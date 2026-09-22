@@ -1,0 +1,147 @@
+// Package enginesvc exposes the process engine over Connect.
+package enginesvc
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"log/slog"
+	"sort"
+
+	"connectrpc.com/connect"
+
+	enginev1 "github.com/zimwip/goap/gen/goap/engine/v1"
+	"github.com/zimwip/goap/gen/goap/engine/v1/enginev1connect"
+	"github.com/zimwip/goap/internal/pbconv"
+	"github.com/zimwip/goap/internal/rpcerr"
+	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/engine"
+)
+
+// Handler implements enginev1connect.EngineServiceHandler. Processes run in
+// background goroutines; clients poll GetProcess or listen to NATS events.
+type Handler struct {
+	Engine *engine.Engine
+	Log    *slog.Logger
+	// Run executes a process in the background (defaults to a goroutine).
+	Run func(id string)
+}
+
+var _ enginev1connect.EngineServiceHandler = (*Handler)(nil)
+
+func (h *Handler) run(p *engine.Process) {
+	if p.Status != engine.StatusRunning {
+		return
+	}
+	if h.Run != nil {
+		h.Run(p.ID)
+		return
+	}
+	go func() {
+		if _, err := h.Engine.Run(context.Background(), p.ID); err != nil {
+			h.Log.Error("run", "process", p.ID, "err", err)
+		}
+	}()
+}
+
+func toConnect(err error) error {
+	var unknown engine.ErrUnknownMethodology
+	switch {
+	case errors.Is(err, engine.ErrNotFound), errors.As(err, &unknown):
+		return connect.NewError(connect.CodeNotFound, err)
+	}
+	return rpcerr.ToConnect(err)
+}
+
+func (h *Handler) StartProcess(ctx context.Context, r *connect.Request[enginev1.StartProcessRequest]) (*connect.Response[enginev1.StartProcessResponse], error) {
+	p, err := h.Engine.Start(ctx, engine.StartRequest{
+		Methodology: r.Msg.Methodology, ChangeID: domain.ChangeID(r.Msg.ChangeId), BaselineID: domain.BaselineID(r.Msg.BaselineId),
+		Title: r.Msg.Title, Intent: r.Msg.Intent, Goal: r.Msg.Goal, Vars: pbconv.Map(r.Msg.Vars),
+	})
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	h.run(p)
+	return connect.NewResponse(&enginev1.StartProcessResponse{Process: ProcessToPB(p)}), nil
+}
+
+func (h *Handler) AnswerIntent(ctx context.Context, r *connect.Request[enginev1.AnswerIntentRequest]) (*connect.Response[enginev1.AnswerIntentResponse], error) {
+	p, err := h.Engine.Answer(ctx, r.Msg.ProcessId, r.Msg.Answer)
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	h.run(p)
+	return connect.NewResponse(&enginev1.AnswerIntentResponse{Process: ProcessToPB(p)}), nil
+}
+
+func (h *Handler) SubmitHumanInput(ctx context.Context, r *connect.Request[enginev1.SubmitHumanInputRequest]) (*connect.Response[enginev1.SubmitHumanInputResponse], error) {
+	items := make([]engine.ItemInput, 0, len(r.Msg.Items))
+	for _, s := range r.Msg.Items {
+		raw, err := json.Marshal(s.AsMap())
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		}
+		var it engine.ItemInput
+		if err := json.Unmarshal(raw, &it); err != nil {
+			return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		}
+		items = append(items, it)
+	}
+	p, err := h.Engine.Submit(ctx, r.Msg.ProcessId, items)
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	h.run(p)
+	return connect.NewResponse(&enginev1.SubmitHumanInputResponse{Process: ProcessToPB(p)}), nil
+}
+
+func (h *Handler) GetProcess(ctx context.Context, r *connect.Request[enginev1.GetProcessRequest]) (*connect.Response[enginev1.GetProcessResponse], error) {
+	p, err := h.Engine.Store.Get(ctx, r.Msg.Id)
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	return connect.NewResponse(&enginev1.GetProcessResponse{Process: ProcessToPB(p)}), nil
+}
+
+func (h *Handler) ListProcesses(ctx context.Context, _ *connect.Request[enginev1.ListProcessesRequest]) (*connect.Response[enginev1.ListProcessesResponse], error) {
+	ps, err := h.Engine.Store.List(ctx)
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	out := &enginev1.ListProcessesResponse{}
+	for _, p := range ps {
+		out.Processes = append(out.Processes, ProcessToPB(p))
+	}
+	return connect.NewResponse(out), nil
+}
+
+// ProcessToPB converts a process.
+func ProcessToPB(p *engine.Process) *enginev1.Process {
+	out := &enginev1.Process{
+		Id: p.ID, Methodology: p.Methodology, ChangeId: string(p.ChangeID), Status: string(p.Status), Goal: p.Goal,
+		Question: p.Question, Plan: p.Plan, World: p.World, Unknown: p.Unknown, Error: p.Error,
+		CreatedAt: pbconv.Time(p.CreatedAt), UpdatedAt: pbconv.Time(p.UpdatedAt),
+	}
+	for _, t := range p.Intent.Turns {
+		out.Turns = append(out.Turns, &enginev1.Turn{Role: t.Role, Text: t.Text})
+	}
+	for _, c := range p.Candidates {
+		out.Candidates = append(out.Candidates, &enginev1.Candidate{Goal: c.Goal, Confidence: c.Confidence, Reason: c.Reason})
+	}
+	if t := p.Pending; t != nil {
+		out.Pending = &enginev1.HumanTask{Action: t.Action, Description: t.Description, Instructions: t.Instructions, Step: int32(t.Step)}
+	}
+	for a := range p.Disabled {
+		out.Disabled = append(out.Disabled, a)
+	}
+	sort.Strings(out.Disabled)
+	for _, s := range p.Steps {
+		ps := &enginev1.Step{Index: int32(s.Index), Action: s.Action, Plan: s.Plan, Before: s.Before, After: s.After,
+			EffectsMet: s.EffectsMet, Output: s.Output, Error: s.Error, StartedAt: pbconv.Time(s.StartedAt), EndedAt: pbconv.Time(s.EndedAt)}
+		for _, id := range s.Items {
+			ps.Items = append(ps.Items, string(id))
+		}
+		out.Steps = append(out.Steps, ps)
+	}
+	return out
+}

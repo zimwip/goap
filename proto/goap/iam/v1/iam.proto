@@ -1,0 +1,62 @@
+syntax = "proto3";
+
+package goap.iam.v1;
+
+// IamService manages organizations, users and roles.
+// Not implemented yet (milestone M2).
+service IamService {
+  rpc CreateOrganization(CreateOrganizationRequest) returns (CreateOrganizationResponse);
+  rpc CreateUser(CreateUserRequest) returns (CreateUserResponse);
+  rpc GrantRole(GrantRoleRequest) returns (GrantRoleResponse);
+  rpc WhoAmI(WhoAmIRequest) returns (WhoAmIResponse);
+}
+
+message Organization {
+  string id = 1;
+  string name = 2;
+}
+
+message User {
+  string id = 1;
+  string email = 2;
+  string display_name = 3;
+}
+
+message RoleBinding {
+  string user_id = 1;
+  string organization_id = 2;
+  // viewer | contributor | methodologist | admin
+  string role = 3;
+}
+
+message CreateOrganizationRequest {
+  string name = 1;
+}
+
+message CreateOrganizationResponse {
+  Organization organization = 1;
+}
+
+message CreateUserRequest {
+  string email = 1;
+  string display_name = 2;
+}
+
+message CreateUserResponse {
+  User user = 1;
+}
+
+message GrantRoleRequest {
+  RoleBinding binding = 1;
+}
+
+message GrantRoleResponse {
+  RoleBinding binding = 1;
+}
+
+message WhoAmIRequest {}
+
+message WhoAmIResponse {
+  User user = 1;
+  repeated RoleBinding bindings = 2;
+}

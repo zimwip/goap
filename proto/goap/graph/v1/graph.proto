@@ -1,0 +1,266 @@
+syntax = "proto3";
+
+package goap.graph.v1;
+
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+
+// GraphService exposes the two axes of the knowledge graph: the domain axis
+// (versioned nodes, version-to-version links, baselines) and the change axis
+// (change sets and their items, i.e. the blackboards of agent processes).
+service GraphService {
+  // Domain axis
+  rpc CreateNode(CreateNodeRequest) returns (CreateNodeResponse);
+  rpc UpdateNode(UpdateNodeRequest) returns (UpdateNodeResponse);
+  rpc GetNode(GetNodeRequest) returns (GetNodeResponse);
+  rpc CreateLink(CreateLinkRequest) returns (CreateLinkResponse);
+  rpc CreateBaseline(CreateBaselineRequest) returns (CreateBaselineResponse);
+  rpc ListBaselines(ListBaselinesRequest) returns (ListBaselinesResponse);
+  rpc GetBaselineGraph(GetBaselineGraphRequest) returns (GetBaselineGraphResponse);
+
+  // Change axis
+  rpc CreateChange(CreateChangeRequest) returns (CreateChangeResponse);
+  rpc GetChange(GetChangeRequest) returns (GetChangeResponse);
+  rpc ListChanges(ListChangesRequest) returns (ListChangesResponse);
+  rpc UpdateChange(UpdateChangeRequest) returns (UpdateChangeResponse);
+  rpc AddItems(AddItemsRequest) returns (AddItemsResponse);
+  rpc GetBlackboard(GetBlackboardRequest) returns (GetBlackboardResponse);
+  rpc ApplyChange(ApplyChangeRequest) returns (ApplyChangeResponse);
+}
+
+message NodeRef {
+  string id = 1;
+  int32 version = 2;
+}
+
+message Node {
+  string id = 1;
+  int32 version = 2;
+  string key = 3;
+  string type = 4;
+  google.protobuf.Struct props = 5;
+  bool deleted = 6;
+  string change_id = 7;
+  google.protobuf.Timestamp created_at = 8;
+}
+
+message Link {
+  string id = 1;
+  string type = 2;
+  NodeRef from = 3;
+  NodeRef to = 4;
+  google.protobuf.Struct props = 5;
+  string change_id = 6;
+}
+
+message NodeView {
+  Node node = 1;
+  int32 latest = 2;
+  repeated Link out = 3;
+  repeated Link in = 4;
+}
+
+message Baseline {
+  string id = 1;
+  string name = 2;
+  string parent_id = 3;
+  string change_id = 4;
+  map<string, int32> nodes = 5;
+  google.protobuf.Timestamp created_at = 6;
+}
+
+message Endpoint {
+  NodeRef node = 1;
+  string item = 2;
+}
+
+message NodeDraft {
+  NodeRef base = 1;
+  string key = 2;
+  string type = 3;
+  google.protobuf.Struct props = 4;
+}
+
+message LinkDraft {
+  string link_id = 1;
+  string type = 2;
+  Endpoint from = 3;
+  Endpoint to = 4;
+  google.protobuf.Struct props = 5;
+}
+
+message Proposal {
+  // create_node | update_node | delete_node | add_link | remove_link
+  string op = 1;
+  NodeDraft node = 2;
+  LinkDraft link = 3;
+}
+
+message Decision {
+  string item = 1;
+  bool accept = 2;
+  string comment = 3;
+}
+
+message ChangeItem {
+  string id = 1;
+  // impact | proposal | decision | artifact
+  string kind = 2;
+  string type = 3;
+  string status = 4;
+  NodeRef target = 5;
+  Proposal proposal = 6;
+  Decision decision = 7;
+  google.protobuf.Struct data = 8;
+  string produced_by = 9;
+  repeated string derived_from = 10;
+  google.protobuf.Timestamp created_at = 11;
+}
+
+message ChangeSet {
+  string id = 1;
+  string title = 2;
+  string intent = 3;
+  string methodology = 4;
+  string goal = 5;
+  string status = 6;
+  string baseline_id = 7;
+  string result_baseline_id = 8;
+  google.protobuf.Struct data = 9;
+  repeated ChangeItem items = 10;
+  google.protobuf.Timestamp created_at = 11;
+}
+
+message CreateNodeRequest {
+  string key = 1;
+  string type = 2;
+  google.protobuf.Struct props = 3;
+}
+
+message CreateNodeResponse {
+  Node node = 1;
+}
+
+message UpdateNodeRequest {
+  NodeRef base = 1;
+  google.protobuf.Struct props = 2;
+}
+
+message UpdateNodeResponse {
+  Node node = 1;
+}
+
+message GetNodeRequest {
+  // version 0 = latest
+  NodeRef ref = 1;
+  // alternative to ref: latest version of the node with this key
+  string key = 2;
+}
+
+message GetNodeResponse {
+  NodeView view = 1;
+}
+
+message CreateLinkRequest {
+  string type = 1;
+  NodeRef from = 2;
+  NodeRef to = 3;
+  google.protobuf.Struct props = 4;
+}
+
+message CreateLinkResponse {
+  Link link = 1;
+}
+
+message CreateBaselineRequest {
+  string name = 1;
+  repeated NodeRef nodes = 2;
+  // snapshot the latest version of every node
+  bool all_latest = 3;
+}
+
+message CreateBaselineResponse {
+  Baseline baseline = 1;
+}
+
+message ListBaselinesRequest {}
+
+message ListBaselinesResponse {
+  repeated Baseline baselines = 1;
+}
+
+message GetBaselineGraphRequest {
+  string id = 1;
+}
+
+message GetBaselineGraphResponse {
+  Baseline baseline = 1;
+  repeated Node nodes = 2;
+  repeated Link links = 3;
+  repeated Link suspect_links = 4;
+}
+
+message CreateChangeRequest {
+  string title = 1;
+  string intent = 2;
+  string methodology = 3;
+  string baseline_id = 4;
+  google.protobuf.Struct data = 5;
+}
+
+message CreateChangeResponse {
+  ChangeSet change = 1;
+}
+
+message GetChangeRequest {
+  string id = 1;
+}
+
+message GetChangeResponse {
+  ChangeSet change = 1;
+}
+
+message ListChangesRequest {}
+
+message ListChangesResponse {
+  repeated ChangeSet changes = 1;
+}
+
+message UpdateChangeRequest {
+  string id = 1;
+  optional string goal = 2;
+  optional string status = 3;
+  google.protobuf.Struct data = 4;
+}
+
+message UpdateChangeResponse {
+  ChangeSet change = 1;
+}
+
+message AddItemsRequest {
+  string change_id = 1;
+  repeated ChangeItem items = 2;
+}
+
+message AddItemsResponse {
+  repeated ChangeItem items = 1;
+}
+
+message GetBlackboardRequest {
+  string change_id = 1;
+}
+
+message GetBlackboardResponse {
+  ChangeSet change = 1;
+  repeated NodeView nodes = 2;
+  repeated Node neighbors = 3;
+}
+
+message ApplyChangeRequest {
+  string change_id = 1;
+  string baseline_name = 2;
+}
+
+message ApplyChangeResponse {
+  Baseline baseline = 1;
+}

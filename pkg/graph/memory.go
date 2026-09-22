@@ -109,6 +109,15 @@ func (t *memTx) NodesIn(ctx context.Context, baseline domain.BaselineID, nodeTyp
 	return out, nil
 }
 
+func (t *memTx) LatestNodes(_ context.Context) ([]domain.Node, error) {
+	out := make([]domain.Node, 0, len(t.st.versions))
+	for _, vs := range t.st.versions {
+		out = append(out, vs[len(vs)-1])
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Key < out[j].Key })
+	return out, nil
+}
+
 func (t *memTx) OutLinks(_ context.Context, ref domain.NodeRef) ([]domain.Link, error) {
 	var out []domain.Link
 	for _, l := range t.st.links {

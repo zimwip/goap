@@ -42,9 +42,11 @@ func newFixture(t *testing.T, repo Repo) fixture {
 	return f
 }
 
-func TestApplyUpdateCreatesSuspectLinks(t *testing.T) {
+func TestApplyUpdateCreatesSuspectLinks(t *testing.T) { forEachRepo(t, testApplyUpdateCreatesSuspectLinks) }
+
+func testApplyUpdateCreatesSuspectLinks(t *testing.T, repo Repo) {
 	ctx := context.Background()
-	f := newFixture(t, NewMemory())
+	f := newFixture(t, repo)
 	g := f.g
 
 	c, err := g.CreateChange(ctx, NewChange{Title: "PSP v2", BaselineID: f.base.ID})
@@ -122,9 +124,11 @@ func TestApplyUpdateCreatesSuspectLinks(t *testing.T) {
 	}
 }
 
-func TestApplyRemoveLinkBumpsSource(t *testing.T) {
+func TestApplyRemoveLinkBumpsSource(t *testing.T) { forEachRepo(t, testApplyRemoveLinkBumpsSource) }
+
+func testApplyRemoveLinkBumpsSource(t *testing.T, repo Repo) {
 	ctx := context.Background()
-	f := newFixture(t, NewMemory())
+	f := newFixture(t, repo)
 	g := f.g
 	v, _ := g.View(ctx, f.test.Ref())
 	c, _ := g.CreateChange(ctx, NewChange{Title: "drop test", BaselineID: f.base.ID})
@@ -145,9 +149,11 @@ func TestApplyRemoveLinkBumpsSource(t *testing.T) {
 	}
 }
 
-func TestApplyRejectedAndConflicts(t *testing.T) {
+func TestApplyRejectedAndConflicts(t *testing.T) { forEachRepo(t, testApplyRejectedAndConflicts) }
+
+func testApplyRejectedAndConflicts(t *testing.T, repo Repo) {
 	ctx := context.Background()
-	f := newFixture(t, NewMemory())
+	f := newFixture(t, repo)
 	g := f.g
 	reqRef := f.req.Ref()
 	c1, _ := g.CreateChange(ctx, NewChange{Title: "c1", BaselineID: f.base.ID})
@@ -182,9 +188,11 @@ func TestApplyRejectedAndConflicts(t *testing.T) {
 	}
 }
 
-func TestAddItemsValidation(t *testing.T) {
+func TestAddItemsValidation(t *testing.T) { forEachRepo(t, testAddItemsValidation) }
+
+func testAddItemsValidation(t *testing.T, repo Repo) {
 	ctx := context.Background()
-	f := newFixture(t, NewMemory())
+	f := newFixture(t, repo)
 	c, _ := f.g.CreateChange(ctx, NewChange{Title: "c", BaselineID: f.base.ID})
 	bad := domain.NodeRef{ID: f.req.ID, Version: 9}
 	if _, err := f.g.AddItems(ctx, c.ID, []domain.ChangeItem{{Kind: domain.KindImpact, Target: &bad}}); !errors.Is(err, ErrInvalid) {
