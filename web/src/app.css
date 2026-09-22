@@ -132,6 +132,7 @@ label {
 
 input[type='text'],
 input[type='password'],
+input[type='number'],
 input:not([type]),
 select,
 textarea {
@@ -150,6 +151,13 @@ textarea {
 textarea.mono {
   font-family: var(--mono);
   font-size: 0.85rem;
+}
+input:disabled,
+select:disabled,
+textarea:disabled {
+  background: var(--surface-2);
+  color: var(--text);
+  opacity: 0.85;
 }
 input:focus,
 select:focus,
@@ -182,9 +190,21 @@ button.primary:hover:not(:disabled) {
   filter: brightness(1.08);
   background: var(--accent);
 }
+button.danger {
+  color: var(--danger);
+}
+button.danger:hover:not(:disabled) {
+  background: var(--danger-soft);
+}
 button.small {
   padding: 0.2rem 0.55rem;
   font-size: 0.8rem;
+}
+input.bad,
+select.bad,
+textarea.bad {
+  border-color: var(--danger);
+  background: var(--danger-soft);
 }
 button:disabled {
   opacity: 0.5;

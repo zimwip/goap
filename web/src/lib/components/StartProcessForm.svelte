@@ -1,11 +1,21 @@
 <script lang="ts">
-  import { registry, graph, engine, errorMessage, type Baseline, type Methodology, type Process } from '../api';
+  import {
+    registry,
+    graph,
+    engine,
+    errorMessage,
+    compareVersions,
+    type Baseline,
+    type MethodologySummary,
+    type Process,
+  } from '../api';
 
   let { onstarted }: { onstarted: (p: Process) => void } = $props();
 
-  let methodologies = $state<Methodology[]>([]);
+  let methodologies = $state<MethodologySummary[]>([]);
   let baselines = $state<Baseline[]>([]);
   let loadError = $state('');
+  let loaded = $state(false);
 
   let methodology = $state('');
   let baselineId = $state('');
@@ -16,15 +26,27 @@
   let error = $state('');
 
   $effect(() => {
-    Promise.all([registry.listMethodologies(), graph.listBaselines()])
+    Promise.all([registry.listMethodologies(true), graph.listBaselines()])
       .then(([m, b]) => {
-        methodologies = m.methodologies ?? [];
+        methodologies = latestPublished(m.methodologies ?? []);
+        loaded = true;
         baselines = b.baselines ?? [];
         if (!methodology && methodologies.length) methodology = methodologies[0].name ?? '';
         if (!baselineId && baselines.length) baselineId = baselines[baselines.length - 1].id ?? '';
       })
       .catch((e) => (loadError = errorMessage(e)));
   });
+
+  /** Seules les versions publiées sont exécutables : on garde la plus récente par nom. */
+  function latestPublished(list: MethodologySummary[]): MethodologySummary[] {
+    const best = new Map<string, MethodologySummary>();
+    for (const m of list) {
+      if (m.status !== 'published' || !m.name) continue;
+      const cur = best.get(m.name);
+      if (!cur || compareVersions(m.version, cur.version) > 0) best.set(m.name, m);
+    }
+    return [...best.values()].sort((a, b) => (a.name ?? '').localeCompare(b.name ?? ''));
+  }
 
   const goals = $derived(methodologies.find((m) => m.name === methodology)?.goals ?? []);
 
@@ -73,6 +95,9 @@
           <option value={m.name}>{m.name}{m.version ? ` (v${m.version})` : ''}</option>
         {/each}
       </select>
+      {#if loaded && methodologies.length === 0}
+        <div class="hint">Aucune méthodologie publiée : publiez-en une depuis l'écran « Méthodologies ».</div>
+      {/if}
     </div>
     <div class="field">
       <label for="sp-base">Référentiel</label>

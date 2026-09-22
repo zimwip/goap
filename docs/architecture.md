@@ -451,7 +451,7 @@ docs/                        architecture, ADR
 | **M2 — IAM** | organisations, utilisateurs, OIDC, isolation `org_id` dans le graphe, ABAC sur le service graph |
 | **M3 — MCP** | registre de serveurs MCP, découverte d'outils, actions `tool`, secrets MCP via Vault |
 | **M4 — axe change avancé** | propagation d'impact (CTE récursive paramétrée par types de liens), liens suspects, diff de baselines, merge/rebase de changesets concurrents |
-| **M5 — UX** | éditeur de méthodologies, visualisation du graphe et du plan, tâches humaines |
+| **M5 — UX** | ✅ éditeur de méthodologies (formulaires, anomalies localisées, publication, versions, import/export YAML), écran « Accès » (politiques ABAC), approbations · reste : visualisation du graphe et du plan |
 | **M6 — K8s** | charts Helm, HPA engine, observabilité (OpenTelemetry) |
 
 ## 7. Questions ouvertes
