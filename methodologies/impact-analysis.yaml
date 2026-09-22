@@ -1,0 +1,155 @@
+name: impact-analysis
+version: 1.0.0
+description: >
+  Analyse d'impact d'un changement sur un référentiel d'exigences :
+  identification des éléments impactés, propagation le long des liens de
+  traçabilité, propositions de mise à jour et revue humaine.
+
+domain:
+  nodeTypes:
+    - name: Need
+      description: Besoin métier exprimé par une partie prenante
+      properties: [title, description]
+    - name: Requirement
+      description: Exigence (fonctionnelle ou non) satisfaisant un besoin
+      properties: [title, description, priority]
+    - name: TestCase
+      description: Cas de test vérifiant une exigence
+      properties: [title, steps]
+    - name: Component
+      description: Composant logiciel implémentant des exigences
+      properties: [title, owner]
+  linkTypes:
+    - {name: satisfies, from: Requirement, to: Need}
+    - {name: verifies, from: TestCase, to: Requirement}
+    - {name: implements, from: Component, to: Requirement}
+
+conditions:
+  - name: has_impacts
+    description: Au moins un élément du graphe de référence est impacté
+    expr: size(impacts) > 0
+  - name: propagated
+    description: Les impacts ont été propagés le long des liens de traçabilité
+    expr: artifacts.exists(a, a.type == "propagation")
+  - name: reported
+    description: Un rapport d'impact a été rédigé
+    expr: artifacts.exists(a, a.type == "report")
+  - name: reviewed
+    description: Toutes les propositions ont reçu une décision
+    expr: size(proposals) > 0 && proposals.all(p, p.status != "proposed")
+
+actions:
+  - name: identify_impacts
+    kind: llm
+    description: Identifier les éléments directement impactés par l'intention de changement
+    pre: {has_impacts: false}
+    effects: {has_impacts: true}
+    cost: 2
+    model: default
+    prompt: |
+      Tu es un analyste d'impact. Intention de changement :
+      "{{ .Change.Intent }}"
+
+      Éléments du référentiel (clé, type, propriétés) :
+      {{ range .Baseline.Nodes }}- {{ .Key }} ({{ .Type }}) {{ json .Properties }}
+      {{ end }}
+      Identifie les éléments DIRECTEMENT impactés. Pour chacun, produis un item
+      {"kind":"impact","type":"direct","target":"<clé>","data":{"reason":"..."}}.
+
+  - name: select_impacts
+    kind: human
+    description: Sélection manuelle des éléments impactés (repli si l'analyse automatique n'est pas possible)
+    pre: {has_impacts: false}
+    effects: {has_impacts: true}
+    cost: 8
+    instructions: Indiquez les éléments du référentiel directement impactés par le changement.
+
+  - name: propagate_impacts
+    kind: builtin
+    builtin: graph.propagate
+    description: Propager les impacts aux éléments liés (tests, composants, exigences dérivées)
+    pre: {has_impacts: true, propagated: false}
+    effects: {propagated: true}
+    cost: 1
+    params:
+      maxDepth: 3
+      # un impact sur la cible d'un lien se propage à sa source
+      linkTypes: [verifies, implements, satisfies]
+
+  - name: propose_requirement_updates
+    kind: llm
+    description: Proposer une nouvelle version de chaque exigence impactée
+    pre: {propagated: true}
+    cost: 3
+    model: default
+    expects:
+      forEach: impacts
+      where: x.target.type == "Requirement"
+      produce: {op: update_node}
+    prompt: |
+      Intention de changement : "{{ .Change.Intent }}"
+      Exigences impactées :
+      {{ range .Impacts }}{{ if eq .Target.Type "Requirement" }}- {{ .Target.Key }} {{ json .Target.Properties }} (raison : {{ index .Data "reason" }})
+      {{ end }}{{ end }}
+      Pour chaque exigence, propose sa nouvelle version :
+      {"kind":"proposal","proposal":{"op":"update_node","node":{"base":"<clé>","props":{...}}}}
+
+  - name: propose_tests
+    kind: llm
+    description: Proposer un nouveau cas de test pour chaque exigence impactée
+    pre: {propagated: true}
+    cost: 3
+    model: default
+    expects:
+      forEach: impacts
+      where: x.target.type == "Requirement"
+      produce: {op: create_node, nodeType: TestCase}
+      link: {type: verifies}
+    prompt: |
+      Intention de changement : "{{ .Change.Intent }}"
+      Exigences impactées :
+      {{ range .Impacts }}{{ if eq .Target.Type "Requirement" }}- {{ .Target.Key }} {{ json .Target.Properties }}
+      {{ end }}{{ end }}
+      Pour chaque exigence, propose un cas de test et son lien :
+      {"kind":"proposal","ref":"t1","proposal":{"op":"create_node","node":{"key":"TST-...","type":"TestCase","props":{"title":"..."}}}}
+      {"kind":"proposal","proposal":{"op":"add_link","link":{"type":"verifies","from":"#t1","to":"<clé exigence>"}}}
+
+  - name: write_report
+    kind: llm
+    description: Rédiger le rapport d'impact
+    pre: {propagated: true, reported: false}
+    effects: {reported: true}
+    cost: 1
+    model: fast
+    prompt: |
+      Intention : "{{ .Change.Intent }}"
+      Impacts :
+      {{ range .Impacts }}- {{ .Target.Key }} ({{ .Target.Type }}, {{ .Type }}) : {{ index .Data "reason" }}
+      {{ end }}
+      Rédige un rapport synthétique : {"kind":"artifact","type":"report","data":{"markdown":"..."}}
+
+  - name: review_proposals
+    kind: human
+    description: Revue des propositions (acceptation / rejet)
+    pre: {"expect:propose_requirement_updates": true, "expect:propose_tests": true}
+    effects: {reviewed: true}
+    cost: 2
+    instructions: Acceptez ou rejetez chaque proposition.
+
+goals:
+  - name: assess_impact
+    description: Évaluer l'impact d'un changement et produire un rapport, sans modifier le référentiel
+    examples:
+      - quel est l'impact
+      - qu'est-ce que ça casse
+      - analyse d'impact
+    pre: {propagated: true, reported: true}
+    value: 10
+  - name: prepare_change
+    description: Préparer la modification du référentiel (exigences et tests mis à jour) et la faire valider
+    examples:
+      - mettre à jour les exigences
+      - préparer la modification
+      - proposer les changements
+    pre: {"expect:propose_requirement_updates": true, "expect:propose_tests": true, reviewed: true}
+    value: 20
