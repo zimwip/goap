@@ -10,6 +10,7 @@ import (
 	"github.com/zimwip/goap/internal/modelgw"
 	"github.com/zimwip/goap/internal/platform"
 	"github.com/zimwip/goap/internal/registrysvc"
+	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/engine"
 	"github.com/zimwip/goap/pkg/intent"
 	"github.com/zimwip/goap/pkg/methodology"
@@ -38,6 +39,7 @@ func main() {
 		},
 		Intent:   intent.Resolver{Ranker: ranker},
 		Store:    engine.NewMemoryStore(), // PostgreSQL store: milestone M1
+		Authz:    authz.DefaultRoles,      // IamService.CheckPermission: milestone M2
 		Events:   events,
 		Log:      log,
 		MaxSteps: platform.EnvInt("GOAP_MAX_STEPS", 50),

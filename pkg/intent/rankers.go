@@ -33,7 +33,9 @@ func (Lexical) Rank(_ context.Context, turns []Turn, goals []GoalInfo) ([]Candid
 	total := 0.0
 	for i, g := range goals {
 		vocab := map[string]bool{}
-		for w := range tokens(normalize(g.Name + " " + g.Description + " " + strings.Join(g.Examples, " "))) {
+		// the technical goal name is left out: identifiers like "prepare_change"
+		// would match everyday words (an exact name is handled by the resolver)
+		for w := range tokens(normalize(g.Description + " " + strings.Join(g.Examples, " "))) {
 			vocab[w] = true
 		}
 		for w := range words {

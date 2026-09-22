@@ -79,6 +79,9 @@ type Action struct {
 	Effects     map[string]bool        `yaml:"effects,omitempty" json:"effects,omitempty"`
 	Cost        float64                `yaml:"cost,omitempty" json:"cost,omitempty"`
 	Expects     *condition.Expectation `yaml:"expects,omitempty" json:"expects,omitempty"`
+	// Permission required from the process initiator to run the action
+	// automatically; otherwise the process waits for an authorized approver.
+	Permission string `yaml:"permission,omitempty" json:"permission,omitempty"`
 	// llm
 	Model  string `yaml:"model,omitempty" json:"model,omitempty"`
 	Prompt string `yaml:"prompt,omitempty" json:"prompt,omitempty"`

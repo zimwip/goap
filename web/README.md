@@ -43,3 +43,9 @@ URL sont relatives), ou définissez `VITE_GOAP_BASE_URL` au moment du build.
 - `src/lib/nav.svelte.ts` : navigation par fragment d'URL (`#processus/<id>`, `#changement/<id>`…)
 - `src/lib/items.ts` : mise en forme des items d'un changement
 - `src/lib/components/` : écrans et composants
+
+## Version de TypeScript
+
+TypeScript est volontairement contraint à `^6` : `svelte-check` (4.7) déclare
+`typescript: ^5.0.0 || ^6.0.0` en dépendance pair. Ne passer à TypeScript 7
+qu'une fois une version de `svelte-check` compatible publiée.

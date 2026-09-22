@@ -148,7 +148,7 @@ Types d'exécuteurs :
 | `llm` | Prompt (template Go) + contexte blackboard → Model Gateway, sortie JSON structurée | ChangeItems |
 | `tool` | Appel d'un outil via le MCP Connector | Artifact (+ mapping optionnel vers items) |
 | `human` | Crée une tâche ; le processus passe en `waiting` jusqu'à `SubmitHumanInput` | Items saisis |
-| `builtin` | Fonction Go enregistrée (ex. `graph.propagate`) | ChangeItems |
+| `builtin` | Fonction Go enregistrée : `graph.propagate` (propagation d'impact), `graph.apply` (application du change) | ChangeItems / nouvelle baseline |
 
 Les sorties LLM/humaines utilisent un format d'entrée simplifié (`engine.ItemInput`) : les nœuds sont
 désignés par leur **clé** (`REQ-1`), les items du même lot par `#ref`, les items existants par `@<id>` ;
@@ -179,16 +179,43 @@ Avant toute planification :
    │           │
    │           ▼
    │    agir : exécuter la 1re action du plan
-   │           │   (human → waiting ; erreur → retry/failed)
+   │           │   (human / approbation → waiting ; erreur → retry/failed)
    │           ▼
    └──── enregistrer items + step (événement NATS)
 ```
+
+### 2.7 Application du changement et permissions
+
+Les actions ne modifient jamais le domaine directement : elles alimentent le change, et la transformation
+effective n'a lieu qu'à l'**application** du change ([ADR 0004](adr/0004-application-du-change.md)).
+Cette application est elle-même une action planifiable, `builtin: graph.apply`, qui porte une **permission** :
+
+```yaml
+- name: apply_change
+  kind: builtin
+  builtin: graph.apply
+  pre: {reviewed: true, applied: false}   # uniquement après la revue
+  effects: {applied: true}                # applied: change.status == "applied"
+  permission: change:apply
+```
+
+- Le processus mémorise son **initiateur** (identité propagée par la gateway : `X-Goap-Subject/Org/Roles`).
+- Si l'initiateur détient la permission, l'action s'exécute automatiquement.
+- Sinon, le processus passe en `waiting` avec une tâche d'**approbation** (`pending.kind = approval`).
+  Une personne habilitée appelle `ApproveAction` : si elle approuve, l'action s'exécute avec son identité
+  (`step.approvedBy`) ; si elle refuse, l'action est désactivée pour le processus et le planificateur
+  cherche une autre voie (en général : `stuck`).
+- Toute action peut porter une permission, pas seulement `graph.apply`.
+
+Décision des permissions : `pkg/authz` avec une politique de rôles statique (`viewer`, `contributor`,
+`methodologist`, `approver`, `admin`) en attendant `IamService.CheckPermission` (M2).
 
 Replanifier à chaque pas rend le moteur robuste aux actions non déterministes (LLM) et aux modifications
 concurrentes du blackboard (un humain peut ajouter un impact pendant l'exécution).
 
 Décisions structurantes : [ADR 0001 — blackboard = axe change](adr/0001-blackboard-axe-change.md),
-[ADR 0002 — conditions CEL](adr/0002-conditions-cel.md), [ADR 0003 — liens version-à-version](adr/0003-liens-version-a-version.md).
+[ADR 0002 — conditions CEL](adr/0002-conditions-cel.md), [ADR 0003 — liens version-à-version](adr/0003-liens-version-a-version.md),
+[ADR 0004 — application du change](adr/0004-application-du-change.md).
 
 ## 3. Architecture des composants
 
@@ -284,6 +311,8 @@ change_item(id uuid, change_id, kind, type, status, target_id, target_version, p
 
 - La gateway valide le JWT (OIDC en prod, HS256 signé par un secret Vault en dev) et propage
   `X-Goap-Subject`, `X-Goap-Org`, `X-Goap-Roles` aux services (réseau interne uniquement).
+- Permissions d'action : voir §2.7. Le moteur fait confiance aux en-têtes `X-Goap-*` : il ne doit être
+  joignable que via la gateway (qui les écrase systématiquement).
 - Chaque ressource (méthodologie, changeset, processus) appartient à une **organisation** : isolation multi-tenant
   par `org_id` dans toutes les tables (à ajouter avec le service IAM).
 - Les secrets ne sont jamais en variables d'environnement en prod : `internal/platform/secrets` lit Vault
@@ -367,7 +396,7 @@ docs/                        architecture, ADR
 |---|---|
 | **M0 — socle** 🟢 | Doc, modèle domaine/change, planificateur A\*, conditions CEL, boucle d'intention, moteur (mémoire), graph (mémoire + Postgres), registry, modelgw (fake + Anthropic + OpenAI-compatible), gateway, compose, UI minimale |
 | **M1 — persistance moteur** | `ProcessStore` PostgreSQL, work-queue JetStream, reprise après crash, multi-réplique |
-| **M2 — IAM** | organisations, utilisateurs, rôles, OIDC, isolation `org_id` |
+| **M2 — IAM** | organisations, utilisateurs, rôles, OIDC, isolation `org_id`, `CheckPermission` en remplacement de la politique de rôles statique |
 | **M3 — MCP** | registre de serveurs MCP, découverte d'outils, actions `tool`, secrets MCP via Vault |
 | **M4 — axe change avancé** | propagation d'impact (CTE récursive paramétrée par types de liens), liens suspects, diff de baselines, merge/rebase de changesets concurrents |
 | **M5 — UX** | éditeur de méthodologies, visualisation du graphe et du plan, tâches humaines |
@@ -383,5 +412,5 @@ docs/                        architecture, ADR
 3. **Concurrence sur une baseline** : deux ChangeSets partant de B1 — stratégie de fusion (rebase des propositions,
    détection de conflit sur `base version`) ?
 4. **Coût des actions** : statique (déclaré) ou dynamique (tokens estimés, latence observée) ?
-5. **Décisions humaines** : les `decision` sont-elles des conditions de goal (validation obligatoire) ou une
-   étape d'`apply` séparée ?
+5. ~~**Décisions humaines** : validation obligatoire ou `apply` séparé ?~~ → tranché par l'[ADR 0004](adr/0004-application-du-change.md) :
+   `apply` est une action planifiable conditionnée par la revue et protégée par une permission.

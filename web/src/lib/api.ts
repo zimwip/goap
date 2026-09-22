@@ -225,7 +225,16 @@ export interface Candidate {
   reason?: string;
 }
 
+export interface Principal {
+  subject?: string;
+  org?: string;
+  roles?: string[];
+}
 export interface HumanTask {
+  /** input : saisir des items · approval : approuver ou refuser l'action */
+  kind?: 'input' | 'approval' | string;
+  /** permission requise pour approuver (ex. change:apply) */
+  permission?: string;
   action?: string;
   description?: string;
   instructions?: string;
@@ -240,6 +249,7 @@ export interface Step {
   after?: Record<string, boolean>;
   items?: string[];
   effectsMet?: boolean;
+  approvedBy?: string;
   output?: string;
   error?: string;
   startedAt?: string;
@@ -264,6 +274,7 @@ export interface Process {
   error?: string;
   createdAt?: string;
   updatedAt?: string;
+  initiator?: Principal;
 }
 
 /** Item au format d'entrée du moteur (pkg/engine.ItemInput). */
@@ -335,6 +346,12 @@ export const engine = {
     rpc<{ processId: string; items: ItemInput[] }, { process?: Process }>(ENGINE, 'SubmitHumanInput', {
       processId,
       items,
+    }),
+  approveAction: (processId: string, approve: boolean, comment: string) =>
+    rpc<{ processId: string; approve: boolean; comment: string }, { process?: Process }>(ENGINE, 'ApproveAction', {
+      processId,
+      approve,
+      comment,
     }),
   getProcess: (id: string, signal?: AbortSignal) =>
     rpc<{ id: string }, { process?: Process }>(ENGINE, 'GetProcess', { id }, signal),

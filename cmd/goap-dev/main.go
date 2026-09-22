@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"strings"
 
 	"github.com/zimwip/goap/gen/goap/engine/v1/enginev1connect"
 	"github.com/zimwip/goap/gen/goap/graph/v1/graphv1connect"
@@ -15,6 +16,7 @@ import (
 	"github.com/zimwip/goap/internal/modelgw"
 	"github.com/zimwip/goap/internal/platform"
 	"github.com/zimwip/goap/internal/registrysvc"
+	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/engine"
 	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/intent"
@@ -50,13 +52,18 @@ func main() {
 		Intent: intent.Resolver{Ranker: intent.Lexical{}},
 		Store:  engine.NewMemoryStore(),
 		Events: engine.NopPublisher{},
+		Authz:  authz.DefaultRoles,
 		Log:    log,
 	}
 	srv := platform.NewServer(log, platform.Env("GOAP_HTTP_ADDR", ":8080"))
 	srv.Mount(graphv1connect.NewGraphServiceHandler(&graphsvc.Handler{Graph: g}))
 	srv.Mount(registryv1connect.NewRegistryServiceHandler(reg))
 	srv.Mount(modelv1connect.NewModelServiceHandler(&modelgw.Handler{Router: router}))
-	srv.Mount(enginev1connect.NewEngineServiceHandler(&enginesvc.Handler{Engine: e, Log: log}))
+	// no gateway in this mode: callers act as "dev" with GOAP_DEV_ROLES. With
+	// GOAP_DEV_ROLES=contributor, applying a change waits for an approval that
+	// only a caller with change:apply can give (use the full stack for that).
+	dev := authz.Principal{Subject: "dev", Org: "dev", Roles: strings.Split(platform.Env("GOAP_DEV_ROLES", "contributor,approver"), ",")}
+	srv.Mount(enginev1connect.NewEngineServiceHandler(&enginesvc.Handler{Engine: e, Log: log, DefaultPrincipal: &dev}))
 	if err := srv.Run(); err != nil {
 		platform.Fatal(log, "server", err)
 	}

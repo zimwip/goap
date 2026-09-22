@@ -42,6 +42,9 @@ const (
 	IamServiceGrantRoleProcedure = "/goap.iam.v1.IamService/GrantRole"
 	// IamServiceWhoAmIProcedure is the fully-qualified name of the IamService's WhoAmI RPC.
 	IamServiceWhoAmIProcedure = "/goap.iam.v1.IamService/WhoAmI"
+	// IamServiceCheckPermissionProcedure is the fully-qualified name of the IamService's
+	// CheckPermission RPC.
+	IamServiceCheckPermissionProcedure = "/goap.iam.v1.IamService/CheckPermission"
 )
 
 // IamServiceClient is a client for the goap.iam.v1.IamService service.
@@ -50,6 +53,9 @@ type IamServiceClient interface {
 	CreateUser(context.Context, *connect.Request[v1.CreateUserRequest]) (*connect.Response[v1.CreateUserResponse], error)
 	GrantRole(context.Context, *connect.Request[v1.GrantRoleRequest]) (*connect.Response[v1.GrantRoleResponse], error)
 	WhoAmI(context.Context, *connect.Request[v1.WhoAmIRequest]) (*connect.Response[v1.WhoAmIResponse], error)
+	// Decide a permission (e.g. "change:apply") for a subject in an organization.
+	// Target of the engine's authorizer (today: static role policy).
+	CheckPermission(context.Context, *connect.Request[v1.CheckPermissionRequest]) (*connect.Response[v1.CheckPermissionResponse], error)
 }
 
 // NewIamServiceClient constructs a client for the goap.iam.v1.IamService service. By default, it
@@ -87,6 +93,12 @@ func NewIamServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			connect.WithSchema(iamServiceMethods.ByName("WhoAmI")),
 			connect.WithClientOptions(opts...),
 		),
+		checkPermission: connect.NewClient[v1.CheckPermissionRequest, v1.CheckPermissionResponse](
+			httpClient,
+			baseURL+IamServiceCheckPermissionProcedure,
+			connect.WithSchema(iamServiceMethods.ByName("CheckPermission")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -96,6 +108,7 @@ type iamServiceClient struct {
 	createUser         *connect.Client[v1.CreateUserRequest, v1.CreateUserResponse]
 	grantRole          *connect.Client[v1.GrantRoleRequest, v1.GrantRoleResponse]
 	whoAmI             *connect.Client[v1.WhoAmIRequest, v1.WhoAmIResponse]
+	checkPermission    *connect.Client[v1.CheckPermissionRequest, v1.CheckPermissionResponse]
 }
 
 // CreateOrganization calls goap.iam.v1.IamService.CreateOrganization.
@@ -118,12 +131,20 @@ func (c *iamServiceClient) WhoAmI(ctx context.Context, req *connect.Request[v1.W
 	return c.whoAmI.CallUnary(ctx, req)
 }
 
+// CheckPermission calls goap.iam.v1.IamService.CheckPermission.
+func (c *iamServiceClient) CheckPermission(ctx context.Context, req *connect.Request[v1.CheckPermissionRequest]) (*connect.Response[v1.CheckPermissionResponse], error) {
+	return c.checkPermission.CallUnary(ctx, req)
+}
+
 // IamServiceHandler is an implementation of the goap.iam.v1.IamService service.
 type IamServiceHandler interface {
 	CreateOrganization(context.Context, *connect.Request[v1.CreateOrganizationRequest]) (*connect.Response[v1.CreateOrganizationResponse], error)
 	CreateUser(context.Context, *connect.Request[v1.CreateUserRequest]) (*connect.Response[v1.CreateUserResponse], error)
 	GrantRole(context.Context, *connect.Request[v1.GrantRoleRequest]) (*connect.Response[v1.GrantRoleResponse], error)
 	WhoAmI(context.Context, *connect.Request[v1.WhoAmIRequest]) (*connect.Response[v1.WhoAmIResponse], error)
+	// Decide a permission (e.g. "change:apply") for a subject in an organization.
+	// Target of the engine's authorizer (today: static role policy).
+	CheckPermission(context.Context, *connect.Request[v1.CheckPermissionRequest]) (*connect.Response[v1.CheckPermissionResponse], error)
 }
 
 // NewIamServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -157,6 +178,12 @@ func NewIamServiceHandler(svc IamServiceHandler, opts ...connect.HandlerOption) 
 		connect.WithSchema(iamServiceMethods.ByName("WhoAmI")),
 		connect.WithHandlerOptions(opts...),
 	)
+	iamServiceCheckPermissionHandler := connect.NewUnaryHandler(
+		IamServiceCheckPermissionProcedure,
+		svc.CheckPermission,
+		connect.WithSchema(iamServiceMethods.ByName("CheckPermission")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/goap.iam.v1.IamService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case IamServiceCreateOrganizationProcedure:
@@ -167,6 +194,8 @@ func NewIamServiceHandler(svc IamServiceHandler, opts ...connect.HandlerOption) 
 			iamServiceGrantRoleHandler.ServeHTTP(w, r)
 		case IamServiceWhoAmIProcedure:
 			iamServiceWhoAmIHandler.ServeHTTP(w, r)
+		case IamServiceCheckPermissionProcedure:
+			iamServiceCheckPermissionHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -190,4 +219,8 @@ func (UnimplementedIamServiceHandler) GrantRole(context.Context, *connect.Reques
 
 func (UnimplementedIamServiceHandler) WhoAmI(context.Context, *connect.Request[v1.WhoAmIRequest]) (*connect.Response[v1.WhoAmIResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.iam.v1.IamService.WhoAmI is not implemented"))
+}
+
+func (UnimplementedIamServiceHandler) CheckPermission(context.Context, *connect.Request[v1.CheckPermissionRequest]) (*connect.Response[v1.CheckPermissionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.iam.v1.IamService.CheckPermission is not implemented"))
 }

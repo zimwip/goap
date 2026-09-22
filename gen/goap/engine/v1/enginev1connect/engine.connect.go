@@ -42,6 +42,9 @@ const (
 	// EngineServiceSubmitHumanInputProcedure is the fully-qualified name of the EngineService's
 	// SubmitHumanInput RPC.
 	EngineServiceSubmitHumanInputProcedure = "/goap.engine.v1.EngineService/SubmitHumanInput"
+	// EngineServiceApproveActionProcedure is the fully-qualified name of the EngineService's
+	// ApproveAction RPC.
+	EngineServiceApproveActionProcedure = "/goap.engine.v1.EngineService/ApproveAction"
 	// EngineServiceGetProcessProcedure is the fully-qualified name of the EngineService's GetProcess
 	// RPC.
 	EngineServiceGetProcessProcedure = "/goap.engine.v1.EngineService/GetProcess"
@@ -55,6 +58,9 @@ type EngineServiceClient interface {
 	StartProcess(context.Context, *connect.Request[v1.StartProcessRequest]) (*connect.Response[v1.StartProcessResponse], error)
 	AnswerIntent(context.Context, *connect.Request[v1.AnswerIntentRequest]) (*connect.Response[v1.AnswerIntentResponse], error)
 	SubmitHumanInput(context.Context, *connect.Request[v1.SubmitHumanInputRequest]) (*connect.Response[v1.SubmitHumanInputResponse], error)
+	// Decide a pending approval (an action needing a permission the initiator
+	// lacks) with the caller's permissions.
+	ApproveAction(context.Context, *connect.Request[v1.ApproveActionRequest]) (*connect.Response[v1.ApproveActionResponse], error)
 	GetProcess(context.Context, *connect.Request[v1.GetProcessRequest]) (*connect.Response[v1.GetProcessResponse], error)
 	ListProcesses(context.Context, *connect.Request[v1.ListProcessesRequest]) (*connect.Response[v1.ListProcessesResponse], error)
 }
@@ -88,6 +94,12 @@ func NewEngineServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(engineServiceMethods.ByName("SubmitHumanInput")),
 			connect.WithClientOptions(opts...),
 		),
+		approveAction: connect.NewClient[v1.ApproveActionRequest, v1.ApproveActionResponse](
+			httpClient,
+			baseURL+EngineServiceApproveActionProcedure,
+			connect.WithSchema(engineServiceMethods.ByName("ApproveAction")),
+			connect.WithClientOptions(opts...),
+		),
 		getProcess: connect.NewClient[v1.GetProcessRequest, v1.GetProcessResponse](
 			httpClient,
 			baseURL+EngineServiceGetProcessProcedure,
@@ -108,6 +120,7 @@ type engineServiceClient struct {
 	startProcess     *connect.Client[v1.StartProcessRequest, v1.StartProcessResponse]
 	answerIntent     *connect.Client[v1.AnswerIntentRequest, v1.AnswerIntentResponse]
 	submitHumanInput *connect.Client[v1.SubmitHumanInputRequest, v1.SubmitHumanInputResponse]
+	approveAction    *connect.Client[v1.ApproveActionRequest, v1.ApproveActionResponse]
 	getProcess       *connect.Client[v1.GetProcessRequest, v1.GetProcessResponse]
 	listProcesses    *connect.Client[v1.ListProcessesRequest, v1.ListProcessesResponse]
 }
@@ -127,6 +140,11 @@ func (c *engineServiceClient) SubmitHumanInput(ctx context.Context, req *connect
 	return c.submitHumanInput.CallUnary(ctx, req)
 }
 
+// ApproveAction calls goap.engine.v1.EngineService.ApproveAction.
+func (c *engineServiceClient) ApproveAction(ctx context.Context, req *connect.Request[v1.ApproveActionRequest]) (*connect.Response[v1.ApproveActionResponse], error) {
+	return c.approveAction.CallUnary(ctx, req)
+}
+
 // GetProcess calls goap.engine.v1.EngineService.GetProcess.
 func (c *engineServiceClient) GetProcess(ctx context.Context, req *connect.Request[v1.GetProcessRequest]) (*connect.Response[v1.GetProcessResponse], error) {
 	return c.getProcess.CallUnary(ctx, req)
@@ -142,6 +160,9 @@ type EngineServiceHandler interface {
 	StartProcess(context.Context, *connect.Request[v1.StartProcessRequest]) (*connect.Response[v1.StartProcessResponse], error)
 	AnswerIntent(context.Context, *connect.Request[v1.AnswerIntentRequest]) (*connect.Response[v1.AnswerIntentResponse], error)
 	SubmitHumanInput(context.Context, *connect.Request[v1.SubmitHumanInputRequest]) (*connect.Response[v1.SubmitHumanInputResponse], error)
+	// Decide a pending approval (an action needing a permission the initiator
+	// lacks) with the caller's permissions.
+	ApproveAction(context.Context, *connect.Request[v1.ApproveActionRequest]) (*connect.Response[v1.ApproveActionResponse], error)
 	GetProcess(context.Context, *connect.Request[v1.GetProcessRequest]) (*connect.Response[v1.GetProcessResponse], error)
 	ListProcesses(context.Context, *connect.Request[v1.ListProcessesRequest]) (*connect.Response[v1.ListProcessesResponse], error)
 }
@@ -171,6 +192,12 @@ func NewEngineServiceHandler(svc EngineServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(engineServiceMethods.ByName("SubmitHumanInput")),
 		connect.WithHandlerOptions(opts...),
 	)
+	engineServiceApproveActionHandler := connect.NewUnaryHandler(
+		EngineServiceApproveActionProcedure,
+		svc.ApproveAction,
+		connect.WithSchema(engineServiceMethods.ByName("ApproveAction")),
+		connect.WithHandlerOptions(opts...),
+	)
 	engineServiceGetProcessHandler := connect.NewUnaryHandler(
 		EngineServiceGetProcessProcedure,
 		svc.GetProcess,
@@ -191,6 +218,8 @@ func NewEngineServiceHandler(svc EngineServiceHandler, opts ...connect.HandlerOp
 			engineServiceAnswerIntentHandler.ServeHTTP(w, r)
 		case EngineServiceSubmitHumanInputProcedure:
 			engineServiceSubmitHumanInputHandler.ServeHTTP(w, r)
+		case EngineServiceApproveActionProcedure:
+			engineServiceApproveActionHandler.ServeHTTP(w, r)
 		case EngineServiceGetProcessProcedure:
 			engineServiceGetProcessHandler.ServeHTTP(w, r)
 		case EngineServiceListProcessesProcedure:
@@ -214,6 +243,10 @@ func (UnimplementedEngineServiceHandler) AnswerIntent(context.Context, *connect.
 
 func (UnimplementedEngineServiceHandler) SubmitHumanInput(context.Context, *connect.Request[v1.SubmitHumanInputRequest]) (*connect.Response[v1.SubmitHumanInputResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.engine.v1.EngineService.SubmitHumanInput is not implemented"))
+}
+
+func (UnimplementedEngineServiceHandler) ApproveAction(context.Context, *connect.Request[v1.ApproveActionRequest]) (*connect.Response[v1.ApproveActionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.engine.v1.EngineService.ApproveAction is not implemented"))
 }
 
 func (UnimplementedEngineServiceHandler) GetProcess(context.Context, *connect.Request[v1.GetProcessRequest]) (*connect.Response[v1.GetProcessResponse], error) {

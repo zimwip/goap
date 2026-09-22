@@ -16,6 +16,7 @@ type GraphPort interface {
 	AddItems(ctx context.Context, id domain.ChangeID, items []domain.ChangeItem) ([]domain.ChangeItem, error)
 	Blackboard(ctx context.Context, id domain.ChangeID) (domain.Blackboard, error)
 	BaselineGraph(ctx context.Context, id domain.BaselineID) ([]domain.Node, []domain.Link, error)
+	Apply(ctx context.Context, id domain.ChangeID, baselineName string) (domain.Baseline, error)
 }
 
 // MethodologyPort resolves methodologies (the registry).

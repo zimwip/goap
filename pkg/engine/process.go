@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/goap"
 	"github.com/zimwip/goap/pkg/intent"
@@ -33,20 +34,23 @@ func (s Status) Terminal() bool {
 
 // Process is an agent process working on a change.
 type Process struct {
-	ID          string             `json:"id"`
-	Methodology string             `json:"methodology"`
-	ChangeID    domain.ChangeID    `json:"changeId"`
-	Status      Status             `json:"status"`
-	Goal        string             `json:"goal,omitempty"`
-	Intent      intent.Session     `json:"intent"`
-	Question    string             `json:"question,omitempty"`
-	Candidates  []intent.Candidate `json:"candidates,omitempty"`
-	Pending     *HumanTask         `json:"pending,omitempty"`
-	Plan        []string           `json:"plan,omitempty"`
-	World       goap.WorldState    `json:"world,omitempty"`
-	Unknown     map[string]string  `json:"unknown,omitempty"`
-	Steps       []Step             `json:"steps"`
-	Vars        map[string]any     `json:"vars,omitempty"`
+	ID          string          `json:"id"`
+	Methodology string          `json:"methodology"`
+	ChangeID    domain.ChangeID `json:"changeId"`
+	// Initiator is the principal who started the process; automatic actions
+	// run with its permissions.
+	Initiator  authz.Principal    `json:"initiator"`
+	Status     Status             `json:"status"`
+	Goal       string             `json:"goal,omitempty"`
+	Intent     intent.Session     `json:"intent"`
+	Question   string             `json:"question,omitempty"`
+	Candidates []intent.Candidate `json:"candidates,omitempty"`
+	Pending    *HumanTask         `json:"pending,omitempty"`
+	Plan       []string           `json:"plan,omitempty"`
+	World      goap.WorldState    `json:"world,omitempty"`
+	Unknown    map[string]string  `json:"unknown,omitempty"`
+	Steps      []Step             `json:"steps"`
+	Vars       map[string]any     `json:"vars,omitempty"`
 	// Disabled lists actions excluded from planning after repeatedly failing
 	// to deliver their effects.
 	Disabled  map[string]bool `json:"disabled,omitempty"`
@@ -55,8 +59,16 @@ type Process struct {
 	UpdatedAt time.Time       `json:"updatedAt"`
 }
 
-// HumanTask is a pending human action.
+// Task kinds.
+const (
+	TaskInput    = "input"    // a human action: submit items
+	TaskApproval = "approval" // an action needing a permission the initiator lacks
+)
+
+// HumanTask is a pending human action or approval.
 type HumanTask struct {
+	Kind         string `json:"kind"`
+	Permission   string `json:"permission,omitempty"`
 	Action       string `json:"action"`
 	Description  string `json:"description"`
 	Instructions string `json:"instructions,omitempty"`
@@ -72,6 +84,7 @@ type Step struct {
 	After      goap.WorldState `json:"after,omitempty"`
 	Items      []domain.ItemID `json:"items,omitempty"`
 	EffectsMet bool            `json:"effectsMet"`
+	ApprovedBy string          `json:"approvedBy,omitempty"`
 	Output     string          `json:"output,omitempty"`
 	Error      string          `json:"error,omitempty"`
 	StartedAt  time.Time       `json:"startedAt"`
