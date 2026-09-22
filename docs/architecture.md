@@ -56,6 +56,11 @@ d'un graphe de connaissance versionné, dont l'autre axe, **l'axe *domaine***, d
 | **Link** | Relation typée **de version à version** : `REQ-12@v3 ─satisfies→ NEED-4@v2`. Un lien ne « suit » pas automatiquement les nouvelles versions : si `NEED-4` passe en v3, le lien devient **suspect** — c'est le signal d'impact natif du modèle. |
 | **Baseline** | Ensemble cohérent `{NodeID → Version}` : un « commit » du graphe. Les liens d'une baseline sont ceux dont les deux extrémités sont dans la baseline. Toute modification part d'une baseline de référence et produit une baseline d'arrivée. |
 
+Règle de versionnement ([ADR 0003](adr/0003-liens-version-a-version.md)) : les **liens sortants font partie
+de la version du nœud source**. Ajouter/retirer un lien sortant crée une nouvelle version de la source ;
+un nœud qui change de version reporte ses liens sortants ; les liens entrants depuis des nœuds non
+modifiés restent sur l'ancienne version et deviennent **suspects**. Les baselines restent ainsi immuables.
+
 #### Axe change
 
 | Concept | Description |
@@ -132,8 +137,9 @@ Une action déclare :
 Un `expects` est **compilé en condition CEL** (`expect:<action>`) ajoutée automatiquement aux effets de l'action.
 Ainsi le lien sur l'axe domaine est à la fois la **spécification** de l'action, son **critère de
 réussite** et un **effet planifiable**. Après exécution, le moteur ré-évalue : si l'effet promis n'est pas
-observé, l'action est marquée en échec partiel et le planificateur replanifie (éventuellement vers une autre
-action produisant le même effet).
+observé, l'étape est marquée `effectsMet=false` ; après 2 échecs l'action est **désactivée** pour ce
+processus et le planificateur replanifie vers une autre action produisant le même effet (ex. repli
+`identify_impacts` (LLM) → `select_impacts` (humain)). Si aucun plan n'existe, le processus passe en `stuck`.
 
 Types d'exécuteurs :
 
@@ -141,8 +147,12 @@ Types d'exécuteurs :
 |---|---|---|
 | `llm` | Prompt (template Go) + contexte blackboard → Model Gateway, sortie JSON structurée | ChangeItems |
 | `tool` | Appel d'un outil via le MCP Connector | Artifact (+ mapping optionnel vers items) |
-| `human` | Crée une tâche ; le processus passe en `waiting` jusqu'à `Resume` | Items saisis |
-| `builtin` | Fonction Go enregistrée (ex. `graph.propagate_impacts`) | ChangeItems |
+| `human` | Crée une tâche ; le processus passe en `waiting` jusqu'à `SubmitHumanInput` | Items saisis |
+| `builtin` | Fonction Go enregistrée (ex. `graph.propagate`) | ChangeItems |
+
+Les sorties LLM/humaines utilisent un format d'entrée simplifié (`engine.ItemInput`) : les nœuds sont
+désignés par leur **clé** (`REQ-1`), les items du même lot par `#ref`, les items existants par `@<id>` ;
+le moteur les résout en `NodeRef` exacts de la baseline de référence.
 
 ### 2.5 Boucle d'intention
 
@@ -176,6 +186,9 @@ Avant toute planification :
 
 Replanifier à chaque pas rend le moteur robuste aux actions non déterministes (LLM) et aux modifications
 concurrentes du blackboard (un humain peut ajouter un impact pendant l'exécution).
+
+Décisions structurantes : [ADR 0001 — blackboard = axe change](adr/0001-blackboard-axe-change.md),
+[ADR 0002 — conditions CEL](adr/0002-conditions-cel.md), [ADR 0003 — liens version-à-version](adr/0003-liens-version-a-version.md).
 
 ## 3. Architecture des composants
 
@@ -313,9 +326,9 @@ actions:
     pre: {impacts_propagated: true}
     expects:
       forEach: impacts
-      where: 'i.target.type == "Requirement"'
+      where: x.target.type == "Requirement"   # x = élément itéré
       produce: {op: create_node, nodeType: TestCase}
-      link: {type: verifies, to: target}
+      link: {type: verifies}                  # direction: out (nouveau -> cible) par défaut
 goals:
   - name: assess_impact
     description: Mesurer l'impact d'un changement sans rien modifier
@@ -329,6 +342,7 @@ Voir `methodologies/impact-analysis.yaml` pour l'exemple complet exécutable.
 
 ```
 cmd/<service>/main.go        points d'entrée (gateway, registry, engine, graph, modelgw, mcp, iam)
+cmd/goap-dev/                tout-en-un en mémoire pour le développement local
 internal/platform/           config, logs, serveur HTTP/Connect, NATS, Postgres, secrets Vault
 internal/<service>/          implémentation des handlers Connect d'un service
 pkg/domain/                  modèle du graphe (axe domaine + axe change)
@@ -338,7 +352,7 @@ pkg/condition/               compilation/évaluation CEL, compilation des `expec
 pkg/intent/                  boucle d'intention (Ranker lexical, Ranker LLM)
 pkg/engine/                  processus, exécuteurs d'actions
 pkg/methodology/             format de méthodologie, chargement YAML, validation
-pkg/llm/                     client Model Gateway + fournisseurs
+pkg/llm/                     contrat de complétion (implémenté par internal/modelgw)
 proto/                       contrats connect-rpc (buf)
 gen/                         code généré (commité)
 methodologies/               méthodologies d'exemple
