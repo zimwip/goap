@@ -1,0 +1,52 @@
+syntax = "proto3";
+
+package goap.registry.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// RegistryService stores and validates methodology definitions.
+service RegistryService {
+  rpc PublishMethodology(PublishMethodologyRequest) returns (PublishMethodologyResponse);
+  rpc GetMethodology(GetMethodologyRequest) returns (GetMethodologyResponse);
+  rpc ListMethodologies(ListMethodologiesRequest) returns (ListMethodologiesResponse);
+}
+
+message GoalSummary {
+  string name = 1;
+  string description = 2;
+}
+
+message Methodology {
+  string name = 1;
+  string version = 2;
+  string description = 3;
+  // YAML source of the definition
+  string source = 4;
+  repeated GoalSummary goals = 5;
+  google.protobuf.Timestamp published_at = 6;
+}
+
+message PublishMethodologyRequest {
+  string source = 1;
+}
+
+message PublishMethodologyResponse {
+  Methodology methodology = 1;
+}
+
+message GetMethodologyRequest {
+  string name = 1;
+  // empty = latest
+  string version = 2;
+}
+
+message GetMethodologyResponse {
+  Methodology methodology = 1;
+}
+
+message ListMethodologiesRequest {}
+
+message ListMethodologiesResponse {
+  // latest version of each methodology
+  repeated Methodology methodologies = 1;
+}

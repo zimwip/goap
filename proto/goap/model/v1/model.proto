@@ -1,0 +1,48 @@
+syntax = "proto3";
+
+package goap.model.v1;
+
+// ModelService is the model gateway: one API over several LLM providers and
+// models, addressed by alias ("default", "fast", …) or "provider/model".
+service ModelService {
+  rpc Complete(CompleteRequest) returns (CompleteResponse);
+  rpc ListModels(ListModelsRequest) returns (ListModelsResponse);
+}
+
+message Message {
+  string role = 1;
+  string content = 2;
+}
+
+message CompleteRequest {
+  string model = 1;
+  string system = 2;
+  repeated Message messages = 3;
+  int32 max_tokens = 4;
+  bool json = 5;
+}
+
+message Usage {
+  int32 input_tokens = 1;
+  int32 output_tokens = 2;
+}
+
+message CompleteResponse {
+  string text = 1;
+  string provider = 2;
+  string model = 3;
+  Usage usage = 4;
+}
+
+message ListModelsRequest {}
+
+message ModelAlias {
+  string alias = 1;
+  string provider = 2;
+  string model = 3;
+}
+
+message ListModelsResponse {
+  repeated ModelAlias aliases = 1;
+  repeated string providers = 2;
+}

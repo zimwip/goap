@@ -31,6 +31,8 @@ type Tx interface {
 	Node(ctx context.Context, ref domain.NodeRef) (domain.Node, error)
 	NodeByKey(ctx context.Context, key string) (domain.Node, error)
 	NodesIn(ctx context.Context, baseline domain.BaselineID, nodeType string) ([]domain.Node, error)
+	// LatestNodes returns the latest version of every node.
+	LatestNodes(ctx context.Context) ([]domain.Node, error)
 	OutLinks(ctx context.Context, ref domain.NodeRef) ([]domain.Link, error)
 	InLinks(ctx context.Context, ref domain.NodeRef) ([]domain.Link, error)
 	Baseline(ctx context.Context, id domain.BaselineID) (domain.Baseline, error)

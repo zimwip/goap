@@ -1,0 +1,118 @@
+syntax = "proto3";
+
+package goap.engine.v1;
+
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+
+// EngineService runs agent processes: intent loop, then GOAP planning and
+// execution over the blackboard of a change.
+service EngineService {
+  rpc StartProcess(StartProcessRequest) returns (StartProcessResponse);
+  rpc AnswerIntent(AnswerIntentRequest) returns (AnswerIntentResponse);
+  rpc SubmitHumanInput(SubmitHumanInputRequest) returns (SubmitHumanInputResponse);
+  rpc GetProcess(GetProcessRequest) returns (GetProcessResponse);
+  rpc ListProcesses(ListProcessesRequest) returns (ListProcessesResponse);
+}
+
+message Turn {
+  string role = 1;
+  string text = 2;
+}
+
+message Candidate {
+  string goal = 1;
+  double confidence = 2;
+  string reason = 3;
+}
+
+message HumanTask {
+  string action = 1;
+  string description = 2;
+  string instructions = 3;
+  int32 step = 4;
+}
+
+message Step {
+  int32 index = 1;
+  string action = 2;
+  repeated string plan = 3;
+  map<string, bool> before = 4;
+  map<string, bool> after = 5;
+  repeated string items = 6;
+  bool effects_met = 7;
+  string output = 8;
+  string error = 9;
+  google.protobuf.Timestamp started_at = 10;
+  google.protobuf.Timestamp ended_at = 11;
+}
+
+message Process {
+  string id = 1;
+  string methodology = 2;
+  string change_id = 3;
+  // clarifying | running | waiting | completed | stuck | failed
+  string status = 4;
+  string goal = 5;
+  repeated Turn turns = 6;
+  string question = 7;
+  repeated Candidate candidates = 8;
+  HumanTask pending = 9;
+  repeated string plan = 10;
+  map<string, bool> world = 11;
+  map<string, string> unknown = 12;
+  repeated Step steps = 13;
+  repeated string disabled = 14;
+  string error = 15;
+  google.protobuf.Timestamp created_at = 16;
+  google.protobuf.Timestamp updated_at = 17;
+}
+
+message StartProcessRequest {
+  string methodology = 1;
+  // continue an existing change, or open one on baseline_id
+  string change_id = 2;
+  string baseline_id = 3;
+  string title = 4;
+  string intent = 5;
+  // skip the intent loop
+  string goal = 6;
+  google.protobuf.Struct vars = 7;
+}
+
+message StartProcessResponse {
+  Process process = 1;
+}
+
+message AnswerIntentRequest {
+  string process_id = 1;
+  string answer = 2;
+}
+
+message AnswerIntentResponse {
+  Process process = 1;
+}
+
+message SubmitHumanInputRequest {
+  string process_id = 1;
+  // items in the engine input format (see pkg/engine.ItemInput)
+  repeated google.protobuf.Struct items = 2;
+}
+
+message SubmitHumanInputResponse {
+  Process process = 1;
+}
+
+message GetProcessRequest {
+  string id = 1;
+}
+
+message GetProcessResponse {
+  Process process = 1;
+}
+
+message ListProcessesRequest {}
+
+message ListProcessesResponse {
+  repeated Process processes = 1;
+}

@@ -1,0 +1,52 @@
+syntax = "proto3";
+
+package goap.mcp.v1;
+
+import "google/protobuf/struct.proto";
+
+// McpService registers MCP servers and exposes their tools to `tool` actions.
+// Not implemented yet (milestone M3).
+service McpService {
+  rpc RegisterServer(RegisterServerRequest) returns (RegisterServerResponse);
+  rpc ListTools(ListToolsRequest) returns (ListToolsResponse);
+  rpc CallTool(CallToolRequest) returns (CallToolResponse);
+}
+
+message Server {
+  string name = 1;
+  // streamable HTTP endpoint of the MCP server
+  string url = 2;
+  // Vault path of the credentials
+  string secret_path = 3;
+}
+
+message RegisterServerRequest {
+  Server server = 1;
+}
+
+message RegisterServerResponse {
+  Server server = 1;
+}
+
+message Tool {
+  // "<server>/<tool>"
+  string name = 1;
+  string description = 2;
+  google.protobuf.Struct input_schema = 3;
+}
+
+message ListToolsRequest {}
+
+message ListToolsResponse {
+  repeated Tool tools = 1;
+}
+
+message CallToolRequest {
+  string name = 1;
+  google.protobuf.Struct arguments = 2;
+}
+
+message CallToolResponse {
+  google.protobuf.Struct result = 1;
+  bool is_error = 2;
+}

@@ -140,6 +140,22 @@ func (g *Graph) CreateBaseline(ctx context.Context, name string, nodes []domain.
 	return b, err
 }
 
+// CreateBaselineFromLatest snapshots the latest version of every live node.
+func (g *Graph) CreateBaselineFromLatest(ctx context.Context, name string) (domain.Baseline, error) {
+	var refs []domain.NodeRef
+	err := g.repo.InTx(ctx, func(tx Tx) error {
+		nodes, err := tx.LatestNodes(ctx)
+		for _, n := range nodes {
+			refs = append(refs, n.Ref())
+		}
+		return err
+	})
+	if err != nil {
+		return domain.Baseline{}, err
+	}
+	return g.CreateBaseline(ctx, name, refs)
+}
+
 // Baseline returns a baseline.
 func (g *Graph) Baseline(ctx context.Context, id domain.BaselineID) (b domain.Baseline, err error) {
 	err = g.repo.InTx(ctx, func(tx Tx) error { b, err = tx.Baseline(ctx, id); return err })
