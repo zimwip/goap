@@ -42,7 +42,9 @@ func newFixture(t *testing.T, repo Repo) fixture {
 	return f
 }
 
-func TestApplyUpdateCreatesSuspectLinks(t *testing.T) { forEachRepo(t, testApplyUpdateCreatesSuspectLinks) }
+func TestApplyUpdateCreatesSuspectLinks(t *testing.T) {
+	forEachRepo(t, testApplyUpdateCreatesSuspectLinks)
+}
 
 func testApplyUpdateCreatesSuspectLinks(t *testing.T, repo Repo) {
 	ctx := context.Background()
