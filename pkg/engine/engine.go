@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/goap"
 	"github.com/zimwip/goap/pkg/graph"
@@ -27,7 +28,9 @@ type Engine struct {
 	Store         Store
 	Events        Publisher
 	Planner       goap.Planner
-	Log           *slog.Logger
+	// Authz decides action permissions (nil: every permission is granted).
+	Authz authz.Authorizer
+	Log   *slog.Logger
 	// MaxSteps bounds the number of actions of a process (default 50).
 	MaxSteps int
 	// MaxFailures disables an action after that many executions without the
@@ -91,7 +94,7 @@ func (e *Engine) Start(ctx context.Context, req StartRequest) (*Process, error) 
 		}
 		changeID = c.ID
 	}
-	p := &Process{ID: uuid.NewString(), Methodology: m.Name, ChangeID: changeID, Vars: req.Vars, Disabled: map[string]bool{},
+	p := &Process{ID: uuid.NewString(), Methodology: m.Name, ChangeID: changeID, Initiator: authz.From(ctx), Vars: req.Vars, Disabled: map[string]bool{},
 		CreatedAt: e.clock(), UpdatedAt: e.clock()}
 	if req.Intent != "" {
 		p.Intent.Turns = append(p.Intent.Turns, intent.Turn{Role: "user", Text: req.Intent})
@@ -167,8 +170,8 @@ func (e *Engine) Submit(ctx context.Context, id string, items []ItemInput) (*Pro
 	if err != nil {
 		return nil, err
 	}
-	if p.Status != StatusWaiting || p.Pending == nil {
-		return nil, fmt.Errorf("process %s has no pending human task", id)
+	if p.Status != StatusWaiting || p.Pending == nil || p.Pending.Kind != TaskInput {
+		return nil, fmt.Errorf("process %s has no pending human task: %w", id, ErrInvalidState)
 	}
 	m, err := e.Methodologies.Methodology(ctx, p.Methodology)
 	if err != nil {
@@ -276,35 +279,111 @@ func (e *Engine) cycle(ctx context.Context, p *Process, m *methodology.Compiled)
 	// act
 	action, _ := m.Action(plan.Actions[0].Name)
 	step := Step{Index: len(p.Steps), Action: action.Name, Plan: p.Plan, Before: maps.Clone(p.World), StartedAt: e.clock()}
+	if action.Permission != "" {
+		ok, err := e.allowed(ctx, p.Initiator, action.Permission)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			// the initiator may not run this action: wait for an authorized approver
+			p.Steps = append(p.Steps, step)
+			p.Status = StatusWaiting
+			p.Pending = &HumanTask{Kind: TaskApproval, Permission: action.Permission, Action: action.Name,
+				Description: action.Description, Instructions: action.Instructions, Step: step.Index}
+			return nil
+		}
+	}
+	p.Steps = append(p.Steps, step)
+	return e.execute(ctx, p, m, bb, action, len(p.Steps)-1)
+}
+
+// execute runs an action for the step at index i and records its outcome.
+func (e *Engine) execute(ctx context.Context, p *Process, m *methodology.Compiled, bb domain.Blackboard, action methodology.Action, i int) error {
 	exec, ok := e.Executors[action.Kind]
 	if !ok {
 		return fmt.Errorf("no executor for action kind %q", action.Kind)
 	}
 	e.log().Info("executing action", "process", p.ID, "action", action.Name, "plan", p.Plan)
 	res, err := exec.Execute(ctx, ActionContext{Process: p, Action: action, Blackboard: bb, Graph: e.Graph})
+	step := &p.Steps[i]
 	step.Output = res.Output
 	if err != nil {
 		step.Error = err.Error()
 		step.EndedAt = e.clock()
-		p.Steps = append(p.Steps, step)
 		return e.recordFailure(p, action.Name)
 	}
 	if res.Wait {
-		p.Steps = append(p.Steps, step)
 		p.Status = StatusWaiting
-		p.Pending = &HumanTask{Action: action.Name, Description: action.Description, Instructions: action.Instructions, Step: step.Index}
+		p.Pending = &HumanTask{Kind: TaskInput, Action: action.Name, Description: action.Description, Instructions: action.Instructions, Step: i}
 		return nil
 	}
 	ids, err := e.addItems(ctx, p, res.Items, action.Name)
 	if err != nil {
 		step.Error = err.Error()
 		step.EndedAt = e.clock()
-		p.Steps = append(p.Steps, step)
 		return e.recordFailure(p, action.Name)
 	}
 	step.Items = ids
-	p.Steps = append(p.Steps, step)
-	return e.finishStep(ctx, p, m, &p.Steps[len(p.Steps)-1])
+	return e.finishStep(ctx, p, m, step)
+}
+
+func (e *Engine) allowed(ctx context.Context, p authz.Principal, permission string) (bool, error) {
+	if e.Authz == nil {
+		return true, nil
+	}
+	return e.Authz.Allowed(ctx, p, permission)
+}
+
+// ErrInvalidState is returned when an operation does not match the process state.
+var ErrInvalidState = errors.New("invalid process state")
+
+// Approve decides a pending approval with the permissions of the principal of
+// ctx. On approval the action runs immediately (call Run afterwards to
+// continue); on rejection the action is disabled for this process and the
+// planner looks for another way.
+func (e *Engine) Approve(ctx context.Context, id string, approve bool, comment string) (*Process, error) {
+	defer e.lock(id)()
+	p, err := e.Store.Get(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if p.Status != StatusWaiting || p.Pending == nil || p.Pending.Kind != TaskApproval {
+		return nil, fmt.Errorf("process %s has no pending approval: %w", id, ErrInvalidState)
+	}
+	approver := authz.From(ctx)
+	ok, err := e.allowed(ctx, approver, p.Pending.Permission)
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		return nil, fmt.Errorf("%q lacks %s: %w", approver.Subject, p.Pending.Permission, authz.ErrForbidden)
+	}
+	m, err := e.Methodologies.Methodology(ctx, p.Methodology)
+	if err != nil {
+		return nil, err
+	}
+	i := p.Pending.Step
+	action, _ := m.Action(p.Pending.Action)
+	p.Pending = nil
+	p.Status = StatusRunning
+	p.Steps[i].ApprovedBy = approver.Subject
+	if !approve {
+		p.Steps[i].Error = fmt.Sprintf("rejected by %s: %s", approver.Subject, comment)
+		p.Steps[i].EndedAt = e.clock()
+		if p.Disabled == nil {
+			p.Disabled = map[string]bool{}
+		}
+		p.Disabled[action.Name] = true
+		return p, e.save(ctx, p, "step")
+	}
+	bb, err := e.observe(ctx, p, m)
+	if err != nil {
+		return nil, err
+	}
+	if err := e.execute(ctx, p, m, bb, action, i); err != nil {
+		e.fail(p, err)
+	}
+	return p, e.save(ctx, p, eventOf(p))
 }
 
 // finishStep re-observes the blackboard and checks the promised effects.

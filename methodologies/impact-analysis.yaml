@@ -1,5 +1,5 @@
 name: impact-analysis
-version: 1.0.0
+version: 1.1.0
 description: >
   Analyse d'impact d'un changement sur un référentiel d'exigences :
   identification des éléments impactés, propagation le long des liens de
@@ -37,6 +37,9 @@ conditions:
   - name: reviewed
     description: Toutes les propositions ont reçu une décision
     expr: size(proposals) > 0 && proposals.all(p, p.status != "proposed")
+  - name: applied
+    description: Le changement a été appliqué au référentiel (nouvelle baseline)
+    expr: change.status == "applied"
 
 actions:
   - name: identify_impacts
@@ -136,6 +139,16 @@ actions:
     cost: 2
     instructions: Acceptez ou rejetez chaque proposition.
 
+  - name: apply_change
+    kind: builtin
+    builtin: graph.apply
+    description: Appliquer le changement validé au référentiel (crée la baseline d'arrivée)
+    pre: {reviewed: true, applied: false}
+    effects: {applied: true}
+    cost: 1
+    # sans cette permission, l'initiateur doit obtenir l'approbation d'un approbateur
+    permission: change:apply
+
 goals:
   - name: assess_impact
     description: Évaluer l'impact d'un changement et produire un rapport, sans modifier le référentiel
@@ -153,3 +166,11 @@ goals:
       - proposer les changements
     pre: {"expect:propose_requirement_updates": true, "expect:propose_tests": true, reviewed: true}
     value: 20
+  - name: deliver_change
+    description: Préparer, valider puis appliquer la modification au référentiel
+    examples:
+      - appliquer la modification
+      - livrer le changement
+      - mettre en production le référentiel
+    pre: {reviewed: true, applied: true}
+    value: 30

@@ -2,10 +2,12 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"os"
 	"strings"
 	"testing"
 
+	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/intent"
@@ -76,6 +78,7 @@ func setup(t *testing.T) (*Engine, *graph.Graph, domain.BaselineID) {
 		},
 		Intent: intent.Resolver{Ranker: intent.Lexical{}},
 		Store:  NewMemoryStore(),
+		Authz:  authz.DefaultRoles,
 	}
 	return e, g, b.ID
 }
@@ -182,5 +185,100 @@ func TestStuckWhenNoPlan(t *testing.T) {
 	}
 	if !p.Disabled["identify_impacts"] {
 		t.Fatal("identify_impacts should be disabled")
+	}
+}
+
+var (
+	contributor = authz.Principal{Subject: "carol", Roles: []string{"contributor"}}
+	approver    = authz.Principal{Subject: "alice", Roles: []string{"approver"}}
+	admin       = authz.Principal{Subject: "root", Roles: []string{"admin"}}
+)
+
+// deliverUntilReviewed starts a deliver_change process as who, accepts every
+// proposal and runs until the next blocking point.
+func deliverUntilReviewed(t *testing.T, who authz.Principal) (*Engine, *graph.Graph, *Process) {
+	t.Helper()
+	e, g, base := setup(t)
+	ctx := authz.With(context.Background(), who)
+	p, err := e.Start(ctx, StartRequest{Methodology: "impact-analysis", BaselineID: base, Goal: "deliver_change"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Initiator.Subject != who.Subject {
+		t.Fatalf("initiator not recorded: %+v", p.Initiator)
+	}
+	p, _ = e.Run(ctx, p.ID)
+	if p.Status != StatusWaiting || p.Pending.Kind != TaskInput || p.Pending.Action != "review_proposals" {
+		t.Fatalf("expected review, got %s %+v", p.Status, p.Pending)
+	}
+	c, _ := g.Change(ctx, p.ChangeID)
+	var decisions []ItemInput
+	for _, it := range c.ItemsOfKind(domain.KindProposal) {
+		decisions = append(decisions, ItemInput{Kind: "decision", Decision: &DecisionInput{Item: "@" + string(it.ID), Accept: true}})
+	}
+	if _, err := e.Submit(ctx, p.ID, decisions); err != nil {
+		t.Fatal(err)
+	}
+	p, _ = e.Run(ctx, p.ID)
+	return e, g, p
+}
+
+func TestApplyNeedsApproval(t *testing.T) {
+	e, g, p := deliverUntilReviewed(t, contributor)
+	if p.Status != StatusWaiting || p.Pending.Kind != TaskApproval || p.Pending.Permission != authz.PermChangeApply {
+		t.Fatalf("expected an approval task, got %s %+v", p.Status, p.Pending)
+	}
+	if c, _ := g.Change(context.Background(), p.ChangeID); c.Status == domain.ChangeApplied {
+		t.Fatal("change applied without approval")
+	}
+	// the contributor may neither submit items nor approve
+	if _, err := e.Submit(authz.With(context.Background(), contributor), p.ID, nil); !errors.Is(err, ErrInvalidState) {
+		t.Fatalf("submit on approval task: %v", err)
+	}
+	if _, err := e.Approve(authz.With(context.Background(), contributor), p.ID, true, ""); !errors.Is(err, authz.ErrForbidden) {
+		t.Fatalf("expected forbidden, got %v", err)
+	}
+	ctx := authz.With(context.Background(), approver)
+	p, err := e.Approve(ctx, p.ID, true, "ok")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, _ = e.Run(ctx, p.ID)
+	if p.Status != StatusCompleted {
+		t.Fatalf("status %s %s", p.Status, p.Error)
+	}
+	last := p.Steps[len(p.Steps)-1]
+	if last.Action != "apply_change" || last.ApprovedBy != "alice" || !last.EffectsMet {
+		t.Fatalf("unexpected apply step %+v", last)
+	}
+	c, _ := g.Change(ctx, p.ChangeID)
+	if c.Status != domain.ChangeApplied || c.ResultBaselineID == "" {
+		t.Fatalf("change not applied: %+v", c)
+	}
+}
+
+func TestApplyAutomaticWithPermission(t *testing.T) {
+	_, g, p := deliverUntilReviewed(t, admin)
+	if p.Status != StatusCompleted {
+		t.Fatalf("admin initiator should apply directly, got %s %+v", p.Status, p.Pending)
+	}
+	if c, _ := g.Change(context.Background(), p.ChangeID); c.Status != domain.ChangeApplied {
+		t.Fatal("change not applied")
+	}
+}
+
+func TestApplyRejected(t *testing.T) {
+	e, g, p := deliverUntilReviewed(t, contributor)
+	ctx := authz.With(context.Background(), approver)
+	p, err := e.Approve(ctx, p.ID, false, "pas maintenant")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, _ = e.Run(ctx, p.ID)
+	if p.Status != StatusStuck || !p.Disabled["apply_change"] {
+		t.Fatalf("expected stuck with apply disabled, got %s %v", p.Status, p.Disabled)
+	}
+	if c, _ := g.Change(ctx, p.ChangeID); c.Status == domain.ChangeApplied {
+		t.Fatal("rejected apply must not change the graph")
 	}
 }

@@ -31,6 +31,7 @@
             <code class="action">{s.action}</code>
             <span class="st">{LABEL[st]}</span>
             <span class="grow"></span>
+            {#if s.approvedBy}<span class="hint">décidé par {s.approvedBy}</span>{/if}
             {#if s.items?.length}<span class="hint">{s.items.length} item{s.items.length > 1 ? 's' : ''}</span>{/if}
             <span class="hint" title={formatDate(s.startedAt)}>{duration(s)}</span>
           </div>

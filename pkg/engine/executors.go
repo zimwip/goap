@@ -159,7 +159,7 @@ func (b BuiltinExecutor) Execute(ctx context.Context, ac ActionContext) (ActionR
 
 // DefaultBuiltins returns the builtin actions shipped with the engine.
 func DefaultBuiltins() BuiltinExecutor {
-	return BuiltinExecutor{"graph.propagate": Propagate}
+	return BuiltinExecutor{"graph.propagate": Propagate, "graph.apply": ApplyChange}
 }
 
 // Propagate follows links backwards from impacted nodes (an impact on the
@@ -227,4 +227,16 @@ func Propagate(ctx context.Context, ac ActionContext) (ActionResult, error) {
 	items = append(items, ItemInput{Kind: string(domain.KindArtifact), Type: "propagation",
 		Data: map[string]any{"propagated": len(items), "maxDepth": maxDepth}})
 	return ActionResult{Items: items, Output: fmt.Sprintf("%d propagated impacts", len(items)-1)}, nil
+}
+
+// ApplyChange materializes the change into a new baseline (graph.apply). The
+// change is then "applied": conditions observe it through change.status and
+// change.resultBaseline. Param baselineName defaults to the change title.
+func ApplyChange(ctx context.Context, ac ActionContext) (ActionResult, error) {
+	name, _ := ac.Action.Params["baselineName"].(string)
+	b, err := ac.Graph.Apply(ctx, ac.Blackboard.Change.ID, name)
+	if err != nil {
+		return ActionResult{}, err
+	}
+	return ActionResult{Output: fmt.Sprintf("baseline %s (%s) created", b.Name, b.ID)}, nil
 }

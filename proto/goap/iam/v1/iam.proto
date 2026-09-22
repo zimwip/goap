@@ -9,6 +9,9 @@ service IamService {
   rpc CreateUser(CreateUserRequest) returns (CreateUserResponse);
   rpc GrantRole(GrantRoleRequest) returns (GrantRoleResponse);
   rpc WhoAmI(WhoAmIRequest) returns (WhoAmIResponse);
+  // Decide a permission (e.g. "change:apply") for a subject in an organization.
+  // Target of the engine's authorizer (today: static role policy).
+  rpc CheckPermission(CheckPermissionRequest) returns (CheckPermissionResponse);
 }
 
 message Organization {
@@ -59,4 +62,14 @@ message WhoAmIRequest {}
 message WhoAmIResponse {
   User user = 1;
   repeated RoleBinding bindings = 2;
+}
+
+message CheckPermissionRequest {
+  string subject = 1;
+  string organization_id = 2;
+  string permission = 3;
+}
+
+message CheckPermissionResponse {
+  bool allowed = 1;
 }

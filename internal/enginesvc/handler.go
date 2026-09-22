@@ -6,14 +6,18 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"net/http"
 	"sort"
+	"strings"
 
 	"connectrpc.com/connect"
 
 	enginev1 "github.com/zimwip/goap/gen/goap/engine/v1"
 	"github.com/zimwip/goap/gen/goap/engine/v1/enginev1connect"
+	"github.com/zimwip/goap/internal/gateway"
 	"github.com/zimwip/goap/internal/pbconv"
 	"github.com/zimwip/goap/internal/rpcerr"
+	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/engine"
 )
@@ -25,6 +29,22 @@ type Handler struct {
 	Log    *slog.Logger
 	// Run executes a process in the background (defaults to a goroutine).
 	Run func(id string)
+	// DefaultPrincipal is used when the request carries no identity headers
+	// (single-process dev without gateway). Nil keeps such callers anonymous.
+	DefaultPrincipal *authz.Principal
+}
+
+// principal reads the identity set by the gateway. The engine must only be
+// reachable through the gateway, which overwrites these headers.
+func (h *Handler) principal(ctx context.Context, hdr http.Header) context.Context {
+	p := authz.Principal{Subject: hdr.Get(gateway.HeaderSubject), Org: hdr.Get(gateway.HeaderOrg)}
+	if roles := hdr.Get(gateway.HeaderRoles); roles != "" {
+		p.Roles = strings.Split(roles, ",")
+	}
+	if p.Anonymous() && h.DefaultPrincipal != nil {
+		p = *h.DefaultPrincipal
+	}
+	return authz.With(ctx, p)
 }
 
 var _ enginev1connect.EngineServiceHandler = (*Handler)(nil)
@@ -49,11 +69,16 @@ func toConnect(err error) error {
 	switch {
 	case errors.Is(err, engine.ErrNotFound), errors.As(err, &unknown):
 		return connect.NewError(connect.CodeNotFound, err)
+	case errors.Is(err, authz.ErrForbidden):
+		return connect.NewError(connect.CodePermissionDenied, err)
+	case errors.Is(err, engine.ErrInvalidState):
+		return connect.NewError(connect.CodeFailedPrecondition, err)
 	}
 	return rpcerr.ToConnect(err)
 }
 
 func (h *Handler) StartProcess(ctx context.Context, r *connect.Request[enginev1.StartProcessRequest]) (*connect.Response[enginev1.StartProcessResponse], error) {
+	ctx = h.principal(ctx, r.Header())
 	p, err := h.Engine.Start(ctx, engine.StartRequest{
 		Methodology: r.Msg.Methodology, ChangeID: domain.ChangeID(r.Msg.ChangeId), BaselineID: domain.BaselineID(r.Msg.BaselineId),
 		Title: r.Msg.Title, Intent: r.Msg.Intent, Goal: r.Msg.Goal, Vars: pbconv.Map(r.Msg.Vars),
@@ -66,7 +91,7 @@ func (h *Handler) StartProcess(ctx context.Context, r *connect.Request[enginev1.
 }
 
 func (h *Handler) AnswerIntent(ctx context.Context, r *connect.Request[enginev1.AnswerIntentRequest]) (*connect.Response[enginev1.AnswerIntentResponse], error) {
-	p, err := h.Engine.Answer(ctx, r.Msg.ProcessId, r.Msg.Answer)
+	p, err := h.Engine.Answer(h.principal(ctx, r.Header()), r.Msg.ProcessId, r.Msg.Answer)
 	if err != nil {
 		return nil, toConnect(err)
 	}
@@ -87,12 +112,21 @@ func (h *Handler) SubmitHumanInput(ctx context.Context, r *connect.Request[engin
 		}
 		items = append(items, it)
 	}
-	p, err := h.Engine.Submit(ctx, r.Msg.ProcessId, items)
+	p, err := h.Engine.Submit(h.principal(ctx, r.Header()), r.Msg.ProcessId, items)
 	if err != nil {
 		return nil, toConnect(err)
 	}
 	h.run(p)
 	return connect.NewResponse(&enginev1.SubmitHumanInputResponse{Process: ProcessToPB(p)}), nil
+}
+
+func (h *Handler) ApproveAction(ctx context.Context, r *connect.Request[enginev1.ApproveActionRequest]) (*connect.Response[enginev1.ApproveActionResponse], error) {
+	p, err := h.Engine.Approve(h.principal(ctx, r.Header()), r.Msg.ProcessId, r.Msg.Approve, r.Msg.Comment)
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	h.run(p)
+	return connect.NewResponse(&enginev1.ApproveActionResponse{Process: ProcessToPB(p)}), nil
 }
 
 func (h *Handler) GetProcess(ctx context.Context, r *connect.Request[enginev1.GetProcessRequest]) (*connect.Response[enginev1.GetProcessResponse], error) {
@@ -121,6 +155,7 @@ func ProcessToPB(p *engine.Process) *enginev1.Process {
 		Id: p.ID, Methodology: p.Methodology, ChangeId: string(p.ChangeID), Status: string(p.Status), Goal: p.Goal,
 		Question: p.Question, Plan: p.Plan, World: p.World, Unknown: p.Unknown, Error: p.Error,
 		CreatedAt: pbconv.Time(p.CreatedAt), UpdatedAt: pbconv.Time(p.UpdatedAt),
+		Initiator: &enginev1.Principal{Subject: p.Initiator.Subject, Org: p.Initiator.Org, Roles: p.Initiator.Roles},
 	}
 	for _, t := range p.Intent.Turns {
 		out.Turns = append(out.Turns, &enginev1.Turn{Role: t.Role, Text: t.Text})
@@ -129,7 +164,7 @@ func ProcessToPB(p *engine.Process) *enginev1.Process {
 		out.Candidates = append(out.Candidates, &enginev1.Candidate{Goal: c.Goal, Confidence: c.Confidence, Reason: c.Reason})
 	}
 	if t := p.Pending; t != nil {
-		out.Pending = &enginev1.HumanTask{Action: t.Action, Description: t.Description, Instructions: t.Instructions, Step: int32(t.Step)}
+		out.Pending = &enginev1.HumanTask{Kind: t.Kind, Permission: t.Permission, Action: t.Action, Description: t.Description, Instructions: t.Instructions, Step: int32(t.Step)}
 	}
 	for a := range p.Disabled {
 		out.Disabled = append(out.Disabled, a)
@@ -137,7 +172,7 @@ func ProcessToPB(p *engine.Process) *enginev1.Process {
 	sort.Strings(out.Disabled)
 	for _, s := range p.Steps {
 		ps := &enginev1.Step{Index: int32(s.Index), Action: s.Action, Plan: s.Plan, Before: s.Before, After: s.After,
-			EffectsMet: s.EffectsMet, Output: s.Output, Error: s.Error, StartedAt: pbconv.Time(s.StartedAt), EndedAt: pbconv.Time(s.EndedAt)}
+			EffectsMet: s.EffectsMet, ApprovedBy: s.ApprovedBy, Output: s.Output, Error: s.Error, StartedAt: pbconv.Time(s.StartedAt), EndedAt: pbconv.Time(s.EndedAt)}
 		for _, id := range s.Items {
 			ps.Items = append(ps.Items, string(id))
 		}

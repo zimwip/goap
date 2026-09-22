@@ -81,3 +81,11 @@ func (c *Client) BaselineGraph(ctx context.Context, id domain.BaselineID) ([]dom
 	}
 	return pbconv.NodesFromPB(r.Msg.Nodes), pbconv.LinksFromPB(r.Msg.Links), nil
 }
+
+func (c *Client) Apply(ctx context.Context, id domain.ChangeID, baselineName string) (domain.Baseline, error) {
+	r, err := c.rpc.ApplyChange(ctx, connect.NewRequest(&graphv1.ApplyChangeRequest{ChangeId: string(id), BaselineName: baselineName}))
+	if err != nil {
+		return domain.Baseline{}, rpcerr.FromConnect(err)
+	}
+	return pbconv.BaselineFromPB(r.Msg.Baseline), nil
+}

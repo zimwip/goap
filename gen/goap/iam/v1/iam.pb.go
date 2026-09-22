@@ -554,6 +554,110 @@ func (x *WhoAmIResponse) GetBindings() []*RoleBinding {
 	return nil
 }
 
+type CheckPermissionRequest struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Subject        string                 `protobuf:"bytes,1,opt,name=subject,proto3" json:"subject,omitempty"`
+	OrganizationId string                 `protobuf:"bytes,2,opt,name=organization_id,json=organizationId,proto3" json:"organization_id,omitempty"`
+	Permission     string                 `protobuf:"bytes,3,opt,name=permission,proto3" json:"permission,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *CheckPermissionRequest) Reset() {
+	*x = CheckPermissionRequest{}
+	mi := &file_goap_iam_v1_iam_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CheckPermissionRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CheckPermissionRequest) ProtoMessage() {}
+
+func (x *CheckPermissionRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_iam_v1_iam_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CheckPermissionRequest.ProtoReflect.Descriptor instead.
+func (*CheckPermissionRequest) Descriptor() ([]byte, []int) {
+	return file_goap_iam_v1_iam_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *CheckPermissionRequest) GetSubject() string {
+	if x != nil {
+		return x.Subject
+	}
+	return ""
+}
+
+func (x *CheckPermissionRequest) GetOrganizationId() string {
+	if x != nil {
+		return x.OrganizationId
+	}
+	return ""
+}
+
+func (x *CheckPermissionRequest) GetPermission() string {
+	if x != nil {
+		return x.Permission
+	}
+	return ""
+}
+
+type CheckPermissionResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Allowed       bool                   `protobuf:"varint,1,opt,name=allowed,proto3" json:"allowed,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CheckPermissionResponse) Reset() {
+	*x = CheckPermissionResponse{}
+	mi := &file_goap_iam_v1_iam_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CheckPermissionResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CheckPermissionResponse) ProtoMessage() {}
+
+func (x *CheckPermissionResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_iam_v1_iam_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CheckPermissionResponse.ProtoReflect.Descriptor instead.
+func (*CheckPermissionResponse) Descriptor() ([]byte, []int) {
+	return file_goap_iam_v1_iam_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *CheckPermissionResponse) GetAllowed() bool {
+	if x != nil {
+		return x.Allowed
+	}
+	return false
+}
+
 var File_goap_iam_v1_iam_proto protoreflect.FileDescriptor
 
 const file_goap_iam_v1_iam_proto_rawDesc = "" +
@@ -586,14 +690,23 @@ const file_goap_iam_v1_iam_proto_rawDesc = "" +
 	"\rWhoAmIRequest\"m\n" +
 	"\x0eWhoAmIResponse\x12%\n" +
 	"\x04user\x18\x01 \x01(\v2\x11.goap.iam.v1.UserR\x04user\x124\n" +
-	"\bbindings\x18\x02 \x03(\v2\x18.goap.iam.v1.RoleBindingR\bbindings2\xd1\x02\n" +
+	"\bbindings\x18\x02 \x03(\v2\x18.goap.iam.v1.RoleBindingR\bbindings\"{\n" +
+	"\x16CheckPermissionRequest\x12\x18\n" +
+	"\asubject\x18\x01 \x01(\tR\asubject\x12'\n" +
+	"\x0forganization_id\x18\x02 \x01(\tR\x0eorganizationId\x12\x1e\n" +
+	"\n" +
+	"permission\x18\x03 \x01(\tR\n" +
+	"permission\"3\n" +
+	"\x17CheckPermissionResponse\x12\x18\n" +
+	"\aallowed\x18\x01 \x01(\bR\aallowed2\xaf\x03\n" +
 	"\n" +
 	"IamService\x12e\n" +
 	"\x12CreateOrganization\x12&.goap.iam.v1.CreateOrganizationRequest\x1a'.goap.iam.v1.CreateOrganizationResponse\x12M\n" +
 	"\n" +
 	"CreateUser\x12\x1e.goap.iam.v1.CreateUserRequest\x1a\x1f.goap.iam.v1.CreateUserResponse\x12J\n" +
 	"\tGrantRole\x12\x1d.goap.iam.v1.GrantRoleRequest\x1a\x1e.goap.iam.v1.GrantRoleResponse\x12A\n" +
-	"\x06WhoAmI\x12\x1a.goap.iam.v1.WhoAmIRequest\x1a\x1b.goap.iam.v1.WhoAmIResponseB\x97\x01\n" +
+	"\x06WhoAmI\x12\x1a.goap.iam.v1.WhoAmIRequest\x1a\x1b.goap.iam.v1.WhoAmIResponse\x12\\\n" +
+	"\x0fCheckPermission\x12#.goap.iam.v1.CheckPermissionRequest\x1a$.goap.iam.v1.CheckPermissionResponseB\x97\x01\n" +
 	"\x0fcom.goap.iam.v1B\bIamProtoP\x01Z,github.com/zimwip/goap/gen/goap/iam/v1;iamv1\xa2\x02\x03GIX\xaa\x02\vGoap.Iam.V1\xca\x02\vGoap\\Iam\\V1\xe2\x02\x17Goap\\Iam\\V1\\GPBMetadata\xea\x02\rGoap::Iam::V1b\x06proto3"
 
 var (
@@ -608,7 +721,7 @@ func file_goap_iam_v1_iam_proto_rawDescGZIP() []byte {
 	return file_goap_iam_v1_iam_proto_rawDescData
 }
 
-var file_goap_iam_v1_iam_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
+var file_goap_iam_v1_iam_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
 var file_goap_iam_v1_iam_proto_goTypes = []any{
 	(*Organization)(nil),               // 0: goap.iam.v1.Organization
 	(*User)(nil),                       // 1: goap.iam.v1.User
@@ -621,6 +734,8 @@ var file_goap_iam_v1_iam_proto_goTypes = []any{
 	(*GrantRoleResponse)(nil),          // 8: goap.iam.v1.GrantRoleResponse
 	(*WhoAmIRequest)(nil),              // 9: goap.iam.v1.WhoAmIRequest
 	(*WhoAmIResponse)(nil),             // 10: goap.iam.v1.WhoAmIResponse
+	(*CheckPermissionRequest)(nil),     // 11: goap.iam.v1.CheckPermissionRequest
+	(*CheckPermissionResponse)(nil),    // 12: goap.iam.v1.CheckPermissionResponse
 }
 var file_goap_iam_v1_iam_proto_depIdxs = []int32{
 	0,  // 0: goap.iam.v1.CreateOrganizationResponse.organization:type_name -> goap.iam.v1.Organization
@@ -633,12 +748,14 @@ var file_goap_iam_v1_iam_proto_depIdxs = []int32{
 	5,  // 7: goap.iam.v1.IamService.CreateUser:input_type -> goap.iam.v1.CreateUserRequest
 	7,  // 8: goap.iam.v1.IamService.GrantRole:input_type -> goap.iam.v1.GrantRoleRequest
 	9,  // 9: goap.iam.v1.IamService.WhoAmI:input_type -> goap.iam.v1.WhoAmIRequest
-	4,  // 10: goap.iam.v1.IamService.CreateOrganization:output_type -> goap.iam.v1.CreateOrganizationResponse
-	6,  // 11: goap.iam.v1.IamService.CreateUser:output_type -> goap.iam.v1.CreateUserResponse
-	8,  // 12: goap.iam.v1.IamService.GrantRole:output_type -> goap.iam.v1.GrantRoleResponse
-	10, // 13: goap.iam.v1.IamService.WhoAmI:output_type -> goap.iam.v1.WhoAmIResponse
-	10, // [10:14] is the sub-list for method output_type
-	6,  // [6:10] is the sub-list for method input_type
+	11, // 10: goap.iam.v1.IamService.CheckPermission:input_type -> goap.iam.v1.CheckPermissionRequest
+	4,  // 11: goap.iam.v1.IamService.CreateOrganization:output_type -> goap.iam.v1.CreateOrganizationResponse
+	6,  // 12: goap.iam.v1.IamService.CreateUser:output_type -> goap.iam.v1.CreateUserResponse
+	8,  // 13: goap.iam.v1.IamService.GrantRole:output_type -> goap.iam.v1.GrantRoleResponse
+	10, // 14: goap.iam.v1.IamService.WhoAmI:output_type -> goap.iam.v1.WhoAmIResponse
+	12, // 15: goap.iam.v1.IamService.CheckPermission:output_type -> goap.iam.v1.CheckPermissionResponse
+	11, // [11:16] is the sub-list for method output_type
+	6,  // [6:11] is the sub-list for method input_type
 	6,  // [6:6] is the sub-list for extension type_name
 	6,  // [6:6] is the sub-list for extension extendee
 	0,  // [0:6] is the sub-list for field type_name
@@ -655,7 +772,7 @@ func file_goap_iam_v1_iam_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_goap_iam_v1_iam_proto_rawDesc), len(file_goap_iam_v1_iam_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   11,
+			NumMessages:   13,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

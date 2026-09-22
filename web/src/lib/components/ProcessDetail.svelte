@@ -5,6 +5,7 @@
   import WorldState from './WorldState.svelte';
   import StepsTimeline from './StepsTimeline.svelte';
   import HumanTaskForm from './HumanTaskForm.svelte';
+  import ApprovalPanel from './ApprovalPanel.svelte';
 
   let { id, onupdate }: { id: string; onupdate?: (p: Process) => void } = $props();
 
@@ -85,6 +86,10 @@
     </div>
     <dl class="meta">
       <dt>Méthodologie</dt><dd>{process.methodology}</dd>
+      {#if process.initiator?.subject}
+        <dt>Initiateur</dt>
+        <dd>{process.initiator.subject}{#if process.initiator.roles?.length} <span class="empty">({process.initiator.roles.join(', ')})</span>{/if}</dd>
+      {/if}
       <dt>Objectif</dt><dd>{#if process.goal}<code>{process.goal}</code>{:else}<span class="empty">à déterminer</span>{/if}</dd>
       {#if process.changeId}
         <dt>Changement</dt>
@@ -133,7 +138,11 @@
 
   {#if process.status === 'waiting' && process.pending}
     {#key `${process.id}:${process.pending.step}:${process.pending.action}`}
-      <HumanTaskForm {process} onsubmitted={set} />
+      {#if process.pending.kind === 'approval'}
+        <ApprovalPanel {process} ondecided={set} />
+      {:else}
+        <HumanTaskForm {process} onsubmitted={set} />
+      {/if}
     {/key}
   {/if}
 
