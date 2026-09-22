@@ -207,8 +207,45 @@ Cette application est elle-même une action planifiable, `builtin: graph.apply`,
   cherche une autre voie (en général : `stuck`).
 - Toute action peut porter une permission, pas seulement `graph.apply`.
 
-Décision des permissions : `pkg/authz` avec une politique de rôles statique (`viewer`, `contributor`,
-`methodologist`, `approver`, `admin`) en attendant `IamService.CheckPermission` (M2).
+Les permissions sont décidées en **ABAC** par Casbin (§2.8) : la ressource est le change, avec pour
+attributs l'organisation et le propriétaire (= l'initiateur). La politique par défaut applique le
+**principe des quatre yeux** : un approbateur applique les changes de son organisation, jamais les siens.
+
+### 2.8 Contrôle d'accès ABAC (Casbin)
+
+Toutes les décisions d'accès passent par un enforcer [Casbin](https://casbin.org) avec un modèle
+**ABAC** ([ADR 0005](adr/0005-abac-casbin.md)). Une règle de politique est :
+
+```
+p, <règle sur les attributs>, <type de ressource | *>, <action | *>, <allow | deny>
+```
+
+| Attribut | Contenu |
+|---|---|
+| `r.sub` | appelant : `Subject`, `Org`, `Roles` (issus du JWT, propagés par la gateway) |
+| `r.obj` | ressource : `Type`, `ID`, `Org`, `Owner`, `Name` |
+| `r.act` | action : `read`, `start`, `submit`, `write`, `publish`, `delete`, `apply`… |
+
+Fonctions disponibles dans les règles : `hasRole(r.sub, "x")`, `hasAnyRole(r.sub, "a", "b")`,
+`isAnonymous(r.sub)`. Un `deny` qui correspond l'emporte sur tout `allow`.
+
+Politiques par défaut (créées si la table est vide) :
+
+| Règle | Ressource | Action |
+|---|---|---|
+| `hasRole(r.sub, "admin")` | `*` | `*` |
+| `!isAnonymous(r.sub) && (r.obj.Org == "" \|\| r.obj.Org == r.sub.Org)` | `*` | `read` |
+| `hasAnyRole(r.sub, "contributor", "methodologist", "approver") && r.obj.Org == r.sub.Org` | `process` | `*` |
+| `hasRole(r.sub, "methodologist") && r.obj.Org == r.sub.Org` | `methodology` | `*` |
+| `hasRole(r.sub, "approver") && r.sub.Org == r.obj.Org && r.sub.Subject != r.obj.Owner` | `change` | `apply` |
+
+- Les politiques sont stockées dans la base du service **iam** (table `casbin_rule`) et administrées via
+  `IamService.ListPolicies / AddPolicy / RemovePolicy` (ressource `policy`) et l'écran « Accès » du frontend.
+  Une règle est validée (compilation + évaluation d'essai) avant d'être enregistrée.
+- Les services appellent `IamService.CheckPermission` (client `iamsvc.Client`, interface `authz.Authorizer`).
+- Après une modification, iam publie `goap.iam.policy.changed` ; les répliques rechargent (et toutes les 30 s).
+- Points d'application : moteur (démarrer / répondre / soumettre / lire un processus, permission des actions,
+  approbations), registry (écrire / publier / supprimer une méthodologie), iam (administration des politiques).
 
 Replanifier à chaque pas rend le moteur robuste aux actions non déterministes (LLM) et aux modifications
 concurrentes du blackboard (un humain peut ajouter un impact pendant l'exécution).
@@ -250,8 +287,8 @@ Décisions structurantes : [ADR 0001 — blackboard = axe change](adr/0001-black
 | Service | Responsabilité | API | Persistance | Statut |
 |---|---|---|---|---|
 | **gateway** | Point d'entrée unique, authentification (JWT/OIDC), routage vers les services, CORS, rate-limit | Echo HTTP, reverse proxy Connect | — | 🟢 socle |
-| **iam** | Utilisateurs, organisations (tenants), rôles, permissions, API keys | Connect `iam.v1` | `iam` | 🟡 à venir |
-| **registry** | Stockage, validation et versionnement des méthodologies | Connect `registry.v1` | `registry` | 🟢 socle |
+| **iam** | Décisions d'accès ABAC (Casbin), administration des politiques ; utilisateurs / organisations à venir | Connect `iam.v1` | `iam` | 🟢 ABAC · 🟡 comptes |
+| **registry** | Méthodologies structurées en base : édition (brouillon), validation, publication, versions, import/export YAML | Connect `registry.v1` | `registry` | 🟢 |
 | **engine** | Boucle d'intention, planification, exécution des processus ; déployable en cluster | Connect `engine.v1` | `engine` | 🟢 socle (mémoire) |
 | **graph** | Axe domaine (nœuds versionnés, liens, baselines) + axe change (ChangeSets, items, apply) | Connect `graph.v1` | `graph` | 🟢 |
 | **modelgw** | Abstraction multi-fournisseurs / multi-modèles, alias (`default`, `fast`, `reasoning`), quotas, traces | Connect `model.v1` | `modelgw` (usage) | 🟢 socle |
@@ -327,6 +364,19 @@ change_item(id uuid, change_id, kind, type, status, target_id, target_version, p
 
 ## 4. Format d'une méthodologie
 
+Les méthodologies sont **stockées en base** sous forme structurée ([ADR 0006](adr/0006-methodologies-en-base.md)),
+éditées depuis le frontend et administrables en SQL. Tables du schéma `registry` : `methodology` (en-tête,
+statut) et une table par section (`methodology_node_type`, `methodology_link_type`, `methodology_condition`,
+`methodology_action`, `methodology_goal`, ordonnées par `position`).
+
+Cycle de vie d'une version : **brouillon** (modifiable, peut être invalide : les anomalies sont renvoyées
+avec leur chemin, ex. `conditions[2].expr`) → **publiée** (validée, immuable, seule exécutable par le
+moteur) → **archivée**. Modifier une version publiée = créer une nouvelle version brouillon (`CreateVersion`).
+
+Le **YAML** n'est qu'un format d'**import / export** (`ImportMethodology`, `ExportMethodology`) ; les
+fichiers de `methodologies/` sont importés et publiés au démarrage du registry s'ils n'existent pas encore.
+Exemple de définition en YAML :
+
 ```yaml
 name: impact-analysis
 version: 1.0.0
@@ -373,14 +423,16 @@ Voir `methodologies/impact-analysis.yaml` pour l'exemple complet exécutable.
 cmd/<service>/main.go        points d'entrée (gateway, registry, engine, graph, modelgw, mcp, iam)
 cmd/goap-dev/                tout-en-un en mémoire pour le développement local
 internal/platform/           config, logs, serveur HTTP/Connect, NATS, Postgres, secrets Vault
-internal/<service>/          implémentation des handlers Connect d'un service
+internal/<service>/          implémentation des handlers Connect d'un service (graphsvc, registrysvc, iamsvc…)
+internal/identity/           identité de l'appelant (en-têtes posés par la gateway)
 pkg/domain/                  modèle du graphe (axe domaine + axe change)
 pkg/graph/                   Store (mémoire, PostgreSQL), apply, hydratation
 pkg/goap/                    planificateur A*
 pkg/condition/               compilation/évaluation CEL, compilation des `expects`
 pkg/intent/                  boucle d'intention (Ranker lexical, Ranker LLM)
 pkg/engine/                  processus, exécuteurs d'actions
-pkg/methodology/             format de méthodologie, chargement YAML, validation
+pkg/methodology/             modèle de méthodologie, validation (anomalies localisées), compilation, import/export YAML
+pkg/authz/                   ABAC : identité, requêtes, modèle et enforcer Casbin, politiques par défaut
 pkg/llm/                     contrat de complétion (implémenté par internal/modelgw)
 proto/                       contrats connect-rpc (buf)
 gen/                         code généré (commité)
@@ -396,7 +448,7 @@ docs/                        architecture, ADR
 |---|---|
 | **M0 — socle** 🟢 | Doc, modèle domaine/change, planificateur A\*, conditions CEL, boucle d'intention, moteur (mémoire), graph (mémoire + Postgres), registry, modelgw (fake + Anthropic + OpenAI-compatible), gateway, compose, UI minimale |
 | **M1 — persistance moteur** | `ProcessStore` PostgreSQL, work-queue JetStream, reprise après crash, multi-réplique |
-| **M2 — IAM** | organisations, utilisateurs, rôles, OIDC, isolation `org_id`, `CheckPermission` en remplacement de la politique de rôles statique |
+| **M2 — IAM** | organisations, utilisateurs, OIDC, isolation `org_id` dans le graphe, ABAC sur le service graph |
 | **M3 — MCP** | registre de serveurs MCP, découverte d'outils, actions `tool`, secrets MCP via Vault |
 | **M4 — axe change avancé** | propagation d'impact (CTE récursive paramétrée par types de liens), liens suspects, diff de baselines, merge/rebase de changesets concurrents |
 | **M5 — UX** | éditeur de méthodologies, visualisation du graphe et du plan, tâches humaines |

@@ -6,7 +6,11 @@ package methodology
 import (
 	"bytes"
 	"fmt"
+	"maps"
+	"regexp"
 	"slices"
+	"sort"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 
@@ -124,102 +128,208 @@ type Compiled struct {
 	actions    map[string]Action
 }
 
+// Issue is a validation problem located by a field path such as
+// "conditions[2].expr" or "actions[0].pre.has_impacts".
+type Issue struct {
+	Path    string `json:"path"`
+	Message string `json:"message"`
+}
+
+func (i Issue) String() string {
+	if i.Path == "" {
+		return i.Message
+	}
+	return i.Path + ": " + i.Message
+}
+
+// Issues is a list of validation problems; it implements error.
+type Issues []Issue
+
+func (is Issues) Error() string {
+	msgs := make([]string, len(is))
+	for i, x := range is {
+		msgs[i] = x.String()
+	}
+	return strings.Join(msgs, "; ")
+}
+
+var nameRE = regexp.MustCompile(`^[a-z][a-z0-9_-]*$`)
+
+// Validate returns every problem of the definition (empty when valid).
+func (m *Methodology) Validate() Issues {
+	_, issues := m.compile()
+	return issues
+}
+
 // Compile validates the methodology and compiles its conditions, including
-// the conditions generated from action expectations.
+// the conditions generated from action expectations. The methodology itself
+// is not modified; generated effects live in the compiled actions only.
 func (m *Methodology) Compile() (*Compiled, error) {
-	if m.Name == "" {
-		return nil, fmt.Errorf("methodology name required")
+	c, issues := m.compile()
+	if len(issues) > 0 {
+		return nil, fmt.Errorf("methodology %s: %w", m.Name, issues)
+	}
+	return c, nil
+}
+
+func (m *Methodology) compile() (*Compiled, Issues) {
+	var issues Issues
+	add := func(path, format string, args ...any) {
+		issues = append(issues, Issue{Path: path, Message: fmt.Sprintf(format, args...)})
+	}
+	switch {
+	case m.Name == "":
+		add("name", "name required")
+	case !nameRE.MatchString(m.Name):
+		add("name", "name must be lowercase letters, digits, '-' or '_' and start with a letter")
 	}
 	if len(m.Goals) == 0 {
-		return nil, fmt.Errorf("methodology %s: at least one goal required", m.Name)
+		add("goals", "at least one goal required")
 	}
 	nodeTypes := map[string]bool{}
-	for _, n := range m.Domain.NodeTypes {
+	for i, n := range m.Domain.NodeTypes {
+		path := fmt.Sprintf("domain.nodeTypes[%d]", i)
+		if n.Name == "" {
+			add(path+".name", "name required")
+		} else if nodeTypes[n.Name] {
+			add(path+".name", "duplicate node type %s", n.Name)
+		}
 		nodeTypes[n.Name] = true
 	}
 	linkTypes := map[string]bool{}
-	for _, l := range m.Domain.LinkTypes {
+	for i, l := range m.Domain.LinkTypes {
+		path := fmt.Sprintf("domain.linkTypes[%d]", i)
+		if l.Name == "" {
+			add(path+".name", "name required")
+		} else if linkTypes[l.Name] {
+			add(path+".name", "duplicate link type %s", l.Name)
+		}
 		linkTypes[l.Name] = true
-		for _, end := range []string{l.From, l.To} {
-			if end != "" && !nodeTypes[end] {
-				return nil, fmt.Errorf("link type %s references unknown node type %s", l.Name, end)
-			}
+		if l.From != "" && !nodeTypes[l.From] {
+			add(path+".from", "unknown node type %s", l.From)
+		}
+		if l.To != "" && !nodeTypes[l.To] {
+			add(path+".to", "unknown node type %s", l.To)
 		}
 	}
 
-	defs := make([]condition.Definition, 0, len(m.Conditions)+len(m.Actions))
-	for _, c := range m.Conditions {
-		defs = append(defs, condition.Definition{Name: c.Name, Expr: c.Expr})
+	// conditions: each expression is compiled on its own to report every error
+	var defs []condition.Definition
+	known := map[string]bool{}
+	for i, c := range m.Conditions {
+		path := fmt.Sprintf("conditions[%d]", i)
+		switch {
+		case c.Name == "":
+			add(path+".name", "name required")
+			continue
+		case known[c.Name]:
+			add(path+".name", "duplicate condition %s", c.Name)
+			continue
+		}
+		known[c.Name] = true
+		d := condition.Definition{Name: c.Name, Expr: c.Expr}
+		if _, err := condition.Compile([]condition.Definition{d}); err != nil {
+			add(path+".expr", "%s", strings.TrimPrefix(err.Error(), fmt.Sprintf("condition %q: ", c.Name)))
+			continue
+		}
+		defs = append(defs, d)
 	}
+
 	actions := map[string]Action{}
-	for i := range m.Actions {
-		a := &m.Actions[i]
+	for i, src := range m.Actions {
+		path := fmt.Sprintf("actions[%d]", i)
+		a := src
+		a.Effects = maps.Clone(src.Effects)
 		if a.Name == "" {
-			return nil, fmt.Errorf("action #%d without name", i)
+			add(path+".name", "name required")
+			continue
 		}
 		if _, dup := actions[a.Name]; dup {
-			return nil, fmt.Errorf("duplicate action %s", a.Name)
+			add(path+".name", "duplicate action %s", a.Name)
+			continue
 		}
 		if !slices.Contains([]string{KindLLM, KindTool, KindHuman, KindBuiltin}, a.Kind) {
-			return nil, fmt.Errorf("action %s: unknown kind %q", a.Name, a.Kind)
+			add(path+".kind", "unknown kind %q", a.Kind)
 		}
 		switch {
 		case a.Kind == KindLLM && a.Prompt == "":
-			return nil, fmt.Errorf("action %s: llm action requires a prompt", a.Name)
+			add(path+".prompt", "llm action requires a prompt")
 		case a.Kind == KindTool && a.Tool == "":
-			return nil, fmt.Errorf("action %s: tool action requires a tool", a.Name)
+			add(path+".tool", "tool action requires a tool")
 		case a.Kind == KindBuiltin && a.Builtin == "":
-			return nil, fmt.Errorf("action %s: builtin action requires a builtin", a.Name)
+			add(path+".builtin", "builtin action requires a builtin")
+		}
+		if a.Permission != "" && !strings.Contains(a.Permission, ":") {
+			add(path+".permission", "permission must be <resource>:<action>")
 		}
 		if e := a.Expects; e != nil {
 			if e.Produce.NodeType != "" && len(nodeTypes) > 0 && !nodeTypes[e.Produce.NodeType] {
-				return nil, fmt.Errorf("action %s: expects unknown node type %s", a.Name, e.Produce.NodeType)
+				add(path+".expects.produce.nodeType", "unknown node type %s", e.Produce.NodeType)
 			}
 			if e.Link != nil && len(linkTypes) > 0 && !linkTypes[e.Link.Type] {
-				return nil, fmt.Errorf("action %s: expects unknown link type %s", a.Name, e.Link.Type)
+				add(path+".expects.link.type", "unknown link type %s", e.Link.Type)
 			}
 			expr, err := e.Expr()
 			if err != nil {
-				return nil, fmt.Errorf("action %s: %w", a.Name, err)
+				add(path+".expects", "%v", err)
+			} else {
+				d := condition.Definition{Name: a.ExpectCondition(), Expr: expr}
+				if _, err := condition.Compile([]condition.Definition{d}); err != nil {
+					add(path+".expects.where", "%v", err)
+				} else {
+					defs = append(defs, d)
+					known[d.Name] = true
+					if a.Effects == nil {
+						a.Effects = map[string]bool{}
+					}
+					a.Effects[a.ExpectCondition()] = true
+				}
 			}
-			defs = append(defs, condition.Definition{Name: a.ExpectCondition(), Expr: expr})
-			if a.Effects == nil {
-				a.Effects = map[string]bool{}
-			}
-			a.Effects[a.ExpectCondition()] = true
 		}
 		if len(a.Effects) == 0 {
-			return nil, fmt.Errorf("action %s: no effect, it can never be planned", a.Name)
+			add(path+".effects", "no effect: the action can never be planned")
 		}
-		actions[a.Name] = *a
+		actions[a.Name] = a
+	}
+	// references to conditions (expect:* conditions are known once every
+	// action has been processed)
+	for i, a := range m.Actions {
+		for k := range a.Pre {
+			if !known[k] {
+				add(fmt.Sprintf("actions[%d].pre.%s", i, k), "unknown condition %q", k)
+			}
+		}
+		for k := range a.Effects {
+			if !known[k] {
+				add(fmt.Sprintf("actions[%d].effects.%s", i, k), "unknown condition %q", k)
+			}
+		}
+	}
+	goals := map[string]bool{}
+	for i, g := range m.Goals {
+		path := fmt.Sprintf("goals[%d]", i)
+		if g.Name == "" {
+			add(path+".name", "name required")
+		} else if goals[g.Name] {
+			add(path+".name", "duplicate goal %s", g.Name)
+		}
+		goals[g.Name] = true
+		if len(g.Pre) == 0 {
+			add(path+".pre", "a goal needs at least one condition")
+		}
+		for k := range g.Pre {
+			if !known[k] {
+				add(path+".pre."+k, "unknown condition %q", k)
+			}
+		}
+	}
+	if len(issues) > 0 {
+		sort.SliceStable(issues, func(i, j int) bool { return issues[i].Path < issues[j].Path })
+		return nil, issues
 	}
 	set, err := condition.Compile(defs)
 	if err != nil {
-		return nil, fmt.Errorf("methodology %s: %w", m.Name, err)
-	}
-	check := func(owner string, conds map[string]bool) error {
-		for k := range conds {
-			if !set.Has(k) {
-				return fmt.Errorf("%s references unknown condition %q", owner, k)
-			}
-		}
-		return nil
-	}
-	for _, a := range m.Actions {
-		if err := check("action "+a.Name, a.Pre); err != nil {
-			return nil, err
-		}
-		if err := check("action "+a.Name, a.Effects); err != nil {
-			return nil, err
-		}
-	}
-	for _, g := range m.Goals {
-		if len(g.Pre) == 0 {
-			return nil, fmt.Errorf("goal %s has no precondition", g.Name)
-		}
-		if err := check("goal "+g.Name, g.Pre); err != nil {
-			return nil, err
-		}
+		return nil, Issues{{Message: err.Error()}}
 	}
 	return &Compiled{Methodology: m, Conditions: set, actions: actions}, nil
 }
@@ -243,7 +353,8 @@ func (c *Compiled) Goal(name string) (Goal, bool) {
 // PlanningActions returns the planner operators.
 func (c *Compiled) PlanningActions() []goap.Action {
 	out := make([]goap.Action, 0, len(c.Actions))
-	for _, a := range c.Actions {
+	for _, src := range c.Actions {
+		a := c.actions[src.Name]
 		out = append(out, goap.Action{Name: a.Name, Pre: a.Pre, Effects: a.Effects, Cost: a.Cost})
 	}
 	return out
@@ -252,4 +363,15 @@ func (c *Compiled) PlanningActions() []goap.Action {
 // PlanningGoal returns the planner goal.
 func (g Goal) PlanningGoal() goap.Goal {
 	return goap.Goal{Name: g.Name, Pre: g.Pre, Value: g.Value}
+}
+
+// MarshalYAML-friendly export of the definition (import/export format).
+func (m *Methodology) YAML() ([]byte, error) {
+	var b bytes.Buffer
+	enc := yaml.NewEncoder(&b)
+	enc.SetIndent(2)
+	if err := enc.Encode(m); err != nil {
+		return nil, err
+	}
+	return b.Bytes(), enc.Close()
 }

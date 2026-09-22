@@ -14,13 +14,15 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+
+	"github.com/zimwip/goap/internal/identity"
 )
 
 // Headers propagated to services. Incoming values are always overwritten.
 const (
-	HeaderSubject = "X-Goap-Subject"
-	HeaderOrg     = "X-Goap-Org"
-	HeaderRoles   = "X-Goap-Roles"
+	HeaderSubject = identity.HeaderSubject
+	HeaderOrg     = identity.HeaderOrg
+	HeaderRoles   = identity.HeaderRoles
 )
 
 // Route maps a Connect service prefix to an upstream base URL.

@@ -78,7 +78,7 @@ func setup(t *testing.T) (*Engine, *graph.Graph, domain.BaselineID) {
 		},
 		Intent: intent.Resolver{Ranker: intent.Lexical{}},
 		Store:  NewMemoryStore(),
-		Authz:  authz.DefaultRoles,
+		Authz:  mustCasbin(t),
 	}
 	return e, g, b.ID
 }
@@ -189,10 +189,19 @@ func TestStuckWhenNoPlan(t *testing.T) {
 }
 
 var (
-	contributor = authz.Principal{Subject: "carol", Roles: []string{"contributor"}}
-	approver    = authz.Principal{Subject: "alice", Roles: []string{"approver"}}
-	admin       = authz.Principal{Subject: "root", Roles: []string{"admin"}}
+	contributor = authz.Principal{Subject: "carol", Org: "acme", Roles: []string{"contributor"}}
+	approver    = authz.Principal{Subject: "alice", Org: "acme", Roles: []string{"approver"}}
+	admin       = authz.Principal{Subject: "root", Org: "acme", Roles: []string{"admin"}}
 )
+
+func mustCasbin(t *testing.T) authz.Authorizer {
+	t.Helper()
+	c, err := authz.NewCasbin(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return c
+}
 
 // deliverUntilReviewed starts a deliver_change process as who, accepts every
 // proposal and runs until the next blocking point.
@@ -225,7 +234,7 @@ func deliverUntilReviewed(t *testing.T, who authz.Principal) (*Engine, *graph.Gr
 
 func TestApplyNeedsApproval(t *testing.T) {
 	e, g, p := deliverUntilReviewed(t, contributor)
-	if p.Status != StatusWaiting || p.Pending.Kind != TaskApproval || p.Pending.Permission != authz.PermChangeApply {
+	if p.Status != StatusWaiting || p.Pending.Kind != TaskApproval || p.Pending.Permission != "change:apply" {
 		t.Fatalf("expected an approval task, got %s %+v", p.Status, p.Pending)
 	}
 	if c, _ := g.Change(context.Background(), p.ChangeID); c.Status == domain.ChangeApplied {
@@ -280,5 +289,21 @@ func TestApplyRejected(t *testing.T) {
 	}
 	if c, _ := g.Change(ctx, p.ChangeID); c.Status == domain.ChangeApplied {
 		t.Fatal("rejected apply must not change the graph")
+	}
+}
+
+func TestApproverCannotApproveOwnChange(t *testing.T) {
+	// alice (approver) starts the process: the four-eyes rule denies the
+	// automatic apply and her own approval; another approver may approve.
+	e, _, p := deliverUntilReviewed(t, approver)
+	if p.Status != StatusWaiting || p.Pending.Kind != TaskApproval {
+		t.Fatalf("expected approval task, got %s %+v", p.Status, p.Pending)
+	}
+	if _, err := e.Approve(authz.With(context.Background(), approver), p.ID, true, ""); !errors.Is(err, authz.ErrForbidden) {
+		t.Fatalf("self approval must be forbidden, got %v", err)
+	}
+	other := authz.Principal{Subject: "bob", Org: "acme", Roles: []string{"approver"}}
+	if _, err := e.Approve(authz.With(context.Background(), other), p.ID, true, ""); err != nil {
+		t.Fatal(err)
 	}
 }

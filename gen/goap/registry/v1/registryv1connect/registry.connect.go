@@ -33,22 +33,51 @@ const (
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// RegistryServicePublishMethodologyProcedure is the fully-qualified name of the RegistryService's
-	// PublishMethodology RPC.
-	RegistryServicePublishMethodologyProcedure = "/goap.registry.v1.RegistryService/PublishMethodology"
-	// RegistryServiceGetMethodologyProcedure is the fully-qualified name of the RegistryService's
-	// GetMethodology RPC.
-	RegistryServiceGetMethodologyProcedure = "/goap.registry.v1.RegistryService/GetMethodology"
 	// RegistryServiceListMethodologiesProcedure is the fully-qualified name of the RegistryService's
 	// ListMethodologies RPC.
 	RegistryServiceListMethodologiesProcedure = "/goap.registry.v1.RegistryService/ListMethodologies"
+	// RegistryServiceGetMethodologyProcedure is the fully-qualified name of the RegistryService's
+	// GetMethodology RPC.
+	RegistryServiceGetMethodologyProcedure = "/goap.registry.v1.RegistryService/GetMethodology"
+	// RegistryServiceSaveMethodologyProcedure is the fully-qualified name of the RegistryService's
+	// SaveMethodology RPC.
+	RegistryServiceSaveMethodologyProcedure = "/goap.registry.v1.RegistryService/SaveMethodology"
+	// RegistryServiceValidateMethodologyProcedure is the fully-qualified name of the RegistryService's
+	// ValidateMethodology RPC.
+	RegistryServiceValidateMethodologyProcedure = "/goap.registry.v1.RegistryService/ValidateMethodology"
+	// RegistryServicePublishMethodologyProcedure is the fully-qualified name of the RegistryService's
+	// PublishMethodology RPC.
+	RegistryServicePublishMethodologyProcedure = "/goap.registry.v1.RegistryService/PublishMethodology"
+	// RegistryServiceCreateVersionProcedure is the fully-qualified name of the RegistryService's
+	// CreateVersion RPC.
+	RegistryServiceCreateVersionProcedure = "/goap.registry.v1.RegistryService/CreateVersion"
+	// RegistryServiceDeleteMethodologyProcedure is the fully-qualified name of the RegistryService's
+	// DeleteMethodology RPC.
+	RegistryServiceDeleteMethodologyProcedure = "/goap.registry.v1.RegistryService/DeleteMethodology"
+	// RegistryServiceImportMethodologyProcedure is the fully-qualified name of the RegistryService's
+	// ImportMethodology RPC.
+	RegistryServiceImportMethodologyProcedure = "/goap.registry.v1.RegistryService/ImportMethodology"
+	// RegistryServiceExportMethodologyProcedure is the fully-qualified name of the RegistryService's
+	// ExportMethodology RPC.
+	RegistryServiceExportMethodologyProcedure = "/goap.registry.v1.RegistryService/ExportMethodology"
 )
 
 // RegistryServiceClient is a client for the goap.registry.v1.RegistryService service.
 type RegistryServiceClient interface {
-	PublishMethodology(context.Context, *connect.Request[v1.PublishMethodologyRequest]) (*connect.Response[v1.PublishMethodologyResponse], error)
-	GetMethodology(context.Context, *connect.Request[v1.GetMethodologyRequest]) (*connect.Response[v1.GetMethodologyResponse], error)
 	ListMethodologies(context.Context, *connect.Request[v1.ListMethodologiesRequest]) (*connect.Response[v1.ListMethodologiesResponse], error)
+	// version empty = latest published version
+	GetMethodology(context.Context, *connect.Request[v1.GetMethodologyRequest]) (*connect.Response[v1.GetMethodologyResponse], error)
+	// Create or replace a draft. Invalid drafts are saved and their issues returned.
+	SaveMethodology(context.Context, *connect.Request[v1.SaveMethodologyRequest]) (*connect.Response[v1.SaveMethodologyResponse], error)
+	ValidateMethodology(context.Context, *connect.Request[v1.ValidateMethodologyRequest]) (*connect.Response[v1.ValidateMethodologyResponse], error)
+	// Freeze a valid draft; the engine only runs published versions.
+	PublishMethodology(context.Context, *connect.Request[v1.PublishMethodologyRequest]) (*connect.Response[v1.PublishMethodologyResponse], error)
+	// Copy a version into a new draft version.
+	CreateVersion(context.Context, *connect.Request[v1.CreateVersionRequest]) (*connect.Response[v1.CreateVersionResponse], error)
+	// Delete a draft, or archive a published version.
+	DeleteMethodology(context.Context, *connect.Request[v1.DeleteMethodologyRequest]) (*connect.Response[v1.DeleteMethodologyResponse], error)
+	ImportMethodology(context.Context, *connect.Request[v1.ImportMethodologyRequest]) (*connect.Response[v1.ImportMethodologyResponse], error)
+	ExportMethodology(context.Context, *connect.Request[v1.ExportMethodologyRequest]) (*connect.Response[v1.ExportMethodologyResponse], error)
 }
 
 // NewRegistryServiceClient constructs a client for the goap.registry.v1.RegistryService service. By
@@ -62,10 +91,10 @@ func NewRegistryServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 	baseURL = strings.TrimRight(baseURL, "/")
 	registryServiceMethods := v1.File_goap_registry_v1_registry_proto.Services().ByName("RegistryService").Methods()
 	return &registryServiceClient{
-		publishMethodology: connect.NewClient[v1.PublishMethodologyRequest, v1.PublishMethodologyResponse](
+		listMethodologies: connect.NewClient[v1.ListMethodologiesRequest, v1.ListMethodologiesResponse](
 			httpClient,
-			baseURL+RegistryServicePublishMethodologyProcedure,
-			connect.WithSchema(registryServiceMethods.ByName("PublishMethodology")),
+			baseURL+RegistryServiceListMethodologiesProcedure,
+			connect.WithSchema(registryServiceMethods.ByName("ListMethodologies")),
 			connect.WithClientOptions(opts...),
 		),
 		getMethodology: connect.NewClient[v1.GetMethodologyRequest, v1.GetMethodologyResponse](
@@ -74,10 +103,46 @@ func NewRegistryServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(registryServiceMethods.ByName("GetMethodology")),
 			connect.WithClientOptions(opts...),
 		),
-		listMethodologies: connect.NewClient[v1.ListMethodologiesRequest, v1.ListMethodologiesResponse](
+		saveMethodology: connect.NewClient[v1.SaveMethodologyRequest, v1.SaveMethodologyResponse](
 			httpClient,
-			baseURL+RegistryServiceListMethodologiesProcedure,
-			connect.WithSchema(registryServiceMethods.ByName("ListMethodologies")),
+			baseURL+RegistryServiceSaveMethodologyProcedure,
+			connect.WithSchema(registryServiceMethods.ByName("SaveMethodology")),
+			connect.WithClientOptions(opts...),
+		),
+		validateMethodology: connect.NewClient[v1.ValidateMethodologyRequest, v1.ValidateMethodologyResponse](
+			httpClient,
+			baseURL+RegistryServiceValidateMethodologyProcedure,
+			connect.WithSchema(registryServiceMethods.ByName("ValidateMethodology")),
+			connect.WithClientOptions(opts...),
+		),
+		publishMethodology: connect.NewClient[v1.PublishMethodologyRequest, v1.PublishMethodologyResponse](
+			httpClient,
+			baseURL+RegistryServicePublishMethodologyProcedure,
+			connect.WithSchema(registryServiceMethods.ByName("PublishMethodology")),
+			connect.WithClientOptions(opts...),
+		),
+		createVersion: connect.NewClient[v1.CreateVersionRequest, v1.CreateVersionResponse](
+			httpClient,
+			baseURL+RegistryServiceCreateVersionProcedure,
+			connect.WithSchema(registryServiceMethods.ByName("CreateVersion")),
+			connect.WithClientOptions(opts...),
+		),
+		deleteMethodology: connect.NewClient[v1.DeleteMethodologyRequest, v1.DeleteMethodologyResponse](
+			httpClient,
+			baseURL+RegistryServiceDeleteMethodologyProcedure,
+			connect.WithSchema(registryServiceMethods.ByName("DeleteMethodology")),
+			connect.WithClientOptions(opts...),
+		),
+		importMethodology: connect.NewClient[v1.ImportMethodologyRequest, v1.ImportMethodologyResponse](
+			httpClient,
+			baseURL+RegistryServiceImportMethodologyProcedure,
+			connect.WithSchema(registryServiceMethods.ByName("ImportMethodology")),
+			connect.WithClientOptions(opts...),
+		),
+		exportMethodology: connect.NewClient[v1.ExportMethodologyRequest, v1.ExportMethodologyResponse](
+			httpClient,
+			baseURL+RegistryServiceExportMethodologyProcedure,
+			connect.WithSchema(registryServiceMethods.ByName("ExportMethodology")),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -85,19 +150,15 @@ func NewRegistryServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 
 // registryServiceClient implements RegistryServiceClient.
 type registryServiceClient struct {
-	publishMethodology *connect.Client[v1.PublishMethodologyRequest, v1.PublishMethodologyResponse]
-	getMethodology     *connect.Client[v1.GetMethodologyRequest, v1.GetMethodologyResponse]
-	listMethodologies  *connect.Client[v1.ListMethodologiesRequest, v1.ListMethodologiesResponse]
-}
-
-// PublishMethodology calls goap.registry.v1.RegistryService.PublishMethodology.
-func (c *registryServiceClient) PublishMethodology(ctx context.Context, req *connect.Request[v1.PublishMethodologyRequest]) (*connect.Response[v1.PublishMethodologyResponse], error) {
-	return c.publishMethodology.CallUnary(ctx, req)
-}
-
-// GetMethodology calls goap.registry.v1.RegistryService.GetMethodology.
-func (c *registryServiceClient) GetMethodology(ctx context.Context, req *connect.Request[v1.GetMethodologyRequest]) (*connect.Response[v1.GetMethodologyResponse], error) {
-	return c.getMethodology.CallUnary(ctx, req)
+	listMethodologies   *connect.Client[v1.ListMethodologiesRequest, v1.ListMethodologiesResponse]
+	getMethodology      *connect.Client[v1.GetMethodologyRequest, v1.GetMethodologyResponse]
+	saveMethodology     *connect.Client[v1.SaveMethodologyRequest, v1.SaveMethodologyResponse]
+	validateMethodology *connect.Client[v1.ValidateMethodologyRequest, v1.ValidateMethodologyResponse]
+	publishMethodology  *connect.Client[v1.PublishMethodologyRequest, v1.PublishMethodologyResponse]
+	createVersion       *connect.Client[v1.CreateVersionRequest, v1.CreateVersionResponse]
+	deleteMethodology   *connect.Client[v1.DeleteMethodologyRequest, v1.DeleteMethodologyResponse]
+	importMethodology   *connect.Client[v1.ImportMethodologyRequest, v1.ImportMethodologyResponse]
+	exportMethodology   *connect.Client[v1.ExportMethodologyRequest, v1.ExportMethodologyResponse]
 }
 
 // ListMethodologies calls goap.registry.v1.RegistryService.ListMethodologies.
@@ -105,11 +166,62 @@ func (c *registryServiceClient) ListMethodologies(ctx context.Context, req *conn
 	return c.listMethodologies.CallUnary(ctx, req)
 }
 
+// GetMethodology calls goap.registry.v1.RegistryService.GetMethodology.
+func (c *registryServiceClient) GetMethodology(ctx context.Context, req *connect.Request[v1.GetMethodologyRequest]) (*connect.Response[v1.GetMethodologyResponse], error) {
+	return c.getMethodology.CallUnary(ctx, req)
+}
+
+// SaveMethodology calls goap.registry.v1.RegistryService.SaveMethodology.
+func (c *registryServiceClient) SaveMethodology(ctx context.Context, req *connect.Request[v1.SaveMethodologyRequest]) (*connect.Response[v1.SaveMethodologyResponse], error) {
+	return c.saveMethodology.CallUnary(ctx, req)
+}
+
+// ValidateMethodology calls goap.registry.v1.RegistryService.ValidateMethodology.
+func (c *registryServiceClient) ValidateMethodology(ctx context.Context, req *connect.Request[v1.ValidateMethodologyRequest]) (*connect.Response[v1.ValidateMethodologyResponse], error) {
+	return c.validateMethodology.CallUnary(ctx, req)
+}
+
+// PublishMethodology calls goap.registry.v1.RegistryService.PublishMethodology.
+func (c *registryServiceClient) PublishMethodology(ctx context.Context, req *connect.Request[v1.PublishMethodologyRequest]) (*connect.Response[v1.PublishMethodologyResponse], error) {
+	return c.publishMethodology.CallUnary(ctx, req)
+}
+
+// CreateVersion calls goap.registry.v1.RegistryService.CreateVersion.
+func (c *registryServiceClient) CreateVersion(ctx context.Context, req *connect.Request[v1.CreateVersionRequest]) (*connect.Response[v1.CreateVersionResponse], error) {
+	return c.createVersion.CallUnary(ctx, req)
+}
+
+// DeleteMethodology calls goap.registry.v1.RegistryService.DeleteMethodology.
+func (c *registryServiceClient) DeleteMethodology(ctx context.Context, req *connect.Request[v1.DeleteMethodologyRequest]) (*connect.Response[v1.DeleteMethodologyResponse], error) {
+	return c.deleteMethodology.CallUnary(ctx, req)
+}
+
+// ImportMethodology calls goap.registry.v1.RegistryService.ImportMethodology.
+func (c *registryServiceClient) ImportMethodology(ctx context.Context, req *connect.Request[v1.ImportMethodologyRequest]) (*connect.Response[v1.ImportMethodologyResponse], error) {
+	return c.importMethodology.CallUnary(ctx, req)
+}
+
+// ExportMethodology calls goap.registry.v1.RegistryService.ExportMethodology.
+func (c *registryServiceClient) ExportMethodology(ctx context.Context, req *connect.Request[v1.ExportMethodologyRequest]) (*connect.Response[v1.ExportMethodologyResponse], error) {
+	return c.exportMethodology.CallUnary(ctx, req)
+}
+
 // RegistryServiceHandler is an implementation of the goap.registry.v1.RegistryService service.
 type RegistryServiceHandler interface {
-	PublishMethodology(context.Context, *connect.Request[v1.PublishMethodologyRequest]) (*connect.Response[v1.PublishMethodologyResponse], error)
-	GetMethodology(context.Context, *connect.Request[v1.GetMethodologyRequest]) (*connect.Response[v1.GetMethodologyResponse], error)
 	ListMethodologies(context.Context, *connect.Request[v1.ListMethodologiesRequest]) (*connect.Response[v1.ListMethodologiesResponse], error)
+	// version empty = latest published version
+	GetMethodology(context.Context, *connect.Request[v1.GetMethodologyRequest]) (*connect.Response[v1.GetMethodologyResponse], error)
+	// Create or replace a draft. Invalid drafts are saved and their issues returned.
+	SaveMethodology(context.Context, *connect.Request[v1.SaveMethodologyRequest]) (*connect.Response[v1.SaveMethodologyResponse], error)
+	ValidateMethodology(context.Context, *connect.Request[v1.ValidateMethodologyRequest]) (*connect.Response[v1.ValidateMethodologyResponse], error)
+	// Freeze a valid draft; the engine only runs published versions.
+	PublishMethodology(context.Context, *connect.Request[v1.PublishMethodologyRequest]) (*connect.Response[v1.PublishMethodologyResponse], error)
+	// Copy a version into a new draft version.
+	CreateVersion(context.Context, *connect.Request[v1.CreateVersionRequest]) (*connect.Response[v1.CreateVersionResponse], error)
+	// Delete a draft, or archive a published version.
+	DeleteMethodology(context.Context, *connect.Request[v1.DeleteMethodologyRequest]) (*connect.Response[v1.DeleteMethodologyResponse], error)
+	ImportMethodology(context.Context, *connect.Request[v1.ImportMethodologyRequest]) (*connect.Response[v1.ImportMethodologyResponse], error)
+	ExportMethodology(context.Context, *connect.Request[v1.ExportMethodologyRequest]) (*connect.Response[v1.ExportMethodologyResponse], error)
 }
 
 // NewRegistryServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -119,10 +231,10 @@ type RegistryServiceHandler interface {
 // and JSON codecs. They also support gzip compression.
 func NewRegistryServiceHandler(svc RegistryServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
 	registryServiceMethods := v1.File_goap_registry_v1_registry_proto.Services().ByName("RegistryService").Methods()
-	registryServicePublishMethodologyHandler := connect.NewUnaryHandler(
-		RegistryServicePublishMethodologyProcedure,
-		svc.PublishMethodology,
-		connect.WithSchema(registryServiceMethods.ByName("PublishMethodology")),
+	registryServiceListMethodologiesHandler := connect.NewUnaryHandler(
+		RegistryServiceListMethodologiesProcedure,
+		svc.ListMethodologies,
+		connect.WithSchema(registryServiceMethods.ByName("ListMethodologies")),
 		connect.WithHandlerOptions(opts...),
 	)
 	registryServiceGetMethodologyHandler := connect.NewUnaryHandler(
@@ -131,20 +243,68 @@ func NewRegistryServiceHandler(svc RegistryServiceHandler, opts ...connect.Handl
 		connect.WithSchema(registryServiceMethods.ByName("GetMethodology")),
 		connect.WithHandlerOptions(opts...),
 	)
-	registryServiceListMethodologiesHandler := connect.NewUnaryHandler(
-		RegistryServiceListMethodologiesProcedure,
-		svc.ListMethodologies,
-		connect.WithSchema(registryServiceMethods.ByName("ListMethodologies")),
+	registryServiceSaveMethodologyHandler := connect.NewUnaryHandler(
+		RegistryServiceSaveMethodologyProcedure,
+		svc.SaveMethodology,
+		connect.WithSchema(registryServiceMethods.ByName("SaveMethodology")),
+		connect.WithHandlerOptions(opts...),
+	)
+	registryServiceValidateMethodologyHandler := connect.NewUnaryHandler(
+		RegistryServiceValidateMethodologyProcedure,
+		svc.ValidateMethodology,
+		connect.WithSchema(registryServiceMethods.ByName("ValidateMethodology")),
+		connect.WithHandlerOptions(opts...),
+	)
+	registryServicePublishMethodologyHandler := connect.NewUnaryHandler(
+		RegistryServicePublishMethodologyProcedure,
+		svc.PublishMethodology,
+		connect.WithSchema(registryServiceMethods.ByName("PublishMethodology")),
+		connect.WithHandlerOptions(opts...),
+	)
+	registryServiceCreateVersionHandler := connect.NewUnaryHandler(
+		RegistryServiceCreateVersionProcedure,
+		svc.CreateVersion,
+		connect.WithSchema(registryServiceMethods.ByName("CreateVersion")),
+		connect.WithHandlerOptions(opts...),
+	)
+	registryServiceDeleteMethodologyHandler := connect.NewUnaryHandler(
+		RegistryServiceDeleteMethodologyProcedure,
+		svc.DeleteMethodology,
+		connect.WithSchema(registryServiceMethods.ByName("DeleteMethodology")),
+		connect.WithHandlerOptions(opts...),
+	)
+	registryServiceImportMethodologyHandler := connect.NewUnaryHandler(
+		RegistryServiceImportMethodologyProcedure,
+		svc.ImportMethodology,
+		connect.WithSchema(registryServiceMethods.ByName("ImportMethodology")),
+		connect.WithHandlerOptions(opts...),
+	)
+	registryServiceExportMethodologyHandler := connect.NewUnaryHandler(
+		RegistryServiceExportMethodologyProcedure,
+		svc.ExportMethodology,
+		connect.WithSchema(registryServiceMethods.ByName("ExportMethodology")),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/goap.registry.v1.RegistryService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case RegistryServicePublishMethodologyProcedure:
-			registryServicePublishMethodologyHandler.ServeHTTP(w, r)
-		case RegistryServiceGetMethodologyProcedure:
-			registryServiceGetMethodologyHandler.ServeHTTP(w, r)
 		case RegistryServiceListMethodologiesProcedure:
 			registryServiceListMethodologiesHandler.ServeHTTP(w, r)
+		case RegistryServiceGetMethodologyProcedure:
+			registryServiceGetMethodologyHandler.ServeHTTP(w, r)
+		case RegistryServiceSaveMethodologyProcedure:
+			registryServiceSaveMethodologyHandler.ServeHTTP(w, r)
+		case RegistryServiceValidateMethodologyProcedure:
+			registryServiceValidateMethodologyHandler.ServeHTTP(w, r)
+		case RegistryServicePublishMethodologyProcedure:
+			registryServicePublishMethodologyHandler.ServeHTTP(w, r)
+		case RegistryServiceCreateVersionProcedure:
+			registryServiceCreateVersionHandler.ServeHTTP(w, r)
+		case RegistryServiceDeleteMethodologyProcedure:
+			registryServiceDeleteMethodologyHandler.ServeHTTP(w, r)
+		case RegistryServiceImportMethodologyProcedure:
+			registryServiceImportMethodologyHandler.ServeHTTP(w, r)
+		case RegistryServiceExportMethodologyProcedure:
+			registryServiceExportMethodologyHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -154,14 +314,38 @@ func NewRegistryServiceHandler(svc RegistryServiceHandler, opts ...connect.Handl
 // UnimplementedRegistryServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedRegistryServiceHandler struct{}
 
-func (UnimplementedRegistryServiceHandler) PublishMethodology(context.Context, *connect.Request[v1.PublishMethodologyRequest]) (*connect.Response[v1.PublishMethodologyResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.registry.v1.RegistryService.PublishMethodology is not implemented"))
+func (UnimplementedRegistryServiceHandler) ListMethodologies(context.Context, *connect.Request[v1.ListMethodologiesRequest]) (*connect.Response[v1.ListMethodologiesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.registry.v1.RegistryService.ListMethodologies is not implemented"))
 }
 
 func (UnimplementedRegistryServiceHandler) GetMethodology(context.Context, *connect.Request[v1.GetMethodologyRequest]) (*connect.Response[v1.GetMethodologyResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.registry.v1.RegistryService.GetMethodology is not implemented"))
 }
 
-func (UnimplementedRegistryServiceHandler) ListMethodologies(context.Context, *connect.Request[v1.ListMethodologiesRequest]) (*connect.Response[v1.ListMethodologiesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.registry.v1.RegistryService.ListMethodologies is not implemented"))
+func (UnimplementedRegistryServiceHandler) SaveMethodology(context.Context, *connect.Request[v1.SaveMethodologyRequest]) (*connect.Response[v1.SaveMethodologyResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.registry.v1.RegistryService.SaveMethodology is not implemented"))
+}
+
+func (UnimplementedRegistryServiceHandler) ValidateMethodology(context.Context, *connect.Request[v1.ValidateMethodologyRequest]) (*connect.Response[v1.ValidateMethodologyResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.registry.v1.RegistryService.ValidateMethodology is not implemented"))
+}
+
+func (UnimplementedRegistryServiceHandler) PublishMethodology(context.Context, *connect.Request[v1.PublishMethodologyRequest]) (*connect.Response[v1.PublishMethodologyResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.registry.v1.RegistryService.PublishMethodology is not implemented"))
+}
+
+func (UnimplementedRegistryServiceHandler) CreateVersion(context.Context, *connect.Request[v1.CreateVersionRequest]) (*connect.Response[v1.CreateVersionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.registry.v1.RegistryService.CreateVersion is not implemented"))
+}
+
+func (UnimplementedRegistryServiceHandler) DeleteMethodology(context.Context, *connect.Request[v1.DeleteMethodologyRequest]) (*connect.Response[v1.DeleteMethodologyResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.registry.v1.RegistryService.DeleteMethodology is not implemented"))
+}
+
+func (UnimplementedRegistryServiceHandler) ImportMethodology(context.Context, *connect.Request[v1.ImportMethodologyRequest]) (*connect.Response[v1.ImportMethodologyResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.registry.v1.RegistryService.ImportMethodology is not implemented"))
+}
+
+func (UnimplementedRegistryServiceHandler) ExportMethodology(context.Context, *connect.Request[v1.ExportMethodologyRequest]) (*connect.Response[v1.ExportMethodologyResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.registry.v1.RegistryService.ExportMethodology is not implemented"))
 }

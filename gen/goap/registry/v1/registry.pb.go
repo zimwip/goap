@@ -9,6 +9,7 @@ package registryv1
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	structpb "google.golang.org/protobuf/types/known/structpb"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	reflect "reflect"
 	sync "sync"
@@ -22,28 +23,29 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-type GoalSummary struct {
+type NodeType struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	Description   string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
+	Properties    []string               `protobuf:"bytes,3,rep,name=properties,proto3" json:"properties,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *GoalSummary) Reset() {
-	*x = GoalSummary{}
+func (x *NodeType) Reset() {
+	*x = NodeType{}
 	mi := &file_goap_registry_v1_registry_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *GoalSummary) String() string {
+func (x *NodeType) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*GoalSummary) ProtoMessage() {}
+func (*NodeType) ProtoMessage() {}
 
-func (x *GoalSummary) ProtoReflect() protoreflect.Message {
+func (x *NodeType) ProtoReflect() protoreflect.Message {
 	mi := &file_goap_registry_v1_registry_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -55,23 +57,552 @@ func (x *GoalSummary) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GoalSummary.ProtoReflect.Descriptor instead.
-func (*GoalSummary) Descriptor() ([]byte, []int) {
+// Deprecated: Use NodeType.ProtoReflect.Descriptor instead.
+func (*NodeType) Descriptor() ([]byte, []int) {
 	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *GoalSummary) GetName() string {
+func (x *NodeType) GetName() string {
 	if x != nil {
 		return x.Name
 	}
 	return ""
 }
 
-func (x *GoalSummary) GetDescription() string {
+func (x *NodeType) GetDescription() string {
 	if x != nil {
 		return x.Description
 	}
 	return ""
+}
+
+func (x *NodeType) GetProperties() []string {
+	if x != nil {
+		return x.Properties
+	}
+	return nil
+}
+
+type LinkType struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	From          string                 `protobuf:"bytes,2,opt,name=from,proto3" json:"from,omitempty"`
+	To            string                 `protobuf:"bytes,3,opt,name=to,proto3" json:"to,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LinkType) Reset() {
+	*x = LinkType{}
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LinkType) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LinkType) ProtoMessage() {}
+
+func (x *LinkType) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LinkType.ProtoReflect.Descriptor instead.
+func (*LinkType) Descriptor() ([]byte, []int) {
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *LinkType) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *LinkType) GetFrom() string {
+	if x != nil {
+		return x.From
+	}
+	return ""
+}
+
+func (x *LinkType) GetTo() string {
+	if x != nil {
+		return x.To
+	}
+	return ""
+}
+
+type Condition struct {
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Name        string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Description string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
+	// CEL expression over the blackboard
+	Expr          string `protobuf:"bytes,3,opt,name=expr,proto3" json:"expr,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Condition) Reset() {
+	*x = Condition{}
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Condition) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Condition) ProtoMessage() {}
+
+func (x *Condition) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Condition.ProtoReflect.Descriptor instead.
+func (*Condition) Descriptor() ([]byte, []int) {
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *Condition) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *Condition) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *Condition) GetExpr() string {
+	if x != nil {
+		return x.Expr
+	}
+	return ""
+}
+
+type ProduceSpec struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// create_node | update_node
+	Op            string `protobuf:"bytes,1,opt,name=op,proto3" json:"op,omitempty"`
+	NodeType      string `protobuf:"bytes,2,opt,name=node_type,json=nodeType,proto3" json:"node_type,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ProduceSpec) Reset() {
+	*x = ProduceSpec{}
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ProduceSpec) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ProduceSpec) ProtoMessage() {}
+
+func (x *ProduceSpec) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ProduceSpec.ProtoReflect.Descriptor instead.
+func (*ProduceSpec) Descriptor() ([]byte, []int) {
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *ProduceSpec) GetOp() string {
+	if x != nil {
+		return x.Op
+	}
+	return ""
+}
+
+func (x *ProduceSpec) GetNodeType() string {
+	if x != nil {
+		return x.NodeType
+	}
+	return ""
+}
+
+type LinkSpec struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Type  string                 `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
+	// out (default) | in
+	Direction     string `protobuf:"bytes,2,opt,name=direction,proto3" json:"direction,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LinkSpec) Reset() {
+	*x = LinkSpec{}
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LinkSpec) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LinkSpec) ProtoMessage() {}
+
+func (x *LinkSpec) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LinkSpec.ProtoReflect.Descriptor instead.
+func (*LinkSpec) Descriptor() ([]byte, []int) {
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *LinkSpec) GetType() string {
+	if x != nil {
+		return x.Type
+	}
+	return ""
+}
+
+func (x *LinkSpec) GetDirection() string {
+	if x != nil {
+		return x.Direction
+	}
+	return ""
+}
+
+type Expectation struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// impacts | proposals | items | artifacts
+	ForEach       string       `protobuf:"bytes,1,opt,name=for_each,json=forEach,proto3" json:"for_each,omitempty"`
+	Where         string       `protobuf:"bytes,2,opt,name=where,proto3" json:"where,omitempty"`
+	Produce       *ProduceSpec `protobuf:"bytes,3,opt,name=produce,proto3" json:"produce,omitempty"`
+	Link          *LinkSpec    `protobuf:"bytes,4,opt,name=link,proto3" json:"link,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Expectation) Reset() {
+	*x = Expectation{}
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Expectation) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Expectation) ProtoMessage() {}
+
+func (x *Expectation) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Expectation.ProtoReflect.Descriptor instead.
+func (*Expectation) Descriptor() ([]byte, []int) {
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *Expectation) GetForEach() string {
+	if x != nil {
+		return x.ForEach
+	}
+	return ""
+}
+
+func (x *Expectation) GetWhere() string {
+	if x != nil {
+		return x.Where
+	}
+	return ""
+}
+
+func (x *Expectation) GetProduce() *ProduceSpec {
+	if x != nil {
+		return x.Produce
+	}
+	return nil
+}
+
+func (x *Expectation) GetLink() *LinkSpec {
+	if x != nil {
+		return x.Link
+	}
+	return nil
+}
+
+type Action struct {
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Name        string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Description string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
+	// llm | tool | human | builtin
+	Kind    string          `protobuf:"bytes,3,opt,name=kind,proto3" json:"kind,omitempty"`
+	Pre     map[string]bool `protobuf:"bytes,4,rep,name=pre,proto3" json:"pre,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
+	Effects map[string]bool `protobuf:"bytes,5,rep,name=effects,proto3" json:"effects,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
+	Cost    float64         `protobuf:"fixed64,6,opt,name=cost,proto3" json:"cost,omitempty"`
+	Expects *Expectation    `protobuf:"bytes,7,opt,name=expects,proto3" json:"expects,omitempty"`
+	// "<resource>:<action>" required from the initiator, e.g. change:apply
+	Permission    string           `protobuf:"bytes,8,opt,name=permission,proto3" json:"permission,omitempty"`
+	Model         string           `protobuf:"bytes,9,opt,name=model,proto3" json:"model,omitempty"`
+	Prompt        string           `protobuf:"bytes,10,opt,name=prompt,proto3" json:"prompt,omitempty"`
+	Tool          string           `protobuf:"bytes,11,opt,name=tool,proto3" json:"tool,omitempty"`
+	Builtin       string           `protobuf:"bytes,12,opt,name=builtin,proto3" json:"builtin,omitempty"`
+	Instructions  string           `protobuf:"bytes,13,opt,name=instructions,proto3" json:"instructions,omitempty"`
+	Params        *structpb.Struct `protobuf:"bytes,14,opt,name=params,proto3" json:"params,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Action) Reset() {
+	*x = Action{}
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Action) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Action) ProtoMessage() {}
+
+func (x *Action) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Action.ProtoReflect.Descriptor instead.
+func (*Action) Descriptor() ([]byte, []int) {
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *Action) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *Action) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *Action) GetKind() string {
+	if x != nil {
+		return x.Kind
+	}
+	return ""
+}
+
+func (x *Action) GetPre() map[string]bool {
+	if x != nil {
+		return x.Pre
+	}
+	return nil
+}
+
+func (x *Action) GetEffects() map[string]bool {
+	if x != nil {
+		return x.Effects
+	}
+	return nil
+}
+
+func (x *Action) GetCost() float64 {
+	if x != nil {
+		return x.Cost
+	}
+	return 0
+}
+
+func (x *Action) GetExpects() *Expectation {
+	if x != nil {
+		return x.Expects
+	}
+	return nil
+}
+
+func (x *Action) GetPermission() string {
+	if x != nil {
+		return x.Permission
+	}
+	return ""
+}
+
+func (x *Action) GetModel() string {
+	if x != nil {
+		return x.Model
+	}
+	return ""
+}
+
+func (x *Action) GetPrompt() string {
+	if x != nil {
+		return x.Prompt
+	}
+	return ""
+}
+
+func (x *Action) GetTool() string {
+	if x != nil {
+		return x.Tool
+	}
+	return ""
+}
+
+func (x *Action) GetBuiltin() string {
+	if x != nil {
+		return x.Builtin
+	}
+	return ""
+}
+
+func (x *Action) GetInstructions() string {
+	if x != nil {
+		return x.Instructions
+	}
+	return ""
+}
+
+func (x *Action) GetParams() *structpb.Struct {
+	if x != nil {
+		return x.Params
+	}
+	return nil
+}
+
+type Goal struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Description   string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
+	Examples      []string               `protobuf:"bytes,3,rep,name=examples,proto3" json:"examples,omitempty"`
+	Pre           map[string]bool        `protobuf:"bytes,4,rep,name=pre,proto3" json:"pre,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
+	Value         float64                `protobuf:"fixed64,5,opt,name=value,proto3" json:"value,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Goal) Reset() {
+	*x = Goal{}
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Goal) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Goal) ProtoMessage() {}
+
+func (x *Goal) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Goal.ProtoReflect.Descriptor instead.
+func (*Goal) Descriptor() ([]byte, []int) {
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *Goal) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *Goal) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *Goal) GetExamples() []string {
+	if x != nil {
+		return x.Examples
+	}
+	return nil
+}
+
+func (x *Goal) GetPre() map[string]bool {
+	if x != nil {
+		return x.Pre
+	}
+	return nil
+}
+
+func (x *Goal) GetValue() float64 {
+	if x != nil {
+		return x.Value
+	}
+	return 0
 }
 
 type Methodology struct {
@@ -79,17 +610,24 @@ type Methodology struct {
 	Name        string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	Version     string                 `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
 	Description string                 `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
-	// YAML source of the definition
-	Source        string                 `protobuf:"bytes,4,opt,name=source,proto3" json:"source,omitempty"`
-	Goals         []*GoalSummary         `protobuf:"bytes,5,rep,name=goals,proto3" json:"goals,omitempty"`
-	PublishedAt   *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=published_at,json=publishedAt,proto3" json:"published_at,omitempty"`
+	// draft | published | archived (read only)
+	Status        string                 `protobuf:"bytes,4,opt,name=status,proto3" json:"status,omitempty"`
+	NodeTypes     []*NodeType            `protobuf:"bytes,5,rep,name=node_types,json=nodeTypes,proto3" json:"node_types,omitempty"`
+	LinkTypes     []*LinkType            `protobuf:"bytes,6,rep,name=link_types,json=linkTypes,proto3" json:"link_types,omitempty"`
+	Conditions    []*Condition           `protobuf:"bytes,7,rep,name=conditions,proto3" json:"conditions,omitempty"`
+	Actions       []*Action              `protobuf:"bytes,8,rep,name=actions,proto3" json:"actions,omitempty"`
+	Goals         []*Goal                `protobuf:"bytes,9,rep,name=goals,proto3" json:"goals,omitempty"`
+	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	PublishedAt   *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=published_at,json=publishedAt,proto3" json:"published_at,omitempty"`
+	UpdatedBy     string                 `protobuf:"bytes,13,opt,name=updated_by,json=updatedBy,proto3" json:"updated_by,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Methodology) Reset() {
 	*x = Methodology{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[1]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -101,7 +639,7 @@ func (x *Methodology) String() string {
 func (*Methodology) ProtoMessage() {}
 
 func (x *Methodology) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[1]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -114,7 +652,7 @@ func (x *Methodology) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Methodology.ProtoReflect.Descriptor instead.
 func (*Methodology) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{1}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *Methodology) GetName() string {
@@ -138,16 +676,58 @@ func (x *Methodology) GetDescription() string {
 	return ""
 }
 
-func (x *Methodology) GetSource() string {
+func (x *Methodology) GetStatus() string {
 	if x != nil {
-		return x.Source
+		return x.Status
 	}
 	return ""
 }
 
-func (x *Methodology) GetGoals() []*GoalSummary {
+func (x *Methodology) GetNodeTypes() []*NodeType {
+	if x != nil {
+		return x.NodeTypes
+	}
+	return nil
+}
+
+func (x *Methodology) GetLinkTypes() []*LinkType {
+	if x != nil {
+		return x.LinkTypes
+	}
+	return nil
+}
+
+func (x *Methodology) GetConditions() []*Condition {
+	if x != nil {
+		return x.Conditions
+	}
+	return nil
+}
+
+func (x *Methodology) GetActions() []*Action {
+	if x != nil {
+		return x.Actions
+	}
+	return nil
+}
+
+func (x *Methodology) GetGoals() []*Goal {
 	if x != nil {
 		return x.Goals
+	}
+	return nil
+}
+
+func (x *Methodology) GetCreatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return nil
+}
+
+func (x *Methodology) GetUpdatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.UpdatedAt
 	}
 	return nil
 }
@@ -159,72 +739,36 @@ func (x *Methodology) GetPublishedAt() *timestamppb.Timestamp {
 	return nil
 }
 
-type PublishMethodologyRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Source        string                 `protobuf:"bytes,1,opt,name=source,proto3" json:"source,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *PublishMethodologyRequest) Reset() {
-	*x = PublishMethodologyRequest{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[2]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *PublishMethodologyRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*PublishMethodologyRequest) ProtoMessage() {}
-
-func (x *PublishMethodologyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[2]
+func (x *Methodology) GetUpdatedBy() string {
 	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use PublishMethodologyRequest.ProtoReflect.Descriptor instead.
-func (*PublishMethodologyRequest) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{2}
-}
-
-func (x *PublishMethodologyRequest) GetSource() string {
-	if x != nil {
-		return x.Source
+		return x.UpdatedBy
 	}
 	return ""
 }
 
-type PublishMethodologyResponse struct {
+type GoalSummary struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Methodology   *Methodology           `protobuf:"bytes,1,opt,name=methodology,proto3" json:"methodology,omitempty"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Description   string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *PublishMethodologyResponse) Reset() {
-	*x = PublishMethodologyResponse{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[3]
+func (x *GoalSummary) Reset() {
+	*x = GoalSummary{}
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *PublishMethodologyResponse) String() string {
+func (x *GoalSummary) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*PublishMethodologyResponse) ProtoMessage() {}
+func (*GoalSummary) ProtoMessage() {}
 
-func (x *PublishMethodologyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[3]
+func (x *GoalSummary) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -235,30 +779,270 @@ func (x *PublishMethodologyResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use PublishMethodologyResponse.ProtoReflect.Descriptor instead.
-func (*PublishMethodologyResponse) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{3}
+// Deprecated: Use GoalSummary.ProtoReflect.Descriptor instead.
+func (*GoalSummary) Descriptor() ([]byte, []int) {
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{9}
 }
 
-func (x *PublishMethodologyResponse) GetMethodology() *Methodology {
+func (x *GoalSummary) GetName() string {
 	if x != nil {
-		return x.Methodology
+		return x.Name
+	}
+	return ""
+}
+
+func (x *GoalSummary) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+type MethodologySummary struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Version       string                 `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
+	Description   string                 `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
+	Status        string                 `protobuf:"bytes,4,opt,name=status,proto3" json:"status,omitempty"`
+	Goals         []*GoalSummary         `protobuf:"bytes,5,rep,name=goals,proto3" json:"goals,omitempty"`
+	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	PublishedAt   *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=published_at,json=publishedAt,proto3" json:"published_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MethodologySummary) Reset() {
+	*x = MethodologySummary{}
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MethodologySummary) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MethodologySummary) ProtoMessage() {}
+
+func (x *MethodologySummary) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MethodologySummary.ProtoReflect.Descriptor instead.
+func (*MethodologySummary) Descriptor() ([]byte, []int) {
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *MethodologySummary) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *MethodologySummary) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
+}
+
+func (x *MethodologySummary) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *MethodologySummary) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
+func (x *MethodologySummary) GetGoals() []*GoalSummary {
+	if x != nil {
+		return x.Goals
+	}
+	return nil
+}
+
+func (x *MethodologySummary) GetUpdatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.UpdatedAt
+	}
+	return nil
+}
+
+func (x *MethodologySummary) GetPublishedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.PublishedAt
+	}
+	return nil
+}
+
+// A validation issue. `path` locates the field, e.g. "conditions[2].expr".
+type Issue struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Path          string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
+	Message       string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Issue) Reset() {
+	*x = Issue{}
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Issue) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Issue) ProtoMessage() {}
+
+func (x *Issue) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Issue.ProtoReflect.Descriptor instead.
+func (*Issue) Descriptor() ([]byte, []int) {
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *Issue) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+func (x *Issue) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+type ListMethodologiesRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// every version (drafts, archived) instead of the latest one per name
+	AllVersions   bool `protobuf:"varint,1,opt,name=all_versions,json=allVersions,proto3" json:"all_versions,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListMethodologiesRequest) Reset() {
+	*x = ListMethodologiesRequest{}
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListMethodologiesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListMethodologiesRequest) ProtoMessage() {}
+
+func (x *ListMethodologiesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListMethodologiesRequest.ProtoReflect.Descriptor instead.
+func (*ListMethodologiesRequest) Descriptor() ([]byte, []int) {
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *ListMethodologiesRequest) GetAllVersions() bool {
+	if x != nil {
+		return x.AllVersions
+	}
+	return false
+}
+
+type ListMethodologiesResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Methodologies []*MethodologySummary  `protobuf:"bytes,1,rep,name=methodologies,proto3" json:"methodologies,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListMethodologiesResponse) Reset() {
+	*x = ListMethodologiesResponse{}
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListMethodologiesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListMethodologiesResponse) ProtoMessage() {}
+
+func (x *ListMethodologiesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListMethodologiesResponse.ProtoReflect.Descriptor instead.
+func (*ListMethodologiesResponse) Descriptor() ([]byte, []int) {
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *ListMethodologiesResponse) GetMethodologies() []*MethodologySummary {
+	if x != nil {
+		return x.Methodologies
 	}
 	return nil
 }
 
 type GetMethodologyRequest struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	// empty = latest
-	Version       string `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Version       string                 `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GetMethodologyRequest) Reset() {
 	*x = GetMethodologyRequest{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[4]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -270,7 +1054,7 @@ func (x *GetMethodologyRequest) String() string {
 func (*GetMethodologyRequest) ProtoMessage() {}
 
 func (x *GetMethodologyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[4]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -283,7 +1067,7 @@ func (x *GetMethodologyRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetMethodologyRequest.ProtoReflect.Descriptor instead.
 func (*GetMethodologyRequest) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{4}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *GetMethodologyRequest) GetName() string {
@@ -309,7 +1093,7 @@ type GetMethodologyResponse struct {
 
 func (x *GetMethodologyResponse) Reset() {
 	*x = GetMethodologyResponse{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[5]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -321,7 +1105,7 @@ func (x *GetMethodologyResponse) String() string {
 func (*GetMethodologyResponse) ProtoMessage() {}
 
 func (x *GetMethodologyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[5]
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -334,7 +1118,7 @@ func (x *GetMethodologyResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetMethodologyResponse.ProtoReflect.Descriptor instead.
 func (*GetMethodologyResponse) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{5}
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *GetMethodologyResponse) GetMethodology() *Methodology {
@@ -344,27 +1128,463 @@ func (x *GetMethodologyResponse) GetMethodology() *Methodology {
 	return nil
 }
 
-type ListMethodologiesRequest struct {
+type SaveMethodologyRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Methodology   *Methodology           `protobuf:"bytes,1,opt,name=methodology,proto3" json:"methodology,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SaveMethodologyRequest) Reset() {
+	*x = SaveMethodologyRequest{}
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SaveMethodologyRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SaveMethodologyRequest) ProtoMessage() {}
+
+func (x *SaveMethodologyRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SaveMethodologyRequest.ProtoReflect.Descriptor instead.
+func (*SaveMethodologyRequest) Descriptor() ([]byte, []int) {
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *SaveMethodologyRequest) GetMethodology() *Methodology {
+	if x != nil {
+		return x.Methodology
+	}
+	return nil
+}
+
+type SaveMethodologyResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Methodology   *Methodology           `protobuf:"bytes,1,opt,name=methodology,proto3" json:"methodology,omitempty"`
+	Issues        []*Issue               `protobuf:"bytes,2,rep,name=issues,proto3" json:"issues,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SaveMethodologyResponse) Reset() {
+	*x = SaveMethodologyResponse{}
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SaveMethodologyResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SaveMethodologyResponse) ProtoMessage() {}
+
+func (x *SaveMethodologyResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SaveMethodologyResponse.ProtoReflect.Descriptor instead.
+func (*SaveMethodologyResponse) Descriptor() ([]byte, []int) {
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *SaveMethodologyResponse) GetMethodology() *Methodology {
+	if x != nil {
+		return x.Methodology
+	}
+	return nil
+}
+
+func (x *SaveMethodologyResponse) GetIssues() []*Issue {
+	if x != nil {
+		return x.Issues
+	}
+	return nil
+}
+
+type ValidateMethodologyRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Methodology   *Methodology           `protobuf:"bytes,1,opt,name=methodology,proto3" json:"methodology,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ValidateMethodologyRequest) Reset() {
+	*x = ValidateMethodologyRequest{}
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ValidateMethodologyRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ValidateMethodologyRequest) ProtoMessage() {}
+
+func (x *ValidateMethodologyRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ValidateMethodologyRequest.ProtoReflect.Descriptor instead.
+func (*ValidateMethodologyRequest) Descriptor() ([]byte, []int) {
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *ValidateMethodologyRequest) GetMethodology() *Methodology {
+	if x != nil {
+		return x.Methodology
+	}
+	return nil
+}
+
+type ValidateMethodologyResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Issues        []*Issue               `protobuf:"bytes,1,rep,name=issues,proto3" json:"issues,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ValidateMethodologyResponse) Reset() {
+	*x = ValidateMethodologyResponse{}
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ValidateMethodologyResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ValidateMethodologyResponse) ProtoMessage() {}
+
+func (x *ValidateMethodologyResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ValidateMethodologyResponse.ProtoReflect.Descriptor instead.
+func (*ValidateMethodologyResponse) Descriptor() ([]byte, []int) {
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *ValidateMethodologyResponse) GetIssues() []*Issue {
+	if x != nil {
+		return x.Issues
+	}
+	return nil
+}
+
+type PublishMethodologyRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Version       string                 `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PublishMethodologyRequest) Reset() {
+	*x = PublishMethodologyRequest{}
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PublishMethodologyRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PublishMethodologyRequest) ProtoMessage() {}
+
+func (x *PublishMethodologyRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PublishMethodologyRequest.ProtoReflect.Descriptor instead.
+func (*PublishMethodologyRequest) Descriptor() ([]byte, []int) {
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *PublishMethodologyRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *PublishMethodologyRequest) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
+}
+
+type PublishMethodologyResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Methodology   *Methodology           `protobuf:"bytes,1,opt,name=methodology,proto3" json:"methodology,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PublishMethodologyResponse) Reset() {
+	*x = PublishMethodologyResponse{}
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PublishMethodologyResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PublishMethodologyResponse) ProtoMessage() {}
+
+func (x *PublishMethodologyResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PublishMethodologyResponse.ProtoReflect.Descriptor instead.
+func (*PublishMethodologyResponse) Descriptor() ([]byte, []int) {
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *PublishMethodologyResponse) GetMethodology() *Methodology {
+	if x != nil {
+		return x.Methodology
+	}
+	return nil
+}
+
+type CreateVersionRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	FromVersion   string                 `protobuf:"bytes,2,opt,name=from_version,json=fromVersion,proto3" json:"from_version,omitempty"`
+	NewVersion    string                 `protobuf:"bytes,3,opt,name=new_version,json=newVersion,proto3" json:"new_version,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateVersionRequest) Reset() {
+	*x = CreateVersionRequest{}
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateVersionRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateVersionRequest) ProtoMessage() {}
+
+func (x *CreateVersionRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateVersionRequest.ProtoReflect.Descriptor instead.
+func (*CreateVersionRequest) Descriptor() ([]byte, []int) {
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *CreateVersionRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *CreateVersionRequest) GetFromVersion() string {
+	if x != nil {
+		return x.FromVersion
+	}
+	return ""
+}
+
+func (x *CreateVersionRequest) GetNewVersion() string {
+	if x != nil {
+		return x.NewVersion
+	}
+	return ""
+}
+
+type CreateVersionResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Methodology   *Methodology           `protobuf:"bytes,1,opt,name=methodology,proto3" json:"methodology,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateVersionResponse) Reset() {
+	*x = CreateVersionResponse{}
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateVersionResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateVersionResponse) ProtoMessage() {}
+
+func (x *CreateVersionResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateVersionResponse.ProtoReflect.Descriptor instead.
+func (*CreateVersionResponse) Descriptor() ([]byte, []int) {
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *CreateVersionResponse) GetMethodology() *Methodology {
+	if x != nil {
+		return x.Methodology
+	}
+	return nil
+}
+
+type DeleteMethodologyRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Version       string                 `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteMethodologyRequest) Reset() {
+	*x = DeleteMethodologyRequest{}
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteMethodologyRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteMethodologyRequest) ProtoMessage() {}
+
+func (x *DeleteMethodologyRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteMethodologyRequest.ProtoReflect.Descriptor instead.
+func (*DeleteMethodologyRequest) Descriptor() ([]byte, []int) {
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *DeleteMethodologyRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *DeleteMethodologyRequest) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
+}
+
+type DeleteMethodologyResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ListMethodologiesRequest) Reset() {
-	*x = ListMethodologiesRequest{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[6]
+func (x *DeleteMethodologyResponse) Reset() {
+	*x = DeleteMethodologyResponse{}
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ListMethodologiesRequest) String() string {
+func (x *DeleteMethodologyResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ListMethodologiesRequest) ProtoMessage() {}
+func (*DeleteMethodologyResponse) ProtoMessage() {}
 
-func (x *ListMethodologiesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[6]
+func (x *DeleteMethodologyResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -375,34 +1595,35 @@ func (x *ListMethodologiesRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ListMethodologiesRequest.ProtoReflect.Descriptor instead.
-func (*ListMethodologiesRequest) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{6}
+// Deprecated: Use DeleteMethodologyResponse.ProtoReflect.Descriptor instead.
+func (*DeleteMethodologyResponse) Descriptor() ([]byte, []int) {
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{25}
 }
 
-type ListMethodologiesResponse struct {
+type ImportMethodologyRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// latest version of each methodology
-	Methodologies []*Methodology `protobuf:"bytes,1,rep,name=methodologies,proto3" json:"methodologies,omitempty"`
+	Yaml  string                 `protobuf:"bytes,1,opt,name=yaml,proto3" json:"yaml,omitempty"`
+	// publish right away (the definition must be valid)
+	Publish       bool `protobuf:"varint,2,opt,name=publish,proto3" json:"publish,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ListMethodologiesResponse) Reset() {
-	*x = ListMethodologiesResponse{}
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[7]
+func (x *ImportMethodologyRequest) Reset() {
+	*x = ImportMethodologyRequest{}
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ListMethodologiesResponse) String() string {
+func (x *ImportMethodologyRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ListMethodologiesResponse) ProtoMessage() {}
+func (*ImportMethodologyRequest) ProtoMessage() {}
 
-func (x *ListMethodologiesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_registry_v1_registry_proto_msgTypes[7]
+func (x *ImportMethodologyRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -413,49 +1634,337 @@ func (x *ListMethodologiesResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ListMethodologiesResponse.ProtoReflect.Descriptor instead.
-func (*ListMethodologiesResponse) Descriptor() ([]byte, []int) {
-	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{7}
+// Deprecated: Use ImportMethodologyRequest.ProtoReflect.Descriptor instead.
+func (*ImportMethodologyRequest) Descriptor() ([]byte, []int) {
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{26}
 }
 
-func (x *ListMethodologiesResponse) GetMethodologies() []*Methodology {
+func (x *ImportMethodologyRequest) GetYaml() string {
 	if x != nil {
-		return x.Methodologies
+		return x.Yaml
+	}
+	return ""
+}
+
+func (x *ImportMethodologyRequest) GetPublish() bool {
+	if x != nil {
+		return x.Publish
+	}
+	return false
+}
+
+type ImportMethodologyResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Methodology   *Methodology           `protobuf:"bytes,1,opt,name=methodology,proto3" json:"methodology,omitempty"`
+	Issues        []*Issue               `protobuf:"bytes,2,rep,name=issues,proto3" json:"issues,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ImportMethodologyResponse) Reset() {
+	*x = ImportMethodologyResponse{}
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ImportMethodologyResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ImportMethodologyResponse) ProtoMessage() {}
+
+func (x *ImportMethodologyResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ImportMethodologyResponse.ProtoReflect.Descriptor instead.
+func (*ImportMethodologyResponse) Descriptor() ([]byte, []int) {
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *ImportMethodologyResponse) GetMethodology() *Methodology {
+	if x != nil {
+		return x.Methodology
 	}
 	return nil
+}
+
+func (x *ImportMethodologyResponse) GetIssues() []*Issue {
+	if x != nil {
+		return x.Issues
+	}
+	return nil
+}
+
+type ExportMethodologyRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Version       string                 `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ExportMethodologyRequest) Reset() {
+	*x = ExportMethodologyRequest{}
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExportMethodologyRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExportMethodologyRequest) ProtoMessage() {}
+
+func (x *ExportMethodologyRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExportMethodologyRequest.ProtoReflect.Descriptor instead.
+func (*ExportMethodologyRequest) Descriptor() ([]byte, []int) {
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *ExportMethodologyRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *ExportMethodologyRequest) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
+}
+
+type ExportMethodologyResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Yaml          string                 `protobuf:"bytes,1,opt,name=yaml,proto3" json:"yaml,omitempty"`
+	Filename      string                 `protobuf:"bytes,2,opt,name=filename,proto3" json:"filename,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ExportMethodologyResponse) Reset() {
+	*x = ExportMethodologyResponse{}
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExportMethodologyResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExportMethodologyResponse) ProtoMessage() {}
+
+func (x *ExportMethodologyResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExportMethodologyResponse.ProtoReflect.Descriptor instead.
+func (*ExportMethodologyResponse) Descriptor() ([]byte, []int) {
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *ExportMethodologyResponse) GetYaml() string {
+	if x != nil {
+		return x.Yaml
+	}
+	return ""
+}
+
+func (x *ExportMethodologyResponse) GetFilename() string {
+	if x != nil {
+		return x.Filename
+	}
+	return ""
 }
 
 var File_goap_registry_v1_registry_proto protoreflect.FileDescriptor
 
 const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\n" +
-	"\x1fgoap/registry/v1/registry.proto\x12\x10goap.registry.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"C\n" +
-	"\vGoalSummary\x12\x12\n" +
+	"\x1fgoap/registry/v1/registry.proto\x12\x10goap.registry.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"`\n" +
+	"\bNodeType\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
-	"\vdescription\x18\x02 \x01(\tR\vdescription\"\xe9\x01\n" +
+	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x1e\n" +
+	"\n" +
+	"properties\x18\x03 \x03(\tR\n" +
+	"properties\"B\n" +
+	"\bLinkType\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
+	"\x04from\x18\x02 \x01(\tR\x04from\x12\x0e\n" +
+	"\x02to\x18\x03 \x01(\tR\x02to\"U\n" +
+	"\tCondition\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
+	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x12\n" +
+	"\x04expr\x18\x03 \x01(\tR\x04expr\":\n" +
+	"\vProduceSpec\x12\x0e\n" +
+	"\x02op\x18\x01 \x01(\tR\x02op\x12\x1b\n" +
+	"\tnode_type\x18\x02 \x01(\tR\bnodeType\"<\n" +
+	"\bLinkSpec\x12\x12\n" +
+	"\x04type\x18\x01 \x01(\tR\x04type\x12\x1c\n" +
+	"\tdirection\x18\x02 \x01(\tR\tdirection\"\xa7\x01\n" +
+	"\vExpectation\x12\x19\n" +
+	"\bfor_each\x18\x01 \x01(\tR\aforEach\x12\x14\n" +
+	"\x05where\x18\x02 \x01(\tR\x05where\x127\n" +
+	"\aproduce\x18\x03 \x01(\v2\x1d.goap.registry.v1.ProduceSpecR\aproduce\x12.\n" +
+	"\x04link\x18\x04 \x01(\v2\x1a.goap.registry.v1.LinkSpecR\x04link\"\xda\x04\n" +
+	"\x06Action\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
+	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x12\n" +
+	"\x04kind\x18\x03 \x01(\tR\x04kind\x123\n" +
+	"\x03pre\x18\x04 \x03(\v2!.goap.registry.v1.Action.PreEntryR\x03pre\x12?\n" +
+	"\aeffects\x18\x05 \x03(\v2%.goap.registry.v1.Action.EffectsEntryR\aeffects\x12\x12\n" +
+	"\x04cost\x18\x06 \x01(\x01R\x04cost\x127\n" +
+	"\aexpects\x18\a \x01(\v2\x1d.goap.registry.v1.ExpectationR\aexpects\x12\x1e\n" +
+	"\n" +
+	"permission\x18\b \x01(\tR\n" +
+	"permission\x12\x14\n" +
+	"\x05model\x18\t \x01(\tR\x05model\x12\x16\n" +
+	"\x06prompt\x18\n" +
+	" \x01(\tR\x06prompt\x12\x12\n" +
+	"\x04tool\x18\v \x01(\tR\x04tool\x12\x18\n" +
+	"\abuiltin\x18\f \x01(\tR\abuiltin\x12\"\n" +
+	"\finstructions\x18\r \x01(\tR\finstructions\x12/\n" +
+	"\x06params\x18\x0e \x01(\v2\x17.google.protobuf.StructR\x06params\x1a6\n" +
+	"\bPreEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\bR\x05value:\x028\x01\x1a:\n" +
+	"\fEffectsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\bR\x05value:\x028\x01\"\xd9\x01\n" +
+	"\x04Goal\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
+	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x1a\n" +
+	"\bexamples\x18\x03 \x03(\tR\bexamples\x121\n" +
+	"\x03pre\x18\x04 \x03(\v2\x1f.goap.registry.v1.Goal.PreEntryR\x03pre\x12\x14\n" +
+	"\x05value\x18\x05 \x01(\x01R\x05value\x1a6\n" +
+	"\bPreEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\bR\x05value:\x028\x01\"\xde\x04\n" +
 	"\vMethodology\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\tR\aversion\x12 \n" +
 	"\vdescription\x18\x03 \x01(\tR\vdescription\x12\x16\n" +
-	"\x06source\x18\x04 \x01(\tR\x06source\x123\n" +
-	"\x05goals\x18\x05 \x03(\v2\x1d.goap.registry.v1.GoalSummaryR\x05goals\x12=\n" +
-	"\fpublished_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\vpublishedAt\"3\n" +
-	"\x19PublishMethodologyRequest\x12\x16\n" +
-	"\x06source\x18\x01 \x01(\tR\x06source\"]\n" +
-	"\x1aPublishMethodologyResponse\x12?\n" +
-	"\vmethodology\x18\x01 \x01(\v2\x1d.goap.registry.v1.MethodologyR\vmethodology\"E\n" +
+	"\x06status\x18\x04 \x01(\tR\x06status\x129\n" +
+	"\n" +
+	"node_types\x18\x05 \x03(\v2\x1a.goap.registry.v1.NodeTypeR\tnodeTypes\x129\n" +
+	"\n" +
+	"link_types\x18\x06 \x03(\v2\x1a.goap.registry.v1.LinkTypeR\tlinkTypes\x12;\n" +
+	"\n" +
+	"conditions\x18\a \x03(\v2\x1b.goap.registry.v1.ConditionR\n" +
+	"conditions\x122\n" +
+	"\aactions\x18\b \x03(\v2\x18.goap.registry.v1.ActionR\aactions\x12,\n" +
+	"\x05goals\x18\t \x03(\v2\x16.goap.registry.v1.GoalR\x05goals\x129\n" +
+	"\n" +
+	"created_at\x18\n" +
+	" \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
+	"\n" +
+	"updated_at\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12=\n" +
+	"\fpublished_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\vpublishedAt\x12\x1d\n" +
+	"\n" +
+	"updated_by\x18\r \x01(\tR\tupdatedBy\"C\n" +
+	"\vGoalSummary\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
+	"\vdescription\x18\x02 \x01(\tR\vdescription\"\xab\x02\n" +
+	"\x12MethodologySummary\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
+	"\aversion\x18\x02 \x01(\tR\aversion\x12 \n" +
+	"\vdescription\x18\x03 \x01(\tR\vdescription\x12\x16\n" +
+	"\x06status\x18\x04 \x01(\tR\x06status\x123\n" +
+	"\x05goals\x18\x05 \x03(\v2\x1d.goap.registry.v1.GoalSummaryR\x05goals\x129\n" +
+	"\n" +
+	"updated_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12=\n" +
+	"\fpublished_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\vpublishedAt\"5\n" +
+	"\x05Issue\x12\x12\n" +
+	"\x04path\x18\x01 \x01(\tR\x04path\x12\x18\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\"=\n" +
+	"\x18ListMethodologiesRequest\x12!\n" +
+	"\fall_versions\x18\x01 \x01(\bR\vallVersions\"g\n" +
+	"\x19ListMethodologiesResponse\x12J\n" +
+	"\rmethodologies\x18\x01 \x03(\v2$.goap.registry.v1.MethodologySummaryR\rmethodologies\"E\n" +
 	"\x15GetMethodologyRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\tR\aversion\"Y\n" +
 	"\x16GetMethodologyResponse\x12?\n" +
-	"\vmethodology\x18\x01 \x01(\v2\x1d.goap.registry.v1.MethodologyR\vmethodology\"\x1a\n" +
-	"\x18ListMethodologiesRequest\"`\n" +
-	"\x19ListMethodologiesResponse\x12C\n" +
-	"\rmethodologies\x18\x01 \x03(\v2\x1d.goap.registry.v1.MethodologyR\rmethodologies2\xd5\x02\n" +
-	"\x0fRegistryService\x12o\n" +
-	"\x12PublishMethodology\x12+.goap.registry.v1.PublishMethodologyRequest\x1a,.goap.registry.v1.PublishMethodologyResponse\x12c\n" +
-	"\x0eGetMethodology\x12'.goap.registry.v1.GetMethodologyRequest\x1a(.goap.registry.v1.GetMethodologyResponse\x12l\n" +
-	"\x11ListMethodologies\x12*.goap.registry.v1.ListMethodologiesRequest\x1a+.goap.registry.v1.ListMethodologiesResponseB\xbf\x01\n" +
+	"\vmethodology\x18\x01 \x01(\v2\x1d.goap.registry.v1.MethodologyR\vmethodology\"Y\n" +
+	"\x16SaveMethodologyRequest\x12?\n" +
+	"\vmethodology\x18\x01 \x01(\v2\x1d.goap.registry.v1.MethodologyR\vmethodology\"\x8b\x01\n" +
+	"\x17SaveMethodologyResponse\x12?\n" +
+	"\vmethodology\x18\x01 \x01(\v2\x1d.goap.registry.v1.MethodologyR\vmethodology\x12/\n" +
+	"\x06issues\x18\x02 \x03(\v2\x17.goap.registry.v1.IssueR\x06issues\"]\n" +
+	"\x1aValidateMethodologyRequest\x12?\n" +
+	"\vmethodology\x18\x01 \x01(\v2\x1d.goap.registry.v1.MethodologyR\vmethodology\"N\n" +
+	"\x1bValidateMethodologyResponse\x12/\n" +
+	"\x06issues\x18\x01 \x03(\v2\x17.goap.registry.v1.IssueR\x06issues\"I\n" +
+	"\x19PublishMethodologyRequest\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
+	"\aversion\x18\x02 \x01(\tR\aversion\"]\n" +
+	"\x1aPublishMethodologyResponse\x12?\n" +
+	"\vmethodology\x18\x01 \x01(\v2\x1d.goap.registry.v1.MethodologyR\vmethodology\"n\n" +
+	"\x14CreateVersionRequest\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12!\n" +
+	"\ffrom_version\x18\x02 \x01(\tR\vfromVersion\x12\x1f\n" +
+	"\vnew_version\x18\x03 \x01(\tR\n" +
+	"newVersion\"X\n" +
+	"\x15CreateVersionResponse\x12?\n" +
+	"\vmethodology\x18\x01 \x01(\v2\x1d.goap.registry.v1.MethodologyR\vmethodology\"H\n" +
+	"\x18DeleteMethodologyRequest\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
+	"\aversion\x18\x02 \x01(\tR\aversion\"\x1b\n" +
+	"\x19DeleteMethodologyResponse\"H\n" +
+	"\x18ImportMethodologyRequest\x12\x12\n" +
+	"\x04yaml\x18\x01 \x01(\tR\x04yaml\x12\x18\n" +
+	"\apublish\x18\x02 \x01(\bR\apublish\"\x8d\x01\n" +
+	"\x19ImportMethodologyResponse\x12?\n" +
+	"\vmethodology\x18\x01 \x01(\v2\x1d.goap.registry.v1.MethodologyR\vmethodology\x12/\n" +
+	"\x06issues\x18\x02 \x03(\v2\x17.goap.registry.v1.IssueR\x06issues\"H\n" +
+	"\x18ExportMethodologyRequest\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
+	"\aversion\x18\x02 \x01(\tR\aversion\"K\n" +
+	"\x19ExportMethodologyResponse\x12\x12\n" +
+	"\x04yaml\x18\x01 \x01(\tR\x04yaml\x12\x1a\n" +
+	"\bfilename\x18\x02 \x01(\tR\bfilename2\xdd\a\n" +
+	"\x0fRegistryService\x12l\n" +
+	"\x11ListMethodologies\x12*.goap.registry.v1.ListMethodologiesRequest\x1a+.goap.registry.v1.ListMethodologiesResponse\x12c\n" +
+	"\x0eGetMethodology\x12'.goap.registry.v1.GetMethodologyRequest\x1a(.goap.registry.v1.GetMethodologyResponse\x12f\n" +
+	"\x0fSaveMethodology\x12(.goap.registry.v1.SaveMethodologyRequest\x1a).goap.registry.v1.SaveMethodologyResponse\x12r\n" +
+	"\x13ValidateMethodology\x12,.goap.registry.v1.ValidateMethodologyRequest\x1a-.goap.registry.v1.ValidateMethodologyResponse\x12o\n" +
+	"\x12PublishMethodology\x12+.goap.registry.v1.PublishMethodologyRequest\x1a,.goap.registry.v1.PublishMethodologyResponse\x12`\n" +
+	"\rCreateVersion\x12&.goap.registry.v1.CreateVersionRequest\x1a'.goap.registry.v1.CreateVersionResponse\x12l\n" +
+	"\x11DeleteMethodology\x12*.goap.registry.v1.DeleteMethodologyRequest\x1a+.goap.registry.v1.DeleteMethodologyResponse\x12l\n" +
+	"\x11ImportMethodology\x12*.goap.registry.v1.ImportMethodologyRequest\x1a+.goap.registry.v1.ImportMethodologyResponse\x12l\n" +
+	"\x11ExportMethodology\x12*.goap.registry.v1.ExportMethodologyRequest\x1a+.goap.registry.v1.ExportMethodologyResponseB\xbf\x01\n" +
 	"\x14com.goap.registry.v1B\rRegistryProtoP\x01Z6github.com/zimwip/goap/gen/goap/registry/v1;registryv1\xa2\x02\x03GRX\xaa\x02\x10Goap.Registry.V1\xca\x02\x10Goap\\Registry\\V1\xe2\x02\x1cGoap\\Registry\\V1\\GPBMetadata\xea\x02\x12Goap::Registry::V1b\x06proto3"
 
 var (
@@ -470,35 +1979,97 @@ func file_goap_registry_v1_registry_proto_rawDescGZIP() []byte {
 	return file_goap_registry_v1_registry_proto_rawDescData
 }
 
-var file_goap_registry_v1_registry_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
+var file_goap_registry_v1_registry_proto_msgTypes = make([]protoimpl.MessageInfo, 33)
 var file_goap_registry_v1_registry_proto_goTypes = []any{
-	(*GoalSummary)(nil),                // 0: goap.registry.v1.GoalSummary
-	(*Methodology)(nil),                // 1: goap.registry.v1.Methodology
-	(*PublishMethodologyRequest)(nil),  // 2: goap.registry.v1.PublishMethodologyRequest
-	(*PublishMethodologyResponse)(nil), // 3: goap.registry.v1.PublishMethodologyResponse
-	(*GetMethodologyRequest)(nil),      // 4: goap.registry.v1.GetMethodologyRequest
-	(*GetMethodologyResponse)(nil),     // 5: goap.registry.v1.GetMethodologyResponse
-	(*ListMethodologiesRequest)(nil),   // 6: goap.registry.v1.ListMethodologiesRequest
-	(*ListMethodologiesResponse)(nil),  // 7: goap.registry.v1.ListMethodologiesResponse
-	(*timestamppb.Timestamp)(nil),      // 8: google.protobuf.Timestamp
+	(*NodeType)(nil),                    // 0: goap.registry.v1.NodeType
+	(*LinkType)(nil),                    // 1: goap.registry.v1.LinkType
+	(*Condition)(nil),                   // 2: goap.registry.v1.Condition
+	(*ProduceSpec)(nil),                 // 3: goap.registry.v1.ProduceSpec
+	(*LinkSpec)(nil),                    // 4: goap.registry.v1.LinkSpec
+	(*Expectation)(nil),                 // 5: goap.registry.v1.Expectation
+	(*Action)(nil),                      // 6: goap.registry.v1.Action
+	(*Goal)(nil),                        // 7: goap.registry.v1.Goal
+	(*Methodology)(nil),                 // 8: goap.registry.v1.Methodology
+	(*GoalSummary)(nil),                 // 9: goap.registry.v1.GoalSummary
+	(*MethodologySummary)(nil),          // 10: goap.registry.v1.MethodologySummary
+	(*Issue)(nil),                       // 11: goap.registry.v1.Issue
+	(*ListMethodologiesRequest)(nil),    // 12: goap.registry.v1.ListMethodologiesRequest
+	(*ListMethodologiesResponse)(nil),   // 13: goap.registry.v1.ListMethodologiesResponse
+	(*GetMethodologyRequest)(nil),       // 14: goap.registry.v1.GetMethodologyRequest
+	(*GetMethodologyResponse)(nil),      // 15: goap.registry.v1.GetMethodologyResponse
+	(*SaveMethodologyRequest)(nil),      // 16: goap.registry.v1.SaveMethodologyRequest
+	(*SaveMethodologyResponse)(nil),     // 17: goap.registry.v1.SaveMethodologyResponse
+	(*ValidateMethodologyRequest)(nil),  // 18: goap.registry.v1.ValidateMethodologyRequest
+	(*ValidateMethodologyResponse)(nil), // 19: goap.registry.v1.ValidateMethodologyResponse
+	(*PublishMethodologyRequest)(nil),   // 20: goap.registry.v1.PublishMethodologyRequest
+	(*PublishMethodologyResponse)(nil),  // 21: goap.registry.v1.PublishMethodologyResponse
+	(*CreateVersionRequest)(nil),        // 22: goap.registry.v1.CreateVersionRequest
+	(*CreateVersionResponse)(nil),       // 23: goap.registry.v1.CreateVersionResponse
+	(*DeleteMethodologyRequest)(nil),    // 24: goap.registry.v1.DeleteMethodologyRequest
+	(*DeleteMethodologyResponse)(nil),   // 25: goap.registry.v1.DeleteMethodologyResponse
+	(*ImportMethodologyRequest)(nil),    // 26: goap.registry.v1.ImportMethodologyRequest
+	(*ImportMethodologyResponse)(nil),   // 27: goap.registry.v1.ImportMethodologyResponse
+	(*ExportMethodologyRequest)(nil),    // 28: goap.registry.v1.ExportMethodologyRequest
+	(*ExportMethodologyResponse)(nil),   // 29: goap.registry.v1.ExportMethodologyResponse
+	nil,                                 // 30: goap.registry.v1.Action.PreEntry
+	nil,                                 // 31: goap.registry.v1.Action.EffectsEntry
+	nil,                                 // 32: goap.registry.v1.Goal.PreEntry
+	(*structpb.Struct)(nil),             // 33: google.protobuf.Struct
+	(*timestamppb.Timestamp)(nil),       // 34: google.protobuf.Timestamp
 }
 var file_goap_registry_v1_registry_proto_depIdxs = []int32{
-	0, // 0: goap.registry.v1.Methodology.goals:type_name -> goap.registry.v1.GoalSummary
-	8, // 1: goap.registry.v1.Methodology.published_at:type_name -> google.protobuf.Timestamp
-	1, // 2: goap.registry.v1.PublishMethodologyResponse.methodology:type_name -> goap.registry.v1.Methodology
-	1, // 3: goap.registry.v1.GetMethodologyResponse.methodology:type_name -> goap.registry.v1.Methodology
-	1, // 4: goap.registry.v1.ListMethodologiesResponse.methodologies:type_name -> goap.registry.v1.Methodology
-	2, // 5: goap.registry.v1.RegistryService.PublishMethodology:input_type -> goap.registry.v1.PublishMethodologyRequest
-	4, // 6: goap.registry.v1.RegistryService.GetMethodology:input_type -> goap.registry.v1.GetMethodologyRequest
-	6, // 7: goap.registry.v1.RegistryService.ListMethodologies:input_type -> goap.registry.v1.ListMethodologiesRequest
-	3, // 8: goap.registry.v1.RegistryService.PublishMethodology:output_type -> goap.registry.v1.PublishMethodologyResponse
-	5, // 9: goap.registry.v1.RegistryService.GetMethodology:output_type -> goap.registry.v1.GetMethodologyResponse
-	7, // 10: goap.registry.v1.RegistryService.ListMethodologies:output_type -> goap.registry.v1.ListMethodologiesResponse
-	8, // [8:11] is the sub-list for method output_type
-	5, // [5:8] is the sub-list for method input_type
-	5, // [5:5] is the sub-list for extension type_name
-	5, // [5:5] is the sub-list for extension extendee
-	0, // [0:5] is the sub-list for field type_name
+	3,  // 0: goap.registry.v1.Expectation.produce:type_name -> goap.registry.v1.ProduceSpec
+	4,  // 1: goap.registry.v1.Expectation.link:type_name -> goap.registry.v1.LinkSpec
+	30, // 2: goap.registry.v1.Action.pre:type_name -> goap.registry.v1.Action.PreEntry
+	31, // 3: goap.registry.v1.Action.effects:type_name -> goap.registry.v1.Action.EffectsEntry
+	5,  // 4: goap.registry.v1.Action.expects:type_name -> goap.registry.v1.Expectation
+	33, // 5: goap.registry.v1.Action.params:type_name -> google.protobuf.Struct
+	32, // 6: goap.registry.v1.Goal.pre:type_name -> goap.registry.v1.Goal.PreEntry
+	0,  // 7: goap.registry.v1.Methodology.node_types:type_name -> goap.registry.v1.NodeType
+	1,  // 8: goap.registry.v1.Methodology.link_types:type_name -> goap.registry.v1.LinkType
+	2,  // 9: goap.registry.v1.Methodology.conditions:type_name -> goap.registry.v1.Condition
+	6,  // 10: goap.registry.v1.Methodology.actions:type_name -> goap.registry.v1.Action
+	7,  // 11: goap.registry.v1.Methodology.goals:type_name -> goap.registry.v1.Goal
+	34, // 12: goap.registry.v1.Methodology.created_at:type_name -> google.protobuf.Timestamp
+	34, // 13: goap.registry.v1.Methodology.updated_at:type_name -> google.protobuf.Timestamp
+	34, // 14: goap.registry.v1.Methodology.published_at:type_name -> google.protobuf.Timestamp
+	9,  // 15: goap.registry.v1.MethodologySummary.goals:type_name -> goap.registry.v1.GoalSummary
+	34, // 16: goap.registry.v1.MethodologySummary.updated_at:type_name -> google.protobuf.Timestamp
+	34, // 17: goap.registry.v1.MethodologySummary.published_at:type_name -> google.protobuf.Timestamp
+	10, // 18: goap.registry.v1.ListMethodologiesResponse.methodologies:type_name -> goap.registry.v1.MethodologySummary
+	8,  // 19: goap.registry.v1.GetMethodologyResponse.methodology:type_name -> goap.registry.v1.Methodology
+	8,  // 20: goap.registry.v1.SaveMethodologyRequest.methodology:type_name -> goap.registry.v1.Methodology
+	8,  // 21: goap.registry.v1.SaveMethodologyResponse.methodology:type_name -> goap.registry.v1.Methodology
+	11, // 22: goap.registry.v1.SaveMethodologyResponse.issues:type_name -> goap.registry.v1.Issue
+	8,  // 23: goap.registry.v1.ValidateMethodologyRequest.methodology:type_name -> goap.registry.v1.Methodology
+	11, // 24: goap.registry.v1.ValidateMethodologyResponse.issues:type_name -> goap.registry.v1.Issue
+	8,  // 25: goap.registry.v1.PublishMethodologyResponse.methodology:type_name -> goap.registry.v1.Methodology
+	8,  // 26: goap.registry.v1.CreateVersionResponse.methodology:type_name -> goap.registry.v1.Methodology
+	8,  // 27: goap.registry.v1.ImportMethodologyResponse.methodology:type_name -> goap.registry.v1.Methodology
+	11, // 28: goap.registry.v1.ImportMethodologyResponse.issues:type_name -> goap.registry.v1.Issue
+	12, // 29: goap.registry.v1.RegistryService.ListMethodologies:input_type -> goap.registry.v1.ListMethodologiesRequest
+	14, // 30: goap.registry.v1.RegistryService.GetMethodology:input_type -> goap.registry.v1.GetMethodologyRequest
+	16, // 31: goap.registry.v1.RegistryService.SaveMethodology:input_type -> goap.registry.v1.SaveMethodologyRequest
+	18, // 32: goap.registry.v1.RegistryService.ValidateMethodology:input_type -> goap.registry.v1.ValidateMethodologyRequest
+	20, // 33: goap.registry.v1.RegistryService.PublishMethodology:input_type -> goap.registry.v1.PublishMethodologyRequest
+	22, // 34: goap.registry.v1.RegistryService.CreateVersion:input_type -> goap.registry.v1.CreateVersionRequest
+	24, // 35: goap.registry.v1.RegistryService.DeleteMethodology:input_type -> goap.registry.v1.DeleteMethodologyRequest
+	26, // 36: goap.registry.v1.RegistryService.ImportMethodology:input_type -> goap.registry.v1.ImportMethodologyRequest
+	28, // 37: goap.registry.v1.RegistryService.ExportMethodology:input_type -> goap.registry.v1.ExportMethodologyRequest
+	13, // 38: goap.registry.v1.RegistryService.ListMethodologies:output_type -> goap.registry.v1.ListMethodologiesResponse
+	15, // 39: goap.registry.v1.RegistryService.GetMethodology:output_type -> goap.registry.v1.GetMethodologyResponse
+	17, // 40: goap.registry.v1.RegistryService.SaveMethodology:output_type -> goap.registry.v1.SaveMethodologyResponse
+	19, // 41: goap.registry.v1.RegistryService.ValidateMethodology:output_type -> goap.registry.v1.ValidateMethodologyResponse
+	21, // 42: goap.registry.v1.RegistryService.PublishMethodology:output_type -> goap.registry.v1.PublishMethodologyResponse
+	23, // 43: goap.registry.v1.RegistryService.CreateVersion:output_type -> goap.registry.v1.CreateVersionResponse
+	25, // 44: goap.registry.v1.RegistryService.DeleteMethodology:output_type -> goap.registry.v1.DeleteMethodologyResponse
+	27, // 45: goap.registry.v1.RegistryService.ImportMethodology:output_type -> goap.registry.v1.ImportMethodologyResponse
+	29, // 46: goap.registry.v1.RegistryService.ExportMethodology:output_type -> goap.registry.v1.ExportMethodologyResponse
+	38, // [38:47] is the sub-list for method output_type
+	29, // [29:38] is the sub-list for method input_type
+	29, // [29:29] is the sub-list for extension type_name
+	29, // [29:29] is the sub-list for extension extendee
+	0,  // [0:29] is the sub-list for field type_name
 }
 
 func init() { file_goap_registry_v1_registry_proto_init() }
@@ -512,7 +2083,7 @@ func file_goap_registry_v1_registry_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_goap_registry_v1_registry_proto_rawDesc), len(file_goap_registry_v1_registry_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   8,
+			NumMessages:   33,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

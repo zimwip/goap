@@ -2,13 +2,110 @@ syntax = "proto3";
 
 package goap.registry.v1;
 
+import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
 
-// RegistryService stores and validates methodology definitions.
+// RegistryService stores methodologies in the database as structured
+// definitions. A version is a draft (editable) until published (immutable).
+// YAML is only an import / export format.
 service RegistryService {
-  rpc PublishMethodology(PublishMethodologyRequest) returns (PublishMethodologyResponse);
-  rpc GetMethodology(GetMethodologyRequest) returns (GetMethodologyResponse);
   rpc ListMethodologies(ListMethodologiesRequest) returns (ListMethodologiesResponse);
+  // version empty = latest published version
+  rpc GetMethodology(GetMethodologyRequest) returns (GetMethodologyResponse);
+  // Create or replace a draft. Invalid drafts are saved and their issues returned.
+  rpc SaveMethodology(SaveMethodologyRequest) returns (SaveMethodologyResponse);
+  rpc ValidateMethodology(ValidateMethodologyRequest) returns (ValidateMethodologyResponse);
+  // Freeze a valid draft; the engine only runs published versions.
+  rpc PublishMethodology(PublishMethodologyRequest) returns (PublishMethodologyResponse);
+  // Copy a version into a new draft version.
+  rpc CreateVersion(CreateVersionRequest) returns (CreateVersionResponse);
+  // Delete a draft, or archive a published version.
+  rpc DeleteMethodology(DeleteMethodologyRequest) returns (DeleteMethodologyResponse);
+  rpc ImportMethodology(ImportMethodologyRequest) returns (ImportMethodologyResponse);
+  rpc ExportMethodology(ExportMethodologyRequest) returns (ExportMethodologyResponse);
+}
+
+message NodeType {
+  string name = 1;
+  string description = 2;
+  repeated string properties = 3;
+}
+
+message LinkType {
+  string name = 1;
+  string from = 2;
+  string to = 3;
+}
+
+message Condition {
+  string name = 1;
+  string description = 2;
+  // CEL expression over the blackboard
+  string expr = 3;
+}
+
+message ProduceSpec {
+  // create_node | update_node
+  string op = 1;
+  string node_type = 2;
+}
+
+message LinkSpec {
+  string type = 1;
+  // out (default) | in
+  string direction = 2;
+}
+
+message Expectation {
+  // impacts | proposals | items | artifacts
+  string for_each = 1;
+  string where = 2;
+  ProduceSpec produce = 3;
+  LinkSpec link = 4;
+}
+
+message Action {
+  string name = 1;
+  string description = 2;
+  // llm | tool | human | builtin
+  string kind = 3;
+  map<string, bool> pre = 4;
+  map<string, bool> effects = 5;
+  double cost = 6;
+  Expectation expects = 7;
+  // "<resource>:<action>" required from the initiator, e.g. change:apply
+  string permission = 8;
+  string model = 9;
+  string prompt = 10;
+  string tool = 11;
+  string builtin = 12;
+  string instructions = 13;
+  google.protobuf.Struct params = 14;
+}
+
+message Goal {
+  string name = 1;
+  string description = 2;
+  repeated string examples = 3;
+  map<string, bool> pre = 4;
+  double value = 5;
+}
+
+message Methodology {
+  string name = 1;
+  string version = 2;
+  string description = 3;
+  // draft | published | archived (read only)
+  string status = 4;
+  repeated NodeType node_types = 5;
+  repeated LinkType link_types = 6;
+  repeated Condition conditions = 7;
+  repeated Action actions = 8;
+  repeated Goal goals = 9;
+  google.protobuf.Timestamp created_at = 10;
+  google.protobuf.Timestamp updated_at = 11;
+  google.protobuf.Timestamp published_at = 12;
+  string updated_by = 13;
 }
 
 message GoalSummary {
@@ -16,27 +113,33 @@ message GoalSummary {
   string description = 2;
 }
 
-message Methodology {
+message MethodologySummary {
   string name = 1;
   string version = 2;
   string description = 3;
-  // YAML source of the definition
-  string source = 4;
+  string status = 4;
   repeated GoalSummary goals = 5;
-  google.protobuf.Timestamp published_at = 6;
+  google.protobuf.Timestamp updated_at = 6;
+  google.protobuf.Timestamp published_at = 7;
 }
 
-message PublishMethodologyRequest {
-  string source = 1;
+// A validation issue. `path` locates the field, e.g. "conditions[2].expr".
+message Issue {
+  string path = 1;
+  string message = 2;
 }
 
-message PublishMethodologyResponse {
-  Methodology methodology = 1;
+message ListMethodologiesRequest {
+  // every version (drafts, archived) instead of the latest one per name
+  bool all_versions = 1;
+}
+
+message ListMethodologiesResponse {
+  repeated MethodologySummary methodologies = 1;
 }
 
 message GetMethodologyRequest {
   string name = 1;
-  // empty = latest
   string version = 2;
 }
 
@@ -44,9 +147,66 @@ message GetMethodologyResponse {
   Methodology methodology = 1;
 }
 
-message ListMethodologiesRequest {}
+message SaveMethodologyRequest {
+  Methodology methodology = 1;
+}
 
-message ListMethodologiesResponse {
-  // latest version of each methodology
-  repeated Methodology methodologies = 1;
+message SaveMethodologyResponse {
+  Methodology methodology = 1;
+  repeated Issue issues = 2;
+}
+
+message ValidateMethodologyRequest {
+  Methodology methodology = 1;
+}
+
+message ValidateMethodologyResponse {
+  repeated Issue issues = 1;
+}
+
+message PublishMethodologyRequest {
+  string name = 1;
+  string version = 2;
+}
+
+message PublishMethodologyResponse {
+  Methodology methodology = 1;
+}
+
+message CreateVersionRequest {
+  string name = 1;
+  string from_version = 2;
+  string new_version = 3;
+}
+
+message CreateVersionResponse {
+  Methodology methodology = 1;
+}
+
+message DeleteMethodologyRequest {
+  string name = 1;
+  string version = 2;
+}
+
+message DeleteMethodologyResponse {}
+
+message ImportMethodologyRequest {
+  string yaml = 1;
+  // publish right away (the definition must be valid)
+  bool publish = 2;
+}
+
+message ImportMethodologyResponse {
+  Methodology methodology = 1;
+  repeated Issue issues = 2;
+}
+
+message ExportMethodologyRequest {
+  string name = 1;
+  string version = 2;
+}
+
+message ExportMethodologyResponse {
+  string yaml = 1;
+  string filename = 2;
 }

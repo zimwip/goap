@@ -7,10 +7,10 @@ import (
 	"github.com/zimwip/goap/gen/goap/engine/v1/enginev1connect"
 	"github.com/zimwip/goap/internal/enginesvc"
 	"github.com/zimwip/goap/internal/graphsvc"
+	"github.com/zimwip/goap/internal/iamsvc"
 	"github.com/zimwip/goap/internal/modelgw"
 	"github.com/zimwip/goap/internal/platform"
 	"github.com/zimwip/goap/internal/registrysvc"
-	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/engine"
 	"github.com/zimwip/goap/pkg/intent"
 	"github.com/zimwip/goap/pkg/methodology"
@@ -28,6 +28,7 @@ func main() {
 	if platform.Env("GOAP_INTENT_RANKER", "lexical") == "llm" {
 		ranker = intent.LLMRanker{Client: models, Model: platform.Env("GOAP_INTENT_MODEL", "fast")}
 	}
+	authorizer := iamsvc.NewClient(hc, platform.Env("GOAP_IAM_URL", "http://localhost:8086"))
 	e := &engine.Engine{
 		Graph:         graphsvc.NewClient(hc, platform.Env("GOAP_GRAPH_URL", "http://localhost:8081")),
 		Methodologies: registrysvc.NewClient(hc, platform.Env("GOAP_REGISTRY_URL", "http://localhost:8082")),
@@ -39,7 +40,7 @@ func main() {
 		},
 		Intent:   intent.Resolver{Ranker: ranker},
 		Store:    engine.NewMemoryStore(), // PostgreSQL store: milestone M1
-		Authz:    authz.DefaultRoles,      // IamService.CheckPermission: milestone M2
+		Authz:    authorizer,
 		Events:   events,
 		Log:      log,
 		MaxSteps: platform.EnvInt("GOAP_MAX_STEPS", 50),
@@ -49,7 +50,7 @@ func main() {
 	}
 	srv := platform.NewServer(log, platform.Env("GOAP_HTTP_ADDR", ":8080"))
 	srv.Readiness(events.Ready)
-	srv.Mount(enginev1connect.NewEngineServiceHandler(&enginesvc.Handler{Engine: e, Log: log}))
+	srv.Mount(enginev1connect.NewEngineServiceHandler(&enginesvc.Handler{Engine: e, Log: log, Authz: authorizer}))
 	if err := srv.Run(); err != nil {
 		platform.Fatal(log, "server", err)
 	}
