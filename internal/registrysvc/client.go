@@ -13,8 +13,8 @@ import (
 	"github.com/zimwip/goap/pkg/methodology"
 )
 
-// Client adapts the registry to engine.MethodologyPort. Compiled
-// methodologies are cached by name and version.
+// Client adapts the registry to engine.MethodologyPort. Published versions
+// are immutable, so compiled methodologies are cached by name and version.
 type Client struct {
 	rpc   registryv1connect.RegistryServiceClient
 	mu    sync.Mutex
@@ -28,26 +28,26 @@ func NewClient(hc *http.Client, baseURL string) *Client {
 	return &Client{rpc: registryv1connect.NewRegistryServiceClient(hc, baseURL), cache: map[string]*methodology.Compiled{}}
 }
 
-// Methodology implements engine.MethodologyPort (latest version).
+// Methodology implements engine.MethodologyPort (latest published version).
 func (c *Client) Methodology(ctx context.Context, name string) (*methodology.Compiled, error) {
 	r, err := c.rpc.GetMethodology(ctx, connect.NewRequest(&registryv1.GetMethodologyRequest{Name: name}))
+	if connect.CodeOf(err) == connect.CodeNotFound {
+		return nil, engine.ErrUnknownMethodology{Name: name}
+	}
 	if err != nil {
 		return nil, err
 	}
-	key := r.Msg.Methodology.Name + "@" + r.Msg.Methodology.Version
+	k := key(r.Msg.Methodology.Name, r.Msg.Methodology.Version)
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if m, ok := c.cache[key]; ok {
+	if m, ok := c.cache[k]; ok {
 		return m, nil
 	}
-	m, err := methodology.Parse([]byte(r.Msg.Methodology.Source))
-	if err != nil {
-		return nil, err
-	}
+	m := FromPB(r.Msg.Methodology)
 	cm, err := m.Compile()
 	if err != nil {
 		return nil, err
 	}
-	c.cache[key] = cm
+	c.cache[k] = cm
 	return cm, nil
 }

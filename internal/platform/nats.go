@@ -69,3 +69,12 @@ func (e *Events) Close() {
 		_ = e.nc.Drain()
 	}
 }
+
+// Subscribe calls fn for every message on subject (core NATS, at most once).
+func (e *Events) Subscribe(subject string, fn func(data []byte)) error {
+	if e == nil {
+		return nil
+	}
+	_, err := e.nc.Subscribe(subject, func(m *nats.Msg) { fn(m.Data) })
+	return err
+}

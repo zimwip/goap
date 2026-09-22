@@ -38,24 +38,30 @@ const (
 	IamServiceCreateOrganizationProcedure = "/goap.iam.v1.IamService/CreateOrganization"
 	// IamServiceCreateUserProcedure is the fully-qualified name of the IamService's CreateUser RPC.
 	IamServiceCreateUserProcedure = "/goap.iam.v1.IamService/CreateUser"
-	// IamServiceGrantRoleProcedure is the fully-qualified name of the IamService's GrantRole RPC.
-	IamServiceGrantRoleProcedure = "/goap.iam.v1.IamService/GrantRole"
 	// IamServiceWhoAmIProcedure is the fully-qualified name of the IamService's WhoAmI RPC.
 	IamServiceWhoAmIProcedure = "/goap.iam.v1.IamService/WhoAmI"
 	// IamServiceCheckPermissionProcedure is the fully-qualified name of the IamService's
 	// CheckPermission RPC.
 	IamServiceCheckPermissionProcedure = "/goap.iam.v1.IamService/CheckPermission"
+	// IamServiceListPoliciesProcedure is the fully-qualified name of the IamService's ListPolicies RPC.
+	IamServiceListPoliciesProcedure = "/goap.iam.v1.IamService/ListPolicies"
+	// IamServiceAddPolicyProcedure is the fully-qualified name of the IamService's AddPolicy RPC.
+	IamServiceAddPolicyProcedure = "/goap.iam.v1.IamService/AddPolicy"
+	// IamServiceRemovePolicyProcedure is the fully-qualified name of the IamService's RemovePolicy RPC.
+	IamServiceRemovePolicyProcedure = "/goap.iam.v1.IamService/RemovePolicy"
 )
 
 // IamServiceClient is a client for the goap.iam.v1.IamService service.
 type IamServiceClient interface {
 	CreateOrganization(context.Context, *connect.Request[v1.CreateOrganizationRequest]) (*connect.Response[v1.CreateOrganizationResponse], error)
 	CreateUser(context.Context, *connect.Request[v1.CreateUserRequest]) (*connect.Response[v1.CreateUserResponse], error)
-	GrantRole(context.Context, *connect.Request[v1.GrantRoleRequest]) (*connect.Response[v1.GrantRoleResponse], error)
 	WhoAmI(context.Context, *connect.Request[v1.WhoAmIRequest]) (*connect.Response[v1.WhoAmIResponse], error)
-	// Decide a permission (e.g. "change:apply") for a subject in an organization.
-	// Target of the engine's authorizer (today: static role policy).
+	// Decide an access request. Called by the services (engine, registry).
 	CheckPermission(context.Context, *connect.Request[v1.CheckPermissionRequest]) (*connect.Response[v1.CheckPermissionResponse], error)
+	// Policy administration (requires `policy` permissions).
+	ListPolicies(context.Context, *connect.Request[v1.ListPoliciesRequest]) (*connect.Response[v1.ListPoliciesResponse], error)
+	AddPolicy(context.Context, *connect.Request[v1.AddPolicyRequest]) (*connect.Response[v1.AddPolicyResponse], error)
+	RemovePolicy(context.Context, *connect.Request[v1.RemovePolicyRequest]) (*connect.Response[v1.RemovePolicyResponse], error)
 }
 
 // NewIamServiceClient constructs a client for the goap.iam.v1.IamService service. By default, it
@@ -81,12 +87,6 @@ func NewIamServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			connect.WithSchema(iamServiceMethods.ByName("CreateUser")),
 			connect.WithClientOptions(opts...),
 		),
-		grantRole: connect.NewClient[v1.GrantRoleRequest, v1.GrantRoleResponse](
-			httpClient,
-			baseURL+IamServiceGrantRoleProcedure,
-			connect.WithSchema(iamServiceMethods.ByName("GrantRole")),
-			connect.WithClientOptions(opts...),
-		),
 		whoAmI: connect.NewClient[v1.WhoAmIRequest, v1.WhoAmIResponse](
 			httpClient,
 			baseURL+IamServiceWhoAmIProcedure,
@@ -99,6 +99,24 @@ func NewIamServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			connect.WithSchema(iamServiceMethods.ByName("CheckPermission")),
 			connect.WithClientOptions(opts...),
 		),
+		listPolicies: connect.NewClient[v1.ListPoliciesRequest, v1.ListPoliciesResponse](
+			httpClient,
+			baseURL+IamServiceListPoliciesProcedure,
+			connect.WithSchema(iamServiceMethods.ByName("ListPolicies")),
+			connect.WithClientOptions(opts...),
+		),
+		addPolicy: connect.NewClient[v1.AddPolicyRequest, v1.AddPolicyResponse](
+			httpClient,
+			baseURL+IamServiceAddPolicyProcedure,
+			connect.WithSchema(iamServiceMethods.ByName("AddPolicy")),
+			connect.WithClientOptions(opts...),
+		),
+		removePolicy: connect.NewClient[v1.RemovePolicyRequest, v1.RemovePolicyResponse](
+			httpClient,
+			baseURL+IamServiceRemovePolicyProcedure,
+			connect.WithSchema(iamServiceMethods.ByName("RemovePolicy")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -106,9 +124,11 @@ func NewIamServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 type iamServiceClient struct {
 	createOrganization *connect.Client[v1.CreateOrganizationRequest, v1.CreateOrganizationResponse]
 	createUser         *connect.Client[v1.CreateUserRequest, v1.CreateUserResponse]
-	grantRole          *connect.Client[v1.GrantRoleRequest, v1.GrantRoleResponse]
 	whoAmI             *connect.Client[v1.WhoAmIRequest, v1.WhoAmIResponse]
 	checkPermission    *connect.Client[v1.CheckPermissionRequest, v1.CheckPermissionResponse]
+	listPolicies       *connect.Client[v1.ListPoliciesRequest, v1.ListPoliciesResponse]
+	addPolicy          *connect.Client[v1.AddPolicyRequest, v1.AddPolicyResponse]
+	removePolicy       *connect.Client[v1.RemovePolicyRequest, v1.RemovePolicyResponse]
 }
 
 // CreateOrganization calls goap.iam.v1.IamService.CreateOrganization.
@@ -121,11 +141,6 @@ func (c *iamServiceClient) CreateUser(ctx context.Context, req *connect.Request[
 	return c.createUser.CallUnary(ctx, req)
 }
 
-// GrantRole calls goap.iam.v1.IamService.GrantRole.
-func (c *iamServiceClient) GrantRole(ctx context.Context, req *connect.Request[v1.GrantRoleRequest]) (*connect.Response[v1.GrantRoleResponse], error) {
-	return c.grantRole.CallUnary(ctx, req)
-}
-
 // WhoAmI calls goap.iam.v1.IamService.WhoAmI.
 func (c *iamServiceClient) WhoAmI(ctx context.Context, req *connect.Request[v1.WhoAmIRequest]) (*connect.Response[v1.WhoAmIResponse], error) {
 	return c.whoAmI.CallUnary(ctx, req)
@@ -136,15 +151,32 @@ func (c *iamServiceClient) CheckPermission(ctx context.Context, req *connect.Req
 	return c.checkPermission.CallUnary(ctx, req)
 }
 
+// ListPolicies calls goap.iam.v1.IamService.ListPolicies.
+func (c *iamServiceClient) ListPolicies(ctx context.Context, req *connect.Request[v1.ListPoliciesRequest]) (*connect.Response[v1.ListPoliciesResponse], error) {
+	return c.listPolicies.CallUnary(ctx, req)
+}
+
+// AddPolicy calls goap.iam.v1.IamService.AddPolicy.
+func (c *iamServiceClient) AddPolicy(ctx context.Context, req *connect.Request[v1.AddPolicyRequest]) (*connect.Response[v1.AddPolicyResponse], error) {
+	return c.addPolicy.CallUnary(ctx, req)
+}
+
+// RemovePolicy calls goap.iam.v1.IamService.RemovePolicy.
+func (c *iamServiceClient) RemovePolicy(ctx context.Context, req *connect.Request[v1.RemovePolicyRequest]) (*connect.Response[v1.RemovePolicyResponse], error) {
+	return c.removePolicy.CallUnary(ctx, req)
+}
+
 // IamServiceHandler is an implementation of the goap.iam.v1.IamService service.
 type IamServiceHandler interface {
 	CreateOrganization(context.Context, *connect.Request[v1.CreateOrganizationRequest]) (*connect.Response[v1.CreateOrganizationResponse], error)
 	CreateUser(context.Context, *connect.Request[v1.CreateUserRequest]) (*connect.Response[v1.CreateUserResponse], error)
-	GrantRole(context.Context, *connect.Request[v1.GrantRoleRequest]) (*connect.Response[v1.GrantRoleResponse], error)
 	WhoAmI(context.Context, *connect.Request[v1.WhoAmIRequest]) (*connect.Response[v1.WhoAmIResponse], error)
-	// Decide a permission (e.g. "change:apply") for a subject in an organization.
-	// Target of the engine's authorizer (today: static role policy).
+	// Decide an access request. Called by the services (engine, registry).
 	CheckPermission(context.Context, *connect.Request[v1.CheckPermissionRequest]) (*connect.Response[v1.CheckPermissionResponse], error)
+	// Policy administration (requires `policy` permissions).
+	ListPolicies(context.Context, *connect.Request[v1.ListPoliciesRequest]) (*connect.Response[v1.ListPoliciesResponse], error)
+	AddPolicy(context.Context, *connect.Request[v1.AddPolicyRequest]) (*connect.Response[v1.AddPolicyResponse], error)
+	RemovePolicy(context.Context, *connect.Request[v1.RemovePolicyRequest]) (*connect.Response[v1.RemovePolicyResponse], error)
 }
 
 // NewIamServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -166,12 +198,6 @@ func NewIamServiceHandler(svc IamServiceHandler, opts ...connect.HandlerOption) 
 		connect.WithSchema(iamServiceMethods.ByName("CreateUser")),
 		connect.WithHandlerOptions(opts...),
 	)
-	iamServiceGrantRoleHandler := connect.NewUnaryHandler(
-		IamServiceGrantRoleProcedure,
-		svc.GrantRole,
-		connect.WithSchema(iamServiceMethods.ByName("GrantRole")),
-		connect.WithHandlerOptions(opts...),
-	)
 	iamServiceWhoAmIHandler := connect.NewUnaryHandler(
 		IamServiceWhoAmIProcedure,
 		svc.WhoAmI,
@@ -184,18 +210,40 @@ func NewIamServiceHandler(svc IamServiceHandler, opts ...connect.HandlerOption) 
 		connect.WithSchema(iamServiceMethods.ByName("CheckPermission")),
 		connect.WithHandlerOptions(opts...),
 	)
+	iamServiceListPoliciesHandler := connect.NewUnaryHandler(
+		IamServiceListPoliciesProcedure,
+		svc.ListPolicies,
+		connect.WithSchema(iamServiceMethods.ByName("ListPolicies")),
+		connect.WithHandlerOptions(opts...),
+	)
+	iamServiceAddPolicyHandler := connect.NewUnaryHandler(
+		IamServiceAddPolicyProcedure,
+		svc.AddPolicy,
+		connect.WithSchema(iamServiceMethods.ByName("AddPolicy")),
+		connect.WithHandlerOptions(opts...),
+	)
+	iamServiceRemovePolicyHandler := connect.NewUnaryHandler(
+		IamServiceRemovePolicyProcedure,
+		svc.RemovePolicy,
+		connect.WithSchema(iamServiceMethods.ByName("RemovePolicy")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/goap.iam.v1.IamService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case IamServiceCreateOrganizationProcedure:
 			iamServiceCreateOrganizationHandler.ServeHTTP(w, r)
 		case IamServiceCreateUserProcedure:
 			iamServiceCreateUserHandler.ServeHTTP(w, r)
-		case IamServiceGrantRoleProcedure:
-			iamServiceGrantRoleHandler.ServeHTTP(w, r)
 		case IamServiceWhoAmIProcedure:
 			iamServiceWhoAmIHandler.ServeHTTP(w, r)
 		case IamServiceCheckPermissionProcedure:
 			iamServiceCheckPermissionHandler.ServeHTTP(w, r)
+		case IamServiceListPoliciesProcedure:
+			iamServiceListPoliciesHandler.ServeHTTP(w, r)
+		case IamServiceAddPolicyProcedure:
+			iamServiceAddPolicyHandler.ServeHTTP(w, r)
+		case IamServiceRemovePolicyProcedure:
+			iamServiceRemovePolicyHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -213,14 +261,22 @@ func (UnimplementedIamServiceHandler) CreateUser(context.Context, *connect.Reque
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.iam.v1.IamService.CreateUser is not implemented"))
 }
 
-func (UnimplementedIamServiceHandler) GrantRole(context.Context, *connect.Request[v1.GrantRoleRequest]) (*connect.Response[v1.GrantRoleResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.iam.v1.IamService.GrantRole is not implemented"))
-}
-
 func (UnimplementedIamServiceHandler) WhoAmI(context.Context, *connect.Request[v1.WhoAmIRequest]) (*connect.Response[v1.WhoAmIResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.iam.v1.IamService.WhoAmI is not implemented"))
 }
 
 func (UnimplementedIamServiceHandler) CheckPermission(context.Context, *connect.Request[v1.CheckPermissionRequest]) (*connect.Response[v1.CheckPermissionResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.iam.v1.IamService.CheckPermission is not implemented"))
+}
+
+func (UnimplementedIamServiceHandler) ListPolicies(context.Context, *connect.Request[v1.ListPoliciesRequest]) (*connect.Response[v1.ListPoliciesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.iam.v1.IamService.ListPolicies is not implemented"))
+}
+
+func (UnimplementedIamServiceHandler) AddPolicy(context.Context, *connect.Request[v1.AddPolicyRequest]) (*connect.Response[v1.AddPolicyResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.iam.v1.IamService.AddPolicy is not implemented"))
+}
+
+func (UnimplementedIamServiceHandler) RemovePolicy(context.Context, *connect.Request[v1.RemovePolicyRequest]) (*connect.Response[v1.RemovePolicyResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.iam.v1.IamService.RemovePolicy is not implemented"))
 }

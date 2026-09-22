@@ -1,22 +1,17 @@
-// Package authz carries the identity of callers and decides whether they hold
-// a permission. The role policy is the interim implementation until the IAM
-// service (milestone M2) answers IamService.CheckPermission.
+// Package authz carries the identity of callers and decides access with
+// attribute-based rules (ABAC) evaluated by Casbin. Policies are stored and
+// administered by the IAM service; this package holds the model, the
+// enforcer and the request types shared by every service.
 package authz
 
 import (
 	"context"
 	"errors"
-	"slices"
 	"strings"
 )
 
-// Well-known permissions.
-const (
-	// PermChangeApply allows materializing a change into a new baseline.
-	PermChangeApply = "change:apply"
-)
-
-// Principal is an authenticated caller.
+// Principal is an authenticated caller (subject attributes of ABAC rules:
+// r.sub.Subject, r.sub.Org, r.sub.Roles).
 type Principal struct {
 	Subject string   `json:"subject,omitempty"`
 	Org     string   `json:"org,omitempty"`
@@ -25,6 +20,32 @@ type Principal struct {
 
 // Anonymous reports whether the principal is unauthenticated.
 func (p Principal) Anonymous() bool { return p.Subject == "" }
+
+// Resource is the object of an access request (r.obj.Type, r.obj.ID,
+// r.obj.Org, r.obj.Owner, r.obj.Name).
+type Resource struct {
+	Type  string `json:"type"`            // change, process, methodology, policy…
+	ID    string `json:"id,omitempty"`    // resource identifier
+	Org   string `json:"org,omitempty"`   // owning organization
+	Owner string `json:"owner,omitempty"` // subject who created / owns it
+	Name  string `json:"name,omitempty"`  // human name (methodology name, goal…)
+}
+
+// Request is an ABAC access request.
+type Request struct {
+	Subject  Principal
+	Action   string
+	Resource Resource
+}
+
+// ParsePermission splits "type:action" (e.g. "change:apply").
+func ParsePermission(p string) (resourceType, action string, err error) {
+	t, a, ok := strings.Cut(p, ":")
+	if !ok || t == "" || a == "" {
+		return "", "", errors.New("permission must be <resource>:<action>")
+	}
+	return t, a, nil
+}
 
 type ctxKey struct{}
 
@@ -39,44 +60,40 @@ func From(ctx context.Context) Principal {
 	return p
 }
 
-// ErrForbidden is returned when a principal lacks a permission.
+// ErrForbidden is returned when access is denied.
 var ErrForbidden = errors.New("permission denied")
 
-// Authorizer decides permissions.
+// Authorizer decides access requests.
 type Authorizer interface {
-	Allowed(ctx context.Context, p Principal, permission string) (bool, error)
+	Authorize(ctx context.Context, req Request) (bool, error)
 }
 
 // AllowAll grants everything (tests, single-user dev).
 type AllowAll struct{}
 
-// Allowed implements Authorizer.
-func (AllowAll) Allowed(context.Context, Principal, string) (bool, error) { return true, nil }
+// Authorize implements Authorizer.
+func (AllowAll) Authorize(context.Context, Request) (bool, error) { return true, nil }
 
-// RolePolicy maps roles to permissions. "*" grants every permission and
-// "<resource>:*" every action on a resource.
-type RolePolicy map[string][]string
-
-// DefaultRoles is the platform role model.
-var DefaultRoles = RolePolicy{
-	"viewer":        {"process:read", "change:read"},
-	"contributor":   {"process:read", "change:read", "process:start", "process:submit"},
-	"methodologist": {"process:read", "change:read", "process:start", "process:submit", "methodology:publish"},
-	"approver":      {"process:read", "change:read", "process:submit", PermChangeApply},
-	"admin":         {"*"},
+// Check returns ErrForbidden when the request is denied. A nil authorizer
+// grants everything.
+func Check(ctx context.Context, a Authorizer, req Request) error {
+	if a == nil {
+		return nil
+	}
+	ok, err := a.Authorize(ctx, req)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return fmtForbidden(req)
+	}
+	return nil
 }
 
-// Allowed implements Authorizer. Anonymous principals hold no permission.
-func (r RolePolicy) Allowed(_ context.Context, p Principal, permission string) (bool, error) {
-	if p.Anonymous() {
-		return false, nil
+func fmtForbidden(req Request) error {
+	who := req.Subject.Subject
+	if who == "" {
+		who = "anonymous"
 	}
-	resource, _, _ := strings.Cut(permission, ":")
-	for _, role := range p.Roles {
-		perms := r[role]
-		if slices.Contains(perms, "*") || slices.Contains(perms, permission) || slices.Contains(perms, resource+":*") {
-			return true, nil
-		}
-	}
-	return false, nil
+	return errors.Join(ErrForbidden, errors.New(who+" may not "+req.Action+" "+req.Resource.Type+" "+req.Resource.ID))
 }

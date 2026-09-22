@@ -84,3 +84,62 @@ goals: [{name: g, pre: {c: true}}]`,
 		}
 	}
 }
+
+func TestIssuesArePathed(t *testing.T) {
+	m, err := Parse([]byte(`
+name: Bad Name
+conditions:
+  - {name: ok, expr: "size(impacts) > 0"}
+  - {name: broken, expr: "impacts +"}
+actions:
+  - {name: a, kind: llm, effects: {ok: true, ghost: true}}
+goals:
+  - {name: g, pre: {}}
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]bool{}
+	for _, is := range m.Validate() {
+		got[is.Path] = true
+	}
+	for _, want := range []string{"name", "conditions[1].expr", "actions[0].prompt", "actions[0].effects.ghost", "goals[0].pre"} {
+		if !got[want] {
+			t.Errorf("missing issue %s in %v", want, got)
+		}
+	}
+}
+
+func TestCompileDoesNotMutateAndYAMLRoundTrip(t *testing.T) {
+	data, _ := os.ReadFile("../../methodologies/impact-analysis.yaml")
+	m, err := Parse(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := m.Compile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, a := range m.Actions {
+		if a.Effects[a.ExpectCondition()] {
+			t.Fatalf("compile leaked generated effect into the definition: %s", a.Name)
+		}
+	}
+	if a, _ := c.Action("propose_tests"); !a.Effects["expect:propose_tests"] {
+		t.Fatal("compiled action must carry the generated effect")
+	}
+	out, err := m.YAML()
+	if err != nil {
+		t.Fatal(err)
+	}
+	m2, err := Parse(out)
+	if err != nil {
+		t.Fatalf("re-import: %v\n%s", err, out)
+	}
+	if _, err := m2.Compile(); err != nil {
+		t.Fatal(err)
+	}
+	if len(m2.Actions) != len(m.Actions) || m2.Actions[2].Params["maxDepth"] != m.Actions[2].Params["maxDepth"] {
+		t.Fatalf("round trip lost data")
+	}
+}

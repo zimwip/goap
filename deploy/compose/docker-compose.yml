@@ -74,6 +74,7 @@ services:
       <<: *env
       GOAP_DB_DSN: postgres://registry:registry@postgres:5432/goap?sslmode=disable
       GOAP_METHODOLOGIES_DIR: /methodologies
+      GOAP_IAM_URL: http://iam:8080
     ports: ["8082:8080"]
 
   modelgw:
@@ -89,6 +90,7 @@ services:
       GOAP_GRAPH_URL: http://graph:8080
       GOAP_REGISTRY_URL: http://registry:8080
       GOAP_MODELGW_URL: http://modelgw:8080
+      GOAP_IAM_URL: http://iam:8080
       GOAP_INTENT_RANKER: ${GOAP_INTENT_RANKER:-lexical}
     ports: ["8083:8080"]
 
@@ -99,6 +101,10 @@ services:
   iam:
     <<: *service
     build: {context: ../.., args: {SERVICE: iam}}
+    environment:
+      <<: *env
+      GOAP_DB_DSN: postgres://iam:iam@postgres:5432/goap?sslmode=disable
+    ports: ["8086:8080"]
 
   gateway:
     <<: *service

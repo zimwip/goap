@@ -1,161 +1,154 @@
-// Package registrysvc stores methodology definitions and serves them over Connect.
+// Package registrysvc stores methodologies as structured definitions and
+// serves them over Connect. YAML is only an import/export format.
 package registrysvc
 
 import (
 	"context"
-	"embed"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
 	"sync"
 	"time"
 
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
-
-	"github.com/zimwip/goap/internal/rpcerr"
+	"github.com/zimwip/goap/pkg/methodology"
 )
 
-// Migrations holds the registry schema.
-//
-//go:embed migrations/*.sql
-var Migrations embed.FS
+// Status of a methodology version.
+type Status string
 
-// Goal summarizes a goal.
-type Goal struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
-}
+const (
+	StatusDraft     Status = "draft"
+	StatusPublished Status = "published"
+	StatusArchived  Status = "archived"
+)
 
-// Record is a published methodology version.
+// Record is a stored methodology version.
 type Record struct {
-	Name        string
-	Version     string
-	Description string
-	Source      string
-	Goals       []Goal
+	Methodology methodology.Methodology
+	Status      Status
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
 	PublishedAt time.Time
+	UpdatedBy   string
 }
 
-// Store persists records. Get with an empty version returns the latest one.
+// Store persists methodology versions.
 type Store interface {
-	Put(ctx context.Context, r Record) error
+	// Save creates or replaces a draft. It fails with ErrImmutable when the
+	// version exists and is not a draft.
+	Save(ctx context.Context, r Record) error
+	// Get returns a version; an empty version returns the latest published one.
 	Get(ctx context.Context, name, version string) (Record, error)
+	// List returns every version, sorted by name then creation date.
 	List(ctx context.Context) ([]Record, error)
+	SetStatus(ctx context.Context, name, version string, s Status, at time.Time) error
+	// Delete removes a draft.
+	Delete(ctx context.Context, name, version string) error
 }
 
-// ErrExists is returned when publishing another source under an existing version.
-var ErrExists = errors.New("methodology version already published with a different source")
+var (
+	// ErrNotFound is returned for unknown methodologies.
+	ErrNotFound = errors.New("methodology not found")
+	// ErrImmutable is returned when modifying a published or archived version.
+	ErrImmutable = errors.New("methodology version is not a draft")
+)
 
 // MemoryStore is an in-memory Store.
 type MemoryStore struct {
 	mu sync.RWMutex
-	m  map[string][]Record
+	m  map[string]Record // key name@version
 }
 
 // NewMemoryStore returns an empty store.
-func NewMemoryStore() *MemoryStore { return &MemoryStore{m: map[string][]Record{}} }
+func NewMemoryStore() *MemoryStore { return &MemoryStore{m: map[string]Record{}} }
 
-func (s *MemoryStore) Put(_ context.Context, r Record) error {
+func key(name, version string) string { return name + "@" + version }
+
+func (s *MemoryStore) Save(_ context.Context, r Record) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for _, old := range s.m[r.Name] {
-		if old.Version == r.Version {
-			if old.Source == r.Source {
-				return nil
-			}
-			return ErrExists
+	k := key(r.Methodology.Name, r.Methodology.Version)
+	if old, ok := s.m[k]; ok {
+		if old.Status != StatusDraft {
+			return fmt.Errorf("%s: %w", k, ErrImmutable)
 		}
+		r.CreatedAt = old.CreatedAt
 	}
-	s.m[r.Name] = append(s.m[r.Name], r)
+	s.m[k] = r
 	return nil
 }
 
 func (s *MemoryStore) Get(_ context.Context, name, version string) (Record, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	rs := s.m[name]
-	if len(rs) == 0 {
-		return Record{}, fmt.Errorf("methodology %s: %w", name, rpcerr.ErrNotFound)
+	if version != "" {
+		r, ok := s.m[key(name, version)]
+		if !ok {
+			return Record{}, fmt.Errorf("%s: %w", key(name, version), ErrNotFound)
+		}
+		return r, nil
 	}
-	if version == "" {
-		return rs[len(rs)-1], nil
-	}
-	for _, r := range rs {
-		if r.Version == version {
-			return r, nil
+	var best Record
+	found := false
+	for _, r := range s.m {
+		if r.Methodology.Name == name && r.Status == StatusPublished && (!found || r.PublishedAt.After(best.PublishedAt)) {
+			best, found = r, true
 		}
 	}
-	return Record{}, fmt.Errorf("methodology %s@%s: %w", name, version, rpcerr.ErrNotFound)
+	if !found {
+		return Record{}, fmt.Errorf("%s (published): %w", name, ErrNotFound)
+	}
+	return best, nil
 }
 
 func (s *MemoryStore) List(_ context.Context) ([]Record, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	var out []Record
-	for _, rs := range s.m {
-		out = append(out, rs[len(rs)-1])
+	out := make([]Record, 0, len(s.m))
+	for _, r := range s.m {
+		out = append(out, r)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	sortRecords(out)
 	return out, nil
 }
 
-// PostgresStore is a PostgreSQL Store.
-type PostgresStore struct{ Pool *pgxpool.Pool }
+func sortRecords(rs []Record) {
+	sort.Slice(rs, func(i, j int) bool {
+		if rs[i].Methodology.Name != rs[j].Methodology.Name {
+			return rs[i].Methodology.Name < rs[j].Methodology.Name
+		}
+		return rs[i].CreatedAt.Before(rs[j].CreatedAt)
+	})
+}
 
-func (s PostgresStore) Put(ctx context.Context, r Record) error {
-	goals, _ := json.Marshal(r.Goals)
-	tag, err := s.Pool.Exec(ctx, `INSERT INTO methodology (name, version, description, source, goals, published_at)
-		VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (name, version) DO NOTHING`,
-		r.Name, r.Version, r.Description, r.Source, goals, r.PublishedAt)
-	if err != nil || tag.RowsAffected() == 1 {
-		return err
+func (s *MemoryStore) SetStatus(_ context.Context, name, version string, st Status, at time.Time) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	k := key(name, version)
+	r, ok := s.m[k]
+	if !ok {
+		return fmt.Errorf("%s: %w", k, ErrNotFound)
 	}
-	old, err := s.Get(ctx, r.Name, r.Version)
-	if err != nil {
-		return err
+	r.Status = st
+	r.UpdatedAt = at
+	if st == StatusPublished {
+		r.PublishedAt = at
 	}
-	if old.Source != r.Source {
-		return ErrExists
-	}
+	s.m[k] = r
 	return nil
 }
 
-const cols = `name, version, description, source, goals, published_at`
-
-func scan(row pgx.Row) (Record, error) {
-	var r Record
-	var goals []byte
-	if err := row.Scan(&r.Name, &r.Version, &r.Description, &r.Source, &goals, &r.PublishedAt); err != nil {
-		return r, err
+func (s *MemoryStore) Delete(_ context.Context, name, version string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	k := key(name, version)
+	r, ok := s.m[k]
+	if !ok {
+		return fmt.Errorf("%s: %w", k, ErrNotFound)
 	}
-	_ = json.Unmarshal(goals, &r.Goals)
-	return r, nil
-}
-
-func (s PostgresStore) Get(ctx context.Context, name, version string) (Record, error) {
-	q := `SELECT ` + cols + ` FROM methodology WHERE name = $1 AND ($2 = '' OR version = $2) ORDER BY published_at DESC LIMIT 1`
-	r, err := scan(s.Pool.QueryRow(ctx, q, name, version))
-	if errors.Is(err, pgx.ErrNoRows) {
-		return r, fmt.Errorf("methodology %s@%s: %w", name, version, rpcerr.ErrNotFound)
+	if r.Status != StatusDraft {
+		return fmt.Errorf("%s: %w", k, ErrImmutable)
 	}
-	return r, err
-}
-
-func (s PostgresStore) List(ctx context.Context) ([]Record, error) {
-	rows, err := s.Pool.Query(ctx, `SELECT DISTINCT ON (name) `+cols+` FROM methodology ORDER BY name, published_at DESC`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []Record
-	for rows.Next() {
-		r, err := scan(rows)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, r)
-	}
-	return out, rows.Err()
+	delete(s.m, k)
+	return nil
 }

@@ -8,13 +8,12 @@ import (
 	"log/slog"
 	"net/http"
 	"sort"
-	"strings"
 
 	"connectrpc.com/connect"
 
 	enginev1 "github.com/zimwip/goap/gen/goap/engine/v1"
 	"github.com/zimwip/goap/gen/goap/engine/v1/enginev1connect"
-	"github.com/zimwip/goap/internal/gateway"
+	"github.com/zimwip/goap/internal/identity"
 	"github.com/zimwip/goap/internal/pbconv"
 	"github.com/zimwip/goap/internal/rpcerr"
 	"github.com/zimwip/goap/pkg/authz"
@@ -32,19 +31,32 @@ type Handler struct {
 	// DefaultPrincipal is used when the request carries no identity headers
 	// (single-process dev without gateway). Nil keeps such callers anonymous.
 	DefaultPrincipal *authz.Principal
+	// Authz authorizes process operations (resource "process"; actions
+	// start, submit, read). Nil grants everything.
+	Authz authz.Authorizer
 }
 
-// principal reads the identity set by the gateway. The engine must only be
-// reachable through the gateway, which overwrites these headers.
+// authorize checks an operation on a process (p nil for start).
+func (h *Handler) authorize(ctx context.Context, action, methodology string, p *engine.Process) error {
+	who := authz.From(ctx)
+	res := authz.Resource{Type: "process", Name: methodology, Org: who.Org, Owner: who.Subject}
+	if p != nil {
+		res = authz.Resource{Type: "process", ID: p.ID, Name: p.Methodology, Org: p.Initiator.Org, Owner: p.Initiator.Subject}
+	}
+	return authz.Check(ctx, h.Authz, authz.Request{Subject: who, Action: action, Resource: res})
+}
+
+// loadAuthorized loads a process and checks the operation on it.
+func (h *Handler) loadAuthorized(ctx context.Context, id, action string) error {
+	p, err := h.Engine.Store.Get(ctx, id)
+	if err != nil {
+		return err
+	}
+	return h.authorize(ctx, action, "", p)
+}
+
 func (h *Handler) principal(ctx context.Context, hdr http.Header) context.Context {
-	p := authz.Principal{Subject: hdr.Get(gateway.HeaderSubject), Org: hdr.Get(gateway.HeaderOrg)}
-	if roles := hdr.Get(gateway.HeaderRoles); roles != "" {
-		p.Roles = strings.Split(roles, ",")
-	}
-	if p.Anonymous() && h.DefaultPrincipal != nil {
-		p = *h.DefaultPrincipal
-	}
-	return authz.With(ctx, p)
+	return identity.Extractor{Default: h.DefaultPrincipal}.Context(ctx, hdr)
 }
 
 var _ enginev1connect.EngineServiceHandler = (*Handler)(nil)
@@ -79,6 +91,9 @@ func toConnect(err error) error {
 
 func (h *Handler) StartProcess(ctx context.Context, r *connect.Request[enginev1.StartProcessRequest]) (*connect.Response[enginev1.StartProcessResponse], error) {
 	ctx = h.principal(ctx, r.Header())
+	if err := h.authorize(ctx, "start", r.Msg.Methodology, nil); err != nil {
+		return nil, toConnect(err)
+	}
 	p, err := h.Engine.Start(ctx, engine.StartRequest{
 		Methodology: r.Msg.Methodology, ChangeID: domain.ChangeID(r.Msg.ChangeId), BaselineID: domain.BaselineID(r.Msg.BaselineId),
 		Title: r.Msg.Title, Intent: r.Msg.Intent, Goal: r.Msg.Goal, Vars: pbconv.Map(r.Msg.Vars),
@@ -91,7 +106,11 @@ func (h *Handler) StartProcess(ctx context.Context, r *connect.Request[enginev1.
 }
 
 func (h *Handler) AnswerIntent(ctx context.Context, r *connect.Request[enginev1.AnswerIntentRequest]) (*connect.Response[enginev1.AnswerIntentResponse], error) {
-	p, err := h.Engine.Answer(h.principal(ctx, r.Header()), r.Msg.ProcessId, r.Msg.Answer)
+	ctx = h.principal(ctx, r.Header())
+	if err := h.loadAuthorized(ctx, r.Msg.ProcessId, "submit"); err != nil {
+		return nil, toConnect(err)
+	}
+	p, err := h.Engine.Answer(ctx, r.Msg.ProcessId, r.Msg.Answer)
 	if err != nil {
 		return nil, toConnect(err)
 	}
@@ -112,7 +131,11 @@ func (h *Handler) SubmitHumanInput(ctx context.Context, r *connect.Request[engin
 		}
 		items = append(items, it)
 	}
-	p, err := h.Engine.Submit(h.principal(ctx, r.Header()), r.Msg.ProcessId, items)
+	ctx = h.principal(ctx, r.Header())
+	if err := h.loadAuthorized(ctx, r.Msg.ProcessId, "submit"); err != nil {
+		return nil, toConnect(err)
+	}
+	p, err := h.Engine.Submit(ctx, r.Msg.ProcessId, items)
 	if err != nil {
 		return nil, toConnect(err)
 	}
@@ -130,15 +153,27 @@ func (h *Handler) ApproveAction(ctx context.Context, r *connect.Request[enginev1
 }
 
 func (h *Handler) GetProcess(ctx context.Context, r *connect.Request[enginev1.GetProcessRequest]) (*connect.Response[enginev1.GetProcessResponse], error) {
+	ctx = h.principal(ctx, r.Header())
 	p, err := h.Engine.Store.Get(ctx, r.Msg.Id)
 	if err != nil {
+		return nil, toConnect(err)
+	}
+	if err := h.authorize(ctx, "read", "", p); err != nil {
 		return nil, toConnect(err)
 	}
 	return connect.NewResponse(&enginev1.GetProcessResponse{Process: ProcessToPB(p)}), nil
 }
 
-func (h *Handler) ListProcesses(ctx context.Context, _ *connect.Request[enginev1.ListProcessesRequest]) (*connect.Response[enginev1.ListProcessesResponse], error) {
-	ps, err := h.Engine.Store.List(ctx)
+func (h *Handler) ListProcesses(ctx context.Context, r *connect.Request[enginev1.ListProcessesRequest]) (*connect.Response[enginev1.ListProcessesResponse], error) {
+	ctx = h.principal(ctx, r.Header())
+	all, err := h.Engine.Store.List(ctx)
+	// only the processes the caller may read
+	var ps []*engine.Process
+	for _, p := range all {
+		if h.authorize(ctx, "read", "", p) == nil {
+			ps = append(ps, p)
+		}
+	}
 	if err != nil {
 		return nil, toConnect(err)
 	}

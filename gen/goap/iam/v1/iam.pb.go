@@ -133,30 +133,30 @@ func (x *User) GetDisplayName() string {
 	return ""
 }
 
-type RoleBinding struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	UserId         string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
-	OrganizationId string                 `protobuf:"bytes,2,opt,name=organization_id,json=organizationId,proto3" json:"organization_id,omitempty"`
-	// viewer | contributor | methodologist | admin
-	Role          string `protobuf:"bytes,3,opt,name=role,proto3" json:"role,omitempty"`
+// Subject attributes (r.sub in rules).
+type Principal struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Subject       string                 `protobuf:"bytes,1,opt,name=subject,proto3" json:"subject,omitempty"`
+	Org           string                 `protobuf:"bytes,2,opt,name=org,proto3" json:"org,omitempty"`
+	Roles         []string               `protobuf:"bytes,3,rep,name=roles,proto3" json:"roles,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *RoleBinding) Reset() {
-	*x = RoleBinding{}
+func (x *Principal) Reset() {
+	*x = Principal{}
 	mi := &file_goap_iam_v1_iam_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *RoleBinding) String() string {
+func (x *Principal) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*RoleBinding) ProtoMessage() {}
+func (*Principal) ProtoMessage() {}
 
-func (x *RoleBinding) ProtoReflect() protoreflect.Message {
+func (x *Principal) ProtoReflect() protoreflect.Message {
 	mi := &file_goap_iam_v1_iam_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -168,28 +168,178 @@ func (x *RoleBinding) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RoleBinding.ProtoReflect.Descriptor instead.
-func (*RoleBinding) Descriptor() ([]byte, []int) {
+// Deprecated: Use Principal.ProtoReflect.Descriptor instead.
+func (*Principal) Descriptor() ([]byte, []int) {
 	return file_goap_iam_v1_iam_proto_rawDescGZIP(), []int{2}
 }
 
-func (x *RoleBinding) GetUserId() string {
+func (x *Principal) GetSubject() string {
 	if x != nil {
-		return x.UserId
+		return x.Subject
 	}
 	return ""
 }
 
-func (x *RoleBinding) GetOrganizationId() string {
+func (x *Principal) GetOrg() string {
 	if x != nil {
-		return x.OrganizationId
+		return x.Org
 	}
 	return ""
 }
 
-func (x *RoleBinding) GetRole() string {
+func (x *Principal) GetRoles() []string {
 	if x != nil {
-		return x.Role
+		return x.Roles
+	}
+	return nil
+}
+
+// Object attributes (r.obj in rules).
+type Resource struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Type          string                 `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
+	Id            string                 `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
+	Org           string                 `protobuf:"bytes,3,opt,name=org,proto3" json:"org,omitempty"`
+	Owner         string                 `protobuf:"bytes,4,opt,name=owner,proto3" json:"owner,omitempty"`
+	Name          string                 `protobuf:"bytes,5,opt,name=name,proto3" json:"name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Resource) Reset() {
+	*x = Resource{}
+	mi := &file_goap_iam_v1_iam_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Resource) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Resource) ProtoMessage() {}
+
+func (x *Resource) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_iam_v1_iam_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Resource.ProtoReflect.Descriptor instead.
+func (*Resource) Descriptor() ([]byte, []int) {
+	return file_goap_iam_v1_iam_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *Resource) GetType() string {
+	if x != nil {
+		return x.Type
+	}
+	return ""
+}
+
+func (x *Resource) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *Resource) GetOrg() string {
+	if x != nil {
+		return x.Org
+	}
+	return ""
+}
+
+func (x *Resource) GetOwner() string {
+	if x != nil {
+		return x.Owner
+	}
+	return ""
+}
+
+func (x *Resource) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+// An ABAC rule: `rule` is an expression over r.sub, r.obj and r.act, e.g.
+// hasRole(r.sub, "approver") && r.sub.Org == r.obj.Org && r.sub.Subject != r.obj.Owner
+type Policy struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Rule  string                 `protobuf:"bytes,1,opt,name=rule,proto3" json:"rule,omitempty"`
+	// resource type or "*"
+	Resource string `protobuf:"bytes,2,opt,name=resource,proto3" json:"resource,omitempty"`
+	// action or "*"
+	Action string `protobuf:"bytes,3,opt,name=action,proto3" json:"action,omitempty"`
+	// allow | deny
+	Effect        string `protobuf:"bytes,4,opt,name=effect,proto3" json:"effect,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Policy) Reset() {
+	*x = Policy{}
+	mi := &file_goap_iam_v1_iam_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Policy) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Policy) ProtoMessage() {}
+
+func (x *Policy) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_iam_v1_iam_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Policy.ProtoReflect.Descriptor instead.
+func (*Policy) Descriptor() ([]byte, []int) {
+	return file_goap_iam_v1_iam_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *Policy) GetRule() string {
+	if x != nil {
+		return x.Rule
+	}
+	return ""
+}
+
+func (x *Policy) GetResource() string {
+	if x != nil {
+		return x.Resource
+	}
+	return ""
+}
+
+func (x *Policy) GetAction() string {
+	if x != nil {
+		return x.Action
+	}
+	return ""
+}
+
+func (x *Policy) GetEffect() string {
+	if x != nil {
+		return x.Effect
 	}
 	return ""
 }
@@ -203,7 +353,7 @@ type CreateOrganizationRequest struct {
 
 func (x *CreateOrganizationRequest) Reset() {
 	*x = CreateOrganizationRequest{}
-	mi := &file_goap_iam_v1_iam_proto_msgTypes[3]
+	mi := &file_goap_iam_v1_iam_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -215,7 +365,7 @@ func (x *CreateOrganizationRequest) String() string {
 func (*CreateOrganizationRequest) ProtoMessage() {}
 
 func (x *CreateOrganizationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_iam_v1_iam_proto_msgTypes[3]
+	mi := &file_goap_iam_v1_iam_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -228,7 +378,7 @@ func (x *CreateOrganizationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateOrganizationRequest.ProtoReflect.Descriptor instead.
 func (*CreateOrganizationRequest) Descriptor() ([]byte, []int) {
-	return file_goap_iam_v1_iam_proto_rawDescGZIP(), []int{3}
+	return file_goap_iam_v1_iam_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *CreateOrganizationRequest) GetName() string {
@@ -247,7 +397,7 @@ type CreateOrganizationResponse struct {
 
 func (x *CreateOrganizationResponse) Reset() {
 	*x = CreateOrganizationResponse{}
-	mi := &file_goap_iam_v1_iam_proto_msgTypes[4]
+	mi := &file_goap_iam_v1_iam_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -259,7 +409,7 @@ func (x *CreateOrganizationResponse) String() string {
 func (*CreateOrganizationResponse) ProtoMessage() {}
 
 func (x *CreateOrganizationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_iam_v1_iam_proto_msgTypes[4]
+	mi := &file_goap_iam_v1_iam_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -272,7 +422,7 @@ func (x *CreateOrganizationResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateOrganizationResponse.ProtoReflect.Descriptor instead.
 func (*CreateOrganizationResponse) Descriptor() ([]byte, []int) {
-	return file_goap_iam_v1_iam_proto_rawDescGZIP(), []int{4}
+	return file_goap_iam_v1_iam_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *CreateOrganizationResponse) GetOrganization() *Organization {
@@ -292,7 +442,7 @@ type CreateUserRequest struct {
 
 func (x *CreateUserRequest) Reset() {
 	*x = CreateUserRequest{}
-	mi := &file_goap_iam_v1_iam_proto_msgTypes[5]
+	mi := &file_goap_iam_v1_iam_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -304,7 +454,7 @@ func (x *CreateUserRequest) String() string {
 func (*CreateUserRequest) ProtoMessage() {}
 
 func (x *CreateUserRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_iam_v1_iam_proto_msgTypes[5]
+	mi := &file_goap_iam_v1_iam_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -317,7 +467,7 @@ func (x *CreateUserRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateUserRequest.ProtoReflect.Descriptor instead.
 func (*CreateUserRequest) Descriptor() ([]byte, []int) {
-	return file_goap_iam_v1_iam_proto_rawDescGZIP(), []int{5}
+	return file_goap_iam_v1_iam_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *CreateUserRequest) GetEmail() string {
@@ -343,7 +493,7 @@ type CreateUserResponse struct {
 
 func (x *CreateUserResponse) Reset() {
 	*x = CreateUserResponse{}
-	mi := &file_goap_iam_v1_iam_proto_msgTypes[6]
+	mi := &file_goap_iam_v1_iam_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -355,7 +505,7 @@ func (x *CreateUserResponse) String() string {
 func (*CreateUserResponse) ProtoMessage() {}
 
 func (x *CreateUserResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_iam_v1_iam_proto_msgTypes[6]
+	mi := &file_goap_iam_v1_iam_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -368,100 +518,12 @@ func (x *CreateUserResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateUserResponse.ProtoReflect.Descriptor instead.
 func (*CreateUserResponse) Descriptor() ([]byte, []int) {
-	return file_goap_iam_v1_iam_proto_rawDescGZIP(), []int{6}
+	return file_goap_iam_v1_iam_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *CreateUserResponse) GetUser() *User {
 	if x != nil {
 		return x.User
-	}
-	return nil
-}
-
-type GrantRoleRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Binding       *RoleBinding           `protobuf:"bytes,1,opt,name=binding,proto3" json:"binding,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *GrantRoleRequest) Reset() {
-	*x = GrantRoleRequest{}
-	mi := &file_goap_iam_v1_iam_proto_msgTypes[7]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *GrantRoleRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*GrantRoleRequest) ProtoMessage() {}
-
-func (x *GrantRoleRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_iam_v1_iam_proto_msgTypes[7]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use GrantRoleRequest.ProtoReflect.Descriptor instead.
-func (*GrantRoleRequest) Descriptor() ([]byte, []int) {
-	return file_goap_iam_v1_iam_proto_rawDescGZIP(), []int{7}
-}
-
-func (x *GrantRoleRequest) GetBinding() *RoleBinding {
-	if x != nil {
-		return x.Binding
-	}
-	return nil
-}
-
-type GrantRoleResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Binding       *RoleBinding           `protobuf:"bytes,1,opt,name=binding,proto3" json:"binding,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *GrantRoleResponse) Reset() {
-	*x = GrantRoleResponse{}
-	mi := &file_goap_iam_v1_iam_proto_msgTypes[8]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *GrantRoleResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*GrantRoleResponse) ProtoMessage() {}
-
-func (x *GrantRoleResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_iam_v1_iam_proto_msgTypes[8]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use GrantRoleResponse.ProtoReflect.Descriptor instead.
-func (*GrantRoleResponse) Descriptor() ([]byte, []int) {
-	return file_goap_iam_v1_iam_proto_rawDescGZIP(), []int{8}
-}
-
-func (x *GrantRoleResponse) GetBinding() *RoleBinding {
-	if x != nil {
-		return x.Binding
 	}
 	return nil
 }
@@ -504,8 +566,7 @@ func (*WhoAmIRequest) Descriptor() ([]byte, []int) {
 
 type WhoAmIResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	User          *User                  `protobuf:"bytes,1,opt,name=user,proto3" json:"user,omitempty"`
-	Bindings      []*RoleBinding         `protobuf:"bytes,2,rep,name=bindings,proto3" json:"bindings,omitempty"`
+	Principal     *Principal             `protobuf:"bytes,1,opt,name=principal,proto3" json:"principal,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -540,27 +601,20 @@ func (*WhoAmIResponse) Descriptor() ([]byte, []int) {
 	return file_goap_iam_v1_iam_proto_rawDescGZIP(), []int{10}
 }
 
-func (x *WhoAmIResponse) GetUser() *User {
+func (x *WhoAmIResponse) GetPrincipal() *Principal {
 	if x != nil {
-		return x.User
-	}
-	return nil
-}
-
-func (x *WhoAmIResponse) GetBindings() []*RoleBinding {
-	if x != nil {
-		return x.Bindings
+		return x.Principal
 	}
 	return nil
 }
 
 type CheckPermissionRequest struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	Subject        string                 `protobuf:"bytes,1,opt,name=subject,proto3" json:"subject,omitempty"`
-	OrganizationId string                 `protobuf:"bytes,2,opt,name=organization_id,json=organizationId,proto3" json:"organization_id,omitempty"`
-	Permission     string                 `protobuf:"bytes,3,opt,name=permission,proto3" json:"permission,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Subject       *Principal             `protobuf:"bytes,1,opt,name=subject,proto3" json:"subject,omitempty"`
+	Action        string                 `protobuf:"bytes,2,opt,name=action,proto3" json:"action,omitempty"`
+	Resource      *Resource              `protobuf:"bytes,3,opt,name=resource,proto3" json:"resource,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CheckPermissionRequest) Reset() {
@@ -593,25 +647,25 @@ func (*CheckPermissionRequest) Descriptor() ([]byte, []int) {
 	return file_goap_iam_v1_iam_proto_rawDescGZIP(), []int{11}
 }
 
-func (x *CheckPermissionRequest) GetSubject() string {
+func (x *CheckPermissionRequest) GetSubject() *Principal {
 	if x != nil {
 		return x.Subject
 	}
-	return ""
+	return nil
 }
 
-func (x *CheckPermissionRequest) GetOrganizationId() string {
+func (x *CheckPermissionRequest) GetAction() string {
 	if x != nil {
-		return x.OrganizationId
+		return x.Action
 	}
 	return ""
 }
 
-func (x *CheckPermissionRequest) GetPermission() string {
+func (x *CheckPermissionRequest) GetResource() *Resource {
 	if x != nil {
-		return x.Permission
+		return x.Resource
 	}
-	return ""
+	return nil
 }
 
 type CheckPermissionResponse struct {
@@ -658,6 +712,254 @@ func (x *CheckPermissionResponse) GetAllowed() bool {
 	return false
 }
 
+type ListPoliciesRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListPoliciesRequest) Reset() {
+	*x = ListPoliciesRequest{}
+	mi := &file_goap_iam_v1_iam_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListPoliciesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListPoliciesRequest) ProtoMessage() {}
+
+func (x *ListPoliciesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_iam_v1_iam_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListPoliciesRequest.ProtoReflect.Descriptor instead.
+func (*ListPoliciesRequest) Descriptor() ([]byte, []int) {
+	return file_goap_iam_v1_iam_proto_rawDescGZIP(), []int{13}
+}
+
+type ListPoliciesResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Policies      []*Policy              `protobuf:"bytes,1,rep,name=policies,proto3" json:"policies,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListPoliciesResponse) Reset() {
+	*x = ListPoliciesResponse{}
+	mi := &file_goap_iam_v1_iam_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListPoliciesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListPoliciesResponse) ProtoMessage() {}
+
+func (x *ListPoliciesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_iam_v1_iam_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListPoliciesResponse.ProtoReflect.Descriptor instead.
+func (*ListPoliciesResponse) Descriptor() ([]byte, []int) {
+	return file_goap_iam_v1_iam_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *ListPoliciesResponse) GetPolicies() []*Policy {
+	if x != nil {
+		return x.Policies
+	}
+	return nil
+}
+
+type AddPolicyRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Policy        *Policy                `protobuf:"bytes,1,opt,name=policy,proto3" json:"policy,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AddPolicyRequest) Reset() {
+	*x = AddPolicyRequest{}
+	mi := &file_goap_iam_v1_iam_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AddPolicyRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AddPolicyRequest) ProtoMessage() {}
+
+func (x *AddPolicyRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_iam_v1_iam_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AddPolicyRequest.ProtoReflect.Descriptor instead.
+func (*AddPolicyRequest) Descriptor() ([]byte, []int) {
+	return file_goap_iam_v1_iam_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *AddPolicyRequest) GetPolicy() *Policy {
+	if x != nil {
+		return x.Policy
+	}
+	return nil
+}
+
+type AddPolicyResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Policy        *Policy                `protobuf:"bytes,1,opt,name=policy,proto3" json:"policy,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AddPolicyResponse) Reset() {
+	*x = AddPolicyResponse{}
+	mi := &file_goap_iam_v1_iam_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AddPolicyResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AddPolicyResponse) ProtoMessage() {}
+
+func (x *AddPolicyResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_iam_v1_iam_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AddPolicyResponse.ProtoReflect.Descriptor instead.
+func (*AddPolicyResponse) Descriptor() ([]byte, []int) {
+	return file_goap_iam_v1_iam_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *AddPolicyResponse) GetPolicy() *Policy {
+	if x != nil {
+		return x.Policy
+	}
+	return nil
+}
+
+type RemovePolicyRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Policy        *Policy                `protobuf:"bytes,1,opt,name=policy,proto3" json:"policy,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RemovePolicyRequest) Reset() {
+	*x = RemovePolicyRequest{}
+	mi := &file_goap_iam_v1_iam_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RemovePolicyRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RemovePolicyRequest) ProtoMessage() {}
+
+func (x *RemovePolicyRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_iam_v1_iam_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RemovePolicyRequest.ProtoReflect.Descriptor instead.
+func (*RemovePolicyRequest) Descriptor() ([]byte, []int) {
+	return file_goap_iam_v1_iam_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *RemovePolicyRequest) GetPolicy() *Policy {
+	if x != nil {
+		return x.Policy
+	}
+	return nil
+}
+
+type RemovePolicyResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RemovePolicyResponse) Reset() {
+	*x = RemovePolicyResponse{}
+	mi := &file_goap_iam_v1_iam_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RemovePolicyResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RemovePolicyResponse) ProtoMessage() {}
+
+func (x *RemovePolicyResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_iam_v1_iam_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RemovePolicyResponse.ProtoReflect.Descriptor instead.
+func (*RemovePolicyResponse) Descriptor() ([]byte, []int) {
+	return file_goap_iam_v1_iam_proto_rawDescGZIP(), []int{18}
+}
+
 var File_goap_iam_v1_iam_proto protoreflect.FileDescriptor
 
 const file_goap_iam_v1_iam_proto_rawDesc = "" +
@@ -669,11 +971,22 @@ const file_goap_iam_v1_iam_proto_rawDesc = "" +
 	"\x04User\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05email\x18\x02 \x01(\tR\x05email\x12!\n" +
-	"\fdisplay_name\x18\x03 \x01(\tR\vdisplayName\"c\n" +
-	"\vRoleBinding\x12\x17\n" +
-	"\auser_id\x18\x01 \x01(\tR\x06userId\x12'\n" +
-	"\x0forganization_id\x18\x02 \x01(\tR\x0eorganizationId\x12\x12\n" +
-	"\x04role\x18\x03 \x01(\tR\x04role\"/\n" +
+	"\fdisplay_name\x18\x03 \x01(\tR\vdisplayName\"M\n" +
+	"\tPrincipal\x12\x18\n" +
+	"\asubject\x18\x01 \x01(\tR\asubject\x12\x10\n" +
+	"\x03org\x18\x02 \x01(\tR\x03org\x12\x14\n" +
+	"\x05roles\x18\x03 \x03(\tR\x05roles\"j\n" +
+	"\bResource\x12\x12\n" +
+	"\x04type\x18\x01 \x01(\tR\x04type\x12\x0e\n" +
+	"\x02id\x18\x02 \x01(\tR\x02id\x12\x10\n" +
+	"\x03org\x18\x03 \x01(\tR\x03org\x12\x14\n" +
+	"\x05owner\x18\x04 \x01(\tR\x05owner\x12\x12\n" +
+	"\x04name\x18\x05 \x01(\tR\x04name\"h\n" +
+	"\x06Policy\x12\x12\n" +
+	"\x04rule\x18\x01 \x01(\tR\x04rule\x12\x1a\n" +
+	"\bresource\x18\x02 \x01(\tR\bresource\x12\x16\n" +
+	"\x06action\x18\x03 \x01(\tR\x06action\x12\x16\n" +
+	"\x06effect\x18\x04 \x01(\tR\x06effect\"/\n" +
 	"\x19CreateOrganizationRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\"[\n" +
 	"\x1aCreateOrganizationResponse\x12=\n" +
@@ -682,31 +995,36 @@ const file_goap_iam_v1_iam_proto_rawDesc = "" +
 	"\x05email\x18\x01 \x01(\tR\x05email\x12!\n" +
 	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\";\n" +
 	"\x12CreateUserResponse\x12%\n" +
-	"\x04user\x18\x01 \x01(\v2\x11.goap.iam.v1.UserR\x04user\"F\n" +
-	"\x10GrantRoleRequest\x122\n" +
-	"\abinding\x18\x01 \x01(\v2\x18.goap.iam.v1.RoleBindingR\abinding\"G\n" +
-	"\x11GrantRoleResponse\x122\n" +
-	"\abinding\x18\x01 \x01(\v2\x18.goap.iam.v1.RoleBindingR\abinding\"\x0f\n" +
-	"\rWhoAmIRequest\"m\n" +
-	"\x0eWhoAmIResponse\x12%\n" +
-	"\x04user\x18\x01 \x01(\v2\x11.goap.iam.v1.UserR\x04user\x124\n" +
-	"\bbindings\x18\x02 \x03(\v2\x18.goap.iam.v1.RoleBindingR\bbindings\"{\n" +
-	"\x16CheckPermissionRequest\x12\x18\n" +
-	"\asubject\x18\x01 \x01(\tR\asubject\x12'\n" +
-	"\x0forganization_id\x18\x02 \x01(\tR\x0eorganizationId\x12\x1e\n" +
-	"\n" +
-	"permission\x18\x03 \x01(\tR\n" +
-	"permission\"3\n" +
+	"\x04user\x18\x01 \x01(\v2\x11.goap.iam.v1.UserR\x04user\"\x0f\n" +
+	"\rWhoAmIRequest\"F\n" +
+	"\x0eWhoAmIResponse\x124\n" +
+	"\tprincipal\x18\x01 \x01(\v2\x16.goap.iam.v1.PrincipalR\tprincipal\"\x95\x01\n" +
+	"\x16CheckPermissionRequest\x120\n" +
+	"\asubject\x18\x01 \x01(\v2\x16.goap.iam.v1.PrincipalR\asubject\x12\x16\n" +
+	"\x06action\x18\x02 \x01(\tR\x06action\x121\n" +
+	"\bresource\x18\x03 \x01(\v2\x15.goap.iam.v1.ResourceR\bresource\"3\n" +
 	"\x17CheckPermissionResponse\x12\x18\n" +
-	"\aallowed\x18\x01 \x01(\bR\aallowed2\xaf\x03\n" +
+	"\aallowed\x18\x01 \x01(\bR\aallowed\"\x15\n" +
+	"\x13ListPoliciesRequest\"G\n" +
+	"\x14ListPoliciesResponse\x12/\n" +
+	"\bpolicies\x18\x01 \x03(\v2\x13.goap.iam.v1.PolicyR\bpolicies\"?\n" +
+	"\x10AddPolicyRequest\x12+\n" +
+	"\x06policy\x18\x01 \x01(\v2\x13.goap.iam.v1.PolicyR\x06policy\"@\n" +
+	"\x11AddPolicyResponse\x12+\n" +
+	"\x06policy\x18\x01 \x01(\v2\x13.goap.iam.v1.PolicyR\x06policy\"B\n" +
+	"\x13RemovePolicyRequest\x12+\n" +
+	"\x06policy\x18\x01 \x01(\v2\x13.goap.iam.v1.PolicyR\x06policy\"\x16\n" +
+	"\x14RemovePolicyResponse2\xd9\x04\n" +
 	"\n" +
 	"IamService\x12e\n" +
 	"\x12CreateOrganization\x12&.goap.iam.v1.CreateOrganizationRequest\x1a'.goap.iam.v1.CreateOrganizationResponse\x12M\n" +
 	"\n" +
-	"CreateUser\x12\x1e.goap.iam.v1.CreateUserRequest\x1a\x1f.goap.iam.v1.CreateUserResponse\x12J\n" +
-	"\tGrantRole\x12\x1d.goap.iam.v1.GrantRoleRequest\x1a\x1e.goap.iam.v1.GrantRoleResponse\x12A\n" +
+	"CreateUser\x12\x1e.goap.iam.v1.CreateUserRequest\x1a\x1f.goap.iam.v1.CreateUserResponse\x12A\n" +
 	"\x06WhoAmI\x12\x1a.goap.iam.v1.WhoAmIRequest\x1a\x1b.goap.iam.v1.WhoAmIResponse\x12\\\n" +
-	"\x0fCheckPermission\x12#.goap.iam.v1.CheckPermissionRequest\x1a$.goap.iam.v1.CheckPermissionResponseB\x97\x01\n" +
+	"\x0fCheckPermission\x12#.goap.iam.v1.CheckPermissionRequest\x1a$.goap.iam.v1.CheckPermissionResponse\x12S\n" +
+	"\fListPolicies\x12 .goap.iam.v1.ListPoliciesRequest\x1a!.goap.iam.v1.ListPoliciesResponse\x12J\n" +
+	"\tAddPolicy\x12\x1d.goap.iam.v1.AddPolicyRequest\x1a\x1e.goap.iam.v1.AddPolicyResponse\x12S\n" +
+	"\fRemovePolicy\x12 .goap.iam.v1.RemovePolicyRequest\x1a!.goap.iam.v1.RemovePolicyResponseB\x97\x01\n" +
 	"\x0fcom.goap.iam.v1B\bIamProtoP\x01Z,github.com/zimwip/goap/gen/goap/iam/v1;iamv1\xa2\x02\x03GIX\xaa\x02\vGoap.Iam.V1\xca\x02\vGoap\\Iam\\V1\xe2\x02\x17Goap\\Iam\\V1\\GPBMetadata\xea\x02\rGoap::Iam::V1b\x06proto3"
 
 var (
@@ -721,44 +1039,57 @@ func file_goap_iam_v1_iam_proto_rawDescGZIP() []byte {
 	return file_goap_iam_v1_iam_proto_rawDescData
 }
 
-var file_goap_iam_v1_iam_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
+var file_goap_iam_v1_iam_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
 var file_goap_iam_v1_iam_proto_goTypes = []any{
 	(*Organization)(nil),               // 0: goap.iam.v1.Organization
 	(*User)(nil),                       // 1: goap.iam.v1.User
-	(*RoleBinding)(nil),                // 2: goap.iam.v1.RoleBinding
-	(*CreateOrganizationRequest)(nil),  // 3: goap.iam.v1.CreateOrganizationRequest
-	(*CreateOrganizationResponse)(nil), // 4: goap.iam.v1.CreateOrganizationResponse
-	(*CreateUserRequest)(nil),          // 5: goap.iam.v1.CreateUserRequest
-	(*CreateUserResponse)(nil),         // 6: goap.iam.v1.CreateUserResponse
-	(*GrantRoleRequest)(nil),           // 7: goap.iam.v1.GrantRoleRequest
-	(*GrantRoleResponse)(nil),          // 8: goap.iam.v1.GrantRoleResponse
+	(*Principal)(nil),                  // 2: goap.iam.v1.Principal
+	(*Resource)(nil),                   // 3: goap.iam.v1.Resource
+	(*Policy)(nil),                     // 4: goap.iam.v1.Policy
+	(*CreateOrganizationRequest)(nil),  // 5: goap.iam.v1.CreateOrganizationRequest
+	(*CreateOrganizationResponse)(nil), // 6: goap.iam.v1.CreateOrganizationResponse
+	(*CreateUserRequest)(nil),          // 7: goap.iam.v1.CreateUserRequest
+	(*CreateUserResponse)(nil),         // 8: goap.iam.v1.CreateUserResponse
 	(*WhoAmIRequest)(nil),              // 9: goap.iam.v1.WhoAmIRequest
 	(*WhoAmIResponse)(nil),             // 10: goap.iam.v1.WhoAmIResponse
 	(*CheckPermissionRequest)(nil),     // 11: goap.iam.v1.CheckPermissionRequest
 	(*CheckPermissionResponse)(nil),    // 12: goap.iam.v1.CheckPermissionResponse
+	(*ListPoliciesRequest)(nil),        // 13: goap.iam.v1.ListPoliciesRequest
+	(*ListPoliciesResponse)(nil),       // 14: goap.iam.v1.ListPoliciesResponse
+	(*AddPolicyRequest)(nil),           // 15: goap.iam.v1.AddPolicyRequest
+	(*AddPolicyResponse)(nil),          // 16: goap.iam.v1.AddPolicyResponse
+	(*RemovePolicyRequest)(nil),        // 17: goap.iam.v1.RemovePolicyRequest
+	(*RemovePolicyResponse)(nil),       // 18: goap.iam.v1.RemovePolicyResponse
 }
 var file_goap_iam_v1_iam_proto_depIdxs = []int32{
 	0,  // 0: goap.iam.v1.CreateOrganizationResponse.organization:type_name -> goap.iam.v1.Organization
 	1,  // 1: goap.iam.v1.CreateUserResponse.user:type_name -> goap.iam.v1.User
-	2,  // 2: goap.iam.v1.GrantRoleRequest.binding:type_name -> goap.iam.v1.RoleBinding
-	2,  // 3: goap.iam.v1.GrantRoleResponse.binding:type_name -> goap.iam.v1.RoleBinding
-	1,  // 4: goap.iam.v1.WhoAmIResponse.user:type_name -> goap.iam.v1.User
-	2,  // 5: goap.iam.v1.WhoAmIResponse.bindings:type_name -> goap.iam.v1.RoleBinding
-	3,  // 6: goap.iam.v1.IamService.CreateOrganization:input_type -> goap.iam.v1.CreateOrganizationRequest
-	5,  // 7: goap.iam.v1.IamService.CreateUser:input_type -> goap.iam.v1.CreateUserRequest
-	7,  // 8: goap.iam.v1.IamService.GrantRole:input_type -> goap.iam.v1.GrantRoleRequest
-	9,  // 9: goap.iam.v1.IamService.WhoAmI:input_type -> goap.iam.v1.WhoAmIRequest
-	11, // 10: goap.iam.v1.IamService.CheckPermission:input_type -> goap.iam.v1.CheckPermissionRequest
-	4,  // 11: goap.iam.v1.IamService.CreateOrganization:output_type -> goap.iam.v1.CreateOrganizationResponse
-	6,  // 12: goap.iam.v1.IamService.CreateUser:output_type -> goap.iam.v1.CreateUserResponse
-	8,  // 13: goap.iam.v1.IamService.GrantRole:output_type -> goap.iam.v1.GrantRoleResponse
-	10, // 14: goap.iam.v1.IamService.WhoAmI:output_type -> goap.iam.v1.WhoAmIResponse
-	12, // 15: goap.iam.v1.IamService.CheckPermission:output_type -> goap.iam.v1.CheckPermissionResponse
-	11, // [11:16] is the sub-list for method output_type
-	6,  // [6:11] is the sub-list for method input_type
-	6,  // [6:6] is the sub-list for extension type_name
-	6,  // [6:6] is the sub-list for extension extendee
-	0,  // [0:6] is the sub-list for field type_name
+	2,  // 2: goap.iam.v1.WhoAmIResponse.principal:type_name -> goap.iam.v1.Principal
+	2,  // 3: goap.iam.v1.CheckPermissionRequest.subject:type_name -> goap.iam.v1.Principal
+	3,  // 4: goap.iam.v1.CheckPermissionRequest.resource:type_name -> goap.iam.v1.Resource
+	4,  // 5: goap.iam.v1.ListPoliciesResponse.policies:type_name -> goap.iam.v1.Policy
+	4,  // 6: goap.iam.v1.AddPolicyRequest.policy:type_name -> goap.iam.v1.Policy
+	4,  // 7: goap.iam.v1.AddPolicyResponse.policy:type_name -> goap.iam.v1.Policy
+	4,  // 8: goap.iam.v1.RemovePolicyRequest.policy:type_name -> goap.iam.v1.Policy
+	5,  // 9: goap.iam.v1.IamService.CreateOrganization:input_type -> goap.iam.v1.CreateOrganizationRequest
+	7,  // 10: goap.iam.v1.IamService.CreateUser:input_type -> goap.iam.v1.CreateUserRequest
+	9,  // 11: goap.iam.v1.IamService.WhoAmI:input_type -> goap.iam.v1.WhoAmIRequest
+	11, // 12: goap.iam.v1.IamService.CheckPermission:input_type -> goap.iam.v1.CheckPermissionRequest
+	13, // 13: goap.iam.v1.IamService.ListPolicies:input_type -> goap.iam.v1.ListPoliciesRequest
+	15, // 14: goap.iam.v1.IamService.AddPolicy:input_type -> goap.iam.v1.AddPolicyRequest
+	17, // 15: goap.iam.v1.IamService.RemovePolicy:input_type -> goap.iam.v1.RemovePolicyRequest
+	6,  // 16: goap.iam.v1.IamService.CreateOrganization:output_type -> goap.iam.v1.CreateOrganizationResponse
+	8,  // 17: goap.iam.v1.IamService.CreateUser:output_type -> goap.iam.v1.CreateUserResponse
+	10, // 18: goap.iam.v1.IamService.WhoAmI:output_type -> goap.iam.v1.WhoAmIResponse
+	12, // 19: goap.iam.v1.IamService.CheckPermission:output_type -> goap.iam.v1.CheckPermissionResponse
+	14, // 20: goap.iam.v1.IamService.ListPolicies:output_type -> goap.iam.v1.ListPoliciesResponse
+	16, // 21: goap.iam.v1.IamService.AddPolicy:output_type -> goap.iam.v1.AddPolicyResponse
+	18, // 22: goap.iam.v1.IamService.RemovePolicy:output_type -> goap.iam.v1.RemovePolicyResponse
+	16, // [16:23] is the sub-list for method output_type
+	9,  // [9:16] is the sub-list for method input_type
+	9,  // [9:9] is the sub-list for extension type_name
+	9,  // [9:9] is the sub-list for extension extendee
+	0,  // [0:9] is the sub-list for field type_name
 }
 
 func init() { file_goap_iam_v1_iam_proto_init() }
@@ -772,7 +1103,7 @@ func file_goap_iam_v1_iam_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_goap_iam_v1_iam_proto_rawDesc), len(file_goap_iam_v1_iam_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   13,
+			NumMessages:   19,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

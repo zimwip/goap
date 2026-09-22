@@ -38,12 +38,13 @@ curl -s localhost:8080/goap.engine.v1.EngineService/StartProcess -H 'Content-Typ
 
 | Service | Port (compose) | Rôle |
 |---|---|---|
-| gateway | 8080 | point d'entrée, authentification (none / HS256), routage Connect |
+| gateway | 8080 | point d'entrée, authentification (none / HS256 + jetons de dev), routage Connect |
 | graph | 8081 | axe domaine (nœuds versionnés, liens version-à-version, baselines) + axe change |
-| registry | 8082 | méthodologies (YAML validé et compilé) |
+| registry | 8082 | méthodologies structurées en base (brouillon → publiée), import/export YAML |
 | engine | 8083 | processus agentiques : intention → planification → exécution |
 | modelgw | 8084 | passerelle LLM multi-fournisseurs (Anthropic, OpenAI-compatible, fake) |
-| mcp, iam | — | squelettes (API définie, non implémentée) |
+| iam | 8086 | contrôle d'accès ABAC (Casbin), politiques en base |
+| mcp | — | squelette (API définie, non implémentée) |
 
 ## Développement
 

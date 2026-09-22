@@ -280,7 +280,7 @@ func (e *Engine) cycle(ctx context.Context, p *Process, m *methodology.Compiled)
 	action, _ := m.Action(plan.Actions[0].Name)
 	step := Step{Index: len(p.Steps), Action: action.Name, Plan: p.Plan, Before: maps.Clone(p.World), StartedAt: e.clock()}
 	if action.Permission != "" {
-		ok, err := e.allowed(ctx, p.Initiator, action.Permission)
+		ok, err := e.allowed(ctx, p, p.Initiator, action.Permission)
 		if err != nil {
 			return err
 		}
@@ -327,11 +327,25 @@ func (e *Engine) execute(ctx context.Context, p *Process, m *methodology.Compile
 	return e.finishStep(ctx, p, m, step)
 }
 
-func (e *Engine) allowed(ctx context.Context, p authz.Principal, permission string) (bool, error) {
+// allowed evaluates an action permission ("<resource>:<action>") for who. The
+// resource is the change of the process, owned by the initiator's
+// organization and subject, so that ABAC rules can express separation of
+// duties (an approver never approves its own change).
+func (e *Engine) allowed(ctx context.Context, p *Process, who authz.Principal, permission string) (bool, error) {
 	if e.Authz == nil {
 		return true, nil
 	}
-	return e.Authz.Allowed(ctx, p, permission)
+	typ, act, err := authz.ParsePermission(permission)
+	if err != nil {
+		return false, err
+	}
+	res := authz.Resource{Type: typ, Org: p.Initiator.Org, Owner: p.Initiator.Subject, Name: p.Methodology}
+	if typ == "change" {
+		res.ID = string(p.ChangeID)
+	} else {
+		res.ID = p.ID
+	}
+	return e.Authz.Authorize(ctx, authz.Request{Subject: who, Action: act, Resource: res})
 }
 
 // ErrInvalidState is returned when an operation does not match the process state.
@@ -351,7 +365,7 @@ func (e *Engine) Approve(ctx context.Context, id string, approve bool, comment s
 		return nil, fmt.Errorf("process %s has no pending approval: %w", id, ErrInvalidState)
 	}
 	approver := authz.From(ctx)
-	ok, err := e.allowed(ctx, approver, p.Pending.Permission)
+	ok, err := e.allowed(ctx, p, approver, p.Pending.Permission)
 	if err != nil {
 		return nil, err
 	}

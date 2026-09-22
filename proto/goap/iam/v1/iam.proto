@@ -2,16 +2,21 @@ syntax = "proto3";
 
 package goap.iam.v1;
 
-// IamService manages organizations, users and roles.
-// Not implemented yet (milestone M2).
+// IamService manages organizations, users and access policies. Access is
+// attribute based (ABAC) and evaluated by Casbin; policies are stored in the
+// iam database. Organization and user management: milestone M2.
 service IamService {
   rpc CreateOrganization(CreateOrganizationRequest) returns (CreateOrganizationResponse);
   rpc CreateUser(CreateUserRequest) returns (CreateUserResponse);
-  rpc GrantRole(GrantRoleRequest) returns (GrantRoleResponse);
   rpc WhoAmI(WhoAmIRequest) returns (WhoAmIResponse);
-  // Decide a permission (e.g. "change:apply") for a subject in an organization.
-  // Target of the engine's authorizer (today: static role policy).
+
+  // Decide an access request. Called by the services (engine, registry).
   rpc CheckPermission(CheckPermissionRequest) returns (CheckPermissionResponse);
+
+  // Policy administration (requires `policy` permissions).
+  rpc ListPolicies(ListPoliciesRequest) returns (ListPoliciesResponse);
+  rpc AddPolicy(AddPolicyRequest) returns (AddPolicyResponse);
+  rpc RemovePolicy(RemovePolicyRequest) returns (RemovePolicyResponse);
 }
 
 message Organization {
@@ -25,11 +30,32 @@ message User {
   string display_name = 3;
 }
 
-message RoleBinding {
-  string user_id = 1;
-  string organization_id = 2;
-  // viewer | contributor | methodologist | admin
-  string role = 3;
+// Subject attributes (r.sub in rules).
+message Principal {
+  string subject = 1;
+  string org = 2;
+  repeated string roles = 3;
+}
+
+// Object attributes (r.obj in rules).
+message Resource {
+  string type = 1;
+  string id = 2;
+  string org = 3;
+  string owner = 4;
+  string name = 5;
+}
+
+// An ABAC rule: `rule` is an expression over r.sub, r.obj and r.act, e.g.
+// hasRole(r.sub, "approver") && r.sub.Org == r.obj.Org && r.sub.Subject != r.obj.Owner
+message Policy {
+  string rule = 1;
+  // resource type or "*"
+  string resource = 2;
+  // action or "*"
+  string action = 3;
+  // allow | deny
+  string effect = 4;
 }
 
 message CreateOrganizationRequest {
@@ -49,27 +75,38 @@ message CreateUserResponse {
   User user = 1;
 }
 
-message GrantRoleRequest {
-  RoleBinding binding = 1;
-}
-
-message GrantRoleResponse {
-  RoleBinding binding = 1;
-}
-
 message WhoAmIRequest {}
 
 message WhoAmIResponse {
-  User user = 1;
-  repeated RoleBinding bindings = 2;
+  Principal principal = 1;
 }
 
 message CheckPermissionRequest {
-  string subject = 1;
-  string organization_id = 2;
-  string permission = 3;
+  Principal subject = 1;
+  string action = 2;
+  Resource resource = 3;
 }
 
 message CheckPermissionResponse {
   bool allowed = 1;
 }
+
+message ListPoliciesRequest {}
+
+message ListPoliciesResponse {
+  repeated Policy policies = 1;
+}
+
+message AddPolicyRequest {
+  Policy policy = 1;
+}
+
+message AddPolicyResponse {
+  Policy policy = 1;
+}
+
+message RemovePolicyRequest {
+  Policy policy = 1;
+}
+
+message RemovePolicyResponse {}
