@@ -5,6 +5,7 @@
   import ChangeView from './lib/components/ChangeView.svelte';
   import BaselineView from './lib/components/BaselineView.svelte';
   import MethodologiesView from './lib/components/MethodologiesView.svelte';
+  import AccessView from './lib/components/AccessView.svelte';
 
   let token = $state(getToken() ?? '');
   let tokenOpen = $state(false);
@@ -51,8 +52,10 @@
       <ChangeView />
     {:else if nav.tab === 'referentiel'}
       <BaselineView />
-    {:else}
+    {:else if nav.tab === 'methodologies'}
       <MethodologiesView />
+    {:else}
+      <AccessView />
     {/if}
   </main>
 </div>

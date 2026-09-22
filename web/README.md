@@ -1,8 +1,26 @@
 # GOAP — interface web
 
 Interface Svelte 5 + Vite + TypeScript pour la plateforme GOAP : lancement et
-suivi des processus, revue des changements, consultation des référentiels et
-des méthodologies.
+suivi des processus, revue des changements, consultation des référentiels,
+édition des méthodologies et administration des accès.
+
+## Écrans
+
+- **Processus**, **Changement**, **Référentiel** : suivi de l'exécution. Seules
+  les méthodologies **publiées** sont proposées au démarrage d'un processus.
+- **Méthodologies** (`#methodologies`) : toutes les versions, regroupées par nom
+  (brouillon / publiée / archivée), création, import YAML (fichier ou texte,
+  publication directe facultative). L'éditeur (`#methodologies/<nom>/<version>`,
+  `#methodologies/new`) couvre le domaine, les conditions CEL, les actions (pré-
+  conditions, effets, attendus `expects`…) et les objectifs. Un brouillon se
+  valide, s'enregistre puis se publie (immuable) ; une version publiée ou
+  archivée s'affiche en lecture seule. Les problèmes de validation renvoient
+  au champ concerné. Le YAML n'est qu'un format d'import / export.
+- **Accès** (`#acces`) : politiques ABAC (`rule`, ressource, action,
+  `allow`/`deny` — le refus l'emporte), ajout et suppression.
+
+Un refus d'autorisation (`permission_denied`) est affiché sous la forme
+« Accès refusé : … ».
 
 ## Démarrage
 
@@ -40,7 +58,9 @@ URL sont relatives), ou définissez `VITE_GOAP_BASE_URL` au moment du build.
 ## Organisation
 
 - `src/lib/api.ts` : types des messages et client `rpc()` (Connect/JSON, sans génération de code)
-- `src/lib/nav.svelte.ts` : navigation par fragment d'URL (`#processus/<id>`, `#changement/<id>`…)
+- `src/lib/nav.svelte.ts` : navigation par fragment d'URL (`#processus/<id>`, `#changement/<id>`…) et
+  garde de sortie (`setLeaveGuard`) pour les modifications non enregistrées
+- `src/lib/methodologyForm.ts` : modèle d'édition d'une méthodologie et conversion vers / depuis le message proto
 - `src/lib/items.ts` : mise en forme des items d'un changement
 - `src/lib/components/` : écrans et composants
 

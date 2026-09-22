@@ -82,7 +82,13 @@ export async function rpc<TReq extends object, TRes>(
 
 /** Message d'erreur lisible pour l'interface. */
 export function errorMessage(e: unknown): string {
-  if (e instanceof RpcError) return e.code ? `${e.code} : ${e.message}` : e.message;
+  if (e instanceof RpcError) {
+    if (e.code === 'permission_denied')
+      return `Accès refusé : vous n'avez pas les droits nécessaires pour cette opération${e.message ? ` (${e.message})` : ''}.`;
+    if (e.code === 'unauthenticated')
+      return `Authentification requise : configurez un jeton d'accès valide${e.message ? ` (${e.message})` : ''}.`;
+    return e.code ? `${e.code} : ${e.message}` : e.message;
+  }
   if (e instanceof Error) return e.message;
   return String(e);
 }
@@ -98,18 +104,120 @@ type Empty = Record<string, never>;
 
 // --- registry ---------------------------------------------------------------
 
-export interface GoalSummary {
+/** draft : modifiable · published : figée (seule exécutable) · archived : lecture seule */
+export type MethodologyStatus = 'draft' | 'published' | 'archived';
+
+export interface NodeType {
   name?: string;
   description?: string;
+  properties?: string[];
+}
+
+export interface LinkType {
+  name?: string;
+  from?: string;
+  to?: string;
+}
+
+export interface Condition {
+  name?: string;
+  description?: string;
+  /** Expression CEL évaluée sur le tableau noir. */
+  expr?: string;
+}
+
+export interface ProduceSpec {
+  op?: 'create_node' | 'update_node' | string;
+  nodeType?: string;
+}
+
+export interface LinkSpec {
+  type?: string;
+  direction?: 'out' | 'in' | string;
+}
+
+export interface Expectation {
+  forEach?: 'impacts' | 'proposals' | 'items' | 'artifacts' | string;
+  where?: string;
+  produce?: ProduceSpec;
+  link?: LinkSpec;
+}
+
+export type ActionKind = 'llm' | 'tool' | 'human' | 'builtin';
+
+export interface Action {
+  name?: string;
+  description?: string;
+  kind?: ActionKind | string;
+  pre?: Record<string, boolean>;
+  effects?: Record<string, boolean>;
+  cost?: number;
+  expects?: Expectation;
+  /** « <ressource>:<action> » exigée de l'initiateur, ex. change:apply */
+  permission?: string;
+  model?: string;
+  prompt?: string;
+  tool?: string;
+  builtin?: string;
+  instructions?: string;
+  params?: Struct;
+}
+
+export interface Goal {
+  name?: string;
+  description?: string;
+  examples?: string[];
+  pre?: Record<string, boolean>;
+  value?: number;
 }
 
 export interface Methodology {
   name?: string;
   version?: string;
   description?: string;
-  source?: string;
-  goals?: GoalSummary[];
+  status?: MethodologyStatus | string;
+  nodeTypes?: NodeType[];
+  linkTypes?: LinkType[];
+  conditions?: Condition[];
+  actions?: Action[];
+  goals?: Goal[];
+  createdAt?: string;
+  updatedAt?: string;
   publishedAt?: string;
+  updatedBy?: string;
+}
+
+export interface GoalSummary {
+  name?: string;
+  description?: string;
+}
+
+export interface MethodologySummary {
+  name?: string;
+  version?: string;
+  description?: string;
+  status?: MethodologyStatus | string;
+  goals?: GoalSummary[];
+  updatedAt?: string;
+  publishedAt?: string;
+}
+
+/** Problème de validation ; `path` localise le champ, ex. « conditions[2].expr ». */
+export interface Issue {
+  path?: string;
+  message?: string;
+}
+
+// --- iam --------------------------------------------------------------------
+
+/** Règle ABAC : `rule` est une expression sur r.sub, r.obj et r.act. */
+export interface Policy {
+  rule?: string;
+  /** type de ressource ou « * » */
+  resource?: string;
+  /** action ou « * » */
+  action?: string;
+  effect?: 'allow' | 'deny' | string;
 }
 
 // --- graph ------------------------------------------------------------------
@@ -298,9 +406,54 @@ const REGISTRY = 'goap.registry.v1.RegistryService';
 const GRAPH = 'goap.graph.v1.GraphService';
 const ENGINE = 'goap.engine.v1.EngineService';
 
+const IAM = 'goap.iam.v1.IamService';
+
+type NameVersion = { name: string; version: string };
+
 export const registry = {
-  listMethodologies: (signal?: AbortSignal) =>
-    rpc<Empty, { methodologies?: Methodology[] }>(REGISTRY, 'ListMethodologies', {}, signal),
+  /** `allVersions` : toutes les versions (brouillons, archivées) au lieu de la dernière par nom. */
+  listMethodologies: (allVersions = false, signal?: AbortSignal) =>
+    rpc<{ allVersions?: boolean }, { methodologies?: MethodologySummary[] }>(
+      REGISTRY,
+      'ListMethodologies',
+      allVersions ? { allVersions } : {},
+      signal,
+    ),
+  /** `version` vide : dernière version publiée. */
+  getMethodology: (name: string, version = '', signal?: AbortSignal) =>
+    rpc<NameVersion, { methodology?: Methodology }>(REGISTRY, 'GetMethodology', { name, version }, signal),
+  saveMethodology: (methodology: Methodology) =>
+    rpc<{ methodology: Methodology }, { methodology?: Methodology; issues?: Issue[] }>(REGISTRY, 'SaveMethodology', {
+      methodology,
+    }),
+  validateMethodology: (methodology: Methodology) =>
+    rpc<{ methodology: Methodology }, { issues?: Issue[] }>(REGISTRY, 'ValidateMethodology', { methodology }),
+  publishMethodology: (name: string, version: string) =>
+    rpc<NameVersion, { methodology?: Methodology }>(REGISTRY, 'PublishMethodology', { name, version }),
+  createVersion: (name: string, fromVersion: string, newVersion: string) =>
+    rpc<{ name: string; fromVersion: string; newVersion: string }, { methodology?: Methodology }>(
+      REGISTRY,
+      'CreateVersion',
+      { name, fromVersion, newVersion },
+    ),
+  /** Supprime un brouillon, ou archive une version publiée. */
+  deleteMethodology: (name: string, version: string) =>
+    rpc<NameVersion, Empty>(REGISTRY, 'DeleteMethodology', { name, version }),
+  importMethodology: (yaml: string, publish: boolean) =>
+    rpc<{ yaml: string; publish?: boolean }, { methodology?: Methodology; issues?: Issue[] }>(
+      REGISTRY,
+      'ImportMethodology',
+      publish ? { yaml, publish } : { yaml },
+    ),
+  exportMethodology: (name: string, version: string) =>
+    rpc<NameVersion, { yaml?: string; filename?: string }>(REGISTRY, 'ExportMethodology', { name, version }),
+};
+
+export const iam = {
+  listPolicies: (signal?: AbortSignal) =>
+    rpc<Empty, { policies?: Policy[] }>(IAM, 'ListPolicies', {}, signal),
+  addPolicy: (policy: Policy) => rpc<{ policy: Policy }, { policy?: Policy }>(IAM, 'AddPolicy', { policy }),
+  removePolicy: (policy: Policy) => rpc<{ policy: Policy }, Empty>(IAM, 'RemovePolicy', { policy }),
 };
 
 export const graph = {
@@ -374,6 +527,29 @@ export function formatDate(iso: string | undefined): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
   return d.toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'medium' });
+}
+
+/** Compare deux numéros de version « 1.2.10 » segment par segment (numérique si possible). */
+export function compareVersions(a: string | undefined, b: string | undefined): number {
+  const pa = (a ?? '').split(/[.-]/);
+  const pb = (b ?? '').split(/[.-]/);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const x = pa[i] ?? '';
+    const y = pb[i] ?? '';
+    const nx = Number(x);
+    const ny = Number(y);
+    const c = x !== '' && y !== '' && !Number.isNaN(nx) && !Number.isNaN(ny) ? nx - ny : x.localeCompare(y);
+    if (c !== 0) return c;
+  }
+  return 0;
+}
+
+/** Incrémente le dernier segment numérique : 1.2.3 → 1.2.4. */
+export function bumpPatch(version: string | undefined): string {
+  const v = version ?? '';
+  const m = /^(.*?)(\d+)(\D*)$/.exec(v);
+  if (!m) return v ? `${v}.1` : '0.1.0';
+  return `${m[1]}${Number(m[2]) + 1}${m[3]}`;
 }
 
 export function shortId(id: string | undefined): string {

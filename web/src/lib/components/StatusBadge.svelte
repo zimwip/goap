@@ -15,6 +15,10 @@
     proposed: 'proposé',
     accepted: 'accepté',
     rejected: 'rejeté',
+    published: 'publiée',
+    archived: 'archivée',
+    allow: 'autoriser',
+    deny: 'refuser',
   };
 
   const TONES: Record<string, string> = {
@@ -30,6 +34,10 @@
     proposed: 'info',
     accepted: 'ok',
     rejected: 'danger',
+    published: 'ok',
+    archived: 'neutral',
+    allow: 'ok',
+    deny: 'danger',
   };
 
   const tone = $derived(TONES[status] ?? 'neutral');
