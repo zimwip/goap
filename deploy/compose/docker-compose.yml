@@ -68,6 +68,7 @@ services:
       <<: *env
       GOAP_DB_DSN: postgres://graph:graph@postgres:5432/goap?sslmode=disable
       GOAP_GRAPH_SEED: demo
+      GOAP_REGISTRY_URL: http://registry:8080
     ports: ["8081:8080"]
 
   registry:
