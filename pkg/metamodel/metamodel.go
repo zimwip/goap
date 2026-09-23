@@ -678,3 +678,57 @@ func BackfillInstanceOf(ctx context.Context, g Graph, meth string) (Result, erro
 	res.Change, res.Baseline = c.ID, b.ID
 	return res, nil
 }
+
+// CreateObject creates a data node typed by the NodeType typeName of
+// methodology meth: the node and its instanceOf edge go through one change
+// applied on main. It fails with graph.ErrNotFound when the NodeType is not on
+// the graph yet (methodology not published), graph.ErrConflict when the key is
+// taken, and graph.ErrInvalid without a key.
+func CreateObject(ctx context.Context, g KeyGraph, meth, typeName, key string, props map[string]any) (domain.Node, domain.Baseline, error) {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return domain.Node{}, domain.Baseline{}, fmt.Errorf("object key is required: %w", graph.ErrInvalid)
+	}
+	head, err := g.BranchHead(ctx, domain.MainBranch)
+	if err != nil {
+		return domain.Node{}, domain.Baseline{}, err
+	}
+	nodes, _, err := g.BaselineGraph(ctx, head.ID)
+	if err != nil {
+		return domain.Node{}, domain.Baseline{}, err
+	}
+	var typeRef *domain.NodeRef
+	for _, n := range nodes {
+		if n.Key == key {
+			return domain.Node{}, domain.Baseline{}, fmt.Errorf("key %q is already used: %w", key, graph.ErrConflict)
+		}
+		if n.Key == Key(meth, TypeNodeType, typeName) {
+			ref := n.Ref()
+			typeRef = &ref
+		}
+	}
+	if typeRef == nil {
+		return domain.Node{}, domain.Baseline{}, fmt.Errorf("node type %s of %s is not on the graph (publish the methodology): %w", typeName, meth, graph.ErrNotFound)
+	}
+	c, err := g.CreateChange(ctx, graph.NewChange{Title: "Create " + key, Intent: "Create " + typeName + " " + key,
+		BaselineID: head.ID, Methodology: meth})
+	if err != nil {
+		return domain.Node{}, domain.Baseline{}, err
+	}
+	id := domain.ItemID(uuid.NewString())
+	items := []domain.ChangeItem{
+		{ID: id, Kind: domain.KindProposal, Type: "object", ProducedBy: "metamodel.create_object",
+			Proposal: &domain.Proposal{Op: domain.OpCreateNode, Node: &domain.NodeDraft{Key: key, Type: typeName, Properties: props}}},
+		{Kind: domain.KindProposal, Type: "object", ProducedBy: "metamodel.create_object", DerivedFrom: []domain.ItemID{id},
+			Proposal: &domain.Proposal{Op: domain.OpAddLink, Link: &domain.LinkDraft{Type: LinkInstanceOf, From: domain.Endpoint{Item: id}, To: domain.Endpoint{Node: typeRef}}}},
+	}
+	if _, err := g.AddItems(ctx, c.ID, items); err != nil {
+		return domain.Node{}, domain.Baseline{}, err
+	}
+	b, err := g.Apply(ctx, c.ID, domain.MainBranch)
+	if err != nil {
+		return domain.Node{}, domain.Baseline{}, err
+	}
+	n, err := g.NodeByKey(ctx, key)
+	return n, b, err
+}

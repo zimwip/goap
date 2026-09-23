@@ -12,6 +12,7 @@
   import Resizer from './Resizer.svelte';
   import Toasts from './Toasts.svelte';
   import ContextMenu from './ContextMenu.svelte';
+  import ObjectDialog from './ObjectDialog.svelte';
   import StatusBar from './StatusBar.svelte';
   import { layout, LIMITS, toggleConsole } from './layout.svelte';
   import { activeTab, closeTab } from './tabs.svelte';
@@ -114,6 +115,7 @@
 </div>
 <Toasts />
 <ContextMenu />
+<ObjectDialog />
 
 <style>
   .shell {

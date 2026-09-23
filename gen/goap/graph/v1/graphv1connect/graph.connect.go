@@ -35,6 +35,9 @@ const (
 const (
 	// GraphServiceCreateNodeProcedure is the fully-qualified name of the GraphService's CreateNode RPC.
 	GraphServiceCreateNodeProcedure = "/goap.graph.v1.GraphService/CreateNode"
+	// GraphServiceCreateObjectProcedure is the fully-qualified name of the GraphService's CreateObject
+	// RPC.
+	GraphServiceCreateObjectProcedure = "/goap.graph.v1.GraphService/CreateObject"
 	// GraphServiceUpdateNodeProcedure is the fully-qualified name of the GraphService's UpdateNode RPC.
 	GraphServiceUpdateNodeProcedure = "/goap.graph.v1.GraphService/UpdateNode"
 	// GraphServiceGetNodeProcedure is the fully-qualified name of the GraphService's GetNode RPC.
@@ -106,6 +109,9 @@ const (
 type GraphServiceClient interface {
 	// Domain axis
 	CreateNode(context.Context, *connect.Request[v1.CreateNodeRequest]) (*connect.Response[v1.CreateNodeResponse], error)
+	// CreateObject creates a data node typed by a NodeType of the metadata layer
+	// (ADR 0012): the node and its instanceOf edge go through a change applied on main.
+	CreateObject(context.Context, *connect.Request[v1.CreateObjectRequest]) (*connect.Response[v1.CreateObjectResponse], error)
 	UpdateNode(context.Context, *connect.Request[v1.UpdateNodeRequest]) (*connect.Response[v1.UpdateNodeResponse], error)
 	GetNode(context.Context, *connect.Request[v1.GetNodeRequest]) (*connect.Response[v1.GetNodeResponse], error)
 	CreateLink(context.Context, *connect.Request[v1.CreateLinkRequest]) (*connect.Response[v1.CreateLinkResponse], error)
@@ -150,6 +156,12 @@ func NewGraphServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			httpClient,
 			baseURL+GraphServiceCreateNodeProcedure,
 			connect.WithSchema(graphServiceMethods.ByName("CreateNode")),
+			connect.WithClientOptions(opts...),
+		),
+		createObject: connect.NewClient[v1.CreateObjectRequest, v1.CreateObjectResponse](
+			httpClient,
+			baseURL+GraphServiceCreateObjectProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("CreateObject")),
 			connect.WithClientOptions(opts...),
 		),
 		updateNode: connect.NewClient[v1.UpdateNodeRequest, v1.UpdateNodeResponse](
@@ -302,6 +314,7 @@ func NewGraphServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 // graphServiceClient implements GraphServiceClient.
 type graphServiceClient struct {
 	createNode       *connect.Client[v1.CreateNodeRequest, v1.CreateNodeResponse]
+	createObject     *connect.Client[v1.CreateObjectRequest, v1.CreateObjectResponse]
 	updateNode       *connect.Client[v1.UpdateNodeRequest, v1.UpdateNodeResponse]
 	getNode          *connect.Client[v1.GetNodeRequest, v1.GetNodeResponse]
 	createLink       *connect.Client[v1.CreateLinkRequest, v1.CreateLinkResponse]
@@ -331,6 +344,11 @@ type graphServiceClient struct {
 // CreateNode calls goap.graph.v1.GraphService.CreateNode.
 func (c *graphServiceClient) CreateNode(ctx context.Context, req *connect.Request[v1.CreateNodeRequest]) (*connect.Response[v1.CreateNodeResponse], error) {
 	return c.createNode.CallUnary(ctx, req)
+}
+
+// CreateObject calls goap.graph.v1.GraphService.CreateObject.
+func (c *graphServiceClient) CreateObject(ctx context.Context, req *connect.Request[v1.CreateObjectRequest]) (*connect.Response[v1.CreateObjectResponse], error) {
+	return c.createObject.CallUnary(ctx, req)
 }
 
 // UpdateNode calls goap.graph.v1.GraphService.UpdateNode.
@@ -457,6 +475,9 @@ func (c *graphServiceClient) ListExecutions(ctx context.Context, req *connect.Re
 type GraphServiceHandler interface {
 	// Domain axis
 	CreateNode(context.Context, *connect.Request[v1.CreateNodeRequest]) (*connect.Response[v1.CreateNodeResponse], error)
+	// CreateObject creates a data node typed by a NodeType of the metadata layer
+	// (ADR 0012): the node and its instanceOf edge go through a change applied on main.
+	CreateObject(context.Context, *connect.Request[v1.CreateObjectRequest]) (*connect.Response[v1.CreateObjectResponse], error)
 	UpdateNode(context.Context, *connect.Request[v1.UpdateNodeRequest]) (*connect.Response[v1.UpdateNodeResponse], error)
 	GetNode(context.Context, *connect.Request[v1.GetNodeRequest]) (*connect.Response[v1.GetNodeResponse], error)
 	CreateLink(context.Context, *connect.Request[v1.CreateLinkRequest]) (*connect.Response[v1.CreateLinkResponse], error)
@@ -497,6 +518,12 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 		GraphServiceCreateNodeProcedure,
 		svc.CreateNode,
 		connect.WithSchema(graphServiceMethods.ByName("CreateNode")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceCreateObjectHandler := connect.NewUnaryHandler(
+		GraphServiceCreateObjectProcedure,
+		svc.CreateObject,
+		connect.WithSchema(graphServiceMethods.ByName("CreateObject")),
 		connect.WithHandlerOptions(opts...),
 	)
 	graphServiceUpdateNodeHandler := connect.NewUnaryHandler(
@@ -647,6 +674,8 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 		switch r.URL.Path {
 		case GraphServiceCreateNodeProcedure:
 			graphServiceCreateNodeHandler.ServeHTTP(w, r)
+		case GraphServiceCreateObjectProcedure:
+			graphServiceCreateObjectHandler.ServeHTTP(w, r)
 		case GraphServiceUpdateNodeProcedure:
 			graphServiceUpdateNodeHandler.ServeHTTP(w, r)
 		case GraphServiceGetNodeProcedure:
@@ -706,6 +735,10 @@ type UnimplementedGraphServiceHandler struct{}
 
 func (UnimplementedGraphServiceHandler) CreateNode(context.Context, *connect.Request[v1.CreateNodeRequest]) (*connect.Response[v1.CreateNodeResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.CreateNode is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) CreateObject(context.Context, *connect.Request[v1.CreateObjectRequest]) (*connect.Response[v1.CreateObjectResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.CreateObject is not implemented"))
 }
 
 func (UnimplementedGraphServiceHandler) UpdateNode(context.Context, *connect.Request[v1.UpdateNodeRequest]) (*connect.Response[v1.UpdateNodeResponse], error) {

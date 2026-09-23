@@ -11,6 +11,9 @@ import "google/protobuf/timestamp.proto";
 service GraphService {
   // Domain axis
   rpc CreateNode(CreateNodeRequest) returns (CreateNodeResponse);
+  // CreateObject creates a data node typed by a NodeType of the metadata layer
+  // (ADR 0012): the node and its instanceOf edge go through a change applied on main.
+  rpc CreateObject(CreateObjectRequest) returns (CreateObjectResponse);
   rpc UpdateNode(UpdateNodeRequest) returns (UpdateNodeResponse);
   rpc GetNode(GetNodeRequest) returns (GetNodeResponse);
   rpc CreateLink(CreateLinkRequest) returns (CreateLinkResponse);
@@ -169,6 +172,18 @@ message CreateNodeRequest {
 
 message CreateNodeResponse {
   Node node = 1;
+}
+
+message CreateObjectRequest {
+  string methodology = 1;
+  string node_type = 2;
+  string key = 3;
+  google.protobuf.Struct props = 4;
+}
+
+message CreateObjectResponse {
+  Node node = 1;
+  Baseline baseline = 2;
 }
 
 message UpdateNodeRequest {

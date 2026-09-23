@@ -47,6 +47,14 @@ func (h *Handler) CreateNode(ctx context.Context, r *connect.Request[graphv1.Cre
 	return res(&graphv1.CreateNodeResponse{Node: pbconv.NodeToPB(n)}, err)
 }
 
+func (h *Handler) CreateObject(ctx context.Context, r *connect.Request[graphv1.CreateObjectRequest]) (*connect.Response[graphv1.CreateObjectResponse], error) {
+	n, b, err := metamodel.CreateObject(ctx, h.Graph, r.Msg.Methodology, r.Msg.NodeType, r.Msg.Key, pbconv.Map(r.Msg.Props))
+	if err == nil {
+		h.publish(ctx, "goap.graph.object.created", map[string]string{"methodology": r.Msg.Methodology, "key": n.Key})
+	}
+	return res(&graphv1.CreateObjectResponse{Node: pbconv.NodeToPB(n), Baseline: pbconv.BaselineToPB(b)}, err)
+}
+
 func (h *Handler) UpdateNode(ctx context.Context, r *connect.Request[graphv1.UpdateNodeRequest]) (*connect.Response[graphv1.UpdateNodeResponse], error) {
 	n, err := h.Graph.UpdateNode(ctx, pbconv.RefFromPB(r.Msg.Base), pbconv.Map(r.Msg.Props))
 	return res(&graphv1.UpdateNodeResponse{Node: pbconv.NodeToPB(n)}, err)

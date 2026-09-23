@@ -10,6 +10,7 @@
   import { openTab, tabsState, tabId } from '../../shell/tabs.svelte';
   import { select, requestReveal } from '../../shell/workbench.svelte';
   import { openContextMenu } from '../../shell/contextMenu.svelte';
+  import { openObjectDialog } from '../../shell/objectDialog.svelte';
   import { formatDate, type MethodologySummary } from '../../api';
   import {
     emptyAgent,
@@ -18,6 +19,7 @@
     emptyGoal,
     emptyNodeType,
     emptyLinkType,
+    typeProperties,
     type Section,
     type SectionItem,
   } from '../../methodologyForm';
@@ -286,6 +288,15 @@
                       badgeTone="danger"
                       onselect={() => revealDomain(d, `nodeTypes[${i}]`)}
                       onopen={() => revealDomain(d, `nodeTypes[${i}]`)}
+                      oncontextmenu={(e) =>
+                        openContextMenu(e, [
+                          {
+                            label: d.status === 'published' ? `New ${n.name.trim()} object` : 'New object (publish first)',
+                            icon: 'plus',
+                            disabled: d.status !== 'published' || !n.name.trim(),
+                            run: () => openObjectDialog(d.name, n.name.trim(), typeProperties(d.form, n.name.trim())),
+                          },
+                        ])}
                     />
                   {:else}
                     <p class="empty pad3">No node types.</p>
