@@ -393,3 +393,43 @@ func (t *pgTx) PutItem(ctx context.Context, change domain.ChangeID, it domain.Ch
 		string(it.ID), string(change), string(it.Kind), payload, tid, tv, it.CreatedAt)
 	return mapErr(err, "change item")
 }
+
+func (t *pgTx) PutExecution(ctx context.Context, r domain.ExecutionRecord) error {
+	payload, err := json.Marshal(r)
+	if err != nil {
+		return err
+	}
+	_, err = t.tx.Exec(ctx, `INSERT INTO execution (id, change_id, process_id, seq, kind, action, started_at, payload) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+		r.ID, string(r.ChangeID), r.ProcessID, r.Seq, r.Kind, r.Action, r.StartedAt, payload)
+	return mapErr(err, "execution")
+}
+
+func (t *pgTx) Executions(ctx context.Context, f domain.ExecutionFilter) ([]domain.ExecutionRecord, error) {
+	var change *string
+	if f.ChangeID != "" {
+		change = nullUUID(string(f.ChangeID))
+	}
+	procs := f.ProcessIDs
+	if procs == nil {
+		procs = []string{}
+	}
+	rows, err := t.tx.Query(ctx, `SELECT payload FROM execution WHERE ($1::uuid IS NULL OR change_id = $1::uuid)
+		AND (cardinality($2::text[]) = 0 OR process_id = ANY($2::text[])) ORDER BY n`, change, procs)
+	if err != nil {
+		return nil, mapErr(err, "executions")
+	}
+	defer rows.Close()
+	var out []domain.ExecutionRecord
+	for rows.Next() {
+		var payload []byte
+		if err := rows.Scan(&payload); err != nil {
+			return nil, err
+		}
+		var r domain.ExecutionRecord
+		if err := json.Unmarshal(payload, &r); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}

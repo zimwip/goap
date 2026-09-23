@@ -29,7 +29,7 @@ func NewClient(hc *http.Client, baseURL string, opts ...connect.ClientOption) *C
 
 func (c *Client) CreateChange(ctx context.Context, in graph.NewChange) (domain.ChangeSet, error) {
 	r, err := c.rpc.CreateChange(ctx, connect.NewRequest(&graphv1.CreateChangeRequest{Title: in.Title, Intent: in.Intent,
-		Methodology: in.Methodology, BaselineId: string(in.BaselineID), Data: pbconv.Struct(in.Data)}))
+		Methodology: in.Methodology, BaselineId: string(in.BaselineID), Branch: in.Branch, Data: pbconv.Struct(in.Data)}))
 	if err != nil {
 		return domain.ChangeSet{}, rpcerr.FromConnect(err)
 	}
@@ -100,4 +100,37 @@ func (c *Client) Baselines(ctx context.Context) ([]domain.Baseline, error) {
 		out[i] = pbconv.BaselineFromPB(b)
 	}
 	return out, nil
+}
+
+func (c *Client) Record(ctx context.Context, recs []domain.ExecutionRecord) error {
+	_, err := c.rpc.RecordExecutions(ctx, connect.NewRequest(&graphv1.RecordExecutionsRequest{Records: pbconv.ExecutionsToPB(recs)}))
+	return rpcerr.FromConnect(err)
+}
+
+func (c *Client) Journal(ctx context.Context, f domain.ExecutionFilter) ([]domain.ExecutionRecord, error) {
+	r, err := c.rpc.ListExecutions(ctx, connect.NewRequest(&graphv1.ListExecutionsRequest{ChangeId: string(f.ChangeID), ProcessIds: f.ProcessIDs}))
+	if err != nil {
+		return nil, rpcerr.FromConnect(err)
+	}
+	return pbconv.ExecutionsFromPB(r.Msg.Records), nil
+}
+
+func (c *Client) BranchHead(ctx context.Context, name string) (domain.Baseline, error) {
+	r, err := c.rpc.GetBranch(ctx, connect.NewRequest(&graphv1.GetBranchRequest{Name: name}))
+	if err != nil {
+		return domain.Baseline{}, rpcerr.FromConnect(err)
+	}
+	return pbconv.BaselineFromPB(r.Msg.Head), nil
+}
+
+func (c *Client) CreateBaseline(ctx context.Context, name string, nodes []domain.NodeRef) (domain.Baseline, error) {
+	req := &graphv1.CreateBaselineRequest{Name: name}
+	for _, n := range nodes {
+		req.Nodes = append(req.Nodes, pbconv.RefToPB(n))
+	}
+	r, err := c.rpc.CreateBaseline(ctx, connect.NewRequest(req))
+	if err != nil {
+		return domain.Baseline{}, rpcerr.FromConnect(err)
+	}
+	return pbconv.BaselineFromPB(r.Msg.Baseline), nil
 }

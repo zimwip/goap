@@ -136,3 +136,11 @@ func (t *EngineTracer) TraceID(ctx context.Context) string {
 var errNoSpan = errors.New("no span")
 
 var _ = errNoSpan
+
+// SpanID implements engine.SpanIDer: the current span of ctx.
+func (t *EngineTracer) SpanID(ctx context.Context) string {
+	if sc := trace.SpanContextFromContext(ctx); sc.IsValid() {
+		return sc.SpanID().String()
+	}
+	return ""
+}

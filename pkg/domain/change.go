@@ -85,8 +85,11 @@ type ChangeItem struct {
 	ProducedBy  string         `json:"producedBy,omitempty"`
 	DerivedFrom []ItemID       `json:"derivedFrom,omitempty"`
 	// Supersedes lists the items this one replaces.
-	Supersedes []ItemID  `json:"supersedes,omitempty"`
-	CreatedAt  time.Time `json:"createdAt"`
+	Supersedes []ItemID `json:"supersedes,omitempty"`
+	// Execution is the journal record of the action execution that produced
+	// the item (provenance down to the model / tool calls).
+	Execution string    `json:"execution,omitempty"`
+	CreatedAt time.Time `json:"createdAt"`
 }
 
 // ProposalOp is the kind of modification proposed for the target graph.

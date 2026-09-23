@@ -94,6 +94,12 @@ const (
 	// GraphServiceRebaseChangeProcedure is the fully-qualified name of the GraphService's RebaseChange
 	// RPC.
 	GraphServiceRebaseChangeProcedure = "/goap.graph.v1.GraphService/RebaseChange"
+	// GraphServiceRecordExecutionsProcedure is the fully-qualified name of the GraphService's
+	// RecordExecutions RPC.
+	GraphServiceRecordExecutionsProcedure = "/goap.graph.v1.GraphService/RecordExecutions"
+	// GraphServiceListExecutionsProcedure is the fully-qualified name of the GraphService's
+	// ListExecutions RPC.
+	GraphServiceListExecutionsProcedure = "/goap.graph.v1.GraphService/ListExecutions"
 )
 
 // GraphServiceClient is a client for the goap.graph.v1.GraphService service.
@@ -124,6 +130,9 @@ type GraphServiceClient interface {
 	MergeBranch(context.Context, *connect.Request[v1.MergeBranchRequest]) (*connect.Response[v1.MergeBranchResponse], error)
 	GetDivergences(context.Context, *connect.Request[v1.GetDivergencesRequest]) (*connect.Response[v1.GetDivergencesResponse], error)
 	RebaseChange(context.Context, *connect.Request[v1.RebaseChangeRequest]) (*connect.Response[v1.RebaseChangeResponse], error)
+	// Execution journal (ADR 0011)
+	RecordExecutions(context.Context, *connect.Request[v1.RecordExecutionsRequest]) (*connect.Response[v1.RecordExecutionsResponse], error)
+	ListExecutions(context.Context, *connect.Request[v1.ListExecutionsRequest]) (*connect.Response[v1.ListExecutionsResponse], error)
 }
 
 // NewGraphServiceClient constructs a client for the goap.graph.v1.GraphService service. By default,
@@ -275,6 +284,18 @@ func NewGraphServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(graphServiceMethods.ByName("RebaseChange")),
 			connect.WithClientOptions(opts...),
 		),
+		recordExecutions: connect.NewClient[v1.RecordExecutionsRequest, v1.RecordExecutionsResponse](
+			httpClient,
+			baseURL+GraphServiceRecordExecutionsProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("RecordExecutions")),
+			connect.WithClientOptions(opts...),
+		),
+		listExecutions: connect.NewClient[v1.ListExecutionsRequest, v1.ListExecutionsResponse](
+			httpClient,
+			baseURL+GraphServiceListExecutionsProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("ListExecutions")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -303,6 +324,8 @@ type graphServiceClient struct {
 	mergeBranch      *connect.Client[v1.MergeBranchRequest, v1.MergeBranchResponse]
 	getDivergences   *connect.Client[v1.GetDivergencesRequest, v1.GetDivergencesResponse]
 	rebaseChange     *connect.Client[v1.RebaseChangeRequest, v1.RebaseChangeResponse]
+	recordExecutions *connect.Client[v1.RecordExecutionsRequest, v1.RecordExecutionsResponse]
+	listExecutions   *connect.Client[v1.ListExecutionsRequest, v1.ListExecutionsResponse]
 }
 
 // CreateNode calls goap.graph.v1.GraphService.CreateNode.
@@ -420,6 +443,16 @@ func (c *graphServiceClient) RebaseChange(ctx context.Context, req *connect.Requ
 	return c.rebaseChange.CallUnary(ctx, req)
 }
 
+// RecordExecutions calls goap.graph.v1.GraphService.RecordExecutions.
+func (c *graphServiceClient) RecordExecutions(ctx context.Context, req *connect.Request[v1.RecordExecutionsRequest]) (*connect.Response[v1.RecordExecutionsResponse], error) {
+	return c.recordExecutions.CallUnary(ctx, req)
+}
+
+// ListExecutions calls goap.graph.v1.GraphService.ListExecutions.
+func (c *graphServiceClient) ListExecutions(ctx context.Context, req *connect.Request[v1.ListExecutionsRequest]) (*connect.Response[v1.ListExecutionsResponse], error) {
+	return c.listExecutions.CallUnary(ctx, req)
+}
+
 // GraphServiceHandler is an implementation of the goap.graph.v1.GraphService service.
 type GraphServiceHandler interface {
 	// Domain axis
@@ -448,6 +481,9 @@ type GraphServiceHandler interface {
 	MergeBranch(context.Context, *connect.Request[v1.MergeBranchRequest]) (*connect.Response[v1.MergeBranchResponse], error)
 	GetDivergences(context.Context, *connect.Request[v1.GetDivergencesRequest]) (*connect.Response[v1.GetDivergencesResponse], error)
 	RebaseChange(context.Context, *connect.Request[v1.RebaseChangeRequest]) (*connect.Response[v1.RebaseChangeResponse], error)
+	// Execution journal (ADR 0011)
+	RecordExecutions(context.Context, *connect.Request[v1.RecordExecutionsRequest]) (*connect.Response[v1.RecordExecutionsResponse], error)
+	ListExecutions(context.Context, *connect.Request[v1.ListExecutionsRequest]) (*connect.Response[v1.ListExecutionsResponse], error)
 }
 
 // NewGraphServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -595,6 +631,18 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(graphServiceMethods.ByName("RebaseChange")),
 		connect.WithHandlerOptions(opts...),
 	)
+	graphServiceRecordExecutionsHandler := connect.NewUnaryHandler(
+		GraphServiceRecordExecutionsProcedure,
+		svc.RecordExecutions,
+		connect.WithSchema(graphServiceMethods.ByName("RecordExecutions")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceListExecutionsHandler := connect.NewUnaryHandler(
+		GraphServiceListExecutionsProcedure,
+		svc.ListExecutions,
+		connect.WithSchema(graphServiceMethods.ByName("ListExecutions")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/goap.graph.v1.GraphService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case GraphServiceCreateNodeProcedure:
@@ -643,6 +691,10 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 			graphServiceGetDivergencesHandler.ServeHTTP(w, r)
 		case GraphServiceRebaseChangeProcedure:
 			graphServiceRebaseChangeHandler.ServeHTTP(w, r)
+		case GraphServiceRecordExecutionsProcedure:
+			graphServiceRecordExecutionsHandler.ServeHTTP(w, r)
+		case GraphServiceListExecutionsProcedure:
+			graphServiceListExecutionsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -742,4 +794,12 @@ func (UnimplementedGraphServiceHandler) GetDivergences(context.Context, *connect
 
 func (UnimplementedGraphServiceHandler) RebaseChange(context.Context, *connect.Request[v1.RebaseChangeRequest]) (*connect.Response[v1.RebaseChangeResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.RebaseChange is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) RecordExecutions(context.Context, *connect.Request[v1.RecordExecutionsRequest]) (*connect.Response[v1.RecordExecutionsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.RecordExecutions is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) ListExecutions(context.Context, *connect.Request[v1.ListExecutionsRequest]) (*connect.Response[v1.ListExecutionsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.ListExecutions is not implemented"))
 }

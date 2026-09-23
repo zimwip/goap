@@ -249,3 +249,12 @@ func (h *Handler) RebaseChange(ctx context.Context, r *connect.Request[graphv1.R
 	h.publish(ctx, "goap.change."+string(c.ID)+".rebased", domain.ChangeEvent{Type: "change.rebased", Change: c})
 	return res(&graphv1.RebaseChangeResponse{Change: pbconv.ChangeToPB(c), Superseded: superseded, Divergences: pbconv.DivergencesToPB(out.Divergences)}, nil)
 }
+
+func (h *Handler) RecordExecutions(ctx context.Context, r *connect.Request[graphv1.RecordExecutionsRequest]) (*connect.Response[graphv1.RecordExecutionsResponse], error) {
+	return res(&graphv1.RecordExecutionsResponse{}, h.Graph.Record(ctx, pbconv.ExecutionsFromPB(r.Msg.Records)))
+}
+
+func (h *Handler) ListExecutions(ctx context.Context, r *connect.Request[graphv1.ListExecutionsRequest]) (*connect.Response[graphv1.ListExecutionsResponse], error) {
+	rs, err := h.Graph.Journal(ctx, domain.ExecutionFilter{ChangeID: domain.ChangeID(r.Msg.ChangeId), ProcessIDs: r.Msg.ProcessIds})
+	return res(&graphv1.ListExecutionsResponse{Records: pbconv.ExecutionsToPB(rs)}, err)
+}

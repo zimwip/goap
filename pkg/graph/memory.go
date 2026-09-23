@@ -25,6 +25,7 @@ type memState struct {
 	baselines map[domain.BaselineID]domain.Baseline
 	changes   map[domain.ChangeID]domain.ChangeSet
 	branches  map[string]domain.Branch
+	journal   []domain.ExecutionRecord
 }
 
 // NewMemory returns an empty in-memory repository.
@@ -46,6 +47,7 @@ func (s memState) clone() memState {
 		baselines: maps.Clone(s.baselines),
 		changes:   make(map[domain.ChangeID]domain.ChangeSet, len(s.changes)),
 		branches:  maps.Clone(s.branches),
+		journal:   slices.Clone(s.journal),
 	}
 	for k, v := range s.versions {
 		c.versions[k] = slices.Clone(v)
@@ -275,4 +277,34 @@ func (t *memTx) PutItem(_ context.Context, id domain.ChangeID, it domain.ChangeI
 	c.Items = append(c.Items, it)
 	t.st.changes[id] = c
 	return nil
+}
+
+func (t *memTx) PutExecution(_ context.Context, r domain.ExecutionRecord) error {
+	if _, ok := t.st.changes[r.ChangeID]; !ok {
+		return fmt.Errorf("change %s: %w", r.ChangeID, ErrInvalid)
+	}
+	for _, x := range t.st.journal {
+		if x.ID == r.ID {
+			return fmt.Errorf("execution %s: %w", r.ID, ErrConflict)
+		}
+	}
+	t.st.journal = append(t.st.journal, r)
+	return nil
+}
+
+func (t *memTx) Executions(_ context.Context, f domain.ExecutionFilter) ([]domain.ExecutionRecord, error) {
+	var out []domain.ExecutionRecord
+	for _, r := range t.st.journal {
+		if matchExecution(r, f) {
+			out = append(out, r)
+		}
+	}
+	return out, nil
+}
+
+func matchExecution(r domain.ExecutionRecord, f domain.ExecutionFilter) bool {
+	if f.ChangeID != "" && r.ChangeID != f.ChangeID {
+		return false
+	}
+	return len(f.ProcessIDs) == 0 || slices.Contains(f.ProcessIDs, r.ProcessID)
 }
