@@ -350,7 +350,11 @@ func (m *Methodology) compile() (*Compiled, Issues) {
 		if _, _, err := SplitRef(m.DomainRef); err != nil {
 			add("domainRef", "%v", err)
 		}
-		m.lintDomainRefs(nodeTypes, linkTypes, add)
+		if len(m.Domain.NodeTypes) == 0 {
+			add("domainRef", "domain reference not resolved (see Resolve)")
+		} else {
+			m.lintDomainRefs(nodeTypes, linkTypes, add)
+		}
 	}
 
 	// conditions: each expression is compiled on its own to report every error

@@ -325,8 +325,8 @@ func (r Result) Changed() bool { return r.Change != "" }
 // methodology's types exist on the graph once it is projected.
 func Sync(ctx context.Context, g Graph, m *methodology.Methodology) (Result, error) {
 	if m.DomainRef != "" {
-		name, _, _ := strings.Cut(m.DomainRef, "@")
-		if _, err := SyncDomain(ctx, g, &methodology.Domain{Name: name, Schema: m.Domain}); err != nil {
+		name, version, _ := strings.Cut(m.DomainRef, "@")
+		if _, err := SyncDomain(ctx, g, &methodology.Domain{Name: name, Version: version, Schema: m.Domain}); err != nil {
 			return Result{Methodology: m.Name}, fmt.Errorf("domain %s: %w", name, err)
 		}
 	}

@@ -1,28 +1,11 @@
 name: impact-analysis
-version: 1.1.0
+version: 1.2.0
 description: >
   Impact analysis of a change on a requirements repository: identification of
   impacted elements, propagation along traceability links, update proposals
   and human review.
 
-domain:
-  nodeTypes:
-    - name: Need
-      description: Business need expressed by a stakeholder
-      properties: [title, description]
-    - name: Requirement
-      description: Requirement (functional or non-functional) satisfying a need
-      properties: [title, description, priority]
-    - name: TestCase
-      description: Test case verifying a requirement
-      properties: [title, steps]
-    - name: Component
-      description: Software component implementing requirements
-      properties: [title, owner]
-  linkTypes:
-    - {name: satisfies, from: Requirement, to: Need}
-    - {name: verifies, from: TestCase, to: Requirement}
-    - {name: implements, from: Component, to: Requirement}
+domainRef: alm@1.0.0
 
 conditions:
   - name: has_impacts

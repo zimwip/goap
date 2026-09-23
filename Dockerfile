@@ -12,6 +12,7 @@ RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache
 FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=build /out/service /service
 COPY methodologies /methodologies
+COPY domains /domains
 EXPOSE 8080
 USER nonroot
 ENTRYPOINT ["/service"]

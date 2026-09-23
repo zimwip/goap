@@ -27,7 +27,10 @@ make web                      # UI on http://localhost:5173 (separate terminal)
 ANTHROPIC_API_KEY=... make up # without a key: "fake" LLM provider
 ```
 
-Provided methodologies (`methodologies/`, imported at startup): `impact-analysis`, `test-design`,
+Provided domains (`domains/`, imported before the methodologies): `alm` (needs, requirements,
+functions, components, builds, releases, deployments) and `metamodel`.
+
+Provided methodologies (`methodologies/`, imported at startup, they reference the domains): `impact-analysis`, `test-design`,
 `sdlc` (development cycle on the ALM domain: need → requirement → function → component → build
 artifact → application → solution, data, interfaces, flows; releases and dev → test → staging →
 production deployment) and `methodology-improvement` (self-observation).

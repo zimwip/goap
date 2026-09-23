@@ -3,7 +3,6 @@ package metamodel
 import (
 	"context"
 	"errors"
-	"os"
 	"slices"
 	"testing"
 
@@ -14,11 +13,7 @@ import (
 
 func load(t *testing.T) *methodology.Methodology {
 	t.Helper()
-	data, err := os.ReadFile("../../methodologies/test-design.yaml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	m, err := methodology.Parse(data)
+	m, err := methodology.LoadFile("../../methodologies/test-design.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,7 +73,8 @@ func TestSyncVersionsTheMethodology(t *testing.T) {
 	}
 	// the change history explains every version
 	cs, _ := g.Changes(ctx)
-	if len(cs) != 2 || cs[1].Data["metamodel"].(map[string]any)["version"] != "9.0.0" || cs[1].Status != domain.ChangeApplied {
+	// the shared domain, then the two versions of the methodology
+	if len(cs) != 3 || cs[2].Data["metamodel"].(map[string]any)["version"] != "9.0.0" || cs[2].Status != domain.ChangeApplied {
 		t.Fatalf("changes: %+v", cs)
 	}
 }
@@ -102,7 +98,7 @@ func TestSyncNodeTypeIsMetadataLayer(t *testing.T) {
 	if _, err := Sync(ctx, g, m); err != nil {
 		t.Fatal(err)
 	}
-	nt, err := g.NodeByKey(ctx, Key(m.Name, TypeNodeType, "Requirement"))
+	nt, err := g.NodeByKey(ctx, DomainKey("alm", "Requirement"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,16 +118,16 @@ func TestSyncNodeTypeIsMetadataLayer(t *testing.T) {
 	}
 
 	// Requirement kept its graph-native version and properties, untouched
-	nt2, err := g.NodeByKey(ctx, Key(m.Name, TypeNodeType, "Requirement"))
+	nt2, err := g.NodeByKey(ctx, DomainKey("alm", "Requirement"))
 	if err != nil || nt2.Version != nt.Version || nt2.Properties["description"] != nt.Properties["description"] {
 		t.Fatalf("Requirement was overwritten: %+v (was %+v)", nt2, nt)
 	}
 	// TestCase, dropped from the registry, still lives in the graph
-	if _, err := g.NodeByKey(ctx, Key(m.Name, TypeNodeType, "TestCase")); err != nil {
+	if _, err := g.NodeByKey(ctx, DomainKey("alm", "TestCase")); err != nil {
 		t.Fatalf("TestCase was deleted: %v", err)
 	}
 	// SecurityRequirement, authored directly on the graph, survived too
-	if _, err := g.NodeByKey(ctx, Key(m.Name, TypeNodeType, "SecurityRequirement")); err != nil {
+	if _, err := g.NodeByKey(ctx, DomainKey("alm", "SecurityRequirement")); err != nil {
 		t.Fatalf("SecurityRequirement was deleted: %v", err)
 	}
 }
@@ -141,11 +137,7 @@ func TestSyncNodeTypeIsMetadataLayer(t *testing.T) {
 // after a Sync.
 func TestSupertypesMatchesDeclaredSchema(t *testing.T) {
 	ctx := context.Background()
-	data, err := os.ReadFile("../../methodologies/sdlc.yaml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	m, err := methodology.Parse(data)
+	m, err := methodology.LoadFile("../../methodologies/sdlc.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -208,7 +200,7 @@ func TestBackfillInstanceOf(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	nt, err := g.NodeByKey(ctx, Key(m.Name, TypeNodeType, "Requirement"))
+	nt, err := g.NodeByKey(ctx, DomainKey("alm", "Requirement"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -243,7 +235,7 @@ func TestCreateObject(t *testing.T) {
 	if err != nil || n.Type != "Requirement" || n.Properties["title"] != "Pay" || b.ID == "" {
 		t.Fatalf("create: %+v %v", n, err)
 	}
-	nt, _ := g.NodeByKey(ctx, Key(m.Name, TypeNodeType, "Requirement"))
+	nt, _ := g.NodeByKey(ctx, DomainKey("alm", "Requirement"))
 	v, _ := g.View(ctx, n.Ref())
 	var linked bool
 	for _, l := range v.Out {

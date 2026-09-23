@@ -1,0 +1,22 @@
+name: metamodel
+version: 1.0.0
+description: >
+  The methodology meta-model as domain objects (methodology, agent, action, goal, condition, trigger, node type), used by the self-observation methodology.
+nodeTypes:
+  - {name: Methodology, properties: [name, version, description]}
+  - {name: Agent, properties: [name, planner, actions, goals]}
+  - {name: Action, properties: [name, kind, cost, model, prompt, code, specializes, when, priority]}
+  - {name: Goal, properties: [name, pre]}
+  - {name: Condition, properties: [name, expr]}
+  - {name: Trigger, properties: [name, type, event]}
+  - {name: NodeType, properties: [name, extends]}
+  - {name: ToolRequest, properties: [name, description, motivation]}
+linkTypes:
+  - {name: contains, from: Methodology}
+  - {name: uses, from: Agent, to: Action}
+  - {name: pursues, from: Agent, to: Goal}
+  - {name: has, from: Agent, to: Trigger}
+  - {name: requires, to: Condition}
+  - {name: achieves, from: Action, to: Condition}
+  - {name: specializes, from: Action, to: Action}
+  - {name: extends, from: NodeType, to: NodeType}

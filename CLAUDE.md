@@ -7,7 +7,7 @@
 - Tests: `make test`; PostgreSQL-backed tests (graph, registry, iam) run when `GOAP_TEST_PG_DSN` is set (`internal/pgtest`); SQLite variants always run.
 - Storage has two SQL dialects: PostgreSQL (`migrations/`) and SQLite for the local mode (`migrations_sqlite/`, `make devlocal`, ADR 0010); schema changes go to both.
 - `make lint` must pass (go vet + gofmt).
-- The example methodology `methodologies/impact-analysis.yaml` is exercised by `pkg/methodology` and `pkg/engine` tests; `methodologies/sdlc.yaml` (ALM domain, seeded by `internal/graphsvc/seed.go`) by `pkg/engine/sdlc_test.go`.
+- Example methodologies reference the shared domains of `domains/` (`alm`, `metamodel`; loaded in tests with `methodology.LoadFile`). `methodologies/impact-analysis.yaml` is exercised by `pkg/methodology` and `pkg/engine` tests; `methodologies/sdlc.yaml` (ALM domain, seeded by `internal/graphsvc/seed.go`) by `pkg/engine/sdlc_test.go`.
 - Versioning rule of the graph: outgoing links belong to the source node version (see `pkg/graph/apply.go`).
 - Authorization is ABAC (Casbin) via `authz.Authorizer`; default policies in `pkg/authz/casbin.go`, stored by the iam service.
 - Methodologies live in the registry database (structured); YAML is import/export only. The object part (node/link types) can be a shared `Domain` (ADR 0013): a methodology references it with `domainRef`, and its NodeTypes are keyed `D:<domain>/nodetype/<name>` on the graph.

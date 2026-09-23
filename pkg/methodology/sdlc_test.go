@@ -1,16 +1,11 @@
 package methodology
 
 import (
-	"os"
 	"testing"
 )
 
 func TestSDLCMethodologyIsValid(t *testing.T) {
-	data, err := os.ReadFile("../../methodologies/sdlc.yaml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	m, err := Parse(data)
+	m, err := LoadFile("../../methodologies/sdlc.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -3,7 +3,6 @@ package engine
 import (
 	"context"
 	"errors"
-	"os"
 	"strings"
 	"testing"
 
@@ -44,11 +43,7 @@ func scripted(t *testing.T) llm.Client {
 func setup(t *testing.T) (*Engine, *graph.Graph, domain.BaselineID) {
 	t.Helper()
 	ctx := context.Background()
-	data, err := os.ReadFile("../../methodologies/impact-analysis.yaml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	m, err := methodology.Parse(data)
+	m, err := methodology.LoadFile("../../methodologies/impact-analysis.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -2,7 +2,6 @@ package engine
 
 import (
 	"context"
-	"os"
 	"strings"
 	"testing"
 
@@ -22,7 +21,7 @@ type memDrafts struct {
 
 func (d *memDrafts) Definition(_ context.Context, name, version string) (methodology.Methodology, bool, error) {
 	if version == "" {
-		version = "1.1.0"
+		version = "1.2.0"
 	}
 	m, ok := d.defs[name+"@"+version]
 	return m, ok, nil
@@ -48,8 +47,7 @@ func TestSelfObservationProposesAndDrafts(t *testing.T) {
 		t.Fatalf("observed run: %v %+v", err, p)
 	}
 	// the observer methodology, and the observed one projected onto the graph
-	data, _ := os.ReadFile("../../methodologies/methodology-improvement.yaml")
-	obsM, err := methodology.Parse(data)
+	obsM, err := methodology.LoadFile("../../methodologies/methodology-improvement.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,7 +61,7 @@ func TestSelfObservationProposesAndDrafts(t *testing.T) {
 	if err != nil || !res.Changed() {
 		t.Fatalf("sync: %+v %v", res, err)
 	}
-	drafts := &memDrafts{defs: map[string]methodology.Methodology{"impact-analysis@1.1.0": *impact.Methodology}}
+	drafts := &memDrafts{defs: map[string]methodology.Methodology{"impact-analysis@1.2.0": *impact.Methodology}}
 	builtins := e.Executors[methodology.KindBuiltin].(BuiltinExecutor)
 	for k, v := range e.SelfImprovementBuiltins(SelfImprovement{Drafts: drafts, Thresholds: observe.Thresholds{LLMCalls: 1, MinSystematized: 1}}) {
 		builtins[k] = v
@@ -111,7 +109,7 @@ func TestSelfObservationProposesAndDrafts(t *testing.T) {
 		t.Fatalf("drafts: %+v", drafts.saved)
 	}
 	d := drafts.saved[0]
-	if d.Version != "1.1.1" || drafts.who[0].Subject != "mia" {
+	if d.Version != "1.2.1" || drafts.who[0].Subject != "mia" {
 		t.Fatalf("draft version %s by %+v", d.Version, drafts.who[0])
 	}
 	var spec *methodology.Action
