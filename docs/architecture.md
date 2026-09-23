@@ -306,6 +306,15 @@ avec l'identité de l'initiateur. S'il se termine, l'action reprend avec son ré
 l'action parente est **suspendue** (`pending.kind = agent`) puis rejouée quand l'enfant se termine — les
 écritures n'étant validées qu'en fin d'action, le rejeu est sûr et retrouve le sous-agent déjà démarré.
 
+**Spécialisation** ([ADR 0009](adr/0009-branches-options-decisions.md) §5) : une action peut en spécialiser
+une autre (`specializes: <action>` ou `<méthodologie>/<action>`), avec une garde CEL `when` et une
+`priority`. Une spécialisation n'est pas planifiée : elle hérite des préconditions, effets et coût de l'action
+spécialisée, et la **remplace à l'exécution** quand sa garde est vraie (la plus prioritaire gagne, celles des
+autres méthodologies comprises). Une action `kind: abstract` n'a pas d'implémentation propre : elle exige une
+spécialisation applicable (ex. `build` spécialisée en `build_java`, `build_c`, `build_shell`).
+**Sous-typage** (§6) : un type de nœud peut en étendre un autre (`extends`) ; les conditions voient
+`x.types` (le type et ses ancêtres) : `"Requirement" in i.target.types` vaut pour ses sous-types.
+
 ### 2.11 Déclencheurs d'agents
 
 En dehors de la boucle d'intention, un agent peut être exécuté **automatiquement** par des déclencheurs
@@ -325,6 +334,30 @@ Garde-fous : un déclencheur ne réagit jamais à ses propres productions (le ch
 Les événements viennent de NATS (service graph, moteur, registry) ou du bus local en mode tout-en-un.
 `ListTriggers` / `FireTrigger` exposent l'état et le déclenchement manuel (permission `trigger:fire`).
 Avec plusieurs répliques du moteur, un seul doit exécuter les déclencheurs (élection de leader : M1).
+
+### 2.12 Journal d'exécution et auto-observation ([ADR 0011](adr/0011-journal-auto-observation.md))
+
+L'exécution d'un change est **capturée sur l'axe change**, à côté du blackboard :
+
+```
+change CR-42
+ ├─ items (blackboard) ── item.execution ──┐
+ └─ journal                                ▼
+     process.started · tick (monde, plan, replanifié ?) · action (spécialisation, effets, items,
+     tokens, appels LLM / outils, traceId/spanId) · approval · process.ended (statut, totaux)
+```
+
+- Chaque tick de planification et chaque exécution d'action (LLM ou formelle) est persisté et relié aux
+  items produits : l'**audit** remonte d'une proposition à l'appel de modèle qui l'a produite, et au span
+  OpenTelemetry correspondant.
+- La **méthodologie est modélisée dans le domaine** (`pkg/metamodel`) : chaque publication projette ses
+  éléments (méthodologie, agents, actions, buts, conditions, déclencheurs, types) en nœuds versionnés
+  `M:<méthodologie>/<type>/<nom>` par un change appliqué sur main.
+- L'agent **`methodology-improvement/observer`** se déclenche à la fin de chaque processus racine
+  (terminé, en échec ou bloqué) : il analyse le journal et les traces (points durs : boucles, échecs, LLM
+  coûteux ou systématisable, replanifications, spans lents), propose des modifications **sur les nœuds de
+  la méthodologie** (spécialisation par script, modèle, coût, agent, demande d'outil MCP), les soumet à une
+  revue humaine et produit une **nouvelle version brouillon** de la méthodologie.
 
 ### 2.10 Actions script et DSL
 
@@ -506,6 +539,10 @@ barre d'état de l'IDE avec les runs en cours de l'utilisateur et ses notificati
 Les compteurs sont aussi **conservés dans le processus** (tokens, appels LLM et outils par étape et au
 total) et affichés dans l'IDE, avec un lien vers la trace Jaeger (`traceId`).
 
+Le **journal d'exécution** des changes (§2.12) porte `traceId` / `spanId` : l'agent d'auto-observation
+relit la trace d'un run par l'API de requête Jaeger (`GOAP_TRACE_QUERY_URL`, liens `GOAP_TRACE_UI_URL`)
+pour y chercher les points durs (spans lents, outils, appels de modèle).
+
 ## 4. Format d'une méthodologie
 
 Les méthodologies sont **stockées en base** sous forme structurée ([ADR 0006](adr/0006-methodologies-en-base.md)),
@@ -559,7 +596,10 @@ goals:
     pre: {impacts_propagated: true}
 ```
 
-Voir `methodologies/impact-analysis.yaml` pour l'exemple complet exécutable.
+Voir `methodologies/impact-analysis.yaml` pour l'exemple complet exécutable, et
+`methodologies/methodology-improvement.yaml` (auto-observation : action abstraite spécialisée par des règles
+ou un LLM). Champs de spécialisation d'une action : `specializes`, `when`, `priority`, `kind: abstract` ;
+sous-typage d'un type de nœud : `extends`.
 
 ## 5. Organisation du dépôt
 
@@ -571,7 +611,9 @@ internal/platform/           config, logs, serveur HTTP/Connect, NATS, Postgres,
 internal/<service>/          implémentation des handlers Connect d'un service (graphsvc, registrysvc, iamsvc…)
 internal/identity/           identité de l'appelant (en-têtes posés par la gateway)
 pkg/domain/                  modèle du graphe (axe domaine + axe change)
-pkg/graph/                   Store (mémoire, PostgreSQL), apply, hydratation
+pkg/graph/                   Store (mémoire, PostgreSQL, SQLite), apply, branches / merge / rebase, journal d'exécution
+pkg/metamodel/               méthodologie projetée en éléments versionnés du domaine
+pkg/observe/                 analyse de coût des runs (journal + traces) et propositions d'amélioration
 pkg/goap/                    planificateur A*
 pkg/condition/               compilation/évaluation CEL, compilation des `expects`
 pkg/intent/                  boucle d'intention (Ranker lexical, Ranker LLM)
@@ -601,7 +643,8 @@ docs/                        architecture, ADR
 | **M4 — axe change avancé** | propagation d'impact (CTE récursive paramétrée par types de liens), liens suspects, diff de baselines, merge/rebase de changesets concurrents |
 | **M5 — UX** | ✅ éditeur de méthodologies (formulaires, anomalies localisées, publication, versions, import/export YAML), écran « Accès » (politiques ABAC), approbations · reste : visualisation du graphe et du plan |
 | **M6 — K8s** | charts Helm, HPA engine · ✅ observabilité OpenTelemetry, manifestes sandboxes |
-| **M8 — branches et décisions** 🟡 | ADR 0009 (accepté) · ✅ graphe : versions par branche, merge de branche à 3 voies, divergence et rebase de change · reste : moteur (conflit → merge validé → rebase et replanification), spécialisation / sous-typage d'actions et de types du domaine, budget du change, options explorées en branches, comparaison, boucles de décision (questions → analyses), merge de l'option retenue ; puis containers versionnés et releases |
+| **M8 — branches et décisions** 🟡 | ADR 0009 (accepté) · ✅ graphe : versions par branche, merge de branche à 3 voies, divergence et rebase de change · reste : moteur (conflit → merge validé → rebase et replanification), budget du change, options explorées en branches, comparaison, boucles de décision (questions → analyses), merge de l'option retenue ; puis containers versionnés et releases |
+| **M9 — auto-observation** ✅ | ADR 0011 : journal d'exécution sur l'axe change (ticks, actions, appels LLM / outils, décisions, provenance des items), méthodologie projetée en éléments versionnés du domaine, agent `observer` (journal + traces OpenTelemetry → constats → propositions → revue → brouillon), spécialisation d'actions et sous-typage des types |
 | **M7 — agents** ✅ | agents (goap / utility / hybrid), actions script JS / Go avec DSL, sous-agents, sandbox par processus, IDE |
 
 ## 7. Questions ouvertes
