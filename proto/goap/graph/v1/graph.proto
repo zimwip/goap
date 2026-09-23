@@ -37,6 +37,10 @@ service GraphService {
   rpc MergeBranch(MergeBranchRequest) returns (MergeBranchResponse);
   rpc GetDivergences(GetDivergencesRequest) returns (GetDivergencesResponse);
   rpc RebaseChange(RebaseChangeRequest) returns (RebaseChangeResponse);
+
+  // Execution journal (ADR 0011)
+  rpc RecordExecutions(RecordExecutionsRequest) returns (RecordExecutionsResponse);
+  rpc ListExecutions(ListExecutionsRequest) returns (ListExecutionsResponse);
 }
 
 message NodeRef {
@@ -138,6 +142,8 @@ message ChangeItem {
   google.protobuf.Timestamp created_at = 11;
   // items replaced by this one (rebase, merge)
   repeated string supersedes = 12;
+  // journal record of the action execution that produced the item
+  string execution = 13;
 }
 
 message ChangeSet {
@@ -429,4 +435,74 @@ message RebaseChangeResponse {
   // replaced item id -> replacement id ("" when dropped)
   map<string, string> superseded = 2;
   repeated Divergence divergences = 3;
+}
+
+message ModelCall {
+  string provider = 1;
+  string model = 2;
+  int64 input_tokens = 3;
+  int64 output_tokens = 4;
+  int64 duration_ms = 5;
+  string error = 6;
+}
+
+message ToolUse {
+  string name = 1;
+  int64 duration_ms = 2;
+  string error = 3;
+}
+
+// ExecutionRecord is one entry of the execution journal of a change: a tick
+// (observe + plan), an action execution, a human decision, a process start / end.
+message ExecutionRecord {
+  string id = 1;
+  string change_id = 2;
+  string process_id = 3;
+  string parent_process_id = 4;
+  int32 seq = 5;
+  // process.started | tick | action | approval | process.ended
+  string kind = 6;
+  string methodology = 7;
+  string methodology_version = 8;
+  string agent = 9;
+  string planner = 10;
+  string goal = 11;
+  string status = 12;
+  int32 step = 13;
+  string action = 14;
+  string action_kind = 15;
+  string specialization = 16;
+  repeated string plan = 17;
+  map<string, bool> before = 18;
+  map<string, bool> after = 19;
+  optional bool effects_met = 20;
+  repeated string items = 21;
+  int64 input_tokens = 22;
+  int64 output_tokens = 23;
+  repeated ModelCall model_calls = 24;
+  repeated ToolUse tool_calls = 25;
+  string actor = 26;
+  string output = 27;
+  string error = 28;
+  string trace_id = 29;
+  string span_id = 30;
+  google.protobuf.Struct data = 31;
+  google.protobuf.Timestamp started_at = 32;
+  google.protobuf.Timestamp ended_at = 33;
+  int64 duration_ms = 34;
+}
+
+message RecordExecutionsRequest {
+  repeated ExecutionRecord records = 1;
+}
+
+message RecordExecutionsResponse {}
+
+message ListExecutionsRequest {
+  string change_id = 1;
+  repeated string process_ids = 2;
+}
+
+message ListExecutionsResponse {
+  repeated ExecutionRecord records = 1;
 }

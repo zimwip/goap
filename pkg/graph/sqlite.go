@@ -404,3 +404,46 @@ func (t *sqliteTx) PutItem(ctx context.Context, change domain.ChangeID, it domai
 		string(it.ID), string(change), string(it.Kind), string(payload), tid, tv, tsText(it.CreatedAt))
 	return sqliteErr(err, "change item")
 }
+
+func (t *sqliteTx) PutExecution(ctx context.Context, r domain.ExecutionRecord) error {
+	payload, err := json.Marshal(r)
+	if err != nil {
+		return err
+	}
+	_, err = t.tx.ExecContext(ctx, `INSERT INTO execution (id, change_id, process_id, seq, kind, action, started_at, payload) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		r.ID, string(r.ChangeID), r.ProcessID, r.Seq, r.Kind, r.Action, tsText(r.StartedAt), string(payload))
+	return sqliteErr(err, "execution")
+}
+
+func (t *sqliteTx) Executions(ctx context.Context, f domain.ExecutionFilter) ([]domain.ExecutionRecord, error) {
+	q := `SELECT payload FROM execution WHERE 1 = 1`
+	var args []any
+	if f.ChangeID != "" {
+		q += ` AND change_id = ?`
+		args = append(args, string(f.ChangeID))
+	}
+	if len(f.ProcessIDs) > 0 {
+		q += ` AND process_id IN (?` + strings.Repeat(", ?", len(f.ProcessIDs)-1) + `)`
+		for _, p := range f.ProcessIDs {
+			args = append(args, p)
+		}
+	}
+	rows, err := t.tx.QueryContext(ctx, q+` ORDER BY rowid`, args...)
+	if err != nil {
+		return nil, sqliteErr(err, "executions")
+	}
+	defer rows.Close()
+	var out []domain.ExecutionRecord
+	for rows.Next() {
+		var payload string
+		if err := rows.Scan(&payload); err != nil {
+			return nil, err
+		}
+		var r domain.ExecutionRecord
+		if err := json.Unmarshal([]byte(payload), &r); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}

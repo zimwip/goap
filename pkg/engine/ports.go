@@ -19,6 +19,9 @@ type GraphPort interface {
 	BaselineGraph(ctx context.Context, id domain.BaselineID) ([]domain.Node, []domain.Link, error)
 	Apply(ctx context.Context, id domain.ChangeID, baselineName string) (domain.Baseline, error)
 	Baselines(ctx context.Context) ([]domain.Baseline, error)
+	// Record / Journal write and read the execution journal of changes (ADR 0011).
+	Record(ctx context.Context, recs []domain.ExecutionRecord) error
+	Journal(ctx context.Context, f domain.ExecutionFilter) ([]domain.ExecutionRecord, error)
 }
 
 // MethodologyPort resolves methodologies (the registry): the latest

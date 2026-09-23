@@ -74,6 +74,10 @@ type Process struct {
 	Error     string          `json:"error,omitempty"`
 	CreatedAt time.Time       `json:"createdAt"`
 	UpdatedAt time.Time       `json:"updatedAt"`
+	// MethodologyVersion is the published version run by the process.
+	MethodologyVersion string `json:"methodologyVersion,omitempty"`
+	// JournalSeq numbers the execution journal records of the process.
+	JournalSeq int `json:"journalSeq,omitempty"`
 }
 
 // Task kinds.
@@ -154,10 +158,15 @@ type Step struct {
 	Logs       []LogLine       `json:"logs,omitempty"`
 	Children   []string        `json:"children,omitempty"`
 	Sandbox    string          `json:"sandbox,omitempty"`
-	Output     string          `json:"output,omitempty"`
-	Error      string          `json:"error,omitempty"`
-	StartedAt  time.Time       `json:"startedAt"`
-	EndedAt    time.Time       `json:"endedAt,omitempty"`
+	// Specialization is the action actually run for an abstract action.
+	Specialization string `json:"specialization,omitempty"`
+	// Execution is the journal record of the step; SpanID its OpenTelemetry span.
+	Execution string    `json:"execution,omitempty"`
+	SpanID    string    `json:"spanId,omitempty"`
+	Output    string    `json:"output,omitempty"`
+	Error     string    `json:"error,omitempty"`
+	StartedAt time.Time `json:"startedAt"`
+	EndedAt   time.Time `json:"endedAt,omitempty"`
 }
 
 // Pending reports whether the step has not ended yet (waiting for a human).

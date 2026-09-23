@@ -53,4 +53,9 @@ type Tx interface {
 	// PutChange inserts or updates the change header (items are ignored).
 	PutChange(ctx context.Context, c domain.ChangeSet) error
 	PutItem(ctx context.Context, change domain.ChangeID, it domain.ChangeItem) error
+
+	// PutExecution appends a record to the execution journal.
+	PutExecution(ctx context.Context, r domain.ExecutionRecord) error
+	// Executions returns the journal records matching f, in recording order.
+	Executions(ctx context.Context, f domain.ExecutionFilter) ([]domain.ExecutionRecord, error)
 }

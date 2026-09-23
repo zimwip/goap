@@ -196,6 +196,7 @@ func ItemToPB(it domain.ChangeItem) *graphv1.ChangeItem {
 	for _, d := range it.Supersedes {
 		out.Supersedes = append(out.Supersedes, string(d))
 	}
+	out.Execution = it.Execution
 	if p := it.Proposal; p != nil {
 		pp := &graphv1.Proposal{Op: string(p.Op)}
 		if p.Node != nil {
@@ -222,6 +223,7 @@ func ItemFromPB(it *graphv1.ChangeItem) domain.ChangeItem {
 	for _, d := range it.Supersedes {
 		out.Supersedes = append(out.Supersedes, domain.ItemID(d))
 	}
+	out.Execution = it.Execution
 	if p := it.Proposal; p != nil {
 		dp := &domain.Proposal{Op: domain.ProposalOp(p.Op)}
 		if p.Node != nil {

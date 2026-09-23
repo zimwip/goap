@@ -325,8 +325,11 @@ func (e *Engine) Submit(ctx context.Context, id string, items []ItemInput) (*Pro
 	if err != nil {
 		return nil, err
 	}
-	step := &p.Steps[p.Pending.Step]
-	ids, err := e.addItems(ctx, p, items, p.Pending.Action)
+	i := p.Pending.Step
+	step := &p.Steps[i]
+	rec := uuid.NewString()
+	submitted := e.clock()
+	ids, err := e.addItems(ctx, p, items, p.Pending.Action, rec)
 	if err != nil {
 		return nil, err
 	}
@@ -336,6 +339,10 @@ func (e *Engine) Submit(ctx context.Context, id string, items []ItemInput) (*Pro
 	}
 	p.Pending = nil
 	p.Status = StatusRunning
+	r := actionRecord(p, i, methodology.KindHuman, rec)
+	r.Actor, r.StartedAt = authz.From(ctx).Subject, submitted
+	r.Data = map[string]any{"submitted": len(ids)}
+	e.journal(ctx, p, r)
 	return p, e.save(ctx, p, "step")
 }
 
@@ -352,6 +359,11 @@ func (e *Engine) Run(ctx context.Context, id string) (*Process, error) {
 	}
 	ctx, end := e.tracer().StartProcess(ctx, p)
 	defer func() { end(p) }()
+	p.MethodologyVersion = m.Version
+	if p.JournalSeq == 0 {
+		e.journal(ctx, p, domain.ExecutionRecord{Kind: domain.ExecProcessStarted, StartedAt: p.CreatedAt,
+			Data: map[string]any{"intent": firstUserTurn(p), "trigger": p.Trigger, "title": p.Title}})
+	}
 	maxSteps := e.MaxSteps
 	if maxSteps == 0 {
 		maxSteps = 50
@@ -403,6 +415,8 @@ func (e *Engine) cycle(ctx context.Context, p *Process, m *methodology.Compiled)
 	if p.World.Satisfies(goal.Pre) {
 		p.Status = StatusCompleted
 		p.Plan = nil
+		e.journal(ctx, p, domain.ExecutionRecord{Kind: domain.ExecTick, Step: len(p.Steps), Before: maps.Clone(p.World),
+			Data: map[string]any{"goalSatisfied": true}})
 		return nil
 	}
 	// plan with the agent's admissible actions and planner
@@ -416,20 +430,31 @@ func (e *Engine) cycle(ctx context.Context, p *Process, m *methodology.Compiled)
 			actions = append(actions, a)
 		}
 	}
+	tickStart := e.clock()
 	plan, err := e.plan(ag.Planner, p.World, actions, goal.PlanningGoal(), m.Utilities(bb))
 	if errors.Is(err, goap.ErrNoPlan) {
 		p.Status = StatusStuck
 		p.Plan = nil
 		p.Error = fmt.Sprintf("no plan reaches goal %s from the current state", goal.Name)
+		e.journal(ctx, p, domain.ExecutionRecord{Kind: domain.ExecTick, Step: len(p.Steps), Before: maps.Clone(p.World), Error: p.Error,
+			StartedAt: tickStart, EndedAt: e.clock()})
 		return nil
 	}
 	if err != nil {
 		return err
 	}
+	prev := p.Plan
 	p.Plan = make([]string, len(plan.Actions))
 	for i, a := range plan.Actions {
 		p.Plan[i] = a.Name
 	}
+	tick := domain.ExecutionRecord{Kind: domain.ExecTick, Step: len(p.Steps), Before: maps.Clone(p.World), Plan: slices.Clone(p.Plan),
+		Action: p.Plan[0], StartedAt: tickStart, EndedAt: e.clock(),
+		Data: map[string]any{"replanned": replanned(prev, p.Plan), "candidates": len(actions)}}
+	if len(p.Unknown) > 0 {
+		tick.Data["unknown"] = maps.Clone(p.Unknown)
+	}
+	e.journal(ctx, p, tick)
 	// act
 	action, _ := m.Action(plan.Actions[0].Name)
 	step := Step{Index: len(p.Steps), Action: action.Name, Plan: p.Plan, Before: maps.Clone(p.World), StartedAt: e.clock()}
@@ -451,14 +476,24 @@ func (e *Engine) cycle(ctx context.Context, p *Process, m *methodology.Compiled)
 	return e.execute(ctx, p, m, bb, action, len(p.Steps)-1)
 }
 
-// execute runs an action for the step at index i and records its outcome.
+// execute runs an action for the step at index i, records its outcome and
+// journals it (the produced items carry the journal record id).
 func (e *Engine) execute(ctx context.Context, p *Process, m *methodology.Compiled, bb domain.Blackboard, action methodology.Action, i int) error {
+	id := uuid.NewString()
+	p.Steps[i].Execution = id
+	err := e.executeStep(ctx, p, m, bb, action, i)
+	e.journal(ctx, p, actionRecord(p, i, action.Kind, id))
+	return err
+}
+
+func (e *Engine) executeStep(ctx context.Context, p *Process, m *methodology.Compiled, bb domain.Blackboard, action methodology.Action, i int) error {
 	exec, ok := e.Executors[action.Kind]
 	if !ok {
 		return fmt.Errorf("no executor for action kind %q", action.Kind)
 	}
 	e.log().Info("executing action", "process", p.ID, "agent", p.Agent, "action", action.Name, "plan", p.Plan)
 	ctx, end := e.tracer().StartAction(ctx, p, action.Name, action.Kind)
+	p.Steps[i].SpanID = e.spanID(ctx)
 	host := e.newHost(p, action.Name)
 	res, err := exec.Execute(ctx, ActionContext{Process: p, Action: action, Blackboard: bb, Graph: e.Graph, Host: host})
 	step := &p.Steps[i]
@@ -499,7 +534,7 @@ func (e *Engine) execute(ctx context.Context, p *Process, m *methodology.Compile
 		p.Pending = &HumanTask{Kind: TaskInput, Action: action.Name, Description: action.Description, Instructions: action.Instructions, Step: i}
 		return nil
 	}
-	ids, err := e.addItems(ctx, p, res.Items, action.Name)
+	ids, err := e.addItems(ctx, p, res.Items, action.Name, step.Execution)
 	if err != nil {
 		step.Error = err.Error()
 		step.EndedAt = e.clock()
@@ -624,6 +659,8 @@ func (e *Engine) Approve(ctx context.Context, id string, approve bool, comment s
 	p.Pending = nil
 	p.Status = StatusRunning
 	p.Steps[i].ApprovedBy = approver.Subject
+	e.journal(ctx, p, domain.ExecutionRecord{Kind: domain.ExecApproval, Step: i, Action: action.Name, Actor: approver.Subject,
+		Data: map[string]any{"approved": approve, "comment": comment, "permission": action.Permission}})
 	if !approve {
 		p.Steps[i].Error = fmt.Sprintf("rejected by %s: %s", approver.Subject, comment)
 		p.Steps[i].EndedAt = e.clock()
@@ -691,7 +728,7 @@ func (e *Engine) observe(ctx context.Context, p *Process, m *methodology.Compile
 	return bb, nil
 }
 
-func (e *Engine) addItems(ctx context.Context, p *Process, in []ItemInput, producedBy string) ([]domain.ItemID, error) {
+func (e *Engine) addItems(ctx context.Context, p *Process, in []ItemInput, producedBy, execution string) ([]domain.ItemID, error) {
 	if len(in) == 0 {
 		return nil, nil
 	}
@@ -706,6 +743,9 @@ func (e *Engine) addItems(ctx context.Context, p *Process, in []ItemInput, produ
 	items, err := newResolver(nodes, bb.Change, uuid.NewString).resolve(in, producedBy)
 	if err != nil {
 		return nil, err
+	}
+	for k := range items {
+		items[k].Execution = execution
 	}
 	added, err := e.Graph.AddItems(ctx, p.ChangeID, items)
 	if err != nil {
@@ -743,6 +783,11 @@ func (e *Engine) save(ctx context.Context, p *Process, event string) error {
 	}
 	if p.TraceID == "" {
 		p.TraceID = e.tracer().TraceID(ctx)
+	}
+	if p.Status.Terminal() && event == string(p.Status) {
+		r := endRecord(p)
+		r.EndedAt = p.UpdatedAt
+		e.journal(ctx, p, r)
 	}
 	if err := e.Store.Put(ctx, p); err != nil {
 		return err
