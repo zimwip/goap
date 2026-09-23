@@ -1,12 +1,14 @@
 name: sdlc
-version: 0.1.0
+version: 0.2.0
 description: >
   Cycle de vie du développement logiciel (SDLC) sur le référentiel ALM :
   besoins → exigences → fonctions → composants → artefacts de build →
   applications → solutions, avec données, interfaces et flux. Du périmètre
   d'un changement à sa livraison : analyse d'impact, spécification et
-  traçabilité, conception, build (spécialisé par technologie), tests, note de
-  version, revue et application au référentiel. Version initiale, à affiner.
+  traçabilité, conception, build (spécialisé par technologie), tests, releases,
+  note de version, revue, déploiement de proche en proche sur les
+  environnements (dev → test → recette → production) et application au
+  référentiel. Version initiale, à affiner.
 
 domain:
   nodeTypes:
@@ -24,6 +26,9 @@ domain:
     - {name: Interface, description: Interface (API, fichier, événement) exposée par une application, properties: [title, protocol, version]}
     - {name: Flow, description: Flux de données entre applications au travers d'une interface, properties: [title, mode, frequency]}
     - {name: TestCase, description: Cas de test vérifiant une exigence, properties: [title, level, steps]}
+    - {name: Release, description: Version livrable d'une application (ensemble d'artefacts), properties: [title, version, status, notes]}
+    - {name: Environment, description: Environnement d'exécution (dev, test, recette, production), properties: [name, stage, order, url]}
+    - {name: Deployment, description: Déploiement d'une release sur un environnement, properties: [status, stage, date, checks]}
   linkTypes:
     - {name: satisfies, from: Requirement, to: Need}
     - {name: refines, from: Requirement, to: Requirement}
@@ -44,6 +49,11 @@ domain:
     - {name: through, from: Flow, to: Interface}
     - {name: carries, from: Flow, to: Data}
     - {name: verifies, from: TestCase, to: Requirement}
+    - {name: contains, from: Release, to: BuildArtifact}
+    - {name: releases, from: Release, to: Application}
+    - {name: promotes_to, from: Environment, to: Environment}
+    - {name: of_release, from: Deployment, to: Release}
+    - {name: in_environment, from: Deployment, to: Environment}
 
 conditions:
   # --- analyse
@@ -95,12 +105,25 @@ conditions:
       && proposals.filter(p, p.op == "create_node" && "Component" in p.node.types).all(p,
         artifacts.exists(a, a.type == "build" && a.data.component == p.node.key))
   # --- livraison
+  - name: release_planned
+    description: Les releases des applications concernées sont constituées (artefacts, version, chaîne d'environnements)
+    expr: artifacts.exists(a, a.type == "release_plan")
   - name: release_noted
     description: La note de version est rédigée
     expr: artifacts.exists(a, a.type == "release_note")
   - name: reviewed
-    description: Toutes les propositions ont reçu une décision
-    expr: size(proposals) > 0 && proposals.all(p, p.status != "proposed")
+    description: >
+      Toutes les propositions de contenu ont reçu une décision (les déploiements,
+      enregistrés après la revue, n'en ont pas besoin)
+    expr: >
+      proposals.exists(p, p.node == null || p.node.type != "Deployment")
+      && proposals.all(p, p.status != "proposed" || (p.node != null && p.node.type == "Deployment")
+        || (p.op == "add_link" && p.link.from.type == "Deployment"))
+  - name: rolled_out
+    description: Chaque release est déployée sur tous les environnements de la chaîne (ou il n'y a rien à déployer)
+    expr: >
+      artifacts.exists(p, p.type == "release_plan" && (size(p.data.releases) == 0
+        || size(artifacts.filter(w, w.type == "deployment_wave")) >= size(p.data.pipeline)))
   - name: applied
     description: Le changement est appliqué au référentiel ALM (nouvelle baseline)
     expr: change.status == "applied"
@@ -145,7 +168,8 @@ actions:
     params:
       maxDepth: 6
       linkTypes: [satisfies, refines, realizes, implements, depends_on, built_from, composed_of, deploys,
-                  includes, addresses, owned_by, exposed_by, exchanges, source, target, through, carries, verifies]
+                  includes, addresses, owned_by, exposed_by, exchanges, source, target, through, carries, verifies,
+                  contains, releases, of_release]
 
   # ======================= spécification
   - name: specify_requirements
@@ -438,11 +462,59 @@ actions:
     description: "Build générique (autres technologies) : archive et empreinte"
     code: *build
 
+  # ======================= releases et environnements
+  - name: plan_release
+    kind: script
+    language: javascript
+    description: >
+      Constituer une release par application qui déploie un nouvel artefact (version mineure suivante,
+      liens contains / releases) et figer la chaîne d'environnements (ordre promotes_to)
+    pre: {requirements_specified: true, build_complete: true, release_planned: false}
+    effects: {release_planned: true}
+    cost: 1
+    code: |
+      function bumpMinor(v) {
+        const p = String(v || "0.0").split(".");
+        while (p.length < 2) p.push("0");
+        p[1] = String((parseInt(p[1], 10) || 0) + 1);
+        return p.slice(0, 2).join(".");
+      }
+      function run(ctx) {
+        const props = ctx.proposals();
+        const artifacts = new Map(); // item ref -> key
+        for (const p of props) {
+          if (p.op === "create_node" && p.node && p.node.type === "BuildArtifact") artifacts.set("@" + p.id, p.node.key);
+        }
+        // applications recevant un nouvel artefact (liens deploys proposés par le build)
+        const byApp = new Map();
+        for (const l of props) {
+          if (l.op !== "add_link" || !l.link || l.link.type !== "deploys" || !artifacts.has(l.link.to)) continue;
+          if (!byApp.has(l.link.from)) byApp.set(l.link.from, []);
+          byApp.get(l.link.from).push(l.link.to);
+        }
+        const releases = [];
+        for (const [app, arts] of byApp) {
+          const node = ctx.node(app);
+          const v = bumpMinor(node.props.version);
+          const key = "REL-" + app + "-" + v;
+          const r = ctx.proposeNode("Release", key, { title: (node.props.title || app) + " " + v, version: v, status: "candidate" });
+          ctx.proposeLink(r, "releases", app);
+          for (const a of arts) ctx.proposeLink(r, "contains", a);
+          releases.push(key);
+        }
+        // chaîne d'environnements : ordre croissant (propriété order)
+        const pipeline = ctx.nodes("Environment")
+          .map(e => ({ key: e.key, name: e.props.name || e.key, stage: e.props.stage || "", order: Number(e.props.order || 0) }))
+          .sort((a, b) => a.order - b.order);
+        ctx.addArtifact("release_plan", { releases: releases, pipeline: pipeline });
+        return releases.length + " release(s), " + pipeline.length + " environnement(s)";
+      }
+
   # ======================= livraison
   - name: write_release_note
     kind: llm
     description: Rédiger la note de version
-    pre: {requirements_specified: true, tests_planned: true, design_checked: true, build_complete: true, release_noted: false}
+    pre: {requirements_specified: true, tests_planned: true, design_checked: true, build_complete: true, release_planned: true, release_noted: false}
     effects: {release_noted: true}
     cost: 1
     model: fast
@@ -454,14 +526,15 @@ actions:
       Artefacts :
       {{ range .Artifacts }}- {{ .Type }} {{ json .Data }}
       {{ end }}
-      Rédige la note de version (exigences, composants, artefacts, applications
-      concernées, tests) : {"kind":"artifact","type":"release_note","data":{"markdown":"..."}}
+      Rédige la note de version (exigences, composants, artefacts, releases,
+      applications concernées, tests, chaîne de déploiement) :
+      {"kind":"artifact","type":"release_note","data":{"markdown":"..."}}
 
   - name: assemble_release_note
     kind: script
     language: javascript
     description: Assembler la note de version à partir du change (repli déterministe)
-    pre: {requirements_specified: true, tests_planned: true, design_checked: true, build_complete: true, release_noted: false}
+    pre: {requirements_specified: true, tests_planned: true, design_checked: true, build_complete: true, release_planned: true, release_noted: false}
     effects: {release_noted: true}
     cost: 3
     code: |
@@ -473,6 +546,9 @@ actions:
         section("Conception", props.filter(p => ["Function", "Component", "Interface", "Flow", "Data"].includes(p.node.type)).map(p => p.op + " " + p.node.type + " " + p.node.key));
         section("Artefacts de build", ctx.items("artifact").filter(a => a.type === "build").map(a => a.data.artifact + " (" + a.data.toolchain + ")"));
         section("Tests", props.filter(p => p.node.type === "TestCase").map(p => p.node.key));
+        section("Releases", props.filter(p => p.node.type === "Release").map(p => p.node.key + " " + (p.node.props.title || "")));
+        const plan = ctx.items("artifact").filter(a => a.type === "release_plan").pop();
+        if (plan) section("Déploiement", [plan.data.pipeline.map(e => e.name + " (" + e.stage + ")").join(" → ")]);
         section("Applications concernées", ctx.impacts().filter(i => i.target && i.target.type === "Application").map(i => i.target.key + " " + (i.target.props.title || "")));
         ctx.addArtifact("release_note", { markdown: lines.join("\n") });
         return "note de version assemblée";
@@ -486,11 +562,78 @@ actions:
     cost: 2
     instructions: Acceptez ou rejetez chaque proposition au vu de la note de version et du contrôle de conception.
 
+  # ======================= déploiement (abstrait, incrémental, spécialisé par étage d'environnement)
+  - name: deploy
+    kind: abstract
+    description: >
+      Déployer les releases sur l'environnement suivant de la chaîne. Chaque exécution est une vague
+      (un environnement) ; la spécialisation dépend de l'étage : automatique en dev / test, contrôles de
+      recette en staging, fenêtre de changement et approbation d'un release manager en production.
+    pre: {reviewed: true, rolled_out: false}
+    effects: {rolled_out: true}
+    cost: 2
+    incremental: true
+
+  - name: deploy_auto
+    kind: script
+    language: javascript
+    specializes: deploy
+    description: "Déploiement automatique (dev, test) : tests unitaires et smoke tests"
+    params: {checks: [tests unitaires, smoke tests]}
+    code: &deploy |
+      function run(ctx) {
+        const plan = ctx.items("artifact").filter(a => a.type === "release_plan").pop();
+        const waves = ctx.items("artifact").filter(a => a.type === "deployment_wave");
+        const env = plan.data.pipeline[waves.length];
+        if (!env) throw new Error("toutes les vagues sont déployées");
+        const checks = ctx.param("checks") || [];
+        const tests = ctx.proposals().filter(p => p.op === "create_node" && p.node && p.node.type === "TestCase");
+        const campaign = {};
+        for (const t of tests) campaign[t.node.props.level || "acceptance"] = (campaign[t.node.props.level || "acceptance"] || 0) + 1;
+        const releaseRef = key => {
+          const p = ctx.proposals().find(p => p.op === "create_node" && p.node && p.node.key === key);
+          return p ? "@" + p.id : key;
+        };
+        for (const r of plan.data.releases) {
+          const d = ctx.proposeNode("Deployment", "DEP-" + r + "-" + env.key, { status: "succeeded", stage: env.stage, checks: checks });
+          ctx.proposeLink(d, "of_release", releaseRef(r));
+          ctx.proposeLink(d, "in_environment", env.key);
+        }
+        ctx.addArtifact("deployment_wave", { environment: env.key, name: env.name, stage: env.stage, releases: plan.data.releases,
+          checks: checks, tests: campaign });
+        return plan.data.releases.length + " release(s) déployée(s) sur " + env.name;
+      }
+
+  - name: deploy_staging
+    kind: script
+    language: javascript
+    specializes: deploy
+    priority: 10
+    description: "Déploiement en recette : non-régression, performance, sécurité (campagne des cas de test)"
+    when: >
+      artifacts.exists(p, p.type == "release_plan"
+        && p.data.pipeline[size(artifacts.filter(w, w.type == "deployment_wave"))].stage == "staging")
+    params: {checks: [non-régression, tests de performance, tests de sécurité (DAST), recette métier]}
+    code: *deploy
+
+  - name: deploy_production
+    kind: script
+    language: javascript
+    specializes: deploy
+    priority: 20
+    permission: release:deploy
+    description: "Mise en production : fenêtre de changement, plan de retour arrière, approbation d'un release manager"
+    when: >
+      artifacts.exists(p, p.type == "release_plan"
+        && p.data.pipeline[size(artifacts.filter(w, w.type == "deployment_wave"))].stage == "prod")
+    params: {checks: [fenêtre de changement, plan de retour arrière, surveillance post-déploiement]}
+    code: *deploy
+
   - name: apply_change
     kind: builtin
     builtin: graph.apply
-    description: Appliquer le changement au référentiel ALM (nouvelle baseline)
-    pre: {reviewed: true, applied: false}
+    description: Appliquer le changement au référentiel ALM (nouvelle baseline, releases et déploiements compris)
+    pre: {reviewed: true, rolled_out: true, applied: false}
     effects: {applied: true}
     cost: 1
     permission: change:apply
@@ -516,6 +659,11 @@ goals:
     examples: ["construire", "build", "livrer les artefacts"]
     pre: {components_in_scope: true, build_complete: true}
     value: 7
+  - name: release
+    description: Constituer les releases et les déployer sur tous les environnements
+    examples: ["mettre en production", "déployer la release", "livrer en recette"]
+    pre: {release_planned: true, rolled_out: true}
+    value: 8
   - name: deliver
     description: Livrer un changement de bout en bout, de l'exigence au référentiel mis à jour
     examples: ["livrer une évolution", "développer une nouvelle fonctionnalité", "réaliser le changement"]
@@ -544,6 +692,11 @@ agents:
     actions: [identify_scope, select_scope, propagate_impacts, specify_requirements, write_requirements,
               trace_requirements, trace_manually, allocate_functions, design_solution, write_design, check_design, build]
     goals: [build_components]
+  - name: release_manager
+    description: Gestionnaire de release — releases, note de version, revue, déploiement de proche en proche
+    examples: ["mettre en production", "déployer la release sur les environnements"]
+    planner: goap
+    goals: [release]
   - name: delivery
     description: Livraison de bout en bout — de l'intention au référentiel ALM mis à jour
     examples: ["livrer une évolution", "développer une fonctionnalité de bout en bout"]

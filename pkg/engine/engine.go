@@ -459,8 +459,15 @@ func (e *Engine) cycle(ctx context.Context, p *Process, m *methodology.Compiled)
 	// act
 	action, _ := m.Action(plan.Actions[0].Name)
 	step := Step{Index: len(p.Steps), Action: action.Name, Plan: p.Plan, Before: maps.Clone(p.World), StartedAt: e.clock()}
-	if action.Permission != "" {
-		ok, err := e.allowed(ctx, p, p.Initiator, action.Permission)
+	// the permission is the one of the implementation that will run (a
+	// specialization may require more, e.g. a production deployment)
+	permission := action.Permission
+	if impl, spec, err := e.specialize(ctx, m, action, bb); err == nil && spec != "" {
+		permission = impl.Permission
+		step.Specialization = spec
+	}
+	if permission != "" {
+		ok, err := e.allowed(ctx, p, p.Initiator, permission)
 		if err != nil {
 			return err
 		}
@@ -468,7 +475,7 @@ func (e *Engine) cycle(ctx context.Context, p *Process, m *methodology.Compiled)
 			// the initiator may not run this action: wait for an authorized approver
 			p.Steps = append(p.Steps, step)
 			p.Status = StatusWaiting
-			p.Pending = &HumanTask{Kind: TaskApproval, Permission: action.Permission, Action: action.Name,
+			p.Pending = &HumanTask{Kind: TaskApproval, Permission: permission, Action: action.Name,
 				Description: action.Description, Instructions: action.Instructions, Step: step.Index}
 			return nil
 		}
@@ -710,11 +717,12 @@ func (e *Engine) Approve(ctx context.Context, id string, approve bool, comment s
 	}
 	i := p.Pending.Step
 	action, _ := m.Action(p.Pending.Action)
+	permission := p.Pending.Permission
 	p.Pending = nil
 	p.Status = StatusRunning
 	p.Steps[i].ApprovedBy = approver.Subject
 	e.journal(ctx, p, domain.ExecutionRecord{Kind: domain.ExecApproval, Step: i, Action: action.Name, Actor: approver.Subject,
-		Data: map[string]any{"approved": approve, "comment": comment, "permission": action.Permission}})
+		Data: map[string]any{"approved": approve, "comment": comment, "permission": permission}})
 	if !approve {
 		p.Steps[i].Error = fmt.Sprintf("rejected by %s: %s", approver.Subject, comment)
 		p.Steps[i].EndedAt = e.clock()

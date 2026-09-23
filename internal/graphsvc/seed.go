@@ -51,6 +51,13 @@ func SeedDemo(ctx context.Context, g *graph.Graph) (bool, error) {
 		{Key: "ITF-3", Type: "Interface", Properties: map[string]any{"title": "Fichier de règlement", "protocol": "SFTP", "version": "v1"}},
 		{Key: "FLW-1", Type: "Flow", Properties: map[string]any{"title": "Confirmation de paiement", "mode": "asynchrone", "frequency": "temps réel"}},
 		{Key: "FLW-2", Type: "Flow", Properties: map[string]any{"title": "Règlement quotidien", "mode": "batch", "frequency": "quotidien"}},
+		// environments and releases
+		{Key: "ENV-DEV", Type: "Environment", Properties: map[string]any{"name": "Développement", "stage": "dev", "order": 1}},
+		{Key: "ENV-TEST", Type: "Environment", Properties: map[string]any{"name": "Intégration", "stage": "test", "order": 2}},
+		{Key: "ENV-STG", Type: "Environment", Properties: map[string]any{"name": "Recette", "stage": "staging", "order": 3}},
+		{Key: "ENV-PRD", Type: "Environment", Properties: map[string]any{"name": "Production", "stage": "prod", "order": 4}},
+		{Key: "REL-APP-1-5.2", Type: "Release", Properties: map[string]any{"title": "Checkout 5.2", "version": "5.2", "status": "deployed"}},
+		{Key: "DEP-REL-APP-1-5.2-ENV-PRD", Type: "Deployment", Properties: map[string]any{"status": "succeeded", "stage": "prod"}},
 	}
 	refs := map[string]domain.NodeRef{}
 	for _, n := range nodes {
@@ -81,6 +88,9 @@ func SeedDemo(ctx context.Context, g *graph.Graph) (bool, error) {
 		{"ITF-3", "exposed_by", "APP-3"}, {"ITF-3", "exchanges", "DAT-2"},
 		{"FLW-1", "source", "APP-1"}, {"FLW-1", "target", "APP-2"}, {"FLW-1", "through", "ITF-2"}, {"FLW-1", "carries", "DAT-3"},
 		{"FLW-2", "source", "APP-1"}, {"FLW-2", "target", "APP-3"}, {"FLW-2", "through", "ITF-3"}, {"FLW-2", "carries", "DAT-2"},
+		{"ENV-DEV", "promotes_to", "ENV-TEST"}, {"ENV-TEST", "promotes_to", "ENV-STG"}, {"ENV-STG", "promotes_to", "ENV-PRD"},
+		{"REL-APP-1-5.2", "releases", "APP-1"}, {"REL-APP-1-5.2", "contains", "ART-1"}, {"REL-APP-1-5.2", "contains", "ART-4"},
+		{"DEP-REL-APP-1-5.2-ENV-PRD", "of_release", "REL-APP-1-5.2"}, {"DEP-REL-APP-1-5.2-ENV-PRD", "in_environment", "ENV-PRD"},
 	}
 	for _, l := range links {
 		if _, err := g.Link(ctx, l[1], refs[l[0]], refs[l[2]], nil); err != nil {

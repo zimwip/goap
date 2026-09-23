@@ -28,7 +28,8 @@ ANTHROPIC_API_KEY=... make up # sans clé : fournisseur LLM « fake »
 
 Méthodologies fournies (`methodologies/`, importées au démarrage) : `impact-analysis`, `test-design`,
 `sdlc` (cycle de développement sur le domaine ALM : besoin → exigence → fonction → composant → artefact de
-build → application → solution, données, interfaces, flux) et `methodology-improvement` (auto-observation).
+build → application → solution, données, interfaces, flux ; releases et déploiement dev → test → recette →
+production) et `methodology-improvement` (auto-observation).
 
 Sans clé API, le fournisseur `fake` renvoie des réponses vides : les actions LLM échouent à produire
 leurs effets, sont désactivées, et le planificateur se replie sur les actions humaines — pratique pour
