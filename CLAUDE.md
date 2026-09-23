@@ -12,4 +12,5 @@
 - Methodologies live in the registry database (structured); YAML is import/export only.
 - Agents (goap/utility/hybrid planners) and script actions (JS via goja, Go via yaegi) use the DSL in `pkg/dsl` (docs/dsl.md); scripts run in sandboxes (`internal/sandbox`, `GOAP_SANDBOX`).
 - Telemetry: `internal/telemetry` (OpenTelemetry); keep span / attribute names stable (docs/architecture.md §3.7).
+- Execution journal (ADR 0011): the engine records ticks / actions / approvals on the change (`domain.ExecutionRecord`); items carry `execution`. Published methodologies are projected onto the graph (`pkg/metamodel`, keys `M:<methodology>/<type>/<name>`); the observer (`methodologies/methodology-improvement.yaml`, `pkg/observe`) turns runs into methodology drafts.
 - `web/src/lib/help/dsl.md` is a copy of `docs/dsl.md` (the web dev container only mounts `web/`); `make lint` checks they are identical.
