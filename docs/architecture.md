@@ -269,6 +269,7 @@ Politiques par défaut (créées si la table est vide) :
 | `hasAnyRole(r.sub, "contributor", "methodologist", "approver") && r.obj.Org == r.sub.Org` | `process` | `*` |
 | `hasRole(r.sub, "methodologist") && r.obj.Org == r.sub.Org` | `methodology` | `*` |
 | `hasRole(r.sub, "approver") && r.sub.Org == r.obj.Org && r.sub.Subject != r.obj.Owner` | `change` | `apply` |
+| `hasRole(r.sub, "release_manager") && r.sub.Org == r.obj.Org && r.sub.Subject != r.obj.Owner` | `release` | `deploy` |
 
 - Les politiques sont stockées dans la base du service **iam** (table `casbin_rule`) et administrées via
   `IamService.ListPolicies / AddPolicy / RemovePolicy` (ressource `policy`) et l'écran « Accès » du frontend.
@@ -602,7 +603,7 @@ ou un LLM). Champs de spécialisation d'une action : `specializes`, `when`, `pri
 sous-typage d'un type de nœud : `extends`. Une action `incremental: true` atteint ses effets en plusieurs
 exécutions : une exécution qui produit des items sans les atteindre est un **progrès**, pas un échec.
 
-### 4.1 Méthodologie SDLC sur le domaine ALM (`methodologies/sdlc.yaml`, version initiale 0.1.0)
+### 4.1 Méthodologie SDLC sur le domaine ALM (`methodologies/sdlc.yaml`, version 0.2.0)
 
 Domaine ALM (données de démonstration : `internal/graphsvc/seed.go`) :
 
@@ -613,6 +614,9 @@ Need ◄─satisfies─ Requirement ◄─realizes─ Function ◄─implements�
                                         ▲  ▲                              Data ─owned_by─► Application
                    Interface ─exposed_by┘  └─source / target─ Flow ─through─► Interface ; Flow / Interface ─carries / exchanges─► Data
 TestCase ─verifies─► Requirement
+Release ─releases─► Application ; Release ─contains─► BuildArtifact
+Deployment ─of_release─► Release ; Deployment ─in_environment─► Environment ; Environment ─promotes_to─► Environment
+                                   (dev → test → staging → prod, propriété order)
 ```
 
 Cycle (buts, du plus partiel au plus complet) :
@@ -623,9 +627,13 @@ Cycle (buts, du plus partiel au plus complet) :
 | `specify` | exigences révisées / créées (LLM, repli humain) → traçabilité vers les besoins (script) → un cas de test par exigence (script, niveau selon le sous-type) |
 | `design` | allocation des exigences aux fonctions (script) → conception composants / interfaces / flux / données (LLM, repli humain) → contrôle de cohérence (script) |
 | `build_components` | `build` **abstraite et incrémentale**, spécialisée par technologie : `build_java` (Maven, JDK 21), `build_c` (gcc/make, cppcheck), `build_shell` (shellcheck, bats), `build_generic` ; chaque exécution construit les composants d'une technologie, crée les `BuildArtifact` et les liens `built_from` / `deploys` |
-| `deliver` | note de version (LLM, repli script) → revue humaine → `graph.apply` (permission `change:apply`) |
+| `release` | une **release** par application recevant un nouvel artefact (version mineure suivante, liens `releases` / `contains`) et chaîne d'environnements figée (`release_plan`) → note de version → revue → `deploy` **abstraite et incrémentale** : une vague par environnement, spécialisée par étage — `deploy_auto` (dev, test : tests unitaires, smoke tests), `deploy_staging` (non-régression, performance, sécurité, campagne des cas de test), `deploy_production` (fenêtre de changement, retour arrière ; permission `release:deploy` : un release manager, jamais sur son propre change) ; chaque vague crée les nœuds `Deployment` |
+| `deliver` | tout le cycle, puis `graph.apply` (permission `change:apply`) : le référentiel reçoit exigences, conception, artefacts, releases et déploiements |
 
-Agents : `analyst` (goap), `architect` (hybrid), `builder` (goap), `delivery` (goap, tout le cycle). Les
+Agents : `analyst` (goap), `architect` (hybrid), `builder` (goap), `release_manager` (goap), `delivery`
+(goap, tout le cycle). La revue porte sur le contenu ; les déploiements, enregistrés après elle, n'en
+requièrent pas. La permission d'une spécialisation (ex. `deploy_production`) est vérifiée avant son
+exécution : sans elle, le processus attend l'approbation d'une personne habilitée. Les
 conditions « chaque élément … » étant vraies sur un ensemble vide, les actions de conception, de build et
 de livraison exigent aussi des exigences spécifiées pour ancrer le cycle. L'agent d'auto-observation
 s'applique à ses exécutions comme à toute autre méthodologie.
@@ -674,7 +682,7 @@ docs/                        architecture, ADR
 | **M6 — K8s** | charts Helm, HPA engine · ✅ observabilité OpenTelemetry, manifestes sandboxes |
 | **M8 — branches et décisions** 🟡 | ADR 0009 (accepté) · ✅ graphe : versions par branche, merge de branche à 3 voies, divergence et rebase de change · reste : moteur (conflit → merge validé → rebase et replanification), budget du change, options explorées en branches, comparaison, boucles de décision (questions → analyses), merge de l'option retenue ; puis containers versionnés et releases |
 | **M9 — auto-observation** ✅ | ADR 0011 : journal d'exécution sur l'axe change (ticks, actions, appels LLM / outils, décisions, provenance des items), méthodologie projetée en éléments versionnés du domaine, agent `observer` (journal + traces OpenTelemetry → constats → propositions → revue → brouillon), spécialisation d'actions et sous-typage des types |
-| **M10 — SDLC** 🟡 | méthodologie `sdlc` 0.1.0 sur le domaine ALM (besoin → exigence → fonction → composant → artefact → application → solution, données, interfaces, flux), build spécialisé par technologie, actions incrémentales · à affiner : releases, environnements, qualité (couverture, sécurité), outils MCP (dépôts, CI, registre d'artefacts) |
+| **M10 — SDLC** 🟡 | méthodologie `sdlc` 0.2.0 sur le domaine ALM (besoin → exigence → fonction → composant → artefact → application → solution, données, interfaces, flux), build spécialisé par technologie, releases et déploiement de proche en proche (dev → test → recette → production, approbation release manager), actions incrémentales · à affiner : qualité (couverture, sécurité), retour arrière, gel / fenêtres de changement, outils MCP (dépôts, CI, registre d'artefacts, déploiement) |
 | **M7 — agents** ✅ | agents (goap / utility / hybrid), actions script JS / Go avec DSL, sous-agents, sandbox par processus, IDE |
 
 ## 7. Questions ouvertes

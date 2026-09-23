@@ -55,6 +55,8 @@ var DefaultPolicies = []Policy{
 	{Rule: `hasRole(r.sub, "methodologist") && r.obj.Org == r.sub.Org`, Resource: "trigger", Action: "fire", Effect: "allow"},
 	// four-eyes principle: an approver applies changes of its organization, never its own
 	{Rule: `hasRole(r.sub, "approver") && r.sub.Org == r.obj.Org && r.sub.Subject != r.obj.Owner`, Resource: "change", Action: "apply", Effect: "allow"},
+	// production deployments: a release manager of the organization, never on its own change
+	{Rule: `hasRole(r.sub, "release_manager") && r.sub.Org == r.obj.Org && r.sub.Subject != r.obj.Owner`, Resource: "release", Action: "deploy", Effect: "allow"},
 }
 
 // Casbin is an Authorizer backed by a Casbin enforcer.

@@ -34,7 +34,7 @@ func sdlcModel(t *testing.T) llm.Client {
 			out = `{"items":[{"ref":"c1","kind":"proposal","proposal":{"op":"create_node","node":{"key":"CMP-10","type":"Component","props":{"title":"installments-engine","technology":"java","version":"0.0.0"}}}},
 			{"kind":"proposal","proposal":{"op":"add_link","link":{"type":"implements","from":"#c1","to":"FCT-1"}}},
 			{"kind":"artifact","type":"design","data":{"summary":"moteur d'échéancier dédié","decisions":["nouveau composant Java"]}}]}`
-		case strings.Contains(p, "note de version (exigences"):
+		case strings.Contains(p, "Rédige la note de version"):
 			out = `{"items":[{"kind":"artifact","type":"release_note","data":{"markdown":"# Paiement en 3 fois"}}]}`
 		default:
 			t.Errorf("unexpected prompt:\n%s", p)
@@ -44,7 +44,15 @@ func sdlcModel(t *testing.T) llm.Client {
 }
 
 func TestSDLCDelivery(t *testing.T) {
-	ctx := authz.With(context.Background(), authz.Principal{Subject: "dev", Org: "acme", Roles: []string{"admin"}})
+	// an ordinary contributor delivers; a release manager approves the production
+	// deployment and an approver applies the change (four-eyes)
+	ctx := authz.With(context.Background(), authz.Principal{Subject: "dev", Org: "acme", Roles: []string{"contributor"}})
+	rm := authz.With(context.Background(), authz.Principal{Subject: "rm", Org: "acme", Roles: []string{"release_manager"}})
+	approver := authz.With(context.Background(), authz.Principal{Subject: "ap", Org: "acme", Roles: []string{"approver"}})
+	authorizer, err := authz.NewCasbin(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
 	data, err := os.ReadFile("../../methodologies/sdlc.yaml")
 	if err != nil {
 		t.Fatal(err)
@@ -73,6 +81,7 @@ func TestSDLCDelivery(t *testing.T) {
 		},
 		Intent: intent.Resolver{Ranker: intent.Lexical{}},
 		Store:  engine.NewMemoryStore(),
+		Authz:  authorizer,
 	}
 	p, err := e.Start(ctx, engine.StartRequest{Methodology: "sdlc", Agent: "delivery", Goal: "deliver", BaselineID: bs[0].ID,
 		Title: "Paiement en 3 fois", Intent: "Permettre le paiement en 3 fois sans frais"})
@@ -120,8 +129,34 @@ func TestSDLCDelivery(t *testing.T) {
 	if p, err = e.Submit(ctx, p.ID, decisions); err != nil {
 		t.Fatal(err)
 	}
+	// dev, test, staging are deployed; production waits for a release manager
+	if p, err = e.Run(ctx, p.ID); err != nil || p.Status != engine.StatusWaiting || p.Pending.Permission != "release:deploy" {
+		t.Fatalf("production must wait for a release manager: %v %s %+v", err, p.Status, p.Pending)
+	}
+	if _, err := e.Approve(approver, p.ID, true, ""); err == nil {
+		t.Fatal("an approver is not a release manager")
+	}
+	if p, err = e.Approve(rm, p.ID, true, "fenêtre du jeudi"); err != nil {
+		t.Fatal(err)
+	}
+	// the change itself is applied by an approver (four-eyes)
+	if p, err = e.Run(ctx, p.ID); err != nil || p.Status != engine.StatusWaiting || p.Pending.Permission != "change:apply" {
+		t.Fatalf("apply must wait for an approver: %v %s %+v", err, p.Status, p.Pending)
+	}
+	if p, err = e.Approve(approver, p.ID, true, ""); err != nil {
+		t.Fatal(err)
+	}
 	if p, err = e.Run(ctx, p.ID); err != nil || p.Status != engine.StatusCompleted {
 		t.Fatalf("delivery: %v %s %s", err, p.Status, p.Error)
+	}
+	var deploys []string
+	for _, s := range p.Steps {
+		if s.Action == "deploy" {
+			deploys = append(deploys, s.Specialization)
+		}
+	}
+	if !slices.Equal(deploys, []string{"deploy_auto", "deploy_auto", "deploy_staging", "deploy_production"}) {
+		t.Fatalf("deployment waves: %v", deploys)
 	}
 	c, _ = g.Change(ctx, p.ChangeID)
 	nodes, links, err := g.BaselineGraph(ctx, c.ResultBaselineID)
@@ -129,20 +164,29 @@ func TestSDLCDelivery(t *testing.T) {
 		t.Fatal(err)
 	}
 	byKey := map[string]domain.Node{}
+	types := map[string]int{}
 	for _, n := range nodes {
 		byKey[n.Key] = n
+		types[n.Type]++
+	}
+	// releases of APP-1 (CMP-1, CMP-4) and APP-2 (CMP-2), each on 4 environments (+1 seeded deployment)
+	if types["Release"] != 3 || types["Deployment"] != 9 {
+		t.Fatalf("releases / deployments: %v", types)
 	}
 	art := byKey["ART-CMP-10-0.0.1"]
 	if art.Properties["coordinates"] != "com.acme:installments-engine:0.0.1" {
 		t.Fatalf("java artifact: %+v", art)
 	}
-	var realized, deployed bool
+	rel := byKey["REL-APP-1-5.3"]
+	var realized, deployed, contains, inProd bool
 	for _, l := range links {
 		from, to := l.From, l.To
 		realized = realized || (l.Type == "realizes" && from.ID == byKey["FCT-1"].ID && to.ID == byKey["REQ-10"].ID)
 		deployed = deployed || (l.Type == "deploys" && from.ID == byKey["APP-1"].ID && to.ID == byKey["ART-CMP-1-1.4.3"].ID)
+		contains = contains || (l.Type == "contains" && from.ID == rel.ID && to.ID == byKey["ART-CMP-4-3.0.2"].ID)
+		inProd = inProd || (l.Type == "in_environment" && from.ID == byKey["DEP-REL-APP-1-5.3-ENV-PRD"].ID && to.ID == byKey["ENV-PRD"].ID)
 	}
-	if !realized || !deployed {
-		t.Fatalf("traceability: realized=%v deployed=%v", realized, deployed)
+	if !realized || !deployed || !contains || !inProd {
+		t.Fatalf("traceability: realized=%v deployed=%v contains=%v inProd=%v", realized, deployed, contains, inProd)
 	}
 }
