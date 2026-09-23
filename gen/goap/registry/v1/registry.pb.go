@@ -915,17 +915,19 @@ type Methodology struct {
 	Version     string                 `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
 	Description string                 `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
 	// draft | published | archived (read only)
-	Status        string                 `protobuf:"bytes,4,opt,name=status,proto3" json:"status,omitempty"`
-	NodeTypes     []*NodeType            `protobuf:"bytes,5,rep,name=node_types,json=nodeTypes,proto3" json:"node_types,omitempty"`
-	LinkTypes     []*LinkType            `protobuf:"bytes,6,rep,name=link_types,json=linkTypes,proto3" json:"link_types,omitempty"`
-	Conditions    []*Condition           `protobuf:"bytes,7,rep,name=conditions,proto3" json:"conditions,omitempty"`
-	Actions       []*Action              `protobuf:"bytes,8,rep,name=actions,proto3" json:"actions,omitempty"`
-	Goals         []*Goal                `protobuf:"bytes,9,rep,name=goals,proto3" json:"goals,omitempty"`
-	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
-	PublishedAt   *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=published_at,json=publishedAt,proto3" json:"published_at,omitempty"`
-	UpdatedBy     string                 `protobuf:"bytes,13,opt,name=updated_by,json=updatedBy,proto3" json:"updated_by,omitempty"`
-	Agents        []*Agent               `protobuf:"bytes,14,rep,name=agents,proto3" json:"agents,omitempty"`
+	Status      string                 `protobuf:"bytes,4,opt,name=status,proto3" json:"status,omitempty"`
+	NodeTypes   []*NodeType            `protobuf:"bytes,5,rep,name=node_types,json=nodeTypes,proto3" json:"node_types,omitempty"`
+	LinkTypes   []*LinkType            `protobuf:"bytes,6,rep,name=link_types,json=linkTypes,proto3" json:"link_types,omitempty"`
+	Conditions  []*Condition           `protobuf:"bytes,7,rep,name=conditions,proto3" json:"conditions,omitempty"`
+	Actions     []*Action              `protobuf:"bytes,8,rep,name=actions,proto3" json:"actions,omitempty"`
+	Goals       []*Goal                `protobuf:"bytes,9,rep,name=goals,proto3" json:"goals,omitempty"`
+	CreatedAt   *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt   *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	PublishedAt *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=published_at,json=publishedAt,proto3" json:"published_at,omitempty"`
+	UpdatedBy   string                 `protobuf:"bytes,13,opt,name=updated_by,json=updatedBy,proto3" json:"updated_by,omitempty"`
+	Agents      []*Agent               `protobuf:"bytes,14,rep,name=agents,proto3" json:"agents,omitempty"`
+	// shared domain "<name>[@<version>]" used instead of node_types / link_types
+	DomainRef     string `protobuf:"bytes,15,opt,name=domain_ref,json=domainRef,proto3" json:"domain_ref,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1056,6 +1058,13 @@ func (x *Methodology) GetAgents() []*Agent {
 		return x.Agents
 	}
 	return nil
+}
+
+func (x *Methodology) GetDomainRef() string {
+	if x != nil {
+		return x.DomainRef
+	}
+	return ""
 }
 
 type GoalSummary struct {
@@ -1413,9 +1422,12 @@ func (x *ListMethodologiesResponse) GetMethodologies() []*MethodologySummary {
 }
 
 type GetMethodologyRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Version       string                 `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Name    string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Version string                 `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
+	// fill node_types / link_types from the referenced domain (engine use);
+	// editors leave it unset to get the definition as stored
+	ResolveDomain bool `protobuf:"varint,3,opt,name=resolve_domain,json=resolveDomain,proto3" json:"resolve_domain,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1462,6 +1474,13 @@ func (x *GetMethodologyRequest) GetVersion() string {
 		return x.Version
 	}
 	return ""
+}
+
+func (x *GetMethodologyRequest) GetResolveDomain() bool {
+	if x != nil {
+		return x.ResolveDomain
+	}
+	return false
 }
 
 type GetMethodologyResponse struct {
@@ -2189,6 +2208,1246 @@ func (x *ExportMethodologyResponse) GetFilename() string {
 	return ""
 }
 
+// Domain is the shared object part of the model, versioned on its own.
+type Domain struct {
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Name        string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Version     string                 `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
+	Description string                 `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
+	// draft | published | archived (read only)
+	Status        string                 `protobuf:"bytes,4,opt,name=status,proto3" json:"status,omitempty"`
+	NodeTypes     []*NodeType            `protobuf:"bytes,5,rep,name=node_types,json=nodeTypes,proto3" json:"node_types,omitempty"`
+	LinkTypes     []*LinkType            `protobuf:"bytes,6,rep,name=link_types,json=linkTypes,proto3" json:"link_types,omitempty"`
+	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	PublishedAt   *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=published_at,json=publishedAt,proto3" json:"published_at,omitempty"`
+	UpdatedBy     string                 `protobuf:"bytes,10,opt,name=updated_by,json=updatedBy,proto3" json:"updated_by,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Domain) Reset() {
+	*x = Domain{}
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[33]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Domain) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Domain) ProtoMessage() {}
+
+func (x *Domain) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[33]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Domain.ProtoReflect.Descriptor instead.
+func (*Domain) Descriptor() ([]byte, []int) {
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{33}
+}
+
+func (x *Domain) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *Domain) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
+}
+
+func (x *Domain) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *Domain) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
+func (x *Domain) GetNodeTypes() []*NodeType {
+	if x != nil {
+		return x.NodeTypes
+	}
+	return nil
+}
+
+func (x *Domain) GetLinkTypes() []*LinkType {
+	if x != nil {
+		return x.LinkTypes
+	}
+	return nil
+}
+
+func (x *Domain) GetCreatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return nil
+}
+
+func (x *Domain) GetUpdatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.UpdatedAt
+	}
+	return nil
+}
+
+func (x *Domain) GetPublishedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.PublishedAt
+	}
+	return nil
+}
+
+func (x *Domain) GetUpdatedBy() string {
+	if x != nil {
+		return x.UpdatedBy
+	}
+	return ""
+}
+
+type DomainSummary struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Version       string                 `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
+	Description   string                 `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
+	Status        string                 `protobuf:"bytes,4,opt,name=status,proto3" json:"status,omitempty"`
+	NodeTypeCount int32                  `protobuf:"varint,5,opt,name=node_type_count,json=nodeTypeCount,proto3" json:"node_type_count,omitempty"`
+	LinkTypeCount int32                  `protobuf:"varint,6,opt,name=link_type_count,json=linkTypeCount,proto3" json:"link_type_count,omitempty"`
+	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	PublishedAt   *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=published_at,json=publishedAt,proto3" json:"published_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DomainSummary) Reset() {
+	*x = DomainSummary{}
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[34]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DomainSummary) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DomainSummary) ProtoMessage() {}
+
+func (x *DomainSummary) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[34]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DomainSummary.ProtoReflect.Descriptor instead.
+func (*DomainSummary) Descriptor() ([]byte, []int) {
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{34}
+}
+
+func (x *DomainSummary) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *DomainSummary) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
+}
+
+func (x *DomainSummary) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *DomainSummary) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
+func (x *DomainSummary) GetNodeTypeCount() int32 {
+	if x != nil {
+		return x.NodeTypeCount
+	}
+	return 0
+}
+
+func (x *DomainSummary) GetLinkTypeCount() int32 {
+	if x != nil {
+		return x.LinkTypeCount
+	}
+	return 0
+}
+
+func (x *DomainSummary) GetUpdatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.UpdatedAt
+	}
+	return nil
+}
+
+func (x *DomainSummary) GetPublishedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.PublishedAt
+	}
+	return nil
+}
+
+type ListDomainsRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// every version (drafts, archived) instead of the latest one per name
+	AllVersions   bool `protobuf:"varint,1,opt,name=all_versions,json=allVersions,proto3" json:"all_versions,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListDomainsRequest) Reset() {
+	*x = ListDomainsRequest{}
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[35]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListDomainsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListDomainsRequest) ProtoMessage() {}
+
+func (x *ListDomainsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[35]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListDomainsRequest.ProtoReflect.Descriptor instead.
+func (*ListDomainsRequest) Descriptor() ([]byte, []int) {
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{35}
+}
+
+func (x *ListDomainsRequest) GetAllVersions() bool {
+	if x != nil {
+		return x.AllVersions
+	}
+	return false
+}
+
+type ListDomainsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Domains       []*DomainSummary       `protobuf:"bytes,1,rep,name=domains,proto3" json:"domains,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListDomainsResponse) Reset() {
+	*x = ListDomainsResponse{}
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[36]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListDomainsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListDomainsResponse) ProtoMessage() {}
+
+func (x *ListDomainsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[36]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListDomainsResponse.ProtoReflect.Descriptor instead.
+func (*ListDomainsResponse) Descriptor() ([]byte, []int) {
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{36}
+}
+
+func (x *ListDomainsResponse) GetDomains() []*DomainSummary {
+	if x != nil {
+		return x.Domains
+	}
+	return nil
+}
+
+type GetDomainRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Version       string                 `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetDomainRequest) Reset() {
+	*x = GetDomainRequest{}
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[37]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetDomainRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetDomainRequest) ProtoMessage() {}
+
+func (x *GetDomainRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[37]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetDomainRequest.ProtoReflect.Descriptor instead.
+func (*GetDomainRequest) Descriptor() ([]byte, []int) {
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{37}
+}
+
+func (x *GetDomainRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *GetDomainRequest) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
+}
+
+type GetDomainResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Domain        *Domain                `protobuf:"bytes,1,opt,name=domain,proto3" json:"domain,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetDomainResponse) Reset() {
+	*x = GetDomainResponse{}
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[38]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetDomainResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetDomainResponse) ProtoMessage() {}
+
+func (x *GetDomainResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[38]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetDomainResponse.ProtoReflect.Descriptor instead.
+func (*GetDomainResponse) Descriptor() ([]byte, []int) {
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{38}
+}
+
+func (x *GetDomainResponse) GetDomain() *Domain {
+	if x != nil {
+		return x.Domain
+	}
+	return nil
+}
+
+type SaveDomainRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Domain        *Domain                `protobuf:"bytes,1,opt,name=domain,proto3" json:"domain,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SaveDomainRequest) Reset() {
+	*x = SaveDomainRequest{}
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[39]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SaveDomainRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SaveDomainRequest) ProtoMessage() {}
+
+func (x *SaveDomainRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[39]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SaveDomainRequest.ProtoReflect.Descriptor instead.
+func (*SaveDomainRequest) Descriptor() ([]byte, []int) {
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{39}
+}
+
+func (x *SaveDomainRequest) GetDomain() *Domain {
+	if x != nil {
+		return x.Domain
+	}
+	return nil
+}
+
+type SaveDomainResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Domain        *Domain                `protobuf:"bytes,1,opt,name=domain,proto3" json:"domain,omitempty"`
+	Issues        []*Issue               `protobuf:"bytes,2,rep,name=issues,proto3" json:"issues,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SaveDomainResponse) Reset() {
+	*x = SaveDomainResponse{}
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[40]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SaveDomainResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SaveDomainResponse) ProtoMessage() {}
+
+func (x *SaveDomainResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[40]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SaveDomainResponse.ProtoReflect.Descriptor instead.
+func (*SaveDomainResponse) Descriptor() ([]byte, []int) {
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{40}
+}
+
+func (x *SaveDomainResponse) GetDomain() *Domain {
+	if x != nil {
+		return x.Domain
+	}
+	return nil
+}
+
+func (x *SaveDomainResponse) GetIssues() []*Issue {
+	if x != nil {
+		return x.Issues
+	}
+	return nil
+}
+
+type ValidateDomainRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Domain        *Domain                `protobuf:"bytes,1,opt,name=domain,proto3" json:"domain,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ValidateDomainRequest) Reset() {
+	*x = ValidateDomainRequest{}
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[41]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ValidateDomainRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ValidateDomainRequest) ProtoMessage() {}
+
+func (x *ValidateDomainRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[41]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ValidateDomainRequest.ProtoReflect.Descriptor instead.
+func (*ValidateDomainRequest) Descriptor() ([]byte, []int) {
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{41}
+}
+
+func (x *ValidateDomainRequest) GetDomain() *Domain {
+	if x != nil {
+		return x.Domain
+	}
+	return nil
+}
+
+type ValidateDomainResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Issues        []*Issue               `protobuf:"bytes,1,rep,name=issues,proto3" json:"issues,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ValidateDomainResponse) Reset() {
+	*x = ValidateDomainResponse{}
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[42]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ValidateDomainResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ValidateDomainResponse) ProtoMessage() {}
+
+func (x *ValidateDomainResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[42]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ValidateDomainResponse.ProtoReflect.Descriptor instead.
+func (*ValidateDomainResponse) Descriptor() ([]byte, []int) {
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{42}
+}
+
+func (x *ValidateDomainResponse) GetIssues() []*Issue {
+	if x != nil {
+		return x.Issues
+	}
+	return nil
+}
+
+type PublishDomainRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Version       string                 `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PublishDomainRequest) Reset() {
+	*x = PublishDomainRequest{}
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[43]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PublishDomainRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PublishDomainRequest) ProtoMessage() {}
+
+func (x *PublishDomainRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[43]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PublishDomainRequest.ProtoReflect.Descriptor instead.
+func (*PublishDomainRequest) Descriptor() ([]byte, []int) {
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{43}
+}
+
+func (x *PublishDomainRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *PublishDomainRequest) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
+}
+
+type PublishDomainResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Domain        *Domain                `protobuf:"bytes,1,opt,name=domain,proto3" json:"domain,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PublishDomainResponse) Reset() {
+	*x = PublishDomainResponse{}
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[44]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PublishDomainResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PublishDomainResponse) ProtoMessage() {}
+
+func (x *PublishDomainResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[44]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PublishDomainResponse.ProtoReflect.Descriptor instead.
+func (*PublishDomainResponse) Descriptor() ([]byte, []int) {
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{44}
+}
+
+func (x *PublishDomainResponse) GetDomain() *Domain {
+	if x != nil {
+		return x.Domain
+	}
+	return nil
+}
+
+type CreateDomainVersionRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	FromVersion   string                 `protobuf:"bytes,2,opt,name=from_version,json=fromVersion,proto3" json:"from_version,omitempty"`
+	NewVersion    string                 `protobuf:"bytes,3,opt,name=new_version,json=newVersion,proto3" json:"new_version,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateDomainVersionRequest) Reset() {
+	*x = CreateDomainVersionRequest{}
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[45]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateDomainVersionRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateDomainVersionRequest) ProtoMessage() {}
+
+func (x *CreateDomainVersionRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[45]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateDomainVersionRequest.ProtoReflect.Descriptor instead.
+func (*CreateDomainVersionRequest) Descriptor() ([]byte, []int) {
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{45}
+}
+
+func (x *CreateDomainVersionRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *CreateDomainVersionRequest) GetFromVersion() string {
+	if x != nil {
+		return x.FromVersion
+	}
+	return ""
+}
+
+func (x *CreateDomainVersionRequest) GetNewVersion() string {
+	if x != nil {
+		return x.NewVersion
+	}
+	return ""
+}
+
+type CreateDomainVersionResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Domain        *Domain                `protobuf:"bytes,1,opt,name=domain,proto3" json:"domain,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateDomainVersionResponse) Reset() {
+	*x = CreateDomainVersionResponse{}
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[46]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateDomainVersionResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateDomainVersionResponse) ProtoMessage() {}
+
+func (x *CreateDomainVersionResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[46]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateDomainVersionResponse.ProtoReflect.Descriptor instead.
+func (*CreateDomainVersionResponse) Descriptor() ([]byte, []int) {
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{46}
+}
+
+func (x *CreateDomainVersionResponse) GetDomain() *Domain {
+	if x != nil {
+		return x.Domain
+	}
+	return nil
+}
+
+type DeleteDomainRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Version       string                 `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteDomainRequest) Reset() {
+	*x = DeleteDomainRequest{}
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[47]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteDomainRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteDomainRequest) ProtoMessage() {}
+
+func (x *DeleteDomainRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[47]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteDomainRequest.ProtoReflect.Descriptor instead.
+func (*DeleteDomainRequest) Descriptor() ([]byte, []int) {
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{47}
+}
+
+func (x *DeleteDomainRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *DeleteDomainRequest) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
+}
+
+type DeleteDomainResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteDomainResponse) Reset() {
+	*x = DeleteDomainResponse{}
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[48]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteDomainResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteDomainResponse) ProtoMessage() {}
+
+func (x *DeleteDomainResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[48]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteDomainResponse.ProtoReflect.Descriptor instead.
+func (*DeleteDomainResponse) Descriptor() ([]byte, []int) {
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{48}
+}
+
+type ImportDomainRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Yaml          string                 `protobuf:"bytes,1,opt,name=yaml,proto3" json:"yaml,omitempty"`
+	Publish       bool                   `protobuf:"varint,2,opt,name=publish,proto3" json:"publish,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ImportDomainRequest) Reset() {
+	*x = ImportDomainRequest{}
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[49]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ImportDomainRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ImportDomainRequest) ProtoMessage() {}
+
+func (x *ImportDomainRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[49]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ImportDomainRequest.ProtoReflect.Descriptor instead.
+func (*ImportDomainRequest) Descriptor() ([]byte, []int) {
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{49}
+}
+
+func (x *ImportDomainRequest) GetYaml() string {
+	if x != nil {
+		return x.Yaml
+	}
+	return ""
+}
+
+func (x *ImportDomainRequest) GetPublish() bool {
+	if x != nil {
+		return x.Publish
+	}
+	return false
+}
+
+type ImportDomainResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Domain        *Domain                `protobuf:"bytes,1,opt,name=domain,proto3" json:"domain,omitempty"`
+	Issues        []*Issue               `protobuf:"bytes,2,rep,name=issues,proto3" json:"issues,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ImportDomainResponse) Reset() {
+	*x = ImportDomainResponse{}
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[50]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ImportDomainResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ImportDomainResponse) ProtoMessage() {}
+
+func (x *ImportDomainResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[50]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ImportDomainResponse.ProtoReflect.Descriptor instead.
+func (*ImportDomainResponse) Descriptor() ([]byte, []int) {
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{50}
+}
+
+func (x *ImportDomainResponse) GetDomain() *Domain {
+	if x != nil {
+		return x.Domain
+	}
+	return nil
+}
+
+func (x *ImportDomainResponse) GetIssues() []*Issue {
+	if x != nil {
+		return x.Issues
+	}
+	return nil
+}
+
+type ExportDomainRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Version       string                 `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ExportDomainRequest) Reset() {
+	*x = ExportDomainRequest{}
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[51]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExportDomainRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExportDomainRequest) ProtoMessage() {}
+
+func (x *ExportDomainRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[51]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExportDomainRequest.ProtoReflect.Descriptor instead.
+func (*ExportDomainRequest) Descriptor() ([]byte, []int) {
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{51}
+}
+
+func (x *ExportDomainRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *ExportDomainRequest) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
+}
+
+type ExportDomainResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Yaml          string                 `protobuf:"bytes,1,opt,name=yaml,proto3" json:"yaml,omitempty"`
+	Filename      string                 `protobuf:"bytes,2,opt,name=filename,proto3" json:"filename,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ExportDomainResponse) Reset() {
+	*x = ExportDomainResponse{}
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[52]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExportDomainResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExportDomainResponse) ProtoMessage() {}
+
+func (x *ExportDomainResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[52]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExportDomainResponse.ProtoReflect.Descriptor instead.
+func (*ExportDomainResponse) Descriptor() ([]byte, []int) {
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{52}
+}
+
+func (x *ExportDomainResponse) GetYaml() string {
+	if x != nil {
+		return x.Yaml
+	}
+	return ""
+}
+
+func (x *ExportDomainResponse) GetFilename() string {
+	if x != nil {
+		return x.Filename
+	}
+	return ""
+}
+
+type GetDomainUsageRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Version       string                 `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetDomainUsageRequest) Reset() {
+	*x = GetDomainUsageRequest{}
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[53]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetDomainUsageRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetDomainUsageRequest) ProtoMessage() {}
+
+func (x *GetDomainUsageRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[53]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetDomainUsageRequest.ProtoReflect.Descriptor instead.
+func (*GetDomainUsageRequest) Descriptor() ([]byte, []int) {
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{53}
+}
+
+func (x *GetDomainUsageRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *GetDomainUsageRequest) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
+}
+
+type DomainUser struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Version       string                 `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
+	Status        string                 `protobuf:"bytes,3,opt,name=status,proto3" json:"status,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DomainUser) Reset() {
+	*x = DomainUser{}
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[54]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DomainUser) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DomainUser) ProtoMessage() {}
+
+func (x *DomainUser) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[54]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DomainUser.ProtoReflect.Descriptor instead.
+func (*DomainUser) Descriptor() ([]byte, []int) {
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{54}
+}
+
+func (x *DomainUser) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *DomainUser) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
+}
+
+func (x *DomainUser) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
+type GetDomainUsageResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// methodology versions whose domain_ref resolves to the domain version
+	Methodologies []*DomainUser `protobuf:"bytes,1,rep,name=methodologies,proto3" json:"methodologies,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetDomainUsageResponse) Reset() {
+	*x = GetDomainUsageResponse{}
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[55]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetDomainUsageResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetDomainUsageResponse) ProtoMessage() {}
+
+func (x *GetDomainUsageResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_registry_v1_registry_proto_msgTypes[55]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetDomainUsageResponse.ProtoReflect.Descriptor instead.
+func (*GetDomainUsageResponse) Descriptor() ([]byte, []int) {
+	return file_goap_registry_v1_registry_proto_rawDescGZIP(), []int{55}
+}
+
+func (x *GetDomainUsageResponse) GetMethodologies() []*DomainUser {
+	if x != nil {
+		return x.Methodologies
+	}
+	return nil
+}
+
 var File_goap_registry_v1_registry_proto protoreflect.FileDescriptor
 
 const file_goap_registry_v1_registry_proto_rawDesc = "" +
@@ -2280,7 +3539,7 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\x05value\x18\x05 \x01(\x01R\x05value\x1a6\n" +
 	"\bPreEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\bR\x05value:\x028\x01\"\x8f\x05\n" +
+	"\x05value\x18\x02 \x01(\bR\x05value:\x028\x01\"\xae\x05\n" +
 	"\vMethodology\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\tR\aversion\x12 \n" +
@@ -2303,7 +3562,9 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\fpublished_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\vpublishedAt\x12\x1d\n" +
 	"\n" +
 	"updated_by\x18\r \x01(\tR\tupdatedBy\x12/\n" +
-	"\x06agents\x18\x0e \x03(\v2\x17.goap.registry.v1.AgentR\x06agents\"C\n" +
+	"\x06agents\x18\x0e \x03(\v2\x17.goap.registry.v1.AgentR\x06agents\x12\x1d\n" +
+	"\n" +
+	"domain_ref\x18\x0f \x01(\tR\tdomainRef\"C\n" +
 	"\vGoalSummary\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\"^\n" +
@@ -2327,10 +3588,11 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\x18ListMethodologiesRequest\x12!\n" +
 	"\fall_versions\x18\x01 \x01(\bR\vallVersions\"g\n" +
 	"\x19ListMethodologiesResponse\x12J\n" +
-	"\rmethodologies\x18\x01 \x03(\v2$.goap.registry.v1.MethodologySummaryR\rmethodologies\"E\n" +
+	"\rmethodologies\x18\x01 \x03(\v2$.goap.registry.v1.MethodologySummaryR\rmethodologies\"l\n" +
 	"\x15GetMethodologyRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
-	"\aversion\x18\x02 \x01(\tR\aversion\"Y\n" +
+	"\aversion\x18\x02 \x01(\tR\aversion\x12%\n" +
+	"\x0eresolve_domain\x18\x03 \x01(\bR\rresolveDomain\"Y\n" +
 	"\x16GetMethodologyResponse\x12?\n" +
 	"\vmethodology\x18\x01 \x01(\v2\x1d.goap.registry.v1.MethodologyR\vmethodology\"Y\n" +
 	"\x16SaveMethodologyRequest\x12?\n" +
@@ -2369,7 +3631,90 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\aversion\x18\x02 \x01(\tR\aversion\"K\n" +
 	"\x19ExportMethodologyResponse\x12\x12\n" +
 	"\x04yaml\x18\x01 \x01(\tR\x04yaml\x12\x1a\n" +
-	"\bfilename\x18\x02 \x01(\tR\bfilename2\xdd\a\n" +
+	"\bfilename\x18\x02 \x01(\tR\bfilename\"\xba\x03\n" +
+	"\x06Domain\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
+	"\aversion\x18\x02 \x01(\tR\aversion\x12 \n" +
+	"\vdescription\x18\x03 \x01(\tR\vdescription\x12\x16\n" +
+	"\x06status\x18\x04 \x01(\tR\x06status\x129\n" +
+	"\n" +
+	"node_types\x18\x05 \x03(\v2\x1a.goap.registry.v1.NodeTypeR\tnodeTypes\x129\n" +
+	"\n" +
+	"link_types\x18\x06 \x03(\v2\x1a.goap.registry.v1.LinkTypeR\tlinkTypes\x129\n" +
+	"\n" +
+	"created_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
+	"\n" +
+	"updated_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12=\n" +
+	"\fpublished_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\vpublishedAt\x12\x1d\n" +
+	"\n" +
+	"updated_by\x18\n" +
+	" \x01(\tR\tupdatedBy\"\xc1\x02\n" +
+	"\rDomainSummary\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
+	"\aversion\x18\x02 \x01(\tR\aversion\x12 \n" +
+	"\vdescription\x18\x03 \x01(\tR\vdescription\x12\x16\n" +
+	"\x06status\x18\x04 \x01(\tR\x06status\x12&\n" +
+	"\x0fnode_type_count\x18\x05 \x01(\x05R\rnodeTypeCount\x12&\n" +
+	"\x0flink_type_count\x18\x06 \x01(\x05R\rlinkTypeCount\x129\n" +
+	"\n" +
+	"updated_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12=\n" +
+	"\fpublished_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\vpublishedAt\"7\n" +
+	"\x12ListDomainsRequest\x12!\n" +
+	"\fall_versions\x18\x01 \x01(\bR\vallVersions\"P\n" +
+	"\x13ListDomainsResponse\x129\n" +
+	"\adomains\x18\x01 \x03(\v2\x1f.goap.registry.v1.DomainSummaryR\adomains\"@\n" +
+	"\x10GetDomainRequest\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
+	"\aversion\x18\x02 \x01(\tR\aversion\"E\n" +
+	"\x11GetDomainResponse\x120\n" +
+	"\x06domain\x18\x01 \x01(\v2\x18.goap.registry.v1.DomainR\x06domain\"E\n" +
+	"\x11SaveDomainRequest\x120\n" +
+	"\x06domain\x18\x01 \x01(\v2\x18.goap.registry.v1.DomainR\x06domain\"w\n" +
+	"\x12SaveDomainResponse\x120\n" +
+	"\x06domain\x18\x01 \x01(\v2\x18.goap.registry.v1.DomainR\x06domain\x12/\n" +
+	"\x06issues\x18\x02 \x03(\v2\x17.goap.registry.v1.IssueR\x06issues\"I\n" +
+	"\x15ValidateDomainRequest\x120\n" +
+	"\x06domain\x18\x01 \x01(\v2\x18.goap.registry.v1.DomainR\x06domain\"I\n" +
+	"\x16ValidateDomainResponse\x12/\n" +
+	"\x06issues\x18\x01 \x03(\v2\x17.goap.registry.v1.IssueR\x06issues\"D\n" +
+	"\x14PublishDomainRequest\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
+	"\aversion\x18\x02 \x01(\tR\aversion\"I\n" +
+	"\x15PublishDomainResponse\x120\n" +
+	"\x06domain\x18\x01 \x01(\v2\x18.goap.registry.v1.DomainR\x06domain\"t\n" +
+	"\x1aCreateDomainVersionRequest\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12!\n" +
+	"\ffrom_version\x18\x02 \x01(\tR\vfromVersion\x12\x1f\n" +
+	"\vnew_version\x18\x03 \x01(\tR\n" +
+	"newVersion\"O\n" +
+	"\x1bCreateDomainVersionResponse\x120\n" +
+	"\x06domain\x18\x01 \x01(\v2\x18.goap.registry.v1.DomainR\x06domain\"C\n" +
+	"\x13DeleteDomainRequest\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
+	"\aversion\x18\x02 \x01(\tR\aversion\"\x16\n" +
+	"\x14DeleteDomainResponse\"C\n" +
+	"\x13ImportDomainRequest\x12\x12\n" +
+	"\x04yaml\x18\x01 \x01(\tR\x04yaml\x12\x18\n" +
+	"\apublish\x18\x02 \x01(\bR\apublish\"y\n" +
+	"\x14ImportDomainResponse\x120\n" +
+	"\x06domain\x18\x01 \x01(\v2\x18.goap.registry.v1.DomainR\x06domain\x12/\n" +
+	"\x06issues\x18\x02 \x03(\v2\x17.goap.registry.v1.IssueR\x06issues\"C\n" +
+	"\x13ExportDomainRequest\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
+	"\aversion\x18\x02 \x01(\tR\aversion\"F\n" +
+	"\x14ExportDomainResponse\x12\x12\n" +
+	"\x04yaml\x18\x01 \x01(\tR\x04yaml\x12\x1a\n" +
+	"\bfilename\x18\x02 \x01(\tR\bfilename\"E\n" +
+	"\x15GetDomainUsageRequest\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
+	"\aversion\x18\x02 \x01(\tR\aversion\"R\n" +
+	"\n" +
+	"DomainUser\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
+	"\aversion\x18\x02 \x01(\tR\aversion\x12\x16\n" +
+	"\x06status\x18\x03 \x01(\tR\x06status\"\\\n" +
+	"\x16GetDomainUsageResponse\x12B\n" +
+	"\rmethodologies\x18\x01 \x03(\v2\x1c.goap.registry.v1.DomainUserR\rmethodologies2\xa5\x0f\n" +
 	"\x0fRegistryService\x12l\n" +
 	"\x11ListMethodologies\x12*.goap.registry.v1.ListMethodologiesRequest\x1a+.goap.registry.v1.ListMethodologiesResponse\x12c\n" +
 	"\x0eGetMethodology\x12'.goap.registry.v1.GetMethodologyRequest\x1a(.goap.registry.v1.GetMethodologyResponse\x12f\n" +
@@ -2379,7 +3724,18 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\rCreateVersion\x12&.goap.registry.v1.CreateVersionRequest\x1a'.goap.registry.v1.CreateVersionResponse\x12l\n" +
 	"\x11DeleteMethodology\x12*.goap.registry.v1.DeleteMethodologyRequest\x1a+.goap.registry.v1.DeleteMethodologyResponse\x12l\n" +
 	"\x11ImportMethodology\x12*.goap.registry.v1.ImportMethodologyRequest\x1a+.goap.registry.v1.ImportMethodologyResponse\x12l\n" +
-	"\x11ExportMethodology\x12*.goap.registry.v1.ExportMethodologyRequest\x1a+.goap.registry.v1.ExportMethodologyResponseB\xbf\x01\n" +
+	"\x11ExportMethodology\x12*.goap.registry.v1.ExportMethodologyRequest\x1a+.goap.registry.v1.ExportMethodologyResponse\x12Z\n" +
+	"\vListDomains\x12$.goap.registry.v1.ListDomainsRequest\x1a%.goap.registry.v1.ListDomainsResponse\x12T\n" +
+	"\tGetDomain\x12\".goap.registry.v1.GetDomainRequest\x1a#.goap.registry.v1.GetDomainResponse\x12W\n" +
+	"\n" +
+	"SaveDomain\x12#.goap.registry.v1.SaveDomainRequest\x1a$.goap.registry.v1.SaveDomainResponse\x12c\n" +
+	"\x0eValidateDomain\x12'.goap.registry.v1.ValidateDomainRequest\x1a(.goap.registry.v1.ValidateDomainResponse\x12`\n" +
+	"\rPublishDomain\x12&.goap.registry.v1.PublishDomainRequest\x1a'.goap.registry.v1.PublishDomainResponse\x12r\n" +
+	"\x13CreateDomainVersion\x12,.goap.registry.v1.CreateDomainVersionRequest\x1a-.goap.registry.v1.CreateDomainVersionResponse\x12]\n" +
+	"\fDeleteDomain\x12%.goap.registry.v1.DeleteDomainRequest\x1a&.goap.registry.v1.DeleteDomainResponse\x12]\n" +
+	"\fImportDomain\x12%.goap.registry.v1.ImportDomainRequest\x1a&.goap.registry.v1.ImportDomainResponse\x12]\n" +
+	"\fExportDomain\x12%.goap.registry.v1.ExportDomainRequest\x1a&.goap.registry.v1.ExportDomainResponse\x12c\n" +
+	"\x0eGetDomainUsage\x12'.goap.registry.v1.GetDomainUsageRequest\x1a(.goap.registry.v1.GetDomainUsageResponseB\xbf\x01\n" +
 	"\x14com.goap.registry.v1B\rRegistryProtoP\x01Z6github.com/zimwip/goap/gen/goap/registry/v1;registryv1\xa2\x02\x03GRX\xaa\x02\x10Goap.Registry.V1\xca\x02\x10Goap\\Registry\\V1\xe2\x02\x1cGoap\\Registry\\V1\\GPBMetadata\xea\x02\x12Goap::Registry::V1b\x06proto3"
 
 var (
@@ -2394,7 +3750,7 @@ func file_goap_registry_v1_registry_proto_rawDescGZIP() []byte {
 	return file_goap_registry_v1_registry_proto_rawDescData
 }
 
-var file_goap_registry_v1_registry_proto_msgTypes = make([]protoimpl.MessageInfo, 36)
+var file_goap_registry_v1_registry_proto_msgTypes = make([]protoimpl.MessageInfo, 59)
 var file_goap_registry_v1_registry_proto_goTypes = []any{
 	(*NodeType)(nil),                    // 0: goap.registry.v1.NodeType
 	(*LinkType)(nil),                    // 1: goap.registry.v1.LinkType
@@ -2429,34 +3785,57 @@ var file_goap_registry_v1_registry_proto_goTypes = []any{
 	(*ImportMethodologyResponse)(nil),   // 30: goap.registry.v1.ImportMethodologyResponse
 	(*ExportMethodologyRequest)(nil),    // 31: goap.registry.v1.ExportMethodologyRequest
 	(*ExportMethodologyResponse)(nil),   // 32: goap.registry.v1.ExportMethodologyResponse
-	nil,                                 // 33: goap.registry.v1.Action.PreEntry
-	nil,                                 // 34: goap.registry.v1.Action.EffectsEntry
-	nil,                                 // 35: goap.registry.v1.Goal.PreEntry
-	(*structpb.Struct)(nil),             // 36: google.protobuf.Struct
-	(*timestamppb.Timestamp)(nil),       // 37: google.protobuf.Timestamp
+	(*Domain)(nil),                      // 33: goap.registry.v1.Domain
+	(*DomainSummary)(nil),               // 34: goap.registry.v1.DomainSummary
+	(*ListDomainsRequest)(nil),          // 35: goap.registry.v1.ListDomainsRequest
+	(*ListDomainsResponse)(nil),         // 36: goap.registry.v1.ListDomainsResponse
+	(*GetDomainRequest)(nil),            // 37: goap.registry.v1.GetDomainRequest
+	(*GetDomainResponse)(nil),           // 38: goap.registry.v1.GetDomainResponse
+	(*SaveDomainRequest)(nil),           // 39: goap.registry.v1.SaveDomainRequest
+	(*SaveDomainResponse)(nil),          // 40: goap.registry.v1.SaveDomainResponse
+	(*ValidateDomainRequest)(nil),       // 41: goap.registry.v1.ValidateDomainRequest
+	(*ValidateDomainResponse)(nil),      // 42: goap.registry.v1.ValidateDomainResponse
+	(*PublishDomainRequest)(nil),        // 43: goap.registry.v1.PublishDomainRequest
+	(*PublishDomainResponse)(nil),       // 44: goap.registry.v1.PublishDomainResponse
+	(*CreateDomainVersionRequest)(nil),  // 45: goap.registry.v1.CreateDomainVersionRequest
+	(*CreateDomainVersionResponse)(nil), // 46: goap.registry.v1.CreateDomainVersionResponse
+	(*DeleteDomainRequest)(nil),         // 47: goap.registry.v1.DeleteDomainRequest
+	(*DeleteDomainResponse)(nil),        // 48: goap.registry.v1.DeleteDomainResponse
+	(*ImportDomainRequest)(nil),         // 49: goap.registry.v1.ImportDomainRequest
+	(*ImportDomainResponse)(nil),        // 50: goap.registry.v1.ImportDomainResponse
+	(*ExportDomainRequest)(nil),         // 51: goap.registry.v1.ExportDomainRequest
+	(*ExportDomainResponse)(nil),        // 52: goap.registry.v1.ExportDomainResponse
+	(*GetDomainUsageRequest)(nil),       // 53: goap.registry.v1.GetDomainUsageRequest
+	(*DomainUser)(nil),                  // 54: goap.registry.v1.DomainUser
+	(*GetDomainUsageResponse)(nil),      // 55: goap.registry.v1.GetDomainUsageResponse
+	nil,                                 // 56: goap.registry.v1.Action.PreEntry
+	nil,                                 // 57: goap.registry.v1.Action.EffectsEntry
+	nil,                                 // 58: goap.registry.v1.Goal.PreEntry
+	(*structpb.Struct)(nil),             // 59: google.protobuf.Struct
+	(*timestamppb.Timestamp)(nil),       // 60: google.protobuf.Timestamp
 }
 var file_goap_registry_v1_registry_proto_depIdxs = []int32{
 	3,  // 0: goap.registry.v1.Expectation.produce:type_name -> goap.registry.v1.ProduceSpec
 	4,  // 1: goap.registry.v1.Expectation.link:type_name -> goap.registry.v1.LinkSpec
-	33, // 2: goap.registry.v1.Action.pre:type_name -> goap.registry.v1.Action.PreEntry
-	34, // 3: goap.registry.v1.Action.effects:type_name -> goap.registry.v1.Action.EffectsEntry
+	56, // 2: goap.registry.v1.Action.pre:type_name -> goap.registry.v1.Action.PreEntry
+	57, // 3: goap.registry.v1.Action.effects:type_name -> goap.registry.v1.Action.EffectsEntry
 	5,  // 4: goap.registry.v1.Action.expects:type_name -> goap.registry.v1.Expectation
-	36, // 5: goap.registry.v1.Action.params:type_name -> google.protobuf.Struct
+	59, // 5: goap.registry.v1.Action.params:type_name -> google.protobuf.Struct
 	8,  // 6: goap.registry.v1.Agent.triggers:type_name -> goap.registry.v1.Trigger
-	35, // 7: goap.registry.v1.Goal.pre:type_name -> goap.registry.v1.Goal.PreEntry
+	58, // 7: goap.registry.v1.Goal.pre:type_name -> goap.registry.v1.Goal.PreEntry
 	0,  // 8: goap.registry.v1.Methodology.node_types:type_name -> goap.registry.v1.NodeType
 	1,  // 9: goap.registry.v1.Methodology.link_types:type_name -> goap.registry.v1.LinkType
 	2,  // 10: goap.registry.v1.Methodology.conditions:type_name -> goap.registry.v1.Condition
 	6,  // 11: goap.registry.v1.Methodology.actions:type_name -> goap.registry.v1.Action
 	9,  // 12: goap.registry.v1.Methodology.goals:type_name -> goap.registry.v1.Goal
-	37, // 13: goap.registry.v1.Methodology.created_at:type_name -> google.protobuf.Timestamp
-	37, // 14: goap.registry.v1.Methodology.updated_at:type_name -> google.protobuf.Timestamp
-	37, // 15: goap.registry.v1.Methodology.published_at:type_name -> google.protobuf.Timestamp
+	60, // 13: goap.registry.v1.Methodology.created_at:type_name -> google.protobuf.Timestamp
+	60, // 14: goap.registry.v1.Methodology.updated_at:type_name -> google.protobuf.Timestamp
+	60, // 15: goap.registry.v1.Methodology.published_at:type_name -> google.protobuf.Timestamp
 	7,  // 16: goap.registry.v1.Methodology.agents:type_name -> goap.registry.v1.Agent
 	11, // 17: goap.registry.v1.MethodologySummary.goals:type_name -> goap.registry.v1.GoalSummary
 	12, // 18: goap.registry.v1.MethodologySummary.agents:type_name -> goap.registry.v1.AgentSummary
-	37, // 19: goap.registry.v1.MethodologySummary.updated_at:type_name -> google.protobuf.Timestamp
-	37, // 20: goap.registry.v1.MethodologySummary.published_at:type_name -> google.protobuf.Timestamp
+	60, // 19: goap.registry.v1.MethodologySummary.updated_at:type_name -> google.protobuf.Timestamp
+	60, // 20: goap.registry.v1.MethodologySummary.published_at:type_name -> google.protobuf.Timestamp
 	13, // 21: goap.registry.v1.ListMethodologiesResponse.methodologies:type_name -> goap.registry.v1.MethodologySummary
 	10, // 22: goap.registry.v1.GetMethodologyResponse.methodology:type_name -> goap.registry.v1.Methodology
 	10, // 23: goap.registry.v1.SaveMethodologyRequest.methodology:type_name -> goap.registry.v1.Methodology
@@ -2468,29 +3847,68 @@ var file_goap_registry_v1_registry_proto_depIdxs = []int32{
 	10, // 29: goap.registry.v1.CreateVersionResponse.methodology:type_name -> goap.registry.v1.Methodology
 	10, // 30: goap.registry.v1.ImportMethodologyResponse.methodology:type_name -> goap.registry.v1.Methodology
 	14, // 31: goap.registry.v1.ImportMethodologyResponse.issues:type_name -> goap.registry.v1.Issue
-	15, // 32: goap.registry.v1.RegistryService.ListMethodologies:input_type -> goap.registry.v1.ListMethodologiesRequest
-	17, // 33: goap.registry.v1.RegistryService.GetMethodology:input_type -> goap.registry.v1.GetMethodologyRequest
-	19, // 34: goap.registry.v1.RegistryService.SaveMethodology:input_type -> goap.registry.v1.SaveMethodologyRequest
-	21, // 35: goap.registry.v1.RegistryService.ValidateMethodology:input_type -> goap.registry.v1.ValidateMethodologyRequest
-	23, // 36: goap.registry.v1.RegistryService.PublishMethodology:input_type -> goap.registry.v1.PublishMethodologyRequest
-	25, // 37: goap.registry.v1.RegistryService.CreateVersion:input_type -> goap.registry.v1.CreateVersionRequest
-	27, // 38: goap.registry.v1.RegistryService.DeleteMethodology:input_type -> goap.registry.v1.DeleteMethodologyRequest
-	29, // 39: goap.registry.v1.RegistryService.ImportMethodology:input_type -> goap.registry.v1.ImportMethodologyRequest
-	31, // 40: goap.registry.v1.RegistryService.ExportMethodology:input_type -> goap.registry.v1.ExportMethodologyRequest
-	16, // 41: goap.registry.v1.RegistryService.ListMethodologies:output_type -> goap.registry.v1.ListMethodologiesResponse
-	18, // 42: goap.registry.v1.RegistryService.GetMethodology:output_type -> goap.registry.v1.GetMethodologyResponse
-	20, // 43: goap.registry.v1.RegistryService.SaveMethodology:output_type -> goap.registry.v1.SaveMethodologyResponse
-	22, // 44: goap.registry.v1.RegistryService.ValidateMethodology:output_type -> goap.registry.v1.ValidateMethodologyResponse
-	24, // 45: goap.registry.v1.RegistryService.PublishMethodology:output_type -> goap.registry.v1.PublishMethodologyResponse
-	26, // 46: goap.registry.v1.RegistryService.CreateVersion:output_type -> goap.registry.v1.CreateVersionResponse
-	28, // 47: goap.registry.v1.RegistryService.DeleteMethodology:output_type -> goap.registry.v1.DeleteMethodologyResponse
-	30, // 48: goap.registry.v1.RegistryService.ImportMethodology:output_type -> goap.registry.v1.ImportMethodologyResponse
-	32, // 49: goap.registry.v1.RegistryService.ExportMethodology:output_type -> goap.registry.v1.ExportMethodologyResponse
-	41, // [41:50] is the sub-list for method output_type
-	32, // [32:41] is the sub-list for method input_type
-	32, // [32:32] is the sub-list for extension type_name
-	32, // [32:32] is the sub-list for extension extendee
-	0,  // [0:32] is the sub-list for field type_name
+	0,  // 32: goap.registry.v1.Domain.node_types:type_name -> goap.registry.v1.NodeType
+	1,  // 33: goap.registry.v1.Domain.link_types:type_name -> goap.registry.v1.LinkType
+	60, // 34: goap.registry.v1.Domain.created_at:type_name -> google.protobuf.Timestamp
+	60, // 35: goap.registry.v1.Domain.updated_at:type_name -> google.protobuf.Timestamp
+	60, // 36: goap.registry.v1.Domain.published_at:type_name -> google.protobuf.Timestamp
+	60, // 37: goap.registry.v1.DomainSummary.updated_at:type_name -> google.protobuf.Timestamp
+	60, // 38: goap.registry.v1.DomainSummary.published_at:type_name -> google.protobuf.Timestamp
+	34, // 39: goap.registry.v1.ListDomainsResponse.domains:type_name -> goap.registry.v1.DomainSummary
+	33, // 40: goap.registry.v1.GetDomainResponse.domain:type_name -> goap.registry.v1.Domain
+	33, // 41: goap.registry.v1.SaveDomainRequest.domain:type_name -> goap.registry.v1.Domain
+	33, // 42: goap.registry.v1.SaveDomainResponse.domain:type_name -> goap.registry.v1.Domain
+	14, // 43: goap.registry.v1.SaveDomainResponse.issues:type_name -> goap.registry.v1.Issue
+	33, // 44: goap.registry.v1.ValidateDomainRequest.domain:type_name -> goap.registry.v1.Domain
+	14, // 45: goap.registry.v1.ValidateDomainResponse.issues:type_name -> goap.registry.v1.Issue
+	33, // 46: goap.registry.v1.PublishDomainResponse.domain:type_name -> goap.registry.v1.Domain
+	33, // 47: goap.registry.v1.CreateDomainVersionResponse.domain:type_name -> goap.registry.v1.Domain
+	33, // 48: goap.registry.v1.ImportDomainResponse.domain:type_name -> goap.registry.v1.Domain
+	14, // 49: goap.registry.v1.ImportDomainResponse.issues:type_name -> goap.registry.v1.Issue
+	54, // 50: goap.registry.v1.GetDomainUsageResponse.methodologies:type_name -> goap.registry.v1.DomainUser
+	15, // 51: goap.registry.v1.RegistryService.ListMethodologies:input_type -> goap.registry.v1.ListMethodologiesRequest
+	17, // 52: goap.registry.v1.RegistryService.GetMethodology:input_type -> goap.registry.v1.GetMethodologyRequest
+	19, // 53: goap.registry.v1.RegistryService.SaveMethodology:input_type -> goap.registry.v1.SaveMethodologyRequest
+	21, // 54: goap.registry.v1.RegistryService.ValidateMethodology:input_type -> goap.registry.v1.ValidateMethodologyRequest
+	23, // 55: goap.registry.v1.RegistryService.PublishMethodology:input_type -> goap.registry.v1.PublishMethodologyRequest
+	25, // 56: goap.registry.v1.RegistryService.CreateVersion:input_type -> goap.registry.v1.CreateVersionRequest
+	27, // 57: goap.registry.v1.RegistryService.DeleteMethodology:input_type -> goap.registry.v1.DeleteMethodologyRequest
+	29, // 58: goap.registry.v1.RegistryService.ImportMethodology:input_type -> goap.registry.v1.ImportMethodologyRequest
+	31, // 59: goap.registry.v1.RegistryService.ExportMethodology:input_type -> goap.registry.v1.ExportMethodologyRequest
+	35, // 60: goap.registry.v1.RegistryService.ListDomains:input_type -> goap.registry.v1.ListDomainsRequest
+	37, // 61: goap.registry.v1.RegistryService.GetDomain:input_type -> goap.registry.v1.GetDomainRequest
+	39, // 62: goap.registry.v1.RegistryService.SaveDomain:input_type -> goap.registry.v1.SaveDomainRequest
+	41, // 63: goap.registry.v1.RegistryService.ValidateDomain:input_type -> goap.registry.v1.ValidateDomainRequest
+	43, // 64: goap.registry.v1.RegistryService.PublishDomain:input_type -> goap.registry.v1.PublishDomainRequest
+	45, // 65: goap.registry.v1.RegistryService.CreateDomainVersion:input_type -> goap.registry.v1.CreateDomainVersionRequest
+	47, // 66: goap.registry.v1.RegistryService.DeleteDomain:input_type -> goap.registry.v1.DeleteDomainRequest
+	49, // 67: goap.registry.v1.RegistryService.ImportDomain:input_type -> goap.registry.v1.ImportDomainRequest
+	51, // 68: goap.registry.v1.RegistryService.ExportDomain:input_type -> goap.registry.v1.ExportDomainRequest
+	53, // 69: goap.registry.v1.RegistryService.GetDomainUsage:input_type -> goap.registry.v1.GetDomainUsageRequest
+	16, // 70: goap.registry.v1.RegistryService.ListMethodologies:output_type -> goap.registry.v1.ListMethodologiesResponse
+	18, // 71: goap.registry.v1.RegistryService.GetMethodology:output_type -> goap.registry.v1.GetMethodologyResponse
+	20, // 72: goap.registry.v1.RegistryService.SaveMethodology:output_type -> goap.registry.v1.SaveMethodologyResponse
+	22, // 73: goap.registry.v1.RegistryService.ValidateMethodology:output_type -> goap.registry.v1.ValidateMethodologyResponse
+	24, // 74: goap.registry.v1.RegistryService.PublishMethodology:output_type -> goap.registry.v1.PublishMethodologyResponse
+	26, // 75: goap.registry.v1.RegistryService.CreateVersion:output_type -> goap.registry.v1.CreateVersionResponse
+	28, // 76: goap.registry.v1.RegistryService.DeleteMethodology:output_type -> goap.registry.v1.DeleteMethodologyResponse
+	30, // 77: goap.registry.v1.RegistryService.ImportMethodology:output_type -> goap.registry.v1.ImportMethodologyResponse
+	32, // 78: goap.registry.v1.RegistryService.ExportMethodology:output_type -> goap.registry.v1.ExportMethodologyResponse
+	36, // 79: goap.registry.v1.RegistryService.ListDomains:output_type -> goap.registry.v1.ListDomainsResponse
+	38, // 80: goap.registry.v1.RegistryService.GetDomain:output_type -> goap.registry.v1.GetDomainResponse
+	40, // 81: goap.registry.v1.RegistryService.SaveDomain:output_type -> goap.registry.v1.SaveDomainResponse
+	42, // 82: goap.registry.v1.RegistryService.ValidateDomain:output_type -> goap.registry.v1.ValidateDomainResponse
+	44, // 83: goap.registry.v1.RegistryService.PublishDomain:output_type -> goap.registry.v1.PublishDomainResponse
+	46, // 84: goap.registry.v1.RegistryService.CreateDomainVersion:output_type -> goap.registry.v1.CreateDomainVersionResponse
+	48, // 85: goap.registry.v1.RegistryService.DeleteDomain:output_type -> goap.registry.v1.DeleteDomainResponse
+	50, // 86: goap.registry.v1.RegistryService.ImportDomain:output_type -> goap.registry.v1.ImportDomainResponse
+	52, // 87: goap.registry.v1.RegistryService.ExportDomain:output_type -> goap.registry.v1.ExportDomainResponse
+	55, // 88: goap.registry.v1.RegistryService.GetDomainUsage:output_type -> goap.registry.v1.GetDomainUsageResponse
+	70, // [70:89] is the sub-list for method output_type
+	51, // [51:70] is the sub-list for method input_type
+	51, // [51:51] is the sub-list for extension type_name
+	51, // [51:51] is the sub-list for extension extendee
+	0,  // [0:51] is the sub-list for field type_name
 }
 
 func init() { file_goap_registry_v1_registry_proto_init() }
@@ -2504,7 +3922,7 @@ func file_goap_registry_v1_registry_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_goap_registry_v1_registry_proto_rawDesc), len(file_goap_registry_v1_registry_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   36,
+			NumMessages:   59,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

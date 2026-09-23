@@ -96,12 +96,22 @@ func serveWeb(log *slog.Logger, e *echo.Echo, dir string) {
 }
 
 // registryEvents receives the registry events in-process (no NATS here) and
-// reacts to publications.
-type registryEvents func(ctx context.Context, name, version string)
+// reacts to publications of methodologies and domains.
+type registryEvents struct {
+	methodology func(ctx context.Context, name, version string)
+	domain      func(ctx context.Context, name, version string)
+}
 
 func (f registryEvents) Publish(ctx context.Context, subject string, v any) error {
-	if ev, ok := v.(map[string]string); ok && subject == "goap.registry.methodology.published" {
-		f(context.WithoutCancel(ctx), ev["name"], ev["version"])
+	ev, ok := v.(map[string]string)
+	if !ok {
+		return nil
+	}
+	switch subject {
+	case "goap.registry.methodology.published":
+		f.methodology(context.WithoutCancel(ctx), ev["name"], ev["version"])
+	case "goap.registry.domain.published":
+		f.domain(context.WithoutCancel(ctx), ev["name"], ev["version"])
 	}
 	return nil
 }

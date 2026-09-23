@@ -50,7 +50,7 @@ func (c *Client) List(ctx context.Context) ([]*methodology.Compiled, error) {
 
 // Methodology implements engine.MethodologyPort (latest published version).
 func (c *Client) Methodology(ctx context.Context, name string) (*methodology.Compiled, error) {
-	r, err := c.rpc.GetMethodology(ctx, connect.NewRequest(&registryv1.GetMethodologyRequest{Name: name}))
+	r, err := c.rpc.GetMethodology(ctx, connect.NewRequest(&registryv1.GetMethodologyRequest{Name: name, ResolveDomain: true}))
 	if connect.CodeOf(err) == connect.CodeNotFound {
 		return nil, engine.ErrUnknownMethodology{Name: name}
 	}

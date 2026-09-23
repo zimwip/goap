@@ -22,13 +22,16 @@ import (
 
 // Methodology is the declarative definition deployed in the registry.
 type Methodology struct {
-	Name        string      `yaml:"name" json:"name"`
-	Version     string      `yaml:"version" json:"version"`
-	Description string      `yaml:"description,omitempty" json:"description,omitempty"`
-	Domain      Schema      `yaml:"domain" json:"domain"`
-	Conditions  []Condition `yaml:"conditions" json:"conditions"`
-	Actions     []Action    `yaml:"actions" json:"actions"`
-	Goals       []Goal      `yaml:"goals" json:"goals"`
+	Name        string `yaml:"name" json:"name"`
+	Version     string `yaml:"version" json:"version"`
+	Description string `yaml:"description,omitempty" json:"description,omitempty"`
+	// DomainRef references a shared Domain "<name>@<version>" (version empty:
+	// latest published) instead of embedding one; Resolve fills Domain from it.
+	DomainRef  string      `yaml:"domainRef,omitempty" json:"domainRef,omitempty"`
+	Domain     Schema      `yaml:"domain,omitempty" json:"domain"`
+	Conditions []Condition `yaml:"conditions" json:"conditions"`
+	Actions    []Action    `yaml:"actions" json:"actions"`
+	Goals      []Goal      `yaml:"goals" json:"goals"`
 	// Agents run the methodology; without agents an implicit "default" agent
 	// has every action and goal and the goap planner.
 	Agents []Agent `yaml:"agents,omitempty" json:"agents,omitempty"`
@@ -275,6 +278,59 @@ func (m *Methodology) Compile() (*Compiled, error) {
 	return c, nil
 }
 
+// check validates the schema and returns the sets of node and link type
+// names. Issue paths start with prefix.
+func (s Schema) check(prefix string, add func(path, format string, args ...any)) (nodeTypes, linkTypes map[string]bool) {
+	nodeTypes = map[string]bool{}
+	for i, n := range s.NodeTypes {
+		path := fmt.Sprintf(prefix+"nodeTypes[%d]", i)
+		if n.Name == "" {
+			add(path+".name", "name required")
+		} else if nodeTypes[n.Name] {
+			add(path+".name", "duplicate node type %s", n.Name)
+		}
+		nodeTypes[n.Name] = true
+	}
+	parents := map[string]string{}
+	for i, n := range s.NodeTypes {
+		if n.Extends == "" {
+			continue
+		}
+		if !nodeTypes[n.Extends] {
+			add(fmt.Sprintf(prefix+"nodeTypes[%d].extends", i), "unknown node type %s", n.Extends)
+			continue
+		}
+		parents[n.Name] = n.Extends
+	}
+	for i, n := range s.NodeTypes {
+		seen := map[string]bool{n.Name: true}
+		for t := parents[n.Name]; t != ""; t = parents[t] {
+			if seen[t] {
+				add(fmt.Sprintf(prefix+"nodeTypes[%d].extends", i), "cyclic subtyping through %s", t)
+				break
+			}
+			seen[t] = true
+		}
+	}
+	linkTypes = map[string]bool{}
+	for i, l := range s.LinkTypes {
+		path := fmt.Sprintf(prefix+"linkTypes[%d]", i)
+		if l.Name == "" {
+			add(path+".name", "name required")
+		} else if linkTypes[l.Name] {
+			add(path+".name", "duplicate link type %s", l.Name)
+		}
+		linkTypes[l.Name] = true
+		if l.From != "" && !nodeTypes[l.From] {
+			add(path+".from", "unknown node type %s", l.From)
+		}
+		if l.To != "" && !nodeTypes[l.To] {
+			add(path+".to", "unknown node type %s", l.To)
+		}
+	}
+	return nodeTypes, linkTypes
+}
+
 func (m *Methodology) compile() (*Compiled, Issues) {
 	var issues Issues
 	add := func(path, format string, args ...any) {
@@ -289,52 +345,12 @@ func (m *Methodology) compile() (*Compiled, Issues) {
 	if len(m.Goals) == 0 {
 		add("goals", "at least one goal required")
 	}
-	nodeTypes := map[string]bool{}
-	for i, n := range m.Domain.NodeTypes {
-		path := fmt.Sprintf("domain.nodeTypes[%d]", i)
-		if n.Name == "" {
-			add(path+".name", "name required")
-		} else if nodeTypes[n.Name] {
-			add(path+".name", "duplicate node type %s", n.Name)
+	nodeTypes, linkTypes := m.Domain.check("domain.", add)
+	if m.DomainRef != "" {
+		if _, _, err := SplitRef(m.DomainRef); err != nil {
+			add("domainRef", "%v", err)
 		}
-		nodeTypes[n.Name] = true
-	}
-	parents := map[string]string{}
-	for i, n := range m.Domain.NodeTypes {
-		if n.Extends == "" {
-			continue
-		}
-		if !nodeTypes[n.Extends] {
-			add(fmt.Sprintf("domain.nodeTypes[%d].extends", i), "unknown node type %s", n.Extends)
-			continue
-		}
-		parents[n.Name] = n.Extends
-	}
-	for i, n := range m.Domain.NodeTypes {
-		seen := map[string]bool{n.Name: true}
-		for t := parents[n.Name]; t != ""; t = parents[t] {
-			if seen[t] {
-				add(fmt.Sprintf("domain.nodeTypes[%d].extends", i), "cyclic subtyping through %s", t)
-				break
-			}
-			seen[t] = true
-		}
-	}
-	linkTypes := map[string]bool{}
-	for i, l := range m.Domain.LinkTypes {
-		path := fmt.Sprintf("domain.linkTypes[%d]", i)
-		if l.Name == "" {
-			add(path+".name", "name required")
-		} else if linkTypes[l.Name] {
-			add(path+".name", "duplicate link type %s", l.Name)
-		}
-		linkTypes[l.Name] = true
-		if l.From != "" && !nodeTypes[l.From] {
-			add(path+".from", "unknown node type %s", l.From)
-		}
-		if l.To != "" && !nodeTypes[l.To] {
-			add(path+".to", "unknown node type %s", l.To)
-		}
+		m.lintDomainRefs(nodeTypes, linkTypes, add)
 	}
 
 	// conditions: each expression is compiled on its own to report every error

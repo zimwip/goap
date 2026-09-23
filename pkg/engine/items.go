@@ -60,10 +60,11 @@ type resolver struct {
 func newResolver(nodes []domain.Node, change domain.ChangeSet, newID func() string) *resolver {
 	r := &resolver{byKey: map[string]domain.NodeRef{}, byID: map[domain.NodeID]domain.NodeRef{}, byType: map[string]domain.NodeRef{},
 		items: map[domain.ItemID]bool{}, local: map[string]domain.ItemID{}, newID: newID}
+	ns := metamodel.TypeNamespace(nodes, change.Methodology)
 	for _, n := range nodes {
 		r.byKey[n.Key] = n.Ref()
 		r.byID[n.ID] = n.Ref()
-		if meth, kind, name, ok := metamodel.ParseKey(n.Key); ok && meth == change.Methodology && kind == strings.ToLower(metamodel.TypeNodeType) {
+		if name, ok := metamodel.TypeName(n.Key, ns); ok {
 			r.byType[name] = n.Ref()
 		}
 	}
