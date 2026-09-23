@@ -22,6 +22,10 @@ type GraphPort interface {
 	// Record / Journal write and read the execution journal of changes (ADR 0011).
 	Record(ctx context.Context, recs []domain.ExecutionRecord) error
 	Journal(ctx context.Context, f domain.ExecutionFilter) ([]domain.ExecutionRecord, error)
+	// BranchHead / CreateBaseline let the engine resolve NodeType ancestry
+	// from the metadata layer of the graph (ADR 0012, see SupertypesCache).
+	BranchHead(ctx context.Context, name string) (domain.Baseline, error)
+	CreateBaseline(ctx context.Context, name string, nodes []domain.NodeRef) (domain.Baseline, error)
 }
 
 // MethodologyPort resolves methodologies (the registry): the latest

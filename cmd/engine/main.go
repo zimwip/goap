@@ -91,6 +91,15 @@ func main() {
 	}
 	// self-observation (methodology-improvement): journal, traces, drafts
 	maps.Copy(builtins, e.SelfImprovementBuiltins(telemetry.SelfImprovementFromEnv(registry)))
+	// the metadata layer changed (ADR 0012): drop the cached NodeType ancestry
+	if err := events.Subscribe("goap.graph.nodetype.changed", func(data []byte) {
+		var ev struct{ Methodology string }
+		if json.Unmarshal(data, &ev) == nil && ev.Methodology != "" {
+			e.InvalidateSupertypes(ev.Methodology)
+		}
+	}); err != nil {
+		platform.Fatal(log, "subscribe", err)
+	}
 	// triggers: agents run automatically on events and schedules
 	var triggers *engine.TriggerManager
 	if platform.Env("GOAP_TRIGGERS", "on") == "on" {

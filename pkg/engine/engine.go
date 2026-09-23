@@ -52,10 +52,15 @@ type Engine struct {
 	// promised effects (default 2).
 	MaxFailures int
 
-	locks sync.Map // process id -> *sync.Mutex
-	now   func() time.Time
-	bg    sync.WaitGroup
+	locks      sync.Map // process id -> *sync.Mutex
+	supertypes SupertypesCache
+	now        func() time.Time
+	bg         sync.WaitGroup
 }
+
+// InvalidateSupertypes drops the cached NodeType ancestry of a methodology
+// (called when the graph service reports a metadata-layer change, ADR 0012).
+func (e *Engine) InvalidateSupertypes(methodology string) { e.supertypes.Invalidate(methodology) }
 
 // background runs f in a tracked goroutine (see Drain).
 func (e *Engine) background(f func()) {
@@ -788,7 +793,7 @@ func (e *Engine) observe(ctx context.Context, p *Process, m *methodology.Compile
 		return bb, err
 	}
 	bb.Vars = p.Vars
-	bb.Supertypes = m.Supertypes()
+	bb.Supertypes = e.supertypes.Get(ctx, e.Graph, m)
 	res := m.Conditions.Evaluate(bb)
 	p.World = res.State
 	p.Unknown = res.Errors

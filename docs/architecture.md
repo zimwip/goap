@@ -315,6 +315,9 @@ those from other methodologies). An action of `kind: abstract` has no implementa
 an applicable specialization (e.g. `build` specialized into `build_java`, `build_c`, `build_shell`).
 **Subtyping** (§6): a node type can extend another (`extends`); conditions see
 `x.types` (the type and its ancestors): `"Requirement" in i.target.types` holds for its subtypes.
+Node types are the **metadata layer** of the graph ([ADR 0012](adr/0012-nodetype-graph-native.md)):
+unlike the rest of the meta-model, they are graph-native and no longer a registry mirror (§2.12).
+A data node references the node type it instantiates with a `LinkInstanceOf` edge.
 
 ### 2.11 Agent triggers
 
@@ -352,8 +355,13 @@ change CR-42
   items it produced: **auditing** can trace back from a proposal to the model call that produced it, and to the
   corresponding OpenTelemetry span.
 - The **methodology is modeled in the domain** (`pkg/metamodel`): each publication projects its
-  elements (methodology, agents, actions, goals, conditions, triggers, types) as versioned nodes
-  `M:<methodology>/<type>/<name>` via a change applied on main.
+  elements (methodology, agents, actions, goals, conditions, triggers) as versioned nodes
+  `M:<methodology>/<type>/<name>` via a change applied on main. **Node types are the exception**
+  ([ADR 0012](adr/0012-nodetype-graph-native.md)): once seeded on the graph, they are authored
+  there directly — the registry's declared node types are only the bootstrap seed and a
+  compile-time validation schema afterwards, never overwritten or deleted by a later publication.
+  `x.types` resolution (§2.9) reads the graph's node types first, falling back to the declared
+  schema for a methodology never synced onto the graph.
 - The **`methodology-improvement/observer`** agent triggers at the end of every root process
   (completed, failed, or stuck): it analyzes the journal and traces (pain points: loops, failures, costly
   or systematizable LLM calls, replans, slow spans), proposes modifications **to the methodology's
@@ -684,6 +692,7 @@ docs/                        architecture, ADRs
 | **M9 — self-observation** ✅ | ADR 0011: execution journal on the change axis (ticks, actions, LLM / tool calls, decisions, item provenance), methodology projected into versioned domain elements, `observer` agent (journal + OpenTelemetry traces → findings → proposals → review → draft), action specialization and type subtyping |
 | **M10 — SDLC** 🟡 | `sdlc` 0.2.0 methodology on the ALM domain (need → requirement → function → component → artifact → application → solution, data, interfaces, flows), build specialized by technology, incremental releases and deployment (dev → test → staging → production, release manager approval), incremental actions · to refine: quality (coverage, security), rollback, freezes / change windows, MCP tools (repositories, CI, artifact registry, deployment) |
 | **M7 — agents** ✅ | agents (goap / utility / hybrid), JS / Go script actions with DSL, sub-agents, sandbox per process, IDE |
+| **M11 — graph-native metadata layer** 🟡 | ADR 0012: `NodeType` seeded on the graph and never overwritten by `Sync`, `LinkInstanceOf`, graph-first `x.types` resolution with a permanent declared-schema fallback, `nodetype` ABAC resource · remaining: IDE screen to author node types and `extends` directly on the graph, backfill of `instanceOf` edges for existing domain nodes |
 
 ## 7. Open questions
 

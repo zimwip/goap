@@ -10,15 +10,21 @@ import (
 	"github.com/zimwip/goap/gen/goap/graph/v1/graphv1connect"
 	"github.com/zimwip/goap/internal/pbconv"
 	"github.com/zimwip/goap/internal/rpcerr"
+	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/engine"
 	"github.com/zimwip/goap/pkg/graph"
+	"github.com/zimwip/goap/pkg/metamodel"
 )
 
 // Handler implements graphv1connect.GraphServiceHandler.
 type Handler struct {
 	Graph  *graph.Graph
 	Events engine.Publisher
+	// Authz gates writes to the metadata layer (NodeType nodes and extends
+	// edges, ADR 0012), resource "nodetype". Nil grants everything. Ordinary
+	// domain-node proposals and instanceOf edges are never gated by it.
+	Authz authz.Authorizer
 }
 
 var _ graphv1connect.GraphServiceHandler = (*Handler)(nil)
@@ -136,8 +142,45 @@ func (h *Handler) UpdateChange(ctx context.Context, r *connect.Request[graphv1.U
 	return res(&graphv1.UpdateChangeResponse{Change: pbconv.ChangeToPB(c)}, err)
 }
 
+// touchesMetadataLayer reports whether items author or delete NodeType nodes
+// or extends edges (ADR 0012), the only graph writes gated by the "nodetype"
+// resource. remove_link items never carry a Type (metamodel.Sync never
+// proposes removing an extends edge), so they are not inspected here.
+func (h *Handler) touchesMetadataLayer(ctx context.Context, items []domain.ChangeItem) bool {
+	for _, it := range items {
+		p := it.Proposal
+		if p == nil {
+			continue
+		}
+		switch p.Op {
+		case domain.OpCreateNode:
+			if p.Node != nil && p.Node.Type == metamodel.TypeNodeType {
+				return true
+			}
+		case domain.OpUpdateNode, domain.OpDeleteNode:
+			if p.Node != nil && p.Node.Base != nil {
+				if n, err := h.Graph.Node(ctx, *p.Node.Base); err == nil && n.Type == metamodel.TypeNodeType {
+					return true
+				}
+			}
+		case domain.OpAddLink:
+			if p.Link != nil && p.Link.Type == metamodel.LinkExtends {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func (h *Handler) AddItems(ctx context.Context, r *connect.Request[graphv1.AddItemsRequest]) (*connect.Response[graphv1.AddItemsResponse], error) {
-	items, err := h.Graph.AddItems(ctx, domain.ChangeID(r.Msg.ChangeId), pbconv.ItemsFromPB(r.Msg.Items))
+	proposed := pbconv.ItemsFromPB(r.Msg.Items)
+	if h.touchesMetadataLayer(ctx, proposed) {
+		who := authz.From(ctx)
+		if err := authz.Check(ctx, h.Authz, authz.Request{Subject: who, Action: "write", Resource: authz.Resource{Type: "nodetype", Org: who.Org}}); err != nil {
+			return nil, rpcerr.ToConnect(err)
+		}
+	}
+	items, err := h.Graph.AddItems(ctx, domain.ChangeID(r.Msg.ChangeId), proposed)
 	if err == nil {
 		if c, cerr := h.Graph.Change(ctx, domain.ChangeID(r.Msg.ChangeId)); cerr == nil {
 			c.Items = nil
