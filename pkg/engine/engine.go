@@ -535,6 +535,7 @@ func (e *Engine) specialize(ctx context.Context, m *methodology.Compiled, action
 	}
 	impl := best.a
 	impl.Name, impl.Pre, impl.Effects, impl.Expects, impl.Cost = action.Name, action.Pre, action.Effects, action.Expects, action.Cost
+	impl.Incremental = action.Incremental
 	impl.Permission = cmp.Or(impl.Permission, action.Permission)
 	return impl, best.name, nil
 }
@@ -743,6 +744,10 @@ func (e *Engine) finishStep(ctx context.Context, p *Process, m *methodology.Comp
 	step.EndedAt = e.clock()
 	step.EffectsMet = p.World.Satisfies(action.Effects)
 	if !step.EffectsMet {
+		if action.Incremental && len(step.Items) > 0 {
+			step.Progress = true // the action runs again on the next cycle
+			return nil
+		}
 		return e.recordFailure(p, action.Name)
 	}
 	return nil
@@ -755,7 +760,7 @@ func (e *Engine) recordFailure(p *Process, action string) error {
 	}
 	n := 0
 	for _, s := range p.Steps {
-		if s.Action == action && !s.EffectsMet && !s.EndedAt.IsZero() {
+		if s.Action == action && !s.EffectsMet && !s.Progress && !s.EndedAt.IsZero() {
 			n++
 		}
 	}

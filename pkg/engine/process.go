@@ -151,13 +151,15 @@ type Step struct {
 	After      goap.WorldState `json:"after,omitempty"`
 	Items      []domain.ItemID `json:"items,omitempty"`
 	EffectsMet bool            `json:"effectsMet"`
-	ApprovedBy string          `json:"approvedBy,omitempty"`
-	Usage      Usage           `json:"usage"`
-	LLMCalls   []LLMCall       `json:"llmCalls,omitempty"`
-	ToolCalls  []ToolCall      `json:"toolCalls,omitempty"`
-	Logs       []LogLine       `json:"logs,omitempty"`
-	Children   []string        `json:"children,omitempty"`
-	Sandbox    string          `json:"sandbox,omitempty"`
+	// Progress: an incremental action produced items without reaching its effects yet.
+	Progress   bool       `json:"progress,omitempty"`
+	ApprovedBy string     `json:"approvedBy,omitempty"`
+	Usage      Usage      `json:"usage"`
+	LLMCalls   []LLMCall  `json:"llmCalls,omitempty"`
+	ToolCalls  []ToolCall `json:"toolCalls,omitempty"`
+	Logs       []LogLine  `json:"logs,omitempty"`
+	Children   []string   `json:"children,omitempty"`
+	Sandbox    string     `json:"sandbox,omitempty"`
 	// Specialization is the action actually run for an abstract action.
 	Specialization string `json:"specialization,omitempty"`
 	// Execution is the journal record of the step; SpanID its OpenTelemetry span.

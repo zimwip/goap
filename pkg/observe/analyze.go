@@ -195,7 +195,8 @@ func Analyze(recs []domain.ExecutionRecord, items map[domain.ItemID]domain.Chang
 			}
 			r.Steps++
 			s.Executions++
-			if rec.Error != "" || (rec.EffectsMet != nil && !*rec.EffectsMet) {
+			progress, _ := rec.Data["progress"].(bool)
+			if rec.Error != "" || (rec.EffectsMet != nil && !*rec.EffectsMet && !progress) {
 				s.Failures++
 			}
 			s.ModelCalls += len(rec.ModelCalls)

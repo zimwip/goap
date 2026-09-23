@@ -80,6 +80,12 @@ func actionRecord(p *Process, i int, kind, id string) domain.ExecutionRecord {
 			r.Data["child"] = p.Pending.ChildProcessID
 		}
 	}
+	if s.Progress {
+		if r.Data == nil {
+			r.Data = map[string]any{}
+		}
+		r.Data["progress"] = true
+	}
 	if len(s.Children) > 0 {
 		if r.Data == nil {
 			r.Data = map[string]any{}

@@ -412,9 +412,11 @@ type Action struct {
 	// CEL expression returning a number (utility / hybrid planners)
 	Utility string `protobuf:"bytes,17,opt,name=utility,proto3" json:"utility,omitempty"`
 	// specialization: "<action>" or "<methodology>/<action>", guard (CEL) and priority
-	Specializes   string `protobuf:"bytes,18,opt,name=specializes,proto3" json:"specializes,omitempty"`
-	When          string `protobuf:"bytes,19,opt,name=when,proto3" json:"when,omitempty"`
-	Priority      int32  `protobuf:"varint,20,opt,name=priority,proto3" json:"priority,omitempty"`
+	Specializes string `protobuf:"bytes,18,opt,name=specializes,proto3" json:"specializes,omitempty"`
+	When        string `protobuf:"bytes,19,opt,name=when,proto3" json:"when,omitempty"`
+	Priority    int32  `protobuf:"varint,20,opt,name=priority,proto3" json:"priority,omitempty"`
+	// reaches its effects over several executions (progress is not a failure)
+	Incremental   bool `protobuf:"varint,21,opt,name=incremental,proto3" json:"incremental,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -587,6 +589,13 @@ func (x *Action) GetPriority() int32 {
 		return x.Priority
 	}
 	return 0
+}
+
+func (x *Action) GetIncremental() bool {
+	if x != nil {
+		return x.Incremental
+	}
+	return false
 }
 
 // An agent (Embabel terminology): a planner and the set of admissible actions
@@ -2210,7 +2219,7 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\bfor_each\x18\x01 \x01(\tR\aforEach\x12\x14\n" +
 	"\x05where\x18\x02 \x01(\tR\x05where\x127\n" +
 	"\aproduce\x18\x03 \x01(\v2\x1d.goap.registry.v1.ProduceSpecR\aproduce\x12.\n" +
-	"\x04link\x18\x04 \x01(\v2\x1a.goap.registry.v1.LinkSpecR\x04link\"\xf6\x05\n" +
+	"\x04link\x18\x04 \x01(\v2\x1a.goap.registry.v1.LinkSpecR\x04link\"\x98\x06\n" +
 	"\x06Action\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x12\n" +
@@ -2234,7 +2243,8 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\autility\x18\x11 \x01(\tR\autility\x12 \n" +
 	"\vspecializes\x18\x12 \x01(\tR\vspecializes\x12\x12\n" +
 	"\x04when\x18\x13 \x01(\tR\x04when\x12\x1a\n" +
-	"\bpriority\x18\x14 \x01(\x05R\bpriority\x1a6\n" +
+	"\bpriority\x18\x14 \x01(\x05R\bpriority\x12 \n" +
+	"\vincremental\x18\x15 \x01(\bR\vincremental\x1a6\n" +
 	"\bPreEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\bR\x05value:\x028\x01\x1a:\n" +

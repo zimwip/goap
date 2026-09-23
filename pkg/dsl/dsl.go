@@ -42,15 +42,26 @@ type Link struct {
 
 // Item is a change item of the blackboard snapshot.
 type Item struct {
-	ID         string         `json:"id"`
-	Kind       string         `json:"kind"`
-	Type       string         `json:"type"`
-	Status     string         `json:"status"`
-	Op         string         `json:"op"`
-	ProducedBy string         `json:"producedBy"`
-	Target     *Node          `json:"target"`
-	Node       *Node          `json:"node"` // proposal node (draft), base node when updating
-	Data       map[string]any `json:"data"`
+	ID         string `json:"id"`
+	Kind       string `json:"kind"`
+	Type       string `json:"type"`
+	Status     string `json:"status"`
+	Op         string `json:"op"`
+	ProducedBy string `json:"producedBy"`
+	Target     *Node  `json:"target"`
+	Node       *Node  `json:"node"` // proposal node (draft), base node when updating
+	// Link is the link of add_link / remove_link proposals.
+	Link *ItemLink      `json:"link"`
+	Data map[string]any `json:"data"`
+}
+
+// ItemLink is a proposed link: endpoints are node keys, or "@<itemId>" for
+// nodes proposed by other items (usable as is in ProposeLink).
+type ItemLink struct {
+	ID   string `json:"id"`
+	Type string `json:"type"`
+	From string `json:"from"`
+	To   string `json:"to"`
 }
 
 // CompleteRequest is an LLM request.
@@ -313,6 +324,18 @@ func ItemsFromBlackboard(bb domain.Blackboard) []Item {
 			ProducedBy: it.ProducedBy, Target: view(it.Target), Data: it.Data}
 		if p := it.Proposal; p != nil {
 			x.Op = string(p.Op)
+			if l := p.Link; l != nil {
+				end := func(e domain.Endpoint) string {
+					if e.Item != "" {
+						return "@" + string(e.Item)
+					}
+					if n := view(e.Node); n != nil && n.Key != "" {
+						return n.Key
+					}
+					return e.String()
+				}
+				x.Link = &ItemLink{ID: string(l.LinkID), Type: l.Type, From: end(l.From), To: end(l.To)}
+			}
 			if p.Node != nil {
 				x.Node = &Node{Key: p.Node.Key, Type: p.Node.Type, Props: p.Node.Properties}
 				if b := view(p.Node.Base); b != nil {

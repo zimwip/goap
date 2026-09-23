@@ -99,6 +99,12 @@
         data-path="{p}.cost"
       />
     </div>
+    <div class="field">
+      <label class="check" title="Les effets sont atteints en plusieurs exécutions (ex. un build par technologie) : une exécution qui produit des items sans atteindre les effets est un progrès, pas un échec.">
+        <input type="checkbox" bind:checked={action.incremental} />
+        Incrémentale
+      </label>
+    </div>
   {/if}
   <div class="field">
     <label for="{id}-perm">Permission <span class="opt">(facultative)</span></label>
