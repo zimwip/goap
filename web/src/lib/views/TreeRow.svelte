@@ -18,6 +18,7 @@
     onselect,
     onopen,
     ontoggle,
+    oncontextmenu,
     actions,
     trail,
   }: {
@@ -38,6 +39,8 @@
     /** double click / Enter */
     onopen?: () => void;
     ontoggle?: () => void;
+    /** right click */
+    oncontextmenu?: (e: MouseEvent) => void;
     /** buttons shown on hover */
     actions?: Snippet;
     /** content always shown at the end of the row */
@@ -80,6 +83,7 @@
   onclick={click}
   ondblclick={() => onopen?.()}
   onkeydown={keydown}
+  oncontextmenu={oncontextmenu}
 >
   {#if expanded !== undefined}
     <button

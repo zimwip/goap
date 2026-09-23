@@ -9,6 +9,7 @@
   import { getDraft, peekDraft, draftKey, type Draft } from '../../stores/drafts.svelte';
   import { openTab, tabsState, tabId } from '../../shell/tabs.svelte';
   import { select, requestReveal } from '../../shell/workbench.svelte';
+  import { openContextMenu } from '../../shell/contextMenu.svelte';
   import { formatDate, type MethodologySummary } from '../../api';
   import {
     emptyAgent,
@@ -255,6 +256,10 @@
                   badge={d.count('nodeTypes') || undefined}
                   badgeTone="danger"
                   ontoggle={() => toggle(ntK)}
+                  oncontextmenu={(e) =>
+                    openContextMenu(e, [
+                      { label: 'New node type', icon: 'plus', disabled: d.readonly, run: () => addNodeType(d) },
+                    ])}
                 >
                   {#snippet actions()}
                     {#if !d.readonly}
@@ -296,6 +301,10 @@
                   badge={d.count('linkTypes') || undefined}
                   badgeTone="danger"
                   ontoggle={() => toggle(ltK)}
+                  oncontextmenu={(e) =>
+                    openContextMenu(e, [
+                      { label: 'New link type', icon: 'plus', disabled: d.readonly, run: () => addLinkType(d) },
+                    ])}
                 >
                   {#snippet actions()}
                     {#if !d.readonly}
