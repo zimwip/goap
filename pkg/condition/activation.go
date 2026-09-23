@@ -69,6 +69,7 @@ func (h hydrator) item(it domain.ChangeItem) map[string]any {
 					n["key"] = base["key"]
 				}
 			}
+			n["types"] = h.bb.TypesOf(n["type"].(string))
 			m["node"] = n
 		}
 		if p.Link != nil {
@@ -92,23 +93,25 @@ func (h hydrator) endpoint(e domain.Endpoint) map[string]any {
 		m["item"] = ""
 		return m
 	}
-	m := map[string]any{"item": string(e.Item), "id": "", "version": int64(0), "key": "", "type": "", "props": map[string]any{}}
+	m := map[string]any{"item": string(e.Item), "id": "", "version": int64(0), "key": "", "type": "", "types": []any{}, "props": map[string]any{}}
 	if it, ok := h.bb.Change.Item(e.Item); ok && it.Proposal != nil && it.Proposal.Node != nil {
 		m["key"] = it.Proposal.Node.Key
 		m["type"] = it.Proposal.Node.Type
+		m["types"] = h.bb.TypesOf(it.Proposal.Node.Type)
 		m["props"] = orEmpty(it.Proposal.Node.Properties)
 	}
 	return m
 }
 
 func (h hydrator) ref(r domain.NodeRef) map[string]any {
-	m := map[string]any{"id": string(r.ID), "version": int64(r.Version), "key": "", "type": "", "props": map[string]any{},
+	m := map[string]any{"id": string(r.ID), "version": int64(r.Version), "key": "", "type": "", "types": []any{}, "props": map[string]any{},
 		"deleted": false, "latest": int64(r.Version), "out": []any{}, "in": []any{}}
 	v, ok := h.bb.Nodes[r]
 	if !ok {
 		return m
 	}
 	m["key"], m["type"], m["props"], m["deleted"], m["latest"] = v.Key, v.Type, orEmpty(v.Properties), v.Deleted, int64(v.Latest)
+	m["types"] = h.bb.TypesOf(v.Type)
 	out := make([]any, 0, len(v.Out))
 	for _, l := range v.Out {
 		out = append(out, map[string]any{"id": string(l.ID), "type": l.Type, "to": h.summary(l.To)})
@@ -128,6 +131,7 @@ func (h hydrator) summary(r domain.NodeRef) map[string]any {
 	} else if v, ok := h.bb.Nodes[r]; ok {
 		m["key"], m["type"] = v.Key, v.Type
 	}
+	m["types"] = h.bb.TypesOf(m["type"].(string))
 	return m
 }
 

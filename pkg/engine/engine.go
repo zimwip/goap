@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -481,9 +482,61 @@ func (e *Engine) cycle(ctx context.Context, p *Process, m *methodology.Compiled)
 func (e *Engine) execute(ctx context.Context, p *Process, m *methodology.Compiled, bb domain.Blackboard, action methodology.Action, i int) error {
 	id := uuid.NewString()
 	p.Steps[i].Execution = id
-	err := e.executeStep(ctx, p, m, bb, action, i)
-	e.journal(ctx, p, actionRecord(p, i, action.Kind, id))
+	impl, spec, err := e.specialize(ctx, m, action, bb)
+	if err != nil {
+		step := &p.Steps[i]
+		step.Error, step.EndedAt = err.Error(), e.clock()
+		e.journal(ctx, p, actionRecord(p, i, action.Kind, id))
+		return e.recordFailure(p, action.Name)
+	}
+	p.Steps[i].Specialization = spec
+	err = e.executeStep(ctx, p, m, bb, impl, i)
+	e.journal(ctx, p, actionRecord(p, i, impl.Kind, id))
 	return err
+}
+
+// specialize returns the implementation to run for a planned action: the
+// applicable specialization with the highest priority (declared in this
+// methodology, then in the others), else the action itself. The result keeps
+// the name, pre-conditions, effects and cost of the planned action.
+func (e *Engine) specialize(ctx context.Context, m *methodology.Compiled, action methodology.Action, bb domain.Blackboard) (methodology.Action, string, error) {
+	type candidate struct {
+		a    methodology.Action
+		name string
+	}
+	var best *candidate
+	consider := func(owner *methodology.Compiled) {
+		for _, s := range owner.SpecializationsOf(m.Name, action.Name) {
+			if !owner.Applicable(s, bb) || (best != nil && s.Priority <= best.a.Priority) {
+				continue
+			}
+			name := s.Name
+			if owner.Name != m.Name {
+				name = owner.Name + "/" + s.Name
+			}
+			best = &candidate{a: s, name: name}
+		}
+	}
+	consider(m)
+	if others, err := e.Methodologies.List(ctx); err != nil {
+		e.log().Warn("specializations of other methodologies unavailable", "err", err)
+	} else {
+		for _, o := range others {
+			if o.Name != m.Name {
+				consider(o)
+			}
+		}
+	}
+	if best == nil {
+		if action.Kind == methodology.KindAbstract {
+			return action, "", fmt.Errorf("no applicable specialization for abstract action %s", action.Name)
+		}
+		return action, "", nil
+	}
+	impl := best.a
+	impl.Name, impl.Pre, impl.Effects, impl.Expects, impl.Cost = action.Name, action.Pre, action.Effects, action.Expects, action.Cost
+	impl.Permission = cmp.Or(impl.Permission, action.Permission)
+	return impl, best.name, nil
 }
 
 func (e *Engine) executeStep(ctx context.Context, p *Process, m *methodology.Compiled, bb domain.Blackboard, action methodology.Action, i int) error {
@@ -722,6 +775,7 @@ func (e *Engine) observe(ctx context.Context, p *Process, m *methodology.Compile
 		return bb, err
 	}
 	bb.Vars = p.Vars
+	bb.Supertypes = m.Supertypes()
 	res := m.Conditions.Evaluate(bb)
 	p.World = res.State
 	p.Unknown = res.Errors

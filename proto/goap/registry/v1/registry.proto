@@ -29,6 +29,8 @@ message NodeType {
   string name = 1;
   string description = 2;
   repeated string properties = 3;
+  // parent type (subtyping): inherits its properties and link types
+  string extends = 4;
 }
 
 message LinkType {
@@ -67,7 +69,7 @@ message Expectation {
 message Action {
   string name = 1;
   string description = 2;
-  // llm | script | tool | human | builtin
+  // llm | script | tool | human | builtin | abstract
   string kind = 3;
   map<string, bool> pre = 4;
   map<string, bool> effects = 5;
@@ -86,6 +88,10 @@ message Action {
   string code = 16;
   // CEL expression returning a number (utility / hybrid planners)
   string utility = 17;
+  // specialization: "<action>" or "<methodology>/<action>", guard (CEL) and priority
+  string specializes = 18;
+  string when = 19;
+  int32 priority = 20;
 }
 
 // An agent (Embabel terminology): a planner and the set of admissible actions

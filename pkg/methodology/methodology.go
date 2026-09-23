@@ -16,6 +16,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/zimwip/goap/pkg/condition"
+	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/goap"
 )
 
@@ -100,6 +101,10 @@ type NodeType struct {
 	Name        string   `yaml:"name" json:"name"`
 	Description string   `yaml:"description,omitempty" json:"description,omitempty"`
 	Properties  []string `yaml:"properties,omitempty" json:"properties,omitempty"`
+	// Extends makes the type a subtype: it inherits the properties and link
+	// types of its parent, and conditions on the parent apply to it
+	// (x.types contains every supertype, ADR 0009 §6).
+	Extends string `yaml:"extends,omitempty" json:"extends,omitempty"`
 }
 
 // UnmarshalYAML accepts either a plain name or a full object.
@@ -133,6 +138,9 @@ const (
 	KindHuman   = "human"
 	KindBuiltin = "builtin"
 	KindScript  = "script"
+	// KindAbstract declares a role without implementation: a specialization
+	// is chosen at execution (ADR 0009 §5).
+	KindAbstract = "abstract"
 )
 
 // Script languages.
@@ -169,7 +177,21 @@ type Action struct {
 	// Utility is a CEL expression returning a number, used by the utility
 	// and hybrid planners (default: 1).
 	Utility string `yaml:"utility,omitempty" json:"utility,omitempty"`
+	// Specializes makes the action a specialization of another one: "<action>"
+	// of this methodology or "<methodology>/<action>". A specialization is not
+	// planned: it inherits the pre-conditions, effects and cost of the action it
+	// specializes, and replaces its implementation at execution when When (CEL
+	// over the blackboard, empty: always) holds; the highest Priority wins.
+	Specializes string `yaml:"specializes,omitempty" json:"specializes,omitempty"`
+	When        string `yaml:"when,omitempty" json:"when,omitempty"`
+	Priority    int    `yaml:"priority,omitempty" json:"priority,omitempty"`
 }
+
+// IsSpecialization reports whether the action specializes another one.
+func (a Action) IsSpecialization() bool { return a.Specializes != "" }
+
+// WhenCondition is the name of the guard condition of a specialization.
+func (a Action) WhenCondition() string { return "when:" + a.Name }
 
 // ExpectCondition is the name of the condition generated from an action's expects.
 func (a Action) ExpectCondition() string { return "expect:" + a.Name }
@@ -201,6 +223,8 @@ type Compiled struct {
 	actions    map[string]Action
 	utilities  *condition.NumberSet
 	agents     map[string]Agent
+	// whens are the guards of the specializations (not part of the world state)
+	whens *condition.Set
 }
 
 // Issue is a validation problem located by a field path such as
@@ -271,6 +295,27 @@ func (m *Methodology) compile() (*Compiled, Issues) {
 		}
 		nodeTypes[n.Name] = true
 	}
+	parents := map[string]string{}
+	for i, n := range m.Domain.NodeTypes {
+		if n.Extends == "" {
+			continue
+		}
+		if !nodeTypes[n.Extends] {
+			add(fmt.Sprintf("domain.nodeTypes[%d].extends", i), "unknown node type %s", n.Extends)
+			continue
+		}
+		parents[n.Name] = n.Extends
+	}
+	for i, n := range m.Domain.NodeTypes {
+		seen := map[string]bool{n.Name: true}
+		for t := parents[n.Name]; t != ""; t = parents[t] {
+			if seen[t] {
+				add(fmt.Sprintf("domain.nodeTypes[%d].extends", i), "cyclic subtyping through %s", t)
+				break
+			}
+			seen[t] = true
+		}
+	}
 	linkTypes := map[string]bool{}
 	for i, l := range m.Domain.LinkTypes {
 		path := fmt.Sprintf("domain.linkTypes[%d]", i)
@@ -311,7 +356,7 @@ func (m *Methodology) compile() (*Compiled, Issues) {
 	}
 
 	actions := map[string]Action{}
-	var utilities []condition.Definition
+	var utilities, whens []condition.Definition
 	for i, src := range m.Actions {
 		path := fmt.Sprintf("actions[%d]", i)
 		a := src
@@ -324,8 +369,29 @@ func (m *Methodology) compile() (*Compiled, Issues) {
 			add(path+".name", "duplicate action %s", a.Name)
 			continue
 		}
-		if !slices.Contains([]string{KindLLM, KindTool, KindHuman, KindBuiltin, KindScript}, a.Kind) {
+		if !slices.Contains([]string{KindLLM, KindTool, KindHuman, KindBuiltin, KindScript, KindAbstract}, a.Kind) {
 			add(path+".kind", "unknown kind %q", a.Kind)
+		}
+		if a.IsSpecialization() {
+			if a.Kind == KindAbstract {
+				add(path+".kind", "a specialization must be implemented")
+			}
+			if strings.Count(a.Specializes, "/") > 1 || strings.HasSuffix(a.Specializes, "/") || a.Specializes == a.Name {
+				add(path+".specializes", "specializes must be <action> or <methodology>/<action>")
+			}
+			if len(a.Pre) > 0 || len(a.Effects) > 0 || a.Expects != nil {
+				add(path+".specializes", "a specialization inherits pre, effects and expects from the action it specializes")
+			}
+			if a.When != "" {
+				d := condition.Definition{Name: a.WhenCondition(), Expr: a.When}
+				if _, err := condition.Compile([]condition.Definition{d}); err != nil {
+					add(path+".when", "%s", strings.TrimPrefix(err.Error(), fmt.Sprintf("condition %q: ", d.Name)))
+				} else {
+					whens = append(whens, d)
+				}
+			}
+		} else if a.When != "" || a.Priority != 0 {
+			add(path+".when", "when and priority apply to specializations only")
 		}
 		if a.Kind == KindScript {
 			if a.Language != LangJavaScript && a.Language != LangGo {
@@ -377,10 +443,22 @@ func (m *Methodology) compile() (*Compiled, Issues) {
 				}
 			}
 		}
-		if len(a.Effects) == 0 {
+		if len(a.Effects) == 0 && !a.IsSpecialization() {
 			add(path+".effects", "no effect: the action can never be planned")
 		}
 		actions[a.Name] = a
+	}
+	// local specializations must target a planned action of this methodology
+	for i, a := range m.Actions {
+		target, local := a.SpecializedAction(m.Name)
+		if !a.IsSpecialization() || !local {
+			continue
+		}
+		if t, ok := actions[target]; !ok {
+			add(fmt.Sprintf("actions[%d].specializes", i), "unknown action %q", target)
+		} else if t.IsSpecialization() {
+			add(fmt.Sprintf("actions[%d].specializes", i), "cannot specialize the specialization %q", target)
+		}
 	}
 	// references to conditions (expect:* conditions are known once every
 	// action has been processed)
@@ -431,8 +509,10 @@ func (m *Methodology) compile() (*Compiled, Issues) {
 			add(path+".planner", "planner must be goap, utility or hybrid")
 		}
 		for j, a := range ag.Actions {
-			if _, ok := actions[a]; !ok {
+			if act, ok := actions[a]; !ok {
 				add(fmt.Sprintf("%s.actions[%d]", path, j), "unknown action %q", a)
+			} else if act.IsSpecialization() {
+				add(fmt.Sprintf("%s.actions[%d]", path, j), "%q is a specialization: list the action it specializes", a)
 			}
 		}
 		for j, g := range ag.Goals {
@@ -500,7 +580,11 @@ func (m *Methodology) compile() (*Compiled, Issues) {
 	if err != nil {
 		return nil, Issues{{Message: err.Error()}}
 	}
-	return &Compiled{Methodology: m, Conditions: set, actions: actions, utilities: uset, agents: agents}, nil
+	wset, err := condition.Compile(whens)
+	if err != nil {
+		return nil, Issues{{Message: err.Error()}}
+	}
+	return &Compiled{Methodology: m, Conditions: set, actions: actions, utilities: uset, agents: agents, whens: wset}, nil
 }
 
 // Action returns an action by name.
@@ -524,9 +608,70 @@ func (c *Compiled) PlanningActions() []goap.Action {
 	out := make([]goap.Action, 0, len(c.Actions))
 	for _, src := range c.Actions {
 		a := c.actions[src.Name]
+		if a.IsSpecialization() {
+			continue
+		}
 		out = append(out, goap.Action{Name: a.Name, Pre: a.Pre, Effects: a.Effects, Cost: a.Cost})
 	}
 	return out
+}
+
+// Supertypes maps each node type to its ancestors, nearest first (ADR 0009 §6).
+func (m *Methodology) Supertypes() map[string][]string {
+	parents := map[string]string{}
+	for _, n := range m.Domain.NodeTypes {
+		if n.Extends != "" {
+			parents[n.Name] = n.Extends
+		}
+	}
+	out := map[string][]string{}
+	for _, n := range m.Domain.NodeTypes {
+		seen := map[string]bool{n.Name: true}
+		for t := parents[n.Name]; t != "" && !seen[t]; t = parents[t] {
+			seen[t] = true
+			out[n.Name] = append(out[n.Name], t)
+		}
+	}
+	return out
+}
+
+// SpecializedAction returns the action a specialization targets and whether
+// it belongs to the methodology named self.
+func (a Action) SpecializedAction(self string) (string, bool) {
+	if i := strings.Index(a.Specializes, "/"); i >= 0 {
+		return a.Specializes[i+1:], a.Specializes[:i] == self
+	}
+	return a.Specializes, true
+}
+
+// SpecializationsOf returns the specializations this methodology declares
+// for the action "<methodology>/<action>", in declaration order.
+func (c *Compiled) SpecializationsOf(methodologyName, action string) []Action {
+	var out []Action
+	for _, src := range c.Actions {
+		a := c.actions[src.Name]
+		if !a.IsSpecialization() {
+			continue
+		}
+		target, local := a.SpecializedAction(c.Name)
+		if target != action {
+			continue
+		}
+		if (local && methodologyName == c.Name) || (!local && strings.HasPrefix(a.Specializes, methodologyName+"/")) {
+			out = append(out, a)
+		}
+	}
+	return out
+}
+
+// Applicable reports whether the guard of a specialization holds on the
+// blackboard (no guard: always; evaluation error: no).
+func (c *Compiled) Applicable(a Action, bb domain.Blackboard) bool {
+	if a.When == "" {
+		return true
+	}
+	res := c.whens.Evaluate(bb)
+	return res.State[a.WhenCondition()]
 }
 
 // Agent returns an agent (the implicit default agent when the methodology
