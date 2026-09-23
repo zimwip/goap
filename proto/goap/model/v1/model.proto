@@ -7,6 +7,22 @@ package goap.model.v1;
 service ModelService {
   rpc Complete(CompleteRequest) returns (CompleteResponse);
   rpc ListModels(ListModelsRequest) returns (ListModelsResponse);
+
+  // Platform administration of the gateway (`admin` on the `platform`
+  // resource). Providers are pluggable: a kind is a preset (Mistral, Anthropic,
+  // Google, …) on top of a wire protocol (anthropic, openai, gemini).
+  rpc ListProviderKinds(ListProviderKindsRequest) returns (ListProviderKindsResponse);
+  rpc ListProviders(ListProvidersRequest) returns (ListProvidersResponse);
+  rpc SaveProvider(SaveProviderRequest) returns (SaveProviderResponse);
+  rpc DeleteProvider(DeleteProviderRequest) returns (DeleteProviderResponse);
+  // Ask the provider for its models (before or after saving it).
+  rpc DiscoverModels(DiscoverModelsRequest) returns (DiscoverModelsResponse);
+  // The catalog: models offered on the platform, with quota and access level.
+  rpc ListCatalog(ListCatalogRequest) returns (ListCatalogResponse);
+  rpc SaveModel(SaveModelRequest) returns (SaveModelResponse);
+  rpc DeleteModel(DeleteModelRequest) returns (DeleteModelResponse);
+  rpc SaveAlias(SaveAliasRequest) returns (SaveAliasResponse);
+  rpc DeleteAlias(DeleteAliasRequest) returns (DeleteAliasResponse);
 }
 
 message Message {
@@ -46,3 +62,126 @@ message ListModelsResponse {
   repeated ModelAlias aliases = 1;
   repeated string providers = 2;
 }
+
+message ProviderKind {
+  string id = 1;
+  string label = 2;
+  string protocol = 3;
+  string default_base_url = 4;
+  bool key_required = 5;
+  string description = 6;
+}
+
+message ProviderProtocol {
+  string id = 1;
+  string label = 2;
+}
+
+message ListProviderKindsRequest {}
+
+message ListProviderKindsResponse {
+  repeated ProviderKind kinds = 1;
+  repeated ProviderProtocol protocols = 2;
+}
+
+// A configured provider. The API key is write-only: only has_key and a
+// masked key_hint are returned.
+message Provider {
+  string name = 1;
+  string kind = 2;
+  string protocol = 3;
+  string base_url = 4;
+  bool enabled = 5;
+  bool has_key = 6;
+  string key_hint = 7;
+  // whether the provider is loaded in the running router
+  bool active = 8;
+}
+
+message ListProvidersRequest {}
+
+message ListProvidersResponse {
+  repeated Provider providers = 1;
+}
+
+message SaveProviderRequest {
+  Provider provider = 1;
+  // empty: keep the stored key
+  string api_key = 2;
+  bool clear_key = 3;
+}
+
+message SaveProviderResponse {
+  Provider provider = 1;
+}
+
+message DeleteProviderRequest {
+  string name = 1;
+}
+
+message DeleteProviderResponse {}
+
+message DiscoveredModel {
+  string id = 1;
+  string display_name = 2;
+  // already in the catalog
+  bool registered = 3;
+}
+
+message DiscoverModelsRequest {
+  Provider provider = 1;
+  // empty: use the stored key of the provider of that name
+  string api_key = 2;
+}
+
+message DiscoverModelsResponse {
+  repeated DiscoveredModel models = 1;
+}
+
+// A catalog entry. roles: any of these roles may call the model (empty:
+// every authenticated caller); admins always may. quota_tokens: global token
+// budget per period (0: unlimited); quota_period: day | month | total.
+message CatalogModel {
+  string provider = 1;
+  string model = 2;
+  string display_name = 3;
+  bool enabled = 4;
+  int64 quota_tokens = 5;
+  string quota_period = 6;
+  repeated string roles = 7;
+  int64 used_tokens = 8;
+}
+
+message ListCatalogRequest {}
+
+message ListCatalogResponse {
+  repeated CatalogModel models = 1;
+  repeated ModelAlias aliases = 2;
+}
+
+message SaveModelRequest {
+  CatalogModel model = 1;
+}
+
+message SaveModelResponse {
+  CatalogModel model = 1;
+}
+
+message DeleteModelRequest {
+  string provider = 1;
+  string model = 2;
+}
+
+message DeleteModelResponse {}
+
+message SaveAliasRequest {
+  ModelAlias alias = 1;
+}
+
+message SaveAliasResponse {}
+
+message DeleteAliasRequest {
+  string alias = 1;
+}
+
+message DeleteAliasResponse {}

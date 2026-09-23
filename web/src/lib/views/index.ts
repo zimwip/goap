@@ -15,6 +15,7 @@ import DomainExplorer from './nav/DomainExplorer.svelte';
 import RunsExplorer from './nav/RunsExplorer.svelte';
 import BaselineExplorer from './nav/BaselineExplorer.svelte';
 import ChangesExplorer from './nav/ChangesExplorer.svelte';
+import PlatformTab from './platform/PlatformTab.svelte';
 import AccessExplorer from './nav/AccessExplorer.svelte';
 import TriggersExplorer from './nav/TriggersExplorer.svelte';
 import AssistantPanel from './assistant/AssistantPanel.svelte';
@@ -313,6 +314,16 @@ registerView({
   component: PoliciesTab,
   key: () => 'all',
   tabTitle: () => 'Access policies',
+});
+
+registerView({
+  id: 'platform',
+  zone: 'editor',
+  title: 'Platform settings',
+  icon: 'settings',
+  component: PlatformTab,
+  key: () => 'main',
+  tabTitle: () => 'Platform settings',
 });
 
 registerView({

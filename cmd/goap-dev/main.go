@@ -37,6 +37,7 @@ import (
 	"github.com/zimwip/goap/pkg/engine"
 	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/intent"
+	"github.com/zimwip/goap/pkg/llm"
 	"github.com/zimwip/goap/pkg/metamodel"
 	"github.com/zimwip/goap/pkg/methodology"
 )
@@ -115,12 +116,17 @@ func main() {
 		platform.Fatal(log, "methodology projection", err)
 	}
 	key, _ := secrets.Get(ctx, "", "ANTHROPIC_API_KEY")
-	router, err := modelgw.Build(ctx, modelgw.DefaultConfig(key != ""), secrets.Get)
-	if err != nil {
+	secret, _ := secrets.Get(ctx, "", "GOAP_SECRET_KEY")
+	if secret == "" {
+		secret = modelgw.DevSecret
+	}
+	gw := modelgw.NewService(st.models, modelgw.NewBox(secret), log)
+	gw.Router.Instrument = telemetry.NewGenAI().Instrument
+	if err := gw.Bootstrap(ctx, modelgw.DefaultConfig(key != ""), secrets.Get); err != nil {
 		platform.Fatal(log, "models", err)
 	}
-	router.Instrument = telemetry.NewGenAI().Instrument
-	models := telemetry.LLMClient{Next: router}
+	// the engine calls the gateway in-process, without an identity: trusted
+	models := telemetry.LLMClient{Next: llm.ClientFunc(gw.Complete)}
 	// scripts run in-process unless GOAP_SANDBOX selects a provisioner
 	sandboxes, runtime, _, err := sandbox.FromEnv(log, platform.H2CClient(), telemetry.ClientOptions())
 	if err != nil {
@@ -160,7 +166,7 @@ func main() {
 	srv.Mount(graphv1connect.NewGraphServiceHandler(&graphsvc.Handler{Graph: g, Events: changePublisher(onChange), Authz: authorizer, Identity: ident}, telemetry.HandlerOptions()...))
 	srv.Mount(registryv1connect.NewRegistryServiceHandler(&registrysvc.Handler{Service: reg, Identity: ident}, telemetry.HandlerOptions()...))
 	srv.Mount(iamv1connect.NewIamServiceHandler(&iamsvc.Handler{Enforcer: authorizer, Identity: ident}, telemetry.HandlerOptions()...))
-	srv.Mount(modelv1connect.NewModelServiceHandler(&modelgw.Handler{Router: router}, telemetry.HandlerOptions()...))
+	srv.Mount(modelv1connect.NewModelServiceHandler(&modelgw.Handler{Service: gw, Identity: ident, Authz: authorizer}, telemetry.HandlerOptions()...))
 	srv.Mount(enginev1connect.NewEngineServiceHandler(&enginesvc.Handler{Engine: e, Log: log, DefaultPrincipal: &dev, Authz: authorizer, Broker: broker, Triggers: triggers}, telemetry.HandlerOptions()...))
 	// single process: the platform is up when this answers (the gateway serves it otherwise)
 	srv.Echo.GET("/api/status", func(c echo.Context) error {

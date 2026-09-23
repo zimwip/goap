@@ -688,6 +688,7 @@ const GRAPH = 'goap.graph.v1.GraphService';
 const ENGINE = 'goap.engine.v1.EngineService';
 
 const IAM = 'goap.iam.v1.IamService';
+const MODEL = 'goap.model.v1.ModelService';
 
 export const ENGINE_SERVICE = ENGINE;
 
@@ -965,3 +966,69 @@ export function formatTime(iso: string | undefined): string {
 export function shortId(id: string | undefined): string {
   return id ? id.slice(0, 8) : '';
 }
+
+// --- model gateway administration ---------------------------------------------
+
+export interface ProviderKind {
+  id: string;
+  label?: string;
+  protocol?: string;
+  defaultBaseUrl?: string;
+  keyRequired?: boolean;
+  description?: string;
+}
+
+export interface LlmProvider {
+  name: string;
+  kind: string;
+  protocol: string;
+  baseUrl?: string;
+  enabled?: boolean;
+  hasKey?: boolean;
+  keyHint?: string;
+  /** loaded in the running router */
+  active?: boolean;
+}
+
+export interface DiscoveredModel {
+  id: string;
+  displayName?: string;
+  registered?: boolean;
+}
+
+/** int64 fields travel as strings in proto3 JSON. */
+export interface CatalogModel {
+  provider: string;
+  model: string;
+  displayName?: string;
+  enabled?: boolean;
+  quotaTokens?: string | number;
+  quotaPeriod?: string;
+  roles?: string[];
+  usedTokens?: string | number;
+}
+
+export interface ModelAlias {
+  alias: string;
+  provider: string;
+  model: string;
+}
+
+export const models = {
+  listProviderKinds: (signal?: AbortSignal) =>
+    rpc<Empty, { kinds?: ProviderKind[]; protocols?: { id: string; label?: string }[] }>(MODEL, 'ListProviderKinds', {}, signal),
+  listProviders: (signal?: AbortSignal) => rpc<Empty, { providers?: LlmProvider[] }>(MODEL, 'ListProviders', {}, signal),
+  /** `apiKey` empty keeps the stored key. */
+  saveProvider: (provider: LlmProvider, apiKey = '', clearKey = false) =>
+    rpc<object, { provider?: LlmProvider }>(MODEL, 'SaveProvider', { provider, apiKey, clearKey }),
+  deleteProvider: (name: string) => rpc<{ name: string }, Empty>(MODEL, 'DeleteProvider', { name }),
+  /** Ask the provider for its models; `apiKey` empty uses the stored key of the provider of that name. */
+  discoverModels: (provider: Partial<LlmProvider>, apiKey = '') =>
+    rpc<object, { models?: DiscoveredModel[] }>(MODEL, 'DiscoverModels', { provider, apiKey }),
+  listCatalog: (signal?: AbortSignal) =>
+    rpc<Empty, { models?: CatalogModel[]; aliases?: ModelAlias[] }>(MODEL, 'ListCatalog', {}, signal),
+  saveModel: (model: CatalogModel) => rpc<{ model: CatalogModel }, { model?: CatalogModel }>(MODEL, 'SaveModel', { model }),
+  deleteModel: (provider: string, model: string) => rpc<object, Empty>(MODEL, 'DeleteModel', { provider, model }),
+  saveAlias: (alias: ModelAlias) => rpc<{ alias: ModelAlias }, Empty>(MODEL, 'SaveAlias', { alias }),
+  deleteAlias: (alias: string) => rpc<{ alias: string }, Empty>(MODEL, 'DeleteAlias', { alias }),
+};
