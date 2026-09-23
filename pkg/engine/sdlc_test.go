@@ -3,6 +3,7 @@ package engine_test
 import (
 	"context"
 	"os"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -14,6 +15,7 @@ import (
 	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/intent"
 	"github.com/zimwip/goap/pkg/llm"
+	"github.com/zimwip/goap/pkg/metamodel"
 	"github.com/zimwip/goap/pkg/methodology"
 )
 
@@ -69,6 +71,19 @@ func TestSDLCDelivery(t *testing.T) {
 	g := graph.New(graph.NewMemory())
 	if _, err := graphsvc.SeedDemo(ctx, g); err != nil {
 		t.Fatal(err)
+	}
+	// project sdlc's node types onto the graph (ADR 0012): exercises the
+	// graph-native x.types resolution instead of falling back to the
+	// declared schema.
+	if _, err := metamodel.Sync(ctx, g, m); err != nil {
+		t.Fatal(err)
+	}
+	graphTypes, err := metamodel.Supertypes(ctx, g, "sdlc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := m.Supertypes(); !reflect.DeepEqual(graphTypes, want) {
+		t.Fatalf("graph-derived supertypes = %v, want %v", graphTypes, want)
 	}
 	bs, _ := g.Baselines(ctx)
 	e := &engine.Engine{
