@@ -54,6 +54,12 @@ const (
 	// EngineServiceWatchEventsProcedure is the fully-qualified name of the EngineService's WatchEvents
 	// RPC.
 	EngineServiceWatchEventsProcedure = "/goap.engine.v1.EngineService/WatchEvents"
+	// EngineServiceListTriggersProcedure is the fully-qualified name of the EngineService's
+	// ListTriggers RPC.
+	EngineServiceListTriggersProcedure = "/goap.engine.v1.EngineService/ListTriggers"
+	// EngineServiceFireTriggerProcedure is the fully-qualified name of the EngineService's FireTrigger
+	// RPC.
+	EngineServiceFireTriggerProcedure = "/goap.engine.v1.EngineService/FireTrigger"
 )
 
 // EngineServiceClient is a client for the goap.engine.v1.EngineService service.
@@ -69,6 +75,10 @@ type EngineServiceClient interface {
 	// Live process events and logs (server streaming). Empty process_id: every
 	// process the caller may read.
 	WatchEvents(context.Context, *connect.Request[v1.WatchEventsRequest]) (*connect.ServerStreamForClient[v1.WatchEventsResponse], error)
+	// Triggers of the published agents, with their state.
+	ListTriggers(context.Context, *connect.Request[v1.ListTriggersRequest]) (*connect.Response[v1.ListTriggersResponse], error)
+	// Fire a trigger now (test from the IDE).
+	FireTrigger(context.Context, *connect.Request[v1.FireTriggerRequest]) (*connect.Response[v1.FireTriggerResponse], error)
 }
 
 // NewEngineServiceClient constructs a client for the goap.engine.v1.EngineService service. By
@@ -124,6 +134,18 @@ func NewEngineServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(engineServiceMethods.ByName("WatchEvents")),
 			connect.WithClientOptions(opts...),
 		),
+		listTriggers: connect.NewClient[v1.ListTriggersRequest, v1.ListTriggersResponse](
+			httpClient,
+			baseURL+EngineServiceListTriggersProcedure,
+			connect.WithSchema(engineServiceMethods.ByName("ListTriggers")),
+			connect.WithClientOptions(opts...),
+		),
+		fireTrigger: connect.NewClient[v1.FireTriggerRequest, v1.FireTriggerResponse](
+			httpClient,
+			baseURL+EngineServiceFireTriggerProcedure,
+			connect.WithSchema(engineServiceMethods.ByName("FireTrigger")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -136,6 +158,8 @@ type engineServiceClient struct {
 	getProcess       *connect.Client[v1.GetProcessRequest, v1.GetProcessResponse]
 	listProcesses    *connect.Client[v1.ListProcessesRequest, v1.ListProcessesResponse]
 	watchEvents      *connect.Client[v1.WatchEventsRequest, v1.WatchEventsResponse]
+	listTriggers     *connect.Client[v1.ListTriggersRequest, v1.ListTriggersResponse]
+	fireTrigger      *connect.Client[v1.FireTriggerRequest, v1.FireTriggerResponse]
 }
 
 // StartProcess calls goap.engine.v1.EngineService.StartProcess.
@@ -173,6 +197,16 @@ func (c *engineServiceClient) WatchEvents(ctx context.Context, req *connect.Requ
 	return c.watchEvents.CallServerStream(ctx, req)
 }
 
+// ListTriggers calls goap.engine.v1.EngineService.ListTriggers.
+func (c *engineServiceClient) ListTriggers(ctx context.Context, req *connect.Request[v1.ListTriggersRequest]) (*connect.Response[v1.ListTriggersResponse], error) {
+	return c.listTriggers.CallUnary(ctx, req)
+}
+
+// FireTrigger calls goap.engine.v1.EngineService.FireTrigger.
+func (c *engineServiceClient) FireTrigger(ctx context.Context, req *connect.Request[v1.FireTriggerRequest]) (*connect.Response[v1.FireTriggerResponse], error) {
+	return c.fireTrigger.CallUnary(ctx, req)
+}
+
 // EngineServiceHandler is an implementation of the goap.engine.v1.EngineService service.
 type EngineServiceHandler interface {
 	StartProcess(context.Context, *connect.Request[v1.StartProcessRequest]) (*connect.Response[v1.StartProcessResponse], error)
@@ -186,6 +220,10 @@ type EngineServiceHandler interface {
 	// Live process events and logs (server streaming). Empty process_id: every
 	// process the caller may read.
 	WatchEvents(context.Context, *connect.Request[v1.WatchEventsRequest], *connect.ServerStream[v1.WatchEventsResponse]) error
+	// Triggers of the published agents, with their state.
+	ListTriggers(context.Context, *connect.Request[v1.ListTriggersRequest]) (*connect.Response[v1.ListTriggersResponse], error)
+	// Fire a trigger now (test from the IDE).
+	FireTrigger(context.Context, *connect.Request[v1.FireTriggerRequest]) (*connect.Response[v1.FireTriggerResponse], error)
 }
 
 // NewEngineServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -237,6 +275,18 @@ func NewEngineServiceHandler(svc EngineServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(engineServiceMethods.ByName("WatchEvents")),
 		connect.WithHandlerOptions(opts...),
 	)
+	engineServiceListTriggersHandler := connect.NewUnaryHandler(
+		EngineServiceListTriggersProcedure,
+		svc.ListTriggers,
+		connect.WithSchema(engineServiceMethods.ByName("ListTriggers")),
+		connect.WithHandlerOptions(opts...),
+	)
+	engineServiceFireTriggerHandler := connect.NewUnaryHandler(
+		EngineServiceFireTriggerProcedure,
+		svc.FireTrigger,
+		connect.WithSchema(engineServiceMethods.ByName("FireTrigger")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/goap.engine.v1.EngineService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case EngineServiceStartProcessProcedure:
@@ -253,6 +303,10 @@ func NewEngineServiceHandler(svc EngineServiceHandler, opts ...connect.HandlerOp
 			engineServiceListProcessesHandler.ServeHTTP(w, r)
 		case EngineServiceWatchEventsProcedure:
 			engineServiceWatchEventsHandler.ServeHTTP(w, r)
+		case EngineServiceListTriggersProcedure:
+			engineServiceListTriggersHandler.ServeHTTP(w, r)
+		case EngineServiceFireTriggerProcedure:
+			engineServiceFireTriggerHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -288,4 +342,12 @@ func (UnimplementedEngineServiceHandler) ListProcesses(context.Context, *connect
 
 func (UnimplementedEngineServiceHandler) WatchEvents(context.Context, *connect.Request[v1.WatchEventsRequest], *connect.ServerStream[v1.WatchEventsResponse]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("goap.engine.v1.EngineService.WatchEvents is not implemented"))
+}
+
+func (UnimplementedEngineServiceHandler) ListTriggers(context.Context, *connect.Request[v1.ListTriggersRequest]) (*connect.Response[v1.ListTriggersResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.engine.v1.EngineService.ListTriggers is not implemented"))
+}
+
+func (UnimplementedEngineServiceHandler) FireTrigger(context.Context, *connect.Request[v1.FireTriggerRequest]) (*connect.Response[v1.FireTriggerResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.engine.v1.EngineService.FireTrigger is not implemented"))
 }

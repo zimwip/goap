@@ -6,6 +6,10 @@ package main
 
 import (
 	"context"
+	"net/http"
+	"time"
+
+	"github.com/labstack/echo/v4"
 	"strings"
 
 	"github.com/zimwip/goap/gen/goap/engine/v1/enginev1connect"
@@ -24,6 +28,7 @@ import (
 	"github.com/zimwip/goap/internal/sandbox"
 	"github.com/zimwip/goap/internal/telemetry"
 	"github.com/zimwip/goap/pkg/authz"
+	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/engine"
 	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/intent"
@@ -68,8 +73,14 @@ func main() {
 		platform.Fatal(log, "sandbox", err)
 	}
 	broker := engine.NewBroker()
+	var triggers *engine.TriggerManager
+	onChange := func(ctx context.Context, ev domain.ChangeEvent) {
+		if triggers != nil {
+			triggers.Handle(ctx, engine.TriggerEventOf(ev))
+		}
+	}
 	e := &engine.Engine{
-		Graph:         g,
+		Graph:         engine.EventingGraph{GraphPort: g, OnEvent: onChange},
 		Methodologies: reg,
 		Executors: map[string]engine.Executor{
 			methodology.KindLLM:     engine.LLMExecutor{Client: models},
@@ -86,16 +97,35 @@ func main() {
 		Tracer:    telemetry.NewEngineTracer(),
 		Log:       log,
 	}
+	triggers = &engine.TriggerManager{Engine: e, Log: log}
+	triggers.Start(ctx)
+	go triggers.WatchProcesses(ctx, broker)
 	srv := platform.NewServer(log, platform.Env("GOAP_HTTP_ADDR", ":8080"))
-	srv.Mount(graphv1connect.NewGraphServiceHandler(&graphsvc.Handler{Graph: g}, telemetry.HandlerOptions()...))
+	srv.Mount(graphv1connect.NewGraphServiceHandler(&graphsvc.Handler{Graph: g, Events: changePublisher(onChange)}, telemetry.HandlerOptions()...))
 	srv.Mount(registryv1connect.NewRegistryServiceHandler(&registrysvc.Handler{Service: reg, Identity: ident}, telemetry.HandlerOptions()...))
 	srv.Mount(iamv1connect.NewIamServiceHandler(&iamsvc.Handler{Enforcer: authorizer, Identity: ident}, telemetry.HandlerOptions()...))
 	srv.Mount(modelv1connect.NewModelServiceHandler(&modelgw.Handler{Router: router}, telemetry.HandlerOptions()...))
-	srv.Mount(enginev1connect.NewEngineServiceHandler(&enginesvc.Handler{Engine: e, Log: log, DefaultPrincipal: &dev, Authz: authorizer, Broker: broker}, telemetry.HandlerOptions()...))
+	srv.Mount(enginev1connect.NewEngineServiceHandler(&enginesvc.Handler{Engine: e, Log: log, DefaultPrincipal: &dev, Authz: authorizer, Broker: broker, Triggers: triggers}, telemetry.HandlerOptions()...))
+	// single process: the platform is up when this answers (the gateway serves it otherwise)
+	srv.Echo.GET("/api/status", func(c echo.Context) error {
+		return c.JSON(http.StatusOK, map[string]any{"status": "ok", "time": time.Now().UTC(),
+			"services": []map[string]any{{"name": "goap-dev", "status": "up", "latencyMs": 0}}})
+	})
 	if runtime != nil {
 		srv.Mount(runtimev1connect.NewRuntimeServiceHandler(runtime, telemetry.HandlerOptions()...))
 	}
 	if err := srv.Run(); err != nil {
 		platform.Fatal(log, "server", err)
 	}
+}
+
+// changePublisher forwards the change events of the graph handler (calls from
+// the IDE) to the triggers.
+type changePublisher func(ctx context.Context, ev domain.ChangeEvent)
+
+func (f changePublisher) Publish(ctx context.Context, _ string, v any) error {
+	if ev, ok := v.(domain.ChangeEvent); ok {
+		f(ctx, ev)
+	}
+	return nil
 }

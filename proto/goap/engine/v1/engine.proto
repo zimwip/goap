@@ -19,6 +19,43 @@ service EngineService {
   // Live process events and logs (server streaming). Empty process_id: every
   // process the caller may read.
   rpc WatchEvents(WatchEventsRequest) returns (stream WatchEventsResponse);
+  // Triggers of the published agents, with their state.
+  rpc ListTriggers(ListTriggersRequest) returns (ListTriggersResponse);
+  // Fire a trigger now (test from the IDE).
+  rpc FireTrigger(FireTriggerRequest) returns (FireTriggerResponse);
+}
+
+message TriggerState {
+  string methodology = 1;
+  string agent = 2;
+  string name = 3;
+  string description = 4;
+  // event | schedule
+  string type = 5;
+  string event = 6;
+  string schedule = 7;
+  bool enabled = 8;
+  int32 fires = 9;
+  google.protobuf.Timestamp last_fired = 10;
+  google.protobuf.Timestamp next_fire = 11;
+  string last_process_id = 12;
+  string last_error = 13;
+}
+
+message ListTriggersRequest {}
+
+message ListTriggersResponse {
+  repeated TriggerState triggers = 1;
+}
+
+message FireTriggerRequest {
+  string methodology = 1;
+  string agent = 2;
+  string trigger = 3;
+}
+
+message FireTriggerResponse {
+  Process process = 1;
 }
 
 // Token and call accounting.
@@ -141,6 +178,8 @@ message Process {
   string title = 24;
   // OpenTelemetry trace of the process (root span "process")
   string trace_id = 25;
+  // "<methodology>/<agent>/<trigger>" when started by a trigger
+  string trigger = 26;
 }
 
 message StartProcessRequest {
@@ -200,7 +239,14 @@ message GetProcessResponse {
   Process process = 1;
 }
 
-message ListProcessesRequest {}
+message ListProcessesRequest {
+  // only the processes started by the caller
+  bool mine = 1;
+  // filter by status (empty: all)
+  repeated string statuses = 2;
+  // only root processes (no sub-agents)
+  bool roots_only = 3;
+}
 
 message ListProcessesResponse {
   repeated Process processes = 1;

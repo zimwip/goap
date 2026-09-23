@@ -89,3 +89,15 @@ func (c *Client) Apply(ctx context.Context, id domain.ChangeID, baselineName str
 	}
 	return pbconv.BaselineFromPB(r.Msg.Baseline), nil
 }
+
+func (c *Client) Baselines(ctx context.Context) ([]domain.Baseline, error) {
+	r, err := c.rpc.ListBaselines(ctx, connect.NewRequest(&graphv1.ListBaselinesRequest{}))
+	if err != nil {
+		return nil, rpcerr.FromConnect(err)
+	}
+	out := make([]domain.Baseline, len(r.Msg.Baselines))
+	for i, b := range r.Msg.Baselines {
+		out[i] = pbconv.BaselineFromPB(b)
+	}
+	return out, nil
+}

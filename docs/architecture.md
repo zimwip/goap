@@ -279,6 +279,26 @@ avec l'identité de l'initiateur. S'il se termine, l'action reprend avec son ré
 l'action parente est **suspendue** (`pending.kind = agent`) puis rejouée quand l'enfant se termine — les
 écritures n'étant validées qu'en fin d'action, le rejeu est sûr et retrouve le sous-agent déjà démarré.
 
+### 2.11 Déclencheurs d'agents
+
+En dehors de la boucle d'intention, un agent peut être exécuté **automatiquement** par des déclencheurs
+déclarés sur l'agent (`agents[].triggers`) :
+
+| Champ | Rôle |
+|---|---|
+| `type` | `event` ou `schedule` |
+| `event` + `filter` | `change.created`, `change.applied`, `change.item_added`, `process.completed`, `process.failed`, `methodology.published` ; filtre CEL sur `event` (`event.change.*`, `event.process.*`) |
+| `schedule` | expression cron (5 champs, UTC) |
+| `goal`, `intent` | objectif visé (sinon identification limitée à l'agent) et texte d'intention |
+| `target` | `new_change` (nouveau change sur la dernière baseline) ou `event_change` (le change de l'événement) |
+| `roles` | rôles de l'**identité de service** `system:trigger:<méthodologie>/<agent>/<déclencheur>` (ABAC) |
+
+Garde-fous : un déclencheur ne réagit jamais à ses propres productions (le change qu'il ouvre est marqué
+`data.trigger`, le processus porte `trigger`), et ne s'exécute pas plus d'une fois toutes les 2 s.
+Les événements viennent de NATS (service graph, moteur, registry) ou du bus local en mode tout-en-un.
+`ListTriggers` / `FireTrigger` exposent l'état et le déclenchement manuel (permission `trigger:fire`).
+Avec plusieurs répliques du moteur, un seul doit exécuter les déclencheurs (élection de leader : M1).
+
 ### 2.10 Actions script et DSL
 
 Les actions `kind: script` sont du code **JavaScript** (goja) ou **Go** (yaegi) saisi dans l'IDE. Le moteur
@@ -446,6 +466,9 @@ variables standard `OTEL_EXPORTER_OTLP_ENDPOINT` / `OTEL_*` :
   `gen_ai.client.token.usage` et `gen_ai.client.operation.duration` ;
 - **outils** : span `execute_tool <nom>` (`gen_ai.tool.name`) ;
 - métriques `goap.actions`, `goap.action.duration`, `goap.tokens` (par agent / action / résultat).
+
+La gateway expose aussi `GET /api/status` (disponibilité et latence de chaque service), affiché dans la
+barre d'état de l'IDE avec les runs en cours de l'utilisateur et ses notifications.
 
 Les compteurs sont aussi **conservés dans le processus** (tokens, appels LLM et outils par étape et au
 total) et affichés dans l'IDE, avec un lien vers la trace Jaeger (`traceId`).

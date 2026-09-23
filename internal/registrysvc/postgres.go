@@ -92,8 +92,13 @@ func (s PostgresStore) Save(ctx context.Context, r Record) error {
 			batch.Queue(`INSERT INTO methodology_goal VALUES ($1, $2, $3, $4, $5, $6, $7)`, id, i, g.Name, g.Description, ex, jsonOf(orEmptyBool(g.Pre)), g.Value)
 		}
 		for i, ag := range m.Agents {
-			batch.Queue(`INSERT INTO methodology_agent VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`, id, i, ag.Name, ag.Description,
-				orEmptyStrings(ag.Examples), ag.Planner, orEmptyStrings(ag.Actions), orEmptyStrings(ag.Goals))
+			triggers := ag.Triggers
+			if triggers == nil {
+				triggers = []methodology.Trigger{}
+			}
+			batch.Queue(`INSERT INTO methodology_agent (methodology_id, position, name, description, examples, planner, actions, goals, triggers)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`, id, i, ag.Name, ag.Description,
+				orEmptyStrings(ag.Examples), ag.Planner, orEmptyStrings(ag.Actions), orEmptyStrings(ag.Goals), jsonOf(triggers))
 		}
 		return tx.SendBatch(ctx, batch).Close()
 	})
@@ -223,13 +228,18 @@ func (s PostgresStore) loadSections(ctx context.Context, id string, m *methodolo
 	if err != nil {
 		return err
 	}
-	rows, err = s.Pool.Query(ctx, `SELECT name, description, examples, planner, actions, goals FROM methodology_agent WHERE methodology_id = $1 ORDER BY position`, id)
+	rows, err = s.Pool.Query(ctx, `SELECT name, description, examples, planner, actions, goals, triggers FROM methodology_agent WHERE methodology_id = $1 ORDER BY position`, id)
 	if err != nil {
 		return err
 	}
 	m.Agents, err = pgx.CollectRows(rows, func(r pgx.CollectableRow) (methodology.Agent, error) {
 		var a methodology.Agent
-		err := r.Scan(&a.Name, &a.Description, &a.Examples, &a.Planner, &a.Actions, &a.Goals)
+		var triggers []byte
+		err := r.Scan(&a.Name, &a.Description, &a.Examples, &a.Planner, &a.Actions, &a.Goals, &triggers)
+		_ = json.Unmarshal(triggers, &a.Triggers)
+		if len(a.Triggers) == 0 {
+			a.Triggers = nil
+		}
 		a.Examples, a.Actions, a.Goals = nilIfNoStrings(a.Examples), nilIfNoStrings(a.Actions), nilIfNoStrings(a.Goals)
 		return a, err
 	})

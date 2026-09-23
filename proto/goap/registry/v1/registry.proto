@@ -101,6 +101,34 @@ message Agent {
   repeated string actions = 5;
   // goal names (empty: all)
   repeated string goals = 6;
+  // automatic executions (outside the intent loop)
+  repeated Trigger triggers = 7;
+}
+
+// A trigger starts the agent automatically.
+message Trigger {
+  string name = 1;
+  string description = 2;
+  // event | schedule
+  string type = 3;
+  // event triggers: change.created | change.applied | change.item_added |
+  // process.completed | process.failed | methodology.published
+  string event = 4;
+  // CEL filter over the event: event.type, event.change {id, title, status,
+  // methodology, goal, baseline}, event.process {id, agent, goal, status}
+  string filter = 5;
+  // schedule triggers: cron expression (5 fields, UTC)
+  string schedule = 6;
+  // goal to reach (empty: the only goal of the agent, or the intent loop)
+  string goal = 7;
+  // intent text given to the process
+  string intent = 8;
+  // new_change: open a change on the latest baseline (default);
+  // event_change: work on the change of the event
+  string target = 9;
+  // roles of the service identity running the process (ABAC)
+  repeated string roles = 10;
+  bool enabled = 11;
 }
 
 message Goal {

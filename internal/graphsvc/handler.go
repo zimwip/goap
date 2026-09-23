@@ -107,7 +107,7 @@ func (h *Handler) CreateChange(ctx context.Context, r *connect.Request[graphv1.C
 	c, err := h.Graph.CreateChange(ctx, graph.NewChange{Title: r.Msg.Title, Intent: r.Msg.Intent, Methodology: r.Msg.Methodology,
 		BaselineID: domain.BaselineID(r.Msg.BaselineId), Data: pbconv.Map(r.Msg.Data)})
 	if err == nil {
-		h.publish(ctx, "goap.change."+string(c.ID)+".created", c)
+		h.publish(ctx, "goap.change."+string(c.ID)+".created", domain.ChangeEvent{Type: "change.created", Change: c})
 	}
 	return res(&graphv1.CreateChangeResponse{Change: pbconv.ChangeToPB(c)}, err)
 }
@@ -139,7 +139,10 @@ func (h *Handler) UpdateChange(ctx context.Context, r *connect.Request[graphv1.U
 func (h *Handler) AddItems(ctx context.Context, r *connect.Request[graphv1.AddItemsRequest]) (*connect.Response[graphv1.AddItemsResponse], error) {
 	items, err := h.Graph.AddItems(ctx, domain.ChangeID(r.Msg.ChangeId), pbconv.ItemsFromPB(r.Msg.Items))
 	if err == nil {
-		h.publish(ctx, "goap.change."+r.Msg.ChangeId+".item_added", items)
+		if c, cerr := h.Graph.Change(ctx, domain.ChangeID(r.Msg.ChangeId)); cerr == nil {
+			c.Items = nil
+			h.publish(ctx, "goap.change."+r.Msg.ChangeId+".item_added", domain.ChangeEvent{Type: "change.item_added", Change: c, Items: items})
+		}
 	}
 	return res(&graphv1.AddItemsResponse{Items: pbconv.ItemsToPB(items)}, err)
 }
@@ -162,7 +165,10 @@ func (h *Handler) GetBlackboard(ctx context.Context, r *connect.Request[graphv1.
 func (h *Handler) ApplyChange(ctx context.Context, r *connect.Request[graphv1.ApplyChangeRequest]) (*connect.Response[graphv1.ApplyChangeResponse], error) {
 	b, err := h.Graph.Apply(ctx, domain.ChangeID(r.Msg.ChangeId), r.Msg.BaselineName)
 	if err == nil {
-		h.publish(ctx, "goap.change."+r.Msg.ChangeId+".applied", b)
+		if c, cerr := h.Graph.Change(ctx, domain.ChangeID(r.Msg.ChangeId)); cerr == nil {
+			c.Items = nil
+			h.publish(ctx, "goap.change."+r.Msg.ChangeId+".applied", domain.ChangeEvent{Type: "change.applied", Change: c, Baseline: &b})
+		}
 	}
 	return res(&graphv1.ApplyChangeResponse{Baseline: pbconv.BaselineToPB(b)}, err)
 }

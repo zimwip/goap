@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/robfig/cron/v3"
 	"gopkg.in/yaml.v3"
 
 	"github.com/zimwip/goap/pkg/condition"
@@ -53,6 +54,39 @@ type Agent struct {
 	Actions []string `yaml:"actions,omitempty" json:"actions,omitempty"`
 	// Goals of the agent (empty: all).
 	Goals []string `yaml:"goals,omitempty" json:"goals,omitempty"`
+	// Triggers run the agent automatically (outside the intent loop).
+	Triggers []Trigger `yaml:"triggers,omitempty" json:"triggers,omitempty"`
+}
+
+// Trigger types, events and targets.
+const (
+	TriggerEvent    = "event"
+	TriggerSchedule = "schedule"
+
+	TargetNewChange   = "new_change"
+	TargetEventChange = "event_change"
+)
+
+// TriggerEvents lists the events a trigger can react to.
+var TriggerEvents = []string{"change.created", "change.applied", "change.item_added", "process.completed", "process.failed", "methodology.published"}
+
+// Trigger starts an agent automatically on an event or a schedule.
+type Trigger struct {
+	Name        string `yaml:"name" json:"name"`
+	Description string `yaml:"description,omitempty" json:"description,omitempty"`
+	Type        string `yaml:"type" json:"type"`
+	// Event and Filter (CEL over `event`) for event triggers.
+	Event  string `yaml:"event,omitempty" json:"event,omitempty"`
+	Filter string `yaml:"filter,omitempty" json:"filter,omitempty"`
+	// Schedule is a 5-field cron expression (UTC) for schedule triggers.
+	Schedule string `yaml:"schedule,omitempty" json:"schedule,omitempty"`
+	Goal     string `yaml:"goal,omitempty" json:"goal,omitempty"`
+	Intent   string `yaml:"intent,omitempty" json:"intent,omitempty"`
+	// Target: new_change (default) or event_change (the change of the event).
+	Target string `yaml:"target,omitempty" json:"target,omitempty"`
+	// Roles of the service identity running the process.
+	Roles   []string `yaml:"roles,omitempty" json:"roles,omitempty"`
+	Enabled bool     `yaml:"enabled" json:"enabled"`
 }
 
 // Schema is the domain model of the methodology.
@@ -404,6 +438,46 @@ func (m *Methodology) compile() (*Compiled, Issues) {
 		for j, g := range ag.Goals {
 			if !goals[g] {
 				add(fmt.Sprintf("%s.goals[%d]", path, j), "unknown goal %q", g)
+			}
+		}
+		names := map[string]bool{}
+		for j, tr := range ag.Triggers {
+			tp := fmt.Sprintf("%s.triggers[%d]", path, j)
+			switch {
+			case tr.Name == "":
+				add(tp+".name", "name required")
+			case names[tr.Name]:
+				add(tp+".name", "duplicate trigger %s", tr.Name)
+			}
+			names[tr.Name] = true
+			switch tr.Type {
+			case TriggerEvent:
+				if !slices.Contains(TriggerEvents, tr.Event) {
+					add(tp+".event", "event must be one of %s", strings.Join(TriggerEvents, ", "))
+				}
+				if _, err := condition.CompileEventFilter(tr.Filter); err != nil {
+					add(tp+".filter", "%v", err)
+				}
+			case TriggerSchedule:
+				if _, err := cron.ParseStandard(tr.Schedule); err != nil {
+					add(tp+".schedule", "invalid cron expression: %v", err)
+				}
+			default:
+				add(tp+".type", "type must be event or schedule")
+			}
+			switch tr.Target {
+			case "", TargetNewChange:
+			case TargetEventChange:
+				if tr.Type != TriggerEvent || !(strings.HasPrefix(tr.Event, "change.") || strings.HasPrefix(tr.Event, "process.")) {
+					add(tp+".target", "event_change requires a change.* or process.* event")
+				}
+			default:
+				add(tp+".target", "target must be new_change or event_change")
+			}
+			if tr.Goal != "" && !goals[tr.Goal] {
+				add(tp+".goal", "unknown goal %q", tr.Goal)
+			} else if tr.Goal != "" && len(ag.Goals) > 0 && !slices.Contains(ag.Goals, tr.Goal) {
+				add(tp+".goal", "goal %q is not a goal of the agent", tr.Goal)
 			}
 		}
 		if ag.Planner == "" {

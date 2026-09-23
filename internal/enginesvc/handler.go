@@ -36,6 +36,8 @@ type Handler struct {
 	Authz authz.Authorizer
 	// Broker streams live events (WatchEvents).
 	Broker *engine.Broker
+	// Triggers runs agents automatically (nil: triggers disabled).
+	Triggers *engine.TriggerManager
 }
 
 // authorize checks an operation on a process (p nil for start).
@@ -168,10 +170,21 @@ func (h *Handler) GetProcess(ctx context.Context, r *connect.Request[enginev1.Ge
 
 func (h *Handler) ListProcesses(ctx context.Context, r *connect.Request[enginev1.ListProcessesRequest]) (*connect.Response[enginev1.ListProcessesResponse], error) {
 	ctx = h.principal(ctx, r.Header())
+	me := authz.From(ctx)
 	all, err := h.Engine.Store.List(ctx)
-	// only the processes the caller may read
+	statuses := map[string]bool{}
+	for _, s := range r.Msg.Statuses {
+		statuses[s] = true
+	}
+	// only the processes the caller may read, filtered
 	var ps []*engine.Process
 	for _, p := range all {
+		switch {
+		case r.Msg.Mine && p.Initiator.Subject != me.Subject,
+			len(statuses) > 0 && !statuses[string(p.Status)],
+			r.Msg.RootsOnly && p.ParentID != "":
+			continue
+		}
 		if h.authorize(ctx, "read", "", p) == nil {
 			ps = append(ps, p)
 		}
@@ -251,6 +264,42 @@ func (h *Handler) WatchEvents(ctx context.Context, r *connect.Request[enginev1.W
 	}
 }
 
+// ListTriggers lists the triggers of the published agents.
+func (h *Handler) ListTriggers(ctx context.Context, r *connect.Request[enginev1.ListTriggersRequest]) (*connect.Response[enginev1.ListTriggersResponse], error) {
+	out := &enginev1.ListTriggersResponse{}
+	if h.Triggers == nil {
+		return connect.NewResponse(out), nil
+	}
+	ctx = h.principal(ctx, r.Header())
+	if err := authz.Check(ctx, h.Authz, authz.Request{Subject: authz.From(ctx), Action: "read", Resource: authz.Resource{Type: "trigger"}}); err != nil {
+		return nil, toConnect(err)
+	}
+	for _, s := range h.Triggers.States() {
+		out.Triggers = append(out.Triggers, &enginev1.TriggerState{Methodology: s.Methodology, Agent: s.Agent, Name: s.Name, Description: s.Description,
+			Type: s.Type, Event: s.Event, Schedule: s.Schedule, Enabled: s.Enabled, Fires: int32(s.Fires), LastFired: pbconv.Time(s.LastFired),
+			NextFire: pbconv.Time(s.NextFire), LastProcessId: s.LastProcessID, LastError: s.LastError})
+	}
+	return connect.NewResponse(out), nil
+}
+
+// FireTrigger fires a trigger now.
+func (h *Handler) FireTrigger(ctx context.Context, r *connect.Request[enginev1.FireTriggerRequest]) (*connect.Response[enginev1.FireTriggerResponse], error) {
+	if h.Triggers == nil {
+		return nil, connect.NewError(connect.CodeUnimplemented, errors.New("triggers are disabled"))
+	}
+	ctx = h.principal(ctx, r.Header())
+	who := authz.From(ctx)
+	if err := authz.Check(ctx, h.Authz, authz.Request{Subject: who, Action: "fire",
+		Resource: authz.Resource{Type: "trigger", ID: r.Msg.Methodology + "/" + r.Msg.Agent + "/" + r.Msg.Trigger, Name: r.Msg.Methodology, Org: who.Org}}); err != nil {
+		return nil, toConnect(err)
+	}
+	p, err := h.Triggers.Fire(ctx, r.Msg.Methodology, r.Msg.Agent, r.Msg.Trigger)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, err)
+	}
+	return connect.NewResponse(&enginev1.FireTriggerResponse{Process: ProcessToPB(p)}), nil
+}
+
 func logToPB(l engine.LogLine) *enginev1.LogLine {
 	return &enginev1.LogLine{Time: pbconv.Time(l.Time), Level: l.Level, Message: l.Message, ProcessId: l.ProcessID, Action: l.Action, Step: int32(l.Step)}
 }
@@ -267,7 +316,7 @@ func ProcessToPB(p *engine.Process) *enginev1.Process {
 		CreatedAt: pbconv.Time(p.CreatedAt), UpdatedAt: pbconv.Time(p.UpdatedAt),
 		Initiator: &enginev1.Principal{Subject: p.Initiator.Subject, Org: p.Initiator.Org, Roles: p.Initiator.Roles},
 		Agent:     p.Agent, Planner: p.Planner, ParentId: p.ParentID, Usage: usageToPB(p.Usage),
-		BaselineId: string(p.BaselineID), Title: p.Title, TraceId: p.TraceID,
+		BaselineId: string(p.BaselineID), Title: p.Title, TraceId: p.TraceID, Trigger: p.Trigger,
 	}
 	for _, t := range p.Intent.Turns {
 		out.Turns = append(out.Turns, &enginev1.Turn{Role: t.Role, Text: t.Text})

@@ -16,6 +16,7 @@ import (
 	"github.com/zimwip/goap/internal/registrysvc"
 	"github.com/zimwip/goap/internal/sandbox"
 	"github.com/zimwip/goap/internal/telemetry"
+	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/engine"
 	"github.com/zimwip/goap/pkg/intent"
 	"github.com/zimwip/goap/pkg/llm"
@@ -85,9 +86,31 @@ func main() {
 		Log:       log,
 		MaxSteps:  platform.EnvInt("GOAP_MAX_STEPS", 50),
 	}
+	// triggers: agents run automatically on events and schedules
+	var triggers *engine.TriggerManager
+	if platform.Env("GOAP_TRIGGERS", "on") == "on" {
+		triggers = &engine.TriggerManager{Engine: e, Log: log}
+		triggers.Start(ctx)
+		go triggers.WatchProcesses(ctx, broker)
+		if err := events.Subscribe("goap.change.>", func(data []byte) {
+			var ev domain.ChangeEvent
+			if json.Unmarshal(data, &ev) == nil && ev.Type != "" {
+				triggers.Handle(context.Background(), engine.TriggerEventOf(ev))
+			}
+		}); err != nil {
+			platform.Fatal(log, "subscribe", err)
+		}
+		if err := events.Subscribe("goap.registry.methodology.published", func(data []byte) {
+			var m struct{ Name, Version string }
+			_ = json.Unmarshal(data, &m)
+			triggers.Handle(context.Background(), engine.TriggerEvent{Type: "methodology.published", Methodology: m.Name, Version: m.Version})
+		}); err != nil {
+			platform.Fatal(log, "subscribe", err)
+		}
+	}
 	srv := platform.NewServer(log, platform.Env("GOAP_HTTP_ADDR", ":8080"))
 	srv.Readiness(events.Ready)
-	srv.Mount(enginev1connect.NewEngineServiceHandler(&enginesvc.Handler{Engine: e, Log: log, Authz: authorizer, Broker: broker}, telemetry.HandlerOptions()...))
+	srv.Mount(enginev1connect.NewEngineServiceHandler(&enginesvc.Handler{Engine: e, Log: log, Authz: authorizer, Broker: broker, Triggers: triggers}, telemetry.HandlerOptions()...))
 	if runtime != nil {
 		// sandboxes call back the engine here (job token authentication)
 		srv.Mount(runtimev1connect.NewRuntimeServiceHandler(runtime, telemetry.HandlerOptions()...))
