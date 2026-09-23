@@ -32,6 +32,7 @@ type Host struct {
 	llmCalls  []LLMCall
 	toolCalls []ToolCall
 	children  map[string]string // new sub-agent calls
+	spawned   []string          // their processes, in call order
 	waitingOn string            // child process blocking the action
 	calls     int
 
@@ -216,9 +217,7 @@ func (h *Host) record(step *Step) {
 		step.Usage.OutputTokens += c.OutputTokens
 	}
 	step.Usage.ToolCalls += len(h.toolCalls)
-	for _, id := range h.children {
-		step.Children = append(step.Children, id)
-	}
+	step.Children = append(step.Children, h.spawned...)
 }
 
 // ---- script actions ---------------------------------------------------------

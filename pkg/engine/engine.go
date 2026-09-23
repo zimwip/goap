@@ -638,6 +638,7 @@ func (e *Engine) runChild(ctx context.Context, h *Host, key, agentName, intentTe
 		}
 		h.mu.Lock()
 		h.children[key] = c.ID
+		h.spawned = append(h.spawned, c.ID)
 		h.mu.Unlock()
 		child = c
 		if child.Status == StatusRunning {
