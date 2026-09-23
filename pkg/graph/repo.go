@@ -27,8 +27,15 @@ type Repo interface {
 
 // Tx gives access to storage primitives inside a transaction.
 type Tx interface {
-	// Node returns an exact node version, or the latest one when ref.Version is 0.
+	// Node returns an exact node version, or the latest one on main when ref.Version is 0.
 	Node(ctx context.Context, ref domain.NodeRef) (domain.Node, error)
+	// LatestOn returns the latest version of a node on a branch (ErrNotFound if none).
+	LatestOn(ctx context.Context, id domain.NodeID, branch string) (domain.Node, error)
+	// Versions returns every version of a node, all branches, by version.
+	Versions(ctx context.Context, id domain.NodeID) ([]domain.Node, error)
+	Branch(ctx context.Context, name string) (domain.Branch, error)
+	Branches(ctx context.Context) ([]domain.Branch, error)
+	PutBranch(ctx context.Context, b domain.Branch) error
 	NodeByKey(ctx context.Context, key string) (domain.Node, error)
 	NodesIn(ctx context.Context, baseline domain.BaselineID, nodeType string) ([]domain.Node, error)
 	// LatestNodes returns the latest version of every node.

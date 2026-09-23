@@ -28,10 +28,33 @@ func (r NodeRef) String() string { return fmt.Sprintf("%s@v%d", r.ID, r.Version)
 // IsZero reports whether the reference is unset.
 func (r NodeRef) IsZero() bool { return r.ID == "" }
 
-// Node is one immutable version of a domain node.
+// MainBranch is the default branch.
+const MainBranch = "main"
+
+// Version reasons.
+const (
+	ReasonCreate = "create" // first version of a node
+	ReasonRevise = "revise" // successor on the same branch
+	ReasonDerive = "derive" // first version on a parallel branch
+	ReasonMerge  = "merge"  // merge of versions of two branches
+)
+
+// BranchOf returns the branch name, defaulting to main.
+func BranchOf(b string) string {
+	if b == "" {
+		return MainBranch
+	}
+	return b
+}
+
+// Node is one immutable version of a domain node. Versions are numbered per
+// node across all branches; Parents link a version to the one(s) it comes from.
 type Node struct {
 	ID         NodeID         `json:"id"`
 	Version    Version        `json:"version"`
+	Branch     string         `json:"branch,omitempty"`
+	Parents    []Version      `json:"parents,omitempty"`
+	Reason     string         `json:"reason,omitempty"`
 	Key        string         `json:"key"`
 	Type       string         `json:"type"`
 	Properties map[string]any `json:"props,omitempty"`
@@ -64,6 +87,7 @@ type BaselineID string
 type Baseline struct {
 	ID        BaselineID         `json:"id"`
 	Name      string             `json:"name"`
+	Branch    string             `json:"branch,omitempty"`
 	ParentID  BaselineID         `json:"parentId,omitempty"`
 	ChangeID  ChangeID           `json:"changeId,omitempty"`
 	Nodes     map[NodeID]Version `json:"nodes"`
@@ -74,4 +98,23 @@ type Baseline struct {
 func (b Baseline) Contains(r NodeRef) bool {
 	v, ok := b.Nodes[r.ID]
 	return ok && v == r.Version
+}
+
+// Branch statuses.
+const (
+	BranchOpen      = "open"
+	BranchMerged    = "merged"
+	BranchAbandoned = "abandoned"
+)
+
+// Branch is a line of versions parallel to main (an option of a change, a
+// maintenance line…). Its head is its most recent baseline.
+type Branch struct {
+	Name         string     `json:"name"`
+	Parent       string     `json:"parent"`
+	ForkBaseline BaselineID `json:"forkBaseline"`
+	Head         BaselineID `json:"head,omitempty"`   // latest baseline of the branch
+	Origin       string     `json:"origin,omitempty"` // change / option that opened it
+	Status       string     `json:"status"`
+	CreatedAt    time.Time  `json:"createdAt"`
 }

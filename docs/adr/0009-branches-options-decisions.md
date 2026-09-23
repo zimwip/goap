@@ -1,6 +1,6 @@
 # ADR 0009 — Branches de versions, options d'analyse, boucles de décision et merge
 
-**Statut** : proposé · **Date** : 2026-09 · Étend l'ADR 0003 (versionnement) et le scénario de conflit
+**Statut** : accepté · **Date** : 2026-09 · Étend l'ADR 0003 (versionnement) et le scénario de conflit
 (merge validé par un humain, rebase, replanification).
 
 ## Contexte
@@ -13,7 +13,7 @@
    additionnel**, jusqu'à ce que la décision puisse être entérinée ; l'option retenue est **mergée** sur la
    branche principale.
 
-## Décision proposée
+## Décision
 
 ### 1. Versions et branches
 Chaque version de nœud porte :
@@ -96,10 +96,19 @@ Le change continue ensuite vers son application ou sa release.
   `superseded` ; l'IDE gagne une vue de comparaison d'options, un diff à 3 voies et une vue du graphe de versions.
 - L'appel de sous-agents doit pouvoir cibler une autre méthodologie (`runAgent("méthodologie/agent", …)`).
 
-## Questions ouvertes
-1. Numérotation : entier global par nœud + nom de branche (proposé) ou numérotation hiérarchique (`1.2.1`) ?
-2. Matérialisation des options : paresseuse (proposé) ou systématique dès la création ?
-3. Décideur : toujours humain, ou agent avec seuil de confiance et ratification humaine ?
-4. Borne des boucles de décision : nombre de tours, budget tokens / durée, escalade vers qui ?
-5. Multi-méthodologie : quelle méthodologie « possède » un type de nœud pour arbitrer les conflits entre
-   changes issus de méthodologies différentes ?
+## Décisions complémentaires (validées)
+
+1. **Numérotation** : entier croissant par nœud + nom de branche.
+2. **Matérialisation des options** : paresseuse (à la demande d'une analyse).
+3. **Décideur** : un **agent de la méthodologie** prend la décision avec une **confiance** ; en dessous du
+   seuil déclaré par le point de décision, la décision devient une action humaine en attente (ratification).
+4. **Budget** : fixé pendant la phase d'analyse, **au niveau du change** (tokens, étapes, durée). Le moteur
+   décompte la consommation ; les conditions exposent `budget` (`remaining`, `ratio`, `low`, `exhausted`).
+   Quand le budget est bas, les méthodologies basculent sur des chemins **accélérés, sous-optimaux**
+   (décider avec l'information disponible au lieu d'investiguer) ; épuisé, les boucles de décision sont
+   closes de force par le décideur, et au besoin par un humain.
+5. **Multi-méthodologie = spécialisation** : une action peut être **abstraite** et avoir des
+   **spécialisations** (même rôle, règles différentes : `build` en C, en Java, en shell), déclarées dans la
+   même méthodologie ou dans d'autres (`specializes: "<méthodologie>/<action>"`), avec une **garde** CEL
+   (`when`) et une priorité. Le planificateur raisonne sur l'action abstraite ; à l'exécution, le moteur
+   choisit la spécialisation applicable la plus prioritaire.

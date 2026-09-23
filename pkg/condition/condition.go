@@ -36,7 +36,7 @@ type compiled struct {
 }
 
 // Variables exposed to expressions.
-var Variables = []string{"change", "items", "impacts", "proposals", "decisions", "artifacts", "vars"}
+var Variables = []string{"change", "items", "impacts", "proposals", "decisions", "artifacts", "merges", "vars"}
 
 // NewEnv returns the CEL environment used for conditions.
 func NewEnv() (*cel.Env, error) {
@@ -47,6 +47,7 @@ func NewEnv() (*cel.Env, error) {
 		cel.Variable("proposals", cel.ListType(cel.DynType)),
 		cel.Variable("decisions", cel.ListType(cel.DynType)),
 		cel.Variable("artifacts", cel.ListType(cel.DynType)),
+		cel.Variable("merges", cel.ListType(cel.DynType)),
 		cel.Variable("vars", cel.MapType(cel.StringType, cel.DynType)),
 		ext.Strings(),
 		ext.Lists(),

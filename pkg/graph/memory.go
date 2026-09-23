@@ -24,6 +24,7 @@ type memState struct {
 	links     []domain.Link
 	baselines map[domain.BaselineID]domain.Baseline
 	changes   map[domain.ChangeID]domain.ChangeSet
+	branches  map[string]domain.Branch
 }
 
 // NewMemory returns an empty in-memory repository.
@@ -33,6 +34,7 @@ func NewMemory() *Memory {
 		keys:      map[string]domain.NodeID{},
 		baselines: map[domain.BaselineID]domain.Baseline{},
 		changes:   map[domain.ChangeID]domain.ChangeSet{},
+		branches:  map[string]domain.Branch{},
 	}}
 }
 
@@ -43,6 +45,7 @@ func (s memState) clone() memState {
 		links:     slices.Clone(s.links),
 		baselines: maps.Clone(s.baselines),
 		changes:   make(map[domain.ChangeID]domain.ChangeSet, len(s.changes)),
+		branches:  maps.Clone(s.branches),
 	}
 	for k, v := range s.versions {
 		c.versions[k] = slices.Clone(v)
@@ -74,12 +77,57 @@ func (t *memTx) Node(_ context.Context, ref domain.NodeRef) (domain.Node, error)
 		return domain.Node{}, fmt.Errorf("node %s: %w", ref.ID, ErrNotFound)
 	}
 	if ref.Version == 0 {
-		return vs[len(vs)-1], nil
+		for i := len(vs) - 1; i >= 0; i-- {
+			if domain.BranchOf(vs[i].Branch) == domain.MainBranch {
+				return vs[i], nil
+			}
+		}
+		return domain.Node{}, fmt.Errorf("node %s has no version on main: %w", ref.ID, ErrNotFound)
 	}
 	if int(ref.Version) > len(vs) || ref.Version < 1 {
 		return domain.Node{}, fmt.Errorf("node %s: %w", ref, ErrNotFound)
 	}
 	return vs[ref.Version-1], nil
+}
+
+func (t *memTx) LatestOn(_ context.Context, id domain.NodeID, branch string) (domain.Node, error) {
+	vs := t.st.versions[id]
+	for i := len(vs) - 1; i >= 0; i-- {
+		if domain.BranchOf(vs[i].Branch) == domain.BranchOf(branch) {
+			return vs[i], nil
+		}
+	}
+	return domain.Node{}, fmt.Errorf("node %s has no version on %s: %w", id, domain.BranchOf(branch), ErrNotFound)
+}
+
+func (t *memTx) Versions(_ context.Context, id domain.NodeID) ([]domain.Node, error) {
+	vs, ok := t.st.versions[id]
+	if !ok {
+		return nil, fmt.Errorf("node %s: %w", id, ErrNotFound)
+	}
+	return slices.Clone(vs), nil
+}
+
+func (t *memTx) Branch(_ context.Context, name string) (domain.Branch, error) {
+	b, ok := t.st.branches[name]
+	if !ok {
+		return domain.Branch{}, fmt.Errorf("branch %s: %w", name, ErrNotFound)
+	}
+	return b, nil
+}
+
+func (t *memTx) Branches(_ context.Context) ([]domain.Branch, error) {
+	out := make([]domain.Branch, 0, len(t.st.branches))
+	for _, b := range t.st.branches {
+		out = append(out, b)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.Before(out[j].CreatedAt) })
+	return out, nil
+}
+
+func (t *memTx) PutBranch(_ context.Context, b domain.Branch) error {
+	t.st.branches[b.Name] = b
+	return nil
 }
 
 func (t *memTx) NodeByKey(ctx context.Context, key string) (domain.Node, error) {
@@ -111,8 +159,10 @@ func (t *memTx) NodesIn(ctx context.Context, baseline domain.BaselineID, nodeTyp
 
 func (t *memTx) LatestNodes(_ context.Context) ([]domain.Node, error) {
 	out := make([]domain.Node, 0, len(t.st.versions))
-	for _, vs := range t.st.versions {
-		out = append(out, vs[len(vs)-1])
+	for id := range t.st.versions {
+		if n, err := t.LatestOn(context.Background(), id, domain.MainBranch); err == nil {
+			out = append(out, n)
+		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Key < out[j].Key })
 	return out, nil

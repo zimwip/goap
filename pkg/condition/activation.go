@@ -13,6 +13,9 @@ func Activation(bb domain.Blackboard) map[string]any {
 	items := make([]any, 0, len(c.Items))
 	byKind := map[domain.ItemKind][]any{}
 	for _, it := range c.Items {
+		if !c.Active(it.ID) {
+			continue // superseded by a rebase or a merge
+		}
 		m := h.item(it)
 		items = append(items, m)
 		byKind[it.Kind] = append(byKind[it.Kind], m)
@@ -24,13 +27,14 @@ func Activation(bb domain.Blackboard) map[string]any {
 	return map[string]any{
 		"change": map[string]any{
 			"id": string(c.ID), "title": c.Title, "intent": c.Intent, "status": string(c.Status),
-			"goal": c.Goal, "methodology": c.Methodology, "baseline": string(c.BaselineID), "resultBaseline": string(c.ResultBaselineID), "data": orEmpty(c.Data),
+			"goal": c.Goal, "methodology": c.Methodology, "branch": domain.BranchOf(c.Branch), "baseline": string(c.BaselineID), "resultBaseline": string(c.ResultBaselineID), "data": orEmpty(c.Data),
 		},
 		"items":     items,
 		"impacts":   orEmptyList(byKind[domain.KindImpact]),
 		"proposals": orEmptyList(byKind[domain.KindProposal]),
 		"decisions": orEmptyList(byKind[domain.KindDecision]),
 		"artifacts": orEmptyList(byKind[domain.KindArtifact]),
+		"merges":    orEmptyList(byKind[domain.KindMerge]),
 		"vars":      vars,
 	}
 }

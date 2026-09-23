@@ -24,13 +24,15 @@ const (
 // ChangeSet describes a modification of the domain graph. It starts from a
 // reference baseline and accumulates items. It is the blackboard of a process.
 type ChangeSet struct {
-	ID               ChangeID       `json:"id"`
-	Title            string         `json:"title"`
-	Intent           string         `json:"intent"`
-	Methodology      string         `json:"methodology,omitempty"`
-	Goal             string         `json:"goal,omitempty"`
-	Status           ChangeStatus   `json:"status"`
-	BaselineID       BaselineID     `json:"baselineId"`
+	ID          ChangeID     `json:"id"`
+	Title       string       `json:"title"`
+	Intent      string       `json:"intent"`
+	Methodology string       `json:"methodology,omitempty"`
+	Goal        string       `json:"goal,omitempty"`
+	Status      ChangeStatus `json:"status"`
+	BaselineID  BaselineID   `json:"baselineId"`
+	// Branch the change is applied to (default main).
+	Branch           string         `json:"branch,omitempty"`
 	ResultBaselineID BaselineID     `json:"resultBaselineId,omitempty"`
 	Data             map[string]any `json:"data,omitempty"`
 	Items            []ChangeItem   `json:"items"`
@@ -54,6 +56,9 @@ const (
 	KindProposal ItemKind = "proposal"
 	KindDecision ItemKind = "decision"
 	KindArtifact ItemKind = "artifact"
+	// KindMerge records a divergence of a proposal from the head of its branch
+	// and the proposed resolution (validated by a human before the rebase).
+	KindMerge ItemKind = "merge"
 )
 
 // ItemStatus is the review state of an item.
@@ -63,6 +68,8 @@ const (
 	ItemProposed ItemStatus = "proposed"
 	ItemAccepted ItemStatus = "accepted"
 	ItemRejected ItemStatus = "rejected"
+	// ItemSuperseded marks an item replaced by another one (rebase, merge).
+	ItemSuperseded ItemStatus = "superseded"
 )
 
 // ChangeItem is one fact on the blackboard.
@@ -77,7 +84,9 @@ type ChangeItem struct {
 	Data        map[string]any `json:"data,omitempty"`
 	ProducedBy  string         `json:"producedBy,omitempty"`
 	DerivedFrom []ItemID       `json:"derivedFrom,omitempty"`
-	CreatedAt   time.Time      `json:"createdAt"`
+	// Supersedes lists the items this one replaces.
+	Supersedes []ItemID  `json:"supersedes,omitempty"`
+	CreatedAt  time.Time `json:"createdAt"`
 }
 
 // ProposalOp is the kind of modification proposed for the target graph.
@@ -89,6 +98,9 @@ const (
 	OpDeleteNode ProposalOp = "delete_node"
 	OpAddLink    ProposalOp = "add_link"
 	OpRemoveLink ProposalOp = "remove_link"
+	// OpMergeNode creates a version merging Node.Base (target branch, may be
+	// nil when the node is new there) with Node.From (source branch).
+	OpMergeNode ProposalOp = "merge_node"
 )
 
 // Proposal is a modification of the target graph.
@@ -101,7 +113,10 @@ type Proposal struct {
 // NodeDraft describes a node to create (Base unset) or a new version of an
 // existing node (Base = the version it modifies, used for conflict detection).
 type NodeDraft struct {
-	Base       *NodeRef       `json:"base,omitempty"`
+	Base *NodeRef `json:"base,omitempty"`
+	// From and Ancestor are set for merge_node (Properties is then the full merged map).
+	From       *NodeRef       `json:"from,omitempty"`
+	Ancestor   *NodeRef       `json:"ancestor,omitempty"`
 	Key        string         `json:"key,omitempty"`
 	Type       string         `json:"type,omitempty"`
 	Properties map[string]any `json:"props,omitempty"`
@@ -158,6 +173,10 @@ func (it ChangeItem) Validate() error {
 			if p.Node == nil || p.Node.Base == nil {
 				return fmt.Errorf("%s requires node.base", p.Op)
 			}
+		case OpMergeNode:
+			if p.Node == nil || p.Node.From == nil {
+				return fmt.Errorf("merge_node requires node.from")
+			}
 		case OpAddLink:
 			if p.Link == nil || p.Link.Type == "" {
 				return fmt.Errorf("add_link requires link.type")
@@ -176,7 +195,7 @@ func (it ChangeItem) Validate() error {
 		if it.Decision == nil || it.Decision.Item == "" {
 			return fmt.Errorf("decision item requires decision.item")
 		}
-	case KindArtifact:
+	case KindArtifact, KindMerge:
 	default:
 		return fmt.Errorf("unknown item kind %q", it.Kind)
 	}
@@ -212,6 +231,11 @@ func (c *ChangeSet) EffectiveStatus(id ItemID) ItemStatus {
 		if it.ID == id {
 			st = it.Status
 		}
+		for _, s := range it.Supersedes {
+			if s == id {
+				return ItemSuperseded
+			}
+		}
 	}
 	for _, it := range c.Items {
 		if it.Kind == KindDecision && it.Decision != nil && it.Decision.Item == id {
@@ -224,3 +248,6 @@ func (c *ChangeSet) EffectiveStatus(id ItemID) ItemStatus {
 	}
 	return st
 }
+
+// Active reports whether an item is not superseded.
+func (c *ChangeSet) Active(id ItemID) bool { return c.EffectiveStatus(id) != ItemSuperseded }

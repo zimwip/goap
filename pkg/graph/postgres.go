@@ -79,7 +79,7 @@ func str(s *string) string {
 	return *s
 }
 
-const nodeCols = `n.id::text, v.version, n.key, n.type, v.props, v.deleted, v.change_id::text, v.created_at`
+const nodeCols = `n.id::text, v.version, n.key, n.type, v.props, v.deleted, v.change_id::text, v.created_at, v.branch, v.parents, v.reason`
 
 func scanNode(row pgx.Row) (domain.Node, error) {
 	var n domain.Node
@@ -87,8 +87,12 @@ func scanNode(row pgx.Row) (domain.Node, error) {
 	var change *string
 	var p []byte
 	var version int
-	if err := row.Scan(&id, &version, &n.Key, &n.Type, &p, &n.Deleted, &change, &n.CreatedAt); err != nil {
+	var parents []int32
+	if err := row.Scan(&id, &version, &n.Key, &n.Type, &p, &n.Deleted, &change, &n.CreatedAt, &n.Branch, &parents, &n.Reason); err != nil {
 		return n, err
+	}
+	for _, pv := range parents {
+		n.Parents = append(n.Parents, domain.Version(pv))
 	}
 	n.ID, n.Version, n.Properties, n.ChangeID = domain.NodeID(id), domain.Version(version), props(p), domain.ChangeID(str(change))
 	return n, nil
@@ -108,16 +112,64 @@ func collectNodes(rows pgx.Rows) ([]domain.Node, error) {
 }
 
 func (t *pgTx) Node(ctx context.Context, ref domain.NodeRef) (domain.Node, error) {
-	q := `SELECT ` + nodeCols + ` FROM node n JOIN node_version v ON v.node_id = n.id
-	      WHERE n.id = $1 AND v.version = CASE WHEN $2 = 0 THEN n.latest ELSE $2 END`
+	if ref.Version == 0 {
+		return t.LatestOn(ctx, ref.ID, domain.MainBranch)
+	}
+	q := `SELECT ` + nodeCols + ` FROM node n JOIN node_version v ON v.node_id = n.id WHERE n.id = $1 AND v.version = $2`
 	n, err := scanNode(t.tx.QueryRow(ctx, q, string(ref.ID), int(ref.Version)))
 	return n, mapErr(err, "node "+ref.String())
 }
 
+func (t *pgTx) LatestOn(ctx context.Context, id domain.NodeID, branch string) (domain.Node, error) {
+	q := `SELECT ` + nodeCols + ` FROM node n JOIN node_version v ON v.node_id = n.id WHERE n.id = $1 AND v.branch = $2 ORDER BY v.version DESC LIMIT 1`
+	n, err := scanNode(t.tx.QueryRow(ctx, q, string(id), domain.BranchOf(branch)))
+	return n, mapErr(err, "node "+string(id)+" on "+domain.BranchOf(branch))
+}
+
+func (t *pgTx) Versions(ctx context.Context, id domain.NodeID) ([]domain.Node, error) {
+	rows, err := t.tx.Query(ctx, `SELECT `+nodeCols+` FROM node n JOIN node_version v ON v.node_id = n.id WHERE n.id = $1 ORDER BY v.version`, string(id))
+	if err != nil {
+		return nil, err
+	}
+	out, err := collectNodes(rows)
+	if err == nil && len(out) == 0 {
+		err = fmt.Errorf("node %s: %w", id, ErrNotFound)
+	}
+	return out, err
+}
+
+func (t *pgTx) Branch(ctx context.Context, name string) (domain.Branch, error) {
+	var b domain.Branch
+	err := t.tx.QueryRow(ctx, `SELECT name, parent, coalesce(fork_baseline::text, ''), coalesce(head_baseline::text, ''), origin, status, created_at FROM branch WHERE name = $1`, name).
+		Scan(&b.Name, &b.Parent, (*string)(&b.ForkBaseline), (*string)(&b.Head), &b.Origin, &b.Status, &b.CreatedAt)
+	return b, mapErr(err, "branch "+name)
+}
+
+func (t *pgTx) Branches(ctx context.Context) ([]domain.Branch, error) {
+	rows, err := t.tx.Query(ctx, `SELECT name, parent, coalesce(fork_baseline::text, ''), coalesce(head_baseline::text, ''), origin, status, created_at FROM branch ORDER BY created_at`)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (domain.Branch, error) {
+		var b domain.Branch
+		err := r.Scan(&b.Name, &b.Parent, (*string)(&b.ForkBaseline), (*string)(&b.Head), &b.Origin, &b.Status, &b.CreatedAt)
+		return b, err
+	})
+}
+
+func (t *pgTx) PutBranch(ctx context.Context, b domain.Branch) error {
+	_, err := t.tx.Exec(ctx, `INSERT INTO branch (name, parent, fork_baseline, head_baseline, origin, status, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7)
+		ON CONFLICT (name) DO UPDATE SET status = EXCLUDED.status, head_baseline = EXCLUDED.head_baseline`,
+		b.Name, b.Parent, nullUUID(string(b.ForkBaseline)), nullUUID(string(b.Head)), b.Origin, b.Status, b.CreatedAt)
+	return mapErr(err, "branch "+b.Name)
+}
+
 func (t *pgTx) NodeByKey(ctx context.Context, key string) (domain.Node, error) {
-	q := `SELECT ` + nodeCols + ` FROM node n JOIN node_version v ON v.node_id = n.id AND v.version = n.latest WHERE n.key = $1`
-	n, err := scanNode(t.tx.QueryRow(ctx, q, key))
-	return n, mapErr(err, "node key "+key)
+	var id string
+	if err := t.tx.QueryRow(ctx, `SELECT id::text FROM node WHERE key = $1`, key).Scan(&id); err != nil {
+		return domain.Node{}, mapErr(err, "node key "+key)
+	}
+	return t.LatestOn(ctx, domain.NodeID(id), domain.MainBranch)
 }
 
 func (t *pgTx) NodesIn(ctx context.Context, baseline domain.BaselineID, nodeType string) ([]domain.Node, error) {
@@ -135,7 +187,7 @@ func (t *pgTx) NodesIn(ctx context.Context, baseline domain.BaselineID, nodeType
 }
 
 func (t *pgTx) LatestNodes(ctx context.Context) ([]domain.Node, error) {
-	q := `SELECT ` + nodeCols + ` FROM node n JOIN node_version v ON v.node_id = n.id AND v.version = n.latest ORDER BY n.key`
+	q := `SELECT DISTINCT ON (n.key) ` + nodeCols + ` FROM node n JOIN node_version v ON v.node_id = n.id AND v.branch = 'main' ORDER BY n.key, v.version DESC`
 	rows, err := t.tx.Query(ctx, q)
 	if err != nil {
 		return nil, err
@@ -179,8 +231,8 @@ func (t *pgTx) InLinks(ctx context.Context, ref domain.NodeRef) ([]domain.Link, 
 func (t *pgTx) Baseline(ctx context.Context, id domain.BaselineID) (domain.Baseline, error) {
 	var b domain.Baseline
 	var parent, change *string
-	err := t.tx.QueryRow(ctx, `SELECT id::text, name, parent_id::text, change_id::text, created_at FROM baseline WHERE id = $1`, string(id)).
-		Scan((*string)(&b.ID), &b.Name, &parent, &change, &b.CreatedAt)
+	err := t.tx.QueryRow(ctx, `SELECT id::text, name, parent_id::text, change_id::text, created_at, branch FROM baseline WHERE id = $1`, string(id)).
+		Scan((*string)(&b.ID), &b.Name, &parent, &change, &b.CreatedAt, &b.Branch)
 	if err != nil {
 		return b, mapErr(err, "baseline "+string(id))
 	}
@@ -226,9 +278,9 @@ func (t *pgTx) Change(ctx context.Context, id domain.ChangeID) (domain.ChangeSet
 	var c domain.ChangeSet
 	var result *string
 	var data []byte
-	err := t.tx.QueryRow(ctx, `SELECT id::text, title, intent, methodology, goal, status, baseline_id::text, result_baseline_id::text, data, created_at
+	err := t.tx.QueryRow(ctx, `SELECT id::text, title, intent, methodology, goal, status, baseline_id::text, result_baseline_id::text, data, created_at, branch
 		FROM change_set WHERE id = $1`, string(id)).
-		Scan((*string)(&c.ID), &c.Title, &c.Intent, &c.Methodology, &c.Goal, (*string)(&c.Status), (*string)(&c.BaselineID), &result, &data, &c.CreatedAt)
+		Scan((*string)(&c.ID), &c.Title, &c.Intent, &c.Methodology, &c.Goal, (*string)(&c.Status), (*string)(&c.BaselineID), &result, &data, &c.CreatedAt, &c.Branch)
 	if err != nil {
 		return c, mapErr(err, "change "+string(id))
 	}
@@ -286,8 +338,13 @@ func (t *pgTx) PutNode(ctx context.Context, n domain.Node) error {
 			return fmt.Errorf("node %s: not the next version: %w", n.Ref(), ErrConflict)
 		}
 	}
-	_, err := t.tx.Exec(ctx, `INSERT INTO node_version (node_id, version, props, deleted, change_id, created_at) VALUES ($1, $2, $3, $4, $5, $6)`,
-		string(n.ID), int(n.Version), jsonb(n.Properties), n.Deleted, nullUUID(string(n.ChangeID)), n.CreatedAt)
+	parents := make([]int32, len(n.Parents))
+	for i, pv := range n.Parents {
+		parents[i] = int32(pv)
+	}
+	_, err := t.tx.Exec(ctx, `INSERT INTO node_version (node_id, version, props, deleted, change_id, created_at, branch, parents, reason)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+		string(n.ID), int(n.Version), jsonb(n.Properties), n.Deleted, nullUUID(string(n.ChangeID)), n.CreatedAt, domain.BranchOf(n.Branch), parents, n.Reason)
 	return mapErr(err, "node "+n.Ref().String())
 }
 
@@ -298,8 +355,8 @@ func (t *pgTx) PutLink(ctx context.Context, l domain.Link) error {
 }
 
 func (t *pgTx) PutBaseline(ctx context.Context, b domain.Baseline) error {
-	_, err := t.tx.Exec(ctx, `INSERT INTO baseline (id, name, parent_id, change_id, created_at) VALUES ($1, $2, $3, $4, $5)`,
-		string(b.ID), b.Name, nullUUID(string(b.ParentID)), nullUUID(string(b.ChangeID)), b.CreatedAt)
+	_, err := t.tx.Exec(ctx, `INSERT INTO baseline (id, name, parent_id, change_id, created_at, branch) VALUES ($1, $2, $3, $4, $5, $6)`,
+		string(b.ID), b.Name, nullUUID(string(b.ParentID)), nullUUID(string(b.ChangeID)), b.CreatedAt, domain.BranchOf(b.Branch))
 	if err != nil {
 		return mapErr(err, "baseline")
 	}
@@ -312,11 +369,12 @@ func (t *pgTx) PutBaseline(ctx context.Context, b domain.Baseline) error {
 }
 
 func (t *pgTx) PutChange(ctx context.Context, c domain.ChangeSet) error {
-	_, err := t.tx.Exec(ctx, `INSERT INTO change_set (id, title, intent, methodology, goal, status, baseline_id, result_baseline_id, data, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+	_, err := t.tx.Exec(ctx, `INSERT INTO change_set (id, title, intent, methodology, goal, status, baseline_id, result_baseline_id, data, created_at, branch)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 		ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, intent = EXCLUDED.intent, goal = EXCLUDED.goal, status = EXCLUDED.status,
-		  result_baseline_id = EXCLUDED.result_baseline_id, data = EXCLUDED.data`,
-		string(c.ID), c.Title, c.Intent, c.Methodology, c.Goal, string(c.Status), string(c.BaselineID), nullUUID(string(c.ResultBaselineID)), jsonb(c.Data), c.CreatedAt)
+		  result_baseline_id = EXCLUDED.result_baseline_id, data = EXCLUDED.data, baseline_id = EXCLUDED.baseline_id, branch = EXCLUDED.branch`,
+		string(c.ID), c.Title, c.Intent, c.Methodology, c.Goal, string(c.Status), string(c.BaselineID), nullUUID(string(c.ResultBaselineID)), jsonb(c.Data), c.CreatedAt,
+		domain.BranchOf(c.Branch))
 	return mapErr(err, "change")
 }
 

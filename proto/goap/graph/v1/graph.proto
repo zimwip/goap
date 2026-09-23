@@ -26,6 +26,17 @@ service GraphService {
   rpc AddItems(AddItemsRequest) returns (AddItemsResponse);
   rpc GetBlackboard(GetBlackboardRequest) returns (GetBlackboardResponse);
   rpc ApplyChange(ApplyChangeRequest) returns (ApplyChangeResponse);
+
+  // Version branches (ADR 0009)
+  rpc CreateBranch(CreateBranchRequest) returns (CreateBranchResponse);
+  rpc ListBranches(ListBranchesRequest) returns (ListBranchesResponse);
+  rpc GetBranch(GetBranchRequest) returns (GetBranchResponse);
+  rpc SetBranchStatus(SetBranchStatusRequest) returns (SetBranchStatusResponse);
+  rpc ListNodeVersions(ListNodeVersionsRequest) returns (ListNodeVersionsResponse);
+  rpc PlanMerge(PlanMergeRequest) returns (PlanMergeResponse);
+  rpc MergeBranch(MergeBranchRequest) returns (MergeBranchResponse);
+  rpc GetDivergences(GetDivergencesRequest) returns (GetDivergencesResponse);
+  rpc RebaseChange(RebaseChangeRequest) returns (RebaseChangeResponse);
 }
 
 message NodeRef {
@@ -42,6 +53,12 @@ message Node {
   bool deleted = 6;
   string change_id = 7;
   google.protobuf.Timestamp created_at = 8;
+  // branch of the version (main by default)
+  string branch = 9;
+  // versions this one descends from (two for a merge)
+  repeated int32 parents = 10;
+  // create | revise | derive | merge
+  string reason = 11;
 }
 
 message Link {
@@ -67,6 +84,7 @@ message Baseline {
   string change_id = 4;
   map<string, int32> nodes = 5;
   google.protobuf.Timestamp created_at = 6;
+  string branch = 7;
 }
 
 message Endpoint {
@@ -79,6 +97,9 @@ message NodeDraft {
   string key = 2;
   string type = 3;
   google.protobuf.Struct props = 4;
+  // merge_node: merged version and common ancestor
+  NodeRef from = 5;
+  NodeRef ancestor = 6;
 }
 
 message LinkDraft {
@@ -90,7 +111,7 @@ message LinkDraft {
 }
 
 message Proposal {
-  // create_node | update_node | delete_node | add_link | remove_link
+  // create_node | update_node | delete_node | add_link | remove_link | merge_node
   string op = 1;
   NodeDraft node = 2;
   LinkDraft link = 3;
@@ -104,7 +125,7 @@ message Decision {
 
 message ChangeItem {
   string id = 1;
-  // impact | proposal | decision | artifact
+  // impact | proposal | decision | artifact | merge
   string kind = 2;
   string type = 3;
   string status = 4;
@@ -115,6 +136,8 @@ message ChangeItem {
   string produced_by = 9;
   repeated string derived_from = 10;
   google.protobuf.Timestamp created_at = 11;
+  // items replaced by this one (rebase, merge)
+  repeated string supersedes = 12;
 }
 
 message ChangeSet {
@@ -129,6 +152,7 @@ message ChangeSet {
   google.protobuf.Struct data = 9;
   repeated ChangeItem items = 10;
   google.protobuf.Timestamp created_at = 11;
+  string branch = 12;
 }
 
 message CreateNodeRequest {
@@ -206,6 +230,8 @@ message CreateChangeRequest {
   string methodology = 3;
   string baseline_id = 4;
   google.protobuf.Struct data = 5;
+  // branch the change applies to (default main)
+  string branch = 6;
 }
 
 message CreateChangeResponse {
@@ -263,4 +289,144 @@ message ApplyChangeRequest {
 
 message ApplyChangeResponse {
   Baseline baseline = 1;
+}
+
+message Branch {
+  string name = 1;
+  string parent = 2;
+  string fork_baseline = 3;
+  string head = 4;
+  // change / option that opened the branch
+  string origin = 5;
+  // open | merged | abandoned
+  string status = 6;
+  google.protobuf.Timestamp created_at = 7;
+}
+
+message CreateBranchRequest {
+  string name = 1;
+  string from_baseline = 2;
+  string origin = 3;
+}
+
+message CreateBranchResponse {
+  Branch branch = 1;
+}
+
+message ListBranchesRequest {}
+
+message ListBranchesResponse {
+  repeated Branch branches = 1;
+}
+
+message GetBranchRequest {
+  string name = 1;
+}
+
+message GetBranchResponse {
+  Branch branch = 1;
+  Baseline head = 2;
+}
+
+message SetBranchStatusRequest {
+  string name = 1;
+  string status = 2;
+}
+
+message SetBranchStatusResponse {}
+
+message ListNodeVersionsRequest {
+  string id = 1;
+}
+
+message ListNodeVersionsResponse {
+  repeated Node versions = 1;
+}
+
+message MergeCandidate {
+  string node = 1;
+  string key = 2;
+  string type = 3;
+  // added | fast_forward | merge
+  string kind = 4;
+  NodeRef ancestor = 5;
+  NodeRef ours = 6;
+  NodeRef theirs = 7;
+  bool deleted = 8;
+  google.protobuf.Struct base = 9;
+  google.protobuf.Struct ours_props = 10;
+  google.protobuf.Struct theirs_props = 11;
+  google.protobuf.Struct merged = 12;
+  repeated string conflicts = 13;
+}
+
+message MergePlan {
+  string from = 1;
+  string into = 2;
+  string into_head = 3;
+  repeated MergeCandidate candidates = 4;
+}
+
+message PlanMergeRequest {
+  string from = 1;
+  string into = 2;
+}
+
+message PlanMergeResponse {
+  MergePlan plan = 1;
+}
+
+message Resolution {
+  google.protobuf.Struct props = 1;
+  // keep the target version unchanged
+  bool skip = 2;
+}
+
+message MergeBranchRequest {
+  string from = 1;
+  string into = 2;
+  string title = 3;
+  // by node id
+  map<string, Resolution> resolutions = 4;
+}
+
+message MergeBranchResponse {
+  ChangeSet change = 1;
+  Baseline baseline = 2;
+  MergePlan plan = 3;
+}
+
+message Divergence {
+  string item = 1;
+  string op = 2;
+  // base | from | to
+  string role = 3;
+  NodeRef base = 4;
+  NodeRef head = 5;
+  bool head_deleted = 6;
+  google.protobuf.Struct theirs = 7;
+  google.protobuf.Struct ours = 8;
+  google.protobuf.Struct merged = 9;
+  repeated string conflicts = 10;
+}
+
+message GetDivergencesRequest {
+  string change_id = 1;
+}
+
+message GetDivergencesResponse {
+  repeated Divergence divergences = 1;
+}
+
+message RebaseChangeRequest {
+  string change_id = 1;
+  // resolved properties by item id
+  map<string, google.protobuf.Struct> resolutions = 2;
+}
+
+message RebaseChangeResponse {
+  ChangeSet change = 1;
+  // replaced item id -> replacement id ("" when dropped)
+  map<string, string> superseded = 2;
+  repeated Divergence divergences = 3;
 }
