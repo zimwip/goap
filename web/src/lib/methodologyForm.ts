@@ -5,7 +5,7 @@
 // lists become text, JSON params become text. `toForm` / `fromForm` convert
 // between this model and the proto message.
 
-import type { Action, Agent, Issue, Methodology, Struct, Trigger } from './api';
+import type { Action, Agent, Issue, LinkType, Methodology, NodeType, Struct, Trigger } from './api';
 
 export interface CondRow {
   cond: string;
@@ -128,6 +128,8 @@ export interface MethodologyForm {
   name: string;
   version: string;
   description: string;
+  /** shared domain "<name>[@<version>]"; empty: embedded node / link types */
+  domainRef: string;
   nodeTypes: NodeTypeForm[];
   linkTypes: LinkTypeForm[];
   conditions: ConditionForm[];
@@ -223,6 +225,7 @@ export function emptyForm(): MethodologyForm {
     name: '',
     version: '0.1.0',
     description: '',
+    domainRef: '',
     nodeTypes: [],
     linkTypes: [],
     conditions: [],
@@ -342,6 +345,43 @@ function triggerFromForm(t: TriggerForm): Trigger {
   return o;
 }
 
+export function nodeTypeToForm(n: NodeType): NodeTypeForm {
+  return {
+    name: n.name ?? '',
+    description: n.description ?? '',
+    properties: (n.properties ?? []).join(', '),
+    extends: n.extends ?? '',
+  };
+}
+
+export function linkTypeToForm(l: LinkType): LinkTypeForm {
+  return { name: l.name ?? '', from: l.from ?? '', to: l.to ?? '' };
+}
+
+export function nodeTypeFromForm(n: NodeTypeForm): NodeType {
+  const o: NodeType = {};
+  put(o, 'name', n.name.trim());
+  put(o, 'description', n.description.trim());
+  put(o, 'extends', n.extends.trim());
+  put(
+    o,
+    'properties',
+    n.properties
+      .split(',')
+      .map((p) => p.trim())
+      .filter(Boolean),
+  );
+  return o;
+}
+
+export function linkTypeFromForm(l: LinkTypeForm): LinkType {
+  const o: LinkType = {};
+  put(o, 'name', l.name.trim());
+  put(o, 'from', l.from);
+  put(o, 'to', l.to);
+  return o;
+}
+
 export function toForm(m: Methodology): MethodologyForm {
   const cu = uids(m.conditions);
   const au = uids(m.actions);
@@ -351,13 +391,9 @@ export function toForm(m: Methodology): MethodologyForm {
     name: m.name ?? '',
     version: m.version ?? '',
     description: m.description ?? '',
-    nodeTypes: (m.nodeTypes ?? []).map((n) => ({
-      name: n.name ?? '',
-      description: n.description ?? '',
-      properties: (n.properties ?? []).join(', '),
-      extends: n.extends ?? '',
-    })),
-    linkTypes: (m.linkTypes ?? []).map((l) => ({ name: l.name ?? '', from: l.from ?? '', to: l.to ?? '' })),
+    domainRef: m.domainRef ?? '',
+    nodeTypes: (m.nodeTypes ?? []).map(nodeTypeToForm),
+    linkTypes: (m.linkTypes ?? []).map(linkTypeToForm),
     conditions: (m.conditions ?? []).map((c, i) => ({
       uid: cu[i],
       name: c.name ?? '',
@@ -405,36 +441,9 @@ export function fromForm(f: MethodologyForm): { methodology: Methodology; issues
   put(m, 'version', f.version.trim());
   put(m, 'description', f.description.trim());
 
-  put(
-    m,
-    'nodeTypes',
-    f.nodeTypes.map((n) => {
-      const o: NonNullable<Methodology['nodeTypes']>[number] = {};
-      put(o, 'name', n.name.trim());
-      put(o, 'description', n.description.trim());
-      put(o, 'extends', n.extends.trim());
-      put(
-        o,
-        'properties',
-        n.properties
-          .split(',')
-          .map((p) => p.trim())
-          .filter(Boolean),
-      );
-      return o;
-    }),
-  );
-  put(
-    m,
-    'linkTypes',
-    f.linkTypes.map((l) => {
-      const o: NonNullable<Methodology['linkTypes']>[number] = {};
-      put(o, 'name', l.name.trim());
-      put(o, 'from', l.from);
-      put(o, 'to', l.to);
-      return o;
-    }),
-  );
+  put(m, 'domainRef', f.domainRef.trim());
+  put(m, 'nodeTypes', f.nodeTypes.map(nodeTypeFromForm));
+  put(m, 'linkTypes', f.linkTypes.map(linkTypeFromForm));
   put(
     m,
     'conditions',
@@ -558,7 +567,7 @@ export function fromForm(f: MethodologyForm): { methodology: Methodology; issues
 }
 
 /** Properties of a node type: inherited ones first (nearest ancestor last), then its own. */
-export function typeProperties(f: MethodologyForm, name: string): string[] {
+export function typeProperties(f: { nodeTypes: NodeTypeForm[] }, name: string): string[] {
   const chain: NodeTypeForm[] = [];
   for (let t = f.nodeTypes.find((n) => n.name.trim() === name); t && !chain.includes(t); ) {
     chain.unshift(t);

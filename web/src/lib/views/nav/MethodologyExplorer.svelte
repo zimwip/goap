@@ -23,6 +23,7 @@
     type Section,
     type SectionItem,
   } from '../../methodologyForm';
+  import { revealDomainPath } from '../editors/domainTabs';
   import {
     SECTION_LABEL,
     SECTION_ICON,
@@ -92,6 +93,10 @@
   }
 
   function revealDomain(d: Draft, path: string) {
+    if (d.usesDomainRef && d.refDomain) {
+      revealDomainPath(d.refDomain.name, d.refDomain.version, path);
+      return;
+    }
     const t = openTab(methodologySpec(d.name, d.version));
     requestReveal(t.id, path);
   }
@@ -239,7 +244,7 @@
                 depth={2}
                 icon="graph"
                 label="Domain"
-                detail={`${d.form.nodeTypes.length} types · ${d.form.linkTypes.length} links`}
+                detail={d.usesDomainRef ? `${d.form.domainRef} · ${d.nodeTypes.length} types` : `${d.nodeTypes.length} types · ${d.linkTypes.length} links`}
                 expanded={isOpen(domK)}
                 badge={d.count('nodeTypes') + d.count('linkTypes') || undefined}
                 badgeTone="danger"
@@ -253,18 +258,18 @@
                   depth={3}
                   icon="node"
                   label="Node types"
-                  detail={String(d.form.nodeTypes.length)}
+                  detail={String(d.nodeTypes.length)}
                   expanded={isOpen(ntK)}
                   badge={d.count('nodeTypes') || undefined}
                   badgeTone="danger"
                   ontoggle={() => toggle(ntK)}
                   oncontextmenu={(e) =>
                     openContextMenu(e, [
-                      { label: 'New node type', icon: 'plus', disabled: d.readonly, run: () => addNodeType(d) },
+                      { label: 'New node type', icon: 'plus', disabled: d.readonly || d.usesDomainRef, run: () => addNodeType(d) },
                     ])}
                 >
                   {#snippet actions()}
-                    {#if !d.readonly}
+                    {#if !d.readonly && !d.usesDomainRef}
                       <button
                         type="button"
                         title="Add"
@@ -278,7 +283,7 @@
                   {/snippet}
                 </TreeRow>
                 {#if isOpen(ntK)}
-                  {#each d.form.nodeTypes as n, i (i)}
+                  {#each d.nodeTypes as n, i (i)}
                     <TreeRow
                       depth={4}
                       label={n.name || '(unnamed)'}
@@ -294,7 +299,7 @@
                             label: d.status === 'published' ? `New ${n.name.trim()} object` : 'New object (publish first)',
                             icon: 'plus',
                             disabled: d.status !== 'published' || !n.name.trim(),
-                            run: () => openObjectDialog(d.name, n.name.trim(), typeProperties(d.form, n.name.trim())),
+                            run: () => openObjectDialog(d.name, n.name.trim(), typeProperties(d, n.name.trim())),
                           },
                         ])}
                     />
@@ -307,18 +312,18 @@
                   depth={3}
                   icon="trace"
                   label="Link types"
-                  detail={String(d.form.linkTypes.length)}
+                  detail={String(d.linkTypes.length)}
                   expanded={isOpen(ltK)}
                   badge={d.count('linkTypes') || undefined}
                   badgeTone="danger"
                   ontoggle={() => toggle(ltK)}
                   oncontextmenu={(e) =>
                     openContextMenu(e, [
-                      { label: 'New link type', icon: 'plus', disabled: d.readonly, run: () => addLinkType(d) },
+                      { label: 'New link type', icon: 'plus', disabled: d.readonly || d.usesDomainRef, run: () => addLinkType(d) },
                     ])}
                 >
                   {#snippet actions()}
-                    {#if !d.readonly}
+                    {#if !d.readonly && !d.usesDomainRef}
                       <button
                         type="button"
                         title="Add"
@@ -332,7 +337,7 @@
                   {/snippet}
                 </TreeRow>
                 {#if isOpen(ltK)}
-                  {#each d.form.linkTypes as l, i (i)}
+                  {#each d.linkTypes as l, i (i)}
                     <TreeRow
                       depth={4}
                       label={l.name || '(unnamed)'}
