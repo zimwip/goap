@@ -10,7 +10,7 @@ import (
 // ToPB converts a stored record.
 func ToPB(r Record) *registryv1.Methodology {
 	m := r.Methodology
-	out := &registryv1.Methodology{Name: m.Name, Version: m.Version, Description: m.Description, Status: string(r.Status),
+	out := &registryv1.Methodology{Name: m.Name, Version: m.Version, Description: m.Description, DomainRef: m.DomainRef, Status: string(r.Status),
 		CreatedAt: pbconv.Time(r.CreatedAt), UpdatedAt: pbconv.Time(r.UpdatedAt), PublishedAt: pbconv.Time(r.PublishedAt), UpdatedBy: r.UpdatedBy}
 	for _, n := range m.Domain.NodeTypes {
 		out.NodeTypes = append(out.NodeTypes, &registryv1.NodeType{Name: n.Name, Description: n.Description, Properties: n.Properties, Extends: n.Extends})
@@ -67,7 +67,7 @@ func FromPB(p *registryv1.Methodology) methodology.Methodology {
 	if p == nil {
 		return methodology.Methodology{}
 	}
-	m := methodology.Methodology{Name: p.Name, Version: p.Version, Description: p.Description}
+	m := methodology.Methodology{Name: p.Name, Version: p.Version, Description: p.Description, DomainRef: p.DomainRef}
 	for _, n := range p.NodeTypes {
 		m.Domain.NodeTypes = append(m.Domain.NodeTypes, methodology.NodeType{Name: n.Name, Description: n.Description, Properties: nilIfNone(n.Properties), Extends: n.Extends})
 	}
@@ -123,4 +123,51 @@ func IssuesToPB(is methodology.Issues) []*registryv1.Issue {
 		out[i] = &registryv1.Issue{Path: x.Path, Message: x.Message}
 	}
 	return out
+}
+
+func nodeTypesToPB(ns []methodology.NodeType) []*registryv1.NodeType {
+	var out []*registryv1.NodeType
+	for _, n := range ns {
+		out = append(out, &registryv1.NodeType{Name: n.Name, Description: n.Description, Properties: n.Properties, Extends: n.Extends})
+	}
+	return out
+}
+
+func linkTypesToPB(ls []methodology.LinkType) []*registryv1.LinkType {
+	var out []*registryv1.LinkType
+	for _, l := range ls {
+		out = append(out, &registryv1.LinkType{Name: l.Name, From: l.From, To: l.To})
+	}
+	return out
+}
+
+// DomainToPB converts a stored domain record.
+func DomainToPB(r DomainRecord) *registryv1.Domain {
+	d := r.Domain
+	return &registryv1.Domain{Name: d.Name, Version: d.Version, Description: d.Description, Status: string(r.Status),
+		NodeTypes: nodeTypesToPB(d.NodeTypes), LinkTypes: linkTypesToPB(d.LinkTypes),
+		CreatedAt: pbconv.Time(r.CreatedAt), UpdatedAt: pbconv.Time(r.UpdatedAt), PublishedAt: pbconv.Time(r.PublishedAt), UpdatedBy: r.UpdatedBy}
+}
+
+// DomainSummaryToPB converts a record to a list entry.
+func DomainSummaryToPB(r DomainRecord) *registryv1.DomainSummary {
+	d := r.Domain
+	return &registryv1.DomainSummary{Name: d.Name, Version: d.Version, Description: d.Description, Status: string(r.Status),
+		NodeTypeCount: int32(len(d.NodeTypes)), LinkTypeCount: int32(len(d.LinkTypes)),
+		UpdatedAt: pbconv.Time(r.UpdatedAt), PublishedAt: pbconv.Time(r.PublishedAt)}
+}
+
+// DomainFromPB converts an edited domain (status and timestamps are ignored).
+func DomainFromPB(p *registryv1.Domain) methodology.Domain {
+	if p == nil {
+		return methodology.Domain{}
+	}
+	d := methodology.Domain{Name: p.Name, Version: p.Version, Description: p.Description}
+	for _, n := range p.NodeTypes {
+		d.NodeTypes = append(d.NodeTypes, methodology.NodeType{Name: n.Name, Description: n.Description, Properties: nilIfNone(n.Properties), Extends: n.Extends})
+	}
+	for _, l := range p.LinkTypes {
+		d.LinkTypes = append(d.LinkTypes, methodology.LinkType{Name: l.Name, From: l.From, To: l.To})
+	}
+	return d
 }

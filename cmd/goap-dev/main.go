@@ -70,22 +70,44 @@ func main() {
 	reg := &registrysvc.Service{Store: st.methodologies, Authz: authorizer}
 	// publications are projected onto the domain graph (the methodology as
 	// versioned elements) and reload the triggers
-	reg.Events = registryEvents(func(ctx context.Context, name, version string) {
-		r, err := st.methodologies.Get(ctx, name, version)
-		if err != nil {
-			log.Error("published methodology", "name", name, "err", err)
-			return
-		}
-		if res, err := metamodel.Sync(ctx, g, &r.Methodology); err != nil {
-			log.Error("methodology projection", "name", name, "err", err)
-		} else if res.Changed() {
-			log.Info("methodology projected onto the graph", "name", name, "version", version, "change", res.Change)
-		}
-		if triggers != nil {
-			triggers.Handle(ctx, engine.TriggerEvent{Type: "methodology.published", Methodology: name, Version: version})
-		}
-	})
+	reg.Events = registryEvents{
+		methodology: func(ctx context.Context, name, version string) {
+			r, err := reg.GetResolved(ctx, name, version) // the shared domain filled in
+			if err != nil {
+				log.Error("published methodology", "name", name, "err", err)
+				return
+			}
+			if res, err := metamodel.Sync(ctx, g, &r.Methodology); err != nil {
+				log.Error("methodology projection", "name", name, "err", err)
+			} else if res.Changed() {
+				log.Info("methodology projected onto the graph", "name", name, "version", version, "change", res.Change)
+			}
+			if _, err := metamodel.BackfillInstanceOf(ctx, g, name); err != nil {
+				log.Warn("instanceOf backfill", "methodology", name, "err", err)
+			}
+			if triggers != nil {
+				triggers.Handle(ctx, engine.TriggerEvent{Type: "methodology.published", Methodology: name, Version: version})
+			}
+		},
+		// methodologies following the latest version of a domain get its new types
+		domain: func(ctx context.Context, name, version string) {
+			rs, err := metamodel.SyncAll(ctx, g, reg)
+			if err != nil {
+				log.Error("domain projection", "domain", name, "err", err)
+				return
+			}
+			for _, res := range rs {
+				if _, err := metamodel.BackfillInstanceOf(ctx, g, res.Methodology); err != nil {
+					log.Warn("instanceOf backfill", "methodology", res.Methodology, "err", err)
+				}
+			}
+			log.Info("domain published: methodologies projected again", "domain", name, "version", version)
+		},
+	}
 	system := authz.With(ctx, authz.Principal{Subject: "system:registry", Roles: []string{"admin"}})
+	if _, err := reg.SeedDomains(system, platform.Env("GOAP_DOMAINS_DIR", "domains")); err != nil {
+		platform.Fatal(log, "domains", err)
+	}
 	if _, err := reg.Seed(system, platform.Env("GOAP_METHODOLOGIES_DIR", "methodologies")); err != nil {
 		platform.Fatal(log, "methodologies", err)
 	}

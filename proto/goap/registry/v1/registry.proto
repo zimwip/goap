@@ -23,6 +23,23 @@ service RegistryService {
   rpc DeleteMethodology(DeleteMethodologyRequest) returns (DeleteMethodologyResponse);
   rpc ImportMethodology(ImportMethodologyRequest) returns (ImportMethodologyResponse);
   rpc ExportMethodology(ExportMethodologyRequest) returns (ExportMethodologyResponse);
+
+  // Domains are the shared object part (node types, link types) that
+  // methodologies reference with domain_ref. They have the same lifecycle as
+  // methodologies but are edited on their own: no change, impact or proposal.
+  rpc ListDomains(ListDomainsRequest) returns (ListDomainsResponse);
+  // version empty = latest published version
+  rpc GetDomain(GetDomainRequest) returns (GetDomainResponse);
+  rpc SaveDomain(SaveDomainRequest) returns (SaveDomainResponse);
+  rpc ValidateDomain(ValidateDomainRequest) returns (ValidateDomainResponse);
+  // Freeze a valid draft, once no published methodology would break.
+  rpc PublishDomain(PublishDomainRequest) returns (PublishDomainResponse);
+  rpc CreateDomainVersion(CreateDomainVersionRequest) returns (CreateDomainVersionResponse);
+  rpc DeleteDomain(DeleteDomainRequest) returns (DeleteDomainResponse);
+  rpc ImportDomain(ImportDomainRequest) returns (ImportDomainResponse);
+  rpc ExportDomain(ExportDomainRequest) returns (ExportDomainResponse);
+  // Methodology versions referencing a domain version.
+  rpc GetDomainUsage(GetDomainUsageRequest) returns (GetDomainUsageResponse);
 }
 
 message NodeType {
@@ -163,6 +180,8 @@ message Methodology {
   google.protobuf.Timestamp published_at = 12;
   string updated_by = 13;
   repeated Agent agents = 14;
+  // shared domain "<name>[@<version>]" used instead of node_types / link_types
+  string domain_ref = 15;
 }
 
 message GoalSummary {
@@ -205,6 +224,9 @@ message ListMethodologiesResponse {
 message GetMethodologyRequest {
   string name = 1;
   string version = 2;
+  // fill node_types / link_types from the referenced domain (engine use);
+  // editors leave it unset to get the definition as stored
+  bool resolve_domain = 3;
 }
 
 message GetMethodologyResponse {
@@ -273,4 +295,127 @@ message ExportMethodologyRequest {
 message ExportMethodologyResponse {
   string yaml = 1;
   string filename = 2;
+}
+
+// Domain is the shared object part of the model, versioned on its own.
+message Domain {
+  string name = 1;
+  string version = 2;
+  string description = 3;
+  // draft | published | archived (read only)
+  string status = 4;
+  repeated NodeType node_types = 5;
+  repeated LinkType link_types = 6;
+  google.protobuf.Timestamp created_at = 7;
+  google.protobuf.Timestamp updated_at = 8;
+  google.protobuf.Timestamp published_at = 9;
+  string updated_by = 10;
+}
+
+message DomainSummary {
+  string name = 1;
+  string version = 2;
+  string description = 3;
+  string status = 4;
+  int32 node_type_count = 5;
+  int32 link_type_count = 6;
+  google.protobuf.Timestamp updated_at = 7;
+  google.protobuf.Timestamp published_at = 8;
+}
+
+message ListDomainsRequest {
+  // every version (drafts, archived) instead of the latest one per name
+  bool all_versions = 1;
+}
+
+message ListDomainsResponse {
+  repeated DomainSummary domains = 1;
+}
+
+message GetDomainRequest {
+  string name = 1;
+  string version = 2;
+}
+
+message GetDomainResponse {
+  Domain domain = 1;
+}
+
+message SaveDomainRequest {
+  Domain domain = 1;
+}
+
+message SaveDomainResponse {
+  Domain domain = 1;
+  repeated Issue issues = 2;
+}
+
+message ValidateDomainRequest {
+  Domain domain = 1;
+}
+
+message ValidateDomainResponse {
+  repeated Issue issues = 1;
+}
+
+message PublishDomainRequest {
+  string name = 1;
+  string version = 2;
+}
+
+message PublishDomainResponse {
+  Domain domain = 1;
+}
+
+message CreateDomainVersionRequest {
+  string name = 1;
+  string from_version = 2;
+  string new_version = 3;
+}
+
+message CreateDomainVersionResponse {
+  Domain domain = 1;
+}
+
+message DeleteDomainRequest {
+  string name = 1;
+  string version = 2;
+}
+
+message DeleteDomainResponse {}
+
+message ImportDomainRequest {
+  string yaml = 1;
+  bool publish = 2;
+}
+
+message ImportDomainResponse {
+  Domain domain = 1;
+  repeated Issue issues = 2;
+}
+
+message ExportDomainRequest {
+  string name = 1;
+  string version = 2;
+}
+
+message ExportDomainResponse {
+  string yaml = 1;
+  string filename = 2;
+}
+
+message GetDomainUsageRequest {
+  string name = 1;
+  string version = 2;
+}
+
+message DomainUser {
+  string name = 1;
+  string version = 2;
+  string status = 3;
+}
+
+message GetDomainUsageResponse {
+  // methodology versions whose domain_ref resolves to the domain version
+  repeated DomainUser methodologies = 1;
 }

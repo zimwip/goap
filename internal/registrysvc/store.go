@@ -53,10 +53,19 @@ var (
 	ErrImmutable = errors.New("methodology version is not a draft")
 )
 
+// errDomainNotFound is ErrNotFound with a message that names a domain.
+var errDomainNotFound error = domainNotFound{}
+
+type domainNotFound struct{}
+
+func (domainNotFound) Error() string        { return "domain not found" }
+func (domainNotFound) Is(target error) bool { return target == ErrNotFound }
+
 // MemoryStore is an in-memory Store.
 type MemoryStore struct {
-	mu sync.RWMutex
-	m  map[string]Record // key name@version
+	mu  sync.RWMutex
+	m   map[string]Record // key name@version
+	dom memoryDomains
 }
 
 // NewMemoryStore returns an empty store.

@@ -25,15 +25,9 @@ import (
 // the graph, reported on events so the engine invalidates its ancestor cache.
 func syncMethodologies(ctx context.Context, log *slog.Logger, g *graph.Graph, reg metamodel.Published, events engine.Publisher) {
 	for delay := time.Second; ; delay = min(2*delay, time.Minute) {
-		rs, err := metamodel.SyncAll(ctx, g, reg)
+		n, err := syncAll(ctx, log, g, reg, events)
 		if err == nil {
-			for _, res := range rs {
-				backfillInstanceOf(ctx, log, g, res.Methodology)
-				if res.Changed() {
-					publishNodeTypeChanged(ctx, events, res.Methodology)
-				}
-			}
-			log.Info("methodologies projected onto the graph", "methodologies", len(rs))
+			log.Info("methodologies projected onto the graph", "methodologies", n)
 			return
 		}
 		log.Warn("methodology projection", "err", err, "retry", delay)
@@ -43,6 +37,22 @@ func syncMethodologies(ctx context.Context, log *slog.Logger, g *graph.Graph, re
 		case <-time.After(delay):
 		}
 	}
+}
+
+// syncAll projects every published methodology (and the shared domains they
+// reference), backfills instanceOf edges and reports graph changes.
+func syncAll(ctx context.Context, log *slog.Logger, g *graph.Graph, reg metamodel.Published, events engine.Publisher) (int, error) {
+	rs, err := metamodel.SyncAll(ctx, g, reg)
+	if err != nil {
+		return 0, err
+	}
+	for _, res := range rs {
+		backfillInstanceOf(ctx, log, g, res.Methodology)
+		if res.Changed() {
+			publishNodeTypeChanged(ctx, events, res.Methodology)
+		}
+	}
+	return len(rs), nil
 }
 
 // backfillInstanceOf links pre-existing domain nodes to their node type
@@ -112,6 +122,21 @@ func main() {
 					publishNodeTypeChanged(context.Background(), events, ev.Name)
 				}
 				backfillInstanceOf(context.Background(), log, g, ev.Name)
+			}
+		}); err != nil {
+			platform.Fatal(log, "subscribe", err)
+		}
+	}
+	// a published domain reaches the methodologies that follow its latest
+	// version: project everything again (idempotent)
+	if url := platform.Env("GOAP_REGISTRY_URL", ""); url != "" {
+		reg := registrysvc.NewClient(platform.H2CClient(), url, telemetry.ClientOptions()...)
+		if err := events.Subscribe("goap.registry.domain.published", func([]byte) {
+			ctx := context.Background()
+			if n, err := syncAll(ctx, log, g, reg, events); err != nil {
+				log.Error("domain projection", "err", err)
+			} else {
+				log.Info("domain published: methodologies projected again", "methodologies", n)
 			}
 		}); err != nil {
 			platform.Fatal(log, "subscribe", err)

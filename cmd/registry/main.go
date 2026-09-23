@@ -31,6 +31,13 @@ func main() {
 		// bootstrap: import the YAML files of versions not stored yet
 		system := authz.With(ctx, authz.Principal{Subject: "system:registry", Roles: []string{"admin"}})
 		seed := &registrysvc.Service{Store: store, Events: events}
+		if ddir := platform.Env("GOAP_DOMAINS_DIR", ""); ddir != "" {
+			doms, err := seed.SeedDomains(system, ddir)
+			if err != nil {
+				platform.Fatal(log, "import domains", err)
+			}
+			log.Info("domains imported", "dir", ddir, "domains", doms)
+		}
 		loaded, err := seed.Seed(system, dir)
 		if err != nil {
 			platform.Fatal(log, "import methodologies", err)

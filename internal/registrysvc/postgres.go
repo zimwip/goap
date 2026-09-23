@@ -39,8 +39,8 @@ func (s PostgresStore) Save(ctx context.Context, r Record) error {
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):
 			id = uuid.NewString()
-			_, err = tx.Exec(ctx, `INSERT INTO methodology (id, name, version, description, status, created_at, updated_at, updated_by)
-				VALUES ($1, $2, $3, $4, $5, $6, $6, $7)`, id, m.Name, m.Version, m.Description, string(r.Status), r.UpdatedAt, r.UpdatedBy)
+			_, err = tx.Exec(ctx, `INSERT INTO methodology (id, name, version, description, domain_ref, status, created_at, updated_at, updated_by)
+				VALUES ($1, $2, $3, $4, $8, $5, $6, $6, $7)`, id, m.Name, m.Version, m.Description, string(r.Status), r.UpdatedAt, r.UpdatedBy, m.DomainRef)
 			if err != nil {
 				return err
 			}
@@ -49,8 +49,8 @@ func (s PostgresStore) Save(ctx context.Context, r Record) error {
 		case Status(status) != StatusDraft:
 			return fmt.Errorf("%s: %w", key(m.Name, m.Version), ErrImmutable)
 		default:
-			if _, err := tx.Exec(ctx, `UPDATE methodology SET description = $2, updated_at = $3, updated_by = $4 WHERE id = $1`,
-				id, m.Description, r.UpdatedAt, r.UpdatedBy); err != nil {
+			if _, err := tx.Exec(ctx, `UPDATE methodology SET description = $2, updated_at = $3, updated_by = $4, domain_ref = $5 WHERE id = $1`,
+				id, m.Description, r.UpdatedAt, r.UpdatedBy, m.DomainRef); err != nil {
 				return err
 			}
 			for _, t := range []string{"methodology_node_type", "methodology_link_type", "methodology_condition", "methodology_action", "methodology_goal", "methodology_agent"} {
@@ -127,7 +127,7 @@ func orEmptyAny(m map[string]any) map[string]any {
 	return m
 }
 
-const headerCols = `id::text, name, version, description, status, created_at, updated_at, published_at, updated_by`
+const headerCols = `id::text, name, version, description, domain_ref, status, created_at, updated_at, published_at, updated_by`
 
 type header struct {
 	id string
@@ -139,7 +139,7 @@ func scanHeader(row pgx.Row) (header, error) {
 	var published *time.Time
 	var status string
 	m := &h.r.Methodology
-	err := row.Scan(&h.id, &m.Name, &m.Version, &m.Description, &status, &h.r.CreatedAt, &h.r.UpdatedAt, &published, &h.r.UpdatedBy)
+	err := row.Scan(&h.id, &m.Name, &m.Version, &m.Description, &m.DomainRef, &status, &h.r.CreatedAt, &h.r.UpdatedAt, &published, &h.r.UpdatedBy)
 	h.r.Status = Status(status)
 	if published != nil {
 		h.r.PublishedAt = *published
@@ -340,5 +340,168 @@ func (s PostgresStore) Delete(ctx context.Context, name, version string) error {
 		return fmt.Errorf("%s: %w", key(name, version), ErrImmutable)
 	}
 	_, err = s.Pool.Exec(ctx, `DELETE FROM methodology WHERE name = $1 AND version = $2 AND status = 'draft'`, name, version)
+	return err
+}
+
+const domainCols = `id::text, name, version, description, status, created_at, updated_at, published_at, updated_by`
+
+type domainHeader struct {
+	id string
+	r  DomainRecord
+}
+
+func scanDomainHeader(row pgx.Row) (domainHeader, error) {
+	var h domainHeader
+	var published *time.Time
+	var status string
+	d := &h.r.Domain
+	err := row.Scan(&h.id, &d.Name, &d.Version, &d.Description, &status, &h.r.CreatedAt, &h.r.UpdatedAt, &published, &h.r.UpdatedBy)
+	h.r.Status = Status(status)
+	if published != nil {
+		h.r.PublishedAt = *published
+	}
+	return h, err
+}
+
+func (s PostgresStore) SaveDomain(ctx context.Context, r DomainRecord) error {
+	d := r.Domain
+	return pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
+		var id, status string
+		err := tx.QueryRow(ctx, `SELECT id::text, status FROM domain WHERE name = $1 AND version = $2 FOR UPDATE`, d.Name, d.Version).Scan(&id, &status)
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			id = uuid.NewString()
+			if _, err = tx.Exec(ctx, `INSERT INTO domain (id, name, version, description, status, created_at, updated_at, updated_by)
+				VALUES ($1, $2, $3, $4, $5, $6, $6, $7)`, id, d.Name, d.Version, d.Description, string(r.Status), r.UpdatedAt, r.UpdatedBy); err != nil {
+				return err
+			}
+		case err != nil:
+			return err
+		case Status(status) != StatusDraft:
+			return fmt.Errorf("domain %s: %w", key(d.Name, d.Version), ErrImmutable)
+		default:
+			if _, err := tx.Exec(ctx, `UPDATE domain SET description = $2, updated_at = $3, updated_by = $4 WHERE id = $1`,
+				id, d.Description, r.UpdatedAt, r.UpdatedBy); err != nil {
+				return err
+			}
+			for _, t := range []string{"domain_node_type", "domain_link_type"} {
+				if _, err := tx.Exec(ctx, `DELETE FROM `+t+` WHERE domain_id = $1`, id); err != nil {
+					return err
+				}
+			}
+		}
+		batch := &pgx.Batch{}
+		for i, n := range d.NodeTypes {
+			batch.Queue(`INSERT INTO domain_node_type (domain_id, position, name, description, properties, extends) VALUES ($1, $2, $3, $4, $5, $6)`,
+				id, i, n.Name, n.Description, orEmptyStrings(n.Properties), n.Extends)
+		}
+		for i, l := range d.LinkTypes {
+			batch.Queue(`INSERT INTO domain_link_type (domain_id, position, name, from_type, to_type) VALUES ($1, $2, $3, $4, $5)`, id, i, l.Name, l.From, l.To)
+		}
+		return tx.SendBatch(ctx, batch).Close()
+	})
+}
+
+func (s PostgresStore) loadDomainSections(ctx context.Context, id string, d *methodology.Domain) error {
+	rows, err := s.Pool.Query(ctx, `SELECT name, description, properties, extends FROM domain_node_type WHERE domain_id = $1 ORDER BY position`, id)
+	if err != nil {
+		return err
+	}
+	d.NodeTypes, err = pgx.CollectRows(rows, func(r pgx.CollectableRow) (methodology.NodeType, error) {
+		var n methodology.NodeType
+		err := r.Scan(&n.Name, &n.Description, &n.Properties, &n.Extends)
+		n.Properties = nilIfNoStrings(n.Properties)
+		return n, err
+	})
+	if err != nil {
+		return err
+	}
+	rows, err = s.Pool.Query(ctx, `SELECT name, from_type, to_type FROM domain_link_type WHERE domain_id = $1 ORDER BY position`, id)
+	if err != nil {
+		return err
+	}
+	d.LinkTypes, err = pgx.CollectRows(rows, func(r pgx.CollectableRow) (methodology.LinkType, error) {
+		var l methodology.LinkType
+		return l, r.Scan(&l.Name, &l.From, &l.To)
+	})
+	return err
+}
+
+func (s PostgresStore) GetDomain(ctx context.Context, name, version string) (DomainRecord, error) {
+	q := `SELECT ` + domainCols + ` FROM domain WHERE name = $1 AND version = $2`
+	args := []any{name, version}
+	if version == "" {
+		q = `SELECT ` + domainCols + ` FROM domain WHERE name = $1 AND status = 'published' ORDER BY published_at DESC LIMIT 1`
+		args = args[:1]
+	}
+	h, err := scanDomainHeader(s.Pool.QueryRow(ctx, q, args...))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return DomainRecord{}, fmt.Errorf("%s: %w", key(name, version), errDomainNotFound)
+	}
+	if err != nil {
+		return DomainRecord{}, err
+	}
+	if err := s.loadDomainSections(ctx, h.id, &h.r.Domain); err != nil {
+		return DomainRecord{}, err
+	}
+	return h.r, nil
+}
+
+func (s PostgresStore) ListDomains(ctx context.Context) ([]DomainRecord, error) {
+	rows, err := s.Pool.Query(ctx, `SELECT `+domainCols+` FROM domain ORDER BY name, created_at`)
+	if err != nil {
+		return nil, err
+	}
+	var hs []domainHeader
+	for rows.Next() {
+		h, err := scanDomainHeader(rows)
+		if err != nil {
+			rows.Close()
+			return nil, err
+		}
+		hs = append(hs, h)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	out := make([]DomainRecord, len(hs))
+	for i, h := range hs {
+		if err := s.loadDomainSections(ctx, h.id, &h.r.Domain); err != nil {
+			return nil, err
+		}
+		out[i] = h.r
+	}
+	return out, nil
+}
+
+func (s PostgresStore) SetDomainStatus(ctx context.Context, name, version string, st Status, at time.Time) error {
+	q := `UPDATE domain SET status = $3, updated_at = $4 WHERE name = $1 AND version = $2`
+	if st == StatusPublished {
+		q = `UPDATE domain SET status = $3, updated_at = $4, published_at = $4 WHERE name = $1 AND version = $2`
+	}
+	tag, err := s.Pool.Exec(ctx, q, name, version, string(st), at)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("%s: %w", key(name, version), errDomainNotFound)
+	}
+	return nil
+}
+
+func (s PostgresStore) DeleteDomain(ctx context.Context, name, version string) error {
+	var status string
+	err := s.Pool.QueryRow(ctx, `SELECT status FROM domain WHERE name = $1 AND version = $2`, name, version).Scan(&status)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return fmt.Errorf("%s: %w", key(name, version), errDomainNotFound)
+	}
+	if err != nil {
+		return err
+	}
+	if Status(status) != StatusDraft {
+		return fmt.Errorf("domain %s: %w", key(name, version), ErrImmutable)
+	}
+	_, err = s.Pool.Exec(ctx, `DELETE FROM domain WHERE name = $1 AND version = $2 AND status = 'draft'`, name, version)
 	return err
 }

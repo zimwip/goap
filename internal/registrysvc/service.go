@@ -97,7 +97,16 @@ func (s *Service) Save(ctx context.Context, m methodology.Methodology) (Record, 
 		return Record{}, nil, err
 	}
 	s.publish(ctx, "saved", saved)
-	return saved, m.Validate(), nil
+	return saved, s.validate(ctx, &m), nil
+}
+
+// validate checks a definition against the domain it references, if any.
+func (s *Service) validate(ctx context.Context, m *methodology.Methodology) methodology.Issues {
+	res, issues := m.Resolve(s.resolver(ctx))
+	if len(issues) > 0 {
+		return issues
+	}
+	return res.Validate()
 }
 
 // Publish freezes a valid draft.
@@ -112,8 +121,11 @@ func (s *Service) Publish(ctx context.Context, name, version string) (Record, er
 	if r.Status != StatusDraft {
 		return Record{}, fmt.Errorf("%s@%s: %w", name, version, ErrImmutable)
 	}
-	if issues := r.Methodology.Validate(); len(issues) > 0 {
+	if issues := s.validate(ctx, &r.Methodology); len(issues) > 0 {
 		return Record{}, fmt.Errorf("%w: %v", ErrInvalid, issues)
+	}
+	if err := s.requirePublishedDomain(ctx, &r.Methodology); err != nil {
+		return Record{}, err
 	}
 	if err := s.Store.SetStatus(ctx, name, version, StatusPublished, s.clock()); err != nil {
 		return Record{}, err
@@ -250,6 +262,24 @@ func (s *Service) Methodology(ctx context.Context, name string) (*methodology.Co
 	if err != nil {
 		return nil, engine.ErrUnknownMethodology{Name: name}
 	}
-	m := r.Methodology
+	m, issues := r.Methodology.Resolve(s.resolver(ctx))
+	if len(issues) > 0 {
+		return nil, fmt.Errorf("methodology %s: %w", name, issues)
+	}
 	return m.Compile()
+}
+
+// GetResolved returns a version whose domain is filled from its reference
+// (engine use); Get returns the definition as stored.
+func (s *Service) GetResolved(ctx context.Context, name, version string) (Record, error) {
+	r, err := s.Store.Get(ctx, name, version)
+	if err != nil {
+		return r, err
+	}
+	m, issues := r.Methodology.Resolve(s.resolver(ctx))
+	if len(issues) > 0 {
+		return r, fmt.Errorf("methodology %s: %w", name, issues)
+	}
+	r.Methodology = *m
+	return r, nil
 }

@@ -10,7 +10,7 @@
 - The example methodology `methodologies/impact-analysis.yaml` is exercised by `pkg/methodology` and `pkg/engine` tests; `methodologies/sdlc.yaml` (ALM domain, seeded by `internal/graphsvc/seed.go`) by `pkg/engine/sdlc_test.go`.
 - Versioning rule of the graph: outgoing links belong to the source node version (see `pkg/graph/apply.go`).
 - Authorization is ABAC (Casbin) via `authz.Authorizer`; default policies in `pkg/authz/casbin.go`, stored by the iam service.
-- Methodologies live in the registry database (structured); YAML is import/export only.
+- Methodologies live in the registry database (structured); YAML is import/export only. The object part (node/link types) can be a shared `Domain` (ADR 0013): a methodology references it with `domainRef`, and its NodeTypes are keyed `D:<domain>/nodetype/<name>` on the graph.
 - Agents (goap/utility/hybrid planners) and script actions (JS via goja, Go via yaegi) use the DSL in `pkg/dsl` (docs/dsl.md); scripts run in sandboxes (`internal/sandbox`, `GOAP_SANDBOX`).
 - Telemetry: `internal/telemetry` (OpenTelemetry); keep span / attribute names stable (docs/architecture.md §3.7).
 - Execution journal (ADR 0011): the engine records ticks / actions / approvals on the change (`domain.ExecutionRecord`); items carry `execution`. Published methodologies are projected onto the graph (`pkg/metamodel`, keys `M:<methodology>/<type>/<name>`); the observer (`methodologies/methodology-improvement.yaml`, `pkg/observe`) turns runs into methodology drafts.

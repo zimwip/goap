@@ -11,6 +11,12 @@
 // never updates or deletes it again — the registry's declared node types are
 // only its bootstrap seed and a compile-time validation schema from then on.
 // Data-layer nodes reference their NodeType by a LinkInstanceOf edge.
+//
+// A methodology that references a shared Domain (Methodology.DomainRef) does
+// not own NodeType nodes: they belong to the domain, one node per type, keyed
+// "D:<domain>/nodetype/<name>" and shared by every methodology (and every data
+// node) that uses the domain. The methodology's root node carries its
+// domainRef, which is how graph-side lookups find the type namespace.
 package metamodel
 
 import (
@@ -62,6 +68,52 @@ func Key(meth, typ, name string) string {
 		return "M:" + meth
 	}
 	return "M:" + meth + "/" + strings.ToLower(typ) + "/" + name
+}
+
+// DomainKey returns the key of a NodeType owned by a shared domain.
+func DomainKey(domainName, name string) string {
+	return "D:" + domainName + "/" + strings.ToLower(TypeNodeType) + "/" + name
+}
+
+// domainNamespace is the type namespace of a shared domain (see typeKey).
+func domainNamespace(domainName string) string { return "D:" + domainName }
+
+// typeKey returns the key of the NodeType called name in a type namespace: a
+// methodology name (own types) or "D:<domain>" (shared domain). Names cannot
+// contain ':', so the two are never confused.
+func typeKey(ns, name string) string {
+	if d, ok := strings.CutPrefix(ns, "D:"); ok {
+		return DomainKey(d, name)
+	}
+	return Key(ns, TypeNodeType, name)
+}
+
+// TypeName returns the name of a NodeType key of the type namespace ns.
+func TypeName(key, ns string) (string, bool) {
+	prefix := typeKey(ns, "")
+	if name, ok := strings.CutPrefix(key, prefix); ok && name != "" {
+		return name, true
+	}
+	return "", false
+}
+
+// TypeNamespace returns where the NodeTypes of a methodology live: the
+// methodology itself, or the shared domain its root node references (props
+// "domainRef", "<name>[@<version>]"). Pass the nodes of a baseline; without a
+// methodology root node the methodology owns its types.
+func TypeNamespace(nodes []domain.Node, meth string) string {
+	root := Key(meth, TypeMethodology, "")
+	for _, n := range nodes {
+		if n.Key != root {
+			continue
+		}
+		if ref, _ := n.Properties["domainRef"].(string); ref != "" {
+			name, _, _ := strings.Cut(ref, "@")
+			return domainNamespace(name)
+		}
+		break
+	}
+	return meth
 }
 
 // ParseKey splits an element key (ok is false for other nodes).
@@ -128,7 +180,7 @@ func empty(x any) bool {
 func Project(m *methodology.Methodology) ([]Element, []Edge) {
 	name := m.Name
 	root := Key(name, TypeMethodology, "")
-	els := []Element{{Key: root, Type: TypeMethodology, Props: props(map[string]any{"name": m.Name, "version": m.Version, "description": m.Description})}}
+	els := []Element{{Key: root, Type: TypeMethodology, Props: props(map[string]any{"name": m.Name, "version": m.Version, "description": m.Description, "domainRef": m.DomainRef})}}
 	var edges []Edge
 	add := func(typ, n string, v any) string {
 		k := Key(name, typ, n)
@@ -148,14 +200,16 @@ func Project(m *methodology.Methodology) ([]Element, []Edge) {
 			}
 		}
 	}
-	types := map[string]bool{}
-	for _, t := range m.Domain.NodeTypes {
-		types[t.Name] = true
-	}
-	for _, t := range m.Domain.NodeTypes {
-		k := add(TypeNodeType, t.Name, t)
-		if t.Extends != "" && types[t.Extends] {
-			edges = append(edges, Edge{LinkExtends, k, Key(name, TypeNodeType, t.Extends)})
+	if m.DomainRef == "" { // otherwise the node types belong to the shared domain (ProjectDomain)
+		types := map[string]bool{}
+		for _, t := range m.Domain.NodeTypes {
+			types[t.Name] = true
+		}
+		for _, t := range m.Domain.NodeTypes {
+			k := add(TypeNodeType, t.Name, t)
+			if t.Extends != "" && types[t.Extends] {
+				edges = append(edges, Edge{LinkExtends, k, Key(name, TypeNodeType, t.Extends)})
+			}
 		}
 	}
 	actions := map[string]methodology.Action{}
@@ -211,6 +265,24 @@ func Project(m *methodology.Methodology) ([]Element, []Edge) {
 	return els, edges
 }
 
+// ProjectDomain returns the NodeType nodes and extends links of a shared domain.
+func ProjectDomain(d *methodology.Domain) ([]Element, []Edge) {
+	types := map[string]bool{}
+	for _, t := range d.NodeTypes {
+		types[t.Name] = true
+	}
+	var els []Element
+	var edges []Edge
+	for _, t := range d.NodeTypes {
+		k := DomainKey(d.Name, t.Name)
+		els = append(els, Element{Key: k, Type: TypeNodeType, Props: props(t)})
+		if t.Extends != "" && types[t.Extends] {
+			edges = append(edges, Edge{LinkExtends, k, DomainKey(d.Name, t.Extends)})
+		}
+	}
+	return els, edges
+}
+
 // Graph is what the projection needs from the graph (*graph.Graph and the
 // graph service client implement it).
 type Graph interface {
@@ -247,15 +319,59 @@ func (r Result) Changed() bool { return r.Change != "" }
 // Sync projects a methodology onto main: a change creates, updates or
 // deletes the element nodes and links that differ, and is applied. Nothing
 // happens when the graph already matches.
+//
+// A methodology referencing a shared domain first synchronizes that domain
+// (its Domain must be resolved, as registry.Compile does), so that the
+// methodology's types exist on the graph once it is projected.
 func Sync(ctx context.Context, g Graph, m *methodology.Methodology) (Result, error) {
-	res, err := sync(ctx, g, m)
+	if m.DomainRef != "" {
+		name, _, _ := strings.Cut(m.DomainRef, "@")
+		if _, err := SyncDomain(ctx, g, &methodology.Domain{Name: name, Schema: m.Domain}); err != nil {
+			return Result{Methodology: m.Name}, fmt.Errorf("domain %s: %w", name, err)
+		}
+	}
+	els, edges := Project(m)
+	return syncProjection(ctx, g, target{
+		prefix: Key(m.Name, TypeMethodology, ""), els: els, edges: edges, name: m.Name,
+		title:  fmt.Sprintf("Methodology %s %s", m.Name, m.Version),
+		intent: "Publish methodology " + m.Name + " " + m.Version,
+		data:   map[string]any{"metamodel": map[string]any{"methodology": m.Name, "version": m.Version}},
+		branch: m.Name + "@" + m.Version,
+	})
+}
+
+// SyncDomain projects the NodeTypes of a shared domain onto main. Like every
+// NodeType (ADR 0012) they are only created and linked: an existing node is
+// authored on the graph and never overwritten or deleted by a publication.
+func SyncDomain(ctx context.Context, g Graph, d *methodology.Domain) (Result, error) {
+	els, edges := ProjectDomain(d)
+	return syncProjection(ctx, g, target{
+		prefix: "D:" + d.Name, els: els, edges: edges, name: "domain " + d.Name,
+		title:  fmt.Sprintf("Domain %s %s", d.Name, d.Version),
+		intent: "Publish domain " + d.Name + " " + d.Version,
+		data:   map[string]any{"metamodel": map[string]any{"domain": d.Name, "version": d.Version}},
+		branch: d.Name + "@" + d.Version,
+	})
+}
+
+// target is what a synchronization projects: the elements owned under a key
+// prefix, and how the change that applies them is described.
+type target struct {
+	prefix, name, title, intent, branch string
+	els                                 []Element
+	edges                               []Edge
+	data                                map[string]any
+}
+
+func syncProjection(ctx context.Context, g Graph, t target) (Result, error) {
+	res, err := sync(ctx, g, t)
 	if errors.Is(err, graph.ErrConflict) {
-		res, err = sync(ctx, g, m) // main moved meanwhile: once more on the new head
+		res, err = sync(ctx, g, t) // main moved meanwhile: once more on the new head
 	}
 	return res, err
 }
 
-func sync(ctx context.Context, g Graph, m *methodology.Methodology) (Result, error) {
+func sync(ctx context.Context, g Graph, t target) (Result, error) {
 	head, err := g.BranchHead(ctx, domain.MainBranch)
 	if errors.Is(err, graph.ErrNotFound) {
 		head, err = g.CreateBaseline(ctx, "Repository", nil)
@@ -267,7 +383,7 @@ func sync(ctx context.Context, g Graph, m *methodology.Methodology) (Result, err
 	if err != nil {
 		return Result{}, err
 	}
-	prefix := Key(m.Name, TypeMethodology, "")
+	prefix := t.prefix
 	current := map[string]domain.Node{}
 	byID := map[domain.NodeID]domain.Node{}
 	for _, n := range nodes {
@@ -276,8 +392,8 @@ func sync(ctx context.Context, g Graph, m *methodology.Methodology) (Result, err
 			current[n.Key] = n
 		}
 	}
-	els, edges := Project(m)
-	res := Result{Methodology: m.Name}
+	els, edges := t.els, t.edges
+	res := Result{Methodology: t.name}
 	var items []domain.ChangeItem
 	refs := map[string]domain.Endpoint{} // element key → endpoint
 	desired := map[string]bool{}
@@ -354,16 +470,14 @@ func sync(ctx context.Context, g Graph, m *methodology.Methodology) (Result, err
 	if len(items) == 0 {
 		return res, nil
 	}
-	title := fmt.Sprintf("Methodology %s %s", m.Name, m.Version)
-	c, err := g.CreateChange(ctx, graph.NewChange{Title: title, Intent: "Publish methodology " + m.Name + " " + m.Version,
-		BaselineID: head.ID, Data: map[string]any{"metamodel": map[string]any{"methodology": m.Name, "version": m.Version}}})
+	c, err := g.CreateChange(ctx, graph.NewChange{Title: t.title, Intent: t.intent, BaselineID: head.ID, Data: t.data})
 	if err != nil {
 		return res, err
 	}
 	if _, err := g.AddItems(ctx, c.ID, items); err != nil {
 		return res, err
 	}
-	b, err := g.Apply(ctx, c.ID, m.Name+"@"+m.Version)
+	b, err := g.Apply(ctx, c.ID, t.branch)
 	if err != nil {
 		return res, err
 	}
@@ -445,9 +559,10 @@ func Supertypes(ctx context.Context, g Graph, methodology string) (map[string][]
 	if err != nil {
 		return nil, err
 	}
+	ns := TypeNamespace(nodes, methodology)
 	names := map[domain.NodeID]string{} // NodeType node id → name
 	for _, n := range nodes {
-		if meth, kind, name, ok := ParseKey(n.Key); ok && meth == methodology && kind == strings.ToLower(TypeNodeType) {
+		if name, ok := TypeName(n.Key, ns); ok {
 			names[n.ID] = name
 		}
 	}
@@ -507,11 +622,12 @@ func ApplyNodeTypes(ctx context.Context, g Graph, meth string, ops []NodeTypeOp)
 	for _, n := range nodes {
 		byKey[n.Key] = n
 	}
+	ns := TypeNamespace(nodes, meth)
 	res := Result{Methodology: meth}
 	var items []domain.ChangeItem
 	refs := map[string]domain.Endpoint{} // NodeType name → endpoint, for extends targets created in this batch
 	for _, op := range ops {
-		key := Key(meth, TypeNodeType, op.Name)
+		key := typeKey(ns, op.Name)
 		n, exists := byKey[key]
 		if op.Delete {
 			if exists {
@@ -550,7 +666,7 @@ func ApplyNodeTypes(ctx context.Context, g Graph, meth string, ops []NodeTypeOp)
 		}
 		to, ok := refs[op.Extends]
 		if !ok {
-			if n, exists := byKey[Key(meth, TypeNodeType, op.Extends)]; exists {
+			if n, exists := byKey[typeKey(ns, op.Extends)]; exists {
 				ref := n.Ref()
 				to = domain.Endpoint{Node: &ref}
 			} else {
@@ -591,7 +707,11 @@ func LinkToType(ctx context.Context, g KeyGraph, meth string, ref domain.NodeRef
 	if err != nil {
 		return err
 	}
-	nt, err := g.NodeByKey(ctx, Key(meth, TypeNodeType, typeName))
+	ns := meth
+	if root, err := g.NodeByKey(ctx, Key(meth, TypeMethodology, "")); err == nil {
+		ns = TypeNamespace([]domain.Node{root}, meth)
+	}
+	nt, err := g.NodeByKey(ctx, typeKey(ns, typeName))
 	if errors.Is(err, graph.ErrNotFound) {
 		return nil
 	}
@@ -631,9 +751,10 @@ func BackfillInstanceOf(ctx context.Context, g Graph, meth string) (Result, erro
 	if err != nil {
 		return res, err
 	}
+	ns := TypeNamespace(nodes, meth)
 	types := map[string]domain.NodeRef{} // NodeType name → node
 	for _, n := range nodes {
-		if m, kind, name, ok := ParseKey(n.Key); ok && m == meth && kind == strings.ToLower(TypeNodeType) {
+		if name, ok := TypeName(n.Key, ns); ok {
 			types[name] = n.Ref()
 		}
 	}
@@ -698,11 +819,12 @@ func CreateObject(ctx context.Context, g KeyGraph, meth, typeName, key string, p
 		return domain.Node{}, domain.Baseline{}, err
 	}
 	var typeRef *domain.NodeRef
+	typeKeyWanted := typeKey(TypeNamespace(nodes, meth), typeName)
 	for _, n := range nodes {
 		if n.Key == key {
 			return domain.Node{}, domain.Baseline{}, fmt.Errorf("key %q is already used: %w", key, graph.ErrConflict)
 		}
-		if n.Key == Key(meth, TypeNodeType, typeName) {
+		if n.Key == typeKeyWanted {
 			ref := n.Ref()
 			typeRef = &ref
 		}

@@ -361,7 +361,10 @@ change CR-42
   there directly — the registry's declared node types are only the bootstrap seed and a
   compile-time validation schema afterwards, never overwritten or deleted by a later publication.
   `x.types` resolution (§2.9) reads the graph's node types first, falling back to the declared
-  schema for a methodology never synced onto the graph.
+  schema for a methodology never synced onto the graph. When a methodology references a shared
+  domain ([ADR 0013](adr/0013-shared-domain.md), §4) its node types are owned by the domain, one
+  node per type keyed `D:<domain>/nodetype/<name>` and shared by every methodology using it; the
+  methodology's root node carries its `domainRef` (`metamodel.TypeNamespace`).
 - The **`methodology-improvement/observer`** agent triggers at the end of every root process
   (completed, failed, or stuck): it analyzes the journal and traces (pain points: loops, failures, costly
   or systematizable LLM calls, replans, slow spans), proposes modifications **to the methodology's
@@ -562,6 +565,18 @@ status) and one table per section (`methodology_node_type`, `methodology_link_ty
 Lifecycle of a version: **draft** (editable, can be invalid: anomalies are returned
 with their path, e.g. `conditions[2].expr`) → **published** (validated, immutable, the only one executable by the
 engine) → **archived**. Modifying a published version means creating a new draft version (`CreateVersion`).
+
+**Shared domain.** The object part of the model (node types, link types) can live in a
+**Domain**, versioned on its own (`domain`, `domain_node_type`, `domain_link_type` tables; same
+draft → published → archived lifecycle; `registry.v1` `*Domain*` RPCs, ABAC resource `domain`, role
+`methodologist`). A methodology is then the active part only (agents, actions, conditions, goals) and
+references the domain with `domainRef: <name>[@<version>]`; an unpinned reference follows the latest
+published version. Embedding a `domain:` and referencing one are exclusive; the embedded form stays
+valid. Consistency is checked at save / publish (`Methodology.Resolve`, then `Validate`): action
+`expects`, CEL type literals (`"X" in p.node.types`, `.link.type == "x"`) and builtin `params.linkTypes`
+must name types of the domain. A methodology can only be published on a published domain, and a domain
+version is refused when it would break a published methodology that follows the latest version
+(`GetDomainUsage` lists the dependents). Editing a domain creates no change, impact or proposal.
 
 **YAML** is only an **import / export** format (`ImportMethodology`, `ExportMethodology`); the
 files in `methodologies/` are imported and published at registry startup if they don't already exist.
