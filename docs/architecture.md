@@ -568,6 +568,7 @@ docs/                        architecture, ADR
 | **M4 — axe change avancé** | propagation d'impact (CTE récursive paramétrée par types de liens), liens suspects, diff de baselines, merge/rebase de changesets concurrents |
 | **M5 — UX** | ✅ éditeur de méthodologies (formulaires, anomalies localisées, publication, versions, import/export YAML), écran « Accès » (politiques ABAC), approbations · reste : visualisation du graphe et du plan |
 | **M6 — K8s** | charts Helm, HPA engine · ✅ observabilité OpenTelemetry, manifestes sandboxes |
+| **M8 — branches et décisions** 🟡 | ADR 0009 (proposé) : versions par branche (`revise` / `derive` / `merge`), conflits → merge validé → rebase et replanification, options explorées en branches, comparaison, boucles de décision (questions → analyses), merge de l'option retenue ; puis containers versionnés et releases |
 | **M7 — agents** ✅ | agents (goap / utility / hybrid), actions script JS / Go avec DSL, sous-agents, sandbox par processus, IDE |
 
 ## 7. Questions ouvertes
