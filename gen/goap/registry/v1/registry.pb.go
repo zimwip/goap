@@ -24,10 +24,12 @@ const (
 )
 
 type NodeType struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Description   string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
-	Properties    []string               `protobuf:"bytes,3,rep,name=properties,proto3" json:"properties,omitempty"`
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Name        string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Description string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
+	Properties  []string               `protobuf:"bytes,3,rep,name=properties,proto3" json:"properties,omitempty"`
+	// parent type (subtyping): inherits its properties and link types
+	Extends       string `protobuf:"bytes,4,opt,name=extends,proto3" json:"extends,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -81,6 +83,13 @@ func (x *NodeType) GetProperties() []string {
 		return x.Properties
 	}
 	return nil
+}
+
+func (x *NodeType) GetExtends() string {
+	if x != nil {
+		return x.Extends
+	}
+	return ""
 }
 
 type LinkType struct {
@@ -383,7 +392,7 @@ type Action struct {
 	state       protoimpl.MessageState `protogen:"open.v1"`
 	Name        string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	Description string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
-	// llm | script | tool | human | builtin
+	// llm | script | tool | human | builtin | abstract
 	Kind    string          `protobuf:"bytes,3,opt,name=kind,proto3" json:"kind,omitempty"`
 	Pre     map[string]bool `protobuf:"bytes,4,rep,name=pre,proto3" json:"pre,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
 	Effects map[string]bool `protobuf:"bytes,5,rep,name=effects,proto3" json:"effects,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
@@ -401,7 +410,11 @@ type Action struct {
 	Language string `protobuf:"bytes,15,opt,name=language,proto3" json:"language,omitempty"`
 	Code     string `protobuf:"bytes,16,opt,name=code,proto3" json:"code,omitempty"`
 	// CEL expression returning a number (utility / hybrid planners)
-	Utility       string `protobuf:"bytes,17,opt,name=utility,proto3" json:"utility,omitempty"`
+	Utility string `protobuf:"bytes,17,opt,name=utility,proto3" json:"utility,omitempty"`
+	// specialization: "<action>" or "<methodology>/<action>", guard (CEL) and priority
+	Specializes   string `protobuf:"bytes,18,opt,name=specializes,proto3" json:"specializes,omitempty"`
+	When          string `protobuf:"bytes,19,opt,name=when,proto3" json:"when,omitempty"`
+	Priority      int32  `protobuf:"varint,20,opt,name=priority,proto3" json:"priority,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -553,6 +566,27 @@ func (x *Action) GetUtility() string {
 		return x.Utility
 	}
 	return ""
+}
+
+func (x *Action) GetSpecializes() string {
+	if x != nil {
+		return x.Specializes
+	}
+	return ""
+}
+
+func (x *Action) GetWhen() string {
+	if x != nil {
+		return x.When
+	}
+	return ""
+}
+
+func (x *Action) GetPriority() int32 {
+	if x != nil {
+		return x.Priority
+	}
+	return 0
 }
 
 // An agent (Embabel terminology): a planner and the set of admissible actions
@@ -2150,13 +2184,14 @@ var File_goap_registry_v1_registry_proto protoreflect.FileDescriptor
 
 const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\n" +
-	"\x1fgoap/registry/v1/registry.proto\x12\x10goap.registry.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"`\n" +
+	"\x1fgoap/registry/v1/registry.proto\x12\x10goap.registry.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"z\n" +
 	"\bNodeType\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x1e\n" +
 	"\n" +
 	"properties\x18\x03 \x03(\tR\n" +
-	"properties\"B\n" +
+	"properties\x12\x18\n" +
+	"\aextends\x18\x04 \x01(\tR\aextends\"B\n" +
 	"\bLinkType\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
 	"\x04from\x18\x02 \x01(\tR\x04from\x12\x0e\n" +
@@ -2175,7 +2210,7 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\bfor_each\x18\x01 \x01(\tR\aforEach\x12\x14\n" +
 	"\x05where\x18\x02 \x01(\tR\x05where\x127\n" +
 	"\aproduce\x18\x03 \x01(\v2\x1d.goap.registry.v1.ProduceSpecR\aproduce\x12.\n" +
-	"\x04link\x18\x04 \x01(\v2\x1a.goap.registry.v1.LinkSpecR\x04link\"\xa4\x05\n" +
+	"\x04link\x18\x04 \x01(\v2\x1a.goap.registry.v1.LinkSpecR\x04link\"\xf6\x05\n" +
 	"\x06Action\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x12\n" +
@@ -2196,7 +2231,10 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\x06params\x18\x0e \x01(\v2\x17.google.protobuf.StructR\x06params\x12\x1a\n" +
 	"\blanguage\x18\x0f \x01(\tR\blanguage\x12\x12\n" +
 	"\x04code\x18\x10 \x01(\tR\x04code\x12\x18\n" +
-	"\autility\x18\x11 \x01(\tR\autility\x1a6\n" +
+	"\autility\x18\x11 \x01(\tR\autility\x12 \n" +
+	"\vspecializes\x18\x12 \x01(\tR\vspecializes\x12\x12\n" +
+	"\x04when\x18\x13 \x01(\tR\x04when\x12\x1a\n" +
+	"\bpriority\x18\x14 \x01(\x05R\bpriority\x1a6\n" +
 	"\bPreEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\bR\x05value:\x028\x01\x1a:\n" +

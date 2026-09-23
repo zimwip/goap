@@ -17,6 +17,18 @@ type Blackboard struct {
 	// Neighbors holds the endpoints of the links of hydrated nodes.
 	Neighbors map[NodeRef]Node `json:"-"`
 	Vars      map[string]any   `json:"vars,omitempty"`
+	// Supertypes maps node types to their ancestors (subtyping of the
+	// methodology schema), exposed to conditions as x.types.
+	Supertypes map[string][]string `json:"-"`
+}
+
+// TypesOf returns a type followed by its supertypes.
+func (bb Blackboard) TypesOf(t string) []any {
+	out := []any{t}
+	for _, s := range bb.Supertypes[t] {
+		out = append(out, s)
+	}
+	return out
 }
 
 // ReferencedNodes lists every domain reference held by the change items.

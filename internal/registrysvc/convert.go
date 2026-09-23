@@ -13,7 +13,7 @@ func ToPB(r Record) *registryv1.Methodology {
 	out := &registryv1.Methodology{Name: m.Name, Version: m.Version, Description: m.Description, Status: string(r.Status),
 		CreatedAt: pbconv.Time(r.CreatedAt), UpdatedAt: pbconv.Time(r.UpdatedAt), PublishedAt: pbconv.Time(r.PublishedAt), UpdatedBy: r.UpdatedBy}
 	for _, n := range m.Domain.NodeTypes {
-		out.NodeTypes = append(out.NodeTypes, &registryv1.NodeType{Name: n.Name, Description: n.Description, Properties: n.Properties})
+		out.NodeTypes = append(out.NodeTypes, &registryv1.NodeType{Name: n.Name, Description: n.Description, Properties: n.Properties, Extends: n.Extends})
 	}
 	for _, l := range m.Domain.LinkTypes {
 		out.LinkTypes = append(out.LinkTypes, &registryv1.LinkType{Name: l.Name, From: l.From, To: l.To})
@@ -24,7 +24,8 @@ func ToPB(r Record) *registryv1.Methodology {
 	for _, a := range m.Actions {
 		pa := &registryv1.Action{Name: a.Name, Description: a.Description, Kind: a.Kind, Pre: a.Pre, Effects: a.Effects, Cost: a.Cost,
 			Permission: a.Permission, Model: a.Model, Prompt: a.Prompt, Tool: a.Tool, Builtin: a.Builtin, Instructions: a.Instructions,
-			Params: pbconv.Struct(a.Params), Language: a.Language, Code: a.Code, Utility: a.Utility}
+			Params: pbconv.Struct(a.Params), Language: a.Language, Code: a.Code, Utility: a.Utility,
+			Specializes: a.Specializes, When: a.When, Priority: int32(a.Priority)}
 		if e := a.Expects; e != nil {
 			pe := &registryv1.Expectation{ForEach: e.ForEach, Where: e.Where, Produce: &registryv1.ProduceSpec{Op: e.Produce.Op, NodeType: e.Produce.NodeType}}
 			if e.Link != nil {
@@ -68,7 +69,7 @@ func FromPB(p *registryv1.Methodology) methodology.Methodology {
 	}
 	m := methodology.Methodology{Name: p.Name, Version: p.Version, Description: p.Description}
 	for _, n := range p.NodeTypes {
-		m.Domain.NodeTypes = append(m.Domain.NodeTypes, methodology.NodeType{Name: n.Name, Description: n.Description, Properties: nilIfNone(n.Properties)})
+		m.Domain.NodeTypes = append(m.Domain.NodeTypes, methodology.NodeType{Name: n.Name, Description: n.Description, Properties: nilIfNone(n.Properties), Extends: n.Extends})
 	}
 	for _, l := range p.LinkTypes {
 		m.Domain.LinkTypes = append(m.Domain.LinkTypes, methodology.LinkType{Name: l.Name, From: l.From, To: l.To})
@@ -79,7 +80,8 @@ func FromPB(p *registryv1.Methodology) methodology.Methodology {
 	for _, a := range p.Actions {
 		ma := methodology.Action{Name: a.Name, Description: a.Description, Kind: a.Kind, Pre: nilIfEmpty(a.Pre), Effects: nilIfEmpty(a.Effects),
 			Cost: a.Cost, Permission: a.Permission, Model: a.Model, Prompt: a.Prompt, Tool: a.Tool, Builtin: a.Builtin,
-			Instructions: a.Instructions, Params: pbconv.Map(a.Params), Language: a.Language, Code: a.Code, Utility: a.Utility}
+			Instructions: a.Instructions, Params: pbconv.Map(a.Params), Language: a.Language, Code: a.Code, Utility: a.Utility,
+			Specializes: a.Specializes, When: a.When, Priority: int(a.Priority)}
 		if e := a.Expects; e != nil && e.ForEach != "" {
 			me := &condition.Expectation{ForEach: e.ForEach, Where: e.Where}
 			if e.Produce != nil {

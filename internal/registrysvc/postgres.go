@@ -65,7 +65,8 @@ func (s PostgresStore) Save(ctx context.Context, r Record) error {
 			if props == nil {
 				props = []string{}
 			}
-			batch.Queue(`INSERT INTO methodology_node_type VALUES ($1, $2, $3, $4, $5)`, id, i, n.Name, n.Description, props)
+			batch.Queue(`INSERT INTO methodology_node_type (methodology_id, position, name, description, properties, extends) VALUES ($1, $2, $3, $4, $5, $6)`,
+				id, i, n.Name, n.Description, props, n.Extends)
 		}
 		for i, l := range m.Domain.LinkTypes {
 			batch.Queue(`INSERT INTO methodology_link_type VALUES ($1, $2, $3, $4, $5)`, id, i, l.Name, l.From, l.To)
@@ -79,10 +80,11 @@ func (s PostgresStore) Save(ctx context.Context, r Record) error {
 				expects = jsonOf(a.Expects)
 			}
 			batch.Queue(`INSERT INTO methodology_action (methodology_id, position, name, description, kind, pre, effects, cost, expects,
-				permission, model, prompt, tool, builtin, instructions, params, language, code, utility)
-				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)`,
+				permission, model, prompt, tool, builtin, instructions, params, language, code, utility, specializes, when_expr, priority)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)`,
 				id, i, a.Name, a.Description, a.Kind, jsonOf(orEmptyBool(a.Pre)), jsonOf(orEmptyBool(a.Effects)), a.Cost, expects,
-				a.Permission, a.Model, a.Prompt, a.Tool, a.Builtin, a.Instructions, jsonOf(orEmptyAny(a.Params)), a.Language, a.Code, a.Utility)
+				a.Permission, a.Model, a.Prompt, a.Tool, a.Builtin, a.Instructions, jsonOf(orEmptyAny(a.Params)), a.Language, a.Code, a.Utility,
+				a.Specializes, a.When, a.Priority)
 		}
 		for i, g := range m.Goals {
 			ex := g.Examples
@@ -166,13 +168,13 @@ func (s PostgresStore) Get(ctx context.Context, name, version string) (Record, e
 }
 
 func (s PostgresStore) loadSections(ctx context.Context, id string, m *methodology.Methodology) error {
-	rows, err := s.Pool.Query(ctx, `SELECT name, description, properties FROM methodology_node_type WHERE methodology_id = $1 ORDER BY position`, id)
+	rows, err := s.Pool.Query(ctx, `SELECT name, description, properties, extends FROM methodology_node_type WHERE methodology_id = $1 ORDER BY position`, id)
 	if err != nil {
 		return err
 	}
 	m.Domain.NodeTypes, err = pgx.CollectRows(rows, func(r pgx.CollectableRow) (methodology.NodeType, error) {
 		var n methodology.NodeType
-		err := r.Scan(&n.Name, &n.Description, &n.Properties)
+		err := r.Scan(&n.Name, &n.Description, &n.Properties, &n.Extends)
 		if len(n.Properties) == 0 {
 			n.Properties = nil
 		}
@@ -204,7 +206,7 @@ func (s PostgresStore) loadSections(ctx context.Context, id string, m *methodolo
 		return err
 	}
 	rows, err = s.Pool.Query(ctx, `SELECT name, description, kind, pre, effects, cost, expects, permission, model, prompt, tool, builtin, instructions, params,
-		language, code, utility FROM methodology_action WHERE methodology_id = $1 ORDER BY position`, id)
+		language, code, utility, specializes, when_expr, priority FROM methodology_action WHERE methodology_id = $1 ORDER BY position`, id)
 	if err != nil {
 		return err
 	}
@@ -212,7 +214,7 @@ func (s PostgresStore) loadSections(ctx context.Context, id string, m *methodolo
 		var a methodology.Action
 		var pre, effects, expects, params []byte
 		if err := r.Scan(&a.Name, &a.Description, &a.Kind, &pre, &effects, &a.Cost, &expects, &a.Permission, &a.Model, &a.Prompt,
-			&a.Tool, &a.Builtin, &a.Instructions, &params, &a.Language, &a.Code, &a.Utility); err != nil {
+			&a.Tool, &a.Builtin, &a.Instructions, &params, &a.Language, &a.Code, &a.Utility, &a.Specializes, &a.When, &a.Priority); err != nil {
 			return a, err
 		}
 		_ = json.Unmarshal(pre, &a.Pre)
