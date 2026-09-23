@@ -306,6 +306,9 @@ func ItemsFromBlackboard(bb domain.Blackboard) []Item {
 	}
 	out := make([]Item, 0, len(bb.Change.Items))
 	for _, it := range bb.Change.Items {
+		if !bb.Change.Active(it.ID) {
+			continue
+		}
 		x := Item{ID: string(it.ID), Kind: string(it.Kind), Type: it.Type, Status: string(bb.Change.EffectiveStatus(it.ID)),
 			ProducedBy: it.ProducedBy, Target: view(it.Target), Data: it.Data}
 		if p := it.Proposal; p != nil {

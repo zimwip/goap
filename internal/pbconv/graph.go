@@ -81,7 +81,16 @@ func RefPtrFromPB(r *graphv1.NodeRef) *domain.NodeRef {
 
 func NodeToPB(n domain.Node) *graphv1.Node {
 	return &graphv1.Node{Id: string(n.ID), Version: int32(n.Version), Key: n.Key, Type: n.Type, Props: Struct(n.Properties),
-		Deleted: n.Deleted, ChangeId: string(n.ChangeID), CreatedAt: Time(n.CreatedAt)}
+		Deleted: n.Deleted, ChangeId: string(n.ChangeID), CreatedAt: Time(n.CreatedAt),
+		Branch: domain.BranchOf(n.Branch), Parents: versionsToPB(n.Parents), Reason: n.Reason}
+}
+
+func versionsToPB(vs []domain.Version) []int32 {
+	var out []int32
+	for _, v := range vs {
+		out = append(out, int32(v))
+	}
+	return out
 }
 
 func NodeFromPB(n *graphv1.Node) domain.Node {
@@ -89,7 +98,16 @@ func NodeFromPB(n *graphv1.Node) domain.Node {
 		return domain.Node{}
 	}
 	return domain.Node{ID: domain.NodeID(n.Id), Version: domain.Version(n.Version), Key: n.Key, Type: n.Type, Properties: Map(n.Props),
-		Deleted: n.Deleted, ChangeID: domain.ChangeID(n.ChangeId), CreatedAt: FromTime(n.CreatedAt)}
+		Deleted: n.Deleted, ChangeID: domain.ChangeID(n.ChangeId), CreatedAt: FromTime(n.CreatedAt),
+		Branch: n.Branch, Parents: versionsFromPB(n.Parents), Reason: n.Reason}
+}
+
+func versionsFromPB(vs []int32) []domain.Version {
+	var out []domain.Version
+	for _, v := range vs {
+		out = append(out, domain.Version(v))
+	}
+	return out
 }
 
 func NodesToPB(ns []domain.Node) []*graphv1.Node {
@@ -145,7 +163,8 @@ func BaselineToPB(b domain.Baseline) *graphv1.Baseline {
 	for id, v := range b.Nodes {
 		nodes[string(id)] = int32(v)
 	}
-	return &graphv1.Baseline{Id: string(b.ID), Name: b.Name, ParentId: string(b.ParentID), ChangeId: string(b.ChangeID), Nodes: nodes, CreatedAt: Time(b.CreatedAt)}
+	return &graphv1.Baseline{Id: string(b.ID), Name: b.Name, ParentId: string(b.ParentID), ChangeId: string(b.ChangeID), Nodes: nodes, CreatedAt: Time(b.CreatedAt),
+		Branch: domain.BranchOf(b.Branch)}
 }
 
 func BaselineFromPB(b *graphv1.Baseline) domain.Baseline {
@@ -153,7 +172,8 @@ func BaselineFromPB(b *graphv1.Baseline) domain.Baseline {
 	for id, v := range b.Nodes {
 		nodes[domain.NodeID(id)] = domain.Version(v)
 	}
-	return domain.Baseline{ID: domain.BaselineID(b.Id), Name: b.Name, ParentID: domain.BaselineID(b.ParentId), ChangeID: domain.ChangeID(b.ChangeId), Nodes: nodes, CreatedAt: FromTime(b.CreatedAt)}
+	return domain.Baseline{ID: domain.BaselineID(b.Id), Name: b.Name, ParentID: domain.BaselineID(b.ParentId), ChangeID: domain.ChangeID(b.ChangeId), Nodes: nodes, CreatedAt: FromTime(b.CreatedAt),
+		Branch: b.Branch}
 }
 
 func endpointToPB(e domain.Endpoint) *graphv1.Endpoint {
@@ -173,10 +193,14 @@ func ItemToPB(it domain.ChangeItem) *graphv1.ChangeItem {
 	for _, d := range it.DerivedFrom {
 		out.DerivedFrom = append(out.DerivedFrom, string(d))
 	}
+	for _, d := range it.Supersedes {
+		out.Supersedes = append(out.Supersedes, string(d))
+	}
 	if p := it.Proposal; p != nil {
 		pp := &graphv1.Proposal{Op: string(p.Op)}
 		if p.Node != nil {
-			pp.Node = &graphv1.NodeDraft{Base: RefPtrToPB(p.Node.Base), Key: p.Node.Key, Type: p.Node.Type, Props: Struct(p.Node.Properties)}
+			pp.Node = &graphv1.NodeDraft{Base: RefPtrToPB(p.Node.Base), Key: p.Node.Key, Type: p.Node.Type, Props: Struct(p.Node.Properties),
+				From: RefPtrToPB(p.Node.From), Ancestor: RefPtrToPB(p.Node.Ancestor)}
 		}
 		if p.Link != nil {
 			pp.Link = &graphv1.LinkDraft{LinkId: string(p.Link.LinkID), Type: p.Link.Type, From: endpointToPB(p.Link.From), To: endpointToPB(p.Link.To), Props: Struct(p.Link.Properties)}
@@ -195,10 +219,14 @@ func ItemFromPB(it *graphv1.ChangeItem) domain.ChangeItem {
 	for _, d := range it.DerivedFrom {
 		out.DerivedFrom = append(out.DerivedFrom, domain.ItemID(d))
 	}
+	for _, d := range it.Supersedes {
+		out.Supersedes = append(out.Supersedes, domain.ItemID(d))
+	}
 	if p := it.Proposal; p != nil {
 		dp := &domain.Proposal{Op: domain.ProposalOp(p.Op)}
 		if p.Node != nil {
-			dp.Node = &domain.NodeDraft{Base: RefPtrFromPB(p.Node.Base), Key: p.Node.Key, Type: p.Node.Type, Properties: Map(p.Node.Props)}
+			dp.Node = &domain.NodeDraft{Base: RefPtrFromPB(p.Node.Base), Key: p.Node.Key, Type: p.Node.Type, Properties: Map(p.Node.Props),
+				From: RefPtrFromPB(p.Node.From), Ancestor: RefPtrFromPB(p.Node.Ancestor)}
 		}
 		if p.Link != nil {
 			dp.Link = &domain.LinkDraft{LinkID: domain.LinkID(p.Link.LinkId), Type: p.Link.Type, From: endpointFromPB(p.Link.From), To: endpointFromPB(p.Link.To), Properties: Map(p.Link.Props)}
@@ -229,7 +257,8 @@ func ItemsFromPB(its []*graphv1.ChangeItem) []domain.ChangeItem {
 
 func ChangeToPB(c domain.ChangeSet) *graphv1.ChangeSet {
 	return &graphv1.ChangeSet{Id: string(c.ID), Title: c.Title, Intent: c.Intent, Methodology: c.Methodology, Goal: c.Goal, Status: string(c.Status),
-		BaselineId: string(c.BaselineID), ResultBaselineId: string(c.ResultBaselineID), Data: Struct(c.Data), Items: ItemsToPB(c.Items), CreatedAt: Time(c.CreatedAt)}
+		BaselineId: string(c.BaselineID), ResultBaselineId: string(c.ResultBaselineID), Data: Struct(c.Data), Items: ItemsToPB(c.Items), CreatedAt: Time(c.CreatedAt),
+		Branch: domain.BranchOf(c.Branch)}
 }
 
 func ChangeFromPB(c *graphv1.ChangeSet) domain.ChangeSet {
@@ -237,5 +266,19 @@ func ChangeFromPB(c *graphv1.ChangeSet) domain.ChangeSet {
 		return domain.ChangeSet{}
 	}
 	return domain.ChangeSet{ID: domain.ChangeID(c.Id), Title: c.Title, Intent: c.Intent, Methodology: c.Methodology, Goal: c.Goal, Status: domain.ChangeStatus(c.Status),
-		BaselineID: domain.BaselineID(c.BaselineId), ResultBaselineID: domain.BaselineID(c.ResultBaselineId), Data: Map(c.Data), Items: ItemsFromPB(c.Items), CreatedAt: FromTime(c.CreatedAt)}
+		BaselineID: domain.BaselineID(c.BaselineId), ResultBaselineID: domain.BaselineID(c.ResultBaselineId), Data: Map(c.Data), Items: ItemsFromPB(c.Items), CreatedAt: FromTime(c.CreatedAt),
+		Branch: c.Branch}
+}
+
+func BranchToPB(b domain.Branch) *graphv1.Branch {
+	return &graphv1.Branch{Name: b.Name, Parent: b.Parent, ForkBaseline: string(b.ForkBaseline), Head: string(b.Head),
+		Origin: b.Origin, Status: b.Status, CreatedAt: Time(b.CreatedAt)}
+}
+
+func BranchFromPB(b *graphv1.Branch) domain.Branch {
+	if b == nil {
+		return domain.Branch{}
+	}
+	return domain.Branch{Name: b.Name, Parent: b.Parent, ForkBaseline: domain.BaselineID(b.ForkBaseline), Head: domain.BaselineID(b.Head),
+		Origin: b.Origin, Status: b.Status, CreatedAt: FromTime(b.CreatedAt)}
 }

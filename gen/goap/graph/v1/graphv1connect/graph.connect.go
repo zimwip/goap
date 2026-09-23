@@ -69,6 +69,31 @@ const (
 	// GraphServiceApplyChangeProcedure is the fully-qualified name of the GraphService's ApplyChange
 	// RPC.
 	GraphServiceApplyChangeProcedure = "/goap.graph.v1.GraphService/ApplyChange"
+	// GraphServiceCreateBranchProcedure is the fully-qualified name of the GraphService's CreateBranch
+	// RPC.
+	GraphServiceCreateBranchProcedure = "/goap.graph.v1.GraphService/CreateBranch"
+	// GraphServiceListBranchesProcedure is the fully-qualified name of the GraphService's ListBranches
+	// RPC.
+	GraphServiceListBranchesProcedure = "/goap.graph.v1.GraphService/ListBranches"
+	// GraphServiceGetBranchProcedure is the fully-qualified name of the GraphService's GetBranch RPC.
+	GraphServiceGetBranchProcedure = "/goap.graph.v1.GraphService/GetBranch"
+	// GraphServiceSetBranchStatusProcedure is the fully-qualified name of the GraphService's
+	// SetBranchStatus RPC.
+	GraphServiceSetBranchStatusProcedure = "/goap.graph.v1.GraphService/SetBranchStatus"
+	// GraphServiceListNodeVersionsProcedure is the fully-qualified name of the GraphService's
+	// ListNodeVersions RPC.
+	GraphServiceListNodeVersionsProcedure = "/goap.graph.v1.GraphService/ListNodeVersions"
+	// GraphServicePlanMergeProcedure is the fully-qualified name of the GraphService's PlanMerge RPC.
+	GraphServicePlanMergeProcedure = "/goap.graph.v1.GraphService/PlanMerge"
+	// GraphServiceMergeBranchProcedure is the fully-qualified name of the GraphService's MergeBranch
+	// RPC.
+	GraphServiceMergeBranchProcedure = "/goap.graph.v1.GraphService/MergeBranch"
+	// GraphServiceGetDivergencesProcedure is the fully-qualified name of the GraphService's
+	// GetDivergences RPC.
+	GraphServiceGetDivergencesProcedure = "/goap.graph.v1.GraphService/GetDivergences"
+	// GraphServiceRebaseChangeProcedure is the fully-qualified name of the GraphService's RebaseChange
+	// RPC.
+	GraphServiceRebaseChangeProcedure = "/goap.graph.v1.GraphService/RebaseChange"
 )
 
 // GraphServiceClient is a client for the goap.graph.v1.GraphService service.
@@ -89,6 +114,16 @@ type GraphServiceClient interface {
 	AddItems(context.Context, *connect.Request[v1.AddItemsRequest]) (*connect.Response[v1.AddItemsResponse], error)
 	GetBlackboard(context.Context, *connect.Request[v1.GetBlackboardRequest]) (*connect.Response[v1.GetBlackboardResponse], error)
 	ApplyChange(context.Context, *connect.Request[v1.ApplyChangeRequest]) (*connect.Response[v1.ApplyChangeResponse], error)
+	// Version branches (ADR 0009)
+	CreateBranch(context.Context, *connect.Request[v1.CreateBranchRequest]) (*connect.Response[v1.CreateBranchResponse], error)
+	ListBranches(context.Context, *connect.Request[v1.ListBranchesRequest]) (*connect.Response[v1.ListBranchesResponse], error)
+	GetBranch(context.Context, *connect.Request[v1.GetBranchRequest]) (*connect.Response[v1.GetBranchResponse], error)
+	SetBranchStatus(context.Context, *connect.Request[v1.SetBranchStatusRequest]) (*connect.Response[v1.SetBranchStatusResponse], error)
+	ListNodeVersions(context.Context, *connect.Request[v1.ListNodeVersionsRequest]) (*connect.Response[v1.ListNodeVersionsResponse], error)
+	PlanMerge(context.Context, *connect.Request[v1.PlanMergeRequest]) (*connect.Response[v1.PlanMergeResponse], error)
+	MergeBranch(context.Context, *connect.Request[v1.MergeBranchRequest]) (*connect.Response[v1.MergeBranchResponse], error)
+	GetDivergences(context.Context, *connect.Request[v1.GetDivergencesRequest]) (*connect.Response[v1.GetDivergencesResponse], error)
+	RebaseChange(context.Context, *connect.Request[v1.RebaseChangeRequest]) (*connect.Response[v1.RebaseChangeResponse], error)
 }
 
 // NewGraphServiceClient constructs a client for the goap.graph.v1.GraphService service. By default,
@@ -186,6 +221,60 @@ func NewGraphServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(graphServiceMethods.ByName("ApplyChange")),
 			connect.WithClientOptions(opts...),
 		),
+		createBranch: connect.NewClient[v1.CreateBranchRequest, v1.CreateBranchResponse](
+			httpClient,
+			baseURL+GraphServiceCreateBranchProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("CreateBranch")),
+			connect.WithClientOptions(opts...),
+		),
+		listBranches: connect.NewClient[v1.ListBranchesRequest, v1.ListBranchesResponse](
+			httpClient,
+			baseURL+GraphServiceListBranchesProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("ListBranches")),
+			connect.WithClientOptions(opts...),
+		),
+		getBranch: connect.NewClient[v1.GetBranchRequest, v1.GetBranchResponse](
+			httpClient,
+			baseURL+GraphServiceGetBranchProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("GetBranch")),
+			connect.WithClientOptions(opts...),
+		),
+		setBranchStatus: connect.NewClient[v1.SetBranchStatusRequest, v1.SetBranchStatusResponse](
+			httpClient,
+			baseURL+GraphServiceSetBranchStatusProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("SetBranchStatus")),
+			connect.WithClientOptions(opts...),
+		),
+		listNodeVersions: connect.NewClient[v1.ListNodeVersionsRequest, v1.ListNodeVersionsResponse](
+			httpClient,
+			baseURL+GraphServiceListNodeVersionsProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("ListNodeVersions")),
+			connect.WithClientOptions(opts...),
+		),
+		planMerge: connect.NewClient[v1.PlanMergeRequest, v1.PlanMergeResponse](
+			httpClient,
+			baseURL+GraphServicePlanMergeProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("PlanMerge")),
+			connect.WithClientOptions(opts...),
+		),
+		mergeBranch: connect.NewClient[v1.MergeBranchRequest, v1.MergeBranchResponse](
+			httpClient,
+			baseURL+GraphServiceMergeBranchProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("MergeBranch")),
+			connect.WithClientOptions(opts...),
+		),
+		getDivergences: connect.NewClient[v1.GetDivergencesRequest, v1.GetDivergencesResponse](
+			httpClient,
+			baseURL+GraphServiceGetDivergencesProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("GetDivergences")),
+			connect.WithClientOptions(opts...),
+		),
+		rebaseChange: connect.NewClient[v1.RebaseChangeRequest, v1.RebaseChangeResponse](
+			httpClient,
+			baseURL+GraphServiceRebaseChangeProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("RebaseChange")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -205,6 +294,15 @@ type graphServiceClient struct {
 	addItems         *connect.Client[v1.AddItemsRequest, v1.AddItemsResponse]
 	getBlackboard    *connect.Client[v1.GetBlackboardRequest, v1.GetBlackboardResponse]
 	applyChange      *connect.Client[v1.ApplyChangeRequest, v1.ApplyChangeResponse]
+	createBranch     *connect.Client[v1.CreateBranchRequest, v1.CreateBranchResponse]
+	listBranches     *connect.Client[v1.ListBranchesRequest, v1.ListBranchesResponse]
+	getBranch        *connect.Client[v1.GetBranchRequest, v1.GetBranchResponse]
+	setBranchStatus  *connect.Client[v1.SetBranchStatusRequest, v1.SetBranchStatusResponse]
+	listNodeVersions *connect.Client[v1.ListNodeVersionsRequest, v1.ListNodeVersionsResponse]
+	planMerge        *connect.Client[v1.PlanMergeRequest, v1.PlanMergeResponse]
+	mergeBranch      *connect.Client[v1.MergeBranchRequest, v1.MergeBranchResponse]
+	getDivergences   *connect.Client[v1.GetDivergencesRequest, v1.GetDivergencesResponse]
+	rebaseChange     *connect.Client[v1.RebaseChangeRequest, v1.RebaseChangeResponse]
 }
 
 // CreateNode calls goap.graph.v1.GraphService.CreateNode.
@@ -277,6 +375,51 @@ func (c *graphServiceClient) ApplyChange(ctx context.Context, req *connect.Reque
 	return c.applyChange.CallUnary(ctx, req)
 }
 
+// CreateBranch calls goap.graph.v1.GraphService.CreateBranch.
+func (c *graphServiceClient) CreateBranch(ctx context.Context, req *connect.Request[v1.CreateBranchRequest]) (*connect.Response[v1.CreateBranchResponse], error) {
+	return c.createBranch.CallUnary(ctx, req)
+}
+
+// ListBranches calls goap.graph.v1.GraphService.ListBranches.
+func (c *graphServiceClient) ListBranches(ctx context.Context, req *connect.Request[v1.ListBranchesRequest]) (*connect.Response[v1.ListBranchesResponse], error) {
+	return c.listBranches.CallUnary(ctx, req)
+}
+
+// GetBranch calls goap.graph.v1.GraphService.GetBranch.
+func (c *graphServiceClient) GetBranch(ctx context.Context, req *connect.Request[v1.GetBranchRequest]) (*connect.Response[v1.GetBranchResponse], error) {
+	return c.getBranch.CallUnary(ctx, req)
+}
+
+// SetBranchStatus calls goap.graph.v1.GraphService.SetBranchStatus.
+func (c *graphServiceClient) SetBranchStatus(ctx context.Context, req *connect.Request[v1.SetBranchStatusRequest]) (*connect.Response[v1.SetBranchStatusResponse], error) {
+	return c.setBranchStatus.CallUnary(ctx, req)
+}
+
+// ListNodeVersions calls goap.graph.v1.GraphService.ListNodeVersions.
+func (c *graphServiceClient) ListNodeVersions(ctx context.Context, req *connect.Request[v1.ListNodeVersionsRequest]) (*connect.Response[v1.ListNodeVersionsResponse], error) {
+	return c.listNodeVersions.CallUnary(ctx, req)
+}
+
+// PlanMerge calls goap.graph.v1.GraphService.PlanMerge.
+func (c *graphServiceClient) PlanMerge(ctx context.Context, req *connect.Request[v1.PlanMergeRequest]) (*connect.Response[v1.PlanMergeResponse], error) {
+	return c.planMerge.CallUnary(ctx, req)
+}
+
+// MergeBranch calls goap.graph.v1.GraphService.MergeBranch.
+func (c *graphServiceClient) MergeBranch(ctx context.Context, req *connect.Request[v1.MergeBranchRequest]) (*connect.Response[v1.MergeBranchResponse], error) {
+	return c.mergeBranch.CallUnary(ctx, req)
+}
+
+// GetDivergences calls goap.graph.v1.GraphService.GetDivergences.
+func (c *graphServiceClient) GetDivergences(ctx context.Context, req *connect.Request[v1.GetDivergencesRequest]) (*connect.Response[v1.GetDivergencesResponse], error) {
+	return c.getDivergences.CallUnary(ctx, req)
+}
+
+// RebaseChange calls goap.graph.v1.GraphService.RebaseChange.
+func (c *graphServiceClient) RebaseChange(ctx context.Context, req *connect.Request[v1.RebaseChangeRequest]) (*connect.Response[v1.RebaseChangeResponse], error) {
+	return c.rebaseChange.CallUnary(ctx, req)
+}
+
 // GraphServiceHandler is an implementation of the goap.graph.v1.GraphService service.
 type GraphServiceHandler interface {
 	// Domain axis
@@ -295,6 +438,16 @@ type GraphServiceHandler interface {
 	AddItems(context.Context, *connect.Request[v1.AddItemsRequest]) (*connect.Response[v1.AddItemsResponse], error)
 	GetBlackboard(context.Context, *connect.Request[v1.GetBlackboardRequest]) (*connect.Response[v1.GetBlackboardResponse], error)
 	ApplyChange(context.Context, *connect.Request[v1.ApplyChangeRequest]) (*connect.Response[v1.ApplyChangeResponse], error)
+	// Version branches (ADR 0009)
+	CreateBranch(context.Context, *connect.Request[v1.CreateBranchRequest]) (*connect.Response[v1.CreateBranchResponse], error)
+	ListBranches(context.Context, *connect.Request[v1.ListBranchesRequest]) (*connect.Response[v1.ListBranchesResponse], error)
+	GetBranch(context.Context, *connect.Request[v1.GetBranchRequest]) (*connect.Response[v1.GetBranchResponse], error)
+	SetBranchStatus(context.Context, *connect.Request[v1.SetBranchStatusRequest]) (*connect.Response[v1.SetBranchStatusResponse], error)
+	ListNodeVersions(context.Context, *connect.Request[v1.ListNodeVersionsRequest]) (*connect.Response[v1.ListNodeVersionsResponse], error)
+	PlanMerge(context.Context, *connect.Request[v1.PlanMergeRequest]) (*connect.Response[v1.PlanMergeResponse], error)
+	MergeBranch(context.Context, *connect.Request[v1.MergeBranchRequest]) (*connect.Response[v1.MergeBranchResponse], error)
+	GetDivergences(context.Context, *connect.Request[v1.GetDivergencesRequest]) (*connect.Response[v1.GetDivergencesResponse], error)
+	RebaseChange(context.Context, *connect.Request[v1.RebaseChangeRequest]) (*connect.Response[v1.RebaseChangeResponse], error)
 }
 
 // NewGraphServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -388,6 +541,60 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(graphServiceMethods.ByName("ApplyChange")),
 		connect.WithHandlerOptions(opts...),
 	)
+	graphServiceCreateBranchHandler := connect.NewUnaryHandler(
+		GraphServiceCreateBranchProcedure,
+		svc.CreateBranch,
+		connect.WithSchema(graphServiceMethods.ByName("CreateBranch")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceListBranchesHandler := connect.NewUnaryHandler(
+		GraphServiceListBranchesProcedure,
+		svc.ListBranches,
+		connect.WithSchema(graphServiceMethods.ByName("ListBranches")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceGetBranchHandler := connect.NewUnaryHandler(
+		GraphServiceGetBranchProcedure,
+		svc.GetBranch,
+		connect.WithSchema(graphServiceMethods.ByName("GetBranch")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceSetBranchStatusHandler := connect.NewUnaryHandler(
+		GraphServiceSetBranchStatusProcedure,
+		svc.SetBranchStatus,
+		connect.WithSchema(graphServiceMethods.ByName("SetBranchStatus")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceListNodeVersionsHandler := connect.NewUnaryHandler(
+		GraphServiceListNodeVersionsProcedure,
+		svc.ListNodeVersions,
+		connect.WithSchema(graphServiceMethods.ByName("ListNodeVersions")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServicePlanMergeHandler := connect.NewUnaryHandler(
+		GraphServicePlanMergeProcedure,
+		svc.PlanMerge,
+		connect.WithSchema(graphServiceMethods.ByName("PlanMerge")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceMergeBranchHandler := connect.NewUnaryHandler(
+		GraphServiceMergeBranchProcedure,
+		svc.MergeBranch,
+		connect.WithSchema(graphServiceMethods.ByName("MergeBranch")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceGetDivergencesHandler := connect.NewUnaryHandler(
+		GraphServiceGetDivergencesProcedure,
+		svc.GetDivergences,
+		connect.WithSchema(graphServiceMethods.ByName("GetDivergences")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceRebaseChangeHandler := connect.NewUnaryHandler(
+		GraphServiceRebaseChangeProcedure,
+		svc.RebaseChange,
+		connect.WithSchema(graphServiceMethods.ByName("RebaseChange")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/goap.graph.v1.GraphService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case GraphServiceCreateNodeProcedure:
@@ -418,6 +625,24 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 			graphServiceGetBlackboardHandler.ServeHTTP(w, r)
 		case GraphServiceApplyChangeProcedure:
 			graphServiceApplyChangeHandler.ServeHTTP(w, r)
+		case GraphServiceCreateBranchProcedure:
+			graphServiceCreateBranchHandler.ServeHTTP(w, r)
+		case GraphServiceListBranchesProcedure:
+			graphServiceListBranchesHandler.ServeHTTP(w, r)
+		case GraphServiceGetBranchProcedure:
+			graphServiceGetBranchHandler.ServeHTTP(w, r)
+		case GraphServiceSetBranchStatusProcedure:
+			graphServiceSetBranchStatusHandler.ServeHTTP(w, r)
+		case GraphServiceListNodeVersionsProcedure:
+			graphServiceListNodeVersionsHandler.ServeHTTP(w, r)
+		case GraphServicePlanMergeProcedure:
+			graphServicePlanMergeHandler.ServeHTTP(w, r)
+		case GraphServiceMergeBranchProcedure:
+			graphServiceMergeBranchHandler.ServeHTTP(w, r)
+		case GraphServiceGetDivergencesProcedure:
+			graphServiceGetDivergencesHandler.ServeHTTP(w, r)
+		case GraphServiceRebaseChangeProcedure:
+			graphServiceRebaseChangeHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -481,4 +706,40 @@ func (UnimplementedGraphServiceHandler) GetBlackboard(context.Context, *connect.
 
 func (UnimplementedGraphServiceHandler) ApplyChange(context.Context, *connect.Request[v1.ApplyChangeRequest]) (*connect.Response[v1.ApplyChangeResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.ApplyChange is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) CreateBranch(context.Context, *connect.Request[v1.CreateBranchRequest]) (*connect.Response[v1.CreateBranchResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.CreateBranch is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) ListBranches(context.Context, *connect.Request[v1.ListBranchesRequest]) (*connect.Response[v1.ListBranchesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.ListBranches is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) GetBranch(context.Context, *connect.Request[v1.GetBranchRequest]) (*connect.Response[v1.GetBranchResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.GetBranch is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) SetBranchStatus(context.Context, *connect.Request[v1.SetBranchStatusRequest]) (*connect.Response[v1.SetBranchStatusResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.SetBranchStatus is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) ListNodeVersions(context.Context, *connect.Request[v1.ListNodeVersionsRequest]) (*connect.Response[v1.ListNodeVersionsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.ListNodeVersions is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) PlanMerge(context.Context, *connect.Request[v1.PlanMergeRequest]) (*connect.Response[v1.PlanMergeResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.PlanMerge is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) MergeBranch(context.Context, *connect.Request[v1.MergeBranchRequest]) (*connect.Response[v1.MergeBranchResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.MergeBranch is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) GetDivergences(context.Context, *connect.Request[v1.GetDivergencesRequest]) (*connect.Response[v1.GetDivergencesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.GetDivergences is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) RebaseChange(context.Context, *connect.Request[v1.RebaseChangeRequest]) (*connect.Response[v1.RebaseChangeResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.RebaseChange is not implemented"))
 }

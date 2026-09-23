@@ -105,7 +105,7 @@ func (h *Handler) GetBaselineGraph(ctx context.Context, r *connect.Request[graph
 
 func (h *Handler) CreateChange(ctx context.Context, r *connect.Request[graphv1.CreateChangeRequest]) (*connect.Response[graphv1.CreateChangeResponse], error) {
 	c, err := h.Graph.CreateChange(ctx, graph.NewChange{Title: r.Msg.Title, Intent: r.Msg.Intent, Methodology: r.Msg.Methodology,
-		BaselineID: domain.BaselineID(r.Msg.BaselineId), Data: pbconv.Map(r.Msg.Data)})
+		BaselineID: domain.BaselineID(r.Msg.BaselineId), Branch: r.Msg.Branch, Data: pbconv.Map(r.Msg.Data)})
 	if err == nil {
 		h.publish(ctx, "goap.change."+string(c.ID)+".created", domain.ChangeEvent{Type: "change.created", Change: c})
 	}
@@ -171,4 +171,81 @@ func (h *Handler) ApplyChange(ctx context.Context, r *connect.Request[graphv1.Ap
 		}
 	}
 	return res(&graphv1.ApplyChangeResponse{Baseline: pbconv.BaselineToPB(b)}, err)
+}
+
+func (h *Handler) CreateBranch(ctx context.Context, r *connect.Request[graphv1.CreateBranchRequest]) (*connect.Response[graphv1.CreateBranchResponse], error) {
+	b, err := h.Graph.CreateBranch(ctx, graph.NewBranch{Name: r.Msg.Name, From: domain.BaselineID(r.Msg.FromBaseline), Origin: r.Msg.Origin})
+	return res(&graphv1.CreateBranchResponse{Branch: pbconv.BranchToPB(b)}, err)
+}
+
+func (h *Handler) ListBranches(ctx context.Context, _ *connect.Request[graphv1.ListBranchesRequest]) (*connect.Response[graphv1.ListBranchesResponse], error) {
+	bs, err := h.Graph.Branches(ctx)
+	out := &graphv1.ListBranchesResponse{}
+	for _, b := range bs {
+		out.Branches = append(out.Branches, pbconv.BranchToPB(b))
+	}
+	return res(out, err)
+}
+
+func (h *Handler) GetBranch(ctx context.Context, r *connect.Request[graphv1.GetBranchRequest]) (*connect.Response[graphv1.GetBranchResponse], error) {
+	b, err := h.Graph.Branch(ctx, r.Msg.Name)
+	if err != nil {
+		return nil, rpcerr.ToConnect(err)
+	}
+	head, err := h.Graph.BranchHead(ctx, b.Name)
+	return res(&graphv1.GetBranchResponse{Branch: pbconv.BranchToPB(b), Head: pbconv.BaselineToPB(head)}, err)
+}
+
+func (h *Handler) SetBranchStatus(ctx context.Context, r *connect.Request[graphv1.SetBranchStatusRequest]) (*connect.Response[graphv1.SetBranchStatusResponse], error) {
+	return res(&graphv1.SetBranchStatusResponse{}, h.Graph.SetBranchStatus(ctx, r.Msg.Name, r.Msg.Status))
+}
+
+func (h *Handler) ListNodeVersions(ctx context.Context, r *connect.Request[graphv1.ListNodeVersionsRequest]) (*connect.Response[graphv1.ListNodeVersionsResponse], error) {
+	vs, err := h.Graph.Versions(ctx, domain.NodeID(r.Msg.Id))
+	return res(&graphv1.ListNodeVersionsResponse{Versions: pbconv.NodesToPB(vs)}, err)
+}
+
+func (h *Handler) PlanMerge(ctx context.Context, r *connect.Request[graphv1.PlanMergeRequest]) (*connect.Response[graphv1.PlanMergeResponse], error) {
+	p, err := h.Graph.PlanMerge(ctx, r.Msg.From, r.Msg.Into)
+	return res(&graphv1.PlanMergeResponse{Plan: pbconv.MergePlanToPB(p)}, err)
+}
+
+func (h *Handler) MergeBranch(ctx context.Context, r *connect.Request[graphv1.MergeBranchRequest]) (*connect.Response[graphv1.MergeBranchResponse], error) {
+	req := graph.MergeRequest{From: r.Msg.From, Into: r.Msg.Into, Title: r.Msg.Title, Resolutions: map[domain.NodeID]graph.Resolution{}}
+	for id, res := range r.Msg.Resolutions {
+		req.Resolutions[domain.NodeID(id)] = graph.Resolution{Props: pbconv.Map(res.GetProps()), Skip: res.GetSkip()}
+	}
+	out, err := h.Graph.MergeBranch(ctx, req)
+	if err == nil {
+		c := out.Change
+		c.Items = nil
+		h.publish(ctx, "goap.change."+string(c.ID)+".applied", domain.ChangeEvent{Type: "change.applied", Change: c, Baseline: &out.Baseline})
+	}
+	return res(&graphv1.MergeBranchResponse{Change: pbconv.ChangeToPB(out.Change), Baseline: pbconv.BaselineToPB(out.Baseline), Plan: pbconv.MergePlanToPB(out.Plan)}, err)
+}
+
+func (h *Handler) GetDivergences(ctx context.Context, r *connect.Request[graphv1.GetDivergencesRequest]) (*connect.Response[graphv1.GetDivergencesResponse], error) {
+	ds, err := h.Graph.Divergences(ctx, domain.ChangeID(r.Msg.ChangeId))
+	return res(&graphv1.GetDivergencesResponse{Divergences: pbconv.DivergencesToPB(ds)}, err)
+}
+
+func (h *Handler) RebaseChange(ctx context.Context, r *connect.Request[graphv1.RebaseChangeRequest]) (*connect.Response[graphv1.RebaseChangeResponse], error) {
+	resolutions := map[domain.ItemID]map[string]any{}
+	for id, s := range r.Msg.Resolutions {
+		resolutions[domain.ItemID(id)] = pbconv.Map(s)
+		if resolutions[domain.ItemID(id)] == nil {
+			resolutions[domain.ItemID(id)] = map[string]any{}
+		}
+	}
+	out, err := h.Graph.Rebase(ctx, domain.ChangeID(r.Msg.ChangeId), resolutions)
+	if err != nil {
+		return nil, rpcerr.ToConnect(err)
+	}
+	superseded := map[string]string{}
+	for k, v := range out.Superseded {
+		superseded[string(k)] = string(v)
+	}
+	c := out.Change
+	h.publish(ctx, "goap.change."+string(c.ID)+".rebased", domain.ChangeEvent{Type: "change.rebased", Change: c})
+	return res(&graphv1.RebaseChangeResponse{Change: pbconv.ChangeToPB(c), Superseded: superseded, Divergences: pbconv.DivergencesToPB(out.Divergences)}, nil)
 }

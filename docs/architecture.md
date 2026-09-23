@@ -61,14 +61,41 @@ de la version du nœud source**. Ajouter/retirer un lien sortant crée une nouve
 un nœud qui change de version reporte ses liens sortants ; les liens entrants depuis des nœuds non
 modifiés restent sur l'ancienne version et deviennent **suspects**. Les baselines restent ainsi immuables.
 
+#### Branches de versions ([ADR 0009](adr/0009-branches-options-decisions.md))
+
+Les versions sont numérotées **par nœud, toutes branches confondues** (`REQ-1@v7`), et chaque version porte
+sa `branch` (`main` par défaut), ses `parents` et sa `reason` : `create`, `revise` (successeur sur la même
+branche), `derive` (première version sur une branche parallèle) ou `merge` (deux parents).
+
+```
+REQ-1  v1(main) ── v3(main, revise) ───────────── v4(main, merge ← v3 + v2)
+          └────── v2(opt-a, derive) ─────────────────┘
+```
+
+- Une **branche** (`CreateBranch`) part d'une baseline (`forkBaseline`) et avance par les changes appliqués
+  sur elle (`ChangeSet.branch`) ; sa **tête** (`head`) est la dernière baseline produite. `main` existe
+  implicitement.
+- « Dernière version » se lit **par branche** (`latest(node, branch)`) : l'`apply` d'un change détecte un
+  conflit quand un nœud a avancé **sur la branche du change** depuis la version de base.
+- **Merge de branche** (`PlanMerge` / `MergeBranch`) : pour chaque nœud modifié sur la branche source depuis
+  le fork, merge à 3 voies contre l'ancêtre commun (remontée des `parents`) — propriété par propriété (un côté
+  égal à l'ancêtre prend l'autre, sinon **conflit**) et liens sortants par ensemble (clé type + nœud cible :
+  ajouté d'un côté → gardé, retiré d'un côté → retiré). Le merge est un change `merge_node` appliqué sur la
+  cible ; les conflits exigent une résolution (propriétés résolues, ou `skip`). La branche passe `merged`.
+- **Divergence et rebase d'un change** (`GetDivergences` / `RebaseChange`) : les propositions dont un nœud a
+  avancé sur la branche sont recalculées sur la tête (fusion à 3 voies base / proposition / tête, ou
+  résolution fournie) ; la nouvelle proposition **remplace** l'ancienne (`supersedes`, statut `superseded`),
+  un item `merge` trace chaque remplacement, `change.data.rebases` garde l'historique et la baseline du change
+  devient la tête. Les items remplacés disparaissent des conditions CEL ; `merges` et `change.branch` y sont exposés.
+
 #### Axe change
 
 | Concept | Description |
 |---|---|
 | **ChangeSet** | Une demande de modification. Référence une baseline de départ, porte l'intention initiale et le goal retenu. C'est **le blackboard** d'un processus agentique. |
-| **ChangeItem** | Élément du blackboard. `kind` ∈ `impact`, `proposal`, `decision`, `artifact`. Chaque item a une provenance (`producedBy` = action, `derivedFrom` = autres items). |
+| **ChangeItem** | Élément du blackboard. `kind` ∈ `impact`, `proposal`, `decision`, `artifact`, `merge`. Chaque item a une provenance (`producedBy` = action, `derivedFrom` = autres items). |
 | **Impact** | Référence un nœud **du graphe de référence** (`NodeRef` version exacte) avec une raison. Point de départ de l'analyse. |
-| **Proposal** | Modification proposée du **graphe d'arrivée** : `create_node`, `update_node`, `delete_node`, `add_link`, `remove_link`. Les extrémités de lien peuvent être un nœud existant (`NodeRef`) ou un nœud proposé (référence à un autre item). |
+| **Proposal** | Modification proposée du **graphe d'arrivée** : `create_node`, `update_node`, `delete_node`, `add_link`, `remove_link` (et `merge_node` pour les merges de branche). Les extrémités de lien peuvent être un nœud existant (`NodeRef`) ou un nœud proposé (référence à un autre item). |
 | **Decision** | Acceptation / rejet d'une proposition (humain ou agent). |
 | **Artifact** | Donnée libre produite par une action (résumé, rapport, réponse d'outil). |
 
@@ -98,9 +125,9 @@ Variables exposées à l'expression :
 
 | Variable | Contenu |
 |---|---|
-| `change` | `{id, title, intent, status, goal, baseline}` |
-| `items` | tous les ChangeItems |
-| `impacts`, `proposals`, `decisions`, `artifacts` | items filtrés par `kind` |
+| `change` | `{id, title, intent, status, goal, baseline, branch, data}` |
+| `items` | les ChangeItems actifs (les items `superseded` par un rebase sont exclus) |
+| `impacts`, `proposals`, `decisions`, `artifacts`, `merges` | items filtrés par `kind` |
 | `vars` | variables libres du processus (réponses de clarification, paramètres) |
 
 Chaque référence de domaine d'un item (`target`, `node.base`, extrémités de lien) est **hydratée** :
@@ -568,7 +595,7 @@ docs/                        architecture, ADR
 | **M4 — axe change avancé** | propagation d'impact (CTE récursive paramétrée par types de liens), liens suspects, diff de baselines, merge/rebase de changesets concurrents |
 | **M5 — UX** | ✅ éditeur de méthodologies (formulaires, anomalies localisées, publication, versions, import/export YAML), écran « Accès » (politiques ABAC), approbations · reste : visualisation du graphe et du plan |
 | **M6 — K8s** | charts Helm, HPA engine · ✅ observabilité OpenTelemetry, manifestes sandboxes |
-| **M8 — branches et décisions** 🟡 | ADR 0009 (proposé) : versions par branche (`revise` / `derive` / `merge`), conflits → merge validé → rebase et replanification, options explorées en branches, comparaison, boucles de décision (questions → analyses), merge de l'option retenue ; puis containers versionnés et releases |
+| **M8 — branches et décisions** 🟡 | ADR 0009 (accepté) · ✅ graphe : versions par branche, merge de branche à 3 voies, divergence et rebase de change · reste : moteur (conflit → merge validé → rebase et replanification), spécialisation d'actions, budget du change, options explorées en branches, comparaison, boucles de décision (questions → analyses), merge de l'option retenue ; puis containers versionnés et releases |
 | **M7 — agents** ✅ | agents (goap / utility / hybrid), actions script JS / Go avec DSL, sous-agents, sandbox par processus, IDE |
 
 ## 7. Questions ouvertes
@@ -578,8 +605,8 @@ docs/                        architecture, ADR
    Proposition : conditions globales quantifiées (`all`/`exists`) + actions qui itèrent en interne.
 2. **Attendu d'action** : un `expects` suffit-il à exprimer tous les attendus, ou faut-il un vrai langage
    de motifs de graphe (type Cypher restreint) ?
-3. **Concurrence sur une baseline** : deux ChangeSets partant de B1 — stratégie de fusion (rebase des propositions,
-   détection de conflit sur `base version`) ?
+3. ~~**Concurrence sur une baseline**~~ → [ADR 0009](adr/0009-branches-options-decisions.md) : détection sur la
+   version de base par branche, rebase des propositions (merge à 3 voies) validé par un humain en cas de conflit.
 4. **Coût des actions** : statique (déclaré) ou dynamique (tokens estimés, latence observée) ?
 5. ~~**Décisions humaines** : validation obligatoire ou `apply` séparé ?~~ → tranché par l'[ADR 0004](adr/0004-application-du-change.md) :
    `apply` est une action planifiable conditionnée par la revue et protégée par une permission.

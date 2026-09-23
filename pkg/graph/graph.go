@@ -37,7 +37,7 @@ func (g *Graph) CreateNode(ctx context.Context, in NewNode) (domain.Node, error)
 	if in.Type == "" {
 		return domain.Node{}, fmt.Errorf("node type required: %w", ErrInvalid)
 	}
-	n := domain.Node{ID: domain.NodeID(g.newID()), Version: 1, Key: in.Key, Type: in.Type, Properties: in.Properties, CreatedAt: g.now()}
+	n := domain.Node{ID: domain.NodeID(g.newID()), Version: 1, Branch: domain.MainBranch, Reason: domain.ReasonCreate, Key: in.Key, Type: in.Type, Properties: in.Properties, CreatedAt: g.now()}
 	if n.Key == "" {
 		n.Key = string(n.ID)
 	}
@@ -45,8 +45,8 @@ func (g *Graph) CreateNode(ctx context.Context, in NewNode) (domain.Node, error)
 	return n, err
 }
 
-// UpdateNode creates a new version of a node outside of any change (import).
-// base must be the latest version.
+// UpdateNode creates a new version of a node on main outside of any change
+// (import). base must be the latest version on main.
 func (g *Graph) UpdateNode(ctx context.Context, base domain.NodeRef, props map[string]any) (domain.Node, error) {
 	var n domain.Node
 	err := g.repo.InTx(ctx, func(tx Tx) error {
@@ -57,8 +57,12 @@ func (g *Graph) UpdateNode(ctx context.Context, base domain.NodeRef, props map[s
 		if latest.Version != base.Version {
 			return fmt.Errorf("node %s is at v%d: %w", base, latest.Version, ErrConflict)
 		}
+		v, err := nextVersion(ctx, tx, base.ID)
+		if err != nil {
+			return err
+		}
 		n = latest
-		n.Version++
+		n.Version, n.Branch, n.Parents, n.Reason = v, domain.MainBranch, []domain.Version{latest.Version}, domain.ReasonRevise
 		n.Properties = props
 		n.ChangeID = ""
 		n.CreatedAt = g.now()
@@ -228,18 +232,27 @@ type NewChange struct {
 	Intent      string
 	Methodology string
 	BaselineID  domain.BaselineID
-	Data        map[string]any
+	// Branch the change applies to (default main); it must be open.
+	Branch string
+	Data   map[string]any
 }
 
 // CreateChange opens a change on a reference baseline.
 func (g *Graph) CreateChange(ctx context.Context, in NewChange) (domain.ChangeSet, error) {
 	c := domain.ChangeSet{
 		ID: domain.ChangeID(g.newID()), Title: in.Title, Intent: in.Intent, Methodology: in.Methodology,
-		Status: domain.ChangeDraft, BaselineID: in.BaselineID, Data: in.Data, CreatedAt: g.now(),
+		Status: domain.ChangeDraft, BaselineID: in.BaselineID, Branch: domain.BranchOf(in.Branch), Data: in.Data, CreatedAt: g.now(),
 	}
 	err := g.repo.InTx(ctx, func(tx Tx) error {
 		if _, err := tx.Baseline(ctx, in.BaselineID); err != nil {
 			return err
+		}
+		b, err := branchOf(ctx, tx, c.Branch)
+		if err != nil {
+			return err
+		}
+		if b.Status != domain.BranchOpen {
+			return fmt.Errorf("branch %s is %s: %w", b.Name, b.Status, ErrConflict)
 		}
 		return tx.PutChange(ctx, c)
 	})
