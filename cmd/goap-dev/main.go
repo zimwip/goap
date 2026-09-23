@@ -13,6 +13,7 @@ import (
 	"github.com/zimwip/goap/gen/goap/iam/v1/iamv1connect"
 	"github.com/zimwip/goap/gen/goap/model/v1/modelv1connect"
 	"github.com/zimwip/goap/gen/goap/registry/v1/registryv1connect"
+	"github.com/zimwip/goap/gen/goap/runtime/v1/runtimev1connect"
 	"github.com/zimwip/goap/internal/enginesvc"
 	"github.com/zimwip/goap/internal/graphsvc"
 	"github.com/zimwip/goap/internal/iamsvc"
@@ -20,6 +21,8 @@ import (
 	"github.com/zimwip/goap/internal/modelgw"
 	"github.com/zimwip/goap/internal/platform"
 	"github.com/zimwip/goap/internal/registrysvc"
+	"github.com/zimwip/goap/internal/sandbox"
+	"github.com/zimwip/goap/internal/telemetry"
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/engine"
 	"github.com/zimwip/goap/pkg/graph"
@@ -30,6 +33,7 @@ import (
 func main() {
 	ctx := context.Background()
 	log := platform.Logger("goap-dev")
+	defer telemetry.Setup(context.Background(), log, "goap-dev")(context.Background())
 	secrets := platform.NewSecrets()
 	dev := authz.Principal{
 		Subject: platform.Env("GOAP_DEV_SUBJECT", "dev"),
@@ -56,26 +60,41 @@ func main() {
 	if err != nil {
 		platform.Fatal(log, "models", err)
 	}
+	router.Instrument = telemetry.NewGenAI().Instrument
+	models := telemetry.LLMClient{Next: router}
+	// scripts run in-process unless GOAP_SANDBOX selects a provisioner
+	sandboxes, runtime, _, err := sandbox.FromEnv(log, platform.H2CClient(), telemetry.ClientOptions())
+	if err != nil {
+		platform.Fatal(log, "sandbox", err)
+	}
+	broker := engine.NewBroker()
 	e := &engine.Engine{
 		Graph:         g,
 		Methodologies: reg,
 		Executors: map[string]engine.Executor{
-			methodology.KindLLM:     engine.LLMExecutor{Client: router},
+			methodology.KindLLM:     engine.LLMExecutor{Client: models},
+			methodology.KindScript:  engine.ScriptExecutor{Sandboxes: sandboxes},
 			methodology.KindHuman:   engine.HumanExecutor{},
 			methodology.KindBuiltin: engine.DefaultBuiltins(),
 		},
-		Intent: intent.Resolver{Ranker: intent.Lexical{}},
-		Store:  engine.NewMemoryStore(),
-		Events: engine.NopPublisher{},
-		Authz:  authorizer,
-		Log:    log,
+		Intent:    intent.Resolver{Ranker: intent.Lexical{}},
+		Store:     engine.NewMemoryStore(),
+		Events:    broker,
+		Authz:     authorizer,
+		LLM:       models,
+		Sandboxes: sandboxes,
+		Tracer:    telemetry.NewEngineTracer(),
+		Log:       log,
 	}
 	srv := platform.NewServer(log, platform.Env("GOAP_HTTP_ADDR", ":8080"))
-	srv.Mount(graphv1connect.NewGraphServiceHandler(&graphsvc.Handler{Graph: g}))
-	srv.Mount(registryv1connect.NewRegistryServiceHandler(&registrysvc.Handler{Service: reg, Identity: ident}))
-	srv.Mount(iamv1connect.NewIamServiceHandler(&iamsvc.Handler{Enforcer: authorizer, Identity: ident}))
-	srv.Mount(modelv1connect.NewModelServiceHandler(&modelgw.Handler{Router: router}))
-	srv.Mount(enginev1connect.NewEngineServiceHandler(&enginesvc.Handler{Engine: e, Log: log, DefaultPrincipal: &dev, Authz: authorizer}))
+	srv.Mount(graphv1connect.NewGraphServiceHandler(&graphsvc.Handler{Graph: g}, telemetry.HandlerOptions()...))
+	srv.Mount(registryv1connect.NewRegistryServiceHandler(&registrysvc.Handler{Service: reg, Identity: ident}, telemetry.HandlerOptions()...))
+	srv.Mount(iamv1connect.NewIamServiceHandler(&iamsvc.Handler{Enforcer: authorizer, Identity: ident}, telemetry.HandlerOptions()...))
+	srv.Mount(modelv1connect.NewModelServiceHandler(&modelgw.Handler{Router: router}, telemetry.HandlerOptions()...))
+	srv.Mount(enginev1connect.NewEngineServiceHandler(&enginesvc.Handler{Engine: e, Log: log, DefaultPrincipal: &dev, Authz: authorizer, Broker: broker}, telemetry.HandlerOptions()...))
+	if runtime != nil {
+		srv.Mount(runtimev1connect.NewRuntimeServiceHandler(runtime, telemetry.HandlerOptions()...))
+	}
 	if err := srv.Run(); err != nil {
 		platform.Fatal(log, "server", err)
 	}

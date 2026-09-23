@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log/slog"
 	"maps"
+	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -13,9 +15,11 @@ import (
 
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/dsl"
 	"github.com/zimwip/goap/pkg/goap"
 	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/intent"
+	"github.com/zimwip/goap/pkg/llm"
 	"github.com/zimwip/goap/pkg/methodology"
 )
 
@@ -30,7 +34,17 @@ type Engine struct {
 	Planner       goap.Planner
 	// Authz decides action permissions (nil: every permission is granted).
 	Authz authz.Authorizer
-	Log   *slog.Logger
+	// LLM serves DSL model calls (the model gateway).
+	LLM llm.Client
+	// Tools serves DSL tool calls (the MCP connector).
+	Tools ToolCaller
+	// Sandboxes isolates script actions (one sandbox per process run).
+	Sandboxes Sandboxes
+	// Tracer instruments processes and actions (nil: no tracing).
+	Tracer Tracer
+	// Schedule runs a process in the background (default: a goroutine).
+	Schedule func(id string)
+	Log      *slog.Logger
 	// MaxSteps bounds the number of actions of a process (default 50).
 	MaxSteps int
 	// MaxFailures disables an action after that many executions without the
@@ -39,6 +53,31 @@ type Engine struct {
 
 	locks sync.Map // process id -> *sync.Mutex
 	now   func() time.Time
+	bg    sync.WaitGroup
+}
+
+// background runs f in a tracked goroutine (see Drain).
+func (e *Engine) background(f func()) {
+	e.bg.Add(1)
+	go func() {
+		defer e.bg.Done()
+		f()
+	}()
+}
+
+// Drain waits for the background work (tests).
+func (e *Engine) Drain() { e.bg.Wait() }
+
+func (e *Engine) schedule(id string) {
+	if e.Schedule != nil {
+		e.Schedule(id)
+		return
+	}
+	e.background(func() {
+		if _, err := e.Run(context.Background(), id); err != nil {
+			e.log().Error("run", "process", id, "err", err)
+		}
+	})
 }
 
 // StartRequest starts a process.
@@ -49,9 +88,13 @@ type StartRequest struct {
 	BaselineID domain.BaselineID
 	Title      string
 	Intent     string
-	// Goal skips the intent loop.
+	// Goal skips the intent loop (with Agent, or the first agent having it).
 	Goal string
-	Vars map[string]any
+	// Agent restricts identification to one agent of the methodology.
+	Agent string
+	// ParentID is set for sub-agent processes.
+	ParentID string
+	Vars     map[string]any
 }
 
 func (e *Engine) lock(id string) func() {
@@ -76,37 +119,46 @@ func (e *Engine) log() *slog.Logger {
 }
 
 // Start creates a process and resolves its intent. The returned process is
-// either clarifying (a question is pending) or running (call Run).
+// either clarifying (a question is pending) or running (call Run). Without
+// methodology, identification ranks the agents of every published methodology.
 func (e *Engine) Start(ctx context.Context, req StartRequest) (*Process, error) {
-	m, err := e.Methodologies.Methodology(ctx, req.Methodology)
-	if err != nil {
-		return nil, err
-	}
-	changeID := req.ChangeID
-	if changeID == "" {
-		title := req.Title
-		if title == "" {
-			title = truncate(req.Intent, 80)
-		}
-		c, err := e.Graph.CreateChange(ctx, graph.NewChange{Title: title, Intent: req.Intent, Methodology: m.Name, BaselineID: req.BaselineID})
-		if err != nil {
-			return nil, err
-		}
-		changeID = c.ID
-	}
-	p := &Process{ID: uuid.NewString(), Methodology: m.Name, ChangeID: changeID, Initiator: authz.From(ctx), Vars: req.Vars, Disabled: map[string]bool{},
+	p := &Process{ID: uuid.NewString(), Methodology: req.Methodology, Agent: req.Agent, ChangeID: req.ChangeID, BaselineID: req.BaselineID,
+		Title: req.Title, ParentID: req.ParentID, Initiator: authz.From(ctx), Vars: req.Vars, Disabled: map[string]bool{},
 		CreatedAt: e.clock(), UpdatedAt: e.clock()}
 	if req.Intent != "" {
 		p.Intent.Turns = append(p.Intent.Turns, intent.Turn{Role: "user", Text: req.Intent})
 	}
+	if req.ChangeID != "" && req.BaselineID == "" {
+		bb, err := e.Graph.Blackboard(ctx, req.ChangeID)
+		if err != nil {
+			return nil, err
+		}
+		p.BaselineID = bb.Change.BaselineID
+	}
+	if p.ChangeID == "" && p.BaselineID == "" {
+		return nil, fmt.Errorf("a baseline or a change is required: %w", ErrInvalidState)
+	}
 	if req.Goal != "" {
+		m, err := e.Methodologies.Methodology(ctx, req.Methodology)
+		if err != nil {
+			return nil, err
+		}
 		if _, ok := m.Goal(req.Goal); !ok {
 			return nil, fmt.Errorf("unknown goal %q", req.Goal)
 		}
-		if err := e.selectGoal(ctx, p, req.Goal); err != nil {
+		agent := req.Agent
+		if agent == "" {
+			for _, ag := range m.AgentList() {
+				if slices.ContainsFunc(m.AgentGoals(ag), func(g methodology.Goal) bool { return g.Name == req.Goal }) {
+					agent = ag.Name
+					break
+				}
+			}
+		}
+		if err := e.selectTarget(ctx, p, m, agent, req.Goal); err != nil {
 			return nil, err
 		}
-	} else if err := e.resolveIntent(ctx, p, m); err != nil {
+	} else if err := e.resolveIntent(ctx, p); err != nil {
 		return nil, err
 	}
 	if err := e.save(ctx, p, "started"); err != nil {
@@ -125,41 +177,131 @@ func (e *Engine) Answer(ctx context.Context, id, answer string) (*Process, error
 	if p.Status != StatusClarifying {
 		return nil, fmt.Errorf("process %s is %s, not clarifying", id, p.Status)
 	}
-	m, err := e.Methodologies.Methodology(ctx, p.Methodology)
-	if err != nil {
-		return nil, err
-	}
 	p.Intent.Turns = append(p.Intent.Turns, intent.Turn{Role: "user", Text: answer})
-	if err := e.resolveIntent(ctx, p, m); err != nil {
+	if err := e.resolveIntent(ctx, p); err != nil {
 		return nil, err
 	}
 	return p, e.save(ctx, p, "intent")
 }
 
-func (e *Engine) resolveIntent(ctx context.Context, p *Process, m *methodology.Compiled) error {
-	goals := make([]intent.GoalInfo, 0, len(m.Goals))
-	for _, g := range m.Goals {
-		goals = append(goals, intent.GoalInfo{Name: g.Name, Description: g.Description, Examples: g.Examples})
+// target is an identifiable (methodology, agent, goal) triple.
+type target struct {
+	m     *methodology.Compiled
+	agent methodology.Agent
+	goal  methodology.Goal
+}
+
+func (t target) key() string { return t.m.Name + "/" + t.agent.Name + "/" + t.goal.Name }
+
+func (e *Engine) targets(ctx context.Context, p *Process) ([]target, error) {
+	var ms []*methodology.Compiled
+	if p.Methodology != "" {
+		m, err := e.Methodologies.Methodology(ctx, p.Methodology)
+		if err != nil {
+			return nil, err
+		}
+		ms = []*methodology.Compiled{m}
+	} else {
+		all, err := e.Methodologies.List(ctx)
+		if err != nil {
+			return nil, err
+		}
+		ms = all
+	}
+	var out []target
+	for _, m := range ms {
+		for _, ag := range m.AgentList() {
+			if p.Agent != "" && ag.Name != p.Agent {
+				continue
+			}
+			for _, g := range m.AgentGoals(ag) {
+				out = append(out, target{m: m, agent: ag, goal: g})
+			}
+		}
+	}
+	if len(out) == 0 {
+		return nil, fmt.Errorf("no agent goal matches methodology %q agent %q: %w", p.Methodology, p.Agent, ErrInvalidState)
+	}
+	return out, nil
+}
+
+// resolveIntent identifies the (methodology, agent, goal) of the intent.
+func (e *Engine) resolveIntent(ctx context.Context, p *Process) error {
+	ts, err := e.targets(ctx, p)
+	if err != nil {
+		return err
+	}
+	byKey := map[string]target{}
+	goals := make([]intent.GoalInfo, 0, len(ts))
+	for _, t := range ts {
+		byKey[t.key()] = t
+		desc := t.goal.Description
+		if t.agent.Description != "" && t.agent.Description != t.m.Description {
+			desc = t.agent.Description + " — " + desc
+		}
+		goals = append(goals, intent.GoalInfo{Name: t.key(), Description: desc, Examples: append(slices.Clone(t.agent.Examples), t.goal.Examples...)})
 	}
 	res, err := e.Intent.Resolve(ctx, &p.Intent, goals)
 	if err != nil {
 		return err
 	}
-	p.Candidates = res.Candidates
+	p.Candidates = nil
+	for _, c := range res.Candidates {
+		if t, ok := byKey[c.Goal]; ok {
+			c.Methodology, c.Agent, c.Goal = t.m.Name, t.agent.Name, t.goal.Name
+		}
+		p.Candidates = append(p.Candidates, c)
+	}
 	if !res.Resolved() {
 		p.Status = StatusClarifying
 		p.Question = res.Question
 		return nil
 	}
-	return e.selectGoal(ctx, p, res.Goal)
+	t := byKey[res.Goal]
+	return e.selectTarget(ctx, p, t.m, t.agent.Name, t.goal.Name)
 }
 
-func (e *Engine) selectGoal(ctx context.Context, p *Process, goal string) error {
-	p.Goal = goal
+// selectTarget fixes the methodology, agent and goal and opens the change.
+func (e *Engine) selectTarget(ctx context.Context, p *Process, m *methodology.Compiled, agentName, goal string) error {
+	if agentName == "" {
+		agentName = m.AgentList()[0].Name
+	}
+	ag, ok := m.Agent(agentName)
+	if !ok {
+		return fmt.Errorf("unknown agent %q in %s: %w", agentName, m.Name, ErrInvalidState)
+	}
+	p.Methodology, p.Agent, p.Planner, p.Goal = m.Name, ag.Name, ag.Planner, goal
 	p.Question = ""
 	p.Status = StatusRunning
+	if p.ChangeID == "" {
+		title := p.Title
+		if title == "" {
+			title = truncate(firstUserTurn(p), 80)
+		}
+		if title == "" {
+			title = m.Name + " / " + goal
+		}
+		p.Title = title
+		c, err := e.Graph.CreateChange(ctx, graph.NewChange{Title: title, Intent: firstUserTurn(p), Methodology: m.Name, BaselineID: p.BaselineID})
+		if err != nil {
+			return err
+		}
+		p.ChangeID = c.ID
+	}
+	if p.ParentID != "" {
+		return nil // the change goal belongs to the parent process
+	}
 	_, err := e.Graph.UpdateChange(ctx, p.ChangeID, graph.ChangePatch{Goal: &goal})
 	return err
+}
+
+func firstUserTurn(p *Process) string {
+	for _, t := range p.Intent.Turns {
+		if t.Role == "user" {
+			return t.Text
+		}
+	}
+	return ""
 }
 
 // Submit provides the items of a pending human task and resumes the process
@@ -202,6 +344,8 @@ func (e *Engine) Run(ctx context.Context, id string) (*Process, error) {
 	if err != nil {
 		return nil, err
 	}
+	ctx, end := e.tracer().StartProcess(ctx, p)
+	defer func() { end(p) }()
 	maxSteps := e.MaxSteps
 	if maxSteps == 0 {
 		maxSteps = 50
@@ -255,14 +399,18 @@ func (e *Engine) cycle(ctx context.Context, p *Process, m *methodology.Compiled)
 		p.Plan = nil
 		return nil
 	}
-	// plan
+	// plan with the agent's admissible actions and planner
+	ag, ok := m.Agent(p.Agent)
+	if !ok {
+		return fmt.Errorf("unknown agent %q", p.Agent)
+	}
 	var actions []goap.Action
-	for _, a := range m.PlanningActions() {
+	for _, a := range m.AgentActions(ag) {
 		if !p.Disabled[a.Name] {
 			actions = append(actions, a)
 		}
 	}
-	plan, err := e.Planner.Plan(p.World, actions, goal.PlanningGoal())
+	plan, err := e.plan(ag.Planner, p.World, actions, goal.PlanningGoal(), m.Utilities(bb))
 	if errors.Is(err, goap.ErrNoPlan) {
 		p.Status = StatusStuck
 		p.Plan = nil
@@ -303,15 +451,43 @@ func (e *Engine) execute(ctx context.Context, p *Process, m *methodology.Compile
 	if !ok {
 		return fmt.Errorf("no executor for action kind %q", action.Kind)
 	}
-	e.log().Info("executing action", "process", p.ID, "action", action.Name, "plan", p.Plan)
-	res, err := exec.Execute(ctx, ActionContext{Process: p, Action: action, Blackboard: bb, Graph: e.Graph})
+	e.log().Info("executing action", "process", p.ID, "agent", p.Agent, "action", action.Name, "plan", p.Plan)
+	ctx, end := e.tracer().StartAction(ctx, p, action.Name, action.Kind)
+	host := e.newHost(p, action.Name)
+	res, err := exec.Execute(ctx, ActionContext{Process: p, Action: action, Blackboard: bb, Graph: e.Graph, Host: host})
 	step := &p.Steps[i]
-	step.Output = res.Output
+	host.record(step)
+	step.Output, step.Sandbox = res.Output, res.Sandbox
+	for _, l := range res.Logs {
+		l.Step = i
+		step.Logs = append(step.Logs, l)
+		e.emitLog(ctx, p, l)
+	}
+	p.Usage = Usage{}
+	for _, st := range p.Steps {
+		p.Usage.Add(st.Usage)
+	}
+	if len(host.children) > 0 {
+		if p.Children == nil {
+			p.Children = map[string]string{}
+		}
+		maps.Copy(p.Children, host.children)
+	}
+	end(step, err)
 	if err != nil {
 		step.Error = err.Error()
 		step.EndedAt = e.clock()
 		return e.recordFailure(p, action.Name)
 	}
+	if res.Suspended {
+		// the action waits for a sub-agent: it is retried when the child ends
+		step.EndedAt = e.clock()
+		step.Output = "suspended: waiting for sub-agent " + res.Child
+		p.Status = StatusWaiting
+		p.Pending = &HumanTask{Kind: TaskAgent, Action: action.Name, Description: action.Description, Step: i, ChildProcessID: res.Child}
+		return nil
+	}
+	e.forgetChildren(p, action.Name)
 	if res.Wait {
 		p.Status = StatusWaiting
 		p.Pending = &HumanTask{Kind: TaskInput, Action: action.Name, Description: action.Description, Instructions: action.Instructions, Step: i}
@@ -327,10 +503,71 @@ func (e *Engine) execute(ctx context.Context, p *Process, m *methodology.Compile
 	return e.finishStep(ctx, p, m, step)
 }
 
-// allowed evaluates an action permission ("<resource>:<action>") for who. The
-// resource is the change of the process, owned by the initiator's
-// organization and subject, so that ABAC rules can express separation of
-// duties (an approver never approves its own change).
+// forgetChildren drops the sub-agent calls of a finished action execution, so
+// that a later execution of the same action starts new sub-agents.
+func (e *Engine) forgetChildren(p *Process, action string) {
+	for k := range p.Children {
+		if strings.HasPrefix(k, action+"#") {
+			delete(p.Children, k)
+		}
+	}
+}
+
+// runChild runs (or resumes) a sub-agent for a host call.
+func (e *Engine) runChild(ctx context.Context, h *Host, key, agentName, intentText string) (dsl.AgentResult, error) {
+	parent := h.process
+	var child *Process
+	if id, ok := parent.Children[key]; ok {
+		c, err := e.Store.Get(ctx, id)
+		if err != nil {
+			return dsl.AgentResult{}, err
+		}
+		child = c
+	} else {
+		c, err := e.Start(ctx, StartRequest{Methodology: parent.Methodology, ChangeID: parent.ChangeID, BaselineID: parent.BaselineID,
+			Agent: agentName, Intent: intentText, ParentID: parent.ID, Vars: parent.Vars})
+		if err != nil {
+			return dsl.AgentResult{}, err
+		}
+		h.mu.Lock()
+		h.children[key] = c.ID
+		h.mu.Unlock()
+		child = c
+		if child.Status == StatusRunning {
+			if child, err = e.Run(ctx, child.ID); err != nil {
+				return dsl.AgentResult{}, err
+			}
+		}
+	}
+	res := dsl.AgentResult{Status: string(child.Status), Goal: child.Goal, ProcessID: child.ID}
+	switch child.Status {
+	case StatusCompleted, StatusStuck, StatusFailed:
+		return res, nil
+	}
+	h.mu.Lock()
+	h.waitingOn = child.ID
+	h.mu.Unlock()
+	return res, dsl.ErrSuspended
+}
+
+// resumeParent wakes a parent process whose action waits for child.
+func (e *Engine) resumeParent(parentID, childID string) {
+	ctx := context.Background()
+	unlock := e.lock(parentID)
+	p, err := e.Store.Get(ctx, parentID)
+	if err != nil || p.Status != StatusWaiting || p.Pending == nil || p.Pending.Kind != TaskAgent || p.Pending.ChildProcessID != childID {
+		unlock()
+		return
+	}
+	p.Pending = nil
+	p.Status = StatusRunning
+	err = e.save(ctx, p, "step")
+	unlock()
+	if err == nil {
+		e.schedule(parentID)
+	}
+}
+
 func (e *Engine) allowed(ctx context.Context, p *Process, who authz.Principal, permission string) (bool, error) {
 	if e.Authz == nil {
 		return true, nil
@@ -475,19 +712,46 @@ func (e *Engine) addItems(ctx context.Context, p *Process, in []ItemInput, produ
 	return ids, nil
 }
 
-// ProcessEvent is published on every process save.
+// ProcessEvent is published on every process save, and for log lines.
 type ProcessEvent struct {
-	Event   string   `json:"event"`
-	Process *Process `json:"process"`
+	Event   string    `json:"event"`
+	Process *Process  `json:"process,omitempty"`
+	Log     *LogLine  `json:"log,omitempty"`
+	Time    time.Time `json:"time"`
+}
+
+func (e *Engine) emitLog(ctx context.Context, p *Process, l LogLine) {
+	if e.Events == nil {
+		return
+	}
+	if l.ProcessID == "" {
+		l.ProcessID = p.ID
+	}
+	_ = e.Events.Publish(ctx, fmt.Sprintf("goap.process.%s.log", p.ID), ProcessEvent{Event: "log", Log: &l, Time: l.Time})
 }
 
 func (e *Engine) save(ctx context.Context, p *Process, event string) error {
 	p.UpdatedAt = e.clock()
+	if p.Status.Terminal() {
+		p.Children = nil
+	}
+	if p.TraceID == "" {
+		p.TraceID = e.tracer().TraceID(ctx)
+	}
 	if err := e.Store.Put(ctx, p); err != nil {
 		return err
 	}
+	if p.Status.Terminal() {
+		if e.Sandboxes != nil {
+			e.Sandboxes.Release(ctx, p.ID)
+		}
+		if p.ParentID != "" {
+			parent, child := p.ParentID, p.ID
+			e.background(func() { e.resumeParent(parent, child) })
+		}
+	}
 	if e.Events != nil {
-		if err := e.Events.Publish(ctx, fmt.Sprintf("goap.process.%s.%s", p.ID, event), ProcessEvent{Event: event, Process: p}); err != nil {
+		if err := e.Events.Publish(ctx, fmt.Sprintf("goap.process.%s.%s", p.ID, event), ProcessEvent{Event: event, Process: p, Time: p.UpdatedAt}); err != nil {
 			e.log().Warn("publish failed", "err", err)
 		}
 	}

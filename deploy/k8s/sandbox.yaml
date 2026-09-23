@@ -1,0 +1,68 @@
+# Sandboxes on Kubernetes (GOAP_SANDBOX=kubernetes).
+# - the engine service account may manage pods in the sandbox namespace only;
+# - sandbox pods may only reach the engine RuntimeService (and DNS).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: goap-sandbox
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: goap-sandbox-manager
+  namespace: goap-sandbox
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["create", "get", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: goap-engine-sandbox-manager
+  namespace: goap-sandbox
+subjects:
+  - kind: ServiceAccount
+    name: goap-engine
+    namespace: goap
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: goap-sandbox-manager
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: goap-sandbox-egress
+  namespace: goap-sandbox
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: goap-sandbox
+  policyTypes: [Ingress, Egress]
+  ingress:
+    # only the engine sends jobs
+    - from:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: goap}}
+          podSelector: {matchLabels: {app.kubernetes.io/name: goap-engine}}
+      ports: [{port: 8080}]
+  egress:
+    # RuntimeService of the engine
+    - to:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: goap}}
+          podSelector: {matchLabels: {app.kubernetes.io/name: goap-engine}}
+      ports: [{port: 8080}]
+    # DNS
+    - to:
+        - namespaceSelector: {}
+          podSelector: {matchLabels: {k8s-app: kube-dns}}
+      ports: [{port: 53, protocol: UDP}, {port: 53, protocol: TCP}]
+---
+# Optional: stronger isolation with gVisor (GOAP_SANDBOX_RUNTIME_CLASS=gvisor)
+apiVersion: node.k8s.io/v1
+kind: RuntimeClass
+metadata:
+  name: gvisor
+handler: runsc

@@ -53,7 +53,7 @@ func (s PostgresStore) Save(ctx context.Context, r Record) error {
 				id, m.Description, r.UpdatedAt, r.UpdatedBy); err != nil {
 				return err
 			}
-			for _, t := range []string{"methodology_node_type", "methodology_link_type", "methodology_condition", "methodology_action", "methodology_goal"} {
+			for _, t := range []string{"methodology_node_type", "methodology_link_type", "methodology_condition", "methodology_action", "methodology_goal", "methodology_agent"} {
 				if _, err := tx.Exec(ctx, `DELETE FROM `+t+` WHERE methodology_id = $1`, id); err != nil {
 					return err
 				}
@@ -79,9 +79,10 @@ func (s PostgresStore) Save(ctx context.Context, r Record) error {
 				expects = jsonOf(a.Expects)
 			}
 			batch.Queue(`INSERT INTO methodology_action (methodology_id, position, name, description, kind, pre, effects, cost, expects,
-				permission, model, prompt, tool, builtin, instructions, params) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
+				permission, model, prompt, tool, builtin, instructions, params, language, code, utility)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)`,
 				id, i, a.Name, a.Description, a.Kind, jsonOf(orEmptyBool(a.Pre)), jsonOf(orEmptyBool(a.Effects)), a.Cost, expects,
-				a.Permission, a.Model, a.Prompt, a.Tool, a.Builtin, a.Instructions, jsonOf(orEmptyAny(a.Params)))
+				a.Permission, a.Model, a.Prompt, a.Tool, a.Builtin, a.Instructions, jsonOf(orEmptyAny(a.Params)), a.Language, a.Code, a.Utility)
 		}
 		for i, g := range m.Goals {
 			ex := g.Examples
@@ -90,8 +91,19 @@ func (s PostgresStore) Save(ctx context.Context, r Record) error {
 			}
 			batch.Queue(`INSERT INTO methodology_goal VALUES ($1, $2, $3, $4, $5, $6, $7)`, id, i, g.Name, g.Description, ex, jsonOf(orEmptyBool(g.Pre)), g.Value)
 		}
+		for i, ag := range m.Agents {
+			batch.Queue(`INSERT INTO methodology_agent VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`, id, i, ag.Name, ag.Description,
+				orEmptyStrings(ag.Examples), ag.Planner, orEmptyStrings(ag.Actions), orEmptyStrings(ag.Goals))
+		}
 		return tx.SendBatch(ctx, batch).Close()
 	})
+}
+
+func orEmptyStrings(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+	return s
 }
 
 func orEmptyBool(m map[string]bool) map[string]bool {
@@ -186,8 +198,8 @@ func (s PostgresStore) loadSections(ctx context.Context, id string, m *methodolo
 	if err != nil {
 		return err
 	}
-	rows, err = s.Pool.Query(ctx, `SELECT name, description, kind, pre, effects, cost, expects, permission, model, prompt, tool, builtin, instructions, params
-		FROM methodology_action WHERE methodology_id = $1 ORDER BY position`, id)
+	rows, err = s.Pool.Query(ctx, `SELECT name, description, kind, pre, effects, cost, expects, permission, model, prompt, tool, builtin, instructions, params,
+		language, code, utility FROM methodology_action WHERE methodology_id = $1 ORDER BY position`, id)
 	if err != nil {
 		return err
 	}
@@ -195,7 +207,7 @@ func (s PostgresStore) loadSections(ctx context.Context, id string, m *methodolo
 		var a methodology.Action
 		var pre, effects, expects, params []byte
 		if err := r.Scan(&a.Name, &a.Description, &a.Kind, &pre, &effects, &a.Cost, &expects, &a.Permission, &a.Model, &a.Prompt,
-			&a.Tool, &a.Builtin, &a.Instructions, &params); err != nil {
+			&a.Tool, &a.Builtin, &a.Instructions, &params, &a.Language, &a.Code, &a.Utility); err != nil {
 			return a, err
 		}
 		_ = json.Unmarshal(pre, &a.Pre)
@@ -210,6 +222,22 @@ func (s PostgresStore) loadSections(ctx context.Context, id string, m *methodolo
 	})
 	if err != nil {
 		return err
+	}
+	rows, err = s.Pool.Query(ctx, `SELECT name, description, examples, planner, actions, goals FROM methodology_agent WHERE methodology_id = $1 ORDER BY position`, id)
+	if err != nil {
+		return err
+	}
+	m.Agents, err = pgx.CollectRows(rows, func(r pgx.CollectableRow) (methodology.Agent, error) {
+		var a methodology.Agent
+		err := r.Scan(&a.Name, &a.Description, &a.Examples, &a.Planner, &a.Actions, &a.Goals)
+		a.Examples, a.Actions, a.Goals = nilIfNoStrings(a.Examples), nilIfNoStrings(a.Actions), nilIfNoStrings(a.Goals)
+		return a, err
+	})
+	if err != nil {
+		return err
+	}
+	if len(m.Agents) == 0 {
+		m.Agents = nil
 	}
 	rows, err = s.Pool.Query(ctx, `SELECT name, description, examples, pre, value FROM methodology_goal WHERE methodology_id = $1 ORDER BY position`, id)
 	if err != nil {
@@ -228,6 +256,13 @@ func (s PostgresStore) loadSections(ctx context.Context, id string, m *methodolo
 		return g, nil
 	})
 	return err
+}
+
+func nilIfNoStrings(s []string) []string {
+	if len(s) == 0 {
+		return nil
+	}
+	return s
 }
 
 func nilIfEmpty[M ~map[K]V, K comparable, V any](m M) M {

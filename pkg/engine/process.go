@@ -5,6 +5,7 @@ package engine
 import (
 	"context"
 	"fmt"
+	"maps"
 	"sort"
 	"sync"
 	"time"
@@ -39,18 +40,32 @@ type Process struct {
 	ChangeID    domain.ChangeID `json:"changeId"`
 	// Initiator is the principal who started the process; automatic actions
 	// run with its permissions.
-	Initiator  authz.Principal    `json:"initiator"`
-	Status     Status             `json:"status"`
-	Goal       string             `json:"goal,omitempty"`
-	Intent     intent.Session     `json:"intent"`
-	Question   string             `json:"question,omitempty"`
-	Candidates []intent.Candidate `json:"candidates,omitempty"`
-	Pending    *HumanTask         `json:"pending,omitempty"`
-	Plan       []string           `json:"plan,omitempty"`
-	World      goap.WorldState    `json:"world,omitempty"`
-	Unknown    map[string]string  `json:"unknown,omitempty"`
-	Steps      []Step             `json:"steps"`
-	Vars       map[string]any     `json:"vars,omitempty"`
+	Initiator authz.Principal `json:"initiator"`
+	// Agent of the methodology run by the process and its planner.
+	Agent   string `json:"agent,omitempty"`
+	Planner string `json:"planner,omitempty"`
+	// ParentID is the process that called this one as a sub-agent.
+	ParentID string `json:"parentId,omitempty"`
+	// Children maps sub-agent calls ("action#index:agent") to their process,
+	// so that a retried action finds the sub-agent it started.
+	Children   map[string]string `json:"children,omitempty"`
+	BaselineID domain.BaselineID `json:"baselineId,omitempty"`
+	Title      string            `json:"title,omitempty"`
+	Usage      Usage             `json:"usage"`
+	TraceID    string            `json:"traceId,omitempty"`
+	// TraceParent (W3C) of the process root span: later runs continue the trace.
+	TraceParent string             `json:"traceParent,omitempty"`
+	Status      Status             `json:"status"`
+	Goal        string             `json:"goal,omitempty"`
+	Intent      intent.Session     `json:"intent"`
+	Question    string             `json:"question,omitempty"`
+	Candidates  []intent.Candidate `json:"candidates,omitempty"`
+	Pending     *HumanTask         `json:"pending,omitempty"`
+	Plan        []string           `json:"plan,omitempty"`
+	World       goap.WorldState    `json:"world,omitempty"`
+	Unknown     map[string]string  `json:"unknown,omitempty"`
+	Steps       []Step             `json:"steps"`
+	Vars        map[string]any     `json:"vars,omitempty"`
 	// Disabled lists actions excluded from planning after repeatedly failing
 	// to deliver their effects.
 	Disabled  map[string]bool `json:"disabled,omitempty"`
@@ -63,6 +78,7 @@ type Process struct {
 const (
 	TaskInput    = "input"    // a human action: submit items
 	TaskApproval = "approval" // an action needing a permission the initiator lacks
+	TaskAgent    = "agent"    // a script action waiting for a sub-agent
 )
 
 // HumanTask is a pending human action or approval.
@@ -73,6 +89,51 @@ type HumanTask struct {
 	Description  string `json:"description"`
 	Instructions string `json:"instructions,omitempty"`
 	Step         int    `json:"step"`
+	// ChildProcessID is the sub-agent a TaskAgent waits for.
+	ChildProcessID string `json:"childProcessId,omitempty"`
+}
+
+// Usage accounts LLM tokens and calls.
+type Usage struct {
+	InputTokens  int64 `json:"inputTokens"`
+	OutputTokens int64 `json:"outputTokens"`
+	LLMCalls     int   `json:"llmCalls"`
+	ToolCalls    int   `json:"toolCalls"`
+}
+
+// Add accumulates u2.
+func (u *Usage) Add(u2 Usage) {
+	u.InputTokens += u2.InputTokens
+	u.OutputTokens += u2.OutputTokens
+	u.LLMCalls += u2.LLMCalls
+	u.ToolCalls += u2.ToolCalls
+}
+
+// LLMCall records one model call.
+type LLMCall struct {
+	Provider     string `json:"provider"`
+	Model        string `json:"model"`
+	InputTokens  int64  `json:"inputTokens"`
+	OutputTokens int64  `json:"outputTokens"`
+	DurationMs   int64  `json:"durationMs"`
+	Error        string `json:"error,omitempty"`
+}
+
+// ToolCall records one tool call.
+type ToolCall struct {
+	Name       string `json:"name"`
+	DurationMs int64  `json:"durationMs"`
+	Error      string `json:"error,omitempty"`
+}
+
+// LogLine is a process log line.
+type LogLine struct {
+	Time      time.Time `json:"time"`
+	Level     string    `json:"level"`
+	Message   string    `json:"message"`
+	ProcessID string    `json:"processId,omitempty"`
+	Action    string    `json:"action,omitempty"`
+	Step      int       `json:"step"`
 }
 
 // Step records one executed action.
@@ -85,11 +146,20 @@ type Step struct {
 	Items      []domain.ItemID `json:"items,omitempty"`
 	EffectsMet bool            `json:"effectsMet"`
 	ApprovedBy string          `json:"approvedBy,omitempty"`
+	Usage      Usage           `json:"usage"`
+	LLMCalls   []LLMCall       `json:"llmCalls,omitempty"`
+	ToolCalls  []ToolCall      `json:"toolCalls,omitempty"`
+	Logs       []LogLine       `json:"logs,omitempty"`
+	Children   []string        `json:"children,omitempty"`
+	Sandbox    string          `json:"sandbox,omitempty"`
 	Output     string          `json:"output,omitempty"`
 	Error      string          `json:"error,omitempty"`
 	StartedAt  time.Time       `json:"startedAt"`
 	EndedAt    time.Time       `json:"endedAt,omitempty"`
 }
+
+// Pending reports whether the step has not ended yet (waiting for a human).
+func (s *Step) Pending() bool { return s.EndedAt.IsZero() }
 
 // Store persists processes.
 type Store interface {
@@ -114,6 +184,8 @@ func clone(p *Process) *Process {
 	c := *p
 	c.Steps = append([]Step(nil), p.Steps...)
 	c.Intent.Turns = append([]intent.Turn(nil), p.Intent.Turns...)
+	c.Children = maps.Clone(p.Children)
+	c.Disabled = maps.Clone(p.Disabled)
 	return &c
 }
 

@@ -24,7 +24,7 @@ func ToPB(r Record) *registryv1.Methodology {
 	for _, a := range m.Actions {
 		pa := &registryv1.Action{Name: a.Name, Description: a.Description, Kind: a.Kind, Pre: a.Pre, Effects: a.Effects, Cost: a.Cost,
 			Permission: a.Permission, Model: a.Model, Prompt: a.Prompt, Tool: a.Tool, Builtin: a.Builtin, Instructions: a.Instructions,
-			Params: pbconv.Struct(a.Params)}
+			Params: pbconv.Struct(a.Params), Language: a.Language, Code: a.Code, Utility: a.Utility}
 		if e := a.Expects; e != nil {
 			pe := &registryv1.Expectation{ForEach: e.ForEach, Where: e.Where, Produce: &registryv1.ProduceSpec{Op: e.Produce.Op, NodeType: e.Produce.NodeType}}
 			if e.Link != nil {
@@ -37,6 +37,9 @@ func ToPB(r Record) *registryv1.Methodology {
 	for _, g := range m.Goals {
 		out.Goals = append(out.Goals, &registryv1.Goal{Name: g.Name, Description: g.Description, Examples: g.Examples, Pre: g.Pre, Value: g.Value})
 	}
+	for _, a := range m.Agents {
+		out.Agents = append(out.Agents, &registryv1.Agent{Name: a.Name, Description: a.Description, Examples: a.Examples, Planner: a.Planner, Actions: a.Actions, Goals: a.Goals})
+	}
 	return out
 }
 
@@ -46,6 +49,9 @@ func SummaryToPB(r Record) *registryv1.MethodologySummary {
 		Status: string(r.Status), UpdatedAt: pbconv.Time(r.UpdatedAt), PublishedAt: pbconv.Time(r.PublishedAt)}
 	for _, g := range r.Methodology.Goals {
 		out.Goals = append(out.Goals, &registryv1.GoalSummary{Name: g.Name, Description: g.Description})
+	}
+	for _, a := range r.Methodology.Agents {
+		out.Agents = append(out.Agents, &registryv1.AgentSummary{Name: a.Name, Description: a.Description, Planner: a.Planner})
 	}
 	return out
 }
@@ -68,7 +74,7 @@ func FromPB(p *registryv1.Methodology) methodology.Methodology {
 	for _, a := range p.Actions {
 		ma := methodology.Action{Name: a.Name, Description: a.Description, Kind: a.Kind, Pre: nilIfEmpty(a.Pre), Effects: nilIfEmpty(a.Effects),
 			Cost: a.Cost, Permission: a.Permission, Model: a.Model, Prompt: a.Prompt, Tool: a.Tool, Builtin: a.Builtin,
-			Instructions: a.Instructions, Params: pbconv.Map(a.Params)}
+			Instructions: a.Instructions, Params: pbconv.Map(a.Params), Language: a.Language, Code: a.Code, Utility: a.Utility}
 		if e := a.Expects; e != nil && e.ForEach != "" {
 			me := &condition.Expectation{ForEach: e.ForEach, Where: e.Where}
 			if e.Produce != nil {
@@ -83,6 +89,10 @@ func FromPB(p *registryv1.Methodology) methodology.Methodology {
 	}
 	for _, g := range p.Goals {
 		m.Goals = append(m.Goals, methodology.Goal{Name: g.Name, Description: g.Description, Examples: nilIfNone(g.Examples), Pre: nilIfEmpty(g.Pre), Value: g.Value})
+	}
+	for _, a := range p.Agents {
+		m.Agents = append(m.Agents, methodology.Agent{Name: a.Name, Description: a.Description, Examples: nilIfNone(a.Examples), Planner: a.Planner,
+			Actions: nilIfNone(a.Actions), Goals: nilIfNone(a.Goals)})
 	}
 	return m
 }

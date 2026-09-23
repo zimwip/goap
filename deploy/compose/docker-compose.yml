@@ -1,5 +1,7 @@
 # Dev stack: docker compose -f deploy/compose/docker-compose.yml up --build
 # Gateway: http://localhost:8080 · Web: http://localhost:5173 · NATS monitor: http://localhost:8222 · Vault: http://localhost:8200
+# Jaeger (traces): http://localhost:16686 · Prometheus: http://localhost:9090 · Grafana: http://localhost:3000
+# Script sandboxes need the runner image: make runner-image (done by make up)
 name: goap
 
 x-service: &service
@@ -12,6 +14,7 @@ x-service: &service
     GOAP_LOG_FORMAT: text
     VAULT_ADDR: http://vault:8200
     VAULT_TOKEN: dev-root-token
+    OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
   depends_on: &deps
     postgres: {condition: service_healthy}
     nats: {condition: service_started}
@@ -92,7 +95,49 @@ services:
       GOAP_MODELGW_URL: http://modelgw:8080
       GOAP_IAM_URL: http://iam:8080
       GOAP_INTENT_RANKER: ${GOAP_INTENT_RANKER:-lexical}
+      # script actions run in one hardened container per process
+      GOAP_SANDBOX: ${GOAP_SANDBOX:-docker}
+      GOAP_SANDBOX_IMAGE: goap/runner:dev
+      GOAP_SANDBOX_NETWORK: goap-sandbox
+      GOAP_RUNTIME_URL: http://engine:8080
+      GOAP_DOCKER_HOST: tcp://docker-proxy:2375
+    networks: [default, sandbox]
     ports: ["8083:8080"]
+
+  # Docker API restricted to containers management (the engine never gets the socket)
+  docker-proxy:
+    image: tecnativa/docker-socket-proxy:0.3
+    environment:
+      CONTAINERS: 1
+      POST: 1
+      DELETE: 1
+    volumes: ["/var/run/docker.sock:/var/run/docker.sock:ro"]
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.135.0
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes: ["../otel/collector.yaml:/etc/otelcol/config.yaml:ro"]
+    ports: ["4317:4317", "4318:4318"]
+    depends_on: [jaeger]
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.73.0
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports: ["16686:16686"]
+
+  prometheus:
+    image: prom/prometheus:v3.6.0
+    volumes: ["../prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro"]
+    ports: ["9090:9090"]
+
+  grafana:
+    image: grafana/grafana:12.2.0
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+    volumes: ["../grafana/provisioning:/etc/grafana/provisioning:ro"]
+    ports: ["3000:3000"]
 
   mcp:
     <<: *service
@@ -133,6 +178,12 @@ services:
       - webmodules:/app/node_modules
     ports: ["5173:5173"]
     depends_on: [gateway]
+
+networks:
+  # sandboxes: no internet, only the engine RuntimeService is reachable
+  sandbox:
+    name: goap-sandbox
+    internal: true
 
 volumes:
   pgdata:

@@ -23,8 +23,8 @@ type Client struct {
 var _ engine.GraphPort = (*Client)(nil)
 
 // NewClient returns a client for the graph service at baseURL.
-func NewClient(hc *http.Client, baseURL string) *Client {
-	return &Client{rpc: graphv1connect.NewGraphServiceClient(hc, baseURL)}
+func NewClient(hc *http.Client, baseURL string, opts ...connect.ClientOption) *Client {
+	return &Client{rpc: graphv1connect.NewGraphServiceClient(hc, baseURL, opts...)}
 }
 
 func (c *Client) CreateChange(ctx context.Context, in graph.NewChange) (domain.ChangeSet, error) {

@@ -29,6 +29,9 @@ type Candidate struct {
 	Goal       string  `json:"goal"`
 	Confidence float64 `json:"confidence"`
 	Reason     string  `json:"reason,omitempty"`
+	// Agent and Methodology are filled by the engine for agent identification.
+	Agent       string `json:"agent,omitempty"`
+	Methodology string `json:"methodology,omitempty"`
 }
 
 // Ranker ranks goals for a dialogue. Candidates are returned by decreasing
@@ -170,7 +173,8 @@ func pickOffered(s *Session, goals []GoalInfo) string {
 		return s.Offered[n-1]
 	}
 	for _, g := range goals {
-		if strings.EqualFold(answer, g.Name) {
+		// goal names may be qualified ("methodology/agent/goal"): accept any suffix
+		if strings.EqualFold(answer, g.Name) || strings.HasSuffix(strings.ToLower(g.Name), "/"+strings.ToLower(answer)) {
 			return g.Name
 		}
 	}

@@ -1,0 +1,70 @@
+syntax = "proto3";
+
+package goap.runtime.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// SandboxService is served by goap-runner inside a sandbox (one per process
+// run). It executes script actions with the DSL; it has no access to the
+// platform except the RuntimeService of the engine.
+service SandboxService {
+  rpc Execute(ExecuteRequest) returns (ExecuteResponse);
+}
+
+// RuntimeService is served by the engine and called from sandboxes with the
+// job token: every DSL operation that leaves the sandbox (LLM, sub-agents,
+// tools, domain queries) goes through it, so it is authorized, traced and
+// accounted.
+service RuntimeService {
+  rpc Call(CallRequest) returns (CallResponse);
+}
+
+message ExecuteRequest {
+  string job_id = 1;
+  // secret identifying the job on RuntimeService
+  string token = 2;
+  string runtime_url = 3;
+  // javascript | go
+  string language = 4;
+  string code = 5;
+  string process_id = 6;
+  string agent = 7;
+  string action = 8;
+  // JSON documents
+  string params_json = 9;
+  string vars_json = 10;
+  string blackboard_json = 11;
+  int64 timeout_ms = 12;
+  // W3C trace context of the caller
+  string traceparent = 13;
+}
+
+message LogLine {
+  google.protobuf.Timestamp time = 1;
+  string level = 2;
+  string message = 3;
+}
+
+message ExecuteResponse {
+  // items produced (engine ItemInput JSON array)
+  string items_json = 1;
+  string output = 2;
+  repeated LogLine logs = 3;
+  string error = 4;
+  // the script waits for a sub-agent: the step is retried once it completes
+  bool suspended = 5;
+}
+
+message CallRequest {
+  string job_id = 1;
+  string token = 2;
+  // llm.complete | agents.run | tools.call | domain.nodes | domain.node | domain.links
+  string op = 3;
+  string args_json = 4;
+}
+
+message CallResponse {
+  string result_json = 1;
+  string error = 2;
+  bool suspended = 3;
+}

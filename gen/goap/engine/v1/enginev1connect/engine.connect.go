@@ -51,6 +51,9 @@ const (
 	// EngineServiceListProcessesProcedure is the fully-qualified name of the EngineService's
 	// ListProcesses RPC.
 	EngineServiceListProcessesProcedure = "/goap.engine.v1.EngineService/ListProcesses"
+	// EngineServiceWatchEventsProcedure is the fully-qualified name of the EngineService's WatchEvents
+	// RPC.
+	EngineServiceWatchEventsProcedure = "/goap.engine.v1.EngineService/WatchEvents"
 )
 
 // EngineServiceClient is a client for the goap.engine.v1.EngineService service.
@@ -63,6 +66,9 @@ type EngineServiceClient interface {
 	ApproveAction(context.Context, *connect.Request[v1.ApproveActionRequest]) (*connect.Response[v1.ApproveActionResponse], error)
 	GetProcess(context.Context, *connect.Request[v1.GetProcessRequest]) (*connect.Response[v1.GetProcessResponse], error)
 	ListProcesses(context.Context, *connect.Request[v1.ListProcessesRequest]) (*connect.Response[v1.ListProcessesResponse], error)
+	// Live process events and logs (server streaming). Empty process_id: every
+	// process the caller may read.
+	WatchEvents(context.Context, *connect.Request[v1.WatchEventsRequest]) (*connect.ServerStreamForClient[v1.WatchEventsResponse], error)
 }
 
 // NewEngineServiceClient constructs a client for the goap.engine.v1.EngineService service. By
@@ -112,6 +118,12 @@ func NewEngineServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(engineServiceMethods.ByName("ListProcesses")),
 			connect.WithClientOptions(opts...),
 		),
+		watchEvents: connect.NewClient[v1.WatchEventsRequest, v1.WatchEventsResponse](
+			httpClient,
+			baseURL+EngineServiceWatchEventsProcedure,
+			connect.WithSchema(engineServiceMethods.ByName("WatchEvents")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -123,6 +135,7 @@ type engineServiceClient struct {
 	approveAction    *connect.Client[v1.ApproveActionRequest, v1.ApproveActionResponse]
 	getProcess       *connect.Client[v1.GetProcessRequest, v1.GetProcessResponse]
 	listProcesses    *connect.Client[v1.ListProcessesRequest, v1.ListProcessesResponse]
+	watchEvents      *connect.Client[v1.WatchEventsRequest, v1.WatchEventsResponse]
 }
 
 // StartProcess calls goap.engine.v1.EngineService.StartProcess.
@@ -155,6 +168,11 @@ func (c *engineServiceClient) ListProcesses(ctx context.Context, req *connect.Re
 	return c.listProcesses.CallUnary(ctx, req)
 }
 
+// WatchEvents calls goap.engine.v1.EngineService.WatchEvents.
+func (c *engineServiceClient) WatchEvents(ctx context.Context, req *connect.Request[v1.WatchEventsRequest]) (*connect.ServerStreamForClient[v1.WatchEventsResponse], error) {
+	return c.watchEvents.CallServerStream(ctx, req)
+}
+
 // EngineServiceHandler is an implementation of the goap.engine.v1.EngineService service.
 type EngineServiceHandler interface {
 	StartProcess(context.Context, *connect.Request[v1.StartProcessRequest]) (*connect.Response[v1.StartProcessResponse], error)
@@ -165,6 +183,9 @@ type EngineServiceHandler interface {
 	ApproveAction(context.Context, *connect.Request[v1.ApproveActionRequest]) (*connect.Response[v1.ApproveActionResponse], error)
 	GetProcess(context.Context, *connect.Request[v1.GetProcessRequest]) (*connect.Response[v1.GetProcessResponse], error)
 	ListProcesses(context.Context, *connect.Request[v1.ListProcessesRequest]) (*connect.Response[v1.ListProcessesResponse], error)
+	// Live process events and logs (server streaming). Empty process_id: every
+	// process the caller may read.
+	WatchEvents(context.Context, *connect.Request[v1.WatchEventsRequest], *connect.ServerStream[v1.WatchEventsResponse]) error
 }
 
 // NewEngineServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -210,6 +231,12 @@ func NewEngineServiceHandler(svc EngineServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(engineServiceMethods.ByName("ListProcesses")),
 		connect.WithHandlerOptions(opts...),
 	)
+	engineServiceWatchEventsHandler := connect.NewServerStreamHandler(
+		EngineServiceWatchEventsProcedure,
+		svc.WatchEvents,
+		connect.WithSchema(engineServiceMethods.ByName("WatchEvents")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/goap.engine.v1.EngineService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case EngineServiceStartProcessProcedure:
@@ -224,6 +251,8 @@ func NewEngineServiceHandler(svc EngineServiceHandler, opts ...connect.HandlerOp
 			engineServiceGetProcessHandler.ServeHTTP(w, r)
 		case EngineServiceListProcessesProcedure:
 			engineServiceListProcessesHandler.ServeHTTP(w, r)
+		case EngineServiceWatchEventsProcedure:
+			engineServiceWatchEventsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -255,4 +284,8 @@ func (UnimplementedEngineServiceHandler) GetProcess(context.Context, *connect.Re
 
 func (UnimplementedEngineServiceHandler) ListProcesses(context.Context, *connect.Request[v1.ListProcessesRequest]) (*connect.Response[v1.ListProcessesResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.engine.v1.EngineService.ListProcesses is not implemented"))
+}
+
+func (UnimplementedEngineServiceHandler) WatchEvents(context.Context, *connect.Request[v1.WatchEventsRequest], *connect.ServerStream[v1.WatchEventsResponse]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("goap.engine.v1.EngineService.WatchEvents is not implemented"))
 }

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/exaring/otelpgx"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -20,6 +21,7 @@ func OpenPostgres(ctx context.Context, dsn string) (*pgxpool.Pool, error) {
 	if err != nil {
 		return nil, err
 	}
+	cfg.ConnConfig.Tracer = otelpgx.NewTracer()
 	var pool *pgxpool.Pool
 	for attempt := 1; ; attempt++ {
 		pool, err = pgxpool.NewWithConfig(ctx, cfg)

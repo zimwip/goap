@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"sort"
 
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/graph"
@@ -19,9 +20,11 @@ type GraphPort interface {
 	Apply(ctx context.Context, id domain.ChangeID, baselineName string) (domain.Baseline, error)
 }
 
-// MethodologyPort resolves methodologies (the registry).
+// MethodologyPort resolves methodologies (the registry): the latest
+// published version of one, or of every methodology.
 type MethodologyPort interface {
 	Methodology(ctx context.Context, name string) (*methodology.Compiled, error)
+	List(ctx context.Context) ([]*methodology.Compiled, error)
 }
 
 // Publisher publishes process events (NATS in services).
@@ -45,6 +48,16 @@ func (s StaticMethodologies) Methodology(_ context.Context, name string) (*metho
 		return nil, ErrUnknownMethodology{Name: name}
 	}
 	return m, nil
+}
+
+// List implements MethodologyPort.
+func (s StaticMethodologies) List(context.Context) ([]*methodology.Compiled, error) {
+	out := make([]*methodology.Compiled, 0, len(s))
+	for _, m := range s {
+		out = append(out, m)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out, nil
 }
 
 // ErrUnknownMethodology is returned for unknown methodologies.

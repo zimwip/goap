@@ -87,8 +87,8 @@ func TestLifecycle(t *testing.T) {
 			if _, err := s.CreateVersion(ctx, m.Name, "2.0.0", "2.1.0"); err != nil {
 				t.Fatal(err)
 			}
-			all, _ := s.List(ctx, true)
-			latest, _ := s.List(ctx, false)
+			all, _ := s.Versions(ctx, true)
+			latest, _ := s.Versions(ctx, false)
 			if len(all) != 2 || len(latest) != 1 || latest[0].Methodology.Version != "2.0.0" {
 				t.Fatalf("list: %d all, latest %+v", len(all), latest)
 			}
@@ -139,4 +139,29 @@ func normalize(m methodology.Methodology) methodology.Methodology {
 		}
 	}
 	return m
+}
+
+func TestAgentsAndScriptsRoundTrip(t *testing.T) {
+	for name, mk := range stores(t) {
+		t.Run(name, func(t *testing.T) {
+			s := &Service{Store: mk(t)}
+			data, _ := os.ReadFile("../../methodologies/test-design.yaml")
+			if _, _, err := s.Import(as("admin"), data, true); err != nil {
+				t.Fatal(err)
+			}
+			want, _ := methodology.Parse(data)
+			got, err := s.Get(context.Background(), "test-design", "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(got.Methodology.Agents, want.Agents) || got.Methodology.Actions[1].Code != want.Actions[1].Code ||
+				got.Methodology.Actions[3].Utility != want.Actions[3].Utility {
+				t.Fatalf("agents/scripts not stored:\n%+v", got.Methodology.Agents)
+			}
+			all, err := s.List(context.Background())
+			if err != nil || len(all) != 1 || len(all[0].AgentList()) != 3 {
+				t.Fatalf("engine port list: %v", err)
+			}
+		})
+	}
 }

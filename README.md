@@ -45,6 +45,8 @@ curl -s localhost:8080/goap.engine.v1.EngineService/StartProcess -H 'Content-Typ
 | modelgw | 8084 | passerelle LLM multi-fournisseurs (Anthropic, OpenAI-compatible, fake) |
 | iam | 8086 | contrôle d'accès ABAC (Casbin), politiques en base |
 | mcp | — | squelette (API définie, non implémentée) |
+| goap-runner | — | sandbox des actions script (un conteneur / pod / processus par exécution) |
+| otel-collector, jaeger, prometheus, grafana | 4318, 16686, 9090, 3000 | observabilité OpenTelemetry |
 
 ## Développement
 
@@ -55,5 +57,7 @@ make test       # tests unitaires
 make test-pg    # tests du dépôt PostgreSQL du graphe
 make lint
 ```
+
+DSL des actions script : [docs/dsl.md](docs/dsl.md).
 
 Stack : Go 1.26 · Echo · connect-rpc · NATS JetStream · PostgreSQL · Vault · Svelte 5.

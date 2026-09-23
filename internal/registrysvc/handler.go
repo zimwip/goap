@@ -38,7 +38,7 @@ func toConnect(err error) error {
 }
 
 func (h *Handler) ListMethodologies(ctx context.Context, r *connect.Request[registryv1.ListMethodologiesRequest]) (*connect.Response[registryv1.ListMethodologiesResponse], error) {
-	rs, err := h.Service.List(ctx, r.Msg.AllVersions)
+	rs, err := h.Service.Versions(ctx, r.Msg.AllVersions)
 	if err != nil {
 		return nil, toConnect(err)
 	}
