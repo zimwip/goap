@@ -2,6 +2,7 @@ package metamodel
 
 import (
 	"context"
+	"errors"
 	"os"
 	"slices"
 	"testing"
@@ -222,5 +223,36 @@ func TestBackfillInstanceOf(t *testing.T) {
 
 	if res, err := BackfillInstanceOf(ctx, g, m.Name); err != nil || res.Changed() {
 		t.Fatalf("second backfill must not change: %+v %v", res, err)
+	}
+}
+
+func TestCreateObject(t *testing.T) {
+	ctx := context.Background()
+	g := graph.New(graph.NewMemory())
+	m := load(t)
+	if _, _, err := CreateObject(ctx, g, m.Name, "Requirement", "REQ-1", nil); !errors.Is(err, graph.ErrNotFound) {
+		t.Fatalf("unsynced methodology: %v", err)
+	}
+	if _, err := Sync(ctx, g, m); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := CreateObject(ctx, g, m.Name, "Requirement", " ", nil); !errors.Is(err, graph.ErrInvalid) {
+		t.Fatalf("no key: %v", err)
+	}
+	n, b, err := CreateObject(ctx, g, m.Name, "Requirement", "REQ-1", map[string]any{"title": "Pay"})
+	if err != nil || n.Type != "Requirement" || n.Properties["title"] != "Pay" || b.ID == "" {
+		t.Fatalf("create: %+v %v", n, err)
+	}
+	nt, _ := g.NodeByKey(ctx, Key(m.Name, TypeNodeType, "Requirement"))
+	v, _ := g.View(ctx, n.Ref())
+	var linked bool
+	for _, l := range v.Out {
+		linked = linked || (l.Type == LinkInstanceOf && l.To == nt.Ref())
+	}
+	if !linked {
+		t.Fatalf("no instanceOf edge: %+v", v.Out)
+	}
+	if _, _, err := CreateObject(ctx, g, m.Name, "Requirement", "REQ-1", nil); !errors.Is(err, graph.ErrConflict) {
+		t.Fatalf("duplicate key: %v", err)
 	}
 }

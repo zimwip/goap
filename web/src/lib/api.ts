@@ -728,6 +728,12 @@ export const graph = {
       processIds.length ? { changeId, processIds } : { changeId },
       signal,
     ),
+  /** Creates a data node typed by a NodeType of the methodology (published, synced on the graph). */
+  createObject: (methodology: string, nodeType: string, key: string, props: Struct) =>
+    rpc<
+      { methodology: string; nodeType: string; key: string; props: Struct },
+      { node?: GraphNode; baseline?: Baseline }
+    >(GRAPH, 'CreateObject', { methodology, nodeType, key, props }),
   applyChange: (changeId: string, baselineName: string) =>
     rpc<{ changeId: string; baselineName: string }, { baseline?: Baseline }>(GRAPH, 'ApplyChange', {
       changeId,

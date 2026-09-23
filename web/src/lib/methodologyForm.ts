@@ -557,6 +557,18 @@ export function fromForm(f: MethodologyForm): { methodology: Methodology; issues
   return { methodology: m, issues };
 }
 
+/** Properties of a node type: inherited ones first (nearest ancestor last), then its own. */
+export function typeProperties(f: MethodologyForm, name: string): string[] {
+  const chain: NodeTypeForm[] = [];
+  for (let t = f.nodeTypes.find((n) => n.name.trim() === name); t && !chain.includes(t); ) {
+    chain.unshift(t);
+    const parent = t.extends.trim();
+    t = parent ? f.nodeTypes.find((n) => n.name.trim() === parent) : undefined;
+  }
+  const props = chain.flatMap((n) => n.properties.split(',').map((p) => p.trim()).filter(Boolean));
+  return [...new Set(props)];
+}
+
 /** Conditions usable in pre / effects: declared + generated `expect:<action>`. */
 export function conditionNames(f: MethodologyForm): string[] {
   const names = f.conditions.map((c) => c.name.trim()).filter(Boolean);
