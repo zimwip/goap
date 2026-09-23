@@ -7,6 +7,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/graph"
 )
 
@@ -22,6 +23,8 @@ func ToConnect(err error) error {
 	switch {
 	case errors.As(err, &ce):
 		return err
+	case errors.Is(err, authz.ErrForbidden):
+		return connect.NewError(connect.CodePermissionDenied, err)
 	case errors.Is(err, graph.ErrNotFound), errors.Is(err, ErrNotFound):
 		return connect.NewError(connect.CodeNotFound, err)
 	case errors.Is(err, graph.ErrConflict):
@@ -43,6 +46,8 @@ func FromConnect(err error) error {
 		return nil
 	}
 	switch connect.CodeOf(err) {
+	case connect.CodePermissionDenied:
+		return errors.Join(authz.ErrForbidden, err)
 	case connect.CodeNotFound:
 		return errors.Join(graph.ErrNotFound, err)
 	case connect.CodeFailedPrecondition:

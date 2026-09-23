@@ -135,7 +135,7 @@ func main() {
 	triggers.Start(ctx)
 	go triggers.WatchProcesses(ctx, broker)
 	srv := platform.NewServer(log, platform.Env("GOAP_HTTP_ADDR", ":8080"))
-	srv.Mount(graphv1connect.NewGraphServiceHandler(&graphsvc.Handler{Graph: g, Events: changePublisher(onChange)}, telemetry.HandlerOptions()...))
+	srv.Mount(graphv1connect.NewGraphServiceHandler(&graphsvc.Handler{Graph: g, Events: changePublisher(onChange), Authz: authorizer, Identity: ident}, telemetry.HandlerOptions()...))
 	srv.Mount(registryv1connect.NewRegistryServiceHandler(&registrysvc.Handler{Service: reg, Identity: ident}, telemetry.HandlerOptions()...))
 	srv.Mount(iamv1connect.NewIamServiceHandler(&iamsvc.Handler{Enforcer: authorizer, Identity: ident}, telemetry.HandlerOptions()...))
 	srv.Mount(modelv1connect.NewModelServiceHandler(&modelgw.Handler{Router: router}, telemetry.HandlerOptions()...))
