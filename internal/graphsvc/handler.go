@@ -8,6 +8,7 @@ import (
 
 	graphv1 "github.com/zimwip/goap/gen/goap/graph/v1"
 	"github.com/zimwip/goap/gen/goap/graph/v1/graphv1connect"
+	"github.com/zimwip/goap/internal/identity"
 	"github.com/zimwip/goap/internal/pbconv"
 	"github.com/zimwip/goap/internal/rpcerr"
 	"github.com/zimwip/goap/pkg/authz"
@@ -22,9 +23,12 @@ type Handler struct {
 	Graph  *graph.Graph
 	Events engine.Publisher
 	// Authz gates writes to the metadata layer (NodeType nodes and extends
-	// edges, ADR 0012), resource "nodetype". Nil grants everything. Ordinary
-	// domain-node proposals and instanceOf edges are never gated by it.
+	// edges, ADR 0012), resource "nodetype", and object creation (CreateObject),
+	// resource "object". Nil grants everything. Ordinary domain-node proposals
+	// and instanceOf edges are never gated by it.
 	Authz authz.Authorizer
+	// Identity extracts the caller from request headers (set by the gateway).
+	Identity identity.Extractor
 }
 
 var _ graphv1connect.GraphServiceHandler = (*Handler)(nil)
@@ -48,6 +52,12 @@ func (h *Handler) CreateNode(ctx context.Context, r *connect.Request[graphv1.Cre
 }
 
 func (h *Handler) CreateObject(ctx context.Context, r *connect.Request[graphv1.CreateObjectRequest]) (*connect.Response[graphv1.CreateObjectResponse], error) {
+	ctx = h.Identity.Context(ctx, r.Header())
+	who := authz.From(ctx)
+	if err := authz.Check(ctx, h.Authz, authz.Request{Subject: who, Action: "create",
+		Resource: authz.Resource{Type: "object", Name: r.Msg.NodeType, Org: who.Org, Owner: who.Subject}}); err != nil {
+		return nil, rpcerr.ToConnect(err)
+	}
 	n, b, err := metamodel.CreateObject(ctx, h.Graph, r.Msg.Methodology, r.Msg.NodeType, r.Msg.Key, pbconv.Map(r.Msg.Props))
 	if err == nil {
 		h.publish(ctx, "goap.graph.object.created", map[string]string{"methodology": r.Msg.Methodology, "key": n.Key})
@@ -181,6 +191,7 @@ func (h *Handler) touchesMetadataLayer(ctx context.Context, items []domain.Chang
 }
 
 func (h *Handler) AddItems(ctx context.Context, r *connect.Request[graphv1.AddItemsRequest]) (*connect.Response[graphv1.AddItemsResponse], error) {
+	ctx = h.Identity.Context(ctx, r.Header())
 	proposed := pbconv.ItemsFromPB(r.Msg.Items)
 	if h.touchesMetadataLayer(ctx, proposed) {
 		who := authz.From(ctx)

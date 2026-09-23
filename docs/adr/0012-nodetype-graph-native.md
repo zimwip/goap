@@ -77,7 +77,11 @@ ADR 0011 registry-projection model unchanged.
    `Authz` field and a new ABAC resource `nodetype` (role `methodologist`, mirroring the
    `methodology` resource), gating only proposals that create/update/delete a `NodeType`
    node or add an `extends` edge. Ordinary domain-node proposals and `instanceOf` edges
-   stay ungated.
+   stay ungated. Callers are identified from the gateway headers (`identity.Extractor`).
+   Creating a data object through `CreateObject` is gated by the `object:create` action
+   (roles `contributor`, `methodologist`, `approver` of the same organization; `admin`
+   through the catch-all rule). Policy stores already seeded do not pick up the new default
+   rule: add it from the Access screen.
 
 ## Consequences
 
