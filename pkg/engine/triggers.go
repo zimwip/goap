@@ -298,6 +298,10 @@ func (t *TriggerManager) start(ctx context.Context, key string, s TriggerState, 
 	if req.Intent == "" {
 		req.Intent = "Exécution automatique : " + strings.TrimSpace(s.Name+" "+def.Description)
 	}
+	if ev != nil {
+		// the event is available to the agent (conditions, scripts, builtins)
+		req.Vars = map[string]any{"event": ev.activation()}
+	}
 	switch {
 	case def.Target == methodology.TargetEventChange:
 		switch {

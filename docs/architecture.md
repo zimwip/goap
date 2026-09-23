@@ -314,7 +314,7 @@ déclarés sur l'agent (`agents[].triggers`) :
 | Champ | Rôle |
 |---|---|
 | `type` | `event` ou `schedule` |
-| `event` + `filter` | `change.created`, `change.applied`, `change.item_added`, `process.completed`, `process.failed`, `methodology.published` ; filtre CEL sur `event` (`event.change.*`, `event.process.*`) |
+| `event` + `filter` | `change.created`, `change.applied`, `change.item_added`, `process.completed`, `process.failed`, `process.stuck`, `methodology.published` ; filtre CEL sur `event` (`event.change.*`, `event.process.*`) |
 | `schedule` | expression cron (5 champs, UTC) |
 | `goal`, `intent` | objectif visé (sinon identification limitée à l'agent) et texte d'intention |
 | `target` | `new_change` (nouveau change sur la dernière baseline) ou `event_change` (le change de l'événement) |

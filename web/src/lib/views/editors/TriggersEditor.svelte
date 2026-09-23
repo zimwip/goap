@@ -29,6 +29,7 @@
     'change.item_added': 'change.item_added — item ajouté à un changement',
     'process.completed': 'process.completed — exécution terminée',
     'process.failed': 'process.failed — exécution en échec',
+    'process.stuck': 'process.stuck — exécution bloquée (aucun plan)',
     'methodology.published': 'methodology.published — méthodologie publiée',
   };
   const TARGET_LABELS: Record<string, string> = {

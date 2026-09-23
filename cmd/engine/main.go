@@ -4,6 +4,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"maps"
 	"time"
 
 	"github.com/zimwip/goap/gen/goap/engine/v1/enginev1connect"
@@ -66,14 +67,16 @@ func main() {
 		ranker = intent.LLMRanker{Client: models, Model: platform.Env("GOAP_INTENT_MODEL", "fast")}
 	}
 	authorizer := iamsvc.NewClient(hc, platform.Env("GOAP_IAM_URL", "http://localhost:8086"), copts...)
+	registry := registrysvc.NewClient(hc, platform.Env("GOAP_REGISTRY_URL", "http://localhost:8082"), copts...)
+	builtins := engine.DefaultBuiltins()
 	e := &engine.Engine{
 		Graph:         graphsvc.NewClient(hc, platform.Env("GOAP_GRAPH_URL", "http://localhost:8081"), copts...),
-		Methodologies: registrysvc.NewClient(hc, platform.Env("GOAP_REGISTRY_URL", "http://localhost:8082"), copts...),
+		Methodologies: registry,
 		Executors: map[string]engine.Executor{
 			methodology.KindLLM:     engine.LLMExecutor{Client: models},
 			methodology.KindScript:  engine.ScriptExecutor{Sandboxes: sandboxes},
 			methodology.KindHuman:   engine.HumanExecutor{},
-			methodology.KindBuiltin: engine.DefaultBuiltins(),
+			methodology.KindBuiltin: builtins,
 			// methodology.KindTool: MCP connector (milestone M3)
 		},
 		Intent:    intent.Resolver{Ranker: ranker},
@@ -86,6 +89,8 @@ func main() {
 		Log:       log,
 		MaxSteps:  platform.EnvInt("GOAP_MAX_STEPS", 50),
 	}
+	// self-observation (methodology-improvement): journal, traces, drafts
+	maps.Copy(builtins, e.SelfImprovementBuiltins(telemetry.SelfImprovementFromEnv(registry)))
 	// triggers: agents run automatically on events and schedules
 	var triggers *engine.TriggerManager
 	if platform.Env("GOAP_TRIGGERS", "on") == "on" {
