@@ -1,7 +1,12 @@
 <script lang="ts">
-  // Écran « Accès » : administration des politiques ABAC (évaluées par Casbin).
-  import { iam, errorMessage, type Policy } from '../api';
-  import StatusBadge from './StatusBadge.svelte';
+  // Onglet « Politiques » : administration des politiques ABAC (évaluées par Casbin).
+  import { iam, errorMessage, type Policy } from '../../api';
+  import type { Tab } from '../../shell/types';
+  import Icon from '../../shell/Icon.svelte';
+  import StatusBadge from '../../components/StatusBadge.svelte';
+  import { provideActions } from '../../shell/workbench.svelte';
+
+  let { tab }: { tab: Tab } = $props();
 
   let policies = $state<Policy[]>([]);
   let loading = $state(true);
@@ -89,6 +94,11 @@
     },
   ];
 
+  provideActions(
+    () => tab.id,
+    () => [{ id: 'refresh', label: 'Actualiser', icon: 'refresh', disabled: loading, run: load }],
+  );
+
   function useExample(p: Required<Policy>) {
     rule = p.rule;
     resource = p.resource;
@@ -98,9 +108,10 @@
   }
 </script>
 
-<div class="row head">
-  <h2 class="grow">Accès</h2>
-  <button onclick={load} disabled={loading}>Actualiser</button>
+<div class="editor-page">
+<div class="editor-head">
+  <Icon name="shield" size={18} />
+  <h2>Politiques d'accès</h2>
 </div>
 
 <p class="hint intro">
@@ -125,7 +136,7 @@
             <th>Ressource</th>
             <th>Action</th>
             <th>Effet</th>
-            <th><span class="sr">Supprimer</span></th>
+            <th><span class="sr-only">Supprimer</span></th>
           </tr>
         </thead>
         <tbody>
@@ -162,7 +173,7 @@
         placeholder={'hasRole(r.sub, "editor") && r.sub.Org == r.obj.Org'}
       ></textarea>
     </div>
-    <div class="grid">
+    <div class="pgrid">
       <div class="field">
         <label for="pol-res">Ressource</label>
         <input id="pol-res" type="text" class="mono" bind:value={resource} placeholder="change ou *" />
@@ -217,14 +228,9 @@
     {/each}
   </section>
 </div>
+</div>
 
 <style>
-  .head {
-    margin-bottom: 0.5rem;
-  }
-  .head h2 {
-    margin: 0;
-  }
   .intro {
     max-width: 60rem;
   }
@@ -242,20 +248,13 @@
     text-align: right;
     white-space: nowrap;
   }
-  .sr {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip: rect(0 0 0 0);
-  }
   .cols {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
     gap: 0 1rem;
     align-items: start;
   }
-  .grid {
+  .pgrid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
     gap: 0 0.85rem;

@@ -5,7 +5,7 @@
 // de lignes, les listes de chaînes des textes, les paramètres JSON un texte.
 // `toForm` / `fromForm` convertissent entre ce modèle et le message proto.
 
-import type { Action, Issue, Methodology, Struct } from './api';
+import type { Action, Agent, Issue, Methodology, Struct, Trigger } from './api';
 
 export interface CondRow {
   cond: string;
@@ -25,7 +25,16 @@ export interface LinkTypeForm {
   to: string;
 }
 
-export interface ConditionForm {
+/**
+ * Les éléments ouvrables dans un onglet (agents, actions, conditions, objectifs)
+ * portent un identifiant local stable `uid` (jamais envoyé au serveur) : il
+ * survit aux renommages et réordonnancements tant que le brouillon est en mémoire.
+ */
+export interface Identified {
+  uid: string;
+}
+
+export interface ConditionForm extends Identified {
   name: string;
   description: string;
   expr: string;
@@ -40,7 +49,7 @@ export interface ExpectsForm {
   direction: string;
 }
 
-export interface ActionForm {
+export interface ActionForm extends Identified {
   name: string;
   description: string;
   kind: string;
@@ -57,9 +66,46 @@ export interface ActionForm {
   params: string;
   hasExpects: boolean;
   expects: ExpectsForm;
+  /** script : javascript | go */
+  language: string;
+  code: string;
+  /** expression CEL numérique (planificateurs utility / hybrid) */
+  utility: string;
 }
 
-export interface GoalForm {
+export interface TriggerForm {
+  name: string;
+  description: string;
+  /** event | schedule */
+  type: string;
+  event: string;
+  /** filtre CEL sur l'événement */
+  filter: string;
+  /** cron à 5 champs (UTC) */
+  schedule: string;
+  goal: string;
+  intent: string;
+  /** new_change | event_change */
+  target: string;
+  /** rôles séparés par des virgules */
+  roles: string;
+  enabled: boolean;
+}
+
+export interface AgentForm extends Identified {
+  name: string;
+  description: string;
+  /** un exemple par ligne */
+  examples: string;
+  planner: string;
+  /** actions admissibles (vide : toutes) */
+  actions: string[];
+  /** objectifs (vide : tous) */
+  goals: string[];
+  triggers: TriggerForm[];
+}
+
+export interface GoalForm extends Identified {
   name: string;
   description: string;
   /** un exemple par ligne */
@@ -77,9 +123,18 @@ export interface MethodologyForm {
   conditions: ConditionForm[];
   actions: ActionForm[];
   goals: GoalForm[];
+  agents: AgentForm[];
 }
 
-export const ACTION_KINDS = ['llm', 'tool', 'human', 'builtin'] as const;
+/** Sections dont les éléments s'ouvrent dans un onglet. */
+export type Section = 'agents' | 'actions' | 'conditions' | 'goals';
+export type SectionItem = AgentForm | ActionForm | ConditionForm | GoalForm;
+
+export const ACTION_KINDS = ['llm', 'script', 'tool', 'human', 'builtin'] as const;
+export const SCRIPT_LANGUAGES = ['javascript', 'go'] as const;
+export const PLANNERS = ['goap', 'utility', 'hybrid'] as const;
+export const TRIGGER_TYPES = ['event', 'schedule'] as const;
+export const TRIGGER_TARGETS = ['new_change', 'event_change'] as const;
 export const FOR_EACH = ['impacts', 'proposals', 'items', 'artifacts'] as const;
 export const PRODUCE_OPS = ['create_node', 'update_node'] as const;
 
@@ -87,7 +142,14 @@ export const PRODUCE_OPS = ['create_node', 'update_node'] as const;
 
 export const emptyNodeType = (): NodeTypeForm => ({ name: '', description: '', properties: '' });
 export const emptyLinkType = (): LinkTypeForm => ({ name: '', from: '', to: '' });
-export const emptyCondition = (): ConditionForm => ({ name: '', description: '', expr: '' });
+let uidSeq = 0;
+/** Nouvel identifiant local (éléments créés dans l'interface). */
+export function newUid(): string {
+  uidSeq += 1;
+  return `new-${uidSeq}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+export const emptyCondition = (): ConditionForm => ({ uid: newUid(), name: '', description: '', expr: '' });
 export const emptyExpects = (): ExpectsForm => ({
   forEach: 'impacts',
   where: '',
@@ -97,6 +159,7 @@ export const emptyExpects = (): ExpectsForm => ({
   direction: 'out',
 });
 export const emptyAction = (): ActionForm => ({
+  uid: newUid(),
   name: '',
   description: '',
   kind: 'llm',
@@ -112,8 +175,34 @@ export const emptyAction = (): ActionForm => ({
   params: '',
   hasExpects: false,
   expects: emptyExpects(),
+  language: 'javascript',
+  code: '',
+  utility: '',
 });
-export const emptyGoal = (): GoalForm => ({ name: '', description: '', examples: '', pre: [], value: 1 });
+export const emptyGoal = (): GoalForm => ({ uid: newUid(), name: '', description: '', examples: '', pre: [], value: 1 });
+export const emptyAgent = (): AgentForm => ({
+  uid: newUid(),
+  name: '',
+  description: '',
+  examples: '',
+  planner: 'goap',
+  actions: [],
+  goals: [],
+  triggers: [],
+});
+export const emptyTrigger = (): TriggerForm => ({
+  name: '',
+  description: '',
+  type: 'event',
+  event: 'change.created',
+  filter: '',
+  schedule: '',
+  goal: '',
+  intent: '',
+  target: 'new_change',
+  roles: '',
+  enabled: true,
+});
 
 export function emptyForm(): MethodologyForm {
   return {
@@ -125,6 +214,7 @@ export function emptyForm(): MethodologyForm {
     conditions: [],
     actions: [],
     goals: [],
+    agents: [],
   };
 }
 
@@ -134,9 +224,24 @@ function rows(m: Record<string, boolean> | undefined): CondRow[] {
   return Object.entries(m ?? {}).map(([cond, value]) => ({ cond, value: !!value }));
 }
 
-function actionToForm(a: Action): ActionForm {
+/**
+ * Identifiants des éléments chargés : dérivés du nom (stables d'un chargement à
+ * l'autre, ce qui permet de rouvrir les onglets mémorisés), dédoublonnés.
+ */
+function uids<T extends { name?: string }>(list: T[] | undefined): string[] {
+  const used = new Set<string>();
+  return (list ?? []).map((x, i) => {
+    let u = x.name || `#${i}`;
+    while (used.has(u)) u += '~';
+    used.add(u);
+    return u;
+  });
+}
+
+function actionToForm(a: Action, uid: string): ActionForm {
   const e = a.expects;
   return {
+    uid,
     name: a.name ?? '',
     description: a.description ?? '',
     kind: a.kind || 'llm',
@@ -159,10 +264,71 @@ function actionToForm(a: Action): ActionForm {
       linkType: e?.link?.type ?? '',
       direction: e?.link?.direction || 'out',
     },
+    language: a.language || 'javascript',
+    code: a.code ?? '',
+    utility: a.utility ?? '',
   };
 }
 
+function agentToForm(a: Agent, uid: string): AgentForm {
+  return {
+    uid,
+    name: a.name ?? '',
+    description: a.description ?? '',
+    examples: (a.examples ?? []).join('\n'),
+    planner: a.planner || 'goap',
+    actions: [...(a.actions ?? [])],
+    goals: [...(a.goals ?? [])],
+    triggers: (a.triggers ?? []).map(triggerToForm),
+  };
+}
+
+function triggerToForm(t: Trigger): TriggerForm {
+  return {
+    name: t.name ?? '',
+    description: t.description ?? '',
+    type: t.type || 'event',
+    event: t.event ?? '',
+    filter: t.filter ?? '',
+    schedule: t.schedule ?? '',
+    goal: t.goal ?? '',
+    intent: t.intent ?? '',
+    target: t.target || 'new_change',
+    roles: (t.roles ?? []).join(', '),
+    enabled: !!t.enabled,
+  };
+}
+
+function triggerFromForm(t: TriggerForm): Trigger {
+  const o: Trigger = {};
+  put(o, 'name', t.name.trim());
+  put(o, 'description', t.description.trim());
+  put(o, 'type', t.type);
+  if (t.type === 'schedule') put(o, 'schedule', t.schedule.trim());
+  else {
+    put(o, 'event', t.event);
+    put(o, 'filter', t.filter.trim());
+  }
+  put(o, 'goal', t.goal);
+  put(o, 'intent', t.intent.trim());
+  put(o, 'target', t.target === 'new_change' ? undefined : t.target);
+  put(
+    o,
+    'roles',
+    t.roles
+      .split(',')
+      .map((r) => r.trim())
+      .filter(Boolean),
+  );
+  if (t.enabled) o.enabled = true;
+  return o;
+}
+
 export function toForm(m: Methodology): MethodologyForm {
+  const cu = uids(m.conditions);
+  const au = uids(m.actions);
+  const gu = uids(m.goals);
+  const agu = uids(m.agents);
   return {
     name: m.name ?? '',
     version: m.version ?? '',
@@ -173,19 +339,22 @@ export function toForm(m: Methodology): MethodologyForm {
       properties: (n.properties ?? []).join(', '),
     })),
     linkTypes: (m.linkTypes ?? []).map((l) => ({ name: l.name ?? '', from: l.from ?? '', to: l.to ?? '' })),
-    conditions: (m.conditions ?? []).map((c) => ({
+    conditions: (m.conditions ?? []).map((c, i) => ({
+      uid: cu[i],
       name: c.name ?? '',
       description: c.description ?? '',
       expr: c.expr ?? '',
     })),
-    actions: (m.actions ?? []).map(actionToForm),
-    goals: (m.goals ?? []).map((g) => ({
+    actions: (m.actions ?? []).map((a, i) => actionToForm(a, au[i])),
+    goals: (m.goals ?? []).map((g, i) => ({
+      uid: gu[i],
       name: g.name ?? '',
       description: g.description ?? '',
       examples: (g.examples ?? []).join('\n'),
       pre: rows(g.pre),
       value: g.value ?? 0,
     })),
+    agents: (m.agents ?? []).map((a, i) => agentToForm(a, agu[i])),
   };
 }
 
@@ -269,10 +438,14 @@ export function fromForm(f: MethodologyForm): { methodology: Methodology; issues
       put(o, 'effects', toMap(a.effects));
       put(o, 'cost', num(a.cost));
       put(o, 'permission', a.permission.trim());
+      put(o, 'utility', a.utility.trim());
       // Champs propres au type d'action : les autres sont ignorés.
       if (a.kind === 'llm') {
         put(o, 'model', a.model.trim());
         put(o, 'prompt', a.prompt);
+      } else if (a.kind === 'script') {
+        put(o, 'language', a.language);
+        put(o, 'code', a.code);
       } else if (a.kind === 'tool') {
         put(o, 'tool', a.tool.trim());
       } else if (a.kind === 'human') {
@@ -330,6 +503,28 @@ export function fromForm(f: MethodologyForm): { methodology: Methodology; issues
       return o;
     }),
   );
+  put(
+    m,
+    'agents',
+    f.agents.map((a) => {
+      const o: Agent = {};
+      put(o, 'name', a.name.trim());
+      put(o, 'description', a.description.trim());
+      put(
+        o,
+        'examples',
+        a.examples
+          .split('\n')
+          .map((x) => x.trim())
+          .filter(Boolean),
+      );
+      put(o, 'planner', a.planner);
+      put(o, 'actions', [...a.actions]);
+      put(o, 'goals', [...a.goals]);
+      put(o, 'triggers', a.triggers.map(triggerFromForm));
+      return o;
+    }),
+  );
   return { methodology: m, issues };
 }
 
@@ -338,6 +533,35 @@ export function conditionNames(f: MethodologyForm): string[] {
   const names = f.conditions.map((c) => c.name.trim()).filter(Boolean);
   for (const a of f.actions) if (a.hasExpects && a.name.trim()) names.push(`expect:${a.name.trim()}`);
   return [...new Set(names)];
+}
+
+/** Remplace une référence renommée dans une map de conditions (ordre conservé). */
+function renameRows(rs: CondRow[], from: string, to: string): void {
+  for (const r of rs) if (r.cond === from) r.cond = to;
+}
+
+/**
+ * Répercute le renommage d'un élément sur ses références : conditions dans les
+ * pre / effects des actions et objectifs, actions et objectifs dans les agents.
+ */
+export function renameReferences(f: MethodologyForm, section: Section, from: string, to: string): void {
+  if (!from || !to || from === to) return;
+  if (section === 'conditions') {
+    for (const a of f.actions) {
+      renameRows(a.pre, from, to);
+      renameRows(a.effects, from, to);
+    }
+    for (const g of f.goals) renameRows(g.pre, from, to);
+  } else if (section === 'actions') {
+    for (const ag of f.agents) ag.actions = ag.actions.map((x) => (x === from ? to : x));
+    const ef = `expect:${from}`;
+    renameReferences(f, 'conditions', ef, `expect:${to}`);
+  } else if (section === 'goals') {
+    for (const ag of f.agents) {
+      ag.goals = ag.goals.map((x) => (x === from ? to : x));
+      for (const t of ag.triggers) if (t.goal === from) t.goal = to;
+    }
+  }
 }
 
 // --- chemins des problèmes ------------------------------------------------------------
