@@ -8,12 +8,14 @@ import (
 	"github.com/zimwip/goap/internal/iamsvc"
 	"github.com/zimwip/goap/internal/platform"
 	"github.com/zimwip/goap/internal/registrysvc"
+	"github.com/zimwip/goap/internal/telemetry"
 	"github.com/zimwip/goap/pkg/authz"
 )
 
 func main() {
 	ctx := context.Background()
 	log := platform.Logger("registry")
+	defer telemetry.Setup(context.Background(), log, "registry")(context.Background())
 	srv := platform.NewServer(log, platform.Env("GOAP_HTTP_ADDR", ":8080"))
 	var store registrysvc.Store = registrysvc.NewMemoryStore()
 	if pool := platform.OptionalPostgres(ctx, log, registrysvc.Migrations); pool != nil {
@@ -35,7 +37,7 @@ func main() {
 		}
 		log.Info("methodologies imported", "dir", dir, "methodologies", loaded)
 	}
-	srv.Mount(registryv1connect.NewRegistryServiceHandler(&registrysvc.Handler{Service: svc}))
+	srv.Mount(registryv1connect.NewRegistryServiceHandler(&registrysvc.Handler{Service: svc}, telemetry.HandlerOptions()...))
 	if err := srv.Run(); err != nil {
 		platform.Fatal(log, "server", err)
 	}

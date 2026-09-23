@@ -1,0 +1,151 @@
+name: test-design
+version: 1.0.0
+description: >
+  Conception et revue d'une campagne de tests à partir des exigences du
+  référentiel. Exemple d'agents (planificateurs goap, utility et hybrid),
+  d'actions script (JavaScript et Go) et de délégation à des sous-agents.
+
+domain:
+  nodeTypes:
+    - {name: Requirement, properties: [title, priority]}
+    - {name: TestCase, properties: [title]}
+  linkTypes:
+    - {name: verifies, from: TestCase, to: Requirement}
+
+conditions:
+  - name: has_scope
+    description: Les exigences à couvrir sont identifiées
+    expr: size(impacts) > 0
+  - name: tests_designed
+    description: Au moins un cas de test est proposé
+    expr: proposals.exists(p, p.op == "create_node" && p.node.type == "TestCase")
+  - name: summarized
+    description: Une synthèse de la campagne est rédigée
+    expr: artifacts.exists(a, a.type == "summary")
+  - name: reviewed
+    description: Toutes les propositions ont reçu une décision
+    expr: size(proposals) > 0 && proposals.all(p, p.status != "proposed")
+
+actions:
+  - name: collect_scope
+    kind: script
+    language: javascript
+    description: Retenir les exigences du référentiel comme périmètre de la campagne
+    pre: {has_scope: false}
+    effects: {has_scope: true}
+    code: |
+      function run(ctx) {
+        const reqs = ctx.nodes("Requirement");
+        for (const r of reqs) ctx.addImpact(r.key, "dans le périmètre de la campagne");
+        ctx.log(reqs.length + " exigence(s) retenue(s)");
+        return reqs.length + " exigence(s)";
+      }
+
+  - name: design_tests
+    kind: script
+    language: go
+    description: Proposer un cas de test par exigence du périmètre
+    pre: {has_scope: true, tests_designed: false}
+    effects: {tests_designed: true}
+    code: |
+      package action
+
+      import (
+      	"fmt"
+
+      	"github.com/zimwip/goap/pkg/dsl"
+      )
+
+      func Run(ctx *dsl.Ctx) error {
+      	for _, i := range ctx.Impacts() {
+      		if i.Target == nil || i.Target.Type != "Requirement" {
+      			continue
+      		}
+      		title := fmt.Sprintf("Vérifier %s : %v", i.Target.Key, i.Target.Props["title"])
+      		t := ctx.ProposeNode("TestCase", "TC-"+i.Target.Key, map[string]any{"title": title})
+      		ctx.ProposeLink(t, "verifies", i.Target.Key)
+      	}
+      	return nil
+      }
+
+  - name: summarize
+    kind: script
+    language: javascript
+    description: Rédiger la synthèse de la campagne avec le LLM
+    pre: {tests_designed: true, summarized: false}
+    effects: {summarized: true}
+    code: |
+      const tests = ctx.proposals().filter(p => p.op === "create_node");
+      const r = ctx.complete({
+        model: "fast",
+        prompt: "Résume en trois lignes une campagne de " + tests.length + " cas de test : " +
+                tests.map(t => t.node.props.title).join("; "),
+      });
+      ctx.addArtifact("summary", { markdown: r.text, tests: tests.length });
+
+  - name: auto_review
+    kind: script
+    language: javascript
+    description: Accepter automatiquement les propositions (petites campagnes)
+    pre: {tests_designed: true, reviewed: false}
+    effects: {reviewed: true}
+    utility: 'has(vars.review) && vars.review == "human" ? 0.1 : 0.9'
+    code: |
+      for (const p of ctx.proposals()) {
+        if (p.status === "proposed") ctx.decide(p.id, true, "revue automatique");
+      }
+
+  - name: human_review
+    kind: human
+    description: Revue humaine des propositions
+    pre: {tests_designed: true, reviewed: false}
+    effects: {reviewed: true}
+    utility: "0.5"
+    instructions: Acceptez ou rejetez chaque cas de test proposé.
+
+  - name: delegate
+    kind: script
+    language: javascript
+    description: Faire concevoir puis revoir la campagne par les agents spécialisés
+    pre: {reviewed: false}
+    effects: {tests_designed: true, summarized: true, reviewed: true}
+    code: |
+      const design = ctx.runAgent("test-designer", "concevoir les cas de test");
+      if (design.status !== "completed") throw new Error("conception : " + design.status);
+      const review = ctx.runAgent("reviewer", "revoir les cas de test");
+      if (review.status !== "completed") throw new Error("revue : " + review.status);
+      ctx.log("campagne conçue et revue");
+
+goals:
+  - name: designed
+    description: Concevoir les cas de test et leur synthèse
+    pre: {tests_designed: true, summarized: true}
+    value: 10
+  - name: review
+    description: Revoir les cas de test proposés
+    pre: {reviewed: true}
+    value: 10
+  - name: delivered
+    description: Concevoir, synthétiser et faire valider une campagne de tests
+    pre: {tests_designed: true, summarized: true, reviewed: true}
+    value: 20
+
+agents:
+  - name: test-designer
+    description: Concepteur de tests
+    examples: [concevoir les cas de test, écrire des tests]
+    planner: goap
+    actions: [collect_scope, design_tests, summarize]
+    goals: [designed]
+  - name: reviewer
+    description: Relecteur de campagnes de tests
+    examples: [revoir les cas de test, valider les tests]
+    planner: utility
+    actions: [auto_review, human_review]
+    goals: [review]
+  - name: coordinator
+    description: Coordinateur de campagne de tests
+    examples: [préparer et valider la campagne de tests, campagne de tests complète]
+    planner: hybrid
+    actions: [delegate]
+    goals: [delivered]

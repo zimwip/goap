@@ -7,12 +7,14 @@ import (
 	"github.com/zimwip/goap/gen/goap/graph/v1/graphv1connect"
 	"github.com/zimwip/goap/internal/graphsvc"
 	"github.com/zimwip/goap/internal/platform"
+	"github.com/zimwip/goap/internal/telemetry"
 	"github.com/zimwip/goap/pkg/graph"
 )
 
 func main() {
 	ctx := context.Background()
 	log := platform.Logger("graph")
+	defer telemetry.Setup(context.Background(), log, "graph")(context.Background())
 	var repo graph.Repo = graph.NewMemory()
 	srv := platform.NewServer(log, platform.Env("GOAP_HTTP_ADDR", ":8080"))
 	if pool := platform.OptionalPostgres(ctx, log, graph.Migrations); pool != nil {
@@ -32,7 +34,7 @@ func main() {
 		}
 		log.Info("demo seed", "loaded", seeded)
 	}
-	srv.Mount(graphv1connect.NewGraphServiceHandler(&graphsvc.Handler{Graph: g, Events: events}))
+	srv.Mount(graphv1connect.NewGraphServiceHandler(&graphsvc.Handler{Graph: g, Events: events}, telemetry.HandlerOptions()...))
 	if err := srv.Run(); err != nil {
 		platform.Fatal(log, "server", err)
 	}

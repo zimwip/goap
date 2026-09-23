@@ -50,9 +50,17 @@ func (Lexical) Rank(_ context.Context, turns []Turn, goals []GoalInfo) ([]Candid
 		}
 		total += scores[i]
 	}
+	// confidence is relative to the best competitor, so that it does not
+	// dilute when many goals match weakly
 	out := make([]Candidate, len(goals))
 	for i, g := range goals {
-		out[i] = Candidate{Goal: g.Name, Confidence: scores[i] / (total + 1), Reason: fmt.Sprintf("score %.0f", scores[i])}
+		best := 0.0
+		for j, s := range scores {
+			if j != i && s > best {
+				best = s
+			}
+		}
+		out[i] = Candidate{Goal: g.Name, Confidence: scores[i] / (scores[i] + best + 1), Reason: fmt.Sprintf("score %.0f", scores[i])}
 	}
 	return out, nil
 }

@@ -7,11 +7,13 @@ import (
 
 	"github.com/zimwip/goap/internal/gateway"
 	"github.com/zimwip/goap/internal/platform"
+	"github.com/zimwip/goap/internal/telemetry"
 )
 
 func main() {
 	ctx := context.Background()
 	log := platform.Logger("gateway")
+	defer telemetry.Setup(context.Background(), log, "gateway")(context.Background())
 	secrets := platform.NewSecrets()
 	cfg := gateway.Config{
 		AuthMode:  platform.Env("GOAP_AUTH_MODE", "none"),

@@ -34,6 +34,8 @@ type Handler struct {
 	// Authz authorizes process operations (resource "process"; actions
 	// start, submit, read). Nil grants everything.
 	Authz authz.Authorizer
+	// Broker streams live events (WatchEvents).
+	Broker *engine.Broker
 }
 
 // authorize checks an operation on a process (p nil for start).
@@ -96,7 +98,7 @@ func (h *Handler) StartProcess(ctx context.Context, r *connect.Request[enginev1.
 	}
 	p, err := h.Engine.Start(ctx, engine.StartRequest{
 		Methodology: r.Msg.Methodology, ChangeID: domain.ChangeID(r.Msg.ChangeId), BaselineID: domain.BaselineID(r.Msg.BaselineId),
-		Title: r.Msg.Title, Intent: r.Msg.Intent, Goal: r.Msg.Goal, Vars: pbconv.Map(r.Msg.Vars),
+		Title: r.Msg.Title, Intent: r.Msg.Intent, Goal: r.Msg.Goal, Agent: r.Msg.Agent, Vars: pbconv.Map(r.Msg.Vars),
 	})
 	if err != nil {
 		return nil, toConnect(err)
@@ -184,6 +186,79 @@ func (h *Handler) ListProcesses(ctx context.Context, r *connect.Request[enginev1
 	return connect.NewResponse(out), nil
 }
 
+// WatchEvents streams live process events and logs.
+func (h *Handler) WatchEvents(ctx context.Context, r *connect.Request[enginev1.WatchEventsRequest], stream *connect.ServerStream[enginev1.WatchEventsResponse]) error {
+	if h.Broker == nil {
+		return connect.NewError(connect.CodeUnimplemented, errors.New("event streaming is not configured"))
+	}
+	ctx = h.principal(ctx, r.Header())
+	if id := r.Msg.ProcessId; id != "" {
+		if err := h.loadAuthorized(ctx, id, "read"); err != nil {
+			return toConnect(err)
+		}
+	}
+	events, cancel := h.Broker.Subscribe(256)
+	defer cancel()
+	allowed := map[string]bool{} // read decision per process
+	canRead := func(p *engine.Process) bool {
+		ok, seen := allowed[p.ID]
+		if !seen {
+			ok = h.authorize(ctx, "read", "", p) == nil
+			allowed[p.ID] = ok
+		}
+		return ok
+	}
+	related := func(id string) bool {
+		return r.Msg.ProcessId == "" || id == r.Msg.ProcessId
+	}
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case ev, ok := <-events:
+			if !ok {
+				return nil
+			}
+			out := &enginev1.WatchEventsResponse{Type: ev.Event, Time: pbconv.Time(ev.Time)}
+			switch {
+			case ev.Process != nil:
+				p := ev.Process
+				if !(related(p.ID) || related(p.ParentID)) || !canRead(p) {
+					continue
+				}
+				out.Process = ProcessToPB(p)
+			case ev.Log != nil:
+				if !related(ev.Log.ProcessID) {
+					continue
+				}
+				if ok, seen := allowed[ev.Log.ProcessID]; seen && !ok {
+					continue
+				}
+				if _, seen := allowed[ev.Log.ProcessID]; !seen {
+					p, err := h.Engine.Store.Get(ctx, ev.Log.ProcessID)
+					if err != nil || !canRead(p) {
+						continue
+					}
+				}
+				out.Log = logToPB(*ev.Log)
+			default:
+				continue
+			}
+			if err := stream.Send(out); err != nil {
+				return err
+			}
+		}
+	}
+}
+
+func logToPB(l engine.LogLine) *enginev1.LogLine {
+	return &enginev1.LogLine{Time: pbconv.Time(l.Time), Level: l.Level, Message: l.Message, ProcessId: l.ProcessID, Action: l.Action, Step: int32(l.Step)}
+}
+
+func usageToPB(u engine.Usage) *enginev1.Usage {
+	return &enginev1.Usage{InputTokens: u.InputTokens, OutputTokens: u.OutputTokens, LlmCalls: int32(u.LLMCalls), ToolCalls: int32(u.ToolCalls)}
+}
+
 // ProcessToPB converts a process.
 func ProcessToPB(p *engine.Process) *enginev1.Process {
 	out := &enginev1.Process{
@@ -191,15 +266,18 @@ func ProcessToPB(p *engine.Process) *enginev1.Process {
 		Question: p.Question, Plan: p.Plan, World: p.World, Unknown: p.Unknown, Error: p.Error,
 		CreatedAt: pbconv.Time(p.CreatedAt), UpdatedAt: pbconv.Time(p.UpdatedAt),
 		Initiator: &enginev1.Principal{Subject: p.Initiator.Subject, Org: p.Initiator.Org, Roles: p.Initiator.Roles},
+		Agent:     p.Agent, Planner: p.Planner, ParentId: p.ParentID, Usage: usageToPB(p.Usage),
+		BaselineId: string(p.BaselineID), Title: p.Title, TraceId: p.TraceID,
 	}
 	for _, t := range p.Intent.Turns {
 		out.Turns = append(out.Turns, &enginev1.Turn{Role: t.Role, Text: t.Text})
 	}
 	for _, c := range p.Candidates {
-		out.Candidates = append(out.Candidates, &enginev1.Candidate{Goal: c.Goal, Confidence: c.Confidence, Reason: c.Reason})
+		out.Candidates = append(out.Candidates, &enginev1.Candidate{Goal: c.Goal, Confidence: c.Confidence, Reason: c.Reason, Agent: c.Agent, Methodology: c.Methodology})
 	}
 	if t := p.Pending; t != nil {
-		out.Pending = &enginev1.HumanTask{Kind: t.Kind, Permission: t.Permission, Action: t.Action, Description: t.Description, Instructions: t.Instructions, Step: int32(t.Step)}
+		out.Pending = &enginev1.HumanTask{Kind: t.Kind, Permission: t.Permission, Action: t.Action, Description: t.Description,
+			Instructions: t.Instructions, Step: int32(t.Step), ChildProcessId: t.ChildProcessID}
 	}
 	for a := range p.Disabled {
 		out.Disabled = append(out.Disabled, a)
@@ -210,6 +288,17 @@ func ProcessToPB(p *engine.Process) *enginev1.Process {
 			EffectsMet: s.EffectsMet, ApprovedBy: s.ApprovedBy, Output: s.Output, Error: s.Error, StartedAt: pbconv.Time(s.StartedAt), EndedAt: pbconv.Time(s.EndedAt)}
 		for _, id := range s.Items {
 			ps.Items = append(ps.Items, string(id))
+		}
+		ps.Usage, ps.ChildProcessIds, ps.Sandbox = usageToPB(s.Usage), s.Children, s.Sandbox
+		for _, c := range s.LLMCalls {
+			ps.LlmCalls = append(ps.LlmCalls, &enginev1.LlmCall{Provider: c.Provider, Model: c.Model, InputTokens: c.InputTokens,
+				OutputTokens: c.OutputTokens, DurationMs: c.DurationMs, Error: c.Error})
+		}
+		for _, c := range s.ToolCalls {
+			ps.ToolCalls = append(ps.ToolCalls, &enginev1.ToolCall{Name: c.Name, DurationMs: c.DurationMs, Error: c.Error})
+		}
+		for _, l := range s.Logs {
+			ps.Logs = append(ps.Logs, logToPB(l))
 		}
 		out.Steps = append(out.Steps, ps)
 	}

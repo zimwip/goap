@@ -12,6 +12,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/labstack/echo/otelecho"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
 )
@@ -31,6 +32,10 @@ func NewServer(log *slog.Logger, addr string) *Server {
 	e.HideBanner = true
 	e.HidePort = true
 	e.Use(middleware.Recover())
+	e.Use(otelecho.Middleware(ServiceName(), otelecho.WithSkipper(func(c echo.Context) bool {
+		p := c.Request().URL.Path
+		return p == "/healthz" || p == "/readyz"
+	})))
 	e.Use(middleware.RequestID())
 	e.Use(middleware.RequestLoggerWithConfig(middleware.RequestLoggerConfig{
 		LogURI: true, LogStatus: true, LogLatency: true, LogMethod: true,

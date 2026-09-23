@@ -51,8 +51,8 @@ type Client struct {
 var _ llm.Client = (*Client)(nil)
 
 // NewClient returns a model gateway client.
-func NewClient(hc *http.Client, baseURL string) *Client {
-	return &Client{rpc: modelv1connect.NewModelServiceClient(hc, baseURL)}
+func NewClient(hc *http.Client, baseURL string, opts ...connect.ClientOption) *Client {
+	return &Client{rpc: modelv1connect.NewModelServiceClient(hc, baseURL, opts...)}
 }
 
 // Complete implements llm.Client.

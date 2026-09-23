@@ -34,6 +34,11 @@ func EnvDuration(key string, def time.Duration) time.Duration {
 	return def
 }
 
+var serviceName = "goap"
+
+// ServiceName returns the name given to Logger.
+func ServiceName() string { return serviceName }
+
 // Logger returns the service logger (JSON unless GOAP_LOG_FORMAT=text).
 func Logger(service string) *slog.Logger {
 	level := slog.LevelInfo
@@ -45,6 +50,7 @@ func Logger(service string) *slog.Logger {
 	if os.Getenv("GOAP_LOG_FORMAT") == "text" {
 		h = slog.NewTextHandler(os.Stdout, opts)
 	}
+	serviceName = service
 	l := slog.New(h).With("service", service)
 	slog.SetDefault(l)
 	return l

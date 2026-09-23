@@ -9,6 +9,8 @@ import (
 
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
 )
 
 // Events publishes JSON events on NATS JetStream.
@@ -48,7 +50,10 @@ func (e *Events) Publish(ctx context.Context, subject string, v any) error {
 	if err != nil {
 		return err
 	}
-	_, err = e.js.Publish(ctx, subject, data)
+	msg := nats.NewMsg(subject)
+	msg.Data = data
+	otel.GetTextMapPropagator().Inject(ctx, propagation.HeaderCarrier(msg.Header))
+	_, err = e.js.PublishMsg(ctx, msg)
 	return err
 }
 

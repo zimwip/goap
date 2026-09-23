@@ -27,6 +27,32 @@ type Methodology struct {
 	Conditions  []Condition `yaml:"conditions" json:"conditions"`
 	Actions     []Action    `yaml:"actions" json:"actions"`
 	Goals       []Goal      `yaml:"goals" json:"goals"`
+	// Agents run the methodology; without agents an implicit "default" agent
+	// has every action and goal and the goap planner.
+	Agents []Agent `yaml:"agents,omitempty" json:"agents,omitempty"`
+}
+
+// Planners.
+const (
+	PlannerGOAP    = "goap"    // A* over the world state
+	PlannerUtility = "utility" // greedy: the applicable action with the highest utility
+	PlannerHybrid  = "hybrid"  // A* with costs weighted by utilities
+)
+
+// DefaultAgent is the name of the implicit agent.
+const DefaultAgent = "default"
+
+// Agent is a planner with a set of admissible actions and goals (Embabel
+// terminology). Description and examples drive intent identification.
+type Agent struct {
+	Name        string   `yaml:"name" json:"name"`
+	Description string   `yaml:"description,omitempty" json:"description,omitempty"`
+	Examples    []string `yaml:"examples,omitempty" json:"examples,omitempty"`
+	Planner     string   `yaml:"planner,omitempty" json:"planner,omitempty"`
+	// Actions admissible for the agent (empty: all).
+	Actions []string `yaml:"actions,omitempty" json:"actions,omitempty"`
+	// Goals of the agent (empty: all).
+	Goals []string `yaml:"goals,omitempty" json:"goals,omitempty"`
 }
 
 // Schema is the domain model of the methodology.
@@ -72,6 +98,13 @@ const (
 	KindTool    = "tool"
 	KindHuman   = "human"
 	KindBuiltin = "builtin"
+	KindScript  = "script"
+)
+
+// Script languages.
+const (
+	LangJavaScript = "javascript"
+	LangGo         = "go"
 )
 
 // Action is a unit of work.
@@ -96,6 +129,12 @@ type Action struct {
 	// human
 	Instructions string         `yaml:"instructions,omitempty" json:"instructions,omitempty"`
 	Params       map[string]any `yaml:"params,omitempty" json:"params,omitempty"`
+	// script: code run in the sandbox with the DSL (docs/dsl.md)
+	Language string `yaml:"language,omitempty" json:"language,omitempty"`
+	Code     string `yaml:"code,omitempty" json:"code,omitempty"`
+	// Utility is a CEL expression returning a number, used by the utility
+	// and hybrid planners (default: 1).
+	Utility string `yaml:"utility,omitempty" json:"utility,omitempty"`
 }
 
 // ExpectCondition is the name of the condition generated from an action's expects.
@@ -126,6 +165,8 @@ type Compiled struct {
 	*Methodology
 	Conditions *condition.Set
 	actions    map[string]Action
+	utilities  *condition.NumberSet
+	agents     map[string]Agent
 }
 
 // Issue is a validation problem located by a field path such as
@@ -236,6 +277,7 @@ func (m *Methodology) compile() (*Compiled, Issues) {
 	}
 
 	actions := map[string]Action{}
+	var utilities []condition.Definition
 	for i, src := range m.Actions {
 		path := fmt.Sprintf("actions[%d]", i)
 		a := src
@@ -248,8 +290,23 @@ func (m *Methodology) compile() (*Compiled, Issues) {
 			add(path+".name", "duplicate action %s", a.Name)
 			continue
 		}
-		if !slices.Contains([]string{KindLLM, KindTool, KindHuman, KindBuiltin}, a.Kind) {
+		if !slices.Contains([]string{KindLLM, KindTool, KindHuman, KindBuiltin, KindScript}, a.Kind) {
 			add(path+".kind", "unknown kind %q", a.Kind)
+		}
+		if a.Kind == KindScript {
+			if a.Language != LangJavaScript && a.Language != LangGo {
+				add(path+".language", "script language must be javascript or go")
+			}
+			if strings.TrimSpace(a.Code) == "" {
+				add(path+".code", "script action requires code")
+			}
+		}
+		if a.Utility != "" {
+			if err := condition.CheckNumber(a.Utility); err != nil {
+				add(path+".utility", "%v", err)
+			} else {
+				utilities = append(utilities, condition.Definition{Name: a.Name, Expr: a.Utility})
+			}
 		}
 		switch {
 		case a.Kind == KindLLM && a.Prompt == "":
@@ -323,6 +380,40 @@ func (m *Methodology) compile() (*Compiled, Issues) {
 			}
 		}
 	}
+	agents := map[string]Agent{}
+	for i, ag := range m.Agents {
+		path := fmt.Sprintf("agents[%d]", i)
+		switch {
+		case ag.Name == "":
+			add(path+".name", "name required")
+		case !nameRE.MatchString(ag.Name):
+			add(path+".name", "name must be lowercase letters, digits, '-' or '_'")
+		case agents[ag.Name].Name != "":
+			add(path+".name", "duplicate agent %s", ag.Name)
+		}
+		switch ag.Planner {
+		case "", PlannerGOAP, PlannerUtility, PlannerHybrid:
+		default:
+			add(path+".planner", "planner must be goap, utility or hybrid")
+		}
+		for j, a := range ag.Actions {
+			if _, ok := actions[a]; !ok {
+				add(fmt.Sprintf("%s.actions[%d]", path, j), "unknown action %q", a)
+			}
+		}
+		for j, g := range ag.Goals {
+			if !goals[g] {
+				add(fmt.Sprintf("%s.goals[%d]", path, j), "unknown goal %q", g)
+			}
+		}
+		if ag.Planner == "" {
+			ag.Planner = PlannerGOAP
+		}
+		agents[ag.Name] = ag
+	}
+	if len(m.Agents) == 0 {
+		agents[DefaultAgent] = Agent{Name: DefaultAgent, Description: m.Description, Planner: PlannerGOAP}
+	}
 	if len(issues) > 0 {
 		sort.SliceStable(issues, func(i, j int) bool { return issues[i].Path < issues[j].Path })
 		return nil, issues
@@ -331,7 +422,11 @@ func (m *Methodology) compile() (*Compiled, Issues) {
 	if err != nil {
 		return nil, Issues{{Message: err.Error()}}
 	}
-	return &Compiled{Methodology: m, Conditions: set, actions: actions}, nil
+	uset, err := condition.CompileNumbers(utilities)
+	if err != nil {
+		return nil, Issues{{Message: err.Error()}}
+	}
+	return &Compiled{Methodology: m, Conditions: set, actions: actions, utilities: uset, agents: agents}, nil
 }
 
 // Action returns an action by name.
@@ -350,12 +445,79 @@ func (c *Compiled) Goal(name string) (Goal, bool) {
 	return Goal{}, false
 }
 
-// PlanningActions returns the planner operators.
+// PlanningActions returns the planner operators (every action).
 func (c *Compiled) PlanningActions() []goap.Action {
 	out := make([]goap.Action, 0, len(c.Actions))
 	for _, src := range c.Actions {
 		a := c.actions[src.Name]
 		out = append(out, goap.Action{Name: a.Name, Pre: a.Pre, Effects: a.Effects, Cost: a.Cost})
+	}
+	return out
+}
+
+// Agent returns an agent (the implicit default agent when the methodology
+// declares none).
+func (c *Compiled) Agent(name string) (Agent, bool) {
+	a, ok := c.agents[name]
+	return a, ok
+}
+
+// AgentList returns the agents in declaration order.
+func (c *Compiled) AgentList() []Agent {
+	if len(c.Methodology.Agents) == 0 {
+		return []Agent{c.agents[DefaultAgent]}
+	}
+	out := make([]Agent, 0, len(c.Methodology.Agents))
+	for _, a := range c.Methodology.Agents {
+		out = append(out, c.agents[a.Name])
+	}
+	return out
+}
+
+// AgentActions returns the planner operators admissible for an agent.
+func (c *Compiled) AgentActions(ag Agent) []goap.Action {
+	all := c.PlanningActions()
+	if len(ag.Actions) == 0 {
+		return all
+	}
+	out := make([]goap.Action, 0, len(ag.Actions))
+	for _, a := range all {
+		if slices.Contains(ag.Actions, a.Name) {
+			out = append(out, a)
+		}
+	}
+	return out
+}
+
+// AgentGoals returns the goals of an agent.
+func (c *Compiled) AgentGoals(ag Agent) []Goal {
+	if len(ag.Goals) == 0 {
+		return c.Goals
+	}
+	var out []Goal
+	for _, g := range c.Goals {
+		if slices.Contains(ag.Goals, g.Name) {
+			out = append(out, g)
+		}
+	}
+	return out
+}
+
+// Utilities evaluates the utility of every action against a blackboard
+// (actions without utility expression: 1; evaluation errors: 0).
+func (c *Compiled) Utilities(bb condition.Input) map[string]float64 {
+	out := make(map[string]float64, len(c.actions))
+	vals := c.utilities.Evaluate(bb)
+	for name := range c.actions {
+		v, ok := vals[name]
+		if !ok {
+			if c.actions[name].Utility != "" {
+				v = 0
+			} else {
+				v = 1
+			}
+		}
+		out[name] = v
 	}
 	return out
 }

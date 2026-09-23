@@ -9,3 +9,5 @@
 - Versioning rule of the graph: outgoing links belong to the source node version (see `pkg/graph/apply.go`).
 - Authorization is ABAC (Casbin) via `authz.Authorizer`; default policies in `pkg/authz/casbin.go`, stored by the iam service.
 - Methodologies live in the registry database (structured); YAML is import/export only.
+- Agents (goap/utility/hybrid planners) and script actions (JS via goja, Go via yaegi) use the DSL in `pkg/dsl` (docs/dsl.md); scripts run in sandboxes (`internal/sandbox`, `GOAP_SANDBOX`).
+- Telemetry: `internal/telemetry` (OpenTelemetry); keep span / attribute names stable (docs/architecture.md §3.7).

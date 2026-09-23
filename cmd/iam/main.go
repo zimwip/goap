@@ -11,12 +11,14 @@ import (
 	"github.com/zimwip/goap/gen/goap/iam/v1/iamv1connect"
 	"github.com/zimwip/goap/internal/iamsvc"
 	"github.com/zimwip/goap/internal/platform"
+	"github.com/zimwip/goap/internal/telemetry"
 	"github.com/zimwip/goap/pkg/authz"
 )
 
 func main() {
 	ctx := context.Background()
 	log := platform.Logger("iam")
+	defer telemetry.Setup(context.Background(), log, "iam")(context.Background())
 	srv := platform.NewServer(log, platform.Env("GOAP_HTTP_ADDR", ":8080"))
 	var adapter persist.Adapter
 	if pool := platform.OptionalPostgres(ctx, log, iamsvc.Migrations); pool != nil {
@@ -46,7 +48,7 @@ func main() {
 			}
 		}()
 	}
-	srv.Mount(iamv1connect.NewIamServiceHandler(&iamsvc.Handler{Enforcer: enforcer, Events: events}))
+	srv.Mount(iamv1connect.NewIamServiceHandler(&iamsvc.Handler{Enforcer: enforcer, Events: events}, telemetry.HandlerOptions()...))
 	if err := srv.Run(); err != nil {
 		platform.Fatal(log, "server", err)
 	}

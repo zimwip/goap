@@ -49,9 +49,9 @@ func (s *Service) Get(ctx context.Context, name, version string) (Record, error)
 	return s.Store.Get(ctx, name, version)
 }
 
-// List returns every version, or the latest version of each methodology
+// Versions returns every version, or the latest version of each methodology
 // (latest published if any, latest draft otherwise).
-func (s *Service) List(ctx context.Context, all bool) ([]Record, error) {
+func (s *Service) Versions(ctx context.Context, all bool) ([]Record, error) {
 	rs, err := s.Store.List(ctx)
 	if err != nil || all {
 		return rs, err
@@ -219,6 +219,29 @@ func (s *Service) Seed(ctx context.Context, dir string) ([]string, error) {
 		loaded = append(loaded, m.Name+"@"+m.Version)
 	}
 	return loaded, nil
+}
+
+// List implements engine.MethodologyPort: the latest published version of
+// every methodology.
+func (s *Service) List(ctx context.Context) ([]*methodology.Compiled, error) {
+	rs, err := s.Store.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	seen := map[string]bool{}
+	var out []*methodology.Compiled
+	for _, r := range rs {
+		if r.Status != StatusPublished || seen[r.Methodology.Name] {
+			continue
+		}
+		seen[r.Methodology.Name] = true
+		c, err := s.Methodology(ctx, r.Methodology.Name)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, nil
 }
 
 // Methodology implements engine.MethodologyPort for in-process use.

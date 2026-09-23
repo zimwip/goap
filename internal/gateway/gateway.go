@@ -14,6 +14,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
 	"github.com/zimwip/goap/internal/identity"
 )
@@ -75,6 +76,7 @@ func Mount(e *echo.Echo, cfg Config) error {
 			return fmt.Errorf("route %s: %w", r.Prefix, err)
 		}
 		proxy := httputil.NewSingleHostReverseProxy(u)
+		proxy.Transport = otelhttp.NewTransport(http.DefaultTransport)
 		proxy.FlushInterval = -1 // streaming friendly
 		e.Any(r.Prefix+"*", echo.WrapHandler(proxy), auth)
 	}

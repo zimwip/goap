@@ -67,7 +67,7 @@ message Expectation {
 message Action {
   string name = 1;
   string description = 2;
-  // llm | tool | human | builtin
+  // llm | script | tool | human | builtin
   string kind = 3;
   map<string, bool> pre = 4;
   map<string, bool> effects = 5;
@@ -81,6 +81,26 @@ message Action {
   string builtin = 12;
   string instructions = 13;
   google.protobuf.Struct params = 14;
+  // script actions: javascript | go, and the code run in the sandbox with the DSL
+  string language = 15;
+  string code = 16;
+  // CEL expression returning a number (utility / hybrid planners)
+  string utility = 17;
+}
+
+// An agent (Embabel terminology): a planner and the set of admissible actions
+// reaching its goals. Identification of the agent from an intent uses the
+// description and examples.
+message Agent {
+  string name = 1;
+  string description = 2;
+  repeated string examples = 3;
+  // goap | utility | hybrid
+  string planner = 4;
+  // admissible action names (empty: all)
+  repeated string actions = 5;
+  // goal names (empty: all)
+  repeated string goals = 6;
 }
 
 message Goal {
@@ -106,11 +126,18 @@ message Methodology {
   google.protobuf.Timestamp updated_at = 11;
   google.protobuf.Timestamp published_at = 12;
   string updated_by = 13;
+  repeated Agent agents = 14;
 }
 
 message GoalSummary {
   string name = 1;
   string description = 2;
+}
+
+message AgentSummary {
+  string name = 1;
+  string description = 2;
+  string planner = 3;
 }
 
 message MethodologySummary {
@@ -119,6 +146,7 @@ message MethodologySummary {
   string description = 3;
   string status = 4;
   repeated GoalSummary goals = 5;
+  repeated AgentSummary agents = 8;
   google.protobuf.Timestamp updated_at = 6;
   google.protobuf.Timestamp published_at = 7;
 }

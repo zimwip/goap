@@ -33,6 +33,9 @@ func parseTarget(s string) (Target, bool) {
 
 // Router resolves aliases and dispatches to providers.
 type Router struct {
+	// Instrument wraps every provider call (OpenTelemetry GenAI spans and metrics).
+	Instrument func(ctx context.Context, provider, model string, req llm.Request, call func(context.Context) (llm.Response, error)) (llm.Response, error)
+
 	mu        sync.RWMutex
 	providers map[string]Provider
 	aliases   map[string]Target
@@ -88,15 +91,24 @@ func (r *Router) Complete(ctx context.Context, req llm.Request) (llm.Response, e
 	if err != nil {
 		return llm.Response{}, err
 	}
-	resp, err := p.Complete(ctx, t.Model, req)
+	call := func(ctx context.Context) (llm.Response, error) {
+		resp, err := p.Complete(ctx, t.Model, req)
+		if resp.Provider == "" {
+			resp.Provider = t.Provider
+		}
+		if resp.Model == "" {
+			resp.Model = t.Model
+		}
+		return resp, err
+	}
+	var resp llm.Response
+	if r.Instrument != nil {
+		resp, err = r.Instrument(ctx, t.Provider, t.Model, req, call)
+	} else {
+		resp, err = call(ctx)
+	}
 	if err != nil {
 		return resp, fmt.Errorf("%s/%s: %w", t.Provider, t.Model, err)
-	}
-	if resp.Provider == "" {
-		resp.Provider = t.Provider
-	}
-	if resp.Model == "" {
-		resp.Model = t.Model
 	}
 	return resp, nil
 }

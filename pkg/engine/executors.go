@@ -18,6 +18,9 @@ type ActionContext struct {
 	Action     methodology.Action
 	Blackboard domain.Blackboard
 	Graph      GraphPort
+	// Host serves the DSL operations of the action (LLM, sub-agents, tools,
+	// domain) and records their usage in the step.
+	Host *Host
 }
 
 // ActionResult is what an executor produced.
@@ -26,6 +29,12 @@ type ActionResult struct {
 	// Wait suspends the process until a human submits the items.
 	Wait   bool
 	Output string
+	// Suspended: the action waits for the sub-agent Child and is retried
+	// when it completes.
+	Suspended bool
+	Child     string
+	Logs      []LogLine
+	Sandbox   string
 }
 
 // Executor runs one kind of action.
@@ -116,8 +125,13 @@ func (e LLMExecutor) Execute(ctx context.Context, ac ActionContext) (ActionResul
 	if model == "" {
 		model = "default"
 	}
-	resp, err := e.Client.Complete(ctx, llm.Request{Model: model, System: llmSystem, JSON: true, MaxTokens: 16000,
-		Messages: []llm.Message{{Role: "user", Content: prompt}}})
+	req := llm.Request{Model: model, System: llmSystem, JSON: true, MaxTokens: 16000, Messages: []llm.Message{{Role: "user", Content: prompt}}}
+	var resp llm.Response
+	if ac.Host != nil {
+		resp, err = ac.Host.completeLLM(ctx, e.Client, req)
+	} else {
+		resp, err = e.Client.Complete(ctx, req)
+	}
 	if err != nil {
 		return ActionResult{}, err
 	}

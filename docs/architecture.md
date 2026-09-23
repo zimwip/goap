@@ -82,10 +82,11 @@ de nœuds et en une nouvelle baseline. Le ChangeSet reste l'historique explicabl
 | Blackboard | **ChangeSet** (axe change) | Persisté, partagé, auditable ; référence des éléments du domaine. |
 | Objet du blackboard | **ChangeItem** | Typé par `kind` + `type` sémantique. |
 | Condition | **Condition** = expression [CEL](https://cel.dev) évaluée sur le blackboard *hydraté* avec les nœuds de domaine référencés | Voir §2.3. |
-| Action (`@Action`) | **Action** de méthodologie (`llm`, `tool`, `human`, `builtin`) | Préconditions/effets = conditions nommées. L'**attendu** d'une action se traduit par un lien sur l'axe domaine (§2.4). |
+| Agent (`@Agent`) | **Agent** de méthodologie : un planificateur (`goap`, `utility`, `hybrid`) + actions admissibles + objectifs | Voir §2.9. Un agent peut appeler d'autres agents. |
+| Action (`@Action`) | **Action** de méthodologie (`script` JS/Go, `llm`, `tool`, `human`, `builtin`) | Préconditions/effets = conditions nommées. L'**attendu** d'une action se traduit par un lien sur l'axe domaine (§2.4). Le code des actions `script` utilise le DSL (§2.10). |
 | Goal (`@AchievesGoal`) | **Goal** = conjonction de conditions + valeur | |
 | GOAP planner (A\*) | `pkg/goap` 🟢 | A\* sur l'espace des états booléens. |
-| Autonomy / goal selection | **Boucle d'intention** `pkg/intent` 🟢 | Classement des goals + clarification tant que la confiance est insuffisante. |
+| Autonomy / goal selection | **Boucle d'intention** `pkg/intent` 🟢 | Identification de l'agent et de l'objectif (toutes méthodologies publiées) + clarification tant que la confiance est insuffisante. |
 | AgentProcess | **Process** `pkg/engine` 🟢 | Boucle observe → planifie → agit → replanifie. |
 
 ### 2.3 Conditions : expressions sur l'état du changement
@@ -158,8 +159,11 @@ le moteur les résout en `NodeRef` exacts de la baseline de référence.
 
 Avant toute planification :
 
-1. l'utilisateur exprime une demande (« le fournisseur de paiement change d'API, qu'est-ce que ça casse ? ») ;
-2. le **Ranker** (LLM via Model Gateway, ou lexical en dev) classe les goals de la méthodologie avec une confiance ;
+1. l'utilisateur exprime une demande (« le fournisseur de paiement change d'API, qu'est-ce que ça casse ? »),
+   éventuellement en précisant la méthodologie et/ou l'agent ;
+2. le **Ranker** (LLM via Model Gateway, ou lexical en dev) classe les couples **(agent, objectif)** de
+   la méthodologie — ou de **toutes les méthodologies publiées** si aucune n'est précisée — avec une
+   confiance (description et exemples de l'agent et de l'objectif) ;
 3. si `confiance(top) ≥ seuil` et écart suffisant avec le second → goal retenu, `change.goal` renseigné ;
 4. sinon → **question de clarification** (générée à partir des goals candidats), processus en `clarifying` ;
    la réponse est ajoutée à l'historique et on reboucle (max N tours) ;
@@ -254,6 +258,40 @@ Décisions structurantes : [ADR 0001 — blackboard = axe change](adr/0001-black
 [ADR 0002 — conditions CEL](adr/0002-conditions-cel.md), [ADR 0003 — liens version-à-version](adr/0003-liens-version-a-version.md),
 [ADR 0004 — application du change](adr/0004-application-du-change.md).
 
+### 2.9 Agents et planificateurs
+
+Une méthodologie déclare des **agents** (Embabel) : `{name, description, examples, planner, actions, goals}`.
+Sans agent déclaré, un agent implicite `default` (toutes les actions, tous les objectifs, `goap`) est utilisé.
+
+| Planificateur | Choix de l'action suivante |
+|---|---|
+| `goap` | A\* : séquence d'actions de coût minimal atteignant l'objectif |
+| `utility` | l'action applicable (préconditions vraies, effets pas encore atteints) de plus grande **utilité** ; pas d'anticipation |
+| `hybrid` | A\* où le coût de chaque action est divisé par son utilité : l'objectif est atteint en privilégiant les actions utiles |
+
+L'**utilité** d'une action est une expression CEL numérique (`utility`), évaluée à chaque cycle sur le
+blackboard (défaut : 1 ; une utilité ≤ 0 exclut l'action). Exemple :
+`has(vars.review) && vars.review == "human" ? 0.1 : 0.9`.
+
+**Sous-agents** : une action peut appeler `ctx.runAgent(nom, intention)`. Le sous-agent est un processus
+enfant (`parentId`) de la **même méthodologie**, travaillant sur le **même change** (blackboard partagé)
+avec l'identité de l'initiateur. S'il se termine, l'action reprend avec son résultat ; s'il attend un humain,
+l'action parente est **suspendue** (`pending.kind = agent`) puis rejouée quand l'enfant se termine — les
+écritures n'étant validées qu'en fin d'action, le rejeu est sûr et retrouve le sous-agent déjà démarré.
+
+### 2.10 Actions script et DSL
+
+Les actions `kind: script` sont du code **JavaScript** (goja) ou **Go** (yaegi) saisi dans l'IDE. Le moteur
+injecte un objet `ctx` (même API dans les deux langages, référence : [docs/dsl.md](dsl.md)) :
+
+- **lecture** du blackboard (items hydratés) et du **domaine** de référence (`node`, `nodes`, `links`) ;
+- **écriture** sur le change (`addImpact`, `proposeNode`, `proposeUpdate`, `proposeLink`, `addArtifact`,
+  `decide`) — tamponnée, validée atomiquement à la fin de l'action ;
+- **appels plateforme** : `llm` / `complete` (model gateway), `runAgent` (sous-agents), `callTool` (MCP), `log`.
+
+Les interpréteurs n'exposent ni fichiers, ni réseau, ni processus (Go : sous-ensemble de la stdlib ;
+JavaScript : pas de `require`), avec timeout. Le code s'exécute dans le **sandbox** du processus (§3.6).
+
 ## 3. Architecture des composants
 
 ```
@@ -274,14 +312,15 @@ Décisions structurantes : [ADR 0001 — blackboard = axe change](adr/0001-black
   │  logies)   │         │  planif, x N)│          │  change)     │
   └────────────┘         └──┬────────┬──┘          └──────────────┘
                             │        │
-                    ┌───────▼──┐  ┌──▼──────────┐
-                    │ modelgw  │  │ mcp         │──► serveurs MCP externes
-                    │ (LLMs)   │  │ connector   │
-                    └────┬─────┘  └─────────────┘
-                         ▼
-             Anthropic / OpenAI-compatible / Ollama…
+                    ┌───────▼──┐  ┌──▼──────────┐   ┌──────────────────────────┐
+                    │ modelgw  │  │ mcp         │   │ sandboxes (1 / processus)│
+                    │ (LLMs)   │  │ connector   │   │ goap-runner : JS / Go    │
+                    └────┬─────┘  └─────────────┘   │ ◄── jobs ── engine       │
+                         ▼                          │ ── RuntimeService ──►    │
+             Anthropic / OpenAI-compatible / Ollama… └──────────────────────────┘
 
   Transverse : PostgreSQL (schéma par service) · NATS JetStream (événements) · Vault (secrets)
+               OpenTelemetry → collector → Jaeger (traces) / Prometheus (métriques) / Grafana
 ```
 
 | Service | Responsabilité | API | Persistance | Statut |
@@ -293,6 +332,8 @@ Décisions structurantes : [ADR 0001 — blackboard = axe change](adr/0001-black
 | **graph** | Axe domaine (nœuds versionnés, liens, baselines) + axe change (ChangeSets, items, apply) | Connect `graph.v1` | `graph` | 🟢 |
 | **modelgw** | Abstraction multi-fournisseurs / multi-modèles, alias (`default`, `fast`, `reasoning`), quotas, traces | Connect `model.v1` | `modelgw` (usage) | 🟢 socle |
 | **mcp** | Registre et proxy de serveurs MCP ; expose les outils aux actions `tool` | Connect `mcp.v1` | `mcp` | 🟡 à venir |
+| **goap-runner** | Sandbox d'exécution des actions script (un par processus) | Connect `runtime.v1` (SandboxService) | — | 🟢 |
+| **otel-collector** | Réception OTLP, export traces (Jaeger) et métriques (Prometheus) | OTLP | — | 🟢 |
 | **vault** | Secrets (clés API LLM, credentials MCP, DSN) | HashiCorp Vault KV v2 | — | 🟢 dev mode |
 
 ### 3.1 Communication
@@ -357,10 +398,57 @@ change_item(id uuid, change_id, kind, type, status, target_id, target_version, p
 
 ### 3.5 Déploiement
 
-- `deploy/compose/docker-compose.yml` : postgres, nats (JetStream), vault (dev), tous les services, web.
+- `deploy/compose/docker-compose.yml` : postgres, nats (JetStream), vault (dev), tous les services, web,
+  otel-collector, Jaeger, Prometheus, Grafana, proxy restreint de l'API Docker (sandboxes).
 - Une seule image multi-cible (`Dockerfile`, `ARG SERVICE`), binaire statique sur `distroless`.
 - Kubernetes 🟡 : un chart Helm par service (ou kustomize) ; engine en `Deployment` scalable (HPA sur la
   profondeur du stream work-queue), NATS via le chart officiel, Vault Agent Injector.
+
+### 3.6 Exécution sandboxée des actions (executor)
+
+Le moteur est le **plan de contrôle** (planification, état, blackboard) ; il n'exécute jamais le code des
+méthodologies ([ADR 0007](adr/0007-sandbox-executor.md)).
+
+```
+ engine ──Acquire(process)──► Pool ──Start(spec)──► Provisioner ──► sandbox (goap-runner)
+   │                                                                   │
+   ├── SandboxService.Execute(job, jeton) ────────────────────────────►│ interprète JS / Go (DSL)
+   │◄──────────── RuntimeService.Call(jeton, llm|agents|tools|domain) ─┤
+   └── items tamponnés, journaux, suspension ◄──────────────────────────┘
+```
+
+- **Un sandbox par processus**, démarré au premier script, arrêté quand le processus se termine ou après
+  une période d'inactivité (un processus qui attend un humain ne garde pas de conteneur).
+- Le sandbox ne connaît que l'URL du **RuntimeService** du moteur et un **jeton par job** (révoqué en fin
+  de job). Toute opération sortante (LLM, sous-agents, outils, lecture du domaine) passe par le moteur :
+  autorisée, tracée, comptée. Aucune clé ni secret n'entre dans le sandbox.
+- `Provisioner` adapté à chaque environnement (`GOAP_SANDBOX`) :
+
+| Provisioner | Isolation |
+|---|---|
+| `inproc` | aucune (interpréteurs dans le moteur) — tests et développement uniquement |
+| `process` | processus séparé, environnement vide, groupe de processus tué à l'arrêt ; *wrapper* configurable (bubblewrap, nsjail) et UID dédié pour une vraie isolation sur bare metal |
+| `docker` | conteneur par processus : rootfs en lecture seule, `cap-drop ALL`, `no-new-privileges`, utilisateur non-root, limites CPU / mémoire / PIDs, réseau interne sans Internet, runtime optionnel (gVisor `runsc`) ; API Docker via un proxy restreint |
+| `kubernetes` | pod par processus : `restricted` Pod Security, pas de jeton de service account, seccomp `RuntimeDefault`, RuntimeClass optionnelle (gVisor, Kata), NetworkPolicy limitant les flux au moteur (`deploy/k8s/sandbox.yaml`) |
+
+### 3.7 Observabilité (OpenTelemetry)
+
+Composant `internal/telemetry` ([ADR 0008](adr/0008-observabilite-opentelemetry.md)), activé par les
+variables standard `OTEL_EXPORTER_OTLP_ENDPOINT` / `OTEL_*` :
+
+- **traces** de tous les appels : HTTP (Echo, gateway), Connect (client et serveur, contexte W3C propagé),
+  PostgreSQL (pgx), NATS (en-têtes), sandboxes (le runner continue la trace de l'action) ;
+- **un processus = une trace** : span racine `process <agent>` (le `traceparent` est conservé dans le
+  processus, les exécutions en arrière-plan le continuent), un span `action <nom>` par action ;
+- **appels LLM** : span `chat <modèle>` (conventions sémantiques GenAI : `gen_ai.system`,
+  `gen_ai.request.model`, `gen_ai.usage.input_tokens` / `output_tokens`…) attribué au processus, à
+  l'agent et à l'action via le **baggage** propagé du moteur au model gateway ; métriques
+  `gen_ai.client.token.usage` et `gen_ai.client.operation.duration` ;
+- **outils** : span `execute_tool <nom>` (`gen_ai.tool.name`) ;
+- métriques `goap.actions`, `goap.action.duration`, `goap.tokens` (par agent / action / résultat).
+
+Les compteurs sont aussi **conservés dans le processus** (tokens, appels LLM et outils par étape et au
+total) et affichés dans l'IDE, avec un lien vers la trace Jaeger (`traceId`).
 
 ## 4. Format d'une méthodologie
 
@@ -422,6 +510,7 @@ Voir `methodologies/impact-analysis.yaml` pour l'exemple complet exécutable.
 ```
 cmd/<service>/main.go        points d'entrée (gateway, registry, engine, graph, modelgw, mcp, iam)
 cmd/goap-dev/                tout-en-un en mémoire pour le développement local
+cmd/goap-runner/             sandbox d'exécution des actions script
 internal/platform/           config, logs, serveur HTTP/Connect, NATS, Postgres, secrets Vault
 internal/<service>/          implémentation des handlers Connect d'un service (graphsvc, registrysvc, iamsvc…)
 internal/identity/           identité de l'appelant (en-têtes posés par la gateway)
@@ -430,14 +519,17 @@ pkg/graph/                   Store (mémoire, PostgreSQL), apply, hydratation
 pkg/goap/                    planificateur A*
 pkg/condition/               compilation/évaluation CEL, compilation des `expects`
 pkg/intent/                  boucle d'intention (Ranker lexical, Ranker LLM)
-pkg/engine/                  processus, exécuteurs d'actions
+pkg/engine/                  processus, agents et planificateurs, exécuteurs d'actions, hôte DSL, sous-agents, événements
+pkg/dsl/                     DSL des actions script (API ctx, interpréteurs JavaScript et Go)
+internal/sandbox/            pool de sandboxes, provisioners (process, docker, kubernetes), RuntimeService, runner
+internal/telemetry/          OpenTelemetry : exporteurs, intercepteurs, spans processus / actions / LLM / outils
 pkg/methodology/             modèle de méthodologie, validation (anomalies localisées), compilation, import/export YAML
 pkg/authz/                   ABAC : identité, requêtes, modèle et enforcer Casbin, politiques par défaut
 pkg/llm/                     contrat de complétion (implémenté par internal/modelgw)
 proto/                       contrats connect-rpc (buf)
 gen/                         code généré (commité)
 methodologies/               méthodologies d'exemple
-deploy/                      compose, init postgres, (k8s à venir)
+deploy/                      compose, init postgres, otel collector, prometheus, grafana, k8s (sandboxes)
 web/                         frontend Svelte
 docs/                        architecture, ADR
 ```
@@ -452,7 +544,8 @@ docs/                        architecture, ADR
 | **M3 — MCP** | registre de serveurs MCP, découverte d'outils, actions `tool`, secrets MCP via Vault |
 | **M4 — axe change avancé** | propagation d'impact (CTE récursive paramétrée par types de liens), liens suspects, diff de baselines, merge/rebase de changesets concurrents |
 | **M5 — UX** | ✅ éditeur de méthodologies (formulaires, anomalies localisées, publication, versions, import/export YAML), écran « Accès » (politiques ABAC), approbations · reste : visualisation du graphe et du plan |
-| **M6 — K8s** | charts Helm, HPA engine, observabilité (OpenTelemetry) |
+| **M6 — K8s** | charts Helm, HPA engine · ✅ observabilité OpenTelemetry, manifestes sandboxes |
+| **M7 — agents** ✅ | agents (goap / utility / hybrid), actions script JS / Go avec DSL, sous-agents, sandbox par processus, IDE |
 
 ## 7. Questions ouvertes
 

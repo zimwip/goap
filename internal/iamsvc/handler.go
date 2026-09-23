@@ -129,8 +129,8 @@ type Client struct {
 var _ authz.Authorizer = (*Client)(nil)
 
 // NewClient returns an IAM client.
-func NewClient(hc *http.Client, baseURL string) *Client {
-	return &Client{rpc: iamv1connect.NewIamServiceClient(hc, baseURL)}
+func NewClient(hc *http.Client, baseURL string, opts ...connect.ClientOption) *Client {
+	return &Client{rpc: iamv1connect.NewIamServiceClient(hc, baseURL, opts...)}
 }
 
 // Authorize implements authz.Authorizer.

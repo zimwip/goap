@@ -16,6 +16,42 @@ service EngineService {
   rpc ApproveAction(ApproveActionRequest) returns (ApproveActionResponse);
   rpc GetProcess(GetProcessRequest) returns (GetProcessResponse);
   rpc ListProcesses(ListProcessesRequest) returns (ListProcessesResponse);
+  // Live process events and logs (server streaming). Empty process_id: every
+  // process the caller may read.
+  rpc WatchEvents(WatchEventsRequest) returns (stream WatchEventsResponse);
+}
+
+// Token and call accounting.
+message Usage {
+  int64 input_tokens = 1;
+  int64 output_tokens = 2;
+  int32 llm_calls = 3;
+  int32 tool_calls = 4;
+}
+
+message LlmCall {
+  string provider = 1;
+  string model = 2;
+  int64 input_tokens = 3;
+  int64 output_tokens = 4;
+  int64 duration_ms = 5;
+  string error = 6;
+}
+
+message ToolCall {
+  string name = 1;
+  int64 duration_ms = 2;
+  string error = 3;
+}
+
+message LogLine {
+  google.protobuf.Timestamp time = 1;
+  // debug | info | warn | error
+  string level = 2;
+  string message = 3;
+  string process_id = 4;
+  string action = 5;
+  int32 step = 6;
 }
 
 message Turn {
@@ -27,6 +63,8 @@ message Candidate {
   string goal = 1;
   double confidence = 2;
   string reason = 3;
+  string agent = 4;
+  string methodology = 5;
 }
 
 message Principal {
@@ -44,6 +82,8 @@ message HumanTask {
   string kind = 5;
   // permission required to approve
   string permission = 6;
+  // kind "agent": the sub-agent process this one waits for
+  string child_process_id = 7;
 }
 
 message Step {
@@ -59,6 +99,14 @@ message Step {
   google.protobuf.Timestamp started_at = 10;
   google.protobuf.Timestamp ended_at = 11;
   string approved_by = 12;
+  Usage usage = 13;
+  repeated LlmCall llm_calls = 14;
+  repeated ToolCall tool_calls = 15;
+  repeated LogLine logs = 16;
+  // sub-agent processes started by this step
+  repeated string child_process_ids = 17;
+  // sandbox that executed the step (script actions)
+  string sandbox = 18;
 }
 
 message Process {
@@ -81,9 +129,23 @@ message Process {
   google.protobuf.Timestamp created_at = 16;
   google.protobuf.Timestamp updated_at = 17;
   Principal initiator = 18;
+  // agent of the methodology run by the process
+  string agent = 19;
+  // goap | utility | hybrid
+  string planner = 20;
+  // process that called this one as a sub-agent
+  string parent_id = 21;
+  // totals over the steps
+  Usage usage = 22;
+  string baseline_id = 23;
+  string title = 24;
+  // OpenTelemetry trace of the process (root span "process")
+  string trace_id = 25;
 }
 
 message StartProcessRequest {
+  // empty: the intent loop identifies the methodology and agent among every
+  // published methodology
   string methodology = 1;
   // continue an existing change, or open one on baseline_id
   string change_id = 2;
@@ -93,6 +155,8 @@ message StartProcessRequest {
   // skip the intent loop
   string goal = 6;
   google.protobuf.Struct vars = 7;
+  // restrict identification to this agent
+  string agent = 8;
 }
 
 message StartProcessResponse {
@@ -140,4 +204,16 @@ message ListProcessesRequest {}
 
 message ListProcessesResponse {
   repeated Process processes = 1;
+}
+
+message WatchEventsRequest {
+  string process_id = 1;
+}
+
+message WatchEventsResponse {
+  // started | intent | step | waiting | completed | stuck | failed | log
+  string type = 1;
+  google.protobuf.Timestamp time = 2;
+  Process process = 3;
+  LogLine log = 4;
 }

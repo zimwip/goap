@@ -1,8 +1,8 @@
-SERVICES := graph registry engine modelgw gateway mcp iam goap-dev
+SERVICES := graph registry engine modelgw gateway mcp iam goap-dev goap-runner
 COMPOSE  := docker compose -f deploy/compose/docker-compose.yml
 export PATH := $(PATH):$(shell go env GOPATH)/bin
 
-.PHONY: all build test test-pg lint generate tools up down logs dev web
+.PHONY: all build test test-pg lint generate tools up down logs dev web runner-image
 
 all: generate build test
 
@@ -35,7 +35,10 @@ dev: ## single process, in-memory, demo data: http://localhost:8080
 web:
 	cd web && npm install && npm run dev
 
-up:
+runner-image: ## image of the script sandboxes (goap-runner)
+	docker build --build-arg SERVICE=goap-runner -t goap/runner:dev .
+
+up: runner-image
 	$(COMPOSE) up --build -d
 
 down:
