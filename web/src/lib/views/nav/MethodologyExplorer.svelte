@@ -15,6 +15,8 @@
     emptyAction,
     emptyCondition,
     emptyGoal,
+    emptyNodeType,
+    emptyLinkType,
     type Section,
     type SectionItem,
   } from '../../methodologyForm';
@@ -86,9 +88,25 @@
     return '';
   }
 
-  function openDomain(d: Draft) {
+  function revealDomain(d: Draft, path: string) {
     const t = openTab(methodologySpec(d.name, d.version));
-    requestReveal(t.id, 'nodeTypes');
+    requestReveal(t.id, path);
+  }
+
+  function openDomain(d: Draft) {
+    revealDomain(d, 'nodeTypes');
+  }
+
+  function addNodeType(d: Draft) {
+    d.form.nodeTypes.push(emptyNodeType());
+    expanded[`s:${d.key}/nodeTypes`] = true;
+    revealDomain(d, `nodeTypes[${d.form.nodeTypes.length - 1}]`);
+  }
+
+  function addLinkType(d: Draft) {
+    d.form.linkTypes.push(emptyLinkType());
+    expanded[`s:${d.key}/linkTypes`] = true;
+    revealDomain(d, `linkTypes[${d.form.linkTypes.length - 1}]`);
   }
 </script>
 
@@ -213,16 +231,103 @@
                   {/each}
                 {/if}
               {/each}
+              {@const domK = `s:${k}/domain`}
               <TreeRow
                 depth={2}
                 icon="graph"
                 label="Domain"
                 detail={`${d.form.nodeTypes.length} types · ${d.form.linkTypes.length} links`}
+                expanded={isOpen(domK)}
                 badge={d.count('nodeTypes') + d.count('linkTypes') || undefined}
                 badgeTone="danger"
                 onselect={() => openDomain(d)}
                 onopen={() => openDomain(d)}
+                ontoggle={() => toggle(domK)}
               />
+              {#if isOpen(domK)}
+                {@const ntK = `s:${k}/nodeTypes`}
+                <TreeRow
+                  depth={3}
+                  icon="node"
+                  label="Node types"
+                  detail={String(d.form.nodeTypes.length)}
+                  expanded={isOpen(ntK)}
+                  badge={d.count('nodeTypes') || undefined}
+                  badgeTone="danger"
+                  ontoggle={() => toggle(ntK)}
+                >
+                  {#snippet actions()}
+                    {#if !d.readonly}
+                      <button
+                        type="button"
+                        title="Add"
+                        aria-label="Add: Node type"
+                        onclick={(e) => {
+                          e.stopPropagation();
+                          addNodeType(d);
+                        }}><Icon name="plus" size={13} /></button
+                      >
+                    {/if}
+                  {/snippet}
+                </TreeRow>
+                {#if isOpen(ntK)}
+                  {#each d.form.nodeTypes as n, i (i)}
+                    <TreeRow
+                      depth={4}
+                      label={n.name || '(unnamed)'}
+                      italic={!n.name}
+                      detail={n.extends ? `extends ${n.extends}` : ''}
+                      badge={d.count(`nodeTypes[${i}]`) || undefined}
+                      badgeTone="danger"
+                      onselect={() => revealDomain(d, `nodeTypes[${i}]`)}
+                      onopen={() => revealDomain(d, `nodeTypes[${i}]`)}
+                    />
+                  {:else}
+                    <p class="empty pad3">No node types.</p>
+                  {/each}
+                {/if}
+                {@const ltK = `s:${k}/linkTypes`}
+                <TreeRow
+                  depth={3}
+                  icon="trace"
+                  label="Link types"
+                  detail={String(d.form.linkTypes.length)}
+                  expanded={isOpen(ltK)}
+                  badge={d.count('linkTypes') || undefined}
+                  badgeTone="danger"
+                  ontoggle={() => toggle(ltK)}
+                >
+                  {#snippet actions()}
+                    {#if !d.readonly}
+                      <button
+                        type="button"
+                        title="Add"
+                        aria-label="Add: Link type"
+                        onclick={(e) => {
+                          e.stopPropagation();
+                          addLinkType(d);
+                        }}><Icon name="plus" size={13} /></button
+                      >
+                    {/if}
+                  {/snippet}
+                </TreeRow>
+                {#if isOpen(ltK)}
+                  {#each d.form.linkTypes as l, i (i)}
+                    <TreeRow
+                      depth={4}
+                      label={l.name || '(unnamed)'}
+                      italic={!l.name}
+                      detail={l.from && l.to ? `${l.from} → ${l.to}` : ''}
+                      badge={d.count(`linkTypes[${i}]`) || undefined}
+                      badgeTone="danger"
+                      onselect={() => revealDomain(d, `linkTypes[${i}]`)}
+                      onopen={() => revealDomain(d, `linkTypes[${i}]`)}
+                    />
+                  {:else}
+                    <p class="empty pad3">No link types.</p>
+                  {/each}
+                {/if}
+              {/if}
             {/if}
           {/if}
         {/each}
