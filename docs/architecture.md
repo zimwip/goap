@@ -555,6 +555,16 @@ The change **execution journal** (§2.12) carries `traceId` / `spanId`: the self
 re-reads a run's trace via the Jaeger query API (`GOAP_TRACE_QUERY_URL`, links `GOAP_TRACE_UI_URL`)
 to look for pain points (slow spans, tools, model calls).
 
+### 3.8 Voice input ([ADR 0013](adr/0013-voice-interaction.md))
+
+The assistant accepts push-to-talk voice input. Speech-to-text runs **entirely in the browser**
+(Whisper `tiny` / `base` through transformers.js in a Web Worker, WebGPU with WASM fallback;
+French and English). Only the resulting text reaches the backend, through the same
+`StartProcess` path as typed requests, so voice adds no server-side load, API or scaling
+concern. Audio is never uploaded or persisted. Code: `web/src/lib/voice/`. Server-side
+transcription (stateless unary RPC) and live conversation (ephemeral token to a realtime
+provider, or gateway WebSocket) are analyzed in the ADR but not built.
+
 ## 4. Format of a methodology
 
 Methodologies are **stored in the database** in structured form ([ADR 0006](adr/0006-methodologies-en-base.md)),

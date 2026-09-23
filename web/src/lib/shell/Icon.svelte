@@ -23,6 +23,7 @@
     download: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M7 10l5 5 5-5 M12 15V3',
     refresh: 'M21 12a9 9 0 1 1-3-6.7L21 8 M21 3v5h-5',
     plus: 'M12 5v14 M5 12h14',
+    mic: 'M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z M19 10v2a7 7 0 0 1-14 0v-2 M12 19v3',
     trash: 'M3 6h18 M8 6V4h8v2 M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6',
     copy: 'M9 9h11v11H9z M5 15H4V4h11v1',
     chevronRight: 'M9 18l6-6-6-6',

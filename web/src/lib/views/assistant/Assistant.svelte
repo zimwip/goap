@@ -5,6 +5,8 @@
   import Icon from '../../shell/Icon.svelte';
   import Popover from '../../shell/Popover.svelte';
   import AssistantRun from './AssistantRun.svelte';
+  import VoiceButton from '../../voice/VoiceButton.svelte';
+  import { voiceSettings } from '../../voice/settings.svelte';
   import {
     conversation,
     assistantUi,
@@ -56,6 +58,12 @@
     }
   }
 
+  function appendTranscript(text: string) {
+    const d = conversation.draft.trimEnd();
+    conversation.draft = d ? `${d} ${text}` : text;
+    input?.focus();
+  }
+
   function suggest(text: string) {
     conversation.draft = text;
     input?.focus();
@@ -89,6 +97,23 @@
             <option value="">Most recent</option>
             {#each sortedBaselines as b (b.id)}<option value={b.id}>{b.name || shortId(b.id)} — {formatDate(b.createdAt)}</option>{/each}
           </select>
+        </div>
+        <div class="set">
+          <label class="check"><input type="checkbox" bind:checked={voiceSettings.enabled} /> Voice input (push-to-talk)</label>
+          {#if voiceSettings.enabled}
+            <label for="as-vlang">Spoken language</label>
+            <select id="as-vlang" bind:value={voiceSettings.language}>
+              <option value="auto">Auto-detect</option>
+              <option value="fr">Français</option>
+              <option value="en">English</option>
+            </select>
+            <label for="as-vmodel">Speech model</label>
+            <select id="as-vmodel" bind:value={voiceSettings.model}>
+              <option value="base">Base (~75 MB, better accuracy)</option>
+              <option value="tiny">Tiny (~40 MB, faster)</option>
+            </select>
+            <p class="muted hint">Audio is transcribed in your browser and never leaves it. The model is downloaded once, then cached.</p>
+          {/if}
         </div>
       </Popover>
     </div>
@@ -153,6 +178,7 @@
       onkeydown={keydown}
       data-no-pin
     ></textarea>
+    <VoiceButton ontranscript={appendTranscript} />
     <button type="submit" class="primary" disabled={assistantUi.sending || !conversation.draft.trim()}>
       <Icon name="send" size={14} />
       {assistantUi.sending ? 'Sending…' : 'Send'}
@@ -200,6 +226,18 @@
   }
   .set {
     padding: 0.6rem;
+  }
+  .set + .set {
+    border-top: 1px solid var(--border);
+  }
+  .check {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+  .hint {
+    font-size: 0.85em;
+    margin: 0.4rem 0 0;
   }
   .scroll {
     flex: 1;
