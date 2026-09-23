@@ -5,7 +5,7 @@
   import Popover from './Popover.svelte';
   import { openTab } from './tabs.svelte';
   import { health, startHealth, refreshHealth, myActiveRuns, myRunsState, refreshMyRuns } from '../stores/status.svelte';
-  import { session } from '../stores/session.svelte';
+  import { session, hasAnyRole } from '../stores/session.svelte';
   import { notifications, markRead, markAllRead, clearNotifications, type Notice } from '../stores/notifications.svelte';
   import { live } from '../stores/live.svelte';
   import { formatTime, shortId, onTokenChange } from '../api';
@@ -134,6 +134,12 @@
       ? ` · ${session.principal.org}`
       : ''}
   </span>
+
+  {#if hasAnyRole('admin')}
+    <button type="button" class="item" aria-label="Platform settings" title="Platform settings (LLM gateway)" onclick={() => openTab({ kind: 'platform', params: {} }, { pin: true })}>
+      <Icon name="settings" size={13} />
+    </button>
+  {/if}
 
   <div class="item-wrap">
     <button

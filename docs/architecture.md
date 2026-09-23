@@ -422,7 +422,7 @@ JavaScript: no `require`), with a timeout. The code runs in the process's **sand
 | **registry** | Methodologies structured in the database: editing (draft), validation, publishing, versions, YAML import/export | Connect `registry.v1` | `registry` | 🟢 |
 | **engine** | Intent loop, planning, process execution; deployable as a cluster | Connect `engine.v1` | `engine` | 🟢 core (memory) |
 | **graph** | Domain axis (versioned nodes, links, baselines) + change axis (ChangeSets, items, apply) | Connect `graph.v1` | `graph` | 🟢 |
-| **modelgw** | Multi-provider / multi-model abstraction, aliases (`default`, `fast`, `reasoning`), quotas, traces | Connect `model.v1` | `modelgw` (usage) | 🟢 core |
+| **modelgw** | Multi-provider / multi-model abstraction, aliases (`default`, `fast`, `reasoning`), administered catalog with global token quotas and required roles (see below), traces | Connect `model.v1` | `modelgw` (providers, catalog, usage) | 🟢 core |
 | **mcp** | MCP server registry and proxy; exposes tools to `tool` actions | Connect `mcp.v1` | `mcp` | 🟡 upcoming |
 | **goap-runner** | Sandbox for executing script actions (one per process) | Connect `runtime.v1` (SandboxService) | — | 🟢 |
 | **otel-collector** | OTLP reception, trace export (Jaeger) and metrics (Prometheus) | OTLP | — | 🟢 |
@@ -733,3 +733,21 @@ docs/                        architecture, ADRs
 4. **Action cost**: static (declared) or dynamic (estimated tokens, observed latency)?
 5. ~~**Human decisions**: mandatory validation or a separate `apply`?~~ → settled by [ADR 0004](adr/0004-application-du-change.md):
    `apply` is a plannable action conditioned by review and protected by a permission.
+
+
+## Model gateway administration (platform settings)
+
+Administrators (`admin` on the `platform` resource, Casbin) open **Platform settings** from the gear in the IDE
+status bar. The gateway configuration lives in the `modelgw` database (PostgreSQL `migrations/`, SQLite
+`migrations_sqlite/`, one `SQLStore` for both); `GOAP_MODELS_CONFIG` / env keys only seed an empty store.
+
+- **Providers** are pluggable: a `Protocol` (`anthropic`, `openai`, `gemini`, `fake`; `internal/modelgw/protocols.go`)
+  knows how to complete and how to list models; a `Kind` is a preset on a protocol (Anthropic, Mistral AI, Google
+  Gemini, OpenAI, custom OpenAI-compatible). Adding a provider type = `RegisterProtocol` / `RegisterKind`.
+- **API keys** are write-only: sealed with AES-GCM (`GOAP_SECRET_KEY`, Vault `goap/modelgw#encryption_key`) and
+  never returned; the UI only gets `hasKey` and the last four characters.
+- **Catalog**: `DiscoverModels` asks the provider for its models; the admin adds them to the catalog, with a global
+  token quota (per day / month / total, shared by all users) and the roles allowed to call the model (none =
+  any signed-in user; `admin` always). Only enabled catalog models can be called; calls without identity
+  (engine, in-process) are trusted and skip the role check but still count toward the quota.
+- **Aliases** (`default`, `fast`…) point to catalog models and are changed at runtime (router reload).

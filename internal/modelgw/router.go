@@ -53,6 +53,13 @@ func (r *Router) AddProvider(name string, p Provider) {
 	r.providers[name] = p
 }
 
+// Replace swaps every provider and alias at once (configuration reload).
+func (r *Router) Replace(providers map[string]Provider, aliases map[string]Target) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.providers, r.aliases = providers, aliases
+}
+
 // SetAlias maps an alias to "provider/model".
 func (r *Router) SetAlias(alias, target string) error {
 	t, ok := parseTarget(target)

@@ -37,12 +37,55 @@ const (
 	ModelServiceCompleteProcedure = "/goap.model.v1.ModelService/Complete"
 	// ModelServiceListModelsProcedure is the fully-qualified name of the ModelService's ListModels RPC.
 	ModelServiceListModelsProcedure = "/goap.model.v1.ModelService/ListModels"
+	// ModelServiceListProviderKindsProcedure is the fully-qualified name of the ModelService's
+	// ListProviderKinds RPC.
+	ModelServiceListProviderKindsProcedure = "/goap.model.v1.ModelService/ListProviderKinds"
+	// ModelServiceListProvidersProcedure is the fully-qualified name of the ModelService's
+	// ListProviders RPC.
+	ModelServiceListProvidersProcedure = "/goap.model.v1.ModelService/ListProviders"
+	// ModelServiceSaveProviderProcedure is the fully-qualified name of the ModelService's SaveProvider
+	// RPC.
+	ModelServiceSaveProviderProcedure = "/goap.model.v1.ModelService/SaveProvider"
+	// ModelServiceDeleteProviderProcedure is the fully-qualified name of the ModelService's
+	// DeleteProvider RPC.
+	ModelServiceDeleteProviderProcedure = "/goap.model.v1.ModelService/DeleteProvider"
+	// ModelServiceDiscoverModelsProcedure is the fully-qualified name of the ModelService's
+	// DiscoverModels RPC.
+	ModelServiceDiscoverModelsProcedure = "/goap.model.v1.ModelService/DiscoverModels"
+	// ModelServiceListCatalogProcedure is the fully-qualified name of the ModelService's ListCatalog
+	// RPC.
+	ModelServiceListCatalogProcedure = "/goap.model.v1.ModelService/ListCatalog"
+	// ModelServiceSaveModelProcedure is the fully-qualified name of the ModelService's SaveModel RPC.
+	ModelServiceSaveModelProcedure = "/goap.model.v1.ModelService/SaveModel"
+	// ModelServiceDeleteModelProcedure is the fully-qualified name of the ModelService's DeleteModel
+	// RPC.
+	ModelServiceDeleteModelProcedure = "/goap.model.v1.ModelService/DeleteModel"
+	// ModelServiceSaveAliasProcedure is the fully-qualified name of the ModelService's SaveAlias RPC.
+	ModelServiceSaveAliasProcedure = "/goap.model.v1.ModelService/SaveAlias"
+	// ModelServiceDeleteAliasProcedure is the fully-qualified name of the ModelService's DeleteAlias
+	// RPC.
+	ModelServiceDeleteAliasProcedure = "/goap.model.v1.ModelService/DeleteAlias"
 )
 
 // ModelServiceClient is a client for the goap.model.v1.ModelService service.
 type ModelServiceClient interface {
 	Complete(context.Context, *connect.Request[v1.CompleteRequest]) (*connect.Response[v1.CompleteResponse], error)
 	ListModels(context.Context, *connect.Request[v1.ListModelsRequest]) (*connect.Response[v1.ListModelsResponse], error)
+	// Platform administration of the gateway (`admin` on the `platform`
+	// resource). Providers are pluggable: a kind is a preset (Mistral, Anthropic,
+	// Google, …) on top of a wire protocol (anthropic, openai, gemini).
+	ListProviderKinds(context.Context, *connect.Request[v1.ListProviderKindsRequest]) (*connect.Response[v1.ListProviderKindsResponse], error)
+	ListProviders(context.Context, *connect.Request[v1.ListProvidersRequest]) (*connect.Response[v1.ListProvidersResponse], error)
+	SaveProvider(context.Context, *connect.Request[v1.SaveProviderRequest]) (*connect.Response[v1.SaveProviderResponse], error)
+	DeleteProvider(context.Context, *connect.Request[v1.DeleteProviderRequest]) (*connect.Response[v1.DeleteProviderResponse], error)
+	// Ask the provider for its models (before or after saving it).
+	DiscoverModels(context.Context, *connect.Request[v1.DiscoverModelsRequest]) (*connect.Response[v1.DiscoverModelsResponse], error)
+	// The catalog: models offered on the platform, with quota and access level.
+	ListCatalog(context.Context, *connect.Request[v1.ListCatalogRequest]) (*connect.Response[v1.ListCatalogResponse], error)
+	SaveModel(context.Context, *connect.Request[v1.SaveModelRequest]) (*connect.Response[v1.SaveModelResponse], error)
+	DeleteModel(context.Context, *connect.Request[v1.DeleteModelRequest]) (*connect.Response[v1.DeleteModelResponse], error)
+	SaveAlias(context.Context, *connect.Request[v1.SaveAliasRequest]) (*connect.Response[v1.SaveAliasResponse], error)
+	DeleteAlias(context.Context, *connect.Request[v1.DeleteAliasRequest]) (*connect.Response[v1.DeleteAliasResponse], error)
 }
 
 // NewModelServiceClient constructs a client for the goap.model.v1.ModelService service. By default,
@@ -68,13 +111,83 @@ func NewModelServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(modelServiceMethods.ByName("ListModels")),
 			connect.WithClientOptions(opts...),
 		),
+		listProviderKinds: connect.NewClient[v1.ListProviderKindsRequest, v1.ListProviderKindsResponse](
+			httpClient,
+			baseURL+ModelServiceListProviderKindsProcedure,
+			connect.WithSchema(modelServiceMethods.ByName("ListProviderKinds")),
+			connect.WithClientOptions(opts...),
+		),
+		listProviders: connect.NewClient[v1.ListProvidersRequest, v1.ListProvidersResponse](
+			httpClient,
+			baseURL+ModelServiceListProvidersProcedure,
+			connect.WithSchema(modelServiceMethods.ByName("ListProviders")),
+			connect.WithClientOptions(opts...),
+		),
+		saveProvider: connect.NewClient[v1.SaveProviderRequest, v1.SaveProviderResponse](
+			httpClient,
+			baseURL+ModelServiceSaveProviderProcedure,
+			connect.WithSchema(modelServiceMethods.ByName("SaveProvider")),
+			connect.WithClientOptions(opts...),
+		),
+		deleteProvider: connect.NewClient[v1.DeleteProviderRequest, v1.DeleteProviderResponse](
+			httpClient,
+			baseURL+ModelServiceDeleteProviderProcedure,
+			connect.WithSchema(modelServiceMethods.ByName("DeleteProvider")),
+			connect.WithClientOptions(opts...),
+		),
+		discoverModels: connect.NewClient[v1.DiscoverModelsRequest, v1.DiscoverModelsResponse](
+			httpClient,
+			baseURL+ModelServiceDiscoverModelsProcedure,
+			connect.WithSchema(modelServiceMethods.ByName("DiscoverModels")),
+			connect.WithClientOptions(opts...),
+		),
+		listCatalog: connect.NewClient[v1.ListCatalogRequest, v1.ListCatalogResponse](
+			httpClient,
+			baseURL+ModelServiceListCatalogProcedure,
+			connect.WithSchema(modelServiceMethods.ByName("ListCatalog")),
+			connect.WithClientOptions(opts...),
+		),
+		saveModel: connect.NewClient[v1.SaveModelRequest, v1.SaveModelResponse](
+			httpClient,
+			baseURL+ModelServiceSaveModelProcedure,
+			connect.WithSchema(modelServiceMethods.ByName("SaveModel")),
+			connect.WithClientOptions(opts...),
+		),
+		deleteModel: connect.NewClient[v1.DeleteModelRequest, v1.DeleteModelResponse](
+			httpClient,
+			baseURL+ModelServiceDeleteModelProcedure,
+			connect.WithSchema(modelServiceMethods.ByName("DeleteModel")),
+			connect.WithClientOptions(opts...),
+		),
+		saveAlias: connect.NewClient[v1.SaveAliasRequest, v1.SaveAliasResponse](
+			httpClient,
+			baseURL+ModelServiceSaveAliasProcedure,
+			connect.WithSchema(modelServiceMethods.ByName("SaveAlias")),
+			connect.WithClientOptions(opts...),
+		),
+		deleteAlias: connect.NewClient[v1.DeleteAliasRequest, v1.DeleteAliasResponse](
+			httpClient,
+			baseURL+ModelServiceDeleteAliasProcedure,
+			connect.WithSchema(modelServiceMethods.ByName("DeleteAlias")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // modelServiceClient implements ModelServiceClient.
 type modelServiceClient struct {
-	complete   *connect.Client[v1.CompleteRequest, v1.CompleteResponse]
-	listModels *connect.Client[v1.ListModelsRequest, v1.ListModelsResponse]
+	complete          *connect.Client[v1.CompleteRequest, v1.CompleteResponse]
+	listModels        *connect.Client[v1.ListModelsRequest, v1.ListModelsResponse]
+	listProviderKinds *connect.Client[v1.ListProviderKindsRequest, v1.ListProviderKindsResponse]
+	listProviders     *connect.Client[v1.ListProvidersRequest, v1.ListProvidersResponse]
+	saveProvider      *connect.Client[v1.SaveProviderRequest, v1.SaveProviderResponse]
+	deleteProvider    *connect.Client[v1.DeleteProviderRequest, v1.DeleteProviderResponse]
+	discoverModels    *connect.Client[v1.DiscoverModelsRequest, v1.DiscoverModelsResponse]
+	listCatalog       *connect.Client[v1.ListCatalogRequest, v1.ListCatalogResponse]
+	saveModel         *connect.Client[v1.SaveModelRequest, v1.SaveModelResponse]
+	deleteModel       *connect.Client[v1.DeleteModelRequest, v1.DeleteModelResponse]
+	saveAlias         *connect.Client[v1.SaveAliasRequest, v1.SaveAliasResponse]
+	deleteAlias       *connect.Client[v1.DeleteAliasRequest, v1.DeleteAliasResponse]
 }
 
 // Complete calls goap.model.v1.ModelService.Complete.
@@ -87,10 +200,75 @@ func (c *modelServiceClient) ListModels(ctx context.Context, req *connect.Reques
 	return c.listModels.CallUnary(ctx, req)
 }
 
+// ListProviderKinds calls goap.model.v1.ModelService.ListProviderKinds.
+func (c *modelServiceClient) ListProviderKinds(ctx context.Context, req *connect.Request[v1.ListProviderKindsRequest]) (*connect.Response[v1.ListProviderKindsResponse], error) {
+	return c.listProviderKinds.CallUnary(ctx, req)
+}
+
+// ListProviders calls goap.model.v1.ModelService.ListProviders.
+func (c *modelServiceClient) ListProviders(ctx context.Context, req *connect.Request[v1.ListProvidersRequest]) (*connect.Response[v1.ListProvidersResponse], error) {
+	return c.listProviders.CallUnary(ctx, req)
+}
+
+// SaveProvider calls goap.model.v1.ModelService.SaveProvider.
+func (c *modelServiceClient) SaveProvider(ctx context.Context, req *connect.Request[v1.SaveProviderRequest]) (*connect.Response[v1.SaveProviderResponse], error) {
+	return c.saveProvider.CallUnary(ctx, req)
+}
+
+// DeleteProvider calls goap.model.v1.ModelService.DeleteProvider.
+func (c *modelServiceClient) DeleteProvider(ctx context.Context, req *connect.Request[v1.DeleteProviderRequest]) (*connect.Response[v1.DeleteProviderResponse], error) {
+	return c.deleteProvider.CallUnary(ctx, req)
+}
+
+// DiscoverModels calls goap.model.v1.ModelService.DiscoverModels.
+func (c *modelServiceClient) DiscoverModels(ctx context.Context, req *connect.Request[v1.DiscoverModelsRequest]) (*connect.Response[v1.DiscoverModelsResponse], error) {
+	return c.discoverModels.CallUnary(ctx, req)
+}
+
+// ListCatalog calls goap.model.v1.ModelService.ListCatalog.
+func (c *modelServiceClient) ListCatalog(ctx context.Context, req *connect.Request[v1.ListCatalogRequest]) (*connect.Response[v1.ListCatalogResponse], error) {
+	return c.listCatalog.CallUnary(ctx, req)
+}
+
+// SaveModel calls goap.model.v1.ModelService.SaveModel.
+func (c *modelServiceClient) SaveModel(ctx context.Context, req *connect.Request[v1.SaveModelRequest]) (*connect.Response[v1.SaveModelResponse], error) {
+	return c.saveModel.CallUnary(ctx, req)
+}
+
+// DeleteModel calls goap.model.v1.ModelService.DeleteModel.
+func (c *modelServiceClient) DeleteModel(ctx context.Context, req *connect.Request[v1.DeleteModelRequest]) (*connect.Response[v1.DeleteModelResponse], error) {
+	return c.deleteModel.CallUnary(ctx, req)
+}
+
+// SaveAlias calls goap.model.v1.ModelService.SaveAlias.
+func (c *modelServiceClient) SaveAlias(ctx context.Context, req *connect.Request[v1.SaveAliasRequest]) (*connect.Response[v1.SaveAliasResponse], error) {
+	return c.saveAlias.CallUnary(ctx, req)
+}
+
+// DeleteAlias calls goap.model.v1.ModelService.DeleteAlias.
+func (c *modelServiceClient) DeleteAlias(ctx context.Context, req *connect.Request[v1.DeleteAliasRequest]) (*connect.Response[v1.DeleteAliasResponse], error) {
+	return c.deleteAlias.CallUnary(ctx, req)
+}
+
 // ModelServiceHandler is an implementation of the goap.model.v1.ModelService service.
 type ModelServiceHandler interface {
 	Complete(context.Context, *connect.Request[v1.CompleteRequest]) (*connect.Response[v1.CompleteResponse], error)
 	ListModels(context.Context, *connect.Request[v1.ListModelsRequest]) (*connect.Response[v1.ListModelsResponse], error)
+	// Platform administration of the gateway (`admin` on the `platform`
+	// resource). Providers are pluggable: a kind is a preset (Mistral, Anthropic,
+	// Google, …) on top of a wire protocol (anthropic, openai, gemini).
+	ListProviderKinds(context.Context, *connect.Request[v1.ListProviderKindsRequest]) (*connect.Response[v1.ListProviderKindsResponse], error)
+	ListProviders(context.Context, *connect.Request[v1.ListProvidersRequest]) (*connect.Response[v1.ListProvidersResponse], error)
+	SaveProvider(context.Context, *connect.Request[v1.SaveProviderRequest]) (*connect.Response[v1.SaveProviderResponse], error)
+	DeleteProvider(context.Context, *connect.Request[v1.DeleteProviderRequest]) (*connect.Response[v1.DeleteProviderResponse], error)
+	// Ask the provider for its models (before or after saving it).
+	DiscoverModels(context.Context, *connect.Request[v1.DiscoverModelsRequest]) (*connect.Response[v1.DiscoverModelsResponse], error)
+	// The catalog: models offered on the platform, with quota and access level.
+	ListCatalog(context.Context, *connect.Request[v1.ListCatalogRequest]) (*connect.Response[v1.ListCatalogResponse], error)
+	SaveModel(context.Context, *connect.Request[v1.SaveModelRequest]) (*connect.Response[v1.SaveModelResponse], error)
+	DeleteModel(context.Context, *connect.Request[v1.DeleteModelRequest]) (*connect.Response[v1.DeleteModelResponse], error)
+	SaveAlias(context.Context, *connect.Request[v1.SaveAliasRequest]) (*connect.Response[v1.SaveAliasResponse], error)
+	DeleteAlias(context.Context, *connect.Request[v1.DeleteAliasRequest]) (*connect.Response[v1.DeleteAliasResponse], error)
 }
 
 // NewModelServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -112,12 +290,92 @@ func NewModelServiceHandler(svc ModelServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(modelServiceMethods.ByName("ListModels")),
 		connect.WithHandlerOptions(opts...),
 	)
+	modelServiceListProviderKindsHandler := connect.NewUnaryHandler(
+		ModelServiceListProviderKindsProcedure,
+		svc.ListProviderKinds,
+		connect.WithSchema(modelServiceMethods.ByName("ListProviderKinds")),
+		connect.WithHandlerOptions(opts...),
+	)
+	modelServiceListProvidersHandler := connect.NewUnaryHandler(
+		ModelServiceListProvidersProcedure,
+		svc.ListProviders,
+		connect.WithSchema(modelServiceMethods.ByName("ListProviders")),
+		connect.WithHandlerOptions(opts...),
+	)
+	modelServiceSaveProviderHandler := connect.NewUnaryHandler(
+		ModelServiceSaveProviderProcedure,
+		svc.SaveProvider,
+		connect.WithSchema(modelServiceMethods.ByName("SaveProvider")),
+		connect.WithHandlerOptions(opts...),
+	)
+	modelServiceDeleteProviderHandler := connect.NewUnaryHandler(
+		ModelServiceDeleteProviderProcedure,
+		svc.DeleteProvider,
+		connect.WithSchema(modelServiceMethods.ByName("DeleteProvider")),
+		connect.WithHandlerOptions(opts...),
+	)
+	modelServiceDiscoverModelsHandler := connect.NewUnaryHandler(
+		ModelServiceDiscoverModelsProcedure,
+		svc.DiscoverModels,
+		connect.WithSchema(modelServiceMethods.ByName("DiscoverModels")),
+		connect.WithHandlerOptions(opts...),
+	)
+	modelServiceListCatalogHandler := connect.NewUnaryHandler(
+		ModelServiceListCatalogProcedure,
+		svc.ListCatalog,
+		connect.WithSchema(modelServiceMethods.ByName("ListCatalog")),
+		connect.WithHandlerOptions(opts...),
+	)
+	modelServiceSaveModelHandler := connect.NewUnaryHandler(
+		ModelServiceSaveModelProcedure,
+		svc.SaveModel,
+		connect.WithSchema(modelServiceMethods.ByName("SaveModel")),
+		connect.WithHandlerOptions(opts...),
+	)
+	modelServiceDeleteModelHandler := connect.NewUnaryHandler(
+		ModelServiceDeleteModelProcedure,
+		svc.DeleteModel,
+		connect.WithSchema(modelServiceMethods.ByName("DeleteModel")),
+		connect.WithHandlerOptions(opts...),
+	)
+	modelServiceSaveAliasHandler := connect.NewUnaryHandler(
+		ModelServiceSaveAliasProcedure,
+		svc.SaveAlias,
+		connect.WithSchema(modelServiceMethods.ByName("SaveAlias")),
+		connect.WithHandlerOptions(opts...),
+	)
+	modelServiceDeleteAliasHandler := connect.NewUnaryHandler(
+		ModelServiceDeleteAliasProcedure,
+		svc.DeleteAlias,
+		connect.WithSchema(modelServiceMethods.ByName("DeleteAlias")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/goap.model.v1.ModelService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ModelServiceCompleteProcedure:
 			modelServiceCompleteHandler.ServeHTTP(w, r)
 		case ModelServiceListModelsProcedure:
 			modelServiceListModelsHandler.ServeHTTP(w, r)
+		case ModelServiceListProviderKindsProcedure:
+			modelServiceListProviderKindsHandler.ServeHTTP(w, r)
+		case ModelServiceListProvidersProcedure:
+			modelServiceListProvidersHandler.ServeHTTP(w, r)
+		case ModelServiceSaveProviderProcedure:
+			modelServiceSaveProviderHandler.ServeHTTP(w, r)
+		case ModelServiceDeleteProviderProcedure:
+			modelServiceDeleteProviderHandler.ServeHTTP(w, r)
+		case ModelServiceDiscoverModelsProcedure:
+			modelServiceDiscoverModelsHandler.ServeHTTP(w, r)
+		case ModelServiceListCatalogProcedure:
+			modelServiceListCatalogHandler.ServeHTTP(w, r)
+		case ModelServiceSaveModelProcedure:
+			modelServiceSaveModelHandler.ServeHTTP(w, r)
+		case ModelServiceDeleteModelProcedure:
+			modelServiceDeleteModelHandler.ServeHTTP(w, r)
+		case ModelServiceSaveAliasProcedure:
+			modelServiceSaveAliasHandler.ServeHTTP(w, r)
+		case ModelServiceDeleteAliasProcedure:
+			modelServiceDeleteAliasHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -133,4 +391,44 @@ func (UnimplementedModelServiceHandler) Complete(context.Context, *connect.Reque
 
 func (UnimplementedModelServiceHandler) ListModels(context.Context, *connect.Request[v1.ListModelsRequest]) (*connect.Response[v1.ListModelsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.model.v1.ModelService.ListModels is not implemented"))
+}
+
+func (UnimplementedModelServiceHandler) ListProviderKinds(context.Context, *connect.Request[v1.ListProviderKindsRequest]) (*connect.Response[v1.ListProviderKindsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.model.v1.ModelService.ListProviderKinds is not implemented"))
+}
+
+func (UnimplementedModelServiceHandler) ListProviders(context.Context, *connect.Request[v1.ListProvidersRequest]) (*connect.Response[v1.ListProvidersResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.model.v1.ModelService.ListProviders is not implemented"))
+}
+
+func (UnimplementedModelServiceHandler) SaveProvider(context.Context, *connect.Request[v1.SaveProviderRequest]) (*connect.Response[v1.SaveProviderResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.model.v1.ModelService.SaveProvider is not implemented"))
+}
+
+func (UnimplementedModelServiceHandler) DeleteProvider(context.Context, *connect.Request[v1.DeleteProviderRequest]) (*connect.Response[v1.DeleteProviderResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.model.v1.ModelService.DeleteProvider is not implemented"))
+}
+
+func (UnimplementedModelServiceHandler) DiscoverModels(context.Context, *connect.Request[v1.DiscoverModelsRequest]) (*connect.Response[v1.DiscoverModelsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.model.v1.ModelService.DiscoverModels is not implemented"))
+}
+
+func (UnimplementedModelServiceHandler) ListCatalog(context.Context, *connect.Request[v1.ListCatalogRequest]) (*connect.Response[v1.ListCatalogResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.model.v1.ModelService.ListCatalog is not implemented"))
+}
+
+func (UnimplementedModelServiceHandler) SaveModel(context.Context, *connect.Request[v1.SaveModelRequest]) (*connect.Response[v1.SaveModelResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.model.v1.ModelService.SaveModel is not implemented"))
+}
+
+func (UnimplementedModelServiceHandler) DeleteModel(context.Context, *connect.Request[v1.DeleteModelRequest]) (*connect.Response[v1.DeleteModelResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.model.v1.ModelService.DeleteModel is not implemented"))
+}
+
+func (UnimplementedModelServiceHandler) SaveAlias(context.Context, *connect.Request[v1.SaveAliasRequest]) (*connect.Response[v1.SaveAliasResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.model.v1.ModelService.SaveAlias is not implemented"))
+}
+
+func (UnimplementedModelServiceHandler) DeleteAlias(context.Context, *connect.Request[v1.DeleteAliasRequest]) (*connect.Response[v1.DeleteAliasResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.model.v1.ModelService.DeleteAlias is not implemented"))
 }
