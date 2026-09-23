@@ -151,7 +151,7 @@
           <h3>Domaine</h3>
           <h4 data-path="nodeTypes">Types de nœuds</h4>
           {#each f.nodeTypes as n, i}
-            <div class="item" class:has-issues={d.count(`nodeTypes[${i}]`) > 0} data-path="nodeTypes[{i}]">
+            <div class="item nt" class:has-issues={d.count(`nodeTypes[${i}]`) > 0} data-path="nodeTypes[{i}]">
               <input
                 type="text"
                 class="mono"
@@ -161,6 +161,17 @@
                 data-path="nodeTypes[{i}].name"
                 placeholder="Requirement"
               />
+              <select
+                aria-label="Type parent (étend)"
+                title="Type parent : le sous-type hérite de ses propriétés et des types de liens qui l'acceptent"
+                bind:value={n.extends}
+                class:bad={d.bad(`nodeTypes[${i}].extends`)}
+                data-path="nodeTypes[{i}].extends"
+              >
+                <option value="">— aucun parent —</option>
+                {#if n.extends && !d.nodeTypeNames.includes(n.extends)}<option value={n.extends}>{n.extends} (inconnu)</option>{/if}
+                {#each d.nodeTypeNames.filter((t) => t !== n.name.trim()) as t (t)}<option value={t}>étend {t}</option>{/each}
+              </select>
               <input
                 type="text"
                 aria-label="Description"
@@ -194,7 +205,11 @@
           {#if !d.readonly}
             <button type="button" class="small" onclick={() => f.nodeTypes.push(emptyNodeType())}>+ Type de nœud</button>
           {/if}
-          <p class="hint cols">Colonnes : nom · description · propriétés (séparées par des virgules).</p>
+          <p class="hint cols">
+            Colonnes : nom · type parent · description · propriétés (séparées par des virgules). Un sous-type hérite des
+            propriétés et des types de liens de son parent ; les conditions sur le parent s'y appliquent (<code>x.types</code>
+            contient tous les super-types).
+          </p>
 
           <h4 class="sub" data-path="linkTypes">Types de liens</h4>
           {#each f.linkTypes as l, i}
@@ -288,6 +303,9 @@
     margin-bottom: 0.3rem;
     border-radius: var(--radius-sm);
   }
+  .item.nt {
+    grid-template-columns: minmax(120px, 1fr) minmax(110px, 0.9fr) minmax(140px, 1.5fr) minmax(140px, 1.3fr) auto;
+  }
   .item.has-issues {
     box-shadow: inset 3px 0 0 var(--danger);
     padding-left: 5px;
@@ -336,7 +354,8 @@
     font-size: 0.8rem;
   }
   @media (max-width: 800px) {
-    .item {
+    .item,
+    .item.nt {
       grid-template-columns: 1fr;
     }
   }

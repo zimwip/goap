@@ -11,6 +11,7 @@
     conditions,
     nodeTypes,
     linkTypes,
+    actions = [],
     bad,
     readonly = false,
     onrename,
@@ -20,6 +21,8 @@
     conditions: string[];
     nodeTypes: string[];
     linkTypes: string[];
+    /** noms des autres actions (cibles possibles d'une spécialisation) */
+    actions?: string[];
     bad: (path: string, exact?: boolean) => boolean;
     readonly?: boolean;
     /** renommage validé (perte du focus) : mise à jour des références */
@@ -38,6 +41,9 @@
   const LANGUAGE_LABELS: Record<string, string> = { javascript: 'JavaScript (goja)', go: 'Go (yaegi)' };
 
   const p = $derived(`actions[${index}]`);
+  /** une spécialisation n'est pas planifiée : pré / effets / attendus / coût hérités */
+  const isSpec = $derived(!!action.specializes.trim());
+  const specTargets = $derived(actions.filter((a) => a && a !== action.name));
   const id = $derived(`act-${index}`);
 
   const KIND_LABELS: Record<string, string> = {
@@ -46,6 +52,7 @@
     tool: 'tool — outil externe',
     human: 'human — tâche humaine',
     builtin: 'builtin — fonction intégrée',
+    abstract: 'abstract — sans implémentation (à spécialiser)',
   };
   const FOR_EACH_LABELS: Record<string, string> = {
     impacts: 'impacts',
@@ -79,18 +86,20 @@
       {#each ACTION_KINDS as k (k)}<option value={k}>{KIND_LABELS[k]}</option>{/each}
     </select>
   </div>
-  <div class="field">
-    <label for="{id}-cost">Coût</label>
-    <input
-      id="{id}-cost"
-      type="number"
-      min="0"
-      step="any"
-      bind:value={action.cost}
-      class:bad={bad(`${p}.cost`)}
-      data-path="{p}.cost"
-    />
-  </div>
+  {#if !isSpec}
+    <div class="field">
+      <label for="{id}-cost">Coût</label>
+      <input
+        id="{id}-cost"
+        type="number"
+        min="0"
+        step="any"
+        bind:value={action.cost}
+        class:bad={bad(`${p}.cost`)}
+        data-path="{p}.cost"
+      />
+    </div>
+  {/if}
   <div class="field">
     <label for="{id}-perm">Permission <span class="opt">(facultative)</span></label>
     <input
@@ -133,10 +142,81 @@
   />
 </div>
 
-<div class="grid2 field">
-  <CondRows bind:rows={action.pre} options={conditions} path="{p}.pre" label="Préconditions" {bad} {readonly} />
-  <CondRows bind:rows={action.effects} options={conditions} path="{p}.effects" label="Effets" {bad} {readonly} />
+<div class="spec" class:on={isSpec} data-path="{p}.specializes">
+  <div class="grid">
+    <div class="field">
+      <label for="{id}-spec">Spécialise <span class="opt">(facultatif)</span></label>
+      <input
+        id="{id}-spec"
+        type="text"
+        class="mono"
+        list="{id}-spec-list"
+        bind:value={action.specializes}
+        class:bad={bad(`${p}.specializes`)}
+        data-path="{p}.specializes"
+        placeholder="action ou méthodologie/action"
+      />
+      <datalist id="{id}-spec-list">
+        {#each specTargets as a (a)}<option value={a}></option>{/each}
+      </datalist>
+    </div>
+    {#if isSpec}
+      <div class="field">
+        <label for="{id}-prio">Priorité</label>
+        <input
+          id="{id}-prio"
+          type="number"
+          step="1"
+          bind:value={action.priority}
+          class:bad={bad(`${p}.priority`)}
+          data-path="{p}.priority"
+        />
+      </div>
+    {/if}
+  </div>
+  {#if isSpec}
+    <div class="field">
+      <label for="{id}-when">Garde <span class="opt">(when — expression CEL sur le tableau noir ; vide : toujours)</span></label>
+      <CodeEditor
+        id="{id}-when"
+        bind:value={action.when}
+        language="cel"
+        lineNumbers={false}
+        {readonly}
+        label="Garde de la spécialisation"
+        minHeight="1.9rem"
+        maxHeight="8rem"
+        placeholder={'ex. size(impacts) > 10'}
+        bad={bad(`${p}.when`)}
+        path="{p}.when"
+      />
+    </div>
+    <p class="hint">
+      Une spécialisation n'est pas planifiée : elle hérite des préconditions, effets, résultats attendus et du coût de
+      l'action <code>{action.specializes}</code> et remplace son implémentation à l'exécution quand sa garde est vraie. Si
+      plusieurs spécialisations s'appliquent, la priorité la plus haute l'emporte.
+    </p>
+  {:else}
+    <p class="hint">
+      Renseignez une action (<code>action</code>, ou <code>méthodologie/action</code> pour une autre méthodologie) pour faire
+      de celle-ci une spécialisation qui la remplace à l'exécution sous condition.
+    </p>
+  {/if}
 </div>
+
+{#if action.kind === 'abstract'}
+  <p class="hint abstract">
+    Action abstraite : planifiée comme les autres mais sans implémentation. Elle doit être spécialisée (au moins une
+    spécialisation applicable) pour pouvoir s'exécuter.
+  </p>
+{/if}
+
+{#if !isSpec}
+  <div class="grid2 field">
+    <CondRows bind:rows={action.pre} options={conditions} path="{p}.pre" label="Préconditions" {bad} {readonly} />
+    <CondRows bind:rows={action.effects} options={conditions} path="{p}.effects" label="Effets" {bad} {readonly} />
+  </div>
+{/if}
 
 {#if action.kind === 'llm'}
   <div class="field">
@@ -253,6 +333,7 @@
   </div>
 {/if}
 
+{#if !isSpec}
 <div class="expects" class:on={action.hasExpects} data-path="{p}.expects">
   <label class="check">
     <input type="checkbox" bind:checked={action.hasExpects} />
@@ -344,6 +425,7 @@
     </div>
   {/if}
 </div>
+{/if}
 
 <style>
   .script-head {
@@ -382,6 +464,23 @@
   }
   .opt {
     font-weight: 400;
+  }
+  .spec {
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    padding-top: 0.6rem;
+    margin-bottom: 0.7rem;
+  }
+  .spec .hint {
+    margin: 0 0 0.6rem;
+  }
+  .spec.on {
+    box-shadow: inset 3px 0 0 var(--info);
+    padding-left: 0.6rem;
+  }
+  .hint.abstract {
+    margin: 0 0 0.7rem;
+    color: var(--info);
   }
   .expects {
     border-top: 1px solid var(--border);

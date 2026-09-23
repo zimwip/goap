@@ -17,6 +17,8 @@ export interface NodeTypeForm {
   description: string;
   /** propriétés séparées par des virgules */
   properties: string;
+  /** type parent (sous-typage) */
+  extends: string;
 }
 
 export interface LinkTypeForm {
@@ -71,6 +73,12 @@ export interface ActionForm extends Identified {
   code: string;
   /** expression CEL numérique (planificateurs utility / hybrid) */
   utility: string;
+  /** action spécialisée : « <action> » ou « <méthodologie>/<action> » */
+  specializes: string;
+  /** garde CEL de la spécialisation */
+  when: string;
+  /** priorité de la spécialisation (la plus haute l'emporte) */
+  priority: number;
 }
 
 export interface TriggerForm {
@@ -130,7 +138,7 @@ export interface MethodologyForm {
 export type Section = 'agents' | 'actions' | 'conditions' | 'goals';
 export type SectionItem = AgentForm | ActionForm | ConditionForm | GoalForm;
 
-export const ACTION_KINDS = ['llm', 'script', 'tool', 'human', 'builtin'] as const;
+export const ACTION_KINDS = ['llm', 'script', 'tool', 'human', 'builtin', 'abstract'] as const;
 export const SCRIPT_LANGUAGES = ['javascript', 'go'] as const;
 export const PLANNERS = ['goap', 'utility', 'hybrid'] as const;
 export const TRIGGER_TYPES = ['event', 'schedule'] as const;
@@ -140,7 +148,7 @@ export const PRODUCE_OPS = ['create_node', 'update_node'] as const;
 
 // --- constructeurs --------------------------------------------------------------
 
-export const emptyNodeType = (): NodeTypeForm => ({ name: '', description: '', properties: '' });
+export const emptyNodeType = (): NodeTypeForm => ({ name: '', description: '', properties: '', extends: '' });
 export const emptyLinkType = (): LinkTypeForm => ({ name: '', from: '', to: '' });
 let uidSeq = 0;
 /** Nouvel identifiant local (éléments créés dans l'interface). */
@@ -178,6 +186,9 @@ export const emptyAction = (): ActionForm => ({
   language: 'javascript',
   code: '',
   utility: '',
+  specializes: '',
+  when: '',
+  priority: 0,
 });
 export const emptyGoal = (): GoalForm => ({ uid: newUid(), name: '', description: '', examples: '', pre: [], value: 1 });
 export const emptyAgent = (): AgentForm => ({
@@ -267,6 +278,9 @@ function actionToForm(a: Action, uid: string): ActionForm {
     language: a.language || 'javascript',
     code: a.code ?? '',
     utility: a.utility ?? '',
+    specializes: a.specializes ?? '',
+    when: a.when ?? '',
+    priority: a.priority ?? 0,
   };
 }
 
@@ -337,6 +351,7 @@ export function toForm(m: Methodology): MethodologyForm {
       name: n.name ?? '',
       description: n.description ?? '',
       properties: (n.properties ?? []).join(', '),
+      extends: n.extends ?? '',
     })),
     linkTypes: (m.linkTypes ?? []).map((l) => ({ name: l.name ?? '', from: l.from ?? '', to: l.to ?? '' })),
     conditions: (m.conditions ?? []).map((c, i) => ({
@@ -393,6 +408,7 @@ export function fromForm(f: MethodologyForm): { methodology: Methodology; issues
       const o: NonNullable<Methodology['nodeTypes']>[number] = {};
       put(o, 'name', n.name.trim());
       put(o, 'description', n.description.trim());
+      put(o, 'extends', n.extends.trim());
       put(
         o,
         'properties',
@@ -434,9 +450,17 @@ export function fromForm(f: MethodologyForm): { methodology: Methodology; issues
       put(o, 'name', a.name.trim());
       put(o, 'description', a.description.trim());
       put(o, 'kind', a.kind);
-      put(o, 'pre', toMap(a.pre));
-      put(o, 'effects', toMap(a.effects));
-      put(o, 'cost', num(a.cost));
+      const specializes = a.specializes.trim();
+      put(o, 'specializes', specializes);
+      if (specializes) {
+        // Une spécialisation hérite des pré / effets / attendus / coût de l'action spécialisée.
+        put(o, 'when', a.when.trim());
+        put(o, 'priority', num(Math.trunc(a.priority)));
+      } else {
+        put(o, 'pre', toMap(a.pre));
+        put(o, 'effects', toMap(a.effects));
+        put(o, 'cost', num(a.cost));
+      }
       put(o, 'permission', a.permission.trim());
       put(o, 'utility', a.utility.trim());
       // Champs propres au type d'action : les autres sont ignorés.
@@ -465,7 +489,7 @@ export function fromForm(f: MethodologyForm): { methodology: Methodology; issues
           }
         }
       }
-      if (a.hasExpects) {
+      if (a.hasExpects && !specializes) {
         const x = a.expects;
         const e: NonNullable<Action['expects']> = {};
         put(e, 'forEach', x.forEach);
@@ -531,7 +555,8 @@ export function fromForm(f: MethodologyForm): { methodology: Methodology; issues
 /** Conditions utilisables dans pre / effects : déclarées + `expect:<action>` générées. */
 export function conditionNames(f: MethodologyForm): string[] {
   const names = f.conditions.map((c) => c.name.trim()).filter(Boolean);
-  for (const a of f.actions) if (a.hasExpects && a.name.trim()) names.push(`expect:${a.name.trim()}`);
+  for (const a of f.actions)
+    if (a.hasExpects && !a.specializes.trim() && a.name.trim()) names.push(`expect:${a.name.trim()}`);
   return [...new Set(names)];
 }
 
@@ -554,6 +579,12 @@ export function renameReferences(f: MethodologyForm, section: Section, from: str
     for (const g of f.goals) renameRows(g.pre, from, to);
   } else if (section === 'actions') {
     for (const ag of f.agents) ag.actions = ag.actions.map((x) => (x === from ? to : x));
+    // spécialisations locales (« <action> » ou « <cette méthodologie>/<action> »)
+    const self = f.name.trim();
+    for (const a of f.actions) {
+      if (a.specializes === from) a.specializes = to;
+      else if (self && a.specializes === `${self}/${from}`) a.specializes = `${self}/${to}`;
+    }
     const ef = `expect:${from}`;
     renameReferences(f, 'conditions', ef, `expect:${to}`);
   } else if (section === 'goals') {
