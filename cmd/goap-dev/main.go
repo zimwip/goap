@@ -1,7 +1,11 @@
 // Command goap-dev runs graph, registry, iam, model gateway and engine in a
-// single process with in-memory storage, for local development without
-// containers. Callers act as the principal GOAP_DEV_SUBJECT / GOAP_DEV_ROLES
-// unless the request carries X-Goap-* identity headers.
+// single process, for local development without containers. Storage is
+// in-memory (GOAP_STORE=memory, default) or a local SQLite file
+// (GOAP_STORE=sqlite, GOAP_SQLITE_PATH) that keeps the graph, methodologies,
+// policies and processes across restarts. When GOAP_WEB_DIR (default
+// web/dist) holds a built IDE, it is served too. Callers act as the principal
+// GOAP_DEV_SUBJECT / GOAP_DEV_ROLES unless the request carries X-Goap-*
+// identity headers.
 package main
 
 import (
@@ -47,15 +51,20 @@ func main() {
 	}
 	ident := identity.Extractor{Default: &dev}
 
-	authorizer, err := authz.NewCasbin(nil)
+	st, err := openStores(ctx, log)
+	if err != nil {
+		platform.Fatal(log, "store", err)
+	}
+	defer st.close()
+	authorizer, err := authz.NewCasbin(st.policies)
 	if err != nil {
 		platform.Fatal(log, "casbin", err)
 	}
-	g := graph.New(graph.NewMemory())
+	g := graph.New(st.graph)
 	if _, err := graphsvc.SeedDemo(ctx, g); err != nil {
 		platform.Fatal(log, "seed", err)
 	}
-	reg := &registrysvc.Service{Store: registrysvc.NewMemoryStore(), Authz: authorizer}
+	reg := &registrysvc.Service{Store: st.methodologies, Authz: authorizer}
 	system := authz.With(ctx, authz.Principal{Subject: "system:registry", Roles: []string{"admin"}})
 	if _, err := reg.Seed(system, platform.Env("GOAP_METHODOLOGIES_DIR", "methodologies")); err != nil {
 		platform.Fatal(log, "methodologies", err)
@@ -89,7 +98,7 @@ func main() {
 			methodology.KindBuiltin: engine.DefaultBuiltins(),
 		},
 		Intent:    intent.Resolver{Ranker: intent.Lexical{}},
-		Store:     engine.NewMemoryStore(),
+		Store:     st.processes,
 		Events:    broker,
 		Authz:     authorizer,
 		LLM:       models,
@@ -111,6 +120,7 @@ func main() {
 		return c.JSON(http.StatusOK, map[string]any{"status": "ok", "time": time.Now().UTC(),
 			"services": []map[string]any{{"name": "goap-dev", "status": "up", "latencyMs": 0}}})
 	})
+	serveWeb(log, srv.Echo, platform.Env("GOAP_WEB_DIR", "web/dist"))
 	if runtime != nil {
 		srv.Mount(runtimev1connect.NewRuntimeServiceHandler(runtime, telemetry.HandlerOptions()...))
 	}

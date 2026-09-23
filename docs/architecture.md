@@ -409,6 +409,8 @@ une interface, remplaçable par l'implémentation PostgreSQL sans changer le mot
 
 ### 3.3 Persistance
 
+- **Local sans conteneur** : un fichier SQLite partagé par `goap-dev` (migrations `migrations_sqlite/`
+  par composant, [ADR 0010](adr/0010-mode-local-sqlite.md)).
 - **Dev** : une instance PostgreSQL, **un schéma par service** (`graph`, `registry`, `engine`, `iam`,
   `modelgw`, `mcp`) et un rôle dédié par service (`deploy/postgres/init.sql`).
 - **Prod** : une base (ou un cluster) par service ; seul le DSN change (`GOAP_DB_DSN`, lu depuis Vault).
@@ -447,6 +449,10 @@ change_item(id uuid, change_id, kind, type, status, target_id, target_version, p
 
 - `deploy/compose/docker-compose.yml` : postgres, nats (JetStream), vault (dev), tous les services, web,
   otel-collector, Jaeger, Prometheus, Grafana, proxy restreint de l'API Docker (sandboxes).
+- **Mode local sans conteneur** ([ADR 0010](adr/0010-mode-local-sqlite.md)) : `make devlocal` lance
+  `goap-dev` (tous les services dans un processus, bus d'événements en mémoire) sur un fichier **SQLite**
+  (`.goap/goap.db`, pilote Go pur) et sert l'IDE compilé sur http://localhost:8080. `GOAP_STORE=memory`
+  (`make dev`) garde le mode éphémère.
 - Une seule image multi-cible (`Dockerfile`, `ARG SERVICE`), binaire statique sur `distroless`.
 - Kubernetes 🟡 : un chart Helm par service (ou kustomize) ; engine en `Deployment` scalable (HPA sur la
   profondeur du stream work-queue), NATS via le chart officiel, Vault Agent Injector.
@@ -559,7 +565,7 @@ Voir `methodologies/impact-analysis.yaml` pour l'exemple complet exécutable.
 
 ```
 cmd/<service>/main.go        points d'entrée (gateway, registry, engine, graph, modelgw, mcp, iam)
-cmd/goap-dev/                tout-en-un en mémoire pour le développement local
+cmd/goap-dev/                tout-en-un pour le développement local (mémoire ou SQLite, sert l'IDE)
 cmd/goap-runner/             sandbox d'exécution des actions script
 internal/platform/           config, logs, serveur HTTP/Connect, NATS, Postgres, secrets Vault
 internal/<service>/          implémentation des handlers Connect d'un service (graphsvc, registrysvc, iamsvc…)
@@ -595,7 +601,7 @@ docs/                        architecture, ADR
 | **M4 — axe change avancé** | propagation d'impact (CTE récursive paramétrée par types de liens), liens suspects, diff de baselines, merge/rebase de changesets concurrents |
 | **M5 — UX** | ✅ éditeur de méthodologies (formulaires, anomalies localisées, publication, versions, import/export YAML), écran « Accès » (politiques ABAC), approbations · reste : visualisation du graphe et du plan |
 | **M6 — K8s** | charts Helm, HPA engine · ✅ observabilité OpenTelemetry, manifestes sandboxes |
-| **M8 — branches et décisions** 🟡 | ADR 0009 (accepté) · ✅ graphe : versions par branche, merge de branche à 3 voies, divergence et rebase de change · reste : moteur (conflit → merge validé → rebase et replanification), spécialisation d'actions, budget du change, options explorées en branches, comparaison, boucles de décision (questions → analyses), merge de l'option retenue ; puis containers versionnés et releases |
+| **M8 — branches et décisions** 🟡 | ADR 0009 (accepté) · ✅ graphe : versions par branche, merge de branche à 3 voies, divergence et rebase de change · reste : moteur (conflit → merge validé → rebase et replanification), spécialisation / sous-typage d'actions et de types du domaine, budget du change, options explorées en branches, comparaison, boucles de décision (questions → analyses), merge de l'option retenue ; puis containers versionnés et releases |
 | **M7 — agents** ✅ | agents (goap / utility / hybrid), actions script JS / Go avec DSL, sous-agents, sandbox par processus, IDE |
 
 ## 7. Questions ouvertes

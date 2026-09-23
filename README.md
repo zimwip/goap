@@ -14,7 +14,11 @@ Le blackboard du moteur est **l'axe *change*** d'un graphe de connaissance versi
 ## Démarrage rapide
 
 ```bash
-# 1. Tout-en-un, en mémoire, avec données de démo (aucune dépendance)
+# 1. Local, sans docker : un seul processus, SQLite (.goap/goap.db), IDE compris
+make devlocal                 # IDE + API sur http://localhost:8080 (Go + Node requis)
+make devlocal-reset           # repartir d'une base vide (démo et méthodologies ré-importées)
+
+#    variante en mémoire, rechargement à chaud de l'IDE
 make dev                      # API Connect sur http://localhost:8080
 make web                      # UI sur http://localhost:5173 (autre terminal)
 
