@@ -94,3 +94,14 @@ func serveWeb(log *slog.Logger, e *echo.Echo, dir string) {
 	}))
 	log.Info("serving the IDE", "dir", dir)
 }
+
+// registryEvents receives the registry events in-process (no NATS here) and
+// reacts to publications.
+type registryEvents func(ctx context.Context, name, version string)
+
+func (f registryEvents) Publish(ctx context.Context, subject string, v any) error {
+	if ev, ok := v.(map[string]string); ok && subject == "goap.registry.methodology.published" {
+		f(context.WithoutCancel(ctx), ev["name"], ev["version"])
+	}
+	return nil
+}

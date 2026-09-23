@@ -36,6 +36,7 @@ import (
 	"github.com/zimwip/goap/pkg/engine"
 	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/intent"
+	"github.com/zimwip/goap/pkg/metamodel"
 	"github.com/zimwip/goap/pkg/methodology"
 )
 
@@ -64,10 +65,31 @@ func main() {
 	if _, err := graphsvc.SeedDemo(ctx, g); err != nil {
 		platform.Fatal(log, "seed", err)
 	}
+	var triggers *engine.TriggerManager
 	reg := &registrysvc.Service{Store: st.methodologies, Authz: authorizer}
+	// publications are projected onto the domain graph (the methodology as
+	// versioned elements) and reload the triggers
+	reg.Events = registryEvents(func(ctx context.Context, name, version string) {
+		r, err := st.methodologies.Get(ctx, name, version)
+		if err != nil {
+			log.Error("published methodology", "name", name, "err", err)
+			return
+		}
+		if res, err := metamodel.Sync(ctx, g, &r.Methodology); err != nil {
+			log.Error("methodology projection", "name", name, "err", err)
+		} else if res.Changed() {
+			log.Info("methodology projected onto the graph", "name", name, "version", version, "change", res.Change)
+		}
+		if triggers != nil {
+			triggers.Handle(ctx, engine.TriggerEvent{Type: "methodology.published", Methodology: name, Version: version})
+		}
+	})
 	system := authz.With(ctx, authz.Principal{Subject: "system:registry", Roles: []string{"admin"}})
 	if _, err := reg.Seed(system, platform.Env("GOAP_METHODOLOGIES_DIR", "methodologies")); err != nil {
 		platform.Fatal(log, "methodologies", err)
+	}
+	if _, err := metamodel.SyncAll(ctx, g, reg); err != nil {
+		platform.Fatal(log, "methodology projection", err)
 	}
 	key, _ := secrets.Get(ctx, "", "ANTHROPIC_API_KEY")
 	router, err := modelgw.Build(ctx, modelgw.DefaultConfig(key != ""), secrets.Get)
@@ -82,7 +104,6 @@ func main() {
 		platform.Fatal(log, "sandbox", err)
 	}
 	broker := engine.NewBroker()
-	var triggers *engine.TriggerManager
 	onChange := func(ctx context.Context, ev domain.ChangeEvent) {
 		if triggers != nil {
 			triggers.Handle(ctx, engine.TriggerEventOf(ev))

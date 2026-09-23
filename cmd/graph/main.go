@@ -3,13 +3,36 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+	"log/slog"
+	"time"
 
 	"github.com/zimwip/goap/gen/goap/graph/v1/graphv1connect"
 	"github.com/zimwip/goap/internal/graphsvc"
 	"github.com/zimwip/goap/internal/platform"
+	"github.com/zimwip/goap/internal/registrysvc"
 	"github.com/zimwip/goap/internal/telemetry"
 	"github.com/zimwip/goap/pkg/graph"
+	"github.com/zimwip/goap/pkg/metamodel"
 )
+
+// syncMethodologies projects every published methodology at startup,
+// retrying while the registry is not reachable.
+func syncMethodologies(ctx context.Context, log *slog.Logger, g *graph.Graph, reg metamodel.Published) {
+	for delay := time.Second; ; delay = min(2*delay, time.Minute) {
+		rs, err := metamodel.SyncAll(ctx, g, reg)
+		if err == nil {
+			log.Info("methodologies projected onto the graph", "methodologies", len(rs))
+			return
+		}
+		log.Warn("methodology projection", "err", err, "retry", delay)
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(delay):
+		}
+	}
+}
 
 func main() {
 	ctx := context.Background()
@@ -33,6 +56,29 @@ func main() {
 			platform.Fatal(log, "seed", err)
 		}
 		log.Info("demo seed", "loaded", seeded)
+	}
+	// the published methodologies are projected onto the graph as versioned elements
+	if url := platform.Env("GOAP_REGISTRY_URL", ""); url != "" {
+		reg := registrysvc.NewClient(platform.H2CClient(), url, telemetry.ClientOptions()...)
+		go syncMethodologies(ctx, log, g, reg)
+		if err := events.Subscribe("goap.registry.methodology.published", func(data []byte) {
+			var ev struct{ Name, Version string }
+			if json.Unmarshal(data, &ev) != nil || ev.Name == "" {
+				return
+			}
+			m, err := reg.Methodology(context.Background(), ev.Name)
+			if err != nil {
+				log.Error("published methodology", "name", ev.Name, "err", err)
+				return
+			}
+			if res, err := metamodel.Sync(context.Background(), g, m.Methodology); err != nil {
+				log.Error("methodology projection", "name", ev.Name, "err", err)
+			} else if res.Changed() {
+				log.Info("methodology projected onto the graph", "name", ev.Name, "version", ev.Version, "change", res.Change)
+			}
+		}); err != nil {
+			platform.Fatal(log, "subscribe", err)
+		}
 	}
 	srv.Mount(graphv1connect.NewGraphServiceHandler(&graphsvc.Handler{Graph: g, Events: events}, telemetry.HandlerOptions()...))
 	if err := srv.Run(); err != nil {
