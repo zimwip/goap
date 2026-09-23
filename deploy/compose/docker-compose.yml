@@ -95,6 +95,8 @@ services:
       GOAP_REGISTRY_URL: http://registry:8080
       GOAP_MODELGW_URL: http://modelgw:8080
       GOAP_IAM_URL: http://iam:8080
+      GOAP_TRACE_QUERY_URL: http://jaeger:16686
+      GOAP_TRACE_UI_URL: http://localhost:16686/trace/
       GOAP_INTENT_RANKER: ${GOAP_INTENT_RANKER:-lexical}
       # script actions run in one hardened container per process
       GOAP_SANDBOX: ${GOAP_SANDBOX:-docker}

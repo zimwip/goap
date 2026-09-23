@@ -10,6 +10,7 @@ package main
 
 import (
 	"context"
+	"maps"
 	"net/http"
 	"time"
 
@@ -109,6 +110,7 @@ func main() {
 			triggers.Handle(ctx, engine.TriggerEventOf(ev))
 		}
 	}
+	builtins := engine.DefaultBuiltins()
 	e := &engine.Engine{
 		Graph:         engine.EventingGraph{GraphPort: g, OnEvent: onChange},
 		Methodologies: reg,
@@ -116,7 +118,7 @@ func main() {
 			methodology.KindLLM:     engine.LLMExecutor{Client: models},
 			methodology.KindScript:  engine.ScriptExecutor{Sandboxes: sandboxes},
 			methodology.KindHuman:   engine.HumanExecutor{},
-			methodology.KindBuiltin: engine.DefaultBuiltins(),
+			methodology.KindBuiltin: builtins,
 		},
 		Intent:    intent.Resolver{Ranker: intent.Lexical{}},
 		Store:     st.processes,
@@ -127,6 +129,8 @@ func main() {
 		Tracer:    telemetry.NewEngineTracer(),
 		Log:       log,
 	}
+	// self-observation (methodology-improvement): journal, traces, drafts
+	maps.Copy(builtins, e.SelfImprovementBuiltins(telemetry.SelfImprovementFromEnv(registrysvc.Drafts{Service: reg})))
 	triggers = &engine.TriggerManager{Engine: e, Log: log}
 	triggers.Start(ctx)
 	go triggers.WatchProcesses(ctx, broker)

@@ -193,6 +193,7 @@ export const TRIGGER_EVENTS = [
   'change.item_added',
   'process.completed',
   'process.failed',
+  'process.stuck',
   'methodology.published',
 ] as const;
 

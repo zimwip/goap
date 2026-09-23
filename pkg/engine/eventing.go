@@ -62,7 +62,7 @@ func TriggerEventOf(ev domain.ChangeEvent) TriggerEvent {
 }
 
 // WatchProcesses feeds process events of the broker to the trigger manager
-// (process.completed, process.failed). It returns when ctx is done.
+// (process.completed, process.failed, process.stuck). It returns when ctx is done.
 func (t *TriggerManager) WatchProcesses(ctx context.Context, b *Broker) {
 	events, cancel := b.Subscribe(256)
 	defer cancel()
@@ -85,6 +85,10 @@ func (t *TriggerManager) WatchProcesses(ctx context.Context, b *Broker) {
 			case StatusFailed:
 				if ev.Event == string(StatusFailed) {
 					t.Handle(ctx, TriggerEvent{Type: "process.failed", Process: ev.Process})
+				}
+			case StatusStuck:
+				if ev.Event == string(StatusStuck) {
+					t.Handle(ctx, TriggerEvent{Type: "process.stuck", Process: ev.Process})
 				}
 			}
 		}

@@ -69,7 +69,7 @@ const (
 )
 
 // TriggerEvents lists the events a trigger can react to.
-var TriggerEvents = []string{"change.created", "change.applied", "change.item_added", "process.completed", "process.failed", "methodology.published"}
+var TriggerEvents = []string{"change.created", "change.applied", "change.item_added", "process.completed", "process.failed", "process.stuck", "methodology.published"}
 
 // Trigger starts an agent automatically on an event or a schedule.
 type Trigger struct {
