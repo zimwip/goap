@@ -126,6 +126,8 @@ export interface NodeType {
   name?: string;
   description?: string;
   properties?: string[];
+  /** type parent : le sous-type hérite de ses propriétés et des types de liens */
+  extends?: string;
 }
 
 export interface LinkType {
@@ -158,7 +160,7 @@ export interface Expectation {
   link?: LinkSpec;
 }
 
-export type ActionKind = 'llm' | 'script' | 'tool' | 'human' | 'builtin';
+export type ActionKind = 'llm' | 'script' | 'tool' | 'human' | 'builtin' | 'abstract';
 export type ScriptLanguage = 'javascript' | 'go';
 export type PlannerKind = 'goap' | 'utility' | 'hybrid';
 
@@ -184,6 +186,12 @@ export interface Action {
   code?: string;
   /** expression CEL numérique (planificateurs utility / hybrid) */
   utility?: string;
+  /** spécialisation : « <action> » ou « <méthodologie>/<action> » (non planifiée) */
+  specializes?: string;
+  /** garde CEL de la spécialisation, évaluée sur le tableau noir */
+  when?: string;
+  /** priorité de la spécialisation (la plus haute l'emporte) */
+  priority?: number;
 }
 
 export type TriggerType = 'event' | 'schedule';
@@ -364,6 +372,9 @@ export interface Decision {
 
 export type ItemKind = 'impact' | 'proposal' | 'decision' | 'artifact';
 
+/** Statut d'un item remplacé (rebase, fusion) : voir `supersedes` de son remplaçant. */
+export const ITEM_SUPERSEDED = 'superseded';
+
 export interface ChangeItem {
   id?: string;
   kind?: ItemKind | string;
@@ -376,6 +387,10 @@ export interface ChangeItem {
   producedBy?: string;
   derivedFrom?: string[];
   createdAt?: string;
+  /** items remplacés par celui-ci (rebase, fusion) */
+  supersedes?: string[];
+  /** enregistrement du journal d'exécution qui a produit l'item */
+  execution?: string;
 }
 
 export interface ChangeSet {
@@ -390,6 +405,68 @@ export interface ChangeSet {
   data?: Struct;
   items?: ChangeItem[];
   createdAt?: string;
+}
+
+/** process.started | tick | action | approval | process.ended */
+export type ExecutionKind = 'process.started' | 'tick' | 'action' | 'approval' | 'process.ended';
+
+export interface ModelCall {
+  provider?: string;
+  model?: string;
+  inputTokens?: Int64;
+  outputTokens?: Int64;
+  durationMs?: Int64;
+  error?: string;
+}
+
+export interface ToolUse {
+  name?: string;
+  durationMs?: Int64;
+  error?: string;
+}
+
+/**
+ * Entrée du journal d'exécution d'un changement (ADR 0011) : tick (observation +
+ * planification), exécution d'action, décision humaine, début / fin de processus.
+ */
+export interface ExecutionRecord {
+  id?: string;
+  changeId?: string;
+  processId?: string;
+  parentProcessId?: string;
+  seq?: number;
+  kind?: ExecutionKind | string;
+  methodology?: string;
+  methodologyVersion?: string;
+  agent?: string;
+  planner?: string;
+  goal?: string;
+  status?: string;
+  step?: number;
+  action?: string;
+  actionKind?: string;
+  /** spécialisation exécutée à la place de l'action planifiée */
+  specialization?: string;
+  plan?: string[];
+  before?: Record<string, boolean>;
+  after?: Record<string, boolean>;
+  /** absent tant que l'action n'est pas terminée (ou en erreur, ou en attente) */
+  effectsMet?: boolean;
+  items?: string[];
+  inputTokens?: Int64;
+  outputTokens?: Int64;
+  modelCalls?: ModelCall[];
+  toolCalls?: ToolUse[];
+  actor?: string;
+  output?: string;
+  error?: string;
+  traceId?: string;
+  spanId?: string;
+  /** tick : replanned, candidates, unknown · action : waiting, child, children · fin : steps, llmCalls… */
+  data?: Struct;
+  startedAt?: string;
+  endedAt?: string;
+  durationMs?: Int64;
 }
 
 // --- engine -----------------------------------------------------------------
@@ -641,6 +718,14 @@ export const graph = {
     rpc<Empty, { changes?: ChangeSet[] }>(GRAPH, 'ListChanges', {}, signal),
   getChange: (id: string, signal?: AbortSignal) =>
     rpc<{ id: string }, { change?: ChangeSet }>(GRAPH, 'GetChange', { id }, signal),
+  /** Journal d'exécution d'un changement, éventuellement restreint à des processus. */
+  listExecutions: (changeId: string, processIds: string[] = [], signal?: AbortSignal) =>
+    rpc<{ changeId: string; processIds?: string[] }, { records?: ExecutionRecord[] }>(
+      GRAPH,
+      'ListExecutions',
+      processIds.length ? { changeId, processIds } : { changeId },
+      signal,
+    ),
   applyChange: (changeId: string, baselineName: string) =>
     rpc<{ changeId: string; baselineName: string }, { baseline?: Baseline }>(GRAPH, 'ApplyChange', {
       changeId,

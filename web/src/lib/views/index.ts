@@ -24,6 +24,7 @@ import ConditionTab from './editors/ConditionTab.svelte';
 import GoalTab from './editors/GoalTab.svelte';
 import RunTab from './editors/RunTab.svelte';
 import ChangeTab from './editors/ChangeTab.svelte';
+import JournalTab from './editors/JournalTab.svelte';
 import BaselineTab from './editors/BaselineTab.svelte';
 import PoliciesTab from './editors/PoliciesTab.svelte';
 import ImportTab from './editors/ImportTab.svelte';
@@ -173,7 +174,12 @@ for (const kind of ['agent', 'action', 'condition', 'goal'] as const) {
         ['Description', it.description],
       ];
       if ('planner' in it) rows.push(['Planificateur', it.planner], ['Actions', it.actions.join(', ') || 'toutes'], ['Objectifs', it.goals.join(', ') || 'tous']);
-      if ('kind' in it) rows.push(['Type', it.kind], ['Coût', String(it.cost)], ['Permission', it.permission], ['Utilité', it.utility]);
+      if ('kind' in it) {
+        rows.push(['Type', it.kind]);
+        if (it.specializes) rows.push(['Spécialise', it.specializes], ['Garde', it.when], ['Priorité', String(it.priority)]);
+        else rows.push(['Coût', String(it.cost)]);
+        rows.push(['Permission', it.permission], ['Utilité', it.utility]);
+      }
       if ('expr' in it) rows.push(['Expression', it.expr]);
       if ('value' in it) rows.push(['Valeur', String(it.value)]);
       return { title: it.name || '(sans nom)', subtitle: ITEM_TITLES[kind], rows };
@@ -227,6 +233,20 @@ registerView({
   component: ChangeTab,
   key: (p) => p.id ?? '',
   tabTitle: (t) => changes.items.find((c) => c.id === t.params.id)?.title || `Changement ${shortId(t.params.id)}`,
+});
+
+registerView({
+  id: 'journal',
+  zone: 'editor',
+  title: "Journal d'exécution",
+  icon: 'list',
+  component: JournalTab,
+  key: (p) => p.id ?? '',
+  tabTitle: (t) => {
+    const c = changes.items.find((x) => x.id === t.params.id);
+    return `Journal · ${c?.title || shortId(t.params.id)}`;
+  },
+  tooltip: (t) => `Journal d'exécution du changement ${t.params.id}`,
 });
 
 registerView({

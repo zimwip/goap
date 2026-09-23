@@ -6,6 +6,7 @@
     formatDate,
     shortId,
     type Baseline,
+    ITEM_SUPERSEDED,
     type ChangeItem,
     type ChangeSet,
     type GraphNode,
@@ -94,6 +95,19 @@
 
   const related = $derived([...processes.values()].filter((p) => p.changeId && p.changeId === selected));
 
+  /** Journal d'exécution du changement, éventuellement centré sur un enregistrement. */
+  function openJournal(record = '') {
+    if (change?.id) openTab({ kind: 'journal', params: { id: change.id, process: '', record } }, { pin: true });
+  }
+
+  function provenance(i: ChangeItem): string {
+    const parts = [i.producedBy ? `Produit par ${i.producedBy}` : 'Producteur inconnu'];
+    if (i.execution) parts.push(`exécution ${shortId(i.execution)} — ouvrir dans le journal d'exécution`);
+    if (i.supersedes?.length) parts.push(`remplace ${i.supersedes.map(shortId).join(', ')}`);
+    if (i.status === ITEM_SUPERSEDED) parts.push('remplacé par un item plus récent');
+    return parts.join(' · ');
+  }
+
   function openBaseline(id: string | undefined) {
     if (id) openTab({ kind: 'baseline', params: { id } });
   }
@@ -102,6 +116,14 @@
     () => tab.id,
     () => [
       { id: 'refresh', label: 'Actualiser', icon: 'refresh', disabled: loading, run: () => load(selected) },
+      {
+        id: 'journal',
+        label: "Journal d'exécution",
+        icon: 'list',
+        disabled: !change,
+        title: 'Ticks, actions, appels de modèle et décisions des processus de ce changement',
+        run: () => openJournal(),
+      },
       {
         id: 'apply',
         label: applying ? 'Application…' : 'Appliquer',
@@ -115,6 +137,15 @@
   );
 </script>
 
+
+{#snippet producer(i: ChangeItem)}
+  {#if i.execution}
+    <button type="button" class="link" title={provenance(i)} onclick={() => openJournal(i.execution)}>{i.producedBy || shortId(i.execution)}</button>
+  {:else}
+    <span title={provenance(i)}>{i.producedBy}</span>
+  {/if}
+  {#if i.supersedes?.length}<span class="hint" title={provenance(i)}> (remplace {i.supersedes.length})</span>{/if}
+{/snippet}
 
 <div class="editor-page">
 {#if error}<div class="alert">{error}</div>{/if}
@@ -144,6 +175,8 @@
         <dd><button type="button" class="link mono" onclick={() => openBaseline(change?.resultBaselineId)}>{shortId(change.resultBaselineId)}</button></dd>
       {/if}
       {#if change.createdAt}<dt>Créé le</dt><dd>{formatDate(change.createdAt)}</dd>{/if}
+      <dt>Journal</dt>
+      <dd><button type="button" class="link" onclick={() => openJournal()}>Journal d'exécution</button></dd>
       {#if related.length}
         <dt>Exécutions</dt>
         <dd class="runs">
@@ -178,11 +211,11 @@
         <thead><tr><th>Élément</th><th>Type</th><th>Raison</th><th>Produit par</th></tr></thead>
         <tbody>
           {#each groups.impact as i (i.id)}
-            <tr>
+            <tr class:superseded={i.status === ITEM_SUPERSEDED}>
               <td><code>{refKey(ctx, i.target)}</code></td>
               <td>{i.type}</td>
               <td>{show(i.data?.['reason'])}</td>
-              <td class="muted">{i.producedBy}</td>
+              <td class="muted">{@render producer(i)}</td>
             </tr>
           {/each}
         </tbody>
@@ -197,7 +230,7 @@
     {#if groups.proposal.length}
       <ul class="list">
         {#each groups.proposal as i (i.id)}
-          <li>
+          <li class:superseded={i.status === ITEM_SUPERSEDED}>
             <div class="row">
               <strong class="grow">{describeProposal(ctx, i)}</strong>
               <StatusBadge status={i.status} />
@@ -205,7 +238,7 @@
             {#if i.proposal?.node?.props}
               <pre>{JSON.stringify(i.proposal.node.props, null, 2)}</pre>
             {/if}
-            <div class="hint">{i.producedBy} · <code>{shortId(i.id)}</code></div>
+            <div class="hint">{@render producer(i)} · <code>{shortId(i.id)}</code></div>
           </li>
         {/each}
       </ul>
@@ -221,7 +254,7 @@
         <thead><tr><th>Proposition</th><th>Décision</th><th>Commentaire</th></tr></thead>
         <tbody>
           {#each groups.decision as i (i.id)}
-            <tr>
+            <tr class:superseded={i.status === ITEM_SUPERSEDED}>
               <td>{describeProposal(ctx, ctx.items.get(i.decision?.item ?? ''))}</td>
               <td><StatusBadge status={i.decision?.accept ? 'accepted' : 'rejected'} /></td>
               <td>{i.decision?.comment ?? ''}</td>
@@ -238,8 +271,11 @@
     <h3>Artefacts <span class="count">{groups.artifact.length}</span></h3>
     {#each groups.artifact as i (i.id)}
       {@const md = markdownOf(i)}
-      <article class="artifact">
-        <h4>{i.type || 'artefact'} <span class="hint">· {i.producedBy}</span></h4>
+      <article class="artifact" class:superseded={i.status === ITEM_SUPERSEDED}>
+        <h4>
+          {i.type || 'artefact'} <span class="hint">· {@render producer(i)}</span>
+          {#if i.status === ITEM_SUPERSEDED}<StatusBadge status={i.status} />{/if}
+        </h4>
         {#if md !== undefined}
           <pre class="md">{md}</pre>
         {:else if i.data}
@@ -304,6 +340,14 @@
   }
   .artifact + .artifact {
     margin-top: 1rem;
+  }
+  .superseded {
+    opacity: 0.55;
+  }
+  .superseded strong,
+  .superseded td,
+  .superseded h4 {
+    text-decoration: line-through;
   }
   .md {
     font-size: 0.88rem;

@@ -118,6 +118,15 @@
         run: () => openTab({ kind: 'change', params: { id: process?.changeId ?? '' } }),
       },
       {
+        id: 'journal',
+        label: "Journal d'exécution",
+        icon: 'list',
+        disabled: !process?.changeId,
+        title: process?.changeId ? "Journal d'exécution de ce processus (ticks, actions, appels de modèle)" : 'Processus sans changement',
+        run: () =>
+          openTab({ kind: 'journal', params: { id: process?.changeId ?? '', process: process?.id ?? '', record: '' } }, { pin: true }),
+      },
+      {
         id: 'parent',
         label: 'Processus parent',
         icon: 'runs',
@@ -172,7 +181,17 @@
           {/if}
           {#if process.changeId}
             <dt>Changement</dt>
-            <dd><button type="button" class="link mono" onclick={() => openTab({ kind: 'change', params: { id: process.changeId ?? '' } })}>{shortId(process.changeId)}</button></dd>
+            <dd>
+              <button type="button" class="link mono" onclick={() => openTab({ kind: 'change', params: { id: process.changeId ?? '' } })}>{shortId(process.changeId)}</button>
+              ·
+              <button
+                type="button"
+                class="link"
+                onclick={() =>
+                  openTab({ kind: 'journal', params: { id: process.changeId ?? '', process: process.id ?? '', record: '' } }, { pin: true })}
+                >journal d'exécution</button
+              >
+            </dd>
           {/if}
           {#if process.baselineId}
             <dt>Référentiel</dt>

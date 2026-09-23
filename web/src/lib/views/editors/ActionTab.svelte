@@ -25,6 +25,22 @@
     () => root,
   );
 
+  const actionNames = $derived([...new Set(d.form.actions.map((a) => a.name.trim()).filter(Boolean))]);
+  /** spécialisations locales de cette action */
+  const specializations = $derived(
+    item && item.name.trim()
+      ? d.form.actions.filter((a) => {
+          const s = a.specializes.trim();
+          return a !== item && (s === item.name.trim() || s === `${d.form.name.trim()}/${item.name.trim()}`);
+        })
+      : [],
+  );
+  const specialized = $derived(
+    item?.specializes.trim() && !item.specializes.includes('/')
+      ? d.form.actions.find((a) => a.name.trim() === item.specializes.trim())
+      : undefined,
+  );
+
   const agents = $derived(
     item ? d.form.agents.filter((a) => a.actions.length === 0 || a.actions.includes(item.name)) : [],
   );
@@ -41,12 +57,28 @@
           conditions={d.conditionOptions}
           nodeTypes={d.nodeTypeNames}
           linkTypes={d.linkTypeNames}
+          actions={actionNames}
           bad={d.bad}
           readonly={d.readonly}
           onrename={(from, to) => d.rename('actions', from, to)}
         />
       </section>
     </fieldset>
+    {#if specialized}
+      <p class="hint">
+        Spécialise <button type="button" class="link" onclick={() => openItem(d, 'actions', specialized)}>{specialized.name}</button>.
+      </p>
+    {/if}
+    {#if specializations.length || item.kind === 'abstract'}
+      <p class="hint">
+        Spécialisations :
+        {#each specializations as a, i (a.uid)}{i ? ', ' : ''}<button type="button" class="link" onclick={() => openItem(d, 'actions', a)}
+            >{a.name || '(sans nom)'}</button
+          >{a.priority ? ` (priorité ${a.priority})` : ''}{:else}
+          aucune dans cette méthodologie{item.kind === 'abstract' ? ' — une action abstraite doit être spécialisée' : ''}
+        {/each}
+      </p>
+    {/if}
     <p class="hint">
       Agents pouvant l'utiliser :
       {#each agents as a, i (a.uid)}{i ? ', ' : ''}<button type="button" class="link" onclick={() => openItem(d, 'agents', a)}
