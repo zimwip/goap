@@ -2,7 +2,6 @@ package engine_test
 
 import (
 	"context"
-	"os"
 	"reflect"
 	"slices"
 	"strings"
@@ -56,11 +55,7 @@ func TestSDLCDelivery(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	data, err := os.ReadFile("../../methodologies/sdlc.yaml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	m, err := methodology.Parse(data)
+	m, err := methodology.LoadFile("../../methodologies/sdlc.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}

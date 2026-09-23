@@ -1,0 +1,47 @@
+name: alm
+version: 1.0.0
+description: >
+  Application lifecycle management domain: needs, requirements, functions, components, builds, releases and deployments. Shared by the delivery methodologies (impact-analysis, test-design, sdlc).
+nodeTypes:
+  - {name: Need, description: Business need expressed by a stakeholder, properties: [title, description, stakeholder]}
+  - {name: Requirement, description: Requirement satisfying a need, properties: [title, description, priority, status]}
+  - {name: FunctionalRequirement, extends: Requirement, description: Functional requirement}
+  - {name: NonFunctionalRequirement, extends: Requirement, description: Non-functional requirement (performance, availability…), properties: [category]}
+  - {name: SecurityRequirement, extends: NonFunctionalRequirement, description: Security requirement}
+  - {name: Function, description: Function (capability) realizing requirements, properties: [title, description]}
+  - {name: Component, description: Software component implementing functions, properties: [title, owner, technology, version, repository]}
+  - {name: BuildArtifact, description: Artifact produced by the build of a component, properties: [name, format, version, technology, coordinates, toolchain, checks]}
+  - {name: Application, description: Deployable application composed of components, properties: [title, owner, version]}
+  - {name: Solution, description: Solution grouping applications serving needs, properties: [title, owner]}
+  - {name: Data, description: Data object, properties: [title, classification]}
+  - {name: Interface, description: Interface (API, file, event) exposed by an application, properties: [title, protocol, version]}
+  - {name: Flow, description: Data flow between applications through an interface, properties: [title, mode, frequency]}
+  - {name: TestCase, description: Test case verifying a requirement, properties: [title, level, steps]}
+  - {name: Release, description: Deliverable version of an application (a set of artifacts), properties: [title, version, status, notes]}
+  - {name: Environment, description: Execution environment (dev, test, staging, production), properties: [name, stage, order, url]}
+  - {name: Deployment, description: Deployment of a release to an environment, properties: [status, stage, date, checks]}
+linkTypes:
+  - {name: satisfies, from: Requirement, to: Need}
+  - {name: refines, from: Requirement, to: Requirement}
+  - {name: realizes, from: Function, to: Requirement}
+  - {name: implements, from: Component, to: Function}
+  - {name: depends_on, from: Component, to: Component}
+  - {name: accesses, from: Component, to: Data}
+  - {name: built_from, from: BuildArtifact, to: Component}
+  - {name: composed_of, from: Application, to: Component}
+  - {name: deploys, from: Application, to: BuildArtifact}
+  - {name: includes, from: Solution, to: Application}
+  - {name: addresses, from: Solution, to: Need}
+  - {name: owned_by, from: Data, to: Application}
+  - {name: exposed_by, from: Interface, to: Application}
+  - {name: exchanges, from: Interface, to: Data}
+  - {name: source, from: Flow, to: Application}
+  - {name: target, from: Flow, to: Application}
+  - {name: through, from: Flow, to: Interface}
+  - {name: carries, from: Flow, to: Data}
+  - {name: verifies, from: TestCase, to: Requirement}
+  - {name: contains, from: Release, to: BuildArtifact}
+  - {name: releases, from: Release, to: Application}
+  - {name: promotes_to, from: Environment, to: Environment}
+  - {name: of_release, from: Deployment, to: Release}
+  - {name: in_environment, from: Deployment, to: Environment}

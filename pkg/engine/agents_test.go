@@ -2,7 +2,6 @@ package engine
 
 import (
 	"context"
-	"os"
 	"strings"
 	"testing"
 
@@ -13,11 +12,7 @@ import (
 
 func loadMethodology(t *testing.T, file string) *methodology.Compiled {
 	t.Helper()
-	data, err := os.ReadFile("../../methodologies/" + file)
-	if err != nil {
-		t.Fatal(err)
-	}
-	m, err := methodology.Parse(data)
+	m, err := methodology.LoadFile("../../methodologies/" + file)
 	if err != nil {
 		t.Fatal(err)
 	}

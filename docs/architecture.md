@@ -579,7 +579,8 @@ version is refused when it would break a published methodology that follows the 
 (`GetDomainUsage` lists the dependents). Editing a domain creates no change, impact or proposal.
 
 **YAML** is only an **import / export** format (`ImportMethodology`, `ExportMethodology`); the
-files in `methodologies/` are imported and published at registry startup if they don't already exist.
+files in `domains/` then `methodologies/` are imported and published at registry startup if they don't already exist
+(`GOAP_DOMAINS_DIR`, `GOAP_METHODOLOGIES_DIR`; a changed file needs a new version number).
 Example YAML definition:
 
 ```yaml
@@ -626,7 +627,7 @@ or an LLM). Action specialization fields: `specializes`, `when`, `priority`, `ki
 node type subtyping: `extends`. An `incremental: true` action reaches its effects across several
 executions: an execution that produces items without reaching them is **progress**, not a failure.
 
-### 4.1 SDLC methodology on the ALM domain (`methodologies/sdlc.yaml`, version 0.2.0)
+### 4.1 SDLC methodology on the ALM domain (`methodologies/sdlc.yaml`, version 0.3.0, on the shared `alm` domain of `domains/alm.yaml`)
 
 ALM domain (demo data: `internal/graphsvc/seed.go`):
 
@@ -686,7 +687,8 @@ pkg/authz/                   ABAC: identity, requests, Casbin model and enforcer
 pkg/llm/                     completion contract (implemented by internal/modelgw)
 proto/                       connect-rpc contracts (buf)
 gen/                         generated code (committed)
-methodologies/               example methodologies
+methodologies/               example methodologies (active part)
+domains/                     shared domains (object part) they reference
 deploy/                      compose, postgres init, otel collector, prometheus, grafana, k8s (sandboxes)
 web/                         Svelte frontend
 docs/                        architecture, ADRs
@@ -705,7 +707,7 @@ docs/                        architecture, ADRs
 | **M6 — K8s** | Helm charts, engine HPA · ✅ OpenTelemetry observability, sandbox manifests |
 | **M8 — branches and decisions** 🟡 | ADR 0009 (accepted) · ✅ graph: per-branch versions, 3-way branch merge, change divergence and rebase · remaining: engine (conflict → validated merge → rebase and replanning), change budget, options explored as branches, comparison, decision loops (questions → analyses), merging the chosen option; then versioned containers and releases |
 | **M9 — self-observation** ✅ | ADR 0011: execution journal on the change axis (ticks, actions, LLM / tool calls, decisions, item provenance), methodology projected into versioned domain elements, `observer` agent (journal + OpenTelemetry traces → findings → proposals → review → draft), action specialization and type subtyping |
-| **M10 — SDLC** 🟡 | `sdlc` 0.2.0 methodology on the ALM domain (need → requirement → function → component → artifact → application → solution, data, interfaces, flows), build specialized by technology, incremental releases and deployment (dev → test → staging → production, release manager approval), incremental actions · to refine: quality (coverage, security), rollback, freezes / change windows, MCP tools (repositories, CI, artifact registry, deployment) |
+| **M10 — SDLC** 🟡 | `sdlc` 0.3.0 methodology on the shared ALM domain (need → requirement → function → component → artifact → application → solution, data, interfaces, flows), build specialized by technology, incremental releases and deployment (dev → test → staging → production, release manager approval), incremental actions · to refine: quality (coverage, security), rollback, freezes / change windows, MCP tools (repositories, CI, artifact registry, deployment) |
 | **M7 — agents** ✅ | agents (goap / utility / hybrid), JS / Go script actions with DSL, sub-agents, sandbox per process, IDE |
 | **M11 — graph-native metadata layer** 🟡 | ADR 0012: `NodeType` seeded on the graph and never overwritten by `Sync`, `LinkInstanceOf` (auto-attached by the engine's item resolver), graph-first `x.types` resolution with a permanent declared-schema fallback, `nodetype` ABAC resource, automatic `instanceOf` backfill for pre-existing domain nodes · remaining: IDE screen to author node types and `extends` directly on the graph |
 

@@ -1,7 +1,6 @@
 package methodology
 
 import (
-	"os"
 	"strings"
 	"testing"
 
@@ -10,11 +9,7 @@ import (
 
 func load(t *testing.T) *Compiled {
 	t.Helper()
-	data, err := os.ReadFile("../../methodologies/impact-analysis.yaml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	m, err := Parse(data)
+	m, err := LoadFile("../../methodologies/impact-analysis.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -111,8 +106,7 @@ goals:
 }
 
 func TestCompileDoesNotMutateAndYAMLRoundTrip(t *testing.T) {
-	data, _ := os.ReadFile("../../methodologies/impact-analysis.yaml")
-	m, err := Parse(data)
+	m, err := LoadFile("../../methodologies/impact-analysis.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}

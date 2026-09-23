@@ -1,16 +1,11 @@
 name: test-design
-version: 1.1.0
+version: 1.2.0
 description: >
   Design and review of a test campaign from the repository's requirements.
   Example of agents (goap, utility and hybrid planners), script actions
   (JavaScript and Go) and delegation to sub-agents.
 
-domain:
-  nodeTypes:
-    - {name: Requirement, properties: [title, priority]}
-    - {name: TestCase, properties: [title]}
-  linkTypes:
-    - {name: verifies, from: TestCase, to: Requirement}
+domainRef: alm@1.0.0
 
 conditions:
   - name: has_scope

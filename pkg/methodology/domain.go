@@ -3,6 +3,8 @@ package methodology
 import (
 	"bytes"
 	"fmt"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -139,4 +141,52 @@ func (m *Methodology) lintDomainRefs(nodeTypes, linkTypes map[string]bool, add f
 			}
 		}
 	}
+}
+
+// DomainDir resolves domain references from the YAML files of a directory
+// (an empty version picks the last matching file in name order).
+func DomainDir(dir string) DomainResolver {
+	return func(name, version string) (*Domain, error) {
+		files, err := filepath.Glob(filepath.Join(dir, "*.y*ml"))
+		if err != nil {
+			return nil, err
+		}
+		var found *Domain
+		for _, f := range files {
+			src, err := os.ReadFile(f)
+			if err != nil {
+				return nil, err
+			}
+			d, err := ParseDomain(src)
+			if err != nil {
+				return nil, fmt.Errorf("%s: %w", f, err)
+			}
+			if d.Name == name && (version == "" || d.Version == version) {
+				found = d
+			}
+		}
+		if found == nil {
+			return nil, fmt.Errorf("domain %s@%s not found in %s", name, version, dir)
+		}
+		return found, nil
+	}
+}
+
+// LoadFile parses a methodology file. A domain reference is resolved from the
+// "domains" directory next to the methodology's directory (the layout of the
+// repository: methodologies/ and domains/).
+func LoadFile(path string) (*Methodology, error) {
+	src, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	m, err := Parse(src)
+	if err != nil {
+		return nil, err
+	}
+	res, issues := m.Resolve(DomainDir(filepath.Join(filepath.Dir(path), "..", "domains")))
+	if len(issues) > 0 {
+		return nil, fmt.Errorf("%s: %w", path, issues)
+	}
+	return res, nil
 }

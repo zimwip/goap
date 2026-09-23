@@ -39,14 +39,12 @@ func as(roles ...string) context.Context {
 
 func example(t *testing.T) methodology.Methodology {
 	t.Helper()
-	data, err := os.ReadFile("../../methodologies/impact-analysis.yaml")
+	// resolved and embedded: the legacy shape, independent of stored domains
+	m, err := methodology.LoadFile("../../methodologies/impact-analysis.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}
-	m, err := methodology.Parse(data)
-	if err != nil {
-		t.Fatal(err)
-	}
+	m.DomainRef = ""
 	return *m
 }
 
@@ -159,6 +157,9 @@ func TestAgentsAndScriptsRoundTrip(t *testing.T) {
 	for name, mk := range stores(t) {
 		t.Run(name, func(t *testing.T) {
 			s := &Service{Store: mk(t)}
+			if _, err := s.SeedDomains(as("admin"), "../../domains"); err != nil {
+				t.Fatal(err)
+			}
 			data, _ := os.ReadFile("../../methodologies/test-design.yaml")
 			if _, _, err := s.Import(as("admin"), data, true); err != nil {
 				t.Fatal(err)

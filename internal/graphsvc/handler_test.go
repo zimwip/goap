@@ -2,7 +2,6 @@ package graphsvc_test
 
 import (
 	"context"
-	"os"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -30,11 +29,7 @@ func createObject(h *graphsvc.Handler, roles, key string) error {
 }
 
 func TestCreateObjectIsRoleGated(t *testing.T) {
-	data, err := os.ReadFile("../../methodologies/test-design.yaml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	m, err := methodology.Parse(data)
+	m, err := methodology.LoadFile("../../methodologies/test-design.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}

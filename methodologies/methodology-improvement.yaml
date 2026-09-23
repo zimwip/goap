@@ -1,5 +1,5 @@
 name: methodology-improvement
-version: 1.0.0
+version: 1.1.0
 description: >
   Platform self-observation: at the end of each process, an agent analyzes the
   execution journal (planning ticks, actions, LLM and tool calls) and the
@@ -9,25 +9,7 @@ description: >
   agent definitions, new actions, MCP tools. Accepted proposals become a new
   draft version of the methodology.
 
-domain:
-  nodeTypes:
-    - {name: Methodology, properties: [name, version, description]}
-    - {name: Agent, properties: [name, planner, actions, goals]}
-    - {name: Action, properties: [name, kind, cost, model, prompt, code, specializes, when, priority]}
-    - {name: Goal, properties: [name, pre]}
-    - {name: Condition, properties: [name, expr]}
-    - {name: Trigger, properties: [name, type, event]}
-    - {name: NodeType, properties: [name, extends]}
-    - {name: ToolRequest, properties: [name, description, motivation]}
-  linkTypes:
-    - {name: contains, from: Methodology}
-    - {name: uses, from: Agent, to: Action}
-    - {name: pursues, from: Agent, to: Goal}
-    - {name: has, from: Agent, to: Trigger}
-    - {name: requires, to: Condition}
-    - {name: achieves, from: Action, to: Condition}
-    - {name: specializes, from: Action, to: Action}
-    - {name: extends, from: NodeType, to: NodeType}
+domainRef: metamodel@1.0.0
 
 conditions:
   - name: analyzed
