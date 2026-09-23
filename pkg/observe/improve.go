@@ -62,18 +62,18 @@ func Propose(r Report, m *methodology.Methodology) (props []Proposal, notes []st
 			name := a.Name + "_script"
 			props = append(props, Proposal{Finding: i, Op: "create_node", Type: "Action", Key: ElementKey(m.Name, "action", name),
 				Props: map[string]any{"name": name, "kind": methodology.KindScript, "language": methodology.LangJavaScript,
-					"specializes": a.Name, "priority": 10, "description": "Version systématisée de " + a.Name + " (sans appel LLM).",
+					"specializes": a.Name, "priority": 10, "description": "Systematized version of " + a.Name + " (no LLM call).",
 					"code": scriptTemplate(a, stats[a.Name])},
-				Title:     "Spécialiser " + a.Name + " par un script",
-				Rationale: f.Evidence + ". Le script est prioritaire ; ajouter une garde `when` pour garder le LLM sur les cas atypiques.",
+				Title:     "Specialize " + a.Name + " with a script",
+				Rationale: f.Evidence + ". The script takes priority; add a `when` guard to keep the LLM for atypical cases.",
 				LinkType:  "specializes", LinkTo: ElementKey(m.Name, "action", a.Name)})
 		case FindLLMHeavy:
 			if !known || a.Kind != methodology.KindLLM || a.Model == "fast" || !once("model:"+a.Name) {
 				continue
 			}
 			props = append(props, Proposal{Finding: i, Op: "update_node", Key: ElementKey(m.Name, "action", a.Name),
-				Props: map[string]any{"model": "fast"}, Title: "Modèle rapide pour " + a.Name,
-				Rationale: f.Evidence + ". Un modèle plus léger (alias fast) réduit coût et latence ; à valider sur la qualité des sorties."})
+				Props: map[string]any{"model": "fast"}, Title: "Fast model for " + a.Name,
+				Rationale: f.Evidence + ". A lighter model (fast alias) reduces cost and latency; check the quality of its outputs."})
 		case FindLoop, FindFailure:
 			if !known || !once("cost:"+a.Name) {
 				continue
@@ -83,8 +83,8 @@ func Propose(r Report, m *methodology.Methodology) (props []Proposal, notes []st
 				cost = 1
 			}
 			props = append(props, Proposal{Finding: i, Op: "update_node", Key: ElementKey(m.Name, "action", a.Name),
-				Props: map[string]any{"cost": cost * 2}, Title: "Renchérir " + a.Name,
-				Rationale: f.Evidence + ". Doubler son coût oriente le planificateur vers d'autres chemins ; revoir aussi ses préconditions / effets."})
+				Props: map[string]any{"cost": cost * 2}, Title: "Raise the cost of " + a.Name,
+				Rationale: f.Evidence + ". Doubling its cost steers the planner toward other paths; also review its preconditions / effects."})
 		case FindDisabled:
 			ag := agentOf(m, f.Agent)
 			if !known || ag == nil || !once("agent:"+ag.Name+":"+a.Name) {
@@ -97,8 +97,8 @@ func Propose(r Report, m *methodology.Methodology) (props []Proposal, notes []st
 				}
 			}
 			props = append(props, Proposal{Finding: i, Op: "update_node", Key: ElementKey(m.Name, "agent", ag.Name),
-				Props: map[string]any{"actions": keep}, Title: "Retirer " + a.Name + " de l'agent " + ag.Name,
-				Rationale: f.Evidence + ". L'action ne produit pas ses effets pour cet agent : la retirer évite des cycles perdus."})
+				Props: map[string]any{"actions": keep}, Title: "Remove " + a.Name + " from agent " + ag.Name,
+				Rationale: f.Evidence + ". The action does not produce its effects for this agent: removing it avoids wasted cycles."})
 		case FindSlowSpan, FindSlowAction:
 			tool := f.Span
 			if f.Action != "" {
@@ -109,8 +109,8 @@ func Propose(r Report, m *methodology.Methodology) (props []Proposal, notes []st
 				continue
 			}
 			props = append(props, Proposal{Finding: i, Op: "create_node", Type: TypeToolRequest, Key: ElementKey(m.Name, "tool", name),
-				Props: map[string]any{"name": name, "description": "Outil MCP dédié pour " + tool, "motivation": f.Evidence, "span": f.Span},
-				Title: "Outil MCP " + name, Rationale: f.Evidence + ". Un outil MCP dédié (cache, traitement par lot) sortirait ce point dur du chemin critique."})
+				Props: map[string]any{"name": name, "description": "Dedicated MCP tool for " + tool, "motivation": f.Evidence, "span": f.Span},
+				Title: "MCP tool " + name, Rationale: f.Evidence + ". A dedicated MCP tool (caching, batch processing) would take this hot spot off the critical path."})
 		case FindReplanning:
 			notes = append(notes, f.Evidence)
 		}
@@ -158,10 +158,10 @@ func toolName(s string) string {
 // of what the LLM produced, to be completed by the methodologist.
 func scriptTemplate(a methodology.Action, s ActionStats) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "// Version systématisée de %s (proposée par l'observation des exécutions).\n", a.Name)
-	fmt.Fprintf(&b, "// Sorties observées du LLM : %s\n", strings.Join(slices.Sorted(maps.Keys(s.Outputs)), ", "))
+	fmt.Fprintf(&b, "// Systematized version of %s (proposed from execution observation).\n", a.Name)
+	fmt.Fprintf(&b, "// Observed LLM outputs: %s\n", strings.Join(slices.Sorted(maps.Keys(s.Outputs)), ", "))
 	if a.Prompt != "" {
-		fmt.Fprintf(&b, "// Consigne d'origine :\n")
+		fmt.Fprintf(&b, "// Original instructions:\n")
 		for _, l := range strings.Split(strings.TrimSpace(a.Prompt), "\n") {
 			fmt.Fprintf(&b, "//   %s\n", l)
 		}
@@ -170,11 +170,11 @@ func scriptTemplate(a methodology.Action, s ActionStats) string {
 	for _, k := range slices.Sorted(maps.Keys(s.Outputs)) {
 		switch {
 		case strings.HasPrefix(k, "impact"):
-			b.WriteString("for (const n of ctx.nodes(\"\")) {\n  // TODO règle de sélection des nœuds impactés\n  // ctx.addImpact(n.key, \"règle\");\n}\n")
+			b.WriteString("for (const n of ctx.nodes(\"\")) {\n  // TODO rule to select the impacted nodes\n  // ctx.addImpact(n.key, \"rule\");\n}\n")
 		case strings.HasPrefix(k, "proposal/update_node"):
-			b.WriteString("for (const i of ctx.impacts()) {\n  // TODO règle de mise à jour\n  // ctx.proposeUpdate(i.target.key, {});\n}\n")
+			b.WriteString("for (const i of ctx.impacts()) {\n  // TODO update rule\n  // ctx.proposeUpdate(i.target.key, {});\n}\n")
 		case strings.HasPrefix(k, "proposal/create_node"), strings.HasPrefix(k, "proposal/add_link"):
-			b.WriteString("for (const i of ctx.impacts()) {\n  // TODO nœuds / liens à créer\n  // const p = ctx.proposeNode(\"Type\", \"KEY\", {});\n  // ctx.proposeLink(p, \"type\", i.target.key);\n}\n")
+			b.WriteString("for (const i of ctx.impacts()) {\n  // TODO nodes / links to create\n  // const p = ctx.proposeNode(\"Type\", \"KEY\", {});\n  // ctx.proposeLink(p, \"type\", i.target.key);\n}\n")
 		case strings.HasPrefix(k, "artifact"):
 			b.WriteString("ctx.addArtifact(\"" + strings.TrimPrefix(k, "artifact/") + "\", { /* TODO */ });\n")
 		}
@@ -211,7 +211,7 @@ func Apply(m methodology.Methodology, edits []Edit) (Draft, error) {
 	for _, e := range edits {
 		meth, kind, name, ok := parseKey(e.Key)
 		if !ok || meth != m.Name {
-			d.Skipped = append(d.Skipped, e.Key+": autre méthodologie ou nœud hors modèle")
+			d.Skipped = append(d.Skipped, e.Key+": other methodology or node outside the model")
 			continue
 		}
 		if e.Op == "create_node" && e.Type == TypeToolRequest {
@@ -221,7 +221,7 @@ func Apply(m methodology.Methodology, edits []Edit) (Draft, error) {
 			}
 			tr["key"] = e.Key
 			d.ToolRequests = append(d.ToolRequests, tr)
-			d.Applied = append(d.Applied, "demande d'outil MCP "+name)
+			d.Applied = append(d.Applied, "MCP tool request "+name)
 			continue
 		}
 		var err error

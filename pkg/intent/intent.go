@@ -152,11 +152,11 @@ func (r Resolver) question(ctx context.Context, s *Session, cands []Candidate, g
 		desc[g.Name] = g.Description
 	}
 	var b strings.Builder
-	b.WriteString("Je ne suis pas certain de l'objectif. Souhaitez-vous :\n")
+	b.WriteString("I'm not sure of the goal. Would you like to:\n")
 	for i, g := range offered {
 		fmt.Fprintf(&b, "%d) %s\n", i+1, desc[g])
 	}
-	b.WriteString("Répondez par le numéro ou reformulez.")
+	b.WriteString("Reply with the number or rephrase.")
 	return b.String(), offered
 }
 

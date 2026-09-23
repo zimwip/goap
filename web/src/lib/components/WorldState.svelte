@@ -9,7 +9,7 @@
 
 {#if names.length}
   <table>
-    <thead><tr><th>Condition</th><th>Valeur</th></tr></thead>
+    <thead><tr><th>Condition</th><th>Value</th></tr></thead>
     <tbody>
       {#each names as name (name)}
         {@const err = unknown[name]}
@@ -17,12 +17,12 @@
           <td><code>{name}</code></td>
           <td>
             {#if err !== undefined}
-              <span class="v unknown" title={err}>inconnue</span>
+              <span class="v unknown" title={err}>unknown</span>
               <span class="err">{err}</span>
             {:else if world[name]}
-              <span class="v yes">vrai</span>
+              <span class="v yes">true</span>
             {:else}
-              <span class="v no">faux</span>
+              <span class="v no">false</span>
             {/if}
           </td>
         </tr>
@@ -30,7 +30,7 @@
     </tbody>
   </table>
 {:else}
-  <p class="empty">État du monde non encore évalué.</p>
+  <p class="empty">World state not yet evaluated.</p>
 {/if}
 
 <style>

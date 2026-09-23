@@ -1,72 +1,73 @@
-# GOAP — plateforme agentique de méthodologies d'entreprise
+# GOAP — agentic platform for enterprise methodologies
 
-GOAP permet de déployer des **méthodologies d'entreprise** (analyse d'impact, gestion d'exigences,
-revues…) sous forme de définitions déclaratives, exécutées par un moteur agentique inspiré
-d'[Embabel](https://github.com/embabel/embabel-agent) : **boucle d'intention**, **planification GOAP (A\*)**,
-exécution d'actions (LLM, humain, code, outils MCP) et **replanification** après chaque action.
+GOAP lets you deploy **enterprise methodologies** (impact analysis, requirements management,
+reviews…) as declarative definitions, executed by an agentic engine inspired
+by [Embabel](https://github.com/embabel/embabel-agent): **intent loop**, **GOAP (A\*) planning**,
+action execution (LLM, human, code, MCP tools), and **replanning** after each action.
 
-Le blackboard du moteur est **l'axe *change*** d'un graphe de connaissance versionné dont
-**l'axe *domaine*** porte le contenu de référence. Les conditions sont des expressions
-[CEL](https://cel.dev) sur l'état du changement, hydraté avec les éléments de domaine qu'il référence.
+The engine's blackboard is the **change axis** of a versioned knowledge graph whose
+**domain axis** carries the reference content. Conditions are
+[CEL](https://cel.dev) expressions on the state of the change, hydrated with the domain
+elements it references.
 
-👉 **Lire d'abord : [docs/architecture.md](docs/architecture.md)** · décisions : [docs/adr](docs/adr)
+👉 **Read first: [docs/architecture.md](docs/architecture.md)** · decisions: [docs/adr](docs/adr)
 
-## Démarrage rapide
+## Quick start
 
 ```bash
-# 1. Local, sans docker : un seul processus, SQLite (.goap/goap.db), IDE compris
-make devlocal                 # IDE + API sur http://localhost:8080 (Go + Node requis)
-make devlocal-reset           # repartir d'une base vide (démo et méthodologies ré-importées)
+# 1. Local, without docker: a single process, SQLite (.goap/goap.db), IDE included
+make devlocal                 # IDE + API on http://localhost:8080 (Go + Node required)
+make devlocal-reset           # start from an empty database (demo and methodologies re-imported)
 
-#    variante en mémoire, rechargement à chaud de l'IDE
-make dev                      # API Connect sur http://localhost:8080
-make web                      # UI sur http://localhost:5173 (autre terminal)
+#    in-memory variant, hot reload of the IDE
+make dev                      # Connect API on http://localhost:8080
+make web                      # UI on http://localhost:5173 (separate terminal)
 
-# 2. Pile complète : postgres, nats, vault, services, web
-ANTHROPIC_API_KEY=... make up # sans clé : fournisseur LLM « fake »
+# 2. Full stack: postgres, nats, vault, services, web
+ANTHROPIC_API_KEY=... make up # without a key: "fake" LLM provider
 ```
 
-Méthodologies fournies (`methodologies/`, importées au démarrage) : `impact-analysis`, `test-design`,
-`sdlc` (cycle de développement sur le domaine ALM : besoin → exigence → fonction → composant → artefact de
-build → application → solution, données, interfaces, flux ; releases et déploiement dev → test → recette →
-production) et `methodology-improvement` (auto-observation).
+Provided methodologies (`methodologies/`, imported at startup): `impact-analysis`, `test-design`,
+`sdlc` (development cycle on the ALM domain: need → requirement → function → component → build
+artifact → application → solution, data, interfaces, flows; releases and dev → test → staging →
+production deployment) and `methodology-improvement` (self-observation).
 
-Sans clé API, le fournisseur `fake` renvoie des réponses vides : les actions LLM échouent à produire
-leurs effets, sont désactivées, et le planificateur se replie sur les actions humaines — pratique pour
-observer la replanification.
+Without an API key, the `fake` provider returns empty responses: LLM actions fail to produce
+their effects, get disabled, and the planner falls back to human actions — handy for
+observing replanning.
 
-Exemple d'appel (protocole Connect en JSON, via la gateway) :
+Example call (Connect JSON protocol, via the gateway):
 
 ```bash
 curl -s localhost:8080/goap.graph.v1.GraphService/ListBaselines -H 'Content-Type: application/json' -d '{}'
 curl -s localhost:8080/goap.engine.v1.EngineService/StartProcess -H 'Content-Type: application/json' \
-  -d '{"methodology":"impact-analysis","baselineId":"<id>","intent":"Le PSP passe en API v2 : qu'"'"'est-ce que ça casse ?"}'
+  -d '{"methodology":"impact-analysis","baselineId":"<id>","intent":"The PSP is moving to API v2: what does this break?"}'
 ```
 
 ## Services
 
-| Service | Port (compose) | Rôle |
+| Service | Port (compose) | Role |
 |---|---|---|
-| gateway | 8080 | point d'entrée, authentification (none / HS256 + jetons de dev), routage Connect |
-| graph | 8081 | axe domaine (nœuds versionnés, liens version-à-version, baselines) + axe change |
-| registry | 8082 | méthodologies structurées en base (brouillon → publiée), import/export YAML |
-| engine | 8083 | processus agentiques : intention → planification → exécution |
-| modelgw | 8084 | passerelle LLM multi-fournisseurs (Anthropic, OpenAI-compatible, fake) |
-| iam | 8086 | contrôle d'accès ABAC (Casbin), politiques en base |
-| mcp | — | squelette (API définie, non implémentée) |
-| goap-runner | — | sandbox des actions script (un conteneur / pod / processus par exécution) |
-| otel-collector, jaeger, prometheus, grafana | 4318, 16686, 9090, 3000 | observabilité OpenTelemetry |
+| gateway | 8080 | entry point, authentication (none / HS256 + dev tokens), Connect routing |
+| graph | 8081 | domain axis (versioned nodes, version-to-version links, baselines) + change axis |
+| registry | 8082 | methodologies structured in the database (draft → published), YAML import/export |
+| engine | 8083 | agentic processes: intent → planning → execution |
+| modelgw | 8084 | multi-provider LLM gateway (Anthropic, OpenAI-compatible, fake) |
+| iam | 8086 | ABAC access control (Casbin), policies in the database |
+| mcp | — | skeleton (API defined, not implemented) |
+| goap-runner | — | script action sandbox (one container / pod / process per execution) |
+| otel-collector, jaeger, prometheus, grafana | 4318, 16686, 9090, 3000 | OpenTelemetry observability |
 
-## Développement
+## Development
 
 ```bash
-make tools      # buf + plugins protoc
+make tools      # buf + protoc plugins
 make generate   # proto/ -> gen/
-make test       # tests unitaires
-make test-pg    # tests du dépôt PostgreSQL du graphe
+make test       # unit tests
+make test-pg    # graph PostgreSQL repository tests
 make lint
 ```
 
-DSL des actions script : [docs/dsl.md](docs/dsl.md).
+Script action DSL: [docs/dsl.md](docs/dsl.md).
 
-Stack : Go 1.26 · Echo · connect-rpc · NATS JetStream · PostgreSQL · Vault · Svelte 5.
+Stack: Go 1.26 · Echo · connect-rpc · NATS JetStream · PostgreSQL · Vault · Svelte 5.

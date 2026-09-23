@@ -10,7 +10,9 @@ import (
 func TestJournalRecordsTicksAndActions(t *testing.T) {
 	ctx := context.Background()
 	e, g, base := setup(t)
-	p, err := e.Start(ctx, StartRequest{Methodology: "impact-analysis", BaselineID: base, Intent: "Le PSP change d'API, qu'est-ce que ça casse ?"})
+	// the intent text deliberately echoes the "assess_impact" goal example
+	// in methodologies/impact-analysis.yaml.
+	p, err := e.Start(ctx, StartRequest{Methodology: "impact-analysis", BaselineID: base, Intent: "The PSP changes its API, what does this break?"})
 	if err != nil {
 		t.Fatal(err)
 	}

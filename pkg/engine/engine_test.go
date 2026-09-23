@@ -15,23 +15,24 @@ import (
 	"github.com/zimwip/goap/pkg/methodology"
 )
 
-// scripted answers by prompt content, like a deterministic LLM.
+// scripted answers by prompt content, like a deterministic LLM. The matched
+// substrings come from the prompt templates in methodologies/impact-analysis.yaml.
 func scripted(t *testing.T) llm.Client {
 	return llm.ClientFunc(func(_ context.Context, req llm.Request) (llm.Response, error) {
 		p := req.Messages[0].Content
 		var out string
 		switch {
-		case strings.Contains(p, "DIRECTEMENT impactés"):
+		case strings.Contains(p, "DIRECTLY impacted"):
 			if !strings.Contains(p, "REQ-1 (Requirement)") {
 				t.Errorf("prompt misses baseline nodes:\n%s", p)
 			}
-			out = `Voici: {"items":[{"kind":"impact","type":"direct","target":"REQ-1","data":{"reason":"PSP API change"}}]}`
-		case strings.Contains(p, "nouvelle version"):
+			out = `Here: {"items":[{"kind":"impact","type":"direct","target":"REQ-1","data":{"reason":"PSP API change"}}]}`
+		case strings.Contains(p, "new version"):
 			out = `{"items":[{"kind":"proposal","proposal":{"op":"update_node","node":{"base":"REQ-1","props":{"title":"Use PSP v2"}}}}]}`
-		case strings.Contains(p, "cas de test"):
+		case strings.Contains(p, "test case"):
 			out = `{"items":[{"ref":"t1","kind":"proposal","proposal":{"op":"create_node","node":{"key":"TST-9","type":"TestCase"}}},
 			{"kind":"proposal","proposal":{"op":"add_link","link":{"type":"verifies","from":"#t1","to":"REQ-1"}}}]}`
-		case strings.Contains(p, "rapport"):
+		case strings.Contains(p, "report"):
 			out = `{"items":[{"kind":"artifact","type":"report","data":{"markdown":"# Impact"}}]}`
 		default:
 			t.Errorf("unexpected prompt %s", p)
@@ -86,7 +87,9 @@ func setup(t *testing.T) (*Engine, *graph.Graph, domain.BaselineID) {
 func TestAssessImpact(t *testing.T) {
 	ctx := context.Background()
 	e, g, base := setup(t)
-	p, err := e.Start(ctx, StartRequest{Methodology: "impact-analysis", BaselineID: base, Intent: "Le PSP change d'API, qu'est-ce que ça casse ?"})
+	// the intent text deliberately echoes the "assess_impact" goal example
+	// ("what does this break") in methodologies/impact-analysis.yaml.
+	p, err := e.Start(ctx, StartRequest{Methodology: "impact-analysis", BaselineID: base, Intent: "The PSP changes its API, what does this break?"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -121,7 +124,7 @@ func TestAssessImpact(t *testing.T) {
 func TestPrepareChangeWithClarificationAndReview(t *testing.T) {
 	ctx := context.Background()
 	e, g, base := setup(t)
-	p, err := e.Start(ctx, StartRequest{Methodology: "impact-analysis", BaselineID: base, Intent: "Le fournisseur de paiement change"})
+	p, err := e.Start(ctx, StartRequest{Methodology: "impact-analysis", BaselineID: base, Intent: "The payment provider is changing"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -279,7 +282,7 @@ func TestApplyAutomaticWithPermission(t *testing.T) {
 func TestApplyRejected(t *testing.T) {
 	e, g, p := deliverUntilReviewed(t, contributor)
 	ctx := authz.With(context.Background(), approver)
-	p, err := e.Approve(ctx, p.ID, false, "pas maintenant")
+	p, err := e.Approve(ctx, p.ID, false, "not now")
 	if err != nil {
 		t.Fatal(err)
 	}

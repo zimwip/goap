@@ -1,5 +1,5 @@
-// Rendu Markdown minimal (titres, paragraphes, listes, tableaux, blocs de
-// code, code en ligne, gras) pour l'aide embarquée. Le texte est échappé.
+// Minimal Markdown rendering (headings, paragraphs, lists, tables, code
+// blocks, inline code, bold) for the embedded help. Text is escaped.
 
 function esc(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');

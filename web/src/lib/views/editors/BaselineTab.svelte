@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Onglet « référentiel » : nœuds et liens d'une baseline (liens suspects signalés).
+  // Baseline tab: nodes and links of a baseline (suspect links flagged).
   import { graph, errorMessage, formatDate, nodeTitle, shortId, type Baseline, type GraphNode, type Link } from '../../api';
   import type { Tab } from '../../shell/types';
   import Icon from '../../shell/Icon.svelte';
@@ -46,7 +46,7 @@
   const byId = $derived(new Map(nodes.map((n) => [n.id ?? '', n])));
   const suspectIds = $derived(new Set(suspect.map((l) => l.id ?? '')));
 
-  // Les liens suspects ne figurent pas forcément dans `links` : on les fusionne.
+  // Suspect links don't necessarily appear in `links`: merge them in.
   const allLinks = $derived.by(() => {
     const seen = new Set(links.map((l) => l.id ?? ''));
     return [...links, ...suspect.filter((l) => !seen.has(l.id ?? ''))];
@@ -67,25 +67,25 @@
 
   provideActions(
     () => tab.id,
-    () => [{ id: 'refresh', label: 'Actualiser', icon: 'refresh', disabled: loading, run: () => reload++ }],
+    () => [{ id: 'refresh', label: 'Refresh', icon: 'refresh', disabled: loading, run: () => reload++ }],
   );
 
   function showNode(n: GraphNode) {
     select({
       title: n.key ?? '',
-      subtitle: `Nœud ${n.type ?? ''} v${n.version ?? 0}`,
+      subtitle: `Node ${n.type ?? ''} v${n.version ?? 0}`,
       rows: [
-        ['Identifiant', n.id ?? ''],
+        ['ID', n.id ?? ''],
         ['Type', n.type ?? ''],
         ['Version', String(n.version ?? 0)],
         ...Object.entries(n.props ?? {}).map(([k, v]): [string, string] => [k, typeof v === 'string' ? v : JSON.stringify(v)]),
-        ['Changement', n.changeId ?? ''],
-        ['Créé', formatDate(n.createdAt)],
+        ['Change', n.changeId ?? ''],
+        ['Created', formatDate(n.createdAt)],
       ],
     });
   }
 
-  const selectedKey = $derived(selection.current?.subtitle?.startsWith('Nœud') ? selection.current.title : '');
+  const selectedKey = $derived(selection.current?.subtitle?.startsWith('Node') ? selection.current.title : '');
 
   function stale(ref: { id?: string; version?: number } | undefined): boolean {
     const n = ref?.id ? byId.get(ref.id) : undefined;
@@ -103,26 +103,26 @@
 {#if baseline}
   <p class="hint">
     <code>{baseline.id}</code>
-    {#if baseline.createdAt} · créé le {formatDate(baseline.createdAt)}{/if}
-    {#if baseline.changeId} · issu du changement <button type="button" class="link mono" onclick={() => openTab({ kind: 'change', params: { id: baseline?.changeId ?? '' } })}>{baseline.changeId.slice(0, 8)}</button>{/if}
+    {#if baseline.createdAt} · created on {formatDate(baseline.createdAt)}{/if}
+    {#if baseline.changeId} · from change <button type="button" class="link mono" onclick={() => openTab({ kind: 'change', params: { id: baseline?.changeId ?? '' } })}>{baseline.changeId.slice(0, 8)}</button>{/if}
     {#if baseline.parentId} · parent <button type="button" class="link mono" onclick={() => openTab({ kind: 'baseline', params: { id: baseline?.parentId ?? '' } })}>{shortId(baseline.parentId)}</button>{/if}
-    · {nodes.length} nœuds · {allLinks.length} liens
+    · {nodes.length} nodes · {allLinks.length} links
     {#if suspect.length}· <span class="suspect-count">{suspect.length} suspect{suspect.length > 1 ? 's' : ''}</span>{/if}
   </p>
 {/if}
 
-{#if loading}<p class="empty">Chargement…</p>{/if}
+{#if loading}<p class="empty">Loading…</p>{/if}
 
 {#if selected && !loading && !error}
   <section class="card">
     <div class="row" style="margin-bottom: 0.5rem">
-      <h3 class="grow" style="margin: 0">Nœuds</h3>
-      <input class="filter" type="search" placeholder="Filtrer…" aria-label="Filtrer les nœuds" bind:value={filter} data-no-pin />
+      <h3 class="grow" style="margin: 0">Nodes</h3>
+      <input class="filter" type="search" placeholder="Filter…" aria-label="Filter nodes" bind:value={filter} data-no-pin />
     </div>
     {#if shownNodes.length}
       <div class="scroll">
         <table>
-          <thead><tr><th>Clé</th><th>Type</th><th>Version</th><th>Titre</th></tr></thead>
+          <thead><tr><th>Key</th><th>Type</th><th>Version</th><th>Title</th></tr></thead>
           <tbody>
             {#each shownNodes as n (n.id)}
               <tr class:deleted={n.deleted} class:sel={selectedKey === n.key}>
@@ -136,16 +136,16 @@
         </table>
       </div>
     {:else}
-      <p class="empty">Aucun nœud.</p>
+      <p class="empty">No nodes.</p>
     {/if}
   </section>
 
   <section class="card">
-    <h3>Liens</h3>
+    <h3>Links</h3>
     {#if allLinks.length}
       <div class="scroll">
         <table>
-          <thead><tr><th>Source</th><th>Type</th><th>Cible</th><th></th></tr></thead>
+          <thead><tr><th>Source</th><th>Type</th><th>Target</th><th></th></tr></thead>
           <tbody>
             {#each allLinks as l (l.id)}
               {@const isSuspect = suspectIds.has(l.id ?? '')}
@@ -161,7 +161,7 @@
                 </td>
                 <td>
                   {#if isSuspect}
-                    <span class="tag" title="Une extrémité du lien a évolué depuis sa création">suspect</span>
+                    <span class="tag" title="One end of the link has changed since it was created">suspect</span>
                   {/if}
                 </td>
               </tr>
@@ -170,7 +170,7 @@
         </table>
       </div>
     {:else}
-      <p class="empty">Aucun lien.</p>
+      <p class="empty">No links.</p>
     {/if}
   </section>
 {/if}

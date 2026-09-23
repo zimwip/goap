@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Onglet « Importer » : import d'une définition YAML (fichier ou texte).
+  // "Import" tab: import a YAML definition (file or text).
   import { registry, errorMessage, type Issue, type Methodology } from '../../api';
   import type { Tab } from '../../shell/types';
   import Icon from '../../shell/Icon.svelte';
@@ -37,7 +37,7 @@
       imported = { methodology: res.methodology, issues: res.issues ?? [] };
       void refreshMethodologies();
       const m = res.methodology;
-      if (m) notify(`Importée : ${m.name} v${m.version}.`, 'ok');
+      if (m) notify(`Imported: ${m.name} v${m.version}.`, 'ok');
     } catch (err) {
       error = errorMessage(err);
     } finally {
@@ -50,7 +50,7 @@
     () => [
       {
         id: 'save',
-        label: importing ? 'Import…' : 'Importer',
+        label: importing ? 'Import…' : 'Import',
         icon: 'upload',
         primary: true,
         shortcut: 'Ctrl+S',
@@ -64,30 +64,30 @@
 <div class="editor-page">
   <div class="editor-head">
     <Icon name="upload" size={18} />
-    <h2>Importer une méthodologie (YAML)</h2>
+    <h2>Import a methodology (YAML)</h2>
   </div>
   <section class="card">
     <div class="field">
-      <label for="imp-file">Fichier</label>
+      <label for="imp-file">File</label>
       <input id="imp-file" type="file" accept=".yaml,.yml,text/yaml,application/yaml" onchange={readFile} />
     </div>
     <div class="field">
-      <label for="imp-yaml">… ou contenu YAML</label>
-      <CodeEditor id="imp-yaml" bind:value={yaml} label="Contenu YAML" minHeight="18rem" maxHeight="55vh" placeholder="name: …" />
+      <label for="imp-yaml">… or YAML content</label>
+      <CodeEditor id="imp-yaml" bind:value={yaml} label="YAML content" minHeight="18rem" maxHeight="55vh" placeholder="name: …" />
     </div>
     <label class="check field">
       <input type="checkbox" bind:checked={publish} />
-      Publier directement <span class="opt hint">(la définition doit être valide)</span>
+      Publish directly <span class="opt hint">(the definition must be valid)</span>
     </label>
     {#if error}<div class="alert">{error}</div>{/if}
     {#if imported}
       {@const m = imported.methodology}
       <div class="alert" class:ok={imported.issues.length === 0} class:warn={imported.issues.length > 0}>
         {#if m}
-          Importée : <strong>{m.name}</strong> v{m.version} ({m.status === 'published' ? 'publiée' : 'brouillon'}).
-          <button type="button" class="link" onclick={() => openTab(methodologySpec(m.name ?? '', m.version ?? ''), { pin: true })}>Ouvrir →</button>
+          Imported: <strong>{m.name}</strong> v{m.version} ({m.status === 'published' ? 'published' : 'draft'}).
+          <button type="button" class="link" onclick={() => openTab(methodologySpec(m.name ?? '', m.version ?? ''), { pin: true })}>Open →</button>
         {:else}
-          Import terminé.
+          Import complete.
         {/if}
       </div>
       {#if imported.issues.length}
@@ -99,7 +99,7 @@
       {/if}
     {/if}
     <button class="primary" type="button" onclick={doImport} disabled={importing || !yaml.trim()}>
-      {importing ? 'Import…' : 'Importer'}
+      {importing ? 'Import…' : 'Import'}
     </button>
   </section>
 </div>

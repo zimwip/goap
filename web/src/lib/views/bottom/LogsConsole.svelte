@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Console « Journaux » : lignes des événements « log » et journaux des étapes.
+  // "Logs" console: "log" event lines and step logs.
   import Icon from '../../shell/Icon.svelte';
   import { live, clearLogs, processes } from '../../stores/live.svelte';
   import { openTab } from '../../shell/tabs.svelte';
@@ -37,18 +37,18 @@
 </script>
 
 <div class="console-tools">
-  <select aria-label="Niveau minimal" bind:value={minLevel} data-no-pin>
+  <select aria-label="Minimum level" bind:value={minLevel} data-no-pin>
     {#each LEVELS as l (l)}<option value={l}>≥ {l}</option>{/each}
   </select>
-  <select aria-label="Processus" bind:value={processId} data-no-pin>
-    <option value="">Tous les processus</option>
+  <select aria-label="Process" bind:value={processId} data-no-pin>
+    <option value="">All processes</option>
     {#each procs as p (p)}<option value={p}>{name(p)}</option>{/each}
   </select>
-  <input type="search" placeholder="Filtrer…" aria-label="Filtrer les journaux" bind:value={filter} data-no-pin />
-  <label class="check"><input type="checkbox" bind:checked={follow} /> Suivre</label>
+  <input type="search" placeholder="Filter…" aria-label="Filter logs" bind:value={filter} data-no-pin />
+  <label class="check"><input type="checkbox" bind:checked={follow} /> Follow</label>
   <span class="grow"></span>
   <span class="hint">{rows.length} / {live.logs.length}</span>
-  <button type="button" class="ghost small" title="Effacer" aria-label="Effacer les journaux" onclick={clearLogs}><Icon name="clear" size={13} /></button>
+  <button type="button" class="ghost small" title="Clear" aria-label="Clear logs" onclick={clearLogs}><Icon name="clear" size={13} /></button>
 </div>
 <div
   class="console-scroll"
@@ -57,7 +57,7 @@
 >
   {#if rows.length}
     <table class="console-table">
-      <thead><tr><th>Heure</th><th>Niveau</th><th>Processus</th><th>Action</th><th>Message</th></tr></thead>
+      <thead><tr><th>Time</th><th>Level</th><th>Process</th><th>Action</th><th>Message</th></tr></thead>
       <tbody>
         {#each rows as l (l.key)}
           <tr class:clickable={!!l.processId} data-row data-pid={l.processId}>
@@ -75,6 +75,6 @@
       </tbody>
     </table>
   {:else}
-    <p class="console-empty">Aucune ligne de journal.</p>
+    <p class="console-empty">No log lines.</p>
   {/if}
 </div>

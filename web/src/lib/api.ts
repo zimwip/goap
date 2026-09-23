@@ -1,6 +1,6 @@
-// Client minimal pour la passerelle GOAP (protocole Connect, encodage JSON).
-// Chaque RPC est un `POST /{package.Service}/{Method}` avec un corps JSON
-// (proto3 JSON : champs en lowerCamelCase, valeurs par défaut omises).
+// Minimal client for the GOAP gateway (Connect protocol, JSON encoding).
+// Each RPC is a `POST /{package.Service}/{Method}` with a JSON body
+// (proto3 JSON: fields in lowerCamelCase, default values omitted).
 
 // ---------------------------------------------------------------------------
 // Transport
@@ -8,10 +8,10 @@
 
 const TOKEN_KEY = 'goap.token';
 
-/** Base des URL RPC : relative par défaut (le serveur Vite relaie `/goap.*`). */
+/** Base for RPC URLs: relative by default (the Vite server proxies `/goap.*`). */
 export const BASE = (import.meta.env.VITE_GOAP_BASE_URL as string | undefined) ?? '';
 
-/** Base de l'interface Jaeger pour les liens « Trace ». */
+/** Base for the Jaeger UI, used by the "Trace" links. */
 export const JAEGER_URL = ((import.meta.env.VITE_GOAP_JAEGER_URL as string | undefined) ?? 'http://localhost:16686').replace(
   /\/+$/,
   '',
@@ -39,7 +39,7 @@ export function getToken(): string | null {
 
 const tokenListeners = new Set<() => void>();
 
-/** Abonnement aux changements de jeton (relance des flux). Renvoie la fonction de désabonnement. */
+/** Subscribe to token changes (restarts streams). Returns the unsubscribe function. */
 export function onTokenChange(fn: () => void): () => void {
   tokenListeners.add(fn);
   return () => tokenListeners.delete(fn);
@@ -50,7 +50,7 @@ export function setToken(token: string | null): void {
     if (token) localStorage.setItem(TOKEN_KEY, token);
     else localStorage.removeItem(TOKEN_KEY);
   } catch {
-    // stockage indisponible (navigation privée, etc.) : on ignore
+    // storage unavailable (private browsing, etc.): ignore
   }
   for (const fn of tokenListeners) fn();
 }
@@ -75,7 +75,7 @@ export async function rpc<TReq extends object, TRes>(
     });
   } catch (e) {
     if (e instanceof DOMException && e.name === 'AbortError') throw e;
-    throw new RpcError('unavailable', `Passerelle injoignable : ${String(e)}`, 0);
+    throw new RpcError('unavailable', `Gateway unreachable: ${String(e)}`, 0);
   }
 
   const text = await res.text();
@@ -95,22 +95,22 @@ export async function rpc<TReq extends object, TRes>(
   return (data ?? {}) as TRes;
 }
 
-/** Message d'erreur lisible pour l'interface. */
+/** Human-readable error message for the UI. */
 export function errorMessage(e: unknown): string {
   if (e instanceof RpcError) {
     if (e.code === 'permission_denied')
-      return `Accès refusé : vous n'avez pas les droits nécessaires pour cette opération${e.message ? ` (${e.message})` : ''}.`;
+      return `Access denied: you do not have the rights required for this operation${e.message ? ` (${e.message})` : ''}.`;
     if (e.code === 'unauthenticated')
-      return `Authentification requise : configurez un jeton d'accès valide${e.message ? ` (${e.message})` : ''}.`;
-    return e.code ? `${e.code} : ${e.message}` : e.message;
+      return `Authentication required: configure a valid access token${e.message ? ` (${e.message})` : ''}.`;
+    return e.code ? `${e.code}: ${e.message}` : e.message;
   }
   if (e instanceof Error) return e.message;
   return String(e);
 }
 
 // ---------------------------------------------------------------------------
-// Types (proto3 JSON). Les champs sont optionnels car les valeurs par défaut
-// sont omises à la sérialisation.
+// Types (proto3 JSON). Fields are optional because default values are
+// omitted on serialization.
 // ---------------------------------------------------------------------------
 
 export type JsonValue = null | boolean | number | string | JsonValue[] | { [k: string]: JsonValue };
@@ -119,14 +119,14 @@ type Empty = Record<string, never>;
 
 // --- registry ---------------------------------------------------------------
 
-/** draft : modifiable · published : figée (seule exécutable) · archived : lecture seule */
+/** draft: editable · published: frozen (only executable one) · archived: read-only */
 export type MethodologyStatus = 'draft' | 'published' | 'archived';
 
 export interface NodeType {
   name?: string;
   description?: string;
   properties?: string[];
-  /** type parent : le sous-type hérite de ses propriétés et des types de liens */
+  /** parent type: the subtype inherits its properties and link types */
   extends?: string;
 }
 
@@ -139,7 +139,7 @@ export interface LinkType {
 export interface Condition {
   name?: string;
   description?: string;
-  /** Expression CEL évaluée sur le tableau noir. */
+  /** CEL expression evaluated against the blackboard. */
   expr?: string;
 }
 
@@ -172,7 +172,7 @@ export interface Action {
   effects?: Record<string, boolean>;
   cost?: number;
   expects?: Expectation;
-  /** « <ressource>:<action> » exigée de l'initiateur, ex. change:apply */
+  /** "<resource>:<action>" required of the initiator, e.g. change:apply */
   permission?: string;
   model?: string;
   prompt?: string;
@@ -180,19 +180,19 @@ export interface Action {
   builtin?: string;
   instructions?: string;
   params?: Struct;
-  /** actions script : javascript | go */
+  /** script actions: javascript | go */
   language?: ScriptLanguage | string;
-  /** code exécuté dans le sandbox avec le DSL `ctx` */
+  /** code executed in the sandbox with the `ctx` DSL */
   code?: string;
-  /** expression CEL numérique (planificateurs utility / hybrid) */
+  /** numeric CEL expression (utility / hybrid planners) */
   utility?: string;
-  /** spécialisation : « <action> » ou « <méthodologie>/<action> » (non planifiée) */
+  /** specialization: "<action>" or "<methodology>/<action>" (not planned) */
   specializes?: string;
-  /** garde CEL de la spécialisation, évaluée sur le tableau noir */
+  /** CEL guard for the specialization, evaluated against the blackboard */
   when?: string;
-  /** priorité de la spécialisation (la plus haute l'emporte) */
+  /** specialization priority (highest wins) */
   priority?: number;
-  /** effets atteints en plusieurs exécutions (une exécution qui produit des items est un progrès) */
+  /** effects reached over several runs (a run that produces items is progress) */
   incremental?: boolean;
 }
 
@@ -207,34 +207,34 @@ export const TRIGGER_EVENTS = [
   'methodology.published',
 ] as const;
 
-/** Déclencheur : exécution automatique d'un agent (hors boucle d'intention). */
+/** Trigger: automatic run of an agent (outside the intent loop). */
 export interface Trigger {
   name?: string;
   description?: string;
   type?: TriggerType | string;
-  /** déclencheurs « event » */
+  /** "event" triggers */
   event?: string;
-  /** filtre CEL sur l'événement */
+  /** CEL filter on the event */
   filter?: string;
-  /** déclencheurs « schedule » : cron à 5 champs, UTC */
+  /** "schedule" triggers: 5-field cron, UTC */
   schedule?: string;
   goal?: string;
   intent?: string;
-  /** new_change (défaut) | event_change */
+  /** new_change (default) | event_change */
   target?: 'new_change' | 'event_change' | string;
   roles?: string[];
   enabled?: boolean;
 }
 
-/** Agent (terminologie Embabel) : un planificateur et ses actions admissibles. */
+/** Agent (Embabel terminology): a planner and its eligible actions. */
 export interface Agent {
   name?: string;
   description?: string;
   examples?: string[];
   planner?: PlannerKind | string;
-  /** noms des actions admissibles (vide : toutes) */
+  /** eligible action names (empty: all) */
   actions?: string[];
-  /** noms des objectifs (vide : tous) */
+  /** goal names (empty: all) */
   goals?: string[];
   triggers?: Trigger[];
 }
@@ -286,7 +286,7 @@ export interface MethodologySummary {
   publishedAt?: string;
 }
 
-/** Problème de validation ; `path` localise le champ, ex. « conditions[2].expr ». */
+/** Validation issue; `path` locates the field, e.g. "conditions[2].expr". */
 export interface Issue {
   path?: string;
   message?: string;
@@ -294,12 +294,12 @@ export interface Issue {
 
 // --- iam --------------------------------------------------------------------
 
-/** Règle ABAC : `rule` est une expression sur r.sub, r.obj et r.act. */
+/** ABAC rule: `rule` is an expression over r.sub, r.obj and r.act. */
 export interface Policy {
   rule?: string;
-  /** type de ressource ou « * » */
+  /** resource type or "*" */
   resource?: string;
-  /** action ou « * » */
+  /** action or "*" */
   action?: string;
   effect?: 'allow' | 'deny' | string;
 }
@@ -374,7 +374,7 @@ export interface Decision {
 
 export type ItemKind = 'impact' | 'proposal' | 'decision' | 'artifact';
 
-/** Statut d'un item remplacé (rebase, fusion) : voir `supersedes` de son remplaçant. */
+/** Status of a superseded item (rebase, merge): see its replacement's `supersedes`. */
 export const ITEM_SUPERSEDED = 'superseded';
 
 export interface ChangeItem {
@@ -389,9 +389,9 @@ export interface ChangeItem {
   producedBy?: string;
   derivedFrom?: string[];
   createdAt?: string;
-  /** items remplacés par celui-ci (rebase, fusion) */
+  /** items superseded by this one (rebase, merge) */
   supersedes?: string[];
-  /** enregistrement du journal d'exécution qui a produit l'item */
+  /** execution journal record that produced the item */
   execution?: string;
 }
 
@@ -428,8 +428,8 @@ export interface ToolUse {
 }
 
 /**
- * Entrée du journal d'exécution d'un changement (ADR 0011) : tick (observation +
- * planification), exécution d'action, décision humaine, début / fin de processus.
+ * Entry in a change's execution journal (ADR 0011): tick (observation +
+ * planning), action execution, human decision, process start / end.
  */
 export interface ExecutionRecord {
   id?: string;
@@ -447,12 +447,12 @@ export interface ExecutionRecord {
   step?: number;
   action?: string;
   actionKind?: string;
-  /** spécialisation exécutée à la place de l'action planifiée */
+  /** specialization executed in place of the planned action */
   specialization?: string;
   plan?: string[];
   before?: Record<string, boolean>;
   after?: Record<string, boolean>;
-  /** absent tant que l'action n'est pas terminée (ou en erreur, ou en attente) */
+  /** absent as long as the action is not finished (or errored, or waiting) */
   effectsMet?: boolean;
   items?: string[];
   inputTokens?: Int64;
@@ -464,7 +464,7 @@ export interface ExecutionRecord {
   error?: string;
   traceId?: string;
   spanId?: string;
-  /** tick : replanned, candidates, unknown · action : waiting, child, children · fin : steps, llmCalls… */
+  /** tick: replanned, candidates, unknown · action: waiting, child, children · end: steps, llmCalls… */
   data?: Struct;
   startedAt?: string;
   endedAt?: string;
@@ -488,7 +488,7 @@ export interface Candidate {
   methodology?: string;
 }
 
-/** Entier 64 bits : proto3 JSON le sérialise en chaîne. */
+/** 64-bit integer: proto3 JSON serializes it as a string. */
 export type Int64 = number | string;
 
 export interface Usage {
@@ -530,11 +530,11 @@ export interface Principal {
   roles?: string[];
 }
 export interface HumanTask {
-  /** input : saisir des items · approval : approuver ou refuser l'action · agent : attente d'un sous-agent */
+  /** input: enter items · approval: approve or reject the action · agent: waiting on a sub-agent */
   kind?: 'input' | 'approval' | 'agent' | string;
-  /** kind « agent » : processus du sous-agent attendu */
+  /** kind "agent": process of the awaited sub-agent */
   childProcessId?: string;
-  /** permission requise pour approuver (ex. change:apply) */
+  /** permission required to approve (e.g. change:apply) */
   permission?: string;
   action?: string;
   description?: string;
@@ -559,9 +559,9 @@ export interface Step {
   llmCalls?: LlmCall[];
   toolCalls?: ToolCall[];
   logs?: LogLine[];
-  /** processus des sous-agents lancés par l'étape */
+  /** processes of sub-agents started by the step */
   childProcessIds?: string[];
-  /** sandbox ayant exécuté l'étape (actions script) */
+  /** sandbox that executed the step (script actions) */
   sandbox?: string;
 }
 
@@ -586,18 +586,18 @@ export interface Process {
   initiator?: Principal;
   agent?: string;
   planner?: PlannerKind | string;
-  /** processus appelant (sous-agent) */
+  /** calling process (sub-agent) */
   parentId?: string;
   usage?: Usage;
   baselineId?: string;
   title?: string;
-  /** trace OpenTelemetry (span racine « process ») */
+  /** OpenTelemetry trace (root "process" span) */
   traceId?: string;
-  /** « <agent>/<déclencheur> » quand lancé par un déclencheur */
+  /** "<agent>/<trigger>" when started by a trigger */
   trigger?: string;
 }
 
-/** État d'un déclencheur d'un agent publié. */
+/** State of a trigger of a published agent. */
 export interface TriggerState {
   methodology?: string;
   agent?: string;
@@ -615,16 +615,16 @@ export interface TriggerState {
 }
 
 export interface ListProcessesRequest {
-  /** seulement les processus lancés par l'appelant */
+  /** only processes started by the caller */
   mine?: boolean;
   statuses?: string[];
-  /** seulement les processus racines (pas de sous-agents) */
+  /** only root processes (no sub-agents) */
   rootsOnly?: boolean;
 }
 
 export type EventType = 'started' | 'intent' | 'step' | 'waiting' | 'completed' | 'stuck' | 'failed' | 'log';
 
-/** Message du flux WatchEvents. */
+/** Message on the WatchEvents stream. */
 export interface WatchEvent {
   type?: EventType | string;
   time?: string;
@@ -632,12 +632,12 @@ export interface WatchEvent {
   log?: LogLine;
 }
 
-/** Item au format d'entrée du moteur (pkg/engine.ItemInput). */
+/** Item in the engine's input format (pkg/engine.ItemInput). */
 export interface ItemInput {
   ref?: string;
   kind: ItemKind;
   type?: string;
-  /** Clé du nœud ciblé. */
+  /** Key of the targeted node. */
   target?: string;
   proposal?: Struct;
   decision?: { item: string; accept: boolean; comment?: string };
@@ -660,7 +660,7 @@ export const ENGINE_SERVICE = ENGINE;
 type NameVersion = { name: string; version: string };
 
 export const registry = {
-  /** `allVersions` : toutes les versions (brouillons, archivées) au lieu de la dernière par nom. */
+  /** `allVersions`: all versions (drafts, archived) instead of the latest by name. */
   listMethodologies: (allVersions = false, signal?: AbortSignal) =>
     rpc<{ allVersions?: boolean }, { methodologies?: MethodologySummary[] }>(
       REGISTRY,
@@ -668,7 +668,7 @@ export const registry = {
       allVersions ? { allVersions } : {},
       signal,
     ),
-  /** `version` vide : dernière version publiée. */
+  /** empty `version`: latest published version. */
   getMethodology: (name: string, version = '', signal?: AbortSignal) =>
     rpc<NameVersion, { methodology?: Methodology }>(REGISTRY, 'GetMethodology', { name, version }, signal),
   saveMethodology: (methodology: Methodology) =>
@@ -685,7 +685,7 @@ export const registry = {
       'CreateVersion',
       { name, fromVersion, newVersion },
     ),
-  /** Supprime un brouillon, ou archive une version publiée. */
+  /** Deletes a draft, or archives a published version. */
   deleteMethodology: (name: string, version: string) =>
     rpc<NameVersion, Empty>(REGISTRY, 'DeleteMethodology', { name, version }),
   importMethodology: (yaml: string, publish: boolean) =>
@@ -720,7 +720,7 @@ export const graph = {
     rpc<Empty, { changes?: ChangeSet[] }>(GRAPH, 'ListChanges', {}, signal),
   getChange: (id: string, signal?: AbortSignal) =>
     rpc<{ id: string }, { change?: ChangeSet }>(GRAPH, 'GetChange', { id }, signal),
-  /** Journal d'exécution d'un changement, éventuellement restreint à des processus. */
+  /** Execution journal of a change, optionally restricted to given processes. */
   listExecutions: (changeId: string, processIds: string[] = [], signal?: AbortSignal) =>
     rpc<{ changeId: string; processIds?: string[] }, { records?: ExecutionRecord[] }>(
       GRAPH,
@@ -736,9 +736,9 @@ export const graph = {
 };
 
 export interface StartProcessRequest {
-  /** vide : identification parmi toutes les méthodologies publiées et leurs agents */
+  /** empty: identify among all published methodologies and their agents */
   methodology?: string;
-  /** restreint l'identification à cet agent */
+  /** restricts identification to this agent */
   agent?: string;
   baselineId?: string;
   changeId?: string;
@@ -781,7 +781,7 @@ export const engine = {
     }),
 };
 
-// --- état de la plateforme (passerelle, hors RPC) -------------------------------
+// --- platform status (gateway, outside RPC) -------------------------------
 
 export interface ServiceStatus {
   name?: string;
@@ -796,7 +796,7 @@ export interface PlatformStatus {
   time?: string;
 }
 
-/** `GET /api/status` servi par la passerelle. */
+/** `GET /api/status` served by the gateway. */
 export async function platformStatus(signal?: AbortSignal): Promise<PlatformStatus> {
   const headers: Record<string, string> = { Accept: 'application/json' };
   const token = getToken();
@@ -806,7 +806,7 @@ export async function platformStatus(signal?: AbortSignal): Promise<PlatformStat
     res = await fetch(`${BASE}/api/status`, { headers, signal });
   } catch (e) {
     if (e instanceof DOMException && e.name === 'AbortError') throw e;
-    throw new RpcError('unavailable', `Passerelle injoignable : ${String(e)}`, 0);
+    throw new RpcError('unavailable', `Gateway unreachable: ${String(e)}`, 0);
   }
   const text = await res.text();
   let data: PlatformStatus | undefined;
@@ -815,16 +815,16 @@ export async function platformStatus(signal?: AbortSignal): Promise<PlatformStat
   } catch {
     data = undefined;
   }
-  // 503 avec un corps d'état : plateforme indisponible, mais réponse exploitable.
+  // 503 with a status body: platform unavailable, but a usable response.
   if (data?.status) return data;
   throw new RpcError(res.status === 404 ? 'unimplemented' : 'unknown', text || res.statusText, res.status);
 }
 
 // ---------------------------------------------------------------------------
-// Utilitaires d'affichage
+// Display utilities
 // ---------------------------------------------------------------------------
 
-/** Titre lisible d'un nœud (propriété `title`, sinon `name`). */
+/** Human-readable title of a node (`title` property, else `name`). */
 export function nodeTitle(n: GraphNode | undefined): string {
   const t = n?.props?.['title'] ?? n?.props?.['name'];
   return typeof t === 'string' ? t : '';
@@ -837,7 +837,7 @@ export function formatDate(iso: string | undefined): string {
   return d.toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'medium' });
 }
 
-/** Compare deux numéros de version « 1.2.10 » segment par segment (numérique si possible). */
+/** Compares two version numbers "1.2.10" segment by segment (numerically when possible). */
 export function compareVersions(a: string | undefined, b: string | undefined): number {
   const pa = (a ?? '').split(/[.-]/);
   const pb = (b ?? '').split(/[.-]/);
@@ -852,7 +852,7 @@ export function compareVersions(a: string | undefined, b: string | undefined): n
   return 0;
 }
 
-/** Incrémente le dernier segment numérique : 1.2.3 → 1.2.4. */
+/** Increments the last numeric segment: 1.2.3 → 1.2.4. */
 export function bumpPatch(version: string | undefined): string {
   const v = version ?? '';
   const m = /^(.*?)(\d+)(\D*)$/.exec(v);
@@ -860,14 +860,14 @@ export function bumpPatch(version: string | undefined): string {
   return `${m[1]}${Number(m[2]) + 1}${m[3]}`;
 }
 
-/** Valeur numérique d'un entier proto3 (nombre ou chaîne pour les int64). */
+/** Numeric value of a proto3 integer (number or string for int64). */
 export function int(v: Int64 | undefined | null): number {
   if (v === undefined || v === null || v === '') return 0;
   const n = typeof v === 'number' ? v : Number(v);
   return Number.isFinite(n) ? n : 0;
 }
 
-/** 12345 → « 12 345 ». */
+/** 12345 → "12 345" (grouped thousands). */
 export function formatInt(v: Int64 | undefined | null): string {
   return int(v).toLocaleString('fr-FR');
 }

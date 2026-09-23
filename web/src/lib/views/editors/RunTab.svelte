@@ -1,6 +1,6 @@
 <script lang="ts">
-  // Visionneuse d'exécution en direct (WatchEvents du processus ; repli sur
-  // GetProcess toutes les 2 s si le flux échoue).
+  // Live execution viewer (process WatchEvents; falls back to
+  // GetProcess every 2s if the stream fails).
   import type { Tab } from '../../shell/types';
   import Icon from '../../shell/Icon.svelte';
   import StatusBadge from '../../components/StatusBadge.svelte';
@@ -35,9 +35,9 @@
 
   const POLL_MS = 2000;
   /**
-   * Le serveur n'envoie les en-têtes du flux qu'avec le premier événement :
-   * « connecting » est l'état normal d'un flux inactif. On n'y fait qu'une
-   * vérification lente ; l'interrogation à 2 s ne sert qu'en cas d'échec.
+   * The server only sends the stream headers with the first event:
+   * "connecting" is the normal state of an idle stream. We only do a
+   * slow check here; polling every 2s is only used on failure.
    */
   const IDLE_POLL_MS = 10_000;
   const TERMINAL = ['completed', 'failed'];
@@ -58,7 +58,7 @@
     }
   }
 
-  // Chargement initial et flux du processus.
+  // Initial load and process stream.
   $effect(() => {
     const pid = id;
     const ctrl = new AbortController();
@@ -67,7 +67,7 @@
       processId: pid,
       onEvent: (e) => {
         if (e.log && (e.log.processId ?? pid) === pid) liveLogs = [...liveLogs, e.log].slice(-500);
-        // Le flux global enregistre déjà l'événement : mise à jour des données seulement.
+        // The global stream already records the event: just update the data.
         ingestEvent(e, false);
       },
       onStatus: (s) => (stream = s),
@@ -80,7 +80,7 @@
 
   const status = $derived(process?.status ?? '');
 
-  // Repli : interrogation périodique quand le flux a échoué.
+  // Fallback: periodic polling when the stream has failed.
   $effect(() => {
     if (stream === 'open' || TERMINAL.includes(status) || !id) return;
     const ctrl = new AbortController();
@@ -101,34 +101,34 @@
   provideActions(
     () => tab.id,
     () => [
-      { id: 'refresh', label: 'Actualiser', icon: 'refresh', disabled: loading, run: () => refresh() },
+      { id: 'refresh', label: 'Refresh', icon: 'refresh', disabled: loading, run: () => refresh() },
       {
         id: 'trace',
         label: 'Trace',
         icon: 'trace',
         disabled: !traceUrl,
-        title: traceUrl ? 'Ouvrir la trace dans Jaeger' : 'Pas de trace pour ce processus',
+        title: traceUrl ? 'Open the trace in Jaeger' : 'No trace for this process',
         run: () => window.open(traceUrl, '_blank', 'noopener'),
       },
       {
         id: 'change',
-        label: 'Changement',
+        label: 'Change',
         icon: 'diff',
         disabled: !process?.changeId,
         run: () => openTab({ kind: 'change', params: { id: process?.changeId ?? '' } }),
       },
       {
         id: 'journal',
-        label: "Journal d'exécution",
+        label: 'Execution journal',
         icon: 'list',
         disabled: !process?.changeId,
-        title: process?.changeId ? "Journal d'exécution de ce processus (ticks, actions, appels de modèle)" : 'Processus sans changement',
+        title: process?.changeId ? 'Execution journal for this process (ticks, actions, model calls)' : 'Process without a change',
         run: () =>
           openTab({ kind: 'journal', params: { id: process?.changeId ?? '', process: process?.id ?? '', record: '' } }, { pin: true }),
       },
       {
         id: 'parent',
-        label: 'Processus parent',
+        label: 'Parent process',
         icon: 'runs',
         disabled: !process?.parentId,
         run: () => openRun(process?.parentId ?? ''),
@@ -140,20 +140,20 @@
 <div class="editor-page wide">
   {#if error}<div class="alert">{error}</div>{/if}
   {#if !process}
-    {#if !error}<p class="empty">Chargement…</p>{/if}
+    {#if !error}<p class="empty">Loading…</p>{/if}
   {:else}
     <div class="editor-head">
       <Icon name={process.parentId ? 'bot' : 'runs'} size={18} />
-      <h2>{process.title || `Exécution ${shortId(process.id)}`}</h2>
+      <h2>{process.title || `Run ${shortId(process.id)}`}</h2>
       <StatusBadge status={process.status} />
-      {#if process.trigger}<span class="trig" title="Lancé automatiquement par un déclencheur">déclenché par {process.trigger}</span>{/if}
+      {#if process.trigger}<span class="trig" title="Launched automatically by a trigger">triggered by {process.trigger}</span>{/if}
       <span
         class="live {stream}"
         title={stream === 'retrying' || stream === 'stopped'
-          ? 'Flux indisponible : interrogation toutes les 2 s'
-          : 'Mises à jour en direct (WatchEvents)'}
+          ? 'Stream unavailable: polling every 2s'
+          : 'Live updates (WatchEvents)'}
       >
-        <span class="led" aria-hidden="true"></span>{stream === 'retrying' || stream === 'stopped' ? 'interrogation' : 'en direct'}
+        <span class="led" aria-hidden="true"></span>{stream === 'retrying' || stream === 'stopped' ? 'polling' : 'live'}
       </span>
       <span class="grow"></span>
       {#if traceUrl}
@@ -164,23 +164,23 @@
     <div class="top">
       <section class="card">
         <dl class="meta">
-          <dt>Identifiant</dt><dd><code>{process.id}</code></dd>
-          <dt>Méthodologie</dt><dd>{process.methodology || '—'}</dd>
-          <dt>Agent</dt><dd>{#if process.agent}<code>{process.agent}</code>{:else}<span class="empty">à déterminer</span>{/if}</dd>
-          <dt>Planificateur</dt><dd>{process.planner || '—'}</dd>
-          <dt>Objectif</dt><dd>{#if process.goal}<code>{process.goal}</code>{:else}<span class="empty">à déterminer</span>{/if}</dd>
+          <dt>ID</dt><dd><code>{process.id}</code></dd>
+          <dt>Methodology</dt><dd>{process.methodology || '—'}</dd>
+          <dt>Agent</dt><dd>{#if process.agent}<code>{process.agent}</code>{:else}<span class="empty">to be determined</span>{/if}</dd>
+          <dt>Planner</dt><dd>{process.planner || '—'}</dd>
+          <dt>Goal</dt><dd>{#if process.goal}<code>{process.goal}</code>{:else}<span class="empty">to be determined</span>{/if}</dd>
           {#if process.trigger}
-            <dt>Déclenché par</dt><dd><span class="trig"><Icon name="zap" size={12} /> {process.trigger}</span></dd>
+            <dt>Triggered by</dt><dd><span class="trig"><Icon name="zap" size={12} /> {process.trigger}</span></dd>
           {/if}
           {#if process.initiator?.subject}
-            <dt>Initiateur</dt>
+            <dt>Initiator</dt>
             <dd>
               {process.initiator.subject}{#if process.initiator.roles?.length}
                 <span class="hint"> ({process.initiator.roles.join(', ')})</span>{/if}
             </dd>
           {/if}
           {#if process.changeId}
-            <dt>Changement</dt>
+            <dt>Change</dt>
             <dd>
               <button type="button" class="link mono" onclick={() => openTab({ kind: 'change', params: { id: process.changeId ?? '' } })}>{shortId(process.changeId)}</button>
               ·
@@ -189,12 +189,12 @@
                 class="link"
                 onclick={() =>
                   openTab({ kind: 'journal', params: { id: process.changeId ?? '', process: process.id ?? '', record: '' } }, { pin: true })}
-                >journal d'exécution</button
+                >execution journal</button
               >
             </dd>
           {/if}
           {#if process.baselineId}
-            <dt>Référentiel</dt>
+            <dt>Baseline</dt>
             <dd><button type="button" class="link mono" onclick={() => openTab({ kind: 'baseline', params: { id: process.baselineId ?? '' } })}>{shortId(process.baselineId)}</button></dd>
           {/if}
           {#if process.parentId}
@@ -202,7 +202,7 @@
             <dd><button type="button" class="link mono" onclick={() => openRun(process.parentId ?? '')}>{shortId(process.parentId)}</button></dd>
           {/if}
           {#if children.length}
-            <dt>Sous-agents</dt>
+            <dt>Sub-agents</dt>
             <dd class="kids">
               {#each children as c (c)}
                 {@const cp = processes.get(c)}
@@ -213,16 +213,16 @@
               {/each}
             </dd>
           {/if}
-          <dt>Créé</dt><dd>{formatDate(process.createdAt)}</dd>
-          {#if process.updatedAt}<dt>Mis à jour</dt><dd>{formatDate(process.updatedAt)}</dd>{/if}
+          <dt>Created</dt><dd>{formatDate(process.createdAt)}</dd>
+          {#if process.updatedAt}<dt>Updated</dt><dd>{formatDate(process.updatedAt)}</dd>{/if}
         </dl>
         {#if process.error}<pre class="perror">{process.error}</pre>{/if}
       </section>
-      <section class="stats" aria-label="Totaux">
-        <div class="stat"><span class="v">{formatInt(process.usage?.inputTokens)}</span><span class="k">tokens entrée</span></div>
-        <div class="stat"><span class="v">{formatInt(process.usage?.outputTokens)}</span><span class="k">tokens sortie</span></div>
-        <div class="stat"><span class="v">{process.usage?.llmCalls ?? 0}</span><span class="k">appels LLM</span></div>
-        <div class="stat"><span class="v">{process.usage?.toolCalls ?? 0}</span><span class="k">appels d'outils</span></div>
+      <section class="stats" aria-label="Totals">
+        <div class="stat"><span class="v">{formatInt(process.usage?.inputTokens)}</span><span class="k">input tokens</span></div>
+        <div class="stat"><span class="v">{formatInt(process.usage?.outputTokens)}</span><span class="k">output tokens</span></div>
+        <div class="stat"><span class="v">{process.usage?.llmCalls ?? 0}</span><span class="k">LLM calls</span></div>
+        <div class="stat"><span class="v">{process.usage?.toolCalls ?? 0}</span><span class="k">tool calls</span></div>
       </section>
     </div>
 
@@ -236,9 +236,9 @@
           <ApprovalPanel {process} ondecided={set} />
         {:else if process.pending.kind === 'agent'}
           <section class="card waiting-agent">
-            <h3>En attente d'un sous-agent</h3>
+            <h3>Waiting for a sub-agent</h3>
             <p>
-              L'action <code>{process.pending.action}</code> attend la fin du sous-agent
+              Action <code>{process.pending.action}</code> is waiting for the sub-agent
               {#if process.pending.childProcessId}
                 <button type="button" class="link mono" onclick={() => openRun(process.pending?.childProcessId ?? '', true)}>
                   {processes.get(process.pending.childProcessId)?.agent || shortId(process.pending.childProcessId)}
@@ -246,7 +246,7 @@
                 {#if processes.get(process.pending.childProcessId)}
                   <StatusBadge status={processes.get(process.pending.childProcessId)?.status} />
                 {/if}
-              {/if}. Elle sera rejouée quand il se terminera.
+              {/if} to finish. It will be replayed once that completes.
             </p>
             {#if process.pending.description}<p class="hint">{process.pending.description}</p>{/if}
           </section>
@@ -266,10 +266,10 @@
           {/each}
         </ol>
       {:else}
-        <p class="empty">Aucun plan.</p>
+        <p class="empty">No plan.</p>
       {/if}
       {#if process.disabled?.length}
-        <h4 style="margin-top: 0.7rem">Actions désactivées</h4>
+        <h4 style="margin-top: 0.7rem">Disabled actions</h4>
         <ul class="chips">
           {#each process.disabled as a (a)}
             <li class="chip disabled">{a}</li>
@@ -280,11 +280,11 @@
 
     <div class="two">
       <section class="card">
-        <h3>État du monde</h3>
+        <h3>World state</h3>
         <WorldState world={process.world} unknown={process.unknown} />
       </section>
       <section class="card">
-        <h3>Étapes <span class="hint">{process.steps?.length ?? 0}</span></h3>
+        <h3>Steps <span class="hint">{process.steps?.length ?? 0}</span></h3>
         <StepsTimeline steps={process.steps} {liveLogs} onopenprocess={(c) => openRun(c)} />
       </section>
     </div>

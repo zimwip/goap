@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Outil latéral « Assistant ».
+  // "Assistant" side tool.
   import Assistant from './Assistant.svelte';
 </script>
 

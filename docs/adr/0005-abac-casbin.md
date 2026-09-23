@@ -1,24 +1,24 @@
-# ADR 0005 — Contrôle d'accès ABAC avec Casbin
+# ADR 0005 — ABAC access control with Casbin
 
-**Statut** : accepté · **Date** : 2026-09 · Remplace la politique de rôles statique introduite avec l'ADR 0004.
+**Status**: accepted · **Date**: 2026-09 · Replaces the static role policy introduced in ADR 0004.
 
-## Contexte
-Les décisions d'accès dépendent d'attributs, pas seulement de rôles : organisation de la ressource
-(multi-tenant), propriétaire (séparation des tâches : on n'approuve pas son propre changement), type de
-méthodologie… Les règles doivent être administrables sans redéploiement.
+## Context
+Access decisions depend on attributes, not just roles: the resource's organization
+(multi-tenant), the owner (separation of duties: you don't approve your own change), methodology
+type… Rules must be administrable without redeployment.
 
-## Décision
-- **Casbin** avec un modèle ABAC : `p = sub_rule, obj_type, act, eft`, matcher
-  `(type ou *) && (action ou *) && eval(sub_rule)`, effet *allow sauf deny*.
-- Les règles sont des expressions sur `r.sub` (Principal), `r.obj` (Resource) et `r.act`, avec les
-  fonctions `hasRole`, `hasAnyRole`, `isAnonymous`.
-- Politiques persistées dans le schéma `iam` (`casbin_rule`, adaptateur pgx maison), administrées par
-  `IamService` ; les autres services interrogent `CheckPermission` via `authz.Authorizer`.
-- En mode tout-en-un (`goap-dev`), l'enforcer est en mémoire dans le processus.
+## Decision
+- **Casbin** with an ABAC model: `p = sub_rule, obj_type, act, eft`, matcher
+  `(type or *) && (action or *) && eval(sub_rule)`, effect *allow unless deny*.
+- Rules are expressions over `r.sub` (Principal), `r.obj` (Resource), and `r.act`, with the
+  functions `hasRole`, `hasAnyRole`, `isAnonymous`.
+- Policies persisted in the `iam` schema (`casbin_rule`, custom pgx adapter), administered by
+  `IamService`; other services query `CheckPermission` via `authz.Authorizer`.
+- In all-in-one mode (`goap-dev`), the enforcer is in-memory within the process.
 
-## Conséquences
-- Une seule sémantique d'autorisation pour tous les services ; règles modifiables à chaud.
-- Chaque décision coûte un appel RPC à iam ; un cache de décisions pourra être ajouté si nécessaire.
-- Les politiques par défaut ne sont insérées que si la table est vide : les faire évoluer sur une base
-  existante passe par l'API d'administration (ou une migration).
-- Les en-têtes d'identité (`X-Goap-*`) ne sont fiables que si les services ne sont joignables que via la gateway.
+## Consequences
+- A single authorization semantics for all services; rules changeable on the fly.
+- Every decision costs one RPC call to iam; a decision cache can be added if needed.
+- Default policies are only inserted if the table is empty: evolving them on an existing
+  database goes through the admin API (or a migration).
+- Identity headers (`X-Goap-*`) are only trustworthy if services are reachable only through the gateway.

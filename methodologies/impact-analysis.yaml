@@ -1,23 +1,23 @@
 name: impact-analysis
 version: 1.1.0
 description: >
-  Analyse d'impact d'un changement sur un référentiel d'exigences :
-  identification des éléments impactés, propagation le long des liens de
-  traçabilité, propositions de mise à jour et revue humaine.
+  Impact analysis of a change on a requirements repository: identification of
+  impacted elements, propagation along traceability links, update proposals
+  and human review.
 
 domain:
   nodeTypes:
     - name: Need
-      description: Besoin métier exprimé par une partie prenante
+      description: Business need expressed by a stakeholder
       properties: [title, description]
     - name: Requirement
-      description: Exigence (fonctionnelle ou non) satisfaisant un besoin
+      description: Requirement (functional or non-functional) satisfying a need
       properties: [title, description, priority]
     - name: TestCase
-      description: Cas de test vérifiant une exigence
+      description: Test case verifying a requirement
       properties: [title, steps]
     - name: Component
-      description: Composant logiciel implémentant des exigences
+      description: Software component implementing requirements
       properties: [title, owner]
   linkTypes:
     - {name: satisfies, from: Requirement, to: Need}
@@ -26,62 +26,62 @@ domain:
 
 conditions:
   - name: has_impacts
-    description: Au moins un élément du graphe de référence est impacté
+    description: At least one element of the reference graph is impacted
     expr: size(impacts) > 0
   - name: propagated
-    description: Les impacts ont été propagés le long des liens de traçabilité
+    description: Impacts have been propagated along traceability links
     expr: artifacts.exists(a, a.type == "propagation")
   - name: reported
-    description: Un rapport d'impact a été rédigé
+    description: An impact report has been written
     expr: artifacts.exists(a, a.type == "report")
   - name: reviewed
-    description: Toutes les propositions ont reçu une décision
+    description: All proposals have received a decision
     expr: size(proposals) > 0 && proposals.all(p, p.status != "proposed")
   - name: applied
-    description: Le changement a été appliqué au référentiel (nouvelle baseline)
+    description: The change has been applied to the repository (new baseline)
     expr: change.status == "applied"
 
 actions:
   - name: identify_impacts
     kind: llm
-    description: Identifier les éléments directement impactés par l'intention de changement
+    description: Identify the elements directly impacted by the change intent
     pre: {has_impacts: false}
     effects: {has_impacts: true}
     cost: 2
     model: default
     prompt: |
-      Tu es un analyste d'impact. Intention de changement :
+      You are an impact analyst. Change intent:
       "{{ .Change.Intent }}"
 
-      Éléments du référentiel (clé, type, propriétés) :
+      Repository elements (key, type, properties):
       {{ range .Baseline.Nodes }}- {{ .Key }} ({{ .Type }}) {{ json .Properties }}
       {{ end }}
-      Identifie les éléments DIRECTEMENT impactés. Pour chacun, produis un item
-      {"kind":"impact","type":"direct","target":"<clé>","data":{"reason":"..."}}.
+      Identify the elements DIRECTLY impacted. For each one, produce an item
+      {"kind":"impact","type":"direct","target":"<key>","data":{"reason":"..."}}.
 
   - name: select_impacts
     kind: human
-    description: Sélection manuelle des éléments impactés (repli si l'analyse automatique n'est pas possible)
+    description: Manual selection of impacted elements (fallback if automatic analysis is not possible)
     pre: {has_impacts: false}
     effects: {has_impacts: true}
     cost: 8
-    instructions: Indiquez les éléments du référentiel directement impactés par le changement.
+    instructions: Indicate the elements of the repository directly impacted by the change.
 
   - name: propagate_impacts
     kind: builtin
     builtin: graph.propagate
-    description: Propager les impacts aux éléments liés (tests, composants, exigences dérivées)
+    description: Propagate impacts to linked elements (tests, components, derived requirements)
     pre: {has_impacts: true, propagated: false}
     effects: {propagated: true}
     cost: 1
     params:
       maxDepth: 3
-      # un impact sur la cible d'un lien se propage à sa source
+      # an impact on the target of a link propagates to its source
       linkTypes: [verifies, implements, satisfies]
 
   - name: propose_requirement_updates
     kind: llm
-    description: Proposer une nouvelle version de chaque exigence impactée
+    description: Propose a new version of each impacted requirement
     pre: {propagated: true}
     cost: 3
     model: default
@@ -90,16 +90,16 @@ actions:
       where: x.target.type == "Requirement"
       produce: {op: update_node}
     prompt: |
-      Intention de changement : "{{ .Change.Intent }}"
-      Exigences impactées :
-      {{ range .Impacts }}{{ if eq .Target.Type "Requirement" }}- {{ .Target.Key }} {{ json .Target.Properties }} (raison : {{ index .Data "reason" }})
+      Change intent: "{{ .Change.Intent }}"
+      Impacted requirements:
+      {{ range .Impacts }}{{ if eq .Target.Type "Requirement" }}- {{ .Target.Key }} {{ json .Target.Properties }} (reason: {{ index .Data "reason" }})
       {{ end }}{{ end }}
-      Pour chaque exigence, propose sa nouvelle version :
-      {"kind":"proposal","proposal":{"op":"update_node","node":{"base":"<clé>","props":{...}}}}
+      For each requirement, propose its new version:
+      {"kind":"proposal","proposal":{"op":"update_node","node":{"base":"<key>","props":{...}}}}
 
   - name: propose_tests
     kind: llm
-    description: Proposer un nouveau cas de test pour chaque exigence impactée
+    description: Propose a new test case for each impacted requirement
     pre: {propagated: true}
     cost: 3
     model: default
@@ -109,68 +109,68 @@ actions:
       produce: {op: create_node, nodeType: TestCase}
       link: {type: verifies}
     prompt: |
-      Intention de changement : "{{ .Change.Intent }}"
-      Exigences impactées :
+      Change intent: "{{ .Change.Intent }}"
+      Impacted requirements:
       {{ range .Impacts }}{{ if eq .Target.Type "Requirement" }}- {{ .Target.Key }} {{ json .Target.Properties }}
       {{ end }}{{ end }}
-      Pour chaque exigence, propose un cas de test et son lien :
+      For each requirement, propose a test case and its link:
       {"kind":"proposal","ref":"t1","proposal":{"op":"create_node","node":{"key":"TST-...","type":"TestCase","props":{"title":"..."}}}}
-      {"kind":"proposal","proposal":{"op":"add_link","link":{"type":"verifies","from":"#t1","to":"<clé exigence>"}}}
+      {"kind":"proposal","proposal":{"op":"add_link","link":{"type":"verifies","from":"#t1","to":"<requirement key>"}}}
 
   - name: write_report
     kind: llm
-    description: Rédiger le rapport d'impact
+    description: Write the impact report
     pre: {propagated: true, reported: false}
     effects: {reported: true}
     cost: 1
     model: fast
     prompt: |
-      Intention : "{{ .Change.Intent }}"
-      Impacts :
+      Intent: "{{ .Change.Intent }}"
+      Impacts:
       {{ range .Impacts }}- {{ .Target.Key }} ({{ .Target.Type }}, {{ .Type }}) : {{ index .Data "reason" }}
       {{ end }}
-      Rédige un rapport synthétique : {"kind":"artifact","type":"report","data":{"markdown":"..."}}
+      Write a concise report: {"kind":"artifact","type":"report","data":{"markdown":"..."}}
 
   - name: review_proposals
     kind: human
-    description: Revue des propositions (acceptation / rejet)
+    description: Review of proposals (accept / reject)
     pre: {"expect:propose_requirement_updates": true, "expect:propose_tests": true}
     effects: {reviewed: true}
     cost: 2
-    instructions: Acceptez ou rejetez chaque proposition.
+    instructions: Accept or reject each proposal.
 
   - name: apply_change
     kind: builtin
     builtin: graph.apply
-    description: Appliquer le changement validé au référentiel (crée la baseline d'arrivée)
+    description: Apply the validated change to the repository (creates the resulting baseline)
     pre: {reviewed: true, applied: false}
     effects: {applied: true}
     cost: 1
-    # sans cette permission, l'initiateur doit obtenir l'approbation d'un approbateur
+    # without this permission, the initiator must obtain an approver's approval
     permission: change:apply
 
 goals:
   - name: assess_impact
-    description: Évaluer l'impact d'un changement et produire un rapport, sans modifier le référentiel
+    description: Assess the impact of a change and produce a report, without modifying the repository
     examples:
-      - quel est l'impact
-      - qu'est-ce que ça casse
-      - analyse d'impact
+      - what is the impact
+      - what does this break
+      - impact analysis
     pre: {propagated: true, reported: true}
     value: 10
   - name: prepare_change
-    description: Préparer la modification du référentiel (exigences et tests mis à jour) et la faire valider
+    description: Prepare the repository change (updated requirements and tests) and have it validated
     examples:
-      - mettre à jour les exigences
-      - préparer la modification
-      - proposer les changements
+      - update the requirements
+      - prepare the change
+      - propose the changes
     pre: {"expect:propose_requirement_updates": true, "expect:propose_tests": true, reviewed: true}
     value: 20
   - name: deliver_change
-    description: Préparer, valider puis appliquer la modification au référentiel
+    description: Prepare, validate, then apply the change to the repository
     examples:
-      - appliquer la modification
-      - livrer le changement
-      - mettre en production le référentiel
+      - apply the change
+      - deliver the change
+      - put the repository into production
     pre: {reviewed: true, applied: true}
     value: 30

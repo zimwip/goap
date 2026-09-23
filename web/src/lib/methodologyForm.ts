@@ -1,9 +1,9 @@
-// Modèle d'édition d'une méthodologie.
+// Editing model of a methodology.
 //
-// Le formulaire manipule une copie « à plat » de la définition, plus commode à
-// lier aux champs : les maps de conditions (pre / effects) deviennent des listes
-// de lignes, les listes de chaînes des textes, les paramètres JSON un texte.
-// `toForm` / `fromForm` convertissent entre ce modèle et le message proto.
+// The form works with a "flattened" copy of the definition, more convenient
+// to bind to fields: condition maps (pre / effects) become row lists, string
+// lists become text, JSON params become text. `toForm` / `fromForm` convert
+// between this model and the proto message.
 
 import type { Action, Agent, Issue, Methodology, Struct, Trigger } from './api';
 
@@ -15,9 +15,9 @@ export interface CondRow {
 export interface NodeTypeForm {
   name: string;
   description: string;
-  /** propriétés séparées par des virgules */
+  /** comma-separated properties */
   properties: string;
-  /** type parent (sous-typage) */
+  /** parent type (subtyping) */
   extends: string;
 }
 
@@ -28,9 +28,9 @@ export interface LinkTypeForm {
 }
 
 /**
- * Les éléments ouvrables dans un onglet (agents, actions, conditions, objectifs)
- * portent un identifiant local stable `uid` (jamais envoyé au serveur) : il
- * survit aux renommages et réordonnancements tant que le brouillon est en mémoire.
+ * Elements that can be opened in a tab (agents, actions, conditions, goals)
+ * carry a stable local `uid` (never sent to the server): it survives
+ * renames and reorderings as long as the draft is in memory.
  */
 export interface Identified {
   uid: string;
@@ -64,22 +64,22 @@ export interface ActionForm extends Identified {
   tool: string;
   builtin: string;
   instructions: string;
-  /** paramètres (builtin) en JSON */
+  /** params (builtin) as JSON */
   params: string;
   hasExpects: boolean;
   expects: ExpectsForm;
-  /** script : javascript | go */
+  /** script: javascript | go */
   language: string;
   code: string;
-  /** expression CEL numérique (planificateurs utility / hybrid) */
+  /** numeric CEL expression (utility / hybrid planners) */
   utility: string;
-  /** action spécialisée : « <action> » ou « <méthodologie>/<action> » */
+  /** specialized action: "<action>" or "<methodology>/<action>" */
   specializes: string;
-  /** garde CEL de la spécialisation */
+  /** CEL guard of the specialization */
   when: string;
-  /** priorité de la spécialisation (la plus haute l'emporte) */
+  /** specialization priority (highest wins) */
   priority: number;
-  /** effets atteints en plusieurs exécutions */
+  /** effects reached over several runs */
   incremental: boolean;
 }
 
@@ -89,15 +89,15 @@ export interface TriggerForm {
   /** event | schedule */
   type: string;
   event: string;
-  /** filtre CEL sur l'événement */
+  /** CEL filter on the event */
   filter: string;
-  /** cron à 5 champs (UTC) */
+  /** 5-field cron (UTC) */
   schedule: string;
   goal: string;
   intent: string;
   /** new_change | event_change */
   target: string;
-  /** rôles séparés par des virgules */
+  /** comma-separated roles */
   roles: string;
   enabled: boolean;
 }
@@ -105,12 +105,12 @@ export interface TriggerForm {
 export interface AgentForm extends Identified {
   name: string;
   description: string;
-  /** un exemple par ligne */
+  /** one example per line */
   examples: string;
   planner: string;
-  /** actions admissibles (vide : toutes) */
+  /** eligible actions (empty: all) */
   actions: string[];
-  /** objectifs (vide : tous) */
+  /** goals (empty: all) */
   goals: string[];
   triggers: TriggerForm[];
 }
@@ -118,7 +118,7 @@ export interface AgentForm extends Identified {
 export interface GoalForm extends Identified {
   name: string;
   description: string;
-  /** un exemple par ligne */
+  /** one example per line */
   examples: string;
   pre: CondRow[];
   value: number;
@@ -136,7 +136,7 @@ export interface MethodologyForm {
   agents: AgentForm[];
 }
 
-/** Sections dont les éléments s'ouvrent dans un onglet. */
+/** Sections whose elements open in a tab. */
 export type Section = 'agents' | 'actions' | 'conditions' | 'goals';
 export type SectionItem = AgentForm | ActionForm | ConditionForm | GoalForm;
 
@@ -148,12 +148,12 @@ export const TRIGGER_TARGETS = ['new_change', 'event_change'] as const;
 export const FOR_EACH = ['impacts', 'proposals', 'items', 'artifacts'] as const;
 export const PRODUCE_OPS = ['create_node', 'update_node'] as const;
 
-// --- constructeurs --------------------------------------------------------------
+// --- constructors --------------------------------------------------------------
 
 export const emptyNodeType = (): NodeTypeForm => ({ name: '', description: '', properties: '', extends: '' });
 export const emptyLinkType = (): LinkTypeForm => ({ name: '', from: '', to: '' });
 let uidSeq = 0;
-/** Nouvel identifiant local (éléments créés dans l'interface). */
+/** New local id (elements created in the UI). */
 export function newUid(): string {
   uidSeq += 1;
   return `new-${uidSeq}-${Math.random().toString(36).slice(2, 7)}`;
@@ -239,8 +239,8 @@ function rows(m: Record<string, boolean> | undefined): CondRow[] {
 }
 
 /**
- * Identifiants des éléments chargés : dérivés du nom (stables d'un chargement à
- * l'autre, ce qui permet de rouvrir les onglets mémorisés), dédoublonnés.
+ * Ids of loaded elements: derived from the name (stable across reloads,
+ * which allows reopening remembered tabs), deduplicated.
  */
 function uids<T extends { name?: string }>(list: T[] | undefined): string[] {
   const used = new Set<string>();
@@ -377,7 +377,7 @@ export function toForm(m: Methodology): MethodologyForm {
   };
 }
 
-/** Copie `v` dans `o[k]` seulement si non vide (proto3 JSON omet les valeurs par défaut). */
+/** Copies `v` into `o[k]` only if non-empty (proto3 JSON omits default values). */
 function put<T extends object, K extends keyof T>(o: T, k: K, v: T[K] | undefined): void {
   if (v === undefined || v === '' || (Array.isArray(v) && v.length === 0)) return;
   if (typeof v === 'object' && v !== null && !Array.isArray(v) && Object.keys(v).length === 0) return;
@@ -395,8 +395,8 @@ function num(n: number): number | undefined {
 }
 
 /**
- * Construit le message proto. Les erreurs détectables localement (JSON des
- * paramètres invalide) sont renvoyées comme des problèmes de validation.
+ * Builds the proto message. Locally detectable errors (invalid params JSON)
+ * are returned as validation issues.
  */
 export function fromForm(f: MethodologyForm): { methodology: Methodology; issues: Issue[] } {
   const issues: Issue[] = [];
@@ -457,7 +457,7 @@ export function fromForm(f: MethodologyForm): { methodology: Methodology; issues
       const specializes = a.specializes.trim();
       put(o, 'specializes', specializes);
       if (specializes) {
-        // Une spécialisation hérite des pré / effets / attendus / coût de l'action spécialisée.
+        // A specialization inherits the pre / effects / expects / cost of the specialized action.
         put(o, 'when', a.when.trim());
         put(o, 'priority', num(Math.trunc(a.priority)));
       } else {
@@ -468,7 +468,7 @@ export function fromForm(f: MethodologyForm): { methodology: Methodology; issues
       }
       put(o, 'permission', a.permission.trim());
       put(o, 'utility', a.utility.trim());
-      // Champs propres au type d'action : les autres sont ignorés.
+      // Fields specific to the action type: the others are ignored.
       if (a.kind === 'llm') {
         put(o, 'model', a.model.trim());
         put(o, 'prompt', a.prompt);
@@ -484,12 +484,12 @@ export function fromForm(f: MethodologyForm): { methodology: Methodology; issues
         if (a.params.trim()) {
           try {
             const p: unknown = JSON.parse(a.params);
-            if (p === null || typeof p !== 'object' || Array.isArray(p)) throw new Error('objet attendu');
+            if (p === null || typeof p !== 'object' || Array.isArray(p)) throw new Error('object expected');
             put(o, 'params', p as Struct);
           } catch (e) {
             issues.push({
               path: `actions[${i}].params`,
-              message: `Paramètres JSON invalides : ${e instanceof Error ? e.message : String(e)}`,
+              message: `Invalid params JSON: ${e instanceof Error ? e.message : String(e)}`,
             });
           }
         }
@@ -557,7 +557,7 @@ export function fromForm(f: MethodologyForm): { methodology: Methodology; issues
   return { methodology: m, issues };
 }
 
-/** Conditions utilisables dans pre / effects : déclarées + `expect:<action>` générées. */
+/** Conditions usable in pre / effects: declared + generated `expect:<action>`. */
 export function conditionNames(f: MethodologyForm): string[] {
   const names = f.conditions.map((c) => c.name.trim()).filter(Boolean);
   for (const a of f.actions)
@@ -565,14 +565,14 @@ export function conditionNames(f: MethodologyForm): string[] {
   return [...new Set(names)];
 }
 
-/** Remplace une référence renommée dans une map de conditions (ordre conservé). */
+/** Replaces a renamed reference in a condition map (order preserved). */
 function renameRows(rs: CondRow[], from: string, to: string): void {
   for (const r of rs) if (r.cond === from) r.cond = to;
 }
 
 /**
- * Répercute le renommage d'un élément sur ses références : conditions dans les
- * pre / effects des actions et objectifs, actions et objectifs dans les agents.
+ * Propagates the rename of an element to its references: conditions in the
+ * pre / effects of actions and goals, actions and goals in agents.
  */
 export function renameReferences(f: MethodologyForm, section: Section, from: string, to: string): void {
   if (!from || !to || from === to) return;
@@ -584,7 +584,7 @@ export function renameReferences(f: MethodologyForm, section: Section, from: str
     for (const g of f.goals) renameRows(g.pre, from, to);
   } else if (section === 'actions') {
     for (const ag of f.agents) ag.actions = ag.actions.map((x) => (x === from ? to : x));
-    // spécialisations locales (« <action> » ou « <cette méthodologie>/<action> »)
+    // local specializations ("<action>" or "<this methodology>/<action>")
     const self = f.name.trim();
     for (const a of f.actions) {
       if (a.specializes === from) a.specializes = to;
@@ -600,7 +600,7 @@ export function renameReferences(f: MethodologyForm, section: Section, from: str
   }
 }
 
-// --- chemins des problèmes ------------------------------------------------------------
+// --- issue paths ------------------------------------------------------------
 
 const SEGMENT_ALIASES: Record<string, string> = {
   node_types: 'nodeTypes',
@@ -609,7 +609,7 @@ const SEGMENT_ALIASES: Record<string, string> = {
   node_type: 'nodeType',
 };
 
-/** Normalise un chemin serveur (« domain.node_types[0].name » → « nodeTypes[0].name »). */
+/** Normalizes a server path ("domain.node_types[0].name" → "nodeTypes[0].name"). */
 export function normalizePath(path: string | undefined): string {
   return (path ?? '')
     .trim()
@@ -617,13 +617,13 @@ export function normalizePath(path: string | undefined): string {
     .replace(/[A-Za-z_]+/g, (seg) => SEGMENT_ALIASES[seg] ?? seg);
 }
 
-/** Chemin parent : « actions[0].pre.x » → « actions[0].pre » → « actions[0] » → « actions ». */
+/** Parent path: "actions[0].pre.x" → "actions[0].pre" → "actions[0]" → "actions". */
 export function parentPath(path: string): string {
   const m = /^(.*)(\.[^.[\]]+|\[\d+\])$/.exec(path);
   return m ? m[1] : '';
 }
 
-// --- listes -----------------------------------------------------------------------
+// --- lists -----------------------------------------------------------------------
 
 export function moveItem<T>(list: T[], i: number, delta: number): void {
   const j = i + delta;

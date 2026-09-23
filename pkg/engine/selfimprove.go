@@ -123,7 +123,7 @@ func (e *Engine) observeAnalyze(ctx context.Context, ac ActionContext, cfg SelfI
 	if cfg.TraceURL != "" && r.TraceID != "" {
 		data["traceUrl"] = cfg.TraceURL + r.TraceID
 	}
-	out := fmt.Sprintf("%s/%s : %d constats (%d étapes, %d tokens, %d spans)", r.Methodology, r.Agent, len(r.Findings), r.Steps, r.Tokens, len(spans))
+	out := fmt.Sprintf("%s/%s: %d findings (%d steps, %d tokens, %d spans)", r.Methodology, r.Agent, len(r.Findings), r.Steps, r.Tokens, len(spans))
 	return ActionResult{Items: []ItemInput{{Kind: "artifact", Type: "cost_report", Data: data}}, Output: out, Logs: logs}, nil
 }
 
@@ -194,7 +194,7 @@ func (e *Engine) observePropose(ctx context.Context, ac ActionContext) (ActionRe
 	}
 	items = append(items, ItemInput{Kind: "artifact", Type: "improvement_plan", Data: map[string]any{
 		"methodology": r.Methodology, "observedVersion": r.Version, "currentVersion": cm.Version, "proposals": len(props), "notes": notes}})
-	return ActionResult{Items: items, Output: fmt.Sprintf("%d propositions, %d remarques", len(props), len(notes))}, nil
+	return ActionResult{Items: items, Output: fmt.Sprintf("%d proposals, %d notes", len(props), len(notes))}, nil
 }
 
 func (e *Engine) methodologyDraft(ctx context.Context, ac ActionContext, cfg SelfImprovement) (ActionResult, error) {
@@ -224,7 +224,7 @@ func (e *Engine) methodologyDraft(ctx context.Context, ac ActionContext, cfg Sel
 	}
 	if len(edits) == 0 {
 		return ActionResult{Items: []ItemInput{{Kind: "artifact", Type: "methodology_draft",
-			Data: map[string]any{"methodology": r.Methodology, "skipped": true, "reason": "aucune proposition acceptée"}}}, Output: "rien à intégrer"}, nil
+			Data: map[string]any{"methodology": r.Methodology, "skipped": true, "reason": "no proposal accepted"}}}, Output: "nothing to merge"}, nil
 	}
 	// the draft is saved with the identity of the process initiator
 	ctx = authz.With(ctx, ac.Process.Initiator)
@@ -252,7 +252,7 @@ func (e *Engine) methodologyDraft(ctx context.Context, ac ActionContext, cfg Sel
 	}
 	data["issues"] = orEmptyAnyList(is)
 	return ActionResult{Items: []ItemInput{{Kind: "artifact", Type: "methodology_draft", Data: data}},
-		Output: fmt.Sprintf("brouillon %s@%s : %d modifications, %d anomalies", cur.Name, d.Methodology.Version, len(d.Applied), len(issues))}, nil
+		Output: fmt.Sprintf("draft %s@%s: %d changes, %d issues", cur.Name, d.Methodology.Version, len(d.Applied), len(issues))}, nil
 }
 
 func cmpErr(err error, fallback string) string {

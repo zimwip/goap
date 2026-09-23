@@ -1,132 +1,131 @@
-# GOAP — atelier web (IDE)
+# GOAP — web workshop (IDE)
 
-Interface Svelte 5 + Vite + TypeScript de la plateforme GOAP, organisée comme un
-IDE (à la VS Code) : conception des méthodologies (agents, actions, conditions,
-objectifs, domaine), tests d'intention, suivi en direct des exécutions, revue des
-changements, référentiels, déclencheurs et politiques d'accès. Un **assistant**
-conversationnel permet aux non-spécialistes de formuler une demande en langage
-courant.
+Svelte 5 + Vite + TypeScript interface for the GOAP platform, organized as an
+IDE (VS Code style): methodology design (agents, actions, conditions,
+goals, domain), intent testing, live execution monitoring, change review,
+repositories, triggers, and access policies. A conversational **assistant**
+lets non-specialists phrase a request in plain language.
 
-## Disposition
+## Layout
 
 ```
-┌──────────────────────────────── En-tête ─────────────────────────────────┐
-│ GOAP Atelier   [ Rechercher (Ctrl+P) — « > » : commandes ]   ● en direct 👤 │
-├──────────────────────────────── Barre d'outils ──────────────────────────┤
-│ actions de l'éditeur actif (Enregistrer, Valider, Publier…)   globales    │
+┌──────────────────────────────── Header ───────────────────────────────────┐
+│ GOAP Workshop  [ Search (Ctrl+P) — "> " : commands ]         ● live 👤     │
+├──────────────────────────────── Toolbar ──────────────────────────────────┤
+│ actions of the active editor (Save, Validate, Publish…)        global     │
 ├──┬──────────────┬──────────────────────────────────────┬──────────────┬──┤
-│A │ Navigation   │ Onglets d'édition                    │ Panneau droit│A │
-│c │ (outil de la │                                      │ (Tester,     │c │
-│t │  barre       │  éditeur de l'onglet actif           │  Propriétés, │t │
-│. │  d'activité) ├──────────────────────────────────────┤  Aide DSL)   │. │
-│  │              │ Console : Événements · Journaux ·    │              │  │
-│  │              │ Problèmes · Tokens                   │              │  │
+│A │ Navigation   │ Editing tabs                          │ Right panel │A │
+│c │ (activity    │                                      │ (Test,       │c │
+│t │  bar tool)   │  active tab's editor                 │  Properties, │t │
+│. │              ├──────────────────────────────────────┤  DSL Help)   │. │
+│  │              │ Console: Events · Logs ·              │              │  │
+│  │              │ Problems · Tokens                     │              │  │
 ├──┴──────────────┴──────────────────────────────────────┴──────────────┴──┤
-│ ● Plateforme OK   flux en direct      2 exécutions en cours  👤 dev  🔔 3 │
-└──────────────────────────────── Barre d'état ────────────────────────────┘
+│ ● Platform OK   live stream      2 runs in progress   👤 dev  🔔 3        │
+└──────────────────────────────── Status bar ───────────────────────────────┘
 ```
 
-- **En-tête** : recherche d'objets (onglets ouverts, méthodologies, agents,
-  exécutions, référentiels, changements) ; préfixe `>` pour la palette de
-  commandes. Menu utilisateur : identité (`WhoAmI`), jeton d'accès (stocké dans
-  `localStorage`, clé `goap.token`, envoyé en `Authorization: Bearer …`), thème
-  (système / clair / sombre).
-- **Barre d'outils** : actions contextuelles de l'éditeur actif (méthodologie :
-  Enregistrer, Valider, Publier, Exporter, Nouvelle version, Recharger,
-  Supprimer / Archiver ; exécution : Actualiser, Trace, Changement, Parent…),
-  plus « Nouveau test d'intention » et les bascules des panneaux.
-- **Barre d'activité gauche** → panneau de navigation (redimensionnable,
-  repliable) :
-  - **Assistant** : conversation en langage courant (aussi disponible en onglet) ;
-  - **Méthodologies** : méthodologie → version → Agents / Actions / Conditions /
-    Objectifs / Domaine (compteurs de problèmes, ● modifications, `+` pour ajouter) ;
-  - **Exécutions** : processus regroupés par statut, sous-agents imbriqués sous
-    leur parent ;
-  - **Déclencheurs** : état des déclencheurs des agents publiés (`ListTriggers`),
-    bouton « Déclencher » (`FireTrigger`) qui ouvre l'exécution créée ;
-  - **Référentiel** : baselines → nœuds par type ;
-  - **Changements** ; **Accès** (politiques ABAC).
-- **Zone d'édition à onglets** : chaque objet s'ouvre dans un onglet. Un clic
-  simple ouvre un **aperçu** (titre en italique) remplacé par la sélection
-  suivante ; un onglet devient **épinglé** par double clic (sur l'onglet ou dans
-  l'explorateur) ou dès qu'on modifie son contenu ; l'icône d'épingle le
-  désépingle. ● signale des modifications non enregistrées ; clic milieu ferme ;
-  glisser-déposer pour réordonner. Les onglets sont mémorisés (`localStorage`).
-- **Console** (redimensionnable, repliable) : **Événements** (flux
-  `WatchEvents` en direct, clic → exécution), **Journaux** (filtre par niveau et
-  processus), **Problèmes** (validation du brouillon actif, clic → champ
-  concerné), **Tokens** (un appel LLM par ligne : heure, processus, agent,
-  action, modèle, entrée / sortie, durée, totaux).
-- **Barre d'activité droite** : **Tester** (méthodologie et agent facultatifs,
-  référentiel, intention → « Envoyer » = `StartProcess` ; candidats de
-  l'identification, question de clarification et réponse ; ouvre l'exécution),
-  **Propriétés** (détails de l'objet sélectionné), **Aide DSL** (`docs/dsl.md`).
-- **Barre d'état** : santé de la plateforme (`GET /api/status` toutes les 15 s,
-  détail des services au clic), mes exécutions en cours (`ListProcesses`
-  `{mine, rootsOnly, statuses}` + flux ; liste au clic), identité et
-  **notifications** (fin, échec, blocage, saisie ou approbation attendue,
-  clarification, lancement par un déclencheur ; 100 dernières, mémorisées).
+- **Header**: object search (open tabs, methodologies, agents,
+  runs, repositories, changes); `>` prefix for the command
+  palette. User menu: identity (`WhoAmI`), access token (stored in
+  `localStorage`, key `goap.token`, sent as `Authorization: Bearer …`), theme
+  (system / light / dark).
+- **Toolbar**: contextual actions of the active editor (methodology:
+  Save, Validate, Publish, Export, New version, Reload,
+  Delete / Archive; run: Refresh, Trace, Change, Parent…),
+  plus "New intent test" and panel toggles.
+- **Left activity bar** → navigation panel (resizable,
+  collapsible):
+  - **Assistant**: plain-language conversation (also available as a tab);
+  - **Methodologies**: methodology → version → Agents / Actions / Conditions /
+    Goals / Domain (problem counters, ● changes, `+` to add);
+  - **Runs**: processes grouped by status, sub-agents nested under
+    their parent;
+  - **Triggers**: status of published agents' triggers (`ListTriggers`),
+    "Fire" button (`FireTrigger`) that opens the created run;
+  - **Repository**: baselines → nodes by type;
+  - **Changes**; **Access** (ABAC policies).
+- **Tabbed editing area**: each object opens in a tab. A single click
+  opens a **preview** (italicized title) replaced by the next
+  selection; a tab becomes **pinned** on double click (on the tab or in
+  the explorer) or as soon as its content is modified; the pin icon
+  unpins it. ● signals unsaved changes; middle click closes it;
+  drag and drop to reorder. Tabs are remembered (`localStorage`).
+- **Console** (resizable, collapsible): **Events** (live
+  `WatchEvents` stream, click → run), **Logs** (filter by level and
+  process), **Problems** (validation of the active draft, click → relevant
+  field), **Tokens** (one LLM call per row: time, process, agent,
+  action, model, input / output, duration, totals).
+- **Right activity bar**: **Test** (optional methodology and agent,
+  repository, intent → "Send" = `StartProcess`; identification
+  candidates, clarification question and answer; opens the run),
+  **Properties** (details of the selected object), **DSL Help** (`docs/dsl.md`).
+- **Status bar**: platform health (`GET /api/status` every 15 s,
+  per-service detail on click), my running runs (`ListProcesses`
+  `{mine, rootsOnly, statuses}` + stream; list on click), identity, and
+  **notifications** (completion, failure, blocked, pending input or approval,
+  clarification, triggered launch; last 100, remembered).
 
-Sous 1024 px de large, les panneaux latéraux se superposent à l'éditeur.
+Below 1024 px wide, the side panels overlay the editor.
 
-## Éditeurs
+## Editors
 
-- **Méthodologie** : général et domaine (types de nœuds et de liens), contenu.
-- **Agent** : nom, description, exemples, planificateur (`goap`, `utility`,
-  `hybrid`), actions admissibles et objectifs (liste vide = tous), et
-  **déclencheurs** (événement ou planification cron UTC, filtre CEL, objectif,
-  intention, cible, rôles, activé).
-- **Action** : tous les champs ; `script` : éditeur de code (CodeMirror)
-  JavaScript / Go avec coloration et complétion de l'API `ctx.` ; `llm` : éditeur
-  de prompt ; `utility` : expression CEL numérique.
-- **Condition** (expression CEL), **Objectif**.
+- **Methodology**: general and domain (node and link types), content.
+- **Agent**: name, description, examples, planner (`goap`, `utility`,
+  `hybrid`), admissible actions and goals (empty list = all), and
+  **triggers** (event or UTC cron schedule, CEL filter, goal,
+  intent, target, roles, enabled).
+- **Action**: all fields; `script`: code editor (CodeMirror)
+  JavaScript / Go with syntax highlighting and `ctx.` API completion; `llm`: prompt
+  editor; `utility`: numeric CEL expression.
+- **Condition** (CEL expression), **Goal**.
 
-Les agents, actions, conditions et objectifs sont édités dans le **brouillon**
-en mémoire de leur méthodologie@version, partagé par tous ses onglets :
-enregistrer depuis n'importe lequel enregistre la méthodologie entière
-(`SaveMethodology`). Le brouillon est validé automatiquement après chaque
-modification. Un renommage met à jour les références (pre / effects, agents,
-déclencheurs). Les versions publiées ou archivées sont en lecture seule.
+Agents, actions, conditions, and goals are edited in their
+methodology@version's in-memory **draft**, shared by all its tabs:
+saving from any of them saves the entire methodology
+(`SaveMethodology`). The draft is automatically validated after each
+change. Renaming updates references (pre / effects, agents,
+triggers). Published or archived versions are read-only.
 
-- **Exécution** (en direct via `WatchEvents`, repli sur `GetProcess` toutes les
-  2 s si le flux échoue) : statut, agent, planificateur, objectif, initiateur,
-  « déclenché par », totaux (tokens, appels LLM / outils), lien **Trace** vers
-  Jaeger, parent / sous-agents, plan, état du monde, étapes (usage, appels LLM
-  et outils, journaux, sandbox, sous-agents), tâche en attente (saisie,
-  approbation, attente d'un sous-agent) et dialogue d'intention.
-- **Changement**, **Référentiel**, **Politiques d'accès**, **Import YAML**.
+- **Run** (live via `WatchEvents`, falling back to `GetProcess` every
+  2 s if the stream fails): status, agent, planner, goal, initiator,
+  "triggered by", totals (tokens, LLM / tool calls), **Trace** link to
+  Jaeger, parent / sub-agents, plan, world state, steps (usage, LLM calls
+  and tool calls, logs, sandbox, sub-agents), pending task (input,
+  approval, waiting on a sub-agent), and intent dialog.
+- **Change**, **Repository**, **Access policies**, **YAML import**.
 
 ## Assistant
 
-Pour les utilisateurs non spécialistes : cartes des agents disponibles avec
-leurs exemples de demandes, saisie libre → `StartProcess` sans méthodologie
-(identification parmi tous les agents publiés, sur le référentiel le plus
-récent — modifiable dans les réglages). La conversation suit l'exécution en
-direct avec des messages lisibles (description des actions), pose les questions
-de clarification sous forme de boutons, affiche les tâches humaines et les
-approbations dans la conversation, suit les sous-agents, et résume le résultat
-(artefacts, impacts, propositions, tokens, « Voir le détail »). L'historique est
-conservé dans le navigateur ; « Nouvelle conversation » le réinitialise.
+For non-specialist users: cards of available agents with
+their example requests, free-text entry → `StartProcess` without a methodology
+(identification among all published agents, on the most recent
+repository — configurable in settings). The conversation follows the run
+live with readable messages (action descriptions), asks clarification
+questions as buttons, shows human tasks and
+approvals in the conversation, follows sub-agents, and summarizes the result
+(artifacts, impacts, proposals, tokens, "View details"). History is
+kept in the browser; "New conversation" resets it.
 
-## Raccourcis
+## Shortcuts
 
-| Raccourci                    | Action                                   |
+| Shortcut                     | Action                                   |
 | ---------------------------- | ---------------------------------------- |
-| `Ctrl`/`Cmd` + `S`           | enregistrer l'éditeur actif              |
-| `Ctrl`/`Cmd` + `W`, `Alt`+`W` | fermer l'onglet (`Alt`+`W` si le navigateur intercepte `Ctrl`+`W`) |
-| `Ctrl`/`Cmd` + `J`           | afficher / masquer la console            |
-| `Ctrl`/`Cmd` + `B`           | afficher / masquer la navigation         |
-| `Ctrl`/`Cmd` + `P` (ou `K`)  | rechercher ; `>` pour les commandes      |
-| `Ctrl` + `Espace`            | complétion dans l'éditeur de code        |
-| `Ctrl` + `Entrée`            | envoyer l'intention (Tester)             |
-| double clic                  | épingler un onglet / ouvrir épinglé      |
-| clic milieu                  | fermer un onglet                         |
-| flèches                      | naviguer dans les arbres, onglets et barres d'activité ; redimensionner un séparateur focalisé |
+| `Ctrl`/`Cmd` + `S`           | save the active editor                   |
+| `Ctrl`/`Cmd` + `W`, `Alt`+`W` | close the tab (`Alt`+`W` if the browser intercepts `Ctrl`+`W`) |
+| `Ctrl`/`Cmd` + `J`           | show / hide the console                  |
+| `Ctrl`/`Cmd` + `B`           | show / hide navigation                   |
+| `Ctrl`/`Cmd` + `P` (or `K`)  | search; `>` for commands                 |
+| `Ctrl` + `Space`             | completion in the code editor            |
+| `Ctrl` + `Enter`             | send the intent (Test)                   |
+| double click                 | pin a tab / open a pinned one            |
+| middle click                 | close a tab                              |
+| arrow keys                   | navigate trees, tabs, and activity bars; resize a focused splitter |
 
-## Démarrage
+## Getting started
 
-Prérequis : Node.js ≥ 20.19 (ou ≥ 22.12) et une passerelle GOAP accessible
-(ou `go run ./cmd/goap-dev` à la racine du dépôt).
+Prerequisites: Node.js ≥ 20.19 (or ≥ 22.12) and an accessible GOAP gateway
+(or `go run ./cmd/goap-dev` at the repository root).
 
 ```sh
 cd web
@@ -134,67 +133,67 @@ npm install
 npm run dev          # http://localhost:5173
 ```
 
-En développement, Vite relaie `/goap.*` (RPC Connect) et `/api` (état de la
-plateforme) vers la passerelle, par défaut `http://localhost:8080` :
+In development, Vite proxies `/goap.*` (Connect RPC) and `/api` (platform
+status) to the gateway, defaulting to `http://localhost:8080`:
 
 ```sh
-GOAP_GATEWAY_URL=http://passerelle:8080 npm run dev
+GOAP_GATEWAY_URL=http://gateway:8080 npm run dev
 ```
 
-Variables de build facultatives :
+Optional build variables:
 
-| Variable               | Rôle                                                    |
+| Variable               | Role                                                    |
 | ---------------------- | ------------------------------------------------------- |
-| `VITE_GOAP_BASE_URL`   | base des URL de la passerelle (défaut : relatives)       |
-| `VITE_GOAP_JAEGER_URL` | base de Jaeger pour les liens « Trace » (défaut `http://localhost:16686`) |
+| `VITE_GOAP_BASE_URL`   | base URL of the gateway (default: relative)              |
+| `VITE_GOAP_JAEGER_URL` | Jaeger base URL for "Trace" links (default `http://localhost:16686`) |
 
 ## Scripts
 
-| Commande          | Rôle                                            |
-| ----------------- | ----------------------------------------------- |
-| `npm run dev`     | serveur de développement avec proxy             |
-| `npm run build`   | build de production dans `dist/`                |
-| `npm run check`   | vérification des types (`svelte-check`)         |
-| `npm run preview` | sert le build localement                        |
+| Command           | Role                                             |
+| ----------------- | ------------------------------------------------ |
+| `npm run dev`     | development server with proxy                    |
+| `npm run build`   | production build into `dist/`                    |
+| `npm run check`   | type checking (`svelte-check`)                   |
+| `npm run preview` | serves the build locally                         |
 
-## Protocole
+## Protocol
 
-- RPC unaires : Connect en JSON (`POST /{package.Service}/{Method}`), sans
-  génération de code (`src/lib/api.ts`). Les `int64` arrivent en chaînes (proto3
-  JSON) : `int()` les convertit.
-- Flux serveur `EngineService.WatchEvents` (`src/lib/stream.ts`) : `fetch` +
-  `ReadableStream`, `Content-Type: application/connect+json`, enveloppes Connect
-  (1 octet d'indicateurs + longueur 32 bits big-endian + JSON ; indicateur
-  `0x02` = fin de flux, erreur éventuelle), `AbortController`, reconnexion avec
-  délai exponentiel. Le serveur n'envoie les en-têtes qu'avec le premier
-  événement : un flux inactif reste « en attente », ce qui est normal.
+- Unary RPCs: Connect JSON (`POST /{package.Service}/{Method}`), without
+  code generation (`src/lib/api.ts`). `int64` values arrive as strings (proto3
+  JSON): `int()` converts them.
+- `EngineService.WatchEvents` server stream (`src/lib/stream.ts`): `fetch` +
+  `ReadableStream`, `Content-Type: application/connect+json`, Connect envelopes
+  (1 flag byte + 32-bit big-endian length + JSON; flag
+  `0x02` = end of stream, possible error), `AbortController`, exponential-backoff
+  reconnection. The server only sends headers with the first
+  event: an idle stream stays "pending", which is normal.
 
-## Organisation
+## Organization
 
-- `src/lib/shell/` : mini-framework de l'IDE — registre des vues
+- `src/lib/shell/`: the IDE's mini-framework — view registry
   (`registerView({id, zone: 'left'|'right'|'bottom'|'editor', title, icon, component})`),
-  disposition persistée (`layout.svelte.ts`), onglets d'aperçu / épinglés
-  (`tabs.svelte.ts`), actions contextuelles et mises en évidence
-  (`workbench.svelte.ts`), composants de la coquille (en-tête, barres, panneaux,
-  onglets, console, barre d'état).
-- `src/lib/views/` : vues enregistrées (`index.ts`) — `nav/` (explorateurs),
-  `editors/` (onglets), `bottom/` (console), `right/` (outils), `assistant/`.
-- `src/lib/stores/` : brouillons des méthodologies, catalogues, données vivantes
-  (événements, processus, journaux, tokens), identité, notifications, état de la
-  plateforme, assistant.
-- `src/lib/api.ts`, `src/lib/stream.ts` : client Connect (unaire et flux).
-- `src/lib/methodologyForm.ts` : modèle d'édition d'une méthodologie ↔ message proto.
-- `src/lib/codemirror.ts`, `src/lib/dsl.ts` : éditeur de code et complétion du DSL.
-- `src/lib/help/dsl.md` : **copie** de `docs/dsl.md` embarquée au build (le
-  conteneur de développement ne monte que `web/`) — à resynchroniser quand
-  `docs/dsl.md` change.
-- `src/lib/components/` : composants réutilisés (formulaires de tâche humaine,
-  approbation, lignes de conditions, frise des étapes…).
+  persisted layout (`layout.svelte.ts`), preview / pinned tabs
+  (`tabs.svelte.ts`), contextual actions and highlights
+  (`workbench.svelte.ts`), shell components (header, bars, panels,
+  tabs, console, status bar).
+- `src/lib/views/`: registered views (`index.ts`) — `nav/` (explorers),
+  `editors/` (tabs), `bottom/` (console), `right/` (tools), `assistant/`.
+- `src/lib/stores/`: methodology drafts, catalogs, live data
+  (events, processes, logs, tokens), identity, notifications, platform
+  status, assistant.
+- `src/lib/api.ts`, `src/lib/stream.ts`: Connect client (unary and stream).
+- `src/lib/methodologyForm.ts`: editing model of a methodology ↔ proto message.
+- `src/lib/codemirror.ts`, `src/lib/dsl.ts`: code editor and DSL completion.
+- `src/lib/help/dsl.md`: **copy** of `docs/dsl.md` embedded at build time (the
+  development container only mounts `web/`) — to be resynced whenever
+  `docs/dsl.md` changes.
+- `src/lib/components/`: shared components (human task forms,
+  approval, condition rows, step timeline…).
 
-CodeMirror est chargé à la demande (morceau séparé du bundle).
+CodeMirror is loaded on demand (a separate bundle chunk).
 
-## Version de TypeScript
+## TypeScript version
 
-TypeScript est volontairement contraint à `^6` : `svelte-check` (4.7) déclare
-`typescript: ^5.0.0 || ^6.0.0` en dépendance pair. Ne passer à TypeScript 7
-qu'une fois une version de `svelte-check` compatible publiée.
+TypeScript is deliberately constrained to `^6`: `svelte-check` (4.7) declares
+`typescript: ^5.0.0 || ^6.0.0` as a peer dependency. Only move to TypeScript 7
+once a compatible version of `svelte-check` is published.

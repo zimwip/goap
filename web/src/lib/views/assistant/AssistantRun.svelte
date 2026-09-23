@@ -1,6 +1,6 @@
 <script lang="ts">
-  // Suivi d'une exécution dans la conversation de l'assistant, en langage
-  // courant : agent choisi, progression, questions, tâches, résultat.
+  // Tracking a run within the assistant conversation, in plain
+  // language: chosen agent, progress, questions, tasks, result.
   import { untrack } from 'svelte';
   import AssistantRun from './AssistantRun.svelte';
   import HumanTaskForm from '../../components/HumanTaskForm.svelte';
@@ -18,7 +18,7 @@
     depth = 0,
   }: {
     processId: string;
-    /** suivi en direct (flux WatchEvents du processus et de ses sous-agents) */
+    /** live follow-up (WatchEvents stream of the process and its sub-agents) */
     live?: boolean;
     depth?: number;
   } = $props();
@@ -40,7 +40,7 @@
     }
   }
 
-  // État à jour à l'affichage (l'historique peut dater).
+  // State refreshed on display (the history may be stale).
   $effect(() => {
     void processId;
     untrack(() => void refresh());
@@ -63,7 +63,7 @@
   const status = $derived(p?.status ?? '');
   const done = $derived(status === 'completed' || status === 'failed');
 
-  // Repli si le flux échoue.
+  // Fallback if the stream fails.
   $effect(() => {
     if (!live || done || (stream !== 'retrying' && stream !== 'stopped')) return;
     const t = setInterval(() => void refresh(), 2000);
@@ -74,7 +74,7 @@
     if (p?.methodology) void loadMethodology(p.methodology);
   });
 
-  // Résultat : items du changement à la fin.
+  // Result: change items at the end.
   let change = $state<ChangeSet | undefined>();
   $effect(() => {
     if (status !== 'completed' || !p?.changeId || depth > 0) return;
@@ -142,14 +142,14 @@
 
 <div class="run" class:nested={depth > 0}>
   {#if !p}
-    {#if error}<div class="bubble bot err">Je n'arrive pas à suivre cette demande : {error}</div>{:else}<div class="bubble bot">…</div>{/if}
+    {#if error}<div class="bubble bot err">I cannot follow up on this request: {error}</div>{:else}<div class="bubble bot">…</div>{/if}
   {:else}
     {#if depth > 0}
-      <div class="deleg">↳ délègue à <strong>« {agentName} »</strong></div>
+      <div class="deleg">↳ delegates to <strong>"{agentName}"</strong></div>
     {:else if p.agent}
       <div class="bubble bot">
-        L'agent <strong>« {agentName} »</strong> s'en occupe{#if p.goal}&nbsp;: {goalLabel(p.methodology, p.goal).replace(/\.$/, '')}{/if}.
-        {#if p.trigger}<span class="muted">(déclenché par {p.trigger})</span>{/if}
+        Agent <strong>"{agentName}"</strong> is handling it{#if p.goal}: {goalLabel(p.methodology, p.goal).replace(/\.$/, '')}{/if}.
+        {#if p.trigger}<span class="muted">(triggered by {p.trigger})</span>{/if}
       </div>
     {/if}
 
@@ -158,7 +158,7 @@
     {/each}
 
     {#if status === 'clarifying'}
-      <div class="bubble bot">{p.question || 'Pouvez-vous préciser votre demande ?'}</div>
+      <div class="bubble bot">{p.question || 'Could you clarify your request?'}</div>
       {#if p.candidates?.length}
         <div class="choices">
           {#each p.candidates as c, i (i)}
@@ -175,8 +175,8 @@
           void reply(answer);
         }}
       >
-        <input type="text" bind:value={answer} placeholder="Votre réponse…" aria-label="Votre réponse" data-no-pin />
-        <button type="submit" class="primary small" disabled={answering || !answer.trim()}>Répondre</button>
+        <input type="text" bind:value={answer} placeholder="Your answer…" aria-label="Your answer" data-no-pin />
+        <button type="submit" class="primary small" disabled={answering || !answer.trim()}>Reply</button>
       </form>
     {/if}
 
@@ -195,7 +195,7 @@
 
     {#if logs.length}
       <button type="button" class="link small-link" onclick={() => (showLogs = !showLogs)}>
-        {showLogs ? 'Masquer le journal' : `Voir le journal (${logs.length})`}
+        {showLogs ? 'Hide the log' : `View the log (${logs.length})`}
       </button>
       {#if showLogs}
         <ol class="logs">
@@ -211,38 +211,38 @@
     {/each}
 
     {#if status === 'running'}
-      <div class="working"><span class="spin" aria-hidden="true"></span> Je travaille…{#if p.plan?.length} prochaine étape : {actionLabel(p.methodology, p.plan[0]).toLowerCase()}{/if}</div>
+      <div class="working"><span class="spin" aria-hidden="true"></span> Working…{#if p.plan?.length} next step: {actionLabel(p.methodology, p.plan[0]).toLowerCase()}{/if}</div>
     {:else if status === 'waiting' && p.pending}
       {#key `${p.id}:${p.pending.step}:${p.pending.action}:${p.pending.kind}`}
         {#if p.pending.kind === 'input'}
-          <div class="bubble bot">J'ai besoin de vous pour continuer : {p.pending.description || actionLabel(p.methodology, p.pending.action)}.</div>
+          <div class="bubble bot">I need you to continue: {p.pending.description || actionLabel(p.methodology, p.pending.action)}.</div>
           <div class="inline"><HumanTaskForm process={p} onsubmitted={ingestProcess} /></div>
         {:else if p.pending.kind === 'approval'}
-          <div class="bubble bot">Cette étape doit être approuvée par une personne habilitée.</div>
+          <div class="bubble bot">This step must be approved by an authorized person.</div>
           <div class="inline"><ApprovalPanel process={p} ondecided={ingestProcess} /></div>
         {:else if p.pending.kind === 'agent'}
-          <div class="working"><span class="spin" aria-hidden="true"></span> En attente d'un autre agent…</div>
+          <div class="working"><span class="spin" aria-hidden="true"></span> Waiting for another agent…</div>
         {/if}
       {/key}
     {:else if status === 'stuck'}
-      <div class="bubble bot warn">Je suis bloqué : aucune action ne permet d'atteindre l'objectif avec les informations disponibles.{#if p.error} ({p.error}){/if}</div>
+      <div class="bubble bot warn">I am stuck: no action can reach the goal with the information available.{#if p.error} ({p.error}){/if}</div>
     {:else if status === 'failed'}
-      <div class="bubble bot err">La demande a échoué{#if p.error}&nbsp;: {p.error}{/if}.</div>
+      <div class="bubble bot err">The request failed{#if p.error}: {p.error}{/if}.</div>
     {:else if status === 'completed' && depth > 0}
-      <div class="muted small">terminé</div>
+      <div class="muted small">completed</div>
     {:else if status === 'completed'}
       <div class="bubble bot result">
-        <p><strong>C'est terminé.</strong>
+        <p><strong>It's done.</strong>
           {#if counts.impacts || counts.proposals}
-            {counts.impacts} élément{counts.impacts > 1 ? 's' : ''} impacté{counts.impacts > 1 ? 's' : ''},
-            {counts.proposals} proposition{counts.proposals > 1 ? 's' : ''}{#if counts.accepted} ({counts.accepted} acceptée{counts.accepted > 1 ? 's' : ''}){/if}.
+            {counts.impacts} element{counts.impacts > 1 ? 's' : ''} impacted,
+            {counts.proposals} proposal{counts.proposals > 1 ? 's' : ''}{#if counts.accepted} ({counts.accepted} accepted){/if}.
           {/if}
         </p>
         {#each artifacts as a (a.id)}
           {@const x = markdownOf(a.data)}
           <div class="artifact">
             {#if x.md !== undefined}
-              <!-- Markdown échappé par renderMarkdown. -->
+              <!-- Markdown escaped by renderMarkdown. -->
               <div class="md">{@html renderMarkdown(x.md)}</div>
             {:else if x.text !== undefined}
               <p class="text">{x.text}</p>
@@ -250,15 +250,15 @@
           </div>
         {/each}
         <p class="muted small">
-          {#if tokens}{formatInt(tokens)} tokens · {p.usage?.llmCalls ?? 0} appel{(p.usage?.llmCalls ?? 0) > 1 ? 's' : ''} au modèle ·{/if}
-          <button type="button" class="link" onclick={() => openTab({ kind: 'run', params: { id: p?.id ?? '' } }, { pin: true })}>Voir le détail</button>
+          {#if tokens}{formatInt(tokens)} tokens · {p.usage?.llmCalls ?? 0} model call{(p.usage?.llmCalls ?? 0) > 1 ? 's' : ''} ·{/if}
+          <button type="button" class="link" onclick={() => openTab({ kind: 'run', params: { id: p?.id ?? '' } }, { pin: true })}>View details</button>
         </p>
       </div>
     {/if}
 
     {#if error && p}<div class="muted small err">{error}</div>{/if}
     {#if depth === 0 && !done && status !== 'completed'}
-      <button type="button" class="link small-link" onclick={() => openTab({ kind: 'run', params: { id: p?.id ?? '' } })}>Voir le détail</button>
+      <button type="button" class="link small-link" onclick={() => openTab({ kind: 'run', params: { id: p?.id ?? '' } })}>View details</button>
     {/if}
   {/if}
 </div>

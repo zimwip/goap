@@ -1,5 +1,5 @@
-// Types du mini-framework de l'IDE : vues enregistrées dans des zones,
-// onglets d'éditeurs et actions contextuelles de la barre d'outils.
+// Types of the IDE's mini-framework: views registered in zones, editor
+// tabs, and toolbar contextual actions.
 import type { Component } from 'svelte';
 import type { IconName } from './Icon.svelte';
 
@@ -7,16 +7,16 @@ export type Zone = 'left' | 'right' | 'bottom' | 'editor';
 
 export type TabParams = Record<string, string>;
 
-/** Ce qu'il faut pour ouvrir un onglet : le type d'éditeur et ses paramètres. */
+/** What's needed to open a tab: the editor type and its params. */
 export interface TabSpec {
   kind: string;
   params: TabParams;
 }
 
 export interface Tab extends TabSpec {
-  /** `kind:clé` — une seule instance par objet */
+  /** `kind:key` — a single instance per object */
   id: string;
-  /** false : onglet d'aperçu, remplacé par la sélection suivante */
+  /** false: preview tab, replaced by the next selection */
   pinned: boolean;
 }
 
@@ -29,11 +29,11 @@ export interface ToolbarAction {
   primary?: boolean;
   danger?: boolean;
   title?: string;
-  /** raccourci affiché dans l'infobulle */
+  /** shortcut shown in the tooltip */
   shortcut?: string;
 }
 
-/** Détails affichés par le panneau « Propriétés ». */
+/** Details shown by the "Properties" panel. */
 export interface Properties {
   title: string;
   subtitle?: string;
@@ -47,34 +47,33 @@ interface BaseView {
   order?: number;
 }
 
-/** Vue d'une zone latérale ou basse (sans paramètres). */
+/** View of a side or bottom zone (no params). */
 export interface PanelView extends BaseView {
   zone: 'left' | 'right' | 'bottom';
   component: Component;
-  /** pastille (compteur) affichée sur l'icône ou l'onglet */
+  /** badge (counter) shown on the icon or tab */
   badge?: () => string | number | undefined;
 }
 
-/** Type d'éditeur : un composant qui reçoit l'onglet, plus des accroches. */
+/** Editor type: a component that receives the tab, plus hooks. */
 export interface EditorView extends BaseView {
   zone: 'editor';
   component: Component<{ tab: Tab }>;
-  /** clé unique de l'objet édité (l'identifiant d'onglet est `kind:clé`) */
+  /** unique key of the edited object (the tab id is `kind:key`) */
   key: (params: TabParams) => string;
   tabTitle: (tab: Tab) => string;
   tabIcon?: (tab: Tab) => IconName;
-  /** infobulle de l'onglet */
+  /** tab tooltip */
   tooltip?: (tab: Tab) => string;
   dirty?: (tab: Tab) => boolean;
   /**
-   * Regroupe les onglets qui partagent un même état (brouillon d'une
-   * méthodologie) : les modifications ne sont abandonnées qu'à la fermeture du
-   * dernier onglet du groupe.
+   * Groups tabs that share the same state (a methodology's draft): changes
+   * are only discarded when the last tab of the group is closed.
    */
   group?: (tab: Tab) => string;
-  /** le groupe a-t-il des modifications (fermeture du dernier onglet du groupe) ? */
+  /** does the group have changes (closing the group's last tab)? */
   groupDirty?: (tab: Tab) => boolean;
-  /** abandonne les modifications du groupe (fermeture sans enregistrer) */
+  /** discards the group's changes (close without saving) */
   discard?: (tab: Tab) => void;
   properties?: (tab: Tab) => Properties | undefined;
 }

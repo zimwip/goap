@@ -1,7 +1,7 @@
 <script lang="ts">
-  // Onglet « journal d'exécution » d'un changement (ADR 0011) : ticks
-  // (observation + planification), exécutions d'actions, décisions humaines,
-  // début / fin des processus, regroupés par processus dans l'ordre du journal.
+  // "Execution journal" tab for a change (ADR 0011): ticks
+  // (observation + planning), action executions, human decisions,
+  // process start / end, grouped by process in journal order.
   import { tick } from 'svelte';
   import type { Tab } from '../../shell/types';
   import Icon from '../../shell/Icon.svelte';
@@ -28,9 +28,9 @@
   let { tab }: { tab: Tab } = $props();
 
   const changeId = $derived(tab.params.id ?? '');
-  /** restreint le journal à un processus (ouverture depuis une exécution) */
+  /** restricts the journal to a single process (opened from an execution) */
   const onlyProcess = $derived(tab.params.process ?? '');
-  /** enregistrement à mettre en évidence (provenance d'un item) */
+  /** record to highlight (item provenance) */
   const focus = $derived(tab.params.record ?? '');
 
   let records = $state<ExecutionRecord[]>([]);
@@ -70,7 +70,7 @@
     return () => ctrl.abort();
   });
 
-  // Rechargement quand un processus du changement évolue (flux WatchEvents).
+  // Reload when a process of the change changes (WatchEvents stream).
   const liveSignature = $derived(
     [...processes.values()]
       .filter((p) => p.changeId === changeId && (!onlyProcess || p.id === onlyProcess))
@@ -88,7 +88,7 @@
     return () => clearTimeout(timer);
   });
 
-  // Mise en évidence de l'enregistrement demandé.
+  // Highlighting of the requested record.
   let scrolledTo = '';
   $effect(() => {
     const id = focus;
@@ -97,7 +97,7 @@
     void tick().then(() => root?.querySelector(`[data-record="${CSS.escape(id)}"]`)?.scrollIntoView({ block: 'center' }));
   });
 
-  // --- regroupement par processus -------------------------------------------------------
+  // --- grouping by process -------------------------------------------------------
 
   interface Group {
     processId: string;
@@ -145,7 +145,7 @@
       model += r.modelCalls?.length ?? 0;
       tools += r.toolCalls?.length ?? 0;
     }
-    // La fin de processus porte les totaux faisant foi (usage du processus).
+    // The end-of-process record carries the authoritative totals (process usage).
     if (ended && (int(ended.inputTokens) || int(ended.outputTokens))) {
       inTok = int(ended.inputTokens);
       outTok = int(ended.outputTokens);
@@ -190,14 +190,14 @@
 
   const ctx = $derived(makeContext([], items));
 
-  // --- affichage d'un enregistrement ---------------------------------------------------
+  // --- display of a record ---------------------------------------------------
 
   const KIND_LABELS: Record<string, string> = {
-    'process.started': 'début',
+    'process.started': 'start',
     tick: 'tick',
     action: 'action',
-    approval: 'décision',
-    'process.ended': 'fin',
+    approval: 'decision',
+    'process.ended': 'end',
   };
 
   function tone(r: ExecutionRecord): 'error' | 'ok' | 'partial' | 'pending' | 'neutral' {
@@ -222,9 +222,9 @@
   }
 
   const WAITING_LABELS: Record<string, string> = {
-    input: 'en attente de saisie',
-    approval: "en attente d'approbation",
-    agent: "en attente d'un sous-agent",
+    input: 'waiting for input',
+    approval: 'waiting for approval',
+    agent: 'waiting for a sub-agent',
   };
 
   function unknownOf(r: ExecutionRecord): [string, string][] {
@@ -259,14 +259,14 @@
   provideActions(
     () => tab.id,
     () => [
-      { id: 'refresh', label: 'Actualiser', icon: 'refresh', disabled: loading, run: () => load(changeId, onlyProcess) },
-      { id: 'change', label: 'Changement', icon: 'diff', disabled: !changeId, run: openChange },
+      { id: 'refresh', label: 'Refresh', icon: 'refresh', disabled: loading, run: () => load(changeId, onlyProcess) },
+      { id: 'change', label: 'Change', icon: 'diff', disabled: !changeId, run: openChange },
       {
         id: 'all',
-        label: 'Tous les processus',
+        label: 'All processes',
         icon: 'filter',
         disabled: !onlyProcess,
-        title: 'Afficher le journal de tous les processus du changement',
+        title: 'Show the journal for all processes of the change',
         run: () => {
           tab.params.process = '';
         },
@@ -280,27 +280,27 @@
 
   <div class="editor-head">
     <Icon name="list" size={18} />
-    <h2>Journal d'exécution</h2>
-    <button type="button" class="link mono" onclick={openChange}>changement {shortId(changeId)}</button>
+    <h2>Execution journal</h2>
+    <button type="button" class="link mono" onclick={openChange}>change {shortId(changeId)}</button>
     {#if onlyProcess}
-      <span class="hint">· processus <code>{shortId(onlyProcess)}</code></span>
+      <span class="hint">· process <code>{shortId(onlyProcess)}</code></span>
     {/if}
     <span class="grow"></span>
     <label class="check"><input type="checkbox" bind:checked={showTicks} /> Ticks</label>
   </div>
 
   {#if loading && !loaded}
-    <p class="empty">Chargement…</p>
+    <p class="empty">Loading…</p>
   {:else if loaded && !records.length}
-    <p class="empty">Aucun enregistrement dans le journal de ce changement.</p>
+    <p class="empty">No records in the journal for this change.</p>
   {/if}
 
   {#if groups.length > 1}
-    <section class="stats" aria-label="Totaux du changement">
-      <div class="stat"><span class="v">{groups.length}</span><span class="k">processus</span></div>
+    <section class="stats" aria-label="Change totals">
+      <div class="stat"><span class="v">{groups.length}</span><span class="k">processes</span></div>
       <div class="stat"><span class="v">{totals.actions}</span><span class="k">actions</span></div>
-      <div class="stat"><span class="v">{formatInt(totals.inputTokens)} → {formatInt(totals.outputTokens)}</span><span class="k">tokens entrée → sortie</span></div>
-      <div class="stat"><span class="v">{totals.modelCalls}</span><span class="k">appels de modèle</span></div>
+      <div class="stat"><span class="v">{formatInt(totals.inputTokens)} → {formatInt(totals.outputTokens)}</span><span class="k">input → output tokens</span></div>
+      <div class="stat"><span class="v">{totals.modelCalls}</span><span class="k">model calls</span></div>
     </section>
   {/if}
 
@@ -308,11 +308,11 @@
     <section class="card process">
       <div class="row phead">
         <Icon name={g.parentProcessId ? 'bot' : 'runs'} size={16} />
-        <strong>{g.agent || 'processus'}</strong>
-        <button type="button" class="link mono" title="Ouvrir l'exécution" onclick={() => openRun(g.processId)}>{shortId(g.processId)}</button>
+        <strong>{g.agent || 'process'}</strong>
+        <button type="button" class="link mono" title="Open execution" onclick={() => openRun(g.processId)}>{shortId(g.processId)}</button>
         <StatusBadge status={g.status} />
         {#if g.parentProcessId}
-          <span class="hint">sous-agent de
+          <span class="hint">sub-agent of
             <button type="button" class="link mono" onclick={() => openRun(g.parentProcessId)}>{shortId(g.parentProcessId)}</button></span
           >
         {/if}
@@ -323,15 +323,15 @@
       </div>
       <div class="hint pmeta">
         {#if g.methodology}{g.methodology}{g.version ? ` v${g.version}` : ''}{/if}
-        {#if g.planner} · planificateur {g.planner}{/if}
-        {#if g.goal} · objectif <code>{g.goal}</code>{/if}
+        {#if g.planner} · planner {g.planner}{/if}
+        {#if g.goal} · goal <code>{g.goal}</code>{/if}
       </div>
       <div class="totals">
-        <span title="Tokens entrée → sortie"><strong>{formatInt(g.inputTokens)} → {formatInt(g.outputTokens)}</strong> tok</span>
-        <span><strong>{g.modelCalls}</strong> appel{g.modelCalls > 1 ? 's' : ''} de modèle</span>
-        {#if g.toolCalls}<span><strong>{g.toolCalls}</strong> appel{g.toolCalls > 1 ? 's' : ''} d'outil</span>{/if}
+        <span title="Input → output tokens"><strong>{formatInt(g.inputTokens)} → {formatInt(g.outputTokens)}</strong> tok</span>
+        <span><strong>{g.modelCalls}</strong> model call{g.modelCalls > 1 ? 's' : ''}</span>
+        {#if g.toolCalls}<span><strong>{g.toolCalls}</strong> tool call{g.toolCalls > 1 ? 's' : ''}</span>{/if}
         <span><strong>{g.actions}</strong> action{g.actions > 1 ? 's' : ''}</span>
-        <span>durée <strong>{formatDuration(g.durationMs)}</strong></span>
+        <span>duration <strong>{formatDuration(g.durationMs)}</strong></span>
       </div>
 
       <ol class="timeline">
@@ -343,7 +343,7 @@
               <div class="dot" aria-hidden="true"></div>
               <div class="body">
                 <div class="row head">
-                  <span class="seq" title="Numéro d'ordre dans le journal du processus">{r.seq ?? ''}</span>
+                  <span class="seq" title="Sequence number in the process journal">{r.seq ?? ''}</span>
                   <span class="kind">{KIND_LABELS[r.kind ?? ''] ?? r.kind}</span>
                   {#if r.kind === 'tick'}
                     {#if r.plan?.length}
@@ -351,42 +351,42 @@
                         {#each r.plan as a, i (i)}<li class:chosen={i === 0}>{a}</li>{/each}
                       </ol>
                     {:else}
-                      <span class="st">aucun plan</span>
+                      <span class="st">no plan</span>
                     {/if}
-                    {#if r.data?.['replanned'] === true}<span class="tag warn" title="Le plan s'écarte de la suite du plan précédent">replanifié</span>{/if}
+                    {#if r.data?.['replanned'] === true}<span class="tag warn" title="The plan deviates from the continuation of the previous plan">replanned</span>{/if}
                     {#if numOf(r.data?.['candidates']) !== undefined}<span class="hint">{numOf(r.data?.['candidates'])} candidates</span>{/if}
                   {:else if r.kind === 'action'}
                     <code class="action">{r.action}</code>
-                    {#if r.specialization}<span class="tag" title="Spécialisation exécutée à la place de l'action planifiée">→ {r.specialization}</span>{/if}
+                    {#if r.specialization}<span class="tag" title="Specialization executed instead of the planned action">→ {r.specialization}</span>{/if}
                     {#if r.actionKind}<span class="hint">{r.actionKind}</span>{/if}
                     {#if w}
-                      <span class="st">{WAITING_LABELS[w] ?? `en attente (${w})`}</span>
+                      <span class="st">{WAITING_LABELS[w] ?? `waiting (${w})`}</span>
                     {:else if r.effectsMet === true}
-                      <span class="st" title="Effets atteints">✓ effets</span>
+                      <span class="st" title="Effects met">✓ effects</span>
                     {:else if r.effectsMet === false}
-                      <span class="st" title="Effets non atteints">✗ effets</span>
+                      <span class="st" title="Effects not met">✗ effects</span>
                     {:else if r.error}
-                      <span class="st">erreur</span>
+                      <span class="st">error</span>
                     {/if}
                   {:else if r.kind === 'approval'}
                     <code class="action">{r.action}</code>
-                    <span class="st">{r.data?.['approved'] === false ? 'refusée' : 'approuvée'}</span>
+                    <span class="st">{r.data?.['approved'] === false ? 'rejected' : 'approved'}</span>
                     {#if str(r.data?.['comment'])}<span class="hint">« {str(r.data?.['comment'])} »</span>{/if}
                   {:else if r.kind === 'process.started'}
                     {#if str(r.data?.['title'])}<strong>{str(r.data?.['title'])}</strong>{/if}
-                    {#if str(r.data?.['trigger'])}<span class="hint">déclenché par {str(r.data?.['trigger'])}</span>{/if}
+                    {#if str(r.data?.['trigger'])}<span class="hint">triggered by {str(r.data?.['trigger'])}</span>{/if}
                   {:else if r.kind === 'process.ended'}
                     <StatusBadge status={r.status} />
-                    {#if numOf(r.data?.['steps']) !== undefined}<span class="hint">{numOf(r.data?.['steps'])} étape{(numOf(r.data?.['steps']) ?? 0) > 1 ? 's' : ''}</span>{/if}
+                    {#if numOf(r.data?.['steps']) !== undefined}<span class="hint">{numOf(r.data?.['steps'])} step{(numOf(r.data?.['steps']) ?? 0) > 1 ? 's' : ''}</span>{/if}
                   {/if}
                   <span class="grow"></span>
                   {#if int(r.inputTokens) || int(r.outputTokens)}
-                    <span class="usage" title="Tokens entrée / sortie">{formatInt(r.inputTokens)} → {formatInt(r.outputTokens)} tok</span>
+                    <span class="usage" title="Input / output tokens">{formatInt(r.inputTokens)} → {formatInt(r.outputTokens)} tok</span>
                   {/if}
-                  {#if r.modelCalls?.length}<span class="hint">{r.modelCalls.length} modèle{r.modelCalls.length > 1 ? 's' : ''}</span>{/if}
-                  {#if r.toolCalls?.length}<span class="hint">{r.toolCalls.length} outil{r.toolCalls.length > 1 ? 's' : ''}</span>{/if}
+                  {#if r.modelCalls?.length}<span class="hint">{r.modelCalls.length} model{r.modelCalls.length > 1 ? 's' : ''}</span>{/if}
+                  {#if r.toolCalls?.length}<span class="hint">{r.toolCalls.length} tool{r.toolCalls.length > 1 ? 's' : ''}</span>{/if}
                   {#if r.items?.length}<span class="hint">{r.items.length} item{r.items.length > 1 ? 's' : ''}</span>{/if}
-                  {#if r.actor}<span class="hint">par {r.actor}</span>{/if}
+                  {#if r.actor}<span class="hint">by {r.actor}</span>{/if}
                   {#if int(r.durationMs)}<span class="hint">{formatDuration(r.durationMs)}</span>{/if}
                   <span class="hint" title={formatDate(r.startedAt)}>{formatTime(r.startedAt)}</span>
                 </div>
@@ -396,14 +396,14 @@
                 {/if}
                 {#if r.kind === 'tick' && unknownOf(r).length}
                   <div class="unknown">
-                    Conditions inconnues :
+                    Unknown conditions:
                     {#each unknownOf(r) as [c, why] (c)}<span class="chip" title={why}>{c}</span>{/each}
                   </div>
                 {/if}
                 {#if r.kind === 'process.ended'}
                   {#if stringsOf(r.data?.['disabled']).length}
                     <div class="unknown">
-                      Actions désactivées :
+                      Disabled actions:
                       {#each stringsOf(r.data?.['disabled']) as a (a)}<span class="chip">{a}</span>{/each}
                     </div>
                   {/if}
@@ -411,7 +411,7 @@
                 {#if r.error}<pre class="error">{r.error}</pre>{/if}
                 {#if str(r.data?.['child']) || stringsOf(r.data?.['children']).length}
                   <div class="children">
-                    Sous-agents :
+                    Sub-agents:
                     {#each [...new Set([str(r.data?.['child']), ...stringsOf(r.data?.['children'])].filter(Boolean))] as c (c)}
                       <button type="button" class="link mono" onclick={() => openRun(c)}>{processes.get(c)?.agent || shortId(c)}</button>
                     {/each}
@@ -419,7 +419,7 @@
                 {/if}
                 {#if r.items?.length}
                   <details>
-                    <summary>Items produits ({r.items.length})</summary>
+                    <summary>Items produced ({r.items.length})</summary>
                     <ul class="items">
                       {#each r.items as it (it)}
                         {@const ci = ctx.items.get(it)}
@@ -433,10 +433,10 @@
                 {/if}
                 {#if r.modelCalls?.length}
                   <details>
-                    <summary>Appels de modèle ({r.modelCalls.length})</summary>
+                    <summary>Model calls ({r.modelCalls.length})</summary>
                     <table class="calls">
                       <thead>
-                        <tr><th>Fournisseur</th><th>Modèle</th><th class="num">Entrée</th><th class="num">Sortie</th><th class="num">Durée</th><th>Erreur</th></tr>
+                        <tr><th>Provider</th><th>Model</th><th class="num">Input</th><th class="num">Output</th><th class="num">Duration</th><th>Error</th></tr>
                       </thead>
                       <tbody>
                         {#each r.modelCalls as c, k (k)}
@@ -455,9 +455,9 @@
                 {/if}
                 {#if r.toolCalls?.length}
                   <details>
-                    <summary>Appels d'outils ({r.toolCalls.length})</summary>
+                    <summary>Tool calls ({r.toolCalls.length})</summary>
                     <table class="calls">
-                      <thead><tr><th>Outil</th><th class="num">Durée</th><th>Erreur</th></tr></thead>
+                      <thead><tr><th>Tool</th><th class="num">Duration</th><th>Error</th></tr></thead>
                       <tbody>
                         {#each r.toolCalls as c, k (k)}
                           <tr class:err={!!c.error}>
@@ -472,7 +472,7 @@
                 {/if}
                 {#if r.output}
                   <details>
-                    <summary>Sortie</summary>
+                    <summary>Output</summary>
                     <pre>{r.output}</pre>
                   </details>
                 {/if}

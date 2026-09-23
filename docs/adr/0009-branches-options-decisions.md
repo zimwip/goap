@@ -1,29 +1,29 @@
-# ADR 0009 — Branches de versions, options d'analyse, boucles de décision et merge
+# ADR 0009 — Version branches, analysis options, decision loops, and merge
 
-**Statut** : accepté · **Date** : 2026-09 · Étend l'ADR 0003 (versionnement) et le scénario de conflit
-(merge validé par un humain, rebase, replanification).
+**Status**: accepted · **Date**: 2026-09 · Extends ADR 0003 (versioning) and the conflict scenario
+(merge validated by a human, rebase, replanning).
 
-## Contexte
-1. Deux changes concurrents peuvent modifier les mêmes nœuds : un conflit doit produire une **opération de
-   merge** en attente de validation humaine, qui peut rendre caduques des actions du change et relancer la
-   planification dans le contexte post-merge.
-2. Une version de nœud doit pouvoir être créée **dans plusieurs branches en parallèle**, à la manière de git.
-3. L'analyse d'une modification explore **plusieurs options**, chacune dans sa branche, les **compare** puis
-   **décide** ; une décision impossible doit produire son **pourquoi** et un **objectif d'analyse
-   additionnel**, jusqu'à ce que la décision puisse être entérinée ; l'option retenue est **mergée** sur la
-   branche principale.
+## Context
+1. Two concurrent changes can modify the same nodes: a conflict must produce a **merge
+   operation** pending human validation, which can invalidate change actions and restart
+   planning in the post-merge context.
+2. A node version must be creatable **in several branches in parallel**, git-style.
+3. Analyzing a modification explores **several options**, each in its own branch, **compares** them, then
+   **decides**; an impossible decision must produce its **why** and an **additional analysis
+   goal**, until the decision can be finalized; the chosen option is **merged** onto the
+   main branch.
 
-## Décision
+## Decision
 
-### 1. Versions et branches
-Chaque version de nœud porte :
+### 1. Versions and branches
+Each node version carries:
 
-| Champ | Rôle |
+| Field | Role |
 |---|---|
-| `version` | entier croissant **par nœud**, toutes branches confondues (identité `NODE@v7`) |
-| `branch` | nom de la branche (`main` par défaut) |
-| `parents` | version(s) d'origine : une pour `revise` / `derive`, deux pour un merge |
-| `reason` | `create` · `revise` (successeur sur la même branche) · `derive` (départ d'une branche parallèle) · `merge` |
+| `version` | increasing integer **per node**, across all branches (identity `NODE@v7`) |
+| `branch` | branch name (`main` by default) |
+| `parents` | originating version(s): one for `revise` / `derive`, two for a merge |
+| `reason` | `create` · `revise` (successor on the same branch) · `derive` (start of a parallel branch) · `merge` |
 
 ```
 REQ-1  v1(main) ── v2(main, revise) ─────────────── v6(main, merge ← v2 + v5)
@@ -31,92 +31,92 @@ REQ-1  v1(main) ── v2(main, revise) ─────────────�
           └────── v5(opt-b, derive)
 ```
 
-- Une **branche** est un objet `{name, parentBranch, forkBaseline, headBaseline, origin (change / option), status: open | merged | abandoned}`.
-  Les baselines appartiennent à une branche et forment un DAG (`parents`).
-- La règle de l'ADR 0003 est inchangée : les liens sortants appartiennent à la version source ; une version
-  dérivée reporte ses liens sortants dans sa branche, et les liens entrants depuis d'autres branches deviennent suspects.
-- « Dernière version » se lit **par branche** (`latest(node, branch)`). L'ancêtre commun de deux versions
-  (remontée des `parents`) est la base du merge à 3 voies.
+- A **branch** is an object `{name, parentBranch, forkBaseline, headBaseline, origin (change / option), status: open | merged | abandoned}`.
+  Baselines belong to a branch and form a DAG (`parents`).
+- The ADR 0003 rule is unchanged: outgoing links belong to the source version; a
+  derived version carries its outgoing links forward within its branch, and incoming links from other branches become suspect.
+- "Latest version" is read **per branch** (`latest(node, branch)`). The common ancestor of two versions
+  (walking up `parents`) is the base of the 3-way merge.
 
-### 2. Conflits et merge (déjà retenu)
-- Détection au plus tôt : quand une branche avance (apply, merge), les changes et options ouverts qui
-  s'appuient sur des versions dépassées passent `diverged`.
-- Item `merge` par proposition en conflit : `{base (ancêtre commun), theirs, ours, fusion proposée,
-  clés en conflit}` ; la fusion est calculée (`graph.rebase`, 3 voies par propriété) ou proposée par un agent.
-- Le processus est interrompu entre deux actions (`pending.kind = merge`) ; validation humaine (ABAC
-  `change:merge`) ; puis **rebase** : baseline déplacée, items remplacés `superseded`, contexte post-change
-  exposé (`change.rebases`) ; la boucle OODA replanifie ce qui est devenu caduc.
+### 2. Conflicts and merge (already decided)
+- Earliest possible detection: when a branch advances (apply, merge), open changes and options that
+  rely on outdated versions move to `diverged`.
+- One `merge` item per conflicting proposal: `{base (common ancestor), theirs, ours, proposed merge,
+  conflicting keys}`; the merge is computed (`graph.rebase`, 3-way per property) or proposed by an agent.
+- The process is paused between two actions (`pending.kind = merge`); human validation (ABAC
+  `change:merge`); then **rebase**: baseline moved, superseded items marked `superseded`, post-change context
+  exposed (`change.rebases`); the OODA loop replans whatever became obsolete.
 
-### 3. Options : une branche par hypothèse
-Un change peut ouvrir des **options** : `{id, name, hypothesis, branch, status: exploring | evaluated | selected | rejected}`.
+### 3. Options: one branch per hypothesis
+A change can open **options**: `{id, name, hypothesis, branch, status: exploring | evaluated | selected | rejected}`.
 
-- Les **impacts** (analyse) restent au niveau du change et sont partagés ; les **propositions** portent
-  l'option à laquelle elles appartiennent.
-- Une option est **matérialisée** sur sa branche (`derive` depuis la baseline du change) quand une analyse
-  a besoin du graphe résultant (propagation, simulation, contrôles) ; sinon elle reste à l'état de propositions.
-- L'exploration d'une option est un **sous-processus** (sous-agent) travaillant sur l'option : il peut
-  appliquer ses propositions sur la branche de l'option sans toucher `main`.
-- La **comparaison** est un artefact `comparison` (critères × options, scores, argumentaire) produit par
-  une action (LLM, script) ; conditions CEL disponibles : `options`, `options.all(o, o.status == "evaluated")`…
+- **Impacts** (analysis) stay at the change level and are shared; **proposals** belong
+  to the option they are part of.
+- An option is **materialized** on its branch (`derive` from the change's baseline) when an analysis
+  needs the resulting graph (propagation, simulation, checks); otherwise it stays at the proposal stage.
+- Exploring an option is a **sub-process** (sub-agent) working on the option: it can
+  apply its proposals on the option's branch without touching `main`.
+- **Comparison** is a `comparison` artifact (criteria × options, scores, rationale) produced by
+  an action (LLM, script); available CEL conditions: `options`, `options.all(o, o.status == "evaluated")`…
 
-### 4. Décisions et boucles de décision
-La décision est un **point de décision** sur le blackboard : `{question, options, critères, status:
-open | blocked | decided, décideur, justification}`.
+### 4. Decisions and decision loops
+The decision is a **decision point** on the blackboard: `{question, options, criteria, status:
+open | blocked | decided, decider, justification}`.
 
 ```
-            ┌──────────────► explorer les options ──► comparer ──┐
+            ┌──────────────► explore options ──► compare ──┐
             │                                                     ▼
-   questions ouvertes ◄── « impossible de décider : pourquoi » ◄── décider ──► décision entérinée
-   (goal d'analyse)                                                              │
-            └── sous-agent d'analyse (identifié par l'intention = le pourquoi)   ▼
-                                                                          merge de l'option sur main
+   open questions ◄── "cannot decide: why" ◄── decide ──► decision finalized
+   (analysis goal)                                                              │
+            └── analysis sub-agent (identified by the intent = the why)   ▼
+                                                                          merge the option onto main
 ```
 
-- Le décideur (humain, ou agent avec ratification humaine selon la méthodologie) peut répondre
-  **« indécidable »** avec un **pourquoi** : cela crée des items `question` (ouverts) sur le blackboard.
-- Conditions de plateforme : `open_questions` / `no_open_questions`. L'action de décision exige
-  `no_open_questions` ; une action générique `investigate` a pour effet de répondre aux questions : elle
-  lance un **sous-agent** dont l'intention est la question — l'identification choisit l'agent d'analyse
-  adapté, dans cette méthodologie ou dans une autre (axe multi-méthodologique).
-- La réponse (artefact `answer` lié à la question) ferme la question ; le monde change ; le planificateur
-  revient naturellement à la décision. Pas de pile de goals explicite : la boucle émerge du blackboard.
-- Garde-fous : nombre maximal de tours et budget (tokens, durée) par point de décision ; au-delà,
-  escalade vers un humain.
+- The decider (human, or agent with human ratification depending on the methodology) can answer
+  **"undecidable"** with a **why**: this creates `question` items (open) on the blackboard.
+- Platform conditions: `open_questions` / `no_open_questions`. The decision action requires
+  `no_open_questions`; a generic `investigate` action has the effect of answering questions: it
+  launches a **sub-agent** whose intent is the question — identification picks the suitable analysis
+  agent, in this methodology or another (multi-methodology axis).
+- The answer (`answer` artifact linked to the question) closes the question; the world changes; the planner
+  naturally returns to the decision. No explicit goal stack: the loop emerges from the blackboard.
+- Safeguards: maximum number of rounds and budget (tokens, duration) per decision point; beyond that,
+  escalation to a human.
 
-### 5. Entérinement et merge
-Une fois la décision prise : l'option retenue passe `selected`, sa branche est **mergée sur `main`**
-(flux du §2, avec validation humaine des conflits), les autres options passent `rejected` et leurs
-branches `abandoned` (conservées pour l'audit : on sait ce qui a été envisagé et pourquoi ce n'a pas été retenu).
-Le change continue ensuite vers son application ou sa release.
+### 5. Finalization and merge
+Once the decision is made: the chosen option moves to `selected`, its branch is **merged onto `main`**
+(flow from §2, with human validation of conflicts), the other options move to `rejected` and their
+branches to `abandoned` (kept for audit: what was considered and why it wasn't chosen remains known).
+The change then continues toward its application or its release.
 
-## Conséquences
-- Le modèle de version gagne `branch`, `parents`, `reason` ; `latest` devient par branche ; les requêtes
-  « dernière version » et la détection de liens suspects prennent la branche en paramètre.
-- Le blackboard gagne les items `merge`, `option`, `decision point`, `question`, `answer` et le statut
-  `superseded` ; l'IDE gagne une vue de comparaison d'options, un diff à 3 voies et une vue du graphe de versions.
-- L'appel de sous-agents doit pouvoir cibler une autre méthodologie (`runAgent("méthodologie/agent", …)`).
+## Consequences
+- The version model gains `branch`, `parents`, `reason`; `latest` becomes per-branch; "latest version"
+  queries and suspect-link detection take the branch as a parameter.
+- The blackboard gains `merge`, `option`, `decision point`, `question`, `answer` items and the `superseded`
+  status; the IDE gains an option comparison view, a 3-way diff, and a version graph view.
+- Sub-agent calls must be able to target another methodology (`runAgent("methodology/agent", …)`).
 
-## Décisions complémentaires (validées)
+## Complementary decisions (validated)
 
-1. **Numérotation** : entier croissant par nœud + nom de branche.
-2. **Matérialisation des options** : paresseuse (à la demande d'une analyse).
-3. **Décideur** : un **agent de la méthodologie** prend la décision avec une **confiance** ; en dessous du
-   seuil déclaré par le point de décision, la décision devient une action humaine en attente (ratification).
-4. **Budget** : fixé pendant la phase d'analyse, **au niveau du change** (tokens, étapes, durée). Le moteur
-   décompte la consommation ; les conditions exposent `budget` (`remaining`, `ratio`, `low`, `exhausted`).
-   Quand le budget est bas, les méthodologies basculent sur des chemins **accélérés, sous-optimaux**
-   (décider avec l'information disponible au lieu d'investiguer) ; épuisé, les boucles de décision sont
-   closes de force par le décideur, et au besoin par un humain.
-5. **Multi-méthodologie = spécialisation** : une action peut être **abstraite** et avoir des
-   **spécialisations** (même rôle, règles différentes : `build` en C, en Java, en shell), déclarées dans la
-   même méthodologie ou dans d'autres (`specializes: "<méthodologie>/<action>"`), avec une **garde** CEL
-   (`when`) et une priorité. Le planificateur raisonne sur l'action abstraite ; à l'exécution, le moteur
-   choisit la spécialisation applicable la plus prioritaire.
-   *Implémenté (M9) : champs `specializes` / `when` / `priority`, `kind: abstract`, choix à l'exécution.*
-6. **Sous-typage** (principe validé, les exemples restent illustratifs) : la spécialisation s'applique aux
-   **types d'objets du domaine** comme aux **actions**. Un type de nœud peut en spécialiser un autre
-   (`extends`, ex. `SecurityRequirement` ⊂ `Requirement`, `JavaComponent` ⊂ `Component`) : il hérite de ses
-   propriétés et des types de liens autorisés, et une condition, un `expects` ou une garde écrits sur le
-   type parent s'appliquent aux sous-types (test `isA`). Les spécialisations d'action se sélectionnent
-   naturellement sur le sous-type de l'objet traité (garde `when` sur `isA(x, "JavaComponent")`).
-   *Implémenté (M9) : `extends` sur les types de nœuds, `x.types` dans les conditions.*
+1. **Numbering**: increasing integer per node + branch name.
+2. **Materialization of options**: lazy (on demand from an analysis).
+3. **Decider**: a **methodology agent** makes the decision with a **confidence** level; below the
+   threshold declared by the decision point, the decision becomes a pending human action (ratification).
+4. **Budget**: set during the analysis phase, **at the change level** (tokens, steps, duration). The engine
+   tracks consumption; conditions expose `budget` (`remaining`, `ratio`, `low`, `exhausted`).
+   When the budget is low, methodologies switch to **accelerated, suboptimal** paths
+   (deciding with the information at hand instead of investigating); once exhausted, decision loops are
+   forcibly closed by the decider, and if needed by a human.
+5. **Multi-methodology = specialization**: an action can be **abstract** and have
+   **specializations** (same role, different rules: `build` in C, in Java, in shell), declared in the
+   same methodology or in others (`specializes: "<methodology>/<action>"`), with a CEL **guard**
+   (`when`) and a priority. The planner reasons over the abstract action; at execution time, the engine
+   picks the highest-priority applicable specialization.
+   *Implemented (M9): `specializes` / `when` / `priority` fields, `kind: abstract`, choice at execution time.*
+6. **Subtyping** (validated principle, examples remain illustrative): specialization applies to
+   **domain object types** as well as to **actions**. A node type can specialize another
+   (`extends`, e.g. `SecurityRequirement` ⊂ `Requirement`, `JavaComponent` ⊂ `Component`): it inherits its
+   properties and allowed link types, and a condition, an `expects`, or a guard written on the
+   parent type applies to subtypes (`isA` test). Action specializations naturally select based
+   on the subtype of the object being processed (guard `when` on `isA(x, "JavaComponent")`).
+   *Implemented (M9): `extends` on node types, `x.types` in conditions.*

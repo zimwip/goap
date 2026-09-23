@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Explorateur des changements (change sets) regroupés par statut.
+  // Explorer for changes (change sets) grouped by status.
   import Icon from '../../shell/Icon.svelte';
   import TreeRow from '../TreeRow.svelte';
   import StatusBadge from '../../components/StatusBadge.svelte';
@@ -17,10 +17,10 @@
   });
 
   const STATUSES = [
-    { id: 'active', label: 'Actifs' },
-    { id: 'draft', label: 'Brouillons' },
-    { id: 'applied', label: 'Appliqués' },
-    { id: 'abandoned', label: 'Abandonnés' },
+    { id: 'active', label: 'Active' },
+    { id: 'draft', label: 'Drafts' },
+    { id: 'applied', label: 'Applied' },
+    { id: 'abandoned', label: 'Abandoned' },
   ];
 
   const q = $derived(filter.trim().toLowerCase());
@@ -32,17 +32,17 @@
     openTab({ kind: 'change', params: { id: c.id ?? '' } }, { pin });
     select({
       title: c.title || shortId(c.id),
-      subtitle: 'Changement',
+      subtitle: 'Change',
       rows: [
-        ['Identifiant', c.id ?? ''],
-        ['Statut', c.status ?? ''],
-        ['Intention', c.intent ?? ''],
-        ['Méthodologie', c.methodology ?? ''],
-        ['Objectif', c.goal ?? ''],
-        ['Référentiel de départ', c.baselineId ?? ''],
-        ['Référentiel résultant', c.resultBaselineId ?? ''],
+        ['Id', c.id ?? ''],
+        ['Status', c.status ?? ''],
+        ['Intent', c.intent ?? ''],
+        ['Methodology', c.methodology ?? ''],
+        ['Goal', c.goal ?? ''],
+        ['Starting baseline', c.baselineId ?? ''],
+        ['Resulting baseline', c.resultBaselineId ?? ''],
         ['Items', String(c.items?.length ?? 0)],
-        ['Créé', formatDate(c.createdAt)],
+        ['Created', formatDate(c.createdAt)],
       ],
     });
   }
@@ -56,18 +56,18 @@
 
 <div class="explorer">
   <div class="tools">
-    <input type="search" placeholder="Filtrer…" aria-label="Filtrer les changements" bind:value={filter} data-no-pin />
+    <input type="search" placeholder="Filter…" aria-label="Filter changes" bind:value={filter} data-no-pin />
     <button
       type="button"
       class="ghost small"
-      title="Actualiser"
-      aria-label="Actualiser"
+      title="Refresh"
+      aria-label="Refresh"
       disabled={changes.loading}
       onclick={() => refreshChanges()}><Icon name="refresh" size={14} /></button
     >
   </div>
   {#if changes.error}<div class="alert small">{changes.error}</div>{/if}
-  <div role="tree" aria-label="Changements">
+  <div role="tree" aria-label="Changes">
     {#each STATUSES as s (s.id)}
       {@const list = shown.filter((c) => c.status === s.id)}
       {@const k = `c:${s.id}`}
@@ -98,13 +98,13 @@
     {/if}
   </div>
   {#if changes.loaded && !changes.items.length}
-    <p class="empty pad">Aucun changement listé.</p>
+    <p class="empty pad">No changes listed.</p>
   {/if}
   <form class="manual" onsubmit={openManual}>
-    <label for="chg-id">Ouvrir par identifiant</label>
+    <label for="chg-id">Open by id</label>
     <div class="row">
-      <input id="chg-id" class="grow mono" type="text" bind:value={manualId} placeholder="identifiant" data-no-pin />
-      <button type="submit" class="small" disabled={!manualId.trim()}>Ouvrir</button>
+      <input id="chg-id" class="grow mono" type="text" bind:value={manualId} placeholder="id" data-no-pin />
+      <button type="submit" class="small" disabled={!manualId.trim()}>Open</button>
     </div>
   </form>
 </div>

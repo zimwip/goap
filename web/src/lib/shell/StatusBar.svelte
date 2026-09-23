@@ -1,6 +1,6 @@
 <script lang="ts">
-  // Barre d'état : santé de la plateforme, mes exécutions en cours, identité
-  // et notifications.
+  // Status bar: platform health, my running runs, identity,
+  // and notifications.
   import Icon from './Icon.svelte';
   import Popover from './Popover.svelte';
   import { openTab } from './tabs.svelte';
@@ -26,7 +26,7 @@
       off();
     };
   });
-  // Horloge des durées écoulées (seulement quand la liste est ouverte).
+  // Elapsed-time clock (only while the list is open).
   $effect(() => {
     if (!runsOpen) return;
     now = Date.now();
@@ -38,10 +38,10 @@
   const running = $derived(runs.some((p) => p.status === 'running'));
 
   const HEALTH: Record<string, string> = {
-    ok: 'Plateforme OK',
-    degraded: 'Plateforme dégradée',
-    down: 'Plateforme indisponible',
-    unknown: 'État de la plateforme inconnu',
+    ok: 'Platform OK',
+    degraded: 'Platform degraded',
+    down: 'Platform unavailable',
+    unknown: 'Platform status unknown',
   };
 
   function elapsed(iso: string | undefined): string {
@@ -64,16 +64,16 @@
   }
 </script>
 
-<footer class="status" aria-label="Barre d'état">
+<footer class="status" aria-label="Status bar">
   <div class="item-wrap">
     <button type="button" class="item health {health.status}" aria-haspopup="dialog" aria-expanded={healthOpen} onclick={() => (healthOpen = !healthOpen)}>
       <span class="dot" aria-hidden="true"></span>{HEALTH[health.status] ?? health.status}
     </button>
-    <Popover bind:open={healthOpen} label="État de la plateforme">
+    <Popover bind:open={healthOpen} label="Platform status">
       <div class="pop-head">
         <strong>{HEALTH[health.status] ?? health.status}</strong>
         <span class="grow"></span>
-        <button type="button" class="small ghost" onclick={() => refreshHealth()} aria-label="Actualiser"><Icon name="refresh" size={12} /></button>
+        <button type="button" class="small ghost" onclick={() => refreshHealth()} aria-label="Refresh"><Icon name="refresh" size={12} /></button>
       </div>
       {#if health.data?.services?.length}
         <table class="svc">
@@ -88,25 +88,25 @@
           </tbody>
         </table>
       {:else}
-        <p class="pad hint">{health.error || 'Aucun service signalé.'}</p>
+        <p class="pad hint">{health.error || 'No service reported.'}</p>
       {/if}
-      <p class="pad hint">Vérifié à {formatTime(health.checkedAt)} (toutes les 15 s).</p>
+      <p class="pad hint">Checked at {formatTime(health.checkedAt)} (every 15 s).</p>
     </Popover>
   </div>
 
-  <span class="item muted stream" title={live.error || 'Flux d’événements'}>
-    <Icon name="radio" size={12} />{live.status === 'retrying' ? 'flux : reconnexion' : live.status === 'stopped' ? 'flux arrêté' : 'flux en direct'}
+  <span class="item muted stream" title={live.error || 'Event stream'}>
+    <Icon name="radio" size={12} />{live.status === 'retrying' ? 'stream: reconnecting' : live.status === 'stopped' ? 'stream stopped' : 'stream live'}
   </span>
 
   <span class="grow"></span>
 
   <div class="item-wrap">
-    <button type="button" class="item" aria-haspopup="dialog" aria-expanded={runsOpen} onclick={() => (runsOpen = !runsOpen)} title="Mes exécutions en cours">
+    <button type="button" class="item" aria-haspopup="dialog" aria-expanded={runsOpen} onclick={() => (runsOpen = !runsOpen)} title="My running runs">
       {#if running}<span class="spin" aria-hidden="true"></span>{:else}<Icon name="play" size={12} />{/if}
-      {runs.length ? `${runs.length} exécution${runs.length > 1 ? 's' : ''} en cours` : 'Aucune exécution en cours'}
+      {runs.length ? `${runs.length} run${runs.length > 1 ? 's' : ''} in progress` : 'No runs in progress'}
     </button>
-    <Popover bind:open={runsOpen} label="Mes exécutions en cours" width="380px">
-      <div class="pop-head"><strong>Mes exécutions en cours</strong></div>
+    <Popover bind:open={runsOpen} label="My running runs" width="380px">
+      <div class="pop-head"><strong>My running runs</strong></div>
       {#if myRunsState.error}<p class="pad alert">{myRunsState.error}</p>{/if}
       {#if runs.length}
         <ul class="list">
@@ -115,7 +115,7 @@
               <button type="button" class="row-btn" onclick={() => openRun(p.id ?? '')}>
                 <span class="main">
                   <strong>{p.agent || p.title || shortId(p.id)}</strong>
-                  <span class="hint">{p.goal ? `objectif ${p.goal}` : 'objectif à déterminer'}</span>
+                  <span class="hint">{p.goal ? `goal ${p.goal}` : 'goal to be determined'}</span>
                 </span>
                 <StatusBadge status={p.status} />
                 <span class="hint el">{elapsed(p.createdAt)}</span>
@@ -124,13 +124,13 @@
           {/each}
         </ul>
       {:else}
-        <p class="pad hint">Aucune exécution en cours.</p>
+        <p class="pad hint">No runs in progress.</p>
       {/if}
     </Popover>
   </div>
 
-  <span class="item muted" title={session.principal?.roles?.length ? `Rôles : ${session.principal.roles.join(', ')}` : ''}>
-    <Icon name="user" size={12} />{session.principal?.subject || (session.hasToken ? 'jeton configuré' : 'anonyme')}{session.principal?.org
+  <span class="item muted" title={session.principal?.roles?.length ? `Roles: ${session.principal.roles.join(', ')}` : ''}>
+    <Icon name="user" size={12} />{session.principal?.subject || (session.hasToken ? 'token configured' : 'anonymous')}{session.principal?.org
       ? ` · ${session.principal.org}`
       : ''}
   </span>
@@ -141,7 +141,7 @@
       class="item bell"
       aria-haspopup="dialog"
       aria-expanded={bellOpen}
-      aria-label={`Notifications${notifications.unread ? ` (${notifications.unread} non lues)` : ''}`}
+      aria-label={`Notifications${notifications.unread ? ` (${notifications.unread} unread)` : ''}`}
       onclick={() => (bellOpen = !bellOpen)}
     >
       <Icon name="bell" size={13} />
@@ -151,8 +151,8 @@
       <div class="pop-head">
         <strong>Notifications</strong>
         <span class="grow"></span>
-        <button type="button" class="small ghost" disabled={!notifications.unread} onclick={markAllRead}>Tout marquer lu</button>
-        <button type="button" class="small ghost" disabled={!notifications.items.length} onclick={clearNotifications}>Effacer</button>
+        <button type="button" class="small ghost" disabled={!notifications.unread} onclick={markAllRead}>Mark all read</button>
+        <button type="button" class="small ghost" disabled={!notifications.items.length} onclick={clearNotifications}>Clear</button>
       </div>
       {#if notifications.items.length}
         <ul class="list">
@@ -170,7 +170,7 @@
           {/each}
         </ul>
       {:else}
-        <p class="pad hint">Aucune notification.</p>
+        <p class="pad hint">No notifications.</p>
       {/if}
     </Popover>
   </div>

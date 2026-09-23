@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Poignée de redimensionnement (souris, tactile et clavier).
+  // Resize handle (mouse, touch, and keyboard).
   let {
     orientation,
     value,
@@ -9,12 +9,12 @@
     label,
     onresize,
   }: {
-    /** vertical : poignée verticale, redimensionne une largeur */
+    /** vertical: vertical handle, resizes a width */
     orientation: 'vertical' | 'horizontal';
     value: number;
     min: number;
     max: number;
-    /** la taille croît quand le pointeur va vers la gauche / le haut */
+    /** size grows as the pointer moves left / up */
     invert?: boolean;
     label: string;
     onresize: (v: number) => void;
@@ -63,7 +63,7 @@
   }
 </script>
 
-<!-- Séparateur focalisable (motif « window splitter » WAI-ARIA) : interactif. -->
+<!-- Focusable separator (WAI-ARIA "window splitter" pattern): interactive. -->
 <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
 <div
   class="resizer {orientation}"

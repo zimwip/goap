@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Onglet « action » : édite une action du brouillon de sa méthodologie.
+  // "Action" tab: edits an action in its methodology's draft.
   import { untrack } from 'svelte';
   import type { Tab } from '../../shell/types';
   import ActionEditor from '../../components/ActionEditor.svelte';
@@ -26,7 +26,7 @@
   );
 
   const actionNames = $derived([...new Set(d.form.actions.map((a) => a.name.trim()).filter(Boolean))]);
-  /** spécialisations locales de cette action */
+  /** local specializations of this action */
   const specializations = $derived(
     item && item.name.trim()
       ? d.form.actions.filter((a) => {
@@ -48,7 +48,7 @@
 
 <div class="editor-page" bind:this={root}>
   {#if item}
-    <DraftHeader draft={d} icon="zap" kind="Action" title={item.name || '(sans nom)'} dirty={d.itemDirty('actions', item.uid)} />
+    <DraftHeader draft={d} icon="zap" kind="Action" title={item.name || '(unnamed)'} dirty={d.itemDirty('actions', item.uid)} />
     <fieldset class="plain" disabled={d.readonly}>
       <section class="card">
         <ActionEditor
@@ -66,25 +66,25 @@
     </fieldset>
     {#if specialized}
       <p class="hint">
-        Spécialise <button type="button" class="link" onclick={() => openItem(d, 'actions', specialized)}>{specialized.name}</button>.
+        Specializes <button type="button" class="link" onclick={() => openItem(d, 'actions', specialized)}>{specialized.name}</button>.
       </p>
     {/if}
     {#if specializations.length || item.kind === 'abstract'}
       <p class="hint">
-        Spécialisations :
+        Specializations:
         {#each specializations as a, i (a.uid)}{i ? ', ' : ''}<button type="button" class="link" onclick={() => openItem(d, 'actions', a)}
-            >{a.name || '(sans nom)'}</button
-          >{a.priority ? ` (priorité ${a.priority})` : ''}{:else}
-          aucune dans cette méthodologie{item.kind === 'abstract' ? ' — une action abstraite doit être spécialisée' : ''}
+            >{a.name || '(unnamed)'}</button
+          >{a.priority ? ` (priority ${a.priority})` : ''}{:else}
+          none in this methodology{item.kind === 'abstract' ? ' — an abstract action must be specialized' : ''}
         {/each}
       </p>
     {/if}
     <p class="hint">
-      Agents pouvant l'utiliser :
+      Agents that can use it:
       {#each agents as a, i (a.uid)}{i ? ', ' : ''}<button type="button" class="link" onclick={() => openItem(d, 'agents', a)}
-          >{a.name || '(sans nom)'}</button
+          >{a.name || '(unnamed)'}</button
         >{:else}
-        {d.form.agents.length ? 'aucun' : 'agent par défaut'}
+        {d.form.agents.length ? 'none' : 'default agent'}
       {/each}
     </p>
   {:else}

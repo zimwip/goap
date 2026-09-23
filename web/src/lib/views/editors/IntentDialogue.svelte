@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Dialogue d'identification de l'intention (processus « clarifying »).
+  // Intent identification dialogue (the "clarifying" process).
   import { engine, errorMessage, type Process } from '../../api';
 
   let { process, onupdate }: { process: Process; onupdate: (p: Process) => void } = $props();
@@ -8,7 +8,7 @@
   let busy = $state(false);
   let error = $state('');
 
-  const ROLES: Record<string, string> = { user: 'Vous', human: 'Vous', assistant: 'Moteur', system: 'Moteur' };
+  const ROLES: Record<string, string> = { user: 'You', human: 'You', assistant: 'Engine', system: 'Engine' };
 
   async function send(e: SubmitEvent) {
     e.preventDefault();
@@ -32,7 +32,7 @@
 </script>
 
 <section class="card dialogue">
-  <h3>Dialogue d'intention</h3>
+  <h3>Intent dialogue</h3>
   {#if process.turns?.length}
     <ol class="turns">
       {#each process.turns as t, i (i)}
@@ -47,7 +47,7 @@
     {#if process.question}<p class="question">{process.question}</p>{/if}
     {#if process.candidates?.length}
       <table class="cands">
-        <thead><tr><th>Méthodologie</th><th>Agent</th><th>Objectif</th><th class="num">Confiance</th><th>Raison</th><th></th></tr></thead>
+        <thead><tr><th>Methodology</th><th>Agent</th><th>Goal</th><th class="num">Confidence</th><th>Reason</th><th></th></tr></thead>
         <tbody>
           {#each process.candidates as c, i (i)}
             <tr>
@@ -60,8 +60,8 @@
               </td>
               <td class="hint">{c.reason ?? ''}</td>
               <td>
-                <button type="button" class="small" onclick={() => pick(c.goal ?? c.agent ?? '')} title="Répondre avec ce choix"
-                  >Choisir</button
+                <button type="button" class="small" onclick={() => pick(c.goal ?? c.agent ?? '')} title="Reply with this choice"
+                  >Choose</button
                 >
               </td>
             </tr>
@@ -70,8 +70,8 @@
       </table>
     {/if}
     <form class="row answer" onsubmit={send}>
-      <input class="grow" type="text" bind:value={answer} placeholder="Votre réponse…" aria-label="Réponse" data-no-pin />
-      <button class="primary" type="submit" disabled={busy || !answer.trim()}>{busy ? 'Envoi…' : 'Répondre'}</button>
+      <input class="grow" type="text" bind:value={answer} placeholder="Your answer…" aria-label="Answer" data-no-pin />
+      <button class="primary" type="submit" disabled={busy || !answer.trim()}>{busy ? 'Sending…' : 'Reply'}</button>
     </form>
     {#if error}<div class="alert" style="margin: 0.5rem 0 0">{error}</div>{/if}
   {/if}

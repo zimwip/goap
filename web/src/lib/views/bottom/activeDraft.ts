@@ -1,4 +1,4 @@
-// Brouillon de méthodologie de l'onglet actif (sans le créer).
+// Methodology draft of the active tab (without creating it).
 import { activeTab } from '../../shell/tabs.svelte';
 import { peekDraft, type Draft } from '../../stores/drafts.svelte';
 import { draftGroup, isDraftTab } from '../editors/methodologyTabs';

@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Barre d'onglets de la zone d'édition.
+  // Tab bar for the editor area.
   import Icon from './Icon.svelte';
   import { editorView } from './registry';
   import { tabsState, activate, closeTab, togglePin, pinTab, moveTab, isDirty } from './tabs.svelte';
@@ -31,7 +31,7 @@
     list.querySelectorAll<HTMLElement>('[role=tab]')[j]?.focus();
   }
 
-  // Onglet actif visible quand il change.
+  // Keep the active tab visible when it changes.
   $effect(() => {
     const id = tabsState.active;
     if (!id || !list) return;
@@ -45,7 +45,7 @@
   }
 </script>
 
-<div class="tabs" role="tablist" aria-label="Onglets ouverts" bind:this={list} onwheel={wheel}>
+<div class="tabs" role="tablist" aria-label="Open tabs" bind:this={list} onwheel={wheel}>
   {#each tabsState.tabs as tab, i (tab.id)}
     {@const v = editorView(tab.kind)}
     {@const on = tab.id === tabsState.active}
@@ -60,7 +60,7 @@
       role="tab"
       tabindex={on ? 0 : -1}
       aria-selected={on}
-      title={`${v?.tooltip?.(tab) ?? title}${tab.pinned ? '' : ' (aperçu — double-cliquez pour épingler)'}`}
+      title={`${v?.tooltip?.(tab) ?? title}${tab.pinned ? '' : ' (preview — double-click to pin)'}`}
       draggable="true"
       onclick={() => activate(tab.id)}
       ondblclick={() => pinTab(tab.id)}
@@ -85,8 +85,8 @@
           type="button"
           class="tbtn pin"
           tabindex="-1"
-          title="Désépingler"
-          aria-label={`Désépingler ${title}`}
+          title="Unpin"
+          aria-label={`Unpin ${title}`}
           onclick={(e) => {
             e.stopPropagation();
             togglePin(tab.id);
@@ -97,8 +97,8 @@
         type="button"
         class="tbtn close"
         tabindex="-1"
-        title={dirty ? 'Modifications non enregistrées — fermer' : 'Fermer (Ctrl+W)'}
-        aria-label={`Fermer ${title}`}
+        title={dirty ? 'Unsaved changes — close' : 'Close (Ctrl+W)'}
+        aria-label={`Close ${title}`}
         onclick={(e) => {
           e.stopPropagation();
           closeTab(tab.id);

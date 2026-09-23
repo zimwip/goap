@@ -1,6 +1,6 @@
-// Brouillons en mémoire : un par méthodologie@version, partagé par tous les
-// onglets qui en éditent une partie (méthodologie, agent, action…). Enregistrer
-// depuis n'importe lequel de ces onglets enregistre la méthodologie entière.
+// In-memory drafts: one per methodology@version, shared by every tab
+// editing a part of it (methodology, agent, action…). Saving from any of
+// these tabs saves the whole methodology.
 import { SvelteMap } from 'svelte/reactivity';
 import { registry, errorMessage, bumpPatch, type Issue, type Methodology } from '../api';
 import {
@@ -33,7 +33,7 @@ function under(issuePath: string, path: string): boolean {
 export class Draft {
   readonly name: string;
   readonly version: string;
-  /** nouvelle méthodologie jamais enregistrée */
+  /** new methodology never saved */
   readonly isNew: boolean;
 
   form = $state<MethodologyForm>(emptyForm());
@@ -42,13 +42,13 @@ export class Draft {
   meta = $state<Meta>({});
   loading = $state(true);
   loadError = $state('');
-  /** opération en cours (save, validate, publish…) */
+  /** operation in progress (save, validate, publish…) */
   busy = $state('');
   error = $state('');
-  /** null : pas encore validé */
+  /** null: not yet validated */
   issues = $state<Issue[] | null>(null);
   localIssues = $state<Issue[]>([]);
-  /** JSON du formulaire lors de la dernière validation */
+  /** form JSON at the last validation */
   validatedAt = $state('');
 
   readonly key: string;
@@ -89,10 +89,10 @@ export class Draft {
   }
 
   get label(): string {
-    return this.isNew ? 'Nouvelle méthodologie' : `${this.name} v${this.version}`;
+    return this.isNew ? 'New methodology' : `${this.name} v${this.version}`;
   }
 
-  // --- chargement --------------------------------------------------------------
+  // --- loading --------------------------------------------------------------
 
   private apply(m: Methodology) {
     this.form = toForm(m);
@@ -101,7 +101,7 @@ export class Draft {
     this.meta = { createdAt: m.createdAt, updatedAt: m.updatedAt, publishedAt: m.publishedAt, updatedBy: m.updatedBy };
   }
 
-  /** Charge une seule fois (appels concurrents partagés). */
+  /** Loads once (concurrent calls share the result). */
   ensureLoaded(): Promise<void> {
     if (this.isNew) return Promise.resolve();
     this.loaded ??= this.reload();
@@ -115,7 +115,7 @@ export class Draft {
     this.localIssues = [];
     try {
       const res = await registry.getMethodology(this.name, this.version);
-      if (!res.methodology) throw new Error('Méthodologie introuvable.');
+      if (!res.methodology) throw new Error('Methodology not found.');
       this.apply(res.methodology);
       this.loading = false;
       if (this.status === 'draft') await this.validate(true);
@@ -126,15 +126,15 @@ export class Draft {
     }
   }
 
-  /** Abandonne les modifications (retour au dernier état enregistré). */
+  /** Discards changes (back to the last saved state). */
   revert(): void {
     this.form = JSON.parse(this.snapshot) as MethodologyForm;
     this.localIssues = [];
   }
 
-  // --- problèmes -----------------------------------------------------------------
+  // --- issues -----------------------------------------------------------------
 
-  /** Le champ `path` (ou, sauf `exact`, un de ses descendants) a-t-il un problème ? */
+  /** Does field `path` (or, unless `exact`, one of its descendants) have an issue? */
   bad = (path: string, exact = false): boolean =>
     this.allIssues.some((i) => (exact ? i.norm === path : under(i.norm, path)));
 
@@ -142,7 +142,7 @@ export class Draft {
     return this.allIssues.filter((i) => under(i.norm, path)).length;
   }
 
-  // --- éléments ------------------------------------------------------------------
+  // --- elements ------------------------------------------------------------------
 
   items(section: Section): SectionItem[] {
     return this.form[section];
@@ -155,7 +155,7 @@ export class Draft {
     return i;
   }
 
-  /** L'élément diffère-t-il de sa version enregistrée ? */
+  /** Does the element differ from its saved version? */
   itemDirty(section: Section, uid: string): boolean {
     const cur = this.items(section).find((x) => x.uid === uid);
     const old = (this.saved[section] as SectionItem[]).find((x) => x.uid === uid);
@@ -166,14 +166,14 @@ export class Draft {
     renameReferences(this.form, section, from.trim(), to.trim());
   }
 
-  // --- opérations ------------------------------------------------------------------
+  // --- operations ------------------------------------------------------------------
 
-  /** Construit le message ; renvoie null si le formulaire contient des erreurs locales. */
+  /** Builds the message; returns null if the form has local errors. */
   private build(): Methodology | null {
     const { methodology, issues } = fromForm(this.form);
     this.localIssues = issues;
     if (issues.length) {
-      this.error = 'Corrigez les erreurs signalées avant de continuer.';
+      this.error = 'Fix the reported errors before continuing.';
       return null;
     }
     return methodology;
@@ -192,14 +192,14 @@ export class Draft {
     }
   }
 
-  /** Validation serveur ; `quiet` : validation automatique (pas d'état « occupé »). */
+  /** Server-side validation; `quiet`: automatic validation (no "busy" state). */
   async validate(quiet = false): Promise<void> {
     if (this.readonly) return;
     const at = this.current;
     const { methodology, issues } = fromForm(this.form);
     this.localIssues = issues;
     if (issues.length) {
-      if (!quiet) this.error = 'Corrigez les erreurs signalées avant de continuer.';
+      if (!quiet) this.error = 'Fix the reported errors before continuing.';
       return;
     }
     if (quiet) {
@@ -210,7 +210,7 @@ export class Draft {
           this.validatedAt = at;
         }
       } catch {
-        // validation de fond : les erreurs réseau sont ignorées
+        // background validation: network errors are ignored
       }
       return;
     }
@@ -220,11 +220,11 @@ export class Draft {
     });
   }
 
-  /** Enregistre le brouillon. Renvoie la méthodologie enregistrée (ou undefined). */
+  /** Saves the draft. Returns the saved methodology (or undefined). */
   async save(): Promise<Methodology | undefined> {
     if (this.readonly) return undefined;
     if (!this.form.name.trim() || !this.form.version.trim()) {
-      this.error = 'Le nom et la version sont obligatoires.';
+      this.error = 'Name and version are required.';
       return undefined;
     }
     const m = this.build();
@@ -233,8 +233,8 @@ export class Draft {
     const res = await this.run('save', () => registry.saveMethodology(m));
     if (!res) return undefined;
     const saved = res.methodology ?? m;
-    // Le formulaire est conservé tel quel (identifiants locaux des onglets) ;
-    // seules les métadonnées viennent du serveur.
+    // The form is kept as is (tabs' local ids); only the metadata comes
+    // from the server.
     this.snapshot = at;
     this.status = saved.status || 'draft';
     this.meta = {
@@ -251,7 +251,7 @@ export class Draft {
   }
 
   async publish(): Promise<boolean> {
-    if (!confirm(`Publier ${this.label} ? La version deviendra immuable et exécutable par le moteur.`)) return false;
+    if (!confirm(`Publish ${this.label}? The version will become immutable and executable by the engine.`)) return false;
     const res = await this.run('publish', () => registry.publishMethodology(this.name, this.version));
     if (!res) return false;
     this.status = res.methodology?.status || 'published';
@@ -260,11 +260,11 @@ export class Draft {
     return true;
   }
 
-  /** Crée une nouvelle version (copie de la version enregistrée) ; renvoie son numéro. */
+  /** Creates a new version (copy of the saved version); returns its number. */
   async newVersion(): Promise<string | undefined> {
-    if (this.dirty && !confirm('Des modifications ne sont pas enregistrées : la nouvelle version est copiée depuis la version enregistrée. Continuer ?'))
+    if (this.dirty && !confirm('There are unsaved changes: the new version is copied from the saved version. Continue?'))
       return undefined;
-    const v = prompt(`Numéro de la nouvelle version (copie de v${this.version}) :`, bumpPatch(this.version))?.trim();
+    const v = prompt(`Number of the new version (copy of v${this.version}):`, bumpPatch(this.version))?.trim();
     if (!v) return undefined;
     const res = await this.run('version', () => registry.createVersion(this.name, this.version, v));
     if (!res) return undefined;
@@ -287,12 +287,12 @@ export class Draft {
     });
   }
 
-  /** Supprime un brouillon ou archive une version publiée. Renvoie « deleted » / « archived ». */
+  /** Deletes a draft or archives a published version. Returns "deleted" / "archived". */
   async remove(): Promise<'deleted' | 'archived' | undefined> {
     const draft = this.status === 'draft';
     const msg = draft
-      ? `Supprimer définitivement le brouillon ${this.label} ?`
-      : `Archiver ${this.label} ? Elle ne pourra plus être utilisée pour démarrer un processus.`;
+      ? `Permanently delete the draft ${this.label}?`
+      : `Archive ${this.label}? It will no longer be usable to start a process.`;
     if (!confirm(msg)) return undefined;
     const ok = await this.run('delete', async () => {
       await registry.deleteMethodology(this.name, this.version);
@@ -311,13 +311,13 @@ export class Draft {
 
 export const drafts = new SvelteMap<string, Draft>();
 
-/** Brouillon d'une version (créé et chargé à la demande). */
+/** Draft of a version (created and loaded on demand). */
 export function getDraft(name: string, version: string): Draft {
   const key = name ? draftKey(name, version) : 'new';
   let d = drafts.get(key);
   if (!d) {
-    // Les $derived du brouillon ne doivent pas appartenir à l'effet (composant)
-    // qui le crée : ils vivent aussi longtemps que le brouillon.
+    // The draft's $derived must not belong to the effect (component) that
+    // creates it: they live as long as the draft.
     let created: Draft | undefined;
     $effect.root(() => {
       created = new Draft(name, version);
@@ -329,7 +329,7 @@ export function getDraft(name: string, version: string): Draft {
   return d;
 }
 
-/** Brouillon déjà en mémoire (sans chargement). */
+/** Draft already in memory (no loading). */
 export function peekDraft(key: string): Draft | undefined {
   return drafts.get(key);
 }

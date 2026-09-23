@@ -294,9 +294,9 @@ func (t *TriggerManager) start(ctx context.Context, key string, s TriggerState, 
 	}
 	ctx = authz.With(ctx, who)
 	req := StartRequest{Methodology: s.Methodology, Agent: s.Agent, Goal: def.Goal, Intent: def.Intent, Trigger: key,
-		Title: fmt.Sprintf("%s (déclencheur %s)", s.Agent, s.Name)}
+		Title: fmt.Sprintf("%s (trigger %s)", s.Agent, s.Name)}
 	if req.Intent == "" {
-		req.Intent = "Exécution automatique : " + strings.TrimSpace(s.Name+" "+def.Description)
+		req.Intent = "Automatic run: " + strings.TrimSpace(s.Name+" "+def.Description)
 	}
 	if ev != nil {
 		// the event is available to the agent (conditions, scripts, builtins)

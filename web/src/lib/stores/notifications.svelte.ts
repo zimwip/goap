@@ -1,6 +1,6 @@
-// Notifications dérivées du flux WatchEvents pour les processus de
-// l'utilisateur courant (tous quand il est anonyme) : fin, échec, blocage,
-// saisie ou approbation attendue, clarification, lancement par un déclencheur.
+// Notifications derived from the WatchEvents stream for the current user's
+// processes (all of them when anonymous): completion, failure, stuck,
+// pending input or approval, clarification, started by a trigger.
 import { onLiveEvent } from './live.svelte';
 import { me, hasAnyRole } from './session.svelte';
 import { notify } from '../shell/workbench.svelte';
@@ -9,7 +9,7 @@ import { shortId, type Process, type WatchEvent } from '../api';
 
 export interface Notice {
   id: string;
-  /** clé de dédoublonnage (processus + situation) */
+  /** deduplication key (process + situation) */
   key: string;
   time: string;
   tone: 'ok' | 'error' | 'warn' | 'info';
@@ -79,34 +79,34 @@ export function noticeFromEvent(e: WatchEvent): void {
   if (!p?.id) return;
   const base = { processId: p.id, time: e.time };
   if (e.type === 'started' && p.trigger) {
-    push({ ...base, key: `${p.id}|trigger`, tone: 'info', title: 'Déclencheur', text: `« ${p.trigger} » a lancé ${label(p)}` });
+    push({ ...base, key: `${p.id}|trigger`, tone: 'info', title: 'Trigger', text: `"${p.trigger}" started ${label(p)}` });
   }
   const approval = p.status === 'waiting' && p.pending?.kind === 'approval';
   if (!mine(p) && !(approval && hasAnyRole('approver', 'admin'))) return;
   switch (e.type) {
     case 'completed':
-      push({ ...base, key: `${p.id}|completed`, tone: 'ok', title: 'Exécution terminée', text: label(p) });
+      push({ ...base, key: `${p.id}|completed`, tone: 'ok', title: 'Run completed', text: label(p) });
       break;
     case 'failed':
-      push({ ...base, key: `${p.id}|failed`, tone: 'error', title: 'Exécution en échec', text: `${label(p)}${p.error ? ` : ${p.error}` : ''}` }, true);
+      push({ ...base, key: `${p.id}|failed`, tone: 'error', title: 'Run failed', text: `${label(p)}${p.error ? `: ${p.error}` : ''}` }, true);
       break;
     case 'stuck':
-      push({ ...base, key: `${p.id}|stuck|${p.steps?.length ?? 0}`, tone: 'warn', title: 'Exécution bloquée', text: label(p) });
+      push({ ...base, key: `${p.id}|stuck|${p.steps?.length ?? 0}`, tone: 'warn', title: 'Run stuck', text: label(p) });
       break;
     case 'waiting': {
       const t = p.pending;
       if (t?.kind === 'input')
-        push({ ...base, key: `${p.id}|input|${t.step}|${t.action}`, tone: 'warn', title: 'Saisie attendue', text: `${label(p)} — ${t.action ?? ''}` });
+        push({ ...base, key: `${p.id}|input|${t.step}|${t.action}`, tone: 'warn', title: 'Input expected', text: `${label(p)} — ${t.action ?? ''}` });
       else if (t?.kind === 'approval')
         push(
-          { ...base, key: `${p.id}|approval|${t.step}|${t.action}`, tone: 'warn', title: 'Approbation requise', text: `${label(p)} — ${t.action ?? ''} (${t.permission ?? ''})` },
+          { ...base, key: `${p.id}|approval|${t.step}|${t.action}`, tone: 'warn', title: 'Approval required', text: `${label(p)} — ${t.action ?? ''} (${t.permission ?? ''})` },
           true,
         );
       break;
     }
     case 'intent':
       if (p.status === 'clarifying' && p.question)
-        push({ ...base, key: `${p.id}|clarify|${p.turns?.length ?? 0}`, tone: 'info', title: 'Question de clarification', text: p.question });
+        push({ ...base, key: `${p.id}|clarify|${p.turns?.length ?? 0}`, tone: 'info', title: 'Clarification question', text: p.question });
       break;
   }
 }

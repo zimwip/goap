@@ -1,6 +1,6 @@
 <script lang="ts">
-  // Explorateur des exécutions : processus regroupés par statut, sous-agents
-  // imbriqués sous leur processus parent.
+  // Runs explorer: processes grouped by status, sub-agents
+  // nested under their parent process.
   import Icon from '../../shell/Icon.svelte';
   import TreeRow from '../TreeRow.svelte';
   import StatusBadge from '../../components/StatusBadge.svelte';
@@ -19,10 +19,10 @@
   });
 
   const GROUPS: { id: string; label: string; statuses: string[]; icon: IconName }[] = [
-    { id: 'active', label: 'En cours', statuses: ['running', 'clarifying'], icon: 'play' },
-    { id: 'waiting', label: 'En attente', statuses: ['waiting'], icon: 'user' },
-    { id: 'done', label: 'Terminées', statuses: ['completed'], icon: 'check' },
-    { id: 'failed', label: 'Échecs et blocages', statuses: ['failed', 'stuck'], icon: 'alert' },
+    { id: 'active', label: 'In progress', statuses: ['running', 'clarifying'], icon: 'play' },
+    { id: 'waiting', label: 'Waiting', statuses: ['waiting'], icon: 'user' },
+    { id: 'done', label: 'Completed', statuses: ['completed'], icon: 'check' },
+    { id: 'failed', label: 'Failures and blocks', statuses: ['failed', 'stuck'], icon: 'alert' },
   ];
 
   function label(p: Process): string {
@@ -36,7 +36,7 @@
   const matches = (p: Process) =>
     !q || `${p.id} ${p.title ?? ''} ${p.agent ?? ''} ${p.goal ?? ''} ${p.methodology ?? ''}`.toLowerCase().includes(q);
 
-  /** Racines : processus sans parent connu. */
+  /** Roots: processes with no known parent. */
   const roots = $derived(all.filter((p) => !p.parentId || !processes.has(p.parentId)));
   const byParent = $derived.by(() => {
     const m = new Map<string, Process[]>();
@@ -52,20 +52,20 @@
     openTab({ kind: 'run', params: { id: p.id ?? '' } }, { pin });
     select({
       title: label(p),
-      subtitle: 'Exécution',
+      subtitle: 'Run',
       rows: [
-        ['Identifiant', p.id ?? ''],
-        ['Statut', p.status ?? ''],
-        ['Méthodologie', p.methodology ?? ''],
+        ['Id', p.id ?? ''],
+        ['Status', p.status ?? ''],
+        ['Methodology', p.methodology ?? ''],
         ['Agent', p.agent ?? ''],
-        ['Planificateur', p.planner ?? ''],
-        ['Objectif', p.goal ?? ''],
-        ['Déclenché par', p.trigger ?? ''],
-        ['Initiateur', p.initiator?.subject ?? ''],
-        ['Tokens (entrée / sortie)', `${formatInt(p.usage?.inputTokens)} / ${formatInt(p.usage?.outputTokens)}`],
-        ['Appels LLM / outils', `${p.usage?.llmCalls ?? 0} / ${p.usage?.toolCalls ?? 0}`],
-        ['Créé', formatDate(p.createdAt)],
-        ['Mis à jour', formatDate(p.updatedAt)],
+        ['Planner', p.planner ?? ''],
+        ['Goal', p.goal ?? ''],
+        ['Triggered by', p.trigger ?? ''],
+        ['Initiator', p.initiator?.subject ?? ''],
+        ['Tokens (input / output)', `${formatInt(p.usage?.inputTokens)} / ${formatInt(p.usage?.outputTokens)}`],
+        ['LLM / tool calls', `${p.usage?.llmCalls ?? 0} / ${p.usage?.toolCalls ?? 0}`],
+        ['Created', formatDate(p.createdAt)],
+        ['Updated', formatDate(p.updatedAt)],
       ],
     });
   }
@@ -87,7 +87,7 @@
     detail={[p.agent && p.agent !== label(p) ? p.agent : '', shortId(p.id)].filter(Boolean).join(' · ')}
     expanded={kids.length ? isOpen(k, true) : undefined}
     active={tabsState.active === `run:${p.id}`}
-    title={`${label(p)} — ${p.status}${tokens ? ` — ${formatInt(tokens)} tokens` : ''}${p.trigger ? `\ndéclenché par ${p.trigger}` : ''}\n${formatDate(p.createdAt)}`}
+    title={`${label(p)} — ${p.status}${tokens ? ` — ${formatInt(tokens)} tokens` : ''}${p.trigger ? `\ntriggered by ${p.trigger}` : ''}\n${formatDate(p.createdAt)}`}
     onselect={() => open(p)}
     onopen={() => open(p, true)}
     ontoggle={() => toggle(k, true)}
@@ -105,24 +105,24 @@
 
 <div class="explorer">
   <div class="tools">
-    <input type="search" placeholder="Filtrer…" aria-label="Filtrer les exécutions" bind:value={filter} data-no-pin />
-    <button type="button" class="ghost small" title="Nouveau test d'intention" aria-label="Nouveau test d'intention" onclick={newTest}
+    <input type="search" placeholder="Filter…" aria-label="Filter runs" bind:value={filter} data-no-pin />
+    <button type="button" class="ghost small" title="New intent test" aria-label="New intent test" onclick={newTest}
       ><Icon name="flask" size={14} /></button
     >
     <button
       type="button"
       class="ghost small"
-      title="Actualiser"
-      aria-label="Actualiser"
+      title="Refresh"
+      aria-label="Refresh"
       disabled={live.processesLoading}
       onclick={() => refreshProcesses()}><Icon name="refresh" size={14} /></button
     >
   </div>
   {#if live.processesError}<div class="alert small">{live.processesError}</div>{/if}
   {#if live.processesLoaded && !all.length && !live.processesError}
-    <p class="empty pad">Aucune exécution. Lancez un test d'intention depuis l'outil « Tester ».</p>
+    <p class="empty pad">No runs. Launch an intent test from the "Tester" tool.</p>
   {/if}
-  <div role="tree" aria-label="Exécutions">
+  <div role="tree" aria-label="Runs">
     {#each GROUPS as g (g.id)}
       {@const list = roots.filter((p) => g.statuses.includes(p.status ?? '') && subtreeMatches(p))}
       {@const gk = `g:${g.id}`}
@@ -140,7 +140,7 @@
       {/if}
     {/each}
     {#if roots.some((p) => !GROUPS.some((g) => g.statuses.includes(p.status ?? '')))}
-      <TreeRow icon="help" label="Autres" expanded={isOpen('g:other')} ontoggle={() => toggle('g:other')} />
+      <TreeRow icon="help" label="Other" expanded={isOpen('g:other')} ontoggle={() => toggle('g:other')} />
       {#if isOpen('g:other')}
         {#each roots.filter((p) => !GROUPS.some((g) => g.statuses.includes(p.status ?? ''))) as p (p.id)}{@render node(p, 1)}{/each}
       {/if}

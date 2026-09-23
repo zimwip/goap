@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Console « Tokens » : un appel LLM par ligne, avec totaux.
+  // "Tokens" console: one LLM call per line, with totals.
   import Icon from '../../shell/Icon.svelte';
   import { live, clearTokens, processes } from '../../stores/live.svelte';
   import { openTab } from '../../shell/tabs.svelte';
@@ -26,7 +26,7 @@
     ),
   );
 
-  const n = (v: number) => v.toLocaleString('fr-FR');
+  const n = (v: number) => v.toLocaleString('en-US');
 
   $effect(() => {
     void rows.length;
@@ -40,22 +40,22 @@
 </script>
 
 <div class="console-tools">
-  <select aria-label="Processus" bind:value={processId} data-no-pin>
-    <option value="">Tous les processus</option>
+  <select aria-label="Process" bind:value={processId} data-no-pin>
+    <option value="">All processes</option>
     {#each procs as p (p)}<option value={p}>{name(p)}</option>{/each}
   </select>
-  <select aria-label="Modèle" bind:value={model} data-no-pin>
-    <option value="">Tous les modèles</option>
+  <select aria-label="Model" bind:value={model} data-no-pin>
+    <option value="">All models</option>
     {#each models as m (m)}<option value={m}>{m}</option>{/each}
   </select>
-  <label class="check"><input type="checkbox" bind:checked={follow} /> Suivre</label>
+  <label class="check"><input type="checkbox" bind:checked={follow} /> Follow</label>
   <span class="grow"></span>
   <span class="totals">
-    {rows.length} appel{rows.length > 1 ? 's' : ''} · entrée <strong>{n(totals.input)}</strong> · sortie
+    {rows.length} call{rows.length > 1 ? 's' : ''} · input <strong>{n(totals.input)}</strong> · output
     <strong>{n(totals.output)}</strong> · total <strong>{n(totals.input + totals.output)}</strong> · {formatDuration(totals.duration)}
-    {#if totals.errors}· <span class="err">{totals.errors} en erreur</span>{/if}
+    {#if totals.errors}· <span class="err">{totals.errors} in error</span>{/if}
   </span>
-  <button type="button" class="ghost small" title="Effacer" aria-label="Effacer les appels" onclick={clearTokens}><Icon name="clear" size={13} /></button>
+  <button type="button" class="ghost small" title="Clear" aria-label="Clear calls" onclick={clearTokens}><Icon name="clear" size={13} /></button>
 </div>
 <div
   class="console-scroll"
@@ -66,8 +66,8 @@
     <table class="console-table">
       <thead>
         <tr>
-          <th>Heure</th><th>Processus</th><th>Agent</th><th>Action</th><th>Modèle</th>
-          <th class="num">Entrée</th><th class="num">Sortie</th><th class="num">Durée</th><th>Erreur</th>
+          <th>Time</th><th>Process</th><th>Agent</th><th>Action</th><th>Model</th>
+          <th class="num">Input</th><th class="num">Output</th><th class="num">Duration</th><th>Error</th>
         </tr>
       </thead>
       <tbody>
@@ -98,7 +98,7 @@
       </tfoot>
     </table>
   {:else}
-    <p class="console-empty">Aucun appel LLM enregistré (ils apparaissent avec les étapes des exécutions).</p>
+    <p class="console-empty">No LLM calls recorded (they appear alongside run steps).</p>
   {/if}
 </div>
 

@@ -7,12 +7,12 @@ import (
 )
 
 var goals = []GoalInfo{
-	{Name: "assess_impact", Description: "Évaluer l'impact d'un changement et produire un rapport", Examples: []string{"quel est l'impact", "qu'est-ce que ça casse"}},
-	{Name: "prepare_change", Description: "Préparer la modification du référentiel et la faire valider", Examples: []string{"mettre à jour les exigences"}},
+	{Name: "assess_impact", Description: "Assess the impact of a change and produce a report", Examples: []string{"what is the impact", "what does this break"}},
+	{Name: "prepare_change", Description: "Prepare the update of the repository and get it validated", Examples: []string{"update the requirements"}},
 }
 
 func TestResolveDirect(t *testing.T) {
-	s := &Session{Turns: []Turn{{Role: "user", Text: "Le PSP change d'API : qu'est-ce que ça casse ?"}}}
+	s := &Session{Turns: []Turn{{Role: "user", Text: "The PSP is changing its API: what does this break?"}}}
 	res, err := Resolver{Ranker: Lexical{}}.Resolve(context.Background(), s, goals)
 	if err != nil {
 		t.Fatal(err)
@@ -23,7 +23,7 @@ func TestResolveDirect(t *testing.T) {
 }
 
 func TestResolveClarifyThenChoose(t *testing.T) {
-	s := &Session{Turns: []Turn{{Role: "user", Text: "Le fournisseur de paiement change"}}}
+	s := &Session{Turns: []Turn{{Role: "user", Text: "The payment provider is changing"}}}
 	r := Resolver{Ranker: Lexical{}}
 	res, err := r.Resolve(context.Background(), s, goals)
 	if err != nil {

@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Barre d'activité verticale : une icône par outil de la zone.
+  // Vertical activity bar: one icon per tool in the area.
   import Icon from './Icon.svelte';
   import { viewsIn } from './registry';
   import { layout, toggleTool } from './layout.svelte';
@@ -20,7 +20,7 @@
   }
 </script>
 
-<div class="bar {side}" role="toolbar" aria-orientation="vertical" tabindex="-1" aria-label={side === 'left' ? 'Outils de navigation' : 'Outils latéraux'} onkeydown={keydown}>
+<div class="bar {side}" role="toolbar" aria-orientation="vertical" tabindex="-1" aria-label={side === 'left' ? 'Navigation tools' : 'Side tools'} onkeydown={keydown}>
   {#each views as v (v.id)}
     {@const on = open && active === v.id}
     {@const badge = v.badge?.()}

@@ -1,6 +1,6 @@
 <script lang="ts">
-  // Explorateur : méthodologie → version → sections (Agents, Actions,
-  // Conditions, Objectifs, Domaine) → éléments.
+  // Explorer: methodology → version → sections (Agents, Actions,
+  // Conditions, Goals, Domain) → items.
   import Icon from '../../shell/Icon.svelte';
   import TreeRow from '../TreeRow.svelte';
   import StatusBadge from '../../components/StatusBadge.svelte';
@@ -51,7 +51,7 @@
     if (expanded[k]) void getDraft(v.name ?? '', v.version ?? '');
   }
 
-  // Les versions dépliées (état restauré) chargent leur brouillon.
+  // Expanded versions (restored state) load their draft.
   $effect(() => {
     for (const m of methodologies.items) if (isOpen(`v:${vkey(m)}`)) getDraft(m.name ?? '', m.version ?? '');
   });
@@ -60,14 +60,14 @@
     openTab(methodologySpec(v.name ?? '', v.version ?? ''), { pin });
     select({
       title: `${v.name} v${v.version}`,
-      subtitle: 'Méthodologie',
+      subtitle: 'Methodology',
       rows: [
-        ['Statut', v.status ?? ''],
+        ['Status', v.status ?? ''],
         ['Description', v.description ?? ''],
         ['Agents', (v.agents ?? []).map((a) => a.name).join(', ') || '—'],
-        ['Objectifs', (v.goals ?? []).map((g) => g.name).join(', ') || '—'],
-        ['Modifiée', formatDate(v.updatedAt)],
-        ['Publiée', formatDate(v.publishedAt)],
+        ['Goals', (v.goals ?? []).map((g) => g.name).join(', ') || '—'],
+        ['Modified', formatDate(v.updatedAt)],
+        ['Published', formatDate(v.publishedAt)],
       ],
     });
   }
@@ -94,26 +94,26 @@
 
 <div class="explorer">
   <div class="tools">
-    <input type="search" placeholder="Filtrer…" aria-label="Filtrer les méthodologies" bind:value={filter} data-no-pin />
+    <input type="search" placeholder="Filter…" aria-label="Filter methodologies" bind:value={filter} data-no-pin />
     <button
       type="button"
       class="ghost small"
-      title="Nouvelle méthodologie"
-      aria-label="Nouvelle méthodologie"
+      title="New methodology"
+      aria-label="New methodology"
       onclick={() => openTab(methodologySpec('', ''), { pin: true })}><Icon name="plus" size={14} /></button
     >
     <button
       type="button"
       class="ghost small"
-      title="Importer YAML"
-      aria-label="Importer YAML"
+      title="Import YAML"
+      aria-label="Import YAML"
       onclick={() => openTab({ kind: 'import', params: {} }, { pin: true })}><Icon name="upload" size={14} /></button
     >
     <button
       type="button"
       class="ghost small"
-      title="Actualiser"
-      aria-label="Actualiser"
+      title="Refresh"
+      aria-label="Refresh"
       disabled={methodologies.loading}
       onclick={() => refreshMethodologies()}><Icon name="refresh" size={14} /></button
     >
@@ -121,10 +121,10 @@
 
   {#if methodologies.error}<div class="alert small">{methodologies.error}</div>{/if}
   {#if methodologies.loaded && !methodologies.items.length && !methodologies.error}
-    <p class="empty pad">Aucune méthodologie. Créez-en une ou importez un fichier YAML.</p>
+    <p class="empty pad">No methodologies. Create one or import a YAML file.</p>
   {/if}
 
-  <div role="tree" aria-label="Méthodologies">
+  <div role="tree" aria-label="Methodologies">
     {#each groups as g (g.name)}
       {@const gk = `m:${g.name}`}
       <TreeRow
@@ -158,7 +158,7 @@
           </TreeRow>
           {#if vOpen}
             {#if !d || d.loading}
-              <p class="empty pad2">Chargement…</p>
+              <p class="empty pad2">Loading…</p>
             {:else if d.loadError}
               <p class="alert small">{d.loadError}</p>
             {:else}
@@ -180,8 +180,8 @@
                     {#if !d.readonly}
                       <button
                         type="button"
-                        title="Ajouter"
-                        aria-label={`Ajouter : ${SECTION_LABEL[s]}`}
+                        title="Add"
+                        aria-label={`Add: ${SECTION_LABEL[s]}`}
                         onclick={(e) => {
                           e.stopPropagation();
                           add(d, s);
@@ -197,7 +197,7 @@
                     {@const dirty = d.itemDirty(s, it.uid)}
                     <TreeRow
                       depth={3}
-                      label={it.name || '(sans nom)'}
+                      label={it.name || '(unnamed)'}
                       italic={!it.name}
                       detail={itemDetail(s, it)}
                       active={tabsState.active === id}
@@ -208,7 +208,7 @@
                     />
                   {:else}
                     <p class="empty pad3">
-                      {s === 'agents' ? 'Aucun agent (agent par défaut : toutes les actions).' : 'Aucun élément.'}
+                      {s === 'agents' ? 'No agent (default agent: all actions).' : 'No items.'}
                     </p>
                   {/each}
                 {/if}
@@ -216,8 +216,8 @@
               <TreeRow
                 depth={2}
                 icon="graph"
-                label="Domaine"
-                detail={`${d.form.nodeTypes.length} types · ${d.form.linkTypes.length} liens`}
+                label="Domain"
+                detail={`${d.form.nodeTypes.length} types · ${d.form.linkTypes.length} links`}
                 badge={d.count('nodeTypes') + d.count('linkTypes') || undefined}
                 badgeTone="danger"
                 onselect={() => openDomain(d)}

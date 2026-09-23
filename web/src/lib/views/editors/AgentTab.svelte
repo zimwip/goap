@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Onglet « agent » : planificateur, actions admissibles et objectifs.
+  // "Agent" tab: planner, eligible actions and goals.
   import { untrack } from 'svelte';
   import type { Tab } from '../../shell/types';
   import DraftHeader from './DraftHeader.svelte';
@@ -29,14 +29,14 @@
   );
 
   const PLANNER_LABELS: Record<string, string> = {
-    goap: 'GOAP — plan A* sur préconditions et effets',
-    utility: "Utility — à chaque pas, l'action d'utilité maximale",
-    hybrid: "Hybride — plan GOAP départagé par l'utilité",
+    goap: 'GOAP — A* plan over preconditions and effects',
+    utility: 'Utility — at each step, the highest-utility action',
+    hybrid: 'Hybrid — GOAP plan tie-broken by utility',
   };
 
   const actionNames = $derived([...new Set(d.form.actions.map((a) => a.name.trim()).filter(Boolean))]);
   const goalNames = $derived([...new Set(d.form.goals.map((g) => g.name.trim()).filter(Boolean))]);
-  const actionDetails = $derived(Object.fromEntries(d.form.actions.map((a) => [a.name, `${a.kind}${a.utility ? ' · utilité' : ''}`])));
+  const actionDetails = $derived(Object.fromEntries(d.form.actions.map((a) => [a.name, `${a.kind}${a.utility ? ' · utility' : ''}`])));
   const goalDetails = $derived(Object.fromEntries(d.form.goals.map((g) => [g.name, g.description])));
   const noUtility = $derived(
     item && item.planner !== 'goap'
@@ -47,12 +47,12 @@
 
 <div class="editor-page" bind:this={root}>
   {#if item}
-    <DraftHeader draft={d} icon="bot" kind="Agent" title={item.name || '(sans nom)'} dirty={d.itemDirty('agents', item.uid)} />
+    <DraftHeader draft={d} icon="bot" kind="Agent" title={item.name || '(unnamed)'} dirty={d.itemDirty('agents', item.uid)} />
     <fieldset class="plain" disabled={d.readonly}>
       <section class="card">
         <div class="grid">
           <div class="field">
-            <label for="ag-name">Nom <span class="opt">(minuscules, chiffres, - ou _)</span></label>
+            <label for="ag-name">Name <span class="opt">(lowercase, digits, - or _)</span></label>
             <input
               id="ag-name"
               type="text"
@@ -64,24 +64,24 @@
             />
           </div>
           <div class="field">
-            <label for="ag-planner">Planificateur</label>
+            <label for="ag-planner">Planner</label>
             <select id="ag-planner" bind:value={item.planner} class:bad={d.bad(`${p}.planner`)} data-path="{p}.planner">
               {#each PLANNERS as pl (pl)}<option value={pl}>{PLANNER_LABELS[pl]}</option>{/each}
             </select>
           </div>
         </div>
         <div class="field">
-          <label for="ag-desc">Description <span class="opt">(sert à identifier l'agent à partir d'une intention)</span></label>
+          <label for="ag-desc">Description <span class="opt">(used to identify the agent from an intent)</span></label>
           <textarea id="ag-desc" rows="2" bind:value={item.description} class:bad={d.bad(`${p}.description`)} data-path="{p}.description"
           ></textarea>
         </div>
         <div class="field">
-          <label for="ag-ex">Exemples d'intentions <span class="opt">(un par ligne)</span></label>
+          <label for="ag-ex">Intent examples <span class="opt">(one per line)</span></label>
           <textarea id="ag-ex" rows="4" bind:value={item.examples} class:bad={d.bad(`${p}.examples`)} data-path="{p}.examples"></textarea>
         </div>
         {#if noUtility.length}
           <div class="alert warn">
-            Planificateur {item.planner} : ces actions n'ont pas d'expression d'utilité —
+            Planner {item.planner}: these actions have no utility expression —
             {noUtility.join(', ')}.
           </div>
         {/if}
@@ -91,8 +91,8 @@
           bind:selected={item.actions}
           options={actionNames}
           details={actionDetails}
-          allLabel="toutes les actions"
-          label="Actions admissibles"
+          allLabel="all actions"
+          label="Eligible actions"
           path="{p}.actions"
           bad={d.bad}
           readonly={d.readonly}
@@ -101,8 +101,8 @@
           bind:selected={item.goals}
           options={goalNames}
           details={goalDetails}
-          allLabel="tous les objectifs"
-          label="Objectifs"
+          allLabel="all goals"
+          label="Goals"
           path="{p}.goals"
           bad={d.bad}
           readonly={d.readonly}

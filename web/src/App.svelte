@@ -1,6 +1,6 @@
 <script lang="ts">
-  // Racine : coquille de l'IDE, flux d'événements global, validation de fond
-  // du brouillon actif et garde de sortie.
+  // Root: IDE shell, global event stream, background validation
+  // of the active draft, and exit guard.
   import './lib/views';
   import './lib/stores/notifications.svelte';
   import Shell from './lib/shell/Shell.svelte';
@@ -15,7 +15,7 @@
     return stop;
   });
 
-  // Validation automatique du brouillon actif, 800 ms après la dernière modification.
+  // Automatic validation of the active draft, 800 ms after the last change.
   $effect(() => {
     const d = activeDraft();
     if (!d || d.readonly || d.isNew || d.loading) return;

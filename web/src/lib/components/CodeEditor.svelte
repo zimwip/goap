@@ -1,6 +1,6 @@
 <script lang="ts">
-  // Éditeur de code CodeMirror 6 lié à une chaîne (`bind:value`). CodeMirror
-  // est chargé à la demande (morceau séparé du bundle).
+  // CodeMirror 6 code editor bound to a string (`bind:value`). CodeMirror
+  // is loaded on demand (separate bundle chunk).
   import { onMount } from 'svelte';
   import type { CodeLanguage } from '../codemirror';
 
@@ -24,18 +24,18 @@
     value?: string;
     language?: CodeLanguage;
     readonly?: boolean;
-    /** complétion de l'API ctx des actions script */
+    /** completion for the ctx API of script actions */
     dsl?: boolean;
     lineNumbers?: boolean;
     wrap?: boolean;
     placeholder?: string;
     minHeight?: string;
     maxHeight?: string;
-    /** libellé accessible */
+    /** accessible label */
     label?: string;
     id?: string;
     bad?: boolean;
-    /** chemin des problèmes de validation */
+    /** path of validation issues */
     path?: string;
   } = $props();
 
@@ -88,7 +88,7 @@
     });
   }
 
-  // Valeur modifiée de l'extérieur (annulation, rechargement…).
+  // Value changed from the outside (undo, reload…).
   $effect(() => {
     const v = value;
     if (view && v !== view.state.doc.toString()) {
@@ -111,7 +111,7 @@
 <div class="code" class:bad class:readonly data-path={path} style:--min-h={minHeight} style:--max-h={maxHeight}>
   <div bind:this={host}></div>
   {#if !view}
-    <!-- Repli pendant le chargement de CodeMirror. -->
+    <!-- Fallback while CodeMirror is loading. -->
     <textarea class="mono fallback" {id} aria-label={label} bind:value readonly={readonly} {placeholder} spellcheck="false"></textarea>
   {/if}
 </div>

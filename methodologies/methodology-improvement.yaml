@@ -1,13 +1,13 @@
 name: methodology-improvement
 version: 1.0.0
 description: >
-  Auto-observation de la plateforme : à la fin de chaque processus, un agent
-  analyse le journal d'exécution (ticks de planification, actions, appels LLM
-  et outils) et les traces OpenTelemetry du run, repère les éléments trop
-  coûteux (boucles, échecs, LLM là où l'action est systématisable, points
-  lents) et propose d'améliorer la méthodologie : spécialisations, définition
-  des agents, nouvelles actions, outils MCP. Les propositions acceptées
-  deviennent une nouvelle version brouillon de la méthodologie.
+  Platform self-observation: at the end of each process, an agent analyzes the
+  execution journal (planning ticks, actions, LLM and tool calls) and the
+  OpenTelemetry traces of the run, spots the elements that are too costly
+  (loops, failures, LLM calls where the action is systematizable, slow
+  points) and proposes improvements to the methodology: specializations,
+  agent definitions, new actions, MCP tools. Accepted proposals become a new
+  draft version of the methodology.
 
 domain:
   nodeTypes:
@@ -31,24 +31,25 @@ domain:
 
 conditions:
   - name: analyzed
-    description: Le coût du run observé est analysé (journal + traces)
+    description: The cost of the observed run has been analyzed (journal + traces)
     expr: artifacts.exists(a, a.type == "cost_report")
   - name: has_findings
-    description: L'analyse a relevé des points durs
+    description: The analysis found pain points
     expr: artifacts.exists(a, a.type == "cost_report" && size(a.data.findings) > 0)
   - name: proposed
-    description: Des améliorations sont proposées (ou l'analyse n'en a pas tiré)
+    description: Improvements have been proposed (or the analysis found none)
     expr: artifacts.exists(a, a.type == "improvement_plan")
   - name: reviewed
-    description: Chaque proposition a reçu une décision
+    description: Every proposal has received a decision
     expr: size(proposals) > 0 && proposals.all(p, p.status != "proposed")
   - name: drafted
-    description: Les améliorations acceptées sont intégrées dans un brouillon de la méthodologie
+    description: The accepted improvements are integrated into a draft of the methodology
     expr: artifacts.exists(a, a.type == "methodology_draft")
   - name: settled
     description: >
-      L'observation est close : brouillon produit, ou rien à améliorer (aucun
-      constat, ou aucune proposition) — le but est alors atteint dès l'analyse.
+      The observation is closed: a draft was produced, or there is nothing to
+      improve (no findings, or no proposal) — the goal is then reached as soon
+      as the analysis is done.
     expr: >
       artifacts.exists(a, a.type == "methodology_draft")
       || artifacts.exists(a, a.type == "cost_report" && size(a.data.findings) == 0)
@@ -59,15 +60,16 @@ actions:
     kind: builtin
     builtin: observe.analyze
     description: >
-      Analyser le run observé : journal d'exécution du change (et des sous-agents),
-      spans OpenTelemetry de sa trace ; statistiques par action et constats.
+      Analyze the observed run: execution journal of the change (and its
+      sub-agents), OpenTelemetry spans of its trace; per-action statistics and
+      findings.
     pre: {analyzed: false}
     effects: {analyzed: true}
     cost: 1
 
   - name: propose_improvements
     kind: abstract
-    description: Proposer des améliorations de la méthodologie à partir des constats
+    description: Propose improvements to the methodology from the findings
     pre: {analyzed: true, proposed: false}
     effects: {proposed: true}
     cost: 1
@@ -77,9 +79,10 @@ actions:
     builtin: observe.propose
     specializes: propose_improvements
     description: >
-      Règles : spécialiser par un script une action LLM à sortie régulière, modèle
-      rapide pour une action LLM coûteuse, renchérir une action qui boucle, retirer
-      d'un agent une action désactivée, demander un outil MCP pour un point lent.
+      Rules: specialize a regular-output LLM action with a script, use a
+      faster model for a costly LLM action, raise the cost of a looping
+      action, remove a disabled action from an agent, request an MCP tool for
+      a slow point.
 
   - name: propose_with_llm
     kind: llm
@@ -87,27 +90,27 @@ actions:
     when: vars.llm_review == true
     priority: 10
     model: reasoning
-    description: Analyse par un LLM du rapport de coût (activer avec la variable llm_review)
+    description: LLM analysis of the cost report (enable with the llm_review variable)
     prompt: |
-      Tu améliores une méthodologie d'entreprise exécutée par des agents GOAP.
-      Voici le rapport de coût d'une exécution (journal + traces) :
+      You are improving an enterprise methodology run by GOAP agents.
+      Here is the cost report of a run (journal + traces):
       {{range .Artifacts}}{{if eq .Type "cost_report"}}{{json .Data}}{{end}}{{end}}
 
-      Propose des modifications des éléments de la méthodologie (nœuds de clé
-      « M:<méthodologie>/<action|agent|goal|condition>/<nom> ») :
-      - update_node sur une action (kind, model, cost, prompt, code…) ou un agent (actions, planner) ;
-      - create_node de type Action avec « specializes » (spécialisation, script systématisant un appel LLM) ;
-      - create_node de type ToolRequest pour un outil MCP à créer (name, description, motivation).
-      Chaque proposition porte data.title et data.rationale. Termine par un
-      artifact de type "improvement_plan" avec data.notes (liste de remarques).
+      Propose changes to the elements of the methodology (nodes with key
+      "M:<methodology>/<action|agent|goal|condition>/<name>"):
+      - update_node on an action (kind, model, cost, prompt, code…) or an agent (actions, planner);
+      - create_node of type Action with "specializes" (specialization, a script systematizing an LLM call);
+      - create_node of type ToolRequest for an MCP tool to be created (name, description, motivation).
+      Each proposal carries data.title and data.rationale. Finish with an
+      artifact of type "improvement_plan" with data.notes (a list of remarks).
 
   - name: review_improvements
     kind: human
-    description: Revue des propositions d'amélioration par un méthodologiste
+    description: Review of improvement proposals by a methodologist
     instructions: >
-      Accepter ou rejeter chaque proposition (décisions). Les propositions
-      acceptées seront intégrées dans une nouvelle version brouillon de la
-      méthodologie, à publier depuis l'éditeur.
+      Accept or reject each proposal (decisions). Accepted proposals will be
+      integrated into a new draft version of the methodology, to be published
+      from the editor.
     pre: {proposed: true, reviewed: false}
     effects: {reviewed: true}
     cost: 1
@@ -115,7 +118,7 @@ actions:
   - name: draft_methodology
     kind: builtin
     builtin: methodology.draft
-    description: Créer la nouvelle version brouillon de la méthodologie avec les propositions acceptées
+    description: Create the new draft version of the methodology with the accepted proposals
     pre: {reviewed: true, drafted: false}
     effects: {drafted: true, settled: true}
     permission: methodology:write
@@ -123,24 +126,24 @@ actions:
 
 goals:
   - name: improve_methodology
-    description: Rendre la méthodologie moins coûteuse à partir de ses exécutions
+    description: Make the methodology less costly based on its executions
     examples:
-      - analyser le coût d'une exécution
-      - améliorer la méthodologie à partir des exécutions
-      - trouver les points durs d'un agent
+      - analyze the cost of a run
+      - improve the methodology from its executions
+      - find the pain points of an agent
     pre: {settled: true}
     value: 10
 
 agents:
   - name: observer
-    description: Observe les exécutions terminées et propose d'améliorer leur méthodologie
+    description: Observes completed runs and proposes to improve their methodology
     examples:
-      - pourquoi ce processus a-t-il coûté autant
-      - améliorer la méthodologie à partir de ses exécutions
+      - why did this process cost so much
+      - improve the methodology from its executions
     planner: goap
     triggers:
       - name: on_process_end
-        description: Observer chaque processus racine terminé (hors auto-observation)
+        description: Observe every completed root process (excluding self-observation)
         type: event
         event: process.completed
         filter: event.process.methodology != "methodology-improvement" && event.process.parent == ""
@@ -148,7 +151,7 @@ agents:
         roles: [methodologist]
         enabled: true
       - name: on_process_failure
-        description: Observer les processus en échec
+        description: Observe failed processes
         type: event
         event: process.failed
         filter: event.process.methodology != "methodology-improvement" && event.process.parent == ""
@@ -156,7 +159,7 @@ agents:
         roles: [methodologist]
         enabled: true
       - name: on_process_stuck
-        description: Observer les processus bloqués (aucun plan n'atteint le but)
+        description: Observe stuck processes (no plan reaches the goal)
         type: event
         event: process.stuck
         filter: event.process.methodology != "methodology-improvement" && event.process.parent == ""

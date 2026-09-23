@@ -1,24 +1,24 @@
-# ADR 0008 — Observabilité OpenTelemetry, un processus = une trace
+# ADR 0008 — OpenTelemetry observability, one process = one trace
 
-**Statut** : accepté · **Date** : 2026-09
+**Status**: accepted · **Date**: 2026-09
 
-## Contexte
-Il faut suivre l'ensemble des appels et surtout chaque appel LLM et chaque outil utilisé, avec les
-tokens consommés, et les rattacher au processus, à l'agent et à l'action.
+## Context
+All calls must be tracked, especially every LLM call and every tool used, with
+tokens consumed, and attributed to the process, the agent, and the action.
 
-## Décision
-- OpenTelemetry (SDK Go), export OTLP vers un **collector** (Jaeger pour les traces, Prometheus pour les
-  métriques, Grafana pour la visualisation) ; configuration par les variables `OTEL_*` standard.
-- Instrumentation : Echo, Connect (`otelconnect`, parent distant de confiance entre services internes),
-  pgx, NATS (contexte dans les en-têtes), proxy de la gateway.
-- Spans métier : `process <agent>` (le `traceparent` est persisté dans le processus pour que les
-  exécutions en arrière-plan, reprises et sous-agents restent dans la même trace), `action <nom>`,
-  `chat <modèle>` (conventions GenAI) dans le model gateway, `execute_tool <nom>`.
-- Attribution des appels LLM par **baggage** (`goap.process.id`, `goap.agent`, `goap.action`,
-  `goap.methodology`) posé par le moteur et lu par le model gateway ; l'identifiant de processus n'est pas
-  mis dans les métriques (cardinalité).
-- Les compteurs (tokens, appels) sont également persistés dans le processus pour l'IDE.
+## Decision
+- OpenTelemetry (Go SDK), OTLP export to a **collector** (Jaeger for traces, Prometheus for
+  metrics, Grafana for visualization); configured via the standard `OTEL_*` variables.
+- Instrumentation: Echo, Connect (`otelconnect`, trusted remote parent between internal
+  services), pgx, NATS (context in headers), gateway proxy.
+- Business spans: `process <agent>` (the `traceparent` is persisted in the process so that
+  background executions, resumptions, and sub-agents stay in the same trace), `action <name>`,
+  `chat <model>` (GenAI conventions) in the model gateway, `execute_tool <name>`.
+- LLM calls attributed via **baggage** (`goap.process.id`, `goap.agent`, `goap.action`,
+  `goap.methodology`) set by the engine and read by the model gateway; the process ID is not
+  put into metrics (cardinality).
+- Counters (tokens, calls) are also persisted in the process for the IDE.
 
-## Conséquences
-- Une trace peut durer longtemps (processus en attente d'un humain) : acceptable pour Jaeger, à surveiller
-  pour l'échantillonnage (tail sampling dans le collector si nécessaire).
+## Consequences
+- A trace can last a long time (process waiting on a human): acceptable for Jaeger, to watch
+  for sampling purposes (tail sampling in the collector if needed).

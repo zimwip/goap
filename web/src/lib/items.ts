@@ -1,10 +1,10 @@
-// Mise en forme des items d'un changement (résolution des clés de nœuds).
+// Formatting of a change's items (resolution of node keys).
 import type { ChangeItem, Endpoint, GraphNode, JsonValue, NodeRef } from './api';
 
 export interface ItemContext {
-  /** Nœuds du référentiel de départ, indexés par identifiant. */
+  /** Nodes from the starting baseline, indexed by id. */
   nodes: Map<string, GraphNode>;
-  /** Items du changement, indexés par identifiant. */
+  /** Items of the change, indexed by id. */
   items: Map<string, ChangeItem>;
 }
 
@@ -27,24 +27,24 @@ function endpointKey(ctx: ItemContext, ep: Endpoint | undefined): string {
   if (ep.item) {
     const it = ctx.items.get(ep.item);
     const key = it?.proposal?.node?.key;
-    return key ? `${key} (nouveau)` : `item ${ep.item.slice(0, 8)}`;
+    return key ? `${key} (new)` : `item ${ep.item.slice(0, 8)}`;
   }
   return '?';
 }
 
 const OPS: Record<string, string> = {
-  create_node: 'Créer',
-  update_node: 'Modifier',
-  delete_node: 'Supprimer',
-  add_link: 'Lier',
-  remove_link: 'Délier',
+  create_node: 'Create',
+  update_node: 'Update',
+  delete_node: 'Delete',
+  add_link: 'Link',
+  remove_link: 'Unlink',
 };
 
 export function opLabel(op: string | undefined): string {
   return OPS[op ?? ''] ?? op ?? '?';
 }
 
-/** Résumé d'une ligne d'une proposition. */
+/** Summary of a proposal line. */
 export function describeProposal(ctx: ItemContext, item: ChangeItem | undefined): string {
   const p = item?.proposal;
   if (!p) return item?.id ? `item ${item.id.slice(0, 8)}` : '?';
@@ -57,7 +57,7 @@ export function describeProposal(ctx: ItemContext, item: ChangeItem | undefined)
   return `${opLabel(p.op)} ${key}${type ? ` (${type})` : ''}`;
 }
 
-/** Texte d'une valeur JSON pour l'affichage compact. */
+/** Text of a JSON value for compact display. */
 export function show(v: JsonValue | undefined): string {
   if (v === undefined || v === null) return '';
   return typeof v === 'string' ? v : JSON.stringify(v);

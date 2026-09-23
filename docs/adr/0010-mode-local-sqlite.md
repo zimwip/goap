@@ -1,31 +1,31 @@
-# ADR 0010 — Mode local sans conteneur (SQLite)
+# ADR 0010 — Local mode without containers (SQLite)
 
-**Statut** : accepté · **Date** : 2026-09
+**Status**: accepted · **Date**: 2026-09
 
-## Contexte
-La pile complète (compose : PostgreSQL, NATS, Vault, services, observabilité) est lourde pour travailler sur
-une méthodologie ou sur l'IDE. `goap-dev` (tout-en-un en mémoire) perd tout à l'arrêt : graphe, méthodologies
-éditées, politiques, processus en attente d'une action humaine.
+## Context
+The full stack (compose: PostgreSQL, NATS, Vault, services, observability) is heavy for working on
+a methodology or on the IDE. `goap-dev` (all-in-one in memory) loses everything on stop: graph,
+edited methodologies, policies, processes waiting on a human action.
 
-## Décision
-- `goap-dev` choisit son stockage par `GOAP_STORE` : `memory` (défaut) ou `sqlite`, un **fichier unique**
-  (`GOAP_SQLITE_PATH`, défaut `.goap/goap.db`) partagé par le graphe, le registry, l'IAM et le moteur.
-- Pilote **`modernc.org/sqlite`** (Go pur, sans cgo) : rien à installer hors Go (et Node pour l'IDE).
-- Chaque composant a ses migrations SQLite (`migrations_sqlite/`), suivies par composant dans
-  `schema_migrations` ; mêmes interfaces de stockage que PostgreSQL (`graph.Repo`, `registrysvc.Store`,
-  adaptateur Casbin, `engine.Store`) et mêmes tests (le graphe, le registry et l'IAM tournent sur mémoire,
-  SQLite et PostgreSQL).
-- Le graphe garde le modèle normalisé (versions, liens, baselines, branches) ; les méthodologies et les
-  processus sont des documents JSON (interrogeables avec les fonctions JSON de SQLite).
-- Une seule connexion en écriture (SQLite n'a qu'un écrivain), WAL, clés étrangères actives.
-- Au démarrage, les processus restés `running` sont marqués `failed` (pas de work-queue à reprendre) ;
-  les processus `waiting` / `clarifying` reprennent normalement.
-- `goap-dev` sert l'IDE compilé (`GOAP_WEB_DIR`, défaut `web/dist`) avec repli SPA ; `make devlocal`
-  recompile l'IDE si ses sources ont changé puis lance le tout sur http://localhost:8080.
-- Les scripts s'exécutent dans le processus (`GOAP_SANDBOX=inproc`) ou en sous-processus
-  (`GOAP_SANDBOX=process`), sans docker.
+## Decision
+- `goap-dev` selects its storage via `GOAP_STORE`: `memory` (default) or `sqlite`, a **single file**
+  (`GOAP_SQLITE_PATH`, default `.goap/goap.db`) shared by the graph, the registry, IAM, and the engine.
+- **`modernc.org/sqlite`** driver (pure Go, no cgo): nothing to install besides Go (and Node for the IDE).
+- Each component has its own SQLite migrations (`migrations_sqlite/`), tracked per component in
+  `schema_migrations`; same storage interfaces as PostgreSQL (`graph.Repo`, `registrysvc.Store`,
+  Casbin adapter, `engine.Store`) and the same tests (the graph, registry, and IAM run on memory,
+  SQLite, and PostgreSQL).
+- The graph keeps the normalized model (versions, links, baselines, branches); methodologies and
+  processes are JSON documents (queryable with SQLite's JSON functions).
+- A single write connection (SQLite has only one writer), WAL, foreign keys enabled.
+- On startup, processes left `running` are marked `failed` (no work-queue to resume);
+  `waiting` / `clarifying` processes resume normally.
+- `goap-dev` serves the compiled IDE (`GOAP_WEB_DIR`, default `web/dist`) with an SPA fallback; `make devlocal`
+  rebuilds the IDE if its sources changed, then launches everything on http://localhost:8080.
+- Scripts run in-process (`GOAP_SANDBOX=inproc`) or as a subprocess
+  (`GOAP_SANDBOX=process`), without docker.
 
-## Conséquences
-- SQLite reste un mode de **développement** : pas de clustering, un seul processus ; la production reste
-  sur PostgreSQL (une base par service).
-- Toute évolution de schéma se fait dans les deux dialectes (`migrations/` et `migrations_sqlite/`).
+## Consequences
+- SQLite remains a **development** mode: no clustering, a single process; production stays
+  on PostgreSQL (one database per service).
+- Any schema change must be made in both dialects (`migrations/` and `migrations_sqlite/`).

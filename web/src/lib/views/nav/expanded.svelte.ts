@@ -1,4 +1,4 @@
-// État « déplié » des arbres des explorateurs, persisté.
+// "Expanded" state of the explorer trees, persisted.
 import { loadRaw, save } from '../../shell/storage';
 
 const KEY = 'goap.ide.expanded';

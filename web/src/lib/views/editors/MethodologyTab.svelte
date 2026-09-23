@@ -1,6 +1,6 @@
 <script lang="ts">
-  // Onglet « méthodologie » : général, domaine (types de nœuds et de liens) et
-  // contenu (agents, actions, conditions, objectifs).
+  // Methodology tab: general, domain (node types and link types), and
+  // content (agents, actions, conditions, goals).
   import { untrack } from 'svelte';
   import type { Tab } from '../../shell/types';
   import Icon from '../../shell/Icon.svelte';
@@ -32,7 +32,7 @@
 
   let { tab }: { tab: Tab } = $props();
 
-  // Le composant est recréé pour chaque onglet : le brouillon est résolu une fois.
+  // The component is recreated for each tab: the draft is resolved once.
   const d = untrack(() => draftOf(tab));
   const f = $derived(d.form);
   let root = $state<HTMLElement>();
@@ -48,7 +48,7 @@
     drafts.delete('new');
     getDraft(name, version);
     replaceTab(tab.id, methodologySpec(name, version));
-    notify(`Méthodologie ${name} v${version} créée.`, 'ok');
+    notify(`Methodology ${name} v${version} created.`, 'ok');
   }
 
   provideActions(
@@ -58,7 +58,7 @@
         ? [
             {
               id: 'save',
-              label: d.busy === 'save' ? 'Création…' : 'Créer le brouillon',
+              label: d.busy === 'save' ? 'Creating…' : 'Create draft',
               icon: 'save',
               primary: true,
               shortcut: 'Ctrl+S',
@@ -92,18 +92,18 @@
 
 <div class="editor-page" bind:this={root}>
   {#if d.loading}
-    <p class="empty">Chargement…</p>
+    <p class="empty">Loading…</p>
   {:else if d.loadError}
     <div class="alert">{d.loadError}</div>
   {:else}
-    <DraftHeader draft={d} icon="book" kind="Méthodologie" title={d.isNew ? 'Nouvelle méthodologie' : d.label} dirty={d.dirty} />
+    <DraftHeader draft={d} icon="book" kind="Methodology" title={d.isNew ? 'New methodology' : d.label} dirty={d.dirty} />
 
     <fieldset class="plain" disabled={d.readonly}>
       <section class="card" id="m-general">
-        <h3>Général</h3>
+        <h3>General</h3>
         <div class="grid">
           <div class="field">
-            <label for="m-name">Nom</label>
+            <label for="m-name">Name</label>
             <input
               id="m-name"
               type="text"
@@ -136,41 +136,41 @@
         </div>
         {#if d.meta.updatedAt || d.meta.publishedAt}
           <p class="hint">
-            {#if d.meta.createdAt}Créée le {formatDate(d.meta.createdAt)}.{/if}
-            {#if d.meta.updatedAt}Modifiée le {formatDate(d.meta.updatedAt)}{d.meta.updatedBy ? ` par ${d.meta.updatedBy}` : ''}.{/if}
-            {#if d.meta.publishedAt}Publiée le {formatDate(d.meta.publishedAt)}.{/if}
+            {#if d.meta.createdAt}Created on {formatDate(d.meta.createdAt)}.{/if}
+            {#if d.meta.updatedAt}Modified on {formatDate(d.meta.updatedAt)}{d.meta.updatedBy ? ` by ${d.meta.updatedBy}` : ''}.{/if}
+            {#if d.meta.publishedAt}Published on {formatDate(d.meta.publishedAt)}.{/if}
           </p>
         {/if}
         {#if d.isNew}
-          <p class="hint">Créez le brouillon pour ajouter le domaine, les agents, actions, conditions et objectifs.</p>
+          <p class="hint">Create the draft to add the domain, agents, actions, conditions, and goals.</p>
         {/if}
       </section>
 
       {#if !d.isNew}
         <section class="card" id="m-domain">
-          <h3>Domaine</h3>
-          <h4 data-path="nodeTypes">Types de nœuds</h4>
+          <h3>Domain</h3>
+          <h4 data-path="nodeTypes">Node types</h4>
           {#each f.nodeTypes as n, i}
             <div class="item nt" class:has-issues={d.count(`nodeTypes[${i}]`) > 0} data-path="nodeTypes[{i}]">
               <input
                 type="text"
                 class="mono"
-                aria-label="Nom du type de nœud"
+                aria-label="Node type name"
                 bind:value={n.name}
                 class:bad={d.bad(`nodeTypes[${i}].name`)}
                 data-path="nodeTypes[{i}].name"
                 placeholder="Requirement"
               />
               <select
-                aria-label="Type parent (étend)"
-                title="Type parent : le sous-type hérite de ses propriétés et des types de liens qui l'acceptent"
+                aria-label="Parent type (extends)"
+                title="Parent type: the subtype inherits its properties and the link types that accept it"
                 bind:value={n.extends}
                 class:bad={d.bad(`nodeTypes[${i}].extends`)}
                 data-path="nodeTypes[{i}].extends"
               >
-                <option value="">— aucun parent —</option>
-                {#if n.extends && !d.nodeTypeNames.includes(n.extends)}<option value={n.extends}>{n.extends} (inconnu)</option>{/if}
-                {#each d.nodeTypeNames.filter((t) => t !== n.name.trim()) as t (t)}<option value={t}>étend {t}</option>{/each}
+                <option value="">— no parent —</option>
+                {#if n.extends && !d.nodeTypeNames.includes(n.extends)}<option value={n.extends}>{n.extends} (unknown)</option>{/if}
+                {#each d.nodeTypeNames.filter((t) => t !== n.name.trim()) as t (t)}<option value={t}>extends {t}</option>{/each}
               </select>
               <input
                 type="text"
@@ -183,7 +183,7 @@
               <input
                 type="text"
                 class="mono"
-                aria-label="Propriétés (séparées par des virgules)"
+                aria-label="Properties (comma-separated)"
                 bind:value={n.properties}
                 class:bad={d.bad(`nodeTypes[${i}].properties`)}
                 data-path="nodeTypes[{i}].properties"
@@ -193,66 +193,66 @@
                 <RowTools
                   index={i}
                   count={f.nodeTypes.length}
-                  label="le type de nœud"
+                  label="the node type"
                   onmove={(delta) => moveItem(f.nodeTypes, i, delta)}
                   onremove={() => f.nodeTypes.splice(i, 1)}
                 />
               {/if}
             </div>
           {:else}
-            <p class="empty">Aucun type de nœud.</p>
+            <p class="empty">No node types.</p>
           {/each}
           {#if !d.readonly}
-            <button type="button" class="small" onclick={() => f.nodeTypes.push(emptyNodeType())}>+ Type de nœud</button>
+            <button type="button" class="small" onclick={() => f.nodeTypes.push(emptyNodeType())}>+ Node type</button>
           {/if}
           <p class="hint cols">
-            Colonnes : nom · type parent · description · propriétés (séparées par des virgules). Un sous-type hérite des
-            propriétés et des types de liens de son parent ; les conditions sur le parent s'y appliquent (<code>x.types</code>
-            contient tous les super-types).
+            Columns: name · parent type · description · properties (comma-separated). A subtype inherits its parent's
+            properties and link types; conditions on the parent apply to it as well (<code>x.types</code>
+            contains all supertypes).
           </p>
 
-          <h4 class="sub" data-path="linkTypes">Types de liens</h4>
+          <h4 class="sub" data-path="linkTypes">Link types</h4>
           {#each f.linkTypes as l, i}
             <div class="item" class:has-issues={d.count(`linkTypes[${i}]`) > 0} data-path="linkTypes[{i}]">
               <input
                 type="text"
                 class="mono"
-                aria-label="Nom du type de lien"
+                aria-label="Link type name"
                 bind:value={l.name}
                 class:bad={d.bad(`linkTypes[${i}].name`)}
                 data-path="linkTypes[{i}].name"
                 placeholder="verifies"
               />
-              <select aria-label="De" bind:value={l.from} class:bad={d.bad(`linkTypes[${i}].from`)} data-path="linkTypes[{i}].from">
-                <option value="">— de —</option>
-                {#if l.from && !d.nodeTypeNames.includes(l.from)}<option value={l.from}>{l.from} (inconnu)</option>{/if}
+              <select aria-label="From" bind:value={l.from} class:bad={d.bad(`linkTypes[${i}].from`)} data-path="linkTypes[{i}].from">
+                <option value="">— from —</option>
+                {#if l.from && !d.nodeTypeNames.includes(l.from)}<option value={l.from}>{l.from} (unknown)</option>{/if}
                 {#each d.nodeTypeNames as t (t)}<option value={t}>{t}</option>{/each}
               </select>
-              <select aria-label="Vers" bind:value={l.to} class:bad={d.bad(`linkTypes[${i}].to`)} data-path="linkTypes[{i}].to">
-                <option value="">— vers —</option>
-                {#if l.to && !d.nodeTypeNames.includes(l.to)}<option value={l.to}>{l.to} (inconnu)</option>{/if}
+              <select aria-label="To" bind:value={l.to} class:bad={d.bad(`linkTypes[${i}].to`)} data-path="linkTypes[{i}].to">
+                <option value="">— to —</option>
+                {#if l.to && !d.nodeTypeNames.includes(l.to)}<option value={l.to}>{l.to} (unknown)</option>{/if}
                 {#each d.nodeTypeNames as t (t)}<option value={t}>{t}</option>{/each}
               </select>
               {#if !d.readonly}
                 <RowTools
                   index={i}
                   count={f.linkTypes.length}
-                  label="le type de lien"
+                  label="the link type"
                   onmove={(delta) => moveItem(f.linkTypes, i, delta)}
                   onremove={() => f.linkTypes.splice(i, 1)}
                 />
               {/if}
             </div>
           {:else}
-            <p class="empty">Aucun type de lien.</p>
+            <p class="empty">No link types.</p>
           {/each}
           {#if !d.readonly}
-            <button type="button" class="small" onclick={() => f.linkTypes.push(emptyLinkType())}>+ Type de lien</button>
+            <button type="button" class="small" onclick={() => f.linkTypes.push(emptyLinkType())}>+ Link type</button>
           {/if}
         </section>
 
         <section class="card">
-          <h3>Contenu</h3>
+          <h3>Content</h3>
           <div class="content">
             {#each SECTIONS as s (s)}
               <div class="col" data-path={s}>
@@ -262,7 +262,7 @@
                   <span class="hint">{f[s].length}</span>
                   <span class="grow"></span>
                   {#if !d.readonly}
-                    <button type="button" class="small ghost" onclick={() => add(s)} aria-label={`Ajouter : ${SECTION_LABEL[s]}`}>+</button>
+                    <button type="button" class="small ghost" onclick={() => add(s)} aria-label={`Add: ${SECTION_LABEL[s]}`}>+</button>
                   {/if}
                 </div>
                 <ul>
@@ -273,13 +273,13 @@
                         type="button"
                         class="link"
                         onclick={() => openItem(d, s, it)}
-                        ondblclick={() => openItem(d, s, it, true)}>{it.name || '(sans nom)'}</button
+                        ondblclick={() => openItem(d, s, it, true)}>{it.name || '(unnamed)'}</button
                       >
                       <span class="hint ell">{summary(s, it)}</span>
                       {#if n}<span class="count">{n}</span>{/if}
                     </li>
                   {:else}
-                    <li class="empty">{s === 'agents' ? 'Agent par défaut (toutes les actions)' : 'Aucun'}</li>
+                    <li class="empty">{s === 'agents' ? 'Default agent (all actions)' : 'None'}</li>
                   {/each}
                 </ul>
               </div>

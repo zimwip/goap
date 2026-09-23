@@ -1,5 +1,5 @@
 <script lang="ts" module>
-  // Jeu d'icônes en ligne (traits 24×24, style « lucide »), sans dépendance.
+  // Inline icon set (24×24 strokes, "lucide" style), no dependency.
   const PATHS = {
     book: 'M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5',
     play: 'M6 4l14 8-14 8z',

@@ -1,5 +1,5 @@
-// Catalogues partagés par les explorateurs, le testeur et la recherche :
-// méthodologies (toutes versions), référentiels, changements.
+// Catalogs shared by the explorers, the tester and search: methodologies
+// (all versions), baselines, changes.
 import {
   registry,
   graph,
@@ -59,7 +59,7 @@ export interface MethodologyGroup {
   versions: MethodologySummary[];
 }
 
-/** Versions regroupées par nom, de la plus récente à la plus ancienne. */
+/** Versions grouped by name, from most recent to oldest. */
 export function groupedMethodologies(): MethodologyGroup[] {
   const byName = new Map<string, MethodologySummary[]>();
   for (const m of methodologies.items) {
@@ -75,7 +75,7 @@ export function groupedMethodologies(): MethodologyGroup[] {
   return out.sort((a, b) => a.name.localeCompare(b.name));
 }
 
-/** Seules les versions publiées sont exécutables : la plus récente par nom. */
+/** Only published versions are executable: the most recent one per name. */
 export function latestPublished(): MethodologySummary[] {
   const best = new Map<string, MethodologySummary>();
   for (const m of methodologies.items) {

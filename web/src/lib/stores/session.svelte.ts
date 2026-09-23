@@ -1,4 +1,4 @@
-// Identité courante (IamService.WhoAmI), rafraîchie à chaque changement de jeton.
+// Current identity (IamService.WhoAmI), refreshed on every token change.
 import { iam, onTokenChange, getToken, type Principal } from '../api';
 
 export const session = $state({
@@ -15,7 +15,7 @@ export async function refreshIdentity(): Promise<void> {
     session.error = '';
   } catch {
     session.principal = undefined;
-    session.error = 'identité inconnue';
+    session.error = 'unknown identity';
   } finally {
     session.loaded = true;
   }
@@ -23,7 +23,7 @@ export async function refreshIdentity(): Promise<void> {
 
 onTokenChange(() => void refreshIdentity());
 
-/** Sujet courant ('' : anonyme ou inconnu). */
+/** Current subject ('': anonymous or unknown). */
 export function me(): string {
   return session.principal?.subject ?? '';
 }

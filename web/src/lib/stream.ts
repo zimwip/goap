@@ -1,9 +1,9 @@
-// Flux serveur Connect (server streaming) depuis le navigateur, sans génération
-// de code : `POST /{Service}/{Method}` avec `Content-Type: application/connect+json`.
+// Connect server streaming from the browser, without code generation:
+// `POST /{Service}/{Method}` with `Content-Type: application/connect+json`.
 //
-// Requête : UNE enveloppe = 1 octet d'indicateurs (0) + longueur sur 4 octets
-// (big-endian) + JSON UTF-8. Réponse : une suite d'enveloppes ; l'indicateur
-// 0x02 marque l'enveloppe de fin de flux, dont le JSON peut contenir
+// Request: ONE envelope = 1 flags byte (0) + 4-byte length (big-endian) +
+// UTF-8 JSON. Response: a sequence of envelopes; flag 0x02 marks the
+// end-of-stream envelope, whose JSON may contain
 // `{"error": {"code", "message"}}`.
 
 import { BASE, RpcError, getToken, ENGINE_SERVICE, type WatchEvent } from './api';
@@ -29,10 +29,10 @@ function concat(a: Uint8Array, b: Uint8Array): Uint8Array {
 }
 
 /**
- * Appelle une RPC en flux serveur et transmet chaque message à `onMessage`.
- * Se résout à la fin normale du flux ; rejette avec une `RpcError` si le
- * serveur signale une erreur ou si le flux est coupé avant son enveloppe de fin.
- * `onOpen` est appelé dès la réception des en-têtes de réponse.
+ * Calls a server-streaming RPC and forwards each message to `onMessage`.
+ * Resolves on normal stream end; rejects with an `RpcError` if the server
+ * reports an error or if the stream is cut before its end-of-stream envelope.
+ * `onOpen` is called as soon as the response headers are received.
  */
 export async function serverStream<TReq extends object, TRes>(
   service: string,
@@ -59,7 +59,7 @@ export async function serverStream<TReq extends object, TRes>(
     });
   } catch (e) {
     if (signal.aborted) throw e;
-    throw new RpcError('unavailable', `Passerelle injoignable : ${String(e)}`, 0);
+    throw new RpcError('unavailable', `Gateway unreachable: ${String(e)}`, 0);
   }
 
   if (!res.ok || !res.body) {
@@ -68,7 +68,7 @@ export async function serverStream<TReq extends object, TRes>(
     try {
       err = JSON.parse(text) as typeof err;
     } catch {
-      // corps non JSON
+      // non-JSON body
     }
     throw new RpcError(err.code ?? (res.status === 404 ? 'unimplemented' : 'unknown'), err.message ?? (text || res.statusText), res.status);
   }
@@ -88,14 +88,14 @@ export async function serverStream<TReq extends object, TRes>(
         if (buf.length < 5 + len) break;
         const payload = buf.subarray(5, 5 + len);
         buf = buf.slice(5 + len);
-        if (flags & FLAG_COMPRESSED) throw new RpcError('internal', 'Message compressé non pris en charge', res.status);
+        if (flags & FLAG_COMPRESSED) throw new RpcError('internal', 'Compressed message not supported', res.status);
         const text = decoder.decode(payload);
         if (flags & FLAG_END_STREAM) {
           let end: { error?: { code?: string; message?: string } } = {};
           try {
             end = text ? (JSON.parse(text) as typeof end) : {};
           } catch {
-            // fin de flux illisible : considérée comme normale
+            // unreadable end-of-stream: treated as normal
           }
           if (end.error) throw new RpcError(end.error.code ?? 'unknown', end.error.message ?? '', res.status);
           return;
@@ -107,17 +107,17 @@ export async function serverStream<TReq extends object, TRes>(
     reader.releaseLock();
   }
   if (signal.aborted) return;
-  throw new RpcError('unavailable', 'Flux interrompu avant sa fin', res.status);
+  throw new RpcError('unavailable', 'Stream interrupted before its end', res.status);
 }
 
 // ---------------------------------------------------------------------------
-// Abonnement durable avec reconnexion
+// Durable subscription with reconnection
 // ---------------------------------------------------------------------------
 
 export type StreamStatus = 'connecting' | 'open' | 'retrying' | 'stopped';
 
 export interface WatchOptions {
-  /** vide : tous les processus lisibles par l'appelant */
+  /** empty: all processes readable by the caller */
   processId?: string;
   onEvent: (e: WatchEvent) => void;
   onStatus?: (status: StreamStatus, error?: RpcError) => void;
@@ -127,8 +127,8 @@ const MIN_DELAY = 1000;
 const MAX_DELAY = 30_000;
 
 /**
- * S'abonne à `EngineService.WatchEvents` et se reconnecte avec un délai
- * exponentiel quand le flux se termine ou échoue. Renvoie la fonction d'arrêt.
+ * Subscribes to `EngineService.WatchEvents` and reconnects with an
+ * exponential delay when the stream ends or fails. Returns the stop function.
  */
 export function watchEvents(opts: WatchOptions): () => void {
   const ctrl = new AbortController();
@@ -149,7 +149,7 @@ export function watchEvents(opts: WatchOptions): () => void {
           'WatchEvents',
           opts.processId ? { processId: opts.processId } : {},
           (msg: WatchEvent) => {
-            delay = MIN_DELAY; // un message reçu : la connexion est saine
+            delay = MIN_DELAY; // a message was received: the connection is healthy
             opts.onEvent(msg);
           },
           ctrl.signal,
@@ -161,7 +161,7 @@ export function watchEvents(opts: WatchOptions): () => void {
       }
       if (ctrl.signal.aborted) break;
       status('retrying', failure);
-      // Les refus d'accès et RPC absentes ne se corrigent pas vite : attente longue.
+      // Access denials and missing RPCs don't get fixed quickly: wait longer.
       const slow = failure && ['unauthenticated', 'permission_denied', 'unimplemented'].includes(failure.code);
       const wait = slow ? MAX_DELAY : delay;
       delay = Math.min(delay * 2, MAX_DELAY);

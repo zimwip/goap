@@ -242,7 +242,7 @@ func Sync(ctx context.Context, g Graph, m *methodology.Methodology) (Result, err
 func sync(ctx context.Context, g Graph, m *methodology.Methodology) (Result, error) {
 	head, err := g.BranchHead(ctx, domain.MainBranch)
 	if errors.Is(err, graph.ErrNotFound) {
-		head, err = g.CreateBaseline(ctx, "Référentiel", nil)
+		head, err = g.CreateBaseline(ctx, "Repository", nil)
 	}
 	if err != nil {
 		return Result{}, err
@@ -328,8 +328,8 @@ func sync(ctx context.Context, g Graph, m *methodology.Methodology) (Result, err
 	if len(items) == 0 {
 		return res, nil
 	}
-	title := fmt.Sprintf("Méthodologie %s %s", m.Name, m.Version)
-	c, err := g.CreateChange(ctx, graph.NewChange{Title: title, Intent: "Publication de la méthodologie " + m.Name + " " + m.Version,
+	title := fmt.Sprintf("Methodology %s %s", m.Name, m.Version)
+	c, err := g.CreateChange(ctx, graph.NewChange{Title: title, Intent: "Publish methodology " + m.Name + " " + m.Version,
 		BaselineID: head.ID, Data: map[string]any{"metamodel": map[string]any{"methodology": m.Name, "version": m.Version}}})
 	if err != nil {
 		return res, err

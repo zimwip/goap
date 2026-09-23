@@ -1,5 +1,5 @@
-// État de la plateforme (GET /api/status, toutes les 15 s) et « mes
-// exécutions » en cours (ListProcesses mine + flux).
+// Platform status (GET /api/status, every 15 s) and "my runs" in progress
+// (ListProcesses mine + stream).
 import { SvelteSet } from 'svelte/reactivity';
 import { engine, errorMessage, platformStatus, RpcError, type PlatformStatus, type Process } from '../api';
 import { processes, ingestProcess, onLiveEvent } from './live.svelte';
@@ -20,7 +20,7 @@ export async function refreshHealth(): Promise<void> {
     health.error = '';
   } catch (e) {
     health.data = undefined;
-    // Passerelle injoignable : plateforme indisponible ; point d'accès absent : état inconnu.
+    // Gateway unreachable: platform unavailable; endpoint missing: status unknown.
     health.status = e instanceof RpcError && e.code === 'unimplemented' ? 'unknown' : 'down';
     health.error = errorMessage(e);
   } finally {
@@ -34,11 +34,11 @@ export function startHealth(): () => void {
   return () => clearInterval(t);
 }
 
-// --- mes exécutions -------------------------------------------------------------------------
+// --- my runs -------------------------------------------------------------------------
 
 export const ACTIVE = ['running', 'waiting', 'clarifying'];
 
-/** Identifiants renvoyés par ListProcesses { mine, rootsOnly }. */
+/** Ids returned by ListProcesses { mine, rootsOnly }. */
 const mineIds = new SvelteSet<string>();
 export const myRunsState = $state({ loading: false, error: '' });
 
@@ -59,13 +59,13 @@ export async function refreshMyRuns(): Promise<void> {
   }
 }
 
-// Processus racines démarrés par l'utilisateur et vus dans le flux.
+// Root processes started by the user and seen on the stream.
 onLiveEvent((e) => {
   const p = e.process;
   if (e.type === 'started' && p?.id && !p.parentId && (!me() || p.initiator?.subject === me())) mineIds.add(p.id);
 });
 
-/** Mes exécutions actives, les plus récentes d'abord. */
+/** My active runs, most recent first. */
 export function myActiveRuns(): Process[] {
   const out: Process[] = [];
   for (const id of mineIds) {

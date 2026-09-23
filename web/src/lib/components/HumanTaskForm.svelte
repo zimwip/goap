@@ -25,19 +25,19 @@
   let submitting = $state(false);
   let error = $state('');
 
-  // --- sélection des impacts
+  // --- impact selection
   let selected = $state<Record<string, boolean>>({});
   let reason = $state('');
   let filter = $state('');
 
-  // --- revue des propositions
+  // --- proposal review
   let decisions = $state<Record<string, boolean>>({});
 
-  // --- JSON brut
+  // --- raw JSON
   let raw = $state('');
   let showRaw = $state(false);
 
-  // Charge le changement et son référentiel de départ quand la tâche change.
+  // Loads the change and its starting baseline when the task changes.
   const changeId = $derived(process.changeId);
   const step = $derived(task?.step);
   $effect(() => {
@@ -120,7 +120,7 @@
     try {
       parsed = JSON.parse(raw || '[]');
     } catch (e) {
-      error = `JSON invalide : ${errorMessage(e)}`;
+      error = `Invalid JSON: ${errorMessage(e)}`;
       return;
     }
     const list = Array.isArray(parsed) ? parsed : [parsed];
@@ -130,7 +130,7 @@
 
 <section class="card task">
   <div class="row">
-    <h3 class="grow" style="margin: 0">Tâche humaine : <code>{action}</code></h3>
+    <h3 class="grow" style="margin: 0">Human task: <code>{action}</code></h3>
   </div>
   {#if task?.description}<p class="desc">{task.description}</p>{/if}
   {#if task?.instructions}<p class="instructions">{task.instructions}</p>{/if}
@@ -140,8 +140,8 @@
   {#if mode === 'select'}
     <form onsubmit={submitStructured}>
       <div class="row" style="margin-bottom: 0.5rem">
-        <strong class="grow">Éléments impactés ({selectedKeys.length})</strong>
-        <input class="filter" type="text" placeholder="Filtrer…" bind:value={filter} />
+        <strong class="grow">Impacted elements ({selectedKeys.length})</strong>
+        <input class="filter" type="text" placeholder="Filter…" bind:value={filter} />
       </div>
       <div class="nodes">
         {#each shownNodes as n (n.id)}
@@ -152,18 +152,18 @@
             <span class="title">{nodeTitle(n)}</span>
           </label>
         {:else}
-          <p class="empty">Aucun nœud.</p>
+          <p class="empty">No nodes.</p>
         {/each}
       </div>
       <div class="field" style="margin-top: 0.75rem">
-        <label for="ht-reason">Raison</label>
-        <textarea id="ht-reason" rows="2" bind:value={reason} placeholder="Pourquoi ces éléments sont-ils impactés ?"></textarea>
+        <label for="ht-reason">Reason</label>
+        <textarea id="ht-reason" rows="2" bind:value={reason} placeholder="Why are these elements impacted?"></textarea>
       </div>
       <div class="row">
         <button class="primary" type="submit" disabled={submitting || selectedKeys.length === 0}>
-          {submitting ? 'Envoi…' : 'Envoyer les impacts'}
+          {submitting ? 'Sending…' : 'Send impacts'}
         </button>
-        <button type="button" class="small" onclick={openRaw}>Voir / éditer en JSON</button>
+        <button type="button" class="small" onclick={openRaw}>View / edit as JSON</button>
       </div>
     </form>
   {:else if mode === 'review'}
@@ -175,26 +175,26 @@
             <li>
               <div class="row">
                 <span class="grow">{describeProposal(ctx, p)}</span>
-                <div class="toggle" role="group" aria-label="Décision">
+                <div class="toggle" role="group" aria-label="Decision">
                   <button
                     type="button"
                     class="small"
                     class:on-accept={decisions[id] !== false}
                     aria-pressed={decisions[id] !== false}
-                    onclick={() => (decisions[id] = true)}>Accepter</button
+                    onclick={() => (decisions[id] = true)}>Accept</button
                   >
                   <button
                     type="button"
                     class="small"
                     class:on-reject={decisions[id] === false}
                     aria-pressed={decisions[id] === false}
-                    onclick={() => (decisions[id] = false)}>Rejeter</button
+                    onclick={() => (decisions[id] = false)}>Reject</button
                   >
                 </div>
               </div>
               {#if p.proposal?.node?.props}
                 <details>
-                  <summary>Propriétés</summary>
+                  <summary>Properties</summary>
                   <pre>{JSON.stringify(p.proposal.node.props, null, 2)}</pre>
                 </details>
               {/if}
@@ -202,20 +202,20 @@
           {/each}
         </ul>
       {:else}
-        <p class="empty">Aucune proposition en attente de décision.</p>
+        <p class="empty">No proposals awaiting a decision.</p>
       {/if}
       <div class="row" style="margin-top: 0.75rem">
         <button class="primary" type="submit" disabled={submitting || pendingProposals.length === 0}>
-          {submitting ? 'Envoi…' : 'Envoyer les décisions'}
+          {submitting ? 'Sending…' : 'Send decisions'}
         </button>
-        <button type="button" class="small" onclick={openRaw}>Voir / éditer en JSON</button>
+        <button type="button" class="small" onclick={openRaw}>View / edit as JSON</button>
       </div>
     </form>
   {/if}
 
   {#if mode === 'raw' || showRaw}
     <div class="raw">
-      <label for="ht-raw">Items (format d'entrée du moteur, tableau JSON)</label>
+      <label for="ht-raw">Items (engine input format, JSON array)</label>
       <textarea
         id="ht-raw"
         class="mono"
@@ -225,10 +225,10 @@
       ></textarea>
       <div class="row" style="margin-top: 0.5rem">
         <button class="primary" type="button" onclick={submitRaw} disabled={submitting}>
-          {submitting ? 'Envoi…' : 'Envoyer le JSON'}
+          {submitting ? 'Sending…' : 'Send JSON'}
         </button>
         {#if mode !== 'raw'}
-          <button type="button" class="small" onclick={() => (showRaw = false)}>Masquer</button>
+          <button type="button" class="small" onclick={() => (showRaw = false)}>Hide</button>
         {/if}
       </div>
     </div>

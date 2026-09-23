@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Onglet « objectif » : conditions à atteindre, valeur, exemples d'intentions.
+  // "Goal" tab: conditions to reach, value, intent examples.
   import { untrack } from 'svelte';
   import type { Tab } from '../../shell/types';
   import CondRows from '../../components/CondRows.svelte';
@@ -32,12 +32,12 @@
 
 <div class="editor-page" bind:this={root}>
   {#if item}
-    <DraftHeader draft={d} icon="target" kind="Objectif" title={item.name || '(sans nom)'} dirty={d.itemDirty('goals', item.uid)} />
+    <DraftHeader draft={d} icon="target" kind="Goal" title={item.name || '(unnamed)'} dirty={d.itemDirty('goals', item.uid)} />
     <fieldset class="plain" disabled={d.readonly}>
       <section class="card">
         <div class="grid">
           <div class="field">
-            <label for="g-name">Nom</label>
+            <label for="g-name">Name</label>
             <input
               id="g-name"
               type="text"
@@ -54,7 +54,7 @@
             />
           </div>
           <div class="field">
-            <label for="g-value">Valeur</label>
+            <label for="g-value">Value</label>
             <input id="g-value" type="number" step="any" bind:value={item.value} class:bad={d.bad(`${p}.value`)} data-path="{p}.value" />
           </div>
         </div>
@@ -64,7 +64,7 @@
         </div>
         <div class="grid2">
           <div class="field">
-            <label for="g-ex">Exemples d'intentions <span class="opt">(un par ligne)</span></label>
+            <label for="g-ex">Intent examples <span class="opt">(one per line)</span></label>
             <textarea id="g-ex" rows="5" bind:value={item.examples} class:bad={d.bad(`${p}.examples`)} data-path="{p}.examples"></textarea>
           </div>
           <div class="field">
@@ -72,7 +72,7 @@
               bind:rows={item.pre}
               options={d.conditionOptions}
               path="{p}.pre"
-              label="Conditions à atteindre"
+              label="Conditions to reach"
               bad={d.bad}
               readonly={d.readonly}
             />
@@ -81,14 +81,14 @@
       </section>
     </fieldset>
     <p class="hint">
-      Agents visant cet objectif :
+      Agents targeting this goal:
       {#each agents as a, i (a.uid)}{i ? ', ' : ''}<button type="button" class="link" onclick={() => openItem(d, 'agents', a)}
-          >{a.name || '(sans nom)'}</button
+          >{a.name || '(unnamed)'}</button
         >{:else}
-        {d.form.agents.length ? 'aucun' : 'agent par défaut'}
+        {d.form.agents.length ? 'none' : 'default agent'}
       {/each}
     </p>
   {:else}
-    <ItemMissing draft={d} what="Objectif" />
+    <ItemMissing draft={d} what="Goal" />
   {/if}
 </div>

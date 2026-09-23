@@ -1,6 +1,6 @@
 <script lang="ts">
-  // Outil « Déclencheurs » : état des déclencheurs des agents publiés
-  // (ListTriggers) et déclenchement manuel (FireTrigger).
+  // "Triggers" tool: status of published agents' triggers
+  // (ListTriggers) and manual firing (FireTrigger).
   import Icon from '../../shell/Icon.svelte';
   import { engine, errorMessage, formatDate, shortId, type TriggerState } from '../../api';
   import { openTab } from '../../shell/tabs.svelte';
@@ -31,7 +31,7 @@
     void load();
     if (!methodologies.loaded) void refreshMethodologies();
     const t = setInterval(() => void load(), 30_000);
-    // Un processus lancé par un déclencheur met à jour les compteurs.
+    // A process launched by a trigger updates the counters.
     const off = onLiveEvent((e) => {
       if (e.type === 'started' && e.process?.trigger) void load();
     });
@@ -56,7 +56,7 @@
         ingestProcess(p);
         openTab({ kind: 'run', params: { id: p.id } }, { pin: true });
       }
-      notify(`Déclencheur « ${t.name} » lancé.`, 'ok');
+      notify(`Trigger "${t.name}" fired.`, 'ok');
       void load();
     } catch (e) {
       notify(errorMessage(e), 'error');
@@ -68,18 +68,18 @@
   function show(t: TriggerState) {
     select({
       title: t.name ?? '',
-      subtitle: `Déclencheur de ${t.methodology} / ${t.agent}`,
+      subtitle: `Trigger of ${t.methodology} / ${t.agent}`,
       rows: [
         ['Description', t.description ?? ''],
         ['Type', t.type ?? ''],
-        ['Événement', t.event ?? ''],
-        ['Planification', t.schedule ?? ''],
-        ['Activé', t.enabled ? 'oui' : 'non'],
-        ['Exécutions', String(t.fires ?? 0)],
-        ['Dernier déclenchement', formatDate(t.lastFired)],
-        ['Prochain', formatDate(t.nextFire)],
-        ['Dernière erreur', t.lastError ?? ''],
-        ['Dernier processus', t.lastProcessId ?? ''],
+        ['Event', t.event ?? ''],
+        ['Schedule', t.schedule ?? ''],
+        ['Enabled', t.enabled ? 'yes' : 'no'],
+        ['Runs', String(t.fires ?? 0)],
+        ['Last fired', formatDate(t.lastFired)],
+        ['Next', formatDate(t.nextFire)],
+        ['Last error', t.lastError ?? ''],
+        ['Last process', t.lastProcessId ?? ''],
       ],
     });
   }
@@ -93,39 +93,39 @@
 
 <div class="explorer">
   <div class="tools">
-    <input type="search" placeholder="Filtrer…" aria-label="Filtrer les déclencheurs" bind:value={filter} data-no-pin />
-    <button type="button" class="ghost small" title="Actualiser" aria-label="Actualiser" disabled={loading} onclick={load}
+    <input type="search" placeholder="Filter…" aria-label="Filter triggers" bind:value={filter} data-no-pin />
+    <button type="button" class="ghost small" title="Refresh" aria-label="Refresh" disabled={loading} onclick={load}
       ><Icon name="refresh" size={14} /></button
     >
   </div>
   {#if error}<div class="alert small">{error}</div>{/if}
   {#if !loading && !error && !triggers.length}
-    <p class="empty pad">Aucun déclencheur sur les agents publiés. Ajoutez-en dans l'éditeur d'un agent (section « Déclencheurs »).</p>
+    <p class="empty pad">No triggers on published agents. Add some in an agent's editor (the "Triggers" section).</p>
   {/if}
   <ul class="list">
     {#each shown as t (key(t))}
       <li class:off={!t.enabled}>
         <div class="line1">
-          <button type="button" class="link name" onclick={() => show(t)} title="Détails dans « Propriétés »">{t.name}</button>
-          <span class="type">{t.type === 'schedule' ? 'cron' : 'événement'}</span>
+          <button type="button" class="link name" onclick={() => show(t)} title="Details in 'Properties'">{t.name}</button>
+          <span class="type">{t.type === 'schedule' ? 'cron' : 'event'}</span>
           <span class="grow"></span>
           <button
             type="button"
             class="small fire"
             disabled={!!firing}
-            title="Déclencher maintenant"
-            onclick={() => fire(t)}><Icon name="play" size={11} />{firing === key(t) ? '…' : 'Déclencher'}</button
+            title="Fire now"
+            onclick={() => fire(t)}><Icon name="play" size={11} />{firing === key(t) ? '…' : 'Fire'}</button
           >
         </div>
         <div class="line2">
           <button type="button" class="link" onclick={() => openAgent(t)}>{t.methodology} / {t.agent}</button>
           · <code>{t.type === 'schedule' ? t.schedule : t.event}</code>
-          {#if !t.enabled}· <span class="warn">désactivé</span>{/if}
+          {#if !t.enabled}· <span class="warn">disabled</span>{/if}
         </div>
         <div class="line2">
-          {t.fires ?? 0} exécution{(t.fires ?? 0) > 1 ? 's' : ''}
-          {#if t.lastFired}· dernière {formatDate(t.lastFired)}{/if}
-          {#if t.nextFire}· prochaine {formatDate(t.nextFire)}{/if}
+          {t.fires ?? 0} run{(t.fires ?? 0) > 1 ? 's' : ''}
+          {#if t.lastFired}· last {formatDate(t.lastFired)}{/if}
+          {#if t.nextFire}· next {formatDate(t.nextFire)}{/if}
           {#if t.lastProcessId}
             · <button type="button" class="link mono" onclick={() => openTab({ kind: 'run', params: { id: t.lastProcessId ?? '' } })}
               >{shortId(t.lastProcessId)}</button

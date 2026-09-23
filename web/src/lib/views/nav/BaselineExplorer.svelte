@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Explorateur des référentiels : baselines → nœuds (par type).
+  // Baseline explorer: baselines → nodes (by type).
   import Icon from '../../shell/Icon.svelte';
   import TreeRow from '../TreeRow.svelte';
   import { toggle, isOpen, expanded } from './expanded.svelte';
@@ -48,13 +48,13 @@
     openTab({ kind: 'baseline', params: { id: b.id ?? '' } }, { pin });
     select({
       title: b.name || shortId(b.id),
-      subtitle: 'Référentiel',
+      subtitle: 'Baseline',
       rows: [
-        ['Identifiant', b.id ?? ''],
+        ['Id', b.id ?? ''],
         ['Parent', b.parentId ?? ''],
-        ['Changement', b.changeId ?? ''],
-        ['Nœuds', String(Object.keys(b.nodes ?? {}).length)],
-        ['Créé', formatDate(b.createdAt)],
+        ['Change', b.changeId ?? ''],
+        ['Nodes', String(Object.keys(b.nodes ?? {}).length)],
+        ['Created', formatDate(b.createdAt)],
       ],
     });
   }
@@ -63,14 +63,14 @@
     openTab({ kind: 'baseline', params: { id: b.id ?? '' } }, { pin });
     select({
       title: n.key ?? '',
-      subtitle: `Nœud ${n.type ?? ''} v${n.version ?? 0}`,
+      subtitle: `Node ${n.type ?? ''} v${n.version ?? 0}`,
       rows: [
-        ['Identifiant', n.id ?? ''],
+        ['Id', n.id ?? ''],
         ['Type', n.type ?? ''],
         ['Version', String(n.version ?? 0)],
         ...Object.entries(n.props ?? {}).map(([k, v]): [string, string] => [k, typeof v === 'string' ? v : JSON.stringify(v)]),
-        ['Changement', n.changeId ?? ''],
-        ['Créé', formatDate(n.createdAt)],
+        ['Change', n.changeId ?? ''],
+        ['Created', formatDate(n.createdAt)],
       ],
     });
   }
@@ -78,12 +78,12 @@
 
 <div class="explorer">
   <div class="tools">
-    <input type="search" placeholder="Filtrer les nœuds…" aria-label="Filtrer les nœuds" bind:value={filter} data-no-pin />
+    <input type="search" placeholder="Filter nodes…" aria-label="Filter nodes" bind:value={filter} data-no-pin />
     <button
       type="button"
       class="ghost small"
-      title="Actualiser"
-      aria-label="Actualiser"
+      title="Refresh"
+      aria-label="Refresh"
       disabled={baselines.loading}
       onclick={() => {
         graphs.clear();
@@ -92,8 +92,8 @@
     >
   </div>
   {#if baselines.error}<div class="alert small">{baselines.error}</div>{/if}
-  {#if baselines.loaded && !baselines.items.length && !baselines.error}<p class="empty pad">Aucun référentiel.</p>{/if}
-  <div role="tree" aria-label="Référentiels">
+  {#if baselines.loaded && !baselines.items.length && !baselines.error}<p class="empty pad">No baselines.</p>{/if}
+  <div role="tree" aria-label="Baselines">
     {#each sorted as b (b.id)}
       {@const k = `b:${b.id}`}
       {@const g = graphs.get(b.id ?? '')}
@@ -109,7 +109,7 @@
       />
       {#if isOpen(k)}
         {#if !g || g.loading}
-          <p class="empty pad2">Chargement…</p>
+          <p class="empty pad2">Loading…</p>
         {:else if g.error}
           <p class="alert small">{g.error}</p>
         {:else}
@@ -130,7 +130,7 @@
               {/each}
             {/if}
           {:else}
-            <p class="empty pad2">Aucun nœud.</p>
+            <p class="empty pad2">No nodes.</p>
           {/each}
         {/if}
       {/if}

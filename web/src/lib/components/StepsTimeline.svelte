@@ -7,9 +7,9 @@
     liveLogs = [],
   }: {
     steps?: Step[];
-    /** ouverture d'un processus enfant (sous-agent) */
+    /** opens a child process (sub-agent) */
     onopenprocess?: (id: string) => void;
-    /** journaux reçus en direct, rattachés à leur étape */
+    /** live-received logs, attached to their step */
     liveLogs?: { time?: string; level?: string; message?: string; step?: number }[];
   } = $props();
 
@@ -26,7 +26,7 @@
     return s.effectsMet ? 'ok' : 'partial';
   }
 
-  const LABEL = { error: 'erreur', ok: 'effets atteints', partial: 'effets non atteints', pending: 'en cours' };
+  const LABEL = { error: 'error', ok: 'effects reached', partial: 'effects not reached', pending: 'in progress' };
 
   function logsOf(s: Step, i: number) {
     const idx = s.index ?? i;
@@ -51,14 +51,14 @@
             <span class="idx">#{(s.index ?? i) + 1}</span>
             <code class="action">{s.action}</code>
             <span class="st">{LABEL[st]}</span>
-            {#if s.sandbox}<span class="tag" title="Sandbox d'exécution">⧉ {s.sandbox}</span>{/if}
+            {#if s.sandbox}<span class="tag" title="Execution sandbox">⧉ {s.sandbox}</span>{/if}
             <span class="grow"></span>
             {#if tokensIn || tokensOut}
-              <span class="usage" title="Tokens entrée / sortie">{formatInt(tokensIn)} → {formatInt(tokensOut)} tok</span>
+              <span class="usage" title="Input / output tokens">{formatInt(tokensIn)} → {formatInt(tokensOut)} tok</span>
             {/if}
             {#if s.usage?.llmCalls}<span class="hint">{s.usage.llmCalls} LLM</span>{/if}
-            {#if s.usage?.toolCalls}<span class="hint">{s.usage.toolCalls} outil{s.usage.toolCalls > 1 ? 's' : ''}</span>{/if}
-            {#if s.approvedBy}<span class="hint">décidé par {s.approvedBy}</span>{/if}
+            {#if s.usage?.toolCalls}<span class="hint">{s.usage.toolCalls} tool{s.usage.toolCalls > 1 ? 's' : ''}</span>{/if}
+            {#if s.approvedBy}<span class="hint">decided by {s.approvedBy}</span>{/if}
             {#if s.items?.length}<span class="hint">{s.items.length} item{s.items.length > 1 ? 's' : ''}</span>{/if}
             <span class="hint" title={formatDate(s.startedAt)}>{duration(s)}</span>
           </div>
@@ -67,7 +67,7 @@
           {/if}
           {#if s.childProcessIds?.length}
             <div class="children">
-              Sous-agents :
+              Sub-agents:
               {#each s.childProcessIds as c (c)}
                 <button type="button" class="link mono" onclick={() => onopenprocess?.(c)}>{shortId(c)}</button>
               {/each}
@@ -75,10 +75,10 @@
           {/if}
           {#if s.llmCalls?.length}
             <details>
-              <summary>Appels LLM ({s.llmCalls.length})</summary>
+              <summary>LLM calls ({s.llmCalls.length})</summary>
               <table class="calls">
                 <thead>
-                  <tr><th>Fournisseur</th><th>Modèle</th><th class="num">Entrée</th><th class="num">Sortie</th><th class="num">Durée</th><th>Erreur</th></tr>
+                  <tr><th>Provider</th><th>Model</th><th class="num">Input</th><th class="num">Output</th><th class="num">Duration</th><th>Error</th></tr>
                 </thead>
                 <tbody>
                   {#each s.llmCalls as c, k (k)}
@@ -97,9 +97,9 @@
           {/if}
           {#if s.toolCalls?.length}
             <details>
-              <summary>Appels d'outils ({s.toolCalls.length})</summary>
+              <summary>Tool calls ({s.toolCalls.length})</summary>
               <table class="calls">
-                <thead><tr><th>Outil</th><th class="num">Durée</th><th>Erreur</th></tr></thead>
+                <thead><tr><th>Tool</th><th class="num">Duration</th><th>Error</th></tr></thead>
                 <tbody>
                   {#each s.toolCalls as c, k (k)}
                     <tr class:err={!!c.error}>
@@ -114,7 +114,7 @@
           {/if}
           {#if logs.length}
             <details open={st === 'pending' || st === 'error'}>
-              <summary>Journal ({logs.length})</summary>
+              <summary>Log ({logs.length})</summary>
               <ol class="logs">
                 {#each logs as l, k (k)}
                   <li class="lvl-{l.level || 'info'}">
@@ -128,7 +128,7 @@
           {/if}
           {#if s.output}
             <details>
-              <summary>Sortie</summary>
+              <summary>Output</summary>
               <pre>{s.output}</pre>
             </details>
           {/if}
@@ -137,7 +137,7 @@
     {/each}
   </ol>
 {:else}
-  <p class="empty">Aucune étape exécutée.</p>
+  <p class="empty">No steps executed.</p>
 {/if}
 
 <style>
