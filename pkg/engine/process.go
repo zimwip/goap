@@ -46,6 +46,8 @@ type Process struct {
 	Planner string `json:"planner,omitempty"`
 	// ParentID is the process that called this one as a sub-agent.
 	ParentID string `json:"parentId,omitempty"`
+	// Trigger ("<methodology>/<agent>/<trigger>") started the process.
+	Trigger string `json:"trigger,omitempty"`
 	// Children maps sub-agent calls ("action#index:agent") to their process,
 	// so that a retried action finds the sub-agent it started.
 	Children   map[string]string `json:"children,omitempty"`

@@ -37,6 +37,15 @@ type ChangeSet struct {
 	CreatedAt        time.Time      `json:"createdAt"`
 }
 
+// ChangeEvent is published by the graph service on change lifecycle events
+// (change.created, change.item_added, change.applied).
+type ChangeEvent struct {
+	Type     string       `json:"type"`
+	Change   ChangeSet    `json:"change"`
+	Baseline *Baseline    `json:"baseline,omitempty"`
+	Items    []ChangeItem `json:"items,omitempty"`
+}
+
 // ItemKind classifies change items.
 type ItemKind string
 

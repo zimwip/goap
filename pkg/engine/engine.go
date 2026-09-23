@@ -94,7 +94,9 @@ type StartRequest struct {
 	Agent string
 	// ParentID is set for sub-agent processes.
 	ParentID string
-	Vars     map[string]any
+	// Trigger is set for processes started by a trigger.
+	Trigger string
+	Vars    map[string]any
 }
 
 func (e *Engine) lock(id string) func() {
@@ -123,7 +125,7 @@ func (e *Engine) log() *slog.Logger {
 // methodology, identification ranks the agents of every published methodology.
 func (e *Engine) Start(ctx context.Context, req StartRequest) (*Process, error) {
 	p := &Process{ID: uuid.NewString(), Methodology: req.Methodology, Agent: req.Agent, ChangeID: req.ChangeID, BaselineID: req.BaselineID,
-		Title: req.Title, ParentID: req.ParentID, Initiator: authz.From(ctx), Vars: req.Vars, Disabled: map[string]bool{},
+		Title: req.Title, ParentID: req.ParentID, Trigger: req.Trigger, Initiator: authz.From(ctx), Vars: req.Vars, Disabled: map[string]bool{},
 		CreatedAt: e.clock(), UpdatedAt: e.clock()}
 	if req.Intent != "" {
 		p.Intent.Turns = append(p.Intent.Turns, intent.Turn{Role: "user", Text: req.Intent})
@@ -282,7 +284,11 @@ func (e *Engine) selectTarget(ctx context.Context, p *Process, m *methodology.Co
 			title = m.Name + " / " + goal
 		}
 		p.Title = title
-		c, err := e.Graph.CreateChange(ctx, graph.NewChange{Title: title, Intent: firstUserTurn(p), Methodology: m.Name, BaselineID: p.BaselineID})
+		var data map[string]any
+		if p.Trigger != "" {
+			data = map[string]any{"trigger": p.Trigger}
+		}
+		c, err := e.Graph.CreateChange(ctx, graph.NewChange{Title: title, Intent: firstUserTurn(p), Methodology: m.Name, BaselineID: p.BaselineID, Data: data})
 		if err != nil {
 			return err
 		}

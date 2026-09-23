@@ -60,4 +60,15 @@ func TestAuthAndRouting(t *testing.T) {
 	if gotSubject != "alice" || gotRoles != "admin" {
 		t.Fatalf("identity not propagated: %q %q", gotSubject, gotRoles)
 	}
+	st, err := http.Get(srv.URL + "/api/status")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var status PlatformStatus
+	_ = json.NewDecoder(st.Body).Decode(&status)
+	st.Body.Close()
+	// the fake upstream answers 200 on /readyz
+	if status.Status != "ok" || len(status.Services) != 1 || status.Services[0].Name != "graph" {
+		t.Fatalf("status %+v", status)
+	}
 }

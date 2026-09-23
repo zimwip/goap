@@ -1,5 +1,5 @@
 name: test-design
-version: 1.0.0
+version: 1.1.0
 description: >
   Conception et revue d'une campagne de tests à partir des exigences du
   référentiel. Exemple d'agents (planificateurs goap, utility et hybrid),
@@ -137,12 +137,30 @@ agents:
     planner: goap
     actions: [collect_scope, design_tests, summarize]
     goals: [designed]
+    triggers:
+      - name: nightly
+        description: Conception nocturne sur le dernier référentiel
+        type: schedule
+        schedule: "0 2 * * *"
+        goal: designed
+        roles: [contributor]
+        enabled: false
   - name: reviewer
     description: Relecteur de campagnes de tests
     examples: [revoir les cas de test, valider les tests]
     planner: utility
     actions: [auto_review, human_review]
     goals: [review]
+    triggers:
+      - name: after_design
+        description: Revoir automatiquement une conception terminée (hors délégation)
+        type: event
+        event: process.completed
+        filter: event.process.agent == "test-designer" && event.process.parent == ""
+        target: event_change
+        goal: review
+        roles: [contributor]
+        enabled: true
   - name: coordinator
     description: Coordinateur de campagne de tests
     examples: [préparer et valider la campagne de tests, campagne de tests complète]

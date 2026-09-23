@@ -70,6 +70,7 @@ func Mount(e *echo.Echo, cfg Config) error {
 	if err != nil {
 		return err
 	}
+	e.GET("/api/status", statusHandler(cfg.Routes))
 	for _, r := range cfg.Routes {
 		u, err := url.Parse(r.Upstream)
 		if err != nil {
