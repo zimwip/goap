@@ -185,6 +185,10 @@ type Action struct {
 	Specializes string `yaml:"specializes,omitempty" json:"specializes,omitempty"`
 	When        string `yaml:"when,omitempty" json:"when,omitempty"`
 	Priority    int    `yaml:"priority,omitempty" json:"priority,omitempty"`
+	// Incremental actions reach their effects over several executions (one
+	// per technology, per batch…): an execution that produced items without
+	// reaching the effects is progress, not a failure.
+	Incremental bool `yaml:"incremental,omitempty" json:"incremental,omitempty"`
 }
 
 // IsSpecialization reports whether the action specializes another one.

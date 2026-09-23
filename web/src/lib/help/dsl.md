@@ -21,7 +21,7 @@ l'action, de façon atomique ; une action en erreur n'écrit rien. Les référen
 | `ctx.nodes(type)` (`""` = tous) | `Nodes(type)` | `Node[]` |
 | `ctx.links(key, direction, type)` (`"out"`/`"in"`, `""` = tous) | `Links(…)` | `Link[]` |
 
-`Item` : `{id, kind, type, status, target, data, op, node, producedBy}` — `Node` : `{id, version, key, type, props}` —
+`Item` : `{id, kind, type, status, target, data, op, node, link, producedBy}` (`link` : `{type, from, to}` d'une proposition de lien, extrémités = clé de nœud ou `@<itemId>` d'un nœud proposé, réutilisables dans `proposeLink`) — `Node` : `{id, version, key, type, props}` —
 `Link` : `{id, type, from, to}` (`from`/`to` : `{id, version, key, type}`).
 
 ## Écriture (sur le change)

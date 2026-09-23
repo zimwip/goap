@@ -1,0 +1,551 @@
+name: sdlc
+version: 0.1.0
+description: >
+  Cycle de vie du développement logiciel (SDLC) sur le référentiel ALM :
+  besoins → exigences → fonctions → composants → artefacts de build →
+  applications → solutions, avec données, interfaces et flux. Du périmètre
+  d'un changement à sa livraison : analyse d'impact, spécification et
+  traçabilité, conception, build (spécialisé par technologie), tests, note de
+  version, revue et application au référentiel. Version initiale, à affiner.
+
+domain:
+  nodeTypes:
+    - {name: Need, description: Besoin métier exprimé par une partie prenante, properties: [title, description, stakeholder]}
+    - {name: Requirement, description: Exigence satisfaisant un besoin, properties: [title, description, priority, status]}
+    - {name: FunctionalRequirement, extends: Requirement, description: Exigence fonctionnelle}
+    - {name: NonFunctionalRequirement, extends: Requirement, description: Exigence non fonctionnelle (performance, disponibilité…), properties: [category]}
+    - {name: SecurityRequirement, extends: NonFunctionalRequirement, description: Exigence de sécurité}
+    - {name: Function, description: Fonction (capacité) réalisant des exigences, properties: [title, description]}
+    - {name: Component, description: Composant logiciel implémentant des fonctions, properties: [title, owner, technology, version, repository]}
+    - {name: BuildArtifact, description: Artefact produit par le build d'un composant, properties: [name, format, version, technology, coordinates, toolchain, checks]}
+    - {name: Application, description: Application déployable composée de composants, properties: [title, owner, version]}
+    - {name: Solution, description: Solution regroupant des applications au service de besoins, properties: [title, owner]}
+    - {name: Data, description: Objet de données, properties: [title, classification]}
+    - {name: Interface, description: Interface (API, fichier, événement) exposée par une application, properties: [title, protocol, version]}
+    - {name: Flow, description: Flux de données entre applications au travers d'une interface, properties: [title, mode, frequency]}
+    - {name: TestCase, description: Cas de test vérifiant une exigence, properties: [title, level, steps]}
+  linkTypes:
+    - {name: satisfies, from: Requirement, to: Need}
+    - {name: refines, from: Requirement, to: Requirement}
+    - {name: realizes, from: Function, to: Requirement}
+    - {name: implements, from: Component, to: Function}
+    - {name: depends_on, from: Component, to: Component}
+    - {name: accesses, from: Component, to: Data}
+    - {name: built_from, from: BuildArtifact, to: Component}
+    - {name: composed_of, from: Application, to: Component}
+    - {name: deploys, from: Application, to: BuildArtifact}
+    - {name: includes, from: Solution, to: Application}
+    - {name: addresses, from: Solution, to: Need}
+    - {name: owned_by, from: Data, to: Application}
+    - {name: exposed_by, from: Interface, to: Application}
+    - {name: exchanges, from: Interface, to: Data}
+    - {name: source, from: Flow, to: Application}
+    - {name: target, from: Flow, to: Application}
+    - {name: through, from: Flow, to: Interface}
+    - {name: carries, from: Flow, to: Data}
+    - {name: verifies, from: TestCase, to: Requirement}
+
+conditions:
+  # --- analyse
+  - name: scoped
+    description: Le périmètre du changement est identifié (éléments directement impactés)
+    expr: size(impacts) > 0
+  - name: propagated
+    description: Les impacts sont propagés le long des liens ALM
+    expr: artifacts.exists(a, a.type == "propagation")
+  # --- spécification
+  - name: requirements_specified
+    description: Des exigences sont créées ou révisées
+    expr: proposals.exists(p, (p.op == "create_node" || p.op == "update_node") && "Requirement" in p.node.types)
+  # NB : les conditions « chaque … » sont vraies sur un ensemble vide ; les actions
+  # qui en dépendent exigent aussi requirements_specified pour ancrer le cycle.
+  - name: requirements_traced
+    description: Chaque nouvelle exigence satisfait un besoin (ou en raffine une autre)
+    expr: >
+      proposals.filter(p, p.op == "create_node" && "Requirement" in p.node.types).all(r,
+        proposals.exists(l, l.op == "add_link" && (l.link.type == "satisfies" || l.link.type == "refines") && l.link.from.key == r.node.key))
+  - name: tests_planned
+    description: Chaque exigence créée ou révisée est vérifiée par un cas de test proposé
+    expr: >
+      proposals.filter(p, (p.op == "create_node" || p.op == "update_node") && "Requirement" in p.node.types).all(r,
+        proposals.exists(l, l.op == "add_link" && l.link.type == "verifies" && l.link.to.key == r.node.key))
+  # --- conception
+  - name: functions_allocated
+    description: Chaque nouvelle exigence est réalisée par une fonction
+    expr: >
+      proposals.filter(p, p.op == "create_node" && "Requirement" in p.node.types).all(r,
+        proposals.exists(l, l.op == "add_link" && l.link.type == "realizes" && l.link.to.key == r.node.key))
+  - name: design_done
+    description: La conception (composants, interfaces, flux, données) est décrite
+    expr: artifacts.exists(a, a.type == "design")
+  - name: design_checked
+    description: La cohérence de la conception est contrôlée
+    expr: artifacts.exists(a, a.type == "design_check")
+  # --- build
+  - name: components_in_scope
+    description: Des composants sont impactés ou créés
+    expr: >
+      impacts.exists(i, "Component" in i.target.types)
+      || proposals.exists(p, p.op == "create_node" && "Component" in p.node.types)
+  - name: build_complete
+    description: Chaque composant impacté ou créé a un artefact de build
+    expr: >
+      impacts.filter(i, "Component" in i.target.types).all(i,
+        artifacts.exists(a, a.type == "build" && a.data.component == i.target.key))
+      && proposals.filter(p, p.op == "create_node" && "Component" in p.node.types).all(p,
+        artifacts.exists(a, a.type == "build" && a.data.component == p.node.key))
+  # --- livraison
+  - name: release_noted
+    description: La note de version est rédigée
+    expr: artifacts.exists(a, a.type == "release_note")
+  - name: reviewed
+    description: Toutes les propositions ont reçu une décision
+    expr: size(proposals) > 0 && proposals.all(p, p.status != "proposed")
+  - name: applied
+    description: Le changement est appliqué au référentiel ALM (nouvelle baseline)
+    expr: change.status == "applied"
+
+actions:
+  # ======================= analyse d'impact
+  - name: identify_scope
+    kind: llm
+    description: Identifier les éléments ALM directement impactés par l'intention
+    pre: {scoped: false}
+    effects: {scoped: true}
+    cost: 2
+    model: default
+    prompt: |
+      Tu es analyste dans un cycle de développement logiciel. Intention de changement :
+      "{{ .Change.Intent }}"
+
+      Référentiel ALM (clé, type, propriétés) :
+      {{ range .Baseline.Nodes }}- {{ .Key }} ({{ .Type }}) {{ json .Properties }}
+      {{ end }}
+      Identifie les éléments DIRECTEMENT concernés (besoins, exigences, fonctions,
+      composants, interfaces, flux, données). Pour chacun :
+      {"kind":"impact","type":"direct","target":"<clé>","data":{"reason":"..."}}
+
+  - name: select_scope
+    kind: human
+    description: Désigner manuellement les éléments directement impactés (repli)
+    pre: {scoped: false}
+    effects: {scoped: true}
+    cost: 8
+    instructions: Indiquez les éléments du référentiel ALM directement concernés par le changement (impacts).
+
+  - name: propagate_impacts
+    kind: builtin
+    builtin: graph.propagate
+    description: >
+      Propager les impacts le long des liens ALM : besoin → exigences → fonctions →
+      composants → artefacts, applications → solutions, interfaces, flux, données, tests
+    pre: {scoped: true, propagated: false}
+    effects: {propagated: true}
+    cost: 1
+    params:
+      maxDepth: 6
+      linkTypes: [satisfies, refines, realizes, implements, depends_on, built_from, composed_of, deploys,
+                  includes, addresses, owned_by, exposed_by, exchanges, source, target, through, carries, verifies]
+
+  # ======================= spécification
+  - name: specify_requirements
+    kind: llm
+    description: Réviser les exigences impactées et créer les nouvelles exigences
+    pre: {propagated: true, requirements_specified: false}
+    effects: {requirements_specified: true}
+    cost: 3
+    model: default
+    prompt: |
+      Intention de changement : "{{ .Change.Intent }}"
+      Éléments impactés :
+      {{ range .Impacts }}- {{ .Target.Key }} ({{ .Target.Type }}) {{ json .Target.Properties }} : {{ index .Data "reason" }}
+      {{ end }}
+      Révise les exigences impactées et crée les exigences nouvelles (types :
+      FunctionalRequirement, NonFunctionalRequirement, SecurityRequirement), chacune
+      reliée au besoin qu'elle satisfait :
+      {"kind":"proposal","proposal":{"op":"update_node","node":{"base":"<clé>","props":{...}}}}
+      {"ref":"r1","kind":"proposal","proposal":{"op":"create_node","node":{"key":"REQ-...","type":"FunctionalRequirement","props":{"title":"...","priority":"high"}}}}
+      {"kind":"proposal","proposal":{"op":"add_link","link":{"type":"satisfies","from":"#r1","to":"<clé du besoin>"}}}
+
+  - name: write_requirements
+    kind: human
+    description: Rédiger les exigences (repli)
+    pre: {propagated: true, requirements_specified: false}
+    effects: {requirements_specified: true}
+    cost: 8
+    instructions: >
+      Proposez les nouvelles versions des exigences impactées et les exigences
+      nouvelles (avec leur lien « satisfies » vers le besoin).
+
+  - name: trace_requirements
+    kind: script
+    language: javascript
+    description: Relier chaque nouvelle exigence non tracée aux besoins du périmètre (règle systématique)
+    pre: {requirements_specified: true, requirements_traced: false}
+    effects: {requirements_traced: true}
+    cost: 1
+    code: |
+      function run(ctx) {
+        const props = ctx.proposals();
+        const traced = new Set(props.filter(l => l.op === "add_link" && l.link && (l.link.type === "satisfies" || l.link.type === "refines"))
+          .map(l => l.link.from));
+        // besoins du périmètre : impactés, ou satisfaits par les exigences impactées
+        const needs = new Set();
+        for (const i of ctx.impacts()) {
+          if (!i.target) continue;
+          if (i.target.type === "Need") needs.add(i.target.key);
+          if (i.target.type.endsWith("Requirement")) {
+            for (const l of ctx.links(i.target.key, "out", "satisfies")) needs.add(l.to.key);
+          }
+        }
+        let n = 0;
+        for (const r of props) {
+          if (r.op !== "create_node" || !r.node || !r.node.type.endsWith("Requirement")) continue;
+          if (traced.has("@" + r.id) || traced.has(r.node.key)) continue;
+          if (needs.size === 0) { ctx.warn(r.node.key + " : aucun besoin dans le périmètre"); continue; }
+          for (const need of needs) { ctx.proposeLink("@" + r.id, "satisfies", need); n++; }
+        }
+        return n + " lien(s) de traçabilité proposé(s)";
+      }
+
+  - name: trace_manually
+    kind: human
+    description: Tracer manuellement les exigences vers les besoins (repli)
+    pre: {requirements_specified: true, requirements_traced: false}
+    effects: {requirements_traced: true}
+    cost: 6
+    instructions: Reliez chaque nouvelle exigence au besoin qu'elle satisfait (ou à l'exigence qu'elle raffine).
+
+  - name: plan_tests
+    kind: script
+    language: javascript
+    description: Un cas de test par exigence créée ou révisée (niveau selon le type d'exigence)
+    pre: {requirements_specified: true, tests_planned: false}
+    effects: {tests_planned: true}
+    cost: 1
+    code: |
+      function run(ctx) {
+        const props = ctx.proposals();
+        const verified = new Set(props.filter(l => l.op === "add_link" && l.link && l.link.type === "verifies").map(l => l.link.to));
+        let n = 0;
+        for (const r of props) {
+          if ((r.op !== "create_node" && r.op !== "update_node") || !r.node || !r.node.type.endsWith("Requirement")) continue;
+          const ref = r.op === "create_node" ? "@" + r.id : r.node.key;
+          if (verified.has(ref) || verified.has(r.node.key)) continue;
+          const level = r.node.type === "SecurityRequirement" ? "security"
+            : r.node.type === "NonFunctionalRequirement" ? "performance" : "acceptance";
+          const title = (r.node.props && r.node.props.title) || r.node.key;
+          const t = ctx.proposeNode("TestCase", "TST-" + r.node.key, { title: "Vérifier : " + title, level: level });
+          ctx.proposeLink(t, "verifies", ref);
+          n++;
+        }
+        return n + " cas de test proposé(s)";
+      }
+
+  # ======================= conception
+  - name: allocate_functions
+    kind: script
+    language: javascript
+    description: Allouer chaque nouvelle exigence à une fonction (fonction impactée, sinon nouvelle fonction)
+    pre: {requirements_traced: true, functions_allocated: false}
+    effects: {functions_allocated: true}
+    cost: 1
+    code: |
+      function run(ctx) {
+        const props = ctx.proposals();
+        const realized = new Set(props.filter(l => l.op === "add_link" && l.link && l.link.type === "realizes").map(l => l.link.to));
+        const functions = ctx.impacts().filter(i => i.target && i.target.type === "Function").map(i => i.target.key).sort();
+        let n = 0;
+        for (const r of props) {
+          if (r.op !== "create_node" || !r.node || !r.node.type.endsWith("Requirement")) continue;
+          if (realized.has("@" + r.id) || realized.has(r.node.key)) continue;
+          let fn = functions[0];
+          if (!fn) {
+            fn = ctx.proposeNode("Function", "FCT-" + r.node.key, { title: "Fonction : " + ((r.node.props && r.node.props.title) || r.node.key) });
+          }
+          ctx.proposeLink(fn, "realizes", "@" + r.id);
+          n++;
+        }
+        return n + " allocation(s)";
+      }
+
+  - name: design_solution
+    kind: llm
+    description: Concevoir l'évolution des composants, interfaces, flux et données
+    pre: {requirements_specified: true, requirements_traced: true, functions_allocated: true, design_done: false}
+    effects: {design_done: true}
+    cost: 3
+    model: reasoning
+    prompt: |
+      Intention de changement : "{{ .Change.Intent }}"
+      Éléments impactés :
+      {{ range .Impacts }}- {{ .Target.Key }} ({{ .Target.Type }}) {{ json .Target.Properties }}
+      {{ end }}
+      Propositions déjà faites :
+      {{ range .Proposals }}- {{ .Proposal.Op }} {{ json .Proposal }}
+      {{ end }}
+      Conçois l'évolution : composants à modifier (update_node, props version /
+      technology) ou à créer (type Component, technology java|c|shell|…, lien
+      implements vers la fonction), interfaces (exposed_by, exchanges), flux
+      (source, target, through, carries) et données. Termine par
+      {"kind":"artifact","type":"design","data":{"summary":"...","decisions":["..."]}}
+
+  - name: write_design
+    kind: human
+    description: Décrire la conception (repli)
+    pre: {requirements_specified: true, requirements_traced: true, functions_allocated: true, design_done: false}
+    effects: {design_done: true}
+    cost: 8
+    utility: 'has(vars.design) && vars.design == "manual" ? 2.0 : 0.3'
+    instructions: >
+      Proposez les évolutions de composants, interfaces, flux et données, puis un
+      artefact « design » résumant les décisions.
+
+  - name: check_design
+    kind: script
+    language: javascript
+    description: Contrôler la cohérence de la conception (liens obligatoires des éléments créés)
+    pre: {design_done: true, design_checked: false}
+    effects: {design_checked: true}
+    cost: 1
+    code: |
+      function run(ctx) {
+        const props = ctx.proposals();
+        const links = props.filter(l => l.op === "add_link" && l.link).map(l => l.link);
+        const has = (from, type) => links.some(l => (l.from === from.id || l.from === from.key) && l.type === type);
+        const required = {
+          Component: ["implements"], Interface: ["exposed_by"], Flow: ["source", "target", "carries"],
+          BuildArtifact: ["built_from"], Data: ["owned_by"],
+        };
+        const issues = [];
+        for (const p of props) {
+          if (p.op !== "create_node" || !p.node || !required[p.node.type]) continue;
+          for (const t of required[p.node.type]) {
+            if (!has({ id: "@" + p.id, key: p.node.key }, t)) issues.push(p.node.type + " " + p.node.key + " : lien « " + t + " » manquant");
+          }
+        }
+        for (const i of issues) ctx.warn(i);
+        ctx.addArtifact("design_check", { ok: issues.length === 0, issues: issues });
+        return issues.length + " anomalie(s)";
+      }
+
+  # ======================= build (action abstraite, spécialisée par technologie)
+  - name: build
+    kind: abstract
+    description: >
+      Construire les composants impactés ou créés. Action abstraite : chaque
+      exécution construit les composants d'une technologie (spécialisation), jusqu'à
+      ce que tous aient leur artefact.
+    pre: {propagated: true, design_checked: true, build_complete: false}
+    effects: {build_complete: true}
+    cost: 2
+    incremental: true
+
+  - name: build_java
+    kind: script
+    language: javascript
+    specializes: build
+    params: {technology: java}
+    priority: 30
+    description: "Build Java : Maven, JDK 21, vérification des dépendances et couverture"
+    when: >
+      impacts.exists(i, "Component" in i.target.types && has(i.target.props.technology) && i.target.props.technology == "java"
+        && !artifacts.exists(a, a.type == "build" && a.data.component == i.target.key))
+      || proposals.exists(p, p.op == "create_node" && "Component" in p.node.types && has(p.node.props.technology)
+        && p.node.props.technology == "java" && !artifacts.exists(a, a.type == "build" && a.data.component == p.node.key))
+    code: &build |
+      const RULES = {
+        java:  { format: "jar", toolchain: "maven 3.9 / JDK 21", checks: ["mvn -B verify", "OWASP dependency-check", "JaCoCo ≥ 80 %"],
+                 coordinates: (c, v) => "com.acme:" + c + ":" + v },
+        c:     { format: "elf", toolchain: "gcc 13 / make", checks: ["-Wall -Wextra -Werror", "cppcheck", "valgrind sur les tests"],
+                 coordinates: (c, v) => c + "-" + v + "-linux-x86_64" },
+        shell: { format: "tar.gz", toolchain: "bash 5", checks: ["shellcheck -S warning", "bats"],
+                 coordinates: (c, v) => c + "-" + v + ".tar.gz" },
+        other: { format: "tar.gz", toolchain: "archive", checks: ["sha256"],
+                 coordinates: (c, v) => c + "-" + v + ".tar.gz" },
+      };
+      function bump(v) {
+        const p = String(v || "0.0.0").split(".");
+        while (p.length < 3) p.push("0");
+        p[2] = String((parseInt(p[2], 10) || 0) + 1);
+        return p.join(".");
+      }
+      // composants du périmètre sans artefact de build
+      function pending(ctx) {
+        const built = new Set(ctx.items("artifact").filter(a => a.type === "build").map(a => a.data.component));
+        const out = new Map();
+        for (const i of ctx.impacts()) {
+          if (i.target && i.target.type === "Component" && !built.has(i.target.key)) out.set(i.target.key, { key: i.target.key, ref: i.target.key, props: i.target.props || {}, existing: true });
+        }
+        for (const p of ctx.proposals()) {
+          if (p.op === "create_node" && p.node && p.node.type === "Component" && !built.has(p.node.key)) out.set(p.node.key, { key: p.node.key, ref: "@" + p.id, props: p.node.props || {}, existing: false });
+        }
+        return [...out.values()];
+      }
+      function build(ctx, tech) {
+        const known = ["java", "c", "shell"];
+        const mine = pending(ctx).filter(c => tech === "other" ? !known.includes(c.props.technology) : c.props.technology === tech);
+        const r = RULES[tech];
+        for (const c of mine) {
+          const name = String(c.props.title || c.key);
+          const v = bump(c.props.version);
+          const key = "ART-" + c.key + "-" + v;
+          const art = ctx.proposeNode("BuildArtifact", key, { name: name, format: r.format, version: v, technology: c.props.technology || "",
+            coordinates: r.coordinates(name, v), toolchain: r.toolchain, checks: r.checks });
+          ctx.proposeLink(art, "built_from", c.ref);
+          if (c.existing) {
+            for (const l of ctx.links(c.key, "in", "composed_of")) ctx.proposeLink(l.from.key, "deploys", art);
+          }
+          ctx.addArtifact("build", { component: c.key, technology: c.props.technology || "", version: v, artifact: key, toolchain: r.toolchain, checks: r.checks });
+        }
+        return mine.length + " composant(s) " + tech + " construit(s)";
+      }
+      function run(ctx) { return build(ctx, ctx.param("technology") || "other"); }
+
+  - name: build_c
+    kind: script
+    language: javascript
+    specializes: build
+    params: {technology: c}
+    priority: 20
+    description: "Build C : gcc / make, avertissements bloquants, analyse statique"
+    when: >
+      impacts.exists(i, "Component" in i.target.types && has(i.target.props.technology) && i.target.props.technology == "c"
+        && !artifacts.exists(a, a.type == "build" && a.data.component == i.target.key))
+      || proposals.exists(p, p.op == "create_node" && "Component" in p.node.types && has(p.node.props.technology)
+        && p.node.props.technology == "c" && !artifacts.exists(a, a.type == "build" && a.data.component == p.node.key))
+    code: *build
+
+  - name: build_shell
+    kind: script
+    language: javascript
+    specializes: build
+    params: {technology: shell}
+    priority: 10
+    description: "Build shell : shellcheck, tests bats, archive"
+    when: >
+      impacts.exists(i, "Component" in i.target.types && has(i.target.props.technology) && i.target.props.technology == "shell"
+        && !artifacts.exists(a, a.type == "build" && a.data.component == i.target.key))
+      || proposals.exists(p, p.op == "create_node" && "Component" in p.node.types && has(p.node.props.technology)
+        && p.node.props.technology == "shell" && !artifacts.exists(a, a.type == "build" && a.data.component == p.node.key))
+    code: *build
+
+  - name: build_generic
+    kind: script
+    language: javascript
+    specializes: build
+    params: {technology: other}
+    description: "Build générique (autres technologies) : archive et empreinte"
+    code: *build
+
+  # ======================= livraison
+  - name: write_release_note
+    kind: llm
+    description: Rédiger la note de version
+    pre: {requirements_specified: true, tests_planned: true, design_checked: true, build_complete: true, release_noted: false}
+    effects: {release_noted: true}
+    cost: 1
+    model: fast
+    prompt: |
+      Intention : "{{ .Change.Intent }}"
+      Propositions :
+      {{ range .Proposals }}- {{ json .Proposal }}
+      {{ end }}
+      Artefacts :
+      {{ range .Artifacts }}- {{ .Type }} {{ json .Data }}
+      {{ end }}
+      Rédige la note de version (exigences, composants, artefacts, applications
+      concernées, tests) : {"kind":"artifact","type":"release_note","data":{"markdown":"..."}}
+
+  - name: assemble_release_note
+    kind: script
+    language: javascript
+    description: Assembler la note de version à partir du change (repli déterministe)
+    pre: {requirements_specified: true, tests_planned: true, design_checked: true, build_complete: true, release_noted: false}
+    effects: {release_noted: true}
+    cost: 3
+    code: |
+      function run(ctx) {
+        const lines = ["# Note de version", "", "Intention : " + ctx.intent(), ""];
+        const section = (title, rows) => { if (rows.length) { lines.push("## " + title, ...rows.map(r => "- " + r), ""); } };
+        const props = ctx.proposals().filter(p => p.node);
+        section("Exigences", props.filter(p => p.node.type.endsWith("Requirement")).map(p => p.op + " " + p.node.key));
+        section("Conception", props.filter(p => ["Function", "Component", "Interface", "Flow", "Data"].includes(p.node.type)).map(p => p.op + " " + p.node.type + " " + p.node.key));
+        section("Artefacts de build", ctx.items("artifact").filter(a => a.type === "build").map(a => a.data.artifact + " (" + a.data.toolchain + ")"));
+        section("Tests", props.filter(p => p.node.type === "TestCase").map(p => p.node.key));
+        section("Applications concernées", ctx.impacts().filter(i => i.target && i.target.type === "Application").map(i => i.target.key + " " + (i.target.props.title || "")));
+        ctx.addArtifact("release_note", { markdown: lines.join("\n") });
+        return "note de version assemblée";
+      }
+
+  - name: review
+    kind: human
+    description: Revue du changement (exigences, conception, artefacts, tests)
+    pre: {release_noted: true, reviewed: false}
+    effects: {reviewed: true}
+    cost: 2
+    instructions: Acceptez ou rejetez chaque proposition au vu de la note de version et du contrôle de conception.
+
+  - name: apply_change
+    kind: builtin
+    builtin: graph.apply
+    description: Appliquer le changement au référentiel ALM (nouvelle baseline)
+    pre: {reviewed: true, applied: false}
+    effects: {applied: true}
+    cost: 1
+    permission: change:apply
+
+goals:
+  - name: analyze_impact
+    description: Mesurer l'impact d'un changement sur la chaîne ALM
+    examples: ["quel est l'impact", "qu'est-ce que ça casse", "analyse d'impact"]
+    pre: {propagated: true}
+    value: 3
+  - name: specify
+    description: Spécifier les exigences d'un changement, tracées et vérifiées
+    examples: ["spécifier le besoin", "écrire les exigences", "nouvelle exigence"]
+    pre: {requirements_specified: true, requirements_traced: true, tests_planned: true}
+    value: 5
+  - name: design
+    description: Concevoir l'évolution de la solution (fonctions, composants, interfaces, flux, données)
+    examples: ["concevoir", "architecture", "quels composants modifier"]
+    pre: {requirements_specified: true, functions_allocated: true, design_checked: true}
+    value: 6
+  - name: build_components
+    description: Construire les composants impactés
+    examples: ["construire", "build", "livrer les artefacts"]
+    pre: {components_in_scope: true, build_complete: true}
+    value: 7
+  - name: deliver
+    description: Livrer un changement de bout en bout, de l'exigence au référentiel mis à jour
+    examples: ["livrer une évolution", "développer une nouvelle fonctionnalité", "réaliser le changement"]
+    pre: {applied: true}
+    value: 10
+
+agents:
+  - name: analyst
+    description: Analyste — périmètre, impacts, exigences, traçabilité, plan de test
+    examples: ["analyse d'impact", "spécifier les exigences", "quel est l'impact de ce besoin"]
+    planner: goap
+    actions: [identify_scope, select_scope, propagate_impacts, specify_requirements, write_requirements,
+              trace_requirements, trace_manually, plan_tests]
+    goals: [analyze_impact, specify]
+  - name: architect
+    description: Architecte — allocation fonctionnelle, conception des composants, interfaces, flux et données
+    examples: ["concevoir la solution", "quels composants et interfaces modifier"]
+    planner: hybrid
+    actions: [identify_scope, select_scope, propagate_impacts, specify_requirements, write_requirements,
+              trace_requirements, trace_manually, allocate_functions, design_solution, write_design, check_design]
+    goals: [design]
+  - name: builder
+    description: Intégrateur — build des composants selon leur technologie
+    examples: ["construire les composants", "build"]
+    planner: goap
+    actions: [identify_scope, select_scope, propagate_impacts, specify_requirements, write_requirements,
+              trace_requirements, trace_manually, allocate_functions, design_solution, write_design, check_design, build]
+    goals: [build_components]
+  - name: delivery
+    description: Livraison de bout en bout — de l'intention au référentiel ALM mis à jour
+    examples: ["livrer une évolution", "développer une fonctionnalité de bout en bout"]
+    planner: goap
+    goals: [deliver]

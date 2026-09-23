@@ -192,6 +192,8 @@ export interface Action {
   when?: string;
   /** priorité de la spécialisation (la plus haute l'emporte) */
   priority?: number;
+  /** effets atteints en plusieurs exécutions (une exécution qui produit des items est un progrès) */
+  incremental?: boolean;
 }
 
 export type TriggerType = 'event' | 'schedule';

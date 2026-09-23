@@ -79,6 +79,8 @@ export interface ActionForm extends Identified {
   when: string;
   /** priorité de la spécialisation (la plus haute l'emporte) */
   priority: number;
+  /** effets atteints en plusieurs exécutions */
+  incremental: boolean;
 }
 
 export interface TriggerForm {
@@ -189,6 +191,7 @@ export const emptyAction = (): ActionForm => ({
   specializes: '',
   when: '',
   priority: 0,
+  incremental: false,
 });
 export const emptyGoal = (): GoalForm => ({ uid: newUid(), name: '', description: '', examples: '', pre: [], value: 1 });
 export const emptyAgent = (): AgentForm => ({
@@ -281,6 +284,7 @@ function actionToForm(a: Action, uid: string): ActionForm {
     specializes: a.specializes ?? '',
     when: a.when ?? '',
     priority: a.priority ?? 0,
+    incremental: a.incremental ?? false,
   };
 }
 
@@ -460,6 +464,7 @@ export function fromForm(f: MethodologyForm): { methodology: Methodology; issues
         put(o, 'pre', toMap(a.pre));
         put(o, 'effects', toMap(a.effects));
         put(o, 'cost', num(a.cost));
+        if (a.incremental) o.incremental = true;
       }
       put(o, 'permission', a.permission.trim());
       put(o, 'utility', a.utility.trim());

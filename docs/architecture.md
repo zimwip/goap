@@ -599,7 +599,36 @@ goals:
 Voir `methodologies/impact-analysis.yaml` pour l'exemple complet exécutable, et
 `methodologies/methodology-improvement.yaml` (auto-observation : action abstraite spécialisée par des règles
 ou un LLM). Champs de spécialisation d'une action : `specializes`, `when`, `priority`, `kind: abstract` ;
-sous-typage d'un type de nœud : `extends`.
+sous-typage d'un type de nœud : `extends`. Une action `incremental: true` atteint ses effets en plusieurs
+exécutions : une exécution qui produit des items sans les atteindre est un **progrès**, pas un échec.
+
+### 4.1 Méthodologie SDLC sur le domaine ALM (`methodologies/sdlc.yaml`, version initiale 0.1.0)
+
+Domaine ALM (données de démonstration : `internal/graphsvc/seed.go`) :
+
+```
+Need ◄─satisfies─ Requirement ◄─realizes─ Function ◄─implements─ Component ◄─built_from─ BuildArtifact
+  ▲               (Functional / NonFunctional ⊃ Security)            │  ▲  depends_on / accesses ─► Data
+  └─addresses─ Solution ─includes─► Application ─composed_of─────────┘  └───── deploys ───────────┘
+                                        ▲  ▲                              Data ─owned_by─► Application
+                   Interface ─exposed_by┘  └─source / target─ Flow ─through─► Interface ; Flow / Interface ─carries / exchanges─► Data
+TestCase ─verifies─► Requirement
+```
+
+Cycle (buts, du plus partiel au plus complet) :
+
+| But | Étapes |
+|---|---|
+| `analyze_impact` | périmètre (LLM, repli humain) → propagation le long de tous les liens ALM |
+| `specify` | exigences révisées / créées (LLM, repli humain) → traçabilité vers les besoins (script) → un cas de test par exigence (script, niveau selon le sous-type) |
+| `design` | allocation des exigences aux fonctions (script) → conception composants / interfaces / flux / données (LLM, repli humain) → contrôle de cohérence (script) |
+| `build_components` | `build` **abstraite et incrémentale**, spécialisée par technologie : `build_java` (Maven, JDK 21), `build_c` (gcc/make, cppcheck), `build_shell` (shellcheck, bats), `build_generic` ; chaque exécution construit les composants d'une technologie, crée les `BuildArtifact` et les liens `built_from` / `deploys` |
+| `deliver` | note de version (LLM, repli script) → revue humaine → `graph.apply` (permission `change:apply`) |
+
+Agents : `analyst` (goap), `architect` (hybrid), `builder` (goap), `delivery` (goap, tout le cycle). Les
+conditions « chaque élément … » étant vraies sur un ensemble vide, les actions de conception, de build et
+de livraison exigent aussi des exigences spécifiées pour ancrer le cycle. L'agent d'auto-observation
+s'applique à ses exécutions comme à toute autre méthodologie.
 
 ## 5. Organisation du dépôt
 
@@ -645,6 +674,7 @@ docs/                        architecture, ADR
 | **M6 — K8s** | charts Helm, HPA engine · ✅ observabilité OpenTelemetry, manifestes sandboxes |
 | **M8 — branches et décisions** 🟡 | ADR 0009 (accepté) · ✅ graphe : versions par branche, merge de branche à 3 voies, divergence et rebase de change · reste : moteur (conflit → merge validé → rebase et replanification), budget du change, options explorées en branches, comparaison, boucles de décision (questions → analyses), merge de l'option retenue ; puis containers versionnés et releases |
 | **M9 — auto-observation** ✅ | ADR 0011 : journal d'exécution sur l'axe change (ticks, actions, appels LLM / outils, décisions, provenance des items), méthodologie projetée en éléments versionnés du domaine, agent `observer` (journal + traces OpenTelemetry → constats → propositions → revue → brouillon), spécialisation d'actions et sous-typage des types |
+| **M10 — SDLC** 🟡 | méthodologie `sdlc` 0.1.0 sur le domaine ALM (besoin → exigence → fonction → composant → artefact → application → solution, données, interfaces, flux), build spécialisé par technologie, actions incrémentales · à affiner : releases, environnements, qualité (couverture, sécurité), outils MCP (dépôts, CI, registre d'artefacts) |
 | **M7 — agents** ✅ | agents (goap / utility / hybrid), actions script JS / Go avec DSL, sous-agents, sandbox par processus, IDE |
 
 ## 7. Questions ouvertes

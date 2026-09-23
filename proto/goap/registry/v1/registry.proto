@@ -92,6 +92,8 @@ message Action {
   string specializes = 18;
   string when = 19;
   int32 priority = 20;
+  // reaches its effects over several executions (progress is not a failure)
+  bool incremental = 21;
 }
 
 // An agent (Embabel terminology): a planner and the set of admissible actions
