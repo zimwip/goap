@@ -1,4 +1,5 @@
 <script lang="ts">
+  // Onglet « changement » : items du change set et application au référentiel.
   import {
     graph,
     errorMessage,
@@ -8,12 +9,18 @@
     type ChangeItem,
     type ChangeSet,
     type GraphNode,
-  } from '../api';
-  import { nav, go } from '../nav.svelte';
-  import { makeContext, describeProposal, refKey, show } from '../items';
-  import StatusBadge from './StatusBadge.svelte';
+  } from '../../api';
+  import type { Tab } from '../../shell/types';
+  import Icon from '../../shell/Icon.svelte';
+  import { makeContext, describeProposal, refKey, show } from '../../items';
+  import StatusBadge from '../../components/StatusBadge.svelte';
+  import { openTab } from '../../shell/tabs.svelte';
+  import { provideActions, notify } from '../../shell/workbench.svelte';
+  import { refreshChanges, refreshBaselines } from '../../stores/catalog.svelte';
+  import { processes } from '../../stores/live.svelte';
 
-  let changes = $state<ChangeSet[]>([]);
+  let { tab }: { tab: Tab } = $props();
+
   let change = $state<ChangeSet | undefined>();
   let nodes = $state<GraphNode[]>([]);
   let loading = $state(false);
@@ -23,15 +30,7 @@
   let applying = $state(false);
   let applied = $state<Baseline | undefined>();
 
-  const selected = $derived(nav.id);
-
-  async function loadList() {
-    try {
-      changes = (await graph.listChanges()).changes ?? [];
-    } catch {
-      changes = []; // liste facultative : on garde la saisie manuelle
-    }
-  }
+  const selected = $derived(tab.params.id ?? '');
 
   async function load(id: string, signal?: AbortSignal) {
     loading = true;
@@ -47,10 +46,6 @@
       if (!signal?.aborted) loading = false;
     }
   }
-
-  $effect(() => {
-    loadList();
-  });
 
   $effect(() => {
     const id = selected;
@@ -82,7 +77,9 @@
     try {
       applied = (await graph.applyChange(change.id, baselineName.trim())).baseline;
       await load(change.id);
-      loadList();
+      void refreshChanges();
+      void refreshBaselines();
+      notify(`Référentiel ${applied?.name || shortId(applied?.id)} créé.`, 'ok');
     } catch (e) {
       error = errorMessage(e);
     } finally {
@@ -90,51 +87,47 @@
     }
   }
 
-  let manualId = $state('');
-
   function markdownOf(i: ChangeItem): string | undefined {
     const md = i.data?.['markdown'];
     return typeof md === 'string' ? md : undefined;
   }
+
+  const related = $derived([...processes.values()].filter((p) => p.changeId && p.changeId === selected));
+
+  function openBaseline(id: string | undefined) {
+    if (id) openTab({ kind: 'baseline', params: { id } });
+  }
+
+  provideActions(
+    () => tab.id,
+    () => [
+      { id: 'refresh', label: 'Actualiser', icon: 'refresh', disabled: loading, run: () => load(selected) },
+      {
+        id: 'apply',
+        label: applying ? 'Application…' : 'Appliquer',
+        icon: 'check',
+        primary: true,
+        disabled: !change || isApplied || applying || !baselineName.trim(),
+        title: 'Créer un nouveau référentiel à partir du changement',
+        run: apply,
+      },
+    ],
+  );
 </script>
 
-<div class="row head">
-  <h2 class="grow">Changement</h2>
-  <div class="picker">
-    {#if changes.length}
-      <select value={selected} onchange={(e) => go('changement', e.currentTarget.value)} aria-label="Changement">
-        {#if !selected}<option value="">— choisir —</option>{/if}
-        {#each changes as c (c.id)}
-          <option value={c.id}>{c.title || shortId(c.id)} · {c.status}</option>
-        {/each}
-      </select>
-    {:else}
-      <form
-        class="row"
-        onsubmit={(e) => {
-          e.preventDefault();
-          if (manualId.trim()) go('changement', manualId.trim());
-        }}
-      >
-        <input class="grow" type="text" placeholder="Identifiant du changement" bind:value={manualId} />
-        <button type="submit">Ouvrir</button>
-      </form>
-    {/if}
-  </div>
-</div>
 
+<div class="editor-page">
 {#if error}<div class="alert">{error}</div>{/if}
 
-{#if !selected}
-  <p class="empty">Sélectionnez un changement, ou ouvrez-le depuis un processus.</p>
-{:else if loading && !change}
+{#if loading && !change}
   <p class="empty">Chargement…</p>
 {/if}
 
 {#if change}
   <section class="card">
-    <div class="row">
-      <h3 class="grow" style="margin: 0">{change.title || 'Sans titre'}</h3>
+    <div class="editor-head">
+      <Icon name="diff" size={18} />
+      <h2>{change.title || 'Sans titre'}</h2>
       <StatusBadge status={change.status} />
     </div>
     {#if change.intent}<p class="intent">« {change.intent} »</p>{/if}
@@ -144,13 +137,22 @@
       {#if change.goal}<dt>Objectif</dt><dd><code>{change.goal}</code></dd>{/if}
       {#if change.baselineId}
         <dt>Référentiel de départ</dt>
-        <dd><a href="#referentiel/{change.baselineId}">{shortId(change.baselineId)}</a></dd>
+        <dd><button type="button" class="link mono" onclick={() => openBaseline(change?.baselineId)}>{shortId(change.baselineId)}</button></dd>
       {/if}
       {#if change.resultBaselineId}
         <dt>Référentiel résultant</dt>
-        <dd><a href="#referentiel/{change.resultBaselineId}">{shortId(change.resultBaselineId)}</a></dd>
+        <dd><button type="button" class="link mono" onclick={() => openBaseline(change?.resultBaselineId)}>{shortId(change.resultBaselineId)}</button></dd>
       {/if}
       {#if change.createdAt}<dt>Créé le</dt><dd>{formatDate(change.createdAt)}</dd>{/if}
+      {#if related.length}
+        <dt>Exécutions</dt>
+        <dd class="runs">
+          {#each related as p (p.id)}
+            <button type="button" class="link" onclick={() => openTab({ kind: 'run', params: { id: p.id ?? '' } })}>{p.agent || shortId(p.id)}</button>
+            <StatusBadge status={p.status} />
+          {/each}
+        </dd>
+      {/if}
     </dl>
 
     <div class="apply row">
@@ -164,7 +166,7 @@
     </div>
     {#if applied}
       <div class="alert ok" style="margin: 0.75rem 0 0">
-        Référentiel <a href="#referentiel/{applied.id}">{applied.name || applied.id}</a> créé.
+        Référentiel <button type="button" class="link" onclick={() => openBaseline(applied?.id)}>{applied.name || applied.id}</button> créé.
       </div>
     {/if}
   </section>
@@ -256,33 +258,21 @@
     </section>
   {/if}
 {/if}
+</div>
 
 <style>
-  .head {
-    margin-bottom: 0.6rem;
-  }
-  .head h2 {
-    margin: 0;
-  }
-  .picker {
-    min-width: 280px;
+  .runs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem 0.5rem;
+    align-items: center;
   }
   .intent {
     margin: 0.6rem 0;
     font-style: italic;
   }
   .meta {
-    display: grid;
-    grid-template-columns: max-content 1fr;
-    gap: 0.2rem 1rem;
-    margin: 0.5rem 0 1rem;
-    font-size: 0.9rem;
-  }
-  .meta dt {
-    color: var(--muted);
-  }
-  .meta dd {
-    margin: 0;
+    margin: 0.5rem 0 0.8rem;
   }
   .apply {
     align-items: flex-end;

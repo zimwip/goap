@@ -27,7 +27,8 @@ test-pg: ## tests against PostgreSQL (graph, registry, iam)
 
 lint:
 	go vet ./...
-	gofmt -l . | (! grep .)
+	gofmt -l . | (! grep -v node_modules | grep .)
+	@cmp -s docs/dsl.md web/src/lib/help/dsl.md || (echo 'web/src/lib/help/dsl.md is out of sync with docs/dsl.md' && exit 1)
 
 dev: ## single process, in-memory, demo data: http://localhost:8080
 	go run ./cmd/goap-dev

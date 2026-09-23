@@ -1,0 +1,271 @@
+<script lang="ts">
+  // Explorateur : méthodologie → version → sections (Agents, Actions,
+  // Conditions, Objectifs, Domaine) → éléments.
+  import Icon from '../../shell/Icon.svelte';
+  import TreeRow from '../TreeRow.svelte';
+  import StatusBadge from '../../components/StatusBadge.svelte';
+  import { expanded, toggle, isOpen } from './expanded.svelte';
+  import { methodologies, refreshMethodologies, groupedMethodologies } from '../../stores/catalog.svelte';
+  import { getDraft, peekDraft, draftKey, type Draft } from '../../stores/drafts.svelte';
+  import { openTab, tabsState, tabId } from '../../shell/tabs.svelte';
+  import { select, requestReveal } from '../../shell/workbench.svelte';
+  import { formatDate, type MethodologySummary } from '../../api';
+  import {
+    emptyAgent,
+    emptyAction,
+    emptyCondition,
+    emptyGoal,
+    type Section,
+    type SectionItem,
+  } from '../../methodologyForm';
+  import {
+    SECTION_LABEL,
+    SECTION_ICON,
+    itemSpec,
+    methodologySpec,
+    openItem,
+  } from '../editors/methodologyTabs';
+
+  let filter = $state('');
+
+  $effect(() => {
+    if (!methodologies.loaded) void refreshMethodologies();
+  });
+
+  const groups = $derived.by(() => {
+    const q = filter.trim().toLowerCase();
+    const all = groupedMethodologies();
+    if (!q) return all;
+    return all.filter((g) => `${g.name} ${g.description}`.toLowerCase().includes(q));
+  });
+
+  const SECTIONS: Section[] = ['agents', 'actions', 'conditions', 'goals'];
+
+  function vkey(v: MethodologySummary) {
+    return draftKey(v.name ?? '', v.version ?? '');
+  }
+
+  function toggleVersion(v: MethodologySummary) {
+    const k = `v:${vkey(v)}`;
+    toggle(k);
+    if (expanded[k]) void getDraft(v.name ?? '', v.version ?? '');
+  }
+
+  // Les versions dépliées (état restauré) chargent leur brouillon.
+  $effect(() => {
+    for (const m of methodologies.items) if (isOpen(`v:${vkey(m)}`)) getDraft(m.name ?? '', m.version ?? '');
+  });
+
+  function selectVersion(v: MethodologySummary, pin = false) {
+    openTab(methodologySpec(v.name ?? '', v.version ?? ''), { pin });
+    select({
+      title: `${v.name} v${v.version}`,
+      subtitle: 'Méthodologie',
+      rows: [
+        ['Statut', v.status ?? ''],
+        ['Description', v.description ?? ''],
+        ['Agents', (v.agents ?? []).map((a) => a.name).join(', ') || '—'],
+        ['Objectifs', (v.goals ?? []).map((g) => g.name).join(', ') || '—'],
+        ['Modifiée', formatDate(v.updatedAt)],
+        ['Publiée', formatDate(v.publishedAt)],
+      ],
+    });
+  }
+
+  function add(d: Draft, section: Section) {
+    const factories = { agents: emptyAgent, actions: emptyAction, conditions: emptyCondition, goals: emptyGoal };
+    const item = factories[section]();
+    (d.form[section] as SectionItem[]).push(item);
+    expanded[`s:${d.key}/${section}`] = true;
+    openItem(d, section, d.form[section][d.form[section].length - 1], true);
+  }
+
+  function itemDetail(section: Section, it: SectionItem): string {
+    if (section === 'actions' && 'kind' in it) return it.kind;
+    if (section === 'agents' && 'planner' in it) return it.planner;
+    return '';
+  }
+
+  function openDomain(d: Draft) {
+    const t = openTab(methodologySpec(d.name, d.version));
+    requestReveal(t.id, 'nodeTypes');
+  }
+</script>
+
+<div class="explorer">
+  <div class="tools">
+    <input type="search" placeholder="Filtrer…" aria-label="Filtrer les méthodologies" bind:value={filter} data-no-pin />
+    <button
+      type="button"
+      class="ghost small"
+      title="Nouvelle méthodologie"
+      aria-label="Nouvelle méthodologie"
+      onclick={() => openTab(methodologySpec('', ''), { pin: true })}><Icon name="plus" size={14} /></button
+    >
+    <button
+      type="button"
+      class="ghost small"
+      title="Importer YAML"
+      aria-label="Importer YAML"
+      onclick={() => openTab({ kind: 'import', params: {} }, { pin: true })}><Icon name="upload" size={14} /></button
+    >
+    <button
+      type="button"
+      class="ghost small"
+      title="Actualiser"
+      aria-label="Actualiser"
+      disabled={methodologies.loading}
+      onclick={() => refreshMethodologies()}><Icon name="refresh" size={14} /></button
+    >
+  </div>
+
+  {#if methodologies.error}<div class="alert small">{methodologies.error}</div>{/if}
+  {#if methodologies.loaded && !methodologies.items.length && !methodologies.error}
+    <p class="empty pad">Aucune méthodologie. Créez-en une ou importez un fichier YAML.</p>
+  {/if}
+
+  <div role="tree" aria-label="Méthodologies">
+    {#each groups as g (g.name)}
+      {@const gk = `m:${g.name}`}
+      <TreeRow
+        icon="book"
+        label={g.name}
+        expanded={isOpen(gk, true)}
+        title={g.description || g.name}
+        ontoggle={() => toggle(gk, true)}
+      />
+      {#if isOpen(gk, true)}
+        {#each g.versions as v (v.version)}
+          {@const k = vkey(v)}
+          {@const d = peekDraft(k)}
+          {@const vOpen = isOpen(`v:${k}`)}
+          {@const vid = tabId(methodologySpec(v.name ?? '', v.version ?? ''))}
+          <TreeRow
+              depth={1}
+              icon="tag"
+              label={`v${v.version}`}
+              expanded={vOpen}
+              active={tabsState.active === vid}
+              badge={d?.dirty ? '●' : d && d.allIssues.length ? d.allIssues.length : undefined}
+              badgeTone={d?.dirty ? 'accent' : 'danger'}
+              onselect={() => selectVersion(v)}
+              onopen={() => selectVersion(v, true)}
+              ontoggle={() => toggleVersion(v)}
+            >
+            {#snippet trail()}
+              <StatusBadge status={v.status} />
+            {/snippet}
+          </TreeRow>
+          {#if vOpen}
+            {#if !d || d.loading}
+              <p class="empty pad2">Chargement…</p>
+            {:else if d.loadError}
+              <p class="alert small">{d.loadError}</p>
+            {:else}
+              {#each SECTIONS as s (s)}
+                {@const sk = `s:${k}/${s}`}
+                {@const items = d.items(s)}
+                {@const n = d.count(s)}
+                <TreeRow
+                  depth={2}
+                  icon={SECTION_ICON[s]}
+                  label={SECTION_LABEL[s]}
+                  detail={String(items.length)}
+                  expanded={isOpen(sk)}
+                  badge={n || undefined}
+                  badgeTone="danger"
+                  ontoggle={() => toggle(sk)}
+                >
+                  {#snippet actions()}
+                    {#if !d.readonly}
+                      <button
+                        type="button"
+                        title="Ajouter"
+                        aria-label={`Ajouter : ${SECTION_LABEL[s]}`}
+                        onclick={(e) => {
+                          e.stopPropagation();
+                          add(d, s);
+                        }}><Icon name="plus" size={13} /></button
+                      >
+                    {/if}
+                  {/snippet}
+                </TreeRow>
+                {#if isOpen(sk)}
+                  {#each items as it, i (it.uid)}
+                    {@const id = tabId(itemSpec(d, s, it))}
+                    {@const issues = d.count(`${s}[${i}]`)}
+                    {@const dirty = d.itemDirty(s, it.uid)}
+                    <TreeRow
+                      depth={3}
+                      label={it.name || '(sans nom)'}
+                      italic={!it.name}
+                      detail={itemDetail(s, it)}
+                      active={tabsState.active === id}
+                      badge={issues || (dirty ? '●' : undefined)}
+                      badgeTone={issues ? 'danger' : 'accent'}
+                      onselect={() => openItem(d, s, it)}
+                      onopen={() => openItem(d, s, it, true)}
+                    />
+                  {:else}
+                    <p class="empty pad3">
+                      {s === 'agents' ? 'Aucun agent (agent par défaut : toutes les actions).' : 'Aucun élément.'}
+                    </p>
+                  {/each}
+                {/if}
+              {/each}
+              <TreeRow
+                depth={2}
+                icon="graph"
+                label="Domaine"
+                detail={`${d.form.nodeTypes.length} types · ${d.form.linkTypes.length} liens`}
+                badge={d.count('nodeTypes') + d.count('linkTypes') || undefined}
+                badgeTone="danger"
+                onselect={() => openDomain(d)}
+                onopen={() => openDomain(d)}
+              />
+            {/if}
+          {/if}
+        {/each}
+      {/if}
+    {/each}
+  </div>
+</div>
+
+<style>
+  .explorer {
+    padding-bottom: 1rem;
+  }
+  .tools {
+    display: flex;
+    gap: 2px;
+    padding: 0 0.5rem 0.4rem;
+    position: sticky;
+    top: 0;
+    background: var(--chrome);
+    z-index: 1;
+  }
+  .tools input {
+    min-height: 24px;
+    height: 24px;
+    margin-right: 0.2rem;
+  }
+  .tools button {
+    padding: 0.1rem 0.3rem;
+  }
+  .pad {
+    padding: 0.4rem 0.8rem;
+  }
+  .pad2 {
+    padding: 0.1rem 0 0.1rem 46px;
+    margin: 0;
+  }
+  .pad3 {
+    padding: 0.1rem 0 0.1rem 58px;
+    margin: 0;
+    font-size: 0.9em;
+  }
+  .alert.small {
+    margin: 0.3rem 0.5rem;
+    font-size: 0.88em;
+  }
+</style>

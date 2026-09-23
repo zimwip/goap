@@ -1,10 +1,13 @@
+/* Jetons de thème. Clair par défaut, sombre selon le système ou forcé par
+   data-theme sur <html> (menu utilisateur). */
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
 
-  --bg: #f7f7f5;
+  --bg: #f3f3f1;
   --surface: #ffffff;
   --surface-2: #f0f0ed;
-  --border: #e2e2dd;
+  --surface-3: #e8e8e4;
+  --border: #dcdcd6;
   --text: #1c1c1a;
   --muted: #6b6b66;
   --accent: #3b5bdb;
@@ -21,25 +24,45 @@
   --info-soft: #e3f0fc;
   --neutral-soft: #ececea;
 
-  --radius: 8px;
-  --radius-sm: 5px;
-  --shadow: 0 1px 2px rgb(0 0 0 / 0.05), 0 1px 3px rgb(0 0 0 / 0.04);
+  --chrome: #e9e9e5;
+  --chrome-2: #dfdfda;
+  --hover: rgb(0 0 0 / 0.05);
+  --selection: #c9d6fb;
+  --active-line: rgb(59 91 219 / 0.05);
+
+  --syn-keyword: #8b3fbf;
+  --syn-string: #2b7a2b;
+  --syn-number: #b35c00;
+  --syn-comment: #8a8a82;
+  --syn-function: #1f5fbf;
+  --syn-type: #0f7b8a;
+  --syn-property: #7a4b12;
+  --syn-def: #1c1c1a;
+
+  --radius: 6px;
+  --radius-sm: 4px;
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.05);
+  --shadow-pop: 0 6px 24px rgb(0 0 0 / 0.14), 0 1px 3px rgb(0 0 0 / 0.08);
   --font: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+  --row: 22px;
 }
 
+/* Thème sombre : selon le système (sauf thème clair forcé), ou forcé. Le bloc
+   est répété car CSS n'a pas de mixins. */
 @media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #141413;
-    --surface: #1d1d1b;
-    --surface-2: #262624;
-    --border: #34342f;
-    --text: #ecece8;
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+    --bg: #1b1b1a;
+    --surface: #1f1f1e;
+    --surface-2: #272725;
+    --surface-3: #2f2f2c;
+    --border: #363632;
+    --text: #e6e6e1;
     --muted: #9c9c95;
     --accent: #7c9bff;
     --accent-soft: #232c4a;
     --accent-text: #0f1426;
-
     --ok: #69db7c;
     --ok-soft: #1c3322;
     --warn: #ffb057;
@@ -49,9 +72,60 @@
     --info: #74c0fc;
     --info-soft: #172c40;
     --neutral-soft: #2c2c29;
-
+    --chrome: #171716;
+    --chrome-2: #121211;
+    --hover: rgb(255 255 255 / 0.06);
+    --selection: #2f3d66;
+    --active-line: rgb(124 155 255 / 0.07);
+    --syn-keyword: #d19bff;
+    --syn-string: #9ad38a;
+    --syn-number: #ffb870;
+    --syn-comment: #7d7d76;
+    --syn-function: #82b1ff;
+    --syn-type: #6fd1dc;
+    --syn-property: #e3c08d;
+    --syn-def: #e6e6e1;
     --shadow: none;
+    --shadow-pop: 0 6px 24px rgb(0 0 0 / 0.5);
   }
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #1b1b1a;
+  --surface: #1f1f1e;
+  --surface-2: #272725;
+  --surface-3: #2f2f2c;
+  --border: #363632;
+  --text: #e6e6e1;
+  --muted: #9c9c95;
+  --accent: #7c9bff;
+  --accent-soft: #232c4a;
+  --accent-text: #0f1426;
+  --ok: #69db7c;
+  --ok-soft: #1c3322;
+  --warn: #ffb057;
+  --warn-soft: #3a2a14;
+  --danger: #ff8787;
+  --danger-soft: #3d1c1c;
+  --info: #74c0fc;
+  --info-soft: #172c40;
+  --neutral-soft: #2c2c29;
+  --chrome: #171716;
+  --chrome-2: #121211;
+  --hover: rgb(255 255 255 / 0.06);
+  --selection: #2f3d66;
+  --active-line: rgb(124 155 255 / 0.07);
+  --syn-keyword: #d19bff;
+  --syn-string: #9ad38a;
+  --syn-number: #ffb870;
+  --syn-comment: #7d7d76;
+  --syn-function: #82b1ff;
+  --syn-type: #6fd1dc;
+  --syn-property: #e3c08d;
+  --syn-def: #e6e6e1;
+  --shadow: none;
+  --shadow-pop: 0 6px 24px rgb(0 0 0 / 0.5);
 }
 
 *,
@@ -63,12 +137,18 @@
 html,
 body {
   margin: 0;
+  height: 100%;
+  overflow: hidden;
   background: var(--bg);
   color: var(--text);
   font-family: var(--font);
-  font-size: 15px;
-  line-height: 1.5;
+  font-size: 13px;
+  line-height: 1.45;
   -webkit-font-smoothing: antialiased;
+}
+
+#app {
+  height: 100%;
 }
 
 h1,
@@ -79,19 +159,19 @@ h4 {
   margin: 0 0 0.6em;
 }
 h2 {
-  font-size: 1.35rem;
+  font-size: 1.25rem;
 }
 h3 {
-  font-size: 1.05rem;
+  font-size: 1rem;
 }
 h4 {
-  font-size: 0.95rem;
+  font-size: 0.9rem;
   color: var(--muted);
   font-weight: 600;
 }
 
 p {
-  margin: 0 0 0.75em;
+  margin: 0 0 0.6em;
 }
 
 a {
@@ -106,18 +186,23 @@ code,
 pre,
 .mono {
   font-family: var(--mono);
-  font-size: 0.86em;
+  font-size: 0.92em;
 }
 
 pre {
   margin: 0;
-  padding: 0.75rem 0.9rem;
+  padding: 0.5rem 0.7rem;
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   overflow: auto;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 
 /* --- formulaires ------------------------------------------------------- */
@@ -127,12 +212,13 @@ label {
   font-size: 0.85rem;
   font-weight: 600;
   color: var(--muted);
-  margin-bottom: 0.25rem;
+  margin-bottom: 0.2rem;
 }
 
 input[type='text'],
 input[type='password'],
 input[type='number'],
+input[type='search'],
 input:not([type]),
 select,
 textarea {
@@ -142,15 +228,17 @@ textarea {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  padding: 0.45rem 0.6rem;
+  padding: 0.25rem 0.45rem;
+  min-height: 26px;
 }
 textarea {
   resize: vertical;
-  min-height: 4.5rem;
+  min-height: 3.5rem;
 }
-textarea.mono {
+textarea.mono,
+input.mono {
   font-family: var(--mono);
-  font-size: 0.85rem;
+  font-size: 0.92em;
 }
 input:disabled,
 select:disabled,
@@ -164,19 +252,20 @@ select:focus,
 textarea:focus,
 button:focus-visible {
   outline: 2px solid var(--accent);
-  outline-offset: 1px;
+  outline-offset: 0;
 }
 
 button {
   font: inherit;
   font-weight: 600;
-  font-size: 0.9rem;
+  font-size: 0.92rem;
   cursor: pointer;
   border-radius: var(--radius-sm);
-  padding: 0.45rem 0.9rem;
+  padding: 0.25rem 0.7rem;
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--text);
+  min-height: 26px;
 }
 button:hover:not(:disabled) {
   background: var(--surface-2);
@@ -197,8 +286,31 @@ button.danger:hover:not(:disabled) {
   background: var(--danger-soft);
 }
 button.small {
-  padding: 0.2rem 0.55rem;
-  font-size: 0.8rem;
+  padding: 0.1rem 0.45rem;
+  font-size: 0.85rem;
+  min-height: 22px;
+}
+button.link {
+  border: none;
+  background: none;
+  padding: 0;
+  min-height: 0;
+  color: var(--accent);
+  font-weight: 500;
+  font-size: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+button.link:hover:not(:disabled) {
+  background: none;
+  text-decoration: underline;
+}
+button.ghost {
+  border-color: transparent;
+  background: transparent;
+}
+button.ghost:hover:not(:disabled) {
+  background: var(--hover);
 }
 input.bad,
 select.bad,
@@ -212,24 +324,49 @@ button:disabled {
 }
 
 .field {
-  margin-bottom: 0.85rem;
+  margin-bottom: 0.6rem;
 }
 .row {
   display: flex;
-  gap: 0.75rem;
+  gap: 0.5rem;
   align-items: center;
   flex-wrap: wrap;
 }
-.row > .grow {
+.row > .grow,
+.grow {
   flex: 1;
 }
 .hint {
-  font-size: 0.85rem;
+  font-size: 0.88rem;
   color: var(--muted);
 }
 .empty {
   color: var(--muted);
   font-style: italic;
+}
+.opt {
+  font-weight: 400;
+}
+.check {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--text);
+  font-weight: 500;
+}
+.check input {
+  margin: 0;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0 0.7rem;
+}
+.grid2 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 0.5rem 0.7rem;
 }
 
 /* --- blocs ------------------------------------------------------------- */
@@ -239,8 +376,8 @@ button:disabled {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
-  padding: 1rem 1.15rem;
-  margin-bottom: 1rem;
+  padding: 0.75rem 0.9rem;
+  margin-bottom: 0.75rem;
 }
 .card > h3:first-child {
   margin-top: 0;
@@ -248,11 +385,11 @@ button:disabled {
 
 .alert {
   border-radius: var(--radius-sm);
-  padding: 0.55rem 0.8rem;
-  margin-bottom: 0.9rem;
+  padding: 0.4rem 0.65rem;
+  margin-bottom: 0.7rem;
   background: var(--danger-soft);
   color: var(--danger);
-  font-size: 0.9rem;
+  font-size: 0.92rem;
 }
 .alert.info {
   background: var(--info-soft);
@@ -262,21 +399,25 @@ button:disabled {
   background: var(--ok-soft);
   color: var(--ok);
 }
+.alert.warn {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
 
 table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.9rem;
+  font-size: 0.95em;
 }
 th,
 td {
   text-align: left;
-  padding: 0.4rem 0.55rem;
+  padding: 0.2rem 0.45rem;
   border-bottom: 1px solid var(--border);
   vertical-align: top;
 }
 th {
-  font-size: 0.78rem;
+  font-size: 0.8rem;
   text-transform: uppercase;
   letter-spacing: 0.03em;
   color: var(--muted);
@@ -285,11 +426,16 @@ th {
 tbody tr:last-child td {
   border-bottom: none;
 }
+td.num,
+th.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
 
 .chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.35rem;
+  gap: 0.3rem;
   list-style: none;
   padding: 0;
   margin: 0;
@@ -297,16 +443,178 @@ tbody tr:last-child td {
 .chip {
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
+  gap: 0.3rem;
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: 999px;
-  padding: 0.1rem 0.6rem;
-  font-size: 0.82rem;
+  padding: 0 0.5rem;
+  font-size: 0.85rem;
   font-family: var(--mono);
 }
 .chip .n {
   color: var(--muted);
   font-family: var(--font);
-  font-size: 0.75rem;
+  font-size: 0.78rem;
+}
+
+.meta {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.15rem 0.9rem;
+  margin: 0;
+  font-size: 0.95em;
+}
+.meta dt {
+  color: var(--muted);
+}
+.meta dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Mise en évidence d'un champ ciblé depuis la console « Problèmes ». */
+.flash {
+  animation: flash 1.2s ease-out;
+}
+@keyframes flash {
+  0%,
+  30% {
+    box-shadow: 0 0 0 3px var(--warn);
+  }
+  100% {
+    box-shadow: 0 0 0 3px transparent;
+  }
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* Éditeurs : conteneur défilant commun. */
+.editor-page {
+  padding: 0.9rem 1.1rem 2rem;
+  max-width: 1100px;
+}
+.editor-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.7rem;
+}
+.editor-head h2 {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+fieldset.plain {
+  border: none;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/* --- console (zone basse) ------------------------------------------------ */
+
+.console-tools {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.25rem 0.5rem;
+  flex: none;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+.console-tools input,
+.console-tools select {
+  width: auto;
+  min-height: 22px;
+  height: 22px;
+  padding: 0 0.35rem;
+  font-size: 0.92em;
+}
+.console-tools input[type='search'] {
+  width: 180px;
+}
+.console-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+.console-table {
+  font-family: var(--mono);
+  font-size: 0.92em;
+}
+.console-table th {
+  position: sticky;
+  top: 0;
+  background: var(--surface);
+  z-index: 1;
+  font-family: var(--font);
+}
+.console-table td {
+  padding: 0.05rem 0.45rem;
+  white-space: nowrap;
+  border-bottom: none;
+  max-width: 22rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.console-table tbody tr:nth-child(even) td {
+  background: var(--active-line);
+}
+.console-table tbody tr.clickable {
+  cursor: pointer;
+}
+.console-table tbody tr.clickable:hover td {
+  background: var(--hover);
+}
+.console-table td.wrap {
+  white-space: pre-wrap;
+  word-break: break-word;
+  width: 100%;
+  max-width: none;
+  min-width: 14rem;
+}
+.console-empty {
+  padding: 0.6rem 0.8rem;
+  color: var(--muted);
+  font-style: italic;
+}
+.lvl {
+  text-transform: uppercase;
+  font-size: 0.85em;
+  font-weight: 700;
+}
+.lvl-debug {
+  color: var(--muted);
+}
+.lvl-info {
+  color: var(--info);
+}
+.lvl-warn {
+  color: var(--warn);
+}
+.lvl-error {
+  color: var(--danger);
+}
+.console-tools button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  white-space: nowrap;
 }

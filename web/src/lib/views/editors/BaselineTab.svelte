@@ -1,10 +1,14 @@
 <script lang="ts">
-  import { graph, errorMessage, formatDate, nodeTitle, type Baseline, type GraphNode, type Link } from '../api';
-  import { nav, go } from '../nav.svelte';
+  // Onglet « référentiel » : nœuds et liens d'une baseline (liens suspects signalés).
+  import { graph, errorMessage, formatDate, nodeTitle, shortId, type Baseline, type GraphNode, type Link } from '../../api';
+  import type { Tab } from '../../shell/types';
+  import Icon from '../../shell/Icon.svelte';
+  import { openTab } from '../../shell/tabs.svelte';
+  import { provideActions, select, selection } from '../../shell/workbench.svelte';
 
-  let baselines = $state<Baseline[]>([]);
-  let listError = $state('');
+  let { tab }: { tab: Tab } = $props();
 
+  let reload = $state(0);
   let baseline = $state<Baseline | undefined>();
   let nodes = $state<GraphNode[]>([]);
   let links = $state<Link[]>([]);
@@ -13,19 +17,10 @@
   let error = $state('');
   let filter = $state('');
 
-  const selected = $derived(nav.id);
+  const selected = $derived(tab.params.id ?? '');
 
   $effect(() => {
-    graph
-      .listBaselines()
-      .then((r) => {
-        baselines = r.baselines ?? [];
-        if (nav.tab === 'referentiel' && !nav.id && baselines.length) go('referentiel', baselines[baselines.length - 1].id ?? '');
-      })
-      .catch((e) => (listError = errorMessage(e)));
-  });
-
-  $effect(() => {
+    void reload;
     const id = selected;
     if (!id) return;
     const ctrl = new AbortController();
@@ -70,32 +65,47 @@
     return n?.key ?? ref.id.slice(0, 8);
   }
 
+  provideActions(
+    () => tab.id,
+    () => [{ id: 'refresh', label: 'Actualiser', icon: 'refresh', disabled: loading, run: () => reload++ }],
+  );
+
+  function showNode(n: GraphNode) {
+    select({
+      title: n.key ?? '',
+      subtitle: `Nœud ${n.type ?? ''} v${n.version ?? 0}`,
+      rows: [
+        ['Identifiant', n.id ?? ''],
+        ['Type', n.type ?? ''],
+        ['Version', String(n.version ?? 0)],
+        ...Object.entries(n.props ?? {}).map(([k, v]): [string, string] => [k, typeof v === 'string' ? v : JSON.stringify(v)]),
+        ['Changement', n.changeId ?? ''],
+        ['Créé', formatDate(n.createdAt)],
+      ],
+    });
+  }
+
+  const selectedKey = $derived(selection.current?.subtitle?.startsWith('Nœud') ? selection.current.title : '');
+
   function stale(ref: { id?: string; version?: number } | undefined): boolean {
     const n = ref?.id ? byId.get(ref.id) : undefined;
     return !!n && (ref?.version ?? 0) !== (n.version ?? 0);
   }
 </script>
 
-<div class="row head">
-  <h2 class="grow">Référentiel</h2>
-  <div class="picker">
-    <select value={selected} onchange={(e) => go('referentiel', e.currentTarget.value)} aria-label="Référentiel">
-      {#if !selected}<option value="">— choisir —</option>{/if}
-      {#each baselines as b (b.id)}
-        <option value={b.id}>{b.name || b.id}</option>
-      {/each}
-    </select>
-  </div>
+<div class="editor-page wide">
+<div class="editor-head">
+  <Icon name="database" size={18} />
+  <h2>{baseline?.name || shortId(selected)}</h2>
 </div>
-
-{#if listError}<div class="alert">{listError}</div>{/if}
 {#if error}<div class="alert">{error}</div>{/if}
 
 {#if baseline}
   <p class="hint">
     <code>{baseline.id}</code>
     {#if baseline.createdAt} · créé le {formatDate(baseline.createdAt)}{/if}
-    {#if baseline.changeId} · issu du changement <a href="#changement/{baseline.changeId}">{baseline.changeId.slice(0, 8)}</a>{/if}
+    {#if baseline.changeId} · issu du changement <button type="button" class="link mono" onclick={() => openTab({ kind: 'change', params: { id: baseline?.changeId ?? '' } })}>{baseline.changeId.slice(0, 8)}</button>{/if}
+    {#if baseline.parentId} · parent <button type="button" class="link mono" onclick={() => openTab({ kind: 'baseline', params: { id: baseline?.parentId ?? '' } })}>{shortId(baseline.parentId)}</button>{/if}
     · {nodes.length} nœuds · {allLinks.length} liens
     {#if suspect.length}· <span class="suspect-count">{suspect.length} suspect{suspect.length > 1 ? 's' : ''}</span>{/if}
   </p>
@@ -107,7 +117,7 @@
   <section class="card">
     <div class="row" style="margin-bottom: 0.5rem">
       <h3 class="grow" style="margin: 0">Nœuds</h3>
-      <input class="filter" type="text" placeholder="Filtrer…" bind:value={filter} />
+      <input class="filter" type="search" placeholder="Filtrer…" aria-label="Filtrer les nœuds" bind:value={filter} data-no-pin />
     </div>
     {#if shownNodes.length}
       <div class="scroll">
@@ -115,8 +125,8 @@
           <thead><tr><th>Clé</th><th>Type</th><th>Version</th><th>Titre</th></tr></thead>
           <tbody>
             {#each shownNodes as n (n.id)}
-              <tr class:deleted={n.deleted}>
-                <td><code>{n.key}</code></td>
+              <tr class:deleted={n.deleted} class:sel={selectedKey === n.key}>
+                <td><button type="button" class="link mono" onclick={() => showNode(n)}>{n.key}</button></td>
                 <td>{n.type}</td>
                 <td>v{n.version ?? 0}</td>
                 <td>{nodeTitle(n)}</td>
@@ -164,16 +174,14 @@
     {/if}
   </section>
 {/if}
+</div>
 
 <style>
-  .head {
-    margin-bottom: 0.4rem;
+  .wide {
+    max-width: 1400px;
   }
-  .head h2 {
-    margin: 0;
-  }
-  .picker {
-    min-width: 240px;
+  tr.sel td {
+    background: var(--accent-soft);
   }
   .filter {
     max-width: 220px;

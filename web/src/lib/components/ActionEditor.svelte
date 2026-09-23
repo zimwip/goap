@@ -1,7 +1,9 @@
 <script lang="ts">
   // Édition d'une action de la méthodologie.
-  import { ACTION_KINDS, FOR_EACH, PRODUCE_OPS, type ActionForm } from '../methodologyForm';
+  import { ACTION_KINDS, FOR_EACH, PRODUCE_OPS, SCRIPT_LANGUAGES, type ActionForm } from '../methodologyForm';
+  import { TEMPLATES } from '../dsl';
   import CondRows from './CondRows.svelte';
+  import CodeEditor from './CodeEditor.svelte';
 
   let {
     action = $bindable(),
@@ -11,6 +13,7 @@
     linkTypes,
     bad,
     readonly = false,
+    onrename,
   }: {
     action: ActionForm;
     index: number;
@@ -19,13 +22,27 @@
     linkTypes: string[];
     bad: (path: string, exact?: boolean) => boolean;
     readonly?: boolean;
+    /** renommage validé (perte du focus) : mise à jour des références */
+    onrename?: (from: string, to: string) => void;
   } = $props();
+
+  let nameAtFocus = '';
+
+  function setLanguage(lang: string) {
+    // Le modèle d'un langage est remplacé par celui de l'autre.
+    const isTemplate = !action.code.trim() || Object.values(TEMPLATES).includes(action.code);
+    action.language = lang;
+    if (isTemplate && action.code.trim()) action.code = TEMPLATES[lang] ?? '';
+  }
+
+  const LANGUAGE_LABELS: Record<string, string> = { javascript: 'JavaScript (goja)', go: 'Go (yaegi)' };
 
   const p = $derived(`actions[${index}]`);
   const id = $derived(`act-${index}`);
 
   const KIND_LABELS: Record<string, string> = {
     llm: 'llm — modèle de langage',
+    script: 'script — code JavaScript / Go',
     tool: 'tool — outil externe',
     human: 'human — tâche humaine',
     builtin: 'builtin — fonction intégrée',
@@ -49,6 +66,11 @@
       class:bad={bad(`${p}.name`)}
       data-path="{p}.name"
       placeholder="identify_impacts"
+      onfocus={() => (nameAtFocus = action.name)}
+      onchange={() => {
+        if (nameAtFocus && nameAtFocus !== action.name) onrename?.(nameAtFocus, action.name);
+        nameAtFocus = action.name;
+      }}
     />
   </div>
   <div class="field">
@@ -94,6 +116,23 @@
   />
 </div>
 
+<div class="field">
+  <label for="{id}-utility">Utilité <span class="opt">(expression CEL numérique — planificateurs utility / hybrid)</span></label>
+  <CodeEditor
+    id="{id}-utility"
+    bind:value={action.utility}
+    language="cel"
+    lineNumbers={false}
+    {readonly}
+    label="Utilité"
+    minHeight="1.9rem"
+    maxHeight="8rem"
+    placeholder="ex. size(impacts) * 2.0"
+    bad={bad(`${p}.utility`)}
+    path="{p}.utility"
+  />
+</div>
+
 <div class="grid2 field">
   <CondRows bind:rows={action.pre} options={conditions} path="{p}.pre" label="Préconditions" {bad} {readonly} />
   <CondRows bind:rows={action.effects} options={conditions} path="{p}.effects" label="Effets" {bad} {readonly} />
@@ -113,14 +152,54 @@
   </div>
   <div class="field">
     <label for="{id}-prompt">Prompt <span class="opt">(gabarit Go : {'{{ .Change.Intent }}'}…)</span></label>
-    <textarea
+    <CodeEditor
       id="{id}-prompt"
-      class="mono"
-      rows="8"
       bind:value={action.prompt}
-      class:bad={bad(`${p}.prompt`)}
-      data-path="{p}.prompt"
-    ></textarea>
+      language="text"
+      wrap
+      {readonly}
+      label="Prompt"
+      minHeight="10rem"
+      bad={bad(`${p}.prompt`)}
+      path="{p}.prompt"
+    />
+  </div>
+{:else if action.kind === 'script'}
+  <div class="script-head">
+    <div class="field lang">
+      <label for="{id}-lang">Langage</label>
+      <select
+        id="{id}-lang"
+        value={action.language}
+        onchange={(e) => setLanguage(e.currentTarget.value)}
+        class:bad={bad(`${p}.language`)}
+        data-path="{p}.language"
+      >
+        {#each SCRIPT_LANGUAGES as l (l)}<option value={l}>{LANGUAGE_LABELS[l]}</option>{/each}
+      </select>
+    </div>
+    <p class="hint grow">
+      Le code s'exécute dans le sandbox du processus avec l'objet <code>ctx</code> (<kbd>Ctrl</kbd>+<kbd>Espace</kbd> pour
+      la complétion, voir « Aide DSL »). Les écritures sont appliquées de façon atomique à la fin de l'action.
+    </p>
+    {#if !readonly && !action.code.trim()}
+      <button type="button" class="small" onclick={() => (action.code = TEMPLATES[action.language] ?? '')}>Insérer un modèle</button>
+    {/if}
+  </div>
+  <div class="field">
+    <label for="{id}-code">Code</label>
+    <CodeEditor
+      id="{id}-code"
+      bind:value={action.code}
+      language={action.language === 'go' ? 'go' : 'javascript'}
+      dsl
+      {readonly}
+      label="Code de l'action"
+      minHeight="16rem"
+      maxHeight="60vh"
+      bad={bad(`${p}.code`)}
+      path="{p}.code"
+    />
   </div>
 {:else if action.kind === 'tool'}
   <div class="field">
@@ -267,6 +346,30 @@
 </div>
 
 <style>
+  .script-head {
+    display: flex;
+    gap: 0.8rem;
+    align-items: flex-end;
+    flex-wrap: wrap;
+  }
+  .script-head .lang {
+    width: 200px;
+  }
+  .script-head .hint {
+    margin-bottom: 0.7rem;
+    min-width: 240px;
+  }
+  .script-head button {
+    margin-bottom: 0.7rem;
+  }
+  kbd {
+    font-family: var(--mono);
+    font-size: 0.85em;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 0 3px;
+    background: var(--surface-2);
+  }
   .grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));

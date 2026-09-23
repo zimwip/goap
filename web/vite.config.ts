@@ -11,7 +11,10 @@ export default defineConfig({
   server: {
     proxy: {
       // Toutes les RPC Connect (/goap.<pkg>.v1.<Service>/<Method>) vont à la passerelle.
+      // http-proxy relaie les réponses en flux (WatchEvents) sans les mettre en tampon.
       '^/goap\\.': { target: gateway, changeOrigin: true },
+      // Points d'accès HTTP de la passerelle (état de la plateforme…).
+      '/api': { target: gateway, changeOrigin: true },
     },
   },
 });

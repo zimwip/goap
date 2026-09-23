@@ -9,7 +9,13 @@
 const TOKEN_KEY = 'goap.token';
 
 /** Base des URL RPC : relative par défaut (le serveur Vite relaie `/goap.*`). */
-const BASE = (import.meta.env.VITE_GOAP_BASE_URL as string | undefined) ?? '';
+export const BASE = (import.meta.env.VITE_GOAP_BASE_URL as string | undefined) ?? '';
+
+/** Base de l'interface Jaeger pour les liens « Trace ». */
+export const JAEGER_URL = ((import.meta.env.VITE_GOAP_JAEGER_URL as string | undefined) ?? 'http://localhost:16686').replace(
+  /\/+$/,
+  '',
+);
 
 export class RpcError extends Error {
   readonly code: string;
@@ -31,6 +37,14 @@ export function getToken(): string | null {
   }
 }
 
+const tokenListeners = new Set<() => void>();
+
+/** Abonnement aux changements de jeton (relance des flux). Renvoie la fonction de désabonnement. */
+export function onTokenChange(fn: () => void): () => void {
+  tokenListeners.add(fn);
+  return () => tokenListeners.delete(fn);
+}
+
 export function setToken(token: string | null): void {
   try {
     if (token) localStorage.setItem(TOKEN_KEY, token);
@@ -38,6 +52,7 @@ export function setToken(token: string | null): void {
   } catch {
     // stockage indisponible (navigation privée, etc.) : on ignore
   }
+  for (const fn of tokenListeners) fn();
 }
 
 export async function rpc<TReq extends object, TRes>(
@@ -143,7 +158,9 @@ export interface Expectation {
   link?: LinkSpec;
 }
 
-export type ActionKind = 'llm' | 'tool' | 'human' | 'builtin';
+export type ActionKind = 'llm' | 'script' | 'tool' | 'human' | 'builtin';
+export type ScriptLanguage = 'javascript' | 'go';
+export type PlannerKind = 'goap' | 'utility' | 'hybrid';
 
 export interface Action {
   name?: string;
@@ -161,6 +178,54 @@ export interface Action {
   builtin?: string;
   instructions?: string;
   params?: Struct;
+  /** actions script : javascript | go */
+  language?: ScriptLanguage | string;
+  /** code exécuté dans le sandbox avec le DSL `ctx` */
+  code?: string;
+  /** expression CEL numérique (planificateurs utility / hybrid) */
+  utility?: string;
+}
+
+export type TriggerType = 'event' | 'schedule';
+export const TRIGGER_EVENTS = [
+  'change.created',
+  'change.applied',
+  'change.item_added',
+  'process.completed',
+  'process.failed',
+  'methodology.published',
+] as const;
+
+/** Déclencheur : exécution automatique d'un agent (hors boucle d'intention). */
+export interface Trigger {
+  name?: string;
+  description?: string;
+  type?: TriggerType | string;
+  /** déclencheurs « event » */
+  event?: string;
+  /** filtre CEL sur l'événement */
+  filter?: string;
+  /** déclencheurs « schedule » : cron à 5 champs, UTC */
+  schedule?: string;
+  goal?: string;
+  intent?: string;
+  /** new_change (défaut) | event_change */
+  target?: 'new_change' | 'event_change' | string;
+  roles?: string[];
+  enabled?: boolean;
+}
+
+/** Agent (terminologie Embabel) : un planificateur et ses actions admissibles. */
+export interface Agent {
+  name?: string;
+  description?: string;
+  examples?: string[];
+  planner?: PlannerKind | string;
+  /** noms des actions admissibles (vide : toutes) */
+  actions?: string[];
+  /** noms des objectifs (vide : tous) */
+  goals?: string[];
+  triggers?: Trigger[];
 }
 
 export interface Goal {
@@ -181,6 +246,7 @@ export interface Methodology {
   conditions?: Condition[];
   actions?: Action[];
   goals?: Goal[];
+  agents?: Agent[];
   createdAt?: string;
   updatedAt?: string;
   publishedAt?: string;
@@ -192,12 +258,19 @@ export interface GoalSummary {
   description?: string;
 }
 
+export interface AgentSummary {
+  name?: string;
+  description?: string;
+  planner?: string;
+}
+
 export interface MethodologySummary {
   name?: string;
   version?: string;
   description?: string;
   status?: MethodologyStatus | string;
   goals?: GoalSummary[];
+  agents?: AgentSummary[];
   updatedAt?: string;
   publishedAt?: string;
 }
@@ -331,6 +404,44 @@ export interface Candidate {
   goal?: string;
   confidence?: number;
   reason?: string;
+  agent?: string;
+  methodology?: string;
+}
+
+/** Entier 64 bits : proto3 JSON le sérialise en chaîne. */
+export type Int64 = number | string;
+
+export interface Usage {
+  inputTokens?: Int64;
+  outputTokens?: Int64;
+  llmCalls?: number;
+  toolCalls?: number;
+}
+
+export interface LlmCall {
+  provider?: string;
+  model?: string;
+  inputTokens?: Int64;
+  outputTokens?: Int64;
+  durationMs?: Int64;
+  error?: string;
+}
+
+export interface ToolCall {
+  name?: string;
+  durationMs?: Int64;
+  error?: string;
+}
+
+export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
+
+export interface LogLine {
+  time?: string;
+  level?: LogLevel | string;
+  message?: string;
+  processId?: string;
+  action?: string;
+  step?: number;
 }
 
 export interface Principal {
@@ -339,8 +450,10 @@ export interface Principal {
   roles?: string[];
 }
 export interface HumanTask {
-  /** input : saisir des items · approval : approuver ou refuser l'action */
-  kind?: 'input' | 'approval' | string;
+  /** input : saisir des items · approval : approuver ou refuser l'action · agent : attente d'un sous-agent */
+  kind?: 'input' | 'approval' | 'agent' | string;
+  /** kind « agent » : processus du sous-agent attendu */
+  childProcessId?: string;
   /** permission requise pour approuver (ex. change:apply) */
   permission?: string;
   action?: string;
@@ -362,6 +475,14 @@ export interface Step {
   error?: string;
   startedAt?: string;
   endedAt?: string;
+  usage?: Usage;
+  llmCalls?: LlmCall[];
+  toolCalls?: ToolCall[];
+  logs?: LogLine[];
+  /** processus des sous-agents lancés par l'étape */
+  childProcessIds?: string[];
+  /** sandbox ayant exécuté l'étape (actions script) */
+  sandbox?: string;
 }
 
 export interface Process {
@@ -383,6 +504,52 @@ export interface Process {
   createdAt?: string;
   updatedAt?: string;
   initiator?: Principal;
+  agent?: string;
+  planner?: PlannerKind | string;
+  /** processus appelant (sous-agent) */
+  parentId?: string;
+  usage?: Usage;
+  baselineId?: string;
+  title?: string;
+  /** trace OpenTelemetry (span racine « process ») */
+  traceId?: string;
+  /** « <agent>/<déclencheur> » quand lancé par un déclencheur */
+  trigger?: string;
+}
+
+/** État d'un déclencheur d'un agent publié. */
+export interface TriggerState {
+  methodology?: string;
+  agent?: string;
+  name?: string;
+  description?: string;
+  type?: TriggerType | string;
+  event?: string;
+  schedule?: string;
+  enabled?: boolean;
+  fires?: number;
+  lastFired?: string;
+  nextFire?: string;
+  lastProcessId?: string;
+  lastError?: string;
+}
+
+export interface ListProcessesRequest {
+  /** seulement les processus lancés par l'appelant */
+  mine?: boolean;
+  statuses?: string[];
+  /** seulement les processus racines (pas de sous-agents) */
+  rootsOnly?: boolean;
+}
+
+export type EventType = 'started' | 'intent' | 'step' | 'waiting' | 'completed' | 'stuck' | 'failed' | 'log';
+
+/** Message du flux WatchEvents. */
+export interface WatchEvent {
+  type?: EventType | string;
+  time?: string;
+  process?: Process;
+  log?: LogLine;
 }
 
 /** Item au format d'entrée du moteur (pkg/engine.ItemInput). */
@@ -407,6 +574,8 @@ const GRAPH = 'goap.graph.v1.GraphService';
 const ENGINE = 'goap.engine.v1.EngineService';
 
 const IAM = 'goap.iam.v1.IamService';
+
+export const ENGINE_SERVICE = ENGINE;
 
 type NameVersion = { name: string; version: string };
 
@@ -450,6 +619,7 @@ export const registry = {
 };
 
 export const iam = {
+  whoAmI: (signal?: AbortSignal) => rpc<Empty, { principal?: Principal }>(IAM, 'WhoAmI', {}, signal),
   listPolicies: (signal?: AbortSignal) =>
     rpc<Empty, { policies?: Policy[] }>(IAM, 'ListPolicies', {}, signal),
   addPolicy: (policy: Policy) => rpc<{ policy: Policy }, { policy?: Policy }>(IAM, 'AddPolicy', { policy }),
@@ -478,7 +648,10 @@ export const graph = {
 };
 
 export interface StartProcessRequest {
-  methodology: string;
+  /** vide : identification parmi toutes les méthodologies publiées et leurs agents */
+  methodology?: string;
+  /** restreint l'identification à cet agent */
+  agent?: string;
   baselineId?: string;
   changeId?: string;
   title?: string;
@@ -508,9 +681,56 @@ export const engine = {
     }),
   getProcess: (id: string, signal?: AbortSignal) =>
     rpc<{ id: string }, { process?: Process }>(ENGINE, 'GetProcess', { id }, signal),
-  listProcesses: (signal?: AbortSignal) =>
-    rpc<Empty, { processes?: Process[] }>(ENGINE, 'ListProcesses', {}, signal),
+  listProcesses: (req: ListProcessesRequest = {}, signal?: AbortSignal) =>
+    rpc<ListProcessesRequest, { processes?: Process[] }>(ENGINE, 'ListProcesses', req, signal),
+  listTriggers: (signal?: AbortSignal) =>
+    rpc<Empty, { triggers?: TriggerState[] }>(ENGINE, 'ListTriggers', {}, signal),
+  fireTrigger: (methodology: string, agent: string, trigger: string) =>
+    rpc<{ methodology: string; agent: string; trigger: string }, { process?: Process }>(ENGINE, 'FireTrigger', {
+      methodology,
+      agent,
+      trigger,
+    }),
 };
+
+// --- état de la plateforme (passerelle, hors RPC) -------------------------------
+
+export interface ServiceStatus {
+  name?: string;
+  status?: 'up' | 'down' | string;
+  latencyMs?: number;
+  error?: string;
+}
+
+export interface PlatformStatus {
+  status?: 'ok' | 'degraded' | 'down' | string;
+  services?: ServiceStatus[];
+  time?: string;
+}
+
+/** `GET /api/status` servi par la passerelle. */
+export async function platformStatus(signal?: AbortSignal): Promise<PlatformStatus> {
+  const headers: Record<string, string> = { Accept: 'application/json' };
+  const token = getToken();
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}/api/status`, { headers, signal });
+  } catch (e) {
+    if (e instanceof DOMException && e.name === 'AbortError') throw e;
+    throw new RpcError('unavailable', `Passerelle injoignable : ${String(e)}`, 0);
+  }
+  const text = await res.text();
+  let data: PlatformStatus | undefined;
+  try {
+    data = text ? (JSON.parse(text) as PlatformStatus) : undefined;
+  } catch {
+    data = undefined;
+  }
+  // 503 avec un corps d'état : plateforme indisponible, mais réponse exploitable.
+  if (data?.status) return data;
+  throw new RpcError(res.status === 404 ? 'unimplemented' : 'unknown', text || res.statusText, res.status);
+}
 
 // ---------------------------------------------------------------------------
 // Utilitaires d'affichage
@@ -550,6 +770,32 @@ export function bumpPatch(version: string | undefined): string {
   const m = /^(.*?)(\d+)(\D*)$/.exec(v);
   if (!m) return v ? `${v}.1` : '0.1.0';
   return `${m[1]}${Number(m[2]) + 1}${m[3]}`;
+}
+
+/** Valeur numérique d'un entier proto3 (nombre ou chaîne pour les int64). */
+export function int(v: Int64 | undefined | null): number {
+  if (v === undefined || v === null || v === '') return 0;
+  const n = typeof v === 'number' ? v : Number(v);
+  return Number.isFinite(n) ? n : 0;
+}
+
+/** 12345 → « 12 345 ». */
+export function formatInt(v: Int64 | undefined | null): string {
+  return int(v).toLocaleString('fr-FR');
+}
+
+export function formatDuration(ms: Int64 | undefined | null): string {
+  const n = int(ms);
+  if (n < 1000) return `${n} ms`;
+  if (n < 60_000) return `${(n / 1000).toFixed(1)} s`;
+  return `${Math.floor(n / 60_000)} min ${Math.round((n % 60_000) / 1000)} s`;
+}
+
+export function formatTime(iso: string | undefined): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 }
 
 export function shortId(id: string | undefined): string {
