@@ -252,6 +252,8 @@ export interface Methodology {
   version?: string;
   description?: string;
   status?: MethodologyStatus | string;
+  /** shared domain "<name>[@<version>]" used instead of embedded node / link types */
+  domainRef?: string;
   nodeTypes?: NodeType[];
   linkTypes?: LinkType[];
   conditions?: Condition[];
@@ -262,6 +264,38 @@ export interface Methodology {
   updatedAt?: string;
   publishedAt?: string;
   updatedBy?: string;
+}
+
+/** Shared object part of the model: node types and link types, versioned on its own. */
+export interface Domain {
+  name?: string;
+  version?: string;
+  description?: string;
+  status?: MethodologyStatus | string;
+  nodeTypes?: NodeType[];
+  linkTypes?: LinkType[];
+  createdAt?: string;
+  updatedAt?: string;
+  publishedAt?: string;
+  updatedBy?: string;
+}
+
+export interface DomainSummary {
+  name?: string;
+  version?: string;
+  description?: string;
+  status?: string;
+  nodeTypeCount?: number;
+  linkTypeCount?: number;
+  updatedAt?: string;
+  publishedAt?: string;
+}
+
+/** Methodology version referencing a domain version. */
+export interface DomainUser {
+  name?: string;
+  version?: string;
+  status?: string;
 }
 
 export interface GoalSummary {
@@ -696,6 +730,42 @@ export const registry = {
     ),
   exportMethodology: (name: string, version: string) =>
     rpc<NameVersion, { yaml?: string; filename?: string }>(REGISTRY, 'ExportMethodology', { name, version }),
+
+  // --- shared domains (no change / impact / proposal involved) ---
+  listDomains: (allVersions = false, signal?: AbortSignal) =>
+    rpc<{ allVersions?: boolean }, { domains?: DomainSummary[] }>(
+      REGISTRY,
+      'ListDomains',
+      allVersions ? { allVersions } : {},
+      signal,
+    ),
+  /** empty `version`: latest published version. */
+  getDomain: (name: string, version = '', signal?: AbortSignal) =>
+    rpc<NameVersion, { domain?: Domain }>(REGISTRY, 'GetDomain', { name, version }, signal),
+  saveDomain: (domain: Domain) =>
+    rpc<{ domain: Domain }, { domain?: Domain; issues?: Issue[] }>(REGISTRY, 'SaveDomain', { domain }),
+  validateDomain: (domain: Domain) => rpc<{ domain: Domain }, { issues?: Issue[] }>(REGISTRY, 'ValidateDomain', { domain }),
+  publishDomain: (name: string, version: string) =>
+    rpc<NameVersion, { domain?: Domain }>(REGISTRY, 'PublishDomain', { name, version }),
+  createDomainVersion: (name: string, fromVersion: string, newVersion: string) =>
+    rpc<{ name: string; fromVersion: string; newVersion: string }, { domain?: Domain }>(REGISTRY, 'CreateDomainVersion', {
+      name,
+      fromVersion,
+      newVersion,
+    }),
+  /** Deletes a draft, or archives a published version. */
+  deleteDomain: (name: string, version: string) => rpc<NameVersion, Empty>(REGISTRY, 'DeleteDomain', { name, version }),
+  importDomain: (yaml: string, publish: boolean) =>
+    rpc<{ yaml: string; publish?: boolean }, { domain?: Domain; issues?: Issue[] }>(
+      REGISTRY,
+      'ImportDomain',
+      publish ? { yaml, publish } : { yaml },
+    ),
+  exportDomain: (name: string, version: string) =>
+    rpc<NameVersion, { yaml?: string; filename?: string }>(REGISTRY, 'ExportDomain', { name, version }),
+  /** Methodology versions referencing a domain version (unpinned references included). */
+  getDomainUsage: (name: string, version: string, signal?: AbortSignal) =>
+    rpc<NameVersion, { methodologies?: DomainUser[] }>(REGISTRY, 'GetDomainUsage', { name, version }, signal),
 };
 
 export const iam = {

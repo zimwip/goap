@@ -14,6 +14,7 @@ import {
   type Section,
   type SectionItem,
 } from '../methodologyForm';
+import { splitRef, toDomainForm, type DomainForm } from '../domainForm';
 import { refreshMethodologies } from './catalog.svelte';
 
 export interface NormIssue extends Issue {
@@ -74,8 +75,16 @@ export class Draft {
     [...this.localIssues, ...(this.issues ?? [])].map((i) => ({ ...i, norm: normalizePath(i.path) })),
   );
   readonly conditionOptions = $derived(conditionNames(this.form));
-  readonly nodeTypeNames = $derived([...new Set(this.form.nodeTypes.map((n) => n.name.trim()).filter(Boolean))]);
-  readonly linkTypeNames = $derived([...new Set(this.form.linkTypes.map((l) => l.name.trim()).filter(Boolean))]);
+  /** shared domain the methodology references (loaded from the registry) */
+  refDomain = $state<DomainForm & { status: string }>();
+  refError = $state('');
+  /** does the methodology use a shared domain instead of embedded types? */
+  readonly usesDomainRef = $derived(this.form.domainRef.trim() !== '');
+  /** node and link types in effect: those of the shared domain, else the embedded ones */
+  readonly nodeTypes = $derived(this.usesDomainRef ? (this.refDomain?.nodeTypes ?? []) : this.form.nodeTypes);
+  readonly linkTypes = $derived(this.usesDomainRef ? (this.refDomain?.linkTypes ?? []) : this.form.linkTypes);
+  readonly nodeTypeNames = $derived([...new Set(this.nodeTypes.map((n) => n.name.trim()).filter(Boolean))]);
+  readonly linkTypeNames = $derived([...new Set(this.linkTypes.map((l) => l.name.trim()).filter(Boolean))]);
   get canPublish(): boolean {
     return (
       !this.readonly &&
@@ -99,6 +108,39 @@ export class Draft {
     this.snapshot = JSON.stringify(this.form);
     this.status = m.status || 'draft';
     this.meta = { createdAt: m.createdAt, updatedAt: m.updatedAt, publishedAt: m.publishedAt, updatedBy: m.updatedBy };
+    void this.loadRef();
+  }
+
+  /** Loads the referenced domain (unpinned reference: latest published version). */
+  async loadRef(): Promise<void> {
+    const ref = this.form.domainRef.trim();
+    this.refError = '';
+    if (!ref) {
+      this.refDomain = undefined;
+      return;
+    }
+    const { name, version } = splitRef(ref);
+    try {
+      const res = await registry.getDomain(name, version);
+      if (this.form.domainRef.trim() !== ref) return;
+      this.refDomain = res.domain ? { ...toDomainForm(res.domain), status: res.domain.status ?? '' } : undefined;
+      if (!res.domain) this.refError = `Domain ${ref} not found.`;
+    } catch (e) {
+      if (this.form.domainRef.trim() === ref) {
+        this.refDomain = undefined;
+        this.refError = errorMessage(e);
+      }
+    }
+  }
+
+  /** Points the methodology at a shared domain ("" : back to embedded types). */
+  setDomainRef(ref: string): void {
+    this.form.domainRef = ref;
+    if (ref) {
+      this.form.nodeTypes = [];
+      this.form.linkTypes = [];
+    }
+    void this.loadRef();
   }
 
   /** Loads once (concurrent calls share the result). */
@@ -130,6 +172,7 @@ export class Draft {
   revert(): void {
     this.form = JSON.parse(this.snapshot) as MethodologyForm;
     this.localIssues = [];
+    void this.loadRef();
   }
 
   // --- issues -----------------------------------------------------------------

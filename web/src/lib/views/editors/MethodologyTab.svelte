@@ -9,6 +9,9 @@
   import { provideActions, useReveal, notify } from '../../shell/workbench.svelte';
   import { replaceTab } from '../../shell/tabs.svelte';
   import { drafts, getDraft } from '../../stores/drafts.svelte';
+  import { domains, refreshDomains, publishedDomainVersions } from '../../stores/domains.svelte';
+  import { splitRef } from '../../domainForm';
+  import { openDomain } from './domainTabs';
   import { formatDate } from '../../api';
   import {
     emptyNodeType,
@@ -72,6 +75,19 @@
     () => tab.id,
     () => root,
   );
+
+  $effect(() => {
+    if (!domains.loaded) void refreshDomains();
+  });
+
+  const domainNames = $derived([...new Set(domains.items.map((x) => x.name ?? '').filter(Boolean))].sort());
+  const ref = $derived(splitRef(f.domainRef));
+  const refVersions = $derived(ref.name ? publishedDomainVersions(ref.name) : []);
+
+  function pickDomain(name: string, version: string) {
+    if (name && (f.nodeTypes.length || f.linkTypes.length) && !confirm('The embedded node types and link types will be removed from this draft in favor of the shared domain. Continue?')) return;
+    d.setDomainRef(name ? (version ? `${name}@${version}` : name) : '');
+  }
 
   const SECTIONS: Section[] = ['agents', 'actions', 'conditions', 'goals'];
 
@@ -149,6 +165,51 @@
       {#if !d.isNew}
         <section class="card" id="m-domain">
           <h3>Domain</h3>
+          <div class="grid">
+            <div class="field">
+              <label for="m-domain-name">Shared domain</label>
+              <select id="m-domain-name" value={ref.name} onchange={(e) => pickDomain(e.currentTarget.value, '')} data-path="domainRef" class:bad={d.bad('domainRef')}>
+                <option value="">— embedded types (legacy) —</option>
+                {#if ref.name && !domainNames.includes(ref.name)}<option value={ref.name}>{ref.name} (unknown)</option>{/if}
+                {#each domainNames as n (n)}<option value={n}>{n}</option>{/each}
+              </select>
+            </div>
+            {#if ref.name}
+              <div class="field">
+                <label for="m-domain-ver">Version</label>
+                <select id="m-domain-ver" value={ref.version} onchange={(e) => pickDomain(ref.name, e.currentTarget.value)}>
+                  <option value="">latest published (floating)</option>
+                  {#if ref.version && !refVersions.some((v) => v.version === ref.version)}<option value={ref.version}>{ref.version}</option>{/if}
+                  {#each refVersions as v (v.version)}<option value={v.version}>v{v.version}</option>{/each}
+                </select>
+              </div>
+            {/if}
+          </div>
+          {#if d.usesDomainRef}
+            {#if d.refError}<div class="alert">{d.refError}</div>{/if}
+            <p class="hint">
+              Node types and link types come from the shared domain (read-only here).
+              <button type="button" class="link" onclick={() => openDomain(ref.name, d.refDomain?.version ?? ref.version)}>Open the domain</button>
+              to edit them.
+            </p>
+            <h4>Node types</h4>
+            <ul class="plain-list">
+              {#each d.nodeTypes as n}
+                <li><code>{n.name}</code>{#if n.extends}<span class="hint"> extends {n.extends}</span>{/if}{#if n.properties}<span class="hint"> · {n.properties}</span>{/if}</li>
+              {:else}
+                <li class="empty">{d.refError ? '' : 'Loading…'}</li>
+              {/each}
+            </ul>
+            <h4 class="sub">Link types</h4>
+            <ul class="plain-list">
+              {#each d.linkTypes as l}
+                <li><code>{l.name}</code>{#if l.from && l.to}<span class="hint"> {l.from} → {l.to}</span>{/if}</li>
+              {:else}
+                <li class="empty">None.</li>
+              {/each}
+            </ul>
+          {:else}
+            <p class="hint">Prefer a shared domain: node and link types are then shared by every methodology that references it.</p>
           <h4 data-path="nodeTypes">Node types</h4>
           {#each f.nodeTypes as n, i}
             <div class="item nt" class:has-issues={d.count(`nodeTypes[${i}]`) > 0} data-path="nodeTypes[{i}]">
@@ -249,6 +310,7 @@
           {#if !d.readonly}
             <button type="button" class="small" onclick={() => f.linkTypes.push(emptyLinkType())}>+ Link type</button>
           {/if}
+          {/if}
         </section>
 
         <section class="card">
@@ -294,6 +356,13 @@
 <style>
   h4.sub {
     margin-top: 1rem;
+  }
+  .plain-list {
+    list-style: none;
+    margin: 0 0 0.4rem;
+    padding: 0;
+    display: grid;
+    gap: 0.15rem;
   }
   .item {
     display: grid;

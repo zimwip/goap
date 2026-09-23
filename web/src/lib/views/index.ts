@@ -3,12 +3,15 @@ import { registerView } from '../shell/registry';
 import type { Tab } from '../shell/types';
 import { formatDate, formatInt, shortId } from '../api';
 import { peekDraft, drafts } from '../stores/drafts.svelte';
+import { peekDomainDraft, domainDrafts } from '../stores/domains.svelte';
 import { processes, live } from '../stores/live.svelte';
 import { baselines, changes } from '../stores/catalog.svelte';
 import { draftGroup, KIND_SECTION, SECTION_ICON } from './editors/methodologyTabs';
 import { activeDraft } from './bottom/activeDraft';
+import { domainGroup } from './editors/domainTabs';
 
 import MethodologyExplorer from './nav/MethodologyExplorer.svelte';
+import DomainExplorer from './nav/DomainExplorer.svelte';
 import RunsExplorer from './nav/RunsExplorer.svelte';
 import BaselineExplorer from './nav/BaselineExplorer.svelte';
 import ChangesExplorer from './nav/ChangesExplorer.svelte';
@@ -18,6 +21,7 @@ import AssistantPanel from './assistant/AssistantPanel.svelte';
 import AssistantTab from './assistant/AssistantTab.svelte';
 
 import MethodologyTab from './editors/MethodologyTab.svelte';
+import DomainTab from './editors/DomainTab.svelte';
 import AgentTab from './editors/AgentTab.svelte';
 import ActionTab from './editors/ActionTab.svelte';
 import ConditionTab from './editors/ConditionTab.svelte';
@@ -42,6 +46,7 @@ import DslHelpPanel from './right/DslHelpPanel.svelte';
 
 registerView({ id: 'assistant', zone: 'left', title: 'Assistant', icon: 'chat', component: AssistantPanel, order: 0 });
 registerView({ id: 'methodologies', zone: 'left', title: 'Methodologies', icon: 'book', component: MethodologyExplorer, order: 1 });
+registerView({ id: 'domains', zone: 'left', title: 'Domains', icon: 'graph', component: DomainExplorer, order: 1.5 });
 registerView({
   id: 'runs',
   zone: 'left',
@@ -130,6 +135,47 @@ registerView({
         ['Actions', String(d.form.actions.length)],
         ['Conditions', String(d.form.conditions.length)],
         ['Goals', String(d.form.goals.length)],
+        ['Issues', d.issues === null ? 'not validated' : String(d.allIssues.length)],
+        ['Modified', `${formatDate(d.meta.updatedAt)}${d.meta.updatedBy ? ` by ${d.meta.updatedBy}` : ''}`],
+        ['Published', formatDate(d.meta.publishedAt)],
+      ],
+    };
+  },
+});
+
+const domainGroupDirty = (tab: Tab) => peekDomainDraft(domainGroup(tab))?.dirty ?? false;
+
+registerView({
+  id: 'domain',
+  zone: 'editor',
+  title: 'Domain',
+  icon: 'graph',
+  component: DomainTab,
+  key: (p) => (p.name ? `${p.name}@${p.version}` : 'new'),
+  tabTitle: (t) => (t.params.name ? `${t.params.name} v${t.params.version} (domain)` : 'New domain'),
+  tooltip: (t) => (t.params.name ? `Domain ${t.params.name} v${t.params.version}` : 'New domain'),
+  dirty: domainGroupDirty,
+  groupDirty: domainGroupDirty,
+  group: domainGroup,
+  discard: (tab) => {
+    const key = domainGroup(tab);
+    const d = peekDomainDraft(key);
+    if (!d) return;
+    if (d.isNew) domainDrafts.delete(key);
+    else d.revert();
+  },
+  properties: (t) => {
+    const d = peekDomainDraft(domainGroup(t));
+    if (!d || d.isNew) return undefined;
+    return {
+      title: d.label,
+      subtitle: 'Domain',
+      rows: [
+        ['Status', d.status],
+        ['Description', d.form.description],
+        ['Node types', String(d.form.nodeTypes.length)],
+        ['Link types', String(d.form.linkTypes.length)],
+        ['Used by', String(d.usage.length)],
         ['Issues', d.issues === null ? 'not validated' : String(d.allIssues.length)],
         ['Modified', `${formatDate(d.meta.updatedAt)}${d.meta.updatedBy ? ` by ${d.meta.updatedBy}` : ''}`],
         ['Published', formatDate(d.meta.publishedAt)],
