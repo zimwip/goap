@@ -1,268 +1,268 @@
-# GOAP — Plateforme agentique de méthodologies d'entreprise
+# GOAP — Agentic platform for enterprise methodologies
 
-> Document d'architecture — version 0.1 (fondation)
-> Statut : **brouillon de travail**. Les sections marquées 🟡 sont des hypothèses à valider, 🟢 sont implémentées dans le socle initial.
+> Architecture document — version 0.1 (foundation)
+> Status: **working draft**. Sections marked 🟡 are hypotheses to validate, 🟢 are implemented in the initial core.
 
 ## 1. Vision
 
-GOAP est une plateforme agentique **généraliste** dans laquelle on déploie des **méthodologies d'entreprise**
-(analyse d'impact, gestion d'exigences, revue d'architecture, conformité, onboarding…) sous forme de
-définitions déclaratives. Une méthodologie décrit :
+GOAP is a **general-purpose** agentic platform in which **enterprise methodologies**
+(impact analysis, requirements management, architecture review, compliance, onboarding…) are deployed
+as declarative definitions. A methodology describes:
 
-- un **modèle de domaine** (types de nœuds, types de liens) ;
-- des **conditions** (prédicats sur l'état d'un changement) ;
-- des **actions** (unités de travail : LLM, outil MCP, humain, code) avec préconditions, effets et coût ;
-- des **objectifs** (goals) exprimés comme un ensemble de conditions à atteindre.
+- a **domain model** (node types, link types);
+- **conditions** (predicates on the state of a change);
+- **actions** (units of work: LLM, MCP tool, human, code) with preconditions, effects, and cost;
+- **goals** expressed as a set of conditions to reach.
 
-Le moteur d'exécution s'inspire d'[Embabel](https://github.com/embabel/embabel-agent) :
-**planification GOAP** (Goal Oriented Action Planning, A\*) sur un **blackboard**, replanification après
-chaque action (boucle OODA), et une **boucle d'intention** préalable qui transforme une demande en
-langage naturel en objectif formel.
+The execution engine is inspired by [Embabel](https://github.com/embabel/embabel-agent):
+**GOAP planning** (Goal Oriented Action Planning, A\*) on a **blackboard**, replanning after
+each action (OODA loop), and a preliminary **intent loop** that turns a natural-language
+request into a formal goal.
 
-L'originalité de GOAP : le blackboard n'est pas un sac d'objets en mémoire, c'est **l'axe *change***
-d'un graphe de connaissance versionné, dont l'autre axe, **l'axe *domaine***, décrit le contenu de référence.
+GOAP's originality: the blackboard is not a bag of objects in memory, it is the **change axis**
+of a versioned knowledge graph, whose other axis, the **domain axis**, describes the reference content.
 
-## 2. Concepts fondamentaux
+## 2. Fundamental concepts
 
-### 2.1 Le graphe à deux axes
+### 2.1 The two-axis graph
 
 ```
-                 AXE DOMAINE (contenu, versionné)
+                 DOMAIN AXIS (content, versioned)
    ┌──────────────────────────────────────────────────────────┐
-   │  NEED-4@v2 ◄──satisfies── REQ-12@v3 ◄──verifies── TST-7@v1│   baseline B1 (référence)
+   │  NEED-4@v2 ◄──satisfies── REQ-12@v3 ◄──verifies── TST-7@v1│   baseline B1 (reference)
    │                              │                             │
    └──────────────────────────────┼─────────────────────────────┘
-                                  │ référence (target)
-                 AXE CHANGE (modification, = blackboard)
+                                  │ reference (target)
+                 CHANGE AXIS (modification, = blackboard)
    ┌──────────────────────────────┼─────────────────────────────┐
    │ ChangeSet CR-42 (baseline = B1, intent = "…")              │
    │   ├─ impact   #i1 → REQ-12@v3   (direct)                   │
-   │   ├─ impact   #i2 → TST-7@v1    (propagé depuis #i1)       │
+   │   ├─ impact   #i2 → TST-7@v1    (propagated from #i1)      │
    │   ├─ proposal #p1 update_node REQ-12 (base v3) → props'    │
    │   ├─ proposal #p2 add_link    TST-9(new) ─verifies→ #p1    │
    │   └─ decision #d1 accept #p1                               │
    └────────────────────────────────────────────────────────────┘
                                   │ apply
                                   ▼
-                 baseline B2 (graphe d'arrivée) : REQ-12@v4, TST-9@v1 …
+                 baseline B2 (resulting graph): REQ-12@v4, TST-9@v1 …
 ```
 
-#### Axe domaine
+#### Domain axis
 
 | Concept | Description |
 |---|---|
-| **Node** | Élément de contenu typé (`Requirement`, `Service`, `Process`…). Identité stable `NodeID` + `Key` lisible (`REQ-12`). |
-| **Version** | Chaque modification crée une nouvelle version immuable `NodeID@vN`. Une version peut être un *tombstone* (suppression). |
-| **Link** | Relation typée **de version à version** : `REQ-12@v3 ─satisfies→ NEED-4@v2`. Un lien ne « suit » pas automatiquement les nouvelles versions : si `NEED-4` passe en v3, le lien devient **suspect** — c'est le signal d'impact natif du modèle. |
-| **Baseline** | Ensemble cohérent `{NodeID → Version}` : un « commit » du graphe. Les liens d'une baseline sont ceux dont les deux extrémités sont dans la baseline. Toute modification part d'une baseline de référence et produit une baseline d'arrivée. |
+| **Node** | Typed content element (`Requirement`, `Service`, `Process`…). Stable identity `NodeID` + readable `Key` (`REQ-12`). |
+| **Version** | Each modification creates a new immutable version `NodeID@vN`. A version can be a *tombstone* (deletion). |
+| **Link** | Typed relationship **from version to version**: `REQ-12@v3 ─satisfies→ NEED-4@v2`. A link does not automatically "follow" new versions: if `NEED-4` moves to v3, the link becomes **suspect** — this is the model's native impact signal. |
+| **Baseline** | Coherent set `{NodeID → Version}`: a "commit" of the graph. A baseline's links are those whose two endpoints are both in the baseline. Every modification starts from a reference baseline and produces a resulting baseline. |
 
-Règle de versionnement ([ADR 0003](adr/0003-liens-version-a-version.md)) : les **liens sortants font partie
-de la version du nœud source**. Ajouter/retirer un lien sortant crée une nouvelle version de la source ;
-un nœud qui change de version reporte ses liens sortants ; les liens entrants depuis des nœuds non
-modifiés restent sur l'ancienne version et deviennent **suspects**. Les baselines restent ainsi immuables.
+Versioning rule ([ADR 0003](adr/0003-liens-version-a-version.md)): **outgoing links belong
+to the source node's version**. Adding/removing an outgoing link creates a new version of the source;
+a node that changes version carries its outgoing links forward; incoming links from unmodified
+nodes stay on the old version and become **suspect**. Baselines thus remain immutable.
 
-#### Branches de versions ([ADR 0009](adr/0009-branches-options-decisions.md))
+#### Version branches ([ADR 0009](adr/0009-branches-options-decisions.md))
 
-Les versions sont numérotées **par nœud, toutes branches confondues** (`REQ-1@v7`), et chaque version porte
-sa `branch` (`main` par défaut), ses `parents` et sa `reason` : `create`, `revise` (successeur sur la même
-branche), `derive` (première version sur une branche parallèle) ou `merge` (deux parents).
+Versions are numbered **per node, across all branches** (`REQ-1@v7`), and each version carries
+its `branch` (`main` by default), its `parents`, and its `reason`: `create`, `revise` (successor on the same
+branch), `derive` (first version on a parallel branch), or `merge` (two parents).
 
 ```
 REQ-1  v1(main) ── v3(main, revise) ───────────── v4(main, merge ← v3 + v2)
           └────── v2(opt-a, derive) ─────────────────┘
 ```
 
-- Une **branche** (`CreateBranch`) part d'une baseline (`forkBaseline`) et avance par les changes appliqués
-  sur elle (`ChangeSet.branch`) ; sa **tête** (`head`) est la dernière baseline produite. `main` existe
-  implicitement.
-- « Dernière version » se lit **par branche** (`latest(node, branch)`) : l'`apply` d'un change détecte un
-  conflit quand un nœud a avancé **sur la branche du change** depuis la version de base.
-- **Merge de branche** (`PlanMerge` / `MergeBranch`) : pour chaque nœud modifié sur la branche source depuis
-  le fork, merge à 3 voies contre l'ancêtre commun (remontée des `parents`) — propriété par propriété (un côté
-  égal à l'ancêtre prend l'autre, sinon **conflit**) et liens sortants par ensemble (clé type + nœud cible :
-  ajouté d'un côté → gardé, retiré d'un côté → retiré). Le merge est un change `merge_node` appliqué sur la
-  cible ; les conflits exigent une résolution (propriétés résolues, ou `skip`). La branche passe `merged`.
-- **Divergence et rebase d'un change** (`GetDivergences` / `RebaseChange`) : les propositions dont un nœud a
-  avancé sur la branche sont recalculées sur la tête (fusion à 3 voies base / proposition / tête, ou
-  résolution fournie) ; la nouvelle proposition **remplace** l'ancienne (`supersedes`, statut `superseded`),
-  un item `merge` trace chaque remplacement, `change.data.rebases` garde l'historique et la baseline du change
-  devient la tête. Les items remplacés disparaissent des conditions CEL ; `merges` et `change.branch` y sont exposés.
+- A **branch** (`CreateBranch`) starts from a baseline (`forkBaseline`) and advances through the changes applied
+  on it (`ChangeSet.branch`); its **head** (`head`) is the latest baseline produced. `main` exists
+  implicitly.
+- "Latest version" is read **per branch** (`latest(node, branch)`): applying (`apply`) a change detects a
+  conflict when a node has advanced **on the change's branch** since the base version.
+- **Branch merge** (`PlanMerge` / `MergeBranch`): for each node modified on the source branch since
+  the fork, a 3-way merge against the common ancestor (walking up `parents`) — property by property (one side
+  equal to the ancestor takes the other, otherwise **conflict**) and outgoing links as a set (key = type + target
+  node: added on one side → kept, removed on one side → removed). The merge is a `merge_node` change applied on
+  the target; conflicts require a resolution (resolved properties, or `skip`). The branch moves to `merged`.
+- **Divergence and rebasing of a change** (`GetDivergences` / `RebaseChange`): proposals whose node has
+  advanced on the branch are recomputed against the head (3-way merge of base / proposal / head, or
+  supplied resolution); the new proposal **replaces** the old one (`supersedes`, status `superseded`),
+  a `merge` item traces each replacement, `change.data.rebases` keeps the history, and the change's baseline
+  becomes the head. Replaced items disappear from CEL conditions; `merges` and `change.branch` are exposed there.
 
-#### Axe change
+#### Change axis
 
 | Concept | Description |
 |---|---|
-| **ChangeSet** | Une demande de modification. Référence une baseline de départ, porte l'intention initiale et le goal retenu. C'est **le blackboard** d'un processus agentique. |
-| **ChangeItem** | Élément du blackboard. `kind` ∈ `impact`, `proposal`, `decision`, `artifact`, `merge`. Chaque item a une provenance (`producedBy` = action, `derivedFrom` = autres items). |
-| **Impact** | Référence un nœud **du graphe de référence** (`NodeRef` version exacte) avec une raison. Point de départ de l'analyse. |
-| **Proposal** | Modification proposée du **graphe d'arrivée** : `create_node`, `update_node`, `delete_node`, `add_link`, `remove_link` (et `merge_node` pour les merges de branche). Les extrémités de lien peuvent être un nœud existant (`NodeRef`) ou un nœud proposé (référence à un autre item). |
-| **Decision** | Acceptation / rejet d'une proposition (humain ou agent). |
-| **Artifact** | Donnée libre produite par une action (résumé, rapport, réponse d'outil). |
+| **ChangeSet** | A modification request. References a starting baseline, carries the initial intent and the chosen goal. It is **the blackboard** of an agentic process. |
+| **ChangeItem** | Blackboard element. `kind` ∈ `impact`, `proposal`, `decision`, `artifact`, `merge`. Each item has a provenance (`producedBy` = action, `derivedFrom` = other items). |
+| **Impact** | References a node **of the reference graph** (`NodeRef` exact version) with a reason. Starting point of the analysis. |
+| **Proposal** | Proposed modification of the **resulting graph**: `create_node`, `update_node`, `delete_node`, `add_link`, `remove_link` (and `merge_node` for branch merges). Link endpoints can be an existing node (`NodeRef`) or a proposed node (reference to another item). |
+| **Decision** | Acceptance / rejection of a proposal (human or agent). |
+| **Artifact** | Free-form data produced by an action (summary, report, tool response). |
 
-L'application d'un ChangeSet (`ApplyChange`) matérialise les propositions acceptées en nouvelles versions
-de nœuds et en une nouvelle baseline. Le ChangeSet reste l'historique explicable de *pourquoi* le graphe a changé.
+Applying a ChangeSet (`ApplyChange`) materializes the accepted proposals into new node versions
+and a new baseline. The ChangeSet remains the explainable history of *why* the graph changed.
 
-### 2.2 Correspondance avec Embabel
+### 2.2 Correspondence with Embabel
 
-| Embabel | GOAP | Commentaire |
+| Embabel | GOAP | Comment |
 |---|---|---|
-| Blackboard | **ChangeSet** (axe change) | Persisté, partagé, auditable ; référence des éléments du domaine. |
-| Objet du blackboard | **ChangeItem** | Typé par `kind` + `type` sémantique. |
-| Condition | **Condition** = expression [CEL](https://cel.dev) évaluée sur le blackboard *hydraté* avec les nœuds de domaine référencés | Voir §2.3. |
-| Agent (`@Agent`) | **Agent** de méthodologie : un planificateur (`goap`, `utility`, `hybrid`) + actions admissibles + objectifs | Voir §2.9. Un agent peut appeler d'autres agents. |
-| Action (`@Action`) | **Action** de méthodologie (`script` JS/Go, `llm`, `tool`, `human`, `builtin`) | Préconditions/effets = conditions nommées. L'**attendu** d'une action se traduit par un lien sur l'axe domaine (§2.4). Le code des actions `script` utilise le DSL (§2.10). |
-| Goal (`@AchievesGoal`) | **Goal** = conjonction de conditions + valeur | |
-| GOAP planner (A\*) | `pkg/goap` 🟢 | A\* sur l'espace des états booléens. |
-| Autonomy / goal selection | **Boucle d'intention** `pkg/intent` 🟢 | Identification de l'agent et de l'objectif (toutes méthodologies publiées) + clarification tant que la confiance est insuffisante. |
-| AgentProcess | **Process** `pkg/engine` 🟢 | Boucle observe → planifie → agit → replanifie. |
+| Blackboard | **ChangeSet** (change axis) | Persisted, shared, auditable; references domain elements. |
+| Blackboard object | **ChangeItem** | Typed by `kind` + semantic `type`. |
+| Condition | **Condition** = [CEL](https://cel.dev) expression evaluated on the blackboard *hydrated* with the referenced domain nodes | See §2.3. |
+| Agent (`@Agent`) | Methodology **Agent**: a planner (`goap`, `utility`, `hybrid`) + admissible actions + goals | See §2.9. An agent can call other agents. |
+| Action (`@Action`) | Methodology **Action** (`script` JS/Go, `llm`, `tool`, `human`, `builtin`) | Preconditions/effects = named conditions. An action's **expectation** translates into a link on the domain axis (§2.4). `script` action code uses the DSL (§2.10). |
+| Goal (`@AchievesGoal`) | **Goal** = conjunction of conditions + value | |
+| GOAP planner (A\*) | `pkg/goap` 🟢 | A\* over the space of boolean states. |
+| Autonomy / goal selection | **Intent loop** `pkg/intent` 🟢 | Identification of the agent and the goal (all published methodologies) + clarification as long as confidence is insufficient. |
+| AgentProcess | **Process** `pkg/engine` 🟢 | Observe → plan → act → replan loop. |
 
-### 2.3 Conditions : expressions sur l'état du changement
+### 2.3 Conditions: expressions on the state of the change
 
-Une condition est un prédicat **nommé** évalué sur le blackboard. On retient **CEL** (Common Expression
-Language, `cel-go`) : non Turing-complet, typé, rapide, sandboxé, sérialisable dans une définition YAML.
+A condition is a **named** predicate evaluated on the blackboard. We chose **CEL** (Common Expression
+Language, `cel-go`): not Turing-complete, typed, fast, sandboxed, serializable in a YAML definition.
 
-Variables exposées à l'expression :
+Variables exposed to the expression:
 
-| Variable | Contenu |
+| Variable | Content |
 |---|---|
 | `change` | `{id, title, intent, status, goal, baseline, branch, data}` |
-| `items` | les ChangeItems actifs (les items `superseded` par un rebase sont exclus) |
-| `impacts`, `proposals`, `decisions`, `artifacts`, `merges` | items filtrés par `kind` |
-| `vars` | variables libres du processus (réponses de clarification, paramètres) |
+| `items` | the active ChangeItems (items `superseded` by a rebase are excluded) |
+| `impacts`, `proposals`, `decisions`, `artifacts`, `merges` | items filtered by `kind` |
+| `vars` | free process variables (clarification answers, parameters) |
 
-Chaque référence de domaine d'un item (`target`, `node.base`, extrémités de lien) est **hydratée** :
-`{id, version, key, type, props, out: [{type, to}], in: [{type, from}], latest}`. Une condition peut donc
-naviguer dans le domaine *de référence* sans appel réseau pendant l'évaluation (l'hydratation est faite
-une fois par cycle par le moteur via le Graph Service).
+Each domain reference of an item (`target`, `node.base`, link endpoints) is **hydrated**:
+`{id, version, key, type, props, out: [{type, to}], in: [{type, from}], latest}`. A condition can thus
+navigate the *reference* domain without a network call during evaluation (hydration is done
+once per cycle by the engine via the Graph Service).
 
-Exemples :
+Examples:
 
 ```cel
-// au moins un impact identifié
+// at least one identified impact
 size(impacts) > 0
 
-// chaque exigence impactée a une proposition de mise à jour
+// every impacted requirement has an update proposal
 impacts.filter(i, i.target.type == "Requirement")
        .all(i, proposals.exists(p, p.op == "update_node" && p.node.base.id == i.target.id))
 
-// aucun lien suspect : toute cible impactée est à sa dernière version
+// no suspect link: every impacted target is at its latest version
 impacts.all(i, i.target.version == i.target.latest)
 ```
 
-Le monde vu par le planificateur est **l'évaluation booléenne de toutes les conditions**
-(`WorldState = {nom → vrai/faux}`). Une condition dont l'évaluation échoue (champ absent, erreur de type) est
-**inconnue** et ne satisfait aucune précondition.
+The world seen by the planner is **the boolean evaluation of all conditions**
+(`WorldState = {name → true/false}`). A condition whose evaluation fails (missing field, type error) is
+**unknown** and satisfies no precondition.
 
-### 2.4 Actions et « attendu » sur l'axe domaine
+### 2.4 Actions and "expectation" on the domain axis
 
-Une action déclare :
+An action declares:
 
-- `pre` : conditions requises (`{nom: bool}`) ;
-- `effects` : conditions que l'action est **censée** rendre vraies/fausses (utilisées pour planifier) ;
-- `expects` (optionnel) : l'**attendu** exprimé comme un **motif de lien de domaine**. Exemple :
-  « pour chaque impact sur un `Requirement`, produire une proposition de nœud `TestCase` liée par `verifies` ».
+- `pre`: required conditions (`{name: bool}`);
+- `effects`: conditions the action is **expected** to make true/false (used for planning);
+- `expects` (optional): the **expectation** expressed as a **domain link pattern**. Example:
+  "for each impact on a `Requirement`, produce a `TestCase` node proposal linked by `verifies`".
 
-Un `expects` est **compilé en condition CEL** (`expect:<action>`) ajoutée automatiquement aux effets de l'action.
-Ainsi le lien sur l'axe domaine est à la fois la **spécification** de l'action, son **critère de
-réussite** et un **effet planifiable**. Après exécution, le moteur ré-évalue : si l'effet promis n'est pas
-observé, l'étape est marquée `effectsMet=false` ; après 2 échecs l'action est **désactivée** pour ce
-processus et le planificateur replanifie vers une autre action produisant le même effet (ex. repli
-`identify_impacts` (LLM) → `select_impacts` (humain)). Si aucun plan n'existe, le processus passe en `stuck`.
+An `expects` is **compiled into a CEL condition** (`expect:<action>`) automatically added to the action's effects.
+Thus the link on the domain axis is simultaneously the action's **specification**, its **success
+criterion**, and a **plannable effect**. After execution, the engine re-evaluates: if the promised effect is not
+observed, the step is marked `effectsMet=false`; after 2 failures the action is **disabled** for this
+process and the planner replans toward another action producing the same effect (e.g. fallback
+`identify_impacts` (LLM) → `select_impacts` (human)). If no plan exists, the process goes to `stuck`.
 
-Types d'exécuteurs :
+Executor types:
 
-| Kind | Exécution | Sortie |
+| Kind | Execution | Output |
 |---|---|---|
-| `llm` | Prompt (template Go) + contexte blackboard → Model Gateway, sortie JSON structurée | ChangeItems |
-| `tool` | Appel d'un outil via le MCP Connector | Artifact (+ mapping optionnel vers items) |
-| `human` | Crée une tâche ; le processus passe en `waiting` jusqu'à `SubmitHumanInput` | Items saisis |
-| `builtin` | Fonction Go enregistrée : `graph.propagate` (propagation d'impact), `graph.apply` (application du change) | ChangeItems / nouvelle baseline |
+| `llm` | Prompt (Go template) + blackboard context → Model Gateway, structured JSON output | ChangeItems |
+| `tool` | Call to a tool via the MCP Connector | Artifact (+ optional mapping to items) |
+| `human` | Creates a task; the process moves to `waiting` until `SubmitHumanInput` | Submitted items |
+| `builtin` | Registered Go function: `graph.propagate` (impact propagation), `graph.apply` (change application) | ChangeItems / new baseline |
 
-Les sorties LLM/humaines utilisent un format d'entrée simplifié (`engine.ItemInput`) : les nœuds sont
-désignés par leur **clé** (`REQ-1`), les items du même lot par `#ref`, les items existants par `@<id>` ;
-le moteur les résout en `NodeRef` exacts de la baseline de référence.
+LLM/human outputs use a simplified input format (`engine.ItemInput`): nodes are
+designated by their **key** (`REQ-1`), items from the same batch by `#ref`, existing items by `@<id>`;
+the engine resolves them into exact `NodeRef`s of the reference baseline.
 
-### 2.5 Boucle d'intention
+### 2.5 Intent loop
 
-Avant toute planification :
+Before any planning:
 
-1. l'utilisateur exprime une demande (« le fournisseur de paiement change d'API, qu'est-ce que ça casse ? »),
-   éventuellement en précisant la méthodologie et/ou l'agent ;
-2. le **Ranker** (LLM via Model Gateway, ou lexical en dev) classe les couples **(agent, objectif)** de
-   la méthodologie — ou de **toutes les méthodologies publiées** si aucune n'est précisée — avec une
-   confiance (description et exemples de l'agent et de l'objectif) ;
-3. si `confiance(top) ≥ seuil` et écart suffisant avec le second → goal retenu, `change.goal` renseigné ;
-4. sinon → **question de clarification** (générée à partir des goals candidats), processus en `clarifying` ;
-   la réponse est ajoutée à l'historique et on reboucle (max N tours) ;
-5. le goal retenu peut exiger des **paramètres** (ex. le nœud de départ) : ils sont extraits dans `vars`.
+1. the user expresses a request ("the payment provider is changing its API, what does that break?"),
+   optionally specifying the methodology and/or the agent;
+2. the **Ranker** (LLM via the Model Gateway, or lexical in dev) ranks the **(agent, goal)** pairs of
+   the methodology — or of **all published methodologies** if none is specified — with a
+   confidence score (agent and goal description and examples);
+3. if `confidence(top) ≥ threshold` and sufficient margin over the second → goal selected, `change.goal` set;
+4. otherwise → **clarification question** (generated from the candidate goals), process moves to `clarifying`;
+   the answer is added to the history and the loop repeats (max N rounds);
+5. the selected goal may require **parameters** (e.g. the starting node): these are extracted into `vars`.
 
-### 2.6 Boucle d'exécution (Process)
+### 2.6 Execution loop (Process)
 
 ```
         ┌─────────────┐
-        │  intention  │── clarification ──► (attente utilisateur)
+        │   intent    │── clarification ──► (waiting for user)
         └──────┬──────┘
                ▼
-   ┌──► observer : hydrater blackboard, évaluer conditions ──► goal atteint ? ── oui ──► completed
-   │           │ non
+   ┌──► observe: hydrate blackboard, evaluate conditions ──► goal reached? ── yes ──► completed
+   │           │ no
    │           ▼
-   │    planifier : A*(WorldState, actions, goal) ── aucun plan ──► stuck
+   │    plan: A*(WorldState, actions, goal) ── no plan ──► stuck
    │           │
    │           ▼
-   │    agir : exécuter la 1re action du plan
-   │           │   (human / approbation → waiting ; erreur → retry/failed)
+   │    act: execute the plan's 1st action
+   │           │   (human / approval → waiting; error → retry/failed)
    │           ▼
-   └──── enregistrer items + step (événement NATS)
+   └──── record items + step (NATS event)
 ```
 
-### 2.7 Application du changement et permissions
+### 2.7 Change application and permissions
 
-Les actions ne modifient jamais le domaine directement : elles alimentent le change, et la transformation
-effective n'a lieu qu'à l'**application** du change ([ADR 0004](adr/0004-application-du-change.md)).
-Cette application est elle-même une action planifiable, `builtin: graph.apply`, qui porte une **permission** :
+Actions never modify the domain directly: they feed the change, and the actual
+transformation only happens when the change is **applied** ([ADR 0004](adr/0004-application-du-change.md)).
+This application is itself a plannable action, `builtin: graph.apply`, which carries a **permission**:
 
 ```yaml
 - name: apply_change
   kind: builtin
   builtin: graph.apply
-  pre: {reviewed: true, applied: false}   # uniquement après la revue
+  pre: {reviewed: true, applied: false}   # only after review
   effects: {applied: true}                # applied: change.status == "applied"
   permission: change:apply
 ```
 
-- Le processus mémorise son **initiateur** (identité propagée par la gateway : `X-Goap-Subject/Org/Roles`).
-- Si l'initiateur détient la permission, l'action s'exécute automatiquement.
-- Sinon, le processus passe en `waiting` avec une tâche d'**approbation** (`pending.kind = approval`).
-  Une personne habilitée appelle `ApproveAction` : si elle approuve, l'action s'exécute avec son identité
-  (`step.approvedBy`) ; si elle refuse, l'action est désactivée pour le processus et le planificateur
-  cherche une autre voie (en général : `stuck`).
-- Toute action peut porter une permission, pas seulement `graph.apply`.
+- The process remembers its **initiator** (identity propagated by the gateway: `X-Goap-Subject/Org/Roles`).
+- If the initiator holds the permission, the action executes automatically.
+- Otherwise, the process moves to `waiting` with an **approval** task (`pending.kind = approval`).
+  An authorized person calls `ApproveAction`: if they approve, the action executes with their identity
+  (`step.approvedBy`); if they refuse, the action is disabled for the process and the planner
+  looks for another path (generally: `stuck`).
+- Any action can carry a permission, not just `graph.apply`.
 
-Les permissions sont décidées en **ABAC** par Casbin (§2.8) : la ressource est le change, avec pour
-attributs l'organisation et le propriétaire (= l'initiateur). La politique par défaut applique le
-**principe des quatre yeux** : un approbateur applique les changes de son organisation, jamais les siens.
+Permissions are decided **ABAC**-style by Casbin (§2.8): the resource is the change, with the
+organization and the owner (= the initiator) as attributes. The default policy applies the
+**four-eyes principle**: an approver applies changes from their own organization, never their own.
 
-### 2.8 Contrôle d'accès ABAC (Casbin)
+### 2.8 ABAC access control (Casbin)
 
-Toutes les décisions d'accès passent par un enforcer [Casbin](https://casbin.org) avec un modèle
-**ABAC** ([ADR 0005](adr/0005-abac-casbin.md)). Une règle de politique est :
+All access decisions go through a [Casbin](https://casbin.org) enforcer with an
+**ABAC** model ([ADR 0005](adr/0005-abac-casbin.md)). A policy rule is:
 
 ```
-p, <règle sur les attributs>, <type de ressource | *>, <action | *>, <allow | deny>
+p, <rule on attributes>, <resource type | *>, <action | *>, <allow | deny>
 ```
 
-| Attribut | Contenu |
+| Attribute | Content |
 |---|---|
-| `r.sub` | appelant : `Subject`, `Org`, `Roles` (issus du JWT, propagés par la gateway) |
-| `r.obj` | ressource : `Type`, `ID`, `Org`, `Owner`, `Name` |
-| `r.act` | action : `read`, `start`, `submit`, `write`, `publish`, `delete`, `apply`… |
+| `r.sub` | caller: `Subject`, `Org`, `Roles` (from the JWT, propagated by the gateway) |
+| `r.obj` | resource: `Type`, `ID`, `Org`, `Owner`, `Name` |
+| `r.act` | action: `read`, `start`, `submit`, `write`, `publish`, `delete`, `apply`… |
 
-Fonctions disponibles dans les règles : `hasRole(r.sub, "x")`, `hasAnyRole(r.sub, "a", "b")`,
-`isAnonymous(r.sub)`. Un `deny` qui correspond l'emporte sur tout `allow`.
+Functions available in rules: `hasRole(r.sub, "x")`, `hasAnyRole(r.sub, "a", "b")`,
+`isAnonymous(r.sub)`. A matching `deny` overrides any `allow`.
 
-Politiques par défaut (créées si la table est vide) :
+Default policies (created if the table is empty):
 
-| Règle | Ressource | Action |
+| Rule | Resource | Action |
 |---|---|---|
 | `hasRole(r.sub, "admin")` | `*` | `*` |
 | `!isAnonymous(r.sub) && (r.obj.Org == "" \|\| r.obj.Org == r.sub.Org)` | `*` | `read` |
@@ -271,186 +271,186 @@ Politiques par défaut (créées si la table est vide) :
 | `hasRole(r.sub, "approver") && r.sub.Org == r.obj.Org && r.sub.Subject != r.obj.Owner` | `change` | `apply` |
 | `hasRole(r.sub, "release_manager") && r.sub.Org == r.obj.Org && r.sub.Subject != r.obj.Owner` | `release` | `deploy` |
 
-- Les politiques sont stockées dans la base du service **iam** (table `casbin_rule`) et administrées via
-  `IamService.ListPolicies / AddPolicy / RemovePolicy` (ressource `policy`) et l'écran « Accès » du frontend.
-  Une règle est validée (compilation + évaluation d'essai) avant d'être enregistrée.
-- Les services appellent `IamService.CheckPermission` (client `iamsvc.Client`, interface `authz.Authorizer`).
-- Après une modification, iam publie `goap.iam.policy.changed` ; les répliques rechargent (et toutes les 30 s).
-- Points d'application : moteur (démarrer / répondre / soumettre / lire un processus, permission des actions,
-  approbations), registry (écrire / publier / supprimer une méthodologie), iam (administration des politiques).
+- Policies are stored in the **iam** service's database (table `casbin_rule`) and administered via
+  `IamService.ListPolicies / AddPolicy / RemovePolicy` (resource `policy`) and the frontend's "Access" screen.
+  A rule is validated (compilation + trial evaluation) before being stored.
+- Services call `IamService.CheckPermission` (client `iamsvc.Client`, interface `authz.Authorizer`).
+- After a change, iam publishes `goap.iam.policy.changed`; replicas reload (and every 30 s).
+- Enforcement points: engine (start / respond to / submit / read a process, action permission,
+  approvals), registry (write / publish / delete a methodology), iam (policy administration).
 
-Replanifier à chaque pas rend le moteur robuste aux actions non déterministes (LLM) et aux modifications
-concurrentes du blackboard (un humain peut ajouter un impact pendant l'exécution).
+Replanning at every step makes the engine robust to non-deterministic actions (LLM) and to concurrent
+modifications of the blackboard (a human can add an impact during execution).
 
-Décisions structurantes : [ADR 0001 — blackboard = axe change](adr/0001-blackboard-axe-change.md),
-[ADR 0002 — conditions CEL](adr/0002-conditions-cel.md), [ADR 0003 — liens version-à-version](adr/0003-liens-version-a-version.md),
-[ADR 0004 — application du change](adr/0004-application-du-change.md).
+Foundational decisions: [ADR 0001 — blackboard = change axis](adr/0001-blackboard-axe-change.md),
+[ADR 0002 — CEL conditions](adr/0002-conditions-cel.md), [ADR 0003 — version-to-version links](adr/0003-liens-version-a-version.md),
+[ADR 0004 — change application](adr/0004-application-du-change.md).
 
-### 2.9 Agents et planificateurs
+### 2.9 Agents and planners
 
-Une méthodologie déclare des **agents** (Embabel) : `{name, description, examples, planner, actions, goals}`.
-Sans agent déclaré, un agent implicite `default` (toutes les actions, tous les objectifs, `goap`) est utilisé.
+A methodology declares **agents** (Embabel): `{name, description, examples, planner, actions, goals}`.
+With no agent declared, an implicit `default` agent (all actions, all goals, `goap`) is used.
 
-| Planificateur | Choix de l'action suivante |
+| Planner | Choice of next action |
 |---|---|
-| `goap` | A\* : séquence d'actions de coût minimal atteignant l'objectif |
-| `utility` | l'action applicable (préconditions vraies, effets pas encore atteints) de plus grande **utilité** ; pas d'anticipation |
-| `hybrid` | A\* où le coût de chaque action est divisé par son utilité : l'objectif est atteint en privilégiant les actions utiles |
+| `goap` | A\*: sequence of actions of minimal cost reaching the goal |
+| `utility` | the applicable action (preconditions true, effects not yet reached) with the greatest **utility**; no lookahead |
+| `hybrid` | A\* where each action's cost is divided by its utility: the goal is reached while favoring useful actions |
 
-L'**utilité** d'une action est une expression CEL numérique (`utility`), évaluée à chaque cycle sur le
-blackboard (défaut : 1 ; une utilité ≤ 0 exclut l'action). Exemple :
+An action's **utility** is a numeric CEL expression (`utility`), evaluated each cycle on the
+blackboard (default: 1; a utility ≤ 0 excludes the action). Example:
 `has(vars.review) && vars.review == "human" ? 0.1 : 0.9`.
 
-**Sous-agents** : une action peut appeler `ctx.runAgent(nom, intention)`. Le sous-agent est un processus
-enfant (`parentId`) de la **même méthodologie**, travaillant sur le **même change** (blackboard partagé)
-avec l'identité de l'initiateur. S'il se termine, l'action reprend avec son résultat ; s'il attend un humain,
-l'action parente est **suspendue** (`pending.kind = agent`) puis rejouée quand l'enfant se termine — les
-écritures n'étant validées qu'en fin d'action, le rejeu est sûr et retrouve le sous-agent déjà démarré.
+**Sub-agents**: an action can call `ctx.runAgent(name, intent)`. The sub-agent is a child
+process (`parentId`) of the **same methodology**, working on the **same change** (shared blackboard)
+with the initiator's identity. If it completes, the action resumes with its result; if it is waiting on a human,
+the parent action is **suspended** (`pending.kind = agent`) then replayed when the child completes — since
+writes are only committed at the end of an action, replay is safe and finds the sub-agent already started.
 
-**Spécialisation** ([ADR 0009](adr/0009-branches-options-decisions.md) §5) : une action peut en spécialiser
-une autre (`specializes: <action>` ou `<méthodologie>/<action>`), avec une garde CEL `when` et une
-`priority`. Une spécialisation n'est pas planifiée : elle hérite des préconditions, effets et coût de l'action
-spécialisée, et la **remplace à l'exécution** quand sa garde est vraie (la plus prioritaire gagne, celles des
-autres méthodologies comprises). Une action `kind: abstract` n'a pas d'implémentation propre : elle exige une
-spécialisation applicable (ex. `build` spécialisée en `build_java`, `build_c`, `build_shell`).
-**Sous-typage** (§6) : un type de nœud peut en étendre un autre (`extends`) ; les conditions voient
-`x.types` (le type et ses ancêtres) : `"Requirement" in i.target.types` vaut pour ses sous-types.
+**Specialization** ([ADR 0009](adr/0009-branches-options-decisions.md) §5): an action can specialize
+another one (`specializes: <action>` or `<methodology>/<action>`), with a CEL guard `when` and a
+`priority`. A specialization is not planned: it inherits the specialized action's preconditions, effects, and
+cost, and **replaces it at execution time** when its guard is true (the highest priority wins, including
+those from other methodologies). An action of `kind: abstract` has no implementation of its own: it requires
+an applicable specialization (e.g. `build` specialized into `build_java`, `build_c`, `build_shell`).
+**Subtyping** (§6): a node type can extend another (`extends`); conditions see
+`x.types` (the type and its ancestors): `"Requirement" in i.target.types` holds for its subtypes.
 
-### 2.11 Déclencheurs d'agents
+### 2.11 Agent triggers
 
-En dehors de la boucle d'intention, un agent peut être exécuté **automatiquement** par des déclencheurs
-déclarés sur l'agent (`agents[].triggers`) :
+Outside the intent loop, an agent can be executed **automatically** by triggers
+declared on the agent (`agents[].triggers`):
 
-| Champ | Rôle |
+| Field | Role |
 |---|---|
-| `type` | `event` ou `schedule` |
-| `event` + `filter` | `change.created`, `change.applied`, `change.item_added`, `process.completed`, `process.failed`, `process.stuck`, `methodology.published` ; filtre CEL sur `event` (`event.change.*`, `event.process.*`) |
-| `schedule` | expression cron (5 champs, UTC) |
-| `goal`, `intent` | objectif visé (sinon identification limitée à l'agent) et texte d'intention |
-| `target` | `new_change` (nouveau change sur la dernière baseline) ou `event_change` (le change de l'événement) |
-| `roles` | rôles de l'**identité de service** `system:trigger:<méthodologie>/<agent>/<déclencheur>` (ABAC) |
+| `type` | `event` or `schedule` |
+| `event` + `filter` | `change.created`, `change.applied`, `change.item_added`, `process.completed`, `process.failed`, `process.stuck`, `methodology.published`; CEL filter on `event` (`event.change.*`, `event.process.*`) |
+| `schedule` | cron expression (5 fields, UTC) |
+| `goal`, `intent` | targeted goal (otherwise identification is limited to the agent) and intent text |
+| `target` | `new_change` (new change on the latest baseline) or `event_change` (the event's change) |
+| `roles` | roles of the **service identity** `system:trigger:<methodology>/<agent>/<trigger>` (ABAC) |
 
-Garde-fous : un déclencheur ne réagit jamais à ses propres productions (le change qu'il ouvre est marqué
-`data.trigger`, le processus porte `trigger`), et ne s'exécute pas plus d'une fois toutes les 2 s.
-Les événements viennent de NATS (service graph, moteur, registry) ou du bus local en mode tout-en-un.
-`ListTriggers` / `FireTrigger` exposent l'état et le déclenchement manuel (permission `trigger:fire`).
-Avec plusieurs répliques du moteur, un seul doit exécuter les déclencheurs (élection de leader : M1).
+Safeguards: a trigger never reacts to its own productions (the change it opens is marked
+`data.trigger`, the process carries `trigger`), and it does not run more than once every 2 s.
+Events come from NATS (graph, engine, registry services) or the local bus in all-in-one mode.
+`ListTriggers` / `FireTrigger` expose the state and manual firing (permission `trigger:fire`).
+With several engine replicas, only one must run the triggers (leader election: M1).
 
-### 2.12 Journal d'exécution et auto-observation ([ADR 0011](adr/0011-journal-auto-observation.md))
+### 2.12 Execution journal and self-observation ([ADR 0011](adr/0011-journal-auto-observation.md))
 
-L'exécution d'un change est **capturée sur l'axe change**, à côté du blackboard :
+The execution of a change is **captured on the change axis**, alongside the blackboard:
 
 ```
 change CR-42
  ├─ items (blackboard) ── item.execution ──┐
  └─ journal                                ▼
-     process.started · tick (monde, plan, replanifié ?) · action (spécialisation, effets, items,
-     tokens, appels LLM / outils, traceId/spanId) · approval · process.ended (statut, totaux)
+     process.started · tick (world, plan, replanned?) · action (specialization, effects, items,
+     tokens, LLM / tool calls, traceId/spanId) · approval · process.ended (status, totals)
 ```
 
-- Chaque tick de planification et chaque exécution d'action (LLM ou formelle) est persisté et relié aux
-  items produits : l'**audit** remonte d'une proposition à l'appel de modèle qui l'a produite, et au span
-  OpenTelemetry correspondant.
-- La **méthodologie est modélisée dans le domaine** (`pkg/metamodel`) : chaque publication projette ses
-  éléments (méthodologie, agents, actions, buts, conditions, déclencheurs, types) en nœuds versionnés
-  `M:<méthodologie>/<type>/<nom>` par un change appliqué sur main.
-- L'agent **`methodology-improvement/observer`** se déclenche à la fin de chaque processus racine
-  (terminé, en échec ou bloqué) : il analyse le journal et les traces (points durs : boucles, échecs, LLM
-  coûteux ou systématisable, replanifications, spans lents), propose des modifications **sur les nœuds de
-  la méthodologie** (spécialisation par script, modèle, coût, agent, demande d'outil MCP), les soumet à une
-  revue humaine et produit une **nouvelle version brouillon** de la méthodologie.
+- Every planning tick and every action execution (LLM or formal) is persisted and linked to the
+  items it produced: **auditing** can trace back from a proposal to the model call that produced it, and to the
+  corresponding OpenTelemetry span.
+- The **methodology is modeled in the domain** (`pkg/metamodel`): each publication projects its
+  elements (methodology, agents, actions, goals, conditions, triggers, types) as versioned nodes
+  `M:<methodology>/<type>/<name>` via a change applied on main.
+- The **`methodology-improvement/observer`** agent triggers at the end of every root process
+  (completed, failed, or stuck): it analyzes the journal and traces (pain points: loops, failures, costly
+  or systematizable LLM calls, replans, slow spans), proposes modifications **to the methodology's
+  nodes** (specialization by script, model, cost, agent, MCP tool request), submits them for human
+  review, and produces a **new draft version** of the methodology.
 
-### 2.10 Actions script et DSL
+### 2.10 Script actions and DSL
 
-Les actions `kind: script` sont du code **JavaScript** (goja) ou **Go** (yaegi) saisi dans l'IDE. Le moteur
-injecte un objet `ctx` (même API dans les deux langages, référence : [docs/dsl.md](dsl.md)) :
+`kind: script` actions are **JavaScript** (goja) or **Go** (yaegi) code entered in the IDE. The engine
+injects a `ctx` object (same API in both languages, reference: [docs/dsl.md](dsl.md)):
 
-- **lecture** du blackboard (items hydratés) et du **domaine** de référence (`node`, `nodes`, `links`) ;
-- **écriture** sur le change (`addImpact`, `proposeNode`, `proposeUpdate`, `proposeLink`, `addArtifact`,
-  `decide`) — tamponnée, validée atomiquement à la fin de l'action ;
-- **appels plateforme** : `llm` / `complete` (model gateway), `runAgent` (sous-agents), `callTool` (MCP), `log`.
+- **reading** the blackboard (hydrated items) and the reference **domain** (`node`, `nodes`, `links`);
+- **writing** to the change (`addImpact`, `proposeNode`, `proposeUpdate`, `proposeLink`, `addArtifact`,
+  `decide`) — buffered, validated atomically at the end of the action;
+- **platform calls**: `llm` / `complete` (model gateway), `runAgent` (sub-agents), `callTool` (MCP), `log`.
 
-Les interpréteurs n'exposent ni fichiers, ni réseau, ni processus (Go : sous-ensemble de la stdlib ;
-JavaScript : pas de `require`), avec timeout. Le code s'exécute dans le **sandbox** du processus (§3.6).
+The interpreters expose neither files, network, nor processes (Go: subset of the stdlib;
+JavaScript: no `require`), with a timeout. The code runs in the process's **sandbox** (§3.6).
 
-## 3. Architecture des composants
+## 3. Component architecture
 
 ```
                           ┌──────────────┐
-          navigateur ───► │  web (Svelte)│
+           browser ────►  │  web (Svelte)│
                           └──────┬───────┘
                                  │ HTTPS (Connect JSON / REST)
                           ┌──────▼───────┐       ┌─────────┐
-                          │   gateway    │──────►│  iam    │ (users, orgs, rôles, tokens)
+                          │   gateway    │──────►│  iam    │ (users, orgs, roles, tokens)
                           │ (Echo, authN,│       └─────────┘
-                          │  routage)    │
+                          │  routing)    │
                           └──┬───┬───┬───┘
               connect-rpc    │   │   │
         ┌────────────────────┘   │   └─────────────────────┐
   ┌─────▼──────┐         ┌───────▼──────┐          ┌───────▼──────┐
   │  registry  │◄────────│    engine    │─────────►│    graph     │
-  │ (méthodo-  │         │ (processus,  │          │ (domaine +   │
-  │  logies)   │         │  planif, x N)│          │  change)     │
+  │ (methodol- │         │ (processes,  │          │ (domain +    │
+  │  ogies)    │         │  planning,xN)│          │  change)     │
   └────────────┘         └──┬────────┬──┘          └──────────────┘
                             │        │
                     ┌───────▼──┐  ┌──▼──────────┐   ┌──────────────────────────┐
-                    │ modelgw  │  │ mcp         │   │ sandboxes (1 / processus)│
+                    │ modelgw  │  │ mcp         │   │ sandboxes (1 / process)  │
                     │ (LLMs)   │  │ connector   │   │ goap-runner : JS / Go    │
                     └────┬─────┘  └─────────────┘   │ ◄── jobs ── engine       │
                          ▼                          │ ── RuntimeService ──►    │
              Anthropic / OpenAI-compatible / Ollama… └──────────────────────────┘
 
-  Transverse : PostgreSQL (schéma par service) · NATS JetStream (événements) · Vault (secrets)
-               OpenTelemetry → collector → Jaeger (traces) / Prometheus (métriques) / Grafana
+  Cross-cutting: PostgreSQL (schema per service) · NATS JetStream (events) · Vault (secrets)
+               OpenTelemetry → collector → Jaeger (traces) / Prometheus (metrics) / Grafana
 ```
 
-| Service | Responsabilité | API | Persistance | Statut |
+| Service | Responsibility | API | Persistence | Status |
 |---|---|---|---|---|
-| **gateway** | Point d'entrée unique, authentification (JWT/OIDC), routage vers les services, CORS, rate-limit | Echo HTTP, reverse proxy Connect | — | 🟢 socle |
-| **iam** | Décisions d'accès ABAC (Casbin), administration des politiques ; utilisateurs / organisations à venir | Connect `iam.v1` | `iam` | 🟢 ABAC · 🟡 comptes |
-| **registry** | Méthodologies structurées en base : édition (brouillon), validation, publication, versions, import/export YAML | Connect `registry.v1` | `registry` | 🟢 |
-| **engine** | Boucle d'intention, planification, exécution des processus ; déployable en cluster | Connect `engine.v1` | `engine` | 🟢 socle (mémoire) |
-| **graph** | Axe domaine (nœuds versionnés, liens, baselines) + axe change (ChangeSets, items, apply) | Connect `graph.v1` | `graph` | 🟢 |
-| **modelgw** | Abstraction multi-fournisseurs / multi-modèles, alias (`default`, `fast`, `reasoning`), quotas, traces | Connect `model.v1` | `modelgw` (usage) | 🟢 socle |
-| **mcp** | Registre et proxy de serveurs MCP ; expose les outils aux actions `tool` | Connect `mcp.v1` | `mcp` | 🟡 à venir |
-| **goap-runner** | Sandbox d'exécution des actions script (un par processus) | Connect `runtime.v1` (SandboxService) | — | 🟢 |
-| **otel-collector** | Réception OTLP, export traces (Jaeger) et métriques (Prometheus) | OTLP | — | 🟢 |
-| **vault** | Secrets (clés API LLM, credentials MCP, DSN) | HashiCorp Vault KV v2 | — | 🟢 dev mode |
+| **gateway** | Single entry point, authentication (JWT/OIDC), routing to services, CORS, rate-limit | Echo HTTP, Connect reverse proxy | — | 🟢 core |
+| **iam** | ABAC access decisions (Casbin), policy administration; users / organizations to come | Connect `iam.v1` | `iam` | 🟢 ABAC · 🟡 accounts |
+| **registry** | Methodologies structured in the database: editing (draft), validation, publishing, versions, YAML import/export | Connect `registry.v1` | `registry` | 🟢 |
+| **engine** | Intent loop, planning, process execution; deployable as a cluster | Connect `engine.v1` | `engine` | 🟢 core (memory) |
+| **graph** | Domain axis (versioned nodes, links, baselines) + change axis (ChangeSets, items, apply) | Connect `graph.v1` | `graph` | 🟢 |
+| **modelgw** | Multi-provider / multi-model abstraction, aliases (`default`, `fast`, `reasoning`), quotas, traces | Connect `model.v1` | `modelgw` (usage) | 🟢 core |
+| **mcp** | MCP server registry and proxy; exposes tools to `tool` actions | Connect `mcp.v1` | `mcp` | 🟡 upcoming |
+| **goap-runner** | Sandbox for executing script actions (one per process) | Connect `runtime.v1` (SandboxService) | — | 🟢 |
+| **otel-collector** | OTLP reception, trace export (Jaeger) and metrics (Prometheus) | OTLP | — | 🟢 |
+| **vault** | Secrets (LLM API keys, MCP credentials, DSN) | HashiCorp Vault KV v2 | — | 🟢 dev mode |
 
 ### 3.1 Communication
 
-- **Externe** : HTTP via Echo sur la gateway. Le frontend utilise le protocole **Connect en JSON**
-  (`POST /goap.engine.v1.EngineService/StartProcess`), ce qui évite toute génération de code côté web.
-- **Synchrone inter-services** : **connect-rpc** (HTTP/2 h2c en interne, HTTP/1.1 compatible). Contrats dans
-  `proto/`, générés par `buf` dans `gen/`.
-- **Asynchrone** : **NATS JetStream**. Conventions de sujets :
+- **External**: HTTP via Echo on the gateway. The frontend uses the **Connect JSON**
+  protocol (`POST /goap.engine.v1.EngineService/StartProcess`), avoiding any code generation on the web side.
+- **Synchronous inter-service**: **connect-rpc** (HTTP/2 h2c internally, HTTP/1.1 compatible). Contracts in
+  `proto/`, generated by `buf` into `gen/`.
+- **Asynchronous**: **NATS JetStream**. Subject conventions:
 
-| Sujet | Émetteur | Contenu |
+| Subject | Emitter | Content |
 |---|---|---|
 | `goap.process.<id>.started` / `.step` / `.waiting` / `.completed` / `.failed` | engine | `ProcessEvent` |
 | `goap.change.<id>.item_added` / `.applied` | graph | `ChangeEvent` |
-| `goap.registry.methodology.published` | registry | nom + version |
-| `goap.engine.work` (work-queue) 🟡 | engine | tick de processus à exécuter (clustering) |
+| `goap.registry.methodology.published` | registry | name + version |
+| `goap.engine.work` (work queue) 🟡 | engine | process tick to execute (clustering) |
 
-### 3.2 Clustering du moteur 🟡
+### 3.2 Engine clustering 🟡
 
-Cible : l'état d'un processus est persisté (schéma `engine`) ; chaque pas d'exécution est déclenché par un
-message sur un stream JetStream **work-queue** (`goap.engine.work`, clé = processId). N'importe quelle
-réplique consomme le message, verrouille le processus (`SELECT … FOR UPDATE SKIP LOCKED` ou advisory lock),
-exécute **un** pas, persiste, et republie un tick si le processus n'est pas terminal. Les pas sont
-idempotents (clé `processId/stepIndex`). Le socle initial utilise un `ProcessStore` en mémoire derrière
-une interface, remplaçable par l'implémentation PostgreSQL sans changer le moteur.
+Target: a process's state is persisted (`engine` schema); each execution step is triggered by a
+message on a **work-queue** JetStream stream (`goap.engine.work`, key = processId). Any
+replica consumes the message, locks the process (`SELECT … FOR UPDATE SKIP LOCKED` or an advisory lock),
+executes **one** step, persists it, and republishes a tick if the process is not terminal. Steps are
+idempotent (key `processId/stepIndex`). The initial core uses an in-memory `ProcessStore` behind
+an interface, replaceable with the PostgreSQL implementation without changing the engine.
 
-### 3.3 Persistance
+### 3.3 Persistence
 
-- **Local sans conteneur** : un fichier SQLite partagé par `goap-dev` (migrations `migrations_sqlite/`
-  par composant, [ADR 0010](adr/0010-mode-local-sqlite.md)).
-- **Dev** : une instance PostgreSQL, **un schéma par service** (`graph`, `registry`, `engine`, `iam`,
-  `modelgw`, `mcp`) et un rôle dédié par service (`deploy/postgres/init.sql`).
-- **Prod** : une base (ou un cluster) par service ; seul le DSN change (`GOAP_DB_DSN`, lu depuis Vault).
-- Migrations embarquées dans chaque service (`embed.FS`), appliquées au démarrage (verrou advisory).
+- **Local without containers**: a single SQLite file shared by `goap-dev` (migrations `migrations_sqlite/`
+  per component, [ADR 0010](adr/0010-mode-local-sqlite.md)).
+- **Dev**: one PostgreSQL instance, **one schema per service** (`graph`, `registry`, `engine`, `iam`,
+  `modelgw`, `mcp`) and a dedicated role per service (`deploy/postgres/init.sql`).
+- **Prod**: one database (or cluster) per service; only the DSN changes (`GOAP_DB_DSN`, read from Vault).
+- Migrations embedded in each service (`embed.FS`), applied at startup (advisory lock).
 
-Modèle `graph` (simplifié) :
+`graph` model (simplified):
 
 ```sql
 node(id uuid, key text, type text, latest int)
@@ -463,106 +463,106 @@ change_item(id uuid, change_id, kind, type, status, target_id, target_version, p
             produced_by, derived_from uuid[], created_at)
 ```
 
-> Pourquoi PostgreSQL et pas une base graphe ? Les parcours nécessaires (voisinage, propagation d'impact à
-> profondeur bornée) s'expriment en CTE récursives ; le versionnement version-à-version et les baselines sont
-> plus simples en relationnel ; un seul moteur à opérer. Une projection vers une base graphe reste possible
-> via les événements NATS.
+> Why PostgreSQL and not a graph database? The required traversals (neighborhood, impact propagation
+> at bounded depth) are expressed as recursive CTEs; version-to-version versioning and baselines are
+> simpler in a relational model; only one engine to operate. A projection to a graph database remains
+> possible via NATS events.
 
-### 3.4 Sécurité
+### 3.4 Security
 
-- La gateway valide le JWT (OIDC en prod, HS256 signé par un secret Vault en dev) et propage
-  `X-Goap-Subject`, `X-Goap-Org`, `X-Goap-Roles` aux services (réseau interne uniquement).
-- Permissions d'action : voir §2.7. Le moteur fait confiance aux en-têtes `X-Goap-*` : il ne doit être
-  joignable que via la gateway (qui les écrase systématiquement).
-- Chaque ressource (méthodologie, changeset, processus) appartient à une **organisation** : isolation multi-tenant
-  par `org_id` dans toutes les tables (à ajouter avec le service IAM).
-- Les secrets ne sont jamais en variables d'environnement en prod : `internal/platform/secrets` lit Vault
-  (KV v2, auth token en dev / Kubernetes auth en prod) avec repli sur l'environnement en dev.
+- The gateway validates the JWT (OIDC in prod, HS256 signed with a Vault secret in dev) and propagates
+  `X-Goap-Subject`, `X-Goap-Org`, `X-Goap-Roles` to services (internal network only).
+- Action permissions: see §2.7. The engine trusts the `X-Goap-*` headers: it must only be
+  reachable via the gateway (which systematically overwrites them).
+- Each resource (methodology, changeset, process) belongs to an **organization**: multi-tenant isolation
+  via `org_id` in all tables (to be added with the IAM service).
+- Secrets are never in environment variables in prod: `internal/platform/secrets` reads from Vault
+  (KV v2, token auth in dev / Kubernetes auth in prod) with a fallback to the environment in dev.
 
-### 3.5 Déploiement
+### 3.5 Deployment
 
-- `deploy/compose/docker-compose.yml` : postgres, nats (JetStream), vault (dev), tous les services, web,
-  otel-collector, Jaeger, Prometheus, Grafana, proxy restreint de l'API Docker (sandboxes).
-- **Mode local sans conteneur** ([ADR 0010](adr/0010-mode-local-sqlite.md)) : `make devlocal` lance
-  `goap-dev` (tous les services dans un processus, bus d'événements en mémoire) sur un fichier **SQLite**
-  (`.goap/goap.db`, pilote Go pur) et sert l'IDE compilé sur http://localhost:8080. `GOAP_STORE=memory`
-  (`make dev`) garde le mode éphémère.
-- Une seule image multi-cible (`Dockerfile`, `ARG SERVICE`), binaire statique sur `distroless`.
-- Kubernetes 🟡 : un chart Helm par service (ou kustomize) ; engine en `Deployment` scalable (HPA sur la
-  profondeur du stream work-queue), NATS via le chart officiel, Vault Agent Injector.
+- `deploy/compose/docker-compose.yml`: postgres, nats (JetStream), vault (dev), all services, web,
+  otel-collector, Jaeger, Prometheus, Grafana, restricted Docker API proxy (sandboxes).
+- **Local mode without containers** ([ADR 0010](adr/0010-mode-local-sqlite.md)): `make devlocal` launches
+  `goap-dev` (all services in one process, in-memory event bus) on a **SQLite** file
+  (`.goap/goap.db`, pure Go driver) and serves the compiled IDE on http://localhost:8080. `GOAP_STORE=memory`
+  (`make dev`) keeps the ephemeral mode.
+- A single multi-target image (`Dockerfile`, `ARG SERVICE`), static binary on `distroless`.
+- Kubernetes 🟡: one Helm chart per service (or kustomize); engine as a scalable `Deployment` (HPA on
+  the work-queue stream depth), NATS via the official chart, Vault Agent Injector.
 
-### 3.6 Exécution sandboxée des actions (executor)
+### 3.6 Sandboxed execution of actions (executor)
 
-Le moteur est le **plan de contrôle** (planification, état, blackboard) ; il n'exécute jamais le code des
-méthodologies ([ADR 0007](adr/0007-sandbox-executor.md)).
+The engine is the **control plane** (planning, state, blackboard); it never executes the
+methodologies' code ([ADR 0007](adr/0007-sandbox-executor.md)).
 
 ```
  engine ──Acquire(process)──► Pool ──Start(spec)──► Provisioner ──► sandbox (goap-runner)
    │                                                                   │
-   ├── SandboxService.Execute(job, jeton) ────────────────────────────►│ interprète JS / Go (DSL)
-   │◄──────────── RuntimeService.Call(jeton, llm|agents|tools|domain) ─┤
-   └── items tamponnés, journaux, suspension ◄──────────────────────────┘
+   ├── SandboxService.Execute(job, token) ────────────────────────────►│ interprets JS / Go (DSL)
+   │◄──────────── RuntimeService.Call(token, llm|agents|tools|domain) ─┤
+   └── buffered items, journals, suspension ◄──────────────────────────┘
 ```
 
-- **Un sandbox par processus**, démarré au premier script, arrêté quand le processus se termine ou après
-  une période d'inactivité (un processus qui attend un humain ne garde pas de conteneur).
-- Le sandbox ne connaît que l'URL du **RuntimeService** du moteur et un **jeton par job** (révoqué en fin
-  de job). Toute opération sortante (LLM, sous-agents, outils, lecture du domaine) passe par le moteur :
-  autorisée, tracée, comptée. Aucune clé ni secret n'entre dans le sandbox.
-- `Provisioner` adapté à chaque environnement (`GOAP_SANDBOX`) :
+- **One sandbox per process**, started on the first script, stopped when the process ends or after
+  a period of inactivity (a process waiting on a human keeps no container).
+- The sandbox knows only the engine's **RuntimeService** URL and a **per-job token** (revoked at the end
+  of the job). Every outgoing operation (LLM, sub-agents, tools, domain reads) goes through the engine:
+  authorized, traced, counted. No key or secret ever enters the sandbox.
+- `Provisioner` adapted to each environment (`GOAP_SANDBOX`):
 
 | Provisioner | Isolation |
 |---|---|
-| `inproc` | aucune (interpréteurs dans le moteur) — tests et développement uniquement |
-| `process` | processus séparé, environnement vide, groupe de processus tué à l'arrêt ; *wrapper* configurable (bubblewrap, nsjail) et UID dédié pour une vraie isolation sur bare metal |
-| `docker` | conteneur par processus : rootfs en lecture seule, `cap-drop ALL`, `no-new-privileges`, utilisateur non-root, limites CPU / mémoire / PIDs, réseau interne sans Internet, runtime optionnel (gVisor `runsc`) ; API Docker via un proxy restreint |
-| `kubernetes` | pod par processus : `restricted` Pod Security, pas de jeton de service account, seccomp `RuntimeDefault`, RuntimeClass optionnelle (gVisor, Kata), NetworkPolicy limitant les flux au moteur (`deploy/k8s/sandbox.yaml`) |
+| `inproc` | none (interpreters in the engine) — tests and development only |
+| `process` | separate process, empty environment, process group killed on stop; configurable *wrapper* (bubblewrap, nsjail) and dedicated UID for real isolation on bare metal |
+| `docker` | container per process: read-only rootfs, `cap-drop ALL`, `no-new-privileges`, non-root user, CPU / memory / PID limits, internal network with no Internet, optional runtime (gVisor `runsc`); Docker API via a restricted proxy |
+| `kubernetes` | pod per process: `restricted` Pod Security, no service account token, seccomp `RuntimeDefault`, optional RuntimeClass (gVisor, Kata), NetworkPolicy limiting flows to the engine (`deploy/k8s/sandbox.yaml`) |
 
-### 3.7 Observabilité (OpenTelemetry)
+### 3.7 Observability (OpenTelemetry)
 
-Composant `internal/telemetry` ([ADR 0008](adr/0008-observabilite-opentelemetry.md)), activé par les
-variables standard `OTEL_EXPORTER_OTLP_ENDPOINT` / `OTEL_*` :
+`internal/telemetry` component ([ADR 0008](adr/0008-observabilite-opentelemetry.md)), enabled by the
+standard `OTEL_EXPORTER_OTLP_ENDPOINT` / `OTEL_*` variables:
 
-- **traces** de tous les appels : HTTP (Echo, gateway), Connect (client et serveur, contexte W3C propagé),
-  PostgreSQL (pgx), NATS (en-têtes), sandboxes (le runner continue la trace de l'action) ;
-- **un processus = une trace** : span racine `process <agent>` (le `traceparent` est conservé dans le
-  processus, les exécutions en arrière-plan le continuent), un span `action <nom>` par action ;
-- **appels LLM** : span `chat <modèle>` (conventions sémantiques GenAI : `gen_ai.system`,
-  `gen_ai.request.model`, `gen_ai.usage.input_tokens` / `output_tokens`…) attribué au processus, à
-  l'agent et à l'action via le **baggage** propagé du moteur au model gateway ; métriques
-  `gen_ai.client.token.usage` et `gen_ai.client.operation.duration` ;
-- **outils** : span `execute_tool <nom>` (`gen_ai.tool.name`) ;
-- métriques `goap.actions`, `goap.action.duration`, `goap.tokens` (par agent / action / résultat).
+- **traces** of all calls: HTTP (Echo, gateway), Connect (client and server, W3C context propagated),
+  PostgreSQL (pgx), NATS (headers), sandboxes (the runner continues the action's trace);
+- **one process = one trace**: root span `process <agent>` (the `traceparent` is kept in the
+  process, background executions continue it), an `action <name>` span per action;
+- **LLM calls**: span `chat <model>` (GenAI semantic conventions: `gen_ai.system`,
+  `gen_ai.request.model`, `gen_ai.usage.input_tokens` / `output_tokens`…) attributed to the process, the
+  agent, and the action via **baggage** propagated from the engine to the model gateway; metrics
+  `gen_ai.client.token.usage` and `gen_ai.client.operation.duration`;
+- **tools**: span `execute_tool <name>` (`gen_ai.tool.name`);
+- metrics `goap.actions`, `goap.action.duration`, `goap.tokens` (by agent / action / result).
 
-La gateway expose aussi `GET /api/status` (disponibilité et latence de chaque service), affiché dans la
-barre d'état de l'IDE avec les runs en cours de l'utilisateur et ses notifications.
+The gateway also exposes `GET /api/status` (availability and latency of each service), displayed in the
+IDE's status bar along with the user's running runs and their notifications.
 
-Les compteurs sont aussi **conservés dans le processus** (tokens, appels LLM et outils par étape et au
-total) et affichés dans l'IDE, avec un lien vers la trace Jaeger (`traceId`).
+Counters are also **kept in the process** (tokens, LLM and tool calls per step and overall)
+and displayed in the IDE, with a link to the Jaeger trace (`traceId`).
 
-Le **journal d'exécution** des changes (§2.12) porte `traceId` / `spanId` : l'agent d'auto-observation
-relit la trace d'un run par l'API de requête Jaeger (`GOAP_TRACE_QUERY_URL`, liens `GOAP_TRACE_UI_URL`)
-pour y chercher les points durs (spans lents, outils, appels de modèle).
+The change **execution journal** (§2.12) carries `traceId` / `spanId`: the self-observation agent
+re-reads a run's trace via the Jaeger query API (`GOAP_TRACE_QUERY_URL`, links `GOAP_TRACE_UI_URL`)
+to look for pain points (slow spans, tools, model calls).
 
-## 4. Format d'une méthodologie
+## 4. Format of a methodology
 
-Les méthodologies sont **stockées en base** sous forme structurée ([ADR 0006](adr/0006-methodologies-en-base.md)),
-éditées depuis le frontend et administrables en SQL. Tables du schéma `registry` : `methodology` (en-tête,
-statut) et une table par section (`methodology_node_type`, `methodology_link_type`, `methodology_condition`,
-`methodology_action`, `methodology_goal`, ordonnées par `position`).
+Methodologies are **stored in the database** in structured form ([ADR 0006](adr/0006-methodologies-en-base.md)),
+edited from the frontend and administrable in SQL. Tables of the `registry` schema: `methodology` (header,
+status) and one table per section (`methodology_node_type`, `methodology_link_type`, `methodology_condition`,
+`methodology_action`, `methodology_goal`, ordered by `position`).
 
-Cycle de vie d'une version : **brouillon** (modifiable, peut être invalide : les anomalies sont renvoyées
-avec leur chemin, ex. `conditions[2].expr`) → **publiée** (validée, immuable, seule exécutable par le
-moteur) → **archivée**. Modifier une version publiée = créer une nouvelle version brouillon (`CreateVersion`).
+Lifecycle of a version: **draft** (editable, can be invalid: anomalies are returned
+with their path, e.g. `conditions[2].expr`) → **published** (validated, immutable, the only one executable by the
+engine) → **archived**. Modifying a published version means creating a new draft version (`CreateVersion`).
 
-Le **YAML** n'est qu'un format d'**import / export** (`ImportMethodology`, `ExportMethodology`) ; les
-fichiers de `methodologies/` sont importés et publiés au démarrage du registry s'ils n'existent pas encore.
-Exemple de définition en YAML :
+**YAML** is only an **import / export** format (`ImportMethodology`, `ExportMethodology`); the
+files in `methodologies/` are imported and published at registry startup if they don't already exist.
+Example YAML definition:
 
 ```yaml
 name: impact-analysis
 version: 1.0.0
-description: Analyse d'impact d'un changement sur un référentiel d'exigences
+description: Impact analysis of a change on a requirements repository
 domain:
   nodeTypes: [Need, Requirement, TestCase, Component]
   linkTypes:
@@ -576,7 +576,7 @@ conditions:
 actions:
   - name: identify_impacts
     kind: llm
-    description: Identifier les nœuds directement impactés par l'intention
+    description: Identify the nodes directly impacted by the intent
     pre: {has_impacts: false}
     effects: {has_impacts: true}
     cost: 2
@@ -587,25 +587,25 @@ actions:
     pre: {impacts_propagated: true}
     expects:
       forEach: impacts
-      where: x.target.type == "Requirement"   # x = élément itéré
+      where: x.target.type == "Requirement"   # x = iterated element
       produce: {op: create_node, nodeType: TestCase}
-      link: {type: verifies}                  # direction: out (nouveau -> cible) par défaut
+      link: {type: verifies}                  # direction: out (new -> target) by default
 goals:
   - name: assess_impact
-    description: Mesurer l'impact d'un changement sans rien modifier
-    examples: ["qu'est-ce que ça casse", "quel est l'impact"]
+    description: Measure the impact of a change without modifying anything
+    examples: ["what does this break", "what is the impact"]
     pre: {impacts_propagated: true}
 ```
 
-Voir `methodologies/impact-analysis.yaml` pour l'exemple complet exécutable, et
-`methodologies/methodology-improvement.yaml` (auto-observation : action abstraite spécialisée par des règles
-ou un LLM). Champs de spécialisation d'une action : `specializes`, `when`, `priority`, `kind: abstract` ;
-sous-typage d'un type de nœud : `extends`. Une action `incremental: true` atteint ses effets en plusieurs
-exécutions : une exécution qui produit des items sans les atteindre est un **progrès**, pas un échec.
+See `methodologies/impact-analysis.yaml` for the full executable example, and
+`methodologies/methodology-improvement.yaml` (self-observation: abstract action specialized by rules
+or an LLM). Action specialization fields: `specializes`, `when`, `priority`, `kind: abstract`;
+node type subtyping: `extends`. An `incremental: true` action reaches its effects across several
+executions: an execution that produces items without reaching them is **progress**, not a failure.
 
-### 4.1 Méthodologie SDLC sur le domaine ALM (`methodologies/sdlc.yaml`, version 0.2.0)
+### 4.1 SDLC methodology on the ALM domain (`methodologies/sdlc.yaml`, version 0.2.0)
 
-Domaine ALM (données de démonstration : `internal/graphsvc/seed.go`) :
+ALM domain (demo data: `internal/graphsvc/seed.go`):
 
 ```
 Need ◄─satisfies─ Requirement ◄─realizes─ Function ◄─implements─ Component ◄─built_from─ BuildArtifact
@@ -616,84 +616,84 @@ Need ◄─satisfies─ Requirement ◄─realizes─ Function ◄─implements�
 TestCase ─verifies─► Requirement
 Release ─releases─► Application ; Release ─contains─► BuildArtifact
 Deployment ─of_release─► Release ; Deployment ─in_environment─► Environment ; Environment ─promotes_to─► Environment
-                                   (dev → test → staging → prod, propriété order)
+                                   (dev → test → staging → prod, order property)
 ```
 
-Cycle (buts, du plus partiel au plus complet) :
+Cycle (goals, from most partial to most complete):
 
-| But | Étapes |
+| Goal | Steps |
 |---|---|
-| `analyze_impact` | périmètre (LLM, repli humain) → propagation le long de tous les liens ALM |
-| `specify` | exigences révisées / créées (LLM, repli humain) → traçabilité vers les besoins (script) → un cas de test par exigence (script, niveau selon le sous-type) |
-| `design` | allocation des exigences aux fonctions (script) → conception composants / interfaces / flux / données (LLM, repli humain) → contrôle de cohérence (script) |
-| `build_components` | `build` **abstraite et incrémentale**, spécialisée par technologie : `build_java` (Maven, JDK 21), `build_c` (gcc/make, cppcheck), `build_shell` (shellcheck, bats), `build_generic` ; chaque exécution construit les composants d'une technologie, crée les `BuildArtifact` et les liens `built_from` / `deploys` |
-| `release` | une **release** par application recevant un nouvel artefact (version mineure suivante, liens `releases` / `contains`) et chaîne d'environnements figée (`release_plan`) → note de version → revue → `deploy` **abstraite et incrémentale** : une vague par environnement, spécialisée par étage — `deploy_auto` (dev, test : tests unitaires, smoke tests), `deploy_staging` (non-régression, performance, sécurité, campagne des cas de test), `deploy_production` (fenêtre de changement, retour arrière ; permission `release:deploy` : un release manager, jamais sur son propre change) ; chaque vague crée les nœuds `Deployment` |
-| `deliver` | tout le cycle, puis `graph.apply` (permission `change:apply`) : le référentiel reçoit exigences, conception, artefacts, releases et déploiements |
+| `analyze_impact` | scope (LLM, human fallback) → propagation along all ALM links |
+| `specify` | requirements revised / created (LLM, human fallback) → traceability to needs (script) → one test case per requirement (script, level depending on subtype) |
+| `design` | allocation of requirements to functions (script) → design of components / interfaces / flows / data (LLM, human fallback) → consistency check (script) |
+| `build_components` | **abstract and incremental** `build`, specialized by technology: `build_java` (Maven, JDK 21), `build_c` (gcc/make, cppcheck), `build_shell` (shellcheck, bats), `build_generic`; each execution builds the components of one technology, creates the `BuildArtifact`s and the `built_from` / `deploys` links |
+| `release` | one **release** per application receiving a new artifact (next minor version, `releases` / `contains` links) and a fixed environment chain (`release_plan`) → release note → review → **abstract and incremental** `deploy`: one wave per environment, specialized by stage — `deploy_auto` (dev, test: unit tests, smoke tests), `deploy_staging` (regression, performance, security, test case campaign), `deploy_production` (change window, rollback; permission `release:deploy`: a release manager, never on their own change); each wave creates `Deployment` nodes |
+| `deliver` | the whole cycle, then `graph.apply` (permission `change:apply`): the reference repository receives requirements, design, artifacts, releases, and deployments |
 
-Agents : `analyst` (goap), `architect` (hybrid), `builder` (goap), `release_manager` (goap), `delivery`
-(goap, tout le cycle). La revue porte sur le contenu ; les déploiements, enregistrés après elle, n'en
-requièrent pas. La permission d'une spécialisation (ex. `deploy_production`) est vérifiée avant son
-exécution : sans elle, le processus attend l'approbation d'une personne habilitée. Les
-conditions « chaque élément … » étant vraies sur un ensemble vide, les actions de conception, de build et
-de livraison exigent aussi des exigences spécifiées pour ancrer le cycle. L'agent d'auto-observation
-s'applique à ses exécutions comme à toute autre méthodologie.
+Agents: `analyst` (goap), `architect` (hybrid), `builder` (goap), `release_manager` (goap), `delivery`
+(goap, the whole cycle). Review covers content; deployments, recorded after it, do not
+require it. The permission for a specialization (e.g. `deploy_production`) is checked before its
+execution: without it, the process waits for approval from an authorized person. Since the
+"each element …" conditions hold on an empty set, the design, build, and delivery actions also require
+specified requirements to anchor the cycle. The self-observation agent applies to its own runs just like
+to any other methodology.
 
-## 5. Organisation du dépôt
+## 5. Repository organization
 
 ```
-cmd/<service>/main.go        points d'entrée (gateway, registry, engine, graph, modelgw, mcp, iam)
-cmd/goap-dev/                tout-en-un pour le développement local (mémoire ou SQLite, sert l'IDE)
-cmd/goap-runner/             sandbox d'exécution des actions script
-internal/platform/           config, logs, serveur HTTP/Connect, NATS, Postgres, secrets Vault
-internal/<service>/          implémentation des handlers Connect d'un service (graphsvc, registrysvc, iamsvc…)
-internal/identity/           identité de l'appelant (en-têtes posés par la gateway)
-pkg/domain/                  modèle du graphe (axe domaine + axe change)
-pkg/graph/                   Store (mémoire, PostgreSQL, SQLite), apply, branches / merge / rebase, journal d'exécution
-pkg/metamodel/               méthodologie projetée en éléments versionnés du domaine
-pkg/observe/                 analyse de coût des runs (journal + traces) et propositions d'amélioration
-pkg/goap/                    planificateur A*
-pkg/condition/               compilation/évaluation CEL, compilation des `expects`
-pkg/intent/                  boucle d'intention (Ranker lexical, Ranker LLM)
-pkg/engine/                  processus, agents et planificateurs, exécuteurs d'actions, hôte DSL, sous-agents, événements
-pkg/dsl/                     DSL des actions script (API ctx, interpréteurs JavaScript et Go)
-internal/sandbox/            pool de sandboxes, provisioners (process, docker, kubernetes), RuntimeService, runner
-internal/telemetry/          OpenTelemetry : exporteurs, intercepteurs, spans processus / actions / LLM / outils
-pkg/methodology/             modèle de méthodologie, validation (anomalies localisées), compilation, import/export YAML
-pkg/authz/                   ABAC : identité, requêtes, modèle et enforcer Casbin, politiques par défaut
-pkg/llm/                     contrat de complétion (implémenté par internal/modelgw)
-proto/                       contrats connect-rpc (buf)
-gen/                         code généré (commité)
-methodologies/               méthodologies d'exemple
-deploy/                      compose, init postgres, otel collector, prometheus, grafana, k8s (sandboxes)
-web/                         frontend Svelte
-docs/                        architecture, ADR
+cmd/<service>/main.go        entry points (gateway, registry, engine, graph, modelgw, mcp, iam)
+cmd/goap-dev/                all-in-one for local development (memory or SQLite, serves the IDE)
+cmd/goap-runner/             sandbox for executing script actions
+internal/platform/           config, logs, HTTP/Connect server, NATS, Postgres, Vault secrets
+internal/<service>/          Connect handler implementation for a service (graphsvc, registrysvc, iamsvc…)
+internal/identity/           caller identity (headers set by the gateway)
+pkg/domain/                  graph model (domain axis + change axis)
+pkg/graph/                   Store (memory, PostgreSQL, SQLite), apply, branches / merge / rebase, execution journal
+pkg/metamodel/               methodology projected into versioned domain elements
+pkg/observe/                 run cost analysis (journal + traces) and improvement proposals
+pkg/goap/                    A* planner
+pkg/condition/               CEL compilation/evaluation, `expects` compilation
+pkg/intent/                  intent loop (lexical Ranker, LLM Ranker)
+pkg/engine/                  processes, agents and planners, action executors, DSL host, sub-agents, events
+pkg/dsl/                     script action DSL (ctx API, JavaScript and Go interpreters)
+internal/sandbox/            sandbox pool, provisioners (process, docker, kubernetes), RuntimeService, runner
+internal/telemetry/          OpenTelemetry: exporters, interceptors, process / action / LLM / tool spans
+pkg/methodology/             methodology model, validation (localized anomalies), compilation, YAML import/export
+pkg/authz/                   ABAC: identity, requests, Casbin model and enforcer, default policies
+pkg/llm/                     completion contract (implemented by internal/modelgw)
+proto/                       connect-rpc contracts (buf)
+gen/                         generated code (committed)
+methodologies/               example methodologies
+deploy/                      compose, postgres init, otel collector, prometheus, grafana, k8s (sandboxes)
+web/                         Svelte frontend
+docs/                        architecture, ADRs
 ```
 
-## 6. Feuille de route
+## 6. Roadmap
 
-| Étape | Contenu |
+| Step | Content |
 |---|---|
-| **M0 — socle** 🟢 | Doc, modèle domaine/change, planificateur A\*, conditions CEL, boucle d'intention, moteur (mémoire), graph (mémoire + Postgres), registry, modelgw (fake + Anthropic + OpenAI-compatible), gateway, compose, UI minimale |
-| **M1 — persistance moteur** | `ProcessStore` PostgreSQL, work-queue JetStream, reprise après crash, multi-réplique |
-| **M2 — IAM** | organisations, utilisateurs, OIDC, isolation `org_id` dans le graphe, ABAC sur le service graph |
-| **M3 — MCP** | registre de serveurs MCP, découverte d'outils, actions `tool`, secrets MCP via Vault |
-| **M4 — axe change avancé** | propagation d'impact (CTE récursive paramétrée par types de liens), liens suspects, diff de baselines, merge/rebase de changesets concurrents |
-| **M5 — UX** | ✅ éditeur de méthodologies (formulaires, anomalies localisées, publication, versions, import/export YAML), écran « Accès » (politiques ABAC), approbations · reste : visualisation du graphe et du plan |
-| **M6 — K8s** | charts Helm, HPA engine · ✅ observabilité OpenTelemetry, manifestes sandboxes |
-| **M8 — branches et décisions** 🟡 | ADR 0009 (accepté) · ✅ graphe : versions par branche, merge de branche à 3 voies, divergence et rebase de change · reste : moteur (conflit → merge validé → rebase et replanification), budget du change, options explorées en branches, comparaison, boucles de décision (questions → analyses), merge de l'option retenue ; puis containers versionnés et releases |
-| **M9 — auto-observation** ✅ | ADR 0011 : journal d'exécution sur l'axe change (ticks, actions, appels LLM / outils, décisions, provenance des items), méthodologie projetée en éléments versionnés du domaine, agent `observer` (journal + traces OpenTelemetry → constats → propositions → revue → brouillon), spécialisation d'actions et sous-typage des types |
-| **M10 — SDLC** 🟡 | méthodologie `sdlc` 0.2.0 sur le domaine ALM (besoin → exigence → fonction → composant → artefact → application → solution, données, interfaces, flux), build spécialisé par technologie, releases et déploiement de proche en proche (dev → test → recette → production, approbation release manager), actions incrémentales · à affiner : qualité (couverture, sécurité), retour arrière, gel / fenêtres de changement, outils MCP (dépôts, CI, registre d'artefacts, déploiement) |
-| **M7 — agents** ✅ | agents (goap / utility / hybrid), actions script JS / Go avec DSL, sous-agents, sandbox par processus, IDE |
+| **M0 — foundation** 🟢 | Doc, domain/change model, A\* planner, CEL conditions, intent loop, engine (memory), graph (memory + Postgres), registry, modelgw (fake + Anthropic + OpenAI-compatible), gateway, compose, minimal UI |
+| **M1 — engine persistence** | PostgreSQL `ProcessStore`, JetStream work-queue, crash recovery, multi-replica |
+| **M2 — IAM** | organizations, users, OIDC, `org_id` isolation in the graph, ABAC on the graph service |
+| **M3 — MCP** | MCP server registry, tool discovery, `tool` actions, MCP secrets via Vault |
+| **M4 — advanced change axis** | impact propagation (recursive CTE parameterized by link types), suspect links, baseline diff, merge/rebase of concurrent changesets |
+| **M5 — UX** | ✅ methodology editor (forms, localized anomalies, publishing, versions, YAML import/export), "Access" screen (ABAC policies), approvals · remaining: graph and plan visualization |
+| **M6 — K8s** | Helm charts, engine HPA · ✅ OpenTelemetry observability, sandbox manifests |
+| **M8 — branches and decisions** 🟡 | ADR 0009 (accepted) · ✅ graph: per-branch versions, 3-way branch merge, change divergence and rebase · remaining: engine (conflict → validated merge → rebase and replanning), change budget, options explored as branches, comparison, decision loops (questions → analyses), merging the chosen option; then versioned containers and releases |
+| **M9 — self-observation** ✅ | ADR 0011: execution journal on the change axis (ticks, actions, LLM / tool calls, decisions, item provenance), methodology projected into versioned domain elements, `observer` agent (journal + OpenTelemetry traces → findings → proposals → review → draft), action specialization and type subtyping |
+| **M10 — SDLC** 🟡 | `sdlc` 0.2.0 methodology on the ALM domain (need → requirement → function → component → artifact → application → solution, data, interfaces, flows), build specialized by technology, incremental releases and deployment (dev → test → staging → production, release manager approval), incremental actions · to refine: quality (coverage, security), rollback, freezes / change windows, MCP tools (repositories, CI, artifact registry, deployment) |
+| **M7 — agents** ✅ | agents (goap / utility / hybrid), JS / Go script actions with DSL, sub-agents, sandbox per process, IDE |
 
-## 7. Questions ouvertes
+## 7. Open questions
 
-1. **Granularité des conditions** : faut-il des conditions *paramétrées* (par nœud) plutôt que globales ?
-   GOAP classique raisonne sur des booléens globaux ; une condition par nœud ferait exploser l'espace d'états.
-   Proposition : conditions globales quantifiées (`all`/`exists`) + actions qui itèrent en interne.
-2. **Attendu d'action** : un `expects` suffit-il à exprimer tous les attendus, ou faut-il un vrai langage
-   de motifs de graphe (type Cypher restreint) ?
-3. ~~**Concurrence sur une baseline**~~ → [ADR 0009](adr/0009-branches-options-decisions.md) : détection sur la
-   version de base par branche, rebase des propositions (merge à 3 voies) validé par un humain en cas de conflit.
-4. **Coût des actions** : statique (déclaré) ou dynamique (tokens estimés, latence observée) ?
-5. ~~**Décisions humaines** : validation obligatoire ou `apply` séparé ?~~ → tranché par l'[ADR 0004](adr/0004-application-du-change.md) :
-   `apply` est une action planifiable conditionnée par la revue et protégée par une permission.
+1. **Condition granularity**: should conditions be *parameterized* (per node) rather than global?
+   Classic GOAP reasons over global booleans; a condition per node would blow up the state space.
+   Proposal: quantified global conditions (`all`/`exists`) + actions that iterate internally.
+2. **Action expectation**: is `expects` enough to express every expectation, or is a real graph
+   pattern language needed (a restricted Cypher-like language)?
+3. ~~**Concurrency on a baseline**~~ → [ADR 0009](adr/0009-branches-options-decisions.md): detection on the
+   base version per branch, rebase of proposals (3-way merge) validated by a human in case of conflict.
+4. **Action cost**: static (declared) or dynamic (estimated tokens, observed latency)?
+5. ~~**Human decisions**: mandatory validation or a separate `apply`?~~ → settled by [ADR 0004](adr/0004-application-du-change.md):
+   `apply` is a plannable action conditioned by review and protected by a permission.

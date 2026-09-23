@@ -1,26 +1,26 @@
-# ADR 0004 — L'application du change est une action planifiable protégée par permission
+# ADR 0004 — Applying the change is a plannable action protected by a permission
 
-**Statut** : accepté · **Date** : 2026-09
+**Status**: accepted · **Date**: 2026-09
 
-## Contexte
-Les actions n'écrivent que dans le change (ADR 0001) ; le domaine n'est transformé qu'à l'application
-(`ApplyChange`). Il fallait décider qui déclenche cette application : un acte manuel hors moteur, ou le
-moteur lui-même.
+## Context
+Actions only write to the change (ADR 0001); the domain is only transformed at
+application time (`ApplyChange`). It had to be decided who triggers this application: a manual act outside
+the engine, or the engine itself.
 
-## Décision
-- L'application est une action `builtin: graph.apply` de la méthodologie, avec des préconditions (en
-  général `reviewed: true`) et l'effet `applied: true` (`change.status == "applied"`).
-- Une action peut déclarer une `permission` (ici `change:apply`). Le moteur l'évalue pour
-  l'**initiateur** du processus :
-  - permission détenue → exécution automatique ;
-  - sinon → tâche d'**approbation** ; `ApproveAction` par une personne habilitée exécute l'action avec
-    son identité (`approvedBy`), un refus désactive l'action pour ce processus.
-- Les permissions sont décidées par `authz.Authorizer` : politique de rôles statique aujourd'hui,
-  `IamService.CheckPermission` au jalon M2.
+## Decision
+- Applying is a `builtin: graph.apply` action of the methodology, with preconditions (generally
+  `reviewed: true`) and the effect `applied: true` (`change.status == "applied"`).
+- An action can declare a `permission` (here `change:apply`). The engine evaluates it for
+  the process's **initiator**:
+  - permission held → automatic execution;
+  - otherwise → an **approval** task; `ApproveAction` by an authorized person executes the action with
+    their identity (`approvedBy`); a refusal disables the action for this process.
+- Permissions are decided by `authz.Authorizer`: a static role policy today,
+  `IamService.CheckPermission` at milestone M2.
 
-## Conséquences
-- Chaque méthodologie décide si l'application est automatique, soumise à approbation, ou absente
-  (goal qui s'arrête à la revue).
-- La validation reste traçable dans le processus (étape, approbateur, commentaire de refus).
-- L'application peut échouer en conflit si le référentiel a évolué depuis la baseline de référence :
-  l'étape est en erreur et l'action est retentée puis désactivée comme toute autre action.
+## Consequences
+- Each methodology decides whether the application is automatic, subject to approval, or absent
+  (a goal that stops at review).
+- Validation remains traceable in the process (step, approver, refusal comment).
+- Application can fail with a conflict if the reference repository has evolved since the reference baseline:
+  the step errors out and the action is retried and then disabled like any other action.

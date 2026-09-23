@@ -1,6 +1,6 @@
-// Assistant conversationnel : historique de la conversation (localStorage),
-// informations des méthodologies publiées (descriptions des agents et des
-// actions) et envoi des demandes (StartProcess sans méthodologie).
+// Conversational assistant: conversation history (localStorage), info from
+// published methodologies (agent and action descriptions), and sending
+// requests (StartProcess without a methodology).
 import { SvelteMap } from 'svelte/reactivity';
 import { engine, registry, errorMessage, type Agent, type Methodology } from '../api';
 import { loadRaw, save } from '../shell/storage';
@@ -9,7 +9,7 @@ import { baselines, refreshBaselines, latestPublished, methodologies, refreshMet
 
 export interface Thread {
   id: string;
-  /** demande de l'utilisateur */
+  /** user's request */
   text: string;
   at: string;
   processId?: string;
@@ -18,9 +18,9 @@ export interface Thread {
 
 interface Conversation {
   threads: Thread[];
-  /** référentiel choisi ('' : le plus récent) */
+  /** chosen baseline ('': the most recent) */
   baselineId: string;
-  /** brouillon de la zone de saisie */
+  /** draft of the input box */
   draft: string;
 }
 
@@ -44,9 +44,9 @@ $effect.root(() => {
   });
 });
 
-// --- méthodologies publiées -------------------------------------------------------------
+// --- published methodologies -------------------------------------------------------------
 
-/** Dernière version publiée de chaque méthodologie, par nom. */
+/** Latest published version of each methodology, by name. */
 export const published = new SvelteMap<string, Methodology>();
 const pending = new Map<string, Promise<void>>();
 
@@ -74,7 +74,7 @@ export async function loadCatalog(): Promise<void> {
 export interface AgentCard {
   methodology: string;
   agent: Agent;
-  /** agent implicite d'une méthodologie sans agents */
+  /** implicit agent of a methodology without agents */
   implicit: boolean;
   examples: string[];
 }
@@ -103,7 +103,7 @@ export function agentCards(): AgentCard[] {
   return out;
 }
 
-/** Nom lisible d'un agent : première phrase courte de sa description, sinon son nom. */
+/** Readable name of an agent: first short sentence of its description, else its name. */
 export function agentLabel(methodology: string | undefined, agent: string | undefined): string {
   const m = published.get(methodology ?? '');
   const a = m?.agents?.find((x) => x.name === agent);
@@ -114,7 +114,7 @@ export function agentLabel(methodology: string | undefined, agent: string | unde
   return methodology || 'assistant';
 }
 
-/** Libellé d'une action : sa description dans la méthodologie, sinon son nom rendu lisible. */
+/** Label of an action: its description in the methodology, else its name made readable. */
 export function actionLabel(methodology: string | undefined, action: string | undefined): string {
   const m = published.get(methodology ?? '');
   const a = m?.actions?.find((x) => x.name === action);
@@ -127,7 +127,7 @@ export function goalLabel(methodology: string | undefined, goal: string | undefi
   return m?.goals?.find((g) => g.name === goal)?.description || (goal ?? '').replace(/[_-]+/g, ' ');
 }
 
-// --- envoi -----------------------------------------------------------------------------------
+// --- sending -----------------------------------------------------------------------------------
 
 export async function latestBaselineId(): Promise<string> {
   if (!baselines.loaded) await refreshBaselines();
@@ -150,7 +150,7 @@ export async function sendRequest(text: string): Promise<void> {
       ingestProcess(res.process);
       th.processId = res.process.id;
       void loadMethodology(res.process.methodology ?? '');
-    } else th.error = "Le moteur n'a pas créé d'exécution.";
+    } else th.error = 'The engine did not create a run.';
   } catch (e) {
     th.error = errorMessage(e);
   } finally {

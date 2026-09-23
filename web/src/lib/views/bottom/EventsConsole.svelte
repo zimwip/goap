@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Console « Événements » : flux WatchEvents en direct.
+  // "Events" console: live WatchEvents stream.
   import Icon from '../../shell/Icon.svelte';
   import { live, clearEvents, processes } from '../../stores/live.svelte';
   import { openTab } from '../../shell/tabs.svelte';
@@ -13,14 +13,14 @@
 
   const TYPES = ['started', 'intent', 'step', 'waiting', 'completed', 'stuck', 'failed', 'log'];
   const LABELS: Record<string, string> = {
-    started: 'démarré',
-    intent: 'intention',
-    step: 'étape',
-    waiting: 'attente',
-    completed: 'terminé',
-    stuck: 'bloqué',
-    failed: 'échec',
-    log: 'journal',
+    started: 'started',
+    intent: 'intent',
+    step: 'step',
+    waiting: 'waiting',
+    completed: 'completed',
+    stuck: 'stuck',
+    failed: 'failed',
+    log: 'log',
   };
 
   const q = $derived(filter.trim().toLowerCase());
@@ -44,16 +44,16 @@
 </script>
 
 <div class="console-tools">
-  <select aria-label="Type d'événement" bind:value={type} data-no-pin>
-    <option value="">Tous les types</option>
+  <select aria-label="Event type" bind:value={type} data-no-pin>
+    <option value="">All types</option>
     {#each TYPES as t (t)}<option value={t}>{LABELS[t]}</option>{/each}
   </select>
-  <input type="search" placeholder="Filtrer…" aria-label="Filtrer les événements" bind:value={filter} data-no-pin />
-  <label class="check"><input type="checkbox" bind:checked={follow} /> Suivre</label>
+  <input type="search" placeholder="Filter…" aria-label="Filter events" bind:value={filter} data-no-pin />
+  <label class="check"><input type="checkbox" bind:checked={follow} /> Follow</label>
   <span class="grow"></span>
   <span class="hint">{rows.length} / {live.events.length}</span>
-  <span class="hint">{live.status === 'open' ? '● connecté' : live.status === 'connecting' ? '● en attente' : live.status === 'stopped' ? 'arrêté' : `reconnexion…${live.error ? ` (${live.error})` : ''}`}</span>
-  <button type="button" class="ghost small" title="Effacer" aria-label="Effacer les événements" onclick={clearEvents}><Icon name="clear" size={13} /></button>
+  <span class="hint">{live.status === 'open' ? '● connected' : live.status === 'connecting' ? '● waiting' : live.status === 'stopped' ? 'stopped' : `reconnecting…${live.error ? ` (${live.error})` : ''}`}</span>
+  <button type="button" class="ghost small" title="Clear" aria-label="Clear events" onclick={clearEvents}><Icon name="clear" size={13} /></button>
 </div>
 <div
   class="console-scroll"
@@ -62,7 +62,7 @@
 >
   {#if rows.length}
     <table class="console-table">
-      <thead><tr><th>Heure</th><th>Type</th><th>Processus</th><th>Agent</th><th>Étape / action</th></tr></thead>
+      <thead><tr><th>Time</th><th>Type</th><th>Process</th><th>Agent</th><th>Step / action</th></tr></thead>
       <tbody>
         {#each rows as e (e.seq)}
           <tr class:clickable={!!e.processId} data-row data-pid={e.processId}>
@@ -80,7 +80,7 @@
       </tbody>
     </table>
   {:else}
-    <p class="console-empty">Aucun événement reçu pour le moment.</p>
+    <p class="console-empty">No events received yet.</p>
   {/if}
 </div>
 

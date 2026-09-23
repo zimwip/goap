@@ -1,6 +1,6 @@
 <script lang="ts">
-  // Barre d'outils : actions contextuelles de l'éditeur actif, puis actions
-  // globales et bascules des panneaux.
+  // Toolbar: contextual actions of the active editor, then
+  // global actions and panel toggles.
   import Icon from './Icon.svelte';
   import { tabActions, focusRequests } from './workbench.svelte';
   import { tabsState } from './tabs.svelte';
@@ -43,16 +43,16 @@
     {/each}
   </div>
   <div class="group global">
-    <button type="button" class="tb" title="Nouveau test d'intention" onclick={newTest}>
-      <Icon name="flask" size={14} /><span class="lbl">Nouveau test d'intention</span>
+    <button type="button" class="tb" title="New intent test" onclick={newTest}>
+      <Icon name="flask" size={14} /><span class="lbl">New intent test</span>
     </button>
     <span class="sep" aria-hidden="true"></span>
     <button
       type="button"
       class="tb icon"
       aria-pressed={layout.leftOpen}
-      title="Panneau de navigation (Ctrl+B)"
-      aria-label="Panneau de navigation"
+      title="Navigation panel (Ctrl+B)"
+      aria-label="Navigation panel"
       onclick={() => (layout.leftOpen = !layout.leftOpen)}><Icon name="panelLeft" size={15} /></button
     >
     <button
@@ -67,8 +67,8 @@
       type="button"
       class="tb icon"
       aria-pressed={layout.rightOpen}
-      title="Panneau latéral droit"
-      aria-label="Panneau latéral droit"
+      title="Right side panel"
+      aria-label="Right side panel"
       onclick={() => (layout.rightOpen = !layout.rightOpen)}><Icon name="panelRight" size={15} /></button
     >
   </div>

@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Édition d'une action de la méthodologie.
+  // Editing a methodology action.
   import { ACTION_KINDS, FOR_EACH, PRODUCE_OPS, SCRIPT_LANGUAGES, type ActionForm } from '../methodologyForm';
   import { TEMPLATES } from '../dsl';
   import CondRows from './CondRows.svelte';
@@ -21,18 +21,18 @@
     conditions: string[];
     nodeTypes: string[];
     linkTypes: string[];
-    /** noms des autres actions (cibles possibles d'une spécialisation) */
+    /** names of other actions (possible targets of a specialization) */
     actions?: string[];
     bad: (path: string, exact?: boolean) => boolean;
     readonly?: boolean;
-    /** renommage validé (perte du focus) : mise à jour des références */
+    /** confirmed rename (on blur): updates references */
     onrename?: (from: string, to: string) => void;
   } = $props();
 
   let nameAtFocus = '';
 
   function setLanguage(lang: string) {
-    // Le modèle d'un langage est remplacé par celui de l'autre.
+    // The template for a language is replaced by the other one's.
     const isTemplate = !action.code.trim() || Object.values(TEMPLATES).includes(action.code);
     action.language = lang;
     if (isTemplate && action.code.trim()) action.code = TEMPLATES[lang] ?? '';
@@ -41,30 +41,30 @@
   const LANGUAGE_LABELS: Record<string, string> = { javascript: 'JavaScript (goja)', go: 'Go (yaegi)' };
 
   const p = $derived(`actions[${index}]`);
-  /** une spécialisation n'est pas planifiée : pré / effets / attendus / coût hérités */
+  /** a specialization is not planned: pre / effects / expects / cost are inherited */
   const isSpec = $derived(!!action.specializes.trim());
   const specTargets = $derived(actions.filter((a) => a && a !== action.name));
   const id = $derived(`act-${index}`);
 
   const KIND_LABELS: Record<string, string> = {
-    llm: 'llm — modèle de langage',
-    script: 'script — code JavaScript / Go',
-    tool: 'tool — outil externe',
-    human: 'human — tâche humaine',
-    builtin: 'builtin — fonction intégrée',
-    abstract: 'abstract — sans implémentation (à spécialiser)',
+    llm: 'llm — language model',
+    script: 'script — JavaScript / Go code',
+    tool: 'tool — external tool',
+    human: 'human — human task',
+    builtin: 'builtin — built-in function',
+    abstract: 'abstract — no implementation (to be specialized)',
   };
   const FOR_EACH_LABELS: Record<string, string> = {
     impacts: 'impacts',
-    proposals: 'propositions',
+    proposals: 'proposals',
     items: 'items',
-    artifacts: 'artefacts',
+    artifacts: 'artifacts',
   };
 </script>
 
 <div class="grid">
   <div class="field">
-    <label for="{id}-name">Nom</label>
+    <label for="{id}-name">Name</label>
     <input
       id="{id}-name"
       type="text"
@@ -81,14 +81,14 @@
     />
   </div>
   <div class="field">
-    <label for="{id}-kind">Type</label>
+    <label for="{id}-kind">Kind</label>
     <select id="{id}-kind" bind:value={action.kind} class:bad={bad(`${p}.kind`)} data-path="{p}.kind">
       {#each ACTION_KINDS as k (k)}<option value={k}>{KIND_LABELS[k]}</option>{/each}
     </select>
   </div>
   {#if !isSpec}
     <div class="field">
-      <label for="{id}-cost">Coût</label>
+      <label for="{id}-cost">Cost</label>
       <input
         id="{id}-cost"
         type="number"
@@ -100,14 +100,14 @@
       />
     </div>
     <div class="field">
-      <label class="check" title="Les effets sont atteints en plusieurs exécutions (ex. un build par technologie) : une exécution qui produit des items sans atteindre les effets est un progrès, pas un échec.">
+      <label class="check" title="The effects are reached over several runs (e.g. one build per technology): a run that produces items without reaching the effects is progress, not a failure.">
         <input type="checkbox" bind:checked={action.incremental} />
-        Incrémentale
+        Incremental
       </label>
     </div>
   {/if}
   <div class="field">
-    <label for="{id}-perm">Permission <span class="opt">(facultative)</span></label>
+    <label for="{id}-perm">Permission <span class="opt">(optional)</span></label>
     <input
       id="{id}-perm"
       type="text"
@@ -132,17 +132,17 @@
 </div>
 
 <div class="field">
-  <label for="{id}-utility">Utilité <span class="opt">(expression CEL numérique — planificateurs utility / hybrid)</span></label>
+  <label for="{id}-utility">Utility <span class="opt">(numeric CEL expression — utility / hybrid planners)</span></label>
   <CodeEditor
     id="{id}-utility"
     bind:value={action.utility}
     language="cel"
     lineNumbers={false}
     {readonly}
-    label="Utilité"
+    label="Utility"
     minHeight="1.9rem"
     maxHeight="8rem"
-    placeholder="ex. size(impacts) * 2.0"
+    placeholder="e.g. size(impacts) * 2.0"
     bad={bad(`${p}.utility`)}
     path="{p}.utility"
   />
@@ -151,7 +151,7 @@
 <div class="spec" class:on={isSpec} data-path="{p}.specializes">
   <div class="grid">
     <div class="field">
-      <label for="{id}-spec">Spécialise <span class="opt">(facultatif)</span></label>
+      <label for="{id}-spec">Specializes <span class="opt">(optional)</span></label>
       <input
         id="{id}-spec"
         type="text"
@@ -160,7 +160,7 @@
         bind:value={action.specializes}
         class:bad={bad(`${p}.specializes`)}
         data-path="{p}.specializes"
-        placeholder="action ou méthodologie/action"
+        placeholder="action or methodology/action"
       />
       <datalist id="{id}-spec-list">
         {#each specTargets as a (a)}<option value={a}></option>{/each}
@@ -168,7 +168,7 @@
     </div>
     {#if isSpec}
       <div class="field">
-        <label for="{id}-prio">Priorité</label>
+        <label for="{id}-prio">Priority</label>
         <input
           id="{id}-prio"
           type="number"
@@ -182,51 +182,51 @@
   </div>
   {#if isSpec}
     <div class="field">
-      <label for="{id}-when">Garde <span class="opt">(when — expression CEL sur le tableau noir ; vide : toujours)</span></label>
+      <label for="{id}-when">Guard <span class="opt">(when — CEL expression over the blackboard; empty: always)</span></label>
       <CodeEditor
         id="{id}-when"
         bind:value={action.when}
         language="cel"
         lineNumbers={false}
         {readonly}
-        label="Garde de la spécialisation"
+        label="Specialization guard"
         minHeight="1.9rem"
         maxHeight="8rem"
-        placeholder={'ex. size(impacts) > 10'}
+        placeholder={'e.g. size(impacts) > 10'}
         bad={bad(`${p}.when`)}
         path="{p}.when"
       />
     </div>
     <p class="hint">
-      Une spécialisation n'est pas planifiée : elle hérite des préconditions, effets, résultats attendus et du coût de
-      l'action <code>{action.specializes}</code> et remplace son implémentation à l'exécution quand sa garde est vraie. Si
-      plusieurs spécialisations s'appliquent, la priorité la plus haute l'emporte.
+      A specialization is not planned: it inherits the preconditions, effects, expected results and cost of
+      action <code>{action.specializes}</code> and replaces its implementation at run time when its guard is true. If
+      several specializations apply, the highest priority wins.
     </p>
   {:else}
     <p class="hint">
-      Renseignez une action (<code>action</code>, ou <code>méthodologie/action</code> pour une autre méthodologie) pour faire
-      de celle-ci une spécialisation qui la remplace à l'exécution sous condition.
+      Fill in an action (<code>action</code>, or <code>methodology/action</code> for another methodology) to make
+      this one a specialization that replaces it at run time under a condition.
     </p>
   {/if}
 </div>
 
 {#if action.kind === 'abstract'}
   <p class="hint abstract">
-    Action abstraite : planifiée comme les autres mais sans implémentation. Elle doit être spécialisée (au moins une
-    spécialisation applicable) pour pouvoir s'exécuter.
+    Abstract action: planned like any other but with no implementation. It must be specialized (at least one
+    applicable specialization) before it can run.
   </p>
 {/if}
 
 {#if !isSpec}
   <div class="grid2 field">
-    <CondRows bind:rows={action.pre} options={conditions} path="{p}.pre" label="Préconditions" {bad} {readonly} />
-    <CondRows bind:rows={action.effects} options={conditions} path="{p}.effects" label="Effets" {bad} {readonly} />
+    <CondRows bind:rows={action.pre} options={conditions} path="{p}.pre" label="Preconditions" {bad} {readonly} />
+    <CondRows bind:rows={action.effects} options={conditions} path="{p}.effects" label="Effects" {bad} {readonly} />
   </div>
 {/if}
 
 {#if action.kind === 'llm'}
   <div class="field">
-    <label for="{id}-model">Modèle</label>
+    <label for="{id}-model">Model</label>
     <input
       id="{id}-model"
       type="text"
@@ -237,7 +237,7 @@
     />
   </div>
   <div class="field">
-    <label for="{id}-prompt">Prompt <span class="opt">(gabarit Go : {'{{ .Change.Intent }}'}…)</span></label>
+    <label for="{id}-prompt">Prompt <span class="opt">(Go template: {'{{ .Change.Intent }}'}…)</span></label>
     <CodeEditor
       id="{id}-prompt"
       bind:value={action.prompt}
@@ -253,7 +253,7 @@
 {:else if action.kind === 'script'}
   <div class="script-head">
     <div class="field lang">
-      <label for="{id}-lang">Langage</label>
+      <label for="{id}-lang">Language</label>
       <select
         id="{id}-lang"
         value={action.language}
@@ -265,11 +265,11 @@
       </select>
     </div>
     <p class="hint grow">
-      Le code s'exécute dans le sandbox du processus avec l'objet <code>ctx</code> (<kbd>Ctrl</kbd>+<kbd>Espace</kbd> pour
-      la complétion, voir « Aide DSL »). Les écritures sont appliquées de façon atomique à la fin de l'action.
+      The code runs in the process sandbox with the <code>ctx</code> object (<kbd>Ctrl</kbd>+<kbd>Space</kbd> for
+      completion, see "DSL Help"). Writes are applied atomically at the end of the action.
     </p>
     {#if !readonly && !action.code.trim()}
-      <button type="button" class="small" onclick={() => (action.code = TEMPLATES[action.language] ?? '')}>Insérer un modèle</button>
+      <button type="button" class="small" onclick={() => (action.code = TEMPLATES[action.language] ?? '')}>Insert a template</button>
     {/if}
   </div>
   <div class="field">
@@ -280,7 +280,7 @@
       language={action.language === 'go' ? 'go' : 'javascript'}
       dsl
       {readonly}
-      label="Code de l'action"
+      label="Action code"
       minHeight="16rem"
       maxHeight="60vh"
       bad={bad(`${p}.code`)}
@@ -289,7 +289,7 @@
   </div>
 {:else if action.kind === 'tool'}
   <div class="field">
-    <label for="{id}-tool">Outil</label>
+    <label for="{id}-tool">Tool</label>
     <input
       id="{id}-tool"
       type="text"
@@ -313,7 +313,7 @@
 {:else if action.kind === 'builtin'}
   <div class="grid2">
     <div class="field">
-      <label for="{id}-builtin">Fonction intégrée</label>
+      <label for="{id}-builtin">Built-in function</label>
       <input
         id="{id}-builtin"
         type="text"
@@ -325,7 +325,7 @@
       />
     </div>
     <div class="field">
-      <label for="{id}-params">Paramètres <span class="opt">(objet JSON)</span></label>
+      <label for="{id}-params">Parameters <span class="opt">(JSON object)</span></label>
       <textarea
         id="{id}-params"
         class="mono"
@@ -343,12 +343,12 @@
 <div class="expects" class:on={action.hasExpects} data-path="{p}.expects">
   <label class="check">
     <input type="checkbox" bind:checked={action.hasExpects} />
-    Résultats attendus <span class="opt">(expects — génère la condition <code>expect:{action.name || '…'}</code>)</span>
+    Expected results <span class="opt">(expects — generates the condition <code>expect:{action.name || '…'}</code>)</span>
   </label>
   {#if action.hasExpects}
     <div class="grid">
       <div class="field">
-        <label for="{id}-fe">Pour chaque</label>
+        <label for="{id}-fe">For each</label>
         <select
           id="{id}-fe"
           bind:value={action.expects.forEach}
@@ -359,7 +359,7 @@
         </select>
       </div>
       <div class="field">
-        <label for="{id}-where">Filtre <span class="opt">(CEL, variable <code>x</code>)</span></label>
+        <label for="{id}-where">Filter <span class="opt">(CEL, variable <code>x</code>)</span></label>
         <input
           id="{id}-where"
           type="text"
@@ -371,60 +371,60 @@
         />
       </div>
       <div class="field">
-        <label for="{id}-op">Produire</label>
+        <label for="{id}-op">Produce</label>
         <select
           id="{id}-op"
           bind:value={action.expects.op}
           class:bad={bad(`${p}.expects.produce`)}
           data-path="{p}.expects.produce"
         >
-          <option value="">— rien —</option>
+          <option value="">— nothing —</option>
           {#each PRODUCE_OPS as o (o)}<option value={o}>{o}</option>{/each}
         </select>
       </div>
       {#if action.expects.op}
         <div class="field">
-          <label for="{id}-nt">Type de nœud</label>
+          <label for="{id}-nt">Node type</label>
           <select
             id="{id}-nt"
             bind:value={action.expects.nodeType}
             class:bad={bad(`${p}.expects.produce.nodeType`)}
             data-path="{p}.expects.produce.nodeType"
           >
-            <option value="">— aucun —</option>
+            <option value="">— none —</option>
             {#if action.expects.nodeType && !nodeTypes.includes(action.expects.nodeType)}
-              <option value={action.expects.nodeType}>{action.expects.nodeType} (inconnu)</option>
+              <option value={action.expects.nodeType}>{action.expects.nodeType} (unknown)</option>
             {/if}
             {#each nodeTypes as n (n)}<option value={n}>{n}</option>{/each}
           </select>
         </div>
       {/if}
       <div class="field">
-        <label for="{id}-lt">Lien</label>
+        <label for="{id}-lt">Link</label>
         <select
           id="{id}-lt"
           bind:value={action.expects.linkType}
           class:bad={bad(`${p}.expects.link`)}
           data-path="{p}.expects.link"
         >
-          <option value="">— aucun —</option>
+          <option value="">— none —</option>
           {#if action.expects.linkType && !linkTypes.includes(action.expects.linkType)}
-            <option value={action.expects.linkType}>{action.expects.linkType} (inconnu)</option>
+            <option value={action.expects.linkType}>{action.expects.linkType} (unknown)</option>
           {/if}
           {#each linkTypes as l (l)}<option value={l}>{l}</option>{/each}
         </select>
       </div>
       {#if action.expects.linkType}
         <div class="field">
-          <label for="{id}-dir">Sens du lien</label>
+          <label for="{id}-dir">Link direction</label>
           <select
             id="{id}-dir"
             bind:value={action.expects.direction}
             class:bad={bad(`${p}.expects.link.direction`)}
             data-path="{p}.expects.link.direction"
           >
-            <option value="out">out — du produit vers l'élément</option>
-            <option value="in">in — de l'élément vers le produit</option>
+            <option value="out">out — from the product to the element</option>
+            <option value="in">in — from the element to the product</option>
           </select>
         </div>
       {/if}

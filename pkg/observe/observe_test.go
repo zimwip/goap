@@ -52,9 +52,9 @@ func TestProposeAndApply(t *testing.T) {
 	m := methodology.Methodology{Name: "m", Version: "1.0.0",
 		Conditions: []methodology.Condition{{Name: "c", Expr: "true"}, {Name: "d", Expr: "true"}},
 		Actions: []methodology.Action{
-			{Name: "classify", Kind: "llm", Prompt: "Classe", Effects: map[string]bool{"c": true}},
+			{Name: "classify", Kind: "llm", Prompt: "Classify", Effects: map[string]bool{"c": true}},
 			{Name: "check", Kind: "human", Effects: map[string]bool{"d": true}, Cost: 1.5},
-			{Name: "summarize", Kind: "llm", Prompt: "Résume", Effects: map[string]bool{"d": true}},
+			{Name: "summarize", Kind: "llm", Prompt: "Summarize", Effects: map[string]bool{"d": true}},
 		},
 		Goals:  []methodology.Goal{{Name: "g", Pre: map[string]bool{"c": true}}},
 		Agents: []methodology.Agent{{Name: "ag"}},
@@ -65,7 +65,7 @@ func TestProposeAndApply(t *testing.T) {
 		{Kind: FindLoop, Action: "check", Agent: "ag"},
 		{Kind: FindDisabled, Action: "check", Agent: "ag"},
 		{Kind: FindSlowSpan, Span: "execute_tool crm/search"},
-		{Kind: FindReplanning, Agent: "ag", Evidence: "le plan a changé"},
+		{Kind: FindReplanning, Agent: "ag", Evidence: "the plan changed"},
 	}, Actions: []ActionStats{{Action: "classify", Outputs: map[string]int{"impact/direct": 2}}}}
 	props, notes := Propose(r, &m)
 	if len(props) != 5 || len(notes) != 1 {

@@ -258,13 +258,13 @@ func findings(r Report, th Thresholds) []Finding {
 		if s.Executions >= th.LoopExecutions {
 			f := base
 			f.Kind, f.Count = FindLoop, s.Executions
-			f.Evidence = fmt.Sprintf("%s exécutée %d fois dans le run (seuil %d)", s.Action, s.Executions, th.LoopExecutions)
+			f.Evidence = fmt.Sprintf("%s executed %d times in the run (threshold %d)", s.Action, s.Executions, th.LoopExecutions)
 			out = append(out, f)
 		}
 		if s.Failures >= th.Failures {
 			f := base
 			f.Kind, f.Count = FindFailure, s.Failures
-			f.Evidence = fmt.Sprintf("%s : %d exécutions sans les effets promis sur %d", s.Action, s.Failures, s.Executions)
+			f.Evidence = fmt.Sprintf("%s: %d executions without the promised effects out of %d", s.Action, s.Failures, s.Executions)
 			out = append(out, f)
 		}
 		if s.ModelCalls > 0 {
@@ -275,33 +275,33 @@ func findings(r Report, th Thresholds) []Finding {
 			if regular(s, th) {
 				f := base
 				f.Kind, f.Tokens, f.Share, f.Count = FindSystematizable, s.Tokens, share, s.ModelCalls
-				f.Evidence = fmt.Sprintf("%s : %d appels LLM (%d tokens) pour une sortie régulière (%s) : systématisable par un script",
+				f.Evidence = fmt.Sprintf("%s: %d LLM calls (%d tokens) for a regular output (%s): systematizable with a script",
 					s.Action, s.ModelCalls, s.Tokens, strings.Join(slices.Sorted(maps.Keys(s.Outputs)), ", "))
 				out = append(out, f)
 			} else if s.ModelCalls >= th.LLMCalls || (r.Tokens > 0 && share >= th.LLMTokenShare && s.Tokens > 0) {
 				f := base
 				f.Kind, f.Tokens, f.Share, f.Count = FindLLMHeavy, s.Tokens, share, s.ModelCalls
-				f.Evidence = fmt.Sprintf("%s : %d appels LLM, %d tokens (%.0f %% du run)", s.Action, s.ModelCalls, s.Tokens, 100*share)
+				f.Evidence = fmt.Sprintf("%s: %d LLM calls, %d tokens (%.0f%% of the run)", s.Action, s.ModelCalls, s.Tokens, 100*share)
 				out = append(out, f)
 			}
 		}
 		if s.MaxDurationMs >= th.SlowActionMs {
 			f := base
 			f.Kind, f.Duration = FindSlowAction, s.MaxDurationMs
-			f.Evidence = fmt.Sprintf("%s : jusqu'à %d ms par exécution", s.Action, s.MaxDurationMs)
+			f.Evidence = fmt.Sprintf("%s: up to %d ms per execution", s.Action, s.MaxDurationMs)
 			out = append(out, f)
 		}
 	}
 	if r.Replans >= th.Replans {
 		out = append(out, Finding{Kind: FindReplanning, Methodology: r.Methodology, Agent: r.Agent, Element: el("agent", r.Agent), Count: r.Replans,
-			Evidence: fmt.Sprintf("le plan a changé %d fois sur %d cycles : préconditions / effets à revoir", r.Replans, r.Ticks)})
+			Evidence: fmt.Sprintf("the plan changed %d times over %d cycles: preconditions / effects need review", r.Replans, r.Ticks)})
 	}
 	for _, sp := range r.Spans {
 		if sp.MaxDurationMs < th.SlowSpanMs {
 			continue
 		}
 		f := Finding{Kind: FindSlowSpan, Methodology: r.Methodology, Agent: r.Agent, Action: sp.Action, Span: sp.Name, Duration: sp.MaxDurationMs, Count: sp.Count,
-			Element: el("methodology", ""), Evidence: fmt.Sprintf("span %q : %d appels, jusqu'à %d ms", sp.Name, sp.Count, sp.MaxDurationMs)}
+			Element: el("methodology", ""), Evidence: fmt.Sprintf("span %q: %d calls, up to %d ms", sp.Name, sp.Count, sp.MaxDurationMs)}
 		if sp.Action != "" {
 			f.Element = el("action", sp.Action)
 		}
@@ -327,6 +327,6 @@ func regular(s ActionStats, th Thresholds) bool {
 func (r *Report) WithDisabled(agent string, disabled []string) {
 	for _, a := range disabled {
 		r.Findings = append(r.Findings, Finding{Kind: FindDisabled, Methodology: r.Methodology, Agent: agent, Action: a,
-			Element: ElementKey(r.Methodology, "action", a), Evidence: a + " désactivée après des échecs répétés"})
+			Element: ElementKey(r.Methodology, "action", a), Evidence: a + " disabled after repeated failures"})
 	}
 }

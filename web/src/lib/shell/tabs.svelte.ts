@@ -1,7 +1,7 @@
-// Onglets de la zone d'édition, avec le comportement des « onglets d'aperçu »
-// de VS Code : un clic simple ouvre un aperçu (titre en italique) remplacé par
-// la sélection suivante ; un onglet épinglé (double clic, icône, ou première
-// modification) n'est jamais remplacé.
+// Tabs of the editor area, with VS Code's "preview tab" behavior: a single
+// click opens a preview (title in italics) that gets replaced by the next
+// selection; a pinned tab (double click, icon, or first edit) is never
+// replaced.
 import { editorView } from './registry';
 import { loadRaw, save } from './storage';
 import type { Tab, TabSpec } from './types';
@@ -27,7 +27,7 @@ function restore(): TabsState {
 
 export const tabsState: TabsState = $state(restore());
 
-/** Historique d'activation (pour revenir à l'onglet précédent à la fermeture). */
+/** Activation history (to return to the previous tab on close). */
 const history: string[] = [];
 
 $effect.root(() => {
@@ -67,15 +67,15 @@ export function activate(id: string): void {
 }
 
 /**
- * Ouvre (ou active) l'onglet d'un objet. Sans `pin`, l'onglet est un aperçu
- * qui remplace l'aperçu courant, sauf si celui-ci a des modifications.
+ * Opens (or activates) an object's tab. Without `pin`, the tab is a preview
+ * that replaces the current preview, unless it has unsaved changes.
  */
 export function openTab(spec: TabSpec, opts: { pin?: boolean; background?: boolean } = {}): Tab {
   const id = tabId(spec);
   const existing = findTab(id);
   if (existing) {
     if (opts.pin) existing.pinned = true;
-    // Les paramètres peuvent porter des informations plus récentes (nom…).
+    // Params may carry more recent information (name…).
     Object.assign(existing.params, spec.params);
     if (!opts.background) activate(id);
     return existing;
@@ -111,8 +111,8 @@ function forget(id: string): void {
 }
 
 /**
- * Ferme un onglet. Si ses modifications ne sont partagées par aucun autre
- * onglet ouvert, demande confirmation puis les abandonne.
+ * Closes a tab. If its changes are not shared by any other open tab, asks
+ * for confirmation then discards them.
  */
 export function closeTab(id: string, opts: { force?: boolean } = {}): boolean {
   const idx = tabsState.tabs.findIndex((t) => t.id === id);
@@ -125,7 +125,7 @@ export function closeTab(id: string, opts: { force?: boolean } = {}): boolean {
       !!group && tabsState.tabs.some((t) => t.id !== id && editorView(t.kind)?.group?.(t) === group);
     if (!shared) {
       const title = view.tabTitle(tab);
-      if (!confirm(`« ${title} » contient des modifications non enregistrées. Fermer et les abandonner ?`)) return false;
+      if (!confirm(`"${title}" has unsaved changes. Close and discard them?`)) return false;
       view.discard?.(tab);
     }
   }
@@ -150,7 +150,7 @@ export function closeAll(): void {
   for (const t of [...tabsState.tabs]) closeTab(t.id);
 }
 
-/** Remplace un onglet par un autre objet (ex. nouvelle méthodologie enregistrée). */
+/** Replaces a tab with another object (e.g. newly saved methodology). */
 export function replaceTab(id: string, spec: TabSpec): void {
   const idx = tabsState.tabs.findIndex((t) => t.id === id);
   const nid = tabId(spec);
@@ -166,7 +166,7 @@ export function replaceTab(id: string, spec: TabSpec): void {
   if (tabsState.active === id) tabsState.active = nid;
 }
 
-/** Ferme sans confirmation les onglets dont l'objet n'existe plus. */
+/** Closes without confirmation the tabs whose object no longer exists. */
 export function closeWhere(pred: (t: Tab) => boolean): void {
   for (const t of [...tabsState.tabs]) if (pred(t)) closeTab(t.id, { force: true });
 }

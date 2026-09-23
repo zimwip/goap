@@ -1,9 +1,9 @@
 <script lang="ts">
-  // Boutons de réordonnancement / suppression d'un élément de liste.
+  // Buttons to reorder / remove a list item.
   let {
     index,
     count,
-    label = 'élément',
+    label = 'item',
     onmove,
     onremove,
   }: {
@@ -19,20 +19,20 @@
   <button
     type="button"
     class="small icon"
-    title="Monter"
-    aria-label={`Monter ${label}`}
+    title="Move up"
+    aria-label={`Move ${label} up`}
     disabled={index === 0}
     onclick={() => onmove(-1)}>↑</button
   >
   <button
     type="button"
     class="small icon"
-    title="Descendre"
-    aria-label={`Descendre ${label}`}
+    title="Move down"
+    aria-label={`Move ${label} down`}
     disabled={index >= count - 1}
     onclick={() => onmove(1)}>↓</button
   >
-  <button type="button" class="small icon danger" title="Supprimer" aria-label={`Supprimer ${label}`} onclick={onremove}
+  <button type="button" class="small icon danger" title="Remove" aria-label={`Remove ${label}`} onclick={onremove}
     >✕</button
   >
 </span>

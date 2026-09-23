@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Onglet « Assistant » (même conversation que l'outil latéral).
+  // "Assistant" tab (same conversation as the side tool).
   import type { Tab } from '../../shell/types';
   import Assistant from './Assistant.svelte';
   import { provideActions } from '../../shell/workbench.svelte';
@@ -12,11 +12,11 @@
     () => [
       {
         id: 'new',
-        label: 'Nouvelle conversation',
+        label: 'New conversation',
         icon: 'plus',
         disabled: !conversation.threads.length,
         run: () => {
-          if (confirm('Commencer une nouvelle conversation ? L’historique actuel sera effacé.')) newConversation();
+          if (confirm('Start a new conversation? The current history will be erased.')) newConversation();
         },
       },
     ],

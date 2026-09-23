@@ -1,19 +1,18 @@
-// Contributions des éditeurs actifs à l'atelier : actions de la barre d'outils,
-// demandes de mise en évidence d'un champ, sélection pour « Propriétés »,
-// notifications.
+// Contributions of active editors to the workbench: toolbar actions,
+// field-highlight requests, selection for "Properties", notifications.
 import { SvelteMap } from 'svelte/reactivity';
 import { tick } from 'svelte';
 import type { Properties, ToolbarAction } from './types';
 import { parentPath } from '../methodologyForm';
 
-// --- actions contextuelles ------------------------------------------------------
+// --- contextual actions ------------------------------------------------------
 
-/** Actions fournies par l'éditeur monté de chaque onglet. */
+/** Actions provided by each tab's mounted editor. */
 export const tabActions = new SvelteMap<string, ToolbarAction[]>();
 
 /**
- * À appeler à l'initialisation d'un composant d'éditeur : publie ses actions
- * pour la barre d'outils (recalculées quand l'état lu par `fn` change).
+ * To call when initializing an editor component: publishes its actions
+ * for the toolbar (recomputed when the state read by `fn` changes).
  */
 export function provideActions(tabId: () => string, fn: () => ToolbarAction[]): void {
   $effect(() => {
@@ -28,7 +27,7 @@ export function provideActions(tabId: () => string, fn: () => ToolbarAction[]): 
   });
 }
 
-/** Exécute l'action `id` de l'onglet (raccourcis clavier). Renvoie false si absente. */
+/** Runs the tab's `id` action (keyboard shortcuts). Returns false if absent. */
 export function runTabAction(tabIdValue: string, id: string): boolean {
   const a = tabActions.get(tabIdValue)?.find((x) => x.id === id);
   if (!a || a.disabled) return false;
@@ -36,7 +35,7 @@ export function runTabAction(tabIdValue: string, id: string): boolean {
   return true;
 }
 
-// --- mise en évidence d'un champ ---------------------------------------------------
+// --- field highlighting ---------------------------------------------------
 
 export const revealState = $state({ tabId: '', path: '', seq: 0 });
 
@@ -46,7 +45,7 @@ export function requestReveal(tabId: string, path: string): void {
   revealState.seq += 1;
 }
 
-/** Amène à l'écran (et donne le focus à) l'élément `[data-path]` le plus proche du chemin. */
+/** Scrolls into view (and focuses) the `[data-path]` element closest to the path. */
 export function revealIn(root: HTMLElement | undefined, path: string): boolean {
   if (!root) return false;
   const els = [...root.querySelectorAll<HTMLElement>('[data-path]')];
@@ -67,8 +66,8 @@ export function revealIn(root: HTMLElement | undefined, path: string): boolean {
 }
 
 /**
- * À appeler dans un éditeur : traite les demandes de mise en évidence qui le
- * concernent (après le rendu).
+ * To call within an editor: processes the highlight requests concerning it
+ * (after render).
  */
 export function useReveal(tabId: () => string, root: () => HTMLElement | undefined): void {
   $effect(() => {
@@ -82,7 +81,7 @@ export function useReveal(tabId: () => string, root: () => HTMLElement | undefin
   });
 }
 
-// --- sélection ---------------------------------------------------------------------
+// --- selection ---------------------------------------------------------------------
 
 export const selection = $state<{ current: Properties | undefined }>({ current: undefined });
 
@@ -112,7 +111,7 @@ export function dismiss(id: number): void {
   if (i >= 0) toasts.splice(i, 1);
 }
 
-// --- requêtes transverses -------------------------------------------------------------
+// --- cross-cutting requests -------------------------------------------------------------
 
-/** Compteur incrémenté pour demander le focus de l'intention dans « Tester ». */
+/** Counter incremented to request intent focus in "Test". */
 export const focusRequests = $state({ tester: 0, search: 0 });

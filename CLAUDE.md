@@ -1,6 +1,7 @@
 # GOAP — notes for contributors and agents
 
-- Architecture and concepts: `docs/architecture.md` (French). Keep it in sync with code changes.
+- **English is the project's official language.** All code, comments, docs, commit messages, and UI text must be in English.
+- Architecture and concepts: `docs/architecture.md`. Keep it in sync with code changes.
 - Go module `github.com/zimwip/goap`; core logic in `pkg/` (no infra deps), services in `internal/` + `cmd/`.
 - Contracts: `proto/` → `make generate` (buf) → `gen/` (committed, never edit by hand).
 - Tests: `make test`; PostgreSQL-backed tests (graph, registry, iam) run when `GOAP_TEST_PG_DSN` is set (`internal/pgtest`); SQLite variants always run.

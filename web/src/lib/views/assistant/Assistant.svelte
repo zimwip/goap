@@ -1,6 +1,6 @@
 <script lang="ts">
-  // Assistant conversationnel pour les non-spécialistes : présentation des
-  // agents disponibles, demande en langage courant, suivi en direct.
+  // Conversational assistant for non-specialists: presents the available
+  // agents, plain-language requests, live follow-up.
   import { tick } from 'svelte';
   import Icon from '../../shell/Icon.svelte';
   import Popover from '../../shell/Popover.svelte';
@@ -38,7 +38,7 @@
   const cards = $derived(agentCards());
   const threads = $derived(conversation.threads);
 
-  // Défilement vers le bas à chaque nouvelle demande.
+  // Scroll to the bottom on every new request.
   $effect(() => {
     void threads.length;
     void tick().then(() => scroller?.scrollTo({ top: scroller.scrollHeight, behavior: 'smooth' }));
@@ -62,7 +62,7 @@
   }
 
   function reset() {
-    if (threads.length && !confirm('Commencer une nouvelle conversation ? L’historique actuel sera effacé.')) return;
+    if (threads.length && !confirm('Start a new conversation? The current history will be erased.')) return;
     newConversation();
   }
 
@@ -74,40 +74,40 @@
     <strong class="title"><Icon name="chat" size={15} /> Assistant</strong>
     <span class="grow"></span>
     {#if mode === 'panel'}
-      <button type="button" class="ghost small" title="Ouvrir dans un onglet" aria-label="Ouvrir dans un onglet" onclick={() => openTab({ kind: 'assistant', params: {} }, { pin: true })}>
+      <button type="button" class="ghost small" title="Open in a tab" aria-label="Open in a tab" onclick={() => openTab({ kind: 'assistant', params: {} }, { pin: true })}>
         <Icon name="external" size={13} />
       </button>
     {/if}
     <div class="settings">
-      <button type="button" class="ghost small" title="Réglages" aria-label="Réglages" aria-expanded={settingsOpen} onclick={() => (settingsOpen = !settingsOpen)}>
+      <button type="button" class="ghost small" title="Settings" aria-label="Settings" aria-expanded={settingsOpen} onclick={() => (settingsOpen = !settingsOpen)}>
         <Icon name="settings" size={13} />
       </button>
-      <Popover bind:open={settingsOpen} label="Réglages de l'assistant" align="right" placement="below" width="280px">
+      <Popover bind:open={settingsOpen} label="Assistant settings" align="right" placement="below" width="280px">
         <div class="set">
-          <label for="as-base">Référentiel de travail</label>
+          <label for="as-base">Working baseline</label>
           <select id="as-base" bind:value={conversation.baselineId}>
-            <option value="">Le plus récent</option>
+            <option value="">Most recent</option>
             {#each sortedBaselines as b (b.id)}<option value={b.id}>{b.name || shortId(b.id)} — {formatDate(b.createdAt)}</option>{/each}
           </select>
         </div>
       </Popover>
     </div>
-    <button type="button" class="small" onclick={reset} title="Nouvelle conversation" aria-label="Nouvelle conversation">
-      <Icon name="plus" size={12} />{#if mode === 'tab'} Nouvelle conversation{:else} Nouvelle{/if}
+    <button type="button" class="small" onclick={reset} title="New conversation" aria-label="New conversation">
+      <Icon name="plus" size={12} />{#if mode === 'tab'} New conversation{:else} New{/if}
     </button>
   </div>
 
   <div class="scroll" bind:this={scroller}>
     {#if !threads.length}
       <div class="home">
-        <h2>Bonjour, que puis-je faire pour vous ?</h2>
-        <p class="muted">Décrivez votre besoin avec vos mots : l'assistant choisit l'agent adapté et vous tient informé.</p>
+        <h2>Hello, what can I do for you?</h2>
+        <p class="muted">Describe what you need in your own words: the assistant picks the right agent and keeps you informed.</p>
         {#if loadingCatalog && !cards.length}
-          <p class="muted">Chargement des agents…</p>
+          <p class="muted">Loading agents…</p>
         {:else if methodologies.error}
           <div class="alert">{methodologies.error}</div>
         {:else if !cards.length}
-          <p class="muted">Aucun agent n'est disponible pour le moment.</p>
+          <p class="muted">No agent is available at the moment.</p>
         {/if}
         <div class="cards">
           {#each cards as c (`${c.methodology}/${c.agent.name}`)}
@@ -133,7 +133,7 @@
             {#if t.processId}
               <AssistantRun processId={t.processId} live={i === threads.length - 1} />
             {:else if t.error}
-              <div class="bubble bot err">Je n'ai pas pu lancer la demande : {t.error}</div>
+              <div class="bubble bot err">I could not start the request: {t.error}</div>
             {:else}
               <div class="bubble bot">…</div>
             {/if}
@@ -148,14 +148,14 @@
       bind:this={input}
       bind:value={conversation.draft}
       rows={mode === 'panel' ? 3 : 2}
-      placeholder={mode === 'tab' ? 'Votre demande… (Entrée pour envoyer, Maj+Entrée pour aller à la ligne)' : 'Votre demande…'}
-      aria-label="Votre demande"
+      placeholder={mode === 'tab' ? 'Your request… (Enter to send, Shift+Enter for a new line)' : 'Your request…'}
+      aria-label="Your request"
       onkeydown={keydown}
       data-no-pin
     ></textarea>
     <button type="submit" class="primary" disabled={assistantUi.sending || !conversation.draft.trim()}>
       <Icon name="send" size={14} />
-      {assistantUi.sending ? 'Envoi…' : 'Envoyer'}
+      {assistantUi.sending ? 'Sending…' : 'Send'}
     </button>
   </form>
 </div>

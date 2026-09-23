@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Panneau latéral affichant l'outil actif d'une barre d'activité.
+  // Side panel showing the active tool of an activity bar.
   import { panelView } from './registry';
   import { layout } from './layout.svelte';
   import Icon from './Icon.svelte';
@@ -17,7 +17,7 @@
 <section class="panel" aria-label={view?.title}>
   <header>
     <h2>{view?.title ?? ''}</h2>
-    <button type="button" class="ghost small icon" title="Masquer le panneau" aria-label="Masquer le panneau" onclick={close}>
+    <button type="button" class="ghost small icon" title="Hide the panel" aria-label="Hide the panel" onclick={close}>
       <Icon name="x" size={14} />
     </button>
   </header>

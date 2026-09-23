@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Fenêtre contextuelle ancrée à un bouton (barre d'état, en-tête).
+  // Popup anchored to a button (status bar, header).
   import type { Snippet } from 'svelte';
 
   let {

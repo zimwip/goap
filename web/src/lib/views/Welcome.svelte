@@ -1,39 +1,39 @@
 <script lang="ts">
-  // Page d'accueil de la zone d'édition (aucun onglet ouvert).
+  // Home page of the editor area (no tab open).
   import Icon from '../shell/Icon.svelte';
   import { runCommand } from '../shell/commands';
   import { showTool } from '../shell/layout.svelte';
 
   const SHORTCUTS: [string, string][] = [
-    ['Ctrl/Cmd + S', "Enregistrer l'éditeur actif"],
-    ['Ctrl/Cmd + W (ou Alt + W)', "Fermer l'onglet"],
-    ['Ctrl/Cmd + J', 'Afficher / masquer la console'],
-    ['Ctrl/Cmd + B', 'Afficher / masquer la navigation'],
-    ['Ctrl/Cmd + P', 'Rechercher un objet (« > » : commandes)'],
-    ['Double clic', 'Épingler un onglet ou ouvrir un élément épinglé'],
-    ['Clic milieu', 'Fermer un onglet'],
+    ['Ctrl/Cmd + S', 'Save the active editor'],
+    ['Ctrl/Cmd + W (or Alt + W)', 'Close the tab'],
+    ['Ctrl/Cmd + J', 'Show / hide the console'],
+    ['Ctrl/Cmd + B', 'Show / hide navigation'],
+    ['Ctrl/Cmd + P', 'Search for an object (">": commands)'],
+    ['Double click', 'Pin a tab or open a pinned item'],
+    ['Middle click', 'Close a tab'],
   ];
 </script>
 
 <div class="welcome">
-  <h1><span class="logo">◆</span> Atelier GOAP</h1>
+  <h1><span class="logo">◆</span> GOAP Workshop</h1>
   <p class="hint">
-    Concevez les méthodologies (agents, actions, conditions, objectifs), testez des intentions et suivez les exécutions en direct.
+    Design methodologies (agents, actions, conditions, goals), test intents, and follow runs live.
   </p>
   <div class="cols">
     <section>
-      <h2>Démarrer</h2>
+      <h2>Get started</h2>
       <ul class="links">
-        <li><button type="button" class="link" onclick={() => runCommand('assistant')}><Icon name="chat" size={14} /> Assistant (demande en langage courant)</button></li>
-        <li><button type="button" class="link" onclick={() => runCommand('newMethodology')}><Icon name="plus" size={14} /> Nouvelle méthodologie</button></li>
-        <li><button type="button" class="link" onclick={() => runCommand('import')}><Icon name="upload" size={14} /> Importer une méthodologie (YAML)</button></li>
-        <li><button type="button" class="link" onclick={() => runCommand('test')}><Icon name="flask" size={14} /> Nouveau test d'intention</button></li>
-        <li><button type="button" class="link" onclick={() => showTool('left', 'runs')}><Icon name="runs" size={14} /> Exécutions</button></li>
-        <li><button type="button" class="link" onclick={() => showTool('right', 'dsl')}><Icon name="help" size={14} /> Aide du DSL des actions script</button></li>
+        <li><button type="button" class="link" onclick={() => runCommand('assistant')}><Icon name="chat" size={14} /> Assistant (plain-language request)</button></li>
+        <li><button type="button" class="link" onclick={() => runCommand('newMethodology')}><Icon name="plus" size={14} /> New methodology</button></li>
+        <li><button type="button" class="link" onclick={() => runCommand('import')}><Icon name="upload" size={14} /> Import a methodology (YAML)</button></li>
+        <li><button type="button" class="link" onclick={() => runCommand('test')}><Icon name="flask" size={14} /> New intent test</button></li>
+        <li><button type="button" class="link" onclick={() => showTool('left', 'runs')}><Icon name="runs" size={14} /> Runs</button></li>
+        <li><button type="button" class="link" onclick={() => showTool('right', 'dsl')}><Icon name="help" size={14} /> Script actions DSL help</button></li>
       </ul>
     </section>
     <section>
-      <h2>Raccourcis</h2>
+      <h2>Shortcuts</h2>
       <table>
         <tbody>
           {#each SHORTCUTS as [k, v] (k)}

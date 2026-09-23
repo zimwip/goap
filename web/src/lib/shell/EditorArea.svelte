@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Zone d'édition : onglets et éditeur de l'onglet actif.
+  // Editor area: tabs and the active tab's editor.
   import TabBar from './TabBar.svelte';
   import { editorView } from './registry';
   import { tabsState, activeTab, pinTab, isDirty } from './tabs.svelte';
@@ -10,7 +10,7 @@
   const tab = $derived(activeTab());
   const view = $derived(tab ? editorView(tab.kind) : undefined);
 
-  // Un aperçu devient épinglé dès qu'il est modifié.
+  // A preview becomes pinned as soon as it's modified.
   $effect(() => {
     if (tab && !tab.pinned && isDirty(tab)) pinTab(tab.id);
   });
@@ -18,7 +18,7 @@
   function edited(e: Event) {
     const t = e.target as HTMLElement | null;
     if (!tab || tab.pinned || !t) return;
-    // Filtres de listes / recherches : pas une modification du contenu.
+    // List filters / searches: not a content modification.
     if (t.closest('[data-no-pin]')) return;
     pinTab(tab.id);
   }
@@ -28,14 +28,14 @@
   {#if tabsState.tabs.length}
     <TabBar />
   {/if}
-  <div class="content" role="tabpanel" aria-label={view?.tabTitle(tab!) ?? 'Accueil'} oninput={edited}>
+  <div class="content" role="tabpanel" aria-label={view?.tabTitle(tab!) ?? 'Home'} oninput={edited}>
     {#if tab && view}
       {#key tab.id}
         {@const C = view.component}
         <C {tab} />
       {/key}
     {:else if tab}
-      <p class="empty pad">Type d'onglet inconnu : {tab.kind}</p>
+      <p class="empty pad">Unknown tab type: {tab.kind}</p>
     {:else}
       {@const W = welcome}
       <W />

@@ -4,9 +4,9 @@
 </script>
 
 {#if draft.loading}
-  <p class="empty">Chargement…</p>
+  <p class="empty">Loading…</p>
 {:else if draft.loadError}
   <div class="alert">{draft.loadError}</div>
 {:else}
-  <div class="alert warn">{what} introuvable dans le brouillon {draft.label} (supprimé ou renommé ?).</div>
+  <div class="alert warn">{what} not found in draft {draft.label} (deleted or renamed?).</div>
 {/if}

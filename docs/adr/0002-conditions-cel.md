@@ -1,26 +1,26 @@
-# ADR 0002 — Conditions exprimées en CEL
+# ADR 0002 — Conditions expressed in CEL
 
-**Statut** : accepté · **Date** : 2026-09
+**Status**: accepted · **Date**: 2026-09
 
-## Contexte
-Les préconditions / effets GOAP sont des booléens nommés. Il faut les calculer à partir de l'état
-du changement, lequel référence des éléments de domaine. Le langage doit être déclaratif (YAML),
-sûr (exécuté côté serveur), rapide et vérifiable au chargement.
+## Context
+GOAP preconditions / effects are named booleans. They must be computed from the state
+of the change, which references domain elements. The language must be declarative (YAML),
+safe (executed server-side), fast, and verifiable at load time.
 
 ## Options
-1. Code Go enregistré (souple, mais pas déclaratif ni déployable sans build).
-2. JSONPath / JMESPath (pas de quantificateurs typés, erreurs peu explicites).
-3. **CEL** (typé, non Turing-complet, macros `all`/`exists`/`filter`, borne de coût, utilisé par
+1. Registered Go code (flexible, but neither declarative nor deployable without a build).
+2. JSONPath / JMESPath (no typed quantifiers, unclear error messages).
+3. **CEL** (typed, not Turing-complete, `all`/`exists`/`filter` macros, cost bound, used by
    Kubernetes/Envoy).
-4. Rego (puissant mais orienté politique, plus lourd).
+4. Rego (powerful but policy-oriented, heavier).
 
-## Décision
-CEL (`cel.dev/cel-go`). Variables : `change`, `items`, `impacts`, `proposals`, `decisions`,
-`artifacts`, `vars`. Les références de domaine sont hydratées (`type`, `key`, `props`, `out`, `in`,
-`latest`). Une expression en erreur rend la condition **inconnue** : elle ne satisfait aucune
-précondition. Les `expects` des actions sont compilés en CEL.
+## Decision
+CEL (`cel.dev/cel-go`). Variables: `change`, `items`, `impacts`, `proposals`, `decisions`,
+`artifacts`, `vars`. Domain references are hydrated (`type`, `key`, `props`, `out`, `in`,
+`latest`). An expression that errors makes the condition **unknown**: it satisfies no
+precondition. Actions' `expects` are compiled into CEL.
 
-## Conséquences
-- Validation des méthodologies à la publication (compilation + type bool).
-- Pas d'appel réseau pendant l'évaluation ; la profondeur de navigation est limitée à l'hydratation
-  (voisinage direct). Des fonctions de parcours pourront être ajoutées si nécessaire.
+## Consequences
+- Methodologies are validated at publish time (compilation + bool type check).
+- No network call during evaluation; navigation depth is limited to hydration
+  (direct neighborhood). Traversal functions can be added later if needed.

@@ -1,33 +1,33 @@
-# ADR 0007 — Exécution sandboxée des actions : un sandbox par processus, provisioner par environnement
+# ADR 0007 — Sandboxed execution of actions: one sandbox per process, one provisioner per environment
 
-**Statut** : accepté · **Date** : 2026-09
+**Status**: accepted · **Date**: 2026-09
 
-## Contexte
-Les actions `script` exécutent du code saisi par les méthodologues (JavaScript, Go). Il ne doit jamais
-tourner dans le moteur ni pouvoir atteindre l'hôte, le réseau interne ou des secrets. La plateforme se
-déploie en Docker Compose (dev), Kubernetes et potentiellement bare metal.
+## Context
+`script` actions execute code entered by methodologists (JavaScript, Go). It must never run in the
+engine, nor be able to reach the host, the internal network, or secrets. The platform deploys
+on Docker Compose (dev), Kubernetes, and potentially bare metal.
 
 ## Options
-1. Interpréteurs dans le moteur (sandbox « langage » seule) — simple, mais une faille d'interpréteur
-   compromet le moteur et ses secrets.
-2. Un conteneur **par action** — isolation forte mais coût de démarrage (~1 s) à chaque action.
-3. Un sandbox **par processus** réutilisé pour ses actions, derrière une abstraction de provisioner.
+1. Interpreters in the engine ("language" sandbox only) — simple, but an interpreter
+   flaw compromises the engine and its secrets.
+2. A container **per action** — strong isolation but startup cost (~1 s) on every action.
+3. A sandbox **per process** reused for its actions, behind a provisioner abstraction.
 
-## Décision
-Option 3 :
-- `engine.Sandboxes` (Acquire / Release par processus) implémenté par `sandbox.Pool` sur un
-  `Provisioner` (`process`, `docker`, `kubernetes` ; `inproc` pour les tests) choisi par `GOAP_SANDBOX`.
-- Le sandbox exécute `goap-runner` (SandboxService). Les opérations qui sortent du script passent par le
-  RuntimeService du moteur avec un **jeton par job** : le sandbox n'a ni identité, ni secret, ni accès
-  au graphe ou au model gateway.
-- Défense en profondeur : interpréteurs sans fichiers / réseau / processus + isolation du conteneur ou
-  du pod (rootfs en lecture seule, pas de capabilities, non-root, limites, réseau interne, gVisor optionnel).
-- Sandboxes arrêtés à la fin du processus ou après inactivité.
+## Decision
+Option 3:
+- `engine.Sandboxes` (Acquire / Release per process) implemented by `sandbox.Pool` on a
+  `Provisioner` (`process`, `docker`, `kubernetes`; `inproc` for tests) chosen via `GOAP_SANDBOX`.
+- The sandbox runs `goap-runner` (SandboxService). Operations leaving the script go through the
+  engine's RuntimeService with a **per-job token**: the sandbox has no identity, no secret, and no access
+  to the graph or the model gateway.
+- Defense in depth: interpreters without files / network / processes + container or
+  pod isolation (read-only rootfs, no capabilities, non-root, limits, internal network, optional gVisor).
+- Sandboxes stopped at the end of the process or after inactivity.
 
-## Conséquences
-- Le moteur pilote une infrastructure (API Docker via proxy restreint, ou droits `pods` limités à un
-  namespace dédié sur Kubernetes).
-- Latence : démarrage du sandbox au premier script d'un processus ; les appels DSL sortants font un aller-retour
-  réseau vers le moteur.
-- Une boucle infinie dans un script Go interprété ne peut pas être interrompue : le job échoue au timeout et
-  le sandbox (jetable) est recyclé avec le processus.
+## Consequences
+- The engine drives infrastructure (Docker API via a restricted proxy, or `pods` rights limited to a
+  dedicated namespace on Kubernetes).
+- Latency: sandbox startup on a process's first script; outgoing DSL calls make a round trip
+  over the network to the engine.
+- An infinite loop in an interpreted Go script cannot be interrupted: the job fails on timeout and
+  the (disposable) sandbox is recycled along with the process.

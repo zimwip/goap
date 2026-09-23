@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Onglet « condition » : expression CEL évaluée sur le tableau noir.
+  // "Condition" tab: CEL expression evaluated over the blackboard.
   import { untrack } from 'svelte';
   import type { Tab } from '../../shell/types';
   import CodeEditor from '../../components/CodeEditor.svelte';
@@ -39,12 +39,12 @@
 
 <div class="editor-page" bind:this={root}>
   {#if item}
-    <DraftHeader draft={d} icon="branch" kind="Condition" title={item.name || '(sans nom)'} dirty={d.itemDirty('conditions', item.uid)} />
+    <DraftHeader draft={d} icon="branch" kind="Condition" title={item.name || '(unnamed)'} dirty={d.itemDirty('conditions', item.uid)} />
     <fieldset class="plain" disabled={d.readonly}>
       <section class="card">
         <div class="grid">
           <div class="field">
-            <label for="c-name">Nom</label>
+            <label for="c-name">Name</label>
             <input
               id="c-name"
               type="text"
@@ -66,38 +66,38 @@
           </div>
         </div>
         <div class="field">
-          <label for="c-expr">Expression CEL</label>
+          <label for="c-expr">CEL expression</label>
           <CodeEditor
             id="c-expr"
             bind:value={item.expr}
             language="cel"
             readonly={d.readonly}
-            label="Expression CEL"
+            label="CEL expression"
             minHeight="4rem"
             placeholder="size(impacts) > 0"
             bad={d.bad(`${p}.expr`)}
             path="{p}.expr"
           />
           <p class="hint">
-            Variables : <code>impacts</code>, <code>proposals</code>, <code>artifacts</code>, <code>items</code>,
-            <code>change</code>… Les conditions forment l'état du monde du planificateur.
+            Variables: <code>impacts</code>, <code>proposals</code>, <code>artifacts</code>, <code>items</code>,
+            <code>change</code>… Conditions form the planner's world state.
           </p>
         </div>
       </section>
     </fieldset>
     <section class="card">
-      <h3>Utilisée par</h3>
+      <h3>Used by</h3>
       {#if usedBy.actions.length || usedBy.goals.length}
         <ul class="chips">
           {#each usedBy.actions as a (a.uid)}
             <li><button type="button" class="chip" onclick={() => openItem(d, 'actions', a)}>action · {a.name}</button></li>
           {/each}
           {#each usedBy.goals as g (g.uid)}
-            <li><button type="button" class="chip" onclick={() => openItem(d, 'goals', g)}>objectif · {g.name}</button></li>
+            <li><button type="button" class="chip" onclick={() => openItem(d, 'goals', g)}>goal · {g.name}</button></li>
           {/each}
         </ul>
       {:else}
-        <p class="empty">Aucune action ni objectif n'y fait référence.</p>
+        <p class="empty">No action or goal references it.</p>
       {/if}
     </section>
   {:else}

@@ -1,7 +1,7 @@
 <script lang="ts">
-  // Coquille de l'IDE : en-tête, barre d'outils, barres d'activité, panneaux
-  // redimensionnables, zone d'édition et console. Le contenu vient du registre
-  // des vues.
+  // IDE shell: header, toolbar, activity bars, resizable panels,
+  // editor area, and console. Content comes from the view
+  // registry.
   import type { Component } from 'svelte';
   import Header from './Header.svelte';
   import Toolbar from './Toolbar.svelte';
@@ -21,7 +21,7 @@
   let width = $state(window.innerWidth);
   let height = $state(window.innerHeight);
 
-  // Écrans étroits : les panneaux latéraux passent en superposition.
+  // Narrow screens: side panels switch to an overlay.
   const narrow = $derived(width < 1024);
   const sideMax = $derived(Math.max(LIMITS.side.min, Math.min(LIMITS.side.max, Math.floor(width * 0.4))));
   const bottomMax = $derived(Math.max(LIMITS.bottom.min, Math.min(LIMITS.bottom.max, height - 200)));
@@ -67,7 +67,7 @@
           value={Math.min(layout.leftWidth, sideMax)}
           min={LIMITS.side.min}
           max={sideMax}
-          label="Largeur du panneau de navigation"
+          label="Navigation panel width"
           onresize={(v) => (layout.leftWidth = v)}
         />
       {/if}
@@ -83,7 +83,7 @@
           min={LIMITS.bottom.min}
           max={bottomMax}
           invert
-          label="Hauteur de la console"
+          label="Console height"
           onresize={(v) => (layout.bottomHeight = v)}
         />
         <div class="bottom" style:height="{Math.min(layout.bottomHeight, bottomMax)}px">
@@ -99,7 +99,7 @@
           min={LIMITS.side.min}
           max={sideMax}
           invert
-          label="Largeur du panneau latéral droit"
+          label="Right side panel width"
           onresize={(v) => (layout.rightWidth = v)}
         />
       {/if}
@@ -147,7 +147,7 @@
     flex: none;
     min-height: 0;
   }
-  /* Étroit : panneaux latéraux superposés à l'éditeur. */
+  /* Narrow: side panels overlaid on the editor. */
   .narrow .side {
     position: absolute;
     top: 0;

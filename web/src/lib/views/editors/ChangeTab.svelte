@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Onglet « changement » : items du change set et application au référentiel.
+  // Change tab: change set items and applying to the baseline.
   import {
     graph,
     errorMessage,
@@ -80,7 +80,7 @@
       await load(change.id);
       void refreshChanges();
       void refreshBaselines();
-      notify(`Référentiel ${applied?.name || shortId(applied?.id)} créé.`, 'ok');
+      notify(`Baseline ${applied?.name || shortId(applied?.id)} created.`, 'ok');
     } catch (e) {
       error = errorMessage(e);
     } finally {
@@ -95,16 +95,16 @@
 
   const related = $derived([...processes.values()].filter((p) => p.changeId && p.changeId === selected));
 
-  /** Journal d'exécution du changement, éventuellement centré sur un enregistrement. */
+  /** Execution journal of the change, optionally centered on a record. */
   function openJournal(record = '') {
     if (change?.id) openTab({ kind: 'journal', params: { id: change.id, process: '', record } }, { pin: true });
   }
 
   function provenance(i: ChangeItem): string {
-    const parts = [i.producedBy ? `Produit par ${i.producedBy}` : 'Producteur inconnu'];
-    if (i.execution) parts.push(`exécution ${shortId(i.execution)} — ouvrir dans le journal d'exécution`);
-    if (i.supersedes?.length) parts.push(`remplace ${i.supersedes.map(shortId).join(', ')}`);
-    if (i.status === ITEM_SUPERSEDED) parts.push('remplacé par un item plus récent');
+    const parts = [i.producedBy ? `Produced by ${i.producedBy}` : 'Unknown producer'];
+    if (i.execution) parts.push(`execution ${shortId(i.execution)} — open in the execution journal`);
+    if (i.supersedes?.length) parts.push(`supersedes ${i.supersedes.map(shortId).join(', ')}`);
+    if (i.status === ITEM_SUPERSEDED) parts.push('superseded by a more recent item');
     return parts.join(' · ');
   }
 
@@ -115,22 +115,22 @@
   provideActions(
     () => tab.id,
     () => [
-      { id: 'refresh', label: 'Actualiser', icon: 'refresh', disabled: loading, run: () => load(selected) },
+      { id: 'refresh', label: 'Refresh', icon: 'refresh', disabled: loading, run: () => load(selected) },
       {
         id: 'journal',
-        label: "Journal d'exécution",
+        label: "Execution journal",
         icon: 'list',
         disabled: !change,
-        title: 'Ticks, actions, appels de modèle et décisions des processus de ce changement',
+        title: 'Ticks, actions, model calls and decisions of this change\'s processes',
         run: () => openJournal(),
       },
       {
         id: 'apply',
-        label: applying ? 'Application…' : 'Appliquer',
+        label: applying ? 'Applying…' : 'Apply',
         icon: 'check',
         primary: true,
         disabled: !change || isApplied || applying || !baselineName.trim(),
-        title: 'Créer un nouveau référentiel à partir du changement',
+        title: 'Create a new baseline from the change',
         run: apply,
       },
     ],
@@ -144,41 +144,41 @@
   {:else}
     <span title={provenance(i)}>{i.producedBy}</span>
   {/if}
-  {#if i.supersedes?.length}<span class="hint" title={provenance(i)}> (remplace {i.supersedes.length})</span>{/if}
+  {#if i.supersedes?.length}<span class="hint" title={provenance(i)}> (supersedes {i.supersedes.length})</span>{/if}
 {/snippet}
 
 <div class="editor-page">
 {#if error}<div class="alert">{error}</div>{/if}
 
 {#if loading && !change}
-  <p class="empty">Chargement…</p>
+  <p class="empty">Loading…</p>
 {/if}
 
 {#if change}
   <section class="card">
     <div class="editor-head">
       <Icon name="diff" size={18} />
-      <h2>{change.title || 'Sans titre'}</h2>
+      <h2>{change.title || 'Untitled'}</h2>
       <StatusBadge status={change.status} />
     </div>
-    {#if change.intent}<p class="intent">« {change.intent} »</p>{/if}
+    {#if change.intent}<p class="intent">"{change.intent}"</p>{/if}
     <dl class="meta">
-      <dt>Identifiant</dt><dd><code>{change.id}</code></dd>
-      {#if change.methodology}<dt>Méthodologie</dt><dd>{change.methodology}</dd>{/if}
-      {#if change.goal}<dt>Objectif</dt><dd><code>{change.goal}</code></dd>{/if}
+      <dt>ID</dt><dd><code>{change.id}</code></dd>
+      {#if change.methodology}<dt>Methodology</dt><dd>{change.methodology}</dd>{/if}
+      {#if change.goal}<dt>Goal</dt><dd><code>{change.goal}</code></dd>{/if}
       {#if change.baselineId}
-        <dt>Référentiel de départ</dt>
+        <dt>Starting baseline</dt>
         <dd><button type="button" class="link mono" onclick={() => openBaseline(change?.baselineId)}>{shortId(change.baselineId)}</button></dd>
       {/if}
       {#if change.resultBaselineId}
-        <dt>Référentiel résultant</dt>
+        <dt>Resulting baseline</dt>
         <dd><button type="button" class="link mono" onclick={() => openBaseline(change?.resultBaselineId)}>{shortId(change.resultBaselineId)}</button></dd>
       {/if}
-      {#if change.createdAt}<dt>Créé le</dt><dd>{formatDate(change.createdAt)}</dd>{/if}
+      {#if change.createdAt}<dt>Created on</dt><dd>{formatDate(change.createdAt)}</dd>{/if}
       <dt>Journal</dt>
-      <dd><button type="button" class="link" onclick={() => openJournal()}>Journal d'exécution</button></dd>
+      <dd><button type="button" class="link" onclick={() => openJournal()}>Execution journal</button></dd>
       {#if related.length}
-        <dt>Exécutions</dt>
+        <dt>Executions</dt>
         <dd class="runs">
           {#each related as p (p.id)}
             <button type="button" class="link" onclick={() => openTab({ kind: 'run', params: { id: p.id ?? '' } })}>{p.agent || shortId(p.id)}</button>
@@ -190,16 +190,16 @@
 
     <div class="apply row">
       <div class="grow">
-        <label for="bname">Nom du nouveau référentiel</label>
+        <label for="bname">Name of the new baseline</label>
         <input id="bname" type="text" bind:value={baselineName} disabled={isApplied} />
       </div>
       <button class="primary" onclick={apply} disabled={isApplied || applying || !baselineName.trim()}>
-        {applying ? 'Application…' : 'Appliquer'}
+        {applying ? 'Applying…' : 'Apply'}
       </button>
     </div>
     {#if applied}
       <div class="alert ok" style="margin: 0.75rem 0 0">
-        Référentiel <button type="button" class="link" onclick={() => openBaseline(applied?.id)}>{applied.name || applied.id}</button> créé.
+        Baseline <button type="button" class="link" onclick={() => openBaseline(applied?.id)}>{applied.name || applied.id}</button> created.
       </div>
     {/if}
   </section>
@@ -208,7 +208,7 @@
     <h3>Impacts <span class="count">{groups.impact.length}</span></h3>
     {#if groups.impact.length}
       <table>
-        <thead><tr><th>Élément</th><th>Type</th><th>Raison</th><th>Produit par</th></tr></thead>
+        <thead><tr><th>Item</th><th>Type</th><th>Reason</th><th>Produced by</th></tr></thead>
         <tbody>
           {#each groups.impact as i (i.id)}
             <tr class:superseded={i.status === ITEM_SUPERSEDED}>
@@ -221,12 +221,12 @@
         </tbody>
       </table>
     {:else}
-      <p class="empty">Aucun impact.</p>
+      <p class="empty">No impacts.</p>
     {/if}
   </section>
 
   <section class="card">
-    <h3>Propositions <span class="count">{groups.proposal.length}</span></h3>
+    <h3>Proposals <span class="count">{groups.proposal.length}</span></h3>
     {#if groups.proposal.length}
       <ul class="list">
         {#each groups.proposal as i (i.id)}
@@ -243,15 +243,15 @@
         {/each}
       </ul>
     {:else}
-      <p class="empty">Aucune proposition.</p>
+      <p class="empty">No proposals.</p>
     {/if}
   </section>
 
   <section class="card">
-    <h3>Décisions <span class="count">{groups.decision.length}</span></h3>
+    <h3>Decisions <span class="count">{groups.decision.length}</span></h3>
     {#if groups.decision.length}
       <table>
-        <thead><tr><th>Proposition</th><th>Décision</th><th>Commentaire</th></tr></thead>
+        <thead><tr><th>Proposal</th><th>Decision</th><th>Comment</th></tr></thead>
         <tbody>
           {#each groups.decision as i (i.id)}
             <tr class:superseded={i.status === ITEM_SUPERSEDED}>
@@ -263,17 +263,17 @@
         </tbody>
       </table>
     {:else}
-      <p class="empty">Aucune décision.</p>
+      <p class="empty">No decisions.</p>
     {/if}
   </section>
 
   <section class="card">
-    <h3>Artefacts <span class="count">{groups.artifact.length}</span></h3>
+    <h3>Artifacts <span class="count">{groups.artifact.length}</span></h3>
     {#each groups.artifact as i (i.id)}
       {@const md = markdownOf(i)}
       <article class="artifact" class:superseded={i.status === ITEM_SUPERSEDED}>
         <h4>
-          {i.type || 'artefact'} <span class="hint">· {@render producer(i)}</span>
+          {i.type || 'artifact'} <span class="hint">· {@render producer(i)}</span>
           {#if i.status === ITEM_SUPERSEDED}<StatusBadge status={i.status} />{/if}
         </h4>
         {#if md !== undefined}
@@ -283,13 +283,13 @@
         {/if}
       </article>
     {:else}
-      <p class="empty">Aucun artefact.</p>
+      <p class="empty">No artifacts.</p>
     {/each}
   </section>
 
   {#if others.length}
     <section class="card">
-      <h3>Autres items</h3>
+      <h3>Other items</h3>
       <pre>{JSON.stringify(others, null, 2)}</pre>
     </section>
   {/if}

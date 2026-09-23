@@ -1,12 +1,12 @@
 <script lang="ts">
-  // Outil « Aide DSL » : docs/dsl.md embarqué au build (copie dans lib/help).
+  // "DSL Help" tool: docs/dsl.md bundled at build time (copied into lib/help).
   import source from '../../help/dsl.md?raw';
   import { renderMarkdown } from '../../markdown';
 
   const html = renderMarkdown(source);
 </script>
 
-<!-- Contenu embarqué au build (fichier du dépôt), échappé par renderMarkdown. -->
+<!-- Content bundled at build time (repo file), escaped by renderMarkdown. -->
 <article class="md">{@html html}</article>
 
 <style>

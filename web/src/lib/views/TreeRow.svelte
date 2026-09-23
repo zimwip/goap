@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Ligne d'arbre d'explorateur : clic simple = aperçu, double clic = épingler.
+  // Explorer tree row: single click = preview, double click = pin.
   import type { Snippet } from 'svelte';
   import Icon, { type IconName } from '../shell/Icon.svelte';
 
@@ -25,7 +25,7 @@
     icon?: IconName;
     label: string;
     detail?: string;
-    /** undefined : feuille */
+    /** undefined: leaf */
     expanded?: boolean;
     active?: boolean;
     muted?: boolean;
@@ -33,14 +33,14 @@
     badge?: string | number;
     badgeTone?: 'neutral' | 'danger' | 'warn' | 'ok' | 'accent';
     title?: string;
-    /** clic simple */
+    /** single click */
     onselect?: () => void;
-    /** double clic / Entrée */
+    /** double click / Enter */
     onopen?: () => void;
     ontoggle?: () => void;
-    /** boutons affichés au survol */
+    /** buttons shown on hover */
     actions?: Snippet;
-    /** contenu toujours affiché en fin de ligne */
+    /** content always shown at the end of the row */
     trail?: Snippet;
   } = $props();
 
@@ -86,7 +86,7 @@
       type="button"
       class="twisty"
       tabindex="-1"
-      aria-label={expanded ? 'Replier' : 'Déplier'}
+      aria-label={expanded ? 'Collapse' : 'Expand'}
       onclick={(e) => {
         e.stopPropagation();
         ontoggle?.();

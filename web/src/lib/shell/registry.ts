@@ -1,5 +1,5 @@
-// Registre des vues : chaque zone de l'IDE affiche les vues qui y sont
-// enregistrées (outils de la barre d'activité, onglets de la console, éditeurs).
+// View registry: each IDE zone displays the views registered for it
+// (activity bar tools, console tabs, editors).
 import type { EditorView, PanelView, View, Zone } from './types';
 
 const views = new Map<string, View>();

@@ -41,7 +41,7 @@ function run(ctx) {
   let n = 0;
   for (const i of ctx.impacts()) {
     if (i.target.type !== "Requirement") continue;
-    const t = ctx.proposeNode("TestCase", "TST-" + i.target.key, { title: "Vérifier " + i.target.props.title });
+    const t = ctx.proposeNode("TestCase", "TST-" + i.target.key, { title: "Verify " + i.target.props.title });
     ctx.proposeLink(t, "verifies", i.target.key);
     n++;
   }

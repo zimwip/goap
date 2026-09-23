@@ -1,7 +1,6 @@
-// Données vivantes de l'atelier : flux WatchEvents global (console
-// « Événements »), processus connus, lignes de journal et appels LLM (console
-// « Tokens »). Toute source de processus (flux, GetProcess, ListProcesses)
-// passe par `ingestProcess`.
+// Live workbench data: global WatchEvents stream ("Events" console), known
+// processes, log lines and LLM calls ("Tokens" console). Every process
+// source (stream, GetProcess, ListProcesses) goes through `ingestProcess`.
 import { SvelteMap } from 'svelte/reactivity';
 import {
   engine,
@@ -21,7 +20,7 @@ export interface EventRow {
   processId: string;
   agent: string;
   methodology: string;
-  /** étape / action concernée */
+  /** step / action concerned */
   detail: string;
   level?: string;
 }
@@ -58,7 +57,7 @@ const MAX_TOKENS = 5000;
 class Live {
   status = $state<StreamStatus>('stopped');
   error = $state('');
-  /** pause de l'affichage des événements (le flux continue) */
+  /** pauses the event display (the stream keeps running) */
   paused = $state(false);
   events = $state.raw<EventRow[]>([]);
   logs = $state.raw<LogRow[]>([]);
@@ -70,7 +69,7 @@ class Live {
 
 export const live = new Live();
 
-/** Processus connus, par identifiant. */
+/** Known processes, by id. */
 export const processes = new SvelteMap<string, Process>();
 
 const logKeys = new Set<string>();
@@ -100,12 +99,12 @@ function addLogs(lines: LogLine[], fallbackProcess = ''): void {
   }
   if (!fresh.length) return;
   const merged = [...live.logs, ...fresh];
-  // Les journaux des étapes peuvent arriver après les lignes en direct : tri par date.
+  // Step logs may arrive after live lines: sort by date.
   merged.sort((a, b) => a.time.localeCompare(b.time));
   live.logs = cap(merged, MAX_LOGS);
 }
 
-/** Enregistre un état de processus (et ses journaux / appels LLM). */
+/** Records a process state (and its logs / LLM calls). */
 export function ingestProcess(p: Process | undefined): void {
   if (!p?.id) return;
   processes.set(p.id, p);
@@ -146,22 +145,22 @@ function describe(e: WatchEvent): string {
   const p = e.process;
   if (!p) return '';
   if (e.type === 'waiting' && p.pending) return `${p.pending.kind ?? 'input'} · ${p.pending.action ?? ''}`;
-  if (e.type === 'intent') return p.question ? 'clarification' : p.goal ? `objectif ${p.goal}` : '';
+  if (e.type === 'intent') return p.question ? 'clarification' : p.goal ? `goal ${p.goal}` : '';
   const last = p.steps?.[p.steps.length - 1];
   if (last && (e.type === 'step' || e.type === 'failed' || e.type === 'stuck'))
     return `#${(last.index ?? p.steps!.length - 1) + 1} ${last.action ?? ''}`;
-  return p.goal ? `objectif ${p.goal}` : '';
+  return p.goal ? `goal ${p.goal}` : '';
 }
 
 const eventListeners = new Set<(e: WatchEvent) => void>();
 
-/** Abonnement aux événements du flux global (notifications…). */
+/** Subscription to global stream events (notifications…). */
 export function onLiveEvent(fn: (e: WatchEvent) => void): () => void {
   eventListeners.add(fn);
   return () => eventListeners.delete(fn);
 }
 
-/** Traite un événement (flux global ou flux d'un onglet d'exécution). */
+/** Processes an event (global stream or a run tab's stream). */
 export function ingestEvent(e: WatchEvent, record = true): void {
   if (e.process) ingestProcess(e.process);
   if (e.log) addLogs([e.log]);
@@ -212,7 +211,7 @@ export function clearTokens(): void {
 
 let stop: (() => void) | undefined;
 
-/** Démarre (ou redémarre) le flux global ; relancé à chaque changement de jeton. */
+/** Starts (or restarts) the global stream; relaunched on every token change. */
 export function startLive(): () => void {
   const start = () => {
     stop?.();
@@ -237,7 +236,7 @@ export function startLive(): () => void {
   };
 }
 
-/** Sous-processus connus d'un processus (par parentId ou par les étapes). */
+/** Known sub-processes of a process (by parentId or via the steps). */
 export function childrenOf(p: Process | undefined): string[] {
   if (!p?.id) return [];
   const ids = new Set<string>();

@@ -1,5 +1,5 @@
-// Configuration CodeMirror 6 : thème aligné sur les jetons CSS de l'application
-// (clair / sombre), coloration JavaScript / Go et complétion du DSL `ctx`.
+// CodeMirror 6 configuration: theme aligned with the application's CSS tokens
+// (light / dark), JavaScript / Go syntax highlighting and `ctx` DSL completion.
 import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter, drawSelection, placeholder as placeholderExt } from '@codemirror/view';
 import { EditorState, Compartment, type Extension } from '@codemirror/state';
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
@@ -28,7 +28,7 @@ import { DSL_FIELDS, DSL_FUNCTIONS, goName } from './dsl';
 
 export type CodeLanguage = 'javascript' | 'go' | 'cel' | 'text';
 
-// --- thème ----------------------------------------------------------------------
+// --- theme ----------------------------------------------------------------------
 
 const theme = EditorView.theme({
   '&': {
@@ -79,7 +79,7 @@ const highlight = HighlightStyle.define([
   { tag: [t.operator, t.punctuation, t.bracket], color: 'var(--muted)' },
 ]);
 
-// --- complétion du DSL -------------------------------------------------------------
+// --- DSL completion -------------------------------------------------------------
 
 function dslOptions(lang: 'javascript' | 'go'): Completion[] {
   return DSL_FUNCTIONS.map((f) => {
@@ -110,7 +110,7 @@ function dslSource(lang: 'javascript' | 'go') {
   return (ctx: CompletionContext): CompletionResult | null => {
     const m = ctx.matchBefore(/\bctx\.\w*$/);
     if (m) return { from: m.from + 4, options: fns, validFor: /^\w*$/ };
-    // Champs des objets Item / Node / Link après « x. » (hors ctx).
+    // Fields of Item / Node / Link objects after "x." (other than ctx).
     const f = ctx.matchBefore(/\b[a-zA-Z_]\w*\.\w*$/);
     if (f && ctx.explicit) return { from: f.from + f.text.indexOf('.') + 1, options: fields, validFor: /^\w*$/ };
     if (f && f.text.length > f.text.indexOf('.') + 1)
@@ -128,7 +128,7 @@ export function languageExtension(lang: CodeLanguage, dsl: boolean): Extension {
     case 'go':
       return [go(), dsl ? goLanguage.data.of({ autocomplete: dslSource('go') }) : []];
     case 'cel':
-      // CEL a une syntaxe d'expression proche de JavaScript : coloration suffisante.
+      // CEL has an expression syntax close to JavaScript: highlighting is good enough.
       return javascript();
     default:
       return [];

@@ -1,4 +1,4 @@
-// Accès tolérant à localStorage (navigation privée, stockage bloqué…).
+// Tolerant access to localStorage (private browsing, blocked storage…).
 export function load<T>(key: string, fallback: T): T {
   try {
     const raw = localStorage.getItem(key);
@@ -22,6 +22,6 @@ export function save(key: string, value: unknown): void {
   try {
     localStorage.setItem(key, JSON.stringify(value));
   } catch {
-    // ignoré
+    // ignored
   }
 }

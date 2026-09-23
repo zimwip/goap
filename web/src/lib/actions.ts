@@ -1,8 +1,8 @@
-// Actions Svelte utilitaires.
+// Svelte utility actions.
 
 /**
- * Délégation du clic sur les lignes `[data-row]` d'un tableau (le clavier passe
- * par un bouton dans la ligne). Les clics sur un contrôle de la ligne sont ignorés.
+ * Click delegation on `[data-row]` table rows (keyboard access goes through a
+ * button inside the row). Clicks on a control within the row are ignored.
  */
 export function rowClick(node: HTMLElement, handler: (row: HTMLElement, e: MouseEvent) => void) {
   let h = handler;

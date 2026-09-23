@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Outil « Accès » : aperçu des politiques ABAC ; l'édition se fait dans l'onglet « Politiques ».
+  // "Access" tool: overview of ABAC policies; editing happens in the "Policies" tab.
   import Icon from '../../shell/Icon.svelte';
   import TreeRow from '../TreeRow.svelte';
   import StatusBadge from '../../components/StatusBadge.svelte';
@@ -32,12 +32,12 @@
     if (p)
       select({
         title: `${p.effect} ${p.resource}/${p.action}`,
-        subtitle: 'Politique ABAC',
+        subtitle: 'ABAC policy',
         rows: [
-          ['Règle', p.rule ?? ''],
-          ['Ressource', p.resource ?? ''],
+          ['Rule', p.rule ?? ''],
+          ['Resource', p.resource ?? ''],
           ['Action', p.action ?? ''],
-          ['Effet', p.effect ?? ''],
+          ['Effect', p.effect ?? ''],
         ],
       });
   }
@@ -46,15 +46,15 @@
 <div class="explorer">
   <div class="tools">
     <button type="button" class="small" onclick={() => open(undefined, true)}>
-      <Icon name="shield" size={13} /> Éditer les politiques
+      <Icon name="shield" size={13} /> Edit policies
     </button>
     <span class="grow"></span>
-    <button type="button" class="ghost small" title="Actualiser" aria-label="Actualiser" disabled={loading} onclick={load}
+    <button type="button" class="ghost small" title="Refresh" aria-label="Refresh" disabled={loading} onclick={load}
       ><Icon name="refresh" size={14} /></button
     >
   </div>
   {#if error}<div class="alert small">{error}</div>{/if}
-  <div role="tree" aria-label="Politiques">
+  <div role="tree" aria-label="Policies">
     {#each policies as p, i (i)}
       <TreeRow
         icon="shield"
@@ -66,7 +66,7 @@
         {#snippet trail()}<StatusBadge status={p.effect} />{/snippet}
       </TreeRow>
     {:else}
-      {#if !loading && !error}<p class="empty pad">Aucune politique.</p>{/if}
+      {#if !loading && !error}<p class="empty pad">No policies.</p>{/if}
     {/each}
   </div>
 </div>

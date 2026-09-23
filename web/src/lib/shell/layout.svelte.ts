@@ -1,5 +1,5 @@
-// État de la disposition : outils actifs, tailles et repli des panneaux,
-// thème. Persisté dans localStorage.
+// Layout state: active tools, panel sizes and collapse, theme. Persisted
+// in localStorage.
 import { load, save } from './storage';
 
 const KEY = 'goap.ide.layout';
@@ -50,7 +50,7 @@ $effect.root(() => {
   });
 });
 
-/** Clic sur une icône de la barre d'activité : sélectionne l'outil ou replie le panneau. */
+/** Click on an activity bar icon: selects the tool or collapses the panel. */
 export function toggleTool(side: 'left' | 'right', id: string): void {
   if (side === 'left') {
     if (layout.left === id && layout.leftOpen) layout.leftOpen = false;

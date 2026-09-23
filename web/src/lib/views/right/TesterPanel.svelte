@@ -1,11 +1,11 @@
 <script lang="ts" module>
-  // Conservé quand le panneau est fermé puis rouvert.
+  // Kept when the panel is closed then reopened.
   const session = $state({ recent: [] as string[], intent: '' });
 </script>
 
 <script lang="ts">
-  // Outil « Tester » : envoie une intention (StartProcess) et affiche le
-  // résultat de l'identification (candidats, question de clarification).
+  // "Tester" tool: sends an intent (StartProcess) and displays the
+  // identification result (candidates, clarification question).
   import Icon from '../../shell/Icon.svelte';
   import StatusBadge from '../../components/StatusBadge.svelte';
   import IntentDialogue from '../editors/IntentDialogue.svelte';
@@ -22,7 +22,7 @@
   import { focusRequests } from '../../shell/workbench.svelte';
 
   let methodology = $state('');
-  /** « méthodologie::agent » */
+  /** "methodology::agent" */
   let agentKey = $state('');
   let baselineId = $state('');
   let goal = $state('');
@@ -51,7 +51,7 @@
   );
   const goals = $derived(published.find((m) => m.name === methodology)?.goals ?? []);
 
-  // Valeurs par défaut et cohérence des sélections.
+  // Default values and consistency of selections.
   $effect(() => {
     if (!baselineId && baselines.items.length) baselineId = baselines.items[baselines.items.length - 1].id ?? '';
   });
@@ -102,9 +102,9 @@
 <div class="tester">
   <form onsubmit={submit}>
     <div class="field">
-      <label for="t-meth">Méthodologie</label>
+      <label for="t-meth">Methodology</label>
       <select id="t-meth" bind:value={methodology}>
-        <option value="">Toutes (identification automatique)</option>
+        <option value="">All (automatic identification)</option>
         {#each published as m (m.name)}
           <option value={m.name}>{m.name} (v{m.version})</option>
         {/each}
@@ -113,7 +113,7 @@
     <div class="field">
       <label for="t-agent">Agent</label>
       <select id="t-agent" bind:value={agentKey}>
-        <option value="">Identifié à partir de l'intention</option>
+        <option value="">Identified from the intent</option>
         {#each agents as x (x.key)}
           <option value={x.key} title={x.a.description}>{methodology ? '' : `${x.m} / `}{x.a.name}{x.a.planner ? ` · ${x.a.planner}` : ''}</option>
         {/each}
@@ -121,62 +121,62 @@
     </div>
     {#if methodology && goals.length}
       <div class="field">
-        <label for="t-goal">Objectif</label>
+        <label for="t-goal">Goal</label>
         <select id="t-goal" bind:value={goal}>
-          <option value="">Déduit de l'intention</option>
+          <option value="">Inferred from the intent</option>
           {#each goals as g (g.name)}<option value={g.name} title={g.description}>{g.name}</option>{/each}
         </select>
       </div>
     {/if}
     <div class="field">
-      <label for="t-base">Référentiel</label>
+      <label for="t-base">Baseline</label>
       <select id="t-base" bind:value={baselineId}>
-        {#if !baselines.items.length}<option value="">— aucun —</option>{/if}
+        {#if !baselines.items.length}<option value="">— none —</option>{/if}
         {#each [...baselines.items].reverse() as b (b.id)}<option value={b.id}>{b.name || shortId(b.id)}</option>{/each}
       </select>
     </div>
     <div class="field">
-      <label for="t-title">Titre du changement <span class="opt">(facultatif)</span></label>
+      <label for="t-title">Change title <span class="opt">(optional)</span></label>
       <input id="t-title" type="text" bind:value={title} />
     </div>
     <div class="field">
-      <label for="t-intent">Intention</label>
+      <label for="t-intent">Intent</label>
       <textarea
         id="t-intent"
         bind:this={textarea}
         rows="5"
         bind:value={session.intent}
         onkeydown={keydown}
-        placeholder="Ex. : la durée de session passe de 30 à 15 minutes, quel est l'impact ?"
+        placeholder="E.g.: session duration goes from 30 to 15 minutes, what's the impact?"
       ></textarea>
-      <div class="hint">Ctrl+Entrée pour envoyer.</div>
+      <div class="hint">Ctrl+Enter to send.</div>
     </div>
     {#if methodologies.error}<div class="alert">{methodologies.error}</div>{/if}
     {#if methodologies.loaded && !published.length}
-      <div class="alert info">Aucune méthodologie publiée : publiez-en une pour pouvoir l'exécuter.</div>
+      <div class="alert info">No methodology published: publish one to be able to run it.</div>
     {/if}
     {#if error}<div class="alert">{error}</div>{/if}
     <button class="primary send" type="submit" disabled={!canSubmit}>
-      <Icon name="send" size={14} />{submitting ? 'Envoi…' : 'Envoyer'}
+      <Icon name="send" size={14} />{submitting ? 'Sending…' : 'Send'}
     </button>
   </form>
 
   {#if last}
     <section class="result">
       <div class="row">
-        <strong class="grow">Résultat</strong>
+        <strong class="grow">Result</strong>
         <StatusBadge status={last.status} />
       </div>
       <dl class="meta">
-        <dt>Processus</dt>
+        <dt>Process</dt>
         <dd><button type="button" class="link mono" onclick={() => openTab({ kind: 'run', params: { id: last.id ?? '' } }, { pin: true })}>{shortId(last.id)}</button></dd>
-        {#if last.methodology}<dt>Méthodologie</dt><dd>{last.methodology}</dd>{/if}
+        {#if last.methodology}<dt>Methodology</dt><dd>{last.methodology}</dd>{/if}
         {#if last.agent}<dt>Agent</dt><dd><code>{last.agent}</code></dd>{/if}
-        {#if last.goal}<dt>Objectif</dt><dd><code>{last.goal}</code></dd>{/if}
+        {#if last.goal}<dt>Goal</dt><dd><code>{last.goal}</code></dd>{/if}
       </dl>
       {#if last.candidates?.length && last.status !== 'clarifying'}
         <table class="cands">
-          <thead><tr><th>Agent</th><th>Objectif</th><th class="num">Confiance</th></tr></thead>
+          <thead><tr><th>Agent</th><th>Goal</th><th class="num">Confidence</th></tr></thead>
           <tbody>
             {#each last.candidates as c, i (i)}
               <tr title={c.reason}>
@@ -197,7 +197,7 @@
 
   {#if session.recent.length > 1}
     <section class="recent">
-      <h3>Tests récents</h3>
+      <h3>Recent tests</h3>
       <ul>
         {#each session.recent.slice(1) as id (id)}
           {@const p = processes.get(id)}

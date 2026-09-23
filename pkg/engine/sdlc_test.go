@@ -17,25 +17,26 @@ import (
 	"github.com/zimwip/goap/pkg/methodology"
 )
 
-// sdlcModel answers the LLM actions of methodologies/sdlc.yaml.
+// sdlcModel answers the LLM actions of methodologies/sdlc.yaml. The matched
+// substrings come from the prompt templates in methodologies/sdlc.yaml.
 func sdlcModel(t *testing.T) llm.Client {
 	return llm.ClientFunc(func(_ context.Context, req llm.Request) (llm.Response, error) {
 		p := req.Messages[0].Content
 		var out string
 		switch {
-		case strings.Contains(p, "DIRECTEMENT concernés"):
-			out = `{"items":[{"kind":"impact","type":"direct","target":"NEED-1","data":{"reason":"nouveau mode de paiement"}},
-			{"kind":"impact","type":"direct","target":"REQ-1","data":{"reason":"le PSP doit gérer le paiement fractionné"}}]}`
-		case strings.Contains(p, "Révise les exigences"):
-			out = `{"items":[{"kind":"proposal","proposal":{"op":"update_node","node":{"base":"REQ-1","props":{"title":"Le paiement carte (comptant ou 3 fois) passe par le PSP Acme (API v2)"}}}},
-			{"ref":"r1","kind":"proposal","proposal":{"op":"create_node","node":{"key":"REQ-10","type":"FunctionalRequirement","props":{"title":"Payer en 3 fois sans frais","priority":"high"}}}},
+		case strings.Contains(p, "DIRECTLY concerned"):
+			out = `{"items":[{"kind":"impact","type":"direct","target":"NEED-1","data":{"reason":"new payment method"}},
+			{"kind":"impact","type":"direct","target":"REQ-1","data":{"reason":"the PSP must handle split payments"}}]}`
+		case strings.Contains(p, "Revise the impacted requirements"):
+			out = `{"items":[{"kind":"proposal","proposal":{"op":"update_node","node":{"base":"REQ-1","props":{"title":"Card payment (in full or in 3 installments) goes through the Acme PSP (API v2)"}}}},
+			{"ref":"r1","kind":"proposal","proposal":{"op":"create_node","node":{"key":"REQ-10","type":"FunctionalRequirement","props":{"title":"Pay in 3 installments with no fees","priority":"high"}}}},
 			{"kind":"proposal","proposal":{"op":"add_link","link":{"type":"satisfies","from":"#r1","to":"NEED-1"}}}]}`
-		case strings.Contains(p, "Conçois l'évolution"):
+		case strings.Contains(p, "Design the evolution"):
 			out = `{"items":[{"ref":"c1","kind":"proposal","proposal":{"op":"create_node","node":{"key":"CMP-10","type":"Component","props":{"title":"installments-engine","technology":"java","version":"0.0.0"}}}},
 			{"kind":"proposal","proposal":{"op":"add_link","link":{"type":"implements","from":"#c1","to":"FCT-1"}}},
-			{"kind":"artifact","type":"design","data":{"summary":"moteur d'échéancier dédié","decisions":["nouveau composant Java"]}}]}`
-		case strings.Contains(p, "Rédige la note de version"):
-			out = `{"items":[{"kind":"artifact","type":"release_note","data":{"markdown":"# Paiement en 3 fois"}}]}`
+			{"kind":"artifact","type":"design","data":{"summary":"dedicated installment scheduling engine","decisions":["new Java component"]}}]}`
+		case strings.Contains(p, "Write the release note"):
+			out = `{"items":[{"kind":"artifact","type":"release_note","data":{"markdown":"# Payment in 3 installments"}}]}`
 		default:
 			t.Errorf("unexpected prompt:\n%s", p)
 		}
@@ -84,7 +85,7 @@ func TestSDLCDelivery(t *testing.T) {
 		Authz:  authorizer,
 	}
 	p, err := e.Start(ctx, engine.StartRequest{Methodology: "sdlc", Agent: "delivery", Goal: "deliver", BaselineID: bs[0].ID,
-		Title: "Paiement en 3 fois", Intent: "Permettre le paiement en 3 fois sans frais"})
+		Title: "Payment in 3 installments", Intent: "Allow payment in 3 installments with no fees"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -136,7 +137,7 @@ func TestSDLCDelivery(t *testing.T) {
 	if _, err := e.Approve(approver, p.ID, true, ""); err == nil {
 		t.Fatal("an approver is not a release manager")
 	}
-	if p, err = e.Approve(rm, p.ID, true, "fenêtre du jeudi"); err != nil {
+	if p, err = e.Approve(rm, p.ID, true, "Thursday window"); err != nil {
 		t.Fatal(err)
 	}
 	// the change itself is applied by an approver (four-eyes)

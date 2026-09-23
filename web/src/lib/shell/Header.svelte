@@ -1,6 +1,6 @@
 <script lang="ts">
-  // En-tête : produit, recherche / palette de commandes, état du flux,
-  // menu utilisateur (jeton d'accès, thème).
+  // Header: product, search / command palette, stream status,
+  // user menu (access token, theme).
   import Icon, { type IconName } from './Icon.svelte';
   import { COMMANDS } from './commands';
   import { layout } from './layout.svelte';
@@ -12,7 +12,7 @@
   import { methodologies, baselines, changes } from '../stores/catalog.svelte';
   import { live, processes } from '../stores/live.svelte';
 
-  // --- recherche -------------------------------------------------------------------
+  // --- search -------------------------------------------------------------------
 
   interface Result {
     key: string;
@@ -39,7 +39,7 @@
       return COMMANDS.filter((c) => !q || match(c.label, q)).map((c) => ({
         key: `cmd:${c.id}`,
         label: c.label,
-        detail: c.shortcut ?? 'commande',
+        detail: c.shortcut ?? 'command',
         icon: c.icon ?? 'code',
         run: c.run,
       }));
@@ -50,7 +50,7 @@
       const v = editorView(t.kind);
       const label = v?.tabTitle(t) ?? t.id;
       if (!q || match(`${label} ${v?.title ?? ''}`, q))
-        out.push({ key: `tab:${t.id}`, label, detail: 'onglet ouvert', icon: v?.tabIcon?.(t) ?? v?.icon ?? 'file', run: () => activate(t.id) });
+        out.push({ key: `tab:${t.id}`, label, detail: 'open tab', icon: v?.tabIcon?.(t) ?? v?.icon ?? 'file', run: () => activate(t.id) });
     }
     if (!q) return out.slice(0, 30);
     for (const m of methodologies.items) {
@@ -59,7 +59,7 @@
         out.push({
           key: `m:${label}`,
           label,
-          detail: `méthodologie · ${m.status}`,
+          detail: `methodology · ${m.status}`,
           icon: 'book',
           run: () => openTab({ kind: 'methodology', params: { name: m.name ?? '', version: m.version ?? '' } }),
         });
@@ -75,12 +75,12 @@
           });
     }
     for (const p of processes.values()) {
-      const label = p.title || `Exécution ${shortId(p.id)}`;
+      const label = p.title || `Run ${shortId(p.id)}`;
       if (match(`${label} ${p.id} ${p.agent ?? ''} ${p.goal ?? ''} ${p.methodology ?? ''}`, q))
         out.push({
           key: `p:${p.id}`,
           label,
-          detail: `exécution · ${p.status}${p.agent ? ` · ${p.agent}` : ''}`,
+          detail: `run · ${p.status}${p.agent ? ` · ${p.agent}` : ''}`,
           icon: 'runs',
           run: () => openTab({ kind: 'run', params: { id: p.id ?? '' } }),
         });
@@ -90,7 +90,7 @@
         out.push({
           key: `b:${b.id}`,
           label: b.name || shortId(b.id),
-          detail: 'référentiel',
+          detail: 'baseline',
           icon: 'database',
           run: () => openTab({ kind: 'baseline', params: { id: b.id ?? '' } }),
         });
@@ -99,7 +99,7 @@
         out.push({
           key: `c:${c.id}`,
           label: c.title || shortId(c.id),
-          detail: `changement · ${c.status}`,
+          detail: `change · ${c.status}`,
           icon: 'diff',
           run: () => openTab({ kind: 'change', params: { id: c.id ?? '' } }),
         });
@@ -139,7 +139,7 @@
     e.preventDefault();
   }
 
-  // --- utilisateur ---------------------------------------------------------------------
+  // --- user ---------------------------------------------------------------------
 
   let menuOpen = $state(false);
   let tokenDraft = $state('');
@@ -167,10 +167,10 @@
   }
 
   const STREAM_LABEL: Record<string, string> = {
-    open: 'Flux en direct connecté',
-    connecting: 'Flux en direct : en attente d’événements',
-    retrying: 'Flux interrompu — reconnexion…',
-    stopped: 'Flux arrêté',
+    open: 'Live stream connected',
+    connecting: 'Live stream: waiting for events',
+    retrying: 'Stream interrupted — reconnecting…',
+    stopped: 'Stream stopped',
   };
 
   function outside(node: HTMLElement) {
@@ -183,7 +183,7 @@
 </script>
 
 <header class="header">
-  <div class="brand"><span class="logo" aria-hidden="true">◆</span> GOAP <span class="sub">Atelier</span></div>
+  <div class="brand"><span class="logo" aria-hidden="true">◆</span> GOAP <span class="sub">Workshop</span></div>
 
   <div class="search">
     <span class="sicon"><Icon name="search" size={14} /></span>
@@ -194,8 +194,8 @@
       aria-expanded={open && results.length > 0}
       aria-controls="search-results"
       aria-autocomplete="list"
-      aria-label="Rechercher un objet ou une commande"
-      placeholder="Rechercher (Ctrl+P) — « > » pour les commandes"
+      aria-label="Search for an object or a command"
+      placeholder="Search (Ctrl+P) — '&gt;' for commands"
       bind:value={query}
       onfocus={() => (open = true)}
       onblur={() => setTimeout(() => (open = false), 150)}
@@ -227,37 +227,37 @@
   <div class="right">
     <span class="stream {live.status}" title={`${STREAM_LABEL[live.status]}${live.error ? ` : ${live.error}` : ''}`}>
       <span class="led" aria-hidden="true"></span>
-      <span class="sl">{live.status === 'retrying' ? 'reconnexion' : live.status === 'stopped' ? 'hors ligne' : 'en direct'}</span>
+      <span class="sl">{live.status === 'retrying' ? 'reconnecting' : live.status === 'stopped' ? 'offline' : 'live'}</span>
     </span>
     <div class="user" use:outside>
       <button type="button" class="ghost ubtn" aria-haspopup="true" aria-expanded={menuOpen} onclick={toggleMenu}>
         <Icon name="user" size={15} />
-        <span class="uname">{principal?.subject || (hasToken ? 'Jeton configuré' : 'Anonyme')}</span>
+        <span class="uname">{principal?.subject || (hasToken ? 'Token configured' : 'Anonymous')}</span>
       </button>
       {#if menuOpen}
-        <div class="menu" role="dialog" aria-label="Utilisateur">
+        <div class="menu" role="dialog" aria-label="User">
           <p class="hint">
             {#if principal?.subject}
-              Connecté : <strong>{principal.subject}</strong>{principal.org ? ` · ${principal.org}` : ''}
-              {#if principal.roles?.length}<br />Rôles : {principal.roles.join(', ')}{/if}
+              Signed in: <strong>{principal.subject}</strong>{principal.org ? ` · ${principal.org}` : ''}
+              {#if principal.roles?.length}<br />Roles: {principal.roles.join(', ')}{/if}
             {:else}
-              {session.error || 'Aucune identité.'}
+              {session.error || 'No identity.'}
             {/if}
           </p>
           <form onsubmit={saveToken}>
-            <label for="token">Jeton d'accès (Bearer)</label>
-            <input id="token" type="password" bind:value={tokenDraft} autocomplete="off" placeholder="jeton…" />
+            <label for="token">Access token (Bearer)</label>
+            <input id="token" type="password" bind:value={tokenDraft} autocomplete="off" placeholder="token…" />
             <div class="row" style="margin-top: 0.4rem">
-              <button class="small primary" type="submit">Enregistrer</button>
-              {#if hasToken}<button class="small" type="button" onclick={clearToken}>Retirer</button>{/if}
+              <button class="small primary" type="submit">Save</button>
+              {#if hasToken}<button class="small" type="button" onclick={clearToken}>Remove</button>{/if}
             </div>
           </form>
           <div class="theme">
-            <label for="theme">Thème</label>
+            <label for="theme">Theme</label>
             <select id="theme" bind:value={layout.theme}>
-              <option value="auto">Système</option>
-              <option value="light">Clair</option>
-              <option value="dark">Sombre</option>
+              <option value="auto">System</option>
+              <option value="light">Light</option>
+              <option value="dark">Dark</option>
             </select>
           </div>
         </div>

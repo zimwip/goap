@@ -1,6 +1,6 @@
 <script lang="ts">
-  // Outil « Propriétés » : détails de l'objet sélectionné (explorateurs) ou,
-  // à défaut, de l'onglet actif.
+  // "Properties" tool: details of the selected object (explorers) or,
+  // failing that, the active tab.
   import { selection } from '../../shell/workbench.svelte';
   import { activeTab } from '../../shell/tabs.svelte';
   import { editorView } from '../../shell/registry';
@@ -23,10 +23,10 @@
       {/each}
     </dl>
     {#if selection.current && fromTab}
-      <button type="button" class="small" onclick={() => (selection.current = undefined)}>Afficher l'onglet actif</button>
+      <button type="button" class="small" onclick={() => (selection.current = undefined)}>Show active tab</button>
     {/if}
   {:else}
-    <p class="empty">Sélectionnez un objet dans un explorateur.</p>
+    <p class="empty">Select an object in an explorer.</p>
   {/if}
 </div>
 

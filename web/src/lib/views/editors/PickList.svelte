@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Sélection multiple par cases à cocher ; liste vide = « tous ».
+  // Multi-select via checkboxes; empty list = "all".
   let {
     selected = $bindable(),
     options,
@@ -12,7 +12,7 @@
   }: {
     selected: string[];
     options: string[];
-    /** libellé de l'état « liste vide » */
+    /** label for the "empty list" state */
     allLabel: string;
     label: string;
     path: string;
@@ -40,12 +40,12 @@
     </span>
     <span class="grow"></span>
     {#if !readonly}
-      <button type="button" class="small ghost" disabled={selected.length === 0} onclick={() => (selected = [])}>Tous (vide)</button>
-      <button type="button" class="small ghost" onclick={() => (selected = [...options])}>Tout cocher</button>
+      <button type="button" class="small ghost" disabled={selected.length === 0} onclick={() => (selected = [])}>All (empty)</button>
+      <button type="button" class="small ghost" onclick={() => (selected = [...options])}>Check all</button>
     {/if}
   </div>
   {#if options.length > 8}
-    <input type="search" class="filter" placeholder="Filtrer…" aria-label={`Filtrer : ${label}`} bind:value={filter} data-no-pin />
+    <input type="search" class="filter" placeholder="Filter…" aria-label={`Filter: ${label}`} bind:value={filter} data-no-pin />
   {/if}
   <div class="list" role="group" aria-label={label}>
     {#each shown as o (o)}
@@ -56,13 +56,13 @@
         {#if details[o]}<span class="hint">{details[o]}</span>{/if}
       </label>
     {:else}
-      <p class="empty">Aucun élément.</p>
+      <p class="empty">No items.</p>
     {/each}
     {#each unknown as u (u)}
       <label class="opt bad">
         <input type="checkbox" checked disabled={readonly} onchange={() => toggle(u, false)} />
         <code>{u}</code>
-        <span class="hint">inconnu — décochez pour retirer</span>
+        <span class="hint">unknown — uncheck to remove</span>
       </label>
     {/each}
   </div>

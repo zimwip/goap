@@ -27,7 +27,7 @@ type recordingHost struct {
 func (h *recordingHost) add(s string) { h.mu.Lock(); h.calls = append(h.calls, s); h.mu.Unlock() }
 func (h *recordingHost) Complete(_ context.Context, r dsl.CompleteRequest) (dsl.CompleteResult, error) {
 	h.add("llm:" + r.Prompt)
-	return dsl.CompleteResult{Text: "résumé", InputTokens: 5, OutputTokens: 2}, nil
+	return dsl.CompleteResult{Text: "summary", InputTokens: 5, OutputTokens: 2}, nil
 }
 func (h *recordingHost) RunAgent(_ context.Context, name, _ string) (dsl.AgentResult, error) {
 	h.add("agent:" + name)
@@ -86,20 +86,20 @@ func runtimeServer(t *testing.T) (*Runtime, string) {
 
 const script = `
 const n = ctx.node("REQ-1");
-const r = ctx.complete({ prompt: "résume " + n.key });
+const r = ctx.complete({ prompt: "summarize " + n.key });
 ctx.addArtifact("summary", { text: r.text, tokens: r.inputTokens });
 ctx.log("done " + n.type);
 `
 
 func checkResult(t *testing.T, res dsl.Result, h *recordingHost) {
 	t.Helper()
-	if len(res.Items) != 1 || res.Items[0]["type"] != "summary" || res.Items[0]["data"].(map[string]any)["text"] != "résumé" {
+	if len(res.Items) != 1 || res.Items[0]["type"] != "summary" || res.Items[0]["data"].(map[string]any)["text"] != "summary" {
 		t.Fatalf("unexpected items %+v", res.Items)
 	}
 	if len(res.Logs) != 1 || res.Logs[0].Message != "done Requirement" {
 		t.Fatalf("logs %+v", res.Logs)
 	}
-	if strings.Join(h.calls, ",") != "node:REQ-1,llm:résume REQ-1" {
+	if strings.Join(h.calls, ",") != "node:REQ-1,llm:summarize REQ-1" {
 		t.Fatalf("host calls %v", h.calls)
 	}
 }

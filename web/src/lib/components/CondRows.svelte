@@ -1,6 +1,6 @@
 <script lang="ts">
-  // Édition d'une map de conditions (pre / effects) sous forme de lignes :
-  // condition + valeur attendue (vrai / faux).
+  // Editing a map of conditions (pre / effects) as rows:
+  // condition + expected value (true / false).
   import type { CondRow } from '../methodologyForm';
   import RowTools from './RowTools.svelte';
   import { moveItem } from '../methodologyForm';
@@ -15,7 +15,7 @@
   }: {
     rows: CondRow[];
     options: string[];
-    /** chemin des problèmes, ex. « actions[0].pre » */
+    /** path of the issues, e.g. "actions[0].pre" */
     path: string;
     label: string;
     bad: (path: string, exact?: boolean) => boolean;
@@ -34,9 +34,9 @@
   <div class="label">{label}</div>
   {#each rows as row, i}
     <div class="crow" class:bad={!!row.cond && bad(`${path}.${row.cond}`)}>
-      <select bind:value={row.cond} aria-label={`${label} : condition`} data-path={`${path}.${row.cond}`}>
+      <select bind:value={row.cond} aria-label={`${label}: condition`} data-path={`${path}.${row.cond}`}>
         {#if !row.cond}<option value="">— condition —</option>{/if}
-        {#if row.cond && !options.includes(row.cond)}<option value={row.cond}>{row.cond} (inconnue)</option>{/if}
+        {#if row.cond && !options.includes(row.cond)}<option value={row.cond}>{row.cond} (unknown)</option>{/if}
         {#each options as o (o)}
           <option value={o} disabled={o !== row.cond && used.has(o)}>{o}</option>
         {/each}
@@ -46,21 +46,21 @@
         class="small toggle"
         class:on={row.value}
         aria-pressed={row.value}
-        title="Valeur attendue (cliquer pour inverser)"
-        onclick={() => (row.value = !row.value)}>{row.value ? 'vrai' : 'faux'}</button
+        title="Expected value (click to toggle)"
+        onclick={() => (row.value = !row.value)}>{row.value ? 'true' : 'false'}</button
       >
       {#if !readonly}
         <RowTools
           index={i}
           count={rows.length}
-          label="la condition"
+          label="the condition"
           onmove={(d) => moveItem(rows, i, d)}
           onremove={() => rows.splice(i, 1)}
         />
       {/if}
     </div>
   {:else}
-    <div class="empty">Aucune condition.</div>
+    <div class="empty">No conditions.</div>
   {/each}
   {#if !readonly}
     <button type="button" class="small add" onclick={add}>+ condition</button>

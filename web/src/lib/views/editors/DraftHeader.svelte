@@ -1,5 +1,5 @@
 <script lang="ts">
-  // En-tête commun des onglets d'un brouillon : fil d'Ariane, statut, erreurs.
+  // Common header for a draft's tabs: breadcrumb, status, errors.
   import Icon, { type IconName } from '../../shell/Icon.svelte';
   import StatusBadge from '../../components/StatusBadge.svelte';
   import { openTab } from '../../shell/tabs.svelte';
@@ -17,7 +17,7 @@
 
 <div class="crumbs">
   {#if draft.isNew}
-    <span>Nouvelle méthodologie</span>
+    <span>New methodology</span>
   {:else}
     <button type="button" class="link" onclick={() => openTab(methodologySpec(draft.name, draft.version))}>{draft.label}</button>
   {/if}
@@ -28,14 +28,14 @@
   <Icon name={icon} size={18} />
   <h2>{title}</h2>
   <StatusBadge status={draft.status} />
-  {#if dirty}<span class="dirty" title="Modifications non enregistrées">● modifié</span>{/if}
+  {#if dirty}<span class="dirty" title="Unsaved changes">● modified</span>{/if}
 </div>
 {#if draft.error}<div class="alert">{draft.error}</div>{/if}
 {#if draft.readonly && !draft.loading}
   <div class="alert info">
     {draft.status === 'published'
-      ? 'Version publiée : elle est immuable. Créez une nouvelle version pour la modifier.'
-      : 'Version archivée : lecture seule.'}
+      ? 'Published version: it is immutable. Create a new version to modify it.'
+      : 'Archived version: read-only.'}
   </div>
 {/if}
 

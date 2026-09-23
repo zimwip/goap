@@ -16,7 +16,7 @@
       const res = await engine.approveAction(process.id, approve, comment.trim());
       if (res.process) ondecided(res.process);
     } catch (err) {
-      // PermissionDenied : l'utilisateur courant n'a pas la permission requise
+      // PermissionDenied: the current user does not have the required permission
       error = errorMessage(err);
     } finally {
       busy = false;
@@ -25,20 +25,20 @@
 </script>
 
 <section class="card approval">
-  <h3>Approbation requise</h3>
+  <h3>Approval required</h3>
   <p>
-    L'action <code>{task?.action}</code> nécessite la permission <code>{task?.permission}</code>, que
-    l'initiateur du processus ne possède pas. Une personne habilitée doit l'approuver.
+    Action <code>{task?.action}</code> requires permission <code>{task?.permission}</code>, which
+    the process initiator does not have. An authorized person must approve it.
   </p>
   {#if task?.description}<p class="hint">{task.description}</p>{/if}
   <label class="field">
-    <span>Commentaire (facultatif)</span>
+    <span>Comment (optional)</span>
     <textarea rows="2" bind:value={comment}></textarea>
   </label>
   {#if error}<div class="alert">{error}</div>{/if}
   <div class="row">
-    <button class="primary" disabled={busy} onclick={() => decide(true)}>Approuver et exécuter</button>
-    <button disabled={busy} onclick={() => decide(false)}>Refuser</button>
+    <button class="primary" disabled={busy} onclick={() => decide(true)}>Approve and run</button>
+    <button disabled={busy} onclick={() => decide(false)}>Reject</button>
   </div>
 </section>
 

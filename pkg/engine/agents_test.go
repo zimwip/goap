@@ -37,7 +37,7 @@ func agentsSetup(t *testing.T) (*Engine, domain.BaselineID) {
 	statics["test-design"] = loadMethodology(t, "test-design.yaml")
 	e.Executors[methodology.KindScript] = ScriptExecutor{Sandboxes: InprocSandboxes{}}
 	e.LLM = llm.ClientFunc(func(_ context.Context, r llm.Request) (llm.Response, error) {
-		return llm.Response{Text: "Campagne de test.", Provider: "test", Model: r.Model, Usage: llm.Usage{InputTokens: 42, OutputTokens: 7}}, nil
+		return llm.Response{Text: "Test campaign.", Provider: "test", Model: r.Model, Usage: llm.Usage{InputTokens: 42, OutputTokens: 7}}, nil
 	})
 	e.Schedule = func(id string) { e.background(func() { _, _ = e.Run(context.Background(), id) }) }
 	return e, base
@@ -46,7 +46,9 @@ func agentsSetup(t *testing.T) (*Engine, domain.BaselineID) {
 func TestIdentifyAgentAcrossMethodologies(t *testing.T) {
 	ctx := context.Background()
 	e, base := agentsSetup(t)
-	p, err := e.Start(ctx, StartRequest{BaselineID: base, Intent: "préparer et valider la campagne de tests"})
+	// the intent text deliberately echoes the coordinator's example phrase
+	// in methodologies/test-design.yaml.
+	p, err := e.Start(ctx, StartRequest{BaselineID: base, Intent: "prepare and validate the test campaign"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,7 +63,7 @@ func TestIdentifyAgentAcrossMethodologies(t *testing.T) {
 func TestScriptAgentWithLLMUsage(t *testing.T) {
 	ctx := context.Background()
 	e, base := agentsSetup(t)
-	p, err := e.Start(ctx, StartRequest{Methodology: "test-design", Agent: "test-designer", BaselineID: base, Intent: "concevoir les cas de test"})
+	p, err := e.Start(ctx, StartRequest{Methodology: "test-design", Agent: "test-designer", BaselineID: base, Intent: "design the test cases"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,7 +85,9 @@ func TestScriptAgentWithLLMUsage(t *testing.T) {
 	if p.Usage.InputTokens != 42 || p.Usage.OutputTokens != 7 || p.Usage.LLMCalls != 1 {
 		t.Fatalf("process usage %+v", p.Usage)
 	}
-	if len(p.Steps[0].Logs) != 1 || !strings.Contains(p.Steps[0].Logs[0].Message, "exigence") {
+	// "requirement" is logged by the collect_scope script in
+	// methodologies/test-design.yaml.
+	if len(p.Steps[0].Logs) != 1 || !strings.Contains(p.Steps[0].Logs[0].Message, "requirement") {
 		t.Fatalf("script logs not recorded: %+v", p.Steps[0].Logs)
 	}
 }
@@ -92,7 +96,7 @@ func TestSubAgentsWithSuspension(t *testing.T) {
 	ctx := context.Background()
 	e, base := agentsSetup(t)
 	p, err := e.Start(ctx, StartRequest{Methodology: "test-design", Agent: "coordinator", BaselineID: base,
-		Intent: "préparer et valider la campagne de tests", Vars: map[string]any{"review": "human"}})
+		Intent: "prepare and validate the test campaign", Vars: map[string]any{"review": "human"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -135,9 +139,9 @@ func TestSubAgentsWithSuspension(t *testing.T) {
 func TestUtilityPlannerAutoReview(t *testing.T) {
 	ctx := context.Background()
 	e, base := agentsSetup(t)
-	d, _ := e.Start(ctx, StartRequest{Methodology: "test-design", Agent: "test-designer", BaselineID: base, Intent: "concevoir"})
+	d, _ := e.Start(ctx, StartRequest{Methodology: "test-design", Agent: "test-designer", BaselineID: base, Intent: "design"})
 	d, _ = e.Run(ctx, d.ID)
-	r, err := e.Start(ctx, StartRequest{Methodology: "test-design", Agent: "reviewer", ChangeID: d.ChangeID, Intent: "revoir"})
+	r, err := e.Start(ctx, StartRequest{Methodology: "test-design", Agent: "reviewer", ChangeID: d.ChangeID, Intent: "review"})
 	if err != nil {
 		t.Fatal(err)
 	}

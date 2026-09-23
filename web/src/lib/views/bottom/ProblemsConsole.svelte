@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Console « Problèmes » : validation du brouillon de l'onglet actif.
+  // "Problems" console: validation of the active tab's draft.
   import Icon from '../../shell/Icon.svelte';
   import { activeDraft } from './activeDraft';
   import { revealIssue } from '../editors/methodologyTabs';
@@ -7,9 +7,9 @@
 
   const d = $derived(activeDraft());
 
-  const SINGULAR: Record<Section, string> = { agents: 'Agent', actions: 'Action', conditions: 'Condition', goals: 'Objectif' };
+  const SINGULAR: Record<Section, string> = { agents: 'Agent', actions: 'Action', conditions: 'Condition', goals: 'Goal' };
 
-  /** « actions[2].pre.x » → « Action identify › pre.x ». */
+  /** "actions[2].pre.x" → "Action identify › pre.x". */
   function where(path: string): string {
     if (!d) return path;
     const m = /^(agents|actions|conditions|goals)\[(\d+)\]\.?(.*)$/.exec(path);
@@ -18,8 +18,8 @@
       const it = d.items(section)[Number(m[2])];
       return `${SINGULAR[section]} ${it?.name || `#${Number(m[2]) + 1}`}${m[3] ? ` › ${m[3]}` : ''}`;
     }
-    if (/^(nodeTypes|linkTypes)/.test(path)) return `Domaine › ${path}`;
-    return path ? `Méthodologie › ${path}` : 'Méthodologie';
+    if (/^(nodeTypes|linkTypes)/.test(path)) return `Domain › ${path}`;
+    return path ? `Methodology › ${path}` : 'Methodology';
   }
 
   const stale = $derived(!!d && d.issues !== null && d.validatedAt !== d.current);
@@ -29,22 +29,22 @@
   {#if d}
     <strong>{d.label}</strong>
     {#if d.readonly}
-      <span class="hint">version {d.status === 'published' ? 'publiée' : 'archivée'} — validation inutile</span>
+      <span class="hint">{d.status === 'published' ? 'published' : 'archived'} version — validation not needed</span>
     {:else if d.issues === null && !d.localIssues.length}
-      <span class="hint">pas encore validé</span>
+      <span class="hint">not yet validated</span>
     {:else if stale}
-      <span class="hint">validation en attente (modifications en cours)…</span>
+      <span class="hint">validation pending (changes in progress)…</span>
     {:else}
-      <span class="hint">validé</span>
+      <span class="hint">validated</span>
     {/if}
     <span class="grow"></span>
     {#if !d.readonly && !d.isNew}
       <button type="button" class="small" disabled={!!d.busy} onclick={() => d.validate()}>
-        <Icon name="check" size={12} /> Valider
+        <Icon name="check" size={12} /> Validate
       </button>
     {/if}
   {:else}
-    <span class="hint">Ouvrez une méthodologie (ou un de ses agents, actions…) pour voir ses problèmes.</span>
+    <span class="hint">Open a methodology (or one of its agents, actions…) to see its problems.</span>
   {/if}
 </div>
 <div class="console-scroll">
@@ -63,7 +63,7 @@
         {/each}
       </ul>
     {:else if d.issues !== null}
-      <p class="console-empty ok">Aucun problème détecté.</p>
+      <p class="console-empty ok">No problems detected.</p>
     {/if}
   {/if}
 </div>

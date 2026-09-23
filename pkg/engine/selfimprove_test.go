@@ -38,8 +38,9 @@ func (d *memDrafts) SaveDraft(ctx context.Context, m methodology.Methodology) (m
 func TestSelfObservationProposesAndDrafts(t *testing.T) {
 	ctx := authz.With(context.Background(), authz.Principal{Subject: "mia", Org: "acme", Roles: []string{"methodologist"}})
 	e, g, base := setup(t)
-	// the observed run
-	p, err := e.Start(ctx, StartRequest{Methodology: "impact-analysis", BaselineID: base, Intent: "Le PSP change d'API, qu'est-ce que ça casse ?"})
+	// the observed run; the intent text deliberately echoes the
+	// "assess_impact" goal example in methodologies/impact-analysis.yaml.
+	p, err := e.Start(ctx, StartRequest{Methodology: "impact-analysis", BaselineID: base, Intent: "The PSP changes its API, what does this break?"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,7 +70,7 @@ func TestSelfObservationProposesAndDrafts(t *testing.T) {
 	}
 
 	op, err := e.Start(ctx, StartRequest{Methodology: obs.Name, Agent: "observer", Goal: "improve_methodology", BaselineID: res.Baseline,
-		Intent: "observer", Vars: map[string]any{"event": map[string]any{"process": map[string]any{"id": p.ID}}}})
+		Intent: "observe", Vars: map[string]any{"event": map[string]any{"process": map[string]any{"id": p.ID}}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,7 +98,7 @@ func TestSelfObservationProposesAndDrafts(t *testing.T) {
 		t.Fatalf("report: %+v", report)
 	}
 	joined := strings.Join(titles, " | ")
-	if !strings.Contains(joined, "Spécialiser identify_impacts par un script") {
+	if !strings.Contains(joined, "Specialize identify_impacts with a script") {
 		t.Fatalf("proposals: %s", joined)
 	}
 	if op, err = e.Submit(ctx, op.ID, decisions); err != nil {

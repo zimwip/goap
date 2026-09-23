@@ -1,20 +1,20 @@
-# ADR 0003 — Liens version-à-version, liens sortants portés par la source
+# ADR 0003 — Version-to-version links, outgoing links carried by the source
 
-**Statut** : accepté · **Date** : 2026-09
+**Status**: accepted · **Date**: 2026-09
 
-## Contexte
-Les liens relient des versions exactes. Une baseline doit rester immuable, et un changement sur un
-nœud doit signaler les éléments qui en dépendent.
+## Context
+Links connect exact versions. A baseline must remain immutable, and a change to a
+node must signal the elements that depend on it.
 
-## Décision
-- Un lien appartient à une baseline si ses deux extrémités y sont (aux versions du lien).
-- Les **liens sortants font partie de la version du nœud source** : ajouter ou retirer un lien sortant
-  d'un nœud existant crée une nouvelle version de ce nœud.
-- À l'application d'un changement, un nœud qui change de version **reporte ses liens sortants** ;
-  les liens **entrants** depuis des nœuds non modifiés restent sur l'ancienne version et deviennent
-  **suspects** (`SuspectLinks`) : c'est le signal d'impact natif du modèle.
+## Decision
+- A link belongs to a baseline if both its endpoints are in it (at the link's versions).
+- **Outgoing links are part of the source node's version**: adding or removing an outgoing link
+  of an existing node creates a new version of that node.
+- When a change is applied, a node that changes version **carries its outgoing links forward**;
+  **incoming** links from unmodified nodes stay on the old version and become
+  **suspect** (`SuspectLinks`): this is the model's native impact signal.
 
-## Conséquences
-- Les baselines sont immuables sans stocker explicitement l'ensemble des liens.
-- Un changement de propriété d'une exigence rend suspects ses tests et composants, à revoir dans un
-  changement ultérieur (ou dans le même, en les incluant).
+## Consequences
+- Baselines are immutable without explicitly storing the full set of links.
+- A property change on a requirement makes its tests and components suspect, to be reviewed in a
+  later change (or the same one, by including them).

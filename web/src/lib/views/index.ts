@@ -1,4 +1,4 @@
-// Enregistrement des vues de l'atelier dans le registre du shell.
+// Registration of the workbench's views in the shell's registry.
 import { registerView } from '../shell/registry';
 import type { Tab } from '../shell/types';
 import { formatDate, formatInt, shortId } from '../api';
@@ -38,14 +38,14 @@ import TesterPanel from './right/TesterPanel.svelte';
 import PropertiesPanel from './right/PropertiesPanel.svelte';
 import DslHelpPanel from './right/DslHelpPanel.svelte';
 
-// --- navigation (gauche) -------------------------------------------------------------
+// --- navigation (left) -------------------------------------------------------------
 
 registerView({ id: 'assistant', zone: 'left', title: 'Assistant', icon: 'chat', component: AssistantPanel, order: 0 });
-registerView({ id: 'methodologies', zone: 'left', title: 'Méthodologies', icon: 'book', component: MethodologyExplorer, order: 1 });
+registerView({ id: 'methodologies', zone: 'left', title: 'Methodologies', icon: 'book', component: MethodologyExplorer, order: 1 });
 registerView({
   id: 'runs',
   zone: 'left',
-  title: 'Exécutions',
+  title: 'Runs',
   icon: 'runs',
   component: RunsExplorer,
   order: 2,
@@ -55,19 +55,19 @@ registerView({
     return n || undefined;
   },
 });
-registerView({ id: 'triggers', zone: 'left', title: 'Déclencheurs', icon: 'clock', component: TriggersExplorer, order: 2.5 });
-registerView({ id: 'baselines', zone: 'left', title: 'Référentiel', icon: 'database', component: BaselineExplorer, order: 3 });
-registerView({ id: 'changes', zone: 'left', title: 'Changements', icon: 'diff', component: ChangesExplorer, order: 4 });
-registerView({ id: 'access', zone: 'left', title: 'Accès', icon: 'shield', component: AccessExplorer, order: 5 });
+registerView({ id: 'triggers', zone: 'left', title: 'Triggers', icon: 'clock', component: TriggersExplorer, order: 2.5 });
+registerView({ id: 'baselines', zone: 'left', title: 'Baseline', icon: 'database', component: BaselineExplorer, order: 3 });
+registerView({ id: 'changes', zone: 'left', title: 'Changes', icon: 'diff', component: ChangesExplorer, order: 4 });
+registerView({ id: 'access', zone: 'left', title: 'Access', icon: 'shield', component: AccessExplorer, order: 5 });
 
-// --- console (bas) ---------------------------------------------------------------------
+// --- console (bottom) ---------------------------------------------------------------------
 
-registerView({ id: 'events', zone: 'bottom', title: 'Événements', icon: 'radio', component: EventsConsole, order: 1 });
-registerView({ id: 'logs', zone: 'bottom', title: 'Journaux', icon: 'list', component: LogsConsole, order: 2 });
+registerView({ id: 'events', zone: 'bottom', title: 'Events', icon: 'radio', component: EventsConsole, order: 1 });
+registerView({ id: 'logs', zone: 'bottom', title: 'Logs', icon: 'list', component: LogsConsole, order: 2 });
 registerView({
   id: 'problems',
   zone: 'bottom',
-  title: 'Problèmes',
+  title: 'Issues',
   icon: 'alert',
   component: ProblemsConsole,
   order: 3,
@@ -86,13 +86,13 @@ registerView({
   badge: () => live.tokens.length || undefined,
 });
 
-// --- outils (droite) ---------------------------------------------------------------------
+// --- tools (right) ---------------------------------------------------------------------
 
-registerView({ id: 'tester', zone: 'right', title: 'Tester', icon: 'flask', component: TesterPanel, order: 1 });
-registerView({ id: 'properties', zone: 'right', title: 'Propriétés', icon: 'info', component: PropertiesPanel, order: 2 });
-registerView({ id: 'dsl', zone: 'right', title: 'Aide DSL', icon: 'help', component: DslHelpPanel, order: 3 });
+registerView({ id: 'tester', zone: 'right', title: 'Test', icon: 'flask', component: TesterPanel, order: 1 });
+registerView({ id: 'properties', zone: 'right', title: 'Properties', icon: 'info', component: PropertiesPanel, order: 2 });
+registerView({ id: 'dsl', zone: 'right', title: 'DSL Help', icon: 'help', component: DslHelpPanel, order: 3 });
 
-// --- éditeurs ------------------------------------------------------------------------------
+// --- editors ------------------------------------------------------------------------------
 
 function discardGroup(tab: Tab) {
   const key = draftGroup(tab);
@@ -107,12 +107,12 @@ const groupDirty = (tab: Tab) => peekDraft(draftGroup(tab))?.dirty ?? false;
 registerView({
   id: 'methodology',
   zone: 'editor',
-  title: 'Méthodologie',
+  title: 'Methodology',
   icon: 'book',
   component: MethodologyTab,
   key: (p) => (p.name ? `${p.name}@${p.version}` : 'new'),
-  tabTitle: (t) => (t.params.name ? `${t.params.name} v${t.params.version}` : 'Nouvelle méthodologie'),
-  tooltip: (t) => (t.params.name ? `Méthodologie ${t.params.name} v${t.params.version}` : 'Nouvelle méthodologie'),
+  tabTitle: (t) => (t.params.name ? `${t.params.name} v${t.params.version}` : 'New methodology'),
+  tooltip: (t) => (t.params.name ? `Methodology ${t.params.name} v${t.params.version}` : 'New methodology'),
   dirty: groupDirty,
   groupDirty,
   group: draftGroup,
@@ -122,23 +122,23 @@ registerView({
     if (!d || d.isNew) return undefined;
     return {
       title: d.label,
-      subtitle: 'Méthodologie',
+      subtitle: 'Methodology',
       rows: [
-        ['Statut', d.status],
+        ['Status', d.status],
         ['Description', d.form.description],
         ['Agents', String(d.form.agents.length)],
         ['Actions', String(d.form.actions.length)],
         ['Conditions', String(d.form.conditions.length)],
-        ['Objectifs', String(d.form.goals.length)],
-        ['Problèmes', d.issues === null ? 'non validé' : String(d.allIssues.length)],
-        ['Modifiée', `${formatDate(d.meta.updatedAt)}${d.meta.updatedBy ? ` par ${d.meta.updatedBy}` : ''}`],
-        ['Publiée', formatDate(d.meta.publishedAt)],
+        ['Goals', String(d.form.goals.length)],
+        ['Issues', d.issues === null ? 'not validated' : String(d.allIssues.length)],
+        ['Modified', `${formatDate(d.meta.updatedAt)}${d.meta.updatedBy ? ` by ${d.meta.updatedBy}` : ''}`],
+        ['Published', formatDate(d.meta.publishedAt)],
       ],
     };
   },
 });
 
-const ITEM_TITLES: Record<string, string> = { agent: 'Agent', action: 'Action', condition: 'Condition', goal: 'Objectif' };
+const ITEM_TITLES: Record<string, string> = { agent: 'Agent', action: 'Action', condition: 'Condition', goal: 'Goal' };
 const ITEM_VIEWS = { agent: AgentTab, action: ActionTab, condition: ConditionTab, goal: GoalTab };
 
 for (const kind of ['agent', 'action', 'condition', 'goal'] as const) {
@@ -156,7 +156,7 @@ for (const kind of ['agent', 'action', 'condition', 'goal'] as const) {
     icon: SECTION_ICON[section],
     component: ITEM_VIEWS[kind],
     key: (p) => `${p.m}@${p.v}/${p.uid}`,
-    tabTitle: (t) => itemOf(t)?.item.name || t.params.name || '(sans nom)',
+    tabTitle: (t) => itemOf(t)?.item.name || t.params.name || '(unnamed)',
     tooltip: (t) => `${ITEM_TITLES[kind]} ${itemOf(t)?.item.name || t.params.name || ''} — ${t.params.m} v${t.params.v}`,
     dirty: (t) => {
       const x = itemOf(t);
@@ -170,19 +170,19 @@ for (const kind of ['agent', 'action', 'condition', 'goal'] as const) {
       if (!x) return undefined;
       const it = x.item;
       const rows: [string, string][] = [
-        ['Méthodologie', x.d.label],
+        ['Methodology', x.d.label],
         ['Description', it.description],
       ];
-      if ('planner' in it) rows.push(['Planificateur', it.planner], ['Actions', it.actions.join(', ') || 'toutes'], ['Objectifs', it.goals.join(', ') || 'tous']);
+      if ('planner' in it) rows.push(['Planner', it.planner], ['Actions', it.actions.join(', ') || 'all'], ['Goals', it.goals.join(', ') || 'all']);
       if ('kind' in it) {
         rows.push(['Type', it.kind]);
-        if (it.specializes) rows.push(['Spécialise', it.specializes], ['Garde', it.when], ['Priorité', String(it.priority)]);
-        else rows.push(['Coût', String(it.cost)]);
-        rows.push(['Permission', it.permission], ['Utilité', it.utility]);
+        if (it.specializes) rows.push(['Specializes', it.specializes], ['Guard', it.when], ['Priority', String(it.priority)]);
+        else rows.push(['Cost', String(it.cost)]);
+        rows.push(['Permission', it.permission], ['Utility', it.utility]);
       }
       if ('expr' in it) rows.push(['Expression', it.expr]);
-      if ('value' in it) rows.push(['Valeur', String(it.value)]);
-      return { title: it.name || '(sans nom)', subtitle: ITEM_TITLES[kind], rows };
+      if ('value' in it) rows.push(['Value', String(it.value)]);
+      return { title: it.name || '(unnamed)', subtitle: ITEM_TITLES[kind], rows };
     },
   });
 }
@@ -190,36 +190,36 @@ for (const kind of ['agent', 'action', 'condition', 'goal'] as const) {
 registerView({
   id: 'run',
   zone: 'editor',
-  title: 'Exécution',
+  title: 'Run',
   icon: 'runs',
   component: RunTab,
   key: (p) => p.id ?? '',
   tabTitle: (t) => {
     const p = processes.get(t.params.id ?? '');
-    return p?.title || (p?.agent ? `${p.agent} · ${shortId(p.id)}` : `Exécution ${shortId(t.params.id)}`);
+    return p?.title || (p?.agent ? `${p.agent} · ${shortId(p.id)}` : `Run ${shortId(t.params.id)}`);
   },
   tabIcon: (t) => (processes.get(t.params.id ?? '')?.parentId ? 'bot' : 'runs'),
   tooltip: (t) => {
     const p = processes.get(t.params.id ?? '');
-    return `Exécution ${t.params.id}${p ? ` — ${p.status}` : ''}`;
+    return `Run ${t.params.id}${p ? ` — ${p.status}` : ''}`;
   },
   properties: (t) => {
     const p = processes.get(t.params.id ?? '');
     if (!p) return undefined;
     return {
-      title: p.title || `Exécution ${shortId(p.id)}`,
-      subtitle: 'Exécution',
+      title: p.title || `Run ${shortId(p.id)}`,
+      subtitle: 'Run',
       rows: [
-        ['Identifiant', p.id ?? ''],
-        ['Statut', p.status ?? ''],
-        ['Méthodologie', p.methodology ?? ''],
+        ['Id', p.id ?? ''],
+        ['Status', p.status ?? ''],
+        ['Methodology', p.methodology ?? ''],
         ['Agent', p.agent ?? ''],
-        ['Planificateur', p.planner ?? ''],
-        ['Objectif', p.goal ?? ''],
-        ['Déclenché par', p.trigger ?? ''],
-        ['Tokens (entrée / sortie)', `${formatInt(p.usage?.inputTokens)} / ${formatInt(p.usage?.outputTokens)}`],
+        ['Planner', p.planner ?? ''],
+        ['Goal', p.goal ?? ''],
+        ['Triggered by', p.trigger ?? ''],
+        ['Tokens (input / output)', `${formatInt(p.usage?.inputTokens)} / ${formatInt(p.usage?.outputTokens)}`],
         ['Trace', p.traceId ?? ''],
-        ['Créé', formatDate(p.createdAt)],
+        ['Created', formatDate(p.createdAt)],
       ],
     };
   },
@@ -228,17 +228,17 @@ registerView({
 registerView({
   id: 'change',
   zone: 'editor',
-  title: 'Changement',
+  title: 'Change',
   icon: 'diff',
   component: ChangeTab,
   key: (p) => p.id ?? '',
-  tabTitle: (t) => changes.items.find((c) => c.id === t.params.id)?.title || `Changement ${shortId(t.params.id)}`,
+  tabTitle: (t) => changes.items.find((c) => c.id === t.params.id)?.title || `Change ${shortId(t.params.id)}`,
 });
 
 registerView({
   id: 'journal',
   zone: 'editor',
-  title: "Journal d'exécution",
+  title: 'Execution journal',
   icon: 'list',
   component: JournalTab,
   key: (p) => p.id ?? '',
@@ -246,27 +246,27 @@ registerView({
     const c = changes.items.find((x) => x.id === t.params.id);
     return `Journal · ${c?.title || shortId(t.params.id)}`;
   },
-  tooltip: (t) => `Journal d'exécution du changement ${t.params.id}`,
+  tooltip: (t) => `Execution journal of change ${t.params.id}`,
 });
 
 registerView({
   id: 'baseline',
   zone: 'editor',
-  title: 'Référentiel',
+  title: 'Baseline',
   icon: 'database',
   component: BaselineTab,
   key: (p) => p.id ?? '',
-  tabTitle: (t) => baselines.items.find((b) => b.id === t.params.id)?.name || `Référentiel ${shortId(t.params.id)}`,
+  tabTitle: (t) => baselines.items.find((b) => b.id === t.params.id)?.name || `Baseline ${shortId(t.params.id)}`,
 });
 
 registerView({
   id: 'policies',
   zone: 'editor',
-  title: 'Politiques',
+  title: 'Policies',
   icon: 'shield',
   component: PoliciesTab,
   key: () => 'all',
-  tabTitle: () => "Politiques d'accès",
+  tabTitle: () => 'Access policies',
 });
 
 registerView({
@@ -282,9 +282,9 @@ registerView({
 registerView({
   id: 'import',
   zone: 'editor',
-  title: 'Importer',
+  title: 'Import',
   icon: 'upload',
   component: ImportTab,
   key: () => 'yaml',
-  tabTitle: () => 'Importer YAML',
+  tabTitle: () => 'Import YAML',
 });
