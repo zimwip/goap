@@ -67,7 +67,13 @@ ADR 0011 registry-projection model unchanged.
    output: a `create_node` proposal whose type matches a known `NodeType` gets a companion
    `instanceOf` edge for free.
 
-6. **Authorization**: `internal/graphsvc` had no authorization at all. It gains an
+6. **Catch-up backfill**: `metamodel.BackfillInstanceOf` links pre-existing data nodes
+   (created before their methodology's `NodeType` nodes existed, or by the import path) to
+   their type. It runs automatically after every `Sync` (startup and on each publication,
+   `cmd/graph/main.go`), is idempotent (skips nodes already linked), and a failure is
+   logged, never fatal — it just retries on the next sync.
+
+7. **Authorization**: `internal/graphsvc` had no authorization at all. It gains an
    `Authz` field and a new ABAC resource `nodetype` (role `methodologist`, mirroring the
    `methodology` resource), gating only proposals that create/update/delete a `NodeType`
    node or add an `extends` edge. Ordinary domain-node proposals and `instanceOf` edges

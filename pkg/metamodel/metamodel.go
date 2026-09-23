@@ -612,3 +612,69 @@ func LinkToType(ctx context.Context, g KeyGraph, meth string, ref domain.NodeRef
 	_, err = g.Apply(ctx, c.ID, domain.MainBranch)
 	return err
 }
+
+// BackfillInstanceOf adds an instanceOf edge for every data node of the main
+// branch whose Type matches a NodeType of methodology and that has none yet.
+// It is the catch-up for nodes created before the metadata layer existed for
+// that methodology (ADR 0012 phase 3), and is idempotent: nodes already
+// linked, and methodologies with no NodeType nodes yet, are left untouched.
+func BackfillInstanceOf(ctx context.Context, g Graph, meth string) (Result, error) {
+	res := Result{Methodology: meth}
+	head, err := g.BranchHead(ctx, domain.MainBranch)
+	if errors.Is(err, graph.ErrNotFound) {
+		return res, nil
+	}
+	if err != nil {
+		return res, err
+	}
+	nodes, links, err := g.BaselineGraph(ctx, head.ID)
+	if err != nil {
+		return res, err
+	}
+	types := map[string]domain.NodeRef{} // NodeType name → node
+	for _, n := range nodes {
+		if m, kind, name, ok := ParseKey(n.Key); ok && m == meth && kind == strings.ToLower(TypeNodeType) {
+			types[name] = n.Ref()
+		}
+	}
+	if len(types) == 0 {
+		return res, nil
+	}
+	linked := map[domain.NodeID]bool{}
+	for _, l := range links {
+		if l.Type == LinkInstanceOf {
+			linked[l.From.ID] = true
+		}
+	}
+	var items []domain.ChangeItem
+	for _, n := range nodes {
+		if linked[n.ID] {
+			continue
+		}
+		to, ok := types[n.Type]
+		if !ok {
+			continue
+		}
+		from := n.Ref()
+		items = append(items, domain.ChangeItem{Kind: domain.KindProposal, Type: "metamodel", ProducedBy: "metamodel.backfill_instance_of",
+			Proposal: &domain.Proposal{Op: domain.OpAddLink, Link: &domain.LinkDraft{Type: LinkInstanceOf, From: domain.Endpoint{Node: &from}, To: domain.Endpoint{Node: &to}}}})
+		res.Links++
+	}
+	if len(items) == 0 {
+		return res, nil
+	}
+	c, err := g.CreateChange(ctx, graph.NewChange{Title: "Backfill instanceOf for " + meth,
+		Intent: "Link existing nodes to their node type", BaselineID: head.ID, Methodology: meth})
+	if err != nil {
+		return res, err
+	}
+	if _, err := g.AddItems(ctx, c.ID, items); err != nil {
+		return res, err
+	}
+	b, err := g.Apply(ctx, c.ID, domain.MainBranch)
+	if err != nil {
+		return res, err
+	}
+	res.Change, res.Baseline = c.ID, b.ID
+	return res, nil
+}

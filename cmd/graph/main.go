@@ -19,14 +19,16 @@ import (
 )
 
 // syncMethodologies projects every published methodology at startup,
-// retrying while the registry is not reachable. Every methodology whose
-// projection changes the graph (which seeds its NodeType nodes the first
-// time) is reported on events, so the engine invalidates its ancestor cache.
+// retrying while the registry is not reachable. Every synced methodology is
+// then backfilled (ADR 0012 phase 3: instanceOf edges for nodes created
+// before its metadata layer existed) and, when the projection changed
+// the graph, reported on events so the engine invalidates its ancestor cache.
 func syncMethodologies(ctx context.Context, log *slog.Logger, g *graph.Graph, reg metamodel.Published, events engine.Publisher) {
 	for delay := time.Second; ; delay = min(2*delay, time.Minute) {
 		rs, err := metamodel.SyncAll(ctx, g, reg)
 		if err == nil {
 			for _, res := range rs {
+				backfillInstanceOf(ctx, log, g, res.Methodology)
 				if res.Changed() {
 					publishNodeTypeChanged(ctx, events, res.Methodology)
 				}
@@ -40,6 +42,20 @@ func syncMethodologies(ctx context.Context, log *slog.Logger, g *graph.Graph, re
 			return
 		case <-time.After(delay):
 		}
+	}
+}
+
+// backfillInstanceOf links pre-existing domain nodes to their node type
+// (ADR 0012 phase 3). It is idempotent and best-effort: a failure is logged,
+// never fatal, and retried on the next sync.
+func backfillInstanceOf(ctx context.Context, log *slog.Logger, g *graph.Graph, methodology string) {
+	res, err := metamodel.BackfillInstanceOf(ctx, g, methodology)
+	if err != nil {
+		log.Warn("instanceOf backfill", "methodology", methodology, "err", err)
+		return
+	}
+	if res.Changed() {
+		log.Info("instanceOf backfill", "methodology", methodology, "links", res.Links)
 	}
 }
 
@@ -90,9 +106,12 @@ func main() {
 			}
 			if res, err := metamodel.Sync(context.Background(), g, m.Methodology); err != nil {
 				log.Error("methodology projection", "name", ev.Name, "err", err)
-			} else if res.Changed() {
-				log.Info("methodology projected onto the graph", "name", ev.Name, "version", ev.Version, "change", res.Change)
-				publishNodeTypeChanged(context.Background(), events, ev.Name)
+			} else {
+				if res.Changed() {
+					log.Info("methodology projected onto the graph", "name", ev.Name, "version", ev.Version, "change", res.Change)
+					publishNodeTypeChanged(context.Background(), events, ev.Name)
+				}
+				backfillInstanceOf(context.Background(), log, g, ev.Name)
 			}
 		}); err != nil {
 			platform.Fatal(log, "subscribe", err)

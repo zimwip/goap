@@ -178,3 +178,49 @@ func TestSupertypesFallback(t *testing.T) {
 		t.Fatalf("expected nil, nil for an unsynced methodology: %v %v", got, err)
 	}
 }
+
+// TestBackfillInstanceOf verifies the phase-3 catch-up (ADR 0012): data nodes
+// created before their methodology's metadata layer existed get linked once
+// it does, and the operation is idempotent.
+func TestBackfillInstanceOf(t *testing.T) {
+	ctx := context.Background()
+	g := graph.New(graph.NewMemory())
+	m := load(t)
+	if _, err := g.CreateNode(ctx, graph.NewNode{Key: "REQ-1", Type: "Requirement"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := g.CreateNode(ctx, graph.NewNode{Key: "OTHER-1", Type: "Unrelated"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := g.CreateBaselineFromLatest(ctx, "Initial baseline"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Sync(ctx, g, m); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := BackfillInstanceOf(ctx, g, m.Name)
+	if err != nil || res.Links != 1 || !res.Changed() {
+		t.Fatalf("first backfill: %+v %v", res, err)
+	}
+	req, err := g.NodeByKey(ctx, "REQ-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	nt, err := g.NodeByKey(ctx, Key(m.Name, TypeNodeType, "Requirement"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	v, _ := g.View(ctx, req.Ref())
+	var linked bool
+	for _, l := range v.Out {
+		linked = linked || (l.Type == LinkInstanceOf && l.To == nt.Ref())
+	}
+	if !linked {
+		t.Fatalf("REQ-1 has no instanceOf link: %+v", v.Out)
+	}
+
+	if res, err := BackfillInstanceOf(ctx, g, m.Name); err != nil || res.Changed() {
+		t.Fatalf("second backfill must not change: %+v %v", res, err)
+	}
+}
