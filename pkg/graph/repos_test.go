@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -18,6 +19,18 @@ import (
 // GOAP_TEST_PG_DSN is set, against PostgreSQL in a fresh schema.
 func forEachRepo(t *testing.T, f func(t *testing.T, repo Repo)) {
 	t.Run("memory", func(t *testing.T) { f(t, NewMemory()) })
+	t.Run("sqlite", func(t *testing.T) {
+		ctx := context.Background()
+		db, err := platform.OpenSQLite(ctx, filepath.Join(t.TempDir(), "goap.db"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer db.Close()
+		if err := platform.MigrateSQLite(ctx, db, "graph", SQLiteMigrations, "migrations_sqlite"); err != nil {
+			t.Fatal(err)
+		}
+		f(t, NewSQLite(db))
+	})
 	dsn := os.Getenv("GOAP_TEST_PG_DSN")
 	if dsn == "" {
 		return

@@ -2,7 +2,7 @@ SERVICES := graph registry engine modelgw gateway mcp iam goap-dev goap-runner
 COMPOSE  := docker compose -f deploy/compose/docker-compose.yml
 export PATH := $(PATH):$(shell go env GOPATH)/bin
 
-.PHONY: all build test test-pg lint generate tools up down logs dev web runner-image
+.PHONY: all build test test-pg lint generate tools up down logs dev devlocal devlocal-reset web runner-image
 
 all: generate build test
 
@@ -32,6 +32,16 @@ lint:
 
 dev: ## single process, in-memory, demo data: http://localhost:8080
 	go run ./cmd/goap-dev
+
+devlocal: web/dist/index.html ## on this machine, no docker: SQLite (.goap/goap.db) + IDE on http://localhost:8080
+	GOAP_STORE=sqlite go run ./cmd/goap-dev
+
+devlocal-reset: ## drop the local SQLite database (demo data and methodologies are seeded again)
+	rm -rf .goap
+
+# the IDE is rebuilt when its sources change (served by goap-dev)
+web/dist/index.html: web/package.json web/index.html web/vite.config.ts $(shell find web/src -type f 2>/dev/null)
+	cd web && npm install --no-audit --no-fund && npm run build
 
 web:
 	cd web && npm install && npm run dev

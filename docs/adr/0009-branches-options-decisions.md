@@ -112,3 +112,9 @@ Le change continue ensuite vers son application ou sa release.
    même méthodologie ou dans d'autres (`specializes: "<méthodologie>/<action>"`), avec une **garde** CEL
    (`when`) et une priorité. Le planificateur raisonne sur l'action abstraite ; à l'exécution, le moteur
    choisit la spécialisation applicable la plus prioritaire.
+6. **Sous-typage** (principe validé, les exemples restent illustratifs) : la spécialisation s'applique aux
+   **types d'objets du domaine** comme aux **actions**. Un type de nœud peut en spécialiser un autre
+   (`extends`, ex. `SecurityRequirement` ⊂ `Requirement`, `JavaComponent` ⊂ `Component`) : il hérite de ses
+   propriétés et des types de liens autorisés, et une condition, un `expects` ou une garde écrits sur le
+   type parent s'appliquent aux sous-types (test `isA`). Les spécialisations d'action se sélectionnent
+   naturellement sur le sous-type de l'objet traité (garde `when` sur `isA(x, "JavaComponent")`).

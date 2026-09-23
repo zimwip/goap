@@ -2,16 +2,37 @@ package iamsvc
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 
+	"github.com/casbin/casbin/v2/persist"
+
 	"github.com/zimwip/goap/internal/pgtest"
+	"github.com/zimwip/goap/internal/platform"
 	"github.com/zimwip/goap/pkg/authz"
 )
 
 func TestAdapterPersistsPolicies(t *testing.T) {
 	pool := pgtest.Pool(t, Migrations)
+	testAdapter(t, &Adapter{Pool: pool})
+}
+
+func TestSQLiteAdapterPersistsPolicies(t *testing.T) {
 	ctx := context.Background()
-	e1, err := authz.NewCasbin(&Adapter{Pool: pool})
+	db, err := platform.OpenSQLite(ctx, filepath.Join(t.TempDir(), "goap.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if err := platform.MigrateSQLite(ctx, db, "iam", SQLiteMigrations, "migrations_sqlite"); err != nil {
+		t.Fatal(err)
+	}
+	testAdapter(t, &SQLiteAdapter{DB: db})
+}
+
+func testAdapter(t *testing.T, adapter persist.Adapter) {
+	ctx := context.Background()
+	e1, err := authz.NewCasbin(adapter)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -20,7 +41,7 @@ func TestAdapterPersistsPolicies(t *testing.T) {
 		t.Fatal(err)
 	}
 	// a second enforcer (another replica) sees seeded + added policies
-	e2, err := authz.NewCasbin(&Adapter{Pool: pool})
+	e2, err := authz.NewCasbin(adapter)
 	if err != nil {
 		t.Fatal(err)
 	}
