@@ -15,6 +15,7 @@ import DomainExplorer from './nav/DomainExplorer.svelte';
 import RunsExplorer from './nav/RunsExplorer.svelte';
 import BaselineExplorer from './nav/BaselineExplorer.svelte';
 import ChangesExplorer from './nav/ChangesExplorer.svelte';
+import TokensTab from './dashboard/TokensTab.svelte';
 import PlatformTab from './platform/PlatformTab.svelte';
 import AccessExplorer from './nav/AccessExplorer.svelte';
 import TriggersExplorer from './nav/TriggersExplorer.svelte';
@@ -314,6 +315,16 @@ registerView({
   component: PoliciesTab,
   key: () => 'all',
   tabTitle: () => 'Access policies',
+});
+
+registerView({
+  id: 'tokenUsage',
+  zone: 'editor',
+  title: 'Token usage',
+  icon: 'coins',
+  component: TokensTab,
+  key: () => 'main',
+  tabTitle: () => 'Token usage',
 });
 
 registerView({

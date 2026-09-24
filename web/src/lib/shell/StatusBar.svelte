@@ -135,6 +135,10 @@
       : ''}
   </span>
 
+  <button type="button" class="item" aria-label="Token usage" title="Token usage dashboard" onclick={() => openTab({ kind: 'tokenUsage', params: {} }, { pin: true })}>
+    <Icon name="coins" size={13} />
+  </button>
+
   {#if hasAnyRole('admin')}
     <button type="button" class="item" aria-label="Platform settings" title="Platform settings (LLM gateway)" onclick={() => openTab({ kind: 'platform', params: {} }, { pin: true })}>
       <Icon name="settings" size={13} />

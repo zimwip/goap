@@ -55,6 +55,7 @@
     <strong>{n(totals.output)}</strong> · total <strong>{n(totals.input + totals.output)}</strong> · {formatDuration(totals.duration)}
     {#if totals.errors}· <span class="err">{totals.errors} in error</span>{/if}
   </span>
+  <button type="button" class="small" onclick={() => openTab({ kind: 'tokenUsage', params: {} }, { pin: true })}>Dashboard</button>
   <button type="button" class="ghost small" title="Clear" aria-label="Clear calls" onclick={clearTokens}><Icon name="clear" size={13} /></button>
 </div>
 <div
