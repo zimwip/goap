@@ -7,9 +7,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
-	"strings"
 	"sync"
-	"syscall"
 )
 
 // ProcessProvisioner runs goap-runner as a separate OS process (bare metal).
@@ -60,10 +58,7 @@ func (p *ProcessProvisioner) Start(_ context.Context, spec Spec) (Instance, erro
 	cmd.Dir = dir
 	// no inherited environment: no secrets, no credentials leak into the sandbox
 	cmd.Env = []string{fmt.Sprintf("GOAP_HTTP_ADDR=127.0.0.1:%d", port), "GOAP_LOG_FORMAT=text", "GOAP_SANDBOX_ID=" + spec.ID}
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	if p.UID != 0 {
-		cmd.SysProcAttr.Credential = &syscall.Credential{Uid: p.UID, Gid: p.GID}
-	}
+	configureSysProcAttr(cmd, p.UID, p.GID)
 	cmd.Stdout, cmd.Stderr = os.Stderr, os.Stderr
 	if err := cmd.Start(); err != nil {
 		os.RemoveAll(dir)
@@ -91,8 +86,5 @@ func (p *ProcessProvisioner) Stop(_ context.Context, id string) error {
 	if !ok || cmd.Process == nil {
 		return nil
 	}
-	if err := syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL); err != nil && !strings.Contains(err.Error(), "no such process") {
-		return err
-	}
-	return nil
+	return killProcessGroup(cmd)
 }
