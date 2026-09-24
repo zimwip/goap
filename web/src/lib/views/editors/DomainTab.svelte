@@ -2,12 +2,13 @@
   // Domain tab: node types and link types shared by the methodologies that
   // reference the domain. Saved and published on their own: no change,
   // impact or proposal is involved.
-  import { untrack } from 'svelte';
+  import { untrack, tick } from 'svelte';
   import type { Tab } from '../../shell/types';
   import Icon from '../../shell/Icon.svelte';
   import RowTools from '../../components/RowTools.svelte';
   import StatusBadge from '../../components/StatusBadge.svelte';
-  import { provideActions, useReveal, notify } from '../../shell/workbench.svelte';
+  import OntologyGraph from '../../components/OntologyGraph.svelte';
+  import { provideActions, useReveal, notify, requestReveal } from '../../shell/workbench.svelte';
   import { replaceTab, openTab } from '../../shell/tabs.svelte';
   import { domainDrafts, getDomainDraft } from '../../stores/domains.svelte';
   import { formatDate } from '../../api';
@@ -21,6 +22,13 @@
   const d = untrack(() => domainDraftOf(tab));
   const f = $derived(d.form);
   let root = $state<HTMLElement>();
+  let view = $state<'form' | 'graph'>('form');
+
+  async function openInForm(kind: 'node' | 'link', index: number) {
+    view = 'form';
+    await tick();
+    requestReveal(tab.id, kind === 'node' ? `nodeTypes[${index}]` : `linkTypes[${index}]`);
+  }
 
   async function createNew() {
     const saved = await d.save();
@@ -80,7 +88,20 @@
       </div>
     {/if}
 
-    <fieldset class="plain" disabled={d.readonly}>
+    {#if !d.isNew}
+      <div class="seg" role="tablist" aria-label="Domain view">
+        <button type="button" role="tab" aria-selected={view === 'form'} class:on={view === 'form'} onclick={() => (view = 'form')}>Definition</button>
+        <button type="button" role="tab" aria-selected={view === 'graph'} class:on={view === 'graph'} onclick={() => (view = 'graph')}>
+          <Icon name="graph" size={13} /> Graph
+        </button>
+      </div>
+    {/if}
+
+    {#if view === 'graph' && !d.isNew}
+      <OntologyGraph nodeTypes={f.nodeTypes} linkTypes={f.linkTypes} onopen={openInForm} />
+    {/if}
+
+    <fieldset class="plain" disabled={d.readonly} hidden={view === 'graph' && !d.isNew}>
       <section class="card" id="d-general">
         <h3>General</h3>
         <div class="grid">
@@ -193,6 +214,24 @@
 </div>
 
 <style>
+  .seg {
+    display: inline-flex;
+    margin: 0.2rem 0 0.7rem;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .seg button {
+    border: none;
+    border-radius: 0;
+    background: var(--surface);
+    font-weight: 500;
+    padding: 0.3rem 0.9rem;
+  }
+  .seg button.on {
+    background: var(--accent);
+    color: var(--accent-text);
+  }
   h3.sub {
     margin-top: 1rem;
   }

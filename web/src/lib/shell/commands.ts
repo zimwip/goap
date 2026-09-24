@@ -57,6 +57,7 @@ export const COMMANDS: Command[] = [
     icon: 'plus',
     run: () => openTab({ kind: 'methodology', params: { name: '', version: '' } }, { pin: true }),
   },
+  { id: 'tokenUsage', label: 'Token usage dashboard', icon: 'coins', run: () => openTab({ kind: 'tokenUsage', params: {} }, { pin: true }) },
   { id: 'import', label: 'Import a methodology (YAML)', icon: 'upload', run: () => openTab({ kind: 'import', params: {} }, { pin: true }) },
   { id: 'policies', label: 'Open access policies', icon: 'shield', run: () => openTab({ kind: 'policies', params: {} }) },
   { id: 'dsl', label: 'DSL Help', icon: 'help', run: () => showTool('right', 'dsl') },
