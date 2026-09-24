@@ -1,6 +1,6 @@
 <script lang="ts">
   // Single global "New object" dialog, mounted once at the shell root.
-  import { objectDialog, closeObjectDialog } from './objectDialog.svelte';
+  import { objectDialog, closeObjectDialog } from './objectDialogState.svelte';
   import { notify } from './workbench.svelte';
   import { graph, errorMessage, type Struct } from '../api';
   import { refreshBaselines } from '../stores/catalog.svelte';

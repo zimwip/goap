@@ -10,7 +10,7 @@
   import { formatDate, type DomainSummary } from '../../api';
   import { domainSpec, openDomain, revealDomainPath } from '../editors/domainTabs';
   import { emptyNodeType, emptyLinkType } from '../../methodologyForm';
-  import { openContextMenu } from '../../shell/contextMenu.svelte';
+  import { openContextMenu } from '../../shell/contextMenuState.svelte';
 
   let filter = $state('');
 
