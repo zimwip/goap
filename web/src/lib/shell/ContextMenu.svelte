@@ -1,7 +1,7 @@
 <script lang="ts">
   // Single global right-click menu, mounted once at the shell root.
   import Icon from './Icon.svelte';
-  import { menuState, closeContextMenu, type ContextMenuItem } from './contextMenu.svelte';
+  import { menuState, closeContextMenu, type ContextMenuItem } from './contextMenuState.svelte';
 
   let el = $state<HTMLDivElement>();
 

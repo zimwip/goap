@@ -9,8 +9,8 @@
   import { getDraft, peekDraft, draftKey, type Draft } from '../../stores/drafts.svelte';
   import { openTab, tabsState, tabId } from '../../shell/tabs.svelte';
   import { select, requestReveal } from '../../shell/workbench.svelte';
-  import { openContextMenu } from '../../shell/contextMenu.svelte';
-  import { openObjectDialog } from '../../shell/objectDialog.svelte';
+  import { openContextMenu } from '../../shell/contextMenuState.svelte';
+  import { openObjectDialog } from '../../shell/objectDialogState.svelte';
   import { formatDate, type MethodologySummary } from '../../api';
   import {
     emptyAgent,
