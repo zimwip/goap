@@ -43,7 +43,13 @@ type ExecutionRecord struct {
 	After          map[string]bool `json:"after,omitempty"`
 	EffectsMet     *bool           `json:"effectsMet,omitempty"`
 	// Items produced by the action (they carry this record id as provenance).
-	Items        []ItemID    `json:"items,omitempty"`
+	Items []ItemID `json:"items,omitempty"`
+	// A step reads the blackboard and extends it: BoardBefore / BoardAfter are the
+	// numbers of items on the change when the step starts / ends (the blackboard
+	// state), Reads the existing node versions the step started from.
+	Reads        []NodeRef   `json:"reads,omitempty"`
+	BoardBefore  int         `json:"boardBefore"`
+	BoardAfter   int         `json:"boardAfter"`
 	InputTokens  int64       `json:"inputTokens,omitempty"`
 	OutputTokens int64       `json:"outputTokens,omitempty"`
 	ModelCalls   []ModelCall `json:"modelCalls,omitempty"`

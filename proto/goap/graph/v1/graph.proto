@@ -44,6 +44,15 @@ service GraphService {
   rpc MergeBranch(MergeBranchRequest) returns (MergeBranchResponse);
   rpc GetDivergences(GetDivergencesRequest) returns (GetDivergencesResponse);
   rpc RebaseChange(RebaseChangeRequest) returns (RebaseChangeResponse);
+  // Completes a merge_pending change: merges its branch into the branch it forked from.
+  rpc MergeChange(MergeChangeRequest) returns (MergeChangeResponse);
+  // Nodes the change shares with other open changes (a merge will be needed).
+  rpc GetSharedNodes(GetSharedNodesRequest) returns (GetSharedNodesResponse);
+  // Pre/post view of the impacts of a change, with the maturity state of both sides.
+  rpc GetImpacts(GetImpactsRequest) returns (GetImpactsResponse);
+  // Splits a change along organisational boundaries: one sub-change per unit owning impacted nodes.
+  rpc SplitChange(SplitChangeRequest) returns (SplitChangeResponse);
+  rpc ListSubChanges(ListSubChangesRequest) returns (ListSubChangesResponse);
 
   // Execution journal (ADR 0011)
   rpc RecordExecutions(RecordExecutionsRequest) returns (RecordExecutionsResponse);
@@ -72,6 +81,8 @@ message Node {
   string reason = 11;
   // state in the lifecycle of the node type (empty: none)
   string state = 12;
+  // namespace of the node (default sdlc)
+  string namespace = 13;
 }
 
 message Link {
@@ -117,6 +128,8 @@ message NodeDraft {
   NodeRef ancestor = 6;
   // transition_node: target lifecycle state
   string state = 7;
+  // created node namespace (empty: the change namespace)
+  string namespace = 8;
 }
 
 message LinkDraft {
@@ -157,6 +170,8 @@ message ChangeItem {
   repeated string supersedes = 12;
   // journal record of the action execution that produced the item
   string execution = 13;
+  // impact: the "post" side (target is the "pre" version)
+  Endpoint post = 14;
 }
 
 message ChangeSet {
@@ -172,12 +187,18 @@ message ChangeSet {
   repeated ChangeItem items = 10;
   google.protobuf.Timestamp created_at = 11;
   string branch = 12;
+  // namespace the change acts on (default sdlc)
+  string namespace = 13;
+  // sub-change: the parent change and the responsible OrgUnit key
+  string parent_id = 14;
+  string owner_org = 15;
 }
 
 message CreateNodeRequest {
   string key = 1;
   string type = 2;
   google.protobuf.Struct props = 3;
+  string namespace = 4;
 }
 
 message CreateNodeResponse {
@@ -189,6 +210,8 @@ message CreateObjectRequest {
   string node_type = 2;
   string key = 3;
   google.protobuf.Struct props = 4;
+  // namespace of the created object (default sdlc)
+  string namespace = 5;
 }
 
 message CreateObjectResponse {
@@ -210,6 +233,8 @@ message GetNodeRequest {
   NodeRef ref = 1;
   // alternative to ref: latest version of the node with this key
   string key = 2;
+  // namespace of key (default sdlc)
+  string namespace = 3;
 }
 
 message GetNodeResponse {
@@ -263,6 +288,14 @@ message CreateChangeRequest {
   google.protobuf.Struct data = 5;
   // branch the change applies to (default main)
   string branch = 6;
+  // namespace the change acts on (default sdlc)
+  string namespace = 7;
+  // give the change a branch of its own, merged into `branch` when applied
+  bool own_branch = 8;
+  // make the change a sub-change of another one (namespace, branch and baseline follow the parent)
+  string parent_id = 9;
+  // key of the responsible OrgUnit (organisation namespace)
+  string owner_org = 10;
 }
 
 message CreateChangeResponse {
@@ -515,6 +548,11 @@ message ExecutionRecord {
   google.protobuf.Timestamp started_at = 32;
   google.protobuf.Timestamp ended_at = 33;
   int64 duration_ms = 34;
+  // the step reads the blackboard and extends it: node versions it started from,
+  // and the item count of the change before / after it
+  repeated NodeRef reads = 35;
+  int32 board_before = 36;
+  int32 board_after = 37;
 }
 
 message RecordExecutionsRequest {
@@ -546,5 +584,66 @@ message ListNodeChangesRequest {
 
 message ListNodeChangesResponse {
   // headers only (no items)
+  repeated ChangeSet changes = 1;
+}
+
+message MergeChangeRequest {
+  string change_id = 1;
+  // by node id
+  map<string, Resolution> resolutions = 2;
+}
+
+message MergeChangeResponse {
+  ChangeSet change = 1;
+}
+
+message GetSharedNodesRequest {
+  string change_id = 1;
+}
+
+message SharedNode {
+  NodeRef node = 1;
+  string key = 2;
+  repeated string changes = 3;
+}
+
+message GetSharedNodesResponse {
+  repeated SharedNode nodes = 1;
+}
+
+message GetImpactsRequest {
+  string change_id = 1;
+}
+
+message Impact {
+  string item = 1;
+  string key = 2;
+  string type = 3;
+  // pre: version of the reference baseline (empty for a created node)
+  NodeRef pre = 4;
+  string pre_state = 5;
+  // post: version on the change branch (empty until it exists)
+  NodeRef post = 6;
+  string post_state = 7;
+}
+
+message GetImpactsResponse {
+  repeated Impact impacts = 1;
+}
+
+message SplitChangeRequest {
+  string change_id = 1;
+}
+
+message SplitChangeResponse {
+  // the sub-changes created by this call
+  repeated ChangeSet changes = 1;
+}
+
+message ListSubChangesRequest {
+  string change_id = 1;
+}
+
+message ListSubChangesResponse {
   repeated ChangeSet changes = 1;
 }

@@ -29,7 +29,7 @@ func NewClient(hc *http.Client, baseURL string, opts ...connect.ClientOption) *C
 
 func (c *Client) CreateChange(ctx context.Context, in graph.NewChange) (domain.ChangeSet, error) {
 	r, err := c.rpc.CreateChange(ctx, connect.NewRequest(&graphv1.CreateChangeRequest{Title: in.Title, Intent: in.Intent,
-		Methodology: in.Methodology, BaselineId: string(in.BaselineID), Branch: in.Branch, Data: pbconv.Struct(in.Data)}))
+		Methodology: in.Methodology, Namespace: in.Namespace, BaselineId: string(in.BaselineID), Branch: in.Branch, OwnBranch: in.OwnBranch, ParentId: string(in.ParentID), OwnerOrg: in.OwnerOrg, Data: pbconv.Struct(in.Data)}))
 	if err != nil {
 		return domain.ChangeSet{}, rpcerr.FromConnect(err)
 	}

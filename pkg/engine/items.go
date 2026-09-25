@@ -12,10 +12,12 @@ import (
 // Domain nodes are designated by key (or "id@version"), items of the same
 // batch by "#<ref>" and existing items by "@<itemId>".
 type ItemInput struct {
-	Ref         string         `json:"ref,omitempty"`
-	Kind        string         `json:"kind"`
-	Type        string         `json:"type,omitempty"`
-	Target      string         `json:"target,omitempty"`
+	Ref    string `json:"ref,omitempty"`
+	Kind   string `json:"kind"`
+	Type   string `json:"type,omitempty"`
+	Target string `json:"target,omitempty"`
+	// Post (impact): the proposal producing the new version, "#ref" or "@itemId".
+	Post        string         `json:"post,omitempty"`
 	Proposal    *ProposalInput `json:"proposal,omitempty"`
 	Decision    *DecisionInput `json:"decision,omitempty"`
 	Data        map[string]any `json:"data,omitempty"`
@@ -148,6 +150,13 @@ func (r *resolver) resolve(in []ItemInput, producedBy string) ([]domain.ChangeIt
 				return nil, fmt.Errorf("item %d: %w", i, err)
 			}
 			item.Target = &ref
+		}
+		if it.Post != "" {
+			e, err := r.endpoint(it.Post)
+			if err != nil {
+				return nil, fmt.Errorf("item %d: post: %w", i, err)
+			}
+			item.Post = &e
 		}
 		var instanceOf *domain.ChangeItem // companion instanceOf link, appended after item below
 		if p := it.Proposal; p != nil {

@@ -18,6 +18,7 @@
 
   const STATUSES = [
     { id: 'active', label: 'Active' },
+    { id: 'merge_pending', label: 'Merge pending' },
     { id: 'draft', label: 'Drafts' },
     { id: 'applied', label: 'Applied' },
     { id: 'abandoned', label: 'Abandoned' },
@@ -25,7 +26,7 @@
 
   const q = $derived(filter.trim().toLowerCase());
   const shown = $derived(
-    changes.items.filter((c) => !q || `${c.id} ${c.title ?? ''} ${c.intent ?? ''} ${c.methodology ?? ''}`.toLowerCase().includes(q)),
+    changes.items.filter((c) => !q || `${c.id} ${c.title ?? ''} ${c.intent ?? ''} ${c.methodology ?? ''} ${c.namespace ?? ''}`.toLowerCase().includes(q)),
   );
 
   function open(c: ChangeSet, pin = false) {
@@ -37,6 +38,7 @@
         ['Id', c.id ?? ''],
         ['Status', c.status ?? ''],
         ['Intent', c.intent ?? ''],
+        ['Namespace', c.namespace ?? ''],
         ['Methodology', c.methodology ?? ''],
         ['Goal', c.goal ?? ''],
         ['Starting baseline', c.baselineId ?? ''],

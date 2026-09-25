@@ -41,6 +41,11 @@
   let loading = $state(false);
   let error = $state('');
 
+  let subs = $state<ChangeSet[]>([]);
+  let splitting = $state(false);
+  let merging = $state(false);
+  let mergeError = $state('');
+
   let baselineName = $state('');
   let applying = $state(false);
   let applied = $state<Baseline | undefined>();
@@ -56,6 +61,7 @@
       if (!baselineName) baselineName = c?.title ? `${c.title}` : `change-${shortId(id)}`;
       nodes = c?.baselineId ? ((await graph.getBaselineGraph(c.baselineId, signal)).nodes ?? []) : [];
       attached = (await graph.getChangeNodes(id, signal)).nodes ?? [];
+      subs = (await graph.listSubChanges(id, signal)).changes ?? [];
     } catch (e) {
       if (!signal?.aborted) error = errorMessage(e);
     } finally {
@@ -67,6 +73,8 @@
     const id = selected;
     change = undefined;
     attached = [];
+    subs = [];
+    mergeError = '';
     extraNodes = [];
     applied = undefined;
     baselineName = '';
@@ -250,6 +258,42 @@
     }
   }
 
+  const ownBranch = $derived((change?.branch ?? '').startsWith('change-'));
+  const openSubs = $derived(subs.filter((s) => s.status !== 'applied' && s.status !== 'abandoned'));
+
+  async function split() {
+    if (!change?.id) return;
+    splitting = true;
+    error = '';
+    try {
+      const made = (await graph.splitChange(change.id)).changes ?? [];
+      await load(change.id);
+      void refreshChanges();
+      notify(made.length ? `${made.length} sub-change(s) created.` : 'No new sub-change: every owning unit already has one.', 'ok');
+    } catch (e) {
+      error = errorMessage(e);
+    } finally {
+      splitting = false;
+    }
+  }
+
+  async function merge() {
+    if (!change?.id) return;
+    merging = true;
+    mergeError = '';
+    try {
+      await graph.mergeChange(change.id);
+      await load(change.id);
+      void refreshChanges();
+      void refreshBaselines();
+      notify('Change merged.', 'ok');
+    } catch (e) {
+      mergeError = errorMessage(e);
+    } finally {
+      merging = false;
+    }
+  }
+
   async function apply() {
     if (!change?.id) return;
     applying = true;
@@ -347,6 +391,12 @@
         {#if ch.intent}<p class="intent">"{ch.intent}"</p>{/if}
         <dl class="meta">
           <dt>ID</dt><dd><code>{ch.id}</code></dd>
+          {#if ch.namespace}<dt>Namespace</dt><dd>{ch.namespace}</dd>{/if}
+          {#if ch.ownerOrg}<dt>Owner unit</dt><dd><code>{ch.ownerOrg}</code></dd>{/if}
+          {#if ch.parentId}
+            <dt>Parent change</dt>
+            <dd><button type="button" class="link mono" onclick={() => openTab({ kind: 'change', params: { id: ch.parentId ?? '' } })}>{shortId(ch.parentId)}</button></dd>
+          {/if}
           {#if ch.methodology}<dt>Methodology</dt><dd>{ch.methodology}</dd>{/if}
           {#if ch.goal}<dt>Goal</dt><dd><code>{ch.goal}</code></dd>{/if}
           {#if ch.baselineId}
@@ -370,6 +420,35 @@
             </dd>
           {/if}
         </dl>
+
+        {#if ch.status === 'merge_pending'}
+          <div class="alert warn" style="margin: 0.75rem 0">
+            <p>Applied on its own branch; the merge into the parent branch is pending.</p>
+            <button class="primary" onclick={merge} disabled={merging}>{merging ? 'Merging…' : 'Merge'}</button>
+            {#if mergeError}<pre class="error">{mergeError}</pre>{/if}
+          </div>
+        {/if}
+
+        {#if ownBranch || subs.length}
+          <h3>Sub-changes <span class="count">{subs.length}</span></h3>
+          {#if subs.length}
+            <ul class="subs">
+              {#each subs as s (s.id)}
+                <li>
+                  <button type="button" class="link" onclick={() => openTab({ kind: 'change', params: { id: s.id ?? '' } })}>{s.title || shortId(s.id)}</button>
+                  {#if s.ownerOrg}<code>{s.ownerOrg}</code>{/if}
+                  <StatusBadge status={s.status} />
+                </li>
+              {/each}
+            </ul>
+          {/if}
+          {#if ownBranch && !closed}
+            <button type="button" onclick={split} disabled={splitting} title="One sub-change per unit owning the impacted nodes">
+              {splitting ? 'Splitting…' : 'Split by owner'}
+            </button>
+          {/if}
+          {#if openSubs.length}<p class="hint">Apply or abandon the {openSubs.length} open sub-change(s) before applying this change.</p>{/if}
+        {/if}
 
         <div class="apply row">
           <div class="grow">
@@ -485,6 +564,21 @@
 </div>
 
 <style>
+  .subs {
+    list-style: none;
+    margin: 0 0 0.5rem;
+    padding: 0;
+  }
+  .subs li {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.15rem 0;
+  }
+  .hint {
+    color: var(--text-muted, inherit);
+    font-size: 0.88em;
+  }
   .runs {
     display: flex;
     flex-wrap: wrap;

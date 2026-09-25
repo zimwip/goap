@@ -26,10 +26,10 @@ func SeedDemo(ctx context.Context, g *graph.Graph) (bool, error) {
 		{Key: "TST-2", Type: "TestCase", Properties: map[string]any{"title": "Full refund"}},
 		{Key: "TST-3", Type: "TestCase", Properties: map[string]any{"title": "Receipt received"}},
 		{Key: "REQ-4", Type: "SecurityRequirement", Properties: map[string]any{"title": "Card data is never stored in the clear (PCI DSS)", "priority": "high"}},
-		{Key: "CMP-1", Type: "Component", Properties: map[string]any{"title": "payment-service", "owner": "team-checkout", "technology": "java", "version": "1.4.2"}},
-		{Key: "CMP-2", Type: "Component", Properties: map[string]any{"title": "notification-service", "owner": "team-crm", "technology": "go", "version": "2.1.0"}},
-		{Key: "CMP-3", Type: "Component", Properties: map[string]any{"title": "settlement-batch", "owner": "team-finance", "technology": "shell", "version": "0.9.3"}},
-		{Key: "CMP-4", Type: "Component", Properties: map[string]any{"title": "card-crypto", "owner": "team-security", "technology": "c", "version": "3.0.1"}},
+		{Key: "CMP-1", Type: "Component", Properties: map[string]any{"title": "payment-service", "technology": "java", "version": "1.4.2"}},
+		{Key: "CMP-2", Type: "Component", Properties: map[string]any{"title": "notification-service", "technology": "go", "version": "2.1.0"}},
+		{Key: "CMP-3", Type: "Component", Properties: map[string]any{"title": "settlement-batch", "technology": "shell", "version": "0.9.3"}},
+		{Key: "CMP-4", Type: "Component", Properties: map[string]any{"title": "card-crypto", "technology": "c", "version": "3.0.1"}},
 		// ALM chain (sdlc)
 		{Key: "FCT-1", Type: "Function", Properties: map[string]any{"title": "Collect a payment"}},
 		{Key: "FCT-2", Type: "Function", Properties: map[string]any{"title": "Refund an order"}},
@@ -39,10 +39,10 @@ func SeedDemo(ctx context.Context, g *graph.Graph) (bool, error) {
 		{Key: "ART-2", Type: "BuildArtifact", Properties: map[string]any{"name": "notification-service", "format": "tar.gz", "version": "2.1.0"}},
 		{Key: "ART-3", Type: "BuildArtifact", Properties: map[string]any{"name": "settlement-batch", "format": "tar.gz", "version": "0.9.3"}},
 		{Key: "ART-4", Type: "BuildArtifact", Properties: map[string]any{"name": "card-crypto", "format": "elf", "version": "3.0.1"}},
-		{Key: "APP-1", Type: "Application", Properties: map[string]any{"title": "Checkout", "owner": "team-checkout", "version": "5.2"}},
-		{Key: "APP-2", Type: "Application", Properties: map[string]any{"title": "CRM", "owner": "team-crm", "version": "3.0"}},
-		{Key: "APP-3", Type: "Application", Properties: map[string]any{"title": "Finance back office", "owner": "team-finance", "version": "1.7"}},
-		{Key: "SOL-1", Type: "Solution", Properties: map[string]any{"title": "Online commerce", "owner": "direction-digitale"}},
+		{Key: "APP-1", Type: "Application", Properties: map[string]any{"title": "Checkout", "version": "5.2"}},
+		{Key: "APP-2", Type: "Application", Properties: map[string]any{"title": "CRM", "version": "3.0"}},
+		{Key: "APP-3", Type: "Application", Properties: map[string]any{"title": "Finance back office", "version": "1.7"}},
+		{Key: "SOL-1", Type: "Solution", Properties: map[string]any{"title": "Online commerce"}},
 		{Key: "DAT-1", Type: "Data", Properties: map[string]any{"title": "Order", "classification": "internal"}},
 		{Key: "DAT-2", Type: "Data", Properties: map[string]any{"title": "Payment", "classification": "confidential"}},
 		{Key: "DAT-3", Type: "Data", Properties: map[string]any{"title": "Customer", "classification": "personal"}},
@@ -59,6 +59,19 @@ func SeedDemo(ctx context.Context, g *graph.Graph) (bool, error) {
 		{Key: "REL-APP-1-5.2", Type: "Release", Properties: map[string]any{"title": "Checkout 5.2", "version": "5.2", "status": "deployed"}},
 		{Key: "DEP-REL-APP-1-5.2-ENV-PRD", Type: "Deployment", Properties: map[string]any{"status": "succeeded", "stage": "prod"}},
 	}
+	// organisation namespace: the units that own the nodes above
+	const org = "organisation"
+	orgUnit := func(key, name, kind string) graph.NewNode {
+		return graph.NewNode{Namespace: org, Key: key, Type: "OrgUnit", Properties: map[string]any{"name": name, "kind": kind}}
+	}
+	nodes = append(nodes,
+		orgUnit("ORG-ACME", "Acme", "company"),
+		orgUnit("ORG-DIGITAL", "Direction Digitale", "direction"),
+		orgUnit("ORG-CHECKOUT", "Team Checkout", "team"),
+		orgUnit("ORG-CRM", "Team CRM", "team"),
+		orgUnit("ORG-FINANCE", "Team Finance", "team"),
+		orgUnit("ORG-SECURITY", "Team Security", "team"),
+	)
 	refs := map[string]domain.NodeRef{}
 	for _, n := range nodes {
 		created, err := g.CreateNode(ctx, n)
@@ -91,6 +104,14 @@ func SeedDemo(ctx context.Context, g *graph.Graph) (bool, error) {
 		{"ENV-DEV", "promotes_to", "ENV-TEST"}, {"ENV-TEST", "promotes_to", "ENV-STG"}, {"ENV-STG", "promotes_to", "ENV-PRD"},
 		{"REL-APP-1-5.2", "releases", "APP-1"}, {"REL-APP-1-5.2", "contains", "ART-1"}, {"REL-APP-1-5.2", "contains", "ART-4"},
 		{"DEP-REL-APP-1-5.2-ENV-PRD", "of_release", "REL-APP-1-5.2"}, {"DEP-REL-APP-1-5.2-ENV-PRD", "in_environment", "ENV-PRD"},
+		// organisation hierarchy (child part_of parent)
+		{"ORG-DIGITAL", "part_of", "ORG-ACME"},
+		{"ORG-CHECKOUT", "part_of", "ORG-DIGITAL"}, {"ORG-CRM", "part_of", "ORG-DIGITAL"},
+		{"ORG-FINANCE", "part_of", "ORG-DIGITAL"}, {"ORG-SECURITY", "part_of", "ORG-DIGITAL"},
+		// ownership: a node of one namespace references a unit of another
+		{"CMP-1", "owner", "ORG-CHECKOUT"}, {"CMP-2", "owner", "ORG-CRM"}, {"CMP-3", "owner", "ORG-FINANCE"}, {"CMP-4", "owner", "ORG-SECURITY"},
+		{"APP-1", "owner", "ORG-CHECKOUT"}, {"APP-2", "owner", "ORG-CRM"}, {"APP-3", "owner", "ORG-FINANCE"},
+		{"SOL-1", "owner", "ORG-DIGITAL"},
 	}
 	for _, l := range links {
 		if _, err := g.Link(ctx, l[1], refs[l[0]], refs[l[2]], nil); err != nil {

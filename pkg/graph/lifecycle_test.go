@@ -159,7 +159,7 @@ func testLifecycleTransitionRules(t *testing.T, repo Repo) {
 	}
 	// a node type without lifecycle has no transitions
 	c = w.change(t, "no lifecycle")
-	tn, _ := w.g.NodeByKey(ctx, "D:x/nodetype/Note")
+	tn, _ := w.g.NodeByKey(ctx, "", "D:x/nodetype/Note")
 	if _, err := w.g.AddItems(ctx, c.ID, []domain.ChangeItem{moveItem(tn, "x")}); err == nil {
 		t.Fatal("a NodeType has no lifecycle: transition must be refused")
 	}
@@ -231,7 +231,7 @@ func testLifecycleCreateNode(t *testing.T, repo Repo) {
 	if _, err := w.g.Apply(ctx, c.ID, ""); err != nil {
 		t.Fatal(err)
 	}
-	if n, err := w.g.NodeByKey(ctx, "REQ-9"); err != nil || n.State != "proposed" {
+	if n, err := w.g.NodeByKey(ctx, "", "REQ-9"); err != nil || n.State != "proposed" {
 		t.Fatalf("created node: %+v %v", n, err)
 	}
 	// created directly in an editable state: refused when applied

@@ -36,7 +36,9 @@ type Tx interface {
 	Branch(ctx context.Context, name string) (domain.Branch, error)
 	Branches(ctx context.Context) ([]domain.Branch, error)
 	PutBranch(ctx context.Context, b domain.Branch) error
-	NodeByKey(ctx context.Context, key string) (domain.Node, error)
+	NodeByKey(ctx context.Context, namespace, key string) (domain.Node, error)
+	// NodeIDByKey resolves a key whatever the branch the node lives on.
+	NodeIDByKey(ctx context.Context, namespace, key string) (domain.NodeID, error)
 	NodesIn(ctx context.Context, baseline domain.BaselineID, nodeType string) ([]domain.Node, error)
 	// LatestNodes returns the latest version of every node.
 	LatestNodes(ctx context.Context) ([]domain.Node, error)

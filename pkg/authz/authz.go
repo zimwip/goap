@@ -24,11 +24,12 @@ func (p Principal) Anonymous() bool { return p.Subject == "" }
 // Resource is the object of an access request (r.obj.Type, r.obj.ID,
 // r.obj.Org, r.obj.Owner, r.obj.Name).
 type Resource struct {
-	Type  string `json:"type"`            // change, process, methodology, policy…
-	ID    string `json:"id,omitempty"`    // resource identifier
-	Org   string `json:"org,omitempty"`   // owning organization
-	Owner string `json:"owner,omitempty"` // subject who created / owns it
-	Name  string `json:"name,omitempty"`  // human name (methodology name, goal…)
+	Type      string `json:"type"`                // change, process, methodology, policy…
+	ID        string `json:"id,omitempty"`        // resource identifier
+	Org       string `json:"org,omitempty"`       // owning organization
+	Namespace string `json:"namespace,omitempty"` // graph namespace of the object
+	Owner     string `json:"owner,omitempty"`     // subject who created / owns it
+	Name      string `json:"name,omitempty"`      // human name (methodology name, goal…)
 }
 
 // Request is an ABAC access request.

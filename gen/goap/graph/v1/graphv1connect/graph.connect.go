@@ -103,6 +103,20 @@ const (
 	// GraphServiceRebaseChangeProcedure is the fully-qualified name of the GraphService's RebaseChange
 	// RPC.
 	GraphServiceRebaseChangeProcedure = "/goap.graph.v1.GraphService/RebaseChange"
+	// GraphServiceMergeChangeProcedure is the fully-qualified name of the GraphService's MergeChange
+	// RPC.
+	GraphServiceMergeChangeProcedure = "/goap.graph.v1.GraphService/MergeChange"
+	// GraphServiceGetSharedNodesProcedure is the fully-qualified name of the GraphService's
+	// GetSharedNodes RPC.
+	GraphServiceGetSharedNodesProcedure = "/goap.graph.v1.GraphService/GetSharedNodes"
+	// GraphServiceGetImpactsProcedure is the fully-qualified name of the GraphService's GetImpacts RPC.
+	GraphServiceGetImpactsProcedure = "/goap.graph.v1.GraphService/GetImpacts"
+	// GraphServiceSplitChangeProcedure is the fully-qualified name of the GraphService's SplitChange
+	// RPC.
+	GraphServiceSplitChangeProcedure = "/goap.graph.v1.GraphService/SplitChange"
+	// GraphServiceListSubChangesProcedure is the fully-qualified name of the GraphService's
+	// ListSubChanges RPC.
+	GraphServiceListSubChangesProcedure = "/goap.graph.v1.GraphService/ListSubChanges"
 	// GraphServiceRecordExecutionsProcedure is the fully-qualified name of the GraphService's
 	// RecordExecutions RPC.
 	GraphServiceRecordExecutionsProcedure = "/goap.graph.v1.GraphService/RecordExecutions"
@@ -146,6 +160,15 @@ type GraphServiceClient interface {
 	MergeBranch(context.Context, *connect.Request[v1.MergeBranchRequest]) (*connect.Response[v1.MergeBranchResponse], error)
 	GetDivergences(context.Context, *connect.Request[v1.GetDivergencesRequest]) (*connect.Response[v1.GetDivergencesResponse], error)
 	RebaseChange(context.Context, *connect.Request[v1.RebaseChangeRequest]) (*connect.Response[v1.RebaseChangeResponse], error)
+	// Completes a merge_pending change: merges its branch into the branch it forked from.
+	MergeChange(context.Context, *connect.Request[v1.MergeChangeRequest]) (*connect.Response[v1.MergeChangeResponse], error)
+	// Nodes the change shares with other open changes (a merge will be needed).
+	GetSharedNodes(context.Context, *connect.Request[v1.GetSharedNodesRequest]) (*connect.Response[v1.GetSharedNodesResponse], error)
+	// Pre/post view of the impacts of a change, with the maturity state of both sides.
+	GetImpacts(context.Context, *connect.Request[v1.GetImpactsRequest]) (*connect.Response[v1.GetImpactsResponse], error)
+	// Splits a change along organisational boundaries: one sub-change per unit owning impacted nodes.
+	SplitChange(context.Context, *connect.Request[v1.SplitChangeRequest]) (*connect.Response[v1.SplitChangeResponse], error)
+	ListSubChanges(context.Context, *connect.Request[v1.ListSubChangesRequest]) (*connect.Response[v1.ListSubChangesResponse], error)
 	// Execution journal (ADR 0011)
 	RecordExecutions(context.Context, *connect.Request[v1.RecordExecutionsRequest]) (*connect.Response[v1.RecordExecutionsResponse], error)
 	ListExecutions(context.Context, *connect.Request[v1.ListExecutionsRequest]) (*connect.Response[v1.ListExecutionsResponse], error)
@@ -318,6 +341,36 @@ func NewGraphServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(graphServiceMethods.ByName("RebaseChange")),
 			connect.WithClientOptions(opts...),
 		),
+		mergeChange: connect.NewClient[v1.MergeChangeRequest, v1.MergeChangeResponse](
+			httpClient,
+			baseURL+GraphServiceMergeChangeProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("MergeChange")),
+			connect.WithClientOptions(opts...),
+		),
+		getSharedNodes: connect.NewClient[v1.GetSharedNodesRequest, v1.GetSharedNodesResponse](
+			httpClient,
+			baseURL+GraphServiceGetSharedNodesProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("GetSharedNodes")),
+			connect.WithClientOptions(opts...),
+		),
+		getImpacts: connect.NewClient[v1.GetImpactsRequest, v1.GetImpactsResponse](
+			httpClient,
+			baseURL+GraphServiceGetImpactsProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("GetImpacts")),
+			connect.WithClientOptions(opts...),
+		),
+		splitChange: connect.NewClient[v1.SplitChangeRequest, v1.SplitChangeResponse](
+			httpClient,
+			baseURL+GraphServiceSplitChangeProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("SplitChange")),
+			connect.WithClientOptions(opts...),
+		),
+		listSubChanges: connect.NewClient[v1.ListSubChangesRequest, v1.ListSubChangesResponse](
+			httpClient,
+			baseURL+GraphServiceListSubChangesProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("ListSubChanges")),
+			connect.WithClientOptions(opts...),
+		),
 		recordExecutions: connect.NewClient[v1.RecordExecutionsRequest, v1.RecordExecutionsResponse](
 			httpClient,
 			baseURL+GraphServiceRecordExecutionsProcedure,
@@ -361,6 +414,11 @@ type graphServiceClient struct {
 	mergeBranch      *connect.Client[v1.MergeBranchRequest, v1.MergeBranchResponse]
 	getDivergences   *connect.Client[v1.GetDivergencesRequest, v1.GetDivergencesResponse]
 	rebaseChange     *connect.Client[v1.RebaseChangeRequest, v1.RebaseChangeResponse]
+	mergeChange      *connect.Client[v1.MergeChangeRequest, v1.MergeChangeResponse]
+	getSharedNodes   *connect.Client[v1.GetSharedNodesRequest, v1.GetSharedNodesResponse]
+	getImpacts       *connect.Client[v1.GetImpactsRequest, v1.GetImpactsResponse]
+	splitChange      *connect.Client[v1.SplitChangeRequest, v1.SplitChangeResponse]
+	listSubChanges   *connect.Client[v1.ListSubChangesRequest, v1.ListSubChangesResponse]
 	recordExecutions *connect.Client[v1.RecordExecutionsRequest, v1.RecordExecutionsResponse]
 	listExecutions   *connect.Client[v1.ListExecutionsRequest, v1.ListExecutionsResponse]
 }
@@ -495,6 +553,31 @@ func (c *graphServiceClient) RebaseChange(ctx context.Context, req *connect.Requ
 	return c.rebaseChange.CallUnary(ctx, req)
 }
 
+// MergeChange calls goap.graph.v1.GraphService.MergeChange.
+func (c *graphServiceClient) MergeChange(ctx context.Context, req *connect.Request[v1.MergeChangeRequest]) (*connect.Response[v1.MergeChangeResponse], error) {
+	return c.mergeChange.CallUnary(ctx, req)
+}
+
+// GetSharedNodes calls goap.graph.v1.GraphService.GetSharedNodes.
+func (c *graphServiceClient) GetSharedNodes(ctx context.Context, req *connect.Request[v1.GetSharedNodesRequest]) (*connect.Response[v1.GetSharedNodesResponse], error) {
+	return c.getSharedNodes.CallUnary(ctx, req)
+}
+
+// GetImpacts calls goap.graph.v1.GraphService.GetImpacts.
+func (c *graphServiceClient) GetImpacts(ctx context.Context, req *connect.Request[v1.GetImpactsRequest]) (*connect.Response[v1.GetImpactsResponse], error) {
+	return c.getImpacts.CallUnary(ctx, req)
+}
+
+// SplitChange calls goap.graph.v1.GraphService.SplitChange.
+func (c *graphServiceClient) SplitChange(ctx context.Context, req *connect.Request[v1.SplitChangeRequest]) (*connect.Response[v1.SplitChangeResponse], error) {
+	return c.splitChange.CallUnary(ctx, req)
+}
+
+// ListSubChanges calls goap.graph.v1.GraphService.ListSubChanges.
+func (c *graphServiceClient) ListSubChanges(ctx context.Context, req *connect.Request[v1.ListSubChangesRequest]) (*connect.Response[v1.ListSubChangesResponse], error) {
+	return c.listSubChanges.CallUnary(ctx, req)
+}
+
 // RecordExecutions calls goap.graph.v1.GraphService.RecordExecutions.
 func (c *graphServiceClient) RecordExecutions(ctx context.Context, req *connect.Request[v1.RecordExecutionsRequest]) (*connect.Response[v1.RecordExecutionsResponse], error) {
 	return c.recordExecutions.CallUnary(ctx, req)
@@ -540,6 +623,15 @@ type GraphServiceHandler interface {
 	MergeBranch(context.Context, *connect.Request[v1.MergeBranchRequest]) (*connect.Response[v1.MergeBranchResponse], error)
 	GetDivergences(context.Context, *connect.Request[v1.GetDivergencesRequest]) (*connect.Response[v1.GetDivergencesResponse], error)
 	RebaseChange(context.Context, *connect.Request[v1.RebaseChangeRequest]) (*connect.Response[v1.RebaseChangeResponse], error)
+	// Completes a merge_pending change: merges its branch into the branch it forked from.
+	MergeChange(context.Context, *connect.Request[v1.MergeChangeRequest]) (*connect.Response[v1.MergeChangeResponse], error)
+	// Nodes the change shares with other open changes (a merge will be needed).
+	GetSharedNodes(context.Context, *connect.Request[v1.GetSharedNodesRequest]) (*connect.Response[v1.GetSharedNodesResponse], error)
+	// Pre/post view of the impacts of a change, with the maturity state of both sides.
+	GetImpacts(context.Context, *connect.Request[v1.GetImpactsRequest]) (*connect.Response[v1.GetImpactsResponse], error)
+	// Splits a change along organisational boundaries: one sub-change per unit owning impacted nodes.
+	SplitChange(context.Context, *connect.Request[v1.SplitChangeRequest]) (*connect.Response[v1.SplitChangeResponse], error)
+	ListSubChanges(context.Context, *connect.Request[v1.ListSubChangesRequest]) (*connect.Response[v1.ListSubChangesResponse], error)
 	// Execution journal (ADR 0011)
 	RecordExecutions(context.Context, *connect.Request[v1.RecordExecutionsRequest]) (*connect.Response[v1.RecordExecutionsResponse], error)
 	ListExecutions(context.Context, *connect.Request[v1.ListExecutionsRequest]) (*connect.Response[v1.ListExecutionsResponse], error)
@@ -708,6 +800,36 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(graphServiceMethods.ByName("RebaseChange")),
 		connect.WithHandlerOptions(opts...),
 	)
+	graphServiceMergeChangeHandler := connect.NewUnaryHandler(
+		GraphServiceMergeChangeProcedure,
+		svc.MergeChange,
+		connect.WithSchema(graphServiceMethods.ByName("MergeChange")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceGetSharedNodesHandler := connect.NewUnaryHandler(
+		GraphServiceGetSharedNodesProcedure,
+		svc.GetSharedNodes,
+		connect.WithSchema(graphServiceMethods.ByName("GetSharedNodes")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceGetImpactsHandler := connect.NewUnaryHandler(
+		GraphServiceGetImpactsProcedure,
+		svc.GetImpacts,
+		connect.WithSchema(graphServiceMethods.ByName("GetImpacts")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceSplitChangeHandler := connect.NewUnaryHandler(
+		GraphServiceSplitChangeProcedure,
+		svc.SplitChange,
+		connect.WithSchema(graphServiceMethods.ByName("SplitChange")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceListSubChangesHandler := connect.NewUnaryHandler(
+		GraphServiceListSubChangesProcedure,
+		svc.ListSubChanges,
+		connect.WithSchema(graphServiceMethods.ByName("ListSubChanges")),
+		connect.WithHandlerOptions(opts...),
+	)
 	graphServiceRecordExecutionsHandler := connect.NewUnaryHandler(
 		GraphServiceRecordExecutionsProcedure,
 		svc.RecordExecutions,
@@ -774,6 +896,16 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 			graphServiceGetDivergencesHandler.ServeHTTP(w, r)
 		case GraphServiceRebaseChangeProcedure:
 			graphServiceRebaseChangeHandler.ServeHTTP(w, r)
+		case GraphServiceMergeChangeProcedure:
+			graphServiceMergeChangeHandler.ServeHTTP(w, r)
+		case GraphServiceGetSharedNodesProcedure:
+			graphServiceGetSharedNodesHandler.ServeHTTP(w, r)
+		case GraphServiceGetImpactsProcedure:
+			graphServiceGetImpactsHandler.ServeHTTP(w, r)
+		case GraphServiceSplitChangeProcedure:
+			graphServiceSplitChangeHandler.ServeHTTP(w, r)
+		case GraphServiceListSubChangesProcedure:
+			graphServiceListSubChangesHandler.ServeHTTP(w, r)
 		case GraphServiceRecordExecutionsProcedure:
 			graphServiceRecordExecutionsHandler.ServeHTTP(w, r)
 		case GraphServiceListExecutionsProcedure:
@@ -889,6 +1021,26 @@ func (UnimplementedGraphServiceHandler) GetDivergences(context.Context, *connect
 
 func (UnimplementedGraphServiceHandler) RebaseChange(context.Context, *connect.Request[v1.RebaseChangeRequest]) (*connect.Response[v1.RebaseChangeResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.RebaseChange is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) MergeChange(context.Context, *connect.Request[v1.MergeChangeRequest]) (*connect.Response[v1.MergeChangeResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.MergeChange is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) GetSharedNodes(context.Context, *connect.Request[v1.GetSharedNodesRequest]) (*connect.Response[v1.GetSharedNodesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.GetSharedNodes is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) GetImpacts(context.Context, *connect.Request[v1.GetImpactsRequest]) (*connect.Response[v1.GetImpactsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.GetImpacts is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) SplitChange(context.Context, *connect.Request[v1.SplitChangeRequest]) (*connect.Response[v1.SplitChangeResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.SplitChange is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) ListSubChanges(context.Context, *connect.Request[v1.ListSubChangesRequest]) (*connect.Response[v1.ListSubChangesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.ListSubChanges is not implemented"))
 }
 
 func (UnimplementedGraphServiceHandler) RecordExecutions(context.Context, *connect.Request[v1.RecordExecutionsRequest]) (*connect.Response[v1.RecordExecutionsResponse], error) {

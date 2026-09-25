@@ -60,3 +60,44 @@ func TestJournalRecordsTicksAndActions(t *testing.T) {
 		t.Fatalf("tick: %+v", recs[1])
 	}
 }
+
+// A step starts from a blackboard state, reads existing nodes and produces the
+// next state: the marks of consecutive steps chain, and the items produced by a
+// step account for the growth of the board.
+func TestJournalStepsChainBlackboardStates(t *testing.T) {
+	ctx := context.Background()
+	e, g, base := setup(t)
+	p, err := e.Start(ctx, StartRequest{Methodology: "impact-analysis", BaselineID: base, Intent: "The PSP changes its API, what does this break?"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p, err = e.Run(ctx, p.ID); err != nil || p.Status != StatusCompleted {
+		t.Fatalf("run: %v %+v", err, p)
+	}
+	recs, err := g.Journal(ctx, domain.ExecutionFilter{ChangeID: p.ChangeID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var acts []domain.ExecutionRecord
+	for _, r := range recs {
+		if r.Kind == domain.ExecAction {
+			acts = append(acts, r)
+		}
+	}
+	if len(acts) < 2 {
+		t.Fatalf("expected several actions, got %d", len(acts))
+	}
+	sawReads := false
+	for i, a := range acts {
+		if a.BoardAfter-a.BoardBefore != len(a.Items) {
+			t.Fatalf("action %s: board %d -> %d but %d items", a.Action, a.BoardBefore, a.BoardAfter, len(a.Items))
+		}
+		if i > 0 && a.BoardBefore != acts[i-1].BoardAfter {
+			t.Fatalf("action %s starts from board %d, previous ended at %d", a.Action, a.BoardBefore, acts[i-1].BoardAfter)
+		}
+		sawReads = sawReads || len(a.Reads) > 0
+	}
+	if !sawReads {
+		t.Fatal("no step recorded the node versions it read")
+	}
+}

@@ -49,15 +49,15 @@ const (
 
 // Link types of the methodology model.
 const (
-	LinkContains    = "contains"    // Methodology → element
-	LinkUses        = "uses"        // Agent → Action (admissible)
-	LinkPursues     = "pursues"     // Agent → Goal
-	LinkHas         = "has"         // Agent → Trigger
-	LinkRequires    = "requires"    // Action / Goal → Condition (pre-condition)
-	LinkAchieves    = "achieves"    // Action → Condition (effect)
-	LinkSpecializes = "specializes" // Action → Action
-	LinkExtends     = "extends"     // NodeType → NodeType (subtyping, metadata layer)
-	LinkInstanceOf  = "instanceOf"  // data node → NodeType (metadata layer)
+	LinkContains    = "contains"            // Methodology → element
+	LinkUses        = "uses"                // Agent → Action (admissible)
+	LinkPursues     = "pursues"             // Agent → Goal
+	LinkHas         = "has"                 // Agent → Trigger
+	LinkRequires    = "requires"            // Action / Goal → Condition (pre-condition)
+	LinkAchieves    = "achieves"            // Action → Condition (effect)
+	LinkSpecializes = "specializes"         // Action → Action
+	LinkExtends     = "extends"             // NodeType → NodeType (subtyping, metadata layer)
+	LinkInstanceOf  = domain.LinkInstanceOf // data node → NodeType (metadata layer)
 )
 
 // Key returns the domain key of an element: "M:<methodology>" for the
@@ -331,7 +331,7 @@ type Graph interface {
 // need to (the engine only resolves ancestor types, never links to them).
 type KeyGraph interface {
 	Graph
-	NodeByKey(ctx context.Context, key string) (domain.Node, error)
+	NodeByKey(ctx context.Context, namespace, key string) (domain.Node, error)
 }
 
 // Result reports a synchronization.
@@ -510,7 +510,7 @@ func sync(ctx context.Context, g Graph, t target) (Result, error) {
 	if len(items) == 0 {
 		return res, nil
 	}
-	c, err := g.CreateChange(ctx, graph.NewChange{Title: t.title, Intent: t.intent, BaselineID: head.ID, Data: t.data})
+	c, err := g.CreateChange(ctx, graph.NewChange{Namespace: domain.NamespaceMetadata, Title: t.title, Intent: t.intent, BaselineID: head.ID, Data: t.data})
 	if err != nil {
 		return res, err
 	}
@@ -723,7 +723,7 @@ func ApplyNodeTypes(ctx context.Context, g Graph, meth string, ops []NodeTypeOp)
 	if len(items) == 0 {
 		return res, nil
 	}
-	c, err := g.CreateChange(ctx, graph.NewChange{Title: "Node types of " + meth, Intent: "Define node types of " + meth,
+	c, err := g.CreateChange(ctx, graph.NewChange{Namespace: domain.NamespaceMetadata, Title: "Node types of " + meth, Intent: "Define node types of " + meth,
 		BaselineID: head.ID, Methodology: meth})
 	if err != nil {
 		return res, err
@@ -748,10 +748,10 @@ func LinkToType(ctx context.Context, g KeyGraph, meth string, ref domain.NodeRef
 		return err
 	}
 	ns := meth
-	if root, err := g.NodeByKey(ctx, Key(meth, TypeMethodology, "")); err == nil {
+	if root, err := g.NodeByKey(ctx, domain.NamespaceMetadata, Key(meth, TypeMethodology, "")); err == nil {
 		ns = TypeNamespace([]domain.Node{root}, meth)
 	}
-	nt, err := g.NodeByKey(ctx, typeKey(ns, typeName))
+	nt, err := g.NodeByKey(ctx, domain.NamespaceMetadata, typeKey(ns, typeName))
 	if errors.Is(err, graph.ErrNotFound) {
 		return nil
 	}
@@ -759,7 +759,7 @@ func LinkToType(ctx context.Context, g KeyGraph, meth string, ref domain.NodeRef
 		return err
 	}
 	ntRef := nt.Ref()
-	c, err := g.CreateChange(ctx, graph.NewChange{Title: "Link " + string(ref.ID) + " to " + typeName,
+	c, err := g.CreateChange(ctx, graph.NewChange{Namespace: domain.NamespaceMetadata, Title: "Link " + string(ref.ID) + " to " + typeName,
 		Intent: "instanceOf " + typeName, BaselineID: head.ID, Methodology: meth})
 	if err != nil {
 		return err
@@ -824,7 +824,7 @@ func BackfillInstanceOf(ctx context.Context, g Graph, meth string) (Result, erro
 	if len(items) == 0 {
 		return res, nil
 	}
-	c, err := g.CreateChange(ctx, graph.NewChange{Title: "Backfill instanceOf for " + meth,
+	c, err := g.CreateChange(ctx, graph.NewChange{Namespace: domain.NamespaceMetadata, Title: "Backfill instanceOf for " + meth,
 		Intent: "Link existing nodes to their node type", BaselineID: head.ID, Methodology: meth})
 	if err != nil {
 		return res, err
@@ -840,12 +840,12 @@ func BackfillInstanceOf(ctx context.Context, g Graph, meth string) (Result, erro
 	return res, nil
 }
 
-// CreateObject creates a data node typed by the NodeType typeName of
+// CreateObject creates, in namespace, a data node typed by the NodeType typeName of
 // methodology meth: the node and its instanceOf edge go through one change
 // applied on main. It fails with graph.ErrNotFound when the NodeType is not on
 // the graph yet (methodology not published), graph.ErrConflict when the key is
 // taken, and graph.ErrInvalid without a key.
-func CreateObject(ctx context.Context, g KeyGraph, meth, typeName, key string, props map[string]any) (domain.Node, domain.Baseline, error) {
+func CreateObject(ctx context.Context, g KeyGraph, meth, namespace, typeName, key string, props map[string]any) (domain.Node, domain.Baseline, error) {
 	key = strings.TrimSpace(key)
 	if key == "" {
 		return domain.Node{}, domain.Baseline{}, fmt.Errorf("object key is required: %w", graph.ErrInvalid)
@@ -861,7 +861,7 @@ func CreateObject(ctx context.Context, g KeyGraph, meth, typeName, key string, p
 	var typeRef *domain.NodeRef
 	typeKeyWanted := typeKey(TypeNamespace(nodes, meth), typeName)
 	for _, n := range nodes {
-		if n.Key == key {
+		if n.Key == key && domain.NamespaceOf(n.Namespace) == domain.NamespaceOf(namespace) {
 			return domain.Node{}, domain.Baseline{}, fmt.Errorf("key %q is already used: %w", key, graph.ErrConflict)
 		}
 		if n.Key == typeKeyWanted {
@@ -872,7 +872,7 @@ func CreateObject(ctx context.Context, g KeyGraph, meth, typeName, key string, p
 	if typeRef == nil {
 		return domain.Node{}, domain.Baseline{}, fmt.Errorf("node type %s of %s is not on the graph (publish the methodology): %w", typeName, meth, graph.ErrNotFound)
 	}
-	c, err := g.CreateChange(ctx, graph.NewChange{Title: "Create " + key, Intent: "Create " + typeName + " " + key,
+	c, err := g.CreateChange(ctx, graph.NewChange{Namespace: namespace, Title: "Create " + key, Intent: "Create " + typeName + " " + key,
 		BaselineID: head.ID, Methodology: meth})
 	if err != nil {
 		return domain.Node{}, domain.Baseline{}, err
@@ -891,6 +891,6 @@ func CreateObject(ctx context.Context, g KeyGraph, meth, typeName, key string, p
 	if err != nil {
 		return domain.Node{}, domain.Baseline{}, err
 	}
-	n, err := g.NodeByKey(ctx, key)
+	n, err := g.NodeByKey(ctx, namespace, key)
 	return n, b, err
 }

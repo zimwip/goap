@@ -15,22 +15,31 @@ type ItemID string
 type ChangeStatus string
 
 const (
-	ChangeDraft     ChangeStatus = "draft"
-	ChangeActive    ChangeStatus = "active"
-	ChangeApplied   ChangeStatus = "applied"
-	ChangeAbandoned ChangeStatus = "abandoned"
+	ChangeDraft  ChangeStatus = "draft"
+	ChangeActive ChangeStatus = "active"
+	// ChangeMergePending: applied on its own branch, waiting for a merge into the target branch.
+	ChangeMergePending ChangeStatus = "merge_pending"
+	ChangeApplied      ChangeStatus = "applied"
+	ChangeAbandoned    ChangeStatus = "abandoned"
 )
 
 // ChangeSet describes a modification of the domain graph. It starts from a
 // reference baseline and accumulates items. It is the blackboard of a process.
 type ChangeSet struct {
-	ID          ChangeID     `json:"id"`
-	Title       string       `json:"title"`
-	Intent      string       `json:"intent"`
-	Methodology string       `json:"methodology,omitempty"`
-	Goal        string       `json:"goal,omitempty"`
-	Status      ChangeStatus `json:"status"`
-	BaselineID  BaselineID   `json:"baselineId"`
+	ID          ChangeID `json:"id"`
+	Title       string   `json:"title"`
+	Intent      string   `json:"intent"`
+	Methodology string   `json:"methodology,omitempty"`
+	// Namespace the change acts on: only its nodes can be linked to the change.
+	Namespace string `json:"namespace,omitempty"`
+	// ParentID is set on a sub-change: a part of the parent change, split along an
+	// organisational boundary. OwnerOrg is the key of the OrgUnit ("organisation"
+	// namespace) responsible for it.
+	ParentID   ChangeID     `json:"parentId,omitempty"`
+	OwnerOrg   string       `json:"ownerOrg,omitempty"`
+	Goal       string       `json:"goal,omitempty"`
+	Status     ChangeStatus `json:"status"`
+	BaselineID BaselineID   `json:"baselineId"`
 	// Branch the change is applied to (default main).
 	Branch           string         `json:"branch,omitempty"`
 	ResultBaselineID BaselineID     `json:"resultBaselineId,omitempty"`
@@ -74,11 +83,14 @@ const (
 
 // ChangeItem is one fact on the blackboard.
 type ChangeItem struct {
-	ID          ItemID         `json:"id"`
-	Kind        ItemKind       `json:"kind"`
-	Type        string         `json:"type,omitempty"`
-	Status      ItemStatus     `json:"status"`
-	Target      *NodeRef       `json:"target,omitempty"`   // impact: node of the reference graph; decision: n/a
+	ID     ItemID     `json:"id"`
+	Kind   ItemKind   `json:"kind"`
+	Type   string     `json:"type,omitempty"`
+	Status ItemStatus `json:"status"`
+	Target *NodeRef   `json:"target,omitempty"` // impact: the "pre" version, in the reference graph; decision: n/a
+	// Post is the "post" side of an impact: the proposal (Item) that produces the
+	// new version on the change branch, or that version once known (Node).
+	Post        *Endpoint      `json:"post,omitempty"`
 	Proposal    *Proposal      `json:"proposal,omitempty"` // proposal only
 	Decision    *Decision      `json:"decision,omitempty"` // decision only
 	Data        map[string]any `json:"data,omitempty"`
@@ -122,8 +134,10 @@ type Proposal struct {
 type NodeDraft struct {
 	Base *NodeRef `json:"base,omitempty"`
 	// From and Ancestor are set for merge_node (Properties is then the full merged map).
-	From       *NodeRef       `json:"from,omitempty"`
-	Ancestor   *NodeRef       `json:"ancestor,omitempty"`
+	From     *NodeRef `json:"from,omitempty"`
+	Ancestor *NodeRef `json:"ancestor,omitempty"`
+	// Namespace of a created node (empty: the change namespace).
+	Namespace  string         `json:"namespace,omitempty"`
 	Key        string         `json:"key,omitempty"`
 	Type       string         `json:"type,omitempty"`
 	Properties map[string]any `json:"props,omitempty"`
@@ -165,8 +179,11 @@ type Decision struct {
 func (it ChangeItem) Validate() error {
 	switch it.Kind {
 	case KindImpact:
-		if it.Target == nil || it.Target.IsZero() {
-			return fmt.Errorf("impact item requires a target")
+		if (it.Target == nil || it.Target.IsZero()) && it.Post == nil {
+			return fmt.Errorf("impact item requires a target (pre) or a post")
+		}
+		if p := it.Post; p != nil && (p.Node == nil) == (p.Item == "") {
+			return fmt.Errorf("impact post requires exactly one of node and item")
 		}
 	case KindProposal:
 		p := it.Proposal

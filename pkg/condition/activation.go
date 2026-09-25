@@ -50,10 +50,17 @@ func (h hydrator) item(it domain.ChangeItem) map[string]any {
 		"id": string(it.ID), "kind": string(it.Kind), "type": it.Type,
 		"status":     string(h.bb.Change.EffectiveStatus(it.ID)),
 		"producedBy": it.ProducedBy, "derivedFrom": derived, "data": orEmpty(it.Data),
-		"target": nil, "op": "", "node": nil, "link": nil, "decision": nil,
+		"target": nil, "post": nil, "op": "", "node": nil, "link": nil, "decision": nil,
 	}
 	if it.Target != nil {
 		m["target"] = h.ref(*it.Target)
+	}
+	if e := it.Post; e != nil {
+		if e.Node != nil {
+			m["post"] = h.ref(*e.Node)
+		} else {
+			m["post"] = string(e.Item) // the proposal producing the post version
+		}
 	}
 	if p := it.Proposal; p != nil {
 		m["op"] = string(p.Op)
