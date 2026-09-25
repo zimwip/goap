@@ -203,10 +203,8 @@ func (s *Service) Complete(ctx context.Context, req llm.Request) (llm.Response, 
 	if !ok || !m.Enabled {
 		return llm.Response{}, fmt.Errorf("%w: %s/%s is not in the platform catalog or is disabled", ErrModelDisabled, t.Provider, t.Model)
 	}
-	if p := authz.From(ctx); !p.Anonymous() && len(m.Roles) > 0 && !slices.Contains(p.Roles, "admin") {
-		if !slices.ContainsFunc(m.Roles, func(r string) bool { return slices.Contains(p.Roles, r) }) {
-			return llm.Response{}, fmt.Errorf("%w: %s/%s requires one of the roles %s", ErrForbidden, t.Provider, t.Model, strings.Join(m.Roles, ", "))
-		}
+	if !allowed(authz.From(ctx), m) {
+		return llm.Response{}, fmt.Errorf("%w: %s/%s requires one of the roles %s", ErrForbidden, t.Provider, t.Model, strings.Join(m.Roles, ", "))
 	}
 	period := PeriodKey(m.QuotaPeriod, s.now())
 	if m.QuotaTokens > 0 {
@@ -225,6 +223,46 @@ func (s *Service) Complete(ctx context.Context, req llm.Request) (llm.Response, 
 		}
 	}
 	return resp, err
+}
+
+// allowed applies the access level of a catalog model to a caller. Callers
+// without identity are trusted internal services.
+func allowed(p authz.Principal, m ModelEntry) bool {
+	if p.Anonymous() || len(m.Roles) == 0 || slices.Contains(p.Roles, "admin") {
+		return true
+	}
+	return slices.ContainsFunc(m.Roles, func(r string) bool { return slices.Contains(p.Roles, r) })
+}
+
+// Available lists the models the caller may use (enabled catalog models of a
+// loaded provider, with the required role) and the aliases pointing to them.
+func (s *Service) Available(ctx context.Context) ([]ModelEntry, []AliasEntry, error) {
+	entries, err := s.Store.ListModels(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	aliases, err := s.Store.ListAliases(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	p := authz.From(ctx)
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	ok := map[string]bool{}
+	var models []ModelEntry
+	for _, m := range entries {
+		if reason, known := s.active[m.Provider]; m.Enabled && known && reason == "" && allowed(p, m) {
+			models = append(models, m)
+			ok[m.Provider+"/"+m.Model] = true
+		}
+	}
+	var out []AliasEntry
+	for _, a := range aliases {
+		if ok[a.Target] {
+			out = append(out, a)
+		}
+	}
+	return models, out, nil
 }
 
 // ---- administration ------------------------------------------------------

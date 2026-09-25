@@ -79,11 +79,25 @@ func (h *Handler) Complete(ctx context.Context, r *connect.Request[modelv1.Compl
 		Usage: &modelv1.Usage{InputTokens: int32(resp.Usage.InputTokens), OutputTokens: int32(resp.Usage.OutputTokens)}}), nil
 }
 
-func (h *Handler) ListModels(context.Context, *connect.Request[modelv1.ListModelsRequest]) (*connect.Response[modelv1.ListModelsResponse], error) {
-	names, targets, providers := h.Service.Router.Aliases()
-	out := &modelv1.ListModelsResponse{Providers: providers}
-	for _, n := range names {
-		out.Aliases = append(out.Aliases, &modelv1.ModelAlias{Alias: n, Provider: targets[n].Provider, Model: targets[n].Model})
+func (h *Handler) ListModels(ctx context.Context, r *connect.Request[modelv1.ListModelsRequest]) (*connect.Response[modelv1.ListModelsResponse], error) {
+	ctx = h.Identity.Context(ctx, r.Header())
+	models, aliases, err := h.Service.Available(ctx)
+	if err != nil {
+		return nil, rpcErr(err)
+	}
+	out := &modelv1.ListModelsResponse{}
+	seen := map[string]bool{}
+	for _, m := range models {
+		out.Models = append(out.Models, &modelv1.AvailableModel{Provider: m.Provider, Model: m.Model, DisplayName: m.DisplayName})
+		if !seen[m.Provider] {
+			seen[m.Provider] = true
+			out.Providers = append(out.Providers, m.Provider)
+		}
+	}
+	for _, a := range aliases {
+		if t, ok := parseTarget(a.Target); ok {
+			out.Aliases = append(out.Aliases, &modelv1.ModelAlias{Alias: a.Alias, Provider: t.Provider, Model: t.Model})
+		}
 	}
 	return connect.NewResponse(out), nil
 }

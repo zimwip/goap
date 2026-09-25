@@ -6,7 +6,8 @@
   import StatusBadge from '../../components/StatusBadge.svelte';
   import { provideActions } from '../../shell/workbench.svelte';
   import { openTab } from '../../shell/tabs.svelte';
-  import { engine, errorMessage, formatDate, type Process } from '../../api';
+  import { engine, models, errorMessage, formatDate, type CatalogModel, type Process } from '../../api';
+  import { hasAnyRole } from '../../stores/session.svelte';
   import { computeStats, type Slice } from '../../tokenStats';
 
   let { tab }: { tab: Tab } = $props();
@@ -24,6 +25,9 @@
   let range = $state('7d');
   let sort = $state<'total' | 'input' | 'output' | 'calls'>('total');
   let loadedAt = $state(Date.now());
+  let catalog = $state<CatalogModel[]>([]);
+  let quotaError = $state('');
+  const isAdmin = $derived(hasAnyRole('admin'));
 
   async function load() {
     loading = true;
@@ -31,6 +35,15 @@
       processes = (await engine.listProcesses({})).processes ?? [];
       loadedAt = Date.now();
       error = '';
+      // global quotas are administered (and readable) by platform admins only
+      if (isAdmin) {
+        try {
+          catalog = (await models.listCatalog()).models ?? [];
+          quotaError = '';
+        } catch (e) {
+          quotaError = errorMessage(e);
+        }
+      }
     } catch (e) {
       error = errorMessage(e);
     } finally {
@@ -65,6 +78,16 @@
   const y = (v: number) => CH.h - CH.b - (v / maxBucket) * (CH.h - CH.t - CH.b);
   const labelEvery = $derived(Math.max(1, Math.ceil(stats.buckets.length / 8)));
 
+  const num = (v: string | number | undefined) => Number(v ?? 0) || 0;
+  const quotas = $derived(
+    catalog
+      .filter((m) => m.enabled && num(m.quotaTokens) > 0)
+      .map((m) => ({ m, quota: num(m.quotaTokens), used: num(m.usedTokens), pct: (num(m.usedTokens) / num(m.quotaTokens)) * 100 }))
+      .sort((a, b) => b.pct - a.pct),
+  );
+  const unmetered = $derived(catalog.filter((m) => m.enabled && num(m.quotaTokens) === 0 && num(m.usedTokens) > 0));
+  const RESET: Record<string, string> = { day: 'resets daily (UTC)', month: 'resets monthly (UTC)', total: 'never resets' };
+
   function heavy(r: { ratio: number }) {
     return r.ratio >= 3 && stats.runs >= 4;
   }
@@ -84,6 +107,37 @@
     </select>
   </div>
   {#if error}<div class="alert">{error}</div>{/if}
+  {#if isAdmin}
+    <section class="card">
+      <div class="row">
+        <h3 class="grow">Quota usage</h3>
+        <button type="button" class="small" onclick={() => openTab({ kind: 'platform', params: {} }, { pin: true })}>Manage quotas</button>
+      </div>
+      {#if quotaError}
+        <p class="alert">{quotaError}</p>
+      {:else if quotas.length === 0}
+        <p class="empty">No model has a global quota. Set one in Platform settings.</p>
+      {:else}
+        <ul class="quotas">
+          {#each quotas as q (q.m.provider + '/' + q.m.model)}
+            <li>
+              <code class="qname">{q.m.provider}/{q.m.model}</code>
+              <span class="qbar" class:warn={q.pct >= 80 && q.pct < 100} class:full={q.pct >= 100} role="progressbar" aria-valuenow={Math.min(100, Math.round(q.pct))} aria-valuemin="0" aria-valuemax="100" aria-label={`Quota of ${q.m.model}`}>
+                <span style={`width:${Math.min(100, q.pct)}%`}></span>
+              </span>
+              <span class="qval">{compact(q.used)} / {compact(q.quota)} <span class="hint">{Math.round(q.pct)}%</span></span>
+              <span class="hint qreset">{RESET[q.m.quotaPeriod ?? 'month'] ?? ''}</span>
+              {#if q.pct >= 100}<span class="heavy full">exhausted</span>{:else if q.pct >= 80}<span class="heavy">near limit</span>{/if}
+            </li>
+          {/each}
+        </ul>
+      {/if}
+      {#if unmetered.length}
+        <p class="hint">Without quota: {unmetered.map((m) => `${m.provider}/${m.model} (${compact(num(m.usedTokens))})`).join(', ')}.</p>
+      {/if}
+      <p class="hint">Quotas count the tokens of the current period across all users; the period figures above cover the selected range only.</p>
+    </section>
+  {/if}
   {#if loading && !processes.length}
     <p class="empty">Loading…</p>
   {:else if stats.calls === 0}
@@ -116,6 +170,7 @@
         {/each}
       </svg>
     </section>
+
 
     <div class="cols">
       {#each [['By model', stats.byModel], ['By agent', stats.byAgent], ['By action', stats.byAction]] as [title, rows] (title)}
@@ -327,6 +382,60 @@
   .share .track {
     width: 90px;
     margin-right: 0.4rem;
+  }
+  .quotas {
+    list-style: none;
+    margin: 0 0 0.5rem;
+    padding: 0;
+    display: grid;
+    gap: 0.5rem;
+  }
+  .quotas li {
+    display: grid;
+    grid-template-columns: minmax(140px, 1.2fr) 2fr auto minmax(110px, auto) auto;
+    gap: 0.6rem;
+    align-items: center;
+  }
+  .qname {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .qbar {
+    height: 10px;
+    border-radius: 5px;
+    background: var(--surface-2);
+    overflow: hidden;
+  }
+  .qbar span {
+    display: block;
+    height: 100%;
+    background: var(--ok);
+  }
+  .qbar.warn span {
+    background: var(--warn);
+  }
+  .qbar.full span {
+    background: var(--danger);
+  }
+  .qval {
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .qreset {
+    font-size: 0.8rem;
+  }
+  .heavy.full {
+    border-color: var(--danger);
+    color: var(--danger);
+  }
+  @media (max-width: 800px) {
+    .quotas li {
+      grid-template-columns: 1fr auto;
+    }
+    .qbar {
+      grid-column: 1 / -1;
+    }
   }
   .heavy {
     margin-left: 0.4rem;

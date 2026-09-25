@@ -4,6 +4,7 @@
   import { TEMPLATES } from '../dsl';
   import CondRows from './CondRows.svelte';
   import CodeEditor from './CodeEditor.svelte';
+  import { modelChoices, refreshModelChoices, isAvailableModel } from '../stores/modelChoices.svelte';
 
   let {
     action = $bindable(),
@@ -28,6 +29,12 @@
     /** confirmed rename (on blur): updates references */
     onrename?: (from: string, to: string) => void;
   } = $props();
+
+  $effect(() => {
+    if (action.kind === 'llm' && !modelChoices.loaded) void refreshModelChoices();
+  });
+
+  const defaultAlias = $derived(modelChoices.aliases.find((a) => a.alias === 'default'));
 
   let nameAtFocus = '';
 
@@ -227,14 +234,37 @@
 {#if action.kind === 'llm'}
   <div class="field">
     <label for="{id}-model">Model</label>
-    <input
+    <select
       id="{id}-model"
-      type="text"
       bind:value={action.model}
-      class:bad={bad(`${p}.model`)}
+      class:bad={bad(`${p}.model`) || (modelChoices.loaded && !!action.model.trim() && !isAvailableModel(action.model))}
       data-path="{p}.model"
-      placeholder="default"
-    />
+      disabled={readonly}
+    >
+      <option value="">default{defaultAlias ? ` — ${defaultAlias.provider}/${defaultAlias.model}` : ''}</option>
+      {#if action.model.trim() && modelChoices.loaded && !isAvailableModel(action.model)}
+        <option value={action.model}>{action.model} (not available to you)</option>
+      {/if}
+      {#if modelChoices.aliases.some((a) => a.alias !== 'default')}
+        <optgroup label="Aliases">
+          {#each modelChoices.aliases.filter((a) => a.alias !== 'default') as a (a.alias)}
+            <option value={a.alias}>{a.alias} — {a.provider}/{a.model}</option>
+          {/each}
+        </optgroup>
+      {/if}
+      <optgroup label="Models">
+        {#each modelChoices.models as m (m.provider + '/' + m.model)}
+          <option value={`${m.provider}/${m.model}`}>{m.provider}/{m.displayName || m.model}</option>
+        {/each}
+      </optgroup>
+    </select>
+    {#if modelChoices.loaded && !!action.model.trim() && !isAvailableModel(action.model)}
+      <span class="hint">This model is not in your list of authorized models (removed, disabled, or restricted by role). Pick another one.</span>
+    {:else if modelChoices.error}
+      <span class="hint">Model list unavailable: {modelChoices.error}</span>
+    {:else}
+      <span class="hint">Only models enabled and authorized for you in Platform settings are listed.</span>
+    {/if}
   </div>
   <div class="field">
     <label for="{id}-prompt">Prompt <span class="opt">(Go template: {'{{ .Change.Intent }}'}…)</span></label>
