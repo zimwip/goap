@@ -11,7 +11,7 @@ import (
 // ToPB converts a stored record.
 func ToPB(r Record) *registryv1.Methodology {
 	m := r.Methodology
-	out := &registryv1.Methodology{Name: m.Name, Version: m.Version, Description: m.Description, DomainRef: m.DomainRef, Status: string(r.Status),
+	out := &registryv1.Methodology{Name: m.Name, Version: m.Version, Description: m.Description, DomainRef: m.DomainRef, Namespace: m.Namespace, Status: string(r.Status),
 		CreatedAt: pbconv.Time(r.CreatedAt), UpdatedAt: pbconv.Time(r.UpdatedAt), PublishedAt: pbconv.Time(r.PublishedAt), UpdatedBy: r.UpdatedBy}
 	for _, n := range m.Domain.NodeTypes {
 		out.NodeTypes = append(out.NodeTypes, nodeTypeToPB(n))
@@ -69,7 +69,7 @@ func FromPB(p *registryv1.Methodology) methodology.Methodology {
 	if p == nil {
 		return methodology.Methodology{}
 	}
-	m := methodology.Methodology{Name: p.Name, Version: p.Version, Description: p.Description, DomainRef: p.DomainRef}
+	m := methodology.Methodology{Name: p.Name, Version: p.Version, Description: p.Description, DomainRef: p.DomainRef, Namespace: p.Namespace}
 	for _, n := range p.NodeTypes {
 		m.Domain.NodeTypes = append(m.Domain.NodeTypes, nodeTypeFromPB(n))
 	}

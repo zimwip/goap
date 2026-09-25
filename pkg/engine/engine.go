@@ -298,7 +298,7 @@ func (e *Engine) selectTarget(ctx context.Context, p *Process, m *methodology.Co
 		if p.Trigger != "" {
 			data = map[string]any{"trigger": p.Trigger}
 		}
-		c, err := e.Graph.CreateChange(ctx, graph.NewChange{Title: title, Intent: firstUserTurn(p), Methodology: m.Name, Namespace: p.Namespace, OwnBranch: p.OwnBranch, BaselineID: p.BaselineID, Data: data})
+		c, err := e.Graph.CreateChange(ctx, graph.NewChange{Title: title, Intent: firstUserTurn(p), Methodology: m.Name, Namespace: firstNonEmpty(p.Namespace, m.Namespace), OwnBranch: p.OwnBranch, BaselineID: p.BaselineID, Data: data})
 		if err != nil {
 			return err
 		}

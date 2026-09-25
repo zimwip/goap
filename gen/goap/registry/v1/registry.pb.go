@@ -1239,8 +1239,10 @@ type Methodology struct {
 	UpdatedBy   string                 `protobuf:"bytes,13,opt,name=updated_by,json=updatedBy,proto3" json:"updated_by,omitempty"`
 	Agents      []*Agent               `protobuf:"bytes,14,rep,name=agents,proto3" json:"agents,omitempty"`
 	// shared domain "<name>[@<version>]" used instead of node_types / link_types
-	DomainRef     string       `protobuf:"bytes,15,opt,name=domain_ref,json=domainRef,proto3" json:"domain_ref,omitempty"`
-	Lifecycles    []*Lifecycle `protobuf:"bytes,16,rep,name=lifecycles,proto3" json:"lifecycles,omitempty"`
+	DomainRef  string       `protobuf:"bytes,15,opt,name=domain_ref,json=domainRef,proto3" json:"domain_ref,omitempty"`
+	Lifecycles []*Lifecycle `protobuf:"bytes,16,rep,name=lifecycles,proto3" json:"lifecycles,omitempty"`
+	// graph namespace the changes of the methodology act on (default sdlc)
+	Namespace     string `protobuf:"bytes,17,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1385,6 +1387,13 @@ func (x *Methodology) GetLifecycles() []*Lifecycle {
 		return x.Lifecycles
 	}
 	return nil
+}
+
+func (x *Methodology) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
+	}
+	return ""
 }
 
 type GoalSummary struct {
@@ -3894,7 +3903,7 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\x05value\x18\x05 \x01(\x01R\x05value\x1a6\n" +
 	"\bPreEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\bR\x05value:\x028\x01\"\xeb\x05\n" +
+	"\x05value\x18\x02 \x01(\bR\x05value:\x028\x01\"\x89\x06\n" +
 	"\vMethodology\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\tR\aversion\x12 \n" +
@@ -3922,7 +3931,8 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"domain_ref\x18\x0f \x01(\tR\tdomainRef\x12;\n" +
 	"\n" +
 	"lifecycles\x18\x10 \x03(\v2\x1b.goap.registry.v1.LifecycleR\n" +
-	"lifecycles\"C\n" +
+	"lifecycles\x12\x1c\n" +
+	"\tnamespace\x18\x11 \x01(\tR\tnamespace\"C\n" +
 	"\vGoalSummary\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\"^\n" +

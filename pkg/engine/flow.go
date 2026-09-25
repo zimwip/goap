@@ -190,3 +190,12 @@ func (e *Engine) FlowsOf(ctx context.Context, id string) ([]domain.Flow, error) 
 	}
 	return slices.Clone(bb.Change.Flows()), nil
 }
+
+func firstNonEmpty(ss ...string) string {
+	for _, s := range ss {
+		if s != "" {
+			return s
+		}
+	}
+	return ""
+}

@@ -40,8 +40,8 @@ func (s PostgresStore) Save(ctx context.Context, r Record) error {
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):
 			id = uuid.NewString()
-			_, err = tx.Exec(ctx, `INSERT INTO methodology (id, name, version, description, domain_ref, status, created_at, updated_at, updated_by)
-				VALUES ($1, $2, $3, $4, $8, $5, $6, $6, $7)`, id, m.Name, m.Version, m.Description, string(r.Status), r.UpdatedAt, r.UpdatedBy, m.DomainRef)
+			_, err = tx.Exec(ctx, `INSERT INTO methodology (id, name, version, description, domain_ref, namespace, status, created_at, updated_at, updated_by)
+				VALUES ($1, $2, $3, $4, $8, $9, $5, $6, $6, $7)`, id, m.Name, m.Version, m.Description, string(r.Status), r.UpdatedAt, r.UpdatedBy, m.DomainRef, m.Namespace)
 			if err != nil {
 				return err
 			}
@@ -50,8 +50,8 @@ func (s PostgresStore) Save(ctx context.Context, r Record) error {
 		case Status(status) != StatusDraft:
 			return fmt.Errorf("%s: %w", key(m.Name, m.Version), ErrImmutable)
 		default:
-			if _, err := tx.Exec(ctx, `UPDATE methodology SET description = $2, updated_at = $3, updated_by = $4, domain_ref = $5 WHERE id = $1`,
-				id, m.Description, r.UpdatedAt, r.UpdatedBy, m.DomainRef); err != nil {
+			if _, err := tx.Exec(ctx, `UPDATE methodology SET description = $2, updated_at = $3, updated_by = $4, domain_ref = $5, namespace = $6 WHERE id = $1`,
+				id, m.Description, r.UpdatedAt, r.UpdatedBy, m.DomainRef, m.Namespace); err != nil {
 				return err
 			}
 			for _, t := range []string{"methodology_node_type", "methodology_link_type", "methodology_lifecycle", "methodology_condition", "methodology_action", "methodology_goal", "methodology_agent"} {
@@ -132,7 +132,7 @@ func orEmptyAny(m map[string]any) map[string]any {
 	return m
 }
 
-const headerCols = `id::text, name, version, description, domain_ref, status, created_at, updated_at, published_at, updated_by`
+const headerCols = `id::text, name, version, description, domain_ref, namespace, status, created_at, updated_at, published_at, updated_by`
 
 type header struct {
 	id string
@@ -144,7 +144,7 @@ func scanHeader(row pgx.Row) (header, error) {
 	var published *time.Time
 	var status string
 	m := &h.r.Methodology
-	err := row.Scan(&h.id, &m.Name, &m.Version, &m.Description, &m.DomainRef, &status, &h.r.CreatedAt, &h.r.UpdatedAt, &published, &h.r.UpdatedBy)
+	err := row.Scan(&h.id, &m.Name, &m.Version, &m.Description, &m.DomainRef, &m.Namespace, &status, &h.r.CreatedAt, &h.r.UpdatedAt, &published, &h.r.UpdatedBy)
 	h.r.Status = Status(status)
 	if published != nil {
 		h.r.PublishedAt = *published

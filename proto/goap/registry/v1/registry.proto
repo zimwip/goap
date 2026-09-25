@@ -223,6 +223,8 @@ message Methodology {
   // shared domain "<name>[@<version>]" used instead of node_types / link_types
   string domain_ref = 15;
   repeated Lifecycle lifecycles = 16;
+  // graph namespace the changes of the methodology act on (default sdlc)
+  string namespace = 17;
 }
 
 message GoalSummary {
