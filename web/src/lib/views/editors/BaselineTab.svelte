@@ -126,12 +126,15 @@
           <tbody>
             {#each shownNodes as n (n.id)}
               <tr class:deleted={n.deleted} class:sel={selectedKey === n.key}>
-                <td><button type="button" class="link mono" onclick={() => showNode(n)}>{n.key}</button></td>
+                <td><button type="button" class="link mono" title="Open the node editor" ondblclick={() => openTab({ kind: 'node', params: { id: n.id ?? '', key: n.key ?? '' } }, { pin: true })} onclick={() => showNode(n)}>{n.key}</button></td>
                 <td>{n.type}</td>
                 <td>v{n.version ?? 0}</td>
                 <td>{#if n.state}<span class="state">{n.state}</span>{/if}</td>
                 <td>{nodeTitle(n)}</td>
-                <td><button type="button" class="link small" title="Versions and states of the node" onclick={() => openTab({ kind: 'nodeHistory', params: { id: n.id ?? '', key: n.key ?? '' } }, { pin: true })}>History</button></td>
+                <td class="nowrap">
+                  <button type="button" class="link small" title="Open the node editor" onclick={() => openTab({ kind: 'node', params: { id: n.id ?? '', key: n.key ?? '' } }, { pin: true })}>Open</button>
+                  <button type="button" class="link small" title="Versions and states of the node" onclick={() => openTab({ kind: 'node', params: { id: n.id ?? '', key: n.key ?? '', pane: 'history' } }, { pin: true })}>History</button>
+                </td>
               </tr>
             {/each}
           </tbody>

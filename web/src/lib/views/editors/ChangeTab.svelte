@@ -14,11 +14,13 @@
     type NodeRef,
     type Struct,
   } from '../../api';
+  import { untrack } from 'svelte';
   import type { Tab } from '../../shell/types';
   import Icon from '../../shell/Icon.svelte';
   import { makeContext, describeProposal, refKey, show } from '../../items';
   import StatusBadge from '../../components/StatusBadge.svelte';
   import ChangeLifecycle from '../../components/ChangeLifecycle.svelte';
+  import EditorPanes, { type Pane } from '../../components/EditorPanes.svelte';
   import { lifecycleRows, reopenable, nodeTypeNames, typeNodeRef, lifecycleResolver, supersededIds, type LifecycleRow } from '../../lifecycle';
   import { openTab } from '../../shell/tabs.svelte';
   import { provideActions, notify } from '../../shell/workbench.svelte';
@@ -32,6 +34,10 @@
   let attached = $state<NodeRef[]>([]);
   let extraNodes = $state<string[]>([]);
   let moving = $state('');
+  let pane = $state(untrack(() => tab.params.pane) || 'overview');
+  $effect(() => {
+    tab.params.pane = pane;
+  });
   let loading = $state(false);
   let error = $state('');
 
@@ -91,6 +97,11 @@
     ...items.filter((i) => i.proposal?.op === 'create_node' && !supersededIds(items).has(i.id ?? '')).map((i) => i.proposal?.node?.key ?? ''),
   ]);
   const stuckEditable = $derived(lcRows.some((r) => r.lifecycle && r.editable && !r.removal));
+  const panes = $derived<Pane[]>([
+    { id: 'overview', label: 'Overview', badge: stuckEditable ? '!' : undefined },
+    { id: 'nodes', label: 'Nodes', badge: lcRows.length || undefined },
+    { id: 'items', label: 'Items', badge: items.length || undefined },
+  ]);
 
   /** Proposes a transition of a node in this change (the server checks it). */
   /** Proposes new values for some properties of a node (the server checks the state). */
@@ -323,146 +334,153 @@
 {/if}
 
 {#if change}
-  <section class="card">
-    <div class="editor-head">
-      <Icon name="diff" size={18} />
-      <h2>{change.title || 'Untitled'}</h2>
-      <StatusBadge status={change.status} />
-    </div>
-    {#if change.intent}<p class="intent">"{change.intent}"</p>{/if}
-    <dl class="meta">
-      <dt>ID</dt><dd><code>{change.id}</code></dd>
-      {#if change.methodology}<dt>Methodology</dt><dd>{change.methodology}</dd>{/if}
-      {#if change.goal}<dt>Goal</dt><dd><code>{change.goal}</code></dd>{/if}
-      {#if change.baselineId}
-        <dt>Starting baseline</dt>
-        <dd><button type="button" class="link mono" onclick={() => openBaseline(change?.baselineId)}>{shortId(change.baselineId)}</button></dd>
-      {/if}
-      {#if change.resultBaselineId}
-        <dt>Resulting baseline</dt>
-        <dd><button type="button" class="link mono" onclick={() => openBaseline(change?.resultBaselineId)}>{shortId(change.resultBaselineId)}</button></dd>
-      {/if}
-      {#if change.createdAt}<dt>Created on</dt><dd>{formatDate(change.createdAt)}</dd>{/if}
-      <dt>Journal</dt>
-      <dd><button type="button" class="link" onclick={() => openJournal()}>Execution journal</button></dd>
-      {#if related.length}
-        <dt>Executions</dt>
-        <dd class="runs">
-          {#each related as p (p.id)}
-            <button type="button" class="link" onclick={() => openTab({ kind: 'run', params: { id: p.id ?? '' } })}>{p.agent || shortId(p.id)}</button>
-            <StatusBadge status={p.status} />
-          {/each}
-        </dd>
-      {/if}
-    </dl>
+  {@const ch = change}
+  <EditorPanes {panes} bind:active={pane} label="Change sections">
+    {#snippet children(active)}
+      {#if active === 'overview'}
+      <section class="card">
+        <div class="editor-head">
+          <Icon name="diff" size={18} />
+          <h2>{ch.title || 'Untitled'}</h2>
+          <StatusBadge status={ch.status} />
+        </div>
+        {#if ch.intent}<p class="intent">"{ch.intent}"</p>{/if}
+        <dl class="meta">
+          <dt>ID</dt><dd><code>{ch.id}</code></dd>
+          {#if ch.methodology}<dt>Methodology</dt><dd>{ch.methodology}</dd>{/if}
+          {#if ch.goal}<dt>Goal</dt><dd><code>{ch.goal}</code></dd>{/if}
+          {#if ch.baselineId}
+            <dt>Starting baseline</dt>
+            <dd><button type="button" class="link mono" onclick={() => openBaseline(ch.baselineId)}>{shortId(ch.baselineId)}</button></dd>
+          {/if}
+          {#if ch.resultBaselineId}
+            <dt>Resulting baseline</dt>
+            <dd><button type="button" class="link mono" onclick={() => openBaseline(ch.resultBaselineId)}>{shortId(ch.resultBaselineId)}</button></dd>
+          {/if}
+          {#if ch.createdAt}<dt>Created on</dt><dd>{formatDate(ch.createdAt)}</dd>{/if}
+          <dt>Journal</dt>
+          <dd><button type="button" class="link" onclick={() => openJournal()}>Execution journal</button></dd>
+          {#if related.length}
+            <dt>Executions</dt>
+            <dd class="runs">
+              {#each related as p (p.id)}
+                <button type="button" class="link" onclick={() => openTab({ kind: 'run', params: { id: p.id ?? '' } })}>{p.agent || shortId(p.id)}</button>
+                <StatusBadge status={p.status} />
+              {/each}
+            </dd>
+          {/if}
+        </dl>
 
-    <div class="apply row">
-      <div class="grow">
-        <label for="bname">Name of the new baseline</label>
-        <input id="bname" type="text" bind:value={baselineName} disabled={isApplied} />
-      </div>
-      <button class="primary" onclick={apply} disabled={isApplied || applying || !baselineName.trim() || stuckEditable} title={stuckEditable ? 'Move the nodes out of their editable state first' : ''}>
-        {applying ? 'Applying…' : 'Apply'}
-      </button>
-    </div>
-    {#if applied}
-      <div class="alert ok" style="margin: 0.75rem 0 0">
-        Baseline <button type="button" class="link" onclick={() => openBaseline(applied?.id)}>{applied.name || applied.id}</button> created.
-      </div>
-    {/if}
-  </section>
-
-  <ChangeLifecycle rows={lcRows} candidates={lcCandidates} disabled={closed} busy={moving} onmove={move} onedit={edit} types={typeNames} {lifecycleOf} keys={takenKeys} oncreate={createNode} onremove={removeNode} onundo={undoDelete} onhistory={(r) => openTab({ kind: 'nodeHistory', params: { id: r.node.id ?? '', key: r.node.key ?? '' } }, { pin: true })} onadd={(id) => (extraNodes = [...extraNodes, id])} />
-
-  <section class="card">
-    <h3>Impacts <span class="count">{groups.impact.length}</span></h3>
-    {#if groups.impact.length}
-      <table>
-        <thead><tr><th>Item</th><th>Type</th><th>Reason</th><th>Produced by</th></tr></thead>
-        <tbody>
-          {#each groups.impact as i (i.id)}
-            <tr class:superseded={i.status === ITEM_SUPERSEDED}>
-              <td><code>{refKey(ctx, i.target)}</code></td>
-              <td>{i.type}</td>
-              <td>{show(i.data?.['reason'])}</td>
-              <td class="muted">{@render producer(i)}</td>
-            </tr>
-          {/each}
-        </tbody>
-      </table>
-    {:else}
-      <p class="empty">No impacts.</p>
-    {/if}
-  </section>
-
-  <section class="card">
-    <h3>Proposals <span class="count">{groups.proposal.length}</span></h3>
-    {#if groups.proposal.length}
-      <ul class="list">
-        {#each groups.proposal as i (i.id)}
-          <li class:superseded={i.status === ITEM_SUPERSEDED}>
-            <div class="row">
-              <strong class="grow">{describeProposal(ctx, i)}</strong>
-              <StatusBadge status={i.status} />
-            </div>
-            {#if i.proposal?.node?.props}
-              <pre>{JSON.stringify(i.proposal.node.props, null, 2)}</pre>
-            {/if}
-            <div class="hint">{@render producer(i)} · <code>{shortId(i.id)}</code></div>
-          </li>
-        {/each}
-      </ul>
-    {:else}
-      <p class="empty">No proposals.</p>
-    {/if}
-  </section>
-
-  <section class="card">
-    <h3>Decisions <span class="count">{groups.decision.length}</span></h3>
-    {#if groups.decision.length}
-      <table>
-        <thead><tr><th>Proposal</th><th>Decision</th><th>Comment</th></tr></thead>
-        <tbody>
-          {#each groups.decision as i (i.id)}
-            <tr class:superseded={i.status === ITEM_SUPERSEDED}>
-              <td>{describeProposal(ctx, ctx.items.get(i.decision?.item ?? ''))}</td>
-              <td><StatusBadge status={i.decision?.accept ? 'accepted' : 'rejected'} /></td>
-              <td>{i.decision?.comment ?? ''}</td>
-            </tr>
-          {/each}
-        </tbody>
-      </table>
-    {:else}
-      <p class="empty">No decisions.</p>
-    {/if}
-  </section>
-
-  <section class="card">
-    <h3>Artifacts <span class="count">{groups.artifact.length}</span></h3>
-    {#each groups.artifact as i (i.id)}
-      {@const md = markdownOf(i)}
-      <article class="artifact" class:superseded={i.status === ITEM_SUPERSEDED}>
-        <h4>
-          {i.type || 'artifact'} <span class="hint">· {@render producer(i)}</span>
-          {#if i.status === ITEM_SUPERSEDED}<StatusBadge status={i.status} />{/if}
-        </h4>
-        {#if md !== undefined}
-          <pre class="md">{md}</pre>
-        {:else if i.data}
-          <pre>{JSON.stringify(i.data, null, 2)}</pre>
+        <div class="apply row">
+          <div class="grow">
+            <label for="bname">Name of the new baseline</label>
+            <input id="bname" type="text" bind:value={baselineName} disabled={isApplied} />
+          </div>
+          <button class="primary" onclick={apply} disabled={isApplied || applying || !baselineName.trim() || stuckEditable} title={stuckEditable ? 'Move the nodes out of their editable state first' : ''}>
+            {applying ? 'Applying…' : 'Apply'}
+          </button>
+        </div>
+        {#if applied}
+          <div class="alert ok" style="margin: 0.75rem 0 0">
+            Baseline <button type="button" class="link" onclick={() => openBaseline(applied?.id)}>{applied.name || applied.id}</button> created.
+          </div>
         {/if}
-      </article>
-    {:else}
-      <p class="empty">No artifacts.</p>
-    {/each}
-  </section>
+      </section>
+      {:else if active === 'nodes'}
+      <ChangeLifecycle rows={lcRows} candidates={lcCandidates} disabled={closed} busy={moving} onmove={move} onedit={edit} types={typeNames} {lifecycleOf} keys={takenKeys} oncreate={createNode} onremove={removeNode} onundo={undoDelete} onhistory={(r) => openTab({ kind: 'node', params: { id: r.node.id ?? '', key: r.node.key ?? '', pane: 'history' } }, { pin: true })} onopennode={(r) => openTab({ kind: 'node', params: { id: r.node.id ?? '', key: r.node.key ?? '', change: ch.id ?? '' } }, { pin: true })} onadd={(id) => (extraNodes = [...extraNodes, id])} />
+      {:else if active === 'items'}
+      <section class="card">
+        <h3>Impacts <span class="count">{groups.impact.length}</span></h3>
+        {#if groups.impact.length}
+          <table>
+            <thead><tr><th>Item</th><th>Type</th><th>Reason</th><th>Produced by</th></tr></thead>
+            <tbody>
+              {#each groups.impact as i (i.id)}
+                <tr class:superseded={i.status === ITEM_SUPERSEDED}>
+                  <td><code>{refKey(ctx, i.target)}</code></td>
+                  <td>{i.type}</td>
+                  <td>{show(i.data?.['reason'])}</td>
+                  <td class="muted">{@render producer(i)}</td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        {:else}
+          <p class="empty">No impacts.</p>
+        {/if}
+      </section>
 
-  {#if others.length}
-    <section class="card">
-      <h3>Other items</h3>
-      <pre>{JSON.stringify(others, null, 2)}</pre>
-    </section>
-  {/if}
+      <section class="card">
+        <h3>Proposals <span class="count">{groups.proposal.length}</span></h3>
+        {#if groups.proposal.length}
+          <ul class="list">
+            {#each groups.proposal as i (i.id)}
+              <li class:superseded={i.status === ITEM_SUPERSEDED}>
+                <div class="row">
+                  <strong class="grow">{describeProposal(ctx, i)}</strong>
+                  <StatusBadge status={i.status} />
+                </div>
+                {#if i.proposal?.node?.props}
+                  <pre>{JSON.stringify(i.proposal.node.props, null, 2)}</pre>
+                {/if}
+                <div class="hint">{@render producer(i)} · <code>{shortId(i.id)}</code></div>
+              </li>
+            {/each}
+          </ul>
+        {:else}
+          <p class="empty">No proposals.</p>
+        {/if}
+      </section>
+
+      <section class="card">
+        <h3>Decisions <span class="count">{groups.decision.length}</span></h3>
+        {#if groups.decision.length}
+          <table>
+            <thead><tr><th>Proposal</th><th>Decision</th><th>Comment</th></tr></thead>
+            <tbody>
+              {#each groups.decision as i (i.id)}
+                <tr class:superseded={i.status === ITEM_SUPERSEDED}>
+                  <td>{describeProposal(ctx, ctx.items.get(i.decision?.item ?? ''))}</td>
+                  <td><StatusBadge status={i.decision?.accept ? 'accepted' : 'rejected'} /></td>
+                  <td>{i.decision?.comment ?? ''}</td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        {:else}
+          <p class="empty">No decisions.</p>
+        {/if}
+      </section>
+
+      <section class="card">
+        <h3>Artifacts <span class="count">{groups.artifact.length}</span></h3>
+        {#each groups.artifact as i (i.id)}
+          {@const md = markdownOf(i)}
+          <article class="artifact" class:superseded={i.status === ITEM_SUPERSEDED}>
+            <h4>
+              {i.type || 'artifact'} <span class="hint">· {@render producer(i)}</span>
+              {#if i.status === ITEM_SUPERSEDED}<StatusBadge status={i.status} />{/if}
+            </h4>
+            {#if md !== undefined}
+              <pre class="md">{md}</pre>
+            {:else if i.data}
+              <pre>{JSON.stringify(i.data, null, 2)}</pre>
+            {/if}
+          </article>
+        {:else}
+          <p class="empty">No artifacts.</p>
+        {/each}
+      </section>
+
+      {#if others.length}
+        <section class="card">
+          <h3>Other items</h3>
+          <pre>{JSON.stringify(others, null, 2)}</pre>
+        </section>
+      {/if}
+      {/if}
+    {/snippet}
+  </EditorPanes>
 {/if}
 </div>
 
