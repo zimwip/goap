@@ -22,8 +22,34 @@ import (
 func (g *Graph) Apply(ctx context.Context, id domain.ChangeID, baselineName string) (domain.Baseline, error) {
 	var result domain.Baseline
 	err := g.repo.InTx(ctx, func(tx Tx) (err error) {
-		result, err = g.applyTx(ctx, tx, id, baselineName)
-		return err
+		if open, err := openSubChanges(ctx, tx, id); err != nil {
+			return err
+		} else if len(open) > 0 {
+			return fmt.Errorf("change %s has %d open sub-change(s), apply or abandon them first: %w", id, len(open), ErrConflict)
+		}
+		if result, err = g.applyTx(ctx, tx, id, baselineName); err != nil {
+			return err
+		}
+		c, err := tx.Change(ctx, id)
+		if err != nil {
+			return err
+		}
+		// A change with its own branch is merged into the branch it was forked
+		// from once applied; conflicts leave it merge_pending (see MergeChange).
+		own, ok, err := ownBranch(ctx, tx, c)
+		if err != nil || !ok {
+			return err
+		}
+		c, err = g.integrate(ctx, tx, c, own, nil)
+		if err != nil {
+			return err
+		}
+		if c.Status == domain.ChangeApplied {
+			if result, err = tx.Baseline(ctx, c.ResultBaselineID); err != nil {
+				return err
+			}
+		}
+		return nil
 	})
 	return result, err
 }
@@ -33,7 +59,7 @@ func (g *Graph) applyTx(ctx context.Context, tx Tx, id domain.ChangeID, baseline
 	if err != nil {
 		return domain.Baseline{}, err
 	}
-	if c.Status == domain.ChangeApplied || c.Status == domain.ChangeAbandoned {
+	if c.Status == domain.ChangeApplied || c.Status == domain.ChangeAbandoned || c.Status == domain.ChangeMergePending {
 		return domain.Baseline{}, fmt.Errorf("change %s is %s: %w", id, c.Status, ErrConflict)
 	}
 	base, err := tx.Baseline(ctx, c.BaselineID)
@@ -44,7 +70,19 @@ func (g *Graph) applyTx(ctx context.Context, tx Tx, id domain.ChangeID, baseline
 	if err != nil {
 		return domain.Baseline{}, err
 	}
-	a := &applier{g: g, tx: tx, ctx: ctx, change: c, walk: w, branch: domain.BranchOf(c.Branch), target: maps.Clone(base.Nodes),
+	target, parentBaseline := maps.Clone(base.Nodes), base.ID
+	// A change on its own branch starts from the head of that branch: what its
+	// sub-changes merged into it since the fork is part of the result.
+	if _, isOwn, err := ownBranch(ctx, tx, c); err != nil {
+		return domain.Baseline{}, err
+	} else if isOwn {
+		head, err := branchHead(ctx, tx, c.Branch)
+		if err != nil {
+			return domain.Baseline{}, err
+		}
+		target, parentBaseline = maps.Clone(head.Nodes), head.ID
+	}
+	a := &applier{g: g, tx: tx, ctx: ctx, change: c, walk: w, branch: domain.BranchOf(c.Branch), target: target,
 		bumped: map[domain.NodeID]*bump{}, created: map[domain.ItemID]domain.NodeRef{}, removed: map[domain.LinkID]bool{}}
 	if err := a.run(); err != nil {
 		return domain.Baseline{}, err
@@ -52,7 +90,7 @@ func (g *Graph) applyTx(ctx context.Context, tx Tx, id domain.ChangeID, baseline
 	if baselineName == "" {
 		baselineName = c.Title
 	}
-	result := domain.Baseline{ID: domain.BaselineID(g.newID()), Name: baselineName, Branch: a.branch, ParentID: base.ID, ChangeID: c.ID, Nodes: a.target, CreatedAt: g.now()}
+	result := domain.Baseline{ID: domain.BaselineID(g.newID()), Name: baselineName, Branch: a.branch, ParentID: parentBaseline, ChangeID: c.ID, Nodes: a.target, CreatedAt: g.now()}
 	if err := tx.PutBaseline(ctx, result); err != nil {
 		return domain.Baseline{}, err
 	}
@@ -214,7 +252,7 @@ func (a *applier) run() error {
 		p := it.Proposal
 		switch p.Op {
 		case domain.OpCreateNode:
-			n := domain.Node{ID: domain.NodeID(a.g.newID()), Version: 1, Branch: a.branch, Reason: domain.ReasonCreate,
+			n := domain.Node{ID: domain.NodeID(a.g.newID()), Version: 1, Branch: a.branch, Reason: domain.ReasonCreate, Namespace: domain.NamespaceOf(firstNonEmpty(p.Node.Namespace, a.change.Namespace)),
 				Key: p.Node.Key, Type: p.Node.Type, Properties: p.Node.Properties, ChangeID: a.change.ID, CreatedAt: a.g.now(), State: a.walk.created[it.ID]}
 			if n.Key == "" {
 				n.Key = string(n.ID)

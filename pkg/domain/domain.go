@@ -28,6 +28,27 @@ func (r NodeRef) String() string { return fmt.Sprintf("%s@v%d", r.ID, r.Version)
 // IsZero reports whether the reference is unset.
 func (r NodeRef) IsZero() bool { return r.ID == "" }
 
+// DefaultNamespace is the namespace of nodes and changes that name none.
+const DefaultNamespace = "sdlc"
+
+// NamespaceMetadata is the namespace of the meta model bound to the objects the
+// code manipulates (methodologies, node types, domains).
+const NamespaceMetadata = "metadata"
+
+// NamespaceOf returns ns, defaulting to DefaultNamespace.
+func NamespaceOf(ns string) string {
+	if ns == "" {
+		return DefaultNamespace
+	}
+	return ns
+}
+
+// LinkInstanceOf is the link from a data node to its NodeType (metadata layer).
+const LinkInstanceOf = "instanceOf"
+
+// ChangeBranchOrigin is the Branch.Origin of the branch owned by a change.
+func ChangeBranchOrigin(id ChangeID) string { return "change:" + string(id) }
+
 // MainBranch is the default branch.
 const MainBranch = "main"
 
@@ -55,6 +76,7 @@ type Node struct {
 	Branch     string         `json:"branch,omitempty"`
 	Parents    []Version      `json:"parents,omitempty"`
 	Reason     string         `json:"reason,omitempty"`
+	Namespace  string         `json:"namespace,omitempty"`
 	Key        string         `json:"key"`
 	Type       string         `json:"type"`
 	Properties map[string]any `json:"props,omitempty"`

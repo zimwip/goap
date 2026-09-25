@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"slices"
 	"sync"
 	"time"
 
@@ -31,6 +32,8 @@ func New(repo Repo) *Graph {
 
 // NewNode describes a node to create.
 type NewNode struct {
+	// Namespace of the node (default: domain.DefaultNamespace).
+	Namespace  string
 	Key        string
 	Type       string
 	Properties map[string]any
@@ -43,7 +46,7 @@ func (g *Graph) CreateNode(ctx context.Context, in NewNode) (domain.Node, error)
 	if in.Type == "" {
 		return domain.Node{}, fmt.Errorf("node type required: %w", ErrInvalid)
 	}
-	n := domain.Node{ID: domain.NodeID(g.newID()), Version: 1, Branch: domain.MainBranch, Reason: domain.ReasonCreate, Key: in.Key, Type: in.Type, Properties: in.Properties, CreatedAt: g.now(), State: in.State}
+	n := domain.Node{ID: domain.NodeID(g.newID()), Version: 1, Branch: domain.MainBranch, Reason: domain.ReasonCreate, Namespace: domain.NamespaceOf(in.Namespace), Key: in.Key, Type: in.Type, Properties: in.Properties, CreatedAt: g.now(), State: in.State}
 	if n.Key == "" {
 		n.Key = string(n.ID)
 	}
@@ -83,9 +86,9 @@ func (g *Graph) Node(ctx context.Context, ref domain.NodeRef) (n domain.Node, er
 	return
 }
 
-// NodeByKey returns the latest version of the node with the given key.
-func (g *Graph) NodeByKey(ctx context.Context, key string) (n domain.Node, err error) {
-	err = g.repo.InTx(ctx, func(tx Tx) error { n, err = tx.NodeByKey(ctx, key); return err })
+// NodeByKey returns the latest version of the node with the given key in a namespace.
+func (g *Graph) NodeByKey(ctx context.Context, namespace, key string) (n domain.Node, err error) {
+	err = g.repo.InTx(ctx, func(tx Tx) error { n, err = tx.NodeByKey(ctx, namespace, key); return err })
 	return
 }
 
@@ -237,20 +240,43 @@ type NewChange struct {
 	Title       string
 	Intent      string
 	Methodology string
-	BaselineID  domain.BaselineID
-	// Branch the change applies to (default main); it must be open.
+	// Namespace the change acts on (default: domain.DefaultNamespace).
+	Namespace  string
+	BaselineID domain.BaselineID
+	// Branch the change applies to (default main); it must be open. With
+	// OwnBranch it is the branch the change is finally merged into.
 	Branch string
-	Data   map[string]any
+	// OwnBranch gives the change a branch of its own, named after it and forked
+	// from BaselineID: its versions live there until the change is merged.
+	OwnBranch bool
+	// ParentID makes the change a sub-change of another one (see prepareSubChange).
+	ParentID domain.ChangeID
+	// OwnerOrg is the key of the OrgUnit responsible for the change.
+	OwnerOrg string
+	Data     map[string]any
 }
 
-// CreateChange opens a change on a reference baseline.
+// CreateChange opens a change on a reference baseline. A sub-change
+// (ParentID) belongs to the namespace of its parent, forks its own branch from
+// the branch of the parent (which must have one) and is merged into it.
 func (g *Graph) CreateChange(ctx context.Context, in NewChange) (domain.ChangeSet, error) {
-	c := domain.ChangeSet{
-		ID: domain.ChangeID(g.newID()), Title: in.Title, Intent: in.Intent, Methodology: in.Methodology,
-		Status: domain.ChangeDraft, BaselineID: in.BaselineID, Branch: domain.BranchOf(in.Branch), Data: in.Data, CreatedAt: g.now(),
-	}
+	var c domain.ChangeSet
 	err := g.repo.InTx(ctx, func(tx Tx) error {
-		if _, err := tx.Baseline(ctx, in.BaselineID); err != nil {
+		c = domain.ChangeSet{
+			ID: domain.ChangeID(g.newID()), Title: in.Title, Intent: in.Intent, Methodology: in.Methodology, Namespace: domain.NamespaceOf(in.Namespace),
+			Status: domain.ChangeDraft, BaselineID: in.BaselineID, Branch: domain.BranchOf(in.Branch), Data: in.Data, CreatedAt: g.now(),
+			ParentID: in.ParentID, OwnerOrg: in.OwnerOrg,
+		}
+		if err := g.prepareSubChange(ctx, tx, &c, &in); err != nil {
+			return err
+		}
+		if in.OwnerOrg != "" {
+			if err := checkOwnerOrg(ctx, tx, in.OwnerOrg); err != nil {
+				return err
+			}
+		}
+		fork, err := tx.Baseline(ctx, c.BaselineID)
+		if err != nil {
 			return err
 		}
 		b, err := branchOf(ctx, tx, c.Branch)
@@ -259,6 +285,14 @@ func (g *Graph) CreateChange(ctx context.Context, in NewChange) (domain.ChangeSe
 		}
 		if b.Status != domain.BranchOpen {
 			return fmt.Errorf("branch %s is %s: %w", b.Name, b.Status, ErrConflict)
+		}
+		if in.OwnBranch {
+			own := domain.Branch{Name: changeBranchName(c.ID), Parent: b.Name, ForkBaseline: fork.ID, Head: fork.ID,
+				Origin: domain.ChangeBranchOrigin(c.ID), Status: domain.BranchOpen, CreatedAt: g.now()}
+			if err := tx.PutBranch(ctx, own); err != nil {
+				return err
+			}
+			c.Branch = own.Name
 		}
 		return tx.PutChange(ctx, c)
 	})
@@ -299,6 +333,19 @@ func (g *Graph) UpdateChange(ctx context.Context, id domain.ChangeID, p ChangePa
 				return fmt.Errorf("change %s cannot go from %s to %s: %w", id, c.Status, *p.Status, ErrConflict)
 			}
 			c.Status = *p.Status
+			if c.Status == domain.ChangeAbandoned {
+				if err := g.abandonSubChanges(ctx, tx, c.ID); err != nil {
+					return err
+				}
+				if own, ok, err := ownBranch(ctx, tx, c); err != nil {
+					return err
+				} else if ok {
+					own.Status = domain.BranchAbandoned
+					if err := tx.PutBranch(ctx, own); err != nil {
+						return err
+					}
+				}
+			}
 		}
 		if len(p.Data) > 0 {
 			if c.Data == nil {
@@ -321,7 +368,7 @@ func (g *Graph) AddItems(ctx context.Context, id domain.ChangeID, items []domain
 		if err != nil {
 			return err
 		}
-		if c.Status == domain.ChangeApplied || c.Status == domain.ChangeAbandoned {
+		if c.Status == domain.ChangeApplied || c.Status == domain.ChangeAbandoned || c.Status == domain.ChangeMergePending {
 			return fmt.Errorf("change %s is %s: %w", id, c.Status, ErrConflict)
 		}
 		b, err := tx.Baseline(ctx, c.BaselineID)
@@ -329,13 +376,19 @@ func (g *Graph) AddItems(ctx context.Context, id domain.ChangeID, items []domain
 			return err
 		}
 		known := map[domain.ItemID]bool{}
+		byID := map[domain.ItemID]domain.ChangeItem{}
 		for _, it := range c.Items {
 			known[it.ID] = true
+			byID[it.ID] = it
+		}
+		items = slices.Clone(items)
+		for i := range items {
+			if items[i].ID == "" {
+				items[i].ID = domain.ItemID(g.newID())
+			}
+			byID[items[i].ID] = items[i] // an impact may name a proposal of the same batch, whatever the order
 		}
 		for _, it := range items {
-			if it.ID == "" {
-				it.ID = domain.ItemID(g.newID())
-			}
 			if it.Status == "" {
 				it.Status = domain.ItemProposed
 			}
@@ -353,6 +406,9 @@ func (g *Graph) AddItems(ctx context.Context, id domain.ChangeID, items []domain
 					return fmt.Errorf("item %s references unknown item %s: %w", it.ID, e.Item, ErrInvalid)
 				}
 			}
+			if err := g.checkImpact(ctx, tx, b, byID, it); err != nil {
+				return fmt.Errorf("item %s: %v: %w", it.ID, err, ErrInvalid)
+			}
 			if it.Decision != nil && !known[it.Decision.Item] {
 				return fmt.Errorf("decision %s targets unknown item %s: %w", it.ID, it.Decision.Item, ErrInvalid)
 			}
@@ -360,6 +416,7 @@ func (g *Graph) AddItems(ctx context.Context, id domain.ChangeID, items []domain
 				return err
 			}
 			known[it.ID] = true
+			byID[it.ID] = it
 			out = append(out, it)
 		}
 		// lifecycle: replay the whole change (early feedback, Apply is authoritative)
@@ -452,6 +509,8 @@ func validStatusMove(from, to domain.ChangeStatus) bool {
 		return to == domain.ChangeActive || to == domain.ChangeAbandoned
 	case domain.ChangeActive:
 		return to == domain.ChangeDraft || to == domain.ChangeAbandoned
+	case domain.ChangeMergePending:
+		return to == domain.ChangeAbandoned
 	}
 	return false
 }

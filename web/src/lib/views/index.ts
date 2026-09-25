@@ -19,6 +19,7 @@ import ChangesExplorer from './nav/ChangesExplorer.svelte';
 import TokensTab from './dashboard/TokensTab.svelte';
 import PlatformTab from './platform/PlatformTab.svelte';
 import AccessExplorer from './nav/AccessExplorer.svelte';
+import OrganisationExplorer from './nav/OrganisationExplorer.svelte';
 import TriggersExplorer from './nav/TriggersExplorer.svelte';
 import AssistantPanel from './assistant/AssistantPanel.svelte';
 import AssistantTab from './assistant/AssistantTab.svelte';
@@ -66,6 +67,7 @@ registerView({
 registerView({ id: 'triggers', zone: 'left', title: 'Triggers', icon: 'clock', component: TriggersExplorer, order: 2.5 });
 registerView({ id: 'baselines', zone: 'left', title: 'Baseline', icon: 'database', component: BaselineExplorer, order: 3 });
 registerView({ id: 'changes', zone: 'left', title: 'Changes', icon: 'diff', component: ChangesExplorer, order: 4 });
+registerView({ id: 'organisation', zone: 'left', title: 'Organisation', icon: 'user', component: OrganisationExplorer, order: 4.5 });
 registerView({ id: 'access', zone: 'left', title: 'Access', icon: 'shield', component: AccessExplorer, order: 5 });
 
 // --- console (bottom) ---------------------------------------------------------------------

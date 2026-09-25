@@ -56,6 +56,13 @@ of a versioned knowledge graph, whose other axis, the **domain axis**, describes
 | **Link** | Typed relationship **from version to version**: `REQ-12@v3 ─satisfies→ NEED-4@v2`. A link does not automatically "follow" new versions: if `NEED-4` moves to v3, the link becomes **suspect** — this is the model's native impact signal. |
 | **Baseline** | Coherent set `{NodeID → Version}`: a "commit" of the graph. A baseline's links are those whose two endpoints are both in the baseline. Every modification starts from a reference baseline and produces a resulting baseline. |
 
+**Namespaces** ([ADR 0015](adr/0015-namespaces.md)): every node lives in a namespace (`sdlc` by default,
+`metadata` for the meta model bound to the code). Keys are unique per namespace. A change acts on one
+namespace: it can only create and modify nodes of that namespace, but may link to nodes of another one.
+The organisation is a hierarchy of units in its own namespace (`organisation`); nodes reference their owner
+unit across namespaces, and a change is split into sub-changes along unit boundaries
+([ADR 0016](adr/0016-organisation-and-sub-changes.md)).
+
 Versioning rule ([ADR 0003](adr/0003-liens-version-a-version.md)): **outgoing links belong
 to the source node's version**. Adding/removing an outgoing link creates a new version of the source;
 a node that changes version carries its outgoing links forward; incoming links from unmodified
@@ -93,7 +100,7 @@ REQ-1  v1(main) ── v3(main, revise) ───────────── 
 | Concept | Description |
 |---|---|
 | **ChangeSet** | A modification request. References a starting baseline, carries the initial intent and the chosen goal. It is **the blackboard** of an agentic process. |
-| **ChangeItem** | Blackboard element. `kind` ∈ `impact`, `proposal`, `decision`, `artifact`, `merge`. Each item has a provenance (`producedBy` = action, `derivedFrom` = other items). |
+| **ChangeItem** | Blackboard element. `kind` ∈ `impact`, `proposal`, `decision`, `artifact`, `merge`. Each item has a provenance (`producedBy` = action, `derivedFrom` = other items). An `impact` describes a change in terms of **pre** (`target`, a released version of the reference baseline) and **post** (`post`, the proposal producing the new version on the change branch), see [ADR 0015](adr/0015-namespaces.md). |
 | **Impact** | References a node **of the reference graph** (`NodeRef` exact version) with a reason. Starting point of the analysis. |
 | **Proposal** | Proposed modification of the **resulting graph**: `create_node`, `update_node`, `delete_node`, `add_link`, `remove_link` (and `merge_node` for branch merges). Link endpoints can be an existing node (`NodeRef`) or a proposed node (reference to another item). |
 | **Decision** | Acceptance / rejection of a proposal (human or agent). |
@@ -351,6 +358,9 @@ change CR-42
      tokens, LLM / tool calls, traceId/spanId) · approval · process.ended (status, totals)
 ```
 
+- A step is a transition of the blackboard: the `action` record carries `boardBefore` / `boardAfter`
+  (item count of the change around the step), `reads` (node versions the step started from) and `items`
+  (what it produced), see [ADR 0015](adr/0015-namespaces.md).
 - Every planning tick and every action execution (LLM or formal) is persisted and linked to the
   items it produced: **auditing** can trace back from a proposal to the model call that produced it, and to the
   corresponding OpenTelemetry span.

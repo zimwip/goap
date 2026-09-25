@@ -1,0 +1,11 @@
+name: organisation
+version: 1.0.0
+description: >
+  Organisation structure, managed in its own namespace ("organisation"): a hierarchy of organisational units. Nodes of other namespaces reference a unit as their owner through the cross-namespace `owner` link; changes are split into sub-changes along unit boundaries.
+nodeTypes:
+  - {name: OrgUnit, description: "Organisational unit (company, direction, department, team)", properties: [name, kind, description]}
+linkTypes:
+  # child -> parent: outgoing links belong to the source version, so reorganising a unit only versions that unit
+  - {name: part_of, from: OrgUnit, to: OrgUnit}
+  # any node, whatever its namespace -> the unit that owns it
+  - {name: owner, to: OrgUnit}

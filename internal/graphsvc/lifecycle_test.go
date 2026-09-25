@@ -101,7 +101,7 @@ func TestLifecycleIsEnforcedByTheService(t *testing.T) {
 	if _, err := h.ApplyChange(ctx, r); err != nil {
 		t.Fatalf("admin may release: %v", err)
 	}
-	if n, err := g.NodeByKey(ctx, "REQ-1"); err != nil || n.State != "released" || n.Version != 2 || n.Properties["title"] != "b" {
+	if n, err := g.NodeByKey(ctx, "", "REQ-1"); err != nil || n.State != "released" || n.Version != 2 || n.Properties["title"] != "b" {
 		t.Fatalf("REQ-1: %+v %v", n, err)
 	}
 }

@@ -59,10 +59,10 @@ func TestCreateObjectIsRoleGated(t *testing.T) {
 		}
 	}
 	// a denied caller created nothing
-	if _, err := g.NodeByKey(context.Background(), "REQ-2"); err == nil {
+	if _, err := g.NodeByKey(context.Background(), "", "REQ-2"); err == nil {
 		t.Error("REQ-2 must not exist")
 	}
-	if _, err := g.NodeByKey(context.Background(), "REQ-3"); err != nil {
+	if _, err := g.NodeByKey(context.Background(), "", "REQ-3"); err != nil {
 		t.Errorf("REQ-3 must exist: %v", err)
 	}
 }

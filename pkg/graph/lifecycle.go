@@ -180,6 +180,9 @@ func invalidf(format string, args ...any) error {
 // applied. Transition permissions are only checked when applying: the actor who
 // applies a change is the one who validates the transitions it contains.
 func (g *Graph) walk(ctx context.Context, tx Tx, c domain.ChangeSet, authorize bool) (*walked, error) {
+	if err := checkNamespace(ctx, tx, c); err != nil {
+		return nil, err
+	}
 	ix, err := g.typesAt(ctx, tx, c.BaselineID)
 	if err != nil {
 		return nil, err

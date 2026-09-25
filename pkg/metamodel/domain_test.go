@@ -69,7 +69,7 @@ func TestSharedDomainHasOneNodeTypePerType(t *testing.T) {
 	if r, err := Sync(ctx, g, a); err != nil || r.Changed() {
 		t.Fatalf("idempotent: %+v %v", r, err)
 	}
-	root, _ := g.NodeByKey(ctx, Key("first", TypeMethodology, ""))
+	root, _ := g.NodeByKey(ctx, domain.NamespaceMetadata, Key("first", TypeMethodology, ""))
 	if root.Properties["domainRef"] != "alm@1" {
 		t.Fatalf("root must carry the domain reference: %v", root.Properties)
 	}
@@ -104,11 +104,11 @@ func TestSharedDomainSupertypesBackfillAndObjects(t *testing.T) {
 		t.Fatalf("second methodology must find the node already linked: %+v %v", res, err)
 	}
 
-	n, _, err := CreateObject(ctx, g, "second", "SecurityRequirement", "SEC-1", nil)
+	n, _, err := CreateObject(ctx, g, "second", "", "SecurityRequirement", "SEC-1", nil)
 	if err != nil {
 		t.Fatalf("create object through a methodology referencing the domain: %v", err)
 	}
-	nt, err := g.NodeByKey(ctx, DomainKey("alm", "SecurityRequirement"))
+	nt, err := g.NodeByKey(ctx, domain.NamespaceMetadata, DomainKey("alm", "SecurityRequirement"))
 	if err != nil {
 		t.Fatal(err)
 	}

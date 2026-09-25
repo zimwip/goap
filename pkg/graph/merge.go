@@ -423,8 +423,10 @@ type Resolution struct {
 
 // MergeRequest merges a branch into another one.
 type MergeRequest struct {
-	From, Into  string
-	Title       string
+	From, Into string
+	Title      string
+	// Namespace of the merge change (default: domain.DefaultNamespace).
+	Namespace   string
 	Resolutions map[domain.NodeID]Resolution
 }
 
@@ -440,65 +442,64 @@ type MergeResult struct {
 // is marked merged. Conflicts without a resolution fail with ErrConflict.
 func (g *Graph) MergeBranch(ctx context.Context, in MergeRequest) (res MergeResult, err error) {
 	err = g.repo.InTx(ctx, func(tx Tx) error {
-		plan, err := planMerge(ctx, tx, in.From, in.Into)
-		if err != nil {
-			return err
-		}
-		res.Plan = plan
-		var unresolved []string
-		for _, c := range plan.Conflicting() {
-			if _, ok := in.Resolutions[c.Node]; !ok {
-				unresolved = append(unresolved, c.Key)
-			}
-		}
-		if len(unresolved) > 0 {
-			return fmt.Errorf("merge %s into %s: unresolved conflicts on %s: %w", in.From, plan.Into, strings.Join(unresolved, ", "), ErrConflict)
-		}
-		title := in.Title
-		if title == "" {
-			title = fmt.Sprintf("merge %s into %s", in.From, plan.Into)
-		}
-		c := domain.ChangeSet{ID: domain.ChangeID(g.newID()), Title: title, Intent: title, Status: domain.ChangeActive,
-			BaselineID: plan.IntoHead, Branch: plan.Into, CreatedAt: g.now(),
-			Data: map[string]any{"merge": map[string]any{"from": in.From, "into": plan.Into}}}
-		if err := tx.PutChange(ctx, c); err != nil {
-			return err
-		}
-		for _, cand := range plan.Candidates {
-			r, resolved := in.Resolutions[cand.Node]
-			if r.Skip || (cand.Ours == nil && cand.Ancestor != nil) {
-				continue // kept as is on the target (or deleted there)
-			}
-			props := cand.Merged
-			if resolved && r.Props != nil {
-				props = r.Props
-			}
-			theirs := cand.Theirs
-			it := domain.ChangeItem{ID: domain.ItemID(g.newID()), Kind: domain.KindProposal, Type: "merge", Status: domain.ItemAccepted,
-				ProducedBy: "graph.merge", CreatedAt: g.now(),
-				Proposal: &domain.Proposal{Op: domain.OpMergeNode, Node: &domain.NodeDraft{
-					Base: cand.Ours, From: &theirs, Ancestor: cand.Ancestor, Key: cand.Key, Type: cand.Type, Properties: props}}}
-			if len(cand.Conflicts) > 0 {
-				it.Data = map[string]any{"conflicts": cand.Conflicts}
-			}
-			if err := tx.PutItem(ctx, c.ID, it); err != nil {
-				return err
-			}
-		}
-		if res.Baseline, err = g.applyTx(ctx, tx, c.ID, title); err != nil {
-			return err
-		}
-		if res.Change, err = tx.Change(ctx, c.ID); err != nil {
-			return err
-		}
-		fb, err := tx.Branch(ctx, in.From)
-		if err != nil {
-			return err
-		}
-		fb.Status = domain.BranchMerged
-		return tx.PutBranch(ctx, fb)
+		res, err = g.mergeBranchTx(ctx, tx, in)
+		return err
 	})
 	return
+}
+
+func (g *Graph) mergeBranchTx(ctx context.Context, tx Tx, in MergeRequest) (res MergeResult, err error) {
+	plan, err := planMerge(ctx, tx, in.From, in.Into)
+	if err != nil {
+		return res, err
+	}
+	res.Plan = plan
+	if un := unresolved(plan, in.Resolutions); len(un) > 0 {
+		return res, fmt.Errorf("merge %s into %s: unresolved conflicts on %s: %w", in.From, plan.Into, strings.Join(un, ", "), ErrConflict)
+	}
+	title := in.Title
+	if title == "" {
+		title = fmt.Sprintf("merge %s into %s", in.From, plan.Into)
+	}
+	c := domain.ChangeSet{ID: domain.ChangeID(g.newID()), Title: title, Intent: title, Status: domain.ChangeActive,
+		Namespace: domain.NamespaceOf(in.Namespace), BaselineID: plan.IntoHead, Branch: plan.Into, CreatedAt: g.now(),
+		Data: map[string]any{"merge": map[string]any{"from": in.From, "into": plan.Into}}}
+	if err := tx.PutChange(ctx, c); err != nil {
+		return res, err
+	}
+	for _, cand := range plan.Candidates {
+		r, resolved := in.Resolutions[cand.Node]
+		if r.Skip || (cand.Ours == nil && cand.Ancestor != nil) {
+			continue // kept as is on the target (or deleted there)
+		}
+		props := cand.Merged
+		if resolved && r.Props != nil {
+			props = r.Props
+		}
+		theirs := cand.Theirs
+		it := domain.ChangeItem{ID: domain.ItemID(g.newID()), Kind: domain.KindProposal, Type: "merge", Status: domain.ItemAccepted,
+			ProducedBy: "graph.merge", CreatedAt: g.now(),
+			Proposal: &domain.Proposal{Op: domain.OpMergeNode, Node: &domain.NodeDraft{
+				Base: cand.Ours, From: &theirs, Ancestor: cand.Ancestor, Key: cand.Key, Type: cand.Type, Properties: props}}}
+		if len(cand.Conflicts) > 0 {
+			it.Data = map[string]any{"conflicts": cand.Conflicts}
+		}
+		if err := tx.PutItem(ctx, c.ID, it); err != nil {
+			return res, err
+		}
+	}
+	if res.Baseline, err = g.applyTx(ctx, tx, c.ID, title); err != nil {
+		return res, err
+	}
+	if res.Change, err = tx.Change(ctx, c.ID); err != nil {
+		return res, err
+	}
+	fb, err := tx.Branch(ctx, in.From)
+	if err != nil {
+		return res, err
+	}
+	fb.Status = domain.BranchMerged
+	return res, tx.PutBranch(ctx, fb)
 }
 
 // ---- Change divergence and rebase ---------------------------------------------

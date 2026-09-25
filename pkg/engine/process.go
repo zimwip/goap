@@ -52,6 +52,8 @@ type Process struct {
 	// so that a retried action finds the sub-agent it started.
 	Children   map[string]string `json:"children,omitempty"`
 	BaselineID domain.BaselineID `json:"baselineId,omitempty"`
+	Namespace  string            `json:"namespace,omitempty"`
+	OwnBranch  bool              `json:"ownBranch,omitempty"`
 	Title      string            `json:"title,omitempty"`
 	Usage      Usage             `json:"usage"`
 	TraceID    string            `json:"traceId,omitempty"`
@@ -144,13 +146,18 @@ type LogLine struct {
 
 // Step records one executed action.
 type Step struct {
-	Index      int             `json:"index"`
-	Action     string          `json:"action"`
-	Plan       []string        `json:"plan"`
-	Before     goap.WorldState `json:"before"`
-	After      goap.WorldState `json:"after,omitempty"`
-	Items      []domain.ItemID `json:"items,omitempty"`
-	EffectsMet bool            `json:"effectsMet"`
+	Index  int             `json:"index"`
+	Action string          `json:"action"`
+	Plan   []string        `json:"plan"`
+	Before goap.WorldState `json:"before"`
+	After  goap.WorldState `json:"after,omitempty"`
+	Items  []domain.ItemID `json:"items,omitempty"`
+	// Reads are the node versions referenced on the blackboard when the step
+	// started; BoardBefore / BoardAfter the item count of the change around it.
+	Reads       []domain.NodeRef `json:"reads,omitempty"`
+	BoardBefore int              `json:"boardBefore,omitempty"`
+	BoardAfter  int              `json:"boardAfter,omitempty"`
+	EffectsMet  bool             `json:"effectsMet"`
 	// Progress: an incremental action produced items without reaching its effects yet.
 	Progress   bool       `json:"progress,omitempty"`
 	ApprovedBy string     `json:"approvedBy,omitempty"`

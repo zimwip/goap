@@ -64,7 +64,7 @@ func (h *Handler) CreateNode(ctx context.Context, r *connect.Request[graphv1.Cre
 	if err := h.refuseDirectWrite(ctx, r.Msg.Type); err != nil {
 		return nil, err
 	}
-	n, err := h.Graph.CreateNode(ctx, graph.NewNode{Key: r.Msg.Key, Type: r.Msg.Type, Properties: pbconv.Map(r.Msg.Props)})
+	n, err := h.Graph.CreateNode(ctx, graph.NewNode{Namespace: r.Msg.Namespace, Key: r.Msg.Key, Type: r.Msg.Type, Properties: pbconv.Map(r.Msg.Props)})
 	return res(&graphv1.CreateNodeResponse{Node: pbconv.NodeToPB(n)}, err)
 }
 
@@ -72,10 +72,10 @@ func (h *Handler) CreateObject(ctx context.Context, r *connect.Request[graphv1.C
 	ctx = h.Identity.Context(ctx, r.Header())
 	who := authz.From(ctx)
 	if err := authz.Check(ctx, h.Authz, authz.Request{Subject: who, Action: "create",
-		Resource: authz.Resource{Type: "object", Name: r.Msg.NodeType, Org: who.Org, Owner: who.Subject}}); err != nil {
+		Resource: authz.Resource{Type: "object", Name: r.Msg.NodeType, Namespace: domain.NamespaceOf(r.Msg.Namespace), Org: who.Org, Owner: who.Subject}}); err != nil {
 		return nil, rpcerr.ToConnect(err)
 	}
-	n, b, err := metamodel.CreateObject(ctx, h.Graph, r.Msg.Methodology, r.Msg.NodeType, r.Msg.Key, pbconv.Map(r.Msg.Props))
+	n, b, err := metamodel.CreateObject(ctx, h.Graph, r.Msg.Methodology, r.Msg.Namespace, r.Msg.NodeType, r.Msg.Key, pbconv.Map(r.Msg.Props))
 	if err == nil {
 		h.publish(ctx, "goap.graph.object.created", map[string]string{"methodology": r.Msg.Methodology, "key": n.Key})
 	}
@@ -95,7 +95,7 @@ func (h *Handler) UpdateNode(ctx context.Context, r *connect.Request[graphv1.Upd
 func (h *Handler) GetNode(ctx context.Context, r *connect.Request[graphv1.GetNodeRequest]) (*connect.Response[graphv1.GetNodeResponse], error) {
 	ref := pbconv.RefFromPB(r.Msg.Ref)
 	if r.Msg.Key != "" {
-		n, err := h.Graph.NodeByKey(ctx, r.Msg.Key)
+		n, err := h.Graph.NodeByKey(ctx, r.Msg.Namespace, r.Msg.Key)
 		if err != nil {
 			return nil, rpcerr.ToConnect(err)
 		}
@@ -155,7 +155,7 @@ func (h *Handler) GetBaselineGraph(ctx context.Context, r *connect.Request[graph
 }
 
 func (h *Handler) CreateChange(ctx context.Context, r *connect.Request[graphv1.CreateChangeRequest]) (*connect.Response[graphv1.CreateChangeResponse], error) {
-	c, err := h.Graph.CreateChange(ctx, graph.NewChange{Title: r.Msg.Title, Intent: r.Msg.Intent, Methodology: r.Msg.Methodology,
+	c, err := h.Graph.CreateChange(ctx, graph.NewChange{ParentID: domain.ChangeID(r.Msg.ParentId), OwnerOrg: r.Msg.OwnerOrg, OwnBranch: r.Msg.OwnBranch, Namespace: r.Msg.Namespace, Title: r.Msg.Title, Intent: r.Msg.Intent, Methodology: r.Msg.Methodology,
 		BaselineID: domain.BaselineID(r.Msg.BaselineId), Branch: r.Msg.Branch, Data: pbconv.Map(r.Msg.Data)})
 	if err == nil {
 		h.publish(ctx, "goap.change."+string(c.ID)+".created", domain.ChangeEvent{Type: "change.created", Change: c})
@@ -330,6 +330,62 @@ func (h *Handler) MergeBranch(ctx context.Context, r *connect.Request[graphv1.Me
 		h.publish(ctx, "goap.change."+string(c.ID)+".applied", domain.ChangeEvent{Type: "change.applied", Change: c, Baseline: &out.Baseline})
 	}
 	return res(&graphv1.MergeBranchResponse{Change: pbconv.ChangeToPB(out.Change), Baseline: pbconv.BaselineToPB(out.Baseline), Plan: pbconv.MergePlanToPB(out.Plan)}, err)
+}
+
+func (h *Handler) MergeChange(ctx context.Context, r *connect.Request[graphv1.MergeChangeRequest]) (*connect.Response[graphv1.MergeChangeResponse], error) {
+	resolutions := map[domain.NodeID]graph.Resolution{}
+	for id, rs := range r.Msg.Resolutions {
+		resolutions[domain.NodeID(id)] = graph.Resolution{Props: pbconv.Map(rs.GetProps()), Skip: rs.GetSkip()}
+	}
+	c, err := h.Graph.MergeChange(ctx, domain.ChangeID(r.Msg.ChangeId), resolutions)
+	if err == nil {
+		c.Items = nil
+		h.publish(ctx, "goap.change."+string(c.ID)+".applied", domain.ChangeEvent{Type: "change.applied", Change: c})
+	}
+	return res(&graphv1.MergeChangeResponse{Change: pbconv.ChangeToPB(c)}, err)
+}
+
+func (h *Handler) GetSharedNodes(ctx context.Context, r *connect.Request[graphv1.GetSharedNodesRequest]) (*connect.Response[graphv1.GetSharedNodesResponse], error) {
+	ns, err := h.Graph.SharedNodes(ctx, domain.ChangeID(r.Msg.ChangeId))
+	out := &graphv1.GetSharedNodesResponse{}
+	for _, n := range ns {
+		sn := &graphv1.SharedNode{Node: pbconv.RefToPB(n.Node), Key: n.Key}
+		for _, c := range n.Changes {
+			sn.Changes = append(sn.Changes, string(c))
+		}
+		out.Nodes = append(out.Nodes, sn)
+	}
+	return res(out, err)
+}
+
+func (h *Handler) SplitChange(ctx context.Context, r *connect.Request[graphv1.SplitChangeRequest]) (*connect.Response[graphv1.SplitChangeResponse], error) {
+	cs, err := h.Graph.SplitByOwner(ctx, domain.ChangeID(r.Msg.ChangeId))
+	out := &graphv1.SplitChangeResponse{}
+	for _, c := range cs {
+		h.publish(ctx, "goap.change."+string(c.ID)+".created", domain.ChangeEvent{Type: "change.created", Change: c})
+		out.Changes = append(out.Changes, pbconv.ChangeToPB(c))
+	}
+	return res(out, err)
+}
+
+func (h *Handler) ListSubChanges(ctx context.Context, r *connect.Request[graphv1.ListSubChangesRequest]) (*connect.Response[graphv1.ListSubChangesResponse], error) {
+	cs, err := h.Graph.SubChanges(ctx, domain.ChangeID(r.Msg.ChangeId))
+	out := &graphv1.ListSubChangesResponse{}
+	for _, c := range cs {
+		c.Items = nil
+		out.Changes = append(out.Changes, pbconv.ChangeToPB(c))
+	}
+	return res(out, err)
+}
+
+func (h *Handler) GetImpacts(ctx context.Context, r *connect.Request[graphv1.GetImpactsRequest]) (*connect.Response[graphv1.GetImpactsResponse], error) {
+	ims, err := h.Graph.Impacts(ctx, domain.ChangeID(r.Msg.ChangeId))
+	out := &graphv1.GetImpactsResponse{}
+	for _, im := range ims {
+		out.Impacts = append(out.Impacts, &graphv1.Impact{Item: string(im.Item), Key: im.Key, Type: im.Type,
+			Pre: pbconv.RefPtrToPB(im.Pre), PreState: im.PreState, Post: pbconv.RefPtrToPB(im.Post), PostState: im.PostState})
+	}
+	return res(out, err)
 }
 
 func (h *Handler) GetDivergences(ctx context.Context, r *connect.Request[graphv1.GetDivergencesRequest]) (*connect.Response[graphv1.GetDivergencesResponse], error) {

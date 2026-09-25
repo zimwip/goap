@@ -92,8 +92,12 @@ type StartRequest struct {
 	// ChangeID continues an existing change; otherwise a change is opened on BaselineID.
 	ChangeID   domain.ChangeID
 	BaselineID domain.BaselineID
-	Title      string
-	Intent     string
+	// Namespace of the new change (default: domain.DefaultNamespace).
+	Namespace string
+	// OwnBranch gives the new change a branch of its own (merged into main when applied).
+	OwnBranch bool
+	Title     string
+	Intent    string
 	// Goal skips the intent loop (with Agent, or the first agent having it).
 	Goal string
 	// Agent restricts identification to one agent of the methodology.
@@ -130,7 +134,7 @@ func (e *Engine) log() *slog.Logger {
 // either clarifying (a question is pending) or running (call Run). Without
 // methodology, identification ranks the agents of every published methodology.
 func (e *Engine) Start(ctx context.Context, req StartRequest) (*Process, error) {
-	p := &Process{ID: uuid.NewString(), Methodology: req.Methodology, Agent: req.Agent, ChangeID: req.ChangeID, BaselineID: req.BaselineID,
+	p := &Process{ID: uuid.NewString(), Methodology: req.Methodology, Agent: req.Agent, ChangeID: req.ChangeID, BaselineID: req.BaselineID, Namespace: req.Namespace, OwnBranch: req.OwnBranch,
 		Title: req.Title, ParentID: req.ParentID, Trigger: req.Trigger, Initiator: authz.From(ctx), Vars: req.Vars, Disabled: map[string]bool{},
 		CreatedAt: e.clock(), UpdatedAt: e.clock()}
 	if req.Intent != "" {
@@ -294,7 +298,7 @@ func (e *Engine) selectTarget(ctx context.Context, p *Process, m *methodology.Co
 		if p.Trigger != "" {
 			data = map[string]any{"trigger": p.Trigger}
 		}
-		c, err := e.Graph.CreateChange(ctx, graph.NewChange{Title: title, Intent: firstUserTurn(p), Methodology: m.Name, BaselineID: p.BaselineID, Data: data})
+		c, err := e.Graph.CreateChange(ctx, graph.NewChange{Title: title, Intent: firstUserTurn(p), Methodology: m.Name, Namespace: p.Namespace, OwnBranch: p.OwnBranch, BaselineID: p.BaselineID, Data: data})
 		if err != nil {
 			return err
 		}
@@ -455,7 +459,7 @@ func (e *Engine) cycle(ctx context.Context, p *Process, m *methodology.Compiled)
 		p.Plan[i] = a.Name
 	}
 	tick := domain.ExecutionRecord{Kind: domain.ExecTick, Step: len(p.Steps), Before: maps.Clone(p.World), Plan: slices.Clone(p.Plan),
-		Action: p.Plan[0], StartedAt: tickStart, EndedAt: e.clock(),
+		BoardBefore: len(bb.Change.Items), BoardAfter: len(bb.Change.Items), Action: p.Plan[0], StartedAt: tickStart, EndedAt: e.clock(),
 		Data: map[string]any{"replanned": replanned(prev, p.Plan), "candidates": len(actions)}}
 	if len(p.Unknown) > 0 {
 		tick.Data["unknown"] = maps.Clone(p.Unknown)
@@ -463,7 +467,8 @@ func (e *Engine) cycle(ctx context.Context, p *Process, m *methodology.Compiled)
 	e.journal(ctx, p, tick)
 	// act
 	action, _ := m.Action(plan.Actions[0].Name)
-	step := Step{Index: len(p.Steps), Action: action.Name, Plan: p.Plan, Before: maps.Clone(p.World), StartedAt: e.clock()}
+	step := Step{Index: len(p.Steps), Action: action.Name, Plan: p.Plan, Before: maps.Clone(p.World), StartedAt: e.clock(),
+		Reads: bb.Change.ReferencedNodes(), BoardBefore: len(bb.Change.Items)}
 	// the permission is the one of the implementation that will run (a
 	// specialization may require more, e.g. a production deployment)
 	permission := action.Permission
@@ -750,9 +755,11 @@ func (e *Engine) Approve(ctx context.Context, id string, approve bool, comment s
 
 // finishStep re-observes the blackboard and checks the promised effects.
 func (e *Engine) finishStep(ctx context.Context, p *Process, m *methodology.Compiled, step *Step) error {
-	if _, err := e.observe(ctx, p, m); err != nil {
+	bb, err := e.observe(ctx, p, m)
+	if err != nil {
 		return err
 	}
+	step.BoardAfter = len(bb.Change.Items)
 	action, _ := m.Action(step.Action)
 	step.After = maps.Clone(p.World)
 	step.EndedAt = e.clock()

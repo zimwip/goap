@@ -79,7 +79,7 @@ func str(s *string) string {
 	return *s
 }
 
-const nodeCols = `n.id::text, v.version, n.key, n.type, v.props, v.deleted, v.change_id::text, v.created_at, v.branch, v.parents, v.reason, v.state`
+const nodeCols = `n.id::text, v.version, n.namespace, n.key, n.type, v.props, v.deleted, v.change_id::text, v.created_at, v.branch, v.parents, v.reason, v.state`
 
 func scanNode(row pgx.Row) (domain.Node, error) {
 	var n domain.Node
@@ -88,7 +88,7 @@ func scanNode(row pgx.Row) (domain.Node, error) {
 	var p []byte
 	var version int
 	var parents []int32
-	if err := row.Scan(&id, &version, &n.Key, &n.Type, &p, &n.Deleted, &change, &n.CreatedAt, &n.Branch, &parents, &n.Reason, &n.State); err != nil {
+	if err := row.Scan(&id, &version, &n.Namespace, &n.Key, &n.Type, &p, &n.Deleted, &change, &n.CreatedAt, &n.Branch, &parents, &n.Reason, &n.State); err != nil {
 		return n, err
 	}
 	for _, pv := range parents {
@@ -164,9 +164,17 @@ func (t *pgTx) PutBranch(ctx context.Context, b domain.Branch) error {
 	return mapErr(err, "branch "+b.Name)
 }
 
-func (t *pgTx) NodeByKey(ctx context.Context, key string) (domain.Node, error) {
+func (t *pgTx) NodeIDByKey(ctx context.Context, namespace, key string) (domain.NodeID, error) {
 	var id string
-	if err := t.tx.QueryRow(ctx, `SELECT id::text FROM node WHERE key = $1`, key).Scan(&id); err != nil {
+	if err := t.tx.QueryRow(ctx, `SELECT id::text FROM node WHERE namespace = $1 AND key = $2`, domain.NamespaceOf(namespace), key).Scan(&id); err != nil {
+		return "", mapErr(err, "node key "+key)
+	}
+	return domain.NodeID(id), nil
+}
+
+func (t *pgTx) NodeByKey(ctx context.Context, namespace, key string) (domain.Node, error) {
+	var id string
+	if err := t.tx.QueryRow(ctx, `SELECT id::text FROM node WHERE namespace = $1 AND key = $2`, domain.NamespaceOf(namespace), key).Scan(&id); err != nil {
 		return domain.Node{}, mapErr(err, "node key "+key)
 	}
 	return t.LatestOn(ctx, domain.NodeID(id), domain.MainBranch)
@@ -278,9 +286,9 @@ func (t *pgTx) Change(ctx context.Context, id domain.ChangeID) (domain.ChangeSet
 	var c domain.ChangeSet
 	var result *string
 	var data []byte
-	err := t.tx.QueryRow(ctx, `SELECT id::text, title, intent, methodology, goal, status, baseline_id::text, result_baseline_id::text, data, created_at, branch
+	err := t.tx.QueryRow(ctx, `SELECT id::text, title, intent, methodology, goal, status, baseline_id::text, result_baseline_id::text, data, created_at, branch, namespace, COALESCE(parent_id::text, ''), owner_org
 		FROM change_set WHERE id = $1`, string(id)).
-		Scan((*string)(&c.ID), &c.Title, &c.Intent, &c.Methodology, &c.Goal, (*string)(&c.Status), (*string)(&c.BaselineID), &result, &data, &c.CreatedAt, &c.Branch)
+		Scan((*string)(&c.ID), &c.Title, &c.Intent, &c.Methodology, &c.Goal, (*string)(&c.Status), (*string)(&c.BaselineID), &result, &data, &c.CreatedAt, &c.Branch, &c.Namespace, (*string)(&c.ParentID), &c.OwnerOrg)
 	if err != nil {
 		return c, mapErr(err, "change "+string(id))
 	}
@@ -326,7 +334,7 @@ func (t *pgTx) Changes(ctx context.Context) ([]domain.ChangeSet, error) {
 
 func (t *pgTx) PutNode(ctx context.Context, n domain.Node) error {
 	if n.Version == 1 {
-		if _, err := t.tx.Exec(ctx, `INSERT INTO node (id, key, type, latest) VALUES ($1, $2, $3, 1)`, string(n.ID), n.Key, n.Type); err != nil {
+		if _, err := t.tx.Exec(ctx, `INSERT INTO node (id, namespace, key, type, latest) VALUES ($1, $2, $3, $4, 1)`, string(n.ID), domain.NamespaceOf(n.Namespace), n.Key, n.Type); err != nil {
 			return mapErr(err, "node "+n.Key)
 		}
 	} else {
@@ -369,12 +377,12 @@ func (t *pgTx) PutBaseline(ctx context.Context, b domain.Baseline) error {
 }
 
 func (t *pgTx) PutChange(ctx context.Context, c domain.ChangeSet) error {
-	_, err := t.tx.Exec(ctx, `INSERT INTO change_set (id, title, intent, methodology, goal, status, baseline_id, result_baseline_id, data, created_at, branch)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+	_, err := t.tx.Exec(ctx, `INSERT INTO change_set (id, title, intent, methodology, goal, status, baseline_id, result_baseline_id, data, created_at, branch, namespace, parent_id, owner_org)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 		ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, intent = EXCLUDED.intent, goal = EXCLUDED.goal, status = EXCLUDED.status,
 		  result_baseline_id = EXCLUDED.result_baseline_id, data = EXCLUDED.data, baseline_id = EXCLUDED.baseline_id, branch = EXCLUDED.branch`,
 		string(c.ID), c.Title, c.Intent, c.Methodology, c.Goal, string(c.Status), string(c.BaselineID), nullUUID(string(c.ResultBaselineID)), jsonb(c.Data), c.CreatedAt,
-		domain.BranchOf(c.Branch))
+		domain.BranchOf(c.Branch), domain.NamespaceOf(c.Namespace), nullUUID(string(c.ParentID)), c.OwnerOrg)
 	return mapErr(err, "change")
 }
 

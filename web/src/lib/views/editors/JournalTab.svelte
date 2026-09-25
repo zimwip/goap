@@ -417,6 +417,22 @@
                     {/each}
                   </div>
                 {/if}
+                {#if r.kind === 'action' && r.boardBefore !== undefined}
+                  <div class="board">
+                    Blackboard {r.boardBefore} → {r.boardAfter ?? r.boardBefore} items
+                    {#if r.reads?.length}, read {r.reads.length} node version{r.reads.length > 1 ? 's' : ''}{/if}
+                  </div>
+                {/if}
+                {#if r.reads?.length}
+                  <details>
+                    <summary>Nodes read ({r.reads.length})</summary>
+                    <ul class="items">
+                      {#each r.reads as n (`${n.id}@${n.version}`)}
+                        <li><code>{shortId(n.id ?? '')}@{n.version}</code></li>
+                      {/each}
+                    </ul>
+                  </details>
+                {/if}
                 {#if r.items?.length}
                   <details>
                     <summary>Items produced ({r.items.length})</summary>
@@ -704,6 +720,10 @@
   }
   tr.err td {
     color: var(--danger);
+  }
+  .board {
+    color: var(--text-muted, inherit);
+    font-size: 0.85em;
   }
   .items {
     margin: 0.25rem 0 0;

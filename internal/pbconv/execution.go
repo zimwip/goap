@@ -15,6 +15,10 @@ func ExecutionToPB(r domain.ExecutionRecord) *graphv1.ExecutionRecord {
 	for _, it := range r.Items {
 		out.Items = append(out.Items, string(it))
 	}
+	out.BoardBefore, out.BoardAfter = int32(r.BoardBefore), int32(r.BoardAfter)
+	for _, n := range r.Reads {
+		out.Reads = append(out.Reads, RefToPB(n))
+	}
 	for _, c := range r.ModelCalls {
 		out.ModelCalls = append(out.ModelCalls, &graphv1.ModelCall{Provider: c.Provider, Model: c.Model, InputTokens: c.InputTokens,
 			OutputTokens: c.OutputTokens, DurationMs: c.DurationMs, Error: c.Error})
@@ -34,6 +38,10 @@ func ExecutionFromPB(r *graphv1.ExecutionRecord) domain.ExecutionRecord {
 		TraceID: r.TraceId, SpanID: r.SpanId, Data: Map(r.Data), StartedAt: FromTime(r.StartedAt), EndedAt: FromTime(r.EndedAt), DurationMs: r.DurationMs}
 	for _, it := range r.Items {
 		out.Items = append(out.Items, domain.ItemID(it))
+	}
+	out.BoardBefore, out.BoardAfter = int(r.BoardBefore), int(r.BoardAfter)
+	for _, n := range r.Reads {
+		out.Reads = append(out.Reads, RefFromPB(n))
 	}
 	for _, c := range r.ModelCalls {
 		out.ModelCalls = append(out.ModelCalls, domain.ModelCall{Provider: c.Provider, Model: c.Model, InputTokens: c.InputTokens,

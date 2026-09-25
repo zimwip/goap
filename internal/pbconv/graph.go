@@ -80,7 +80,7 @@ func RefPtrFromPB(r *graphv1.NodeRef) *domain.NodeRef {
 }
 
 func NodeToPB(n domain.Node) *graphv1.Node {
-	return &graphv1.Node{Id: string(n.ID), Version: int32(n.Version), Key: n.Key, Type: n.Type, Props: Struct(n.Properties),
+	return &graphv1.Node{Id: string(n.ID), Version: int32(n.Version), Namespace: n.Namespace, Key: n.Key, Type: n.Type, Props: Struct(n.Properties),
 		Deleted: n.Deleted, ChangeId: string(n.ChangeID), CreatedAt: Time(n.CreatedAt),
 		Branch: domain.BranchOf(n.Branch), Parents: versionsToPB(n.Parents), Reason: n.Reason, State: n.State}
 }
@@ -97,7 +97,7 @@ func NodeFromPB(n *graphv1.Node) domain.Node {
 	if n == nil {
 		return domain.Node{}
 	}
-	return domain.Node{ID: domain.NodeID(n.Id), Version: domain.Version(n.Version), Key: n.Key, Type: n.Type, Properties: Map(n.Props),
+	return domain.Node{ID: domain.NodeID(n.Id), Version: domain.Version(n.Version), Namespace: n.Namespace, Key: n.Key, Type: n.Type, Properties: Map(n.Props),
 		Deleted: n.Deleted, ChangeID: domain.ChangeID(n.ChangeId), CreatedAt: FromTime(n.CreatedAt),
 		Branch: n.Branch, Parents: versionsFromPB(n.Parents), Reason: n.Reason, State: n.State}
 }
@@ -197,10 +197,13 @@ func ItemToPB(it domain.ChangeItem) *graphv1.ChangeItem {
 		out.Supersedes = append(out.Supersedes, string(d))
 	}
 	out.Execution = it.Execution
+	if it.Post != nil {
+		out.Post = endpointToPB(*it.Post)
+	}
 	if p := it.Proposal; p != nil {
 		pp := &graphv1.Proposal{Op: string(p.Op)}
 		if p.Node != nil {
-			pp.Node = &graphv1.NodeDraft{Base: RefPtrToPB(p.Node.Base), Key: p.Node.Key, Type: p.Node.Type, Props: Struct(p.Node.Properties),
+			pp.Node = &graphv1.NodeDraft{Base: RefPtrToPB(p.Node.Base), Namespace: p.Node.Namespace, Key: p.Node.Key, Type: p.Node.Type, Props: Struct(p.Node.Properties),
 				From: RefPtrToPB(p.Node.From), Ancestor: RefPtrToPB(p.Node.Ancestor), State: p.Node.State}
 		}
 		if p.Link != nil {
@@ -224,10 +227,14 @@ func ItemFromPB(it *graphv1.ChangeItem) domain.ChangeItem {
 		out.Supersedes = append(out.Supersedes, domain.ItemID(d))
 	}
 	out.Execution = it.Execution
+	if it.Post != nil {
+		e := endpointFromPB(it.Post)
+		out.Post = &e
+	}
 	if p := it.Proposal; p != nil {
 		dp := &domain.Proposal{Op: domain.ProposalOp(p.Op)}
 		if p.Node != nil {
-			dp.Node = &domain.NodeDraft{Base: RefPtrFromPB(p.Node.Base), Key: p.Node.Key, Type: p.Node.Type, Properties: Map(p.Node.Props),
+			dp.Node = &domain.NodeDraft{Base: RefPtrFromPB(p.Node.Base), Namespace: p.Node.Namespace, Key: p.Node.Key, Type: p.Node.Type, Properties: Map(p.Node.Props),
 				From: RefPtrFromPB(p.Node.From), Ancestor: RefPtrFromPB(p.Node.Ancestor), State: p.Node.State}
 		}
 		if p.Link != nil {
@@ -258,7 +265,7 @@ func ItemsFromPB(its []*graphv1.ChangeItem) []domain.ChangeItem {
 }
 
 func ChangeToPB(c domain.ChangeSet) *graphv1.ChangeSet {
-	return &graphv1.ChangeSet{Id: string(c.ID), Title: c.Title, Intent: c.Intent, Methodology: c.Methodology, Goal: c.Goal, Status: string(c.Status),
+	return &graphv1.ChangeSet{Id: string(c.ID), Title: c.Title, Intent: c.Intent, Methodology: c.Methodology, Goal: c.Goal, Namespace: c.Namespace, ParentId: string(c.ParentID), OwnerOrg: c.OwnerOrg, Status: string(c.Status),
 		BaselineId: string(c.BaselineID), ResultBaselineId: string(c.ResultBaselineID), Data: Struct(c.Data), Items: ItemsToPB(c.Items), CreatedAt: Time(c.CreatedAt),
 		Branch: domain.BranchOf(c.Branch)}
 }
@@ -267,7 +274,7 @@ func ChangeFromPB(c *graphv1.ChangeSet) domain.ChangeSet {
 	if c == nil {
 		return domain.ChangeSet{}
 	}
-	return domain.ChangeSet{ID: domain.ChangeID(c.Id), Title: c.Title, Intent: c.Intent, Methodology: c.Methodology, Goal: c.Goal, Status: domain.ChangeStatus(c.Status),
+	return domain.ChangeSet{ID: domain.ChangeID(c.Id), Title: c.Title, Intent: c.Intent, Methodology: c.Methodology, Goal: c.Goal, Namespace: c.Namespace, ParentID: domain.ChangeID(c.ParentId), OwnerOrg: c.OwnerOrg, Status: domain.ChangeStatus(c.Status),
 		BaselineID: domain.BaselineID(c.BaselineId), ResultBaselineID: domain.BaselineID(c.ResultBaselineId), Data: Map(c.Data), Items: ItemsFromPB(c.Items), CreatedAt: FromTime(c.CreatedAt),
 		Branch: c.Branch}
 }

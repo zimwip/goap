@@ -67,7 +67,7 @@ func sqliteErr(err error, what string) error {
 	return err
 }
 
-const sqliteNodeCols = `n.id, v.version, n.key, n.type, v.props, v.deleted, v.change_id, v.created_at, v.branch, v.parents, v.reason, v.state`
+const sqliteNodeCols = `n.id, v.version, n.namespace, n.key, n.type, v.props, v.deleted, v.change_id, v.created_at, v.branch, v.parents, v.reason, v.state`
 
 type scanner interface{ Scan(dest ...any) error }
 
@@ -76,7 +76,7 @@ func sqliteScanNode(row scanner) (domain.Node, error) {
 	var id, p, created, parents string
 	var change sql.NullString
 	var version int
-	if err := row.Scan(&id, &version, &n.Key, &n.Type, &p, &n.Deleted, &change, &created, &n.Branch, &parents, &n.Reason, &n.State); err != nil {
+	if err := row.Scan(&id, &version, &n.Namespace, &n.Key, &n.Type, &p, &n.Deleted, &change, &created, &n.Branch, &parents, &n.Reason, &n.State); err != nil {
 		return n, err
 	}
 	_ = json.Unmarshal([]byte(parents), &n.Parents)
@@ -167,9 +167,17 @@ func (t *sqliteTx) PutBranch(ctx context.Context, b domain.Branch) error {
 	return sqliteErr(err, "branch "+b.Name)
 }
 
-func (t *sqliteTx) NodeByKey(ctx context.Context, key string) (domain.Node, error) {
+func (t *sqliteTx) NodeIDByKey(ctx context.Context, namespace, key string) (domain.NodeID, error) {
 	var id string
-	if err := t.tx.QueryRowContext(ctx, `SELECT id FROM node WHERE key = ?`, key).Scan(&id); err != nil {
+	if err := t.tx.QueryRowContext(ctx, `SELECT id FROM node WHERE namespace = ? AND key = ?`, domain.NamespaceOf(namespace), key).Scan(&id); err != nil {
+		return "", sqliteErr(err, "node key "+key)
+	}
+	return domain.NodeID(id), nil
+}
+
+func (t *sqliteTx) NodeByKey(ctx context.Context, namespace, key string) (domain.Node, error) {
+	var id string
+	if err := t.tx.QueryRowContext(ctx, `SELECT id FROM node WHERE namespace = ? AND key = ?`, domain.NamespaceOf(namespace), key).Scan(&id); err != nil {
 		return domain.Node{}, sqliteErr(err, "node key "+key)
 	}
 	return t.LatestOn(ctx, domain.NodeID(id), domain.MainBranch)
@@ -286,9 +294,9 @@ func (t *sqliteTx) Change(ctx context.Context, id domain.ChangeID) (domain.Chang
 	var c domain.ChangeSet
 	var result sql.NullString
 	var data, created string
-	err := t.tx.QueryRowContext(ctx, `SELECT id, title, intent, methodology, goal, status, baseline_id, result_baseline_id, data, created_at, branch
+	err := t.tx.QueryRowContext(ctx, `SELECT id, title, intent, methodology, goal, status, baseline_id, result_baseline_id, data, created_at, branch, namespace, COALESCE(parent_id, ''), owner_org
 		FROM change_set WHERE id = ?`, string(id)).
-		Scan((*string)(&c.ID), &c.Title, &c.Intent, &c.Methodology, &c.Goal, (*string)(&c.Status), (*string)(&c.BaselineID), &result, &data, &created, &c.Branch)
+		Scan((*string)(&c.ID), &c.Title, &c.Intent, &c.Methodology, &c.Goal, (*string)(&c.Status), (*string)(&c.BaselineID), &result, &data, &created, &c.Branch, &c.Namespace, (*string)(&c.ParentID), &c.OwnerOrg)
 	if err != nil {
 		return c, sqliteErr(err, "change "+string(id))
 	}
@@ -330,7 +338,7 @@ func (t *sqliteTx) Changes(ctx context.Context) ([]domain.ChangeSet, error) {
 
 func (t *sqliteTx) PutNode(ctx context.Context, n domain.Node) error {
 	if n.Version == 1 {
-		if _, err := t.tx.ExecContext(ctx, `INSERT INTO node (id, key, type, latest) VALUES (?, ?, ?, 1)`, string(n.ID), n.Key, n.Type); err != nil {
+		if _, err := t.tx.ExecContext(ctx, `INSERT INTO node (id, namespace, key, type, latest) VALUES (?, ?, ?, ?, 1)`, string(n.ID), domain.NamespaceOf(n.Namespace), n.Key, n.Type); err != nil {
 			return sqliteErr(err, "node "+n.Key)
 		}
 	} else {
@@ -380,12 +388,12 @@ func (t *sqliteTx) PutBaseline(ctx context.Context, b domain.Baseline) error {
 }
 
 func (t *sqliteTx) PutChange(ctx context.Context, c domain.ChangeSet) error {
-	_, err := t.tx.ExecContext(ctx, `INSERT INTO change_set (id, title, intent, methodology, goal, status, baseline_id, result_baseline_id, data, created_at, branch)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	_, err := t.tx.ExecContext(ctx, `INSERT INTO change_set (id, title, intent, methodology, goal, status, baseline_id, result_baseline_id, data, created_at, branch, namespace, parent_id, owner_org)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT (id) DO UPDATE SET title = excluded.title, intent = excluded.intent, goal = excluded.goal, status = excluded.status,
 		  result_baseline_id = excluded.result_baseline_id, data = excluded.data, baseline_id = excluded.baseline_id, branch = excluded.branch`,
 		string(c.ID), c.Title, c.Intent, c.Methodology, c.Goal, string(c.Status), string(c.BaselineID), nullUUID(string(c.ResultBaselineID)),
-		string(jsonb(c.Data)), tsText(c.CreatedAt), domain.BranchOf(c.Branch))
+		string(jsonb(c.Data)), tsText(c.CreatedAt), domain.BranchOf(c.Branch), domain.NamespaceOf(c.Namespace), nullUUID(string(c.ParentID)), c.OwnerOrg)
 	return sqliteErr(err, "change")
 }
 

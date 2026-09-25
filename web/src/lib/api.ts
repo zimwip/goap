@@ -385,6 +385,7 @@ export interface NodeRef {
 
 export interface GraphNode {
   id?: string;
+  namespace?: string;
   version?: number;
   key?: string;
   type?: string;
@@ -463,7 +464,10 @@ export interface ChangeItem {
   kind?: ItemKind | string;
   type?: string;
   status?: string;
+  /** impact: the "pre" version (released, in the reference baseline) */
   target?: NodeRef;
+  /** impact: the "post" side, the proposal producing the new version (item) or that version (node) */
+  post?: { node?: NodeRef; item?: string };
   proposal?: Proposal;
   decision?: Decision;
   data?: Struct;
@@ -478,11 +482,17 @@ export interface ChangeItem {
 
 export interface ChangeSet {
   id?: string;
+  namespace?: string;
+  /** branch the change works on (change-<id> when it has its own) */
+  branch?: string;
+  /** sub-change: parent change and responsible OrgUnit key */
+  parentId?: string;
+  ownerOrg?: string;
   title?: string;
   intent?: string;
   methodology?: string;
   goal?: string;
-  status?: 'draft' | 'active' | 'applied' | 'abandoned' | string;
+  status?: 'draft' | 'active' | 'merge_pending' | 'applied' | 'abandoned' | string;
   baselineId?: string;
   resultBaselineId?: string;
   data?: Struct;
@@ -536,6 +546,11 @@ export interface ExecutionRecord {
   /** absent as long as the action is not finished (or errored, or waiting) */
   effectsMet?: boolean;
   items?: string[];
+  /** node versions the step read (referenced on the blackboard when it started) */
+  reads?: NodeRef[];
+  /** item count of the change (blackboard state) when the step started / ended */
+  boardBefore?: number;
+  boardAfter?: number;
   inputTokens?: Int64;
   outputTokens?: Int64;
   modelCalls?: ModelCall[];
@@ -824,6 +839,22 @@ export const iam = {
   removePolicy: (policy: Policy) => rpc<{ policy: Policy }, Empty>(IAM, 'RemovePolicy', { policy }),
 };
 
+export interface ImpactView {
+  item?: string;
+  key?: string;
+  type?: string;
+  pre?: NodeRef;
+  preState?: string;
+  post?: NodeRef;
+  postState?: string;
+}
+
+export interface SharedNode {
+  node?: NodeRef;
+  key?: string;
+  changes?: string[];
+}
+
 export const graph = {
   listBaselines: (signal?: AbortSignal) =>
     rpc<Empty, { baselines?: Baseline[] }>(GRAPH, 'ListBaselines', {}, signal),
@@ -840,8 +871,35 @@ export const graph = {
     rpc<{ id: string }, { change?: ChangeSet }>(GRAPH, 'GetChange', { id }, signal),
   getBranch: (name: string, signal?: AbortSignal) =>
     rpc<{ name: string }, { branch?: { name?: string; head?: string }; head?: Baseline }>(GRAPH, 'GetBranch', { name }, signal),
-  createChange: (req: { title: string; intent?: string; baselineId: string; methodology?: string }) =>
-    rpc<typeof req, { change?: ChangeSet }>(GRAPH, 'CreateChange', req),
+  createChange: (req: {
+    title: string;
+    intent?: string;
+    baselineId?: string;
+    methodology?: string;
+    namespace?: string;
+    /** branch the change is merged into (default main) */
+    branch?: string;
+    ownBranch?: boolean;
+    parentId?: string;
+    ownerOrg?: string;
+  }) => rpc<typeof req, { change?: ChangeSet }>(GRAPH, 'CreateChange', req),
+  /** Splits a change into one sub-change per organisational unit owning impacted nodes. */
+  splitChange: (changeId: string) =>
+    rpc<{ changeId: string }, { changes?: ChangeSet[] }>(GRAPH, 'SplitChange', { changeId }),
+  listSubChanges: (changeId: string, signal?: AbortSignal) =>
+    rpc<{ changeId: string }, { changes?: ChangeSet[] }>(GRAPH, 'ListSubChanges', { changeId }, signal),
+  /** Completes a merge_pending change; resolutions are by node id. */
+  mergeChange: (changeId: string, resolutions: Record<string, { props?: Struct; skip?: boolean }> = {}) =>
+    rpc<
+      { changeId: string; resolutions: Record<string, { props?: Struct; skip?: boolean }> },
+      { change?: ChangeSet }
+    >(GRAPH, 'MergeChange', { changeId, resolutions }),
+  /** Pre/post view of the impacts of a change. */
+  getImpacts: (changeId: string, signal?: AbortSignal) =>
+    rpc<{ changeId: string }, { impacts?: ImpactView[] }>(GRAPH, 'GetImpacts', { changeId }, signal),
+  /** Nodes the change shares with other open changes. */
+  getSharedNodes: (changeId: string, signal?: AbortSignal) =>
+    rpc<{ changeId: string }, { nodes?: SharedNode[] }>(GRAPH, 'GetSharedNodes', { changeId }, signal),
   /** Every version of a node, all branches. */
   listNodeVersions: (id: string, signal?: AbortSignal) =>
     rpc<{ id: string }, { versions?: GraphNode[] }>(GRAPH, 'ListNodeVersions', { id }, signal),

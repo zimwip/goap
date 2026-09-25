@@ -139,8 +139,19 @@ func (t *memTx) PutBranch(_ context.Context, b domain.Branch) error {
 	return nil
 }
 
-func (t *memTx) NodeByKey(ctx context.Context, key string) (domain.Node, error) {
-	id, ok := t.st.keys[key]
+// nsKey scopes a node key to its namespace.
+func nsKey(namespace, key string) string { return domain.NamespaceOf(namespace) + "\x00" + key }
+
+func (t *memTx) NodeIDByKey(_ context.Context, namespace, key string) (domain.NodeID, error) {
+	id, ok := t.st.keys[nsKey(namespace, key)]
+	if !ok {
+		return "", fmt.Errorf("node key %q: %w", key, ErrNotFound)
+	}
+	return id, nil
+}
+
+func (t *memTx) NodeByKey(ctx context.Context, namespace, key string) (domain.Node, error) {
+	id, ok := t.st.keys[nsKey(namespace, key)]
 	if !ok {
 		return domain.Node{}, fmt.Errorf("node key %q: %w", key, ErrNotFound)
 	}
@@ -241,11 +252,11 @@ func (t *memTx) PutNode(_ context.Context, n domain.Node) error {
 		return fmt.Errorf("node %s: expected version %d: %w", n.Ref(), len(vs)+1, ErrConflict)
 	}
 	if n.Version == 1 {
-		if _, dup := t.st.keys[n.Key]; dup && n.Key != "" {
+		if _, dup := t.st.keys[nsKey(n.Namespace, n.Key)]; dup && n.Key != "" {
 			return fmt.Errorf("node key %q already used: %w", n.Key, ErrConflict)
 		}
 		if n.Key != "" {
-			t.st.keys[n.Key] = n.ID
+			t.st.keys[nsKey(n.Namespace, n.Key)] = n.ID
 		}
 	}
 	t.st.versions[n.ID] = append(vs, n)
