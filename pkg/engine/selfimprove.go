@@ -181,6 +181,7 @@ func (e *Engine) observePropose(ctx context.Context, ac ActionContext) (ActionRe
 			Key   string         `json:"key,omitempty"`
 			Type  string         `json:"type,omitempty"`
 			Props map[string]any `json:"props,omitempty"`
+			State string         `json:"state,omitempty"`
 		}{Props: p.Props}
 		if p.Op == "update_node" {
 			in.Proposal.Node.Base = p.Key

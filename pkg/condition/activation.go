@@ -70,6 +70,7 @@ func (h hydrator) item(it domain.ChangeItem) map[string]any {
 				}
 			}
 			n["types"] = h.bb.TypesOf(n["type"].(string))
+			n["state"] = p.Node.State // transition_node / create_node: the target state
 			m["node"] = n
 		}
 		if p.Link != nil {
@@ -105,12 +106,13 @@ func (h hydrator) endpoint(e domain.Endpoint) map[string]any {
 
 func (h hydrator) ref(r domain.NodeRef) map[string]any {
 	m := map[string]any{"id": string(r.ID), "version": int64(r.Version), "key": "", "type": "", "types": []any{}, "props": map[string]any{},
-		"deleted": false, "latest": int64(r.Version), "out": []any{}, "in": []any{}}
+		"deleted": false, "latest": int64(r.Version), "out": []any{}, "in": []any{}, "state": "", "editable": true}
 	v, ok := h.bb.Nodes[r]
 	if !ok {
 		return m
 	}
 	m["key"], m["type"], m["props"], m["deleted"], m["latest"] = v.Key, v.Type, orEmpty(v.Properties), v.Deleted, int64(v.Latest)
+	m["state"], m["editable"] = v.State, !v.Frozen
 	m["types"] = h.bb.TypesOf(v.Type)
 	out := make([]any, 0, len(v.Out))
 	for _, l := range v.Out {

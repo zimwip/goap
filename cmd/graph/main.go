@@ -143,6 +143,7 @@ func main() {
 		}
 	}
 	authorizer := iamsvc.NewClient(platform.H2CClient(), platform.Env("GOAP_IAM_URL", "http://localhost:8086"))
+	g.Authorizer = graphsvc.TransitionAuthorizer(authorizer)
 	srv.Mount(graphv1connect.NewGraphServiceHandler(&graphsvc.Handler{Graph: g, Events: events, Authz: authorizer}, telemetry.HandlerOptions()...))
 	if err := srv.Run(); err != nil {
 		platform.Fatal(log, "server", err)

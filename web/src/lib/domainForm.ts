@@ -2,10 +2,13 @@
 // row models of the methodology form.
 import type { Domain } from './api';
 import {
+  lifecycleFromForm,
+  lifecycleToForm,
   linkTypeFromForm,
   linkTypeToForm,
   nodeTypeFromForm,
   nodeTypeToForm,
+  type LifecycleForm,
   type LinkTypeForm,
   type NodeTypeForm,
 } from './methodologyForm';
@@ -16,10 +19,11 @@ export interface DomainForm {
   description: string;
   nodeTypes: NodeTypeForm[];
   linkTypes: LinkTypeForm[];
+  lifecycles: LifecycleForm[];
 }
 
 export function emptyDomainForm(): DomainForm {
-  return { name: '', version: '0.1.0', description: '', nodeTypes: [], linkTypes: [] };
+  return { name: '', version: '0.1.0', description: '', nodeTypes: [], linkTypes: [], lifecycles: [] };
 }
 
 export function toDomainForm(d: Domain): DomainForm {
@@ -29,6 +33,7 @@ export function toDomainForm(d: Domain): DomainForm {
     description: d.description ?? '',
     nodeTypes: (d.nodeTypes ?? []).map(nodeTypeToForm),
     linkTypes: (d.linkTypes ?? []).map(linkTypeToForm),
+    lifecycles: (d.lifecycles ?? []).map(lifecycleToForm),
   };
 }
 
@@ -37,6 +42,7 @@ export function fromDomainForm(f: DomainForm): Domain {
   if (f.description.trim()) d.description = f.description.trim();
   if (f.nodeTypes.length) d.nodeTypes = f.nodeTypes.map(nodeTypeFromForm);
   if (f.linkTypes.length) d.linkTypes = f.linkTypes.map(linkTypeFromForm);
+  if (f.lifecycles.length) d.lifecycles = f.lifecycles.map(lifecycleFromForm);
   return d;
 }
 

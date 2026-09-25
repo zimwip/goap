@@ -104,6 +104,10 @@ const (
 	// OpMergeNode creates a version merging Node.Base (target branch, may be
 	// nil when the node is new there) with Node.From (source branch).
 	OpMergeNode ProposalOp = "merge_node"
+	// OpTransitionNode moves Node.Base to the lifecycle state Node.State. It is
+	// how a released node is reopened for edition (a transition into an
+	// editable state) and how it leaves the editable states again (ADR 0014).
+	OpTransitionNode ProposalOp = "transition_node"
 )
 
 // Proposal is a modification of the target graph.
@@ -123,6 +127,8 @@ type NodeDraft struct {
 	Key        string         `json:"key,omitempty"`
 	Type       string         `json:"type,omitempty"`
 	Properties map[string]any `json:"props,omitempty"`
+	// State is the target lifecycle state of a transition_node.
+	State string `json:"state,omitempty"`
 }
 
 // Endpoint designates a link endpoint: an existing node version or a node
@@ -175,6 +181,10 @@ func (it ChangeItem) Validate() error {
 		case OpUpdateNode, OpDeleteNode:
 			if p.Node == nil || p.Node.Base == nil {
 				return fmt.Errorf("%s requires node.base", p.Op)
+			}
+		case OpTransitionNode:
+			if p.Node == nil || p.Node.Base == nil || p.Node.State == "" {
+				return fmt.Errorf("transition_node requires node.base and node.state")
 			}
 		case OpMergeNode:
 			if p.Node == nil || p.Node.From == nil {

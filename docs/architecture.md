@@ -751,3 +751,16 @@ status bar. The gateway configuration lives in the `modelgw` database (PostgreSQ
   any signed-in user; `admin` always). Only enabled catalog models can be called; calls without identity
   (engine, in-process) are trusted and skip the role check but still count toward the quota.
 - **Aliases** (`default`, `fast`…) point to catalog models and are changed at runtime (router reload).
+
+
+## Node lifecycle (ADR 0014)
+
+A domain is composed of **node types, link types and lifecycles**. A lifecycle is a named state machine
+(states with an `editable` flag, transitions with permission, CEL guard, required attributes/links and,
+for documents, allowed child states) that node types name and subtypes inherit. The state is stored on
+each node version. A node is modified only in an editable state, which it holds only through a change:
+the change reopens it (`transition_node`), edits it and moves it out of the editable states before it is
+applied. Changes are attached to the nodes they modify (several changes may be attached to one node;
+conflicts appear at Apply). A document type embeds nodes through `contains` links and its transitions
+validate the states of its children in the result baseline. The rules live in `pkg/graph/lifecycle.go`
+(`Graph.walk` + the checks of `Apply`); the metadata is projected on the NodeType graph nodes.

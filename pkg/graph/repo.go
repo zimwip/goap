@@ -54,6 +54,14 @@ type Tx interface {
 	PutChange(ctx context.Context, c domain.ChangeSet) error
 	PutItem(ctx context.Context, change domain.ChangeID, it domain.ChangeItem) error
 
+	// PutAttachment attaches a node (at the version the change starts from) to
+	// a change; attaching twice is a no-op.
+	PutAttachment(ctx context.Context, change domain.ChangeID, ref domain.NodeRef) error
+	// Attachments lists the nodes a change is attached to.
+	Attachments(ctx context.Context, change domain.ChangeID) ([]domain.NodeRef, error)
+	// NodeAttachments lists the changes a node is attached to, oldest first.
+	NodeAttachments(ctx context.Context, node domain.NodeID) ([]domain.ChangeID, error)
+
 	// PutExecution appends a record to the execution journal.
 	PutExecution(ctx context.Context, r domain.ExecutionRecord) error
 	// Executions returns the journal records matching f, in recording order.

@@ -4,7 +4,10 @@ description: >
   Application lifecycle management domain: needs, requirements, functions, components, builds, releases and deployments. Shared by the delivery methodologies (impact-analysis, test-design, sdlc).
 nodeTypes:
   - {name: Need, description: Business need expressed by a stakeholder, properties: [title, description, stakeholder]}
-  - {name: Requirement, description: Requirement satisfying a need, properties: [title, description, priority, status]}
+  - name: Requirement
+    description: Requirement satisfying a need
+    properties: [title, description, priority, status]
+    lifecycle: requirement
   - {name: FunctionalRequirement, extends: Requirement, description: Functional requirement}
   - {name: NonFunctionalRequirement, extends: Requirement, description: Non-functional requirement (performance, availability…), properties: [category]}
   - {name: SecurityRequirement, extends: NonFunctionalRequirement, description: Security requirement}
@@ -17,9 +20,43 @@ nodeTypes:
   - {name: Interface, description: Interface (API, file, event) exposed by an application, properties: [title, protocol, version]}
   - {name: Flow, description: Data flow between applications through an interface, properties: [title, mode, frequency]}
   - {name: TestCase, description: Test case verifying a requirement, properties: [title, level, steps]}
-  - {name: Release, description: Deliverable version of an application (a set of artifacts), properties: [title, version, status, notes]}
+  - name: Release
+    description: Deliverable version of an application (a set of artifacts)
+    properties: [title, version, status, notes]
+    lifecycle: release
   - {name: Environment, description: Execution environment (dev, test, staging, production), properties: [name, stage, order, url]}
   - {name: Deployment, description: Deployment of a release to an environment, properties: [status, stage, date, checks]}
+lifecycles:
+  # Work happens in the editable states, which a node only holds through a change:
+  # a persisted version is never editable.
+  - name: requirement
+    initial: proposed
+    states:
+      - {name: proposed, description: "Raised, not worked on yet"}
+      - {name: draft, editable: true, description: Being written or reworked in a change}
+      - {name: in_review, description: Submitted for review}
+      - {name: approved, description: Reviewed and accepted}
+      - {name: obsolete, final: true, description: No longer applicable}
+    transitions:
+      - {name: start, from: proposed, to: draft}
+      - {name: submit, from: draft, to: in_review, requires: {attributes: [title]}}
+      - {name: approve, from: in_review, to: approved, permission: "requirement:approve"}
+      - {name: reject, from: in_review, to: draft}
+      - {name: reopen, from: approved, to: draft}
+      - {name: retire, from: approved, to: obsolete}
+  - name: release
+    initial: candidate
+    states:
+      - {name: candidate, description: "Planned, contents may still change"}
+      - {name: draft, editable: true, description: Contents being reworked in a change}
+      - {name: released, description: Frozen deliverable}
+      - {name: withdrawn, final: true}
+    transitions:
+      - {name: rework, from: candidate, to: draft}
+      - {name: ready, from: draft, to: candidate}
+      - {name: release, from: candidate, to: released}
+      - {name: reopen, from: released, to: draft}
+      - {name: withdraw, from: released, to: withdrawn}
 linkTypes:
   - {name: satisfies, from: Requirement, to: Need}
   - {name: refines, from: Requirement, to: Requirement}

@@ -67,7 +67,7 @@ func sqliteErr(err error, what string) error {
 	return err
 }
 
-const sqliteNodeCols = `n.id, v.version, n.key, n.type, v.props, v.deleted, v.change_id, v.created_at, v.branch, v.parents, v.reason`
+const sqliteNodeCols = `n.id, v.version, n.key, n.type, v.props, v.deleted, v.change_id, v.created_at, v.branch, v.parents, v.reason, v.state`
 
 type scanner interface{ Scan(dest ...any) error }
 
@@ -76,7 +76,7 @@ func sqliteScanNode(row scanner) (domain.Node, error) {
 	var id, p, created, parents string
 	var change sql.NullString
 	var version int
-	if err := row.Scan(&id, &version, &n.Key, &n.Type, &p, &n.Deleted, &change, &created, &n.Branch, &parents, &n.Reason); err != nil {
+	if err := row.Scan(&id, &version, &n.Key, &n.Type, &p, &n.Deleted, &change, &created, &n.Branch, &parents, &n.Reason, &n.State); err != nil {
 		return n, err
 	}
 	_ = json.Unmarshal([]byte(parents), &n.Parents)
@@ -347,10 +347,10 @@ func (t *sqliteTx) PutNode(ctx context.Context, n domain.Node) error {
 		parents = []domain.Version{}
 	}
 	pj, _ := json.Marshal(parents)
-	_, err := t.tx.ExecContext(ctx, `INSERT INTO node_version (node_id, version, props, deleted, change_id, created_at, branch, parents, reason)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+	_, err := t.tx.ExecContext(ctx, `INSERT INTO node_version (node_id, version, props, deleted, change_id, created_at, branch, parents, reason, state)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		string(n.ID), int(n.Version), string(jsonb(n.Properties)), n.Deleted, nullUUID(string(n.ChangeID)), tsText(n.CreatedAt),
-		domain.BranchOf(n.Branch), string(pj), n.Reason)
+		domain.BranchOf(n.Branch), string(pj), n.Reason, n.State)
 	return sqliteErr(err, "node "+n.Ref().String())
 }
 
@@ -403,6 +403,47 @@ func (t *sqliteTx) PutItem(ctx context.Context, change domain.ChangeID, it domai
 	_, err = t.tx.ExecContext(ctx, `INSERT INTO change_item (id, change_id, kind, payload, target_id, target_version, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
 		string(it.ID), string(change), string(it.Kind), string(payload), tid, tv, tsText(it.CreatedAt))
 	return sqliteErr(err, "change item")
+}
+
+func (t *sqliteTx) PutAttachment(ctx context.Context, change domain.ChangeID, ref domain.NodeRef) error {
+	_, err := t.tx.ExecContext(ctx, `INSERT INTO change_node (change_id, node_id, base_version) VALUES (?, ?, ?) ON CONFLICT DO NOTHING`,
+		string(change), string(ref.ID), int(ref.Version))
+	return sqliteErr(err, "change attachment")
+}
+
+func (t *sqliteTx) Attachments(ctx context.Context, change domain.ChangeID) ([]domain.NodeRef, error) {
+	rows, err := t.tx.QueryContext(ctx, `SELECT node_id, base_version FROM change_node WHERE change_id = ? ORDER BY seq`, string(change))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []domain.NodeRef
+	for rows.Next() {
+		var id string
+		var v int
+		if err := rows.Scan(&id, &v); err != nil {
+			return nil, err
+		}
+		out = append(out, domain.NodeRef{ID: domain.NodeID(id), Version: domain.Version(v)})
+	}
+	return out, rows.Err()
+}
+
+func (t *sqliteTx) NodeAttachments(ctx context.Context, node domain.NodeID) ([]domain.ChangeID, error) {
+	rows, err := t.tx.QueryContext(ctx, `SELECT change_id FROM change_node WHERE node_id = ? ORDER BY seq`, string(node))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []domain.ChangeID
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out = append(out, domain.ChangeID(id))
+	}
+	return out, rows.Err()
 }
 
 func (t *sqliteTx) PutExecution(ctx context.Context, r domain.ExecutionRecord) error {

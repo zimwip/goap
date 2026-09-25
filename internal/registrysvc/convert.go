@@ -4,6 +4,7 @@ import (
 	registryv1 "github.com/zimwip/goap/gen/goap/registry/v1"
 	"github.com/zimwip/goap/internal/pbconv"
 	"github.com/zimwip/goap/pkg/condition"
+	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/methodology"
 )
 
@@ -13,11 +14,12 @@ func ToPB(r Record) *registryv1.Methodology {
 	out := &registryv1.Methodology{Name: m.Name, Version: m.Version, Description: m.Description, DomainRef: m.DomainRef, Status: string(r.Status),
 		CreatedAt: pbconv.Time(r.CreatedAt), UpdatedAt: pbconv.Time(r.UpdatedAt), PublishedAt: pbconv.Time(r.PublishedAt), UpdatedBy: r.UpdatedBy}
 	for _, n := range m.Domain.NodeTypes {
-		out.NodeTypes = append(out.NodeTypes, &registryv1.NodeType{Name: n.Name, Description: n.Description, Properties: n.Properties, Extends: n.Extends})
+		out.NodeTypes = append(out.NodeTypes, nodeTypeToPB(n))
 	}
 	for _, l := range m.Domain.LinkTypes {
 		out.LinkTypes = append(out.LinkTypes, &registryv1.LinkType{Name: l.Name, From: l.From, To: l.To})
 	}
+	out.Lifecycles = lifecyclesToPB(m.Domain.Lifecycles)
 	for _, c := range m.Conditions {
 		out.Conditions = append(out.Conditions, &registryv1.Condition{Name: c.Name, Description: c.Description, Expr: c.Expr})
 	}
@@ -69,11 +71,12 @@ func FromPB(p *registryv1.Methodology) methodology.Methodology {
 	}
 	m := methodology.Methodology{Name: p.Name, Version: p.Version, Description: p.Description, DomainRef: p.DomainRef}
 	for _, n := range p.NodeTypes {
-		m.Domain.NodeTypes = append(m.Domain.NodeTypes, methodology.NodeType{Name: n.Name, Description: n.Description, Properties: nilIfNone(n.Properties), Extends: n.Extends})
+		m.Domain.NodeTypes = append(m.Domain.NodeTypes, nodeTypeFromPB(n))
 	}
 	for _, l := range p.LinkTypes {
 		m.Domain.LinkTypes = append(m.Domain.LinkTypes, methodology.LinkType{Name: l.Name, From: l.From, To: l.To})
 	}
+	m.Domain.Lifecycles = lifecyclesFromPB(p.Lifecycles)
 	for _, c := range p.Conditions {
 		m.Conditions = append(m.Conditions, methodology.Condition{Name: c.Name, Description: c.Description, Expr: c.Expr})
 	}
@@ -128,7 +131,7 @@ func IssuesToPB(is methodology.Issues) []*registryv1.Issue {
 func nodeTypesToPB(ns []methodology.NodeType) []*registryv1.NodeType {
 	var out []*registryv1.NodeType
 	for _, n := range ns {
-		out = append(out, &registryv1.NodeType{Name: n.Name, Description: n.Description, Properties: n.Properties, Extends: n.Extends})
+		out = append(out, nodeTypeToPB(n))
 	}
 	return out
 }
@@ -145,7 +148,7 @@ func linkTypesToPB(ls []methodology.LinkType) []*registryv1.LinkType {
 func DomainToPB(r DomainRecord) *registryv1.Domain {
 	d := r.Domain
 	return &registryv1.Domain{Name: d.Name, Version: d.Version, Description: d.Description, Status: string(r.Status),
-		NodeTypes: nodeTypesToPB(d.NodeTypes), LinkTypes: linkTypesToPB(d.LinkTypes),
+		NodeTypes: nodeTypesToPB(d.NodeTypes), LinkTypes: linkTypesToPB(d.LinkTypes), Lifecycles: lifecyclesToPB(d.Lifecycles),
 		CreatedAt: pbconv.Time(r.CreatedAt), UpdatedAt: pbconv.Time(r.UpdatedAt), PublishedAt: pbconv.Time(r.PublishedAt), UpdatedBy: r.UpdatedBy}
 }
 
@@ -164,10 +167,69 @@ func DomainFromPB(p *registryv1.Domain) methodology.Domain {
 	}
 	d := methodology.Domain{Name: p.Name, Version: p.Version, Description: p.Description}
 	for _, n := range p.NodeTypes {
-		d.NodeTypes = append(d.NodeTypes, methodology.NodeType{Name: n.Name, Description: n.Description, Properties: nilIfNone(n.Properties), Extends: n.Extends})
+		d.NodeTypes = append(d.NodeTypes, nodeTypeFromPB(n))
 	}
 	for _, l := range p.LinkTypes {
 		d.LinkTypes = append(d.LinkTypes, methodology.LinkType{Name: l.Name, From: l.From, To: l.To})
 	}
+	d.Lifecycles = lifecyclesFromPB(p.Lifecycles)
 	return d
+}
+
+func nodeTypeToPB(n methodology.NodeType) *registryv1.NodeType {
+	out := &registryv1.NodeType{Name: n.Name, Description: n.Description, Properties: n.Properties, Extends: n.Extends,
+		Lifecycle: n.Lifecycle, ChangeControlled: n.ChangeControlled}
+	if d := n.Document; d != nil {
+		out.Document = &registryv1.DocumentSpec{Contains: d.Contains}
+	}
+	return out
+}
+
+func nodeTypeFromPB(n *registryv1.NodeType) methodology.NodeType {
+	out := methodology.NodeType{Name: n.Name, Description: n.Description, Properties: nilIfNone(n.Properties), Extends: n.Extends,
+		Lifecycle: n.Lifecycle, ChangeControlled: n.ChangeControlled}
+	if d := n.Document; d != nil {
+		out.Document = &domain.DocumentSpec{Contains: nilIfNone(d.Contains)}
+	}
+	return out
+}
+
+func lifecyclesToPB(ls []domain.Lifecycle) []*registryv1.Lifecycle {
+	var out []*registryv1.Lifecycle
+	for _, l := range ls {
+		pl := &registryv1.Lifecycle{Name: l.Name, Initial: l.Initial}
+		for _, s := range l.States {
+			pl.States = append(pl.States, &registryv1.LifecycleState{Name: s.Name, Description: s.Description, Editable: s.Editable, Final: s.Final})
+		}
+		for _, t := range l.Transitions {
+			pt := &registryv1.LifecycleTransition{Name: t.Name, From: t.From, To: t.To, Permission: t.Permission, Guard: t.Guard,
+				RequiresAttributes: t.Requires.Attributes, RequiresOutgoingLinks: t.Requires.OutgoingLinks}
+			if t.Children != nil {
+				pt.ChildrenStates = t.Children.States
+			}
+			pl.Transitions = append(pl.Transitions, pt)
+		}
+		out = append(out, pl)
+	}
+	return out
+}
+
+func lifecyclesFromPB(ls []*registryv1.Lifecycle) []domain.Lifecycle {
+	var out []domain.Lifecycle
+	for _, l := range ls {
+		dl := domain.Lifecycle{Name: l.Name, Initial: l.Initial}
+		for _, s := range l.States {
+			dl.States = append(dl.States, domain.LifecycleState{Name: s.Name, Description: s.Description, Editable: s.Editable, Final: s.Final})
+		}
+		for _, t := range l.Transitions {
+			dt := domain.Transition{Name: t.Name, From: t.From, To: t.To, Permission: t.Permission, Guard: t.Guard,
+				Requires: domain.TransitionRequires{Attributes: nilIfNone(t.RequiresAttributes), OutgoingLinks: nilIfNone(t.RequiresOutgoingLinks)}}
+			if len(t.ChildrenStates) > 0 {
+				dt.Children = &domain.ChildrenRule{States: t.ChildrenStates}
+			}
+			dl.Transitions = append(dl.Transitions, dt)
+		}
+		out = append(out, dl)
+	}
+	return out
 }

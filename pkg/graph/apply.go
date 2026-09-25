@@ -40,7 +40,11 @@ func (g *Graph) applyTx(ctx context.Context, tx Tx, id domain.ChangeID, baseline
 	if err != nil {
 		return domain.Baseline{}, err
 	}
-	a := &applier{g: g, tx: tx, ctx: ctx, change: c, branch: domain.BranchOf(c.Branch), target: maps.Clone(base.Nodes),
+	w, err := g.walk(ctx, tx, c, true)
+	if err != nil {
+		return domain.Baseline{}, err
+	}
+	a := &applier{g: g, tx: tx, ctx: ctx, change: c, walk: w, branch: domain.BranchOf(c.Branch), target: maps.Clone(base.Nodes),
 		bumped: map[domain.NodeID]*bump{}, created: map[domain.ItemID]domain.NodeRef{}, removed: map[domain.LinkID]bool{}}
 	if err := a.run(); err != nil {
 		return domain.Baseline{}, err
@@ -96,6 +100,7 @@ type bump struct {
 }
 
 type applier struct {
+	walk     *walked
 	g        *Graph
 	tx       Tx
 	ctx      context.Context
@@ -210,7 +215,7 @@ func (a *applier) run() error {
 		switch p.Op {
 		case domain.OpCreateNode:
 			n := domain.Node{ID: domain.NodeID(a.g.newID()), Version: 1, Branch: a.branch, Reason: domain.ReasonCreate,
-				Key: p.Node.Key, Type: p.Node.Type, Properties: p.Node.Properties, ChangeID: a.change.ID, CreatedAt: a.g.now()}
+				Key: p.Node.Key, Type: p.Node.Type, Properties: p.Node.Properties, ChangeID: a.change.ID, CreatedAt: a.g.now(), State: a.walk.created[it.ID]}
 			if n.Key == "" {
 				n.Key = string(n.ID)
 			}
@@ -236,6 +241,10 @@ func (a *applier) run() error {
 				return err
 			}
 			b.deleted = true
+		case domain.OpTransitionNode:
+			if _, err := a.bumpOf(*p.Node.Base); err != nil {
+				return err
+			}
 		case domain.OpMergeNode:
 			if err := a.mergeOf(p.Node); err != nil {
 				return err
@@ -260,6 +269,15 @@ func (a *applier) run() error {
 			l, err := a.findLink(p.Link.LinkID)
 			if err != nil {
 				return err
+			}
+			src, err := a.tx.Node(a.ctx, l.From)
+			if err != nil {
+				return err
+			}
+			if lc := a.walk.ix.lifecycleOf(src.Type); lc != nil {
+				if s, managed := a.walk.stateOf(src); managed && !lc.Editable(s) {
+					return invalidf("cannot remove a link of %s (%s): it is %s, not editable; reopen it in this change with a transition", src.Key, src.Type, s)
+				}
 			}
 			if _, err := a.bumpOf(l.From); err != nil {
 				return err
@@ -290,6 +308,9 @@ func (a *applier) run() error {
 		n.Version, n.Branch = v, a.branch
 		n.Properties = b.props
 		n.Deleted = b.deleted
+		if s, ok := a.walk.state[id]; ok && !b.merge {
+			n.State = s
+		}
 		n.ChangeID = a.change.ID
 		n.CreatedAt = a.g.now()
 		if err := a.tx.PutNode(a.ctx, n); err != nil {
@@ -346,7 +367,8 @@ func (a *applier) run() error {
 			return err
 		}
 	}
-	return nil
+	// 6. lifecycle: states left behind and transition requirements
+	return a.checkMoves()
 }
 
 func (a *applier) addDraft(from domain.NodeRef, d domain.LinkDraft) error {

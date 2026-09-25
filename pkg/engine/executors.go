@@ -56,8 +56,10 @@ Answer ONLY with a JSON object {"items":[...]} where each item is one of:
 {"ref":"...","kind":"proposal","proposal":{"op":"create_node","node":{"key":"...","type":"...","props":{...}}}}
 {"kind":"proposal","proposal":{"op":"update_node","node":{"base":"<node key>","props":{...}}}}
 {"kind":"proposal","proposal":{"op":"delete_node","node":{"base":"<node key>"}}}
+{"kind":"proposal","proposal":{"op":"transition_node","node":{"base":"<node key>","state":"<target lifecycle state>"}}}
 {"kind":"proposal","proposal":{"op":"add_link","link":{"type":"...","from":"<node key or #ref>","to":"<node key or #ref>"}}}
 {"kind":"artifact","type":"...","data":{...}}
+A node whose type has a lifecycle can only be modified in an editable state: reopen it with a transition_node first, and finish with a transition_node to a non-editable state.
 Reference nodes by their key. Reference items created in the same answer by "#<ref>".`
 
 // PromptData is exposed to prompt templates.

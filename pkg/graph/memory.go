@@ -26,6 +26,12 @@ type memState struct {
 	changes   map[domain.ChangeID]domain.ChangeSet
 	branches  map[string]domain.Branch
 	journal   []domain.ExecutionRecord
+	attached  []attachment // in attachment order
+}
+
+type attachment struct {
+	change domain.ChangeID
+	ref    domain.NodeRef
 }
 
 // NewMemory returns an empty in-memory repository.
@@ -48,6 +54,7 @@ func (s memState) clone() memState {
 		changes:   make(map[domain.ChangeID]domain.ChangeSet, len(s.changes)),
 		branches:  maps.Clone(s.branches),
 		journal:   slices.Clone(s.journal),
+		attached:  slices.Clone(s.attached),
 	}
 	for k, v := range s.versions {
 		c.versions[k] = slices.Clone(v)
@@ -277,6 +284,36 @@ func (t *memTx) PutItem(_ context.Context, id domain.ChangeID, it domain.ChangeI
 	c.Items = append(c.Items, it)
 	t.st.changes[id] = c
 	return nil
+}
+
+func (t *memTx) PutAttachment(_ context.Context, change domain.ChangeID, ref domain.NodeRef) error {
+	for _, a := range t.st.attached {
+		if a.change == change && a.ref.ID == ref.ID {
+			return nil
+		}
+	}
+	t.st.attached = append(t.st.attached, attachment{change, ref})
+	return nil
+}
+
+func (t *memTx) Attachments(_ context.Context, change domain.ChangeID) ([]domain.NodeRef, error) {
+	var out []domain.NodeRef
+	for _, a := range t.st.attached {
+		if a.change == change {
+			out = append(out, a.ref)
+		}
+	}
+	return out, nil
+}
+
+func (t *memTx) NodeAttachments(_ context.Context, node domain.NodeID) ([]domain.ChangeID, error) {
+	var out []domain.ChangeID
+	for _, a := range t.st.attached {
+		if a.ref.ID == node {
+			out = append(out, a.change)
+		}
+	}
+	return out, nil
 }
 
 func (t *memTx) PutExecution(_ context.Context, r domain.ExecutionRecord) error {

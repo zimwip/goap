@@ -61,6 +61,12 @@ const (
 	// GraphServiceListChangesProcedure is the fully-qualified name of the GraphService's ListChanges
 	// RPC.
 	GraphServiceListChangesProcedure = "/goap.graph.v1.GraphService/ListChanges"
+	// GraphServiceGetChangeNodesProcedure is the fully-qualified name of the GraphService's
+	// GetChangeNodes RPC.
+	GraphServiceGetChangeNodesProcedure = "/goap.graph.v1.GraphService/GetChangeNodes"
+	// GraphServiceListNodeChangesProcedure is the fully-qualified name of the GraphService's
+	// ListNodeChanges RPC.
+	GraphServiceListNodeChangesProcedure = "/goap.graph.v1.GraphService/ListNodeChanges"
 	// GraphServiceUpdateChangeProcedure is the fully-qualified name of the GraphService's UpdateChange
 	// RPC.
 	GraphServiceUpdateChangeProcedure = "/goap.graph.v1.GraphService/UpdateChange"
@@ -122,6 +128,10 @@ type GraphServiceClient interface {
 	CreateChange(context.Context, *connect.Request[v1.CreateChangeRequest]) (*connect.Response[v1.CreateChangeResponse], error)
 	GetChange(context.Context, *connect.Request[v1.GetChangeRequest]) (*connect.Response[v1.GetChangeResponse], error)
 	ListChanges(context.Context, *connect.Request[v1.ListChangesRequest]) (*connect.Response[v1.ListChangesResponse], error)
+	// Nodes a change is attached to (the versions it starts from), and the
+	// changes a node is attached to (ADR 0014).
+	GetChangeNodes(context.Context, *connect.Request[v1.GetChangeNodesRequest]) (*connect.Response[v1.GetChangeNodesResponse], error)
+	ListNodeChanges(context.Context, *connect.Request[v1.ListNodeChangesRequest]) (*connect.Response[v1.ListNodeChangesResponse], error)
 	UpdateChange(context.Context, *connect.Request[v1.UpdateChangeRequest]) (*connect.Response[v1.UpdateChangeResponse], error)
 	AddItems(context.Context, *connect.Request[v1.AddItemsRequest]) (*connect.Response[v1.AddItemsResponse], error)
 	GetBlackboard(context.Context, *connect.Request[v1.GetBlackboardRequest]) (*connect.Response[v1.GetBlackboardResponse], error)
@@ -216,6 +226,18 @@ func NewGraphServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			httpClient,
 			baseURL+GraphServiceListChangesProcedure,
 			connect.WithSchema(graphServiceMethods.ByName("ListChanges")),
+			connect.WithClientOptions(opts...),
+		),
+		getChangeNodes: connect.NewClient[v1.GetChangeNodesRequest, v1.GetChangeNodesResponse](
+			httpClient,
+			baseURL+GraphServiceGetChangeNodesProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("GetChangeNodes")),
+			connect.WithClientOptions(opts...),
+		),
+		listNodeChanges: connect.NewClient[v1.ListNodeChangesRequest, v1.ListNodeChangesResponse](
+			httpClient,
+			baseURL+GraphServiceListNodeChangesProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("ListNodeChanges")),
 			connect.WithClientOptions(opts...),
 		),
 		updateChange: connect.NewClient[v1.UpdateChangeRequest, v1.UpdateChangeResponse](
@@ -324,6 +346,8 @@ type graphServiceClient struct {
 	createChange     *connect.Client[v1.CreateChangeRequest, v1.CreateChangeResponse]
 	getChange        *connect.Client[v1.GetChangeRequest, v1.GetChangeResponse]
 	listChanges      *connect.Client[v1.ListChangesRequest, v1.ListChangesResponse]
+	getChangeNodes   *connect.Client[v1.GetChangeNodesRequest, v1.GetChangeNodesResponse]
+	listNodeChanges  *connect.Client[v1.ListNodeChangesRequest, v1.ListNodeChangesResponse]
 	updateChange     *connect.Client[v1.UpdateChangeRequest, v1.UpdateChangeResponse]
 	addItems         *connect.Client[v1.AddItemsRequest, v1.AddItemsResponse]
 	getBlackboard    *connect.Client[v1.GetBlackboardRequest, v1.GetBlackboardResponse]
@@ -394,6 +418,16 @@ func (c *graphServiceClient) GetChange(ctx context.Context, req *connect.Request
 // ListChanges calls goap.graph.v1.GraphService.ListChanges.
 func (c *graphServiceClient) ListChanges(ctx context.Context, req *connect.Request[v1.ListChangesRequest]) (*connect.Response[v1.ListChangesResponse], error) {
 	return c.listChanges.CallUnary(ctx, req)
+}
+
+// GetChangeNodes calls goap.graph.v1.GraphService.GetChangeNodes.
+func (c *graphServiceClient) GetChangeNodes(ctx context.Context, req *connect.Request[v1.GetChangeNodesRequest]) (*connect.Response[v1.GetChangeNodesResponse], error) {
+	return c.getChangeNodes.CallUnary(ctx, req)
+}
+
+// ListNodeChanges calls goap.graph.v1.GraphService.ListNodeChanges.
+func (c *graphServiceClient) ListNodeChanges(ctx context.Context, req *connect.Request[v1.ListNodeChangesRequest]) (*connect.Response[v1.ListNodeChangesResponse], error) {
+	return c.listNodeChanges.CallUnary(ctx, req)
 }
 
 // UpdateChange calls goap.graph.v1.GraphService.UpdateChange.
@@ -488,6 +522,10 @@ type GraphServiceHandler interface {
 	CreateChange(context.Context, *connect.Request[v1.CreateChangeRequest]) (*connect.Response[v1.CreateChangeResponse], error)
 	GetChange(context.Context, *connect.Request[v1.GetChangeRequest]) (*connect.Response[v1.GetChangeResponse], error)
 	ListChanges(context.Context, *connect.Request[v1.ListChangesRequest]) (*connect.Response[v1.ListChangesResponse], error)
+	// Nodes a change is attached to (the versions it starts from), and the
+	// changes a node is attached to (ADR 0014).
+	GetChangeNodes(context.Context, *connect.Request[v1.GetChangeNodesRequest]) (*connect.Response[v1.GetChangeNodesResponse], error)
+	ListNodeChanges(context.Context, *connect.Request[v1.ListNodeChangesRequest]) (*connect.Response[v1.ListNodeChangesResponse], error)
 	UpdateChange(context.Context, *connect.Request[v1.UpdateChangeRequest]) (*connect.Response[v1.UpdateChangeResponse], error)
 	AddItems(context.Context, *connect.Request[v1.AddItemsRequest]) (*connect.Response[v1.AddItemsResponse], error)
 	GetBlackboard(context.Context, *connect.Request[v1.GetBlackboardRequest]) (*connect.Response[v1.GetBlackboardResponse], error)
@@ -578,6 +616,18 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 		GraphServiceListChangesProcedure,
 		svc.ListChanges,
 		connect.WithSchema(graphServiceMethods.ByName("ListChanges")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceGetChangeNodesHandler := connect.NewUnaryHandler(
+		GraphServiceGetChangeNodesProcedure,
+		svc.GetChangeNodes,
+		connect.WithSchema(graphServiceMethods.ByName("GetChangeNodes")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceListNodeChangesHandler := connect.NewUnaryHandler(
+		GraphServiceListNodeChangesProcedure,
+		svc.ListNodeChanges,
+		connect.WithSchema(graphServiceMethods.ByName("ListNodeChanges")),
 		connect.WithHandlerOptions(opts...),
 	)
 	graphServiceUpdateChangeHandler := connect.NewUnaryHandler(
@@ -694,6 +744,10 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 			graphServiceGetChangeHandler.ServeHTTP(w, r)
 		case GraphServiceListChangesProcedure:
 			graphServiceListChangesHandler.ServeHTTP(w, r)
+		case GraphServiceGetChangeNodesProcedure:
+			graphServiceGetChangeNodesHandler.ServeHTTP(w, r)
+		case GraphServiceListNodeChangesProcedure:
+			graphServiceListNodeChangesHandler.ServeHTTP(w, r)
 		case GraphServiceUpdateChangeProcedure:
 			graphServiceUpdateChangeHandler.ServeHTTP(w, r)
 		case GraphServiceAddItemsProcedure:
@@ -775,6 +829,14 @@ func (UnimplementedGraphServiceHandler) GetChange(context.Context, *connect.Requ
 
 func (UnimplementedGraphServiceHandler) ListChanges(context.Context, *connect.Request[v1.ListChangesRequest]) (*connect.Response[v1.ListChangesResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.ListChanges is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) GetChangeNodes(context.Context, *connect.Request[v1.GetChangeNodesRequest]) (*connect.Response[v1.GetChangeNodesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.GetChangeNodes is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) ListNodeChanges(context.Context, *connect.Request[v1.ListNodeChangesRequest]) (*connect.Response[v1.ListNodeChangesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.ListNodeChanges is not implemented"))
 }
 
 func (UnimplementedGraphServiceHandler) UpdateChange(context.Context, *connect.Request[v1.UpdateChangeRequest]) (*connect.Response[v1.UpdateChangeResponse], error) {

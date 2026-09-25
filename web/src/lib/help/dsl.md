@@ -32,6 +32,7 @@ writes designate items created within the same execution.
 | `ctx.proposeNode(type, key, props)` | creation proposal → `"#pN"` |
 | `ctx.proposeUpdate(key, props)` | new version of a node |
 | `ctx.proposeDelete(key)` | deletion |
+| `ctx.proposeTransition(key, state)` | move a node to a lifecycle state (reopen it before editing, leave the editable states before the change is applied) |
 | `ctx.proposeLink(from, type, to)` | link (`from` / `to`: node key or `#pN`) |
 | `ctx.addArtifact(type, data)` | free-form data (report…) |
 | `ctx.decide(itemId, accept, comment)` | decision on a proposal |

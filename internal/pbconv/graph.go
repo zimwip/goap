@@ -82,7 +82,7 @@ func RefPtrFromPB(r *graphv1.NodeRef) *domain.NodeRef {
 func NodeToPB(n domain.Node) *graphv1.Node {
 	return &graphv1.Node{Id: string(n.ID), Version: int32(n.Version), Key: n.Key, Type: n.Type, Props: Struct(n.Properties),
 		Deleted: n.Deleted, ChangeId: string(n.ChangeID), CreatedAt: Time(n.CreatedAt),
-		Branch: domain.BranchOf(n.Branch), Parents: versionsToPB(n.Parents), Reason: n.Reason}
+		Branch: domain.BranchOf(n.Branch), Parents: versionsToPB(n.Parents), Reason: n.Reason, State: n.State}
 }
 
 func versionsToPB(vs []domain.Version) []int32 {
@@ -99,7 +99,7 @@ func NodeFromPB(n *graphv1.Node) domain.Node {
 	}
 	return domain.Node{ID: domain.NodeID(n.Id), Version: domain.Version(n.Version), Key: n.Key, Type: n.Type, Properties: Map(n.Props),
 		Deleted: n.Deleted, ChangeID: domain.ChangeID(n.ChangeId), CreatedAt: FromTime(n.CreatedAt),
-		Branch: n.Branch, Parents: versionsFromPB(n.Parents), Reason: n.Reason}
+		Branch: n.Branch, Parents: versionsFromPB(n.Parents), Reason: n.Reason, State: n.State}
 }
 
 func versionsFromPB(vs []int32) []domain.Version {
@@ -151,11 +151,11 @@ func LinksFromPB(ls []*graphv1.Link) []domain.Link {
 }
 
 func ViewToPB(v domain.NodeView) *graphv1.NodeView {
-	return &graphv1.NodeView{Node: NodeToPB(v.Node), Latest: int32(v.Latest), Out: LinksToPB(v.Out), In: LinksToPB(v.In)}
+	return &graphv1.NodeView{Node: NodeToPB(v.Node), Latest: int32(v.Latest), Out: LinksToPB(v.Out), In: LinksToPB(v.In), Frozen: v.Frozen}
 }
 
 func ViewFromPB(v *graphv1.NodeView) domain.NodeView {
-	return domain.NodeView{Node: NodeFromPB(v.Node), Latest: domain.Version(v.Latest), Out: LinksFromPB(v.Out), In: LinksFromPB(v.In)}
+	return domain.NodeView{Node: NodeFromPB(v.Node), Latest: domain.Version(v.Latest), Out: LinksFromPB(v.Out), In: LinksFromPB(v.In), Frozen: v.Frozen}
 }
 
 func BaselineToPB(b domain.Baseline) *graphv1.Baseline {
@@ -201,7 +201,7 @@ func ItemToPB(it domain.ChangeItem) *graphv1.ChangeItem {
 		pp := &graphv1.Proposal{Op: string(p.Op)}
 		if p.Node != nil {
 			pp.Node = &graphv1.NodeDraft{Base: RefPtrToPB(p.Node.Base), Key: p.Node.Key, Type: p.Node.Type, Props: Struct(p.Node.Properties),
-				From: RefPtrToPB(p.Node.From), Ancestor: RefPtrToPB(p.Node.Ancestor)}
+				From: RefPtrToPB(p.Node.From), Ancestor: RefPtrToPB(p.Node.Ancestor), State: p.Node.State}
 		}
 		if p.Link != nil {
 			pp.Link = &graphv1.LinkDraft{LinkId: string(p.Link.LinkID), Type: p.Link.Type, From: endpointToPB(p.Link.From), To: endpointToPB(p.Link.To), Props: Struct(p.Link.Properties)}
@@ -228,7 +228,7 @@ func ItemFromPB(it *graphv1.ChangeItem) domain.ChangeItem {
 		dp := &domain.Proposal{Op: domain.ProposalOp(p.Op)}
 		if p.Node != nil {
 			dp.Node = &domain.NodeDraft{Base: RefPtrFromPB(p.Node.Base), Key: p.Node.Key, Type: p.Node.Type, Properties: Map(p.Node.Props),
-				From: RefPtrFromPB(p.Node.From), Ancestor: RefPtrFromPB(p.Node.Ancestor)}
+				From: RefPtrFromPB(p.Node.From), Ancestor: RefPtrFromPB(p.Node.Ancestor), State: p.Node.State}
 		}
 		if p.Link != nil {
 			dp.Link = &domain.LinkDraft{LinkID: domain.LinkID(p.Link.LinkId), Type: p.Link.Type, From: endpointFromPB(p.Link.From), To: endpointFromPB(p.Link.To), Properties: Map(p.Link.Props)}

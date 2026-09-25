@@ -59,8 +59,10 @@ type Node struct {
 	Type       string         `json:"type"`
 	Properties map[string]any `json:"props,omitempty"`
 	Deleted    bool           `json:"deleted,omitempty"`
-	ChangeID   ChangeID       `json:"changeId,omitempty"`
-	CreatedAt  time.Time      `json:"createdAt"`
+	// State in the lifecycle of the node type (empty: the type has none).
+	State     string    `json:"state,omitempty"`
+	ChangeID  ChangeID  `json:"changeId,omitempty"`
+	CreatedAt time.Time `json:"createdAt"`
 }
 
 // Ref returns the exact reference of this node version.

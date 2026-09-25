@@ -155,7 +155,37 @@ func props(v any) map[string]any {
 			delete(m, k)
 		}
 	}
+	// an explicit false (not change controlled) is not an empty value
+	if t, ok := v.(methodology.NodeType); ok && t.ChangeControlled != nil {
+		m["changeControlled"] = *t.ChangeControlled
+	}
 	return m
+}
+
+// nodeTypeProps are the properties of a NodeType graph node. The lifecycle the
+// type names is embedded (resolved) so that the graph needs no other node to
+// evaluate it; its name stays in lifecycleRef.
+func nodeTypeProps(s methodology.Schema, t methodology.NodeType) map[string]any {
+	m := props(t)
+	delete(m, "lifecycle")
+	if l := s.Lifecycle(t.Lifecycle); t.Lifecycle != "" && l != nil {
+		m["lifecycleRef"] = t.Lifecycle
+		m["lifecycle"] = props(l)
+	}
+	return m
+}
+
+// lifecycleKeys are the NodeType properties that carry the lifecycle model.
+var lifecycleKeys = []string{"lifecycle", "lifecycleRef", "document", "changeControlled"}
+
+func pick(m map[string]any, keys []string) map[string]any {
+	out := map[string]any{}
+	for _, k := range keys {
+		if v, ok := m[k]; ok {
+			out[k] = v
+		}
+	}
+	return out
 }
 
 func empty(x any) bool {
@@ -206,7 +236,9 @@ func Project(m *methodology.Methodology) ([]Element, []Edge) {
 			types[t.Name] = true
 		}
 		for _, t := range m.Domain.NodeTypes {
-			k := add(TypeNodeType, t.Name, t)
+			k := Key(name, TypeNodeType, t.Name)
+			els = append(els, Element{Key: k, Type: TypeNodeType, Props: nodeTypeProps(m.Domain, t)})
+			edges = append(edges, Edge{LinkContains, root, k})
 			if t.Extends != "" && types[t.Extends] {
 				edges = append(edges, Edge{LinkExtends, k, Key(name, TypeNodeType, t.Extends)})
 			}
@@ -275,7 +307,7 @@ func ProjectDomain(d *methodology.Domain) ([]Element, []Edge) {
 	var edges []Edge
 	for _, t := range d.NodeTypes {
 		k := DomainKey(d.Name, t.Name)
-		els = append(els, Element{Key: k, Type: TypeNodeType, Props: props(t)})
+		els = append(els, Element{Key: k, Type: TypeNodeType, Props: nodeTypeProps(d.Schema, t)})
 		if t.Extends != "" && types[t.Extends] {
 			edges = append(edges, Edge{LinkExtends, k, DomainKey(d.Name, t.Extends)})
 		}
@@ -404,7 +436,15 @@ func sync(ctx context.Context, g Graph, t target) (Result, error) {
 			refs[el.Key] = domain.Endpoint{Node: &ref}
 			// NodeType is the metadata layer (ADR 0012): once created, it is
 			// authored on the graph, not overwritten from the registry.
+			// The lifecycle, document and change-control declarations are the
+			// exception (ADR 0014): they are governed by the domain and follow
+			// its published version.
 			if el.Type == TypeNodeType {
+				if patch := diff(pick(n.Properties, lifecycleKeys), pick(el.Props, lifecycleKeys)); patch != nil {
+					items = append(items, domain.ChangeItem{Kind: domain.KindProposal, Type: "metamodel", ProducedBy: "metamodel.sync",
+						Proposal: &domain.Proposal{Op: domain.OpUpdateNode, Node: &domain.NodeDraft{Base: &ref, Properties: patch}}})
+					res.Updated++
+				}
 				continue
 			}
 			if patch := diff(n.Properties, el.Props); patch != nil {

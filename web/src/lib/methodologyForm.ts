@@ -5,11 +5,38 @@
 // lists become text, JSON params become text. `toForm` / `fromForm` convert
 // between this model and the proto message.
 
-import type { Action, Agent, Issue, LinkType, Methodology, NodeType, Struct, Trigger } from './api';
+import type { Action, Agent, Issue, Lifecycle, LifecycleState, LifecycleTransition, LinkType, Methodology, NodeType, Struct, Trigger } from './api';
 
 export interface CondRow {
   cond: string;
   value: boolean;
+}
+
+export interface LifecycleStateForm {
+  name: string;
+  description: string;
+  editable: boolean;
+  final: boolean;
+}
+
+export interface LifecycleTransitionForm {
+  name: string;
+  from: string;
+  to: string;
+  permission: string;
+  guard: string;
+  /** comma-separated */
+  requiresAttributes: string;
+  requiresLinks: string;
+  /** comma-separated states allowed for the contained children */
+  children: string;
+}
+
+export interface LifecycleForm {
+  name: string;
+  initial: string;
+  states: LifecycleStateForm[];
+  transitions: LifecycleTransitionForm[];
 }
 
 export interface NodeTypeForm {
@@ -19,6 +46,12 @@ export interface NodeTypeForm {
   properties: string;
   /** parent type (subtyping) */
   extends: string;
+  /** name of the domain lifecycle of the nodes ("" : none, or inherited from the parent) */
+  lifecycle: string;
+  /** comma-separated node types the type embeds ("" : not a document) */
+  document: string;
+  /** false: direct writes, outside changes */
+  changeControlled: boolean;
 }
 
 export interface LinkTypeForm {
@@ -132,6 +165,8 @@ export interface MethodologyForm {
   domainRef: string;
   nodeTypes: NodeTypeForm[];
   linkTypes: LinkTypeForm[];
+  /** lifecycles of an embedded domain (edited in a shared domain; kept as they are) */
+  lifecycles: LifecycleForm[];
   conditions: ConditionForm[];
   actions: ActionForm[];
   goals: GoalForm[];
@@ -152,7 +187,7 @@ export const PRODUCE_OPS = ['create_node', 'update_node'] as const;
 
 // --- constructors --------------------------------------------------------------
 
-export const emptyNodeType = (): NodeTypeForm => ({ name: '', description: '', properties: '', extends: '' });
+export const emptyNodeType = (): NodeTypeForm => ({ name: '', description: '', properties: '', extends: '', lifecycle: '', document: '', changeControlled: true });
 export const emptyLinkType = (): LinkTypeForm => ({ name: '', from: '', to: '' });
 let uidSeq = 0;
 /** New local id (elements created in the UI). */
@@ -228,6 +263,7 @@ export function emptyForm(): MethodologyForm {
     domainRef: '',
     nodeTypes: [],
     linkTypes: [],
+    lifecycles: [],
     conditions: [],
     actions: [],
     goals: [],
@@ -351,6 +387,72 @@ export function nodeTypeToForm(n: NodeType): NodeTypeForm {
     description: n.description ?? '',
     properties: (n.properties ?? []).join(', '),
     extends: n.extends ?? '',
+    lifecycle: n.lifecycle ?? '',
+    document: (n.document?.contains ?? []).join(', '),
+    changeControlled: n.changeControlled !== false,
+  };
+}
+
+const csv = (v: string): string[] =>
+  v
+    .split(',')
+    .map((x) => x.trim())
+    .filter(Boolean);
+
+export function lifecycleToForm(l: Lifecycle): LifecycleForm {
+  return {
+    name: l.name ?? '',
+    initial: l.initial ?? '',
+    states: (l.states ?? []).map((s) => ({ name: s.name ?? '', description: s.description ?? '', editable: !!s.editable, final: !!s.final })),
+    transitions: (l.transitions ?? []).map((t) => ({
+      name: t.name ?? '',
+      from: t.from ?? '',
+      to: t.to ?? '',
+      permission: t.permission ?? '',
+      guard: t.guard ?? '',
+      requiresAttributes: (t.requiresAttributes ?? []).join(', '),
+      requiresLinks: (t.requiresOutgoingLinks ?? []).join(', '),
+      children: (t.childrenStates ?? []).join(', '),
+    })),
+  };
+}
+
+export function lifecycleFromForm(l: LifecycleForm): Lifecycle {
+  const o: Lifecycle = { name: l.name.trim(), initial: l.initial.trim() };
+  o.states = l.states.map((s) => {
+    const st: LifecycleState = { name: s.name.trim() };
+    put(st, 'description', s.description.trim());
+    if (s.editable) st.editable = true;
+    if (s.final) st.final = true;
+    return st;
+  });
+  o.transitions = l.transitions.map((t) => {
+    const tr: LifecycleTransition = { name: t.name.trim(), from: t.from.trim(), to: t.to.trim() };
+    put(tr, 'permission', t.permission.trim());
+    put(tr, 'guard', t.guard.trim());
+    put(tr, 'requiresAttributes', csv(t.requiresAttributes));
+    put(tr, 'requiresOutgoingLinks', csv(t.requiresLinks));
+    put(tr, 'childrenStates', csv(t.children));
+    return tr;
+  });
+  return o;
+}
+
+/** A lifecycle to start from: work happens in `draft`, persisted versions rest in `approved`. */
+export function defaultLifecycle(name = ''): LifecycleForm {
+  return {
+    name,
+    initial: 'proposed',
+    states: [
+      { name: 'proposed', description: '', editable: false, final: false },
+      { name: 'draft', description: 'Being worked on in a change', editable: true, final: false },
+      { name: 'approved', description: '', editable: false, final: false },
+    ],
+    transitions: [
+      { name: 'start', from: 'proposed', to: 'draft', permission: '', guard: '', requiresAttributes: '', requiresLinks: '', children: '' },
+      { name: 'approve', from: 'draft', to: 'approved', permission: '', guard: '', requiresAttributes: '', requiresLinks: '', children: '' },
+      { name: 'reopen', from: 'approved', to: 'draft', permission: '', guard: '', requiresAttributes: '', requiresLinks: '', children: '' },
+    ],
   };
 }
 
@@ -371,6 +473,10 @@ export function nodeTypeFromForm(n: NodeTypeForm): NodeType {
       .map((p) => p.trim())
       .filter(Boolean),
   );
+  put(o, 'lifecycle', n.lifecycle.trim());
+  const contains = csv(n.document);
+  if (contains.length) o.document = { contains };
+  if (!n.changeControlled) o.changeControlled = false;
   return o;
 }
 
@@ -394,6 +500,7 @@ export function toForm(m: Methodology): MethodologyForm {
     domainRef: m.domainRef ?? '',
     nodeTypes: (m.nodeTypes ?? []).map(nodeTypeToForm),
     linkTypes: (m.linkTypes ?? []).map(linkTypeToForm),
+    lifecycles: (m.lifecycles ?? []).map(lifecycleToForm),
     conditions: (m.conditions ?? []).map((c, i) => ({
       uid: cu[i],
       name: c.name ?? '',
@@ -444,6 +551,7 @@ export function fromForm(f: MethodologyForm): { methodology: Methodology; issues
   put(m, 'domainRef', f.domainRef.trim());
   put(m, 'nodeTypes', f.nodeTypes.map(nodeTypeFromForm));
   put(m, 'linkTypes', f.linkTypes.map(linkTypeFromForm));
+  put(m, 'lifecycles', f.lifecycles.map(lifecycleFromForm));
   put(
     m,
     'conditions',

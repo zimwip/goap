@@ -79,7 +79,7 @@ func str(s *string) string {
 	return *s
 }
 
-const nodeCols = `n.id::text, v.version, n.key, n.type, v.props, v.deleted, v.change_id::text, v.created_at, v.branch, v.parents, v.reason`
+const nodeCols = `n.id::text, v.version, n.key, n.type, v.props, v.deleted, v.change_id::text, v.created_at, v.branch, v.parents, v.reason, v.state`
 
 func scanNode(row pgx.Row) (domain.Node, error) {
 	var n domain.Node
@@ -88,7 +88,7 @@ func scanNode(row pgx.Row) (domain.Node, error) {
 	var p []byte
 	var version int
 	var parents []int32
-	if err := row.Scan(&id, &version, &n.Key, &n.Type, &p, &n.Deleted, &change, &n.CreatedAt, &n.Branch, &parents, &n.Reason); err != nil {
+	if err := row.Scan(&id, &version, &n.Key, &n.Type, &p, &n.Deleted, &change, &n.CreatedAt, &n.Branch, &parents, &n.Reason, &n.State); err != nil {
 		return n, err
 	}
 	for _, pv := range parents {
@@ -342,9 +342,9 @@ func (t *pgTx) PutNode(ctx context.Context, n domain.Node) error {
 	for i, pv := range n.Parents {
 		parents[i] = int32(pv)
 	}
-	_, err := t.tx.Exec(ctx, `INSERT INTO node_version (node_id, version, props, deleted, change_id, created_at, branch, parents, reason)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-		string(n.ID), int(n.Version), jsonb(n.Properties), n.Deleted, nullUUID(string(n.ChangeID)), n.CreatedAt, domain.BranchOf(n.Branch), parents, n.Reason)
+	_, err := t.tx.Exec(ctx, `INSERT INTO node_version (node_id, version, props, deleted, change_id, created_at, branch, parents, reason, state)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+		string(n.ID), int(n.Version), jsonb(n.Properties), n.Deleted, nullUUID(string(n.ChangeID)), n.CreatedAt, domain.BranchOf(n.Branch), parents, n.Reason, n.State)
 	return mapErr(err, "node "+n.Ref().String())
 }
 
@@ -392,6 +392,47 @@ func (t *pgTx) PutItem(ctx context.Context, change domain.ChangeID, it domain.Ch
 	_, err = t.tx.Exec(ctx, `INSERT INTO change_item (id, change_id, kind, payload, target_id, target_version, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
 		string(it.ID), string(change), string(it.Kind), payload, tid, tv, it.CreatedAt)
 	return mapErr(err, "change item")
+}
+
+func (t *pgTx) PutAttachment(ctx context.Context, change domain.ChangeID, ref domain.NodeRef) error {
+	_, err := t.tx.Exec(ctx, `INSERT INTO change_node (change_id, node_id, base_version) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
+		string(change), string(ref.ID), int(ref.Version))
+	return mapErr(err, "change attachment")
+}
+
+func (t *pgTx) Attachments(ctx context.Context, change domain.ChangeID) ([]domain.NodeRef, error) {
+	rows, err := t.tx.Query(ctx, `SELECT node_id::text, base_version FROM change_node WHERE change_id = $1 ORDER BY seq`, string(change))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []domain.NodeRef
+	for rows.Next() {
+		var id string
+		var v int
+		if err := rows.Scan(&id, &v); err != nil {
+			return nil, err
+		}
+		out = append(out, domain.NodeRef{ID: domain.NodeID(id), Version: domain.Version(v)})
+	}
+	return out, rows.Err()
+}
+
+func (t *pgTx) NodeAttachments(ctx context.Context, node domain.NodeID) ([]domain.ChangeID, error) {
+	rows, err := t.tx.Query(ctx, `SELECT change_id::text FROM change_node WHERE node_id = $1 ORDER BY seq`, string(node))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []domain.ChangeID
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out = append(out, domain.ChangeID(id))
+	}
+	return out, rows.Err()
 }
 
 func (t *pgTx) PutExecution(ctx context.Context, r domain.ExecutionRecord) error {

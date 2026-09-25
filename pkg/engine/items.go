@@ -30,6 +30,8 @@ type ProposalInput struct {
 		Key   string         `json:"key,omitempty"`
 		Type  string         `json:"type,omitempty"`
 		Props map[string]any `json:"props,omitempty"`
+		// State: transition_node target, or the state a created node is born in
+		State string `json:"state,omitempty"`
 	} `json:"node,omitempty"`
 	Link *struct {
 		ID    string         `json:"id,omitempty"`
@@ -151,7 +153,7 @@ func (r *resolver) resolve(in []ItemInput, producedBy string) ([]domain.ChangeIt
 		if p := it.Proposal; p != nil {
 			dp := &domain.Proposal{Op: domain.ProposalOp(p.Op)}
 			if p.Node != nil {
-				dp.Node = &domain.NodeDraft{Key: p.Node.Key, Type: p.Node.Type, Properties: p.Node.Props}
+				dp.Node = &domain.NodeDraft{Key: p.Node.Key, Type: p.Node.Type, Properties: p.Node.Props, State: p.Node.State}
 				if p.Node.Base != "" {
 					ref, err := r.node(p.Node.Base)
 					if err != nil {

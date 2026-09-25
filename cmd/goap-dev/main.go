@@ -64,6 +64,7 @@ func main() {
 		platform.Fatal(log, "casbin", err)
 	}
 	g := graph.New(st.graph)
+	g.Authorizer = graphsvc.TransitionAuthorizer(authorizer)
 	if _, err := graphsvc.SeedDemo(ctx, g); err != nil {
 		platform.Fatal(log, "seed", err)
 	}

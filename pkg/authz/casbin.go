@@ -59,6 +59,8 @@ var DefaultPolicies = []Policy{
 	// the metadata layer of the graph (NodeType nodes and extends edges, ADR 0012)
 	{Rule: `hasRole(r.sub, "methodologist") && r.obj.Org == r.sub.Org`, Resource: "nodetype", Action: "*", Effect: "allow"},
 	{Rule: `hasRole(r.sub, "methodologist") && r.obj.Org == r.sub.Org`, Resource: "trigger", Action: "fire", Effect: "allow"},
+	// lifecycle transitions of nodes (ADR 0014); a transition may require another permission
+	{Rule: `hasAnyRole(r.sub, "contributor", "methodologist", "approver") && r.obj.Org == r.sub.Org`, Resource: "node", Action: "transition", Effect: "allow"},
 	// four-eyes principle: an approver applies changes of its organization, never its own
 	{Rule: `hasRole(r.sub, "approver") && r.sub.Org == r.obj.Org && r.sub.Subject != r.obj.Owner`, Resource: "change", Action: "apply", Effect: "allow"},
 	// production deployments: a release manager of the organization, never on its own change

@@ -25,6 +25,10 @@ service GraphService {
   rpc CreateChange(CreateChangeRequest) returns (CreateChangeResponse);
   rpc GetChange(GetChangeRequest) returns (GetChangeResponse);
   rpc ListChanges(ListChangesRequest) returns (ListChangesResponse);
+  // Nodes a change is attached to (the versions it starts from), and the
+  // changes a node is attached to (ADR 0014).
+  rpc GetChangeNodes(GetChangeNodesRequest) returns (GetChangeNodesResponse);
+  rpc ListNodeChanges(ListNodeChangesRequest) returns (ListNodeChangesResponse);
   rpc UpdateChange(UpdateChangeRequest) returns (UpdateChangeResponse);
   rpc AddItems(AddItemsRequest) returns (AddItemsResponse);
   rpc GetBlackboard(GetBlackboardRequest) returns (GetBlackboardResponse);
@@ -66,6 +70,8 @@ message Node {
   repeated int32 parents = 10;
   // create | revise | derive | merge
   string reason = 11;
+  // state in the lifecycle of the node type (empty: none)
+  string state = 12;
 }
 
 message Link {
@@ -82,6 +88,8 @@ message NodeView {
   int32 latest = 2;
   repeated Link out = 3;
   repeated Link in = 4;
+  // the node has a lifecycle and its state is not editable
+  bool frozen = 5;
 }
 
 message Baseline {
@@ -107,6 +115,8 @@ message NodeDraft {
   // merge_node: merged version and common ancestor
   NodeRef from = 5;
   NodeRef ancestor = 6;
+  // transition_node: target lifecycle state
+  string state = 7;
 }
 
 message LinkDraft {
@@ -520,4 +530,21 @@ message ListExecutionsRequest {
 
 message ListExecutionsResponse {
   repeated ExecutionRecord records = 1;
+}
+
+message GetChangeNodesRequest {
+  string change_id = 1;
+}
+
+message GetChangeNodesResponse {
+  repeated NodeRef nodes = 1;
+}
+
+message ListNodeChangesRequest {
+  string node_id = 1;
+}
+
+message ListNodeChangesResponse {
+  // headers only (no items)
+  repeated ChangeSet changes = 1;
 }

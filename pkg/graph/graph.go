@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -16,6 +17,9 @@ type Graph struct {
 	repo  Repo
 	now   func() time.Time
 	newID func() string
+	// Authorizer, when set, is asked before every lifecycle transition.
+	Authorizer TransitionAuthorizer
+	types      sync.Map // baseline id → *typeIndex
 }
 
 // New returns a Graph backed by repo.
@@ -30,6 +34,8 @@ type NewNode struct {
 	Key        string
 	Type       string
 	Properties map[string]any
+	// State is the lifecycle state of the first version (import; changes use create_node).
+	State string
 }
 
 // CreateNode creates version 1 of a node outside of any change (import).
@@ -37,7 +43,7 @@ func (g *Graph) CreateNode(ctx context.Context, in NewNode) (domain.Node, error)
 	if in.Type == "" {
 		return domain.Node{}, fmt.Errorf("node type required: %w", ErrInvalid)
 	}
-	n := domain.Node{ID: domain.NodeID(g.newID()), Version: 1, Branch: domain.MainBranch, Reason: domain.ReasonCreate, Key: in.Key, Type: in.Type, Properties: in.Properties, CreatedAt: g.now()}
+	n := domain.Node{ID: domain.NodeID(g.newID()), Version: 1, Branch: domain.MainBranch, Reason: domain.ReasonCreate, Key: in.Key, Type: in.Type, Properties: in.Properties, CreatedAt: g.now(), State: in.State}
 	if n.Key == "" {
 		n.Key = string(n.ID)
 	}
@@ -288,7 +294,10 @@ func (g *Graph) UpdateChange(ctx context.Context, id domain.ChangeID, p ChangePa
 		if p.Goal != nil {
 			c.Goal = *p.Goal
 		}
-		if p.Status != nil {
+		if p.Status != nil && *p.Status != c.Status {
+			if !validStatusMove(c.Status, *p.Status) {
+				return fmt.Errorf("change %s cannot go from %s to %s: %w", id, c.Status, *p.Status, ErrConflict)
+			}
 			c.Status = *p.Status
 		}
 		if len(p.Data) > 0 {
@@ -353,6 +362,17 @@ func (g *Graph) AddItems(ctx context.Context, id domain.ChangeID, items []domain
 			known[it.ID] = true
 			out = append(out, it)
 		}
+		// lifecycle: replay the whole change (early feedback, Apply is authoritative)
+		if full, err := tx.Change(ctx, id); err != nil {
+			return err
+		} else if _, err := g.walk(ctx, tx, full, false); err != nil {
+			return err
+		}
+		for _, ref := range modifies(out) {
+			if err := tx.PutAttachment(ctx, id, ref); err != nil {
+				return err
+			}
+		}
 		if c.Status == domain.ChangeDraft {
 			c.Status = domain.ChangeActive
 			return tx.PutChange(ctx, c)
@@ -383,10 +403,17 @@ func (g *Graph) Blackboard(ctx context.Context, id domain.ChangeID) (bb domain.B
 			return err
 		}
 		bb = domain.Blackboard{Change: c, Nodes: map[domain.NodeRef]domain.NodeView{}, Neighbors: map[domain.NodeRef]domain.Node{}}
+		ix, err := g.typesAt(ctx, tx, c.BaselineID)
+		if err != nil {
+			return err
+		}
 		for _, r := range c.ReferencedNodes() {
 			v, err := view(ctx, tx, r)
 			if err != nil {
 				return err
+			}
+			if lc := ix.lifecycleOf(v.Type); lc != nil && v.State != "" {
+				v.Frozen = !lc.Editable(v.State)
 			}
 			bb.Nodes[r] = v
 			for _, l := range v.Out {
@@ -415,4 +442,48 @@ func neighbor(ctx context.Context, tx Tx, into map[domain.NodeRef]domain.Node, r
 	}
 	into[r] = n
 	return nil
+}
+
+// validStatusMove is the change status machine: draft → active → applied
+// (applying is done by Apply) or abandoned; applied and abandoned are final.
+func validStatusMove(from, to domain.ChangeStatus) bool {
+	switch from {
+	case domain.ChangeDraft:
+		return to == domain.ChangeActive || to == domain.ChangeAbandoned
+	case domain.ChangeActive:
+		return to == domain.ChangeDraft || to == domain.ChangeAbandoned
+	}
+	return false
+}
+
+// ChangeNodes lists the nodes a change is attached to (the version it starts from).
+func (g *Graph) ChangeNodes(ctx context.Context, id domain.ChangeID) (refs []domain.NodeRef, err error) {
+	err = g.repo.InTx(ctx, func(tx Tx) error {
+		if _, err := tx.Change(ctx, id); err != nil {
+			return err
+		}
+		refs, err = tx.Attachments(ctx, id)
+		return err
+	})
+	return
+}
+
+// NodeChanges lists the changes a node is attached to, oldest first.
+func (g *Graph) NodeChanges(ctx context.Context, node domain.NodeID) (out []domain.ChangeSet, err error) {
+	err = g.repo.InTx(ctx, func(tx Tx) error {
+		ids, err := tx.NodeAttachments(ctx, node)
+		if err != nil {
+			return err
+		}
+		for _, id := range ids {
+			c, err := tx.Change(ctx, id)
+			if err != nil {
+				return err
+			}
+			c.Items = nil
+			out = append(out, c)
+		}
+		return nil
+	})
+	return
 }

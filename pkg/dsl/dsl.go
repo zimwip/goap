@@ -223,6 +223,14 @@ func (c *Ctx) ProposeDelete(key string) string {
 	return c.emit(map[string]any{"kind": "proposal", "proposal": map[string]any{"op": "delete_node", "node": map[string]any{"base": key}}})
 }
 
+// ProposeTransition proposes to move a node to a lifecycle state. A node of a
+// type with a lifecycle is only modified in an editable state: reopen it with a
+// transition first, and move it out of the editable states at the end.
+func (c *Ctx) ProposeTransition(key, state string) string {
+	return c.emit(map[string]any{"kind": "proposal", "proposal": map[string]any{"op": "transition_node",
+		"node": map[string]any{"base": key, "state": state}}})
+}
+
 // ProposeLink proposes a link; from and to are node keys or "#pN" references.
 func (c *Ctx) ProposeLink(from, linkType, to string) string {
 	return c.emit(map[string]any{"kind": "proposal", "proposal": map[string]any{"op": "add_link",

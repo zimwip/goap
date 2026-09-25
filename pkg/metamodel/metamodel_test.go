@@ -248,3 +248,57 @@ func TestCreateObject(t *testing.T) {
 		t.Fatalf("duplicate key: %v", err)
 	}
 }
+
+func TestSyncPatchesTheLifecycleOfExistingNodeTypes(t *testing.T) {
+	ctx := context.Background()
+	g := graph.New(graph.NewMemory())
+	d, err := methodology.ParseDomain([]byte(`
+name: docs
+version: 1.0.0
+nodeTypes:
+  - {name: Req, description: as authored}
+  - {name: Note, changeControlled: false}
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := SyncDomain(ctx, g, d); err != nil {
+		t.Fatal(err)
+	}
+	if n, _ := g.NodeByKey(ctx, DomainKey("docs", "Note")); n.Properties["changeControlled"] != false {
+		t.Fatalf("an explicit changeControlled=false must be projected: %+v", n.Properties)
+	}
+	before, _ := g.NodeByKey(ctx, DomainKey("docs", "Req"))
+	if _, ok := before.Properties["lifecycle"]; ok {
+		t.Fatal("no lifecycle yet")
+	}
+
+	// the domain gains a lifecycle (and a changed description, which stays graph-native)
+	d.NodeTypes[0].Description = "changed in the registry"
+	d.Lifecycles = []domain.Lifecycle{{Name: "req", Initial: "draft",
+		States:      []domain.LifecycleState{{Name: "draft", Editable: true}, {Name: "approved"}},
+		Transitions: []domain.Transition{{Name: "approve", From: "draft", To: "approved"}}}}
+	d.NodeTypes[0].Lifecycle = "req"
+	if r, err := SyncDomain(ctx, g, d); err != nil || r.Updated != 1 {
+		t.Fatalf("sync: %+v %v", r, err)
+	}
+	after, _ := g.NodeByKey(ctx, DomainKey("docs", "Req"))
+	if lc, _ := after.Properties["lifecycle"].(map[string]any); lc == nil || lc["name"] != "req" || after.Properties["lifecycleRef"] != "req" {
+		t.Fatalf("the named lifecycle is embedded, resolved: %+v", after.Properties)
+	}
+	if after.Version != before.Version+1 || after.Properties["lifecycle"] == nil || after.Properties["description"] != "as authored" {
+		t.Fatalf("lifecycle must follow the registry, the rest stays: %+v", after)
+	}
+	// idempotent
+	if r, _ := SyncDomain(ctx, g, d); r.Changed() {
+		t.Fatalf("second sync must be a no-op: %+v", r)
+	}
+	// removing the lifecycle clears it
+	d.NodeTypes[0].Lifecycle = ""
+	if _, err := SyncDomain(ctx, g, d); err != nil {
+		t.Fatal(err)
+	}
+	if n, _ := g.NodeByKey(ctx, DomainKey("docs", "Req")); n.Properties["lifecycle"] != nil {
+		t.Fatalf("lifecycle must be removed: %+v", n.Properties)
+	}
+}
