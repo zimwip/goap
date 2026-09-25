@@ -66,6 +66,12 @@ func TestServicePolicy(t *testing.T) {
 			if _, err := svc.Complete(meth, req); err != nil {
 				t.Fatalf("next day: %v", err)
 			}
+			if ms, as, err := svc.Available(user); err != nil || len(ms) != 0 || len(as) != 0 {
+				t.Fatalf("contributor must see nothing: %v %+v %+v", err, ms, as)
+			}
+			if ms, as, err := svc.Available(meth); err != nil || len(ms) != 1 || len(as) != 1 {
+				t.Fatalf("methodologist sees the model and its alias: %v %+v %+v", err, ms, as)
+			}
 			cat, aliases, err := svc.Catalog(ctx)
 			if err != nil || len(cat) != 1 || len(aliases) != 1 || cat[0].Roles[0] != "methodologist" {
 				t.Fatalf("catalog: %v %+v %+v", err, cat, aliases)

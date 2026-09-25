@@ -365,17 +365,81 @@ func (x *ModelAlias) GetModel() string {
 	return ""
 }
 
+// A model the caller may use.
+type AvailableModel struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Provider      string                 `protobuf:"bytes,1,opt,name=provider,proto3" json:"provider,omitempty"`
+	Model         string                 `protobuf:"bytes,2,opt,name=model,proto3" json:"model,omitempty"`
+	DisplayName   string                 `protobuf:"bytes,3,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AvailableModel) Reset() {
+	*x = AvailableModel{}
+	mi := &file_goap_model_v1_model_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AvailableModel) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AvailableModel) ProtoMessage() {}
+
+func (x *AvailableModel) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_model_v1_model_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AvailableModel.ProtoReflect.Descriptor instead.
+func (*AvailableModel) Descriptor() ([]byte, []int) {
+	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *AvailableModel) GetProvider() string {
+	if x != nil {
+		return x.Provider
+	}
+	return ""
+}
+
+func (x *AvailableModel) GetModel() string {
+	if x != nil {
+		return x.Model
+	}
+	return ""
+}
+
+func (x *AvailableModel) GetDisplayName() string {
+	if x != nil {
+		return x.DisplayName
+	}
+	return ""
+}
+
+// What the caller may use: the enabled catalog models it has the role for and
+// the aliases pointing to them.
 type ListModelsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Aliases       []*ModelAlias          `protobuf:"bytes,1,rep,name=aliases,proto3" json:"aliases,omitempty"`
 	Providers     []string               `protobuf:"bytes,2,rep,name=providers,proto3" json:"providers,omitempty"`
+	Models        []*AvailableModel      `protobuf:"bytes,3,rep,name=models,proto3" json:"models,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ListModelsResponse) Reset() {
 	*x = ListModelsResponse{}
-	mi := &file_goap_model_v1_model_proto_msgTypes[6]
+	mi := &file_goap_model_v1_model_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -387,7 +451,7 @@ func (x *ListModelsResponse) String() string {
 func (*ListModelsResponse) ProtoMessage() {}
 
 func (x *ListModelsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_model_v1_model_proto_msgTypes[6]
+	mi := &file_goap_model_v1_model_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -400,7 +464,7 @@ func (x *ListModelsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListModelsResponse.ProtoReflect.Descriptor instead.
 func (*ListModelsResponse) Descriptor() ([]byte, []int) {
-	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{6}
+	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *ListModelsResponse) GetAliases() []*ModelAlias {
@@ -413,6 +477,13 @@ func (x *ListModelsResponse) GetAliases() []*ModelAlias {
 func (x *ListModelsResponse) GetProviders() []string {
 	if x != nil {
 		return x.Providers
+	}
+	return nil
+}
+
+func (x *ListModelsResponse) GetModels() []*AvailableModel {
+	if x != nil {
+		return x.Models
 	}
 	return nil
 }
@@ -431,7 +502,7 @@ type ProviderKind struct {
 
 func (x *ProviderKind) Reset() {
 	*x = ProviderKind{}
-	mi := &file_goap_model_v1_model_proto_msgTypes[7]
+	mi := &file_goap_model_v1_model_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -443,7 +514,7 @@ func (x *ProviderKind) String() string {
 func (*ProviderKind) ProtoMessage() {}
 
 func (x *ProviderKind) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_model_v1_model_proto_msgTypes[7]
+	mi := &file_goap_model_v1_model_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -456,7 +527,7 @@ func (x *ProviderKind) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProviderKind.ProtoReflect.Descriptor instead.
 func (*ProviderKind) Descriptor() ([]byte, []int) {
-	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{7}
+	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *ProviderKind) GetId() string {
@@ -511,7 +582,7 @@ type ProviderProtocol struct {
 
 func (x *ProviderProtocol) Reset() {
 	*x = ProviderProtocol{}
-	mi := &file_goap_model_v1_model_proto_msgTypes[8]
+	mi := &file_goap_model_v1_model_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -523,7 +594,7 @@ func (x *ProviderProtocol) String() string {
 func (*ProviderProtocol) ProtoMessage() {}
 
 func (x *ProviderProtocol) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_model_v1_model_proto_msgTypes[8]
+	mi := &file_goap_model_v1_model_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -536,7 +607,7 @@ func (x *ProviderProtocol) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProviderProtocol.ProtoReflect.Descriptor instead.
 func (*ProviderProtocol) Descriptor() ([]byte, []int) {
-	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{8}
+	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *ProviderProtocol) GetId() string {
@@ -561,7 +632,7 @@ type ListProviderKindsRequest struct {
 
 func (x *ListProviderKindsRequest) Reset() {
 	*x = ListProviderKindsRequest{}
-	mi := &file_goap_model_v1_model_proto_msgTypes[9]
+	mi := &file_goap_model_v1_model_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -573,7 +644,7 @@ func (x *ListProviderKindsRequest) String() string {
 func (*ListProviderKindsRequest) ProtoMessage() {}
 
 func (x *ListProviderKindsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_model_v1_model_proto_msgTypes[9]
+	mi := &file_goap_model_v1_model_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -586,7 +657,7 @@ func (x *ListProviderKindsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListProviderKindsRequest.ProtoReflect.Descriptor instead.
 func (*ListProviderKindsRequest) Descriptor() ([]byte, []int) {
-	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{9}
+	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{10}
 }
 
 type ListProviderKindsResponse struct {
@@ -599,7 +670,7 @@ type ListProviderKindsResponse struct {
 
 func (x *ListProviderKindsResponse) Reset() {
 	*x = ListProviderKindsResponse{}
-	mi := &file_goap_model_v1_model_proto_msgTypes[10]
+	mi := &file_goap_model_v1_model_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -611,7 +682,7 @@ func (x *ListProviderKindsResponse) String() string {
 func (*ListProviderKindsResponse) ProtoMessage() {}
 
 func (x *ListProviderKindsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_model_v1_model_proto_msgTypes[10]
+	mi := &file_goap_model_v1_model_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -624,7 +695,7 @@ func (x *ListProviderKindsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListProviderKindsResponse.ProtoReflect.Descriptor instead.
 func (*ListProviderKindsResponse) Descriptor() ([]byte, []int) {
-	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{10}
+	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *ListProviderKindsResponse) GetKinds() []*ProviderKind {
@@ -660,7 +731,7 @@ type Provider struct {
 
 func (x *Provider) Reset() {
 	*x = Provider{}
-	mi := &file_goap_model_v1_model_proto_msgTypes[11]
+	mi := &file_goap_model_v1_model_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -672,7 +743,7 @@ func (x *Provider) String() string {
 func (*Provider) ProtoMessage() {}
 
 func (x *Provider) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_model_v1_model_proto_msgTypes[11]
+	mi := &file_goap_model_v1_model_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -685,7 +756,7 @@ func (x *Provider) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Provider.ProtoReflect.Descriptor instead.
 func (*Provider) Descriptor() ([]byte, []int) {
-	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{11}
+	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *Provider) GetName() string {
@@ -752,7 +823,7 @@ type ListProvidersRequest struct {
 
 func (x *ListProvidersRequest) Reset() {
 	*x = ListProvidersRequest{}
-	mi := &file_goap_model_v1_model_proto_msgTypes[12]
+	mi := &file_goap_model_v1_model_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -764,7 +835,7 @@ func (x *ListProvidersRequest) String() string {
 func (*ListProvidersRequest) ProtoMessage() {}
 
 func (x *ListProvidersRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_model_v1_model_proto_msgTypes[12]
+	mi := &file_goap_model_v1_model_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -777,7 +848,7 @@ func (x *ListProvidersRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListProvidersRequest.ProtoReflect.Descriptor instead.
 func (*ListProvidersRequest) Descriptor() ([]byte, []int) {
-	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{12}
+	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{13}
 }
 
 type ListProvidersResponse struct {
@@ -789,7 +860,7 @@ type ListProvidersResponse struct {
 
 func (x *ListProvidersResponse) Reset() {
 	*x = ListProvidersResponse{}
-	mi := &file_goap_model_v1_model_proto_msgTypes[13]
+	mi := &file_goap_model_v1_model_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -801,7 +872,7 @@ func (x *ListProvidersResponse) String() string {
 func (*ListProvidersResponse) ProtoMessage() {}
 
 func (x *ListProvidersResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_model_v1_model_proto_msgTypes[13]
+	mi := &file_goap_model_v1_model_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -814,7 +885,7 @@ func (x *ListProvidersResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListProvidersResponse.ProtoReflect.Descriptor instead.
 func (*ListProvidersResponse) Descriptor() ([]byte, []int) {
-	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{13}
+	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *ListProvidersResponse) GetProviders() []*Provider {
@@ -836,7 +907,7 @@ type SaveProviderRequest struct {
 
 func (x *SaveProviderRequest) Reset() {
 	*x = SaveProviderRequest{}
-	mi := &file_goap_model_v1_model_proto_msgTypes[14]
+	mi := &file_goap_model_v1_model_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -848,7 +919,7 @@ func (x *SaveProviderRequest) String() string {
 func (*SaveProviderRequest) ProtoMessage() {}
 
 func (x *SaveProviderRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_model_v1_model_proto_msgTypes[14]
+	mi := &file_goap_model_v1_model_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -861,7 +932,7 @@ func (x *SaveProviderRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SaveProviderRequest.ProtoReflect.Descriptor instead.
 func (*SaveProviderRequest) Descriptor() ([]byte, []int) {
-	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{14}
+	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *SaveProviderRequest) GetProvider() *Provider {
@@ -894,7 +965,7 @@ type SaveProviderResponse struct {
 
 func (x *SaveProviderResponse) Reset() {
 	*x = SaveProviderResponse{}
-	mi := &file_goap_model_v1_model_proto_msgTypes[15]
+	mi := &file_goap_model_v1_model_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -906,7 +977,7 @@ func (x *SaveProviderResponse) String() string {
 func (*SaveProviderResponse) ProtoMessage() {}
 
 func (x *SaveProviderResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_model_v1_model_proto_msgTypes[15]
+	mi := &file_goap_model_v1_model_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -919,7 +990,7 @@ func (x *SaveProviderResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SaveProviderResponse.ProtoReflect.Descriptor instead.
 func (*SaveProviderResponse) Descriptor() ([]byte, []int) {
-	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{15}
+	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *SaveProviderResponse) GetProvider() *Provider {
@@ -938,7 +1009,7 @@ type DeleteProviderRequest struct {
 
 func (x *DeleteProviderRequest) Reset() {
 	*x = DeleteProviderRequest{}
-	mi := &file_goap_model_v1_model_proto_msgTypes[16]
+	mi := &file_goap_model_v1_model_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -950,7 +1021,7 @@ func (x *DeleteProviderRequest) String() string {
 func (*DeleteProviderRequest) ProtoMessage() {}
 
 func (x *DeleteProviderRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_model_v1_model_proto_msgTypes[16]
+	mi := &file_goap_model_v1_model_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -963,7 +1034,7 @@ func (x *DeleteProviderRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteProviderRequest.ProtoReflect.Descriptor instead.
 func (*DeleteProviderRequest) Descriptor() ([]byte, []int) {
-	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{16}
+	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *DeleteProviderRequest) GetName() string {
@@ -981,7 +1052,7 @@ type DeleteProviderResponse struct {
 
 func (x *DeleteProviderResponse) Reset() {
 	*x = DeleteProviderResponse{}
-	mi := &file_goap_model_v1_model_proto_msgTypes[17]
+	mi := &file_goap_model_v1_model_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -993,7 +1064,7 @@ func (x *DeleteProviderResponse) String() string {
 func (*DeleteProviderResponse) ProtoMessage() {}
 
 func (x *DeleteProviderResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_model_v1_model_proto_msgTypes[17]
+	mi := &file_goap_model_v1_model_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1006,7 +1077,7 @@ func (x *DeleteProviderResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteProviderResponse.ProtoReflect.Descriptor instead.
 func (*DeleteProviderResponse) Descriptor() ([]byte, []int) {
-	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{17}
+	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{18}
 }
 
 type DiscoveredModel struct {
@@ -1021,7 +1092,7 @@ type DiscoveredModel struct {
 
 func (x *DiscoveredModel) Reset() {
 	*x = DiscoveredModel{}
-	mi := &file_goap_model_v1_model_proto_msgTypes[18]
+	mi := &file_goap_model_v1_model_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1033,7 +1104,7 @@ func (x *DiscoveredModel) String() string {
 func (*DiscoveredModel) ProtoMessage() {}
 
 func (x *DiscoveredModel) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_model_v1_model_proto_msgTypes[18]
+	mi := &file_goap_model_v1_model_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1046,7 +1117,7 @@ func (x *DiscoveredModel) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DiscoveredModel.ProtoReflect.Descriptor instead.
 func (*DiscoveredModel) Descriptor() ([]byte, []int) {
-	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{18}
+	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *DiscoveredModel) GetId() string {
@@ -1081,7 +1152,7 @@ type DiscoverModelsRequest struct {
 
 func (x *DiscoverModelsRequest) Reset() {
 	*x = DiscoverModelsRequest{}
-	mi := &file_goap_model_v1_model_proto_msgTypes[19]
+	mi := &file_goap_model_v1_model_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1093,7 +1164,7 @@ func (x *DiscoverModelsRequest) String() string {
 func (*DiscoverModelsRequest) ProtoMessage() {}
 
 func (x *DiscoverModelsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_model_v1_model_proto_msgTypes[19]
+	mi := &file_goap_model_v1_model_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1106,7 +1177,7 @@ func (x *DiscoverModelsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DiscoverModelsRequest.ProtoReflect.Descriptor instead.
 func (*DiscoverModelsRequest) Descriptor() ([]byte, []int) {
-	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{19}
+	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *DiscoverModelsRequest) GetProvider() *Provider {
@@ -1132,7 +1203,7 @@ type DiscoverModelsResponse struct {
 
 func (x *DiscoverModelsResponse) Reset() {
 	*x = DiscoverModelsResponse{}
-	mi := &file_goap_model_v1_model_proto_msgTypes[20]
+	mi := &file_goap_model_v1_model_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1144,7 +1215,7 @@ func (x *DiscoverModelsResponse) String() string {
 func (*DiscoverModelsResponse) ProtoMessage() {}
 
 func (x *DiscoverModelsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_model_v1_model_proto_msgTypes[20]
+	mi := &file_goap_model_v1_model_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1157,7 +1228,7 @@ func (x *DiscoverModelsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DiscoverModelsResponse.ProtoReflect.Descriptor instead.
 func (*DiscoverModelsResponse) Descriptor() ([]byte, []int) {
-	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{20}
+	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *DiscoverModelsResponse) GetModels() []*DiscoveredModel {
@@ -1186,7 +1257,7 @@ type CatalogModel struct {
 
 func (x *CatalogModel) Reset() {
 	*x = CatalogModel{}
-	mi := &file_goap_model_v1_model_proto_msgTypes[21]
+	mi := &file_goap_model_v1_model_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1198,7 +1269,7 @@ func (x *CatalogModel) String() string {
 func (*CatalogModel) ProtoMessage() {}
 
 func (x *CatalogModel) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_model_v1_model_proto_msgTypes[21]
+	mi := &file_goap_model_v1_model_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1211,7 +1282,7 @@ func (x *CatalogModel) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CatalogModel.ProtoReflect.Descriptor instead.
 func (*CatalogModel) Descriptor() ([]byte, []int) {
-	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{21}
+	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *CatalogModel) GetProvider() string {
@@ -1278,7 +1349,7 @@ type ListCatalogRequest struct {
 
 func (x *ListCatalogRequest) Reset() {
 	*x = ListCatalogRequest{}
-	mi := &file_goap_model_v1_model_proto_msgTypes[22]
+	mi := &file_goap_model_v1_model_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1290,7 +1361,7 @@ func (x *ListCatalogRequest) String() string {
 func (*ListCatalogRequest) ProtoMessage() {}
 
 func (x *ListCatalogRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_model_v1_model_proto_msgTypes[22]
+	mi := &file_goap_model_v1_model_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1303,7 +1374,7 @@ func (x *ListCatalogRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListCatalogRequest.ProtoReflect.Descriptor instead.
 func (*ListCatalogRequest) Descriptor() ([]byte, []int) {
-	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{22}
+	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{23}
 }
 
 type ListCatalogResponse struct {
@@ -1316,7 +1387,7 @@ type ListCatalogResponse struct {
 
 func (x *ListCatalogResponse) Reset() {
 	*x = ListCatalogResponse{}
-	mi := &file_goap_model_v1_model_proto_msgTypes[23]
+	mi := &file_goap_model_v1_model_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1328,7 +1399,7 @@ func (x *ListCatalogResponse) String() string {
 func (*ListCatalogResponse) ProtoMessage() {}
 
 func (x *ListCatalogResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_model_v1_model_proto_msgTypes[23]
+	mi := &file_goap_model_v1_model_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1341,7 +1412,7 @@ func (x *ListCatalogResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListCatalogResponse.ProtoReflect.Descriptor instead.
 func (*ListCatalogResponse) Descriptor() ([]byte, []int) {
-	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{23}
+	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *ListCatalogResponse) GetModels() []*CatalogModel {
@@ -1367,7 +1438,7 @@ type SaveModelRequest struct {
 
 func (x *SaveModelRequest) Reset() {
 	*x = SaveModelRequest{}
-	mi := &file_goap_model_v1_model_proto_msgTypes[24]
+	mi := &file_goap_model_v1_model_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1379,7 +1450,7 @@ func (x *SaveModelRequest) String() string {
 func (*SaveModelRequest) ProtoMessage() {}
 
 func (x *SaveModelRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_model_v1_model_proto_msgTypes[24]
+	mi := &file_goap_model_v1_model_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1392,7 +1463,7 @@ func (x *SaveModelRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SaveModelRequest.ProtoReflect.Descriptor instead.
 func (*SaveModelRequest) Descriptor() ([]byte, []int) {
-	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{24}
+	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *SaveModelRequest) GetModel() *CatalogModel {
@@ -1411,7 +1482,7 @@ type SaveModelResponse struct {
 
 func (x *SaveModelResponse) Reset() {
 	*x = SaveModelResponse{}
-	mi := &file_goap_model_v1_model_proto_msgTypes[25]
+	mi := &file_goap_model_v1_model_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1423,7 +1494,7 @@ func (x *SaveModelResponse) String() string {
 func (*SaveModelResponse) ProtoMessage() {}
 
 func (x *SaveModelResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_model_v1_model_proto_msgTypes[25]
+	mi := &file_goap_model_v1_model_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1436,7 +1507,7 @@ func (x *SaveModelResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SaveModelResponse.ProtoReflect.Descriptor instead.
 func (*SaveModelResponse) Descriptor() ([]byte, []int) {
-	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{25}
+	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *SaveModelResponse) GetModel() *CatalogModel {
@@ -1456,7 +1527,7 @@ type DeleteModelRequest struct {
 
 func (x *DeleteModelRequest) Reset() {
 	*x = DeleteModelRequest{}
-	mi := &file_goap_model_v1_model_proto_msgTypes[26]
+	mi := &file_goap_model_v1_model_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1468,7 +1539,7 @@ func (x *DeleteModelRequest) String() string {
 func (*DeleteModelRequest) ProtoMessage() {}
 
 func (x *DeleteModelRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_model_v1_model_proto_msgTypes[26]
+	mi := &file_goap_model_v1_model_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1481,7 +1552,7 @@ func (x *DeleteModelRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteModelRequest.ProtoReflect.Descriptor instead.
 func (*DeleteModelRequest) Descriptor() ([]byte, []int) {
-	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{26}
+	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *DeleteModelRequest) GetProvider() string {
@@ -1506,7 +1577,7 @@ type DeleteModelResponse struct {
 
 func (x *DeleteModelResponse) Reset() {
 	*x = DeleteModelResponse{}
-	mi := &file_goap_model_v1_model_proto_msgTypes[27]
+	mi := &file_goap_model_v1_model_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1518,7 +1589,7 @@ func (x *DeleteModelResponse) String() string {
 func (*DeleteModelResponse) ProtoMessage() {}
 
 func (x *DeleteModelResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_model_v1_model_proto_msgTypes[27]
+	mi := &file_goap_model_v1_model_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1531,7 +1602,7 @@ func (x *DeleteModelResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteModelResponse.ProtoReflect.Descriptor instead.
 func (*DeleteModelResponse) Descriptor() ([]byte, []int) {
-	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{27}
+	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{28}
 }
 
 type SaveAliasRequest struct {
@@ -1543,7 +1614,7 @@ type SaveAliasRequest struct {
 
 func (x *SaveAliasRequest) Reset() {
 	*x = SaveAliasRequest{}
-	mi := &file_goap_model_v1_model_proto_msgTypes[28]
+	mi := &file_goap_model_v1_model_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1555,7 +1626,7 @@ func (x *SaveAliasRequest) String() string {
 func (*SaveAliasRequest) ProtoMessage() {}
 
 func (x *SaveAliasRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_model_v1_model_proto_msgTypes[28]
+	mi := &file_goap_model_v1_model_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1568,7 +1639,7 @@ func (x *SaveAliasRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SaveAliasRequest.ProtoReflect.Descriptor instead.
 func (*SaveAliasRequest) Descriptor() ([]byte, []int) {
-	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{28}
+	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *SaveAliasRequest) GetAlias() *ModelAlias {
@@ -1586,7 +1657,7 @@ type SaveAliasResponse struct {
 
 func (x *SaveAliasResponse) Reset() {
 	*x = SaveAliasResponse{}
-	mi := &file_goap_model_v1_model_proto_msgTypes[29]
+	mi := &file_goap_model_v1_model_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1598,7 +1669,7 @@ func (x *SaveAliasResponse) String() string {
 func (*SaveAliasResponse) ProtoMessage() {}
 
 func (x *SaveAliasResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_model_v1_model_proto_msgTypes[29]
+	mi := &file_goap_model_v1_model_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1611,7 +1682,7 @@ func (x *SaveAliasResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SaveAliasResponse.ProtoReflect.Descriptor instead.
 func (*SaveAliasResponse) Descriptor() ([]byte, []int) {
-	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{29}
+	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{30}
 }
 
 type DeleteAliasRequest struct {
@@ -1623,7 +1694,7 @@ type DeleteAliasRequest struct {
 
 func (x *DeleteAliasRequest) Reset() {
 	*x = DeleteAliasRequest{}
-	mi := &file_goap_model_v1_model_proto_msgTypes[30]
+	mi := &file_goap_model_v1_model_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1635,7 +1706,7 @@ func (x *DeleteAliasRequest) String() string {
 func (*DeleteAliasRequest) ProtoMessage() {}
 
 func (x *DeleteAliasRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_model_v1_model_proto_msgTypes[30]
+	mi := &file_goap_model_v1_model_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1648,7 +1719,7 @@ func (x *DeleteAliasRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteAliasRequest.ProtoReflect.Descriptor instead.
 func (*DeleteAliasRequest) Descriptor() ([]byte, []int) {
-	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{30}
+	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *DeleteAliasRequest) GetAlias() string {
@@ -1666,7 +1737,7 @@ type DeleteAliasResponse struct {
 
 func (x *DeleteAliasResponse) Reset() {
 	*x = DeleteAliasResponse{}
-	mi := &file_goap_model_v1_model_proto_msgTypes[31]
+	mi := &file_goap_model_v1_model_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1678,7 +1749,7 @@ func (x *DeleteAliasResponse) String() string {
 func (*DeleteAliasResponse) ProtoMessage() {}
 
 func (x *DeleteAliasResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_model_v1_model_proto_msgTypes[31]
+	mi := &file_goap_model_v1_model_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1691,7 +1762,7 @@ func (x *DeleteAliasResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteAliasResponse.ProtoReflect.Descriptor instead.
 func (*DeleteAliasResponse) Descriptor() ([]byte, []int) {
-	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{31}
+	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{32}
 }
 
 var File_goap_model_v1_model_proto protoreflect.FileDescriptor
@@ -1722,10 +1793,15 @@ const file_goap_model_v1_model_proto_rawDesc = "" +
 	"ModelAlias\x12\x14\n" +
 	"\x05alias\x18\x01 \x01(\tR\x05alias\x12\x1a\n" +
 	"\bprovider\x18\x02 \x01(\tR\bprovider\x12\x14\n" +
-	"\x05model\x18\x03 \x01(\tR\x05model\"g\n" +
+	"\x05model\x18\x03 \x01(\tR\x05model\"e\n" +
+	"\x0eAvailableModel\x12\x1a\n" +
+	"\bprovider\x18\x01 \x01(\tR\bprovider\x12\x14\n" +
+	"\x05model\x18\x02 \x01(\tR\x05model\x12!\n" +
+	"\fdisplay_name\x18\x03 \x01(\tR\vdisplayName\"\x9e\x01\n" +
 	"\x12ListModelsResponse\x123\n" +
 	"\aaliases\x18\x01 \x03(\v2\x19.goap.model.v1.ModelAliasR\aaliases\x12\x1c\n" +
-	"\tproviders\x18\x02 \x03(\tR\tproviders\"\xbf\x01\n" +
+	"\tproviders\x18\x02 \x03(\tR\tproviders\x125\n" +
+	"\x06models\x18\x03 \x03(\v2\x1d.goap.model.v1.AvailableModelR\x06models\"\xbf\x01\n" +
 	"\fProviderKind\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05label\x18\x02 \x01(\tR\x05label\x12\x1a\n" +
@@ -1829,7 +1905,7 @@ func file_goap_model_v1_model_proto_rawDescGZIP() []byte {
 	return file_goap_model_v1_model_proto_rawDescData
 }
 
-var file_goap_model_v1_model_proto_msgTypes = make([]protoimpl.MessageInfo, 32)
+var file_goap_model_v1_model_proto_msgTypes = make([]protoimpl.MessageInfo, 33)
 var file_goap_model_v1_model_proto_goTypes = []any{
 	(*Message)(nil),                   // 0: goap.model.v1.Message
 	(*CompleteRequest)(nil),           // 1: goap.model.v1.CompleteRequest
@@ -1837,78 +1913,80 @@ var file_goap_model_v1_model_proto_goTypes = []any{
 	(*CompleteResponse)(nil),          // 3: goap.model.v1.CompleteResponse
 	(*ListModelsRequest)(nil),         // 4: goap.model.v1.ListModelsRequest
 	(*ModelAlias)(nil),                // 5: goap.model.v1.ModelAlias
-	(*ListModelsResponse)(nil),        // 6: goap.model.v1.ListModelsResponse
-	(*ProviderKind)(nil),              // 7: goap.model.v1.ProviderKind
-	(*ProviderProtocol)(nil),          // 8: goap.model.v1.ProviderProtocol
-	(*ListProviderKindsRequest)(nil),  // 9: goap.model.v1.ListProviderKindsRequest
-	(*ListProviderKindsResponse)(nil), // 10: goap.model.v1.ListProviderKindsResponse
-	(*Provider)(nil),                  // 11: goap.model.v1.Provider
-	(*ListProvidersRequest)(nil),      // 12: goap.model.v1.ListProvidersRequest
-	(*ListProvidersResponse)(nil),     // 13: goap.model.v1.ListProvidersResponse
-	(*SaveProviderRequest)(nil),       // 14: goap.model.v1.SaveProviderRequest
-	(*SaveProviderResponse)(nil),      // 15: goap.model.v1.SaveProviderResponse
-	(*DeleteProviderRequest)(nil),     // 16: goap.model.v1.DeleteProviderRequest
-	(*DeleteProviderResponse)(nil),    // 17: goap.model.v1.DeleteProviderResponse
-	(*DiscoveredModel)(nil),           // 18: goap.model.v1.DiscoveredModel
-	(*DiscoverModelsRequest)(nil),     // 19: goap.model.v1.DiscoverModelsRequest
-	(*DiscoverModelsResponse)(nil),    // 20: goap.model.v1.DiscoverModelsResponse
-	(*CatalogModel)(nil),              // 21: goap.model.v1.CatalogModel
-	(*ListCatalogRequest)(nil),        // 22: goap.model.v1.ListCatalogRequest
-	(*ListCatalogResponse)(nil),       // 23: goap.model.v1.ListCatalogResponse
-	(*SaveModelRequest)(nil),          // 24: goap.model.v1.SaveModelRequest
-	(*SaveModelResponse)(nil),         // 25: goap.model.v1.SaveModelResponse
-	(*DeleteModelRequest)(nil),        // 26: goap.model.v1.DeleteModelRequest
-	(*DeleteModelResponse)(nil),       // 27: goap.model.v1.DeleteModelResponse
-	(*SaveAliasRequest)(nil),          // 28: goap.model.v1.SaveAliasRequest
-	(*SaveAliasResponse)(nil),         // 29: goap.model.v1.SaveAliasResponse
-	(*DeleteAliasRequest)(nil),        // 30: goap.model.v1.DeleteAliasRequest
-	(*DeleteAliasResponse)(nil),       // 31: goap.model.v1.DeleteAliasResponse
+	(*AvailableModel)(nil),            // 6: goap.model.v1.AvailableModel
+	(*ListModelsResponse)(nil),        // 7: goap.model.v1.ListModelsResponse
+	(*ProviderKind)(nil),              // 8: goap.model.v1.ProviderKind
+	(*ProviderProtocol)(nil),          // 9: goap.model.v1.ProviderProtocol
+	(*ListProviderKindsRequest)(nil),  // 10: goap.model.v1.ListProviderKindsRequest
+	(*ListProviderKindsResponse)(nil), // 11: goap.model.v1.ListProviderKindsResponse
+	(*Provider)(nil),                  // 12: goap.model.v1.Provider
+	(*ListProvidersRequest)(nil),      // 13: goap.model.v1.ListProvidersRequest
+	(*ListProvidersResponse)(nil),     // 14: goap.model.v1.ListProvidersResponse
+	(*SaveProviderRequest)(nil),       // 15: goap.model.v1.SaveProviderRequest
+	(*SaveProviderResponse)(nil),      // 16: goap.model.v1.SaveProviderResponse
+	(*DeleteProviderRequest)(nil),     // 17: goap.model.v1.DeleteProviderRequest
+	(*DeleteProviderResponse)(nil),    // 18: goap.model.v1.DeleteProviderResponse
+	(*DiscoveredModel)(nil),           // 19: goap.model.v1.DiscoveredModel
+	(*DiscoverModelsRequest)(nil),     // 20: goap.model.v1.DiscoverModelsRequest
+	(*DiscoverModelsResponse)(nil),    // 21: goap.model.v1.DiscoverModelsResponse
+	(*CatalogModel)(nil),              // 22: goap.model.v1.CatalogModel
+	(*ListCatalogRequest)(nil),        // 23: goap.model.v1.ListCatalogRequest
+	(*ListCatalogResponse)(nil),       // 24: goap.model.v1.ListCatalogResponse
+	(*SaveModelRequest)(nil),          // 25: goap.model.v1.SaveModelRequest
+	(*SaveModelResponse)(nil),         // 26: goap.model.v1.SaveModelResponse
+	(*DeleteModelRequest)(nil),        // 27: goap.model.v1.DeleteModelRequest
+	(*DeleteModelResponse)(nil),       // 28: goap.model.v1.DeleteModelResponse
+	(*SaveAliasRequest)(nil),          // 29: goap.model.v1.SaveAliasRequest
+	(*SaveAliasResponse)(nil),         // 30: goap.model.v1.SaveAliasResponse
+	(*DeleteAliasRequest)(nil),        // 31: goap.model.v1.DeleteAliasRequest
+	(*DeleteAliasResponse)(nil),       // 32: goap.model.v1.DeleteAliasResponse
 }
 var file_goap_model_v1_model_proto_depIdxs = []int32{
 	0,  // 0: goap.model.v1.CompleteRequest.messages:type_name -> goap.model.v1.Message
 	2,  // 1: goap.model.v1.CompleteResponse.usage:type_name -> goap.model.v1.Usage
 	5,  // 2: goap.model.v1.ListModelsResponse.aliases:type_name -> goap.model.v1.ModelAlias
-	7,  // 3: goap.model.v1.ListProviderKindsResponse.kinds:type_name -> goap.model.v1.ProviderKind
-	8,  // 4: goap.model.v1.ListProviderKindsResponse.protocols:type_name -> goap.model.v1.ProviderProtocol
-	11, // 5: goap.model.v1.ListProvidersResponse.providers:type_name -> goap.model.v1.Provider
-	11, // 6: goap.model.v1.SaveProviderRequest.provider:type_name -> goap.model.v1.Provider
-	11, // 7: goap.model.v1.SaveProviderResponse.provider:type_name -> goap.model.v1.Provider
-	11, // 8: goap.model.v1.DiscoverModelsRequest.provider:type_name -> goap.model.v1.Provider
-	18, // 9: goap.model.v1.DiscoverModelsResponse.models:type_name -> goap.model.v1.DiscoveredModel
-	21, // 10: goap.model.v1.ListCatalogResponse.models:type_name -> goap.model.v1.CatalogModel
-	5,  // 11: goap.model.v1.ListCatalogResponse.aliases:type_name -> goap.model.v1.ModelAlias
-	21, // 12: goap.model.v1.SaveModelRequest.model:type_name -> goap.model.v1.CatalogModel
-	21, // 13: goap.model.v1.SaveModelResponse.model:type_name -> goap.model.v1.CatalogModel
-	5,  // 14: goap.model.v1.SaveAliasRequest.alias:type_name -> goap.model.v1.ModelAlias
-	1,  // 15: goap.model.v1.ModelService.Complete:input_type -> goap.model.v1.CompleteRequest
-	4,  // 16: goap.model.v1.ModelService.ListModels:input_type -> goap.model.v1.ListModelsRequest
-	9,  // 17: goap.model.v1.ModelService.ListProviderKinds:input_type -> goap.model.v1.ListProviderKindsRequest
-	12, // 18: goap.model.v1.ModelService.ListProviders:input_type -> goap.model.v1.ListProvidersRequest
-	14, // 19: goap.model.v1.ModelService.SaveProvider:input_type -> goap.model.v1.SaveProviderRequest
-	16, // 20: goap.model.v1.ModelService.DeleteProvider:input_type -> goap.model.v1.DeleteProviderRequest
-	19, // 21: goap.model.v1.ModelService.DiscoverModels:input_type -> goap.model.v1.DiscoverModelsRequest
-	22, // 22: goap.model.v1.ModelService.ListCatalog:input_type -> goap.model.v1.ListCatalogRequest
-	24, // 23: goap.model.v1.ModelService.SaveModel:input_type -> goap.model.v1.SaveModelRequest
-	26, // 24: goap.model.v1.ModelService.DeleteModel:input_type -> goap.model.v1.DeleteModelRequest
-	28, // 25: goap.model.v1.ModelService.SaveAlias:input_type -> goap.model.v1.SaveAliasRequest
-	30, // 26: goap.model.v1.ModelService.DeleteAlias:input_type -> goap.model.v1.DeleteAliasRequest
-	3,  // 27: goap.model.v1.ModelService.Complete:output_type -> goap.model.v1.CompleteResponse
-	6,  // 28: goap.model.v1.ModelService.ListModels:output_type -> goap.model.v1.ListModelsResponse
-	10, // 29: goap.model.v1.ModelService.ListProviderKinds:output_type -> goap.model.v1.ListProviderKindsResponse
-	13, // 30: goap.model.v1.ModelService.ListProviders:output_type -> goap.model.v1.ListProvidersResponse
-	15, // 31: goap.model.v1.ModelService.SaveProvider:output_type -> goap.model.v1.SaveProviderResponse
-	17, // 32: goap.model.v1.ModelService.DeleteProvider:output_type -> goap.model.v1.DeleteProviderResponse
-	20, // 33: goap.model.v1.ModelService.DiscoverModels:output_type -> goap.model.v1.DiscoverModelsResponse
-	23, // 34: goap.model.v1.ModelService.ListCatalog:output_type -> goap.model.v1.ListCatalogResponse
-	25, // 35: goap.model.v1.ModelService.SaveModel:output_type -> goap.model.v1.SaveModelResponse
-	27, // 36: goap.model.v1.ModelService.DeleteModel:output_type -> goap.model.v1.DeleteModelResponse
-	29, // 37: goap.model.v1.ModelService.SaveAlias:output_type -> goap.model.v1.SaveAliasResponse
-	31, // 38: goap.model.v1.ModelService.DeleteAlias:output_type -> goap.model.v1.DeleteAliasResponse
-	27, // [27:39] is the sub-list for method output_type
-	15, // [15:27] is the sub-list for method input_type
-	15, // [15:15] is the sub-list for extension type_name
-	15, // [15:15] is the sub-list for extension extendee
-	0,  // [0:15] is the sub-list for field type_name
+	6,  // 3: goap.model.v1.ListModelsResponse.models:type_name -> goap.model.v1.AvailableModel
+	8,  // 4: goap.model.v1.ListProviderKindsResponse.kinds:type_name -> goap.model.v1.ProviderKind
+	9,  // 5: goap.model.v1.ListProviderKindsResponse.protocols:type_name -> goap.model.v1.ProviderProtocol
+	12, // 6: goap.model.v1.ListProvidersResponse.providers:type_name -> goap.model.v1.Provider
+	12, // 7: goap.model.v1.SaveProviderRequest.provider:type_name -> goap.model.v1.Provider
+	12, // 8: goap.model.v1.SaveProviderResponse.provider:type_name -> goap.model.v1.Provider
+	12, // 9: goap.model.v1.DiscoverModelsRequest.provider:type_name -> goap.model.v1.Provider
+	19, // 10: goap.model.v1.DiscoverModelsResponse.models:type_name -> goap.model.v1.DiscoveredModel
+	22, // 11: goap.model.v1.ListCatalogResponse.models:type_name -> goap.model.v1.CatalogModel
+	5,  // 12: goap.model.v1.ListCatalogResponse.aliases:type_name -> goap.model.v1.ModelAlias
+	22, // 13: goap.model.v1.SaveModelRequest.model:type_name -> goap.model.v1.CatalogModel
+	22, // 14: goap.model.v1.SaveModelResponse.model:type_name -> goap.model.v1.CatalogModel
+	5,  // 15: goap.model.v1.SaveAliasRequest.alias:type_name -> goap.model.v1.ModelAlias
+	1,  // 16: goap.model.v1.ModelService.Complete:input_type -> goap.model.v1.CompleteRequest
+	4,  // 17: goap.model.v1.ModelService.ListModels:input_type -> goap.model.v1.ListModelsRequest
+	10, // 18: goap.model.v1.ModelService.ListProviderKinds:input_type -> goap.model.v1.ListProviderKindsRequest
+	13, // 19: goap.model.v1.ModelService.ListProviders:input_type -> goap.model.v1.ListProvidersRequest
+	15, // 20: goap.model.v1.ModelService.SaveProvider:input_type -> goap.model.v1.SaveProviderRequest
+	17, // 21: goap.model.v1.ModelService.DeleteProvider:input_type -> goap.model.v1.DeleteProviderRequest
+	20, // 22: goap.model.v1.ModelService.DiscoverModels:input_type -> goap.model.v1.DiscoverModelsRequest
+	23, // 23: goap.model.v1.ModelService.ListCatalog:input_type -> goap.model.v1.ListCatalogRequest
+	25, // 24: goap.model.v1.ModelService.SaveModel:input_type -> goap.model.v1.SaveModelRequest
+	27, // 25: goap.model.v1.ModelService.DeleteModel:input_type -> goap.model.v1.DeleteModelRequest
+	29, // 26: goap.model.v1.ModelService.SaveAlias:input_type -> goap.model.v1.SaveAliasRequest
+	31, // 27: goap.model.v1.ModelService.DeleteAlias:input_type -> goap.model.v1.DeleteAliasRequest
+	3,  // 28: goap.model.v1.ModelService.Complete:output_type -> goap.model.v1.CompleteResponse
+	7,  // 29: goap.model.v1.ModelService.ListModels:output_type -> goap.model.v1.ListModelsResponse
+	11, // 30: goap.model.v1.ModelService.ListProviderKinds:output_type -> goap.model.v1.ListProviderKindsResponse
+	14, // 31: goap.model.v1.ModelService.ListProviders:output_type -> goap.model.v1.ListProvidersResponse
+	16, // 32: goap.model.v1.ModelService.SaveProvider:output_type -> goap.model.v1.SaveProviderResponse
+	18, // 33: goap.model.v1.ModelService.DeleteProvider:output_type -> goap.model.v1.DeleteProviderResponse
+	21, // 34: goap.model.v1.ModelService.DiscoverModels:output_type -> goap.model.v1.DiscoverModelsResponse
+	24, // 35: goap.model.v1.ModelService.ListCatalog:output_type -> goap.model.v1.ListCatalogResponse
+	26, // 36: goap.model.v1.ModelService.SaveModel:output_type -> goap.model.v1.SaveModelResponse
+	28, // 37: goap.model.v1.ModelService.DeleteModel:output_type -> goap.model.v1.DeleteModelResponse
+	30, // 38: goap.model.v1.ModelService.SaveAlias:output_type -> goap.model.v1.SaveAliasResponse
+	32, // 39: goap.model.v1.ModelService.DeleteAlias:output_type -> goap.model.v1.DeleteAliasResponse
+	28, // [28:40] is the sub-list for method output_type
+	16, // [16:28] is the sub-list for method input_type
+	16, // [16:16] is the sub-list for extension type_name
+	16, // [16:16] is the sub-list for extension extendee
+	0,  // [0:16] is the sub-list for field type_name
 }
 
 func init() { file_goap_model_v1_model_proto_init() }
@@ -1922,7 +2000,7 @@ func file_goap_model_v1_model_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_goap_model_v1_model_proto_rawDesc), len(file_goap_model_v1_model_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   32,
+			NumMessages:   33,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

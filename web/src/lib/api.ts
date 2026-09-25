@@ -1014,7 +1014,16 @@ export interface ModelAlias {
   model: string;
 }
 
+export interface AvailableModel {
+  provider: string;
+  model: string;
+  displayName?: string;
+}
+
 export const models = {
+  /** Models (and aliases) the caller may use. */
+  listAvailable: (signal?: AbortSignal) =>
+    rpc<Empty, { models?: AvailableModel[]; aliases?: ModelAlias[] }>(MODEL, 'ListModels', {}, signal),
   listProviderKinds: (signal?: AbortSignal) =>
     rpc<Empty, { kinds?: ProviderKind[]; protocols?: { id: string; label?: string }[] }>(MODEL, 'ListProviderKinds', {}, signal),
   listProviders: (signal?: AbortSignal) => rpc<Empty, { providers?: LlmProvider[] }>(MODEL, 'ListProviders', {}, signal),

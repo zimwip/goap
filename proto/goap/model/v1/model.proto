@@ -58,9 +58,19 @@ message ModelAlias {
   string model = 3;
 }
 
+// A model the caller may use.
+message AvailableModel {
+  string provider = 1;
+  string model = 2;
+  string display_name = 3;
+}
+
+// What the caller may use: the enabled catalog models it has the role for and
+// the aliases pointing to them.
 message ListModelsResponse {
   repeated ModelAlias aliases = 1;
   repeated string providers = 2;
+  repeated AvailableModel models = 3;
 }
 
 message ProviderKind {
