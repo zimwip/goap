@@ -18,6 +18,8 @@
     lifecycleOf,
     keys,
     oncreate,
+    onremove,
+    onundo,
   }: {
     rows: LifecycleRow[];
     /** nodes the change could take on */
@@ -35,7 +37,18 @@
     keys: string[];
     /** creates a node: identity and type only, the rest comes from Edit */
     oncreate: (key: string, type: string, state: string) => Promise<boolean> | boolean;
+    /** proposes the deletion of a node (or discards a node the change creates) */
+    onremove: (row: LifecycleRow) => Promise<boolean> | boolean;
+    /** withdraws the deletion proposed for a node */
+    onundo: (row: LifecycleRow) => Promise<boolean> | boolean;
   } = $props();
+
+  function remove(r: LifecycleRow) {
+    const what = r.created
+      ? `Discard the new node ${r.node.key}?`
+      : `Delete ${r.node.key} (${r.node.type}) when this change is applied? Links pointing to it become suspect.`;
+    if (confirm(what)) void onremove(r);
+  }
 
   let newNodeKey = $state('');
   let newNodeType = $state('');
@@ -80,7 +93,7 @@
   const shown = $derived(
     candidates.filter((n) => !filter || `${n.key} ${n.type}`.toLowerCase().includes(filter.toLowerCase())).slice(0, 200),
   );
-  const leftEditable = $derived(rows.filter((r) => r.lifecycle && r.editable));
+  const leftEditable = $derived(rows.filter((r) => r.lifecycle && r.editable && !r.removal));
 
   const text = (v: unknown): string => (v === undefined || v === null ? '' : typeof v === 'string' ? v : JSON.stringify(v));
 
@@ -155,11 +168,12 @@
       <thead><tr><th>Node</th><th>State</th><th>Actions</th></tr></thead>
       <tbody>
         {#each rows as r (r.node.id)}
-          <tr>
+          <tr class:removed={!!r.removal}>
             <td>
               <code>{r.node.key}</code>
               <span class="hint">{r.node.type}{r.created ? '' : ` v${r.node.version ?? 0}`}</span>
               {#if r.created}<span class="tag ok" title="Created by this change; stored when it is applied">new</span>{/if}
+              {#if r.removal}<span class="tag danger" title="Deletion proposed in this change">deleted when applied</span>{/if}
               {#if r.edits}<span class="tag ok" title="Property edits proposed in this change">{r.edits} edit{r.edits > 1 ? 's' : ''}</span>{/if}
             </td>
             <td>
@@ -177,6 +191,9 @@
               {#if disabled}
                 <span class="hint">change closed</span>
               {:else}
+                {#if r.removal}
+                  <button type="button" class="small" disabled={busy !== ''} onclick={() => onundo(r)}>Undo delete</button>
+                {:else}
                 <button
                   type="button"
                   class="small"
@@ -203,6 +220,16 @@
                     <span class="hint">{r.lifecycle.states?.find((s) => s.name === r.effective)?.final ? 'final state' : 'no transition from this state'}</span>
                   {/if}
                 {/each}
+                <button
+                  type="button"
+                  class="small danger"
+                  disabled={(!r.editable && !r.created) || busy !== ''}
+                  title={r.created ? 'Discard this new node' : r.editable ? 'Delete the node when the change is applied' : 'Reopen the node to delete it'}
+                  onclick={() => remove(r)}
+                >
+                  {r.created ? 'Discard' : 'Delete'}
+                </button>
+                {/if}
               {/if}
             </td>
           </tr>
@@ -319,6 +346,13 @@
   }
   .tag.ok {
     color: var(--ok);
+  }
+  .tag.danger {
+    color: var(--danger);
+  }
+  tr.removed code {
+    text-decoration: line-through;
+    opacity: 0.6;
   }
   .row {
     display: flex;
