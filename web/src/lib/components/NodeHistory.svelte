@@ -1,21 +1,16 @@
 <script lang="ts">
   // History of a node: every version with its state, the properties that
   // changed, the change that produced it (ADR 0014).
-  import { graph, errorMessage, formatDate, shortId, type GraphNode } from '../../api';
-  import type { Tab } from '../../shell/types';
-  import Icon from '../../shell/Icon.svelte';
-  import { openTab } from '../../shell/tabs.svelte';
-  import { provideActions } from '../../shell/workbench.svelte';
-  import { changes, refreshChanges } from '../../stores/catalog.svelte';
+  import { graph, errorMessage, formatDate, shortId, type GraphNode } from '../api';
+  import { openTab } from '../shell/tabs.svelte';
+  import { changes, refreshChanges } from '../stores/catalog.svelte';
 
-  let { tab }: { tab: Tab } = $props();
+  let { id, reloadKey = 0 }: { id: string; /** bump to reload */ reloadKey?: number } = $props();
 
   let versions = $state<GraphNode[]>([]);
   let loading = $state(true);
   let error = $state('');
   let open = $state<number[]>([]);
-
-  const id = $derived(tab.params.id ?? '');
 
   async function load(signal?: AbortSignal) {
     loading = true;
@@ -31,15 +26,11 @@
   }
 
   $effect(() => {
+    void reloadKey;
     const ctrl = new AbortController();
     void load(ctrl.signal);
     return () => ctrl.abort();
   });
-
-  provideActions(
-    () => tab.id,
-    () => [{ id: 'refresh', label: 'Refresh', icon: 'refresh', disabled: loading, run: () => load() }],
-  );
 
   const latest = $derived(versions.at(-1));
   const changeTitle = (cid: string | undefined) => (cid ? (changes.items.find((c) => c.id === cid)?.title ?? `change ${shortId(cid)}`) : 'import (no change)');
@@ -82,18 +73,12 @@
   }
 </script>
 
-<div class="editor-page">
-  <div class="editor-head">
-    <Icon name="clock" size={18} />
-    <h2>{latest?.key || tab.params.key || shortId(id)}</h2>
-    {#if latest?.type}<span class="hint">{latest.type}</span>{/if}
-    {#if latest?.deleted}<span class="tag bad">deleted</span>{/if}
-  </div>
+<div class="history">
   {#if error}<div class="alert">{error}</div>{/if}
   {#if loading && !versions.length}
     <p class="empty">Loading…</p>
   {:else if versions.length}
-    <p class="hint">{versions.length} version{versions.length > 1 ? 's' : ''}{latest?.state ? ` · now ${latest.state}` : ''}.</p>
+    <p class="hint">{versions.length} version{versions.length > 1 ? 's' : ''}{latest?.state ? ` · now ${latest.state}` : ''}{latest?.deleted ? ' · deleted' : ''}.</p>
     {#if path.length > 1}
       <ol class="path" aria-label="States over time">
         {#each path as s, i (i)}<li><span class="state">{s}</span></li>{/each}
@@ -187,13 +172,6 @@
     color: var(--muted);
     font-size: 0.85rem;
     margin-right: 0.2rem;
-  }
-  .tag.bad {
-    color: var(--danger);
-    border: 1px solid var(--danger);
-    border-radius: 999px;
-    padding: 0 0.45rem;
-    font-size: 0.8rem;
   }
   tr.deleted td {
     opacity: 0.7;

@@ -838,6 +838,10 @@ export const graph = {
     rpc<Empty, { changes?: ChangeSet[] }>(GRAPH, 'ListChanges', {}, signal),
   getChange: (id: string, signal?: AbortSignal) =>
     rpc<{ id: string }, { change?: ChangeSet }>(GRAPH, 'GetChange', { id }, signal),
+  getBranch: (name: string, signal?: AbortSignal) =>
+    rpc<{ name: string }, { branch?: { name?: string; head?: string }; head?: Baseline }>(GRAPH, 'GetBranch', { name }, signal),
+  createChange: (req: { title: string; intent?: string; baselineId: string; methodology?: string }) =>
+    rpc<typeof req, { change?: ChangeSet }>(GRAPH, 'CreateChange', req),
   /** Every version of a node, all branches. */
   listNodeVersions: (id: string, signal?: AbortSignal) =>
     rpc<{ id: string }, { versions?: GraphNode[] }>(GRAPH, 'ListNodeVersions', { id }, signal),
