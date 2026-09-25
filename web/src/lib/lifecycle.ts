@@ -46,6 +46,64 @@ export interface LifecycleRow {
   edits: number;
   /** properties declared by the node type (inherited ones included) */
   declared: string[];
+  /** the create_node item, for a node the change creates (not stored yet) */
+  created?: ChangeItem;
+}
+
+/** Ids of the items another item replaces. */
+export function supersededIds(items: ChangeItem[]): Set<string> {
+  return new Set(items.flatMap((i) => i.supersedes ?? []));
+}
+
+/** Names of the node types of a baseline (its NodeType nodes). */
+export function nodeTypeNames(nodes: GraphNode[]): string[] {
+  const names = nodes
+    .filter((n) => n.type === 'NodeType')
+    .map((n) => (n.props as Record<string, unknown> | undefined)?.name)
+    .filter((x): x is string => typeof x === 'string' && !!x);
+  return [...new Set(names)].sort();
+}
+
+/** The NodeType node of a type name (target of the instanceOf link of its instances). */
+export function typeNodeRef(nodes: GraphNode[], name: string): NodeRef | undefined {
+  const n = nodes.find((x) => x.type === 'NodeType' && (x.props as Record<string, unknown> | undefined)?.name === name);
+  return n?.id ? { id: n.id, version: n.version } : undefined;
+}
+
+/** States a new node of the type can be born in: the initial one, or one a transition leads to from it. */
+export function birthStates(lifecycle: Lifecycle | undefined): string[] {
+  if (!lifecycle) return [];
+  const init = lifecycle.initial ?? '';
+  return [init, ...(lifecycle.transitions ?? []).filter((t) => t.from === init).map((t) => t.to ?? '')].filter(
+    (s, i, all) => s && all.indexOf(s) === i,
+  );
+}
+
+/** Rows of the nodes the change creates (create_node proposals still standing). */
+export function createdRows(nodes: GraphNode[], items: ChangeItem[]): LifecycleRow[] {
+  const resolve = lifecycleResolver(nodes);
+  const gone = supersededIds(items);
+  const rows: LifecycleRow[] = [];
+  for (const it of items) {
+    const p = it.proposal;
+    if (p?.op !== 'create_node' || !it.id || gone.has(it.id) || it.status === 'rejected') continue;
+    const lifecycle = resolve(p.node?.type);
+    const state = lifecycle ? p.node?.state || lifecycle.initial || '' : '';
+    rows.push({
+      node: { id: it.id, key: p.node?.key ?? '', type: p.node?.type ?? '', version: 0, state },
+      lifecycle,
+      base: '',
+      effective: state,
+      moves: [],
+      editable: lifecycle ? editableState(lifecycle, state) : true,
+      transitions: [],
+      props: { ...((p.node?.props ?? {}) as Record<string, unknown>) },
+      edits: 0,
+      declared: declaredProperties(nodes, p.node?.type),
+      created: it,
+    });
+  }
+  return rows;
 }
 
 const editableState = (l: Lifecycle, s: string) => !!l.states?.find((x) => x.name === s)?.editable;
@@ -81,6 +139,7 @@ export function lifecycleRows(
 ): LifecycleRow[] {
   const resolve = lifecycleResolver(nodes);
   const byId = new Map(nodes.map((n) => [n.id ?? '', n]));
+  const gone = supersededIds(items);
   const ids = [...new Set([...attached.map((r) => r.id ?? ''), ...extra])].filter((id) => byId.has(id));
   const rows: LifecycleRow[] = [];
   for (const id of ids) {
@@ -93,7 +152,7 @@ export function lifecycleRows(
     let edits = 0;
     for (const it of items) {
       const p = it.proposal;
-      if (!p || p.node?.base?.id !== id || it.status === 'superseded' || it.status === 'rejected') continue;
+      if (!p || p.node?.base?.id !== id || (it.id && gone.has(it.id)) || it.status === 'superseded' || it.status === 'rejected') continue;
       if (p.op === 'transition_node' && p.node?.state) {
         cur = p.node.state;
         moves.push(cur);
@@ -115,7 +174,8 @@ export function lifecycleRows(
       declared: declaredProperties(nodes, node.type),
     });
   }
-  return rows.sort((a, b) => (a.node.key ?? '').localeCompare(b.node.key ?? ''));
+  rows.sort((a, b) => (a.node.key ?? '').localeCompare(b.node.key ?? ''));
+  return [...rows, ...createdRows(nodes, items)];
 }
 
 /** Is this transition a "reopen": from a state that is not editable into one that is? */

@@ -3,7 +3,8 @@
   // lifecycle, edit its properties, and see which ones must still leave an
   // editable state before the change can be applied (ADR 0014).
   import type { GraphNode, LifecycleTransition } from '../api';
-  import { isReopen, type LifecycleRow } from '../lifecycle';
+  import { birthStates, isReopen, type LifecycleRow } from '../lifecycle';
+  import type { Lifecycle } from '../api';
 
   let {
     rows,
@@ -13,6 +14,10 @@
     onmove,
     onedit,
     onadd,
+    types,
+    lifecycleOf,
+    keys,
+    oncreate,
   }: {
     rows: LifecycleRow[];
     /** nodes the change could take on */
@@ -21,9 +26,48 @@
     busy?: string;
     onmove: (row: LifecycleRow, t: LifecycleTransition) => void;
     /** proposes new values for properties (only the changed ones) */
-    onedit: (row: LifecycleRow, patch: Record<string, unknown>) => Promise<boolean> | boolean;
+    onedit: (row: LifecycleRow, patch: Record<string, unknown>, state?: string) => Promise<boolean> | boolean;
     onadd: (id: string) => void;
+    /** node types a new node can have */
+    types: string[];
+    lifecycleOf: (type: string) => Lifecycle | undefined;
+    /** keys already taken (baseline and pending nodes) */
+    keys: string[];
+    /** creates a node: identity and type only, the rest comes from Edit */
+    oncreate: (key: string, type: string, state: string) => Promise<boolean> | boolean;
   } = $props();
+
+  let newNodeKey = $state('');
+  let newNodeType = $state('');
+  let newNodeState = $state('');
+  let createError = $state('');
+  let creating = $state(false);
+  let draftState = $state('');
+
+  const newLifecycle = $derived(newNodeType ? lifecycleOf(newNodeType) : undefined);
+  const newStates = $derived(birthStates(newLifecycle));
+
+  $effect(() => {
+    // a type change resets the state to its initial one
+    newNodeState = newLifecycle?.initial ?? '';
+  });
+
+  async function create() {
+    createError = '';
+    const key = newNodeKey.trim();
+    if (!key) return void (createError = 'A node needs a key.');
+    if (!newNodeType) return void (createError = 'Choose the node type.');
+    if (keys.includes(key)) return void (createError = `The key “${key}” is already used.`);
+    creating = true;
+    try {
+      if (await oncreate(key, newNodeType, newNodeState)) {
+        newNodeKey = '';
+        newNodeType = '';
+      }
+    } finally {
+      creating = false;
+    }
+  }
 
   let picked = $state('');
   let filter = $state('');
@@ -47,6 +91,7 @@
 
   function startEdit(r: LifecycleRow) {
     editing = r.node.id ?? '';
+    draftState = r.effective;
     draft = Object.fromEntries(fields(r).map((k) => [k, text(r.props[k])]));
     newKey = newValue = formError = '';
   }
@@ -77,11 +122,12 @@
       formError = e instanceof Error ? e.message : String(e);
       return;
     }
-    if (!Object.keys(patch).length) {
+    const stateChanged = !!r.created && !!r.lifecycle && draftState !== r.effective;
+    if (!Object.keys(patch).length && !stateChanged) {
       editing = '';
       return;
     }
-    if (await onedit(r, patch)) editing = '';
+    if (await onedit(r, patch, stateChanged ? draftState : undefined)) editing = '';
   }
 
   function add() {
@@ -111,7 +157,9 @@
         {#each rows as r (r.node.id)}
           <tr>
             <td>
-              <code>{r.node.key}</code> <span class="hint">{r.node.type} v{r.node.version ?? 0}</span>
+              <code>{r.node.key}</code>
+              <span class="hint">{r.node.type}{r.created ? '' : ` v${r.node.version ?? 0}`}</span>
+              {#if r.created}<span class="tag ok" title="Created by this change; stored when it is applied">new</span>{/if}
               {#if r.edits}<span class="tag ok" title="Property edits proposed in this change">{r.edits} edit{r.edits > 1 ? 's' : ''}</span>{/if}
             </td>
             <td>
@@ -120,7 +168,7 @@
                 {#if r.moves.length}
                   <span class="hint" title="Proposed in this change">from {r.base || 'no state'} → {r.moves.join(' → ')}</span>
                 {/if}
-                {#if r.editable}<span class="tag">editable</span>{/if}
+                {#if r.editable}<span class="tag">{r.created ? 'born editable: choose another state' : 'editable'}</span>{/if}
               {:else}
                 <span class="hint">no lifecycle</span>
               {/if}
@@ -132,8 +180,8 @@
                 <button
                   type="button"
                   class="small"
-                  disabled={!r.editable || busy !== ''}
-                  title={r.editable ? 'Edit the properties' : 'Reopen the node to edit it'}
+                  disabled={(!r.editable && !r.created) || busy !== ''}
+                  title={r.editable || r.created ? 'Edit the properties' : 'Reopen the node to edit it'}
                   onclick={() => (editing === r.node.id ? (editing = '') : startEdit(r))}
                 >
                   Edit
@@ -168,6 +216,14 @@
                     void save(r);
                   }}
                 >
+                  {#if r.created && r.lifecycle}
+                    <div class="field">
+                      <label for="st-{r.node.id}">State the node is created in</label>
+                      <select id="st-{r.node.id}" bind:value={draftState}>
+                        {#each birthStates(r.lifecycle) as s (s)}<option value={s}>{s}</option>{/each}
+                      </select>
+                    </div>
+                  {/if}
                   {#each Object.keys(draft) as k (k)}
                     <div class="field">
                       <label for="p-{r.node.id}-{k}">{k}{#if !r.declared.includes(k)} <span class="hint">(not declared by {r.node.type})</span>{/if}</label>
@@ -200,6 +256,31 @@
     </table>
   {:else}
     <p class="empty">No node in this change yet: add one below.</p>
+  {/if}
+
+  {#if !disabled}
+    <form
+      class="create row"
+      onsubmit={(e) => {
+        e.preventDefault();
+        void create();
+      }}
+    >
+      <strong>New node</strong>
+      <input type="text" class="mono" placeholder="key (e.g. REQ-12)" aria-label="Key of the new node" bind:value={newNodeKey} />
+      <select aria-label="Type of the new node" bind:value={newNodeType}>
+        <option value="">— type —</option>
+        {#each types as t (t)}<option value={t}>{t}</option>{/each}
+      </select>
+      {#if newStates.length > 1}
+        <select aria-label="State of the new node" bind:value={newNodeState}>
+          {#each newStates as s (s)}<option value={s}>{s}</option>{/each}
+        </select>
+      {/if}
+      <button type="submit" disabled={creating || busy !== ''}>{creating ? 'Creating…' : 'Create'}</button>
+    </form>
+    {#if createError}<div class="alert">{createError}</div>{/if}
+    <p class="hint">A new node starts with its key and type only: fill in its properties with Edit.</p>
   {/if}
 
   {#if !disabled && candidates.length}
@@ -245,6 +326,13 @@
     align-items: center;
     flex-wrap: wrap;
     margin-top: 0.7rem;
+  }
+  .create input[type='text'] {
+    width: 12rem;
+  }
+  .create select {
+    width: auto;
+    min-width: 10rem;
   }
   .add input[type='search'] {
     width: 16rem;
