@@ -6,6 +6,7 @@ import { peekDraft, drafts } from '../stores/drafts.svelte';
 import { peekDomainDraft, domainDrafts } from '../stores/domains.svelte';
 import { processes, live } from '../stores/live.svelte';
 import { baselines, changes } from '../stores/catalog.svelte';
+import NodeHistoryTab from './editors/NodeHistoryTab.svelte';
 import { draftGroup, KIND_SECTION, SECTION_ICON } from './editors/methodologyTabs';
 import { activeDraft } from './bottom/activeDraft';
 import { domainGroup } from './editors/domainTabs';
@@ -305,6 +306,16 @@ registerView({
   component: BaselineTab,
   key: (p) => p.id ?? '',
   tabTitle: (t) => baselines.items.find((b) => b.id === t.params.id)?.name || `Baseline ${shortId(t.params.id)}`,
+});
+
+registerView({
+  id: 'nodeHistory',
+  zone: 'editor',
+  title: 'Node history',
+  icon: 'clock',
+  component: NodeHistoryTab,
+  key: (p) => p.id ?? '',
+  tabTitle: (t) => `History ${t.params.key || shortId(t.params.id)}`,
 });
 
 registerView({

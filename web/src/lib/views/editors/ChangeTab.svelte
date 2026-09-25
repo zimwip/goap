@@ -372,7 +372,7 @@
     {/if}
   </section>
 
-  <ChangeLifecycle rows={lcRows} candidates={lcCandidates} disabled={closed} busy={moving} onmove={move} onedit={edit} types={typeNames} {lifecycleOf} keys={takenKeys} oncreate={createNode} onremove={removeNode} onundo={undoDelete} onadd={(id) => (extraNodes = [...extraNodes, id])} />
+  <ChangeLifecycle rows={lcRows} candidates={lcCandidates} disabled={closed} busy={moving} onmove={move} onedit={edit} types={typeNames} {lifecycleOf} keys={takenKeys} oncreate={createNode} onremove={removeNode} onundo={undoDelete} onhistory={(r) => openTab({ kind: 'nodeHistory', params: { id: r.node.id ?? '', key: r.node.key ?? '' } }, { pin: true })} onadd={(id) => (extraNodes = [...extraNodes, id])} />
 
   <section class="card">
     <h3>Impacts <span class="count">{groups.impact.length}</span></h3>
