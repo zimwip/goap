@@ -8,9 +8,10 @@
   import RowTools from '../../components/RowTools.svelte';
   import StatusBadge from '../../components/StatusBadge.svelte';
   import OntologyGraph from '../../components/OntologyGraph.svelte';
+  import EditorPanes, { type Pane } from '../../components/EditorPanes.svelte';
   import LifecycleEditor from '../../components/LifecycleEditor.svelte';
   import NodeTypeMeta from '../../components/NodeTypeMeta.svelte';
-  import { provideActions, useReveal, notify, requestReveal } from '../../shell/workbench.svelte';
+  import { provideActions, useReveal, notify, requestReveal, revealState } from '../../shell/workbench.svelte';
   import { replaceTab, openTab } from '../../shell/tabs.svelte';
   import { domainDrafts, getDomainDraft } from '../../stores/domains.svelte';
   import { formatDate } from '../../api';
@@ -24,10 +25,13 @@
   const d = untrack(() => domainDraftOf(tab));
   const f = $derived(d.form);
   let root = $state<HTMLElement>();
-  let view = $state<'form' | 'graph'>('form');
+  let pane = $state(untrack(() => tab.params.pane) || 'overview');
+  $effect(() => {
+    tab.params.pane = pane;
+  });
 
   async function openInForm(kind: 'node' | 'link', index: number) {
-    view = 'form';
+    pane = kind === 'node' ? 'types' : 'links';
     await tick();
     requestReveal(tab.id, kind === 'node' ? `nodeTypes[${index}]` : `linkTypes[${index}]`);
   }
@@ -71,6 +75,23 @@
     replaceTab(tab.id, domainSpec(name, version));
     notify(`Domain ${name} v${version} created.`, 'ok');
   }
+
+  const panes = $derived<Pane[]>([
+    { id: 'overview', label: 'Overview', badge: d.usage.length || undefined },
+    { id: 'types', label: 'Node types', badge: f.nodeTypes.length },
+    { id: 'links', label: 'Link types', badge: f.linkTypes.length },
+    { id: 'lifecycles', label: 'Lifecycles', badge: f.lifecycles.length },
+    { id: 'graph', label: 'Graph' },
+    { id: 'issues', label: 'Issues', badge: d.allIssues.length || undefined },
+  ]);
+
+  // a reveal request (from the problems console, a graph double-click…) opens the pane that holds the field
+  $effect(() => {
+    void revealState.seq;
+    if (revealState.tabId !== tab.id || !revealState.path) return;
+    const path = revealState.path;
+    pane = path.startsWith('nodeTypes') ? 'types' : path.startsWith('linkTypes') ? 'links' : path.startsWith('lifecycles') ? 'lifecycles' : 'overview';
+  });
 
   provideActions(
     () => tab.id,
@@ -116,20 +137,42 @@
       </div>
     {/if}
 
-    {#if !d.isNew}
-      <div class="seg" role="tablist" aria-label="Domain view">
-        <button type="button" role="tab" aria-selected={view === 'form'} class:on={view === 'form'} onclick={() => (view = 'form')}>Definition</button>
-        <button type="button" role="tab" aria-selected={view === 'graph'} class:on={view === 'graph'} onclick={() => (view = 'graph')}>
-          <Icon name="graph" size={13} /> Graph
-        </button>
-      </div>
-    {/if}
-
-    {#if view === 'graph' && !d.isNew}
-      <OntologyGraph nodeTypes={f.nodeTypes} linkTypes={f.linkTypes} onopen={openInForm} />
-    {/if}
-
-    <fieldset class="plain" disabled={d.readonly} hidden={view === 'graph' && !d.isNew}>
+    {#if d.isNew}
+      <fieldset class="plain" disabled={d.readonly}>
+      <section class="card" id="d-general">
+        <h3>General</h3>
+        <div class="grid">
+          <div class="field">
+            <label for="d-name">Name</label>
+            <input id="d-name" type="text" class="mono" bind:value={f.name} disabled={!d.isNew} class:bad={d.bad('name')} data-path="name" placeholder="alm" />
+          </div>
+          <div class="field">
+            <label for="d-version">Version</label>
+            <input id="d-version" type="text" class="mono" bind:value={f.version} disabled={!d.isNew} class:bad={d.bad('version')} data-path="version" placeholder="0.1.0" />
+          </div>
+        </div>
+        <div class="field">
+          <label for="d-desc">Description</label>
+          <textarea id="d-desc" rows="2" bind:value={f.description} data-path="description"></textarea>
+        </div>
+        {#if d.meta.updatedAt || d.meta.publishedAt}
+          <p class="hint">
+            {#if d.meta.createdAt}Created on {formatDate(d.meta.createdAt)}.{/if}
+            {#if d.meta.updatedAt}Modified on {formatDate(d.meta.updatedAt)}{d.meta.updatedBy ? ` by ${d.meta.updatedBy}` : ''}.{/if}
+            {#if d.meta.publishedAt}Published on {formatDate(d.meta.publishedAt)}.{/if}
+          </p>
+        {/if}
+        {#if d.isNew}<p class="hint">Create the draft to add node types and link types.</p>{/if}
+      </section>
+      </fieldset>
+    {:else}
+      <EditorPanes {panes} bind:active={pane} label="Domain sections">
+        {#snippet children(active)}
+          {#if active === 'graph'}
+            <OntologyGraph nodeTypes={f.nodeTypes} linkTypes={f.linkTypes} onopen={openInForm} />
+          {:else}
+            <fieldset class="plain" disabled={d.readonly}>
+              {#if active === 'overview'}
       <section class="card" id="d-general">
         <h3>General</h3>
         <div class="grid">
@@ -156,7 +199,23 @@
         {#if d.isNew}<p class="hint">Create the draft to add node types and link types.</p>{/if}
       </section>
 
-      {#if !d.isNew}
+        <section class="card" id="d-usage">
+          <h3>Used by</h3>
+          {#if d.usage.length}
+            <ul class="plain-list">
+              {#each d.usage as u}
+                <li>
+                  <button type="button" class="link" onclick={() => openTab(methodologySpec(u.name ?? '', u.version ?? ''))}>{u.name} v{u.version}</button>
+                  <span class="hint">{u.status}</span>
+                </li>
+              {/each}
+            </ul>
+            <p class="hint">A version cannot be deleted or archived while a methodology is pinned to it, and a new version is refused if it would break a published methodology following the latest version.</p>
+          {:else}
+            <p class="empty">No methodology references this version.</p>
+          {/if}
+        </section>
+              {:else if active === 'types'}
         <section class="card" id="d-types">
           <h3>Node types</h3>
           {#each f.nodeTypes as n, i}
@@ -192,8 +251,10 @@
             properties and link types; conditions on the parent apply to it as well (<code>x.types</code> contains all
             supertypes).
           </p>
-
-          <h3 class="sub" data-path="linkTypes">Link types</h3>
+        </section>
+              {:else if active === 'links'}
+        <section class="card" id="d-links">
+          <h3 data-path="linkTypes">Link types</h3>
           {#each f.linkTypes as l, i}
             <div class="item" class:has-issues={d.count(`linkTypes[${i}]`) > 0} data-path="linkTypes[{i}]">
               <input type="text" class="mono" aria-label="Link type name" bind:value={l.name} class:bad={d.bad(`linkTypes[${i}].name`)} data-path="linkTypes[{i}].name" placeholder="verifies" />
@@ -218,7 +279,7 @@
             <button type="button" class="small" onclick={() => f.linkTypes.push(emptyLinkType())}>+ Link type</button>
           {/if}
         </section>
-
+              {:else if active === 'lifecycles'}
         <section class="card" id="d-lifecycles">
           <h3>Lifecycles</h3>
           <p class="hint">
@@ -250,80 +311,27 @@
             <button type="button" class="small" onclick={addLifecycle}>+ Lifecycle</button>
           {/if}
         </section>
-
-        {#if d.allIssues.length}
-          <section class="card">
-            <h3>Issues ({d.allIssues.length})</h3>
-            <ul class="plain-list">
-              {#each d.allIssues as i}<li><code>{i.norm || 'domain'}</code>: {i.message}</li>{/each}
-            </ul>
-          </section>
-        {/if}
-
-        <section class="card" id="d-usage">
-          <h3>Used by</h3>
-          {#if d.usage.length}
-            <ul class="plain-list">
-              {#each d.usage as u}
-                <li>
-                  <button type="button" class="link" onclick={() => openTab(methodologySpec(u.name ?? '', u.version ?? ''))}>{u.name} v{u.version}</button>
-                  <span class="hint">{u.status}</span>
-                </li>
-              {/each}
-            </ul>
-            <p class="hint">A version cannot be deleted or archived while a methodology is pinned to it, and a new version is refused if it would break a published methodology following the latest version.</p>
-          {:else}
-            <p class="empty">No methodology references this version.</p>
+              {:else if active === 'issues'}
+                <section class="card">
+                  <h3>Issues ({d.allIssues.length})</h3>
+                  {#if d.allIssues.length}
+                    <ul class="plain-list">
+                      {#each d.allIssues as i}<li><code>{i.norm || 'domain'}</code>: {i.message}</li>{/each}
+                    </ul>
+                  {:else}
+                    <p class="empty">No issue detected. Use Validate to check the draft.</p>
+                  {/if}
+                </section>
+              {/if}
+            </fieldset>
           {/if}
-        </section>
-      {/if}
-    </fieldset>
+        {/snippet}
+      </EditorPanes>
+    {/if}
   {/if}
 </div>
 
 <style>
-  .seg {
-    display: inline-flex;
-    margin: 0.2rem 0 0.7rem;
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    overflow: hidden;
-  }
-  .seg button {
-    border: none;
-    border-radius: 0;
-    background: var(--surface);
-    font-weight: 500;
-    padding: 0.3rem 0.9rem;
-  }
-  .seg button.on {
-    background: var(--accent);
-    color: var(--accent-text);
-  }
-  .lifecycle {
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 0.4rem 0.7rem;
-    margin-bottom: 0.5rem;
-  }
-  .lifecycle summary {
-    cursor: pointer;
-    display: flex;
-    gap: 0.6rem;
-    align-items: baseline;
-  }
-  .lifecycle summary.has-issues {
-    box-shadow: inset 3px 0 0 var(--danger);
-    padding-left: 5px;
-  }
-  .lifecycle-body {
-    display: grid;
-    gap: 0.5rem;
-    padding: 0.5rem 0 0.2rem;
-  }
-  h3.sub {
-    margin-top: 1rem;
-  }
   .item {
     display: grid;
     grid-template-columns: minmax(120px, 1fr) minmax(140px, 1.5fr) minmax(140px, 1.3fr) auto;

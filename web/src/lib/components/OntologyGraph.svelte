@@ -292,13 +292,13 @@
 
   // --- pointer -----------------------------------------------------------------------
 
-  let drag: { id: string; sx: number; sy: number; ox: number; oy: number; moved: boolean } | undefined;
+  let drag: { id: string; sx: number; sy: number; ox: number; oy: number; moved: boolean; pid: number } | undefined;
   let pan: { sx: number; sy: number; vx: number; vy: number; moved: boolean } | undefined;
 
   function nodeDown(e: PointerEvent, n: GNode) {
     e.stopPropagation();
-    svg?.setPointerCapture(e.pointerId);
-    drag = { id: n.id, sx: e.clientX, sy: e.clientY, ox: n.x, oy: n.y, moved: false };
+    // the pointer is captured only once a drag starts: a plain click and a double-click must still reach the node
+    drag = { id: n.id, sx: e.clientX, sy: e.clientY, ox: n.x, oy: n.y, moved: false, pid: e.pointerId };
   }
 
   function bgDown(e: PointerEvent) {
@@ -312,6 +312,7 @@
       const dy = e.clientY - drag.sy;
       if (!drag.moved && Math.hypot(dx, dy) < 4) return;
       drag.moved = true;
+      svg?.setPointerCapture(drag.pid);
       const n = nodeMap.get(drag.id);
       if (n) {
         n.x = drag.ox + dx / view.k;
