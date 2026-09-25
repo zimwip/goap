@@ -19,7 +19,7 @@
   import { makeContext, describeProposal, refKey, show } from '../../items';
   import StatusBadge from '../../components/StatusBadge.svelte';
   import ChangeLifecycle from '../../components/ChangeLifecycle.svelte';
-  import { lifecycleRows, reopenable, type LifecycleRow } from '../../lifecycle';
+  import { lifecycleRows, reopenable, nodeTypeNames, typeNodeRef, lifecycleResolver, supersededIds, type LifecycleRow } from '../../lifecycle';
   import { openTab } from '../../shell/tabs.svelte';
   import { provideActions, notify } from '../../shell/workbench.svelte';
   import { refreshChanges, refreshBaselines } from '../../stores/catalog.svelte';
@@ -84,17 +84,86 @@
   const closed = $derived(change?.status === 'applied' || change?.status === 'abandoned');
   const lcRows = $derived(lifecycleRows(nodes, attached, items, extraNodes));
   const lcCandidates = $derived(reopenable(nodes, lcRows));
+  const typeNames = $derived(nodeTypeNames(nodes));
+  const lifecycleOf = $derived(lifecycleResolver(nodes));
+  const takenKeys = $derived([
+    ...nodes.map((n) => n.key ?? ''),
+    ...items.filter((i) => i.proposal?.op === 'create_node' && !supersededIds(items).has(i.id ?? '')).map((i) => i.proposal?.node?.key ?? ''),
+  ]);
   const stuckEditable = $derived(lcRows.some((r) => r.lifecycle && r.editable));
 
   /** Proposes a transition of a node in this change (the server checks it). */
   /** Proposes new values for some properties of a node (the server checks the state). */
-  async function edit(row: LifecycleRow, patch: Record<string, unknown>): Promise<boolean> {
+  async function edit(row: LifecycleRow, patch: Record<string, unknown>, state?: string): Promise<boolean> {
+    if (row.created) return editCreated(row, patch, state);
     if (!change?.id || !row.node.id) return false;
     moving = `${row.node.id}:edit`;
     error = '';
     try {
       const base: NodeRef = { id: row.node.id, version: row.node.version };
       await graph.addItems(change.id, [{ kind: 'proposal', proposal: { op: 'update_node', node: { base, props: patch as Struct } } }]);
+      await load(change.id);
+      return true;
+    } catch (e) {
+      error = errorMessage(e);
+      return false;
+    } finally {
+      moving = '';
+    }
+  }
+
+  const newId = () => crypto.randomUUID();
+
+  /** create_node proposal (and its instanceOf link to the node type) for a node the change creates. */
+  function creationItems(key: string, type: string, props: Struct, state: string, supersedes: string[] = [], oldLinks: string[] = []): ChangeItem[] {
+    const id = newId();
+    const born = lifecycleOf(type) && state && state !== lifecycleOf(type)?.initial ? state : undefined;
+    const out: ChangeItem[] = [
+      { id, kind: 'proposal', supersedes, proposal: { op: 'create_node', node: { key, type, props, ...(born ? { state: born } : {}) } } },
+    ];
+    const typeRef = typeNodeRef(nodes, type);
+    if (typeRef) {
+      out.push({ id: newId(), kind: 'proposal', type: 'metamodel', supersedes: oldLinks, proposal: { op: 'add_link', link: { type: 'instanceOf', from: { item: id }, to: { node: typeRef } } } });
+    }
+    return out;
+  }
+
+  /** Creates a node: identity and type only. */
+  async function createNode(key: string, type: string, state: string): Promise<boolean> {
+    if (!change?.id) return false;
+    moving = 'create';
+    error = '';
+    try {
+      await graph.addItems(change.id, creationItems(key, type, {}, state));
+      await load(change.id);
+      return true;
+    } catch (e) {
+      error = errorMessage(e);
+      return false;
+    } finally {
+      moving = '';
+    }
+  }
+
+  /** Edits a node the change creates: a new create_node replaces the previous one. */
+  async function editCreated(row: LifecycleRow, patch: Record<string, unknown>, state?: string): Promise<boolean> {
+    const old = row.created;
+    if (!change?.id || !old?.id) return false;
+    moving = `${old.id}:edit`;
+    error = '';
+    try {
+      const gone = supersededIds(items);
+      const linkIds = items.filter((i) => i.proposal?.op === 'add_link' && i.proposal.link?.from?.item === old.id && !gone.has(i.id ?? '')).map((i) => i.id ?? '');
+      // anything else pointing at the pending node would be left dangling
+      const dependents = items.filter(
+        (i) =>
+          !gone.has(i.id ?? '') &&
+          !linkIds.includes(i.id ?? '') &&
+          (i.proposal?.link?.from?.item === old.id || i.proposal?.link?.to?.item === old.id || i.derivedFrom?.includes(old.id ?? '')),
+      );
+      if (dependents.length) throw new Error(`${row.node.key} is already linked by other items of the change: it can no longer be edited here.`);
+      const props = { ...row.props, ...patch } as Struct;
+      await graph.addItems(change.id, creationItems(row.node.key ?? '', row.node.type ?? '', props, state ?? row.effective, [old.id], linkIds));
       await load(change.id);
       return true;
     } catch (e) {
@@ -253,7 +322,7 @@
     {/if}
   </section>
 
-  <ChangeLifecycle rows={lcRows} candidates={lcCandidates} disabled={closed} busy={moving} onmove={move} onedit={edit} onadd={(id) => (extraNodes = [...extraNodes, id])} />
+  <ChangeLifecycle rows={lcRows} candidates={lcCandidates} disabled={closed} busy={moving} onmove={move} onedit={edit} types={typeNames} {lifecycleOf} keys={takenKeys} oncreate={createNode} onadd={(id) => (extraNodes = [...extraNodes, id])} />
 
   <section class="card">
     <h3>Impacts <span class="count">{groups.impact.length}</span></h3>
