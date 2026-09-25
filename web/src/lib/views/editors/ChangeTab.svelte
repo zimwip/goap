@@ -12,6 +12,7 @@
     type GraphNode,
     type LifecycleTransition,
     type NodeRef,
+    type Struct,
   } from '../../api';
   import type { Tab } from '../../shell/types';
   import Icon from '../../shell/Icon.svelte';
@@ -83,9 +84,27 @@
   const closed = $derived(change?.status === 'applied' || change?.status === 'abandoned');
   const lcRows = $derived(lifecycleRows(nodes, attached, items, extraNodes));
   const lcCandidates = $derived(reopenable(nodes, lcRows));
-  const stuckEditable = $derived(lcRows.some((r) => r.editable));
+  const stuckEditable = $derived(lcRows.some((r) => r.lifecycle && r.editable));
 
   /** Proposes a transition of a node in this change (the server checks it). */
+  /** Proposes new values for some properties of a node (the server checks the state). */
+  async function edit(row: LifecycleRow, patch: Record<string, unknown>): Promise<boolean> {
+    if (!change?.id || !row.node.id) return false;
+    moving = `${row.node.id}:edit`;
+    error = '';
+    try {
+      const base: NodeRef = { id: row.node.id, version: row.node.version };
+      await graph.addItems(change.id, [{ kind: 'proposal', proposal: { op: 'update_node', node: { base, props: patch as Struct } } }]);
+      await load(change.id);
+      return true;
+    } catch (e) {
+      error = errorMessage(e);
+      return false;
+    } finally {
+      moving = '';
+    }
+  }
+
   async function move(row: LifecycleRow, t: LifecycleTransition) {
     if (!change?.id || !row.node.id) return;
     moving = `${row.node.id}:${t.name}`;
@@ -234,7 +253,7 @@
     {/if}
   </section>
 
-  <ChangeLifecycle rows={lcRows} candidates={lcCandidates} disabled={closed} busy={moving} onmove={move} onadd={(id) => (extraNodes = [...extraNodes, id])} />
+  <ChangeLifecycle rows={lcRows} candidates={lcCandidates} disabled={closed} busy={moving} onmove={move} onedit={edit} onadd={(id) => (extraNodes = [...extraNodes, id])} />
 
   <section class="card">
     <h3>Impacts <span class="count">{groups.impact.length}</span></h3>

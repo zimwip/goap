@@ -29,7 +29,8 @@ export function lifecycleResolver(nodes: GraphNode[]): (type: string | undefined
 
 export interface LifecycleRow {
   node: GraphNode;
-  lifecycle: Lifecycle;
+  /** undefined: the node type has no lifecycle (always editable through a change) */
+  lifecycle?: Lifecycle;
   /** stored state ('' : the node has none yet) */
   base: string;
   /** state after the change's transitions */
@@ -39,9 +40,37 @@ export interface LifecycleRow {
   editable: boolean;
   /** transitions available from the effective state */
   transitions: LifecycleTransition[];
+  /** properties after the change's update proposals */
+  props: Record<string, unknown>;
+  /** number of update proposals of the change on this node */
+  edits: number;
+  /** properties declared by the node type (inherited ones included) */
+  declared: string[];
 }
 
 const editableState = (l: Lifecycle, s: string) => !!l.states?.find((x) => x.name === s)?.editable;
+
+/** Properties declared by a node type, its ancestors' first. */
+export function declaredProperties(nodes: GraphNode[], type: string | undefined): string[] {
+  const types = new Map<string, { extends: string; properties: string[] }>();
+  for (const n of nodes) {
+    if (n.type !== 'NodeType') continue;
+    const p = (n.props ?? {}) as Record<string, unknown>;
+    const name = typeof p.name === 'string' ? p.name : '';
+    if (!name || types.has(name)) continue;
+    types.set(name, {
+      extends: typeof p.extends === 'string' ? p.extends : '',
+      properties: Array.isArray(p.properties) ? p.properties.filter((x): x is string => typeof x === 'string') : [],
+    });
+  }
+  const chain: string[][] = [];
+  const seen = new Set<string>();
+  for (let t = type ?? ''; t && !seen.has(t); t = types.get(t)?.extends ?? '') {
+    seen.add(t);
+    chain.unshift(types.get(t)?.properties ?? []);
+  }
+  return [...new Set(chain.flat())];
+}
 
 /** Rows of the nodes a change works on (attached ones, plus `extra` ids picked by the user). */
 export function lifecycleRows(
@@ -57,16 +86,20 @@ export function lifecycleRows(
   for (const id of ids) {
     const node = byId.get(id)!;
     const lifecycle = resolve(node.type);
-    if (!lifecycle) continue;
     const base = node.state ?? '';
-    let cur = base || lifecycle.initial || '';
+    let cur = lifecycle ? base || lifecycle.initial || '' : '';
     const moves: string[] = [];
+    const props: Record<string, unknown> = { ...((node.props ?? {}) as Record<string, unknown>) };
+    let edits = 0;
     for (const it of items) {
       const p = it.proposal;
-      if (p?.op !== 'transition_node' || p.node?.base?.id !== id || it.status === 'superseded' || it.status === 'rejected') continue;
-      if (p.node?.state) {
+      if (!p || p.node?.base?.id !== id || it.status === 'superseded' || it.status === 'rejected') continue;
+      if (p.op === 'transition_node' && p.node?.state) {
         cur = p.node.state;
         moves.push(cur);
+      } else if (p.op === 'update_node') {
+        Object.assign(props, (p.node?.props ?? {}) as Record<string, unknown>);
+        edits++;
       }
     }
     rows.push({
@@ -75,8 +108,11 @@ export function lifecycleRows(
       base,
       effective: cur,
       moves,
-      editable: editableState(lifecycle, cur),
-      transitions: (lifecycle.transitions ?? []).filter((t) => t.from === cur),
+      editable: lifecycle ? editableState(lifecycle, cur) : true,
+      transitions: lifecycle ? (lifecycle.transitions ?? []).filter((t) => t.from === cur) : [],
+      props,
+      edits,
+      declared: declaredProperties(nodes, node.type),
     });
   }
   return rows.sort((a, b) => (a.node.key ?? '').localeCompare(b.node.key ?? ''));
@@ -84,12 +120,11 @@ export function lifecycleRows(
 
 /** Is this transition a "reopen": from a state that is not editable into one that is? */
 export function isReopen(row: LifecycleRow, t: LifecycleTransition): boolean {
-  return !row.editable && editableState(row.lifecycle, t.to ?? '');
+  return !!row.lifecycle && !row.editable && editableState(row.lifecycle, t.to ?? '');
 }
 
-/** Nodes of the baseline that have a lifecycle and are not in the rows yet. */
+/** Nodes of the baseline the change could take on (not the metadata layer, nor deleted ones). */
 export function reopenable(nodes: GraphNode[], rows: LifecycleRow[]): GraphNode[] {
-  const resolve = lifecycleResolver(nodes);
   const have = new Set(rows.map((r) => r.node.id));
-  return nodes.filter((n) => n.type !== 'NodeType' && !n.deleted && !have.has(n.id) && resolve(n.type));
+  return nodes.filter((n) => n.type !== 'NodeType' && !n.deleted && !have.has(n.id) && !/^[MD]:/.test(n.key ?? ''));
 }
