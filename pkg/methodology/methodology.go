@@ -27,6 +27,10 @@ type Methodology struct {
 	Name        string `yaml:"name" json:"name"`
 	Version     string `yaml:"version" json:"version"`
 	Description string `yaml:"description,omitempty" json:"description,omitempty"`
+	// Namespace is the graph namespace the changes of the methodology act on
+	// (default sdlc). A methodology that edits the meta model (methodology
+	// nodes, node types) targets "metadata".
+	Namespace string `yaml:"namespace,omitempty" json:"namespace,omitempty"`
 	// DomainRef references a shared Domain "<name>@<version>" (version empty:
 	// latest published) instead of embedding one; Resolve fills Domain from it.
 	DomainRef  string      `yaml:"domainRef,omitempty" json:"domainRef,omitempty"`

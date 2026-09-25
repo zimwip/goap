@@ -279,3 +279,26 @@ func TestBoardValidationDiscardedFlowResumes(t *testing.T) {
 		t.Fatalf("after a discarded flow the process goes on with the issues ignored: %s %+v", cur.Status, cur.Dismissed)
 	}
 }
+
+// A methodology targets a namespace: the change it opens acts on it.
+func TestChangeOpensInTheNamespaceOfTheMethodology(t *testing.T) {
+	ctx := context.Background()
+	e, g, base := setup(t)
+	e.Methodologies.(StaticMethodologies)["impact-analysis"].Namespace = "metadata"
+	p, err := e.Start(ctx, StartRequest{Methodology: "impact-analysis", BaselineID: base, Goal: "assess_impact"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := g.Change(ctx, p.ChangeID)
+	if err != nil || c.Namespace != domain.NamespaceMetadata {
+		t.Fatalf("change namespace = %q, %v", c.Namespace, err)
+	}
+	// an explicit namespace on the request wins over the methodology default
+	p2, err := e.Start(ctx, StartRequest{Methodology: "impact-analysis", BaselineID: base, Goal: "assess_impact", Namespace: "sdlc"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c2, _ := g.Change(ctx, p2.ChangeID); c2.Namespace != "sdlc" {
+		t.Fatalf("explicit namespace = %q", c2.Namespace)
+	}
+}
