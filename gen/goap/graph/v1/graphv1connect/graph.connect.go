@@ -117,6 +117,18 @@ const (
 	// GraphServiceListSubChangesProcedure is the fully-qualified name of the GraphService's
 	// ListSubChanges RPC.
 	GraphServiceListSubChangesProcedure = "/goap.graph.v1.GraphService/ListSubChanges"
+	// GraphServiceOpenFlowProcedure is the fully-qualified name of the GraphService's OpenFlow RPC.
+	GraphServiceOpenFlowProcedure = "/goap.graph.v1.GraphService/OpenFlow"
+	// GraphServiceAdoptFlowProcedure is the fully-qualified name of the GraphService's AdoptFlow RPC.
+	GraphServiceAdoptFlowProcedure = "/goap.graph.v1.GraphService/AdoptFlow"
+	// GraphServiceDiscardFlowProcedure is the fully-qualified name of the GraphService's DiscardFlow
+	// RPC.
+	GraphServiceDiscardFlowProcedure = "/goap.graph.v1.GraphService/DiscardFlow"
+	// GraphServiceListFlowsProcedure is the fully-qualified name of the GraphService's ListFlows RPC.
+	GraphServiceListFlowsProcedure = "/goap.graph.v1.GraphService/ListFlows"
+	// GraphServiceValidateBoardProcedure is the fully-qualified name of the GraphService's
+	// ValidateBoard RPC.
+	GraphServiceValidateBoardProcedure = "/goap.graph.v1.GraphService/ValidateBoard"
 	// GraphServiceRecordExecutionsProcedure is the fully-qualified name of the GraphService's
 	// RecordExecutions RPC.
 	GraphServiceRecordExecutionsProcedure = "/goap.graph.v1.GraphService/RecordExecutions"
@@ -169,6 +181,13 @@ type GraphServiceClient interface {
 	// Splits a change along organisational boundaries: one sub-change per unit owning impacted nodes.
 	SplitChange(context.Context, *connect.Request[v1.SplitChangeRequest]) (*connect.Response[v1.SplitChangeResponse], error)
 	ListSubChanges(context.Context, *connect.Request[v1.ListSubChangesRequest]) (*connect.Response[v1.ListSubChangesResponse], error)
+	// Action flow branches: a relaunched step forks the flow, a human adopts or discards the branch.
+	OpenFlow(context.Context, *connect.Request[v1.OpenFlowRequest]) (*connect.Response[v1.OpenFlowResponse], error)
+	AdoptFlow(context.Context, *connect.Request[v1.AdoptFlowRequest]) (*connect.Response[v1.AdoptFlowResponse], error)
+	DiscardFlow(context.Context, *connect.Request[v1.DiscardFlowRequest]) (*connect.Response[v1.DiscardFlowResponse], error)
+	ListFlows(context.Context, *connect.Request[v1.ListFlowsRequest]) (*connect.Response[v1.ListFlowsResponse], error)
+	// Consistency check of the blackboard as a process on a flow sees it.
+	ValidateBoard(context.Context, *connect.Request[v1.ValidateBoardRequest]) (*connect.Response[v1.ValidateBoardResponse], error)
 	// Execution journal (ADR 0011)
 	RecordExecutions(context.Context, *connect.Request[v1.RecordExecutionsRequest]) (*connect.Response[v1.RecordExecutionsResponse], error)
 	ListExecutions(context.Context, *connect.Request[v1.ListExecutionsRequest]) (*connect.Response[v1.ListExecutionsResponse], error)
@@ -371,6 +390,36 @@ func NewGraphServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(graphServiceMethods.ByName("ListSubChanges")),
 			connect.WithClientOptions(opts...),
 		),
+		openFlow: connect.NewClient[v1.OpenFlowRequest, v1.OpenFlowResponse](
+			httpClient,
+			baseURL+GraphServiceOpenFlowProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("OpenFlow")),
+			connect.WithClientOptions(opts...),
+		),
+		adoptFlow: connect.NewClient[v1.AdoptFlowRequest, v1.AdoptFlowResponse](
+			httpClient,
+			baseURL+GraphServiceAdoptFlowProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("AdoptFlow")),
+			connect.WithClientOptions(opts...),
+		),
+		discardFlow: connect.NewClient[v1.DiscardFlowRequest, v1.DiscardFlowResponse](
+			httpClient,
+			baseURL+GraphServiceDiscardFlowProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("DiscardFlow")),
+			connect.WithClientOptions(opts...),
+		),
+		listFlows: connect.NewClient[v1.ListFlowsRequest, v1.ListFlowsResponse](
+			httpClient,
+			baseURL+GraphServiceListFlowsProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("ListFlows")),
+			connect.WithClientOptions(opts...),
+		),
+		validateBoard: connect.NewClient[v1.ValidateBoardRequest, v1.ValidateBoardResponse](
+			httpClient,
+			baseURL+GraphServiceValidateBoardProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("ValidateBoard")),
+			connect.WithClientOptions(opts...),
+		),
 		recordExecutions: connect.NewClient[v1.RecordExecutionsRequest, v1.RecordExecutionsResponse](
 			httpClient,
 			baseURL+GraphServiceRecordExecutionsProcedure,
@@ -419,6 +468,11 @@ type graphServiceClient struct {
 	getImpacts       *connect.Client[v1.GetImpactsRequest, v1.GetImpactsResponse]
 	splitChange      *connect.Client[v1.SplitChangeRequest, v1.SplitChangeResponse]
 	listSubChanges   *connect.Client[v1.ListSubChangesRequest, v1.ListSubChangesResponse]
+	openFlow         *connect.Client[v1.OpenFlowRequest, v1.OpenFlowResponse]
+	adoptFlow        *connect.Client[v1.AdoptFlowRequest, v1.AdoptFlowResponse]
+	discardFlow      *connect.Client[v1.DiscardFlowRequest, v1.DiscardFlowResponse]
+	listFlows        *connect.Client[v1.ListFlowsRequest, v1.ListFlowsResponse]
+	validateBoard    *connect.Client[v1.ValidateBoardRequest, v1.ValidateBoardResponse]
 	recordExecutions *connect.Client[v1.RecordExecutionsRequest, v1.RecordExecutionsResponse]
 	listExecutions   *connect.Client[v1.ListExecutionsRequest, v1.ListExecutionsResponse]
 }
@@ -578,6 +632,31 @@ func (c *graphServiceClient) ListSubChanges(ctx context.Context, req *connect.Re
 	return c.listSubChanges.CallUnary(ctx, req)
 }
 
+// OpenFlow calls goap.graph.v1.GraphService.OpenFlow.
+func (c *graphServiceClient) OpenFlow(ctx context.Context, req *connect.Request[v1.OpenFlowRequest]) (*connect.Response[v1.OpenFlowResponse], error) {
+	return c.openFlow.CallUnary(ctx, req)
+}
+
+// AdoptFlow calls goap.graph.v1.GraphService.AdoptFlow.
+func (c *graphServiceClient) AdoptFlow(ctx context.Context, req *connect.Request[v1.AdoptFlowRequest]) (*connect.Response[v1.AdoptFlowResponse], error) {
+	return c.adoptFlow.CallUnary(ctx, req)
+}
+
+// DiscardFlow calls goap.graph.v1.GraphService.DiscardFlow.
+func (c *graphServiceClient) DiscardFlow(ctx context.Context, req *connect.Request[v1.DiscardFlowRequest]) (*connect.Response[v1.DiscardFlowResponse], error) {
+	return c.discardFlow.CallUnary(ctx, req)
+}
+
+// ListFlows calls goap.graph.v1.GraphService.ListFlows.
+func (c *graphServiceClient) ListFlows(ctx context.Context, req *connect.Request[v1.ListFlowsRequest]) (*connect.Response[v1.ListFlowsResponse], error) {
+	return c.listFlows.CallUnary(ctx, req)
+}
+
+// ValidateBoard calls goap.graph.v1.GraphService.ValidateBoard.
+func (c *graphServiceClient) ValidateBoard(ctx context.Context, req *connect.Request[v1.ValidateBoardRequest]) (*connect.Response[v1.ValidateBoardResponse], error) {
+	return c.validateBoard.CallUnary(ctx, req)
+}
+
 // RecordExecutions calls goap.graph.v1.GraphService.RecordExecutions.
 func (c *graphServiceClient) RecordExecutions(ctx context.Context, req *connect.Request[v1.RecordExecutionsRequest]) (*connect.Response[v1.RecordExecutionsResponse], error) {
 	return c.recordExecutions.CallUnary(ctx, req)
@@ -632,6 +711,13 @@ type GraphServiceHandler interface {
 	// Splits a change along organisational boundaries: one sub-change per unit owning impacted nodes.
 	SplitChange(context.Context, *connect.Request[v1.SplitChangeRequest]) (*connect.Response[v1.SplitChangeResponse], error)
 	ListSubChanges(context.Context, *connect.Request[v1.ListSubChangesRequest]) (*connect.Response[v1.ListSubChangesResponse], error)
+	// Action flow branches: a relaunched step forks the flow, a human adopts or discards the branch.
+	OpenFlow(context.Context, *connect.Request[v1.OpenFlowRequest]) (*connect.Response[v1.OpenFlowResponse], error)
+	AdoptFlow(context.Context, *connect.Request[v1.AdoptFlowRequest]) (*connect.Response[v1.AdoptFlowResponse], error)
+	DiscardFlow(context.Context, *connect.Request[v1.DiscardFlowRequest]) (*connect.Response[v1.DiscardFlowResponse], error)
+	ListFlows(context.Context, *connect.Request[v1.ListFlowsRequest]) (*connect.Response[v1.ListFlowsResponse], error)
+	// Consistency check of the blackboard as a process on a flow sees it.
+	ValidateBoard(context.Context, *connect.Request[v1.ValidateBoardRequest]) (*connect.Response[v1.ValidateBoardResponse], error)
 	// Execution journal (ADR 0011)
 	RecordExecutions(context.Context, *connect.Request[v1.RecordExecutionsRequest]) (*connect.Response[v1.RecordExecutionsResponse], error)
 	ListExecutions(context.Context, *connect.Request[v1.ListExecutionsRequest]) (*connect.Response[v1.ListExecutionsResponse], error)
@@ -830,6 +916,36 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(graphServiceMethods.ByName("ListSubChanges")),
 		connect.WithHandlerOptions(opts...),
 	)
+	graphServiceOpenFlowHandler := connect.NewUnaryHandler(
+		GraphServiceOpenFlowProcedure,
+		svc.OpenFlow,
+		connect.WithSchema(graphServiceMethods.ByName("OpenFlow")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceAdoptFlowHandler := connect.NewUnaryHandler(
+		GraphServiceAdoptFlowProcedure,
+		svc.AdoptFlow,
+		connect.WithSchema(graphServiceMethods.ByName("AdoptFlow")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceDiscardFlowHandler := connect.NewUnaryHandler(
+		GraphServiceDiscardFlowProcedure,
+		svc.DiscardFlow,
+		connect.WithSchema(graphServiceMethods.ByName("DiscardFlow")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceListFlowsHandler := connect.NewUnaryHandler(
+		GraphServiceListFlowsProcedure,
+		svc.ListFlows,
+		connect.WithSchema(graphServiceMethods.ByName("ListFlows")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceValidateBoardHandler := connect.NewUnaryHandler(
+		GraphServiceValidateBoardProcedure,
+		svc.ValidateBoard,
+		connect.WithSchema(graphServiceMethods.ByName("ValidateBoard")),
+		connect.WithHandlerOptions(opts...),
+	)
 	graphServiceRecordExecutionsHandler := connect.NewUnaryHandler(
 		GraphServiceRecordExecutionsProcedure,
 		svc.RecordExecutions,
@@ -906,6 +1022,16 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 			graphServiceSplitChangeHandler.ServeHTTP(w, r)
 		case GraphServiceListSubChangesProcedure:
 			graphServiceListSubChangesHandler.ServeHTTP(w, r)
+		case GraphServiceOpenFlowProcedure:
+			graphServiceOpenFlowHandler.ServeHTTP(w, r)
+		case GraphServiceAdoptFlowProcedure:
+			graphServiceAdoptFlowHandler.ServeHTTP(w, r)
+		case GraphServiceDiscardFlowProcedure:
+			graphServiceDiscardFlowHandler.ServeHTTP(w, r)
+		case GraphServiceListFlowsProcedure:
+			graphServiceListFlowsHandler.ServeHTTP(w, r)
+		case GraphServiceValidateBoardProcedure:
+			graphServiceValidateBoardHandler.ServeHTTP(w, r)
 		case GraphServiceRecordExecutionsProcedure:
 			graphServiceRecordExecutionsHandler.ServeHTTP(w, r)
 		case GraphServiceListExecutionsProcedure:
@@ -1041,6 +1167,26 @@ func (UnimplementedGraphServiceHandler) SplitChange(context.Context, *connect.Re
 
 func (UnimplementedGraphServiceHandler) ListSubChanges(context.Context, *connect.Request[v1.ListSubChangesRequest]) (*connect.Response[v1.ListSubChangesResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.ListSubChanges is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) OpenFlow(context.Context, *connect.Request[v1.OpenFlowRequest]) (*connect.Response[v1.OpenFlowResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.OpenFlow is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) AdoptFlow(context.Context, *connect.Request[v1.AdoptFlowRequest]) (*connect.Response[v1.AdoptFlowResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.AdoptFlow is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) DiscardFlow(context.Context, *connect.Request[v1.DiscardFlowRequest]) (*connect.Response[v1.DiscardFlowResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.DiscardFlow is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) ListFlows(context.Context, *connect.Request[v1.ListFlowsRequest]) (*connect.Response[v1.ListFlowsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.ListFlows is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) ValidateBoard(context.Context, *connect.Request[v1.ValidateBoardRequest]) (*connect.Response[v1.ValidateBoardResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.ValidateBoard is not implemented"))
 }
 
 func (UnimplementedGraphServiceHandler) RecordExecutions(context.Context, *connect.Request[v1.RecordExecutionsRequest]) (*connect.Response[v1.RecordExecutionsResponse], error) {

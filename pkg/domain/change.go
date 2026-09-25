@@ -2,6 +2,7 @@ package domain
 
 import (
 	"fmt"
+	"slices"
 	"time"
 )
 
@@ -46,6 +47,9 @@ type ChangeSet struct {
 	Data             map[string]any `json:"data,omitempty"`
 	Items            []ChangeItem   `json:"items"`
 	CreatedAt        time.Time      `json:"createdAt"`
+
+	flx  *flowIndex // replay of the flow events, valid for flxN items
+	flxN int
 }
 
 // ChangeEvent is published by the graph service on change lifecycle events
@@ -68,6 +72,9 @@ const (
 	// KindMerge records a divergence of a proposal from the head of its branch
 	// and the proposed resolution (validated by a human before the rebase).
 	KindMerge ItemKind = "merge"
+	// KindFlow is an event of the action flow: a step is relaunched on a new flow
+	// branch, and the branch is adopted or discarded (see flow.go).
+	KindFlow ItemKind = "flow"
 )
 
 // ItemStatus is the review state of an item.
@@ -79,6 +86,11 @@ const (
 	ItemRejected ItemStatus = "rejected"
 	// ItemSuperseded marks an item replaced by another one (rebase, merge).
 	ItemSuperseded ItemStatus = "superseded"
+	// ItemCandidate is an item of a flow branch that is neither adopted nor discarded yet.
+	ItemCandidate ItemStatus = "candidate"
+	// ItemStale is an item that a relaunched step may invalidate: it stays in
+	// effect until the relaunched flow is adopted (then it is superseded).
+	ItemStale ItemStatus = "stale"
 )
 
 // ChangeItem is one fact on the blackboard.
@@ -90,7 +102,11 @@ type ChangeItem struct {
 	Target *NodeRef   `json:"target,omitempty"` // impact: the "pre" version, in the reference graph; decision: n/a
 	// Post is the "post" side of an impact: the proposal (Item) that produces the
 	// new version on the change branch, or that version once known (Node).
-	Post        *Endpoint      `json:"post,omitempty"`
+	Post *Endpoint `json:"post,omitempty"`
+	// Flow is the flow branch that produced the item ("" = the main flow);
+	// FlowEvent is set on KindFlow items.
+	Flow        string         `json:"flow,omitempty"`
+	FlowEvent   *FlowEvent     `json:"flowEvent,omitempty"`
 	Proposal    *Proposal      `json:"proposal,omitempty"` // proposal only
 	Decision    *Decision      `json:"decision,omitempty"` // decision only
 	Data        map[string]any `json:"data,omitempty"`
@@ -221,6 +237,10 @@ func (it ChangeItem) Validate() error {
 		default:
 			return fmt.Errorf("unknown proposal op %q", p.Op)
 		}
+	case KindFlow:
+		if err := it.FlowEvent.validate(); err != nil {
+			return err
+		}
 	case KindDecision:
 		if it.Decision == nil || it.Decision.Item == "" {
 			return fmt.Errorf("decision item requires decision.item")
@@ -254,12 +274,16 @@ func (c *ChangeSet) Item(id ItemID) (ChangeItem, bool) {
 }
 
 // EffectiveStatus returns the status of an item after applying the latest
-// decision targeting it.
+// decision targeting it and the flow events of the change: an item of a flow
+// branch is a candidate until the branch is adopted (and rejected when it is
+// discarded), an item invalidated by a relaunched step is stale until the new
+// flow is adopted (then superseded).
 func (c *ChangeSet) EffectiveStatus(id ItemID) ItemStatus {
 	st := ItemProposed
+	var own string
 	for _, it := range c.Items {
 		if it.ID == id {
-			st = it.Status
+			st, own = it.Status, it.Flow
 		}
 		for _, s := range it.Supersedes {
 			if s == id {
@@ -276,8 +300,43 @@ func (c *ChangeSet) EffectiveStatus(id ItemID) ItemStatus {
 			}
 		}
 	}
+	fx := c.flows()
+	if own != "" {
+		switch fx.effective(own) {
+		case FlowOpen:
+			return ItemCandidate
+		case FlowDiscarded:
+			return ItemRejected
+		}
+	}
+	for _, f := range fx.list {
+		if !slices.Contains(f.Stale, id) {
+			continue
+		}
+		switch fx.effective(f.ID) {
+		case FlowAdopted:
+			return ItemSuperseded
+		case FlowOpen:
+			if st == ItemProposed || st == ItemAccepted {
+				st = ItemStale
+			}
+		}
+	}
 	return st
 }
 
+// InEffect reports whether an item counts for the change: it is neither
+// rejected, superseded nor the candidate of a flow branch.
+func (c *ChangeSet) InEffect(id ItemID) bool {
+	switch c.EffectiveStatus(id) {
+	case ItemRejected, ItemSuperseded, ItemCandidate:
+		return false
+	}
+	return true
+}
+
 // Active reports whether an item is not superseded.
-func (c *ChangeSet) Active(id ItemID) bool { return c.EffectiveStatus(id) != ItemSuperseded }
+func (c *ChangeSet) Active(id ItemID) bool {
+	st := c.EffectiveStatus(id)
+	return st != ItemSuperseded && st != ItemCandidate
+}

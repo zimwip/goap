@@ -16,6 +16,14 @@ type GraphPort interface {
 	UpdateChange(ctx context.Context, id domain.ChangeID, p graph.ChangePatch) (domain.ChangeSet, error)
 	AddItems(ctx context.Context, id domain.ChangeID, items []domain.ChangeItem) ([]domain.ChangeItem, error)
 	Blackboard(ctx context.Context, id domain.ChangeID) (domain.Blackboard, error)
+	// BlackboardIn is the blackboard of a flow branch ("" = main); OpenFlow /
+	// AdoptFlow / DiscardFlow relaunch a step on a new branch and decide it.
+	BlackboardIn(ctx context.Context, id domain.ChangeID, flow string) (domain.Blackboard, error)
+	OpenFlow(ctx context.Context, id domain.ChangeID, in graph.OpenFlowRequest) (domain.Flow, error)
+	AdoptFlow(ctx context.Context, id domain.ChangeID, flow, by string) (domain.Flow, error)
+	DiscardFlow(ctx context.Context, id domain.ChangeID, flow, by string) (domain.Flow, error)
+	// ValidateBoard checks the consistency of the blackboard seen from a flow.
+	ValidateBoard(ctx context.Context, id domain.ChangeID, flow string) ([]domain.BoardIssue, error)
 	BaselineGraph(ctx context.Context, id domain.BaselineID) ([]domain.Node, []domain.Link, error)
 	Apply(ctx context.Context, id domain.ChangeID, baselineName string) (domain.Baseline, error)
 	Baselines(ctx context.Context) ([]domain.Baseline, error)

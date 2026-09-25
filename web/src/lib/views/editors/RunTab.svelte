@@ -8,21 +8,27 @@
   import StepsTimeline from '../../components/StepsTimeline.svelte';
   import HumanTaskForm from '../../components/HumanTaskForm.svelte';
   import ApprovalPanel from '../../components/ApprovalPanel.svelte';
+  import FlowDecisionPanel from '../../components/FlowDecisionPanel.svelte';
+  import BoardIssuesPanel from '../../components/BoardIssuesPanel.svelte';
+  import FlowGraph from '../../components/FlowGraph.svelte';
   import IntentDialogue from './IntentDialogue.svelte';
   import { provideActions } from '../../shell/workbench.svelte';
   import { openTab } from '../../shell/tabs.svelte';
   import {
     engine,
+    graph,
     errorMessage,
     formatDate,
     formatInt,
     shortId,
     JAEGER_URL,
+    type Flow,
     type LogLine,
     type Process,
   } from '../../api';
   import { watchEvents, type StreamStatus } from '../../stream';
   import { processes, ingestProcess, ingestEvent, childrenOf } from '../../stores/live.svelte';
+  import { chainOf, inChain } from '../../flowChain';
 
   let { tab }: { tab: Tab } = $props();
 
@@ -44,6 +50,42 @@
 
   function set(p: Process | undefined) {
     if (p) ingestProcess(p);
+  }
+
+  /** a finished run that is not a sub-agent can be restarted from one of its steps */
+  const relaunchable = $derived(
+    !!process?.changeId && !process.parentId && process.status !== 'running' && process.status !== 'clarifying' && process.status !== 'superseded',
+  );
+  /** the process that replaced this one once its relaunched flow was adopted */
+  const replacedBy = $derived(
+    process?.status === 'superseded' ? [...processes.values()].find((p) => p.relaunchOf === process.id && p.status === 'completed') : undefined,
+  );
+  /** the runs linked to this one by relaunches (empty when it is not part of a flow chain) */
+  const chain = $derived(process && inChain(process, processes) ? chainOf(process, processes) : []);
+  const chainKey = $derived(chain.map((p) => `${p.id}:${p.status}`).join(','));
+  let flows = $state<Flow[]>([]);
+  $effect(() => {
+    const changeId = process?.changeId;
+    if (!changeId || !chainKey) {
+      flows = [];
+      return;
+    }
+    const ctrl = new AbortController();
+    graph
+      .listFlows(changeId, ctrl.signal)
+      .then((r) => (flows = r.flows ?? []))
+      .catch(() => {});
+    return () => ctrl.abort();
+  });
+  const relaunchOfProcess = $derived(process?.relaunchOf ? processes.get(process.relaunchOf) : undefined);
+
+  async function relaunch(step: number, reason: string) {
+    if (!process?.id) return;
+    const res = await engine.relaunchStep(process.id, step, reason);
+    if (res.process?.id) {
+      ingestProcess(res.process);
+      openRun(res.process.id);
+    }
   }
 
   async function refresh(signal?: AbortSignal) {
@@ -226,6 +268,28 @@
       </section>
     </div>
 
+    {#if process.flow}
+      <div class="card flow-banner">
+        Relaunched from step {(process.fromStep ?? 0) + 1} of
+        <button type="button" class="link mono" onclick={() => openRun(process.relaunchOf ?? '')}>{relaunchOfProcess?.title || shortId(process.relaunchOf)}</button>
+        {#if relaunchOfProcess}<StatusBadge status={relaunchOfProcess.status} />{/if}
+        on flow <code>{shortId(process.flow)}</code>
+      </div>
+    {/if}
+    {#if process.status === 'superseded'}
+      <div class="card flow-banner">
+        {#if process.flow}This relaunched flow was discarded.{:else}The outputs of this run were replaced by a relaunched flow.{/if}
+        {#if replacedBy}<button type="button" class="link mono" onclick={() => openRun(replacedBy.id ?? '')}>{replacedBy.title || shortId(replacedBy.id)}</button>{/if}
+      </div>
+    {/if}
+
+    {#if chain.length > 1}
+      <details class="card flow-graph">
+        <summary>Flow <span class="hint">{chain.length} runs · {flows.length} branch{flows.length === 1 ? '' : 'es'}</span></summary>
+        <FlowGraph {processes} processId={process.id ?? ''} {flows} onopen={(pid) => openRun(pid)} />
+      </details>
+    {/if}
+
     {#if process.status === 'clarifying' || process.turns?.length}
       <IntentDialogue {process} onupdate={set} />
     {/if}
@@ -234,6 +298,20 @@
       {#key `${process.id}:${process.pending.step}:${process.pending.action}:${process.pending.kind}`}
         {#if process.pending.kind === 'approval'}
           <ApprovalPanel {process} ondecided={set} />
+        {:else if process.pending.kind === 'flow'}
+          <FlowDecisionPanel {process} ondecided={set} />
+        {:else if process.pending.kind === 'board'}
+          <BoardIssuesPanel {process} {flows} ondecided={set} onopen={(pid) => openRun(pid)} />
+        {:else if process.pending.kind === 'relaunched'}
+          {@const awaited = [...processes.values()].find((q) => q.flow === process.pending?.flowId)}
+          <section class="card waiting-agent">
+            <h3>Waiting for the decision on the relaunched flow</h3>
+            <p>
+              This run restarts when the flow relaunched to fix its blackboard is adopted or discarded
+              {#if awaited?.id}: <button type="button" class="link mono" onclick={() => openRun(awaited?.id ?? '')}>{awaited.agent || shortId(awaited.id)}</button>{/if}.
+            </p>
+            {#if process.pending.description}<p class="hint">{process.pending.description}</p>{/if}
+          </section>
         {:else if process.pending.kind === 'agent'}
           <section class="card waiting-agent">
             <h3>Waiting for a sub-agent</h3>
@@ -285,13 +363,20 @@
       </section>
       <section class="card">
         <h3>Steps <span class="hint">{process.steps?.length ?? 0}</span></h3>
-        <StepsTimeline steps={process.steps} {liveLogs} onopenprocess={(c) => openRun(c)} />
+        <StepsTimeline steps={process.steps} processId={process.id ?? ''} {chain} {liveLogs} onopenprocess={(c) => openRun(c)} onrelaunch={relaunchable ? relaunch : undefined} />
       </section>
     </div>
   {/if}
 </div>
 
 <style>
+  .flow-graph > summary {
+    cursor: pointer;
+    font-weight: 600;
+  }
+  .flow-banner {
+    border-left: 3px solid var(--warn);
+  }
   .wide {
     max-width: 1400px;
   }

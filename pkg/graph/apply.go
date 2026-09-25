@@ -22,6 +22,11 @@ import (
 func (g *Graph) Apply(ctx context.Context, id domain.ChangeID, baselineName string) (domain.Baseline, error) {
 	var result domain.Baseline
 	err := g.repo.InTx(ctx, func(tx Tx) (err error) {
+		if c, err := tx.Change(ctx, id); err != nil {
+			return err
+		} else if of := openFlows(c); len(of) > 0 {
+			return fmt.Errorf("change %s has an open flow (%s): adopt or discard it first: %w", id, of[0].ID, ErrConflict)
+		}
 		if open, err := openSubChanges(ctx, tx, id); err != nil {
 			return err
 		} else if len(open) > 0 {
@@ -243,7 +248,7 @@ func (a *applier) mergeOf(d *domain.NodeDraft) error {
 func (a *applier) run() error {
 	var proposals []domain.ChangeItem
 	for _, it := range a.change.Items {
-		if st := a.change.EffectiveStatus(it.ID); it.Kind == domain.KindProposal && st != domain.ItemRejected && st != domain.ItemSuperseded {
+		if it.Kind == domain.KindProposal && a.change.InEffect(it.ID) {
 			proposals = append(proposals, it)
 		}
 	}

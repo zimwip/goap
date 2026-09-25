@@ -47,9 +47,11 @@ type ExecutionRecord struct {
 	// A step reads the blackboard and extends it: BoardBefore / BoardAfter are the
 	// numbers of items on the change when the step starts / ends (the blackboard
 	// state), Reads the existing node versions the step started from.
-	Reads        []NodeRef   `json:"reads,omitempty"`
-	BoardBefore  int         `json:"boardBefore"`
-	BoardAfter   int         `json:"boardAfter"`
+	Reads       []NodeRef `json:"reads,omitempty"`
+	BoardBefore int       `json:"boardBefore"`
+	BoardAfter  int       `json:"boardAfter"`
+	// BoardLast is the last item of the flow before the step: where relaunching the step forks it.
+	BoardLast    ItemID      `json:"boardLast,omitempty"`
 	InputTokens  int64       `json:"inputTokens,omitempty"`
 	OutputTokens int64       `json:"outputTokens,omitempty"`
 	ModelCalls   []ModelCall `json:"modelCalls,omitempty"`

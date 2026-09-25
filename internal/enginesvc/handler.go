@@ -156,6 +156,49 @@ func (h *Handler) ApproveAction(ctx context.Context, r *connect.Request[enginev1
 	return connect.NewResponse(&enginev1.ApproveActionResponse{Process: ProcessToPB(p)}), nil
 }
 
+func (h *Handler) RelaunchStep(ctx context.Context, r *connect.Request[enginev1.RelaunchStepRequest]) (*connect.Response[enginev1.RelaunchStepResponse], error) {
+	ctx = h.principal(ctx, r.Header())
+	if err := h.loadAuthorized(ctx, r.Msg.ProcessId, "relaunch"); err != nil {
+		return nil, toConnect(err)
+	}
+	p, err := h.Engine.Relaunch(ctx, r.Msg.ProcessId, int(r.Msg.Step), r.Msg.Reason)
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	h.run(p)
+	return connect.NewResponse(&enginev1.RelaunchStepResponse{Process: ProcessToPB(p)}), nil
+}
+
+func (h *Handler) DecideFlow(ctx context.Context, r *connect.Request[enginev1.DecideFlowRequest]) (*connect.Response[enginev1.DecideFlowResponse], error) {
+	ctx = h.principal(ctx, r.Header())
+	if err := h.loadAuthorized(ctx, r.Msg.ProcessId, "decide_flow"); err != nil {
+		return nil, toConnect(err)
+	}
+	p, err := h.Engine.DecideFlow(ctx, r.Msg.ProcessId, r.Msg.Adopt, r.Msg.Comment)
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	return connect.NewResponse(&enginev1.DecideFlowResponse{Process: ProcessToPB(p)}), nil
+}
+
+func (h *Handler) ResolveBoard(ctx context.Context, r *connect.Request[enginev1.ResolveBoardRequest]) (*connect.Response[enginev1.ResolveBoardResponse], error) {
+	ctx = h.principal(ctx, r.Header())
+	if err := h.loadAuthorized(ctx, r.Msg.ProcessId, "relaunch"); err != nil {
+		return nil, toConnect(err)
+	}
+	p, np, err := h.Engine.ResolveBoard(ctx, r.Msg.ProcessId, r.Msg.Relaunch, r.Msg.Comment)
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	out := &enginev1.ResolveBoardResponse{Process: ProcessToPB(p)}
+	if np != nil {
+		out.Relaunched = ProcessToPB(np)
+		h.run(np)
+	}
+	h.run(p)
+	return connect.NewResponse(out), nil
+}
+
 func (h *Handler) GetProcess(ctx context.Context, r *connect.Request[enginev1.GetProcessRequest]) (*connect.Response[enginev1.GetProcessResponse], error) {
 	ctx = h.principal(ctx, r.Header())
 	p, err := h.Engine.Store.Get(ctx, r.Msg.Id)
@@ -316,7 +359,7 @@ func ProcessToPB(p *engine.Process) *enginev1.Process {
 		CreatedAt: pbconv.Time(p.CreatedAt), UpdatedAt: pbconv.Time(p.UpdatedAt),
 		Initiator: &enginev1.Principal{Subject: p.Initiator.Subject, Org: p.Initiator.Org, Roles: p.Initiator.Roles},
 		Agent:     p.Agent, Planner: p.Planner, ParentId: p.ParentID, Usage: usageToPB(p.Usage),
-		BaselineId: string(p.BaselineID), Title: p.Title, TraceId: p.TraceID, Trigger: p.Trigger,
+		BaselineId: string(p.BaselineID), Title: p.Title, TraceId: p.TraceID, Trigger: p.Trigger, Flow: p.Flow, RelaunchOf: p.RelaunchOf, FromStep: int32(p.FromStep),
 	}
 	for _, t := range p.Intent.Turns {
 		out.Turns = append(out.Turns, &enginev1.Turn{Role: t.Role, Text: t.Text})
@@ -326,7 +369,17 @@ func ProcessToPB(p *engine.Process) *enginev1.Process {
 	}
 	if t := p.Pending; t != nil {
 		out.Pending = &enginev1.HumanTask{Kind: t.Kind, Permission: t.Permission, Action: t.Action, Description: t.Description,
-			Instructions: t.Instructions, Step: int32(t.Step), ChildProcessId: t.ChildProcessID}
+			Instructions: t.Instructions, Step: int32(t.Step), ChildProcessId: t.ChildProcessID, FlowId: t.FlowID}
+		for _, i := range t.Issues {
+			out.Pending.Issues = append(out.Pending.Issues, &enginev1.BoardIssue{Item: string(i.Item), Culprit: string(i.Culprit), Code: i.Code, Message: i.Message, Severity: i.Severity})
+		}
+		if pr := t.Proposal; pr != nil {
+			rp := &enginev1.RelaunchProposal{Process: pr.Process, Step: int32(pr.Step), Action: pr.Action, Reason: pr.Reason}
+			for _, c := range pr.Culprits {
+				rp.Culprits = append(rp.Culprits, string(c))
+			}
+			out.Pending.Proposal = rp
+		}
 	}
 	for a := range p.Disabled {
 		out.Disabled = append(out.Disabled, a)

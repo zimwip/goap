@@ -26,11 +26,14 @@ const (
 	StatusCompleted  Status = "completed"
 	StatusStuck      Status = "stuck" // no plan reaches the goal
 	StatusFailed     Status = "failed"
+	// StatusSuperseded: the run was replaced by a relaunched flow that was adopted,
+	// or it is the relaunched flow itself that was discarded.
+	StatusSuperseded Status = "superseded"
 )
 
 // Terminal reports whether the process can no longer progress by itself.
 func (s Status) Terminal() bool {
-	return s == StatusCompleted || s == StatusStuck || s == StatusFailed
+	return s == StatusCompleted || s == StatusStuck || s == StatusFailed || s == StatusSuperseded
 }
 
 // Process is an agent process working on a change.
@@ -54,9 +57,17 @@ type Process struct {
 	BaselineID domain.BaselineID `json:"baselineId,omitempty"`
 	Namespace  string            `json:"namespace,omitempty"`
 	OwnBranch  bool              `json:"ownBranch,omitempty"`
-	Title      string            `json:"title,omitempty"`
-	Usage      Usage             `json:"usage"`
-	TraceID    string            `json:"traceId,omitempty"`
+	// Flow is the flow branch the process works on ("" = the main flow). A relaunched
+	// step starts a new process on a new branch: RelaunchOf is the process it
+	// replaces if the branch is adopted, FromStep the step it restarts.
+	Flow       string `json:"flow,omitempty"`
+	RelaunchOf string `json:"relaunchOf,omitempty"`
+	FromStep   int    `json:"fromStep,omitempty"`
+	// Dismissed lists the sets of blackboard issues a human chose to ignore (see issuesKey).
+	Dismissed map[string]bool `json:"dismissed,omitempty"`
+	Title     string          `json:"title,omitempty"`
+	Usage     Usage           `json:"usage"`
+	TraceID   string          `json:"traceId,omitempty"`
 	// TraceParent (W3C) of the process root span: later runs continue the trace.
 	TraceParent string             `json:"traceParent,omitempty"`
 	Status      Status             `json:"status"`
@@ -87,6 +98,12 @@ const (
 	TaskInput    = "input"    // a human action: submit items
 	TaskApproval = "approval" // an action needing a permission the initiator lacks
 	TaskAgent    = "agent"    // a script action waiting for a sub-agent
+	TaskFlow     = "flow"     // a relaunched flow is ready: a human adopts or discards it
+	// TaskBoard: the blackboard is inconsistent; a human relaunches the step that produced the
+	// faulty content (Proposal) or ignores the issues. TaskRelaunched: the process waits for the
+	// decision of the flow relaunched to fix it.
+	TaskBoard      = "board"
+	TaskRelaunched = "relaunched"
 )
 
 // HumanTask is a pending human action or approval.
@@ -99,6 +116,11 @@ type HumanTask struct {
 	Step         int    `json:"step"`
 	// ChildProcessID is the sub-agent a TaskAgent waits for.
 	ChildProcessID string `json:"childProcessId,omitempty"`
+	// TaskBoard: what is wrong, and the earliest step to restart from (nil when none can be).
+	Issues   []domain.BoardIssue `json:"issues,omitempty"`
+	Proposal *RelaunchProposal   `json:"proposal,omitempty"`
+	// FlowID is the flow a TaskRelaunched waits for.
+	FlowID string `json:"flowId,omitempty"`
 }
 
 // Usage accounts LLM tokens and calls.
@@ -157,7 +179,9 @@ type Step struct {
 	Reads       []domain.NodeRef `json:"reads,omitempty"`
 	BoardBefore int              `json:"boardBefore,omitempty"`
 	BoardAfter  int              `json:"boardAfter,omitempty"`
-	EffectsMet  bool             `json:"effectsMet"`
+	// LastItem is the last item of the flow when the step started (the fork point of a relaunch).
+	LastItem   domain.ItemID `json:"lastItem,omitempty"`
+	EffectsMet bool          `json:"effectsMet"`
 	// Progress: an incremental action produced items without reaching its effects yet.
 	Progress   bool       `json:"progress,omitempty"`
 	ApprovedBy string     `json:"approvedBy,omitempty"`
@@ -238,4 +262,15 @@ func (s *MemoryStore) List(_ context.Context) ([]*Process, error) {
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.After(out[j].CreatedAt) })
 	return out, nil
+}
+
+// RelaunchProposal is the step to restart from to fix an inconsistent blackboard: the earliest
+// step, over every run of the change, that produced faulty content.
+type RelaunchProposal struct {
+	Process string `json:"process"`
+	Step    int    `json:"step"`
+	Action  string `json:"action"`
+	Reason  string `json:"reason"`
+	// Culprits are the faulty items the step produced.
+	Culprits []domain.ItemID `json:"culprits"`
 }

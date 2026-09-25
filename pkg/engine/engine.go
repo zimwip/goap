@@ -422,9 +422,24 @@ func (e *Engine) cycle(ctx context.Context, p *Process, m *methodology.Compiled)
 	if !ok {
 		return fmt.Errorf("unknown goal %q", p.Goal)
 	}
+	// the blackboard must be consistent before any action is asked, and before the goal is declared reached
+	if blocked, err := e.checkBoard(ctx, p, bb); err != nil {
+		return err
+	} else if blocked {
+		return nil
+	}
 	if p.World.Satisfies(goal.Pre) {
-		p.Status = StatusCompleted
 		p.Plan = nil
+		if p.Flow != "" && p.Status == StatusRunning {
+			// the relaunched flow reached the goal: a human confirms before it replaces the previous run
+			p.Status = StatusWaiting
+			p.Pending = &HumanTask{Kind: TaskFlow, Action: "adopt_flow", Step: len(p.Steps),
+				Description: "The relaunched flow reached the goal. Adopt it to replace the outputs of the previous run, or discard it."}
+			e.journal(ctx, p, domain.ExecutionRecord{Kind: domain.ExecTick, Step: len(p.Steps), Before: maps.Clone(p.World),
+				Data: map[string]any{"goalSatisfied": true, "flow": p.Flow, "awaitingDecision": true}})
+			return nil
+		}
+		p.Status = StatusCompleted
 		e.journal(ctx, p, domain.ExecutionRecord{Kind: domain.ExecTick, Step: len(p.Steps), Before: maps.Clone(p.World),
 			Data: map[string]any{"goalSatisfied": true}})
 		return nil
@@ -468,7 +483,7 @@ func (e *Engine) cycle(ctx context.Context, p *Process, m *methodology.Compiled)
 	// act
 	action, _ := m.Action(plan.Actions[0].Name)
 	step := Step{Index: len(p.Steps), Action: action.Name, Plan: p.Plan, Before: maps.Clone(p.World), StartedAt: e.clock(),
-		Reads: bb.Change.ReferencedNodes(), BoardBefore: len(bb.Change.Items)}
+		Reads: bb.Change.ReferencedNodes(), BoardBefore: len(bb.Change.Items), LastItem: lastItem(bb.Change)}
 	// the permission is the one of the implementation that will run (a
 	// specialization may require more, e.g. a production deployment)
 	permission := action.Permission
@@ -796,7 +811,7 @@ func (e *Engine) recordFailure(p *Process, action string) error {
 }
 
 func (e *Engine) observe(ctx context.Context, p *Process, m *methodology.Compiled) (domain.Blackboard, error) {
-	bb, err := e.Graph.Blackboard(ctx, p.ChangeID)
+	bb, err := e.Graph.BlackboardIn(ctx, p.ChangeID, p.Flow)
 	if err != nil {
 		return bb, err
 	}
@@ -812,7 +827,7 @@ func (e *Engine) addItems(ctx context.Context, p *Process, in []ItemInput, produ
 	if len(in) == 0 {
 		return nil, nil
 	}
-	bb, err := e.Graph.Blackboard(ctx, p.ChangeID)
+	bb, err := e.Graph.BlackboardIn(ctx, p.ChangeID, p.Flow)
 	if err != nil {
 		return nil, err
 	}
@@ -825,7 +840,7 @@ func (e *Engine) addItems(ctx context.Context, p *Process, in []ItemInput, produ
 		return nil, err
 	}
 	for k := range items {
-		items[k].Execution = execution
+		items[k].Execution, items[k].Flow = execution, p.Flow
 	}
 	added, err := e.Graph.AddItems(ctx, p.ChangeID, items)
 	if err != nil {

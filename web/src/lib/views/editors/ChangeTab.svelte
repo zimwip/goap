@@ -1,6 +1,7 @@
 <script lang="ts">
   // Change tab: change set items and applying to the baseline.
   import {
+    engine,
     graph,
     errorMessage,
     formatDate,
@@ -9,6 +10,8 @@
     ITEM_SUPERSEDED,
     type ChangeItem,
     type ChangeSet,
+    type Flow,
+    type BoardIssue,
     type GraphNode,
     type LifecycleTransition,
     type NodeRef,
@@ -26,6 +29,8 @@
   import { provideActions, notify } from '../../shell/workbench.svelte';
   import { refreshChanges, refreshBaselines } from '../../stores/catalog.svelte';
   import { processes } from '../../stores/live.svelte';
+  import FlowGraph from '../../components/FlowGraph.svelte';
+  import BoardIssueList from '../../components/BoardIssueList.svelte';
 
   let { tab }: { tab: Tab } = $props();
 
@@ -42,6 +47,25 @@
   let error = $state('');
 
   let subs = $state<ChangeSet[]>([]);
+  let flows = $state<Flow[]>([]);
+  let boardIssues = $state<BoardIssue[] | null>(null);
+  let checking = $state(false);
+  let checkError = $state('');
+
+  async function checkBoard() {
+    if (!selected) return;
+    checking = true;
+    checkError = '';
+    try {
+      boardIssues = (await graph.validateBoard(selected)).issues ?? [];
+    } catch (e) {
+      checkError = errorMessage(e);
+    } finally {
+      checking = false;
+    }
+  }
+  let flowError = $state('');
+  let flowBusy = $state(false);
   let splitting = $state(false);
   let merging = $state(false);
   let mergeError = $state('');
@@ -62,6 +86,7 @@
       nodes = c?.baselineId ? ((await graph.getBaselineGraph(c.baselineId, signal)).nodes ?? []) : [];
       attached = (await graph.getChangeNodes(id, signal)).nodes ?? [];
       subs = (await graph.listSubChanges(id, signal)).changes ?? [];
+      flows = (await graph.listFlows(id, signal)).flows ?? [];
     } catch (e) {
       if (!signal?.aborted) error = errorMessage(e);
     } finally {
@@ -74,6 +99,8 @@
     change = undefined;
     attached = [];
     subs = [];
+    flows = [];
+    flowError = '';
     mergeError = '';
     extraNodes = [];
     applied = undefined;
@@ -84,7 +111,35 @@
     return () => ctrl.abort();
   });
 
-  const items = $derived(change?.items ?? []);
+  /** status of an item on the log: base status, then what the flow branches make of it */
+  function effectiveStatus(i: ChangeItem): string | undefined {
+    const own = i.flow ? flows.find((f) => f.id === i.flow) : undefined;
+    if (own?.status === 'open') return 'candidate';
+    if (own?.status === 'discarded') return 'rejected';
+    for (const f of flows) {
+      if (!f.stale?.includes(i.id ?? '')) continue;
+      if (f.status === 'adopted') return 'superseded';
+      if (f.status === 'open' && (i.status === 'proposed' || i.status === 'accepted')) return 'stale';
+    }
+    return i.status;
+  }
+  // flow events are part of the log but not shown as items
+  const items = $derived((change?.items ?? []).filter((i) => i.kind !== 'flow').map((i) => ({ ...i, status: effectiveStatus(i) })));
+  const flowProcess = (f: Flow) => [...processes.values()].find((p) => p.flow === f.id);
+  async function decideFlow(f: Flow, adopt: boolean) {
+    const p = flowProcess(f);
+    if (!p?.id) return;
+    flowBusy = true;
+    flowError = '';
+    try {
+      await engine.decideFlow(p.id, adopt, '');
+      await load(selected);
+    } catch (e) {
+      flowError = errorMessage(e);
+    } finally {
+      flowBusy = false;
+    }
+  }
   const ctx = $derived(makeContext(nodes, items));
   const groups = $derived({
     impact: items.filter((i) => i.kind === 'impact'),
@@ -429,6 +484,40 @@
           </div>
         {/if}
 
+        <div class="board-check">
+          <button onclick={checkBoard} disabled={checking}>{checking ? 'Checking…' : 'Blackboard check'}</button>
+          {#if checkError}<span class="error">{checkError}</span>{/if}
+          {#if boardIssues && !boardIssues.length}<span class="hint">Consistent</span>{/if}
+          {#if boardIssues?.length}
+            <p class="hint">{boardIssues.length} issue{boardIssues.length === 1 ? '' : 's'} on the main flow</p>
+            <BoardIssueList issues={boardIssues} />
+          {/if}
+        </div>
+
+        {#if flows.length}
+          <h3>Flow branches <span class="count">{flows.length}</span></h3>
+          <FlowGraph {processes} changeId={selected} {flows} onopen={(pid) => openTab({ kind: 'run', params: { id: pid } })} />
+          <ul class="subs">
+            {#each flows as f (f.id)}
+              {@const fp = flowProcess(f)}
+              <li>
+                <StatusBadge status={f.status} />
+                <code>{shortId(f.id)}</code>
+                from step {(f.fromStep ?? 0) + 1}
+                {#if f.reason}<span class="muted">· {f.reason}</span>{/if}
+                <span class="hint">· {f.stale?.length ?? 0} stale item(s)</span>
+                {#if f.process}<button type="button" class="link mono" onclick={() => openTab({ kind: 'run', params: { id: f.process ?? '' } })}>previous run</button>{/if}
+                {#if fp}<button type="button" class="link mono" onclick={() => openTab({ kind: 'run', params: { id: fp.id ?? '' } })}>relaunched run</button>{/if}
+                {#if f.status === 'open' && fp?.status === 'waiting' && fp.pending?.kind === 'flow'}
+                  <button type="button" class="primary" disabled={flowBusy} onclick={() => decideFlow(f, true)}>Adopt</button>
+                  <button type="button" disabled={flowBusy} onclick={() => decideFlow(f, false)}>Discard</button>
+                {/if}
+              </li>
+            {/each}
+          </ul>
+          {#if flowError}<pre class="error">{flowError}</pre>{/if}
+        {/if}
+
         {#if ownBranch || subs.length}
           <h3>Sub-changes <span class="count">{subs.length}</span></h3>
           {#if subs.length}
@@ -477,7 +566,7 @@
               {#each groups.impact as i (i.id)}
                 <tr class:superseded={i.status === ITEM_SUPERSEDED}>
                   <td><code>{refKey(ctx, i.target)}</code></td>
-                  <td>{i.type}</td>
+                  <td>{i.type} {#if i.status && i.status !== 'proposed'}<StatusBadge status={i.status} />{/if}</td>
                   <td>{show(i.data?.['reason'])}</td>
                   <td class="muted">{@render producer(i)}</td>
                 </tr>

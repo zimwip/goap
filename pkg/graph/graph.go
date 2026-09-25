@@ -382,6 +382,21 @@ func (g *Graph) AddItems(ctx context.Context, id domain.ChangeID, items []domain
 			byID[it.ID] = it
 		}
 		items = slices.Clone(items)
+		batchFlow := ""
+		if len(items) > 0 {
+			batchFlow = items[0].Flow
+		}
+		for _, it := range items {
+			if it.Kind == domain.KindFlow {
+				return fmt.Errorf("flow events are recorded by OpenFlow, AdoptFlow and DiscardFlow: %w", ErrInvalid)
+			}
+			if it.Flow != batchFlow {
+				return fmt.Errorf("the items of a batch belong to one flow: %w", ErrInvalid)
+			}
+		}
+		if batchFlow != "" && c.FlowStatusOf(batchFlow) != domain.FlowOpen {
+			return fmt.Errorf("flow %s is not open: %w", batchFlow, ErrConflict)
+		}
 		for i := range items {
 			if items[i].ID == "" {
 				items[i].ID = domain.ItemID(g.newID())
@@ -422,7 +437,7 @@ func (g *Graph) AddItems(ctx context.Context, id domain.ChangeID, items []domain
 		// lifecycle: replay the whole change (early feedback, Apply is authoritative)
 		if full, err := tx.Change(ctx, id); err != nil {
 			return err
-		} else if _, err := g.walk(ctx, tx, full, false); err != nil {
+		} else if _, err := g.walk(ctx, tx, full.View(batchFlow), false); err != nil {
 			return err
 		}
 		for _, ref := range modifies(out) {
@@ -453,12 +468,19 @@ func endpointsOf(it domain.ChangeItem) []domain.Endpoint {
 
 // Blackboard returns the change and a hydrated view of every node it
 // references, ready for condition evaluation.
-func (g *Graph) Blackboard(ctx context.Context, id domain.ChangeID) (bb domain.Blackboard, err error) {
+func (g *Graph) Blackboard(ctx context.Context, id domain.ChangeID) (domain.Blackboard, error) {
+	return g.BlackboardIn(ctx, id, "")
+}
+
+// BlackboardIn is the blackboard as seen by the process running on a flow
+// branch ("" = the main flow, see domain.ChangeSet.View).
+func (g *Graph) BlackboardIn(ctx context.Context, id domain.ChangeID, flow string) (bb domain.Blackboard, err error) {
 	err = g.repo.InTx(ctx, func(tx Tx) error {
 		c, err := tx.Change(ctx, id)
 		if err != nil {
 			return err
 		}
+		c = c.View(flow)
 		bb = domain.Blackboard{Change: c, Nodes: map[domain.NodeRef]domain.NodeView{}, Neighbors: map[domain.NodeRef]domain.Node{}}
 		ix, err := g.typesAt(ctx, tx, c.BaselineID)
 		if err != nil {
