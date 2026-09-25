@@ -122,7 +122,7 @@
     {#if shownNodes.length}
       <div class="scroll">
         <table>
-          <thead><tr><th>Key</th><th>Type</th><th>Version</th><th>State</th><th>Title</th></tr></thead>
+          <thead><tr><th>Key</th><th>Type</th><th>Version</th><th>State</th><th>Title</th><th></th></tr></thead>
           <tbody>
             {#each shownNodes as n (n.id)}
               <tr class:deleted={n.deleted} class:sel={selectedKey === n.key}>
@@ -131,6 +131,7 @@
                 <td>v{n.version ?? 0}</td>
                 <td>{#if n.state}<span class="state">{n.state}</span>{/if}</td>
                 <td>{nodeTitle(n)}</td>
+                <td><button type="button" class="link small" title="Versions and states of the node" onclick={() => openTab({ kind: 'nodeHistory', params: { id: n.id ?? '', key: n.key ?? '' } }, { pin: true })}>History</button></td>
               </tr>
             {/each}
           </tbody>

@@ -20,6 +20,7 @@
     oncreate,
     onremove,
     onundo,
+    onhistory,
   }: {
     rows: LifecycleRow[];
     /** nodes the change could take on */
@@ -41,6 +42,8 @@
     onremove: (row: LifecycleRow) => Promise<boolean> | boolean;
     /** withdraws the deletion proposed for a node */
     onundo: (row: LifecycleRow) => Promise<boolean> | boolean;
+    /** opens the history of a stored node */
+    onhistory: (row: LifecycleRow) => void;
   } = $props();
 
   function remove(r: LifecycleRow) {
@@ -194,6 +197,9 @@
                 {#if r.removal}
                   <button type="button" class="small" disabled={busy !== ''} onclick={() => onundo(r)}>Undo delete</button>
                 {:else}
+                {#if !r.created}
+                  <button type="button" class="small ghost" title="Versions and states of the node" onclick={() => onhistory(r)}>History</button>
+                {/if}
                 <button
                   type="button"
                   class="small"

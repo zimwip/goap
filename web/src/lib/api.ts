@@ -394,6 +394,11 @@ export interface GraphNode {
   createdAt?: string;
   /** lifecycle state of the version ('' : the type has none) */
   state?: string;
+  branch?: string;
+  /** versions this one descends from (two for a merge) */
+  parents?: number[];
+  /** create | revise | derive | merge */
+  reason?: string;
 }
 
 export interface Link {
@@ -833,6 +838,9 @@ export const graph = {
     rpc<Empty, { changes?: ChangeSet[] }>(GRAPH, 'ListChanges', {}, signal),
   getChange: (id: string, signal?: AbortSignal) =>
     rpc<{ id: string }, { change?: ChangeSet }>(GRAPH, 'GetChange', { id }, signal),
+  /** Every version of a node, all branches. */
+  listNodeVersions: (id: string, signal?: AbortSignal) =>
+    rpc<{ id: string }, { versions?: GraphNode[] }>(GRAPH, 'ListNodeVersions', { id }, signal),
   /** Nodes the change is attached to (the versions it starts from). */
   getChangeNodes: (changeId: string, signal?: AbortSignal) =>
     rpc<{ changeId: string }, { nodes?: NodeRef[] }>(GRAPH, 'GetChangeNodes', { changeId }, signal),
