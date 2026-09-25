@@ -5,8 +5,11 @@ package domain
 type NodeView struct {
 	Node
 	Latest Version `json:"latest"`
-	Out    []Link  `json:"out,omitempty"`
-	In     []Link  `json:"in,omitempty"`
+	// Frozen: the node has a lifecycle and is in a state that is not editable
+	// (it must be reopened by a transition before it can be modified).
+	Frozen bool   `json:"frozen,omitempty"`
+	Out    []Link `json:"out,omitempty"`
+	In     []Link `json:"in,omitempty"`
 }
 
 // Blackboard is the state an agent process observes: the change (axis change)

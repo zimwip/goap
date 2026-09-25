@@ -208,3 +208,53 @@ func TestSeedDomains(t *testing.T) {
 		t.Fatalf("published: %+v %v", r, err)
 	}
 }
+
+func TestDomainComposedOfNodeTypesLinkTypesAndLifecycles(t *testing.T) {
+	yaml := `
+name: docs
+version: 1.0.0
+lifecycles:
+  - name: req
+    initial: draft
+    states: [{name: draft, editable: true}, {name: approved}]
+    transitions: [{name: approve, from: draft, to: approved, permission: "requirement:approve", requires: {attributes: [title]}}]
+nodeTypes:
+  - {name: Requirement, lifecycle: req}
+  - {name: Spec, document: {contains: [Requirement]}, lifecycle: req, changeControlled: true}
+linkTypes:
+  - {name: contains, from: Spec, to: Requirement}
+`
+	d, err := methodology.ParseDomain([]byte(yaml))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// protobuf round trip keeps the three parts
+	back := DomainFromPB(DomainToPB(DomainRecord{Domain: *d, Status: StatusDraft}))
+	if len(back.Lifecycles) != 1 || back.Lifecycles[0].Transitions[0].Requires.Attributes[0] != "title" || back.NodeTypes[1].Lifecycle != "req" || back.NodeTypes[1].Document == nil || len(back.LinkTypes) != 1 {
+		t.Fatalf("pb round trip: %+v", back)
+	}
+	for name, mk := range stores(t) {
+		t.Run(name, func(t *testing.T) {
+			enf, _ := authz.NewCasbin(nil)
+			s := &Service{Store: mk(t), Authz: enf}
+			ctx := as("methodologist")
+			if _, issues, err := s.SaveDomain(ctx, *d); err != nil || len(issues) > 0 {
+				t.Fatalf("save: %v %v", err, issues)
+			}
+			got, err := s.GetDomain(ctx, "docs", "1.0.0")
+			if err != nil || len(got.Domain.Lifecycles) != 1 || got.Domain.Lifecycles[0].Name != "req" || got.Domain.NodeTypes[0].Lifecycle != "req" {
+				t.Fatalf("stored domain: %+v %v", got.Domain, err)
+			}
+			if l := got.Domain.LifecycleOf("Spec"); l == nil || !l.Editable("draft") || l.Editable("approved") {
+				t.Fatalf("resolved lifecycle: %+v", l)
+			}
+			// a reference to a lifecycle the domain does not have is rejected
+			bad := *d
+			bad.Version = "1.0.1"
+			bad.NodeTypes = []methodology.NodeType{{Name: "Requirement", Lifecycle: "nope"}}
+			if _, issues, _ := s.SaveDomain(ctx, bad); len(issues) == 0 {
+				t.Fatal("unknown lifecycle must be an issue")
+			}
+		})
+	}
+}

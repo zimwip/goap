@@ -75,7 +75,7 @@ func (m *Methodology) Resolve(resolve DomainResolver) (*Methodology, Issues) {
 	if m.DomainRef == "" {
 		return m, nil
 	}
-	if len(m.Domain.NodeTypes) > 0 || len(m.Domain.LinkTypes) > 0 {
+	if len(m.Domain.NodeTypes) > 0 || len(m.Domain.LinkTypes) > 0 || len(m.Domain.Lifecycles) > 0 {
 		return m, Issues{{Path: "domainRef", Message: "a methodology either references a domain or embeds one"}}
 	}
 	name, version, err := SplitRef(m.DomainRef)

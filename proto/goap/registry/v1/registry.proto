@@ -48,6 +48,46 @@ message NodeType {
   repeated string properties = 3;
   // parent type (subtyping): inherits its properties and link types
   string extends = 4;
+  // name of the lifecycle of the nodes of the type (ADR 0014, one of the
+  // domain's lifecycles); inherited through extends
+  string lifecycle = 5;
+  // the type is a document embedding nodes through outgoing "contains" links
+  DocumentSpec document = 6;
+  // absent: change controlled (the default)
+  optional bool change_controlled = 7;
+}
+
+message Lifecycle {
+  string name = 4;
+  string initial = 1;
+  repeated LifecycleState states = 2;
+  repeated LifecycleTransition transitions = 3;
+}
+
+message LifecycleState {
+  string name = 1;
+  string description = 2;
+  // editable states are working states held through a change
+  bool editable = 3;
+  bool final = 4;
+}
+
+message LifecycleTransition {
+  string name = 1;
+  string from = 2;
+  string to = 3;
+  // "type:action" the actor must hold
+  string permission = 4;
+  // CEL over the node and its children, evaluated when the change is applied
+  string guard = 5;
+  repeated string requires_attributes = 6;
+  repeated string requires_outgoing_links = 7;
+  // documents: allowed states of the contained children (empty: no constraint)
+  repeated string children_states = 8;
+}
+
+message DocumentSpec {
+  repeated string contains = 1;
 }
 
 message LinkType {
@@ -182,6 +222,7 @@ message Methodology {
   repeated Agent agents = 14;
   // shared domain "<name>[@<version>]" used instead of node_types / link_types
   string domain_ref = 15;
+  repeated Lifecycle lifecycles = 16;
 }
 
 message GoalSummary {
@@ -306,6 +347,7 @@ message Domain {
   string status = 4;
   repeated NodeType node_types = 5;
   repeated LinkType link_types = 6;
+  repeated Lifecycle lifecycles = 11;
   google.protobuf.Timestamp created_at = 7;
   google.protobuf.Timestamp updated_at = 8;
   google.protobuf.Timestamp published_at = 9;

@@ -122,12 +122,48 @@ type Empty = Record<string, never>;
 /** draft: editable · published: frozen (only executable one) · archived: read-only */
 export type MethodologyStatus = 'draft' | 'published' | 'archived';
 
+export interface LifecycleState {
+  name?: string;
+  description?: string;
+  /** working state: only held through a change */
+  editable?: boolean;
+  final?: boolean;
+}
+
+export interface LifecycleTransition {
+  name?: string;
+  from?: string;
+  to?: string;
+  /** "type:action" the actor must hold (default node:transition) */
+  permission?: string;
+  /** CEL over node, children and change */
+  guard?: string;
+  requiresAttributes?: string[];
+  requiresOutgoingLinks?: string[];
+  /** documents: allowed states of the contained children */
+  childrenStates?: string[];
+}
+
+export interface Lifecycle {
+  /** identifies the lifecycle in its domain; node types name it */
+  name?: string;
+  initial?: string;
+  states?: LifecycleState[];
+  transitions?: LifecycleTransition[];
+}
+
 export interface NodeType {
   name?: string;
   description?: string;
   properties?: string[];
   /** parent type: the subtype inherits its properties and link types */
   extends?: string;
+  /** name of the domain lifecycle of the nodes (inherited through extends) */
+  lifecycle?: string;
+  /** the type embeds nodes of these types through "contains" links */
+  document?: { contains?: string[] };
+  /** absent: change controlled */
+  changeControlled?: boolean;
 }
 
 export interface LinkType {
@@ -256,6 +292,7 @@ export interface Methodology {
   domainRef?: string;
   nodeTypes?: NodeType[];
   linkTypes?: LinkType[];
+  lifecycles?: Lifecycle[];
   conditions?: Condition[];
   actions?: Action[];
   goals?: Goal[];
@@ -274,6 +311,7 @@ export interface Domain {
   status?: MethodologyStatus | string;
   nodeTypes?: NodeType[];
   linkTypes?: LinkType[];
+  lifecycles?: Lifecycle[];
   createdAt?: string;
   updatedAt?: string;
   publishedAt?: string;
@@ -354,6 +392,8 @@ export interface GraphNode {
   deleted?: boolean;
   changeId?: string;
   createdAt?: string;
+  /** lifecycle state of the version ('' : the type has none) */
+  state?: string;
 }
 
 export interface Link {
@@ -384,6 +424,8 @@ export interface NodeDraft {
   key?: string;
   type?: string;
   props?: Struct;
+  /** transition_node: target state; create_node: state the node is born in */
+  state?: string;
 }
 
 export interface LinkDraft {
@@ -395,7 +437,7 @@ export interface LinkDraft {
 }
 
 export interface Proposal {
-  op?: 'create_node' | 'update_node' | 'delete_node' | 'add_link' | 'remove_link' | string;
+  op?: 'create_node' | 'update_node' | 'delete_node' | 'transition_node' | 'add_link' | 'remove_link' | string;
   node?: NodeDraft;
   link?: LinkDraft;
 }

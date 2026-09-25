@@ -8,11 +8,13 @@
   import RowTools from '../../components/RowTools.svelte';
   import StatusBadge from '../../components/StatusBadge.svelte';
   import OntologyGraph from '../../components/OntologyGraph.svelte';
+  import LifecycleEditor from '../../components/LifecycleEditor.svelte';
+  import NodeTypeMeta from '../../components/NodeTypeMeta.svelte';
   import { provideActions, useReveal, notify, requestReveal } from '../../shell/workbench.svelte';
   import { replaceTab, openTab } from '../../shell/tabs.svelte';
   import { domainDrafts, getDomainDraft } from '../../stores/domains.svelte';
   import { formatDate } from '../../api';
-  import { emptyNodeType, emptyLinkType, moveItem } from '../../methodologyForm';
+  import { emptyNodeType, emptyLinkType, moveItem, defaultLifecycle } from '../../methodologyForm';
   import { domainActions, domainDraftOf, domainSpec } from './domainTabs';
   import { methodologySpec } from './methodologyTabs';
 
@@ -28,6 +30,32 @@
     view = 'form';
     await tick();
     requestReveal(tab.id, kind === 'node' ? `nodeTypes[${index}]` : `linkTypes[${index}]`);
+  }
+
+  const lifecycleNames = $derived(f.lifecycles.map((l) => l.name.trim()).filter(Boolean));
+
+  /** nearest ancestor that names a lifecycle, when the type names none itself */
+  function inheritedLifecycle(i: number): { type: string; lifecycle: string } | undefined {
+    if (f.nodeTypes[i].lifecycle) return undefined;
+    const seen = new Set<string>();
+    let cur = f.nodeTypes[i].extends;
+    while (cur && !seen.has(cur)) {
+      seen.add(cur);
+      const p = f.nodeTypes.find((t) => t.name.trim() === cur);
+      if (!p) return undefined;
+      if (p.lifecycle) return { type: p.name, lifecycle: p.lifecycle };
+      cur = p.extends;
+    }
+    return undefined;
+  }
+
+  /** does a node type using the lifecycle embed other nodes (a document)? */
+  const usedByDocument = (name: string) => f.nodeTypes.some((t) => t.document.trim() && t.lifecycle === name);
+
+  function addLifecycle() {
+    let name = 'lifecycle';
+    for (let k = 2; f.lifecycles.some((l) => l.name === name); k++) name = `lifecycle-${k}`;
+    f.lifecycles.push(defaultLifecycle(name));
   }
 
   async function createNew() {
@@ -145,6 +173,14 @@
                 <RowTools index={i} count={f.nodeTypes.length} label="the node type" onmove={(delta) => moveItem(f.nodeTypes, i, delta)} onremove={() => f.nodeTypes.splice(i, 1)} />
               {/if}
             </div>
+            <NodeTypeMeta
+              bind:n={f.nodeTypes[i]}
+              lifecycles={lifecycleNames}
+              typeNames={d.nodeTypeNames}
+              inherited={inheritedLifecycle(i)}
+              readonly={d.readonly}
+              path="nodeTypes[{i}]"
+            />
           {:else}
             <p class="empty">No node types.</p>
           {/each}
@@ -180,6 +216,38 @@
           {/each}
           {#if !d.readonly}
             <button type="button" class="small" onclick={() => f.linkTypes.push(emptyLinkType())}>+ Link type</button>
+          {/if}
+        </section>
+
+        <section class="card" id="d-lifecycles">
+          <h3>Lifecycles</h3>
+          <p class="hint">
+            A lifecycle gives the nodes of a type a state. A node is modified only in an <em>editable</em> state, which it holds only
+            through a change: reopen it, edit it, and move it to a non-editable state before the change is applied. Node types name
+            their lifecycle above; a subtype inherits it.
+          </p>
+          {#each f.lifecycles as l, i}
+            <details class="lifecycle" open={f.lifecycles.length === 1} data-path="lifecycles[{i}]">
+              <summary class:has-issues={d.count(`lifecycles[${i}]`) > 0}>
+                <strong class="mono">{l.name || '(unnamed)'}</strong>
+                <span class="hint">{l.states.length} states · {l.transitions.length} transitions · used by {f.nodeTypes.filter((t) => t.lifecycle === l.name).length} type(s)</span>
+              </summary>
+              <div class="lifecycle-body">
+                <div class="field">
+                  <label for="lc-name-{i}">Name</label>
+                  <input id="lc-name-{i}" type="text" class="mono" bind:value={l.name} class:bad={d.bad(`lifecycles[${i}].name`)} data-path="lifecycles[{i}].name" placeholder="requirement" />
+                </div>
+                <LifecycleEditor bind:lc={f.lifecycles[i]} readonly={d.readonly} documents={usedByDocument(l.name)} path="lifecycles[{i}]" />
+                {#if !d.readonly}
+                  <button type="button" class="small danger" onclick={() => f.lifecycles.splice(i, 1)}>Delete the lifecycle</button>
+                {/if}
+              </div>
+            </details>
+          {:else}
+            <p class="empty">No lifecycles: the nodes have no state.</p>
+          {/each}
+          {#if !d.readonly}
+            <button type="button" class="small" onclick={addLifecycle}>+ Lifecycle</button>
           {/if}
         </section>
 
@@ -231,6 +299,27 @@
   .seg button.on {
     background: var(--accent);
     color: var(--accent-text);
+  }
+  .lifecycle {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.4rem 0.7rem;
+    margin-bottom: 0.5rem;
+  }
+  .lifecycle summary {
+    cursor: pointer;
+    display: flex;
+    gap: 0.6rem;
+    align-items: baseline;
+  }
+  .lifecycle summary.has-issues {
+    box-shadow: inset 3px 0 0 var(--danger);
+    padding-left: 5px;
+  }
+  .lifecycle-body {
+    display: grid;
+    gap: 0.5rem;
+    padding: 0.5rem 0 0.2rem;
   }
   h3.sub {
     margin-top: 1rem;

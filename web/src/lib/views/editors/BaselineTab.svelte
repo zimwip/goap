@@ -122,13 +122,14 @@
     {#if shownNodes.length}
       <div class="scroll">
         <table>
-          <thead><tr><th>Key</th><th>Type</th><th>Version</th><th>Title</th></tr></thead>
+          <thead><tr><th>Key</th><th>Type</th><th>Version</th><th>State</th><th>Title</th></tr></thead>
           <tbody>
             {#each shownNodes as n (n.id)}
               <tr class:deleted={n.deleted} class:sel={selectedKey === n.key}>
                 <td><button type="button" class="link mono" onclick={() => showNode(n)}>{n.key}</button></td>
                 <td>{n.type}</td>
                 <td>v{n.version ?? 0}</td>
+                <td>{#if n.state}<span class="state">{n.state}</span>{/if}</td>
                 <td>{nodeTitle(n)}</td>
               </tr>
             {/each}
@@ -177,6 +178,13 @@
 </div>
 
 <style>
+  .state {
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 0 0.5rem;
+    font-size: 0.8rem;
+    font-family: var(--mono);
+  }
   .wide {
     max-width: 1400px;
   }

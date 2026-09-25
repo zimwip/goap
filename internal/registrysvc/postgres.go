@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/zimwip/goap/pkg/condition"
+	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/methodology"
 )
 
@@ -53,7 +54,7 @@ func (s PostgresStore) Save(ctx context.Context, r Record) error {
 				id, m.Description, r.UpdatedAt, r.UpdatedBy, m.DomainRef); err != nil {
 				return err
 			}
-			for _, t := range []string{"methodology_node_type", "methodology_link_type", "methodology_condition", "methodology_action", "methodology_goal", "methodology_agent"} {
+			for _, t := range []string{"methodology_node_type", "methodology_link_type", "methodology_lifecycle", "methodology_condition", "methodology_action", "methodology_goal", "methodology_agent"} {
 				if _, err := tx.Exec(ctx, `DELETE FROM `+t+` WHERE methodology_id = $1`, id); err != nil {
 					return err
 				}
@@ -65,8 +66,12 @@ func (s PostgresStore) Save(ctx context.Context, r Record) error {
 			if props == nil {
 				props = []string{}
 			}
-			batch.Queue(`INSERT INTO methodology_node_type (methodology_id, position, name, description, properties, extends) VALUES ($1, $2, $3, $4, $5, $6)`,
-				id, i, n.Name, n.Description, props, n.Extends)
+			batch.Queue(`INSERT INTO methodology_node_type (methodology_id, position, name, description, properties, extends, meta) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+				id, i, n.Name, n.Description, props, n.Extends, n.MetaJSON())
+		}
+		for i, l := range m.Domain.Lifecycles {
+			def, _ := json.Marshal(l)
+			batch.Queue(`INSERT INTO methodology_lifecycle (methodology_id, position, name, definition) VALUES ($1, $2, $3, $4)`, id, i, l.Name, def)
 		}
 		for i, l := range m.Domain.LinkTypes {
 			batch.Queue(`INSERT INTO methodology_link_type VALUES ($1, $2, $3, $4, $5)`, id, i, l.Name, l.From, l.To)
@@ -168,19 +173,24 @@ func (s PostgresStore) Get(ctx context.Context, name, version string) (Record, e
 }
 
 func (s PostgresStore) loadSections(ctx context.Context, id string, m *methodology.Methodology) error {
-	rows, err := s.Pool.Query(ctx, `SELECT name, description, properties, extends FROM methodology_node_type WHERE methodology_id = $1 ORDER BY position`, id)
+	rows, err := s.Pool.Query(ctx, `SELECT name, description, properties, extends, meta FROM methodology_node_type WHERE methodology_id = $1 ORDER BY position`, id)
 	if err != nil {
 		return err
 	}
 	m.Domain.NodeTypes, err = pgx.CollectRows(rows, func(r pgx.CollectableRow) (methodology.NodeType, error) {
 		var n methodology.NodeType
-		err := r.Scan(&n.Name, &n.Description, &n.Properties, &n.Extends)
+		var meta []byte
+		err := r.Scan(&n.Name, &n.Description, &n.Properties, &n.Extends, &meta)
+		n.SetMeta(meta)
 		if len(n.Properties) == 0 {
 			n.Properties = nil
 		}
 		return n, err
 	})
 	if err != nil {
+		return err
+	}
+	if m.Domain.Lifecycles, err = s.loadLifecycles(ctx, `SELECT definition FROM methodology_lifecycle WHERE methodology_id = $1 ORDER BY position`, id); err != nil {
 		return err
 	}
 	rows, err = s.Pool.Query(ctx, `SELECT name, from_type, to_type FROM methodology_link_type WHERE methodology_id = $1 ORDER BY position`, id)
@@ -384,7 +394,7 @@ func (s PostgresStore) SaveDomain(ctx context.Context, r DomainRecord) error {
 				id, d.Description, r.UpdatedAt, r.UpdatedBy); err != nil {
 				return err
 			}
-			for _, t := range []string{"domain_node_type", "domain_link_type"} {
+			for _, t := range []string{"domain_node_type", "domain_link_type", "domain_lifecycle"} {
 				if _, err := tx.Exec(ctx, `DELETE FROM `+t+` WHERE domain_id = $1`, id); err != nil {
 					return err
 				}
@@ -392,8 +402,12 @@ func (s PostgresStore) SaveDomain(ctx context.Context, r DomainRecord) error {
 		}
 		batch := &pgx.Batch{}
 		for i, n := range d.NodeTypes {
-			batch.Queue(`INSERT INTO domain_node_type (domain_id, position, name, description, properties, extends) VALUES ($1, $2, $3, $4, $5, $6)`,
-				id, i, n.Name, n.Description, orEmptyStrings(n.Properties), n.Extends)
+			batch.Queue(`INSERT INTO domain_node_type (domain_id, position, name, description, properties, extends, meta) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+				id, i, n.Name, n.Description, orEmptyStrings(n.Properties), n.Extends, n.MetaJSON())
+		}
+		for i, l := range d.Lifecycles {
+			def, _ := json.Marshal(l)
+			batch.Queue(`INSERT INTO domain_lifecycle (domain_id, position, name, definition) VALUES ($1, $2, $3, $4)`, id, i, l.Name, def)
 		}
 		for i, l := range d.LinkTypes {
 			batch.Queue(`INSERT INTO domain_link_type (domain_id, position, name, from_type, to_type) VALUES ($1, $2, $3, $4, $5)`, id, i, l.Name, l.From, l.To)
@@ -403,17 +417,22 @@ func (s PostgresStore) SaveDomain(ctx context.Context, r DomainRecord) error {
 }
 
 func (s PostgresStore) loadDomainSections(ctx context.Context, id string, d *methodology.Domain) error {
-	rows, err := s.Pool.Query(ctx, `SELECT name, description, properties, extends FROM domain_node_type WHERE domain_id = $1 ORDER BY position`, id)
+	rows, err := s.Pool.Query(ctx, `SELECT name, description, properties, extends, meta FROM domain_node_type WHERE domain_id = $1 ORDER BY position`, id)
 	if err != nil {
 		return err
 	}
 	d.NodeTypes, err = pgx.CollectRows(rows, func(r pgx.CollectableRow) (methodology.NodeType, error) {
 		var n methodology.NodeType
-		err := r.Scan(&n.Name, &n.Description, &n.Properties, &n.Extends)
+		var meta []byte
+		err := r.Scan(&n.Name, &n.Description, &n.Properties, &n.Extends, &meta)
+		n.SetMeta(meta)
 		n.Properties = nilIfNoStrings(n.Properties)
 		return n, err
 	})
 	if err != nil {
+		return err
+	}
+	if d.Lifecycles, err = s.loadLifecycles(ctx, `SELECT definition FROM domain_lifecycle WHERE domain_id = $1 ORDER BY position`, id); err != nil {
 		return err
 	}
 	rows, err = s.Pool.Query(ctx, `SELECT name, from_type, to_type FROM domain_link_type WHERE domain_id = $1 ORDER BY position`, id)
@@ -504,4 +523,19 @@ func (s PostgresStore) DeleteDomain(ctx context.Context, name, version string) e
 	}
 	_, err = s.Pool.Exec(ctx, `DELETE FROM domain WHERE name = $1 AND version = $2 AND status = 'draft'`, name, version)
 	return err
+}
+
+func (s PostgresStore) loadLifecycles(ctx context.Context, query, id string) ([]domain.Lifecycle, error) {
+	rows, err := s.Pool.Query(ctx, query, id)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (domain.Lifecycle, error) {
+		var raw []byte
+		var l domain.Lifecycle
+		if err := r.Scan(&raw); err != nil {
+			return l, err
+		}
+		return l, json.Unmarshal(raw, &l)
+	})
 }

@@ -3,6 +3,7 @@ package graphsvc
 
 import (
 	"context"
+	"fmt"
 
 	"connectrpc.com/connect"
 
@@ -46,7 +47,23 @@ func (h *Handler) publish(ctx context.Context, subject string, v any) {
 	}
 }
 
+// refuseDirectWrite rejects writes outside a change to nodes of a type that has
+// a lifecycle (ADR 0014): such nodes are modified through changes only.
+func (h *Handler) refuseDirectWrite(ctx context.Context, typ string) error {
+	controlled, err := h.Graph.LifecycleControlled(ctx, typ)
+	if err != nil {
+		return rpcerr.ToConnect(err)
+	}
+	if controlled {
+		return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("node type %s has a lifecycle: modify its nodes through a change", typ))
+	}
+	return nil
+}
+
 func (h *Handler) CreateNode(ctx context.Context, r *connect.Request[graphv1.CreateNodeRequest]) (*connect.Response[graphv1.CreateNodeResponse], error) {
+	if err := h.refuseDirectWrite(ctx, r.Msg.Type); err != nil {
+		return nil, err
+	}
 	n, err := h.Graph.CreateNode(ctx, graph.NewNode{Key: r.Msg.Key, Type: r.Msg.Type, Properties: pbconv.Map(r.Msg.Props)})
 	return res(&graphv1.CreateNodeResponse{Node: pbconv.NodeToPB(n)}, err)
 }
@@ -66,6 +83,11 @@ func (h *Handler) CreateObject(ctx context.Context, r *connect.Request[graphv1.C
 }
 
 func (h *Handler) UpdateNode(ctx context.Context, r *connect.Request[graphv1.UpdateNodeRequest]) (*connect.Response[graphv1.UpdateNodeResponse], error) {
+	if cur, err := h.Graph.Node(ctx, pbconv.RefFromPB(r.Msg.Base)); err == nil {
+		if err := h.refuseDirectWrite(ctx, cur.Type); err != nil {
+			return nil, err
+		}
+	}
 	n, err := h.Graph.UpdateNode(ctx, pbconv.RefFromPB(r.Msg.Base), pbconv.Map(r.Msg.Props))
 	return res(&graphv1.UpdateNodeResponse{Node: pbconv.NodeToPB(n)}, err)
 }
@@ -84,6 +106,11 @@ func (h *Handler) GetNode(ctx context.Context, r *connect.Request[graphv1.GetNod
 }
 
 func (h *Handler) CreateLink(ctx context.Context, r *connect.Request[graphv1.CreateLinkRequest]) (*connect.Response[graphv1.CreateLinkResponse], error) {
+	if src, err := h.Graph.Node(ctx, pbconv.RefFromPB(r.Msg.From)); err == nil {
+		if err := h.refuseDirectWrite(ctx, src.Type); err != nil {
+			return nil, err
+		}
+	}
 	l, err := h.Graph.Link(ctx, r.Msg.Type, pbconv.RefFromPB(r.Msg.From), pbconv.RefFromPB(r.Msg.To), pbconv.Map(r.Msg.Props))
 	return res(&graphv1.CreateLinkResponse{Link: pbconv.LinkToPB(l)}, err)
 }
@@ -144,6 +171,24 @@ func (h *Handler) GetChange(ctx context.Context, r *connect.Request[graphv1.GetC
 func (h *Handler) ListChanges(ctx context.Context, _ *connect.Request[graphv1.ListChangesRequest]) (*connect.Response[graphv1.ListChangesResponse], error) {
 	cs, err := h.Graph.Changes(ctx)
 	out := &graphv1.ListChangesResponse{}
+	for _, c := range cs {
+		out.Changes = append(out.Changes, pbconv.ChangeToPB(c))
+	}
+	return res(out, err)
+}
+
+func (h *Handler) GetChangeNodes(ctx context.Context, r *connect.Request[graphv1.GetChangeNodesRequest]) (*connect.Response[graphv1.GetChangeNodesResponse], error) {
+	refs, err := h.Graph.ChangeNodes(ctx, domain.ChangeID(r.Msg.ChangeId))
+	out := &graphv1.GetChangeNodesResponse{}
+	for _, ref := range refs {
+		out.Nodes = append(out.Nodes, pbconv.RefToPB(ref))
+	}
+	return res(out, err)
+}
+
+func (h *Handler) ListNodeChanges(ctx context.Context, r *connect.Request[graphv1.ListNodeChangesRequest]) (*connect.Response[graphv1.ListNodeChangesResponse], error) {
+	cs, err := h.Graph.NodeChanges(ctx, domain.NodeID(r.Msg.NodeId))
+	out := &graphv1.ListNodeChangesResponse{}
 	for _, c := range cs {
 		out.Changes = append(out.Changes, pbconv.ChangeToPB(c))
 	}
@@ -225,6 +270,7 @@ func (h *Handler) GetBlackboard(ctx context.Context, r *connect.Request[graphv1.
 }
 
 func (h *Handler) ApplyChange(ctx context.Context, r *connect.Request[graphv1.ApplyChangeRequest]) (*connect.Response[graphv1.ApplyChangeResponse], error) {
+	ctx = h.Identity.Context(ctx, r.Header()) // lifecycle transitions are authorized for the caller
 	b, err := h.Graph.Apply(ctx, domain.ChangeID(r.Msg.ChangeId), r.Msg.BaselineName)
 	if err == nil {
 		if c, cerr := h.Graph.Change(ctx, domain.ChangeID(r.Msg.ChangeId)); cerr == nil {

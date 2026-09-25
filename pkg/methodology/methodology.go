@@ -5,6 +5,7 @@ package methodology
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"maps"
 	"regexp"
@@ -18,6 +19,7 @@ import (
 	"github.com/zimwip/goap/pkg/condition"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/goap"
+	"github.com/zimwip/goap/pkg/guard"
 )
 
 // Methodology is the declarative definition deployed in the registry.
@@ -97,6 +99,8 @@ type Trigger struct {
 type Schema struct {
 	NodeTypes []NodeType `yaml:"nodeTypes" json:"nodeTypes"`
 	LinkTypes []LinkType `yaml:"linkTypes" json:"linkTypes"`
+	// Lifecycles are the state machines node types refer to by name.
+	Lifecycles []domain.Lifecycle `yaml:"lifecycles,omitempty" json:"lifecycles,omitempty"`
 }
 
 // NodeType is a domain node type.
@@ -108,7 +112,20 @@ type NodeType struct {
 	// types of its parent, and conditions on the parent apply to it
 	// (x.types contains every supertype, ADR 0009 §6).
 	Extends string `yaml:"extends,omitempty" json:"extends,omitempty"`
+	// Lifecycle names the state machine of the nodes of the type (one of the
+	// domain's lifecycles, ADR 0014). Inherited through extends; empty: the
+	// nodes have no state.
+	Lifecycle string `yaml:"lifecycle,omitempty" json:"lifecycle,omitempty"`
+	// Document makes the type a document embedding nodes of other types
+	// through outgoing "contains" links.
+	Document *domain.DocumentSpec `yaml:"document,omitempty" json:"document,omitempty"`
+	// ChangeControlled: nodes are only modified through a change (default
+	// true). False: direct writes, and no lifecycle.
+	ChangeControlled *bool `yaml:"changeControlled,omitempty" json:"changeControlled,omitempty"`
 }
+
+// IsChangeControlled tells whether the nodes of the type are modified through changes only.
+func (n NodeType) IsChangeControlled() bool { return n.ChangeControlled == nil || *n.ChangeControlled }
 
 // UnmarshalYAML accepts either a plain name or a full object.
 func (n *NodeType) UnmarshalYAML(v *yaml.Node) error {
@@ -259,6 +276,8 @@ func (is Issues) Error() string {
 	return strings.Join(msgs, "; ")
 }
 
+var lifecycleNameRE = regexp.MustCompile(`^[a-z][a-z0-9_-]*$`)
+
 var nameRE = regexp.MustCompile(`^[a-z][a-z0-9_-]*$`)
 
 // Validate returns every problem of the definition (empty when valid).
@@ -312,6 +331,7 @@ func (s Schema) check(prefix string, add func(path, format string, args ...any))
 			seen[t] = true
 		}
 	}
+	s.checkLifecycles(prefix, nodeTypes, add)
 	linkTypes = map[string]bool{}
 	for i, l := range s.LinkTypes {
 		path := fmt.Sprintf(prefix+"linkTypes[%d]", i)
@@ -329,6 +349,125 @@ func (s Schema) check(prefix string, add func(path, format string, args ...any))
 		}
 	}
 	return nodeTypes, linkTypes
+}
+
+// Lifecycle returns the named lifecycle of the schema.
+func (s Schema) Lifecycle(name string) *domain.Lifecycle {
+	for i := range s.Lifecycles {
+		if s.Lifecycles[i].Name == name {
+			return &s.Lifecycles[i]
+		}
+	}
+	return nil
+}
+
+// LifecycleOf returns the lifecycle of a node type: the one it names, else the
+// one of its nearest ancestor that names one. Nil when the nodes have no state.
+func (s Schema) LifecycleOf(name string) *domain.Lifecycle {
+	byName := map[string]NodeType{}
+	for _, n := range s.NodeTypes {
+		byName[n.Name] = n
+	}
+	for seen := map[string]bool{}; name != "" && !seen[name]; name = byName[name].Extends {
+		seen[name] = true
+		if ref := byName[name].Lifecycle; ref != "" {
+			return s.Lifecycle(ref)
+		}
+	}
+	return nil
+}
+
+// checkLifecycles validates the lifecycles, the references to them and the
+// document declarations.
+func (s Schema) checkLifecycles(prefix string, nodeTypes map[string]bool, add func(path, format string, args ...any)) {
+	names := map[string]bool{}
+	for i, l := range s.Lifecycles {
+		path := fmt.Sprintf(prefix+"lifecycles[%d]", i)
+		switch {
+		case l.Name == "":
+			add(path+".name", "name required")
+		case !lifecycleNameRE.MatchString(l.Name):
+			add(path+".name", "name must be lowercase letters, digits, '-' or '_' and start with a letter")
+		case names[l.Name]:
+			add(path+".name", "duplicate lifecycle %s", l.Name)
+		}
+		names[l.Name] = true
+		for _, msg := range l.Issues() {
+			add(path, "%s", msg)
+		}
+		for j, t := range l.Transitions {
+			if _, err := guard.Compile(t.Guard); err != nil {
+				add(fmt.Sprintf(path+".transitions[%d].guard", j), "%v", err)
+			}
+		}
+	}
+	for i, n := range s.NodeTypes {
+		path := fmt.Sprintf(prefix+"nodeTypes[%d]", i)
+		if n.Lifecycle != "" {
+			if !names[n.Lifecycle] {
+				add(path+".lifecycle", "unknown lifecycle %s", n.Lifecycle)
+			}
+			if !n.IsChangeControlled() {
+				add(path+".changeControlled", "a type with a lifecycle must be change controlled")
+			}
+		}
+		if d := n.Document; d != nil {
+			if len(d.Contains) == 0 {
+				add(path+".document.contains", "a document contains at least one node type")
+			}
+			for _, c := range d.Contains {
+				if !nodeTypes[c] {
+					add(path+".document.contains", "unknown node type %s", c)
+				}
+			}
+		}
+	}
+	// child states of a document transition must exist on a contained type
+	for i, n := range s.NodeTypes {
+		l := s.LifecycleOf(n.Name)
+		if l == nil {
+			continue
+		}
+		for _, t := range l.Transitions {
+			if t.Children == nil {
+				continue
+			}
+			path := fmt.Sprintf(prefix+"nodeTypes[%d].lifecycle", i)
+			doc := s.documentOf(n.Name)
+			if doc == nil {
+				add(path, "transition %s of lifecycle %s constrains children but %s is not a document", t.Name, l.Name, n.Name)
+				continue
+			}
+			for _, st := range t.Children.States {
+				found := false
+				for _, c := range doc.Contains {
+					if cl := s.LifecycleOf(c); cl != nil {
+						if _, ok := cl.State(st); ok {
+							found = true
+						}
+					}
+				}
+				if !found {
+					add(path, "child state %q of transition %s exists on none of the contained types", st, t.Name)
+				}
+			}
+		}
+	}
+}
+
+// documentOf returns the document spec of a type (inherited through extends).
+func (s Schema) documentOf(name string) *domain.DocumentSpec {
+	byName := map[string]NodeType{}
+	for _, n := range s.NodeTypes {
+		byName[n.Name] = n
+	}
+	for seen := map[string]bool{}; name != "" && !seen[name]; name = byName[name].Extends {
+		seen[name] = true
+		if d := byName[name].Document; d != nil {
+			return d
+		}
+	}
+	return nil
 }
 
 func (m *Methodology) compile() (*Compiled, Issues) {
@@ -779,4 +918,27 @@ func (m *Methodology) YAML() ([]byte, error) {
 		return nil, err
 	}
 	return b.Bytes(), enc.Close()
+}
+
+// nodeTypeMeta is the part of a node type stored as a JSON document by the
+// structured (PostgreSQL) registry store.
+type nodeTypeMeta struct {
+	Lifecycle        string               `json:"lifecycle,omitempty"`
+	Document         *domain.DocumentSpec `json:"document,omitempty"`
+	ChangeControlled *bool                `json:"changeControlled,omitempty"`
+}
+
+// MetaJSON serializes the lifecycle, document and change-control declarations.
+func (n NodeType) MetaJSON() []byte {
+	b, _ := json.Marshal(nodeTypeMeta{Lifecycle: n.Lifecycle, Document: n.Document, ChangeControlled: n.ChangeControlled})
+	return b
+}
+
+// SetMeta restores what MetaJSON stored.
+func (n *NodeType) SetMeta(raw []byte) {
+	var m nodeTypeMeta
+	if len(raw) == 0 || json.Unmarshal(raw, &m) != nil {
+		return
+	}
+	n.Lifecycle, n.Document, n.ChangeControlled = m.Lifecycle, m.Document, m.ChangeControlled
 }

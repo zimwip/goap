@@ -26,6 +26,7 @@ func TestResolverAutoLinksInstanceOf(t *testing.T) {
 			Key   string         `json:"key,omitempty"`
 			Type  string         `json:"type,omitempty"`
 			Props map[string]any `json:"props,omitempty"`
+			State string         `json:"state,omitempty"`
 		}{Key: "REQ-10", Type: "Requirement"}},
 	}}, "test")
 	if err != nil {
@@ -59,6 +60,7 @@ func TestResolverSkipsUnknownType(t *testing.T) {
 			Key   string         `json:"key,omitempty"`
 			Type  string         `json:"type,omitempty"`
 			Props map[string]any `json:"props,omitempty"`
+			State string         `json:"state,omitempty"`
 		}{Key: "REQ-10", Type: "Requirement"}},
 	}}, "test")
 	if err != nil {

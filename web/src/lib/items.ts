@@ -36,6 +36,7 @@ const OPS: Record<string, string> = {
   create_node: 'Create',
   update_node: 'Update',
   delete_node: 'Delete',
+  transition_node: 'Move',
   add_link: 'Link',
   remove_link: 'Unlink',
 };
@@ -54,7 +55,8 @@ export function describeProposal(ctx: ItemContext, item: ChangeItem | undefined)
   const n = p.node;
   const key = n?.key || refKey(ctx, n?.base) || '?';
   const type = n?.type || (n?.base?.id ? ctx.nodes.get(n.base.id)?.type : '') || '';
-  return `${opLabel(p.op)} ${key}${type ? ` (${type})` : ''}`;
+  const to = p.op === 'transition_node' && n?.state ? ` → ${n.state}` : '';
+  return `${opLabel(p.op)} ${key}${type ? ` (${type})` : ''}${to}`;
 }
 
 /** Text of a JSON value for compact display. */
