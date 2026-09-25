@@ -5,8 +5,9 @@
   import type { Tab } from '../../shell/types';
   import Icon from '../../shell/Icon.svelte';
   import RowTools from '../../components/RowTools.svelte';
+  import EditorPanes, { type Pane } from '../../components/EditorPanes.svelte';
   import DraftHeader from './DraftHeader.svelte';
-  import { provideActions, useReveal, notify } from '../../shell/workbench.svelte';
+  import { provideActions, useReveal, notify, revealState } from '../../shell/workbench.svelte';
   import { replaceTab } from '../../shell/tabs.svelte';
   import { drafts, getDraft } from '../../stores/drafts.svelte';
   import { domains, refreshDomains, publishedDomainVersions } from '../../stores/domains.svelte';
@@ -91,6 +92,26 @@
 
   const SECTIONS: Section[] = ['agents', 'actions', 'conditions', 'goals'];
 
+  let pane = $state(untrack(() => tab.params.pane) || 'overview');
+  $effect(() => {
+    tab.params.pane = pane;
+  });
+
+  const panes = $derived<Pane[]>([
+    { id: 'overview', label: 'Overview' },
+    { id: 'domain', label: 'Domain', badge: d.usesDomainRef ? f.domainRef : `${f.nodeTypes.length} types` },
+    ...SECTIONS.map((s) => ({ id: s, label: SECTION_LABEL[s], badge: f[s].length })),
+  ]);
+
+  // a reveal request (problems console, issue path…) opens the pane that holds the field
+  $effect(() => {
+    void revealState.seq;
+    if (revealState.tabId !== tab.id || !revealState.path) return;
+    const path = revealState.path;
+    const section = SECTIONS.find((s) => path.startsWith(s));
+    pane = section ?? (/^(domainRef|domain|nodeTypes|linkTypes)/.test(path) ? 'domain' : 'overview');
+  });
+
   function add(section: Section) {
     const factories = { agents: emptyAgent, actions: emptyAction, conditions: emptyCondition, goals: emptyGoal };
     (d.form[section] as SectionItem[]).push(factories[section]());
@@ -114,7 +135,8 @@
   {:else}
     <DraftHeader draft={d} icon="book" kind="Methodology" title={d.isNew ? 'New methodology' : d.label} dirty={d.dirty} />
 
-    <fieldset class="plain" disabled={d.readonly}>
+    {#if d.isNew}
+      <fieldset class="plain" disabled={d.readonly}>
       <section class="card" id="m-general">
         <h3>General</h3>
         <div class="grid">
@@ -161,8 +183,59 @@
           <p class="hint">Create the draft to add the domain, agents, actions, conditions, and goals.</p>
         {/if}
       </section>
-
-      {#if !d.isNew}
+      </fieldset>
+    {:else}
+      <EditorPanes {panes} bind:active={pane} label="Methodology sections">
+        {#snippet children(active)}
+          <fieldset class="plain" disabled={d.readonly}>
+            {#if active === 'overview'}
+      <section class="card" id="m-general">
+        <h3>General</h3>
+        <div class="grid">
+          <div class="field">
+            <label for="m-name">Name</label>
+            <input
+              id="m-name"
+              type="text"
+              class="mono"
+              bind:value={f.name}
+              disabled={!d.isNew}
+              class:bad={d.bad('name')}
+              data-path="name"
+              placeholder="impact-analysis"
+            />
+          </div>
+          <div class="field">
+            <label for="m-version">Version</label>
+            <input
+              id="m-version"
+              type="text"
+              class="mono"
+              bind:value={f.version}
+              disabled={!d.isNew}
+              class:bad={d.bad('version')}
+              data-path="version"
+              placeholder="0.1.0"
+            />
+          </div>
+        </div>
+        <div class="field">
+          <label for="m-desc">Description</label>
+          <textarea id="m-desc" rows="3" bind:value={f.description} class:bad={d.bad('description')} data-path="description"
+          ></textarea>
+        </div>
+        {#if d.meta.updatedAt || d.meta.publishedAt}
+          <p class="hint">
+            {#if d.meta.createdAt}Created on {formatDate(d.meta.createdAt)}.{/if}
+            {#if d.meta.updatedAt}Modified on {formatDate(d.meta.updatedAt)}{d.meta.updatedBy ? ` by ${d.meta.updatedBy}` : ''}.{/if}
+            {#if d.meta.publishedAt}Published on {formatDate(d.meta.publishedAt)}.{/if}
+          </p>
+        {/if}
+        {#if d.isNew}
+          <p class="hint">Create the draft to add the domain, agents, actions, conditions, and goals.</p>
+        {/if}
+      </section>
+            {:else if active === 'domain'}
         <section class="card" id="m-domain">
           <h3>Domain</h3>
           <div class="grid">
@@ -312,48 +385,67 @@
           {/if}
           {/if}
         </section>
-
-        <section class="card">
-          <h3>Content</h3>
-          <div class="content">
-            {#each SECTIONS as s (s)}
-              <div class="col" data-path={s}>
-                <div class="col-head">
-                  <Icon name={SECTION_ICON[s]} size={14} />
-                  <strong>{SECTION_LABEL[s]}</strong>
-                  <span class="hint">{f[s].length}</span>
-                  <span class="grow"></span>
+            {:else if SECTIONS.includes(active as Section)}
+              {@const s = active as Section}
+              <section class="card" data-path={s}>
+                <div class="row head">
+                  <Icon name={SECTION_ICON[s]} size={16} />
+                  <h3 class="grow">{SECTION_LABEL[s]} <span class="hint">{f[s].length}</span></h3>
                   {#if !d.readonly}
-                    <button type="button" class="small ghost" onclick={() => add(s)} aria-label={`Add: ${SECTION_LABEL[s]}`}>+</button>
+                    <button type="button" class="small primary" onclick={() => add(s)}>+ Add</button>
                   {/if}
                 </div>
-                <ul>
+                <p class="hint">Click an element to open it; double-click to keep its tab open.</p>
+                <ul class="items">
                   {#each f[s] as it, i (it.uid)}
                     {@const n = d.count(`${s}[${i}]`)}
-                    <li>
-                      <button
-                        type="button"
-                        class="link"
-                        onclick={() => openItem(d, s, it)}
-                        ondblclick={() => openItem(d, s, it, true)}>{it.name || '(unnamed)'}</button
-                      >
+                    <li data-path="{s}[{i}]" class:has-issues={n > 0}>
+                      <button type="button" class="link" onclick={() => openItem(d, s, it)} ondblclick={() => openItem(d, s, it, true)}>{it.name || '(unnamed)'}</button>
                       <span class="hint ell">{summary(s, it)}</span>
-                      {#if n}<span class="count">{n}</span>{/if}
+                      {#if n}<span class="count bad" title="Issues">{n}</span>{/if}
                     </li>
                   {:else}
-                    <li class="empty">{s === 'agents' ? 'Default agent (all actions)' : 'None'}</li>
+                    <li class="empty">{s === 'agents' ? 'No agent: the default agent runs every action.' : 'None yet.'}</li>
                   {/each}
                 </ul>
-              </div>
-            {/each}
-          </div>
-        </section>
-      {/if}
-    </fieldset>
+              </section>
+            {/if}
+          </fieldset>
+        {/snippet}
+      </EditorPanes>
+    {/if}
   {/if}
 </div>
 
 <style>
+  .row.head {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .items {
+    list-style: none;
+    margin: 0.4rem 0 0;
+    padding: 0;
+    display: grid;
+    gap: 0.2rem;
+  }
+  .items li {
+    display: flex;
+    align-items: baseline;
+    gap: 0.6rem;
+    padding: 0.2rem 0.4rem;
+    border-radius: 4px;
+  }
+  .items li:hover {
+    background: var(--hover);
+  }
+  .items li.has-issues {
+    box-shadow: inset 3px 0 0 var(--danger);
+  }
+  .count.bad {
+    color: var(--danger);
+  }
   h4.sub {
     margin-top: 1rem;
   }
@@ -381,32 +473,6 @@
   }
   .cols {
     margin: 0.3rem 0 0;
-  }
-  .content {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 0.8rem;
-  }
-  .col-head {
-    display: flex;
-    align-items: center;
-    gap: 0.35rem;
-    border-bottom: 1px solid var(--border);
-    padding-bottom: 0.2rem;
-    margin-bottom: 0.3rem;
-  }
-  .col ul {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: grid;
-    gap: 0.15rem;
-  }
-  .col li {
-    display: flex;
-    gap: 0.4rem;
-    align-items: baseline;
-    min-width: 0;
   }
   .ell {
     overflow: hidden;
