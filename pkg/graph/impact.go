@@ -90,7 +90,7 @@ func (g *Graph) Impacts(ctx context.Context, id domain.ChangeID) (out []Impact, 
 		}
 		applied := c.Status == domain.ChangeApplied || c.Status == domain.ChangeMergePending
 		for _, it := range c.Items {
-			if st := c.EffectiveStatus(it.ID); it.Kind != domain.KindImpact || st == domain.ItemRejected || st == domain.ItemSuperseded {
+			if it.Kind != domain.KindImpact || !c.InEffect(it.ID) {
 				continue
 			}
 			im := Impact{Item: it.ID}

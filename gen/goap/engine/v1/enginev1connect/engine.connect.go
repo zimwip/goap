@@ -45,6 +45,15 @@ const (
 	// EngineServiceApproveActionProcedure is the fully-qualified name of the EngineService's
 	// ApproveAction RPC.
 	EngineServiceApproveActionProcedure = "/goap.engine.v1.EngineService/ApproveAction"
+	// EngineServiceRelaunchStepProcedure is the fully-qualified name of the EngineService's
+	// RelaunchStep RPC.
+	EngineServiceRelaunchStepProcedure = "/goap.engine.v1.EngineService/RelaunchStep"
+	// EngineServiceDecideFlowProcedure is the fully-qualified name of the EngineService's DecideFlow
+	// RPC.
+	EngineServiceDecideFlowProcedure = "/goap.engine.v1.EngineService/DecideFlow"
+	// EngineServiceResolveBoardProcedure is the fully-qualified name of the EngineService's
+	// ResolveBoard RPC.
+	EngineServiceResolveBoardProcedure = "/goap.engine.v1.EngineService/ResolveBoard"
 	// EngineServiceGetProcessProcedure is the fully-qualified name of the EngineService's GetProcess
 	// RPC.
 	EngineServiceGetProcessProcedure = "/goap.engine.v1.EngineService/GetProcess"
@@ -70,6 +79,13 @@ type EngineServiceClient interface {
 	// Decide a pending approval (an action needing a permission the initiator
 	// lacks) with the caller's permissions.
 	ApproveAction(context.Context, *connect.Request[v1.ApproveActionRequest]) (*connect.Response[v1.ApproveActionResponse], error)
+	// Restarts a run from one of its steps on a new flow branch of the change; the
+	// outputs of that step and of what followed are marked stale until a human decides.
+	RelaunchStep(context.Context, *connect.Request[v1.RelaunchStepRequest]) (*connect.Response[v1.RelaunchStepResponse], error)
+	// Adopts (the previous outputs are superseded) or discards a relaunched flow.
+	DecideFlow(context.Context, *connect.Request[v1.DecideFlowRequest]) (*connect.Response[v1.DecideFlowResponse], error)
+	// Answers a blackboard inconsistency found before an action: relaunch the proposed step or ignore.
+	ResolveBoard(context.Context, *connect.Request[v1.ResolveBoardRequest]) (*connect.Response[v1.ResolveBoardResponse], error)
 	GetProcess(context.Context, *connect.Request[v1.GetProcessRequest]) (*connect.Response[v1.GetProcessResponse], error)
 	ListProcesses(context.Context, *connect.Request[v1.ListProcessesRequest]) (*connect.Response[v1.ListProcessesResponse], error)
 	// Live process events and logs (server streaming). Empty process_id: every
@@ -116,6 +132,24 @@ func NewEngineServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(engineServiceMethods.ByName("ApproveAction")),
 			connect.WithClientOptions(opts...),
 		),
+		relaunchStep: connect.NewClient[v1.RelaunchStepRequest, v1.RelaunchStepResponse](
+			httpClient,
+			baseURL+EngineServiceRelaunchStepProcedure,
+			connect.WithSchema(engineServiceMethods.ByName("RelaunchStep")),
+			connect.WithClientOptions(opts...),
+		),
+		decideFlow: connect.NewClient[v1.DecideFlowRequest, v1.DecideFlowResponse](
+			httpClient,
+			baseURL+EngineServiceDecideFlowProcedure,
+			connect.WithSchema(engineServiceMethods.ByName("DecideFlow")),
+			connect.WithClientOptions(opts...),
+		),
+		resolveBoard: connect.NewClient[v1.ResolveBoardRequest, v1.ResolveBoardResponse](
+			httpClient,
+			baseURL+EngineServiceResolveBoardProcedure,
+			connect.WithSchema(engineServiceMethods.ByName("ResolveBoard")),
+			connect.WithClientOptions(opts...),
+		),
 		getProcess: connect.NewClient[v1.GetProcessRequest, v1.GetProcessResponse](
 			httpClient,
 			baseURL+EngineServiceGetProcessProcedure,
@@ -155,6 +189,9 @@ type engineServiceClient struct {
 	answerIntent     *connect.Client[v1.AnswerIntentRequest, v1.AnswerIntentResponse]
 	submitHumanInput *connect.Client[v1.SubmitHumanInputRequest, v1.SubmitHumanInputResponse]
 	approveAction    *connect.Client[v1.ApproveActionRequest, v1.ApproveActionResponse]
+	relaunchStep     *connect.Client[v1.RelaunchStepRequest, v1.RelaunchStepResponse]
+	decideFlow       *connect.Client[v1.DecideFlowRequest, v1.DecideFlowResponse]
+	resolveBoard     *connect.Client[v1.ResolveBoardRequest, v1.ResolveBoardResponse]
 	getProcess       *connect.Client[v1.GetProcessRequest, v1.GetProcessResponse]
 	listProcesses    *connect.Client[v1.ListProcessesRequest, v1.ListProcessesResponse]
 	watchEvents      *connect.Client[v1.WatchEventsRequest, v1.WatchEventsResponse]
@@ -180,6 +217,21 @@ func (c *engineServiceClient) SubmitHumanInput(ctx context.Context, req *connect
 // ApproveAction calls goap.engine.v1.EngineService.ApproveAction.
 func (c *engineServiceClient) ApproveAction(ctx context.Context, req *connect.Request[v1.ApproveActionRequest]) (*connect.Response[v1.ApproveActionResponse], error) {
 	return c.approveAction.CallUnary(ctx, req)
+}
+
+// RelaunchStep calls goap.engine.v1.EngineService.RelaunchStep.
+func (c *engineServiceClient) RelaunchStep(ctx context.Context, req *connect.Request[v1.RelaunchStepRequest]) (*connect.Response[v1.RelaunchStepResponse], error) {
+	return c.relaunchStep.CallUnary(ctx, req)
+}
+
+// DecideFlow calls goap.engine.v1.EngineService.DecideFlow.
+func (c *engineServiceClient) DecideFlow(ctx context.Context, req *connect.Request[v1.DecideFlowRequest]) (*connect.Response[v1.DecideFlowResponse], error) {
+	return c.decideFlow.CallUnary(ctx, req)
+}
+
+// ResolveBoard calls goap.engine.v1.EngineService.ResolveBoard.
+func (c *engineServiceClient) ResolveBoard(ctx context.Context, req *connect.Request[v1.ResolveBoardRequest]) (*connect.Response[v1.ResolveBoardResponse], error) {
+	return c.resolveBoard.CallUnary(ctx, req)
 }
 
 // GetProcess calls goap.engine.v1.EngineService.GetProcess.
@@ -215,6 +267,13 @@ type EngineServiceHandler interface {
 	// Decide a pending approval (an action needing a permission the initiator
 	// lacks) with the caller's permissions.
 	ApproveAction(context.Context, *connect.Request[v1.ApproveActionRequest]) (*connect.Response[v1.ApproveActionResponse], error)
+	// Restarts a run from one of its steps on a new flow branch of the change; the
+	// outputs of that step and of what followed are marked stale until a human decides.
+	RelaunchStep(context.Context, *connect.Request[v1.RelaunchStepRequest]) (*connect.Response[v1.RelaunchStepResponse], error)
+	// Adopts (the previous outputs are superseded) or discards a relaunched flow.
+	DecideFlow(context.Context, *connect.Request[v1.DecideFlowRequest]) (*connect.Response[v1.DecideFlowResponse], error)
+	// Answers a blackboard inconsistency found before an action: relaunch the proposed step or ignore.
+	ResolveBoard(context.Context, *connect.Request[v1.ResolveBoardRequest]) (*connect.Response[v1.ResolveBoardResponse], error)
 	GetProcess(context.Context, *connect.Request[v1.GetProcessRequest]) (*connect.Response[v1.GetProcessResponse], error)
 	ListProcesses(context.Context, *connect.Request[v1.ListProcessesRequest]) (*connect.Response[v1.ListProcessesResponse], error)
 	// Live process events and logs (server streaming). Empty process_id: every
@@ -257,6 +316,24 @@ func NewEngineServiceHandler(svc EngineServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(engineServiceMethods.ByName("ApproveAction")),
 		connect.WithHandlerOptions(opts...),
 	)
+	engineServiceRelaunchStepHandler := connect.NewUnaryHandler(
+		EngineServiceRelaunchStepProcedure,
+		svc.RelaunchStep,
+		connect.WithSchema(engineServiceMethods.ByName("RelaunchStep")),
+		connect.WithHandlerOptions(opts...),
+	)
+	engineServiceDecideFlowHandler := connect.NewUnaryHandler(
+		EngineServiceDecideFlowProcedure,
+		svc.DecideFlow,
+		connect.WithSchema(engineServiceMethods.ByName("DecideFlow")),
+		connect.WithHandlerOptions(opts...),
+	)
+	engineServiceResolveBoardHandler := connect.NewUnaryHandler(
+		EngineServiceResolveBoardProcedure,
+		svc.ResolveBoard,
+		connect.WithSchema(engineServiceMethods.ByName("ResolveBoard")),
+		connect.WithHandlerOptions(opts...),
+	)
 	engineServiceGetProcessHandler := connect.NewUnaryHandler(
 		EngineServiceGetProcessProcedure,
 		svc.GetProcess,
@@ -297,6 +374,12 @@ func NewEngineServiceHandler(svc EngineServiceHandler, opts ...connect.HandlerOp
 			engineServiceSubmitHumanInputHandler.ServeHTTP(w, r)
 		case EngineServiceApproveActionProcedure:
 			engineServiceApproveActionHandler.ServeHTTP(w, r)
+		case EngineServiceRelaunchStepProcedure:
+			engineServiceRelaunchStepHandler.ServeHTTP(w, r)
+		case EngineServiceDecideFlowProcedure:
+			engineServiceDecideFlowHandler.ServeHTTP(w, r)
+		case EngineServiceResolveBoardProcedure:
+			engineServiceResolveBoardHandler.ServeHTTP(w, r)
 		case EngineServiceGetProcessProcedure:
 			engineServiceGetProcessHandler.ServeHTTP(w, r)
 		case EngineServiceListProcessesProcedure:
@@ -330,6 +413,18 @@ func (UnimplementedEngineServiceHandler) SubmitHumanInput(context.Context, *conn
 
 func (UnimplementedEngineServiceHandler) ApproveAction(context.Context, *connect.Request[v1.ApproveActionRequest]) (*connect.Response[v1.ApproveActionResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.engine.v1.EngineService.ApproveAction is not implemented"))
+}
+
+func (UnimplementedEngineServiceHandler) RelaunchStep(context.Context, *connect.Request[v1.RelaunchStepRequest]) (*connect.Response[v1.RelaunchStepResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.engine.v1.EngineService.RelaunchStep is not implemented"))
+}
+
+func (UnimplementedEngineServiceHandler) DecideFlow(context.Context, *connect.Request[v1.DecideFlowRequest]) (*connect.Response[v1.DecideFlowResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.engine.v1.EngineService.DecideFlow is not implemented"))
+}
+
+func (UnimplementedEngineServiceHandler) ResolveBoard(context.Context, *connect.Request[v1.ResolveBoardRequest]) (*connect.Response[v1.ResolveBoardResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.engine.v1.EngineService.ResolveBoard is not implemented"))
 }
 
 func (UnimplementedEngineServiceHandler) GetProcess(context.Context, *connect.Request[v1.GetProcessRequest]) (*connect.Response[v1.GetProcessResponse], error) {

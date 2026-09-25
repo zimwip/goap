@@ -206,7 +206,7 @@ func (g *Graph) SplitByOwner(ctx context.Context, id domain.ChangeID) (created [
 		var groups []*group
 		byOrg := map[string]*group{}
 		for _, it := range parent.Items {
-			if st := parent.EffectiveStatus(it.ID); it.Kind != domain.KindImpact || it.Target == nil || st == domain.ItemRejected || st == domain.ItemSuperseded {
+			if it.Kind != domain.KindImpact || it.Target == nil || !parent.InEffect(it.ID) {
 				continue
 			}
 			links, err := tx.OutLinks(ctx, *it.Target)

@@ -28,7 +28,7 @@ func checkNamespace(ctx context.Context, tx Tx, c domain.ChangeSet) error {
 		return nil
 	}
 	for _, it := range c.Items {
-		if st := c.EffectiveStatus(it.ID); it.Kind != domain.KindProposal || st == domain.ItemRejected || st == domain.ItemSuperseded {
+		if it.Kind != domain.KindProposal || !c.InEffect(it.ID) {
 			continue
 		}
 		p := it.Proposal

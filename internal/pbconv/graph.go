@@ -197,6 +197,10 @@ func ItemToPB(it domain.ChangeItem) *graphv1.ChangeItem {
 		out.Supersedes = append(out.Supersedes, string(d))
 	}
 	out.Execution = it.Execution
+	out.Flow = it.Flow
+	if e := it.FlowEvent; e != nil {
+		out.FlowEvent = FlowEventToPB(*e)
+	}
 	if it.Post != nil {
 		out.Post = endpointToPB(*it.Post)
 	}
@@ -227,6 +231,11 @@ func ItemFromPB(it *graphv1.ChangeItem) domain.ChangeItem {
 		out.Supersedes = append(out.Supersedes, domain.ItemID(d))
 	}
 	out.Execution = it.Execution
+	out.Flow = it.Flow
+	if e := it.FlowEvent; e != nil {
+		fe := FlowEventFromPB(e)
+		out.FlowEvent = &fe
+	}
 	if it.Post != nil {
 		e := endpointFromPB(it.Post)
 		out.Post = &e

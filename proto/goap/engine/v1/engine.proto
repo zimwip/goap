@@ -14,6 +14,13 @@ service EngineService {
   // Decide a pending approval (an action needing a permission the initiator
   // lacks) with the caller's permissions.
   rpc ApproveAction(ApproveActionRequest) returns (ApproveActionResponse);
+  // Restarts a run from one of its steps on a new flow branch of the change; the
+  // outputs of that step and of what followed are marked stale until a human decides.
+  rpc RelaunchStep(RelaunchStepRequest) returns (RelaunchStepResponse);
+  // Adopts (the previous outputs are superseded) or discards a relaunched flow.
+  rpc DecideFlow(DecideFlowRequest) returns (DecideFlowResponse);
+  // Answers a blackboard inconsistency found before an action: relaunch the proposed step or ignore.
+  rpc ResolveBoard(ResolveBoardRequest) returns (ResolveBoardResponse);
   rpc GetProcess(GetProcessRequest) returns (GetProcessResponse);
   rpc ListProcesses(ListProcessesRequest) returns (ListProcessesResponse);
   // Live process events and logs (server streaming). Empty process_id: every
@@ -115,12 +122,33 @@ message HumanTask {
   string description = 2;
   string instructions = 3;
   int32 step = 4;
-  // input (submit items) | approval (approve or reject the action)
+  // input (submit items) | approval (approve or reject the action) | agent | flow (adopt or discard a relaunched flow) | board | relaunched
   string kind = 5;
   // permission required to approve
   string permission = 6;
   // kind "agent": the sub-agent process this one waits for
   string child_process_id = 7;
+  // kind "board": what is wrong with the blackboard and the step to restart from (absent when none can be)
+  repeated BoardIssue issues = 8;
+  RelaunchProposal proposal = 9;
+  // kind "relaunched": the flow whose decision the process waits for
+  string flow_id = 10;
+}
+
+message BoardIssue {
+  string item = 1;
+  string culprit = 2;
+  string code = 3;
+  string message = 4;
+  string severity = 5;
+}
+
+message RelaunchProposal {
+  string process = 1;
+  int32 step = 2;
+  string action = 3;
+  string reason = 4;
+  repeated string culprits = 5;
 }
 
 message Step {
@@ -150,7 +178,7 @@ message Process {
   string id = 1;
   string methodology = 2;
   string change_id = 3;
-  // clarifying | running | waiting | completed | stuck | failed
+  // clarifying | running | waiting | completed | stuck | failed | superseded
   string status = 4;
   string goal = 5;
   repeated Turn turns = 6;
@@ -180,6 +208,11 @@ message Process {
   string trace_id = 25;
   // "<methodology>/<agent>/<trigger>" when started by a trigger
   string trigger = 26;
+  // flow branch the process works on (empty: the main flow); set on a relaunched step
+  string flow = 27;
+  // process replaced when the flow is adopted, and the step it restarted
+  string relaunch_of = 28;
+  int32 from_step = 29;
 }
 
 message StartProcessRequest {
@@ -262,4 +295,38 @@ message WatchEventsResponse {
   google.protobuf.Timestamp time = 2;
   Process process = 3;
   LogLine log = 4;
+}
+
+message RelaunchStepRequest {
+  string process_id = 1;
+  int32 step = 2;
+  string reason = 3;
+}
+
+message RelaunchStepResponse {
+  // the new process, running on the new flow branch
+  Process process = 1;
+}
+
+message DecideFlowRequest {
+  string process_id = 1;
+  bool adopt = 2;
+  string comment = 3;
+}
+
+message DecideFlowResponse {
+  Process process = 1;
+}
+
+message ResolveBoardRequest {
+  string process_id = 1;
+  // true: relaunch the proposed step; false: ignore the issues and go on
+  bool relaunch = 2;
+  string comment = 3;
+}
+
+message ResolveBoardResponse {
+  Process process = 1;
+  // the process relaunched on a new flow branch, when relaunch was chosen
+  Process relaunched = 2;
 }

@@ -53,6 +53,13 @@ service GraphService {
   // Splits a change along organisational boundaries: one sub-change per unit owning impacted nodes.
   rpc SplitChange(SplitChangeRequest) returns (SplitChangeResponse);
   rpc ListSubChanges(ListSubChangesRequest) returns (ListSubChangesResponse);
+  // Action flow branches: a relaunched step forks the flow, a human adopts or discards the branch.
+  rpc OpenFlow(OpenFlowRequest) returns (OpenFlowResponse);
+  rpc AdoptFlow(AdoptFlowRequest) returns (AdoptFlowResponse);
+  rpc DiscardFlow(DiscardFlowRequest) returns (DiscardFlowResponse);
+  rpc ListFlows(ListFlowsRequest) returns (ListFlowsResponse);
+  // Consistency check of the blackboard as a process on a flow sees it.
+  rpc ValidateBoard(ValidateBoardRequest) returns (ValidateBoardResponse);
 
   // Execution journal (ADR 0011)
   rpc RecordExecutions(RecordExecutionsRequest) returns (RecordExecutionsResponse);
@@ -172,6 +179,9 @@ message ChangeItem {
   string execution = 13;
   // impact: the "post" side (target is the "pre" version)
   Endpoint post = 14;
+  // flow branch that produced the item; flow_event on kind = flow
+  string flow = 15;
+  FlowEvent flow_event = 16;
 }
 
 message ChangeSet {
@@ -338,6 +348,8 @@ message AddItemsResponse {
 
 message GetBlackboardRequest {
   string change_id = 1;
+  // flow branch the caller runs on (empty: the main flow)
+  string flow = 2;
 }
 
 message GetBlackboardResponse {
@@ -553,6 +565,8 @@ message ExecutionRecord {
   repeated NodeRef reads = 35;
   int32 board_before = 36;
   int32 board_after = 37;
+  // last item of the flow before the step: where a relaunch of the step forks
+  string board_last = 38;
 }
 
 message RecordExecutionsRequest {
@@ -646,4 +660,98 @@ message ListSubChangesRequest {
 
 message ListSubChangesResponse {
   repeated ChangeSet changes = 1;
+}
+
+message FlowEvent {
+  // open | adopt | discard
+  string op = 1;
+  string flow = 2;
+  string parent = 3;
+  string fork_after = 4;
+  int32 from_step = 5;
+  string execution = 6;
+  string process = 7;
+  string reason = 8;
+  repeated string stale = 9;
+  string by = 10;
+}
+
+// Flow is a flow branch of a change, replayed from its events.
+message Flow {
+  string id = 1;
+  string parent = 2;
+  string fork_after = 3;
+  int32 from_step = 4;
+  string execution = 5;
+  string process = 6;
+  string reason = 7;
+  // open | adopted | discarded
+  string status = 8;
+  // items the relaunched step invalidated (stale while open, superseded once adopted)
+  repeated string stale = 9;
+  google.protobuf.Timestamp opened_at = 10;
+  google.protobuf.Timestamp decided_at = 11;
+  string decided_by = 12;
+}
+
+message OpenFlowRequest {
+  string change_id = 1;
+  string parent = 2;
+  string fork_after = 3;
+  repeated string seeds = 4;
+  int32 from_step = 5;
+  string execution = 6;
+  string process = 7;
+  string reason = 8;
+}
+
+message OpenFlowResponse {
+  Flow flow = 1;
+}
+
+message AdoptFlowRequest {
+  string change_id = 1;
+  string flow = 2;
+}
+
+message AdoptFlowResponse {
+  Flow flow = 1;
+}
+
+message DiscardFlowRequest {
+  string change_id = 1;
+  string flow = 2;
+}
+
+message DiscardFlowResponse {
+  Flow flow = 1;
+}
+
+message ListFlowsRequest {
+  string change_id = 1;
+}
+
+message ListFlowsResponse {
+  repeated Flow flows = 1;
+}
+
+message BoardIssue {
+  // item where the problem shows, and the item to blame (relaunch the step that produced it)
+  string item = 1;
+  string culprit = 2;
+  // structure | dangling | derived_from_invalid | reference | outdated | rule | impact | duplicate
+  string code = 3;
+  string message = 4;
+  // error | warning
+  string severity = 5;
+}
+
+message ValidateBoardRequest {
+  string change_id = 1;
+  // flow branch (empty: the main flow)
+  string flow = 2;
+}
+
+message ValidateBoardResponse {
+  repeated BoardIssue issues = 1;
 }

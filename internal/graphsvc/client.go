@@ -58,7 +58,12 @@ func (c *Client) AddItems(ctx context.Context, id domain.ChangeID, items []domai
 }
 
 func (c *Client) Blackboard(ctx context.Context, id domain.ChangeID) (domain.Blackboard, error) {
-	r, err := c.rpc.GetBlackboard(ctx, connect.NewRequest(&graphv1.GetBlackboardRequest{ChangeId: string(id)}))
+	return c.BlackboardIn(ctx, id, "")
+}
+
+// BlackboardIn is the blackboard seen from a flow branch.
+func (c *Client) BlackboardIn(ctx context.Context, id domain.ChangeID, flow string) (domain.Blackboard, error) {
+	r, err := c.rpc.GetBlackboard(ctx, connect.NewRequest(&graphv1.GetBlackboardRequest{ChangeId: string(id), Flow: flow}))
 	if err != nil {
 		return domain.Blackboard{}, rpcerr.FromConnect(err)
 	}
@@ -133,4 +138,53 @@ func (c *Client) CreateBaseline(ctx context.Context, name string, nodes []domain
 		return domain.Baseline{}, rpcerr.FromConnect(err)
 	}
 	return pbconv.BaselineFromPB(r.Msg.Baseline), nil
+}
+
+// OpenFlow implements engine.GraphPort.
+func (c *Client) OpenFlow(ctx context.Context, id domain.ChangeID, in graph.OpenFlowRequest) (domain.Flow, error) {
+	r, err := c.rpc.OpenFlow(ctx, connect.NewRequest(&graphv1.OpenFlowRequest{ChangeId: string(id), Parent: in.Parent, ForkAfter: string(in.ForkAfter),
+		Seeds: seedsToPB(in.Seeds), FromStep: int32(in.FromStep), Execution: in.Execution, Process: in.Process, Reason: in.Reason}))
+	if err != nil {
+		return domain.Flow{}, rpcerr.FromConnect(err)
+	}
+	return pbconv.FlowFromPB(r.Msg.Flow), nil
+}
+
+func seedsToPB(ids []domain.ItemID) []string {
+	var out []string
+	for _, id := range ids {
+		out = append(out, string(id))
+	}
+	return out
+}
+
+// AdoptFlow implements engine.GraphPort (the adopting principal comes from the request identity).
+func (c *Client) AdoptFlow(ctx context.Context, id domain.ChangeID, flow, _ string) (domain.Flow, error) {
+	r, err := c.rpc.AdoptFlow(ctx, connect.NewRequest(&graphv1.AdoptFlowRequest{ChangeId: string(id), Flow: flow}))
+	if err != nil {
+		return domain.Flow{}, rpcerr.FromConnect(err)
+	}
+	return pbconv.FlowFromPB(r.Msg.Flow), nil
+}
+
+// DiscardFlow implements engine.GraphPort.
+func (c *Client) DiscardFlow(ctx context.Context, id domain.ChangeID, flow, _ string) (domain.Flow, error) {
+	r, err := c.rpc.DiscardFlow(ctx, connect.NewRequest(&graphv1.DiscardFlowRequest{ChangeId: string(id), Flow: flow}))
+	if err != nil {
+		return domain.Flow{}, rpcerr.FromConnect(err)
+	}
+	return pbconv.FlowFromPB(r.Msg.Flow), nil
+}
+
+// ValidateBoard implements engine.GraphPort.
+func (c *Client) ValidateBoard(ctx context.Context, id domain.ChangeID, flow string) ([]domain.BoardIssue, error) {
+	r, err := c.rpc.ValidateBoard(ctx, connect.NewRequest(&graphv1.ValidateBoardRequest{ChangeId: string(id), Flow: flow}))
+	if err != nil {
+		return nil, rpcerr.FromConnect(err)
+	}
+	var out []domain.BoardIssue
+	for _, i := range r.Msg.Issues {
+		out = append(out, pbconv.BoardIssueFromPB(i))
+	}
+	return out, nil
 }

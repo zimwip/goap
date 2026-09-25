@@ -454,7 +454,7 @@ export interface Decision {
   comment?: string;
 }
 
-export type ItemKind = 'impact' | 'proposal' | 'decision' | 'artifact';
+export type ItemKind = 'impact' | 'proposal' | 'decision' | 'artifact' | 'merge' | 'flow';
 
 /** Status of a superseded item (rebase, merge): see its replacement's `supersedes`. */
 export const ITEM_SUPERSEDED = 'superseded';
@@ -468,6 +468,9 @@ export interface ChangeItem {
   target?: NodeRef;
   /** impact: the "post" side, the proposal producing the new version (item) or that version (node) */
   post?: { node?: NodeRef; item?: string };
+  /** flow branch that produced the item (empty: the main flow); flowEvent on kind 'flow' */
+  flow?: string;
+  flowEvent?: FlowEvent;
   proposal?: Proposal;
   decision?: Decision;
   data?: Struct;
@@ -569,7 +572,7 @@ export interface ExecutionRecord {
 
 // --- engine -----------------------------------------------------------------
 
-export type ProcessStatus = 'clarifying' | 'running' | 'waiting' | 'completed' | 'stuck' | 'failed';
+export type ProcessStatus = 'clarifying' | 'running' | 'waiting' | 'completed' | 'stuck' | 'failed' | 'superseded';
 
 export interface Turn {
   role?: string;
@@ -625,9 +628,35 @@ export interface Principal {
   org?: string;
   roles?: string[];
 }
+/** Inconsistency found in the content of a blackboard. */
+export interface BoardIssue {
+  /** item where the problem shows */
+  item?: string;
+  /** item to blame: relaunch the step that produced it */
+  culprit?: string;
+  /** structure | dangling | derived_from_invalid | reference | outdated | rule | impact | duplicate */
+  code?: string;
+  message?: string;
+  severity?: 'error' | 'warning' | string;
+}
+
+/** The earliest step to restart from to fix an inconsistent blackboard. */
+export interface RelaunchProposal {
+  process?: string;
+  step?: number;
+  action?: string;
+  reason?: string;
+  culprits?: string[];
+}
+
 export interface HumanTask {
-  /** input: enter items · approval: approve or reject the action · agent: waiting on a sub-agent */
-  kind?: 'input' | 'approval' | 'agent' | string;
+  /** input: enter items · approval: approve or reject · agent: waiting on a sub-agent · flow: adopt or discard a relaunched flow · board: inconsistent blackboard · relaunched: waiting for a relaunched flow */
+  kind?: 'input' | 'approval' | 'agent' | 'flow' | 'board' | 'relaunched' | string;
+  /** kind "board": what is wrong, and the step to restart from (absent when none can be) */
+  issues?: BoardIssue[];
+  proposal?: RelaunchProposal;
+  /** kind "relaunched": the flow whose decision the process waits for */
+  flowId?: string;
   /** kind "agent": process of the awaited sub-agent */
   childProcessId?: string;
   /** permission required to approve (e.g. change:apply) */
@@ -691,6 +720,43 @@ export interface Process {
   traceId?: string;
   /** "<agent>/<trigger>" when started by a trigger */
   trigger?: string;
+  /** flow branch the process works on (relaunched step); empty: the main flow */
+  flow?: string;
+  /** process replaced when the flow is adopted, and the step that was restarted */
+  relaunchOf?: string;
+  fromStep?: number;
+}
+
+/** Event of the action flow, carried by change items of kind "flow". */
+export interface FlowEvent {
+  op?: 'open' | 'adopt' | 'discard' | string;
+  flow?: string;
+  parent?: string;
+  forkAfter?: string;
+  fromStep?: number;
+  execution?: string;
+  process?: string;
+  reason?: string;
+  stale?: string[];
+  by?: string;
+}
+
+/** Flow branch of a change: a relaunched step, adopted or discarded by a human. */
+export interface Flow {
+  id?: string;
+  parent?: string;
+  forkAfter?: string;
+  fromStep?: number;
+  execution?: string;
+  /** the process whose step was relaunched (replaced if the flow is adopted) */
+  process?: string;
+  reason?: string;
+  status?: 'open' | 'adopted' | 'discarded' | string;
+  /** items the relaunched step invalidated (stale while open, superseded once adopted) */
+  stale?: string[];
+  openedAt?: string;
+  decidedAt?: string;
+  decidedBy?: string;
 }
 
 /** State of a trigger of a published agent. */
@@ -894,6 +960,11 @@ export const graph = {
       { changeId: string; resolutions: Record<string, { props?: Struct; skip?: boolean }> },
       { change?: ChangeSet }
     >(GRAPH, 'MergeChange', { changeId, resolutions }),
+  /** Flow branches of a change (relaunched steps). */
+  validateBoard: (changeId: string, flow = '', signal?: AbortSignal) =>
+    rpc<{ changeId: string; flow: string }, { issues?: BoardIssue[] }>(GRAPH, 'ValidateBoard', { changeId, flow }, signal),
+  listFlows: (changeId: string, signal?: AbortSignal) =>
+    rpc<{ changeId: string }, { flows?: Flow[] }>(GRAPH, 'ListFlows', { changeId }, signal),
   /** Pre/post view of the impacts of a change. */
   getImpacts: (changeId: string, signal?: AbortSignal) =>
     rpc<{ changeId: string }, { impacts?: ImpactView[] }>(GRAPH, 'GetImpacts', { changeId }, signal),
@@ -961,6 +1032,27 @@ export const engine = {
       approve,
       comment,
     }),
+  /** Restarts a run from one of its steps on a new flow branch; returns the new process. */
+  relaunchStep: (processId: string, step: number, reason: string) =>
+    rpc<{ processId: string; step: number; reason: string }, { process?: Process }>(ENGINE, 'RelaunchStep', {
+      processId,
+      step,
+      reason,
+    }),
+  /** Adopts (previous outputs superseded) or discards a relaunched flow. */
+  decideFlow: (processId: string, adopt: boolean, comment: string) =>
+    rpc<{ processId: string; adopt: boolean; comment: string }, { process?: Process }>(ENGINE, 'DecideFlow', {
+      processId,
+      adopt,
+      comment,
+    }),
+  /** Answers a blackboard inconsistency: relaunch the proposed step, or ignore the issues and go on. */
+  resolveBoard: (processId: string, relaunch: boolean, comment: string) =>
+    rpc<{ processId: string; relaunch: boolean; comment: string }, { process?: Process; relaunched?: Process }>(
+      ENGINE,
+      'ResolveBoard',
+      { processId, relaunch, comment },
+    ),
   getProcess: (id: string, signal?: AbortSignal) =>
     rpc<{ id: string }, { process?: Process }>(ENGINE, 'GetProcess', { id }, signal),
   listProcesses: (req: ListProcessesRequest = {}, signal?: AbortSignal) =>

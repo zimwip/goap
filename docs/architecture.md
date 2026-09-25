@@ -358,6 +358,11 @@ change CR-42
      tokens, LLM / tool calls, traceId/spanId) · approval · process.ended (status, totals)
 ```
 
+- A step can be **relaunched**: the blackboard is an append-only log, the relaunch opens a *flow branch*,
+  the outputs of the step and of what followed are marked stale, a replanned run appends candidate items,
+  and a human adopts or discards the branch ([ADR 0017](adr/0017-flow-branches.md)).
+- Before every cycle the engine **validates the blackboard**; on inconsistencies the process waits and proposes
+  to restart from the earliest step that produced faulty content (ADR 0017).
 - A step is a transition of the blackboard: the `action` record carries `boardBefore` / `boardAfter`
   (item count of the change around the step), `reads` (node versions the step started from) and `items`
   (what it produced), see [ADR 0015](adr/0015-namespaces.md).

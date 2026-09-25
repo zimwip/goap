@@ -255,7 +255,7 @@ func (h *Handler) AddItems(ctx context.Context, r *connect.Request[graphv1.AddIt
 }
 
 func (h *Handler) GetBlackboard(ctx context.Context, r *connect.Request[graphv1.GetBlackboardRequest]) (*connect.Response[graphv1.GetBlackboardResponse], error) {
-	bb, err := h.Graph.Blackboard(ctx, domain.ChangeID(r.Msg.ChangeId))
+	bb, err := h.Graph.BlackboardIn(ctx, domain.ChangeID(r.Msg.ChangeId), r.Msg.Flow)
 	if err != nil {
 		return nil, rpcerr.ToConnect(err)
 	}
@@ -374,6 +374,60 @@ func (h *Handler) ListSubChanges(ctx context.Context, r *connect.Request[graphv1
 	for _, c := range cs {
 		c.Items = nil
 		out.Changes = append(out.Changes, pbconv.ChangeToPB(c))
+	}
+	return res(out, err)
+}
+
+func (h *Handler) OpenFlow(ctx context.Context, r *connect.Request[graphv1.OpenFlowRequest]) (*connect.Response[graphv1.OpenFlowResponse], error) {
+	m := r.Msg
+	f, err := h.Graph.OpenFlow(ctx, domain.ChangeID(m.ChangeId), graph.OpenFlowRequest{Parent: m.Parent, ForkAfter: domain.ItemID(m.ForkAfter),
+		Seeds: itemIDs(m.Seeds), FromStep: int(m.FromStep), Execution: m.Execution, Process: m.Process, Reason: m.Reason})
+	if err == nil {
+		h.publish(ctx, "goap.change."+m.ChangeId+".flow_opened", f)
+	}
+	return res(&graphv1.OpenFlowResponse{Flow: pbconv.FlowToPB(f)}, err)
+}
+
+func itemIDs(ss []string) []domain.ItemID {
+	var out []domain.ItemID
+	for _, s := range ss {
+		out = append(out, domain.ItemID(s))
+	}
+	return out
+}
+
+func (h *Handler) AdoptFlow(ctx context.Context, r *connect.Request[graphv1.AdoptFlowRequest]) (*connect.Response[graphv1.AdoptFlowResponse], error) {
+	ctx = h.Identity.Context(ctx, r.Header())
+	f, err := h.Graph.AdoptFlow(ctx, domain.ChangeID(r.Msg.ChangeId), r.Msg.Flow, authz.From(ctx).Subject)
+	if err == nil {
+		h.publish(ctx, "goap.change."+r.Msg.ChangeId+".flow_adopted", f)
+	}
+	return res(&graphv1.AdoptFlowResponse{Flow: pbconv.FlowToPB(f)}, err)
+}
+
+func (h *Handler) DiscardFlow(ctx context.Context, r *connect.Request[graphv1.DiscardFlowRequest]) (*connect.Response[graphv1.DiscardFlowResponse], error) {
+	ctx = h.Identity.Context(ctx, r.Header())
+	f, err := h.Graph.DiscardFlow(ctx, domain.ChangeID(r.Msg.ChangeId), r.Msg.Flow, authz.From(ctx).Subject)
+	if err == nil {
+		h.publish(ctx, "goap.change."+r.Msg.ChangeId+".flow_discarded", f)
+	}
+	return res(&graphv1.DiscardFlowResponse{Flow: pbconv.FlowToPB(f)}, err)
+}
+
+func (h *Handler) ListFlows(ctx context.Context, r *connect.Request[graphv1.ListFlowsRequest]) (*connect.Response[graphv1.ListFlowsResponse], error) {
+	fs, err := h.Graph.Flows(ctx, domain.ChangeID(r.Msg.ChangeId))
+	out := &graphv1.ListFlowsResponse{}
+	for _, f := range fs {
+		out.Flows = append(out.Flows, pbconv.FlowToPB(f))
+	}
+	return res(out, err)
+}
+
+func (h *Handler) ValidateBoard(ctx context.Context, r *connect.Request[graphv1.ValidateBoardRequest]) (*connect.Response[graphv1.ValidateBoardResponse], error) {
+	is, err := h.Graph.ValidateBoard(ctx, domain.ChangeID(r.Msg.ChangeId), r.Msg.Flow)
+	out := &graphv1.ValidateBoardResponse{}
+	for _, i := range is {
+		out.Issues = append(out.Issues, pbconv.BoardIssueToPB(i))
 	}
 	return res(out, err)
 }

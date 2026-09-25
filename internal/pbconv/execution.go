@@ -15,7 +15,7 @@ func ExecutionToPB(r domain.ExecutionRecord) *graphv1.ExecutionRecord {
 	for _, it := range r.Items {
 		out.Items = append(out.Items, string(it))
 	}
-	out.BoardBefore, out.BoardAfter = int32(r.BoardBefore), int32(r.BoardAfter)
+	out.BoardBefore, out.BoardAfter, out.BoardLast = int32(r.BoardBefore), int32(r.BoardAfter), string(r.BoardLast)
 	for _, n := range r.Reads {
 		out.Reads = append(out.Reads, RefToPB(n))
 	}
@@ -39,7 +39,7 @@ func ExecutionFromPB(r *graphv1.ExecutionRecord) domain.ExecutionRecord {
 	for _, it := range r.Items {
 		out.Items = append(out.Items, domain.ItemID(it))
 	}
-	out.BoardBefore, out.BoardAfter = int(r.BoardBefore), int(r.BoardAfter)
+	out.BoardBefore, out.BoardAfter, out.BoardLast = int(r.BoardBefore), int(r.BoardAfter), domain.ItemID(r.BoardLast)
 	for _, n := range r.Reads {
 		out.Reads = append(out.Reads, RefFromPB(n))
 	}
