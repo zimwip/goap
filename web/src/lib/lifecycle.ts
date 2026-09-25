@@ -48,6 +48,20 @@ export interface LifecycleRow {
   declared: string[];
   /** the create_node item, for a node the change creates (not stored yet) */
   created?: ChangeItem;
+  /** the delete_node proposal standing on this node */
+  removal?: ChangeItem;
+}
+
+/** Ids of the items a decision rejects (the latest decision on an item wins). */
+export function rejectedIds(items: ChangeItem[]): Set<string> {
+  const out = new Set<string>();
+  for (const it of items) {
+    const d = it.decision;
+    if (it.kind !== 'decision' || !d?.item) continue;
+    if (d.accept) out.delete(d.item);
+    else out.add(d.item);
+  }
+  return out;
 }
 
 /** Ids of the items another item replaces. */
@@ -83,10 +97,11 @@ export function birthStates(lifecycle: Lifecycle | undefined): string[] {
 export function createdRows(nodes: GraphNode[], items: ChangeItem[]): LifecycleRow[] {
   const resolve = lifecycleResolver(nodes);
   const gone = supersededIds(items);
+  const rejected = rejectedIds(items);
   const rows: LifecycleRow[] = [];
   for (const it of items) {
     const p = it.proposal;
-    if (p?.op !== 'create_node' || !it.id || gone.has(it.id) || it.status === 'rejected') continue;
+    if (p?.op !== 'create_node' || !it.id || gone.has(it.id) || rejected.has(it.id) || it.status === 'rejected') continue;
     const lifecycle = resolve(p.node?.type);
     const state = lifecycle ? p.node?.state || lifecycle.initial || '' : '';
     rows.push({
@@ -140,6 +155,7 @@ export function lifecycleRows(
   const resolve = lifecycleResolver(nodes);
   const byId = new Map(nodes.map((n) => [n.id ?? '', n]));
   const gone = supersededIds(items);
+  const rejected = rejectedIds(items);
   const ids = [...new Set([...attached.map((r) => r.id ?? ''), ...extra])].filter((id) => byId.has(id));
   const rows: LifecycleRow[] = [];
   for (const id of ids) {
@@ -150,10 +166,13 @@ export function lifecycleRows(
     const moves: string[] = [];
     const props: Record<string, unknown> = { ...((node.props ?? {}) as Record<string, unknown>) };
     let edits = 0;
+    let removal: ChangeItem | undefined;
     for (const it of items) {
       const p = it.proposal;
-      if (!p || p.node?.base?.id !== id || (it.id && gone.has(it.id)) || it.status === 'superseded' || it.status === 'rejected') continue;
-      if (p.op === 'transition_node' && p.node?.state) {
+      if (!p || p.node?.base?.id !== id || (it.id && (gone.has(it.id) || rejected.has(it.id))) || it.status === 'superseded' || it.status === 'rejected') continue;
+      if (p.op === 'delete_node') {
+        removal = it;
+      } else if (p.op === 'transition_node' && p.node?.state) {
         cur = p.node.state;
         moves.push(cur);
       } else if (p.op === 'update_node') {
@@ -172,6 +191,7 @@ export function lifecycleRows(
       props,
       edits,
       declared: declaredProperties(nodes, node.type),
+      removal,
     });
   }
   rows.sort((a, b) => (a.node.key ?? '').localeCompare(b.node.key ?? ''));

@@ -90,7 +90,7 @@
     ...nodes.map((n) => n.key ?? ''),
     ...items.filter((i) => i.proposal?.op === 'create_node' && !supersededIds(items).has(i.id ?? '')).map((i) => i.proposal?.node?.key ?? ''),
   ]);
-  const stuckEditable = $derived(lcRows.some((r) => r.lifecycle && r.editable));
+  const stuckEditable = $derived(lcRows.some((r) => r.lifecycle && r.editable && !r.removal));
 
   /** Proposes a transition of a node in this change (the server checks it). */
   /** Proposes new values for some properties of a node (the server checks the state). */
@@ -164,6 +164,56 @@
       if (dependents.length) throw new Error(`${row.node.key} is already linked by other items of the change: it can no longer be edited here.`);
       const props = { ...row.props, ...patch } as Struct;
       await graph.addItems(change.id, creationItems(row.node.key ?? '', row.node.type ?? '', props, state ?? row.effective, [old.id], linkIds));
+      await load(change.id);
+      return true;
+    } catch (e) {
+      error = errorMessage(e);
+      return false;
+    } finally {
+      moving = '';
+    }
+  }
+
+  const reject = (id: string, comment: string): ChangeItem => ({ kind: 'decision', decision: { item: id, accept: false, comment } });
+
+  /** Deletes a node when the change is applied, or discards a node the change creates. */
+  async function removeNode(row: LifecycleRow): Promise<boolean> {
+    if (!change?.id) return false;
+    moving = `${row.node.id}:delete`;
+    error = '';
+    try {
+      if (row.created?.id) {
+        const gone = supersededIds(items);
+        const own = items.filter((i) => i.proposal?.op === 'add_link' && i.proposal.link?.from?.item === row.created?.id && !gone.has(i.id ?? ''));
+        const dependents = items.filter(
+          (i) =>
+            !gone.has(i.id ?? '') &&
+            !own.includes(i) &&
+            (i.proposal?.link?.from?.item === row.created?.id || i.proposal?.link?.to?.item === row.created?.id || i.derivedFrom?.includes(row.created?.id ?? '')),
+        );
+        if (dependents.length) throw new Error(`${row.node.key} is linked by other items of the change: it cannot be discarded here.`);
+        await graph.addItems(change.id, [row.created, ...own].map((i) => reject(i.id ?? '', `discarded ${row.node.key}`)));
+      } else {
+        const base: NodeRef = { id: row.node.id, version: row.node.version };
+        await graph.addItems(change.id, [{ kind: 'proposal', proposal: { op: 'delete_node', node: { base } } }]);
+      }
+      await load(change.id);
+      return true;
+    } catch (e) {
+      error = errorMessage(e);
+      return false;
+    } finally {
+      moving = '';
+    }
+  }
+
+  /** Withdraws a deletion proposed by this change. */
+  async function undoDelete(row: LifecycleRow): Promise<boolean> {
+    if (!change?.id || !row.removal?.id) return false;
+    moving = `${row.node.id}:delete`;
+    error = '';
+    try {
+      await graph.addItems(change.id, [reject(row.removal.id, `keep ${row.node.key}`)]);
       await load(change.id);
       return true;
     } catch (e) {
@@ -322,7 +372,7 @@
     {/if}
   </section>
 
-  <ChangeLifecycle rows={lcRows} candidates={lcCandidates} disabled={closed} busy={moving} onmove={move} onedit={edit} types={typeNames} {lifecycleOf} keys={takenKeys} oncreate={createNode} onadd={(id) => (extraNodes = [...extraNodes, id])} />
+  <ChangeLifecycle rows={lcRows} candidates={lcCandidates} disabled={closed} busy={moving} onmove={move} onedit={edit} types={typeNames} {lifecycleOf} keys={takenKeys} oncreate={createNode} onremove={removeNode} onundo={undoDelete} onadd={(id) => (extraNodes = [...extraNodes, id])} />
 
   <section class="card">
     <h3>Impacts <span class="count">{groups.impact.length}</span></h3>
