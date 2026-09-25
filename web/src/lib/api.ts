@@ -833,6 +833,11 @@ export const graph = {
     rpc<Empty, { changes?: ChangeSet[] }>(GRAPH, 'ListChanges', {}, signal),
   getChange: (id: string, signal?: AbortSignal) =>
     rpc<{ id: string }, { change?: ChangeSet }>(GRAPH, 'GetChange', { id }, signal),
+  /** Nodes the change is attached to (the versions it starts from). */
+  getChangeNodes: (changeId: string, signal?: AbortSignal) =>
+    rpc<{ changeId: string }, { nodes?: NodeRef[] }>(GRAPH, 'GetChangeNodes', { changeId }, signal),
+  addItems: (changeId: string, items: ChangeItem[]) =>
+    rpc<{ changeId: string; items: ChangeItem[] }, { items?: ChangeItem[] }>(GRAPH, 'AddItems', { changeId, items }),
   /** Execution journal of a change, optionally restricted to given processes. */
   listExecutions: (changeId: string, processIds: string[] = [], signal?: AbortSignal) =>
     rpc<{ changeId: string; processIds?: string[] }, { records?: ExecutionRecord[] }>(

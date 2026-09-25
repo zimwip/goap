@@ -10,11 +10,15 @@
     type ChangeItem,
     type ChangeSet,
     type GraphNode,
+    type LifecycleTransition,
+    type NodeRef,
   } from '../../api';
   import type { Tab } from '../../shell/types';
   import Icon from '../../shell/Icon.svelte';
   import { makeContext, describeProposal, refKey, show } from '../../items';
   import StatusBadge from '../../components/StatusBadge.svelte';
+  import ChangeLifecycle from '../../components/ChangeLifecycle.svelte';
+  import { lifecycleRows, reopenable, type LifecycleRow } from '../../lifecycle';
   import { openTab } from '../../shell/tabs.svelte';
   import { provideActions, notify } from '../../shell/workbench.svelte';
   import { refreshChanges, refreshBaselines } from '../../stores/catalog.svelte';
@@ -24,6 +28,9 @@
 
   let change = $state<ChangeSet | undefined>();
   let nodes = $state<GraphNode[]>([]);
+  let attached = $state<NodeRef[]>([]);
+  let extraNodes = $state<string[]>([]);
+  let moving = $state('');
   let loading = $state(false);
   let error = $state('');
 
@@ -41,6 +48,7 @@
       change = c;
       if (!baselineName) baselineName = c?.title ? `${c.title}` : `change-${shortId(id)}`;
       nodes = c?.baselineId ? ((await graph.getBaselineGraph(c.baselineId, signal)).nodes ?? []) : [];
+      attached = (await graph.getChangeNodes(id, signal)).nodes ?? [];
     } catch (e) {
       if (!signal?.aborted) error = errorMessage(e);
     } finally {
@@ -51,6 +59,8 @@
   $effect(() => {
     const id = selected;
     change = undefined;
+    attached = [];
+    extraNodes = [];
     applied = undefined;
     baselineName = '';
     if (!id) return;
@@ -70,6 +80,26 @@
   const others = $derived(items.filter((i) => !['impact', 'proposal', 'decision', 'artifact'].includes(i.kind ?? '')));
 
   const isApplied = $derived(change?.status === 'applied');
+  const closed = $derived(change?.status === 'applied' || change?.status === 'abandoned');
+  const lcRows = $derived(lifecycleRows(nodes, attached, items, extraNodes));
+  const lcCandidates = $derived(reopenable(nodes, lcRows));
+  const stuckEditable = $derived(lcRows.some((r) => r.editable));
+
+  /** Proposes a transition of a node in this change (the server checks it). */
+  async function move(row: LifecycleRow, t: LifecycleTransition) {
+    if (!change?.id || !row.node.id) return;
+    moving = `${row.node.id}:${t.name}`;
+    error = '';
+    try {
+      const base: NodeRef = { id: row.node.id, version: row.node.version };
+      await graph.addItems(change.id, [{ kind: 'proposal', proposal: { op: 'transition_node', node: { base, state: t.to } } }]);
+      await load(change.id);
+    } catch (e) {
+      error = errorMessage(e);
+    } finally {
+      moving = '';
+    }
+  }
 
   async function apply() {
     if (!change?.id) return;
@@ -129,8 +159,8 @@
         label: applying ? 'Applying…' : 'Apply',
         icon: 'check',
         primary: true,
-        disabled: !change || isApplied || applying || !baselineName.trim(),
-        title: 'Create a new baseline from the change',
+        disabled: !change || isApplied || applying || !baselineName.trim() || stuckEditable,
+        title: stuckEditable ? 'Move the nodes out of their editable state first' : 'Create a new baseline from the change',
         run: apply,
       },
     ],
@@ -193,7 +223,7 @@
         <label for="bname">Name of the new baseline</label>
         <input id="bname" type="text" bind:value={baselineName} disabled={isApplied} />
       </div>
-      <button class="primary" onclick={apply} disabled={isApplied || applying || !baselineName.trim()}>
+      <button class="primary" onclick={apply} disabled={isApplied || applying || !baselineName.trim() || stuckEditable} title={stuckEditable ? 'Move the nodes out of their editable state first' : ''}>
         {applying ? 'Applying…' : 'Apply'}
       </button>
     </div>
@@ -203,6 +233,8 @@
       </div>
     {/if}
   </section>
+
+  <ChangeLifecycle rows={lcRows} candidates={lcCandidates} disabled={closed} busy={moving} onmove={move} onadd={(id) => (extraNodes = [...extraNodes, id])} />
 
   <section class="card">
     <h3>Impacts <span class="count">{groups.impact.length}</span></h3>
