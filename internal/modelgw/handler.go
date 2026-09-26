@@ -117,14 +117,14 @@ func (h *Handler) ListProviderKinds(ctx context.Context, r *connect.Request[mode
 }
 
 func providerToPB(v ProviderView) *modelv1.Provider {
-	return &modelv1.Provider{Name: v.Name, Kind: v.Kind, Protocol: v.Protocol, BaseUrl: v.BaseURL, Enabled: v.Enabled, HasKey: v.HasKey, KeyHint: v.KeyHint, Active: v.Active}
+	return &modelv1.Provider{Name: v.Name, Kind: v.Kind, Protocol: v.Protocol, BaseUrl: v.BaseURL, Enabled: v.Enabled, HasKey: v.HasKey, ApiKeyRef: v.APIKeyRef, Active: v.Active}
 }
 
 func providerFromPB(p *modelv1.Provider) ProviderRecord {
 	if p == nil {
 		return ProviderRecord{}
 	}
-	return ProviderRecord{Name: p.Name, Kind: p.Kind, Protocol: p.Protocol, BaseURL: p.BaseUrl, Enabled: p.Enabled}
+	return ProviderRecord{Name: p.Name, Kind: p.Kind, Protocol: p.Protocol, BaseURL: p.BaseUrl, Enabled: p.Enabled, APIKeyRef: p.ApiKeyRef}
 }
 
 func (h *Handler) ListProviders(ctx context.Context, r *connect.Request[modelv1.ListProvidersRequest]) (*connect.Response[modelv1.ListProvidersResponse], error) {
@@ -141,29 +141,6 @@ func (h *Handler) ListProviders(ctx context.Context, r *connect.Request[modelv1.
 		out.Providers = append(out.Providers, providerToPB(v))
 	}
 	return connect.NewResponse(out), nil
-}
-
-func (h *Handler) SaveProvider(ctx context.Context, r *connect.Request[modelv1.SaveProviderRequest]) (*connect.Response[modelv1.SaveProviderResponse], error) {
-	ctx, err := h.guard(ctx, r.Header())
-	if err != nil {
-		return nil, err
-	}
-	v, err := h.Service.SaveProvider(ctx, providerFromPB(r.Msg.Provider), r.Msg.ApiKey, r.Msg.ClearKey)
-	if err != nil {
-		return nil, rpcErr(err)
-	}
-	return connect.NewResponse(&modelv1.SaveProviderResponse{Provider: providerToPB(v)}), nil
-}
-
-func (h *Handler) DeleteProvider(ctx context.Context, r *connect.Request[modelv1.DeleteProviderRequest]) (*connect.Response[modelv1.DeleteProviderResponse], error) {
-	ctx, err := h.guard(ctx, r.Header())
-	if err != nil {
-		return nil, err
-	}
-	if err := h.Service.DeleteProvider(ctx, r.Msg.Name); err != nil {
-		return nil, rpcErr(err)
-	}
-	return connect.NewResponse(&modelv1.DeleteProviderResponse{}), nil
 }
 
 func (h *Handler) DiscoverModels(ctx context.Context, r *connect.Request[modelv1.DiscoverModelsRequest]) (*connect.Response[modelv1.DiscoverModelsResponse], error) {
@@ -210,60 +187,6 @@ func (h *Handler) ListCatalog(ctx context.Context, r *connect.Request[modelv1.Li
 		}
 	}
 	return connect.NewResponse(out), nil
-}
-
-func (h *Handler) SaveModel(ctx context.Context, r *connect.Request[modelv1.SaveModelRequest]) (*connect.Response[modelv1.SaveModelResponse], error) {
-	ctx, err := h.guard(ctx, r.Header())
-	if err != nil {
-		return nil, err
-	}
-	m := r.Msg.Model
-	if m == nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("model required"))
-	}
-	e, err := h.Service.SaveModel(ctx, ModelEntry{Provider: m.Provider, Model: m.Model, DisplayName: m.DisplayName, Enabled: m.Enabled,
-		QuotaTokens: m.QuotaTokens, QuotaPeriod: m.QuotaPeriod, Roles: m.Roles})
-	if err != nil {
-		return nil, rpcErr(err)
-	}
-	return connect.NewResponse(&modelv1.SaveModelResponse{Model: catalogToPB(e)}), nil
-}
-
-func (h *Handler) DeleteModel(ctx context.Context, r *connect.Request[modelv1.DeleteModelRequest]) (*connect.Response[modelv1.DeleteModelResponse], error) {
-	ctx, err := h.guard(ctx, r.Header())
-	if err != nil {
-		return nil, err
-	}
-	if err := h.Service.DeleteModel(ctx, r.Msg.Provider, r.Msg.Model); err != nil {
-		return nil, rpcErr(err)
-	}
-	return connect.NewResponse(&modelv1.DeleteModelResponse{}), nil
-}
-
-func (h *Handler) SaveAlias(ctx context.Context, r *connect.Request[modelv1.SaveAliasRequest]) (*connect.Response[modelv1.SaveAliasResponse], error) {
-	ctx, err := h.guard(ctx, r.Header())
-	if err != nil {
-		return nil, err
-	}
-	a := r.Msg.Alias
-	if a == nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("alias required"))
-	}
-	if err := h.Service.SaveAlias(ctx, AliasEntry{Alias: a.Alias, Target: a.Provider + "/" + a.Model}); err != nil {
-		return nil, rpcErr(err)
-	}
-	return connect.NewResponse(&modelv1.SaveAliasResponse{}), nil
-}
-
-func (h *Handler) DeleteAlias(ctx context.Context, r *connect.Request[modelv1.DeleteAliasRequest]) (*connect.Response[modelv1.DeleteAliasResponse], error) {
-	ctx, err := h.guard(ctx, r.Header())
-	if err != nil {
-		return nil, err
-	}
-	if err := h.Service.DeleteAlias(ctx, r.Msg.Alias); err != nil {
-		return nil, rpcErr(err)
-	}
-	return connect.NewResponse(&modelv1.DeleteAliasResponse{}), nil
 }
 
 // Client adapts the model gateway Connect client to llm.Client.

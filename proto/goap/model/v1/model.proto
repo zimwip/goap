@@ -9,20 +9,16 @@ service ModelService {
   rpc ListModels(ListModelsRequest) returns (ListModelsResponse);
 
   // Platform administration of the gateway (`admin` on the `platform`
-  // resource). Providers are pluggable: a kind is a preset (Mistral, Anthropic,
-  // Google, …) on top of a wire protocol (anthropic, openai, gemini).
+  // resource), read-only: providers, models and aliases are nodes of the
+  // platform namespace of the graph, changed through changes. Providers are
+  // pluggable: a kind is a preset (Mistral, Anthropic, Google, …) on top of a
+  // wire protocol (anthropic, openai, gemini).
   rpc ListProviderKinds(ListProviderKindsRequest) returns (ListProviderKindsResponse);
   rpc ListProviders(ListProvidersRequest) returns (ListProvidersResponse);
-  rpc SaveProvider(SaveProviderRequest) returns (SaveProviderResponse);
-  rpc DeleteProvider(DeleteProviderRequest) returns (DeleteProviderResponse);
   // Ask the provider for its models (before or after saving it).
   rpc DiscoverModels(DiscoverModelsRequest) returns (DiscoverModelsResponse);
   // The catalog: models offered on the platform, with quota and access level.
   rpc ListCatalog(ListCatalogRequest) returns (ListCatalogResponse);
-  rpc SaveModel(SaveModelRequest) returns (SaveModelResponse);
-  rpc DeleteModel(DeleteModelRequest) returns (DeleteModelResponse);
-  rpc SaveAlias(SaveAliasRequest) returns (SaveAliasResponse);
-  rpc DeleteAlias(DeleteAliasRequest) returns (DeleteAliasResponse);
 }
 
 message Message {
@@ -94,8 +90,8 @@ message ListProviderKindsResponse {
   repeated ProviderProtocol protocols = 2;
 }
 
-// A configured provider. The API key is write-only: only has_key and a
-// masked key_hint are returned.
+// A configured provider. The API key is never stored: api_key_ref references
+// it (env:<VAR> or <vault path>#<field>, alternatives separated by "|").
 message Provider {
   string name = 1;
   string kind = 2;
@@ -103,7 +99,7 @@ message Provider {
   string base_url = 4;
   bool enabled = 5;
   bool has_key = 6;
-  string key_hint = 7;
+  string api_key_ref = 7;
   // whether the provider is loaded in the running router
   bool active = 8;
 }
@@ -114,23 +110,6 @@ message ListProvidersResponse {
   repeated Provider providers = 1;
 }
 
-message SaveProviderRequest {
-  Provider provider = 1;
-  // empty: keep the stored key
-  string api_key = 2;
-  bool clear_key = 3;
-}
-
-message SaveProviderResponse {
-  Provider provider = 1;
-}
-
-message DeleteProviderRequest {
-  string name = 1;
-}
-
-message DeleteProviderResponse {}
-
 message DiscoveredModel {
   string id = 1;
   string display_name = 2;
@@ -140,7 +119,8 @@ message DiscoveredModel {
 
 message DiscoverModelsRequest {
   Provider provider = 1;
-  // empty: use the stored key of the provider of that name
+  // empty: resolve the key from provider.api_key_ref, or from the reference of the
+  // provider of that name
   string api_key = 2;
 }
 
@@ -169,29 +149,3 @@ message ListCatalogResponse {
   repeated ModelAlias aliases = 2;
 }
 
-message SaveModelRequest {
-  CatalogModel model = 1;
-}
-
-message SaveModelResponse {
-  CatalogModel model = 1;
-}
-
-message DeleteModelRequest {
-  string provider = 1;
-  string model = 2;
-}
-
-message DeleteModelResponse {}
-
-message SaveAliasRequest {
-  ModelAlias alias = 1;
-}
-
-message SaveAliasResponse {}
-
-message DeleteAliasRequest {
-  string alias = 1;
-}
-
-message DeleteAliasResponse {}

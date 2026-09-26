@@ -1307,8 +1307,10 @@ export interface LlmProvider {
   protocol: string;
   baseUrl?: string;
   enabled?: boolean;
+  /** references an API key */
   hasKey?: boolean;
-  keyHint?: string;
+  /** where the key is: `env:<VAR>` or `<vault path>#<field>`, alternatives separated by `|`; the key itself is never stored */
+  apiKeyRef?: string;
   /** loaded in the running router */
   active?: boolean;
 }
@@ -1350,19 +1352,11 @@ export const models = {
   listProviderKinds: (signal?: AbortSignal) =>
     rpc<Empty, { kinds?: ProviderKind[]; protocols?: { id: string; label?: string }[] }>(MODEL, 'ListProviderKinds', {}, signal),
   listProviders: (signal?: AbortSignal) => rpc<Empty, { providers?: LlmProvider[] }>(MODEL, 'ListProviders', {}, signal),
-  /** `apiKey` empty keeps the stored key. */
-  saveProvider: (provider: LlmProvider, apiKey = '', clearKey = false) =>
-    rpc<object, { provider?: LlmProvider }>(MODEL, 'SaveProvider', { provider, apiKey, clearKey }),
-  deleteProvider: (name: string) => rpc<{ name: string }, Empty>(MODEL, 'DeleteProvider', { name }),
-  /** Ask the provider for its models; `apiKey` empty uses the stored key of the provider of that name. */
+  /** Ask the provider for its models; `apiKey` empty resolves the key from the provider's reference. Read-only: the configuration is edited with `llmEdit`. */
   discoverModels: (provider: Partial<LlmProvider>, apiKey = '') =>
     rpc<object, { models?: DiscoveredModel[] }>(MODEL, 'DiscoverModels', { provider, apiKey }),
   listCatalog: (signal?: AbortSignal) =>
     rpc<Empty, { models?: CatalogModel[]; aliases?: ModelAlias[] }>(MODEL, 'ListCatalog', {}, signal),
-  saveModel: (model: CatalogModel) => rpc<{ model: CatalogModel }, { model?: CatalogModel }>(MODEL, 'SaveModel', { model }),
-  deleteModel: (provider: string, model: string) => rpc<object, Empty>(MODEL, 'DeleteModel', { provider, model }),
-  saveAlias: (alias: ModelAlias) => rpc<{ alias: ModelAlias }, Empty>(MODEL, 'SaveAlias', { alias }),
-  deleteAlias: (alias: string) => rpc<{ alias: string }, Empty>(MODEL, 'DeleteAlias', { alias }),
 };
 
 // ---------------------------------------------------------------------------

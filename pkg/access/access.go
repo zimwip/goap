@@ -17,7 +17,7 @@ import (
 
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
-	"github.com/zimwip/goap/pkg/graph"
+	"github.com/zimwip/goap/pkg/graphsnap"
 	"github.com/zimwip/goap/pkg/mcp"
 )
 
@@ -199,47 +199,22 @@ func (s *Snapshot) Enrich(p authz.Principal) authz.Principal {
 	return p
 }
 
-// Directory reads the snapshot of the head of the main branch, looking at the head at most once
-// per TTL (one second by default) and rebuilding only when it moved. When the graph cannot be read
-// the last snapshot keeps serving.
+// Directory reads the snapshot of the head of the main branch (see graphsnap.Cache); TTL is how often the
+// head is looked at, one second by default.
 type Directory struct {
 	Graph Graph
 	TTL   time.Duration
 
-	mu      sync.Mutex
-	cur     *Snapshot
-	checked time.Time
+	once  sync.Once
+	cache graphsnap.Cache[*Snapshot]
 }
 
-// Snapshot returns the current snapshot. A graph without any baseline yields an empty one.
+// Snapshot returns the current snapshot. A graph without any baseline yields an empty one; when the graph
+// cannot be read the last snapshot (nil if none) is returned with the error.
 func (d *Directory) Snapshot(ctx context.Context) (*Snapshot, error) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	ttl := d.TTL
-	if ttl == 0 {
-		ttl = time.Second
-	}
-	if d.cur != nil && time.Since(d.checked) < ttl {
-		return d.cur, nil
-	}
-	head, err := d.Graph.BranchHead(ctx, domain.MainBranch)
-	if errors.Is(err, graph.ErrNotFound) {
-		d.cur, d.checked = BuildSnapshot("", nil, nil), time.Now()
-		return d.cur, nil
-	}
-	if err != nil {
-		return d.cur, err
-	}
-	d.checked = time.Now()
-	if d.cur != nil && d.cur.Baseline == head.ID {
-		return d.cur, nil
-	}
-	nodes, links, err := d.Graph.BaselineGraph(ctx, head.ID)
-	if err != nil {
-		return d.cur, err
-	}
-	d.cur = BuildSnapshot(head.ID, nodes, links)
-	return d.cur, nil
+	d.once.Do(func() { d.cache = graphsnap.Cache[*Snapshot]{Graph: d.Graph, TTL: d.TTL, Build: BuildSnapshot} })
+	s, _, err := d.cache.Get(ctx)
+	return s, err
 }
 
 // Enrich completes a principal from the current snapshot; when the graph cannot be read the

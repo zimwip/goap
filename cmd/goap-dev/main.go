@@ -42,6 +42,7 @@ import (
 	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/intent"
 	"github.com/zimwip/goap/pkg/llm"
+	"github.com/zimwip/goap/pkg/llmcfg"
 	"github.com/zimwip/goap/pkg/metamodel"
 	"github.com/zimwip/goap/pkg/methodology"
 )
@@ -127,14 +128,17 @@ func main() {
 	if _, err := metamodel.SyncAll(ctx, g, reg); err != nil {
 		platform.Fatal(log, "methodology projection", err)
 	}
-	key, _ := secrets.Get(ctx, "", "ANTHROPIC_API_KEY")
-	secret, _ := secrets.Get(ctx, "", "GOAP_SECRET_KEY")
-	if secret == "" {
-		secret = modelgw.DevSecret
+	// the gateway configuration is graph data, seeded once; API keys are references resolved from the environment or Vault
+	if cfg, err := modelgw.InitialConfig(ctx, platform.Env("GOAP_MODELS_CONFIG", ""), secrets); err != nil {
+		platform.Fatal(log, "models config", err)
+	} else if provs, models, aliases, err := cfg.Objects(); err != nil {
+		platform.Fatal(log, "models config", err)
+	} else if _, err := graphsvc.SeedModels(ctx, g, provs, models, aliases); err != nil {
+		platform.Fatal(log, "seed models", err)
 	}
-	gw := modelgw.NewService(st.models, modelgw.NewBox(secret), log)
+	gw := modelgw.NewService(&llmcfg.Directory{Graph: g}, st.models, secrets.Resolve, log)
 	gw.Router.Instrument = telemetry.NewGenAI().Instrument
-	if err := gw.Bootstrap(ctx, modelgw.DefaultConfig(key != ""), secrets.Get); err != nil {
+	if err := gw.Reload(ctx); err != nil {
 		platform.Fatal(log, "models", err)
 	}
 	// the engine calls the gateway in-process, without an identity: trusted

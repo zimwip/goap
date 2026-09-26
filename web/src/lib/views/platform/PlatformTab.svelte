@@ -53,8 +53,8 @@
     <h2>Platform settings</h2>
   </div>
   <p class="hint intro">
-    LLM gateway: connect providers with their API key, fetch the models they offer, then decide which ones the platform
-    exposes, how many tokens they may consume and who may use them. Changes apply immediately.
+    LLM gateway: connect providers (the API key is referenced, never stored), fetch the models they offer, then decide which ones the platform
+    exposes, how many tokens they may consume and who may use them. Providers, models and aliases are nodes of the graph, changed through changes; the gateway follows within a second.
   </p>
 
   {#if error}<div class="alert">{error}</div>{/if}

@@ -10,6 +10,7 @@ import (
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/graph"
+	"github.com/zimwip/goap/pkg/llmcfg"
 	"github.com/zimwip/goap/pkg/mcp"
 )
 
@@ -184,4 +185,38 @@ func SeedUser(ctx context.Context, g *graph.Graph, u access.User) error {
 func SeedPolicy(ctx context.Context, g *graph.Graph, p authz.Policy) error {
 	return applyOn(ctx, g, mcp.NamespaceOrganisation, "Policy "+p.Resource+"/"+p.Action, []domain.ChangeItem{
 		createNode("policy", access.PolicyKey(p), access.NodeTypePolicy, access.PolicyProps(p))})
+}
+
+// SeedModels creates the model gateway configuration (providers, models, aliases; nodes of the platform namespace)
+// when the graph holds no provider yet, so that providers or models deleted on purpose stay so. It reports
+// whether it seeded.
+func SeedModels(ctx context.Context, g *graph.Graph, providers []llmcfg.Provider, models []llmcfg.Model, aliases []llmcfg.Alias) (bool, error) {
+	head, err := g.BranchHead(ctx, domain.MainBranch)
+	if err == nil {
+		nodes, _, gerr := g.BaselineGraph(ctx, head.ID)
+		if gerr != nil {
+			return false, gerr
+		}
+		for _, n := range nodes {
+			if n.Namespace == llmcfg.NamespacePlatform && n.Type == llmcfg.NodeTypeProvider {
+				return false, nil
+			}
+		}
+	} else if !errors.Is(err, graph.ErrNotFound) {
+		return false, err
+	}
+	var items []domain.ChangeItem
+	for _, p := range providers {
+		items = append(items, createNode(domain.ItemID("provider-"+p.Name), llmcfg.ProviderKey(p.Name), llmcfg.NodeTypeProvider, p.Props()))
+	}
+	for _, m := range models {
+		items = append(items, createNode(domain.ItemID("model-"+m.Provider+"/"+m.Model), m.Key(), llmcfg.NodeTypeModel, m.Props()))
+	}
+	for _, a := range aliases {
+		items = append(items, createNode(domain.ItemID("alias-"+a.Alias), llmcfg.AliasKey(a.Alias), llmcfg.NodeTypeAlias, a.Props()))
+	}
+	if len(items) == 0 {
+		return false, nil
+	}
+	return true, applyOn(ctx, g, llmcfg.NamespacePlatform, "Model gateway configuration", items)
 }
