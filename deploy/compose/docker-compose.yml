@@ -76,7 +76,6 @@ services:
     build: {context: ../.., args: {SERVICE: registry}}
     environment:
       <<: *env
-      GOAP_DB_DSN: postgres://registry:registry@postgres:5432/goap?sslmode=disable
       GOAP_DOMAINS_DIR: /domains
       GOAP_METHODOLOGIES_DIR: /methodologies
       GOAP_GRAPH_URL: http://graph:8080

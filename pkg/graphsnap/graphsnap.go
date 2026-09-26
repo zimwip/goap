@@ -35,14 +35,19 @@ type Cache[T any] struct {
 }
 
 // Get returns the current snapshot and the baseline it was built from.
-func (c *Cache[T]) Get(ctx context.Context) (T, domain.BaselineID, error) {
+func (c *Cache[T]) Get(ctx context.Context) (T, domain.BaselineID, error) { return c.get(ctx, false) }
+
+// Fresh is Get without the TTL: the head is looked at now (before a write that builds on what it reads).
+func (c *Cache[T]) Fresh(ctx context.Context) (T, domain.BaselineID, error) { return c.get(ctx, true) }
+
+func (c *Cache[T]) get(ctx context.Context, fresh bool) (T, domain.BaselineID, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	ttl := c.TTL
 	if ttl == 0 {
 		ttl = time.Second
 	}
-	if c.have && time.Since(c.checked) < ttl {
+	if !fresh && c.have && time.Since(c.checked) < ttl {
 		return c.cur, c.id, nil
 	}
 	head, err := c.Graph.BranchHead(ctx, domain.MainBranch)

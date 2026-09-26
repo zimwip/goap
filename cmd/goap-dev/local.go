@@ -17,19 +17,17 @@ import (
 	"github.com/zimwip/goap/internal/mcpsvc"
 	"github.com/zimwip/goap/internal/modelgw"
 	"github.com/zimwip/goap/internal/platform"
-	"github.com/zimwip/goap/internal/registrysvc"
 	"github.com/zimwip/goap/pkg/engine"
 	"github.com/zimwip/goap/pkg/graph"
 )
 
 // stores are the storage backends of the single-process platform.
 type stores struct {
-	graph         graph.Repo
-	methodologies registrysvc.Store
-	processes     engine.Store
-	models        modelgw.Store
-	mcp           mcpsvc.Store
-	close         func()
+	graph     graph.Repo
+	processes engine.Store
+	models    modelgw.Store
+	mcp       mcpsvc.Store
+	close     func()
 }
 
 // openStores selects the storage (GOAP_STORE): memory, or sqlite for the
@@ -37,7 +35,7 @@ type stores struct {
 func openStores(ctx context.Context, log *slog.Logger) (stores, error) {
 	switch kind := platform.Env("GOAP_STORE", "memory"); kind {
 	case "memory":
-		return stores{graph: graph.NewMemory(), methodologies: registrysvc.NewMemoryStore(), processes: engine.NewMemoryStore(), models: modelgw.NewMemoryStore(), mcp: mcpsvc.NewMemoryStore(), close: func() {}}, nil
+		return stores{graph: graph.NewMemory(), processes: engine.NewMemoryStore(), models: modelgw.NewMemoryStore(), mcp: mcpsvc.NewMemoryStore(), close: func() {}}, nil
 	case "sqlite":
 		path := platform.Env("GOAP_SQLITE_PATH", filepath.Join(".goap", "goap.db"))
 		db, err := platform.OpenSQLite(ctx, path)
@@ -48,7 +46,7 @@ func openStores(ctx context.Context, log *slog.Logger) (stores, error) {
 			component string
 			fs        fs.FS
 		}{
-			{"graph", graph.SQLiteMigrations}, {"registry", registrysvc.SQLiteMigrations},
+			{"graph", graph.SQLiteMigrations},
 			{"engine", enginesvc.SQLiteMigrations},
 			{"modelgw", modelgw.SQLiteMigrations}, {"mcp", mcpsvc.SQLiteMigrations},
 		} {
@@ -66,7 +64,7 @@ func openStores(ctx context.Context, log *slog.Logger) (stores, error) {
 		}
 		abs, _ := filepath.Abs(path)
 		log.Info("local storage", "sqlite", abs)
-		return stores{graph: graph.NewSQLite(db), methodologies: registrysvc.SQLiteStore{DB: db},
+		return stores{graph: graph.NewSQLite(db),
 			processes: processes, models: modelgw.SQLStore{DB: db}, mcp: mcpsvc.SQLStore{DB: db}, close: func() { closeDB(log, db) }}, nil
 	default:
 		return stores{}, fmt.Errorf("GOAP_STORE must be memory or sqlite, got %q", kind)

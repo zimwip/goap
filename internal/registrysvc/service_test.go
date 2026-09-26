@@ -4,32 +4,18 @@ import (
 	"context"
 	"errors"
 	"os"
-	"path/filepath"
 	"reflect"
 	"testing"
 
-	"github.com/zimwip/goap/internal/pgtest"
-	"github.com/zimwip/goap/internal/platform"
 	"github.com/zimwip/goap/pkg/authz"
+	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/methodology"
 )
 
 func stores(t *testing.T) map[string]func(t *testing.T) Store {
 	return map[string]func(t *testing.T) Store{
-		"memory":   func(*testing.T) Store { return NewMemoryStore() },
-		"postgres": func(t *testing.T) Store { return PostgresStore{Pool: pgtest.Pool(t, Migrations)} },
-		"sqlite": func(t *testing.T) Store {
-			ctx := context.Background()
-			db, err := platform.OpenSQLite(ctx, filepath.Join(t.TempDir(), "goap.db"))
-			if err != nil {
-				t.Fatal(err)
-			}
-			t.Cleanup(func() { db.Close() })
-			if err := platform.MigrateSQLite(ctx, db, "registry", SQLiteMigrations, "migrations_sqlite"); err != nil {
-				t.Fatal(err)
-			}
-			return SQLiteStore{DB: db}
-		},
+		"memory": func(*testing.T) Store { return NewMemoryStore() },
+		"graph":  func(*testing.T) Store { return NewGraphStore(graph.New(graph.NewMemory())) },
 	}
 }
 
