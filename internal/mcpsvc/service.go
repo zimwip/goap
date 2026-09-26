@@ -28,9 +28,7 @@ type Service struct {
 	Store Store
 	// Directory reads the unit hierarchy, the MCPs and the adapter instances from the graph.
 	Directory *Directory
-	// Library gives the adapter algorithms (the code of the adapters).
-	Library Library
-	Invoker Invoker
+	Invoker   Invoker
 	// Secrets resolves a secret reference of a binding ("<vault path>#<field>" or "env:<VAR>").
 	Secrets func(ctx context.Context, ref string) (string, error)
 	// Lease is the validity of a registration (default DefaultLease).
@@ -89,20 +87,17 @@ func (s *Service) Connectors(ctx context.Context) ([]ConnectorView, error) {
 
 func (s *Service) live(r ConnectorReg) bool { return s.now().Sub(r.LastSeen) <= s.lease() }
 
-// adapterAlgorithm loads the algorithm of an adapter instance and checks that it is an adapter of
-// the MCP the instance says it implements.
-func (s *Service) adapterAlgorithm(ctx context.Context, a mcp.Adapter) (algo.Algorithm, error) {
-	if s.Library == nil {
-		return algo.Algorithm{}, fmt.Errorf("no adapter library configured: %w", ErrLibrary)
+// adapterAlgorithm returns the definition an adapter instance refers to, as an algorithm, and checks
+// that it implements the MCP the instance says it does.
+func adapterAlgorithm(snap *Snapshot, a mcp.Adapter) (algo.Algorithm, error) {
+	def, ok := snap.AdapterDef(a.Adapter)
+	if !ok {
+		return algo.Algorithm{}, fmt.Errorf("adapter of %s in %s: no adapter definition %q (declare it in the platform namespace): %w", a.MCP, a.Unit, a.Adapter, ErrAdapterDef)
 	}
-	alg, _, err := s.Library.Algorithm(ctx, a.Domain, a.Version, a.Algorithm)
-	if err != nil {
-		return alg, fmt.Errorf("adapter of %s in %s: %w: %w", a.MCP, a.Unit, ErrLibrary, err)
+	if def.MCP != a.MCP {
+		return algo.Algorithm{}, fmt.Errorf("adapter definition %s implements the MCP %s, not %s: %w", def.Name, def.MCP, a.MCP, ErrAdapterDef)
 	}
-	if alg.Type != algo.UsageAdapter || alg.MCP != a.MCP {
-		return alg, fmt.Errorf("algorithm %s/%s is not an adapter of the MCP %s: %w", a.Domain, a.Algorithm, a.MCP, mcp.ErrInvalid)
-	}
-	return alg, nil
+	return def.Algorithm(), nil
 }
 
 // CheckAdapter validates an adapter instance before it is saved: the MCP and the algorithm must
@@ -120,15 +115,15 @@ func (s *Service) CheckAdapter(ctx context.Context, a mcp.Adapter) (warnings []s
 	if err := a.Validate(def); err != nil {
 		return nil, err
 	}
-	alg, err := s.adapterAlgorithm(ctx, a)
-	if errors.Is(err, ErrLibrary) {
+	alg, err := adapterAlgorithm(snap, a)
+	if errors.Is(err, ErrAdapterDef) {
 		return nil, fmt.Errorf("%v: %w", err, mcp.ErrInvalid)
 	} else if err != nil {
 		return nil, err
 	}
 	vals, issues := alg.Resolve(a.Params)
 	if len(issues) > 0 {
-		return nil, fmt.Errorf("adapter %s/%s: %s: %w", a.Domain, a.Algorithm, issues[0], mcp.ErrInvalid)
+		return nil, fmt.Errorf("adapter %s: %s: %w", a.Adapter, issues[0], mcp.ErrInvalid)
 	}
 	_, secrets := alg.Split(vals)
 	for name, ref := range secrets {
@@ -194,10 +189,14 @@ func (s *Service) MCPs(ctx context.Context) ([]mcp.Def, error) {
 	return snap.Defs(), nil
 }
 
-// ConnectorOf returns the id of the connector an adapter instance calls (from its algorithm), or ""
-// when the library cannot say.
+// ConnectorOf returns the id of the connector an adapter instance calls (from its definition), or ""
+// when it cannot be resolved.
 func (s *Service) ConnectorOf(ctx context.Context, a mcp.Adapter) string {
-	if alg, err := s.adapterAlgorithm(ctx, a); err == nil {
+	snap, err := s.Directory.Snapshot(ctx)
+	if err != nil {
+		return ""
+	}
+	if alg, err := adapterAlgorithm(snap, a); err == nil {
 		return alg.Connector
 	}
 	return ""
@@ -219,7 +218,7 @@ func (s *Service) Tools(ctx context.Context, unit string) (tools []Tool, mcps []
 }
 
 // Call runs a tool ("<mcp>/<tool>") for the unit holding a change: it takes the adapter instance of the
-// nearest unit, loads its algorithm from the library, and runs the code, which calls the operations the
+// nearest unit, takes its definition from the platform namespace, and runs the code, which calls the operations the
 // connector exposes (configured with the instance's parameters and secrets). A failure reported by
 // the code or the connector is a *ToolError.
 func (s *Service) Call(ctx context.Context, org, name string, args map[string]any) (map[string]any, error) {
@@ -246,8 +245,8 @@ func (s *Service) Call(ctx context.Context, org, name string, args map[string]an
 	if !ok {
 		return nil, fmt.Errorf("mcp %s has no adapter for %s or its ancestors: %w", mcpName, domain.OrgOf(org), ErrNotBound)
 	}
-	alg, err := s.adapterAlgorithm(ctx, a)
-	if errors.Is(err, ErrLibrary) {
+	alg, err := adapterAlgorithm(snap, a)
+	if errors.Is(err, ErrAdapterDef) {
 		return nil, fmt.Errorf("%v: %w", err, ErrUnavailable)
 	} else if err != nil {
 		return nil, err

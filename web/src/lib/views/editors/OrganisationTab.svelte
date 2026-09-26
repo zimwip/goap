@@ -1,15 +1,16 @@
 <script lang="ts">
   // Organisational unit tab. An organisation is an OrgUnit node of the organisation namespace. Its MCP
   // pane says which MCPs the unit can use: an MCP is implemented for the unit by an Adapter node
-  // (`ADP:<unit>/<mcp>`, owned by the unit), the unit's INSTANCE of an adapter of the library (an algorithm of
-  // type `adapter` in a published domain): it names the algorithm and gives the parameter values (root
+  // (`ADP:<unit>/<mcp>`, owned by the unit), the unit's INSTANCE of an adapter definition (an
+  // `AdapterDef` node of the platform namespace): it names the definition and gives the parameter values (root
   // directory, secret references...). A unit inherits the adapters of its ancestors; the nearest wins.
   import type { Tab } from '../../shell/types';
   import Icon from '../../shell/Icon.svelte';
   import EditorPanes, { type Pane } from '../../components/EditorPanes.svelte';
   import AlgorithmParamValues from '../../components/AlgorithmParamValues.svelte';
   import { mcp, errorMessage, type Adapter, type EffectiveMcp, type Struct } from '../../api';
-  import { tools, refreshTools, type LibraryAdapter } from '../../stores/tools.svelte';
+  import { tools, refreshTools } from '../../stores/tools.svelte';
+  import type { AdapterDef } from '../../adapterDef';
   import { defaultToText, type ParamForm } from '../../algorithmForm';
   import { headGraph, findNode, applyOnMain, createNodeItem, updateNodeItem, deleteNodeItem, linkItem, refOf, type HeadGraph } from '../../graphEdit';
   import { openTab } from '../../shell/tabs.svelte';
@@ -86,18 +87,17 @@
 
   let editing = $state(false);
   let fMcp = $state('');
-  /** "<domain>/<algorithm>" of the library */
+  /** name of the adapter definition */
   let fLib = $state('');
-  let fVersion = $state('');
   let fValues = $state<Record<string, unknown>>({});
   let fError = $state('');
   let fWarnings = $state<string[]>([]);
   let checked = $state(false);
   let saving = $state(false);
 
-  const libKey = (l: LibraryAdapter) => `${l.domain}/${l.name}`;
-  const libFor = $derived(tools.library.filter((l) => l.mcp === fMcp));
-  const chosen = $derived<LibraryAdapter | undefined>(tools.library.find((l) => libKey(l) === fLib));
+  const libKey = (l: AdapterDef) => l.name;
+  const libFor = $derived(tools.adapterDefs.filter((l) => l.mcp === fMcp));
+  const chosen = $derived<AdapterDef | undefined>(tools.adapterDefs.find((l) => libKey(l) === fLib));
   const connectorLive = (id: string) => tools.connectors.find((c) => c.info?.id === id)?.live === true;
   const connectorKnown = (id: string) => tools.connectors.some((c) => c.info?.id === id);
   const paramForms = $derived<ParamForm[]>(
@@ -114,10 +114,9 @@
   /** opens the form for an MCP, prefilled from an adapter (its own, or the inherited one to override) */
   function edit(mcpName: string, from?: Adapter) {
     fMcp = mcpName;
-    const own = tools.library.filter((l) => l.mcp === mcpName);
-    const known = from?.algorithm ? own.find((l) => l.domain === from.domain && l.name === from.algorithm) : undefined;
+    const own = tools.adapterDefs.filter((l) => l.mcp === mcpName);
+    const known = from?.adapter ? own.find((l) => l.name === from.adapter) : undefined;
     fLib = known ? libKey(known) : own[0] ? libKey(own[0]) : '';
-    fVersion = known ? (from?.version ?? '') : '';
     fValues = known ? { ...((from?.params ?? {}) as Record<string, unknown>) } : {};
     fError = '';
     fWarnings = [];
@@ -133,7 +132,7 @@
       return undefined;
     }
     if (!chosen) {
-      fError = 'Pick an adapter of the library.';
+      fError = 'Pick an adapter.';
       return undefined;
     }
     const params: Struct = {};
@@ -148,7 +147,7 @@
       }
       params[p.name ?? ''] = v as Struct[string];
     }
-    return { unit: key, mcp: fMcp, domain: chosen.domain, version: fVersion.trim(), algorithm: chosen.name, params };
+    return { unit: key, mcp: fMcp, adapter: chosen.name, params };
   }
 
   async function check() {
@@ -173,7 +172,7 @@
       const h = await headGraph();
       const akey = `ADP:${key}/${a.mcp}`;
       const existing = findNode(h, NS, 'Adapter', akey);
-      const props: Struct = { mcp: a.mcp ?? '', domain: a.domain ?? '', version: a.version ?? '', algorithm: a.algorithm ?? '', params: a.params ?? {} };
+      const props: Struct = { mcp: a.mcp ?? '', adapter: a.adapter ?? '', params: a.params ?? {} };
       const u = findNode(h, NS, 'OrgUnit', key);
       if (!u) throw new Error(`unit ${key} not found`);
       const id = crypto.randomUUID();
@@ -248,7 +247,7 @@
                 {#each effective as e (e.mcp?.name)}
                   <tr>
                     <td><code>{e.mcp?.name}</code></td>
-                    <td><code>{e.adapter?.domain}/{e.adapter?.algorithm}</code>{#if e.adapter?.version}<span class="hint"> @{e.adapter.version}</span>{/if}</td>
+                    <td><code>{e.adapter?.adapter}</code></td>
                     <td>{e.connector || '?'}{#if e.connector && !connectorLive(e.connector)}<span class="tag warn" title={connectorKnown(e.connector) ? 'registration expired' : 'not registered'}> {connectorKnown(e.connector) ? 'expired' : 'not registered'}</span>{/if}</td>
                     <td><code>{e.adapter?.unit}</code></td>
                     <td><span class="badge">{e.inherited ? 'inherited' : 'own'}</span></td>
@@ -283,7 +282,7 @@
             <section class="card">
               <h3>Adapter of <code>{fMcp}</code> for <code>{key}</code></h3>
               <p class="hint">
-                The adapter is code of the library; the unit gives it its parameter values. The same adapter can serve several units with different values (for example another root directory).
+                The adapter is defined once on the platform (Adapters section); the unit gives it its parameter values. The same adapter can serve several units with different values (for example another root directory).
               </p>
               {#if fError}<div class="alert">{fError}</div>{/if}
               <div class="grid">
@@ -307,12 +306,8 @@
                     {#each libFor as l (libKey(l))}
                       <option value={libKey(l)}>{libKey(l)} · connector {l.connector}{connectorLive(l.connector) ? '' : connectorKnown(l.connector) ? ' (expired)' : ' (not registered)'}</option>
                     {/each}
-                    {#if !libFor.length}<option value="">no adapter for this MCP in the library</option>{/if}
+                    {#if !libFor.length}<option value="">no adapter defined for this MCP</option>{/if}
                   </select>
-                </div>
-                <div class="field">
-                  <label for="ad-ver">Version <span class="opt">(empty: latest published{chosen?.version ? `, now ${chosen.version}` : ''})</span></label>
-                  <input id="ad-ver" type="text" class="mono" bind:value={fVersion} placeholder="latest" />
                 </div>
               </div>
               {#if chosen}

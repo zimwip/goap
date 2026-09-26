@@ -1,7 +1,7 @@
 name: platform
 version: 1.0.0
 description: >
-  The platform model, in its own namespace ("platform"): the methodology meta-model as domain objects (methodology, agent, action, goal, condition, trigger, node type), used by the self-observation methodology, and the MCPs: the generic usage of a tool by an LLM. An organisation implements an MCP with an Adapter (organisation domain).
+  The platform model, in its own namespace ("platform"): the methodology meta-model as domain objects (methodology, agent, action, goal, condition, trigger, node type), used by the self-observation methodology, the MCPs (the generic usage of a tool by an LLM) and the adapter definitions (AdapterDef: code mapping an MCP onto a connector). An organisation implements an MCP with an Adapter (organisation domain), an instance of an AdapterDef.
 nodeTypes:
   - {name: Methodology, properties: [name, version, description]}
   - {name: Agent, properties: [name, planner, actions, goals]}
@@ -13,6 +13,9 @@ nodeTypes:
   - {name: ToolRequest, properties: [name, description, motivation]}
   # generic tool usage for an LLM: tools = [{name, description, inputSchema}]. Knows no connector and no adapter.
   - {name: MCP, description: "Generic usage of a tool by an LLM (e.g. document-repository)", properties: [name, description, tools]}
+  # code that implements the tools of one MCP with the operations of one connector (ADR 0019); changed through a change.
+  # An organisational unit instantiates it with an Adapter node (organisation domain) giving its parameter values.
+  - {name: AdapterDef, description: "Adapter: implements the tools of an MCP with the operations of a connector", properties: [name, description, mcp, connector, language, code, params]}
 linkTypes:
   - {name: contains, from: Methodology}
   - {name: uses, from: Agent, to: Action}
@@ -22,27 +25,3 @@ linkTypes:
   - {name: achieves, from: Action, to: Condition}
   - {name: specializes, from: Action, to: Action}
   - {name: extends, from: NodeType, to: NodeType}
-
-# The adapter library (ADR 0019). An adapter is code that implements the tools an MCP expects with the
-# operations a connector exposes. Each organisational unit instantiates one (an Adapter node of the
-# organisation namespace) with its parameter values: the same adapter, another root directory.
-# Parameters are handed to the connector as its configuration, secrets under their name.
-algorithms:
-  - name: localfs-document-repository
-    description: The document-repository MCP on the local file system connector (localfs)
-    type: adapter
-    language: javascript
-    mcp: document-repository
-    connector: localfs
-    params:
-      - {name: root, type: string, required: true, description: Directory the unit exposes as its document repository}
-    code: |
-      switch (ctx.tool()) {
-        case "list":
-          return ctx.call("list_dir", { path: ctx.args().path || "" });
-        case "read":
-          return ctx.call("read_file", { path: ctx.args().path });
-        case "write":
-          return ctx.call("write_file", { path: ctx.args().path, content: ctx.args().content });
-      }
-      ctx.fail("unknown tool " + ctx.tool());

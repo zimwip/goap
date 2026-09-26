@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/zimwip/goap/pkg/algo"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/mcp"
@@ -28,6 +29,31 @@ func documentRepository() mcp.Def {
 		{Name: "read", Description: "Read the text of a document.", InputSchema: obj(map[string]any{"path": str("document path")}, "path")},
 		{Name: "write", Description: "Create or replace a document.", InputSchema: obj(map[string]any{"path": str("document path"), "content": str("text of the document")}, "path", "content")},
 	}}
+}
+
+// LocalFSAdapterName is the adapter definition of the document-repository MCP on the localfs connector.
+const LocalFSAdapterName = "localfs-document-repository"
+
+// localFSAdapterDef is the reference adapter: the document-repository MCP on the local file system connector.
+func localFSAdapterDef() mcp.AdapterDef {
+	return mcp.AdapterDef{
+		Name:        LocalFSAdapterName,
+		Description: "The document-repository MCP on the local file system connector (localfs)",
+		MCP:         "document-repository",
+		Connector:   "localfs",
+		Language:    algo.JavaScript,
+		Params:      []algo.Param{{Name: "root", Type: algo.ParamString, Required: true, Description: "Directory the unit exposes as its document repository"}},
+		Code: `switch (ctx.tool()) {
+  case "list":
+    return ctx.call("list_dir", { path: ctx.args().path || "" });
+  case "read":
+    return ctx.call("read_file", { path: ctx.args().path });
+  case "write":
+    return ctx.call("write_file", { path: ctx.args().path, content: ctx.args().content });
+}
+ctx.fail("unknown tool " + ctx.tool());
+`,
+	}
 }
 
 // applyOn applies proposals on main as one change of a namespace, so that the head of main
@@ -64,7 +90,7 @@ func linkTo(from domain.ItemID, typ string, to domain.NodeRef) domain.ChangeItem
 }
 
 // SeedDefaults makes sure, at every start, that the default organisation (the root of every
-// unit's adapter resolution) and the document-repository MCP exist. It is idempotent: once the
+// unit's adapter resolution), the document-repository MCP and its localfs adapter definition exist. It is idempotent: once the
 // default organisation exists nothing is touched, so that edited or deleted MCPs stay so.
 func SeedDefaults(ctx context.Context, g *graph.Graph) (bool, error) {
 	if _, err := g.NodeByKey(ctx, mcp.NamespaceOrganisation, domain.DefaultOrg); err == nil {
@@ -79,7 +105,11 @@ func SeedDefaults(ctx context.Context, g *graph.Graph) (bool, error) {
 		return false, err
 	}
 	d := documentRepository()
-	err := applyOn(ctx, g, mcp.NamespacePlatform, "MCP "+d.Name, []domain.ChangeItem{createNode("mcp", mcp.MCPKey(d.Name), mcp.NodeTypeMCP, d.Props())})
+	a := localFSAdapterDef()
+	err := applyOn(ctx, g, mcp.NamespacePlatform, "MCP "+d.Name, []domain.ChangeItem{
+		createNode("mcp", mcp.MCPKey(d.Name), mcp.NodeTypeMCP, d.Props()),
+		createNode("adapter-def", mcp.AdapterDefKey(a.Name), mcp.NodeTypeAdapterDef, a.Props()),
+	})
 	return err == nil, err
 }
 
@@ -99,7 +129,7 @@ func SeedUnit(ctx context.Context, g *graph.Graph, key, name, kind, parent strin
 // LocalFSAdapter is the instance of the localfs adapter of the platform library for a unit, exposing a
 // directory as its document repository (demos and tests).
 func LocalFSAdapter(unit, root string) mcp.Adapter {
-	return mcp.Adapter{Unit: unit, MCP: "document-repository", Domain: "platform", Algorithm: "localfs-document-repository", Params: map[string]any{"root": root}}
+	return mcp.Adapter{Unit: unit, MCP: "document-repository", Adapter: LocalFSAdapterName, Params: map[string]any{"root": root}}
 }
 
 // SeedAdapter creates the Adapter node of a unit, owned by it.
@@ -112,4 +142,9 @@ func SeedAdapter(ctx context.Context, g *graph.Graph, a mcp.Adapter) error {
 		createNode("adapter", mcp.AdapterKey(a.Unit, a.MCP), mcp.NodeTypeAdapter, a.Props()),
 		linkTo("adapter", mcp.LinkOwner, unit.Ref()),
 	})
+}
+
+// SeedAdapterDef creates the AdapterDef node of an adapter definition in the platform namespace.
+func SeedAdapterDef(ctx context.Context, g *graph.Graph, d mcp.AdapterDef) error {
+	return applyOn(ctx, g, mcp.NamespacePlatform, "Adapter "+d.Name, []domain.ChangeItem{createNode("adapter-def", mcp.AdapterDefKey(d.Name), mcp.NodeTypeAdapterDef, d.Props())})
 }

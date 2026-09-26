@@ -1414,10 +1414,8 @@ export interface Mcp {
 export interface Adapter {
   unit?: string;
   mcp?: string;
-  /** domain and version of the library holding the algorithm (empty version: latest published) */
-  domain?: string;
-  version?: string;
-  algorithm?: string;
+  /** name of the adapter definition (node `ADD:<name>` of the platform namespace) */
+  adapter?: string;
   params?: Struct;
 }
 
@@ -1425,7 +1423,7 @@ export interface EffectiveMcp {
   mcp?: Mcp;
   adapter?: Adapter;
   inherited?: boolean;
-  /** the connector the adapter calls (empty when the library cannot say) */
+  /** the connector the adapter calls (empty when the adapter definition cannot say) */
   connector?: string;
 }
 

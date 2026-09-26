@@ -21,8 +21,9 @@ rooted in a different directory). Several organisations can work on one change, 
      Registration and calls are authenticated with a shared token (`GOAP_CONNECTOR_TOKEN`).
    - **Adapter**: the code that makes the two work together. An MCP expects functions (its tools), a connector
      exposes its own (its operations); the adapter implements the former with the latter, and only it knows both.
-     It is **an algorithm of the domain library** (ADR 0018: usage `adapter`, in a shared domain such as
-     `platform`), declared for one `mcp` and one `connector`, with typed parameters (a `secret` type holds a
+     It is an **`AdapterDef` node of the `platform` namespace** (key `ADD:<name>`, usage `adapter` of ADR 0018),
+     so creating or changing one is a change like any modification of the platform's configuration. It names one
+     `mcp` and one `connector`, with typed parameters (a `secret` type holds a
      reference the code can never read). The code is the body of `function (ctx)` with `ctx.tool()`,
      `ctx.args()`, `ctx.param(name)`, `ctx.call(operation, args)` (the operations the connector exposes) and
      `ctx.fail(msg)`; it returns the result of the tool. A **template is generated** from the MCP definition (one
@@ -30,8 +31,8 @@ rooted in a different directory). Several organisations can work on one change, 
      Parameters are handed to the connector as its configuration under the same name; secret parameters are
      resolved by the hub and passed under their name.
      **Each organisational unit holds an instance**: an `Adapter` node of the **`organisation`** namespace
-     (key `ADP:<unit>/<mcp>`, linked by `owner` to the OrgUnit) with the reference of the algorithm (`domain`,
-     `version` or latest published, `algorithm`) and the parameter values. It is the only place where unit,
+     (key `ADP:<unit>/<mcp>`, linked by `owner` to the OrgUnit) with the name of the definition (`adapter`) and the
+     parameter values. It is the only place where unit,
      MCP and connector meet, and it is what lets units share the same adapter with different scopes.
 2. **Organisations are OrgUnits.** No second notion of organisation: the hierarchy is `part_of` (ADR 0016).
    The default organisation `ORG-DEFAULT` is created at the first start (`graphsvc.SeedDefaults`, with
@@ -42,8 +43,7 @@ rooted in a different directory). Several organisations can work on one change, 
    its ancestors, then `ORG-DEFAULT`. The same MCP and connector can thus be configured differently by each
    unit (each with its own root directory), and a unit without adapter inherits its ancestor's.
 5. **The hub** (`cmd/mcp`) keeps the connector registry only. It reads MCPs, adapter instances and the hierarchy
-   from the graph (snapshot of the head of `main`) and the adapter code from the registry (published domains,
-   cached), checks the arguments against the tool's schema, runs the adapter (bounded: 30 s, 32 connector
+   from the graph (snapshot of the head of `main`) and the adapter definitions from the same snapshot, checks the arguments against the tool's schema, runs the adapter (bounded: 30 s, 32 connector
    calls), resolves secrets, invokes the connector. It hands a connector only the secrets the connector
    declares. `CheckAdapter` validates an instance before it is saved as a node; `AdapterTemplate` generates code.
 6. **Scheduling.** An action lists the MCPs it uses (a tool action is `<mcp>/<tool>`); the engine offers it to
@@ -62,8 +62,11 @@ rooted in a different directory). Several organisations can work on one change, 
   node types of the former domain name are re-projected as `D:platform/…` at the next sync.
 - Adapter code runs in the hub process (goja / yaegi, no file, network or process access, bounded), the same
   trust model as the algorithms of ADR 0018: authors of the domain library are trusted; sandboxing them with the
-  pool of ADR 0007 is the next step if that changes. The `platform` library entry
+  pool of ADR 0007 is the next step if that changes. The seeded definition
   `localfs-document-repository` is the reference adapter.
+- Web: one **Adapters** explorer manages MCPs, connectors and adapters together; an adapter opens in a dedicated editor
+  (MCP and connector pickers showing which tools / operations the code handles, parameters, code editor) edits the
+  `AdapterDef` node through a change. Domains cannot declare `adapter` algorithms any more (validation rejects them).
 - Follow-ups: validating adapter instances as a node type algorithm (ADR 0018) so that a change cannot apply an
   invalid one; "try it" for adapters against a fake connector; splitting a change by owner could pick the adapter
   units automatically.

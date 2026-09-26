@@ -3,7 +3,6 @@ package mcpsvc_test
 import (
 	"context"
 	"errors"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -19,7 +18,6 @@ import (
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/mcp"
-	"github.com/zimwip/goap/pkg/methodology"
 
 	"github.com/jackc/pgx/v5/stdlib"
 )
@@ -38,36 +36,6 @@ func (f *fakeInvoker) Invoke(_ context.Context, _ string, r *connectorv1.InvokeR
 func localfsInfo() *connectorv1.ConnectorInfo {
 	return &connectorv1.ConnectorInfo{Id: "localfs", Version: "1", SecretNames: []string{"token"}, Operations: []*connectorv1.Operation{
 		{Name: "list_dir"}, {Name: "read_file"}, {Name: "write_file"}}}
-}
-
-// library serves the algorithms of the platform domain of the repository, plus the ones a test adds.
-type library struct{ algos map[string]algo.Algorithm }
-
-func (l library) Algorithm(_ context.Context, domain, _, name string) (algo.Algorithm, string, error) {
-	if a, ok := l.algos[domain+"/"+name]; ok {
-		return a, "1.0.0", nil
-	}
-	return algo.Algorithm{}, "", errors.New("not in the library")
-}
-
-func platformLibrary(t *testing.T) library {
-	t.Helper()
-	raw, err := os.ReadFile("../../domains/platform.yaml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	d, err := methodology.ParseDomain(raw)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if issues := d.Validate(); len(issues) > 0 {
-		t.Fatalf("platform domain: %v", issues)
-	}
-	l := library{algos: map[string]algo.Algorithm{}}
-	for _, a := range d.Algorithms {
-		l.algos["platform/"+a.Name] = a
-	}
-	return l
 }
 
 // world is a graph with the default organisation and the document-repository MCP, and two trees:
@@ -148,13 +116,15 @@ func testRegistry(t *testing.T, st mcpsvc.Store) {
 	}
 }
 
-func newHub(t *testing.T, g *graph.Graph, inv mcpsvc.Invoker, extra ...algo.Algorithm) *mcpsvc.Service {
+// newHub makes a hub over g; extra adapter definitions are added to the graph first (as a change of the platform namespace).
+func newHub(t *testing.T, g *graph.Graph, inv mcpsvc.Invoker, extra ...mcp.AdapterDef) *mcpsvc.Service {
 	t.Helper()
-	lib := platformLibrary(t)
-	for _, a := range extra {
-		lib.algos["platform/"+a.Name] = a
+	for _, d := range extra {
+		if err := graphsvc.SeedAdapterDef(context.Background(), g, d); err != nil {
+			t.Fatal(err)
+		}
 	}
-	svc := &mcpsvc.Service{Store: mcpsvc.NewMemoryStore(), Directory: &mcpsvc.Directory{Graph: g}, Library: lib, Invoker: inv,
+	svc := &mcpsvc.Service{Store: mcpsvc.NewMemoryStore(), Directory: &mcpsvc.Directory{Graph: g}, Invoker: inv,
 		Secrets: func(_ context.Context, ref string) (string, error) { return "secret:" + ref, nil }}
 	if _, err := svc.RegisterConnector(context.Background(), localfsInfo(), "http://localfs:8080"); err != nil {
 		t.Fatal(err)
@@ -211,7 +181,7 @@ func TestTheAdapterCodeMapsTheMCPOntoTheConnector(t *testing.T) {
 	ctx := context.Background()
 	g := world(t)
 	inv := &fakeInvoker{resp: &connectorv1.InvokeResponse{Result: pbconv.Struct(map[string]any{"text": "raw"})}}
-	custom := algo.Algorithm{Name: "shouting-docs", Type: algo.UsageAdapter, Language: algo.JavaScript, MCP: "document-repository", Connector: "localfs",
+	custom := mcp.AdapterDef{Name: "shouting-docs", Language: algo.JavaScript, MCP: "document-repository", Connector: "localfs",
 		Params: []algo.Param{{Name: "root", Type: algo.ParamString, Required: true}, {Name: "prefix", Type: algo.ParamString, Default: ">"}},
 		Code: `
 			if (ctx.tool() === "read") {
@@ -226,7 +196,7 @@ func TestTheAdapterCodeMapsTheMCPOntoTheConnector(t *testing.T) {
 			}
 			ctx.fail("write is not allowed here: " + ctx.tool());`}
 	svc := newHub(t, g, inv, custom)
-	b := mcp.Adapter{Unit: "ORG-B", MCP: "document-repository", Domain: "platform", Algorithm: "shouting-docs", Params: map[string]any{"root": "/b"}}
+	b := mcp.Adapter{Unit: "ORG-B", MCP: "document-repository", Adapter: "shouting-docs", Params: map[string]any{"root": "/b"}}
 	if err := graphsvc.SeedAdapter(ctx, g, b); err != nil {
 		t.Fatal(err)
 	}
@@ -281,18 +251,21 @@ func TestCallErrors(t *testing.T) {
 	}
 	inv.err = nil
 	// a connector that is not registered
-	other := &mcpsvc.Service{Store: mcpsvc.NewMemoryStore(), Directory: &mcpsvc.Directory{Graph: world(t)}, Library: platformLibrary(t), Invoker: inv}
+	other := &mcpsvc.Service{Store: mcpsvc.NewMemoryStore(), Directory: &mcpsvc.Directory{Graph: world(t)}, Invoker: inv}
 	if _, err := other.Call(ctx, "ORG-A", "document-repository/read", args); !errors.Is(err, mcpsvc.ErrUnavailable) {
 		t.Fatalf("unregistered connector = %v", err)
 	}
-	// an algorithm the library does not have
-	broken := &mcpsvc.Service{Store: mcpsvc.NewMemoryStore(), Directory: &mcpsvc.Directory{Graph: world(t)}, Library: library{algos: map[string]algo.Algorithm{}}, Invoker: inv}
-	if _, err := broken.Call(ctx, "ORG-A", "document-repository/read", args); !errors.Is(err, mcpsvc.ErrUnavailable) {
-		t.Fatalf("missing algorithm = %v", err)
+	// an adapter definition the graph does not have
+	gm := world(t)
+	if err := graphsvc.SeedAdapter(ctx, gm, mcp.Adapter{Unit: "ORG-B", MCP: "document-repository", Adapter: "gone"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := newHub(t, gm, inv).Call(ctx, "ORG-B", "document-repository/read", args); !errors.Is(err, mcpsvc.ErrUnavailable) {
+		t.Fatalf("missing definition = %v", err)
 	}
 	// parameter values that do not fit the algorithm
 	g := world(t)
-	if err := graphsvc.SeedAdapter(ctx, g, mcp.Adapter{Unit: "ORG-B", MCP: "document-repository", Domain: "platform", Algorithm: "localfs-document-repository"}); err != nil {
+	if err := graphsvc.SeedAdapter(ctx, g, mcp.Adapter{Unit: "ORG-B", MCP: "document-repository", Adapter: "localfs-document-repository"}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := newHub(t, g, inv).Call(ctx, "ORG-B", "document-repository/read", args); !errors.Is(err, mcp.ErrInvalid) {
@@ -303,10 +276,10 @@ func TestCallErrors(t *testing.T) {
 func TestSecretParametersReachTheConnectorButNotTheScript(t *testing.T) {
 	ctx := context.Background()
 	g := world(t)
-	secure := algo.Algorithm{Name: "secure-docs", Type: algo.UsageAdapter, Language: algo.JavaScript, MCP: "document-repository", Connector: "localfs",
+	secure := mcp.AdapterDef{Name: "secure-docs", Language: algo.JavaScript, MCP: "document-repository", Connector: "localfs",
 		Params: []algo.Param{{Name: "root", Type: algo.ParamString, Required: true}, {Name: "token", Type: algo.ParamSecret, Required: true}, {Name: "other", Type: algo.ParamSecret}},
 		Code:   `return { leaked: String(ctx.param("token")), out: ctx.call("read_file", { path: ctx.args().path }).text };`}
-	if err := graphsvc.SeedAdapter(ctx, g, mcp.Adapter{Unit: "ORG-B", MCP: "document-repository", Domain: "platform", Algorithm: "secure-docs",
+	if err := graphsvc.SeedAdapter(ctx, g, mcp.Adapter{Unit: "ORG-B", MCP: "document-repository", Adapter: "secure-docs",
 		Params: map[string]any{"root": "/b", "token": "env:TOK", "other": "env:X"}}); err != nil {
 		t.Fatal(err)
 	}
@@ -332,20 +305,20 @@ func TestCheckAdapterAndTemplate(t *testing.T) {
 		t.Fatalf("valid instance: %v, %v", w, err)
 	}
 	for name, bad := range map[string]mcp.Adapter{
-		"unknown MCP":       {MCP: "nope", Domain: "platform", Algorithm: "localfs-document-repository"},
-		"unknown algorithm": {MCP: "document-repository", Domain: "platform", Algorithm: "nope"},
-		"missing parameter": {MCP: "document-repository", Domain: "platform", Algorithm: "localfs-document-repository"},
-		"unknown parameter": {MCP: "document-repository", Domain: "platform", Algorithm: "localfs-document-repository", Params: map[string]any{"root": "/", "x": 1}},
+		"unknown MCP":        {MCP: "nope", Adapter: "localfs-document-repository"},
+		"unknown definition": {MCP: "document-repository", Adapter: "nope"},
+		"missing parameter":  {MCP: "document-repository", Adapter: "localfs-document-repository"},
+		"unknown parameter":  {MCP: "document-repository", Adapter: "localfs-document-repository", Params: map[string]any{"root": "/", "x": 1}},
 	} {
 		if _, err := svc.CheckAdapter(ctx, bad); !errors.Is(err, mcp.ErrInvalid) {
 			t.Errorf("%s: %v", name, err)
 		}
 	}
-	// an algorithm of another MCP is refused
-	other := algo.Algorithm{Name: "tickets", Type: algo.UsageAdapter, Language: algo.JavaScript, MCP: "ticketing", Connector: "jira", Code: "return 1"}
+	// a definition of another MCP is refused
+	other := mcp.AdapterDef{Name: "tickets", Language: algo.JavaScript, MCP: "ticketing", Connector: "jira", Code: "return 1"}
 	svc = newHub(t, world(t), &fakeInvoker{}, other)
-	if _, err := svc.CheckAdapter(ctx, mcp.Adapter{MCP: "document-repository", Domain: "platform", Algorithm: "tickets"}); !errors.Is(err, mcp.ErrInvalid) {
-		t.Fatalf("algorithm of another MCP = %v", err)
+	if _, err := svc.CheckAdapter(ctx, mcp.Adapter{MCP: "document-repository", Adapter: "tickets"}); !errors.Is(err, mcp.ErrInvalid) {
+		t.Fatalf("definition of another MCP = %v", err)
 	}
 
 	// the template follows the MCP and what the connector exposes
@@ -376,8 +349,11 @@ func TestSnapshotFollowsTheGraph(t *testing.T) {
 		t.Fatal(err)
 	}
 	s3, _ := d.Snapshot(ctx)
-	if a, inherited, ok := s3.Resolve("ORG-B", "document-repository"); !ok || inherited || a.Params["root"] != "/b" || a.Algorithm != "localfs-document-repository" {
+	if a, inherited, ok := s3.Resolve("ORG-B", "document-repository"); !ok || inherited || a.Params["root"] != "/b" || a.Adapter != "localfs-document-repository" {
 		t.Fatalf("new adapter not seen: %+v %v %v", a, inherited, ok)
+	}
+	if d, ok := s3.AdapterDef("localfs-document-repository"); !ok || d.MCP != "document-repository" || d.Connector != "localfs" || len(s3.AdapterDefs()) != 1 {
+		t.Fatalf("adapter definition not read from the graph: %+v %v", d, ok)
 	}
 	// an empty graph has no adapter and no MCP
 	empty := &mcpsvc.Directory{Graph: graph.New(graph.NewMemory())}

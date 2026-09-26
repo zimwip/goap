@@ -17,7 +17,7 @@ they use.** Every design decision starts by asking which of these questions it a
 | ↳ | **Agent** | A broad task scope that needs planning and loops to be achieved (goap / utility / hybrid planner); may call sub-agents. | methodology |
 | ↳ | **Action** | The smallest task, not splittable: preconditions, effects, cost. Kinds `llm`, `tool`, `human`, `builtin`, `script`. It states the tools (MCPs) it uses. | methodology |
 | **WHAT** | **Domain** | What is being changed: node types, links, lifecycles, algorithms (`alm`, `organisation`, `platform`, ...). The versioned graph is its content. | `domains/`, graph |
-| **WITH WHAT** | **MCP, Connector, Adapter** | **MCP**: the generic usage of a tool by an LLM (`platform` namespace). **Connector**: the driver of a real service, a separate service that registers itself. **Adapter**: the code that implements the tools an MCP expects with the operations a connector exposes. It is an algorithm of the domain library (usage `adapter`, template generated from the MCP and the connector); a unit holds an *instance* with its parameter values (secrets as references), where organisation, MCP and connector converge (`Adapter` node, `organisation` namespace, owned by the unit). | graph + connector registry (MCP hub) |
+| **WITH WHAT** | **MCP, Connector, Adapter** | **MCP**: the generic usage of a tool by an LLM (`platform` namespace). **Connector**: the driver of a real service, a separate service that registers itself. **Adapter**: the code that implements the tools an MCP expects with the operations a connector exposes. It is an `AdapterDef` node of the `platform` namespace (usage `adapter`, template generated from the MCP and the connector), changed through a Change; a unit holds an *instance* with its parameter values (secrets as references), where organisation, MCP and connector converge (`Adapter` node, `organisation` namespace, owned by the unit). | graph + connector registry (MCP hub) |
 
 Design rules that follow, to keep the whole consistent:
 
@@ -42,7 +42,7 @@ Design rules that follow, to keep the whole consistent:
    agent over smaller actions.
 7. **Library and instance.** Whatever is reusable across organisations is written once in the domain library (an
    algorithm with declared parameters, ADR 0018) and instantiated where it is used with parameter values: an adapter
-   is code in the library, and each unit gives it its own scope (same adapter, another root directory).
+   is a definition (`AdapterDef`), and each unit gives it its own scope (same adapter, another root directory).
 8. **Adding a capability**: name the question it answers, put it in that concept, and cross concepts only at the
    meeting points above. Adding a real service is a new connector (a service that registers itself), never a change to
    the platform.

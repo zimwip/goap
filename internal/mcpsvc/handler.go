@@ -93,14 +93,14 @@ func defToPB(d mcp.Def) *mcpv1.Mcp {
 }
 
 func adapterToPB(a mcp.Adapter) *mcpv1.Adapter {
-	return &mcpv1.Adapter{Unit: a.Unit, Mcp: a.MCP, Domain: a.Domain, Version: a.Version, Algorithm: a.Algorithm, Params: pbconv.Struct(a.Params)}
+	return &mcpv1.Adapter{Unit: a.Unit, Mcp: a.MCP, Adapter: a.Adapter, Params: pbconv.Struct(a.Params)}
 }
 
 func adapterFromPB(a *mcpv1.Adapter) mcp.Adapter {
 	if a == nil {
 		return mcp.Adapter{}
 	}
-	return mcp.Adapter{Unit: a.Unit, MCP: a.Mcp, Domain: a.Domain, Version: a.Version, Algorithm: a.Algorithm, Params: pbconv.Map(a.Params)}
+	return mcp.Adapter{Unit: a.Unit, MCP: a.Mcp, Adapter: a.Adapter, Params: pbconv.Map(a.Params)}
 }
 
 // unit is the requested unit, else the default organisation.
