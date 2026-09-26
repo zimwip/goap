@@ -49,6 +49,9 @@ web:
 runner-image: ## image of the script sandboxes (goap-runner)
 	docker build --build-arg SERVICE=goap-runner -t goap/runner:dev .
 
+# Engine socket for the docker-proxy service (docker / podman / Docker Desktop)
+export GOAP_DOCKER_SOCK ?= $(shell ./deploy/compose/docker-sock.sh)
+
 up: runner-image
 	$(COMPOSE) up --build -d
 
