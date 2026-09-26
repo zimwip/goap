@@ -84,7 +84,7 @@ func TestIssuesArePathed(t *testing.T) {
 	m, err := Parse([]byte(`
 name: Bad Name
 conditions:
-  - {name: ok, expr: "size(impacts) > 0"}
+  - {name: ok, expr: "size(changeNodes) > 0"}
   - {name: broken, expr: "impacts +"}
 actions:
   - {name: a, kind: llm, effects: {ok: true, ghost: true}}

@@ -49,25 +49,28 @@ func testNamespaces(t *testing.T, repo Repo) {
 	}
 	orgRef, sdlcRef := org.Ref(), sdlc.Ref()
 	// modifying a node of another namespace is refused
-	_, err = g.AddItems(ctx, c.ID, []domain.ChangeItem{{Kind: domain.KindProposal, Type: "x",
-		Proposal: &domain.Proposal{Op: domain.OpUpdateNode, Node: &domain.NodeDraft{Base: &orgRef, Properties: map[string]any{"a": 1}}}}})
+	_, err = g.AddNodes(ctx, c.ID, []domain.ChangeNode{{Intent: domain.IntentModified, Pre: &orgRef, Rationale: "x"}})
 	if !errors.Is(err, ErrInvalid) {
 		t.Fatalf("update across namespaces: %v", err)
 	}
-	// creating in another namespace is refused
-	_, err = g.AddItems(ctx, c.ID, []domain.ChangeItem{{Kind: domain.KindProposal, Type: "x",
-		Proposal: &domain.Proposal{Op: domain.OpCreateNode, Node: &domain.NodeDraft{Namespace: "organisation", Key: "Y", Type: "T"}}}})
-	if !errors.Is(err, ErrInvalid) {
-		t.Fatalf("create across namespaces: %v", err)
+	// a link to a node of another namespace is allowed, and created nodes belong to the change namespace
+	ns, err := g.AddNodes(ctx, c.ID, []domain.ChangeNode{
+		{Intent: domain.IntentCreated, Key: "Y", Type: "T", Rationale: "new"},
+		{Intent: domain.IntentModified, Pre: &sdlcRef, Rationale: "owned by the unit"},
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
-	// an owner link to another namespace is allowed, and created nodes inherit the change namespace
-	id := domain.ItemID("n1")
-	if _, err := g.AddItems(ctx, c.ID, []domain.ChangeItem{
-		{ID: id, Kind: domain.KindProposal, Type: "x", Proposal: &domain.Proposal{Op: domain.OpCreateNode, Node: &domain.NodeDraft{Key: "Y", Type: "T"}}},
-		{Kind: domain.KindProposal, Type: "x", Proposal: &domain.Proposal{Op: domain.OpAddLink, Link: &domain.LinkDraft{Type: "owner",
-			From: domain.Endpoint{Node: &sdlcRef}, To: domain.Endpoint{Node: &orgRef}}}},
-	}); err != nil {
-		t.Fatalf("cross-namespace link: %v", err)
+	for _, w := range []struct {
+		n domain.ChangeNode
+		w NodeWrite
+	}{{ns[0], NodeWrite{Properties: map[string]any{"a": 1}}}, {ns[1], NodeWrite{AddLinks: []LinkWrite{{Type: "owner", To: orgRef}}}}} {
+		if _, err := g.WriteNode(ctx, c.ID, w.n.ID, w.w); err != nil {
+			t.Fatalf("cross-namespace link: %v", err)
+		}
+		if _, err := g.ReviewNode(ctx, c.ID, w.n.ID, domain.ReviewAccepted, "u", "ok"); err != nil {
+			t.Fatal(err)
+		}
 	}
 	if _, err := g.Apply(ctx, c.ID, "B2"); err != nil {
 		t.Fatal(err)

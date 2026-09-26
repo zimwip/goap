@@ -18,8 +18,14 @@ func setProp(t *testing.T, g *Graph, f fixture, base domain.BaselineID, title st
 		t.Fatal(err)
 	}
 	ref := f.req.Ref()
-	if _, err := g.AddItems(ctx, c.ID, []domain.ChangeItem{{Kind: domain.KindProposal,
-		Proposal: &domain.Proposal{Op: domain.OpUpdateNode, Node: &domain.NodeDraft{Base: &ref, Properties: props}}}}); err != nil {
+	ns, err := g.AddNodes(ctx, c.ID, []domain.ChangeNode{{Intent: domain.IntentModified, Pre: &ref, Rationale: title}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := g.WriteNode(ctx, c.ID, ns[0].ID, NodeWrite{Properties: props}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := g.ReviewNode(ctx, c.ID, ns[0].ID, domain.ReviewAccepted, "u", "ok"); err != nil {
 		t.Fatal(err)
 	}
 	return c

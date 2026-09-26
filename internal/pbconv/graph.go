@@ -10,6 +10,7 @@ import (
 
 	graphv1 "github.com/zimwip/goap/gen/goap/graph/v1"
 	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/graph"
 )
 
 // Struct converts a map to a protobuf Struct (nil for an empty map).
@@ -82,7 +83,8 @@ func RefPtrFromPB(r *graphv1.NodeRef) *domain.NodeRef {
 func NodeToPB(n domain.Node) *graphv1.Node {
 	return &graphv1.Node{Id: string(n.ID), Version: int32(n.Version), Namespace: n.Namespace, Key: n.Key, Type: n.Type, Props: Struct(n.Properties),
 		Deleted: n.Deleted, ChangeId: string(n.ChangeID), CreatedAt: Time(n.CreatedAt),
-		Branch: domain.BranchOf(n.Branch), Parents: versionsToPB(n.Parents), Reason: n.Reason, State: n.State}
+		Branch: domain.BranchOf(n.Branch), Parents: versionsToPB(n.Parents), Reason: n.Reason, State: n.State,
+		ChangeNode: string(n.ChangeNode), Comment: n.Comment, Execution: n.Execution}
 }
 
 func versionsToPB(vs []domain.Version) []int32 {
@@ -99,7 +101,8 @@ func NodeFromPB(n *graphv1.Node) domain.Node {
 	}
 	return domain.Node{ID: domain.NodeID(n.Id), Version: domain.Version(n.Version), Namespace: n.Namespace, Key: n.Key, Type: n.Type, Properties: Map(n.Props),
 		Deleted: n.Deleted, ChangeID: domain.ChangeID(n.ChangeId), CreatedAt: FromTime(n.CreatedAt),
-		Branch: n.Branch, Parents: versionsFromPB(n.Parents), Reason: n.Reason, State: n.State}
+		Branch: n.Branch, Parents: versionsFromPB(n.Parents), Reason: n.Reason, State: n.State,
+		ChangeNode: domain.ChangeNodeID(n.ChangeNode), Comment: n.Comment, Execution: n.Execution}
 }
 
 func versionsFromPB(vs []int32) []domain.Version {
@@ -176,19 +179,8 @@ func BaselineFromPB(b *graphv1.Baseline) domain.Baseline {
 		Branch: b.Branch}
 }
 
-func endpointToPB(e domain.Endpoint) *graphv1.Endpoint {
-	return &graphv1.Endpoint{Node: RefPtrToPB(e.Node), Item: string(e.Item)}
-}
-
-func endpointFromPB(e *graphv1.Endpoint) domain.Endpoint {
-	if e == nil {
-		return domain.Endpoint{}
-	}
-	return domain.Endpoint{Node: RefPtrFromPB(e.Node), Item: domain.ItemID(e.Item)}
-}
-
 func ItemToPB(it domain.ChangeItem) *graphv1.ChangeItem {
-	out := &graphv1.ChangeItem{Id: string(it.ID), Kind: string(it.Kind), Type: it.Type, Status: string(it.Status), Target: RefPtrToPB(it.Target),
+	out := &graphv1.ChangeItem{Id: string(it.ID), Kind: string(it.Kind), Type: it.Type, Status: string(it.Status),
 		Data: Struct(it.Data), ProducedBy: it.ProducedBy, CreatedAt: Time(it.CreatedAt)}
 	for _, d := range it.DerivedFrom {
 		out.DerivedFrom = append(out.DerivedFrom, string(d))
@@ -201,20 +193,6 @@ func ItemToPB(it domain.ChangeItem) *graphv1.ChangeItem {
 	if e := it.FlowEvent; e != nil {
 		out.FlowEvent = FlowEventToPB(*e)
 	}
-	if it.Post != nil {
-		out.Post = endpointToPB(*it.Post)
-	}
-	if p := it.Proposal; p != nil {
-		pp := &graphv1.Proposal{Op: string(p.Op)}
-		if p.Node != nil {
-			pp.Node = &graphv1.NodeDraft{Base: RefPtrToPB(p.Node.Base), Namespace: p.Node.Namespace, Key: p.Node.Key, Type: p.Node.Type, Props: Struct(p.Node.Properties),
-				From: RefPtrToPB(p.Node.From), Ancestor: RefPtrToPB(p.Node.Ancestor), State: p.Node.State}
-		}
-		if p.Link != nil {
-			pp.Link = &graphv1.LinkDraft{LinkId: string(p.Link.LinkID), Type: p.Link.Type, From: endpointToPB(p.Link.From), To: endpointToPB(p.Link.To), Props: Struct(p.Link.Properties)}
-		}
-		out.Proposal = pp
-	}
 	if d := it.Decision; d != nil {
 		out.Decision = &graphv1.Decision{Item: string(d.Item), Accept: d.Accept, Comment: d.Comment}
 	}
@@ -223,7 +201,7 @@ func ItemToPB(it domain.ChangeItem) *graphv1.ChangeItem {
 
 func ItemFromPB(it *graphv1.ChangeItem) domain.ChangeItem {
 	out := domain.ChangeItem{ID: domain.ItemID(it.Id), Kind: domain.ItemKind(it.Kind), Type: it.Type, Status: domain.ItemStatus(it.Status),
-		Target: RefPtrFromPB(it.Target), Data: Map(it.Data), ProducedBy: it.ProducedBy, CreatedAt: FromTime(it.CreatedAt)}
+		Data: Map(it.Data), ProducedBy: it.ProducedBy, CreatedAt: FromTime(it.CreatedAt)}
 	for _, d := range it.DerivedFrom {
 		out.DerivedFrom = append(out.DerivedFrom, domain.ItemID(d))
 	}
@@ -235,21 +213,6 @@ func ItemFromPB(it *graphv1.ChangeItem) domain.ChangeItem {
 	if e := it.FlowEvent; e != nil {
 		fe := FlowEventFromPB(e)
 		out.FlowEvent = &fe
-	}
-	if it.Post != nil {
-		e := endpointFromPB(it.Post)
-		out.Post = &e
-	}
-	if p := it.Proposal; p != nil {
-		dp := &domain.Proposal{Op: domain.ProposalOp(p.Op)}
-		if p.Node != nil {
-			dp.Node = &domain.NodeDraft{Base: RefPtrFromPB(p.Node.Base), Namespace: p.Node.Namespace, Key: p.Node.Key, Type: p.Node.Type, Properties: Map(p.Node.Props),
-				From: RefPtrFromPB(p.Node.From), Ancestor: RefPtrFromPB(p.Node.Ancestor), State: p.Node.State}
-		}
-		if p.Link != nil {
-			dp.Link = &domain.LinkDraft{LinkID: domain.LinkID(p.Link.LinkId), Type: p.Link.Type, From: endpointFromPB(p.Link.From), To: endpointFromPB(p.Link.To), Properties: Map(p.Link.Props)}
-		}
-		out.Proposal = dp
 	}
 	if d := it.Decision; d != nil {
 		out.Decision = &domain.Decision{Item: domain.ItemID(d.Item), Accept: d.Accept, Comment: d.Comment}
@@ -276,7 +239,7 @@ func ItemsFromPB(its []*graphv1.ChangeItem) []domain.ChangeItem {
 func ChangeToPB(c domain.ChangeSet) *graphv1.ChangeSet {
 	return &graphv1.ChangeSet{Id: string(c.ID), Title: c.Title, Intent: c.Intent, Methodology: c.Methodology, Goal: c.Goal, Namespace: c.Namespace, ParentId: string(c.ParentID), OwnerOrg: c.OwnerOrg, Status: string(c.Status),
 		BaselineId: string(c.BaselineID), ResultBaselineId: string(c.ResultBaselineID), Data: Struct(c.Data), Items: ItemsToPB(c.Items), CreatedAt: Time(c.CreatedAt),
-		Branch: domain.BranchOf(c.Branch)}
+		Branch: domain.BranchOf(c.Branch), Nodes: ChangeNodesToPB(c.Nodes)}
 }
 
 func ChangeFromPB(c *graphv1.ChangeSet) domain.ChangeSet {
@@ -285,7 +248,7 @@ func ChangeFromPB(c *graphv1.ChangeSet) domain.ChangeSet {
 	}
 	return domain.ChangeSet{ID: domain.ChangeID(c.Id), Title: c.Title, Intent: c.Intent, Methodology: c.Methodology, Goal: c.Goal, Namespace: c.Namespace, ParentID: domain.ChangeID(c.ParentId), OwnerOrg: c.OwnerOrg, Status: domain.ChangeStatus(c.Status),
 		BaselineID: domain.BaselineID(c.BaselineId), ResultBaselineID: domain.BaselineID(c.ResultBaselineId), Data: Map(c.Data), Items: ItemsFromPB(c.Items), CreatedAt: FromTime(c.CreatedAt),
-		Branch: c.Branch}
+		Branch: c.Branch, Nodes: ChangeNodesFromPB(c.Nodes)}
 }
 
 func BranchToPB(b domain.Branch) *graphv1.Branch {
@@ -299,4 +262,90 @@ func BranchFromPB(b *graphv1.Branch) domain.Branch {
 	}
 	return domain.Branch{Name: b.Name, Parent: b.Parent, ForkBaseline: domain.BaselineID(b.ForkBaseline), Head: domain.BaselineID(b.Head),
 		Origin: b.Origin, Status: b.Status, CreatedAt: FromTime(b.CreatedAt)}
+}
+
+func ChangeNodeToPB(cn domain.ChangeNode) *graphv1.ChangeNode {
+	out := &graphv1.ChangeNode{Id: string(cn.ID), Key: cn.Key, Type: cn.Type, Intent: string(cn.Intent), Rationale: cn.Rationale,
+		Pre: RefPtrToPB(cn.Pre), Post: RefPtrToPB(cn.Post), Landed: RefPtrToPB(cn.Landed), Review: string(cn.Review),
+		Via: string(cn.Via), Recheck: cn.Recheck, ProducedBy: cn.ProducedBy, Execution: cn.Execution, CreatedAt: Time(cn.CreatedAt),
+		Flow: cn.Flow, Superseded: cn.Superseded}
+	for _, r := range cn.Reviews {
+		out.Reviews = append(out.Reviews, &graphv1.Review{Status: string(r.Status), By: r.By, Comment: r.Comment, At: Time(r.At), Flow: r.Flow, Execution: r.Execution, Superseded: r.Superseded})
+	}
+	for _, id := range cn.DerivedFrom {
+		out.DerivedFrom = append(out.DerivedFrom, string(id))
+	}
+	for _, id := range cn.Items {
+		out.Items = append(out.Items, string(id))
+	}
+	return out
+}
+
+func ChangeNodeFromPB(cn *graphv1.ChangeNode) domain.ChangeNode {
+	if cn == nil {
+		return domain.ChangeNode{}
+	}
+	out := domain.ChangeNode{ID: domain.ChangeNodeID(cn.Id), Key: cn.Key, Type: cn.Type, Intent: domain.NodeIntent(cn.Intent), Rationale: cn.Rationale,
+		Pre: RefPtrFromPB(cn.Pre), Post: RefPtrFromPB(cn.Post), Landed: RefPtrFromPB(cn.Landed), Review: domain.NodeReview(cn.Review),
+		Via: domain.ChangeNodeID(cn.Via), Recheck: cn.Recheck, ProducedBy: cn.ProducedBy, Execution: cn.Execution, CreatedAt: FromTime(cn.CreatedAt),
+		Flow: cn.Flow, Superseded: cn.Superseded}
+	for _, r := range cn.Reviews {
+		out.Reviews = append(out.Reviews, domain.Review{Status: domain.NodeReview(r.Status), By: r.By, Comment: r.Comment, At: FromTime(r.At), Flow: r.Flow, Execution: r.Execution, Superseded: r.Superseded})
+	}
+	for _, id := range cn.DerivedFrom {
+		out.DerivedFrom = append(out.DerivedFrom, domain.ItemID(id))
+	}
+	for _, id := range cn.Items {
+		out.Items = append(out.Items, domain.ItemID(id))
+	}
+	return out
+}
+
+func ChangeNodesToPB(cns []domain.ChangeNode) []*graphv1.ChangeNode {
+	out := make([]*graphv1.ChangeNode, len(cns))
+	for i, cn := range cns {
+		out[i] = ChangeNodeToPB(cn)
+	}
+	return out
+}
+
+func ChangeNodesFromPB(cns []*graphv1.ChangeNode) []domain.ChangeNode {
+	if len(cns) == 0 {
+		return nil
+	}
+	out := make([]domain.ChangeNode, len(cns))
+	for i, cn := range cns {
+		out[i] = ChangeNodeFromPB(cn)
+	}
+	return out
+}
+
+func EditsToPB(edits []graph.NodeEdit) []*graphv1.NodeEdit {
+	out := make([]*graphv1.NodeEdit, len(edits))
+	for i, e := range edits {
+		pe := &graphv1.NodeEdit{Key: e.Key, Type: e.Type, Pre: RefPtrToPB(e.Pre), Props: Struct(e.Props), Retire: e.Retire, Rationale: e.Rationale}
+		for _, l := range e.Links {
+			pe.Links = append(pe.Links, &graphv1.LinkEdit{Type: l.Type, To: RefPtrToPB(l.To), ToKey: l.ToKey, Props: Struct(l.Props)})
+		}
+		for _, id := range e.RemoveLinks {
+			pe.RemoveLinks = append(pe.RemoveLinks, string(id))
+		}
+		out[i] = pe
+	}
+	return out
+}
+
+func EditsFromPB(edits []*graphv1.NodeEdit) []graph.NodeEdit {
+	out := make([]graph.NodeEdit, len(edits))
+	for i, pe := range edits {
+		e := graph.NodeEdit{Key: pe.Key, Type: pe.Type, Pre: RefPtrFromPB(pe.Pre), Props: Map(pe.Props), Retire: pe.Retire, Rationale: pe.Rationale}
+		for _, l := range pe.Links {
+			e.Links = append(e.Links, graph.LinkEdit{Type: l.Type, To: RefPtrFromPB(l.To), ToKey: l.ToKey, Props: Map(l.Props)})
+		}
+		for _, id := range pe.RemoveLinks {
+			e.RemoveLinks = append(e.RemoveLinks, domain.LinkID(id))
+		}
+		out[i] = e
+	}
+	return out
 }

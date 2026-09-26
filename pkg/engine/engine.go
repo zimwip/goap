@@ -343,11 +343,11 @@ func (e *Engine) Submit(ctx context.Context, id string, items []ItemInput) (*Pro
 	step := &p.Steps[i]
 	rec := uuid.NewString()
 	submitted := e.clock()
-	ids, err := e.addItems(ctx, p, items, p.Pending.Action, rec)
+	ids, nodes, err := e.addItems(ctx, p, items, p.Pending.Action, rec)
 	if err != nil {
 		return nil, err
 	}
-	step.Items = ids
+	step.Items, step.Nodes = ids, nodes
 	if err := e.finishStep(ctx, p, m, step); err != nil {
 		return nil, err
 	}
@@ -438,13 +438,7 @@ func (e *Engine) cycle(ctx context.Context, p *Process, m *methodology.Compiled)
 			// the relaunched flow reached the goal: a human confirms before it replaces the previous run
 			p.Status = StatusWaiting
 			desc := "The relaunched flow reached the goal. Adopt it to replace the outputs of the previous run, or discard it."
-			// the proposals are applied on a domain branch of their own so that the resulting graph can be reviewed
-			if f, err := e.Graph.MaterializeFlow(ctx, p.ChangeID, p.Flow); err != nil {
-				e.log().Warn("flow preview failed", "process", p.ID, "flow", p.Flow, "err", err)
-				desc += " (the resulting graph could not be previewed: " + err.Error() + ")"
-			} else if f.Branch != "" {
-				desc += " Its proposals are applied on the graph branch " + f.Branch + "."
-			}
+			// what the flow wrote is on its graph branch, to be reviewed against the change branch before deciding
 			p.Pending = &HumanTask{Kind: TaskFlow, Action: "adopt_flow", Step: len(p.Steps), Description: desc}
 			e.journal(ctx, p, domain.ExecutionRecord{Kind: domain.ExecTick, Step: len(p.Steps), Before: maps.Clone(p.World),
 				Data: map[string]any{"goalSatisfied": true, "flow": p.Flow, "awaitingDecision": true}})
@@ -695,13 +689,18 @@ func (e *Engine) executeStep(ctx context.Context, p *Process, m *methodology.Com
 		p.Pending = &HumanTask{Kind: TaskInput, Action: action.Name, Description: action.Description, Instructions: action.Instructions, Step: i}
 		return nil
 	}
-	ids, err := e.addItems(ctx, p, res.Items, action.Name, step.Execution)
+	ids, nodes, err := e.addItems(ctx, p, res.Items, action.Name, step.Execution)
+	if err == nil {
+		var more []domain.ChangeNodeID
+		more, err = e.applyNodeOps(ctx, p, res.Nodes, action.Name, step.Execution)
+		nodes = append(nodes, more...)
+	}
 	if err != nil {
 		step.Error = err.Error()
 		step.EndedAt = e.clock()
 		return e.recordFailure(p, action.Name)
 	}
-	step.Items = ids
+	step.Items, step.Nodes = ids, nodes
 	return e.finishStep(ctx, p, m, step)
 }
 
@@ -855,7 +854,7 @@ func (e *Engine) finishStep(ctx context.Context, p *Process, m *methodology.Comp
 	step.EndedAt = e.clock()
 	step.EffectsMet = p.World.Satisfies(action.Effects)
 	if !step.EffectsMet {
-		if action.Incremental && len(step.Items) > 0 {
+		if action.Incremental && len(step.Items)+len(step.Nodes) > 0 {
 			step.Progress = true // the action runs again on the next cycle
 			return nil
 		}
@@ -899,7 +898,29 @@ func (e *Engine) observe(ctx context.Context, p *Process, m *methodology.Compile
 	return bb, nil
 }
 
-func (e *Engine) addItems(ctx context.Context, p *Process, in []ItemInput, producedBy, execution string) ([]domain.ItemID, error) {
+func (e *Engine) addItems(ctx context.Context, p *Process, in []ItemInput, producedBy, execution string) ([]domain.ItemID, []domain.ChangeNodeID, error) {
+	// change node operations (LLM output, human input) are applied in order, after the items
+	var ops []dsl.NodeOp
+	items := make([]ItemInput, 0, len(in))
+	for _, it := range in {
+		if it.Kind == "changeNode" {
+			if it.ChangeNode == nil {
+				return nil, nil, fmt.Errorf("item of kind changeNode needs a changeNode operation: %w", ErrInvalidState)
+			}
+			ops = append(ops, *it.ChangeNode)
+			continue
+		}
+		items = append(items, it)
+	}
+	ids, err := e.addPlainItems(ctx, p, items, producedBy, execution)
+	if err != nil {
+		return ids, nil, err
+	}
+	nodes, err := e.applyNodeOps(ctx, p, ops, producedBy, execution)
+	return ids, nodes, err
+}
+
+func (e *Engine) addPlainItems(ctx context.Context, p *Process, in []ItemInput, producedBy, execution string) ([]domain.ItemID, error) {
 	if len(in) == 0 {
 		return nil, nil
 	}
@@ -907,11 +928,7 @@ func (e *Engine) addItems(ctx context.Context, p *Process, in []ItemInput, produ
 	if err != nil {
 		return nil, err
 	}
-	nodes, _, err := e.Graph.BaselineGraph(ctx, bb.Change.BaselineID)
-	if err != nil {
-		return nil, err
-	}
-	items, err := newResolver(nodes, bb.Change, uuid.NewString).resolve(in, producedBy)
+	items, err := newResolver(bb.Change, uuid.NewString).resolve(in, producedBy)
 	if err != nil {
 		return nil, err
 	}

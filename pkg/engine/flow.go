@@ -66,7 +66,7 @@ func (e *Engine) relaunchLocked(ctx context.Context, id string, step int, reason
 	case step < 0 || step >= len(old.Steps):
 		return nil, fmt.Errorf("process %s has no step %d: %w", id, step, ErrInvalidState)
 	}
-	seeds, err := e.relaunchedItems(ctx, old, step)
+	seeds, execs, err := e.relaunchedItems(ctx, old, step)
 	if err != nil {
 		return nil, err
 	}
@@ -74,7 +74,7 @@ func (e *Engine) relaunchLocked(ctx context.Context, id string, step int, reason
 	if who.Anonymous() {
 		who = old.Initiator
 	}
-	flow, err := e.Graph.OpenFlow(ctx, old.ChangeID, graph.OpenFlowRequest{Parent: old.Flow, ForkAfter: old.Steps[step].LastItem, Seeds: seeds,
+	flow, err := e.Graph.OpenFlow(ctx, old.ChangeID, graph.OpenFlowRequest{Parent: old.Flow, ForkAfter: old.Steps[step].LastItem, Seeds: seeds, StaleExecutions: execs,
 		FromStep: step, Execution: old.Steps[step].Execution, Process: old.ID, Reason: reason, Guidance: guidance, By: who.Subject})
 	if err != nil {
 		return nil, err
@@ -94,7 +94,7 @@ func (e *Engine) relaunchLocked(ctx context.Context, id string, step int, reason
 // relaunchedItems are the items the step and what followed it produced on the
 // flow of the process: those of its own later steps and of the sub-agent runs
 // started from step onwards (found in the journal).
-func (e *Engine) relaunchedItems(ctx context.Context, old *Process, step int) ([]domain.ItemID, error) {
+func (e *Engine) relaunchedItems(ctx context.Context, old *Process, step int) ([]domain.ItemID, []string, error) {
 	execs := map[string]bool{}
 	for _, s := range old.Steps[step:] {
 		if s.Execution != "" {
@@ -103,7 +103,7 @@ func (e *Engine) relaunchedItems(ctx context.Context, old *Process, step int) ([
 	}
 	recs, err := e.Graph.Journal(ctx, domain.ExecutionFilter{ChangeID: old.ChangeID})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	since := old.Steps[step].StartedAt
 	desc := map[string]bool{old.ID: true}
@@ -122,7 +122,7 @@ func (e *Engine) relaunchedItems(ctx context.Context, old *Process, step int) ([
 	}
 	bb, err := e.Graph.BlackboardIn(ctx, old.ChangeID, old.Flow)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	var seeds []domain.ItemID
 	for _, it := range bb.Change.Items {
@@ -130,7 +130,7 @@ func (e *Engine) relaunchedItems(ctx context.Context, old *Process, step int) ([
 			seeds = append(seeds, it.ID)
 		}
 	}
-	return seeds, nil
+	return seeds, slices.Sorted(maps.Keys(execs)), nil
 }
 
 // DecideFlow adopts or discards the flow branch of a relaunched process. Adopting requires the

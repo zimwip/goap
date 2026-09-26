@@ -1,0 +1,178 @@
+package engine
+
+import (
+	"context"
+	"fmt"
+	"strings"
+
+	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/dsl"
+	"github.com/zimwip/goap/pkg/graph"
+)
+
+// ChangeNodesFromBlackboard builds the change node snapshot given to scripts.
+func ChangeNodesFromBlackboard(bb domain.Blackboard) []dsl.ChangeNode {
+	view := func(r *domain.NodeRef) *dsl.Node {
+		if r == nil {
+			return nil
+		}
+		n := &dsl.Node{ID: string(r.ID), Version: int(r.Version)}
+		if v, ok := bb.Nodes[*r]; ok {
+			n.Key, n.Type, n.State, n.Props = v.Key, v.Type, v.State, v.Properties
+		}
+		return n
+	}
+	end := func(r domain.NodeRef) dsl.LinkEnd {
+		e := dsl.LinkEnd{ID: string(r.ID), Version: int(r.Version)}
+		if n, ok := bb.Neighbors[r]; ok {
+			e.Key, e.Type = n.Key, n.Type
+		} else if v, ok := bb.Nodes[r]; ok {
+			e.Key, e.Type = v.Key, v.Type
+		}
+		return e
+	}
+	out := make([]dsl.ChangeNode, 0, len(bb.Change.Nodes))
+	for _, cn := range bb.Change.Nodes {
+		x := dsl.ChangeNode{ID: string(cn.ID), Key: cn.Key, Type: cn.Type, Intent: string(cn.Intent), Rationale: cn.Rationale, Review: string(cn.Review),
+			Planned: cn.Post == nil, Pre: view(cn.Pre), Post: view(cn.Post), Landed: view(cn.Landed), Items: []string{}, Links: []dsl.Link{}}
+		if cn.Post != nil {
+			for _, l := range bb.Nodes[*cn.Post].Out {
+				x.Links = append(x.Links, dsl.Link{ID: string(l.ID), Type: l.Type, From: dsl.LinkEnd{ID: string(cn.Post.ID), Version: int(cn.Post.Version), Key: cn.Key, Type: cn.Type}, To: end(l.To)})
+			}
+		}
+		for _, id := range cn.Items {
+			x.Items = append(x.Items, string(id))
+		}
+		out = append(out, x)
+	}
+	return out
+}
+
+// applyNodeOps applies the change node operations a script buffered, in order:
+// a declaration adds a change node, a write creates the next version of its
+// node on the change branch, a review accepts or rejects it. References ("#nN")
+// name the change nodes declared earlier by the same script; a key names a
+// change node the process sees. On a flow branch the process sees the change
+// nodes of its flow, and what it declares and writes stays on the flow until it
+// is adopted (ADR 0025).
+func (e *Engine) applyNodeOps(ctx context.Context, p *Process, ops []dsl.NodeOp, producedBy, execution string) ([]domain.ChangeNodeID, error) {
+	if len(ops) == 0 {
+		return nil, nil
+	}
+	bb, err := e.Graph.BlackboardIn(ctx, p.ChangeID, p.Flow)
+	if err != nil {
+		return nil, err
+	}
+	nodes, _, err := e.Graph.BaselineGraph(ctx, bb.Change.BaselineID)
+	if err != nil {
+		return nil, err
+	}
+	baseline := map[string]domain.NodeRef{}
+	for _, n := range nodes {
+		baseline[n.Key] = n.Ref()
+	}
+	byKey := map[string]domain.ChangeNodeID{} // stored change nodes, then the ones this script declares
+	posts := map[domain.ChangeNodeID]domain.NodeRef{}
+	for _, cn := range bb.Change.Nodes {
+		if len(cn.Items) > 0 {
+			continue // derived from items: decided through them
+		}
+		byKey[cn.Key] = cn.ID
+		if cn.Post != nil {
+			posts[cn.ID] = *cn.Post
+		}
+	}
+	local := map[string]domain.ChangeNodeID{}
+	resolve := func(s string) (domain.ChangeNodeID, error) {
+		if strings.HasPrefix(s, "#") {
+			if id, ok := local[s]; ok {
+				return id, nil
+			}
+			return "", fmt.Errorf("unknown change node reference %q", s)
+		}
+		if id, ok := byKey[s]; ok {
+			return id, nil
+		}
+		return "", fmt.Errorf("no change node for %q: declare it with impactNode or createNode", s)
+	}
+	target := func(s string) (domain.NodeRef, error) { // a link target: a node written by the change, else the reference baseline
+		if strings.HasPrefix(s, "#") {
+			id, err := resolve(s)
+			if err != nil {
+				return domain.NodeRef{}, err
+			}
+			if ref, ok := posts[id]; ok {
+				return ref, nil
+			}
+			return domain.NodeRef{}, fmt.Errorf("%s is not written yet: write it before linking to it", s)
+		}
+		if id, ok := byKey[s]; ok {
+			if ref, ok := posts[id]; ok {
+				return ref, nil
+			}
+		}
+		if ref, ok := baseline[s]; ok {
+			return ref, nil
+		}
+		return domain.NodeRef{}, fmt.Errorf("unknown node %q", s)
+	}
+	var declared []domain.ChangeNodeID
+	for i, op := range ops {
+		fail := func(err error) error { return fmt.Errorf("change node operation %d (%s): %w", i, op.Op, err) }
+		switch op.Op {
+		case "declare":
+			cn := domain.ChangeNode{Intent: domain.NodeIntent(op.Intent), Key: op.Key, Type: op.Type, Rationale: op.Rationale, ProducedBy: producedBy, Execution: execution, Flow: p.Flow}
+			if cn.Intent == domain.IntentModified {
+				ref, ok := baseline[op.Key]
+				if !ok {
+					return declared, fail(fmt.Errorf("unknown node %q in the reference baseline", op.Key))
+				}
+				cn.Pre = &ref
+			}
+			added, err := e.Graph.AddNodes(ctx, p.ChangeID, []domain.ChangeNode{cn})
+			if err != nil {
+				return declared, fail(err)
+			}
+			local[op.Ref], byKey[added[0].Key] = added[0].ID, added[0].ID
+			declared = append(declared, added[0].ID)
+		case "write":
+			id, err := resolve(op.Node)
+			if err != nil {
+				return declared, fail(err)
+			}
+			w := graph.NodeWrite{Properties: op.Props, State: op.State, Retire: op.Retire, Flow: p.Flow, Execution: execution}
+			for _, l := range op.Links {
+				to, err := target(l.To)
+				if err != nil {
+					return declared, fail(err)
+				}
+				w.AddLinks = append(w.AddLinks, graph.LinkWrite{Type: l.Type, To: to})
+			}
+			for _, l := range op.RemoveLinks {
+				w.RemoveLinks = append(w.RemoveLinks, domain.LinkID(l))
+			}
+			cn, err := e.Graph.WriteNode(ctx, p.ChangeID, id, w)
+			if err != nil {
+				return declared, fail(err)
+			}
+			if cn.Post != nil {
+				posts[id] = *cn.Post
+			}
+		case "review":
+			id, err := resolve(op.Node)
+			if err != nil {
+				return declared, fail(err)
+			}
+			status := domain.ReviewRejected
+			if op.Accept {
+				status = domain.ReviewAccepted
+			}
+			if _, err := e.Graph.ReviewNodeOn(ctx, p.ChangeID, p.Flow, execution, id, status, producedBy, op.Comment); err != nil {
+				return declared, fail(err)
+			}
+		default:
+			return declared, fail(fmt.Errorf("unknown operation"))
+		}
+	}
+	return declared, nil
+}

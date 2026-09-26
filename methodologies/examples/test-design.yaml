@@ -10,16 +10,16 @@ domainRef: alm@1.0.0
 conditions:
   - name: has_scope
     description: The requirements to cover are identified
-    expr: size(impacts) > 0
+    expr: size(changeNodes) > 0
   - name: tests_designed
-    description: At least one test case is proposed
-    expr: proposals.exists(p, p.op == "create_node" && p.node.type == "TestCase")
+    description: At least one test case is created by the change
+    expr: changeNodes.exists(n, n.intent == "created" && n.type == "TestCase")
   - name: summarized
     description: A summary of the campaign is written
     expr: artifacts.exists(a, a.type == "summary")
   - name: reviewed
-    description: All proposals have received a decision
-    expr: size(proposals) > 0 && proposals.all(p, p.status != "proposed")
+    description: All the test cases have received a decision
+    expr: changeNodes.exists(n, n.intent == "created") && changeNodes.filter(n, n.intent == "created").all(n, n.review != "proposed")
 
 actions:
   - name: collect_scope
@@ -31,7 +31,7 @@ actions:
     code: |
       function run(ctx) {
         const reqs = ctx.nodes("Requirement");
-        for (const r of reqs) ctx.addImpact(r.key, "in the scope of the campaign");
+        for (const r of reqs) ctx.impactNode(r.key, "in the scope of the campaign");
         ctx.log(reqs.length + " requirement(s) retained");
         return reqs.length + " requirement(s)";
       }
@@ -39,7 +39,7 @@ actions:
   - name: design_tests
     kind: script
     language: go
-    description: Propose one test case per requirement in scope
+    description: Create one test case per requirement in scope
     pre: {has_scope: true, tests_designed: false}
     effects: {tests_designed: true}
     code: |
@@ -52,13 +52,16 @@ actions:
       )
 
       func Run(ctx *dsl.Ctx) error {
-      	for _, i := range ctx.Impacts() {
-      		if i.Target == nil || i.Target.Type != "Requirement" {
+      	for _, n := range ctx.ChangeNodes() {
+      		if n.Pre == nil || n.Type != "Requirement" || n.Intent != "modified" {
       			continue
       		}
-      		title := fmt.Sprintf("Verify %s: %v", i.Target.Key, i.Target.Props["title"])
-      		t := ctx.ProposeNode("TestCase", "TC-"+i.Target.Key, map[string]any{"title": title})
-      		ctx.ProposeLink(t, "verifies", i.Target.Key)
+      		title := fmt.Sprintf("Verify %s: %v", n.Key, n.Pre.Props["title"])
+      		t := ctx.CreateNode("TestCase", "TC-"+n.Key, "verifies "+n.Key)
+      		ctx.WriteNode(t, map[string]any{
+      			"props": map[string]any{"title": title},
+      			"links": []any{map[string]any{"type": "verifies", "to": n.Key}},
+      		})
       	}
       	return nil
       }
@@ -70,33 +73,33 @@ actions:
     pre: {tests_designed: true, summarized: false}
     effects: {summarized: true}
     code: |
-      const tests = ctx.proposals().filter(p => p.op === "create_node");
+      const tests = ctx.changeNodes().filter(n => n.intent === "created");
       const r = ctx.complete({
         model: "fast",
         prompt: "Summarize in three lines a campaign of " + tests.length + " test cases: " +
-                tests.map(t => t.node.props.title).join("; "),
+                tests.map(t => t.post ? t.post.props.title : t.key).join("; "),
       });
       ctx.addArtifact("summary", { markdown: r.text, tests: tests.length });
 
   - name: auto_review
     kind: script
     language: javascript
-    description: Automatically accept the proposals (small campaigns)
+    description: Automatically accept the test cases (small campaigns)
     pre: {tests_designed: true, reviewed: false}
     effects: {reviewed: true}
     utility: 'has(vars.review) && vars.review == "human" ? 0.1 : 0.9'
     code: |
-      for (const p of ctx.proposals()) {
-        if (p.status === "proposed") ctx.decide(p.id, true, "automatic review");
+      for (const n of ctx.changeNodes()) {
+        if (n.intent === "created" && n.review === "proposed") ctx.reviewNode(n.key, true, "automatic review");
       }
 
   - name: human_review
     kind: human
-    description: Human review of the proposals
+    description: Human review of the test cases
     pre: {tests_designed: true, reviewed: false}
     effects: {reviewed: true}
     utility: "0.5"
-    instructions: Accept or reject each proposed test case.
+    instructions: Accept or reject each proposed test case (a comment is required).
 
   - name: delegate
     kind: script
@@ -117,7 +120,7 @@ goals:
     pre: {tests_designed: true, summarized: true}
     value: 10
   - name: review
-    description: Review the proposed test cases
+    description: Review the test cases
     pre: {reviewed: true}
     value: 10
   - name: delivered

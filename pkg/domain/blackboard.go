@@ -34,7 +34,7 @@ func (bb Blackboard) TypesOf(t string) []any {
 	return out
 }
 
-// ReferencedNodes lists every domain reference held by the change items.
+// ReferencedNodes lists every domain reference held by the change nodes.
 func (c *ChangeSet) ReferencedNodes() []NodeRef {
 	seen := map[NodeRef]bool{}
 	var out []NodeRef
@@ -45,17 +45,10 @@ func (c *ChangeSet) ReferencedNodes() []NodeRef {
 		seen[*r] = true
 		out = append(out, *r)
 	}
-	for _, it := range c.Items {
-		add(it.Target)
-		if p := it.Proposal; p != nil {
-			if p.Node != nil {
-				add(p.Node.Base)
-			}
-			if p.Link != nil {
-				add(p.Link.From.Node)
-				add(p.Link.To.Node)
-			}
-		}
+	for _, cn := range c.Nodes {
+		add(cn.Pre)
+		add(cn.Post)
+		add(cn.Landed)
 	}
 	return out
 }

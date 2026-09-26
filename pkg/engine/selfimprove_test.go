@@ -7,6 +7,7 @@ import (
 
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/dsl"
 	"github.com/zimwip/goap/pkg/metamodel"
 	"github.com/zimwip/goap/pkg/methodology"
 	"github.com/zimwip/goap/pkg/observe"
@@ -83,13 +84,17 @@ func TestSelfObservationProposesAndDrafts(t *testing.T) {
 	var decisions []ItemInput
 	var titles []string
 	for _, it := range c.Items {
-		switch {
-		case it.Type == "cost_report":
+		if it.Type == "cost_report" {
 			report = it.Data
-		case it.Kind == domain.KindProposal:
-			titles = append(titles, it.Data["title"].(string))
-			decisions = append(decisions, ItemInput{Kind: "decision", Decision: &DecisionInput{Item: "@" + string(it.ID), Accept: true}})
 		}
+	}
+	// every improvement is a change node on an element of the methodology, with the proposed version written
+	for _, n := range c.Nodes {
+		titles = append(titles, n.Rationale)
+		if n.Post == nil || n.Review != domain.ReviewProposed {
+			t.Fatalf("an improvement is written and awaits its review: %+v", n)
+		}
+		decisions = append(decisions, ItemInput{Kind: "changeNode", ChangeNode: &dsl.NodeOp{Op: "review", Node: n.Key, Accept: true, Comment: "worth it"}})
 	}
 	findings, _ := report["findings"].([]any)
 	if len(findings) < 2 || report["methodology"] != "impact-analysis" {

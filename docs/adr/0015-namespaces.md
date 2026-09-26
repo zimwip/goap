@@ -15,9 +15,8 @@ and let nodes of one namespace reference another (a domain node owned by an orga
 2. A **change** has a namespace (`change_set.namespace`). It may create nodes in that namespace only
    and modify (update, delete, transition, merge, add outgoing links from) only nodes of that namespace
    (`pkg/graph/namespace.go`, enforced by `walk`, hence by `AddItems` and `Apply`).
-3. **Cross-namespace references** are allowed: impacts, link targets and `instanceOf` links may point
-   at nodes of another namespace. `instanceOf` (data node → NodeType) is code-managed and exempt from
-   the source-namespace rule.
+3. **Cross-namespace references** are allowed: impacts and link targets may point
+   at nodes of another namespace.
 4. `authz.Resource` carries the namespace so policies can restrict who may act on which namespace.
 
 5. **Change branch** (opt-in with `NewChange.OwnBranch` / `CreateChangeRequest.own_branch`): the change

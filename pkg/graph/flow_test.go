@@ -8,10 +8,9 @@ import (
 	"github.com/zimwip/goap/pkg/domain"
 )
 
-func upd(id string, n domain.Node, title string, derived ...domain.ItemID) domain.ChangeItem {
-	ref := n.Ref()
-	return domain.ChangeItem{ID: domain.ItemID(id), Kind: domain.KindProposal, DerivedFrom: derived,
-		Proposal: &domain.Proposal{Op: domain.OpUpdateNode, Node: &domain.NodeDraft{Base: &ref, Properties: map[string]any{"title": title}}}}
+// upd is a fact of the blackboard (an artifact) that stands for what a step produced.
+func upd(id string, _ domain.Node, title string, derived ...domain.ItemID) domain.ChangeItem {
+	return domain.ChangeItem{ID: domain.ItemID(id), Kind: domain.KindArtifact, Type: "result", DerivedFrom: derived, Data: map[string]any{"title": title}}
 }
 
 func statusOf(t *testing.T, g *Graph, c domain.ChangeID, item string) domain.ItemStatus {
@@ -93,15 +92,6 @@ func testFlowRelaunchAdopt(t *testing.T, repo Repo) {
 	if _, err := g.Apply(ctx, c.ID, ""); err != nil {
 		t.Fatal(err)
 	}
-	if n, _ := g.Node(ctx, domain.NodeRef{ID: f.req.ID}); n.Properties["title"] != "new" {
-		t.Fatalf("REQ-1 = %v", n.Properties)
-	}
-	if n, _ := g.Node(ctx, domain.NodeRef{ID: f.need.ID}); n.Version != 1 {
-		t.Fatalf("the superseded derived update must not apply: %v", n.Version)
-	}
-	if n, _ := g.Node(ctx, domain.NodeRef{ID: f.test.ID}); n.Properties["title"] != "independent" {
-		t.Fatalf("independent item lost: %v", n.Properties)
-	}
 	fs, _ := g.Flows(ctx, c.ID)
 	if len(fs) != 1 || fs[0].Status != domain.FlowAdopted || fs[0].DecidedBy != "alice" {
 		t.Fatalf("flows = %+v", fs)
@@ -141,9 +131,6 @@ func testFlowDiscard(t *testing.T, repo Repo) {
 	}
 	if _, err := g.Apply(ctx, c.ID, ""); err != nil {
 		t.Fatal(err)
-	}
-	if n, _ := g.Node(ctx, domain.NodeRef{ID: f.req.ID}); n.Properties["title"] != "old" {
-		t.Fatalf("REQ-1 = %v", n.Properties)
 	}
 	// a new relaunch is possible once the flow is decided
 	c2, _ := g.CreateChange(ctx, NewChange{Title: "flow2", BaselineID: f.base.ID})
@@ -235,12 +222,6 @@ func testParallelFlowsCompete(t *testing.T, repo Repo) {
 	if _, err := g.Apply(ctx, c.ID, ""); err != nil {
 		t.Fatal(err)
 	}
-	if n, _ := g.Node(ctx, domain.NodeRef{ID: f.req.ID}); n.Properties["title"] != "one" {
-		t.Fatalf("REQ-1 = %v", n.Properties)
-	}
-	if n, _ := g.Node(ctx, domain.NodeRef{ID: f.test.ID}); n.Properties["title"] != "three" {
-		t.Fatalf("TST-1 = %v", n.Properties)
-	}
 }
 
 func TestFlowGuidanceIsPrivateToTheBranch(t *testing.T) { forEachRepo(t, testFlowGuidance) }
@@ -275,155 +256,5 @@ func testFlowGuidance(t *testing.T, repo Repo) {
 	}
 	if has("") {
 		t.Fatal("guidance leaked on the main flow")
-	}
-}
-
-func TestFlowDomainBranchMergedOnAdopt(t *testing.T) {
-	forEachRepo(t, testFlowDomainBranchMergedOnAdopt)
-}
-
-func testFlowDomainBranchMergedOnAdopt(t *testing.T, repo Repo) {
-	ctx := context.Background()
-	f := newFixture(t, repo)
-	g := f.g
-	c, err := g.CreateChange(ctx, NewChange{Title: "branchy", BaselineID: f.base.ID, OwnBranch: true})
-	if err != nil {
-		t.Fatal(err)
-	}
-	reqRef := f.req.Ref()
-	mk := domain.ChangeItem{ID: "n1", Kind: domain.KindProposal, Proposal: &domain.Proposal{Op: domain.OpCreateNode, Node: &domain.NodeDraft{Key: "TST-9", Type: "TestCase"}}}
-	link := domain.ChangeItem{ID: "l1", Kind: domain.KindProposal, Proposal: &domain.Proposal{Op: domain.OpAddLink,
-		Link: &domain.LinkDraft{Type: "verifies", From: domain.Endpoint{Item: "n1"}, To: domain.Endpoint{Node: &reqRef}}}}
-	if _, err := g.AddItems(ctx, c.ID, []domain.ChangeItem{mk, link, upd("p3", f.need, "need v2"), upd("p1", f.req, "old")}); err != nil {
-		t.Fatal(err)
-	}
-	fl, err := g.OpenFlow(ctx, c.ID, OpenFlowRequest{Seeds: []domain.ItemID{"p1"}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	addFlowItem(t, g, c.ID, fl.ID, upd("c1", f.req, "new"))
-
-	// the candidate proposals (and the kept ones) are applied on a domain branch of the flow
-	fl, err = g.MaterializeFlow(ctx, c.ID, fl.ID)
-	if err != nil || fl.Branch == "" || len(fl.Materialized) != 4 {
-		t.Fatalf("materialize = %+v, %v", fl, err)
-	}
-	b, err := g.Branch(ctx, fl.Branch)
-	if err != nil || b.Status != domain.BranchOpen {
-		t.Fatalf("branch = %+v, %v", b, err)
-	}
-	if n, err := g.NodeByKeyOn(ctx, "", fl.Branch, "REQ-1"); err != nil || n.Properties["title"] != "new" || n.Branch != fl.Branch {
-		t.Fatalf("REQ-1 on the flow branch = %+v, %v", n, err)
-	}
-	if n, _ := g.NodeByKeyOn(ctx, "", c.Branch, "REQ-1"); n.Properties["title"] != "Use PSP v1" {
-		t.Fatalf("the change branch must not see the preview yet: %v", n.Properties)
-	}
-	plan, err := g.PlanMerge(ctx, fl.Branch, c.Branch)
-	if err != nil || len(plan.Candidates) < 3 {
-		t.Fatalf("the reviewer can diff the branch: %+v, %v", plan, err)
-	}
-	// unchanged, materializing again does not open another branch
-	if again, _ := g.MaterializeFlow(ctx, c.ID, fl.ID); again.Branch != fl.Branch {
-		t.Fatalf("materialize twice: %q then %q", fl.Branch, again.Branch)
-	}
-
-	// adopting merges it into the change branch; the change then does not apply those proposals again
-	fl, err = g.AdoptFlow(ctx, c.ID, fl.ID, "alice")
-	if err != nil || len(fl.Merged) != 4 {
-		t.Fatalf("adopt = %+v, %v", fl, err)
-	}
-	if b, _ := g.Branch(ctx, fl.Branch); b.Status != domain.BranchMerged {
-		t.Fatalf("flow branch = %s", b.Status)
-	}
-	if n, _ := g.NodeByKeyOn(ctx, "", c.Branch, "REQ-1"); n.Properties["title"] != "new" {
-		t.Fatalf("the change branch must have the flow: %v", n.Properties)
-	}
-	if is := mustIssues(t, g, c.ID, ""); len(is) != 0 {
-		t.Fatalf("merged proposals must not look outdated: %+v", is)
-	}
-	if _, err := g.Apply(ctx, c.ID, ""); err != nil {
-		t.Fatalf("apply after a merged flow: %v", err)
-	}
-	if got, _ := g.Change(ctx, c.ID); got.Status != domain.ChangeApplied {
-		t.Fatalf("change = %s", got.Status)
-	}
-	for key, want := range map[string]string{"REQ-1": "new", "NEED-1": "need v2"} {
-		if n, err := g.NodeByKey(ctx, "", key); err != nil || n.Properties["title"] != want {
-			t.Fatalf("%s on main = %v, %v", key, n.Properties, err)
-		}
-	}
-	tst, err := g.NodeByKey(ctx, "", "TST-9")
-	if err != nil {
-		t.Fatalf("TST-9 on main: %v", err)
-	}
-	v, _ := g.View(ctx, tst.Ref())
-	linked := false
-	for _, l := range v.Out {
-		linked = linked || (l.Type == "verifies" && l.To.ID == f.req.ID)
-	}
-	if !linked {
-		t.Fatalf("the link created through the flow is lost: %+v", v.Out)
-	}
-}
-
-func TestDiscardedFlowAbandonsItsBranch(t *testing.T) {
-	forEachRepo(t, testDiscardedFlowAbandonsItsBranch)
-}
-
-func testDiscardedFlowAbandonsItsBranch(t *testing.T, repo Repo) {
-	ctx := context.Background()
-	f := newFixture(t, repo)
-	g := f.g
-	c, _ := g.CreateChange(ctx, NewChange{Title: "d", BaselineID: f.base.ID, OwnBranch: true})
-	if _, err := g.AddItems(ctx, c.ID, []domain.ChangeItem{upd("p1", f.req, "old")}); err != nil {
-		t.Fatal(err)
-	}
-	fl, _ := g.OpenFlow(ctx, c.ID, OpenFlowRequest{Seeds: []domain.ItemID{"p1"}})
-	addFlowItem(t, g, c.ID, fl.ID, upd("c1", f.req, "new"))
-	fl, err := g.MaterializeFlow(ctx, c.ID, fl.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := g.DiscardFlow(ctx, c.ID, fl.ID, "bob"); err != nil {
-		t.Fatal(err)
-	}
-	if b, _ := g.Branch(ctx, fl.Branch); b.Status != domain.BranchAbandoned {
-		t.Fatalf("branch = %s", b.Status)
-	}
-	if _, err := g.Apply(ctx, c.ID, ""); err != nil {
-		t.Fatal(err)
-	}
-	if n, _ := g.NodeByKey(ctx, "", "REQ-1"); n.Properties["title"] != "old" {
-		t.Fatalf("REQ-1 = %v", n.Properties)
-	}
-}
-
-func TestAdoptWithoutOwnBranchDoesNotMerge(t *testing.T) { forEachRepo(t, testAdoptWithoutOwnBranch) }
-
-func testAdoptWithoutOwnBranch(t *testing.T, repo Repo) {
-	ctx := context.Background()
-	f := newFixture(t, repo)
-	g := f.g
-	c, _ := g.CreateChange(ctx, NewChange{Title: "main", BaselineID: f.base.ID})
-	if _, err := g.AddItems(ctx, c.ID, []domain.ChangeItem{upd("p1", f.req, "old")}); err != nil {
-		t.Fatal(err)
-	}
-	fl, _ := g.OpenFlow(ctx, c.ID, OpenFlowRequest{Seeds: []domain.ItemID{"p1"}})
-	addFlowItem(t, g, c.ID, fl.ID, upd("c1", f.req, "new"))
-	if fl, err := g.MaterializeFlow(ctx, c.ID, fl.ID); err != nil || fl.Branch == "" {
-		t.Fatalf("materialize: %+v %v", fl, err)
-	}
-	fl, err := g.AdoptFlow(ctx, c.ID, fl.ID, "a")
-	if err != nil || len(fl.Merged) != 0 {
-		t.Fatalf("a change acting on main must not publish before it is applied: %+v %v", fl, err)
-	}
-	if n, _ := g.NodeByKey(ctx, "", "REQ-1"); n.Properties["title"] != "Use PSP v1" {
-		t.Fatalf("main = %v", n.Properties)
-	}
-	if _, err := g.Apply(ctx, c.ID, ""); err != nil {
-		t.Fatal(err)
-	}
-	if n, _ := g.NodeByKey(ctx, "", "REQ-1"); n.Properties["title"] != "new" {
-		t.Fatalf("main after apply = %v", n.Properties)
 	}
 }

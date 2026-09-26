@@ -56,9 +56,6 @@ func NamespaceOf(ns string) string {
 	return ns
 }
 
-// LinkInstanceOf is the link from a data node to its NodeType (metadata layer).
-const LinkInstanceOf = "instanceOf"
-
 // ChangeBranchOrigin is the Branch.Origin of the branch owned by a change.
 func ChangeBranchOrigin(id ChangeID) string { return "change:" + string(id) }
 
@@ -71,6 +68,7 @@ const (
 	ReasonRevise = "revise" // successor on the same branch
 	ReasonDerive = "derive" // first version on a parallel branch
 	ReasonMerge  = "merge"  // merge of versions of two branches
+	ReasonAdopt  = "adopt"  // a version that makes a change branch equal to an adopted flow (ADR 0025)
 )
 
 // BranchOf returns the branch name, defaulting to main.
@@ -95,8 +93,15 @@ type Node struct {
 	Properties map[string]any `json:"props,omitempty"`
 	Deleted    bool           `json:"deleted,omitempty"`
 	// State in the lifecycle of the node type (empty: the type has none).
-	State     string    `json:"state,omitempty"`
-	ChangeID  ChangeID  `json:"changeId,omitempty"`
+	State    string   `json:"state,omitempty"`
+	ChangeID ChangeID `json:"changeId,omitempty"`
+	// ChangeNode is the change node that produced this version, Comment the acceptance
+	// comment (else the rationale): the origin of the version (ADR 0024).
+	ChangeNode ChangeNodeID `json:"changeNode,omitempty"`
+	Comment    string       `json:"comment,omitempty"`
+	// Execution is the journal execution (action run) that wrote this version: what a
+	// relaunch of a step marks stale (ADR 0025).
+	Execution string    `json:"execution,omitempty"`
 	CreatedAt time.Time `json:"createdAt"`
 }
 

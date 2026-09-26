@@ -43,6 +43,21 @@ func itemsOfSteps(c domain.ChangeSet, p *Process, from int) map[domain.ItemID]bo
 	return out
 }
 
+// nodesOfSteps are the change nodes declared by the steps of p from `from` on.
+func nodesOfSteps(c domain.ChangeSet, p *Process, from int) map[domain.ChangeNodeID]bool {
+	execs := map[string]bool{}
+	for _, s := range p.Steps[from:] {
+		execs[s.Execution] = true
+	}
+	out := map[domain.ChangeNodeID]bool{}
+	for _, n := range c.Nodes {
+		if execs[n.Execution] {
+			out[n.ID] = true
+		}
+	}
+	return out
+}
+
 func TestRelaunchStepAdoptFlow(t *testing.T) {
 	e, ctx, old, c := completedRun(t)
 	g := e.Graph.(interface {
@@ -51,12 +66,13 @@ func TestRelaunchStepAdoptFlow(t *testing.T) {
 	if len(old.Steps) < 3 {
 		t.Fatalf("steps = %d", len(old.Steps))
 	}
-	replaced, kept := itemsOfSteps(c, old, 1), itemsOfSteps(c, old, 0)
-	for id := range replaced {
-		delete(kept, id)
+	replaced := itemsOfSteps(c, old, 1) // the propagation and report artifacts
+	replacedNodes, keptNodes := nodesOfSteps(c, old, 1), nodesOfSteps(c, old, 0)
+	for id := range replacedNodes {
+		delete(keptNodes, id)
 	}
-	if len(replaced) == 0 || len(kept) == 0 {
-		t.Fatalf("replaced %d kept %d", len(replaced), len(kept))
+	if len(replaced) == 0 || len(replacedNodes) != 2 || len(keptNodes) != 1 {
+		t.Fatalf("replaced %d items, %d change nodes, kept %d change nodes", len(replaced), len(replacedNodes), len(keptNodes))
 	}
 
 	np, err := e.Relaunch(ctx, old.ID, 1, "the PSP answer changed", "")
@@ -72,10 +88,13 @@ func TestRelaunchStepAdoptFlow(t *testing.T) {
 			t.Fatalf("item %s = %s, want stale", id, st)
 		}
 	}
-	for id := range kept {
-		if st := c.EffectiveStatus(id); st == domain.ItemStale {
-			t.Fatalf("item %s of an earlier step must not be stale", id)
-		}
+	// the flow sees the change node of the earlier step, not the ones the relaunched steps declared
+	bb, err := e.Graph.BlackboardIn(ctx, old.ChangeID, np.Flow)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(bb.Change.Nodes) != 1 || !keptNodes[bb.Change.Nodes[0].ID] {
+		t.Fatalf("flow view before the run: %+v", bb.Change.Nodes)
 	}
 	// the relaunched run replans from the state before step 1 and waits for a human once it reaches the goal
 	if np, err = e.Run(ctx, np.ID); err != nil {
@@ -96,6 +115,15 @@ func TestRelaunchStepAdoptFlow(t *testing.T) {
 	}
 	if candidates != len(replaced) {
 		t.Fatalf("candidates = %d, replaced = %d", candidates, len(replaced))
+	}
+	flowNodes := 0
+	for _, n := range c.Nodes {
+		if n.Flow == np.Flow {
+			flowNodes++
+		}
+	}
+	if flowNodes != len(replacedNodes) {
+		t.Fatalf("the flow declares again the %d change nodes it replaces, got %d", len(replacedNodes), flowNodes)
 	}
 	// the previous run is untouched until the human decides
 	if cur, _ := e.Store.Get(ctx, old.ID); cur.Status != StatusCompleted {
@@ -122,6 +150,20 @@ func TestRelaunchStepAdoptFlow(t *testing.T) {
 			t.Fatalf("item %s = %s, want superseded", id, st)
 		}
 	}
+	live := 0
+	for _, n := range c.Nodes {
+		switch {
+		case replacedNodes[n.ID] && !n.Superseded:
+			t.Fatalf("the stale change node %s must be superseded", n.Key)
+		case n.Flow != "":
+			t.Fatalf("an adopted flow leaves no candidate: %+v", n)
+		case !n.Superseded:
+			live++
+		}
+	}
+	if live != 3 {
+		t.Fatalf("REQ-1, TST-1 and CMP-1 are the change's change nodes, got %d", live)
+	}
 	for _, it := range c.Items {
 		if it.Flow == np.Flow && it.Kind != domain.KindFlow {
 			if st := c.EffectiveStatus(it.ID); st == domain.ItemCandidate || st == domain.ItemSuperseded || st == domain.ItemRejected {
@@ -146,6 +188,7 @@ func TestRelaunchStepDiscardFlow(t *testing.T) {
 		Change(context.Context, domain.ChangeID) (domain.ChangeSet, error)
 	})
 	replaced := itemsOfSteps(c, old, 1)
+	replacedNodes := nodesOfSteps(c, old, 1)
 	np, err := e.Relaunch(ctx, old.ID, 1, "try again", "")
 	if err != nil {
 		t.Fatal(err)
@@ -173,6 +216,14 @@ func TestRelaunchStepDiscardFlow(t *testing.T) {
 			if st := c.EffectiveStatus(it.ID); st != domain.ItemRejected {
 				t.Fatalf("discarded candidate %s = %s", it.ID, st)
 			}
+		}
+	}
+	for _, n := range c.Nodes {
+		switch {
+		case replacedNodes[n.ID] && n.Superseded:
+			t.Fatalf("the change node %s counts again after a discard", n.Key)
+		case n.Flow == np.Flow && n.Review != domain.ReviewRejected:
+			t.Fatalf("a discarded candidate is rejected: %+v", n)
 		}
 	}
 	// a new relaunch is possible once the flow is decided

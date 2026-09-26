@@ -91,14 +91,15 @@ func (m *Methodology) Resolve(resolve DomainResolver) (*Methodology, Issues) {
 	return &out, nil
 }
 
-// Patterns of domain types used inside CEL expressions.
+// Patterns of domain types used inside CEL expressions: `"T" in n.types` and `n.type == "T"` on change
+// nodes (variables n, x, r, t, f, c), `l.type == "L"` on links (variable l).
 var (
 	nodeTypeLiterals = []*regexp.Regexp{
 		regexp.MustCompile(`"([^"]+)"\s+in\s+[\w.]+\.types\b`),
-		regexp.MustCompile(`\.(?:target|node)\.type\s*==\s*"([^"]+)"`),
+		regexp.MustCompile(`\b[nxrtfc]\.type\s*==\s*"([^"]+)"`),
 	}
 	linkTypeLiterals = []*regexp.Regexp{
-		regexp.MustCompile(`\.link\.type\s*==\s*"([^"]+)"`),
+		regexp.MustCompile(`\bl\.type\s*==\s*"([^"]+)"`),
 	}
 )
 

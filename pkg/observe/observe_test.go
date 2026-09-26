@@ -19,13 +19,13 @@ func rec(kind, action, actionKind string, mut func(*domain.ExecutionRecord)) dom
 
 func TestAnalyzeFindings(t *testing.T) {
 	no, yes := false, true
-	items := map[domain.ItemID]domain.ChangeItem{"i1": {Kind: domain.KindImpact, Type: "direct"}, "i2": {Kind: domain.KindImpact, Type: "direct"}}
+	nodes := map[domain.ChangeNodeID]domain.ChangeNode{"n1": {Intent: domain.IntentModified}, "n2": {Intent: domain.IntentModified}}
 	recs := []domain.ExecutionRecord{
 		rec(domain.ExecProcessStarted, "", "", nil),
 		rec(domain.ExecTick, "", "", func(r *domain.ExecutionRecord) { r.Data = map[string]any{"replanned": false} }),
 		rec(domain.ExecAction, "classify", "llm", func(r *domain.ExecutionRecord) {
 			r.ModelCalls = []domain.ModelCall{{InputTokens: 900, OutputTokens: 100}}
-			r.InputTokens, r.OutputTokens, r.Items, r.EffectsMet = 900, 100, []domain.ItemID{"i1", "i2"}, &yes
+			r.InputTokens, r.OutputTokens, r.Nodes, r.EffectsMet = 900, 100, []domain.ChangeNodeID{"n1", "n2"}, &yes
 		}),
 	}
 	for i := 0; i < 3; i++ {
@@ -33,7 +33,7 @@ func TestAnalyzeFindings(t *testing.T) {
 	}
 	recs = append(recs, rec(domain.ExecProcessEnded, "", "", func(r *domain.ExecutionRecord) { r.Status = "stuck" }))
 	spans := []Span{{Name: "execute_tool crm/search", DurationMs: 12_000, Attributes: map[string]string{"gen_ai.tool.name": "crm/search"}}}
-	r := Analyze(recs, items, spans, Thresholds{})
+	r := Analyze(recs, nil, nodes, spans, Thresholds{})
 	kinds := map[string]string{}
 	for _, f := range r.Findings {
 		kinds[f.Kind] = f.Action + f.Span
@@ -43,7 +43,7 @@ func TestAnalyzeFindings(t *testing.T) {
 			t.Errorf("finding %s = %q, want %q (%+v)", k, kinds[k], want, r.Findings)
 		}
 	}
-	if r.Status != "stuck" || r.Tokens != 1000 || r.Steps != 4 || r.Actions[0].Outputs["impact/direct"] != 2 {
+	if r.Status != "stuck" || r.Tokens != 1000 || r.Steps != 4 || r.Actions[0].Outputs["changeNode/modified"] != 2 {
 		t.Fatalf("report: %+v", r)
 	}
 }
@@ -66,7 +66,7 @@ func TestProposeAndApply(t *testing.T) {
 		{Kind: FindDisabled, Action: "check", Agent: "ag"},
 		{Kind: FindSlowSpan, Span: "execute_tool crm/search"},
 		{Kind: FindReplanning, Agent: "ag", Evidence: "the plan changed"},
-	}, Actions: []ActionStats{{Action: "classify", Outputs: map[string]int{"impact/direct": 2}}}}
+	}, Actions: []ActionStats{{Action: "classify", Outputs: map[string]int{"changeNode/modified": 2}}}}
 	props, notes := Propose(r, &m)
 	if len(props) != 5 || len(notes) != 1 {
 		t.Fatalf("proposals %+v notes %v", props, notes)
@@ -91,7 +91,7 @@ func TestProposeAndApply(t *testing.T) {
 		t.Fatalf("edits not applied: %+v %+v", out.Actions, out.Agents)
 	}
 	spec := out.Actions[3]
-	if spec.Specializes != "classify" || spec.Priority != 10 || !strings.Contains(spec.Code, "ctx.addImpact") {
+	if spec.Specializes != "classify" || spec.Priority != 10 || !strings.Contains(spec.Code, "ctx.impactNode") {
 		t.Fatalf("specialization: %+v", spec)
 	}
 	if m.Actions[1].Cost != 1.5 || len(m.Actions) != 3 {

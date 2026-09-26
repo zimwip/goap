@@ -11,8 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
-
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/graphsnap"
@@ -216,22 +214,17 @@ func patch(have, want map[string]any) map[string]any {
 	return out
 }
 
-// versionItems reconciles the nodes of a version with a definition: it creates or updates the header, creates, updates
+// versionEdits reconciles the nodes of a version with a definition: it creates or updates the header, creates, updates
 // and, for the elements that left the definition, marks removed the element nodes, and ties new elements to the header.
-func versionItems(hkey, hType string, header map[string]any, els []defEl, old *domain.Node, oldChildren map[string]domain.Node) []domain.ChangeItem {
-	var items []domain.ChangeItem
-	var hEnd domain.Endpoint
+func versionEdits(hkey, hType string, header map[string]any, els []defEl, old *domain.Node, oldChildren map[string]domain.Node) []graph.NodeEdit {
+	var head graph.NodeEdit
 	if old != nil {
 		ref := old.Ref()
-		hEnd = domain.Endpoint{Node: &ref}
-		if p := patch(old.Properties, header); p != nil {
-			items = append(items, update(*old, p))
-		}
+		head = graph.NodeEdit{Pre: &ref, Props: patch(old.Properties, header)}
 	} else {
-		it := create(hType, hkey, header)
-		hEnd = domain.Endpoint{Item: it.ID}
-		items = append(items, it)
+		head = graph.NodeEdit{Key: hkey, Type: hType, Props: header}
 	}
+	var edits []graph.NodeEdit
 	want := map[string]bool{}
 	for _, e := range els {
 		k := hkey + "/" + e.kind + "/" + e.name
@@ -244,22 +237,24 @@ func versionItems(hkey, hType string, header map[string]any, els []defEl, old *d
 		}
 		if n, ok := oldChildren[k]; ok {
 			if p := patch(n.Properties, e.props); p != nil {
-				items = append(items, update(n, p))
+				edits = append(edits, update(n, p))
 			}
 			continue
 		}
-		it := create(nodeType, k, e.props)
-		items = append(items, it, domain.ChangeItem{Kind: domain.KindProposal, Type: "registry", ProducedBy: "registrysvc",
-			Proposal: &domain.Proposal{Op: domain.OpAddLink, Link: &domain.LinkDraft{Type: LinkDefines, From: hEnd, To: domain.Endpoint{Item: it.ID}}}})
+		edits = append(edits, graph.NodeEdit{Key: k, Type: nodeType, Props: e.props})
+		head.Links = append(head.Links, graph.LinkEdit{Type: LinkDefines, ToKey: k})
 	}
 	for _, k := range slices.Sorted(maps.Keys(oldChildren)) {
 		if n := oldChildren[k]; !want[k] {
 			if removed, _ := n.Properties["removed"].(bool); !removed {
-				items = append(items, update(n, map[string]any{"removed": true}))
+				edits = append(edits, update(n, map[string]any{"removed": true}))
 			}
 		}
 	}
-	return items
+	if head.Pre != nil && len(head.Props) == 0 && len(head.Links) == 0 {
+		return edits
+	}
+	return append([]graph.NodeEdit{head}, edits...)
 }
 
 // read returns the versions at the head of main, looked at now.
@@ -273,14 +268,14 @@ func (s *GraphStore) read(ctx context.Context) (*defs, error) {
 
 // commit applies the items build makes from the current versions as one change on main, once more on the new head when
 // main moved meanwhile.
-func (s *GraphStore) commit(ctx context.Context, ns, title string, build func(*defs) ([]domain.ChangeItem, error)) error {
+func (s *GraphStore) commit(ctx context.Context, ns, title string, build func(*defs) ([]graph.NodeEdit, error)) error {
 	for attempt := 0; ; attempt++ {
 		d, err := s.read(ctx)
 		if err != nil {
 			return err
 		}
-		items, err := build(d)
-		if err != nil || len(items) == 0 {
+		edits, err := build(d)
+		if err != nil || len(edits) == 0 {
 			return err
 		}
 		head, err := s.Graph.BranchHead(ctx, domain.MainBranch)
@@ -291,13 +286,7 @@ func (s *GraphStore) commit(ctx context.Context, ns, title string, build func(*d
 		} else if err != nil {
 			return err
 		}
-		c, err := s.Graph.CreateChange(ctx, graph.NewChange{Namespace: ns, Title: title, Intent: title, BaselineID: head.ID})
-		if err != nil {
-			return err
-		}
-		if _, err = s.Graph.AddItems(ctx, c.ID, items); err == nil {
-			_, err = s.Graph.Apply(ctx, c.ID, title)
-		}
+		_, err = s.Graph.Commit(ctx, graph.Commit{Namespace: ns, Title: title, Intent: title, Baseline: head.ID, By: "registrysvc", BaselineName: title, Edits: edits})
 		if errors.Is(err, graph.ErrConflict) && attempt < 3 {
 			continue // main moved: read again and rebuild
 		}
@@ -312,15 +301,9 @@ func (s *GraphStore) now() time.Time {
 	return time.Now()
 }
 
-func create(typ, k string, props map[string]any) domain.ChangeItem {
-	return domain.ChangeItem{ID: domain.ItemID(uuid.NewString()), Kind: domain.KindProposal, Type: "registry", ProducedBy: "registrysvc",
-		Proposal: &domain.Proposal{Op: domain.OpCreateNode, Node: &domain.NodeDraft{Key: k, Type: typ, Properties: props}}}
-}
-
-func update(n domain.Node, props map[string]any) domain.ChangeItem {
+func update(n domain.Node, props map[string]any) graph.NodeEdit {
 	ref := n.Ref()
-	return domain.ChangeItem{Kind: domain.KindProposal, Type: "registry", ProducedBy: "registrysvc",
-		Proposal: &domain.Proposal{Op: domain.OpUpdateNode, Node: &domain.NodeDraft{Base: &ref, Properties: props}}}
+	return graph.NodeEdit{Pre: &ref, Props: props}
 }
 
 // statusPatch is the update of a header node when a version changes status.
@@ -332,7 +315,7 @@ func statusPatch(st Status, at time.Time) map[string]any {
 	return p
 }
 
-func markDeleted(n domain.Node) domain.ChangeItem {
+func markDeleted(n domain.Node) graph.NodeEdit {
 	return update(n, map[string]any{"status": string(statusDeleted)})
 }
 
@@ -341,7 +324,7 @@ func markDeleted(n domain.Node) domain.ChangeItem {
 func (s *GraphStore) Save(ctx context.Context, r Record) error {
 	m := r.Methodology
 	k := key(m.Name, m.Version)
-	return s.commit(ctx, NamespaceMethodology, "Methodology "+k, func(d *defs) ([]domain.ChangeItem, error) {
+	return s.commit(ctx, NamespaceMethodology, "Methodology "+k, func(d *defs) ([]graph.NodeEdit, error) {
 		old, exists := d.methodologies[k]
 		revive := exists && old.rec.Status == statusDeleted
 		if exists && !revive && old.rec.Status != StatusDraft {
@@ -362,7 +345,7 @@ func (s *GraphStore) Save(ctx context.Context, r Record) error {
 			n := old.node
 			oldNode, oldChildren = &n, old.children
 		}
-		return versionItems(MethodologyVersionKey(m.Name, m.Version), TypeMethodologyVersion, props, els, oldNode, oldChildren), nil
+		return versionEdits(MethodologyVersionKey(m.Name, m.Version), TypeMethodologyVersion, props, els, oldNode, oldChildren), nil
 	})
 }
 
@@ -408,18 +391,18 @@ func (s *GraphStore) List(ctx context.Context) ([]Record, error) {
 
 func (s *GraphStore) SetStatus(ctx context.Context, name, version string, st Status, at time.Time) error {
 	k := key(name, version)
-	return s.commit(ctx, NamespaceMethodology, fmt.Sprintf("Methodology %s %s", k, st), func(d *defs) ([]domain.ChangeItem, error) {
+	return s.commit(ctx, NamespaceMethodology, fmt.Sprintf("Methodology %s %s", k, st), func(d *defs) ([]graph.NodeEdit, error) {
 		old, ok := d.methodologies[k]
 		if !ok || old.rec.Status == statusDeleted {
 			return nil, fmt.Errorf("%s: %w", k, ErrNotFound)
 		}
-		return []domain.ChangeItem{update(old.node, statusPatch(st, at))}, nil
+		return []graph.NodeEdit{update(old.node, statusPatch(st, at))}, nil
 	})
 }
 
 func (s *GraphStore) Delete(ctx context.Context, name, version string) error {
 	k := key(name, version)
-	return s.commit(ctx, NamespaceMethodology, "Delete methodology "+k, func(d *defs) ([]domain.ChangeItem, error) {
+	return s.commit(ctx, NamespaceMethodology, "Delete methodology "+k, func(d *defs) ([]graph.NodeEdit, error) {
 		old, ok := d.methodologies[k]
 		if !ok || old.rec.Status == statusDeleted {
 			return nil, fmt.Errorf("%s: %w", k, ErrNotFound)
@@ -427,7 +410,7 @@ func (s *GraphStore) Delete(ctx context.Context, name, version string) error {
 		if old.rec.Status != StatusDraft {
 			return nil, fmt.Errorf("%s: %w", k, ErrImmutable)
 		}
-		return []domain.ChangeItem{markDeleted(old.node)}, nil
+		return []graph.NodeEdit{markDeleted(old.node)}, nil
 	})
 }
 
@@ -436,7 +419,7 @@ func (s *GraphStore) Delete(ctx context.Context, name, version string) error {
 func (s *GraphStore) SaveDomain(ctx context.Context, r DomainRecord) error {
 	dm := r.Domain
 	k := key(dm.Name, dm.Version)
-	return s.commit(ctx, NamespaceDomain, "Domain "+k, func(d *defs) ([]domain.ChangeItem, error) {
+	return s.commit(ctx, NamespaceDomain, "Domain "+k, func(d *defs) ([]graph.NodeEdit, error) {
 		old, exists := d.domains[k]
 		revive := exists && old.rec.Status == statusDeleted
 		if exists && !revive && old.rec.Status != StatusDraft {
@@ -457,7 +440,7 @@ func (s *GraphStore) SaveDomain(ctx context.Context, r DomainRecord) error {
 			n := old.node
 			oldNode, oldChildren = &n, old.children
 		}
-		return versionItems(DomainVersionKey(dm.Name, dm.Version), TypeDomainVersion, props, els, oldNode, oldChildren), nil
+		return versionEdits(DomainVersionKey(dm.Name, dm.Version), TypeDomainVersion, props, els, oldNode, oldChildren), nil
 	})
 }
 
@@ -503,18 +486,18 @@ func (s *GraphStore) ListDomains(ctx context.Context) ([]DomainRecord, error) {
 
 func (s *GraphStore) SetDomainStatus(ctx context.Context, name, version string, st Status, at time.Time) error {
 	k := key(name, version)
-	return s.commit(ctx, NamespaceDomain, fmt.Sprintf("Domain %s %s", k, st), func(d *defs) ([]domain.ChangeItem, error) {
+	return s.commit(ctx, NamespaceDomain, fmt.Sprintf("Domain %s %s", k, st), func(d *defs) ([]graph.NodeEdit, error) {
 		old, ok := d.domains[k]
 		if !ok || old.rec.Status == statusDeleted {
 			return nil, fmt.Errorf("%s: %w", k, errDomainNotFound)
 		}
-		return []domain.ChangeItem{update(old.node, statusPatch(st, at))}, nil
+		return []graph.NodeEdit{update(old.node, statusPatch(st, at))}, nil
 	})
 }
 
 func (s *GraphStore) DeleteDomain(ctx context.Context, name, version string) error {
 	k := key(name, version)
-	return s.commit(ctx, NamespaceDomain, "Delete domain "+k, func(d *defs) ([]domain.ChangeItem, error) {
+	return s.commit(ctx, NamespaceDomain, "Delete domain "+k, func(d *defs) ([]graph.NodeEdit, error) {
 		old, ok := d.domains[k]
 		if !ok || old.rec.Status == statusDeleted {
 			return nil, fmt.Errorf("%s: %w", k, errDomainNotFound)
@@ -522,6 +505,6 @@ func (s *GraphStore) DeleteDomain(ctx context.Context, name, version string) err
 		if old.rec.Status != StatusDraft {
 			return nil, fmt.Errorf("domain %s: %w", k, ErrImmutable)
 		}
-		return []domain.ChangeItem{markDeleted(old.node)}, nil
+		return []graph.NodeEdit{markDeleted(old.node)}, nil
 	})
 }

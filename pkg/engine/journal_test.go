@@ -42,7 +42,7 @@ func TestJournalRecordsTicksAndActions(t *testing.T) {
 		}
 	}
 	act := recs[2]
-	if act.Action != "identify_impacts" || act.ActionKind != "llm" || len(act.ModelCalls) != 1 || act.EffectsMet == nil || !*act.EffectsMet || len(act.Items) != 1 {
+	if act.Action != "identify_impacts" || act.ActionKind != "llm" || len(act.ModelCalls) != 1 || act.EffectsMet == nil || !*act.EffectsMet || len(act.Nodes) != 1 {
 		t.Fatalf("action record: %+v", act)
 	}
 	// provenance: every item produced by an action points to its record
@@ -51,6 +51,12 @@ func TestJournalRecordsTicksAndActions(t *testing.T) {
 		r, ok := byID[it.Execution]
 		if !ok || r.Action != it.ProducedBy {
 			t.Fatalf("item %s (%s) without journal provenance", it.ID, it.ProducedBy)
+		}
+	}
+	for _, n := range c.Nodes {
+		r, ok := byID[n.Execution]
+		if !ok || r.Action != n.ProducedBy {
+			t.Fatalf("change node %s (%s) without journal provenance", n.Key, n.ProducedBy)
 		}
 	}
 	if end := recs[len(recs)-1]; end.Status != string(StatusCompleted) || end.Data["steps"] != 3 {

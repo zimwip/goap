@@ -72,6 +72,18 @@ const (
 	GraphServiceUpdateChangeProcedure = "/goap.graph.v1.GraphService/UpdateChange"
 	// GraphServiceAddItemsProcedure is the fully-qualified name of the GraphService's AddItems RPC.
 	GraphServiceAddItemsProcedure = "/goap.graph.v1.GraphService/AddItems"
+	// GraphServiceAddChangeNodesProcedure is the fully-qualified name of the GraphService's
+	// AddChangeNodes RPC.
+	GraphServiceAddChangeNodesProcedure = "/goap.graph.v1.GraphService/AddChangeNodes"
+	// GraphServiceWriteChangeNodeProcedure is the fully-qualified name of the GraphService's
+	// WriteChangeNode RPC.
+	GraphServiceWriteChangeNodeProcedure = "/goap.graph.v1.GraphService/WriteChangeNode"
+	// GraphServiceReviewChangeNodeProcedure is the fully-qualified name of the GraphService's
+	// ReviewChangeNode RPC.
+	GraphServiceReviewChangeNodeProcedure = "/goap.graph.v1.GraphService/ReviewChangeNode"
+	// GraphServiceCommitEditsProcedure is the fully-qualified name of the GraphService's CommitEdits
+	// RPC.
+	GraphServiceCommitEditsProcedure = "/goap.graph.v1.GraphService/CommitEdits"
 	// GraphServiceGetBlackboardProcedure is the fully-qualified name of the GraphService's
 	// GetBlackboard RPC.
 	GraphServiceGetBlackboardProcedure = "/goap.graph.v1.GraphService/GetBlackboard"
@@ -97,20 +109,12 @@ const (
 	// GraphServiceMergeBranchProcedure is the fully-qualified name of the GraphService's MergeBranch
 	// RPC.
 	GraphServiceMergeBranchProcedure = "/goap.graph.v1.GraphService/MergeBranch"
-	// GraphServiceGetDivergencesProcedure is the fully-qualified name of the GraphService's
-	// GetDivergences RPC.
-	GraphServiceGetDivergencesProcedure = "/goap.graph.v1.GraphService/GetDivergences"
-	// GraphServiceRebaseChangeProcedure is the fully-qualified name of the GraphService's RebaseChange
-	// RPC.
-	GraphServiceRebaseChangeProcedure = "/goap.graph.v1.GraphService/RebaseChange"
 	// GraphServiceMergeChangeProcedure is the fully-qualified name of the GraphService's MergeChange
 	// RPC.
 	GraphServiceMergeChangeProcedure = "/goap.graph.v1.GraphService/MergeChange"
 	// GraphServiceGetSharedNodesProcedure is the fully-qualified name of the GraphService's
 	// GetSharedNodes RPC.
 	GraphServiceGetSharedNodesProcedure = "/goap.graph.v1.GraphService/GetSharedNodes"
-	// GraphServiceGetImpactsProcedure is the fully-qualified name of the GraphService's GetImpacts RPC.
-	GraphServiceGetImpactsProcedure = "/goap.graph.v1.GraphService/GetImpacts"
 	// GraphServiceSplitChangeProcedure is the fully-qualified name of the GraphService's SplitChange
 	// RPC.
 	GraphServiceSplitChangeProcedure = "/goap.graph.v1.GraphService/SplitChange"
@@ -126,9 +130,6 @@ const (
 	GraphServiceDiscardFlowProcedure = "/goap.graph.v1.GraphService/DiscardFlow"
 	// GraphServiceListFlowsProcedure is the fully-qualified name of the GraphService's ListFlows RPC.
 	GraphServiceListFlowsProcedure = "/goap.graph.v1.GraphService/ListFlows"
-	// GraphServiceMaterializeFlowProcedure is the fully-qualified name of the GraphService's
-	// MaterializeFlow RPC.
-	GraphServiceMaterializeFlowProcedure = "/goap.graph.v1.GraphService/MaterializeFlow"
 	// GraphServiceValidateBoardProcedure is the fully-qualified name of the GraphService's
 	// ValidateBoard RPC.
 	GraphServiceValidateBoardProcedure = "/goap.graph.v1.GraphService/ValidateBoard"
@@ -157,12 +158,19 @@ type GraphServiceClient interface {
 	CreateChange(context.Context, *connect.Request[v1.CreateChangeRequest]) (*connect.Response[v1.CreateChangeResponse], error)
 	GetChange(context.Context, *connect.Request[v1.GetChangeRequest]) (*connect.Response[v1.GetChangeResponse], error)
 	ListChanges(context.Context, *connect.Request[v1.ListChangesRequest]) (*connect.Response[v1.ListChangesResponse], error)
-	// Nodes a change is attached to (the versions it starts from), and the
-	// changes a node is attached to (ADR 0014).
+	// The versions a change starts from (the pre version of its change nodes), and the
+	// changes acting on a node (ADR 0024).
 	GetChangeNodes(context.Context, *connect.Request[v1.GetChangeNodesRequest]) (*connect.Response[v1.GetChangeNodesResponse], error)
 	ListNodeChanges(context.Context, *connect.Request[v1.ListNodeChangesRequest]) (*connect.Response[v1.ListNodeChangesResponse], error)
 	UpdateChange(context.Context, *connect.Request[v1.UpdateChangeRequest]) (*connect.Response[v1.UpdateChangeResponse], error)
 	AddItems(context.Context, *connect.Request[v1.AddItemsRequest]) (*connect.Response[v1.AddItemsResponse], error)
+	// Change nodes (ADR 0024): declare the nodes a change acts on, write the version each produces on the
+	// change branch, and accept or reject them (a comment is mandatory).
+	AddChangeNodes(context.Context, *connect.Request[v1.AddChangeNodesRequest]) (*connect.Response[v1.AddChangeNodesResponse], error)
+	WriteChangeNode(context.Context, *connect.Request[v1.WriteChangeNodeRequest]) (*connect.Response[v1.WriteChangeNodeResponse], error)
+	ReviewChangeNode(context.Context, *connect.Request[v1.ReviewChangeNodeRequest]) (*connect.Response[v1.ReviewChangeNodeResponse], error)
+	// Producers: a whole change of node edits (change nodes, versions, reviews, apply) in one call.
+	CommitEdits(context.Context, *connect.Request[v1.CommitEditsRequest]) (*connect.Response[v1.CommitEditsResponse], error)
 	GetBlackboard(context.Context, *connect.Request[v1.GetBlackboardRequest]) (*connect.Response[v1.GetBlackboardResponse], error)
 	ApplyChange(context.Context, *connect.Request[v1.ApplyChangeRequest]) (*connect.Response[v1.ApplyChangeResponse], error)
 	// Version branches (ADR 0009)
@@ -173,14 +181,10 @@ type GraphServiceClient interface {
 	ListNodeVersions(context.Context, *connect.Request[v1.ListNodeVersionsRequest]) (*connect.Response[v1.ListNodeVersionsResponse], error)
 	PlanMerge(context.Context, *connect.Request[v1.PlanMergeRequest]) (*connect.Response[v1.PlanMergeResponse], error)
 	MergeBranch(context.Context, *connect.Request[v1.MergeBranchRequest]) (*connect.Response[v1.MergeBranchResponse], error)
-	GetDivergences(context.Context, *connect.Request[v1.GetDivergencesRequest]) (*connect.Response[v1.GetDivergencesResponse], error)
-	RebaseChange(context.Context, *connect.Request[v1.RebaseChangeRequest]) (*connect.Response[v1.RebaseChangeResponse], error)
 	// Completes a merge_pending change: merges its branch into the branch it forked from.
 	MergeChange(context.Context, *connect.Request[v1.MergeChangeRequest]) (*connect.Response[v1.MergeChangeResponse], error)
 	// Nodes the change shares with other open changes (a merge will be needed).
 	GetSharedNodes(context.Context, *connect.Request[v1.GetSharedNodesRequest]) (*connect.Response[v1.GetSharedNodesResponse], error)
-	// Pre/post view of the impacts of a change, with the maturity state of both sides.
-	GetImpacts(context.Context, *connect.Request[v1.GetImpactsRequest]) (*connect.Response[v1.GetImpactsResponse], error)
 	// Splits a change along organisational boundaries: one sub-change per unit owning impacted nodes.
 	SplitChange(context.Context, *connect.Request[v1.SplitChangeRequest]) (*connect.Response[v1.SplitChangeResponse], error)
 	ListSubChanges(context.Context, *connect.Request[v1.ListSubChangesRequest]) (*connect.Response[v1.ListSubChangesResponse], error)
@@ -190,7 +194,6 @@ type GraphServiceClient interface {
 	DiscardFlow(context.Context, *connect.Request[v1.DiscardFlowRequest]) (*connect.Response[v1.DiscardFlowResponse], error)
 	ListFlows(context.Context, *connect.Request[v1.ListFlowsRequest]) (*connect.Response[v1.ListFlowsResponse], error)
 	// Applies the proposals of a flow on a graph branch of its own (a preview, merged when the flow is adopted).
-	MaterializeFlow(context.Context, *connect.Request[v1.MaterializeFlowRequest]) (*connect.Response[v1.MaterializeFlowResponse], error)
 	// Consistency check of the blackboard as a process on a flow sees it.
 	ValidateBoard(context.Context, *connect.Request[v1.ValidateBoardRequest]) (*connect.Response[v1.ValidateBoardResponse], error)
 	// Execution journal (ADR 0011)
@@ -299,6 +302,30 @@ func NewGraphServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(graphServiceMethods.ByName("AddItems")),
 			connect.WithClientOptions(opts...),
 		),
+		addChangeNodes: connect.NewClient[v1.AddChangeNodesRequest, v1.AddChangeNodesResponse](
+			httpClient,
+			baseURL+GraphServiceAddChangeNodesProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("AddChangeNodes")),
+			connect.WithClientOptions(opts...),
+		),
+		writeChangeNode: connect.NewClient[v1.WriteChangeNodeRequest, v1.WriteChangeNodeResponse](
+			httpClient,
+			baseURL+GraphServiceWriteChangeNodeProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("WriteChangeNode")),
+			connect.WithClientOptions(opts...),
+		),
+		reviewChangeNode: connect.NewClient[v1.ReviewChangeNodeRequest, v1.ReviewChangeNodeResponse](
+			httpClient,
+			baseURL+GraphServiceReviewChangeNodeProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("ReviewChangeNode")),
+			connect.WithClientOptions(opts...),
+		),
+		commitEdits: connect.NewClient[v1.CommitEditsRequest, v1.CommitEditsResponse](
+			httpClient,
+			baseURL+GraphServiceCommitEditsProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("CommitEdits")),
+			connect.WithClientOptions(opts...),
+		),
 		getBlackboard: connect.NewClient[v1.GetBlackboardRequest, v1.GetBlackboardResponse](
 			httpClient,
 			baseURL+GraphServiceGetBlackboardProcedure,
@@ -353,18 +380,6 @@ func NewGraphServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(graphServiceMethods.ByName("MergeBranch")),
 			connect.WithClientOptions(opts...),
 		),
-		getDivergences: connect.NewClient[v1.GetDivergencesRequest, v1.GetDivergencesResponse](
-			httpClient,
-			baseURL+GraphServiceGetDivergencesProcedure,
-			connect.WithSchema(graphServiceMethods.ByName("GetDivergences")),
-			connect.WithClientOptions(opts...),
-		),
-		rebaseChange: connect.NewClient[v1.RebaseChangeRequest, v1.RebaseChangeResponse](
-			httpClient,
-			baseURL+GraphServiceRebaseChangeProcedure,
-			connect.WithSchema(graphServiceMethods.ByName("RebaseChange")),
-			connect.WithClientOptions(opts...),
-		),
 		mergeChange: connect.NewClient[v1.MergeChangeRequest, v1.MergeChangeResponse](
 			httpClient,
 			baseURL+GraphServiceMergeChangeProcedure,
@@ -375,12 +390,6 @@ func NewGraphServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			httpClient,
 			baseURL+GraphServiceGetSharedNodesProcedure,
 			connect.WithSchema(graphServiceMethods.ByName("GetSharedNodes")),
-			connect.WithClientOptions(opts...),
-		),
-		getImpacts: connect.NewClient[v1.GetImpactsRequest, v1.GetImpactsResponse](
-			httpClient,
-			baseURL+GraphServiceGetImpactsProcedure,
-			connect.WithSchema(graphServiceMethods.ByName("GetImpacts")),
 			connect.WithClientOptions(opts...),
 		),
 		splitChange: connect.NewClient[v1.SplitChangeRequest, v1.SplitChangeResponse](
@@ -417,12 +426,6 @@ func NewGraphServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			httpClient,
 			baseURL+GraphServiceListFlowsProcedure,
 			connect.WithSchema(graphServiceMethods.ByName("ListFlows")),
-			connect.WithClientOptions(opts...),
-		),
-		materializeFlow: connect.NewClient[v1.MaterializeFlowRequest, v1.MaterializeFlowResponse](
-			httpClient,
-			baseURL+GraphServiceMaterializeFlowProcedure,
-			connect.WithSchema(graphServiceMethods.ByName("MaterializeFlow")),
 			connect.WithClientOptions(opts...),
 		),
 		validateBoard: connect.NewClient[v1.ValidateBoardRequest, v1.ValidateBoardResponse](
@@ -463,6 +466,10 @@ type graphServiceClient struct {
 	listNodeChanges  *connect.Client[v1.ListNodeChangesRequest, v1.ListNodeChangesResponse]
 	updateChange     *connect.Client[v1.UpdateChangeRequest, v1.UpdateChangeResponse]
 	addItems         *connect.Client[v1.AddItemsRequest, v1.AddItemsResponse]
+	addChangeNodes   *connect.Client[v1.AddChangeNodesRequest, v1.AddChangeNodesResponse]
+	writeChangeNode  *connect.Client[v1.WriteChangeNodeRequest, v1.WriteChangeNodeResponse]
+	reviewChangeNode *connect.Client[v1.ReviewChangeNodeRequest, v1.ReviewChangeNodeResponse]
+	commitEdits      *connect.Client[v1.CommitEditsRequest, v1.CommitEditsResponse]
 	getBlackboard    *connect.Client[v1.GetBlackboardRequest, v1.GetBlackboardResponse]
 	applyChange      *connect.Client[v1.ApplyChangeRequest, v1.ApplyChangeResponse]
 	createBranch     *connect.Client[v1.CreateBranchRequest, v1.CreateBranchResponse]
@@ -472,18 +479,14 @@ type graphServiceClient struct {
 	listNodeVersions *connect.Client[v1.ListNodeVersionsRequest, v1.ListNodeVersionsResponse]
 	planMerge        *connect.Client[v1.PlanMergeRequest, v1.PlanMergeResponse]
 	mergeBranch      *connect.Client[v1.MergeBranchRequest, v1.MergeBranchResponse]
-	getDivergences   *connect.Client[v1.GetDivergencesRequest, v1.GetDivergencesResponse]
-	rebaseChange     *connect.Client[v1.RebaseChangeRequest, v1.RebaseChangeResponse]
 	mergeChange      *connect.Client[v1.MergeChangeRequest, v1.MergeChangeResponse]
 	getSharedNodes   *connect.Client[v1.GetSharedNodesRequest, v1.GetSharedNodesResponse]
-	getImpacts       *connect.Client[v1.GetImpactsRequest, v1.GetImpactsResponse]
 	splitChange      *connect.Client[v1.SplitChangeRequest, v1.SplitChangeResponse]
 	listSubChanges   *connect.Client[v1.ListSubChangesRequest, v1.ListSubChangesResponse]
 	openFlow         *connect.Client[v1.OpenFlowRequest, v1.OpenFlowResponse]
 	adoptFlow        *connect.Client[v1.AdoptFlowRequest, v1.AdoptFlowResponse]
 	discardFlow      *connect.Client[v1.DiscardFlowRequest, v1.DiscardFlowResponse]
 	listFlows        *connect.Client[v1.ListFlowsRequest, v1.ListFlowsResponse]
-	materializeFlow  *connect.Client[v1.MaterializeFlowRequest, v1.MaterializeFlowResponse]
 	validateBoard    *connect.Client[v1.ValidateBoardRequest, v1.ValidateBoardResponse]
 	recordExecutions *connect.Client[v1.RecordExecutionsRequest, v1.RecordExecutionsResponse]
 	listExecutions   *connect.Client[v1.ListExecutionsRequest, v1.ListExecutionsResponse]
@@ -564,6 +567,26 @@ func (c *graphServiceClient) AddItems(ctx context.Context, req *connect.Request[
 	return c.addItems.CallUnary(ctx, req)
 }
 
+// AddChangeNodes calls goap.graph.v1.GraphService.AddChangeNodes.
+func (c *graphServiceClient) AddChangeNodes(ctx context.Context, req *connect.Request[v1.AddChangeNodesRequest]) (*connect.Response[v1.AddChangeNodesResponse], error) {
+	return c.addChangeNodes.CallUnary(ctx, req)
+}
+
+// WriteChangeNode calls goap.graph.v1.GraphService.WriteChangeNode.
+func (c *graphServiceClient) WriteChangeNode(ctx context.Context, req *connect.Request[v1.WriteChangeNodeRequest]) (*connect.Response[v1.WriteChangeNodeResponse], error) {
+	return c.writeChangeNode.CallUnary(ctx, req)
+}
+
+// ReviewChangeNode calls goap.graph.v1.GraphService.ReviewChangeNode.
+func (c *graphServiceClient) ReviewChangeNode(ctx context.Context, req *connect.Request[v1.ReviewChangeNodeRequest]) (*connect.Response[v1.ReviewChangeNodeResponse], error) {
+	return c.reviewChangeNode.CallUnary(ctx, req)
+}
+
+// CommitEdits calls goap.graph.v1.GraphService.CommitEdits.
+func (c *graphServiceClient) CommitEdits(ctx context.Context, req *connect.Request[v1.CommitEditsRequest]) (*connect.Response[v1.CommitEditsResponse], error) {
+	return c.commitEdits.CallUnary(ctx, req)
+}
+
 // GetBlackboard calls goap.graph.v1.GraphService.GetBlackboard.
 func (c *graphServiceClient) GetBlackboard(ctx context.Context, req *connect.Request[v1.GetBlackboardRequest]) (*connect.Response[v1.GetBlackboardResponse], error) {
 	return c.getBlackboard.CallUnary(ctx, req)
@@ -609,16 +632,6 @@ func (c *graphServiceClient) MergeBranch(ctx context.Context, req *connect.Reque
 	return c.mergeBranch.CallUnary(ctx, req)
 }
 
-// GetDivergences calls goap.graph.v1.GraphService.GetDivergences.
-func (c *graphServiceClient) GetDivergences(ctx context.Context, req *connect.Request[v1.GetDivergencesRequest]) (*connect.Response[v1.GetDivergencesResponse], error) {
-	return c.getDivergences.CallUnary(ctx, req)
-}
-
-// RebaseChange calls goap.graph.v1.GraphService.RebaseChange.
-func (c *graphServiceClient) RebaseChange(ctx context.Context, req *connect.Request[v1.RebaseChangeRequest]) (*connect.Response[v1.RebaseChangeResponse], error) {
-	return c.rebaseChange.CallUnary(ctx, req)
-}
-
 // MergeChange calls goap.graph.v1.GraphService.MergeChange.
 func (c *graphServiceClient) MergeChange(ctx context.Context, req *connect.Request[v1.MergeChangeRequest]) (*connect.Response[v1.MergeChangeResponse], error) {
 	return c.mergeChange.CallUnary(ctx, req)
@@ -627,11 +640,6 @@ func (c *graphServiceClient) MergeChange(ctx context.Context, req *connect.Reque
 // GetSharedNodes calls goap.graph.v1.GraphService.GetSharedNodes.
 func (c *graphServiceClient) GetSharedNodes(ctx context.Context, req *connect.Request[v1.GetSharedNodesRequest]) (*connect.Response[v1.GetSharedNodesResponse], error) {
 	return c.getSharedNodes.CallUnary(ctx, req)
-}
-
-// GetImpacts calls goap.graph.v1.GraphService.GetImpacts.
-func (c *graphServiceClient) GetImpacts(ctx context.Context, req *connect.Request[v1.GetImpactsRequest]) (*connect.Response[v1.GetImpactsResponse], error) {
-	return c.getImpacts.CallUnary(ctx, req)
 }
 
 // SplitChange calls goap.graph.v1.GraphService.SplitChange.
@@ -662,11 +670,6 @@ func (c *graphServiceClient) DiscardFlow(ctx context.Context, req *connect.Reque
 // ListFlows calls goap.graph.v1.GraphService.ListFlows.
 func (c *graphServiceClient) ListFlows(ctx context.Context, req *connect.Request[v1.ListFlowsRequest]) (*connect.Response[v1.ListFlowsResponse], error) {
 	return c.listFlows.CallUnary(ctx, req)
-}
-
-// MaterializeFlow calls goap.graph.v1.GraphService.MaterializeFlow.
-func (c *graphServiceClient) MaterializeFlow(ctx context.Context, req *connect.Request[v1.MaterializeFlowRequest]) (*connect.Response[v1.MaterializeFlowResponse], error) {
-	return c.materializeFlow.CallUnary(ctx, req)
 }
 
 // ValidateBoard calls goap.graph.v1.GraphService.ValidateBoard.
@@ -701,12 +704,19 @@ type GraphServiceHandler interface {
 	CreateChange(context.Context, *connect.Request[v1.CreateChangeRequest]) (*connect.Response[v1.CreateChangeResponse], error)
 	GetChange(context.Context, *connect.Request[v1.GetChangeRequest]) (*connect.Response[v1.GetChangeResponse], error)
 	ListChanges(context.Context, *connect.Request[v1.ListChangesRequest]) (*connect.Response[v1.ListChangesResponse], error)
-	// Nodes a change is attached to (the versions it starts from), and the
-	// changes a node is attached to (ADR 0014).
+	// The versions a change starts from (the pre version of its change nodes), and the
+	// changes acting on a node (ADR 0024).
 	GetChangeNodes(context.Context, *connect.Request[v1.GetChangeNodesRequest]) (*connect.Response[v1.GetChangeNodesResponse], error)
 	ListNodeChanges(context.Context, *connect.Request[v1.ListNodeChangesRequest]) (*connect.Response[v1.ListNodeChangesResponse], error)
 	UpdateChange(context.Context, *connect.Request[v1.UpdateChangeRequest]) (*connect.Response[v1.UpdateChangeResponse], error)
 	AddItems(context.Context, *connect.Request[v1.AddItemsRequest]) (*connect.Response[v1.AddItemsResponse], error)
+	// Change nodes (ADR 0024): declare the nodes a change acts on, write the version each produces on the
+	// change branch, and accept or reject them (a comment is mandatory).
+	AddChangeNodes(context.Context, *connect.Request[v1.AddChangeNodesRequest]) (*connect.Response[v1.AddChangeNodesResponse], error)
+	WriteChangeNode(context.Context, *connect.Request[v1.WriteChangeNodeRequest]) (*connect.Response[v1.WriteChangeNodeResponse], error)
+	ReviewChangeNode(context.Context, *connect.Request[v1.ReviewChangeNodeRequest]) (*connect.Response[v1.ReviewChangeNodeResponse], error)
+	// Producers: a whole change of node edits (change nodes, versions, reviews, apply) in one call.
+	CommitEdits(context.Context, *connect.Request[v1.CommitEditsRequest]) (*connect.Response[v1.CommitEditsResponse], error)
 	GetBlackboard(context.Context, *connect.Request[v1.GetBlackboardRequest]) (*connect.Response[v1.GetBlackboardResponse], error)
 	ApplyChange(context.Context, *connect.Request[v1.ApplyChangeRequest]) (*connect.Response[v1.ApplyChangeResponse], error)
 	// Version branches (ADR 0009)
@@ -717,14 +727,10 @@ type GraphServiceHandler interface {
 	ListNodeVersions(context.Context, *connect.Request[v1.ListNodeVersionsRequest]) (*connect.Response[v1.ListNodeVersionsResponse], error)
 	PlanMerge(context.Context, *connect.Request[v1.PlanMergeRequest]) (*connect.Response[v1.PlanMergeResponse], error)
 	MergeBranch(context.Context, *connect.Request[v1.MergeBranchRequest]) (*connect.Response[v1.MergeBranchResponse], error)
-	GetDivergences(context.Context, *connect.Request[v1.GetDivergencesRequest]) (*connect.Response[v1.GetDivergencesResponse], error)
-	RebaseChange(context.Context, *connect.Request[v1.RebaseChangeRequest]) (*connect.Response[v1.RebaseChangeResponse], error)
 	// Completes a merge_pending change: merges its branch into the branch it forked from.
 	MergeChange(context.Context, *connect.Request[v1.MergeChangeRequest]) (*connect.Response[v1.MergeChangeResponse], error)
 	// Nodes the change shares with other open changes (a merge will be needed).
 	GetSharedNodes(context.Context, *connect.Request[v1.GetSharedNodesRequest]) (*connect.Response[v1.GetSharedNodesResponse], error)
-	// Pre/post view of the impacts of a change, with the maturity state of both sides.
-	GetImpacts(context.Context, *connect.Request[v1.GetImpactsRequest]) (*connect.Response[v1.GetImpactsResponse], error)
 	// Splits a change along organisational boundaries: one sub-change per unit owning impacted nodes.
 	SplitChange(context.Context, *connect.Request[v1.SplitChangeRequest]) (*connect.Response[v1.SplitChangeResponse], error)
 	ListSubChanges(context.Context, *connect.Request[v1.ListSubChangesRequest]) (*connect.Response[v1.ListSubChangesResponse], error)
@@ -734,7 +740,6 @@ type GraphServiceHandler interface {
 	DiscardFlow(context.Context, *connect.Request[v1.DiscardFlowRequest]) (*connect.Response[v1.DiscardFlowResponse], error)
 	ListFlows(context.Context, *connect.Request[v1.ListFlowsRequest]) (*connect.Response[v1.ListFlowsResponse], error)
 	// Applies the proposals of a flow on a graph branch of its own (a preview, merged when the flow is adopted).
-	MaterializeFlow(context.Context, *connect.Request[v1.MaterializeFlowRequest]) (*connect.Response[v1.MaterializeFlowResponse], error)
 	// Consistency check of the blackboard as a process on a flow sees it.
 	ValidateBoard(context.Context, *connect.Request[v1.ValidateBoardRequest]) (*connect.Response[v1.ValidateBoardResponse], error)
 	// Execution journal (ADR 0011)
@@ -839,6 +844,30 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(graphServiceMethods.ByName("AddItems")),
 		connect.WithHandlerOptions(opts...),
 	)
+	graphServiceAddChangeNodesHandler := connect.NewUnaryHandler(
+		GraphServiceAddChangeNodesProcedure,
+		svc.AddChangeNodes,
+		connect.WithSchema(graphServiceMethods.ByName("AddChangeNodes")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceWriteChangeNodeHandler := connect.NewUnaryHandler(
+		GraphServiceWriteChangeNodeProcedure,
+		svc.WriteChangeNode,
+		connect.WithSchema(graphServiceMethods.ByName("WriteChangeNode")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceReviewChangeNodeHandler := connect.NewUnaryHandler(
+		GraphServiceReviewChangeNodeProcedure,
+		svc.ReviewChangeNode,
+		connect.WithSchema(graphServiceMethods.ByName("ReviewChangeNode")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceCommitEditsHandler := connect.NewUnaryHandler(
+		GraphServiceCommitEditsProcedure,
+		svc.CommitEdits,
+		connect.WithSchema(graphServiceMethods.ByName("CommitEdits")),
+		connect.WithHandlerOptions(opts...),
+	)
 	graphServiceGetBlackboardHandler := connect.NewUnaryHandler(
 		GraphServiceGetBlackboardProcedure,
 		svc.GetBlackboard,
@@ -893,18 +922,6 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(graphServiceMethods.ByName("MergeBranch")),
 		connect.WithHandlerOptions(opts...),
 	)
-	graphServiceGetDivergencesHandler := connect.NewUnaryHandler(
-		GraphServiceGetDivergencesProcedure,
-		svc.GetDivergences,
-		connect.WithSchema(graphServiceMethods.ByName("GetDivergences")),
-		connect.WithHandlerOptions(opts...),
-	)
-	graphServiceRebaseChangeHandler := connect.NewUnaryHandler(
-		GraphServiceRebaseChangeProcedure,
-		svc.RebaseChange,
-		connect.WithSchema(graphServiceMethods.ByName("RebaseChange")),
-		connect.WithHandlerOptions(opts...),
-	)
 	graphServiceMergeChangeHandler := connect.NewUnaryHandler(
 		GraphServiceMergeChangeProcedure,
 		svc.MergeChange,
@@ -915,12 +932,6 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 		GraphServiceGetSharedNodesProcedure,
 		svc.GetSharedNodes,
 		connect.WithSchema(graphServiceMethods.ByName("GetSharedNodes")),
-		connect.WithHandlerOptions(opts...),
-	)
-	graphServiceGetImpactsHandler := connect.NewUnaryHandler(
-		GraphServiceGetImpactsProcedure,
-		svc.GetImpacts,
-		connect.WithSchema(graphServiceMethods.ByName("GetImpacts")),
 		connect.WithHandlerOptions(opts...),
 	)
 	graphServiceSplitChangeHandler := connect.NewUnaryHandler(
@@ -957,12 +968,6 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 		GraphServiceListFlowsProcedure,
 		svc.ListFlows,
 		connect.WithSchema(graphServiceMethods.ByName("ListFlows")),
-		connect.WithHandlerOptions(opts...),
-	)
-	graphServiceMaterializeFlowHandler := connect.NewUnaryHandler(
-		GraphServiceMaterializeFlowProcedure,
-		svc.MaterializeFlow,
-		connect.WithSchema(graphServiceMethods.ByName("MaterializeFlow")),
 		connect.WithHandlerOptions(opts...),
 	)
 	graphServiceValidateBoardHandler := connect.NewUnaryHandler(
@@ -1015,6 +1020,14 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 			graphServiceUpdateChangeHandler.ServeHTTP(w, r)
 		case GraphServiceAddItemsProcedure:
 			graphServiceAddItemsHandler.ServeHTTP(w, r)
+		case GraphServiceAddChangeNodesProcedure:
+			graphServiceAddChangeNodesHandler.ServeHTTP(w, r)
+		case GraphServiceWriteChangeNodeProcedure:
+			graphServiceWriteChangeNodeHandler.ServeHTTP(w, r)
+		case GraphServiceReviewChangeNodeProcedure:
+			graphServiceReviewChangeNodeHandler.ServeHTTP(w, r)
+		case GraphServiceCommitEditsProcedure:
+			graphServiceCommitEditsHandler.ServeHTTP(w, r)
 		case GraphServiceGetBlackboardProcedure:
 			graphServiceGetBlackboardHandler.ServeHTTP(w, r)
 		case GraphServiceApplyChangeProcedure:
@@ -1033,16 +1046,10 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 			graphServicePlanMergeHandler.ServeHTTP(w, r)
 		case GraphServiceMergeBranchProcedure:
 			graphServiceMergeBranchHandler.ServeHTTP(w, r)
-		case GraphServiceGetDivergencesProcedure:
-			graphServiceGetDivergencesHandler.ServeHTTP(w, r)
-		case GraphServiceRebaseChangeProcedure:
-			graphServiceRebaseChangeHandler.ServeHTTP(w, r)
 		case GraphServiceMergeChangeProcedure:
 			graphServiceMergeChangeHandler.ServeHTTP(w, r)
 		case GraphServiceGetSharedNodesProcedure:
 			graphServiceGetSharedNodesHandler.ServeHTTP(w, r)
-		case GraphServiceGetImpactsProcedure:
-			graphServiceGetImpactsHandler.ServeHTTP(w, r)
 		case GraphServiceSplitChangeProcedure:
 			graphServiceSplitChangeHandler.ServeHTTP(w, r)
 		case GraphServiceListSubChangesProcedure:
@@ -1055,8 +1062,6 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 			graphServiceDiscardFlowHandler.ServeHTTP(w, r)
 		case GraphServiceListFlowsProcedure:
 			graphServiceListFlowsHandler.ServeHTTP(w, r)
-		case GraphServiceMaterializeFlowProcedure:
-			graphServiceMaterializeFlowHandler.ServeHTTP(w, r)
 		case GraphServiceValidateBoardProcedure:
 			graphServiceValidateBoardHandler.ServeHTTP(w, r)
 		case GraphServiceRecordExecutionsProcedure:
@@ -1132,6 +1137,22 @@ func (UnimplementedGraphServiceHandler) AddItems(context.Context, *connect.Reque
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.AddItems is not implemented"))
 }
 
+func (UnimplementedGraphServiceHandler) AddChangeNodes(context.Context, *connect.Request[v1.AddChangeNodesRequest]) (*connect.Response[v1.AddChangeNodesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.AddChangeNodes is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) WriteChangeNode(context.Context, *connect.Request[v1.WriteChangeNodeRequest]) (*connect.Response[v1.WriteChangeNodeResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.WriteChangeNode is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) ReviewChangeNode(context.Context, *connect.Request[v1.ReviewChangeNodeRequest]) (*connect.Response[v1.ReviewChangeNodeResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.ReviewChangeNode is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) CommitEdits(context.Context, *connect.Request[v1.CommitEditsRequest]) (*connect.Response[v1.CommitEditsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.CommitEdits is not implemented"))
+}
+
 func (UnimplementedGraphServiceHandler) GetBlackboard(context.Context, *connect.Request[v1.GetBlackboardRequest]) (*connect.Response[v1.GetBlackboardResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.GetBlackboard is not implemented"))
 }
@@ -1168,24 +1189,12 @@ func (UnimplementedGraphServiceHandler) MergeBranch(context.Context, *connect.Re
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.MergeBranch is not implemented"))
 }
 
-func (UnimplementedGraphServiceHandler) GetDivergences(context.Context, *connect.Request[v1.GetDivergencesRequest]) (*connect.Response[v1.GetDivergencesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.GetDivergences is not implemented"))
-}
-
-func (UnimplementedGraphServiceHandler) RebaseChange(context.Context, *connect.Request[v1.RebaseChangeRequest]) (*connect.Response[v1.RebaseChangeResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.RebaseChange is not implemented"))
-}
-
 func (UnimplementedGraphServiceHandler) MergeChange(context.Context, *connect.Request[v1.MergeChangeRequest]) (*connect.Response[v1.MergeChangeResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.MergeChange is not implemented"))
 }
 
 func (UnimplementedGraphServiceHandler) GetSharedNodes(context.Context, *connect.Request[v1.GetSharedNodesRequest]) (*connect.Response[v1.GetSharedNodesResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.GetSharedNodes is not implemented"))
-}
-
-func (UnimplementedGraphServiceHandler) GetImpacts(context.Context, *connect.Request[v1.GetImpactsRequest]) (*connect.Response[v1.GetImpactsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.GetImpacts is not implemented"))
 }
 
 func (UnimplementedGraphServiceHandler) SplitChange(context.Context, *connect.Request[v1.SplitChangeRequest]) (*connect.Response[v1.SplitChangeResponse], error) {
@@ -1210,10 +1219,6 @@ func (UnimplementedGraphServiceHandler) DiscardFlow(context.Context, *connect.Re
 
 func (UnimplementedGraphServiceHandler) ListFlows(context.Context, *connect.Request[v1.ListFlowsRequest]) (*connect.Response[v1.ListFlowsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.ListFlows is not implemented"))
-}
-
-func (UnimplementedGraphServiceHandler) MaterializeFlow(context.Context, *connect.Request[v1.MaterializeFlowRequest]) (*connect.Response[v1.MaterializeFlowResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.MaterializeFlow is not implemented"))
 }
 
 func (UnimplementedGraphServiceHandler) ValidateBoard(context.Context, *connect.Request[v1.ValidateBoardRequest]) (*connect.Response[v1.ValidateBoardResponse], error) {

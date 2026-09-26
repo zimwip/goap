@@ -3,6 +3,7 @@ package graph
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/zimwip/goap/pkg/domain"
@@ -67,11 +68,12 @@ func testSplitByOwnerAndMerge(t *testing.T, repo Repo) {
 		t.Fatal(err)
 	}
 	r1, r2, r3 := w.cmp1.Ref(), w.cmp2.Ref(), w.cmp3.Ref()
-	if _, err := g.AddItems(ctx, parent.ID, []domain.ChangeItem{
-		{Kind: domain.KindImpact, Type: "direct", Target: &r1},
-		{Kind: domain.KindImpact, Type: "direct", Target: &r2},
-		{Kind: domain.KindImpact, Type: "direct", Target: &r3},
-	}); err != nil {
+	pnodes, err := g.AddNodes(ctx, parent.ID, []domain.ChangeNode{
+		{Intent: domain.IntentModified, Pre: &r1, Rationale: "upgrade one"},
+		{Intent: domain.IntentModified, Pre: &r2, Rationale: "upgrade two"},
+		{Intent: domain.IntentModified, Pre: &r3, Rationale: "upgrade three"},
+	})
+	if err != nil {
 		t.Fatal(err)
 	}
 	subs, err := g.SplitByOwner(ctx, parent.ID)
@@ -87,8 +89,9 @@ func testSplitByOwnerAndMerge(t *testing.T, repo Repo) {
 			t.Fatalf("sub-change = %+v", s)
 		}
 		full, _ := g.Change(ctx, s.ID)
-		if len(full.Items) != 1 || full.Items[0].Kind != domain.KindImpact {
-			t.Fatalf("impacts not copied: %+v", full.Items)
+		if len(full.Nodes) != 1 || full.Nodes[0].Intent != domain.IntentModified || full.Nodes[0].Pre == nil || !full.Nodes[0].Planned() ||
+			!strings.HasPrefix(full.Nodes[0].Rationale, "upgrade ") || len(full.Nodes[0].DerivedFrom) != 1 {
+			t.Fatalf("change nodes not copied: %+v", full.Nodes)
 		}
 		orgs[s.OwnerOrg] = s
 	}
@@ -100,13 +103,27 @@ func testSplitByOwnerAndMerge(t *testing.T, repo Repo) {
 	if _, err := g.Apply(ctx, parent.ID, ""); !errors.Is(err, ErrConflict) {
 		t.Fatalf("apply with open sub-changes: %v", err)
 	}
+	// each change writes its node through its change node and accepts it
 	edit := func(c domain.ChangeSet, n domain.Node, title string) {
-		ref := n.Ref()
-		if _, err := g.AddItems(ctx, c.ID, []domain.ChangeItem{{Kind: domain.KindProposal,
-			Proposal: &domain.Proposal{Op: domain.OpUpdateNode, Node: &domain.NodeDraft{Base: &ref, Properties: map[string]any{"title": title}}}}}); err != nil {
+		nodes, err := g.ListChangeNodes(ctx, c.ID)
+		if err != nil {
 			t.Fatal(err)
 		}
+		for _, cn := range nodes {
+			if cn.Key != n.Key {
+				continue
+			}
+			if _, err := g.WriteNode(ctx, c.ID, cn.ID, NodeWrite{Properties: map[string]any{"title": title}}); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := g.ReviewNode(ctx, c.ID, cn.ID, domain.ReviewAccepted, "u", "ok"); err != nil {
+				t.Fatal(err)
+			}
+			return
+		}
+		t.Fatalf("no change node for %s in %s", n.Key, c.ID)
 	}
+	_ = pnodes
 	edit(orgs["ORG-T1"], w.cmp1, "one v2")
 	edit(orgs["ORG-T2"], w.cmp2, "two v2")
 	edit(parent, w.cmp3, "three v2")

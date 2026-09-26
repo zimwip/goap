@@ -26,12 +26,7 @@ type memState struct {
 	changes   map[domain.ChangeID]domain.ChangeSet
 	branches  map[string]domain.Branch
 	journal   []domain.ExecutionRecord
-	attached  []attachment // in attachment order
-}
-
-type attachment struct {
-	change domain.ChangeID
-	ref    domain.NodeRef
+	nodes     map[domain.ChangeID][]domain.ChangeNode
 }
 
 // NewMemory returns an empty in-memory repository.
@@ -42,6 +37,7 @@ func NewMemory() *Memory {
 		baselines: map[domain.BaselineID]domain.Baseline{},
 		changes:   map[domain.ChangeID]domain.ChangeSet{},
 		branches:  map[string]domain.Branch{},
+		nodes:     map[domain.ChangeID][]domain.ChangeNode{},
 	}}
 }
 
@@ -54,7 +50,10 @@ func (s memState) clone() memState {
 		changes:   make(map[domain.ChangeID]domain.ChangeSet, len(s.changes)),
 		branches:  maps.Clone(s.branches),
 		journal:   slices.Clone(s.journal),
-		attached:  slices.Clone(s.attached),
+		nodes:     make(map[domain.ChangeID][]domain.ChangeNode, len(s.nodes)),
+	}
+	for k, v := range s.nodes {
+		c.nodes[k] = slices.Clone(v)
 	}
 	for k, v := range s.versions {
 		c.versions[k] = slices.Clone(v)
@@ -233,6 +232,7 @@ func (t *memTx) Change(_ context.Context, id domain.ChangeID) (domain.ChangeSet,
 		return domain.ChangeSet{}, fmt.Errorf("change %s: %w", id, ErrNotFound)
 	}
 	c.Items = slices.Clone(c.Items)
+	c.Nodes = slices.Clone(t.st.nodes[id])
 	return c, nil
 }
 
@@ -292,6 +292,7 @@ func (t *memTx) PutChange(_ context.Context, c domain.ChangeSet) error {
 	} else {
 		c.Items = nil
 	}
+	c.Nodes = nil
 	t.st.changes[c.ID] = c
 	return nil
 }
@@ -306,33 +307,14 @@ func (t *memTx) PutItem(_ context.Context, id domain.ChangeID, it domain.ChangeI
 	return nil
 }
 
-func (t *memTx) PutAttachment(_ context.Context, change domain.ChangeID, ref domain.NodeRef) error {
-	for _, a := range t.st.attached {
-		if a.change == change && a.ref.ID == ref.ID {
-			return nil
-		}
-	}
-	t.st.attached = append(t.st.attached, attachment{change, ref})
-	return nil
-}
-
-func (t *memTx) Attachments(_ context.Context, change domain.ChangeID) ([]domain.NodeRef, error) {
-	var out []domain.NodeRef
-	for _, a := range t.st.attached {
-		if a.change == change {
-			out = append(out, a.ref)
-		}
-	}
-	return out, nil
-}
-
-func (t *memTx) NodeAttachments(_ context.Context, node domain.NodeID) ([]domain.ChangeID, error) {
+func (t *memTx) OpenChangeIDs(_ context.Context) ([]domain.ChangeID, error) {
 	var out []domain.ChangeID
-	for _, a := range t.st.attached {
-		if a.ref.ID == node {
-			out = append(out, a.change)
+	for id, c := range t.st.changes {
+		if c.Status != domain.ChangeApplied && c.Status != domain.ChangeAbandoned {
+			out = append(out, id)
 		}
 	}
+	sort.Slice(out, func(i, j int) bool { return t.st.changes[out[i]].CreatedAt.Before(t.st.changes[out[j]].CreatedAt) })
 	return out, nil
 }
 
@@ -364,4 +346,58 @@ func matchExecution(r domain.ExecutionRecord, f domain.ExecutionFilter) bool {
 		return false
 	}
 	return len(f.ProcessIDs) == 0 || slices.Contains(f.ProcessIDs, r.ProcessID)
+}
+
+func (t *memTx) PutChangeNode(_ context.Context, change domain.ChangeID, cn domain.ChangeNode) error {
+	if _, ok := t.st.changes[change]; !ok {
+		return fmt.Errorf("change %s: %w", change, ErrNotFound)
+	}
+	list := t.st.nodes[change]
+	for i := range list {
+		if list[i].ID == cn.ID {
+			list[i] = cn
+			return nil
+		}
+		if cn.Pre != nil && list[i].Pre != nil && list[i].Pre.ID == cn.Pre.ID && list[i].Flow == cn.Flow && !list[i].Superseded && !cn.Superseded {
+			return fmt.Errorf("change node %s: node already in the change: %w", cn.Key, ErrConflict)
+		}
+	}
+	t.st.nodes[change] = append(list, cn)
+	return nil
+}
+
+func (t *memTx) ChangeNodes(_ context.Context, change domain.ChangeID) ([]domain.ChangeNode, error) {
+	return slices.Clone(t.st.nodes[change]), nil
+}
+
+func (t *memTx) NodeChangeNodes(_ context.Context, node domain.NodeID) ([]domain.ChangeID, error) {
+	var out []domain.ChangeID
+	for id, list := range t.st.nodes {
+		for _, cn := range list {
+			if (cn.Pre != nil && cn.Pre.ID == node) || (cn.Post != nil && cn.Post.ID == node) {
+				out = append(out, id)
+				break
+			}
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return t.st.changes[out[i]].CreatedAt.Before(t.st.changes[out[j]].CreatedAt) })
+	return out, nil
+}
+
+func (t *memTx) SetNodeOrigin(_ context.Context, ref domain.NodeRef, change domain.ChangeID, cn domain.ChangeNodeID, comment string) error {
+	vs := t.st.versions[ref.ID]
+	if ref.Version < 1 || int(ref.Version) > len(vs) {
+		return fmt.Errorf("node %s: %w", ref, ErrNotFound)
+	}
+	vs[ref.Version-1].ChangeID, vs[ref.Version-1].ChangeNode, vs[ref.Version-1].Comment = change, cn, comment
+	return nil
+}
+
+func (t *memTx) MoveVersion(_ context.Context, ref domain.NodeRef, to string) error {
+	vs := t.st.versions[ref.ID]
+	if ref.Version < 1 || int(ref.Version) > len(vs) {
+		return fmt.Errorf("node %s: %w", ref, ErrNotFound)
+	}
+	vs[ref.Version-1].Branch = to
+	return nil
 }

@@ -36,11 +36,10 @@ of a versioned knowledge graph, whose other axis, the **domain axis**, describes
                  CHANGE AXIS (modification, = blackboard)
    ┌──────────────────────────────┼─────────────────────────────┐
    │ ChangeSet CR-42 (baseline = B1, intent = "…")              │
-   │   ├─ impact   #i1 → REQ-12@v3   (direct)                   │
-   │   ├─ impact   #i2 → TST-7@v1    (propagated from #i1)      │
-   │   ├─ proposal #p1 update_node REQ-12 (base v3) → props'    │
-   │   ├─ proposal #p2 add_link    TST-9(new) ─verifies→ #p1    │
-   │   └─ decision #d1 accept #p1                               │
+   │   ├─ change node #n1 modified REQ-12 (pre v3, post v4)     │
+   │   ├─ change node #n2 modified TST-7  (pre v1, planned)     │
+   │   ├─ change node #n3 created  TST-9  ─verifies→ REQ-12@v4  │
+   │   └─ decision #d1 (fact)                                   │
    └────────────────────────────────────────────────────────────┘
                                   │ apply
                                   ▼
@@ -92,27 +91,20 @@ REQ-1  v1(main) ── v3(main, revise) ───────────── 
 - **Branch merge** (`PlanMerge` / `MergeBranch`): for each node modified on the source branch since
   the fork, a 3-way merge against the common ancestor (walking up `parents`) — property by property (one side
   equal to the ancestor takes the other, otherwise **conflict**) and outgoing links as a set (key = type + target
-  node: added on one side → kept, removed on one side → removed). The merge is a `merge_node` change applied on
+  node: added on one side → kept, removed on one side → removed). The merge is a change of the platform (one change node per merged node, the versions written directly) on
   the target; conflicts require a resolution (resolved properties, or `skip`). The branch moves to `merged`.
-- **Divergence and rebasing of a change** (`GetDivergences` / `RebaseChange`): proposals whose node has
-  advanced on the branch are recomputed against the head (3-way merge of base / proposal / head, or
-  supplied resolution); the new proposal **replaces** the old one (`supersedes`, status `superseded`),
-  a `merge` item traces each replacement, `change.data.rebases` keeps the history, and the change's baseline
-  becomes the head. Replaced items disappear from CEL conditions; `merges` and `change.branch` are exposed there.
 
 #### Change axis
 
 | Concept | Description |
 |---|---|
 | **ChangeSet** | A modification request. References a starting baseline, carries the initial intent and the chosen goal. It is **the blackboard** of an agentic process. |
-| **ChangeItem** | Blackboard element. `kind` ∈ `impact`, `proposal`, `decision`, `artifact`, `merge`. Each item has a provenance (`producedBy` = action, `derivedFrom` = other items). An `impact` describes a change in terms of **pre** (`target`, a released version of the reference baseline) and **post** (`post`, the proposal producing the new version on the change branch), see [ADR 0015](adr/0015-namespaces.md). |
-| **Impact** | References a node **of the reference graph** (`NodeRef` exact version) with a reason. Starting point of the analysis. |
-| **Proposal** | Proposed modification of the **resulting graph**: `create_node`, `update_node`, `delete_node`, `add_link`, `remove_link` (and `merge_node` for branch merges). Link endpoints can be an existing node (`NodeRef`) or a proposed node (reference to another item). |
-| **Decision** | Acceptance / rejection of a proposal (human or agent). |
+| **ChangeItem** | Blackboard **fact** with no node: `kind` ∈ `decision`, `artifact`, `merge`, `flow`. Each item has a provenance (`producedBy` = action, `derivedFrom` = other items). |
+| **ChangeNode** | Link from the change to a node ([ADR 0024](adr/0024-change-nodes.md)): `intent` (`created` / `modified`), `rationale`, `pre` (released version), `post` (version written on the change branch, empty while only planned: an impact without a proposal), `landed` (version on the target branch once applied), `review` with a mandatory comment. `WriteNode` creates the post version, `ReviewNode` accepts or rejects, `Apply` lands the branch (fast-forward, else auto-merge or `merge_pending`, then `MergeChange`). A node version records its `changeId`, `changeNode` and `comment`. A node's type is a direct attribute of the node (`Node.Type`), there is no `instanceOf` link. |
+| **Decision** | A choice about something that is not a node (human or agent); the acceptance of a node is the review of its change node. |
 | **Artifact** | Free-form data produced by an action (summary, report, tool response). |
 
-Applying a ChangeSet (`ApplyChange`) materializes the accepted proposals into new node versions
-and a new baseline. The ChangeSet remains the explainable history of *why* the graph changed.
+Applying a ChangeSet (`ApplyChange`) lands the accepted change nodes' versions and creates a new baseline. The ChangeSet remains the explainable history of *why* the graph changed.
 
 ### 2.2 Correspondence with Embabel
 
@@ -138,11 +130,12 @@ Variables exposed to the expression:
 | Variable | Content |
 |---|---|
 | `change` | `{id, title, intent, status, goal, baseline, branch, data}` |
-| `items` | the active ChangeItems (items `superseded` by a rebase are excluded) |
-| `impacts`, `proposals`, `decisions`, `artifacts`, `merges` | items filtered by `kind` |
+| `items` | the active ChangeItems (facts) |
+| `decisions`, `artifacts`, `merges` | items filtered by `kind` |
+| `changeNodes` | the change nodes ([ADR 0024](adr/0024-change-nodes.md)), `{id, key, type, types, intent, rationale, review, reviews, comment, pre, post, landed, planned, hasPost, recheck, props, via}`; `pre`, `post`, `landed` are hydrated node views or `null` |
 | `vars` | free process variables (clarification answers, parameters) |
 
-Each domain reference of an item (`target`, `node.base`, link endpoints) is **hydrated**:
+Each node reference of a change node (`pre`, `post`, `landed`, link endpoints) is **hydrated**:
 `{id, version, key, type, props, out: [{type, to}], in: [{type, from}], latest}`. A condition can thus
 navigate the *reference* domain without a network call during evaluation (hydration is done
 once per cycle by the engine via the Graph Service).
@@ -151,14 +144,13 @@ Examples:
 
 ```cel
 // at least one identified impact
-size(impacts) > 0
+size(changeNodes) > 0
 
-// every impacted requirement has an update proposal
-impacts.filter(i, i.target.type == "Requirement")
-       .all(i, proposals.exists(p, p.op == "update_node" && p.node.base.id == i.target.id))
+// every impacted requirement has a written version
+changeNodes.filter(n, "Requirement" in n.types).all(n, n.hasPost)
 
-// no suspect link: every impacted target is at its latest version
-impacts.all(i, i.target.version == i.target.latest)
+// no suspect: every impacted pre is at its latest version
+changeNodes.all(n, n.pre == null || n.pre.version == n.pre.latest)
 ```
 
 The world seen by the planner is **the boolean evaluation of all conditions**
@@ -172,7 +164,7 @@ An action declares:
 - `pre`: required conditions (`{name: bool}`);
 - `effects`: conditions the action is **expected** to make true/false (used for planning);
 - `expects` (optional): the **expectation** expressed as a **domain link pattern**. Example:
-  "for each impact on a `Requirement`, produce a `TestCase` node proposal linked by `verifies`".
+  "for each impact on a `Requirement`, produce a `TestCase` change node linked by `verifies`".
 
 An `expects` is **compiled into a CEL condition** (`expect:<action>`) automatically added to the action's effects.
 Thus the link on the domain axis is simultaneously the action's **specification**, its **success
@@ -333,10 +325,10 @@ cost, and **replaces it at execution time** when its guard is true (the highest 
 those from other methodologies). An action of `kind: abstract` has no implementation of its own: it requires
 an applicable specialization (e.g. `build` specialized into `build_java`, `build_c`, `build_shell`).
 **Subtyping** (§6): a node type can extend another (`extends`); conditions see
-`x.types` (the type and its ancestors): `"Requirement" in i.target.types` holds for its subtypes.
+`x.types` (the type and its ancestors): `"Requirement" in n.types` holds for its subtypes.
 Node types are the **metadata layer** of the graph ([ADR 0012](adr/0012-nodetype-graph-native.md)):
 unlike the rest of the meta-model, they are graph-native and no longer a registry mirror (§2.12).
-A data node references the node type it instantiates with a `LinkInstanceOf` edge.
+A data node carries its node type as an attribute (`Node.Type`).
 
 What the registry stores (node types, link types, lifecycles, algorithms, [ADR 0023](adr/0023-registry-in-the-graph.md)) is the authority. The graph
 enforces only what the `NodeType` nodes carry (lifecycle, document, validators); it does not check link types or namespaces.
@@ -408,7 +400,7 @@ injects a `ctx` object (same API in both languages, reference: [docs/dsl.md](dsl
 
 - **reading** the blackboard (hydrated items) and the reference **domain** (`node`, `nodes`, `links`);
 - **writing** to the change (`addImpact`, `proposeNode`, `proposeUpdate`, `proposeLink`, `addArtifact`,
-  `decide`) — buffered, validated atomically at the end of the action;
+  `decide`, and the change node calls `impactNode`, `createNode`, `writeNode`, `reviewNode`, ADR 0024) — buffered, applied at the end of the action;
 - **platform calls**: `llm` / `complete` (model gateway), `runAgent` (sub-agents), `callTool` (MCP), `log`.
 
 The interpreters expose neither files, network, nor processes (Go: subset of the stdlib;
@@ -731,6 +723,8 @@ actions:
       where: x.target.type == "Requirement"   # x = iterated element
       produce: {op: create_node, nodeType: TestCase}
       link: {type: verifies}                  # direction: out (new -> target) by default
+      # forEach: changeNodes works the same on change nodes (ADR 0024): x is a modified change node,
+      # update_node = its node was written, create_node = a created change node written and linked to it
 goals:
   - name: assess_impact
     description: Measure the impact of a change without modifying anything
@@ -826,7 +820,7 @@ docs/                        architecture, ADRs
 | **M9 — self-observation** ✅ | ADR 0011: execution journal on the change axis (ticks, actions, LLM / tool calls, decisions, item provenance), methodology projected into versioned domain elements, `observer` agent (journal + OpenTelemetry traces → findings → proposals → review → draft), action specialization and type subtyping |
 | **M10 — SDLC** 🟡 | `sdlc` 0.3.0 methodology on the shared ALM domain (need → requirement → function → component → artifact → application → solution, data, interfaces, flows), build specialized by technology, incremental releases and deployment (dev → test → staging → production, release manager approval), incremental actions · to refine: quality (coverage, security), rollback, freezes / change windows, MCP tools (repositories, CI, artifact registry, deployment) |
 | **M7 — agents** ✅ | agents (goap / utility / hybrid), JS / Go script actions with DSL, sub-agents, sandbox per process, IDE |
-| **M11 — graph-native metadata layer** 🟡 | ADR 0012: `NodeType` seeded on the graph and never overwritten by `Sync`, `LinkInstanceOf` (auto-attached by the engine's item resolver), graph-first `x.types` resolution with a permanent declared-schema fallback, `nodetype` ABAC resource, automatic `instanceOf` backfill for pre-existing domain nodes · remaining: IDE screen to author node types and `extends` directly on the graph |
+| **M11 — graph-native metadata layer** 🟡 | ADR 0012: `NodeType` seeded on the graph and never overwritten by `Sync`, graph-first `x.types` resolution with a permanent declared-schema fallback, `nodetype` ABAC resource · remaining: IDE screen to author node types and `extends` directly on the graph |
 
 ## 7. Open questions
 

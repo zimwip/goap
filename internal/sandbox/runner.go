@@ -29,14 +29,15 @@ func (r *Runner) Execute(ctx context.Context, req *connect.Request[runtimev1.Exe
 	job := dsl.Job{Language: m.Language, Code: m.Code, ProcessID: m.ProcessId, Agent: m.Agent, Action: m.Action,
 		Timeout: time.Duration(m.TimeoutMs) * time.Millisecond}
 	var snapshot struct {
-		Items  []dsl.Item `json:"items"`
-		Intent string     `json:"intent"`
-		Goal   string     `json:"goal"`
+		Items  []dsl.Item       `json:"items"`
+		Nodes  []dsl.ChangeNode `json:"nodes"`
+		Intent string           `json:"intent"`
+		Goal   string           `json:"goal"`
 	}
 	if err := json.Unmarshal([]byte(m.BlackboardJson), &snapshot); err != nil && m.BlackboardJson != "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	job.Items, job.Intent, job.Goal = snapshot.Items, snapshot.Intent, snapshot.Goal
+	job.Items, job.Nodes, job.Intent, job.Goal = snapshot.Items, snapshot.Nodes, snapshot.Intent, snapshot.Goal
 	_ = json.Unmarshal([]byte(m.ParamsJson), &job.Params)
 	_ = json.Unmarshal([]byte(m.VarsJson), &job.Vars)
 	hc := r.HTTP
@@ -54,6 +55,8 @@ func (r *Runner) Execute(ctx context.Context, req *connect.Request[runtimev1.Exe
 	} else {
 		b, _ := json.Marshal(res.Items)
 		out.ItemsJson = string(b)
+		nb, _ := json.Marshal(res.Nodes)
+		out.NodesJson = string(nb)
 	}
 	return connect.NewResponse(out), nil
 }

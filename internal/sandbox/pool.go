@@ -226,7 +226,7 @@ func (r *remote) Execute(ctx context.Context, job dsl.Job, host dsl.Host) (dsl.R
 	jobID := uuid.NewString()
 	token, unregister := r.pool.Runtime.Register(jobID, host)
 	defer unregister()
-	snapshot, _ := json.Marshal(map[string]any{"items": job.Items, "intent": job.Intent, "goal": job.Goal})
+	snapshot, _ := json.Marshal(map[string]any{"items": job.Items, "nodes": job.Nodes, "intent": job.Intent, "goal": job.Goal})
 	params, _ := json.Marshal(job.Params)
 	vars, _ := json.Marshal(job.Vars)
 	timeout := r.pool.Timeout
@@ -252,6 +252,11 @@ func (r *remote) Execute(ctx context.Context, job dsl.Job, host dsl.Host) (dsl.R
 	if m.ItemsJson != "" {
 		if err := json.Unmarshal([]byte(m.ItemsJson), &res.Items); err != nil {
 			return res, fmt.Errorf("sandbox items: %w", err)
+		}
+	}
+	if m.NodesJson != "" {
+		if err := json.Unmarshal([]byte(m.NodesJson), &res.Nodes); err != nil {
+			return res, fmt.Errorf("sandbox change nodes: %w", err)
 		}
 	}
 	return res, nil

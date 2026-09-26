@@ -8,6 +8,7 @@ import (
 
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/dsl"
 	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/intent"
 	"github.com/zimwip/goap/pkg/llm"
@@ -25,12 +26,12 @@ func scripted(t *testing.T) llm.Client {
 			if !strings.Contains(p, "REQ-1 (Requirement)") {
 				t.Errorf("prompt misses baseline nodes:\n%s", p)
 			}
-			out = `Here: {"items":[{"kind":"impact","type":"direct","target":"REQ-1","data":{"reason":"PSP API change"}}]}`
+			out = `Here: {"items":[{"kind":"changeNode","changeNode":{"op":"declare","intent":"modified","key":"REQ-1","rationale":"PSP API change"}}]}`
 		case strings.Contains(p, "new version"):
-			out = `{"items":[{"kind":"proposal","proposal":{"op":"update_node","node":{"base":"REQ-1","props":{"title":"Use PSP v2"}}}}]}`
+			out = `{"items":[{"kind":"changeNode","changeNode":{"op":"write","node":"REQ-1","props":{"title":"Use PSP v2"}}}]}`
 		case strings.Contains(p, "test case"):
-			out = `{"items":[{"ref":"t1","kind":"proposal","proposal":{"op":"create_node","node":{"key":"TST-9","type":"TestCase"}}},
-			{"kind":"proposal","proposal":{"op":"add_link","link":{"type":"verifies","from":"#t1","to":"REQ-1"}}}]}`
+			out = `{"items":[{"kind":"changeNode","changeNode":{"op":"declare","ref":"#t1","intent":"created","type":"TestCase","key":"TST-9","rationale":"cover REQ-1"}},
+			{"kind":"changeNode","changeNode":{"op":"write","node":"#t1","props":{"title":"PSP v2 test"},"links":[{"type":"verifies","to":"REQ-1"}]}}]}`
 		case strings.Contains(p, "report"):
 			out = `{"items":[{"kind":"artifact","type":"report","data":{"markdown":"# Impact"}}]}`
 		default:
@@ -79,6 +80,25 @@ func setup(t *testing.T) (*Engine, *graph.Graph, domain.BaselineID) {
 	return e, g, b.ID
 }
 
+// reviewAll accepts every change node of the change that awaits a decision, as a human would.
+func reviewAll(t *testing.T, g *graph.Graph, id domain.ChangeID) []ItemInput {
+	t.Helper()
+	c, err := g.Change(context.Background(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out []ItemInput
+	for _, n := range c.Nodes {
+		if n.Review == domain.ReviewProposed && len(n.Items) == 0 {
+			out = append(out, ItemInput{Kind: "changeNode", ChangeNode: &dsl.NodeOp{Op: "review", Node: n.Key, Accept: true, Comment: "reviewed"}})
+		}
+	}
+	if len(out) == 0 {
+		t.Fatalf("no change node to review: %+v", c.Nodes)
+	}
+	return out
+}
+
 func TestAssessImpact(t *testing.T) {
 	ctx := context.Background()
 	e, g, base := setup(t)
@@ -106,10 +126,14 @@ func TestAssessImpact(t *testing.T) {
 		t.Fatalf("unexpected steps %v", actions)
 	}
 	c, _ := g.Change(ctx, p.ChangeID)
-	impacts := c.ItemsOfKind(domain.KindImpact)
 	// REQ-1 direct, TST-1 and CMP-1 propagated (NEED-1 is upstream, not impacted)
-	if len(impacts) != 3 {
-		t.Fatalf("expected 3 impacts, got %d", len(impacts))
+	if len(c.Nodes) != 3 {
+		t.Fatalf("expected 3 impacted nodes, got %+v", c.Nodes)
+	}
+	for _, n := range c.Nodes {
+		if n.Intent != domain.IntentModified || n.Rationale == "" || !n.Planned() {
+			t.Fatalf("an impact is a planned change node with a rationale: %+v", n)
+		}
 	}
 	if c.Goal != "assess_impact" {
 		t.Fatalf("goal not recorded on the change")
@@ -137,12 +161,7 @@ func TestPrepareChangeWithClarificationAndReview(t *testing.T) {
 	if p.Status != StatusWaiting || p.Pending == nil || p.Pending.Action != "review_proposals" {
 		t.Fatalf("expected review task, got %s %+v %s steps=%+v", p.Status, p.Pending, p.Error, p.Steps)
 	}
-	c, _ := g.Change(ctx, p.ChangeID)
-	var decisions []ItemInput
-	for _, it := range c.ItemsOfKind(domain.KindProposal) {
-		decisions = append(decisions, ItemInput{Kind: "decision", Decision: &DecisionInput{Item: "@" + string(it.ID), Accept: true}})
-	}
-	if _, err := e.Submit(ctx, p.ID, decisions); err != nil {
+	if _, err := e.Submit(ctx, p.ID, reviewAll(t, g, p.ChangeID)); err != nil {
 		t.Fatal(err)
 	}
 	p, _ = e.Run(ctx, p.ID)
@@ -218,12 +237,7 @@ func deliverUntilReviewed(t *testing.T, who authz.Principal) (*Engine, *graph.Gr
 	if p.Status != StatusWaiting || p.Pending.Kind != TaskInput || p.Pending.Action != "review_proposals" {
 		t.Fatalf("expected review, got %s %+v", p.Status, p.Pending)
 	}
-	c, _ := g.Change(ctx, p.ChangeID)
-	var decisions []ItemInput
-	for _, it := range c.ItemsOfKind(domain.KindProposal) {
-		decisions = append(decisions, ItemInput{Kind: "decision", Decision: &DecisionInput{Item: "@" + string(it.ID), Accept: true}})
-	}
-	if _, err := e.Submit(ctx, p.ID, decisions); err != nil {
+	if _, err := e.Submit(ctx, p.ID, reviewAll(t, g, p.ChangeID)); err != nil {
 		t.Fatal(err)
 	}
 	p, _ = e.Run(ctx, p.ID)

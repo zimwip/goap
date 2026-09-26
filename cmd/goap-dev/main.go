@@ -97,9 +97,6 @@ func main() {
 			} else if res.Changed() {
 				log.Info("methodology projected onto the graph", "name", name, "version", version, "change", res.Change)
 			}
-			if _, err := metamodel.BackfillInstanceOf(ctx, g, name); err != nil {
-				log.Warn("instanceOf backfill", "methodology", name, "err", err)
-			}
 			if triggers != nil {
 				triggers.Handle(ctx, engine.TriggerEvent{Type: "methodology.published", Methodology: name, Version: version})
 			}
@@ -111,11 +108,7 @@ func main() {
 				log.Error("domain projection", "domain", name, "err", err)
 				return
 			}
-			for _, res := range rs {
-				if _, err := metamodel.BackfillInstanceOf(ctx, g, res.Methodology); err != nil {
-					log.Warn("instanceOf backfill", "methodology", res.Methodology, "err", err)
-				}
-			}
+			_ = rs
 			log.Info("domain published: methodologies projected again", "domain", name, "version", version)
 		},
 	}

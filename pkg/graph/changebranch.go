@@ -32,6 +32,13 @@ func ownBranch(ctx context.Context, tx Tx, c domain.ChangeSet) (domain.Branch, b
 // integrate merges the branch of a change into its parent branch and marks the
 // change applied. Unresolved conflicts leave the change merge_pending.
 func (g *Graph) integrate(ctx context.Context, tx Tx, c domain.ChangeSet, own domain.Branch, resolutions map[domain.NodeID]Resolution) (domain.ChangeSet, error) {
+	if ff, err := g.fastForward(ctx, tx, c, own); err != nil || ff {
+		if err != nil {
+			return c, err
+		}
+		c, err = tx.Change(ctx, c.ID)
+		return c, err
+	}
 	plan, err := planMerge(ctx, tx, own.Name, own.Parent)
 	if err != nil {
 		return c, err
@@ -49,6 +56,9 @@ func (g *Graph) integrate(ctx context.Context, tx Tx, c domain.ChangeSet, own do
 	}
 	c.Status = domain.ChangeApplied
 	c.ResultBaselineID = res.Baseline.ID
+	if err := g.land(ctx, tx, c, own, res.Change.ID); err != nil {
+		return c, err
+	}
 	return c, tx.PutChange(ctx, c)
 }
 
@@ -98,24 +108,25 @@ type SharedNode struct {
 }
 
 // SharedNodes lists the nodes of a change that other unapplied changes of the
-// same namespace are attached to as well.
+// same namespace act on as well.
 func (g *Graph) SharedNodes(ctx context.Context, id domain.ChangeID) (out []SharedNode, err error) {
 	err = g.repo.InTx(ctx, func(tx Tx) error {
 		c, err := tx.Change(ctx, id)
 		if err != nil {
 			return err
 		}
-		refs, err := tx.Attachments(ctx, id)
+		open, err := g.openChangeHolders(ctx, tx)
 		if err != nil {
 			return err
 		}
-		for _, ref := range refs {
-			ids, err := tx.NodeAttachments(ctx, ref.ID)
-			if err != nil {
-				return err
+		seen := map[domain.NodeID]bool{}
+		for _, cn := range c.Nodes {
+			if cn.Pre == nil || seen[cn.Pre.ID] {
+				continue
 			}
+			seen[cn.Pre.ID] = true
 			var others []domain.ChangeID
-			for _, o := range ids {
+			for _, o := range open[cn.Pre.ID] {
 				if o == id {
 					continue
 				}
@@ -123,7 +134,7 @@ func (g *Graph) SharedNodes(ctx context.Context, id domain.ChangeID) (out []Shar
 				if err != nil {
 					return err
 				}
-				if oc.Status == domain.ChangeApplied || oc.Status == domain.ChangeAbandoned || domain.NamespaceOf(oc.Namespace) != domain.NamespaceOf(c.Namespace) {
+				if domain.NamespaceOf(oc.Namespace) != domain.NamespaceOf(c.Namespace) {
 					continue
 				}
 				others = append(others, o)
@@ -131,11 +142,11 @@ func (g *Graph) SharedNodes(ctx context.Context, id domain.ChangeID) (out []Shar
 			if len(others) == 0 {
 				continue
 			}
-			n, err := tx.Node(ctx, ref)
+			n, err := tx.Node(ctx, *cn.Pre)
 			if err != nil {
 				return err
 			}
-			out = append(out, SharedNode{Node: ref, Key: n.Key, Changes: others})
+			out = append(out, SharedNode{Node: *cn.Pre, Key: n.Key, Changes: others})
 		}
 		return nil
 	})
@@ -168,4 +179,89 @@ func (g *Graph) NodeByKeyOn(ctx context.Context, namespace, branch, key string) 
 		return fmt.Errorf("node key %q on branch %s: %w", key, branch, ErrNotFound)
 	})
 	return
+}
+
+// fastForward lands a change whose target branch has not moved since its
+// branch was forked: the versions of the branch become versions of the target,
+// no merge version is made, and each change node lands as the version it wrote.
+func (g *Graph) fastForward(ctx context.Context, tx Tx, c domain.ChangeSet, own domain.Branch) (bool, error) {
+	into, err := branchHead(ctx, tx, own.Parent)
+	if err != nil || into.ID != own.ForkBaseline {
+		return false, err
+	}
+	from, err := branchHead(ctx, tx, own.Name)
+	if err != nil {
+		return false, err
+	}
+	// only what the change lands moves: the versions of its head baseline (a rejected or replaced version stays behind)
+	moves := map[domain.NodeID]domain.Version{}
+	for id, v := range from.Nodes {
+		moves[id] = v
+	}
+	for _, cn := range c.Nodes { // the retired nodes are not in the baseline any more: their tombstone lands too
+		if cn.Post == nil || cn.Review != domain.ReviewAccepted || cn.Flow != "" || cn.Superseded {
+			continue
+		}
+		if n, err := tx.LatestOn(ctx, cn.Post.ID, own.Name); err == nil && n.Deleted {
+			moves[n.ID] = n.Version
+		} else if err != nil && !errors.Is(err, ErrNotFound) {
+			return false, err
+		}
+	}
+	for id, v := range moves {
+		n, err := tx.Node(ctx, domain.NodeRef{ID: id, Version: v})
+		if err != nil {
+			return false, err
+		}
+		if domain.BranchOf(n.Branch) != own.Name {
+			continue
+		}
+		if err := tx.MoveVersion(ctx, n.Ref(), domain.BranchOf(own.Parent)); err != nil {
+			return false, err
+		}
+	}
+	res := domain.Baseline{ID: domain.BaselineID(g.newID()), Name: "merge " + c.Title, Branch: domain.BranchOf(own.Parent), ParentID: into.ID, ChangeID: c.ID,
+		Nodes: from.Nodes, CreatedAt: g.now()}
+	if err := tx.PutBaseline(ctx, res); err != nil {
+		return false, err
+	}
+	if err := g.advanceBranch(ctx, tx, domain.BranchOf(own.Parent), res.ID); err != nil {
+		return false, err
+	}
+	own.Status = domain.BranchMerged
+	if err := tx.PutBranch(ctx, own); err != nil {
+		return false, err
+	}
+	c.Status, c.ResultBaselineID = domain.ChangeApplied, res.ID
+	if err := g.land(ctx, tx, c, own, c.ID); err != nil {
+		return false, err
+	}
+	return true, tx.PutChange(ctx, c)
+}
+
+// ensureOwnBranch gives a change the branch of its own that the versions it writes live on
+// (ADR 0024), forked from its reference baseline like the one opened with the change. The
+// items of a change are only applied when it is, so nothing is on the branch it acted on yet.
+func (g *Graph) ensureOwnBranch(ctx context.Context, tx Tx, c domain.ChangeSet) (domain.ChangeSet, domain.Branch, error) {
+	if c.ParentID != "" {
+		return c, domain.Branch{}, fmt.Errorf("change %s is a sub-change without a branch of its own: %w", c.ID, ErrInvalid)
+	}
+	parent, err := branchOf(ctx, tx, c.Branch)
+	if err != nil {
+		return c, parent, err
+	}
+	if parent.Status != domain.BranchOpen {
+		return c, parent, fmt.Errorf("branch %s is %s: %w", parent.Name, parent.Status, ErrConflict)
+	}
+	fork, err := tx.Baseline(ctx, c.BaselineID)
+	if err != nil {
+		return c, parent, err
+	}
+	own := domain.Branch{Name: changeBranchName(c.ID), Parent: parent.Name, ForkBaseline: fork.ID, Head: fork.ID,
+		Origin: domain.ChangeBranchOrigin(c.ID), Status: domain.BranchOpen, CreatedAt: g.now()}
+	if err := tx.PutBranch(ctx, own); err != nil {
+		return c, own, err
+	}
+	c.Branch = own.Name
+	return c, own, tx.PutChange(ctx, c)
 }

@@ -8,7 +8,7 @@ import (
 	"github.com/zimwip/goap/pkg/graph"
 )
 
-func blackboard(t *testing.T, withProposal bool) domain.Blackboard {
+func blackboard(t *testing.T, withTest bool) domain.Blackboard {
 	t.Helper()
 	ctx := context.Background()
 	g := graph.New(graph.NewMemory())
@@ -20,18 +20,16 @@ func blackboard(t *testing.T, withProposal bool) domain.Blackboard {
 	b, _ := g.CreateBaseline(ctx, "B1", []domain.NodeRef{need.Ref(), req.Ref()})
 	c, _ := g.CreateChange(ctx, graph.NewChange{Title: "c", BaselineID: b.ID})
 	ref := req.Ref()
-	items, err := g.AddItems(ctx, c.ID, []domain.ChangeItem{{Kind: domain.KindImpact, Type: "direct", Target: &ref}})
-	if err != nil {
+	if _, err := g.AddNodes(ctx, c.ID, []domain.ChangeNode{{Intent: domain.IntentModified, Pre: &ref, Rationale: "impacted"}}); err != nil {
 		t.Fatal(err)
 	}
-	if withProposal {
-		created, err := g.AddItems(ctx, c.ID, []domain.ChangeItem{{Kind: domain.KindProposal, DerivedFrom: []domain.ItemID{items[0].ID},
-			Proposal: &domain.Proposal{Op: domain.OpCreateNode, Node: &domain.NodeDraft{Key: "TST-9", Type: "TestCase"}}}})
+	if withTest {
+		added, err := g.AddNodes(ctx, c.ID, []domain.ChangeNode{{Intent: domain.IntentCreated, Key: "TST-9", Type: "TestCase", Rationale: "cover REQ-1"}})
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := g.AddItems(ctx, c.ID, []domain.ChangeItem{{Kind: domain.KindProposal, Proposal: &domain.Proposal{Op: domain.OpAddLink,
-			Link: &domain.LinkDraft{Type: "verifies", From: domain.Endpoint{Item: created[0].ID}, To: domain.Endpoint{Node: &ref}}}}}); err != nil {
+		if _, err := g.WriteNode(ctx, c.ID, added[0].ID, graph.NodeWrite{Properties: map[string]any{"title": "t"},
+			AddLinks: []graph.LinkWrite{{Type: "verifies", To: ref}}}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -43,18 +41,18 @@ func blackboard(t *testing.T, withProposal bool) domain.Blackboard {
 }
 
 func TestEvaluate(t *testing.T) {
-	exp := Expectation{ForEach: "impacts", Where: `x.target.type == "Requirement"`,
+	exp := Expectation{ForEach: "changeNodes", Where: `x.type == "Requirement"`,
 		Produce: ProduceSpec{Op: "create_node", NodeType: "TestCase"}, Link: &LinkSpec{Type: "verifies"}}
 	expr, err := exp.Expr()
 	if err != nil {
 		t.Fatal(err)
 	}
 	set, err := Compile([]Definition{
-		{Name: "has_impacts", Expr: "size(impacts) > 0"},
-		{Name: "req_impacted", Expr: `impacts.exists(i, i.target.type == "Requirement" && i.target.out.exists(l, l.type == "satisfies" && l.to.key == "NEED-1"))`},
-		{Name: "up_to_date", Expr: "impacts.all(i, i.target.version == i.target.latest)"},
+		{Name: "has_impacts", Expr: `changeNodes.exists(n, n.intent == "modified")`},
+		{Name: "req_impacted", Expr: `changeNodes.exists(n, n.type == "Requirement" && n.pre.out.exists(l, l.type == "satisfies" && l.to.key == "NEED-1"))`},
+		{Name: "up_to_date", Expr: "changeNodes.all(n, n.pre == null || n.pre.version == n.pre.latest)"},
 		{Name: "tests_proposed", Expr: expr},
-		{Name: "broken", Expr: "impacts[0].nope == 1"},
+		{Name: "broken", Expr: "changeNodes[0].nope == 1"},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -76,10 +74,29 @@ func TestEvaluate(t *testing.T) {
 }
 
 func TestCompileErrors(t *testing.T) {
-	if _, err := Compile([]Definition{{Name: "x", Expr: "size(impacts)"}}); err == nil {
+	if _, err := Compile([]Definition{{Name: "x", Expr: "size(changeNodes)"}}); err == nil {
 		t.Fatal("non bool expression must be rejected")
 	}
 	if _, err := Compile([]Definition{{Name: "x", Expr: "unknown_var"}}); err == nil {
 		t.Fatal("unknown variable must be rejected")
+	}
+}
+
+func TestChangeNodes(t *testing.T) {
+	set, err := Compile([]Definition{
+		{Name: "one_planned", Expr: `changeNodes.filter(n, n.intent == "modified" && n.planned && n.pre.key == "REQ-1").size() == 1`},
+		{Name: "created_test", Expr: `changeNodes.exists(n, n.intent == "created" && n.type == "TestCase" && n.pre == null && n.hasPost)`},
+		{Name: "all_reviewed", Expr: `changeNodes.all(n, n.review != "proposed")`},
+		{Name: "linked", Expr: `changeNodes.exists(n, n.pre != null && n.pre.out.exists(l, l.type == "satisfies"))`},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res := set.Evaluate(blackboard(t, true))
+	want := map[string]bool{"one_planned": true, "created_test": true, "all_reviewed": false, "linked": true}
+	for k, v := range want {
+		if got, ok := res.State[k]; !ok || got != v {
+			t.Errorf("%s: got %v (known=%v) want %v; errors=%v", k, got, ok, v, res.Errors)
+		}
 	}
 }
