@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"sync"
 	"time"
 
@@ -12,11 +13,17 @@ import (
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/dsl"
 	"github.com/zimwip/goap/pkg/llm"
+	"github.com/zimwip/goap/pkg/mcp"
+	"github.com/zimwip/goap/pkg/methodology"
 )
 
-// ToolCaller calls external tools (the MCP connector).
-type ToolCaller interface {
-	CallTool(ctx context.Context, name string, args map[string]any) (any, error)
+// ToolPort is the MCP hub seen by the engine (ADR 0019). Tools are those of the MCPs
+// the organization of the change binds; the call runs with the principal of ctx.
+type ToolPort interface {
+	// CallTool calls "<mcp>/<tool>" for an organization.
+	CallTool(ctx context.Context, org, name string, args map[string]any) (any, error)
+	// Tools lists the tools available to an organization and the MCPs it binds.
+	Tools(ctx context.Context, org string) ([]mcp.ToolInfo, []string, error)
 }
 
 // Host implements dsl.Host for one action execution: every call leaving the
@@ -27,6 +34,8 @@ type Host struct {
 	e       *Engine
 	process *Process // read-only while the action runs
 	action  string
+	// mcps are the MCPs the action declared: it can call the tools of these only.
+	mcps []string
 
 	mu        sync.Mutex
 	llmCalls  []LLMCall
@@ -44,8 +53,8 @@ type Host struct {
 
 var _ dsl.Host = (*Host)(nil)
 
-func (e *Engine) newHost(p *Process, action string) *Host {
-	return &Host{e: e, process: p, action: action, children: map[string]string{}}
+func (e *Engine) newHost(p *Process, action methodology.Action) *Host {
+	return &Host{e: e, process: p, action: action.Name, mcps: action.RequiredMCPs(), children: map[string]string{}}
 }
 
 // Attributes identify the caller of platform calls (used for tracing).
@@ -107,16 +116,40 @@ func (h *Host) Complete(ctx context.Context, r dsl.CompleteRequest) (dsl.Complet
 	return out, nil
 }
 
+// Tools lists the tools the action may call: those of its declared MCPs that the
+// organization of the change binds.
+func (h *Host) Tools(ctx context.Context) ([]mcp.ToolInfo, error) {
+	if h.e.Tools == nil || len(h.mcps) == 0 {
+		return nil, nil
+	}
+	all, _, err := h.e.Tools.Tools(authz.With(ctx, h.process.Initiator), h.e.orgOf(h.process))
+	if err != nil {
+		return nil, err
+	}
+	var out []mcp.ToolInfo
+	for _, t := range all {
+		if m, _, err := mcp.SplitTool(t.Name); err == nil && slices.Contains(h.mcps, m) {
+			out = append(out, t)
+		}
+	}
+	return out, nil
+}
+
 // CallTool implements dsl.Host.
 func (h *Host) CallTool(ctx context.Context, name string, args map[string]any) (any, error) {
 	start := time.Now()
 	var out any
 	var err error
 	ctx, end := h.e.tracer().StartTool(h.ctx(ctx), h.process, h.action, name)
-	if h.e.Tools == nil {
-		err = fmt.Errorf("tool %s: no MCP connector configured", name)
-	} else {
-		out, err = h.e.Tools.CallTool(ctx, name, args)
+	switch mcpName, _, splitErr := mcp.SplitTool(name); {
+	case splitErr != nil:
+		err = splitErr
+	case !slices.Contains(h.mcps, mcpName):
+		err = fmt.Errorf("tool %s: action %s does not declare the MCP %s", name, h.action, mcpName)
+	case h.e.Tools == nil:
+		err = fmt.Errorf("tool %s: no MCP hub configured", name)
+	default:
+		out, err = h.e.Tools.CallTool(authz.With(ctx, h.process.Initiator), h.e.orgOf(h.process), name, args)
 	}
 	end(err)
 	call := ToolCall{Name: name, DurationMs: time.Since(start).Milliseconds()}

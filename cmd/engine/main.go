@@ -12,6 +12,7 @@ import (
 	"github.com/zimwip/goap/internal/enginesvc"
 	"github.com/zimwip/goap/internal/graphsvc"
 	"github.com/zimwip/goap/internal/iamsvc"
+	"github.com/zimwip/goap/internal/mcpsvc"
 	"github.com/zimwip/goap/internal/modelgw"
 	"github.com/zimwip/goap/internal/platform"
 	"github.com/zimwip/goap/internal/registrysvc"
@@ -77,8 +78,9 @@ func main() {
 			methodology.KindScript:  engine.ScriptExecutor{Sandboxes: sandboxes},
 			methodology.KindHuman:   engine.HumanExecutor{},
 			methodology.KindBuiltin: builtins,
-			// methodology.KindTool: MCP connector (milestone M3)
+			methodology.KindTool:    engine.ToolExecutor{},
 		},
+		Tools:     mcpsvc.NewClient(hc, platform.Env("GOAP_MCP_URL", "http://localhost:8085"), copts...),
 		Intent:    intent.Resolver{Ranker: ranker},
 		Store:     engine.NewMemoryStore(), // PostgreSQL store: milestone M1
 		Events:    publisher,

@@ -37,8 +37,9 @@ type Engine struct {
 	Authz authz.Authorizer
 	// LLM serves DSL model calls (the model gateway).
 	LLM llm.Client
-	// Tools serves DSL tool calls (the MCP connector).
-	Tools ToolCaller
+	// Tools serves tool calls and decides which actions can be scheduled (the MCP hub).
+	// Without it no action needing an MCP is available.
+	Tools ToolPort
 	// Sandboxes isolates script actions (one sandbox per process run).
 	Sandboxes Sandboxes
 	// Tracer instruments processes and actions (nil: no tracing).
@@ -303,6 +304,7 @@ func (e *Engine) selectTarget(ctx context.Context, p *Process, m *methodology.Co
 			return err
 		}
 		p.ChangeID = c.ID
+		p.OrgID = c.OrgID
 	}
 	if p.ParentID != "" {
 		return nil // the change goal belongs to the parent process
@@ -456,9 +458,17 @@ func (e *Engine) cycle(ctx context.Context, p *Process, m *methodology.Compiled)
 	if !ok {
 		return fmt.Errorf("unknown agent %q", p.Agent)
 	}
+	// an action is available only where the organization binds the MCPs it uses; the
+	// hub is asked only when the methodology has such actions
+	var bound map[string]bool
+	if m.UsesMCPs() {
+		if bound, err = e.boundMCPs(ctx, p); err != nil {
+			return err
+		}
+	}
 	var actions []goap.Action
 	for _, a := range m.AgentActions(ag) {
-		if !p.Disabled[a.Name] {
+		if !p.Disabled[a.Name] && e.schedulable(m, a.Name, bound) {
 			actions = append(actions, a)
 		}
 	}
@@ -494,7 +504,7 @@ func (e *Engine) cycle(ctx context.Context, p *Process, m *methodology.Compiled)
 	// the permission is the one of the implementation that will run (a
 	// specialization may require more, e.g. a production deployment)
 	permission := action.Permission
-	if impl, spec, err := e.specialize(ctx, m, action, bb); err == nil && spec != "" {
+	if impl, spec, err := e.specialize(ctx, p, m, action, bb); err == nil && spec != "" {
 		permission = impl.Permission
 		step.Specialization = spec
 	}
@@ -521,7 +531,7 @@ func (e *Engine) cycle(ctx context.Context, p *Process, m *methodology.Compiled)
 func (e *Engine) execute(ctx context.Context, p *Process, m *methodology.Compiled, bb domain.Blackboard, action methodology.Action, i int) error {
 	id := uuid.NewString()
 	p.Steps[i].Execution = id
-	impl, spec, err := e.specialize(ctx, m, action, bb)
+	impl, spec, err := e.specialize(ctx, p, m, action, bb)
 	if err != nil {
 		step := &p.Steps[i]
 		step.Error, step.EndedAt = err.Error(), e.clock()
@@ -534,11 +544,65 @@ func (e *Engine) execute(ctx context.Context, p *Process, m *methodology.Compile
 	return err
 }
 
+// orgOf is the organization of a process: the one of its change.
+func (e *Engine) orgOf(p *Process) string {
+	return cmp.Or(p.OrgID, p.Initiator.Org, domain.DefaultOrg)
+}
+
+// boundMCPs returns the MCPs the organization of the process binds. Without a hub
+// nothing is bound.
+func (e *Engine) boundMCPs(ctx context.Context, p *Process) (map[string]bool, error) {
+	bound := map[string]bool{}
+	if e.Tools == nil {
+		return bound, nil
+	}
+	_, names, err := e.Tools.Tools(authz.With(ctx, p.Initiator), e.orgOf(p))
+	if err != nil {
+		return nil, fmt.Errorf("MCPs of organization %s: %w", e.orgOf(p), err)
+	}
+	for _, n := range names {
+		bound[n] = true
+	}
+	return bound, nil
+}
+
+// schedulable reports whether every MCP the action needs is bound by the organization.
+// bound is nil when the methodology uses no MCP (nothing to check).
+func (e *Engine) schedulable(m *methodology.Compiled, name string, bound map[string]bool) bool {
+	if bound == nil {
+		return true
+	}
+	a, ok := m.Action(name)
+	return !ok || allBound(a, bound)
+}
+
+func allBound(a methodology.Action, bound map[string]bool) bool {
+	for _, n := range a.RequiredMCPs() {
+		if !bound[n] {
+			return false
+		}
+	}
+	return true
+}
+
 // specialize returns the implementation to run for a planned action: the
 // applicable specialization with the highest priority (declared in this
 // methodology, then in the others), else the action itself. The result keeps
 // the name, pre-conditions, effects and cost of the planned action.
-func (e *Engine) specialize(ctx context.Context, m *methodology.Compiled, action methodology.Action, bb domain.Blackboard) (methodology.Action, string, error) {
+func (e *Engine) specialize(ctx context.Context, p *Process, m *methodology.Compiled, action methodology.Action, bb domain.Blackboard) (methodology.Action, string, error) {
+	var bound map[string]bool
+	var boundErr error
+	fetched := false
+	isBound := func(s methodology.Action) bool {
+		if len(s.RequiredMCPs()) == 0 {
+			return true
+		}
+		if !fetched {
+			bound, boundErr = e.boundMCPs(ctx, p)
+			fetched = true
+		}
+		return boundErr == nil && allBound(s, bound)
+	}
 	type candidate struct {
 		a    methodology.Action
 		name string
@@ -546,7 +610,7 @@ func (e *Engine) specialize(ctx context.Context, m *methodology.Compiled, action
 	var best *candidate
 	consider := func(owner *methodology.Compiled) {
 		for _, s := range owner.SpecializationsOf(m.Name, action.Name) {
-			if !owner.Applicable(s, bb) || (best != nil && s.Priority <= best.a.Priority) {
+			if !owner.Applicable(s, bb) || (best != nil && s.Priority <= best.a.Priority) || !isBound(s) {
 				continue
 			}
 			name := s.Name
@@ -587,7 +651,7 @@ func (e *Engine) executeStep(ctx context.Context, p *Process, m *methodology.Com
 	e.log().Info("executing action", "process", p.ID, "agent", p.Agent, "action", action.Name, "plan", p.Plan)
 	ctx, end := e.tracer().StartAction(ctx, p, action.Name, action.Kind)
 	p.Steps[i].SpanID = e.spanID(ctx)
-	host := e.newHost(p, action.Name)
+	host := e.newHost(p, action)
 	res, err := exec.Execute(ctx, ActionContext{Process: p, Action: action, Blackboard: bb, Graph: e.Graph, Host: host})
 	step := &p.Steps[i]
 	host.record(step)
@@ -823,6 +887,9 @@ func (e *Engine) observe(ctx context.Context, p *Process, m *methodology.Compile
 		return bb, err
 	}
 	bb.Vars = p.Vars
+	if bb.Change.OrgID != "" {
+		p.OrgID = bb.Change.OrgID
+	}
 	bb.Supertypes = e.supertypes.Get(ctx, e.Graph, m)
 	res := m.Conditions.Evaluate(bb)
 	p.World = res.State

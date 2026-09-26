@@ -12,6 +12,7 @@ import (
 	"context"
 	"maps"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -20,13 +21,17 @@ import (
 	"github.com/zimwip/goap/gen/goap/engine/v1/enginev1connect"
 	"github.com/zimwip/goap/gen/goap/graph/v1/graphv1connect"
 	"github.com/zimwip/goap/gen/goap/iam/v1/iamv1connect"
+	"github.com/zimwip/goap/gen/goap/mcp/v1/mcpv1connect"
 	"github.com/zimwip/goap/gen/goap/model/v1/modelv1connect"
 	"github.com/zimwip/goap/gen/goap/registry/v1/registryv1connect"
 	"github.com/zimwip/goap/gen/goap/runtime/v1/runtimev1connect"
+	"github.com/zimwip/goap/internal/connectorkit"
+	"github.com/zimwip/goap/internal/connectors/localfs"
 	"github.com/zimwip/goap/internal/enginesvc"
 	"github.com/zimwip/goap/internal/graphsvc"
 	"github.com/zimwip/goap/internal/iamsvc"
 	"github.com/zimwip/goap/internal/identity"
+	"github.com/zimwip/goap/internal/mcpsvc"
 	"github.com/zimwip/goap/internal/modelgw"
 	"github.com/zimwip/goap/internal/platform"
 	"github.com/zimwip/goap/internal/registrysvc"
@@ -38,6 +43,7 @@ import (
 	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/intent"
 	"github.com/zimwip/goap/pkg/llm"
+	"github.com/zimwip/goap/pkg/mcp"
 	"github.com/zimwip/goap/pkg/metamodel"
 	"github.com/zimwip/goap/pkg/methodology"
 )
@@ -139,6 +145,26 @@ func main() {
 			triggers.Handle(ctx, engine.TriggerEventOf(ev))
 		}
 	}
+	// MCP hub in-process; the local file system connector runs inside too, other connectors
+	// register over HTTP like in the distributed platform
+	connectors := map[string]connectorkit.Connector{"localfs": localfs.Connector{}}
+	connectorToken := os.Getenv("GOAP_CONNECTOR_TOKEN")
+	hub := &mcpsvc.Service{
+		Store:   st.mcp,
+		Invoker: mcpsvc.InprocInvoker{Connectors: connectors, Remote: &mcpsvc.ConnectInvoker{Token: connectorToken}},
+		Secrets: mcpsvc.ResolveSecret(secrets),
+		Lease:   platform.EnvDuration("GOAP_CONNECTOR_LEASE", mcpsvc.DefaultLease),
+	}
+	if err := mcpsvc.Seed(ctx, st.mcp); err != nil {
+		platform.Fatal(log, "mcp seed", err)
+	}
+	hub.KeepRegistered(ctx, connectors)
+	if root := os.Getenv("GOAP_DEV_FS_ROOT"); root != "" {
+		// demo: the default organization exposes a directory as its document repository
+		if err := hub.Bind(ctx, mcp.Binding{OrgID: dev.Org, MCP: "document-repository", Connector: "localfs", Config: map[string]any{"root": root}}); err != nil {
+			platform.Fatal(log, "mcp binding", err)
+		}
+	}
 	builtins := engine.DefaultBuiltins()
 	e := &engine.Engine{
 		Graph:         engine.EventingGraph{GraphPort: g, OnEvent: onChange},
@@ -148,7 +174,9 @@ func main() {
 			methodology.KindScript:  engine.ScriptExecutor{Sandboxes: sandboxes},
 			methodology.KindHuman:   engine.HumanExecutor{},
 			methodology.KindBuiltin: builtins,
+			methodology.KindTool:    engine.ToolExecutor{},
 		},
+		Tools:     mcpsvc.HubPort{Service: hub},
 		Intent:    intent.Resolver{Ranker: intent.Lexical{}},
 		Store:     st.processes,
 		Events:    broker,
@@ -167,6 +195,7 @@ func main() {
 	srv.Mount(graphv1connect.NewGraphServiceHandler(&graphsvc.Handler{Graph: g, Events: changePublisher(onChange), Authz: authorizer, Identity: ident}, telemetry.HandlerOptions()...))
 	srv.Mount(registryv1connect.NewRegistryServiceHandler(&registrysvc.Handler{Service: reg, Identity: ident}, telemetry.HandlerOptions()...))
 	srv.Mount(iamv1connect.NewIamServiceHandler(&iamsvc.Handler{Enforcer: authorizer, Orgs: st.orgs, Identity: ident}, telemetry.HandlerOptions()...))
+	srv.Mount(mcpv1connect.NewMcpServiceHandler(&mcpsvc.Handler{Service: hub, Authz: authorizer, Identity: ident, ConnectorToken: connectorToken}, telemetry.HandlerOptions()...))
 	srv.Mount(modelv1connect.NewModelServiceHandler(&modelgw.Handler{Service: gw, Identity: ident, Authz: authorizer}, telemetry.HandlerOptions()...))
 	srv.Mount(enginev1connect.NewEngineServiceHandler(&enginesvc.Handler{Engine: e, Log: log, DefaultPrincipal: &dev, Authz: authorizer, Broker: broker, Triggers: triggers}, telemetry.HandlerOptions()...))
 	// single process: the platform is up when this answers (the gateway serves it otherwise)

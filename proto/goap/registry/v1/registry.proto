@@ -197,6 +197,8 @@ message Action {
   int32 priority = 20;
   // reaches its effects over several executions (progress is not a failure)
   bool incremental = 21;
+  // MCPs the action uses (llm and script actions); a tool action is "<mcp>/<tool>"
+  repeated string mcps = 22;
 }
 
 // An agent (Embabel terminology): a planner and the set of admissible actions

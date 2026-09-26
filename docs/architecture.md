@@ -186,7 +186,7 @@ Executor types:
 | Kind | Execution | Output |
 |---|---|---|
 | `llm` | Prompt (Go template) + blackboard context → Model Gateway, structured JSON output | ChangeItems |
-| `tool` | Call to a tool via the MCP Connector | Artifact (+ optional mapping to items) |
+| `tool` | Call to a tool (`<mcp>/<tool>`) of the MCP hub, through the organization binding (§3.9) | Artifact `{tool, result}` |
 | `human` | Creates a task; the process moves to `waiting` until `SubmitHumanInput` | Submitted items |
 | `builtin` | Registered Go function: `graph.propagate` (impact propagation), `graph.apply` (change application) | ChangeItems / new baseline |
 
@@ -454,7 +454,8 @@ actions when a transition is applied. Reference: [docs/dsl.md](dsl.md), IDE sect
 | **engine** | Intent loop, planning, process execution; deployable as a cluster | Connect `engine.v1` | `engine` | 🟢 core (memory) |
 | **graph** | Domain axis (versioned nodes, links, baselines) + change axis (ChangeSets, items, apply) | Connect `graph.v1` | `graph` | 🟢 |
 | **modelgw** | Multi-provider / multi-model abstraction, aliases (`default`, `fast`, `reasoning`), administered catalog with global token quotas and required roles (see below), traces | Connect `model.v1` | `modelgw` (providers, catalog, usage) | 🟢 core |
-| **mcp** | MCP server registry and proxy; exposes tools to `tool` actions | Connect `mcp.v1` | `mcp` | 🟡 upcoming |
+| **mcp** | MCP hub: connector registry (self-registration), generic MCP definitions, adapters, organization bindings, tool calls (§3.9) | Connect `mcp.v1` | `mcp` | 🟢 |
+| **connector-\*** | One service per real system (`connector-localfs`, ...), registers itself with the hub | Connect `connector.v1` | — | 🟢 localfs |
 | **goap-runner** | Sandbox for executing script actions (one per process) | Connect `runtime.v1` (SandboxService) | — | 🟢 |
 | **otel-collector** | OTLP reception, trace export (Jaeger) and metrics (Prometheus) | OTLP | — | 🟢 |
 | **vault** | Secrets (LLM API keys, MCP credentials, DSN) | HashiCorp Vault KV v2 | — | 🟢 dev mode |
@@ -589,6 +590,36 @@ and displayed in the IDE, with a link to the Jaeger trace (`traceId`).
 The change **execution journal** (§2.12) carries `traceId` / `spanId`: the self-observation agent
 re-reads a run's trace via the Jaeger query API (`GOAP_TRACE_QUERY_URL`, links `GOAP_TRACE_UI_URL`)
 to look for pain points (slow spans, tools, model calls).
+
+### 3.9 Tools: MCP, connectors, organisations ([ADR 0019](adr/0019-organisations-mcp-connectors.md))
+
+```
+MCP            generic, declared once: name + tool signatures      document-repository { list, read, write }
+Connector      a service of its own wrapping a real API            connector-localfs, connector-gdrive, ...
+Adapter        declarative mapping  MCP tool -> connector operation (arguments "$.path", result path)
+Binding        per organisation: MCP -> (connector, configuration, secret references)
+```
+
+- **Adding a connector is adding a service.** A connector implements `connector.v1.ConnectorService`
+  (`Describe`, `Invoke`); `internal/connectorkit` does the rest: `connectorkit.Run("name", connector)` serves the
+  protocol and registers the connector with the hub (`RegisterConnector`, renewed as a heartbeat within a
+  lease, 30 s by default; the hub lists it live or expired). No hub configuration is needed; only
+  `GOAP_MCP_URL`, `GOAP_CONNECTOR_URL` (its address as the hub reaches it) and, when set on both sides,
+  the shared `GOAP_CONNECTOR_TOKEN`. `internal/connectors/localfs` is the reference implementation.
+- The hub (`cmd/mcp`, `internal/mcpsvc`; tables `mcp`, `mcp_adapter`, `mcp_binding`, `connector`, PostgreSQL and
+  SQLite) resolves a call `<mcp>/<tool>` of an organisation: its binding, the adapter mapping, the live
+  connector; it resolves the secret references (`<vault path>#<field>` or `env:<VAR>`), passes the connector
+  only the secrets it declares, and returns the result. `document-repository` and its `localfs` adapter are
+  seeded.
+- **Scheduling.** An action declares the MCPs it uses (`mcps:` on `llm` and `script` actions; a `tool` action is
+  `<mcp>/<tool>`). It is available to the planner only when the organisation of the change binds them all;
+  otherwise it is left out (and a specialization needing an unbound MCP is skipped). An action can only call the
+  tools of the MCPs it declares.
+- **LLM actions** with `mcps` may call the tools in a bounded loop (`MaxToolRounds`), exchanged as JSON on top
+  of any model (`{"tool_calls":[...]}`, then `{"items":[...]}`); every call is journaled with its duration and
+  error. Calls run with the principal of the process initiator (`tool:call` permission).
+- `goap-dev` runs the hub and the localfs connector in-process (`GOAP_DEV_FS_ROOT` binds a directory to the
+  default organisation); connectors started separately register over HTTP.
 
 ### 3.8 Voice input ([ADR 0013](adr/0013-voice-interaction.md))
 
@@ -746,7 +777,7 @@ docs/                        architecture, ADRs
 | **M0 — foundation** 🟢 | Doc, domain/change model, A\* planner, CEL conditions, intent loop, engine (memory), graph (memory + Postgres), registry, modelgw (fake + Anthropic + OpenAI-compatible), gateway, compose, minimal UI |
 | **M1 — engine persistence** | PostgreSQL `ProcessStore`, JetStream work-queue, crash recovery, multi-replica |
 | **M2 — IAM** | organizations, users, OIDC, `org_id` isolation in the graph, ABAC on the graph service |
-| **M3 — MCP** | MCP server registry, tool discovery, `tool` actions, MCP secrets via Vault |
+| **M3 — MCP** ✅ | MCP hub, connectors as separate self-registering services, adapters, organization bindings, `tool` actions and LLM tools, scheduling filter, secrets via Vault · remaining: web administration screens, more connectors |
 | **M4 — advanced change axis** | impact propagation (recursive CTE parameterized by link types), suspect links, baseline diff, merge/rebase of concurrent changesets |
 | **M5 — UX** | ✅ methodology editor (forms, localized anomalies, publishing, versions, YAML import/export), "Access" screen (ABAC policies), approvals · remaining: graph and plan visualization |
 | **M6 — K8s** | Helm charts, engine HPA · ✅ OpenTelemetry observability, sandbox manifests |

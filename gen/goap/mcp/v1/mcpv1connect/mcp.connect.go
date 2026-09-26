@@ -33,9 +33,31 @@ const (
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// McpServiceRegisterServerProcedure is the fully-qualified name of the McpService's RegisterServer
+	// McpServiceRegisterConnectorProcedure is the fully-qualified name of the McpService's
+	// RegisterConnector RPC.
+	McpServiceRegisterConnectorProcedure = "/goap.mcp.v1.McpService/RegisterConnector"
+	// McpServiceListConnectorsProcedure is the fully-qualified name of the McpService's ListConnectors
 	// RPC.
-	McpServiceRegisterServerProcedure = "/goap.mcp.v1.McpService/RegisterServer"
+	McpServiceListConnectorsProcedure = "/goap.mcp.v1.McpService/ListConnectors"
+	// McpServiceSaveMcpProcedure is the fully-qualified name of the McpService's SaveMcp RPC.
+	McpServiceSaveMcpProcedure = "/goap.mcp.v1.McpService/SaveMcp"
+	// McpServiceListMcpsProcedure is the fully-qualified name of the McpService's ListMcps RPC.
+	McpServiceListMcpsProcedure = "/goap.mcp.v1.McpService/ListMcps"
+	// McpServiceDeleteMcpProcedure is the fully-qualified name of the McpService's DeleteMcp RPC.
+	McpServiceDeleteMcpProcedure = "/goap.mcp.v1.McpService/DeleteMcp"
+	// McpServiceSaveAdapterProcedure is the fully-qualified name of the McpService's SaveAdapter RPC.
+	McpServiceSaveAdapterProcedure = "/goap.mcp.v1.McpService/SaveAdapter"
+	// McpServiceListAdaptersProcedure is the fully-qualified name of the McpService's ListAdapters RPC.
+	McpServiceListAdaptersProcedure = "/goap.mcp.v1.McpService/ListAdapters"
+	// McpServiceDeleteAdapterProcedure is the fully-qualified name of the McpService's DeleteAdapter
+	// RPC.
+	McpServiceDeleteAdapterProcedure = "/goap.mcp.v1.McpService/DeleteAdapter"
+	// McpServiceBindMcpProcedure is the fully-qualified name of the McpService's BindMcp RPC.
+	McpServiceBindMcpProcedure = "/goap.mcp.v1.McpService/BindMcp"
+	// McpServiceListBindingsProcedure is the fully-qualified name of the McpService's ListBindings RPC.
+	McpServiceListBindingsProcedure = "/goap.mcp.v1.McpService/ListBindings"
+	// McpServiceUnbindMcpProcedure is the fully-qualified name of the McpService's UnbindMcp RPC.
+	McpServiceUnbindMcpProcedure = "/goap.mcp.v1.McpService/UnbindMcp"
 	// McpServiceListToolsProcedure is the fully-qualified name of the McpService's ListTools RPC.
 	McpServiceListToolsProcedure = "/goap.mcp.v1.McpService/ListTools"
 	// McpServiceCallToolProcedure is the fully-qualified name of the McpService's CallTool RPC.
@@ -44,7 +66,22 @@ const (
 
 // McpServiceClient is a client for the goap.mcp.v1.McpService service.
 type McpServiceClient interface {
-	RegisterServer(context.Context, *connect.Request[v1.RegisterServerRequest]) (*connect.Response[v1.RegisterServerResponse], error)
+	// Connector registry (called by the connectors, as a heartbeat as well).
+	RegisterConnector(context.Context, *connect.Request[v1.RegisterConnectorRequest]) (*connect.Response[v1.RegisterConnectorResponse], error)
+	ListConnectors(context.Context, *connect.Request[v1.ListConnectorsRequest]) (*connect.Response[v1.ListConnectorsResponse], error)
+	// Generic MCP definitions.
+	SaveMcp(context.Context, *connect.Request[v1.SaveMcpRequest]) (*connect.Response[v1.SaveMcpResponse], error)
+	ListMcps(context.Context, *connect.Request[v1.ListMcpsRequest]) (*connect.Response[v1.ListMcpsResponse], error)
+	DeleteMcp(context.Context, *connect.Request[v1.DeleteMcpRequest]) (*connect.Response[v1.DeleteMcpResponse], error)
+	// Adapters: how a connector implements an MCP.
+	SaveAdapter(context.Context, *connect.Request[v1.SaveAdapterRequest]) (*connect.Response[v1.SaveAdapterResponse], error)
+	ListAdapters(context.Context, *connect.Request[v1.ListAdaptersRequest]) (*connect.Response[v1.ListAdaptersResponse], error)
+	DeleteAdapter(context.Context, *connect.Request[v1.DeleteAdapterRequest]) (*connect.Response[v1.DeleteAdapterResponse], error)
+	// Organization bindings.
+	BindMcp(context.Context, *connect.Request[v1.BindMcpRequest]) (*connect.Response[v1.BindMcpResponse], error)
+	ListBindings(context.Context, *connect.Request[v1.ListBindingsRequest]) (*connect.Response[v1.ListBindingsResponse], error)
+	UnbindMcp(context.Context, *connect.Request[v1.UnbindMcpRequest]) (*connect.Response[v1.UnbindMcpResponse], error)
+	// Tools an organization can use, and their invocation.
 	ListTools(context.Context, *connect.Request[v1.ListToolsRequest]) (*connect.Response[v1.ListToolsResponse], error)
 	CallTool(context.Context, *connect.Request[v1.CallToolRequest]) (*connect.Response[v1.CallToolResponse], error)
 }
@@ -60,10 +97,70 @@ func NewMcpServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 	baseURL = strings.TrimRight(baseURL, "/")
 	mcpServiceMethods := v1.File_goap_mcp_v1_mcp_proto.Services().ByName("McpService").Methods()
 	return &mcpServiceClient{
-		registerServer: connect.NewClient[v1.RegisterServerRequest, v1.RegisterServerResponse](
+		registerConnector: connect.NewClient[v1.RegisterConnectorRequest, v1.RegisterConnectorResponse](
 			httpClient,
-			baseURL+McpServiceRegisterServerProcedure,
-			connect.WithSchema(mcpServiceMethods.ByName("RegisterServer")),
+			baseURL+McpServiceRegisterConnectorProcedure,
+			connect.WithSchema(mcpServiceMethods.ByName("RegisterConnector")),
+			connect.WithClientOptions(opts...),
+		),
+		listConnectors: connect.NewClient[v1.ListConnectorsRequest, v1.ListConnectorsResponse](
+			httpClient,
+			baseURL+McpServiceListConnectorsProcedure,
+			connect.WithSchema(mcpServiceMethods.ByName("ListConnectors")),
+			connect.WithClientOptions(opts...),
+		),
+		saveMcp: connect.NewClient[v1.SaveMcpRequest, v1.SaveMcpResponse](
+			httpClient,
+			baseURL+McpServiceSaveMcpProcedure,
+			connect.WithSchema(mcpServiceMethods.ByName("SaveMcp")),
+			connect.WithClientOptions(opts...),
+		),
+		listMcps: connect.NewClient[v1.ListMcpsRequest, v1.ListMcpsResponse](
+			httpClient,
+			baseURL+McpServiceListMcpsProcedure,
+			connect.WithSchema(mcpServiceMethods.ByName("ListMcps")),
+			connect.WithClientOptions(opts...),
+		),
+		deleteMcp: connect.NewClient[v1.DeleteMcpRequest, v1.DeleteMcpResponse](
+			httpClient,
+			baseURL+McpServiceDeleteMcpProcedure,
+			connect.WithSchema(mcpServiceMethods.ByName("DeleteMcp")),
+			connect.WithClientOptions(opts...),
+		),
+		saveAdapter: connect.NewClient[v1.SaveAdapterRequest, v1.SaveAdapterResponse](
+			httpClient,
+			baseURL+McpServiceSaveAdapterProcedure,
+			connect.WithSchema(mcpServiceMethods.ByName("SaveAdapter")),
+			connect.WithClientOptions(opts...),
+		),
+		listAdapters: connect.NewClient[v1.ListAdaptersRequest, v1.ListAdaptersResponse](
+			httpClient,
+			baseURL+McpServiceListAdaptersProcedure,
+			connect.WithSchema(mcpServiceMethods.ByName("ListAdapters")),
+			connect.WithClientOptions(opts...),
+		),
+		deleteAdapter: connect.NewClient[v1.DeleteAdapterRequest, v1.DeleteAdapterResponse](
+			httpClient,
+			baseURL+McpServiceDeleteAdapterProcedure,
+			connect.WithSchema(mcpServiceMethods.ByName("DeleteAdapter")),
+			connect.WithClientOptions(opts...),
+		),
+		bindMcp: connect.NewClient[v1.BindMcpRequest, v1.BindMcpResponse](
+			httpClient,
+			baseURL+McpServiceBindMcpProcedure,
+			connect.WithSchema(mcpServiceMethods.ByName("BindMcp")),
+			connect.WithClientOptions(opts...),
+		),
+		listBindings: connect.NewClient[v1.ListBindingsRequest, v1.ListBindingsResponse](
+			httpClient,
+			baseURL+McpServiceListBindingsProcedure,
+			connect.WithSchema(mcpServiceMethods.ByName("ListBindings")),
+			connect.WithClientOptions(opts...),
+		),
+		unbindMcp: connect.NewClient[v1.UnbindMcpRequest, v1.UnbindMcpResponse](
+			httpClient,
+			baseURL+McpServiceUnbindMcpProcedure,
+			connect.WithSchema(mcpServiceMethods.ByName("UnbindMcp")),
 			connect.WithClientOptions(opts...),
 		),
 		listTools: connect.NewClient[v1.ListToolsRequest, v1.ListToolsResponse](
@@ -83,14 +180,74 @@ func NewMcpServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 
 // mcpServiceClient implements McpServiceClient.
 type mcpServiceClient struct {
-	registerServer *connect.Client[v1.RegisterServerRequest, v1.RegisterServerResponse]
-	listTools      *connect.Client[v1.ListToolsRequest, v1.ListToolsResponse]
-	callTool       *connect.Client[v1.CallToolRequest, v1.CallToolResponse]
+	registerConnector *connect.Client[v1.RegisterConnectorRequest, v1.RegisterConnectorResponse]
+	listConnectors    *connect.Client[v1.ListConnectorsRequest, v1.ListConnectorsResponse]
+	saveMcp           *connect.Client[v1.SaveMcpRequest, v1.SaveMcpResponse]
+	listMcps          *connect.Client[v1.ListMcpsRequest, v1.ListMcpsResponse]
+	deleteMcp         *connect.Client[v1.DeleteMcpRequest, v1.DeleteMcpResponse]
+	saveAdapter       *connect.Client[v1.SaveAdapterRequest, v1.SaveAdapterResponse]
+	listAdapters      *connect.Client[v1.ListAdaptersRequest, v1.ListAdaptersResponse]
+	deleteAdapter     *connect.Client[v1.DeleteAdapterRequest, v1.DeleteAdapterResponse]
+	bindMcp           *connect.Client[v1.BindMcpRequest, v1.BindMcpResponse]
+	listBindings      *connect.Client[v1.ListBindingsRequest, v1.ListBindingsResponse]
+	unbindMcp         *connect.Client[v1.UnbindMcpRequest, v1.UnbindMcpResponse]
+	listTools         *connect.Client[v1.ListToolsRequest, v1.ListToolsResponse]
+	callTool          *connect.Client[v1.CallToolRequest, v1.CallToolResponse]
 }
 
-// RegisterServer calls goap.mcp.v1.McpService.RegisterServer.
-func (c *mcpServiceClient) RegisterServer(ctx context.Context, req *connect.Request[v1.RegisterServerRequest]) (*connect.Response[v1.RegisterServerResponse], error) {
-	return c.registerServer.CallUnary(ctx, req)
+// RegisterConnector calls goap.mcp.v1.McpService.RegisterConnector.
+func (c *mcpServiceClient) RegisterConnector(ctx context.Context, req *connect.Request[v1.RegisterConnectorRequest]) (*connect.Response[v1.RegisterConnectorResponse], error) {
+	return c.registerConnector.CallUnary(ctx, req)
+}
+
+// ListConnectors calls goap.mcp.v1.McpService.ListConnectors.
+func (c *mcpServiceClient) ListConnectors(ctx context.Context, req *connect.Request[v1.ListConnectorsRequest]) (*connect.Response[v1.ListConnectorsResponse], error) {
+	return c.listConnectors.CallUnary(ctx, req)
+}
+
+// SaveMcp calls goap.mcp.v1.McpService.SaveMcp.
+func (c *mcpServiceClient) SaveMcp(ctx context.Context, req *connect.Request[v1.SaveMcpRequest]) (*connect.Response[v1.SaveMcpResponse], error) {
+	return c.saveMcp.CallUnary(ctx, req)
+}
+
+// ListMcps calls goap.mcp.v1.McpService.ListMcps.
+func (c *mcpServiceClient) ListMcps(ctx context.Context, req *connect.Request[v1.ListMcpsRequest]) (*connect.Response[v1.ListMcpsResponse], error) {
+	return c.listMcps.CallUnary(ctx, req)
+}
+
+// DeleteMcp calls goap.mcp.v1.McpService.DeleteMcp.
+func (c *mcpServiceClient) DeleteMcp(ctx context.Context, req *connect.Request[v1.DeleteMcpRequest]) (*connect.Response[v1.DeleteMcpResponse], error) {
+	return c.deleteMcp.CallUnary(ctx, req)
+}
+
+// SaveAdapter calls goap.mcp.v1.McpService.SaveAdapter.
+func (c *mcpServiceClient) SaveAdapter(ctx context.Context, req *connect.Request[v1.SaveAdapterRequest]) (*connect.Response[v1.SaveAdapterResponse], error) {
+	return c.saveAdapter.CallUnary(ctx, req)
+}
+
+// ListAdapters calls goap.mcp.v1.McpService.ListAdapters.
+func (c *mcpServiceClient) ListAdapters(ctx context.Context, req *connect.Request[v1.ListAdaptersRequest]) (*connect.Response[v1.ListAdaptersResponse], error) {
+	return c.listAdapters.CallUnary(ctx, req)
+}
+
+// DeleteAdapter calls goap.mcp.v1.McpService.DeleteAdapter.
+func (c *mcpServiceClient) DeleteAdapter(ctx context.Context, req *connect.Request[v1.DeleteAdapterRequest]) (*connect.Response[v1.DeleteAdapterResponse], error) {
+	return c.deleteAdapter.CallUnary(ctx, req)
+}
+
+// BindMcp calls goap.mcp.v1.McpService.BindMcp.
+func (c *mcpServiceClient) BindMcp(ctx context.Context, req *connect.Request[v1.BindMcpRequest]) (*connect.Response[v1.BindMcpResponse], error) {
+	return c.bindMcp.CallUnary(ctx, req)
+}
+
+// ListBindings calls goap.mcp.v1.McpService.ListBindings.
+func (c *mcpServiceClient) ListBindings(ctx context.Context, req *connect.Request[v1.ListBindingsRequest]) (*connect.Response[v1.ListBindingsResponse], error) {
+	return c.listBindings.CallUnary(ctx, req)
+}
+
+// UnbindMcp calls goap.mcp.v1.McpService.UnbindMcp.
+func (c *mcpServiceClient) UnbindMcp(ctx context.Context, req *connect.Request[v1.UnbindMcpRequest]) (*connect.Response[v1.UnbindMcpResponse], error) {
+	return c.unbindMcp.CallUnary(ctx, req)
 }
 
 // ListTools calls goap.mcp.v1.McpService.ListTools.
@@ -105,7 +262,22 @@ func (c *mcpServiceClient) CallTool(ctx context.Context, req *connect.Request[v1
 
 // McpServiceHandler is an implementation of the goap.mcp.v1.McpService service.
 type McpServiceHandler interface {
-	RegisterServer(context.Context, *connect.Request[v1.RegisterServerRequest]) (*connect.Response[v1.RegisterServerResponse], error)
+	// Connector registry (called by the connectors, as a heartbeat as well).
+	RegisterConnector(context.Context, *connect.Request[v1.RegisterConnectorRequest]) (*connect.Response[v1.RegisterConnectorResponse], error)
+	ListConnectors(context.Context, *connect.Request[v1.ListConnectorsRequest]) (*connect.Response[v1.ListConnectorsResponse], error)
+	// Generic MCP definitions.
+	SaveMcp(context.Context, *connect.Request[v1.SaveMcpRequest]) (*connect.Response[v1.SaveMcpResponse], error)
+	ListMcps(context.Context, *connect.Request[v1.ListMcpsRequest]) (*connect.Response[v1.ListMcpsResponse], error)
+	DeleteMcp(context.Context, *connect.Request[v1.DeleteMcpRequest]) (*connect.Response[v1.DeleteMcpResponse], error)
+	// Adapters: how a connector implements an MCP.
+	SaveAdapter(context.Context, *connect.Request[v1.SaveAdapterRequest]) (*connect.Response[v1.SaveAdapterResponse], error)
+	ListAdapters(context.Context, *connect.Request[v1.ListAdaptersRequest]) (*connect.Response[v1.ListAdaptersResponse], error)
+	DeleteAdapter(context.Context, *connect.Request[v1.DeleteAdapterRequest]) (*connect.Response[v1.DeleteAdapterResponse], error)
+	// Organization bindings.
+	BindMcp(context.Context, *connect.Request[v1.BindMcpRequest]) (*connect.Response[v1.BindMcpResponse], error)
+	ListBindings(context.Context, *connect.Request[v1.ListBindingsRequest]) (*connect.Response[v1.ListBindingsResponse], error)
+	UnbindMcp(context.Context, *connect.Request[v1.UnbindMcpRequest]) (*connect.Response[v1.UnbindMcpResponse], error)
+	// Tools an organization can use, and their invocation.
 	ListTools(context.Context, *connect.Request[v1.ListToolsRequest]) (*connect.Response[v1.ListToolsResponse], error)
 	CallTool(context.Context, *connect.Request[v1.CallToolRequest]) (*connect.Response[v1.CallToolResponse], error)
 }
@@ -117,10 +289,70 @@ type McpServiceHandler interface {
 // and JSON codecs. They also support gzip compression.
 func NewMcpServiceHandler(svc McpServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
 	mcpServiceMethods := v1.File_goap_mcp_v1_mcp_proto.Services().ByName("McpService").Methods()
-	mcpServiceRegisterServerHandler := connect.NewUnaryHandler(
-		McpServiceRegisterServerProcedure,
-		svc.RegisterServer,
-		connect.WithSchema(mcpServiceMethods.ByName("RegisterServer")),
+	mcpServiceRegisterConnectorHandler := connect.NewUnaryHandler(
+		McpServiceRegisterConnectorProcedure,
+		svc.RegisterConnector,
+		connect.WithSchema(mcpServiceMethods.ByName("RegisterConnector")),
+		connect.WithHandlerOptions(opts...),
+	)
+	mcpServiceListConnectorsHandler := connect.NewUnaryHandler(
+		McpServiceListConnectorsProcedure,
+		svc.ListConnectors,
+		connect.WithSchema(mcpServiceMethods.ByName("ListConnectors")),
+		connect.WithHandlerOptions(opts...),
+	)
+	mcpServiceSaveMcpHandler := connect.NewUnaryHandler(
+		McpServiceSaveMcpProcedure,
+		svc.SaveMcp,
+		connect.WithSchema(mcpServiceMethods.ByName("SaveMcp")),
+		connect.WithHandlerOptions(opts...),
+	)
+	mcpServiceListMcpsHandler := connect.NewUnaryHandler(
+		McpServiceListMcpsProcedure,
+		svc.ListMcps,
+		connect.WithSchema(mcpServiceMethods.ByName("ListMcps")),
+		connect.WithHandlerOptions(opts...),
+	)
+	mcpServiceDeleteMcpHandler := connect.NewUnaryHandler(
+		McpServiceDeleteMcpProcedure,
+		svc.DeleteMcp,
+		connect.WithSchema(mcpServiceMethods.ByName("DeleteMcp")),
+		connect.WithHandlerOptions(opts...),
+	)
+	mcpServiceSaveAdapterHandler := connect.NewUnaryHandler(
+		McpServiceSaveAdapterProcedure,
+		svc.SaveAdapter,
+		connect.WithSchema(mcpServiceMethods.ByName("SaveAdapter")),
+		connect.WithHandlerOptions(opts...),
+	)
+	mcpServiceListAdaptersHandler := connect.NewUnaryHandler(
+		McpServiceListAdaptersProcedure,
+		svc.ListAdapters,
+		connect.WithSchema(mcpServiceMethods.ByName("ListAdapters")),
+		connect.WithHandlerOptions(opts...),
+	)
+	mcpServiceDeleteAdapterHandler := connect.NewUnaryHandler(
+		McpServiceDeleteAdapterProcedure,
+		svc.DeleteAdapter,
+		connect.WithSchema(mcpServiceMethods.ByName("DeleteAdapter")),
+		connect.WithHandlerOptions(opts...),
+	)
+	mcpServiceBindMcpHandler := connect.NewUnaryHandler(
+		McpServiceBindMcpProcedure,
+		svc.BindMcp,
+		connect.WithSchema(mcpServiceMethods.ByName("BindMcp")),
+		connect.WithHandlerOptions(opts...),
+	)
+	mcpServiceListBindingsHandler := connect.NewUnaryHandler(
+		McpServiceListBindingsProcedure,
+		svc.ListBindings,
+		connect.WithSchema(mcpServiceMethods.ByName("ListBindings")),
+		connect.WithHandlerOptions(opts...),
+	)
+	mcpServiceUnbindMcpHandler := connect.NewUnaryHandler(
+		McpServiceUnbindMcpProcedure,
+		svc.UnbindMcp,
+		connect.WithSchema(mcpServiceMethods.ByName("UnbindMcp")),
 		connect.WithHandlerOptions(opts...),
 	)
 	mcpServiceListToolsHandler := connect.NewUnaryHandler(
@@ -137,8 +369,28 @@ func NewMcpServiceHandler(svc McpServiceHandler, opts ...connect.HandlerOption) 
 	)
 	return "/goap.mcp.v1.McpService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case McpServiceRegisterServerProcedure:
-			mcpServiceRegisterServerHandler.ServeHTTP(w, r)
+		case McpServiceRegisterConnectorProcedure:
+			mcpServiceRegisterConnectorHandler.ServeHTTP(w, r)
+		case McpServiceListConnectorsProcedure:
+			mcpServiceListConnectorsHandler.ServeHTTP(w, r)
+		case McpServiceSaveMcpProcedure:
+			mcpServiceSaveMcpHandler.ServeHTTP(w, r)
+		case McpServiceListMcpsProcedure:
+			mcpServiceListMcpsHandler.ServeHTTP(w, r)
+		case McpServiceDeleteMcpProcedure:
+			mcpServiceDeleteMcpHandler.ServeHTTP(w, r)
+		case McpServiceSaveAdapterProcedure:
+			mcpServiceSaveAdapterHandler.ServeHTTP(w, r)
+		case McpServiceListAdaptersProcedure:
+			mcpServiceListAdaptersHandler.ServeHTTP(w, r)
+		case McpServiceDeleteAdapterProcedure:
+			mcpServiceDeleteAdapterHandler.ServeHTTP(w, r)
+		case McpServiceBindMcpProcedure:
+			mcpServiceBindMcpHandler.ServeHTTP(w, r)
+		case McpServiceListBindingsProcedure:
+			mcpServiceListBindingsHandler.ServeHTTP(w, r)
+		case McpServiceUnbindMcpProcedure:
+			mcpServiceUnbindMcpHandler.ServeHTTP(w, r)
 		case McpServiceListToolsProcedure:
 			mcpServiceListToolsHandler.ServeHTTP(w, r)
 		case McpServiceCallToolProcedure:
@@ -152,8 +404,48 @@ func NewMcpServiceHandler(svc McpServiceHandler, opts ...connect.HandlerOption) 
 // UnimplementedMcpServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedMcpServiceHandler struct{}
 
-func (UnimplementedMcpServiceHandler) RegisterServer(context.Context, *connect.Request[v1.RegisterServerRequest]) (*connect.Response[v1.RegisterServerResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.mcp.v1.McpService.RegisterServer is not implemented"))
+func (UnimplementedMcpServiceHandler) RegisterConnector(context.Context, *connect.Request[v1.RegisterConnectorRequest]) (*connect.Response[v1.RegisterConnectorResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.mcp.v1.McpService.RegisterConnector is not implemented"))
+}
+
+func (UnimplementedMcpServiceHandler) ListConnectors(context.Context, *connect.Request[v1.ListConnectorsRequest]) (*connect.Response[v1.ListConnectorsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.mcp.v1.McpService.ListConnectors is not implemented"))
+}
+
+func (UnimplementedMcpServiceHandler) SaveMcp(context.Context, *connect.Request[v1.SaveMcpRequest]) (*connect.Response[v1.SaveMcpResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.mcp.v1.McpService.SaveMcp is not implemented"))
+}
+
+func (UnimplementedMcpServiceHandler) ListMcps(context.Context, *connect.Request[v1.ListMcpsRequest]) (*connect.Response[v1.ListMcpsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.mcp.v1.McpService.ListMcps is not implemented"))
+}
+
+func (UnimplementedMcpServiceHandler) DeleteMcp(context.Context, *connect.Request[v1.DeleteMcpRequest]) (*connect.Response[v1.DeleteMcpResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.mcp.v1.McpService.DeleteMcp is not implemented"))
+}
+
+func (UnimplementedMcpServiceHandler) SaveAdapter(context.Context, *connect.Request[v1.SaveAdapterRequest]) (*connect.Response[v1.SaveAdapterResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.mcp.v1.McpService.SaveAdapter is not implemented"))
+}
+
+func (UnimplementedMcpServiceHandler) ListAdapters(context.Context, *connect.Request[v1.ListAdaptersRequest]) (*connect.Response[v1.ListAdaptersResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.mcp.v1.McpService.ListAdapters is not implemented"))
+}
+
+func (UnimplementedMcpServiceHandler) DeleteAdapter(context.Context, *connect.Request[v1.DeleteAdapterRequest]) (*connect.Response[v1.DeleteAdapterResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.mcp.v1.McpService.DeleteAdapter is not implemented"))
+}
+
+func (UnimplementedMcpServiceHandler) BindMcp(context.Context, *connect.Request[v1.BindMcpRequest]) (*connect.Response[v1.BindMcpResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.mcp.v1.McpService.BindMcp is not implemented"))
+}
+
+func (UnimplementedMcpServiceHandler) ListBindings(context.Context, *connect.Request[v1.ListBindingsRequest]) (*connect.Response[v1.ListBindingsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.mcp.v1.McpService.ListBindings is not implemented"))
+}
+
+func (UnimplementedMcpServiceHandler) UnbindMcp(context.Context, *connect.Request[v1.UnbindMcpRequest]) (*connect.Response[v1.UnbindMcpResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.mcp.v1.McpService.UnbindMcp is not implemented"))
 }
 
 func (UnimplementedMcpServiceHandler) ListTools(context.Context, *connect.Request[v1.ListToolsRequest]) (*connect.Response[v1.ListToolsResponse], error) {
