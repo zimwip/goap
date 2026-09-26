@@ -29,7 +29,7 @@ services:
       POSTGRES_DB: goap
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ../postgres/init.sql:/docker-entrypoint-initdb.d/00-init.sql:ro
+      - ../postgres/init.sql:/docker-entrypoint-initdb.d/00-init.sql:ro,z
     ports: ["5432:5432"]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U goap -d goap"]
@@ -58,7 +58,7 @@ services:
       VAULT_TOKEN: dev-root-token
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       GOAP_JWT_SECRET: ${GOAP_JWT_SECRET:-}
-    volumes: [../vault/init.sh:/init.sh:ro]
+    volumes: ["../vault/init.sh:/init.sh:ro,z"]
     entrypoint: ["/bin/sh", "/init.sh"]
 
   graph:
@@ -102,6 +102,7 @@ services:
       GOAP_REGISTRY_URL: http://registry:8080
       GOAP_MODELGW_URL: http://modelgw:8080
       GOAP_IAM_URL: http://iam:8080
+      GOAP_MCP_URL: http://mcp:8080
       GOAP_TRACE_QUERY_URL: http://jaeger:16686
       GOAP_TRACE_UI_URL: http://localhost:16686/trace/
       GOAP_INTENT_RANKER: ${GOAP_INTENT_RANKER:-lexical}
@@ -128,7 +129,7 @@ services:
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.135.0
     command: ["--config=/etc/otelcol/config.yaml"]
-    volumes: ["../otel/collector.yaml:/etc/otelcol/config.yaml:ro"]
+    volumes: ["../otel/collector.yaml:/etc/otelcol/config.yaml:ro,z"]
     ports: ["4317:4317", "4318:4318"]
     depends_on: [jaeger]
 
@@ -140,7 +141,7 @@ services:
 
   prometheus:
     image: prom/prometheus:v3.6.0
-    volumes: ["../prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro"]
+    volumes: ["../prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro,z"]
     ports: ["9090:9090"]
 
   grafana:
@@ -148,12 +149,33 @@ services:
     environment:
       GF_AUTH_ANONYMOUS_ENABLED: "true"
       GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
-    volumes: ["../grafana/provisioning:/etc/grafana/provisioning:ro"]
+    volumes: ["../grafana/provisioning:/etc/grafana/provisioning:ro,z"]
     ports: ["3000:3000"]
 
+  # MCP hub: registry of connectors, MCP definitions, adapters, organization bindings
   mcp:
     <<: *service
     build: {context: ../.., args: {SERVICE: mcp}}
+    environment:
+      <<: *env
+      GOAP_DB_DSN: postgres://mcp:mcp@postgres:5432/goap?sslmode=disable
+      GOAP_IAM_URL: http://iam:8080
+      GOAP_CONNECTOR_TOKEN: ${GOAP_CONNECTOR_TOKEN:-dev-connector-token}
+    ports: ["8085:8080"]
+
+  # A connector is a service of its own that registers itself with the hub (GOAP_MCP_URL);
+  # adding one is adding a service like this one.
+  connector-localfs:
+    <<: *service
+    build: {context: ../.., args: {SERVICE: connector-localfs}}
+    environment:
+      <<: *env
+      GOAP_MCP_URL: http://mcp:8080
+      GOAP_CONNECTOR_URL: http://connector-localfs:8080
+      GOAP_CONNECTOR_TOKEN: ${GOAP_CONNECTOR_TOKEN:-dev-connector-token}
+      GOAP_LOCALFS_ROOTS: /data
+    volumes: ["localfs:/data"]
+    depends_on: [mcp]
 
   iam:
     <<: *service
@@ -177,7 +199,7 @@ services:
       GOAP_MODELGW_URL: http://modelgw:8080
       GOAP_MCP_URL: http://mcp:8080
       GOAP_IAM_URL: http://iam:8080
-    ports: ["8080:8080"]
+    ports: ["${GOAP_GATEWAY_PORT:-8080}:8080"]
 
   web:
     image: node:22-alpine
@@ -186,7 +208,7 @@ services:
     environment:
       GOAP_GATEWAY_URL: http://gateway:8080
     volumes:
-      - ../../web:/app
+      - ../../web:/app:z
       - webmodules:/app/node_modules
     ports: ["5173:5173"]
     depends_on: [gateway]
@@ -201,3 +223,4 @@ volumes:
   pgdata:
   natsdata:
   webmodules:
+  localfs:
