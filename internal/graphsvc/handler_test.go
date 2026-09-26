@@ -86,12 +86,12 @@ func TestNodeTypeWritesAreRoleGated(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		req := connect.NewRequest(&graphv1.AddChangeNodesRequest{ChangeId: string(c.ID),
-			Nodes: []*graphv1.ChangeNode{{Intent: "created", Key: "M:x/nodetype/T", Type: metamodel.TypeNodeType, Rationale: "why"}}})
+		req := connect.NewRequest(&graphv1.AddChangeImpactsRequest{ChangeId: string(c.ID),
+			Nodes: []*graphv1.ChangeImpact{{Intent: "created", Key: "M:x/nodetype/T", Type: metamodel.TypeNodeType, Rationale: "why"}}})
 		req.Header().Set(identity.HeaderSubject, "u")
 		req.Header().Set(identity.HeaderOrg, "acme")
 		req.Header().Set(identity.HeaderRoles, roles)
-		_, err = h.AddChangeNodes(ctx, req)
+		_, err = h.AddChangeImpacts(ctx, req)
 		return err
 	}
 	if err := add("contributor"); connect.CodeOf(err) != connect.CodePermissionDenied {
@@ -124,12 +124,12 @@ func TestAccessNodesAreGatedByTheFloor(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		req := connect.NewRequest(&graphv1.AddChangeNodesRequest{ChangeId: string(c.ID),
-			Nodes: []*graphv1.ChangeNode{{Intent: "created", Key: "USR:x", Type: "User", Rationale: "why"}}})
+		req := connect.NewRequest(&graphv1.AddChangeImpactsRequest{ChangeId: string(c.ID),
+			Nodes: []*graphv1.ChangeImpact{{Intent: "created", Key: "USR:x", Type: "User", Rationale: "why"}}})
 		req.Header().Set(identity.HeaderSubject, "u")
 		req.Header().Set(identity.HeaderOrg, "acme")
 		req.Header().Set(identity.HeaderRoles, roles)
-		_, err = h.AddChangeNodes(ctx, req)
+		_, err = h.AddChangeImpacts(ctx, req)
 		return err
 	}
 	if err := add("methodologist"); connect.CodeOf(err) != connect.CodePermissionDenied {
@@ -145,7 +145,7 @@ func TestAccessNodesAreGatedByTheFloor(t *testing.T) {
 	}
 }
 
-func TestChangeNodeRPCs(t *testing.T) {
+func TestChangeImpactRPCs(t *testing.T) {
 	ctx := context.Background()
 	g := graph.New(graph.NewMemory())
 	authorizer, err := authz.NewCasbin(nil)
@@ -178,11 +178,11 @@ func TestChangeNodeRPCs(t *testing.T) {
 		r.Header().Set(identity.HeaderOrg, "acme")
 		r.Header().Set(identity.HeaderRoles, roles)
 	}
-	add := func(roles string, pre domain.NodeRef) (*graphv1.ChangeNode, error) {
-		req := connect.NewRequest(&graphv1.AddChangeNodesRequest{ChangeId: string(c.ID),
-			Nodes: []*graphv1.ChangeNode{{Intent: "modified", Pre: pbconv.RefToPB(pre), Rationale: "why"}}})
+	add := func(roles string, pre domain.NodeRef) (*graphv1.ChangeImpact, error) {
+		req := connect.NewRequest(&graphv1.AddChangeImpactsRequest{ChangeId: string(c.ID),
+			Nodes: []*graphv1.ChangeImpact{{Intent: "modified", Pre: pbconv.RefToPB(pre), Rationale: "why"}}})
 		as(roles, req)
-		out, err := h.AddChangeNodes(ctx, req)
+		out, err := h.AddChangeImpacts(ctx, req)
 		if err != nil {
 			return nil, err
 		}
@@ -190,30 +190,30 @@ func TestChangeNodeRPCs(t *testing.T) {
 	}
 
 	if _, err := add("contributor", nt.Ref()); connect.CodeOf(err) != connect.CodePermissionDenied {
-		t.Fatalf("a contributor must not touch node types through change nodes: %v", err)
+		t.Fatalf("a contributor must not touch node types through change impacts: %v", err)
 	}
 	cn, err := add("contributor", req1.Ref())
 	if err != nil {
 		t.Fatal(err)
 	}
 	props, _ := structpb.NewStruct(map[string]any{"title": "two"})
-	wr := connect.NewRequest(&graphv1.WriteChangeNodeRequest{ChangeId: string(c.ID), ChangeNodeId: cn.Id, Props: props})
+	wr := connect.NewRequest(&graphv1.WriteChangeImpactRequest{ChangeId: string(c.ID), ChangeImpactId: cn.Id, Props: props})
 	as("contributor", wr)
-	if out, err := h.WriteChangeNode(ctx, wr); err != nil || out.Msg.Node.Post == nil || out.Msg.Node.Post.Version != 2 {
+	if out, err := h.WriteChangeImpact(ctx, wr); err != nil || out.Msg.Node.Post == nil || out.Msg.Node.Post.Version != 2 {
 		t.Fatalf("write: %v %v", out, err)
 	}
-	rv := connect.NewRequest(&graphv1.ReviewChangeNodeRequest{ChangeId: string(c.ID), ChangeNodeId: cn.Id, Accept: true})
+	rv := connect.NewRequest(&graphv1.ReviewChangeImpactRequest{ChangeId: string(c.ID), ChangeImpactId: cn.Id, Accept: true})
 	as("contributor", rv)
-	if _, err := h.ReviewChangeNode(ctx, rv); connect.CodeOf(err) != connect.CodeInvalidArgument {
+	if _, err := h.ReviewChangeImpact(ctx, rv); connect.CodeOf(err) != connect.CodeInvalidArgument {
 		t.Fatalf("a review without comment must be refused: %v", err)
 	}
 	rv.Msg.Comment = "checked"
-	if out, err := h.ReviewChangeNode(ctx, rv); err != nil || out.Msg.Node.Review != "accepted" || out.Msg.Node.Reviews[0].By != "u" {
+	if out, err := h.ReviewChangeImpact(ctx, rv); err != nil || out.Msg.Node.Review != "accepted" || out.Msg.Node.Reviews[0].By != "u" {
 		t.Fatalf("review: %v %v", out, err)
 	}
 	get, err := h.GetChange(ctx, connect.NewRequest(&graphv1.GetChangeRequest{Id: string(c.ID)}))
 	if err != nil || len(get.Msg.Change.Nodes) != 1 || get.Msg.Change.Nodes[0].Review != "accepted" {
-		t.Fatalf("GetChange carries the change nodes: %v %v", get, err)
+		t.Fatalf("GetChange carries the change impacts: %v %v", get, err)
 	}
 }
 

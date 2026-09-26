@@ -28,7 +28,7 @@ func (h *fakeHost) Nodes(context.Context, string) ([]Node, error) {
 }
 func (h *fakeHost) Links(context.Context, string, string, string) ([]Link, error) { return nil, nil }
 
-var job = Job{Action: "a", Nodes: []ChangeNode{
+var job = Job{Action: "a", Nodes: []ChangeImpact{
 	{ID: "n1", Key: "REQ-1", Type: "Requirement", Intent: "modified", Planned: true, Pre: &Node{Key: "REQ-1", Type: "Requirement", Props: map[string]any{"title": "Pay"}}},
 	{ID: "n2", Key: "TST-1", Type: "TestCase", Intent: "modified", Planned: true, Pre: &Node{Key: "TST-1", Type: "TestCase"}},
 }}
@@ -39,7 +39,7 @@ func TestJavaScript(t *testing.T) {
 	j.Code = `
 function run(ctx) {
   let n = 0;
-  for (const c of ctx.changeNodes()) {
+  for (const c of ctx.changeImpacts()) {
     if (c.type !== "Requirement") continue;
     const t = ctx.createNode("TestCase", "TST-" + c.key, "verifies " + c.key);
     ctx.writeNode(t, { props: { title: "Verify " + c.pre.props.title }, links: [{ type: "verifies", to: c.key }] });
@@ -78,7 +78,7 @@ import (
 )
 
 func Run(ctx *dsl.Ctx) error {
-	for _, n := range ctx.ChangeNodes() {
+	for _, n := range ctx.ChangeImpacts() {
 		if n.Type != "Requirement" {
 			continue
 		}
@@ -129,13 +129,13 @@ func TestSuspension(t *testing.T) {
 	}
 }
 
-func TestGoChangeNodes(t *testing.T) {
-	res, err := Run(context.Background(), Job{Language: "go", Nodes: []ChangeNode{{Key: "REQ-1", Planned: true}}, Code: `package action
+func TestGoChangeImpacts(t *testing.T) {
+	res, err := Run(context.Background(), Job{Language: "go", Nodes: []ChangeImpact{{Key: "REQ-1", Planned: true}}, Code: `package action
 
 import "github.com/zimwip/goap/pkg/dsl"
 
 func Run(ctx *dsl.Ctx) error {
-	for _, n := range ctx.ChangeNodes() {
+	for _, n := range ctx.ChangeImpacts() {
 		if n.Planned {
 			ctx.WriteNode(n.Key, map[string]any{"props": map[string]any{"title": "x"}, "state": "draft"})
 		}

@@ -29,10 +29,10 @@ func (r *Runner) Execute(ctx context.Context, req *connect.Request[runtimev1.Exe
 	job := dsl.Job{Language: m.Language, Code: m.Code, ProcessID: m.ProcessId, Agent: m.Agent, Action: m.Action,
 		Timeout: time.Duration(m.TimeoutMs) * time.Millisecond}
 	var snapshot struct {
-		Items  []dsl.Item       `json:"items"`
-		Nodes  []dsl.ChangeNode `json:"nodes"`
-		Intent string           `json:"intent"`
-		Goal   string           `json:"goal"`
+		Items  []dsl.Item         `json:"items"`
+		Nodes  []dsl.ChangeImpact `json:"nodes"`
+		Intent string             `json:"intent"`
+		Goal   string             `json:"goal"`
 	}
 	if err := json.Unmarshal([]byte(m.BlackboardJson), &snapshot); err != nil && m.BlackboardJson != "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)

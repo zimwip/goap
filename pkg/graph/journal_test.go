@@ -17,7 +17,7 @@ func testJournal(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	f := newFixture(t, repo)
 	g := f.g
-	c := must[domain.ChangeSet](t)(g.CreateChange(ctx, NewChange{Title: "c", BaselineID: f.base.ID}))
+	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{Title: "c", BaselineID: f.base.ID}))
 	t0 := time.Date(2026, 9, 1, 10, 0, 0, 0, time.UTC)
 	met := true
 	recs := []domain.ExecutionRecord{

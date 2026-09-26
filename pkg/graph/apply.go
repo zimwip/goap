@@ -9,10 +9,10 @@ import (
 	"github.com/zimwip/goap/pkg/domain"
 )
 
-// Apply lands a change: the versions its accepted change nodes wrote on its branch
+// Apply lands a change: the versions its accepted change impacts wrote on its branch
 // (ADR 0024) are checked (properties, lifecycle, transitions) and merged into the
 // branch it was forked from, giving the resulting baseline. A change without a branch
-// of its own of accepted change nodes applies as an empty baseline.
+// of its own of accepted change impacts applies as an empty baseline.
 func (g *Graph) Apply(ctx context.Context, id domain.ChangeID, baselineName string) (domain.Baseline, error) {
 	var result domain.Baseline
 	err := g.repo.InTx(ctx, func(tx Tx) (err error) {
@@ -82,10 +82,10 @@ func (g *Graph) applyTx(ctx context.Context, tx Tx, id domain.ChangeID, baseline
 		target, parentBaseline = maps.Clone(head.Nodes), head.ID
 	}
 	a := &applier{g: g, tx: tx, ctx: ctx, change: c, ix: ix, branch: domain.BranchOf(c.Branch), target: target}
-	if err := a.prepareChangeNodes(); err != nil {
+	if err := a.prepareChangeImpacts(); err != nil {
 		return domain.Baseline{}, err
 	}
-	if err := a.checkChangeNodes(); err != nil {
+	if err := a.checkChangeImpacts(); err != nil {
 		return domain.Baseline{}, err
 	}
 	if baselineName == "" {
@@ -125,15 +125,15 @@ func nextVersion(ctx context.Context, tx Tx, id domain.NodeID) (domain.Version, 
 	return domain.Version(len(vs) + 1), nil
 }
 
-// applier checks and gathers what a change lands: the versions its accepted change nodes wrote.
+// applier checks and gathers what a change lands: the versions its accepted change impacts wrote.
 type applier struct {
 	g      *Graph
 	tx     Tx
 	ctx    context.Context
-	change domain.ChangeSet
+	change domain.Change
 	ix     *typeIndex
 	branch string
 	target map[domain.NodeID]domain.Version
-	// cposts are the versions produced by the accepted change nodes (ADR 0024).
+	// cposts are the versions produced by the accepted change impacts (ADR 0024).
 	cposts []cpost
 }

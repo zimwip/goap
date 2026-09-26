@@ -30,7 +30,7 @@ type ActionContext struct {
 // ActionResult is what an executor produced.
 type ActionResult struct {
 	Items []ItemInput
-	// Nodes are change node operations (ADR 0024), applied after the items.
+	// Nodes are change impact operations (ADR 0024), applied after the items.
 	Nodes []dsl.NodeOp
 	// Wait suspends the process until a human submits the items.
 	Wait   bool
@@ -60,29 +60,29 @@ const llmSystem = `You are an agent of an enterprise methodology platform. You w
 Answer ONLY with a JSON object {"items":[...]} where each item is one of:
 {"kind":"artifact","type":"...","data":{...}}
 {"kind":"decision","decision":{"item":"@<item id>","accept":true,"comment":"why"}}
-The nodes the change acts on are change nodes: items of kind "changeNode", applied in order:
-{"kind":"changeNode","changeNode":{"op":"declare","ref":"#n1","intent":"modified","key":"<node key>","rationale":"why the node is impacted"}}
-{"kind":"changeNode","changeNode":{"op":"declare","ref":"#n2","intent":"created","type":"<node type>","key":"<new key>","rationale":"why"}}
-{"kind":"changeNode","changeNode":{"op":"write","node":"<node key or #n1>","props":{...},"state":"<lifecycle state>","links":[{"type":"...","to":"<node key or a #nN already written>"}]}}
-{"kind":"changeNode","changeNode":{"op":"review","node":"<node key>","accept":true,"comment":"why"}}
+The nodes the change acts on are change impacts: items of kind "changeImpact", applied in order:
+{"kind":"changeImpact","changeImpact":{"op":"declare","ref":"#n1","intent":"modified","key":"<node key>","rationale":"why the node is impacted"}}
+{"kind":"changeImpact","changeImpact":{"op":"declare","ref":"#n2","intent":"created","type":"<node type>","key":"<new key>","rationale":"why"}}
+{"kind":"changeImpact","changeImpact":{"op":"write","node":"<node key or #n1>","props":{...},"state":"<lifecycle state>","links":[{"type":"...","to":"<node key or a #nN already written>"}]}}
+{"kind":"changeImpact","changeImpact":{"op":"review","node":"<node key>","accept":true,"comment":"why"}}
 A node whose type has a lifecycle can only be modified in an editable state: reopen it with a write that sets "state" first, and finish with a write to a non-editable state.
-Reference nodes by their key. Reference items and change nodes created in the same answer by "#<ref>".`
+Reference nodes by their key. Reference items and change impacts created in the same answer by "#<ref>".`
 
 // PromptData is exposed to prompt templates.
 type PromptData struct {
-	Change    domain.ChangeSet
+	Change    domain.Change
 	Goal      string
 	Action    methodology.Action
 	Vars      map[string]any
 	Baseline  struct{ Nodes []domain.Node }
 	Artifacts []ItemView
-	// ChangeNodes are the nodes the change acts on (ADR 0024), as the process sees them.
-	ChangeNodes []ChangeNodeView
+	// ChangeImpacts are the nodes the change acts on (ADR 0024), as the process sees them.
+	ChangeImpacts []ChangeImpactView
 }
 
-// ChangeNodeView is a change node with its hydrated pre and post versions.
-type ChangeNodeView struct {
-	domain.ChangeNode
+// ChangeImpactView is a change impact with its hydrated pre and post versions.
+type ChangeImpactView struct {
+	domain.ChangeImpact
 	Pre  domain.NodeView
 	Post domain.NodeView
 }
@@ -114,14 +114,14 @@ func RenderPrompt(ctx context.Context, ac ActionContext) (string, error) {
 		}
 	}
 	for _, cn := range ac.Blackboard.Change.Nodes {
-		v := ChangeNodeView{ChangeNode: cn}
+		v := ChangeImpactView{ChangeImpact: cn}
 		if cn.Pre != nil {
 			v.Pre = ac.Blackboard.Nodes[*cn.Pre]
 		}
 		if cn.Post != nil {
 			v.Post = ac.Blackboard.Nodes[*cn.Post]
 		}
-		d.ChangeNodes = append(d.ChangeNodes, v)
+		d.ChangeImpacts = append(d.ChangeImpacts, v)
 	}
 	var b bytes.Buffer
 	if err := tpl.Execute(&b, d); err != nil {

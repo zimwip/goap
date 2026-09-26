@@ -20,11 +20,11 @@ func blackboard(t *testing.T, withTest bool) domain.Blackboard {
 	b, _ := g.CreateBaseline(ctx, "B1", []domain.NodeRef{need.Ref(), req.Ref()})
 	c, _ := g.CreateChange(ctx, graph.NewChange{Title: "c", BaselineID: b.ID})
 	ref := req.Ref()
-	if _, err := g.AddNodes(ctx, c.ID, []domain.ChangeNode{{Intent: domain.IntentModified, Pre: &ref, Rationale: "impacted"}}); err != nil {
+	if _, err := g.AddNodes(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &ref, Rationale: "impacted"}}); err != nil {
 		t.Fatal(err)
 	}
 	if withTest {
-		added, err := g.AddNodes(ctx, c.ID, []domain.ChangeNode{{Intent: domain.IntentCreated, Key: "TST-9", Type: "TestCase", Rationale: "cover REQ-1"}})
+		added, err := g.AddNodes(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentCreated, Key: "TST-9", Type: "TestCase", Rationale: "cover REQ-1"}})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -41,18 +41,18 @@ func blackboard(t *testing.T, withTest bool) domain.Blackboard {
 }
 
 func TestEvaluate(t *testing.T) {
-	exp := Expectation{ForEach: "changeNodes", Where: `x.type == "Requirement"`,
+	exp := Expectation{ForEach: "changeImpacts", Where: `x.type == "Requirement"`,
 		Produce: ProduceSpec{Op: "create_node", NodeType: "TestCase"}, Link: &LinkSpec{Type: "verifies"}}
 	expr, err := exp.Expr()
 	if err != nil {
 		t.Fatal(err)
 	}
 	set, err := Compile([]Definition{
-		{Name: "has_impacts", Expr: `changeNodes.exists(n, n.intent == "modified")`},
-		{Name: "req_impacted", Expr: `changeNodes.exists(n, n.type == "Requirement" && n.pre.out.exists(l, l.type == "satisfies" && l.to.key == "NEED-1"))`},
-		{Name: "up_to_date", Expr: "changeNodes.all(n, n.pre == null || n.pre.version == n.pre.latest)"},
+		{Name: "has_impacts", Expr: `changeImpacts.exists(n, n.intent == "modified")`},
+		{Name: "req_impacted", Expr: `changeImpacts.exists(n, n.type == "Requirement" && n.pre.out.exists(l, l.type == "satisfies" && l.to.key == "NEED-1"))`},
+		{Name: "up_to_date", Expr: "changeImpacts.all(n, n.pre == null || n.pre.version == n.pre.latest)"},
 		{Name: "tests_proposed", Expr: expr},
-		{Name: "broken", Expr: "changeNodes[0].nope == 1"},
+		{Name: "broken", Expr: "changeImpacts[0].nope == 1"},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -74,7 +74,7 @@ func TestEvaluate(t *testing.T) {
 }
 
 func TestCompileErrors(t *testing.T) {
-	if _, err := Compile([]Definition{{Name: "x", Expr: "size(changeNodes)"}}); err == nil {
+	if _, err := Compile([]Definition{{Name: "x", Expr: "size(changeImpacts)"}}); err == nil {
 		t.Fatal("non bool expression must be rejected")
 	}
 	if _, err := Compile([]Definition{{Name: "x", Expr: "unknown_var"}}); err == nil {
@@ -82,12 +82,12 @@ func TestCompileErrors(t *testing.T) {
 	}
 }
 
-func TestChangeNodes(t *testing.T) {
+func TestChangeImpacts(t *testing.T) {
 	set, err := Compile([]Definition{
-		{Name: "one_planned", Expr: `changeNodes.filter(n, n.intent == "modified" && n.planned && n.pre.key == "REQ-1").size() == 1`},
-		{Name: "created_test", Expr: `changeNodes.exists(n, n.intent == "created" && n.type == "TestCase" && n.pre == null && n.hasPost)`},
-		{Name: "all_reviewed", Expr: `changeNodes.all(n, n.review != "proposed")`},
-		{Name: "linked", Expr: `changeNodes.exists(n, n.pre != null && n.pre.out.exists(l, l.type == "satisfies"))`},
+		{Name: "one_planned", Expr: `changeImpacts.filter(n, n.intent == "modified" && n.planned && n.pre.key == "REQ-1").size() == 1`},
+		{Name: "created_test", Expr: `changeImpacts.exists(n, n.intent == "created" && n.type == "TestCase" && n.pre == null && n.hasPost)`},
+		{Name: "all_reviewed", Expr: `changeImpacts.all(n, n.review != "proposed")`},
+		{Name: "linked", Expr: `changeImpacts.exists(n, n.pre != null && n.pre.out.exists(l, l.type == "satisfies"))`},
 	})
 	if err != nil {
 		t.Fatal(err)

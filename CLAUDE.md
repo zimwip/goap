@@ -12,7 +12,7 @@ they use.** Every design decision starts by asking which of these questions it a
 | Question | Concept | What it is | Where it lives |
 |---|---|---|---|
 | **WHO** | **Organisation** | Who acts, and the scope of responsibility. A hierarchy of units (`OrgUnit`, `part_of`); the default unit `ORG-DEFAULT` is the root of every unit. A unit holds changes, the adapters of its tools and its users; who may do what (`Policy` nodes, ADR 0020) lives here too. | graph, `organisation` namespace |
-| **WHY** | **Change** (intent) | The reason to act, and the blackboard of the execution: everything that modifies the graph goes through one. It has an intent, an owner unit, a methodology, and acts on one namespace. Agents and actions work on it. Pure questions about the world state need none. | `domain.ChangeSet` |
+| **WHY** | **Change** (intent) | The reason to act, and the blackboard of the execution: everything that modifies the graph goes through one. It has an intent, an owner unit, a methodology, and acts on one namespace. Agents and actions work on it. Pure questions about the world state need none. | `domain.Change` |
 | **HOW** | **Methodology** | How a change is performed: goals, conditions, agents, actions, triggers. | graph (`MethodologyVersion` header + `Def*` element nodes, ADR 0023), projected at run time |
 | ↳ | **Agent** | A broad task scope that needs planning and loops to be achieved (goap / utility / hybrid planner); may call sub-agents. | methodology |
 | ↳ | **Action** | The smallest task, not splittable: preconditions, effects, cost. Kinds `llm`, `tool`, `human`, `builtin`, `script`. It states the tools (MCPs) it uses. | methodology |

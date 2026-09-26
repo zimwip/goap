@@ -177,8 +177,8 @@ type Step struct {
 	Before goap.WorldState `json:"before"`
 	After  goap.WorldState `json:"after,omitempty"`
 	Items  []domain.ItemID `json:"items,omitempty"`
-	// Nodes are the change nodes the step declared (ADR 0024).
-	Nodes []domain.ChangeNodeID `json:"nodes,omitempty"`
+	// Nodes are the change impacts the step declared (ADR 0024).
+	Nodes []domain.ChangeImpactID `json:"nodes,omitempty"`
 	// Reads are the node versions referenced on the blackboard when the step
 	// started; BoardBefore / BoardAfter the item count of the change around it.
 	Reads       []domain.NodeRef `json:"reads,omitempty"`

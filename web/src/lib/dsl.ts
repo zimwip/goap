@@ -20,8 +20,6 @@ export const DSL_FUNCTIONS: DslFunction[] = [
   { name: 'param', args: ['name'], returns: 'JSON value', doc: "Action parameter.", group: 'read' },
   { name: 'var', args: ['name'], returns: 'JSON value', doc: 'Process variable (vars from StartProcess).', group: 'read' },
   { name: 'items', args: ['kind'], returns: 'Item[]', doc: 'Items of the change of this kind ("" = all).', group: 'read' },
-  { name: 'impacts', args: [], returns: 'Item[]', doc: 'Impacts of the change.', group: 'read' },
-  { name: 'proposals', args: [], returns: 'Item[]', doc: 'Proposals of the change.', group: 'read' },
   { name: 'node', args: ['key'], returns: 'Node', doc: 'Node from the reference baseline.', group: 'read' },
   { name: 'nodes', args: ['type'], returns: 'Node[]', doc: 'Nodes of this type ("" = all).', group: 'read' },
   {
@@ -31,25 +29,18 @@ export const DSL_FUNCTIONS: DslFunction[] = [
     doc: 'Links of a node; direction "out" / "in", type "" = all.',
     group: 'read',
   },
-  { name: 'addImpact', args: ['key', 'reason'], returns: '', doc: 'Direct impact on a baseline node.', group: 'write' },
-  {
-    name: 'proposeNode',
-    args: ['type', 'key', 'props'],
-    returns: '"#pN"',
-    doc: 'Proposal to create a node; returns a #pN reference.',
-    group: 'write',
-  },
-  { name: 'proposeUpdate', args: ['key', 'props'], returns: '', doc: "New version of a node.", group: 'write' },
-  { name: 'proposeDelete', args: ['key'], returns: '', doc: "Deletion of a node.", group: 'write' },
-  {
-    name: 'proposeLink',
-    args: ['from', 'type', 'to'],
-    returns: '',
-    doc: 'Link between two nodes (node key or #pN reference).',
-    group: 'write',
-  },
   { name: 'addArtifact', args: ['type', 'data'], returns: '', doc: 'Free-form data (report…).', group: 'write' },
-  { name: 'decide', args: ['itemId', 'accept', 'comment'], returns: '', doc: 'Decision on a proposal.', group: 'write' },
+  { name: 'changeImpacts', args: [], returns: 'ChangeImpact[]', doc: 'Nodes the change reads, modifies or creates.', group: 'read' },
+  { name: 'impactNode', args: ['key', 'rationale'], returns: '"#nN"', doc: 'The change acts on a baseline node, and why (no version written yet).', group: 'write' },
+  { name: 'createNode', args: ['type', 'key', 'rationale'], returns: '"#nN"', doc: 'The change creates a node, and why.', group: 'write' },
+  {
+    name: 'writeNode',
+    args: ['node', '{props, state, links, removeLinks, retire}'],
+    returns: '',
+    doc: 'Write the next version of a change impact on the change branch (node: key or #nN; links: [{type, to}]).',
+    group: 'write',
+  },
+  { name: 'reviewNode', args: ['node', 'accept', 'comment'], returns: '', doc: 'Accept or reject a change impact; the comment is mandatory.', group: 'write' },
   { name: 'llm', args: ['prompt'], returns: 'string', doc: 'Text completion ("default" model).', group: 'call' },
   {
     name: 'complete',
@@ -72,7 +63,7 @@ export const DSL_FUNCTIONS: DslFunction[] = [
 
 /** Fields of the returned objects (for completion after `i.` or `n.`). */
 export const DSL_FIELDS: Record<string, string[]> = {
-  Item: ['id', 'kind', 'type', 'status', 'target', 'data', 'op', 'node', 'producedBy'],
+  Item: ['id', 'kind', 'type', 'status', 'data', 'producedBy'],
   Node: ['id', 'version', 'key', 'type', 'state', 'props'],
   Link: ['id', 'type', 'from', 'to'],
 };
@@ -83,8 +74,8 @@ export function goName(name: string): string {
 
 export const TEMPLATES: Record<string, string> = {
   javascript: `// Script actions: the ctx object gives access to the blackboard (see "DSL Help").
-for (const i of ctx.impacts()) {
-  ctx.log("impact on " + i.target.key);
+for (const n of ctx.changeImpacts()) {
+  ctx.log("change impact " + n.key);
 }
 `,
   go: `package action
@@ -92,8 +83,8 @@ for (const i of ctx.impacts()) {
 import "github.com/zimwip/goap/pkg/dsl"
 
 func Run(ctx *dsl.Ctx) error {
-\tfor _, i := range ctx.Impacts() {
-\t\tctx.Log("impact on " + i.Target.Key)
+\tfor _, n := range ctx.ChangeImpacts() {
+\t\tctx.Log("change impact " + n.Key)
 \t}
 \treturn nil
 }

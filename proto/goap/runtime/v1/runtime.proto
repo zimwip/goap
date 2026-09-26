@@ -53,7 +53,7 @@ message ExecuteResponse {
   string error = 4;
   // the script waits for a sub-agent: the step is retried once it completes
   bool suspended = 5;
-  // change node operations (dsl.NodeOp JSON array, ADR 0024)
+  // change impact operations (dsl.NodeOp JSON array, ADR 0024)
   string nodes_json = 6;
 }
 

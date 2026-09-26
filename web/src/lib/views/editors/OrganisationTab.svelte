@@ -12,7 +12,7 @@
   import { tools, refreshTools } from '../../stores/tools.svelte';
   import type { AdapterDef } from '../../adapterDef';
   import { defaultToText, type ParamForm } from '../../algorithmForm';
-  import { headGraph, findNode, applyOnMain, createNodeItem, updateNodeItem, deleteNodeItem, linkItem, refOf, type HeadGraph } from '../../graphEdit';
+  import { headGraph, findNode, applyOnMain, createNodeItem, updateNodeItem, deleteNodeItem, refOf, type HeadGraph } from '../../graphEdit';
   import { openTab } from '../../shell/tabs.svelte';
   import { notify, provideActions } from '../../shell/workbench.svelte';
 
@@ -175,8 +175,7 @@
       const props: Struct = { mcp: a.mcp ?? '', adapter: a.adapter ?? '', params: a.params ?? {} };
       const u = findNode(h, NS, 'OrgUnit', key);
       if (!u) throw new Error(`unit ${key} not found`);
-      const id = crypto.randomUUID();
-      await applyOnMain(NS, `Adapter ${a.mcp} of ${key}`, `${existing ? 'Update' : 'Create'} the adapter of ${a.mcp} for ${key}`, h.baselineId, existing ? [updateNodeItem(existing, props)] : [createNodeItem(id, akey, 'Adapter', props), linkItem(id, 'owner', refOf(u))]);
+      await applyOnMain(NS, `Adapter ${a.mcp} of ${key}`, `${existing ? 'Update' : 'Create'} the adapter of ${a.mcp} for ${key}`, h.baselineId, existing ? [updateNodeItem(existing, props)] : [createNodeItem(akey, 'Adapter', props, [{ type: 'owner', to: refOf(u) }])]);
       notify(`Adapter ${a.mcp} saved for ${key}.`, 'ok');
       editing = false;
       await load();

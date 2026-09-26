@@ -75,7 +75,7 @@ func newLifecycleWorldG(t *testing.T, repo Repo, approveGuard string) lcWorld {
 	return w
 }
 
-func (w lcWorld) change(t *testing.T, title string) domain.ChangeSet {
+func (w lcWorld) change(t *testing.T, title string) domain.Change {
 	t.Helper()
 	c, err := w.g.CreateChange(context.Background(), NewChange{Title: title, BaselineID: w.base.ID})
 	if err != nil {
@@ -84,27 +84,27 @@ func (w lcWorld) change(t *testing.T, title string) domain.ChangeSet {
 	return c
 }
 
-// declare adds the change node of a node the change modifies.
-func (w lcWorld) declare(t *testing.T, c domain.ChangeSet, n domain.Node) domain.ChangeNodeID {
+// declare adds the change impact of a node the change modifies.
+func (w lcWorld) declare(t *testing.T, c domain.Change, n domain.Node) domain.ChangeImpactID {
 	t.Helper()
 	ref := n.Ref()
-	ns, err := w.g.AddNodes(context.Background(), c.ID, []domain.ChangeNode{{Intent: domain.IntentModified, Pre: &ref, Rationale: "test " + n.Key}})
+	ns, err := w.g.AddNodes(context.Background(), c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &ref, Rationale: "test " + n.Key}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	return ns[0].ID
 }
 
-// write writes the next version of a change node.
-func (w lcWorld) write(c domain.ChangeSet, id domain.ChangeNodeID, nw NodeWrite) error {
+// write writes the next version of a change impact.
+func (w lcWorld) write(c domain.Change, id domain.ChangeImpactID, nw NodeWrite) error {
 	_, err := w.g.WriteNode(context.Background(), c.ID, id, nw)
 	return err
 }
 
-// accept accepts the change nodes of a change.
-func (w lcWorld) accept(t *testing.T, c domain.ChangeSet) {
+// accept accepts the change impacts of a change.
+func (w lcWorld) accept(t *testing.T, c domain.Change) {
 	t.Helper()
-	nodes, err := w.g.ListChangeNodes(context.Background(), c.ID)
+	nodes, err := w.g.ListChangeImpacts(context.Background(), c.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -146,7 +146,7 @@ func testLifecycleReopenEditAndApprove(t *testing.T, repo Repo) {
 	}
 	w.accept(t, c)
 	// the change acts on the node
-	if refs, _ := w.g.ChangeNodes(ctx, c.ID); len(refs) != 1 || refs[0] != w.req1.Ref() {
+	if refs, _ := w.g.ChangeImpacts(ctx, c.ID); len(refs) != 1 || refs[0] != w.req1.Ref() {
 		t.Fatalf("pre versions: %+v", refs)
 	}
 	if cs, _ := w.g.NodeChanges(ctx, w.req1.ID); len(cs) != 1 || cs[0].ID != c.ID {
@@ -227,7 +227,7 @@ func TestLifecycleParallelChangesConflict(t *testing.T) {
 func testLifecycleParallelChangesConflict(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	w := newLifecycleWorld(t, repo)
-	var cs []domain.ChangeSet
+	var cs []domain.Change
 	for _, title := range []string{"first", "second"} {
 		c := w.change(t, title)
 		id := w.declare(t, c, w.req1)
@@ -259,8 +259,8 @@ func TestLifecycleCreateNode(t *testing.T) { forEachRepo(t, testLifecycleCreateN
 func testLifecycleCreateNode(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	w := newLifecycleWorld(t, repo)
-	create := func(c domain.ChangeSet, key, state string) error {
-		ns, err := w.g.AddNodes(ctx, c.ID, []domain.ChangeNode{{Intent: domain.IntentCreated, Key: key, Type: "Requirement", Rationale: "new"}})
+	create := func(c domain.Change, key, state string) error {
+		ns, err := w.g.AddNodes(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentCreated, Key: key, Type: "Requirement", Rationale: "new"}})
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -4,13 +4,12 @@
     graph,
     errorMessage,
     nodeTitle,
-    type ChangeItem,
+    type ChangeImpact,
     type GraphNode,
     type ItemInput,
     type Process,
   } from '../api';
-  import { makeContext, describeProposal } from '../items';
-
+  
   let { process, onsubmitted }: { process: Process; onsubmitted: (p: Process) => void } = $props();
 
   const task = $derived(process.pending);
@@ -20,7 +19,7 @@
   );
 
   let nodes = $state<GraphNode[]>([]);
-  let items = $state<ChangeItem[]>([]);
+  let changeImpacts = $state<ChangeImpact[]>([]);
   let loadError = $state('');
   let submitting = $state(false);
   let error = $state('');
@@ -30,8 +29,9 @@
   let reason = $state('');
   let filter = $state('');
 
-  // --- proposal review
-  let decisions = $state<Record<string, boolean>>({});
+  // --- change impact review
+  let nodeDecisions = $state<Record<string, boolean>>({});
+  let comment = $state('');
 
   // --- raw JSON
   let raw = $state('');
@@ -48,21 +48,22 @@
     loadError = '';
     (async () => {
       const change = (await graph.getChange(id, ctrl.signal)).change;
-      items = change?.items ?? [];
+      changeImpacts = change?.nodes ?? [];
       nodes = change?.baselineId
         ? ((await graph.getBaselineGraph(change.baselineId, ctrl.signal)).nodes ?? [])
         : [];
-      const init: Record<string, boolean> = {};
-      for (const it of items) if (it.kind === 'proposal' && it.status === 'proposed' && it.id) init[it.id] = true;
-      decisions = init;
+      const initNodes: Record<string, boolean> = {};
+      for (const n of changeImpacts) if (isPending(n) && n.id) initNodes[n.id] = true;
+      nodeDecisions = initNodes;
     })().catch((e) => {
       if (!ctrl.signal.aborted) loadError = errorMessage(e);
     });
     return () => ctrl.abort();
   });
 
-  const ctx = $derived(makeContext(nodes, items));
-  const pendingProposals = $derived(items.filter((i) => i.kind === 'proposal' && i.status === 'proposed'));
+  /** a change impact awaiting a decision: written directly, on the main flow, not replaced */
+  const isPending = (n: ChangeImpact) => n.review === 'proposed' && !n.flow && !n.superseded;
+  const pendingNodes = $derived(changeImpacts.filter(isPending));
 
   const q = $derived(filter.trim().toLowerCase());
   const shownNodes = $derived(
@@ -74,19 +75,22 @@
 
   const built = $derived.by((): ItemInput[] => {
     if (mode === 'select') {
-      const r = reason.trim();
+      const r = reason.trim() || 'impacted';
       return selectedKeys.map((key) => ({
-        kind: 'impact',
-        type: 'direct',
-        target: key,
-        ...(r ? { data: { reason: r } } : {}),
+        kind: 'changeImpact',
+        changeImpact: { op: 'declare', intent: 'modified', key, rationale: r },
       }));
     }
     if (mode === 'review') {
-      return pendingProposals.map((p) => ({
-        kind: 'decision',
-        decision: { item: `@${p.id}`, accept: decisions[p.id ?? ''] ?? true },
-      }));
+      const why = comment.trim();
+      return [
+        ...pendingNodes.map(
+          (n): ItemInput => ({
+            kind: 'changeImpact',
+            changeImpact: { op: 'review', node: n.key, accept: nodeDecisions[n.id ?? ''] ?? true, comment: why },
+          }),
+        ),
+      ];
     }
     return [];
   });
@@ -168,44 +172,32 @@
     </form>
   {:else if mode === 'review'}
     <form onsubmit={submitStructured}>
-      {#if pendingProposals.length}
+      {#if pendingNodes.length}
         <ul class="proposals">
-          {#each pendingProposals as p (p.id)}
-            {@const id = p.id ?? ''}
+          {#each pendingNodes as n (n.id)}
+            {@const id = n.id ?? ''}
             <li>
               <div class="row">
-                <span class="grow">{describeProposal(ctx, p)}</span>
-                <div class="toggle" role="group" aria-label="Decision">
-                  <button
-                    type="button"
-                    class="small"
-                    class:on-accept={decisions[id] !== false}
-                    aria-pressed={decisions[id] !== false}
-                    onclick={() => (decisions[id] = true)}>Accept</button
-                  >
-                  <button
-                    type="button"
-                    class="small"
-                    class:on-reject={decisions[id] === false}
-                    aria-pressed={decisions[id] === false}
-                    onclick={() => (decisions[id] = false)}>Reject</button
-                  >
+                <span class="grow"><code>{n.key}</code> <span class="type">{n.type}</span> · {n.intent}: {n.rationale}</span>
+                <div class="toggle" role="group" aria-label="Decision on {n.key}">
+                  <button type="button" class="small" class:on-accept={nodeDecisions[id] !== false} aria-pressed={nodeDecisions[id] !== false} onclick={() => (nodeDecisions[id] = true)}>Accept</button>
+                  <button type="button" class="small" class:on-reject={nodeDecisions[id] === false} aria-pressed={nodeDecisions[id] === false} onclick={() => (nodeDecisions[id] = false)}>Reject</button>
                 </div>
               </div>
-              {#if p.proposal?.node?.props}
-                <details>
-                  <summary>Properties</summary>
-                  <pre>{JSON.stringify(p.proposal.node.props, null, 2)}</pre>
-                </details>
-              {/if}
+              {#if n.post?.id}<div class="hint">written as v{n.post.version}</div>{:else if n.intent === 'created'}<div class="hint">not written yet</div>{/if}
             </li>
           {/each}
         </ul>
-      {:else}
-        <p class="empty">No proposals awaiting a decision.</p>
+        <div class="field" style="margin-top: 0.75rem">
+          <label for="ht-comment">Comment (required)</label>
+          <textarea id="ht-comment" rows="2" bind:value={comment} placeholder="Why are these decisions taken?"></textarea>
+        </div>
+      {/if}
+      {#if !pendingNodes.length}
+        <p class="empty">Nothing awaiting a decision.</p>
       {/if}
       <div class="row" style="margin-top: 0.75rem">
-        <button class="primary" type="submit" disabled={submitting || pendingProposals.length === 0}>
+        <button class="primary" type="submit" disabled={submitting || pendingNodes.length === 0 || (pendingNodes.length > 0 && !comment.trim())}>
           {submitting ? 'Sending…' : 'Send decisions'}
         </button>
         <button type="button" class="small" onclick={openRaw}>View / edit as JSON</button>
@@ -221,7 +213,7 @@
         class="mono"
         rows="8"
         bind:value={raw}
-        placeholder={'[\n  {"kind": "impact", "type": "direct", "target": "REQ-1", "data": {"reason": "…"}}\n]'}
+        placeholder={'[\n  {"kind": "changeImpact", "changeImpact": {"op": "declare", "intent": "modified", "key": "REQ-1", "rationale": "…"}}\n]'}
       ></textarea>
       <div class="row" style="margin-top: 0.5rem">
         <button class="primary" type="button" onclick={submitRaw} disabled={submitting}>

@@ -31,6 +31,10 @@ export const tabsState: TabsState = $state(restore());
 const history: string[] = [];
 
 $effect.root(() => {
+  // A preview tab with unsaved changes becomes pinned.
+  $effect(() => {
+    for (const t of tabsState.tabs) if (!t.pinned && isDirty(t)) t.pinned = true;
+  });
   $effect(() => {
     save(KEY, {
       tabs: tabsState.tabs.map((t) => ({ id: t.id, kind: t.kind, params: { ...t.params }, pinned: t.pinned })),

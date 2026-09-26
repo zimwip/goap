@@ -7,12 +7,10 @@
     errorMessage,
     formatDate,
     shortId,
-    type ChangeItem,
-    type ChangeSet,
+    type Change,
     type GraphNode,
     type LifecycleTransition,
     type NodeRef,
-    type Struct,
   } from '../../api';
   import { untrack } from 'svelte';
   import type { Tab } from '../../shell/types';
@@ -27,7 +25,7 @@
   import { provideActions, notify } from '../../shell/workbench.svelte';
   import { changes, refreshChanges } from '../../stores/catalog.svelte';
   import { loadGraph, loadHead, type GraphIndex } from '../../graphIndex';
-  import { declaredProperties, isReopen, lifecycleResolver, lifecycleRows, type LifecycleRow } from '../../lifecycle';
+  import { declaredProperties, isReopen, lifecycleResolver, lifecycleRows, loadPosts, writeNodeInChange, type LifecycleRow, type PostVersions } from '../../lifecycle';
 
   let { tab }: { tab: Tab } = $props();
 
@@ -49,9 +47,10 @@
   let centerId = $state('');
 
   interface Work {
-    change: ChangeSet;
+    change: Change;
     index: GraphIndex;
     attached: NodeRef[];
+    posts: PostVersions;
   }
   let workId = $state(untrack(() => tab.params.change) ?? '');
   let work = $state<Work | undefined>();
@@ -83,8 +82,8 @@
     try {
       const change = (await graph.getChange(workId)).change;
       if (!change?.baselineId) throw new Error('unknown change');
-      const [index, attached] = await Promise.all([loadGraph(change.baselineId), graph.getChangeNodes(workId)]);
-      work = { change, index, attached: attached.nodes ?? [] };
+      const [index, attached] = await Promise.all([loadGraph(change.baselineId), graph.getChangeImpacts(workId)]);
+      work = { change, index, attached: attached.nodes ?? [], posts: await loadPosts(change.nodes ?? []) };
     } catch (e) {
       error = errorMessage(e);
       work = undefined;
@@ -114,8 +113,8 @@
 
   /** the node in the working change, or in the current graph when there is none */
   const row = $derived.by<LifecycleRow | undefined>(() => {
-    if (work) return lifecycleRows(work.index.list, work.attached, work.change.items ?? [], [id]).find((r) => r.node.id === id);
-    return lifecycleRows(headList, [], [], [id]).find((r) => r.node.id === id);
+    if (work) return lifecycleRows(work.index.list, work.attached, work.change.nodes ?? [], work.posts, [id]).find((r) => r.node.id === id);
+    return lifecycleRows(headList, [], [], new Map(), [id]).find((r) => r.node.id === id);
   });
   const inChange = $derived(!!work && !!row);
   const nodeProps = $derived((row?.props ?? stored?.props ?? {}) as Record<string, unknown>);
@@ -150,16 +149,15 @@
     return c.id;
   }
 
-  /** Runs a modification: creates the working change if needed, proposes items, reloads. */
-  async function propose(label: string, build: (base: NodeRef, current: LifecycleRow | undefined) => ChangeItem[]): Promise<boolean> {
+  /** Runs a modification: creates the working change if needed, writes the node on its branch, reloads. */
+  async function propose(label: string, w: { props?: Record<string, unknown>; state?: string; retire?: boolean }, rationale: string): Promise<boolean> {
     busy = label;
     error = '';
     try {
       const cid = await ensureChange();
       const node = work?.index.nodes.get(id);
       if (!node?.id) throw new Error('This node is not in the baseline of the working change: choose another change.');
-      const current = work ? lifecycleRows(work.index.list, work.attached, work.change.items ?? [], [id]).find((r) => r.node.id === id) : undefined;
-      await graph.addItems(cid, build({ id: node.id, version: node.version }, current));
+      await writeNodeInChange(cid, work?.change.nodes ?? [], { pre: { id: node.id, version: node.version } }, w, rationale);
       await loadWork();
       reload++;
       return true;
@@ -171,20 +169,29 @@
     }
   }
 
-  const transition = (t: LifecycleTransition) =>
-    propose('move', (base) => [{ kind: 'proposal', proposal: { op: 'transition_node', node: { base, state: t.to } } }]);
+  const transition = (t: LifecycleTransition) => propose('move', { state: t.to }, `Move ${stored?.key} to ${t.to}`);
 
-  const saveProps = (patch: Record<string, unknown>) =>
-    propose('edit', (base) => [{ kind: 'proposal', proposal: { op: 'update_node', node: { base, props: patch as Struct } } }]);
+  const saveProps = (patch: Record<string, unknown>) => propose('edit', { props: patch }, `Edit ${stored?.key}`);
 
   async function remove() {
     if (!confirm(`Delete ${stored?.key} (${typeName}) when the change is applied? Links pointing to it become suspect.`)) return;
-    await propose('delete', (base) => [{ kind: 'proposal', proposal: { op: 'delete_node', node: { base } } }]);
+    await propose('delete', { retire: true }, `Delete ${stored?.key}`);
   }
 
   async function undoDelete() {
     const rid = row?.removal?.id;
-    if (rid) await propose('delete', () => [{ kind: 'decision', decision: { item: rid, accept: false, comment: 'keep the node' } }]);
+    if (!rid || !workId) return;
+    busy = 'delete';
+    error = '';
+    try {
+      await graph.reviewChangeImpact(workId, rid, false, 'keep the node');
+      await loadWork();
+      reload++;
+    } catch (e) {
+      error = errorMessage(e);
+    } finally {
+      busy = '';
+    }
   }
 
   function pickChange(value: string) {

@@ -61,7 +61,7 @@ func (e *Engine) checkBoard(ctx context.Context, p *Process, bb domain.Blackboar
 // proposeRelaunch finds the earliest step, over every run of the change, that
 // produced content at fault: the step to restart from. It is nil when no step
 // can be relaunched (content of a human or trigger, a flow already open).
-func (e *Engine) proposeRelaunch(ctx context.Context, p *Process, view domain.ChangeSet, issues []domain.BoardIssue) *RelaunchProposal {
+func (e *Engine) proposeRelaunch(ctx context.Context, p *Process, view domain.Change, issues []domain.BoardIssue) *RelaunchProposal {
 	execOf := map[domain.ItemID]string{}
 	for _, it := range view.Items {
 		execOf[it.ID] = it.Execution

@@ -5,7 +5,7 @@
   import AssistantRun from './AssistantRun.svelte';
   import HumanTaskForm from '../../components/HumanTaskForm.svelte';
   import ApprovalPanel from '../../components/ApprovalPanel.svelte';
-  import { engine, graph, errorMessage, int, formatInt, type ChangeSet, type LogLine, type Process } from '../../api';
+  import { engine, graph, errorMessage, int, formatInt, type Change, type LogLine, type Process } from '../../api';
   import { watchEvents, type StreamStatus } from '../../stream';
   import { processes, ingestProcess, ingestEvent } from '../../stores/live.svelte';
   import { loadMethodology, agentLabel, actionLabel, goalLabel } from '../../stores/assistant.svelte';
@@ -75,7 +75,7 @@
   });
 
   // Result: change items at the end.
-  let change = $state<ChangeSet | undefined>();
+  let change = $state<Change | undefined>();
   $effect(() => {
     if (status !== 'completed' || !p?.changeId || depth > 0) return;
     const id = p.changeId;

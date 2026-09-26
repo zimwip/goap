@@ -169,10 +169,10 @@ func scriptTemplate(a methodology.Action, s ActionStats) string {
 	b.WriteString("function run(ctx) {\n")
 	for _, k := range slices.Sorted(maps.Keys(s.Outputs)) {
 		switch {
-		case k == "changeNode/modified":
+		case k == "changeImpact/modified":
 			b.WriteString("for (const n of ctx.nodes(\"\")) {\n  // TODO rule to select the impacted nodes\n  // ctx.impactNode(n.key, \"rule\");\n}\n")
-		case k == "changeNode/created":
-			b.WriteString("for (const n of ctx.changeNodes()) {\n  // TODO nodes to create\n  // const c = ctx.createNode(\"Type\", \"KEY\", \"why\");\n  // ctx.writeNode(c, { props: {}, links: [{ type: \"type\", to: n.key }] });\n}\n")
+		case k == "changeImpact/created":
+			b.WriteString("for (const n of ctx.changeImpacts()) {\n  // TODO nodes to create\n  // const c = ctx.createNode(\"Type\", \"KEY\", \"why\");\n  // ctx.writeNode(c, { props: {}, links: [{ type: \"type\", to: n.key }] });\n}\n")
 		case strings.HasPrefix(k, "artifact"):
 			b.WriteString("ctx.addArtifact(\"" + strings.TrimPrefix(k, "artifact/") + "\", { /* TODO */ });\n")
 		}

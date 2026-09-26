@@ -92,17 +92,17 @@
     return '';
   }
 
-  function revealDomain(d: Draft, path: string) {
+  function revealDomain(d: Draft, path: string, pin = false) {
     if (d.usesDomainRef && d.refDomain) {
-      revealDomainPath(d.refDomain.name, d.refDomain.version, path);
+      revealDomainPath(d.refDomain.name, d.refDomain.version, path, pin);
       return;
     }
-    const t = openTab(methodologySpec(d.name, d.version));
+    const t = openTab(methodologySpec(d.name, d.version), { pin });
     requestReveal(t.id, path);
   }
 
-  function openDomain(d: Draft) {
-    revealDomain(d, 'nodeTypes');
+  function openDomain(d: Draft, pin = false) {
+    revealDomain(d, 'nodeTypes', pin);
   }
 
   function addNodeType(d: Draft) {
@@ -249,7 +249,7 @@
                 badge={d.count('nodeTypes') + d.count('linkTypes') || undefined}
                 badgeTone="danger"
                 onselect={() => openDomain(d)}
-                onopen={() => openDomain(d)}
+                onopen={() => openDomain(d, true)}
                 ontoggle={() => toggle(domK)}
               />
               {#if isOpen(domK)}
@@ -292,7 +292,7 @@
                       badge={d.count(`nodeTypes[${i}]`) || undefined}
                       badgeTone="danger"
                       onselect={() => revealDomain(d, `nodeTypes[${i}]`)}
-                      onopen={() => revealDomain(d, `nodeTypes[${i}]`)}
+                      onopen={() => revealDomain(d, `nodeTypes[${i}]`, true)}
                       oncontextmenu={(e) =>
                         openContextMenu(e, [
                           {
@@ -346,7 +346,7 @@
                       badge={d.count(`linkTypes[${i}]`) || undefined}
                       badgeTone="danger"
                       onselect={() => revealDomain(d, `linkTypes[${i}]`)}
-                      onopen={() => revealDomain(d, `linkTypes[${i}]`)}
+                      onopen={() => revealDomain(d, `linkTypes[${i}]`, true)}
                     />
                   {:else}
                     <p class="empty pad3">No link types.</p>

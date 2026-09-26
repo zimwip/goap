@@ -15,7 +15,7 @@ func testDomain() *Domain {
 func refMethodology() *Methodology {
 	return &Methodology{
 		Name: "m", Version: "1", DomainRef: "alm@1",
-		Conditions: []Condition{{Name: "c", Expr: `changeNodes.exists(n, n.hasPost && n.post.out.exists(l, l.type == "verifies"))`}},
+		Conditions: []Condition{{Name: "c", Expr: `changeImpacts.exists(n, n.hasPost && n.post.out.exists(l, l.type == "verifies"))`}},
 		Actions:    []Action{{Name: "a", Kind: KindHuman, Effects: map[string]bool{"c": true}}},
 		Goals:      []Goal{{Name: "g", Pre: map[string]bool{"c": true}}},
 	}
@@ -73,7 +73,7 @@ func TestResolveRejectsEmbeddedAndReferenced(t *testing.T) {
 
 func TestReferenceLint(t *testing.T) {
 	m := refMethodology()
-	m.Conditions[0].Expr = `changeNodes.exists(n, n.hasPost && n.post.out.exists(l, l.type == "satisfies")) && changeNodes.exists(n, "Component" in n.types)`
+	m.Conditions[0].Expr = `changeImpacts.exists(n, n.hasPost && n.post.out.exists(l, l.type == "satisfies")) && changeImpacts.exists(n, "Component" in n.types)`
 	m.Actions[0].Expects = nil
 	res, issues := m.Resolve(resolver(testDomain()))
 	if len(issues) > 0 {

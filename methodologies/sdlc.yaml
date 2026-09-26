@@ -13,37 +13,37 @@ description: >
 domainRef: alm@1.0.0
 
 conditions:
-  # A change node is a node the change acts on (ADR 0024): declared as impacted (modified) or created,
+  # A change impact is a node the change acts on (ADR 0024): declared as impacted (modified) or created,
   # written when its new version exists, reviewed when it has received a decision.
   # --- analysis
   - name: scoped
     description: The scope of the change is identified (directly impacted elements)
-    expr: changeNodes.exists(n, n.intent == "modified")
+    expr: changeImpacts.exists(n, n.intent == "modified")
   - name: propagated
     description: Impacts are propagated along the ALM links
     expr: artifacts.exists(a, a.type == "propagation")
   # --- specification
   - name: requirements_specified
     description: Requirements are created or revised
-    expr: changeNodes.exists(n, n.hasPost && "Requirement" in n.types)
+    expr: changeImpacts.exists(n, n.hasPost && "Requirement" in n.types)
   # NB: the "each …" conditions are true on an empty set; the actions that
   # depend on them also require requirements_specified to anchor the cycle.
   - name: requirements_traced
     description: Each new requirement satisfies a need (or refines another one)
     expr: >
-      changeNodes.filter(r, r.intent == "created" && "Requirement" in r.types).all(r,
+      changeImpacts.filter(r, r.intent == "created" && "Requirement" in r.types).all(r,
         r.hasPost && r.post.out.exists(l, l.type == "satisfies" || l.type == "refines"))
   - name: tests_planned
     description: Each created or revised requirement is verified by a created test case
     expr: >
-      changeNodes.filter(r, r.hasPost && "Requirement" in r.types).all(r,
-        changeNodes.exists(t, t.intent == "created" && t.hasPost && t.post.out.exists(l, l.type == "verifies" && l.to.id == r.post.id)))
+      changeImpacts.filter(r, r.hasPost && "Requirement" in r.types).all(r,
+        changeImpacts.exists(t, t.intent == "created" && t.hasPost && t.post.out.exists(l, l.type == "verifies" && l.to.id == r.post.id)))
   # --- design
   - name: functions_allocated
     description: Each new requirement is realized by a function
     expr: >
-      changeNodes.filter(r, r.intent == "created" && "Requirement" in r.types && r.hasPost).all(r,
-        changeNodes.exists(f, f.hasPost && f.post.out.exists(l, l.type == "realizes" && l.to.id == r.post.id)))
+      changeImpacts.filter(r, r.intent == "created" && "Requirement" in r.types && r.hasPost).all(r,
+        changeImpacts.exists(f, f.hasPost && f.post.out.exists(l, l.type == "realizes" && l.to.id == r.post.id)))
   - name: design_done
     description: The design (components, interfaces, flows, data) is described
     expr: artifacts.exists(a, a.type == "design")
@@ -53,11 +53,11 @@ conditions:
   # --- build
   - name: components_in_scope
     description: Components are impacted or created
-    expr: changeNodes.exists(n, "Component" in n.types)
+    expr: changeImpacts.exists(n, "Component" in n.types)
   - name: build_complete
     description: Each impacted or created component has a build artifact
     expr: >
-      changeNodes.filter(n, "Component" in n.types).all(n,
+      changeImpacts.filter(n, "Component" in n.types).all(n,
         artifacts.exists(a, a.type == "build" && a.data.component == n.key))
   # --- delivery
   - name: release_planned
@@ -68,9 +68,9 @@ conditions:
     expr: artifacts.exists(a, a.type == "release_note")
   - name: reviewed
     description: >
-      All the change nodes have received a decision (the deployments are
+      All the change impacts have received a decision (the deployments are
       recorded accepted, after the review)
-    expr: size(changeNodes) > 0 && changeNodes.all(n, n.review != "proposed")
+    expr: size(changeImpacts) > 0 && changeImpacts.all(n, n.review != "proposed")
   - name: rolled_out
     description: Each release is deployed to every environment in the chain (or there is nothing to deploy)
     expr: >
@@ -97,8 +97,8 @@ actions:
       {{ range .Baseline.Nodes }}- {{ .Key }} ({{ .Type }}) {{ json .Properties }}
       {{ end }}
       Identify the elements DIRECTLY concerned (needs, requirements, functions,
-      components, interfaces, flows, data). For each one, declare a change node:
-      {"kind":"changeNode","changeNode":{"op":"declare","intent":"modified","key":"<key>","rationale":"why it is concerned"}}
+      components, interfaces, flows, data). For each one, declare a change impact:
+      {"kind":"changeImpact","changeImpact":{"op":"declare","intent":"modified","key":"<key>","rationale":"why it is concerned"}}
 
   - name: select_scope
     kind: human
@@ -106,7 +106,7 @@ actions:
     pre: {scoped: false}
     effects: {scoped: true}
     cost: 8
-    instructions: Indicate the elements of the ALM repository directly concerned by the change, and why (impacted change nodes).
+    instructions: Indicate the elements of the ALM repository directly concerned by the change, and why (impacted change impacts).
 
   - name: propagate_impacts
     kind: builtin
@@ -134,15 +134,15 @@ actions:
     prompt: |
       Change intent: "{{ .Change.Intent }}"
       Impacted elements:
-      {{ range .ChangeNodes }}- {{ .Key }} ({{ .Type }}) {{ json .Pre.Properties }} : {{ .Rationale }}
+      {{ range .ChangeImpacts }}- {{ .Key }} ({{ .Type }}) {{ json .Pre.Properties }} : {{ .Rationale }}
       {{ end }}
       Revise the impacted requirements and create new requirements (types:
       FunctionalRequirement, NonFunctionalRequirement, SecurityRequirement), each one
-      linked to the need it satisfies. A revised requirement is an impacted change node that you write;
+      linked to the need it satisfies. A revised requirement is an impacted change impact that you write;
       a new requirement is declared then written with its link:
-      {"kind":"changeNode","changeNode":{"op":"write","node":"<impacted key>","props":{...}}}
-      {"kind":"changeNode","changeNode":{"op":"declare","ref":"#r1","intent":"created","type":"FunctionalRequirement","key":"REQ-...","rationale":"why"}}
-      {"kind":"changeNode","changeNode":{"op":"write","node":"#r1","props":{"title":"...","priority":"high"},"links":[{"type":"satisfies","to":"<need key>"}]}}
+      {"kind":"changeImpact","changeImpact":{"op":"write","node":"<impacted key>","props":{...}}}
+      {"kind":"changeImpact","changeImpact":{"op":"declare","ref":"#r1","intent":"created","type":"FunctionalRequirement","key":"REQ-...","rationale":"why"}}
+      {"kind":"changeImpact","changeImpact":{"op":"write","node":"#r1","props":{"title":"...","priority":"high"},"links":[{"type":"satisfies","to":"<need key>"}]}}
 
   - name: write_requirements
     kind: human
@@ -163,7 +163,7 @@ actions:
     cost: 1
     code: |
       function run(ctx) {
-        const nodes = ctx.changeNodes();
+        const nodes = ctx.changeImpacts();
         // needs in scope: impacted, or satisfied by the impacted requirements
         const needs = new Set();
         for (const n of nodes) {
@@ -201,7 +201,7 @@ actions:
     cost: 1
     code: |
       function run(ctx) {
-        const nodes = ctx.changeNodes();
+        const nodes = ctx.changeImpacts();
         const verified = new Set();
         for (const t of nodes) {
           if (t.intent === "created" && t.post) for (const l of t.links) if (l.type === "verifies") verified.add(l.to.key);
@@ -229,7 +229,7 @@ actions:
     cost: 1
     code: |
       function run(ctx) {
-        const nodes = ctx.changeNodes();
+        const nodes = ctx.changeImpacts();
         const realized = new Set();
         for (const f of nodes) if (f.post) for (const l of f.links) if (l.type === "realizes") realized.add(l.to.key);
         const functions = nodes.filter(f => f.intent === "modified" && f.type === "Function").map(f => f.key).sort();
@@ -258,17 +258,17 @@ actions:
     prompt: |
       Change intent: "{{ .Change.Intent }}"
       Impacted elements:
-      {{ range .ChangeNodes }}{{ if eq .Intent "modified" }}- {{ .Key }} ({{ .Type }}) {{ json .Pre.Properties }}
+      {{ range .ChangeImpacts }}{{ if eq .Intent "modified" }}- {{ .Key }} ({{ .Type }}) {{ json .Pre.Properties }}
       {{ end }}{{ end }}
-      Change nodes already made:
-      {{ range .ChangeNodes }}- {{ .Intent }} {{ .Type }} {{ .Key }}: {{ .Rationale }}
+      Change impacts already made:
+      {{ range .ChangeImpacts }}- {{ .Intent }} {{ .Type }} {{ .Key }}: {{ .Rationale }}
       {{ end }}
       Design the evolution: components to modify (declare the impacted one if it is not, then write
       version / technology props) or to create (type Component, technology java|c|shell|…, an
       implements link to the function), interfaces (exposed_by, exchanges), flows
-      (source, target, through, carries) and data, as change nodes:
-      {"kind":"changeNode","changeNode":{"op":"declare","ref":"#c1","intent":"created","type":"Component","key":"CMP-...","rationale":"why"}}
-      {"kind":"changeNode","changeNode":{"op":"write","node":"#c1","props":{...},"links":[{"type":"implements","to":"<function key>"}]}}
+      (source, target, through, carries) and data, as change impacts:
+      {"kind":"changeImpact","changeImpact":{"op":"declare","ref":"#c1","intent":"created","type":"Component","key":"CMP-...","rationale":"why"}}
+      {"kind":"changeImpact","changeImpact":{"op":"write","node":"#c1","props":{...},"links":[{"type":"implements","to":"<function key>"}]}}
       End with
       {"kind":"artifact","type":"design","data":{"summary":"...","decisions":["..."]}}
 
@@ -280,7 +280,7 @@ actions:
     cost: 8
     utility: 'has(vars.design) && vars.design == "manual" ? 2.0 : 0.3'
     instructions: >
-      Write the changes to components, interfaces, flows and data (change nodes), then a
+      Write the changes to components, interfaces, flows and data (change impacts), then a
       "design" artifact summarizing the decisions.
 
   - name: check_design
@@ -297,7 +297,7 @@ actions:
           BuildArtifact: ["built_from"], Data: ["owned_by"],
         };
         const issues = [];
-        for (const n of ctx.changeNodes()) {
+        for (const n of ctx.changeImpacts()) {
           if (n.intent !== "created" || !required[n.type]) continue;
           for (const t of required[n.type]) {
             if (!n.post || !n.links.some(l => l.type === t)) issues.push(n.type + " " + n.key + " : missing link \"" + t + "\"");
@@ -328,7 +328,7 @@ actions:
     priority: 30
     description: "Java build: Maven, JDK 21, dependency check and coverage"
     when: >
-      changeNodes.exists(n, "Component" in n.types && has(n.props.technology) && n.props.technology == "java"
+      changeImpacts.exists(n, "Component" in n.types && has(n.props.technology) && n.props.technology == "java"
         && !artifacts.exists(a, a.type == "build" && a.data.component == n.key))
     code: &build |
       const RULES = {
@@ -351,7 +351,7 @@ actions:
       function pending(ctx) {
         const built = new Set(ctx.items("artifact").filter(a => a.type === "build").map(a => a.data.component));
         const out = [];
-        for (const n of ctx.changeNodes()) {
+        for (const n of ctx.changeImpacts()) {
           if (n.type !== "Component" || built.has(n.key)) continue;
           const props = (n.post && n.post.props) || (n.pre && n.pre.props) || {};
           out.push({ key: n.key, props: props, existing: n.intent === "modified" });
@@ -362,7 +362,7 @@ actions:
         const known = ["java", "c", "shell"];
         const mine = pending(ctx).filter(c => tech === "other" ? !known.includes(c.props.technology) : c.props.technology === tech);
         const r = RULES[tech];
-        const declared = new Set(ctx.changeNodes().map(n => n.key));
+        const declared = new Set(ctx.changeImpacts().map(n => n.key));
         for (const c of mine) {
           const name = String(c.props.title || c.key);
           const v = bump(c.props.version);
@@ -392,7 +392,7 @@ actions:
     priority: 20
     description: "C build: gcc / make, blocking warnings, static analysis"
     when: >
-      changeNodes.exists(n, "Component" in n.types && has(n.props.technology) && n.props.technology == "c"
+      changeImpacts.exists(n, "Component" in n.types && has(n.props.technology) && n.props.technology == "c"
         && !artifacts.exists(a, a.type == "build" && a.data.component == n.key))
     code: *build
 
@@ -404,7 +404,7 @@ actions:
     priority: 10
     description: "Shell build: shellcheck, bats tests, archive"
     when: >
-      changeNodes.exists(n, "Component" in n.types && has(n.props.technology) && n.props.technology == "shell"
+      changeImpacts.exists(n, "Component" in n.types && has(n.props.technology) && n.props.technology == "shell"
         && !artifacts.exists(a, a.type == "build" && a.data.component == n.key))
     code: *build
 
@@ -434,7 +434,7 @@ actions:
         return p.slice(0, 2).join(".");
       }
       function run(ctx) {
-        const nodes = ctx.changeNodes();
+        const nodes = ctx.changeImpacts();
         const artifacts = new Set(nodes.filter(n => n.intent === "created" && n.type === "BuildArtifact").map(n => n.key));
         // applications receiving a new artifact (deploys links written by the build)
         const byApp = new Map();
@@ -476,8 +476,8 @@ actions:
     model: fast
     prompt: |
       Intent: "{{ .Change.Intent }}"
-      Change nodes:
-      {{ range .ChangeNodes }}- {{ .Intent }} {{ .Type }} {{ .Key }}: {{ .Rationale }}
+      Change impacts:
+      {{ range .ChangeImpacts }}- {{ .Intent }} {{ .Type }} {{ .Key }}: {{ .Rationale }}
       {{ end }}
       Artifacts:
       {{ range .Artifacts }}- {{ .Type }} {{ json .Data }}
@@ -497,7 +497,7 @@ actions:
       function run(ctx) {
         const lines = ["# Release Note", "", "Intent: " + ctx.intent(), ""];
         const section = (title, rows) => { if (rows.length) { lines.push("## " + title, ...rows.map(r => "- " + r), ""); } };
-        const nodes = ctx.changeNodes().filter(n => n.post || n.intent === "created");
+        const nodes = ctx.changeImpacts().filter(n => n.post || n.intent === "created");
         const verb = n => (n.intent === "created" ? "create " : "update ");
         section("Requirements", nodes.filter(n => n.type.endsWith("Requirement")).map(n => verb(n) + n.key));
         section("Design", nodes.filter(n => ["Function", "Component", "Interface", "Flow", "Data"].includes(n.type)).map(n => verb(n) + n.type + " " + n.key));
@@ -506,7 +506,7 @@ actions:
         section("Releases", nodes.filter(n => n.type === "Release").map(n => n.key + " " + ((n.post && n.post.props.title) || "")));
         const plan = ctx.items("artifact").filter(a => a.type === "release_plan").pop();
         if (plan) section("Deployment", [plan.data.pipeline.map(e => e.name + " (" + e.stage + ")").join(" → ")]);
-        section("Affected applications", ctx.changeNodes().filter(n => n.intent === "modified" && n.type === "Application" && n.pre).map(n => n.key + " " + (n.pre.props.title || "")));
+        section("Affected applications", ctx.changeImpacts().filter(n => n.intent === "modified" && n.type === "Application" && n.pre).map(n => n.key + " " + (n.pre.props.title || "")));
         ctx.addArtifact("release_note", { markdown: lines.join("\n") });
         return "release note assembled";
       }
@@ -517,7 +517,7 @@ actions:
     pre: {release_noted: true, reviewed: false}
     effects: {reviewed: true}
     cost: 2
-    instructions: Accept or reject each change node (impacts, requirements, design, artifacts, tests, releases) based on the release note and the design check; a comment is required.
+    instructions: Accept or reject each change impact (impacts, requirements, design, artifacts, tests, releases) based on the release note and the design check; a comment is required.
 
   # ======================= deployment (abstract, incremental, specialized by environment stage)
   - name: deploy
@@ -544,7 +544,7 @@ actions:
         const env = plan.data.pipeline[waves.length];
         if (!env) throw new Error("all waves are deployed");
         const checks = ctx.param("checks") || [];
-        const tests = ctx.changeNodes().filter(n => n.intent === "created" && n.type === "TestCase" && n.post);
+        const tests = ctx.changeImpacts().filter(n => n.intent === "created" && n.type === "TestCase" && n.post);
         const campaign = {};
         for (const t of tests) campaign[t.post.props.level || "acceptance"] = (campaign[t.post.props.level || "acceptance"] || 0) + 1;
         for (const r of plan.data.releases) {

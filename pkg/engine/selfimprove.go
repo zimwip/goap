@@ -97,7 +97,7 @@ func (e *Engine) observeAnalyze(ctx context.Context, ac ActionContext, cfg SelfI
 		return ActionResult{}, err
 	}
 	items := map[domain.ItemID]domain.ChangeItem{}
-	nodes := map[domain.ChangeNodeID]domain.ChangeNode{}
+	nodes := map[domain.ChangeImpactID]domain.ChangeImpact{}
 	if obs.ChangeID != "" {
 		if bb, err := e.Graph.Blackboard(ctx, obs.ChangeID); err == nil {
 			for _, it := range bb.Change.Items {
@@ -176,7 +176,7 @@ func (e *Engine) observePropose(ctx context.Context, ac ActionContext) (ActionRe
 		return ActionResult{}, err
 	}
 	props, notes := observe.Propose(r, cm.Methodology)
-	// an improvement is a change node on an element of the methodology (ADR 0024): the rationale says what and
+	// an improvement is a change impact on an element of the methodology (ADR 0024): the rationale says what and
 	// why, the version written on the change branch holds the proposed properties
 	var ops []dsl.NodeOp
 	for _, p := range props {

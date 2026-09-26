@@ -13,7 +13,7 @@ The engine injects a `ctx` object: the same API exists in both languages
 
 Writes are **buffered** and only reach the blackboard (the change) at the end of
 the action, atomically; an action that errors writes nothing. The `#nN` references returned by
-writes designate change nodes declared within the same execution.
+writes designate change impacts declared within the same execution.
 
 ## Reading
 
@@ -22,7 +22,7 @@ writes designate change nodes declared within the same execution.
 | `ctx.intent()` / `ctx.goal()` / `ctx.agent()` / `ctx.action()` | `Intent()`… | `string` |
 | `ctx.param(name)` / `ctx.var(name)` | `Param(name)` / `Var(name)` | JSON value |
 | `ctx.items(kind)` (`""` = all) | `Items(kind)` | `Item[]` |
-| `ctx.changeNodes()` | `ChangeNodes()` | `ChangeNode[]` |
+| `ctx.changeImpacts()` | `ChangeImpacts()` | `ChangeImpact[]` |
 | `ctx.node(key)` | `Node(key)` | `Node` (reference baseline) |
 | `ctx.nodes(type)` (`""` = all) | `Nodes(type)` | `Node[]` |
 | `ctx.links(key, direction, type)` (`"out"`/`"in"`, `""` = all) | `Links(…)` | `Link[]` |
@@ -30,8 +30,8 @@ writes designate change nodes declared within the same execution.
 `Item` (artifact, decision): `{id, kind, type, status, data, producedBy}` — `Node`: `{id, version, key, type, props}` —
 `Link`: `{id, type, from, to}` (`from`/`to`: `{id, version, key, type}`).
 
-`ChangeNode`: `{id, key, type, intent, rationale, review, planned, pre, post, landed, links}` — the node the change reads, modifies
-or creates ([ADR 0024](adr/0024-change-nodes.md)); `pre` / `post` / `landed` are `Node`s or `null`, `planned` is set while no
+`ChangeImpact`: `{id, key, type, intent, rationale, review, planned, pre, post, landed, links}` — the node the change reads, modifies
+or creates ([ADR 0024](adr/0024-change-impacts.md)); `pre` / `post` / `landed` are `Node`s or `null`, `planned` is set while no
 version is written, `links` are the outgoing links of the version written.
 
 ## Writing (to the change)
@@ -39,13 +39,13 @@ version is written, `links` are the outgoing links of the version written.
 | JavaScript | Effect |
 |---|---|
 | `ctx.addArtifact(type, data)` | free-form data (report…) |
-| `ctx.impactNode(key, rationale)` | the change acts on a baseline node, and why → `"#nN"` (a change node with no version yet) |
+| `ctx.impactNode(key, rationale)` | the change acts on a baseline node, and why → `"#nN"` (a change impact with no version yet) |
 | `ctx.createNode(type, key, rationale)` | the change creates a node → `"#nN"` |
-| `ctx.writeNode(node, {props, state, links, removeLinks, retire})` | write the next version of the node of a change node on the change branch (`node`: key or `#nN`; `links`: `[{type, to}]`, `to` a node key or a `#nN` already written; `props` merged; `state` a lifecycle state) |
-| `ctx.reviewNode(node, accept, comment)` | accept or reject a change node; the comment is mandatory |
+| `ctx.writeNode(node, {props, state, links, removeLinks, retire})` | write the next version of the node of a change impact on the change branch (`node`: key or `#nN`; `links`: `[{type, to}]`, `to` a node key or a `#nN` already written; `props` merged; `state` a lifecycle state) |
+| `ctx.reviewNode(node, accept, comment)` | accept or reject a change impact; the comment is mandatory |
 
-The change node calls need a change with a branch of its own; they are applied in order when the action ends. On a flow
-branch (a relaunched step, ADR 0025) `changeNodes()` shows the change nodes of the flow, the stale ones of the relaunched steps
+The change impact calls need a change with a branch of its own; they are applied in order when the action ends. On a flow
+branch (a relaunched step, ADR 0025) `changeImpacts()` shows the change impacts of the flow, the stale ones of the relaunched steps
 are not there, and what the script declares, writes and reviews stays on the flow until it is adopted.
 
 ## Calls (via the engine: authorized, traced, counted)
@@ -62,7 +62,7 @@ are not there, and what the script declares, writes and reviews stays on the flo
 
 ```js
 // JavaScript: one test case per impacted requirement
-for (const n of ctx.changeNodes()) {
+for (const n of ctx.changeImpacts()) {
   if (n.type !== "Requirement" || !n.pre) continue;
   const t = ctx.createNode("TestCase", "TST-" + n.key, "verifies " + n.key);
   ctx.writeNode(t, { props: { title: "Verify " + n.pre.props.title }, links: [{ type: "verifies", to: n.key }] });
@@ -76,7 +76,7 @@ package action
 import "github.com/zimwip/goap/pkg/dsl"
 
 func Run(ctx *dsl.Ctx) error {
-	for _, n := range ctx.ChangeNodes() {
+	for _, n := range ctx.ChangeImpacts() {
 		if n.Type != "Requirement" || n.Pre == nil {
 			continue
 		}

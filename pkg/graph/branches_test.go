@@ -182,12 +182,12 @@ func TestMergeProps(t *testing.T) {
 	}
 }
 
-// A branch merge is a change of the platform: each merge version records the change node that explains it.
-func TestBranchMergeRecordsChangeNodes(t *testing.T) {
-	forEachRepo(t, testBranchMergeRecordsChangeNodes)
+// A branch merge is a change of the platform: each merge version records the change impact that explains it.
+func TestBranchMergeRecordsChangeImpacts(t *testing.T) {
+	forEachRepo(t, testBranchMergeRecordsChangeImpacts)
 }
 
-func testBranchMergeRecordsChangeNodes(t *testing.T, repo Repo) {
+func testBranchMergeRecordsChangeImpacts(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	f := newFixture(t, repo)
 	g := f.g
@@ -199,20 +199,20 @@ func testBranchMergeRecordsChangeNodes(t *testing.T, repo Repo) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	nodes, err := g.ListChangeNodes(ctx, res.Change.ID)
+	nodes, err := g.ListChangeImpacts(ctx, res.Change.ID)
 	if err != nil || len(nodes) != 2 {
-		t.Fatalf("one change node per merged node: %+v %v", nodes, err)
+		t.Fatalf("one change impact per merged node: %+v %v", nodes, err)
 	}
-	byKey := map[string]domain.ChangeNode{}
+	byKey := map[string]domain.ChangeImpact{}
 	for _, n := range nodes {
 		byKey[n.Key] = n
 	}
 	req, des := byKey["REQ-1"], byKey["DES-1"]
 	if req.Intent != domain.IntentModified || req.Pre == nil || req.Landed == nil || req.Review != domain.ReviewAccepted || des.Intent != domain.IntentCreated || des.Pre != nil {
-		t.Fatalf("change nodes: %+v %+v", req, des)
+		t.Fatalf("change impacts: %+v %+v", req, des)
 	}
 	head, err := g.Node(ctx, domain.NodeRef{ID: f.req.ID})
-	if err != nil || head.Reason != domain.ReasonMerge || head.Properties["title"] != "both" || head.ChangeNode != req.ID || len(head.Parents) != 2 || head.Ref() != *req.Landed {
+	if err != nil || head.Reason != domain.ReasonMerge || head.Properties["title"] != "both" || head.ChangeImpact != req.ID || len(head.Parents) != 2 || head.Ref() != *req.Landed {
 		t.Fatalf("merge version: %+v %v", head, err)
 	}
 	if head.Comment == "" || res.Change.Status != domain.ChangeApplied {

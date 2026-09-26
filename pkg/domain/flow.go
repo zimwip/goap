@@ -46,7 +46,7 @@ type FlowEvent struct {
 	Process   string   `json:"process,omitempty"`
 	Reason    string   `json:"reason,omitempty"`
 	Stale     []ItemID `json:"stale,omitempty"`
-	// StaleExecutions are the action runs the relaunch invalidates: the change nodes, versions and
+	// StaleExecutions are the action runs the relaunch invalidates: the change impacts, versions and
 	// reviews they produced are stale until the branch is adopted (ADR 0025).
 	StaleExecutions []string `json:"staleExecutions,omitempty"`
 	// By is the principal that adopted or discarded the branch.
@@ -121,7 +121,7 @@ func (fx *flowIndex) effective(id string) FlowStatus {
 }
 
 // flows replays the flow events of the log (cached per log length).
-func (c *ChangeSet) flows() *flowIndex {
+func (c *Change) flows() *flowIndex {
 	if c.flx != nil && c.flxN == len(c.Items) {
 		return c.flx
 	}
@@ -182,13 +182,13 @@ func (c *ChangeSet) flows() *flowIndex {
 }
 
 // Flows lists the flow branches of the change, oldest first.
-func (c *ChangeSet) Flows() []Flow { return slices.Clone(c.flows().list) }
+func (c *Change) Flows() []Flow { return slices.Clone(c.flows().list) }
 
 // Flow returns a flow branch.
-func (c *ChangeSet) Flow(id string) (Flow, bool) { return c.flows().get(id) }
+func (c *Change) Flow(id string) (Flow, bool) { return c.flows().get(id) }
 
 // FlowStatusOf is the effective state of a flow, ancestors included.
-func (c *ChangeSet) FlowStatusOf(id string) FlowStatus { return c.flows().effective(id) }
+func (c *Change) FlowStatusOf(id string) FlowStatus { return c.flows().effective(id) }
 
 // View returns the change as seen by the process running on a flow. The main
 // flow ("") sees the log without the items of branches that are not adopted
@@ -196,7 +196,7 @@ func (c *ChangeSet) FlowStatusOf(id string) FlowStatus { return c.flows().effect
 // its parent's view without the items it invalidated, plus its own items: the
 // board a replanned run works on. The result carries no flow events, its
 // items are plain.
-func (c ChangeSet) View(flow string) ChangeSet {
+func (c Change) View(flow string) Change {
 	out := c
 	out.Items, out.flx, out.flxN = nil, nil, 0
 	fx := c.flows()

@@ -61,9 +61,9 @@ const (
 	// GraphServiceListChangesProcedure is the fully-qualified name of the GraphService's ListChanges
 	// RPC.
 	GraphServiceListChangesProcedure = "/goap.graph.v1.GraphService/ListChanges"
-	// GraphServiceGetChangeNodesProcedure is the fully-qualified name of the GraphService's
-	// GetChangeNodes RPC.
-	GraphServiceGetChangeNodesProcedure = "/goap.graph.v1.GraphService/GetChangeNodes"
+	// GraphServiceGetChangeImpactsProcedure is the fully-qualified name of the GraphService's
+	// GetChangeImpacts RPC.
+	GraphServiceGetChangeImpactsProcedure = "/goap.graph.v1.GraphService/GetChangeImpacts"
 	// GraphServiceListNodeChangesProcedure is the fully-qualified name of the GraphService's
 	// ListNodeChanges RPC.
 	GraphServiceListNodeChangesProcedure = "/goap.graph.v1.GraphService/ListNodeChanges"
@@ -72,15 +72,15 @@ const (
 	GraphServiceUpdateChangeProcedure = "/goap.graph.v1.GraphService/UpdateChange"
 	// GraphServiceAddItemsProcedure is the fully-qualified name of the GraphService's AddItems RPC.
 	GraphServiceAddItemsProcedure = "/goap.graph.v1.GraphService/AddItems"
-	// GraphServiceAddChangeNodesProcedure is the fully-qualified name of the GraphService's
-	// AddChangeNodes RPC.
-	GraphServiceAddChangeNodesProcedure = "/goap.graph.v1.GraphService/AddChangeNodes"
-	// GraphServiceWriteChangeNodeProcedure is the fully-qualified name of the GraphService's
-	// WriteChangeNode RPC.
-	GraphServiceWriteChangeNodeProcedure = "/goap.graph.v1.GraphService/WriteChangeNode"
-	// GraphServiceReviewChangeNodeProcedure is the fully-qualified name of the GraphService's
-	// ReviewChangeNode RPC.
-	GraphServiceReviewChangeNodeProcedure = "/goap.graph.v1.GraphService/ReviewChangeNode"
+	// GraphServiceAddChangeImpactsProcedure is the fully-qualified name of the GraphService's
+	// AddChangeImpacts RPC.
+	GraphServiceAddChangeImpactsProcedure = "/goap.graph.v1.GraphService/AddChangeImpacts"
+	// GraphServiceWriteChangeImpactProcedure is the fully-qualified name of the GraphService's
+	// WriteChangeImpact RPC.
+	GraphServiceWriteChangeImpactProcedure = "/goap.graph.v1.GraphService/WriteChangeImpact"
+	// GraphServiceReviewChangeImpactProcedure is the fully-qualified name of the GraphService's
+	// ReviewChangeImpact RPC.
+	GraphServiceReviewChangeImpactProcedure = "/goap.graph.v1.GraphService/ReviewChangeImpact"
 	// GraphServiceCommitEditsProcedure is the fully-qualified name of the GraphService's CommitEdits
 	// RPC.
 	GraphServiceCommitEditsProcedure = "/goap.graph.v1.GraphService/CommitEdits"
@@ -158,18 +158,18 @@ type GraphServiceClient interface {
 	CreateChange(context.Context, *connect.Request[v1.CreateChangeRequest]) (*connect.Response[v1.CreateChangeResponse], error)
 	GetChange(context.Context, *connect.Request[v1.GetChangeRequest]) (*connect.Response[v1.GetChangeResponse], error)
 	ListChanges(context.Context, *connect.Request[v1.ListChangesRequest]) (*connect.Response[v1.ListChangesResponse], error)
-	// The versions a change starts from (the pre version of its change nodes), and the
+	// The versions a change starts from (the pre version of its change impacts), and the
 	// changes acting on a node (ADR 0024).
-	GetChangeNodes(context.Context, *connect.Request[v1.GetChangeNodesRequest]) (*connect.Response[v1.GetChangeNodesResponse], error)
+	GetChangeImpacts(context.Context, *connect.Request[v1.GetChangeImpactsRequest]) (*connect.Response[v1.GetChangeImpactsResponse], error)
 	ListNodeChanges(context.Context, *connect.Request[v1.ListNodeChangesRequest]) (*connect.Response[v1.ListNodeChangesResponse], error)
 	UpdateChange(context.Context, *connect.Request[v1.UpdateChangeRequest]) (*connect.Response[v1.UpdateChangeResponse], error)
 	AddItems(context.Context, *connect.Request[v1.AddItemsRequest]) (*connect.Response[v1.AddItemsResponse], error)
-	// Change nodes (ADR 0024): declare the nodes a change acts on, write the version each produces on the
+	// Change impacts (ADR 0024): declare the nodes a change acts on, write the version each produces on the
 	// change branch, and accept or reject them (a comment is mandatory).
-	AddChangeNodes(context.Context, *connect.Request[v1.AddChangeNodesRequest]) (*connect.Response[v1.AddChangeNodesResponse], error)
-	WriteChangeNode(context.Context, *connect.Request[v1.WriteChangeNodeRequest]) (*connect.Response[v1.WriteChangeNodeResponse], error)
-	ReviewChangeNode(context.Context, *connect.Request[v1.ReviewChangeNodeRequest]) (*connect.Response[v1.ReviewChangeNodeResponse], error)
-	// Producers: a whole change of node edits (change nodes, versions, reviews, apply) in one call.
+	AddChangeImpacts(context.Context, *connect.Request[v1.AddChangeImpactsRequest]) (*connect.Response[v1.AddChangeImpactsResponse], error)
+	WriteChangeImpact(context.Context, *connect.Request[v1.WriteChangeImpactRequest]) (*connect.Response[v1.WriteChangeImpactResponse], error)
+	ReviewChangeImpact(context.Context, *connect.Request[v1.ReviewChangeImpactRequest]) (*connect.Response[v1.ReviewChangeImpactResponse], error)
+	// Producers: a whole change of node edits (change impacts, versions, reviews, apply) in one call.
 	CommitEdits(context.Context, *connect.Request[v1.CommitEditsRequest]) (*connect.Response[v1.CommitEditsResponse], error)
 	GetBlackboard(context.Context, *connect.Request[v1.GetBlackboardRequest]) (*connect.Response[v1.GetBlackboardResponse], error)
 	ApplyChange(context.Context, *connect.Request[v1.ApplyChangeRequest]) (*connect.Response[v1.ApplyChangeResponse], error)
@@ -278,10 +278,10 @@ func NewGraphServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(graphServiceMethods.ByName("ListChanges")),
 			connect.WithClientOptions(opts...),
 		),
-		getChangeNodes: connect.NewClient[v1.GetChangeNodesRequest, v1.GetChangeNodesResponse](
+		getChangeImpacts: connect.NewClient[v1.GetChangeImpactsRequest, v1.GetChangeImpactsResponse](
 			httpClient,
-			baseURL+GraphServiceGetChangeNodesProcedure,
-			connect.WithSchema(graphServiceMethods.ByName("GetChangeNodes")),
+			baseURL+GraphServiceGetChangeImpactsProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("GetChangeImpacts")),
 			connect.WithClientOptions(opts...),
 		),
 		listNodeChanges: connect.NewClient[v1.ListNodeChangesRequest, v1.ListNodeChangesResponse](
@@ -302,22 +302,22 @@ func NewGraphServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(graphServiceMethods.ByName("AddItems")),
 			connect.WithClientOptions(opts...),
 		),
-		addChangeNodes: connect.NewClient[v1.AddChangeNodesRequest, v1.AddChangeNodesResponse](
+		addChangeImpacts: connect.NewClient[v1.AddChangeImpactsRequest, v1.AddChangeImpactsResponse](
 			httpClient,
-			baseURL+GraphServiceAddChangeNodesProcedure,
-			connect.WithSchema(graphServiceMethods.ByName("AddChangeNodes")),
+			baseURL+GraphServiceAddChangeImpactsProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("AddChangeImpacts")),
 			connect.WithClientOptions(opts...),
 		),
-		writeChangeNode: connect.NewClient[v1.WriteChangeNodeRequest, v1.WriteChangeNodeResponse](
+		writeChangeImpact: connect.NewClient[v1.WriteChangeImpactRequest, v1.WriteChangeImpactResponse](
 			httpClient,
-			baseURL+GraphServiceWriteChangeNodeProcedure,
-			connect.WithSchema(graphServiceMethods.ByName("WriteChangeNode")),
+			baseURL+GraphServiceWriteChangeImpactProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("WriteChangeImpact")),
 			connect.WithClientOptions(opts...),
 		),
-		reviewChangeNode: connect.NewClient[v1.ReviewChangeNodeRequest, v1.ReviewChangeNodeResponse](
+		reviewChangeImpact: connect.NewClient[v1.ReviewChangeImpactRequest, v1.ReviewChangeImpactResponse](
 			httpClient,
-			baseURL+GraphServiceReviewChangeNodeProcedure,
-			connect.WithSchema(graphServiceMethods.ByName("ReviewChangeNode")),
+			baseURL+GraphServiceReviewChangeImpactProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("ReviewChangeImpact")),
 			connect.WithClientOptions(opts...),
 		),
 		commitEdits: connect.NewClient[v1.CommitEditsRequest, v1.CommitEditsResponse](
@@ -451,45 +451,45 @@ func NewGraphServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 
 // graphServiceClient implements GraphServiceClient.
 type graphServiceClient struct {
-	createNode       *connect.Client[v1.CreateNodeRequest, v1.CreateNodeResponse]
-	createObject     *connect.Client[v1.CreateObjectRequest, v1.CreateObjectResponse]
-	updateNode       *connect.Client[v1.UpdateNodeRequest, v1.UpdateNodeResponse]
-	getNode          *connect.Client[v1.GetNodeRequest, v1.GetNodeResponse]
-	createLink       *connect.Client[v1.CreateLinkRequest, v1.CreateLinkResponse]
-	createBaseline   *connect.Client[v1.CreateBaselineRequest, v1.CreateBaselineResponse]
-	listBaselines    *connect.Client[v1.ListBaselinesRequest, v1.ListBaselinesResponse]
-	getBaselineGraph *connect.Client[v1.GetBaselineGraphRequest, v1.GetBaselineGraphResponse]
-	createChange     *connect.Client[v1.CreateChangeRequest, v1.CreateChangeResponse]
-	getChange        *connect.Client[v1.GetChangeRequest, v1.GetChangeResponse]
-	listChanges      *connect.Client[v1.ListChangesRequest, v1.ListChangesResponse]
-	getChangeNodes   *connect.Client[v1.GetChangeNodesRequest, v1.GetChangeNodesResponse]
-	listNodeChanges  *connect.Client[v1.ListNodeChangesRequest, v1.ListNodeChangesResponse]
-	updateChange     *connect.Client[v1.UpdateChangeRequest, v1.UpdateChangeResponse]
-	addItems         *connect.Client[v1.AddItemsRequest, v1.AddItemsResponse]
-	addChangeNodes   *connect.Client[v1.AddChangeNodesRequest, v1.AddChangeNodesResponse]
-	writeChangeNode  *connect.Client[v1.WriteChangeNodeRequest, v1.WriteChangeNodeResponse]
-	reviewChangeNode *connect.Client[v1.ReviewChangeNodeRequest, v1.ReviewChangeNodeResponse]
-	commitEdits      *connect.Client[v1.CommitEditsRequest, v1.CommitEditsResponse]
-	getBlackboard    *connect.Client[v1.GetBlackboardRequest, v1.GetBlackboardResponse]
-	applyChange      *connect.Client[v1.ApplyChangeRequest, v1.ApplyChangeResponse]
-	createBranch     *connect.Client[v1.CreateBranchRequest, v1.CreateBranchResponse]
-	listBranches     *connect.Client[v1.ListBranchesRequest, v1.ListBranchesResponse]
-	getBranch        *connect.Client[v1.GetBranchRequest, v1.GetBranchResponse]
-	setBranchStatus  *connect.Client[v1.SetBranchStatusRequest, v1.SetBranchStatusResponse]
-	listNodeVersions *connect.Client[v1.ListNodeVersionsRequest, v1.ListNodeVersionsResponse]
-	planMerge        *connect.Client[v1.PlanMergeRequest, v1.PlanMergeResponse]
-	mergeBranch      *connect.Client[v1.MergeBranchRequest, v1.MergeBranchResponse]
-	mergeChange      *connect.Client[v1.MergeChangeRequest, v1.MergeChangeResponse]
-	getSharedNodes   *connect.Client[v1.GetSharedNodesRequest, v1.GetSharedNodesResponse]
-	splitChange      *connect.Client[v1.SplitChangeRequest, v1.SplitChangeResponse]
-	listSubChanges   *connect.Client[v1.ListSubChangesRequest, v1.ListSubChangesResponse]
-	openFlow         *connect.Client[v1.OpenFlowRequest, v1.OpenFlowResponse]
-	adoptFlow        *connect.Client[v1.AdoptFlowRequest, v1.AdoptFlowResponse]
-	discardFlow      *connect.Client[v1.DiscardFlowRequest, v1.DiscardFlowResponse]
-	listFlows        *connect.Client[v1.ListFlowsRequest, v1.ListFlowsResponse]
-	validateBoard    *connect.Client[v1.ValidateBoardRequest, v1.ValidateBoardResponse]
-	recordExecutions *connect.Client[v1.RecordExecutionsRequest, v1.RecordExecutionsResponse]
-	listExecutions   *connect.Client[v1.ListExecutionsRequest, v1.ListExecutionsResponse]
+	createNode         *connect.Client[v1.CreateNodeRequest, v1.CreateNodeResponse]
+	createObject       *connect.Client[v1.CreateObjectRequest, v1.CreateObjectResponse]
+	updateNode         *connect.Client[v1.UpdateNodeRequest, v1.UpdateNodeResponse]
+	getNode            *connect.Client[v1.GetNodeRequest, v1.GetNodeResponse]
+	createLink         *connect.Client[v1.CreateLinkRequest, v1.CreateLinkResponse]
+	createBaseline     *connect.Client[v1.CreateBaselineRequest, v1.CreateBaselineResponse]
+	listBaselines      *connect.Client[v1.ListBaselinesRequest, v1.ListBaselinesResponse]
+	getBaselineGraph   *connect.Client[v1.GetBaselineGraphRequest, v1.GetBaselineGraphResponse]
+	createChange       *connect.Client[v1.CreateChangeRequest, v1.CreateChangeResponse]
+	getChange          *connect.Client[v1.GetChangeRequest, v1.GetChangeResponse]
+	listChanges        *connect.Client[v1.ListChangesRequest, v1.ListChangesResponse]
+	getChangeImpacts   *connect.Client[v1.GetChangeImpactsRequest, v1.GetChangeImpactsResponse]
+	listNodeChanges    *connect.Client[v1.ListNodeChangesRequest, v1.ListNodeChangesResponse]
+	updateChange       *connect.Client[v1.UpdateChangeRequest, v1.UpdateChangeResponse]
+	addItems           *connect.Client[v1.AddItemsRequest, v1.AddItemsResponse]
+	addChangeImpacts   *connect.Client[v1.AddChangeImpactsRequest, v1.AddChangeImpactsResponse]
+	writeChangeImpact  *connect.Client[v1.WriteChangeImpactRequest, v1.WriteChangeImpactResponse]
+	reviewChangeImpact *connect.Client[v1.ReviewChangeImpactRequest, v1.ReviewChangeImpactResponse]
+	commitEdits        *connect.Client[v1.CommitEditsRequest, v1.CommitEditsResponse]
+	getBlackboard      *connect.Client[v1.GetBlackboardRequest, v1.GetBlackboardResponse]
+	applyChange        *connect.Client[v1.ApplyChangeRequest, v1.ApplyChangeResponse]
+	createBranch       *connect.Client[v1.CreateBranchRequest, v1.CreateBranchResponse]
+	listBranches       *connect.Client[v1.ListBranchesRequest, v1.ListBranchesResponse]
+	getBranch          *connect.Client[v1.GetBranchRequest, v1.GetBranchResponse]
+	setBranchStatus    *connect.Client[v1.SetBranchStatusRequest, v1.SetBranchStatusResponse]
+	listNodeVersions   *connect.Client[v1.ListNodeVersionsRequest, v1.ListNodeVersionsResponse]
+	planMerge          *connect.Client[v1.PlanMergeRequest, v1.PlanMergeResponse]
+	mergeBranch        *connect.Client[v1.MergeBranchRequest, v1.MergeBranchResponse]
+	mergeChange        *connect.Client[v1.MergeChangeRequest, v1.MergeChangeResponse]
+	getSharedNodes     *connect.Client[v1.GetSharedNodesRequest, v1.GetSharedNodesResponse]
+	splitChange        *connect.Client[v1.SplitChangeRequest, v1.SplitChangeResponse]
+	listSubChanges     *connect.Client[v1.ListSubChangesRequest, v1.ListSubChangesResponse]
+	openFlow           *connect.Client[v1.OpenFlowRequest, v1.OpenFlowResponse]
+	adoptFlow          *connect.Client[v1.AdoptFlowRequest, v1.AdoptFlowResponse]
+	discardFlow        *connect.Client[v1.DiscardFlowRequest, v1.DiscardFlowResponse]
+	listFlows          *connect.Client[v1.ListFlowsRequest, v1.ListFlowsResponse]
+	validateBoard      *connect.Client[v1.ValidateBoardRequest, v1.ValidateBoardResponse]
+	recordExecutions   *connect.Client[v1.RecordExecutionsRequest, v1.RecordExecutionsResponse]
+	listExecutions     *connect.Client[v1.ListExecutionsRequest, v1.ListExecutionsResponse]
 }
 
 // CreateNode calls goap.graph.v1.GraphService.CreateNode.
@@ -547,9 +547,9 @@ func (c *graphServiceClient) ListChanges(ctx context.Context, req *connect.Reque
 	return c.listChanges.CallUnary(ctx, req)
 }
 
-// GetChangeNodes calls goap.graph.v1.GraphService.GetChangeNodes.
-func (c *graphServiceClient) GetChangeNodes(ctx context.Context, req *connect.Request[v1.GetChangeNodesRequest]) (*connect.Response[v1.GetChangeNodesResponse], error) {
-	return c.getChangeNodes.CallUnary(ctx, req)
+// GetChangeImpacts calls goap.graph.v1.GraphService.GetChangeImpacts.
+func (c *graphServiceClient) GetChangeImpacts(ctx context.Context, req *connect.Request[v1.GetChangeImpactsRequest]) (*connect.Response[v1.GetChangeImpactsResponse], error) {
+	return c.getChangeImpacts.CallUnary(ctx, req)
 }
 
 // ListNodeChanges calls goap.graph.v1.GraphService.ListNodeChanges.
@@ -567,19 +567,19 @@ func (c *graphServiceClient) AddItems(ctx context.Context, req *connect.Request[
 	return c.addItems.CallUnary(ctx, req)
 }
 
-// AddChangeNodes calls goap.graph.v1.GraphService.AddChangeNodes.
-func (c *graphServiceClient) AddChangeNodes(ctx context.Context, req *connect.Request[v1.AddChangeNodesRequest]) (*connect.Response[v1.AddChangeNodesResponse], error) {
-	return c.addChangeNodes.CallUnary(ctx, req)
+// AddChangeImpacts calls goap.graph.v1.GraphService.AddChangeImpacts.
+func (c *graphServiceClient) AddChangeImpacts(ctx context.Context, req *connect.Request[v1.AddChangeImpactsRequest]) (*connect.Response[v1.AddChangeImpactsResponse], error) {
+	return c.addChangeImpacts.CallUnary(ctx, req)
 }
 
-// WriteChangeNode calls goap.graph.v1.GraphService.WriteChangeNode.
-func (c *graphServiceClient) WriteChangeNode(ctx context.Context, req *connect.Request[v1.WriteChangeNodeRequest]) (*connect.Response[v1.WriteChangeNodeResponse], error) {
-	return c.writeChangeNode.CallUnary(ctx, req)
+// WriteChangeImpact calls goap.graph.v1.GraphService.WriteChangeImpact.
+func (c *graphServiceClient) WriteChangeImpact(ctx context.Context, req *connect.Request[v1.WriteChangeImpactRequest]) (*connect.Response[v1.WriteChangeImpactResponse], error) {
+	return c.writeChangeImpact.CallUnary(ctx, req)
 }
 
-// ReviewChangeNode calls goap.graph.v1.GraphService.ReviewChangeNode.
-func (c *graphServiceClient) ReviewChangeNode(ctx context.Context, req *connect.Request[v1.ReviewChangeNodeRequest]) (*connect.Response[v1.ReviewChangeNodeResponse], error) {
-	return c.reviewChangeNode.CallUnary(ctx, req)
+// ReviewChangeImpact calls goap.graph.v1.GraphService.ReviewChangeImpact.
+func (c *graphServiceClient) ReviewChangeImpact(ctx context.Context, req *connect.Request[v1.ReviewChangeImpactRequest]) (*connect.Response[v1.ReviewChangeImpactResponse], error) {
+	return c.reviewChangeImpact.CallUnary(ctx, req)
 }
 
 // CommitEdits calls goap.graph.v1.GraphService.CommitEdits.
@@ -704,18 +704,18 @@ type GraphServiceHandler interface {
 	CreateChange(context.Context, *connect.Request[v1.CreateChangeRequest]) (*connect.Response[v1.CreateChangeResponse], error)
 	GetChange(context.Context, *connect.Request[v1.GetChangeRequest]) (*connect.Response[v1.GetChangeResponse], error)
 	ListChanges(context.Context, *connect.Request[v1.ListChangesRequest]) (*connect.Response[v1.ListChangesResponse], error)
-	// The versions a change starts from (the pre version of its change nodes), and the
+	// The versions a change starts from (the pre version of its change impacts), and the
 	// changes acting on a node (ADR 0024).
-	GetChangeNodes(context.Context, *connect.Request[v1.GetChangeNodesRequest]) (*connect.Response[v1.GetChangeNodesResponse], error)
+	GetChangeImpacts(context.Context, *connect.Request[v1.GetChangeImpactsRequest]) (*connect.Response[v1.GetChangeImpactsResponse], error)
 	ListNodeChanges(context.Context, *connect.Request[v1.ListNodeChangesRequest]) (*connect.Response[v1.ListNodeChangesResponse], error)
 	UpdateChange(context.Context, *connect.Request[v1.UpdateChangeRequest]) (*connect.Response[v1.UpdateChangeResponse], error)
 	AddItems(context.Context, *connect.Request[v1.AddItemsRequest]) (*connect.Response[v1.AddItemsResponse], error)
-	// Change nodes (ADR 0024): declare the nodes a change acts on, write the version each produces on the
+	// Change impacts (ADR 0024): declare the nodes a change acts on, write the version each produces on the
 	// change branch, and accept or reject them (a comment is mandatory).
-	AddChangeNodes(context.Context, *connect.Request[v1.AddChangeNodesRequest]) (*connect.Response[v1.AddChangeNodesResponse], error)
-	WriteChangeNode(context.Context, *connect.Request[v1.WriteChangeNodeRequest]) (*connect.Response[v1.WriteChangeNodeResponse], error)
-	ReviewChangeNode(context.Context, *connect.Request[v1.ReviewChangeNodeRequest]) (*connect.Response[v1.ReviewChangeNodeResponse], error)
-	// Producers: a whole change of node edits (change nodes, versions, reviews, apply) in one call.
+	AddChangeImpacts(context.Context, *connect.Request[v1.AddChangeImpactsRequest]) (*connect.Response[v1.AddChangeImpactsResponse], error)
+	WriteChangeImpact(context.Context, *connect.Request[v1.WriteChangeImpactRequest]) (*connect.Response[v1.WriteChangeImpactResponse], error)
+	ReviewChangeImpact(context.Context, *connect.Request[v1.ReviewChangeImpactRequest]) (*connect.Response[v1.ReviewChangeImpactResponse], error)
+	// Producers: a whole change of node edits (change impacts, versions, reviews, apply) in one call.
 	CommitEdits(context.Context, *connect.Request[v1.CommitEditsRequest]) (*connect.Response[v1.CommitEditsResponse], error)
 	GetBlackboard(context.Context, *connect.Request[v1.GetBlackboardRequest]) (*connect.Response[v1.GetBlackboardResponse], error)
 	ApplyChange(context.Context, *connect.Request[v1.ApplyChangeRequest]) (*connect.Response[v1.ApplyChangeResponse], error)
@@ -820,10 +820,10 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(graphServiceMethods.ByName("ListChanges")),
 		connect.WithHandlerOptions(opts...),
 	)
-	graphServiceGetChangeNodesHandler := connect.NewUnaryHandler(
-		GraphServiceGetChangeNodesProcedure,
-		svc.GetChangeNodes,
-		connect.WithSchema(graphServiceMethods.ByName("GetChangeNodes")),
+	graphServiceGetChangeImpactsHandler := connect.NewUnaryHandler(
+		GraphServiceGetChangeImpactsProcedure,
+		svc.GetChangeImpacts,
+		connect.WithSchema(graphServiceMethods.ByName("GetChangeImpacts")),
 		connect.WithHandlerOptions(opts...),
 	)
 	graphServiceListNodeChangesHandler := connect.NewUnaryHandler(
@@ -844,22 +844,22 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(graphServiceMethods.ByName("AddItems")),
 		connect.WithHandlerOptions(opts...),
 	)
-	graphServiceAddChangeNodesHandler := connect.NewUnaryHandler(
-		GraphServiceAddChangeNodesProcedure,
-		svc.AddChangeNodes,
-		connect.WithSchema(graphServiceMethods.ByName("AddChangeNodes")),
+	graphServiceAddChangeImpactsHandler := connect.NewUnaryHandler(
+		GraphServiceAddChangeImpactsProcedure,
+		svc.AddChangeImpacts,
+		connect.WithSchema(graphServiceMethods.ByName("AddChangeImpacts")),
 		connect.WithHandlerOptions(opts...),
 	)
-	graphServiceWriteChangeNodeHandler := connect.NewUnaryHandler(
-		GraphServiceWriteChangeNodeProcedure,
-		svc.WriteChangeNode,
-		connect.WithSchema(graphServiceMethods.ByName("WriteChangeNode")),
+	graphServiceWriteChangeImpactHandler := connect.NewUnaryHandler(
+		GraphServiceWriteChangeImpactProcedure,
+		svc.WriteChangeImpact,
+		connect.WithSchema(graphServiceMethods.ByName("WriteChangeImpact")),
 		connect.WithHandlerOptions(opts...),
 	)
-	graphServiceReviewChangeNodeHandler := connect.NewUnaryHandler(
-		GraphServiceReviewChangeNodeProcedure,
-		svc.ReviewChangeNode,
-		connect.WithSchema(graphServiceMethods.ByName("ReviewChangeNode")),
+	graphServiceReviewChangeImpactHandler := connect.NewUnaryHandler(
+		GraphServiceReviewChangeImpactProcedure,
+		svc.ReviewChangeImpact,
+		connect.WithSchema(graphServiceMethods.ByName("ReviewChangeImpact")),
 		connect.WithHandlerOptions(opts...),
 	)
 	graphServiceCommitEditsHandler := connect.NewUnaryHandler(
@@ -1012,20 +1012,20 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 			graphServiceGetChangeHandler.ServeHTTP(w, r)
 		case GraphServiceListChangesProcedure:
 			graphServiceListChangesHandler.ServeHTTP(w, r)
-		case GraphServiceGetChangeNodesProcedure:
-			graphServiceGetChangeNodesHandler.ServeHTTP(w, r)
+		case GraphServiceGetChangeImpactsProcedure:
+			graphServiceGetChangeImpactsHandler.ServeHTTP(w, r)
 		case GraphServiceListNodeChangesProcedure:
 			graphServiceListNodeChangesHandler.ServeHTTP(w, r)
 		case GraphServiceUpdateChangeProcedure:
 			graphServiceUpdateChangeHandler.ServeHTTP(w, r)
 		case GraphServiceAddItemsProcedure:
 			graphServiceAddItemsHandler.ServeHTTP(w, r)
-		case GraphServiceAddChangeNodesProcedure:
-			graphServiceAddChangeNodesHandler.ServeHTTP(w, r)
-		case GraphServiceWriteChangeNodeProcedure:
-			graphServiceWriteChangeNodeHandler.ServeHTTP(w, r)
-		case GraphServiceReviewChangeNodeProcedure:
-			graphServiceReviewChangeNodeHandler.ServeHTTP(w, r)
+		case GraphServiceAddChangeImpactsProcedure:
+			graphServiceAddChangeImpactsHandler.ServeHTTP(w, r)
+		case GraphServiceWriteChangeImpactProcedure:
+			graphServiceWriteChangeImpactHandler.ServeHTTP(w, r)
+		case GraphServiceReviewChangeImpactProcedure:
+			graphServiceReviewChangeImpactHandler.ServeHTTP(w, r)
 		case GraphServiceCommitEditsProcedure:
 			graphServiceCommitEditsHandler.ServeHTTP(w, r)
 		case GraphServiceGetBlackboardProcedure:
@@ -1121,8 +1121,8 @@ func (UnimplementedGraphServiceHandler) ListChanges(context.Context, *connect.Re
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.ListChanges is not implemented"))
 }
 
-func (UnimplementedGraphServiceHandler) GetChangeNodes(context.Context, *connect.Request[v1.GetChangeNodesRequest]) (*connect.Response[v1.GetChangeNodesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.GetChangeNodes is not implemented"))
+func (UnimplementedGraphServiceHandler) GetChangeImpacts(context.Context, *connect.Request[v1.GetChangeImpactsRequest]) (*connect.Response[v1.GetChangeImpactsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.GetChangeImpacts is not implemented"))
 }
 
 func (UnimplementedGraphServiceHandler) ListNodeChanges(context.Context, *connect.Request[v1.ListNodeChangesRequest]) (*connect.Response[v1.ListNodeChangesResponse], error) {
@@ -1137,16 +1137,16 @@ func (UnimplementedGraphServiceHandler) AddItems(context.Context, *connect.Reque
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.AddItems is not implemented"))
 }
 
-func (UnimplementedGraphServiceHandler) AddChangeNodes(context.Context, *connect.Request[v1.AddChangeNodesRequest]) (*connect.Response[v1.AddChangeNodesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.AddChangeNodes is not implemented"))
+func (UnimplementedGraphServiceHandler) AddChangeImpacts(context.Context, *connect.Request[v1.AddChangeImpactsRequest]) (*connect.Response[v1.AddChangeImpactsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.AddChangeImpacts is not implemented"))
 }
 
-func (UnimplementedGraphServiceHandler) WriteChangeNode(context.Context, *connect.Request[v1.WriteChangeNodeRequest]) (*connect.Response[v1.WriteChangeNodeResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.WriteChangeNode is not implemented"))
+func (UnimplementedGraphServiceHandler) WriteChangeImpact(context.Context, *connect.Request[v1.WriteChangeImpactRequest]) (*connect.Response[v1.WriteChangeImpactResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.WriteChangeImpact is not implemented"))
 }
 
-func (UnimplementedGraphServiceHandler) ReviewChangeNode(context.Context, *connect.Request[v1.ReviewChangeNodeRequest]) (*connect.Response[v1.ReviewChangeNodeResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.ReviewChangeNode is not implemented"))
+func (UnimplementedGraphServiceHandler) ReviewChangeImpact(context.Context, *connect.Request[v1.ReviewChangeImpactRequest]) (*connect.Response[v1.ReviewChangeImpactResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.ReviewChangeImpact is not implemented"))
 }
 
 func (UnimplementedGraphServiceHandler) CommitEdits(context.Context, *connect.Request[v1.CommitEditsRequest]) (*connect.Response[v1.CommitEditsResponse], error) {

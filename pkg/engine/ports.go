@@ -12,14 +12,14 @@ import (
 // GraphPort is what the engine needs from the graph service. *graph.Graph
 // implements it in-process; the engine service uses a connect client.
 type GraphPort interface {
-	CreateChange(ctx context.Context, in graph.NewChange) (domain.ChangeSet, error)
-	UpdateChange(ctx context.Context, id domain.ChangeID, p graph.ChangePatch) (domain.ChangeSet, error)
+	CreateChange(ctx context.Context, in graph.NewChange) (domain.Change, error)
+	UpdateChange(ctx context.Context, id domain.ChangeID, p graph.ChangePatch) (domain.Change, error)
 	AddItems(ctx context.Context, id domain.ChangeID, items []domain.ChangeItem) ([]domain.ChangeItem, error)
-	// Change nodes (ADR 0024): declare the nodes a change acts on, write their versions on the
+	// Change impacts (ADR 0024): declare the nodes a change acts on, write their versions on the
 	// change branch, review them.
-	AddNodes(ctx context.Context, id domain.ChangeID, nodes []domain.ChangeNode) ([]domain.ChangeNode, error)
-	WriteNode(ctx context.Context, id domain.ChangeID, node domain.ChangeNodeID, w graph.NodeWrite) (domain.ChangeNode, error)
-	ReviewNodeOn(ctx context.Context, id domain.ChangeID, flow, execution string, node domain.ChangeNodeID, status domain.NodeReview, by, comment string) (domain.ChangeNode, error)
+	AddNodes(ctx context.Context, id domain.ChangeID, nodes []domain.ChangeImpact) ([]domain.ChangeImpact, error)
+	WriteNode(ctx context.Context, id domain.ChangeID, node domain.ChangeImpactID, w graph.NodeWrite) (domain.ChangeImpact, error)
+	ReviewNodeOn(ctx context.Context, id domain.ChangeID, flow, execution string, node domain.ChangeImpactID, status domain.NodeReview, by, comment string) (domain.ChangeImpact, error)
 	Blackboard(ctx context.Context, id domain.ChangeID) (domain.Blackboard, error)
 	// BlackboardIn is the blackboard of a flow branch ("" = main); OpenFlow /
 	// AdoptFlow / DiscardFlow relaunch a step on a new branch and decide it.

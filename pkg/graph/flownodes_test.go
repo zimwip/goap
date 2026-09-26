@@ -13,9 +13,9 @@ import (
 type flowWorld struct {
 	g      *Graph
 	f      fixture
-	change domain.ChangeSet
-	req    domain.ChangeNode // REQ-1 declared and written by e1
-	tst    domain.ChangeNode // TST-2 declared and written by e2
+	change domain.Change
+	req    domain.ChangeImpact // REQ-1 declared and written by e1
+	tst    domain.ChangeImpact // TST-2 declared and written by e2
 	flow   string
 }
 
@@ -29,14 +29,14 @@ func newFlowWorld(t *testing.T, repo Repo) flowWorld {
 		t.Fatal(err)
 	}
 	pre := f.req.Ref()
-	must := func(cn domain.ChangeNode, err error) domain.ChangeNode {
+	must := func(cn domain.ChangeImpact, err error) domain.ChangeImpact {
 		t.Helper()
 		if err != nil {
 			t.Fatal(err)
 		}
 		return cn
 	}
-	added, err := g.AddNodes(ctx, c.ID, []domain.ChangeNode{{Intent: domain.IntentModified, Pre: &pre, Rationale: "PSP v2 changes the API", Execution: "e1"}})
+	added, err := g.AddNodes(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &pre, Rationale: "PSP v2 changes the API", Execution: "e1"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,7 +44,7 @@ func newFlowWorld(t *testing.T, repo Repo) flowWorld {
 	if req, err = g.ReviewNodeOn(ctx, c.ID, "", "e1", req.ID, domain.ReviewAccepted, "bot", "first look"); err != nil {
 		t.Fatal(err)
 	}
-	added, err = g.AddNodes(ctx, c.ID, []domain.ChangeNode{{Intent: domain.IntentCreated, Key: "TST-2", Type: "TestCase", Rationale: "cover it", Execution: "e2"}})
+	added, err = g.AddNodes(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentCreated, Key: "TST-2", Type: "TestCase", Rationale: "cover it", Execution: "e2"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,28 +56,28 @@ func newFlowWorld(t *testing.T, repo Repo) flowWorld {
 	return flowWorld{g: g, f: f, change: c, req: req, tst: tst, flow: fl.ID}
 }
 
-func viewOf(t *testing.T, g *Graph, id domain.ChangeID, flow string) map[string]domain.ChangeNode {
+func viewOf(t *testing.T, g *Graph, id domain.ChangeID, flow string) map[string]domain.ChangeImpact {
 	t.Helper()
 	bb, err := g.BlackboardIn(context.Background(), id, flow)
 	if err != nil {
 		t.Fatal(err)
 	}
-	out := map[string]domain.ChangeNode{}
+	out := map[string]domain.ChangeImpact{}
 	for _, cn := range bb.Change.Nodes {
 		out[cn.Key] = cn
 	}
 	return out
 }
 
-func TestFlowChangeNodesView(t *testing.T) { forEachRepo(t, testFlowChangeNodesView) }
+func TestFlowChangeImpactsView(t *testing.T) { forEachRepo(t, testFlowChangeImpactsView) }
 
-func testFlowChangeNodesView(t *testing.T, repo Repo) {
+func testFlowChangeImpactsView(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	w := newFlowWorld(t, repo)
 	g, c := w.g, w.change
 	pre := w.f.req.Ref()
 
-	// the main flow keeps what it has; the flow sees neither stale change node
+	// the main flow keeps what it has; the flow sees neither stale change impact
 	main := viewOf(t, g, c.ID, "")
 	if len(main) != 2 || main["REQ-1"].Post == nil || main["REQ-1"].Review != domain.ReviewAccepted {
 		t.Fatalf("main view: %+v", main)
@@ -87,11 +87,11 @@ func testFlowChangeNodesView(t *testing.T, repo Repo) {
 	}
 
 	// the flow declares REQ-1 again, writes and reviews it on its own branch
-	added, err := g.AddNodes(ctx, c.ID, []domain.ChangeNode{{Intent: domain.IntentModified, Pre: &pre, Rationale: "PSP v2, second look", Flow: w.flow, Execution: "e3"}})
+	added, err := g.AddNodes(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &pre, Rationale: "PSP v2, second look", Flow: w.flow, Execution: "e3"}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := g.AddNodes(ctx, c.ID, []domain.ChangeNode{{Intent: domain.IntentModified, Pre: &pre, Rationale: "twice", Flow: w.flow, Execution: "e3"}}); !errors.Is(err, ErrConflict) {
+	if _, err := g.AddNodes(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &pre, Rationale: "twice", Flow: w.flow, Execution: "e3"}}); !errors.Is(err, ErrConflict) {
 		t.Fatalf("a node appears once per flow, got %v", err)
 	}
 	if _, err := g.WriteNode(ctx, c.ID, added[0].ID, NodeWrite{Flow: w.flow, Execution: "e3", Properties: map[string]any{"title": "B"}}); err != nil {
@@ -122,14 +122,14 @@ func testFlowChangeNodesView(t *testing.T, repo Repo) {
 	}
 }
 
-func TestFlowChangeNodesAdopt(t *testing.T) { forEachRepo(t, testFlowChangeNodesAdopt) }
+func TestFlowChangeImpactsAdopt(t *testing.T) { forEachRepo(t, testFlowChangeImpactsAdopt) }
 
-func testFlowChangeNodesAdopt(t *testing.T, repo Repo) {
+func testFlowChangeImpactsAdopt(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	w := newFlowWorld(t, repo)
 	g, c := w.g, w.change
 	pre := w.f.req.Ref()
-	added, err := g.AddNodes(ctx, c.ID, []domain.ChangeNode{{Intent: domain.IntentModified, Pre: &pre, Rationale: "second look", Flow: w.flow, Execution: "e3"}})
+	added, err := g.AddNodes(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &pre, Rationale: "second look", Flow: w.flow, Execution: "e3"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -143,20 +143,20 @@ func testFlowChangeNodesAdopt(t *testing.T, repo Repo) {
 		t.Fatal(err)
 	}
 
-	all, err := g.ListChangeNodes(ctx, c.ID)
+	all, err := g.ListChangeImpacts(ctx, c.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	byID := map[domain.ChangeNodeID]domain.ChangeNode{}
+	byID := map[domain.ChangeImpactID]domain.ChangeImpact{}
 	for _, cn := range all {
 		byID[cn.ID] = cn
 	}
 	if !byID[w.req.ID].Superseded || !byID[w.tst.ID].Superseded {
-		t.Fatalf("the stale change nodes are superseded: %+v", all)
+		t.Fatalf("the stale change impacts are superseded: %+v", all)
 	}
 	adopted := byID[added[0].ID]
 	if adopted.Flow != "" || adopted.Superseded || adopted.Review != domain.ReviewAccepted || adopted.Post == nil {
-		t.Fatalf("the flow's change node becomes the change's: %+v", adopted)
+		t.Fatalf("the flow's change impact becomes the change's: %+v", adopted)
 	}
 	head, err := g.NodeByKeyOn(ctx, "sdlc", changeBranchName(c.ID), "REQ-1")
 	if err != nil || head.Ref() != *adopted.Post || head.Properties["title"] != "B" || head.Reason != domain.ReasonAdopt || head.Execution != "e3" {
@@ -166,7 +166,7 @@ func testFlowChangeNodesAdopt(t *testing.T, repo Repo) {
 	if n, err := g.NodeByKeyOn(ctx, "sdlc", changeBranchName(c.ID), "TST-2"); err != nil || !n.Deleted {
 		t.Fatalf("TST-2 must be retired: %+v %v", n, err)
 	}
-	// the flow does not show any more, the main flow sees the adopted change node only
+	// the flow does not show any more, the main flow sees the adopted change impact only
 	if m := viewOf(t, g, c.ID, ""); len(m) != 1 || m["REQ-1"].ID != added[0].ID {
 		t.Fatalf("main view: %+v", m)
 	}
@@ -174,7 +174,7 @@ func testFlowChangeNodesAdopt(t *testing.T, repo Repo) {
 		t.Fatal(err)
 	}
 	final, _ := g.Node(ctx, domain.NodeRef{ID: w.f.req.ID})
-	if final.Properties["title"] != "B" || final.ChangeNode != added[0].ID || final.Comment != "second look is right" {
+	if final.Properties["title"] != "B" || final.ChangeImpact != added[0].ID || final.Comment != "second look is right" {
 		t.Fatalf("landed: %+v", final)
 	}
 	if n, err := g.NodeByKey(ctx, "sdlc", "TST-2"); err == nil && !n.Deleted {
@@ -182,30 +182,30 @@ func testFlowChangeNodesAdopt(t *testing.T, repo Repo) {
 	}
 }
 
-func TestFlowChangeNodesDiscard(t *testing.T) { forEachRepo(t, testFlowChangeNodesDiscard) }
+func TestFlowChangeImpactsDiscard(t *testing.T) { forEachRepo(t, testFlowChangeImpactsDiscard) }
 
-func testFlowChangeNodesDiscard(t *testing.T, repo Repo) {
+func testFlowChangeImpactsDiscard(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	w := newFlowWorld(t, repo)
 	g, c := w.g, w.change
 	pre := w.f.req.Ref()
-	added, _ := g.AddNodes(ctx, c.ID, []domain.ChangeNode{{Intent: domain.IntentModified, Pre: &pre, Rationale: "second look", Flow: w.flow, Execution: "e3"}})
+	added, _ := g.AddNodes(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &pre, Rationale: "second look", Flow: w.flow, Execution: "e3"}})
 	if _, err := g.WriteNode(ctx, c.ID, added[0].ID, NodeWrite{Flow: w.flow, Execution: "e3", Properties: map[string]any{"title": "B"}}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := g.DiscardFlow(ctx, c.ID, w.flow, "alice"); err != nil {
 		t.Fatal(err)
 	}
-	all, _ := g.ListChangeNodes(ctx, c.ID)
+	all, _ := g.ListChangeImpacts(ctx, c.ID)
 	for _, cn := range all {
 		switch cn.ID {
 		case added[0].ID:
 			if cn.Review != domain.ReviewRejected {
-				t.Fatalf("the flow's change node is rejected: %+v", cn)
+				t.Fatalf("the flow's change impact is rejected: %+v", cn)
 			}
 		case w.req.ID, w.tst.ID:
 			if cn.Superseded {
-				t.Fatalf("the stale change nodes count again: %+v", cn)
+				t.Fatalf("the stale change impacts count again: %+v", cn)
 			}
 		}
 	}
@@ -225,14 +225,14 @@ func testFlowChangeNodesDiscard(t *testing.T, repo Repo) {
 	}
 }
 
-func TestFlowChangeNodesConflict(t *testing.T) { forEachRepo(t, testFlowChangeNodesConflict) }
+func TestFlowChangeImpactsConflict(t *testing.T) { forEachRepo(t, testFlowChangeImpactsConflict) }
 
-func testFlowChangeNodesConflict(t *testing.T, repo Repo) {
+func testFlowChangeImpactsConflict(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	w := newFlowWorld(t, repo)
 	g, c := w.g, w.change
 	pre := w.f.req.Ref()
-	added, _ := g.AddNodes(ctx, c.ID, []domain.ChangeNode{{Intent: domain.IntentModified, Pre: &pre, Rationale: "second look", Flow: w.flow, Execution: "e3"}})
+	added, _ := g.AddNodes(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &pre, Rationale: "second look", Flow: w.flow, Execution: "e3"}})
 	if _, err := g.WriteNode(ctx, c.ID, added[0].ID, NodeWrite{Flow: w.flow, Execution: "e3", Properties: map[string]any{"title": "B"}}); err != nil {
 		t.Fatal(err)
 	}

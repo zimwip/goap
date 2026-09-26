@@ -46,8 +46,8 @@ type Tx interface {
 	InLinks(ctx context.Context, ref domain.NodeRef) ([]domain.Link, error)
 	Baseline(ctx context.Context, id domain.BaselineID) (domain.Baseline, error)
 	Baselines(ctx context.Context) ([]domain.Baseline, error)
-	Change(ctx context.Context, id domain.ChangeID) (domain.ChangeSet, error)
-	Changes(ctx context.Context) ([]domain.ChangeSet, error)
+	Change(ctx context.Context, id domain.ChangeID) (domain.Change, error)
+	Changes(ctx context.Context) ([]domain.Change, error)
 
 	PutNode(ctx context.Context, n domain.Node) error
 	// SetNodeProps replaces the properties of a node version written earlier in
@@ -56,19 +56,19 @@ type Tx interface {
 	PutLink(ctx context.Context, l domain.Link) error
 	PutBaseline(ctx context.Context, b domain.Baseline) error
 	// PutChange inserts or updates the change header (items are ignored).
-	PutChange(ctx context.Context, c domain.ChangeSet) error
+	PutChange(ctx context.Context, c domain.Change) error
 	PutItem(ctx context.Context, change domain.ChangeID, it domain.ChangeItem) error
 
 	// OpenChangeIDs lists the changes that are neither applied nor abandoned.
 	OpenChangeIDs(ctx context.Context) ([]domain.ChangeID, error)
-	// PutChangeNode inserts or updates a change node of a change (ADR 0024).
-	PutChangeNode(ctx context.Context, change domain.ChangeID, cn domain.ChangeNode) error
-	// ChangeNodes lists the change nodes of a change, in creation order.
-	ChangeNodes(ctx context.Context, change domain.ChangeID) ([]domain.ChangeNode, error)
-	// NodeChangeNodes lists the changes holding a change node on a node, oldest first.
-	NodeChangeNodes(ctx context.Context, node domain.NodeID) ([]domain.ChangeID, error)
-	// SetNodeOrigin records on a node version the change and change node that produced it and its comment.
-	SetNodeOrigin(ctx context.Context, ref domain.NodeRef, change domain.ChangeID, cn domain.ChangeNodeID, comment string) error
+	// PutChangeImpact inserts or updates a change impact of a change (ADR 0024).
+	PutChangeImpact(ctx context.Context, change domain.ChangeID, cn domain.ChangeImpact) error
+	// ChangeImpacts lists the change impacts of a change, in creation order.
+	ChangeImpacts(ctx context.Context, change domain.ChangeID) ([]domain.ChangeImpact, error)
+	// NodeChangeImpacts lists the changes holding a change impact on a node, oldest first.
+	NodeChangeImpacts(ctx context.Context, node domain.NodeID) ([]domain.ChangeID, error)
+	// SetNodeOrigin records on a node version the change and change impact that produced it and its comment.
+	SetNodeOrigin(ctx context.Context, ref domain.NodeRef, change domain.ChangeID, cn domain.ChangeImpactID, comment string) error
 
 	// MoveVersion moves a node version to another branch (a fast-forward merge).
 	MoveVersion(ctx context.Context, ref domain.NodeRef, to string) error

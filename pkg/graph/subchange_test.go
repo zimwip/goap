@@ -68,7 +68,7 @@ func testSplitByOwnerAndMerge(t *testing.T, repo Repo) {
 		t.Fatal(err)
 	}
 	r1, r2, r3 := w.cmp1.Ref(), w.cmp2.Ref(), w.cmp3.Ref()
-	pnodes, err := g.AddNodes(ctx, parent.ID, []domain.ChangeNode{
+	pnodes, err := g.AddNodes(ctx, parent.ID, []domain.ChangeImpact{
 		{Intent: domain.IntentModified, Pre: &r1, Rationale: "upgrade one"},
 		{Intent: domain.IntentModified, Pre: &r2, Rationale: "upgrade two"},
 		{Intent: domain.IntentModified, Pre: &r3, Rationale: "upgrade three"},
@@ -83,7 +83,7 @@ func testSplitByOwnerAndMerge(t *testing.T, repo Repo) {
 	if again, err := g.SplitByOwner(ctx, parent.ID); err != nil || len(again) != 0 {
 		t.Fatalf("split must be idempotent: %d, %v", len(again), err)
 	}
-	orgs := map[string]domain.ChangeSet{}
+	orgs := map[string]domain.Change{}
 	for _, s := range subs {
 		if s.ParentID != parent.ID || s.Namespace != parent.Namespace || s.Status != domain.ChangeActive || len(s.Items) != 0 {
 			t.Fatalf("sub-change = %+v", s)
@@ -91,7 +91,7 @@ func testSplitByOwnerAndMerge(t *testing.T, repo Repo) {
 		full, _ := g.Change(ctx, s.ID)
 		if len(full.Nodes) != 1 || full.Nodes[0].Intent != domain.IntentModified || full.Nodes[0].Pre == nil || !full.Nodes[0].Planned() ||
 			!strings.HasPrefix(full.Nodes[0].Rationale, "upgrade ") || len(full.Nodes[0].DerivedFrom) != 1 {
-			t.Fatalf("change nodes not copied: %+v", full.Nodes)
+			t.Fatalf("change impacts not copied: %+v", full.Nodes)
 		}
 		orgs[s.OwnerOrg] = s
 	}
@@ -103,9 +103,9 @@ func testSplitByOwnerAndMerge(t *testing.T, repo Repo) {
 	if _, err := g.Apply(ctx, parent.ID, ""); !errors.Is(err, ErrConflict) {
 		t.Fatalf("apply with open sub-changes: %v", err)
 	}
-	// each change writes its node through its change node and accepts it
-	edit := func(c domain.ChangeSet, n domain.Node, title string) {
-		nodes, err := g.ListChangeNodes(ctx, c.ID)
+	// each change writes its node through its change impact and accepts it
+	edit := func(c domain.Change, n domain.Node, title string) {
+		nodes, err := g.ListChangeImpacts(ctx, c.ID)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -121,7 +121,7 @@ func testSplitByOwnerAndMerge(t *testing.T, repo Repo) {
 			}
 			return
 		}
-		t.Fatalf("no change node for %s in %s", n.Key, c.ID)
+		t.Fatalf("no change impact for %s in %s", n.Key, c.ID)
 	}
 	_ = pnodes
 	edit(orgs["ORG-T1"], w.cmp1, "one v2")

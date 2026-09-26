@@ -88,13 +88,13 @@ func TestSelfObservationProposesAndDrafts(t *testing.T) {
 			report = it.Data
 		}
 	}
-	// every improvement is a change node on an element of the methodology, with the proposed version written
+	// every improvement is a change impact on an element of the methodology, with the proposed version written
 	for _, n := range c.Nodes {
 		titles = append(titles, n.Rationale)
 		if n.Post == nil || n.Review != domain.ReviewProposed {
 			t.Fatalf("an improvement is written and awaits its review: %+v", n)
 		}
-		decisions = append(decisions, ItemInput{Kind: "changeNode", ChangeNode: &dsl.NodeOp{Op: "review", Node: n.Key, Accept: true, Comment: "worth it"}})
+		decisions = append(decisions, ItemInput{Kind: "changeImpact", ChangeImpact: &dsl.NodeOp{Op: "review", Node: n.Key, Accept: true, Comment: "worth it"}})
 	}
 	findings, _ := report["findings"].([]any)
 	if len(findings) < 2 || report["methodology"] != "impact-analysis" {

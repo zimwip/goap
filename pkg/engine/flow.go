@@ -33,7 +33,7 @@ func baseTitle(t string) string {
 	return t
 }
 
-func lastItem(c domain.ChangeSet) domain.ItemID {
+func lastItem(c domain.Change) domain.ItemID {
 	for i := len(c.Items) - 1; i >= 0; i-- {
 		if c.Items[i].Kind != domain.KindFlow {
 			return c.Items[i].ID

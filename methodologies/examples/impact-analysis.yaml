@@ -10,7 +10,7 @@ domainRef: alm@1.0.0
 conditions:
   - name: has_impacts
     description: At least one element of the reference graph is impacted
-    expr: changeNodes.exists(n, n.intent == "modified")
+    expr: changeImpacts.exists(n, n.intent == "modified")
   - name: propagated
     description: Impacts have been propagated along traceability links
     expr: artifacts.exists(a, a.type == "propagation")
@@ -18,8 +18,8 @@ conditions:
     description: An impact report has been written
     expr: artifacts.exists(a, a.type == "report")
   - name: reviewed
-    description: All the change nodes (impacts, updates, new tests) have received a decision
-    expr: size(changeNodes) > 0 && changeNodes.all(n, n.review != "proposed")
+    description: All the change impacts (impacts, updates, new tests) have received a decision
+    expr: size(changeImpacts) > 0 && changeImpacts.all(n, n.review != "proposed")
   - name: applied
     description: The change has been applied to the repository (new baseline)
     expr: change.status == "applied"
@@ -39,8 +39,8 @@ actions:
       Repository elements (key, type, properties):
       {{ range .Baseline.Nodes }}- {{ .Key }} ({{ .Type }}) {{ json .Properties }}
       {{ end }}
-      Identify the elements DIRECTLY impacted. For each one, declare a change node
-      {"kind":"changeNode","changeNode":{"op":"declare","intent":"modified","key":"<key>","rationale":"why it is impacted"}}.
+      Identify the elements DIRECTLY impacted. For each one, declare a change impact
+      {"kind":"changeImpact","changeImpact":{"op":"declare","intent":"modified","key":"<key>","rationale":"why it is impacted"}}.
 
   - name: select_impacts
     kind: human
@@ -69,16 +69,16 @@ actions:
     cost: 3
     model: default
     expects:
-      forEach: changeNodes
+      forEach: changeImpacts
       where: x.type == "Requirement"
       produce: {op: update_node}
     prompt: |
       Change intent: "{{ .Change.Intent }}"
       Impacted requirements:
-      {{ range .ChangeNodes }}{{ if eq .Type "Requirement" }}- {{ .Key }} {{ json .Pre.Properties }} (reason: {{ .Rationale }})
+      {{ range .ChangeImpacts }}{{ if eq .Type "Requirement" }}- {{ .Key }} {{ json .Pre.Properties }} (reason: {{ .Rationale }})
       {{ end }}{{ end }}
       For each requirement, write its new version:
-      {"kind":"changeNode","changeNode":{"op":"write","node":"<key>","props":{...}}}
+      {"kind":"changeImpact","changeImpact":{"op":"write","node":"<key>","props":{...}}}
 
   - name: propose_tests
     kind: llm
@@ -88,18 +88,18 @@ actions:
     cost: 3
     model: default
     expects:
-      forEach: changeNodes
+      forEach: changeImpacts
       where: x.type == "Requirement"
       produce: {op: create_node, nodeType: TestCase}
       link: {type: verifies}
     prompt: |
       Change intent: "{{ .Change.Intent }}"
       Impacted requirements:
-      {{ range .ChangeNodes }}{{ if eq .Type "Requirement" }}- {{ .Key }} {{ json .Post.Properties }}
+      {{ range .ChangeImpacts }}{{ if eq .Type "Requirement" }}- {{ .Key }} {{ json .Post.Properties }}
       {{ end }}{{ end }}
       For each requirement, create a test case and link it to the requirement:
-      {"kind":"changeNode","changeNode":{"op":"declare","ref":"#t1","intent":"created","type":"TestCase","key":"TST-...","rationale":"why"}}
-      {"kind":"changeNode","changeNode":{"op":"write","node":"#t1","props":{"title":"..."},"links":[{"type":"verifies","to":"<requirement key>"}]}}
+      {"kind":"changeImpact","changeImpact":{"op":"declare","ref":"#t1","intent":"created","type":"TestCase","key":"TST-...","rationale":"why"}}
+      {"kind":"changeImpact","changeImpact":{"op":"write","node":"#t1","props":{"title":"..."},"links":[{"type":"verifies","to":"<requirement key>"}]}}
 
   - name: write_report
     kind: llm
@@ -111,17 +111,17 @@ actions:
     prompt: |
       Intent: "{{ .Change.Intent }}"
       Impacts:
-      {{ range .ChangeNodes }}{{ if eq .Intent "modified" }}- {{ .Key }} ({{ .Type }}) : {{ .Rationale }}
+      {{ range .ChangeImpacts }}{{ if eq .Intent "modified" }}- {{ .Key }} ({{ .Type }}) : {{ .Rationale }}
       {{ end }}{{ end }}
       Write a concise report: {"kind":"artifact","type":"report","data":{"markdown":"..."}}
 
   - name: review_proposals
     kind: human
-    description: Review of the change nodes (accept / reject)
+    description: Review of the change impacts (accept / reject)
     pre: {"expect:propose_requirement_updates": true, "expect:propose_tests": true}
     effects: {reviewed: true}
     cost: 2
-    instructions: Accept or reject each change node (impacts, updated requirements, new tests); a comment is required.
+    instructions: Accept or reject each change impact (impacts, updated requirements, new tests); a comment is required.
 
   - name: apply_change
     kind: builtin

@@ -17,7 +17,7 @@ import (
 func flowBranchName(flow string) string { return "flow-" + shortID(flow) }
 
 // flowChain lists the flows from f up to the main flow (excluded), innermost first.
-func flowChain(c domain.ChangeSet, flow string) []domain.Flow {
+func flowChain(c domain.Change, flow string) []domain.Flow {
 	var out []domain.Flow
 	for hops := 0; flow != "" && hops < 64; hops++ {
 		f, ok := c.Flow(flow)
@@ -41,11 +41,11 @@ func staleOf(chain []domain.Flow) map[string]bool {
 	return out
 }
 
-// flowNodes is what the process running on a flow sees of the change nodes.
+// flowNodes is what the process running on a flow sees of the change impacts.
 type flowNodes struct {
 	g      *Graph
 	tx     Tx
-	c      domain.ChangeSet
+	c      domain.Change
 	flow   string
 	chain  []domain.Flow
 	inFlow map[string]bool
@@ -53,7 +53,7 @@ type flowNodes struct {
 	branch string // the change branch
 }
 
-func (g *Graph) newFlowNodes(tx Tx, c domain.ChangeSet, flow string) *flowNodes {
+func (g *Graph) newFlowNodes(tx Tx, c domain.Change, flow string) *flowNodes {
 	v := &flowNodes{g: g, tx: tx, c: c, flow: flow, chain: flowChain(c, flow), inFlow: map[string]bool{}, branch: domain.BranchOf(c.Branch)}
 	for _, f := range v.chain {
 		v.inFlow[f.ID] = true
@@ -64,8 +64,8 @@ func (g *Graph) newFlowNodes(tx Tx, c domain.ChangeSet, flow string) *flowNodes 
 
 func (v *flowNodes) isStale(execution string) bool { return execution != "" && v.stale[execution] }
 
-// visible tells whether a stored change node exists for the flow.
-func (v *flowNodes) visible(cn domain.ChangeNode) bool {
+// visible tells whether a stored change impact exists for the flow.
+func (v *flowNodes) visible(cn domain.ChangeImpact) bool {
 	if cn.Superseded {
 		return false
 	}
@@ -107,7 +107,7 @@ func (v *flowNodes) onChangeBranch(ctx context.Context, node domain.NodeID) (*do
 	return nil, nil
 }
 
-func nodeOf(cn domain.ChangeNode) domain.NodeID {
+func nodeOf(cn domain.ChangeImpact) domain.NodeID {
 	switch {
 	case cn.Post != nil:
 		return cn.Post.ID
@@ -117,9 +117,9 @@ func nodeOf(cn domain.ChangeNode) domain.NodeID {
 	return ""
 }
 
-// nodes returns the change nodes the flow sees, with the post version and the review it resolves to.
-func (v *flowNodes) nodes(ctx context.Context) ([]domain.ChangeNode, error) {
-	var out []domain.ChangeNode
+// nodes returns the change impacts the flow sees, with the post version and the review it resolves to.
+func (v *flowNodes) nodes(ctx context.Context) ([]domain.ChangeImpact, error) {
+	var out []domain.ChangeImpact
 	for _, cn := range v.c.Nodes {
 		if !v.visible(cn) {
 			continue
@@ -152,22 +152,22 @@ func (v *flowNodes) nodes(ctx context.Context) ([]domain.ChangeNode, error) {
 	return out, nil
 }
 
-// find returns the change node a flow sees under an id.
-func (v *flowNodes) find(ctx context.Context, id domain.ChangeNodeID) (domain.ChangeNode, error) {
+// find returns the change impact a flow sees under an id.
+func (v *flowNodes) find(ctx context.Context, id domain.ChangeImpactID) (domain.ChangeImpact, error) {
 	list, err := v.nodes(ctx)
 	if err != nil {
-		return domain.ChangeNode{}, err
+		return domain.ChangeImpact{}, err
 	}
 	for _, cn := range list {
 		if cn.ID == id {
 			return cn, nil
 		}
 	}
-	return domain.ChangeNode{}, fmt.Errorf("change node %s is not on the flow %q of change %s: %w", id, v.flow, v.c.ID, ErrNotFound)
+	return domain.ChangeImpact{}, fmt.Errorf("change impact %s is not on the flow %q of change %s: %w", id, v.flow, v.c.ID, ErrNotFound)
 }
 
 // ensureFlowBranch creates the graph branch of a flow on its first write.
-func (g *Graph) ensureFlowBranch(ctx context.Context, tx Tx, c domain.ChangeSet, own domain.Branch, flow string) (string, error) {
+func (g *Graph) ensureFlowBranch(ctx context.Context, tx Tx, c domain.Change, own domain.Branch, flow string) (string, error) {
 	name := flowBranchName(flow)
 	if _, err := tx.Branch(ctx, name); err == nil {
 		return name, nil
@@ -191,9 +191,9 @@ func (g *Graph) ensureFlowBranch(ctx context.Context, tx Tx, c domain.ChangeSet,
 }
 
 // adoptNodes makes the change branch equal to the flow: for every node the stale runs or the
-// flow wrote, a new version copies what the flow sees (ADR 0025 §5). Change nodes of the flow
+// flow wrote, a new version copies what the flow sees (ADR 0025 §5). Change impacts of the flow
 // become the change's, the stale ones are superseded.
-func (g *Graph) adoptNodes(ctx context.Context, tx Tx, c domain.ChangeSet, f domain.Flow, by string) error {
+func (g *Graph) adoptNodes(ctx context.Context, tx Tx, c domain.Change, f domain.Flow, by string) error {
 	own, hasOwn, err := ownBranch(ctx, tx, c)
 	if err != nil {
 		return err
@@ -204,8 +204,8 @@ func (g *Graph) adoptNodes(ctx context.Context, tx Tx, c domain.ChangeSet, f dom
 	}
 	isStale := func(e string) bool { return e != "" && stale[e] }
 	if !hasOwn {
-		// nothing was written on a branch: only the change nodes move
-		return g.adoptChangeNodes(ctx, tx, c, f, map[domain.NodeID]domain.NodeRef{}, isStale)
+		// nothing was written on a branch: only the change impacts move
+		return g.adoptChangeImpacts(ctx, tx, c, f, map[domain.NodeID]domain.NodeRef{}, isStale)
 	}
 	changeBranch, flowBranch := own.Name, flowBranchName(f.ID)
 	view := &flowNodes{g: g, tx: tx, c: c, flow: "", branch: changeBranch, stale: stale}
@@ -325,12 +325,12 @@ func (g *Graph) adoptNodes(ctx context.Context, tx Tx, c domain.ChangeSet, f dom
 			return err
 		}
 	}
-	return g.adoptChangeNodes(ctx, tx, c, f, newRefs, isStale)
+	return g.adoptChangeImpacts(ctx, tx, c, f, newRefs, isStale)
 }
 
-// adoptChangeNodes moves the change nodes and reviews of an adopted flow to the main flow.
-func (g *Graph) adoptChangeNodes(ctx context.Context, tx Tx, c domain.ChangeSet, f domain.Flow, newRefs map[domain.NodeID]domain.NodeRef, isStale func(string) bool) error {
-	var changed []domain.ChangeNode
+// adoptChangeImpacts moves the change impacts and reviews of an adopted flow to the main flow.
+func (g *Graph) adoptChangeImpacts(ctx context.Context, tx Tx, c domain.Change, f domain.Flow, newRefs map[domain.NodeID]domain.NodeRef, isStale func(string) bool) error {
+	var changed []domain.ChangeImpact
 	for _, cn := range c.Nodes {
 		before := cn
 		cn.Reviews = slices.Clone(cn.Reviews)
@@ -365,8 +365,8 @@ func (g *Graph) adoptChangeNodes(ctx context.Context, tx Tx, c domain.ChangeSet,
 			changed = append(changed, cn)
 		}
 	}
-	// the superseded ones first: a node has one live change node per flow
-	slices.SortStableFunc(changed, func(a, b domain.ChangeNode) int {
+	// the superseded ones first: a node has one live change impact per flow
+	slices.SortStableFunc(changed, func(a, b domain.ChangeImpact) int {
 		if a.Superseded == b.Superseded {
 			return 0
 		}
@@ -376,7 +376,7 @@ func (g *Graph) adoptChangeNodes(ctx context.Context, tx Tx, c domain.ChangeSet,
 		return 1
 	})
 	for _, cn := range changed {
-		if err := tx.PutChangeNode(ctx, c.ID, cn); err != nil {
+		if err := tx.PutChangeImpact(ctx, c.ID, cn); err != nil {
 			return err
 		}
 	}
@@ -391,8 +391,8 @@ func sameRef(a, b *domain.NodeRef) bool {
 }
 
 // discardNodes abandons the branches of a discarded flow and its descendants and rejects the
-// change nodes they declared.
-func (g *Graph) discardNodes(ctx context.Context, tx Tx, c domain.ChangeSet, f domain.Flow, by string) error {
+// change impacts they declared.
+func (g *Graph) discardNodes(ctx context.Context, tx Tx, c domain.Change, f domain.Flow, by string) error {
 	gone := map[string]bool{f.ID: true}
 	for changed := true; changed; {
 		changed = false
@@ -416,7 +416,7 @@ func (g *Graph) discardNodes(ctx context.Context, tx Tx, c domain.ChangeSet, f d
 		}
 		cn.Review = domain.ReviewRejected
 		cn.Reviews = append(cn.Reviews, domain.Review{Status: domain.ReviewRejected, By: by, Comment: "flow discarded", At: g.now(), Flow: cn.Flow})
-		if err := tx.PutChangeNode(ctx, c.ID, cn); err != nil {
+		if err := tx.PutChangeImpact(ctx, c.ID, cn); err != nil {
 			return err
 		}
 	}

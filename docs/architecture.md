@@ -35,10 +35,10 @@ of a versioned knowledge graph, whose other axis, the **domain axis**, describes
                                   │ reference (target)
                  CHANGE AXIS (modification, = blackboard)
    ┌──────────────────────────────┼─────────────────────────────┐
-   │ ChangeSet CR-42 (baseline = B1, intent = "…")              │
-   │   ├─ change node #n1 modified REQ-12 (pre v3, post v4)     │
-   │   ├─ change node #n2 modified TST-7  (pre v1, planned)     │
-   │   ├─ change node #n3 created  TST-9  ─verifies→ REQ-12@v4  │
+   │ Change CR-42 (baseline = B1, intent = "…")              │
+   │   ├─ change impact #n1 modified REQ-12 (pre v3, post v4)     │
+   │   ├─ change impact #n2 modified TST-7  (pre v1, planned)     │
+   │   ├─ change impact #n3 created  TST-9  ─verifies→ REQ-12@v4  │
    │   └─ decision #d1 (fact)                                   │
    └────────────────────────────────────────────────────────────┘
                                   │ apply
@@ -84,33 +84,33 @@ REQ-1  v1(main) ── v3(main, revise) ───────────── 
 ```
 
 - A **branch** (`CreateBranch`) starts from a baseline (`forkBaseline`) and advances through the changes applied
-  on it (`ChangeSet.branch`); its **head** (`head`) is the latest baseline produced. `main` exists
+  on it (`Change.branch`); its **head** (`head`) is the latest baseline produced. `main` exists
   implicitly.
 - "Latest version" is read **per branch** (`latest(node, branch)`): applying (`apply`) a change detects a
   conflict when a node has advanced **on the change's branch** since the base version.
 - **Branch merge** (`PlanMerge` / `MergeBranch`): for each node modified on the source branch since
   the fork, a 3-way merge against the common ancestor (walking up `parents`) — property by property (one side
   equal to the ancestor takes the other, otherwise **conflict**) and outgoing links as a set (key = type + target
-  node: added on one side → kept, removed on one side → removed). The merge is a change of the platform (one change node per merged node, the versions written directly) on
+  node: added on one side → kept, removed on one side → removed). The merge is a change of the platform (one change impact per merged node, the versions written directly) on
   the target; conflicts require a resolution (resolved properties, or `skip`). The branch moves to `merged`.
 
 #### Change axis
 
 | Concept | Description |
 |---|---|
-| **ChangeSet** | A modification request. References a starting baseline, carries the initial intent and the chosen goal. It is **the blackboard** of an agentic process. |
+| **Change** | A modification request. References a starting baseline, carries the initial intent and the chosen goal. It is **the blackboard** of an agentic process. |
 | **ChangeItem** | Blackboard **fact** with no node: `kind` ∈ `decision`, `artifact`, `merge`, `flow`. Each item has a provenance (`producedBy` = action, `derivedFrom` = other items). |
-| **ChangeNode** | Link from the change to a node ([ADR 0024](adr/0024-change-nodes.md)): `intent` (`created` / `modified`), `rationale`, `pre` (released version), `post` (version written on the change branch, empty while only planned: an impact without a proposal), `landed` (version on the target branch once applied), `review` with a mandatory comment. `WriteNode` creates the post version, `ReviewNode` accepts or rejects, `Apply` lands the branch (fast-forward, else auto-merge or `merge_pending`, then `MergeChange`). A node version records its `changeId`, `changeNode` and `comment`. A node's type is a direct attribute of the node (`Node.Type`), there is no `instanceOf` link. |
-| **Decision** | A choice about something that is not a node (human or agent); the acceptance of a node is the review of its change node. |
+| **ChangeImpact** | Link from the change to a node ([ADR 0024](adr/0024-change-impacts.md)): `intent` (`created` / `modified`), `rationale`, `pre` (released version), `post` (version written on the change branch, empty while only planned: an impact without a proposal), `landed` (version on the target branch once applied), `review` with a mandatory comment. `WriteNode` creates the post version, `ReviewNode` accepts or rejects, `Apply` lands the branch (fast-forward, else auto-merge or `merge_pending`, then `MergeChange`). A node version records its `changeId`, `changeImpact` and `comment`. A node's type is a direct attribute of the node (`Node.Type`), there is no `instanceOf` link. |
+| **Decision** | A choice about something that is not a node (human or agent); the acceptance of a node is the review of its change impact. |
 | **Artifact** | Free-form data produced by an action (summary, report, tool response). |
 
-Applying a ChangeSet (`ApplyChange`) lands the accepted change nodes' versions and creates a new baseline. The ChangeSet remains the explainable history of *why* the graph changed.
+Applying a Change (`ApplyChange`) lands the accepted change impacts' versions and creates a new baseline. The Change remains the explainable history of *why* the graph changed.
 
 ### 2.2 Correspondence with Embabel
 
 | Embabel | GOAP | Comment |
 |---|---|---|
-| Blackboard | **ChangeSet** (change axis) | Persisted, shared, auditable; references domain elements. |
+| Blackboard | **Change** (change axis) | Persisted, shared, auditable; references domain elements. |
 | Blackboard object | **ChangeItem** | Typed by `kind` + semantic `type`. |
 | Condition | **Condition** = [CEL](https://cel.dev) expression evaluated on the blackboard *hydrated* with the referenced domain nodes | See §2.3. |
 | Agent (`@Agent`) | Methodology **Agent**: a planner (`goap`, `utility`, `hybrid`) + admissible actions + goals | See §2.9. An agent can call other agents. |
@@ -132,10 +132,10 @@ Variables exposed to the expression:
 | `change` | `{id, title, intent, status, goal, baseline, branch, data}` |
 | `items` | the active ChangeItems (facts) |
 | `decisions`, `artifacts`, `merges` | items filtered by `kind` |
-| `changeNodes` | the change nodes ([ADR 0024](adr/0024-change-nodes.md)), `{id, key, type, types, intent, rationale, review, reviews, comment, pre, post, landed, planned, hasPost, recheck, props, via}`; `pre`, `post`, `landed` are hydrated node views or `null` |
+| `changeImpacts` | the change impacts ([ADR 0024](adr/0024-change-impacts.md)), `{id, key, type, types, intent, rationale, review, reviews, comment, pre, post, landed, planned, hasPost, recheck, props, via}`; `pre`, `post`, `landed` are hydrated node views or `null` |
 | `vars` | free process variables (clarification answers, parameters) |
 
-Each node reference of a change node (`pre`, `post`, `landed`, link endpoints) is **hydrated**:
+Each node reference of a change impact (`pre`, `post`, `landed`, link endpoints) is **hydrated**:
 `{id, version, key, type, props, out: [{type, to}], in: [{type, from}], latest}`. A condition can thus
 navigate the *reference* domain without a network call during evaluation (hydration is done
 once per cycle by the engine via the Graph Service).
@@ -144,13 +144,13 @@ Examples:
 
 ```cel
 // at least one identified impact
-size(changeNodes) > 0
+size(changeImpacts) > 0
 
 // every impacted requirement has a written version
-changeNodes.filter(n, "Requirement" in n.types).all(n, n.hasPost)
+changeImpacts.filter(n, "Requirement" in n.types).all(n, n.hasPost)
 
 // no suspect: every impacted pre is at its latest version
-changeNodes.all(n, n.pre == null || n.pre.version == n.pre.latest)
+changeImpacts.all(n, n.pre == null || n.pre.version == n.pre.latest)
 ```
 
 The world seen by the planner is **the boolean evaluation of all conditions**
@@ -164,7 +164,7 @@ An action declares:
 - `pre`: required conditions (`{name: bool}`);
 - `effects`: conditions the action is **expected** to make true/false (used for planning);
 - `expects` (optional): the **expectation** expressed as a **domain link pattern**. Example:
-  "for each impact on a `Requirement`, produce a `TestCase` change node linked by `verifies`".
+  "for each impact on a `Requirement`, produce a `TestCase` change impact linked by `verifies`".
 
 An `expects` is **compiled into a CEL condition** (`expect:<action>`) automatically added to the action's effects.
 Thus the link on the domain axis is simultaneously the action's **specification**, its **success
@@ -400,7 +400,7 @@ injects a `ctx` object (same API in both languages, reference: [docs/dsl.md](dsl
 
 - **reading** the blackboard (hydrated items) and the reference **domain** (`node`, `nodes`, `links`);
 - **writing** to the change (`addImpact`, `proposeNode`, `proposeUpdate`, `proposeLink`, `addArtifact`,
-  `decide`, and the change node calls `impactNode`, `createNode`, `writeNode`, `reviewNode`, ADR 0024) — buffered, applied at the end of the action;
+  `decide`, and the change impact calls `impactNode`, `createNode`, `writeNode`, `reviewNode`, ADR 0024) — buffered, applied at the end of the action;
 - **platform calls**: `llm` / `complete` (model gateway), `runAgent` (sub-agents), `callTool` (MCP), `log`.
 
 The interpreters expose neither files, network, nor processes (Go: subset of the stdlib;
@@ -453,7 +453,7 @@ actions when a transition is applied. Reference: [docs/dsl.md](dsl.md), IDE sect
 | **gateway** | Single entry point, authentication (JWT/OIDC), routing to services, CORS, rate-limit | Echo HTTP, Connect reverse proxy | — | 🟢 core |
 | **registry** | Methodologies structured in the database: editing (draft), validation, publishing, versions, YAML import/export | Connect `registry.v1` | `registry` | 🟢 |
 | **engine** | Intent loop, planning, process execution; deployable as a cluster | Connect `engine.v1` | `engine` | 🟢 core (memory) |
-| **graph** | Domain axis (versioned nodes, links, baselines) + change axis (ChangeSets, items, apply) | Connect `graph.v1` | `graph` | 🟢 |
+| **graph** | Domain axis (versioned nodes, links, baselines) + change axis (Changes, items, apply) | Connect `graph.v1` | `graph` | 🟢 |
 | **modelgw** | Multi-provider / multi-model abstraction, aliases (`default`, `fast`, `reasoning`), administered catalog with global token quotas and required roles (see below), traces | Connect `model.v1` | `modelgw` (providers, catalog, usage) | 🟢 core |
 | **mcp** | MCP hub: connector registry (self-registration), resolution of the adapters (graph) along the organisation hierarchy, tool calls (§3.9) | Connect `mcp.v1` | `mcp` | 🟢 |
 | **connector-\*** | One service per real system (`connector-localfs`, ...), registers itself with the hub | Connect `connector.v1` | — | 🟢 localfs |
@@ -502,7 +502,7 @@ node_version(node_id, version, props jsonb, deleted bool, change_id, created_at)
 link(id uuid, type, from_id, from_version, to_id, to_version, props jsonb, change_id)
 baseline(id uuid, name, parent_id, change_id, created_at)
 baseline_entry(baseline_id, node_id, version)
-change_set(id uuid, title, intent, status, baseline_id, goal, methodology, result_baseline_id, data jsonb)
+change(id uuid, title, intent, status, baseline_id, goal, methodology, result_baseline_id, data jsonb)
 change_item(id uuid, change_id, kind, type, status, target_id, target_version, payload jsonb,
             produced_by, derived_from uuid[], created_at)
 ```
@@ -723,8 +723,8 @@ actions:
       where: x.target.type == "Requirement"   # x = iterated element
       produce: {op: create_node, nodeType: TestCase}
       link: {type: verifies}                  # direction: out (new -> target) by default
-      # forEach: changeNodes works the same on change nodes (ADR 0024): x is a modified change node,
-      # update_node = its node was written, create_node = a created change node written and linked to it
+      # forEach: changeImpacts works the same on change impacts (ADR 0024): x is a modified change impact,
+      # update_node = its node was written, create_node = a created change impact written and linked to it
 goals:
   - name: assess_impact
     description: Measure the impact of a change without modifying anything

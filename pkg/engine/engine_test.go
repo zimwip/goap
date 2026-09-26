@@ -26,12 +26,12 @@ func scripted(t *testing.T) llm.Client {
 			if !strings.Contains(p, "REQ-1 (Requirement)") {
 				t.Errorf("prompt misses baseline nodes:\n%s", p)
 			}
-			out = `Here: {"items":[{"kind":"changeNode","changeNode":{"op":"declare","intent":"modified","key":"REQ-1","rationale":"PSP API change"}}]}`
+			out = `Here: {"items":[{"kind":"changeImpact","changeImpact":{"op":"declare","intent":"modified","key":"REQ-1","rationale":"PSP API change"}}]}`
 		case strings.Contains(p, "new version"):
-			out = `{"items":[{"kind":"changeNode","changeNode":{"op":"write","node":"REQ-1","props":{"title":"Use PSP v2"}}}]}`
+			out = `{"items":[{"kind":"changeImpact","changeImpact":{"op":"write","node":"REQ-1","props":{"title":"Use PSP v2"}}}]}`
 		case strings.Contains(p, "test case"):
-			out = `{"items":[{"kind":"changeNode","changeNode":{"op":"declare","ref":"#t1","intent":"created","type":"TestCase","key":"TST-9","rationale":"cover REQ-1"}},
-			{"kind":"changeNode","changeNode":{"op":"write","node":"#t1","props":{"title":"PSP v2 test"},"links":[{"type":"verifies","to":"REQ-1"}]}}]}`
+			out = `{"items":[{"kind":"changeImpact","changeImpact":{"op":"declare","ref":"#t1","intent":"created","type":"TestCase","key":"TST-9","rationale":"cover REQ-1"}},
+			{"kind":"changeImpact","changeImpact":{"op":"write","node":"#t1","props":{"title":"PSP v2 test"},"links":[{"type":"verifies","to":"REQ-1"}]}}]}`
 		case strings.Contains(p, "report"):
 			out = `{"items":[{"kind":"artifact","type":"report","data":{"markdown":"# Impact"}}]}`
 		default:
@@ -80,7 +80,7 @@ func setup(t *testing.T) (*Engine, *graph.Graph, domain.BaselineID) {
 	return e, g, b.ID
 }
 
-// reviewAll accepts every change node of the change that awaits a decision, as a human would.
+// reviewAll accepts every change impact of the change that awaits a decision, as a human would.
 func reviewAll(t *testing.T, g *graph.Graph, id domain.ChangeID) []ItemInput {
 	t.Helper()
 	c, err := g.Change(context.Background(), id)
@@ -90,11 +90,11 @@ func reviewAll(t *testing.T, g *graph.Graph, id domain.ChangeID) []ItemInput {
 	var out []ItemInput
 	for _, n := range c.Nodes {
 		if n.Review == domain.ReviewProposed && len(n.Items) == 0 {
-			out = append(out, ItemInput{Kind: "changeNode", ChangeNode: &dsl.NodeOp{Op: "review", Node: n.Key, Accept: true, Comment: "reviewed"}})
+			out = append(out, ItemInput{Kind: "changeImpact", ChangeImpact: &dsl.NodeOp{Op: "review", Node: n.Key, Accept: true, Comment: "reviewed"}})
 		}
 	}
 	if len(out) == 0 {
-		t.Fatalf("no change node to review: %+v", c.Nodes)
+		t.Fatalf("no change impact to review: %+v", c.Nodes)
 	}
 	return out
 }
@@ -132,7 +132,7 @@ func TestAssessImpact(t *testing.T) {
 	}
 	for _, n := range c.Nodes {
 		if n.Intent != domain.IntentModified || n.Rationale == "" || !n.Planned() {
-			t.Fatalf("an impact is a planned change node with a rationale: %+v", n)
+			t.Fatalf("an impact is a planned change impact with a rationale: %+v", n)
 		}
 	}
 	if c.Goal != "assess_impact" {

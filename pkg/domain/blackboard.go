@@ -15,7 +15,7 @@ type NodeView struct {
 // Blackboard is the state an agent process observes: the change (axis change)
 // plus a hydrated view of every domain node it references (axis domain).
 type Blackboard struct {
-	Change ChangeSet            `json:"change"`
+	Change Change               `json:"change"`
 	Nodes  map[NodeRef]NodeView `json:"-"`
 	// Neighbors holds the endpoints of the links of hydrated nodes.
 	Neighbors map[NodeRef]Node `json:"-"`
@@ -34,8 +34,8 @@ func (bb Blackboard) TypesOf(t string) []any {
 	return out
 }
 
-// ReferencedNodes lists every domain reference held by the change nodes.
-func (c *ChangeSet) ReferencedNodes() []NodeRef {
+// ReferencedNodes lists every domain reference held by the change impacts.
+func (c *Change) ReferencedNodes() []NodeRef {
 	seen := map[NodeRef]bool{}
 	var out []NodeRef
 	add := func(r *NodeRef) {

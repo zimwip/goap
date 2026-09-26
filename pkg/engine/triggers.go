@@ -20,11 +20,11 @@ import (
 
 // TriggerEvent is an event that may start agents.
 type TriggerEvent struct {
-	Type        string            `json:"type"`
-	Change      *domain.ChangeSet `json:"change,omitempty"`
-	Process     *Process          `json:"process,omitempty"`
-	Methodology string            `json:"methodology,omitempty"`
-	Version     string            `json:"version,omitempty"`
+	Type        string         `json:"type"`
+	Change      *domain.Change `json:"change,omitempty"`
+	Process     *Process       `json:"process,omitempty"`
+	Methodology string         `json:"methodology,omitempty"`
+	Version     string         `json:"version,omitempty"`
 }
 
 func (ev TriggerEvent) activation() map[string]any {
