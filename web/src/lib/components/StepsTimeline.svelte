@@ -130,6 +130,14 @@
       });
   });
 
+  /** a slot is labelled with its first step number, or a range when its runs sit at different numbers */
+  function slotLabel(sl: Slot): string {
+    const nums = sl.runs.map((r) => r.abs + 1);
+    const lo = Math.min(...nums);
+    const hi = Math.max(...nums);
+    return lo === hi ? `#${lo}` : `#${lo}-${hi}`;
+  }
+
   const runLabel = (r: Run) => (r.current ? 'this run' : r.proc?.title || shortId(r.procId));
 </script>
 
@@ -228,12 +236,12 @@
   {/if}
 {/snippet}
 
-{#snippet head(r: Run, extra?: { count: number })}
+{#snippet head(r: Run, extra?: { count: number; label: string })}
   {@const s = r.step}
   {@const st = stepState(s)}
   {@const tokensIn = int(s.usage?.inputTokens)}
   {@const tokensOut = int(s.usage?.outputTokens)}
-  <span class="idx">#{r.abs + 1}</span>
+  <span class="idx">{extra?.label ?? `#${r.abs + 1}`}</span>
   <code class="action">{s.action}</code>
   <span class="st">{LABEL[st]}</span>
   {#if extra}<span class="chip-runs" title="This step was executed several times">×{extra.count} runs</span>{/if}
@@ -273,7 +281,7 @@
                 aria-label={openSlots[sl.slot] ? 'Hide the runs of this step' : 'Show the runs of this step'}
                 onclick={() => (openSlots[sl.slot] = !openSlots[sl.slot])}
               >{openSlots[sl.slot] ? '▾' : '▸'}</button>
-              {@render head(r, { count: sl.runs.length })}
+              {@render head(r, { count: sl.runs.length, label: slotLabel(sl) })}
             </div>
             {@render relaunchForm(r)}
             {#if openSlots[sl.slot]}

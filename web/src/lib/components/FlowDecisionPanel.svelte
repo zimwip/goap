@@ -1,7 +1,7 @@
 <script lang="ts">
   import { engine, errorMessage, type Process } from '../api';
 
-  let { process, ondecided }: { process: Process; ondecided: (p: Process) => void } = $props();
+  let { process, step, ondecided }: { process: Process; step?: number; ondecided: (p: Process) => void } = $props();
 
   let comment = $state('');
   let busy = $state(false);
@@ -25,7 +25,7 @@
 <section class="card flow-decision">
   <h3>Relaunched flow ready</h3>
   <p>
-    The run restarted from step {(process.fromStep ?? 0) + 1} reached its goal. Adopt it to replace
+    The run restarted from step {step ?? (process.fromStep ?? 0) + 1} reached its goal. Adopt it to replace
     the outputs of the previous run (they become superseded), or discard it to keep the previous
     outputs.
   </p>

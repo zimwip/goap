@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"regexp"
 	"slices"
 
 	"github.com/google/uuid"
@@ -20,6 +21,17 @@ import (
 // replans from the state before step K and appends its items to the branch as
 // candidates, and once it reaches the goal a human adopts the branch (the old
 // outputs are superseded) or discards it (the old outputs count again).
+
+var relaunchSuffix = regexp.MustCompile(`\s*\(relaunch from step \d+\)$`)
+
+// baseTitle drops the "(relaunch from step N)" suffixes a relaunched run carries, so that
+// relaunching a relaunched run does not pile them up.
+func baseTitle(t string) string {
+	for relaunchSuffix.MatchString(t) {
+		t = relaunchSuffix.ReplaceAllString(t, "")
+	}
+	return t
+}
 
 func lastItem(c domain.ChangeSet) domain.ItemID {
 	for i := len(c.Items) - 1; i >= 0; i-- {
@@ -68,7 +80,7 @@ func (e *Engine) relaunchLocked(ctx context.Context, id string, step int, reason
 		return nil, err
 	}
 	p := &Process{ID: uuid.NewString(), Methodology: old.Methodology, MethodologyVersion: old.MethodologyVersion, Agent: old.Agent, Planner: old.Planner,
-		Goal: old.Goal, ChangeID: old.ChangeID, BaselineID: old.BaselineID, Namespace: old.Namespace, Title: fmt.Sprintf("%s (relaunch from step %d)", old.Title, step),
+		Goal: old.Goal, ChangeID: old.ChangeID, BaselineID: old.BaselineID, Namespace: old.Namespace, Title: fmt.Sprintf("%s (relaunch from step %d)", baseTitle(old.Title), step+1),
 		Trigger: old.Trigger, Initiator: who, Vars: maps.Clone(old.Vars), Disabled: map[string]bool{}, Status: StatusRunning,
 		Flow: flow.ID, RelaunchOf: old.ID, FromStep: step, CreatedAt: e.clock(), UpdatedAt: e.clock()}
 	p.Intent = old.Intent

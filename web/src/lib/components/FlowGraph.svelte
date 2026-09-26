@@ -3,9 +3,8 @@
   // every relaunch forking into a lane of its own (dashed while open, solid once
   // adopted, faded when discarded). Steps of a run replaced by an adopted flow are faded.
   import { formatDuration, int, shortId, type Flow, type Process, type Step } from '../api';
-  import { chainOf, offsetOf, relaunchesOf, rootOf, runKind, type ProcessLookup } from '../flowChain';
-  import FlowActions from './FlowActions.svelte';
-
+  import { chainOf, offsetOf, relaunchesOf, restartedStepNumber, rootOf, runKind, type ProcessLookup } from '../flowChain';
+  
   let {
     processes,
     changeId = '',
@@ -13,7 +12,6 @@
     flows = [],
     proposal,
     onopen,
-    ondecided,
   }: {
     /** the processes store */
     processes: ProcessLookup;
@@ -25,8 +23,6 @@
     /** a proposed restart (blackboard check): the step is highlighted */
     proposal?: { process?: string; step?: number };
     onopen?: (processId: string) => void;
-    /** an open flow was adopted or discarded: reload the flows */
-    ondecided?: () => void;
   } = $props();
 
   const W = 128;
@@ -83,9 +79,6 @@
   });
 
   const flowById = $derived(new Map(flows.map((f) => [f.id ?? '', f])));
-  const graphChange = $derived(changeId || processes.get(processId)?.changeId || '');
-  // flows still open: their adopt / discard actions sit under the graph, whatever state their run is in
-  const openFlows = $derived(flows.filter((f) => f.status === 'open'));
 
   const layout = $derived.by(() => {
     const nodes: Node[] = [];
@@ -171,7 +164,7 @@
         const f = p.flow ? flowById.get(p.flow) : undefined;
         const kind = runKind(p);
         const text = p.flow
-          ? `flow ${shortId(p.flow)} · from step ${(p.fromStep ?? 0) + 1}${f?.reason ? ` · ${f.reason}` : ''}${f?.competesWith?.length ? ' · competing' : ''}`
+          ? `flow ${shortId(p.flow)} · from step ${restartedStepNumber(p, processes)}${f?.reason ? ` · ${f.reason}` : ''}${f?.competesWith?.length ? ' · competing' : ''}`
           : p.title || shortId(p.id);
         out.push({ x: PAD, y, text, cls: kind, id: p.id ?? '' });
         lane++;
@@ -231,19 +224,6 @@
       {/each}
     </svg>
   </div>
-  {#if openFlows.length && graphChange}
-    <ul class="open-flows">
-      {#each openFlows as f (f.id)}
-        <li>
-          <span class="tag-open">open</span>
-          <code>{shortId(f.id)}</code>
-          <span class="hint">from step {(f.fromStep ?? 0) + 1}{f.reason ? ` · ${f.reason}` : ''}</span>
-          {#if f.competesWith?.length}<span class="tag-competing">competes with {f.competesWith.map((c) => shortId(c)).join(', ')}</span>{/if}
-          <FlowActions flow={f} changeId={graphChange} compact {ondecided} />
-        </li>
-      {/each}
-    </ul>
-  {/if}
 {:else}
   <p class="empty">No relaunched flow yet.</p>
 {/if}
@@ -355,28 +335,6 @@
   .tag.stale,
   .tag.competing {
     fill: var(--warn);
-    font-weight: 600;
-  }
-  .open-flows {
-    list-style: none;
-    margin: 6px 0 0;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
-  .open-flows li {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 8px;
-  }
-  .tag-open {
-    color: var(--accent);
-    font-weight: 600;
-  }
-  .tag-competing {
-    color: var(--warn);
     font-weight: 600;
   }
   .empty {

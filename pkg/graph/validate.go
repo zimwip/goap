@@ -13,7 +13,8 @@ import (
 // to exist and are in effect, the nodes it refers to are in the reference
 // baseline and have not moved, the proposals obey the lifecycle and namespace
 // rules, impacts have a coherent pre and post, and no node is created twice.
-// The issues come in log order; each names the item to blame (the culprit).
+// The issues come in log order; each names the item to blame (the culprit). Only the outdated
+// proposals are warnings: they are fixed by rebasing the change, not by relaunching a step.
 func (g *Graph) ValidateBoard(ctx context.Context, id domain.ChangeID, flow string) (out []domain.BoardIssue, err error) {
 	err = g.repo.InTx(ctx, func(tx Tx) error {
 		c, err := tx.Change(ctx, id)
@@ -41,7 +42,13 @@ func (g *Graph) validateBoard(ctx context.Context, tx Tx, c domain.ChangeSet, fl
 		if culprit == "" {
 			culprit = item
 		}
-		out = append(out, domain.BoardIssue{Item: item, Culprit: culprit, Code: code, Message: msg, Severity: domain.IssueError})
+		sev := domain.IssueError
+		if code == "outdated" {
+			// relaunching a step cannot fix it (the reference baseline stays the same): the change is
+			// rebased, so it is reported without blocking the run
+			sev = domain.IssueWarning
+		}
+		out = append(out, domain.BoardIssue{Item: item, Culprit: culprit, Code: code, Message: msg, Severity: sev})
 	}
 	seenKeys := map[string]domain.ItemID{}
 	for _, it := range v.Items {
