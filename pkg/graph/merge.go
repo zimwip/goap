@@ -432,9 +432,9 @@ type MergeRequest struct {
 
 // MergeResult is the merge change and the resulting baseline of the target branch.
 type MergeResult struct {
-	Change   domain.ChangeSet `json:"change"`
-	Baseline domain.Baseline  `json:"baseline"`
-	Plan     MergePlan        `json:"plan"`
+	Change   domain.Change   `json:"change"`
+	Baseline domain.Baseline `json:"baseline"`
+	Plan     MergePlan       `json:"plan"`
 }
 
 // MergeBranch merges branch From into Into: a merge change with one change
@@ -461,9 +461,9 @@ func (g *Graph) mergeBranchTx(ctx context.Context, tx Tx, in MergeRequest) (res 
 	if title == "" {
 		title = fmt.Sprintf("merge %s into %s", in.From, plan.Into)
 	}
-	// the merge is a change of the platform (journal): one change node per merged node, whose
+	// the merge is a change of the platform (journal): one change impact per merged node, whose
 	// version records the origin; the merge versions are written here, not proposed
-	c := domain.ChangeSet{ID: domain.ChangeID(g.newID()), Title: title, Intent: title, Status: domain.ChangeActive,
+	c := domain.Change{ID: domain.ChangeID(g.newID()), Title: title, Intent: title, Status: domain.ChangeActive,
 		Namespace: domain.NamespaceOf(in.Namespace), BaselineID: plan.IntoHead, Branch: plan.Into, CreatedAt: g.now(),
 		Data: map[string]any{"merge": map[string]any{"from": in.From, "into": plan.Into}}}
 	if err := tx.PutChange(ctx, c); err != nil {
@@ -540,7 +540,7 @@ func (g *Graph) mergeBranchTx(ctx context.Context, tx Tx, in MergeRequest) (res 
 		m.from.Properties = props // the merged properties, carried by the version below
 		todo = append(todo, m)
 	}
-	// 1. the merge versions, with the change node that explains each
+	// 1. the merge versions, with the change impact that explains each
 	var editable []string
 	for _, m := range todo {
 		n := *m.from
@@ -558,19 +558,19 @@ func (g *Graph) mergeBranchTx(ctx context.Context, tx Tx, in MergeRequest) (res 
 		if len(m.cand.Conflicts) > 0 {
 			why += fmt.Sprintf(" (conflicts on %s, resolved)", strings.Join(m.cand.Conflicts, ", "))
 		}
-		cn := domain.ChangeNode{ID: domain.ChangeNodeID(g.newID()), Key: n.Key, Type: n.Type, Intent: domain.IntentCreated, Rationale: why,
+		cn := domain.ChangeImpact{ID: domain.ChangeImpactID(g.newID()), Key: n.Key, Type: n.Type, Intent: domain.IntentCreated, Rationale: why,
 			Review: domain.ReviewAccepted, ProducedBy: "graph.merge", CreatedAt: g.now()}
 		if m.ours != nil {
 			cn.Intent, cn.Pre = domain.IntentModified, m.cand.Ours
 		}
-		n.Version, n.Branch, n.Deleted, n.ChangeID, n.ChangeNode, n.Comment, n.CreatedAt = v, plan.Into, deleted, c.ID, cn.ID, why, g.now()
+		n.Version, n.Branch, n.Deleted, n.ChangeID, n.ChangeImpact, n.Comment, n.CreatedAt = v, plan.Into, deleted, c.ID, cn.ID, why, g.now()
 		if err := tx.PutNode(ctx, n); err != nil {
 			return res, err
 		}
 		m.next = n.Ref()
 		cn.Post, cn.Landed = &m.next, &m.next
 		cn.Reviews = []domain.Review{{Status: domain.ReviewAccepted, By: "graph.merge", Comment: why, At: g.now()}}
-		if err := tx.PutChangeNode(ctx, c.ID, cn); err != nil {
+		if err := tx.PutChangeImpact(ctx, c.ID, cn); err != nil {
 			return res, err
 		}
 		if deleted {

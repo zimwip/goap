@@ -30,8 +30,8 @@ func almFromFile(t *testing.T) *methodology.Domain {
 }
 
 // create declares a created node on the change and writes it.
-func create(ctx context.Context, g *graph.Graph, c domain.ChangeSet, key, typ string, props map[string]any) error {
-	ns, err := g.AddNodes(ctx, c.ID, []domain.ChangeNode{{Intent: domain.IntentCreated, Key: key, Type: typ, Rationale: "new " + key}})
+func create(ctx context.Context, g *graph.Graph, c domain.Change, key, typ string, props map[string]any) error {
+	ns, err := g.AddNodes(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentCreated, Key: key, Type: typ, Rationale: "new " + key}})
 	if err != nil {
 		return err
 	}
@@ -52,7 +52,7 @@ func TestDomainAlgorithmsEnforcedByTheGraph(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	newChange := func() domain.ChangeSet {
+	newChange := func() domain.Change {
 		c, err := g.CreateChange(ctx, graph.NewChange{Title: "c", BaselineID: head.ID, Namespace: "sdlc"})
 		if err != nil {
 			t.Fatal(err)

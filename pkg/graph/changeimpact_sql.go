@@ -6,7 +6,7 @@ import (
 	"github.com/zimwip/goap/pkg/domain"
 )
 
-// cnRow is the flat storage form of a change node shared by the SQL backends.
+// cnRow is the flat storage form of a change impact shared by the SQL backends.
 type cnRow struct {
 	ID                          string
 	NodeID                      *string
@@ -19,7 +19,7 @@ type cnRow struct {
 	Superseded                  bool
 }
 
-func toCNRow(cn domain.ChangeNode) (cnRow, error) {
+func toCNRow(cn domain.ChangeImpact) (cnRow, error) {
 	r := cnRow{ID: string(cn.ID), Key: cn.Key, Type: cn.Type, Intent: string(cn.Intent), Review: string(cn.Review),
 		Rationale: cn.Rationale, Via: string(cn.Via), Recheck: cn.Recheck, ProducedBy: cn.ProducedBy, Execution: cn.Execution, Flow: cn.Flow, Superseded: cn.Superseded}
 	ver := func(ref *domain.NodeRef) *int {
@@ -56,9 +56,9 @@ func nonNil[T any](s []T) []T {
 	return s
 }
 
-func (r cnRow) node() (domain.ChangeNode, error) {
-	cn := domain.ChangeNode{ID: domain.ChangeNodeID(r.ID), Key: r.Key, Type: r.Type, Intent: domain.NodeIntent(r.Intent),
-		Review: domain.NodeReview(r.Review), Rationale: r.Rationale, Via: domain.ChangeNodeID(r.Via), Recheck: r.Recheck,
+func (r cnRow) node() (domain.ChangeImpact, error) {
+	cn := domain.ChangeImpact{ID: domain.ChangeImpactID(r.ID), Key: r.Key, Type: r.Type, Intent: domain.NodeIntent(r.Intent),
+		Review: domain.NodeReview(r.Review), Rationale: r.Rationale, Via: domain.ChangeImpactID(r.Via), Recheck: r.Recheck,
 		ProducedBy: r.ProducedBy, Execution: r.Execution, Flow: r.Flow, Superseded: r.Superseded}
 	ref := func(v *int) *domain.NodeRef {
 		if v == nil || r.NodeID == nil {

@@ -56,7 +56,7 @@ func testApplyUpdateCreatesSuspectLinks(t *testing.T, repo Repo) {
 		t.Fatal(err)
 	}
 	reqRef := f.req.Ref()
-	cns, err := g.AddNodes(ctx, c.ID, []domain.ChangeNode{
+	cns, err := g.AddNodes(ctx, c.ID, []domain.ChangeImpact{
 		{Intent: domain.IntentModified, Pre: &reqRef, Rationale: "PSP v2"},
 		{Intent: domain.IntentCreated, Key: "TST-2", Type: "TestCase", Rationale: "cover REQ-1"},
 	})
@@ -136,7 +136,7 @@ func testApplyRemoveLinkBumpsSource(t *testing.T, repo Repo) {
 	v, _ := g.View(ctx, f.test.Ref())
 	c, _ := g.CreateChange(ctx, NewChange{Title: "drop test", BaselineID: f.base.ID})
 	pre := f.test.Ref()
-	ns, err := g.AddNodes(ctx, c.ID, []domain.ChangeNode{{Intent: domain.IntentModified, Pre: &pre, Rationale: "the test no longer verifies"}})
+	ns, err := g.AddNodes(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &pre, Rationale: "the test no longer verifies"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -167,12 +167,12 @@ func testApplyRejectedAndConflicts(t *testing.T, repo Repo) {
 	g := f.g
 	reqRef := f.req.Ref()
 	// each change writes the same property with its own value, and accepts (or rejects) it
-	change := func(title string, value int, accept bool) domain.ChangeSet {
+	change := func(title string, value int, accept bool) domain.Change {
 		c, err := g.CreateChange(ctx, NewChange{Title: title, BaselineID: f.base.ID})
 		if err != nil {
 			t.Fatal(err)
 		}
-		ns, err := g.AddNodes(ctx, c.ID, []domain.ChangeNode{{Intent: domain.IntentModified, Pre: &reqRef, Rationale: title}})
+		ns, err := g.AddNodes(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &reqRef, Rationale: title}})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -189,10 +189,10 @@ func testApplyRejectedAndConflicts(t *testing.T, repo Repo) {
 		return c
 	}
 	c1, c2 := change("c1", 1, false), change("c2", 1, true)
-	// the only change node of c1 is rejected: applying it is a no-op
+	// the only change impact of c1 is rejected: applying it is a no-op
 	b, err := g.Apply(ctx, c1.ID, "")
 	if err != nil || b.Nodes[f.req.ID] != 1 {
-		t.Fatalf("rejected change node applied: %v %v", err, b.Nodes)
+		t.Fatalf("rejected change impact applied: %v %v", err, b.Nodes)
 	}
 	if _, err := g.Apply(ctx, c2.ID, ""); err != nil {
 		t.Fatal(err)
@@ -214,7 +214,7 @@ func testAddItemsValidation(t *testing.T, repo Repo) {
 	f := newFixture(t, repo)
 	c, _ := f.g.CreateChange(ctx, NewChange{Title: "c", BaselineID: f.base.ID})
 	bad := domain.NodeRef{ID: f.req.ID, Version: 9}
-	if _, err := f.g.AddNodes(ctx, c.ID, []domain.ChangeNode{{Intent: domain.IntentModified, Pre: &bad, Rationale: "x"}}); !errors.Is(err, ErrConflict) {
+	if _, err := f.g.AddNodes(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &bad, Rationale: "x"}}); !errors.Is(err, ErrConflict) {
 		t.Fatalf("expected a conflict (the version is not in the baseline), got %v", err)
 	}
 	if _, err := f.g.AddItems(ctx, c.ID, []domain.ChangeItem{{Kind: "impact"}}); !errors.Is(err, ErrInvalid) {

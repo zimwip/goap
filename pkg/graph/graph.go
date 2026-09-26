@@ -263,10 +263,10 @@ type NewChange struct {
 // CreateChange opens a change on a reference baseline. A sub-change
 // (ParentID) belongs to the namespace of its parent, forks its own branch from
 // the branch of the parent (which must have one) and is merged into it.
-func (g *Graph) CreateChange(ctx context.Context, in NewChange) (domain.ChangeSet, error) {
-	var c domain.ChangeSet
+func (g *Graph) CreateChange(ctx context.Context, in NewChange) (domain.Change, error) {
+	var c domain.Change
 	err := g.repo.InTx(ctx, func(tx Tx) error {
-		c = domain.ChangeSet{
+		c = domain.Change{
 			ID: domain.ChangeID(g.newID()), Title: in.Title, Intent: in.Intent, Methodology: in.Methodology, Namespace: domain.NamespaceOf(in.Namespace),
 			Status: domain.ChangeDraft, BaselineID: in.BaselineID, Branch: domain.BranchOf(in.Branch), Data: in.Data, CreatedAt: g.now(),
 			ParentID: in.ParentID, OwnerOrg: in.OwnerOrg,
@@ -304,7 +304,7 @@ func (g *Graph) CreateChange(ctx context.Context, in NewChange) (domain.ChangeSe
 }
 
 // Change returns a change with its items.
-func (g *Graph) Change(ctx context.Context, id domain.ChangeID) (c domain.ChangeSet, err error) {
+func (g *Graph) Change(ctx context.Context, id domain.ChangeID) (c domain.Change, err error) {
 	err = g.repo.InTx(ctx, func(tx Tx) error {
 		if c, err = tx.Change(ctx, id); err != nil {
 			return err
@@ -315,7 +315,7 @@ func (g *Graph) Change(ctx context.Context, id domain.ChangeID) (c domain.Change
 }
 
 // Changes lists changes.
-func (g *Graph) Changes(ctx context.Context) (cs []domain.ChangeSet, err error) {
+func (g *Graph) Changes(ctx context.Context) (cs []domain.Change, err error) {
 	err = g.repo.InTx(ctx, func(tx Tx) error { cs, err = tx.Changes(ctx); return err })
 	return
 }
@@ -328,7 +328,7 @@ type ChangePatch struct {
 }
 
 // UpdateChange patches a change header.
-func (g *Graph) UpdateChange(ctx context.Context, id domain.ChangeID, p ChangePatch) (c domain.ChangeSet, err error) {
+func (g *Graph) UpdateChange(ctx context.Context, id domain.ChangeID, p ChangePatch) (c domain.Change, err error) {
 	err = g.repo.InTx(ctx, func(tx Tx) error {
 		c, err = tx.Change(ctx, id)
 		if err != nil {
@@ -368,7 +368,7 @@ func (g *Graph) UpdateChange(ctx context.Context, id domain.ChangeID, p ChangePa
 }
 
 // AddItems appends facts to the blackboard of a change (artifacts, decisions): the nodes
-// a change acts on are its change nodes (AddNodes, ADR 0024). Item ids are assigned when empty.
+// a change acts on are its change impacts (AddNodes, ADR 0024). Item ids are assigned when empty.
 func (g *Graph) AddItems(ctx context.Context, id domain.ChangeID, items []domain.ChangeItem) ([]domain.ChangeItem, error) {
 	out := make([]domain.ChangeItem, 0, len(items))
 	err := g.repo.InTx(ctx, func(tx Tx) error {
@@ -437,14 +437,14 @@ func (g *Graph) Blackboard(ctx context.Context, id domain.ChangeID) (domain.Blac
 }
 
 // BlackboardIn is the blackboard as seen by the process running on a flow
-// branch ("" = the main flow, see domain.ChangeSet.View).
+// branch ("" = the main flow, see domain.Change.View).
 func (g *Graph) BlackboardIn(ctx context.Context, id domain.ChangeID, flow string) (bb domain.Blackboard, err error) {
 	err = g.repo.InTx(ctx, func(tx Tx) error {
 		c, err := tx.Change(ctx, id)
 		if err != nil {
 			return err
 		}
-		nodes, err := g.newFlowNodes(tx, c, flow).nodes(ctx) // the change nodes as the flow sees them (ADR 0025)
+		nodes, err := g.newFlowNodes(tx, c, flow).nodes(ctx) // the change impacts as the flow sees them (ADR 0025)
 		if err != nil {
 			return err
 		}
@@ -506,9 +506,9 @@ func validStatusMove(from, to domain.ChangeStatus) bool {
 	return false
 }
 
-// ChangeNodes lists the versions a change starts from: the pre version of each of its change
+// ChangeImpacts lists the versions a change starts from: the pre version of each of its change
 // nodes (stored, and derived from its items).
-func (g *Graph) ChangeNodes(ctx context.Context, id domain.ChangeID) (refs []domain.NodeRef, err error) {
+func (g *Graph) ChangeImpacts(ctx context.Context, id domain.ChangeID) (refs []domain.NodeRef, err error) {
 	err = g.repo.InTx(ctx, func(tx Tx) error {
 		c, err := tx.Change(ctx, id)
 		if err != nil {
@@ -525,7 +525,7 @@ func (g *Graph) ChangeNodes(ctx context.Context, id domain.ChangeID) (refs []dom
 }
 
 // openChangeHolders maps each node to the unapplied changes acting on it: through
-// stored change nodes or through the change nodes derived from their items.
+// stored change impacts or through the change impacts derived from their items.
 func (g *Graph) openChangeHolders(ctx context.Context, tx Tx) (map[domain.NodeID][]domain.ChangeID, error) {
 	ids, err := tx.OpenChangeIDs(ctx)
 	if err != nil {
@@ -549,9 +549,9 @@ func (g *Graph) openChangeHolders(ctx context.Context, tx Tx) (map[domain.NodeID
 }
 
 // NodeChanges lists the changes acting on a node, oldest first.
-func (g *Graph) NodeChanges(ctx context.Context, node domain.NodeID) (out []domain.ChangeSet, err error) {
+func (g *Graph) NodeChanges(ctx context.Context, node domain.NodeID) (out []domain.Change, err error) {
 	err = g.repo.InTx(ctx, func(tx Tx) error {
-		stored, err := tx.NodeChangeNodes(ctx, node)
+		stored, err := tx.NodeChangeImpacts(ctx, node)
 		if err != nil {
 			return err
 		}
@@ -560,7 +560,7 @@ func (g *Graph) NodeChanges(ctx context.Context, node domain.NodeID) (out []doma
 			return err
 		}
 		for _, id := range slices.Concat(stored, open[node]) {
-			if slices.ContainsFunc(out, func(c domain.ChangeSet) bool { return c.ID == id }) {
+			if slices.ContainsFunc(out, func(c domain.Change) bool { return c.ID == id }) {
 				continue
 			}
 			c, err := tx.Change(ctx, id)
@@ -570,7 +570,7 @@ func (g *Graph) NodeChanges(ctx context.Context, node domain.NodeID) (out []doma
 			c.Items, c.Nodes = nil, nil
 			out = append(out, c)
 		}
-		slices.SortStableFunc(out, func(a, b domain.ChangeSet) int { return a.CreatedAt.Compare(b.CreatedAt) })
+		slices.SortStableFunc(out, func(a, b domain.Change) int { return a.CreatedAt.Compare(b.CreatedAt) })
 		return nil
 	})
 	return

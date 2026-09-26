@@ -10,7 +10,7 @@
   import { showTool } from '../../shell/layout.svelte';
   import { select as select, focusRequests } from '../../shell/workbench.svelte';
   import { openTab, tabsState } from '../../shell/tabs.svelte';
-  import { formatDate, formatInt, shortId, int, type ChangeSet, type Process } from '../../api';
+  import { formatDate, formatInt, shortId, int, type Change, type Process } from '../../api';
 
   let filter = $state('');
   let manualId = $state('');
@@ -88,9 +88,9 @@
     ),
   );
 
-  const runsOf = (c: ChangeSet) => byChange.get(c.id ?? '') ?? [];
+  const runsOf = (c: Change) => byChange.get(c.id ?? '') ?? [];
 
-  function open(c: ChangeSet, pin = false) {
+  function open(c: Change, pin = false) {
     openTab({ kind: 'change', params: { id: c.id ?? '' } }, { pin });
     select({
       title: c.title || shortId(c.id),

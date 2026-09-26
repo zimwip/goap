@@ -235,7 +235,7 @@ type ExecuteResponse struct {
 	Error     string     `protobuf:"bytes,4,opt,name=error,proto3" json:"error,omitempty"`
 	// the script waits for a sub-agent: the step is retried once it completes
 	Suspended bool `protobuf:"varint,5,opt,name=suspended,proto3" json:"suspended,omitempty"`
-	// change node operations (dsl.NodeOp JSON array, ADR 0024)
+	// change impact operations (dsl.NodeOp JSON array, ADR 0024)
 	NodesJson     string `protobuf:"bytes,6,opt,name=nodes_json,json=nodesJson,proto3" json:"nodes_json,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

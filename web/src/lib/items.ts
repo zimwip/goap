@@ -1,5 +1,5 @@
-// Formatting of a change's items (resolution of node keys).
-import type { ChangeItem, Endpoint, GraphNode, JsonValue, NodeRef } from './api';
+// Formatting of a change's items and change impacts (resolution of node keys).
+import type { ChangeItem, GraphNode, JsonValue, NodeRef } from './api';
 
 export interface ItemContext {
   /** Nodes from the starting baseline, indexed by id. */
@@ -19,44 +19,6 @@ export function refKey(ctx: ItemContext, ref: NodeRef | undefined): string {
   if (!ref?.id) return '';
   const key = ctx.nodes.get(ref.id)?.key ?? ref.id.slice(0, 8);
   return ref.version ? `${key}@v${ref.version}` : key;
-}
-
-function endpointKey(ctx: ItemContext, ep: Endpoint | undefined): string {
-  if (!ep) return '?';
-  if (ep.node?.id) return refKey(ctx, ep.node);
-  if (ep.item) {
-    const it = ctx.items.get(ep.item);
-    const key = it?.proposal?.node?.key;
-    return key ? `${key} (new)` : `item ${ep.item.slice(0, 8)}`;
-  }
-  return '?';
-}
-
-const OPS: Record<string, string> = {
-  create_node: 'Create',
-  update_node: 'Update',
-  delete_node: 'Delete',
-  transition_node: 'Move',
-  add_link: 'Link',
-  remove_link: 'Unlink',
-};
-
-export function opLabel(op: string | undefined): string {
-  return OPS[op ?? ''] ?? op ?? '?';
-}
-
-/** Summary of a proposal line. */
-export function describeProposal(ctx: ItemContext, item: ChangeItem | undefined): string {
-  const p = item?.proposal;
-  if (!p) return item?.id ? `item ${item.id.slice(0, 8)}` : '?';
-  if (p.link) {
-    return `${opLabel(p.op)} ${endpointKey(ctx, p.link.from)} → ${p.link.type ?? '?'} → ${endpointKey(ctx, p.link.to)}`;
-  }
-  const n = p.node;
-  const key = n?.key || refKey(ctx, n?.base) || '?';
-  const type = n?.type || (n?.base?.id ? ctx.nodes.get(n.base.id)?.type : '') || '';
-  const to = p.op === 'transition_node' && n?.state ? ` → ${n.state}` : '';
-  return `${opLabel(p.op)} ${key}${type ? ` (${type})` : ''}${to}`;
 }
 
 /** Text of a JSON value for compact display. */

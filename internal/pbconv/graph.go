@@ -84,7 +84,7 @@ func NodeToPB(n domain.Node) *graphv1.Node {
 	return &graphv1.Node{Id: string(n.ID), Version: int32(n.Version), Namespace: n.Namespace, Key: n.Key, Type: n.Type, Props: Struct(n.Properties),
 		Deleted: n.Deleted, ChangeId: string(n.ChangeID), CreatedAt: Time(n.CreatedAt),
 		Branch: domain.BranchOf(n.Branch), Parents: versionsToPB(n.Parents), Reason: n.Reason, State: n.State,
-		ChangeNode: string(n.ChangeNode), Comment: n.Comment, Execution: n.Execution}
+		ChangeImpact: string(n.ChangeImpact), Comment: n.Comment, Execution: n.Execution}
 }
 
 func versionsToPB(vs []domain.Version) []int32 {
@@ -102,7 +102,7 @@ func NodeFromPB(n *graphv1.Node) domain.Node {
 	return domain.Node{ID: domain.NodeID(n.Id), Version: domain.Version(n.Version), Namespace: n.Namespace, Key: n.Key, Type: n.Type, Properties: Map(n.Props),
 		Deleted: n.Deleted, ChangeID: domain.ChangeID(n.ChangeId), CreatedAt: FromTime(n.CreatedAt),
 		Branch: n.Branch, Parents: versionsFromPB(n.Parents), Reason: n.Reason, State: n.State,
-		ChangeNode: domain.ChangeNodeID(n.ChangeNode), Comment: n.Comment, Execution: n.Execution}
+		ChangeImpact: domain.ChangeImpactID(n.ChangeImpact), Comment: n.Comment, Execution: n.Execution}
 }
 
 func versionsFromPB(vs []int32) []domain.Version {
@@ -236,19 +236,19 @@ func ItemsFromPB(its []*graphv1.ChangeItem) []domain.ChangeItem {
 	return out
 }
 
-func ChangeToPB(c domain.ChangeSet) *graphv1.ChangeSet {
-	return &graphv1.ChangeSet{Id: string(c.ID), Title: c.Title, Intent: c.Intent, Methodology: c.Methodology, Goal: c.Goal, Namespace: c.Namespace, ParentId: string(c.ParentID), OwnerOrg: c.OwnerOrg, Status: string(c.Status),
+func ChangeToPB(c domain.Change) *graphv1.Change {
+	return &graphv1.Change{Id: string(c.ID), Title: c.Title, Intent: c.Intent, Methodology: c.Methodology, Goal: c.Goal, Namespace: c.Namespace, ParentId: string(c.ParentID), OwnerOrg: c.OwnerOrg, Status: string(c.Status),
 		BaselineId: string(c.BaselineID), ResultBaselineId: string(c.ResultBaselineID), Data: Struct(c.Data), Items: ItemsToPB(c.Items), CreatedAt: Time(c.CreatedAt),
-		Branch: domain.BranchOf(c.Branch), Nodes: ChangeNodesToPB(c.Nodes)}
+		Branch: domain.BranchOf(c.Branch), Nodes: ChangeImpactsToPB(c.Nodes)}
 }
 
-func ChangeFromPB(c *graphv1.ChangeSet) domain.ChangeSet {
+func ChangeFromPB(c *graphv1.Change) domain.Change {
 	if c == nil {
-		return domain.ChangeSet{}
+		return domain.Change{}
 	}
-	return domain.ChangeSet{ID: domain.ChangeID(c.Id), Title: c.Title, Intent: c.Intent, Methodology: c.Methodology, Goal: c.Goal, Namespace: c.Namespace, ParentID: domain.ChangeID(c.ParentId), OwnerOrg: c.OwnerOrg, Status: domain.ChangeStatus(c.Status),
+	return domain.Change{ID: domain.ChangeID(c.Id), Title: c.Title, Intent: c.Intent, Methodology: c.Methodology, Goal: c.Goal, Namespace: c.Namespace, ParentID: domain.ChangeID(c.ParentId), OwnerOrg: c.OwnerOrg, Status: domain.ChangeStatus(c.Status),
 		BaselineID: domain.BaselineID(c.BaselineId), ResultBaselineID: domain.BaselineID(c.ResultBaselineId), Data: Map(c.Data), Items: ItemsFromPB(c.Items), CreatedAt: FromTime(c.CreatedAt),
-		Branch: c.Branch, Nodes: ChangeNodesFromPB(c.Nodes)}
+		Branch: c.Branch, Nodes: ChangeImpactsFromPB(c.Nodes)}
 }
 
 func BranchToPB(b domain.Branch) *graphv1.Branch {
@@ -264,8 +264,8 @@ func BranchFromPB(b *graphv1.Branch) domain.Branch {
 		Origin: b.Origin, Status: b.Status, CreatedAt: FromTime(b.CreatedAt)}
 }
 
-func ChangeNodeToPB(cn domain.ChangeNode) *graphv1.ChangeNode {
-	out := &graphv1.ChangeNode{Id: string(cn.ID), Key: cn.Key, Type: cn.Type, Intent: string(cn.Intent), Rationale: cn.Rationale,
+func ChangeImpactToPB(cn domain.ChangeImpact) *graphv1.ChangeImpact {
+	out := &graphv1.ChangeImpact{Id: string(cn.ID), Key: cn.Key, Type: cn.Type, Intent: string(cn.Intent), Rationale: cn.Rationale,
 		Pre: RefPtrToPB(cn.Pre), Post: RefPtrToPB(cn.Post), Landed: RefPtrToPB(cn.Landed), Review: string(cn.Review),
 		Via: string(cn.Via), Recheck: cn.Recheck, ProducedBy: cn.ProducedBy, Execution: cn.Execution, CreatedAt: Time(cn.CreatedAt),
 		Flow: cn.Flow, Superseded: cn.Superseded}
@@ -281,13 +281,13 @@ func ChangeNodeToPB(cn domain.ChangeNode) *graphv1.ChangeNode {
 	return out
 }
 
-func ChangeNodeFromPB(cn *graphv1.ChangeNode) domain.ChangeNode {
+func ChangeImpactFromPB(cn *graphv1.ChangeImpact) domain.ChangeImpact {
 	if cn == nil {
-		return domain.ChangeNode{}
+		return domain.ChangeImpact{}
 	}
-	out := domain.ChangeNode{ID: domain.ChangeNodeID(cn.Id), Key: cn.Key, Type: cn.Type, Intent: domain.NodeIntent(cn.Intent), Rationale: cn.Rationale,
+	out := domain.ChangeImpact{ID: domain.ChangeImpactID(cn.Id), Key: cn.Key, Type: cn.Type, Intent: domain.NodeIntent(cn.Intent), Rationale: cn.Rationale,
 		Pre: RefPtrFromPB(cn.Pre), Post: RefPtrFromPB(cn.Post), Landed: RefPtrFromPB(cn.Landed), Review: domain.NodeReview(cn.Review),
-		Via: domain.ChangeNodeID(cn.Via), Recheck: cn.Recheck, ProducedBy: cn.ProducedBy, Execution: cn.Execution, CreatedAt: FromTime(cn.CreatedAt),
+		Via: domain.ChangeImpactID(cn.Via), Recheck: cn.Recheck, ProducedBy: cn.ProducedBy, Execution: cn.Execution, CreatedAt: FromTime(cn.CreatedAt),
 		Flow: cn.Flow, Superseded: cn.Superseded}
 	for _, r := range cn.Reviews {
 		out.Reviews = append(out.Reviews, domain.Review{Status: domain.NodeReview(r.Status), By: r.By, Comment: r.Comment, At: FromTime(r.At), Flow: r.Flow, Execution: r.Execution, Superseded: r.Superseded})
@@ -301,21 +301,21 @@ func ChangeNodeFromPB(cn *graphv1.ChangeNode) domain.ChangeNode {
 	return out
 }
 
-func ChangeNodesToPB(cns []domain.ChangeNode) []*graphv1.ChangeNode {
-	out := make([]*graphv1.ChangeNode, len(cns))
+func ChangeImpactsToPB(cns []domain.ChangeImpact) []*graphv1.ChangeImpact {
+	out := make([]*graphv1.ChangeImpact, len(cns))
 	for i, cn := range cns {
-		out[i] = ChangeNodeToPB(cn)
+		out[i] = ChangeImpactToPB(cn)
 	}
 	return out
 }
 
-func ChangeNodesFromPB(cns []*graphv1.ChangeNode) []domain.ChangeNode {
+func ChangeImpactsFromPB(cns []*graphv1.ChangeImpact) []domain.ChangeImpact {
 	if len(cns) == 0 {
 		return nil
 	}
-	out := make([]domain.ChangeNode, len(cns))
+	out := make([]domain.ChangeImpact, len(cns))
 	for i, cn := range cns {
-		out[i] = ChangeNodeFromPB(cn)
+		out[i] = ChangeImpactFromPB(cn)
 	}
 	return out
 }

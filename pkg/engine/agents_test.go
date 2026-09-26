@@ -118,7 +118,7 @@ func TestSubAgentsWithSuspension(t *testing.T) {
 	var decisions []ItemInput
 	for _, n := range bb.Change.Nodes {
 		if n.Intent == domain.IntentCreated {
-			decisions = append(decisions, ItemInput{Kind: "changeNode", ChangeNode: &dsl.NodeOp{Op: "review", Node: n.Key, Accept: true, Comment: "reviewed by a human"}})
+			decisions = append(decisions, ItemInput{Kind: "changeImpact", ChangeImpact: &dsl.NodeOp{Op: "review", Node: n.Key, Accept: true, Comment: "reviewed by a human"}})
 		}
 	}
 	if len(decisions) == 0 {

@@ -10,7 +10,7 @@ import (
 	"github.com/zimwip/goap/pkg/llm"
 )
 
-func completedRun(t *testing.T) (*Engine, context.Context, *Process, domain.ChangeSet) {
+func completedRun(t *testing.T) (*Engine, context.Context, *Process, domain.Change) {
 	t.Helper()
 	ctx := context.Background()
 	e, g, base := setup(t)
@@ -29,7 +29,7 @@ func completedRun(t *testing.T) (*Engine, context.Context, *Process, domain.Chan
 }
 
 // itemsOfSteps are the items produced by the steps of p from `from` on.
-func itemsOfSteps(c domain.ChangeSet, p *Process, from int) map[domain.ItemID]bool {
+func itemsOfSteps(c domain.Change, p *Process, from int) map[domain.ItemID]bool {
 	execs := map[string]bool{}
 	for _, s := range p.Steps[from:] {
 		execs[s.Execution] = true
@@ -43,13 +43,13 @@ func itemsOfSteps(c domain.ChangeSet, p *Process, from int) map[domain.ItemID]bo
 	return out
 }
 
-// nodesOfSteps are the change nodes declared by the steps of p from `from` on.
-func nodesOfSteps(c domain.ChangeSet, p *Process, from int) map[domain.ChangeNodeID]bool {
+// nodesOfSteps are the change impacts declared by the steps of p from `from` on.
+func nodesOfSteps(c domain.Change, p *Process, from int) map[domain.ChangeImpactID]bool {
 	execs := map[string]bool{}
 	for _, s := range p.Steps[from:] {
 		execs[s.Execution] = true
 	}
-	out := map[domain.ChangeNodeID]bool{}
+	out := map[domain.ChangeImpactID]bool{}
 	for _, n := range c.Nodes {
 		if execs[n.Execution] {
 			out[n.ID] = true
@@ -61,7 +61,7 @@ func nodesOfSteps(c domain.ChangeSet, p *Process, from int) map[domain.ChangeNod
 func TestRelaunchStepAdoptFlow(t *testing.T) {
 	e, ctx, old, c := completedRun(t)
 	g := e.Graph.(interface {
-		Change(context.Context, domain.ChangeID) (domain.ChangeSet, error)
+		Change(context.Context, domain.ChangeID) (domain.Change, error)
 	})
 	if len(old.Steps) < 3 {
 		t.Fatalf("steps = %d", len(old.Steps))
@@ -72,7 +72,7 @@ func TestRelaunchStepAdoptFlow(t *testing.T) {
 		delete(keptNodes, id)
 	}
 	if len(replaced) == 0 || len(replacedNodes) != 2 || len(keptNodes) != 1 {
-		t.Fatalf("replaced %d items, %d change nodes, kept %d change nodes", len(replaced), len(replacedNodes), len(keptNodes))
+		t.Fatalf("replaced %d items, %d change impacts, kept %d change impacts", len(replaced), len(replacedNodes), len(keptNodes))
 	}
 
 	np, err := e.Relaunch(ctx, old.ID, 1, "the PSP answer changed", "")
@@ -88,7 +88,7 @@ func TestRelaunchStepAdoptFlow(t *testing.T) {
 			t.Fatalf("item %s = %s, want stale", id, st)
 		}
 	}
-	// the flow sees the change node of the earlier step, not the ones the relaunched steps declared
+	// the flow sees the change impact of the earlier step, not the ones the relaunched steps declared
 	bb, err := e.Graph.BlackboardIn(ctx, old.ChangeID, np.Flow)
 	if err != nil {
 		t.Fatal(err)
@@ -123,7 +123,7 @@ func TestRelaunchStepAdoptFlow(t *testing.T) {
 		}
 	}
 	if flowNodes != len(replacedNodes) {
-		t.Fatalf("the flow declares again the %d change nodes it replaces, got %d", len(replacedNodes), flowNodes)
+		t.Fatalf("the flow declares again the %d change impacts it replaces, got %d", len(replacedNodes), flowNodes)
 	}
 	// the previous run is untouched until the human decides
 	if cur, _ := e.Store.Get(ctx, old.ID); cur.Status != StatusCompleted {
@@ -154,7 +154,7 @@ func TestRelaunchStepAdoptFlow(t *testing.T) {
 	for _, n := range c.Nodes {
 		switch {
 		case replacedNodes[n.ID] && !n.Superseded:
-			t.Fatalf("the stale change node %s must be superseded", n.Key)
+			t.Fatalf("the stale change impact %s must be superseded", n.Key)
 		case n.Flow != "":
 			t.Fatalf("an adopted flow leaves no candidate: %+v", n)
 		case !n.Superseded:
@@ -162,7 +162,7 @@ func TestRelaunchStepAdoptFlow(t *testing.T) {
 		}
 	}
 	if live != 3 {
-		t.Fatalf("REQ-1, TST-1 and CMP-1 are the change's change nodes, got %d", live)
+		t.Fatalf("REQ-1, TST-1 and CMP-1 are the change's change impacts, got %d", live)
 	}
 	for _, it := range c.Items {
 		if it.Flow == np.Flow && it.Kind != domain.KindFlow {
@@ -185,7 +185,7 @@ func TestRelaunchStepAdoptFlow(t *testing.T) {
 func TestRelaunchStepDiscardFlow(t *testing.T) {
 	e, ctx, old, c := completedRun(t)
 	g := e.Graph.(interface {
-		Change(context.Context, domain.ChangeID) (domain.ChangeSet, error)
+		Change(context.Context, domain.ChangeID) (domain.Change, error)
 	})
 	replaced := itemsOfSteps(c, old, 1)
 	replacedNodes := nodesOfSteps(c, old, 1)
@@ -221,7 +221,7 @@ func TestRelaunchStepDiscardFlow(t *testing.T) {
 	for _, n := range c.Nodes {
 		switch {
 		case replacedNodes[n.ID] && n.Superseded:
-			t.Fatalf("the change node %s counts again after a discard", n.Key)
+			t.Fatalf("the change impact %s counts again after a discard", n.Key)
 		case n.Flow == np.Flow && n.Review != domain.ReviewRejected:
 			t.Fatalf("a discarded candidate is rejected: %+v", n)
 		}

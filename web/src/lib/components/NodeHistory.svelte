@@ -86,7 +86,7 @@
     {/if}
     <section class="card">
       <table>
-        <thead><tr><th>Version</th><th>State</th><th>How</th><th>Change</th><th>Date</th><th>Properties</th></tr></thead>
+        <thead><tr><th>Version</th><th>State</th><th>How</th><th>Change</th><th>Why</th><th>Date</th><th>Properties</th></tr></thead>
         <tbody>
           {#each shown as e (e.v.version)}
             <tr class:deleted={e.v.deleted}>
@@ -107,6 +107,7 @@
                   <span class="hint">{changeTitle(undefined)}</span>
                 {/if}
               </td>
+              <td>{#if e.v.comment}{e.v.comment}{:else}<span class="hint">—</span>{/if}</td>
               <td>{formatDate(e.v.createdAt)}</td>
               <td>
                 <button type="button" class="link" aria-expanded={open.includes(e.v.version ?? 0)} onclick={() => toggle(e.v.version ?? 0)}>
@@ -116,7 +117,7 @@
             </tr>
             {#if open.includes(e.v.version ?? 0)}
               <tr class="detail">
-                <td colspan="6">
+                <td colspan="7">
                   {#if e.diff.length}
                     <table class="diff">
                       <tbody>

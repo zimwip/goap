@@ -29,12 +29,12 @@ func Activation(bb domain.Blackboard) map[string]any {
 			"id": string(c.ID), "title": c.Title, "intent": c.Intent, "status": string(c.Status),
 			"goal": c.Goal, "methodology": c.Methodology, "branch": domain.BranchOf(c.Branch), "baseline": string(c.BaselineID), "resultBaseline": string(c.ResultBaselineID), "data": orEmpty(c.Data),
 		},
-		"items":       items,
-		"changeNodes": h.changeNodes(),
-		"decisions":   orEmptyList(byKind[domain.KindDecision]),
-		"artifacts":   orEmptyList(byKind[domain.KindArtifact]),
-		"merges":      orEmptyList(byKind[domain.KindMerge]),
-		"vars":        vars,
+		"items":         items,
+		"changeImpacts": h.changeImpacts(),
+		"decisions":     orEmptyList(byKind[domain.KindDecision]),
+		"artifacts":     orEmptyList(byKind[domain.KindArtifact]),
+		"merges":        orEmptyList(byKind[domain.KindMerge]),
+		"vars":          vars,
 	}
 }
 
@@ -103,10 +103,10 @@ func orEmptyList(l []any) []any {
 	return l
 }
 
-// changeNodes lists the change nodes of the change (ADR 0024): the stored ones
+// changeImpacts lists the change impacts of the change (ADR 0024): the stored ones
 // and the ones derived from its items. pre, post and landed are node views, or
-// null while absent; a planned change node has no post yet.
-func (h hydrator) changeNodes() []any {
+// null while absent; a planned change impact has no post yet.
+func (h hydrator) changeImpacts() []any {
 	out := make([]any, 0, len(h.bb.Change.Nodes))
 	for _, cn := range h.bb.Change.Nodes {
 		ref := func(r *domain.NodeRef) any {
@@ -137,7 +137,7 @@ func (h hydrator) changeNodes() []any {
 }
 
 // currentProps are the properties of the node as the change has it: the version written, else the one it starts from.
-func (h hydrator) currentProps(cn domain.ChangeNode) map[string]any {
+func (h hydrator) currentProps(cn domain.ChangeImpact) map[string]any {
 	switch {
 	case cn.Post != nil:
 		return orEmpty(h.bb.Nodes[*cn.Post].Properties)

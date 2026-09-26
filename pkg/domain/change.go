@@ -6,13 +6,13 @@ import (
 	"time"
 )
 
-// ChangeID identifies a ChangeSet.
+// ChangeID identifies a Change.
 type ChangeID string
 
 // ItemID identifies a ChangeItem.
 type ItemID string
 
-// ChangeStatus is the lifecycle state of a ChangeSet.
+// ChangeStatus is the lifecycle state of a Change.
 type ChangeStatus string
 
 const (
@@ -24,9 +24,9 @@ const (
 	ChangeAbandoned    ChangeStatus = "abandoned"
 )
 
-// ChangeSet describes a modification of the domain graph. It starts from a
+// Change describes a modification of the domain graph. It starts from a
 // reference baseline and accumulates items. It is the blackboard of a process.
-type ChangeSet struct {
+type Change struct {
 	ID          ChangeID `json:"id"`
 	Title       string   `json:"title"`
 	Intent      string   `json:"intent"`
@@ -48,8 +48,8 @@ type ChangeSet struct {
 	Data             map[string]any `json:"data,omitempty"`
 	Items            []ChangeItem   `json:"items"`
 	// Nodes are the node versions the change reads, modifies or creates (ADR 0024).
-	Nodes     []ChangeNode `json:"nodes,omitempty"`
-	CreatedAt time.Time    `json:"createdAt"`
+	Nodes     []ChangeImpact `json:"nodes,omitempty"`
+	CreatedAt time.Time      `json:"createdAt"`
 
 	flx  *flowIndex // replay of the flow events, valid for flxN items
 	flxN int
@@ -59,12 +59,12 @@ type ChangeSet struct {
 // (change.created, change.item_added, change.applied).
 type ChangeEvent struct {
 	Type     string       `json:"type"`
-	Change   ChangeSet    `json:"change"`
+	Change   Change       `json:"change"`
 	Baseline *Baseline    `json:"baseline,omitempty"`
 	Items    []ChangeItem `json:"items,omitempty"`
 }
 
-// ItemKind classifies the facts of the blackboard (the nodes a change acts on are its change nodes).
+// ItemKind classifies the facts of the blackboard (the nodes a change acts on are its change impacts).
 type ItemKind string
 
 const (
@@ -141,7 +141,7 @@ func (it ChangeItem) Validate() error {
 }
 
 // ItemsOfKind returns the items of the given kind.
-func (c *ChangeSet) ItemsOfKind(k ItemKind) []ChangeItem {
+func (c *Change) ItemsOfKind(k ItemKind) []ChangeItem {
 	var out []ChangeItem
 	for _, it := range c.Items {
 		if it.Kind == k {
@@ -152,7 +152,7 @@ func (c *ChangeSet) ItemsOfKind(k ItemKind) []ChangeItem {
 }
 
 // Item returns the item with the given id.
-func (c *ChangeSet) Item(id ItemID) (ChangeItem, bool) {
+func (c *Change) Item(id ItemID) (ChangeItem, bool) {
 	for _, it := range c.Items {
 		if it.ID == id {
 			return it, true
@@ -166,7 +166,7 @@ func (c *ChangeSet) Item(id ItemID) (ChangeItem, bool) {
 // branch is a candidate until the branch is adopted (and rejected when it is
 // discarded), an item invalidated by a relaunched step is stale until the new
 // flow is adopted (then superseded).
-func (c *ChangeSet) EffectiveStatus(id ItemID) ItemStatus {
+func (c *Change) EffectiveStatus(id ItemID) ItemStatus {
 	st := ItemProposed
 	var own string
 	for _, it := range c.Items {
@@ -215,7 +215,7 @@ func (c *ChangeSet) EffectiveStatus(id ItemID) ItemStatus {
 
 // InEffect reports whether an item counts for the change: it is neither
 // rejected, superseded nor the candidate of a flow branch.
-func (c *ChangeSet) InEffect(id ItemID) bool {
+func (c *Change) InEffect(id ItemID) bool {
 	switch c.EffectiveStatus(id) {
 	case ItemRejected, ItemSuperseded, ItemCandidate:
 		return false
@@ -224,7 +224,7 @@ func (c *ChangeSet) InEffect(id ItemID) bool {
 }
 
 // Active reports whether an item is not superseded.
-func (c *ChangeSet) Active(id ItemID) bool {
+func (c *Change) Active(id ItemID) bool {
 	st := c.EffectiveStatus(id)
 	return st != ItemSuperseded && st != ItemCandidate
 }

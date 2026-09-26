@@ -43,7 +43,7 @@ type Link struct {
 }
 
 // Item is a fact of the blackboard snapshot (artifact, decision): the nodes the change acts
-// on are the change nodes.
+// on are the change impacts.
 type Item struct {
 	ID         string         `json:"id"`
 	Kind       string         `json:"kind"`
@@ -53,39 +53,39 @@ type Item struct {
 	Data       map[string]any `json:"data"`
 }
 
-// ChangeNode is a change node of the blackboard snapshot (ADR 0024): a node the
+// ChangeImpact is a change impact of the blackboard snapshot (ADR 0024): a node the
 // change reads, modifies or creates, with the versions it starts from and produces.
-type ChangeNode struct {
+type ChangeImpact struct {
 	ID        string `json:"id"`
 	Key       string `json:"key"`
 	Type      string `json:"type"`
 	Intent    string `json:"intent"`
 	Rationale string `json:"rationale"`
 	Review    string `json:"review"`
-	// Planned is set while the change node has no post version yet.
+	// Planned is set while the change impact has no post version yet.
 	Planned bool  `json:"planned"`
 	Pre     *Node `json:"pre"`
 	Post    *Node `json:"post"`
 	Landed  *Node `json:"landed"`
 	// Links are the outgoing links of the version written (post): from this node to the linked ones.
 	Links []Link `json:"links"`
-	// Items are the items the change node is derived from (none when written directly).
+	// Items are the items the change impact is derived from (none when written directly).
 	Items []string `json:"items"`
 }
 
-// NodeOp is an operation on a change node buffered by a script; the engine
+// NodeOp is an operation on a change impact buffered by a script; the engine
 // applies them in order after the script ends.
 type NodeOp struct {
 	// Op is declare (ImpactNode, CreateNode), write (WriteNode) or review (ReviewNode).
 	Op string `json:"op"`
-	// Ref names a declared change node ("#nN") for the next operations of the script.
+	// Ref names a declared change impact ("#nN") for the next operations of the script.
 	Ref    string `json:"ref,omitempty"`
 	Intent string `json:"intent,omitempty"`
 	Key    string `json:"key,omitempty"`
 	Type   string `json:"type,omitempty"`
 	// Rationale says why (declare); the comment of a review is in Comment.
 	Rationale string `json:"rationale,omitempty"`
-	// Node designates the change node of a write or review: a node key or "#nN".
+	// Node designates the change impact of a write or review: a node key or "#nN".
 	Node        string         `json:"node,omitempty"`
 	Props       map[string]any `json:"props,omitempty"`
 	State       string         `json:"state,omitempty"`
@@ -162,7 +162,7 @@ type Job struct {
 	Params    map[string]any `json:"params"`
 	Vars      map[string]any `json:"vars"`
 	Items     []Item         `json:"items"`
-	Nodes     []ChangeNode   `json:"nodes"`
+	Nodes     []ChangeImpact `json:"nodes"`
 	Timeout   time.Duration  `json:"timeout"`
 }
 
@@ -170,7 +170,7 @@ type Job struct {
 // ItemInput format), logs and whether the script was suspended.
 type Result struct {
 	Items []map[string]any `json:"items"`
-	// Nodes are the change node operations, in order (the engine applies them).
+	// Nodes are the change impact operations, in order (the engine applies them).
 	Nodes     []NodeOp  `json:"nodes"`
 	Output    string    `json:"output"`
 	Logs      []LogLine `json:"logs"`
@@ -221,10 +221,10 @@ func (c *Ctx) Items(kind string) []Item {
 	return out
 }
 
-// ChangeNodes returns the change nodes of the change: the stored ones and the ones derived from its items.
-func (c *Ctx) ChangeNodes() []ChangeNode {
+// ChangeImpacts returns the change impacts of the change: the stored ones and the ones derived from its items.
+func (c *Ctx) ChangeImpacts() []ChangeImpact {
 	if c.job.Nodes == nil {
-		return []ChangeNode{}
+		return []ChangeImpact{}
 	}
 	return c.job.Nodes
 }
@@ -251,7 +251,7 @@ func (c *Ctx) emit(item map[string]any) string {
 }
 
 // ImpactNode declares that the change acts on an existing node of the reference
-// baseline, and why: a change node with no version written yet. It returns a
+// baseline, and why: a change impact with no version written yet. It returns a
 // reference ("#nN") for WriteNode and ReviewNode of the same script.
 func (c *Ctx) ImpactNode(key, rationale string) string {
 	c.nseq++
@@ -269,7 +269,7 @@ func (c *Ctx) CreateNode(nodeType, key, rationale string) string {
 }
 
 // WriteNode writes the next version of a declared node on the change branch.
-// node is a key of a change node or the reference returned by ImpactNode /
+// node is a key of a change impact or the reference returned by ImpactNode /
 // CreateNode; w may hold props (merged over the current ones), state (a
 // lifecycle state), links ([{type, to}] with to a node key or a reference of a
 // node written earlier), removeLinks (link ids) and retire.
@@ -313,7 +313,7 @@ func asList(v any) []any {
 	return nil
 }
 
-// ReviewNode accepts or rejects a change node; the comment is mandatory.
+// ReviewNode accepts or rejects a change impact; the comment is mandatory.
 func (c *Ctx) ReviewNode(node string, accept bool, comment string) {
 	c.nodeOps = append(c.nodeOps, NodeOp{Op: "review", Node: node, Accept: accept, Comment: comment, ProducedBy: c.job.Action})
 }

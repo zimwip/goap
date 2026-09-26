@@ -27,16 +27,16 @@ func NewClient(hc *http.Client, baseURL string, opts ...connect.ClientOption) *C
 	return &Client{rpc: graphv1connect.NewGraphServiceClient(hc, baseURL, opts...)}
 }
 
-func (c *Client) CreateChange(ctx context.Context, in graph.NewChange) (domain.ChangeSet, error) {
+func (c *Client) CreateChange(ctx context.Context, in graph.NewChange) (domain.Change, error) {
 	r, err := c.rpc.CreateChange(ctx, connect.NewRequest(&graphv1.CreateChangeRequest{Title: in.Title, Intent: in.Intent,
 		Methodology: in.Methodology, Namespace: in.Namespace, BaselineId: string(in.BaselineID), Branch: in.Branch, OwnBranch: in.OwnBranch, ParentId: string(in.ParentID), OwnerOrg: in.OwnerOrg, Data: pbconv.Struct(in.Data)}))
 	if err != nil {
-		return domain.ChangeSet{}, rpcerr.FromConnect(err)
+		return domain.Change{}, rpcerr.FromConnect(err)
 	}
 	return pbconv.ChangeFromPB(r.Msg.Change), nil
 }
 
-func (c *Client) UpdateChange(ctx context.Context, id domain.ChangeID, p graph.ChangePatch) (domain.ChangeSet, error) {
+func (c *Client) UpdateChange(ctx context.Context, id domain.ChangeID, p graph.ChangePatch) (domain.Change, error) {
 	req := &graphv1.UpdateChangeRequest{Id: string(id), Goal: p.Goal, Data: pbconv.Struct(p.Data)}
 	if p.Status != nil {
 		s := string(*p.Status)
@@ -44,7 +44,7 @@ func (c *Client) UpdateChange(ctx context.Context, id domain.ChangeID, p graph.C
 	}
 	r, err := c.rpc.UpdateChange(ctx, connect.NewRequest(req))
 	if err != nil {
-		return domain.ChangeSet{}, rpcerr.FromConnect(err)
+		return domain.Change{}, rpcerr.FromConnect(err)
 	}
 	return pbconv.ChangeFromPB(r.Msg.Change), nil
 }
@@ -58,38 +58,38 @@ func (c *Client) AddItems(ctx context.Context, id domain.ChangeID, items []domai
 }
 
 // AddNodes implements engine.GraphPort.
-func (c *Client) AddNodes(ctx context.Context, id domain.ChangeID, nodes []domain.ChangeNode) ([]domain.ChangeNode, error) {
-	r, err := c.rpc.AddChangeNodes(ctx, connect.NewRequest(&graphv1.AddChangeNodesRequest{ChangeId: string(id), Nodes: pbconv.ChangeNodesToPB(nodes)}))
+func (c *Client) AddNodes(ctx context.Context, id domain.ChangeID, nodes []domain.ChangeImpact) ([]domain.ChangeImpact, error) {
+	r, err := c.rpc.AddChangeImpacts(ctx, connect.NewRequest(&graphv1.AddChangeImpactsRequest{ChangeId: string(id), Nodes: pbconv.ChangeImpactsToPB(nodes)}))
 	if err != nil {
 		return nil, rpcerr.FromConnect(err)
 	}
-	return pbconv.ChangeNodesFromPB(r.Msg.Nodes), nil
+	return pbconv.ChangeImpactsFromPB(r.Msg.Nodes), nil
 }
 
 // WriteNode implements engine.GraphPort.
-func (c *Client) WriteNode(ctx context.Context, id domain.ChangeID, node domain.ChangeNodeID, w graph.NodeWrite) (domain.ChangeNode, error) {
-	req := &graphv1.WriteChangeNodeRequest{ChangeId: string(id), ChangeNodeId: string(node), Props: pbconv.Struct(w.Properties), State: w.State, Retire: w.Retire, Flow: w.Flow, Execution: w.Execution}
+func (c *Client) WriteNode(ctx context.Context, id domain.ChangeID, node domain.ChangeImpactID, w graph.NodeWrite) (domain.ChangeImpact, error) {
+	req := &graphv1.WriteChangeImpactRequest{ChangeId: string(id), ChangeImpactId: string(node), Props: pbconv.Struct(w.Properties), State: w.State, Retire: w.Retire, Flow: w.Flow, Execution: w.Execution}
 	for _, l := range w.AddLinks {
 		req.AddLinks = append(req.AddLinks, &graphv1.NodeLinkWrite{Type: l.Type, To: pbconv.RefToPB(l.To), Props: pbconv.Struct(l.Properties)})
 	}
 	for _, l := range w.RemoveLinks {
 		req.RemoveLinks = append(req.RemoveLinks, string(l))
 	}
-	r, err := c.rpc.WriteChangeNode(ctx, connect.NewRequest(req))
+	r, err := c.rpc.WriteChangeImpact(ctx, connect.NewRequest(req))
 	if err != nil {
-		return domain.ChangeNode{}, rpcerr.FromConnect(err)
+		return domain.ChangeImpact{}, rpcerr.FromConnect(err)
 	}
-	return pbconv.ChangeNodeFromPB(r.Msg.Node), nil
+	return pbconv.ChangeImpactFromPB(r.Msg.Node), nil
 }
 
 // ReviewNodeOn implements engine.GraphPort (the reviewer is the principal of the request).
-func (c *Client) ReviewNodeOn(ctx context.Context, id domain.ChangeID, flow, execution string, node domain.ChangeNodeID, status domain.NodeReview, _, comment string) (domain.ChangeNode, error) {
-	r, err := c.rpc.ReviewChangeNode(ctx, connect.NewRequest(&graphv1.ReviewChangeNodeRequest{ChangeId: string(id), ChangeNodeId: string(node),
+func (c *Client) ReviewNodeOn(ctx context.Context, id domain.ChangeID, flow, execution string, node domain.ChangeImpactID, status domain.NodeReview, _, comment string) (domain.ChangeImpact, error) {
+	r, err := c.rpc.ReviewChangeImpact(ctx, connect.NewRequest(&graphv1.ReviewChangeImpactRequest{ChangeId: string(id), ChangeImpactId: string(node),
 		Accept: status == domain.ReviewAccepted, Comment: comment, Flow: flow, Execution: execution}))
 	if err != nil {
-		return domain.ChangeNode{}, rpcerr.FromConnect(err)
+		return domain.ChangeImpact{}, rpcerr.FromConnect(err)
 	}
-	return pbconv.ChangeNodeFromPB(r.Msg.Node), nil
+	return pbconv.ChangeImpactFromPB(r.Msg.Node), nil
 }
 
 // Commit runs a change of node edits in the graph service (see graph.Commit).

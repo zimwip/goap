@@ -27,15 +27,15 @@ func sdlcModel(t *testing.T) llm.Client {
 		var out string
 		switch {
 		case strings.Contains(p, "DIRECTLY concerned"):
-			out = `{"items":[{"kind":"changeNode","changeNode":{"op":"declare","intent":"modified","key":"NEED-1","rationale":"new payment method"}},
-			{"kind":"changeNode","changeNode":{"op":"declare","intent":"modified","key":"REQ-1","rationale":"the PSP must handle split payments"}}]}`
+			out = `{"items":[{"kind":"changeImpact","changeImpact":{"op":"declare","intent":"modified","key":"NEED-1","rationale":"new payment method"}},
+			{"kind":"changeImpact","changeImpact":{"op":"declare","intent":"modified","key":"REQ-1","rationale":"the PSP must handle split payments"}}]}`
 		case strings.Contains(p, "Revise the impacted requirements"):
-			out = `{"items":[{"kind":"changeNode","changeNode":{"op":"write","node":"REQ-1","props":{"title":"Card payment (in full or in 3 installments) goes through the Acme PSP (API v2)"}}},
-			{"kind":"changeNode","changeNode":{"op":"declare","ref":"#r1","intent":"created","type":"FunctionalRequirement","key":"REQ-10","rationale":"pay in installments"}},
-			{"kind":"changeNode","changeNode":{"op":"write","node":"#r1","props":{"title":"Pay in 3 installments with no fees","priority":"high"},"links":[{"type":"satisfies","to":"NEED-1"}]}}]}`
+			out = `{"items":[{"kind":"changeImpact","changeImpact":{"op":"write","node":"REQ-1","props":{"title":"Card payment (in full or in 3 installments) goes through the Acme PSP (API v2)"}}},
+			{"kind":"changeImpact","changeImpact":{"op":"declare","ref":"#r1","intent":"created","type":"FunctionalRequirement","key":"REQ-10","rationale":"pay in installments"}},
+			{"kind":"changeImpact","changeImpact":{"op":"write","node":"#r1","props":{"title":"Pay in 3 installments with no fees","priority":"high"},"links":[{"type":"satisfies","to":"NEED-1"}]}}]}`
 		case strings.Contains(p, "Design the evolution"):
-			out = `{"items":[{"kind":"changeNode","changeNode":{"op":"declare","ref":"#c1","intent":"created","type":"Component","key":"CMP-10","rationale":"a dedicated engine"}},
-			{"kind":"changeNode","changeNode":{"op":"write","node":"#c1","props":{"title":"installments-engine","technology":"java","version":"0.0.0"},"links":[{"type":"implements","to":"FCT-1"}]}},
+			out = `{"items":[{"kind":"changeImpact","changeImpact":{"op":"declare","ref":"#c1","intent":"created","type":"Component","key":"CMP-10","rationale":"a dedicated engine"}},
+			{"kind":"changeImpact","changeImpact":{"op":"write","node":"#c1","props":{"title":"installments-engine","technology":"java","version":"0.0.0"},"links":[{"type":"implements","to":"FCT-1"}]}},
 			{"kind":"artifact","type":"design","data":{"summary":"dedicated installment scheduling engine","decisions":["new Java component"]}}]}`
 		case strings.Contains(p, "Write the release note"):
 			out = `{"items":[{"kind":"artifact","type":"release_note","data":{"markdown":"# Payment in 3 installments"}}]}`
@@ -122,7 +122,7 @@ func TestSDLCDelivery(t *testing.T) {
 	var decisions []engine.ItemInput
 	for _, n := range c.Nodes {
 		if n.Review == domain.ReviewProposed {
-			decisions = append(decisions, engine.ItemInput{Kind: "changeNode", ChangeNode: &dsl.NodeOp{Op: "review", Node: n.Key, Accept: true, Comment: "reviewed"}})
+			decisions = append(decisions, engine.ItemInput{Kind: "changeImpact", ChangeImpact: &dsl.NodeOp{Op: "review", Node: n.Key, Accept: true, Comment: "reviewed"}})
 		}
 		if n.Intent == domain.IntentCreated {
 			count[n.Type]++

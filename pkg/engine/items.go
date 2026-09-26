@@ -9,20 +9,20 @@ import (
 )
 
 // ItemInput is the external (LLM / human) representation of an item of the
-// change: a fact (artifact, decision) or, with kind "changeNode", an operation
-// on a change node. Items of the same batch are designated by "#<ref>" and
+// change: a fact (artifact, decision) or, with kind "changeImpact", an operation
+// on a change impact. Items of the same batch are designated by "#<ref>" and
 // existing items by "@<itemId>".
 type ItemInput struct {
 	Ref string `json:"ref,omitempty"`
-	// Kind is artifact or decision; "changeNode" carries an operation on a change node (ChangeNode:
+	// Kind is artifact or decision; "changeImpact" carries an operation on a change impact (ChangeImpact:
 	// declare, write or review, ADR 0024), applied in order with the ones of the batch.
 	Kind        string         `json:"kind"`
 	Type        string         `json:"type,omitempty"`
 	Decision    *DecisionInput `json:"decision,omitempty"`
 	Data        map[string]any `json:"data,omitempty"`
 	DerivedFrom []string       `json:"derivedFrom,omitempty"`
-	// ChangeNode is the operation of a "changeNode" item.
-	ChangeNode *dsl.NodeOp `json:"changeNode,omitempty"`
+	// ChangeImpact is the operation of a "changeImpact" item.
+	ChangeImpact *dsl.NodeOp `json:"changeImpact,omitempty"`
 }
 
 // DecisionInput is the external representation of a decision.
@@ -39,7 +39,7 @@ type resolver struct {
 	newID func() string
 }
 
-func newResolver(change domain.ChangeSet, newID func() string) *resolver {
+func newResolver(change domain.Change, newID func() string) *resolver {
 	r := &resolver{items: map[domain.ItemID]bool{}, local: map[string]domain.ItemID{}, newID: newID}
 	for _, it := range change.Items {
 		r.items[it.ID] = true

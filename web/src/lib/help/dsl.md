@@ -12,8 +12,8 @@ The engine injects a `ctx` object: the same API exists in both languages
 (`camelCase` in JavaScript, `PascalCase` in Go).
 
 Writes are **buffered** and only reach the blackboard (the change) at the end of
-the action, atomically; an action that errors writes nothing. The `#pN` references returned by
-writes designate items created within the same execution.
+the action, atomically; an action that errors writes nothing. The `#nN` references returned by
+writes designate change impacts declared within the same execution.
 
 ## Reading
 
@@ -22,26 +22,31 @@ writes designate items created within the same execution.
 | `ctx.intent()` / `ctx.goal()` / `ctx.agent()` / `ctx.action()` | `Intent()`… | `string` |
 | `ctx.param(name)` / `ctx.var(name)` | `Param(name)` / `Var(name)` | JSON value |
 | `ctx.items(kind)` (`""` = all) | `Items(kind)` | `Item[]` |
-| `ctx.impacts()` / `ctx.proposals()` | `Impacts()` / `Proposals()` | `Item[]` |
+| `ctx.changeImpacts()` | `ChangeImpacts()` | `ChangeImpact[]` |
 | `ctx.node(key)` | `Node(key)` | `Node` (reference baseline) |
 | `ctx.nodes(type)` (`""` = all) | `Nodes(type)` | `Node[]` |
 | `ctx.links(key, direction, type)` (`"out"`/`"in"`, `""` = all) | `Links(…)` | `Link[]` |
 
-`Item`: `{id, kind, type, status, target, data, op, node, link, producedBy}` (`link`: `{type, from, to}` of a link proposal, endpoints = node key or `@<itemId>` of a proposed node, reusable in `proposeLink`) — `Node`: `{id, version, key, type, props}` —
+`Item` (artifact, decision): `{id, kind, type, status, data, producedBy}` — `Node`: `{id, version, key, type, props}` —
 `Link`: `{id, type, from, to}` (`from`/`to`: `{id, version, key, type}`).
+
+`ChangeImpact`: `{id, key, type, intent, rationale, review, planned, pre, post, landed, links}` — the node the change reads, modifies
+or creates ([ADR 0024](adr/0024-change-impacts.md)); `pre` / `post` / `landed` are `Node`s or `null`, `planned` is set while no
+version is written, `links` are the outgoing links of the version written.
 
 ## Writing (to the change)
 
 | JavaScript | Effect |
 |---|---|
-| `ctx.addImpact(key, reason)` | direct impact on a baseline node |
-| `ctx.proposeNode(type, key, props)` | creation proposal → `"#pN"` |
-| `ctx.proposeUpdate(key, props)` | new version of a node |
-| `ctx.proposeDelete(key)` | deletion |
-| `ctx.proposeTransition(key, state)` | move a node to a lifecycle state (reopen it before editing, leave the editable states before the change is applied) |
-| `ctx.proposeLink(from, type, to)` | link (`from` / `to`: node key or `#pN`) |
 | `ctx.addArtifact(type, data)` | free-form data (report…) |
-| `ctx.decide(itemId, accept, comment)` | decision on a proposal |
+| `ctx.impactNode(key, rationale)` | the change acts on a baseline node, and why → `"#nN"` (a change impact with no version yet) |
+| `ctx.createNode(type, key, rationale)` | the change creates a node → `"#nN"` |
+| `ctx.writeNode(node, {props, state, links, removeLinks, retire})` | write the next version of the node of a change impact on the change branch (`node`: key or `#nN`; `links`: `[{type, to}]`, `to` a node key or a `#nN` already written; `props` merged; `state` a lifecycle state) |
+| `ctx.reviewNode(node, accept, comment)` | accept or reject a change impact; the comment is mandatory |
+
+The change impact calls need a change with a branch of its own; they are applied in order when the action ends. On a flow
+branch (a relaunched step, ADR 0025) `changeImpacts()` shows the change impacts of the flow, the stale ones of the relaunched steps
+are not there, and what the script declares, writes and reviews stays on the flow until it is adopted.
 
 ## Calls (via the engine: authorized, traced, counted)
 
@@ -57,10 +62,10 @@ writes designate items created within the same execution.
 
 ```js
 // JavaScript: one test case per impacted requirement
-for (const i of ctx.impacts()) {
-  if (i.target.type !== "Requirement") continue;
-  const t = ctx.proposeNode("TestCase", "TST-" + i.target.key, { title: "Verify " + i.target.props.title });
-  ctx.proposeLink(t, "verifies", i.target.key);
+for (const n of ctx.changeImpacts()) {
+  if (n.type !== "Requirement" || !n.pre) continue;
+  const t = ctx.createNode("TestCase", "TST-" + n.key, "verifies " + n.key);
+  ctx.writeNode(t, { props: { title: "Verify " + n.pre.props.title }, links: [{ type: "verifies", to: n.key }] });
 }
 ```
 
@@ -71,12 +76,12 @@ package action
 import "github.com/zimwip/goap/pkg/dsl"
 
 func Run(ctx *dsl.Ctx) error {
-	for _, i := range ctx.Impacts() {
-		if i.Target == nil || i.Target.Type != "Requirement" {
+	for _, n := range ctx.ChangeImpacts() {
+		if n.Type != "Requirement" || n.Pre == nil {
 			continue
 		}
-		t := ctx.ProposeNode("TestCase", "TST-"+i.Target.Key, map[string]any{"title": "Verify " + i.Target.Key})
-		ctx.ProposeLink(t, "verifies", i.Target.Key)
+		t := ctx.CreateNode("TestCase", "TST-"+n.Key, "verifies "+n.Key)
+		ctx.WriteNode(t, map[string]any{"props": map[string]any{"title": "Verify " + n.Key}})
 	}
 	return nil
 }

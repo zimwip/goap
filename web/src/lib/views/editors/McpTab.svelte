@@ -67,7 +67,7 @@
       const h = await headGraph();
       const existing = findNode(h, NS, 'MCP', keyOf(out.name!));
       const props: Struct = { name: out.name ?? '', description: out.description ?? '', tools: (out.tools ?? []) as unknown as Struct[] };
-      const item = existing ? updateNodeItem(existing, props) : createNodeItem(crypto.randomUUID(), keyOf(out.name!), 'MCP', props);
+      const item = existing ? updateNodeItem(existing, props) : createNodeItem(keyOf(out.name!), 'MCP', props);
       await applyOnMain(NS, `MCP ${out.name}`, `${existing ? 'Update' : 'Create'} MCP ${out.name}`, h.baselineId, [item]);
       await refreshTools();
       notify(`MCP ${out.name} saved`, 'ok');

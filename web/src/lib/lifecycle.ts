@@ -1,6 +1,6 @@
 // Node lifecycles as seen by a change (ADR 0014): the state a node has in the
-// change once its transition proposals are counted, and the transitions it can take.
-import type { ChangeItem, GraphNode, Lifecycle, LifecycleTransition, NodeRef } from './api';
+// change once its change impacts are counted, and the transitions it can take.
+import { graph, type ChangeImpact, type GraphNode, type Lifecycle, type LifecycleTransition, type NodeRef } from './api';
 
 /** Lifecycle of a node type, from the NodeType nodes of a baseline (extends chain included). */
 export function lifecycleResolver(nodes: GraphNode[]): (type: string | undefined) => Lifecycle | undefined {
@@ -40,33 +40,53 @@ export interface LifecycleRow {
   editable: boolean;
   /** transitions available from the effective state */
   transitions: LifecycleTransition[];
-  /** properties after the change's update proposals */
+  /** properties after the change's writes */
   props: Record<string, unknown>;
-  /** number of update proposals of the change on this node */
+  /** number of versions the change wrote on this node */
   edits: number;
   /** properties declared by the node type (inherited ones included) */
   declared: string[];
-  /** the create_node item, for a node the change creates (not stored yet) */
-  created?: ChangeItem;
-  /** the delete_node proposal standing on this node */
-  removal?: ChangeItem;
+  /** the change impact, for a node the change creates (not stored yet) */
+  created?: ChangeImpact;
+  /** the change impact whose written version retires this node */
+  removal?: ChangeImpact;
 }
 
-/** Ids of the items a decision rejects (the latest decision on an item wins). */
-export function rejectedIds(items: ChangeItem[]): Set<string> {
-  const out = new Set<string>();
-  for (const it of items) {
-    const d = it.decision;
-    if (it.kind !== 'decision' || !d?.item) continue;
-    if (d.accept) out.delete(d.item);
-    else out.add(d.item);
-  }
+/** Versions written by the change impacts, by `id@version` (the change impacts carry references only). */
+export type PostVersions = Map<string, GraphNode>;
+
+export async function loadPosts(cns: ChangeImpact[]): Promise<PostVersions> {
+  const out: PostVersions = new Map();
+  const ids = [...new Set(cns.filter((c) => c.post?.id && !c.superseded && !c.flow).map((c) => c.post!.id!))];
+  await Promise.all(
+    ids.map(async (id) => {
+      for (const v of (await graph.listNodeVersions(id)).versions ?? []) out.set(`${id}@${v.version}`, v);
+    }),
+  );
   return out;
 }
 
-/** Ids of the items another item replaces. */
-export function supersededIds(items: ChangeItem[]): Set<string> {
-  return new Set(items.flatMap((i) => i.supersedes ?? []));
+/** Change impacts standing in the main flow of the change: not replaced, not rejected. */
+const live = (c: ChangeImpact) => !c.superseded && !c.flow && c.review !== 'rejected';
+
+const postOf = (c: ChangeImpact, posts: PostVersions): GraphNode | undefined => (c.post?.id ? posts.get(`${c.post.id}@${c.post.version}`) : undefined);
+
+/** Declares (once) and writes a node of the change, then accepts it: the UI is its own reviewer. */
+export async function writeNodeInChange(
+  changeId: string,
+  cns: ChangeImpact[],
+  target: { pre?: NodeRef; key?: string; type?: string },
+  w: { props?: Record<string, unknown>; state?: string; retire?: boolean },
+  rationale: string,
+): Promise<void> {
+  let cn = cns.find((c) => live(c) && (target.pre ? c.pre?.id === target.pre.id : c.key === target.key && c.intent === 'created'));
+  if (!cn) {
+    const decl: ChangeImpact = target.pre ? { intent: 'modified', pre: target.pre, rationale } : { intent: 'created', key: target.key, type: target.type, rationale };
+    cn = (await graph.addChangeImpacts(changeId, [decl])).nodes?.[0];
+  }
+  if (!cn?.id) throw new Error('The change impact could not be declared.');
+  await graph.writeChangeImpact(changeId, cn.id, { props: w.props as never, state: w.state, retire: w.retire });
+  await graph.reviewChangeImpact(changeId, cn.id, true, rationale);
 }
 
 /** Names of the node types of a baseline (its NodeType nodes). */
@@ -78,12 +98,6 @@ export function nodeTypeNames(nodes: GraphNode[]): string[] {
   return [...new Set(names)].sort();
 }
 
-/** The NodeType node of a type name (target of the instanceOf link of its instances). */
-export function typeNodeRef(nodes: GraphNode[], name: string): NodeRef | undefined {
-  const n = nodes.find((x) => x.type === 'NodeType' && (x.props as Record<string, unknown> | undefined)?.name === name);
-  return n?.id ? { id: n.id, version: n.version } : undefined;
-}
-
 /** States a new node of the type can be born in: the initial one, or one a transition leads to from it. */
 export function birthStates(lifecycle: Lifecycle | undefined): string[] {
   if (!lifecycle) return [];
@@ -93,29 +107,27 @@ export function birthStates(lifecycle: Lifecycle | undefined): string[] {
   );
 }
 
-/** Rows of the nodes the change creates (create_node proposals still standing). */
-export function createdRows(nodes: GraphNode[], items: ChangeItem[]): LifecycleRow[] {
+/** Rows of the nodes the change creates. */
+export function createdRows(nodes: GraphNode[], cns: ChangeImpact[], posts: PostVersions): LifecycleRow[] {
   const resolve = lifecycleResolver(nodes);
-  const gone = supersededIds(items);
-  const rejected = rejectedIds(items);
   const rows: LifecycleRow[] = [];
-  for (const it of items) {
-    const p = it.proposal;
-    if (p?.op !== 'create_node' || !it.id || gone.has(it.id) || rejected.has(it.id) || it.status === 'rejected') continue;
-    const lifecycle = resolve(p.node?.type);
-    const state = lifecycle ? p.node?.state || lifecycle.initial || '' : '';
+  for (const cn of cns) {
+    if (cn.intent !== 'created' || !cn.id || !live(cn)) continue;
+    const post = postOf(cn, posts);
+    const lifecycle = resolve(cn.type);
+    const state = lifecycle ? post?.state || lifecycle.initial || '' : '';
     rows.push({
-      node: { id: it.id, key: p.node?.key ?? '', type: p.node?.type ?? '', version: 0, state },
+      node: { id: cn.id, key: cn.key ?? '', type: cn.type ?? '', version: 0, state },
       lifecycle,
       base: '',
       effective: state,
       moves: [],
       editable: lifecycle ? editableState(lifecycle, state) : true,
       transitions: [],
-      props: { ...((p.node?.props ?? {}) as Record<string, unknown>) },
+      props: { ...((post?.props ?? {}) as Record<string, unknown>) },
       edits: 0,
-      declared: declaredProperties(nodes, p.node?.type),
-      created: it,
+      declared: declaredProperties(nodes, cn.type),
+      created: cn,
     });
   }
   return rows;
@@ -149,13 +161,12 @@ export function declaredProperties(nodes: GraphNode[], type: string | undefined)
 export function lifecycleRows(
   nodes: GraphNode[],
   attached: NodeRef[],
-  items: ChangeItem[],
+  cns: ChangeImpact[],
+  posts: PostVersions,
   extra: string[],
 ): LifecycleRow[] {
   const resolve = lifecycleResolver(nodes);
   const byId = new Map(nodes.map((n) => [n.id ?? '', n]));
-  const gone = supersededIds(items);
-  const rejected = rejectedIds(items);
   const ids = [...new Set([...attached.map((r) => r.id ?? ''), ...extra])].filter((id) => byId.has(id));
   const rows: LifecycleRow[] = [];
   for (const id of ids) {
@@ -166,19 +177,17 @@ export function lifecycleRows(
     const moves: string[] = [];
     const props: Record<string, unknown> = { ...((node.props ?? {}) as Record<string, unknown>) };
     let edits = 0;
-    let removal: ChangeItem | undefined;
-    for (const it of items) {
-      const p = it.proposal;
-      if (!p || p.node?.base?.id !== id || (it.id && (gone.has(it.id) || rejected.has(it.id))) || it.status === 'superseded' || it.status === 'rejected') continue;
-      if (p.op === 'delete_node') {
-        removal = it;
-      } else if (p.op === 'transition_node' && p.node?.state) {
-        cur = p.node.state;
+    let removal: ChangeImpact | undefined;
+    const cn = cns.find((c) => c.intent === 'modified' && c.pre?.id === id && live(c));
+    const post = cn ? postOf(cn, posts) : undefined;
+    if (cn && post) {
+      if (post.deleted) removal = cn;
+      if (post.state && post.state !== cur) {
+        cur = post.state;
         moves.push(cur);
-      } else if (p.op === 'update_node') {
-        Object.assign(props, (p.node?.props ?? {}) as Record<string, unknown>);
-        edits++;
       }
+      Object.assign(props, (post.props ?? {}) as Record<string, unknown>);
+      edits = Math.max(0, (post.version ?? 0) - (node.version ?? 0));
     }
     rows.push({
       node,
@@ -195,7 +204,7 @@ export function lifecycleRows(
     });
   }
   rows.sort((a, b) => (a.node.key ?? '').localeCompare(b.node.key ?? ''));
-  return [...rows, ...createdRows(nodes, items)];
+  return [...rows, ...createdRows(nodes, cns, posts)];
 }
 
 /** Is this transition a "reopen": from a state that is not editable into one that is? */

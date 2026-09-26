@@ -24,15 +24,15 @@ namespace, and nodes of other namespaces must be able to reference it (a compone
    starts from the head of its own branch, so what its sub-changes merged is part of its result before
    it is merged into main.
 5. **Split**: `SplitByOwner` (`SplitChange` RPC) creates one sub-change per unit owning nodes the
-   change has an impact on (`owner` link of the pre version of a `modified` change node, ADR 0024;
-   the ones derived from impact items count too), with a copy of the change nodes of its nodes
-   (planned, same rationale, derived from the parent's). The parent's own change node for a
+   change has an impact on (`owner` link of the pre version of a `modified` change impact, ADR 0024;
+   the ones derived from impact items count too), with a copy of the change impacts of its nodes
+   (planned, same rationale, derived from the parent's). The parent's own change impact for a
    delegated node is accepted with the comment "delegated to <unit> (sub-change <id>)": a confirmed
    impact that `Apply` ignores, the work being the sub-change's. It is idempotent per unit; impacts
    on unowned nodes stay with the parent. Running an agent per sub-change uses the existing sub-agent mechanism on the
    sub-change (an engine builtin for the split is not provided yet).
 
 ## Consequences
-- Migration `0007_subchange` / SQLite `0006_subchange`: `change_set.parent_id`, `owner_org`.
+- Migration `0007_subchange` / SQLite `0006_subchange`: `change.parent_id`, `owner_org`.
 - A dedicated organisation service is not needed: the graph, its namespace rules and a web editor
   are enough. The iam `Organization` stub (M2) is unrelated (tenant isolation).

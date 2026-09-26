@@ -6,7 +6,7 @@ import {
   errorMessage,
   compareVersions,
   type Baseline,
-  type ChangeSet,
+  type Change,
   type MethodologySummary,
 } from '../api';
 
@@ -23,7 +23,7 @@ function catalog<T>(): Catalog<T> {
 
 export const methodologies: Catalog<MethodologySummary> = $state(catalog());
 export const baselines: Catalog<Baseline> = $state(catalog());
-export const changes: Catalog<ChangeSet> = $state(catalog());
+export const changes: Catalog<Change> = $state(catalog());
 
 async function fill<T>(c: Catalog<T>, fn: () => Promise<T[]>): Promise<void> {
   c.loading = true;

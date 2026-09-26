@@ -10,10 +10,10 @@ import (
 
 // ValidateBoard checks the consistency of the blackboard as a process on a flow
 // sees it: every fact of the view is structurally valid, the facts it builds on
-// exist and are in effect, and the change nodes it holds are coherent (their pre
+// exist and are in effect, and the change impacts it holds are coherent (their pre
 // version is in the reference baseline, they are not waiting to be re-checked).
-// The issues come in log order; each names the item (or change node) to blame (the
-// culprit). Only the outdated change nodes are warnings: they are fixed by
+// The issues come in log order; each names the item (or change impact) to blame (the
+// culprit). Only the outdated change impacts are warnings: they are fixed by
 // re-checking the impact, not by relaunching a step.
 func (g *Graph) ValidateBoard(ctx context.Context, id domain.ChangeID, flow string) (out []domain.BoardIssue, err error) {
 	err = g.repo.InTx(ctx, func(tx Tx) error {
@@ -27,7 +27,7 @@ func (g *Graph) ValidateBoard(ctx context.Context, id domain.ChangeID, flow stri
 	return
 }
 
-func (g *Graph) validateBoard(ctx context.Context, tx Tx, c domain.ChangeSet, flow string) ([]domain.BoardIssue, error) {
+func (g *Graph) validateBoard(ctx context.Context, tx Tx, c domain.Change, flow string) ([]domain.BoardIssue, error) {
 	nodes, err := g.newFlowNodes(tx, c, flow).nodes(ctx)
 	if err != nil {
 		return nil, err
@@ -80,7 +80,7 @@ func (g *Graph) validateBoard(ctx context.Context, tx Tx, c domain.ChangeSet, fl
 			}
 		}
 	}
-	// the change nodes: the id of a change node stands where an item id does
+	// the change impacts: the id of a change impact stands where an item id does
 	for _, cn := range nodes {
 		id := domain.ItemID(cn.ID)
 		if err := cn.Validate(); err != nil {
@@ -93,7 +93,7 @@ func (g *Graph) validateBoard(ctx context.Context, tx Tx, c domain.ChangeSet, fl
 			add(id, "", "outdated", fmt.Sprintf("the impact on %s was written against a version that is no longer the head", cn.Key))
 		}
 	}
-	// log order: the facts, then the change nodes
+	// log order: the facts, then the change impacts
 	pos := map[domain.ItemID]int{}
 	for i, it := range v.Items {
 		pos[it.ID] = i

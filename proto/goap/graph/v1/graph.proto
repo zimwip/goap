@@ -7,7 +7,7 @@ import "google/protobuf/timestamp.proto";
 
 // GraphService exposes the two axes of the knowledge graph: the domain axis
 // (versioned nodes, version-to-version links, baselines) and the change axis
-// (change sets and their items, i.e. the blackboards of agent processes).
+// (changes and their items, i.e. the blackboards of agent processes).
 service GraphService {
   // Domain axis
   rpc CreateNode(CreateNodeRequest) returns (CreateNodeResponse);
@@ -25,18 +25,18 @@ service GraphService {
   rpc CreateChange(CreateChangeRequest) returns (CreateChangeResponse);
   rpc GetChange(GetChangeRequest) returns (GetChangeResponse);
   rpc ListChanges(ListChangesRequest) returns (ListChangesResponse);
-  // The versions a change starts from (the pre version of its change nodes), and the
+  // The versions a change starts from (the pre version of its change impacts), and the
   // changes acting on a node (ADR 0024).
-  rpc GetChangeNodes(GetChangeNodesRequest) returns (GetChangeNodesResponse);
+  rpc GetChangeImpacts(GetChangeImpactsRequest) returns (GetChangeImpactsResponse);
   rpc ListNodeChanges(ListNodeChangesRequest) returns (ListNodeChangesResponse);
   rpc UpdateChange(UpdateChangeRequest) returns (UpdateChangeResponse);
   rpc AddItems(AddItemsRequest) returns (AddItemsResponse);
-  // Change nodes (ADR 0024): declare the nodes a change acts on, write the version each produces on the
+  // Change impacts (ADR 0024): declare the nodes a change acts on, write the version each produces on the
   // change branch, and accept or reject them (a comment is mandatory).
-  rpc AddChangeNodes(AddChangeNodesRequest) returns (AddChangeNodesResponse);
-  rpc WriteChangeNode(WriteChangeNodeRequest) returns (WriteChangeNodeResponse);
-  rpc ReviewChangeNode(ReviewChangeNodeRequest) returns (ReviewChangeNodeResponse);
-  // Producers: a whole change of node edits (change nodes, versions, reviews, apply) in one call.
+  rpc AddChangeImpacts(AddChangeImpactsRequest) returns (AddChangeImpactsResponse);
+  rpc WriteChangeImpact(WriteChangeImpactRequest) returns (WriteChangeImpactResponse);
+  rpc ReviewChangeImpact(ReviewChangeImpactRequest) returns (ReviewChangeImpactResponse);
+  // Producers: a whole change of node edits (change impacts, versions, reviews, apply) in one call.
   rpc CommitEdits(CommitEditsRequest) returns (CommitEditsResponse);
   rpc GetBlackboard(GetBlackboardRequest) returns (GetBlackboardResponse);
   rpc ApplyChange(ApplyChangeRequest) returns (ApplyChangeResponse);
@@ -94,8 +94,8 @@ message Node {
   string state = 12;
   // namespace of the node (default sdlc)
   string namespace = 13;
-  // change node that produced this version, and its acceptance comment (ADR 0024)
-  string change_node = 14;
+  // change impact that produced this version, and its acceptance comment (ADR 0024)
+  string change_impact = 14;
   string comment = 15;
   // action run that wrote this version (what a relaunch marks stale, ADR 0025)
   string execution = 16;
@@ -141,7 +141,7 @@ message ChangeItem {
   string kind = 2;
   string type = 3;
   string status = 4;
-  reserved 5, 6, 14; // target, proposal, post (the nodes a change acts on are its change nodes, ADR 0024)
+  reserved 5, 6, 14; // target, proposal, post (the nodes a change acts on are its change impacts, ADR 0024)
   Decision decision = 7;
   google.protobuf.Struct data = 8;
   string produced_by = 9;
@@ -156,7 +156,7 @@ message ChangeItem {
   FlowEvent flow_event = 16;
 }
 
-message ChangeSet {
+message Change {
   string id = 1;
   string title = 2;
   string intent = 3;
@@ -176,7 +176,7 @@ message ChangeSet {
   string owner_org = 15;
   reserved 16;
   // the nodes the change reads, modifies or creates: stored, and derived from its items (ADR 0024)
-  repeated ChangeNode nodes = 17;
+  repeated ChangeImpact nodes = 17;
 }
 
 message Review {
@@ -192,7 +192,7 @@ message Review {
 }
 
 // The link from a change to a node (ADR 0024).
-message ChangeNode {
+message ChangeImpact {
   string id = 1;
   string key = 2;
   string type = 3;
@@ -213,10 +213,10 @@ message ChangeNode {
   string produced_by = 13;
   repeated string derived_from = 14;
   string execution = 15;
-  // impact / proposal items this change node is derived from (empty when written directly)
+  // impact / proposal items this change impact is derived from (empty when written directly)
   repeated string items = 16;
   google.protobuf.Timestamp created_at = 17;
-  // flow branch that declared the change node (empty: the main flow), replaced by an adopted flow (ADR 0025)
+  // flow branch that declared the change impact (empty: the main flow), replaced by an adopted flow (ADR 0025)
   string flow = 18;
   bool superseded = 19;
 }
@@ -327,7 +327,7 @@ message CreateChangeRequest {
 }
 
 message CreateChangeResponse {
-  ChangeSet change = 1;
+  Change change = 1;
 }
 
 message GetChangeRequest {
@@ -335,13 +335,13 @@ message GetChangeRequest {
 }
 
 message GetChangeResponse {
-  ChangeSet change = 1;
+  Change change = 1;
 }
 
 message ListChangesRequest {}
 
 message ListChangesResponse {
-  repeated ChangeSet changes = 1;
+  repeated Change changes = 1;
 }
 
 message UpdateChangeRequest {
@@ -352,7 +352,7 @@ message UpdateChangeRequest {
 }
 
 message UpdateChangeResponse {
-  ChangeSet change = 1;
+  Change change = 1;
 }
 
 message AddItemsRequest {
@@ -371,7 +371,7 @@ message GetBlackboardRequest {
 }
 
 message GetBlackboardResponse {
-  ChangeSet change = 1;
+  Change change = 1;
   repeated NodeView nodes = 2;
   repeated Node neighbors = 3;
 }
@@ -485,7 +485,7 @@ message MergeBranchRequest {
 }
 
 message MergeBranchResponse {
-  ChangeSet change = 1;
+  Change change = 1;
   Baseline baseline = 2;
   MergePlan plan = 3;
 }
@@ -606,13 +606,13 @@ message CommitEditsResponse {
   Baseline baseline = 2;
 }
 
-message AddChangeNodesRequest {
+message AddChangeImpactsRequest {
   string change_id = 1;
-  repeated ChangeNode nodes = 2;
+  repeated ChangeImpact nodes = 2;
 }
 
-message AddChangeNodesResponse {
-  repeated ChangeNode nodes = 1;
+message AddChangeImpactsResponse {
+  repeated ChangeImpact nodes = 1;
 }
 
 message NodeLinkWrite {
@@ -621,9 +621,9 @@ message NodeLinkWrite {
   google.protobuf.Struct props = 3;
 }
 
-message WriteChangeNodeRequest {
+message WriteChangeImpactRequest {
   string change_id = 1;
-  string change_node_id = 2;
+  string change_impact_id = 2;
   // merged over the properties of the current version
   google.protobuf.Struct props = 3;
   // lifecycle state to move the node to
@@ -637,13 +637,13 @@ message WriteChangeNodeRequest {
   string execution = 9;
 }
 
-message WriteChangeNodeResponse {
-  ChangeNode node = 1;
+message WriteChangeImpactResponse {
+  ChangeImpact node = 1;
 }
 
-message ReviewChangeNodeRequest {
+message ReviewChangeImpactRequest {
   string change_id = 1;
-  string change_node_id = 2;
+  string change_impact_id = 2;
   bool accept = 3;
   string comment = 4;
   // flow branch the review is made on (empty: the main flow) and the action run that makes it
@@ -651,15 +651,15 @@ message ReviewChangeNodeRequest {
   string execution = 6;
 }
 
-message ReviewChangeNodeResponse {
-  ChangeNode node = 1;
+message ReviewChangeImpactResponse {
+  ChangeImpact node = 1;
 }
 
-message GetChangeNodesRequest {
+message GetChangeImpactsRequest {
   string change_id = 1;
 }
 
-message GetChangeNodesResponse {
+message GetChangeImpactsResponse {
   repeated NodeRef nodes = 1;
 }
 
@@ -669,7 +669,7 @@ message ListNodeChangesRequest {
 
 message ListNodeChangesResponse {
   // headers only (no items)
-  repeated ChangeSet changes = 1;
+  repeated Change changes = 1;
 }
 
 message MergeChangeRequest {
@@ -679,7 +679,7 @@ message MergeChangeRequest {
 }
 
 message MergeChangeResponse {
-  ChangeSet change = 1;
+  Change change = 1;
 }
 
 message GetSharedNodesRequest {
@@ -702,7 +702,7 @@ message SplitChangeRequest {
 
 message SplitChangeResponse {
   // the sub-changes created by this call
-  repeated ChangeSet changes = 1;
+  repeated Change changes = 1;
 }
 
 message ListSubChangesRequest {
@@ -710,7 +710,7 @@ message ListSubChangesRequest {
 }
 
 message ListSubChangesResponse {
-  repeated ChangeSet changes = 1;
+  repeated Change changes = 1;
 }
 
 message FlowEvent {

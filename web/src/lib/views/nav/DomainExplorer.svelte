@@ -146,7 +146,7 @@
                     badge={d.count(`nodeTypes[${i}]`) || undefined}
                     badgeTone="danger"
                     onselect={() => revealDomainPath(d.name, d.version, `nodeTypes[${i}]`)}
-                    onopen={() => revealDomainPath(d.name, d.version, `nodeTypes[${i}]`)}
+                    onopen={() => revealDomainPath(d.name, d.version, `nodeTypes[${i}]`, true)}
                     oncontextmenu={(e) =>
                       openContextMenu(e, [
                         {
@@ -193,7 +193,7 @@
                     badge={d.count(`linkTypes[${i}]`) || undefined}
                     badgeTone="danger"
                     onselect={() => revealDomainPath(d.name, d.version, `linkTypes[${i}]`)}
-                    onopen={() => revealDomainPath(d.name, d.version, `linkTypes[${i}]`)}
+                    onopen={() => revealDomainPath(d.name, d.version, `linkTypes[${i}]`, true)}
                     oncontextmenu={(e) =>
                       openContextMenu(e, [
                         {

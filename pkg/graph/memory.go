@@ -23,10 +23,10 @@ type memState struct {
 	keys      map[string]domain.NodeID
 	links     []domain.Link
 	baselines map[domain.BaselineID]domain.Baseline
-	changes   map[domain.ChangeID]domain.ChangeSet
+	changes   map[domain.ChangeID]domain.Change
 	branches  map[string]domain.Branch
 	journal   []domain.ExecutionRecord
-	nodes     map[domain.ChangeID][]domain.ChangeNode
+	nodes     map[domain.ChangeID][]domain.ChangeImpact
 }
 
 // NewMemory returns an empty in-memory repository.
@@ -35,9 +35,9 @@ func NewMemory() *Memory {
 		versions:  map[domain.NodeID][]domain.Node{},
 		keys:      map[string]domain.NodeID{},
 		baselines: map[domain.BaselineID]domain.Baseline{},
-		changes:   map[domain.ChangeID]domain.ChangeSet{},
+		changes:   map[domain.ChangeID]domain.Change{},
 		branches:  map[string]domain.Branch{},
-		nodes:     map[domain.ChangeID][]domain.ChangeNode{},
+		nodes:     map[domain.ChangeID][]domain.ChangeImpact{},
 	}}
 }
 
@@ -47,10 +47,10 @@ func (s memState) clone() memState {
 		keys:      maps.Clone(s.keys),
 		links:     slices.Clone(s.links),
 		baselines: maps.Clone(s.baselines),
-		changes:   make(map[domain.ChangeID]domain.ChangeSet, len(s.changes)),
+		changes:   make(map[domain.ChangeID]domain.Change, len(s.changes)),
 		branches:  maps.Clone(s.branches),
 		journal:   slices.Clone(s.journal),
-		nodes:     make(map[domain.ChangeID][]domain.ChangeNode, len(s.nodes)),
+		nodes:     make(map[domain.ChangeID][]domain.ChangeImpact, len(s.nodes)),
 	}
 	for k, v := range s.nodes {
 		c.nodes[k] = slices.Clone(v)
@@ -226,18 +226,18 @@ func (t *memTx) Baselines(_ context.Context) ([]domain.Baseline, error) {
 	return out, nil
 }
 
-func (t *memTx) Change(_ context.Context, id domain.ChangeID) (domain.ChangeSet, error) {
+func (t *memTx) Change(_ context.Context, id domain.ChangeID) (domain.Change, error) {
 	c, ok := t.st.changes[id]
 	if !ok {
-		return domain.ChangeSet{}, fmt.Errorf("change %s: %w", id, ErrNotFound)
+		return domain.Change{}, fmt.Errorf("change %s: %w", id, ErrNotFound)
 	}
 	c.Items = slices.Clone(c.Items)
 	c.Nodes = slices.Clone(t.st.nodes[id])
 	return c, nil
 }
 
-func (t *memTx) Changes(ctx context.Context) ([]domain.ChangeSet, error) {
-	out := make([]domain.ChangeSet, 0, len(t.st.changes))
+func (t *memTx) Changes(ctx context.Context) ([]domain.Change, error) {
+	out := make([]domain.Change, 0, len(t.st.changes))
 	for id := range t.st.changes {
 		c, _ := t.Change(ctx, id)
 		out = append(out, c)
@@ -286,7 +286,7 @@ func (t *memTx) PutBaseline(_ context.Context, b domain.Baseline) error {
 	return nil
 }
 
-func (t *memTx) PutChange(_ context.Context, c domain.ChangeSet) error {
+func (t *memTx) PutChange(_ context.Context, c domain.Change) error {
 	if old, ok := t.st.changes[c.ID]; ok {
 		c.Items = old.Items
 	} else {
@@ -348,7 +348,7 @@ func matchExecution(r domain.ExecutionRecord, f domain.ExecutionFilter) bool {
 	return len(f.ProcessIDs) == 0 || slices.Contains(f.ProcessIDs, r.ProcessID)
 }
 
-func (t *memTx) PutChangeNode(_ context.Context, change domain.ChangeID, cn domain.ChangeNode) error {
+func (t *memTx) PutChangeImpact(_ context.Context, change domain.ChangeID, cn domain.ChangeImpact) error {
 	if _, ok := t.st.changes[change]; !ok {
 		return fmt.Errorf("change %s: %w", change, ErrNotFound)
 	}
@@ -359,18 +359,18 @@ func (t *memTx) PutChangeNode(_ context.Context, change domain.ChangeID, cn doma
 			return nil
 		}
 		if cn.Pre != nil && list[i].Pre != nil && list[i].Pre.ID == cn.Pre.ID && list[i].Flow == cn.Flow && !list[i].Superseded && !cn.Superseded {
-			return fmt.Errorf("change node %s: node already in the change: %w", cn.Key, ErrConflict)
+			return fmt.Errorf("change impact %s: node already in the change: %w", cn.Key, ErrConflict)
 		}
 	}
 	t.st.nodes[change] = append(list, cn)
 	return nil
 }
 
-func (t *memTx) ChangeNodes(_ context.Context, change domain.ChangeID) ([]domain.ChangeNode, error) {
+func (t *memTx) ChangeImpacts(_ context.Context, change domain.ChangeID) ([]domain.ChangeImpact, error) {
 	return slices.Clone(t.st.nodes[change]), nil
 }
 
-func (t *memTx) NodeChangeNodes(_ context.Context, node domain.NodeID) ([]domain.ChangeID, error) {
+func (t *memTx) NodeChangeImpacts(_ context.Context, node domain.NodeID) ([]domain.ChangeID, error) {
 	var out []domain.ChangeID
 	for id, list := range t.st.nodes {
 		for _, cn := range list {
@@ -384,12 +384,12 @@ func (t *memTx) NodeChangeNodes(_ context.Context, node domain.NodeID) ([]domain
 	return out, nil
 }
 
-func (t *memTx) SetNodeOrigin(_ context.Context, ref domain.NodeRef, change domain.ChangeID, cn domain.ChangeNodeID, comment string) error {
+func (t *memTx) SetNodeOrigin(_ context.Context, ref domain.NodeRef, change domain.ChangeID, cn domain.ChangeImpactID, comment string) error {
 	vs := t.st.versions[ref.ID]
 	if ref.Version < 1 || int(ref.Version) > len(vs) {
 		return fmt.Errorf("node %s: %w", ref, ErrNotFound)
 	}
-	vs[ref.Version-1].ChangeID, vs[ref.Version-1].ChangeNode, vs[ref.Version-1].Comment = change, cn, comment
+	vs[ref.Version-1].ChangeID, vs[ref.Version-1].ChangeImpact, vs[ref.Version-1].Comment = change, cn, comment
 	return nil
 }
 

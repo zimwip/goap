@@ -691,7 +691,7 @@ func (e *Engine) executeStep(ctx context.Context, p *Process, m *methodology.Com
 	}
 	ids, nodes, err := e.addItems(ctx, p, res.Items, action.Name, step.Execution)
 	if err == nil {
-		var more []domain.ChangeNodeID
+		var more []domain.ChangeImpactID
 		more, err = e.applyNodeOps(ctx, p, res.Nodes, action.Name, step.Execution)
 		nodes = append(nodes, more...)
 	}
@@ -898,16 +898,16 @@ func (e *Engine) observe(ctx context.Context, p *Process, m *methodology.Compile
 	return bb, nil
 }
 
-func (e *Engine) addItems(ctx context.Context, p *Process, in []ItemInput, producedBy, execution string) ([]domain.ItemID, []domain.ChangeNodeID, error) {
-	// change node operations (LLM output, human input) are applied in order, after the items
+func (e *Engine) addItems(ctx context.Context, p *Process, in []ItemInput, producedBy, execution string) ([]domain.ItemID, []domain.ChangeImpactID, error) {
+	// change impact operations (LLM output, human input) are applied in order, after the items
 	var ops []dsl.NodeOp
 	items := make([]ItemInput, 0, len(in))
 	for _, it := range in {
-		if it.Kind == "changeNode" {
-			if it.ChangeNode == nil {
-				return nil, nil, fmt.Errorf("item of kind changeNode needs a changeNode operation: %w", ErrInvalidState)
+		if it.Kind == "changeImpact" {
+			if it.ChangeImpact == nil {
+				return nil, nil, fmt.Errorf("item of kind changeImpact needs a changeImpact operation: %w", ErrInvalidState)
 			}
-			ops = append(ops, *it.ChangeNode)
+			ops = append(ops, *it.ChangeImpact)
 			continue
 		}
 		items = append(items, it)

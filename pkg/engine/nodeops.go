@@ -10,8 +10,8 @@ import (
 	"github.com/zimwip/goap/pkg/graph"
 )
 
-// ChangeNodesFromBlackboard builds the change node snapshot given to scripts.
-func ChangeNodesFromBlackboard(bb domain.Blackboard) []dsl.ChangeNode {
+// ChangeImpactsFromBlackboard builds the change impact snapshot given to scripts.
+func ChangeImpactsFromBlackboard(bb domain.Blackboard) []dsl.ChangeImpact {
 	view := func(r *domain.NodeRef) *dsl.Node {
 		if r == nil {
 			return nil
@@ -31,9 +31,9 @@ func ChangeNodesFromBlackboard(bb domain.Blackboard) []dsl.ChangeNode {
 		}
 		return e
 	}
-	out := make([]dsl.ChangeNode, 0, len(bb.Change.Nodes))
+	out := make([]dsl.ChangeImpact, 0, len(bb.Change.Nodes))
 	for _, cn := range bb.Change.Nodes {
-		x := dsl.ChangeNode{ID: string(cn.ID), Key: cn.Key, Type: cn.Type, Intent: string(cn.Intent), Rationale: cn.Rationale, Review: string(cn.Review),
+		x := dsl.ChangeImpact{ID: string(cn.ID), Key: cn.Key, Type: cn.Type, Intent: string(cn.Intent), Rationale: cn.Rationale, Review: string(cn.Review),
 			Planned: cn.Post == nil, Pre: view(cn.Pre), Post: view(cn.Post), Landed: view(cn.Landed), Items: []string{}, Links: []dsl.Link{}}
 		if cn.Post != nil {
 			for _, l := range bb.Nodes[*cn.Post].Out {
@@ -48,14 +48,14 @@ func ChangeNodesFromBlackboard(bb domain.Blackboard) []dsl.ChangeNode {
 	return out
 }
 
-// applyNodeOps applies the change node operations a script buffered, in order:
-// a declaration adds a change node, a write creates the next version of its
+// applyNodeOps applies the change impact operations a script buffered, in order:
+// a declaration adds a change impact, a write creates the next version of its
 // node on the change branch, a review accepts or rejects it. References ("#nN")
-// name the change nodes declared earlier by the same script; a key names a
-// change node the process sees. On a flow branch the process sees the change
+// name the change impacts declared earlier by the same script; a key names a
+// change impact the process sees. On a flow branch the process sees the change
 // nodes of its flow, and what it declares and writes stays on the flow until it
 // is adopted (ADR 0025).
-func (e *Engine) applyNodeOps(ctx context.Context, p *Process, ops []dsl.NodeOp, producedBy, execution string) ([]domain.ChangeNodeID, error) {
+func (e *Engine) applyNodeOps(ctx context.Context, p *Process, ops []dsl.NodeOp, producedBy, execution string) ([]domain.ChangeImpactID, error) {
 	if len(ops) == 0 {
 		return nil, nil
 	}
@@ -71,8 +71,8 @@ func (e *Engine) applyNodeOps(ctx context.Context, p *Process, ops []dsl.NodeOp,
 	for _, n := range nodes {
 		baseline[n.Key] = n.Ref()
 	}
-	byKey := map[string]domain.ChangeNodeID{} // stored change nodes, then the ones this script declares
-	posts := map[domain.ChangeNodeID]domain.NodeRef{}
+	byKey := map[string]domain.ChangeImpactID{} // stored change impacts, then the ones this script declares
+	posts := map[domain.ChangeImpactID]domain.NodeRef{}
 	for _, cn := range bb.Change.Nodes {
 		if len(cn.Items) > 0 {
 			continue // derived from items: decided through them
@@ -82,18 +82,18 @@ func (e *Engine) applyNodeOps(ctx context.Context, p *Process, ops []dsl.NodeOp,
 			posts[cn.ID] = *cn.Post
 		}
 	}
-	local := map[string]domain.ChangeNodeID{}
-	resolve := func(s string) (domain.ChangeNodeID, error) {
+	local := map[string]domain.ChangeImpactID{}
+	resolve := func(s string) (domain.ChangeImpactID, error) {
 		if strings.HasPrefix(s, "#") {
 			if id, ok := local[s]; ok {
 				return id, nil
 			}
-			return "", fmt.Errorf("unknown change node reference %q", s)
+			return "", fmt.Errorf("unknown change impact reference %q", s)
 		}
 		if id, ok := byKey[s]; ok {
 			return id, nil
 		}
-		return "", fmt.Errorf("no change node for %q: declare it with impactNode or createNode", s)
+		return "", fmt.Errorf("no change impact for %q: declare it with impactNode or createNode", s)
 	}
 	target := func(s string) (domain.NodeRef, error) { // a link target: a node written by the change, else the reference baseline
 		if strings.HasPrefix(s, "#") {
@@ -116,12 +116,12 @@ func (e *Engine) applyNodeOps(ctx context.Context, p *Process, ops []dsl.NodeOp,
 		}
 		return domain.NodeRef{}, fmt.Errorf("unknown node %q", s)
 	}
-	var declared []domain.ChangeNodeID
+	var declared []domain.ChangeImpactID
 	for i, op := range ops {
-		fail := func(err error) error { return fmt.Errorf("change node operation %d (%s): %w", i, op.Op, err) }
+		fail := func(err error) error { return fmt.Errorf("change impact operation %d (%s): %w", i, op.Op, err) }
 		switch op.Op {
 		case "declare":
-			cn := domain.ChangeNode{Intent: domain.NodeIntent(op.Intent), Key: op.Key, Type: op.Type, Rationale: op.Rationale, ProducedBy: producedBy, Execution: execution, Flow: p.Flow}
+			cn := domain.ChangeImpact{Intent: domain.NodeIntent(op.Intent), Key: op.Key, Type: op.Type, Rationale: op.Rationale, ProducedBy: producedBy, Execution: execution, Flow: p.Flow}
 			if cn.Intent == domain.IntentModified {
 				ref, ok := baseline[op.Key]
 				if !ok {
@@ -129,7 +129,7 @@ func (e *Engine) applyNodeOps(ctx context.Context, p *Process, ops []dsl.NodeOp,
 				}
 				cn.Pre = &ref
 			}
-			added, err := e.Graph.AddNodes(ctx, p.ChangeID, []domain.ChangeNode{cn})
+			added, err := e.Graph.AddNodes(ctx, p.ChangeID, []domain.ChangeImpact{cn})
 			if err != nil {
 				return declared, fail(err)
 			}

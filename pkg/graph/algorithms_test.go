@@ -73,7 +73,7 @@ func newAlgoWorld(t *testing.T, repo Repo) algoWorld {
 	return w
 }
 
-func (w algoWorld) change(t *testing.T) domain.ChangeSet {
+func (w algoWorld) change(t *testing.T) domain.Change {
 	t.Helper()
 	c, err := w.g.CreateChange(context.Background(), NewChange{Title: "chg", BaselineID: w.base.ID})
 	if err != nil {
@@ -82,9 +82,9 @@ func (w algoWorld) change(t *testing.T) domain.ChangeSet {
 	return c
 }
 
-// declareCreate adds a change node that creates a node, and writes it.
-func (w algoWorld) create(c domain.ChangeSet, key, typ string, props map[string]any) error {
-	ns, err := w.g.AddNodes(context.Background(), c.ID, []domain.ChangeNode{{Intent: domain.IntentCreated, Key: key, Type: typ, Rationale: "new " + key}})
+// declareCreate adds a change impact that creates a node, and writes it.
+func (w algoWorld) create(c domain.Change, key, typ string, props map[string]any) error {
+	ns, err := w.g.AddNodes(context.Background(), c.ID, []domain.ChangeImpact{{Intent: domain.IntentCreated, Key: key, Type: typ, Rationale: "new " + key}})
 	if err != nil {
 		return err
 	}
@@ -92,11 +92,11 @@ func (w algoWorld) create(c domain.ChangeSet, key, typ string, props map[string]
 	return err
 }
 
-// modify adds a change node on an existing node and writes it.
-func (w algoWorld) modify(t *testing.T, c domain.ChangeSet, n domain.Node, writes ...NodeWrite) error {
+// modify adds a change impact on an existing node and writes it.
+func (w algoWorld) modify(t *testing.T, c domain.Change, n domain.Node, writes ...NodeWrite) error {
 	t.Helper()
 	ref := n.Ref()
-	ns, err := w.g.AddNodes(context.Background(), c.ID, []domain.ChangeNode{{Intent: domain.IntentModified, Pre: &ref, Rationale: "modify " + n.Key}})
+	ns, err := w.g.AddNodes(context.Background(), c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &ref, Rationale: "modify " + n.Key}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,9 +108,9 @@ func (w algoWorld) modify(t *testing.T, c domain.ChangeSet, n domain.Node, write
 	return nil
 }
 
-func (w algoWorld) acceptAll(t *testing.T, c domain.ChangeSet) {
+func (w algoWorld) acceptAll(t *testing.T, c domain.Change) {
 	t.Helper()
-	nodes, _ := w.g.ListChangeNodes(context.Background(), c.ID)
+	nodes, _ := w.g.ListChangeImpacts(context.Background(), c.ID)
 	for _, n := range nodes {
 		if _, err := w.g.ReviewNode(context.Background(), c.ID, n.ID, domain.ReviewAccepted, "u", "ok"); err != nil {
 			t.Fatal(err)
@@ -125,10 +125,10 @@ func testPropertyValidators(t *testing.T, repo Repo) {
 	w := newAlgoWorld(t, repo)
 
 	// early feedback on create (also through the inherited validator of a subtype) and update
-	for i, try := range []func(c domain.ChangeSet) error{
-		func(c domain.ChangeSet) error { return w.create(c, "R2", "Req", map[string]any{"code": "nope"}) },
-		func(c domain.ChangeSet) error { return w.create(c, "R3", "Sub", map[string]any{"code": "nope"}) },
-		func(c domain.ChangeSet) error {
+	for i, try := range []func(c domain.Change) error{
+		func(c domain.Change) error { return w.create(c, "R2", "Req", map[string]any{"code": "nope"}) },
+		func(c domain.Change) error { return w.create(c, "R3", "Sub", map[string]any{"code": "nope"}) },
+		func(c domain.Change) error {
 			return w.modify(t, c, w.req, NodeWrite{Properties: map[string]any{"code": "nope"}})
 		},
 	} {

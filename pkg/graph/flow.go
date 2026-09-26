@@ -36,7 +36,7 @@ func (g *Graph) flowEvent(ctx context.Context, tx Tx, id domain.ChangeID, e doma
 		Status: domain.ItemAccepted, ProducedBy: "graph.flow", FlowEvent: &e, CreatedAt: g.now()})
 }
 
-func flowChange(ctx context.Context, tx Tx, id domain.ChangeID) (domain.ChangeSet, error) {
+func flowChange(ctx context.Context, tx Tx, id domain.ChangeID) (domain.Change, error) {
 	c, err := tx.Change(ctx, id)
 	if err != nil {
 		return c, err
@@ -170,7 +170,7 @@ func (g *Graph) Flows(ctx context.Context, id domain.ChangeID) (fs []domain.Flow
 }
 
 // openFlows are the flow branches still waiting for a decision.
-func openFlows(c domain.ChangeSet) []domain.Flow {
+func openFlows(c domain.Change) []domain.Flow {
 	return slices.DeleteFunc(c.Flows(), func(f domain.Flow) bool { return f.Status != domain.FlowOpen })
 }
 

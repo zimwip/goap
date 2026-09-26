@@ -8,7 +8,7 @@ methodologies, an agent's work must be persistent, auditable, shareable between 
 agents, and linked to the reference repository it modifies.
 
 ## Decision
-A process's blackboard is a **ChangeSet** stored by the graph service. Its elements
+A process's blackboard is a **Change** stored by the graph service. Its elements
 (`impact`, `proposal`, `decision`, `artifact`) reference **exact versions** of nodes in the
 reference graph. Actions only write ChangeItems; the domain graph is modified
 only by `ApplyChange`, which produces a new baseline.

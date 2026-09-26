@@ -56,7 +56,7 @@ func TestJournalRecordsTicksAndActions(t *testing.T) {
 	for _, n := range c.Nodes {
 		r, ok := byID[n.Execution]
 		if !ok || r.Action != n.ProducedBy {
-			t.Fatalf("change node %s (%s) without journal provenance", n.Key, n.ProducedBy)
+			t.Fatalf("change impact %s (%s) without journal provenance", n.Key, n.ProducedBy)
 		}
 	}
 	if end := recs[len(recs)-1]; end.Status != string(StatusCompleted) || end.Data["steps"] != 3 {

@@ -9,7 +9,7 @@
   import { provideActions } from '../../shell/workbench.svelte';
   import { openTab } from '../../shell/tabs.svelte';
   import { processes } from '../../stores/live.svelte';
-  import { makeContext, describeProposal } from '../../items';
+  import { makeContext } from '../../items';
   import {
     graph,
     errorMessage,
@@ -244,7 +244,6 @@
   function itemLabel(id: string): string {
     const it = ctx.items.get(id);
     if (!it) return shortId(id);
-    if (it.kind === 'proposal') return describeProposal(ctx, it);
     return `${it.kind ?? 'item'}${it.type ? ` ${it.type}` : ''}`;
   }
 

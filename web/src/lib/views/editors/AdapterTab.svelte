@@ -114,7 +114,7 @@
       const existing = findNode(h, NS_PLATFORM, ADAPTER_DEF_TYPE, key);
       if (isNew && existing) throw new Error(`an adapter named ${def.name} already exists`);
       const props = adapterDefProps({ name: def.name ?? '', description: def.description ?? '', mcp: def.mcp ?? '', connector: def.connector ?? '', language: def.language ?? 'javascript', code: def.code ?? '', params: def.params ?? [] });
-      const item = existing ? updateNodeItem(existing, props) : createNodeItem(crypto.randomUUID(), key, ADAPTER_DEF_TYPE, props);
+      const item = existing ? updateNodeItem(existing, props) : createNodeItem(key, ADAPTER_DEF_TYPE, props);
       await applyOnMain(NS_PLATFORM, `Adapter ${def.name}`, `${existing ? 'Update' : 'Create'} adapter ${def.name} (${def.mcp} on ${def.connector})`, h.baselineId, [item]);
       await refreshTools();
       notify(`Adapter ${def.name} saved`, 'ok');

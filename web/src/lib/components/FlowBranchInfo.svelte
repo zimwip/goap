@@ -1,5 +1,5 @@
 <script lang="ts">
-  // The domain (graph) branch of a flow: chip, competition, and a review of what it changes.
+  // The graph branch of a flow: chip, competition, and a review of what it changes.
   import { errorMessage, graph, type Flow, type MergePlan } from '../api';
 
   let { flow, changeBranch }: { flow: Flow; changeBranch: string } = $props();
@@ -8,13 +8,13 @@
   let loading = $state(false);
   let error = $state('');
   let opened = $state(false);
+  const branch = $derived(`flow-${(flow.id ?? '').slice(0, 8)}`);
 
   async function review() {
-    if (!flow.branch) return;
     loading = true;
     error = '';
     try {
-      plan = (await graph.planMerge(flow.branch, changeBranch || 'main')).plan;
+      plan = (await graph.planMerge(branch, changeBranch || 'main')).plan;
     } catch (e) {
       error = errorMessage(e);
     } finally {
@@ -33,15 +33,9 @@
       competes with {flow.competesWith.map((c) => c.slice(0, 8)).join(', ')}
     </span>
   {/if}
-  {#if flow.branch}
-    <span class="chip" title="graph branch holding the proposals of this flow"><code>{flow.branch}</code></span>
-    {#if flow.merged?.length}
-      <span class="hint">merged into <code>{changeBranch || 'main'}</code></span>
-    {:else if flow.status === 'open'}
-      <button type="button" class="link" onclick={toggle}>{opened ? 'Hide' : 'Review'} graph changes</button>
-    {/if}
-  {:else}
-    <span class="hint">no graph preview (no proposals)</span>
+  {#if flow.status === 'open'}
+    <span class="chip" title="graph branch holding what this flow writes"><code>{branch}</code></span>
+    <button type="button" class="link" onclick={toggle}>{opened ? 'Hide' : 'Review'} graph changes</button>
   {/if}
   {#if opened}
     {#if loading}<p class="hint">Loading…</p>{/if}

@@ -73,28 +73,28 @@ func TestLifecycleIsEnforcedByTheService(t *testing.T) {
 		hdr.Set(identity.HeaderOrg, "acme")
 		hdr.Set(identity.HeaderRoles, roles)
 	}
-	ar := connect.NewRequest(&graphv1.AddChangeNodesRequest{ChangeId: string(c.ID),
-		Nodes: []*graphv1.ChangeNode{{Intent: "modified", Pre: pbconv.RefToPB(ref), Rationale: "release"}}})
+	ar := connect.NewRequest(&graphv1.AddChangeImpactsRequest{ChangeId: string(c.ID),
+		Nodes: []*graphv1.ChangeImpact{{Intent: "modified", Pre: pbconv.RefToPB(ref), Rationale: "release"}}})
 	withRoles(ar.Header(), "contributor")
-	added, err := h.AddChangeNodes(ctx, ar)
+	added, err := h.AddChangeImpacts(ctx, ar)
 	if err != nil {
 		t.Fatalf("anyone may propose the release: %v", err)
 	}
 	cnID := added.Msg.Nodes[0].Id
 	write := func(props map[string]any, state string) {
 		t.Helper()
-		wr := connect.NewRequest(&graphv1.WriteChangeNodeRequest{ChangeId: string(c.ID), ChangeNodeId: cnID, Props: pbconv.Struct(props), State: state})
+		wr := connect.NewRequest(&graphv1.WriteChangeImpactRequest{ChangeId: string(c.ID), ChangeImpactId: cnID, Props: pbconv.Struct(props), State: state})
 		withRoles(wr.Header(), "contributor")
-		if _, err := h.WriteChangeNode(ctx, wr); err != nil {
+		if _, err := h.WriteChangeImpact(ctx, wr); err != nil {
 			t.Fatalf("a contributor may reopen, edit and propose the release: %v", err)
 		}
 	}
 	write(nil, "draft")
 	write(map[string]any{"title": "b"}, "")
 	write(nil, "released")
-	rv := connect.NewRequest(&graphv1.ReviewChangeNodeRequest{ChangeId: string(c.ID), ChangeNodeId: cnID, Accept: true, Comment: "ok"})
+	rv := connect.NewRequest(&graphv1.ReviewChangeImpactRequest{ChangeId: string(c.ID), ChangeImpactId: cnID, Accept: true, Comment: "ok"})
 	withRoles(rv.Header(), "contributor")
-	if _, err := h.ReviewChangeNode(ctx, rv); err != nil {
+	if _, err := h.ReviewChangeImpact(ctx, rv); err != nil {
 		t.Fatal(err)
 	}
 	// the transition is authorized for whoever applies the change

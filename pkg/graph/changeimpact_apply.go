@@ -8,18 +8,18 @@ import (
 	"github.com/zimwip/goap/pkg/domain"
 )
 
-// cpost is a change node of the change being applied, with the version it
+// cpost is a change impact of the change being applied, with the version it
 // produced (the latest of its node on the change branch).
 type cpost struct {
-	cn   domain.ChangeNode
+	cn   domain.ChangeImpact
 	pre  *domain.Node
 	post domain.Node
 }
 
-// prepareChangeNodes puts the versions produced by the accepted change nodes
-// into the target graph. Every change node must have been reviewed; a rejected
+// prepareChangeImpacts puts the versions produced by the accepted change impacts
+// into the target graph. Every change impact must have been reviewed; a rejected
 // one is left out, an accepted one must have been realized.
-func (a *applier) prepareChangeNodes() error {
+func (a *applier) prepareChangeImpacts() error {
 	for _, cn := range a.change.Nodes {
 		if len(cn.Items) > 0 {
 			continue // derived from items: their proposals are applied above
@@ -31,13 +31,13 @@ func (a *applier) prepareChangeNodes() error {
 		case domain.ReviewRejected:
 			continue
 		case domain.ReviewProposed:
-			return fmt.Errorf("change node %s (%s) awaits its review: %w", cn.Key, cn.ID, ErrConflict)
+			return fmt.Errorf("change impact %s (%s) awaits its review: %w", cn.Key, cn.ID, ErrConflict)
 		}
 		if cn.Post == nil {
 			if cn.Intent == domain.IntentModified {
 				continue // an impact confirmed, with no new version to write
 			}
-			return invalidf("change node %s (%s) is accepted but its node is not written: write it or reject it", cn.Key, cn.ID)
+			return invalidf("change impact %s (%s) is accepted but its node is not written: write it or reject it", cn.Key, cn.ID)
 		}
 		post, err := a.tx.LatestOn(a.ctx, cn.Post.ID, a.branch)
 		if err != nil {
@@ -61,11 +61,11 @@ func (a *applier) prepareChangeNodes() error {
 	return nil
 }
 
-// checkChangeNodes validates the versions produced by the change nodes once the
+// checkChangeImpacts validates the versions produced by the change impacts once the
 // target graph is known: property validators, the states the nodes are left in,
 // and the transitions they went through (permission, requirements, guards, then
 // actions), like checkProps and checkMoves do for proposals.
-func (a *applier) checkChangeNodes() error {
+func (a *applier) checkChangeImpacts() error {
 	type moved struct {
 		node     domain.Node
 		t        domain.Transition
@@ -153,9 +153,9 @@ func joinSorted(s []string) string {
 }
 
 // land records, once the branch of a change is merged into its parent, the
-// version each change node landed as, and moves the planned change nodes of the
+// version each change impact landed as, and moves the planned change impacts of the
 // other open changes on the same nodes to the new head, to be re-checked.
-func (g *Graph) land(ctx context.Context, tx Tx, c domain.ChangeSet, own domain.Branch, mergeChange domain.ChangeID) error {
+func (g *Graph) land(ctx context.Context, tx Tx, c domain.Change, own domain.Branch, mergeChange domain.ChangeID) error {
 	for _, cn := range c.Nodes {
 		if cn.Post == nil || cn.Review != domain.ReviewAccepted || cn.Flow != "" || cn.Superseded {
 			continue
@@ -176,10 +176,10 @@ func (g *Graph) land(ctx context.Context, tx Tx, c domain.ChangeSet, own domain.
 		if err := tx.SetNodeOrigin(ctx, ref, c.ID, cn.ID, comment); err != nil {
 			return err
 		}
-		if err := tx.PutChangeNode(ctx, c.ID, cn); err != nil {
+		if err := tx.PutChangeImpact(ctx, c.ID, cn); err != nil {
 			return err
 		}
-		others, err := tx.NodeChangeNodes(ctx, ref.ID)
+		others, err := tx.NodeChangeImpacts(ctx, ref.ID)
 		if err != nil {
 			return err
 		}
@@ -199,7 +199,7 @@ func (g *Graph) land(ctx context.Context, tx Tx, c domain.ChangeSet, own domain.
 					continue
 				}
 				o.Pre, o.Recheck = &ref, true
-				if err := tx.PutChangeNode(ctx, oid, o); err != nil {
+				if err := tx.PutChangeImpact(ctx, oid, o); err != nil {
 					return err
 				}
 			}

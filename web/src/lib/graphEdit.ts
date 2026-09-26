@@ -1,5 +1,5 @@
 // Editing graph nodes the way the organisation explorer does: one change of a namespace applied on main.
-import { graph, type ChangeItem, type GraphNode, type Link, type NodeRef, type Struct } from './api';
+import { graph, type NodeEdit, type GraphNode, type Link, type NodeRef, type Struct } from './api';
 
 export interface HeadGraph {
   baselineId: string;
@@ -21,37 +21,29 @@ export const refOf = (n: GraphNode): NodeRef => ({ id: n.id, version: n.version 
 export const findNode = (h: HeadGraph, namespace: string, type: string, key: string): GraphNode | undefined =>
   h.nodes.find((n) => n.namespace === namespace && n.type === type && n.key === key);
 
-/** Applies proposals on main as one change of `namespace`; returns the id of the applied change. */
-export async function applyOnMain(namespace: string, title: string, intent: string, baselineId: string, items: ChangeItem[]): Promise<string> {
-  const { change } = await graph.createChange({ title, intent, baselineId, namespace });
-  if (!change?.id) throw new Error('change not created');
-  await graph.addItems(change.id, items);
-  await graph.applyChange(change.id, title);
-  return change.id;
+/** Commits node edits on main as one change of `namespace`; returns the id of the applied change. */
+export async function applyOnMain(namespace: string, title: string, intent: string, baselineId: string, edits: NodeEdit[]): Promise<string> {
+  const { changeId } = await graph.commitEdits({ namespace, title, intent, baselineId, edits });
+  if (!changeId) throw new Error('change not created');
+  return changeId;
 }
 
-export const createNodeItem = (id: string, key: string, type: string, props: Struct): ChangeItem => ({
-  id,
-  kind: 'proposal',
-  type: 'object',
-  proposal: { op: 'create_node', node: { key, type, props } },
+export const createNodeItem = (key: string, type: string, props: Struct, links: NonNullable<NodeEdit['links']> = []): NodeEdit => ({
+  key,
+  type,
+  props,
+  rationale: `Create ${key}`,
+  ...(links.length ? { links } : {}),
 });
 
-export const updateNodeItem = (n: GraphNode, props: Struct): ChangeItem => ({
-  kind: 'proposal',
-  type: 'object',
-  proposal: { op: 'update_node', node: { base: refOf(n), props } },
+export const updateNodeItem = (n: GraphNode, props: Struct): NodeEdit => ({
+  pre: refOf(n),
+  props,
+  rationale: `Update ${n.key}`,
 });
 
-export const deleteNodeItem = (n: GraphNode): ChangeItem => ({
-  kind: 'proposal',
-  type: 'object',
-  proposal: { op: 'delete_node', node: { base: refOf(n) } },
-});
-
-export const linkItem = (from: string, type: string, to: NodeRef): ChangeItem => ({
-  kind: 'proposal',
-  type: 'object',
-  derivedFrom: [from],
-  proposal: { op: 'add_link', link: { type, from: { item: from }, to: { node: to } } },
+export const deleteNodeItem = (n: GraphNode): NodeEdit => ({
+  pre: refOf(n),
+  retire: true,
+  rationale: `Delete ${n.key}`,
 });

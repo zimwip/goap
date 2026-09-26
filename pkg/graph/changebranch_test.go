@@ -10,7 +10,7 @@ import (
 
 func TestChangeBranch(t *testing.T) { forEachRepo(t, testChangeBranch) }
 
-func setProp(t *testing.T, g *Graph, f fixture, base domain.BaselineID, title string, props map[string]any) domain.ChangeSet {
+func setProp(t *testing.T, g *Graph, f fixture, base domain.BaselineID, title string, props map[string]any) domain.Change {
 	t.Helper()
 	ctx := context.Background()
 	c, err := g.CreateChange(ctx, NewChange{Title: title, BaselineID: base, OwnBranch: true})
@@ -18,7 +18,7 @@ func setProp(t *testing.T, g *Graph, f fixture, base domain.BaselineID, title st
 		t.Fatal(err)
 	}
 	ref := f.req.Ref()
-	ns, err := g.AddNodes(ctx, c.ID, []domain.ChangeNode{{Intent: domain.IntentModified, Pre: &ref, Rationale: title}})
+	ns, err := g.AddNodes(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &ref, Rationale: title}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -107,7 +107,7 @@ func testChangeBranchDisjoint(t *testing.T, repo Repo) {
 	g := f.g
 	a := setProp(t, g, f, f.base.ID, "A", map[string]any{"title": "Use PSP v1", "a": 1})
 	b := setProp(t, g, f, f.base.ID, "B", map[string]any{"title": "Use PSP v1", "b": 2})
-	for _, c := range []domain.ChangeSet{a, b} {
+	for _, c := range []domain.Change{a, b} {
 		if _, err := g.Apply(ctx, c.ID, ""); err != nil {
 			t.Fatal(err)
 		}

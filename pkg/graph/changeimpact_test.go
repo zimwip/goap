@@ -9,9 +9,9 @@ import (
 	"github.com/zimwip/goap/pkg/domain"
 )
 
-func TestChangeNodes(t *testing.T) { forEachRepo(t, testChangeNodes) }
+func TestChangeImpacts(t *testing.T) { forEachRepo(t, testChangeImpacts) }
 
-func testChangeNodes(t *testing.T, repo Repo) {
+func testChangeImpacts(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	f := newFixture(t, repo)
 	g := f.g
@@ -22,7 +22,7 @@ func testChangeNodes(t *testing.T, repo Repo) {
 	pre, needRef := f.req.Ref(), f.need.Ref()
 
 	// an impact: pre + intent + rationale, no post yet
-	got, err := g.AddNodes(ctx, c.ID, []domain.ChangeNode{
+	got, err := g.AddNodes(ctx, c.ID, []domain.ChangeImpact{
 		{Intent: domain.IntentModified, Pre: &pre, Rationale: "PSP v2 changes the payment API"},
 		{Intent: domain.IntentCreated, Key: "TST-2", Type: "TestCase", Rationale: "cover the new API"},
 	})
@@ -32,10 +32,10 @@ func testChangeNodes(t *testing.T, repo Repo) {
 	if got[0].Key != "REQ-1" || got[0].Type != "Requirement" || got[0].Review != domain.ReviewProposed || !got[0].Planned() {
 		t.Fatalf("key / type come from the pre node, review starts proposed: %+v", got[0])
 	}
-	if _, err := g.AddNodes(ctx, c.ID, []domain.ChangeNode{{Intent: domain.IntentModified, Pre: &pre, Rationale: "again"}}); !errors.Is(err, ErrConflict) {
+	if _, err := g.AddNodes(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &pre, Rationale: "again"}}); !errors.Is(err, ErrConflict) {
 		t.Fatalf("a node appears once per change, got %v", err)
 	}
-	if _, err := g.AddNodes(ctx, c.ID, []domain.ChangeNode{{Intent: domain.IntentModified, Pre: &needRef}}); !errors.Is(err, ErrInvalid) {
+	if _, err := g.AddNodes(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &needRef}}); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("a rationale is required, got %v", err)
 	}
 	if ch, _ := g.Change(ctx, c.ID); ch.Status != domain.ChangeActive || len(ch.Nodes) != 2 {
@@ -77,11 +77,11 @@ func testChangeNodes(t *testing.T, repo Repo) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if n.ChangeNode != got[0].ID || n.Comment != "impact confirmed with the PSP team" || n.ChangeID != c.ID {
+	if n.ChangeImpact != got[0].ID || n.Comment != "impact confirmed with the PSP team" || n.ChangeID != c.ID {
 		t.Fatalf("the version must record its origin: %+v", n)
 	}
 
-	list, err := g.ListChangeNodes(ctx, c.ID)
+	list, err := g.ListChangeImpacts(ctx, c.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -93,9 +93,9 @@ func testChangeNodes(t *testing.T, repo Repo) {
 	}
 }
 
-func TestApplyChangeNodes(t *testing.T) { forEachRepo(t, testApplyChangeNodes) }
+func TestApplyChangeImpacts(t *testing.T) { forEachRepo(t, testApplyChangeImpacts) }
 
-func testApplyChangeNodes(t *testing.T, repo Repo) {
+func testApplyChangeImpacts(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	f := newFixture(t, repo)
 	g := f.g
@@ -108,21 +108,21 @@ func testApplyChangeNodes(t *testing.T, repo Repo) {
 		t.Fatal(err)
 	}
 	pre := f.req.Ref()
-	nodes, err := g.AddNodes(ctx, c1.ID, []domain.ChangeNode{
+	nodes, err := g.AddNodes(ctx, c1.ID, []domain.ChangeImpact{
 		{Intent: domain.IntentModified, Pre: &pre, Rationale: "PSP v2 changes the API"},
 		{Intent: domain.IntentCreated, Key: "TST-2", Type: "TestCase", Rationale: "cover the new API"},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	other, err := g.AddNodes(ctx, c2.ID, []domain.ChangeNode{{Intent: domain.IntentModified, Pre: &pre, Rationale: "impact of PSP v3"}})
+	other, err := g.AddNodes(ctx, c2.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &pre, Rationale: "impact of PSP v3"}})
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// still proposed: the change cannot be applied
 	if _, err := g.Apply(ctx, c1.ID, ""); !errors.Is(err, ErrConflict) {
-		t.Fatalf("a change node awaiting review blocks Apply, got %v", err)
+		t.Fatalf("a change impact awaiting review blocks Apply, got %v", err)
 	}
 	if _, err := g.WriteNode(ctx, c1.ID, nodes[0].ID, NodeWrite{Properties: map[string]any{"title": "Use PSP v2"}}); err != nil {
 		t.Fatal(err)
@@ -157,10 +157,10 @@ func testApplyChangeNodes(t *testing.T, repo Repo) {
 	if b.Nodes[f.req.ID] != head.Version || b.Nodes[tst.Post.ID] == 0 {
 		t.Fatalf("baseline %v does not hold the landed versions", b.Nodes)
 	}
-	if head.ChangeID != c1.ID || head.ChangeNode != nodes[0].ID || head.Comment != "as designed" {
+	if head.ChangeID != c1.ID || head.ChangeImpact != nodes[0].ID || head.Comment != "as designed" {
 		t.Fatalf("landed version must record its origin: %+v", head)
 	}
-	list, err := g.ListChangeNodes(ctx, c1.ID)
+	list, err := g.ListChangeImpacts(ctx, c1.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -172,7 +172,7 @@ func testApplyChangeNodes(t *testing.T, repo Repo) {
 	}
 
 	// the other change's impact (no post yet) follows the new head and is flagged to re-check
-	olist, err := g.ListChangeNodes(ctx, c2.ID)
+	olist, err := g.ListChangeImpacts(ctx, c2.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -181,9 +181,9 @@ func testApplyChangeNodes(t *testing.T, repo Repo) {
 	}
 }
 
-func TestChangeNodesLifecycle(t *testing.T) { forEachRepo(t, testChangeNodesLifecycle) }
+func TestChangeImpactsLifecycle(t *testing.T) { forEachRepo(t, testChangeImpactsLifecycle) }
 
-func testChangeNodesLifecycle(t *testing.T, repo Repo) {
+func testChangeImpactsLifecycle(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	w := newLifecycleWorld(t, repo)
 	g := w.g
@@ -192,14 +192,14 @@ func testChangeNodesLifecycle(t *testing.T, repo Repo) {
 		t.Fatal(err)
 	}
 	pre1, pre2 := w.req1.Ref(), w.req2.Ref()
-	nodes, err := g.AddNodes(ctx, c.ID, []domain.ChangeNode{
+	nodes, err := g.AddNodes(ctx, c.ID, []domain.ChangeImpact{
 		{Intent: domain.IntentModified, Pre: &pre1, Rationale: "reword"},
 		{Intent: domain.IntentModified, Pre: &pre2, Rationale: "approve without title"},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	review := func(id domain.ChangeNodeID) {
+	review := func(id domain.ChangeImpactID) {
 		t.Helper()
 		if _, err := g.ReviewNode(ctx, c.ID, id, domain.ReviewAccepted, "alice", "ok"); err != nil {
 			t.Fatal(err)
@@ -257,20 +257,20 @@ func testChangeNodesLifecycle(t *testing.T, repo Repo) {
 	}
 }
 
-func TestChangeNodesMerge(t *testing.T) { forEachRepo(t, testChangeNodesMerge) }
+func TestChangeImpactsMerge(t *testing.T) { forEachRepo(t, testChangeImpactsMerge) }
 
-func testChangeNodesMerge(t *testing.T, repo Repo) {
+func testChangeImpactsMerge(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	f := newFixture(t, repo)
 	g := f.g
 	pre := f.req.Ref()
-	run := func(title string, props map[string]any) domain.ChangeSet {
+	run := func(title string, props map[string]any) domain.Change {
 		t.Helper()
 		c, err := g.CreateChange(ctx, NewChange{Title: title, BaselineID: f.base.ID, OwnBranch: true})
 		if err != nil {
 			t.Fatal(err)
 		}
-		ns, err := g.AddNodes(ctx, c.ID, []domain.ChangeNode{{Intent: domain.IntentModified, Pre: &pre, Rationale: title}})
+		ns, err := g.AddNodes(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &pre, Rationale: title}})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -312,7 +312,7 @@ func testChangeNodesMerge(t *testing.T, repo Repo) {
 		t.Fatal(err)
 	}
 	head, _ = g.Node(ctx, domain.NodeRef{ID: f.req.ID})
-	list, _ := g.ListChangeNodes(ctx, b.ID)
+	list, _ := g.ListChangeImpacts(ctx, b.ID)
 	if head.Properties["title"] != "A+B" || head.ChangeID != b.ID || list[0].Landed == nil || *list[0].Landed != head.Ref() {
 		t.Fatalf("resolved merge must land as the version of b: %+v %+v", head, list)
 	}

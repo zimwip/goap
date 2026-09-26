@@ -49,7 +49,7 @@ func testCommit(t *testing.T, repo Repo) {
 	if defines.ID != el.ID {
 		t.Fatalf("defines must point at the element: %+v vs %+v", defines, el.Ref())
 	}
-	if doc.ChangeID != res.Change || doc.Comment != "new document" || doc.ChangeNode == "" {
+	if doc.ChangeID != res.Change || doc.Comment != "new document" || doc.ChangeImpact == "" {
 		t.Fatalf("the version must record its origin: %+v", doc)
 	}
 

@@ -256,7 +256,7 @@ func (r *remote) Execute(ctx context.Context, job dsl.Job, host dsl.Host) (dsl.R
 	}
 	if m.NodesJson != "" {
 		if err := json.Unmarshal([]byte(m.NodesJson), &res.Nodes); err != nil {
-			return res, fmt.Errorf("sandbox change nodes: %w", err)
+			return res, fmt.Errorf("sandbox change impacts: %w", err)
 		}
 	}
 	return res, nil

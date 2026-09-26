@@ -10,7 +10,7 @@ import (
 
 // This file is the producer-facing way of making a change of node edits
 // (ADR 0024): the producer says which nodes it creates or modifies and why; the
-// change, its change nodes, the versions on the change branch, the reviews and
+// change, its change impacts, the versions on the change branch, the reviews and
 // the apply follow. Services that project their own definitions into the graph
 // (registry, metamodel, seeds) use it.
 
@@ -59,7 +59,7 @@ type CommitResult struct {
 }
 
 // Commit runs the edits as one change: it opens the change on a branch of its
-// own, declares a change node per edit, writes their versions, accepts them
+// own, declares a change impact per edit, writes their versions, accepts them
 // (the rationale is the comment) and applies the change. When the branch
 // cannot be merged without conflict (another change moved a node meanwhile) the
 // change is abandoned and ErrConflict returned: the producer reads again and
@@ -84,13 +84,13 @@ func (g *Graph) Commit(ctx context.Context, in Commit) (res CommitResult, err er
 		}
 	}()
 
-	nodes := make([]domain.ChangeNode, len(in.Edits))
+	nodes := make([]domain.ChangeImpact, len(in.Edits))
 	for i, e := range in.Edits {
 		why := e.Rationale
 		if why == "" {
 			why = in.Title
 		}
-		nodes[i] = domain.ChangeNode{Intent: domain.IntentModified, Pre: e.Pre, Rationale: why, ProducedBy: in.By}
+		nodes[i] = domain.ChangeImpact{Intent: domain.IntentModified, Pre: e.Pre, Rationale: why, ProducedBy: in.By}
 		if e.Pre == nil {
 			nodes[i].Intent, nodes[i].Key, nodes[i].Type = domain.IntentCreated, e.Key, e.Type
 		}

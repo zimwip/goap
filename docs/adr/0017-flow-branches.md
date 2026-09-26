@@ -14,7 +14,7 @@ rewritten. Relaunching is a **flow branch**, and every transition is an event of
 1. **Events**: items of kind `flow` carry a `FlowEvent`: `open` (parent flow, the last item before the
    step, the step and journal record restarted, the relaunching process, the reason, the items
    invalidated), `adopt`, `discard`. The state of the branches is a replay of these events
-   (`domain.ChangeSet.Flows`). Items carry the flow that produced them (`flow`, empty = main flow).
+   (`domain.Change.Flows`). Items carry the flow that produced them (`flow`, empty = main flow).
 2. **Starting point of a step**: a step records `boardLast`, the last item of its flow when it started
    (with `boardBefore` / `boardAfter`, ADR 0015), so a relaunch knows where to fork.
 3. **Stale marking (automatic)**: the seeds are the items produced by the relaunched step, by the
@@ -58,7 +58,7 @@ rewritten. Relaunching is a **flow branch**, and every transition is an event of
   fails. Adopting merges the flow branch into the change branch **when the change has a branch of its
   own** (a change acting directly on main does not publish before it is applied) and the merge has no
   conflict; the proposals merged this way are recorded on the adopt event and are not applied a second
-  time when the change is applied (`ChangeSet.MergedOnBranch`, skipped by the applier and by the
+  time when the change is applied (`Change.MergedOnBranch`, skipped by the applier and by the
   divergence check). Discarding abandons every branch the flow used. If the flow changed since it was
   materialized, adoption does not merge: the proposals are applied with the change as usual.
 
@@ -85,7 +85,7 @@ The engine validates the blackboard the process reads at the start of every cycl
 
 ## Consequences
 - No schema change: events are ordinary change items. Readers of item statuses use
-  `ChangeSet.InEffect`; the CEL `items` of the main flow no longer contain candidates.
+  `Change.InEffect`; the CEL `items` of the main flow no longer contain candidates.
 - Permissions: the actions `relaunch` and `decide_flow` on the `process` resource (same roles as the
   other process actions).
 - Node versions proposed by an abandoned branch are only proposals until apply: no rollback needed.

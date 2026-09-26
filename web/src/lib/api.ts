@@ -247,7 +247,7 @@ export interface LinkSpec {
 }
 
 export interface Expectation {
-  forEach?: 'impacts' | 'proposals' | 'items' | 'artifacts' | string;
+  forEach?: 'changeImpacts' | 'items' | 'artifacts' | string;
   where?: string;
   produce?: ProduceSpec;
   link?: LinkSpec;
@@ -465,6 +465,11 @@ export interface GraphNode {
   parents?: number[];
   /** create | revise | derive | merge */
   reason?: string;
+  /** change impact that produced this version, and why it was accepted (ADR 0024) */
+  changeImpact?: string;
+  comment?: string;
+  /** action run that wrote this version (what a relaunch marks stale) */
+  execution?: string;
 }
 
 export interface Link {
@@ -485,41 +490,13 @@ export interface Baseline {
   createdAt?: string;
 }
 
-export interface Endpoint {
-  node?: NodeRef;
-  item?: string;
-}
-
-export interface NodeDraft {
-  base?: NodeRef;
-  key?: string;
-  type?: string;
-  props?: Struct;
-  /** transition_node: target state; create_node: state the node is born in */
-  state?: string;
-}
-
-export interface LinkDraft {
-  linkId?: string;
-  type?: string;
-  from?: Endpoint;
-  to?: Endpoint;
-  props?: Struct;
-}
-
-export interface Proposal {
-  op?: 'create_node' | 'update_node' | 'delete_node' | 'transition_node' | 'add_link' | 'remove_link' | string;
-  node?: NodeDraft;
-  link?: LinkDraft;
-}
-
 export interface Decision {
   item?: string;
   accept?: boolean;
   comment?: string;
 }
 
-export type ItemKind = 'impact' | 'proposal' | 'decision' | 'artifact' | 'merge' | 'flow';
+export type ItemKind = 'decision' | 'artifact' | 'merge' | 'flow';
 
 /** Status of a superseded item (rebase, merge): see its replacement's `supersedes`. */
 export const ITEM_SUPERSEDED = 'superseded';
@@ -529,14 +506,9 @@ export interface ChangeItem {
   kind?: ItemKind | string;
   type?: string;
   status?: string;
-  /** impact: the "pre" version (released, in the reference baseline) */
-  target?: NodeRef;
-  /** impact: the "post" side, the proposal producing the new version (item) or that version (node) */
-  post?: { node?: NodeRef; item?: string };
   /** flow branch that produced the item (empty: the main flow); flowEvent on kind 'flow' */
   flow?: string;
   flowEvent?: FlowEvent;
-  proposal?: Proposal;
   decision?: Decision;
   data?: Struct;
   producedBy?: string;
@@ -548,7 +520,7 @@ export interface ChangeItem {
   execution?: string;
 }
 
-export interface ChangeSet {
+export interface Change {
   id?: string;
   namespace?: string;
   /** branch the change works on (change-<id> when it has its own) */
@@ -565,6 +537,55 @@ export interface ChangeSet {
   resultBaselineId?: string;
   data?: Struct;
   items?: ChangeItem[];
+  /** the nodes the change reads, modifies or creates: stored, and derived from its items */
+  nodes?: ChangeImpact[];
+  createdAt?: string;
+}
+
+export interface NodeReview {
+  status?: 'accepted' | 'rejected' | string;
+  by?: string;
+  comment?: string;
+  at?: string;
+  /** flow branch the review was made on, and whether an adopted flow replaced it */
+  flow?: string;
+  superseded?: boolean;
+}
+
+/** The link from a change to a node (ADR 0024). */
+/** A node written by a commit: created (key, type) or modified (pre), retired when a projection no longer owns it. */
+export interface NodeEdit {
+  key?: string;
+  type?: string;
+  pre?: NodeRef;
+  props?: Struct;
+  retire?: boolean;
+  rationale?: string;
+  links?: { type: string; to?: NodeRef; toKey?: string; props?: Struct }[];
+  removeLinks?: string[];
+}
+
+export interface ChangeImpact {
+  id?: string;
+  key?: string;
+  type?: string;
+  intent?: 'created' | 'modified' | string;
+  rationale?: string;
+  /** released version the change starts from (none for a created node) */
+  pre?: NodeRef;
+  /** version written on the change branch (none while only planned) */
+  post?: NodeRef;
+  /** version on the target branch once applied */
+  landed?: NodeRef;
+  review?: 'proposed' | 'accepted' | 'rejected' | string;
+  reviews?: NodeReview[];
+  via?: string;
+  recheck?: boolean;
+  producedBy?: string;
+  /** flow branch that declared it (a candidate until the flow is adopted) */
+  flow?: string;
+  /** replaced by an adopted flow */
+  superseded?: boolean;
   createdAt?: string;
 }
 
@@ -822,12 +843,6 @@ export interface Flow {
   openedAt?: string;
   decidedAt?: string;
   decidedBy?: string;
-  /** graph (domain) branch the flow's proposals were last applied on, for review */
-  branch?: string;
-  branches?: string[];
-  materialized?: string[];
-  /** proposals already merged into the change branch (adopted flow) */
-  merged?: string[];
   /** adopted flows that replace the same items: an open flow that competes cannot be adopted */
   competesWith?: string[];
 }
@@ -886,13 +901,30 @@ export interface WatchEvent {
 }
 
 /** Item in the engine's input format (pkg/engine.ItemInput). */
+/** An operation on a change impact (ADR 0024): declare, write or review, applied in order. */
+export interface NodeOp {
+  op: 'declare' | 'write' | 'review';
+  /** local reference of a declared change impact ("#nN") */
+  ref?: string;
+  intent?: 'created' | 'modified';
+  key?: string;
+  type?: string;
+  rationale?: string;
+  /** write, review: a node key or a "#nN" reference */
+  node?: string;
+  props?: Struct;
+  state?: string;
+  links?: { type: string; to: string }[];
+  accept?: boolean;
+  comment?: string;
+}
+
 export interface ItemInput {
   ref?: string;
-  kind: ItemKind;
+  kind: ItemKind | 'changeImpact';
+  /** kind changeImpact: the operation */
+  changeImpact?: NodeOp;
   type?: string;
-  /** Key of the targeted node. */
-  target?: string;
-  proposal?: Struct;
   decision?: { item: string; accept: boolean; comment?: string };
   data?: Struct;
   derivedFrom?: string[];
@@ -1004,16 +1036,6 @@ export async function whoAmI(signal?: AbortSignal): Promise<Principal> {
   return (await res.json()) as Principal;
 }
 
-export interface ImpactView {
-  item?: string;
-  key?: string;
-  type?: string;
-  pre?: NodeRef;
-  preState?: string;
-  post?: NodeRef;
-  postState?: string;
-}
-
 export interface SharedNode {
   node?: NodeRef;
   key?: string;
@@ -1031,9 +1053,9 @@ export const graph = {
       signal,
     ),
   listChanges: (signal?: AbortSignal) =>
-    rpc<Empty, { changes?: ChangeSet[] }>(GRAPH, 'ListChanges', {}, signal),
+    rpc<Empty, { changes?: Change[] }>(GRAPH, 'ListChanges', {}, signal),
   getChange: (id: string, signal?: AbortSignal) =>
-    rpc<{ id: string }, { change?: ChangeSet }>(GRAPH, 'GetChange', { id }, signal),
+    rpc<{ id: string }, { change?: Change }>(GRAPH, 'GetChange', { id }, signal),
   getBranch: (name: string, signal?: AbortSignal) =>
     rpc<{ name: string }, { branch?: { name?: string; head?: string }; head?: Baseline }>(GRAPH, 'GetBranch', { name }, signal),
   createChange: (req: {
@@ -1047,17 +1069,17 @@ export const graph = {
     ownBranch?: boolean;
     parentId?: string;
     ownerOrg?: string;
-  }) => rpc<typeof req, { change?: ChangeSet }>(GRAPH, 'CreateChange', req),
+  }) => rpc<typeof req, { change?: Change }>(GRAPH, 'CreateChange', req),
   /** Splits a change into one sub-change per organisational unit owning impacted nodes. */
   splitChange: (changeId: string) =>
-    rpc<{ changeId: string }, { changes?: ChangeSet[] }>(GRAPH, 'SplitChange', { changeId }),
+    rpc<{ changeId: string }, { changes?: Change[] }>(GRAPH, 'SplitChange', { changeId }),
   listSubChanges: (changeId: string, signal?: AbortSignal) =>
-    rpc<{ changeId: string }, { changes?: ChangeSet[] }>(GRAPH, 'ListSubChanges', { changeId }, signal),
+    rpc<{ changeId: string }, { changes?: Change[] }>(GRAPH, 'ListSubChanges', { changeId }, signal),
   /** Completes a merge_pending change; resolutions are by node id. */
   mergeChange: (changeId: string, resolutions: Record<string, { props?: Struct; skip?: boolean }> = {}) =>
     rpc<
       { changeId: string; resolutions: Record<string, { props?: Struct; skip?: boolean }> },
-      { change?: ChangeSet }
+      { change?: Change }
     >(GRAPH, 'MergeChange', { changeId, resolutions }),
   /** Flow branches of a change (relaunched steps). */
   validateBoard: (changeId: string, flow = '', signal?: AbortSignal) =>
@@ -1070,24 +1092,29 @@ export const graph = {
   /** Discards an open flow branch straight on the graph (its candidates are rejected, its graph branch abandoned). */
   discardFlow: (changeId: string, flow: string) =>
     rpc<{ changeId: string; flow: string }, { flow?: Flow }>(GRAPH, 'DiscardFlow', { changeId, flow }),
-  /** Applies the proposals of a flow on a graph branch of its own (a preview). */
-  materializeFlow: (changeId: string, flow: string) =>
-    rpc<{ changeId: string; flow: string }, { flow?: Flow }>(GRAPH, 'MaterializeFlow', { changeId, flow }),
   /** What merging a branch into another would do. */
   planMerge: (from: string, into: string, signal?: AbortSignal) =>
     rpc<{ from: string; into: string }, { plan?: MergePlan }>(GRAPH, 'PlanMerge', { from, into }, signal),
-  /** Pre/post view of the impacts of a change. */
-  getImpacts: (changeId: string, signal?: AbortSignal) =>
-    rpc<{ changeId: string }, { impacts?: ImpactView[] }>(GRAPH, 'GetImpacts', { changeId }, signal),
-  /** Nodes the change shares with other open changes. */
   getSharedNodes: (changeId: string, signal?: AbortSignal) =>
     rpc<{ changeId: string }, { nodes?: SharedNode[] }>(GRAPH, 'GetSharedNodes', { changeId }, signal),
   /** Every version of a node, all branches. */
   listNodeVersions: (id: string, signal?: AbortSignal) =>
     rpc<{ id: string }, { versions?: GraphNode[] }>(GRAPH, 'ListNodeVersions', { id }, signal),
-  /** Nodes the change is attached to (the versions it starts from). */
-  getChangeNodes: (changeId: string, signal?: AbortSignal) =>
-    rpc<{ changeId: string }, { nodes?: NodeRef[] }>(GRAPH, 'GetChangeNodes', { changeId }, signal),
+  /** The versions the change starts from (the pre version of its change impacts). */
+  getChangeImpacts: (changeId: string, signal?: AbortSignal) =>
+    rpc<{ changeId: string }, { nodes?: NodeRef[] }>(GRAPH, 'GetChangeImpacts', { changeId }, signal),
+  /** Declare the nodes a change acts on (an impact: pre, intent, rationale). */
+  addChangeImpacts: (changeId: string, nodes: ChangeImpact[]) =>
+    rpc<{ changeId: string; nodes: ChangeImpact[] }, { nodes?: ChangeImpact[] }>(GRAPH, 'AddChangeImpacts', { changeId, nodes }),
+  /** Write the next version of a change impact's node on the change branch. */
+  writeChangeImpact: (changeId: string, changeImpactId: string, w: { props?: Struct; state?: string; retire?: boolean }) =>
+    rpc<{ changeId: string; changeImpactId: string; props?: Struct; state?: string; retire?: boolean }, { node?: ChangeImpact }>(GRAPH, 'WriteChangeImpact', { changeId, changeImpactId, ...w }),
+  /** Accept or reject a change impact; the comment is mandatory. */
+  reviewChangeImpact: (changeId: string, changeImpactId: string, accept: boolean, comment: string) =>
+    rpc<{ changeId: string; changeImpactId: string; accept: boolean; comment: string }, { node?: ChangeImpact }>(GRAPH, 'ReviewChangeImpact', { changeId, changeImpactId, accept, comment }),
+  /** Create a change, write the edits on its branch, accept them and apply it (one call). */
+  commitEdits: (req: { namespace: string; title: string; intent: string; baselineId: string; edits: NodeEdit[] }) =>
+    rpc<typeof req, { changeId?: string }>(GRAPH, 'CommitEdits', req),
   addItems: (changeId: string, items: ChangeItem[]) =>
     rpc<{ changeId: string; items: ChangeItem[] }, { items?: ChangeItem[] }>(GRAPH, 'AddItems', { changeId, items }),
   /** Execution journal of a change, optionally restricted to given processes. */

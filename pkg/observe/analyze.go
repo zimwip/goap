@@ -152,8 +152,8 @@ func outputKey(it domain.ChangeItem) string {
 }
 
 // Analyze computes the cost report of a run from its journal records, the
-// items and change nodes of the observed change and the spans of its trace (optional).
-func Analyze(recs []domain.ExecutionRecord, items map[domain.ItemID]domain.ChangeItem, nodes map[domain.ChangeNodeID]domain.ChangeNode, spans []Span, th Thresholds) Report {
+// items and change impacts of the observed change and the spans of its trace (optional).
+func Analyze(recs []domain.ExecutionRecord, items map[domain.ItemID]domain.ChangeItem, nodes map[domain.ChangeImpactID]domain.ChangeImpact, spans []Span, th Thresholds) Report {
 	th = th.withDefaults()
 	var r Report
 	stats := map[string]*ActionStats{}
@@ -211,7 +211,7 @@ func Analyze(recs []domain.ExecutionRecord, items map[domain.ItemID]domain.Chang
 			}
 			for _, id := range rec.Nodes {
 				if n, ok := nodes[id]; ok {
-					s.Outputs["changeNode/"+string(n.Intent)]++
+					s.Outputs["changeImpact/"+string(n.Intent)]++
 				}
 			}
 			s.Records = append(s.Records, rec.ID)

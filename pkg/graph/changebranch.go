@@ -18,7 +18,7 @@ func changeBranchName(id domain.ChangeID) string {
 }
 
 // ownBranch returns the branch owned by the change, when it has one.
-func ownBranch(ctx context.Context, tx Tx, c domain.ChangeSet) (domain.Branch, bool, error) {
+func ownBranch(ctx context.Context, tx Tx, c domain.Change) (domain.Branch, bool, error) {
 	if domain.BranchOf(c.Branch) == domain.MainBranch {
 		return domain.Branch{}, false, nil
 	}
@@ -31,7 +31,7 @@ func ownBranch(ctx context.Context, tx Tx, c domain.ChangeSet) (domain.Branch, b
 
 // integrate merges the branch of a change into its parent branch and marks the
 // change applied. Unresolved conflicts leave the change merge_pending.
-func (g *Graph) integrate(ctx context.Context, tx Tx, c domain.ChangeSet, own domain.Branch, resolutions map[domain.NodeID]Resolution) (domain.ChangeSet, error) {
+func (g *Graph) integrate(ctx context.Context, tx Tx, c domain.Change, own domain.Branch, resolutions map[domain.NodeID]Resolution) (domain.Change, error) {
 	if ff, err := g.fastForward(ctx, tx, c, own); err != nil || ff {
 		if err != nil {
 			return c, err
@@ -64,7 +64,7 @@ func (g *Graph) integrate(ctx context.Context, tx Tx, c domain.ChangeSet, own do
 
 // MergeChange completes a merge_pending change: its branch is merged into the
 // branch it was forked from, with the given resolutions of the conflicts.
-func (g *Graph) MergeChange(ctx context.Context, id domain.ChangeID, resolutions map[domain.NodeID]Resolution) (c domain.ChangeSet, err error) {
+func (g *Graph) MergeChange(ctx context.Context, id domain.ChangeID, resolutions map[domain.NodeID]Resolution) (c domain.Change, err error) {
 	err = g.repo.InTx(ctx, func(tx Tx) error {
 		if c, err = tx.Change(ctx, id); err != nil {
 			return err
@@ -183,8 +183,8 @@ func (g *Graph) NodeByKeyOn(ctx context.Context, namespace, branch, key string) 
 
 // fastForward lands a change whose target branch has not moved since its
 // branch was forked: the versions of the branch become versions of the target,
-// no merge version is made, and each change node lands as the version it wrote.
-func (g *Graph) fastForward(ctx context.Context, tx Tx, c domain.ChangeSet, own domain.Branch) (bool, error) {
+// no merge version is made, and each change impact lands as the version it wrote.
+func (g *Graph) fastForward(ctx context.Context, tx Tx, c domain.Change, own domain.Branch) (bool, error) {
 	into, err := branchHead(ctx, tx, own.Parent)
 	if err != nil || into.ID != own.ForkBaseline {
 		return false, err
@@ -242,7 +242,7 @@ func (g *Graph) fastForward(ctx context.Context, tx Tx, c domain.ChangeSet, own 
 // ensureOwnBranch gives a change the branch of its own that the versions it writes live on
 // (ADR 0024), forked from its reference baseline like the one opened with the change. The
 // items of a change are only applied when it is, so nothing is on the branch it acted on yet.
-func (g *Graph) ensureOwnBranch(ctx context.Context, tx Tx, c domain.ChangeSet) (domain.ChangeSet, domain.Branch, error) {
+func (g *Graph) ensureOwnBranch(ctx context.Context, tx Tx, c domain.Change) (domain.Change, domain.Branch, error) {
 	if c.ParentID != "" {
 		return c, domain.Branch{}, fmt.Errorf("change %s is a sub-change without a branch of its own: %w", c.ID, ErrInvalid)
 	}

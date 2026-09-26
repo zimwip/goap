@@ -45,8 +45,8 @@
     <div class="confirm card" role="alertdialog" aria-label="Discard this flow branch">
       <p>
         Discard this branch? Its candidate items are rejected, the
-        <strong>{staleCount(flow)}</strong> stale item{staleCount(flow) === 1 ? '' : 's'} count again{#if flow.branch}, and the graph
-        branch <code>{flow.branch}</code> is abandoned{/if}. The previous run stays as it was.
+        <strong>{staleCount(flow)}</strong> stale item{staleCount(flow) === 1 ? '' : 's'} count againand the graph
+        branch <code>flow-{(flow.id ?? '').slice(0, 8)}</code> is abandoned. The previous run stays as it was.
       </p>
       <label class="field">
         <span>Comment (optional)</span>

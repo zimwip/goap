@@ -10,16 +10,16 @@ domainRef: alm@1.0.0
 conditions:
   - name: has_scope
     description: The requirements to cover are identified
-    expr: size(changeNodes) > 0
+    expr: size(changeImpacts) > 0
   - name: tests_designed
     description: At least one test case is created by the change
-    expr: changeNodes.exists(n, n.intent == "created" && n.type == "TestCase")
+    expr: changeImpacts.exists(n, n.intent == "created" && n.type == "TestCase")
   - name: summarized
     description: A summary of the campaign is written
     expr: artifacts.exists(a, a.type == "summary")
   - name: reviewed
     description: All the test cases have received a decision
-    expr: changeNodes.exists(n, n.intent == "created") && changeNodes.filter(n, n.intent == "created").all(n, n.review != "proposed")
+    expr: changeImpacts.exists(n, n.intent == "created") && changeImpacts.filter(n, n.intent == "created").all(n, n.review != "proposed")
 
 actions:
   - name: collect_scope
@@ -52,7 +52,7 @@ actions:
       )
 
       func Run(ctx *dsl.Ctx) error {
-      	for _, n := range ctx.ChangeNodes() {
+      	for _, n := range ctx.ChangeImpacts() {
       		if n.Pre == nil || n.Type != "Requirement" || n.Intent != "modified" {
       			continue
       		}
@@ -73,7 +73,7 @@ actions:
     pre: {tests_designed: true, summarized: false}
     effects: {summarized: true}
     code: |
-      const tests = ctx.changeNodes().filter(n => n.intent === "created");
+      const tests = ctx.changeImpacts().filter(n => n.intent === "created");
       const r = ctx.complete({
         model: "fast",
         prompt: "Summarize in three lines a campaign of " + tests.length + " test cases: " +
@@ -89,7 +89,7 @@ actions:
     effects: {reviewed: true}
     utility: 'has(vars.review) && vars.review == "human" ? 0.1 : 0.9'
     code: |
-      for (const n of ctx.changeNodes()) {
+      for (const n of ctx.changeImpacts()) {
         if (n.intent === "created" && n.review === "proposed") ctx.reviewNode(n.key, true, "automatic review");
       }
 

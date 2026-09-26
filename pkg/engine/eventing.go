@@ -29,7 +29,7 @@ func (g EventingGraph) emit(ctx context.Context, typ string, id domain.ChangeID,
 }
 
 // CreateChange implements GraphPort.
-func (g EventingGraph) CreateChange(ctx context.Context, in graph.NewChange) (domain.ChangeSet, error) {
+func (g EventingGraph) CreateChange(ctx context.Context, in graph.NewChange) (domain.Change, error) {
 	c, err := g.GraphPort.CreateChange(ctx, in)
 	if err == nil {
 		g.emit(ctx, "change.created", c.ID, nil, nil)

@@ -38,8 +38,8 @@ the intent without any rule. Compared with plm-core, aifact and ailm, the missin
    (`Graph.walk`) implements the rules; `AddItems` runs it for early feedback and `Apply` for
    authority. Nodes with no state yet (created before the lifecycle) are unmanaged: editable, no
    leftover check.
-4. **Attachment.** A change is attached to the nodes it modifies (`change_node`, filled by
-   `AddItems`; `GetChangeNodes`, `ListNodeChanges`). **Several open changes may be attached to the
+4. **Attachment.** A change is attached to the nodes it modifies (`change_impact`, filled by
+   `AddItems`; `GetChangeImpacts`, `ListNodeChanges`). **Several open changes may be attached to the
    same node**: conflicts are detected when they are applied (`checkHead`, then rebase / merge,
    ADR 0009). The change stays an unversioned entity; its status now follows a machine
    (`draft → active → applied | abandoned`, only `Apply` applies).

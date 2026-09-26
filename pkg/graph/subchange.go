@@ -20,7 +20,7 @@ const (
 // open and have a branch of its own, the namespace is the parent's, and the
 // change forks from (and is merged into) the parent branch. Its organisational
 // unit must be inside the unit of the parent.
-func (g *Graph) prepareSubChange(ctx context.Context, tx Tx, c *domain.ChangeSet, in *NewChange) error {
+func (g *Graph) prepareSubChange(ctx context.Context, tx Tx, c *domain.Change, in *NewChange) error {
 	if c.ParentID == "" {
 		return nil
 	}
@@ -124,17 +124,17 @@ func orgWithin(ctx context.Context, tx Tx, unit, ancestor string) (bool, error) 
 }
 
 // SubChanges lists the sub-changes of a change, oldest first.
-func (g *Graph) SubChanges(ctx context.Context, id domain.ChangeID) (out []domain.ChangeSet, err error) {
+func (g *Graph) SubChanges(ctx context.Context, id domain.ChangeID) (out []domain.Change, err error) {
 	err = g.repo.InTx(ctx, func(tx Tx) error { out, err = subChanges(ctx, tx, id); return err })
 	return
 }
 
-func subChanges(ctx context.Context, tx Tx, id domain.ChangeID) ([]domain.ChangeSet, error) {
+func subChanges(ctx context.Context, tx Tx, id domain.ChangeID) ([]domain.Change, error) {
 	all, err := tx.Changes(ctx)
 	if err != nil {
 		return nil, err
 	}
-	var out []domain.ChangeSet
+	var out []domain.Change
 	for _, c := range all {
 		if c.ParentID == id {
 			out = append(out, c)
@@ -144,12 +144,12 @@ func subChanges(ctx context.Context, tx Tx, id domain.ChangeID) ([]domain.Change
 }
 
 // openSubChanges are the sub-changes that still have to be applied or abandoned.
-func openSubChanges(ctx context.Context, tx Tx, id domain.ChangeID) ([]domain.ChangeSet, error) {
+func openSubChanges(ctx context.Context, tx Tx, id domain.ChangeID) ([]domain.Change, error) {
 	subs, err := subChanges(ctx, tx, id)
 	if err != nil {
 		return nil, err
 	}
-	return slices.DeleteFunc(subs, func(c domain.ChangeSet) bool {
+	return slices.DeleteFunc(subs, func(c domain.Change) bool {
 		return c.Status == domain.ChangeApplied || c.Status == domain.ChangeAbandoned
 	}), nil
 }
@@ -182,11 +182,11 @@ func (g *Graph) abandonSubChanges(ctx context.Context, tx Tx, id domain.ChangeID
 
 // SplitByOwner splits a change along organisational boundaries: one
 // sub-change per unit owning nodes the change has an impact on (`owner` link
-// of the pre version of a modified change node, ADR 0024). The sub-change gets a
-// copy of the change nodes of its nodes, derived from the parent's. Units that
+// of the pre version of a modified change impact, ADR 0024). The sub-change gets a
+// copy of the change impacts of its nodes, derived from the parent's. Units that
 // already have an open sub-change are left as they are. Impacts on unowned nodes
 // stay with the parent.
-func (g *Graph) SplitByOwner(ctx context.Context, id domain.ChangeID) (created []domain.ChangeSet, err error) {
+func (g *Graph) SplitByOwner(ctx context.Context, id domain.ChangeID) (created []domain.Change, err error) {
 	err = g.repo.InTx(ctx, func(tx Tx) error {
 		parent, err := tx.Change(ctx, id)
 		if err != nil {
@@ -202,16 +202,16 @@ func (g *Graph) SplitByOwner(ctx context.Context, id domain.ChangeID) (created [
 		}
 		type group struct {
 			org, name string
-			nodes     []domain.ChangeNode
+			nodes     []domain.ChangeImpact
 		}
 		var groups []*group
 		byOrg := map[string]*group{}
-		seen, err := g.newFlowNodes(tx, parent, "").nodes(ctx) // the change nodes of the main flow: stored and derived from items
+		seen, err := g.newFlowNodes(tx, parent, "").nodes(ctx) // the change impacts of the main flow: stored and derived from items
 		if err != nil {
 			return err
 		}
 		for _, cn := range parent.Nodes {
-			if !slices.ContainsFunc(seen, func(x domain.ChangeNode) bool { return x.ID == cn.ID }) && len(cn.Items) == 0 {
+			if !slices.ContainsFunc(seen, func(x domain.ChangeImpact) bool { return x.ID == cn.ID }) && len(cn.Items) == 0 {
 				continue // a candidate of a flow, or replaced by one
 			}
 			if cn.Pre == nil || cn.Intent != domain.IntentModified || cn.Review == domain.ReviewRejected || cn.Superseded {
@@ -248,7 +248,7 @@ func (g *Graph) SplitByOwner(ctx context.Context, id domain.ChangeID) (created [
 				continue
 			}
 			in := NewChange{Title: parent.Title + " / " + gr.name, Intent: parent.Intent, Methodology: parent.Methodology, ParentID: id, OwnerOrg: gr.org}
-			sub := domain.ChangeSet{ID: domain.ChangeID(g.newID()), Title: in.Title, Intent: in.Intent, Methodology: in.Methodology, Status: domain.ChangeDraft,
+			sub := domain.Change{ID: domain.ChangeID(g.newID()), Title: in.Title, Intent: in.Intent, Methodology: in.Methodology, Status: domain.ChangeDraft,
 				ParentID: id, OwnerOrg: gr.org, CreatedAt: g.now()}
 			if err := g.prepareSubChange(ctx, tx, &sub, &in); err != nil {
 				return err
@@ -271,19 +271,19 @@ func (g *Graph) SplitByOwner(ctx context.Context, id domain.ChangeID) (created [
 			}
 			for _, cn := range gr.nodes {
 				// the impact is confirmed for the parent, the work moves to the sub-change
-				if stored := slices.IndexFunc(parent.Nodes, func(x domain.ChangeNode) bool { return x.ID == cn.ID && len(x.Items) == 0 }); stored >= 0 && cn.Review == domain.ReviewProposed && cn.Post == nil {
+				if stored := slices.IndexFunc(parent.Nodes, func(x domain.ChangeImpact) bool { return x.ID == cn.ID && len(x.Items) == 0 }); stored >= 0 && cn.Review == domain.ReviewProposed && cn.Post == nil {
 					del := cn
 					del.Review = domain.ReviewAccepted
 					del.Reviews = append(slices.Clone(del.Reviews), domain.Review{Status: domain.ReviewAccepted, By: "graph.split_by_owner", At: g.now(),
 						Comment: fmt.Sprintf("delegated to %s (sub-change %s)", gr.org, sub.ID)})
-					if err := tx.PutChangeNode(ctx, id, del); err != nil {
+					if err := tx.PutChangeImpact(ctx, id, del); err != nil {
 						return err
 					}
 				}
-				// DerivedFrom holds the id of the parent's change node it is copied from
-				cp := domain.ChangeNode{ID: domain.ChangeNodeID(g.newID()), Key: cn.Key, Type: cn.Type, Intent: domain.IntentModified, Rationale: cn.Rationale,
+				// DerivedFrom holds the id of the parent's change impact it is copied from
+				cp := domain.ChangeImpact{ID: domain.ChangeImpactID(g.newID()), Key: cn.Key, Type: cn.Type, Intent: domain.IntentModified, Rationale: cn.Rationale,
 					Pre: cn.Pre, Review: domain.ReviewProposed, ProducedBy: "graph.split_by_owner", DerivedFrom: []domain.ItemID{domain.ItemID(cn.ID)}, CreatedAt: g.now()}
-				if err := tx.PutChangeNode(ctx, sub.ID, cp); err != nil {
+				if err := tx.PutChangeImpact(ctx, sub.ID, cp); err != nil {
 					return err
 				}
 			}

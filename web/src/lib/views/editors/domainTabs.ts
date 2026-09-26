@@ -13,8 +13,8 @@ export function openDomain(name: string, version: string, pin = false): Tab {
 }
 
 /** Opens the domain and highlights the field at `path` (e.g. "nodeTypes[2]"). */
-export function revealDomainPath(name: string, version: string, path: string): void {
-  const tab = openDomain(name, version);
+export function revealDomainPath(name: string, version: string, path: string, pin = false): void {
+  const tab = openDomain(name, version, pin);
   requestReveal(tab.id, path);
 }
 

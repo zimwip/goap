@@ -49,12 +49,12 @@ func testNamespaces(t *testing.T, repo Repo) {
 	}
 	orgRef, sdlcRef := org.Ref(), sdlc.Ref()
 	// modifying a node of another namespace is refused
-	_, err = g.AddNodes(ctx, c.ID, []domain.ChangeNode{{Intent: domain.IntentModified, Pre: &orgRef, Rationale: "x"}})
+	_, err = g.AddNodes(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &orgRef, Rationale: "x"}})
 	if !errors.Is(err, ErrInvalid) {
 		t.Fatalf("update across namespaces: %v", err)
 	}
 	// a link to a node of another namespace is allowed, and created nodes belong to the change namespace
-	ns, err := g.AddNodes(ctx, c.ID, []domain.ChangeNode{
+	ns, err := g.AddNodes(ctx, c.ID, []domain.ChangeImpact{
 		{Intent: domain.IntentCreated, Key: "Y", Type: "T", Rationale: "new"},
 		{Intent: domain.IntentModified, Pre: &sdlcRef, Rationale: "owned by the unit"},
 	})
@@ -62,7 +62,7 @@ func testNamespaces(t *testing.T, repo Repo) {
 		t.Fatal(err)
 	}
 	for _, w := range []struct {
-		n domain.ChangeNode
+		n domain.ChangeImpact
 		w NodeWrite
 	}{{ns[0], NodeWrite{Properties: map[string]any{"a": 1}}}, {ns[1], NodeWrite{AddLinks: []LinkWrite{{Type: "owner", To: orgRef}}}}} {
 		if _, err := g.WriteNode(ctx, c.ID, w.n.ID, w.w); err != nil {

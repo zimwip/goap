@@ -67,7 +67,7 @@ func sqliteErr(err error, what string) error {
 	return err
 }
 
-const sqliteNodeCols = `n.id, v.version, n.namespace, n.key, n.type, v.props, v.deleted, v.change_id, v.created_at, v.branch, v.parents, v.reason, v.state, v.change_node, v.comment, v.execution`
+const sqliteNodeCols = `n.id, v.version, n.namespace, n.key, n.type, v.props, v.deleted, v.change_id, v.created_at, v.branch, v.parents, v.reason, v.state, v.change_impact, v.comment, v.execution`
 
 type scanner interface{ Scan(dest ...any) error }
 
@@ -84,7 +84,7 @@ func sqliteScanNode(row scanner) (domain.Node, error) {
 		n.Parents = nil
 	}
 	n.ID, n.Version, n.Properties, n.ChangeID = domain.NodeID(id), domain.Version(version), props([]byte(p)), domain.ChangeID(change.String)
-	n.ChangeNode = domain.ChangeNodeID(cnode.String)
+	n.ChangeImpact = domain.ChangeImpactID(cnode.String)
 	n.CreatedAt = tsParse(created)
 	return n, nil
 }
@@ -291,12 +291,12 @@ func (t *sqliteTx) Baselines(ctx context.Context) ([]domain.Baseline, error) {
 	return out, nil
 }
 
-func (t *sqliteTx) Change(ctx context.Context, id domain.ChangeID) (domain.ChangeSet, error) {
-	var c domain.ChangeSet
+func (t *sqliteTx) Change(ctx context.Context, id domain.ChangeID) (domain.Change, error) {
+	var c domain.Change
 	var result sql.NullString
 	var data, created string
 	err := t.tx.QueryRowContext(ctx, `SELECT id, title, intent, methodology, goal, status, baseline_id, result_baseline_id, data, created_at, branch, namespace, COALESCE(parent_id, ''), owner_org
-		FROM change_set WHERE id = ?`, string(id)).
+		FROM change WHERE id = ?`, string(id)).
 		Scan((*string)(&c.ID), &c.Title, &c.Intent, &c.Methodology, &c.Goal, (*string)(&c.Status), (*string)(&c.BaselineID), &result, &data, &created, &c.Branch, &c.Namespace, (*string)(&c.ParentID), &c.OwnerOrg)
 	if err != nil {
 		return c, sqliteErr(err, "change "+string(id))
@@ -322,16 +322,16 @@ func (t *sqliteTx) Change(ctx context.Context, id domain.ChangeID) (domain.Chang
 		return c, err
 	}
 	rows.Close()
-	c.Nodes, err = t.ChangeNodes(ctx, id)
+	c.Nodes, err = t.ChangeImpacts(ctx, id)
 	return c, err
 }
 
-func (t *sqliteTx) Changes(ctx context.Context) ([]domain.ChangeSet, error) {
-	ids, err := t.ids(ctx, `SELECT id FROM change_set ORDER BY created_at, rowid`)
+func (t *sqliteTx) Changes(ctx context.Context) ([]domain.Change, error) {
+	ids, err := t.ids(ctx, `SELECT id FROM change ORDER BY created_at, rowid`)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]domain.ChangeSet, 0, len(ids))
+	out := make([]domain.Change, 0, len(ids))
 	for _, id := range ids {
 		c, err := t.Change(ctx, domain.ChangeID(id))
 		if err != nil {
@@ -361,10 +361,10 @@ func (t *sqliteTx) PutNode(ctx context.Context, n domain.Node) error {
 		parents = []domain.Version{}
 	}
 	pj, _ := json.Marshal(parents)
-	_, err := t.tx.ExecContext(ctx, `INSERT INTO node_version (node_id, version, props, deleted, change_id, created_at, branch, parents, reason, state, change_node, comment, execution)
+	_, err := t.tx.ExecContext(ctx, `INSERT INTO node_version (node_id, version, props, deleted, change_id, created_at, branch, parents, reason, state, change_impact, comment, execution)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		string(n.ID), int(n.Version), string(jsonb(n.Properties)), n.Deleted, nullUUID(string(n.ChangeID)), tsText(n.CreatedAt),
-		domain.BranchOf(n.Branch), string(pj), n.Reason, n.State, nullUUID(string(n.ChangeNode)), n.Comment, n.Execution)
+		domain.BranchOf(n.Branch), string(pj), n.Reason, n.State, nullUUID(string(n.ChangeImpact)), n.Comment, n.Execution)
 	return sqliteErr(err, "node "+n.Ref().String())
 }
 
@@ -404,8 +404,8 @@ func (t *sqliteTx) PutBaseline(ctx context.Context, b domain.Baseline) error {
 	return nil
 }
 
-func (t *sqliteTx) PutChange(ctx context.Context, c domain.ChangeSet) error {
-	_, err := t.tx.ExecContext(ctx, `INSERT INTO change_set (id, title, intent, methodology, goal, status, baseline_id, result_baseline_id, data, created_at, branch, namespace, parent_id, owner_org)
+func (t *sqliteTx) PutChange(ctx context.Context, c domain.Change) error {
+	_, err := t.tx.ExecContext(ctx, `INSERT INTO change (id, title, intent, methodology, goal, status, baseline_id, result_baseline_id, data, created_at, branch, namespace, parent_id, owner_org)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT (id) DO UPDATE SET title = excluded.title, intent = excluded.intent, goal = excluded.goal, status = excluded.status,
 		  result_baseline_id = excluded.result_baseline_id, data = excluded.data, baseline_id = excluded.baseline_id, branch = excluded.branch`,
@@ -425,7 +425,7 @@ func (t *sqliteTx) PutItem(ctx context.Context, change domain.ChangeID, it domai
 }
 
 func (t *sqliteTx) OpenChangeIDs(ctx context.Context) ([]domain.ChangeID, error) {
-	rows, err := t.tx.QueryContext(ctx, `SELECT id FROM change_set WHERE status NOT IN ('applied', 'abandoned') ORDER BY created_at, rowid`)
+	rows, err := t.tx.QueryContext(ctx, `SELECT id FROM change WHERE status NOT IN ('applied', 'abandoned') ORDER BY created_at, rowid`)
 	if err != nil {
 		return nil, err
 	}
@@ -484,28 +484,28 @@ func (t *sqliteTx) Executions(ctx context.Context, f domain.ExecutionFilter) ([]
 	return out, rows.Err()
 }
 
-func (t *sqliteTx) PutChangeNode(ctx context.Context, change domain.ChangeID, cn domain.ChangeNode) error {
+func (t *sqliteTx) PutChangeImpact(ctx context.Context, change domain.ChangeID, cn domain.ChangeImpact) error {
 	r, err := toCNRow(cn)
 	if err != nil {
 		return err
 	}
-	_, err = t.tx.ExecContext(ctx, `INSERT INTO change_node (id, seq, change_id, node_id, key, type, intent, rationale, pre_version, post_version, landed_version, review, reviews, via, recheck, produced_by, derived_from, items, execution, created_at, flow, superseded)
-		VALUES (?, (SELECT COALESCE(MAX(seq), 0) + 1 FROM change_node), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	_, err = t.tx.ExecContext(ctx, `INSERT INTO change_impact (id, seq, change_id, node_id, key, type, intent, rationale, pre_version, post_version, landed_version, review, reviews, via, recheck, produced_by, derived_from, items, execution, created_at, flow, superseded)
+		VALUES (?, (SELECT COALESCE(MAX(seq), 0) + 1 FROM change_impact), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT (id) DO UPDATE SET node_id = excluded.node_id, key = excluded.key, type = excluded.type, intent = excluded.intent, rationale = excluded.rationale,
 			pre_version = excluded.pre_version, post_version = excluded.post_version, landed_version = excluded.landed_version, review = excluded.review,
 			reviews = excluded.reviews, via = excluded.via, recheck = excluded.recheck, produced_by = excluded.produced_by, derived_from = excluded.derived_from, items = excluded.items, execution = excluded.execution, flow = excluded.flow, superseded = excluded.superseded`,
 		r.ID, string(change), r.NodeID, r.Key, r.Type, r.Intent, r.Rationale, r.Pre, r.Post, r.Landed, r.Review, string(r.Reviews), nullUUID(r.Via), r.Recheck, r.ProducedBy, string(r.DerivedFrom), string(r.Items), r.Execution, tsText(cn.CreatedAt), r.Flow, r.Superseded)
-	return sqliteErr(err, "change node "+cn.Key)
+	return sqliteErr(err, "change impact "+cn.Key)
 }
 
-func (t *sqliteTx) ChangeNodes(ctx context.Context, change domain.ChangeID) ([]domain.ChangeNode, error) {
+func (t *sqliteTx) ChangeImpacts(ctx context.Context, change domain.ChangeID) ([]domain.ChangeImpact, error) {
 	rows, err := t.tx.QueryContext(ctx, `SELECT id, node_id, key, type, intent, rationale, pre_version, post_version, landed_version, review, reviews, COALESCE(via, ''), recheck, produced_by, derived_from, items, execution, created_at, flow, superseded
-		FROM change_node WHERE change_id = ? ORDER BY seq`, string(change))
+		FROM change_impact WHERE change_id = ? ORDER BY seq`, string(change))
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var out []domain.ChangeNode
+	var out []domain.ChangeImpact
 	for rows.Next() {
 		var r cnRow
 		var reviews, derived, items, created string
@@ -537,8 +537,8 @@ func (t *sqliteTx) ChangeNodes(ctx context.Context, change domain.ChangeID) ([]d
 	return out, rows.Err()
 }
 
-func (t *sqliteTx) NodeChangeNodes(ctx context.Context, node domain.NodeID) ([]domain.ChangeID, error) {
-	rows, err := t.tx.QueryContext(ctx, `SELECT change_id FROM change_node WHERE node_id = ? ORDER BY seq`, string(node))
+func (t *sqliteTx) NodeChangeImpacts(ctx context.Context, node domain.NodeID) ([]domain.ChangeID, error) {
+	rows, err := t.tx.QueryContext(ctx, `SELECT change_id FROM change_impact WHERE node_id = ? ORDER BY seq`, string(node))
 	if err != nil {
 		return nil, err
 	}
@@ -554,8 +554,8 @@ func (t *sqliteTx) NodeChangeNodes(ctx context.Context, node domain.NodeID) ([]d
 	return out, rows.Err()
 }
 
-func (t *sqliteTx) SetNodeOrigin(ctx context.Context, ref domain.NodeRef, change domain.ChangeID, cn domain.ChangeNodeID, comment string) error {
-	res, err := t.tx.ExecContext(ctx, `UPDATE node_version SET change_id = ?, change_node = ?, comment = ? WHERE node_id = ? AND version = ?`, nullUUID(string(change)), nullUUID(string(cn)), comment, string(ref.ID), int(ref.Version))
+func (t *sqliteTx) SetNodeOrigin(ctx context.Context, ref domain.NodeRef, change domain.ChangeID, cn domain.ChangeImpactID, comment string) error {
+	res, err := t.tx.ExecContext(ctx, `UPDATE node_version SET change_id = ?, change_impact = ?, comment = ? WHERE node_id = ? AND version = ?`, nullUUID(string(change)), nullUUID(string(cn)), comment, string(ref.ID), int(ref.Version))
 	if err != nil {
 		return sqliteErr(err, "node "+ref.String())
 	}

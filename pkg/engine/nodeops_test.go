@@ -10,8 +10,8 @@ import (
 	"github.com/zimwip/goap/pkg/graph"
 )
 
-// A script declares, writes and reviews change nodes; the engine applies the operations.
-func TestScriptChangeNodes(t *testing.T) {
+// A script declares, writes and reviews change impacts; the engine applies the operations.
+func TestScriptChangeImpacts(t *testing.T) {
 	ctx := context.Background()
 	e, g, base := setup(t)
 	c, err := g.CreateChange(ctx, graph.NewChange{Title: "PSP v2", BaselineID: base, OwnBranch: true})
@@ -41,26 +41,26 @@ ctx.reviewNode(req, true, "confirmed with the PSP team");
 		t.Fatal(err)
 	}
 	if len(ch.Nodes) != 2 {
-		t.Fatalf("expected 2 change nodes: %+v", ch.Nodes)
+		t.Fatalf("expected 2 change impacts: %+v", ch.Nodes)
 	}
 	req, tst := ch.Nodes[0], ch.Nodes[1]
 	if req.Key != "REQ-1" || req.Post == nil || req.Review != domain.ReviewAccepted || req.ProducedBy != "plan" || req.Execution != "exec-1" {
-		t.Fatalf("REQ-1 change node: %+v", req)
+		t.Fatalf("REQ-1 change impact: %+v", req)
 	}
 	if tst.Key != "TST-2" || tst.Post == nil || tst.Review != domain.ReviewProposed {
-		t.Fatalf("TST-2 change node: %+v", tst)
+		t.Fatalf("TST-2 change impact: %+v", tst)
 	}
-	// a second script reads the change nodes and accepts the other one
+	// a second script reads the change impacts and accepts the other one
 	bb, err := g.Blackboard(ctx, c.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	snap := ChangeNodesFromBlackboard(bb)
+	snap := ChangeImpactsFromBlackboard(bb)
 	if len(snap) != 2 || snap[0].Planned || snap[0].Post == nil || snap[0].Post.Key != "REQ-1" {
 		t.Fatalf("snapshot: %+v", snap)
 	}
 	job2 := dsl.Job{Language: "javascript", Action: "check", Nodes: snap, Code: `
-for (const n of ctx.changeNodes()) if (n.review === "proposed") ctx.reviewNode(n.key, true, "needed");
+for (const n of ctx.changeImpacts()) if (n.review === "proposed") ctx.reviewNode(n.key, true, "needed");
 `}
 	res2, err := dsl.Run(ctx, job2, nopHost{})
 	if err != nil || len(res2.Nodes) != 1 {
@@ -78,7 +78,7 @@ for (const n of ctx.changeNodes()) if (n.review === "proposed") ctx.reviewNode(n
 		t.Fatal(err)
 	}
 	v, err := g.View(ctx, newTst.Ref())
-	if err != nil || len(v.Out) != 1 || v.Out[0].To != newReq.Ref() || newReq.Properties["title"] != "Use PSP v2" || newReq.ChangeNode != req.ID {
+	if err != nil || len(v.Out) != 1 || v.Out[0].To != newReq.Ref() || newReq.Properties["title"] != "Use PSP v2" || newReq.ChangeImpact != req.ID {
 		t.Fatalf("the change must land with the link on the version it wrote: %+v %+v %v", v.Out, newReq, err)
 	}
 
@@ -88,7 +88,7 @@ for (const n of ctx.changeNodes()) if (n.review === "proposed") ctx.reviewNode(n
 		msg string
 	}{
 		"no comment": {[]dsl.NodeOp{{Op: "review", Node: "REQ-1", Accept: true}}, "comment"},
-		"unknown":    {[]dsl.NodeOp{{Op: "write", Node: "NOPE-1"}}, "no change node"},
+		"unknown":    {[]dsl.NodeOp{{Op: "write", Node: "NOPE-1"}}, "no change impact"},
 	} {
 		if _, err := e.applyNodeOps(ctx, p, tc.ops, "x", ""); err == nil || !strings.Contains(err.Error(), tc.msg) {
 			t.Errorf("%s: got %v", name, err)
@@ -96,8 +96,8 @@ for (const n of ctx.changeNodes()) if (n.review === "proposed") ctx.reviewNode(n
 	}
 }
 
-// A relaunched step redoes its change nodes on a flow branch; adopting it replaces the stale ones.
-func TestScriptChangeNodesOnAFlow(t *testing.T) {
+// A relaunched step redoes its change impacts on a flow branch; adopting it replaces the stale ones.
+func TestScriptChangeImpactsOnAFlow(t *testing.T) {
 	ctx := context.Background()
 	e, g, base := setup(t)
 	c, err := g.CreateChange(ctx, graph.NewChange{Title: "PSP v2", BaselineID: base, OwnBranch: true})
@@ -122,14 +122,14 @@ func TestScriptChangeNodesOnAFlow(t *testing.T) {
 		t.Fatal(err)
 	}
 	onFlow := &Process{ChangeID: c.ID, Flow: flow.ID}
-	// on the flow the first idea is not there any more: a script sees no change node and declares its own
+	// on the flow the first idea is not there any more: a script sees no change impact and declares its own
 	bb, _ := g.BlackboardIn(ctx, c.ID, flow.ID)
-	if len(ChangeNodesFromBlackboard(bb)) != 0 {
-		t.Fatalf("a relaunched step starts without its stale change nodes: %+v", ChangeNodesFromBlackboard(bb))
+	if len(ChangeImpactsFromBlackboard(bb)) != 0 {
+		t.Fatalf("a relaunched step starts without its stale change impacts: %+v", ChangeImpactsFromBlackboard(bb))
 	}
 	run(onFlow, "plan", "run-2", `const r = ctx.impactNode("REQ-1", "second idea"); ctx.writeNode(r, { props: { title: "B" } }); ctx.reviewNode(r, true, "better");`)
 	bb, _ = g.BlackboardIn(ctx, c.ID, flow.ID)
-	if snap := ChangeNodesFromBlackboard(bb); len(snap) != 1 || snap[0].Rationale != "second idea" || snap[0].Review != "accepted" || snap[0].Post == nil {
+	if snap := ChangeImpactsFromBlackboard(bb); len(snap) != 1 || snap[0].Rationale != "second idea" || snap[0].Review != "accepted" || snap[0].Post == nil {
 		t.Fatalf("flow snapshot: %+v", snap)
 	}
 	if _, err := g.AdoptFlow(ctx, c.ID, flow.ID, "alice"); err != nil {

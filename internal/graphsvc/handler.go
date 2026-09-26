@@ -184,9 +184,9 @@ func (h *Handler) ListChanges(ctx context.Context, _ *connect.Request[graphv1.Li
 	return res(out, err)
 }
 
-func (h *Handler) GetChangeNodes(ctx context.Context, r *connect.Request[graphv1.GetChangeNodesRequest]) (*connect.Response[graphv1.GetChangeNodesResponse], error) {
-	refs, err := h.Graph.ChangeNodes(ctx, domain.ChangeID(r.Msg.ChangeId))
-	out := &graphv1.GetChangeNodesResponse{}
+func (h *Handler) GetChangeImpacts(ctx context.Context, r *connect.Request[graphv1.GetChangeImpactsRequest]) (*connect.Response[graphv1.GetChangeImpactsResponse], error) {
+	refs, err := h.Graph.ChangeImpacts(ctx, domain.ChangeID(r.Msg.ChangeId))
+	out := &graphv1.GetChangeImpactsResponse{}
 	for _, ref := range refs {
 		out.Nodes = append(out.Nodes, pbconv.RefToPB(ref))
 	}
@@ -227,7 +227,7 @@ func (h *Handler) AddItems(ctx context.Context, r *connect.Request[graphv1.AddIt
 	return res(&graphv1.AddItemsResponse{Items: pbconv.ItemsToPB(items)}, err)
 }
 
-// gateNodeType applies to a change node the gates AddItems applies to proposals:
+// gateNodeType applies to a change impact the gates AddItems applies to proposals:
 // NodeType nodes need the "nodetype" permission, User and Policy nodes the access one.
 func (h *Handler) gateNodeType(ctx context.Context, typ string) error {
 	who := authz.From(ctx)
@@ -248,9 +248,9 @@ func (h *Handler) gateNodeType(ctx context.Context, typ string) error {
 	return nil
 }
 
-func (h *Handler) AddChangeNodes(ctx context.Context, r *connect.Request[graphv1.AddChangeNodesRequest]) (*connect.Response[graphv1.AddChangeNodesResponse], error) {
+func (h *Handler) AddChangeImpacts(ctx context.Context, r *connect.Request[graphv1.AddChangeImpactsRequest]) (*connect.Response[graphv1.AddChangeImpactsResponse], error) {
 	ctx = h.Identity.Context(ctx, r.Header())
-	nodes := pbconv.ChangeNodesFromPB(r.Msg.Nodes)
+	nodes := pbconv.ChangeImpactsFromPB(r.Msg.Nodes)
 	for _, cn := range nodes {
 		typ := cn.Type
 		if cn.Pre != nil {
@@ -263,7 +263,7 @@ func (h *Handler) AddChangeNodes(ctx context.Context, r *connect.Request[graphv1
 		}
 	}
 	out, err := h.Graph.AddNodes(ctx, domain.ChangeID(r.Msg.ChangeId), nodes)
-	return res(&graphv1.AddChangeNodesResponse{Nodes: pbconv.ChangeNodesToPB(out)}, err)
+	return res(&graphv1.AddChangeImpactsResponse{Nodes: pbconv.ChangeImpactsToPB(out)}, err)
 }
 
 func (h *Handler) CommitEdits(ctx context.Context, r *connect.Request[graphv1.CommitEditsRequest]) (*connect.Response[graphv1.CommitEditsResponse], error) {
@@ -302,15 +302,15 @@ func (h *Handler) CommitEdits(ctx context.Context, r *connect.Request[graphv1.Co
 	return res(&graphv1.CommitEditsResponse{ChangeId: string(out.Change), Baseline: pbconv.BaselineToPB(out.Baseline)}, err)
 }
 
-func (h *Handler) WriteChangeNode(ctx context.Context, r *connect.Request[graphv1.WriteChangeNodeRequest]) (*connect.Response[graphv1.WriteChangeNodeResponse], error) {
+func (h *Handler) WriteChangeImpact(ctx context.Context, r *connect.Request[graphv1.WriteChangeImpactRequest]) (*connect.Response[graphv1.WriteChangeImpactResponse], error) {
 	ctx = h.Identity.Context(ctx, r.Header())
-	list, err := h.Graph.ListChangeNodes(ctx, domain.ChangeID(r.Msg.ChangeId))
+	list, err := h.Graph.ListChangeImpacts(ctx, domain.ChangeID(r.Msg.ChangeId))
 	if err != nil {
 		return nil, rpcerr.ToConnect(err)
 	}
 	var typ string
 	for _, cn := range list {
-		if string(cn.ID) == r.Msg.ChangeNodeId {
+		if string(cn.ID) == r.Msg.ChangeImpactId {
 			typ = cn.Type
 		}
 	}
@@ -329,18 +329,18 @@ func (h *Handler) WriteChangeNode(ctx context.Context, r *connect.Request[graphv
 	for _, id := range r.Msg.RemoveLinks {
 		w.RemoveLinks = append(w.RemoveLinks, domain.LinkID(id))
 	}
-	cn, err := h.Graph.WriteNode(ctx, domain.ChangeID(r.Msg.ChangeId), domain.ChangeNodeID(r.Msg.ChangeNodeId), w)
-	return res(&graphv1.WriteChangeNodeResponse{Node: pbconv.ChangeNodeToPB(cn)}, err)
+	cn, err := h.Graph.WriteNode(ctx, domain.ChangeID(r.Msg.ChangeId), domain.ChangeImpactID(r.Msg.ChangeImpactId), w)
+	return res(&graphv1.WriteChangeImpactResponse{Node: pbconv.ChangeImpactToPB(cn)}, err)
 }
 
-func (h *Handler) ReviewChangeNode(ctx context.Context, r *connect.Request[graphv1.ReviewChangeNodeRequest]) (*connect.Response[graphv1.ReviewChangeNodeResponse], error) {
+func (h *Handler) ReviewChangeImpact(ctx context.Context, r *connect.Request[graphv1.ReviewChangeImpactRequest]) (*connect.Response[graphv1.ReviewChangeImpactResponse], error) {
 	ctx = h.Identity.Context(ctx, r.Header())
 	status := domain.ReviewRejected
 	if r.Msg.Accept {
 		status = domain.ReviewAccepted
 	}
-	cn, err := h.Graph.ReviewNodeOn(ctx, domain.ChangeID(r.Msg.ChangeId), r.Msg.Flow, r.Msg.Execution, domain.ChangeNodeID(r.Msg.ChangeNodeId), status, authz.From(ctx).Subject, r.Msg.Comment)
-	return res(&graphv1.ReviewChangeNodeResponse{Node: pbconv.ChangeNodeToPB(cn)}, err)
+	cn, err := h.Graph.ReviewNodeOn(ctx, domain.ChangeID(r.Msg.ChangeId), r.Msg.Flow, r.Msg.Execution, domain.ChangeImpactID(r.Msg.ChangeImpactId), status, authz.From(ctx).Subject, r.Msg.Comment)
+	return res(&graphv1.ReviewChangeImpactResponse{Node: pbconv.ChangeImpactToPB(cn)}, err)
 }
 
 func (h *Handler) GetBlackboard(ctx context.Context, r *connect.Request[graphv1.GetBlackboardRequest]) (*connect.Response[graphv1.GetBlackboardResponse], error) {

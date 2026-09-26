@@ -1,9 +1,9 @@
 // Package domain defines the two-axis knowledge graph used by GOAP.
 //
 // The domain axis holds versioned content nodes linked version-to-version and
-// grouped into baselines. The change axis holds ChangeSets: the description of
+// grouped into baselines. The change axis holds Changes: the description of
 // a modification starting from a reference baseline (impacts) and proposing the
-// target graph (proposals). A ChangeSet is the blackboard of an agent process.
+// target graph (proposals). A Change is the blackboard of an agent process.
 package domain
 
 import (
@@ -95,10 +95,10 @@ type Node struct {
 	// State in the lifecycle of the node type (empty: the type has none).
 	State    string   `json:"state,omitempty"`
 	ChangeID ChangeID `json:"changeId,omitempty"`
-	// ChangeNode is the change node that produced this version, Comment the acceptance
+	// ChangeImpact is the change impact that produced this version, Comment the acceptance
 	// comment (else the rationale): the origin of the version (ADR 0024).
-	ChangeNode ChangeNodeID `json:"changeNode,omitempty"`
-	Comment    string       `json:"comment,omitempty"`
+	ChangeImpact ChangeImpactID `json:"changeImpact,omitempty"`
+	Comment      string         `json:"comment,omitempty"`
 	// Execution is the journal execution (action run) that wrote this version: what a
 	// relaunch of a step marks stale (ADR 0025).
 	Execution string    `json:"execution,omitempty"`

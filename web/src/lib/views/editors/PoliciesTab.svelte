@@ -69,7 +69,7 @@
     try {
       const roles = uRoles.split(',').map((r) => r.trim()).filter(Boolean);
       const u: User = { subject, displayName: uName.trim(), email: uEmail.trim(), locale: '', roles };
-      await applyOnMain(NS_ORGANISATION, `User ${subject}`, 'Add a user', baselineId, [createNodeItem('user', userKey(subject), USER_TYPE, userProps(u))]);
+      await applyOnMain(NS_ORGANISATION, `User ${subject}`, 'Add a user', baselineId, [createNodeItem(userKey(subject), USER_TYPE, userProps(u))]);
       uSubject = uName = uEmail = uRoles = '';
       await load();
     } catch (err) {
@@ -109,7 +109,7 @@
     try {
       const p: Policy = { rule: rule.trim(), resource: resource.trim(), action: action.trim(), effect: policyEffect };
       await applyOnMain(NS_ORGANISATION, `Policy ${p.resource}/${p.action}`, 'Add an access policy', baselineId, [
-        createNodeItem('policy', newPolicyKey(p), POLICY_TYPE, policyProps(p)),
+        createNodeItem(newPolicyKey(p), POLICY_TYPE, policyProps(p)),
       ]);
       rule = '';
       resource = '';

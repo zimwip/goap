@@ -86,36 +86,22 @@
     error = '';
     try {
       const key = `ORG-${slug(name)}`;
-      const { change } = await graph.createChange({
-        title: `New unit ${name.trim()}`,
+      const parentNode = nodes.find((n) => n.id === parent);
+      await graph.commitEdits({
+        title: `Unit ${key}`,
         intent: `Create organisational unit ${name.trim()}`,
         baselineId: latest.id,
         namespace: NS,
+        edits: [
+          {
+            key,
+            type: 'OrgUnit',
+            props: { name: name.trim(), kind },
+            rationale: `Create organisational unit ${name.trim()}`,
+            ...(parentNode ? { links: [{ type: 'part_of', to: { id: parentNode.id, version: parentNode.version } }] } : {}),
+          },
+        ],
       });
-      if (!change?.id) throw new Error('change not created');
-      const itemId = crypto.randomUUID();
-      const parentNode = nodes.find((n) => n.id === parent);
-      await graph.addItems(change.id, [
-        {
-          id: itemId,
-          kind: 'proposal',
-          type: 'orgunit',
-          proposal: { op: 'create_node', node: { key, type: 'OrgUnit', props: { name: name.trim(), kind } } },
-        },
-        ...(parentNode
-          ? [
-              {
-                kind: 'proposal',
-                type: 'orgunit',
-                proposal: {
-                  op: 'add_link',
-                  link: { type: 'part_of', from: { item: itemId }, to: { node: { id: parentNode.id, version: parentNode.version } } },
-                },
-              },
-            ]
-          : []),
-      ]);
-      await graph.applyChange(change.id, `Unit ${key}`);
       notify(`Unit ${key} created.`, 'ok');
       name = '';
       parent = '';

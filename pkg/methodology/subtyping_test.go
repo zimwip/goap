@@ -14,7 +14,7 @@ domain:
     - {name: Requirement}
     - {name: SecurityRequirement, extends: Requirement}
     - {name: CryptoRequirement, extends: SecurityRequirement}
-conditions: [{name: c, expr: 'changeNodes.exists(n, "Requirement" in n.types)'}]
+conditions: [{name: c, expr: 'changeImpacts.exists(n, "Requirement" in n.types)'}]
 actions: [{name: a, kind: human, effects: {c: true}}]
 goals: [{name: g, pre: {c: true}}]
 `))

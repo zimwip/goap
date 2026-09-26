@@ -54,7 +54,7 @@ func Run(ctx context.Context, job Job, host Host) (Result, error) {
 	if res.Output == "" {
 		res.Output = fmt.Sprintf("%d item(s)", len(c.out))
 		if len(c.nodeOps) > 0 {
-			res.Output += fmt.Sprintf(", %d change node operation(s)", len(c.nodeOps))
+			res.Output += fmt.Sprintf(", %d change impact operation(s)", len(c.nodeOps))
 		}
 	}
 	return res, nil
@@ -170,7 +170,7 @@ var Symbols = interp.Exports{
 		"Link":            reflect.ValueOf((*Link)(nil)),
 		"LinkEnd":         reflect.ValueOf((*LinkEnd)(nil)),
 		"Item":            reflect.ValueOf((*Item)(nil)),
-		"ChangeNode":      reflect.ValueOf((*ChangeNode)(nil)),
+		"ChangeImpact":    reflect.ValueOf((*ChangeImpact)(nil)),
 		"CompleteRequest": reflect.ValueOf((*CompleteRequest)(nil)),
 		"CompleteResult":  reflect.ValueOf((*CompleteResult)(nil)),
 		"AgentResult":     reflect.ValueOf((*AgentResult)(nil)),
