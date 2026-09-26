@@ -12,6 +12,7 @@
 - Authorization is ABAC (Casbin) via `authz.Authorizer`; default policies in `pkg/authz/casbin.go`, stored by the iam service.
 - Methodologies live in the registry database (structured); YAML is import/export only. The object part (node/link types) can be a shared `Domain` (ADR 0013): a methodology references it with `domainRef`, and its NodeTypes are keyed `D:<domain>/nodetype/<name>` on the graph.
 - Agents (goap/utility/hybrid planners) and script actions (JS via goja, Go via yaegi) use the DSL in `pkg/dsl` (docs/dsl.md); scripts run in sandboxes (`internal/sandbox`, `GOAP_SANDBOX`).
+- Algorithms (ADR 0018): the DSL is tied to a usage (`pkg/algo`, `pkg/dsl/algo.go`); shared domains declare algorithms + instances that node types (validators) and lifecycle transitions (guards, actions) plug; the graph embeds them resolved in NodeType nodes and runs them (`pkg/graph/algorithms.go`). Only shared domains carry them.
 - Telemetry: `internal/telemetry` (OpenTelemetry); keep span / attribute names stable (docs/architecture.md §3.7).
 - Execution journal (ADR 0011): the engine records ticks / actions / approvals on the change (`domain.ExecutionRecord`); items carry `execution`. Published methodologies are projected onto the graph (`pkg/metamodel`, keys `M:<methodology>/<type>/<name>`); the observer (`methodologies/methodology-improvement.yaml`, `pkg/observe`) turns runs into methodology drafts.
 - `web/src/lib/help/dsl.md` is a copy of `docs/dsl.md` (the web dev container only mounts `web/`); `make lint` checks they are identical.

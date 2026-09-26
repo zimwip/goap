@@ -90,6 +90,9 @@ const (
 	// RegistryServiceGetDomainUsageProcedure is the fully-qualified name of the RegistryService's
 	// GetDomainUsage RPC.
 	RegistryServiceGetDomainUsageProcedure = "/goap.registry.v1.RegistryService/GetDomainUsage"
+	// RegistryServiceRunAlgorithmProcedure is the fully-qualified name of the RegistryService's
+	// RunAlgorithm RPC.
+	RegistryServiceRunAlgorithmProcedure = "/goap.registry.v1.RegistryService/RunAlgorithm"
 )
 
 // RegistryServiceClient is a client for the goap.registry.v1.RegistryService service.
@@ -124,6 +127,8 @@ type RegistryServiceClient interface {
 	ExportDomain(context.Context, *connect.Request[v1.ExportDomainRequest]) (*connect.Response[v1.ExportDomainResponse], error)
 	// Methodology versions referencing a domain version.
 	GetDomainUsage(context.Context, *connect.Request[v1.GetDomainUsageRequest]) (*connect.Response[v1.GetDomainUsageResponse], error)
+	// Try an algorithm of a domain on a sample input, without saving anything.
+	RunAlgorithm(context.Context, *connect.Request[v1.RunAlgorithmRequest]) (*connect.Response[v1.RunAlgorithmResponse], error)
 }
 
 // NewRegistryServiceClient constructs a client for the goap.registry.v1.RegistryService service. By
@@ -251,6 +256,12 @@ func NewRegistryServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(registryServiceMethods.ByName("GetDomainUsage")),
 			connect.WithClientOptions(opts...),
 		),
+		runAlgorithm: connect.NewClient[v1.RunAlgorithmRequest, v1.RunAlgorithmResponse](
+			httpClient,
+			baseURL+RegistryServiceRunAlgorithmProcedure,
+			connect.WithSchema(registryServiceMethods.ByName("RunAlgorithm")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -275,6 +286,7 @@ type registryServiceClient struct {
 	importDomain        *connect.Client[v1.ImportDomainRequest, v1.ImportDomainResponse]
 	exportDomain        *connect.Client[v1.ExportDomainRequest, v1.ExportDomainResponse]
 	getDomainUsage      *connect.Client[v1.GetDomainUsageRequest, v1.GetDomainUsageResponse]
+	runAlgorithm        *connect.Client[v1.RunAlgorithmRequest, v1.RunAlgorithmResponse]
 }
 
 // ListMethodologies calls goap.registry.v1.RegistryService.ListMethodologies.
@@ -372,6 +384,11 @@ func (c *registryServiceClient) GetDomainUsage(ctx context.Context, req *connect
 	return c.getDomainUsage.CallUnary(ctx, req)
 }
 
+// RunAlgorithm calls goap.registry.v1.RegistryService.RunAlgorithm.
+func (c *registryServiceClient) RunAlgorithm(ctx context.Context, req *connect.Request[v1.RunAlgorithmRequest]) (*connect.Response[v1.RunAlgorithmResponse], error) {
+	return c.runAlgorithm.CallUnary(ctx, req)
+}
+
 // RegistryServiceHandler is an implementation of the goap.registry.v1.RegistryService service.
 type RegistryServiceHandler interface {
 	ListMethodologies(context.Context, *connect.Request[v1.ListMethodologiesRequest]) (*connect.Response[v1.ListMethodologiesResponse], error)
@@ -404,6 +421,8 @@ type RegistryServiceHandler interface {
 	ExportDomain(context.Context, *connect.Request[v1.ExportDomainRequest]) (*connect.Response[v1.ExportDomainResponse], error)
 	// Methodology versions referencing a domain version.
 	GetDomainUsage(context.Context, *connect.Request[v1.GetDomainUsageRequest]) (*connect.Response[v1.GetDomainUsageResponse], error)
+	// Try an algorithm of a domain on a sample input, without saving anything.
+	RunAlgorithm(context.Context, *connect.Request[v1.RunAlgorithmRequest]) (*connect.Response[v1.RunAlgorithmResponse], error)
 }
 
 // NewRegistryServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -527,6 +546,12 @@ func NewRegistryServiceHandler(svc RegistryServiceHandler, opts ...connect.Handl
 		connect.WithSchema(registryServiceMethods.ByName("GetDomainUsage")),
 		connect.WithHandlerOptions(opts...),
 	)
+	registryServiceRunAlgorithmHandler := connect.NewUnaryHandler(
+		RegistryServiceRunAlgorithmProcedure,
+		svc.RunAlgorithm,
+		connect.WithSchema(registryServiceMethods.ByName("RunAlgorithm")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/goap.registry.v1.RegistryService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case RegistryServiceListMethodologiesProcedure:
@@ -567,6 +592,8 @@ func NewRegistryServiceHandler(svc RegistryServiceHandler, opts ...connect.Handl
 			registryServiceExportDomainHandler.ServeHTTP(w, r)
 		case RegistryServiceGetDomainUsageProcedure:
 			registryServiceGetDomainUsageHandler.ServeHTTP(w, r)
+		case RegistryServiceRunAlgorithmProcedure:
+			registryServiceRunAlgorithmHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -650,4 +677,8 @@ func (UnimplementedRegistryServiceHandler) ExportDomain(context.Context, *connec
 
 func (UnimplementedRegistryServiceHandler) GetDomainUsage(context.Context, *connect.Request[v1.GetDomainUsageRequest]) (*connect.Response[v1.GetDomainUsageResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.registry.v1.RegistryService.GetDomainUsage is not implemented"))
+}
+
+func (UnimplementedRegistryServiceHandler) RunAlgorithm(context.Context, *connect.Request[v1.RunAlgorithmRequest]) (*connect.Response[v1.RunAlgorithmResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.registry.v1.RegistryService.RunAlgorithm is not implemented"))
 }

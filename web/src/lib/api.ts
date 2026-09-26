@@ -142,6 +142,10 @@ export interface LifecycleTransition {
   requiresOutgoingLinks?: string[];
   /** documents: allowed states of the contained children */
   childrenStates?: string[];
+  /** transition_guard algorithm instances, run in order after the CEL guard */
+  guards?: string[];
+  /** transition_action algorithm instances, run in order once the transition is accepted */
+  actions?: string[];
 }
 
 export interface Lifecycle {
@@ -164,6 +168,56 @@ export interface NodeType {
   document?: { contains?: string[] };
   /** absent: change controlled */
   changeControlled?: boolean;
+  /** property validator instances (ADR 0018), in call order */
+  validators?: PropertyValidator[];
+}
+
+/** Plugs an algorithm instance of type property_validator on a property. */
+export interface PropertyValidator {
+  property?: string;
+  instance?: string;
+}
+
+/** Fixed algorithm types: the extension points of the platform. */
+export type AlgorithmType = 'property_validator' | 'transition_guard' | 'transition_action';
+export type AlgorithmParamType = 'string' | 'number' | 'boolean' | 'regex' | 'enum' | 'strings' | 'json';
+
+export interface AlgorithmParam {
+  name?: string;
+  type?: AlgorithmParamType | string;
+  description?: string;
+  required?: boolean;
+  defaultValue?: unknown;
+  /** allowed values of an enum */
+  values?: string[];
+}
+
+/** Script of a fixed type with declared parameters; declared by a shared domain. */
+export interface Algorithm {
+  name?: string;
+  description?: string;
+  type?: AlgorithmType | string;
+  language?: ScriptLanguage | string;
+  code?: string;
+  params?: AlgorithmParam[];
+}
+
+/** Parameter values of an algorithm: what gets plugged. */
+export interface AlgorithmInstance {
+  name?: string;
+  description?: string;
+  algorithm?: string;
+  values?: Record<string, unknown>;
+}
+
+export interface RunAlgorithmResponse {
+  ok?: boolean;
+  failures?: string[];
+  /** the script itself failed (does not compile, throws, times out) */
+  error?: string;
+  set?: Record<string, unknown>;
+  unset?: string[];
+  logs?: string[];
 }
 
 export interface LinkType {
@@ -314,6 +368,8 @@ export interface Domain {
   nodeTypes?: NodeType[];
   linkTypes?: LinkType[];
   lifecycles?: Lifecycle[];
+  algorithms?: Algorithm[];
+  algorithmInstances?: AlgorithmInstance[];
   createdAt?: string;
   updatedAt?: string;
   publishedAt?: string;
@@ -923,6 +979,13 @@ export const registry = {
   /** Methodology versions referencing a domain version (unpinned references included). */
   getDomainUsage: (name: string, version: string, signal?: AbortSignal) =>
     rpc<NameVersion, { methodologies?: DomainUser[] }>(REGISTRY, 'GetDomainUsage', { name, version }, signal),
+  /** Tries an algorithm on a sample input; nothing is saved. */
+  runAlgorithm: (algorithm: Algorithm, values: Record<string, unknown>, input: Record<string, unknown>) =>
+    rpc<{ algorithm: Algorithm; values: Record<string, unknown>; input: Record<string, unknown> }, RunAlgorithmResponse>(
+      REGISTRY,
+      'RunAlgorithm',
+      { algorithm, values, input },
+    ),
 };
 
 export const iam = {

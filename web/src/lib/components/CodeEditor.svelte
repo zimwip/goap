@@ -24,8 +24,8 @@
     value?: string;
     language?: CodeLanguage;
     readonly?: boolean;
-    /** completion for the ctx API of script actions */
-    dsl?: boolean;
+    /** completion for the ctx API of script actions (true) or of an algorithm usage (its name) */
+    dsl?: boolean | string;
     lineNumbers?: boolean;
     wrap?: boolean;
     placeholder?: string;

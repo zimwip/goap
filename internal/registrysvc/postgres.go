@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/zimwip/goap/pkg/algo"
 	"github.com/zimwip/goap/pkg/condition"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/methodology"
@@ -394,7 +395,7 @@ func (s PostgresStore) SaveDomain(ctx context.Context, r DomainRecord) error {
 				id, d.Description, r.UpdatedAt, r.UpdatedBy); err != nil {
 				return err
 			}
-			for _, t := range []string{"domain_node_type", "domain_link_type", "domain_lifecycle"} {
+			for _, t := range []string{"domain_node_type", "domain_link_type", "domain_lifecycle", "domain_algorithm", "domain_algorithm_instance"} {
 				if _, err := tx.Exec(ctx, `DELETE FROM `+t+` WHERE domain_id = $1`, id); err != nil {
 					return err
 				}
@@ -408,6 +409,14 @@ func (s PostgresStore) SaveDomain(ctx context.Context, r DomainRecord) error {
 		for i, l := range d.Lifecycles {
 			def, _ := json.Marshal(l)
 			batch.Queue(`INSERT INTO domain_lifecycle (domain_id, position, name, definition) VALUES ($1, $2, $3, $4)`, id, i, l.Name, def)
+		}
+		for i, a := range d.Algorithms {
+			def, _ := json.Marshal(a)
+			batch.Queue(`INSERT INTO domain_algorithm (domain_id, position, name, definition) VALUES ($1, $2, $3, $4)`, id, i, a.Name, def)
+		}
+		for i, in := range d.Instances {
+			def, _ := json.Marshal(in)
+			batch.Queue(`INSERT INTO domain_algorithm_instance (domain_id, position, name, definition) VALUES ($1, $2, $3, $4)`, id, i, in.Name, def)
 		}
 		for i, l := range d.LinkTypes {
 			batch.Queue(`INSERT INTO domain_link_type (domain_id, position, name, from_type, to_type) VALUES ($1, $2, $3, $4, $5)`, id, i, l.Name, l.From, l.To)
@@ -433,6 +442,12 @@ func (s PostgresStore) loadDomainSections(ctx context.Context, id string, d *met
 		return err
 	}
 	if d.Lifecycles, err = s.loadLifecycles(ctx, `SELECT definition FROM domain_lifecycle WHERE domain_id = $1 ORDER BY position`, id); err != nil {
+		return err
+	}
+	if d.Algorithms, err = loadJSON[algo.Algorithm](ctx, s, `SELECT definition FROM domain_algorithm WHERE domain_id = $1 ORDER BY position`, id); err != nil {
+		return err
+	}
+	if d.Instances, err = loadJSON[algo.Instance](ctx, s, `SELECT definition FROM domain_algorithm_instance WHERE domain_id = $1 ORDER BY position`, id); err != nil {
 		return err
 	}
 	rows, err = s.Pool.Query(ctx, `SELECT name, from_type, to_type FROM domain_link_type WHERE domain_id = $1 ORDER BY position`, id)
@@ -537,5 +552,21 @@ func (s PostgresStore) loadLifecycles(ctx context.Context, query, id string) ([]
 			return l, err
 		}
 		return l, json.Unmarshal(raw, &l)
+	})
+}
+
+// loadJSON reads rows made of one JSON definition column.
+func loadJSON[T any](ctx context.Context, s PostgresStore, query, id string) ([]T, error) {
+	rows, err := s.Pool.Query(ctx, query, id)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (T, error) {
+		var raw []byte
+		var v T
+		if err := r.Scan(&raw); err != nil {
+			return v, err
+		}
+		return v, json.Unmarshal(raw, &v)
 	})
 }

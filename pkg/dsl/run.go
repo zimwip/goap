@@ -28,15 +28,17 @@ func Run(ctx context.Context, job Job, host Host) (Result, error) {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	c := newCtx(ctx, job, host)
-	var err error
-	switch job.Language {
-	case "javascript", "js":
-		err = runJS(ctx, c, job.Code)
-	case "go":
-		err = runGo(ctx, c, job.Code)
-	default:
-		err = fmt.Errorf("unsupported language %q", job.Language)
-	}
+	err := runScript(ctx, job.Language, job.Code, c, c, func(v goja.Value) {
+		if v != nil && !goja.IsUndefined(v) && !goja.IsNull(v) && c.result == nil {
+			c.result = v.Export()
+		}
+	}, func(entry any) (func() error, error) {
+		run, ok := entry.(func(*Ctx) error)
+		if !ok {
+			return nil, fmt.Errorf("go script: Run must have signature func(*dsl.Ctx) error, got %T", entry)
+		}
+		return func() error { return run(c) }, nil
+	})
 	res := Result{Logs: c.logs}
 	if c.result != nil {
 		res.Output = fmt.Sprint(c.result)
@@ -55,17 +57,43 @@ func Run(ctx context.Context, job Job, host Host) (Result, error) {
 	return res, nil
 }
 
+// ---- generic script engine ------------------------------------------------------
+
+// scriptLogger receives the console / stdout output of a script.
+type scriptLogger interface {
+	logf(level, msg string)
+}
+
+// runScript runs a script in the given language against a context object: the
+// script sees it as `ctx` (JavaScript) or receives it as the argument of Run
+// (Go). Every usage of the DSL (actions, algorithms) goes through it; only the
+// context object and the Go entry point signature differ.
+//
+// JavaScript: the code runs, then the optional function run(ctx) is called and
+// its value passed to onReturn. Go: the code must declare func Run(...) whose
+// signature bind checks, returning the call to make.
+func runScript(ctx context.Context, language, code string, obj any, lg scriptLogger,
+	onReturn func(goja.Value), bind func(entry any) (func() error, error)) error {
+	switch language {
+	case "javascript", "js":
+		return runJS(ctx, obj, lg, code, onReturn)
+	case "go":
+		return runGo(ctx, lg, code, bind)
+	}
+	return fmt.Errorf("unsupported language %q", language)
+}
+
 // ---- JavaScript (goja) --------------------------------------------------
 
-func runJS(ctx context.Context, c *Ctx, code string) error {
+func runJS(ctx context.Context, obj any, lg scriptLogger, code string, onReturn func(goja.Value)) error {
 	vm := goja.New()
 	vm.SetFieldNameMapper(jsNames{})
-	if err := vm.Set("ctx", c); err != nil {
+	if err := vm.Set("ctx", obj); err != nil {
 		return err
 	}
 	console := vm.NewObject()
-	_ = console.Set("log", func(args ...any) { c.Log(fmt.Sprint(args...)) })
-	_ = console.Set("warn", func(args ...any) { c.Warn(fmt.Sprint(args...)) })
+	_ = console.Set("log", func(args ...any) { lg.logf("info", fmt.Sprint(args...)) })
+	_ = console.Set("warn", func(args ...any) { lg.logf("warn", fmt.Sprint(args...)) })
 	_ = vm.Set("console", console)
 	stop := context.AfterFunc(ctx, func() { vm.Interrupt("script interrupted: " + context.Cause(ctx).Error()) })
 	defer stop()
@@ -78,9 +106,7 @@ func runJS(ctx context.Context, c *Ctx, code string) error {
 		if err != nil {
 			return jsError(err)
 		}
-		if v != nil && !goja.IsUndefined(v) && !goja.IsNull(v) && c.result == nil {
-			c.result = v.Export()
-		}
+		onReturn(v)
 	}
 	return nil
 }
@@ -131,6 +157,11 @@ var allowedStdlib = []string{
 var Symbols = interp.Exports{
 	"github.com/zimwip/goap/pkg/dsl/dsl": {
 		"Ctx":             reflect.ValueOf((*Ctx)(nil)),
+		"ValidatorCtx":    reflect.ValueOf((*ValidatorCtx)(nil)),
+		"GuardCtx":        reflect.ValueOf((*GuardCtx)(nil)),
+		"TransitionCtx":   reflect.ValueOf((*TransitionCtx)(nil)),
+		"ChangeInfo":      reflect.ValueOf((*ChangeInfo)(nil)),
+		"TransitionInfo":  reflect.ValueOf((*TransitionInfo)(nil)),
 		"Node":            reflect.ValueOf((*Node)(nil)),
 		"Link":            reflect.ValueOf((*Link)(nil)),
 		"LinkEnd":         reflect.ValueOf((*LinkEnd)(nil)),
@@ -143,7 +174,7 @@ var Symbols = interp.Exports{
 }
 
 type logWriter struct {
-	c     *Ctx
+	c     scriptLogger
 	level string
 }
 
@@ -154,13 +185,13 @@ func (w logWriter) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-func runGo(ctx context.Context, c *Ctx, code string) error {
+func runGo(ctx context.Context, lg scriptLogger, code string, bind func(entry any) (func() error, error)) error {
 	f, err := parser.ParseFile(token.NewFileSet(), "action.go", code, parser.PackageClauseOnly)
 	if err != nil {
 		return fmt.Errorf("go script: %w", err)
 	}
 	pkg := f.Name.Name
-	i := interp.New(interp.Options{Stdout: logWriter{c, "info"}, Stderr: logWriter{c, "warn"}, Env: []string{}})
+	i := interp.New(interp.Options{Stdout: logWriter{lg, "info"}, Stderr: logWriter{lg, "warn"}, Env: []string{}})
 	allowed := interp.Exports{}
 	for _, k := range allowedStdlib {
 		if syms, ok := stdlib.Symbols[k]; ok {
@@ -180,9 +211,9 @@ func runGo(ctx context.Context, c *Ctx, code string) error {
 	if err != nil {
 		return fmt.Errorf("go script must declare func Run(ctx *dsl.Ctx) error: %w", err)
 	}
-	run, ok := v.Interface().(func(*Ctx) error)
-	if !ok {
-		return fmt.Errorf("go script: Run must have signature func(*dsl.Ctx) error, got %s", v.Type())
+	call, err := bind(v.Interface())
+	if err != nil {
+		return err
 	}
 	done := make(chan error, 1)
 	go func() {
@@ -191,7 +222,7 @@ func runGo(ctx context.Context, c *Ctx, code string) error {
 				done <- fmt.Errorf("go script panic: %v", r)
 			}
 		}()
-		done <- run(c)
+		done <- call()
 	}()
 	select {
 	case err := <-done:

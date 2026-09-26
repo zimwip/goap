@@ -30,6 +30,10 @@ export interface LifecycleTransitionForm {
   requiresLinks: string;
   /** comma-separated states allowed for the contained children */
   children: string;
+  /** transition_guard instances, in call order */
+  guards: string[];
+  /** transition_action instances, in call order */
+  actions: string[];
 }
 
 export interface LifecycleForm {
@@ -52,6 +56,8 @@ export interface NodeTypeForm {
   document: string;
   /** false: direct writes, outside changes */
   changeControlled: boolean;
+  /** property validator instances, in call order */
+  validators: { property: string; instance: string }[];
 }
 
 export interface LinkTypeForm {
@@ -187,7 +193,7 @@ export const PRODUCE_OPS = ['create_node', 'update_node'] as const;
 
 // --- constructors --------------------------------------------------------------
 
-export const emptyNodeType = (): NodeTypeForm => ({ name: '', description: '', properties: '', extends: '', lifecycle: '', document: '', changeControlled: true });
+export const emptyNodeType = (): NodeTypeForm => ({ name: '', description: '', properties: '', extends: '', lifecycle: '', document: '', changeControlled: true, validators: [] });
 export const emptyLinkType = (): LinkTypeForm => ({ name: '', from: '', to: '' });
 let uidSeq = 0;
 /** New local id (elements created in the UI). */
@@ -390,6 +396,7 @@ export function nodeTypeToForm(n: NodeType): NodeTypeForm {
     lifecycle: n.lifecycle ?? '',
     document: (n.document?.contains ?? []).join(', '),
     changeControlled: n.changeControlled !== false,
+    validators: (n.validators ?? []).map((v) => ({ property: v.property ?? '', instance: v.instance ?? '' })),
   };
 }
 
@@ -413,6 +420,8 @@ export function lifecycleToForm(l: Lifecycle): LifecycleForm {
       requiresAttributes: (t.requiresAttributes ?? []).join(', '),
       requiresLinks: (t.requiresOutgoingLinks ?? []).join(', '),
       children: (t.childrenStates ?? []).join(', '),
+      guards: [...(t.guards ?? [])],
+      actions: [...(t.actions ?? [])],
     })),
   };
 }
@@ -433,6 +442,8 @@ export function lifecycleFromForm(l: LifecycleForm): Lifecycle {
     put(tr, 'requiresAttributes', csv(t.requiresAttributes));
     put(tr, 'requiresOutgoingLinks', csv(t.requiresLinks));
     put(tr, 'childrenStates', csv(t.children));
+    put(tr, 'guards', t.guards.map((g) => g.trim()).filter(Boolean));
+    put(tr, 'actions', t.actions.map((a) => a.trim()).filter(Boolean));
     return tr;
   });
   return o;
@@ -449,9 +460,9 @@ export function defaultLifecycle(name = ''): LifecycleForm {
       { name: 'approved', description: '', editable: false, final: false },
     ],
     transitions: [
-      { name: 'start', from: 'proposed', to: 'draft', permission: '', guard: '', requiresAttributes: '', requiresLinks: '', children: '' },
-      { name: 'approve', from: 'draft', to: 'approved', permission: '', guard: '', requiresAttributes: '', requiresLinks: '', children: '' },
-      { name: 'reopen', from: 'approved', to: 'draft', permission: '', guard: '', requiresAttributes: '', requiresLinks: '', children: '' },
+      { name: 'start', from: 'proposed', to: 'draft', permission: '', guard: '', requiresAttributes: '', requiresLinks: '', children: '', guards: [], actions: [] },
+      { name: 'approve', from: 'draft', to: 'approved', permission: '', guard: '', requiresAttributes: '', requiresLinks: '', children: '', guards: [], actions: [] },
+      { name: 'reopen', from: 'approved', to: 'draft', permission: '', guard: '', requiresAttributes: '', requiresLinks: '', children: '', guards: [], actions: [] },
     ],
   };
 }
@@ -477,6 +488,7 @@ export function nodeTypeFromForm(n: NodeTypeForm): NodeType {
   const contains = csv(n.document);
   if (contains.length) o.document = { contains };
   if (!n.changeControlled) o.changeControlled = false;
+  if (n.validators.length) o.validators = n.validators.map((v) => ({ property: v.property.trim(), instance: v.instance.trim() }));
   return o;
 }
 

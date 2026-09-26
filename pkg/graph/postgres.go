@@ -356,6 +356,17 @@ func (t *pgTx) PutNode(ctx context.Context, n domain.Node) error {
 	return mapErr(err, "node "+n.Ref().String())
 }
 
+func (t *pgTx) SetNodeProps(ctx context.Context, ref domain.NodeRef, props map[string]any) error {
+	tag, err := t.tx.Exec(ctx, `UPDATE node_version SET props = $3 WHERE node_id = $1 AND version = $2`, string(ref.ID), int(ref.Version), jsonb(props))
+	if err != nil {
+		return mapErr(err, "node "+ref.String())
+	}
+	if tag.RowsAffected() != 1 {
+		return fmt.Errorf("node %s: %w", ref, ErrNotFound)
+	}
+	return nil
+}
+
 func (t *pgTx) PutLink(ctx context.Context, l domain.Link) error {
 	_, err := t.tx.Exec(ctx, `INSERT INTO link (id, type, from_id, from_version, to_id, to_version, props, change_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
 		string(l.ID), l.Type, string(l.From.ID), int(l.From.Version), string(l.To.ID), int(l.To.Version), jsonb(l.Properties), nullUUID(string(l.ChangeID)))

@@ -6,8 +6,10 @@ nodeTypes:
   - {name: Need, description: Business need expressed by a stakeholder, properties: [title, description, stakeholder]}
   - name: Requirement
     description: Requirement satisfying a need
-    properties: [title, description, priority, status]
+    properties: [title, description, priority, status, approvedAt]
     lifecycle: requirement
+    validators:
+      - {property: title, instance: title-max-200}
   - {name: FunctionalRequirement, extends: Requirement, description: Functional requirement}
   - {name: NonFunctionalRequirement, extends: Requirement, description: Non-functional requirement (performance, availability…), properties: [category]}
   - {name: SecurityRequirement, extends: NonFunctionalRequirement, description: Security requirement}
@@ -24,6 +26,8 @@ nodeTypes:
     description: Deliverable version of an application (a set of artifacts)
     properties: [title, version, status, notes]
     lifecycle: release
+    validators:
+      - {property: version, instance: dotted-version}
   - {name: Environment, description: Execution environment (dev, test, staging, production), properties: [name, stage, order, url]}
   - {name: Deployment, description: Deployment of a release to an environment, properties: [status, stage, date, checks]}
 lifecycles:
@@ -40,7 +44,7 @@ lifecycles:
     transitions:
       - {name: start, from: proposed, to: draft}
       - {name: submit, from: draft, to: in_review, requires: {attributes: [title]}}
-      - {name: approve, from: in_review, to: approved, permission: "requirement:approve"}
+      - {name: approve, from: in_review, to: approved, permission: "requirement:approve", actions: [stamp-approved-at]}
       - {name: reject, from: in_review, to: draft}
       - {name: reopen, from: approved, to: draft}
       - {name: retire, from: approved, to: obsolete}
@@ -76,6 +80,77 @@ lifecycles:
       - {name: rework, from: accepted, to: draft}
       - {name: reopen, from: released, to: draft}
       - {name: withdraw, from: released, to: withdrawn}
+# Algorithms (ADR 0018): scripts of a fixed type with declared parameters, and their
+# instances (parameter values), which the node types and transitions above plug.
+algorithms:
+  - name: regex-match
+    description: The value must match a regular expression (an absent value is accepted)
+    type: property_validator
+    language: javascript
+    params:
+      - {name: pattern, type: regex, required: true, description: Regular expression the value must match}
+      - {name: message, type: string, description: Message shown when the value does not match}
+    code: |
+      const v = ctx.value();
+      if (v === undefined || v === null || v === "") return;
+      if (!new RegExp(ctx.param("pattern")).test(String(v))) {
+        ctx.fail(ctx.param("message") || (ctx.property() + " must match " + ctx.param("pattern")));
+      }
+  - name: not-blank
+    description: The value must be present and not blank
+    type: property_validator
+    language: go
+    code: |
+      package validator
+
+      import (
+      	"strings"
+
+      	"github.com/zimwip/goap/pkg/dsl"
+      )
+
+      func Run(ctx *dsl.ValidatorCtx) error {
+      	s, _ := ctx.Value().(string)
+      	if strings.TrimSpace(s) == "" {
+      		ctx.Fail(ctx.Property() + " must not be blank")
+      	}
+      	return nil
+      }
+  - name: max-length
+    description: A text value is at most `max` characters long
+    type: property_validator
+    language: javascript
+    params:
+      - {name: max, type: number, required: true, description: Maximum number of characters}
+    code: |
+      const v = ctx.value();
+      if (typeof v === "string" && [...v].length > ctx.param("max")) {
+        ctx.fail(ctx.property() + " is longer than " + ctx.param("max") + " characters");
+      }
+  - name: children-in-states
+    description: Every node a document contains must be in one of the given states
+    type: transition_guard
+    language: javascript
+    params:
+      - {name: states, type: strings, required: true, description: Allowed states of the contained nodes}
+    code: |
+      const ok = ctx.param("states");
+      for (const c of ctx.children()) {
+        if (!ok.includes(c.state)) ctx.fail(c.key + " is " + c.state + ", expected " + ok.join(" or "));
+      }
+  - name: stamp-date
+    description: Store the date of the transition in a property of the node
+    type: transition_action
+    language: javascript
+    params:
+      - {name: property, type: string, required: true, description: Property that receives the date}
+    code: |
+      ctx.setProp(ctx.param("property"), new Date().toISOString().slice(0, 10));
+algorithmInstances:
+  - {name: title-not-blank, algorithm: not-blank}
+  - {name: title-max-200, algorithm: max-length, values: {max: 200}}
+  - {name: dotted-version, algorithm: regex-match, values: {pattern: '^[0-9]+(\.[0-9]+)*$', message: "version must look like 1.2 or 1.2.3"}}
+  - {name: stamp-approved-at, algorithm: stamp-date, values: {property: approvedAt}}
 linkTypes:
   - {name: satisfies, from: Requirement, to: Need}
   - {name: refines, from: Requirement, to: Requirement}

@@ -17,11 +17,13 @@ import (
 
 // Node is a domain node version.
 type Node struct {
-	ID      string         `json:"id"`
-	Version int            `json:"version"`
-	Key     string         `json:"key"`
-	Type    string         `json:"type"`
-	Props   map[string]any `json:"props"`
+	ID      string `json:"id"`
+	Version int    `json:"version"`
+	Key     string `json:"key"`
+	Type    string `json:"type"`
+	// State in the lifecycle of the node type (empty: none).
+	State string         `json:"state"`
+	Props map[string]any `json:"props"`
 }
 
 // LinkEnd is a link endpoint summary.

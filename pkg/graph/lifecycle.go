@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"strings"
 
+	"github.com/zimwip/goap/pkg/algo"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/guard"
 )
@@ -35,6 +37,7 @@ type typeInfo struct {
 	lifecycle  *domain.Lifecycle
 	document   *domain.DocumentSpec
 	controlled *bool
+	validators []algo.Bound
 }
 
 // typeIndex is the node type metadata of a baseline.
@@ -76,6 +79,7 @@ func (g *Graph) typesAt(ctx context.Context, tx Tx, baseline domain.BaselineID) 
 		if b, ok := n.Properties["changeControlled"].(bool); ok {
 			info.controlled = &b
 		}
+		decodeProp(n.Properties["validators"], &info.validators)
 		ix.byName[name] = info
 	}
 	g.types.Store(baseline, ix)
@@ -213,6 +217,12 @@ func (g *Graph) walk(ctx context.Context, tx Tx, c domain.ChangeSet, authorize b
 		p := it.Proposal
 		switch p.Op {
 		case domain.OpCreateNode:
+			if !authorize {
+				// early feedback: when applying, the properties are validated on the target graph
+				if err := g.validateProps(ctx, ix, domain.Node{Key: p.Node.Key, Type: p.Node.Type}, p.Node.Properties); err != nil {
+					return nil, err
+				}
+			}
 			lc := ix.lifecycleOf(p.Node.Type)
 			if lc == nil {
 				if p.Node.State != "" {
@@ -269,6 +279,20 @@ func (g *Graph) walk(ctx context.Context, tx Tx, c domain.ChangeSet, authorize b
 			if err := editable(p.Node.Base, "update"); err != nil {
 				return nil, err
 			}
+			if !authorize {
+				n, err := tx.Node(ctx, *p.Node.Base)
+				if err != nil {
+					return nil, err
+				}
+				merged := maps.Clone(n.Properties)
+				if merged == nil {
+					merged = map[string]any{}
+				}
+				maps.Copy(merged, p.Node.Properties)
+				if err := g.validateProps(ctx, ix, n, merged); err != nil {
+					return nil, err
+				}
+			}
 		case domain.OpDeleteNode:
 			if err := editable(p.Node.Base, "delete"); err != nil {
 				return nil, err
@@ -320,8 +344,9 @@ func nodeView(n domain.Node) map[string]any {
 func (a *applier) checkMoves() error {
 	// nodes moved (existing) and created with a state move
 	type moved struct {
-		node domain.Node
-		t    domain.Transition
+		node     domain.Node
+		t        domain.Transition
+		children []domain.Node
 	}
 	var moves []moved
 	var editable []string
@@ -341,7 +366,7 @@ func (a *applier) checkMoves() error {
 		}
 		check(n)
 		if ts := a.walk.moves[id]; len(ts) > 0 {
-			moves = append(moves, moved{n, ts[len(ts)-1]})
+			moves = append(moves, moved{node: n, t: ts[len(ts)-1]})
 		}
 	}
 	for item, ref := range a.created {
@@ -351,29 +376,37 @@ func (a *applier) checkMoves() error {
 		}
 		check(n)
 		if t, ok := a.walk.createT[item]; ok {
-			moves = append(moves, moved{n, t})
+			moves = append(moves, moved{node: n, t: t})
 		}
 	}
 	if len(editable) > 0 {
 		return invalidf("the change leaves nodes in an editable state, move them out of it before applying: %s", strings.Join(editable, ", "))
 	}
+	for i, m := range moves {
+		children, err := a.checkTransition(m.node, m.t)
+		if err != nil {
+			return err
+		}
+		moves[i].children = children
+	}
+	// the actions only run once every transition of the change is accepted
 	for _, m := range moves {
-		if err := a.checkTransition(m.node, m.t); err != nil {
+		if err := a.runActions(m.node, m.t, m.children); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (a *applier) checkTransition(n domain.Node, t domain.Transition) error {
+func (a *applier) checkTransition(n domain.Node, t domain.Transition) ([]domain.Node, error) {
 	for _, k := range t.Requires.Attributes {
 		if v, ok := n.Properties[k]; !ok || v == nil || v == "" {
-			return invalidf("%s (%s) cannot take %s: attribute %q is required", n.Key, n.Type, t.Name, k)
+			return nil, invalidf("%s (%s) cannot take %s: attribute %q is required", n.Key, n.Type, t.Name, k)
 		}
 	}
 	out, err := a.tx.OutLinks(a.ctx, n.Ref())
 	if err != nil {
-		return err
+		return nil, err
 	}
 	for _, typ := range t.Requires.OutgoingLinks {
 		found := false
@@ -381,11 +414,11 @@ func (a *applier) checkTransition(n domain.Node, t domain.Transition) error {
 			found = found || l.Type == typ
 		}
 		if !found {
-			return invalidf("%s (%s) cannot take %s: an outgoing %q link is required", n.Key, n.Type, t.Name, typ)
+			return nil, invalidf("%s (%s) cannot take %s: an outgoing %q link is required", n.Key, n.Type, t.Name, typ)
 		}
 	}
-	var children []any
-	if t.Children != nil || t.Guard != "" {
+	var children []domain.Node
+	if t.Children != nil || t.Guard != "" || len(t.GuardAlgos) > 0 || len(t.ActionAlgos) > 0 {
 		for _, l := range out {
 			if l.Type != domain.LinkContains {
 				continue
@@ -396,33 +429,37 @@ func (a *applier) checkTransition(n domain.Node, t domain.Transition) error {
 			}
 			c, err := a.tx.Node(a.ctx, domain.NodeRef{ID: l.To.ID, Version: v})
 			if err != nil {
-				return err
+				return nil, err
 			}
 			if t.Children != nil && !containsString(t.Children.States, c.State) {
 				got := c.State
 				if got == "" {
 					got = "no state"
 				}
-				return invalidf("%s (%s) cannot take %s: contained %s (%s) is in %s, expected %s", n.Key, n.Type, t.Name, c.Key, c.Type, got, strings.Join(t.Children.States, " or "))
+				return nil, invalidf("%s (%s) cannot take %s: contained %s (%s) is in %s, expected %s", n.Key, n.Type, t.Name, c.Key, c.Type, got, strings.Join(t.Children.States, " or "))
 			}
-			children = append(children, nodeView(c))
+			children = append(children, c)
 		}
 	}
 	if t.Guard != "" {
 		gd, err := guard.Compile(t.Guard)
 		if err != nil {
-			return invalidf("guard of %s: %v", t.Name, err)
+			return nil, invalidf("guard of %s: %v", t.Name, err)
 		}
-		ok, err := gd.Check(nodeView(n), children, map[string]any{"id": string(a.change.ID), "title": a.change.Title,
+		views := make([]any, 0, len(children))
+		for _, c := range children {
+			views = append(views, nodeView(c))
+		}
+		ok, err := gd.Check(nodeView(n), views, map[string]any{"id": string(a.change.ID), "title": a.change.Title,
 			"intent": a.change.Intent, "methodology": a.change.Methodology, "goal": a.change.Goal})
 		if err != nil {
-			return invalidf("guard of %s on %s: %v", t.Name, n.Key, err)
+			return nil, invalidf("guard of %s on %s: %v", t.Name, n.Key, err)
 		}
 		if !ok {
-			return invalidf("%s (%s) cannot take %s: guard not satisfied (%s)", n.Key, n.Type, t.Name, t.Guard)
+			return nil, invalidf("%s (%s) cannot take %s: guard not satisfied (%s)", n.Key, n.Type, t.Name, t.Guard)
 		}
 	}
-	return nil
+	return children, a.runGuards(n, t, children)
 }
 
 func containsString(list []string, s string) bool {
