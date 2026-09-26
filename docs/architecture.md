@@ -679,7 +679,8 @@ provider, or gateway WebSocket) are analyzed in the ADR but not built.
 
 Methodologies are **stored in the graph** in structured form ([ADR 0023](adr/0023-registry-in-the-graph.md), which
 supersedes the database of [ADR 0006](adr/0006-methodologies-en-base.md)), edited from the frontend: a
-`MethodologyVersion` header node per version (platform namespace, key `MV:<name>@<version>`: scalar fields, status) and one node per
+`MethodologyVersion` header node per version (namespace `methodology`, key `MV:<name>@<version>`; domains: `DomainVersion` in the `domain` namespace),
+whose status is the node's lifecycle state (`version`: draft, published, archived), and one node per
 element (`DefAction`, `DefAgent`, `DefNodeType`, `DefLifecycle`, ... keyed `<header>/<kind>/<name>`, tied by `defines`),
 every save, publication or deletion being a change applied on main; editing an action versions that node only. The registry service (`registrysvc.GraphStore`,
 through a graph client) has no database. A published version is projected as elements (`M:` / `D:` keys, §2.12).

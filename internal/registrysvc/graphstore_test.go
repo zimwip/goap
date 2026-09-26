@@ -3,6 +3,7 @@ package registrysvc
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -29,7 +30,7 @@ func canon(t *testing.T, v any) string {
 
 func TestGraphStoreRoundTripsEveryDefinitionOfTheRepository(t *testing.T) {
 	ctx := context.Background()
-	s := NewGraphStore(graph.New(graph.NewMemory()))
+	s, _ := newGraphStore(t)
 	now := time.Date(2026, 9, 26, 10, 0, 0, 0, time.UTC)
 	files, _ := filepath.Glob("../../domains/*.yaml")
 	if len(files) == 0 {
@@ -76,8 +77,7 @@ func TestGraphStoreRoundTripsEveryDefinitionOfTheRepository(t *testing.T) {
 
 func TestGraphStoreEditsElementsNotDocuments(t *testing.T) {
 	ctx := context.Background()
-	g := graph.New(graph.NewMemory())
-	s := NewGraphStore(g)
+	s, g := newGraphStore(t)
 	now := time.Now()
 	m := example(t)
 	m.Version = "9.0.0"
@@ -85,7 +85,7 @@ func TestGraphStoreEditsElementsNotDocuments(t *testing.T) {
 		t.Fatal(err)
 	}
 	version := func(k string) domain.Node {
-		n, err := g.NodeByKey(ctx, domain.NamespacePlatform, k)
+		n, err := g.NodeByKey(ctx, NamespaceMethodology, k)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -152,5 +152,68 @@ func TestGraphStoreEditsElementsNotDocuments(t *testing.T) {
 	}
 	if got, err := s.Get(ctx, m.Name, m.Version); err != nil || len(got.Methodology.Actions) != len(m2.Actions) {
 		t.Fatalf("revived draft: %v", err)
+	}
+}
+
+func TestGraphStoreKeepsPublishedVersionsFrozenInTheGraph(t *testing.T) {
+	ctx := context.Background()
+	s, g := newGraphStore(t)
+	now := time.Now()
+	m := example(t)
+	m.Version = "8.0.0"
+	if err := s.Save(ctx, Record{Methodology: m, Status: StatusDraft, CreatedAt: now, UpdatedAt: now}); err != nil {
+		t.Fatal(err)
+	}
+	hk := MethodologyVersionKey(m.Name, m.Version)
+	node := func(k string) domain.Node {
+		n, err := g.NodeByKey(ctx, NamespaceMethodology, k)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	// a draft is a persisted, non editable state; its status is the state of the node, not a property
+	if h := node(hk); h.State != stateDraft || h.Properties["status"] != nil {
+		t.Fatalf("header: state %q, props %v", h.State, h.Properties)
+	}
+	if err := s.SetStatus(ctx, m.Name, m.Version, StatusPublished, now); err != nil {
+		t.Fatal(err)
+	}
+	if h := node(hk); h.State != statePublished || h.Properties["publishedAt"] == nil {
+		t.Fatalf("published header: %q %v", h.State, h.Properties)
+	}
+	if a := node(hk + "/action/" + m.Actions[0].Name); a.State != statePublished {
+		t.Fatalf("elements follow their version: %q", a.State)
+	}
+	// the store refuses to edit it, and so does the graph if asked directly
+	if err := s.Save(ctx, Record{Methodology: m, Status: StatusDraft, UpdatedAt: now}); err == nil {
+		t.Fatal("a published version must not be saved over")
+	}
+	head, _ := g.BranchHead(ctx, domain.MainBranch)
+	c, err := g.CreateChange(ctx, graph.NewChange{Namespace: NamespaceMethodology, Title: "x", BaselineID: head.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := node(hk + "/action/" + m.Actions[0].Name)
+	if _, err := g.AddItems(ctx, c.ID, edit(a, map[string]any{"description": "hack"})); err == nil {
+		t.Fatal("the graph must refuse to reopen a published element")
+	}
+	if err := s.SetStatus(ctx, m.Name, m.Version, StatusArchived, now); err != nil {
+		t.Fatal(err)
+	}
+	if h := node(hk); h.State != stateArchived {
+		t.Fatalf("archived: %q", h.State)
+	}
+	if err := s.Delete(ctx, m.Name, m.Version); err == nil {
+		t.Fatal("an archived version cannot be deleted")
+	}
+}
+
+func TestGraphStoreNeedsTheMetadataSeeded(t *testing.T) {
+	s := NewGraphStore(graph.New(graph.NewMemory()))
+	m := example(t)
+	err := s.Save(context.Background(), Record{Methodology: m, Status: StatusDraft, UpdatedAt: time.Now()})
+	if !errors.Is(err, ErrMetadataMissing) {
+		t.Fatalf("expected ErrMetadataMissing, got %v", err)
 	}
 }

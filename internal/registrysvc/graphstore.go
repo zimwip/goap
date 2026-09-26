@@ -19,10 +19,17 @@ import (
 	"github.com/zimwip/goap/pkg/metamodel"
 )
 
-// Node types of the stored definitions (platform namespace): one header node per version of a methodology or of a domain
-// (scalar fields, status, timestamps) and one node per element of the definition (see defs.go), tied by "defines" links. The
+// Namespaces of the stored definitions: methodology versions and their elements live in the "methodology" namespace, domain
+// versions and theirs in the "domain" namespace.
+const (
+	NamespaceMethodology = "methodology"
+	NamespaceDomain      = "domain"
+)
+
+// Node types of the stored definitions: one header node per version of a methodology or of a domain (scalar fields, timestamps;
+// its status is the node's lifecycle state) and one node per element of the definition (see defs.go), tied by "defines" links. The
 // definition is what these nodes hold; the elements a published methodology projects at run time (metamodel, keys M:/D:) are
-// derived from it.
+// derived from it. The node types and the `version` lifecycle come from the platform domain, seeded before the registry writes.
 const (
 	TypeMethodologyVersion = "MethodologyVersion"
 	TypeDomainVersion      = "DomainVersion"
@@ -30,9 +37,23 @@ const (
 	LinkDefines = "defines"
 )
 
-// statusDeleted marks a deleted draft: a node key is never freed on a versioned graph, so the node stays and a later
-// Save of the same version revives it. The stores treat it as absent.
+// States of the `version` lifecycle. draft is the persisted state of a version being written: it is reopened (editing) inside a change
+// to be edited and closed again, which is how the graph keeps a published version frozen.
+const (
+	stateDraft     = "draft"
+	stateEditing   = "editing"
+	statePublished = "published"
+	stateArchived  = "archived"
+	stateDeleted   = "deleted"
+)
+
+// statusDeleted is the internal status of a discarded draft: a node key is never freed on a versioned graph, so the node stays
+// (state deleted) and a later Save of the same version restores it. The stores treat it as absent.
 const statusDeleted Status = "deleted"
+
+// ErrMetadataMissing is returned when the graph has not been seeded with the platform domain yet (node types and lifecycle of the
+// stored versions): the caller retries.
+var ErrMetadataMissing = errors.New("the graph metadata is not seeded yet")
 
 // MethodologyVersionKey is the key of the node of a methodology version.
 func MethodologyVersionKey(name, version string) string { return "MV:" + key(name, version) }
@@ -67,6 +88,8 @@ type defs struct {
 	methodologies map[string]stored[Record]
 	domains       map[string]stored[DomainRecord]
 	problems      []string
+	// ready: the node types of the versions are on the graph, so that their nodes get their lifecycle
+	ready bool
 }
 
 // stored is a decoded version with the nodes it comes from: the header and every element node (removed ones too, so that
@@ -77,7 +100,7 @@ type stored[T any] struct {
 	children map[string]domain.Node // by key
 }
 
-var metaKeys = []string{"status", "createdAt", "updatedAt", "publishedAt", "updatedBy"}
+var metaKeys = []string{"createdAt", "updatedAt", "publishedAt", "updatedBy"}
 
 func kindOfType(t string) string {
 	for _, k := range defKinds {
@@ -88,38 +111,53 @@ func kindOfType(t string) string {
 	return ""
 }
 
+func statusOf(state string) Status {
+	switch state {
+	case statePublished:
+		return StatusPublished
+	case stateArchived:
+		return StatusArchived
+	case stateDeleted:
+		return statusDeleted
+	}
+	return StatusDraft
+}
+
 func buildDefs(_ domain.BaselineID, nodes []domain.Node, _ []domain.Link) *defs {
 	d := &defs{methodologies: map[string]stored[Record]{}, domains: map[string]stored[DomainRecord]{}}
-	children := map[string]map[string]domain.Node{} // header key -> element nodes
+	type owner struct{ ns, key string }
+	children := map[owner]map[string]domain.Node{} // header -> element nodes
+	metaKey := metamodel.DomainKey(domain.NamespacePlatform, TypeMethodologyVersion)
 	for _, n := range nodes {
-		if n.Namespace != domain.NamespacePlatform || kindOfType(n.Type) == "" {
+		if n.Type == metamodel.TypeNodeType && n.Key == metaKey {
+			_, d.ready = n.Properties["lifecycle"]
+		}
+		if kindOfType(n.Type) == "" {
 			continue
 		}
 		parent, _, _ := strings.Cut(n.Key, "/")
-		if children[parent] == nil {
-			children[parent] = map[string]domain.Node{}
+		o := owner{n.Namespace, parent}
+		if children[o] == nil {
+			children[o] = map[string]domain.Node{}
 		}
-		children[parent][n.Key] = n
+		children[o][n.Key] = n
 	}
 	for _, n := range nodes {
-		if n.Namespace != domain.NamespacePlatform {
-			continue
-		}
-		switch n.Type {
-		case TypeMethodologyVersion:
+		switch {
+		case n.Namespace == NamespaceMethodology && n.Type == TypeMethodologyVersion:
 			var r Record
-			if err := decodeVersion(n, children[n.Key], true, &r.Methodology, &r.Status, &r.CreatedAt, &r.UpdatedAt, &r.PublishedAt, &r.UpdatedBy); err != nil {
+			if err := decodeVersion(n, children[owner{n.Namespace, n.Key}], true, &r.Methodology, &r.Status, &r.CreatedAt, &r.UpdatedAt, &r.PublishedAt, &r.UpdatedBy); err != nil {
 				d.problems = append(d.problems, fmt.Sprintf("%s: %v", n.Key, err))
 				continue
 			}
-			d.methodologies[key(r.Methodology.Name, r.Methodology.Version)] = stored[Record]{n, r, children[n.Key]}
-		case TypeDomainVersion:
+			d.methodologies[key(r.Methodology.Name, r.Methodology.Version)] = stored[Record]{n, r, children[owner{n.Namespace, n.Key}]}
+		case n.Namespace == NamespaceDomain && n.Type == TypeDomainVersion:
 			var r DomainRecord
-			if err := decodeVersion(n, children[n.Key], false, &r.Domain, &r.Status, &r.CreatedAt, &r.UpdatedAt, &r.PublishedAt, &r.UpdatedBy); err != nil {
+			if err := decodeVersion(n, children[owner{n.Namespace, n.Key}], false, &r.Domain, &r.Status, &r.CreatedAt, &r.UpdatedAt, &r.PublishedAt, &r.UpdatedBy); err != nil {
 				d.problems = append(d.problems, fmt.Sprintf("%s: %v", n.Key, err))
 				continue
 			}
-			d.domains[key(r.Domain.Name, r.Domain.Version)] = stored[DomainRecord]{n, r, children[n.Key]}
+			d.domains[key(r.Domain.Name, r.Domain.Version)] = stored[DomainRecord]{n, r, children[owner{n.Namespace, n.Key}]}
 		}
 	}
 	return d
@@ -128,8 +166,7 @@ func buildDefs(_ domain.BaselineID, nodes []domain.Node, _ []domain.Link) *defs 
 // decodeVersion assembles a definition from its header node and its live element nodes.
 func decodeVersion(n domain.Node, elements map[string]domain.Node, isMethodology bool, def any, status *Status, created, updated, published *time.Time, by *string) error {
 	props := maps.Clone(n.Properties)
-	s, _ := props["status"].(string)
-	*status = Status(s)
+	*status = statusOf(n.State)
 	*by, _ = props["updatedBy"].(string)
 	for k, dst := range map[string]*time.Time{"createdAt": created, "updatedAt": updated, "publishedAt": published} {
 		if s, _ := props[k].(string); s != "" {
@@ -139,13 +176,6 @@ func decodeVersion(n domain.Node, elements map[string]domain.Node, isMethodology
 			}
 			*dst = t
 		}
-	}
-	if legacy, ok := props["definition"]; ok { // a version stored as one document
-		b, err := json.Marshal(legacy)
-		if err != nil {
-			return err
-		}
-		return json.Unmarshal(b, def)
 	}
 	for _, k := range metaKeys {
 		delete(props, k)
@@ -171,9 +201,8 @@ func ts(t time.Time) any {
 }
 
 // headerProps are the properties of a version's header node: the fields of the definition and the record's own.
-func headerProps(def map[string]any, st Status, created, updated, published time.Time, by string) map[string]any {
+func headerProps(def map[string]any, created, updated, published time.Time, by string) map[string]any {
 	m := maps.Clone(def)
-	m["status"] = string(st)
 	for k, t := range map[string]time.Time{"createdAt": created, "updatedAt": updated, "publishedAt": published} {
 		if v := ts(t); v != nil {
 			m[k] = v
@@ -210,22 +239,58 @@ func patch(have, want map[string]any) map[string]any {
 	return out
 }
 
-// versionItems reconciles the nodes of a version with a definition: it creates or updates the header, creates, updates
-// and, for the elements that left the definition, marks removed the element nodes, and ties new elements to the header.
+func withoutMeta(p map[string]any) map[string]any {
+	out := maps.Clone(p)
+	for _, k := range metaKeys {
+		delete(out, k)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func create(typ, k string, props map[string]any) domain.ChangeItem {
+	return domain.ChangeItem{ID: domain.ItemID(uuid.NewString()), Kind: domain.KindProposal, Type: "registry", ProducedBy: "registrysvc",
+		Proposal: &domain.Proposal{Op: domain.OpCreateNode, Node: &domain.NodeDraft{Key: k, Type: typ, Properties: props}}}
+}
+
+func update(n domain.Node, props map[string]any) domain.ChangeItem {
+	ref := n.Ref()
+	return domain.ChangeItem{Kind: domain.KindProposal, Type: "registry", ProducedBy: "registrysvc",
+		Proposal: &domain.Proposal{Op: domain.OpUpdateNode, Node: &domain.NodeDraft{Base: &ref, Properties: props}}}
+}
+
+func move(n domain.Node, to string) domain.ChangeItem {
+	ref := n.Ref()
+	return domain.ChangeItem{Kind: domain.KindProposal, Type: "registry", ProducedBy: "registrysvc",
+		Proposal: &domain.Proposal{Op: domain.OpTransitionNode, Node: &domain.NodeDraft{Base: &ref, State: to}}}
+}
+
+// edit changes the properties of a node of a persisted version: it is reopened, changed and closed again. A node with no state
+// (stored before lifecycles) is edited directly.
+func edit(n domain.Node, props map[string]any) []domain.ChangeItem {
+	if n.State != stateDraft {
+		return []domain.ChangeItem{update(n, props)}
+	}
+	return []domain.ChangeItem{move(n, stateEditing), update(n, props), move(n, stateDraft)}
+}
+
+// versionItems reconciles the nodes of a version with a definition. Nothing is proposed when its content did not change (the
+// timestamps alone do not count). A discarded version is restored first. It creates the header and the elements of a new version,
+// edits those that changed, marks removed the elements that left the definition and ties new elements to the header.
 func versionItems(hkey, hType string, header map[string]any, els []defEl, old *domain.Node, oldChildren map[string]domain.Node) []domain.ChangeItem {
 	var items []domain.ChangeItem
 	var hEnd domain.Endpoint
-	if old != nil {
-		ref := old.Ref()
-		hEnd = domain.Endpoint{Node: &ref}
-		if p := patch(old.Properties, header); p != nil {
-			items = append(items, update(*old, p))
-		}
-	} else {
+	if old == nil {
 		it := create(hType, hkey, header)
 		hEnd = domain.Endpoint{Item: it.ID}
 		items = append(items, it)
+	} else {
+		ref := old.Ref()
+		hEnd = domain.Endpoint{Node: &ref}
 	}
+	var elItems []domain.ChangeItem
 	want := map[string]bool{}
 	for _, e := range els {
 		k := hkey + "/" + e.kind + "/" + e.name
@@ -238,23 +303,63 @@ func versionItems(hkey, hType string, header map[string]any, els []defEl, old *d
 		}
 		if n, ok := oldChildren[k]; ok {
 			if p := patch(n.Properties, e.props); p != nil {
-				items = append(items, update(n, p))
+				elItems = append(elItems, edit(n, p)...)
 			}
 			continue
 		}
 		it := create(nodeType, k, e.props)
-		items = append(items, it, domain.ChangeItem{Kind: domain.KindProposal, Type: "registry", ProducedBy: "registrysvc",
+		elItems = append(elItems, it, domain.ChangeItem{Kind: domain.KindProposal, Type: "registry", ProducedBy: "registrysvc",
 			Proposal: &domain.Proposal{Op: domain.OpAddLink, Link: &domain.LinkDraft{Type: LinkDefines, From: hEnd, To: domain.Endpoint{Item: it.ID}}}})
 	}
 	for _, k := range slices.Sorted(maps.Keys(oldChildren)) {
 		if n := oldChildren[k]; !want[k] {
 			if removed, _ := n.Properties["removed"].(bool); !removed {
-				items = append(items, update(n, map[string]any{"removed": true}))
+				elItems = append(elItems, edit(n, map[string]any{"removed": true})...)
 			}
+		}
+	}
+	if old == nil {
+		return append(items, elItems...)
+	}
+	restore := old.State == stateDeleted
+	hp := patch(old.Properties, header)
+	if !restore && withoutMeta(hp) == nil && len(elItems) == 0 {
+		return nil // the content did not change
+	}
+	if restore {
+		items = append(items, move(*old, stateDraft))
+		cur := *old
+		cur.State = stateDraft
+		old = &cur
+	}
+	if hp != nil {
+		items = append(items, edit(*old, hp)...)
+	}
+	return append(items, elItems...)
+}
+
+// publishItems publishes a draft: the header takes its timestamps and moves on from `editing`, the live elements from `draft`.
+func publishItems(header domain.Node, children map[string]domain.Node, at time.Time) []domain.ChangeItem {
+	items := []domain.ChangeItem{move(header, stateEditing), update(header, map[string]any{"publishedAt": ts(at), "updatedAt": ts(at)}), move(header, statePublished)}
+	for _, k := range slices.Sorted(maps.Keys(children)) {
+		if n := children[k]; !isRemoved(n) && n.State == stateDraft {
+			items = append(items, move(n, statePublished))
 		}
 	}
 	return items
 }
+
+func archiveItems(header domain.Node, children map[string]domain.Node) []domain.ChangeItem {
+	items := []domain.ChangeItem{move(header, stateArchived)}
+	for _, k := range slices.Sorted(maps.Keys(children)) {
+		if n := children[k]; !isRemoved(n) && n.State == statePublished {
+			items = append(items, move(n, stateArchived))
+		}
+	}
+	return items
+}
+
+func isRemoved(n domain.Node) bool { removed, _ := n.Properties["removed"].(bool); return removed }
 
 // read returns the versions at the head of main, looked at now.
 func (s *GraphStore) read(ctx context.Context) (*defs, error) {
@@ -265,27 +370,26 @@ func (s *GraphStore) read(ctx context.Context) (*defs, error) {
 	return d, nil
 }
 
-// commit applies the items build makes from the current versions as one change on main, once more on the new head when
-// main moved meanwhile.
-func (s *GraphStore) commit(ctx context.Context, title string, build func(*defs) ([]domain.ChangeItem, error)) error {
+// commit applies the items build makes from the current versions as one change of a namespace on main, once more on the new
+// head when main moved meanwhile.
+func (s *GraphStore) commit(ctx context.Context, ns, title string, build func(*defs) ([]domain.ChangeItem, error)) error {
 	for attempt := 0; ; attempt++ {
 		d, err := s.read(ctx)
 		if err != nil {
 			return err
+		}
+		if !d.ready {
+			return ErrMetadataMissing
 		}
 		items, err := build(d)
 		if err != nil || len(items) == 0 {
 			return err
 		}
 		head, err := s.Graph.BranchHead(ctx, domain.MainBranch)
-		if errors.Is(err, graph.ErrNotFound) {
-			if head, err = s.Graph.CreateBaseline(ctx, "Repository", nil); err != nil {
-				return err
-			}
-		} else if err != nil {
+		if err != nil {
 			return err
 		}
-		c, err := s.Graph.CreateChange(ctx, graph.NewChange{Namespace: domain.NamespacePlatform, Title: title, Intent: title, BaselineID: head.ID})
+		c, err := s.Graph.CreateChange(ctx, graph.NewChange{Namespace: ns, Title: title, Intent: title, BaselineID: head.ID})
 		if err != nil {
 			return err
 		}
@@ -306,28 +410,32 @@ func (s *GraphStore) now() time.Time {
 	return time.Now()
 }
 
-func create(typ, k string, props map[string]any) domain.ChangeItem {
-	return domain.ChangeItem{ID: domain.ItemID(uuid.NewString()), Kind: domain.KindProposal, Type: "registry", ProducedBy: "registrysvc",
-		Proposal: &domain.Proposal{Op: domain.OpCreateNode, Node: &domain.NodeDraft{Key: k, Type: typ, Properties: props}}}
-}
-
-func update(n domain.Node, props map[string]any) domain.ChangeItem {
-	ref := n.Ref()
-	return domain.ChangeItem{Kind: domain.KindProposal, Type: "registry", ProducedBy: "registrysvc",
-		Proposal: &domain.Proposal{Op: domain.OpUpdateNode, Node: &domain.NodeDraft{Base: &ref, Properties: props}}}
-}
-
-// statusPatch is the update of a header node when a version changes status.
-func statusPatch(st Status, at time.Time) map[string]any {
-	p := map[string]any{"status": string(st), "updatedAt": ts(at)}
-	if st == StatusPublished {
-		p["publishedAt"] = ts(at)
+// setStatus moves a stored version on. A version that is not where the move starts is refused (published versions are frozen).
+func setStatus[T any](st stored[T], name string, to Status, at time.Time) ([]domain.ChangeItem, error) {
+	if st.node.State == "" { // stored before lifecycles
+		return nil, fmt.Errorf("%s: %w", name, ErrImmutable)
 	}
-	return p
-}
-
-func markDeleted(n domain.Node) domain.ChangeItem {
-	return update(n, map[string]any{"status": string(statusDeleted)})
+	switch to {
+	case StatusPublished:
+		switch st.node.State {
+		case stateDraft:
+			return publishItems(st.node, st.children, at), nil
+		case statePublished:
+			return nil, nil
+		}
+	case StatusArchived:
+		switch st.node.State {
+		case statePublished:
+			return archiveItems(st.node, st.children), nil
+		case stateArchived:
+			return nil, nil
+		}
+	case statusDeleted:
+		if st.node.State == stateDraft {
+			return []domain.ChangeItem{move(st.node, stateDeleted)}, nil
+		}
+	}
+	return nil, fmt.Errorf("%s is %s, it cannot become %s: %w", name, statusOf(st.node.State), to, ErrImmutable)
 }
 
 // ---- methodologies ---------------------------------------------------------
@@ -335,21 +443,20 @@ func markDeleted(n domain.Node) domain.ChangeItem {
 func (s *GraphStore) Save(ctx context.Context, r Record) error {
 	m := r.Methodology
 	k := key(m.Name, m.Version)
-	return s.commit(ctx, "Methodology "+k, func(d *defs) ([]domain.ChangeItem, error) {
+	return s.commit(ctx, NamespaceMethodology, "Methodology "+k, func(d *defs) ([]domain.ChangeItem, error) {
 		old, exists := d.methodologies[k]
-		revive := exists && old.rec.Status == statusDeleted
-		if exists && !revive && old.rec.Status != StatusDraft {
+		if exists && old.rec.Status != StatusDraft && old.rec.Status != statusDeleted {
 			return nil, fmt.Errorf("%s: %w", k, ErrImmutable)
 		}
 		created := r.UpdatedAt
-		if exists && !revive {
+		if exists && old.rec.Status == StatusDraft {
 			created = old.rec.CreatedAt
 		}
 		header, els, err := encodeMethodology(m)
 		if err != nil {
 			return nil, err
 		}
-		props := headerProps(header, r.Status, created, r.UpdatedAt, r.PublishedAt, r.UpdatedBy)
+		props := headerProps(header, created, r.UpdatedAt, r.PublishedAt, r.UpdatedBy)
 		var oldNode *domain.Node
 		var oldChildren map[string]domain.Node
 		if exists {
@@ -402,26 +509,23 @@ func (s *GraphStore) List(ctx context.Context) ([]Record, error) {
 
 func (s *GraphStore) SetStatus(ctx context.Context, name, version string, st Status, at time.Time) error {
 	k := key(name, version)
-	return s.commit(ctx, fmt.Sprintf("Methodology %s %s", k, st), func(d *defs) ([]domain.ChangeItem, error) {
+	return s.commit(ctx, NamespaceMethodology, fmt.Sprintf("Methodology %s %s", k, st), func(d *defs) ([]domain.ChangeItem, error) {
 		old, ok := d.methodologies[k]
 		if !ok || old.rec.Status == statusDeleted {
 			return nil, fmt.Errorf("%s: %w", k, ErrNotFound)
 		}
-		return []domain.ChangeItem{update(old.node, statusPatch(st, at))}, nil
+		return setStatus(old, k, st, at)
 	})
 }
 
 func (s *GraphStore) Delete(ctx context.Context, name, version string) error {
 	k := key(name, version)
-	return s.commit(ctx, "Delete methodology "+k, func(d *defs) ([]domain.ChangeItem, error) {
+	return s.commit(ctx, NamespaceMethodology, "Delete methodology "+k, func(d *defs) ([]domain.ChangeItem, error) {
 		old, ok := d.methodologies[k]
 		if !ok || old.rec.Status == statusDeleted {
 			return nil, fmt.Errorf("%s: %w", k, ErrNotFound)
 		}
-		if old.rec.Status != StatusDraft {
-			return nil, fmt.Errorf("%s: %w", k, ErrImmutable)
-		}
-		return []domain.ChangeItem{markDeleted(old.node)}, nil
+		return setStatus(old, k, statusDeleted, s.now())
 	})
 }
 
@@ -430,21 +534,20 @@ func (s *GraphStore) Delete(ctx context.Context, name, version string) error {
 func (s *GraphStore) SaveDomain(ctx context.Context, r DomainRecord) error {
 	dm := r.Domain
 	k := key(dm.Name, dm.Version)
-	return s.commit(ctx, "Domain "+k, func(d *defs) ([]domain.ChangeItem, error) {
+	return s.commit(ctx, NamespaceDomain, "Domain "+k, func(d *defs) ([]domain.ChangeItem, error) {
 		old, exists := d.domains[k]
-		revive := exists && old.rec.Status == statusDeleted
-		if exists && !revive && old.rec.Status != StatusDraft {
+		if exists && old.rec.Status != StatusDraft && old.rec.Status != statusDeleted {
 			return nil, fmt.Errorf("domain %s: %w", k, ErrImmutable)
 		}
 		created := r.UpdatedAt
-		if exists && !revive {
+		if exists && old.rec.Status == StatusDraft {
 			created = old.rec.CreatedAt
 		}
 		header, els, err := encodeDomain(dm)
 		if err != nil {
 			return nil, err
 		}
-		props := headerProps(header, r.Status, created, r.UpdatedAt, r.PublishedAt, r.UpdatedBy)
+		props := headerProps(header, created, r.UpdatedAt, r.PublishedAt, r.UpdatedBy)
 		var oldNode *domain.Node
 		var oldChildren map[string]domain.Node
 		if exists {
@@ -497,25 +600,22 @@ func (s *GraphStore) ListDomains(ctx context.Context) ([]DomainRecord, error) {
 
 func (s *GraphStore) SetDomainStatus(ctx context.Context, name, version string, st Status, at time.Time) error {
 	k := key(name, version)
-	return s.commit(ctx, fmt.Sprintf("Domain %s %s", k, st), func(d *defs) ([]domain.ChangeItem, error) {
+	return s.commit(ctx, NamespaceDomain, fmt.Sprintf("Domain %s %s", k, st), func(d *defs) ([]domain.ChangeItem, error) {
 		old, ok := d.domains[k]
 		if !ok || old.rec.Status == statusDeleted {
 			return nil, fmt.Errorf("%s: %w", k, errDomainNotFound)
 		}
-		return []domain.ChangeItem{update(old.node, statusPatch(st, at))}, nil
+		return setStatus(old, "domain "+k, st, at)
 	})
 }
 
 func (s *GraphStore) DeleteDomain(ctx context.Context, name, version string) error {
 	k := key(name, version)
-	return s.commit(ctx, "Delete domain "+k, func(d *defs) ([]domain.ChangeItem, error) {
+	return s.commit(ctx, NamespaceDomain, "Delete domain "+k, func(d *defs) ([]domain.ChangeItem, error) {
 		old, ok := d.domains[k]
 		if !ok || old.rec.Status == statusDeleted {
 			return nil, fmt.Errorf("%s: %w", k, errDomainNotFound)
 		}
-		if old.rec.Status != StatusDraft {
-			return nil, fmt.Errorf("domain %s: %w", k, ErrImmutable)
-		}
-		return []domain.ChangeItem{markDeleted(old.node)}, nil
+		return setStatus(old, "domain "+k, statusDeleted, s.now())
 	})
 }

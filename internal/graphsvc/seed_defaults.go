@@ -227,7 +227,7 @@ func SeedModels(ctx context.Context, g *graph.Graph, providers []llmcfg.Provider
 // own, the default one and every namespace the graph already holds nodes of. Once one is declared, a change acting
 // on an undeclared namespace is refused. Namespaces already declared are left alone; it reports whether it seeded.
 func SeedNamespaces(ctx context.Context, g *graph.Graph) (bool, error) {
-	names := map[string]bool{mcp.NamespacePlatform: true, mcp.NamespaceOrganisation: true, domain.DefaultNamespace: true}
+	names := map[string]bool{mcp.NamespacePlatform: true, mcp.NamespaceOrganisation: true, domain.DefaultNamespace: true, "methodology": true, "domain": true}
 	declared := map[string]bool{}
 	if head, err := g.BranchHead(ctx, domain.MainBranch); err == nil {
 		nodes, _, err := g.BaselineGraph(ctx, head.ID)
