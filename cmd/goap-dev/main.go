@@ -80,6 +80,9 @@ func main() {
 	if _, err := graphsvc.SeedDefaults(ctx, g); err != nil {
 		platform.Fatal(log, "seed defaults", err)
 	}
+	if _, err := graphsvc.SeedNamespaces(ctx, g); err != nil {
+		platform.Fatal(log, "seed namespaces", err)
+	}
 	var triggers *engine.TriggerManager
 	reg := &registrysvc.Service{Store: st.methodologies, Authz: authorizer}
 	// publications are projected onto the domain graph (the methodology as

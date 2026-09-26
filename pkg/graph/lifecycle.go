@@ -25,8 +25,13 @@ import (
 //     document its children are in an allowed state) when the change is applied.
 
 // NodeTypeNode is the type of the graph nodes that hold node types (the
-// metadata layer, ADR 0012).
-const NodeTypeNode = "NodeType"
+// metadata layer, ADR 0012); LinkTypeNode the one of the nodes that hold link types.
+const (
+	NodeTypeNode = "NodeType"
+	LinkTypeNode = "LinkType"
+	// NamespaceNode is the type of the nodes that declare the namespaces changes may act on.
+	NamespaceNode = "Namespace"
+)
 
 // TransitionAuthorizer decides whether the caller may take a transition on a
 // node. Nil allows every transition. n.State is the state it leaves.
@@ -40,8 +45,16 @@ type typeInfo struct {
 	validators []algo.Bound
 }
 
-// typeIndex is the node type metadata of a baseline.
-type typeIndex struct{ byName map[string]typeInfo }
+// linkSpec is one declaration of a link type: the node types it may join (empty: any).
+type linkSpec struct{ from, to string }
+
+// typeIndex is the node type and link type metadata of a baseline.
+type typeIndex struct {
+	byName map[string]typeInfo
+	links  map[string][]linkSpec
+	// namespaces declared by Namespace nodes; nil when the baseline declares none (any namespace is accepted)
+	namespaces map[string]bool
+}
 
 func decodeProp(v any, out any) bool {
 	if v == nil {
@@ -60,7 +73,30 @@ func (g *Graph) typesAt(ctx context.Context, tx Tx, baseline domain.BaselineID) 
 	if err != nil {
 		return nil, err
 	}
-	ix := &typeIndex{byName: map[string]typeInfo{}}
+	ix := &typeIndex{byName: map[string]typeInfo{}, links: map[string][]linkSpec{}}
+	linkNodes, err := tx.NodesIn(ctx, baseline, LinkTypeNode)
+	if err != nil {
+		return nil, err
+	}
+	nsNodes, err := tx.NodesIn(ctx, baseline, NamespaceNode)
+	if err != nil {
+		return nil, err
+	}
+	for _, n := range nsNodes {
+		if name, _ := n.Properties["name"].(string); name != "" {
+			if ix.namespaces == nil {
+				ix.namespaces = map[string]bool{}
+			}
+			ix.namespaces[name] = true
+		}
+	}
+	for _, n := range linkNodes {
+		if name, _ := n.Properties["name"].(string); name != "" {
+			from, _ := n.Properties["from"].(string)
+			to, _ := n.Properties["to"].(string)
+			ix.links[name] = append(ix.links[name], linkSpec{from, to})
+		}
+	}
 	for _, n := range nodes {
 		name, _ := n.Properties["name"].(string)
 		if _, dup := ix.byName[name]; name == "" || dup {
@@ -100,6 +136,44 @@ func (ix *typeIndex) find(typ string, pick func(typeInfo) bool) (typeInfo, bool)
 		typ = info.extends
 	}
 	return typeInfo{}, false
+}
+
+// isA tells whether typ is name or extends it. The bool is false when typ has no NodeType node: nothing is known about it.
+func (ix *typeIndex) isA(typ, name string) (is, known bool) {
+	if _, ok := ix.byName[typ]; !ok {
+		return false, false
+	}
+	for seen := map[string]bool{}; typ != "" && !seen[typ]; typ = ix.byName[typ].extends {
+		if typ == name {
+			return true, true
+		}
+		seen[typ] = true
+	}
+	return false, true
+}
+
+// linkAllowed checks a link of type lt between nodes of the given types against the LinkType nodes of
+// the baseline. A link type nobody declares, and endpoints whose node type is not on the graph, are not judged.
+func (ix *typeIndex) linkAllowed(lt, from, to string) error {
+	specs := ix.links[lt]
+	if len(specs) == 0 {
+		return nil
+	}
+	for _, sp := range specs {
+		okFrom, okTo := sp.from == "", sp.to == ""
+		if !okFrom {
+			is, known := ix.isA(from, sp.from)
+			okFrom = is || !known
+		}
+		if !okTo {
+			is, known := ix.isA(to, sp.to)
+			okTo = is || !known
+		}
+		if okFrom && okTo {
+			return nil
+		}
+	}
+	return invalidf("a %s link cannot join a %s to a %s", lt, from, to)
 }
 
 func (ix *typeIndex) lifecycleOf(typ string) *domain.Lifecycle {
@@ -210,6 +284,7 @@ func (g *Graph) walk(ctx context.Context, tx Tx, c domain.ChangeSet, authorize b
 		}
 		return nil
 	}
+	itemType := map[domain.ItemID]string{} // node type of the nodes the change creates
 	for _, it := range c.Items {
 		if it.Kind != domain.KindProposal || !c.InEffect(it.ID) {
 			continue
@@ -217,6 +292,7 @@ func (g *Graph) walk(ctx context.Context, tx Tx, c domain.ChangeSet, authorize b
 		p := it.Proposal
 		switch p.Op {
 		case domain.OpCreateNode:
+			itemType[it.ID] = p.Node.Type
 			if !authorize {
 				// early feedback: when applying, the properties are validated on the target graph
 				if err := g.validateProps(ctx, ix, domain.Node{Key: p.Node.Key, Type: p.Node.Type}, p.Node.Properties); err != nil {
@@ -301,9 +377,31 @@ func (g *Graph) walk(ctx context.Context, tx Tx, c domain.ChangeSet, authorize b
 			if err := editable(p.Link.From.Node, "link from"); err != nil {
 				return nil, err
 			}
+			if len(ix.links[p.Link.Type]) > 0 {
+				from, err := endpointType(ctx, tx, p.Link.From, itemType)
+				if err != nil {
+					return nil, err
+				}
+				to, err := endpointType(ctx, tx, p.Link.To, itemType)
+				if err != nil {
+					return nil, err
+				}
+				if err := ix.linkAllowed(p.Link.Type, from, to); err != nil {
+					return nil, err
+				}
+			}
 		}
 	}
 	return w, nil
+}
+
+// endpointType is the node type of a link endpoint: a node the change creates or an existing one.
+func endpointType(ctx context.Context, tx Tx, e domain.Endpoint, created map[domain.ItemID]string) (string, error) {
+	if e.Node != nil {
+		n, err := tx.Node(ctx, *e.Node)
+		return n.Type, err
+	}
+	return created[e.Item], nil
 }
 
 // modifies lists the existing nodes (with the version the change starts from)

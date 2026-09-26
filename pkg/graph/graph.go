@@ -279,6 +279,15 @@ func (g *Graph) CreateChange(ctx context.Context, in NewChange) (domain.ChangeSe
 		if err != nil {
 			return err
 		}
+		if _, isMerge := c.Data["merge"]; !isMerge && c.BaselineID != "" {
+			ix, err := g.typesAt(ctx, tx, c.BaselineID)
+			if err != nil {
+				return err
+			}
+			if ix.namespaces != nil && !ix.namespaces[c.Namespace] {
+				return invalidf("namespace %q is not declared: create a Namespace node first", c.Namespace)
+			}
+		}
 		b, err := branchOf(ctx, tx, c.Branch)
 		if err != nil {
 			return err
