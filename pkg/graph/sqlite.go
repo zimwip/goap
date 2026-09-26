@@ -362,6 +362,17 @@ func (t *sqliteTx) PutNode(ctx context.Context, n domain.Node) error {
 	return sqliteErr(err, "node "+n.Ref().String())
 }
 
+func (t *sqliteTx) SetNodeProps(ctx context.Context, ref domain.NodeRef, props map[string]any) error {
+	res, err := t.tx.ExecContext(ctx, `UPDATE node_version SET props = ? WHERE node_id = ? AND version = ?`, string(jsonb(props)), string(ref.ID), int(ref.Version))
+	if err != nil {
+		return sqliteErr(err, "node "+ref.String())
+	}
+	if k, _ := res.RowsAffected(); k != 1 {
+		return fmt.Errorf("node %s: %w", ref, ErrNotFound)
+	}
+	return nil
+}
+
 func (t *sqliteTx) PutLink(ctx context.Context, l domain.Link) error {
 	_, err := t.tx.ExecContext(ctx, `INSERT INTO link (id, type, from_id, from_version, to_id, to_version, props, change_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
 		string(l.ID), l.Type, string(l.From.ID), int(l.From.Version), string(l.To.ID), int(l.To.Version), string(jsonb(l.Properties)), nullUUID(string(l.ChangeID)))

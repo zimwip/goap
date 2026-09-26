@@ -138,6 +138,7 @@ type bump struct {
 	// merge_node: base is the version on the change branch (zero when the
 	// node is new there), from the merged version and ancestor their common ancestor.
 	merge    bool
+	updated  bool // props changed by an update_node proposal
 	from     domain.Node
 	ancestor *domain.Node
 }
@@ -291,6 +292,7 @@ func (a *applier) run() error {
 			}
 			maps.Copy(merged, p.Node.Properties)
 			b.props = merged
+			b.updated = true
 		case domain.OpDeleteNode:
 			b, err := a.bumpOf(*p.Node.Base)
 			if err != nil {
@@ -423,7 +425,10 @@ func (a *applier) run() error {
 			return err
 		}
 	}
-	// 6. lifecycle: states left behind and transition requirements
+	// 6. properties, then lifecycle: states left behind, transition requirements, guards and actions
+	if err := a.checkProps(); err != nil {
+		return err
+	}
 	return a.checkMoves()
 }
 

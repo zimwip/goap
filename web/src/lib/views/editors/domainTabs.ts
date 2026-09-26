@@ -115,3 +115,41 @@ export function domainActions(d: DomainDraft): ToolbarAction[] {
   }
   return acts;
 }
+
+// --- algorithms (ADR 0018) -------------------------------------------------------------
+
+export function algorithmSpec(name: string, version: string, uid: string, alg = ''): TabSpec {
+  return { kind: 'algorithm', params: { name, version, uid, alg } };
+}
+
+export function instanceSpec(name: string, version: string, uid: string, inst = ''): TabSpec {
+  return { kind: 'instance', params: { name, version, uid, inst } };
+}
+
+export function openAlgorithm(d: DomainDraft, index: number, pin = true): Tab {
+  const a = d.form.algorithms[index];
+  return openTab(algorithmSpec(d.name, d.version, a.uid, a.name), { pin });
+}
+
+export function openInstance(d: DomainDraft, index: number, pin = true): Tab {
+  const i = d.form.instances[index];
+  return openTab(instanceSpec(d.name, d.version, i.uid, i.name), { pin });
+}
+
+/** Index of the algorithm / instance a tab shows: by local id, else by name (after a reload). */
+export function algorithmIndex(d: DomainDraft, tab: Tab): number {
+  const i = d.form.algorithms.findIndex((a) => a.uid === tab.params.uid);
+  return i >= 0 ? i : d.form.algorithms.findIndex((a) => a.name === tab.params.alg);
+}
+
+export function instanceIndex(d: DomainDraft, tab: Tab): number {
+  const i = d.form.instances.findIndex((x) => x.uid === tab.params.uid);
+  return i >= 0 ? i : d.form.instances.findIndex((x) => x.name === tab.params.inst);
+}
+
+/** Toolbar actions of an algorithm / instance tab: those of the domain (they share its draft) and a delete. */
+export function algorithmToolbar(d: DomainDraft, remove: { label: string; run: () => void }): ToolbarAction[] {
+  const acts = domainActions(d).filter((a) => ['save', 'validate', 'publish'].includes(a.id));
+  if (!d.readonly) acts.push({ id: 'remove', label: remove.label, icon: 'trash', danger: true, run: remove.run });
+  return acts;
+}

@@ -149,6 +149,7 @@ func DomainToPB(r DomainRecord) *registryv1.Domain {
 	d := r.Domain
 	return &registryv1.Domain{Name: d.Name, Version: d.Version, Description: d.Description, Status: string(r.Status),
 		NodeTypes: nodeTypesToPB(d.NodeTypes), LinkTypes: linkTypesToPB(d.LinkTypes), Lifecycles: lifecyclesToPB(d.Lifecycles),
+		Algorithms: algorithmsToPB(d.Algorithms), AlgorithmInstances: instancesToPB(d.Instances),
 		CreatedAt: pbconv.Time(r.CreatedAt), UpdatedAt: pbconv.Time(r.UpdatedAt), PublishedAt: pbconv.Time(r.PublishedAt), UpdatedBy: r.UpdatedBy}
 }
 
@@ -173,12 +174,13 @@ func DomainFromPB(p *registryv1.Domain) methodology.Domain {
 		d.LinkTypes = append(d.LinkTypes, methodology.LinkType{Name: l.Name, From: l.From, To: l.To})
 	}
 	d.Lifecycles = lifecyclesFromPB(p.Lifecycles)
+	d.Algorithms, d.Instances = algorithmsFromPB(p.Algorithms), instancesFromPB(p.AlgorithmInstances)
 	return d
 }
 
 func nodeTypeToPB(n methodology.NodeType) *registryv1.NodeType {
 	out := &registryv1.NodeType{Name: n.Name, Description: n.Description, Properties: n.Properties, Extends: n.Extends,
-		Lifecycle: n.Lifecycle, ChangeControlled: n.ChangeControlled}
+		Lifecycle: n.Lifecycle, ChangeControlled: n.ChangeControlled, Validators: validatorsToPB(n.Validators)}
 	if d := n.Document; d != nil {
 		out.Document = &registryv1.DocumentSpec{Contains: d.Contains}
 	}
@@ -187,7 +189,7 @@ func nodeTypeToPB(n methodology.NodeType) *registryv1.NodeType {
 
 func nodeTypeFromPB(n *registryv1.NodeType) methodology.NodeType {
 	out := methodology.NodeType{Name: n.Name, Description: n.Description, Properties: nilIfNone(n.Properties), Extends: n.Extends,
-		Lifecycle: n.Lifecycle, ChangeControlled: n.ChangeControlled}
+		Lifecycle: n.Lifecycle, ChangeControlled: n.ChangeControlled, Validators: validatorsFromPB(n.Validators)}
 	if d := n.Document; d != nil {
 		out.Document = &domain.DocumentSpec{Contains: nilIfNone(d.Contains)}
 	}
@@ -203,7 +205,7 @@ func lifecyclesToPB(ls []domain.Lifecycle) []*registryv1.Lifecycle {
 		}
 		for _, t := range l.Transitions {
 			pt := &registryv1.LifecycleTransition{Name: t.Name, From: t.From, To: t.To, Permission: t.Permission, Guard: t.Guard,
-				RequiresAttributes: t.Requires.Attributes, RequiresOutgoingLinks: t.Requires.OutgoingLinks}
+				RequiresAttributes: t.Requires.Attributes, RequiresOutgoingLinks: t.Requires.OutgoingLinks, Guards: t.Guards, Actions: t.Actions}
 			if t.Children != nil {
 				pt.ChildrenStates = t.Children.States
 			}
@@ -223,7 +225,8 @@ func lifecyclesFromPB(ls []*registryv1.Lifecycle) []domain.Lifecycle {
 		}
 		for _, t := range l.Transitions {
 			dt := domain.Transition{Name: t.Name, From: t.From, To: t.To, Permission: t.Permission, Guard: t.Guard,
-				Requires: domain.TransitionRequires{Attributes: nilIfNone(t.RequiresAttributes), OutgoingLinks: nilIfNone(t.RequiresOutgoingLinks)}}
+				Requires: domain.TransitionRequires{Attributes: nilIfNone(t.RequiresAttributes), OutgoingLinks: nilIfNone(t.RequiresOutgoingLinks)},
+				Guards:   nilIfNone(t.Guards), Actions: nilIfNone(t.Actions)}
 			if len(t.ChildrenStates) > 0 {
 				dt.Children = &domain.ChildrenRule{States: t.ChildrenStates}
 			}

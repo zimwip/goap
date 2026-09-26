@@ -45,6 +45,16 @@ func example(t *testing.T) methodology.Methodology {
 		t.Fatal(err)
 	}
 	m.DomainRef = ""
+	// algorithms belong to shared domains: an embedded domain cannot carry them
+	m.Domain.Algorithms, m.Domain.Instances = nil, nil
+	for i := range m.Domain.NodeTypes {
+		m.Domain.NodeTypes[i].Validators = nil
+	}
+	for i := range m.Domain.Lifecycles {
+		for j := range m.Domain.Lifecycles[i].Transitions {
+			m.Domain.Lifecycles[i].Transitions[j].Guards, m.Domain.Lifecycles[i].Transitions[j].Actions = nil, nil
+		}
+	}
 	return *m
 }
 

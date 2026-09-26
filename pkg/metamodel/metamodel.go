@@ -170,13 +170,21 @@ func nodeTypeProps(s methodology.Schema, t methodology.NodeType) map[string]any 
 	delete(m, "lifecycle")
 	if l := s.Lifecycle(t.Lifecycle); t.Lifecycle != "" && l != nil {
 		m["lifecycleRef"] = t.Lifecycle
-		m["lifecycle"] = props(l)
+		m["lifecycle"] = props(s.BindLifecycle(l))
+	}
+	// property validators are embedded resolved (instance + algorithm code), like the lifecycle
+	delete(m, "validators")
+	if bound := s.OwnBoundValidators(t); len(bound) > 0 {
+		b, _ := json.Marshal(bound)
+		var v any
+		_ = json.Unmarshal(b, &v)
+		m["validators"] = v
 	}
 	return m
 }
 
-// lifecycleKeys are the NodeType properties that carry the lifecycle model.
-var lifecycleKeys = []string{"lifecycle", "lifecycleRef", "document", "changeControlled"}
+// lifecycleKeys are the NodeType properties that carry the lifecycle and algorithm model.
+var lifecycleKeys = []string{"lifecycle", "lifecycleRef", "document", "changeControlled", "validators"}
 
 func pick(m map[string]any, keys []string) map[string]any {
 	out := map[string]any{}

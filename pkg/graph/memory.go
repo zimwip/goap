@@ -263,6 +263,15 @@ func (t *memTx) PutNode(_ context.Context, n domain.Node) error {
 	return nil
 }
 
+func (t *memTx) SetNodeProps(_ context.Context, ref domain.NodeRef, props map[string]any) error {
+	vs := t.st.versions[ref.ID]
+	if ref.Version < 1 || int(ref.Version) > len(vs) {
+		return fmt.Errorf("node %s: %w", ref, ErrNotFound)
+	}
+	vs[ref.Version-1].Properties = props
+	return nil
+}
+
 func (t *memTx) PutLink(_ context.Context, l domain.Link) error {
 	t.st.links = append(t.st.links, l)
 	return nil

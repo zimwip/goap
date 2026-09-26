@@ -16,6 +16,7 @@ import (
 	"github.com/robfig/cron/v3"
 	"gopkg.in/yaml.v3"
 
+	"github.com/zimwip/goap/pkg/algo"
 	"github.com/zimwip/goap/pkg/condition"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/goap"
@@ -105,6 +106,36 @@ type Schema struct {
 	LinkTypes []LinkType `yaml:"linkTypes" json:"linkTypes"`
 	// Lifecycles are the state machines node types refer to by name.
 	Lifecycles []domain.Lifecycle `yaml:"lifecycles,omitempty" json:"lifecycles,omitempty"`
+	// Algorithms are the scripts of the domain (ADR 0018) and Instances their
+	// parameterized uses; node types and lifecycle transitions plug instances.
+	// Only shared domains carry them.
+	Algorithms []algo.Algorithm `yaml:"algorithms,omitempty" json:"algorithms,omitempty"`
+	Instances  []algo.Instance  `yaml:"algorithmInstances,omitempty" json:"algorithmInstances,omitempty"`
+}
+
+// algorithms returns the algorithm set of the schema.
+func (s Schema) algorithms() algo.Set {
+	return algo.Set{Algorithms: s.Algorithms, Instances: s.Instances}
+}
+
+// HasAlgorithms tells whether the schema declares or plugs algorithms.
+func (s Schema) HasAlgorithms() bool {
+	if len(s.Algorithms) > 0 || len(s.Instances) > 0 {
+		return true
+	}
+	for _, n := range s.NodeTypes {
+		if len(n.Validators) > 0 {
+			return true
+		}
+	}
+	for _, l := range s.Lifecycles {
+		for _, t := range l.Transitions {
+			if len(t.Guards) > 0 || len(t.Actions) > 0 {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // NodeType is a domain node type.
@@ -126,6 +157,16 @@ type NodeType struct {
 	// ChangeControlled: nodes are only modified through a change (default
 	// true). False: direct writes, and no lifecycle.
 	ChangeControlled *bool `yaml:"changeControlled,omitempty" json:"changeControlled,omitempty"`
+	// Validators plug property validator instances (ADR 0018) on the properties
+	// of the type (its own or inherited). They run in this order when a node of
+	// the type is created or modified, the validators of the supertypes first.
+	Validators []PropertyValidator `yaml:"validators,omitempty" json:"validators,omitempty"`
+}
+
+// PropertyValidator plugs an algorithm instance of type property_validator on a property.
+type PropertyValidator struct {
+	Property string `yaml:"property" json:"property"`
+	Instance string `yaml:"instance" json:"instance"`
 }
 
 // IsChangeControlled tells whether the nodes of the type are modified through changes only.
@@ -336,6 +377,7 @@ func (s Schema) check(prefix string, add func(path, format string, args ...any))
 		}
 	}
 	s.checkLifecycles(prefix, nodeTypes, add)
+	s.checkAlgorithms(prefix, add)
 	linkTypes = map[string]bool{}
 	for i, l := range s.LinkTypes {
 		path := fmt.Sprintf(prefix+"linkTypes[%d]", i)
@@ -489,6 +531,9 @@ func (m *Methodology) compile() (*Compiled, Issues) {
 		add("goals", "at least one goal required")
 	}
 	nodeTypes, linkTypes := m.Domain.check("domain.", add)
+	if m.DomainRef == "" && m.Domain.HasAlgorithms() {
+		add("domain", "algorithms and their plugs belong to a shared domain (domainRef), not to an embedded one")
+	}
 	if m.DomainRef != "" {
 		if _, _, err := SplitRef(m.DomainRef); err != nil {
 			add("domainRef", "%v", err)
@@ -930,11 +975,12 @@ type nodeTypeMeta struct {
 	Lifecycle        string               `json:"lifecycle,omitempty"`
 	Document         *domain.DocumentSpec `json:"document,omitempty"`
 	ChangeControlled *bool                `json:"changeControlled,omitempty"`
+	Validators       []PropertyValidator  `json:"validators,omitempty"`
 }
 
 // MetaJSON serializes the lifecycle, document and change-control declarations.
 func (n NodeType) MetaJSON() []byte {
-	b, _ := json.Marshal(nodeTypeMeta{Lifecycle: n.Lifecycle, Document: n.Document, ChangeControlled: n.ChangeControlled})
+	b, _ := json.Marshal(nodeTypeMeta{Lifecycle: n.Lifecycle, Document: n.Document, ChangeControlled: n.ChangeControlled, Validators: n.Validators})
 	return b
 }
 
@@ -944,5 +990,5 @@ func (n *NodeType) SetMeta(raw []byte) {
 	if len(raw) == 0 || json.Unmarshal(raw, &m) != nil {
 		return
 	}
-	n.Lifecycle, n.Document, n.ChangeControlled = m.Lifecycle, m.Document, m.ChangeControlled
+	n.Lifecycle, n.Document, n.ChangeControlled, n.Validators = m.Lifecycle, m.Document, m.ChangeControlled, m.Validators
 }

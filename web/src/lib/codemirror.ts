@@ -24,7 +24,7 @@ import {
 import { javascript, javascriptLanguage } from '@codemirror/lang-javascript';
 import { go, goLanguage } from '@codemirror/lang-go';
 import { tags as t } from '@lezer/highlight';
-import { DSL_FIELDS, DSL_FUNCTIONS, goName } from './dsl';
+import { DSL_FIELDS, DSL_FUNCTIONS, algorithmUsage, goName, type DslFunction } from './dsl';
 
 export type CodeLanguage = 'javascript' | 'go' | 'cel' | 'text';
 
@@ -81,8 +81,8 @@ const highlight = HighlightStyle.define([
 
 // --- DSL completion -------------------------------------------------------------
 
-function dslOptions(lang: 'javascript' | 'go'): Completion[] {
-  return DSL_FUNCTIONS.map((f) => {
+function dslOptions(lang: 'javascript' | 'go', functions: DslFunction[]): Completion[] {
+  return functions.map((f) => {
     const name = lang === 'go' ? goName(f.name) : f.name;
     const args = f.args.map((a, i) => `\${${i + 1}:${a.replace(/[{}]/g, '')}}`).join(', ');
     return snippetCompletion(`${name}(${args})`, {
@@ -104,8 +104,8 @@ const FIELD_OPTIONS: Completion[] = [...new Set(Object.values(DSL_FIELDS).flat()
     .join(' · '),
 }));
 
-function dslSource(lang: 'javascript' | 'go') {
-  const fns = dslOptions(lang);
+function dslSource(lang: 'javascript' | 'go', functions: DslFunction[]) {
+  const fns = dslOptions(lang, functions);
   const fields = lang === 'go' ? FIELD_OPTIONS.map((o) => ({ ...o, label: goName(o.label) })) : FIELD_OPTIONS;
   return (ctx: CompletionContext): CompletionResult | null => {
     const m = ctx.matchBefore(/\bctx\.\w*$/);
@@ -121,12 +121,14 @@ function dslSource(lang: 'javascript' | 'go') {
 
 // --- extensions ------------------------------------------------------------------------
 
-export function languageExtension(lang: CodeLanguage, dsl: boolean): Extension {
+/** dsl: true = the ctx of script actions; an algorithm usage = the ctx of that usage (ADR 0018). */
+export function languageExtension(lang: CodeLanguage, dsl: boolean | string): Extension {
+  const functions = typeof dsl === 'string' ? (algorithmUsage(dsl)?.functions ?? []) : DSL_FUNCTIONS;
   switch (lang) {
     case 'javascript':
-      return [javascript(), dsl ? javascriptLanguage.data.of({ autocomplete: dslSource('javascript') }) : []];
+      return [javascript(), dsl ? javascriptLanguage.data.of({ autocomplete: dslSource('javascript', functions) }) : []];
     case 'go':
-      return [go(), dsl ? goLanguage.data.of({ autocomplete: dslSource('go') }) : []];
+      return [go(), dsl ? goLanguage.data.of({ autocomplete: dslSource('go', functions) }) : []];
     case 'cel':
       // CEL has an expression syntax close to JavaScript: highlighting is good enough.
       return javascript();

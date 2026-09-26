@@ -13,6 +13,7 @@ import { domainGroup } from './editors/domainTabs';
 
 import MethodologyExplorer from './nav/MethodologyExplorer.svelte';
 import DomainExplorer from './nav/DomainExplorer.svelte';
+import AlgorithmExplorer from './nav/AlgorithmExplorer.svelte';
 import RunsExplorer from './nav/RunsExplorer.svelte';
 import BaselineExplorer from './nav/BaselineExplorer.svelte';
 import ChangesExplorer from './nav/ChangesExplorer.svelte';
@@ -26,6 +27,8 @@ import AssistantTab from './assistant/AssistantTab.svelte';
 
 import MethodologyTab from './editors/MethodologyTab.svelte';
 import DomainTab from './editors/DomainTab.svelte';
+import AlgorithmTab from './editors/AlgorithmTab.svelte';
+import InstanceTab from './editors/InstanceTab.svelte';
 import AgentTab from './editors/AgentTab.svelte';
 import ActionTab from './editors/ActionTab.svelte';
 import ConditionTab from './editors/ConditionTab.svelte';
@@ -51,6 +54,7 @@ import DslHelpPanel from './right/DslHelpPanel.svelte';
 registerView({ id: 'assistant', zone: 'left', title: 'Assistant', icon: 'chat', component: AssistantPanel, order: 0 });
 registerView({ id: 'methodologies', zone: 'left', title: 'Methodologies', icon: 'book', component: MethodologyExplorer, order: 1 });
 registerView({ id: 'domains', zone: 'left', title: 'Domains', icon: 'graph', component: DomainExplorer, order: 1.5 });
+registerView({ id: 'algorithms', zone: 'left', title: 'Algorithms', icon: 'code', component: AlgorithmExplorer, order: 1.6 });
 registerView({
   id: 'runs',
   zone: 'left',
@@ -150,6 +154,14 @@ registerView({
 
 const domainGroupDirty = (tab: Tab) => peekDomainDraft(domainGroup(tab))?.dirty ?? false;
 
+function discardDomain(tab: Tab) {
+  const key = domainGroup(tab);
+  const d = peekDomainDraft(key);
+  if (!d) return;
+  if (d.isNew) domainDrafts.delete(key);
+  else d.revert();
+}
+
 registerView({
   id: 'domain',
   zone: 'editor',
@@ -162,13 +174,7 @@ registerView({
   dirty: domainGroupDirty,
   groupDirty: domainGroupDirty,
   group: domainGroup,
-  discard: (tab) => {
-    const key = domainGroup(tab);
-    const d = peekDomainDraft(key);
-    if (!d) return;
-    if (d.isNew) domainDrafts.delete(key);
-    else d.revert();
-  },
+  discard: discardDomain,
   properties: (t) => {
     const d = peekDomainDraft(domainGroup(t));
     if (!d || d.isNew) return undefined;
@@ -180,6 +186,7 @@ registerView({
         ['Description', d.form.description],
         ['Node types', String(d.form.nodeTypes.length)],
         ['Link types', String(d.form.linkTypes.length)],
+        ['Algorithms', `${d.form.algorithms.length} (${d.form.instances.length} instances)`],
         ['Used by', String(d.usage.length)],
         ['Issues', d.issues === null ? 'not validated' : String(d.allIssues.length)],
         ['Modified', `${formatDate(d.meta.updatedAt)}${d.meta.updatedBy ? ` by ${d.meta.updatedBy}` : ''}`],
@@ -187,6 +194,70 @@ registerView({
       ],
     };
   },
+});
+
+const algorithmProps = (kind: 'algorithm' | 'instance') => (t: Tab) => {
+  const d = peekDomainDraft(domainGroup(t));
+  if (!d || d.isNew) return undefined;
+  if (kind === 'algorithm') {
+    const a = d.form.algorithms.find((x) => x.uid === t.params.uid);
+    if (!a) return undefined;
+    return {
+      title: a.name || '(unnamed)',
+      subtitle: 'Algorithm',
+      rows: [
+        ['Domain', d.label],
+        ['Type', a.type],
+        ['Language', a.language],
+        ['Parameters', a.params.map((p) => p.name).join(', ')],
+        ['Description', a.description],
+      ] as [string, string][],
+    };
+  }
+  const i = d.form.instances.find((x) => x.uid === t.params.uid);
+  if (!i) return undefined;
+  return {
+    title: i.name || '(unnamed)',
+    subtitle: 'Algorithm instance',
+    rows: [
+      ['Domain', d.label],
+      ['Algorithm', i.algorithm],
+      ['Values', JSON.stringify(i.values)],
+      ['Description', i.description],
+    ] as [string, string][],
+  };
+};
+
+registerView({
+  id: 'algorithm',
+  zone: 'editor',
+  title: 'Algorithm',
+  icon: 'code',
+  component: AlgorithmTab,
+  key: (p) => `${p.name}@${p.version}/alg:${p.uid}`,
+  tabTitle: (t) => t.params.alg || '(unnamed)',
+  tooltip: (t) => `Algorithm ${t.params.alg || ''} — ${t.params.name} v${t.params.version}`,
+  dirty: domainGroupDirty,
+  groupDirty: domainGroupDirty,
+  group: domainGroup,
+  discard: discardDomain,
+  properties: algorithmProps('algorithm'),
+});
+
+registerView({
+  id: 'instance',
+  zone: 'editor',
+  title: 'Algorithm instance',
+  icon: 'tag',
+  component: InstanceTab,
+  key: (p) => `${p.name}@${p.version}/inst:${p.uid}`,
+  tabTitle: (t) => t.params.inst || '(unnamed)',
+  tooltip: (t) => `Algorithm instance ${t.params.inst || ''} — ${t.params.name} v${t.params.version}`,
+  dirty: domainGroupDirty,
+  groupDirty: domainGroupDirty,
+  group: domainGroup,
+  discard: discardDomain,
+  properties: algorithmProps('instance'),
 });
 
 const ITEM_TITLES: Record<string, string> = { agent: 'Agent', action: 'Action', condition: 'Condition', goal: 'Goal' };

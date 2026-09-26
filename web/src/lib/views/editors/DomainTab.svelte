@@ -53,6 +53,26 @@
     return undefined;
   }
 
+  /** properties of a node type, own and inherited */
+  function propertiesOf(i: number): string[] {
+    const out = new Set<string>();
+    const seen = new Set<string>();
+    let cur: (typeof f.nodeTypes)[number] | undefined = f.nodeTypes[i];
+    while (cur && !seen.has(cur.name.trim())) {
+      seen.add(cur.name.trim());
+      for (const p of cur.properties.split(',').map((x) => x.trim()).filter(Boolean)) out.add(p);
+      const parentName: string = cur.extends;
+      cur = parentName ? f.nodeTypes.find((t) => t.name.trim() === parentName) : undefined;
+    }
+    return [...out];
+  }
+
+  /** names of the algorithm instances of a type */
+  const instancesOf = (usage: string) =>
+    f.instances
+      .filter((x) => x.name.trim() && f.algorithms.find((a) => a.name === x.algorithm)?.type === usage)
+      .map((x) => x.name.trim());
+
   /** does a node type using the lifecycle embed other nodes (a document)? */
   const usedByDocument = (name: string) => f.nodeTypes.some((t) => t.document.trim() && t.lifecycle === name);
 
@@ -90,7 +110,7 @@
     void revealState.seq;
     if (revealState.tabId !== tab.id || !revealState.path) return;
     const path = revealState.path;
-    pane = path.startsWith('nodeTypes') ? 'types' : path.startsWith('linkTypes') ? 'links' : path.startsWith('lifecycles') ? 'lifecycles' : 'overview';
+    pane = path.startsWith('algorithm') ? 'overview' : path.startsWith('nodeTypes') ? 'types' : path.startsWith('linkTypes') ? 'links' : path.startsWith('lifecycles') ? 'lifecycles' : 'overview';
   });
 
   provideActions(
@@ -237,6 +257,9 @@
               lifecycles={lifecycleNames}
               typeNames={d.nodeTypeNames}
               inherited={inheritedLifecycle(i)}
+              properties={propertiesOf(i)}
+              validatorInstances={instancesOf('property_validator')}
+              bad={(p) => d.bad(p)}
               readonly={d.readonly}
               path="nodeTypes[{i}]"
             />
@@ -298,7 +321,7 @@
                   <label for="lc-name-{i}">Name</label>
                   <input id="lc-name-{i}" type="text" class="mono" bind:value={l.name} class:bad={d.bad(`lifecycles[${i}].name`)} data-path="lifecycles[{i}].name" placeholder="requirement" />
                 </div>
-                <LifecycleEditor bind:lc={f.lifecycles[i]} readonly={d.readonly} documents={usedByDocument(l.name)} path="lifecycles[{i}]" />
+                <LifecycleEditor bind:lc={f.lifecycles[i]} readonly={d.readonly} guardInstances={instancesOf('transition_guard')} actionInstances={instancesOf('transition_action')} bad={(p) => d.bad(p)} documents={usedByDocument(l.name)} path="lifecycles[{i}]" />
                 {#if !d.readonly}
                   <button type="button" class="small danger" onclick={() => f.lifecycles.splice(i, 1)}>Delete the lifecycle</button>
                 {/if}

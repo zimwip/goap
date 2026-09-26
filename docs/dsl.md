@@ -1,4 +1,10 @@
-# Script action DSL (JavaScript / Go)
+# DSL (JavaScript / Go): script actions and domain algorithms
+
+The DSL is a generic capability: the same JavaScript (goja) / Go (yaegi) engine runs the code of a
+**usage**, and the usage decides the `ctx` object the code sees. This page describes the `action` usage
+(first part) and the **algorithm** usages of the domain (last part, [ADR 0018](adr/0018-algorithms.md)).
+
+## Script actions
 
 `kind: script` actions are written in **JavaScript** (interpreted by goja) or in **Go**
 (interpreted by yaegi) and run in the process's **sandbox** (`goap-runner`).
@@ -72,6 +78,60 @@ func Run(ctx *dsl.Ctx) error {
 		t := ctx.ProposeNode("TestCase", "TST-"+i.Target.Key, map[string]any{"title": "Verify " + i.Target.Key})
 		ctx.ProposeLink(t, "verifies", i.Target.Key)
 	}
+	return nil
+}
+```
+
+## Algorithms (domain)
+
+A domain declares **algorithms** (a script of a fixed type, with typed parameters) and **instances**
+(an algorithm with parameter values). Instances are plugged where the type is allowed; the list order
+is the call order. Action code is not an algorithm: it stays in the action declaration.
+
+| Type | Plugged in | Result |
+|---|---|---|
+| `property_validator` | `nodeTypes[].validators: [{property, instance}]` | accepts / rejects a property value, when a node is created or modified |
+| `transition_guard` | `lifecycles[].transitions[].guards: [instance]` | allows / refuses the transition, when the change is applied |
+| `transition_action` | `lifecycles[].transitions[].actions: [instance]` | changes properties of the node that moved, once the transition is accepted |
+
+Parameter types: `string`, `number`, `boolean`, `regex`, `enum` (`values`), `strings` (list), `json`.
+The script reads its values with `ctx.param(name)`.
+
+A **JavaScript** algorithm is the body of a function of `ctx` (it may `return`); a **Go** algorithm
+declares `func Run(ctx *dsl.<Usage>Ctx) error`. Algorithms are pure: no LLM, tool, agent or blackboard
+access. They reject with `ctx.fail(message)` (several messages allowed), by throwing / returning an
+error, or (JavaScript) by returning `false` or a message string.
+
+| JavaScript | Go | Available in |
+|---|---|---|
+| `ctx.param(name)` | `Param(name)` | all |
+| `ctx.instance()` / `ctx.algorithm()` | `Instance()` / `Algorithm()` | all |
+| `ctx.fail(message)` | `Fail(message)` | all (in a transition action it aborts the application of the change) |
+| `ctx.log(msg)` / `ctx.warn(msg)` | `Log(msg)` / `Warn(msg)` | all |
+| `ctx.property()` / `ctx.value()` | `Property()` / `Value()` | validator (`value()` is `null` when absent) |
+| `ctx.node()` | `Node()` | all: `{id, version, key, type, state, props}`, as it will be after the change |
+| `ctx.children()` | `Children()` | guard, action: the nodes a document contains (`Node[]`) |
+| `ctx.change()` | `Change()` | guard, action: `{id, title, intent, methodology, goal}` |
+| `ctx.transition()` | `Transition()` | guard, action: `{name, from, to}` |
+| `ctx.setProp(name, value)` / `ctx.removeProp(name)` | `SetProp(name, value)` / `RemoveProp(name)` | action |
+
+```js
+// property_validator "regex-match": params pattern (regex, required), message (string)
+const v = ctx.value();
+if (v === undefined || v === null || v === "") return;
+if (!new RegExp(ctx.param("pattern")).test(String(v))) {
+  ctx.fail(ctx.param("message") || (ctx.property() + " must match " + ctx.param("pattern")));
+}
+```
+
+```go
+// transition_action "stamp": records who and when
+package action
+
+import "github.com/zimwip/goap/pkg/dsl"
+
+func Run(ctx *dsl.TransitionCtx) error {
+	ctx.SetProp("approvedInChange", ctx.Change().Title)
 	return nil
 }
 ```

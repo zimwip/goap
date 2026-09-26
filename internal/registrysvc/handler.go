@@ -9,6 +9,7 @@ import (
 	registryv1 "github.com/zimwip/goap/gen/goap/registry/v1"
 	"github.com/zimwip/goap/gen/goap/registry/v1/registryv1connect"
 	"github.com/zimwip/goap/internal/identity"
+	"github.com/zimwip/goap/internal/pbconv"
 	"github.com/zimwip/goap/pkg/authz"
 )
 
@@ -197,4 +198,25 @@ func (h *Handler) GetDomainUsage(ctx context.Context, r *connect.Request[registr
 		out.Methodologies = append(out.Methodologies, &registryv1.DomainUser{Name: rec.Methodology.Name, Version: rec.Methodology.Version, Status: string(rec.Status)})
 	}
 	return connect.NewResponse(out), nil
+}
+
+func (h *Handler) RunAlgorithm(ctx context.Context, r *connect.Request[registryv1.RunAlgorithmRequest]) (*connect.Response[registryv1.RunAlgorithmResponse], error) {
+	if r.Msg.Algorithm == nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("algorithm required"))
+	}
+	algs := algorithmsFromPB([]*registryv1.Algorithm{r.Msg.Algorithm})
+	out, err := h.Service.RunAlgorithm(h.Identity.Context(ctx, r.Header()), algs[0], pbconv.Map(r.Msg.Values), pbconv.Map(r.Msg.Input))
+	resp := &registryv1.RunAlgorithmResponse{Failures: out.Failures, Set: pbconv.Struct(out.Set), Unset: out.Unset}
+	for _, l := range out.Logs {
+		resp.Logs = append(resp.Logs, l.Level+": "+l.Message)
+	}
+	switch {
+	case errors.Is(err, ErrInvalid) || errors.Is(err, authz.ErrForbidden):
+		return nil, toConnect(err)
+	case err != nil:
+		resp.Error = err.Error()
+	default:
+		resp.Ok = out.OK()
+	}
+	return connect.NewResponse(resp), nil
 }

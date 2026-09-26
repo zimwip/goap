@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/zimwip/goap/pkg/algo"
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/methodology"
 )
@@ -256,5 +257,79 @@ linkTypes:
 				t.Fatal("unknown lifecycle must be an issue")
 			}
 		})
+	}
+}
+
+// A domain with algorithms survives the store and the wire format, and a broken
+// plug or script is reported when the draft is saved.
+func TestDomainAlgorithms(t *testing.T) {
+	src, err := os.ReadFile(filepath.Join("..", "..", "domains", "alm.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	d, err := methodology.ParseDomain(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(d.Algorithms) == 0 || len(d.Instances) == 0 {
+		t.Fatal("alm.yaml declares algorithms")
+	}
+	// wire round trip
+	back := DomainFromPB(DomainToPB(DomainRecord{Domain: *d}))
+	if len(back.Algorithms) != len(d.Algorithms) || len(back.Instances) != len(d.Instances) {
+		t.Fatalf("wire round trip lost algorithms: %d/%d", len(back.Algorithms), len(back.Instances))
+	}
+	if got, want := back.Instances[2].Values["pattern"], d.Instances[2].Values["pattern"]; got != want {
+		t.Fatalf("instance values: %v != %v", got, want)
+	}
+	if back.NodeTypes[1].Validators[0].Instance != d.NodeTypes[1].Validators[0].Instance {
+		t.Fatalf("validators lost: %+v", back.NodeTypes[1])
+	}
+	for name, mk := range stores(t) {
+		t.Run(name, func(t *testing.T) {
+			enf, _ := authz.NewCasbin(nil)
+			s := &Service{Store: mk(t), Authz: enf}
+			ctx := as("methodologist")
+			if _, issues, err := s.SaveDomain(ctx, *d); err != nil || len(issues) > 0 {
+				t.Fatalf("save: %v %v", issues, err)
+			}
+			got, err := s.GetDomain(ctx, d.Name, d.Version)
+			if err != nil || len(got.Domain.Algorithms) != len(d.Algorithms) || got.Domain.Algorithms[0].Params[0].Type != "regex" {
+				t.Fatalf("get: %v %+v", err, got.Domain.Algorithms)
+			}
+			// a broken plug and a broken script are reported with their path
+			bad := *d
+			bad.Version = "2"
+			bad.Algorithms = append([]algo.Algorithm(nil), d.Algorithms...)
+			bad.Algorithms[0].Code = "function ("
+			bad.Instances = append([]algo.Instance(nil), d.Instances...)
+			bad.Instances[1].Algorithm = "missing"
+			_, issues, err := s.SaveDomain(ctx, bad)
+			if err != nil || len(issues) < 2 {
+				t.Fatalf("expected issues: %v %v", issues, err)
+			}
+			text := issues.Error()
+			if !strings.Contains(text, "algorithms[0].code") || !strings.Contains(text, `unknown algorithm "missing"`) {
+				t.Fatalf("issues: %s", text)
+			}
+		})
+	}
+}
+
+func TestRunAlgorithm(t *testing.T) {
+	enf, _ := authz.NewCasbin(nil)
+	s := &Service{Store: NewMemoryStore(), Authz: enf}
+	a := algo.Algorithm{Name: "len", Type: algo.UsagePropertyValidator, Language: "javascript",
+		Params: []algo.Param{{Name: "max", Type: "number", Required: true}},
+		Code:   `if (String(ctx.value()).length > ctx.param("max")) ctx.fail("too long")`}
+	out, err := s.RunAlgorithm(as("methodologist"), a, map[string]any{"max": 3.0}, map[string]any{"property": "p", "value": "abcd"})
+	if err != nil || out.OK() || out.Failures[0] != "too long" {
+		t.Fatalf("%v %+v", err, out)
+	}
+	if _, err := s.RunAlgorithm(as("methodologist"), a, map[string]any{}, nil); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("missing required param: %v", err)
+	}
+	if _, err := s.RunAlgorithm(as("contributor"), a, map[string]any{"max": 3.0}, nil); !errors.Is(err, authz.ErrForbidden) {
+		t.Fatalf("contributor: %v", err)
 	}
 }

@@ -40,6 +40,8 @@ service RegistryService {
   rpc ExportDomain(ExportDomainRequest) returns (ExportDomainResponse);
   // Methodology versions referencing a domain version.
   rpc GetDomainUsage(GetDomainUsageRequest) returns (GetDomainUsageResponse);
+  // Try an algorithm of a domain on a sample input, without saving anything.
+  rpc RunAlgorithm(RunAlgorithmRequest) returns (RunAlgorithmResponse);
 }
 
 message NodeType {
@@ -55,6 +57,46 @@ message NodeType {
   DocumentSpec document = 6;
   // absent: change controlled (the default)
   optional bool change_controlled = 7;
+  // property validator instances (ADR 0018), in call order
+  repeated PropertyValidator validators = 8;
+}
+
+// PropertyValidator plugs an algorithm instance of type property_validator on a property.
+message PropertyValidator {
+  string property = 1;
+  string instance = 2;
+}
+
+// AlgorithmParam declares a typed parameter of an algorithm.
+message AlgorithmParam {
+  string name = 1;
+  // string | number | boolean | regex | enum | strings | json
+  string type = 2;
+  string description = 3;
+  bool required = 4;
+  google.protobuf.Value default_value = 5;
+  // allowed values of an enum
+  repeated string values = 6;
+}
+
+// Algorithm is a script of a fixed type (ADR 0018) with declared parameters.
+message Algorithm {
+  string name = 1;
+  string description = 2;
+  // property_validator | transition_guard | transition_action
+  string type = 3;
+  // javascript | go
+  string language = 4;
+  string code = 5;
+  repeated AlgorithmParam params = 6;
+}
+
+// AlgorithmInstance sets the parameter values of an algorithm; it is what gets plugged.
+message AlgorithmInstance {
+  string name = 1;
+  string description = 2;
+  string algorithm = 3;
+  google.protobuf.Struct values = 4;
 }
 
 message Lifecycle {
@@ -84,6 +126,10 @@ message LifecycleTransition {
   repeated string requires_outgoing_links = 7;
   // documents: allowed states of the contained children (empty: no constraint)
   repeated string children_states = 8;
+  // transition_guard instances, run in order after the CEL guard
+  repeated string guards = 9;
+  // transition_action instances, run in order once the transition is accepted
+  repeated string actions = 10;
 }
 
 message DocumentSpec {
@@ -350,6 +396,8 @@ message Domain {
   repeated NodeType node_types = 5;
   repeated LinkType link_types = 6;
   repeated Lifecycle lifecycles = 11;
+  repeated Algorithm algorithms = 12;
+  repeated AlgorithmInstance algorithm_instances = 13;
   google.protobuf.Timestamp created_at = 7;
   google.protobuf.Timestamp updated_at = 8;
   google.protobuf.Timestamp published_at = 9;
@@ -462,4 +510,26 @@ message DomainUser {
 message GetDomainUsageResponse {
   // methodology versions whose domain_ref resolves to the domain version
   repeated DomainUser methodologies = 1;
+}
+
+// RunAlgorithmRequest runs an algorithm on a sample input (ADR 0018).
+message RunAlgorithmRequest {
+  Algorithm algorithm = 1;
+  // parameter values (as an instance would set them)
+  google.protobuf.Struct values = 2;
+  // sample input: node {key,type,state,props}, property, value, children [node], transition {name,from,to}, change {id,title,intent,methodology,goal}
+  google.protobuf.Struct input = 3;
+}
+
+message RunAlgorithmResponse {
+  // the algorithm accepted (and the script ran)
+  bool ok = 1;
+  // reasons the algorithm rejected
+  repeated string failures = 2;
+  // the script itself failed (does not compile, throws, times out)
+  string error = 3;
+  // property changes asked by a transition action
+  google.protobuf.Struct set = 4;
+  repeated string unset = 5;
+  repeated string logs = 6;
 }

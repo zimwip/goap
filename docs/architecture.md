@@ -399,6 +399,17 @@ injects a `ctx` object (same API in both languages, reference: [docs/dsl.md](dsl
 The interpreters expose neither files, network, nor processes (Go: subset of the stdlib;
 JavaScript: no `require`), with a timeout. The code runs in the process's **sandbox** (§3.6).
 
+### 2.13 Algorithms: the DSL plugged into the domain ([ADR 0018](adr/0018-algorithms.md))
+
+The DSL is a generic capability tied to a **usage** (which fixes the `ctx` the code sees): `action`
+(§2.10, code inline in the agent's action) and three *pluggable* usages of the domain —
+`property_validator`, `transition_guard`, `transition_action`. A shared domain declares
+**algorithms** (JavaScript or Go, with typed parameters) and **instances** (parameter values);
+node types plug validator instances on their properties, lifecycle transitions plug guard and action
+instances, in call order. The NodeType nodes of the graph embed the resolved instances (like the
+lifecycle, ADR 0014): validators run when items are added and when a change is applied, guards and
+actions when a transition is applied. Reference: [docs/dsl.md](dsl.md), IDE section *Algorithms*.
+
 ## 3. Component architecture
 
 ```

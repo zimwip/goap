@@ -50,6 +50,9 @@ type Tx interface {
 	Changes(ctx context.Context) ([]domain.ChangeSet, error)
 
 	PutNode(ctx context.Context, n domain.Node) error
+	// SetNodeProps replaces the properties of a node version written earlier in
+	// the same transaction (transition actions, ADR 0018).
+	SetNodeProps(ctx context.Context, ref domain.NodeRef, props map[string]any) error
 	PutLink(ctx context.Context, l domain.Link) error
 	PutBaseline(ctx context.Context, b domain.Baseline) error
 	// PutChange inserts or updates the change header (items are ignored).

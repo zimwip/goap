@@ -3,6 +3,8 @@ package domain
 import (
 	"fmt"
 	"slices"
+
+	"github.com/zimwip/goap/pkg/algo"
 )
 
 // Lifecycle is a named state machine of a domain (ADR 0014). Node types refer
@@ -38,8 +40,19 @@ type Transition struct {
 	Permission string `yaml:"permission,omitempty" json:"permission,omitempty"`
 	// Guard is a CEL predicate over the node (node.props, node.state) and its
 	// contained children (children), evaluated when the change is applied.
-	Guard    string             `yaml:"guard,omitempty" json:"guard,omitempty"`
-	Requires TransitionRequires `yaml:"requires,omitempty" json:"requires,omitempty"`
+	Guard string `yaml:"guard,omitempty" json:"guard,omitempty"`
+	// Guards are algorithm instances of type transition_guard (ADR 0018), run
+	// in order after the CEL guard; all must accept.
+	Guards []string `yaml:"guards,omitempty" json:"guards,omitempty"`
+	// Actions are algorithm instances of type transition_action, run in order
+	// once the transition is accepted; they may change properties of the node.
+	Actions []string `yaml:"actions,omitempty" json:"actions,omitempty"`
+	// GuardAlgos and ActionAlgos are the instances resolved with their algorithm.
+	// They are filled when the lifecycle is projected onto the graph (never authored),
+	// so that evaluating a change needs no other lookup.
+	GuardAlgos  []algo.Bound       `yaml:"-" json:"guardAlgos,omitempty"`
+	ActionAlgos []algo.Bound       `yaml:"-" json:"actionAlgos,omitempty"`
+	Requires    TransitionRequires `yaml:"requires,omitempty" json:"requires,omitempty"`
 	// Children (documents): every contained child must be in one of these
 	// states for the transition to be accepted. Validation only, no cascade.
 	Children *ChildrenRule `yaml:"children,omitempty" json:"children,omitempty"`
@@ -231,6 +244,8 @@ func (l *Lifecycle) Clone() *Lifecycle {
 	}
 	c := &Lifecycle{Name: l.Name, Initial: l.Initial, States: slices.Clone(l.States), Transitions: slices.Clone(l.Transitions)}
 	for i, t := range c.Transitions {
+		c.Transitions[i].Guards, c.Transitions[i].Actions = slices.Clone(t.Guards), slices.Clone(t.Actions)
+		c.Transitions[i].GuardAlgos, c.Transitions[i].ActionAlgos = slices.Clone(t.GuardAlgos), slices.Clone(t.ActionAlgos)
 		c.Transitions[i].Requires = TransitionRequires{Attributes: slices.Clone(t.Requires.Attributes), OutgoingLinks: slices.Clone(t.Requires.OutgoingLinks)}
 		if t.Children != nil {
 			c.Transitions[i].Children = &ChildrenRule{States: slices.Clone(t.Children.States)}
