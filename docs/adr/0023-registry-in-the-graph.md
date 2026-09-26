@@ -3,8 +3,7 @@
 ## Context
 
 Methodologies and domains lived in the registry's SQL tables (ADR 0006); the graph only held a projection of the published ones
-(ADR 0011). What describes the enterprise is graph data, changed through changes (CLAUDE.md, rule 4), and the graph's own metadata is
-now graph data too (ADR 0022).
+(ADR 0011). What describes the enterprise is graph data, changed through changes (CLAUDE.md, rule 4).
 
 ## Decision
 
@@ -22,8 +21,8 @@ now graph data too (ADR 0022).
 4. Immutability of published versions stays a rule of the registry service. The edit history of a draft is the version history of its node.
 5. **Registry-managed definitions.** Node types, link types, lifecycles and algorithms of a domain are elements of a stored version, managed through
    the registry; a methodology refers to its domain by an attribute (`domainRef`, resolved when it is published). The stored nodes need no metadata of the
-   graph itself: no seed, no lifecycle, no chicken-and-egg. The graph still enforces its *data* nodes against the `NodeType` (and `LinkType`, `Lifecycle`)
-   nodes a publication projects (ADR 0012, 0014, 0022); those are derived, not authored.
+   graph itself: no seed, no lifecycle, no chicken-and-egg. The graph enforces its *data* nodes only against the `NodeType`
+   nodes a publication projects (ADR 0012, 0014); those are derived, not authored. It checks neither link types nor namespaces.
 6. The published elements (`M:` / `D:`, ADR 0011) remain derived from the definition and are projected on publication as before.
 7. The registry bootstraps from `domains/*.yaml` and `methodologies/*.yaml` once the graph answers (retrying), instead of failing at start.
 

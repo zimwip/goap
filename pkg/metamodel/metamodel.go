@@ -45,10 +45,6 @@ const (
 	TypeCondition   = "Condition"
 	TypeTrigger     = "Trigger"
 	TypeNodeType    = "NodeType"
-	// the rest of the graph's own metadata: link types, lifecycles and namespaces are nodes too
-	TypeLinkType      = "LinkType"
-	TypeLifecycle     = "Lifecycle"
-	TypeNamespaceNode = "Namespace"
 )
 
 // Link types of the methodology model.
@@ -61,9 +57,6 @@ const (
 	LinkAchieves    = "achieves"            // Action → Condition (effect)
 	LinkSpecializes = "specializes"         // Action → Action
 	LinkExtends     = "extends"             // NodeType → NodeType (subtyping, metadata layer)
-	LinkLifecycle   = "lifecycle"           // NodeType → Lifecycle (the state machine of its nodes)
-	LinkFrom        = "linkFrom"            // LinkType → NodeType (where it starts)
-	LinkTo          = "linkTo"              // LinkType → NodeType (where it ends)
 	LinkInstanceOf  = domain.LinkInstanceOf // data node → NodeType (metadata layer)
 )
 
@@ -78,59 +71,8 @@ func Key(meth, typ, name string) string {
 }
 
 // DomainKey returns the key of a NodeType owned by a shared domain.
-func DomainKey(domainName, name string) string { return DomainMetaKey(domainName, TypeNodeType, name) }
-
-// DomainMetaKey returns the key of an element of the metadata layer (NodeType, LinkType, Lifecycle) owned by a shared domain.
-func DomainMetaKey(domainName, typ, name string) string {
-	return "D:" + domainName + "/" + strings.ToLower(typ) + "/" + name
-}
-
-// projectMeta returns the LinkType and Lifecycle nodes of a schema, and the edges tying them to its NodeType nodes.
-// key names an element of the layer; owner (may be nil) adds the edge that says who owns an element.
-func projectMeta(s methodology.Schema, key func(typ, name string) string, owner func(k string) *Edge) ([]Element, []Edge) {
-	var els []Element
-	var edges []Edge
-	own := func(k string) {
-		if owner != nil {
-			if e := owner(k); e != nil {
-				edges = append(edges, *e)
-			}
-		}
-	}
-	types := map[string]bool{}
-	for _, t := range s.NodeTypes {
-		types[t.Name] = true
-	}
-	lifecycles := map[string]bool{}
-	for _, l := range s.Lifecycles {
-		k := key(TypeLifecycle, l.Name)
-		els = append(els, Element{Key: k, Type: TypeLifecycle, Props: props(s.BindLifecycle(s.Lifecycle(l.Name)))})
-		lifecycles[l.Name] = true
-		own(k)
-	}
-	for _, t := range s.NodeTypes {
-		if lifecycles[t.Lifecycle] {
-			edges = append(edges, Edge{LinkLifecycle, key(TypeNodeType, t.Name), key(TypeLifecycle, t.Lifecycle)})
-		}
-	}
-	seen := map[string]bool{}
-	for _, lt := range s.LinkTypes {
-		name := lt.Name
-		if seen[name] { // the same name may join several pairs of types
-			name = lt.Name + "/" + lt.From + "->" + lt.To
-		}
-		seen[name] = true
-		k := key(TypeLinkType, name)
-		els = append(els, Element{Key: k, Type: TypeLinkType, Props: props(lt)})
-		own(k)
-		if types[lt.From] {
-			edges = append(edges, Edge{LinkFrom, k, key(TypeNodeType, lt.From)})
-		}
-		if types[lt.To] {
-			edges = append(edges, Edge{LinkTo, k, key(TypeNodeType, lt.To)})
-		}
-	}
-	return els, edges
+func DomainKey(domainName, name string) string {
+	return "D:" + domainName + "/" + strings.ToLower(TypeNodeType) + "/" + name
 }
 
 // domainNamespace is the type namespace of a shared domain (see typeKey).
@@ -309,9 +251,6 @@ func Project(m *methodology.Methodology) ([]Element, []Edge) {
 				edges = append(edges, Edge{LinkExtends, k, Key(name, TypeNodeType, t.Extends)})
 			}
 		}
-		mels, medges := projectMeta(m.Domain, func(typ, n string) string { return Key(name, typ, n) },
-			func(k string) *Edge { return &Edge{LinkContains, root, k} })
-		els, edges = append(els, mels...), append(edges, medges...)
 	}
 	actions := map[string]methodology.Action{}
 	for _, a := range m.Actions {
@@ -381,8 +320,7 @@ func ProjectDomain(d *methodology.Domain) ([]Element, []Edge) {
 			edges = append(edges, Edge{LinkExtends, k, DomainKey(d.Name, t.Extends)})
 		}
 	}
-	mels, medges := projectMeta(d.Schema, func(typ, n string) string { return DomainMetaKey(d.Name, typ, n) }, nil)
-	return append(els, mels...), append(edges, medges...)
+	return els, edges
 }
 
 // Graph is what the projection needs from the graph (*graph.Graph and the
