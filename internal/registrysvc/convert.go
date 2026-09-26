@@ -236,3 +236,10 @@ func lifecyclesFromPB(ls []*registryv1.Lifecycle) []domain.Lifecycle {
 	}
 	return out
 }
+
+func nilIfEmpty[M ~map[K]V, K comparable, V any](m M) M {
+	if len(m) == 0 {
+		return nil
+	}
+	return m
+}

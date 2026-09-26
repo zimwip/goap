@@ -677,17 +677,18 @@ provider, or gateway WebSocket) are analyzed in the ADR but not built.
 
 ## 4. Format of a methodology
 
-Methodologies are **stored in the database** in structured form ([ADR 0006](adr/0006-methodologies-en-base.md)),
-edited from the frontend and administrable in SQL. Tables of the `registry` schema: `methodology` (header,
-status) and one table per section (`methodology_node_type`, `methodology_link_type`, `methodology_condition`,
-`methodology_action`, `methodology_goal`, ordered by `position`).
+Methodologies are **stored in the graph** in structured form ([ADR 0023](adr/0023-registry-in-the-graph.md), which
+supersedes the database of [ADR 0006](adr/0006-methodologies-en-base.md)), edited from the frontend: one
+`MethodologyVersion` node per version (platform namespace, key `MV:<name>@<version>`) holds its definition and status,
+every save, publication or deletion being a change applied on main. The registry service (`registrysvc.GraphStore`,
+through a graph client) has no database. A published version is projected as elements (`M:` / `D:` keys, §2.12).
 
 Lifecycle of a version: **draft** (editable, can be invalid: anomalies are returned
 with their path, e.g. `conditions[2].expr`) → **published** (validated, immutable, the only one executable by the
 engine) → **archived**. Modifying a published version means creating a new draft version (`CreateVersion`).
 
 **Shared domain.** The object part of the model (node types, link types) can live in a
-**Domain**, versioned on its own (`domain`, `domain_node_type`, `domain_link_type` tables; same
+**Domain**, versioned on its own (`domain`, `domain_node_type`, `DomainVersion` nodes, key `DV:<name>@<version>`; same
 draft → published → archived lifecycle; `registry.v1` `*Domain*` RPCs, ABAC resource `domain`, role
 `methodologist`). A methodology is then the active part only (agents, actions, conditions, goals) and
 references the domain with `domainRef: <name>[@<version>]`; an unpinned reference follows the latest

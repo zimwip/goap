@@ -121,7 +121,7 @@ Usage: .\make.ps1 <target>
   generate        regenerate connect-rpc code from proto/
   build           build all services into bin\
   test            go test ./...
-  test-pg         tests against PostgreSQL (graph, registry)
+  test-pg         tests against PostgreSQL (graph)
   lint            go vet + gofmt + dsl.md sync check
   dev             single process, in-memory, demo data: http://localhost:8080
   devlocal        no docker: SQLite (.goap\goap.db) + IDE on http://localhost:8080

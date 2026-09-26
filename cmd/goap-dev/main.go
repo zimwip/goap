@@ -84,7 +84,8 @@ func main() {
 		platform.Fatal(log, "seed namespaces", err)
 	}
 	var triggers *engine.TriggerManager
-	reg := &registrysvc.Service{Store: st.methodologies, Authz: authorizer}
+	// methodologies and domains are nodes of the graph: the registry needs no database
+	reg := &registrysvc.Service{Store: registrysvc.NewGraphStore(g), Authz: authorizer}
 	// publications are projected onto the domain graph (the methodology as
 	// versioned elements) and reload the triggers
 	reg.Events = registryEvents{

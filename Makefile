@@ -22,7 +22,7 @@ build:
 test:
 	go test ./...
 
-test-pg: ## tests against PostgreSQL (graph, registry)
+test-pg: ## tests against PostgreSQL (graph)
 	GOAP_TEST_PG_DSN=$${GOAP_TEST_PG_DSN:-postgres://goap:goap@localhost:5432/goap?sslmode=disable} go test ./pkg/graph/... ./internal/...
 
 lint:
