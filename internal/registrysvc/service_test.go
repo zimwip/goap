@@ -26,7 +26,7 @@ func as(roles ...string) context.Context {
 func example(t *testing.T) methodology.Methodology {
 	t.Helper()
 	// resolved and embedded: the legacy shape, independent of stored domains
-	m, err := methodology.LoadFile("../../methodologies/impact-analysis.yaml")
+	m, err := methodology.LoadFile("../../methodologies/examples/impact-analysis.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -156,7 +156,7 @@ func TestAgentsAndScriptsRoundTrip(t *testing.T) {
 			if _, err := s.SeedDomains(as("admin"), "../../domains"); err != nil {
 				t.Fatal(err)
 			}
-			data, _ := os.ReadFile("../../methodologies/test-design.yaml")
+			data, _ := os.ReadFile("../../methodologies/examples/test-design.yaml")
 			if _, _, err := s.Import(as("admin"), data, true); err != nil {
 				t.Fatal(err)
 			}

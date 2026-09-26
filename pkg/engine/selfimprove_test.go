@@ -38,7 +38,7 @@ func TestSelfObservationProposesAndDrafts(t *testing.T) {
 	ctx := authz.With(context.Background(), authz.Principal{Subject: "mia", Org: "acme", Roles: []string{"methodologist"}})
 	e, g, base := setup(t)
 	// the observed run; the intent text deliberately echoes the
-	// "assess_impact" goal example in methodologies/impact-analysis.yaml.
+	// "assess_impact" goal example in methodologies/examples/impact-analysis.yaml.
 	p, err := e.Start(ctx, StartRequest{Methodology: "impact-analysis", BaselineID: base, Intent: "The PSP changes its API, what does this break?"})
 	if err != nil {
 		t.Fatal(err)

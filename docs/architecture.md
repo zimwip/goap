@@ -738,7 +738,7 @@ goals:
     pre: {impacts_propagated: true}
 ```
 
-See `methodologies/impact-analysis.yaml` for the full executable example, and
+See `methodologies/examples/impact-analysis.yaml` for the full executable example, and
 `methodologies/methodology-improvement.yaml` (self-observation: abstract action specialized by rules
 or an LLM). Action specialization fields: `specializes`, `when`, `priority`, `kind: abstract`;
 node type subtyping: `extends`. An `incremental: true` action reaches its effects across several
