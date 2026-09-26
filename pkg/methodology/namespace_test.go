@@ -7,7 +7,7 @@ func TestMethodologyImprovementTargetsTheMetadataNamespace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if m.Namespace != "metadata" {
+	if m.Namespace != "platform" {
 		t.Fatalf("namespace = %q", m.Namespace)
 	}
 }

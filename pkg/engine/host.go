@@ -53,8 +53,18 @@ type Host struct {
 
 var _ dsl.Host = (*Host)(nil)
 
-func (e *Engine) newHost(p *Process, action methodology.Action) *Host {
-	return &Host{e: e, process: p, action: action.Name, mcps: action.RequiredMCPs(), children: map[string]string{}}
+// newHost serves the DSL calls of an action. It may call the tools of the MCPs the action
+// requires and, for llm and script actions, of the MCPs its agent declares.
+func (e *Engine) newHost(p *Process, action methodology.Action, agentMCPs []string) *Host {
+	mcps := action.RequiredMCPs()
+	if action.Kind == methodology.KindLLM || action.Kind == methodology.KindScript {
+		for _, m := range agentMCPs {
+			if !slices.Contains(mcps, m) {
+				mcps = append(mcps, m)
+			}
+		}
+	}
+	return &Host{e: e, process: p, action: action.Name, mcps: mcps, children: map[string]string{}}
 }
 
 // Attributes identify the caller of platform calls (used for tracing).

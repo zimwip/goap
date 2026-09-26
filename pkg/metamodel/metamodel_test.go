@@ -28,12 +28,12 @@ func TestSyncVersionsTheMethodology(t *testing.T) {
 	if err != nil || !r.Changed() || r.Created == 0 || r.Links == 0 {
 		t.Fatalf("first sync: %+v %v", r, err)
 	}
-	root, err := g.NodeByKey(ctx, domain.NamespaceMetadata, "M:"+m.Name)
+	root, err := g.NodeByKey(ctx, domain.NamespacePlatform, "M:"+m.Name)
 	if err != nil || root.Type != TypeMethodology || root.Properties["version"] != m.Version {
 		t.Fatalf("root: %+v %v", root, err)
 	}
 	a := m.Actions[0]
-	an, err := g.NodeByKey(ctx, domain.NamespaceMetadata, Key(m.Name, TypeAction, a.Name))
+	an, err := g.NodeByKey(ctx, domain.NamespacePlatform, Key(m.Name, TypeAction, a.Name))
 	if err != nil || an.Properties["kind"] != a.Kind {
 		t.Fatalf("action node: %+v %v", an, err)
 	}
@@ -62,11 +62,11 @@ func TestSyncVersionsTheMethodology(t *testing.T) {
 	if err != nil || r.Created != 1 || r.Updated < 2 {
 		t.Fatalf("third sync: %+v %v", r, err)
 	}
-	an2, _ := g.NodeByKey(ctx, domain.NamespaceMetadata, Key(m.Name, TypeAction, a.Name))
+	an2, _ := g.NodeByKey(ctx, domain.NamespacePlatform, Key(m.Name, TypeAction, a.Name))
 	if an2.Version != an.Version+1 || an2.Properties["cost"] != float64(42) || an2.Properties["description"] != nil {
 		t.Fatalf("action v2: %+v", an2)
 	}
-	spec, _ := g.NodeByKey(ctx, domain.NamespaceMetadata, Key(m.Name, TypeAction, "fast_"+a.Name))
+	spec, _ := g.NodeByKey(ctx, domain.NamespacePlatform, Key(m.Name, TypeAction, "fast_"+a.Name))
 	sv, _ := g.View(ctx, spec.Ref())
 	if len(sv.Out) != 1 || sv.Out[0].Type != LinkSpecializes || sv.Out[0].To != an2.Ref() {
 		t.Fatalf("specializes link: %+v", sv.Out)
@@ -98,7 +98,7 @@ func TestSyncNodeTypeIsMetadataLayer(t *testing.T) {
 	if _, err := Sync(ctx, g, m); err != nil {
 		t.Fatal(err)
 	}
-	nt, err := g.NodeByKey(ctx, domain.NamespaceMetadata, DomainKey("alm", "Requirement"))
+	nt, err := g.NodeByKey(ctx, domain.NamespacePlatform, DomainKey("alm", "Requirement"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -118,16 +118,16 @@ func TestSyncNodeTypeIsMetadataLayer(t *testing.T) {
 	}
 
 	// Requirement kept its graph-native version and properties, untouched
-	nt2, err := g.NodeByKey(ctx, domain.NamespaceMetadata, DomainKey("alm", "Requirement"))
+	nt2, err := g.NodeByKey(ctx, domain.NamespacePlatform, DomainKey("alm", "Requirement"))
 	if err != nil || nt2.Version != nt.Version || nt2.Properties["description"] != nt.Properties["description"] {
 		t.Fatalf("Requirement was overwritten: %+v (was %+v)", nt2, nt)
 	}
 	// TestCase, dropped from the registry, still lives in the graph
-	if _, err := g.NodeByKey(ctx, domain.NamespaceMetadata, DomainKey("alm", "TestCase")); err != nil {
+	if _, err := g.NodeByKey(ctx, domain.NamespacePlatform, DomainKey("alm", "TestCase")); err != nil {
 		t.Fatalf("TestCase was deleted: %v", err)
 	}
 	// SecurityRequirement, authored directly on the graph, survived too
-	if _, err := g.NodeByKey(ctx, domain.NamespaceMetadata, DomainKey("alm", "SecurityRequirement")); err != nil {
+	if _, err := g.NodeByKey(ctx, domain.NamespacePlatform, DomainKey("alm", "SecurityRequirement")); err != nil {
 		t.Fatalf("SecurityRequirement was deleted: %v", err)
 	}
 }
@@ -200,7 +200,7 @@ func TestBackfillInstanceOf(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	nt, err := g.NodeByKey(ctx, domain.NamespaceMetadata, DomainKey("alm", "Requirement"))
+	nt, err := g.NodeByKey(ctx, domain.NamespacePlatform, DomainKey("alm", "Requirement"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -235,7 +235,7 @@ func TestCreateObject(t *testing.T) {
 	if err != nil || n.Type != "Requirement" || n.Properties["title"] != "Pay" || b.ID == "" {
 		t.Fatalf("create: %+v %v", n, err)
 	}
-	nt, _ := g.NodeByKey(ctx, domain.NamespaceMetadata, DomainKey("alm", "Requirement"))
+	nt, _ := g.NodeByKey(ctx, domain.NamespacePlatform, DomainKey("alm", "Requirement"))
 	v, _ := g.View(ctx, n.Ref())
 	var linked bool
 	for _, l := range v.Out {
@@ -265,10 +265,10 @@ nodeTypes:
 	if _, err := SyncDomain(ctx, g, d); err != nil {
 		t.Fatal(err)
 	}
-	if n, _ := g.NodeByKey(ctx, domain.NamespaceMetadata, DomainKey("docs", "Note")); n.Properties["changeControlled"] != false {
+	if n, _ := g.NodeByKey(ctx, domain.NamespacePlatform, DomainKey("docs", "Note")); n.Properties["changeControlled"] != false {
 		t.Fatalf("an explicit changeControlled=false must be projected: %+v", n.Properties)
 	}
-	before, _ := g.NodeByKey(ctx, domain.NamespaceMetadata, DomainKey("docs", "Req"))
+	before, _ := g.NodeByKey(ctx, domain.NamespacePlatform, DomainKey("docs", "Req"))
 	if _, ok := before.Properties["lifecycle"]; ok {
 		t.Fatal("no lifecycle yet")
 	}
@@ -282,7 +282,7 @@ nodeTypes:
 	if r, err := SyncDomain(ctx, g, d); err != nil || r.Updated != 1 {
 		t.Fatalf("sync: %+v %v", r, err)
 	}
-	after, _ := g.NodeByKey(ctx, domain.NamespaceMetadata, DomainKey("docs", "Req"))
+	after, _ := g.NodeByKey(ctx, domain.NamespacePlatform, DomainKey("docs", "Req"))
 	if lc, _ := after.Properties["lifecycle"].(map[string]any); lc == nil || lc["name"] != "req" || after.Properties["lifecycleRef"] != "req" {
 		t.Fatalf("the named lifecycle is embedded, resolved: %+v", after.Properties)
 	}
@@ -298,7 +298,7 @@ nodeTypes:
 	if _, err := SyncDomain(ctx, g, d); err != nil {
 		t.Fatal(err)
 	}
-	if n, _ := g.NodeByKey(ctx, domain.NamespaceMetadata, DomainKey("docs", "Req")); n.Properties["lifecycle"] != nil {
+	if n, _ := g.NodeByKey(ctx, domain.NamespacePlatform, DomainKey("docs", "Req")); n.Properties["lifecycle"] != nil {
 		t.Fatalf("lifecycle must be removed: %+v", n.Properties)
 	}
 }

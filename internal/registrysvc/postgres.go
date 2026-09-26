@@ -104,9 +104,9 @@ func (s PostgresStore) Save(ctx context.Context, r Record) error {
 			if triggers == nil {
 				triggers = []methodology.Trigger{}
 			}
-			batch.Queue(`INSERT INTO methodology_agent (methodology_id, position, name, description, examples, planner, actions, goals, triggers)
-				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`, id, i, ag.Name, ag.Description,
-				orEmptyStrings(ag.Examples), ag.Planner, orEmptyStrings(ag.Actions), orEmptyStrings(ag.Goals), jsonOf(triggers))
+			batch.Queue(`INSERT INTO methodology_agent (methodology_id, position, name, description, examples, planner, actions, goals, triggers, mcps)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`, id, i, ag.Name, ag.Description,
+				orEmptyStrings(ag.Examples), ag.Planner, orEmptyStrings(ag.Actions), orEmptyStrings(ag.Goals), jsonOf(triggers), orEmptyStrings(ag.MCPs))
 		}
 		return tx.SendBatch(ctx, batch).Close()
 	})
@@ -242,19 +242,19 @@ func (s PostgresStore) loadSections(ctx context.Context, id string, m *methodolo
 	if err != nil {
 		return err
 	}
-	rows, err = s.Pool.Query(ctx, `SELECT name, description, examples, planner, actions, goals, triggers FROM methodology_agent WHERE methodology_id = $1 ORDER BY position`, id)
+	rows, err = s.Pool.Query(ctx, `SELECT name, description, examples, planner, actions, goals, triggers, mcps FROM methodology_agent WHERE methodology_id = $1 ORDER BY position`, id)
 	if err != nil {
 		return err
 	}
 	m.Agents, err = pgx.CollectRows(rows, func(r pgx.CollectableRow) (methodology.Agent, error) {
 		var a methodology.Agent
 		var triggers []byte
-		err := r.Scan(&a.Name, &a.Description, &a.Examples, &a.Planner, &a.Actions, &a.Goals, &triggers)
+		err := r.Scan(&a.Name, &a.Description, &a.Examples, &a.Planner, &a.Actions, &a.Goals, &triggers, &a.MCPs)
 		_ = json.Unmarshal(triggers, &a.Triggers)
 		if len(a.Triggers) == 0 {
 			a.Triggers = nil
 		}
-		a.Examples, a.Actions, a.Goals = nilIfNoStrings(a.Examples), nilIfNoStrings(a.Actions), nilIfNoStrings(a.Goals)
+		a.Examples, a.Actions, a.Goals, a.MCPs = nilIfNoStrings(a.Examples), nilIfNoStrings(a.Actions), nilIfNoStrings(a.Goals), nilIfNoStrings(a.MCPs)
 		return a, err
 	})
 	if err != nil {

@@ -68,7 +68,7 @@
   }
 
   function open(n: GraphNode, pin = false) {
-    openTab({ kind: 'node', params: { id: n.id ?? '', key: n.key ?? '' } }, { pin });
+    openTab({ kind: 'unit', params: { key: n.key ?? '' } }, { pin });
   }
 
   function slug(s: string): string {

@@ -293,7 +293,7 @@
       disabled={readonly}
     />
     <span class="hint"
-      >Comma separated. The action can call the tools of these MCPs only, and is scheduled only in a change whose organisation binds them all.</span
+      >Comma separated. The action can call the tools of these MCPs only, and is scheduled only in a change whose organisation (or an ancestor) has an adapter for each of them.</span
     >
   </div>
 {:else if action.kind === 'script'}
@@ -346,7 +346,7 @@
       disabled={readonly}
     />
     <span class="hint"
-      >Comma separated. The action can call the tools of these MCPs only, and is scheduled only in a change whose organisation binds them all.</span
+      >Comma separated. The action can call the tools of these MCPs only, and is scheduled only in a change whose organisation (or an ancestor) has an adapter for each of them.</span
     >
   </div>
 {:else if action.kind === 'tool'}

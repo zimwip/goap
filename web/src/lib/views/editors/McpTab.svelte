@@ -1,8 +1,10 @@
 <script lang="ts">
-  // MCP tab: a generic MCP definition (name, description, tools with their JSON schemas).
+  // MCP tab: a generic MCP definition (name, description, tools with their JSON schemas), stored as a
+  // node `MCP:<name>` of the platform namespace and edited through a change applied on main.
   import type { Tab } from '../../shell/types';
   import Icon from '../../shell/Icon.svelte';
-  import { mcp, errorMessage, type Mcp, type Struct } from '../../api';
+  import { errorMessage, type Mcp, type Struct } from '../../api';
+  import { headGraph, findNode, applyOnMain, createNodeItem, updateNodeItem, deleteNodeItem } from '../../graphEdit';
   import { tools, refreshTools } from '../../stores/tools.svelte';
   import { openTab, closeTab } from '../../shell/tabs.svelte';
   import { notify, provideActions } from '../../shell/workbench.svelte';
@@ -14,6 +16,10 @@
     description: string;
     schema: string;
   }
+
+  $effect(() => {
+    if (!tools.loaded) void refreshTools();
+  });
 
   const isNew = $derived(!tab.params.name);
   let name = $state('');
@@ -38,6 +44,9 @@
     }));
   });
 
+  const NS = 'platform';
+  const keyOf = (n: string) => `MCP:${n}`;
+
   async function save() {
     error = '';
     const out: Mcp = { name: name.trim(), description: description.trim(), tools: [] };
@@ -51,11 +60,15 @@
           return;
         }
       }
-      out.tools!.push({ name: r.name.trim(), description: r.description.trim(), inputSchema: schema });
+      out.tools!.push({ name: r.name.trim(), description: r.description.trim(), ...(schema ? { inputSchema: schema } : {}) });
     }
     saving = true;
     try {
-      await mcp.saveMcp(out);
+      const h = await headGraph();
+      const existing = findNode(h, NS, 'MCP', keyOf(out.name!));
+      const props: Struct = { name: out.name ?? '', description: out.description ?? '', tools: (out.tools ?? []) as unknown as Struct[] };
+      const item = existing ? updateNodeItem(existing, props) : createNodeItem(crypto.randomUUID(), keyOf(out.name!), 'MCP', props);
+      await applyOnMain(NS, `MCP ${out.name}`, `${existing ? 'Update' : 'Create'} MCP ${out.name}`, h.baselineId, [item]);
       await refreshTools();
       notify(`MCP ${out.name} saved`, 'ok');
       if (isNew) {
@@ -70,9 +83,12 @@
   }
 
   async function remove() {
-    if (!confirm(`Delete the MCP ${name}?`)) return;
+    if (!confirm(`Delete the MCP ${name}? Adapters that implement it stop working.`)) return;
     try {
-      await mcp.deleteMcp(name);
+      const h = await headGraph();
+      const existing = findNode(h, NS, 'MCP', keyOf(name));
+      if (!existing) throw new Error(`MCP ${name} is not on the graph`);
+      await applyOnMain(NS, `Delete MCP ${name}`, `Delete MCP ${name}`, h.baselineId, [deleteNodeItem(existing)]);
       await refreshTools();
       closeTab(tab.id, { force: true });
     } catch (e) {
@@ -104,7 +120,7 @@
   </section>
   <section class="card">
     <h3>Tools</h3>
-    <p class="hint">Generic signatures. A connector implements them through an adapter, and an organisation binds the MCP to a connector.</p>
+    <p class="hint">Generic signatures, as an LLM uses them. An MCP knows no connector: an organisational unit implements it with an adapter (Organisation, MCP pane).</p>
     {#each rows as r, i (i)}
       <div class="trow">
         <div class="field">

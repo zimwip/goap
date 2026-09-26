@@ -31,7 +31,7 @@ type Methodology struct {
 	Description string `yaml:"description,omitempty" json:"description,omitempty"`
 	// Namespace is the graph namespace the changes of the methodology act on
 	// (default sdlc). A methodology that edits the meta model (methodology
-	// nodes, node types) targets "metadata".
+	// nodes, node types) targets "platform".
 	Namespace string `yaml:"namespace,omitempty" json:"namespace,omitempty"`
 	// DomainRef references a shared Domain "<name>@<version>" (version empty:
 	// latest published) instead of embedding one; Resolve fills Domain from it.
@@ -68,6 +68,9 @@ type Agent struct {
 	Goals []string `yaml:"goals,omitempty" json:"goals,omitempty"`
 	// Triggers run the agent automatically (outside the intent loop).
 	Triggers []Trigger `yaml:"triggers,omitempty" json:"triggers,omitempty"`
+	// MCPs whose tools the llm and script actions of the agent may use, in addition to the ones
+	// the actions declare themselves. They do not make an action unschedulable when unbound.
+	MCPs []string `yaml:"mcps,omitempty" json:"mcps,omitempty"`
 }
 
 // Trigger types, events and targets.
@@ -746,6 +749,11 @@ func (m *Methodology) compile() (*Compiled, Issues) {
 		case "", PlannerGOAP, PlannerUtility, PlannerHybrid:
 		default:
 			add(path+".planner", "planner must be goap, utility or hybrid")
+		}
+		for _, name := range ag.MCPs {
+			if !mcp.ValidName(name) {
+				add(path+".mcps", "invalid MCP name %q", name)
+			}
 		}
 		for j, a := range ag.Actions {
 			if act, ok := actions[a]; !ok {

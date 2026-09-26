@@ -20,11 +20,11 @@ import TokensTab from './dashboard/TokensTab.svelte';
 import PlatformTab from './platform/PlatformTab.svelte';
 import AccessExplorer from './nav/AccessExplorer.svelte';
 import OrganisationExplorer from './nav/OrganisationExplorer.svelte';
-import ToolsExplorer from './nav/ToolsExplorer.svelte';
+import ConnectorsExplorer from './nav/ConnectorsExplorer.svelte';
+import McpsExplorer from './nav/McpsExplorer.svelte';
 import ConnectorTab from './editors/ConnectorTab.svelte';
+import OrganisationTab from './editors/OrganisationTab.svelte';
 import McpTab from './editors/McpTab.svelte';
-import AdapterTab from './editors/AdapterTab.svelte';
-import BindingTab from './editors/BindingTab.svelte';
 import TriggersExplorer from './nav/TriggersExplorer.svelte';
 import AssistantPanel from './assistant/AssistantPanel.svelte';
 import AssistantTab from './assistant/AssistantTab.svelte';
@@ -75,7 +75,8 @@ registerView({
   },
 });
 registerView({ id: 'organisation', zone: 'left', title: 'Organisation', icon: 'user', component: OrganisationExplorer, order: 4.5 });
-registerView({ id: 'tools', zone: 'left', title: 'Tools', icon: 'zap', component: ToolsExplorer, order: 4.7 });
+registerView({ id: 'mcps', zone: 'left', title: 'MCPs', icon: 'book', component: McpsExplorer, order: 4.6 });
+registerView({ id: 'connectors', zone: 'left', title: 'Connectors', icon: 'zap', component: ConnectorsExplorer, order: 4.7 });
 registerView({ id: 'access', zone: 'left', title: 'Access', icon: 'shield', component: AccessExplorer, order: 5 });
 
 // --- console (bottom) ---------------------------------------------------------------------
@@ -406,23 +407,13 @@ registerView({
 });
 
 registerView({
-  id: 'adapter',
+  id: 'unit',
   zone: 'editor',
-  title: 'Adapter',
-  icon: 'branch',
-  component: AdapterTab,
-  key: (p) => `${p.mcp}/${p.connector || 'new'}`,
-  tabTitle: (t) => (t.params.connector ? `${t.params.mcp} via ${t.params.connector}` : `New adapter (${t.params.mcp})`),
-});
-
-registerView({
-  id: 'binding',
-  zone: 'editor',
-  title: 'Binding',
-  icon: 'key',
-  component: BindingTab,
-  key: (p) => `${p.org}/${p.mcp || 'new'}`,
-  tabTitle: (t) => (t.params.mcp ? `${t.params.org}: ${t.params.mcp}` : `New binding (${t.params.org})`),
+  title: 'Organisation',
+  icon: 'user',
+  component: OrganisationTab,
+  key: (p) => p.key ?? '',
+  tabTitle: (t) => t.params.key ?? 'Organisation',
 });
 
 registerView({

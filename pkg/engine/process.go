@@ -41,9 +41,9 @@ type Process struct {
 	ID          string          `json:"id"`
 	Methodology string          `json:"methodology"`
 	ChangeID    domain.ChangeID `json:"changeId"`
-	// OrgID is the organization of the change (a cache: the change is the source). It
-	// decides which MCPs the actions of the process can use.
-	OrgID string `json:"orgId,omitempty"`
+	// Org is the organisation holding the change: its owner unit, or the default one (a cache:
+	// the change is the source). Its adapters decide which MCPs the actions can use.
+	Org string `json:"org,omitempty"`
 	// Initiator is the principal who started the process; automatic actions
 	// run with its permissions.
 	Initiator authz.Principal `json:"initiator"`

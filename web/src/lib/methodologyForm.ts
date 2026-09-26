@@ -153,6 +153,8 @@ export interface AgentForm extends Identified {
   actions: string[];
   /** goals (empty: all) */
   goals: string[];
+  /** MCPs whose tools the llm / script actions of the agent may use, comma separated */
+  mcps: string;
   triggers: TriggerForm[];
 }
 
@@ -248,6 +250,7 @@ export const emptyAgent = (): AgentForm => ({
   planner: 'goap',
   actions: [],
   goals: [],
+  mcps: '',
   triggers: [],
 });
 export const emptyTrigger = (): TriggerForm => ({
@@ -352,6 +355,7 @@ function agentToForm(a: Agent, uid: string): AgentForm {
     planner: a.planner || 'goap',
     actions: [...(a.actions ?? [])],
     goals: [...(a.goals ?? [])],
+    mcps: (a.mcps ?? []).join(', '),
     triggers: (a.triggers ?? []).map(triggerToForm),
   };
 }
@@ -691,6 +695,7 @@ export function fromForm(f: MethodologyForm): { methodology: Methodology; issues
       put(o, 'planner', a.planner);
       put(o, 'actions', [...a.actions]);
       put(o, 'goals', [...a.goals]);
+      put(o, 'mcps', mcpList(a.mcps));
       put(o, 'triggers', a.triggers.map(triggerFromForm));
       return o;
     }),

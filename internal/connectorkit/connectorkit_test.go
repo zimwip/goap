@@ -14,10 +14,12 @@ import (
 	"github.com/zimwip/goap/gen/goap/mcp/v1/mcpv1connect"
 	"github.com/zimwip/goap/internal/connectorkit"
 	"github.com/zimwip/goap/internal/connectors/localfs"
+	"github.com/zimwip/goap/internal/graphsvc"
 	"github.com/zimwip/goap/internal/identity"
 	"github.com/zimwip/goap/internal/mcpsvc"
 	"github.com/zimwip/goap/pkg/authz"
-	"github.com/zimwip/goap/pkg/mcp"
+	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/graph"
 )
 
 // A connector started later registers by itself; a call from an organization goes
@@ -27,17 +29,22 @@ func TestAutoRegistrationAndCall(t *testing.T) {
 	defer cancel()
 	const token = "s3cret"
 
-	hub := &mcpsvc.Service{Store: mcpsvc.NewMemoryStore(), Invoker: &mcpsvc.ConnectInvoker{Token: token, HTTP: http.DefaultClient}, Lease: 3 * time.Second}
-	if err := mcpsvc.Seed(ctx, hub.Store); err != nil {
+	dir := t.TempDir()
+	g := graph.New(graph.NewMemory())
+	if _, err := graphsvc.SeedDefaults(ctx, g); err != nil {
 		t.Fatal(err)
 	}
+	if err := graphsvc.SeedAdapter(ctx, g, graphsvc.LocalFSAdapter(domain.DefaultOrg, dir)); err != nil {
+		t.Fatal(err)
+	}
+	hub := &mcpsvc.Service{Store: mcpsvc.NewMemoryStore(), Directory: &mcpsvc.Directory{Graph: g},
+		Invoker: &mcpsvc.ConnectInvoker{Token: token, HTTP: http.DefaultClient}, Lease: 3 * time.Second}
 	dev := authz.Principal{Subject: "u", Org: "acme", Roles: []string{"admin"}}
 	mux := http.NewServeMux()
 	mux.Handle(mcpv1connect.NewMcpServiceHandler(&mcpsvc.Handler{Service: hub, Identity: identity.Extractor{Default: &dev}, ConnectorToken: token}))
 	hubSrv := httptest.NewServer(mux)
 	defer hubSrv.Close()
 
-	dir := t.TempDir()
 	cmux := http.NewServeMux()
 	cmux.Handle(connectorkit.Handler(localfs.Connector{}, token))
 	connSrv := httptest.NewServer(cmux)
@@ -59,9 +66,6 @@ func TestAutoRegistrationAndCall(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 
-	if err := hub.Bind(ctx, mcp.Binding{OrgID: "acme", MCP: "document-repository", Connector: "localfs", Config: map[string]any{"root": dir}}); err != nil {
-		t.Fatal(err)
-	}
 	client := mcpsvc.NewClient(http.DefaultClient, hubSrv.URL)
 	cctx := authz.With(ctx, dev)
 	if _, err := client.CallTool(cctx, "acme", "document-repository/write", map[string]any{"path": "n.txt", "content": "hi"}); err != nil {
@@ -74,8 +78,8 @@ func TestAutoRegistrationAndCall(t *testing.T) {
 	if _, err := client.CallTool(cctx, "acme", "document-repository/read", map[string]any{"path": "../x"}); err == nil {
 		t.Fatal("escape not reported")
 	}
-	if _, err := client.CallTool(cctx, "globex", "document-repository/read", map[string]any{"path": "n.txt"}); err == nil {
-		t.Fatal("unbound organization can call the tool")
+	if _, err := client.CallTool(cctx, "acme", "ticketing/create", nil); err == nil {
+		t.Fatal("a tool of an MCP nobody implements can be called")
 	}
 	tools, mcps, err := client.Tools(cctx, "acme")
 	if err != nil || len(tools) != 3 || len(mcps) != 1 {

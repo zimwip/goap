@@ -4,11 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sort"
 	"time"
 
 	connectorv1 "github.com/zimwip/goap/gen/goap/connector/v1"
 	"github.com/zimwip/goap/internal/pbconv"
+	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/mcp"
 )
 
@@ -22,8 +22,10 @@ type Invoker interface {
 
 // Service holds the logic of the hub.
 type Service struct {
-	Store   Store
-	Invoker Invoker
+	Store Store
+	// Directory reads the unit hierarchy, the MCPs and the adapters from the graph.
+	Directory *Directory
+	Invoker   Invoker
 	// Secrets resolves a secret reference of a binding ("<vault path>#<field>" or "env:<VAR>").
 	Secrets func(ctx context.Context, ref string) (string, error)
 	// Lease is the validity of a registration (default DefaultLease).
@@ -82,115 +84,118 @@ func (s *Service) Connectors(ctx context.Context) ([]ConnectorView, error) {
 
 func (s *Service) live(r ConnectorReg) bool { return s.now().Sub(r.LastSeen) <= s.lease() }
 
-// SaveMcp validates and stores a generic MCP definition.
-func (s *Service) SaveMcp(ctx context.Context, d mcp.Def) error {
-	if err := d.Validate(); err != nil {
-		return err
-	}
-	return s.Store.SaveMcp(ctx, d)
-}
-
-// SaveAdapter validates an adapter against its MCP and stores it. Warnings report
-// what cannot be checked or does not match the connector currently registered.
-func (s *Service) SaveAdapter(ctx context.Context, a mcp.Adapter) (warnings []string, err error) {
-	def, err := s.Store.Mcp(ctx, a.MCP)
+// CheckAdapter validates an adapter against the MCP it implements and reports what does
+// not match the connector currently registered. Errors are blocking, warnings are not.
+func (s *Service) CheckAdapter(ctx context.Context, a mcp.Adapter) (warnings []string, err error) {
+	snap, err := s.Directory.Snapshot(ctx)
 	if err != nil {
 		return nil, err
+	}
+	def, ok := snap.Def(a.MCP)
+	if !ok {
+		return nil, fmt.Errorf("unknown MCP %q (declare it in the platform namespace): %w", a.MCP, mcp.ErrInvalid)
 	}
 	if err := a.Validate(def); err != nil {
 		return nil, err
 	}
 	reg, err := s.Store.Connector(ctx, a.Connector)
-	switch {
-	case errors.Is(err, ErrNotFound):
-		warnings = append(warnings, fmt.Sprintf("connector %s is not registered: operations not checked", a.Connector))
-	case err != nil:
+	if errors.Is(err, ErrNotFound) {
+		return []string{fmt.Sprintf("connector %s is not registered: operations and parameters not checked", a.Connector)}, nil
+	} else if err != nil {
 		return nil, err
-	default:
-		ops := map[string]bool{}
-		for _, o := range reg.Info.Operations {
-			ops[o.Name] = true
+	}
+	ops := map[string]bool{}
+	for _, o := range reg.Info.Operations {
+		ops[o.Name] = true
+	}
+	for _, m := range a.Tools {
+		if !ops[m.Operation] {
+			warnings = append(warnings, fmt.Sprintf("connector %s has no operation %s (tool %s)", a.Connector, m.Operation, m.Tool))
 		}
-		for _, m := range a.Tools {
-			if !ops[m.Operation] {
-				warnings = append(warnings, fmt.Sprintf("connector %s has no operation %s (tool %s)", a.Connector, m.Operation, m.Tool))
+	}
+	if schema := pbconv.Map(reg.Info.ConfigSchema); schema != nil {
+		if req, _ := schema["required"].([]any); req != nil {
+			for _, r := range req {
+				if name, _ := r.(string); name != "" {
+					if _, ok := a.Config[name]; !ok {
+						warnings = append(warnings, fmt.Sprintf("connector %s needs the parameter %q", a.Connector, name))
+					}
+				}
 			}
 		}
 	}
-	return warnings, s.Store.SaveAdapter(ctx, a)
-}
-
-// Bind attaches an MCP to a connector for an organization; the adapter must exist.
-func (s *Service) Bind(ctx context.Context, b mcp.Binding) error {
-	if b.OrgID == "" || !mcp.ValidName(b.MCP) || !mcp.ValidName(b.Connector) {
-		return fmt.Errorf("binding needs an organization, an mcp and a connector: %w", mcp.ErrInvalid)
+	declared := map[string]bool{}
+	for _, n := range reg.Info.SecretNames {
+		declared[n] = true
+		if _, ok := a.Secrets[n]; !ok {
+			warnings = append(warnings, fmt.Sprintf("connector %s needs the secret %q", a.Connector, n))
+		}
 	}
-	return s.Store.SaveBinding(ctx, b)
+	for n := range a.Secrets {
+		if !declared[n] {
+			warnings = append(warnings, fmt.Sprintf("connector %s declares no secret %q", a.Connector, n))
+		}
+	}
+	return warnings, nil
 }
 
-// Tool is a tool available to an organization.
+// Tool is a tool available to a unit.
 type Tool = mcp.ToolInfo
 
-// Tools lists the tools of the MCPs bound by the organization (only those its adapter maps)
-// and the bound MCPs.
-func (s *Service) Tools(ctx context.Context, org string) (tools []Tool, mcps []string, err error) {
-	bs, err := s.Store.Bindings(ctx, org)
+// Effective lists the MCPs a unit can use with their resolved adapters, and the unit chain
+// the adapters were looked up along (nearest first).
+func (s *Service) Effective(ctx context.Context, unit string) (chain []string, out []Effective, err error) {
+	snap, err := s.Directory.Snapshot(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
-	for _, b := range bs {
-		def, err := s.Store.Mcp(ctx, b.MCP)
-		if err != nil {
-			return nil, nil, err
-		}
-		ad, err := s.Store.Adapter(ctx, b.MCP, b.Connector)
-		if err != nil {
-			return nil, nil, err
-		}
-		mcps = append(mcps, b.MCP)
-		for _, t := range def.Tools {
-			if _, ok := ad.Mapping(t.Name); ok {
-				tools = append(tools, Tool{Name: mcp.ToolName(b.MCP, t.Name), Description: t.Description, InputSchema: t.InputSchema})
-			}
-		}
-	}
-	sort.Strings(mcps)
-	return tools, mcps, nil
+	return snap.Chain(unit), snap.Effective(unit), nil
 }
 
-// BoundMCPs returns the names of the MCPs the organization binds.
-func (s *Service) BoundMCPs(ctx context.Context, org string) ([]string, error) {
-	bs, err := s.Store.Bindings(ctx, org)
+// MCPs lists the MCP definitions of the platform namespace.
+func (s *Service) MCPs(ctx context.Context) ([]mcp.Def, error) {
+	snap, err := s.Directory.Snapshot(ctx)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]string, len(bs))
-	for i, b := range bs {
-		out[i] = b.MCP
-	}
-	return out, nil
+	return snap.Defs(), nil
 }
 
-// Call runs a tool ("<mcp>/<tool>") for an organization: binding, adapter mapping,
-// connector operation. A failure reported by the connector is a *ToolError.
+// Tools lists the tools a unit can use (the ones its resolved adapters map) and the MCPs.
+func (s *Service) Tools(ctx context.Context, unit string) (tools []Tool, mcps []string, err error) {
+	_, eff, err := s.Effective(ctx, unit)
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, e := range eff {
+		mcps = append(mcps, e.MCP.Name)
+		for _, t := range e.MCP.Tools {
+			if _, ok := e.Adapter.Mapping(t.Name); ok {
+				tools = append(tools, Tool{Name: mcp.ToolName(e.MCP.Name, t.Name), Description: t.Description, InputSchema: t.InputSchema})
+			}
+		}
+	}
+	return tools, mcps, nil
+}
+
+// Call runs a tool ("<mcp>/<tool>") for the unit holding a change: the nearest adapter of the MCP,
+// its mapping, the connector operation. A failure reported by the connector is a *ToolError.
 func (s *Service) Call(ctx context.Context, org, name string, args map[string]any) (map[string]any, error) {
 	mcpName, tool, err := mcp.SplitTool(name)
 	if err != nil {
 		return nil, err
 	}
-	b, err := s.Store.Binding(ctx, org, mcpName)
-	if errors.Is(err, ErrNotFound) {
-		return nil, fmt.Errorf("mcp %s is not bound in organization %s: %w", mcpName, org, ErrNotBound)
-	} else if err != nil {
-		return nil, err
-	}
-	ad, err := s.Store.Adapter(ctx, b.MCP, b.Connector)
+	snap, err := s.Directory.Snapshot(ctx)
 	if err != nil {
 		return nil, err
 	}
-	m, ok := ad.Mapping(tool)
+	b, _, ok := snap.Resolve(org, mcpName)
 	if !ok {
-		return nil, fmt.Errorf("tool %s is not mapped by the adapter %s/%s: %w", name, b.MCP, b.Connector, ErrNotFound)
+		return nil, fmt.Errorf("mcp %s has no adapter for %s or its ancestors: %w", mcpName, domain.OrgOf(org), ErrNotBound)
+	}
+	m, ok := b.Mapping(tool)
+	if !ok {
+		return nil, fmt.Errorf("tool %s is not mapped by the adapter of %s in %s: %w", name, b.MCP, b.Unit, ErrNotFound)
 	}
 	reg, err := s.Store.Connector(ctx, b.Connector)
 	if errors.Is(err, ErrNotFound) {
@@ -226,7 +231,7 @@ func (s *Service) Call(ctx context.Context, org, name string, args map[string]an
 }
 
 // resolveSecrets resolves the bound secrets the connector declares (no other one leaves the hub).
-func (s *Service) resolveSecrets(ctx context.Context, b mcp.Binding, info *connectorv1.ConnectorInfo) (map[string]string, error) {
+func (s *Service) resolveSecrets(ctx context.Context, b mcp.Adapter, info *connectorv1.ConnectorInfo) (map[string]string, error) {
 	out := map[string]string{}
 	for _, name := range info.SecretNames {
 		ref, ok := b.Secrets[name]
@@ -235,7 +240,7 @@ func (s *Service) resolveSecrets(ctx context.Context, b mcp.Binding, info *conne
 		}
 		v, err := s.Secrets(ctx, ref)
 		if err != nil {
-			return nil, fmt.Errorf("secret %s of %s/%s: %w", name, b.OrgID, b.MCP, err)
+			return nil, fmt.Errorf("secret %s of the adapter of %s in %s: %w", name, b.MCP, b.Unit, err)
 		}
 		out[name] = v
 	}

@@ -43,7 +43,6 @@ import (
 	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/intent"
 	"github.com/zimwip/goap/pkg/llm"
-	"github.com/zimwip/goap/pkg/mcp"
 	"github.com/zimwip/goap/pkg/metamodel"
 	"github.com/zimwip/goap/pkg/methodology"
 )
@@ -55,7 +54,7 @@ func main() {
 	secrets := platform.NewSecrets()
 	dev := authz.Principal{
 		Subject: platform.Env("GOAP_DEV_SUBJECT", "dev"),
-		Org:     platform.Env("GOAP_DEV_ORG", domain.DefaultOrg),
+		Org:     platform.Env("GOAP_DEV_ORG", "dev"),
 		Roles:   strings.Split(platform.Env("GOAP_DEV_ROLES", "admin"), ","),
 	}
 	ident := identity.Extractor{Default: &dev}
@@ -73,6 +72,9 @@ func main() {
 	g.Authorizer = graphsvc.TransitionAuthorizer(authorizer)
 	if _, err := graphsvc.SeedDemo(ctx, g); err != nil {
 		platform.Fatal(log, "seed", err)
+	}
+	if _, err := graphsvc.SeedDefaults(ctx, g); err != nil {
+		platform.Fatal(log, "seed defaults", err)
 	}
 	var triggers *engine.TriggerManager
 	reg := &registrysvc.Service{Store: st.methodologies, Authz: authorizer}
@@ -150,19 +152,21 @@ func main() {
 	connectors := map[string]connectorkit.Connector{"localfs": localfs.Connector{}}
 	connectorToken := os.Getenv("GOAP_CONNECTOR_TOKEN")
 	hub := &mcpsvc.Service{
-		Store:   st.mcp,
-		Invoker: mcpsvc.InprocInvoker{Connectors: connectors, Remote: &mcpsvc.ConnectInvoker{Token: connectorToken}},
-		Secrets: mcpsvc.ResolveSecret(secrets),
-		Lease:   platform.EnvDuration("GOAP_CONNECTOR_LEASE", mcpsvc.DefaultLease),
-	}
-	if err := mcpsvc.Seed(ctx, st.mcp); err != nil {
-		platform.Fatal(log, "mcp seed", err)
+		Store:     st.mcp,
+		Directory: &mcpsvc.Directory{Graph: g},
+		Invoker:   mcpsvc.InprocInvoker{Connectors: connectors, Remote: &mcpsvc.ConnectInvoker{Token: connectorToken}},
+		Secrets:   mcpsvc.ResolveSecret(secrets),
+		Lease:     platform.EnvDuration("GOAP_CONNECTOR_LEASE", mcpsvc.DefaultLease),
 	}
 	hub.KeepRegistered(ctx, connectors)
 	if root := os.Getenv("GOAP_DEV_FS_ROOT"); root != "" {
-		// demo: the default organization exposes a directory as its document repository
-		if err := hub.Bind(ctx, mcp.Binding{OrgID: dev.Org, MCP: "document-repository", Connector: "localfs", Config: map[string]any{"root": root}}); err != nil {
-			platform.Fatal(log, "mcp binding", err)
+		// demo: the default organisation implements document-repository with a directory
+		if snap, err := hub.Directory.Snapshot(ctx); err != nil {
+			platform.Fatal(log, "mcp", err)
+		} else if _, _, ok := snap.Resolve(domain.DefaultOrg, "document-repository"); !ok {
+			if err := graphsvc.SeedAdapter(ctx, g, graphsvc.LocalFSAdapter(domain.DefaultOrg, root)); err != nil {
+				platform.Fatal(log, "mcp adapter", err)
+			}
 		}
 	}
 	builtins := engine.DefaultBuiltins()
@@ -194,7 +198,7 @@ func main() {
 	srv := platform.NewServer(log, platform.Env("GOAP_HTTP_ADDR", ":8080"))
 	srv.Mount(graphv1connect.NewGraphServiceHandler(&graphsvc.Handler{Graph: g, Events: changePublisher(onChange), Authz: authorizer, Identity: ident}, telemetry.HandlerOptions()...))
 	srv.Mount(registryv1connect.NewRegistryServiceHandler(&registrysvc.Handler{Service: reg, Identity: ident}, telemetry.HandlerOptions()...))
-	srv.Mount(iamv1connect.NewIamServiceHandler(&iamsvc.Handler{Enforcer: authorizer, Orgs: st.orgs, Identity: ident}, telemetry.HandlerOptions()...))
+	srv.Mount(iamv1connect.NewIamServiceHandler(&iamsvc.Handler{Enforcer: authorizer, Identity: ident}, telemetry.HandlerOptions()...))
 	srv.Mount(mcpv1connect.NewMcpServiceHandler(&mcpsvc.Handler{Service: hub, Authz: authorizer, Identity: ident, ConnectorToken: connectorToken}, telemetry.HandlerOptions()...))
 	srv.Mount(modelv1connect.NewModelServiceHandler(&modelgw.Handler{Service: gw, Identity: ident, Authz: authorizer}, telemetry.HandlerOptions()...))
 	srv.Mount(enginev1connect.NewEngineServiceHandler(&enginesvc.Handler{Engine: e, Log: log, DefaultPrincipal: &dev, Authz: authorizer, Broker: broker, Triggers: triggers}, telemetry.HandlerOptions()...))

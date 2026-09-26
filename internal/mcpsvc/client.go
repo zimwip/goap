@@ -44,7 +44,7 @@ func forward[T any](ctx context.Context, msg *T) *connect.Request[T] {
 // CallTool calls "<mcp>/<tool>" for an organization. A failure reported by the
 // connector is returned as an error.
 func (c *Client) CallTool(ctx context.Context, org, name string, args map[string]any) (any, error) {
-	r, err := c.rpc.CallTool(ctx, forward(ctx, &mcpv1.CallToolRequest{OrgId: org, Name: name, Arguments: pbconv.Struct(args)}))
+	r, err := c.rpc.CallTool(ctx, forward(ctx, &mcpv1.CallToolRequest{Unit: org, Name: name, Arguments: pbconv.Struct(args)}))
 	if err != nil {
 		return nil, err
 	}
@@ -56,7 +56,7 @@ func (c *Client) CallTool(ctx context.Context, org, name string, args map[string
 
 // Tools returns the tools available to an organization and the MCPs it binds.
 func (c *Client) Tools(ctx context.Context, org string) ([]Tool, []string, error) {
-	r, err := c.rpc.ListTools(ctx, forward(ctx, &mcpv1.ListToolsRequest{OrgId: org}))
+	r, err := c.rpc.ListTools(ctx, forward(ctx, &mcpv1.ListToolsRequest{Unit: org}))
 	if err != nil {
 		return nil, nil, err
 	}

@@ -229,6 +229,9 @@ message StartProcessRequest {
   google.protobuf.Struct vars = 7;
   // restrict identification to this agent
   string agent = 8;
+  // key of the OrgUnit holding the new change (empty: the default organisation); its adapters
+  // decide which MCPs the actions can use
+  string owner_org = 9;
 }
 
 message StartProcessResponse {

@@ -6,33 +6,26 @@ import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
 import "goap/connector/v1/connector.proto";
 
-// McpService is the MCP hub. It keeps:
-//   - the live registry of connectors (separate services that register themselves),
-//   - the generic MCP definitions (e.g. document-repository: list, read, write),
-//   - the adapters mapping the tools of an MCP onto the operations of a connector,
-//   - the bindings of an organization: MCP -> (connector, configuration, secrets).
-// A tool call of a change goes through its organization's binding.
+// McpService is the MCP hub. It keeps the live registry of connectors (separate services that
+// register themselves) and resolves tools for the organisational unit that holds a change:
+//   - MCPs are nodes of the "platform" namespace: the generic usage of a tool by an LLM;
+//   - Adapters are nodes of the "organisation" namespace, owned by a unit: they say how the unit
+//     implements an MCP with a connector (parameters, secrets, mapping of the tools onto operations);
+//   - a unit inherits the adapters of its ancestors; the nearest one wins.
+// MCPs and adapters are edited as graph nodes (through changes); this service only reads them.
 service McpService {
   // Connector registry (called by the connectors, as a heartbeat as well).
   rpc RegisterConnector(RegisterConnectorRequest) returns (RegisterConnectorResponse);
   rpc ListConnectors(ListConnectorsRequest) returns (ListConnectorsResponse);
 
-  // Generic MCP definitions.
-  rpc SaveMcp(SaveMcpRequest) returns (SaveMcpResponse);
+  // The MCPs of the platform namespace.
   rpc ListMcps(ListMcpsRequest) returns (ListMcpsResponse);
-  rpc DeleteMcp(DeleteMcpRequest) returns (DeleteMcpResponse);
+  // The MCPs a unit can use, with the adapter that implements each (own or inherited).
+  rpc ListEffective(ListEffectiveRequest) returns (ListEffectiveResponse);
+  // Check an adapter before saving it as a node.
+  rpc CheckAdapter(CheckAdapterRequest) returns (CheckAdapterResponse);
 
-  // Adapters: how a connector implements an MCP.
-  rpc SaveAdapter(SaveAdapterRequest) returns (SaveAdapterResponse);
-  rpc ListAdapters(ListAdaptersRequest) returns (ListAdaptersResponse);
-  rpc DeleteAdapter(DeleteAdapterRequest) returns (DeleteAdapterResponse);
-
-  // Organization bindings.
-  rpc BindMcp(BindMcpRequest) returns (BindMcpResponse);
-  rpc ListBindings(ListBindingsRequest) returns (ListBindingsResponse);
-  rpc UnbindMcp(UnbindMcpRequest) returns (UnbindMcpResponse);
-
-  // Tools an organization can use, and their invocation.
+  // Tools a unit can use, and their invocation.
   rpc ListTools(ListToolsRequest) returns (ListToolsResponse);
   rpc CallTool(CallToolRequest) returns (CallToolResponse);
 }
@@ -64,7 +57,7 @@ message ListConnectorsResponse {
   repeated Connector connectors = 1;
 }
 
-// ---- MCP definitions -----------------------------------------------------------
+// ---- MCPs ----------------------------------------------------------------------------
 
 message McpTool {
   string name = 1;
@@ -79,107 +72,65 @@ message Mcp {
   repeated McpTool tools = 3;
 }
 
-message SaveMcpRequest {
-  Mcp mcp = 1;
-}
-
-message SaveMcpResponse {
-  Mcp mcp = 1;
-}
-
 message ListMcpsRequest {}
 
 message ListMcpsResponse {
   repeated Mcp mcps = 1;
 }
 
-message DeleteMcpRequest {
-  string name = 1;
-}
-
-message DeleteMcpResponse {}
-
-// ---- adapters ---------------------------------------------------------------------
+// ---- adapters ---------------------------------------------------------------------------
 
 // ToolMapping maps one tool of the MCP onto one operation of the connector.
 message ToolMapping {
   string tool = 1;
   string operation = 2;
-  // operation arguments: literals, or "$.a.b" references to the arguments of the
-  // tool call (nested objects and lists are mapped recursively)
+  // operation arguments: literals, or "$.a.b" references to the arguments of the tool call
+  // (nested objects and lists are mapped recursively); empty: the tool arguments as they are
   google.protobuf.Struct arguments = 3;
   // dotted path picked in the result of the operation ("" = the whole result)
   string result_path = 4;
 }
 
 message Adapter {
-  string mcp = 1;
-  string connector = 2;
-  repeated ToolMapping tools = 3;
-}
-
-message SaveAdapterRequest {
-  Adapter adapter = 1;
-}
-
-message SaveAdapterResponse {
-  Adapter adapter = 1;
-  // non-blocking problems (e.g. an operation the registered connector does not offer)
-  repeated string warnings = 2;
-}
-
-message ListAdaptersRequest {
-  // restrict to an MCP
-  string mcp = 1;
-}
-
-message ListAdaptersResponse {
-  repeated Adapter adapters = 1;
-}
-
-message DeleteAdapterRequest {
-  string mcp = 1;
-  string connector = 2;
-}
-
-message DeleteAdapterResponse {}
-
-// ---- bindings ------------------------------------------------------------------------
-
-message Binding {
-  string org_id = 1;
+  // key of the OrgUnit owning the adapter
+  string unit = 1;
   string mcp = 2;
-  // connector implementing the MCP for this organization (through its adapter)
+  // id of a registered connector
   string connector = 3;
-  // per-organization connector configuration (root path, account, ...)
+  // parameters of the connector (see its config schema)
   google.protobuf.Struct config = 4;
   // secret name -> reference: "<vault path>#<field>" or "env:<VARIABLE>"
   map<string, string> secrets = 5;
+  repeated ToolMapping tools = 6;
 }
 
-message BindMcpRequest {
-  Binding binding = 1;
+message EffectiveMcp {
+  Mcp mcp = 1;
+  // the adapter resolved for the unit (its `unit` says where it is defined)
+  Adapter adapter = 2;
+  // defined by an ancestor unit
+  bool inherited = 3;
 }
 
-message BindMcpResponse {
-  Binding binding = 1;
+message ListEffectiveRequest {
+  // key of the OrgUnit (empty: the default organisation)
+  string unit = 1;
 }
 
-message ListBindingsRequest {
-  // empty: the organization of the caller
-  string org_id = 1;
+message ListEffectiveResponse {
+  // the unit and its ancestors, nearest first
+  repeated string chain = 1;
+  repeated EffectiveMcp mcps = 2;
 }
 
-message ListBindingsResponse {
-  repeated Binding bindings = 1;
+message CheckAdapterRequest {
+  Adapter adapter = 1;
 }
 
-message UnbindMcpRequest {
-  string org_id = 1;
-  string mcp = 2;
+message CheckAdapterResponse {
+  // non-blocking problems (connector not registered, operation or parameter unknown, ...)
+  repeated string warnings = 1;
 }
-
-message UnbindMcpResponse {}
 
 // ---- tools ---------------------------------------------------------------------------------
 
@@ -191,19 +142,19 @@ message Tool {
 }
 
 message ListToolsRequest {
-  // empty: the organization of the caller
-  string org_id = 1;
+  // key of the OrgUnit holding the change (empty: the default organisation)
+  string unit = 1;
 }
 
 message ListToolsResponse {
-  // the tools of the MCPs bound by the organization
+  // the mapped tools of the MCPs the unit can use
   repeated Tool tools = 1;
-  // the bound MCPs
+  // the MCPs the unit can use
   repeated string mcps = 2;
 }
 
 message CallToolRequest {
-  string org_id = 1;
+  string unit = 1;
   // "<mcp>/<tool>"
   string name = 2;
   google.protobuf.Struct arguments = 3;

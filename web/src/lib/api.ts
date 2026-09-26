@@ -329,6 +329,8 @@ export interface Agent {
   /** goal names (empty: all) */
   goals?: string[];
   triggers?: Trigger[];
+  /** MCPs whose tools the llm / script actions of the agent may use */
+  mcps?: string[];
 }
 
 export interface Goal {
@@ -551,8 +553,6 @@ export interface ChangeSet {
   /** sub-change: parent change and responsible OrgUnit key */
   parentId?: string;
   ownerOrg?: string;
-  /** organisation (tenant) the change belongs to */
-  orgId?: string;
   title?: string;
   intent?: string;
   methodology?: string;
@@ -998,10 +998,6 @@ export const iam = {
     rpc<Empty, { policies?: Policy[] }>(IAM, 'ListPolicies', {}, signal),
   addPolicy: (policy: Policy) => rpc<{ policy: Policy }, { policy?: Policy }>(IAM, 'AddPolicy', { policy }),
   removePolicy: (policy: Policy) => rpc<{ policy: Policy }, Empty>(IAM, 'RemovePolicy', { policy }),
-  listOrganizations: (signal?: AbortSignal) => rpc<Empty, { organizations?: Organization[] }>(IAM, 'ListOrganizations', {}, signal),
-  getOrganization: (id: string) => rpc<{ id: string }, { organization?: Organization }>(IAM, 'GetOrganization', { id }),
-  createOrganization: (id: string, name: string) =>
-    rpc<{ id: string; name: string }, { organization?: Organization }>(IAM, 'CreateOrganization', { id, name }),
 };
 
 export interface ImpactView {
@@ -1121,6 +1117,8 @@ export interface StartProcessRequest {
   title?: string;
   intent: string;
   goal?: string;
+  /** key of the OrgUnit holding the change (empty: the default organisation) */
+  ownerOrg?: string;
   vars?: Struct;
 }
 
@@ -1364,16 +1362,10 @@ export const models = {
 };
 
 // ---------------------------------------------------------------------------
-// MCP hub and organisations
+// MCP hub: connectors (registry), MCPs and adapters (graph nodes, read here)
 // ---------------------------------------------------------------------------
 
 const MCP = 'goap.mcp.v1.McpService';
-
-export interface Organization {
-  id?: string;
-  name?: string;
-  createdAt?: string;
-}
 
 export interface ConnectorOperation {
   name?: string;
@@ -1385,6 +1377,7 @@ export interface ConnectorInfo {
   id?: string;
   version?: string;
   description?: string;
+  /** JSON Schema of the parameters an adapter gives the connector */
   configSchema?: Struct;
   secretNames?: string[];
   operations?: ConnectorOperation[];
@@ -1403,6 +1396,7 @@ export interface McpTool {
   inputSchema?: Struct;
 }
 
+/** An MCP: the generic usage of a tool by an LLM (node `MCP:<name>` of the platform namespace). */
 export interface Mcp {
   name?: string;
   description?: string;
@@ -1416,18 +1410,20 @@ export interface ToolMapping {
   resultPath?: string;
 }
 
+/** How a unit implements an MCP with a connector (node `ADP:<unit>/<mcp>` of the organisation namespace). */
 export interface Adapter {
-  mcp?: string;
-  connector?: string;
-  tools?: ToolMapping[];
-}
-
-export interface Binding {
-  orgId?: string;
+  unit?: string;
   mcp?: string;
   connector?: string;
   config?: Struct;
   secrets?: Record<string, string>;
+  tools?: ToolMapping[];
+}
+
+export interface EffectiveMcp {
+  mcp?: Mcp;
+  adapter?: Adapter;
+  inherited?: boolean;
 }
 
 export interface HubTool {
@@ -1439,19 +1435,10 @@ export interface HubTool {
 export const mcp = {
   listConnectors: (signal?: AbortSignal) => rpc<Empty, { connectors?: Connector[] }>(MCP, 'ListConnectors', {}, signal),
   listMcps: (signal?: AbortSignal) => rpc<Empty, { mcps?: Mcp[] }>(MCP, 'ListMcps', {}, signal),
-  saveMcp: (m: Mcp) => rpc<{ mcp: Mcp }, { mcp?: Mcp }>(MCP, 'SaveMcp', { mcp: m }),
-  deleteMcp: (name: string) => rpc<{ name: string }, Empty>(MCP, 'DeleteMcp', { name }),
-  listAdapters: (mcpName = '', signal?: AbortSignal) =>
-    rpc<{ mcp: string }, { adapters?: Adapter[] }>(MCP, 'ListAdapters', { mcp: mcpName }, signal),
-  saveAdapter: (adapter: Adapter) =>
-    rpc<{ adapter: Adapter }, { adapter?: Adapter; warnings?: string[] }>(MCP, 'SaveAdapter', { adapter }),
-  deleteAdapter: (mcpName: string, connector: string) =>
-    rpc<{ mcp: string; connector: string }, Empty>(MCP, 'DeleteAdapter', { mcp: mcpName, connector }),
-  listBindings: (orgId = '', signal?: AbortSignal) =>
-    rpc<{ orgId: string }, { bindings?: Binding[] }>(MCP, 'ListBindings', { orgId }, signal),
-  bindMcp: (binding: Binding) => rpc<{ binding: Binding }, { binding?: Binding }>(MCP, 'BindMcp', { binding }),
-  unbindMcp: (orgId: string, mcpName: string) =>
-    rpc<{ orgId: string; mcp: string }, Empty>(MCP, 'UnbindMcp', { orgId, mcp: mcpName }),
-  listTools: (orgId = '', signal?: AbortSignal) =>
-    rpc<{ orgId: string }, { tools?: HubTool[]; mcps?: string[] }>(MCP, 'ListTools', { orgId }, signal),
+  /** the MCPs a unit can use, each with the adapter that implements it (own or inherited); chain: unit then ancestors */
+  listEffective: (unit: string, signal?: AbortSignal) =>
+    rpc<{ unit: string }, { chain?: string[]; mcps?: EffectiveMcp[] }>(MCP, 'ListEffective', { unit }, signal),
+  checkAdapter: (adapter: Adapter) => rpc<{ adapter: Adapter }, { warnings?: string[] }>(MCP, 'CheckAdapter', { adapter }),
+  listTools: (unit = '', signal?: AbortSignal) =>
+    rpc<{ unit: string }, { tools?: HubTool[]; mcps?: string[] }>(MCP, 'ListTools', { unit }, signal),
 };

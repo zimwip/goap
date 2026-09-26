@@ -518,7 +518,7 @@ func sync(ctx context.Context, g Graph, t target) (Result, error) {
 	if len(items) == 0 {
 		return res, nil
 	}
-	c, err := g.CreateChange(ctx, graph.NewChange{Namespace: domain.NamespaceMetadata, Title: t.title, Intent: t.intent, BaselineID: head.ID, Data: t.data})
+	c, err := g.CreateChange(ctx, graph.NewChange{Namespace: domain.NamespacePlatform, Title: t.title, Intent: t.intent, BaselineID: head.ID, Data: t.data})
 	if err != nil {
 		return res, err
 	}
@@ -731,7 +731,7 @@ func ApplyNodeTypes(ctx context.Context, g Graph, meth string, ops []NodeTypeOp)
 	if len(items) == 0 {
 		return res, nil
 	}
-	c, err := g.CreateChange(ctx, graph.NewChange{Namespace: domain.NamespaceMetadata, Title: "Node types of " + meth, Intent: "Define node types of " + meth,
+	c, err := g.CreateChange(ctx, graph.NewChange{Namespace: domain.NamespacePlatform, Title: "Node types of " + meth, Intent: "Define node types of " + meth,
 		BaselineID: head.ID, Methodology: meth})
 	if err != nil {
 		return res, err
@@ -756,10 +756,10 @@ func LinkToType(ctx context.Context, g KeyGraph, meth string, ref domain.NodeRef
 		return err
 	}
 	ns := meth
-	if root, err := g.NodeByKey(ctx, domain.NamespaceMetadata, Key(meth, TypeMethodology, "")); err == nil {
+	if root, err := g.NodeByKey(ctx, domain.NamespacePlatform, Key(meth, TypeMethodology, "")); err == nil {
 		ns = TypeNamespace([]domain.Node{root}, meth)
 	}
-	nt, err := g.NodeByKey(ctx, domain.NamespaceMetadata, typeKey(ns, typeName))
+	nt, err := g.NodeByKey(ctx, domain.NamespacePlatform, typeKey(ns, typeName))
 	if errors.Is(err, graph.ErrNotFound) {
 		return nil
 	}
@@ -767,7 +767,7 @@ func LinkToType(ctx context.Context, g KeyGraph, meth string, ref domain.NodeRef
 		return err
 	}
 	ntRef := nt.Ref()
-	c, err := g.CreateChange(ctx, graph.NewChange{Namespace: domain.NamespaceMetadata, Title: "Link " + string(ref.ID) + " to " + typeName,
+	c, err := g.CreateChange(ctx, graph.NewChange{Namespace: domain.NamespacePlatform, Title: "Link " + string(ref.ID) + " to " + typeName,
 		Intent: "instanceOf " + typeName, BaselineID: head.ID, Methodology: meth})
 	if err != nil {
 		return err
@@ -832,7 +832,7 @@ func BackfillInstanceOf(ctx context.Context, g Graph, meth string) (Result, erro
 	if len(items) == 0 {
 		return res, nil
 	}
-	c, err := g.CreateChange(ctx, graph.NewChange{Namespace: domain.NamespaceMetadata, Title: "Backfill instanceOf for " + meth,
+	c, err := g.CreateChange(ctx, graph.NewChange{Namespace: domain.NamespacePlatform, Title: "Backfill instanceOf for " + meth,
 		Intent: "Link existing nodes to their node type", BaselineID: head.ID, Methodology: meth})
 	if err != nil {
 		return res, err

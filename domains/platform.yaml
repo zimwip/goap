@@ -1,7 +1,7 @@
-name: metamodel
+name: platform
 version: 1.0.0
 description: >
-  The methodology meta-model as domain objects (methodology, agent, action, goal, condition, trigger, node type), used by the self-observation methodology.
+  The platform model, in its own namespace ("platform"): the methodology meta-model as domain objects (methodology, agent, action, goal, condition, trigger, node type), used by the self-observation methodology, and the MCPs: the generic usage of a tool by an LLM. An organisation implements an MCP with an Adapter (organisation domain).
 nodeTypes:
   - {name: Methodology, properties: [name, version, description]}
   - {name: Agent, properties: [name, planner, actions, goals]}
@@ -11,6 +11,8 @@ nodeTypes:
   - {name: Trigger, properties: [name, type, event]}
   - {name: NodeType, properties: [name, extends]}
   - {name: ToolRequest, properties: [name, description, motivation]}
+  # generic tool usage for an LLM: tools = [{name, description, inputSchema}]. Knows no connector and no adapter.
+  - {name: MCP, description: "Generic usage of a tool by an LLM (e.g. document-repository)", properties: [name, description, tools]}
 linkTypes:
   - {name: contains, from: Methodology}
   - {name: uses, from: Agent, to: Action}

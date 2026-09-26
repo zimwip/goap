@@ -97,8 +97,11 @@ type StartRequest struct {
 	Namespace string
 	// OwnBranch gives the new change a branch of its own (merged into main when applied).
 	OwnBranch bool
-	Title     string
-	Intent    string
+	// OwnerOrg is the key of the OrgUnit holding the new change (empty: the default organisation):
+	// its adapters decide which MCPs the actions can use.
+	OwnerOrg string
+	Title    string
+	Intent   string
 	// Goal skips the intent loop (with Agent, or the first agent having it).
 	Goal string
 	// Agent restricts identification to one agent of the methodology.
@@ -135,7 +138,7 @@ func (e *Engine) log() *slog.Logger {
 // either clarifying (a question is pending) or running (call Run). Without
 // methodology, identification ranks the agents of every published methodology.
 func (e *Engine) Start(ctx context.Context, req StartRequest) (*Process, error) {
-	p := &Process{ID: uuid.NewString(), Methodology: req.Methodology, Agent: req.Agent, ChangeID: req.ChangeID, BaselineID: req.BaselineID, Namespace: req.Namespace, OwnBranch: req.OwnBranch,
+	p := &Process{ID: uuid.NewString(), Methodology: req.Methodology, Agent: req.Agent, ChangeID: req.ChangeID, BaselineID: req.BaselineID, Namespace: req.Namespace, OwnBranch: req.OwnBranch, Org: req.OwnerOrg,
 		Title: req.Title, ParentID: req.ParentID, Trigger: req.Trigger, Initiator: authz.From(ctx), Vars: req.Vars, Disabled: map[string]bool{},
 		CreatedAt: e.clock(), UpdatedAt: e.clock()}
 	if req.Intent != "" {
@@ -299,12 +302,11 @@ func (e *Engine) selectTarget(ctx context.Context, p *Process, m *methodology.Co
 		if p.Trigger != "" {
 			data = map[string]any{"trigger": p.Trigger}
 		}
-		c, err := e.Graph.CreateChange(ctx, graph.NewChange{Title: title, Intent: firstUserTurn(p), Methodology: m.Name, OrgID: p.Initiator.Org, Namespace: firstNonEmpty(p.Namespace, m.Namespace), OwnBranch: p.OwnBranch, BaselineID: p.BaselineID, Data: data})
+		c, err := e.Graph.CreateChange(ctx, graph.NewChange{Title: title, Intent: firstUserTurn(p), Methodology: m.Name, OwnerOrg: p.Org, Namespace: firstNonEmpty(p.Namespace, m.Namespace), OwnBranch: p.OwnBranch, BaselineID: p.BaselineID, Data: data})
 		if err != nil {
 			return err
 		}
 		p.ChangeID = c.ID
-		p.OrgID = c.OrgID
 	}
 	if p.ParentID != "" {
 		return nil // the change goal belongs to the parent process
@@ -544,10 +546,8 @@ func (e *Engine) execute(ctx context.Context, p *Process, m *methodology.Compile
 	return err
 }
 
-// orgOf is the organization of a process: the one of its change.
-func (e *Engine) orgOf(p *Process) string {
-	return cmp.Or(p.OrgID, p.Initiator.Org, domain.DefaultOrg)
-}
+// orgOf is the organisation holding the change of a process (an OrgUnit key).
+func (e *Engine) orgOf(p *Process) string { return domain.OrgOf(p.Org) }
 
 // boundMCPs returns the MCPs the organization of the process binds. Without a hub
 // nothing is bound.
@@ -651,7 +651,11 @@ func (e *Engine) executeStep(ctx context.Context, p *Process, m *methodology.Com
 	e.log().Info("executing action", "process", p.ID, "agent", p.Agent, "action", action.Name, "plan", p.Plan)
 	ctx, end := e.tracer().StartAction(ctx, p, action.Name, action.Kind)
 	p.Steps[i].SpanID = e.spanID(ctx)
-	host := e.newHost(p, action)
+	var agentMCPs []string
+	if ag, ok := m.Agent(p.Agent); ok {
+		agentMCPs = ag.MCPs
+	}
+	host := e.newHost(p, action, agentMCPs)
 	res, err := exec.Execute(ctx, ActionContext{Process: p, Action: action, Blackboard: bb, Graph: e.Graph, Host: host})
 	step := &p.Steps[i]
 	host.record(step)
@@ -887,9 +891,7 @@ func (e *Engine) observe(ctx context.Context, p *Process, m *methodology.Compile
 		return bb, err
 	}
 	bb.Vars = p.Vars
-	if bb.Change.OrgID != "" {
-		p.OrgID = bb.Change.OrgID
-	}
+	p.Org = domain.OrgOf(bb.Change.OwnerOrg)
 	bb.Supertypes = e.supertypes.Get(ctx, e.Graph, m)
 	res := m.Conditions.Evaluate(bb)
 	p.World = res.State

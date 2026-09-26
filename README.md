@@ -30,7 +30,7 @@ ANTHROPIC_API_KEY=... make up # without a key: "fake" LLM provider
 On Windows there is no `make`: use `make.cmd <target>` (or `.\make.ps1 <target>`) from cmd or PowerShell. It has the same targets as the Makefile (`make.cmd help` lists them) and needs nothing beyond what Windows ships with.
 
 Provided domains (`domains/`, imported before the methodologies): `alm` (needs, requirements,
-functions, components, builds, releases, deployments) and `metamodel`.
+functions, components, builds, releases, deployments) and `platform`.
 
 Provided methodologies (`methodologies/`, imported at startup, they reference the domains): `impact-analysis`, `test-design`,
 `sdlc` (development cycle on the ALM domain: need → requirement → function → component → build

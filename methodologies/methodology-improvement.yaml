@@ -1,6 +1,6 @@
 name: methodology-improvement
 version: 1.2.0
-namespace: metadata
+namespace: platform
 description: >
   Platform self-observation: at the end of each process, an agent analyzes the
   execution journal (planning ticks, actions, LLM and tool calls) and the
@@ -10,7 +10,7 @@ description: >
   agent definitions, new actions, MCP tools. Accepted proposals become a new
   draft version of the methodology.
 
-domainRef: metamodel@1.0.0
+domainRef: platform@1.0.0
 
 conditions:
   - name: analyzed

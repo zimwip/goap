@@ -57,16 +57,16 @@ of a versioned knowledge graph, whose other axis, the **domain axis**, describes
 | **Baseline** | Coherent set `{NodeID → Version}`: a "commit" of the graph. A baseline's links are those whose two endpoints are both in the baseline. Every modification starts from a reference baseline and produces a resulting baseline. |
 
 **Namespaces** ([ADR 0015](adr/0015-namespaces.md)): every node lives in a namespace (`sdlc` by default,
-`metadata` for the meta model bound to the code). Keys are unique per namespace. A change acts on one
+`platform` for the platform model bound to the code: methodologies, domains, MCPs). Keys are unique per namespace. A change acts on one
 namespace: it can only create and modify nodes of that namespace, but may link to nodes of another one.
 The organisation is a hierarchy of units in its own namespace (`organisation`); nodes reference their owner
 unit across namespaces, and a change is split into sub-changes along unit boundaries
 ([ADR 0016](adr/0016-organisation-and-sub-changes.md)).
 
-**Organisations** ([ADR 0019](adr/0019-organisations-mcp-connectors.md)): every change belongs to an
-organisation (tenant, `orgId`, distinct from the `OrgUnit` owner above), taken from the caller (else `default`)
-and inherited by sub-changes. The iam service stores the organisations (`CreateOrganization`,
-`ListOrganizations`, `GetOrganization`); the `default` organisation is seeded and owns pre-existing changes.
+**Organisations** ([ADR 0019](adr/0019-organisations-mcp-connectors.md)) are the `OrgUnit` nodes above. A
+change is held by one unit (`ownerOrg`; empty: the default organisation `ORG-DEFAULT`, created at the first start
+and the implicit root of every unit's ancestors). The units also hold the **adapters** that implement the tools of
+the platform (§3.9): a unit inherits the adapters of its ancestors, the nearest wins.
 
 Versioning rule ([ADR 0003](adr/0003-liens-version-a-version.md)): **outgoing links belong
 to the source node's version**. Adding/removing an outgoing link creates a new version of the source;
@@ -454,7 +454,7 @@ actions when a transition is applied. Reference: [docs/dsl.md](dsl.md), IDE sect
 | **engine** | Intent loop, planning, process execution; deployable as a cluster | Connect `engine.v1` | `engine` | 🟢 core (memory) |
 | **graph** | Domain axis (versioned nodes, links, baselines) + change axis (ChangeSets, items, apply) | Connect `graph.v1` | `graph` | 🟢 |
 | **modelgw** | Multi-provider / multi-model abstraction, aliases (`default`, `fast`, `reasoning`), administered catalog with global token quotas and required roles (see below), traces | Connect `model.v1` | `modelgw` (providers, catalog, usage) | 🟢 core |
-| **mcp** | MCP hub: connector registry (self-registration), generic MCP definitions, adapters, organization bindings, tool calls (§3.9) | Connect `mcp.v1` | `mcp` | 🟢 |
+| **mcp** | MCP hub: connector registry (self-registration), resolution of the adapters (graph) along the organisation hierarchy, tool calls (§3.9) | Connect `mcp.v1` | `mcp` | 🟢 |
 | **connector-\*** | One service per real system (`connector-localfs`, ...), registers itself with the hub | Connect `connector.v1` | — | 🟢 localfs |
 | **goap-runner** | Sandbox for executing script actions (one per process) | Connect `runtime.v1` (SandboxService) | — | 🟢 |
 | **otel-collector** | OTLP reception, trace export (Jaeger) and metrics (Prometheus) | OTLP | — | 🟢 |
@@ -591,39 +591,52 @@ The change **execution journal** (§2.12) carries `traceId` / `spanId`: the self
 re-reads a run's trace via the Jaeger query API (`GOAP_TRACE_QUERY_URL`, links `GOAP_TRACE_UI_URL`)
 to look for pain points (slow spans, tools, model calls).
 
-### 3.9 Tools: MCP, connectors, organisations ([ADR 0019](adr/0019-organisations-mcp-connectors.md))
+### 3.9 Tools: MCP, connectors, adapters ([ADR 0019](adr/0019-organisations-mcp-connectors.md))
+
+Three independent things, and the one place where they meet:
 
 ```
-MCP            generic, declared once: name + tool signatures      document-repository { list, read, write }
-Connector      a service of its own wrapping a real API            connector-localfs, connector-gdrive, ...
-Adapter        declarative mapping  MCP tool -> connector operation (arguments "$.path", result path)
-Binding        per organisation: MCP -> (connector, configuration, secret references)
+MCP        node of the `platform` namespace (with the methodology meta-model): the generic usage of a tool
+           by an LLM, name + tool signatures, e.g. document-repository { list, read, write }.
+           Knows no connector, no adapter. Referenced by actions (`mcps:`) and agents (`mcps:`).
+Connector  a service of its own wrapping a real API (connector-localfs, connector-gdrive, ...). It registers
+           itself with the hub and announces its configuration parameters, secrets and operations.
+           Knows no MCP, no adapter.
+Adapter    node of the `organisation` namespace, owned (`owner` link) by an OrgUnit: how this unit
+           implements an MCP with a connector = the connector id, its parameters (e.g. the root directory),
+           secret references, and the mapping MCP tool -> connector operation. Where everything converges.
 ```
 
+- **Resolution.** For a tool `<mcp>/<tool>` and the unit holding the change, the hub takes the adapter of the
+  nearest unit along `unit -> parent (part_of) -> ... -> ORG-DEFAULT`. Several organisations working on a change
+  (sub-changes split by owner) can therefore all have file access with the same MCP and the same connector, each
+  configured differently: each unit's adapter carries its own root directory.
 - **Adding a connector is adding a service.** A connector implements `connector.v1.ConnectorService`
   (`Describe`, `Invoke`); `internal/connectorkit` does the rest: `connectorkit.Run("name", connector)` serves the
   protocol and registers the connector with the hub (`RegisterConnector`, renewed as a heartbeat within a
   lease, 30 s by default; the hub lists it live or expired). No hub configuration is needed; only
   `GOAP_MCP_URL`, `GOAP_CONNECTOR_URL` (its address as the hub reaches it) and, when set on both sides,
   the shared `GOAP_CONNECTOR_TOKEN`. `internal/connectors/localfs` is the reference implementation.
-- The hub (`cmd/mcp`, `internal/mcpsvc`; tables `mcp`, `mcp_adapter`, `mcp_binding`, `connector`, PostgreSQL and
-  SQLite) resolves a call `<mcp>/<tool>` of an organisation: its binding, the adapter mapping, the live
-  connector; it resolves the secret references (`<vault path>#<field>` or `env:<VAR>`), passes the connector
-  only the secrets it declares, and returns the result. `document-repository` and its `localfs` adapter are
-  seeded.
+- **The hub** (`cmd/mcp`, `internal/mcpsvc`) keeps only the registry of connectors (table `connector`, PostgreSQL and
+  SQLite). MCPs, adapters and the unit hierarchy are read from the graph (snapshot of the head of `main`, rebuilt
+  when it moves). It maps the arguments (`$.path` references), resolves the secret references (`<vault path>#<field>`
+  or `env:<VAR>`), passes the connector only the secrets it declares, and returns the result. `CheckAdapter`
+  validates an adapter before it is saved (unknown MCP or tool: error; missing parameter or secret, unknown
+  operation, unregistered connector: warnings).
+- **Editing** is editing nodes: MCPs and adapters are created, changed and removed through changes, like any node.
+  The first start creates `ORG-DEFAULT` and `document-repository` (`graphsvc.SeedDefaults`).
 - **Scheduling.** An action declares the MCPs it uses (`mcps:` on `llm` and `script` actions; a `tool` action is
-  `<mcp>/<tool>`). It is available to the planner only when the organisation of the change binds them all;
-  otherwise it is left out (and a specialization needing an unbound MCP is skipped). An action can only call the
-  tools of the MCPs it declares.
-- **LLM actions** with `mcps` may call the tools in a bounded loop (`MaxToolRounds`), exchanged as JSON on top
+  `<mcp>/<tool>`). It is available to the planner only when the unit holding the change resolves an adapter for each
+  of them; otherwise it is left out (and a specialization needing one is skipped). An action can call the tools of
+  the MCPs it declares and, for `llm` / `script` actions, those declared by its agent (`agents[].mcps`).
+- **LLM actions** with MCPs may call the tools in a bounded loop (`MaxToolRounds`), exchanged as JSON on top
   of any model (`{"tool_calls":[...]}`, then `{"items":[...]}`); every call is journaled with its duration and
   error. Calls run with the principal of the process initiator (`tool:call` permission).
-- **Tools view** (web): a tree of the connectors (live / expired, their operations and schemas), the MCPs with their
-  adapters, and the organisations with their bindings. Its editors create and edit MCPs, adapters (tool mapping
-  rows, server warnings shown) and bindings (configuration, secret references); organisations are created from
-  its toolbar. The action editor has an `mcps` field on `llm` / `script` actions.
-- `goap-dev` runs the hub and the localfs connector in-process (`GOAP_DEV_FS_ROOT` binds a directory to the
-  default organisation); connectors started separately register over HTTP.
+- **Web**: *Connectors* (registry, read-only), *MCPs* (platform nodes) and *Organisation* (units; the *MCP* pane
+  of a unit lists the MCPs it can use, own or inherited, and attaches or overrides them with an adapter: connector,
+  parameters generated from its schema, secrets, tool mapping). A new organisation is a new unit.
+- `goap-dev` runs the hub and the localfs connector in-process (`GOAP_DEV_FS_ROOT` gives the default organisation
+  an adapter on a directory); connectors started separately register over HTTP.
 
 ### 3.8 Voice input ([ADR 0013](adr/0013-voice-interaction.md))
 
@@ -781,7 +794,7 @@ docs/                        architecture, ADRs
 | **M0 — foundation** 🟢 | Doc, domain/change model, A\* planner, CEL conditions, intent loop, engine (memory), graph (memory + Postgres), registry, modelgw (fake + Anthropic + OpenAI-compatible), gateway, compose, minimal UI |
 | **M1 — engine persistence** | PostgreSQL `ProcessStore`, JetStream work-queue, crash recovery, multi-replica |
 | **M2 — IAM** | organizations, users, OIDC, `org_id` isolation in the graph, ABAC on the graph service |
-| **M3 — MCP** ✅ | MCP hub, connectors as separate self-registering services, adapters, organization bindings, `tool` actions and LLM tools, scheduling filter, secrets via Vault · remaining: web administration screens, more connectors |
+| **M3 — MCP** ✅ | MCP hub, connectors as separate self-registering services, MCPs and adapters as graph nodes resolved along the organisation hierarchy, `tool` actions and LLM tools, scheduling filter, secrets via Vault · remaining: more connectors, adapter validation as a node type algorithm |
 | **M4 — advanced change axis** | impact propagation (recursive CTE parameterized by link types), suspect links, baseline diff, merge/rebase of concurrent changesets |
 | **M5 — UX** | ✅ methodology editor (forms, localized anomalies, publishing, versions, YAML import/export), "Access" screen (ABAC policies), approvals · remaining: graph and plan visualization |
 | **M6 — K8s** | Helm charts, engine HPA · ✅ OpenTelemetry observability, sandbox manifests |

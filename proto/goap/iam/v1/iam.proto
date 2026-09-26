@@ -2,15 +2,11 @@ syntax = "proto3";
 
 package goap.iam.v1;
 
-import "google/protobuf/timestamp.proto";
-
 // IamService manages organizations, users and access policies. Access is
 // attribute based (ABAC) and evaluated by Casbin; policies are stored in the
 // iam database. Organization and user management: milestone M2.
 service IamService {
   rpc CreateOrganization(CreateOrganizationRequest) returns (CreateOrganizationResponse);
-  rpc ListOrganizations(ListOrganizationsRequest) returns (ListOrganizationsResponse);
-  rpc GetOrganization(GetOrganizationRequest) returns (GetOrganizationResponse);
   rpc CreateUser(CreateUserRequest) returns (CreateUserResponse);
   rpc WhoAmI(WhoAmIRequest) returns (WhoAmIResponse);
 
@@ -23,12 +19,9 @@ service IamService {
   rpc RemovePolicy(RemovePolicyRequest) returns (RemovePolicyResponse);
 }
 
-// Organization is a tenant. Every change belongs to one; the MCP tools available
-// to its actions are the ones bound to the organization.
 message Organization {
   string id = 1;
   string name = 2;
-  google.protobuf.Timestamp created_at = 3;
 }
 
 message User {
@@ -66,23 +59,7 @@ message Policy {
 }
 
 message CreateOrganizationRequest {
-  // slug identifying the organization (lowercase letters, digits, '-'); generated from name when empty
-  string id = 1;
-  string name = 2;
-}
-
-message ListOrganizationsRequest {}
-
-message ListOrganizationsResponse {
-  repeated Organization organizations = 1;
-}
-
-message GetOrganizationRequest {
-  string id = 1;
-}
-
-message GetOrganizationResponse {
-  Organization organization = 1;
+  string name = 1;
 }
 
 message CreateOrganizationResponse {

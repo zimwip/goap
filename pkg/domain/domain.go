@@ -28,11 +28,12 @@ func (r NodeRef) String() string { return fmt.Sprintf("%s@v%d", r.ID, r.Version)
 // IsZero reports whether the reference is unset.
 func (r NodeRef) IsZero() bool { return r.ID == "" }
 
-// DefaultOrg is the organisation of changes and processes that name none. It is
-// the backfill value of pre-existing rows and the organisation seeded by iam.
-const DefaultOrg = "default"
+// DefaultOrg is the key of the default organisation: the OrgUnit of the "organisation"
+// namespace created at the first start. A change that names no owner unit belongs to it,
+// and it is the root of the resolution of the MCP adapters of every unit.
+const DefaultOrg = "ORG-DEFAULT"
 
-// OrgOf returns org, or DefaultOrg when empty.
+// OrgOf returns the unit key org, or DefaultOrg when empty.
 func OrgOf(org string) string {
 	if org == "" {
 		return DefaultOrg
@@ -43,9 +44,9 @@ func OrgOf(org string) string {
 // DefaultNamespace is the namespace of nodes and changes that name none.
 const DefaultNamespace = "sdlc"
 
-// NamespaceMetadata is the namespace of the meta model bound to the objects the
+// NamespacePlatform is the namespace of the meta model bound to the objects the
 // code manipulates (methodologies, node types, domains).
-const NamespaceMetadata = "metadata"
+const NamespacePlatform = "platform"
 
 // NamespaceOf returns ns, defaulting to DefaultNamespace.
 func NamespaceOf(ns string) string {
