@@ -41,7 +41,7 @@ func ToPB(r Record) *registryv1.Methodology {
 		out.Goals = append(out.Goals, &registryv1.Goal{Name: g.Name, Description: g.Description, Examples: g.Examples, Pre: g.Pre, Value: g.Value})
 	}
 	for _, a := range m.Agents {
-		pa := &registryv1.Agent{Name: a.Name, Description: a.Description, Examples: a.Examples, Planner: a.Planner, Actions: a.Actions, Goals: a.Goals}
+		pa := &registryv1.Agent{Name: a.Name, Description: a.Description, Examples: a.Examples, Planner: a.Planner, Actions: a.Actions, Goals: a.Goals, Mcps: a.MCPs}
 		for _, t := range a.Triggers {
 			pa.Triggers = append(pa.Triggers, &registryv1.Trigger{Name: t.Name, Description: t.Description, Type: t.Type, Event: t.Event, Filter: t.Filter,
 				Schedule: t.Schedule, Goal: t.Goal, Intent: t.Intent, Target: t.Target, Roles: t.Roles, Enabled: t.Enabled})
@@ -102,7 +102,7 @@ func FromPB(p *registryv1.Methodology) methodology.Methodology {
 	}
 	for _, a := range p.Agents {
 		ma := methodology.Agent{Name: a.Name, Description: a.Description, Examples: nilIfNone(a.Examples), Planner: a.Planner,
-			Actions: nilIfNone(a.Actions), Goals: nilIfNone(a.Goals)}
+			Actions: nilIfNone(a.Actions), Goals: nilIfNone(a.Goals), MCPs: nilIfNone(a.Mcps)}
 		for _, t := range a.Triggers {
 			ma.Triggers = append(ma.Triggers, methodology.Trigger{Name: t.Name, Description: t.Description, Type: t.Type, Event: t.Event, Filter: t.Filter,
 				Schedule: t.Schedule, Goal: t.Goal, Intent: t.Intent, Target: t.Target, Roles: nilIfNone(t.Roles), Enabled: t.Enabled})

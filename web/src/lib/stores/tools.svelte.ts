@@ -1,12 +1,9 @@
-// State of the "Tools" explorer: connectors, MCPs, adapters, organisations and their bindings.
-import { mcp, iam, errorMessage, type Adapter, type Binding, type Connector, type Mcp, type Organization } from '../api';
+// State of the "Connectors" and "MCPs" explorers: the registry of connectors (hub) and the MCPs (graph nodes, read through the hub).
+import { mcp, errorMessage, type Connector, type Mcp } from '../api';
 
 export const tools = $state({
   connectors: [] as Connector[],
   mcps: [] as Mcp[],
-  adapters: [] as Adapter[],
-  orgs: [] as Organization[],
-  bindings: [] as Binding[],
   loading: false,
   loaded: false,
   error: '',
@@ -15,14 +12,9 @@ export const tools = $state({
 export async function refreshTools(): Promise<void> {
   tools.loading = true;
   try {
-    const [c, m, a, o] = await Promise.all([mcp.listConnectors(), mcp.listMcps(), mcp.listAdapters(), iam.listOrganizations()]);
-    const orgs = o.organizations ?? [];
-    const per = await Promise.all(orgs.map((org) => mcp.listBindings(org.id ?? '')));
+    const [c, m] = await Promise.all([mcp.listConnectors(), mcp.listMcps()]);
     tools.connectors = c.connectors ?? [];
     tools.mcps = m.mcps ?? [];
-    tools.adapters = a.adapters ?? [];
-    tools.orgs = orgs;
-    tools.bindings = per.flatMap((r) => r.bindings ?? []);
     tools.error = '';
   } catch (e) {
     tools.error = errorMessage(e);

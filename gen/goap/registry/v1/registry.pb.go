@@ -1257,7 +1257,9 @@ type Agent struct {
 	// goal names (empty: all)
 	Goals []string `protobuf:"bytes,6,rep,name=goals,proto3" json:"goals,omitempty"`
 	// automatic executions (outside the intent loop)
-	Triggers      []*Trigger `protobuf:"bytes,7,rep,name=triggers,proto3" json:"triggers,omitempty"`
+	Triggers []*Trigger `protobuf:"bytes,7,rep,name=triggers,proto3" json:"triggers,omitempty"`
+	// MCPs whose tools the llm and script actions of the agent may use
+	Mcps          []string `protobuf:"bytes,8,rep,name=mcps,proto3" json:"mcps,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1337,6 +1339,13 @@ func (x *Agent) GetGoals() []string {
 func (x *Agent) GetTriggers() []*Trigger {
 	if x != nil {
 		return x.Triggers
+	}
+	return nil
+}
+
+func (x *Agent) GetMcps() []string {
+	if x != nil {
+		return x.Mcps
 	}
 	return nil
 }
@@ -4401,7 +4410,7 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\bR\x05value:\x028\x01\x1a:\n" +
 	"\fEffectsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\bR\x05value:\x028\x01\"\xda\x01\n" +
+	"\x05value\x18\x02 \x01(\bR\x05value:\x028\x01\"\xee\x01\n" +
 	"\x05Agent\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x1a\n" +
@@ -4409,7 +4418,8 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\aplanner\x18\x04 \x01(\tR\aplanner\x12\x18\n" +
 	"\aactions\x18\x05 \x03(\tR\aactions\x12\x14\n" +
 	"\x05goals\x18\x06 \x03(\tR\x05goals\x125\n" +
-	"\btriggers\x18\a \x03(\v2\x19.goap.registry.v1.TriggerR\btriggers\"\x91\x02\n" +
+	"\btriggers\x18\a \x03(\v2\x19.goap.registry.v1.TriggerR\btriggers\x12\x12\n" +
+	"\x04mcps\x18\b \x03(\tR\x04mcps\"\x91\x02\n" +
 	"\aTrigger\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x12\n" +

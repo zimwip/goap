@@ -185,7 +185,7 @@ func (e LLMExecutor) Execute(ctx context.Context, ac ActionContext) (ActionResul
 	}
 	system := llmSystem
 	var tools []mcp.ToolInfo
-	if ac.Host != nil && len(ac.Action.MCPs) > 0 {
+	if ac.Host != nil && len(ac.Host.mcps) > 0 {
 		if tools, err = ac.Host.Tools(ctx); err != nil {
 			return ActionResult{}, err
 		}

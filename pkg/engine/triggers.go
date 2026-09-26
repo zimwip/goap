@@ -288,7 +288,7 @@ func (t *TriggerManager) fireKey(ctx context.Context, key string, ev *TriggerEve
 }
 
 func (t *TriggerManager) start(ctx context.Context, key string, s TriggerState, def methodology.Trigger, ev *TriggerEvent) (*Process, error) {
-	who := authz.Principal{Subject: "system:trigger:" + key, Org: domain.DefaultOrg, Roles: def.Roles}
+	who := authz.Principal{Subject: "system:trigger:" + key, Org: "system", Roles: def.Roles}
 	if ev != nil && ev.Process != nil && ev.Process.Initiator.Org != "" {
 		who.Org = ev.Process.Initiator.Org
 	}

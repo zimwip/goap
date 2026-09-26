@@ -204,8 +204,7 @@ message ChangeSet {
   // sub-change: the parent change and the responsible OrgUnit key
   string parent_id = 14;
   string owner_org = 15;
-  // organisation (tenant) the change belongs to
-  string org_id = 16;
+  reserved 16;
 }
 
 message CreateNodeRequest {
@@ -310,8 +309,7 @@ message CreateChangeRequest {
   string parent_id = 9;
   // key of the responsible OrgUnit (organisation namespace)
   string owner_org = 10;
-  // organisation the change belongs to (default: the caller's, else "default")
-  string org_id = 11;
+  reserved 11;
 }
 
 message CreateChangeResponse {

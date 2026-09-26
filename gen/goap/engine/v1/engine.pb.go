@@ -1580,7 +1580,10 @@ type StartProcessRequest struct {
 	Goal string           `protobuf:"bytes,6,opt,name=goal,proto3" json:"goal,omitempty"`
 	Vars *structpb.Struct `protobuf:"bytes,7,opt,name=vars,proto3" json:"vars,omitempty"`
 	// restrict identification to this agent
-	Agent         string `protobuf:"bytes,8,opt,name=agent,proto3" json:"agent,omitempty"`
+	Agent string `protobuf:"bytes,8,opt,name=agent,proto3" json:"agent,omitempty"`
+	// key of the OrgUnit holding the new change (empty: the default organisation); its adapters
+	// decide which MCPs the actions can use
+	OwnerOrg      string `protobuf:"bytes,9,opt,name=owner_org,json=ownerOrg,proto3" json:"owner_org,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1667,6 +1670,13 @@ func (x *StartProcessRequest) GetVars() *structpb.Struct {
 func (x *StartProcessRequest) GetAgent() string {
 	if x != nil {
 		return x.Agent
+	}
+	return ""
+}
+
+func (x *StartProcessRequest) GetOwnerOrg() string {
+	if x != nil {
+		return x.OwnerOrg
 	}
 	return ""
 }
@@ -2826,7 +2836,7 @@ const file_goap_engine_v1_engine_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\bR\x05value:\x028\x01\x1a:\n" +
 	"\fUnknownEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xfa\x01\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x97\x02\n" +
 	"\x13StartProcessRequest\x12 \n" +
 	"\vmethodology\x18\x01 \x01(\tR\vmethodology\x12\x1b\n" +
 	"\tchange_id\x18\x02 \x01(\tR\bchangeId\x12\x1f\n" +
@@ -2836,7 +2846,8 @@ const file_goap_engine_v1_engine_proto_rawDesc = "" +
 	"\x06intent\x18\x05 \x01(\tR\x06intent\x12\x12\n" +
 	"\x04goal\x18\x06 \x01(\tR\x04goal\x12+\n" +
 	"\x04vars\x18\a \x01(\v2\x17.google.protobuf.StructR\x04vars\x12\x14\n" +
-	"\x05agent\x18\b \x01(\tR\x05agent\"I\n" +
+	"\x05agent\x18\b \x01(\tR\x05agent\x12\x1b\n" +
+	"\towner_org\x18\t \x01(\tR\bownerOrg\"I\n" +
 	"\x14StartProcessResponse\x121\n" +
 	"\aprocess\x18\x01 \x01(\v2\x17.goap.engine.v1.ProcessR\aprocess\"L\n" +
 	"\x13AnswerIntentRequest\x12\x1d\n" +

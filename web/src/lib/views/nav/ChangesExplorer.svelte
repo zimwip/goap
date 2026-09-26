@@ -99,7 +99,6 @@
         ['Id', c.id ?? ''],
         ['Status', c.status ?? ''],
         ['Intent', c.intent ?? ''],
-        ['Organisation', c.orgId ?? ''],
         ['Namespace', c.namespace ?? ''],
         ['Methodology', c.methodology ?? ''],
         ['Goal', c.goal ?? ''],

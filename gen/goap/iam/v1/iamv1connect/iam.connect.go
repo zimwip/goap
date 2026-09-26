@@ -36,12 +36,6 @@ const (
 	// IamServiceCreateOrganizationProcedure is the fully-qualified name of the IamService's
 	// CreateOrganization RPC.
 	IamServiceCreateOrganizationProcedure = "/goap.iam.v1.IamService/CreateOrganization"
-	// IamServiceListOrganizationsProcedure is the fully-qualified name of the IamService's
-	// ListOrganizations RPC.
-	IamServiceListOrganizationsProcedure = "/goap.iam.v1.IamService/ListOrganizations"
-	// IamServiceGetOrganizationProcedure is the fully-qualified name of the IamService's
-	// GetOrganization RPC.
-	IamServiceGetOrganizationProcedure = "/goap.iam.v1.IamService/GetOrganization"
 	// IamServiceCreateUserProcedure is the fully-qualified name of the IamService's CreateUser RPC.
 	IamServiceCreateUserProcedure = "/goap.iam.v1.IamService/CreateUser"
 	// IamServiceWhoAmIProcedure is the fully-qualified name of the IamService's WhoAmI RPC.
@@ -60,8 +54,6 @@ const (
 // IamServiceClient is a client for the goap.iam.v1.IamService service.
 type IamServiceClient interface {
 	CreateOrganization(context.Context, *connect.Request[v1.CreateOrganizationRequest]) (*connect.Response[v1.CreateOrganizationResponse], error)
-	ListOrganizations(context.Context, *connect.Request[v1.ListOrganizationsRequest]) (*connect.Response[v1.ListOrganizationsResponse], error)
-	GetOrganization(context.Context, *connect.Request[v1.GetOrganizationRequest]) (*connect.Response[v1.GetOrganizationResponse], error)
 	CreateUser(context.Context, *connect.Request[v1.CreateUserRequest]) (*connect.Response[v1.CreateUserResponse], error)
 	WhoAmI(context.Context, *connect.Request[v1.WhoAmIRequest]) (*connect.Response[v1.WhoAmIResponse], error)
 	// Decide an access request. Called by the services (engine, registry).
@@ -87,18 +79,6 @@ func NewIamServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			httpClient,
 			baseURL+IamServiceCreateOrganizationProcedure,
 			connect.WithSchema(iamServiceMethods.ByName("CreateOrganization")),
-			connect.WithClientOptions(opts...),
-		),
-		listOrganizations: connect.NewClient[v1.ListOrganizationsRequest, v1.ListOrganizationsResponse](
-			httpClient,
-			baseURL+IamServiceListOrganizationsProcedure,
-			connect.WithSchema(iamServiceMethods.ByName("ListOrganizations")),
-			connect.WithClientOptions(opts...),
-		),
-		getOrganization: connect.NewClient[v1.GetOrganizationRequest, v1.GetOrganizationResponse](
-			httpClient,
-			baseURL+IamServiceGetOrganizationProcedure,
-			connect.WithSchema(iamServiceMethods.ByName("GetOrganization")),
 			connect.WithClientOptions(opts...),
 		),
 		createUser: connect.NewClient[v1.CreateUserRequest, v1.CreateUserResponse](
@@ -143,8 +123,6 @@ func NewIamServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 // iamServiceClient implements IamServiceClient.
 type iamServiceClient struct {
 	createOrganization *connect.Client[v1.CreateOrganizationRequest, v1.CreateOrganizationResponse]
-	listOrganizations  *connect.Client[v1.ListOrganizationsRequest, v1.ListOrganizationsResponse]
-	getOrganization    *connect.Client[v1.GetOrganizationRequest, v1.GetOrganizationResponse]
 	createUser         *connect.Client[v1.CreateUserRequest, v1.CreateUserResponse]
 	whoAmI             *connect.Client[v1.WhoAmIRequest, v1.WhoAmIResponse]
 	checkPermission    *connect.Client[v1.CheckPermissionRequest, v1.CheckPermissionResponse]
@@ -156,16 +134,6 @@ type iamServiceClient struct {
 // CreateOrganization calls goap.iam.v1.IamService.CreateOrganization.
 func (c *iamServiceClient) CreateOrganization(ctx context.Context, req *connect.Request[v1.CreateOrganizationRequest]) (*connect.Response[v1.CreateOrganizationResponse], error) {
 	return c.createOrganization.CallUnary(ctx, req)
-}
-
-// ListOrganizations calls goap.iam.v1.IamService.ListOrganizations.
-func (c *iamServiceClient) ListOrganizations(ctx context.Context, req *connect.Request[v1.ListOrganizationsRequest]) (*connect.Response[v1.ListOrganizationsResponse], error) {
-	return c.listOrganizations.CallUnary(ctx, req)
-}
-
-// GetOrganization calls goap.iam.v1.IamService.GetOrganization.
-func (c *iamServiceClient) GetOrganization(ctx context.Context, req *connect.Request[v1.GetOrganizationRequest]) (*connect.Response[v1.GetOrganizationResponse], error) {
-	return c.getOrganization.CallUnary(ctx, req)
 }
 
 // CreateUser calls goap.iam.v1.IamService.CreateUser.
@@ -201,8 +169,6 @@ func (c *iamServiceClient) RemovePolicy(ctx context.Context, req *connect.Reques
 // IamServiceHandler is an implementation of the goap.iam.v1.IamService service.
 type IamServiceHandler interface {
 	CreateOrganization(context.Context, *connect.Request[v1.CreateOrganizationRequest]) (*connect.Response[v1.CreateOrganizationResponse], error)
-	ListOrganizations(context.Context, *connect.Request[v1.ListOrganizationsRequest]) (*connect.Response[v1.ListOrganizationsResponse], error)
-	GetOrganization(context.Context, *connect.Request[v1.GetOrganizationRequest]) (*connect.Response[v1.GetOrganizationResponse], error)
 	CreateUser(context.Context, *connect.Request[v1.CreateUserRequest]) (*connect.Response[v1.CreateUserResponse], error)
 	WhoAmI(context.Context, *connect.Request[v1.WhoAmIRequest]) (*connect.Response[v1.WhoAmIResponse], error)
 	// Decide an access request. Called by the services (engine, registry).
@@ -224,18 +190,6 @@ func NewIamServiceHandler(svc IamServiceHandler, opts ...connect.HandlerOption) 
 		IamServiceCreateOrganizationProcedure,
 		svc.CreateOrganization,
 		connect.WithSchema(iamServiceMethods.ByName("CreateOrganization")),
-		connect.WithHandlerOptions(opts...),
-	)
-	iamServiceListOrganizationsHandler := connect.NewUnaryHandler(
-		IamServiceListOrganizationsProcedure,
-		svc.ListOrganizations,
-		connect.WithSchema(iamServiceMethods.ByName("ListOrganizations")),
-		connect.WithHandlerOptions(opts...),
-	)
-	iamServiceGetOrganizationHandler := connect.NewUnaryHandler(
-		IamServiceGetOrganizationProcedure,
-		svc.GetOrganization,
-		connect.WithSchema(iamServiceMethods.ByName("GetOrganization")),
 		connect.WithHandlerOptions(opts...),
 	)
 	iamServiceCreateUserHandler := connect.NewUnaryHandler(
@@ -278,10 +232,6 @@ func NewIamServiceHandler(svc IamServiceHandler, opts ...connect.HandlerOption) 
 		switch r.URL.Path {
 		case IamServiceCreateOrganizationProcedure:
 			iamServiceCreateOrganizationHandler.ServeHTTP(w, r)
-		case IamServiceListOrganizationsProcedure:
-			iamServiceListOrganizationsHandler.ServeHTTP(w, r)
-		case IamServiceGetOrganizationProcedure:
-			iamServiceGetOrganizationHandler.ServeHTTP(w, r)
 		case IamServiceCreateUserProcedure:
 			iamServiceCreateUserHandler.ServeHTTP(w, r)
 		case IamServiceWhoAmIProcedure:
@@ -305,14 +255,6 @@ type UnimplementedIamServiceHandler struct{}
 
 func (UnimplementedIamServiceHandler) CreateOrganization(context.Context, *connect.Request[v1.CreateOrganizationRequest]) (*connect.Response[v1.CreateOrganizationResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.iam.v1.IamService.CreateOrganization is not implemented"))
-}
-
-func (UnimplementedIamServiceHandler) ListOrganizations(context.Context, *connect.Request[v1.ListOrganizationsRequest]) (*connect.Response[v1.ListOrganizationsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.iam.v1.IamService.ListOrganizations is not implemented"))
-}
-
-func (UnimplementedIamServiceHandler) GetOrganization(context.Context, *connect.Request[v1.GetOrganizationRequest]) (*connect.Response[v1.GetOrganizationResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.iam.v1.IamService.GetOrganization is not implemented"))
 }
 
 func (UnimplementedIamServiceHandler) CreateUser(context.Context, *connect.Request[v1.CreateUserRequest]) (*connect.Response[v1.CreateUserResponse], error) {

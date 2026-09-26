@@ -6,7 +6,6 @@ import (
 )
 
 func errNotFound(what string) error { return fmt.Errorf("%s: %w", what, ErrNotFound) }
-func errConflict(why string) error  { return fmt.Errorf("%s: %w", why, ErrConflict) }
 
 var (
 	// ErrNotBound is returned when the organization does not bind the MCP of a tool.

@@ -1011,10 +1011,8 @@ type ChangeSet struct {
 	// namespace the change acts on (default sdlc)
 	Namespace string `protobuf:"bytes,13,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	// sub-change: the parent change and the responsible OrgUnit key
-	ParentId string `protobuf:"bytes,14,opt,name=parent_id,json=parentId,proto3" json:"parent_id,omitempty"`
-	OwnerOrg string `protobuf:"bytes,15,opt,name=owner_org,json=ownerOrg,proto3" json:"owner_org,omitempty"`
-	// organisation (tenant) the change belongs to
-	OrgId         string `protobuf:"bytes,16,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
+	ParentId      string `protobuf:"bytes,14,opt,name=parent_id,json=parentId,proto3" json:"parent_id,omitempty"`
+	OwnerOrg      string `protobuf:"bytes,15,opt,name=owner_org,json=ownerOrg,proto3" json:"owner_org,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1150,13 +1148,6 @@ func (x *ChangeSet) GetParentId() string {
 func (x *ChangeSet) GetOwnerOrg() string {
 	if x != nil {
 		return x.OwnerOrg
-	}
-	return ""
-}
-
-func (x *ChangeSet) GetOrgId() string {
-	if x != nil {
-		return x.OrgId
 	}
 	return ""
 }
@@ -2030,9 +2021,7 @@ type CreateChangeRequest struct {
 	// make the change a sub-change of another one (namespace, branch and baseline follow the parent)
 	ParentId string `protobuf:"bytes,9,opt,name=parent_id,json=parentId,proto3" json:"parent_id,omitempty"`
 	// key of the responsible OrgUnit (organisation namespace)
-	OwnerOrg string `protobuf:"bytes,10,opt,name=owner_org,json=ownerOrg,proto3" json:"owner_org,omitempty"`
-	// organisation the change belongs to (default: the caller's, else "default")
-	OrgId         string `protobuf:"bytes,11,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
+	OwnerOrg      string `protobuf:"bytes,10,opt,name=owner_org,json=ownerOrg,proto3" json:"owner_org,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2133,13 +2122,6 @@ func (x *CreateChangeRequest) GetParentId() string {
 func (x *CreateChangeRequest) GetOwnerOrg() string {
 	if x != nil {
 		return x.OwnerOrg
-	}
-	return ""
-}
-
-func (x *CreateChangeRequest) GetOrgId() string {
-	if x != nil {
-		return x.OrgId
 	}
 	return ""
 }
@@ -6716,7 +6698,7 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\x04post\x18\x0e \x01(\v2\x17.goap.graph.v1.EndpointR\x04post\x12\x12\n" +
 	"\x04flow\x18\x0f \x01(\tR\x04flow\x127\n" +
 	"\n" +
-	"flow_event\x18\x10 \x01(\v2\x18.goap.graph.v1.FlowEventR\tflowEvent\"\x86\x04\n" +
+	"flow_event\x18\x10 \x01(\v2\x18.goap.graph.v1.FlowEventR\tflowEvent\"\xf5\x03\n" +
 	"\tChangeSet\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05title\x18\x02 \x01(\tR\x05title\x12\x16\n" +
@@ -6735,8 +6717,7 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\x06branch\x18\f \x01(\tR\x06branch\x12\x1c\n" +
 	"\tnamespace\x18\r \x01(\tR\tnamespace\x12\x1b\n" +
 	"\tparent_id\x18\x0e \x01(\tR\bparentId\x12\x1b\n" +
-	"\towner_org\x18\x0f \x01(\tR\bownerOrg\x12\x15\n" +
-	"\x06org_id\x18\x10 \x01(\tR\x05orgId\"\x86\x01\n" +
+	"\towner_org\x18\x0f \x01(\tR\bownerOrgJ\x04\b\x10\x10\x11\"\x86\x01\n" +
 	"\x11CreateNodeRequest\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x12\n" +
 	"\x04type\x18\x02 \x01(\tR\x04type\x12-\n" +
@@ -6787,7 +6768,7 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\bbaseline\x18\x01 \x01(\v2\x17.goap.graph.v1.BaselineR\bbaseline\x12)\n" +
 	"\x05nodes\x18\x02 \x03(\v2\x13.goap.graph.v1.NodeR\x05nodes\x12)\n" +
 	"\x05links\x18\x03 \x03(\v2\x13.goap.graph.v1.LinkR\x05links\x128\n" +
-	"\rsuspect_links\x18\x04 \x03(\v2\x13.goap.graph.v1.LinkR\fsuspectLinks\"\xd9\x02\n" +
+	"\rsuspect_links\x18\x04 \x03(\v2\x13.goap.graph.v1.LinkR\fsuspectLinks\"\xc8\x02\n" +
 	"\x13CreateChangeRequest\x12\x14\n" +
 	"\x05title\x18\x01 \x01(\tR\x05title\x12\x16\n" +
 	"\x06intent\x18\x02 \x01(\tR\x06intent\x12 \n" +
@@ -6801,8 +6782,7 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"own_branch\x18\b \x01(\bR\townBranch\x12\x1b\n" +
 	"\tparent_id\x18\t \x01(\tR\bparentId\x12\x1b\n" +
 	"\towner_org\x18\n" +
-	" \x01(\tR\bownerOrg\x12\x15\n" +
-	"\x06org_id\x18\v \x01(\tR\x05orgId\"H\n" +
+	" \x01(\tR\bownerOrgJ\x04\b\v\x10\f\"H\n" +
 	"\x14CreateChangeResponse\x120\n" +
 	"\x06change\x18\x01 \x01(\v2\x18.goap.graph.v1.ChangeSetR\x06change\"\"\n" +
 	"\x10GetChangeRequest\x12\x0e\n" +

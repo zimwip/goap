@@ -1,4 +1,4 @@
-package mcpsvc
+package mcpsvc_test
 
 import (
 	"context"
@@ -8,9 +8,13 @@ import (
 	"time"
 
 	connectorv1 "github.com/zimwip/goap/gen/goap/connector/v1"
+	"github.com/zimwip/goap/internal/graphsvc"
+	"github.com/zimwip/goap/internal/mcpsvc"
 	"github.com/zimwip/goap/internal/pbconv"
 	"github.com/zimwip/goap/internal/pgtest"
 	"github.com/zimwip/goap/internal/platform"
+	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/mcp"
 
 	"github.com/jackc/pgx/v5/stdlib"
@@ -32,143 +36,249 @@ func localfsInfo() *connectorv1.ConnectorInfo {
 		{Name: "list_dir"}, {Name: "read_file"}, {Name: "write_file"}}}
 }
 
-func TestMemoryStore(t *testing.T) { testHub(t, NewMemoryStore()) }
+// world is a graph with the default organisation and the document-repository MCP, and two trees:
+//
+//	ORG-DEFAULT (implicit root of every chain)   adapter: localfs, root /default
+//	ORG-A      part_of ORG-DEFAULT               adapter: localfs, root /a   (overrides)
+//	ORG-A1     part_of ORG-A                     (nothing: inherits ORG-A's)
+//	ORG-B      no parent                         (nothing: inherits the default organisation's)
+func world(t *testing.T) *graph.Graph {
+	t.Helper()
+	ctx := context.Background()
+	g := graph.New(graph.NewMemory())
+	if seeded, err := graphsvc.SeedDefaults(ctx, g); err != nil || !seeded {
+		t.Fatalf("seed defaults = %v, %v", seeded, err)
+	}
+	if seeded, err := graphsvc.SeedDefaults(ctx, g); err != nil || seeded {
+		t.Fatalf("seeding twice = %v, %v", seeded, err)
+	}
+	for _, u := range [][2]string{{"ORG-A", domain.DefaultOrg}, {"ORG-A1", "ORG-A"}, {"ORG-B", ""}} {
+		if err := graphsvc.SeedUnit(ctx, g, u[0], u[0], "team", u[1]); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := graphsvc.SeedAdapter(ctx, g, graphsvc.LocalFSAdapter(domain.DefaultOrg, "/default")); err != nil {
+		t.Fatal(err)
+	}
+	if err := graphsvc.SeedAdapter(ctx, g, graphsvc.LocalFSAdapter("ORG-A", "/a")); err != nil {
+		t.Fatal(err)
+	}
+	return g
+}
 
-func TestSQLiteStore(t *testing.T) {
+func TestConnectorRegistryMemory(t *testing.T) { testRegistry(t, mcpsvc.NewMemoryStore()) }
+
+func TestConnectorRegistrySQLite(t *testing.T) {
 	ctx := context.Background()
 	db, err := platform.OpenSQLite(ctx, filepath.Join(t.TempDir(), "goap.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	if err := platform.MigrateSQLite(ctx, db, "mcp", SQLiteMigrations, "migrations_sqlite"); err != nil {
+	if err := platform.MigrateSQLite(ctx, db, "mcp", mcpsvc.SQLiteMigrations, "migrations_sqlite"); err != nil {
 		t.Fatal(err)
 	}
-	testHub(t, SQLStore{DB: db})
+	testRegistry(t, mcpsvc.SQLStore{DB: db})
 }
 
-func TestPGStore(t *testing.T) {
-	testHub(t, SQLStore{DB: stdlib.OpenDBFromPool(pgtest.Pool(t, Migrations)), Dollar: true})
+func TestConnectorRegistryPG(t *testing.T) {
+	testRegistry(t, mcpsvc.SQLStore{DB: stdlib.OpenDBFromPool(pgtest.Pool(t, mcpsvc.Migrations)), Dollar: true})
 }
 
-func testHub(t *testing.T, st Store) {
+func testRegistry(t *testing.T, st mcpsvc.Store) {
 	ctx := context.Background()
 	now := time.Now().UTC()
-	inv := &fakeInvoker{resp: &connectorv1.InvokeResponse{Result: pbconv.Struct(map[string]any{"text": "hello", "meta": map[string]any{"n": 1}})}}
-	svc := &Service{Store: st, Invoker: inv, Now: func() time.Time { return now }, Lease: time.Minute,
+	svc := &mcpsvc.Service{Store: st, Now: func() time.Time { return now }, Lease: time.Minute}
+	if _, err := st.Connector(ctx, "localfs"); !errors.Is(err, mcpsvc.ErrNotFound) {
+		t.Fatalf("unknown connector = %v", err)
+	}
+	if _, err := svc.RegisterConnector(ctx, &connectorv1.ConnectorInfo{Id: "Bad Id"}, "http://x"); !errors.Is(err, mcp.ErrInvalid) {
+		t.Fatalf("bad id = %v", err)
+	}
+	if _, err := svc.RegisterConnector(ctx, localfsInfo(), "http://localfs:8080"); err != nil {
+		t.Fatal(err)
+	}
+	cs, err := svc.Connectors(ctx)
+	if err != nil || len(cs) != 1 || !cs[0].Live || cs[0].Endpoint != "http://localfs:8080" || len(cs[0].Info.Operations) != 3 {
+		t.Fatalf("connectors = %+v, %v", cs, err)
+	}
+	now = now.Add(2 * time.Minute)
+	if cs, _ = svc.Connectors(ctx); cs[0].Live {
+		t.Fatal("expired registration is live")
+	}
+	if _, err := svc.RegisterConnector(ctx, localfsInfo(), "http://other:8080"); err != nil {
+		t.Fatal(err)
+	}
+	if cs, _ = svc.Connectors(ctx); !cs[0].Live || cs[0].Endpoint != "http://other:8080" {
+		t.Fatalf("renewed registration = %+v", cs[0])
+	}
+}
+
+func newHub(t *testing.T, g *graph.Graph, inv mcpsvc.Invoker) *mcpsvc.Service {
+	t.Helper()
+	svc := &mcpsvc.Service{Store: mcpsvc.NewMemoryStore(), Directory: &mcpsvc.Directory{Graph: g}, Invoker: inv,
 		Secrets: func(_ context.Context, ref string) (string, error) { return "secret:" + ref, nil }}
-
-	if err := Seed(ctx, st); err != nil {
+	if _, err := svc.RegisterConnector(context.Background(), localfsInfo(), "http://localfs:8080"); err != nil {
 		t.Fatal(err)
 	}
-	if err := Seed(ctx, st); err != nil { // idempotent
-		t.Fatal(err)
+	return svc
+}
+
+// The same MCP and the same connector, configured differently by each unit; the nearest unit's
+// adapter wins, and every unit falls back on the default organisation.
+func TestNearestAdapterWins(t *testing.T) {
+	ctx := context.Background()
+	inv := &fakeInvoker{resp: &connectorv1.InvokeResponse{Result: pbconv.Struct(map[string]any{"text": "hi"})}}
+	svc := newHub(t, world(t), inv)
+	args := map[string]any{"path": "n.txt"}
+	for unit, wantRoot := range map[string]string{
+		"ORG-A":           "/a",       // its own adapter
+		"ORG-A1":          "/a",       // inherited from ORG-A, not from the default organisation
+		"ORG-B":           "/default", // no ancestor: the default organisation
+		"":                "/default", // a change naming no unit
+		"ORG-UNKNOWN":     "/default", // a unit the graph does not know
+		domain.DefaultOrg: "/default",
+	} {
+		if _, err := svc.Call(ctx, unit, "document-repository/read", args); err != nil {
+			t.Fatalf("%q: %v", unit, err)
+		}
+		if got := pbconv.Map(inv.last.Config)["root"]; got != wantRoot {
+			t.Errorf("%q: root %v, want %s", unit, got, wantRoot)
+		}
+		if inv.last.Operation != "read_file" || pbconv.Map(inv.last.Arguments)["path"] != "n.txt" {
+			t.Errorf("%q: call = %v", unit, inv.last)
+		}
 	}
 
-	// nothing bound yet
-	if _, err := svc.Call(ctx, "acme", "document-repository/read", nil); !errors.Is(err, ErrNotBound) {
-		t.Fatalf("unbound call = %v", err)
+	chain, eff, err := svc.Effective(ctx, "ORG-A1")
+	if err != nil || len(chain) != 3 || chain[0] != "ORG-A1" || chain[1] != "ORG-A" || chain[2] != domain.DefaultOrg {
+		t.Fatalf("chain = %v, %v", chain, err)
 	}
-	tools, mcps, err := svc.Tools(ctx, "acme")
-	if err != nil || len(tools) != 0 || len(mcps) != 0 {
-		t.Fatalf("tools before binding = %v %v %v", tools, mcps, err)
+	if len(eff) != 1 || eff[0].Adapter.Unit != "ORG-A" || !eff[0].Inherited {
+		t.Fatalf("effective = %+v", eff)
 	}
-
-	// an adapter for a tool the MCP does not have is refused; the valid one warns while the connector is unknown
-	bad := mcp.Adapter{MCP: "document-repository", Connector: "gdrive", Tools: []mcp.ToolMapping{{Tool: "delete", Operation: "rm"}}}
-	if _, err := svc.SaveAdapter(ctx, bad); !errors.Is(err, mcp.ErrInvalid) {
-		t.Fatalf("bad adapter = %v", err)
-	}
-	warn, err := svc.SaveAdapter(ctx, LocalFSAdapter())
-	if err != nil || len(warn) != 1 {
-		t.Fatalf("adapter before registration: warnings %v, %v", warn, err)
+	if _, eff, _ = svc.Effective(ctx, "ORG-A"); eff[0].Inherited {
+		t.Fatal("an own adapter is reported as inherited")
 	}
 
-	// binding needs an adapter
-	if err := svc.Bind(ctx, mcp.Binding{OrgID: "acme", MCP: "document-repository", Connector: "gdrive"}); !errors.Is(err, ErrNotFound) {
-		t.Fatalf("bind without adapter = %v", err)
-	}
-	b := mcp.Binding{OrgID: "acme", MCP: "document-repository", Connector: "localfs",
-		Config: map[string]any{"root": "/data"}, Secrets: map[string]string{"token": "env:TOK", "unused": "env:X"}}
-	if err := svc.Bind(ctx, b); err != nil {
-		t.Fatal(err)
-	}
-	tools, mcps, err = svc.Tools(ctx, "acme")
+	tools, mcps, err := svc.Tools(ctx, "ORG-B")
 	if err != nil || len(tools) != 3 || len(mcps) != 1 || tools[0].Name != "document-repository/list" {
 		t.Fatalf("tools = %v %v %v", tools, mcps, err)
 	}
-	if other, _, _ := svc.Tools(ctx, "globex"); len(other) != 0 {
-		t.Fatal("another organization sees the tools")
-	}
+}
 
-	// the connector is not registered yet
-	if _, err := svc.Call(ctx, "acme", "document-repository/read", map[string]any{"path": "a.txt"}); !errors.Is(err, ErrUnavailable) {
-		t.Fatalf("call before registration = %v", err)
+func TestCallErrors(t *testing.T) {
+	ctx := context.Background()
+	inv := &fakeInvoker{resp: &connectorv1.InvokeResponse{Result: pbconv.Struct(map[string]any{"text": "hi"})}}
+	svc := newHub(t, world(t), inv)
+
+	// an MCP nobody implements
+	if _, err := svc.Call(ctx, "ORG-A", "ticketing/create", nil); !errors.Is(err, mcpsvc.ErrNotBound) {
+		t.Fatalf("unimplemented MCP = %v", err)
 	}
-	if _, err := svc.RegisterConnector(ctx, localfsInfo(), "http://localfs:8080"); err != nil {
+	if _, err := svc.Call(ctx, "ORG-A", "read", nil); !errors.Is(err, mcp.ErrInvalid) {
+		t.Fatalf("unqualified tool = %v", err)
+	}
+	// only the secrets the connector declares leave the hub
+	if _, err := svc.Call(ctx, "ORG-A", "document-repository/read", nil); err != nil {
 		t.Fatal(err)
 	}
-	out, err := svc.Call(ctx, "acme", "document-repository/read", map[string]any{"path": "a.txt", "ignored": 1})
-	if err != nil || out["text"] != "hello" {
-		t.Fatalf("call = %v, %v", out, err)
+	if len(inv.last.Secrets) != 0 {
+		t.Fatalf("secrets = %v", inv.last.Secrets)
 	}
-	got := inv.last
-	if got.Operation != "read_file" || pbconv.Map(got.Arguments)["path"] != "a.txt" || len(pbconv.Map(got.Arguments)) != 1 {
-		t.Fatalf("operation call = %v", got)
-	}
-	if pbconv.Map(got.Config)["root"] != "/data" || got.OrgId != "acme" {
-		t.Fatalf("config/org = %v %v", got.Config, got.OrgId)
-	}
-	if len(got.Secrets) != 1 || got.Secrets["token"] != "secret:env:TOK" {
-		t.Fatalf("secrets must be limited to the ones the connector declares: %v", got.Secrets)
-	}
-
-	// a failure reported by the connector
+	// failures reported by the connector, and transport failures
 	inv.resp = &connectorv1.InvokeResponse{IsError: true, Error: "no such file"}
-	var te *ToolError
-	if _, err := svc.Call(ctx, "acme", "document-repository/read", nil); !errors.As(err, &te) || te.Msg != "no such file" {
+	var te *mcpsvc.ToolError
+	if _, err := svc.Call(ctx, "ORG-A", "document-repository/read", nil); !errors.As(err, &te) || te.Msg != "no such file" {
 		t.Fatalf("connector error = %v", err)
 	}
-	// transport failure
 	inv.resp, inv.err = nil, errors.New("connection refused")
-	if _, err := svc.Call(ctx, "acme", "document-repository/read", nil); !errors.Is(err, ErrUnavailable) {
+	if _, err := svc.Call(ctx, "ORG-A", "document-repository/read", nil); !errors.Is(err, mcpsvc.ErrUnavailable) {
 		t.Fatalf("transport error = %v", err)
 	}
+	// a connector that is not registered
 	inv.err = nil
+	other := &mcpsvc.Service{Store: mcpsvc.NewMemoryStore(), Directory: &mcpsvc.Directory{Graph: world(t)}, Invoker: inv}
+	if _, err := other.Call(ctx, "ORG-A", "document-repository/read", nil); !errors.Is(err, mcpsvc.ErrUnavailable) {
+		t.Fatalf("unregistered connector = %v", err)
+	}
+}
 
-	// lease expiry
-	now = now.Add(2 * time.Minute)
-	if _, err := svc.Call(ctx, "acme", "document-repository/read", nil); !errors.Is(err, ErrUnavailable) {
-		t.Fatalf("expired lease = %v", err)
-	}
-	cs, err := svc.Connectors(ctx)
-	if err != nil || len(cs) != 1 || cs[0].Live {
-		t.Fatalf("connectors = %+v, %v", cs, err)
-	}
-	if _, err := svc.RegisterConnector(ctx, localfsInfo(), "http://localfs:8080"); err != nil {
+func TestSecretsAreResolvedAndFiltered(t *testing.T) {
+	ctx := context.Background()
+	g := world(t)
+	a := graphsvc.LocalFSAdapter("ORG-B", "/b")
+	a.Secrets = map[string]string{"token": "env:TOK", "undeclared": "env:X"}
+	if err := graphsvc.SeedAdapter(ctx, g, a); err != nil {
 		t.Fatal(err)
 	}
-	if cs, _ = svc.Connectors(ctx); !cs[0].Live {
-		t.Fatal("renewed registration is not live")
+	inv := &fakeInvoker{resp: &connectorv1.InvokeResponse{}}
+	svc := newHub(t, g, inv)
+	if _, err := svc.Call(ctx, "ORG-B", "document-repository/read", nil); err != nil {
+		t.Fatal(err)
 	}
+	if len(inv.last.Secrets) != 1 || inv.last.Secrets["token"] != "secret:env:TOK" {
+		t.Fatalf("secrets = %v", inv.last.Secrets)
+	}
+}
 
-	// referential integrity
-	if err := st.DeleteAdapter(ctx, "document-repository", "localfs"); !errors.Is(err, ErrConflict) {
-		t.Fatalf("delete bound adapter = %v", err)
+func TestCheckAdapter(t *testing.T) {
+	ctx := context.Background()
+	svc := newHub(t, world(t), &fakeInvoker{})
+	ok := graphsvc.LocalFSAdapter("ORG-B", "/b")
+	ok.Secrets = map[string]string{"token": "env:T"}
+	if w, err := svc.CheckAdapter(ctx, ok); err != nil || len(w) != 0 {
+		t.Fatalf("valid adapter: %v, %v", w, err)
 	}
-	if err := st.DeleteMcp(ctx, "document-repository"); !errors.Is(err, ErrConflict) {
-		t.Fatalf("delete implemented mcp = %v", err)
+	// unknown MCP, unknown tool: blocking
+	bad := ok
+	bad.MCP = "nope"
+	if _, err := svc.CheckAdapter(ctx, bad); !errors.Is(err, mcp.ErrInvalid) {
+		t.Fatalf("unknown MCP = %v", err)
 	}
-	for _, f := range []func() error{
-		func() error { return st.DeleteBinding(ctx, "acme", "document-repository") },
-		func() error { return st.DeleteAdapter(ctx, "document-repository", "localfs") },
-		func() error { return st.DeleteMcp(ctx, "document-repository") },
-	} {
-		if err := f(); err != nil {
-			t.Fatal(err)
-		}
+	bad = ok
+	bad.Tools = []mcp.ToolMapping{{Tool: "delete", Operation: "rm"}}
+	if _, err := svc.CheckAdapter(ctx, bad); !errors.Is(err, mcp.ErrInvalid) {
+		t.Fatalf("unknown tool = %v", err)
 	}
-	if _, err := st.Mcp(ctx, "document-repository"); !errors.Is(err, ErrNotFound) {
-		t.Fatalf("deleted mcp = %v", err)
+	// mismatches with the registered connector: warnings
+	warn := ok
+	warn.Tools = []mcp.ToolMapping{{Tool: "read", Operation: "no_such_op"}}
+	warn.Config = nil
+	warn.Secrets = map[string]string{"other": "env:X"}
+	w, err := svc.CheckAdapter(ctx, warn)
+	if err != nil || len(w) < 3 {
+		t.Fatalf("warnings = %v, %v", w, err)
+	}
+	// an unregistered connector cannot be checked
+	unk := ok
+	unk.Connector = "gdrive"
+	if w, err := svc.CheckAdapter(ctx, unk); err != nil || len(w) != 1 {
+		t.Fatalf("unregistered connector = %v, %v", w, err)
+	}
+}
+
+func TestSnapshotFollowsTheGraph(t *testing.T) {
+	ctx := context.Background()
+	g := world(t)
+	d := &mcpsvc.Directory{Graph: g}
+	s1, err := d.Snapshot(ctx)
+	if err != nil || len(s1.Problems) != 0 {
+		t.Fatalf("snapshot = %v, %v", s1, err)
+	}
+	if s2, _ := d.Snapshot(ctx); s2 != s1 {
+		t.Fatal("the snapshot of an unchanged head must be reused")
+	}
+	if err := graphsvc.SeedAdapter(ctx, g, graphsvc.LocalFSAdapter("ORG-B", "/b")); err != nil {
+		t.Fatal(err)
+	}
+	s3, _ := d.Snapshot(ctx)
+	if a, inherited, ok := s3.Resolve("ORG-B", "document-repository"); !ok || inherited || a.Config["root"] != "/b" {
+		t.Fatalf("new adapter not seen: %+v %v %v", a, inherited, ok)
+	}
+	// an empty graph has no adapter and no MCP
+	empty := &mcpsvc.Directory{Graph: graph.New(graph.NewMemory())}
+	if s, err := empty.Snapshot(ctx); err != nil || len(s.Defs()) != 0 {
+		t.Fatalf("empty graph = %v, %v", s, err)
 	}
 }

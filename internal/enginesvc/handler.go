@@ -100,7 +100,7 @@ func (h *Handler) StartProcess(ctx context.Context, r *connect.Request[enginev1.
 	}
 	p, err := h.Engine.Start(ctx, engine.StartRequest{
 		Methodology: r.Msg.Methodology, ChangeID: domain.ChangeID(r.Msg.ChangeId), BaselineID: domain.BaselineID(r.Msg.BaselineId),
-		Title: r.Msg.Title, Intent: r.Msg.Intent, Goal: r.Msg.Goal, Agent: r.Msg.Agent, Vars: pbconv.Map(r.Msg.Vars),
+		Title: r.Msg.Title, Intent: r.Msg.Intent, Goal: r.Msg.Goal, Agent: r.Msg.Agent, OwnerOrg: r.Msg.OwnerOrg, Vars: pbconv.Map(r.Msg.Vars),
 	})
 	if err != nil {
 		return nil, toConnect(err)

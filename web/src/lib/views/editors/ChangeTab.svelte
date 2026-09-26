@@ -434,7 +434,6 @@
         {#if ch.intent}<p class="intent">"{ch.intent}"</p>{/if}
         <dl class="meta">
           <dt>ID</dt><dd><code>{ch.id}</code></dd>
-          {#if ch.orgId}<dt>Organisation</dt><dd><code>{ch.orgId}</code></dd>{/if}
           {#if ch.namespace}<dt>Namespace</dt><dd>{ch.namespace}</dd>{/if}
           {#if ch.ownerOrg}<dt>Owner unit</dt><dd><code>{ch.ownerOrg}</code></dd>{/if}
           {#if ch.parentId}

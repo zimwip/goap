@@ -79,6 +79,19 @@
           <label for="ag-ex">Intent examples <span class="opt">(one per line)</span></label>
           <textarea id="ag-ex" rows="4" bind:value={item.examples} class:bad={d.bad(`${p}.examples`)} data-path="{p}.examples"></textarea>
         </div>
+        <div class="field">
+          <label for="ag-mcps">MCPs <span class="opt">(comma separated)</span></label>
+          <input
+            id="ag-mcps"
+            type="text"
+            class="mono"
+            bind:value={item.mcps}
+            class:bad={d.bad(`${p}.mcps`)}
+            data-path="{p}.mcps"
+            placeholder="document-repository"
+          />
+          <span class="hint">MCPs whose tools this agent's LLM/script actions may use, in addition to the ones the actions declare.</span>
+        </div>
         {#if noUtility.length}
           <div class="alert warn">
             Planner {item.planner}: these actions have no utility expression —

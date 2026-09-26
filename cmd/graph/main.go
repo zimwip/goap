@@ -100,6 +100,11 @@ func main() {
 		}
 		log.Info("demo seed", "loaded", seeded)
 	}
+	if seeded, err := graphsvc.SeedDefaults(ctx, g); err != nil {
+		platform.Fatal(log, "seed defaults", err)
+	} else if seeded {
+		log.Info("default organisation created")
+	}
 	// the published methodologies are projected onto the graph as versioned elements
 	if url := platform.Env("GOAP_REGISTRY_URL", ""); url != "" {
 		reg := registrysvc.NewClient(platform.H2CClient(), url, telemetry.ClientOptions()...)

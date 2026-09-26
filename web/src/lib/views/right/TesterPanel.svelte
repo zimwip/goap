@@ -19,6 +19,7 @@
   } from '../../stores/catalog.svelte';
   import { processes, ingestProcess } from '../../stores/live.svelte';
   import { openTab } from '../../shell/tabs.svelte';
+  import { headGraph } from '../../graphEdit';
   import { focusRequests } from '../../shell/workbench.svelte';
 
   let methodology = $state('');
@@ -27,9 +28,18 @@
   let baselineId = $state('');
   let goal = $state('');
   let title = $state('');
+  /** key of the OrgUnit holding the change (empty: the default organisation) */
+  let ownerOrg = $state('');
+  let units = $state<string[]>([]);
   let submitting = $state(false);
   let error = $state('');
   let textarea = $state<HTMLTextAreaElement>();
+
+  $effect(() => {
+    void headGraph()
+      .then((h) => (units = h.nodes.filter((n) => n.namespace === 'organisation' && n.type === 'OrgUnit').map((n) => n.key ?? '').sort()))
+      .catch(() => (units = []));
+  });
 
   $effect(() => {
     if (!methodologies.loaded) void refreshMethodologies();
@@ -77,6 +87,7 @@
         ...(baselineId ? { baselineId } : {}),
         ...(title.trim() ? { title: title.trim() } : {}),
         ...(goal ? { goal } : {}),
+        ...(ownerOrg ? { ownerOrg } : {}),
       });
       const p = res.process;
       if (p?.id) {
@@ -119,6 +130,15 @@
         {/each}
       </select>
     </div>
+    {#if units.length}
+      <div class="field">
+        <label for="t-org">Organisation <span class="opt">(holds the change)</span></label>
+        <select id="t-org" bind:value={ownerOrg}>
+          <option value="">Default organisation</option>
+          {#each units as u (u)}<option value={u}>{u}</option>{/each}
+        </select>
+      </div>
+    {/if}
     {#if methodology && goals.length}
       <div class="field">
         <label for="t-goal">Goal</label>

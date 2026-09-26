@@ -5,12 +5,12 @@
 ## Context
 Node keys were globally unique free strings and the meta model was only a key-prefix convention
 (`M:<methodology>/…`, `D:<domain>/…`). A change could touch any node. We want to organise the graph
-by **namespace** (`metadata`, `sdlc`, `organisation`, …), make a change act on exactly one namespace,
+by **namespace** (`platform`, `sdlc`, `organisation`, …; `platform` was named `metadata`), make a change act on exactly one namespace,
 and let nodes of one namespace reference another (a domain node owned by an organisation unit).
 
 ## Decision
 1. Every node lives in one **namespace** (`node.namespace`); keys are unique per `(namespace, key)`.
-   Default namespace: `sdlc`. `metadata` is the meta model bound to the objects the code manipulates
+   Default namespace: `sdlc`. `platform` is the platform model bound to the objects the code manipulates
    (methodology / domain projection, `pkg/metamodel`); its `M:`/`D:` key prefixes are kept.
 2. A **change** has a namespace (`change_set.namespace`). It may create nodes in that namespace only
    and modify (update, delete, transition, merge, add outgoing links from) only nodes of that namespace
@@ -58,5 +58,5 @@ and let nodes of one namespace reference another (a domain node owned by an orga
 
 ## Consequences
 - Migration `0006_namespace` (PostgreSQL) / `0005_namespace` (SQLite, table rebuilt): existing `M:`/`D:`
-  nodes go to `metadata`, everything else to `sdlc`.
+  nodes go to `platform`, everything else to `sdlc`.
 - `Graph.NodeByKey` and `metamodel.CreateObject` take a namespace.

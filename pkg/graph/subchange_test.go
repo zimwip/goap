@@ -186,26 +186,3 @@ func testSubChangeRules(t *testing.T, repo Repo) {
 		t.Fatalf("sub branch = %s", b.Status)
 	}
 }
-
-func TestChangeOrganisation(t *testing.T) { forEachRepo(t, testChangeOrganisation) }
-
-func testChangeOrganisation(t *testing.T, repo Repo) {
-	ctx := context.Background()
-	w := newOrgWorld(t, repo)
-	def, err := w.g.CreateChange(ctx, NewChange{Title: "No org", BaselineID: w.base.ID})
-	if err != nil || def.OrgID != domain.DefaultOrg {
-		t.Fatalf("default org = %q, %v", def.OrgID, err)
-	}
-	parent, err := w.g.CreateChange(ctx, NewChange{Title: "Acme", OrgID: "acme", BaselineID: w.base.ID, OwnBranch: true})
-	if err != nil {
-		t.Fatal(err)
-	}
-	sub, err := w.g.CreateChange(ctx, NewChange{Title: "Part", ParentID: parent.ID})
-	if err != nil || sub.OrgID != "acme" {
-		t.Fatalf("sub-change org = %q, %v", sub.OrgID, err)
-	}
-	got, err := w.g.Change(ctx, parent.ID)
-	if err != nil || got.OrgID != "acme" {
-		t.Fatalf("reloaded org = %q, %v", got.OrgID, err)
-	}
-}

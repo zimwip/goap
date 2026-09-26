@@ -21,11 +21,9 @@ func main() {
 	defer telemetry.Setup(context.Background(), log, "iam")(context.Background())
 	srv := platform.NewServer(log, platform.Env("GOAP_HTTP_ADDR", ":8080"))
 	var adapter persist.Adapter
-	var orgs iamsvc.OrgStore
 	if pool := platform.OptionalPostgres(ctx, log, iamsvc.Migrations); pool != nil {
 		defer pool.Close()
 		adapter = &iamsvc.Adapter{Pool: pool}
-		orgs = iamsvc.PGOrgStore{Pool: pool}
 		srv.Readiness(pool.Ping)
 	}
 	enforcer, err := authz.NewCasbin(adapter)
@@ -50,7 +48,7 @@ func main() {
 			}
 		}()
 	}
-	srv.Mount(iamv1connect.NewIamServiceHandler(&iamsvc.Handler{Enforcer: enforcer, Orgs: orgs, Events: events}, telemetry.HandlerOptions()...))
+	srv.Mount(iamv1connect.NewIamServiceHandler(&iamsvc.Handler{Enforcer: enforcer, Events: events}, telemetry.HandlerOptions()...))
 	if err := srv.Run(); err != nil {
 		platform.Fatal(log, "server", err)
 	}

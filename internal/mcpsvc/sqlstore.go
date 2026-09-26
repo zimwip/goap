@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"embed"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -13,7 +12,6 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 
 	connectorv1 "github.com/zimwip/goap/gen/goap/connector/v1"
-	"github.com/zimwip/goap/pkg/mcp"
 )
 
 // Migrations holds the PostgreSQL schema; SQLiteMigrations the local mode one.
@@ -59,192 +57,9 @@ func (s SQLStore) exec(ctx context.Context, query string, args ...any) (int64, e
 	return r.RowsAffected()
 }
 
-func (s SQLStore) count(ctx context.Context, query string, args ...any) (int, error) {
-	var n int
-	err := s.DB.QueryRowContext(ctx, s.q(query), args...).Scan(&n)
-	return n, err
-}
-
-func js(v any) string {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return "null"
-	}
-	return string(b)
-}
-
 func notFound(err error, what string) error {
 	if errors.Is(err, sql.ErrNoRows) {
 		return errNotFound(what)
-	}
-	return err
-}
-
-func (s SQLStore) SaveMcp(ctx context.Context, d mcp.Def) error {
-	_, err := s.exec(ctx, `INSERT INTO mcp (name, description, tools) VALUES (?, ?, ?)
-		ON CONFLICT (name) DO UPDATE SET description = excluded.description, tools = excluded.tools`, d.Name, d.Description, js(d.Tools))
-	return err
-}
-
-func scanMcp(r interface{ Scan(...any) error }) (mcp.Def, error) {
-	var d mcp.Def
-	var tools string
-	if err := r.Scan(&d.Name, &d.Description, &tools); err != nil {
-		return d, err
-	}
-	return d, json.Unmarshal([]byte(tools), &d.Tools)
-}
-
-func (s SQLStore) Mcp(ctx context.Context, name string) (mcp.Def, error) {
-	d, err := scanMcp(s.DB.QueryRowContext(ctx, s.q(`SELECT name, description, tools FROM mcp WHERE name = ?`), name))
-	return d, notFound(err, "mcp "+name)
-}
-
-func (s SQLStore) Mcps(ctx context.Context) ([]mcp.Def, error) {
-	rows, err := s.DB.QueryContext(ctx, `SELECT name, description, tools FROM mcp ORDER BY name`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []mcp.Def
-	for rows.Next() {
-		d, err := scanMcp(rows)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, d)
-	}
-	return out, rows.Err()
-}
-
-func (s SQLStore) DeleteMcp(ctx context.Context, name string) error {
-	if n, err := s.count(ctx, `SELECT COUNT(*) FROM mcp_adapter WHERE mcp = ?`, name); err != nil {
-		return err
-	} else if n > 0 {
-		return errConflict("mcp " + name + " is implemented by adapters")
-	}
-	n, err := s.exec(ctx, `DELETE FROM mcp WHERE name = ?`, name)
-	if err == nil && n == 0 {
-		return errNotFound("mcp " + name)
-	}
-	return err
-}
-
-func (s SQLStore) SaveAdapter(ctx context.Context, a mcp.Adapter) error {
-	if _, err := s.Mcp(ctx, a.MCP); err != nil {
-		return err
-	}
-	_, err := s.exec(ctx, `INSERT INTO mcp_adapter (mcp, connector, tools) VALUES (?, ?, ?)
-		ON CONFLICT (mcp, connector) DO UPDATE SET tools = excluded.tools`, a.MCP, a.Connector, js(a.Tools))
-	return err
-}
-
-func scanAdapter(r interface{ Scan(...any) error }) (mcp.Adapter, error) {
-	var a mcp.Adapter
-	var tools string
-	if err := r.Scan(&a.MCP, &a.Connector, &tools); err != nil {
-		return a, err
-	}
-	return a, json.Unmarshal([]byte(tools), &a.Tools)
-}
-
-func (s SQLStore) Adapter(ctx context.Context, m, c string) (mcp.Adapter, error) {
-	a, err := scanAdapter(s.DB.QueryRowContext(ctx, s.q(`SELECT mcp, connector, tools FROM mcp_adapter WHERE mcp = ? AND connector = ?`), m, c))
-	return a, notFound(err, "adapter "+m+"/"+c)
-}
-
-func (s SQLStore) Adapters(ctx context.Context, m string) ([]mcp.Adapter, error) {
-	rows, err := s.DB.QueryContext(ctx, s.q(`SELECT mcp, connector, tools FROM mcp_adapter WHERE (? = '' OR mcp = ?) ORDER BY mcp, connector`), m, m)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []mcp.Adapter
-	for rows.Next() {
-		a, err := scanAdapter(rows)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, a)
-	}
-	return out, rows.Err()
-}
-
-func (s SQLStore) DeleteAdapter(ctx context.Context, m, c string) error {
-	if n, err := s.count(ctx, `SELECT COUNT(*) FROM mcp_binding WHERE mcp = ? AND connector = ?`, m, c); err != nil {
-		return err
-	} else if n > 0 {
-		return errConflict("adapter " + m + "/" + c + " is bound by an organization")
-	}
-	n, err := s.exec(ctx, `DELETE FROM mcp_adapter WHERE mcp = ? AND connector = ?`, m, c)
-	if err == nil && n == 0 {
-		return errNotFound("adapter " + m + "/" + c)
-	}
-	return err
-}
-
-func (s SQLStore) SaveBinding(ctx context.Context, b mcp.Binding) error {
-	if _, err := s.Adapter(ctx, b.MCP, b.Connector); err != nil {
-		return err
-	}
-	_, err := s.exec(ctx, `INSERT INTO mcp_binding (org_id, mcp, connector, config, secrets) VALUES (?, ?, ?, ?, ?)
-		ON CONFLICT (org_id, mcp) DO UPDATE SET connector = excluded.connector, config = excluded.config, secrets = excluded.secrets`,
-		b.OrgID, b.MCP, b.Connector, js(orEmpty(b.Config)), js(orEmptyS(b.Secrets)))
-	return err
-}
-
-func orEmpty(m map[string]any) map[string]any {
-	if m == nil {
-		return map[string]any{}
-	}
-	return m
-}
-
-func orEmptyS(m map[string]string) map[string]string {
-	if m == nil {
-		return map[string]string{}
-	}
-	return m
-}
-
-func scanBinding(r interface{ Scan(...any) error }) (mcp.Binding, error) {
-	var b mcp.Binding
-	var cfg, sec string
-	if err := r.Scan(&b.OrgID, &b.MCP, &b.Connector, &cfg, &sec); err != nil {
-		return b, err
-	}
-	if err := json.Unmarshal([]byte(cfg), &b.Config); err != nil {
-		return b, err
-	}
-	return b, json.Unmarshal([]byte(sec), &b.Secrets)
-}
-
-func (s SQLStore) Binding(ctx context.Context, org, m string) (mcp.Binding, error) {
-	b, err := scanBinding(s.DB.QueryRowContext(ctx, s.q(`SELECT org_id, mcp, connector, config, secrets FROM mcp_binding WHERE org_id = ? AND mcp = ?`), org, m))
-	return b, notFound(err, "binding "+org+"/"+m)
-}
-
-func (s SQLStore) Bindings(ctx context.Context, org string) ([]mcp.Binding, error) {
-	rows, err := s.DB.QueryContext(ctx, s.q(`SELECT org_id, mcp, connector, config, secrets FROM mcp_binding WHERE (? = '' OR org_id = ?) ORDER BY org_id, mcp`), org, org)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []mcp.Binding
-	for rows.Next() {
-		b, err := scanBinding(rows)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, b)
-	}
-	return out, rows.Err()
-}
-
-func (s SQLStore) DeleteBinding(ctx context.Context, org, m string) error {
-	n, err := s.exec(ctx, `DELETE FROM mcp_binding WHERE org_id = ? AND mcp = ?`, org, m)
-	if err == nil && n == 0 {
-		return errNotFound("binding " + org + "/" + m)
 	}
 	return err
 }

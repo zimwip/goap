@@ -10,6 +10,7 @@ import (
 
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/llm"
 	"github.com/zimwip/goap/pkg/mcp"
 	"github.com/zimwip/goap/pkg/methodology"
@@ -93,7 +94,13 @@ func parseDocs(t *testing.T, edit func(*methodology.Methodology)) *methodology.C
 
 func mcpEngine(t *testing.T, hub ToolPort, client llm.Client) (*Engine, domain.BaselineID) {
 	t.Helper()
-	e, _, base := setup(t)
+	e, g, base := setup(t)
+	// the organisations holding the changes
+	for _, u := range []string{"acme", "globex"} {
+		if _, err := g.CreateNode(context.Background(), graph.NewNode{Namespace: "organisation", Key: u, Type: "OrgUnit", Properties: map[string]any{"name": u}}); err != nil {
+			t.Fatal(err)
+		}
+	}
 	e.Methodologies.(StaticMethodologies)["docs"] = parseDocs(t, nil)
 	e.Executors[methodology.KindTool] = ToolExecutor{}
 	if client != nil {
@@ -106,7 +113,7 @@ func mcpEngine(t *testing.T, hub ToolPort, client llm.Client) (*Engine, domain.B
 func runDocs(t *testing.T, e *Engine, base domain.BaselineID, org string) *Process {
 	t.Helper()
 	ctx := authz.With(context.Background(), authz.Principal{Subject: "alice", Org: org, Roles: []string{"admin"}})
-	p, err := e.Start(ctx, StartRequest{Methodology: "docs", Agent: "writer", Goal: "done", BaselineID: base, Intent: "document it"})
+	p, err := e.Start(ctx, StartRequest{Methodology: "docs", Agent: "writer", Goal: "done", BaselineID: base, Intent: "document it", OwnerOrg: org})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -137,8 +144,8 @@ func TestToolActionOnlyWhereTheOrganizationBindsTheMCP(t *testing.T) {
 		t.Fatal(err)
 	}
 	c := bb.Change
-	if c.OrgID != "acme" || p.OrgID != "acme" {
-		t.Fatalf("org: change %q process %q", c.OrgID, p.OrgID)
+	if c.OwnerOrg != "acme" || p.Org != "acme" {
+		t.Fatalf("org: change %q process %q", c.OwnerOrg, p.Org)
 	}
 	if arts := c.ItemsOfKind(domain.KindArtifact); len(arts) != 1 || arts[0].Type != "doc" || arts[0].Data["tool"] != "document-repository/read" {
 		t.Fatalf("artifacts = %+v", arts)
@@ -177,8 +184,8 @@ func TestToolFailureFailsTheStep(t *testing.T) {
 func TestActionCanOnlyCallTheMCPsItDeclares(t *testing.T) {
 	hub := &fakeHub{bound: map[string][]string{"acme": {"document-repository", "ticketing"}}}
 	e, _ := mcpEngine(t, hub, nil)
-	p := &Process{ID: "p", Initiator: authz.Principal{Subject: "alice", Org: "acme"}, OrgID: "acme"}
-	h := e.newHost(p, methodology.Action{Name: "a", Kind: methodology.KindLLM, MCPs: []string{"document-repository"}})
+	p := &Process{ID: "p", Initiator: authz.Principal{Subject: "alice", Org: "acme"}, Org: "acme"}
+	h := e.newHost(p, methodology.Action{Name: "a", Kind: methodology.KindLLM, MCPs: []string{"document-repository"}}, nil)
 	if _, err := h.CallTool(context.Background(), "document-repository/read", map[string]any{"path": "x"}); err != nil {
 		t.Fatal(err)
 	}
@@ -239,5 +246,26 @@ func TestLLMActionCallsToolsThenAnswers(t *testing.T) {
 	}
 	if len(p.Steps[0].ToolCalls) != 2 || p.Steps[0].ToolCalls[1].Error == "" {
 		t.Fatalf("tool calls = %+v", p.Steps[0].ToolCalls)
+	}
+}
+
+func TestAgentMCPsExtendTheToolsOfItsLLMAndScriptActions(t *testing.T) {
+	hub := &fakeHub{bound: map[string][]string{"acme": {"document-repository"}}}
+	e, _ := mcpEngine(t, hub, nil)
+	p := &Process{ID: "p", Initiator: authz.Principal{Subject: "alice"}, Org: "acme"}
+	agentMCPs := []string{"document-repository"}
+	ctx := context.Background()
+	call := func(kind string) error {
+		h := e.newHost(p, methodology.Action{Name: "a", Kind: kind}, agentMCPs)
+		_, err := h.CallTool(ctx, "document-repository/read", map[string]any{"path": "x"})
+		return err
+	}
+	for _, kind := range []string{methodology.KindLLM, methodology.KindScript} {
+		if err := call(kind); err != nil {
+			t.Errorf("%s action cannot use the agent's MCP: %v", kind, err)
+		}
+	}
+	if err := call(methodology.KindBuiltin); err == nil {
+		t.Error("a builtin action can use the agent's MCP")
 	}
 }

@@ -9,11 +9,29 @@
 package mcp
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"regexp"
 	"strings"
 )
+
+// Types and namespaces of the graph objects.
+const (
+	NamespacePlatform     = "platform"
+	NamespaceOrganisation = "organisation"
+	NodeTypeMCP           = "MCP"
+	NodeTypeAdapter       = "Adapter"
+	NodeTypeOrgUnit       = "OrgUnit"
+	LinkOwner             = "owner"
+	LinkPartOf            = "part_of"
+)
+
+// MCPKey is the key of the node of an MCP.
+func MCPKey(name string) string { return "MCP:" + name }
+
+// AdapterKey is the key of the Adapter node of an MCP in a unit.
+func AdapterKey(unit, mcp string) string { return "ADP:" + unit + "/" + mcp }
 
 // ErrInvalid marks a malformed definition.
 var ErrInvalid = errors.New("invalid")
@@ -45,22 +63,21 @@ type ToolMapping struct {
 	ResultPath string `json:"resultPath,omitempty"`
 }
 
-// Adapter is the implementation of an MCP by a connector.
+// Adapter is the implementation of an MCP by a connector for an organisational unit: the one
+// place where unit, MCP and connector meet. The MCP knows no connector, the connector knows
+// no MCP. It is an Adapter node of the "organisation" namespace linked to its unit by `owner`.
 type Adapter struct {
-	MCP       string        `json:"mcp"`
-	Connector string        `json:"connector"`
-	Tools     []ToolMapping `json:"tools"`
-}
-
-// Binding attaches an MCP to a connector for an organization.
-type Binding struct {
-	OrgID     string `json:"orgId"`
-	MCP       string `json:"mcp"`
+	// Unit is the key of the OrgUnit the adapter belongs to (from its `owner` link).
+	Unit string `json:"unit,omitempty"`
+	// MCP is the name of the MCP of the platform namespace.
+	MCP string `json:"mcp"`
+	// Connector is the id of a registered connector.
 	Connector string `json:"connector"`
-	// Config is the connector configuration of the organization.
+	// Config are the parameters of the connector (validated against its config schema).
 	Config map[string]any `json:"config,omitempty"`
-	// Secrets maps a secret name to its reference ("<vault path>#<field>" or "env:<VAR>").
+	// Secrets maps a secret name of the connector to its reference ("<vault path>#<field>" or "env:<VAR>").
 	Secrets map[string]string `json:"secrets,omitempty"`
+	Tools   []ToolMapping     `json:"tools"`
 }
 
 // ToolInfo is a tool available to an organization, under its qualified name.
@@ -117,6 +134,9 @@ func (d Def) Tool(name string) (Tool, bool) {
 // must exist and be mapped once. Tools left unmapped are unavailable through
 // this adapter.
 func (a Adapter) Validate(def Def) error {
+	if a.MCP != def.Name {
+		return fmt.Errorf("adapter of %s validated against %s: %w", a.MCP, def.Name, ErrInvalid)
+	}
 	if !ValidName(a.Connector) {
 		return fmt.Errorf("connector name %q must match %s: %w", a.Connector, nameRE, ErrInvalid)
 	}
@@ -222,4 +242,46 @@ func Pick(result map[string]any, path string) (map[string]any, error) {
 		return m, nil
 	}
 	return map[string]any{"value": v}, nil
+}
+
+func viaJSON(from, to any) error {
+	b, err := json.Marshal(from)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(b, to)
+}
+
+// Props returns the properties of the MCP node.
+func (d Def) Props() map[string]any {
+	var m map[string]any
+	_ = viaJSON(d, &m)
+	return m
+}
+
+// DefFromProps reads an MCP definition from the properties of its node.
+func DefFromProps(props map[string]any) (Def, error) {
+	var d Def
+	if err := viaJSON(props, &d); err != nil {
+		return d, fmt.Errorf("mcp node: %w: %w", err, ErrInvalid)
+	}
+	return d, nil
+}
+
+// Props returns the properties of the Adapter node (the unit is carried by its owner link).
+func (a Adapter) Props() map[string]any {
+	a.Unit = ""
+	var m map[string]any
+	_ = viaJSON(a, &m)
+	return m
+}
+
+// AdapterFromProps reads an adapter from the properties of its node and the unit that owns it.
+func AdapterFromProps(unit string, props map[string]any) (Adapter, error) {
+	var a Adapter
+	if err := viaJSON(props, &a); err != nil {
+		return a, fmt.Errorf("adapter node: %w: %w", err, ErrInvalid)
+	}
+	a.Unit = unit
+	return a, nil
 }

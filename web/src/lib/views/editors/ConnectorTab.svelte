@@ -33,11 +33,11 @@
         <dt>Last seen</dt><dd>{formatDate(c?.lastSeen)}</dd>
         {#if info.secretNames?.length}<dt>Secrets</dt><dd>{info.secretNames.join(', ')}</dd>{/if}
       </dl>
-      <p class="hint">A connector is a separate service: it registers itself with the hub and renews its registration as a heartbeat.</p>
+      <p class="hint">A connector is a separate service: it registers itself with the hub and renews its registration as a heartbeat. It knows no MCP and no adapter.</p>
     </section>
     {#if info.configSchema}
       <section class="card">
-        <h3>Configuration (per organisation)</h3>
+        <h3>Parameters (given by each adapter)</h3>
         <pre class="mono">{JSON.stringify(info.configSchema, null, 2)}</pre>
       </section>
     {/if}

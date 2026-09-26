@@ -287,13 +287,13 @@ func TestBoardValidationDiscardedFlowResumes(t *testing.T) {
 func TestChangeOpensInTheNamespaceOfTheMethodology(t *testing.T) {
 	ctx := context.Background()
 	e, g, base := setup(t)
-	e.Methodologies.(StaticMethodologies)["impact-analysis"].Namespace = "metadata"
+	e.Methodologies.(StaticMethodologies)["impact-analysis"].Namespace = "platform"
 	p, err := e.Start(ctx, StartRequest{Methodology: "impact-analysis", BaselineID: base, Goal: "assess_impact"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	c, err := g.Change(ctx, p.ChangeID)
-	if err != nil || c.Namespace != domain.NamespaceMetadata {
+	if err != nil || c.Namespace != domain.NamespacePlatform {
 		t.Fatalf("change namespace = %q, %v", c.Namespace, err)
 	}
 	// an explicit namespace on the request wins over the methodology default

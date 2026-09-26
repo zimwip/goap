@@ -216,6 +216,8 @@ message Agent {
   repeated string goals = 6;
   // automatic executions (outside the intent loop)
   repeated Trigger triggers = 7;
+  // MCPs whose tools the llm and script actions of the agent may use
+  repeated string mcps = 8;
 }
 
 // A trigger starts the agent automatically.
