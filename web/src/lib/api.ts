@@ -284,6 +284,8 @@ export interface Action {
   priority?: number;
   /** effects reached over several runs (a run that produces items is progress) */
   incremental?: boolean;
+  /** MCPs used by an llm / script action (a tool action names `<mcp>/<tool>`) */
+  mcps?: string[];
 }
 
 export type TriggerType = 'event' | 'schedule';
@@ -996,6 +998,10 @@ export const iam = {
     rpc<Empty, { policies?: Policy[] }>(IAM, 'ListPolicies', {}, signal),
   addPolicy: (policy: Policy) => rpc<{ policy: Policy }, { policy?: Policy }>(IAM, 'AddPolicy', { policy }),
   removePolicy: (policy: Policy) => rpc<{ policy: Policy }, Empty>(IAM, 'RemovePolicy', { policy }),
+  listOrganizations: (signal?: AbortSignal) => rpc<Empty, { organizations?: Organization[] }>(IAM, 'ListOrganizations', {}, signal),
+  getOrganization: (id: string) => rpc<{ id: string }, { organization?: Organization }>(IAM, 'GetOrganization', { id }),
+  createOrganization: (id: string, name: string) =>
+    rpc<{ id: string; name: string }, { organization?: Organization }>(IAM, 'CreateOrganization', { id, name }),
 };
 
 export interface ImpactView {
@@ -1355,4 +1361,97 @@ export const models = {
   deleteModel: (provider: string, model: string) => rpc<object, Empty>(MODEL, 'DeleteModel', { provider, model }),
   saveAlias: (alias: ModelAlias) => rpc<{ alias: ModelAlias }, Empty>(MODEL, 'SaveAlias', { alias }),
   deleteAlias: (alias: string) => rpc<{ alias: string }, Empty>(MODEL, 'DeleteAlias', { alias }),
+};
+
+// ---------------------------------------------------------------------------
+// MCP hub and organisations
+// ---------------------------------------------------------------------------
+
+const MCP = 'goap.mcp.v1.McpService';
+
+export interface Organization {
+  id?: string;
+  name?: string;
+  createdAt?: string;
+}
+
+export interface ConnectorOperation {
+  name?: string;
+  description?: string;
+  inputSchema?: Struct;
+}
+
+export interface ConnectorInfo {
+  id?: string;
+  version?: string;
+  description?: string;
+  configSchema?: Struct;
+  secretNames?: string[];
+  operations?: ConnectorOperation[];
+}
+
+export interface Connector {
+  info?: ConnectorInfo;
+  endpoint?: string;
+  lastSeen?: string;
+  live?: boolean;
+}
+
+export interface McpTool {
+  name?: string;
+  description?: string;
+  inputSchema?: Struct;
+}
+
+export interface Mcp {
+  name?: string;
+  description?: string;
+  tools?: McpTool[];
+}
+
+export interface ToolMapping {
+  tool?: string;
+  operation?: string;
+  arguments?: Struct;
+  resultPath?: string;
+}
+
+export interface Adapter {
+  mcp?: string;
+  connector?: string;
+  tools?: ToolMapping[];
+}
+
+export interface Binding {
+  orgId?: string;
+  mcp?: string;
+  connector?: string;
+  config?: Struct;
+  secrets?: Record<string, string>;
+}
+
+export interface HubTool {
+  name?: string;
+  description?: string;
+  inputSchema?: Struct;
+}
+
+export const mcp = {
+  listConnectors: (signal?: AbortSignal) => rpc<Empty, { connectors?: Connector[] }>(MCP, 'ListConnectors', {}, signal),
+  listMcps: (signal?: AbortSignal) => rpc<Empty, { mcps?: Mcp[] }>(MCP, 'ListMcps', {}, signal),
+  saveMcp: (m: Mcp) => rpc<{ mcp: Mcp }, { mcp?: Mcp }>(MCP, 'SaveMcp', { mcp: m }),
+  deleteMcp: (name: string) => rpc<{ name: string }, Empty>(MCP, 'DeleteMcp', { name }),
+  listAdapters: (mcpName = '', signal?: AbortSignal) =>
+    rpc<{ mcp: string }, { adapters?: Adapter[] }>(MCP, 'ListAdapters', { mcp: mcpName }, signal),
+  saveAdapter: (adapter: Adapter) =>
+    rpc<{ adapter: Adapter }, { adapter?: Adapter; warnings?: string[] }>(MCP, 'SaveAdapter', { adapter }),
+  deleteAdapter: (mcpName: string, connector: string) =>
+    rpc<{ mcp: string; connector: string }, Empty>(MCP, 'DeleteAdapter', { mcp: mcpName, connector }),
+  listBindings: (orgId = '', signal?: AbortSignal) =>
+    rpc<{ orgId: string }, { bindings?: Binding[] }>(MCP, 'ListBindings', { orgId }, signal),
+  bindMcp: (binding: Binding) => rpc<{ binding: Binding }, { binding?: Binding }>(MCP, 'BindMcp', { binding }),
+  unbindMcp: (orgId: string, mcpName: string) =>
+    rpc<{ orgId: string; mcp: string }, Empty>(MCP, 'UnbindMcp', { orgId, mcp: mcpName }),
+  listTools: (orgId = '', signal?: AbortSignal) =>
+    rpc<{ orgId: string }, { tools?: HubTool[]; mcps?: string[] }>(MCP, 'ListTools', { orgId }, signal),
 };

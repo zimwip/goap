@@ -618,6 +618,10 @@ Binding        per organisation: MCP -> (connector, configuration, secret refere
 - **LLM actions** with `mcps` may call the tools in a bounded loop (`MaxToolRounds`), exchanged as JSON on top
   of any model (`{"tool_calls":[...]}`, then `{"items":[...]}`); every call is journaled with its duration and
   error. Calls run with the principal of the process initiator (`tool:call` permission).
+- **Tools view** (web): a tree of the connectors (live / expired, their operations and schemas), the MCPs with their
+  adapters, and the organisations with their bindings. Its editors create and edit MCPs, adapters (tool mapping
+  rows, server warnings shown) and bindings (configuration, secret references); organisations are created from
+  its toolbar. The action editor has an `mcps` field on `llm` / `script` actions.
 - `goap-dev` runs the hub and the localfs connector in-process (`GOAP_DEV_FS_ROOT` binds a directory to the
   default organisation); connectors started separately register over HTTP.
 

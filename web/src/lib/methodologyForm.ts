@@ -120,6 +120,8 @@ export interface ActionForm extends Identified {
   priority: number;
   /** effects reached over several runs */
   incremental: boolean;
+  /** MCPs used by an llm / script action, comma separated */
+  mcps: string;
 }
 
 export interface TriggerForm {
@@ -235,6 +237,7 @@ export const emptyAction = (): ActionForm => ({
   when: '',
   priority: 0,
   incremental: false,
+  mcps: '',
 });
 export const emptyGoal = (): GoalForm => ({ uid: newUid(), name: '', description: '', examples: '', pre: [], value: 1 });
 export const emptyAgent = (): AgentForm => ({
@@ -297,6 +300,12 @@ function uids<T extends { name?: string }>(list: T[] | undefined): string[] {
   });
 }
 
+const mcpList = (s: string): string[] =>
+  s
+    .split(/[\s,]+/)
+    .map((x) => x.trim())
+    .filter(Boolean);
+
 function actionToForm(a: Action, uid: string): ActionForm {
   const e = a.expects;
   return {
@@ -330,6 +339,7 @@ function actionToForm(a: Action, uid: string): ActionForm {
     when: a.when ?? '',
     priority: a.priority ?? 0,
     incremental: a.incremental ?? false,
+    mcps: (a.mcps ?? []).join(', '),
   };
 }
 
@@ -601,9 +611,11 @@ export function fromForm(f: MethodologyForm): { methodology: Methodology; issues
       if (a.kind === 'llm') {
         put(o, 'model', a.model.trim());
         put(o, 'prompt', a.prompt);
+        put(o, 'mcps', mcpList(a.mcps));
       } else if (a.kind === 'script') {
         put(o, 'language', a.language);
         put(o, 'code', a.code);
+        put(o, 'mcps', mcpList(a.mcps));
       } else if (a.kind === 'tool') {
         put(o, 'tool', a.tool.trim());
       } else if (a.kind === 'human') {
