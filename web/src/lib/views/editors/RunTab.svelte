@@ -30,7 +30,7 @@
   } from '../../api';
   import { watchEvents, type StreamStatus } from '../../stream';
   import { processes, ingestProcess, ingestEvent, childrenOf, refreshProcesses } from '../../stores/live.svelte';
-  import { chainOf, inChain } from '../../flowChain';
+  import { chainOf, inChain, restartedStepNumber } from '../../flowChain';
 
   let { tab }: { tab: Tab } = $props();
 
@@ -291,7 +291,7 @@
 
     {#if process.flow}
       <div class="card flow-banner">
-        Relaunched from step {(process.fromStep ?? 0) + 1} of
+        Relaunched from step {restartedStepNumber(process, processes)} of
         <button type="button" class="link mono" onclick={() => openRun(process.relaunchOf ?? '')}>{relaunchOfProcess?.title || shortId(process.relaunchOf)}</button>
         {#if relaunchOfProcess}<StatusBadge status={relaunchOfProcess.status} />{/if}
         on flow <code>{shortId(process.flow)}</code>
@@ -312,7 +312,7 @@
     {#if chain.length > 1}
       <details class="card flow-graph">
         <summary>Flow <span class="hint">{chain.length} runs · {flows.length} branch{flows.length === 1 ? '' : 'es'}</span></summary>
-        <FlowGraph {processes} processId={process.id ?? ''} {flows} onopen={(pid) => openRun(pid)} ondecided={() => { flowsTick++; void refreshProcesses(); }} />
+        <FlowGraph {processes} processId={process.id ?? ''} {flows} onopen={(pid) => openRun(pid)} />
       </details>
     {/if}
 
@@ -325,7 +325,7 @@
         {#if process.pending.kind === 'approval'}
           <ApprovalPanel {process} ondecided={set} />
         {:else if process.pending.kind === 'flow'}
-          <FlowDecisionPanel {process} ondecided={set} />
+          <FlowDecisionPanel {process} step={restartedStepNumber(process, processes)} ondecided={set} />
         {:else if process.pending.kind === 'board'}
           <BoardIssuesPanel {process} {flows} ondecided={set} onopen={(pid) => openRun(pid)} />
         {:else if process.pending.kind === 'relaunched'}

@@ -49,7 +49,7 @@ func (e *Engine) checkBoard(ctx context.Context, p *Process, bb domain.Blackboar
 	prop := e.proposeRelaunch(ctx, p, bb.Change, errs)
 	desc := fmt.Sprintf("The blackboard is inconsistent (%d issue(s)): %s", len(errs), errs[0].Message)
 	if prop != nil {
-		desc += fmt.Sprintf(". Restart from step %d (%s) of process %s.", prop.Step, prop.Action, prop.Process)
+		desc += fmt.Sprintf(". Restart from step %d (%s) of process %s.", prop.Step+1, prop.Action, prop.Process)
 	}
 	p.Status, p.Plan = StatusWaiting, nil
 	p.Pending = &HumanTask{Kind: TaskBoard, Action: "validate_board", Step: len(p.Steps), Description: desc, Issues: errs, Proposal: prop}

@@ -65,3 +65,16 @@ export function runKind(p: Process): RunKind {
   }
   return p.status === 'superseded' ? 'replaced' : 'main';
 }
+
+/** chain-wide 1-based number of the step a relaunched run restarted (its parent's step `fromStep`, after the steps the parent inherited) */
+export function restartedStepNumber(p: Process, all: ProcessLookup): number {
+  const parent = p.relaunchOf ? all.get(p.relaunchOf) : undefined;
+  return (parent ? offsetOf(parent, all) : 0) + (p.fromStep ?? 0) + 1;
+}
+
+/** same number for a flow: through the run relaunched on it, else through the run it relaunched from */
+export function flowStepNumber(f: { id?: string; process?: string; fromStep?: number }, all: ProcessLookup): number {
+  for (const p of all.values()) if (f.id && p.flow === f.id) return restartedStepNumber(p, all);
+  const parent = f.process ? all.get(f.process) : undefined;
+  return (parent ? offsetOf(parent, all) : 0) + (f.fromStep ?? 0) + 1;
+}

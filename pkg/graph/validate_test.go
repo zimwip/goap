@@ -85,7 +85,7 @@ func testValidateBoardOutdatedAndFlowView(t *testing.T, repo Repo) {
 	}
 	// REQ-1 moved on main since b1 was proposed: b1 is outdated
 	by := issuesByCode(mustIssues(t, g, b.ID, ""))
-	if o := by["outdated"]; len(o) != 1 || o[0].Item != "b1" || o[0].Culprit != "b1" {
+	if o := by["outdated"]; len(o) != 1 || o[0].Item != "b1" || o[0].Culprit != "b1" || o[0].Severity != domain.IssueWarning {
 		t.Fatalf("outdated = %+v", by)
 	}
 	// relaunching from b1 marks it (and b2) stale: the flow view no longer contains them, so it is clean

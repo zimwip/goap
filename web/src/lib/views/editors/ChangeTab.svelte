@@ -31,6 +31,7 @@
   import FlowGraph from '../../components/FlowGraph.svelte';
   import FlowActions from '../../components/FlowActions.svelte';
   import FlowBranchInfo from '../../components/FlowBranchInfo.svelte';
+  import { flowStepNumber } from '../../flowChain';
   import { processOfFlow } from '../../flowDecision';
   import BoardIssueList from '../../components/BoardIssueList.svelte';
 
@@ -476,21 +477,25 @@
           {#if checkError}<span class="error">{checkError}</span>{/if}
           {#if boardIssues && !boardIssues.length}<span class="hint">Consistent</span>{/if}
           {#if boardIssues?.length}
-            <p class="hint">{boardIssues.length} issue{boardIssues.length === 1 ? '' : 's'} on the main flow</p>
-            <BoardIssueList issues={boardIssues} />
+            {@const nWarn = boardIssues.filter((i) => i.severity === 'warning').length}
+            {@const nErr = boardIssues.length - nWarn}
+            <p class="hint">
+              {nErr} error{nErr === 1 ? '' : 's'}, {nWarn} warning{nWarn === 1 ? '' : 's'} on the main flow
+            </p>
+            <BoardIssueList issues={boardIssues} sections />
           {/if}
         </div>
 
         {#if flows.length}
           <h3>Flow branches <span class="count">{flows.length}</span></h3>
-          <FlowGraph {processes} changeId={selected} {flows} onopen={(pid) => openTab({ kind: 'run', params: { id: pid } })} ondecided={() => load(selected)} />
+          <FlowGraph {processes} changeId={selected} {flows} onopen={(pid) => openTab({ kind: 'run', params: { id: pid } })} />
           <ul class="subs flows">
             {#each flows as f (f.id)}
               {@const fp = flowProcess(f)}
               <li>
                 <StatusBadge status={flowBadge(f)} />
                 <code>{shortId(f.id)}</code>
-                from step {(f.fromStep ?? 0) + 1}
+                from step {flowStepNumber(f, processes)}
                 {#if f.reason}<span class="muted">· {f.reason}</span>{/if}
                 <span class="hint">· {f.stale?.length ?? 0} stale item(s)</span>
                 {#if f.process}<button type="button" class="link mono" onclick={() => openTab({ kind: 'run', params: { id: f.process ?? '' } })}>previous run</button>{/if}

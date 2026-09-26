@@ -342,3 +342,17 @@ func TestRelaunchGuidanceReachesTheAgent(t *testing.T) {
 		}
 	}
 }
+
+func TestRelaunchedTitlesDoNotPileUp(t *testing.T) {
+	if got := baseTitle("design it (relaunch from step 4) (relaunch from step 2)"); got != "design it" {
+		t.Fatalf("baseTitle = %q", got)
+	}
+	e, ctx, old, _ := completedRun(t)
+	np, err := e.Relaunch(ctx, old.ID, 1, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := old.Title + " (relaunch from step 2)"; np.Title != want {
+		t.Fatalf("title = %q, want %q (steps are numbered from 1)", np.Title, want)
+	}
+}
