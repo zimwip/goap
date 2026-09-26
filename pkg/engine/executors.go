@@ -5,11 +5,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"strings"
 	"text/template"
 
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/llm"
+	"github.com/zimwip/goap/pkg/mcp"
 	"github.com/zimwip/goap/pkg/methodology"
 )
 
@@ -140,7 +142,37 @@ func guidanceSection(bb domain.Blackboard) string {
 	return "\n\nGuidance from a human reviewer (take it into account: it takes precedence over your previous answers):\n" + strings.Join(lines, "\n") + "\n"
 }
 
-// Execute implements Executor.
+// MaxToolRounds bounds the tool calls of one LLM action: after that many rounds the model
+// must answer with its items.
+const MaxToolRounds = 6
+
+// maxToolResult bounds the size of a tool result given back to the model.
+const maxToolResult = 20000
+
+// toolsSection describes the tools an LLM action may call and the protocol to call them.
+// Tool calls are exchanged as JSON on top of any model (no provider-specific tool API).
+func toolsSection(tools []mcp.ToolInfo) string {
+	var b strings.Builder
+	b.WriteString(`
+
+You can call tools before giving your final answer. To call tools, answer ONLY with
+{"tool_calls":[{"name":"<tool>","arguments":{...}}]}; the results are given back to you and you continue.
+When you have what you need, answer with {"items":[...]} as described above. Available tools:
+`)
+	for _, t := range tools {
+		schema, _ := json.Marshal(t.InputSchema)
+		fmt.Fprintf(&b, "- %s: %s arguments: %s\n", t.Name, t.Description, schema)
+	}
+	return b.String()
+}
+
+type toolCall struct {
+	Name      string         `json:"name"`
+	Arguments map[string]any `json:"arguments"`
+}
+
+// Execute implements Executor. An action that declares MCPs may call their tools (bound by the
+// organization of the change) in a bounded loop before answering with its items.
 func (e LLMExecutor) Execute(ctx context.Context, ac ActionContext) (ActionResult, error) {
 	prompt, err := RenderPrompt(ctx, ac)
 	if err != nil {
@@ -151,23 +183,86 @@ func (e LLMExecutor) Execute(ctx context.Context, ac ActionContext) (ActionResul
 	if model == "" {
 		model = "default"
 	}
-	req := llm.Request{Model: model, System: llmSystem, JSON: true, MaxTokens: 16000, Messages: []llm.Message{{Role: "user", Content: prompt}}}
-	var resp llm.Response
-	if ac.Host != nil {
-		resp, err = ac.Host.completeLLM(ctx, e.Client, req)
-	} else {
-		resp, err = e.Client.Complete(ctx, req)
+	system := llmSystem
+	var tools []mcp.ToolInfo
+	if ac.Host != nil && len(ac.Action.MCPs) > 0 {
+		if tools, err = ac.Host.Tools(ctx); err != nil {
+			return ActionResult{}, err
+		}
+		if len(tools) > 0 {
+			system += toolsSection(tools)
+		}
 	}
+	msgs := []llm.Message{{Role: "user", Content: prompt}}
+	calls := 0
+	for round := 0; ; round++ {
+		req := llm.Request{Model: model, System: system, JSON: true, MaxTokens: 16000, Messages: msgs}
+		var resp llm.Response
+		if ac.Host != nil {
+			resp, err = ac.Host.completeLLM(ctx, e.Client, req)
+		} else {
+			resp, err = e.Client.Complete(ctx, req)
+		}
+		if err != nil {
+			return ActionResult{}, err
+		}
+		var out struct {
+			Items     []ItemInput `json:"items"`
+			ToolCalls []toolCall  `json:"tool_calls"`
+		}
+		if err := llm.DecodeJSON(resp.Text, &out); err != nil {
+			return ActionResult{Output: resp.Text}, err
+		}
+		if len(out.ToolCalls) == 0 || len(tools) == 0 {
+			return ActionResult{Items: out.Items, Output: fmt.Sprintf("%s/%s: %d items, %d tool calls", resp.Provider, resp.Model, len(out.Items), calls)}, nil
+		}
+		if round >= MaxToolRounds {
+			return ActionResult{Output: resp.Text}, fmt.Errorf("the model still asks for tools after %d rounds", MaxToolRounds)
+		}
+		results := make([]map[string]any, 0, len(out.ToolCalls))
+		for _, c := range out.ToolCalls {
+			calls++
+			res, err := ac.Host.CallTool(ctx, c.Name, c.Arguments)
+			r := map[string]any{"tool": c.Name}
+			if err != nil {
+				r["error"] = err.Error() // the model sees the failure and may adapt
+			} else {
+				r["result"] = res
+			}
+			results = append(results, r)
+		}
+		b, _ := json.Marshal(results)
+		if len(b) > maxToolResult {
+			b = append(b[:maxToolResult], []byte("... (truncated)")...)
+		}
+		msgs = append(msgs, llm.Message{Role: "assistant", Content: resp.Text},
+			llm.Message{Role: "user", Content: "Tool results:\n" + string(b) + "\nContinue: call more tools or give your final answer."})
+	}
+}
+
+// ---- tool -------------------------------------------------------------------
+
+// ToolExecutor calls the tool of the action ("<mcp>/<tool>") of the MCP hub, with the
+// action params as arguments, and records the result as an artifact item of the type
+// params["artifact"] (default "tool_result") with data {tool, result}.
+type ToolExecutor struct{}
+
+// Execute implements Executor.
+func (ToolExecutor) Execute(ctx context.Context, ac ActionContext) (ActionResult, error) {
+	args := maps.Clone(ac.Action.Params)
+	artifact, _ := args["artifact"].(string)
+	delete(args, "artifact")
+	if artifact == "" {
+		artifact = "tool_result"
+	}
+	res, err := ac.Host.CallTool(ctx, ac.Action.Tool, args)
 	if err != nil {
 		return ActionResult{}, err
 	}
-	var out struct {
-		Items []ItemInput `json:"items"`
-	}
-	if err := llm.DecodeJSON(resp.Text, &out); err != nil {
-		return ActionResult{Output: resp.Text}, err
-	}
-	return ActionResult{Items: out.Items, Output: fmt.Sprintf("%s/%s: %d items", resp.Provider, resp.Model, len(out.Items))}, nil
+	return ActionResult{
+		Items:  []ItemInput{{Kind: string(domain.KindArtifact), Type: artifact, Data: map[string]any{"tool": ac.Action.Tool, "result": res}}},
+		Output: "called " + ac.Action.Tool,
+	}, nil
 }
 
 // ---- human ----------------------------------------------------------------

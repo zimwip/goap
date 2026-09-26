@@ -1,0 +1,59 @@
+syntax = "proto3";
+
+package goap.connector.v1;
+
+import "google/protobuf/struct.proto";
+
+// ConnectorService is the protocol every connector implements. A connector is a
+// separately deployed service wrapping the API of one real service (Google Drive,
+// local file system, ...). It registers itself with the MCP hub
+// (goap.mcp.v1.McpService.RegisterConnector) and is then called by the hub only;
+// adding a connector to the platform is deploying a service that speaks this protocol.
+service ConnectorService {
+  // Describe returns the identity and the operations of the connector.
+  rpc Describe(DescribeRequest) returns (DescribeResponse);
+  // Invoke runs one operation with the configuration of the organization that binds it.
+  rpc Invoke(InvokeRequest) returns (InvokeResponse);
+}
+
+message Operation {
+  string name = 1;
+  string description = 2;
+  // JSON Schema of the arguments
+  google.protobuf.Struct input_schema = 3;
+}
+
+message ConnectorInfo {
+  // stable identifier, e.g. "localfs", "gdrive"
+  string id = 1;
+  string version = 2;
+  string description = 3;
+  // JSON Schema of the per-organization configuration (root path, account, ...)
+  google.protobuf.Struct config_schema = 4;
+  // names of the secrets the connector needs (e.g. "api_key"); bound per organization
+  repeated string secret_names = 5;
+  repeated Operation operations = 6;
+}
+
+message DescribeRequest {}
+
+message DescribeResponse {
+  ConnectorInfo info = 1;
+}
+
+message InvokeRequest {
+  string operation = 1;
+  google.protobuf.Struct arguments = 2;
+  // per-organization configuration (validated against config_schema by the connector)
+  google.protobuf.Struct config = 3;
+  // resolved secrets, by name; never logged
+  map<string, string> secrets = 4;
+  string org_id = 5;
+}
+
+message InvokeResponse {
+  google.protobuf.Struct result = 1;
+  // the operation failed in a way the caller should see (not a transport error)
+  bool is_error = 2;
+  string error = 3;
+}

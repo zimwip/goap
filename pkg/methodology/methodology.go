@@ -21,6 +21,7 @@ import (
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/goap"
 	"github.com/zimwip/goap/pkg/guard"
+	"github.com/zimwip/goap/pkg/mcp"
 )
 
 // Methodology is the declarative definition deployed in the registry.
@@ -229,8 +230,11 @@ type Action struct {
 	// llm
 	Model  string `yaml:"model,omitempty" json:"model,omitempty"`
 	Prompt string `yaml:"prompt,omitempty" json:"prompt,omitempty"`
-	// tool
+	// tool: "<mcp>/<tool>", a tool of an MCP the organization of the change binds
 	Tool string `yaml:"tool,omitempty" json:"tool,omitempty"`
+	// MCPs the action uses (llm and script actions; a tool action uses the MCP of its
+	// tool). The action can be scheduled only in a change whose organization binds them all.
+	MCPs []string `yaml:"mcps,omitempty" json:"mcps,omitempty"`
 	// builtin
 	Builtin string `yaml:"builtin,omitempty" json:"builtin,omitempty"`
 	// human
@@ -254,6 +258,17 @@ type Action struct {
 	// per technology, per batch…): an execution that produced items without
 	// reaching the effects is progress, not a failure.
 	Incremental bool `yaml:"incremental,omitempty" json:"incremental,omitempty"`
+}
+
+// RequiredMCPs returns the MCPs the action needs: its declared ones and the MCP of its tool.
+func (a Action) RequiredMCPs() []string {
+	out := slices.Clone(a.MCPs)
+	if a.Kind == KindTool {
+		if m, _, ok := strings.Cut(a.Tool, "/"); ok && !slices.Contains(out, m) {
+			out = append(out, m)
+		}
+	}
+	return out
 }
 
 // IsSpecialization reports whether the action specializes another one.
@@ -625,8 +640,20 @@ func (m *Methodology) compile() (*Compiled, Issues) {
 			add(path+".prompt", "llm action requires a prompt")
 		case a.Kind == KindTool && a.Tool == "":
 			add(path+".tool", "tool action requires a tool")
+		case a.Kind == KindTool:
+			if _, _, err := mcp.SplitTool(a.Tool); err != nil {
+				add(path+".tool", "tool must be <mcp>/<tool>")
+			}
 		case a.Kind == KindBuiltin && a.Builtin == "":
 			add(path+".builtin", "builtin action requires a builtin")
+		}
+		for _, name := range a.MCPs {
+			if !mcp.ValidName(name) {
+				add(path+".mcps", "invalid MCP name %q", name)
+			}
+		}
+		if len(a.MCPs) > 0 && a.Kind != KindLLM && a.Kind != KindScript {
+			add(path+".mcps", "mcps apply to llm and script actions (a tool action names its tool)")
 		}
 		if a.Permission != "" && !strings.Contains(a.Permission, ":") {
 			add(path+".permission", "permission must be <resource>:<action>")
@@ -903,6 +930,16 @@ func (c *Compiled) AgentList() []Agent {
 		out = append(out, c.agents[a.Name])
 	}
 	return out
+}
+
+// UsesMCPs reports whether an action of the methodology needs an MCP.
+func (c *Compiled) UsesMCPs() bool {
+	for _, a := range c.actions {
+		if len(a.RequiredMCPs()) > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // AgentActions returns the planner operators admissible for an agent.

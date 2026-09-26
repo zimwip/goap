@@ -7,9 +7,11 @@
 package mcpv1
 
 import (
+	v1 "github.com/zimwip/goap/gen/goap/connector/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	structpb "google.golang.org/protobuf/types/known/structpb"
+	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
@@ -22,31 +24,29 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-type Server struct {
+type RegisterConnectorRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	// streamable HTTP endpoint of the MCP server
-	Url string `protobuf:"bytes,2,opt,name=url,proto3" json:"url,omitempty"`
-	// Vault path of the credentials
-	SecretPath    string `protobuf:"bytes,3,opt,name=secret_path,json=secretPath,proto3" json:"secret_path,omitempty"`
+	Info  *v1.ConnectorInfo      `protobuf:"bytes,1,opt,name=info,proto3" json:"info,omitempty"`
+	// base URL where the hub reaches the ConnectorService of this connector
+	Endpoint      string `protobuf:"bytes,2,opt,name=endpoint,proto3" json:"endpoint,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *Server) Reset() {
-	*x = Server{}
+func (x *RegisterConnectorRequest) Reset() {
+	*x = RegisterConnectorRequest{}
 	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *Server) String() string {
+func (x *RegisterConnectorRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*Server) ProtoMessage() {}
+func (*RegisterConnectorRequest) ProtoMessage() {}
 
-func (x *Server) ProtoReflect() protoreflect.Message {
+func (x *RegisterConnectorRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -58,54 +58,304 @@ func (x *Server) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use Server.ProtoReflect.Descriptor instead.
-func (*Server) Descriptor() ([]byte, []int) {
+// Deprecated: Use RegisterConnectorRequest.ProtoReflect.Descriptor instead.
+func (*RegisterConnectorRequest) Descriptor() ([]byte, []int) {
 	return file_goap_mcp_v1_mcp_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *Server) GetName() string {
+func (x *RegisterConnectorRequest) GetInfo() *v1.ConnectorInfo {
+	if x != nil {
+		return x.Info
+	}
+	return nil
+}
+
+func (x *RegisterConnectorRequest) GetEndpoint() string {
+	if x != nil {
+		return x.Endpoint
+	}
+	return ""
+}
+
+type RegisterConnectorResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// the registration expires unless renewed within this delay
+	LeaseSeconds  int32 `protobuf:"varint,1,opt,name=lease_seconds,json=leaseSeconds,proto3" json:"lease_seconds,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RegisterConnectorResponse) Reset() {
+	*x = RegisterConnectorResponse{}
+	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RegisterConnectorResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RegisterConnectorResponse) ProtoMessage() {}
+
+func (x *RegisterConnectorResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RegisterConnectorResponse.ProtoReflect.Descriptor instead.
+func (*RegisterConnectorResponse) Descriptor() ([]byte, []int) {
+	return file_goap_mcp_v1_mcp_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *RegisterConnectorResponse) GetLeaseSeconds() int32 {
+	if x != nil {
+		return x.LeaseSeconds
+	}
+	return 0
+}
+
+type Connector struct {
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Info     *v1.ConnectorInfo      `protobuf:"bytes,1,opt,name=info,proto3" json:"info,omitempty"`
+	Endpoint string                 `protobuf:"bytes,2,opt,name=endpoint,proto3" json:"endpoint,omitempty"`
+	LastSeen *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=last_seen,json=lastSeen,proto3" json:"last_seen,omitempty"`
+	// registered and renewed within the lease
+	Live          bool `protobuf:"varint,4,opt,name=live,proto3" json:"live,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Connector) Reset() {
+	*x = Connector{}
+	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Connector) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Connector) ProtoMessage() {}
+
+func (x *Connector) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Connector.ProtoReflect.Descriptor instead.
+func (*Connector) Descriptor() ([]byte, []int) {
+	return file_goap_mcp_v1_mcp_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *Connector) GetInfo() *v1.ConnectorInfo {
+	if x != nil {
+		return x.Info
+	}
+	return nil
+}
+
+func (x *Connector) GetEndpoint() string {
+	if x != nil {
+		return x.Endpoint
+	}
+	return ""
+}
+
+func (x *Connector) GetLastSeen() *timestamppb.Timestamp {
+	if x != nil {
+		return x.LastSeen
+	}
+	return nil
+}
+
+func (x *Connector) GetLive() bool {
+	if x != nil {
+		return x.Live
+	}
+	return false
+}
+
+type ListConnectorsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListConnectorsRequest) Reset() {
+	*x = ListConnectorsRequest{}
+	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListConnectorsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListConnectorsRequest) ProtoMessage() {}
+
+func (x *ListConnectorsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListConnectorsRequest.ProtoReflect.Descriptor instead.
+func (*ListConnectorsRequest) Descriptor() ([]byte, []int) {
+	return file_goap_mcp_v1_mcp_proto_rawDescGZIP(), []int{3}
+}
+
+type ListConnectorsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Connectors    []*Connector           `protobuf:"bytes,1,rep,name=connectors,proto3" json:"connectors,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListConnectorsResponse) Reset() {
+	*x = ListConnectorsResponse{}
+	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListConnectorsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListConnectorsResponse) ProtoMessage() {}
+
+func (x *ListConnectorsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListConnectorsResponse.ProtoReflect.Descriptor instead.
+func (*ListConnectorsResponse) Descriptor() ([]byte, []int) {
+	return file_goap_mcp_v1_mcp_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *ListConnectorsResponse) GetConnectors() []*Connector {
+	if x != nil {
+		return x.Connectors
+	}
+	return nil
+}
+
+type McpTool struct {
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Name        string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Description string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
+	// JSON Schema of the arguments
+	InputSchema   *structpb.Struct `protobuf:"bytes,3,opt,name=input_schema,json=inputSchema,proto3" json:"input_schema,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *McpTool) Reset() {
+	*x = McpTool{}
+	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *McpTool) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*McpTool) ProtoMessage() {}
+
+func (x *McpTool) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use McpTool.ProtoReflect.Descriptor instead.
+func (*McpTool) Descriptor() ([]byte, []int) {
+	return file_goap_mcp_v1_mcp_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *McpTool) GetName() string {
 	if x != nil {
 		return x.Name
 	}
 	return ""
 }
 
-func (x *Server) GetUrl() string {
+func (x *McpTool) GetDescription() string {
 	if x != nil {
-		return x.Url
+		return x.Description
 	}
 	return ""
 }
 
-func (x *Server) GetSecretPath() string {
+func (x *McpTool) GetInputSchema() *structpb.Struct {
 	if x != nil {
-		return x.SecretPath
+		return x.InputSchema
 	}
-	return ""
+	return nil
 }
 
-type RegisterServerRequest struct {
+type Mcp struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Server        *Server                `protobuf:"bytes,1,opt,name=server,proto3" json:"server,omitempty"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Description   string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
+	Tools         []*McpTool             `protobuf:"bytes,3,rep,name=tools,proto3" json:"tools,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *RegisterServerRequest) Reset() {
-	*x = RegisterServerRequest{}
-	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[1]
+func (x *Mcp) Reset() {
+	*x = Mcp{}
+	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *RegisterServerRequest) String() string {
+func (x *Mcp) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*RegisterServerRequest) ProtoMessage() {}
+func (*Mcp) ProtoMessage() {}
 
-func (x *RegisterServerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[1]
+func (x *Mcp) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -116,40 +366,54 @@ func (x *RegisterServerRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RegisterServerRequest.ProtoReflect.Descriptor instead.
-func (*RegisterServerRequest) Descriptor() ([]byte, []int) {
-	return file_goap_mcp_v1_mcp_proto_rawDescGZIP(), []int{1}
+// Deprecated: Use Mcp.ProtoReflect.Descriptor instead.
+func (*Mcp) Descriptor() ([]byte, []int) {
+	return file_goap_mcp_v1_mcp_proto_rawDescGZIP(), []int{6}
 }
 
-func (x *RegisterServerRequest) GetServer() *Server {
+func (x *Mcp) GetName() string {
 	if x != nil {
-		return x.Server
+		return x.Name
+	}
+	return ""
+}
+
+func (x *Mcp) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *Mcp) GetTools() []*McpTool {
+	if x != nil {
+		return x.Tools
 	}
 	return nil
 }
 
-type RegisterServerResponse struct {
+type SaveMcpRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Server        *Server                `protobuf:"bytes,1,opt,name=server,proto3" json:"server,omitempty"`
+	Mcp           *Mcp                   `protobuf:"bytes,1,opt,name=mcp,proto3" json:"mcp,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *RegisterServerResponse) Reset() {
-	*x = RegisterServerResponse{}
-	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[2]
+func (x *SaveMcpRequest) Reset() {
+	*x = SaveMcpRequest{}
+	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *RegisterServerResponse) String() string {
+func (x *SaveMcpRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*RegisterServerResponse) ProtoMessage() {}
+func (*SaveMcpRequest) ProtoMessage() {}
 
-func (x *RegisterServerResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[2]
+func (x *SaveMcpRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -160,21 +424,975 @@ func (x *RegisterServerResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RegisterServerResponse.ProtoReflect.Descriptor instead.
-func (*RegisterServerResponse) Descriptor() ([]byte, []int) {
-	return file_goap_mcp_v1_mcp_proto_rawDescGZIP(), []int{2}
+// Deprecated: Use SaveMcpRequest.ProtoReflect.Descriptor instead.
+func (*SaveMcpRequest) Descriptor() ([]byte, []int) {
+	return file_goap_mcp_v1_mcp_proto_rawDescGZIP(), []int{7}
 }
 
-func (x *RegisterServerResponse) GetServer() *Server {
+func (x *SaveMcpRequest) GetMcp() *Mcp {
 	if x != nil {
-		return x.Server
+		return x.Mcp
 	}
 	return nil
+}
+
+type SaveMcpResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Mcp           *Mcp                   `protobuf:"bytes,1,opt,name=mcp,proto3" json:"mcp,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SaveMcpResponse) Reset() {
+	*x = SaveMcpResponse{}
+	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SaveMcpResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SaveMcpResponse) ProtoMessage() {}
+
+func (x *SaveMcpResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SaveMcpResponse.ProtoReflect.Descriptor instead.
+func (*SaveMcpResponse) Descriptor() ([]byte, []int) {
+	return file_goap_mcp_v1_mcp_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *SaveMcpResponse) GetMcp() *Mcp {
+	if x != nil {
+		return x.Mcp
+	}
+	return nil
+}
+
+type ListMcpsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListMcpsRequest) Reset() {
+	*x = ListMcpsRequest{}
+	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListMcpsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListMcpsRequest) ProtoMessage() {}
+
+func (x *ListMcpsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListMcpsRequest.ProtoReflect.Descriptor instead.
+func (*ListMcpsRequest) Descriptor() ([]byte, []int) {
+	return file_goap_mcp_v1_mcp_proto_rawDescGZIP(), []int{9}
+}
+
+type ListMcpsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Mcps          []*Mcp                 `protobuf:"bytes,1,rep,name=mcps,proto3" json:"mcps,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListMcpsResponse) Reset() {
+	*x = ListMcpsResponse{}
+	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListMcpsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListMcpsResponse) ProtoMessage() {}
+
+func (x *ListMcpsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListMcpsResponse.ProtoReflect.Descriptor instead.
+func (*ListMcpsResponse) Descriptor() ([]byte, []int) {
+	return file_goap_mcp_v1_mcp_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *ListMcpsResponse) GetMcps() []*Mcp {
+	if x != nil {
+		return x.Mcps
+	}
+	return nil
+}
+
+type DeleteMcpRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteMcpRequest) Reset() {
+	*x = DeleteMcpRequest{}
+	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteMcpRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteMcpRequest) ProtoMessage() {}
+
+func (x *DeleteMcpRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteMcpRequest.ProtoReflect.Descriptor instead.
+func (*DeleteMcpRequest) Descriptor() ([]byte, []int) {
+	return file_goap_mcp_v1_mcp_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *DeleteMcpRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+type DeleteMcpResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteMcpResponse) Reset() {
+	*x = DeleteMcpResponse{}
+	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteMcpResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteMcpResponse) ProtoMessage() {}
+
+func (x *DeleteMcpResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteMcpResponse.ProtoReflect.Descriptor instead.
+func (*DeleteMcpResponse) Descriptor() ([]byte, []int) {
+	return file_goap_mcp_v1_mcp_proto_rawDescGZIP(), []int{12}
+}
+
+// ToolMapping maps one tool of the MCP onto one operation of the connector.
+type ToolMapping struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Tool      string                 `protobuf:"bytes,1,opt,name=tool,proto3" json:"tool,omitempty"`
+	Operation string                 `protobuf:"bytes,2,opt,name=operation,proto3" json:"operation,omitempty"`
+	// operation arguments: literals, or "$.a.b" references to the arguments of the
+	// tool call (nested objects and lists are mapped recursively)
+	Arguments *structpb.Struct `protobuf:"bytes,3,opt,name=arguments,proto3" json:"arguments,omitempty"`
+	// dotted path picked in the result of the operation ("" = the whole result)
+	ResultPath    string `protobuf:"bytes,4,opt,name=result_path,json=resultPath,proto3" json:"result_path,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ToolMapping) Reset() {
+	*x = ToolMapping{}
+	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ToolMapping) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ToolMapping) ProtoMessage() {}
+
+func (x *ToolMapping) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ToolMapping.ProtoReflect.Descriptor instead.
+func (*ToolMapping) Descriptor() ([]byte, []int) {
+	return file_goap_mcp_v1_mcp_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *ToolMapping) GetTool() string {
+	if x != nil {
+		return x.Tool
+	}
+	return ""
+}
+
+func (x *ToolMapping) GetOperation() string {
+	if x != nil {
+		return x.Operation
+	}
+	return ""
+}
+
+func (x *ToolMapping) GetArguments() *structpb.Struct {
+	if x != nil {
+		return x.Arguments
+	}
+	return nil
+}
+
+func (x *ToolMapping) GetResultPath() string {
+	if x != nil {
+		return x.ResultPath
+	}
+	return ""
+}
+
+type Adapter struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Mcp           string                 `protobuf:"bytes,1,opt,name=mcp,proto3" json:"mcp,omitempty"`
+	Connector     string                 `protobuf:"bytes,2,opt,name=connector,proto3" json:"connector,omitempty"`
+	Tools         []*ToolMapping         `protobuf:"bytes,3,rep,name=tools,proto3" json:"tools,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Adapter) Reset() {
+	*x = Adapter{}
+	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Adapter) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Adapter) ProtoMessage() {}
+
+func (x *Adapter) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Adapter.ProtoReflect.Descriptor instead.
+func (*Adapter) Descriptor() ([]byte, []int) {
+	return file_goap_mcp_v1_mcp_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *Adapter) GetMcp() string {
+	if x != nil {
+		return x.Mcp
+	}
+	return ""
+}
+
+func (x *Adapter) GetConnector() string {
+	if x != nil {
+		return x.Connector
+	}
+	return ""
+}
+
+func (x *Adapter) GetTools() []*ToolMapping {
+	if x != nil {
+		return x.Tools
+	}
+	return nil
+}
+
+type SaveAdapterRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Adapter       *Adapter               `protobuf:"bytes,1,opt,name=adapter,proto3" json:"adapter,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SaveAdapterRequest) Reset() {
+	*x = SaveAdapterRequest{}
+	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SaveAdapterRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SaveAdapterRequest) ProtoMessage() {}
+
+func (x *SaveAdapterRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SaveAdapterRequest.ProtoReflect.Descriptor instead.
+func (*SaveAdapterRequest) Descriptor() ([]byte, []int) {
+	return file_goap_mcp_v1_mcp_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *SaveAdapterRequest) GetAdapter() *Adapter {
+	if x != nil {
+		return x.Adapter
+	}
+	return nil
+}
+
+type SaveAdapterResponse struct {
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Adapter *Adapter               `protobuf:"bytes,1,opt,name=adapter,proto3" json:"adapter,omitempty"`
+	// non-blocking problems (e.g. an operation the registered connector does not offer)
+	Warnings      []string `protobuf:"bytes,2,rep,name=warnings,proto3" json:"warnings,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SaveAdapterResponse) Reset() {
+	*x = SaveAdapterResponse{}
+	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SaveAdapterResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SaveAdapterResponse) ProtoMessage() {}
+
+func (x *SaveAdapterResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SaveAdapterResponse.ProtoReflect.Descriptor instead.
+func (*SaveAdapterResponse) Descriptor() ([]byte, []int) {
+	return file_goap_mcp_v1_mcp_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *SaveAdapterResponse) GetAdapter() *Adapter {
+	if x != nil {
+		return x.Adapter
+	}
+	return nil
+}
+
+func (x *SaveAdapterResponse) GetWarnings() []string {
+	if x != nil {
+		return x.Warnings
+	}
+	return nil
+}
+
+type ListAdaptersRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// restrict to an MCP
+	Mcp           string `protobuf:"bytes,1,opt,name=mcp,proto3" json:"mcp,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListAdaptersRequest) Reset() {
+	*x = ListAdaptersRequest{}
+	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListAdaptersRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListAdaptersRequest) ProtoMessage() {}
+
+func (x *ListAdaptersRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListAdaptersRequest.ProtoReflect.Descriptor instead.
+func (*ListAdaptersRequest) Descriptor() ([]byte, []int) {
+	return file_goap_mcp_v1_mcp_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *ListAdaptersRequest) GetMcp() string {
+	if x != nil {
+		return x.Mcp
+	}
+	return ""
+}
+
+type ListAdaptersResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Adapters      []*Adapter             `protobuf:"bytes,1,rep,name=adapters,proto3" json:"adapters,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListAdaptersResponse) Reset() {
+	*x = ListAdaptersResponse{}
+	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListAdaptersResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListAdaptersResponse) ProtoMessage() {}
+
+func (x *ListAdaptersResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListAdaptersResponse.ProtoReflect.Descriptor instead.
+func (*ListAdaptersResponse) Descriptor() ([]byte, []int) {
+	return file_goap_mcp_v1_mcp_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *ListAdaptersResponse) GetAdapters() []*Adapter {
+	if x != nil {
+		return x.Adapters
+	}
+	return nil
+}
+
+type DeleteAdapterRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Mcp           string                 `protobuf:"bytes,1,opt,name=mcp,proto3" json:"mcp,omitempty"`
+	Connector     string                 `protobuf:"bytes,2,opt,name=connector,proto3" json:"connector,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteAdapterRequest) Reset() {
+	*x = DeleteAdapterRequest{}
+	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteAdapterRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteAdapterRequest) ProtoMessage() {}
+
+func (x *DeleteAdapterRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteAdapterRequest.ProtoReflect.Descriptor instead.
+func (*DeleteAdapterRequest) Descriptor() ([]byte, []int) {
+	return file_goap_mcp_v1_mcp_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *DeleteAdapterRequest) GetMcp() string {
+	if x != nil {
+		return x.Mcp
+	}
+	return ""
+}
+
+func (x *DeleteAdapterRequest) GetConnector() string {
+	if x != nil {
+		return x.Connector
+	}
+	return ""
+}
+
+type DeleteAdapterResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteAdapterResponse) Reset() {
+	*x = DeleteAdapterResponse{}
+	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteAdapterResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteAdapterResponse) ProtoMessage() {}
+
+func (x *DeleteAdapterResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteAdapterResponse.ProtoReflect.Descriptor instead.
+func (*DeleteAdapterResponse) Descriptor() ([]byte, []int) {
+	return file_goap_mcp_v1_mcp_proto_rawDescGZIP(), []int{20}
+}
+
+type Binding struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	OrgId string                 `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
+	Mcp   string                 `protobuf:"bytes,2,opt,name=mcp,proto3" json:"mcp,omitempty"`
+	// connector implementing the MCP for this organization (through its adapter)
+	Connector string `protobuf:"bytes,3,opt,name=connector,proto3" json:"connector,omitempty"`
+	// per-organization connector configuration (root path, account, ...)
+	Config *structpb.Struct `protobuf:"bytes,4,opt,name=config,proto3" json:"config,omitempty"`
+	// secret name -> reference: "<vault path>#<field>" or "env:<VARIABLE>"
+	Secrets       map[string]string `protobuf:"bytes,5,rep,name=secrets,proto3" json:"secrets,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Binding) Reset() {
+	*x = Binding{}
+	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Binding) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Binding) ProtoMessage() {}
+
+func (x *Binding) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Binding.ProtoReflect.Descriptor instead.
+func (*Binding) Descriptor() ([]byte, []int) {
+	return file_goap_mcp_v1_mcp_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *Binding) GetOrgId() string {
+	if x != nil {
+		return x.OrgId
+	}
+	return ""
+}
+
+func (x *Binding) GetMcp() string {
+	if x != nil {
+		return x.Mcp
+	}
+	return ""
+}
+
+func (x *Binding) GetConnector() string {
+	if x != nil {
+		return x.Connector
+	}
+	return ""
+}
+
+func (x *Binding) GetConfig() *structpb.Struct {
+	if x != nil {
+		return x.Config
+	}
+	return nil
+}
+
+func (x *Binding) GetSecrets() map[string]string {
+	if x != nil {
+		return x.Secrets
+	}
+	return nil
+}
+
+type BindMcpRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Binding       *Binding               `protobuf:"bytes,1,opt,name=binding,proto3" json:"binding,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BindMcpRequest) Reset() {
+	*x = BindMcpRequest{}
+	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BindMcpRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BindMcpRequest) ProtoMessage() {}
+
+func (x *BindMcpRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BindMcpRequest.ProtoReflect.Descriptor instead.
+func (*BindMcpRequest) Descriptor() ([]byte, []int) {
+	return file_goap_mcp_v1_mcp_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *BindMcpRequest) GetBinding() *Binding {
+	if x != nil {
+		return x.Binding
+	}
+	return nil
+}
+
+type BindMcpResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Binding       *Binding               `protobuf:"bytes,1,opt,name=binding,proto3" json:"binding,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BindMcpResponse) Reset() {
+	*x = BindMcpResponse{}
+	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BindMcpResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BindMcpResponse) ProtoMessage() {}
+
+func (x *BindMcpResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BindMcpResponse.ProtoReflect.Descriptor instead.
+func (*BindMcpResponse) Descriptor() ([]byte, []int) {
+	return file_goap_mcp_v1_mcp_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *BindMcpResponse) GetBinding() *Binding {
+	if x != nil {
+		return x.Binding
+	}
+	return nil
+}
+
+type ListBindingsRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// empty: the organization of the caller
+	OrgId         string `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListBindingsRequest) Reset() {
+	*x = ListBindingsRequest{}
+	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListBindingsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListBindingsRequest) ProtoMessage() {}
+
+func (x *ListBindingsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListBindingsRequest.ProtoReflect.Descriptor instead.
+func (*ListBindingsRequest) Descriptor() ([]byte, []int) {
+	return file_goap_mcp_v1_mcp_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *ListBindingsRequest) GetOrgId() string {
+	if x != nil {
+		return x.OrgId
+	}
+	return ""
+}
+
+type ListBindingsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Bindings      []*Binding             `protobuf:"bytes,1,rep,name=bindings,proto3" json:"bindings,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListBindingsResponse) Reset() {
+	*x = ListBindingsResponse{}
+	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListBindingsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListBindingsResponse) ProtoMessage() {}
+
+func (x *ListBindingsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListBindingsResponse.ProtoReflect.Descriptor instead.
+func (*ListBindingsResponse) Descriptor() ([]byte, []int) {
+	return file_goap_mcp_v1_mcp_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *ListBindingsResponse) GetBindings() []*Binding {
+	if x != nil {
+		return x.Bindings
+	}
+	return nil
+}
+
+type UnbindMcpRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	OrgId         string                 `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
+	Mcp           string                 `protobuf:"bytes,2,opt,name=mcp,proto3" json:"mcp,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UnbindMcpRequest) Reset() {
+	*x = UnbindMcpRequest{}
+	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UnbindMcpRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UnbindMcpRequest) ProtoMessage() {}
+
+func (x *UnbindMcpRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UnbindMcpRequest.ProtoReflect.Descriptor instead.
+func (*UnbindMcpRequest) Descriptor() ([]byte, []int) {
+	return file_goap_mcp_v1_mcp_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *UnbindMcpRequest) GetOrgId() string {
+	if x != nil {
+		return x.OrgId
+	}
+	return ""
+}
+
+func (x *UnbindMcpRequest) GetMcp() string {
+	if x != nil {
+		return x.Mcp
+	}
+	return ""
+}
+
+type UnbindMcpResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UnbindMcpResponse) Reset() {
+	*x = UnbindMcpResponse{}
+	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UnbindMcpResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UnbindMcpResponse) ProtoMessage() {}
+
+func (x *UnbindMcpResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UnbindMcpResponse.ProtoReflect.Descriptor instead.
+func (*UnbindMcpResponse) Descriptor() ([]byte, []int) {
+	return file_goap_mcp_v1_mcp_proto_rawDescGZIP(), []int{27}
 }
 
 type Tool struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// "<server>/<tool>"
+	// "<mcp>/<tool>"
 	Name          string           `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	Description   string           `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
 	InputSchema   *structpb.Struct `protobuf:"bytes,3,opt,name=input_schema,json=inputSchema,proto3" json:"input_schema,omitempty"`
@@ -184,7 +1402,7 @@ type Tool struct {
 
 func (x *Tool) Reset() {
 	*x = Tool{}
-	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[3]
+	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -196,7 +1414,7 @@ func (x *Tool) String() string {
 func (*Tool) ProtoMessage() {}
 
 func (x *Tool) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[3]
+	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -209,7 +1427,7 @@ func (x *Tool) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Tool.ProtoReflect.Descriptor instead.
 func (*Tool) Descriptor() ([]byte, []int) {
-	return file_goap_mcp_v1_mcp_proto_rawDescGZIP(), []int{3}
+	return file_goap_mcp_v1_mcp_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *Tool) GetName() string {
@@ -234,14 +1452,16 @@ func (x *Tool) GetInputSchema() *structpb.Struct {
 }
 
 type ListToolsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// empty: the organization of the caller
+	OrgId         string `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ListToolsRequest) Reset() {
 	*x = ListToolsRequest{}
-	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[4]
+	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -253,7 +1473,7 @@ func (x *ListToolsRequest) String() string {
 func (*ListToolsRequest) ProtoMessage() {}
 
 func (x *ListToolsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[4]
+	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -266,19 +1486,29 @@ func (x *ListToolsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListToolsRequest.ProtoReflect.Descriptor instead.
 func (*ListToolsRequest) Descriptor() ([]byte, []int) {
-	return file_goap_mcp_v1_mcp_proto_rawDescGZIP(), []int{4}
+	return file_goap_mcp_v1_mcp_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *ListToolsRequest) GetOrgId() string {
+	if x != nil {
+		return x.OrgId
+	}
+	return ""
 }
 
 type ListToolsResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Tools         []*Tool                `protobuf:"bytes,1,rep,name=tools,proto3" json:"tools,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// the tools of the MCPs bound by the organization
+	Tools []*Tool `protobuf:"bytes,1,rep,name=tools,proto3" json:"tools,omitempty"`
+	// the bound MCPs
+	Mcps          []string `protobuf:"bytes,2,rep,name=mcps,proto3" json:"mcps,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ListToolsResponse) Reset() {
 	*x = ListToolsResponse{}
-	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[5]
+	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -290,7 +1520,7 @@ func (x *ListToolsResponse) String() string {
 func (*ListToolsResponse) ProtoMessage() {}
 
 func (x *ListToolsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[5]
+	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -303,7 +1533,7 @@ func (x *ListToolsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListToolsResponse.ProtoReflect.Descriptor instead.
 func (*ListToolsResponse) Descriptor() ([]byte, []int) {
-	return file_goap_mcp_v1_mcp_proto_rawDescGZIP(), []int{5}
+	return file_goap_mcp_v1_mcp_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *ListToolsResponse) GetTools() []*Tool {
@@ -313,17 +1543,26 @@ func (x *ListToolsResponse) GetTools() []*Tool {
 	return nil
 }
 
+func (x *ListToolsResponse) GetMcps() []string {
+	if x != nil {
+		return x.Mcps
+	}
+	return nil
+}
+
 type CallToolRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Arguments     *structpb.Struct       `protobuf:"bytes,2,opt,name=arguments,proto3" json:"arguments,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	OrgId string                 `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
+	// "<mcp>/<tool>"
+	Name          string           `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Arguments     *structpb.Struct `protobuf:"bytes,3,opt,name=arguments,proto3" json:"arguments,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CallToolRequest) Reset() {
 	*x = CallToolRequest{}
-	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[6]
+	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -335,7 +1574,7 @@ func (x *CallToolRequest) String() string {
 func (*CallToolRequest) ProtoMessage() {}
 
 func (x *CallToolRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[6]
+	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -348,7 +1587,14 @@ func (x *CallToolRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CallToolRequest.ProtoReflect.Descriptor instead.
 func (*CallToolRequest) Descriptor() ([]byte, []int) {
-	return file_goap_mcp_v1_mcp_proto_rawDescGZIP(), []int{6}
+	return file_goap_mcp_v1_mcp_proto_rawDescGZIP(), []int{31}
+}
+
+func (x *CallToolRequest) GetOrgId() string {
+	if x != nil {
+		return x.OrgId
+	}
+	return ""
 }
 
 func (x *CallToolRequest) GetName() string {
@@ -369,13 +1615,14 @@ type CallToolResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Result        *structpb.Struct       `protobuf:"bytes,1,opt,name=result,proto3" json:"result,omitempty"`
 	IsError       bool                   `protobuf:"varint,2,opt,name=is_error,json=isError,proto3" json:"is_error,omitempty"`
+	Error         string                 `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CallToolResponse) Reset() {
 	*x = CallToolResponse{}
-	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[7]
+	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -387,7 +1634,7 @@ func (x *CallToolResponse) String() string {
 func (*CallToolResponse) ProtoMessage() {}
 
 func (x *CallToolResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[7]
+	mi := &file_goap_mcp_v1_mcp_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -400,7 +1647,7 @@ func (x *CallToolResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CallToolResponse.ProtoReflect.Descriptor instead.
 func (*CallToolResponse) Descriptor() ([]byte, []int) {
-	return file_goap_mcp_v1_mcp_proto_rawDescGZIP(), []int{7}
+	return file_goap_mcp_v1_mcp_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *CallToolResponse) GetResult() *structpb.Struct {
@@ -417,36 +1664,125 @@ func (x *CallToolResponse) GetIsError() bool {
 	return false
 }
 
+func (x *CallToolResponse) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
 var File_goap_mcp_v1_mcp_proto protoreflect.FileDescriptor
 
 const file_goap_mcp_v1_mcp_proto_rawDesc = "" +
 	"\n" +
-	"\x15goap/mcp/v1/mcp.proto\x12\vgoap.mcp.v1\x1a\x1cgoogle/protobuf/struct.proto\"O\n" +
-	"\x06Server\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x12\x10\n" +
-	"\x03url\x18\x02 \x01(\tR\x03url\x12\x1f\n" +
-	"\vsecret_path\x18\x03 \x01(\tR\n" +
-	"secretPath\"D\n" +
-	"\x15RegisterServerRequest\x12+\n" +
-	"\x06server\x18\x01 \x01(\v2\x13.goap.mcp.v1.ServerR\x06server\"E\n" +
-	"\x16RegisterServerResponse\x12+\n" +
-	"\x06server\x18\x01 \x01(\v2\x13.goap.mcp.v1.ServerR\x06server\"x\n" +
+	"\x15goap/mcp/v1/mcp.proto\x12\vgoap.mcp.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a!goap/connector/v1/connector.proto\"l\n" +
+	"\x18RegisterConnectorRequest\x124\n" +
+	"\x04info\x18\x01 \x01(\v2 .goap.connector.v1.ConnectorInfoR\x04info\x12\x1a\n" +
+	"\bendpoint\x18\x02 \x01(\tR\bendpoint\"@\n" +
+	"\x19RegisterConnectorResponse\x12#\n" +
+	"\rlease_seconds\x18\x01 \x01(\x05R\fleaseSeconds\"\xaa\x01\n" +
+	"\tConnector\x124\n" +
+	"\x04info\x18\x01 \x01(\v2 .goap.connector.v1.ConnectorInfoR\x04info\x12\x1a\n" +
+	"\bendpoint\x18\x02 \x01(\tR\bendpoint\x127\n" +
+	"\tlast_seen\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\blastSeen\x12\x12\n" +
+	"\x04live\x18\x04 \x01(\bR\x04live\"\x17\n" +
+	"\x15ListConnectorsRequest\"P\n" +
+	"\x16ListConnectorsResponse\x126\n" +
+	"\n" +
+	"connectors\x18\x01 \x03(\v2\x16.goap.mcp.v1.ConnectorR\n" +
+	"connectors\"{\n" +
+	"\aMcpTool\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
+	"\vdescription\x18\x02 \x01(\tR\vdescription\x12:\n" +
+	"\finput_schema\x18\x03 \x01(\v2\x17.google.protobuf.StructR\vinputSchema\"g\n" +
+	"\x03Mcp\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
+	"\vdescription\x18\x02 \x01(\tR\vdescription\x12*\n" +
+	"\x05tools\x18\x03 \x03(\v2\x14.goap.mcp.v1.McpToolR\x05tools\"4\n" +
+	"\x0eSaveMcpRequest\x12\"\n" +
+	"\x03mcp\x18\x01 \x01(\v2\x10.goap.mcp.v1.McpR\x03mcp\"5\n" +
+	"\x0fSaveMcpResponse\x12\"\n" +
+	"\x03mcp\x18\x01 \x01(\v2\x10.goap.mcp.v1.McpR\x03mcp\"\x11\n" +
+	"\x0fListMcpsRequest\"8\n" +
+	"\x10ListMcpsResponse\x12$\n" +
+	"\x04mcps\x18\x01 \x03(\v2\x10.goap.mcp.v1.McpR\x04mcps\"&\n" +
+	"\x10DeleteMcpRequest\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\"\x13\n" +
+	"\x11DeleteMcpResponse\"\x97\x01\n" +
+	"\vToolMapping\x12\x12\n" +
+	"\x04tool\x18\x01 \x01(\tR\x04tool\x12\x1c\n" +
+	"\toperation\x18\x02 \x01(\tR\toperation\x125\n" +
+	"\targuments\x18\x03 \x01(\v2\x17.google.protobuf.StructR\targuments\x12\x1f\n" +
+	"\vresult_path\x18\x04 \x01(\tR\n" +
+	"resultPath\"i\n" +
+	"\aAdapter\x12\x10\n" +
+	"\x03mcp\x18\x01 \x01(\tR\x03mcp\x12\x1c\n" +
+	"\tconnector\x18\x02 \x01(\tR\tconnector\x12.\n" +
+	"\x05tools\x18\x03 \x03(\v2\x18.goap.mcp.v1.ToolMappingR\x05tools\"D\n" +
+	"\x12SaveAdapterRequest\x12.\n" +
+	"\aadapter\x18\x01 \x01(\v2\x14.goap.mcp.v1.AdapterR\aadapter\"a\n" +
+	"\x13SaveAdapterResponse\x12.\n" +
+	"\aadapter\x18\x01 \x01(\v2\x14.goap.mcp.v1.AdapterR\aadapter\x12\x1a\n" +
+	"\bwarnings\x18\x02 \x03(\tR\bwarnings\"'\n" +
+	"\x13ListAdaptersRequest\x12\x10\n" +
+	"\x03mcp\x18\x01 \x01(\tR\x03mcp\"H\n" +
+	"\x14ListAdaptersResponse\x120\n" +
+	"\badapters\x18\x01 \x03(\v2\x14.goap.mcp.v1.AdapterR\badapters\"F\n" +
+	"\x14DeleteAdapterRequest\x12\x10\n" +
+	"\x03mcp\x18\x01 \x01(\tR\x03mcp\x12\x1c\n" +
+	"\tconnector\x18\x02 \x01(\tR\tconnector\"\x17\n" +
+	"\x15DeleteAdapterResponse\"\xfa\x01\n" +
+	"\aBinding\x12\x15\n" +
+	"\x06org_id\x18\x01 \x01(\tR\x05orgId\x12\x10\n" +
+	"\x03mcp\x18\x02 \x01(\tR\x03mcp\x12\x1c\n" +
+	"\tconnector\x18\x03 \x01(\tR\tconnector\x12/\n" +
+	"\x06config\x18\x04 \x01(\v2\x17.google.protobuf.StructR\x06config\x12;\n" +
+	"\asecrets\x18\x05 \x03(\v2!.goap.mcp.v1.Binding.SecretsEntryR\asecrets\x1a:\n" +
+	"\fSecretsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"@\n" +
+	"\x0eBindMcpRequest\x12.\n" +
+	"\abinding\x18\x01 \x01(\v2\x14.goap.mcp.v1.BindingR\abinding\"A\n" +
+	"\x0fBindMcpResponse\x12.\n" +
+	"\abinding\x18\x01 \x01(\v2\x14.goap.mcp.v1.BindingR\abinding\",\n" +
+	"\x13ListBindingsRequest\x12\x15\n" +
+	"\x06org_id\x18\x01 \x01(\tR\x05orgId\"H\n" +
+	"\x14ListBindingsResponse\x120\n" +
+	"\bbindings\x18\x01 \x03(\v2\x14.goap.mcp.v1.BindingR\bbindings\";\n" +
+	"\x10UnbindMcpRequest\x12\x15\n" +
+	"\x06org_id\x18\x01 \x01(\tR\x05orgId\x12\x10\n" +
+	"\x03mcp\x18\x02 \x01(\tR\x03mcp\"\x13\n" +
+	"\x11UnbindMcpResponse\"x\n" +
 	"\x04Tool\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12:\n" +
-	"\finput_schema\x18\x03 \x01(\v2\x17.google.protobuf.StructR\vinputSchema\"\x12\n" +
-	"\x10ListToolsRequest\"<\n" +
+	"\finput_schema\x18\x03 \x01(\v2\x17.google.protobuf.StructR\vinputSchema\")\n" +
+	"\x10ListToolsRequest\x12\x15\n" +
+	"\x06org_id\x18\x01 \x01(\tR\x05orgId\"P\n" +
 	"\x11ListToolsResponse\x12'\n" +
-	"\x05tools\x18\x01 \x03(\v2\x11.goap.mcp.v1.ToolR\x05tools\"\\\n" +
-	"\x0fCallToolRequest\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x125\n" +
-	"\targuments\x18\x02 \x01(\v2\x17.google.protobuf.StructR\targuments\"^\n" +
+	"\x05tools\x18\x01 \x03(\v2\x11.goap.mcp.v1.ToolR\x05tools\x12\x12\n" +
+	"\x04mcps\x18\x02 \x03(\tR\x04mcps\"s\n" +
+	"\x0fCallToolRequest\x12\x15\n" +
+	"\x06org_id\x18\x01 \x01(\tR\x05orgId\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x125\n" +
+	"\targuments\x18\x03 \x01(\v2\x17.google.protobuf.StructR\targuments\"t\n" +
 	"\x10CallToolResponse\x12/\n" +
 	"\x06result\x18\x01 \x01(\v2\x17.google.protobuf.StructR\x06result\x12\x19\n" +
-	"\bis_error\x18\x02 \x01(\bR\aisError2\xfc\x01\n" +
+	"\bis_error\x18\x02 \x01(\bR\aisError\x12\x14\n" +
+	"\x05error\x18\x03 \x01(\tR\x05error2\xa1\b\n" +
 	"\n" +
-	"McpService\x12Y\n" +
-	"\x0eRegisterServer\x12\".goap.mcp.v1.RegisterServerRequest\x1a#.goap.mcp.v1.RegisterServerResponse\x12J\n" +
+	"McpService\x12b\n" +
+	"\x11RegisterConnector\x12%.goap.mcp.v1.RegisterConnectorRequest\x1a&.goap.mcp.v1.RegisterConnectorResponse\x12Y\n" +
+	"\x0eListConnectors\x12\".goap.mcp.v1.ListConnectorsRequest\x1a#.goap.mcp.v1.ListConnectorsResponse\x12D\n" +
+	"\aSaveMcp\x12\x1b.goap.mcp.v1.SaveMcpRequest\x1a\x1c.goap.mcp.v1.SaveMcpResponse\x12G\n" +
+	"\bListMcps\x12\x1c.goap.mcp.v1.ListMcpsRequest\x1a\x1d.goap.mcp.v1.ListMcpsResponse\x12J\n" +
+	"\tDeleteMcp\x12\x1d.goap.mcp.v1.DeleteMcpRequest\x1a\x1e.goap.mcp.v1.DeleteMcpResponse\x12P\n" +
+	"\vSaveAdapter\x12\x1f.goap.mcp.v1.SaveAdapterRequest\x1a .goap.mcp.v1.SaveAdapterResponse\x12S\n" +
+	"\fListAdapters\x12 .goap.mcp.v1.ListAdaptersRequest\x1a!.goap.mcp.v1.ListAdaptersResponse\x12V\n" +
+	"\rDeleteAdapter\x12!.goap.mcp.v1.DeleteAdapterRequest\x1a\".goap.mcp.v1.DeleteAdapterResponse\x12D\n" +
+	"\aBindMcp\x12\x1b.goap.mcp.v1.BindMcpRequest\x1a\x1c.goap.mcp.v1.BindMcpResponse\x12S\n" +
+	"\fListBindings\x12 .goap.mcp.v1.ListBindingsRequest\x1a!.goap.mcp.v1.ListBindingsResponse\x12J\n" +
+	"\tUnbindMcp\x12\x1d.goap.mcp.v1.UnbindMcpRequest\x1a\x1e.goap.mcp.v1.UnbindMcpResponse\x12J\n" +
 	"\tListTools\x12\x1d.goap.mcp.v1.ListToolsRequest\x1a\x1e.goap.mcp.v1.ListToolsResponse\x12G\n" +
 	"\bCallTool\x12\x1c.goap.mcp.v1.CallToolRequest\x1a\x1d.goap.mcp.v1.CallToolResponseB\x97\x01\n" +
 	"\x0fcom.goap.mcp.v1B\bMcpProtoP\x01Z,github.com/zimwip/goap/gen/goap/mcp/v1;mcpv1\xa2\x02\x03GMX\xaa\x02\vGoap.Mcp.V1\xca\x02\vGoap\\Mcp\\V1\xe2\x02\x17Goap\\Mcp\\V1\\GPBMetadata\xea\x02\rGoap::Mcp::V1b\x06proto3"
@@ -463,36 +1799,101 @@ func file_goap_mcp_v1_mcp_proto_rawDescGZIP() []byte {
 	return file_goap_mcp_v1_mcp_proto_rawDescData
 }
 
-var file_goap_mcp_v1_mcp_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
+var file_goap_mcp_v1_mcp_proto_msgTypes = make([]protoimpl.MessageInfo, 34)
 var file_goap_mcp_v1_mcp_proto_goTypes = []any{
-	(*Server)(nil),                 // 0: goap.mcp.v1.Server
-	(*RegisterServerRequest)(nil),  // 1: goap.mcp.v1.RegisterServerRequest
-	(*RegisterServerResponse)(nil), // 2: goap.mcp.v1.RegisterServerResponse
-	(*Tool)(nil),                   // 3: goap.mcp.v1.Tool
-	(*ListToolsRequest)(nil),       // 4: goap.mcp.v1.ListToolsRequest
-	(*ListToolsResponse)(nil),      // 5: goap.mcp.v1.ListToolsResponse
-	(*CallToolRequest)(nil),        // 6: goap.mcp.v1.CallToolRequest
-	(*CallToolResponse)(nil),       // 7: goap.mcp.v1.CallToolResponse
-	(*structpb.Struct)(nil),        // 8: google.protobuf.Struct
+	(*RegisterConnectorRequest)(nil),  // 0: goap.mcp.v1.RegisterConnectorRequest
+	(*RegisterConnectorResponse)(nil), // 1: goap.mcp.v1.RegisterConnectorResponse
+	(*Connector)(nil),                 // 2: goap.mcp.v1.Connector
+	(*ListConnectorsRequest)(nil),     // 3: goap.mcp.v1.ListConnectorsRequest
+	(*ListConnectorsResponse)(nil),    // 4: goap.mcp.v1.ListConnectorsResponse
+	(*McpTool)(nil),                   // 5: goap.mcp.v1.McpTool
+	(*Mcp)(nil),                       // 6: goap.mcp.v1.Mcp
+	(*SaveMcpRequest)(nil),            // 7: goap.mcp.v1.SaveMcpRequest
+	(*SaveMcpResponse)(nil),           // 8: goap.mcp.v1.SaveMcpResponse
+	(*ListMcpsRequest)(nil),           // 9: goap.mcp.v1.ListMcpsRequest
+	(*ListMcpsResponse)(nil),          // 10: goap.mcp.v1.ListMcpsResponse
+	(*DeleteMcpRequest)(nil),          // 11: goap.mcp.v1.DeleteMcpRequest
+	(*DeleteMcpResponse)(nil),         // 12: goap.mcp.v1.DeleteMcpResponse
+	(*ToolMapping)(nil),               // 13: goap.mcp.v1.ToolMapping
+	(*Adapter)(nil),                   // 14: goap.mcp.v1.Adapter
+	(*SaveAdapterRequest)(nil),        // 15: goap.mcp.v1.SaveAdapterRequest
+	(*SaveAdapterResponse)(nil),       // 16: goap.mcp.v1.SaveAdapterResponse
+	(*ListAdaptersRequest)(nil),       // 17: goap.mcp.v1.ListAdaptersRequest
+	(*ListAdaptersResponse)(nil),      // 18: goap.mcp.v1.ListAdaptersResponse
+	(*DeleteAdapterRequest)(nil),      // 19: goap.mcp.v1.DeleteAdapterRequest
+	(*DeleteAdapterResponse)(nil),     // 20: goap.mcp.v1.DeleteAdapterResponse
+	(*Binding)(nil),                   // 21: goap.mcp.v1.Binding
+	(*BindMcpRequest)(nil),            // 22: goap.mcp.v1.BindMcpRequest
+	(*BindMcpResponse)(nil),           // 23: goap.mcp.v1.BindMcpResponse
+	(*ListBindingsRequest)(nil),       // 24: goap.mcp.v1.ListBindingsRequest
+	(*ListBindingsResponse)(nil),      // 25: goap.mcp.v1.ListBindingsResponse
+	(*UnbindMcpRequest)(nil),          // 26: goap.mcp.v1.UnbindMcpRequest
+	(*UnbindMcpResponse)(nil),         // 27: goap.mcp.v1.UnbindMcpResponse
+	(*Tool)(nil),                      // 28: goap.mcp.v1.Tool
+	(*ListToolsRequest)(nil),          // 29: goap.mcp.v1.ListToolsRequest
+	(*ListToolsResponse)(nil),         // 30: goap.mcp.v1.ListToolsResponse
+	(*CallToolRequest)(nil),           // 31: goap.mcp.v1.CallToolRequest
+	(*CallToolResponse)(nil),          // 32: goap.mcp.v1.CallToolResponse
+	nil,                               // 33: goap.mcp.v1.Binding.SecretsEntry
+	(*v1.ConnectorInfo)(nil),          // 34: goap.connector.v1.ConnectorInfo
+	(*timestamppb.Timestamp)(nil),     // 35: google.protobuf.Timestamp
+	(*structpb.Struct)(nil),           // 36: google.protobuf.Struct
 }
 var file_goap_mcp_v1_mcp_proto_depIdxs = []int32{
-	0, // 0: goap.mcp.v1.RegisterServerRequest.server:type_name -> goap.mcp.v1.Server
-	0, // 1: goap.mcp.v1.RegisterServerResponse.server:type_name -> goap.mcp.v1.Server
-	8, // 2: goap.mcp.v1.Tool.input_schema:type_name -> google.protobuf.Struct
-	3, // 3: goap.mcp.v1.ListToolsResponse.tools:type_name -> goap.mcp.v1.Tool
-	8, // 4: goap.mcp.v1.CallToolRequest.arguments:type_name -> google.protobuf.Struct
-	8, // 5: goap.mcp.v1.CallToolResponse.result:type_name -> google.protobuf.Struct
-	1, // 6: goap.mcp.v1.McpService.RegisterServer:input_type -> goap.mcp.v1.RegisterServerRequest
-	4, // 7: goap.mcp.v1.McpService.ListTools:input_type -> goap.mcp.v1.ListToolsRequest
-	6, // 8: goap.mcp.v1.McpService.CallTool:input_type -> goap.mcp.v1.CallToolRequest
-	2, // 9: goap.mcp.v1.McpService.RegisterServer:output_type -> goap.mcp.v1.RegisterServerResponse
-	5, // 10: goap.mcp.v1.McpService.ListTools:output_type -> goap.mcp.v1.ListToolsResponse
-	7, // 11: goap.mcp.v1.McpService.CallTool:output_type -> goap.mcp.v1.CallToolResponse
-	9, // [9:12] is the sub-list for method output_type
-	6, // [6:9] is the sub-list for method input_type
-	6, // [6:6] is the sub-list for extension type_name
-	6, // [6:6] is the sub-list for extension extendee
-	0, // [0:6] is the sub-list for field type_name
+	34, // 0: goap.mcp.v1.RegisterConnectorRequest.info:type_name -> goap.connector.v1.ConnectorInfo
+	34, // 1: goap.mcp.v1.Connector.info:type_name -> goap.connector.v1.ConnectorInfo
+	35, // 2: goap.mcp.v1.Connector.last_seen:type_name -> google.protobuf.Timestamp
+	2,  // 3: goap.mcp.v1.ListConnectorsResponse.connectors:type_name -> goap.mcp.v1.Connector
+	36, // 4: goap.mcp.v1.McpTool.input_schema:type_name -> google.protobuf.Struct
+	5,  // 5: goap.mcp.v1.Mcp.tools:type_name -> goap.mcp.v1.McpTool
+	6,  // 6: goap.mcp.v1.SaveMcpRequest.mcp:type_name -> goap.mcp.v1.Mcp
+	6,  // 7: goap.mcp.v1.SaveMcpResponse.mcp:type_name -> goap.mcp.v1.Mcp
+	6,  // 8: goap.mcp.v1.ListMcpsResponse.mcps:type_name -> goap.mcp.v1.Mcp
+	36, // 9: goap.mcp.v1.ToolMapping.arguments:type_name -> google.protobuf.Struct
+	13, // 10: goap.mcp.v1.Adapter.tools:type_name -> goap.mcp.v1.ToolMapping
+	14, // 11: goap.mcp.v1.SaveAdapterRequest.adapter:type_name -> goap.mcp.v1.Adapter
+	14, // 12: goap.mcp.v1.SaveAdapterResponse.adapter:type_name -> goap.mcp.v1.Adapter
+	14, // 13: goap.mcp.v1.ListAdaptersResponse.adapters:type_name -> goap.mcp.v1.Adapter
+	36, // 14: goap.mcp.v1.Binding.config:type_name -> google.protobuf.Struct
+	33, // 15: goap.mcp.v1.Binding.secrets:type_name -> goap.mcp.v1.Binding.SecretsEntry
+	21, // 16: goap.mcp.v1.BindMcpRequest.binding:type_name -> goap.mcp.v1.Binding
+	21, // 17: goap.mcp.v1.BindMcpResponse.binding:type_name -> goap.mcp.v1.Binding
+	21, // 18: goap.mcp.v1.ListBindingsResponse.bindings:type_name -> goap.mcp.v1.Binding
+	36, // 19: goap.mcp.v1.Tool.input_schema:type_name -> google.protobuf.Struct
+	28, // 20: goap.mcp.v1.ListToolsResponse.tools:type_name -> goap.mcp.v1.Tool
+	36, // 21: goap.mcp.v1.CallToolRequest.arguments:type_name -> google.protobuf.Struct
+	36, // 22: goap.mcp.v1.CallToolResponse.result:type_name -> google.protobuf.Struct
+	0,  // 23: goap.mcp.v1.McpService.RegisterConnector:input_type -> goap.mcp.v1.RegisterConnectorRequest
+	3,  // 24: goap.mcp.v1.McpService.ListConnectors:input_type -> goap.mcp.v1.ListConnectorsRequest
+	7,  // 25: goap.mcp.v1.McpService.SaveMcp:input_type -> goap.mcp.v1.SaveMcpRequest
+	9,  // 26: goap.mcp.v1.McpService.ListMcps:input_type -> goap.mcp.v1.ListMcpsRequest
+	11, // 27: goap.mcp.v1.McpService.DeleteMcp:input_type -> goap.mcp.v1.DeleteMcpRequest
+	15, // 28: goap.mcp.v1.McpService.SaveAdapter:input_type -> goap.mcp.v1.SaveAdapterRequest
+	17, // 29: goap.mcp.v1.McpService.ListAdapters:input_type -> goap.mcp.v1.ListAdaptersRequest
+	19, // 30: goap.mcp.v1.McpService.DeleteAdapter:input_type -> goap.mcp.v1.DeleteAdapterRequest
+	22, // 31: goap.mcp.v1.McpService.BindMcp:input_type -> goap.mcp.v1.BindMcpRequest
+	24, // 32: goap.mcp.v1.McpService.ListBindings:input_type -> goap.mcp.v1.ListBindingsRequest
+	26, // 33: goap.mcp.v1.McpService.UnbindMcp:input_type -> goap.mcp.v1.UnbindMcpRequest
+	29, // 34: goap.mcp.v1.McpService.ListTools:input_type -> goap.mcp.v1.ListToolsRequest
+	31, // 35: goap.mcp.v1.McpService.CallTool:input_type -> goap.mcp.v1.CallToolRequest
+	1,  // 36: goap.mcp.v1.McpService.RegisterConnector:output_type -> goap.mcp.v1.RegisterConnectorResponse
+	4,  // 37: goap.mcp.v1.McpService.ListConnectors:output_type -> goap.mcp.v1.ListConnectorsResponse
+	8,  // 38: goap.mcp.v1.McpService.SaveMcp:output_type -> goap.mcp.v1.SaveMcpResponse
+	10, // 39: goap.mcp.v1.McpService.ListMcps:output_type -> goap.mcp.v1.ListMcpsResponse
+	12, // 40: goap.mcp.v1.McpService.DeleteMcp:output_type -> goap.mcp.v1.DeleteMcpResponse
+	16, // 41: goap.mcp.v1.McpService.SaveAdapter:output_type -> goap.mcp.v1.SaveAdapterResponse
+	18, // 42: goap.mcp.v1.McpService.ListAdapters:output_type -> goap.mcp.v1.ListAdaptersResponse
+	20, // 43: goap.mcp.v1.McpService.DeleteAdapter:output_type -> goap.mcp.v1.DeleteAdapterResponse
+	23, // 44: goap.mcp.v1.McpService.BindMcp:output_type -> goap.mcp.v1.BindMcpResponse
+	25, // 45: goap.mcp.v1.McpService.ListBindings:output_type -> goap.mcp.v1.ListBindingsResponse
+	27, // 46: goap.mcp.v1.McpService.UnbindMcp:output_type -> goap.mcp.v1.UnbindMcpResponse
+	30, // 47: goap.mcp.v1.McpService.ListTools:output_type -> goap.mcp.v1.ListToolsResponse
+	32, // 48: goap.mcp.v1.McpService.CallTool:output_type -> goap.mcp.v1.CallToolResponse
+	36, // [36:49] is the sub-list for method output_type
+	23, // [23:36] is the sub-list for method input_type
+	23, // [23:23] is the sub-list for extension type_name
+	23, // [23:23] is the sub-list for extension extendee
+	0,  // [0:23] is the sub-list for field type_name
 }
 
 func init() { file_goap_mcp_v1_mcp_proto_init() }
@@ -506,7 +1907,7 @@ func file_goap_mcp_v1_mcp_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_goap_mcp_v1_mcp_proto_rawDesc), len(file_goap_mcp_v1_mcp_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   8,
+			NumMessages:   34,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -1,0 +1,21 @@
+package mcpsvc
+
+import (
+	"errors"
+	"fmt"
+)
+
+func errNotFound(what string) error { return fmt.Errorf("%s: %w", what, ErrNotFound) }
+func errConflict(why string) error  { return fmt.Errorf("%s: %w", why, ErrConflict) }
+
+var (
+	// ErrNotBound is returned when the organization does not bind the MCP of a tool.
+	ErrNotBound = errors.New("mcp not bound")
+	// ErrUnavailable is returned when the connector of a binding is not registered or its lease expired.
+	ErrUnavailable = errors.New("connector unavailable")
+)
+
+// ToolError is a failure reported by the connector for one operation.
+type ToolError struct{ Msg string }
+
+func (e *ToolError) Error() string { return e.Msg }

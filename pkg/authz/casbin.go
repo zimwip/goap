@@ -61,6 +61,8 @@ var DefaultPolicies = []Policy{
 	{Rule: `hasRole(r.sub, "methodologist") && r.obj.Org == r.sub.Org`, Resource: "trigger", Action: "fire", Effect: "allow"},
 	// lifecycle transitions of nodes (ADR 0014); a transition may require another permission
 	{Rule: `hasAnyRole(r.sub, "contributor", "methodologist", "approver") && r.obj.Org == r.sub.Org`, Resource: "node", Action: "transition", Effect: "allow"},
+	// tools of the MCPs bound by the organization of the change (ADR 0019)
+	{Rule: `hasAnyRole(r.sub, "contributor", "methodologist", "approver") && r.obj.Org == r.sub.Org`, Resource: "tool", Action: "call", Effect: "allow"},
 	// four-eyes principle: an approver applies changes of its organization, never its own
 	{Rule: `hasRole(r.sub, "approver") && r.sub.Org == r.obj.Org && r.sub.Subject != r.obj.Owner`, Resource: "change", Action: "apply", Effect: "allow"},
 	// production deployments: a release manager of the organization, never on its own change
