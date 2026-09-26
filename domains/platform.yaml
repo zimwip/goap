@@ -10,22 +10,10 @@ nodeTypes:
   - {name: Condition, properties: [name, expr]}
   - {name: Trigger, properties: [name, type, event]}
   - {name: NodeType, properties: [name, extends]}
-  # link types and lifecycles a published domain projects (ADR 0022): a link type says which node types it may join, a
-  # lifecycle is the state machine of the nodes of a type (NodeType --lifecycle--> Lifecycle). Informative: not enforced.
-  - {name: LinkType, description: "Link type: the node types it may join (empty: any)", properties: [name, from, to]}
-  - {name: Lifecycle, description: "State machine of the nodes of a type", properties: [name, initial, states, transitions]}
-  - {name: ToolRequest, properties: [name, description, motivation]}
-  # generic tool usage for an LLM: tools = [{name, description, inputSchema}]. Knows no connector and no adapter.
-  - {name: MCP, description: "Generic usage of a tool by an LLM (e.g. document-repository)", properties: [name, description, tools]}
-  # code that implements the tools of one MCP with the operations of one connector (ADR 0019); changed through a change.
-  # An organisational unit instantiates it with an Adapter node (organisation domain) giving its parameter values.
-  - {name: AdapterDef, description: "Adapter: implements the tools of an MCP with the operations of a connector", properties: [name, description, mcp, connector, language, code, params]}
-  # the model gateway configuration (the gateway keeps only the token usage, keyed by the model node). An API key is
-  # never stored: apiKeyRef references it (env:<VAR> or <vault path>#<field>, alternatives separated by "|").
   # the registry's stored definitions (ADR 0023): a version of a methodology or a domain is a header node (scalar fields, status,
   # timestamps) and one node per element of its definition, tied by `defines`. Methodology nodes live in the "methodology"
   # namespace and domain nodes in the "domain" namespace. These nodes are the authored definition; a published
-  # methodology is projected at run time onto the elements above (Methodology, Agent, Action, ..., NodeType, LinkType, Lifecycle).
+  # methodology is projected at run time onto the elements above (Methodology, Agent, Action, ..., NodeType).
   # An element removed from a draft stays with removed=true (a node key is never freed), and comes back if it is added again.
   - {name: MethodologyVersion, description: "A version of a methodology: its header and status", properties: [name, version, description, namespace, domainRef, status, createdAt, updatedAt, publishedAt, updatedBy]}
   - {name: DomainVersion, description: "A version of a shared domain: its header and status", properties: [name, version, description, status, createdAt, updatedAt, publishedAt, updatedBy]}
@@ -51,6 +39,3 @@ linkTypes:
   - {name: specializes, from: Action, to: Action}
   - {name: defines}
   - {name: extends, from: NodeType, to: NodeType}
-  - {name: lifecycle, from: NodeType, to: Lifecycle}
-  - {name: linkFrom, from: LinkType, to: NodeType}
-  - {name: linkTo, from: LinkType, to: NodeType}
