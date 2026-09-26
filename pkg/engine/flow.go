@@ -31,14 +31,15 @@ func lastItem(c domain.ChangeSet) domain.ItemID {
 }
 
 // Relaunch restarts a run from step `step`: it opens a flow branch on the change and returns the
-// new process (status running, not scheduled yet: the caller runs it).
-func (e *Engine) Relaunch(ctx context.Context, id string, step int, reason string) (*Process, error) {
+// new process (status running, not scheduled yet: the caller runs it). Guidance is a comment for
+// the agent, recorded on the branch: the relaunched steps read it with the rest of the blackboard.
+func (e *Engine) Relaunch(ctx context.Context, id string, step int, reason, guidance string) (*Process, error) {
 	defer e.lock(id)()
-	return e.relaunchLocked(ctx, id, step, reason)
+	return e.relaunchLocked(ctx, id, step, reason, guidance)
 }
 
 // relaunchLocked is Relaunch with the lock of the process already held.
-func (e *Engine) relaunchLocked(ctx context.Context, id string, step int, reason string) (*Process, error) {
+func (e *Engine) relaunchLocked(ctx context.Context, id string, step int, reason, guidance string) (*Process, error) {
 	old, err := e.Store.Get(ctx, id)
 	if err != nil {
 		return nil, err
@@ -62,7 +63,7 @@ func (e *Engine) relaunchLocked(ctx context.Context, id string, step int, reason
 		who = old.Initiator
 	}
 	flow, err := e.Graph.OpenFlow(ctx, old.ChangeID, graph.OpenFlowRequest{Parent: old.Flow, ForkAfter: old.Steps[step].LastItem, Seeds: seeds,
-		FromStep: step, Execution: old.Steps[step].Execution, Process: old.ID, Reason: reason})
+		FromStep: step, Execution: old.Steps[step].Execution, Process: old.ID, Reason: reason, Guidance: guidance, By: who.Subject})
 	if err != nil {
 		return nil, err
 	}

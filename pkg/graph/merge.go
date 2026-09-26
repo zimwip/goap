@@ -538,7 +538,7 @@ func (g *Graph) Divergences(ctx context.Context, id domain.ChangeID) (ds []Diver
 func activeProposals(c domain.ChangeSet) []domain.ChangeItem {
 	var out []domain.ChangeItem
 	for _, it := range c.Items {
-		if it.Kind == domain.KindProposal && c.InEffect(it.ID) {
+		if it.Kind == domain.KindProposal && c.InEffect(it.ID) && !c.MergedOnBranch(it.ID) {
 			out = append(out, it)
 		}
 	}

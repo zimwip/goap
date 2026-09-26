@@ -161,7 +161,7 @@ func (h *Handler) RelaunchStep(ctx context.Context, r *connect.Request[enginev1.
 	if err := h.loadAuthorized(ctx, r.Msg.ProcessId, "relaunch"); err != nil {
 		return nil, toConnect(err)
 	}
-	p, err := h.Engine.Relaunch(ctx, r.Msg.ProcessId, int(r.Msg.Step), r.Msg.Reason)
+	p, err := h.Engine.Relaunch(ctx, r.Msg.ProcessId, int(r.Msg.Step), r.Msg.Reason, r.Msg.Guidance)
 	if err != nil {
 		return nil, toConnect(err)
 	}

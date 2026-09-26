@@ -63,14 +63,14 @@
     </div>
   {:else}
     <p class="hint">
-      No step can be relaunched to fix this: the faulty content comes from a human or a trigger, or a relaunched flow is
-      already open (decide it first).
+      No step can be relaunched to fix this: the faulty content comes from a human or a trigger.
     </p>
   {/if}
   <label class="field">
-    <span>Comment (optional)</span>
-    <textarea rows="2" bind:value={comment}></textarea>
+    <span>Guidance for the agent (optional)</span>
+    <textarea rows="2" placeholder="What should the relaunched steps take into account?" bind:value={comment}></textarea>
   </label>
+  <p class="hint">On restart it is recorded on the new branch and added to the prompts of the relaunched steps; on ignore it is only kept in the journal.</p>
   {#if error}<div class="alert">{error}</div>{/if}
   <div class="row">
     {#if proposal}<button class="primary" disabled={busy} onclick={() => resolve(true)}>Restart from here</button>{/if}

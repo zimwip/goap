@@ -433,8 +433,15 @@ func (e *Engine) cycle(ctx context.Context, p *Process, m *methodology.Compiled)
 		if p.Flow != "" && p.Status == StatusRunning {
 			// the relaunched flow reached the goal: a human confirms before it replaces the previous run
 			p.Status = StatusWaiting
-			p.Pending = &HumanTask{Kind: TaskFlow, Action: "adopt_flow", Step: len(p.Steps),
-				Description: "The relaunched flow reached the goal. Adopt it to replace the outputs of the previous run, or discard it."}
+			desc := "The relaunched flow reached the goal. Adopt it to replace the outputs of the previous run, or discard it."
+			// the proposals are applied on a domain branch of their own so that the resulting graph can be reviewed
+			if f, err := e.Graph.MaterializeFlow(ctx, p.ChangeID, p.Flow); err != nil {
+				e.log().Warn("flow preview failed", "process", p.ID, "flow", p.Flow, "err", err)
+				desc += " (the resulting graph could not be previewed: " + err.Error() + ")"
+			} else if f.Branch != "" {
+				desc += " Its proposals are applied on the graph branch " + f.Branch + "."
+			}
+			p.Pending = &HumanTask{Kind: TaskFlow, Action: "adopt_flow", Step: len(p.Steps), Description: desc}
 			e.journal(ctx, p, domain.ExecutionRecord{Kind: domain.ExecTick, Step: len(p.Steps), Before: maps.Clone(p.World),
 				Data: map[string]any{"goalSatisfied": true, "flow": p.Flow, "awaitingDecision": true}})
 			return nil

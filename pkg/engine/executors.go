@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"text/template"
 
 	"github.com/zimwip/goap/pkg/domain"
@@ -117,12 +118,35 @@ func RenderPrompt(ctx context.Context, ac ActionContext) (string, error) {
 	return b.String(), nil
 }
 
+// GuidanceType is the type of the artifact items that carry a comment for the agents (a human
+// steering a relaunched flow, or any note left on the blackboard).
+const GuidanceType = "guidance"
+
+// guidanceSection renders the guidance items in effect on the blackboard as a section appended to
+// the prompt of an LLM action, so that the agent adapts its answer.
+func guidanceSection(bb domain.Blackboard) string {
+	var lines []string
+	for _, it := range bb.Change.Items {
+		if it.Kind != domain.KindArtifact || it.Type != GuidanceType || !bb.Change.InEffect(it.ID) {
+			continue
+		}
+		if text, _ := it.Data["text"].(string); strings.TrimSpace(text) != "" {
+			lines = append(lines, "- "+strings.TrimSpace(text))
+		}
+	}
+	if len(lines) == 0 {
+		return ""
+	}
+	return "\n\nGuidance from a human reviewer (take it into account: it takes precedence over your previous answers):\n" + strings.Join(lines, "\n") + "\n"
+}
+
 // Execute implements Executor.
 func (e LLMExecutor) Execute(ctx context.Context, ac ActionContext) (ActionResult, error) {
 	prompt, err := RenderPrompt(ctx, ac)
 	if err != nil {
 		return ActionResult{}, err
 	}
+	prompt += guidanceSection(ac.Blackboard)
 	model := ac.Action.Model
 	if model == "" {
 		model = "default"

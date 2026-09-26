@@ -301,6 +301,8 @@ message RelaunchStepRequest {
   string process_id = 1;
   int32 step = 2;
   string reason = 3;
+  // comment for the agent: recorded on the new flow branch, read by the relaunched steps
+  string guidance = 4;
 }
 
 message RelaunchStepResponse {

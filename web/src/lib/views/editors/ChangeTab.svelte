@@ -1,7 +1,6 @@
 <script lang="ts">
   // Change tab: change set items and applying to the baseline.
   import {
-    engine,
     graph,
     errorMessage,
     formatDate,
@@ -30,6 +29,9 @@
   import { refreshChanges, refreshBaselines } from '../../stores/catalog.svelte';
   import { processes } from '../../stores/live.svelte';
   import FlowGraph from '../../components/FlowGraph.svelte';
+  import FlowActions from '../../components/FlowActions.svelte';
+  import FlowBranchInfo from '../../components/FlowBranchInfo.svelte';
+  import { processOfFlow } from '../../flowDecision';
   import BoardIssueList from '../../components/BoardIssueList.svelte';
 
   let { tab }: { tab: Tab } = $props();
@@ -64,8 +66,6 @@
       checking = false;
     }
   }
-  let flowError = $state('');
-  let flowBusy = $state(false);
   let splitting = $state(false);
   let merging = $state(false);
   let mergeError = $state('');
@@ -100,7 +100,6 @@
     attached = [];
     subs = [];
     flows = [];
-    flowError = '';
     mergeError = '';
     extraNodes = [];
     applied = undefined;
@@ -125,21 +124,9 @@
   }
   // flow events are part of the log but not shown as items
   const items = $derived((change?.items ?? []).filter((i) => i.kind !== 'flow').map((i) => ({ ...i, status: effectiveStatus(i) })));
-  const flowProcess = (f: Flow) => [...processes.values()].find((p) => p.flow === f.id);
-  async function decideFlow(f: Flow, adopt: boolean) {
-    const p = flowProcess(f);
-    if (!p?.id) return;
-    flowBusy = true;
-    flowError = '';
-    try {
-      await engine.decideFlow(p.id, adopt, '');
-      await load(selected);
-    } catch (e) {
-      flowError = errorMessage(e);
-    } finally {
-      flowBusy = false;
-    }
-  }
+  const flowProcess = (f: Flow) => processOfFlow(f);
+  /** the badge of a flow: open flows that compete cannot be adopted any more */
+  const flowBadge = (f: Flow) => (f.status === 'open' && f.competesWith?.length ? 'competing' : f.status);
   const ctx = $derived(makeContext(nodes, items));
   const groups = $derived({
     impact: items.filter((i) => i.kind === 'impact'),
@@ -496,26 +483,23 @@
 
         {#if flows.length}
           <h3>Flow branches <span class="count">{flows.length}</span></h3>
-          <FlowGraph {processes} changeId={selected} {flows} onopen={(pid) => openTab({ kind: 'run', params: { id: pid } })} />
-          <ul class="subs">
+          <FlowGraph {processes} changeId={selected} {flows} onopen={(pid) => openTab({ kind: 'run', params: { id: pid } })} ondecided={() => load(selected)} />
+          <ul class="subs flows">
             {#each flows as f (f.id)}
               {@const fp = flowProcess(f)}
               <li>
-                <StatusBadge status={f.status} />
+                <StatusBadge status={flowBadge(f)} />
                 <code>{shortId(f.id)}</code>
                 from step {(f.fromStep ?? 0) + 1}
                 {#if f.reason}<span class="muted">· {f.reason}</span>{/if}
                 <span class="hint">· {f.stale?.length ?? 0} stale item(s)</span>
                 {#if f.process}<button type="button" class="link mono" onclick={() => openTab({ kind: 'run', params: { id: f.process ?? '' } })}>previous run</button>{/if}
                 {#if fp}<button type="button" class="link mono" onclick={() => openTab({ kind: 'run', params: { id: fp.id ?? '' } })}>relaunched run</button>{/if}
-                {#if f.status === 'open' && fp?.status === 'waiting' && fp.pending?.kind === 'flow'}
-                  <button type="button" class="primary" disabled={flowBusy} onclick={() => decideFlow(f, true)}>Adopt</button>
-                  <button type="button" disabled={flowBusy} onclick={() => decideFlow(f, false)}>Discard</button>
-                {/if}
+                <div class="flow-row"><FlowBranchInfo flow={f} changeBranch={change?.branch ?? ''} /></div>
+                <div class="flow-row"><FlowActions flow={f} changeId={selected} ondecided={() => load(selected)} /></div>
               </li>
             {/each}
           </ul>
-          {#if flowError}<pre class="error">{flowError}</pre>{/if}
         {/if}
 
         {#if ownBranch || subs.length}
@@ -626,10 +610,13 @@
           {@const md = markdownOf(i)}
           <article class="artifact" class:superseded={i.status === ITEM_SUPERSEDED}>
             <h4>
-              {i.type || 'artifact'} <span class="hint">· {@render producer(i)}</span>
-              {#if i.status === ITEM_SUPERSEDED}<StatusBadge status={i.status} />{/if}
+              {#if i.type === 'guidance'}<span class="badge-guidance">guidance</span>{:else}{i.type || 'artifact'}{/if}
+              <span class="hint">· {@render producer(i)}</span>
+              {#if i.status === ITEM_SUPERSEDED || i.status === 'candidate' || i.status === 'stale' || i.status === 'rejected'}<StatusBadge status={i.status} />{/if}
             </h4>
-            {#if md !== undefined}
+            {#if i.type === 'guidance' && typeof i.data?.text === 'string'}
+              <blockquote class="guidance-quote">{i.data.text}</blockquote>
+            {:else if md !== undefined}
               <pre class="md">{md}</pre>
             {:else if i.data}
               <pre>{JSON.stringify(i.data, null, 2)}</pre>
@@ -708,6 +695,29 @@
   }
   .list li:last-child {
     border-bottom: none;
+  }
+  .flows > li {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+  }
+  .flows .flow-row {
+    flex-basis: 100%;
+  }
+  .badge-guidance {
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    border-radius: 999px;
+    padding: 0 8px;
+    font-size: 0.85em;
+  }
+  .guidance-quote {
+    margin: 4px 0;
+    padding: 4px 10px;
+    border-left: 3px solid var(--accent);
+    font-style: italic;
+    white-space: pre-wrap;
   }
   .artifact + .artifact {
     margin-top: 1rem;

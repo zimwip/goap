@@ -58,6 +58,8 @@ service GraphService {
   rpc AdoptFlow(AdoptFlowRequest) returns (AdoptFlowResponse);
   rpc DiscardFlow(DiscardFlowRequest) returns (DiscardFlowResponse);
   rpc ListFlows(ListFlowsRequest) returns (ListFlowsResponse);
+  // Applies the proposals of a flow on a graph branch of its own (a preview, merged when the flow is adopted).
+  rpc MaterializeFlow(MaterializeFlowRequest) returns (MaterializeFlowResponse);
   // Consistency check of the blackboard as a process on a flow sees it.
   rpc ValidateBoard(ValidateBoardRequest) returns (ValidateBoardResponse);
 
@@ -674,6 +676,11 @@ message FlowEvent {
   string reason = 8;
   repeated string stale = 9;
   string by = 10;
+  // materialize: domain branch and the proposals applied on it; adopt: merged into the change branch
+  string branch = 11;
+  repeated string items = 12;
+  bool merged = 13;
+  map<string, string> nodes = 14;
 }
 
 // Flow is a flow branch of a change, replayed from its events.
@@ -692,6 +699,14 @@ message Flow {
   google.protobuf.Timestamp opened_at = 10;
   google.protobuf.Timestamp decided_at = 11;
   string decided_by = 12;
+  // domain (graph) branch the flow was last materialized on, every branch it used, the proposals
+  // applied there, and the ones already merged into the change branch (adopted flow)
+  string branch = 13;
+  repeated string branches = 14;
+  repeated string materialized = 15;
+  repeated string merged = 16;
+  // adopted flows that replace the same items: an open flow that competes cannot be adopted
+  repeated string competes_with = 17;
 }
 
 message OpenFlowRequest {
@@ -703,6 +718,9 @@ message OpenFlowRequest {
   string execution = 6;
   string process = 7;
   string reason = 8;
+  // comment for the agent, recorded on the branch and read by the relaunched steps
+  string guidance = 9;
+  string by = 10;
 }
 
 message OpenFlowResponse {
@@ -754,4 +772,13 @@ message ValidateBoardRequest {
 
 message ValidateBoardResponse {
   repeated BoardIssue issues = 1;
+}
+
+message MaterializeFlowRequest {
+  string change_id = 1;
+  string flow = 2;
+}
+
+message MaterializeFlowResponse {
+  Flow flow = 1;
 }
