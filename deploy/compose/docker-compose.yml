@@ -121,7 +121,9 @@ services:
       CONTAINERS: 1
       POST: 1
       DELETE: 1
-    volumes: ["/var/run/docker.sock:/var/run/docker.sock:ro"]
+    volumes: ["${GOAP_DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock:ro"]
+    # SELinux (Fedora/podman): let the proxy read the host socket
+    security_opt: ["label=disable"]
 
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.135.0
