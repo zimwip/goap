@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"maps"
-	"slices"
 
 	"github.com/zimwip/goap/pkg/access"
 	"github.com/zimwip/goap/pkg/algo"
@@ -221,37 +219,4 @@ func SeedModels(ctx context.Context, g *graph.Graph, providers []llmcfg.Provider
 		return false, nil
 	}
 	return true, applyOn(ctx, g, llmcfg.NamespacePlatform, "Model gateway configuration", items)
-}
-
-// SeedNamespaces declares the namespaces changes may act on as Namespace nodes (platform namespace): the platform's
-// own, the default one and every namespace the graph already holds nodes of. Once one is declared, a change acting
-// on an undeclared namespace is refused. Namespaces already declared are left alone; it reports whether it seeded.
-func SeedNamespaces(ctx context.Context, g *graph.Graph) (bool, error) {
-	names := map[string]bool{mcp.NamespacePlatform: true, mcp.NamespaceOrganisation: true, domain.DefaultNamespace: true, "methodology": true, "domain": true}
-	declared := map[string]bool{}
-	if head, err := g.BranchHead(ctx, domain.MainBranch); err == nil {
-		nodes, _, err := g.BaselineGraph(ctx, head.ID)
-		if err != nil {
-			return false, err
-		}
-		for _, n := range nodes {
-			names[domain.NamespaceOf(n.Namespace)] = true
-			if n.Type == graph.NamespaceNode {
-				declared[n.Key] = true
-			}
-		}
-	} else if !errors.Is(err, graph.ErrNotFound) {
-		return false, err
-	}
-	var items []domain.ChangeItem
-	for _, name := range slices.Sorted(maps.Keys(names)) {
-		key := "NS:" + name
-		if !declared[key] {
-			items = append(items, createNode(domain.ItemID("ns-"+name), key, graph.NamespaceNode, map[string]any{"name": name}))
-		}
-	}
-	if len(items) == 0 {
-		return false, nil
-	}
-	return true, applyOn(ctx, g, mcp.NamespacePlatform, "Namespaces", items)
 }

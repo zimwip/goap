@@ -10,12 +10,10 @@ nodeTypes:
   - {name: Condition, properties: [name, expr]}
   - {name: Trigger, properties: [name, type, event]}
   - {name: NodeType, properties: [name, extends]}
-  # the rest of the graph's metadata, described by the graph itself (ADR 0022): a link type says which node types it
-  # may join, a lifecycle is the state machine of the nodes of a type (NodeType --lifecycle--> Lifecycle), a namespace
-  # is the scope of a change. NodeType is itself a NodeType: the metadata describes itself.
+  # link types and lifecycles a published domain projects (ADR 0022): a link type says which node types it may join, a
+  # lifecycle is the state machine of the nodes of a type (NodeType --lifecycle--> Lifecycle). Informative: not enforced.
   - {name: LinkType, description: "Link type: the node types it may join (empty: any)", properties: [name, from, to]}
   - {name: Lifecycle, description: "State machine of the nodes of a type", properties: [name, initial, states, transitions]}
-  - {name: Namespace, description: "Scope of a change: the namespace it acts on", properties: [name, description]}
   - {name: ToolRequest, properties: [name, description, motivation]}
   # generic tool usage for an LLM: tools = [{name, description, inputSchema}]. Knows no connector and no adapter.
   - {name: MCP, description: "Generic usage of a tool by an LLM (e.g. document-repository)", properties: [name, description, tools]}
