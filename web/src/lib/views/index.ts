@@ -20,8 +20,7 @@ import TokensTab from './dashboard/TokensTab.svelte';
 import PlatformTab from './platform/PlatformTab.svelte';
 import AccessExplorer from './nav/AccessExplorer.svelte';
 import OrganisationExplorer from './nav/OrganisationExplorer.svelte';
-import ConnectorsExplorer from './nav/ConnectorsExplorer.svelte';
-import McpsExplorer from './nav/McpsExplorer.svelte';
+import AdaptersExplorer from './nav/AdaptersExplorer.svelte';
 import ConnectorTab from './editors/ConnectorTab.svelte';
 import OrganisationTab from './editors/OrganisationTab.svelte';
 import McpTab from './editors/McpTab.svelte';
@@ -32,6 +31,7 @@ import AssistantTab from './assistant/AssistantTab.svelte';
 import MethodologyTab from './editors/MethodologyTab.svelte';
 import DomainTab from './editors/DomainTab.svelte';
 import AlgorithmTab from './editors/AlgorithmTab.svelte';
+import AdapterTab from './editors/AdapterTab.svelte';
 import InstanceTab from './editors/InstanceTab.svelte';
 import AgentTab from './editors/AgentTab.svelte';
 import ActionTab from './editors/ActionTab.svelte';
@@ -75,8 +75,7 @@ registerView({
   },
 });
 registerView({ id: 'organisation', zone: 'left', title: 'Organisation', icon: 'user', component: OrganisationExplorer, order: 4.5 });
-registerView({ id: 'mcps', zone: 'left', title: 'MCPs', icon: 'book', component: McpsExplorer, order: 4.6 });
-registerView({ id: 'connectors', zone: 'left', title: 'Connectors', icon: 'zap', component: ConnectorsExplorer, order: 4.7 });
+registerView({ id: 'adapters', zone: 'left', title: 'Adapters', icon: 'zap', component: AdaptersExplorer, order: 4.6 });
 registerView({ id: 'access', zone: 'left', title: 'Access', icon: 'shield', component: AccessExplorer, order: 5 });
 
 // --- console (bottom) ---------------------------------------------------------------------
@@ -247,6 +246,16 @@ registerView({
   group: domainGroup,
   discard: discardDomain,
   properties: algorithmProps('algorithm'),
+});
+
+registerView({
+  id: 'adapter',
+  zone: 'editor',
+  title: 'Adapter',
+  icon: 'zap',
+  component: AdapterTab,
+  key: (p) => p.name || 'new',
+  tabTitle: (t) => (t.params.name ? `Adapter ${t.params.name}` : 'New adapter'),
 });
 
 registerView({

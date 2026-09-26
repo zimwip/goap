@@ -125,7 +125,7 @@
     {:else}
       {#if d.readonly}<p class="hint pad">Published versions are read-only: create a new domain version to edit algorithms.</p>{/if}
       <div role="tree" aria-label="Algorithms">
-        {#each ALGORITHM_USAGES as u (u.usage)}
+        {#each ALGORITHM_USAGES.filter((x) => x.usage !== 'adapter') as u (u.usage)}
           {@const gk = `alg:${selected}:${u.usage}`}
           {@const algs = d.form.algorithms.map((a, i) => ({ a, i })).filter(({ a }) => a.type === u.usage && (match(a.name) || d.form.instances.some((x) => x.algorithm === a.name && match(x.name))))}
           <TreeRow

@@ -2,9 +2,10 @@
 //
 //	MCP        generic usage of a tool by an LLM: name + tool signatures (document-repository: list, read, write)
 //	Connector  a separately deployed service wrapping a real API, exposing its own operations (localfs: list_dir, read_file, ...)
-//	Adapter    code that implements the tools an MCP expects with the operations a connector exposes: an
-//	           algorithm of the domain library (usage `adapter`), instantiated by an organisational unit with
-//	           its parameter values (the Adapter type of this package is that instance)
+//	AdapterDef code that implements the tools an MCP expects with the operations a connector exposes: an
+//	           AdapterDef node of the platform namespace (changed through a change), usage `adapter` of pkg/algo
+//	Adapter    the instance of an AdapterDef by an organisational unit, with its parameter values (Adapter node
+//	           of the organisation namespace)
 package mcp
 
 import (
@@ -13,6 +14,8 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+
+	"github.com/zimwip/goap/pkg/algo"
 )
 
 // Types and namespaces of the graph objects.
@@ -21,6 +24,7 @@ const (
 	NamespaceOrganisation = "organisation"
 	NodeTypeMCP           = "MCP"
 	NodeTypeAdapter       = "Adapter"
+	NodeTypeAdapterDef    = "AdapterDef"
 	NodeTypeOrgUnit       = "OrgUnit"
 	LinkOwner             = "owner"
 	LinkPartOf            = "part_of"
@@ -28,6 +32,9 @@ const (
 
 // MCPKey is the key of the node of an MCP.
 func MCPKey(name string) string { return "MCP:" + name }
+
+// AdapterDefKey is the key of the node of an adapter definition.
+func AdapterDefKey(name string) string { return "ADD:" + name }
 
 // AdapterKey is the key of the Adapter node of an MCP in a unit.
 func AdapterKey(unit, mcp string) string { return "ADP:" + unit + "/" + mcp }
@@ -51,20 +58,30 @@ type Def struct {
 	Tools       []Tool `json:"tools"`
 }
 
-// Adapter is the instance of an adapter algorithm of the library, with the parameter values of one
-// organisational unit: the one place where unit, MCP and connector meet. The connector and the
-// code come from the algorithm; the unit gives the values (root directory, account, secret
-// references). It is an Adapter node of the "organisation" namespace linked to its unit by `owner`.
+// AdapterDef defines an adapter: code that implements the tools of one MCP with the operations of one
+// connector, and the parameters an instance sets. It is an AdapterDef node of the "platform" namespace.
+type AdapterDef struct {
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	// MCP is the name of the MCP whose tools the code implements; Connector the id of the connector it calls.
+	MCP       string       `json:"mcp"`
+	Connector string       `json:"connector"`
+	Language  string       `json:"language"`
+	Code      string       `json:"code"`
+	Params    []algo.Param `json:"params,omitempty"`
+}
+
+// Adapter is the instance of an AdapterDef with the parameter values of one organisational unit: the one
+// place where unit, MCP and connector meet. The connector and the code come from the definition; the
+// unit gives the values (root directory, account, secret references). It is an Adapter node of the
+// "organisation" namespace linked to its unit by `owner`.
 type Adapter struct {
 	// Unit is the key of the OrgUnit the adapter belongs to (from its `owner` link).
 	Unit string `json:"unit,omitempty"`
-	// MCP is the name of the MCP of the platform namespace (the algorithm implements the same).
+	// MCP is the name of the MCP of the platform namespace (the definition implements the same).
 	MCP string `json:"mcp"`
-	// Domain and Version locate the algorithm in the library; an empty version is the latest published.
-	Domain  string `json:"domain"`
-	Version string `json:"version,omitempty"`
-	// Algorithm is the name of the adapter algorithm in the domain.
-	Algorithm string `json:"algorithm"`
+	// Adapter is the name of the AdapterDef.
+	Adapter string `json:"adapter"`
 	// Params are the parameter values (secrets as references).
 	Params map[string]any `json:"params,omitempty"`
 }
@@ -124,10 +141,43 @@ func (a Adapter) Validate(def Def) error {
 	if a.MCP != def.Name {
 		return fmt.Errorf("adapter of %s validated against %s: %w", a.MCP, def.Name, ErrInvalid)
 	}
-	if !ValidName(a.Domain) || !ValidName(a.Algorithm) {
-		return fmt.Errorf("adapter %s: domain and algorithm must be lowercase names: %w", a.MCP, ErrInvalid)
+	if !ValidName(a.Adapter) {
+		return fmt.Errorf("adapter %s: adapter must be the lowercase name of an adapter definition: %w", a.MCP, ErrInvalid)
 	}
 	return nil
+}
+
+// Algorithm is the definition as an algorithm of usage adapter.
+func (d AdapterDef) Algorithm() algo.Algorithm {
+	return algo.Algorithm{Name: d.Name, Description: d.Description, Type: algo.UsageAdapter, Language: d.Language, Code: d.Code,
+		Params: d.Params, MCP: d.MCP, Connector: d.Connector}
+}
+
+// Validate checks a definition (not its script: pkg/dsl compiles it).
+func (d AdapterDef) Validate() error {
+	if !ValidName(d.Name) {
+		return fmt.Errorf("adapter definition name %q must match %s: %w", d.Name, nameRE, ErrInvalid)
+	}
+	if issues := d.Algorithm().Issues(); len(issues) > 0 {
+		return fmt.Errorf("adapter definition %s: %s: %w", d.Name, issues[0], ErrInvalid)
+	}
+	return nil
+}
+
+// Props returns the properties of the AdapterDef node.
+func (d AdapterDef) Props() map[string]any {
+	var m map[string]any
+	_ = viaJSON(d, &m)
+	return m
+}
+
+// AdapterDefFromProps reads an adapter definition from the properties of its node.
+func AdapterDefFromProps(props map[string]any) (AdapterDef, error) {
+	var d AdapterDef
+	if err := viaJSON(props, &d); err != nil {
+		return d, fmt.Errorf("adapter definition node: %w: %w", err, ErrInvalid)
+	}
+	return d, nil
 }
 
 func viaJSON(from, to any) error {

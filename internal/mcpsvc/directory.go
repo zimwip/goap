@@ -19,7 +19,7 @@ type Graph interface {
 }
 
 // Snapshot is the organisation and the tool layer as of one baseline: the unit hierarchy
-// (part_of), the MCPs of the platform namespace and the adapters of the organisation namespace.
+// (part_of), the MCPs and adapter definitions of the platform namespace and the adapters of the organisation namespace.
 type Snapshot struct {
 	Baseline domain.BaselineID
 	// Problems lists the nodes that could not be read (malformed adapter, adapter without unit, ...).
@@ -28,6 +28,7 @@ type Snapshot struct {
 	parent   map[string]string                 // unit -> parent unit
 	units    map[string]bool                   // unit keys
 	mcps     map[string]mcp.Def                // by name
+	defs     map[string]mcp.AdapterDef         // adapter definitions by name
 	adapters map[string]map[string]mcp.Adapter // unit -> mcp name -> adapter
 }
 
@@ -41,7 +42,7 @@ type Effective struct {
 
 // BuildSnapshot reads the objects of a baseline graph.
 func BuildSnapshot(id domain.BaselineID, nodes []domain.Node, links []domain.Link) *Snapshot {
-	s := &Snapshot{Baseline: id, parent: map[string]string{}, units: map[string]bool{}, mcps: map[string]mcp.Def{}, adapters: map[string]map[string]mcp.Adapter{}}
+	s := &Snapshot{Baseline: id, parent: map[string]string{}, units: map[string]bool{}, mcps: map[string]mcp.Def{}, defs: map[string]mcp.AdapterDef{}, adapters: map[string]map[string]mcp.Adapter{}}
 	byID := map[domain.NodeID]domain.Node{}
 	for _, n := range nodes {
 		byID[n.ID] = n
@@ -60,6 +61,16 @@ func BuildSnapshot(id domain.BaselineID, nodes []domain.Node, links []domain.Lin
 				continue
 			}
 			s.mcps[d.Name] = d
+		case n.Namespace == mcp.NamespacePlatform && n.Type == mcp.NodeTypeAdapterDef:
+			d, err := mcp.AdapterDefFromProps(n.Properties)
+			if err == nil {
+				err = d.Validate()
+			}
+			if err != nil {
+				s.Problems = append(s.Problems, fmt.Sprintf("%s: %v", n.Key, err))
+				continue
+			}
+			s.defs[d.Name] = d
 		}
 	}
 	for _, l := range links {
@@ -112,6 +123,22 @@ func (s *Snapshot) Def(name string) (mcp.Def, bool) {
 func (s *Snapshot) Defs() []mcp.Def {
 	out := make([]mcp.Def, 0, len(s.mcps))
 	for _, d := range s.mcps {
+		out = append(out, d)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out
+}
+
+// AdapterDef returns an adapter definition.
+func (s *Snapshot) AdapterDef(name string) (mcp.AdapterDef, bool) {
+	d, ok := s.defs[name]
+	return d, ok
+}
+
+// AdapterDefs lists the adapter definitions by name.
+func (s *Snapshot) AdapterDefs() []mcp.AdapterDef {
+	out := make([]mcp.AdapterDef, 0, len(s.defs))
+	for _, d := range s.defs {
 		out = append(out, d)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })

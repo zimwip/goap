@@ -9,9 +9,9 @@ import "goap/connector/v1/connector.proto";
 // McpService is the MCP hub. It keeps the live registry of connectors (separate services that
 // register themselves) and resolves tools for the organisational unit that holds a change:
 //   - MCPs are nodes of the "platform" namespace: the generic usage of a tool by an LLM;
-//   - Adapters are code, algorithms of the domain library (usage `adapter`) that implement the tools an
-//     MCP expects with the operations a connector exposes; a unit instantiates one with its parameter
-//     values (an Adapter node of the "organisation" namespace, owned by the unit);
+//   - Adapter definitions (AdapterDef nodes of the "platform" namespace) are code that implements the
+//     tools an MCP expects with the operations a connector exposes; a unit instantiates one with its
+//     parameter values (an Adapter node of the "organisation" namespace, owned by the unit);
 //   - a unit inherits the adapters of its ancestors; the nearest one wins.
 // MCPs and adapters are edited as graph nodes (through changes); this service only reads them.
 service McpService {
@@ -83,17 +83,16 @@ message ListMcpsResponse {
 
 // ---- adapters ---------------------------------------------------------------------------
 
-// Adapter is the instance, by an organisational unit, of an adapter algorithm of the domain library:
-// the code that implements the tools an MCP expects with the operations a connector exposes.
+// Adapter is the instance, by an organisational unit, of an adapter definition (AdapterDef node): the
+// code that implements the tools an MCP expects with the operations a connector exposes.
 message Adapter {
   // key of the OrgUnit owning the instance
   string unit = 1;
   // the MCP the adapter implements
   string mcp = 2;
-  // the algorithm in the library: its domain, version (empty: latest published) and name
-  string domain = 3;
-  string version = 4;
-  string algorithm = 5;
+  // name of the AdapterDef (platform namespace) this is an instance of
+  string adapter = 3;
+  reserved 4, 5;
   // parameter values (secrets as references: "<vault path>#<field>" or "env:<VARIABLE>")
   google.protobuf.Struct params = 6;
 }
@@ -104,7 +103,7 @@ message EffectiveMcp {
   Adapter adapter = 2;
   // defined by an ancestor unit
   bool inherited = 3;
-  // the connector the adapter calls (from its algorithm; empty when the library cannot say)
+  // the connector the adapter calls (from its definition; empty when it cannot be resolved)
   string connector = 4;
 }
 

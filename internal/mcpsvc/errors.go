@@ -10,8 +10,8 @@ func errNotFound(what string) error { return fmt.Errorf("%s: %w", what, ErrNotFo
 var (
 	// ErrNotBound is returned when the organization does not bind the MCP of a tool.
 	ErrNotBound = errors.New("mcp not bound")
-	// ErrLibrary is returned when the algorithm of an adapter cannot be loaded from the library.
-	ErrLibrary = errors.New("adapter library")
+	// ErrAdapterDef is returned when the definition an adapter instance refers to is missing or does not fit.
+	ErrAdapterDef = errors.New("adapter definition")
 	// ErrUnavailable is returned when the connector of a binding is not registered or its lease expired.
 	ErrUnavailable = errors.New("connector unavailable")
 )

@@ -472,18 +472,16 @@ func (x *ListMcpsResponse) GetMcps() []*Mcp {
 	return nil
 }
 
-// Adapter is the instance, by an organisational unit, of an adapter algorithm of the domain library:
-// the code that implements the tools an MCP expects with the operations a connector exposes.
+// Adapter is the instance, by an organisational unit, of an adapter definition (AdapterDef node): the
+// code that implements the tools an MCP expects with the operations a connector exposes.
 type Adapter struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// key of the OrgUnit owning the instance
 	Unit string `protobuf:"bytes,1,opt,name=unit,proto3" json:"unit,omitempty"`
 	// the MCP the adapter implements
 	Mcp string `protobuf:"bytes,2,opt,name=mcp,proto3" json:"mcp,omitempty"`
-	// the algorithm in the library: its domain, version (empty: latest published) and name
-	Domain    string `protobuf:"bytes,3,opt,name=domain,proto3" json:"domain,omitempty"`
-	Version   string `protobuf:"bytes,4,opt,name=version,proto3" json:"version,omitempty"`
-	Algorithm string `protobuf:"bytes,5,opt,name=algorithm,proto3" json:"algorithm,omitempty"`
+	// name of the AdapterDef (platform namespace) this is an instance of
+	Adapter string `protobuf:"bytes,3,opt,name=adapter,proto3" json:"adapter,omitempty"`
 	// parameter values (secrets as references: "<vault path>#<field>" or "env:<VARIABLE>")
 	Params        *structpb.Struct `protobuf:"bytes,6,opt,name=params,proto3" json:"params,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -534,23 +532,9 @@ func (x *Adapter) GetMcp() string {
 	return ""
 }
 
-func (x *Adapter) GetDomain() string {
+func (x *Adapter) GetAdapter() string {
 	if x != nil {
-		return x.Domain
-	}
-	return ""
-}
-
-func (x *Adapter) GetVersion() string {
-	if x != nil {
-		return x.Version
-	}
-	return ""
-}
-
-func (x *Adapter) GetAlgorithm() string {
-	if x != nil {
-		return x.Algorithm
+		return x.Adapter
 	}
 	return ""
 }
@@ -569,7 +553,7 @@ type EffectiveMcp struct {
 	Adapter *Adapter `protobuf:"bytes,2,opt,name=adapter,proto3" json:"adapter,omitempty"`
 	// defined by an ancestor unit
 	Inherited bool `protobuf:"varint,3,opt,name=inherited,proto3" json:"inherited,omitempty"`
-	// the connector the adapter calls (from its algorithm; empty when the library cannot say)
+	// the connector the adapter calls (from its definition; empty when it cannot be resolved)
 	Connector     string `protobuf:"bytes,4,opt,name=connector,proto3" json:"connector,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1307,14 +1291,12 @@ const file_goap_mcp_v1_mcp_proto_rawDesc = "" +
 	"\x05tools\x18\x03 \x03(\v2\x14.goap.mcp.v1.McpToolR\x05tools\"\x11\n" +
 	"\x0fListMcpsRequest\"8\n" +
 	"\x10ListMcpsResponse\x12$\n" +
-	"\x04mcps\x18\x01 \x03(\v2\x10.goap.mcp.v1.McpR\x04mcps\"\xb0\x01\n" +
+	"\x04mcps\x18\x01 \x03(\v2\x10.goap.mcp.v1.McpR\x04mcps\"\x86\x01\n" +
 	"\aAdapter\x12\x12\n" +
 	"\x04unit\x18\x01 \x01(\tR\x04unit\x12\x10\n" +
-	"\x03mcp\x18\x02 \x01(\tR\x03mcp\x12\x16\n" +
-	"\x06domain\x18\x03 \x01(\tR\x06domain\x12\x18\n" +
-	"\aversion\x18\x04 \x01(\tR\aversion\x12\x1c\n" +
-	"\talgorithm\x18\x05 \x01(\tR\talgorithm\x12/\n" +
-	"\x06params\x18\x06 \x01(\v2\x17.google.protobuf.StructR\x06params\"\x9e\x01\n" +
+	"\x03mcp\x18\x02 \x01(\tR\x03mcp\x12\x18\n" +
+	"\aadapter\x18\x03 \x01(\tR\aadapter\x12/\n" +
+	"\x06params\x18\x06 \x01(\v2\x17.google.protobuf.StructR\x06paramsJ\x04\b\x04\x10\x05J\x04\b\x05\x10\x06\"\x9e\x01\n" +
 	"\fEffectiveMcp\x12\"\n" +
 	"\x03mcp\x18\x01 \x01(\v2\x10.goap.mcp.v1.McpR\x03mcp\x12.\n" +
 	"\aadapter\x18\x02 \x01(\v2\x14.goap.mcp.v1.AdapterR\aadapter\x12\x1c\n" +

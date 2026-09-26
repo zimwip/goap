@@ -24,7 +24,7 @@ func TestValidate(t *testing.T) {
 			t.Errorf("%+v accepted: %v", bad, err)
 		}
 	}
-	ok := Adapter{MCP: docs.Name, Domain: "platform", Algorithm: "localfs-docs"}
+	ok := Adapter{MCP: docs.Name, Adapter: "localfs-docs"}
 	if err := ok.Validate(docs); err != nil {
 		t.Fatal(err)
 	}
@@ -56,13 +56,13 @@ func TestNodeProps(t *testing.T) {
 	if err != nil || back.Name != docs.Name || len(back.Tools) != 3 {
 		t.Fatalf("def round trip = %+v, %v", back, err)
 	}
-	a := Adapter{Unit: "ORG-A", MCP: "docs", Domain: "platform", Version: "1.0.0", Algorithm: "x", Params: map[string]any{"root": "/r"}}
+	a := Adapter{Unit: "ORG-A", MCP: "docs", Adapter: "x", Params: map[string]any{"root": "/r"}}
 	props := a.Props()
 	if _, has := props["unit"]; has {
 		t.Fatal("the unit is carried by the owner link, not by the properties")
 	}
 	got, err := AdapterFromProps("ORG-A", props)
-	if err != nil || got.Unit != "ORG-A" || got.Algorithm != "x" || got.Params["root"] != "/r" || got.Version != "1.0.0" {
+	if err != nil || got.Unit != "ORG-A" || got.Adapter != "x" || got.Params["root"] != "/r" {
 		t.Fatalf("adapter round trip = %+v, %v", got, err)
 	}
 }
@@ -98,5 +98,31 @@ func TestAdapterParamsFollowTheConnector(t *testing.T) {
 	ps := AdapterParams(schema, []string{"token"})
 	if len(ps) != 3 || ps[0].Name != "retries" || ps[0].Type != algo.ParamNumber || ps[1].Name != "root" || !ps[1].Required || ps[2].Type != algo.ParamSecret {
 		t.Fatalf("params = %+v", ps)
+	}
+}
+
+func TestAdapterDef(t *testing.T) {
+	d := AdapterDef{Name: "localfs-docs", MCP: "docs", Connector: "localfs", Language: algo.JavaScript, Code: "return 1",
+		Params: []algo.Param{{Name: "root", Type: algo.ParamString, Required: true}}}
+	if err := d.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	back, err := AdapterDefFromProps(d.Props())
+	if err != nil || back.Name != d.Name || back.Connector != "localfs" || len(back.Params) != 1 || back.Params[0].Name != "root" || !back.Params[0].Required {
+		t.Fatalf("round trip = %+v, %v", back, err)
+	}
+	if a := d.Algorithm(); a.Type != algo.UsageAdapter || a.MCP != "docs" {
+		t.Fatalf("algorithm = %+v", a)
+	}
+	for name, bad := range map[string]AdapterDef{
+		"name":      {Name: "Bad", MCP: "docs", Connector: "c", Language: algo.JavaScript, Code: "1"},
+		"no mcp":    {Name: "a", Connector: "c", Language: algo.JavaScript, Code: "1"},
+		"connector": {Name: "a", MCP: "docs", Language: algo.JavaScript, Code: "1"},
+		"language":  {Name: "a", MCP: "docs", Connector: "c", Language: "lua", Code: "1"},
+		"code":      {Name: "a", MCP: "docs", Connector: "c", Language: algo.JavaScript},
+	} {
+		if err := bad.Validate(); !errors.Is(err, ErrInvalid) {
+			t.Errorf("%s accepted: %v", name, err)
+		}
 	}
 }

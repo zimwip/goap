@@ -62,8 +62,9 @@ could run when a transition was taken. Making the domain customizable meant chan
    parameter table, instance value forms, *try it* through `RegistryService.RunAlgorithm`, which
    runs an algorithm on a sample input without storing anything); the domain editor plugs instances.
 
-   The `adapter` usage is the exception: it is declared in the library like the others, with `mcp` and
-   `connector` and `secret` parameters (never readable by the code), but it is **not plugged** into a node type or a
+   The `adapter` usage is the exception: it is **not declared in a domain** (validation rejects it): it is
+   an `AdapterDef` node of the `platform` namespace, changed through a change, with `mcp`, `connector` and `secret`
+   parameters (never readable by the code), and it is **not plugged** into a node type or a
    lifecycle: organisational units instantiate it (ADR 0019). It calls the connector, so it is bounded by 30 s and
    32 calls, and is run by the MCP hub, not by the graph service.
 

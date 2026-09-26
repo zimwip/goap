@@ -29,9 +29,10 @@ const (
 	// change properties of the node.
 	UsageTransitionAction Usage = "transition_action"
 	// UsageAdapter implements the tools of an MCP with the operations of a connector (ADR
-	// 0019): the code maps the expected functions onto the exposed ones. It is declared in the
-	// domain library and instantiated, with parameter values, by the organisational units.
-	// It is never plugged into a node type or a lifecycle.
+	// 0019): the code maps the expected functions onto the exposed ones. It is defined by an
+	// AdapterDef node of the platform namespace (changed through a change) and instantiated, with
+	// parameter values, by the organisational units. It is never declared in a domain nor plugged
+	// into a node type or a lifecycle.
 	UsageAdapter Usage = "adapter"
 )
 
