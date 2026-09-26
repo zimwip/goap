@@ -10,9 +10,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/zimwip/goap/internal/graphsvc"
 	"github.com/zimwip/goap/internal/platform"
 	"github.com/zimwip/goap/pkg/authz"
+	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/llm"
+	"github.com/zimwip/goap/pkg/llmcfg"
 )
 
 func stores(t *testing.T) map[string]Store {
@@ -29,22 +33,68 @@ func stores(t *testing.T) map[string]Store {
 	return map[string]Store{"memory": NewMemoryStore(), "sqlite": SQLStore{DB: db}}
 }
 
+// newService returns a service reading its configuration from a fresh graph, which the caller edits with change.
+func newService(store Store) (*Service, *graph.Graph) {
+	g := graph.New(graph.NewMemory())
+	return NewService(&llmcfg.Directory{Graph: g, TTL: 1}, store, (&platform.Secrets{}).Resolve, nil), g
+}
+
+func seed(t *testing.T, g *graph.Graph, provs []ProviderRecord, models []ModelEntry, aliases []AliasEntry) {
+	t.Helper()
+	if _, err := graphsvc.SeedModels(context.Background(), g, provs, models, aliases); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// change applies items on main as one change of the platform namespace.
+func change(t *testing.T, g *graph.Graph, items ...domain.ChangeItem) {
+	t.Helper()
+	ctx := context.Background()
+	head, err := g.BranchHead(ctx, domain.MainBranch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := g.CreateChange(ctx, graph.NewChange{Namespace: llmcfg.NamespacePlatform, Title: "t", Intent: "t", BaselineID: head.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := g.AddItems(ctx, c.ID, items); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := g.Apply(ctx, c.ID, "t"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func updateNode(t *testing.T, g *graph.Graph, key string, props map[string]any) domain.ChangeItem {
+	t.Helper()
+	n, err := g.NodeByKey(context.Background(), llmcfg.NamespacePlatform, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := n.Ref()
+	return domain.ChangeItem{Kind: domain.KindProposal, Type: "object", Proposal: &domain.Proposal{Op: domain.OpUpdateNode, Node: &domain.NodeDraft{Base: &base, Properties: props}}}
+}
+
+func deleteNode(t *testing.T, g *graph.Graph, key string) domain.ChangeItem {
+	t.Helper()
+	n, err := g.NodeByKey(context.Background(), llmcfg.NamespacePlatform, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := n.Ref()
+	return domain.ChangeItem{Kind: domain.KindProposal, Type: "object", Proposal: &domain.Proposal{Op: domain.OpDeleteNode, Node: &domain.NodeDraft{Base: &base}}}
+}
+
 func TestServicePolicy(t *testing.T) {
 	for name, st := range stores(t) {
 		t.Run(name, func(t *testing.T) {
 			ctx := context.Background()
 			now := time.Date(2026, 9, 23, 10, 0, 0, 0, time.UTC)
-			svc := NewService(st, NewBox("k"), nil)
+			svc, g := newService(st)
 			svc.Now = func() time.Time { return now }
-			if _, err := svc.SaveProvider(ctx, ProviderRecord{Name: "fake", Kind: "fake", Enabled: true}, "", false); err != nil {
-				t.Fatal(err)
-			}
-			if _, err := svc.SaveModel(ctx, ModelEntry{Provider: "fake", Model: "echo", Enabled: true, QuotaTokens: 10, QuotaPeriod: PeriodDay, Roles: []string{"methodologist"}}); err != nil {
-				t.Fatal(err)
-			}
-			if err := svc.SaveAlias(ctx, AliasEntry{Alias: "default", Target: "fake/echo"}); err != nil {
-				t.Fatal(err)
-			}
+			echo := ModelEntry{Provider: "fake", Model: "echo", Enabled: true, QuotaTokens: 10, QuotaPeriod: PeriodDay, Roles: []string{"methodologist"}}
+			seed(t, g, []ProviderRecord{{Name: "fake", Kind: "fake", Protocol: "fake", Enabled: true}}, []ModelEntry{echo}, []AliasEntry{{Alias: "default", Target: "fake/echo"}})
 			req := llm.Request{Messages: []llm.Message{{Role: "user", Content: "hi"}}}
 			user := authz.With(ctx, authz.Principal{Subject: "u", Roles: []string{"contributor"}})
 			if _, err := svc.Complete(user, req); !errors.Is(err, ErrForbidden) {
@@ -57,8 +107,8 @@ func TestServicePolicy(t *testing.T) {
 			if _, err := svc.Complete(ctx, req); err != nil { // internal caller
 				t.Fatalf("internal: %v", err)
 			}
-			// fake reports no usage: record some by hand to reach the quota
-			_ = st.AddUsage(ctx, "fake", "echo", PeriodKey(PeriodDay, now), 10)
+			// fake reports no usage: record some by hand, under the key of the model node, to reach the quota
+			_ = st.AddUsage(ctx, echo.Key(), PeriodKey(PeriodDay, now), 10)
 			if _, err := svc.Complete(meth, req); !errors.Is(err, ErrQuotaExceeded) {
 				t.Fatalf("quota: %v", err)
 			}
@@ -76,49 +126,40 @@ func TestServicePolicy(t *testing.T) {
 			if err != nil || len(cat) != 1 || len(aliases) != 1 || cat[0].Roles[0] != "methodologist" {
 				t.Fatalf("catalog: %v %+v %+v", err, cat, aliases)
 			}
-			if _, err := svc.SaveModel(ctx, ModelEntry{Provider: "fake", Model: "echo", Enabled: false}); err != nil {
-				t.Fatal(err)
-			}
+			// the configuration is changed on the graph: the service follows
+			change(t, g, updateNode(t, g, echo.Key(), map[string]any{"provider": "fake", "model": "echo", "enabled": false}))
 			if _, err := svc.Complete(meth, req); !errors.Is(err, ErrModelDisabled) {
 				t.Fatalf("disabled: %v", err)
 			}
-			if err := svc.DeleteProvider(ctx, "fake"); err != nil {
-				t.Fatal(err)
+			change(t, g, deleteNode(t, g, llmcfg.ProviderKey("fake")))
+			if _, err := svc.Complete(meth, req); !errors.Is(err, ErrInvalid) {
+				t.Fatalf("the alias must go with its provider: %v", err)
 			}
-			if m, _ := st.ListModels(ctx); len(m) != 0 {
-				t.Fatalf("models must go with the provider: %+v", m)
-			}
-			if a, _ := st.ListAliases(ctx); len(a) != 0 {
-				t.Fatalf("aliases must go with the provider: %+v", a)
+			if cat, aliases, _ := svc.Catalog(ctx); len(cat) != 0 || len(aliases) != 0 {
+				t.Fatalf("models and aliases must go with the provider: %+v %+v", cat, aliases)
 			}
 		})
 	}
 }
 
-func TestProviderKeyIsSealedAndWriteOnly(t *testing.T) {
+func TestProviderKeyIsAReference(t *testing.T) {
 	ctx := context.Background()
-	st := NewMemoryStore()
-	svc := NewService(st, NewBox("k"), nil)
-	v, err := svc.SaveProvider(ctx, ProviderRecord{Name: "mistral", Kind: "mistral", Enabled: true}, "sk-secret-1234", false)
-	if err != nil {
-		t.Fatal(err)
+	svc, g := newService(NewMemoryStore())
+	seed(t, g, []ProviderRecord{{Name: "mistral", Kind: "mistral", Protocol: "openai", BaseURL: "https://api.mistral.ai/v1", Enabled: true, APIKeyRef: "env:GOAP_TEST_MISTRAL_KEY"}}, nil, nil)
+	view := func() ProviderView {
+		vs, err := svc.Providers(ctx)
+		if err != nil || len(vs) != 1 {
+			t.Fatalf("providers: %v %+v", err, vs)
+		}
+		return vs[0]
 	}
-	if !v.HasKey || v.KeyHint != "••••1234" || v.BaseURL != "https://api.mistral.ai/v1" || v.Protocol != "openai" || !v.Active {
-		t.Fatalf("unexpected view %+v", v)
+	if v := view(); !v.HasKey || v.Active || v.Reason != "no API key" {
+		t.Fatalf("without the key in its environment the provider is inactive: %+v", v)
 	}
-	rec, _, _ := st.GetProvider(ctx, "mistral")
-	if rec.KeyEnc == "" || rec.KeyEnc == "sk-secret-1234" {
-		t.Fatalf("key must be sealed: %q", rec.KeyEnc)
-	}
-	// update without key keeps it; clear removes it
-	if v, _ = svc.SaveProvider(ctx, ProviderRecord{Name: "mistral", Kind: "mistral", Enabled: true}, "", false); !v.HasKey {
-		t.Fatal("key must be kept")
-	}
-	if v, _ = svc.SaveProvider(ctx, ProviderRecord{Name: "mistral", Kind: "mistral", Enabled: true}, "", true); v.HasKey {
-		t.Fatal("key must be cleared")
-	}
-	if _, err := svc.SaveProvider(ctx, ProviderRecord{Name: "Bad/Name", Kind: "fake"}, "", false); !errors.Is(err, ErrInvalid) {
-		t.Fatalf("name validation: %v", err)
+	t.Setenv("GOAP_TEST_MISTRAL_KEY", "sk-secret-1234")
+	change(t, g, updateNode(t, g, llmcfg.ProviderKey("mistral"), map[string]any{"name": "mistral", "kind": "mistral", "protocol": "openai", "enabled": true, "apiKeyRef": "env:GOAP_TEST_MISTRAL_KEY", "baseURL": "https://api.mistral.ai/v1"}))
+	if v := view(); !v.Active || v.APIKeyRef != "env:GOAP_TEST_MISTRAL_KEY" {
+		t.Fatalf("with the key the provider is loaded: %+v", v)
 	}
 }
 
@@ -149,7 +190,7 @@ func TestDiscoverModels(t *testing.T) {
 	}))
 	defer srv.Close()
 	ctx := context.Background()
-	svc := NewService(NewMemoryStore(), NewBox("k"), nil)
+	svc, _ := newService(NewMemoryStore())
 	for _, c := range []struct {
 		kind, base string
 		want       []string
@@ -204,25 +245,36 @@ func TestGeminiComplete(t *testing.T) {
 	}
 }
 
-func TestBootstrapImportsOnce(t *testing.T) {
+func TestDefaultConfigIsSeededOnce(t *testing.T) {
 	ctx := context.Background()
-	st := NewMemoryStore()
-	svc := NewService(st, NewBox("k"), nil)
-	secret := func(context.Context, string, string) (string, error) { return "", nil }
-	if err := svc.Bootstrap(ctx, DefaultConfig(false), secret); err != nil {
+	svc, g := newService(NewMemoryStore())
+	provs, models, aliases, err := DefaultConfig(false).Objects()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if seeded, err := graphsvc.SeedModels(ctx, g, provs, models, aliases); err != nil || !seeded {
+		t.Fatalf("seed: %v %v", seeded, err)
+	}
+	if _, _, err := svc.Router.Resolve("default"); err == nil {
+		t.Fatal("the router is built on first use")
+	}
+	if err := svc.Reload(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if _, _, err := svc.Router.Resolve("default"); err != nil {
 		t.Fatal(err)
 	}
-	if m, _, _ := st.GetModel(ctx, "fake", "echo"); !m.Enabled {
-		t.Fatal("alias targets must be in the catalog")
+	if cat, _, _ := svc.Catalog(ctx); len(cat) != 1 || !cat[0].Enabled {
+		t.Fatalf("alias targets must be in the catalog: %+v", cat)
 	}
-	_ = svc.DeleteAlias(ctx, "default")
-	if err := svc.Bootstrap(ctx, DefaultConfig(false), secret); err != nil {
+	change(t, g, deleteNode(t, g, llmcfg.AliasKey("default")))
+	if seeded, err := graphsvc.SeedModels(ctx, g, provs, models, aliases); err != nil || seeded {
+		t.Fatalf("an administered graph must not be re-seeded: %v %v", seeded, err)
+	}
+	if err := svc.Reload(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if _, _, err := svc.Router.Resolve("default"); err == nil {
-		t.Fatal("an administered store must not be re-seeded")
+		t.Fatal("the deleted alias must be gone")
 	}
 }

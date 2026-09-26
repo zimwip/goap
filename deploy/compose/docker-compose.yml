@@ -89,8 +89,6 @@ services:
       <<: *env
       GOAP_DB_DSN: postgres://modelgw:modelgw@postgres:5432/goap?sslmode=disable
       GOAP_GRAPH_URL: http://graph:8080
-      # encrypts the provider API keys stored in the database (set it in production)
-      GOAP_SECRET_KEY: ${GOAP_SECRET_KEY:-}
     ports: ["8084:8080"]
 
   engine:

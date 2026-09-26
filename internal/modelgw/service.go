@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"regexp"
 	"slices"
 	"sort"
 	"strings"
@@ -15,6 +14,7 @@ import (
 
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/llm"
+	"github.com/zimwip/goap/pkg/llmcfg"
 )
 
 // Errors of the policy applied to completions and of the administration.
@@ -26,29 +26,30 @@ var (
 	ErrNotFound      = errors.New("not found")
 )
 
-var nameRe = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,39}$`)
-
-// Service is the administered gateway: providers, catalog, quotas and
-// access levels live in the Store, the Router serves the completions.
+// Service is the gateway: what is configured (providers, catalog, quotas, access levels, aliases) is read
+// from the graph, the Router serves the completions and the Store counts the token usage.
 type Service struct {
+	Config *llmcfg.Directory
 	Store  Store
 	Router *Router
-	Box    *Box
-	Log    *slog.Logger
+	// Secrets resolves the reference of a provider's API key.
+	Secrets func(ctx context.Context, ref string) (string, error)
+	Log     *slog.Logger
 	// HTTP is used to list the models of a provider.
 	HTTP *http.Client
 	Now  func() time.Time
 
 	mu     sync.RWMutex
+	snap   *llmcfg.Snapshot
 	active map[string]string // provider -> "" (loaded) | reason it is not
 }
 
-// NewService returns a service; call Reload (or Bootstrap) before use.
-func NewService(store Store, box *Box, log *slog.Logger) *Service {
+// NewService returns a service; the router is built from the graph on first use.
+func NewService(config *llmcfg.Directory, store Store, secrets func(ctx context.Context, ref string) (string, error), log *slog.Logger) *Service {
 	if log == nil {
 		log = slog.Default()
 	}
-	return &Service{Store: store, Router: NewRouter(), Box: box, Log: log, HTTP: &http.Client{Timeout: 20 * time.Second}, Now: time.Now, active: map[string]string{}}
+	return &Service{Config: config, Store: store, Router: NewRouter(), Secrets: secrets, Log: log, HTTP: &http.Client{Timeout: 20 * time.Second}, Now: time.Now, active: map[string]string{}}
 }
 
 func (s *Service) now() time.Time {
@@ -58,111 +59,64 @@ func (s *Service) now() time.Time {
 	return time.Now()
 }
 
-// Bootstrap imports a file / environment configuration when the store has no
-// provider yet, then loads the router.
-func (s *Service) Bootstrap(ctx context.Context, cfg Config, secret SecretFunc) error {
-	provs, err := s.Store.ListProviders(ctx)
-	if err != nil {
-		return err
+// sync returns the configuration at the head of the graph, rebuilding the router when it moved. When the
+// graph cannot be read the last configuration keeps serving; without any, the error is returned.
+func (s *Service) sync(ctx context.Context) (*llmcfg.Snapshot, error) {
+	snap, err := s.Config.Snapshot(ctx)
+	if snap == nil {
+		return nil, err
 	}
-	if len(provs) == 0 {
-		imported := map[string]bool{}
-		for name, pc := range cfg.Providers {
-			key := ""
-			if pc.APIKeySecret != "" || pc.APIKeyEnv != "" {
-				if key, err = secret(ctx, pc.APIKeySecret, pc.APIKeyEnv); err != nil {
-					return fmt.Errorf("provider %s: %w", name, err)
-				}
-			}
-			kind := pc.Type
-			switch pc.Type {
-			case "openai":
-				kind = "openai-compatible"
-			case "anthropic":
-				if key == "" {
-					continue // not configured
-				}
-			}
-			k, ok := LookupKind(kind)
-			if !ok {
-				return fmt.Errorf("provider %s: unknown type %q", name, pc.Type)
-			}
-			rec := ProviderRecord{Name: name, Kind: k.ID, Protocol: k.Protocol, BaseURL: pc.BaseURL, Enabled: true, KeyHint: ""}
-			if key != "" {
-				if rec.KeyEnc, err = s.Box.Seal(key); err != nil {
-					return err
-				}
-				rec.KeyHint = KeyHint(key)
-			}
-			if err := s.Store.SaveProvider(ctx, rec); err != nil {
-				return err
-			}
-			imported[name] = true
-		}
-		for alias, target := range cfg.Aliases {
-			t, ok := parseTarget(target)
-			if !ok || !imported[t.Provider] {
-				continue
-			}
-			if err := s.Store.SaveAlias(ctx, AliasEntry{Alias: alias, Target: target}); err != nil {
-				return err
-			}
-			if _, found, err := s.Store.GetModel(ctx, t.Provider, t.Model); err != nil {
-				return err
-			} else if !found {
-				if err := s.Store.SaveModel(ctx, ModelEntry{Provider: t.Provider, Model: t.Model, DisplayName: t.Model, Enabled: true, QuotaPeriod: PeriodMonth}); err != nil {
-					return err
-				}
-			}
-		}
+	s.mu.RLock()
+	same := s.snap == snap
+	s.mu.RUnlock()
+	if same {
+		return snap, nil
 	}
-	return s.Reload(ctx)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.snap == snap {
+		return snap, nil
+	}
+	s.load(ctx, snap)
+	return snap, nil
 }
 
-// Reload rebuilds the router from the store.
+// Reload rebuilds the router from the graph now.
 func (s *Service) Reload(ctx context.Context) error {
-	provs, err := s.Store.ListProviders(ctx)
-	if err != nil {
-		return err
-	}
-	aliases, err := s.Store.ListAliases(ctx)
-	if err != nil {
-		return err
-	}
+	_, err := s.sync(ctx)
+	return err
+}
+
+// load builds the router of a snapshot; the caller holds the lock. A provider that cannot be built
+// (unknown protocol, no API key) is reported as inactive, not as an error.
+func (s *Service) load(ctx context.Context, snap *llmcfg.Snapshot) {
 	built := map[string]Provider{}
 	active := map[string]string{}
-	for _, p := range provs {
+	for _, p := range snap.Providers {
 		if !p.Enabled {
 			active[p.Name] = "disabled"
 			continue
 		}
-		spec, err := s.spec(p, "")
-		if err == nil {
-			var proto Protocol
-			proto, err = protocolOf(spec.Protocol)
-			if err == nil {
-				var prov Provider
-				if prov, err = proto.New(spec); err == nil {
-					built[p.Name] = prov
-					active[p.Name] = ""
-					continue
-				}
-			}
+		prov, err := s.build(ctx, p, "")
+		if err != nil {
+			active[p.Name] = err.Error()
+			s.Log.Warn("provider not loaded", "provider", p.Name, "reason", err)
+			continue
 		}
-		active[p.Name] = err.Error()
-		s.Log.Warn("provider not loaded", "provider", p.Name, "reason", err)
+		built[p.Name] = prov
+		active[p.Name] = ""
 	}
 	targets := map[string]Target{}
-	for _, a := range aliases {
+	for _, a := range snap.Aliases {
 		if t, ok := parseTarget(a.Target); ok {
 			targets[a.Alias] = t
 		}
 	}
+	for _, pr := range snap.Problems {
+		s.Log.Warn("model configuration", "problem", pr)
+	}
 	s.Router.Replace(built, targets)
-	s.mu.Lock()
-	s.active = active
-	s.mu.Unlock()
-	return nil
+	s.snap, s.active = snap, active
 }
 
 func protocolOf(id string) (Protocol, error) {
@@ -173,17 +127,31 @@ func protocolOf(id string) (Protocol, error) {
 	return p, nil
 }
 
-// spec builds the runtime provider spec of a record; overrideKey (when set)
-// replaces the stored key.
-func (s *Service) spec(p ProviderRecord, overrideKey string) (ProviderSpec, error) {
+// key resolves the API key of a provider from its reference.
+func (s *Service) key(ctx context.Context, p ProviderRecord) (string, error) {
+	if p.APIKeyRef == "" || s.Secrets == nil {
+		return "", nil
+	}
+	return s.Secrets(ctx, p.APIKeyRef)
+}
+
+// build creates the runtime provider of a record; overrideKey (when set) replaces the referenced key.
+func (s *Service) build(ctx context.Context, p ProviderRecord, overrideKey string) (Provider, error) {
 	key := overrideKey
 	if key == "" {
 		var err error
-		if key, err = s.Box.Open(p.KeyEnc); err != nil {
-			return ProviderSpec{}, err
+		if key, err = s.key(ctx, p); err != nil {
+			return nil, fmt.Errorf("API key: %w", err)
 		}
 	}
-	return ProviderSpec{Name: p.Name, Kind: p.Kind, Protocol: p.Protocol, BaseURL: p.BaseURL, APIKey: key}, nil
+	if k, ok := LookupKind(p.Kind); ok && k.KeyRequired && key == "" {
+		return nil, errors.New("no API key")
+	}
+	proto, err := protocolOf(p.Protocol)
+	if err != nil {
+		return nil, err
+	}
+	return proto.New(ProviderSpec{Name: p.Name, Kind: p.Kind, Protocol: p.Protocol, BaseURL: p.BaseURL, APIKey: key})
 }
 
 // ---- completions ---------------------------------------------------------
@@ -192,14 +160,15 @@ func (s *Service) spec(p ProviderRecord, overrideKey string) (ProviderSpec, erro
 // required roles, global quota) and calls the provider. Callers without
 // identity are trusted internal services and bypass the role check only.
 func (s *Service) Complete(ctx context.Context, req llm.Request) (llm.Response, error) {
+	snap, err := s.sync(ctx)
+	if err != nil {
+		return llm.Response{}, err
+	}
 	t, _, err := s.Router.Resolve(req.Model)
 	if err != nil {
 		return llm.Response{}, fmt.Errorf("%w: %w", ErrInvalid, err)
 	}
-	m, ok, err := s.Store.GetModel(ctx, t.Provider, t.Model)
-	if err != nil {
-		return llm.Response{}, err
-	}
+	m, ok := findModel(snap, t.Provider, t.Model)
 	if !ok || !m.Enabled {
 		return llm.Response{}, fmt.Errorf("%w: %s/%s is not in the platform catalog or is disabled", ErrModelDisabled, t.Provider, t.Model)
 	}
@@ -208,7 +177,7 @@ func (s *Service) Complete(ctx context.Context, req llm.Request) (llm.Response, 
 	}
 	period := PeriodKey(m.QuotaPeriod, s.now())
 	if m.QuotaTokens > 0 {
-		used, err := s.Store.Usage(ctx, t.Provider, t.Model, period)
+		used, err := s.Store.Usage(ctx, m.Key(), period)
 		if err != nil {
 			return llm.Response{}, err
 		}
@@ -218,7 +187,7 @@ func (s *Service) Complete(ctx context.Context, req llm.Request) (llm.Response, 
 	}
 	resp, err := s.Router.Complete(ctx, req)
 	if tokens := int64(resp.Usage.InputTokens + resp.Usage.OutputTokens); tokens > 0 {
-		if uerr := s.Store.AddUsage(context.WithoutCancel(ctx), t.Provider, t.Model, period, tokens); uerr != nil {
+		if uerr := s.Store.AddUsage(context.WithoutCancel(ctx), m.Key(), period, tokens); uerr != nil {
 			s.Log.Error("usage not recorded", "model", t.Provider+"/"+t.Model, "err", uerr)
 		}
 	}
@@ -234,14 +203,19 @@ func allowed(p authz.Principal, m ModelEntry) bool {
 	return slices.ContainsFunc(m.Roles, func(r string) bool { return slices.Contains(p.Roles, r) })
 }
 
+func findModel(snap *llmcfg.Snapshot, provider, model string) (ModelEntry, bool) {
+	for _, m := range snap.Models {
+		if m.Provider == provider && m.Model == model {
+			return m, true
+		}
+	}
+	return ModelEntry{}, false
+}
+
 // Available lists the models the caller may use (enabled catalog models of a
 // loaded provider, with the required role) and the aliases pointing to them.
 func (s *Service) Available(ctx context.Context) ([]ModelEntry, []AliasEntry, error) {
-	entries, err := s.Store.ListModels(ctx)
-	if err != nil {
-		return nil, nil, err
-	}
-	aliases, err := s.Store.ListAliases(ctx)
+	snap, err := s.sync(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -250,14 +224,14 @@ func (s *Service) Available(ctx context.Context) ([]ModelEntry, []AliasEntry, er
 	defer s.mu.RUnlock()
 	ok := map[string]bool{}
 	var models []ModelEntry
-	for _, m := range entries {
+	for _, m := range snap.Models {
 		if reason, known := s.active[m.Provider]; m.Enabled && known && reason == "" && allowed(p, m) {
 			models = append(models, m)
 			ok[m.Provider+"/"+m.Model] = true
 		}
 	}
 	var out []AliasEntry
-	for _, a := range aliases {
+	for _, a := range snap.Aliases {
 		if ok[a.Target] {
 			out = append(out, a)
 		}
@@ -265,98 +239,31 @@ func (s *Service) Available(ctx context.Context) ([]ModelEntry, []AliasEntry, er
 	return models, out, nil
 }
 
-// ---- administration ------------------------------------------------------
+// ---- administration (read-only: the configuration is changed through changes on the graph) ------
 
 // ProviderView is a provider as shown to administrators.
 type ProviderView struct {
 	ProviderRecord
+	// HasKey: the provider references an API key.
 	HasKey bool
 	Active bool
 	Reason string // why it is not active
 }
 
-func (s *Service) view(p ProviderRecord) ProviderView {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	reason, known := s.active[p.Name]
-	return ProviderView{ProviderRecord: p, HasKey: p.KeyEnc != "", Active: known && reason == "", Reason: reason}
-}
-
 // Providers lists the configured providers.
 func (s *Service) Providers(ctx context.Context) ([]ProviderView, error) {
-	recs, err := s.Store.ListProviders(ctx)
+	snap, err := s.sync(ctx)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]ProviderView, len(recs))
-	for i, r := range recs {
-		out[i] = s.view(r)
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]ProviderView, len(snap.Providers))
+	for i, p := range snap.Providers {
+		reason, known := s.active[p.Name]
+		out[i] = ProviderView{ProviderRecord: p, HasKey: p.APIKeyRef != "", Active: known && reason == "", Reason: reason}
 	}
 	return out, nil
-}
-
-// SaveProvider creates or updates a provider. apiKey empty keeps the stored key.
-func (s *Service) SaveProvider(ctx context.Context, in ProviderRecord, apiKey string, clearKey bool) (ProviderView, error) {
-	if !nameRe.MatchString(in.Name) {
-		return ProviderView{}, fmt.Errorf("%w: provider name must be 1-40 characters of a-z, 0-9, - or _", ErrInvalid)
-	}
-	if k, ok := LookupKind(in.Kind); ok {
-		if in.Protocol == "" {
-			in.Protocol = k.Protocol
-		}
-		if in.BaseURL == "" {
-			in.BaseURL = k.DefaultBaseURL
-		}
-	}
-	if _, ok := LookupProtocol(in.Protocol); !ok {
-		return ProviderView{}, fmt.Errorf("%w: unknown protocol %q", ErrInvalid, in.Protocol)
-	}
-	if in.Kind == "" {
-		in.Kind = "openai-compatible"
-	}
-	if in.BaseURL != "" && !strings.HasPrefix(in.BaseURL, "http://") && !strings.HasPrefix(in.BaseURL, "https://") {
-		return ProviderView{}, fmt.Errorf("%w: base URL must start with http:// or https://", ErrInvalid)
-	}
-	old, _, err := s.Store.GetProvider(ctx, in.Name)
-	if err != nil {
-		return ProviderView{}, err
-	}
-	in.KeyEnc, in.KeyHint = old.KeyEnc, old.KeyHint
-	switch {
-	case apiKey != "":
-		if in.KeyEnc, err = s.Box.Seal(apiKey); err != nil {
-			return ProviderView{}, err
-		}
-		in.KeyHint = KeyHint(apiKey)
-	case clearKey:
-		in.KeyEnc, in.KeyHint = "", ""
-	}
-	if err := s.Store.SaveProvider(ctx, in); err != nil {
-		return ProviderView{}, err
-	}
-	if err := s.Reload(ctx); err != nil {
-		return ProviderView{}, err
-	}
-	return s.view(in), nil
-}
-
-// DeleteProvider removes a provider, its models and the aliases targeting it.
-func (s *Service) DeleteProvider(ctx context.Context, name string) error {
-	aliases, err := s.Store.ListAliases(ctx)
-	if err != nil {
-		return err
-	}
-	for _, a := range aliases {
-		if t, ok := parseTarget(a.Target); ok && t.Provider == name {
-			if err := s.Store.DeleteAlias(ctx, a.Alias); err != nil {
-				return err
-			}
-		}
-	}
-	if err := s.Store.DeleteProvider(ctx, name); err != nil {
-		return err
-	}
-	return s.Reload(ctx)
 }
 
 // Discovered is a model reported by a provider.
@@ -365,12 +272,19 @@ type Discovered struct {
 	Registered bool
 }
 
-// Discover asks a provider for its models. The spec need not be saved; an
-// empty apiKey falls back on the stored key of the provider of that name.
+// Discover asks a provider for its models. The spec need not exist on the graph; an empty apiKey resolves
+// the key from the reference of the spec, or of the provider of that name.
 func (s *Service) Discover(ctx context.Context, in ProviderRecord, apiKey string) ([]Discovered, error) {
-	stored, exists, err := s.Store.GetProvider(ctx, in.Name)
+	snap, err := s.sync(ctx)
 	if err != nil {
 		return nil, err
+	}
+	var stored ProviderRecord
+	exists := false
+	for _, p := range snap.Providers {
+		if p.Name == in.Name {
+			stored, exists = p, true
+		}
 	}
 	if k, ok := LookupKind(in.Kind); ok {
 		if in.Protocol == "" {
@@ -380,9 +294,12 @@ func (s *Service) Discover(ctx context.Context, in ProviderRecord, apiKey string
 			in.BaseURL = k.DefaultBaseURL
 		}
 	}
-	if apiKey == "" && exists {
-		if apiKey, err = s.Box.Open(stored.KeyEnc); err != nil {
-			return nil, fmt.Errorf("%w: %w", ErrInvalid, err)
+	if in.APIKeyRef == "" && exists {
+		in.APIKeyRef = stored.APIKeyRef
+	}
+	if apiKey == "" {
+		if apiKey, err = s.key(ctx, in); err != nil {
+			return nil, fmt.Errorf("%w: API key: %w", ErrInvalid, err)
 		}
 	}
 	proto, err := protocolOf(in.Protocol)
@@ -395,15 +312,9 @@ func (s *Service) Discover(ctx context.Context, in ProviderRecord, apiKey string
 		return nil, fmt.Errorf("list models: %w", err)
 	}
 	have := map[string]bool{}
-	if exists {
-		entries, err := s.Store.ListModels(ctx)
-		if err != nil {
-			return nil, err
-		}
-		for _, e := range entries {
-			if e.Provider == in.Name {
-				have[e.Model] = true
-			}
+	for _, e := range snap.Models {
+		if e.Provider == in.Name {
+			have[e.Model] = true
 		}
 	}
 	out := make([]Discovered, 0, len(models))
@@ -422,102 +333,17 @@ type CatalogEntry struct {
 
 // Catalog lists the catalog and the aliases.
 func (s *Service) Catalog(ctx context.Context) ([]CatalogEntry, []AliasEntry, error) {
-	models, err := s.Store.ListModels(ctx)
+	snap, err := s.sync(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
-	out := make([]CatalogEntry, len(models))
-	for i, m := range models {
-		used, err := s.Store.Usage(ctx, m.Provider, m.Model, PeriodKey(m.QuotaPeriod, s.now()))
+	out := make([]CatalogEntry, len(snap.Models))
+	for i, m := range snap.Models {
+		used, err := s.Store.Usage(ctx, m.Key(), PeriodKey(m.QuotaPeriod, s.now()))
 		if err != nil {
 			return nil, nil, err
 		}
 		out[i] = CatalogEntry{ModelEntry: m, Used: used}
 	}
-	aliases, err := s.Store.ListAliases(ctx)
-	return out, aliases, err
-}
-
-// SaveModel creates or updates a catalog entry.
-func (s *Service) SaveModel(ctx context.Context, m ModelEntry) (CatalogEntry, error) {
-	if m.Model == "" {
-		return CatalogEntry{}, fmt.Errorf("%w: model id required", ErrInvalid)
-	}
-	if _, ok, err := s.Store.GetProvider(ctx, m.Provider); err != nil {
-		return CatalogEntry{}, err
-	} else if !ok {
-		return CatalogEntry{}, fmt.Errorf("%w: provider %q", ErrNotFound, m.Provider)
-	}
-	if m.QuotaTokens < 0 {
-		return CatalogEntry{}, fmt.Errorf("%w: quota must be positive (0: unlimited)", ErrInvalid)
-	}
-	switch m.QuotaPeriod {
-	case "":
-		m.QuotaPeriod = PeriodMonth
-	case PeriodDay, PeriodMonth, PeriodTotal:
-	default:
-		return CatalogEntry{}, fmt.Errorf("%w: quota period must be day, month or total", ErrInvalid)
-	}
-	var roles []string
-	for _, r := range m.Roles {
-		if r = strings.TrimSpace(r); r != "" && !slices.Contains(roles, r) {
-			roles = append(roles, r)
-		}
-	}
-	m.Roles = roles
-	if m.DisplayName == "" {
-		m.DisplayName = m.Model
-	}
-	if err := s.Store.SaveModel(ctx, m); err != nil {
-		return CatalogEntry{}, err
-	}
-	used, err := s.Store.Usage(ctx, m.Provider, m.Model, PeriodKey(m.QuotaPeriod, s.now()))
-	return CatalogEntry{ModelEntry: m, Used: used}, err
-}
-
-// DeleteModel removes a model from the catalog (and the aliases targeting it).
-func (s *Service) DeleteModel(ctx context.Context, provider, model string) error {
-	aliases, err := s.Store.ListAliases(ctx)
-	if err != nil {
-		return err
-	}
-	for _, a := range aliases {
-		if a.Target == provider+"/"+model {
-			if err := s.Store.DeleteAlias(ctx, a.Alias); err != nil {
-				return err
-			}
-		}
-	}
-	if err := s.Store.DeleteModel(ctx, provider, model); err != nil {
-		return err
-	}
-	return s.Reload(ctx)
-}
-
-// SaveAlias maps an alias to a catalog model.
-func (s *Service) SaveAlias(ctx context.Context, a AliasEntry) error {
-	if !nameRe.MatchString(a.Alias) {
-		return fmt.Errorf("%w: alias must be 1-40 characters of a-z, 0-9, - or _", ErrInvalid)
-	}
-	t, ok := parseTarget(a.Target)
-	if !ok {
-		return fmt.Errorf("%w: target must be provider/model", ErrInvalid)
-	}
-	if _, found, err := s.Store.GetModel(ctx, t.Provider, t.Model); err != nil {
-		return err
-	} else if !found {
-		return fmt.Errorf("%w: %s is not in the catalog", ErrNotFound, a.Target)
-	}
-	if err := s.Store.SaveAlias(ctx, a); err != nil {
-		return err
-	}
-	return s.Reload(ctx)
-}
-
-// DeleteAlias removes an alias.
-func (s *Service) DeleteAlias(ctx context.Context, alias string) error {
-	if err := s.Store.DeleteAlias(ctx, alias); err != nil {
-		return err
-	}
-	return s.Reload(ctx)
+	return out, snap.Aliases, nil
 }

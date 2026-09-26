@@ -1,7 +1,9 @@
 <script lang="ts">
-  // Providers: connect (kind preset, protocol, API key), test by fetching the models, add them to the catalog.
+  // Providers: connect (kind preset, protocol, reference of the API key), test by fetching the models, add them to the catalog.
+  // A provider is a node of the graph; the API key itself is never stored, only where to find it.
   import { models, errorMessage, type CatalogModel, type DiscoveredModel, type LlmProvider, type ProviderKind } from '../../api';
   import { SvelteSet } from 'svelte/reactivity';
+  import { deleteProvider, saveModels, saveProvider as saveProviderNode } from '../../llmEdit';
 
   let {
     providers,
@@ -26,10 +28,10 @@
     protocol: string;
     baseUrl: string;
     enabled: boolean;
-    apiKey: string;
-    clearKey: boolean;
-    hasKey: boolean;
-    keyHint: string;
+    /** where the API key is (env:<VAR>, <vault path>#<field>) */
+    apiKeyRef: string;
+    /** a key for the test only, never stored */
+    testKey: string;
   }
 
   let form = $state<Form | undefined>();
@@ -62,10 +64,8 @@
       protocol: kind.protocol ?? 'openai',
       baseUrl: kind.defaultBaseUrl ?? '',
       enabled: true,
-      apiKey: '',
-      clearKey: false,
-      hasKey: false,
-      keyHint: '',
+      apiKeyRef: '',
+      testKey: '',
     };
   }
 
@@ -78,10 +78,8 @@
       protocol: p.protocol,
       baseUrl: p.baseUrl ?? '',
       enabled: p.enabled ?? true,
-      apiKey: '',
-      clearKey: false,
-      hasKey: !!p.hasKey,
-      keyHint: p.keyHint ?? '',
+      apiKeyRef: p.apiKeyRef ?? '',
+      testKey: '',
     };
   }
 
@@ -91,24 +89,19 @@
   }
 
   const keyRequired = $derived(form ? !!kindOf(form.kind)?.keyRequired : false);
-  const canFetch = $derived(!!form && !!form.name && (!!form.apiKey || (form.hasKey && !form.clearKey) || !keyRequired));
+  const canFetch = $derived(!!form && !!form.name && (!!form.testKey || !!form.apiKeyRef.trim() || !keyRequired));
   const valid = $derived(!!form && /^[a-z0-9][a-z0-9_-]{0,39}$/.test(form.name) && !!form.protocol);
 
   function toProvider(f: Form): LlmProvider {
-    return { name: f.name, kind: f.kind, protocol: f.protocol, baseUrl: f.baseUrl, enabled: f.enabled };
+    return { name: f.name, kind: f.kind, protocol: f.protocol, baseUrl: f.baseUrl, enabled: f.enabled, apiKeyRef: f.apiKeyRef.trim() };
   }
 
   async function saveProvider(): Promise<boolean> {
     if (!form) return false;
     const f = form;
     try {
-      const saved = (await models.saveProvider(toProvider(f), f.apiKey, f.clearKey)).provider;
-      // the key is kept server-side: the form now refers to the stored one
-      f.apiKey = '';
-      f.clearKey = false;
+      await saveProviderNode(toProvider(f));
       f.isNew = false;
-      f.hasKey = !!saved?.hasKey;
-      f.keyHint = saved?.keyHint ?? '';
       await onchange();
       return true;
     } catch (e) {
@@ -133,7 +126,7 @@
     error = '';
     notice = '';
     try {
-      found = (await models.discoverModels(toProvider(form), form.apiKey)).models ?? [];
+      found = (await models.discoverModels(toProvider(form), form.testKey)).models ?? [];
       picked.clear();
       if (!found.length) notice = 'The provider answered but lists no model.';
     } catch (e) {
@@ -163,9 +156,7 @@
       if (!(await saveProvider())) return;
       const name = form.name;
       const byId = new Map((found ?? []).map((m) => [m.id, m]));
-      for (const id of picked) {
-        await models.saveModel({ provider: name, model: id, displayName: byId.get(id)?.displayName || id, enabled: true, quotaTokens: 0, quotaPeriod: 'month', roles: [] });
-      }
+      await saveModels([...picked].map((id) => ({ provider: name, model: id, displayName: byId.get(id)?.displayName || id, enabled: true, quotaTokens: 0, quotaPeriod: 'month', roles: [] })));
       const n = picked.size;
       found = (found ?? []).map((m) => (picked.has(m.id) ? { ...m, registered: true } : m));
       picked.clear();
@@ -181,7 +172,7 @@
   async function toggleEnabled(p: LlmProvider) {
     error = '';
     try {
-      await models.saveProvider({ ...p, enabled: !p.enabled });
+      await saveProviderNode({ ...p, enabled: !p.enabled });
       await onchange();
     } catch (e) {
       error = errorMessage(e);
@@ -193,7 +184,7 @@
     if (!confirm(`Delete the provider "${p.name}"${n ? ` and its ${n} model${n > 1 ? 's' : ''} in the catalog` : ''}? Aliases pointing to it are removed too.`)) return;
     error = '';
     try {
-      await models.deleteProvider(p.name);
+      await deleteProvider(p.name);
       if (form?.name === p.name) close();
       await onchange();
     } catch (e) {
@@ -233,7 +224,7 @@
               <td><strong>{p.name}</strong> <span class="hint">{kindOf(p.kind)?.label ?? p.kind}</span></td>
               <td><code>{p.protocol}</code></td>
               <td class="url"><code>{p.baseUrl || 'default'}</code></td>
-              <td>{#if p.hasKey}<code>{p.keyHint}</code>{:else}<span class="hint">none</span>{/if}</td>
+              <td>{#if p.apiKeyRef}<code>{p.apiKeyRef}</code>{:else}<span class="hint">none</span>{/if}</td>
               <td>
                 <button type="button" class="link" onclick={openCatalog}>{modelCount(p.name)}</button>
               </td>
@@ -300,19 +291,13 @@
         <input id="pv-url" type="url" class="mono" bind:value={form.baseUrl} placeholder="provider default" spellcheck="false" />
       </div>
       <div class="field wide">
-        <label for="pv-key">API key {#if !keyRequired}<span class="hint">(optional)</span>{/if}</label>
-        <input
-          id="pv-key"
-          type="password"
-          autocomplete="off"
-          class="mono"
-          bind:value={form.apiKey}
-          placeholder={form.hasKey && !form.clearKey ? `stored ${form.keyHint} — leave empty to keep it` : 'paste the key'}
-        />
-        {#if form.hasKey}
-          <label class="inline"><input type="checkbox" bind:checked={form.clearKey} /> Remove the stored key</label>
-        {/if}
-        <span class="hint">Stored encrypted, never shown again.</span>
+        <label for="pv-key">API key reference {#if !keyRequired}<span class="hint">(optional)</span>{/if}</label>
+        <input id="pv-key" type="text" class="mono" bind:value={form.apiKeyRef} placeholder="env:MISTRAL_API_KEY  or  goap/modelgw#mistral_api_key" spellcheck="false" autocomplete="off" />
+        <span class="hint">The key is read by the gateway from the environment (<code>env:NAME</code>) or Vault (<code>path#field</code>); alternatives separated by <code>|</code>. It is never stored on the graph.</span>
+      </div>
+      <div class="field wide">
+        <label for="pv-test">Key for the test only <span class="hint">(optional)</span></label>
+        <input id="pv-test" type="password" autocomplete="off" class="mono" bind:value={form.testKey} placeholder="used by Test &amp; fetch models, never saved" />
       </div>
       <label class="inline"><input type="checkbox" bind:checked={form.enabled} /> Enabled</label>
     </div>

@@ -1,6 +1,7 @@
 <script lang="ts">
   // Catalog: which models the platform exposes, their global token quota and who may use them.
-  import { models, errorMessage, formatInt, type CatalogModel, type LlmProvider, type ModelAlias } from '../../api';
+  import { errorMessage, formatInt, type CatalogModel, type LlmProvider, type ModelAlias } from '../../api';
+  import { saveModel, deleteModel, saveAlias as saveAliasNode, deleteAlias } from '../../llmEdit';
 
   let {
     providers,
@@ -76,7 +77,7 @@
     busy = key(r.m);
     error = '';
     try {
-      await models.saveModel({ ...r.m, enabled: r.enabled, quotaTokens: r.quota, quotaPeriod: r.period, roles: r.roles });
+      await saveModel({ ...r.m, enabled: r.enabled, quotaTokens: r.quota, quotaPeriod: r.period, roles: r.roles });
       delete edits[key(r.m)];
       await onchange();
     } catch (e) {
@@ -94,7 +95,7 @@
     if (!confirm(`Remove ${key(m)} from the catalog? Aliases pointing to it are removed too.`)) return;
     error = '';
     try {
-      await models.deleteModel(m.provider, m.model);
+      await deleteModel(m.provider, m.model);
       await onchange();
     } catch (e) {
       error = errorMessage(e);
@@ -118,7 +119,7 @@
     const [provider, ...rest] = target.split('/');
     error = '';
     try {
-      await models.saveAlias({ alias, provider, model: rest.join('/') });
+      await saveAliasNode({ alias, provider, model: rest.join('/') });
       aliasName = '';
       await onchange();
     } catch (e) {
@@ -129,7 +130,7 @@
   async function removeAlias(alias: string) {
     error = '';
     try {
-      await models.deleteAlias(alias);
+      await deleteAlias(alias);
       await onchange();
     } catch (e) {
       error = errorMessage(e);

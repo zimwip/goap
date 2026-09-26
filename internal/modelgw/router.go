@@ -13,6 +13,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/zimwip/goap/pkg/llm"
+	"github.com/zimwip/goap/pkg/llmcfg"
 )
 
 // Provider completes prompts on a given model.
@@ -177,6 +178,56 @@ func DefaultConfig(hasAnthropicKey bool) Config {
 		c.Aliases = map[string]string{"default": "fake/echo", "fast": "fake/echo"}
 	}
 	return c
+}
+
+// Objects returns the configuration as the graph objects it seeds: providers (the key by reference), the
+// models the aliases point to, and the aliases. Aliases of a provider that is not configured are left out.
+func (c Config) Objects() (provs []llmcfg.Provider, models []llmcfg.Model, aliases []llmcfg.Alias, err error) {
+	names := make([]string, 0, len(c.Providers))
+	for n := range c.Providers {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	have := map[string]bool{}
+	for _, name := range names {
+		pc := c.Providers[name]
+		kind := pc.Type
+		if kind == "openai" {
+			kind = "openai-compatible"
+		}
+		k, ok := LookupKind(kind)
+		if !ok {
+			return nil, nil, nil, fmt.Errorf("provider %s: unknown type %q", name, pc.Type)
+		}
+		var refs []string
+		if pc.APIKeySecret != "" {
+			refs = append(refs, pc.APIKeySecret)
+		}
+		if pc.APIKeyEnv != "" {
+			refs = append(refs, "env:"+pc.APIKeyEnv)
+		}
+		provs = append(provs, llmcfg.Provider{Name: name, Kind: k.ID, Protocol: k.Protocol, BaseURL: pc.BaseURL, Enabled: true, APIKeyRef: strings.Join(refs, " | ")})
+		have[name] = true
+	}
+	aliasNames := make([]string, 0, len(c.Aliases))
+	for a := range c.Aliases {
+		aliasNames = append(aliasNames, a)
+	}
+	sort.Strings(aliasNames)
+	seen := map[string]bool{}
+	for _, a := range aliasNames {
+		t := c.Aliases[a]
+		p, m, ok := llmcfg.SplitTarget(t)
+		if !ok || !have[p] {
+			continue
+		}
+		aliases = append(aliases, llmcfg.Alias{Alias: a, Target: t})
+		if !seen[t] {
+			seen[t] = true
+			models = append(models, llmcfg.Model{Provider: p, Model: m, DisplayName: m, Enabled: true, QuotaPeriod: llmcfg.PeriodMonth})
+		}
+	}
+	return provs, models, aliases, nil
 }
 
 // SecretFunc resolves a secret (Vault reference, env fallback).

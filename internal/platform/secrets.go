@@ -71,3 +71,29 @@ func (s *Secrets) vault(ctx context.Context, ref string) (string, error) {
 	v, _ := body.Data.Data[field].(string)
 	return v, nil
 }
+
+// Resolve resolves a secret reference: "env:<VAR>" reads the environment, anything else is a Vault
+// reference "<path>#<field>". Alternatives separated by "|" are tried in order and the first
+// non-empty value wins ("goap/modelgw#anthropic_api_key | env:ANTHROPIC_API_KEY").
+func (s *Secrets) Resolve(ctx context.Context, ref string) (string, error) {
+	var lastErr error
+	for _, alt := range strings.Split(ref, "|") {
+		alt = strings.TrimSpace(alt)
+		if alt == "" {
+			continue
+		}
+		var v string
+		if name, ok := strings.CutPrefix(alt, "env:"); ok {
+			v = os.Getenv(name)
+		} else if s.Addr != "" {
+			var err error
+			if v, err = s.vault(ctx, alt); err != nil {
+				lastErr = err
+			}
+		}
+		if v != "" {
+			return v, nil
+		}
+	}
+	return "", lastErr
+}

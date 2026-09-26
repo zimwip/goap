@@ -12,6 +12,7 @@ import (
 	"github.com/zimwip/goap/internal/platform"
 	"github.com/zimwip/goap/internal/telemetry"
 	"github.com/zimwip/goap/pkg/access"
+	"github.com/zimwip/goap/pkg/llmcfg"
 )
 
 func main() {
@@ -19,17 +20,6 @@ func main() {
 	log := platform.Logger("modelgw")
 	defer telemetry.Setup(context.Background(), log, "modelgw")(context.Background())
 	secrets := platform.NewSecrets()
-	var cfg modelgw.Config
-	if path := platform.Env("GOAP_MODELS_CONFIG", ""); path != "" {
-		c, err := modelgw.LoadConfig(path)
-		if err != nil {
-			platform.Fatal(log, "models config", err)
-		}
-		cfg = c
-	} else {
-		key, _ := secrets.Get(ctx, "goap/modelgw#anthropic_api_key", "ANTHROPIC_API_KEY")
-		cfg = modelgw.DefaultConfig(key != "")
-	}
 	srv := platform.NewServer(log, platform.Env("GOAP_HTTP_ADDR", ":8080"))
 	var store modelgw.Store = modelgw.NewMemoryStore()
 	if pool := platform.OptionalPostgres(ctx, log, modelgw.Migrations); pool != nil {
@@ -37,15 +27,13 @@ func main() {
 		store = modelgw.SQLStore{DB: stdlib.OpenDBFromPool(pool), Dollar: true}
 		srv.Readiness(pool.Ping)
 	}
-	secret, _ := secrets.Get(ctx, "goap/modelgw#encryption_key", "GOAP_SECRET_KEY")
-	if secret == "" {
-		log.Warn("GOAP_SECRET_KEY not set: provider API keys are encrypted with a well-known development key")
-		secret = modelgw.DevSecret
-	}
-	svc := modelgw.NewService(store, modelgw.NewBox(secret), log)
+	hc := platform.H2CClient()
+	graphURL := platform.Env("GOAP_GRAPH_URL", "http://localhost:8081")
+	// providers, models and aliases are nodes of the graph; API keys are references resolved here
+	svc := modelgw.NewService(&llmcfg.Directory{Graph: graphsvc.NewClient(hc, graphURL, telemetry.ClientOptions()...)}, store, secrets.Resolve, log)
 	svc.Router.Instrument = telemetry.NewGenAI().Instrument
-	if err := svc.Bootstrap(ctx, cfg, secrets.Get); err != nil {
-		platform.Fatal(log, "models", err)
+	if err := svc.Reload(ctx); err != nil {
+		log.Warn("model configuration not read yet", "err", err)
 	}
 	names, targets, providers := svc.Router.Aliases()
 	for _, n := range names {
@@ -53,7 +41,7 @@ func main() {
 	}
 	log.Info("providers", "providers", providers)
 
-	iam, err := access.NewAuthorizer(&access.Directory{Graph: graphsvc.NewClient(platform.H2CClient(), platform.Env("GOAP_GRAPH_URL", "http://localhost:8081"))})
+	iam, err := access.NewAuthorizer(&access.Directory{Graph: graphsvc.NewClient(hc, graphURL)})
 	if err != nil {
 		platform.Fatal(log, "authorizer", err)
 	}

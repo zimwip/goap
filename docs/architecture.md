@@ -840,19 +840,23 @@ docs/                        architecture, ADRs
 ## Model gateway administration (platform settings)
 
 Administrators (`admin` on the `platform` resource, Casbin) open **Platform settings** from the gear in the IDE
-status bar. The gateway configuration lives in the `modelgw` database (PostgreSQL `migrations/`, SQLite
-`migrations_sqlite/`, one `SQLStore` for both); `GOAP_MODELS_CONFIG` / env keys only seed an empty store.
+status bar. The gateway configuration is **graph data** ([ADR 0021](adr/0021-model-configuration-in-the-graph.md)):
+`LlmProvider`, `LlmModel` and `LlmAlias` nodes of the `platform` namespace (`pkg/llmcfg`, `domains/platform.yaml`), changed
+through changes like any node (the screen writes them with `web/src/lib/llmEdit.ts`). The gateway reads a snapshot of the head
+of `main` and rebuilds its router when it moves. `GOAP_MODELS_CONFIG` / env keys only seed a graph that holds no provider
+(`graphsvc.SeedModels`). The `modelgw` database keeps only the token usage (`llm_usage`, keyed by the key of the model node).
 
 - **Providers** are pluggable: a `Protocol` (`anthropic`, `openai`, `gemini`, `fake`; `internal/modelgw/protocols.go`)
   knows how to complete and how to list models; a `Kind` is a preset on a protocol (Anthropic, Mistral AI, Google
   Gemini, OpenAI, custom OpenAI-compatible). Adding a provider type = `RegisterProtocol` / `RegisterKind`.
-- **API keys** are write-only: sealed with AES-GCM (`GOAP_SECRET_KEY`, Vault `goap/modelgw#encryption_key`) and
-  never returned; the UI only gets `hasKey` and the last four characters.
+- **API keys** are never stored: a provider node holds `apiKeyRef` (`env:<VAR>` or `<vault path>#<field>`, alternatives
+  separated by `|`) that the gateway resolves (`platform.Secrets.Resolve`), like the secret parameters of an adapter.
 - **Catalog**: `DiscoverModels` asks the provider for its models; the admin adds them to the catalog, with a global
   token quota (per day / month / total, shared by all users) and the roles allowed to call the model (none =
   any signed-in user; `admin` always). Only enabled catalog models can be called; calls without identity
   (engine, in-process) are trusted and skip the role check but still count toward the quota.
-- **Aliases** (`default`, `fast`…) point to catalog models and are changed at runtime (router reload).
+- **Aliases** (`default`, `fast`…) point to catalog models; the router follows the graph. The RPCs of the gateway are read-only
+  (`ListProviders`, `ListCatalog`, `DiscoverModels`, `ListProviderKinds`, `ListModels`, `Complete`).
 
 
 ## Node lifecycle (ADR 0014)

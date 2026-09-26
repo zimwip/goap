@@ -3,8 +3,6 @@ package mcpsvc
 import (
 	"context"
 	"net/http"
-	"os"
-	"strings"
 	"sync"
 
 	"connectrpc.com/connect"
@@ -60,13 +58,7 @@ func (i *ConnectInvoker) Invoke(ctx context.Context, endpoint string, req *conne
 	return resp.Msg, nil
 }
 
-// ResolveSecret resolves a secret reference of a binding: "env:<VAR>" reads the
-// environment, anything else is a Vault reference ("<path>#<field>").
+// ResolveSecret resolves a secret reference of an adapter (see platform.Secrets.Resolve).
 func ResolveSecret(s *platform.Secrets) func(ctx context.Context, ref string) (string, error) {
-	return func(ctx context.Context, ref string) (string, error) {
-		if v, ok := strings.CutPrefix(ref, "env:"); ok {
-			return os.Getenv(v), nil
-		}
-		return s.Get(ctx, ref, "")
-	}
+	return s.Resolve
 }

@@ -9,6 +9,7 @@ import (
 
 	"github.com/zimwip/goap/gen/goap/graph/v1/graphv1connect"
 	"github.com/zimwip/goap/internal/graphsvc"
+	"github.com/zimwip/goap/internal/modelgw"
 	"github.com/zimwip/goap/internal/platform"
 	"github.com/zimwip/goap/internal/registrysvc"
 	"github.com/zimwip/goap/internal/telemetry"
@@ -107,6 +108,16 @@ func main() {
 		platform.Fatal(log, "seed defaults", err)
 	} else if seeded {
 		log.Info("default organisation created")
+	}
+	// the model gateway configuration (providers, models, aliases) is graph data: seeded when the graph has none
+	if cfg, err := modelgw.InitialConfig(ctx, platform.Env("GOAP_MODELS_CONFIG", ""), platform.NewSecrets()); err != nil {
+		platform.Fatal(log, "models config", err)
+	} else if provs, models, aliases, err := cfg.Objects(); err != nil {
+		platform.Fatal(log, "models config", err)
+	} else if seeded, err := graphsvc.SeedModels(ctx, g, provs, models, aliases); err != nil {
+		platform.Fatal(log, "seed models", err)
+	} else if seeded {
+		log.Info("model gateway configuration created", "providers", len(provs), "models", len(models), "aliases", len(aliases))
 	}
 	// the published methodologies are projected onto the graph as versioned elements
 	if url := platform.Env("GOAP_REGISTRY_URL", ""); url != "" {
