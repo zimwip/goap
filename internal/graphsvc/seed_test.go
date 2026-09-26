@@ -41,29 +41,3 @@ func TestSeedOrganisationNamespace(t *testing.T) {
 		t.Fatalf("unit hierarchy: %+v", uv.Out)
 	}
 }
-
-func TestSeedNamespacesDeclaresTheOnesInUse(t *testing.T) {
-	ctx := context.Background()
-	g := graph.New(graph.NewMemory())
-	if _, err := graphsvc.SeedDefaults(ctx, g); err != nil {
-		t.Fatal(err)
-	}
-	if err := graphsvc.SeedUnit(ctx, g, "team-a", "Team A", "team", ""); err != nil {
-		t.Fatal(err)
-	}
-	if seeded, err := graphsvc.SeedNamespaces(ctx, g); err != nil || !seeded {
-		t.Fatalf("seed: %v %v", seeded, err)
-	}
-	if seeded, err := graphsvc.SeedNamespaces(ctx, g); err != nil || seeded {
-		t.Fatalf("idempotent: %v %v", seeded, err)
-	}
-	for _, ns := range []string{"platform", "organisation", domain.DefaultNamespace} {
-		if _, err := g.NodeByKey(ctx, "platform", "NS:"+ns); err != nil {
-			t.Errorf("namespace %s not declared: %v", ns, err)
-		}
-	}
-	head, _ := g.BranchHead(ctx, domain.MainBranch)
-	if _, err := g.CreateChange(ctx, graph.NewChange{Title: "x", BaselineID: head.ID, Namespace: "nowhere"}); err == nil {
-		t.Fatal("an undeclared namespace must be refused once namespaces are declared")
-	}
-}

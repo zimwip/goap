@@ -85,9 +85,6 @@ func DomainMetaKey(domainName, typ, name string) string {
 	return "D:" + domainName + "/" + strings.ToLower(typ) + "/" + name
 }
 
-// NamespaceKey is the key of the node of a namespace.
-func NamespaceKey(name string) string { return "NS:" + name }
-
 // projectMeta returns the LinkType and Lifecycle nodes of a schema, and the edges tying them to its NodeType nodes.
 // key names an element of the layer; owner (may be nil) adds the edge that says who owns an element.
 func projectMeta(s methodology.Schema, key func(typ, name string) string, owner func(k string) *Edge) ([]Element, []Edge) {

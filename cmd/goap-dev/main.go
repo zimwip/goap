@@ -80,9 +80,6 @@ func main() {
 	if _, err := graphsvc.SeedDefaults(ctx, g); err != nil {
 		platform.Fatal(log, "seed defaults", err)
 	}
-	if _, err := graphsvc.SeedNamespaces(ctx, g); err != nil {
-		platform.Fatal(log, "seed namespaces", err)
-	}
 	var triggers *engine.TriggerManager
 	// methodologies and domains are nodes of the graph: the registry needs no database
 	reg := &registrysvc.Service{Store: registrysvc.NewGraphStore(g), Authz: authorizer}

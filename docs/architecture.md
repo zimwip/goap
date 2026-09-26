@@ -338,13 +338,11 @@ Node types are the **metadata layer** of the graph ([ADR 0012](adr/0012-nodetype
 unlike the rest of the meta-model, they are graph-native and no longer a registry mirror (§2.12).
 A data node references the node type it instantiates with a `LinkInstanceOf` edge.
 
-The metadata layer is complete and describes itself ([ADR 0022](adr/0022-metadata-as-nodes.md)): the graph content is
-**Change + Node/NodeVersion**, its metadata is **Namespace, Lifecycle, NodeType and LinkType**, all nodes of the platform
-namespace (`NodeType` is a `NodeType`). A domain's publication projects its link types (`D:<domain>/linktype/<name>`, with
-`linkFrom` / `linkTo` edges) and lifecycles (`D:<domain>/lifecycle/<name>`, tied by `NodeType --lifecycle--> Lifecycle`)
-next to its node types. The graph enforces them at the baseline a change starts from: an `add_link` must join the node types
-a declared `LinkType` allows (subtypes count; a link type nobody declares, or a node type not on the graph, is not judged), and
-once `Namespace` nodes exist (`graphsvc.SeedNamespaces`) a change may only act on a declared namespace.
+A domain's publication also projects its link types (`D:<domain>/linktype/<name>`, with `linkFrom` / `linkTo` edges) and its
+lifecycles (`D:<domain>/lifecycle/<name>`, tied by `NodeType --lifecycle--> Lifecycle`) next to its node types
+([ADR 0022](adr/0022-metadata-as-nodes.md)). The graph does not enforce link types or namespaces: what is stored in the registry
+(node types, link types, lifecycles, algorithms) is the authority, and the graph enforces only what the NodeType nodes carry
+(lifecycle, document, validators).
 
 ### 2.11 Agent triggers
 

@@ -109,9 +109,6 @@ func main() {
 	} else if seeded {
 		log.Info("default organisation created")
 	}
-	if _, err := graphsvc.SeedNamespaces(ctx, g); err != nil {
-		platform.Fatal(log, "seed namespaces", err)
-	}
 	// the model gateway configuration (providers, models, aliases) is graph data: seeded when the graph has none
 	if cfg, err := modelgw.InitialConfig(ctx, platform.Env("GOAP_MODELS_CONFIG", ""), platform.NewSecrets()); err != nil {
 		platform.Fatal(log, "models config", err)
