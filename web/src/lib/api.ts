@@ -179,8 +179,8 @@ export interface PropertyValidator {
 }
 
 /** Fixed algorithm types: the extension points of the platform. */
-export type AlgorithmType = 'property_validator' | 'transition_guard' | 'transition_action';
-export type AlgorithmParamType = 'string' | 'number' | 'boolean' | 'regex' | 'enum' | 'strings' | 'json';
+export type AlgorithmType = 'property_validator' | 'transition_guard' | 'transition_action' | 'adapter';
+export type AlgorithmParamType = 'string' | 'number' | 'boolean' | 'regex' | 'enum' | 'strings' | 'json' | 'secret';
 
 export interface AlgorithmParam {
   name?: string;
@@ -200,6 +200,9 @@ export interface Algorithm {
   language?: ScriptLanguage | string;
   code?: string;
   params?: AlgorithmParam[];
+  /** adapters only: the MCP whose tools the code implements and the connector whose operations it calls */
+  mcp?: string;
+  connector?: string;
 }
 
 /** Parameter values of an algorithm: what gets plugged. */
@@ -1403,27 +1406,39 @@ export interface Mcp {
   tools?: McpTool[];
 }
 
-export interface ToolMapping {
-  tool?: string;
-  operation?: string;
-  arguments?: Struct;
-  resultPath?: string;
-}
-
-/** How a unit implements an MCP with a connector (node `ADP:<unit>/<mcp>` of the organisation namespace). */
+/**
+ * An organisational unit's instance of an adapter of the library (an algorithm of type `adapter`): node
+ * `ADP:<unit>/<mcp>` of the organisation namespace, owned by the unit. The connector and the code come from
+ * the algorithm; the unit gives the parameter values (secrets as references).
+ */
 export interface Adapter {
   unit?: string;
   mcp?: string;
-  connector?: string;
-  config?: Struct;
-  secrets?: Record<string, string>;
-  tools?: ToolMapping[];
+  /** domain and version of the library holding the algorithm (empty version: latest published) */
+  domain?: string;
+  version?: string;
+  algorithm?: string;
+  params?: Struct;
 }
 
 export interface EffectiveMcp {
   mcp?: Mcp;
   adapter?: Adapter;
   inherited?: boolean;
+  /** the connector the adapter calls (empty when the library cannot say) */
+  connector?: string;
+}
+
+export interface TemplateParam {
+  name?: string;
+  type?: string;
+  description?: string;
+  required?: boolean;
+}
+
+export interface AdapterTemplate {
+  code?: string;
+  params?: TemplateParam[];
 }
 
 export interface HubTool {
@@ -1438,7 +1453,11 @@ export const mcp = {
   /** the MCPs a unit can use, each with the adapter that implements it (own or inherited); chain: unit then ancestors */
   listEffective: (unit: string, signal?: AbortSignal) =>
     rpc<{ unit: string }, { chain?: string[]; mcps?: EffectiveMcp[] }>(MCP, 'ListEffective', { unit }, signal),
+  /** blocking problems come back as errors, the rest as warnings */
   checkAdapter: (adapter: Adapter) => rpc<{ adapter: Adapter }, { warnings?: string[] }>(MCP, 'CheckAdapter', { adapter }),
+  /** skeleton of the code of an adapter between an MCP and a registered connector, and the parameters the connector needs */
+  adapterTemplate: (mcpName: string, connector: string) =>
+    rpc<{ mcp: string; connector: string }, AdapterTemplate>(MCP, 'AdapterTemplate', { mcp: mcpName, connector }),
   listTools: (unit = '', signal?: AbortSignal) =>
     rpc<{ unit: string }, { tools?: HubTool[]; mcps?: string[] }>(MCP, 'ListTools', { unit }, signal),
 };

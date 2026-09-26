@@ -14,6 +14,7 @@ import (
 	"github.com/zimwip/goap/internal/iamsvc"
 	"github.com/zimwip/goap/internal/mcpsvc"
 	"github.com/zimwip/goap/internal/platform"
+	"github.com/zimwip/goap/internal/registrysvc"
 	"github.com/zimwip/goap/internal/telemetry"
 )
 
@@ -37,9 +38,11 @@ func main() {
 		Store: store,
 		// the MCPs, the adapters and the organisation hierarchy are nodes of the graph
 		Directory: &mcpsvc.Directory{Graph: graphsvc.NewClient(hc, platform.Env("GOAP_GRAPH_URL", "http://localhost:8081"))},
-		Invoker:   &mcpsvc.ConnectInvoker{Token: token},
-		Secrets:   mcpsvc.ResolveSecret(platform.NewSecrets()),
-		Lease:     platform.EnvDuration("GOAP_CONNECTOR_LEASE", mcpsvc.DefaultLease),
+		// the code of the adapters: algorithms of the domain library (registry)
+		Library: &mcpsvc.CachedLibrary{Next: registrysvc.NewClient(hc, platform.Env("GOAP_REGISTRY_URL", "http://localhost:8082"))},
+		Invoker: &mcpsvc.ConnectInvoker{Token: token},
+		Secrets: mcpsvc.ResolveSecret(platform.NewSecrets()),
+		Lease:   platform.EnvDuration("GOAP_CONNECTOR_LEASE", mcpsvc.DefaultLease),
 	}
 	iam := iamsvc.NewClient(hc, platform.Env("GOAP_IAM_URL", "http://localhost:8086"))
 	srv.Mount(mcpv1connect.NewMcpServiceHandler(&mcpsvc.Handler{Service: svc, Authz: iam, ConnectorToken: token}, telemetry.HandlerOptions()...))

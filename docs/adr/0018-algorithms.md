@@ -22,7 +22,9 @@ could run when a transition was taken. Making the domain customizable meant chan
    | `transition_guard` | `GuardCtx` | `Run(ctx *dsl.GuardCtx) error` | allows or refuses a lifecycle transition |
    | `transition_action` | `TransitionCtx` | `Run(ctx *dsl.TransitionCtx) error` | sets / removes properties of the node that moved |
 
-   The three algorithm contexts are **pure**: no LLM, tool or sub-agent call, no blackboard. They
+   | `adapter` | `AdapterCtx` (`tool()`, `args()`, `param()`, `call(operation, args)`) | `Run(ctx *dsl.AdapterCtx) error` | implements the tools of an MCP with the operations of a connector (ADR 0019) |
+
+   The first three algorithm contexts are **pure**: no LLM, tool or sub-agent call, no blackboard. They
    reject with `ctx.fail(message)`, by throwing / returning an error, or (JavaScript) by returning
    `false` or a string. A JavaScript algorithm is the *body* of `function (ctx)`, so it may `return`.
 2. **Action code stays in the agent declaration.** The `action` usage has no algorithms: an action
@@ -59,6 +61,11 @@ could run when a transition was taken. Making the domain customizable meant chan
 7. **IDE**: an *Algorithms* section manages the algorithms and instances of a domain draft (editor,
    parameter table, instance value forms, *try it* through `RegistryService.RunAlgorithm`, which
    runs an algorithm on a sample input without storing anything); the domain editor plugs instances.
+
+   The `adapter` usage is the exception: it is declared in the library like the others, with `mcp` and
+   `connector` and `secret` parameters (never readable by the code), but it is **not plugged** into a node type or a
+   lifecycle: organisational units instantiate it (ADR 0019). It calls the connector, so it is bounded by 30 s and
+   32 calls, and is run by the MCP hub, not by the graph service.
 
 ## Consequences
 

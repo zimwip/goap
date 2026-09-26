@@ -2,55 +2,21 @@ package mcp
 
 import (
 	"errors"
-	"reflect"
+	"strings"
 	"testing"
+
+	"github.com/zimwip/goap/pkg/algo"
+	"github.com/zimwip/goap/pkg/dsl"
 )
 
-func TestMapArguments(t *testing.T) {
-	args := map[string]any{"path": "/a", "opts": map[string]any{"deep": 1.0}}
-	tmpl := map[string]any{
-		"file":   "$.path",
-		"mode":   "r",
-		"deep":   "$.opts.deep",
-		"absent": "$.nope",
-		"nested": map[string]any{"p": "$.path", "q": "$.nope"},
-		"list":   []any{"$.path", "$.nope", "x"},
-		"all":    "$",
-	}
-	got := MapArguments(tmpl, args)
-	want := map[string]any{
-		"file": "/a", "mode": "r", "deep": 1.0,
-		"nested": map[string]any{"p": "/a"},
-		"list":   []any{"/a", "x"},
-		"all":    args,
-	}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("got %v\nwant %v", got, want)
-	}
-	if !reflect.DeepEqual(MapArguments(nil, args), args) {
-		t.Fatal("nil template must pass through")
-	}
-}
-
-func TestPick(t *testing.T) {
-	res := map[string]any{"a": map[string]any{"b": "x", "c": map[string]any{"d": 1.0}}}
-	if v, err := Pick(res, "a.b"); err != nil || !reflect.DeepEqual(v, map[string]any{"value": "x"}) {
-		t.Fatalf("scalar = %v, %v", v, err)
-	}
-	if v, err := Pick(res, "a.c"); err != nil || !reflect.DeepEqual(v, map[string]any{"d": 1.0}) {
-		t.Fatalf("object = %v, %v", v, err)
-	}
-	if v, err := Pick(res, ""); err != nil || !reflect.DeepEqual(v, res) {
-		t.Fatalf("all = %v, %v", v, err)
-	}
-	if _, err := Pick(res, "a.z"); err == nil {
-		t.Fatal("missing path accepted")
-	}
-}
+var docs = Def{Name: "document-repository", Tools: []Tool{
+	{Name: "list", InputSchema: map[string]any{"properties": map[string]any{"path": map[string]any{}}}},
+	{Name: "read", InputSchema: map[string]any{"properties": map[string]any{"path": map[string]any{}}, "required": []any{"path"}}},
+	{Name: "search", InputSchema: map[string]any{"properties": map[string]any{"query": map[string]any{}}}},
+}}
 
 func TestValidate(t *testing.T) {
-	def := Def{Name: "document-repository", Tools: []Tool{{Name: "read"}, {Name: "list"}}}
-	if err := def.Validate(); err != nil {
+	if err := docs.Validate(); err != nil {
 		t.Fatal(err)
 	}
 	for _, bad := range []Def{{Name: "Bad"}, {Name: "x", Tools: []Tool{{Name: "a"}, {Name: "a"}}}, {Name: "x", Tools: []Tool{{Name: "A b"}}}} {
@@ -58,24 +24,79 @@ func TestValidate(t *testing.T) {
 			t.Errorf("%+v accepted: %v", bad, err)
 		}
 	}
-	ok := Adapter{MCP: def.Name, Connector: "localfs", Tools: []ToolMapping{{Tool: "read", Operation: "read_file"}}}
-	if err := ok.Validate(def); err != nil {
+	ok := Adapter{MCP: docs.Name, Domain: "platform", Algorithm: "localfs-docs"}
+	if err := ok.Validate(docs); err != nil {
 		t.Fatal(err)
 	}
-	for _, bad := range []Adapter{
-		{MCP: def.Name, Connector: "localfs", Tools: []ToolMapping{{Tool: "nope", Operation: "x"}}},
-		{MCP: def.Name, Connector: "localfs", Tools: []ToolMapping{{Tool: "read", Operation: "x"}, {Tool: "read", Operation: "y"}}},
-		{MCP: def.Name, Connector: "localfs", Tools: []ToolMapping{{Tool: "read"}}},
-		{MCP: def.Name, Connector: "Bad Name"},
-	} {
-		if err := bad.Validate(def); !errors.Is(err, ErrInvalid) {
-			t.Errorf("%+v accepted: %v", bad, err)
-		}
+	other := ok
+	other.MCP = "ticketing"
+	if err := other.Validate(docs); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("adapter of another MCP = %v", err)
 	}
 	if m, tool, err := SplitTool("document-repository/read"); err != nil || m != "document-repository" || tool != "read" {
 		t.Fatalf("split = %q %q %v", m, tool, err)
 	}
 	if _, _, err := SplitTool("read"); err == nil {
 		t.Fatal("unqualified tool accepted")
+	}
+}
+
+func TestCheckArgs(t *testing.T) {
+	read, _ := docs.Tool("read")
+	if err := read.CheckArgs(map[string]any{"path": "a"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := read.CheckArgs(map[string]any{}); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("missing argument = %v", err)
+	}
+}
+
+func TestNodeProps(t *testing.T) {
+	back, err := DefFromProps(docs.Props())
+	if err != nil || back.Name != docs.Name || len(back.Tools) != 3 {
+		t.Fatalf("def round trip = %+v, %v", back, err)
+	}
+	a := Adapter{Unit: "ORG-A", MCP: "docs", Domain: "platform", Version: "1.0.0", Algorithm: "x", Params: map[string]any{"root": "/r"}}
+	props := a.Props()
+	if _, has := props["unit"]; has {
+		t.Fatal("the unit is carried by the owner link, not by the properties")
+	}
+	got, err := AdapterFromProps("ORG-A", props)
+	if err != nil || got.Unit != "ORG-A" || got.Algorithm != "x" || got.Params["root"] != "/r" || got.Version != "1.0.0" {
+		t.Fatalf("adapter round trip = %+v, %v", got, err)
+	}
+}
+
+func TestAdapterTemplateFollowsTheMCPAndTheConnector(t *testing.T) {
+	ops := []Operation{
+		{Name: "list_dir", InputSchema: map[string]any{"properties": map[string]any{"path": map[string]any{}}}},
+		{Name: "read_file", Description: "Read a text file", InputSchema: map[string]any{"properties": map[string]any{"path": map[string]any{}}}},
+	}
+	code := AdapterTemplate(docs, "localfs", ops)
+	for _, want := range []string{
+		`case "list":`, `ctx.call("list_dir", { path: ctx.args().path })`,
+		`case "read":`, `ctx.call("read_file", { path: ctx.args().path })`,
+		`case "search":`, `not implemented: search`, "read_file(path) - Read a text file",
+	} {
+		if !strings.Contains(code, want) {
+			t.Errorf("template misses %q:\n%s", want, code)
+		}
+	}
+	if err := (algo.Algorithm{Name: "a", Type: algo.UsageAdapter, Language: algo.JavaScript, Code: code, MCP: "document-repository", Connector: "localfs"}).Issues(); len(err) != 0 {
+		t.Fatal(err)
+	}
+	if err := dsl.CheckAlgorithmCode(algo.JavaScript, code); err != nil {
+		t.Fatalf("the generated code does not compile: %v\n%s", err, code)
+	}
+}
+
+func TestAdapterParamsFollowTheConnector(t *testing.T) {
+	schema := map[string]any{"required": []any{"root"}, "properties": map[string]any{
+		"root":    map[string]any{"type": "string", "description": "directory"},
+		"retries": map[string]any{"type": "integer"},
+	}}
+	ps := AdapterParams(schema, []string{"token"})
+	if len(ps) != 3 || ps[0].Name != "retries" || ps[0].Type != algo.ParamNumber || ps[1].Name != "root" || !ps[1].Required || ps[2].Type != algo.ParamSecret {
+		t.Fatalf("params = %+v", ps)
 	}
 }

@@ -1,13 +1,16 @@
 <script lang="ts">
   // Organisational unit tab. An organisation is an OrgUnit node of the organisation namespace. Its MCP
   // pane says which MCPs the unit can use: an MCP is implemented for the unit by an Adapter node
-  // (`ADP:<unit>/<mcp>`, owned by the unit) that picks a connector, gives it its parameters and secrets and
-  // maps the tools of the MCP onto its operations. A unit inherits the adapters of its ancestors; the nearest wins.
+  // (`ADP:<unit>/<mcp>`, owned by the unit), the unit's INSTANCE of an adapter of the library (an algorithm of
+  // type `adapter` in a published domain): it names the algorithm and gives the parameter values (root
+  // directory, secret references...). A unit inherits the adapters of its ancestors; the nearest wins.
   import type { Tab } from '../../shell/types';
   import Icon from '../../shell/Icon.svelte';
   import EditorPanes, { type Pane } from '../../components/EditorPanes.svelte';
-  import { mcp, errorMessage, type Adapter, type EffectiveMcp, type Mcp, type Struct, type ToolMapping } from '../../api';
-  import { tools, refreshTools } from '../../stores/tools.svelte';
+  import AlgorithmParamValues from '../../components/AlgorithmParamValues.svelte';
+  import { mcp, errorMessage, type Adapter, type EffectiveMcp, type Struct } from '../../api';
+  import { tools, refreshTools, type LibraryAdapter } from '../../stores/tools.svelte';
+  import { defaultToText, type ParamForm } from '../../algorithmForm';
   import { headGraph, findNode, applyOnMain, createNodeItem, updateNodeItem, deleteNodeItem, linkItem, refOf, type HeadGraph } from '../../graphEdit';
   import { openTab } from '../../shell/tabs.svelte';
   import { notify, provideActions } from '../../shell/workbench.svelte';
@@ -79,82 +82,43 @@
     { id: 'mcp', label: 'MCP', badge: effective.length || undefined },
   ]);
 
-  // ---- adapter form ---------------------------------------------------------------------------------
-
-  interface Field {
-    name: string;
-    type: string;
-    required: boolean;
-    description: string;
-  }
-  interface Mapping {
-    tool: string;
-    operation: string;
-    args: string;
-    resultPath: string;
-  }
+  // ---- adapter instance form -------------------------------------------------------------------------
 
   let editing = $state(false);
   let fMcp = $state('');
-  let fConnector = $state('');
-  let fValues = $state<Record<string, string>>({});
-  let fExtra = $state('');
-  let fSecrets = $state<Record<string, string>>({});
-  let fMaps = $state<Mapping[]>([]);
+  /** "<domain>/<algorithm>" of the library */
+  let fLib = $state('');
+  let fVersion = $state('');
+  let fValues = $state<Record<string, unknown>>({});
   let fError = $state('');
   let fWarnings = $state<string[]>([]);
   let checked = $state(false);
   let saving = $state(false);
 
-  const mcpDef = $derived<Mcp | undefined>(tools.mcps.find((m) => m.name === fMcp));
-  const conn = $derived(tools.connectors.find((c) => c.info?.id === fConnector)?.info);
-  const schema = $derived((conn?.configSchema ?? {}) as { properties?: Record<string, Record<string, unknown>>; required?: string[] });
-  const SIMPLE = ['string', 'number', 'integer', 'boolean'];
-  const fields = $derived<Field[]>(
-    Object.entries(schema.properties ?? {})
-      .filter(([, d]) => SIMPLE.includes(String(d['type'])))
-      .map(([name, d]) => ({ name, type: String(d['type']), required: (schema.required ?? []).includes(name), description: String(d['description'] ?? '') })),
+  const libKey = (l: LibraryAdapter) => `${l.domain}/${l.name}`;
+  const libFor = $derived(tools.library.filter((l) => l.mcp === fMcp));
+  const chosen = $derived<LibraryAdapter | undefined>(tools.library.find((l) => libKey(l) === fLib));
+  const connectorLive = (id: string) => tools.connectors.find((c) => c.info?.id === id)?.live === true;
+  const connectorKnown = (id: string) => tools.connectors.some((c) => c.info?.id === id);
+  const paramForms = $derived<ParamForm[]>(
+    (chosen?.params ?? []).map((p) => ({
+      name: p.name ?? '',
+      type: p.type ?? 'string',
+      description: p.description ?? '',
+      required: !!p.required,
+      defaultValue: defaultToText(p.type ?? 'string', p.defaultValue),
+      values: (p.values ?? []).join(', '),
+    })),
   );
-  const simpleNames = $derived(new Set(fields.map((f) => f.name)));
-  const opNames = $derived((conn?.operations ?? []).map((o) => o.name ?? ''));
-
-  function argsTemplate(t: { inputSchema?: Struct }): string {
-    const props = Object.keys(((t.inputSchema ?? {}) as { properties?: Record<string, unknown> }).properties ?? {});
-    return props.length ? JSON.stringify(Object.fromEntries(props.map((p) => [p, `$.${p}`])), null, 2) : '';
-  }
-
-  function mappingsFor(m: Mcp | undefined, from: ToolMapping[] = []): Mapping[] {
-    return (m?.tools ?? []).map((t) => {
-      const cur = from.find((x) => x.tool === t.name);
-      return {
-        tool: t.name ?? '',
-        operation: cur?.operation ?? '',
-        args: cur ? (cur.arguments && Object.keys(cur.arguments).length ? JSON.stringify(cur.arguments, null, 2) : '') : argsTemplate(t),
-        resultPath: cur?.resultPath ?? '',
-      };
-    });
-  }
 
   /** opens the form for an MCP, prefilled from an adapter (its own, or the inherited one to override) */
   function edit(mcpName: string, from?: Adapter) {
     fMcp = mcpName;
-    fConnector = from?.connector ?? tools.connectors[0]?.info?.id ?? '';
-    const cfg = { ...(from?.config ?? {}) } as Record<string, unknown>;
-    const sch = ((tools.connectors.find((c) => c.info?.id === fConnector)?.info?.configSchema ?? {}) as { properties?: Record<string, Record<string, unknown>> }).properties ?? {};
-    const vals: Record<string, string> = {};
-    for (const [n, d] of Object.entries(sch)) {
-      if (SIMPLE.includes(String(d['type'])) && cfg[n] !== undefined) {
-        vals[n] = String(cfg[n]);
-        delete cfg[n];
-      }
-    }
-    fValues = vals;
-    fExtra = Object.keys(cfg).length ? JSON.stringify(cfg, null, 2) : '';
-    fSecrets = { ...(from?.secrets ?? {}) };
-    fMaps = mappingsFor(
-      tools.mcps.find((m) => m.name === mcpName),
-      from?.tools,
-    );
+    const own = tools.library.filter((l) => l.mcp === mcpName);
+    const known = from?.algorithm ? own.find((l) => l.domain === from.domain && l.name === from.algorithm) : undefined;
+    fLib = known ? libKey(known) : own[0] ? libKey(own[0]) : '';
+    fVersion = known ? (from?.version ?? '') : '';
+    fValues = known ? { ...((from?.params ?? {}) as Record<string, unknown>) } : {};
     fError = '';
     fWarnings = [];
     checked = false;
@@ -164,58 +128,27 @@
 
   function build(): Adapter | undefined {
     fError = '';
-    if (!fMcp || !fConnector) {
-      fError = 'Pick an MCP and a connector.';
+    if (!fMcp) {
+      fError = 'Pick an MCP.';
       return undefined;
     }
-    const config: Struct = {};
-    for (const f of fields) {
-      const v = (fValues[f.name] ?? '').trim();
-      if (v === '') {
-        if (f.required && f.type !== 'boolean') {
-          fError = `Parameter ${f.name} is required.`;
+    if (!chosen) {
+      fError = 'Pick an adapter of the library.';
+      return undefined;
+    }
+    const params: Struct = {};
+    for (const p of chosen.params) {
+      const v = fValues[p.name ?? ''];
+      if (v === undefined || v === '') {
+        if (p.required && p.defaultValue === undefined) {
+          fError = `Parameter ${p.name} is required.`;
           return undefined;
         }
         continue;
       }
-      if (f.type === 'boolean') config[f.name] = v === 'true';
-      else if (f.type === 'string') config[f.name] = v;
-      else {
-        const n = Number(v);
-        if (Number.isNaN(n) || (f.type === 'integer' && !Number.isInteger(n))) {
-          fError = `Parameter ${f.name} must be ${f.type === 'integer' ? 'an integer' : 'a number'}.`;
-          return undefined;
-        }
-        config[f.name] = n;
-      }
+      params[p.name ?? ''] = v as Struct[string];
     }
-    if (fExtra.trim()) {
-      try {
-        const extra = JSON.parse(fExtra);
-        if (extra === null || typeof extra !== 'object' || Array.isArray(extra)) throw new Error('an object is expected');
-        for (const [k, v] of Object.entries(extra as Struct)) if (!simpleNames.has(k)) config[k] = v;
-      } catch (e) {
-        fError = `Other parameters: invalid JSON (${e instanceof Error ? e.message : e})`;
-        return undefined;
-      }
-    }
-    const secrets: Record<string, string> = {};
-    for (const n of conn?.secretNames ?? []) if ((fSecrets[n] ?? '').trim()) secrets[n] = fSecrets[n].trim();
-    const toolMaps: ToolMapping[] = [];
-    for (const m of fMaps) {
-      if (!m.operation) continue;
-      let args: Struct | undefined;
-      if (m.args.trim()) {
-        try {
-          args = JSON.parse(m.args) as Struct;
-        } catch (e) {
-          fError = `Tool ${m.tool}: arguments are not valid JSON (${e instanceof Error ? e.message : e})`;
-          return undefined;
-        }
-      }
-      toolMaps.push({ tool: m.tool, operation: m.operation, ...(args ? { arguments: args } : {}), ...(m.resultPath.trim() ? { resultPath: m.resultPath.trim() } : {}) });
-    }
-    return { unit: key, mcp: fMcp, connector: fConnector, config, secrets, tools: toolMaps };
+    return { unit: key, mcp: fMcp, domain: chosen.domain, version: fVersion.trim(), algorithm: chosen.name, params };
   }
 
   async function check() {
@@ -235,12 +168,12 @@
     if (!a || !unit) return;
     saving = true;
     try {
-      // blocking problems (unknown MCP or tool) come back as errors
+      // blocking problems (unknown MCP or algorithm, parameters that do not fit) come back as errors
       fWarnings = (await mcp.checkAdapter(a)).warnings ?? [];
       const h = await headGraph();
       const akey = `ADP:${key}/${a.mcp}`;
       const existing = findNode(h, NS, 'Adapter', akey);
-      const props: Struct = { mcp: a.mcp ?? '', connector: a.connector ?? '', config: a.config ?? {}, secrets: a.secrets ?? {}, tools: (a.tools ?? []) as unknown as Struct[] };
+      const props: Struct = { mcp: a.mcp ?? '', domain: a.domain ?? '', version: a.version ?? '', algorithm: a.algorithm ?? '', params: a.params ?? {} };
       const u = findNode(h, NS, 'OrgUnit', key);
       if (!u) throw new Error(`unit ${key} not found`);
       const id = crypto.randomUUID();
@@ -310,12 +243,13 @@
           <section class="card">
             <h3>MCPs available to {key}</h3>
             <table class="tbl">
-              <thead><tr><th>MCP</th><th>Connector</th><th>Defined in</th><th></th><th></th></tr></thead>
+              <thead><tr><th>MCP</th><th>Adapter</th><th>Connector</th><th>Defined in</th><th></th><th></th></tr></thead>
               <tbody>
                 {#each effective as e (e.mcp?.name)}
                   <tr>
                     <td><code>{e.mcp?.name}</code></td>
-                    <td>{e.adapter?.connector}</td>
+                    <td><code>{e.adapter?.domain}/{e.adapter?.algorithm}</code>{#if e.adapter?.version}<span class="hint"> @{e.adapter.version}</span>{/if}</td>
+                    <td>{e.connector || '?'}{#if e.connector && !connectorLive(e.connector)}<span class="tag warn" title={connectorKnown(e.connector) ? 'registration expired' : 'not registered'}> {connectorKnown(e.connector) ? 'expired' : 'not registered'}</span>{/if}</td>
                     <td><code>{e.adapter?.unit}</code></td>
                     <td><span class="badge">{e.inherited ? 'inherited' : 'own'}</span></td>
                     <td class="acts">
@@ -324,7 +258,7 @@
                     </td>
                   </tr>
                 {:else}
-                  <tr><td colspan="5" class="empty">No MCP is implemented for this unit or its ancestors.</td></tr>
+                  <tr><td colspan="6" class="empty">No MCP is implemented for this unit or its ancestors.</td></tr>
                 {/each}
               </tbody>
             </table>
@@ -348,74 +282,50 @@
           {#if editing}
             <section class="card">
               <h3>Adapter of <code>{fMcp}</code> for <code>{key}</code></h3>
+              <p class="hint">
+                The adapter is code of the library; the unit gives it its parameter values. The same adapter can serve several units with different values (for example another root directory).
+              </p>
               {#if fError}<div class="alert">{fError}</div>{/if}
               <div class="grid">
                 <div class="field">
                   <label for="ad-mcp">MCP</label>
-                  <select id="ad-mcp" bind:value={fMcp} disabled={ownNodes.has(fMcp)} onchange={() => (fMaps = mappingsFor(mcpDef))}>
+                  <select
+                    id="ad-mcp"
+                    bind:value={fMcp}
+                    disabled={ownNodes.has(fMcp)}
+                    onchange={() => {
+                      fLib = libFor[0] ? libKey(libFor[0]) : '';
+                      fValues = {};
+                    }}
+                  >
                     {#each tools.mcps as m (m.name)}<option value={m.name}>{m.name}</option>{/each}
                   </select>
                 </div>
                 <div class="field">
-                  <label for="ad-conn">Connector</label>
-                  <select id="ad-conn" bind:value={fConnector}>
-                    {#each tools.connectors as c (c.info?.id)}<option value={c.info?.id}>{c.info?.id}{c.live ? '' : ' (expired)'}</option>{/each}
-                    {#if fConnector && !tools.connectors.some((c) => c.info?.id === fConnector)}<option value={fConnector}>{fConnector} (not registered)</option>{/if}
+                  <label for="ad-lib">Adapter</label>
+                  <select id="ad-lib" bind:value={fLib} onchange={() => (fValues = {})}>
+                    {#each libFor as l (libKey(l))}
+                      <option value={libKey(l)}>{libKey(l)} · connector {l.connector}{connectorLive(l.connector) ? '' : connectorKnown(l.connector) ? ' (expired)' : ' (not registered)'}</option>
+                    {/each}
+                    {#if !libFor.length}<option value="">no adapter for this MCP in the library</option>{/if}
                   </select>
                 </div>
-              </div>
-
-              <h4>Connector parameters</h4>
-              {#each fields as f (f.name)}
                 <div class="field">
-                  <label for="ad-cfg-{f.name}">{f.name}{#if f.required} <span class="req">*</span>{/if} <span class="opt">({f.type})</span></label>
-                  {#if f.type === 'boolean'}
-                    <select id="ad-cfg-{f.name}" bind:value={fValues[f.name]}>
-                      <option value="">unset</option><option value="true">true</option><option value="false">false</option>
-                    </select>
-                  {:else}
-                    <input id="ad-cfg-{f.name}" type={f.type === 'string' ? 'text' : 'number'} step={f.type === 'integer' ? 1 : 'any'} class:mono={f.type === 'string'} bind:value={fValues[f.name]} />
-                  {/if}
-                  {#if f.description}<span class="hint">{f.description}</span>{/if}
+                  <label for="ad-ver">Version <span class="opt">(empty: latest published{chosen?.version ? `, now ${chosen.version}` : ''})</span></label>
+                  <input id="ad-ver" type="text" class="mono" bind:value={fVersion} placeholder="latest" />
                 </div>
-              {/each}
-              <div class="field">
-                <label for="ad-extra">{fields.length ? 'Other parameters' : 'Parameters'} <span class="opt">(JSON object)</span></label>
-                <textarea id="ad-extra" class="mono" rows="3" bind:value={fExtra} placeholder={'{}'}></textarea>
               </div>
-
-              {#if conn?.secretNames?.length}
-                <h4>Secrets</h4>
-                {#each conn.secretNames as n (n)}
-                  <div class="field">
-                    <label for="ad-sec-{n}">{n}</label>
-                    <input id="ad-sec-{n}" class="mono" type="text" bind:value={fSecrets[n]} placeholder="secret/path#field  or  env:VARIABLE" />
-                  </div>
-                {/each}
-                <p class="hint">A reference resolved by the hub at call time: <code>&lt;vault path&gt;#&lt;field&gt;</code> or <code>env:&lt;VAR&gt;</code>. The value itself is never stored on the graph.</p>
+              {#if chosen}
+                {#if chosen.description}<p class="hint">{chosen.description}</p>{/if}
+                {#if !connectorLive(chosen.connector)}
+                  <div class="alert warn">Connector <code>{chosen.connector}</code> is {connectorKnown(chosen.connector) ? 'registered but its registration expired' : 'not registered'}: tool calls will fail until it registers.</div>
+                {/if}
+                <h4>Parameters</h4>
+                <AlgorithmParamValues params={paramForms} bind:values={fValues} idPrefix="ad-par" />
+                {#if paramForms.some((p) => p.type === 'secret')}
+                  <p class="hint">A secret is a reference resolved by the hub at call time: <code>&lt;vault path&gt;#&lt;field&gt;</code> or <code>env:&lt;VAR&gt;</code>. The value itself is never stored on the graph.</p>
+                {/if}
               {/if}
-
-              <h4>Tools of the MCP → operations of the connector</h4>
-              {#each fMaps as m, i (m.tool)}
-                <div class="map">
-                  <div class="field">
-                    <label for="ad-op-{i}"><code>{m.tool}</code></label>
-                    <select id="ad-op-{i}" bind:value={m.operation}>
-                      <option value="">not mapped (tool unavailable)</option>
-                      {#each opNames as o (o)}<option value={o}>{o}</option>{/each}
-                      {#if m.operation && !opNames.includes(m.operation)}<option value={m.operation}>{m.operation} (unknown)</option>{/if}
-                    </select>
-                  </div>
-                  <div class="field grow">
-                    <label for="ad-args-{i}">Arguments <span class="opt">("$.name" = argument of the tool call)</span></label>
-                    <textarea id="ad-args-{i}" class="mono" rows="3" bind:value={m.args}></textarea>
-                  </div>
-                  <div class="field">
-                    <label for="ad-rp-{i}">Result path</label>
-                    <input id="ad-rp-{i}" class="mono" type="text" bind:value={m.resultPath} placeholder="whole result" />
-                  </div>
-                </div>
-              {/each}
 
               {#if fWarnings.length}
                 <div class="alert warn">
@@ -425,8 +335,8 @@
                 <p class="hint">No problem found.</p>
               {/if}
               <div class="row">
-                <button type="button" class="small" onclick={check}>Check</button>
-                <button type="button" class="small primary" disabled={saving} onclick={save}>Save</button>
+                <button type="button" class="small" disabled={!chosen} onclick={check}>Check</button>
+                <button type="button" class="small primary" disabled={saving || !chosen} onclick={save}>Save</button>
                 <button type="button" class="small" onclick={() => (editing = false)}>Cancel</button>
               </div>
             </section>
@@ -476,15 +386,11 @@
     margin-top: 0.6rem;
     align-items: center;
   }
-  .map {
-    display: flex;
-    gap: 0.6rem;
-    align-items: flex-start;
+  .tag.warn {
+    color: var(--warn, #b80);
+    font-size: 0.8rem;
   }
   h4 {
     margin: 0.9rem 0 0.3rem;
-  }
-  .req {
-    color: var(--danger, #c33);
   }
 </style>

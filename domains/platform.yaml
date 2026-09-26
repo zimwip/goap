@@ -22,3 +22,27 @@ linkTypes:
   - {name: achieves, from: Action, to: Condition}
   - {name: specializes, from: Action, to: Action}
   - {name: extends, from: NodeType, to: NodeType}
+
+# The adapter library (ADR 0019). An adapter is code that implements the tools an MCP expects with the
+# operations a connector exposes. Each organisational unit instantiates one (an Adapter node of the
+# organisation namespace) with its parameter values: the same adapter, another root directory.
+# Parameters are handed to the connector as its configuration, secrets under their name.
+algorithms:
+  - name: localfs-document-repository
+    description: The document-repository MCP on the local file system connector (localfs)
+    type: adapter
+    language: javascript
+    mcp: document-repository
+    connector: localfs
+    params:
+      - {name: root, type: string, required: true, description: Directory the unit exposes as its document repository}
+    code: |
+      switch (ctx.tool()) {
+        case "list":
+          return ctx.call("list_dir", { path: ctx.args().path || "" });
+        case "read":
+          return ctx.call("read_file", { path: ctx.args().path });
+        case "write":
+          return ctx.call("write_file", { path: ctx.args().path, content: ctx.args().content });
+      }
+      ctx.fail("unknown tool " + ctx.tool());

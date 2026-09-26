@@ -2,7 +2,7 @@
   // Values form generated from the declared parameters of an algorithm: one control per
   // parameter type, typed values written into `values` (unset parameters are removed, so
   // the default of the algorithm applies).
-  import type { ParamForm } from '../algorithmForm';
+  import { SECRET_HINT, type ParamForm } from '../algorithmForm';
 
   let {
     params,
@@ -91,7 +91,7 @@
           <textarea {id} class="mono" rows="2" disabled={readonly} placeholder={p.defaultValue || '{"any": "json"}'} value={jsonText[p.name] ?? (v === undefined ? '' : JSON.stringify(v))} oninput={(e) => typeJson(p, e.currentTarget.value)}></textarea>
           {#if jsonError[p.name]}<span class="err">{jsonError[p.name]}</span>{/if}
         {:else}
-          <input {id} type="text" class:mono={p.type === 'regex'} disabled={readonly} placeholder={p.defaultValue} value={strOf(v)} oninput={(e) => set(p, e.currentTarget.value)} />
+          <input {id} type="text" class:mono={p.type === 'regex' || p.type === 'secret'} disabled={readonly} placeholder={p.type === 'secret' ? SECRET_HINT : p.defaultValue} autocomplete="off" value={strOf(v)} oninput={(e) => set(p, e.currentTarget.value)} />
           {#if p.type === 'regex' && regexError(v)}<span class="err">{regexError(v)}</span>{/if}
         {/if}
         {#if p.description}<span class="hint">{p.description}</span>{/if}

@@ -11,7 +11,9 @@
   import { provideActions, useReveal, notify } from '../../shell/workbench.svelte';
   import { closeWhere, openTab } from '../../shell/tabs.svelte';
   import { moveItem } from '../../methodologyForm';
-  import { emptyInstance, emptyParam, freeName, ALGORITHM_LANGUAGES, PARAM_TYPES } from '../../algorithmForm';
+  import { emptyInstance, emptyParam, freeName, ALGORITHM_LANGUAGES, PARAM_TYPES, SECRET_HINT } from '../../algorithmForm';
+  import { mcp as hub, errorMessage } from '../../api';
+  import { tools, refreshTools } from '../../stores/tools.svelte';
   import { ALGORITHM_TEMPLATES, ALGORITHM_USAGES, algorithmUsage, type AlgorithmUsage } from '../../dsl';
   import { algorithmIndex, algorithmToolbar, domainDraftOf, instanceSpec } from './domainTabs';
 
@@ -30,6 +32,47 @@
     tab.params.uid = a.uid;
     tab.params.alg = a.name;
   });
+
+  const isAdapter = $derived(a?.type === 'adapter');
+  $effect(() => {
+    if (isAdapter && !tools.loaded) void refreshTools();
+  });
+  let generating = $state(false);
+  let genError = $state('');
+  let genNote = $state('');
+
+  /**
+   * Fills the code of an adapter from the MCP (one case per tool) and the connector (the operations
+   * it can call), and adds the parameters the connector announces (the existing ones are kept).
+   */
+  async function generate() {
+    if (!a) return;
+    genError = '';
+    genNote = '';
+    if (!a.mcp || !a.connector) {
+      genError = 'Pick an MCP and a connector first.';
+      return;
+    }
+    if (!untouched() && !confirm('Replace the code of the adapter with a generated template?')) return;
+    generating = true;
+    try {
+      const t = await hub.adapterTemplate(a.mcp, a.connector);
+      a.language = 'javascript'; // the template is JavaScript
+      a.code = t.code ?? a.code;
+      const have = new Set(a.params.map((p) => p.name));
+      let added = 0;
+      for (const p of t.params ?? []) {
+        if (!p.name || have.has(p.name)) continue;
+        a.params.push({ ...emptyParam(), name: p.name, type: p.type ?? 'string', description: p.description ?? '', required: !!p.required });
+        added++;
+      }
+      genNote = `Template generated${added ? `, ${added} parameter(s) added` : ''}. Complete the mapping: rename operations, reshape arguments and results.`;
+    } catch (e) {
+      genError = errorMessage(e);
+    } finally {
+      generating = false;
+    }
+  }
 
   const bad = (p: string) => d.bad(`algorithms[${index}]${p}`);
   const issues = $derived(d.allIssues.filter((i) => i.norm === `algorithms[${index}]` || i.norm.startsWith(`algorithms[${index}].`) || i.norm.startsWith(`algorithms[${index}][`)));
@@ -142,9 +185,51 @@
         {/if}
       </section>
 
+      {#if isAdapter}
+        <section class="card">
+          <h3>MCP and connector</h3>
+          <p class="hint">
+            The adapter implements the tools of one MCP with the operations of one connector. It is written once here, in the library; each organisational unit
+            then instantiates it with its own parameter values (Organisation › MCP).
+          </p>
+          <div class="grid">
+            <div class="field">
+              <label for="alg-mcp">MCP</label>
+              <select id="alg-mcp" bind:value={a.mcp} class:bad={bad('.mcp')} data-path="algorithms[{index}].mcp">
+                <option value="">Pick an MCP…</option>
+                {#each tools.mcps as m (m.name)}<option value={m.name}>{m.name}</option>{/each}
+                {#if a.mcp && !tools.mcps.some((m) => m.name === a.mcp)}<option value={a.mcp}>{a.mcp} (unknown)</option>{/if}
+              </select>
+            </div>
+            <div class="field">
+              <label for="alg-conn">Connector</label>
+              <select id="alg-conn" bind:value={a.connector} class:bad={bad('.connector')} data-path="algorithms[{index}].connector">
+                <option value="">Pick a connector…</option>
+                {#each tools.connectors as c (c.info?.id)}<option value={c.info?.id}>{c.info?.id}{c.live ? '' : ' (expired)'}</option>{/each}
+                {#if a.connector && !tools.connectors.some((c) => c.info?.id === a.connector)}<option value={a.connector}>{a.connector} (not registered)</option>{/if}
+              </select>
+            </div>
+          </div>
+          {#if !d.readonly}
+            <div class="row">
+              <button type="button" class="small" disabled={generating || !a.mcp || !a.connector} onclick={generate}>{generating ? 'Generating…' : 'Generate from MCP and connector'}</button>
+              <span class="hint">Needs the connector to be registered: the template follows the MCP tools and the operations it exposes.</span>
+            </div>
+          {/if}
+          {#if genError}<div class="alert">{genError}</div>{/if}
+          {#if genNote}<p class="hint">{genNote}</p>{/if}
+        </section>
+      {/if}
+
       <section class="card">
         <h3>Parameters</h3>
-        <p class="hint">Typed values an instance sets and the code reads with <code>ctx.param(name)</code> (Go: <code>ctx.Param(name)</code>). A regex is checked when the instance is saved.</p>
+        <p class="hint">
+          Typed values an instance sets and the code reads with <code>ctx.param(name)</code> (Go: <code>ctx.Param(name)</code>). A regex is checked when the instance is saved.
+          {#if isAdapter}
+            For an adapter, the parameters are handed to the connector as its configuration under the same names (see its config schema), and a <code>secret</code> parameter
+            is a reference (<code>{SECRET_HINT}</code>) the hub resolves and gives to the connector: the code never reads it.
+          {/if}
+        </p>
         {#each a.params as p, i}
           <div class="prow" data-path="algorithms[{index}].params[{i}]">
             <input type="text" class="mono" aria-label="Parameter name" bind:value={p.name} placeholder="pattern" />
@@ -152,7 +237,9 @@
               {#each PARAM_TYPES as t (t)}<option value={t}>{t}</option>{/each}
             </select>
             <label class="check"><input type="checkbox" bind:checked={p.required} /> required</label>
-            <input type="text" class="mono" aria-label="Default value" bind:value={p.defaultValue} placeholder={p.type === 'strings' ? 'default: a, b' : p.type === 'json' ? 'default: JSON' : 'default'} />
+            {#if p.type !== 'secret'}
+              <input type="text" class="mono" aria-label="Default value" bind:value={p.defaultValue} placeholder={p.type === 'strings' ? 'default: a, b' : p.type === 'json' ? 'default: JSON' : 'default'} />
+            {/if}
             {#if p.type === 'enum'}<input type="text" class="mono" aria-label="Enum values" bind:value={p.values} placeholder="values: a, b, c" />{/if}
             <input type="text" class="desc" aria-label="Parameter description" bind:value={p.description} placeholder="Description" />
             {#if !d.readonly}
@@ -174,7 +261,11 @@
             {:else}
               The code is the body of a function of <code>ctx</code>: it may <code>return</code> (<code>false</code> or a message rejects).
             {/if}
-            Pure: no blackboard, LLM or tool calls.
+            {#if isAdapter}
+              The code runs in the hub with a 30 s limit and at most 32 connector calls; it sees the connector's operations only through <code>ctx.call</code>.
+            {:else}
+              Pure: no blackboard, LLM or tool calls.
+            {/if}
           </p>
           <details class="ctxdoc">
             <summary>ctx API ({usage.functions.length} functions)</summary>
@@ -189,6 +280,12 @@
       </section>
     </fieldset>
 
+    {#if isAdapter}
+      <section class="card">
+        <h3>Instances</h3>
+        <p class="hint">Adapters are not instantiated here: each organisational unit attaches one to an MCP from its <strong>MCP</strong> pane, with its own parameter values.</p>
+      </section>
+    {:else}
     <section class="card">
       <h3>Instances</h3>
       {#each instances as inst (inst.uid)}
@@ -202,7 +299,9 @@
       {#if !d.readonly}<button type="button" class="small" onclick={newInstance}>+ Instance</button>{/if}
     </section>
 
-    <AlgorithmTryIt algorithm={a} />
+    {/if}
+
+    {#if !isAdapter}<AlgorithmTryIt algorithm={a} />{/if}
   {/if}
 </div>
 

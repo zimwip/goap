@@ -28,11 +28,16 @@ const (
 	// UsageTransitionAction runs when a lifecycle transition is taken and may
 	// change properties of the node.
 	UsageTransitionAction Usage = "transition_action"
+	// UsageAdapter implements the tools of an MCP with the operations of a connector (ADR
+	// 0019): the code maps the expected functions onto the exposed ones. It is declared in the
+	// domain library and instantiated, with parameter values, by the organisational units.
+	// It is never plugged into a node type or a lifecycle.
+	UsageAdapter Usage = "adapter"
 )
 
 // Usages lists every usage.
 func Usages() []Usage {
-	return []Usage{UsageAction, UsagePropertyValidator, UsageTransitionGuard, UsageTransitionAction}
+	return []Usage{UsageAction, UsagePropertyValidator, UsageTransitionGuard, UsageTransitionAction, UsageAdapter}
 }
 
 // Pluggable tells whether algorithms of this type can be declared and plugged.
@@ -60,11 +65,14 @@ const (
 	ParamStrings = "strings"
 	// ParamJSON is any JSON value.
 	ParamJSON = "json"
+	// ParamSecret is a reference to a secret ("<vault path>#<field>" or "env:<VAR>"). The script
+	// never reads it: adapters hand the resolved secret to the connector under the parameter name.
+	ParamSecret = "secret"
 )
 
 // ParamTypes lists the parameter types.
 func ParamTypes() []string {
-	return []string{ParamString, ParamNumber, ParamBoolean, ParamRegex, ParamEnum, ParamStrings, ParamJSON}
+	return []string{ParamString, ParamNumber, ParamBoolean, ParamRegex, ParamEnum, ParamStrings, ParamJSON, ParamSecret}
 }
 
 // Param declares a parameter of an algorithm: a typed value the instance sets
@@ -87,6 +95,10 @@ type Algorithm struct {
 	Language    string  `yaml:"language" json:"language"`
 	Code        string  `yaml:"code" json:"code"`
 	Params      []Param `yaml:"params,omitempty" json:"params,omitempty"`
+	// MCP and Connector (adapters only): the name of the MCP whose tools the code implements and
+	// the id of the connector whose operations it calls.
+	MCP       string `yaml:"mcp,omitempty" json:"mcp,omitempty"`
+	Connector string `yaml:"connector,omitempty" json:"connector,omitempty"`
 }
 
 // Instance sets the parameter values of an algorithm. Instances are what the
@@ -136,6 +148,16 @@ func (a Algorithm) Issues() []string {
 	if a.Language != JavaScript && a.Language != Go {
 		out = append(out, "language must be javascript or go")
 	}
+	if a.Type == UsageAdapter {
+		if !nameRE.MatchString(a.MCP) {
+			out = append(out, "an adapter names the MCP it implements (mcp)")
+		}
+		if !nameRE.MatchString(a.Connector) {
+			out = append(out, "an adapter names the connector it calls (connector)")
+		}
+	} else if a.MCP != "" || a.Connector != "" {
+		out = append(out, "mcp and connector apply to adapters only")
+	}
 	if a.Code == "" {
 		out = append(out, "code required")
 	}
@@ -154,6 +176,9 @@ func (a Algorithm) Issues() []string {
 		if !slices.Contains(ParamTypes(), p.Type) {
 			out = append(out, fmt.Sprintf("param %s: unknown type %q", p.Name, p.Type))
 			continue
+		}
+		if p.Type == ParamSecret && a.Type != UsageAdapter {
+			out = append(out, fmt.Sprintf("param %s: secrets are for adapters only", p.Name))
 		}
 		if p.Type == ParamEnum && len(p.Values) == 0 {
 			out = append(out, fmt.Sprintf("param %s: an enum needs values", p.Name))
@@ -175,6 +200,12 @@ func (p Param) Coerce(v any) (any, error) {
 		s, ok := v.(string)
 		if !ok {
 			return nil, fmt.Errorf("expected a string, got %T", v)
+		}
+		return s, nil
+	case ParamSecret:
+		s, ok := v.(string)
+		if !ok || s == "" {
+			return nil, fmt.Errorf("expected a secret reference, got %T", v)
 		}
 		return s, nil
 	case ParamRegex:
@@ -281,6 +312,26 @@ func (a Algorithm) Resolve(values map[string]any) (map[string]any, []string) {
 	}
 	slices.Sort(issues)
 	return out, issues
+}
+
+// Split separates the resolved values of an adapter into the configuration handed to the
+// connector (every parameter but the secrets) and the secret references, by parameter name.
+func (a Algorithm) Split(values map[string]any) (config map[string]any, secrets map[string]string) {
+	config, secrets = map[string]any{}, map[string]string{}
+	secret := map[string]bool{}
+	for _, p := range a.Params {
+		secret[p.Name] = p.Type == ParamSecret
+	}
+	for k, v := range values {
+		if secret[k] {
+			if s, ok := v.(string); ok {
+				secrets[k] = s
+			}
+			continue
+		}
+		config[k] = v
+	}
+	return config, secrets
 }
 
 // Set is the algorithms and instances of a domain.

@@ -70,7 +70,7 @@ message PropertyValidator {
 // AlgorithmParam declares a typed parameter of an algorithm.
 message AlgorithmParam {
   string name = 1;
-  // string | number | boolean | regex | enum | strings | json
+  // string | number | boolean | regex | enum | strings | json | secret
   string type = 2;
   string description = 3;
   bool required = 4;
@@ -83,12 +83,15 @@ message AlgorithmParam {
 message Algorithm {
   string name = 1;
   string description = 2;
-  // property_validator | transition_guard | transition_action
+  // property_validator | transition_guard | transition_action | adapter
   string type = 3;
   // javascript | go
   string language = 4;
   string code = 5;
   repeated AlgorithmParam params = 6;
+  // adapters only: the MCP whose tools the code implements and the connector whose operations it calls
+  string mcp = 7;
+  string connector = 8;
 }
 
 // AlgorithmInstance sets the parameter values of an algorithm; it is what gets plugged.

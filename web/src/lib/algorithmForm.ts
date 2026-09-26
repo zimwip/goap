@@ -4,7 +4,10 @@ import type { Algorithm, AlgorithmInstance, AlgorithmParam, AlgorithmParamType }
 import { ALGORITHM_TEMPLATES, ALGORITHM_USAGES, type AlgorithmUsage } from './dsl';
 import { newUid } from './methodologyForm';
 
-export const PARAM_TYPES: AlgorithmParamType[] = ['string', 'number', 'boolean', 'regex', 'enum', 'strings', 'json'];
+export const PARAM_TYPES: AlgorithmParamType[] = ['string', 'number', 'boolean', 'regex', 'enum', 'strings', 'json', 'secret'];
+
+/** hint of a secret value: a reference resolved by the hub at call time, never the secret itself */
+export const SECRET_HINT = 'env:VARIABLE  or  <vault path>#<field>';
 export const ALGORITHM_LANGUAGES = ['javascript', 'go'] as const;
 export { ALGORITHM_USAGES };
 
@@ -28,6 +31,9 @@ export interface AlgorithmForm {
   language: string;
   code: string;
   params: ParamForm[];
+  /** adapters only */
+  mcp: string;
+  connector: string;
 }
 
 export interface InstanceForm {
@@ -84,6 +90,8 @@ export function algorithmToForm(a: Algorithm): AlgorithmForm {
     type: a.type ?? 'property_validator',
     language: a.language ?? 'javascript',
     code: a.code ?? '',
+    mcp: a.mcp ?? '',
+    connector: a.connector ?? '',
     params: (a.params ?? []).map((p) => ({
       name: p.name ?? '',
       type: p.type ?? 'string',
@@ -98,6 +106,10 @@ export function algorithmToForm(a: Algorithm): AlgorithmForm {
 export function algorithmFromForm(a: AlgorithmForm): Algorithm {
   const o: Algorithm = { name: a.name.trim(), type: a.type, language: a.language, code: a.code };
   if (a.description.trim()) o.description = a.description.trim();
+  if (a.type === 'adapter') {
+    o.mcp = a.mcp.trim();
+    o.connector = a.connector.trim();
+  }
   if (a.params.length) {
     o.params = a.params.map((p) => {
       const q: AlgorithmParam = { name: p.name.trim(), type: p.type };
@@ -126,7 +138,7 @@ export function instanceFromForm(i: InstanceForm): AlgorithmInstance {
 }
 
 export function emptyAlgorithm(type: AlgorithmUsage = 'property_validator', name = ''): AlgorithmForm {
-  return { uid: newUid(), name, description: '', type, language: 'javascript', code: ALGORITHM_TEMPLATES[type].javascript, params: [] };
+  return { uid: newUid(), name, description: '', type, language: 'javascript', code: ALGORITHM_TEMPLATES[type].javascript, params: [], mcp: '', connector: '' };
 }
 
 export const emptyParam = (): ParamForm => ({ name: '', type: 'string', description: '', required: false, defaultValue: '', values: '' });

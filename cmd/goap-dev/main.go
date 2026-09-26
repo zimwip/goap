@@ -154,6 +154,7 @@ func main() {
 	hub := &mcpsvc.Service{
 		Store:     st.mcp,
 		Directory: &mcpsvc.Directory{Graph: g},
+		Library:   &mcpsvc.CachedLibrary{Next: reg},
 		Invoker:   mcpsvc.InprocInvoker{Connectors: connectors, Remote: &mcpsvc.ConnectInvoker{Token: connectorToken}},
 		Secrets:   mcpsvc.ResolveSecret(secrets),
 		Lease:     platform.EnvDuration("GOAP_CONNECTOR_LEASE", mcpsvc.DefaultLease),
