@@ -169,12 +169,10 @@ func scriptTemplate(a methodology.Action, s ActionStats) string {
 	b.WriteString("function run(ctx) {\n")
 	for _, k := range slices.Sorted(maps.Keys(s.Outputs)) {
 		switch {
-		case strings.HasPrefix(k, "impact"):
-			b.WriteString("for (const n of ctx.nodes(\"\")) {\n  // TODO rule to select the impacted nodes\n  // ctx.addImpact(n.key, \"rule\");\n}\n")
-		case strings.HasPrefix(k, "proposal/update_node"):
-			b.WriteString("for (const i of ctx.impacts()) {\n  // TODO update rule\n  // ctx.proposeUpdate(i.target.key, {});\n}\n")
-		case strings.HasPrefix(k, "proposal/create_node"), strings.HasPrefix(k, "proposal/add_link"):
-			b.WriteString("for (const i of ctx.impacts()) {\n  // TODO nodes / links to create\n  // const p = ctx.proposeNode(\"Type\", \"KEY\", {});\n  // ctx.proposeLink(p, \"type\", i.target.key);\n}\n")
+		case k == "changeNode/modified":
+			b.WriteString("for (const n of ctx.nodes(\"\")) {\n  // TODO rule to select the impacted nodes\n  // ctx.impactNode(n.key, \"rule\");\n}\n")
+		case k == "changeNode/created":
+			b.WriteString("for (const n of ctx.changeNodes()) {\n  // TODO nodes to create\n  // const c = ctx.createNode(\"Type\", \"KEY\", \"why\");\n  // ctx.writeNode(c, { props: {}, links: [{ type: \"type\", to: n.key }] });\n}\n")
 		case strings.HasPrefix(k, "artifact"):
 			b.WriteString("ctx.addArtifact(\"" + strings.TrimPrefix(k, "artifact/") + "\", { /* TODO */ });\n")
 		}

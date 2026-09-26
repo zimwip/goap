@@ -47,7 +47,9 @@ type ChangeSet struct {
 	ResultBaselineID BaselineID     `json:"resultBaselineId,omitempty"`
 	Data             map[string]any `json:"data,omitempty"`
 	Items            []ChangeItem   `json:"items"`
-	CreatedAt        time.Time      `json:"createdAt"`
+	// Nodes are the node versions the change reads, modifies or creates (ADR 0024).
+	Nodes     []ChangeNode `json:"nodes,omitempty"`
+	CreatedAt time.Time    `json:"createdAt"`
 
 	flx  *flowIndex // replay of the flow events, valid for flxN items
 	flxN int
@@ -62,16 +64,13 @@ type ChangeEvent struct {
 	Items    []ChangeItem `json:"items,omitempty"`
 }
 
-// ItemKind classifies change items.
+// ItemKind classifies the facts of the blackboard (the nodes a change acts on are its change nodes).
 type ItemKind string
 
 const (
-	KindImpact   ItemKind = "impact"
-	KindProposal ItemKind = "proposal"
 	KindDecision ItemKind = "decision"
 	KindArtifact ItemKind = "artifact"
-	// KindMerge records a divergence of a proposal from the head of its branch
-	// and the proposed resolution (validated by a human before the rebase).
+	// KindMerge records a merge of the change and its resolution.
 	KindMerge ItemKind = "merge"
 	// KindFlow is an event of the action flow: a step is relaunched on a new flow
 	// branch, and the branch is adopted or discarded (see flow.go).
@@ -94,21 +93,16 @@ const (
 	ItemStale ItemStatus = "stale"
 )
 
-// ChangeItem is one fact on the blackboard.
+// ChangeItem is one fact on the blackboard: an artifact, a decision, a merge or a flow event.
 type ChangeItem struct {
 	ID     ItemID     `json:"id"`
 	Kind   ItemKind   `json:"kind"`
 	Type   string     `json:"type,omitempty"`
 	Status ItemStatus `json:"status"`
-	Target *NodeRef   `json:"target,omitempty"` // impact: the "pre" version, in the reference graph; decision: n/a
-	// Post is the "post" side of an impact: the proposal (Item) that produces the
-	// new version on the change branch, or that version once known (Node).
-	Post *Endpoint `json:"post,omitempty"`
 	// Flow is the flow branch that produced the item ("" = the main flow);
 	// FlowEvent is set on KindFlow items.
 	Flow        string         `json:"flow,omitempty"`
 	FlowEvent   *FlowEvent     `json:"flowEvent,omitempty"`
-	Proposal    *Proposal      `json:"proposal,omitempty"` // proposal only
 	Decision    *Decision      `json:"decision,omitempty"` // decision only
 	Data        map[string]any `json:"data,omitempty"`
 	ProducedBy  string         `json:"producedBy,omitempty"`
@@ -121,70 +115,6 @@ type ChangeItem struct {
 	CreatedAt time.Time `json:"createdAt"`
 }
 
-// ProposalOp is the kind of modification proposed for the target graph.
-type ProposalOp string
-
-const (
-	OpCreateNode ProposalOp = "create_node"
-	OpUpdateNode ProposalOp = "update_node"
-	OpDeleteNode ProposalOp = "delete_node"
-	OpAddLink    ProposalOp = "add_link"
-	OpRemoveLink ProposalOp = "remove_link"
-	// OpMergeNode creates a version merging Node.Base (target branch, may be
-	// nil when the node is new there) with Node.From (source branch).
-	OpMergeNode ProposalOp = "merge_node"
-	// OpTransitionNode moves Node.Base to the lifecycle state Node.State. It is
-	// how a released node is reopened for edition (a transition into an
-	// editable state) and how it leaves the editable states again (ADR 0014).
-	OpTransitionNode ProposalOp = "transition_node"
-)
-
-// Proposal is a modification of the target graph.
-type Proposal struct {
-	Op   ProposalOp `json:"op"`
-	Node *NodeDraft `json:"node,omitempty"`
-	Link *LinkDraft `json:"link,omitempty"`
-}
-
-// NodeDraft describes a node to create (Base unset) or a new version of an
-// existing node (Base = the version it modifies, used for conflict detection).
-type NodeDraft struct {
-	Base *NodeRef `json:"base,omitempty"`
-	// From and Ancestor are set for merge_node (Properties is then the full merged map).
-	From     *NodeRef `json:"from,omitempty"`
-	Ancestor *NodeRef `json:"ancestor,omitempty"`
-	// Namespace of a created node (empty: the change namespace).
-	Namespace  string         `json:"namespace,omitempty"`
-	Key        string         `json:"key,omitempty"`
-	Type       string         `json:"type,omitempty"`
-	Properties map[string]any `json:"props,omitempty"`
-	// State is the target lifecycle state of a transition_node.
-	State string `json:"state,omitempty"`
-}
-
-// Endpoint designates a link endpoint: an existing node version or a node
-// proposed by another item of the same change.
-type Endpoint struct {
-	Node *NodeRef `json:"node,omitempty"`
-	Item ItemID   `json:"item,omitempty"`
-}
-
-func (e Endpoint) String() string {
-	if e.Node != nil {
-		return e.Node.String()
-	}
-	return "item:" + string(e.Item)
-}
-
-// LinkDraft describes a link to add, or (with LinkID) a link to remove.
-type LinkDraft struct {
-	LinkID     LinkID         `json:"linkId,omitempty"`
-	Type       string         `json:"type,omitempty"`
-	From       Endpoint       `json:"from"`
-	To         Endpoint       `json:"to"`
-	Properties map[string]any `json:"props,omitempty"`
-}
-
 // Decision accepts or rejects another item.
 type Decision struct {
 	Item    ItemID `json:"item"`
@@ -195,49 +125,6 @@ type Decision struct {
 // Validate checks the structural consistency of an item.
 func (it ChangeItem) Validate() error {
 	switch it.Kind {
-	case KindImpact:
-		if (it.Target == nil || it.Target.IsZero()) && it.Post == nil {
-			return fmt.Errorf("impact item requires a target (pre) or a post")
-		}
-		if p := it.Post; p != nil && (p.Node == nil) == (p.Item == "") {
-			return fmt.Errorf("impact post requires exactly one of node and item")
-		}
-	case KindProposal:
-		p := it.Proposal
-		if p == nil {
-			return fmt.Errorf("proposal item requires a proposal")
-		}
-		switch p.Op {
-		case OpCreateNode:
-			if p.Node == nil || p.Node.Type == "" {
-				return fmt.Errorf("create_node requires node.type")
-			}
-		case OpUpdateNode, OpDeleteNode:
-			if p.Node == nil || p.Node.Base == nil {
-				return fmt.Errorf("%s requires node.base", p.Op)
-			}
-		case OpTransitionNode:
-			if p.Node == nil || p.Node.Base == nil || p.Node.State == "" {
-				return fmt.Errorf("transition_node requires node.base and node.state")
-			}
-		case OpMergeNode:
-			if p.Node == nil || p.Node.From == nil {
-				return fmt.Errorf("merge_node requires node.from")
-			}
-		case OpAddLink:
-			if p.Link == nil || p.Link.Type == "" {
-				return fmt.Errorf("add_link requires link.type")
-			}
-			if (p.Link.From.Node == nil && p.Link.From.Item == "") || (p.Link.To.Node == nil && p.Link.To.Item == "") {
-				return fmt.Errorf("add_link requires both endpoints")
-			}
-		case OpRemoveLink:
-			if p.Link == nil || p.Link.LinkID == "" {
-				return fmt.Errorf("remove_link requires link.linkId")
-			}
-		default:
-			return fmt.Errorf("unknown proposal op %q", p.Op)
-		}
 	case KindFlow:
 		if err := it.FlowEvent.validate(); err != nil {
 			return err

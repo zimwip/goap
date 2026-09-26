@@ -9,12 +9,12 @@ import (
 )
 
 // ValidateBoard checks the consistency of the blackboard as a process on a flow
-// sees it: every item of the view is structurally valid, the items it refers
-// to exist and are in effect, the nodes it refers to are in the reference
-// baseline and have not moved, the proposals obey the lifecycle and namespace
-// rules, impacts have a coherent pre and post, and no node is created twice.
-// The issues come in log order; each names the item to blame (the culprit). Only the outdated
-// proposals are warnings: they are fixed by rebasing the change, not by relaunching a step.
+// sees it: every fact of the view is structurally valid, the facts it builds on
+// exist and are in effect, and the change nodes it holds are coherent (their pre
+// version is in the reference baseline, they are not waiting to be re-checked).
+// The issues come in log order; each names the item (or change node) to blame (the
+// culprit). Only the outdated change nodes are warnings: they are fixed by
+// re-checking the impact, not by relaunching a step.
 func (g *Graph) ValidateBoard(ctx context.Context, id domain.ChangeID, flow string) (out []domain.BoardIssue, err error) {
 	err = g.repo.InTx(ctx, func(tx Tx) error {
 		c, err := tx.Change(ctx, id)
@@ -28,6 +28,10 @@ func (g *Graph) ValidateBoard(ctx context.Context, id domain.ChangeID, flow stri
 }
 
 func (g *Graph) validateBoard(ctx context.Context, tx Tx, c domain.ChangeSet, flow string) ([]domain.BoardIssue, error) {
+	nodes, err := g.newFlowNodes(tx, c, flow).nodes(ctx)
+	if err != nil {
+		return nil, err
+	}
 	v := c.View(flow)
 	base, err := tx.Baseline(ctx, c.BaselineID)
 	if err != nil {
@@ -44,13 +48,12 @@ func (g *Graph) validateBoard(ctx context.Context, tx Tx, c domain.ChangeSet, fl
 		}
 		sev := domain.IssueError
 		if code == "outdated" {
-			// relaunching a step cannot fix it (the reference baseline stays the same): the change is
-			// rebased, so it is reported without blocking the run
+			// relaunching a step cannot fix it (the reference baseline stays the same): the impact is
+			// re-checked, so it is reported without blocking the run
 			sev = domain.IssueWarning
 		}
 		out = append(out, domain.BoardIssue{Item: item, Culprit: culprit, Code: code, Message: msg, Severity: sev})
 	}
-	seenKeys := map[string]domain.ItemID{}
 	for _, it := range v.Items {
 		if it.Kind == domain.KindFlow || !v.InEffect(it.ID) {
 			continue
@@ -61,105 +64,40 @@ func (g *Graph) validateBoard(ctx context.Context, tx Tx, c domain.ChangeSet, fl
 		// provenance and structure references
 		var refs []domain.ItemID
 		refs = append(refs, it.DerivedFrom...)
-		for _, e := range endpointsOf(it) {
-			if e.Item != "" {
-				refs = append(refs, e.Item)
-			}
-		}
 		if d := it.Decision; d != nil {
 			// a decision may target an item that is out of effect (it is what rejected it): it only has to exist
 			if _, ok := byID[d.Item]; !ok {
 				add(it.ID, "", "dangling", fmt.Sprintf("decides on item %s, which is not on the blackboard", d.Item))
 			}
 		}
-		if it.Post != nil && it.Post.Item != "" {
-			refs = append(refs, it.Post.Item)
-		}
 		for _, r := range slices.Compact(refs) {
-			ref, ok := byID[r]
+			_, ok := byID[r]
 			switch {
 			case !ok:
 				add(it.ID, "", "dangling", fmt.Sprintf("refers to item %s, which is not on the blackboard", r))
 			case !v.InEffect(r):
 				add(it.ID, r, "derived_from_invalid", fmt.Sprintf("builds on item %s, which is %s", r, v.EffectiveStatus(r)))
-			default:
-				_ = ref
 			}
 		}
-		// nodes must be part of the reference baseline
-		for _, r := range refsOf(it) {
-			if !base.Contains(r) {
-				add(it.ID, "", "reference", fmt.Sprintf("refers to %s which is not in the reference baseline", r))
-			}
+	}
+	// the change nodes: the id of a change node stands where an item id does
+	for _, cn := range nodes {
+		id := domain.ItemID(cn.ID)
+		if err := cn.Validate(); err != nil {
+			add(id, "", "structure", err.Error())
 		}
-		// the same node created twice
-		if p := it.Proposal; p != nil && p.Op == domain.OpCreateNode && p.Node != nil && p.Node.Key != "" {
-			k := firstNonEmpty(p.Node.Namespace, c.Namespace) + "/" + p.Node.Key
-			if first, dup := seenKeys[k]; dup {
-				add(it.ID, first, "duplicate", fmt.Sprintf("creates %s, already created by item %s", p.Node.Key, first))
-			} else {
-				seenKeys[k] = it.ID
-			}
+		if cn.Pre != nil && !base.Contains(*cn.Pre) && !cn.Recheck {
+			add(id, "", "reference", fmt.Sprintf("refers to %s which is not in the reference baseline", cn.Pre))
 		}
-		if err := g.checkImpact(ctx, tx, base, byID, it); err != nil {
-			add(it.ID, "", "impact", err.Error())
+		if cn.Recheck {
+			add(id, "", "outdated", fmt.Sprintf("the impact on %s was written against a version that is no longer the head", cn.Key))
 		}
 	}
-	// nodes that moved since the version the proposals are based on
-	ds, err := divergences(ctx, tx, v)
-	if err != nil {
-		return nil, err
-	}
-	for _, d := range ds {
-		add(d.Item, "", "outdated", fmt.Sprintf("based on %s, but %s is now at %s", d.Base, d.Base.ID, d.Head))
-	}
-	// lifecycle, namespace and link rules: one replay, then locate the failing proposals
-	if _, err := g.walk(ctx, tx, v, false); err != nil {
-		bad, err := g.failingProposals(ctx, tx, v)
-		if err != nil {
-			return nil, err
-		}
-		for _, b := range bad {
-			add(b.item, "", "rule", b.msg)
-		}
-	}
-	// log order
+	// log order: the facts, then the change nodes
 	pos := map[domain.ItemID]int{}
 	for i, it := range v.Items {
 		pos[it.ID] = i
 	}
 	slices.SortStableFunc(out, func(a, b domain.BoardIssue) int { return pos[a.Item] - pos[b.Item] })
-	return out, nil
-}
-
-type failing struct {
-	item domain.ItemID
-	msg  string
-}
-
-// failingProposals replays the proposals one by one and reports the ones the
-// rules refuse (a proposal that fails is left out of the following replays).
-func (g *Graph) failingProposals(ctx context.Context, tx Tx, v domain.ChangeSet) ([]failing, error) {
-	var out []failing
-	skipped := map[domain.ItemID]bool{}
-	for i, it := range v.Items {
-		if it.Kind != domain.KindProposal || !v.InEffect(it.ID) {
-			continue
-		}
-		prefix := v
-		prefix.Items = nil
-		for _, o := range v.Items[:i+1] {
-			if !skipped[o.ID] {
-				prefix.Items = append(prefix.Items, o)
-			}
-		}
-		if _, err := g.walk(ctx, tx, prefix, false); err != nil {
-			if cerr := ctx.Err(); cerr != nil {
-				return nil, cerr
-			}
-			skipped[it.ID] = true
-			out = append(out, failing{item: it.ID, msg: err.Error()})
-		}
-	}
 	return out, nil
 }

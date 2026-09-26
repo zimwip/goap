@@ -46,44 +46,37 @@ func seed(t *testing.T, g *graph.Graph, provs []ProviderRecord, models []ModelEn
 	}
 }
 
-// change applies items on main as one change of the platform namespace.
-func change(t *testing.T, g *graph.Graph, items ...domain.ChangeItem) {
+// change commits edits on main as one change of the platform namespace.
+func change(t *testing.T, g *graph.Graph, edits ...graph.NodeEdit) {
 	t.Helper()
 	ctx := context.Background()
 	head, err := g.BranchHead(ctx, domain.MainBranch)
 	if err != nil {
 		t.Fatal(err)
 	}
-	c, err := g.CreateChange(ctx, graph.NewChange{Namespace: llmcfg.NamespacePlatform, Title: "t", Intent: "t", BaselineID: head.ID})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := g.AddItems(ctx, c.ID, items); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := g.Apply(ctx, c.ID, "t"); err != nil {
+	if _, err := g.Commit(ctx, graph.Commit{Namespace: llmcfg.NamespacePlatform, Title: "t", Intent: "t", Baseline: head.ID, By: "t", Edits: edits}); err != nil {
 		t.Fatal(err)
 	}
 }
 
-func updateNode(t *testing.T, g *graph.Graph, key string, props map[string]any) domain.ChangeItem {
+func updateNode(t *testing.T, g *graph.Graph, key string, props map[string]any) graph.NodeEdit {
 	t.Helper()
 	n, err := g.NodeByKey(context.Background(), llmcfg.NamespacePlatform, key)
 	if err != nil {
 		t.Fatal(err)
 	}
-	base := n.Ref()
-	return domain.ChangeItem{Kind: domain.KindProposal, Type: "object", Proposal: &domain.Proposal{Op: domain.OpUpdateNode, Node: &domain.NodeDraft{Base: &base, Properties: props}}}
+	pre := n.Ref()
+	return graph.NodeEdit{Pre: &pre, Props: props}
 }
 
-func deleteNode(t *testing.T, g *graph.Graph, key string) domain.ChangeItem {
+func deleteNode(t *testing.T, g *graph.Graph, key string) graph.NodeEdit {
 	t.Helper()
 	n, err := g.NodeByKey(context.Background(), llmcfg.NamespacePlatform, key)
 	if err != nil {
 		t.Fatal(err)
 	}
-	base := n.Ref()
-	return domain.ChangeItem{Kind: domain.KindProposal, Type: "object", Proposal: &domain.Proposal{Op: domain.OpDeleteNode, Node: &domain.NodeDraft{Base: &base}}}
+	pre := n.Ref()
+	return graph.NodeEdit{Pre: &pre, Retire: true}
 }
 
 func TestServicePolicy(t *testing.T) {

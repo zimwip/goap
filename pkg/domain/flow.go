@@ -29,9 +29,6 @@ const (
 	FlowOpenOp    = "open"
 	FlowAdoptOp   = "adopt"
 	FlowDiscardOp = "discard"
-	// FlowMaterializeOp: the in-effect proposals of the flow view were applied on a
-	// graph branch of their own (Branch), Items being the proposals applied.
-	FlowMaterializeOp = "materialize"
 )
 
 // FlowEvent is the payload of a KindFlow item.
@@ -49,16 +46,11 @@ type FlowEvent struct {
 	Process   string   `json:"process,omitempty"`
 	Reason    string   `json:"reason,omitempty"`
 	Stale     []ItemID `json:"stale,omitempty"`
+	// StaleExecutions are the action runs the relaunch invalidates: the change nodes, versions and
+	// reviews they produced are stale until the branch is adopted (ADR 0025).
+	StaleExecutions []string `json:"staleExecutions,omitempty"`
 	// By is the principal that adopted or discarded the branch.
 	By string `json:"by,omitempty"`
-	// materialize: the domain branch and the proposals applied on it. adopt: Merged
-	// is set when that branch was merged into the change branch (Items are then
-	// already applied there: the change does not apply them again).
-	Branch string   `json:"branch,omitempty"`
-	Items  []ItemID `json:"items,omitempty"`
-	Merged bool     `json:"merged,omitempty"`
-	// materialize: the nodes created by the create_node proposals applied on the branch.
-	Nodes map[ItemID]NodeID `json:"nodes,omitempty"`
 }
 
 func (e *FlowEvent) validate() error {
@@ -66,7 +58,7 @@ func (e *FlowEvent) validate() error {
 		return fmt.Errorf("flow item requires flowEvent.flow")
 	}
 	switch e.Op {
-	case FlowOpenOp, FlowAdoptOp, FlowDiscardOp, FlowMaterializeOp:
+	case FlowOpenOp, FlowAdoptOp, FlowDiscardOp:
 		return nil
 	}
 	return fmt.Errorf("unknown flow op %q", e.Op)
@@ -83,18 +75,11 @@ type Flow struct {
 	Reason    string     `json:"reason,omitempty"`
 	Status    FlowStatus `json:"status"`
 	Stale     []ItemID   `json:"stale,omitempty"`
-	OpenedAt  time.Time  `json:"openedAt"`
-	DecidedAt time.Time  `json:"decidedAt,omitempty"`
-	DecidedBy string     `json:"decidedBy,omitempty"`
-	// Branch is the domain (graph) branch the flow was last materialized on, with
-	// the proposals applied there; Branches lists every branch it used.
-	Branch       string   `json:"branch,omitempty"`
-	Branches     []string `json:"branches,omitempty"`
-	Materialized []ItemID `json:"materialized,omitempty"`
-	// Merged: the branch was merged into the change branch when the flow was adopted.
-	Merged []ItemID `json:"merged,omitempty"`
-	// Nodes maps the create_node proposals materialized on the branch to the node they created.
-	Nodes map[ItemID]NodeID `json:"nodes,omitempty"`
+	// StaleExecutions: see FlowEvent.
+	StaleExecutions []string  `json:"staleExecutions,omitempty"`
+	OpenedAt        time.Time `json:"openedAt"`
+	DecidedAt       time.Time `json:"decidedAt,omitempty"`
+	DecidedBy       string    `json:"decidedBy,omitempty"`
 	// CompetesWith lists the flows adopted after this one was opened that replace
 	// the same items, or whose replaced items its candidates build on: an open flow
 	// that competes cannot be adopted any more, it is relaunched or discarded.
@@ -155,13 +140,7 @@ func (c *ChangeSet) flows() *flowIndex {
 			fx.byID[e.Flow] = len(fx.list)
 			openAt[e.Flow] = pos
 			fx.list = append(fx.list, Flow{ID: e.Flow, Parent: e.Parent, ForkAfter: e.ForkAfter, FromStep: e.FromStep, Execution: e.Execution,
-				Process: e.Process, Reason: e.Reason, Status: FlowOpen, Stale: slices.Clone(e.Stale), OpenedAt: it.CreatedAt})
-		case FlowMaterializeOp:
-			if i, ok := fx.byID[e.Flow]; ok {
-				f := &fx.list[i]
-				f.Branch, f.Materialized, f.Nodes = e.Branch, slices.Clone(e.Items), e.Nodes
-				f.Branches = append(f.Branches, e.Branch)
-			}
+				Process: e.Process, Reason: e.Reason, Status: FlowOpen, Stale: slices.Clone(e.Stale), StaleExecutions: slices.Clone(e.StaleExecutions), OpenedAt: it.CreatedAt})
 		case FlowAdoptOp, FlowDiscardOp:
 			if i, ok := fx.byID[e.Flow]; ok && fx.list[i].Status == FlowOpen {
 				f := &fx.list[i]
@@ -169,8 +148,6 @@ func (c *ChangeSet) flows() *flowIndex {
 				decidedAt[e.Flow] = pos
 				if e.Op == FlowDiscardOp {
 					f.Status = FlowDiscarded
-				} else if e.Merged {
-					f.Merged = slices.Clone(e.Items)
 				}
 			}
 		}
@@ -185,7 +162,8 @@ func (c *ChangeSet) flows() *flowIndex {
 			if a.Status != FlowAdopted || a.ID == f.ID || decidedAt[a.ID] < openAt[f.ID] {
 				continue
 			}
-			compete := slices.ContainsFunc(f.Stale, func(id ItemID) bool { return slices.Contains(a.Stale, id) })
+			compete := slices.ContainsFunc(f.Stale, func(id ItemID) bool { return slices.Contains(a.Stale, id) }) ||
+				slices.ContainsFunc(f.StaleExecutions, func(e string) bool { return slices.Contains(a.StaleExecutions, e) })
 			for _, it := range c.Items {
 				if compete {
 					break
@@ -201,33 +179,6 @@ func (c *ChangeSet) flows() *flowIndex {
 	}
 	c.flx, c.flxN = fx, len(c.Items)
 	return fx
-}
-
-// MergedNodes maps the create_node proposals already applied on the change branch (through
-// an adopted, merged flow) to the node they created.
-func (c *ChangeSet) MergedNodes() map[ItemID]NodeID {
-	fx := c.flows()
-	out := map[ItemID]NodeID{}
-	for _, f := range fx.list {
-		if len(f.Merged) > 0 && fx.effective(f.ID) == FlowAdopted {
-			for k, v := range f.Nodes {
-				out[k] = v
-			}
-		}
-	}
-	return out
-}
-
-// MergedOnBranch reports whether an item is a proposal of an adopted flow that
-// was merged into the change branch: it is already applied there.
-func (c *ChangeSet) MergedOnBranch(id ItemID) bool {
-	fx := c.flows()
-	for _, f := range fx.list {
-		if len(f.Merged) > 0 && slices.Contains(f.Merged, id) && fx.effective(f.ID) == FlowAdopted {
-			return true
-		}
-	}
-	return false
 }
 
 // Flows lists the flow branches of the change, oldest first.
@@ -279,8 +230,8 @@ func (c ChangeSet) View(flow string) ChangeSet {
 }
 
 // StaleClosure returns the items that depend on the seeds among the items of a
-// view: the seeds, then any item derived from a stale item, proposing a link
-// to one, or deciding on one, until nothing else is reached.
+// view: the seeds, then any item derived from a stale item or deciding on one,
+// until nothing else is reached.
 func StaleClosure(items []ChangeItem, seeds []ItemID) []ItemID {
 	stale := map[ItemID]bool{}
 	for _, s := range seeds {
@@ -293,14 +244,8 @@ func StaleClosure(items []ChangeItem, seeds []ItemID) []ItemID {
 				continue
 			}
 			dep := slices.ContainsFunc(it.DerivedFrom, func(d ItemID) bool { return stale[d] })
-			if p := it.Proposal; !dep && p != nil && p.Link != nil {
-				dep = (p.Link.From.Item != "" && stale[p.Link.From.Item]) || (p.Link.To.Item != "" && stale[p.Link.To.Item])
-			}
 			if d := it.Decision; !dep && d != nil {
 				dep = stale[d.Item]
-			}
-			if p := it.Post; !dep && p != nil {
-				dep = p.Item != "" && stale[p.Item]
 			}
 			if dep {
 				stale[it.ID], changed = true, true

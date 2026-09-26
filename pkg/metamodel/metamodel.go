@@ -10,7 +10,7 @@
 // domain graph (ADR 0012). Once a NodeType node exists in the graph, Sync
 // never updates or deletes it again — the registry's declared node types are
 // only its bootstrap seed and a compile-time validation schema from then on.
-// Data-layer nodes reference their NodeType by a LinkInstanceOf edge.
+// A data node names its NodeType by its Type attribute.
 //
 // A methodology that references a shared Domain (Methodology.DomainRef) does
 // not own NodeType nodes: they belong to the domain, one node per type, keyed
@@ -28,8 +28,6 @@ import (
 	"maps"
 	"slices"
 	"strings"
-
-	"github.com/google/uuid"
 
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/graph"
@@ -49,15 +47,14 @@ const (
 
 // Link types of the methodology model.
 const (
-	LinkContains    = "contains"            // Methodology → element
-	LinkUses        = "uses"                // Agent → Action (admissible)
-	LinkPursues     = "pursues"             // Agent → Goal
-	LinkHas         = "has"                 // Agent → Trigger
-	LinkRequires    = "requires"            // Action / Goal → Condition (pre-condition)
-	LinkAchieves    = "achieves"            // Action → Condition (effect)
-	LinkSpecializes = "specializes"         // Action → Action
-	LinkExtends     = "extends"             // NodeType → NodeType (subtyping, metadata layer)
-	LinkInstanceOf  = domain.LinkInstanceOf // data node → NodeType (metadata layer)
+	LinkContains    = "contains"    // Methodology → element
+	LinkUses        = "uses"        // Agent → Action (admissible)
+	LinkPursues     = "pursues"     // Agent → Goal
+	LinkHas         = "has"         // Agent → Trigger
+	LinkRequires    = "requires"    // Action / Goal → Condition (pre-condition)
+	LinkAchieves    = "achieves"    // Action → Condition (effect)
+	LinkSpecializes = "specializes" // Action → Action
+	LinkExtends     = "extends"     // NodeType → NodeType (subtyping, metadata layer)
 )
 
 // Key returns the domain key of an element: "M:<methodology>" for the
@@ -323,20 +320,23 @@ func ProjectDomain(d *methodology.Domain) ([]Element, []Edge) {
 	return els, edges
 }
 
+// Reader is what reading the projection needs from the graph.
+type Reader interface {
+	BranchHead(ctx context.Context, name string) (domain.Baseline, error)
+	BaselineGraph(ctx context.Context, id domain.BaselineID) ([]domain.Node, []domain.Link, error)
+}
+
 // Graph is what the projection needs from the graph (*graph.Graph and the
 // graph service client implement it).
 type Graph interface {
-	BranchHead(ctx context.Context, name string) (domain.Baseline, error)
+	Reader
 	CreateBaseline(ctx context.Context, name string, nodes []domain.NodeRef) (domain.Baseline, error)
-	BaselineGraph(ctx context.Context, id domain.BaselineID) ([]domain.Node, []domain.Link, error)
-	CreateChange(ctx context.Context, in graph.NewChange) (domain.ChangeSet, error)
-	AddItems(ctx context.Context, id domain.ChangeID, items []domain.ChangeItem) ([]domain.ChangeItem, error)
-	Apply(ctx context.Context, id domain.ChangeID, baselineName string) (domain.Baseline, error)
+	// Commit runs a change of node edits (ADR 0024).
+	Commit(ctx context.Context, in graph.Commit) (graph.CommitResult, error)
 }
 
-// KeyGraph is what LinkToType additionally needs: looking an existing
-// NodeType up by key. *graph.Graph implements it; engine.GraphPort does not
-// need to (the engine only resolves ancestor types, never links to them).
+// KeyGraph is what CreateObject additionally needs: looking a node up by key.
+// *graph.Graph implements it; engine.GraphPort does not need to.
 type KeyGraph interface {
 	Graph
 	NodeByKey(ctx context.Context, namespace, key string) (domain.Node, error)
@@ -434,14 +434,23 @@ func sync(ctx context.Context, g Graph, t target) (Result, error) {
 	}
 	els, edges := t.els, t.edges
 	res := Result{Methodology: t.name}
-	var items []domain.ChangeItem
-	refs := map[string]domain.Endpoint{} // element key → endpoint
+	var edits []graph.NodeEdit
+	editOf := map[string]int{}                  // element key → its edit
+	refs := map[string]*domain.NodeRef{}        // element key → existing version (nil when created by this commit)
+	editFor := func(k string) *graph.NodeEdit { // the edit of an existing element, made on first use
+		if i, ok := editOf[k]; ok {
+			return &edits[i]
+		}
+		editOf[k] = len(edits)
+		edits = append(edits, graph.NodeEdit{Pre: refs[k], Rationale: t.intent})
+		return &edits[len(edits)-1]
+	}
 	desired := map[string]bool{}
 	for _, el := range els {
 		desired[el.Key] = true
 		if n, ok := current[el.Key]; ok {
 			ref := n.Ref()
-			refs[el.Key] = domain.Endpoint{Node: &ref}
+			refs[el.Key] = &ref
 			// NodeType is the metadata layer (ADR 0012): once created, it is
 			// authored on the graph, not overwritten from the registry.
 			// The lifecycle, document and change-control declarations are the
@@ -449,23 +458,19 @@ func sync(ctx context.Context, g Graph, t target) (Result, error) {
 			// its published version.
 			if el.Type == TypeNodeType {
 				if patch := diff(pick(n.Properties, lifecycleKeys), pick(el.Props, lifecycleKeys)); patch != nil {
-					items = append(items, domain.ChangeItem{Kind: domain.KindProposal, Type: "metamodel", ProducedBy: "metamodel.sync",
-						Proposal: &domain.Proposal{Op: domain.OpUpdateNode, Node: &domain.NodeDraft{Base: &ref, Properties: patch}}})
+					editFor(el.Key).Props = patch
 					res.Updated++
 				}
 				continue
 			}
 			if patch := diff(n.Properties, el.Props); patch != nil {
-				items = append(items, domain.ChangeItem{Kind: domain.KindProposal, Type: "metamodel", ProducedBy: "metamodel.sync",
-					Proposal: &domain.Proposal{Op: domain.OpUpdateNode, Node: &domain.NodeDraft{Base: &ref, Properties: patch}}})
+				editFor(el.Key).Props = patch
 				res.Updated++
 			}
 			continue
 		}
-		id := domain.ItemID(uuid.NewString())
-		refs[el.Key] = domain.Endpoint{Item: id}
-		items = append(items, domain.ChangeItem{ID: id, Kind: domain.KindProposal, Type: "metamodel", ProducedBy: "metamodel.sync",
-			Proposal: &domain.Proposal{Op: domain.OpCreateNode, Node: &domain.NodeDraft{Key: el.Key, Type: el.Type, Properties: el.Props}}})
+		editOf[el.Key] = len(edits)
+		edits = append(edits, graph.NodeEdit{Key: el.Key, Type: el.Type, Props: el.Props, Rationale: t.intent})
 		res.Created++
 	}
 	for _, k := range slices.Sorted(maps.Keys(current)) {
@@ -473,8 +478,7 @@ func sync(ctx context.Context, g Graph, t target) (Result, error) {
 		// removed from the registry's declared schema stays in the graph.
 		if !desired[k] && current[k].Type != TypeNodeType {
 			ref := current[k].Ref()
-			items = append(items, domain.ChangeItem{Kind: domain.KindProposal, Type: "metamodel", ProducedBy: "metamodel.sync",
-				Proposal: &domain.Proposal{Op: domain.OpDeleteNode, Node: &domain.NodeDraft{Base: &ref}}})
+			edits = append(edits, graph.NodeEdit{Pre: &ref, Retire: true, Rationale: t.intent})
 			res.Deleted++
 		}
 	}
@@ -488,48 +492,44 @@ func sync(ctx context.Context, g Graph, t target) (Result, error) {
 	}
 	want := map[Edge]bool{}
 	for _, e := range edges {
-		to, ok := refs[e.To]
-		if !ok {
-			if n, exists := keyNode(nodes, e.To); exists { // element of another methodology
-				ref := n.Ref()
-				to = domain.Endpoint{Node: &ref}
-			} else {
-				continue
-			}
+		var to graph.LinkEdit
+		if _, ok := editOf[e.To]; ok && refs[e.To] == nil {
+			to = graph.LinkEdit{Type: e.Type, ToKey: e.To} // created by this commit
+		} else if r, ok := refs[e.To]; ok {
+			to = graph.LinkEdit{Type: e.Type, To: r}
+		} else if n, exists := keyNode(nodes, e.To); exists { // element of another methodology
+			ref := n.Ref()
+			to = graph.LinkEdit{Type: e.Type, To: &ref}
+		} else {
+			continue
 		}
 		want[e] = true
 		if _, ok := have[e]; ok {
 			continue
 		}
-		items = append(items, domain.ChangeItem{Kind: domain.KindProposal, Type: "metamodel", ProducedBy: "metamodel.sync",
-			Proposal: &domain.Proposal{Op: domain.OpAddLink, Link: &domain.LinkDraft{Type: e.Type, From: refs[e.From], To: to}}})
+		src := editFor(e.From)
+		src.Links = append(src.Links, to)
 		res.Links++
 	}
-	for e, id := range have {
+	for _, e := range slices.SortedFunc(maps.Keys(have), func(a, b Edge) int { return strings.Compare(fmt.Sprint(a), fmt.Sprint(b)) }) {
 		// extends edges between NodeType nodes are metadata-layer data
 		// (ADR 0012): never removed by Sync, even when the registry's
 		// declared "extends" target changes.
 		if e.Type != LinkExtends && !want[e] && desired[e.From] && desired[e.To] {
-			items = append(items, domain.ChangeItem{Kind: domain.KindProposal, Type: "metamodel", ProducedBy: "metamodel.sync",
-				Proposal: &domain.Proposal{Op: domain.OpRemoveLink, Link: &domain.LinkDraft{LinkID: id}}})
+			src := editFor(e.From)
+			src.RemoveLinks = append(src.RemoveLinks, have[e])
 			res.Links++
 		}
 	}
-	if len(items) == 0 {
+	if len(edits) == 0 {
 		return res, nil
 	}
-	c, err := g.CreateChange(ctx, graph.NewChange{Namespace: domain.NamespacePlatform, Title: t.title, Intent: t.intent, BaselineID: head.ID, Data: t.data})
+	out, err := g.Commit(ctx, graph.Commit{Namespace: domain.NamespacePlatform, Title: t.title, Intent: t.intent, Baseline: head.ID, Data: t.data,
+		By: "metamodel.sync", BaselineName: t.branch, Edits: edits})
 	if err != nil {
 		return res, err
 	}
-	if _, err := g.AddItems(ctx, c.ID, items); err != nil {
-		return res, err
-	}
-	b, err := g.Apply(ctx, c.ID, t.branch)
-	if err != nil {
-		return res, err
-	}
-	res.Change, res.Baseline = c.ID, b.ID
+	res.Change, res.Baseline = out.Change, out.Baseline.ID
 	return res, nil
 }
 
@@ -595,7 +595,7 @@ func SyncAll(ctx context.Context, g Graph, reg Published) ([]Result, error) {
 // 0012) rather than from the declared schema. It returns a nil map, not an
 // error, when the methodology has no NodeType nodes in the graph yet (never
 // synced): callers fall back to Methodology.Supertypes() in that case.
-func Supertypes(ctx context.Context, g Graph, methodology string) (map[string][]string, error) {
+func Supertypes(ctx context.Context, g Reader, methodology string) (map[string][]string, error) {
 	head, err := g.BranchHead(ctx, domain.MainBranch)
 	if errors.Is(err, graph.ErrNotFound) {
 		return nil, nil
@@ -672,16 +672,17 @@ func ApplyNodeTypes(ctx context.Context, g Graph, meth string, ops []NodeTypeOp)
 	}
 	ns := TypeNamespace(nodes, meth)
 	res := Result{Methodology: meth}
-	var items []domain.ChangeItem
-	refs := map[string]domain.Endpoint{} // NodeType name → endpoint, for extends targets created in this batch
+	var edits []graph.NodeEdit
+	editOf := map[string]int{}           // NodeType name → its edit
+	refs := map[string]*domain.NodeRef{} // NodeType name → existing version (nil when created by this commit)
+	created := map[string]string{}       // NodeType name → key, for extends targets created in this batch
 	for _, op := range ops {
 		key := typeKey(ns, op.Name)
 		n, exists := byKey[key]
 		if op.Delete {
 			if exists {
 				ref := n.Ref()
-				items = append(items, domain.ChangeItem{Kind: domain.KindProposal, Type: "metamodel", ProducedBy: "metamodel.apply_node_types",
-					Proposal: &domain.Proposal{Op: domain.OpDeleteNode, Node: &domain.NodeDraft{Base: &ref}}})
+				edits = append(edits, graph.NodeEdit{Pre: &ref, Retire: true, Rationale: "Delete node type " + op.Name})
 				res.Deleted++
 			}
 			continue
@@ -689,14 +690,21 @@ func ApplyNodeTypes(ctx context.Context, g Graph, meth string, ops []NodeTypeOp)
 		props := map[string]any{"name": op.Name, "description": op.Description, "properties": op.Properties, "extends": op.Extends}
 		if exists {
 			ref := n.Ref()
-			refs[op.Name] = domain.Endpoint{Node: &ref}
+			refs[op.Name] = &ref
 			continue // description/properties are seeded once; only new extends edges are added below.
 		}
-		id := domain.ItemID(uuid.NewString())
-		refs[op.Name] = domain.Endpoint{Item: id}
-		items = append(items, domain.ChangeItem{ID: id, Kind: domain.KindProposal, Type: "metamodel", ProducedBy: "metamodel.apply_node_types",
-			Proposal: &domain.Proposal{Op: domain.OpCreateNode, Node: &domain.NodeDraft{Key: key, Type: TypeNodeType, Properties: props}}})
+		created[op.Name] = key
+		editOf[op.Name] = len(edits)
+		edits = append(edits, graph.NodeEdit{Key: key, Type: TypeNodeType, Props: props, Rationale: "Create node type " + op.Name})
 		res.Created++
+	}
+	editFor := func(name string) *graph.NodeEdit { // the edit of a node type, made on first use for an existing one
+		if i, ok := editOf[name]; ok {
+			return &edits[i]
+		}
+		editOf[name] = len(edits)
+		edits = append(edits, graph.NodeEdit{Pre: refs[name], Rationale: "Extend node type " + name})
+		return &edits[len(edits)-1]
 	}
 	have := map[string]bool{} // "from|to" of existing extends edges
 	for _, l := range links {
@@ -708,149 +716,47 @@ func ApplyNodeTypes(ctx context.Context, g Graph, meth string, ops []NodeTypeOp)
 		if op.Delete || op.Extends == "" {
 			continue
 		}
-		from, ok := refs[op.Name]
-		if !ok {
+		_, isCreated := created[op.Name]
+		from, isExisting := refs[op.Name]
+		if !isCreated && !isExisting {
 			continue
 		}
-		to, ok := refs[op.Extends]
-		if !ok {
-			if n, exists := byKey[typeKey(ns, op.Extends)]; exists {
-				ref := n.Ref()
-				to = domain.Endpoint{Node: &ref}
-			} else {
-				return Result{}, fmt.Errorf("node type %q extends unknown %q", op.Name, op.Extends)
+		var link graph.LinkEdit
+		if key, ok := created[op.Extends]; ok {
+			link = graph.LinkEdit{Type: LinkExtends, ToKey: key}
+		} else if to, ok := refs[op.Extends]; ok {
+			if isExisting && have[string(from.ID)+"|"+string(to.ID)] {
+				continue
 			}
+			link = graph.LinkEdit{Type: LinkExtends, To: to}
+		} else if n, exists := byKey[typeKey(ns, op.Extends)]; exists {
+			ref := n.Ref()
+			if isExisting && have[string(from.ID)+"|"+string(ref.ID)] {
+				continue
+			}
+			link = graph.LinkEdit{Type: LinkExtends, To: &ref}
+		} else {
+			return Result{}, fmt.Errorf("node type %q extends unknown %q", op.Name, op.Extends)
 		}
-		if from.Node != nil && to.Node != nil && have[string(from.Node.ID)+"|"+string(to.Node.ID)] {
-			continue
-		}
-		items = append(items, domain.ChangeItem{Kind: domain.KindProposal, Type: "metamodel", ProducedBy: "metamodel.apply_node_types",
-			Proposal: &domain.Proposal{Op: domain.OpAddLink, Link: &domain.LinkDraft{Type: LinkExtends, From: from, To: to}}})
+		src := editFor(op.Name)
+		src.Links = append(src.Links, link)
 		res.Links++
 	}
-	if len(items) == 0 {
+	if len(edits) == 0 {
 		return res, nil
 	}
-	c, err := g.CreateChange(ctx, graph.NewChange{Namespace: domain.NamespacePlatform, Title: "Node types of " + meth, Intent: "Define node types of " + meth,
-		BaselineID: head.ID, Methodology: meth})
+	out, err := g.Commit(ctx, graph.Commit{Namespace: domain.NamespacePlatform, Title: "Node types of " + meth, Intent: "Define node types of " + meth,
+		Baseline: head.ID, Methodology: meth, By: "metamodel.apply_node_types", BaselineName: domain.MainBranch, Edits: edits})
 	if err != nil {
 		return res, err
 	}
-	if _, err := g.AddItems(ctx, c.ID, items); err != nil {
-		return res, err
-	}
-	b, err := g.Apply(ctx, c.ID, domain.MainBranch)
-	if err != nil {
-		return res, err
-	}
-	res.Change, res.Baseline = c.ID, b.ID
-	return res, nil
-}
-
-// LinkToType adds an instanceOf edge from an existing data node to the
-// NodeType named typeName of methodology meth. It is a no-op (not an error)
-// when that NodeType does not exist in the graph yet.
-func LinkToType(ctx context.Context, g KeyGraph, meth string, ref domain.NodeRef, typeName string) error {
-	head, err := g.BranchHead(ctx, domain.MainBranch)
-	if err != nil {
-		return err
-	}
-	ns := meth
-	if root, err := g.NodeByKey(ctx, domain.NamespacePlatform, Key(meth, TypeMethodology, "")); err == nil {
-		ns = TypeNamespace([]domain.Node{root}, meth)
-	}
-	nt, err := g.NodeByKey(ctx, domain.NamespacePlatform, typeKey(ns, typeName))
-	if errors.Is(err, graph.ErrNotFound) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	ntRef := nt.Ref()
-	c, err := g.CreateChange(ctx, graph.NewChange{Namespace: domain.NamespacePlatform, Title: "Link " + string(ref.ID) + " to " + typeName,
-		Intent: "instanceOf " + typeName, BaselineID: head.ID, Methodology: meth})
-	if err != nil {
-		return err
-	}
-	item := domain.ChangeItem{Kind: domain.KindProposal, Type: "metamodel", ProducedBy: "metamodel.link_to_type",
-		Proposal: &domain.Proposal{Op: domain.OpAddLink, Link: &domain.LinkDraft{Type: LinkInstanceOf, From: domain.Endpoint{Node: &ref}, To: domain.Endpoint{Node: &ntRef}}}}
-	if _, err := g.AddItems(ctx, c.ID, []domain.ChangeItem{item}); err != nil {
-		return err
-	}
-	_, err = g.Apply(ctx, c.ID, domain.MainBranch)
-	return err
-}
-
-// BackfillInstanceOf adds an instanceOf edge for every data node of the main
-// branch whose Type matches a NodeType of methodology and that has none yet.
-// It is the catch-up for nodes created before the metadata layer existed for
-// that methodology (ADR 0012 phase 3), and is idempotent: nodes already
-// linked, and methodologies with no NodeType nodes yet, are left untouched.
-func BackfillInstanceOf(ctx context.Context, g Graph, meth string) (Result, error) {
-	res := Result{Methodology: meth}
-	head, err := g.BranchHead(ctx, domain.MainBranch)
-	if errors.Is(err, graph.ErrNotFound) {
-		return res, nil
-	}
-	if err != nil {
-		return res, err
-	}
-	nodes, links, err := g.BaselineGraph(ctx, head.ID)
-	if err != nil {
-		return res, err
-	}
-	ns := TypeNamespace(nodes, meth)
-	types := map[string]domain.NodeRef{} // NodeType name → node
-	for _, n := range nodes {
-		if name, ok := TypeName(n.Key, ns); ok {
-			types[name] = n.Ref()
-		}
-	}
-	if len(types) == 0 {
-		return res, nil
-	}
-	linked := map[domain.NodeID]bool{}
-	for _, l := range links {
-		if l.Type == LinkInstanceOf {
-			linked[l.From.ID] = true
-		}
-	}
-	var items []domain.ChangeItem
-	for _, n := range nodes {
-		if linked[n.ID] {
-			continue
-		}
-		to, ok := types[n.Type]
-		if !ok {
-			continue
-		}
-		from := n.Ref()
-		items = append(items, domain.ChangeItem{Kind: domain.KindProposal, Type: "metamodel", ProducedBy: "metamodel.backfill_instance_of",
-			Proposal: &domain.Proposal{Op: domain.OpAddLink, Link: &domain.LinkDraft{Type: LinkInstanceOf, From: domain.Endpoint{Node: &from}, To: domain.Endpoint{Node: &to}}}})
-		res.Links++
-	}
-	if len(items) == 0 {
-		return res, nil
-	}
-	c, err := g.CreateChange(ctx, graph.NewChange{Namespace: domain.NamespacePlatform, Title: "Backfill instanceOf for " + meth,
-		Intent: "Link existing nodes to their node type", BaselineID: head.ID, Methodology: meth})
-	if err != nil {
-		return res, err
-	}
-	if _, err := g.AddItems(ctx, c.ID, items); err != nil {
-		return res, err
-	}
-	b, err := g.Apply(ctx, c.ID, domain.MainBranch)
-	if err != nil {
-		return res, err
-	}
-	res.Change, res.Baseline = c.ID, b.ID
+	res.Change, res.Baseline = out.Change, out.Baseline.ID
 	return res, nil
 }
 
 // CreateObject creates, in namespace, a data node typed by the NodeType typeName of
-// methodology meth: the node and its instanceOf edge go through one change
-// applied on main. It fails with graph.ErrNotFound when the NodeType is not on
+// methodology meth: the node goes through one change applied on main. The type
+// is the attribute of the node; the NodeType must be on the graph. It fails with graph.ErrNotFound when the NodeType is not on
 // the graph yet (methodology not published), graph.ErrConflict when the key is
 // taken, and graph.ErrInvalid without a key.
 func CreateObject(ctx context.Context, g KeyGraph, meth, namespace, typeName, key string, props map[string]any) (domain.Node, domain.Baseline, error) {
@@ -866,39 +772,23 @@ func CreateObject(ctx context.Context, g KeyGraph, meth, namespace, typeName, ke
 	if err != nil {
 		return domain.Node{}, domain.Baseline{}, err
 	}
-	var typeRef *domain.NodeRef
+	found := false
 	typeKeyWanted := typeKey(TypeNamespace(nodes, meth), typeName)
 	for _, n := range nodes {
 		if n.Key == key && domain.NamespaceOf(n.Namespace) == domain.NamespaceOf(namespace) {
 			return domain.Node{}, domain.Baseline{}, fmt.Errorf("key %q is already used: %w", key, graph.ErrConflict)
 		}
-		if n.Key == typeKeyWanted {
-			ref := n.Ref()
-			typeRef = &ref
-		}
+		found = found || n.Key == typeKeyWanted
 	}
-	if typeRef == nil {
+	if !found {
 		return domain.Node{}, domain.Baseline{}, fmt.Errorf("node type %s of %s is not on the graph (publish the methodology): %w", typeName, meth, graph.ErrNotFound)
 	}
-	c, err := g.CreateChange(ctx, graph.NewChange{Namespace: namespace, Title: "Create " + key, Intent: "Create " + typeName + " " + key,
-		BaselineID: head.ID, Methodology: meth})
-	if err != nil {
-		return domain.Node{}, domain.Baseline{}, err
-	}
-	id := domain.ItemID(uuid.NewString())
-	items := []domain.ChangeItem{
-		{ID: id, Kind: domain.KindProposal, Type: "object", ProducedBy: "metamodel.create_object",
-			Proposal: &domain.Proposal{Op: domain.OpCreateNode, Node: &domain.NodeDraft{Key: key, Type: typeName, Properties: props}}},
-		{Kind: domain.KindProposal, Type: "object", ProducedBy: "metamodel.create_object", DerivedFrom: []domain.ItemID{id},
-			Proposal: &domain.Proposal{Op: domain.OpAddLink, Link: &domain.LinkDraft{Type: LinkInstanceOf, From: domain.Endpoint{Item: id}, To: domain.Endpoint{Node: typeRef}}}},
-	}
-	if _, err := g.AddItems(ctx, c.ID, items); err != nil {
-		return domain.Node{}, domain.Baseline{}, err
-	}
-	b, err := g.Apply(ctx, c.ID, domain.MainBranch)
+	out, err := g.Commit(ctx, graph.Commit{Namespace: namespace, Title: "Create " + key, Intent: "Create " + typeName + " " + key,
+		Baseline: head.ID, Methodology: meth, By: "metamodel.create_object", BaselineName: domain.MainBranch,
+		Edits: []graph.NodeEdit{{Key: key, Type: typeName, Props: props, Rationale: "Create " + typeName + " " + key}}})
 	if err != nil {
 		return domain.Node{}, domain.Baseline{}, err
 	}
 	n, err := g.NodeByKey(ctx, namespace, key)
-	return n, b, err
+	return n, out.Baseline, err
 }

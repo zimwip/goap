@@ -28,21 +28,3 @@ func MergePlanFromPB(p *graphv1.MergePlan) graph.MergePlan {
 	}
 	return out
 }
-
-func DivergencesToPB(ds []graph.Divergence) []*graphv1.Divergence {
-	out := make([]*graphv1.Divergence, 0, len(ds))
-	for _, d := range ds {
-		out = append(out, &graphv1.Divergence{Item: string(d.Item), Op: string(d.Op), Role: d.Role, Base: RefToPB(d.Base), Head: RefToPB(d.Head),
-			HeadDeleted: d.HeadDeleted, Theirs: Struct(d.Theirs), Ours: Struct(d.Ours), Merged: Struct(d.Merged), Conflicts: d.Conflicts})
-	}
-	return out
-}
-
-func DivergencesFromPB(ds []*graphv1.Divergence) []graph.Divergence {
-	out := make([]graph.Divergence, 0, len(ds))
-	for _, d := range ds {
-		out = append(out, graph.Divergence{Item: domain.ItemID(d.Item), Op: domain.ProposalOp(d.Op), Role: d.Role, Base: RefFromPB(d.Base), Head: RefFromPB(d.Head),
-			HeadDeleted: d.HeadDeleted, Theirs: Map(d.Theirs), Ours: Map(d.Ours), Merged: Map(d.Merged), Conflicts: d.Conflicts})
-	}
-	return out
-}

@@ -29,13 +29,12 @@ func Activation(bb domain.Blackboard) map[string]any {
 			"id": string(c.ID), "title": c.Title, "intent": c.Intent, "status": string(c.Status),
 			"goal": c.Goal, "methodology": c.Methodology, "branch": domain.BranchOf(c.Branch), "baseline": string(c.BaselineID), "resultBaseline": string(c.ResultBaselineID), "data": orEmpty(c.Data),
 		},
-		"items":     items,
-		"impacts":   orEmptyList(byKind[domain.KindImpact]),
-		"proposals": orEmptyList(byKind[domain.KindProposal]),
-		"decisions": orEmptyList(byKind[domain.KindDecision]),
-		"artifacts": orEmptyList(byKind[domain.KindArtifact]),
-		"merges":    orEmptyList(byKind[domain.KindMerge]),
-		"vars":      vars,
+		"items":       items,
+		"changeNodes": h.changeNodes(),
+		"decisions":   orEmptyList(byKind[domain.KindDecision]),
+		"artifacts":   orEmptyList(byKind[domain.KindArtifact]),
+		"merges":      orEmptyList(byKind[domain.KindMerge]),
+		"vars":        vars,
 	}
 }
 
@@ -49,64 +48,10 @@ func (h hydrator) item(it domain.ChangeItem) map[string]any {
 	m := map[string]any{
 		"id": string(it.ID), "kind": string(it.Kind), "type": it.Type,
 		"status":     string(h.bb.Change.EffectiveStatus(it.ID)),
-		"producedBy": it.ProducedBy, "derivedFrom": derived, "data": orEmpty(it.Data),
-		"target": nil, "post": nil, "op": "", "node": nil, "link": nil, "decision": nil,
-	}
-	if it.Target != nil {
-		m["target"] = h.ref(*it.Target)
-	}
-	if e := it.Post; e != nil {
-		if e.Node != nil {
-			m["post"] = h.ref(*e.Node)
-		} else {
-			m["post"] = string(e.Item) // the proposal producing the post version
-		}
-	}
-	if p := it.Proposal; p != nil {
-		m["op"] = string(p.Op)
-		if p.Node != nil {
-			n := map[string]any{"key": p.Node.Key, "type": p.Node.Type, "props": orEmpty(p.Node.Properties), "base": nil}
-			if p.Node.Base != nil {
-				base := h.ref(*p.Node.Base)
-				n["base"] = base
-				if n["type"] == "" {
-					n["type"] = base["type"]
-				}
-				if n["key"] == "" {
-					n["key"] = base["key"]
-				}
-			}
-			n["types"] = h.bb.TypesOf(n["type"].(string))
-			n["state"] = p.Node.State // transition_node / create_node: the target state
-			m["node"] = n
-		}
-		if p.Link != nil {
-			m["link"] = map[string]any{
-				"id": string(p.Link.LinkID), "type": p.Link.Type, "props": orEmpty(p.Link.Properties),
-				"from": h.endpoint(p.Link.From), "to": h.endpoint(p.Link.To),
-			}
-		}
+		"producedBy": it.ProducedBy, "derivedFrom": derived, "data": orEmpty(it.Data), "decision": nil,
 	}
 	if d := it.Decision; d != nil {
 		m["decision"] = map[string]any{"item": string(d.Item), "accept": d.Accept, "comment": d.Comment}
-	}
-	return m
-}
-
-// endpoint returns a node view for an existing node, or a summary of the
-// proposed node for an item endpoint.
-func (h hydrator) endpoint(e domain.Endpoint) map[string]any {
-	if e.Node != nil {
-		m := h.ref(*e.Node)
-		m["item"] = ""
-		return m
-	}
-	m := map[string]any{"item": string(e.Item), "id": "", "version": int64(0), "key": "", "type": "", "types": []any{}, "props": map[string]any{}}
-	if it, ok := h.bb.Change.Item(e.Item); ok && it.Proposal != nil && it.Proposal.Node != nil {
-		m["key"] = it.Proposal.Node.Key
-		m["type"] = it.Proposal.Node.Type
-		m["types"] = h.bb.TypesOf(it.Proposal.Node.Type)
-		m["props"] = orEmpty(it.Proposal.Node.Properties)
 	}
 	return m
 }
@@ -156,4 +101,48 @@ func orEmptyList(l []any) []any {
 		return []any{}
 	}
 	return l
+}
+
+// changeNodes lists the change nodes of the change (ADR 0024): the stored ones
+// and the ones derived from its items. pre, post and landed are node views, or
+// null while absent; a planned change node has no post yet.
+func (h hydrator) changeNodes() []any {
+	out := make([]any, 0, len(h.bb.Change.Nodes))
+	for _, cn := range h.bb.Change.Nodes {
+		ref := func(r *domain.NodeRef) any {
+			if r == nil {
+				return nil
+			}
+			return h.ref(*r)
+		}
+		reviews := make([]any, 0, len(cn.Reviews))
+		comment := ""
+		for _, r := range cn.Reviews {
+			reviews = append(reviews, map[string]any{"status": string(r.Status), "by": r.By, "comment": r.Comment})
+			comment = r.Comment
+		}
+		items := make([]any, 0, len(cn.Items))
+		for _, id := range cn.Items {
+			items = append(items, string(id))
+		}
+		out = append(out, map[string]any{
+			"id": string(cn.ID), "key": cn.Key, "type": cn.Type, "types": h.bb.TypesOf(cn.Type),
+			"intent": string(cn.Intent), "rationale": cn.Rationale, "review": string(cn.Review), "reviews": reviews, "comment": comment,
+			"pre": ref(cn.Pre), "post": ref(cn.Post), "landed": ref(cn.Landed),
+			"planned": cn.Post == nil, "hasPost": cn.Post != nil, "recheck": cn.Recheck, "props": h.currentProps(cn),
+			"via": string(cn.Via), "producedBy": cn.ProducedBy, "items": items,
+		})
+	}
+	return out
+}
+
+// currentProps are the properties of the node as the change has it: the version written, else the one it starts from.
+func (h hydrator) currentProps(cn domain.ChangeNode) map[string]any {
+	switch {
+	case cn.Post != nil:
+		return orEmpty(h.bb.Nodes[*cn.Post].Properties)
+	case cn.Pre != nil:
+		return orEmpty(h.bb.Nodes[*cn.Pre].Properties)
+	}
+	return map[string]any{}
 }

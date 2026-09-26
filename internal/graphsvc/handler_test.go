@@ -2,9 +2,11 @@ package graphsvc_test
 
 import (
 	"context"
+	"net/http"
 	"testing"
 
 	"connectrpc.com/connect"
+	"google.golang.org/protobuf/types/known/structpb"
 
 	graphv1 "github.com/zimwip/goap/gen/goap/graph/v1"
 	"github.com/zimwip/goap/internal/graphsvc"
@@ -84,13 +86,12 @@ func TestNodeTypeWritesAreRoleGated(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		item := domain.ChangeItem{Kind: domain.KindProposal, Proposal: &domain.Proposal{Op: domain.OpCreateNode,
-			Node: &domain.NodeDraft{Key: "M:x/nodetype/T", Type: metamodel.TypeNodeType}}}
-		req := connect.NewRequest(&graphv1.AddItemsRequest{ChangeId: string(c.ID), Items: pbconv.ItemsToPB([]domain.ChangeItem{item})})
+		req := connect.NewRequest(&graphv1.AddChangeNodesRequest{ChangeId: string(c.ID),
+			Nodes: []*graphv1.ChangeNode{{Intent: "created", Key: "M:x/nodetype/T", Type: metamodel.TypeNodeType, Rationale: "why"}}})
 		req.Header().Set(identity.HeaderSubject, "u")
 		req.Header().Set(identity.HeaderOrg, "acme")
 		req.Header().Set(identity.HeaderRoles, roles)
-		_, err = h.AddItems(ctx, req)
+		_, err = h.AddChangeNodes(ctx, req)
 		return err
 	}
 	if err := add("contributor"); connect.CodeOf(err) != connect.CodePermissionDenied {
@@ -123,13 +124,12 @@ func TestAccessNodesAreGatedByTheFloor(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		item := domain.ChangeItem{Kind: domain.KindProposal, Proposal: &domain.Proposal{Op: domain.OpCreateNode,
-			Node: &domain.NodeDraft{Key: "USR:x", Type: "User", Properties: map[string]any{"subject": "x"}}}}
-		req := connect.NewRequest(&graphv1.AddItemsRequest{ChangeId: string(c.ID), Items: pbconv.ItemsToPB([]domain.ChangeItem{item})})
+		req := connect.NewRequest(&graphv1.AddChangeNodesRequest{ChangeId: string(c.ID),
+			Nodes: []*graphv1.ChangeNode{{Intent: "created", Key: "USR:x", Type: "User", Rationale: "why"}}})
 		req.Header().Set(identity.HeaderSubject, "u")
 		req.Header().Set(identity.HeaderOrg, "acme")
 		req.Header().Set(identity.HeaderRoles, roles)
-		_, err = h.AddItems(ctx, req)
+		_, err = h.AddChangeNodes(ctx, req)
 		return err
 	}
 	if err := add("methodologist"); connect.CodeOf(err) != connect.CodePermissionDenied {
@@ -142,5 +142,113 @@ func TestAccessNodesAreGatedByTheFloor(t *testing.T) {
 	req := connect.NewRequest(&graphv1.CreateNodeRequest{Namespace: "organisation", Key: "POL:x", Type: "Policy"})
 	if _, err := h.CreateNode(ctx, req); connect.CodeOf(err) != connect.CodeFailedPrecondition {
 		t.Errorf("direct write of a Policy node: %v", err)
+	}
+}
+
+func TestChangeNodeRPCs(t *testing.T) {
+	ctx := context.Background()
+	g := graph.New(graph.NewMemory())
+	authorizer, err := authz.NewCasbin(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	floor, err := authz.NewCasbinWith(authz.FloorPolicies)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := &graphsvc.Handler{Graph: g, Authz: authorizer, Floor: floor}
+	nt, err := g.CreateNode(ctx, graph.NewNode{Key: "M:x/nodetype/T", Type: metamodel.TypeNodeType})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req1, err := g.CreateNode(ctx, graph.NewNode{Key: "REQ-1", Type: "Requirement", Properties: map[string]any{"title": "one"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	base, err := g.CreateBaseline(ctx, "B1", []domain.NodeRef{nt.Ref(), req1.Ref()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := g.CreateChange(ctx, graph.NewChange{Title: "t", BaselineID: base.ID, OwnBranch: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	as := func(roles string, r interface{ Header() http.Header }) {
+		r.Header().Set(identity.HeaderSubject, "u")
+		r.Header().Set(identity.HeaderOrg, "acme")
+		r.Header().Set(identity.HeaderRoles, roles)
+	}
+	add := func(roles string, pre domain.NodeRef) (*graphv1.ChangeNode, error) {
+		req := connect.NewRequest(&graphv1.AddChangeNodesRequest{ChangeId: string(c.ID),
+			Nodes: []*graphv1.ChangeNode{{Intent: "modified", Pre: pbconv.RefToPB(pre), Rationale: "why"}}})
+		as(roles, req)
+		out, err := h.AddChangeNodes(ctx, req)
+		if err != nil {
+			return nil, err
+		}
+		return out.Msg.Nodes[0], nil
+	}
+
+	if _, err := add("contributor", nt.Ref()); connect.CodeOf(err) != connect.CodePermissionDenied {
+		t.Fatalf("a contributor must not touch node types through change nodes: %v", err)
+	}
+	cn, err := add("contributor", req1.Ref())
+	if err != nil {
+		t.Fatal(err)
+	}
+	props, _ := structpb.NewStruct(map[string]any{"title": "two"})
+	wr := connect.NewRequest(&graphv1.WriteChangeNodeRequest{ChangeId: string(c.ID), ChangeNodeId: cn.Id, Props: props})
+	as("contributor", wr)
+	if out, err := h.WriteChangeNode(ctx, wr); err != nil || out.Msg.Node.Post == nil || out.Msg.Node.Post.Version != 2 {
+		t.Fatalf("write: %v %v", out, err)
+	}
+	rv := connect.NewRequest(&graphv1.ReviewChangeNodeRequest{ChangeId: string(c.ID), ChangeNodeId: cn.Id, Accept: true})
+	as("contributor", rv)
+	if _, err := h.ReviewChangeNode(ctx, rv); connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Fatalf("a review without comment must be refused: %v", err)
+	}
+	rv.Msg.Comment = "checked"
+	if out, err := h.ReviewChangeNode(ctx, rv); err != nil || out.Msg.Node.Review != "accepted" || out.Msg.Node.Reviews[0].By != "u" {
+		t.Fatalf("review: %v %v", out, err)
+	}
+	get, err := h.GetChange(ctx, connect.NewRequest(&graphv1.GetChangeRequest{Id: string(c.ID)}))
+	if err != nil || len(get.Msg.Change.Nodes) != 1 || get.Msg.Change.Nodes[0].Review != "accepted" {
+		t.Fatalf("GetChange carries the change nodes: %v %v", get, err)
+	}
+}
+
+func TestCommitEditsIsGated(t *testing.T) {
+	ctx := context.Background()
+	g := graph.New(graph.NewMemory())
+	authorizer, err := authz.NewCasbin(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := &graphsvc.Handler{Graph: g, Authz: authorizer}
+	base, err := g.CreateBaseline(ctx, "Repository", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	commit := func(roles, typ string) (*graphv1.CommitEditsResponse, error) {
+		req := connect.NewRequest(&graphv1.CommitEditsRequest{Title: "t", BaselineId: string(base.ID),
+			Edits: []*graphv1.NodeEdit{{Key: "K-" + roles, Type: typ, Rationale: "why"}}})
+		req.Header().Set(identity.HeaderSubject, "u")
+		req.Header().Set(identity.HeaderOrg, "acme")
+		req.Header().Set(identity.HeaderRoles, roles)
+		out, err := h.CommitEdits(ctx, req)
+		if err != nil {
+			return nil, err
+		}
+		return out.Msg, nil
+	}
+	if _, err := commit("contributor", metamodel.TypeNodeType); connect.CodeOf(err) != connect.CodePermissionDenied {
+		t.Fatalf("a contributor must not commit node types: %v", err)
+	}
+	out, err := commit("methodologist", metamodel.TypeNodeType)
+	if err != nil || out.ChangeId == "" || out.Baseline.GetId() == "" {
+		t.Fatalf("a methodologist may: %v %v", out, err)
+	}
+	if n, err := g.NodeByKey(ctx, "", "K-methodologist"); err != nil || n.ChangeID != domain.ChangeID(out.ChangeId) || n.Comment != "why" {
+		t.Fatalf("committed node: %+v %v", n, err)
 	}
 }

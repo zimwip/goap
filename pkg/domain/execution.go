@@ -44,6 +44,8 @@ type ExecutionRecord struct {
 	EffectsMet     *bool           `json:"effectsMet,omitempty"`
 	// Items produced by the action (they carry this record id as provenance).
 	Items []ItemID `json:"items,omitempty"`
+	// Nodes are the change nodes the action declared (they carry this record id as their execution).
+	Nodes []ChangeNodeID `json:"nodes,omitempty"`
 	// A step reads the blackboard and extends it: BoardBefore / BoardAfter are the
 	// numbers of items on the change when the step starts / ends (the blackboard
 	// state), Reads the existing node versions the step started from.

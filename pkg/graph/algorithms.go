@@ -64,37 +64,6 @@ func (g *Graph) validateProps(ctx context.Context, ix *typeIndex, n domain.Node,
 	return nil
 }
 
-// checkProps validates the properties of the nodes the change creates or updates
-// in the target graph.
-func (a *applier) checkProps() error {
-	for _, id := range a.order {
-		b := a.bumped[id]
-		if b.deleted || b.merge || !b.updated {
-			continue
-		}
-		n, err := a.tx.Node(a.ctx, b.next)
-		if err != nil {
-			return err
-		}
-		if err := a.g.validateProps(a.ctx, a.walk.ix, n, n.Properties); err != nil {
-			return err
-		}
-	}
-	for _, ref := range a.created {
-		n, err := a.tx.Node(a.ctx, ref)
-		if err != nil {
-			return err
-		}
-		if n.Version != 1 {
-			continue
-		}
-		if err := a.g.validateProps(a.ctx, a.walk.ix, n, n.Properties); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 func (a *applier) changeInfo() dsl.ChangeInfo {
 	return dsl.ChangeInfo{ID: string(a.change.ID), Title: a.change.Title, Intent: a.change.Intent, Methodology: a.change.Methodology, Goal: a.change.Goal}
 }
@@ -158,7 +127,7 @@ func (a *applier) runActions(n domain.Node, t domain.Transition, children []doma
 	if !changed {
 		return nil
 	}
-	if err := a.g.validateProps(a.ctx, a.walk.ix, n, props); err != nil {
+	if err := a.g.validateProps(a.ctx, a.ix, n, props); err != nil {
 		return fmt.Errorf("after the actions of %s: %w", t.Name, err)
 	}
 	return a.tx.SetNodeProps(a.ctx, n.Ref(), props)

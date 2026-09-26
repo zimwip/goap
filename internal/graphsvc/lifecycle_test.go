@@ -68,27 +68,34 @@ func TestLifecycleIsEnforcedByTheService(t *testing.T) {
 		t.Fatal(err)
 	}
 	ref := req.Ref()
-	items := []domain.ChangeItem{
-		{Kind: domain.KindProposal, Proposal: &domain.Proposal{Op: domain.OpTransitionNode, Node: &domain.NodeDraft{Base: &ref, State: "draft"}}},
-		{Kind: domain.KindProposal, Proposal: &domain.Proposal{Op: domain.OpUpdateNode, Node: &domain.NodeDraft{Base: &ref, Properties: map[string]any{"title": "b"}}}},
-		{Kind: domain.KindProposal, Proposal: &domain.Proposal{Op: domain.OpTransitionNode, Node: &domain.NodeDraft{Base: &ref, State: "released"}}},
-	}
 	withRoles := func(hdr interface{ Set(k, v string) }, roles string) {
 		hdr.Set(identity.HeaderSubject, "u")
 		hdr.Set(identity.HeaderOrg, "acme")
 		hdr.Set(identity.HeaderRoles, roles)
 	}
-	add := func(roles string, it []domain.ChangeItem) error {
-		r := connect.NewRequest(&graphv1.AddItemsRequest{ChangeId: string(c.ID), Items: pbconv.ItemsToPB(it)})
-		withRoles(r.Header(), roles)
-		_, err := h.AddItems(ctx, r)
-		return err
-	}
-	if err := add("contributor", items[:2]); err != nil {
-		t.Fatalf("a contributor may reopen and edit: %v", err)
-	}
-	if err := add("contributor", items[2:]); err != nil {
+	ar := connect.NewRequest(&graphv1.AddChangeNodesRequest{ChangeId: string(c.ID),
+		Nodes: []*graphv1.ChangeNode{{Intent: "modified", Pre: pbconv.RefToPB(ref), Rationale: "release"}}})
+	withRoles(ar.Header(), "contributor")
+	added, err := h.AddChangeNodes(ctx, ar)
+	if err != nil {
 		t.Fatalf("anyone may propose the release: %v", err)
+	}
+	cnID := added.Msg.Nodes[0].Id
+	write := func(props map[string]any, state string) {
+		t.Helper()
+		wr := connect.NewRequest(&graphv1.WriteChangeNodeRequest{ChangeId: string(c.ID), ChangeNodeId: cnID, Props: pbconv.Struct(props), State: state})
+		withRoles(wr.Header(), "contributor")
+		if _, err := h.WriteChangeNode(ctx, wr); err != nil {
+			t.Fatalf("a contributor may reopen, edit and propose the release: %v", err)
+		}
+	}
+	write(nil, "draft")
+	write(map[string]any{"title": "b"}, "")
+	write(nil, "released")
+	rv := connect.NewRequest(&graphv1.ReviewChangeNodeRequest{ChangeId: string(c.ID), ChangeNodeId: cnID, Accept: true, Comment: "ok"})
+	withRoles(rv.Header(), "contributor")
+	if _, err := h.ReviewChangeNode(ctx, rv); err != nil {
+		t.Fatal(err)
 	}
 	// the transition is authorized for whoever applies the change
 	r := connect.NewRequest(&graphv1.ApplyChangeRequest{ChangeId: string(c.ID)})
@@ -101,7 +108,7 @@ func TestLifecycleIsEnforcedByTheService(t *testing.T) {
 	if _, err := h.ApplyChange(ctx, r); err != nil {
 		t.Fatalf("admin may release: %v", err)
 	}
-	if n, err := g.NodeByKey(ctx, "", "REQ-1"); err != nil || n.State != "released" || n.Version != 2 || n.Properties["title"] != "b" {
+	if n, err := g.NodeByKey(ctx, "", "REQ-1"); err != nil || n.State != "released" || n.Version != 4 || n.Properties["title"] != "b" {
 		t.Fatalf("REQ-1: %+v %v", n, err)
 	}
 }

@@ -9,11 +9,11 @@ import (
 func TestTypesExposeSupertypes(t *testing.T) {
 	ref := domain.NodeRef{ID: "n1", Version: 1}
 	bb := domain.Blackboard{
-		Change:     domain.ChangeSet{Items: []domain.ChangeItem{{ID: "i1", Kind: domain.KindImpact, Target: &ref}}},
+		Change:     domain.ChangeSet{Nodes: []domain.ChangeNode{{ID: "n", Key: "SEC-1", Type: "SecurityRequirement", Intent: domain.IntentModified, Pre: &ref}}},
 		Nodes:      map[domain.NodeRef]domain.NodeView{ref: {Node: domain.Node{ID: "n1", Version: 1, Key: "SEC-1", Type: "SecurityRequirement"}}},
 		Supertypes: map[string][]string{"SecurityRequirement": {"Requirement"}},
 	}
-	set, err := Compile([]Definition{{Name: "req", Expr: `impacts.exists(i, "Requirement" in i.target.types)`}})
+	set, err := Compile([]Definition{{Name: "req", Expr: `changeNodes.exists(n, "Requirement" in n.types)`}})
 	if err != nil {
 		t.Fatal(err)
 	}

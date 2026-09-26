@@ -42,27 +42,64 @@ type Link struct {
 	To   LinkEnd `json:"to"`
 }
 
-// Item is a change item of the blackboard snapshot.
+// Item is a fact of the blackboard snapshot (artifact, decision): the nodes the change acts
+// on are the change nodes.
 type Item struct {
-	ID         string `json:"id"`
-	Kind       string `json:"kind"`
-	Type       string `json:"type"`
-	Status     string `json:"status"`
-	Op         string `json:"op"`
-	ProducedBy string `json:"producedBy"`
-	Target     *Node  `json:"target"`
-	Node       *Node  `json:"node"` // proposal node (draft), base node when updating
-	// Link is the link of add_link / remove_link proposals.
-	Link *ItemLink      `json:"link"`
-	Data map[string]any `json:"data"`
+	ID         string         `json:"id"`
+	Kind       string         `json:"kind"`
+	Type       string         `json:"type"`
+	Status     string         `json:"status"`
+	ProducedBy string         `json:"producedBy"`
+	Data       map[string]any `json:"data"`
 }
 
-// ItemLink is a proposed link: endpoints are node keys, or "@<itemId>" for
-// nodes proposed by other items (usable as is in ProposeLink).
-type ItemLink struct {
-	ID   string `json:"id"`
+// ChangeNode is a change node of the blackboard snapshot (ADR 0024): a node the
+// change reads, modifies or creates, with the versions it starts from and produces.
+type ChangeNode struct {
+	ID        string `json:"id"`
+	Key       string `json:"key"`
+	Type      string `json:"type"`
+	Intent    string `json:"intent"`
+	Rationale string `json:"rationale"`
+	Review    string `json:"review"`
+	// Planned is set while the change node has no post version yet.
+	Planned bool  `json:"planned"`
+	Pre     *Node `json:"pre"`
+	Post    *Node `json:"post"`
+	Landed  *Node `json:"landed"`
+	// Links are the outgoing links of the version written (post): from this node to the linked ones.
+	Links []Link `json:"links"`
+	// Items are the items the change node is derived from (none when written directly).
+	Items []string `json:"items"`
+}
+
+// NodeOp is an operation on a change node buffered by a script; the engine
+// applies them in order after the script ends.
+type NodeOp struct {
+	// Op is declare (ImpactNode, CreateNode), write (WriteNode) or review (ReviewNode).
+	Op string `json:"op"`
+	// Ref names a declared change node ("#nN") for the next operations of the script.
+	Ref    string `json:"ref,omitempty"`
+	Intent string `json:"intent,omitempty"`
+	Key    string `json:"key,omitempty"`
+	Type   string `json:"type,omitempty"`
+	// Rationale says why (declare); the comment of a review is in Comment.
+	Rationale string `json:"rationale,omitempty"`
+	// Node designates the change node of a write or review: a node key or "#nN".
+	Node        string         `json:"node,omitempty"`
+	Props       map[string]any `json:"props,omitempty"`
+	State       string         `json:"state,omitempty"`
+	Links       []NodeOpLink   `json:"links,omitempty"`
+	RemoveLinks []string       `json:"removeLinks,omitempty"`
+	Retire      bool           `json:"retire,omitempty"`
+	Accept      bool           `json:"accept,omitempty"`
+	Comment     string         `json:"comment,omitempty"`
+	ProducedBy  string         `json:"producedBy,omitempty"`
+}
+
+// NodeOpLink is an outgoing link added by a write: To is a node key or "#nN".
+type NodeOpLink struct {
 	Type string `json:"type"`
-	From string `json:"from"`
 	To   string `json:"to"`
 }
 
@@ -125,16 +162,19 @@ type Job struct {
 	Params    map[string]any `json:"params"`
 	Vars      map[string]any `json:"vars"`
 	Items     []Item         `json:"items"`
+	Nodes     []ChangeNode   `json:"nodes"`
 	Timeout   time.Duration  `json:"timeout"`
 }
 
 // Result is the outcome of a script: the items to add to the change (engine
 // ItemInput format), logs and whether the script was suspended.
 type Result struct {
-	Items     []map[string]any `json:"items"`
-	Output    string           `json:"output"`
-	Logs      []LogLine        `json:"logs"`
-	Suspended bool             `json:"suspended"`
+	Items []map[string]any `json:"items"`
+	// Nodes are the change node operations, in order (the engine applies them).
+	Nodes     []NodeOp  `json:"nodes"`
+	Output    string    `json:"output"`
+	Logs      []LogLine `json:"logs"`
+	Suspended bool      `json:"suspended"`
 }
 
 // Ctx is the object injected as `ctx` in scripts.
@@ -143,6 +183,8 @@ type Ctx struct {
 	host      Host
 	gctx      context.Context
 	out       []map[string]any
+	nodeOps   []NodeOp
+	nseq      int
 	logs      []LogLine
 	seq       int
 	suspended bool
@@ -179,8 +221,13 @@ func (c *Ctx) Items(kind string) []Item {
 	return out
 }
 
-func (c *Ctx) Impacts() []Item   { return c.Items(string(domain.KindImpact)) }
-func (c *Ctx) Proposals() []Item { return c.Items(string(domain.KindProposal)) }
+// ChangeNodes returns the change nodes of the change: the stored ones and the ones derived from its items.
+func (c *Ctx) ChangeNodes() []ChangeNode {
+	if c.job.Nodes == nil {
+		return []ChangeNode{}
+	}
+	return c.job.Nodes
+}
 
 // ---- domain (read, reference baseline) --------------------------------------
 
@@ -203,53 +250,77 @@ func (c *Ctx) emit(item map[string]any) string {
 	return "#" + ref
 }
 
-// AddImpact records a direct impact on a node of the reference baseline.
-func (c *Ctx) AddImpact(key, reason string) string {
-	return c.emit(map[string]any{"kind": "impact", "type": "direct", "target": key, "data": map[string]any{"reason": reason}})
+// ImpactNode declares that the change acts on an existing node of the reference
+// baseline, and why: a change node with no version written yet. It returns a
+// reference ("#nN") for WriteNode and ReviewNode of the same script.
+func (c *Ctx) ImpactNode(key, rationale string) string {
+	c.nseq++
+	ref := fmt.Sprintf("#n%d", c.nseq)
+	c.nodeOps = append(c.nodeOps, NodeOp{Op: "declare", Ref: ref, Intent: string(domain.IntentModified), Key: key, Rationale: rationale, ProducedBy: c.job.Action})
+	return ref
 }
 
-// ProposeNode proposes a new node and returns its reference ("#pN").
-func (c *Ctx) ProposeNode(nodeType, key string, props map[string]any) string {
-	return c.emit(map[string]any{"kind": "proposal", "proposal": map[string]any{"op": "create_node",
-		"node": map[string]any{"type": nodeType, "key": key, "props": props}}})
+// CreateNode declares that the change creates a node of a type, and why.
+func (c *Ctx) CreateNode(nodeType, key, rationale string) string {
+	c.nseq++
+	ref := fmt.Sprintf("#n%d", c.nseq)
+	c.nodeOps = append(c.nodeOps, NodeOp{Op: "declare", Ref: ref, Intent: string(domain.IntentCreated), Key: key, Type: nodeType, Rationale: rationale, ProducedBy: c.job.Action})
+	return ref
 }
 
-// ProposeUpdate proposes a new version of a node.
-func (c *Ctx) ProposeUpdate(key string, props map[string]any) string {
-	return c.emit(map[string]any{"kind": "proposal", "proposal": map[string]any{"op": "update_node",
-		"node": map[string]any{"base": key, "props": props}}})
+// WriteNode writes the next version of a declared node on the change branch.
+// node is a key of a change node or the reference returned by ImpactNode /
+// CreateNode; w may hold props (merged over the current ones), state (a
+// lifecycle state), links ([{type, to}] with to a node key or a reference of a
+// node written earlier), removeLinks (link ids) and retire.
+func (c *Ctx) WriteNode(node string, w map[string]any) {
+	op := NodeOp{Op: "write", Node: node, ProducedBy: c.job.Action}
+	op.Props, _ = w["props"].(map[string]any)
+	op.State, _ = w["state"].(string)
+	op.Retire, _ = w["retire"].(bool)
+	for _, x := range asList(w["links"]) {
+		if m, ok := x.(map[string]any); ok {
+			t, _ := m["type"].(string)
+			to, _ := m["to"].(string)
+			op.Links = append(op.Links, NodeOpLink{Type: t, To: to})
+		}
+	}
+	for _, x := range asList(w["removeLinks"]) {
+		if id, ok := x.(string); ok {
+			op.RemoveLinks = append(op.RemoveLinks, id)
+		}
+	}
+	c.nodeOps = append(c.nodeOps, op)
 }
 
-// ProposeDelete proposes the deletion of a node.
-func (c *Ctx) ProposeDelete(key string) string {
-	return c.emit(map[string]any{"kind": "proposal", "proposal": map[string]any{"op": "delete_node", "node": map[string]any{"base": key}}})
+func asList(v any) []any {
+	switch l := v.(type) {
+	case []any:
+		return l
+	case []map[string]any:
+		out := make([]any, len(l))
+		for i, m := range l {
+			out[i] = m
+		}
+		return out
+	case []string:
+		out := make([]any, len(l))
+		for i, m := range l {
+			out[i] = m
+		}
+		return out
+	}
+	return nil
 }
 
-// ProposeTransition proposes to move a node to a lifecycle state. A node of a
-// type with a lifecycle is only modified in an editable state: reopen it with a
-// transition first, and move it out of the editable states at the end.
-func (c *Ctx) ProposeTransition(key, state string) string {
-	return c.emit(map[string]any{"kind": "proposal", "proposal": map[string]any{"op": "transition_node",
-		"node": map[string]any{"base": key, "state": state}}})
-}
-
-// ProposeLink proposes a link; from and to are node keys or "#pN" references.
-func (c *Ctx) ProposeLink(from, linkType, to string) string {
-	return c.emit(map[string]any{"kind": "proposal", "proposal": map[string]any{"op": "add_link",
-		"link": map[string]any{"type": linkType, "from": from, "to": to}}})
+// ReviewNode accepts or rejects a change node; the comment is mandatory.
+func (c *Ctx) ReviewNode(node string, accept bool, comment string) {
+	c.nodeOps = append(c.nodeOps, NodeOp{Op: "review", Node: node, Accept: accept, Comment: comment, ProducedBy: c.job.Action})
 }
 
 // AddArtifact records free data (report…).
 func (c *Ctx) AddArtifact(artifactType string, data map[string]any) string {
 	return c.emit(map[string]any{"kind": "artifact", "type": artifactType, "data": data})
-}
-
-// Decide accepts or rejects a proposal (item id, or "#pN").
-func (c *Ctx) Decide(item string, accept bool, comment string) string {
-	if len(item) > 0 && item[0] != '#' && item[0] != '@' {
-		item = "@" + item
-	}
-	return c.emit(map[string]any{"kind": "decision", "decision": map[string]any{"item": item, "accept": accept, "comment": comment}})
 }
 
 // ---- platform calls ---------------------------------------------------------
@@ -313,53 +384,15 @@ func extractJSON(s string) string {
 	return s
 }
 
-// ItemsFromBlackboard builds the item snapshot given to scripts.
+// ItemsFromBlackboard builds the snapshot of the facts (artifacts, decisions) given to scripts.
 func ItemsFromBlackboard(bb domain.Blackboard) []Item {
-	view := func(r *domain.NodeRef) *Node {
-		if r == nil {
-			return nil
-		}
-		n := &Node{ID: string(r.ID), Version: int(r.Version)}
-		if v, ok := bb.Nodes[*r]; ok {
-			n.Key, n.Type, n.Props = v.Key, v.Type, v.Properties
-		}
-		return n
-	}
 	out := make([]Item, 0, len(bb.Change.Items))
 	for _, it := range bb.Change.Items {
-		if !bb.Change.Active(it.ID) {
+		if !bb.Change.Active(it.ID) || it.Kind == domain.KindFlow {
 			continue
 		}
-		x := Item{ID: string(it.ID), Kind: string(it.Kind), Type: it.Type, Status: string(bb.Change.EffectiveStatus(it.ID)),
-			ProducedBy: it.ProducedBy, Target: view(it.Target), Data: it.Data}
-		if p := it.Proposal; p != nil {
-			x.Op = string(p.Op)
-			if l := p.Link; l != nil {
-				end := func(e domain.Endpoint) string {
-					if e.Item != "" {
-						return "@" + string(e.Item)
-					}
-					if n := view(e.Node); n != nil && n.Key != "" {
-						return n.Key
-					}
-					return e.String()
-				}
-				x.Link = &ItemLink{ID: string(l.LinkID), Type: l.Type, From: end(l.From), To: end(l.To)}
-			}
-			if p.Node != nil {
-				x.Node = &Node{Key: p.Node.Key, Type: p.Node.Type, Props: p.Node.Properties}
-				if b := view(p.Node.Base); b != nil {
-					x.Node.ID, x.Node.Version = b.ID, b.Version
-					if x.Node.Key == "" {
-						x.Node.Key = b.Key
-					}
-					if x.Node.Type == "" {
-						x.Node.Type = b.Type
-					}
-				}
-			}
-		}
-		out = append(out, x)
+		out = append(out, Item{ID: string(it.ID), Kind: string(it.Kind), Type: it.Type, Status: string(bb.Change.EffectiveStatus(it.ID)),
+			ProducedBy: it.ProducedBy, Data: it.Data})
 	}
 	return out
 }

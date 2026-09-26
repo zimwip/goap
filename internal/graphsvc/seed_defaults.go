@@ -3,7 +3,6 @@ package graphsvc
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	"github.com/zimwip/goap/pkg/access"
 	"github.com/zimwip/goap/pkg/algo"
@@ -60,10 +59,10 @@ ctx.fail("unknown tool " + ctx.tool());
 	}
 }
 
-// applyOn applies proposals on main as one change of a namespace, so that the head of main
+// applyOn commits node edits on main as one change of a namespace, so that the head of main
 // moves (baselines made outside a change do not once main has a head). The graph gets an
 // empty initial baseline when it has none.
-func applyOn(ctx context.Context, g *graph.Graph, namespace, title string, items []domain.ChangeItem) error {
+func applyOn(ctx context.Context, g *graph.Graph, namespace, title string, edits []graph.NodeEdit) error {
 	head, err := g.BranchHead(ctx, domain.MainBranch)
 	if errors.Is(err, graph.ErrNotFound) {
 		head, err = g.CreateBaseline(ctx, "Initial baseline", nil)
@@ -71,26 +70,18 @@ func applyOn(ctx context.Context, g *graph.Graph, namespace, title string, items
 	if err != nil {
 		return err
 	}
-	c, err := g.CreateChange(ctx, graph.NewChange{Namespace: namespace, Title: title, Intent: title, BaselineID: head.ID})
-	if err != nil {
-		return err
-	}
-	if _, err := g.AddItems(ctx, c.ID, items); err != nil {
-		return err
-	}
-	_, err = g.Apply(ctx, c.ID, title)
+	_, err = g.Commit(ctx, graph.Commit{Namespace: namespace, Title: title, Intent: title, Baseline: head.ID, By: "graphsvc.seed", BaselineName: title, Edits: edits})
 	return err
 }
 
-func createNode(id domain.ItemID, key, typ string, props map[string]any) domain.ChangeItem {
-	return domain.ChangeItem{ID: id, Kind: domain.KindProposal, Type: "object", ProducedBy: "graphsvc.seed",
-		Proposal: &domain.Proposal{Op: domain.OpCreateNode, Node: &domain.NodeDraft{Key: key, Type: typ, Properties: props}}}
+func createNode(key, typ string, props map[string]any) graph.NodeEdit {
+	return graph.NodeEdit{Key: key, Type: typ, Props: props, Rationale: "Seed " + key}
 }
 
-// linkTo links the node of an item to an existing node of the graph.
-func linkTo(from domain.ItemID, typ string, to domain.NodeRef) domain.ChangeItem {
-	return domain.ChangeItem{Kind: domain.KindProposal, Type: "object", ProducedBy: "graphsvc.seed", DerivedFrom: []domain.ItemID{from},
-		Proposal: &domain.Proposal{Op: domain.OpAddLink, Link: &domain.LinkDraft{Type: typ, From: domain.Endpoint{Item: from}, To: domain.Endpoint{Node: &to}}}}
+// linkTo links a created node to an existing node of the graph.
+func linkTo(e graph.NodeEdit, typ string, to domain.NodeRef) graph.NodeEdit {
+	e.Links = append(e.Links, graph.LinkEdit{Type: typ, To: &to})
+	return e
 }
 
 // SeedDefaults makes sure, at every start, that the default organisation (the root of every
@@ -102,32 +93,32 @@ func SeedDefaults(ctx context.Context, g *graph.Graph) (bool, error) {
 	} else if !errors.Is(err, graph.ErrNotFound) {
 		return false, err
 	}
-	if err := applyOn(ctx, g, mcp.NamespaceOrganisation, "Default organisation", []domain.ChangeItem{
-		createNode("default-org", domain.DefaultOrg, mcp.NodeTypeOrgUnit, map[string]any{"name": "Default organisation", "kind": "company",
+	if err := applyOn(ctx, g, mcp.NamespaceOrganisation, "Default organisation", []graph.NodeEdit{
+		createNode(domain.DefaultOrg, mcp.NodeTypeOrgUnit, map[string]any{"name": "Default organisation", "kind": "company",
 			"description": "Holds the changes that name no unit, and the adapters every unit inherits."}),
 	}); err != nil {
 		return false, err
 	}
 	d := documentRepository()
 	a := localFSAdapterDef()
-	err := applyOn(ctx, g, mcp.NamespacePlatform, "MCP "+d.Name, []domain.ChangeItem{
-		createNode("mcp", mcp.MCPKey(d.Name), mcp.NodeTypeMCP, d.Props()),
-		createNode("adapter-def", mcp.AdapterDefKey(a.Name), mcp.NodeTypeAdapterDef, a.Props()),
+	err := applyOn(ctx, g, mcp.NamespacePlatform, "MCP "+d.Name, []graph.NodeEdit{
+		createNode(mcp.MCPKey(d.Name), mcp.NodeTypeMCP, d.Props()),
+		createNode(mcp.AdapterDefKey(a.Name), mcp.NodeTypeAdapterDef, a.Props()),
 	})
 	return err == nil, err
 }
 
 // SeedUnit creates an organisational unit, under parent when it is not empty.
 func SeedUnit(ctx context.Context, g *graph.Graph, key, name, kind, parent string) error {
-	items := []domain.ChangeItem{createNode("unit", key, mcp.NodeTypeOrgUnit, map[string]any{"name": name, "kind": kind})}
+	unit := createNode(key, mcp.NodeTypeOrgUnit, map[string]any{"name": name, "kind": kind})
 	if parent != "" {
 		p, err := g.NodeByKey(ctx, mcp.NamespaceOrganisation, parent)
 		if err != nil {
 			return err
 		}
-		items = append(items, linkTo("unit", mcp.LinkPartOf, p.Ref()))
+		unit = linkTo(unit, mcp.LinkPartOf, p.Ref())
 	}
-	return applyOn(ctx, g, mcp.NamespaceOrganisation, "Unit "+key, items)
+	return applyOn(ctx, g, mcp.NamespaceOrganisation, "Unit "+key, []graph.NodeEdit{unit})
 }
 
 // LocalFSAdapter is the instance of the localfs adapter of the platform library for a unit, exposing a
@@ -142,15 +133,14 @@ func SeedAdapter(ctx context.Context, g *graph.Graph, a mcp.Adapter) error {
 	if err != nil {
 		return err
 	}
-	return applyOn(ctx, g, mcp.NamespaceOrganisation, "Adapter "+a.MCP+" of "+a.Unit, []domain.ChangeItem{
-		createNode("adapter", mcp.AdapterKey(a.Unit, a.MCP), mcp.NodeTypeAdapter, a.Props()),
-		linkTo("adapter", mcp.LinkOwner, unit.Ref()),
+	return applyOn(ctx, g, mcp.NamespaceOrganisation, "Adapter "+a.MCP+" of "+a.Unit, []graph.NodeEdit{
+		linkTo(createNode(mcp.AdapterKey(a.Unit, a.MCP), mcp.NodeTypeAdapter, a.Props()), mcp.LinkOwner, unit.Ref()),
 	})
 }
 
 // SeedAdapterDef creates the AdapterDef node of an adapter definition in the platform namespace.
 func SeedAdapterDef(ctx context.Context, g *graph.Graph, d mcp.AdapterDef) error {
-	return applyOn(ctx, g, mcp.NamespacePlatform, "Adapter "+d.Name, []domain.ChangeItem{createNode("adapter-def", mcp.AdapterDefKey(d.Name), mcp.NodeTypeAdapterDef, d.Props())})
+	return applyOn(ctx, g, mcp.NamespacePlatform, "Adapter "+d.Name, []graph.NodeEdit{createNode(mcp.AdapterDefKey(d.Name), mcp.NodeTypeAdapterDef, d.Props())})
 }
 
 // SeedAccess makes sure the default policies exist as Policy nodes of the organisation namespace. It is
@@ -161,30 +151,30 @@ func SeedAccess(ctx context.Context, g *graph.Graph) (bool, error) {
 	} else if !errors.Is(err, graph.ErrNotFound) {
 		return false, err
 	}
-	items := make([]domain.ChangeItem, len(authz.DefaultPolicies))
+	items := make([]graph.NodeEdit, len(authz.DefaultPolicies))
 	for i, p := range authz.DefaultPolicies {
-		items[i] = createNode(domain.ItemID(fmt.Sprintf("policy-%d", i)), access.PolicyKey(p), access.NodeTypePolicy, access.PolicyProps(p))
+		items[i] = createNode(access.PolicyKey(p), access.NodeTypePolicy, access.PolicyProps(p))
 	}
 	return true, applyOn(ctx, g, mcp.NamespaceOrganisation, "Default policies", items)
 }
 
 // SeedUser creates the User node of a subject, member of a unit when unit is not empty.
 func SeedUser(ctx context.Context, g *graph.Graph, u access.User) error {
-	items := []domain.ChangeItem{createNode("user", access.UserKey(u.Subject), access.NodeTypeUser, u.Props())}
+	user := createNode(access.UserKey(u.Subject), access.NodeTypeUser, u.Props())
 	if u.Unit != "" {
 		unit, err := g.NodeByKey(ctx, mcp.NamespaceOrganisation, u.Unit)
 		if err != nil {
 			return err
 		}
-		items = append(items, linkTo("user", access.LinkMemberOf, unit.Ref()))
+		user = linkTo(user, access.LinkMemberOf, unit.Ref())
 	}
-	return applyOn(ctx, g, mcp.NamespaceOrganisation, "User "+u.Subject, items)
+	return applyOn(ctx, g, mcp.NamespaceOrganisation, "User "+u.Subject, []graph.NodeEdit{user})
 }
 
 // SeedPolicy creates a Policy node.
 func SeedPolicy(ctx context.Context, g *graph.Graph, p authz.Policy) error {
-	return applyOn(ctx, g, mcp.NamespaceOrganisation, "Policy "+p.Resource+"/"+p.Action, []domain.ChangeItem{
-		createNode("policy", access.PolicyKey(p), access.NodeTypePolicy, access.PolicyProps(p))})
+	return applyOn(ctx, g, mcp.NamespaceOrganisation, "Policy "+p.Resource+"/"+p.Action, []graph.NodeEdit{
+		createNode(access.PolicyKey(p), access.NodeTypePolicy, access.PolicyProps(p))})
 }
 
 // SeedModels creates the model gateway configuration (providers, models, aliases; nodes of the platform namespace)
@@ -205,15 +195,15 @@ func SeedModels(ctx context.Context, g *graph.Graph, providers []llmcfg.Provider
 	} else if !errors.Is(err, graph.ErrNotFound) {
 		return false, err
 	}
-	var items []domain.ChangeItem
+	var items []graph.NodeEdit
 	for _, p := range providers {
-		items = append(items, createNode(domain.ItemID("provider-"+p.Name), llmcfg.ProviderKey(p.Name), llmcfg.NodeTypeProvider, p.Props()))
+		items = append(items, createNode(llmcfg.ProviderKey(p.Name), llmcfg.NodeTypeProvider, p.Props()))
 	}
 	for _, m := range models {
-		items = append(items, createNode(domain.ItemID("model-"+m.Provider+"/"+m.Model), m.Key(), llmcfg.NodeTypeModel, m.Props()))
+		items = append(items, createNode(m.Key(), llmcfg.NodeTypeModel, m.Props()))
 	}
 	for _, a := range aliases {
-		items = append(items, createNode(domain.ItemID("alias-"+a.Alias), llmcfg.AliasKey(a.Alias), llmcfg.NodeTypeAlias, a.Props()))
+		items = append(items, createNode(llmcfg.AliasKey(a.Alias), llmcfg.NodeTypeAlias, a.Props()))
 	}
 	if len(items) == 0 {
 		return false, nil

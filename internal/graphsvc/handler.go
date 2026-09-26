@@ -212,80 +212,11 @@ func (h *Handler) UpdateChange(ctx context.Context, r *connect.Request[graphv1.U
 	return res(&graphv1.UpdateChangeResponse{Change: pbconv.ChangeToPB(c)}, err)
 }
 
-// touchesMetadataLayer reports whether items author or delete NodeType nodes
-// or extends edges (ADR 0012), the only graph writes gated by the "nodetype"
-// resource. remove_link items never carry a Type (metamodel.Sync never
-// proposes removing an extends edge), so they are not inspected here.
-func (h *Handler) touchesMetadataLayer(ctx context.Context, items []domain.ChangeItem) bool {
-	for _, it := range items {
-		p := it.Proposal
-		if p == nil {
-			continue
-		}
-		switch p.Op {
-		case domain.OpCreateNode:
-			if p.Node != nil && p.Node.Type == metamodel.TypeNodeType {
-				return true
-			}
-		case domain.OpUpdateNode, domain.OpDeleteNode:
-			if p.Node != nil && p.Node.Base != nil {
-				if n, err := h.Graph.Node(ctx, *p.Node.Base); err == nil && n.Type == metamodel.TypeNodeType {
-					return true
-				}
-			}
-		case domain.OpAddLink:
-			if p.Link != nil && p.Link.Type == metamodel.LinkExtends {
-				return true
-			}
-		}
-	}
-	return false
-}
-
 func isAccessType(typ string) bool { return typ == access.NodeTypeUser || typ == access.NodeTypePolicy }
-
-// touchesAccessLayer reports whether items create, change or delete User or Policy nodes.
-func (h *Handler) touchesAccessLayer(ctx context.Context, items []domain.ChangeItem) bool {
-	for _, it := range items {
-		p := it.Proposal
-		if p == nil || p.Node == nil {
-			continue
-		}
-		switch p.Op {
-		case domain.OpCreateNode:
-			if isAccessType(p.Node.Type) {
-				return true
-			}
-		case domain.OpUpdateNode, domain.OpDeleteNode:
-			if p.Node.Base != nil {
-				if n, err := h.Graph.Node(ctx, *p.Node.Base); err == nil && isAccessType(n.Type) {
-					return true
-				}
-			}
-		}
-	}
-	return false
-}
 
 func (h *Handler) AddItems(ctx context.Context, r *connect.Request[graphv1.AddItemsRequest]) (*connect.Response[graphv1.AddItemsResponse], error) {
 	ctx = h.Identity.Context(ctx, r.Header())
 	proposed := pbconv.ItemsFromPB(r.Msg.Items)
-	if h.touchesMetadataLayer(ctx, proposed) {
-		who := authz.From(ctx)
-		if err := authz.Check(ctx, h.Authz, authz.Request{Subject: who, Action: "write", Resource: authz.Resource{Type: "nodetype", Org: who.Org}}); err != nil {
-			return nil, rpcerr.ToConnect(err)
-		}
-	}
-	if h.touchesAccessLayer(ctx, proposed) {
-		who := authz.From(ctx)
-		gate := h.Floor
-		if gate == nil {
-			gate = h.Authz
-		}
-		if err := authz.Check(ctx, gate, authz.Request{Subject: who, Action: "write", Resource: authz.Resource{Type: access.ResourcePolicy, Org: who.Org}}); err != nil {
-			return nil, rpcerr.ToConnect(err)
-		}
-	}
 	items, err := h.Graph.AddItems(ctx, domain.ChangeID(r.Msg.ChangeId), proposed)
 	if err == nil {
 		if c, cerr := h.Graph.Change(ctx, domain.ChangeID(r.Msg.ChangeId)); cerr == nil {
@@ -294,6 +225,122 @@ func (h *Handler) AddItems(ctx context.Context, r *connect.Request[graphv1.AddIt
 		}
 	}
 	return res(&graphv1.AddItemsResponse{Items: pbconv.ItemsToPB(items)}, err)
+}
+
+// gateNodeType applies to a change node the gates AddItems applies to proposals:
+// NodeType nodes need the "nodetype" permission, User and Policy nodes the access one.
+func (h *Handler) gateNodeType(ctx context.Context, typ string) error {
+	who := authz.From(ctx)
+	if typ == metamodel.TypeNodeType {
+		if err := authz.Check(ctx, h.Authz, authz.Request{Subject: who, Action: "write", Resource: authz.Resource{Type: "nodetype", Org: who.Org}}); err != nil {
+			return rpcerr.ToConnect(err)
+		}
+	}
+	if isAccessType(typ) {
+		gate := h.Floor
+		if gate == nil {
+			gate = h.Authz
+		}
+		if err := authz.Check(ctx, gate, authz.Request{Subject: who, Action: "write", Resource: authz.Resource{Type: access.ResourcePolicy, Org: who.Org}}); err != nil {
+			return rpcerr.ToConnect(err)
+		}
+	}
+	return nil
+}
+
+func (h *Handler) AddChangeNodes(ctx context.Context, r *connect.Request[graphv1.AddChangeNodesRequest]) (*connect.Response[graphv1.AddChangeNodesResponse], error) {
+	ctx = h.Identity.Context(ctx, r.Header())
+	nodes := pbconv.ChangeNodesFromPB(r.Msg.Nodes)
+	for _, cn := range nodes {
+		typ := cn.Type
+		if cn.Pre != nil {
+			if n, err := h.Graph.Node(ctx, *cn.Pre); err == nil {
+				typ = n.Type
+			}
+		}
+		if err := h.gateNodeType(ctx, typ); err != nil {
+			return nil, err
+		}
+	}
+	out, err := h.Graph.AddNodes(ctx, domain.ChangeID(r.Msg.ChangeId), nodes)
+	return res(&graphv1.AddChangeNodesResponse{Nodes: pbconv.ChangeNodesToPB(out)}, err)
+}
+
+func (h *Handler) CommitEdits(ctx context.Context, r *connect.Request[graphv1.CommitEditsRequest]) (*connect.Response[graphv1.CommitEditsResponse], error) {
+	ctx = h.Identity.Context(ctx, r.Header())
+	edits := pbconv.EditsFromPB(r.Msg.Edits)
+	for _, e := range edits {
+		typ := e.Type
+		if e.Pre != nil {
+			if n, err := h.Graph.Node(ctx, *e.Pre); err == nil {
+				typ = n.Type
+			}
+		}
+		if err := h.gateNodeType(ctx, typ); err != nil {
+			return nil, err
+		}
+		for _, l := range e.Links {
+			if l.Type == metamodel.LinkExtends {
+				if err := h.gateNodeType(ctx, metamodel.TypeNodeType); err != nil {
+					return nil, err
+				}
+			}
+		}
+	}
+	by := authz.From(ctx).Subject
+	if by == "" {
+		by = "graphsvc"
+	}
+	out, err := h.Graph.Commit(ctx, graph.Commit{Namespace: r.Msg.Namespace, Title: r.Msg.Title, Intent: r.Msg.Intent, Methodology: r.Msg.Methodology,
+		Data: pbconv.Map(r.Msg.Data), Baseline: domain.BaselineID(r.Msg.BaselineId), By: by, BaselineName: r.Msg.BaselineName, Edits: edits})
+	if err == nil {
+		if c, cerr := h.Graph.Change(ctx, out.Change); cerr == nil {
+			c.Items, c.Nodes = nil, nil
+			h.publish(ctx, "goap.change."+string(out.Change)+".applied", domain.ChangeEvent{Type: "change.applied", Change: c, Baseline: &out.Baseline})
+		}
+	}
+	return res(&graphv1.CommitEditsResponse{ChangeId: string(out.Change), Baseline: pbconv.BaselineToPB(out.Baseline)}, err)
+}
+
+func (h *Handler) WriteChangeNode(ctx context.Context, r *connect.Request[graphv1.WriteChangeNodeRequest]) (*connect.Response[graphv1.WriteChangeNodeResponse], error) {
+	ctx = h.Identity.Context(ctx, r.Header())
+	list, err := h.Graph.ListChangeNodes(ctx, domain.ChangeID(r.Msg.ChangeId))
+	if err != nil {
+		return nil, rpcerr.ToConnect(err)
+	}
+	var typ string
+	for _, cn := range list {
+		if string(cn.ID) == r.Msg.ChangeNodeId {
+			typ = cn.Type
+		}
+	}
+	if err := h.gateNodeType(ctx, typ); err != nil {
+		return nil, err
+	}
+	w := graph.NodeWrite{Properties: pbconv.Map(r.Msg.Props), State: r.Msg.State, Retire: r.Msg.Retire, Flow: r.Msg.Flow, Execution: r.Msg.Execution}
+	for _, l := range r.Msg.AddLinks {
+		if l.Type == metamodel.LinkExtends {
+			if err := h.gateNodeType(ctx, metamodel.TypeNodeType); err != nil {
+				return nil, err
+			}
+		}
+		w.AddLinks = append(w.AddLinks, graph.LinkWrite{Type: l.Type, To: pbconv.RefFromPB(l.To), Properties: pbconv.Map(l.Props)})
+	}
+	for _, id := range r.Msg.RemoveLinks {
+		w.RemoveLinks = append(w.RemoveLinks, domain.LinkID(id))
+	}
+	cn, err := h.Graph.WriteNode(ctx, domain.ChangeID(r.Msg.ChangeId), domain.ChangeNodeID(r.Msg.ChangeNodeId), w)
+	return res(&graphv1.WriteChangeNodeResponse{Node: pbconv.ChangeNodeToPB(cn)}, err)
+}
+
+func (h *Handler) ReviewChangeNode(ctx context.Context, r *connect.Request[graphv1.ReviewChangeNodeRequest]) (*connect.Response[graphv1.ReviewChangeNodeResponse], error) {
+	ctx = h.Identity.Context(ctx, r.Header())
+	status := domain.ReviewRejected
+	if r.Msg.Accept {
+		status = domain.ReviewAccepted
+	}
+	cn, err := h.Graph.ReviewNodeOn(ctx, domain.ChangeID(r.Msg.ChangeId), r.Msg.Flow, r.Msg.Execution, domain.ChangeNodeID(r.Msg.ChangeNodeId), status, authz.From(ctx).Subject, r.Msg.Comment)
+	return res(&graphv1.ReviewChangeNodeResponse{Node: pbconv.ChangeNodeToPB(cn)}, err)
 }
 
 func (h *Handler) GetBlackboard(ctx context.Context, r *connect.Request[graphv1.GetBlackboardRequest]) (*connect.Response[graphv1.GetBlackboardResponse], error) {
@@ -423,16 +470,11 @@ func (h *Handler) ListSubChanges(ctx context.Context, r *connect.Request[graphv1
 func (h *Handler) OpenFlow(ctx context.Context, r *connect.Request[graphv1.OpenFlowRequest]) (*connect.Response[graphv1.OpenFlowResponse], error) {
 	m := r.Msg
 	f, err := h.Graph.OpenFlow(ctx, domain.ChangeID(m.ChangeId), graph.OpenFlowRequest{Parent: m.Parent, ForkAfter: domain.ItemID(m.ForkAfter),
-		Seeds: itemIDs(m.Seeds), FromStep: int(m.FromStep), Execution: m.Execution, Process: m.Process, Reason: m.Reason, Guidance: m.Guidance, By: m.By})
+		Seeds: itemIDs(m.Seeds), FromStep: int(m.FromStep), Execution: m.Execution, Process: m.Process, Reason: m.Reason, Guidance: m.Guidance, By: m.By, StaleExecutions: m.StaleExecutions})
 	if err == nil {
 		h.publish(ctx, "goap.change."+m.ChangeId+".flow_opened", f)
 	}
 	return res(&graphv1.OpenFlowResponse{Flow: pbconv.FlowToPB(f)}, err)
-}
-
-func (h *Handler) MaterializeFlow(ctx context.Context, r *connect.Request[graphv1.MaterializeFlowRequest]) (*connect.Response[graphv1.MaterializeFlowResponse], error) {
-	f, err := h.Graph.MaterializeFlow(ctx, domain.ChangeID(r.Msg.ChangeId), r.Msg.Flow)
-	return res(&graphv1.MaterializeFlowResponse{Flow: pbconv.FlowToPB(f)}, err)
 }
 
 func itemIDs(ss []string) []domain.ItemID {
@@ -477,42 +519,6 @@ func (h *Handler) ValidateBoard(ctx context.Context, r *connect.Request[graphv1.
 		out.Issues = append(out.Issues, pbconv.BoardIssueToPB(i))
 	}
 	return res(out, err)
-}
-
-func (h *Handler) GetImpacts(ctx context.Context, r *connect.Request[graphv1.GetImpactsRequest]) (*connect.Response[graphv1.GetImpactsResponse], error) {
-	ims, err := h.Graph.Impacts(ctx, domain.ChangeID(r.Msg.ChangeId))
-	out := &graphv1.GetImpactsResponse{}
-	for _, im := range ims {
-		out.Impacts = append(out.Impacts, &graphv1.Impact{Item: string(im.Item), Key: im.Key, Type: im.Type,
-			Pre: pbconv.RefPtrToPB(im.Pre), PreState: im.PreState, Post: pbconv.RefPtrToPB(im.Post), PostState: im.PostState})
-	}
-	return res(out, err)
-}
-
-func (h *Handler) GetDivergences(ctx context.Context, r *connect.Request[graphv1.GetDivergencesRequest]) (*connect.Response[graphv1.GetDivergencesResponse], error) {
-	ds, err := h.Graph.Divergences(ctx, domain.ChangeID(r.Msg.ChangeId))
-	return res(&graphv1.GetDivergencesResponse{Divergences: pbconv.DivergencesToPB(ds)}, err)
-}
-
-func (h *Handler) RebaseChange(ctx context.Context, r *connect.Request[graphv1.RebaseChangeRequest]) (*connect.Response[graphv1.RebaseChangeResponse], error) {
-	resolutions := map[domain.ItemID]map[string]any{}
-	for id, s := range r.Msg.Resolutions {
-		resolutions[domain.ItemID(id)] = pbconv.Map(s)
-		if resolutions[domain.ItemID(id)] == nil {
-			resolutions[domain.ItemID(id)] = map[string]any{}
-		}
-	}
-	out, err := h.Graph.Rebase(ctx, domain.ChangeID(r.Msg.ChangeId), resolutions)
-	if err != nil {
-		return nil, rpcerr.ToConnect(err)
-	}
-	superseded := map[string]string{}
-	for k, v := range out.Superseded {
-		superseded[string(k)] = string(v)
-	}
-	c := out.Change
-	h.publish(ctx, "goap.change."+string(c.ID)+".rebased", domain.ChangeEvent{Type: "change.rebased", Change: c})
-	return res(&graphv1.RebaseChangeResponse{Change: pbconv.ChangeToPB(c), Superseded: superseded, Divergences: pbconv.DivergencesToPB(out.Divergences)}, nil)
 }
 
 func (h *Handler) RecordExecutions(ctx context.Context, r *connect.Request[graphv1.RecordExecutionsRequest]) (*connect.Response[graphv1.RecordExecutionsResponse], error) {

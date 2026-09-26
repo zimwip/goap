@@ -145,18 +145,15 @@ func ElementKey(meth, kind, name string) string {
 }
 
 func outputKey(it domain.ChangeItem) string {
-	switch {
-	case it.Proposal != nil:
-		return string(it.Kind) + "/" + string(it.Proposal.Op)
-	case it.Type != "":
+	if it.Type != "" {
 		return string(it.Kind) + "/" + it.Type
 	}
 	return string(it.Kind)
 }
 
 // Analyze computes the cost report of a run from its journal records, the
-// items of the observed change and the spans of its trace (optional).
-func Analyze(recs []domain.ExecutionRecord, items map[domain.ItemID]domain.ChangeItem, spans []Span, th Thresholds) Report {
+// items and change nodes of the observed change and the spans of its trace (optional).
+func Analyze(recs []domain.ExecutionRecord, items map[domain.ItemID]domain.ChangeItem, nodes map[domain.ChangeNodeID]domain.ChangeNode, spans []Span, th Thresholds) Report {
 	th = th.withDefaults()
 	var r Report
 	stats := map[string]*ActionStats{}
@@ -210,6 +207,11 @@ func Analyze(recs []domain.ExecutionRecord, items map[domain.ItemID]domain.Chang
 			for _, id := range rec.Items {
 				if it, ok := items[id]; ok {
 					s.Outputs[outputKey(it)]++
+				}
+			}
+			for _, id := range rec.Nodes {
+				if n, ok := nodes[id]; ok {
+					s.Outputs["changeNode/"+string(n.Intent)]++
 				}
 			}
 			s.Records = append(s.Records, rec.ID)

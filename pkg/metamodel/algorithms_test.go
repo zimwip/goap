@@ -29,8 +29,14 @@ func almFromFile(t *testing.T) *methodology.Domain {
 	return d
 }
 
-func createNode(key, typ, state string, props map[string]any) domain.ChangeItem {
-	return domain.ChangeItem{Kind: domain.KindProposal, Proposal: &domain.Proposal{Op: domain.OpCreateNode, Node: &domain.NodeDraft{Key: key, Type: typ, State: state, Properties: props}}}
+// create declares a created node on the change and writes it.
+func create(ctx context.Context, g *graph.Graph, c domain.ChangeSet, key, typ string, props map[string]any) error {
+	ns, err := g.AddNodes(ctx, c.ID, []domain.ChangeNode{{Intent: domain.IntentCreated, Key: key, Type: typ, Rationale: "new " + key}})
+	if err != nil {
+		return err
+	}
+	_, err = g.WriteNode(ctx, c.ID, ns[0].ID, graph.NodeWrite{Properties: props})
+	return err
 }
 
 // The algorithms plugged in a shared domain are embedded in its NodeType nodes
@@ -55,16 +61,20 @@ func TestDomainAlgorithmsEnforcedByTheGraph(t *testing.T) {
 	}
 	c := newChange()
 	// regex-match instance dotted-version on Release.version
-	_, err = g.AddItems(ctx, c.ID, []domain.ChangeItem{createNode("REL-1", "Release", "", map[string]any{"version": "one"})})
+	err = create(ctx, g, c, "REL-1", "Release", map[string]any{"version": "one"})
 	if !errors.Is(err, graph.ErrInvalid) || !strings.Contains(err.Error(), "version must look like 1.2 or 1.2.3") {
 		t.Fatalf("bad version accepted: %v", err)
 	}
 	// max-length instance on Requirement.title (a subtype inherits it)
-	_, err = g.AddItems(ctx, c.ID, []domain.ChangeItem{createNode("REQ-1", "SecurityRequirement", "", map[string]any{"title": strings.Repeat("x", 201)})})
+	err = create(ctx, g, c, "REQ-1", "SecurityRequirement", map[string]any{"title": strings.Repeat("x", 201)})
 	if !errors.Is(err, graph.ErrInvalid) || !strings.Contains(err.Error(), "longer than 200") {
 		t.Fatalf("long title accepted: %v", err)
 	}
-	if _, err := g.AddItems(ctx, c.ID, []domain.ChangeItem{createNode("REL-1", "Release", "", map[string]any{"version": "5.2"}), createNode("REQ-1", "Requirement", "", map[string]any{"title": "ok"})}); err != nil {
+	c = newChange()
+	if err := create(ctx, g, c, "REL-1", "Release", map[string]any{"version": "5.2"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := create(ctx, g, c, "REQ-1", "Requirement", map[string]any{"title": "ok"}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -84,7 +94,7 @@ func TestDomainAlgorithmsEnforcedByTheGraph(t *testing.T) {
 		t.Fatal(err)
 	}
 	c = newChange()
-	if _, err := g.AddItems(ctx, c.ID, []domain.ChangeItem{createNode("REL-2", "Release", "", map[string]any{"version": "5.2"})}); !errors.Is(err, graph.ErrInvalid) || !strings.Contains(err.Error(), "integers only") {
+	if err := create(ctx, g, c, "REL-2", "Release", map[string]any{"version": "5.2"}); !errors.Is(err, graph.ErrInvalid) || !strings.Contains(err.Error(), "integers only") {
 		t.Fatalf("the republished instance must apply: %v", err)
 	}
 }

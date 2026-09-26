@@ -22,7 +22,7 @@ func almDomain(version string) methodology.Domain {
 func refMeth(ref string) methodology.Methodology {
 	return methodology.Methodology{
 		Name: "uses", Version: "1", DomainRef: ref,
-		Conditions: []methodology.Condition{{Name: "c", Expr: `proposals.exists(l, l.link.type == "verifies")`}},
+		Conditions: []methodology.Condition{{Name: "c", Expr: `changeNodes.exists(n, n.hasPost && n.post.out.exists(l, l.type == "verifies"))`}},
 		Actions:    []methodology.Action{{Name: "a", Kind: methodology.KindHuman, Effects: map[string]bool{"c": true}}},
 		Goals:      []methodology.Goal{{Name: "g", Pre: map[string]bool{"c": true}}},
 	}

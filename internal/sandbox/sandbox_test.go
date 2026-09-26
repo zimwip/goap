@@ -119,7 +119,7 @@ func TestRemoteExecution(t *testing.T) {
 	}
 	checkResult(t, res, h)
 	// suspension crosses the sandbox boundary
-	res, err = sb.Execute(ctx, dsl.Job{Language: "javascript", Code: `ctx.addImpact("X", "y"); ctx.runAgent("child", "go")`}, h)
+	res, err = sb.Execute(ctx, dsl.Job{Language: "javascript", Code: `ctx.impactNode("X", "y"); ctx.runAgent("child", "go")`}, h)
 	if err != nil || !res.Suspended || len(res.Items) != 0 {
 		t.Fatalf("expected suspension: %+v %v", res, err)
 	}

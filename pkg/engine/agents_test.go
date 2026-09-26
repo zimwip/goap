@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/dsl"
 	"github.com/zimwip/goap/pkg/llm"
 	"github.com/zimwip/goap/pkg/methodology"
 )
@@ -112,11 +113,16 @@ func TestSubAgentsWithSuspension(t *testing.T) {
 	if len(p.Steps[0].Children) != 2 {
 		t.Fatalf("children not recorded on the step: %+v", p.Steps[0])
 	}
-	// the human accepts every proposal of the shared change
+	// the human accepts every test case of the shared change
 	bb, _ := e.Graph.Blackboard(ctx, p.ChangeID)
 	var decisions []ItemInput
-	for _, it := range bb.Change.ItemsOfKind(domain.KindProposal) {
-		decisions = append(decisions, ItemInput{Kind: "decision", Decision: &DecisionInput{Item: "@" + string(it.ID), Accept: true}})
+	for _, n := range bb.Change.Nodes {
+		if n.Intent == domain.IntentCreated {
+			decisions = append(decisions, ItemInput{Kind: "changeNode", ChangeNode: &dsl.NodeOp{Op: "review", Node: n.Key, Accept: true, Comment: "reviewed by a human"}})
+		}
+	}
+	if len(decisions) == 0 {
+		t.Fatalf("no test case to review: %+v", bb.Change.Nodes)
 	}
 	if _, err := e.Submit(ctx, reviewer.ID, decisions); err != nil {
 		t.Fatal(err)

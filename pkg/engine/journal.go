@@ -60,7 +60,7 @@ func (e *Engine) journal(ctx context.Context, p *Process, recs ...domain.Executi
 func actionRecord(p *Process, i int, kind, id string) domain.ExecutionRecord {
 	s := p.Steps[i]
 	r := domain.ExecutionRecord{ID: id, Kind: domain.ExecAction, Step: i, Action: s.Action, ActionKind: kind, Specialization: s.Specialization,
-		Plan: s.Plan, Before: maps.Clone(s.Before), After: maps.Clone(s.After), Items: slices.Clone(s.Items),
+		Plan: s.Plan, Before: maps.Clone(s.Before), After: maps.Clone(s.After), Items: slices.Clone(s.Items), Nodes: slices.Clone(s.Nodes),
 		Reads: slices.Clone(s.Reads), BoardBefore: s.BoardBefore, BoardAfter: max(s.BoardAfter, s.BoardBefore), BoardLast: s.LastItem,
 		InputTokens: s.Usage.InputTokens, OutputTokens: s.Usage.OutputTokens, Actor: s.ApprovedBy, Output: truncate(s.Output, 2000),
 		Error: s.Error, SpanID: s.SpanID, StartedAt: s.StartedAt, EndedAt: s.EndedAt}

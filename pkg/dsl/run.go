@@ -50,9 +50,12 @@ func Run(ctx context.Context, job Job, host Host) (Result, error) {
 	if err != nil {
 		return res, err
 	}
-	res.Items = c.out
+	res.Items, res.Nodes = c.out, c.nodeOps
 	if res.Output == "" {
 		res.Output = fmt.Sprintf("%d item(s)", len(c.out))
+		if len(c.nodeOps) > 0 {
+			res.Output += fmt.Sprintf(", %d change node operation(s)", len(c.nodeOps))
+		}
 	}
 	return res, nil
 }
@@ -112,7 +115,7 @@ func runJS(ctx context.Context, obj any, lg scriptLogger, code string, onReturn 
 }
 
 // jsNames exposes struct fields by their json tag and methods in camelCase
-// (LLM → llm, AddImpact → addImpact).
+// (LLM → llm, ImpactNode → impactNode).
 type jsNames struct{}
 
 func (jsNames) FieldName(_ reflect.Type, f reflect.StructField) string {
@@ -167,6 +170,7 @@ var Symbols = interp.Exports{
 		"Link":            reflect.ValueOf((*Link)(nil)),
 		"LinkEnd":         reflect.ValueOf((*LinkEnd)(nil)),
 		"Item":            reflect.ValueOf((*Item)(nil)),
+		"ChangeNode":      reflect.ValueOf((*ChangeNode)(nil)),
 		"CompleteRequest": reflect.ValueOf((*CompleteRequest)(nil)),
 		"CompleteResult":  reflect.ValueOf((*CompleteResult)(nil)),
 		"AgentResult":     reflect.ValueOf((*AgentResult)(nil)),

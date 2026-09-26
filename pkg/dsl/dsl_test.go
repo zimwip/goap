@@ -28,9 +28,9 @@ func (h *fakeHost) Nodes(context.Context, string) ([]Node, error) {
 }
 func (h *fakeHost) Links(context.Context, string, string, string) ([]Link, error) { return nil, nil }
 
-var job = Job{Action: "a", Items: []Item{
-	{ID: "i1", Kind: "impact", Target: &Node{Key: "REQ-1", Type: "Requirement", Props: map[string]any{"title": "Pay"}}},
-	{ID: "i2", Kind: "impact", Target: &Node{Key: "TST-1", Type: "TestCase"}},
+var job = Job{Action: "a", Nodes: []ChangeNode{
+	{ID: "n1", Key: "REQ-1", Type: "Requirement", Intent: "modified", Planned: true, Pre: &Node{Key: "REQ-1", Type: "Requirement", Props: map[string]any{"title": "Pay"}}},
+	{ID: "n2", Key: "TST-1", Type: "TestCase", Intent: "modified", Planned: true, Pre: &Node{Key: "TST-1", Type: "TestCase"}},
 }}
 
 func TestJavaScript(t *testing.T) {
@@ -39,10 +39,10 @@ func TestJavaScript(t *testing.T) {
 	j.Code = `
 function run(ctx) {
   let n = 0;
-  for (const i of ctx.impacts()) {
-    if (i.target.type !== "Requirement") continue;
-    const t = ctx.proposeNode("TestCase", "TST-" + i.target.key, { title: "Verify " + i.target.props.title });
-    ctx.proposeLink(t, "verifies", i.target.key);
+  for (const c of ctx.changeNodes()) {
+    if (c.type !== "Requirement") continue;
+    const t = ctx.createNode("TestCase", "TST-" + c.key, "verifies " + c.key);
+    ctx.writeNode(t, { props: { title: "Verify " + c.pre.props.title }, links: [{ type: "verifies", to: c.key }] });
     n++;
   }
   const r = ctx.complete({ prompt: "hello", json: true });
@@ -54,12 +54,11 @@ function run(ctx) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(res.Items) != 2 || res.Output != "1 test(s)" || len(h.prompts) != 1 {
+	if len(res.Nodes) != 2 || res.Output != "1 test(s)" || len(h.prompts) != 1 {
 		t.Fatalf("unexpected result %+v", res)
 	}
-	link := res.Items[1]["proposal"].(map[string]any)["link"].(map[string]any)
-	if link["from"] != "#p1" || link["to"] != "REQ-1" {
-		t.Fatalf("bad link %v", link)
+	if res.Nodes[0].Op != "declare" || res.Nodes[1].Op != "write" || res.Nodes[1].Node != res.Nodes[0].Ref || res.Nodes[1].Links[0].To != "REQ-1" {
+		t.Fatalf("bad operations %+v", res.Nodes)
 	}
 	if len(res.Logs) != 1 || res.Logs[0].Message != "tokens102" && !strings.Contains(res.Logs[0].Message, "10") {
 		t.Fatalf("logs %+v", res.Logs)
@@ -79,12 +78,12 @@ import (
 )
 
 func Run(ctx *dsl.Ctx) error {
-	for _, i := range ctx.Impacts() {
-		if i.Target == nil || i.Target.Type != "Requirement" {
+	for _, n := range ctx.ChangeNodes() {
+		if n.Type != "Requirement" {
 			continue
 		}
-		t := ctx.ProposeNode("TestCase", "TST-"+strings.ToLower(i.Target.Key), map[string]any{"title": "x"})
-		ctx.ProposeLink(t, "verifies", i.Target.Key)
+		t := ctx.CreateNode("TestCase", "TST-"+strings.ToLower(n.Key), "verifies")
+		ctx.WriteNode(t, map[string]any{"props": map[string]any{"title": "x"}})
 	}
 	n, err := ctx.Node("REQ-1")
 	if err != nil {
@@ -99,7 +98,7 @@ func Run(ctx *dsl.Ctx) error {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(res.Items) != 3 || len(res.Logs) != 1 || res.Logs[0].Message != "node Requirement" {
+	if len(res.Items) != 1 || len(res.Nodes) != 2 || len(res.Logs) != 1 || res.Logs[0].Message != "node Requirement" {
 		t.Fatalf("unexpected result %+v", res)
 	}
 }
@@ -107,7 +106,7 @@ func Run(ctx *dsl.Ctx) error {
 func TestSandboxingAndErrors(t *testing.T) {
 	cases := map[string]Job{
 		"go os import": {Language: "go", Code: "package action\nimport \"os\"\nimport \"github.com/zimwip/goap/pkg/dsl\"\nfunc Run(ctx *dsl.Ctx) error { os.Exit(1); return nil }"},
-		"js throw":     {Language: "javascript", Code: `ctx.addImpact("REQ-1", "x"); throw new Error("boom")`},
+		"js throw":     {Language: "javascript", Code: `ctx.impactNode("REQ-1", "x"); throw new Error("boom")`},
 		"js timeout":   {Language: "javascript", Code: `while (true) {}`, Timeout: 200 * time.Millisecond},
 		"js no fs":     {Language: "javascript", Code: `require("fs")`},
 	}
@@ -124,8 +123,34 @@ func TestSandboxingAndErrors(t *testing.T) {
 
 func TestSuspension(t *testing.T) {
 	res, err := Run(context.Background(), Job{Language: "javascript",
-		Code: `ctx.addImpact("REQ-1", "x"); ctx.runAgent("slow", "do it")`}, &fakeHost{})
+		Code: `ctx.impactNode("REQ-1", "x"); ctx.runAgent("slow", "do it")`}, &fakeHost{})
 	if err != nil || !res.Suspended || len(res.Items) != 0 {
 		t.Fatalf("expected suspension without writes, got %+v %v", res, err)
+	}
+}
+
+func TestGoChangeNodes(t *testing.T) {
+	res, err := Run(context.Background(), Job{Language: "go", Nodes: []ChangeNode{{Key: "REQ-1", Planned: true}}, Code: `package action
+
+import "github.com/zimwip/goap/pkg/dsl"
+
+func Run(ctx *dsl.Ctx) error {
+	for _, n := range ctx.ChangeNodes() {
+		if n.Planned {
+			ctx.WriteNode(n.Key, map[string]any{"props": map[string]any{"title": "x"}, "state": "draft"})
+		}
+	}
+	r := ctx.CreateNode("TestCase", "TST-1", "cover")
+	ctx.WriteNode(r, map[string]any{"links": []any{map[string]any{"type": "verifies", "to": "REQ-1"}}})
+	ctx.ReviewNode(r, true, "ok")
+	return nil
+}
+`}, &fakeHost{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Nodes) != 4 || res.Nodes[0].Op != "write" || res.Nodes[0].State != "draft" || res.Nodes[0].Props["title"] != "x" ||
+		res.Nodes[2].Links[0].To != "REQ-1" || res.Nodes[3].Comment != "ok" || !res.Nodes[3].Accept {
+		t.Fatalf("unexpected operations %+v", res.Nodes)
 	}
 }

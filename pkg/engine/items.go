@@ -5,43 +5,24 @@ import (
 	"strings"
 
 	"github.com/zimwip/goap/pkg/domain"
-	"github.com/zimwip/goap/pkg/metamodel"
+	"github.com/zimwip/goap/pkg/dsl"
 )
 
-// ItemInput is the external (LLM / human) representation of a change item.
-// Domain nodes are designated by key (or "id@version"), items of the same
-// batch by "#<ref>" and existing items by "@<itemId>".
+// ItemInput is the external (LLM / human) representation of an item of the
+// change: a fact (artifact, decision) or, with kind "changeNode", an operation
+// on a change node. Items of the same batch are designated by "#<ref>" and
+// existing items by "@<itemId>".
 type ItemInput struct {
-	Ref    string `json:"ref,omitempty"`
-	Kind   string `json:"kind"`
-	Type   string `json:"type,omitempty"`
-	Target string `json:"target,omitempty"`
-	// Post (impact): the proposal producing the new version, "#ref" or "@itemId".
-	Post        string         `json:"post,omitempty"`
-	Proposal    *ProposalInput `json:"proposal,omitempty"`
+	Ref string `json:"ref,omitempty"`
+	// Kind is artifact or decision; "changeNode" carries an operation on a change node (ChangeNode:
+	// declare, write or review, ADR 0024), applied in order with the ones of the batch.
+	Kind        string         `json:"kind"`
+	Type        string         `json:"type,omitempty"`
 	Decision    *DecisionInput `json:"decision,omitempty"`
 	Data        map[string]any `json:"data,omitempty"`
 	DerivedFrom []string       `json:"derivedFrom,omitempty"`
-}
-
-// ProposalInput is the external representation of a proposal.
-type ProposalInput struct {
-	Op   string `json:"op"`
-	Node *struct {
-		Base  string         `json:"base,omitempty"`
-		Key   string         `json:"key,omitempty"`
-		Type  string         `json:"type,omitempty"`
-		Props map[string]any `json:"props,omitempty"`
-		// State: transition_node target, or the state a created node is born in
-		State string `json:"state,omitempty"`
-	} `json:"node,omitempty"`
-	Link *struct {
-		ID    string         `json:"id,omitempty"`
-		Type  string         `json:"type,omitempty"`
-		From  string         `json:"from,omitempty"`
-		To    string         `json:"to,omitempty"`
-		Props map[string]any `json:"props,omitempty"`
-	} `json:"link,omitempty"`
+	// ChangeNode is the operation of a "changeNode" item.
+	ChangeNode *dsl.NodeOp `json:"changeNode,omitempty"`
 }
 
 // DecisionInput is the external representation of a decision.
@@ -51,46 +32,19 @@ type DecisionInput struct {
 	Comment string `json:"comment,omitempty"`
 }
 
-// resolver turns ItemInputs into domain items against the reference baseline.
+// resolver turns ItemInputs into domain items.
 type resolver struct {
-	byKey  map[string]domain.NodeRef
-	byID   map[domain.NodeID]domain.NodeRef
-	byType map[string]domain.NodeRef // NodeType name → node (metadata layer, ADR 0012)
-	items  map[domain.ItemID]bool
-	local  map[string]domain.ItemID
-	newID  func() string
+	items map[domain.ItemID]bool
+	local map[string]domain.ItemID
+	newID func() string
 }
 
-func newResolver(nodes []domain.Node, change domain.ChangeSet, newID func() string) *resolver {
-	r := &resolver{byKey: map[string]domain.NodeRef{}, byID: map[domain.NodeID]domain.NodeRef{}, byType: map[string]domain.NodeRef{},
-		items: map[domain.ItemID]bool{}, local: map[string]domain.ItemID{}, newID: newID}
-	ns := metamodel.TypeNamespace(nodes, change.Methodology)
-	for _, n := range nodes {
-		r.byKey[n.Key] = n.Ref()
-		r.byID[n.ID] = n.Ref()
-		if name, ok := metamodel.TypeName(n.Key, ns); ok {
-			r.byType[name] = n.Ref()
-		}
-	}
+func newResolver(change domain.ChangeSet, newID func() string) *resolver {
+	r := &resolver{items: map[domain.ItemID]bool{}, local: map[string]domain.ItemID{}, newID: newID}
 	for _, it := range change.Items {
 		r.items[it.ID] = true
 	}
 	return r
-}
-
-func (r *resolver) node(s string) (domain.NodeRef, error) {
-	s = strings.TrimSpace(s)
-	if ref, ok := r.byKey[s]; ok {
-		return ref, nil
-	}
-	id := s
-	if i := strings.LastIndex(s, "@"); i > 0 {
-		id = s[:i]
-	}
-	if ref, ok := r.byID[domain.NodeID(id)]; ok {
-		return ref, nil
-	}
-	return domain.NodeRef{}, fmt.Errorf("unknown node %q in reference baseline", s)
 }
 
 func (r *resolver) item(s string) (domain.ItemID, error) {
@@ -115,15 +69,6 @@ func (r *resolver) item(s string) (domain.ItemID, error) {
 	return "", fmt.Errorf("unknown item %q", s)
 }
 
-func (r *resolver) endpoint(s string) (domain.Endpoint, error) {
-	if strings.HasPrefix(s, "#") || strings.HasPrefix(s, "@") {
-		id, err := r.item(s)
-		return domain.Endpoint{Item: id}, err
-	}
-	ref, err := r.node(s)
-	return domain.Endpoint{Node: &ref}, err
-}
-
 // resolve converts a batch. Item ids are assigned here so that "#ref"
 // references inside the batch can be resolved.
 func (r *resolver) resolve(in []ItemInput, producedBy string) ([]domain.ChangeItem, error) {
@@ -144,60 +89,6 @@ func (r *resolver) resolve(in []ItemInput, producedBy string) ([]domain.ChangeIt
 			}
 			item.DerivedFrom = append(item.DerivedFrom, id)
 		}
-		if it.Target != "" {
-			ref, err := r.node(it.Target)
-			if err != nil {
-				return nil, fmt.Errorf("item %d: %w", i, err)
-			}
-			item.Target = &ref
-		}
-		if it.Post != "" {
-			e, err := r.endpoint(it.Post)
-			if err != nil {
-				return nil, fmt.Errorf("item %d: post: %w", i, err)
-			}
-			item.Post = &e
-		}
-		var instanceOf *domain.ChangeItem // companion instanceOf link, appended after item below
-		if p := it.Proposal; p != nil {
-			dp := &domain.Proposal{Op: domain.ProposalOp(p.Op)}
-			if p.Node != nil {
-				dp.Node = &domain.NodeDraft{Key: p.Node.Key, Type: p.Node.Type, Properties: p.Node.Props, State: p.Node.State}
-				if p.Node.Base != "" {
-					ref, err := r.node(p.Node.Base)
-					if err != nil {
-						return nil, fmt.Errorf("item %d: %w", i, err)
-					}
-					dp.Node.Base = &ref
-				}
-				if dp.Op == domain.OpCreateNode {
-					if typeRef, ok := r.byType[p.Node.Type]; ok {
-						instanceOf = &domain.ChangeItem{ID: domain.ItemID(r.newID()), Kind: domain.KindProposal, Type: "metamodel", ProducedBy: producedBy,
-							DerivedFrom: []domain.ItemID{item.ID},
-							Proposal: &domain.Proposal{Op: domain.OpAddLink, Link: &domain.LinkDraft{
-								Type: metamodel.LinkInstanceOf, From: domain.Endpoint{Item: item.ID}, To: domain.Endpoint{Node: &typeRef}}}}
-					}
-				}
-			}
-			if p.Link != nil {
-				dp.Link = &domain.LinkDraft{LinkID: domain.LinkID(p.Link.ID), Type: p.Link.Type, Properties: p.Link.Props}
-				if p.Link.From != "" {
-					e, err := r.endpoint(p.Link.From)
-					if err != nil {
-						return nil, fmt.Errorf("item %d: %w", i, err)
-					}
-					dp.Link.From = e
-				}
-				if p.Link.To != "" {
-					e, err := r.endpoint(p.Link.To)
-					if err != nil {
-						return nil, fmt.Errorf("item %d: %w", i, err)
-					}
-					dp.Link.To = e
-				}
-			}
-			item.Proposal = dp
-		}
 		if d := it.Decision; d != nil {
 			id, err := r.item(d.Item)
 			if err != nil {
@@ -209,9 +100,6 @@ func (r *resolver) resolve(in []ItemInput, producedBy string) ([]domain.ChangeIt
 			return nil, fmt.Errorf("item %d: %w", i, err)
 		}
 		out = append(out, item)
-		if instanceOf != nil {
-			out = append(out, *instanceOf)
-		}
 	}
 	return out, nil
 }

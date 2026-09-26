@@ -11,6 +11,7 @@ import (
 
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/dsl"
 	"github.com/zimwip/goap/pkg/methodology"
 	"github.com/zimwip/goap/pkg/observe"
 )
@@ -96,10 +97,14 @@ func (e *Engine) observeAnalyze(ctx context.Context, ac ActionContext, cfg SelfI
 		return ActionResult{}, err
 	}
 	items := map[domain.ItemID]domain.ChangeItem{}
+	nodes := map[domain.ChangeNodeID]domain.ChangeNode{}
 	if obs.ChangeID != "" {
 		if bb, err := e.Graph.Blackboard(ctx, obs.ChangeID); err == nil {
 			for _, it := range bb.Change.Items {
 				items[it.ID] = it
+			}
+			for _, n := range bb.Change.Nodes {
+				nodes[n.ID] = n
 			}
 		}
 	}
@@ -111,7 +116,7 @@ func (e *Engine) observeAnalyze(ctx context.Context, ac ActionContext, cfg SelfI
 			spans = nil
 		}
 	}
-	r := observe.Analyze(recs, items, spans, cfg.Thresholds)
+	r := observe.Analyze(recs, items, nodes, spans, cfg.Thresholds)
 	r.WithDisabled(obs.Agent, slices.Sorted(maps.Keys(obs.Disabled)))
 	if r.Process == "" {
 		r.Process, r.Methodology, r.Version, r.Agent, r.Status = obs.ID, obs.Methodology, obs.MethodologyVersion, obs.Agent, string(obs.Status)
@@ -171,31 +176,27 @@ func (e *Engine) observePropose(ctx context.Context, ac ActionContext) (ActionRe
 		return ActionResult{}, err
 	}
 	props, notes := observe.Propose(r, cm.Methodology)
-	var items []ItemInput
-	for i, p := range props {
-		in := ItemInput{Ref: fmt.Sprintf("p%d", i), Kind: "proposal", Type: "improvement",
-			Data:     map[string]any{"title": p.Title, "rationale": p.Rationale, "finding": r.Findings[p.Finding].Kind},
-			Proposal: &ProposalInput{Op: p.Op}}
-		in.Proposal.Node = &struct {
-			Base  string         `json:"base,omitempty"`
-			Key   string         `json:"key,omitempty"`
-			Type  string         `json:"type,omitempty"`
-			Props map[string]any `json:"props,omitempty"`
-			State string         `json:"state,omitempty"`
-		}{Props: p.Props}
-		if p.Op == "update_node" {
-			in.Proposal.Node.Base = p.Key
-		} else {
-			in.Proposal.Node.Key, in.Proposal.Node.Type = p.Key, p.Type
+	// an improvement is a change node on an element of the methodology (ADR 0024): the rationale says what and
+	// why, the version written on the change branch holds the proposed properties
+	var ops []dsl.NodeOp
+	for _, p := range props {
+		why := p.Title
+		if p.Rationale != "" {
+			why += ": " + p.Rationale
 		}
-		items = append(items, in)
+		if p.Op == "update_node" {
+			ops = append(ops, dsl.NodeOp{Op: "declare", Intent: string(domain.IntentModified), Key: p.Key, Rationale: why})
+		} else {
+			ops = append(ops, dsl.NodeOp{Op: "declare", Intent: string(domain.IntentCreated), Key: p.Key, Type: p.Type, Rationale: why})
+		}
+		ops = append(ops, dsl.NodeOp{Op: "write", Node: p.Key, Props: p.Props})
 	}
 	if notes == nil {
 		notes = []string{}
 	}
-	items = append(items, ItemInput{Kind: "artifact", Type: "improvement_plan", Data: map[string]any{
-		"methodology": r.Methodology, "observedVersion": r.Version, "currentVersion": cm.Version, "proposals": len(props), "notes": notes}})
-	return ActionResult{Items: items, Output: fmt.Sprintf("%d proposals, %d notes", len(props), len(notes))}, nil
+	items := []ItemInput{{Kind: "artifact", Type: "improvement_plan", Data: map[string]any{
+		"methodology": r.Methodology, "observedVersion": r.Version, "currentVersion": cm.Version, "proposals": len(props), "notes": notes}}}
+	return ActionResult{Items: items, Nodes: ops, Output: fmt.Sprintf("%d proposals, %d notes", len(props), len(notes))}, nil
 }
 
 func (e *Engine) methodologyDraft(ctx context.Context, ac ActionContext, cfg SelfImprovement) (ActionResult, error) {
@@ -208,18 +209,21 @@ func (e *Engine) methodologyDraft(ctx context.Context, ac ActionContext, cfg Sel
 	}
 	bb := ac.Blackboard
 	var edits []observe.Edit
-	for _, it := range bb.Change.Items {
-		if it.Kind != domain.KindProposal || it.Proposal == nil || it.Proposal.Node == nil || bb.Change.EffectiveStatus(it.ID) != domain.ItemAccepted {
+	for _, cn := range bb.Change.Nodes {
+		if cn.Review != domain.ReviewAccepted || cn.Post == nil || len(cn.Items) > 0 {
 			continue
 		}
-		n := it.Proposal.Node
-		ed := observe.Edit{Op: string(it.Proposal.Op), Key: n.Key, Type: n.Type, Props: n.Properties}
-		if n.Base != nil {
-			v, ok := bb.Nodes[*n.Base]
+		post, ok := bb.Nodes[*cn.Post]
+		if !ok {
+			continue
+		}
+		ed := observe.Edit{Op: "create_node", Key: cn.Key, Type: cn.Type, Props: post.Properties}
+		if cn.Pre != nil {
+			pre, ok := bb.Nodes[*cn.Pre]
 			if !ok {
 				continue
 			}
-			ed.Key, ed.Type = v.Key, v.Type
+			ed.Op, ed.Props = "update_node", changedProps(pre.Properties, post.Properties)
 		}
 		edits = append(edits, ed)
 	}
@@ -254,6 +258,17 @@ func (e *Engine) methodologyDraft(ctx context.Context, ac ActionContext, cfg Sel
 	data["issues"] = orEmptyAnyList(is)
 	return ActionResult{Items: []ItemInput{{Kind: "artifact", Type: "methodology_draft", Data: data}},
 		Output: fmt.Sprintf("draft %s@%s: %d changes, %d issues", cur.Name, d.Methodology.Version, len(d.Applied), len(issues))}, nil
+}
+
+// changedProps are the properties a version changes compared to the one it starts from.
+func changedProps(pre, post map[string]any) map[string]any {
+	out := map[string]any{}
+	for k, v := range post {
+		if old, ok := pre[k]; !ok || fmt.Sprint(old) != fmt.Sprint(v) {
+			out[k] = v
+		}
+	}
+	return out
 }
 
 func cmpErr(err error, fallback string) string {

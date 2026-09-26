@@ -234,7 +234,9 @@ type ExecuteResponse struct {
 	Logs      []*LogLine `protobuf:"bytes,3,rep,name=logs,proto3" json:"logs,omitempty"`
 	Error     string     `protobuf:"bytes,4,opt,name=error,proto3" json:"error,omitempty"`
 	// the script waits for a sub-agent: the step is retried once it completes
-	Suspended     bool `protobuf:"varint,5,opt,name=suspended,proto3" json:"suspended,omitempty"`
+	Suspended bool `protobuf:"varint,5,opt,name=suspended,proto3" json:"suspended,omitempty"`
+	// change node operations (dsl.NodeOp JSON array, ADR 0024)
+	NodesJson     string `protobuf:"bytes,6,opt,name=nodes_json,json=nodesJson,proto3" json:"nodes_json,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -302,6 +304,13 @@ func (x *ExecuteResponse) GetSuspended() bool {
 		return x.Suspended
 	}
 	return false
+}
+
+func (x *ExecuteResponse) GetNodesJson() string {
+	if x != nil {
+		return x.NodesJson
+	}
+	return ""
 }
 
 type CallRequest struct {
@@ -460,14 +469,16 @@ const file_goap_runtime_v1_runtime_proto_rawDesc = "" +
 	"\aLogLine\x12.\n" +
 	"\x04time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x04time\x12\x14\n" +
 	"\x05level\x18\x02 \x01(\tR\x05level\x12\x18\n" +
-	"\amessage\x18\x03 \x01(\tR\amessage\"\xaa\x01\n" +
+	"\amessage\x18\x03 \x01(\tR\amessage\"\xc9\x01\n" +
 	"\x0fExecuteResponse\x12\x1d\n" +
 	"\n" +
 	"items_json\x18\x01 \x01(\tR\titemsJson\x12\x16\n" +
 	"\x06output\x18\x02 \x01(\tR\x06output\x12,\n" +
 	"\x04logs\x18\x03 \x03(\v2\x18.goap.runtime.v1.LogLineR\x04logs\x12\x14\n" +
 	"\x05error\x18\x04 \x01(\tR\x05error\x12\x1c\n" +
-	"\tsuspended\x18\x05 \x01(\bR\tsuspended\"g\n" +
+	"\tsuspended\x18\x05 \x01(\bR\tsuspended\x12\x1d\n" +
+	"\n" +
+	"nodes_json\x18\x06 \x01(\tR\tnodesJson\"g\n" +
 	"\vCallRequest\x12\x15\n" +
 	"\x06job_id\x18\x01 \x01(\tR\x05jobId\x12\x14\n" +
 	"\x05token\x18\x02 \x01(\tR\x05token\x12\x0e\n" +

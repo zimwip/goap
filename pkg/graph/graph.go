@@ -2,6 +2,7 @@ package graph
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"slices"
@@ -119,6 +120,9 @@ func view(ctx context.Context, tx Tx, ref domain.NodeRef) (domain.NodeView, erro
 		return domain.NodeView{}, err
 	}
 	latest, err := tx.Node(ctx, domain.NodeRef{ID: ref.ID})
+	if errors.Is(err, ErrNotFound) {
+		latest, err = n, nil // a node the change created, not on main yet
+	}
 	if err != nil {
 		return domain.NodeView{}, err
 	}
@@ -301,7 +305,12 @@ func (g *Graph) CreateChange(ctx context.Context, in NewChange) (domain.ChangeSe
 
 // Change returns a change with its items.
 func (g *Graph) Change(ctx context.Context, id domain.ChangeID) (c domain.ChangeSet, err error) {
-	err = g.repo.InTx(ctx, func(tx Tx) error { c, err = tx.Change(ctx, id); return err })
+	err = g.repo.InTx(ctx, func(tx Tx) error {
+		if c, err = tx.Change(ctx, id); err != nil {
+			return err
+		}
+		return nil
+	})
 	return
 }
 
@@ -358,9 +367,8 @@ func (g *Graph) UpdateChange(ctx context.Context, id domain.ChangeID, p ChangePa
 	return
 }
 
-// AddItems appends items to the blackboard of a change. Item ids are assigned
-// when empty. Impact targets and proposal bases must exist in the reference
-// baseline.
+// AddItems appends facts to the blackboard of a change (artifacts, decisions): the nodes
+// a change acts on are its change nodes (AddNodes, ADR 0024). Item ids are assigned when empty.
 func (g *Graph) AddItems(ctx context.Context, id domain.ChangeID, items []domain.ChangeItem) ([]domain.ChangeItem, error) {
 	out := make([]domain.ChangeItem, 0, len(items))
 	err := g.repo.InTx(ctx, func(tx Tx) error {
@@ -371,15 +379,9 @@ func (g *Graph) AddItems(ctx context.Context, id domain.ChangeID, items []domain
 		if c.Status == domain.ChangeApplied || c.Status == domain.ChangeAbandoned || c.Status == domain.ChangeMergePending {
 			return fmt.Errorf("change %s is %s: %w", id, c.Status, ErrConflict)
 		}
-		b, err := tx.Baseline(ctx, c.BaselineID)
-		if err != nil {
-			return err
-		}
 		known := map[domain.ItemID]bool{}
-		byID := map[domain.ItemID]domain.ChangeItem{}
 		for _, it := range c.Items {
 			known[it.ID] = true
-			byID[it.ID] = it
 		}
 		items = slices.Clone(items)
 		batchFlow := ""
@@ -401,7 +403,6 @@ func (g *Graph) AddItems(ctx context.Context, id domain.ChangeID, items []domain
 			if items[i].ID == "" {
 				items[i].ID = domain.ItemID(g.newID())
 			}
-			byID[items[i].ID] = items[i] // an impact may name a proposal of the same batch, whatever the order
 		}
 		for _, it := range items {
 			if it.Status == "" {
@@ -411,19 +412,6 @@ func (g *Graph) AddItems(ctx context.Context, id domain.ChangeID, items []domain
 			if err := it.Validate(); err != nil {
 				return fmt.Errorf("item %s: %v: %w", it.ID, err, ErrInvalid)
 			}
-			for _, r := range refsOf(it) {
-				if !b.Contains(r) {
-					return fmt.Errorf("item %s references %s which is not in baseline %s: %w", it.ID, r, b.ID, ErrInvalid)
-				}
-			}
-			for _, e := range endpointsOf(it) {
-				if e.Item != "" && !known[e.Item] {
-					return fmt.Errorf("item %s references unknown item %s: %w", it.ID, e.Item, ErrInvalid)
-				}
-			}
-			if err := g.checkImpact(ctx, tx, b, byID, it); err != nil {
-				return fmt.Errorf("item %s: %v: %w", it.ID, err, ErrInvalid)
-			}
 			if it.Decision != nil && !known[it.Decision.Item] {
 				return fmt.Errorf("decision %s targets unknown item %s: %w", it.ID, it.Decision.Item, ErrInvalid)
 			}
@@ -431,19 +419,7 @@ func (g *Graph) AddItems(ctx context.Context, id domain.ChangeID, items []domain
 				return err
 			}
 			known[it.ID] = true
-			byID[it.ID] = it
 			out = append(out, it)
-		}
-		// lifecycle: replay the whole change (early feedback, Apply is authoritative)
-		if full, err := tx.Change(ctx, id); err != nil {
-			return err
-		} else if _, err := g.walk(ctx, tx, full.View(batchFlow), false); err != nil {
-			return err
-		}
-		for _, ref := range modifies(out) {
-			if err := tx.PutAttachment(ctx, id, ref); err != nil {
-				return err
-			}
 		}
 		if c.Status == domain.ChangeDraft {
 			c.Status = domain.ChangeActive
@@ -452,18 +428,6 @@ func (g *Graph) AddItems(ctx context.Context, id domain.ChangeID, items []domain
 		return nil
 	})
 	return out, err
-}
-
-func refsOf(it domain.ChangeItem) []domain.NodeRef {
-	c := domain.ChangeSet{Items: []domain.ChangeItem{it}}
-	return c.ReferencedNodes()
-}
-
-func endpointsOf(it domain.ChangeItem) []domain.Endpoint {
-	if it.Proposal == nil || it.Proposal.Link == nil {
-		return nil
-	}
-	return []domain.Endpoint{it.Proposal.Link.From, it.Proposal.Link.To}
 }
 
 // Blackboard returns the change and a hydrated view of every node it
@@ -480,7 +444,12 @@ func (g *Graph) BlackboardIn(ctx context.Context, id domain.ChangeID, flow strin
 		if err != nil {
 			return err
 		}
+		nodes, err := g.newFlowNodes(tx, c, flow).nodes(ctx) // the change nodes as the flow sees them (ADR 0025)
+		if err != nil {
+			return err
+		}
 		c = c.View(flow)
+		c.Nodes = nodes
 		bb = domain.Blackboard{Change: c, Nodes: map[domain.NodeRef]domain.NodeView{}, Neighbors: map[domain.NodeRef]domain.Node{}}
 		ix, err := g.typesAt(ctx, tx, c.BaselineID)
 		if err != nil {
@@ -537,33 +506,71 @@ func validStatusMove(from, to domain.ChangeStatus) bool {
 	return false
 }
 
-// ChangeNodes lists the nodes a change is attached to (the version it starts from).
+// ChangeNodes lists the versions a change starts from: the pre version of each of its change
+// nodes (stored, and derived from its items).
 func (g *Graph) ChangeNodes(ctx context.Context, id domain.ChangeID) (refs []domain.NodeRef, err error) {
 	err = g.repo.InTx(ctx, func(tx Tx) error {
-		if _, err := tx.Change(ctx, id); err != nil {
+		c, err := tx.Change(ctx, id)
+		if err != nil {
 			return err
 		}
-		refs, err = tx.Attachments(ctx, id)
-		return err
+		for _, cn := range c.Nodes {
+			if cn.Pre != nil {
+				refs = append(refs, *cn.Pre)
+			}
+		}
+		return nil
 	})
 	return
 }
 
-// NodeChanges lists the changes a node is attached to, oldest first.
+// openChangeHolders maps each node to the unapplied changes acting on it: through
+// stored change nodes or through the change nodes derived from their items.
+func (g *Graph) openChangeHolders(ctx context.Context, tx Tx) (map[domain.NodeID][]domain.ChangeID, error) {
+	ids, err := tx.OpenChangeIDs(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := map[domain.NodeID][]domain.ChangeID{}
+	for _, id := range ids {
+		c, err := tx.Change(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		for _, cn := range c.Nodes {
+			for _, ref := range []*domain.NodeRef{cn.Pre, cn.Post} {
+				if ref != nil && !slices.Contains(out[ref.ID], id) {
+					out[ref.ID] = append(out[ref.ID], id)
+				}
+			}
+		}
+	}
+	return out, nil
+}
+
+// NodeChanges lists the changes acting on a node, oldest first.
 func (g *Graph) NodeChanges(ctx context.Context, node domain.NodeID) (out []domain.ChangeSet, err error) {
 	err = g.repo.InTx(ctx, func(tx Tx) error {
-		ids, err := tx.NodeAttachments(ctx, node)
+		stored, err := tx.NodeChangeNodes(ctx, node)
 		if err != nil {
 			return err
 		}
-		for _, id := range ids {
+		open, err := g.openChangeHolders(ctx, tx)
+		if err != nil {
+			return err
+		}
+		for _, id := range slices.Concat(stored, open[node]) {
+			if slices.ContainsFunc(out, func(c domain.ChangeSet) bool { return c.ID == id }) {
+				continue
+			}
 			c, err := tx.Change(ctx, id)
 			if err != nil {
 				return err
 			}
-			c.Items = nil
+			c.Items, c.Nodes = nil, nil
 			out = append(out, c)
 		}
+		slices.SortStableFunc(out, func(a, b domain.ChangeSet) int { return a.CreatedAt.Compare(b.CreatedAt) })
 		return nil
 	})
 	return

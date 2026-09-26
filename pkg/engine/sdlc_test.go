@@ -10,6 +10,7 @@ import (
 	"github.com/zimwip/goap/internal/graphsvc"
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/dsl"
 	"github.com/zimwip/goap/pkg/engine"
 	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/intent"
@@ -26,15 +27,15 @@ func sdlcModel(t *testing.T) llm.Client {
 		var out string
 		switch {
 		case strings.Contains(p, "DIRECTLY concerned"):
-			out = `{"items":[{"kind":"impact","type":"direct","target":"NEED-1","data":{"reason":"new payment method"}},
-			{"kind":"impact","type":"direct","target":"REQ-1","data":{"reason":"the PSP must handle split payments"}}]}`
+			out = `{"items":[{"kind":"changeNode","changeNode":{"op":"declare","intent":"modified","key":"NEED-1","rationale":"new payment method"}},
+			{"kind":"changeNode","changeNode":{"op":"declare","intent":"modified","key":"REQ-1","rationale":"the PSP must handle split payments"}}]}`
 		case strings.Contains(p, "Revise the impacted requirements"):
-			out = `{"items":[{"kind":"proposal","proposal":{"op":"update_node","node":{"base":"REQ-1","props":{"title":"Card payment (in full or in 3 installments) goes through the Acme PSP (API v2)"}}}},
-			{"ref":"r1","kind":"proposal","proposal":{"op":"create_node","node":{"key":"REQ-10","type":"FunctionalRequirement","props":{"title":"Pay in 3 installments with no fees","priority":"high"}}}},
-			{"kind":"proposal","proposal":{"op":"add_link","link":{"type":"satisfies","from":"#r1","to":"NEED-1"}}}]}`
+			out = `{"items":[{"kind":"changeNode","changeNode":{"op":"write","node":"REQ-1","props":{"title":"Card payment (in full or in 3 installments) goes through the Acme PSP (API v2)"}}},
+			{"kind":"changeNode","changeNode":{"op":"declare","ref":"#r1","intent":"created","type":"FunctionalRequirement","key":"REQ-10","rationale":"pay in installments"}},
+			{"kind":"changeNode","changeNode":{"op":"write","node":"#r1","props":{"title":"Pay in 3 installments with no fees","priority":"high"},"links":[{"type":"satisfies","to":"NEED-1"}]}}]}`
 		case strings.Contains(p, "Design the evolution"):
-			out = `{"items":[{"ref":"c1","kind":"proposal","proposal":{"op":"create_node","node":{"key":"CMP-10","type":"Component","props":{"title":"installments-engine","technology":"java","version":"0.0.0"}}}},
-			{"kind":"proposal","proposal":{"op":"add_link","link":{"type":"implements","from":"#c1","to":"FCT-1"}}},
+			out = `{"items":[{"kind":"changeNode","changeNode":{"op":"declare","ref":"#c1","intent":"created","type":"Component","key":"CMP-10","rationale":"a dedicated engine"}},
+			{"kind":"changeNode","changeNode":{"op":"write","node":"#c1","props":{"title":"installments-engine","technology":"java","version":"0.0.0"},"links":[{"type":"implements","to":"FCT-1"}]}},
 			{"kind":"artifact","type":"design","data":{"summary":"dedicated installment scheduling engine","decisions":["new Java component"]}}]}`
 		case strings.Contains(p, "Write the release note"):
 			out = `{"items":[{"kind":"artifact","type":"release_note","data":{"markdown":"# Payment in 3 installments"}}]}`
@@ -119,13 +120,15 @@ func TestSDLCDelivery(t *testing.T) {
 	c, _ := g.Change(ctx, p.ChangeID)
 	count := map[string]int{}
 	var decisions []engine.ItemInput
-	for _, it := range c.Items {
-		if it.Kind == domain.KindProposal {
-			decisions = append(decisions, engine.ItemInput{Kind: "decision", Decision: &engine.DecisionInput{Item: "@" + string(it.ID), Accept: true}})
-			if it.Proposal.Node != nil && it.Proposal.Op == domain.OpCreateNode {
-				count[it.Proposal.Node.Type]++
-			}
+	for _, n := range c.Nodes {
+		if n.Review == domain.ReviewProposed {
+			decisions = append(decisions, engine.ItemInput{Kind: "changeNode", ChangeNode: &dsl.NodeOp{Op: "review", Node: n.Key, Accept: true, Comment: "reviewed"}})
 		}
+		if n.Intent == domain.IntentCreated {
+			count[n.Type]++
+		}
+	}
+	for _, it := range c.Items {
 		if it.Kind == domain.KindArtifact {
 			count["artifact:"+it.Type]++
 			if it.Type == "design_check" && it.Data["ok"] != true {

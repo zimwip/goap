@@ -56,22 +56,23 @@ func testApplyUpdateCreatesSuspectLinks(t *testing.T, repo Repo) {
 		t.Fatal(err)
 	}
 	reqRef := f.req.Ref()
-	items, err := g.AddItems(ctx, c.ID, []domain.ChangeItem{
-		{Kind: domain.KindImpact, Type: "direct", Target: &reqRef},
-		{Kind: domain.KindProposal, Proposal: &domain.Proposal{Op: domain.OpUpdateNode,
-			Node: &domain.NodeDraft{Base: &reqRef, Properties: map[string]any{"title": "Use PSP v2"}}}},
-		{Kind: domain.KindProposal, Proposal: &domain.Proposal{Op: domain.OpCreateNode,
-			Node: &domain.NodeDraft{Key: "TST-2", Type: "TestCase"}}},
+	cns, err := g.AddNodes(ctx, c.ID, []domain.ChangeNode{
+		{Intent: domain.IntentModified, Pre: &reqRef, Rationale: "PSP v2"},
+		{Intent: domain.IntentCreated, Key: "TST-2", Type: "TestCase", Rationale: "cover REQ-1"},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	newTest := items[2].ID
-	if _, err := g.AddItems(ctx, c.ID, []domain.ChangeItem{
-		{Kind: domain.KindProposal, Proposal: &domain.Proposal{Op: domain.OpAddLink,
-			Link: &domain.LinkDraft{Type: "verifies", From: domain.Endpoint{Item: newTest}, To: domain.Endpoint{Node: &reqRef}}}},
-	}); err != nil {
+	if _, err := g.WriteNode(ctx, c.ID, cns[0].ID, NodeWrite{Properties: map[string]any{"title": "Use PSP v2"}}); err != nil {
 		t.Fatal(err)
+	}
+	if _, err := g.WriteNode(ctx, c.ID, cns[1].ID, NodeWrite{AddLinks: []LinkWrite{{Type: "verifies", To: reqRef}}}); err != nil {
+		t.Fatal(err)
+	}
+	for _, n := range cns {
+		if _, err := g.ReviewNode(ctx, c.ID, n.ID, domain.ReviewAccepted, "u", "ok"); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	bb, err := g.Blackboard(ctx, c.ID)
@@ -134,8 +135,15 @@ func testApplyRemoveLinkBumpsSource(t *testing.T, repo Repo) {
 	g := f.g
 	v, _ := g.View(ctx, f.test.Ref())
 	c, _ := g.CreateChange(ctx, NewChange{Title: "drop test", BaselineID: f.base.ID})
-	if _, err := g.AddItems(ctx, c.ID, []domain.ChangeItem{{Kind: domain.KindProposal,
-		Proposal: &domain.Proposal{Op: domain.OpRemoveLink, Link: &domain.LinkDraft{LinkID: v.Out[0].ID}}}}); err != nil {
+	pre := f.test.Ref()
+	ns, err := g.AddNodes(ctx, c.ID, []domain.ChangeNode{{Intent: domain.IntentModified, Pre: &pre, Rationale: "the test no longer verifies"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := g.WriteNode(ctx, c.ID, ns[0].ID, NodeWrite{RemoveLinks: []domain.LinkID{v.Out[0].ID}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := g.ReviewNode(ctx, c.ID, ns[0].ID, domain.ReviewAccepted, "u", "ok"); err != nil {
 		t.Fatal(err)
 	}
 	b2, err := g.Apply(ctx, c.ID, "B2")
@@ -158,35 +166,44 @@ func testApplyRejectedAndConflicts(t *testing.T, repo Repo) {
 	f := newFixture(t, repo)
 	g := f.g
 	reqRef := f.req.Ref()
-	c1, _ := g.CreateChange(ctx, NewChange{Title: "c1", BaselineID: f.base.ID})
-	c2, _ := g.CreateChange(ctx, NewChange{Title: "c2", BaselineID: f.base.ID})
-	upd := domain.ChangeItem{Kind: domain.KindProposal, Proposal: &domain.Proposal{Op: domain.OpUpdateNode,
-		Node: &domain.NodeDraft{Base: &reqRef, Properties: map[string]any{"x": 1}}}}
-	it1, _ := g.AddItems(ctx, c1.ID, []domain.ChangeItem{upd})
-	if _, err := g.AddItems(ctx, c2.ID, []domain.ChangeItem{upd}); err != nil {
-		t.Fatal(err)
+	// each change writes the same property with its own value, and accepts (or rejects) it
+	change := func(title string, value int, accept bool) domain.ChangeSet {
+		c, err := g.CreateChange(ctx, NewChange{Title: title, BaselineID: f.base.ID})
+		if err != nil {
+			t.Fatal(err)
+		}
+		ns, err := g.AddNodes(ctx, c.ID, []domain.ChangeNode{{Intent: domain.IntentModified, Pre: &reqRef, Rationale: title}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := g.WriteNode(ctx, c.ID, ns[0].ID, NodeWrite{Properties: map[string]any{"x": value}}); err != nil {
+			t.Fatal(err)
+		}
+		status := domain.ReviewAccepted
+		if !accept {
+			status = domain.ReviewRejected
+		}
+		if _, err := g.ReviewNode(ctx, c.ID, ns[0].ID, status, "u", "decided"); err != nil {
+			t.Fatal(err)
+		}
+		return c
 	}
-	// reject the only proposal of c1: applying it is a no-op
-	if _, err := g.AddItems(ctx, c1.ID, []domain.ChangeItem{{Kind: domain.KindDecision, Decision: &domain.Decision{Item: it1[0].ID}}}); err != nil {
-		t.Fatal(err)
-	}
+	c1, c2 := change("c1", 1, false), change("c2", 1, true)
+	// the only change node of c1 is rejected: applying it is a no-op
 	b, err := g.Apply(ctx, c1.ID, "")
 	if err != nil || b.Nodes[f.req.ID] != 1 {
-		t.Fatalf("rejected proposal applied: %v %v", err, b.Nodes)
+		t.Fatalf("rejected change node applied: %v %v", err, b.Nodes)
 	}
 	if _, err := g.Apply(ctx, c2.ID, ""); err != nil {
 		t.Fatal(err)
 	}
-	// a third change from B1 now conflicts on REQ-1
-	c3, _ := g.CreateChange(ctx, NewChange{Title: "c3", BaselineID: f.base.ID})
-	_, _ = g.AddItems(ctx, c3.ID, []domain.ChangeItem{upd})
-	if _, err := g.Apply(ctx, c3.ID, ""); !errors.Is(err, ErrConflict) {
-		t.Fatalf("expected conflict, got %v", err)
+	// a third change from B1 writes another value of the same property: a merge is needed
+	c3 := change("c3", 2, true)
+	if _, err := g.Apply(ctx, c3.ID, ""); err != nil {
+		t.Fatal(err)
 	}
-	// the failed apply was rolled back
-	c3b, _ := g.Change(ctx, c3.ID)
-	if c3b.Status == domain.ChangeApplied {
-		t.Fatal("failed apply must not change status")
+	if c3b, _ := g.Change(ctx, c3.ID); c3b.Status != domain.ChangeMergePending {
+		t.Fatalf("expected merge_pending, got %s", c3b.Status)
 	}
 }
 
@@ -197,8 +214,11 @@ func testAddItemsValidation(t *testing.T, repo Repo) {
 	f := newFixture(t, repo)
 	c, _ := f.g.CreateChange(ctx, NewChange{Title: "c", BaselineID: f.base.ID})
 	bad := domain.NodeRef{ID: f.req.ID, Version: 9}
-	if _, err := f.g.AddItems(ctx, c.ID, []domain.ChangeItem{{Kind: domain.KindImpact, Target: &bad}}); !errors.Is(err, ErrInvalid) {
-		t.Fatalf("expected invalid, got %v", err)
+	if _, err := f.g.AddNodes(ctx, c.ID, []domain.ChangeNode{{Intent: domain.IntentModified, Pre: &bad, Rationale: "x"}}); !errors.Is(err, ErrConflict) {
+		t.Fatalf("expected a conflict (the version is not in the baseline), got %v", err)
+	}
+	if _, err := f.g.AddItems(ctx, c.ID, []domain.ChangeItem{{Kind: "impact"}}); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("the impact kind is gone, got %v", err)
 	}
 	if _, err := f.g.AddItems(ctx, c.ID, []domain.ChangeItem{{Kind: domain.KindDecision, Decision: &domain.Decision{Item: "nope"}}}); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("expected invalid, got %v", err)

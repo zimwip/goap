@@ -59,13 +59,19 @@ type Tx interface {
 	PutChange(ctx context.Context, c domain.ChangeSet) error
 	PutItem(ctx context.Context, change domain.ChangeID, it domain.ChangeItem) error
 
-	// PutAttachment attaches a node (at the version the change starts from) to
-	// a change; attaching twice is a no-op.
-	PutAttachment(ctx context.Context, change domain.ChangeID, ref domain.NodeRef) error
-	// Attachments lists the nodes a change is attached to.
-	Attachments(ctx context.Context, change domain.ChangeID) ([]domain.NodeRef, error)
-	// NodeAttachments lists the changes a node is attached to, oldest first.
-	NodeAttachments(ctx context.Context, node domain.NodeID) ([]domain.ChangeID, error)
+	// OpenChangeIDs lists the changes that are neither applied nor abandoned.
+	OpenChangeIDs(ctx context.Context) ([]domain.ChangeID, error)
+	// PutChangeNode inserts or updates a change node of a change (ADR 0024).
+	PutChangeNode(ctx context.Context, change domain.ChangeID, cn domain.ChangeNode) error
+	// ChangeNodes lists the change nodes of a change, in creation order.
+	ChangeNodes(ctx context.Context, change domain.ChangeID) ([]domain.ChangeNode, error)
+	// NodeChangeNodes lists the changes holding a change node on a node, oldest first.
+	NodeChangeNodes(ctx context.Context, node domain.NodeID) ([]domain.ChangeID, error)
+	// SetNodeOrigin records on a node version the change and change node that produced it and its comment.
+	SetNodeOrigin(ctx context.Context, ref domain.NodeRef, change domain.ChangeID, cn domain.ChangeNodeID, comment string) error
+
+	// MoveVersion moves a node version to another branch (a fast-forward merge).
+	MoveVersion(ctx context.Context, ref domain.NodeRef, to string) error
 
 	// PutExecution appends a record to the execution journal.
 	PutExecution(ctx context.Context, r domain.ExecutionRecord) error

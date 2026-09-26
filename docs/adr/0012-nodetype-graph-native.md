@@ -1,3 +1,5 @@
+> **Amended (ADR 0024)**: the `instanceOf` link, `LinkToType` and `BackfillInstanceOf` were removed; `Node.Type` is the direct attribute of a node.
+
 # ADR 0012 — NodeType as the metadata layer of the graph
 
 **Status**: accepted · **Date**: 2026-09

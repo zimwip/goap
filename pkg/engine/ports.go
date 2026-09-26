@@ -15,6 +15,11 @@ type GraphPort interface {
 	CreateChange(ctx context.Context, in graph.NewChange) (domain.ChangeSet, error)
 	UpdateChange(ctx context.Context, id domain.ChangeID, p graph.ChangePatch) (domain.ChangeSet, error)
 	AddItems(ctx context.Context, id domain.ChangeID, items []domain.ChangeItem) ([]domain.ChangeItem, error)
+	// Change nodes (ADR 0024): declare the nodes a change acts on, write their versions on the
+	// change branch, review them.
+	AddNodes(ctx context.Context, id domain.ChangeID, nodes []domain.ChangeNode) ([]domain.ChangeNode, error)
+	WriteNode(ctx context.Context, id domain.ChangeID, node domain.ChangeNodeID, w graph.NodeWrite) (domain.ChangeNode, error)
+	ReviewNodeOn(ctx context.Context, id domain.ChangeID, flow, execution string, node domain.ChangeNodeID, status domain.NodeReview, by, comment string) (domain.ChangeNode, error)
 	Blackboard(ctx context.Context, id domain.ChangeID) (domain.Blackboard, error)
 	// BlackboardIn is the blackboard of a flow branch ("" = main); OpenFlow /
 	// AdoptFlow / DiscardFlow relaunch a step on a new branch and decide it.
@@ -22,8 +27,6 @@ type GraphPort interface {
 	OpenFlow(ctx context.Context, id domain.ChangeID, in graph.OpenFlowRequest) (domain.Flow, error)
 	AdoptFlow(ctx context.Context, id domain.ChangeID, flow, by string) (domain.Flow, error)
 	DiscardFlow(ctx context.Context, id domain.ChangeID, flow, by string) (domain.Flow, error)
-	// MaterializeFlow applies the proposals of a flow on a domain branch of its own (a preview).
-	MaterializeFlow(ctx context.Context, id domain.ChangeID, flow string) (domain.Flow, error)
 	// ValidateBoard checks the consistency of the blackboard seen from a flow.
 	ValidateBoard(ctx context.Context, id domain.ChangeID, flow string) ([]domain.BoardIssue, error)
 	BaselineGraph(ctx context.Context, id domain.BaselineID) ([]domain.Node, []domain.Link, error)

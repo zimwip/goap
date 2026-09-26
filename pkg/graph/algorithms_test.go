@@ -82,8 +82,40 @@ func (w algoWorld) change(t *testing.T) domain.ChangeSet {
 	return c
 }
 
-func createItem(key, typ string, props map[string]any) domain.ChangeItem {
-	return domain.ChangeItem{Kind: domain.KindProposal, Proposal: &domain.Proposal{Op: domain.OpCreateNode, Node: &domain.NodeDraft{Key: key, Type: typ, Properties: props, State: "approved"}}}
+// declareCreate adds a change node that creates a node, and writes it.
+func (w algoWorld) create(c domain.ChangeSet, key, typ string, props map[string]any) error {
+	ns, err := w.g.AddNodes(context.Background(), c.ID, []domain.ChangeNode{{Intent: domain.IntentCreated, Key: key, Type: typ, Rationale: "new " + key}})
+	if err != nil {
+		return err
+	}
+	_, err = w.g.WriteNode(context.Background(), c.ID, ns[0].ID, NodeWrite{Properties: props, State: "approved"})
+	return err
+}
+
+// modify adds a change node on an existing node and writes it.
+func (w algoWorld) modify(t *testing.T, c domain.ChangeSet, n domain.Node, writes ...NodeWrite) error {
+	t.Helper()
+	ref := n.Ref()
+	ns, err := w.g.AddNodes(context.Background(), c.ID, []domain.ChangeNode{{Intent: domain.IntentModified, Pre: &ref, Rationale: "modify " + n.Key}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, nw := range writes {
+		if _, err := w.g.WriteNode(context.Background(), c.ID, ns[0].ID, nw); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (w algoWorld) acceptAll(t *testing.T, c domain.ChangeSet) {
+	t.Helper()
+	nodes, _ := w.g.ListChangeNodes(context.Background(), c.ID)
+	for _, n := range nodes {
+		if _, err := w.g.ReviewNode(context.Background(), c.ID, n.ID, domain.ReviewAccepted, "u", "ok"); err != nil {
+			t.Fatal(err)
+		}
+	}
 }
 
 func TestPropertyValidators(t *testing.T) { forEachRepo(t, testPropertyValidators) }
@@ -91,21 +123,27 @@ func TestPropertyValidators(t *testing.T) { forEachRepo(t, testPropertyValidator
 func testPropertyValidators(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	w := newAlgoWorld(t, repo)
-	c := w.change(t)
 
 	// early feedback on create (also through the inherited validator of a subtype) and update
-	for _, it := range []domain.ChangeItem{
-		createItem("R2", "Req", map[string]any{"code": "nope"}),
-		createItem("R3", "Sub", map[string]any{"code": "nope"}),
-		updateItem(w.req, map[string]any{"code": "nope"}),
+	for i, try := range []func(c domain.ChangeSet) error{
+		func(c domain.ChangeSet) error { return w.create(c, "R2", "Req", map[string]any{"code": "nope"}) },
+		func(c domain.ChangeSet) error { return w.create(c, "R3", "Sub", map[string]any{"code": "nope"}) },
+		func(c domain.ChangeSet) error {
+			return w.modify(t, c, w.req, NodeWrite{Properties: map[string]any{"code": "nope"}})
+		},
 	} {
-		if _, err := w.g.AddItems(ctx, c.ID, []domain.ChangeItem{it}); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "must match") {
-			t.Fatalf("invalid property accepted: %v", err)
+		if err := try(w.change(t)); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "must match") {
+			t.Fatalf("invalid property accepted (%d): %v", i, err)
 		}
 	}
-	if _, err := w.g.AddItems(ctx, c.ID, []domain.ChangeItem{createItem("R2", "Sub", map[string]any{"code": "REQ-2"}), updateItem(w.req, map[string]any{"code": "REQ-9"}), moveItem(w.req, "approved")}); err != nil {
+	c := w.change(t)
+	if err := w.create(c, "R2", "Sub", map[string]any{"code": "REQ-2"}); err != nil {
 		t.Fatal(err)
 	}
+	if err := w.modify(t, c, w.req, NodeWrite{Properties: map[string]any{"code": "REQ-9"}}, NodeWrite{State: "approved"}); err != nil {
+		t.Fatal(err)
+	}
+	w.acceptAll(t, c)
 	if _, err := w.g.Apply(ctx, c.ID, "ok"); err != nil {
 		t.Fatal(err)
 	}
@@ -123,18 +161,23 @@ func testTransitionGuardAndAction(t *testing.T, repo Repo) {
 
 	// the guard algorithm refuses releasing a document whose requirement is a draft
 	c := w.change(t)
-	if _, err := w.g.AddItems(ctx, c.ID, []domain.ChangeItem{moveItem(w.doc, "released")}); err != nil {
+	if err := w.modify(t, c, w.doc, NodeWrite{State: "released"}); err != nil {
 		t.Fatal(err)
 	}
+	w.acceptAll(t, c)
 	if _, err := w.g.Apply(ctx, c.ID, "x"); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "R1 is draft") {
 		t.Fatalf("guard must refuse: %v", err)
 	}
 
 	// approving the requirement in the same change satisfies the guard; the action stamps it
 	c2 := w.change(t)
-	if _, err := w.g.AddItems(ctx, c2.ID, []domain.ChangeItem{moveItem(w.req, "approved"), moveItem(w.doc, "released")}); err != nil {
+	if err := w.modify(t, c2, w.req, NodeWrite{State: "approved"}); err != nil {
 		t.Fatal(err)
 	}
+	if err := w.modify(t, c2, w.doc, NodeWrite{State: "released"}); err != nil {
+		t.Fatal(err)
+	}
+	w.acceptAll(t, c2)
 	if _, err := w.g.Apply(ctx, c2.ID, "y"); err != nil {
 		t.Fatal(err)
 	}

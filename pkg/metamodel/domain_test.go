@@ -95,30 +95,12 @@ func TestSharedDomainSupertypesBackfillAndObjects(t *testing.T) {
 		t.Fatalf("supertypes from the shared domain: %v %v", st, err)
 	}
 
-	// the object is linked once, whichever methodology backfills first
-	res, err := BackfillInstanceOf(ctx, g, "first")
-	if err != nil || res.Links != 1 {
-		t.Fatalf("backfill: %+v %v", res, err)
-	}
-	if res, err := BackfillInstanceOf(ctx, g, "second"); err != nil || res.Changed() {
-		t.Fatalf("second methodology must find the node already linked: %+v %v", res, err)
-	}
-
 	n, _, err := CreateObject(ctx, g, "second", "", "SecurityRequirement", "SEC-1", nil)
 	if err != nil {
 		t.Fatalf("create object through a methodology referencing the domain: %v", err)
 	}
-	nt, err := g.NodeByKey(ctx, domain.NamespacePlatform, DomainKey("alm", "SecurityRequirement"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	v, _ := g.View(ctx, n.Ref())
-	var linked bool
-	for _, l := range v.Out {
-		linked = linked || (l.Type == LinkInstanceOf && l.To == nt.Ref())
-	}
-	if !linked {
-		t.Fatalf("no instanceOf edge to the shared NodeType: %+v", v.Out)
+	if n.Type != "SecurityRequirement" {
+		t.Fatalf("the object is typed by the NodeType it names: %+v", n)
 	}
 }
 

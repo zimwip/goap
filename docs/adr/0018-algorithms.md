@@ -80,7 +80,7 @@ could run when a transition was taken. Making the domain customizable meant chan
   interrupted. Running them in the sandbox pool (ADR 0007) is the next step if untrusted domain
   authors are expected.
 - Property validators are not run on nodes that a change merely moves, links or deletes, nor on
-  `merge_node` results; existing invalid data is never rejected retroactively.
+  branch merge results; existing invalid data is never rejected retroactively.
 - Not done: algorithms shared across domains, algorithms for other extension points (link
   validators, conditions), a dry run of the plugs against existing nodes when a domain is published,
   running the PostgreSQL migration in the automated tests without `GOAP_TEST_PG_DSN`.

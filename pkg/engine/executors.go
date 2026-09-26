@@ -10,6 +10,7 @@ import (
 	"text/template"
 
 	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/dsl"
 	"github.com/zimwip/goap/pkg/llm"
 	"github.com/zimwip/goap/pkg/mcp"
 	"github.com/zimwip/goap/pkg/methodology"
@@ -29,6 +30,8 @@ type ActionContext struct {
 // ActionResult is what an executor produced.
 type ActionResult struct {
 	Items []ItemInput
+	// Nodes are change node operations (ADR 0024), applied after the items.
+	Nodes []dsl.NodeOp
 	// Wait suspends the process until a human submits the items.
 	Wait   bool
 	Output string
@@ -55,15 +58,15 @@ type LLMExecutor struct {
 
 const llmSystem = `You are an agent of an enterprise methodology platform. You work on a change of a versioned domain graph.
 Answer ONLY with a JSON object {"items":[...]} where each item is one of:
-{"ref":"<optional local name>","kind":"impact","type":"<direct|propagated|...>","target":"<node key>","data":{...}}
-{"ref":"...","kind":"proposal","proposal":{"op":"create_node","node":{"key":"...","type":"...","props":{...}}}}
-{"kind":"proposal","proposal":{"op":"update_node","node":{"base":"<node key>","props":{...}}}}
-{"kind":"proposal","proposal":{"op":"delete_node","node":{"base":"<node key>"}}}
-{"kind":"proposal","proposal":{"op":"transition_node","node":{"base":"<node key>","state":"<target lifecycle state>"}}}
-{"kind":"proposal","proposal":{"op":"add_link","link":{"type":"...","from":"<node key or #ref>","to":"<node key or #ref>"}}}
 {"kind":"artifact","type":"...","data":{...}}
-A node whose type has a lifecycle can only be modified in an editable state: reopen it with a transition_node first, and finish with a transition_node to a non-editable state.
-Reference nodes by their key. Reference items created in the same answer by "#<ref>".`
+{"kind":"decision","decision":{"item":"@<item id>","accept":true,"comment":"why"}}
+The nodes the change acts on are change nodes: items of kind "changeNode", applied in order:
+{"kind":"changeNode","changeNode":{"op":"declare","ref":"#n1","intent":"modified","key":"<node key>","rationale":"why the node is impacted"}}
+{"kind":"changeNode","changeNode":{"op":"declare","ref":"#n2","intent":"created","type":"<node type>","key":"<new key>","rationale":"why"}}
+{"kind":"changeNode","changeNode":{"op":"write","node":"<node key or #n1>","props":{...},"state":"<lifecycle state>","links":[{"type":"...","to":"<node key or a #nN already written>"}]}}
+{"kind":"changeNode","changeNode":{"op":"review","node":"<node key>","accept":true,"comment":"why"}}
+A node whose type has a lifecycle can only be modified in an editable state: reopen it with a write that sets "state" first, and finish with a write to a non-editable state.
+Reference nodes by their key. Reference items and change nodes created in the same answer by "#<ref>".`
 
 // PromptData is exposed to prompt templates.
 type PromptData struct {
@@ -72,15 +75,21 @@ type PromptData struct {
 	Action    methodology.Action
 	Vars      map[string]any
 	Baseline  struct{ Nodes []domain.Node }
-	Impacts   []ItemView
-	Proposals []ItemView
 	Artifacts []ItemView
+	// ChangeNodes are the nodes the change acts on (ADR 0024), as the process sees them.
+	ChangeNodes []ChangeNodeView
 }
 
-// ItemView is a change item with its hydrated target.
+// ChangeNodeView is a change node with its hydrated pre and post versions.
+type ChangeNodeView struct {
+	domain.ChangeNode
+	Pre  domain.NodeView
+	Post domain.NodeView
+}
+
+// ItemView is a fact of the change (artifact, decision).
 type ItemView struct {
 	domain.ChangeItem
-	Target domain.NodeView
 }
 
 var funcs = template.FuncMap{
@@ -100,18 +109,19 @@ func RenderPrompt(ctx context.Context, ac ActionContext) (string, error) {
 	}
 	d.Baseline.Nodes = nodes
 	for _, it := range ac.Blackboard.Change.Items {
-		v := ItemView{ChangeItem: it}
-		if it.Target != nil {
-			v.Target = ac.Blackboard.Nodes[*it.Target]
+		if it.Kind == domain.KindArtifact {
+			d.Artifacts = append(d.Artifacts, ItemView{ChangeItem: it})
 		}
-		switch it.Kind {
-		case domain.KindImpact:
-			d.Impacts = append(d.Impacts, v)
-		case domain.KindProposal:
-			d.Proposals = append(d.Proposals, v)
-		case domain.KindArtifact:
-			d.Artifacts = append(d.Artifacts, v)
+	}
+	for _, cn := range ac.Blackboard.Change.Nodes {
+		v := ChangeNodeView{ChangeNode: cn}
+		if cn.Pre != nil {
+			v.Pre = ac.Blackboard.Nodes[*cn.Pre]
 		}
+		if cn.Post != nil {
+			v.Post = ac.Blackboard.Nodes[*cn.Post]
+		}
+		d.ChangeNodes = append(d.ChangeNodes, v)
 	}
 	var b bytes.Buffer
 	if err := tpl.Execute(&b, d); err != nil {
@@ -330,16 +340,18 @@ func Propagate(ctx context.Context, ac ActionContext) (ActionResult, error) {
 	}
 	type entry struct {
 		ref   domain.NodeRef
-		item  string
 		depth int
 	}
 	seen := map[domain.NodeRef]bool{}
 	var queue []entry
-	for _, it := range ac.Blackboard.Change.ItemsOfKind(domain.KindImpact) {
-		seen[*it.Target] = true
-		queue = append(queue, entry{ref: *it.Target, item: "@" + string(it.ID)})
+	// the nodes the change modifies are the seeds; each propagated node is declared as an impact
+	for _, cn := range ac.Blackboard.Change.Nodes {
+		if cn.Pre != nil && cn.Intent == domain.IntentModified {
+			seen[*cn.Pre] = true
+			queue = append(queue, entry{ref: *cn.Pre})
+		}
 	}
-	var items []ItemInput
+	var ops []dsl.NodeOp
 	for len(queue) > 0 {
 		e := queue[0]
 		queue = queue[1:]
@@ -352,16 +364,14 @@ func Propagate(ctx context.Context, ac ActionContext) (ActionResult, error) {
 			}
 			seen[l.From] = true
 			src := byRef[l.From]
-			ref := fmt.Sprintf("p%d", len(items))
-			items = append(items, ItemInput{Ref: ref, Kind: string(domain.KindImpact), Type: "propagated", Target: src.Key,
-				DerivedFrom: []string{e.item},
-				Data:        map[string]any{"reason": fmt.Sprintf("%s %s %s", src.Key, l.Type, byRef[e.ref].Key), "depth": e.depth + 1}})
-			queue = append(queue, entry{ref: l.From, item: "#" + ref, depth: e.depth + 1})
+			ops = append(ops, dsl.NodeOp{Op: "declare", Ref: fmt.Sprintf("#p%d", len(ops)), Intent: string(domain.IntentModified), Key: src.Key,
+				Rationale: fmt.Sprintf("propagated (depth %d): %s %s %s", e.depth+1, src.Key, l.Type, byRef[e.ref].Key)})
+			queue = append(queue, entry{ref: l.From, depth: e.depth + 1})
 		}
 	}
-	items = append(items, ItemInput{Kind: string(domain.KindArtifact), Type: "propagation",
-		Data: map[string]any{"propagated": len(items), "maxDepth": maxDepth}})
-	return ActionResult{Items: items, Output: fmt.Sprintf("%d propagated impacts", len(items)-1)}, nil
+	items := []ItemInput{{Kind: string(domain.KindArtifact), Type: "propagation",
+		Data: map[string]any{"propagated": len(ops), "maxDepth": maxDepth}}}
+	return ActionResult{Items: items, Nodes: ops, Output: fmt.Sprintf("%d propagated impacts", len(ops))}, nil
 }
 
 // ApplyChange materializes the change into a new baseline (graph.apply). The

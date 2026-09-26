@@ -57,6 +57,51 @@ func (c *Client) AddItems(ctx context.Context, id domain.ChangeID, items []domai
 	return pbconv.ItemsFromPB(r.Msg.Items), nil
 }
 
+// AddNodes implements engine.GraphPort.
+func (c *Client) AddNodes(ctx context.Context, id domain.ChangeID, nodes []domain.ChangeNode) ([]domain.ChangeNode, error) {
+	r, err := c.rpc.AddChangeNodes(ctx, connect.NewRequest(&graphv1.AddChangeNodesRequest{ChangeId: string(id), Nodes: pbconv.ChangeNodesToPB(nodes)}))
+	if err != nil {
+		return nil, rpcerr.FromConnect(err)
+	}
+	return pbconv.ChangeNodesFromPB(r.Msg.Nodes), nil
+}
+
+// WriteNode implements engine.GraphPort.
+func (c *Client) WriteNode(ctx context.Context, id domain.ChangeID, node domain.ChangeNodeID, w graph.NodeWrite) (domain.ChangeNode, error) {
+	req := &graphv1.WriteChangeNodeRequest{ChangeId: string(id), ChangeNodeId: string(node), Props: pbconv.Struct(w.Properties), State: w.State, Retire: w.Retire, Flow: w.Flow, Execution: w.Execution}
+	for _, l := range w.AddLinks {
+		req.AddLinks = append(req.AddLinks, &graphv1.NodeLinkWrite{Type: l.Type, To: pbconv.RefToPB(l.To), Props: pbconv.Struct(l.Properties)})
+	}
+	for _, l := range w.RemoveLinks {
+		req.RemoveLinks = append(req.RemoveLinks, string(l))
+	}
+	r, err := c.rpc.WriteChangeNode(ctx, connect.NewRequest(req))
+	if err != nil {
+		return domain.ChangeNode{}, rpcerr.FromConnect(err)
+	}
+	return pbconv.ChangeNodeFromPB(r.Msg.Node), nil
+}
+
+// ReviewNodeOn implements engine.GraphPort (the reviewer is the principal of the request).
+func (c *Client) ReviewNodeOn(ctx context.Context, id domain.ChangeID, flow, execution string, node domain.ChangeNodeID, status domain.NodeReview, _, comment string) (domain.ChangeNode, error) {
+	r, err := c.rpc.ReviewChangeNode(ctx, connect.NewRequest(&graphv1.ReviewChangeNodeRequest{ChangeId: string(id), ChangeNodeId: string(node),
+		Accept: status == domain.ReviewAccepted, Comment: comment, Flow: flow, Execution: execution}))
+	if err != nil {
+		return domain.ChangeNode{}, rpcerr.FromConnect(err)
+	}
+	return pbconv.ChangeNodeFromPB(r.Msg.Node), nil
+}
+
+// Commit runs a change of node edits in the graph service (see graph.Commit).
+func (c *Client) Commit(ctx context.Context, in graph.Commit) (graph.CommitResult, error) {
+	r, err := c.rpc.CommitEdits(ctx, connect.NewRequest(&graphv1.CommitEditsRequest{Namespace: in.Namespace, Title: in.Title, Intent: in.Intent,
+		Methodology: in.Methodology, Data: pbconv.Struct(in.Data), BaselineId: string(in.Baseline), BaselineName: in.BaselineName, Edits: pbconv.EditsToPB(in.Edits)}))
+	if err != nil {
+		return graph.CommitResult{}, rpcerr.FromConnect(err)
+	}
+	return graph.CommitResult{Change: domain.ChangeID(r.Msg.ChangeId), Baseline: pbconv.BaselineFromPB(r.Msg.Baseline)}, nil
+}
+
 func (c *Client) Blackboard(ctx context.Context, id domain.ChangeID) (domain.Blackboard, error) {
 	return c.BlackboardIn(ctx, id, "")
 }
@@ -144,7 +189,7 @@ func (c *Client) CreateBaseline(ctx context.Context, name string, nodes []domain
 func (c *Client) OpenFlow(ctx context.Context, id domain.ChangeID, in graph.OpenFlowRequest) (domain.Flow, error) {
 	r, err := c.rpc.OpenFlow(ctx, connect.NewRequest(&graphv1.OpenFlowRequest{ChangeId: string(id), Parent: in.Parent, ForkAfter: string(in.ForkAfter),
 		Seeds: seedsToPB(in.Seeds), FromStep: int32(in.FromStep), Execution: in.Execution, Process: in.Process, Reason: in.Reason,
-		Guidance: in.Guidance, By: in.By}))
+		Guidance: in.Guidance, By: in.By, StaleExecutions: in.StaleExecutions}))
 	if err != nil {
 		return domain.Flow{}, rpcerr.FromConnect(err)
 	}
@@ -188,13 +233,4 @@ func (c *Client) ValidateBoard(ctx context.Context, id domain.ChangeID, flow str
 		out = append(out, pbconv.BoardIssueFromPB(i))
 	}
 	return out, nil
-}
-
-// MaterializeFlow implements engine.GraphPort.
-func (c *Client) MaterializeFlow(ctx context.Context, id domain.ChangeID, flow string) (domain.Flow, error) {
-	r, err := c.rpc.MaterializeFlow(ctx, connect.NewRequest(&graphv1.MaterializeFlowRequest{ChangeId: string(id), Flow: flow}))
-	if err != nil {
-		return domain.Flow{}, rpcerr.FromConnect(err)
-	}
-	return pbconv.FlowFromPB(r.Msg.Flow), nil
 }
