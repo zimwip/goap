@@ -2,6 +2,7 @@ package metamodel
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/zimwip/goap/pkg/domain"
@@ -153,5 +154,69 @@ func TestTypeNamespace(t *testing.T) {
 	}
 	if _, ok := TypeName("M:sdlc/nodetype/Need", "D:alm"); ok {
 		t.Fatal("a methodology's own type is not in the domain namespace")
+	}
+}
+
+func TestDomainMetadataIsProjectedAsNodes(t *testing.T) {
+	ctx := context.Background()
+	g := graph.New(graph.NewMemory())
+	d := sharedDomain()
+	d.Schema.NodeTypes[1].Lifecycle = "life"
+	d.Schema.Lifecycles = []domain.Lifecycle{{Name: "life", Initial: "draft", States: []domain.LifecycleState{{Name: "draft", Editable: true}, {Name: "done"}},
+		Transitions: []domain.Transition{{Name: "finish", From: "draft", To: "done"}}}}
+	m := refMethodology("first", d)
+	if _, err := Sync(ctx, g, m); err != nil {
+		t.Fatal(err)
+	}
+	if r, err := Sync(ctx, g, m); err != nil || r.Changed() {
+		t.Fatalf("idempotent: %+v %v", r, err)
+	}
+	head, _ := g.BranchHead(ctx, domain.MainBranch)
+	nodes, links, err := g.BaselineGraph(ctx, head.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	byKey := map[string]domain.Node{}
+	byID := map[domain.NodeID]domain.Node{}
+	for _, n := range nodes {
+		byKey[n.Key], byID[n.ID] = n, n
+	}
+	lt, ok := byKey[DomainMetaKey("alm", TypeLinkType, "derives")]
+	if !ok || lt.Type != TypeLinkType || lt.Properties["from"] != "Requirement" || lt.Properties["to"] != "Need" {
+		t.Fatalf("link type node: %+v", lt)
+	}
+	lc, ok := byKey[DomainMetaKey("alm", TypeLifecycle, "life")]
+	if !ok || lc.Type != TypeLifecycle || lc.Properties["initial"] != "draft" {
+		t.Fatalf("lifecycle node: %+v", lc)
+	}
+	edge := map[[3]string]bool{}
+	for _, l := range links {
+		edge[[3]string{l.Type, byID[l.From.ID].Key, byID[l.To.ID].Key}] = true
+	}
+	for _, e := range [][3]string{
+		{LinkLifecycle, DomainKey("alm", "Requirement"), lc.Key},
+		{LinkFrom, lt.Key, DomainKey("alm", "Requirement")},
+		{LinkTo, lt.Key, DomainKey("alm", "Need")},
+	} {
+		if !edge[e] {
+			t.Errorf("missing edge %v", e)
+		}
+	}
+	// the link type now binds the graph: a Need cannot derive from a Need
+	need, _ := g.CreateNode(ctx, graph.NewNode{Key: "N-1", Type: "Need"})
+	need2, _ := g.CreateNode(ctx, graph.NewNode{Key: "N-2", Type: "Need"})
+	b, err := g.CreateBaselineFromLatest(ctx, "with data")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := g.CreateChange(ctx, graph.NewChange{Title: "l", BaselineID: b.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	from, to := need.Ref(), need2.Ref()
+	_, err = g.AddItems(ctx, c.ID, []domain.ChangeItem{{Kind: domain.KindProposal, Proposal: &domain.Proposal{Op: domain.OpAddLink,
+		Link: &domain.LinkDraft{Type: "derives", From: domain.Endpoint{Node: &from}, To: domain.Endpoint{Node: &to}}}}})
+	if err == nil || !strings.Contains(err.Error(), "cannot join") {
+		t.Fatalf("a Need must not derive from a Need: %v", err)
 	}
 }
