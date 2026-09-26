@@ -374,11 +374,8 @@ func (g *Graph) walk(ctx context.Context, tx Tx, c domain.ChangeSet, authorize b
 				return nil, err
 			}
 		case domain.OpAddLink:
-			// instanceOf binds a node to its type (code-managed metadata): it does not edit the node, so it needs no reopening
-			if p.Link.Type != domain.LinkInstanceOf {
-				if err := editable(p.Link.From.Node, "link from"); err != nil {
-					return nil, err
-				}
+			if err := editable(p.Link.From.Node, "link from"); err != nil {
+				return nil, err
 			}
 			if len(ix.links[p.Link.Type]) > 0 {
 				from, err := endpointType(ctx, tx, p.Link.From, itemType)
