@@ -9,8 +9,9 @@ import "goap/connector/v1/connector.proto";
 // McpService is the MCP hub. It keeps the live registry of connectors (separate services that
 // register themselves) and resolves tools for the organisational unit that holds a change:
 //   - MCPs are nodes of the "platform" namespace: the generic usage of a tool by an LLM;
-//   - Adapters are nodes of the "organisation" namespace, owned by a unit: they say how the unit
-//     implements an MCP with a connector (parameters, secrets, mapping of the tools onto operations);
+//   - Adapters are code, algorithms of the domain library (usage `adapter`) that implement the tools an
+//     MCP expects with the operations a connector exposes; a unit instantiates one with its parameter
+//     values (an Adapter node of the "organisation" namespace, owned by the unit);
 //   - a unit inherits the adapters of its ancestors; the nearest one wins.
 // MCPs and adapters are edited as graph nodes (through changes); this service only reads them.
 service McpService {
@@ -22,8 +23,10 @@ service McpService {
   rpc ListMcps(ListMcpsRequest) returns (ListMcpsResponse);
   // The MCPs a unit can use, with the adapter that implements each (own or inherited).
   rpc ListEffective(ListEffectiveRequest) returns (ListEffectiveResponse);
-  // Check an adapter before saving it as a node.
+  // Check an adapter instance before saving it as a node.
   rpc CheckAdapter(CheckAdapterRequest) returns (CheckAdapterResponse);
+  // Generate the skeleton of the code of an adapter between an MCP and a registered connector.
+  rpc AdapterTemplate(AdapterTemplateRequest) returns (AdapterTemplateResponse);
 
   // Tools a unit can use, and their invocation.
   rpc ListTools(ListToolsRequest) returns (ListToolsResponse);
@@ -80,28 +83,19 @@ message ListMcpsResponse {
 
 // ---- adapters ---------------------------------------------------------------------------
 
-// ToolMapping maps one tool of the MCP onto one operation of the connector.
-message ToolMapping {
-  string tool = 1;
-  string operation = 2;
-  // operation arguments: literals, or "$.a.b" references to the arguments of the tool call
-  // (nested objects and lists are mapped recursively); empty: the tool arguments as they are
-  google.protobuf.Struct arguments = 3;
-  // dotted path picked in the result of the operation ("" = the whole result)
-  string result_path = 4;
-}
-
+// Adapter is the instance, by an organisational unit, of an adapter algorithm of the domain library:
+// the code that implements the tools an MCP expects with the operations a connector exposes.
 message Adapter {
-  // key of the OrgUnit owning the adapter
+  // key of the OrgUnit owning the instance
   string unit = 1;
+  // the MCP the adapter implements
   string mcp = 2;
-  // id of a registered connector
-  string connector = 3;
-  // parameters of the connector (see its config schema)
-  google.protobuf.Struct config = 4;
-  // secret name -> reference: "<vault path>#<field>" or "env:<VARIABLE>"
-  map<string, string> secrets = 5;
-  repeated ToolMapping tools = 6;
+  // the algorithm in the library: its domain, version (empty: latest published) and name
+  string domain = 3;
+  string version = 4;
+  string algorithm = 5;
+  // parameter values (secrets as references: "<vault path>#<field>" or "env:<VARIABLE>")
+  google.protobuf.Struct params = 6;
 }
 
 message EffectiveMcp {
@@ -110,6 +104,8 @@ message EffectiveMcp {
   Adapter adapter = 2;
   // defined by an ancestor unit
   bool inherited = 3;
+  // the connector the adapter calls (from its algorithm; empty when the library cannot say)
+  string connector = 4;
 }
 
 message ListEffectiveRequest {
@@ -128,8 +124,29 @@ message CheckAdapterRequest {
 }
 
 message CheckAdapterResponse {
-  // non-blocking problems (connector not registered, operation or parameter unknown, ...)
+  // non-blocking problems (connector not registered, secret needed by the connector, ...)
   repeated string warnings = 1;
+}
+
+message AdapterTemplateRequest {
+  string mcp = 1;
+  // id of a registered connector
+  string connector = 2;
+}
+
+message TemplateParam {
+  string name = 1;
+  // string | number | boolean | strings | json | secret
+  string type = 2;
+  string description = 3;
+  bool required = 4;
+}
+
+message AdapterTemplateResponse {
+  // JavaScript body of the adapter: one case per tool of the MCP, calling the closest operation
+  string code = 1;
+  // the parameters the connector needs (its configuration properties and secrets)
+  repeated TemplateParam params = 2;
 }
 
 // ---- tools ---------------------------------------------------------------------------------

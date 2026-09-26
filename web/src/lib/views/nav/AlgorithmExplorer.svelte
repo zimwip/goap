@@ -152,7 +152,7 @@
                 icon="zap"
                 label={a.name || '(unnamed)'}
                 italic={!a.name}
-                detail={a.language}
+                detail={a.type === 'adapter' && a.connector ? `${a.mcp || '?'} → ${a.connector}` : a.language}
                 expanded={isOpen(ak, true)}
                 active={tabsState.active === tabId(algorithmSpec(d.name, d.version, a.uid, a.name))}
                 badge={d.count(`algorithms[${i}]`) || undefined}
@@ -163,12 +163,12 @@
                 ontoggle={() => toggle(ak, true)}
                 oncontextmenu={(e) =>
                   openContextMenu(e, [
-                    { label: 'New instance', icon: 'plus', disabled: d.readonly, run: () => addInstance(i) },
+                    { label: 'New instance', icon: 'plus', disabled: d.readonly || a.type === 'adapter', run: () => addInstance(i) },
                     { label: 'Remove algorithm', icon: 'trash', disabled: d.readonly, run: () => removeAlgorithm(i) },
                   ])}
               >
                 {#snippet actions()}
-                  {#if !d.readonly}
+                  {#if !d.readonly && a.type !== 'adapter'}
                     <button type="button" title="New instance" aria-label="New instance of {a.name}" onclick={(e) => { e.stopPropagation(); addInstance(i); }}><Icon name="plus" size={13} /></button>
                   {/if}
                 {/snippet}

@@ -17,7 +17,7 @@ import (
 func algorithmsToPB(as []algo.Algorithm) []*registryv1.Algorithm {
 	var out []*registryv1.Algorithm
 	for _, a := range as {
-		pa := &registryv1.Algorithm{Name: a.Name, Description: a.Description, Type: string(a.Type), Language: a.Language, Code: a.Code}
+		pa := &registryv1.Algorithm{Name: a.Name, Description: a.Description, Type: string(a.Type), Language: a.Language, Code: a.Code, Mcp: a.MCP, Connector: a.Connector}
 		for _, p := range a.Params {
 			pp := &registryv1.AlgorithmParam{Name: p.Name, Type: p.Type, Description: p.Description, Required: p.Required, Values: p.Values}
 			if p.Default != nil {
@@ -33,7 +33,7 @@ func algorithmsToPB(as []algo.Algorithm) []*registryv1.Algorithm {
 func algorithmsFromPB(as []*registryv1.Algorithm) []algo.Algorithm {
 	var out []algo.Algorithm
 	for _, a := range as {
-		da := algo.Algorithm{Name: a.Name, Description: a.Description, Type: algo.Usage(a.Type), Language: a.Language, Code: a.Code}
+		da := algo.Algorithm{Name: a.Name, Description: a.Description, Type: algo.Usage(a.Type), Language: a.Language, Code: a.Code, MCP: a.Mcp, Connector: a.Connector}
 		for _, p := range a.Params {
 			dp := algo.Param{Name: p.Name, Type: p.Type, Description: p.Description, Required: p.Required, Values: nilIfNone(p.Values)}
 			if p.DefaultValue != nil {

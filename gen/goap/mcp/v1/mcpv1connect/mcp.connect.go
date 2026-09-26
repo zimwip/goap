@@ -46,6 +46,9 @@ const (
 	McpServiceListEffectiveProcedure = "/goap.mcp.v1.McpService/ListEffective"
 	// McpServiceCheckAdapterProcedure is the fully-qualified name of the McpService's CheckAdapter RPC.
 	McpServiceCheckAdapterProcedure = "/goap.mcp.v1.McpService/CheckAdapter"
+	// McpServiceAdapterTemplateProcedure is the fully-qualified name of the McpService's
+	// AdapterTemplate RPC.
+	McpServiceAdapterTemplateProcedure = "/goap.mcp.v1.McpService/AdapterTemplate"
 	// McpServiceListToolsProcedure is the fully-qualified name of the McpService's ListTools RPC.
 	McpServiceListToolsProcedure = "/goap.mcp.v1.McpService/ListTools"
 	// McpServiceCallToolProcedure is the fully-qualified name of the McpService's CallTool RPC.
@@ -61,8 +64,10 @@ type McpServiceClient interface {
 	ListMcps(context.Context, *connect.Request[v1.ListMcpsRequest]) (*connect.Response[v1.ListMcpsResponse], error)
 	// The MCPs a unit can use, with the adapter that implements each (own or inherited).
 	ListEffective(context.Context, *connect.Request[v1.ListEffectiveRequest]) (*connect.Response[v1.ListEffectiveResponse], error)
-	// Check an adapter before saving it as a node.
+	// Check an adapter instance before saving it as a node.
 	CheckAdapter(context.Context, *connect.Request[v1.CheckAdapterRequest]) (*connect.Response[v1.CheckAdapterResponse], error)
+	// Generate the skeleton of the code of an adapter between an MCP and a registered connector.
+	AdapterTemplate(context.Context, *connect.Request[v1.AdapterTemplateRequest]) (*connect.Response[v1.AdapterTemplateResponse], error)
 	// Tools a unit can use, and their invocation.
 	ListTools(context.Context, *connect.Request[v1.ListToolsRequest]) (*connect.Response[v1.ListToolsResponse], error)
 	CallTool(context.Context, *connect.Request[v1.CallToolRequest]) (*connect.Response[v1.CallToolResponse], error)
@@ -109,6 +114,12 @@ func NewMcpServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			connect.WithSchema(mcpServiceMethods.ByName("CheckAdapter")),
 			connect.WithClientOptions(opts...),
 		),
+		adapterTemplate: connect.NewClient[v1.AdapterTemplateRequest, v1.AdapterTemplateResponse](
+			httpClient,
+			baseURL+McpServiceAdapterTemplateProcedure,
+			connect.WithSchema(mcpServiceMethods.ByName("AdapterTemplate")),
+			connect.WithClientOptions(opts...),
+		),
 		listTools: connect.NewClient[v1.ListToolsRequest, v1.ListToolsResponse](
 			httpClient,
 			baseURL+McpServiceListToolsProcedure,
@@ -131,6 +142,7 @@ type mcpServiceClient struct {
 	listMcps          *connect.Client[v1.ListMcpsRequest, v1.ListMcpsResponse]
 	listEffective     *connect.Client[v1.ListEffectiveRequest, v1.ListEffectiveResponse]
 	checkAdapter      *connect.Client[v1.CheckAdapterRequest, v1.CheckAdapterResponse]
+	adapterTemplate   *connect.Client[v1.AdapterTemplateRequest, v1.AdapterTemplateResponse]
 	listTools         *connect.Client[v1.ListToolsRequest, v1.ListToolsResponse]
 	callTool          *connect.Client[v1.CallToolRequest, v1.CallToolResponse]
 }
@@ -160,6 +172,11 @@ func (c *mcpServiceClient) CheckAdapter(ctx context.Context, req *connect.Reques
 	return c.checkAdapter.CallUnary(ctx, req)
 }
 
+// AdapterTemplate calls goap.mcp.v1.McpService.AdapterTemplate.
+func (c *mcpServiceClient) AdapterTemplate(ctx context.Context, req *connect.Request[v1.AdapterTemplateRequest]) (*connect.Response[v1.AdapterTemplateResponse], error) {
+	return c.adapterTemplate.CallUnary(ctx, req)
+}
+
 // ListTools calls goap.mcp.v1.McpService.ListTools.
 func (c *mcpServiceClient) ListTools(ctx context.Context, req *connect.Request[v1.ListToolsRequest]) (*connect.Response[v1.ListToolsResponse], error) {
 	return c.listTools.CallUnary(ctx, req)
@@ -179,8 +196,10 @@ type McpServiceHandler interface {
 	ListMcps(context.Context, *connect.Request[v1.ListMcpsRequest]) (*connect.Response[v1.ListMcpsResponse], error)
 	// The MCPs a unit can use, with the adapter that implements each (own or inherited).
 	ListEffective(context.Context, *connect.Request[v1.ListEffectiveRequest]) (*connect.Response[v1.ListEffectiveResponse], error)
-	// Check an adapter before saving it as a node.
+	// Check an adapter instance before saving it as a node.
 	CheckAdapter(context.Context, *connect.Request[v1.CheckAdapterRequest]) (*connect.Response[v1.CheckAdapterResponse], error)
+	// Generate the skeleton of the code of an adapter between an MCP and a registered connector.
+	AdapterTemplate(context.Context, *connect.Request[v1.AdapterTemplateRequest]) (*connect.Response[v1.AdapterTemplateResponse], error)
 	// Tools a unit can use, and their invocation.
 	ListTools(context.Context, *connect.Request[v1.ListToolsRequest]) (*connect.Response[v1.ListToolsResponse], error)
 	CallTool(context.Context, *connect.Request[v1.CallToolRequest]) (*connect.Response[v1.CallToolResponse], error)
@@ -223,6 +242,12 @@ func NewMcpServiceHandler(svc McpServiceHandler, opts ...connect.HandlerOption) 
 		connect.WithSchema(mcpServiceMethods.ByName("CheckAdapter")),
 		connect.WithHandlerOptions(opts...),
 	)
+	mcpServiceAdapterTemplateHandler := connect.NewUnaryHandler(
+		McpServiceAdapterTemplateProcedure,
+		svc.AdapterTemplate,
+		connect.WithSchema(mcpServiceMethods.ByName("AdapterTemplate")),
+		connect.WithHandlerOptions(opts...),
+	)
 	mcpServiceListToolsHandler := connect.NewUnaryHandler(
 		McpServiceListToolsProcedure,
 		svc.ListTools,
@@ -247,6 +272,8 @@ func NewMcpServiceHandler(svc McpServiceHandler, opts ...connect.HandlerOption) 
 			mcpServiceListEffectiveHandler.ServeHTTP(w, r)
 		case McpServiceCheckAdapterProcedure:
 			mcpServiceCheckAdapterHandler.ServeHTTP(w, r)
+		case McpServiceAdapterTemplateProcedure:
+			mcpServiceAdapterTemplateHandler.ServeHTTP(w, r)
 		case McpServiceListToolsProcedure:
 			mcpServiceListToolsHandler.ServeHTTP(w, r)
 		case McpServiceCallToolProcedure:
@@ -278,6 +305,10 @@ func (UnimplementedMcpServiceHandler) ListEffective(context.Context, *connect.Re
 
 func (UnimplementedMcpServiceHandler) CheckAdapter(context.Context, *connect.Request[v1.CheckAdapterRequest]) (*connect.Response[v1.CheckAdapterResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.mcp.v1.McpService.CheckAdapter is not implemented"))
+}
+
+func (UnimplementedMcpServiceHandler) AdapterTemplate(context.Context, *connect.Request[v1.AdapterTemplateRequest]) (*connect.Response[v1.AdapterTemplateResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.mcp.v1.McpService.AdapterTemplate is not implemented"))
 }
 
 func (UnimplementedMcpServiceHandler) ListTools(context.Context, *connect.Request[v1.ListToolsRequest]) (*connect.Response[v1.ListToolsResponse], error) {

@@ -105,7 +105,7 @@ func Run(ctx *dsl.Ctx) error {
 // `ctx`: a JavaScript algorithm is the BODY of a function of ctx (it may `return`), a Go
 // algorithm declares `func Run(ctx *dsl.<Ctx>) error`. They are pure: no blackboard, LLM or tool calls.
 
-export type AlgorithmUsage = 'property_validator' | 'transition_guard' | 'transition_action';
+export type AlgorithmUsage = 'property_validator' | 'transition_guard' | 'transition_action' | 'adapter';
 
 export interface AlgorithmUsageInfo {
   usage: AlgorithmUsage;
@@ -191,6 +191,26 @@ export const ALGORITHM_USAGES: AlgorithmUsageInfo[] = [
       change: { id: 'c1', title: 'Approve REQ-1' },
     },
   },
+  {
+    usage: 'adapter',
+    title: 'Adapter',
+    goCtx: 'AdapterCtx',
+    description:
+      'Implements the tools an MCP expects with the operations a connector exposes. Declared in the library, instantiated by organisational units with their parameter values; never plugged into a node type or a lifecycle.',
+    contract:
+      'Returns the result of the tool (JavaScript: an object, or any value, wrapped; Go: ctx.Return); rejects with ctx.fail(msg) or a throw. A failing ctx.call throws.',
+    functions: [
+      { name: 'tool', args: [], returns: 'string', doc: 'Name of the MCP tool being called.', group: 'read' },
+      { name: 'args', args: [], returns: 'object', doc: 'Arguments of the tool call.', group: 'read' },
+      { name: 'param', args: ['name'], returns: 'JSON value', doc: 'Parameter value of the unit instance (secrets are not readable).', group: 'read' },
+      { name: 'operations', args: [], returns: 'string[]', doc: 'Operations the connector exposes.', group: 'read' },
+      { name: 'call', args: ['operation', 'args'], returns: 'object', doc: 'Run an operation of the connector (the hub adds the parameters as its configuration and the secrets); throws on failure. At most 32 calls per execution.', group: 'call' },
+      { name: 'return', args: ['result'], returns: '', doc: 'Go only: set the result of the tool.', group: 'write' },
+      failFn,
+      ...logFns,
+    ],
+    sample: {},
+  },
 ];
 
 export function algorithmUsage(usage: string): AlgorithmUsageInfo | undefined {
@@ -239,6 +259,33 @@ func Run(ctx *dsl.GuardCtx) error {
 \t\t}
 \t}
 \treturn nil
+}
+`,
+  },
+  adapter: {
+    javascript: `// Body of a function of ctx: ctx.tool() is the MCP tool called, ctx.args() its arguments,
+// ctx.call(operation, args) runs an operation of the connector. Return the result of the tool.
+switch (ctx.tool()) {
+  // case "read": return ctx.call("read_file", { path: ctx.args().path });
+}
+ctx.fail("unknown tool " + ctx.tool());
+`,
+    go: `package adapter
+
+import "github.com/zimwip/goap/pkg/dsl"
+
+func Run(ctx *dsl.AdapterCtx) error {
+	switch ctx.Tool() {
+	// case "read":
+	//	res, err := ctx.Call("read_file", map[string]any{"path": ctx.Args()["path"]})
+	//	if err != nil {
+	//		return err
+	//	}
+	//	ctx.Return(res)
+	//	return nil
+	}
+	ctx.Fail("unknown tool " + ctx.Tool())
+	return nil
 }
 `,
   },

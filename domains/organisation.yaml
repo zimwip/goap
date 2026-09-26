@@ -4,12 +4,12 @@ description: >
   Organisation structure, managed in its own namespace ("organisation"): a hierarchy of organisational units. Nodes of other namespaces reference a unit as their owner through the cross-namespace `owner` link; changes are split into sub-changes along unit boundaries.
 nodeTypes:
   - {name: OrgUnit, description: "Organisational unit (company, direction, department, team)", properties: [name, kind, description]}
-  # how an organisational unit implements an MCP: the one place where unit, MCP and connector meet.
-  # mcp = name of an MCP of the platform namespace, connector = id of a registered connector,
-  # config = parameters of the connector (its config schema), secrets = name -> secret reference,
-  # tools = [{tool, operation, arguments, resultPath}] mapping the MCP tools onto connector operations.
+  # an organisational unit's instance of an adapter of the library (an algorithm of usage `adapter`, in a
+  # domain such as platform): the one place where unit, MCP and connector meet. mcp = the MCP implemented,
+  # domain / version / algorithm = the adapter in the library (empty version: latest published),
+  # params = its parameter values (secrets as references: env:<VAR> or <vault path>#<field>).
   # Linked to its unit by `owner`; a unit inherits the adapters of its ancestors (nearest wins).
-  - {name: Adapter, description: "Implementation of an MCP by a connector, for an organisational unit", properties: [mcp, connector, config, secrets, tools, description]}
+  - {name: Adapter, description: "Instance, by an organisational unit, of an adapter of the library", properties: [mcp, domain, version, algorithm, params, description]}
 linkTypes:
   # child -> parent: outgoing links belong to the source version, so reorganising a unit only versions that unit
   - {name: part_of, from: OrgUnit, to: OrgUnit}

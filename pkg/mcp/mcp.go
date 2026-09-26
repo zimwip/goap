@@ -1,11 +1,10 @@
-// Package mcp holds the model of the tool layer, with no infrastructure
-// dependency: generic MCP definitions, the adapters implementing them on a
-// connector, and the bindings of an organization (see ADR 0019).
+// Package mcp holds the model of the tool layer, with no infrastructure dependency (ADR 0019).
 //
-//	MCP        generic: name + tool signatures (document-repository: list, read, write)
-//	Connector  a separately deployed service wrapping a real API (localfs, gdrive)
-//	Adapter    declarative mapping MCP tool -> connector operation
-//	Binding    organization: MCP -> (connector, configuration, secret references)
+//	MCP        generic usage of a tool by an LLM: name + tool signatures (document-repository: list, read, write)
+//	Connector  a separately deployed service wrapping a real API, exposing its own operations (localfs: list_dir, read_file, ...)
+//	Adapter    code that implements the tools an MCP expects with the operations a connector exposes: an
+//	           algorithm of the domain library (usage `adapter`), instantiated by an organisational unit with
+//	           its parameter values (the Adapter type of this package is that instance)
 package mcp
 
 import (
@@ -52,32 +51,22 @@ type Def struct {
 	Tools       []Tool `json:"tools"`
 }
 
-// ToolMapping maps a tool of an MCP onto an operation of a connector.
-type ToolMapping struct {
-	Tool      string `json:"tool"`
-	Operation string `json:"operation"`
-	// Arguments are the operation arguments: literals, or "$.a.b" references to the
-	// arguments of the tool call (see MapArguments). Nil or empty: the tool arguments as they are.
-	Arguments map[string]any `json:"arguments,omitempty"`
-	// ResultPath is the dotted path picked in the operation result ("" = all of it).
-	ResultPath string `json:"resultPath,omitempty"`
-}
-
-// Adapter is the implementation of an MCP by a connector for an organisational unit: the one
-// place where unit, MCP and connector meet. The MCP knows no connector, the connector knows
-// no MCP. It is an Adapter node of the "organisation" namespace linked to its unit by `owner`.
+// Adapter is the instance of an adapter algorithm of the library, with the parameter values of one
+// organisational unit: the one place where unit, MCP and connector meet. The connector and the
+// code come from the algorithm; the unit gives the values (root directory, account, secret
+// references). It is an Adapter node of the "organisation" namespace linked to its unit by `owner`.
 type Adapter struct {
 	// Unit is the key of the OrgUnit the adapter belongs to (from its `owner` link).
 	Unit string `json:"unit,omitempty"`
-	// MCP is the name of the MCP of the platform namespace.
+	// MCP is the name of the MCP of the platform namespace (the algorithm implements the same).
 	MCP string `json:"mcp"`
-	// Connector is the id of a registered connector.
-	Connector string `json:"connector"`
-	// Config are the parameters of the connector (validated against its config schema).
-	Config map[string]any `json:"config,omitempty"`
-	// Secrets maps a secret name of the connector to its reference ("<vault path>#<field>" or "env:<VAR>").
-	Secrets map[string]string `json:"secrets,omitempty"`
-	Tools   []ToolMapping     `json:"tools"`
+	// Domain and Version locate the algorithm in the library; an empty version is the latest published.
+	Domain  string `json:"domain"`
+	Version string `json:"version,omitempty"`
+	// Algorithm is the name of the adapter algorithm in the domain.
+	Algorithm string `json:"algorithm"`
+	// Params are the parameter values (secrets as references).
+	Params map[string]any `json:"params,omitempty"`
 }
 
 // ToolInfo is a tool available to an organization, under its qualified name.
@@ -130,118 +119,15 @@ func (d Def) Tool(name string) (Tool, bool) {
 	return Tool{}, false
 }
 
-// Validate checks an adapter against the MCP it implements: every mapped tool
-// must exist and be mapped once. Tools left unmapped are unavailable through
-// this adapter.
+// Validate checks the instance against the MCP it says it implements.
 func (a Adapter) Validate(def Def) error {
 	if a.MCP != def.Name {
 		return fmt.Errorf("adapter of %s validated against %s: %w", a.MCP, def.Name, ErrInvalid)
 	}
-	if !ValidName(a.Connector) {
-		return fmt.Errorf("connector name %q must match %s: %w", a.Connector, nameRE, ErrInvalid)
-	}
-	seen := map[string]bool{}
-	for _, m := range a.Tools {
-		if _, ok := def.Tool(m.Tool); !ok {
-			return fmt.Errorf("adapter %s/%s: mcp %s has no tool %q: %w", a.MCP, a.Connector, a.MCP, m.Tool, ErrInvalid)
-		}
-		if seen[m.Tool] {
-			return fmt.Errorf("adapter %s/%s: tool %s mapped twice: %w", a.MCP, a.Connector, m.Tool, ErrInvalid)
-		}
-		if m.Operation == "" {
-			return fmt.Errorf("adapter %s/%s: tool %s has no operation: %w", a.MCP, a.Connector, m.Tool, ErrInvalid)
-		}
-		seen[m.Tool] = true
+	if !ValidName(a.Domain) || !ValidName(a.Algorithm) {
+		return fmt.Errorf("adapter %s: domain and algorithm must be lowercase names: %w", a.MCP, ErrInvalid)
 	}
 	return nil
-}
-
-// Mapping returns the mapping of a tool.
-func (a Adapter) Mapping(tool string) (ToolMapping, bool) {
-	for _, m := range a.Tools {
-		if m.Tool == tool {
-			return m, true
-		}
-	}
-	return ToolMapping{}, false
-}
-
-// MapArguments builds the operation arguments from the mapping template and the
-// tool arguments. In the template a string "$" is the whole set of arguments and
-// "$.a.b" the value at that path; a reference to a missing value is left out (an
-// optional argument), other strings, numbers and booleans are literals; objects
-// and lists are mapped recursively. A nil template passes the arguments through.
-func MapArguments(tmpl, args map[string]any) map[string]any {
-	if tmpl == nil {
-		return args
-	}
-	out, _ := mapValue(tmpl, args).(map[string]any)
-	return out
-}
-
-func mapValue(v any, args map[string]any) any {
-	switch x := v.(type) {
-	case string:
-		if x == "$" {
-			return args
-		}
-		if p, ok := strings.CutPrefix(x, "$."); ok {
-			if got, ok := lookup(args, p); ok {
-				return got
-			}
-			return missing{}
-		}
-		return x
-	case map[string]any:
-		out := make(map[string]any, len(x))
-		for k, e := range x {
-			if m := mapValue(e, args); m != (missing{}) {
-				out[k] = m
-			}
-		}
-		return out
-	case []any:
-		out := make([]any, 0, len(x))
-		for _, e := range x {
-			if m := mapValue(e, args); m != (missing{}) {
-				out = append(out, m)
-			}
-		}
-		return out
-	}
-	return v
-}
-
-type missing struct{}
-
-func lookup(v any, path string) (any, bool) {
-	for _, seg := range strings.Split(path, ".") {
-		m, ok := v.(map[string]any)
-		if !ok {
-			return nil, false
-		}
-		if v, ok = m[seg]; !ok {
-			return nil, false
-		}
-	}
-	return v, true
-}
-
-// Pick returns the value at a dotted path of the result ("" = all of it). A
-// non-object value found by the path is wrapped as {"value": v}, so that a
-// result is always an object.
-func Pick(result map[string]any, path string) (map[string]any, error) {
-	if path == "" {
-		return result, nil
-	}
-	v, ok := lookup(result, path)
-	if !ok {
-		return nil, fmt.Errorf("result has no %q", path)
-	}
-	if m, ok := v.(map[string]any); ok {
-		return m, nil
-	}
-	return map[string]any{"value": v}, nil
 }
 
 func viaJSON(from, to any) error {
@@ -276,7 +162,7 @@ func (a Adapter) Props() map[string]any {
 	return m
 }
 
-// AdapterFromProps reads an adapter from the properties of its node and the unit that owns it.
+// AdapterFromProps reads an adapter instance from the properties of its node and the unit that owns it.
 func AdapterFromProps(unit string, props map[string]any) (Adapter, error) {
 	var a Adapter
 	if err := viaJSON(props, &a); err != nil {
@@ -284,4 +170,18 @@ func AdapterFromProps(unit string, props map[string]any) (Adapter, error) {
 	}
 	a.Unit = unit
 	return a, nil
+}
+
+// CheckArgs checks the arguments of a call against the tool's input schema: the required
+// properties must be present.
+func (t Tool) CheckArgs(args map[string]any) error {
+	req, _ := t.InputSchema["required"].([]any)
+	for _, r := range req {
+		if name, _ := r.(string); name != "" {
+			if _, ok := args[name]; !ok {
+				return fmt.Errorf("tool %s: missing argument %q: %w", t.Name, name, ErrInvalid)
+			}
+		}
+	}
+	return nil
 }

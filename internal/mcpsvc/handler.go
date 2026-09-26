@@ -93,22 +93,14 @@ func defToPB(d mcp.Def) *mcpv1.Mcp {
 }
 
 func adapterToPB(a mcp.Adapter) *mcpv1.Adapter {
-	out := &mcpv1.Adapter{Unit: a.Unit, Mcp: a.MCP, Connector: a.Connector, Config: pbconv.Struct(a.Config), Secrets: a.Secrets}
-	for _, m := range a.Tools {
-		out.Tools = append(out.Tools, &mcpv1.ToolMapping{Tool: m.Tool, Operation: m.Operation, Arguments: pbconv.Struct(m.Arguments), ResultPath: m.ResultPath})
-	}
-	return out
+	return &mcpv1.Adapter{Unit: a.Unit, Mcp: a.MCP, Domain: a.Domain, Version: a.Version, Algorithm: a.Algorithm, Params: pbconv.Struct(a.Params)}
 }
 
 func adapterFromPB(a *mcpv1.Adapter) mcp.Adapter {
 	if a == nil {
 		return mcp.Adapter{}
 	}
-	out := mcp.Adapter{Unit: a.Unit, MCP: a.Mcp, Connector: a.Connector, Config: pbconv.Map(a.Config), Secrets: a.Secrets, Tools: []mcp.ToolMapping{}}
-	for _, m := range a.Tools {
-		out.Tools = append(out.Tools, mcp.ToolMapping{Tool: m.Tool, Operation: m.Operation, Arguments: pbconv.Map(m.Arguments), ResultPath: m.ResultPath})
-	}
-	return out
+	return mcp.Adapter{Unit: a.Unit, MCP: a.Mcp, Domain: a.Domain, Version: a.Version, Algorithm: a.Algorithm, Params: pbconv.Map(a.Params)}
 }
 
 // unit is the requested unit, else the default organisation.
@@ -144,7 +136,8 @@ func (h *Handler) ListEffective(ctx context.Context, r *connect.Request[mcpv1.Li
 	}
 	out := &mcpv1.ListEffectiveResponse{Chain: chain}
 	for _, e := range eff {
-		out.Mcps = append(out.Mcps, &mcpv1.EffectiveMcp{Mcp: defToPB(e.MCP), Adapter: adapterToPB(e.Adapter), Inherited: e.Inherited})
+		out.Mcps = append(out.Mcps, &mcpv1.EffectiveMcp{Mcp: defToPB(e.MCP), Adapter: adapterToPB(e.Adapter), Inherited: e.Inherited,
+			Connector: h.Service.ConnectorOf(ctx, e.Adapter)})
 	}
 	return connect.NewResponse(out), nil
 }
@@ -159,6 +152,21 @@ func (h *Handler) CheckAdapter(ctx context.Context, r *connect.Request[mcpv1.Che
 		return nil, rpcErr(err)
 	}
 	return connect.NewResponse(&mcpv1.CheckAdapterResponse{Warnings: warnings}), nil
+}
+
+func (h *Handler) AdapterTemplate(ctx context.Context, r *connect.Request[mcpv1.AdapterTemplateRequest]) (*connect.Response[mcpv1.AdapterTemplateResponse], error) {
+	if _, err := h.check(ctx, r.Header(), "read", h.callerResource(ctx, r.Header(), "adapter", r.Msg.Mcp)); err != nil {
+		return nil, err
+	}
+	code, params, err := h.Service.Template(ctx, r.Msg.Mcp, r.Msg.Connector)
+	if err != nil {
+		return nil, rpcErr(err)
+	}
+	out := &mcpv1.AdapterTemplateResponse{Code: code}
+	for _, p := range params {
+		out.Params = append(out.Params, &mcpv1.TemplateParam{Name: p.Name, Type: p.Type, Description: p.Description, Required: p.Required})
+	}
+	return connect.NewResponse(out), nil
 }
 
 func (h *Handler) ListTools(ctx context.Context, r *connect.Request[mcpv1.ListToolsRequest]) (*connect.Response[mcpv1.ListToolsResponse], error) {

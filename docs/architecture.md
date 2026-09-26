@@ -600,17 +600,28 @@ MCP        node of the `platform` namespace (with the methodology meta-model): t
            by an LLM, name + tool signatures, e.g. document-repository { list, read, write }.
            Knows no connector, no adapter. Referenced by actions (`mcps:`) and agents (`mcps:`).
 Connector  a service of its own wrapping a real API (connector-localfs, connector-gdrive, ...). It registers
-           itself with the hub and announces its configuration parameters, secrets and operations.
-           Knows no MCP, no adapter.
-Adapter    node of the `organisation` namespace, owned (`owner` link) by an OrgUnit: how this unit
-           implements an MCP with a connector = the connector id, its parameters (e.g. the root directory),
-           secret references, and the mapping MCP tool -> connector operation. Where everything converges.
+           itself with the hub and announces its configuration parameters, secrets and the operations it
+           exposes (list_dir, read_file, ...). Knows no MCP, no adapter.
+Adapter    the code that makes the two work together: it implements the tools the MCP expects with the
+           operations the connector exposes. An algorithm of the domain library (usage `adapter`, in a shared
+           domain such as `platform`), declared for one MCP and one connector, with typed parameters. Each
+           organisational unit holds an INSTANCE (an `Adapter` node of the `organisation` namespace, owned by
+           the unit through `owner`): the algorithm reference and the parameter values. Where everything converges.
 ```
 
-- **Resolution.** For a tool `<mcp>/<tool>` and the unit holding the change, the hub takes the adapter of the
-  nearest unit along `unit -> parent (part_of) -> ... -> ORG-DEFAULT`. Several organisations working on a change
-  (sub-changes split by owner) can therefore all have file access with the same MCP and the same connector, each
-  configured differently: each unit's adapter carries its own root directory.
+The adapter code is the body of `function (ctx)`: `ctx.tool()` is the MCP tool called, `ctx.args()` its
+arguments, `ctx.param(name)` a parameter of the unit's instance, `ctx.call(operation, args)` calls an operation
+the connector exposes (a failure throws), `ctx.operations()` lists them, `ctx.fail(message)` rejects; it returns
+the result of the tool. The template is generated from the MCP definition (one `case` per tool) and the
+operations the connector exposes (the closest one is proposed), and the parameters from the connector's
+configuration schema. Parameters are handed to the connector as its configuration (same name); a `secret`
+parameter is a reference (`env:<VAR>` or `<vault path>#<field>`) that the hub resolves and passes to the connector
+under the parameter name, and that the code can never read. Runs are bounded (30 s, 32 connector calls).
+
+- **Resolution.** For a tool `<mcp>/<tool>` and the unit holding the change, the hub takes the adapter instance of the
+  nearest unit along `unit -> parent (part_of) -> ... -> ORG-DEFAULT`, loads its algorithm from the library, and runs
+  it. Several organisations working on a change (sub-changes split by owner) can therefore all have file access
+  with the same MCP, the same adapter and the same connector, each with its own root directory.
 - **Adding a connector is adding a service.** A connector implements `connector.v1.ConnectorService`
   (`Describe`, `Invoke`); `internal/connectorkit` does the rest: `connectorkit.Run("name", connector)` serves the
   protocol and registers the connector with the hub (`RegisterConnector`, renewed as a heartbeat within a
@@ -618,13 +629,16 @@ Adapter    node of the `organisation` namespace, owned (`owner` link) by an OrgU
   `GOAP_MCP_URL`, `GOAP_CONNECTOR_URL` (its address as the hub reaches it) and, when set on both sides,
   the shared `GOAP_CONNECTOR_TOKEN`. `internal/connectors/localfs` is the reference implementation.
 - **The hub** (`cmd/mcp`, `internal/mcpsvc`) keeps only the registry of connectors (table `connector`, PostgreSQL and
-  SQLite). MCPs, adapters and the unit hierarchy are read from the graph (snapshot of the head of `main`, rebuilt
-  when it moves). It maps the arguments (`$.path` references), resolves the secret references (`<vault path>#<field>`
-  or `env:<VAR>`), passes the connector only the secrets it declares, and returns the result. `CheckAdapter`
-  validates an adapter before it is saved (unknown MCP or tool: error; missing parameter or secret, unknown
-  operation, unregistered connector: warnings).
-- **Editing** is editing nodes: MCPs and adapters are created, changed and removed through changes, like any node.
-  The first start creates `ORG-DEFAULT` and `document-repository` (`graphsvc.SeedDefaults`).
+  SQLite). MCPs, adapter instances and the unit hierarchy are read from the graph (snapshot of the head of `main`,
+  rebuilt when it moves), adapter code from the registry (published domains, cached). It checks the arguments against
+  the tool's schema, runs the adapter, resolves the secret parameters, passes the connector only the secrets it
+  declares, and returns the result. `CheckAdapter` validates an instance before it is saved (unknown MCP, algorithm
+  of another MCP, missing or unknown parameter: error; unregistered connector, secret the connector needs: warnings);
+  `AdapterTemplate` generates the code skeleton.
+- **Editing.** MCPs and adapter instances are nodes, created, changed and removed through changes like any node;
+  adapter algorithms are edited in the domain library (Algorithms view) and published with their domain. The first
+  start creates `ORG-DEFAULT` and `document-repository` (`graphsvc.SeedDefaults`); `domains/platform.yaml` ships the
+  `localfs-document-repository` adapter.
 - **Scheduling.** An action declares the MCPs it uses (`mcps:` on `llm` and `script` actions; a `tool` action is
   `<mcp>/<tool>`). It is available to the planner only when the unit holding the change resolves an adapter for each
   of them; otherwise it is left out (and a specialization needing one is skipped). An action can call the tools of
@@ -632,11 +646,12 @@ Adapter    node of the `organisation` namespace, owned (`owner` link) by an OrgU
 - **LLM actions** with MCPs may call the tools in a bounded loop (`MaxToolRounds`), exchanged as JSON on top
   of any model (`{"tool_calls":[...]}`, then `{"items":[...]}`); every call is journaled with its duration and
   error. Calls run with the principal of the process initiator (`tool:call` permission).
-- **Web**: *Connectors* (registry, read-only), *MCPs* (platform nodes) and *Organisation* (units; the *MCP* pane
-  of a unit lists the MCPs it can use, own or inherited, and attaches or overrides them with an adapter: connector,
-  parameters generated from its schema, secrets, tool mapping). A new organisation is a new unit.
+- **Web**: *Connectors* (registry, read-only), *MCPs* (platform nodes), *Algorithms* (the library: adapters are
+  written there, with a template generated from an MCP and a connector) and *Organisation* (units; the *MCP* pane of
+  a unit lists the MCPs it can use, own or inherited, and attaches or overrides them with an instance of a library
+  adapter and its parameter values). A new organisation is a new unit.
 - `goap-dev` runs the hub and the localfs connector in-process (`GOAP_DEV_FS_ROOT` gives the default organisation
-  an adapter on a directory); connectors started separately register over HTTP.
+  an adapter instance on a directory); connectors started separately register over HTTP.
 
 ### 3.8 Voice input ([ADR 0013](adr/0013-voice-interaction.md))
 
@@ -794,7 +809,7 @@ docs/                        architecture, ADRs
 | **M0 — foundation** 🟢 | Doc, domain/change model, A\* planner, CEL conditions, intent loop, engine (memory), graph (memory + Postgres), registry, modelgw (fake + Anthropic + OpenAI-compatible), gateway, compose, minimal UI |
 | **M1 — engine persistence** | PostgreSQL `ProcessStore`, JetStream work-queue, crash recovery, multi-replica |
 | **M2 — IAM** | organizations, users, OIDC, `org_id` isolation in the graph, ABAC on the graph service |
-| **M3 — MCP** ✅ | MCP hub, connectors as separate self-registering services, MCPs and adapters as graph nodes resolved along the organisation hierarchy, `tool` actions and LLM tools, scheduling filter, secrets via Vault · remaining: more connectors, adapter validation as a node type algorithm |
+| **M3 — MCP** ✅ | MCP hub, connectors as separate self-registering services, MCPs and adapter instances as graph nodes, adapters as library code, resolved along the organisation hierarchy, `tool` actions and LLM tools, scheduling filter, secrets via Vault · remaining: more connectors, adapter validation as a node type algorithm |
 | **M4 — advanced change axis** | impact propagation (recursive CTE parameterized by link types), suspect links, baseline diff, merge/rebase of concurrent changesets |
 | **M5 — UX** | ✅ methodology editor (forms, localized anomalies, publishing, versions, YAML import/export), "Access" screen (ABAC policies), approvals · remaining: graph and plan visualization |
 | **M6 — K8s** | Helm charts, engine HPA · ✅ OpenTelemetry observability, sandbox manifests |

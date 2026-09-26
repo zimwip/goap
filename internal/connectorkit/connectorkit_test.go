@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 	"time"
 
@@ -17,9 +18,11 @@ import (
 	"github.com/zimwip/goap/internal/graphsvc"
 	"github.com/zimwip/goap/internal/identity"
 	"github.com/zimwip/goap/internal/mcpsvc"
+	"github.com/zimwip/goap/pkg/algo"
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/graph"
+	"github.com/zimwip/goap/pkg/methodology"
 )
 
 // A connector started later registers by itself; a call from an organization goes
@@ -37,7 +40,7 @@ func TestAutoRegistrationAndCall(t *testing.T) {
 	if err := graphsvc.SeedAdapter(ctx, g, graphsvc.LocalFSAdapter(domain.DefaultOrg, dir)); err != nil {
 		t.Fatal(err)
 	}
-	hub := &mcpsvc.Service{Store: mcpsvc.NewMemoryStore(), Directory: &mcpsvc.Directory{Graph: g},
+	hub := &mcpsvc.Service{Store: mcpsvc.NewMemoryStore(), Directory: &mcpsvc.Directory{Graph: g}, Library: loadPlatformDomain(t),
 		Invoker: &mcpsvc.ConnectInvoker{Token: token, HTTP: http.DefaultClient}, Lease: 3 * time.Second}
 	dev := authz.Principal{Subject: "u", Org: "acme", Roles: []string{"admin"}}
 	mux := http.NewServeMux()
@@ -93,4 +96,32 @@ func TestAutoRegistrationAndCall(t *testing.T) {
 	if !errors.As(err, &ce) || ce.Code() != connect.CodePermissionDenied {
 		t.Fatalf("call without token = %v", err)
 	}
+}
+
+// platformDomain serves the algorithms of domains/platform.yaml, the adapter library of the platform.
+type platformDomain struct{ algos map[string]algo.Algorithm }
+
+func (l platformDomain) Algorithm(_ context.Context, _, _, name string) (algo.Algorithm, string, error) {
+	a, ok := l.algos[name]
+	if !ok {
+		return a, "", errors.New("not in the library")
+	}
+	return a, "1.0.0", nil
+}
+
+func loadPlatformDomain(t *testing.T) platformDomain {
+	t.Helper()
+	raw, err := os.ReadFile("../../domains/platform.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	d, err := methodology.ParseDomain(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	l := platformDomain{algos: map[string]algo.Algorithm{}}
+	for _, a := range d.Algorithms {
+		l.algos[a.Name] = a
+	}
+	return l
 }

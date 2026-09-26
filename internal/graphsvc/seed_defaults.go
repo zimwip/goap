@@ -96,13 +96,10 @@ func SeedUnit(ctx context.Context, g *graph.Graph, key, name, kind, parent strin
 	return applyOn(ctx, g, mcp.NamespaceOrganisation, "Unit "+key, items)
 }
 
-// LocalFSAdapter is the adapter of document-repository on the localfs connector, for demos and tests.
+// LocalFSAdapter is the instance of the localfs adapter of the platform library for a unit, exposing a
+// directory as its document repository (demos and tests).
 func LocalFSAdapter(unit, root string) mcp.Adapter {
-	return mcp.Adapter{Unit: unit, MCP: "document-repository", Connector: "localfs", Config: map[string]any{"root": root}, Tools: []mcp.ToolMapping{
-		{Tool: "list", Operation: "list_dir", Arguments: map[string]any{"path": "$.path"}},
-		{Tool: "read", Operation: "read_file", Arguments: map[string]any{"path": "$.path"}},
-		{Tool: "write", Operation: "write_file", Arguments: map[string]any{"path": "$.path", "content": "$.content"}},
-	}}
+	return mcp.Adapter{Unit: unit, MCP: "document-repository", Domain: "platform", Algorithm: "localfs-document-repository", Params: map[string]any{"root": root}}
 }
 
 // SeedAdapter creates the Adapter node of a unit, owned by it.
