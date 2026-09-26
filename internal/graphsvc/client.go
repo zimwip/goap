@@ -143,7 +143,8 @@ func (c *Client) CreateBaseline(ctx context.Context, name string, nodes []domain
 // OpenFlow implements engine.GraphPort.
 func (c *Client) OpenFlow(ctx context.Context, id domain.ChangeID, in graph.OpenFlowRequest) (domain.Flow, error) {
 	r, err := c.rpc.OpenFlow(ctx, connect.NewRequest(&graphv1.OpenFlowRequest{ChangeId: string(id), Parent: in.Parent, ForkAfter: string(in.ForkAfter),
-		Seeds: seedsToPB(in.Seeds), FromStep: int32(in.FromStep), Execution: in.Execution, Process: in.Process, Reason: in.Reason}))
+		Seeds: seedsToPB(in.Seeds), FromStep: int32(in.FromStep), Execution: in.Execution, Process: in.Process, Reason: in.Reason,
+		Guidance: in.Guidance, By: in.By}))
 	if err != nil {
 		return domain.Flow{}, rpcerr.FromConnect(err)
 	}
@@ -187,4 +188,13 @@ func (c *Client) ValidateBoard(ctx context.Context, id domain.ChangeID, flow str
 		out = append(out, pbconv.BoardIssueFromPB(i))
 	}
 	return out, nil
+}
+
+// MaterializeFlow implements engine.GraphPort.
+func (c *Client) MaterializeFlow(ctx context.Context, id domain.ChangeID, flow string) (domain.Flow, error) {
+	r, err := c.rpc.MaterializeFlow(ctx, connect.NewRequest(&graphv1.MaterializeFlowRequest{ChangeId: string(id), Flow: flow}))
+	if err != nil {
+		return domain.Flow{}, rpcerr.FromConnect(err)
+	}
+	return pbconv.FlowFromPB(r.Msg.Flow), nil
 }

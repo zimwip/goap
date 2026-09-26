@@ -62,14 +62,6 @@ func (e *Engine) checkBoard(ctx context.Context, p *Process, bb domain.Blackboar
 // produced content at fault: the step to restart from. It is nil when no step
 // can be relaunched (content of a human or trigger, a flow already open).
 func (e *Engine) proposeRelaunch(ctx context.Context, p *Process, view domain.ChangeSet, issues []domain.BoardIssue) *RelaunchProposal {
-	if p.Flow != "" {
-		return nil // inside a candidate flow: decide it before relaunching again
-	}
-	for _, f := range view.Flows() {
-		if f.Status == domain.FlowOpen {
-			return nil
-		}
-	}
 	execOf := map[domain.ItemID]string{}
 	for _, it := range view.Items {
 		execOf[it.ID] = it.Execution
@@ -173,9 +165,9 @@ func (e *Engine) ResolveBoard(ctx context.Context, id string, relaunch bool, com
 	}
 	var np *Process
 	if prop.Process == p.ID {
-		np, err = e.relaunchLocked(ctx, p.ID, prop.Step, prop.Reason)
+		np, err = e.relaunchLocked(ctx, p.ID, prop.Step, prop.Reason, comment)
 	} else {
-		np, err = e.Relaunch(ctx, prop.Process, prop.Step, prop.Reason)
+		np, err = e.Relaunch(ctx, prop.Process, prop.Step, prop.Reason, comment)
 	}
 	if err != nil {
 		return nil, nil, err

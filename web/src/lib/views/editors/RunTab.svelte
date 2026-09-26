@@ -11,6 +11,8 @@
   import FlowDecisionPanel from '../../components/FlowDecisionPanel.svelte';
   import BoardIssuesPanel from '../../components/BoardIssuesPanel.svelte';
   import FlowGraph from '../../components/FlowGraph.svelte';
+  import FlowActions from '../../components/FlowActions.svelte';
+  import FlowBranchInfo from '../../components/FlowBranchInfo.svelte';
   import IntentDialogue from './IntentDialogue.svelte';
   import { provideActions } from '../../shell/workbench.svelte';
   import { openTab } from '../../shell/tabs.svelte';
@@ -27,7 +29,7 @@
     type Process,
   } from '../../api';
   import { watchEvents, type StreamStatus } from '../../stream';
-  import { processes, ingestProcess, ingestEvent, childrenOf } from '../../stores/live.svelte';
+  import { processes, ingestProcess, ingestEvent, childrenOf, refreshProcesses } from '../../stores/live.svelte';
   import { chainOf, inChain } from '../../flowChain';
 
   let { tab }: { tab: Tab } = $props();
@@ -64,8 +66,10 @@
   const chain = $derived(process && inChain(process, processes) ? chainOf(process, processes) : []);
   const chainKey = $derived(chain.map((p) => `${p.id}:${p.status}`).join(','));
   let flows = $state<Flow[]>([]);
+  let flowsTick = $state(0);
   $effect(() => {
     const changeId = process?.changeId;
+    void flowsTick;
     if (!changeId || !chainKey) {
       flows = [];
       return;
@@ -77,11 +81,28 @@
       .catch(() => {});
     return () => ctrl.abort();
   });
+  /** the branch the change of a run on a flow acts on (the graph branch of the flow is reviewed against it) */
+  let changeBranch = $state('');
+  $effect(() => {
+    const changeId = process?.changeId;
+    if (!changeId || !process?.flow) {
+      changeBranch = '';
+      return;
+    }
+    const ctrl = new AbortController();
+    graph
+      .getChange(changeId, ctrl.signal)
+      .then((r) => (changeBranch = r.change?.branch ?? ''))
+      .catch(() => {});
+    return () => ctrl.abort();
+  });
+  /** the flow branch this run works on */
+  const ownFlow = $derived(process?.flow ? flows.find((f) => f.id === process.flow) : undefined);
   const relaunchOfProcess = $derived(process?.relaunchOf ? processes.get(process.relaunchOf) : undefined);
 
-  async function relaunch(step: number, reason: string) {
+  async function relaunch(step: number, reason: string, guidance = '') {
     if (!process?.id) return;
-    const res = await engine.relaunchStep(process.id, step, reason);
+    const res = await engine.relaunchStep(process.id, step, reason, guidance);
     if (res.process?.id) {
       ingestProcess(res.process);
       openRun(res.process.id);
@@ -274,6 +295,11 @@
         <button type="button" class="link mono" onclick={() => openRun(process.relaunchOf ?? '')}>{relaunchOfProcess?.title || shortId(process.relaunchOf)}</button>
         {#if relaunchOfProcess}<StatusBadge status={relaunchOfProcess.status} />{/if}
         on flow <code>{shortId(process.flow)}</code>
+        {#if ownFlow}
+          <StatusBadge status={ownFlow.status} />
+          <FlowBranchInfo flow={ownFlow} changeBranch={changeBranch} />
+          <FlowActions flow={ownFlow} changeId={process.changeId ?? ''} ondecided={() => { flowsTick++; void refreshProcesses(); }} />
+        {/if}
       </div>
     {/if}
     {#if process.status === 'superseded'}
@@ -286,7 +312,7 @@
     {#if chain.length > 1}
       <details class="card flow-graph">
         <summary>Flow <span class="hint">{chain.length} runs · {flows.length} branch{flows.length === 1 ? '' : 'es'}</span></summary>
-        <FlowGraph {processes} processId={process.id ?? ''} {flows} onopen={(pid) => openRun(pid)} />
+        <FlowGraph {processes} processId={process.id ?? ''} {flows} onopen={(pid) => openRun(pid)} ondecided={() => { flowsTick++; void refreshProcesses(); }} />
       </details>
     {/if}
 

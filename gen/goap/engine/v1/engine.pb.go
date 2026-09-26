@@ -2321,10 +2321,12 @@ func (x *WatchEventsResponse) GetLog() *LogLine {
 }
 
 type RelaunchStepRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ProcessId     string                 `protobuf:"bytes,1,opt,name=process_id,json=processId,proto3" json:"process_id,omitempty"`
-	Step          int32                  `protobuf:"varint,2,opt,name=step,proto3" json:"step,omitempty"`
-	Reason        string                 `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	ProcessId string                 `protobuf:"bytes,1,opt,name=process_id,json=processId,proto3" json:"process_id,omitempty"`
+	Step      int32                  `protobuf:"varint,2,opt,name=step,proto3" json:"step,omitempty"`
+	Reason    string                 `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`
+	// comment for the agent: recorded on the new flow branch, read by the relaunched steps
+	Guidance      string `protobuf:"bytes,4,opt,name=guidance,proto3" json:"guidance,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2376,6 +2378,13 @@ func (x *RelaunchStepRequest) GetStep() int32 {
 func (x *RelaunchStepRequest) GetReason() string {
 	if x != nil {
 		return x.Reason
+	}
+	return ""
+}
+
+func (x *RelaunchStepRequest) GetGuidance() string {
+	if x != nil {
+		return x.Guidance
 	}
 	return ""
 }
@@ -2867,12 +2876,13 @@ const file_goap_engine_v1_engine_proto_rawDesc = "" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12.\n" +
 	"\x04time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x04time\x121\n" +
 	"\aprocess\x18\x03 \x01(\v2\x17.goap.engine.v1.ProcessR\aprocess\x12)\n" +
-	"\x03log\x18\x04 \x01(\v2\x17.goap.engine.v1.LogLineR\x03log\"`\n" +
+	"\x03log\x18\x04 \x01(\v2\x17.goap.engine.v1.LogLineR\x03log\"|\n" +
 	"\x13RelaunchStepRequest\x12\x1d\n" +
 	"\n" +
 	"process_id\x18\x01 \x01(\tR\tprocessId\x12\x12\n" +
 	"\x04step\x18\x02 \x01(\x05R\x04step\x12\x16\n" +
-	"\x06reason\x18\x03 \x01(\tR\x06reason\"I\n" +
+	"\x06reason\x18\x03 \x01(\tR\x06reason\x12\x1a\n" +
+	"\bguidance\x18\x04 \x01(\tR\bguidance\"I\n" +
 	"\x14RelaunchStepResponse\x121\n" +
 	"\aprocess\x18\x01 \x01(\v2\x17.goap.engine.v1.ProcessR\aprocess\"b\n" +
 	"\x11DecideFlowRequest\x12\x1d\n" +

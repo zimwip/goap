@@ -3,9 +3,11 @@ package engine
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/llm"
 )
 
 func completedRun(t *testing.T) (*Engine, context.Context, *Process, domain.ChangeSet) {
@@ -57,7 +59,7 @@ func TestRelaunchStepAdoptFlow(t *testing.T) {
 		t.Fatalf("replaced %d kept %d", len(replaced), len(kept))
 	}
 
-	np, err := e.Relaunch(ctx, old.ID, 1, "the PSP answer changed")
+	np, err := e.Relaunch(ctx, old.ID, 1, "the PSP answer changed", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,8 +101,9 @@ func TestRelaunchStepAdoptFlow(t *testing.T) {
 	if cur, _ := e.Store.Get(ctx, old.ID); cur.Status != StatusCompleted {
 		t.Fatalf("old run = %s", cur.Status)
 	}
-	if _, err := e.Relaunch(ctx, old.ID, 2, "again"); err == nil {
-		t.Fatal("a second relaunch while a flow is open must fail")
+	// a second relaunch in parallel is allowed
+	if _, err := e.Relaunch(ctx, old.ID, 2, "again", ""); err != nil {
+		t.Fatalf("parallel relaunch: %v", err)
 	}
 
 	np, err = e.DecideFlow(ctx, np.ID, true, "looks right")
@@ -143,7 +146,7 @@ func TestRelaunchStepDiscardFlow(t *testing.T) {
 		Change(context.Context, domain.ChangeID) (domain.ChangeSet, error)
 	})
 	replaced := itemsOfSteps(c, old, 1)
-	np, err := e.Relaunch(ctx, old.ID, 1, "try again")
+	np, err := e.Relaunch(ctx, old.ID, 1, "try again", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -173,14 +176,14 @@ func TestRelaunchStepDiscardFlow(t *testing.T) {
 		}
 	}
 	// a new relaunch is possible once the flow is decided
-	if _, err := e.Relaunch(ctx, old.ID, 2, "later"); err != nil {
+	if _, err := e.Relaunch(ctx, old.ID, 2, "later", ""); err != nil {
 		t.Fatalf("relaunch after a decision: %v", err)
 	}
 }
 
 func TestRelaunchRules(t *testing.T) {
 	e, ctx, old, _ := completedRun(t)
-	if _, err := e.Relaunch(ctx, old.ID, 99, ""); !errors.Is(err, ErrInvalidState) {
+	if _, err := e.Relaunch(ctx, old.ID, 99, "", ""); !errors.Is(err, ErrInvalidState) {
 		t.Fatalf("unknown step: %v", err)
 	}
 }
@@ -300,5 +303,42 @@ func TestChangeOpensInTheNamespaceOfTheMethodology(t *testing.T) {
 	}
 	if c2, _ := g.Change(ctx, p2.ChangeID); c2.Namespace != "sdlc" {
 		t.Fatalf("explicit namespace = %q", c2.Namespace)
+	}
+}
+
+func TestRelaunchGuidanceReachesTheAgent(t *testing.T) {
+	e, ctx, old, _ := completedRun(t)
+	var prompts []string
+	inner := scripted(t)
+	e.Executors["llm"] = LLMExecutor{Client: llm.ClientFunc(func(ctx context.Context, req llm.Request) (llm.Response, error) {
+		prompts = append(prompts, req.Messages[0].Content)
+		return inner.Complete(ctx, req)
+	})}
+	np, err := e.Relaunch(ctx, old.ID, 1, "the PSP answer changed", "the PSP now requires API v3")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if np, err = e.Run(ctx, np.ID); err != nil || np.Status != StatusWaiting || np.Pending.Kind != TaskFlow {
+		t.Fatalf("run: %v %s %+v", err, np.Status, np.Pending)
+	}
+	if len(prompts) == 0 {
+		t.Fatal("no LLM call in the relaunched flow")
+	}
+	for i, p := range prompts {
+		if !strings.Contains(p, "the PSP now requires API v3") {
+			t.Fatalf("prompt %d of the relaunched flow lacks the guidance:\n%s", i, p)
+		}
+	}
+	// the main flow never sees the guidance
+	prompts = nil
+	old2, err := e.Start(ctx, StartRequest{Methodology: "impact-analysis", ChangeID: old.ChangeID, Goal: old.Goal})
+	_ = old2
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range prompts {
+		if strings.Contains(p, "API v3") {
+			t.Fatal("guidance leaked in a prompt of the main flow")
+		}
 	}
 }

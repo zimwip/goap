@@ -25,7 +25,7 @@
     /** live-received logs, attached to their step */
     liveLogs?: { time?: string; level?: string; message?: string; step?: number }[];
     /** offers a "Relaunch from here" action on finished steps of the viewed run */
-    onrelaunch?: (step: number, reason: string) => Promise<void> | void;
+    onrelaunch?: (step: number, reason: string, guidance: string) => Promise<void> | void;
   } = $props();
 
   interface Run {
@@ -49,6 +49,7 @@
 
   let relaunching = $state<string | null>(null);
   let reason = $state('');
+  let guidance = $state('');
   let busy = $state(false);
   let relaunchError = $state('');
   let openSlots = $state<Record<number, boolean>>({});
@@ -58,9 +59,10 @@
     busy = true;
     relaunchError = '';
     try {
-      await onrelaunch?.(step, reason.trim());
+      await onrelaunch?.(step, reason.trim(), guidance.trim());
       relaunching = null;
       reason = '';
+      guidance = '';
     } catch (err) {
       relaunchError = err instanceof Error ? err.message : String(err);
     } finally {
@@ -212,6 +214,11 @@
     <div class="relaunch">
       <p class="hint">The outputs of this step and of what followed are marked stale until you adopt or discard the relaunched flow.</p>
       <input type="text" placeholder="Why relaunch? (optional)" bind:value={reason} />
+      <label class="guidance">
+        <span>Guidance for the agent (optional)</span>
+        <textarea rows="3" placeholder="e.g. the PSP now requires API v3; keep the refund flow unchanged" bind:value={guidance}></textarea>
+      </label>
+      <p class="hint">Recorded on the new branch and added to the prompts of the relaunched steps.</p>
       {#if relaunchError}<div class="alert">{relaunchError}</div>{/if}
       <div class="row">
         <button type="button" class="primary" disabled={busy} onclick={() => relaunch(r.step.index ?? r.own)}>Relaunch</button>
@@ -398,6 +405,16 @@
   }
   .rundetail {
     margin: 0.2rem 0 0.4rem 1.2rem;
+  }
+  .guidance {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin: 6px 0 2px;
+  }
+  .guidance textarea {
+    width: 100%;
+    box-sizing: border-box;
   }
   .relaunch {
     display: flex;

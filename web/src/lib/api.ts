@@ -759,6 +759,32 @@ export interface Flow {
   openedAt?: string;
   decidedAt?: string;
   decidedBy?: string;
+  /** graph (domain) branch the flow's proposals were last applied on, for review */
+  branch?: string;
+  branches?: string[];
+  materialized?: string[];
+  /** proposals already merged into the change branch (adopted flow) */
+  merged?: string[];
+  /** adopted flows that replace the same items: an open flow that competes cannot be adopted */
+  competesWith?: string[];
+}
+
+/** A node changed on the source branch of a merge. */
+export interface MergeCandidate {
+  node?: string;
+  key?: string;
+  type?: string;
+  /** added | fast_forward | merge */
+  kind?: string;
+  deleted?: boolean;
+  conflicts?: string[];
+}
+
+export interface MergePlan {
+  from?: string;
+  into?: string;
+  intoHead?: string;
+  candidates?: MergeCandidate[];
 }
 
 /** State of a trigger of a published agent. */
@@ -967,6 +993,18 @@ export const graph = {
     rpc<{ changeId: string; flow: string }, { issues?: BoardIssue[] }>(GRAPH, 'ValidateBoard', { changeId, flow }, signal),
   listFlows: (changeId: string, signal?: AbortSignal) =>
     rpc<{ changeId: string }, { flows?: Flow[] }>(GRAPH, 'ListFlows', { changeId }, signal),
+  /** Adopts an open flow branch straight on the graph (prefer engine.decideFlow when the run is known). */
+  adoptFlow: (changeId: string, flow: string) =>
+    rpc<{ changeId: string; flow: string }, { flow?: Flow }>(GRAPH, 'AdoptFlow', { changeId, flow }),
+  /** Discards an open flow branch straight on the graph (its candidates are rejected, its graph branch abandoned). */
+  discardFlow: (changeId: string, flow: string) =>
+    rpc<{ changeId: string; flow: string }, { flow?: Flow }>(GRAPH, 'DiscardFlow', { changeId, flow }),
+  /** Applies the proposals of a flow on a graph branch of its own (a preview). */
+  materializeFlow: (changeId: string, flow: string) =>
+    rpc<{ changeId: string; flow: string }, { flow?: Flow }>(GRAPH, 'MaterializeFlow', { changeId, flow }),
+  /** What merging a branch into another would do. */
+  planMerge: (from: string, into: string, signal?: AbortSignal) =>
+    rpc<{ from: string; into: string }, { plan?: MergePlan }>(GRAPH, 'PlanMerge', { from, into }, signal),
   /** Pre/post view of the impacts of a change. */
   getImpacts: (changeId: string, signal?: AbortSignal) =>
     rpc<{ changeId: string }, { impacts?: ImpactView[] }>(GRAPH, 'GetImpacts', { changeId }, signal),
@@ -1035,11 +1073,12 @@ export const engine = {
       comment,
     }),
   /** Restarts a run from one of its steps on a new flow branch; returns the new process. */
-  relaunchStep: (processId: string, step: number, reason: string) =>
-    rpc<{ processId: string; step: number; reason: string }, { process?: Process }>(ENGINE, 'RelaunchStep', {
+  relaunchStep: (processId: string, step: number, reason: string, guidance = '') =>
+    rpc<{ processId: string; step: number; reason: string; guidance: string }, { process?: Process }>(ENGINE, 'RelaunchStep', {
       processId,
       step,
       reason,
+      guidance,
     }),
   /** Adopts (previous outputs superseded) or discards a relaunched flow. */
   decideFlow: (processId: string, adopt: boolean, comment: string) =>

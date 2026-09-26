@@ -381,11 +381,16 @@ func (h *Handler) ListSubChanges(ctx context.Context, r *connect.Request[graphv1
 func (h *Handler) OpenFlow(ctx context.Context, r *connect.Request[graphv1.OpenFlowRequest]) (*connect.Response[graphv1.OpenFlowResponse], error) {
 	m := r.Msg
 	f, err := h.Graph.OpenFlow(ctx, domain.ChangeID(m.ChangeId), graph.OpenFlowRequest{Parent: m.Parent, ForkAfter: domain.ItemID(m.ForkAfter),
-		Seeds: itemIDs(m.Seeds), FromStep: int(m.FromStep), Execution: m.Execution, Process: m.Process, Reason: m.Reason})
+		Seeds: itemIDs(m.Seeds), FromStep: int(m.FromStep), Execution: m.Execution, Process: m.Process, Reason: m.Reason, Guidance: m.Guidance, By: m.By})
 	if err == nil {
 		h.publish(ctx, "goap.change."+m.ChangeId+".flow_opened", f)
 	}
 	return res(&graphv1.OpenFlowResponse{Flow: pbconv.FlowToPB(f)}, err)
+}
+
+func (h *Handler) MaterializeFlow(ctx context.Context, r *connect.Request[graphv1.MaterializeFlowRequest]) (*connect.Response[graphv1.MaterializeFlowResponse], error) {
+	f, err := h.Graph.MaterializeFlow(ctx, domain.ChangeID(r.Msg.ChangeId), r.Msg.Flow)
+	return res(&graphv1.MaterializeFlowResponse{Flow: pbconv.FlowToPB(f)}, err)
 }
 
 func itemIDs(ss []string) []domain.ItemID {

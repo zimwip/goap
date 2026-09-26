@@ -22,6 +22,8 @@ type GraphPort interface {
 	OpenFlow(ctx context.Context, id domain.ChangeID, in graph.OpenFlowRequest) (domain.Flow, error)
 	AdoptFlow(ctx context.Context, id domain.ChangeID, flow, by string) (domain.Flow, error)
 	DiscardFlow(ctx context.Context, id domain.ChangeID, flow, by string) (domain.Flow, error)
+	// MaterializeFlow applies the proposals of a flow on a domain branch of its own (a preview).
+	MaterializeFlow(ctx context.Context, id domain.ChangeID, flow string) (domain.Flow, error)
 	// ValidateBoard checks the consistency of the blackboard seen from a flow.
 	ValidateBoard(ctx context.Context, id domain.ChangeID, flow string) ([]domain.BoardIssue, error)
 	BaselineGraph(ctx context.Context, id domain.BaselineID) ([]domain.Node, []domain.Link, error)

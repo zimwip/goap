@@ -126,6 +126,9 @@ const (
 	GraphServiceDiscardFlowProcedure = "/goap.graph.v1.GraphService/DiscardFlow"
 	// GraphServiceListFlowsProcedure is the fully-qualified name of the GraphService's ListFlows RPC.
 	GraphServiceListFlowsProcedure = "/goap.graph.v1.GraphService/ListFlows"
+	// GraphServiceMaterializeFlowProcedure is the fully-qualified name of the GraphService's
+	// MaterializeFlow RPC.
+	GraphServiceMaterializeFlowProcedure = "/goap.graph.v1.GraphService/MaterializeFlow"
 	// GraphServiceValidateBoardProcedure is the fully-qualified name of the GraphService's
 	// ValidateBoard RPC.
 	GraphServiceValidateBoardProcedure = "/goap.graph.v1.GraphService/ValidateBoard"
@@ -186,6 +189,8 @@ type GraphServiceClient interface {
 	AdoptFlow(context.Context, *connect.Request[v1.AdoptFlowRequest]) (*connect.Response[v1.AdoptFlowResponse], error)
 	DiscardFlow(context.Context, *connect.Request[v1.DiscardFlowRequest]) (*connect.Response[v1.DiscardFlowResponse], error)
 	ListFlows(context.Context, *connect.Request[v1.ListFlowsRequest]) (*connect.Response[v1.ListFlowsResponse], error)
+	// Applies the proposals of a flow on a graph branch of its own (a preview, merged when the flow is adopted).
+	MaterializeFlow(context.Context, *connect.Request[v1.MaterializeFlowRequest]) (*connect.Response[v1.MaterializeFlowResponse], error)
 	// Consistency check of the blackboard as a process on a flow sees it.
 	ValidateBoard(context.Context, *connect.Request[v1.ValidateBoardRequest]) (*connect.Response[v1.ValidateBoardResponse], error)
 	// Execution journal (ADR 0011)
@@ -414,6 +419,12 @@ func NewGraphServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(graphServiceMethods.ByName("ListFlows")),
 			connect.WithClientOptions(opts...),
 		),
+		materializeFlow: connect.NewClient[v1.MaterializeFlowRequest, v1.MaterializeFlowResponse](
+			httpClient,
+			baseURL+GraphServiceMaterializeFlowProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("MaterializeFlow")),
+			connect.WithClientOptions(opts...),
+		),
 		validateBoard: connect.NewClient[v1.ValidateBoardRequest, v1.ValidateBoardResponse](
 			httpClient,
 			baseURL+GraphServiceValidateBoardProcedure,
@@ -472,6 +483,7 @@ type graphServiceClient struct {
 	adoptFlow        *connect.Client[v1.AdoptFlowRequest, v1.AdoptFlowResponse]
 	discardFlow      *connect.Client[v1.DiscardFlowRequest, v1.DiscardFlowResponse]
 	listFlows        *connect.Client[v1.ListFlowsRequest, v1.ListFlowsResponse]
+	materializeFlow  *connect.Client[v1.MaterializeFlowRequest, v1.MaterializeFlowResponse]
 	validateBoard    *connect.Client[v1.ValidateBoardRequest, v1.ValidateBoardResponse]
 	recordExecutions *connect.Client[v1.RecordExecutionsRequest, v1.RecordExecutionsResponse]
 	listExecutions   *connect.Client[v1.ListExecutionsRequest, v1.ListExecutionsResponse]
@@ -652,6 +664,11 @@ func (c *graphServiceClient) ListFlows(ctx context.Context, req *connect.Request
 	return c.listFlows.CallUnary(ctx, req)
 }
 
+// MaterializeFlow calls goap.graph.v1.GraphService.MaterializeFlow.
+func (c *graphServiceClient) MaterializeFlow(ctx context.Context, req *connect.Request[v1.MaterializeFlowRequest]) (*connect.Response[v1.MaterializeFlowResponse], error) {
+	return c.materializeFlow.CallUnary(ctx, req)
+}
+
 // ValidateBoard calls goap.graph.v1.GraphService.ValidateBoard.
 func (c *graphServiceClient) ValidateBoard(ctx context.Context, req *connect.Request[v1.ValidateBoardRequest]) (*connect.Response[v1.ValidateBoardResponse], error) {
 	return c.validateBoard.CallUnary(ctx, req)
@@ -716,6 +733,8 @@ type GraphServiceHandler interface {
 	AdoptFlow(context.Context, *connect.Request[v1.AdoptFlowRequest]) (*connect.Response[v1.AdoptFlowResponse], error)
 	DiscardFlow(context.Context, *connect.Request[v1.DiscardFlowRequest]) (*connect.Response[v1.DiscardFlowResponse], error)
 	ListFlows(context.Context, *connect.Request[v1.ListFlowsRequest]) (*connect.Response[v1.ListFlowsResponse], error)
+	// Applies the proposals of a flow on a graph branch of its own (a preview, merged when the flow is adopted).
+	MaterializeFlow(context.Context, *connect.Request[v1.MaterializeFlowRequest]) (*connect.Response[v1.MaterializeFlowResponse], error)
 	// Consistency check of the blackboard as a process on a flow sees it.
 	ValidateBoard(context.Context, *connect.Request[v1.ValidateBoardRequest]) (*connect.Response[v1.ValidateBoardResponse], error)
 	// Execution journal (ADR 0011)
@@ -940,6 +959,12 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(graphServiceMethods.ByName("ListFlows")),
 		connect.WithHandlerOptions(opts...),
 	)
+	graphServiceMaterializeFlowHandler := connect.NewUnaryHandler(
+		GraphServiceMaterializeFlowProcedure,
+		svc.MaterializeFlow,
+		connect.WithSchema(graphServiceMethods.ByName("MaterializeFlow")),
+		connect.WithHandlerOptions(opts...),
+	)
 	graphServiceValidateBoardHandler := connect.NewUnaryHandler(
 		GraphServiceValidateBoardProcedure,
 		svc.ValidateBoard,
@@ -1030,6 +1055,8 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 			graphServiceDiscardFlowHandler.ServeHTTP(w, r)
 		case GraphServiceListFlowsProcedure:
 			graphServiceListFlowsHandler.ServeHTTP(w, r)
+		case GraphServiceMaterializeFlowProcedure:
+			graphServiceMaterializeFlowHandler.ServeHTTP(w, r)
 		case GraphServiceValidateBoardProcedure:
 			graphServiceValidateBoardHandler.ServeHTTP(w, r)
 		case GraphServiceRecordExecutionsProcedure:
@@ -1183,6 +1210,10 @@ func (UnimplementedGraphServiceHandler) DiscardFlow(context.Context, *connect.Re
 
 func (UnimplementedGraphServiceHandler) ListFlows(context.Context, *connect.Request[v1.ListFlowsRequest]) (*connect.Response[v1.ListFlowsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.ListFlows is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) MaterializeFlow(context.Context, *connect.Request[v1.MaterializeFlowRequest]) (*connect.Response[v1.MaterializeFlowResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.MaterializeFlow is not implemented"))
 }
 
 func (UnimplementedGraphServiceHandler) ValidateBoard(context.Context, *connect.Request[v1.ValidateBoardRequest]) (*connect.Response[v1.ValidateBoardResponse], error) {

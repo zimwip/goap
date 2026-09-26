@@ -88,7 +88,7 @@ func (g *Graph) applyTx(ctx context.Context, tx Tx, id domain.ChangeID, baseline
 		target, parentBaseline = maps.Clone(head.Nodes), head.ID
 	}
 	a := &applier{g: g, tx: tx, ctx: ctx, change: c, walk: w, branch: domain.BranchOf(c.Branch), target: target,
-		bumped: map[domain.NodeID]*bump{}, created: map[domain.ItemID]domain.NodeRef{}, removed: map[domain.LinkID]bool{}}
+		bumped: map[domain.NodeID]*bump{}, created: map[domain.ItemID]domain.NodeRef{}, removed: map[domain.LinkID]bool{}, merged: mergedSet(c), mnodes: c.MergedNodes()}
 	if err := a.run(); err != nil {
 		return domain.Baseline{}, err
 	}
@@ -155,6 +155,9 @@ type applier struct {
 	created  map[domain.ItemID]domain.NodeRef
 	removed  map[domain.LinkID]bool
 	newLinks []domain.LinkDraft // links whose source is a created node
+	// merged are the proposals already applied on the branch by an adopted flow merged into it.
+	merged map[domain.ItemID]bool
+	mnodes map[domain.ItemID]domain.NodeID
 }
 
 func (a *applier) bumpOf(ref domain.NodeRef) (*bump, error) {
@@ -248,9 +251,19 @@ func (a *applier) mergeOf(d *domain.NodeDraft) error {
 func (a *applier) run() error {
 	var proposals []domain.ChangeItem
 	for _, it := range a.change.Items {
-		if it.Kind == domain.KindProposal && a.change.InEffect(it.ID) {
-			proposals = append(proposals, it)
+		if it.Kind != domain.KindProposal || !a.change.InEffect(it.ID) {
+			continue
 		}
+		if a.merged[it.ID] {
+			// already applied on the branch when its flow was merged: later proposals may refer to its node
+			if id, ok := a.mnodes[it.ID]; ok {
+				if v, in := a.target[id]; in {
+					a.created[it.ID] = domain.NodeRef{ID: id, Version: v}
+				}
+			}
+			continue
+		}
+		proposals = append(proposals, it)
 	}
 	// 1. node operations
 	for _, it := range proposals {

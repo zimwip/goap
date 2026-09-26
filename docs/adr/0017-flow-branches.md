@@ -36,9 +36,31 @@ rewritten. Relaunching is a **flow branch**, and every transition is an event of
    `superseded`. Discarding (possible while the branch is open): the candidates are `rejected`, the
    stale items count again, the relaunched process is `superseded`, the previous run is untouched.
    Both are journaled (`approval` record, action `flow`).
-8. **Guards**: at most one open branch per change; a change with an open branch cannot be applied;
-   a batch of items belongs to one flow; only processes without a parent can be relaunched (relaunch
-   the parent step, its sub-agent outputs are seeds).
+8. **Guards**: a change with an open branch cannot be applied; a batch of items belongs to one flow;
+   only processes without a parent can be relaunched (relaunch the parent step, its sub-agent outputs
+   are seeds).
+
+## Parallel branches, guidance and the domain branch (amendment)
+- **Parallel branches**: a change may have several open flow branches (alternatives). Each reads its
+  own view (the parent's view without the items it invalidated, plus its own items), so the
+  alternatives do not see each other. They are decided one by one. An open flow **competes** with a
+  flow adopted after it was opened when they replace the same items, or when its candidates derive
+  from items the adopted flow replaced (`Flow.CompetesWith`): adopting a competing flow is refused, it
+  is relaunched or discarded. Independent branches are adopted freely.
+- **Guidance**: relaunching takes an optional comment (`guidance`). It is recorded as an item of type
+  `guidance` on the branch, so only the relaunched steps read it: LLM actions get it appended to their
+  prompt ("Guidance from a human reviewer..."). A board-inconsistency relaunch passes the human's
+  comment the same way.
+- **Domain branch**: the proposals of a flow view (kept and candidate ones) are applied on a graph
+  branch of its own (`flow-<id>`, forked from the branch the change acts on) by `MaterializeFlow`, done
+  by the engine when the relaunched run reaches its goal, so the reviewer can read the resulting graph
+  (`PlanMerge` of the flow branch against the change branch) before deciding. Nothing is written when it
+  fails. Adopting merges the flow branch into the change branch **when the change has a branch of its
+  own** (a change acting directly on main does not publish before it is applied) and the merge has no
+  conflict; the proposals merged this way are recorded on the adopt event and are not applied a second
+  time when the change is applied (`ChangeSet.MergedOnBranch`, skipped by the applier and by the
+  divergence check). Discarding abandons every branch the flow used. If the flow changed since it was
+  materialized, adoption does not merge: the proposals are applied with the change as usual.
 
 ## Blackboard validation before each action
 The engine validates the blackboard the process reads at the start of every cycle, before planning
