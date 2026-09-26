@@ -14,7 +14,6 @@ import { domainGroup } from './editors/domainTabs';
 import MethodologyExplorer from './nav/MethodologyExplorer.svelte';
 import DomainExplorer from './nav/DomainExplorer.svelte';
 import AlgorithmExplorer from './nav/AlgorithmExplorer.svelte';
-import RunsExplorer from './nav/RunsExplorer.svelte';
 import BaselineExplorer from './nav/BaselineExplorer.svelte';
 import ChangesExplorer from './nav/ChangesExplorer.svelte';
 import TokensTab from './dashboard/TokensTab.svelte';
@@ -55,12 +54,14 @@ registerView({ id: 'assistant', zone: 'left', title: 'Assistant', icon: 'chat', 
 registerView({ id: 'methodologies', zone: 'left', title: 'Methodologies', icon: 'book', component: MethodologyExplorer, order: 1 });
 registerView({ id: 'domains', zone: 'left', title: 'Domains', icon: 'graph', component: DomainExplorer, order: 1.5 });
 registerView({ id: 'algorithms', zone: 'left', title: 'Algorithms', icon: 'code', component: AlgorithmExplorer, order: 1.6 });
+registerView({ id: 'triggers', zone: 'left', title: 'Triggers', icon: 'clock', component: TriggersExplorer, order: 2.5 });
+registerView({ id: 'baselines', zone: 'left', title: 'Baseline', icon: 'database', component: BaselineExplorer, order: 3 });
 registerView({
-  id: 'runs',
+  id: 'changes',
   zone: 'left',
-  title: 'Runs',
-  icon: 'runs',
-  component: RunsExplorer,
+  title: 'Changes',
+  icon: 'diff',
+  component: ChangesExplorer,
   order: 2,
   badge: () => {
     let n = 0;
@@ -68,9 +69,6 @@ registerView({
     return n || undefined;
   },
 });
-registerView({ id: 'triggers', zone: 'left', title: 'Triggers', icon: 'clock', component: TriggersExplorer, order: 2.5 });
-registerView({ id: 'baselines', zone: 'left', title: 'Baseline', icon: 'database', component: BaselineExplorer, order: 3 });
-registerView({ id: 'changes', zone: 'left', title: 'Changes', icon: 'diff', component: ChangesExplorer, order: 4 });
 registerView({ id: 'organisation', zone: 'left', title: 'Organisation', icon: 'user', component: OrganisationExplorer, order: 4.5 });
 registerView({ id: 'access', zone: 'left', title: 'Access', icon: 'shield', component: AccessExplorer, order: 5 });
 
