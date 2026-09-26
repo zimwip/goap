@@ -49,7 +49,7 @@ func main() {
 	secrets := platform.NewSecrets()
 	dev := authz.Principal{
 		Subject: platform.Env("GOAP_DEV_SUBJECT", "dev"),
-		Org:     platform.Env("GOAP_DEV_ORG", "dev"),
+		Org:     platform.Env("GOAP_DEV_ORG", domain.DefaultOrg),
 		Roles:   strings.Split(platform.Env("GOAP_DEV_ROLES", "admin"), ","),
 	}
 	ident := identity.Extractor{Default: &dev}
@@ -166,7 +166,7 @@ func main() {
 	srv := platform.NewServer(log, platform.Env("GOAP_HTTP_ADDR", ":8080"))
 	srv.Mount(graphv1connect.NewGraphServiceHandler(&graphsvc.Handler{Graph: g, Events: changePublisher(onChange), Authz: authorizer, Identity: ident}, telemetry.HandlerOptions()...))
 	srv.Mount(registryv1connect.NewRegistryServiceHandler(&registrysvc.Handler{Service: reg, Identity: ident}, telemetry.HandlerOptions()...))
-	srv.Mount(iamv1connect.NewIamServiceHandler(&iamsvc.Handler{Enforcer: authorizer, Identity: ident}, telemetry.HandlerOptions()...))
+	srv.Mount(iamv1connect.NewIamServiceHandler(&iamsvc.Handler{Enforcer: authorizer, Orgs: st.orgs, Identity: ident}, telemetry.HandlerOptions()...))
 	srv.Mount(modelv1connect.NewModelServiceHandler(&modelgw.Handler{Service: gw, Identity: ident, Authz: authorizer}, telemetry.HandlerOptions()...))
 	srv.Mount(enginev1connect.NewEngineServiceHandler(&enginesvc.Handler{Engine: e, Log: log, DefaultPrincipal: &dev, Authz: authorizer, Broker: broker, Triggers: triggers}, telemetry.HandlerOptions()...))
 	// single process: the platform is up when this answers (the gateway serves it otherwise)

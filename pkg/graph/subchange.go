@@ -43,6 +43,7 @@ func (g *Graph) prepareSubChange(ctx context.Context, tx Tx, c *domain.ChangeSet
 		return fmt.Errorf("a sub-change acts on the namespace of its parent (%s): %w", domain.NamespaceOf(parent.Namespace), ErrInvalid)
 	}
 	c.Namespace = domain.NamespaceOf(parent.Namespace)
+	c.OrgID = domain.OrgOf(parent.OrgID)
 	c.Branch = own.Name
 	in.OwnBranch = true
 	if c.BaselineID == "" {

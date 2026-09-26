@@ -63,6 +63,11 @@ The organisation is a hierarchy of units in its own namespace (`organisation`); 
 unit across namespaces, and a change is split into sub-changes along unit boundaries
 ([ADR 0016](adr/0016-organisation-and-sub-changes.md)).
 
+**Organisations** ([ADR 0019](adr/0019-organisations-mcp-connectors.md)): every change belongs to an
+organisation (tenant, `orgId`, distinct from the `OrgUnit` owner above), taken from the caller (else `default`)
+and inherited by sub-changes. The iam service stores the organisations (`CreateOrganization`,
+`ListOrganizations`, `GetOrganization`); the `default` organisation is seeded and owns pre-existing changes.
+
 Versioning rule ([ADR 0003](adr/0003-liens-version-a-version.md)): **outgoing links belong
 to the source node's version**. Adding/removing an outgoing link creates a new version of the source;
 a node that changes version carries its outgoing links forward; incoming links from unmodified

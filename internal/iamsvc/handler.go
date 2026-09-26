@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"connectrpc.com/connect"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	iamv1 "github.com/zimwip/goap/gen/goap/iam/v1"
 	"github.com/zimwip/goap/gen/goap/iam/v1/iamv1connect"
@@ -14,11 +15,13 @@ import (
 	"github.com/zimwip/goap/pkg/engine"
 )
 
-// Handler implements iamv1connect.IamServiceHandler. Organization and user
-// management are not implemented yet (milestone M2).
+// Handler implements iamv1connect.IamServiceHandler. User management is not
+// implemented yet (milestone M2).
 type Handler struct {
 	iamv1connect.UnimplementedIamServiceHandler
 	Enforcer *authz.Casbin
+	// Orgs stores the organizations (nil: an in-memory store holding the default one).
+	Orgs     OrgStore
 	Identity identity.Extractor
 	Events   engine.Publisher
 }
@@ -55,8 +58,12 @@ func (h *Handler) CheckPermission(ctx context.Context, r *connect.Request[iamv1.
 
 // guard authorizes policy administration for the caller.
 func (h *Handler) guard(ctx context.Context, hdr http.Header, action string) error {
+	return h.guardResource(ctx, hdr, action, authz.Resource{Type: "policy"})
+}
+
+func (h *Handler) guardResource(ctx context.Context, hdr http.Header, action string, res authz.Resource) error {
 	ctx = h.Identity.Context(ctx, hdr)
-	err := authz.Check(ctx, h.Enforcer, authz.Request{Subject: authz.From(ctx), Action: action, Resource: authz.Resource{Type: "policy"}})
+	err := authz.Check(ctx, h.Enforcer, authz.Request{Subject: authz.From(ctx), Action: action, Resource: res})
 	if errors.Is(err, authz.ErrForbidden) {
 		return connect.NewError(connect.CodePermissionDenied, err)
 	}
@@ -144,4 +151,75 @@ func (c *Client) Authorize(ctx context.Context, req authz.Request) (bool, error)
 		return false, err
 	}
 	return r.Msg.Allowed, nil
+}
+
+func (h *Handler) orgs() OrgStore {
+	if h.Orgs == nil {
+		h.Orgs = NewMemoryOrgStore()
+	}
+	return h.Orgs
+}
+
+func orgToPB(o Organization) *iamv1.Organization {
+	return &iamv1.Organization{Id: o.ID, Name: o.Name, CreatedAt: timestamppb.New(o.CreatedAt)}
+}
+
+func orgErr(err error) error {
+	switch {
+	case err == nil:
+		return nil
+	case errors.Is(err, ErrOrgNotFound):
+		return connect.NewError(connect.CodeNotFound, err)
+	case errors.Is(err, ErrOrgExists):
+		return connect.NewError(connect.CodeAlreadyExists, err)
+	case errors.Is(err, ErrOrgInvalid):
+		return connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	return connect.NewError(connect.CodeInternal, err)
+}
+
+func (h *Handler) CreateOrganization(ctx context.Context, r *connect.Request[iamv1.CreateOrganizationRequest]) (*connect.Response[iamv1.CreateOrganizationResponse], error) {
+	if err := h.guardResource(ctx, r.Header(), "write", authz.Resource{Type: "organization", ID: r.Msg.Id}); err != nil {
+		return nil, err
+	}
+	o, err := NewOrganization(r.Msg.Id, r.Msg.Name)
+	if err != nil {
+		return nil, orgErr(err)
+	}
+	o, err = h.orgs().Create(ctx, o)
+	if err != nil {
+		return nil, orgErr(err)
+	}
+	return connect.NewResponse(&iamv1.CreateOrganizationResponse{Organization: orgToPB(o)}), nil
+}
+
+func (h *Handler) GetOrganization(ctx context.Context, r *connect.Request[iamv1.GetOrganizationRequest]) (*connect.Response[iamv1.GetOrganizationResponse], error) {
+	if err := h.guardResource(ctx, r.Header(), "read", authz.Resource{Type: "organization", ID: r.Msg.Id, Org: r.Msg.Id}); err != nil {
+		return nil, err
+	}
+	o, err := h.orgs().Get(ctx, r.Msg.Id)
+	if err != nil {
+		return nil, orgErr(err)
+	}
+	return connect.NewResponse(&iamv1.GetOrganizationResponse{Organization: orgToPB(o)}), nil
+}
+
+// ListOrganizations lists the organizations; a caller who is not an admin sees only its own.
+func (h *Handler) ListOrganizations(ctx context.Context, r *connect.Request[iamv1.ListOrganizationsRequest]) (*connect.Response[iamv1.ListOrganizationsResponse], error) {
+	who := authz.From(h.Identity.Context(ctx, r.Header()))
+	all, err := h.orgs().List(ctx)
+	if err != nil {
+		return nil, orgErr(err)
+	}
+	admin := false
+	for _, role := range who.Roles {
+		admin = admin || role == "admin"
+	}
+	out := &iamv1.ListOrganizationsResponse{}
+	for _, o := range all {
+		if admin || o.ID == who.Org {
+			out.Organizations = append(out.Organizations, orgToPB(o))
+		}
+	}
+	return connect.NewResponse(out), nil
 }
