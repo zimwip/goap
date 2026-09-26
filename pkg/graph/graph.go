@@ -240,6 +240,9 @@ type NewChange struct {
 	Title       string
 	Intent      string
 	Methodology string
+	// OrgID is the organisation the change belongs to (default: domain.DefaultOrg;
+	// a sub-change takes the organisation of its parent).
+	OrgID string
 	// Namespace the change acts on (default: domain.DefaultNamespace).
 	Namespace  string
 	BaselineID domain.BaselineID
@@ -265,7 +268,7 @@ func (g *Graph) CreateChange(ctx context.Context, in NewChange) (domain.ChangeSe
 		c = domain.ChangeSet{
 			ID: domain.ChangeID(g.newID()), Title: in.Title, Intent: in.Intent, Methodology: in.Methodology, Namespace: domain.NamespaceOf(in.Namespace),
 			Status: domain.ChangeDraft, BaselineID: in.BaselineID, Branch: domain.BranchOf(in.Branch), Data: in.Data, CreatedAt: g.now(),
-			ParentID: in.ParentID, OwnerOrg: in.OwnerOrg,
+			ParentID: in.ParentID, OwnerOrg: in.OwnerOrg, OrgID: domain.OrgOf(in.OrgID),
 		}
 		if err := g.prepareSubChange(ctx, tx, &c, &in); err != nil {
 			return err

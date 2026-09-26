@@ -549,6 +549,8 @@ export interface ChangeSet {
   /** sub-change: parent change and responsible OrgUnit key */
   parentId?: string;
   ownerOrg?: string;
+  /** organisation (tenant) the change belongs to */
+  orgId?: string;
   title?: string;
   intent?: string;
   methodology?: string;

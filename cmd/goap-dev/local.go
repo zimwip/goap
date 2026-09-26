@@ -28,6 +28,7 @@ type stores struct {
 	graph         graph.Repo
 	methodologies registrysvc.Store
 	policies      persist.Adapter // nil: in-memory policies
+	orgs          iamsvc.OrgStore // nil: in-memory organizations
 	processes     engine.Store
 	models        modelgw.Store
 	close         func()
@@ -68,7 +69,7 @@ func openStores(ctx context.Context, log *slog.Logger) (stores, error) {
 		abs, _ := filepath.Abs(path)
 		log.Info("local storage", "sqlite", abs)
 		return stores{graph: graph.NewSQLite(db), methodologies: registrysvc.SQLiteStore{DB: db},
-			policies: &iamsvc.SQLiteAdapter{DB: db}, processes: processes, models: modelgw.SQLStore{DB: db}, close: func() { closeDB(log, db) }}, nil
+			policies: &iamsvc.SQLiteAdapter{DB: db}, orgs: iamsvc.SQLiteOrgStore{DB: db}, processes: processes, models: modelgw.SQLStore{DB: db}, close: func() { closeDB(log, db) }}, nil
 	default:
 		return stores{}, fmt.Errorf("GOAP_STORE must be memory or sqlite, got %q", kind)
 	}

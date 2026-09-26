@@ -31,6 +31,10 @@ type ChangeSet struct {
 	Title       string   `json:"title"`
 	Intent      string   `json:"intent"`
 	Methodology string   `json:"methodology,omitempty"`
+	// OrgID is the organisation (tenant) the change belongs to: it decides which
+	// MCP tools, through the organisation bindings, the change's actions can use.
+	// It is not OwnerOrg, which is an OrgUnit node of the "organisation" namespace.
+	OrgID string `json:"orgId,omitempty"`
 	// Namespace the change acts on: only its nodes can be linked to the change.
 	Namespace string `json:"namespace,omitempty"`
 	// ParentID is set on a sub-change: a part of the parent change, split along an

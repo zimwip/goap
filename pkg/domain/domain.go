@@ -28,6 +28,18 @@ func (r NodeRef) String() string { return fmt.Sprintf("%s@v%d", r.ID, r.Version)
 // IsZero reports whether the reference is unset.
 func (r NodeRef) IsZero() bool { return r.ID == "" }
 
+// DefaultOrg is the organisation of changes and processes that name none. It is
+// the backfill value of pre-existing rows and the organisation seeded by iam.
+const DefaultOrg = "default"
+
+// OrgOf returns org, or DefaultOrg when empty.
+func OrgOf(org string) string {
+	if org == "" {
+		return DefaultOrg
+	}
+	return org
+}
+
 // DefaultNamespace is the namespace of nodes and changes that name none.
 const DefaultNamespace = "sdlc"
 
