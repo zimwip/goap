@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/labstack/echo/v4"
+
 	"github.com/zimwip/goap/pkg/authz"
 )
 
@@ -39,4 +41,17 @@ func (x Extractor) Context(ctx context.Context, h http.Header) context.Context {
 		p = *x.Default
 	}
 	return authz.With(ctx, p)
+}
+
+// WhoAmI serves the caller as the platform sees it: the principal of the request, completed by enrich
+// (its User node in the graph). Nil enrich returns the principal as it is.
+func WhoAmI(x Extractor, enrich func(context.Context, authz.Principal) authz.Principal) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		ctx := x.Context(c.Request().Context(), c.Request().Header)
+		p := authz.From(ctx)
+		if enrich != nil {
+			p = enrich(ctx, p)
+		}
+		return c.JSON(http.StatusOK, p)
+	}
 }

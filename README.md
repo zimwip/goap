@@ -58,7 +58,6 @@ curl -s localhost:8080/goap.engine.v1.EngineService/StartProcess -H 'Content-Typ
 | registry | 8082 | methodologies structured in the database (draft → published), YAML import/export |
 | engine | 8083 | agentic processes: intent → planning → execution |
 | modelgw | 8084 | multi-provider LLM gateway (Anthropic, OpenAI-compatible, fake) |
-| iam | 8086 | ABAC access control (Casbin), policies in the database |
 | mcp | — | skeleton (API defined, not implemented) |
 | goap-runner | — | script action sandbox (one container / pod / process per execution) |
 | otel-collector, jaeger, prometheus, grafana | 4318, 16686, 9090, 3000 | OpenTelemetry observability |

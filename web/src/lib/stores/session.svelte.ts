@@ -1,5 +1,5 @@
-// Current identity (IamService.WhoAmI), refreshed on every token change.
-import { iam, onTokenChange, getToken, type Principal } from '../api';
+// Current identity (GET /api/whoami), refreshed on every token change.
+import { whoAmI, onTokenChange, getToken, type Principal } from '../api';
 
 export const session = $state({
   principal: undefined as Principal | undefined,
@@ -11,7 +11,7 @@ export const session = $state({
 export async function refreshIdentity(): Promise<void> {
   session.hasToken = !!getToken();
   try {
-    session.principal = (await iam.whoAmI()).principal;
+    session.principal = await whoAmI();
     session.error = '';
   } catch {
     session.principal = undefined;

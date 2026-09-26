@@ -11,13 +11,13 @@ import (
 	"github.com/zimwip/goap/gen/goap/runtime/v1/runtimev1connect"
 	"github.com/zimwip/goap/internal/enginesvc"
 	"github.com/zimwip/goap/internal/graphsvc"
-	"github.com/zimwip/goap/internal/iamsvc"
 	"github.com/zimwip/goap/internal/mcpsvc"
 	"github.com/zimwip/goap/internal/modelgw"
 	"github.com/zimwip/goap/internal/platform"
 	"github.com/zimwip/goap/internal/registrysvc"
 	"github.com/zimwip/goap/internal/sandbox"
 	"github.com/zimwip/goap/internal/telemetry"
+	"github.com/zimwip/goap/pkg/access"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/engine"
 	"github.com/zimwip/goap/pkg/intent"
@@ -67,7 +67,10 @@ func main() {
 	if platform.Env("GOAP_INTENT_RANKER", "lexical") == "llm" {
 		ranker = intent.LLMRanker{Client: models, Model: platform.Env("GOAP_INTENT_MODEL", "fast")}
 	}
-	authorizer := iamsvc.NewClient(hc, platform.Env("GOAP_IAM_URL", "http://localhost:8086"), copts...)
+	authorizer, err := access.NewAuthorizer(&access.Directory{Graph: graphsvc.NewClient(hc, platform.Env("GOAP_GRAPH_URL", "http://localhost:8081"), copts...)})
+	if err != nil {
+		platform.Fatal(log, "authorizer", err)
+	}
 	registry := registrysvc.NewClient(hc, platform.Env("GOAP_REGISTRY_URL", "http://localhost:8082"), copts...)
 	builtins := engine.DefaultBuiltins()
 	e := &engine.Engine{

@@ -12,6 +12,7 @@ import (
 	"github.com/zimwip/goap/internal/identity"
 	"github.com/zimwip/goap/internal/pbconv"
 	"github.com/zimwip/goap/internal/rpcerr"
+	"github.com/zimwip/goap/pkg/access"
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/engine"
@@ -28,6 +29,9 @@ type Handler struct {
 	// resource "object". Nil grants everything. Ordinary domain-node proposals
 	// and instanceOf edges are never gated by it.
 	Authz authz.Authorizer
+	// Floor gates changes to User and Policy nodes (resource "policy", action "write"). It must not depend
+	// on the policies themselves, so that no policy can lock the administrators out; nil falls back to Authz.
+	Floor authz.Authorizer
 	// Identity extracts the caller from request headers (set by the gateway).
 	Identity identity.Extractor
 }
@@ -50,6 +54,9 @@ func (h *Handler) publish(ctx context.Context, subject string, v any) {
 // refuseDirectWrite rejects writes outside a change to nodes of a type that has
 // a lifecycle (ADR 0014): such nodes are modified through changes only.
 func (h *Handler) refuseDirectWrite(ctx context.Context, typ string) error {
+	if isAccessType(typ) {
+		return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("node type %s is access control: modify its nodes through a change", typ))
+	}
 	controlled, err := h.Graph.LifecycleControlled(ctx, typ)
 	if err != nil {
 		return rpcerr.ToConnect(err)
@@ -235,12 +242,47 @@ func (h *Handler) touchesMetadataLayer(ctx context.Context, items []domain.Chang
 	return false
 }
 
+func isAccessType(typ string) bool { return typ == access.NodeTypeUser || typ == access.NodeTypePolicy }
+
+// touchesAccessLayer reports whether items create, change or delete User or Policy nodes.
+func (h *Handler) touchesAccessLayer(ctx context.Context, items []domain.ChangeItem) bool {
+	for _, it := range items {
+		p := it.Proposal
+		if p == nil || p.Node == nil {
+			continue
+		}
+		switch p.Op {
+		case domain.OpCreateNode:
+			if isAccessType(p.Node.Type) {
+				return true
+			}
+		case domain.OpUpdateNode, domain.OpDeleteNode:
+			if p.Node.Base != nil {
+				if n, err := h.Graph.Node(ctx, *p.Node.Base); err == nil && isAccessType(n.Type) {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
 func (h *Handler) AddItems(ctx context.Context, r *connect.Request[graphv1.AddItemsRequest]) (*connect.Response[graphv1.AddItemsResponse], error) {
 	ctx = h.Identity.Context(ctx, r.Header())
 	proposed := pbconv.ItemsFromPB(r.Msg.Items)
 	if h.touchesMetadataLayer(ctx, proposed) {
 		who := authz.From(ctx)
 		if err := authz.Check(ctx, h.Authz, authz.Request{Subject: who, Action: "write", Resource: authz.Resource{Type: "nodetype", Org: who.Org}}); err != nil {
+			return nil, rpcerr.ToConnect(err)
+		}
+	}
+	if h.touchesAccessLayer(ctx, proposed) {
+		who := authz.From(ctx)
+		gate := h.Floor
+		if gate == nil {
+			gate = h.Authz
+		}
+		if err := authz.Check(ctx, gate, authz.Request{Subject: who, Action: "write", Resource: authz.Resource{Type: access.ResourcePolicy, Org: who.Org}}); err != nil {
 			return nil, rpcerr.ToConnect(err)
 		}
 	}

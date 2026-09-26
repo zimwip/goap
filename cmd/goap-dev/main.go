@@ -1,8 +1,8 @@
-// Command goap-dev runs graph, registry, iam, model gateway and engine in a
+// Command goap-dev runs graph, registry, model gateway and engine in a
 // single process, for local development without containers. Storage is
 // in-memory (GOAP_STORE=memory, default) or a local SQLite file
 // (GOAP_STORE=sqlite, GOAP_SQLITE_PATH) that keeps the graph, methodologies,
-// policies and processes across restarts. When GOAP_WEB_DIR (default
+// access policies (graph nodes) and processes across restarts. When GOAP_WEB_DIR (default
 // web/dist) holds a built IDE, it is served too. Callers act as the principal
 // GOAP_DEV_SUBJECT / GOAP_DEV_ROLES unless the request carries X-Goap-*
 // identity headers.
@@ -20,7 +20,6 @@ import (
 
 	"github.com/zimwip/goap/gen/goap/engine/v1/enginev1connect"
 	"github.com/zimwip/goap/gen/goap/graph/v1/graphv1connect"
-	"github.com/zimwip/goap/gen/goap/iam/v1/iamv1connect"
 	"github.com/zimwip/goap/gen/goap/mcp/v1/mcpv1connect"
 	"github.com/zimwip/goap/gen/goap/model/v1/modelv1connect"
 	"github.com/zimwip/goap/gen/goap/registry/v1/registryv1connect"
@@ -29,7 +28,6 @@ import (
 	"github.com/zimwip/goap/internal/connectors/localfs"
 	"github.com/zimwip/goap/internal/enginesvc"
 	"github.com/zimwip/goap/internal/graphsvc"
-	"github.com/zimwip/goap/internal/iamsvc"
 	"github.com/zimwip/goap/internal/identity"
 	"github.com/zimwip/goap/internal/mcpsvc"
 	"github.com/zimwip/goap/internal/modelgw"
@@ -37,6 +35,7 @@ import (
 	"github.com/zimwip/goap/internal/registrysvc"
 	"github.com/zimwip/goap/internal/sandbox"
 	"github.com/zimwip/goap/internal/telemetry"
+	"github.com/zimwip/goap/pkg/access"
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/engine"
@@ -64,14 +63,18 @@ func main() {
 		platform.Fatal(log, "store", err)
 	}
 	defer st.close()
-	authorizer, err := authz.NewCasbin(st.policies)
-	if err != nil {
-		platform.Fatal(log, "casbin", err)
-	}
 	g := graph.New(st.graph)
+	directory := &access.Directory{Graph: g}
+	authorizer, err := access.NewAuthorizer(directory)
+	if err != nil {
+		platform.Fatal(log, "authorizer", err)
+	}
 	g.Authorizer = graphsvc.TransitionAuthorizer(authorizer)
 	if _, err := graphsvc.SeedDemo(ctx, g); err != nil {
 		platform.Fatal(log, "seed", err)
+	}
+	if _, err := graphsvc.SeedAccess(ctx, g); err != nil {
+		platform.Fatal(log, "seed access", err)
 	}
 	if _, err := graphsvc.SeedDefaults(ctx, g); err != nil {
 		platform.Fatal(log, "seed defaults", err)
@@ -196,9 +199,9 @@ func main() {
 	triggers.Start(ctx)
 	go triggers.WatchProcesses(ctx, broker)
 	srv := platform.NewServer(log, platform.Env("GOAP_HTTP_ADDR", ":8080"))
-	srv.Mount(graphv1connect.NewGraphServiceHandler(&graphsvc.Handler{Graph: g, Events: changePublisher(onChange), Authz: authorizer, Identity: ident}, telemetry.HandlerOptions()...))
+	srv.Mount(graphv1connect.NewGraphServiceHandler(&graphsvc.Handler{Graph: g, Events: changePublisher(onChange), Authz: authorizer, Floor: authorizer.Floor(), Identity: ident}, telemetry.HandlerOptions()...))
 	srv.Mount(registryv1connect.NewRegistryServiceHandler(&registrysvc.Handler{Service: reg, Identity: ident}, telemetry.HandlerOptions()...))
-	srv.Mount(iamv1connect.NewIamServiceHandler(&iamsvc.Handler{Enforcer: authorizer, Identity: ident}, telemetry.HandlerOptions()...))
+	srv.Echo.GET("/api/whoami", identity.WhoAmI(ident, directory.Enrich))
 	srv.Mount(mcpv1connect.NewMcpServiceHandler(&mcpsvc.Handler{Service: hub, Authz: authorizer, Identity: ident, ConnectorToken: connectorToken}, telemetry.HandlerOptions()...))
 	srv.Mount(modelv1connect.NewModelServiceHandler(&modelgw.Handler{Service: gw, Identity: ident, Authz: authorizer}, telemetry.HandlerOptions()...))
 	srv.Mount(enginev1connect.NewEngineServiceHandler(&enginesvc.Handler{Engine: e, Log: log, DefaultPrincipal: &dev, Authz: authorizer, Broker: broker, Triggers: triggers}, telemetry.HandlerOptions()...))

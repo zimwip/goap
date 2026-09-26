@@ -79,7 +79,7 @@ services:
       GOAP_DB_DSN: postgres://registry:registry@postgres:5432/goap?sslmode=disable
       GOAP_DOMAINS_DIR: /domains
       GOAP_METHODOLOGIES_DIR: /methodologies
-      GOAP_IAM_URL: http://iam:8080
+      GOAP_GRAPH_URL: http://graph:8080
     ports: ["8082:8080"]
 
   modelgw:
@@ -88,7 +88,7 @@ services:
     environment:
       <<: *env
       GOAP_DB_DSN: postgres://modelgw:modelgw@postgres:5432/goap?sslmode=disable
-      GOAP_IAM_URL: http://iam:8080
+      GOAP_GRAPH_URL: http://graph:8080
       # encrypts the provider API keys stored in the database (set it in production)
       GOAP_SECRET_KEY: ${GOAP_SECRET_KEY:-}
     ports: ["8084:8080"]
@@ -101,7 +101,6 @@ services:
       GOAP_GRAPH_URL: http://graph:8080
       GOAP_REGISTRY_URL: http://registry:8080
       GOAP_MODELGW_URL: http://modelgw:8080
-      GOAP_IAM_URL: http://iam:8080
       GOAP_MCP_URL: http://mcp:8080
       GOAP_TRACE_QUERY_URL: http://jaeger:16686
       GOAP_TRACE_UI_URL: http://localhost:16686/trace/
@@ -159,7 +158,7 @@ services:
     environment:
       <<: *env
       GOAP_DB_DSN: postgres://mcp:mcp@postgres:5432/goap?sslmode=disable
-      GOAP_IAM_URL: http://iam:8080
+      GOAP_GRAPH_URL: http://graph:8080
       GOAP_CONNECTOR_TOKEN: ${GOAP_CONNECTOR_TOKEN:-dev-connector-token}
     ports: ["8085:8080"]
 
@@ -177,14 +176,6 @@ services:
     volumes: ["localfs:/data"]
     depends_on: [mcp]
 
-  iam:
-    <<: *service
-    build: {context: ../.., args: {SERVICE: iam}}
-    environment:
-      <<: *env
-      GOAP_DB_DSN: postgres://iam:iam@postgres:5432/goap?sslmode=disable
-    ports: ["8086:8080"]
-
   gateway:
     <<: *service
     build: {context: ../.., args: {SERVICE: gateway}}
@@ -198,7 +189,6 @@ services:
       GOAP_ENGINE_URL: http://engine:8080
       GOAP_MODELGW_URL: http://modelgw:8080
       GOAP_MCP_URL: http://mcp:8080
-      GOAP_IAM_URL: http://iam:8080
     ports: ["${GOAP_GATEWAY_PORT:-8080}:8080"]
 
   web:

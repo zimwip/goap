@@ -9,10 +9,10 @@ import (
 
 	"github.com/zimwip/goap/gen/goap/graph/v1/graphv1connect"
 	"github.com/zimwip/goap/internal/graphsvc"
-	"github.com/zimwip/goap/internal/iamsvc"
 	"github.com/zimwip/goap/internal/platform"
 	"github.com/zimwip/goap/internal/registrysvc"
 	"github.com/zimwip/goap/internal/telemetry"
+	"github.com/zimwip/goap/pkg/access"
 	"github.com/zimwip/goap/pkg/engine"
 	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/metamodel"
@@ -100,6 +100,9 @@ func main() {
 		}
 		log.Info("demo seed", "loaded", seeded)
 	}
+	if _, err := graphsvc.SeedAccess(ctx, g); err != nil {
+		platform.Fatal(log, "seed access", err)
+	}
 	if seeded, err := graphsvc.SeedDefaults(ctx, g); err != nil {
 		platform.Fatal(log, "seed defaults", err)
 	} else if seeded {
@@ -147,9 +150,12 @@ func main() {
 			platform.Fatal(log, "subscribe", err)
 		}
 	}
-	authorizer := iamsvc.NewClient(platform.H2CClient(), platform.Env("GOAP_IAM_URL", "http://localhost:8086"))
+	authorizer, err := access.NewAuthorizer(&access.Directory{Graph: g})
+	if err != nil {
+		platform.Fatal(log, "authorizer", err)
+	}
 	g.Authorizer = graphsvc.TransitionAuthorizer(authorizer)
-	srv.Mount(graphv1connect.NewGraphServiceHandler(&graphsvc.Handler{Graph: g, Events: events, Authz: authorizer}, telemetry.HandlerOptions()...))
+	srv.Mount(graphv1connect.NewGraphServiceHandler(&graphsvc.Handler{Graph: g, Events: events, Authz: authorizer, Floor: authorizer.Floor()}, telemetry.HandlerOptions()...))
 	if err := srv.Run(); err != nil {
 		platform.Fatal(log, "server", err)
 	}

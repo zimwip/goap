@@ -3,6 +3,7 @@
 package gateway
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -17,6 +18,7 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
 	"github.com/zimwip/goap/internal/identity"
+	"github.com/zimwip/goap/pkg/authz"
 )
 
 // Headers propagated to services. Incoming values are always overwritten.
@@ -43,6 +45,9 @@ type Config struct {
 	DevTokens bool
 	// AllowOrigins for CORS.
 	AllowOrigins []string
+	// Enrich completes the authenticated principal with what the graph knows of its subject (roles and unit
+	// of its User node). Nil leaves the principal as the token gives it.
+	Enrich func(ctx context.Context, p authz.Principal) authz.Principal
 }
 
 // Claims are the GOAP JWT claims.
@@ -71,6 +76,7 @@ func Mount(e *echo.Echo, cfg Config) error {
 		return err
 	}
 	e.GET("/api/status", statusHandler(cfg.Routes))
+	e.GET("/api/whoami", identity.WhoAmI(identity.Extractor{}, nil), auth)
 	for _, r := range cfg.Routes {
 		u, err := url.Parse(r.Upstream)
 		if err != nil {
@@ -89,10 +95,7 @@ func authenticator(cfg Config) (echo.MiddlewareFunc, error) {
 	case "", "none":
 		return func(next echo.HandlerFunc) echo.HandlerFunc {
 			return func(c echo.Context) error {
-				h := c.Request().Header
-				h.Set(HeaderSubject, "dev")
-				h.Set(HeaderOrg, "dev")
-				h.Set(HeaderRoles, "admin")
+				setPrincipal(c, cfg, authz.Principal{Subject: "dev", Org: "dev", Roles: []string{"admin"}})
 				return next(c)
 			}
 		}, nil
@@ -112,16 +115,24 @@ func authenticator(cfg Config) (echo.MiddlewareFunc, error) {
 				if err != nil {
 					return echo.NewHTTPError(http.StatusUnauthorized, "invalid token")
 				}
-				h := c.Request().Header
-				h.Del("Authorization")
-				h.Set(HeaderSubject, claims.Subject)
-				h.Set(HeaderOrg, claims.Org)
-				h.Set(HeaderRoles, strings.Join(claims.Roles, ","))
+				c.Request().Header.Del("Authorization")
+				setPrincipal(c, cfg, authz.Principal{Subject: claims.Subject, Org: claims.Org, Roles: claims.Roles})
 				return next(c)
 			}
 		}, nil
 	}
 	return nil, fmt.Errorf("unknown auth mode %q", cfg.AuthMode)
+}
+
+// setPrincipal propagates the caller to the services, completed by its User node when there is one.
+func setPrincipal(c echo.Context, cfg Config, p authz.Principal) {
+	if cfg.Enrich != nil {
+		p = cfg.Enrich(c.Request().Context(), p)
+	}
+	h := c.Request().Header
+	h.Set(HeaderSubject, p.Subject)
+	h.Set(HeaderOrg, p.Org)
+	h.Set(HeaderRoles, strings.Join(p.Roles, ","))
 }
 
 func devToken(cfg Config) echo.HandlerFunc {
