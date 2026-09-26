@@ -80,10 +80,6 @@ func main() {
 	if _, err := graphsvc.SeedDefaults(ctx, g); err != nil {
 		platform.Fatal(log, "seed defaults", err)
 	}
-	// the graph's own metadata and the node types of the registry's stored versions, before anything is stored
-	if _, err := metamodel.SeedMeta(ctx, g); err != nil {
-		platform.Fatal(log, "seed metadata", err)
-	}
 	if _, err := graphsvc.SeedNamespaces(ctx, g); err != nil {
 		platform.Fatal(log, "seed namespaces", err)
 	}

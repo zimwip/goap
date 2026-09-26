@@ -9,25 +9,14 @@ import (
 
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/graph"
-	"github.com/zimwip/goap/pkg/metamodel"
 	"github.com/zimwip/goap/pkg/methodology"
 )
 
 func stores(t *testing.T) map[string]func(t *testing.T) Store {
 	return map[string]func(t *testing.T) Store{
 		"memory": func(*testing.T) Store { return NewMemoryStore() },
-		"graph":  func(t *testing.T) Store { st, _ := newGraphStore(t); return st },
+		"graph":  func(*testing.T) Store { return NewGraphStore(graph.New(graph.NewMemory())) },
 	}
-}
-
-// newGraphStore returns a graph store on a graph seeded with the platform metadata, as the graph service does at start.
-func newGraphStore(t *testing.T) (*GraphStore, *graph.Graph) {
-	t.Helper()
-	g := graph.New(graph.NewMemory())
-	if _, err := metamodel.SeedMeta(context.Background(), g); err != nil {
-		t.Fatal(err)
-	}
-	return NewGraphStore(g), g
 }
 
 func as(roles ...string) context.Context {

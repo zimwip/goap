@@ -24,22 +24,22 @@ nodeTypes:
   - {name: AdapterDef, description: "Adapter: implements the tools of an MCP with the operations of a connector", properties: [name, description, mcp, connector, language, code, params]}
   # the model gateway configuration (the gateway keeps only the token usage, keyed by the model node). An API key is
   # never stored: apiKeyRef references it (env:<VAR> or <vault path>#<field>, alternatives separated by "|").
-  # the registry's stored definitions (ADR 0023): a version of a methodology or a domain is a header node (scalar fields,
-  # timestamps; its status is the node's lifecycle state, `version`) and one node per element of its definition, tied by `defines`.
-  # Methodology nodes live in the "methodology" namespace and domain nodes in the "domain" namespace. These nodes are the authored definition; a published
+  # the registry's stored definitions (ADR 0023): a version of a methodology or a domain is a header node (scalar fields, status,
+  # timestamps) and one node per element of its definition, tied by `defines`. Methodology nodes live in the "methodology"
+  # namespace and domain nodes in the "domain" namespace. These nodes are the authored definition; a published
   # methodology is projected at run time onto the elements above (Methodology, Agent, Action, ..., NodeType, LinkType, Lifecycle).
   # An element removed from a draft stays with removed=true (a node key is never freed), and comes back if it is added again.
-  - {name: MethodologyVersion, description: "A version of a methodology: its header and status", properties: [name, version, description, namespace, domainRef, status, createdAt, updatedAt, publishedAt, updatedBy], lifecycle: version}
-  - {name: DomainVersion, description: "A version of a shared domain: its header and status", properties: [name, version, description, status, createdAt, updatedAt, publishedAt, updatedBy], lifecycle: version}
-  - {name: DefCondition, description: "Condition of a stored methodology version", properties: [name, description, expr, position, removed], lifecycle: version}
-  - {name: DefAction, description: "Action of a stored methodology version", properties: [name, kind, description, position, removed], lifecycle: version}
-  - {name: DefGoal, description: "Goal of a stored methodology version", properties: [name, description, pre, position, removed], lifecycle: version}
-  - {name: DefAgent, description: "Agent (with its triggers) of a stored methodology version", properties: [name, planner, actions, goals, triggers, position, removed], lifecycle: version}
-  - {name: DefNodeType, description: "Node type of a stored methodology or domain version", properties: [name, extends, lifecycle, position, removed], lifecycle: version}
-  - {name: DefLinkType, description: "Link type of a stored methodology or domain version", properties: [name, from, to, position, removed], lifecycle: version}
-  - {name: DefLifecycle, description: "Lifecycle of a stored methodology or domain version", properties: [name, initial, states, transitions, position, removed], lifecycle: version}
-  - {name: DefAlgorithm, description: "Algorithm of a stored domain version", properties: [name, type, language, code, params, position, removed], lifecycle: version}
-  - {name: DefAlgorithmInstance, description: "Algorithm instance of a stored domain version", properties: [name, algorithm, values, position, removed], lifecycle: version}
+  - {name: MethodologyVersion, description: "A version of a methodology: its header and status", properties: [name, version, description, namespace, domainRef, status, createdAt, updatedAt, publishedAt, updatedBy]}
+  - {name: DomainVersion, description: "A version of a shared domain: its header and status", properties: [name, version, description, status, createdAt, updatedAt, publishedAt, updatedBy]}
+  - {name: DefCondition, description: "Condition of a stored methodology version", properties: [name, description, expr, position, removed]}
+  - {name: DefAction, description: "Action of a stored methodology version", properties: [name, kind, description, position, removed]}
+  - {name: DefGoal, description: "Goal of a stored methodology version", properties: [name, description, pre, position, removed]}
+  - {name: DefAgent, description: "Agent (with its triggers) of a stored methodology version", properties: [name, planner, actions, goals, triggers, position, removed]}
+  - {name: DefNodeType, description: "Node type of a stored methodology or domain version", properties: [name, extends, lifecycle, position, removed]}
+  - {name: DefLinkType, description: "Link type of a stored methodology or domain version", properties: [name, from, to, position, removed]}
+  - {name: DefLifecycle, description: "Lifecycle of a stored methodology or domain version", properties: [name, initial, states, transitions, position, removed]}
+  - {name: DefAlgorithm, description: "Algorithm of a stored domain version", properties: [name, type, language, code, params, position, removed]}
+  - {name: DefAlgorithmInstance, description: "Algorithm instance of a stored domain version", properties: [name, algorithm, values, position, removed]}
   - {name: LlmProvider, description: "LLM provider: a kind (preset) on a wire protocol", properties: [name, kind, protocol, baseURL, enabled, apiKeyRef]}
   - {name: LlmModel, description: "Model offered on the platform, with its global quota and the roles that may call it", properties: [provider, model, displayName, enabled, quotaTokens, quotaPeriod, roles]}
   - {name: LlmAlias, description: "Name (default, fast, ...) of a model, as provider/model", properties: [alias, target]}
@@ -56,23 +56,3 @@ linkTypes:
   - {name: lifecycle, from: NodeType, to: Lifecycle}
   - {name: linkFrom, from: LinkType, to: NodeType}
   - {name: linkTo, from: LinkType, to: NodeType}
-lifecycles:
-  # The status of a stored version, on the node version like any state (ADR 0014). A persisted version is never editable: a draft is
-  # reopened (`editing`) in a change, edited and closed again; publishing moves it on from either. Nothing is deleted (a key is never
-  # freed): a discarded draft is `deleted` and can be restored; a published version can only be archived.
-  - name: version
-    initial: draft
-    states:
-      - {name: draft, description: "Being written, not published"}
-      - {name: editing, editable: true, description: "Reopened inside a change"}
-      - {name: published, description: "Frozen, the one the engine runs"}
-      - {name: archived, final: true, description: "Retired"}
-      - {name: deleted, description: "A discarded draft"}
-    transitions:
-      - {name: open, from: draft, to: editing}
-      - {name: close, from: editing, to: draft}
-      - {name: publish, from: draft, to: published}
-      - {name: publish-edited, from: editing, to: published}
-      - {name: archive, from: published, to: archived}
-      - {name: discard, from: draft, to: deleted}
-      - {name: restore, from: deleted, to: draft}

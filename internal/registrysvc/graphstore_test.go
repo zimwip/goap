@@ -3,7 +3,6 @@ package registrysvc
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -30,7 +29,7 @@ func canon(t *testing.T, v any) string {
 
 func TestGraphStoreRoundTripsEveryDefinitionOfTheRepository(t *testing.T) {
 	ctx := context.Background()
-	s, _ := newGraphStore(t)
+	s := NewGraphStore(graph.New(graph.NewMemory()))
 	now := time.Date(2026, 9, 26, 10, 0, 0, 0, time.UTC)
 	files, _ := filepath.Glob("../../domains/*.yaml")
 	if len(files) == 0 {
@@ -77,7 +76,8 @@ func TestGraphStoreRoundTripsEveryDefinitionOfTheRepository(t *testing.T) {
 
 func TestGraphStoreEditsElementsNotDocuments(t *testing.T) {
 	ctx := context.Background()
-	s, g := newGraphStore(t)
+	g := graph.New(graph.NewMemory())
+	s := NewGraphStore(g)
 	now := time.Now()
 	m := example(t)
 	m.Version = "9.0.0"
@@ -155,65 +155,38 @@ func TestGraphStoreEditsElementsNotDocuments(t *testing.T) {
 	}
 }
 
-func TestGraphStoreKeepsPublishedVersionsFrozenInTheGraph(t *testing.T) {
+func TestGraphStoreKeepsMethodologiesAndDomainsInTheirNamespaces(t *testing.T) {
 	ctx := context.Background()
-	s, g := newGraphStore(t)
+	g := graph.New(graph.NewMemory())
+	s := NewGraphStore(g)
 	now := time.Now()
 	m := example(t)
-	m.Version = "8.0.0"
 	if err := s.Save(ctx, Record{Methodology: m, Status: StatusDraft, CreatedAt: now, UpdatedAt: now}); err != nil {
 		t.Fatal(err)
 	}
-	hk := MethodologyVersionKey(m.Name, m.Version)
-	node := func(k string) domain.Node {
-		n, err := g.NodeByKey(ctx, NamespaceMethodology, k)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return n
-	}
-	// a draft is a persisted, non editable state; its status is the state of the node, not a property
-	if h := node(hk); h.State != stateDraft || h.Properties["status"] != nil {
-		t.Fatalf("header: state %q, props %v", h.State, h.Properties)
-	}
-	if err := s.SetStatus(ctx, m.Name, m.Version, StatusPublished, now); err != nil {
+	d := sharedDomainDef()
+	if err := s.SaveDomain(ctx, DomainRecord{Domain: d, Status: StatusDraft, CreatedAt: now, UpdatedAt: now}); err != nil {
 		t.Fatal(err)
 	}
-	if h := node(hk); h.State != statePublished || h.Properties["publishedAt"] == nil {
-		t.Fatalf("published header: %q %v", h.State, h.Properties)
+	mh, err := g.NodeByKey(ctx, NamespaceMethodology, MethodologyVersionKey(m.Name, m.Version))
+	if err != nil || mh.Type != TypeMethodologyVersion {
+		t.Fatalf("methodology header: %+v %v", mh, err)
 	}
-	if a := node(hk + "/action/" + m.Actions[0].Name); a.State != statePublished {
-		t.Fatalf("elements follow their version: %q", a.State)
+	dh, err := g.NodeByKey(ctx, NamespaceDomain, DomainVersionKey(d.Name, d.Version))
+	if err != nil || dh.Type != TypeDomainVersion {
+		t.Fatalf("domain header: %+v %v", dh, err)
 	}
-	// the store refuses to edit it, and so does the graph if asked directly
-	if err := s.Save(ctx, Record{Methodology: m, Status: StatusDraft, UpdatedAt: now}); err == nil {
-		t.Fatal("a published version must not be saved over")
+	if _, err := g.NodeByKey(ctx, NamespaceDomain, DomainVersionKey(d.Name, d.Version)+"/nodetype/"+d.NodeTypes[0].Name); err != nil {
+		t.Fatalf("a domain element lives in the domain namespace: %v", err)
 	}
-	head, _ := g.BranchHead(ctx, domain.MainBranch)
-	c, err := g.CreateChange(ctx, graph.NewChange{Namespace: NamespaceMethodology, Title: "x", BaselineID: head.ID})
-	if err != nil {
-		t.Fatal(err)
-	}
-	a := node(hk + "/action/" + m.Actions[0].Name)
-	if _, err := g.AddItems(ctx, c.ID, edit(a, map[string]any{"description": "hack"})); err == nil {
-		t.Fatal("the graph must refuse to reopen a published element")
-	}
-	if err := s.SetStatus(ctx, m.Name, m.Version, StatusArchived, now); err != nil {
-		t.Fatal(err)
-	}
-	if h := node(hk); h.State != stateArchived {
-		t.Fatalf("archived: %q", h.State)
-	}
-	if err := s.Delete(ctx, m.Name, m.Version); err == nil {
-		t.Fatal("an archived version cannot be deleted")
+	if _, err := g.NodeByKey(ctx, "platform", MethodologyVersionKey(m.Name, m.Version)); err == nil {
+		t.Fatal("nothing of the registry's storage belongs to the platform namespace")
 	}
 }
 
-func TestGraphStoreNeedsTheMetadataSeeded(t *testing.T) {
-	s := NewGraphStore(graph.New(graph.NewMemory()))
-	m := example(t)
-	err := s.Save(context.Background(), Record{Methodology: m, Status: StatusDraft, UpdatedAt: time.Now()})
-	if !errors.Is(err, ErrMetadataMissing) {
-		t.Fatalf("expected ErrMetadataMissing, got %v", err)
-	}
+func sharedDomainDef() methodology.Domain {
+	return methodology.Domain{Name: "mini", Version: "1", Schema: methodology.Schema{
+		NodeTypes: []methodology.NodeType{{Name: "Need"}, {Name: "Requirement", Extends: "Need"}},
+		LinkTypes: []methodology.LinkType{{Name: "derives", From: "Requirement", To: "Need"}},
+	}}
 }
