@@ -28,7 +28,7 @@
         <li><button type="button" class="link" onclick={() => runCommand('newMethodology')}><Icon name="plus" size={14} /> New methodology</button></li>
         <li><button type="button" class="link" onclick={() => runCommand('import')}><Icon name="upload" size={14} /> Import a methodology (YAML)</button></li>
         <li><button type="button" class="link" onclick={() => runCommand('test')}><Icon name="flask" size={14} /> New intent test</button></li>
-        <li><button type="button" class="link" onclick={() => showTool('left', 'runs')}><Icon name="runs" size={14} /> Runs</button></li>
+        <li><button type="button" class="link" onclick={() => showTool('left', 'changes')}><Icon name="diff" size={14} /> Changes</button></li>
         <li><button type="button" class="link" onclick={() => showTool('right', 'dsl')}><Icon name="help" size={14} /> Script actions DSL help</button></li>
       </ul>
     </section>

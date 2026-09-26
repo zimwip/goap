@@ -574,6 +574,10 @@ standard `OTEL_EXPORTER_OTLP_ENDPOINT` / `OTEL_*` variables:
 The gateway also exposes `GET /api/status` (availability and latency of each service), displayed in the
 IDE's status bar along with the user's running runs and their notifications.
 
+In the IDE the **Changes** explorer is the single entry point for every modification: a change is the
+blackboard, and the executions (agent processes, sub-agents nested) that work on it are listed under it.
+Executions without a change appear in a "No change" group. The waiting / clarifying badge sits on Changes.
+
 Counters are also **kept in the process** (tokens, LLM and tool calls per step and overall)
 and displayed in the IDE, with a link to the Jaeger trace (`traceId`).
 

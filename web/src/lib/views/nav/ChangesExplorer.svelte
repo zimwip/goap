@@ -1,13 +1,16 @@
 <script lang="ts">
-  // Explorer for changes (change sets) grouped by status.
+  // Explorer for changes (the blackboard of every modification) grouped by status.
+  // Each change nests the executions (agent processes) that work on it.
   import Icon from '../../shell/Icon.svelte';
   import TreeRow from '../TreeRow.svelte';
   import StatusBadge from '../../components/StatusBadge.svelte';
   import { toggle, isOpen } from './expanded.svelte';
   import { changes, refreshChanges } from '../../stores/catalog.svelte';
+  import { live, processes, refreshProcesses } from '../../stores/live.svelte';
+  import { showTool } from '../../shell/layout.svelte';
+  import { select as select, focusRequests } from '../../shell/workbench.svelte';
   import { openTab, tabsState } from '../../shell/tabs.svelte';
-  import { select } from '../../shell/workbench.svelte';
-  import { formatDate, shortId, type ChangeSet } from '../../api';
+  import { formatDate, formatInt, shortId, int, type ChangeSet, type Process } from '../../api';
 
   let filter = $state('');
   let manualId = $state('');
@@ -15,6 +18,56 @@
   $effect(() => {
     if (!changes.loaded) void refreshChanges();
   });
+  $effect(() => {
+    if (!live.processesLoaded) void refreshProcesses();
+  });
+
+  const byChange = $derived.by(() => {
+    const m = new Map<string, Process[]>();
+    const all = [...processes.values()].sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''));
+    for (const p of all) {
+      if (!p.changeId || (p.parentId && processes.has(p.parentId))) continue;
+      m.set(p.changeId, [...(m.get(p.changeId) ?? []), p]);
+    }
+    return m;
+  });
+  const subs = $derived.by(() => {
+    const m = new Map<string, Process[]>();
+    for (const p of processes.values()) if (p.parentId && processes.has(p.parentId)) m.set(p.parentId, [...(m.get(p.parentId) ?? []), p]);
+    return m;
+  });
+  const orphans = $derived(
+    [...processes.values()].filter((p) => !p.changeId && !(p.parentId && processes.has(p.parentId))),
+  );
+
+  const plabel = (p: Process) => p.title || p.agent || p.goal || shortId(p.id);
+
+  function openRun(p: Process, pin = false) {
+    openTab({ kind: 'run', params: { id: p.id ?? '' } }, { pin });
+    select({
+      title: plabel(p),
+      subtitle: 'Execution',
+      rows: [
+        ['Id', p.id ?? ''],
+        ['Change', p.changeId ?? ''],
+        ['Status', p.status ?? ''],
+        ['Methodology', p.methodology ?? ''],
+        ['Agent', p.agent ?? ''],
+        ['Planner', p.planner ?? ''],
+        ['Goal', p.goal ?? ''],
+        ['Triggered by', p.trigger ?? ''],
+        ['Initiator', p.initiator?.subject ?? ''],
+        ['Tokens (input / output)', `${formatInt(p.usage?.inputTokens)} / ${formatInt(p.usage?.outputTokens)}`],
+        ['LLM / tool calls', `${p.usage?.llmCalls ?? 0} / ${p.usage?.toolCalls ?? 0}`],
+        ['Created', formatDate(p.createdAt)],
+      ],
+    });
+  }
+
+  function newTest() {
+    showTool('right', 'tester');
+    focusRequests.tester += 1;
+  }
 
   const STATUSES = [
     { id: 'active', label: 'Active' },
@@ -26,8 +79,16 @@
 
   const q = $derived(filter.trim().toLowerCase());
   const shown = $derived(
-    changes.items.filter((c) => !q || `${c.id} ${c.title ?? ''} ${c.intent ?? ''} ${c.methodology ?? ''} ${c.namespace ?? ''}`.toLowerCase().includes(q)),
+    changes.items.filter(
+      (c) =>
+        !q ||
+        `${c.id} ${c.title ?? ''} ${c.intent ?? ''} ${c.methodology ?? ''} ${c.namespace ?? ''} ${(byChange.get(c.id ?? '') ?? []).map((p) => `${p.agent ?? ''} ${p.goal ?? ''}`).join(' ')}`
+          .toLowerCase()
+          .includes(q),
+    ),
   );
+
+  const runsOf = (c: ChangeSet) => byChange.get(c.id ?? '') ?? [];
 
   function open(c: ChangeSet, pin = false) {
     openTab({ kind: 'change', params: { id: c.id ?? '' } }, { pin });
@@ -56,16 +117,45 @@
   }
 </script>
 
+{#snippet run(p: Process, depth: number)}
+  {@const kids = subs.get(p.id ?? '') ?? []}
+  {@const k = `p:${p.id}`}
+  {@const tokens = int(p.usage?.inputTokens) + int(p.usage?.outputTokens)}
+  <TreeRow
+    {depth}
+    icon={p.parentId ? 'bot' : p.trigger ? 'zap' : 'runs'}
+    label={plabel(p)}
+    detail={shortId(p.id)}
+    expanded={kids.length ? isOpen(k, true) : undefined}
+    active={tabsState.active === `run:${p.id}`}
+    title={`${plabel(p)} — ${p.status}${tokens ? ` — ${formatInt(tokens)} tokens` : ''}${p.trigger ? `\ntriggered by ${p.trigger}` : ''}\n${formatDate(p.createdAt)}`}
+    onselect={() => openRun(p)}
+    onopen={() => openRun(p, true)}
+    ontoggle={() => toggle(k, true)}
+  >
+    {#snippet trail()}<StatusBadge status={p.status} />{/snippet}
+  </TreeRow>
+  {#if kids.length && isOpen(k, true)}
+    {#each kids as c (c.id)}{@render run(c, depth + 1)}{/each}
+  {/if}
+{/snippet}
+
 <div class="explorer">
   <div class="tools">
     <input type="search" placeholder="Filter…" aria-label="Filter changes" bind:value={filter} data-no-pin />
+    <button type="button" class="ghost small" title="New intent test" aria-label="New intent test" onclick={newTest}
+      ><Icon name="flask" size={14} /></button
+    >
     <button
       type="button"
       class="ghost small"
       title="Refresh"
       aria-label="Refresh"
-      disabled={changes.loading}
-      onclick={() => refreshChanges()}><Icon name="refresh" size={14} /></button
+      disabled={changes.loading || live.processesLoading}
+      onclick={() => {
+        void refreshChanges();
+        void refreshProcesses();
+      }}><Icon name="refresh" size={14} /></button
     >
   </div>
   {#if changes.error}<div class="alert small">{changes.error}</div>{/if}
@@ -84,11 +174,16 @@
               detail={formatDate(c.createdAt)}
               title={c.intent || c.title || c.id}
               active={tabsState.active === `change:${c.id}`}
+              expanded={runsOf(c).length ? isOpen(`ch:${c.id}`, true) : undefined}
+              ontoggle={() => toggle(`ch:${c.id}`, true)}
               onselect={() => open(c)}
               onopen={() => open(c, true)}
             >
               {#snippet trail()}<StatusBadge status={c.status} />{/snippet}
             </TreeRow>
+            {#if runsOf(c).length && isOpen(`ch:${c.id}`, true)}
+              {#each runsOf(c) as p (p.id)}{@render run(p, 2)}{/each}
+            {/if}
           {/each}
         {/if}
       {/if}
@@ -99,7 +194,15 @@
       {/each}
     {/if}
   </div>
-  {#if changes.loaded && !changes.items.length}
+  {#if orphans.length}
+    <div role="tree" aria-label="Executions without a change">
+      <TreeRow icon="help" label="No change" detail={String(orphans.length)} expanded={isOpen('g:orphans')} ontoggle={() => toggle('g:orphans')} />
+      {#if isOpen('g:orphans')}
+        {#each orphans as p (p.id)}{@render run(p, 1)}{/each}
+      {/if}
+    </div>
+  {/if}
+  {#if changes.loaded && !changes.items.length && !orphans.length}
     <p class="empty pad">No changes listed.</p>
   {/if}
   <form class="manual" onsubmit={openManual}>
