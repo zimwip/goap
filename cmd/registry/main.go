@@ -5,10 +5,11 @@ import (
 	"context"
 
 	"github.com/zimwip/goap/gen/goap/registry/v1/registryv1connect"
-	"github.com/zimwip/goap/internal/iamsvc"
+	"github.com/zimwip/goap/internal/graphsvc"
 	"github.com/zimwip/goap/internal/platform"
 	"github.com/zimwip/goap/internal/registrysvc"
 	"github.com/zimwip/goap/internal/telemetry"
+	"github.com/zimwip/goap/pkg/access"
 	"github.com/zimwip/goap/pkg/authz"
 )
 
@@ -26,7 +27,11 @@ func main() {
 	events := platform.OptionalEvents(ctx, log)
 	defer events.Close()
 
-	svc := &registrysvc.Service{Store: store, Authz: iamsvc.NewClient(platform.H2CClient(), platform.Env("GOAP_IAM_URL", "http://localhost:8086")), Events: events}
+	authorizer, err := access.NewAuthorizer(&access.Directory{Graph: graphsvc.NewClient(platform.H2CClient(), platform.Env("GOAP_GRAPH_URL", "http://localhost:8081"))})
+	if err != nil {
+		platform.Fatal(log, "authorizer", err)
+	}
+	svc := &registrysvc.Service{Store: store, Authz: authorizer, Events: events}
 	if dir := platform.Env("GOAP_METHODOLOGIES_DIR", ""); dir != "" {
 		// bootstrap: import the YAML files of versions not stored yet
 		system := authz.With(ctx, authz.Principal{Subject: "system:registry", Roles: []string{"admin"}})

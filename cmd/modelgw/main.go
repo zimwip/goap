@@ -7,10 +7,11 @@ import (
 	"github.com/jackc/pgx/v5/stdlib"
 
 	"github.com/zimwip/goap/gen/goap/model/v1/modelv1connect"
-	"github.com/zimwip/goap/internal/iamsvc"
+	"github.com/zimwip/goap/internal/graphsvc"
 	"github.com/zimwip/goap/internal/modelgw"
 	"github.com/zimwip/goap/internal/platform"
 	"github.com/zimwip/goap/internal/telemetry"
+	"github.com/zimwip/goap/pkg/access"
 )
 
 func main() {
@@ -52,7 +53,10 @@ func main() {
 	}
 	log.Info("providers", "providers", providers)
 
-	iam := iamsvc.NewClient(platform.H2CClient(), platform.Env("GOAP_IAM_URL", "http://localhost:8086"))
+	iam, err := access.NewAuthorizer(&access.Directory{Graph: graphsvc.NewClient(platform.H2CClient(), platform.Env("GOAP_GRAPH_URL", "http://localhost:8081"))})
+	if err != nil {
+		platform.Fatal(log, "authorizer", err)
+	}
 	srv.Mount(modelv1connect.NewModelServiceHandler(&modelgw.Handler{Service: svc, Authz: iam}, telemetry.HandlerOptions()...))
 	if err := srv.Run(); err != nil {
 		platform.Fatal(log, "server", err)

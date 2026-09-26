@@ -100,3 +100,47 @@ func TestNodeTypeWritesAreRoleGated(t *testing.T) {
 		t.Errorf("methodologist must: %v", err)
 	}
 }
+
+func TestAccessNodesAreGatedByTheFloor(t *testing.T) {
+	ctx := context.Background()
+	g := graph.New(graph.NewMemory())
+	authorizer, err := authz.NewCasbin(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	floor, err := authz.NewCasbinWith(authz.FloorPolicies)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// the overall authorizer lets methodologists do everything on policies, the floor only administrators
+	h := &graphsvc.Handler{Graph: g, Authz: authorizer, Floor: floor}
+	base, err := g.CreateBaseline(ctx, "Repository", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	add := func(roles string) error {
+		c, err := g.CreateChange(ctx, graph.NewChange{Title: "t", BaselineID: base.ID})
+		if err != nil {
+			t.Fatal(err)
+		}
+		item := domain.ChangeItem{Kind: domain.KindProposal, Proposal: &domain.Proposal{Op: domain.OpCreateNode,
+			Node: &domain.NodeDraft{Key: "USR:x", Type: "User", Properties: map[string]any{"subject": "x"}}}}
+		req := connect.NewRequest(&graphv1.AddItemsRequest{ChangeId: string(c.ID), Items: pbconv.ItemsToPB([]domain.ChangeItem{item})})
+		req.Header().Set(identity.HeaderSubject, "u")
+		req.Header().Set(identity.HeaderOrg, "acme")
+		req.Header().Set(identity.HeaderRoles, roles)
+		_, err = h.AddItems(ctx, req)
+		return err
+	}
+	if err := add("methodologist"); connect.CodeOf(err) != connect.CodePermissionDenied {
+		t.Errorf("only administrators may change users: %v", err)
+	}
+	if err := add("admin"); err != nil {
+		t.Errorf("admin must: %v", err)
+	}
+	// direct writes of access nodes are refused: they go through changes
+	req := connect.NewRequest(&graphv1.CreateNodeRequest{Namespace: "organisation", Key: "POL:x", Type: "Policy"})
+	if _, err := h.CreateNode(ctx, req); connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		t.Errorf("direct write of a Policy node: %v", err)
+	}
+}

@@ -69,6 +69,10 @@ var DefaultPolicies = []Policy{
 	{Rule: `hasRole(r.sub, "release_manager") && r.sub.Org == r.obj.Org && r.sub.Subject != r.obj.Owner`, Resource: "release", Action: "deploy", Effect: "allow"},
 }
 
+// FloorPolicies are the rules that hold whatever the stored policies say, so that a faulty
+// policy can never lock the administrators out.
+var FloorPolicies = []Policy{DefaultPolicies[0]}
+
 // Casbin is an Authorizer backed by a Casbin enforcer.
 type Casbin struct {
 	mu sync.RWMutex
@@ -78,6 +82,35 @@ type Casbin struct {
 // NewCasbin creates an enforcer. With a nil adapter, policies live in memory.
 // When the policy store is empty it is seeded with DefaultPolicies.
 func NewCasbin(adapter persist.Adapter) (*Casbin, error) {
+	c, err := newCasbin(adapter)
+	if err != nil {
+		return nil, err
+	}
+	if pols, _ := c.Policies(); len(pols) == 0 {
+		for _, p := range DefaultPolicies {
+			if err := c.AddPolicy(p); err != nil {
+				return nil, err
+			}
+		}
+	}
+	return c, nil
+}
+
+// NewCasbinWith creates an in-memory enforcer holding exactly the given policies.
+func NewCasbinWith(policies []Policy) (*Casbin, error) {
+	c, err := newCasbin(nil)
+	if err != nil {
+		return nil, err
+	}
+	for _, p := range policies {
+		if err := c.AddPolicy(p); err != nil {
+			return nil, err
+		}
+	}
+	return c, nil
+}
+
+func newCasbin(adapter persist.Adapter) (*Casbin, error) {
 	m, err := model.NewModelFromString(Model)
 	if err != nil {
 		return nil, err
@@ -115,15 +148,7 @@ func NewCasbin(adapter persist.Adapter) (*Casbin, error) {
 		p, _ := args[0].(Principal)
 		return p.Anonymous(), nil
 	})
-	c := &Casbin{e: e}
-	if pols, _ := c.Policies(); len(pols) == 0 {
-		for _, p := range DefaultPolicies {
-			if err := c.AddPolicy(p); err != nil {
-				return nil, err
-			}
-		}
-	}
-	return c, nil
+	return &Casbin{e: e}, nil
 }
 
 // Authorize implements Authorizer. Anonymous principals are always denied.
@@ -161,13 +186,10 @@ func Validate(p Policy) error {
 	if p.Rule == "" || p.Resource == "" || p.Action == "" {
 		return fmt.Errorf("rule, resource and action are required")
 	}
-	probe, err := NewCasbin(nil)
+	probe, err := NewCasbinWith(nil)
 	if err != nil {
 		return err
 	}
-	probe.mu.Lock()
-	probe.e.ClearPolicy()
-	probe.mu.Unlock()
 	if err := probe.AddPolicy(p); err != nil {
 		return err
 	}

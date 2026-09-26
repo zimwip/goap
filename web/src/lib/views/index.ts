@@ -438,11 +438,11 @@ registerView({
 registerView({
   id: 'policies',
   zone: 'editor',
-  title: 'Policies',
+  title: 'Access',
   icon: 'shield',
   component: PoliciesTab,
   key: () => 'all',
-  tabTitle: () => 'Access policies',
+  tabTitle: () => 'Access',
 });
 
 registerView({

@@ -10,12 +10,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/casbin/casbin/v2/persist"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 
 	"github.com/zimwip/goap/internal/enginesvc"
-	"github.com/zimwip/goap/internal/iamsvc"
 	"github.com/zimwip/goap/internal/mcpsvc"
 	"github.com/zimwip/goap/internal/modelgw"
 	"github.com/zimwip/goap/internal/platform"
@@ -28,7 +26,6 @@ import (
 type stores struct {
 	graph         graph.Repo
 	methodologies registrysvc.Store
-	policies      persist.Adapter // nil: in-memory policies
 	processes     engine.Store
 	models        modelgw.Store
 	mcp           mcpsvc.Store
@@ -52,7 +49,7 @@ func openStores(ctx context.Context, log *slog.Logger) (stores, error) {
 			fs        fs.FS
 		}{
 			{"graph", graph.SQLiteMigrations}, {"registry", registrysvc.SQLiteMigrations},
-			{"iam", iamsvc.SQLiteMigrations}, {"engine", enginesvc.SQLiteMigrations},
+			{"engine", enginesvc.SQLiteMigrations},
 			{"modelgw", modelgw.SQLiteMigrations}, {"mcp", mcpsvc.SQLiteMigrations},
 		} {
 			if err := platform.MigrateSQLite(ctx, db, m.component, m.fs, "migrations_sqlite"); err != nil {
@@ -70,7 +67,7 @@ func openStores(ctx context.Context, log *slog.Logger) (stores, error) {
 		abs, _ := filepath.Abs(path)
 		log.Info("local storage", "sqlite", abs)
 		return stores{graph: graph.NewSQLite(db), methodologies: registrysvc.SQLiteStore{DB: db},
-			policies: &iamsvc.SQLiteAdapter{DB: db}, processes: processes, models: modelgw.SQLStore{DB: db}, mcp: mcpsvc.SQLStore{DB: db}, close: func() { closeDB(log, db) }}, nil
+			processes: processes, models: modelgw.SQLStore{DB: db}, mcp: mcpsvc.SQLStore{DB: db}, close: func() { closeDB(log, db) }}, nil
 	default:
 		return stores{}, fmt.Errorf("GOAP_STORE must be memory or sqlite, got %q", kind)
 	}

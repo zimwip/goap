@@ -14,7 +14,7 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-Location $PSScriptRoot
 
-$Services = 'graph', 'registry', 'engine', 'modelgw', 'gateway', 'mcp', 'iam', 'goap-dev', 'goap-runner'
+$Services = 'graph', 'registry', 'engine', 'modelgw', 'gateway', 'mcp', 'goap-dev', 'goap-runner'
 $Compose = @('compose', '-f', 'deploy/compose/docker-compose.yml')
 $Exe = if ($env:OS -eq 'Windows_NT') { '.exe' } else { '' }
 
@@ -121,7 +121,7 @@ Usage: .\make.ps1 <target>
   generate        regenerate connect-rpc code from proto/
   build           build all services into bin\
   test            go test ./...
-  test-pg         tests against PostgreSQL (graph, registry, iam)
+  test-pg         tests against PostgreSQL (graph, registry)
   lint            go vet + gofmt + dsl.md sync check
   dev             single process, in-memory, demo data: http://localhost:8080
   devlocal        no docker: SQLite (.goap\goap.db) + IDE on http://localhost:8080

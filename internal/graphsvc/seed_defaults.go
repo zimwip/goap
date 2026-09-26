@@ -3,8 +3,11 @@ package graphsvc
 import (
 	"context"
 	"errors"
+	"fmt"
 
+	"github.com/zimwip/goap/pkg/access"
 	"github.com/zimwip/goap/pkg/algo"
+	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/mcp"
@@ -147,4 +150,38 @@ func SeedAdapter(ctx context.Context, g *graph.Graph, a mcp.Adapter) error {
 // SeedAdapterDef creates the AdapterDef node of an adapter definition in the platform namespace.
 func SeedAdapterDef(ctx context.Context, g *graph.Graph, d mcp.AdapterDef) error {
 	return applyOn(ctx, g, mcp.NamespacePlatform, "Adapter "+d.Name, []domain.ChangeItem{createNode("adapter-def", mcp.AdapterDefKey(d.Name), mcp.NodeTypeAdapterDef, d.Props())})
+}
+
+// SeedAccess makes sure the default policies exist as Policy nodes of the organisation namespace. It is
+// idempotent: once the floor policy exists nothing is touched, so that edited or deleted policies stay so.
+func SeedAccess(ctx context.Context, g *graph.Graph) (bool, error) {
+	if _, err := g.NodeByKey(ctx, mcp.NamespaceOrganisation, access.PolicyKey(authz.FloorPolicies[0])); err == nil {
+		return false, nil
+	} else if !errors.Is(err, graph.ErrNotFound) {
+		return false, err
+	}
+	items := make([]domain.ChangeItem, len(authz.DefaultPolicies))
+	for i, p := range authz.DefaultPolicies {
+		items[i] = createNode(domain.ItemID(fmt.Sprintf("policy-%d", i)), access.PolicyKey(p), access.NodeTypePolicy, access.PolicyProps(p))
+	}
+	return true, applyOn(ctx, g, mcp.NamespaceOrganisation, "Default policies", items)
+}
+
+// SeedUser creates the User node of a subject, member of a unit when unit is not empty.
+func SeedUser(ctx context.Context, g *graph.Graph, u access.User) error {
+	items := []domain.ChangeItem{createNode("user", access.UserKey(u.Subject), access.NodeTypeUser, u.Props())}
+	if u.Unit != "" {
+		unit, err := g.NodeByKey(ctx, mcp.NamespaceOrganisation, u.Unit)
+		if err != nil {
+			return err
+		}
+		items = append(items, linkTo("user", access.LinkMemberOf, unit.Ref()))
+	}
+	return applyOn(ctx, g, mcp.NamespaceOrganisation, "User "+u.Subject, items)
+}
+
+// SeedPolicy creates a Policy node.
+func SeedPolicy(ctx context.Context, g *graph.Graph, p authz.Policy) error {
+	return applyOn(ctx, g, mcp.NamespaceOrganisation, "Policy "+p.Resource+"/"+p.Action, []domain.ChangeItem{
+		createNode("policy", access.PolicyKey(p), access.NodeTypePolicy, access.PolicyProps(p))})
 }

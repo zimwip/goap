@@ -11,10 +11,10 @@ import (
 
 	"github.com/zimwip/goap/gen/goap/mcp/v1/mcpv1connect"
 	"github.com/zimwip/goap/internal/graphsvc"
-	"github.com/zimwip/goap/internal/iamsvc"
 	"github.com/zimwip/goap/internal/mcpsvc"
 	"github.com/zimwip/goap/internal/platform"
 	"github.com/zimwip/goap/internal/telemetry"
+	"github.com/zimwip/goap/pkg/access"
 )
 
 func main() {
@@ -41,7 +41,10 @@ func main() {
 		Secrets:   mcpsvc.ResolveSecret(platform.NewSecrets()),
 		Lease:     platform.EnvDuration("GOAP_CONNECTOR_LEASE", mcpsvc.DefaultLease),
 	}
-	iam := iamsvc.NewClient(hc, platform.Env("GOAP_IAM_URL", "http://localhost:8086"))
+	iam, err := access.NewAuthorizer(&access.Directory{Graph: graphsvc.NewClient(hc, platform.Env("GOAP_GRAPH_URL", "http://localhost:8081"))})
+	if err != nil {
+		platform.Fatal(log, "authorizer", err)
+	}
 	srv.Mount(mcpv1connect.NewMcpServiceHandler(&mcpsvc.Handler{Service: svc, Authz: iam, ConnectorToken: token}, telemetry.HandlerOptions()...))
 	if err := srv.Run(); err != nil {
 		platform.Fatal(log, "server", err)

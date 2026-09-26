@@ -272,7 +272,7 @@ p, <rule on attributes>, <resource type | *>, <action | *>, <allow | deny>
 Functions available in rules: `hasRole(r.sub, "x")`, `hasAnyRole(r.sub, "a", "b")`,
 `isAnonymous(r.sub)`. A matching `deny` overrides any `allow`.
 
-Default policies (created if the table is empty):
+Default policies (compiled in `pkg/authz`; seeded as `Policy` nodes at the first start, and applied as they are while the graph holds none):
 
 | Rule | Resource | Action |
 |---|---|---|
@@ -283,13 +283,20 @@ Default policies (created if the table is empty):
 | `hasRole(r.sub, "approver") && r.sub.Org == r.obj.Org && r.sub.Subject != r.obj.Owner` | `change` | `apply` |
 | `hasRole(r.sub, "release_manager") && r.sub.Org == r.obj.Org && r.sub.Subject != r.obj.Owner` | `release` | `deploy` |
 
-- Policies are stored in the **iam** service's database (table `casbin_rule`) and administered via
-  `IamService.ListPolicies / AddPolicy / RemovePolicy` (resource `policy`) and the frontend's "Access" screen.
-  A rule is validated (compilation + trial evaluation) before being stored.
-- Services call `IamService.CheckPermission` (client `iamsvc.Client`, interface `authz.Authorizer`).
-- After a change, iam publishes `goap.iam.policy.changed`; replicas reload (and every 30 s).
+- There is no IAM service: who may do what is **graph data** ([ADR 0020](adr/0020-access-in-the-graph.md)). A rule is a
+  `Policy` node and a caller a `User` node (profile, roles, `member_of` a unit) of the `organisation` namespace, changed
+  through changes like any node and edited in the frontend's "Access" screen. A rule is validated (compilation + trial
+  evaluation) when read.
+- Every service builds its `authz.Authorizer` in process (`pkg/access`) from a snapshot of the head of `main` (the graph
+  service over its own graph, the others through a graph client), rebuilt when the head moves (looked at once per second).
+  The roles of the `User` node of the subject are added to those of its token, and its unit is its organisation when the
+  token names none (the gateway does the same before propagating `X-Goap-*`; `GET /api/whoami` returns the result).
+- Lock-out protection: the administrator rule is a compiled-in **floor** checked before the policies, so no stored
+  policy (not even a `deny`) can take administrators out. Changes to `Policy` and `User` nodes need `policy:write`
+  checked against the floor alone (`graphsvc.Handler.Floor`); direct writes of these nodes are refused. While the graph has
+  no policy, or cannot be read, the compiled-in defaults apply.
 - Enforcement points: engine (start / respond to / submit / read a process, action permission,
-  approvals), registry (write / publish / delete a methodology), iam (policy administration).
+  approvals), registry (write / publish / delete a methodology), graph (policies and users, node types, lifecycle).
 
 Replanning at every step makes the engine robust to non-deterministic actions (LLM) and to concurrent
 modifications of the blackboard (a human can add an impact during execution).
@@ -423,8 +430,8 @@ actions when a transition is applied. Reference: [docs/dsl.md](dsl.md), IDE sect
                           └──────┬───────┘
                                  │ HTTPS (Connect JSON / REST)
                           ┌──────▼───────┐       ┌─────────┐
-                          │   gateway    │──────►│  iam    │ (users, orgs, roles, tokens)
-                          │ (Echo, authN,│       └─────────┘
+                          │   gateway    │  (users and roles: graph nodes)
+                          │ (Echo, authN,│
                           │  routing)    │
                           └──┬───┬───┬───┘
               connect-rpc    │   │   │
@@ -449,7 +456,6 @@ actions when a transition is applied. Reference: [docs/dsl.md](dsl.md), IDE sect
 | Service | Responsibility | API | Persistence | Status |
 |---|---|---|---|---|
 | **gateway** | Single entry point, authentication (JWT/OIDC), routing to services, CORS, rate-limit | Echo HTTP, Connect reverse proxy | — | 🟢 core |
-| **iam** | ABAC access decisions (Casbin), policy administration; users / organizations to come | Connect `iam.v1` | `iam` | 🟢 ABAC · 🟡 accounts |
 | **registry** | Methodologies structured in the database: editing (draft), validation, publishing, versions, YAML import/export | Connect `registry.v1` | `registry` | 🟢 |
 | **engine** | Intent loop, planning, process execution; deployable as a cluster | Connect `engine.v1` | `engine` | 🟢 core (memory) |
 | **graph** | Domain axis (versioned nodes, links, baselines) + change axis (ChangeSets, items, apply) | Connect `graph.v1` | `graph` | 🟢 |
@@ -488,7 +494,7 @@ an interface, replaceable with the PostgreSQL implementation without changing th
 
 - **Local without containers**: a single SQLite file shared by `goap-dev` (migrations `migrations_sqlite/`
   per component, [ADR 0010](adr/0010-mode-local-sqlite.md)).
-- **Dev**: one PostgreSQL instance, **one schema per service** (`graph`, `registry`, `engine`, `iam`,
+- **Dev**: one PostgreSQL instance, **one schema per service** (`graph`, `registry`, `engine`,
   `modelgw`, `mcp`) and a dedicated role per service (`deploy/postgres/init.sql`).
 - **Prod**: one database (or cluster) per service; only the DSN changes (`GOAP_DB_DSN`, read from Vault).
 - Migrations embedded in each service (`embed.FS`), applied at startup (advisory lock).
@@ -518,7 +524,7 @@ change_item(id uuid, change_id, kind, type, status, target_id, target_version, p
 - Action permissions: see §2.7. The engine trusts the `X-Goap-*` headers: it must only be
   reachable via the gateway (which systematically overwrites them).
 - Each resource (methodology, changeset, process) belongs to an **organization**: multi-tenant isolation
-  via `org_id` in all tables (to be added with the IAM service).
+  via `org_id` in all tables (organisation units of the graph).
 - Secrets are never in environment variables in prod: `internal/platform/secrets` reads from Vault
   (KV v2, token auth in dev / Kubernetes auth in prod) with a fallback to the environment in dev.
 
@@ -771,11 +777,11 @@ to any other methodology.
 ## 5. Repository organization
 
 ```
-cmd/<service>/main.go        entry points (gateway, registry, engine, graph, modelgw, mcp, iam)
+cmd/<service>/main.go        entry points (gateway, registry, engine, graph, modelgw, mcp)
 cmd/goap-dev/                all-in-one for local development (memory or SQLite, serves the IDE)
 cmd/goap-runner/             sandbox for executing script actions
 internal/platform/           config, logs, HTTP/Connect server, NATS, Postgres, Vault secrets
-internal/<service>/          Connect handler implementation for a service (graphsvc, registrysvc, iamsvc…)
+internal/<service>/          Connect handler implementation for a service (graphsvc, registrysvc…)
 internal/identity/           caller identity (headers set by the gateway)
 pkg/domain/                  graph model (domain axis + change axis)
 pkg/graph/                   Store (memory, PostgreSQL, SQLite), apply, branches / merge / rebase, execution journal

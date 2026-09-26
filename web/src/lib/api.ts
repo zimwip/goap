@@ -429,7 +429,7 @@ export interface Issue {
   message?: string;
 }
 
-// --- iam --------------------------------------------------------------------
+// --- access -----------------------------------------------------------------
 
 /** ABAC rule: `rule` is an expression over r.sub, r.obj and r.act. */
 export interface Policy {
@@ -906,7 +906,6 @@ const REGISTRY = 'goap.registry.v1.RegistryService';
 const GRAPH = 'goap.graph.v1.GraphService';
 const ENGINE = 'goap.engine.v1.EngineService';
 
-const IAM = 'goap.iam.v1.IamService';
 const MODEL = 'goap.model.v1.ModelService';
 
 export const ENGINE_SERVICE = ENGINE;
@@ -995,13 +994,15 @@ export const registry = {
     ),
 };
 
-export const iam = {
-  whoAmI: (signal?: AbortSignal) => rpc<Empty, { principal?: Principal }>(IAM, 'WhoAmI', {}, signal),
-  listPolicies: (signal?: AbortSignal) =>
-    rpc<Empty, { policies?: Policy[] }>(IAM, 'ListPolicies', {}, signal),
-  addPolicy: (policy: Policy) => rpc<{ policy: Policy }, { policy?: Policy }>(IAM, 'AddPolicy', { policy }),
-  removePolicy: (policy: Policy) => rpc<{ policy: Policy }, Empty>(IAM, 'RemovePolicy', { policy }),
-};
+/** The caller as the platform sees it: token principal completed by its User node (GET /api/whoami). */
+export async function whoAmI(signal?: AbortSignal): Promise<Principal> {
+  const headers: Record<string, string> = {};
+  const token = getToken();
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const res = await fetch(`${BASE}/api/whoami`, { headers, signal });
+  if (!res.ok) throw new RpcError('unauthenticated', res.statusText, res.status);
+  return (await res.json()) as Principal;
+}
 
 export interface ImpactView {
   item?: string;

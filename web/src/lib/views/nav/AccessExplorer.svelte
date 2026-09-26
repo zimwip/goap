@@ -3,7 +3,9 @@
   import Icon from '../../shell/Icon.svelte';
   import TreeRow from '../TreeRow.svelte';
   import StatusBadge from '../../components/StatusBadge.svelte';
-  import { iam, errorMessage, type Policy } from '../../api';
+  import { errorMessage, type Policy } from '../../api';
+  import { headGraph } from '../../graphEdit';
+  import { policiesOf } from '../../access';
   import { openTab } from '../../shell/tabs.svelte';
   import { select } from '../../shell/workbench.svelte';
 
@@ -14,7 +16,7 @@
   async function load() {
     loading = true;
     try {
-      policies = (await iam.listPolicies()).policies ?? [];
+      policies = policiesOf((await headGraph()).nodes).map((x) => x.policy);
       error = '';
     } catch (e) {
       error = errorMessage(e);

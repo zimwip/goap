@@ -1,4 +1,4 @@
-SERVICES := graph registry engine modelgw gateway mcp iam connector-localfs goap-dev goap-runner
+SERVICES := graph registry engine modelgw gateway mcp connector-localfs goap-dev goap-runner
 COMPOSE  := docker compose -f deploy/compose/docker-compose.yml
 export PATH := $(PATH):$(shell go env GOPATH)/bin
 
@@ -22,7 +22,7 @@ build:
 test:
 	go test ./...
 
-test-pg: ## tests against PostgreSQL (graph, registry, iam)
+test-pg: ## tests against PostgreSQL (graph, registry)
 	GOAP_TEST_PG_DSN=$${GOAP_TEST_PG_DSN:-postgres://goap:goap@localhost:5432/goap?sslmode=disable} go test ./pkg/graph/... ./internal/...
 
 lint:

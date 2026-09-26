@@ -6,8 +6,10 @@ import (
 	"strings"
 
 	"github.com/zimwip/goap/internal/gateway"
+	"github.com/zimwip/goap/internal/graphsvc"
 	"github.com/zimwip/goap/internal/platform"
 	"github.com/zimwip/goap/internal/telemetry"
+	"github.com/zimwip/goap/pkg/access"
 )
 
 func main() {
@@ -24,9 +26,10 @@ func main() {
 			{Prefix: "/goap.engine.v1.EngineService/", Upstream: platform.Env("GOAP_ENGINE_URL", "http://localhost:8083")},
 			{Prefix: "/goap.model.v1.ModelService/", Upstream: platform.Env("GOAP_MODELGW_URL", "http://localhost:8084")},
 			{Prefix: "/goap.mcp.v1.McpService/", Upstream: platform.Env("GOAP_MCP_URL", "http://localhost:8085")},
-			{Prefix: "/goap.iam.v1.IamService/", Upstream: platform.Env("GOAP_IAM_URL", "http://localhost:8086")},
 		},
 	}
+	// who a caller is comes from the User nodes of the graph as well as from its token
+	cfg.Enrich = (&access.Directory{Graph: graphsvc.NewClient(platform.H2CClient(), platform.Env("GOAP_GRAPH_URL", "http://localhost:8081"), telemetry.ClientOptions()...)}).Enrich
 	if origins := platform.Env("GOAP_CORS_ORIGINS", ""); origins != "" {
 		cfg.AllowOrigins = strings.Split(origins, ",")
 	}
