@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"os"
 	"strings"
 	"testing"
 
@@ -12,7 +13,11 @@ import (
 
 func loadMethodology(t *testing.T, file string) *methodology.Compiled {
 	t.Helper()
-	m, err := methodology.LoadFile("../../methodologies/" + file)
+	path := "../../methodologies/" + file
+	if _, err := os.Stat(path); err != nil { // the examples are not seeded at start: they live in methodologies/examples
+		path = "../../methodologies/examples/" + file
+	}
+	m, err := methodology.LoadFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -42,7 +47,7 @@ func TestIdentifyAgentAcrossMethodologies(t *testing.T) {
 	ctx := context.Background()
 	e, base := agentsSetup(t)
 	// the intent text deliberately echoes the coordinator's example phrase
-	// in methodologies/test-design.yaml.
+	// in methodologies/examples/test-design.yaml.
 	p, err := e.Start(ctx, StartRequest{BaselineID: base, Intent: "prepare and validate the test campaign"})
 	if err != nil {
 		t.Fatal(err)
@@ -81,7 +86,7 @@ func TestScriptAgentWithLLMUsage(t *testing.T) {
 		t.Fatalf("process usage %+v", p.Usage)
 	}
 	// "requirement" is logged by the collect_scope script in
-	// methodologies/test-design.yaml.
+	// methodologies/examples/test-design.yaml.
 	if len(p.Steps[0].Logs) != 1 || !strings.Contains(p.Steps[0].Logs[0].Message, "requirement") {
 		t.Fatalf("script logs not recorded: %+v", p.Steps[0].Logs)
 	}

@@ -8,7 +8,7 @@ import (
 )
 
 // SeedDemo loads a small ALM repository when the graph is empty: needs,
-// requirements and tests (methodologies/impact-analysis.yaml), and the
+// requirements and tests (methodologies/examples/impact-analysis.yaml), and the
 // functions, components, build artifacts, applications, solution, data,
 // interfaces and flows of methodologies/sdlc.yaml.
 func SeedDemo(ctx context.Context, g *graph.Graph) (bool, error) {

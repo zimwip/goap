@@ -13,7 +13,7 @@ import (
 
 func load(t *testing.T) *methodology.Methodology {
 	t.Helper()
-	m, err := methodology.LoadFile("../../methodologies/test-design.yaml")
+	m, err := methodology.LoadFile("../../methodologies/examples/test-design.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}

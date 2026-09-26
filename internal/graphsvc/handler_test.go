@@ -29,7 +29,7 @@ func createObject(h *graphsvc.Handler, roles, key string) error {
 }
 
 func TestCreateObjectIsRoleGated(t *testing.T) {
-	m, err := methodology.LoadFile("../../methodologies/test-design.yaml")
+	m, err := methodology.LoadFile("../../methodologies/examples/test-design.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -9,7 +9,7 @@ import (
 
 func load(t *testing.T) *Compiled {
 	t.Helper()
-	m, err := LoadFile("../../methodologies/impact-analysis.yaml")
+	m, err := LoadFile("../../methodologies/examples/impact-analysis.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,7 +106,7 @@ goals:
 }
 
 func TestCompileDoesNotMutateAndYAMLRoundTrip(t *testing.T) {
-	m, err := LoadFile("../../methodologies/impact-analysis.yaml")
+	m, err := LoadFile("../../methodologies/examples/impact-analysis.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}

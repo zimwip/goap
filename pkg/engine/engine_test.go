@@ -15,7 +15,7 @@ import (
 )
 
 // scripted answers by prompt content, like a deterministic LLM. The matched
-// substrings come from the prompt templates in methodologies/impact-analysis.yaml.
+// substrings come from the prompt templates in methodologies/examples/impact-analysis.yaml.
 func scripted(t *testing.T) llm.Client {
 	return llm.ClientFunc(func(_ context.Context, req llm.Request) (llm.Response, error) {
 		p := req.Messages[0].Content
@@ -43,7 +43,7 @@ func scripted(t *testing.T) llm.Client {
 func setup(t *testing.T) (*Engine, *graph.Graph, domain.BaselineID) {
 	t.Helper()
 	ctx := context.Background()
-	m, err := methodology.LoadFile("../../methodologies/impact-analysis.yaml")
+	m, err := methodology.LoadFile("../../methodologies/examples/impact-analysis.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,7 +83,7 @@ func TestAssessImpact(t *testing.T) {
 	ctx := context.Background()
 	e, g, base := setup(t)
 	// the intent text deliberately echoes the "assess_impact" goal example
-	// ("what does this break") in methodologies/impact-analysis.yaml.
+	// ("what does this break") in methodologies/examples/impact-analysis.yaml.
 	p, err := e.Start(ctx, StartRequest{Methodology: "impact-analysis", BaselineID: base, Intent: "The PSP changes its API, what does this break?"})
 	if err != nil {
 		t.Fatal(err)

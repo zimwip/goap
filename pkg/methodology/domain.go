@@ -172,6 +172,19 @@ func DomainDir(dir string) DomainResolver {
 	}
 }
 
+// domainsDirFor finds the "domains" directory beside the methodologies directory of a file: methodologies/x.yaml
+// and methodologies/examples/x.yaml both resolve to the sibling of methodologies/.
+func domainsDirFor(path string) string {
+	dir := filepath.Dir(path)
+	for i := 0; i < 3; i++ {
+		dir = filepath.Join(dir, "..")
+		if st, err := os.Stat(filepath.Join(dir, "domains")); err == nil && st.IsDir() {
+			return filepath.Join(dir, "domains")
+		}
+	}
+	return filepath.Join(filepath.Dir(path), "..", "domains")
+}
+
 // LoadFile parses a methodology file. A domain reference is resolved from the
 // "domains" directory next to the methodology's directory (the layout of the
 // repository: methodologies/ and domains/).
@@ -184,7 +197,7 @@ func LoadFile(path string) (*Methodology, error) {
 	if err != nil {
 		return nil, err
 	}
-	res, issues := m.Resolve(DomainDir(filepath.Join(filepath.Dir(path), "..", "domains")))
+	res, issues := m.Resolve(DomainDir(domainsDirFor(path)))
 	if len(issues) > 0 {
 		return nil, fmt.Errorf("%s: %w", path, issues)
 	}
