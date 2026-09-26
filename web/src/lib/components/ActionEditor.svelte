@@ -280,6 +280,22 @@
       path="{p}.prompt"
     />
   </div>
+  <div class="field">
+    <label for="{id}-mcps">MCPs used</label>
+    <input
+      id="{id}-mcps"
+      type="text"
+      class="mono"
+      bind:value={action.mcps}
+      class:bad={bad(`${p}.mcps`)}
+      data-path="{p}.mcps"
+      placeholder="document-repository"
+      disabled={readonly}
+    />
+    <span class="hint"
+      >Comma separated. The action can call the tools of these MCPs only, and is scheduled only in a change whose organisation binds them all.</span
+    >
+  </div>
 {:else if action.kind === 'script'}
   <div class="script-head">
     <div class="field lang">
@@ -317,6 +333,22 @@
       path="{p}.code"
     />
   </div>
+  <div class="field">
+    <label for="{id}-mcps">MCPs used</label>
+    <input
+      id="{id}-mcps"
+      type="text"
+      class="mono"
+      bind:value={action.mcps}
+      class:bad={bad(`${p}.mcps`)}
+      data-path="{p}.mcps"
+      placeholder="document-repository"
+      disabled={readonly}
+    />
+    <span class="hint"
+      >Comma separated. The action can call the tools of these MCPs only, and is scheduled only in a change whose organisation binds them all.</span
+    >
+  </div>
 {:else if action.kind === 'tool'}
   <div class="field">
     <label for="{id}-tool">Tool</label>
@@ -327,7 +359,9 @@
       bind:value={action.tool}
       class:bad={bad(`${p}.tool`)}
       data-path="{p}.tool"
+      placeholder="document-repository/read"
     />
+    <span class="hint">Qualified name <code>&lt;mcp&gt;/&lt;tool&gt;</code>. The action needs the MCP bound by the organisation of the change.</span>
   </div>
 {:else if action.kind === 'human'}
   <div class="field">
