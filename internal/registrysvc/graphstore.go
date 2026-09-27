@@ -14,7 +14,6 @@ import (
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/graphsnap"
-	"github.com/zimwip/goap/pkg/metamodel"
 )
 
 // Node types of the stored definitions (built-in meta-domains, ADR 0023): one header node per version of a methodology
@@ -24,6 +23,15 @@ const (
 	TypeMethodologyVersion = "methodology@MethodologyVersion"
 	TypeDomainVersion      = "domain@DomainVersion"
 )
+
+// StoreGraph is what the store needs from the graph (*graph.Graph and the graph service client implement it).
+type StoreGraph interface {
+	BranchHead(ctx context.Context, name string) (domain.Baseline, error)
+	BaselineGraph(ctx context.Context, id domain.BaselineID) ([]domain.Node, []domain.Link, error)
+	CreateBaseline(ctx context.Context, name string, nodes []domain.NodeRef) (domain.Baseline, error)
+	// Commit runs a change of node edits (ADR 0024).
+	Commit(ctx context.Context, in graph.Commit) (graph.CommitResult, error)
+}
 
 // linkDefines is the link type that ties a version of namespace ns to the elements of its definition.
 func linkDefines(ns string) string { return ns + "@defines" }
@@ -49,7 +57,7 @@ func DomainVersionKey(name, version string) string { return "DV:" + key(name, ve
 // are versioned, journaled and reviewable like any node (each element has its own history), and the registry needs no database
 // of its own. It implements Store and DomainStore.
 type GraphStore struct {
-	Graph metamodel.Graph
+	Graph StoreGraph
 	Now   func() time.Time
 
 	cache graphsnap.Cache[*defs]
@@ -61,7 +69,7 @@ var (
 )
 
 // NewGraphStore returns a store over a graph (the graph itself, or a client of the graph service).
-func NewGraphStore(g metamodel.Graph) *GraphStore {
+func NewGraphStore(g StoreGraph) *GraphStore {
 	s := &GraphStore{Graph: g, Now: time.Now}
 	s.cache = graphsnap.Cache[*defs]{Graph: g, Build: buildDefs}
 	return s

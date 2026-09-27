@@ -45,8 +45,8 @@ import (
 	"github.com/zimwip/goap/pkg/intent"
 	"github.com/zimwip/goap/pkg/llm"
 	"github.com/zimwip/goap/pkg/llmcfg"
-	"github.com/zimwip/goap/pkg/metamodel"
 	"github.com/zimwip/goap/pkg/methodology"
+	"github.com/zimwip/goap/pkg/typecat"
 )
 
 func main() {
@@ -73,6 +73,37 @@ func main() {
 		platform.Fatal(log, "authorizer", err)
 	}
 	g.Authorizer = graphsvc.TransitionAuthorizer(authorizer)
+	var triggers *engine.TriggerManager
+	// methodologies and domains are nodes of the graph: the registry needs no database
+	reg := &registrysvc.Service{Store: registrysvc.NewGraphStore(g), Authz: authorizer}
+	// the graph judges nodes by the types of the published domains (ADR 0012): its catalogue follows the registry
+	types := typecat.NewLive(reg.Domains)
+	g.Types = func() graph.TypeCatalog { return types.Get() }
+	// publications reload the triggers and the type catalogue
+	reg.Events = registryEvents{
+		methodology: func(ctx context.Context, name, version string) {
+			if triggers != nil {
+				triggers.Handle(ctx, engine.TriggerEvent{Type: "methodology.published", Methodology: name, Version: version})
+			}
+		},
+		domain: func(ctx context.Context, name, version string) {
+			if err := types.Reload(ctx); err != nil {
+				log.Error("type catalogue", "domain", name, "err", err)
+				return
+			}
+			log.Info("domain published: type catalogue reloaded", "domain", name, "version", version)
+		},
+	}
+	system := authz.With(ctx, authz.Principal{Subject: "system:registry", Roles: []string{"admin"}})
+	if _, err := reg.SeedDomains(system, platform.Env("GOAP_DOMAINS_DIR", "domains")); err != nil {
+		platform.Fatal(log, "domains", err)
+	}
+	if err := types.Reload(ctx); err != nil {
+		platform.Fatal(log, "type catalogue", err)
+	}
+	if _, err := reg.Seed(system, platform.Env("GOAP_METHODOLOGIES_DIR", "methodologies")); err != nil {
+		platform.Fatal(log, "methodologies", err)
+	}
 	if _, err := graphsvc.SeedDemo(ctx, g); err != nil {
 		platform.Fatal(log, "seed", err)
 	}
@@ -81,48 +112,6 @@ func main() {
 	}
 	if _, err := graphsvc.SeedDefaults(ctx, g); err != nil {
 		platform.Fatal(log, "seed defaults", err)
-	}
-	var triggers *engine.TriggerManager
-	// methodologies and domains are nodes of the graph: the registry needs no database
-	reg := &registrysvc.Service{Store: registrysvc.NewGraphStore(g), Authz: authorizer}
-	// publications are projected onto the domain graph (the methodology as
-	// versioned elements) and reload the triggers
-	reg.Events = registryEvents{
-		methodology: func(ctx context.Context, name, version string) {
-			r, err := reg.GetResolved(ctx, name, version) // the shared domain filled in
-			if err != nil {
-				log.Error("published methodology", "name", name, "err", err)
-				return
-			}
-			if res, err := metamodel.Sync(ctx, g, &r.Methodology); err != nil {
-				log.Error("methodology projection", "name", name, "err", err)
-			} else if res.Changed() {
-				log.Info("methodology projected onto the graph", "name", name, "version", version, "change", res.Change)
-			}
-			if triggers != nil {
-				triggers.Handle(ctx, engine.TriggerEvent{Type: "methodology.published", Methodology: name, Version: version})
-			}
-		},
-		// methodologies following the latest version of a domain get its new types
-		domain: func(ctx context.Context, name, version string) {
-			rs, err := metamodel.SyncAll(ctx, g, reg)
-			if err != nil {
-				log.Error("domain projection", "domain", name, "err", err)
-				return
-			}
-			_ = rs
-			log.Info("domain published: methodologies projected again", "domain", name, "version", version)
-		},
-	}
-	system := authz.With(ctx, authz.Principal{Subject: "system:registry", Roles: []string{"admin"}})
-	if _, err := reg.SeedDomains(system, platform.Env("GOAP_DOMAINS_DIR", "domains")); err != nil {
-		platform.Fatal(log, "domains", err)
-	}
-	if _, err := reg.Seed(system, platform.Env("GOAP_METHODOLOGIES_DIR", "methodologies")); err != nil {
-		platform.Fatal(log, "methodologies", err)
-	}
-	if _, err := metamodel.SyncAll(ctx, g, reg); err != nil {
-		platform.Fatal(log, "methodology projection", err)
 	}
 	// the gateway configuration is graph data, seeded once; API keys are references resolved from the environment or Vault
 	if cfg, err := modelgw.InitialConfig(ctx, platform.Env("GOAP_MODELS_CONFIG", ""), secrets); err != nil {
@@ -205,6 +194,7 @@ func main() {
 		Sandboxes: sandboxes,
 		Tracer:    telemetry.NewEngineTracer(),
 		Log:       log,
+		Types:     func() methodology.TypeSet { return types.Get() },
 	}
 	// self-observation (methodology-improvement): journal, traces, drafts
 	maps.Copy(builtins, e.SelfImprovementBuiltins(telemetry.SelfImprovementFromEnv(registrysvc.Drafts{Service: reg})))

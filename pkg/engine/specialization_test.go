@@ -13,7 +13,7 @@ import (
 const buildMethodology = `
 name: demo
 version: "1.0.0"
-domain: {nodeTypes: [Component]}
+namespace: alm
 conditions:
   - {name: built, expr: 'artifacts.exists(a, a.type == "build")'}
 actions:

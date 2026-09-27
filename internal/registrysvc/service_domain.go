@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/methodology"
+	"github.com/zimwip/goap/pkg/typecat"
 )
 
 // ErrNoDomainStore is returned when the Store does not hold domains.
@@ -21,48 +23,26 @@ func (s *Service) domains() (DomainStore, error) {
 	return nil, ErrNoDomainStore
 }
 
-// resolver looks domains up for Methodology.Resolve. An unpinned reference
-// resolves to the latest published version, a pinned one to that version,
-// draft included (so that a draft methodology can be edited against a draft
-// domain; publishing requires a published one).
-func (s *Service) resolver(ctx context.Context) methodology.DomainResolver {
-	return func(name, version string) (*methodology.Domain, error) {
-		ds, err := s.domains()
-		if err != nil {
-			return nil, err
-		}
-		r, err := ds.GetDomain(ctx, name, version)
-		if err != nil {
-			return nil, err
-		}
-		if r.Status == StatusArchived {
-			return nil, fmt.Errorf("%s@%s is archived", r.Domain.Name, r.Domain.Version)
-		}
-		return &r.Domain, nil
-	}
-}
-
-// requirePublishedDomain refuses to publish a methodology on a draft domain.
-func (s *Service) requirePublishedDomain(ctx context.Context, m *methodology.Methodology) error {
-	if m.DomainRef == "" {
-		return nil
-	}
-	name, version, err := methodology.SplitRef(m.DomainRef)
+// Types is the type catalogue in force (ADR 0012 §2): the latest published version of every domain and the built-in
+// meta-domains. over replaces the published version of a domain (to check a candidate version).
+func (s *Service) Types(ctx context.Context, over ...*methodology.Domain) (*typecat.Catalog, error) {
+	ds, err := s.Domains(ctx)
 	if err != nil {
-		return fmt.Errorf("%w: %v", ErrInvalid, err)
+		return nil, err
 	}
-	ds, err := s.domains()
-	if err != nil {
-		return err
+	byName := map[string]*methodology.Domain{}
+	var order []string
+	for _, d := range append(ds, over...) {
+		if _, ok := byName[d.Name]; !ok {
+			order = append(order, d.Name)
+		}
+		byName[d.Name] = d
 	}
-	r, err := ds.GetDomain(ctx, name, version)
-	if err != nil {
-		return fmt.Errorf("%w: domain %s: %v", ErrInvalid, m.DomainRef, err)
+	list := make([]*methodology.Domain, 0, len(order))
+	for _, n := range order {
+		list = append(list, byName[n])
 	}
-	if r.Status != StatusPublished {
-		return fmt.Errorf("%w: domain %s is %s, publish it first", ErrInvalid, m.DomainRef, r.Status)
-	}
-	return nil
+	return typecat.New(list...)
 }
 
 func (s *Service) authorizeDomain(ctx context.Context, action string, d *methodology.Domain) error {
@@ -85,7 +65,7 @@ func (s *Service) GetDomain(ctx context.Context, name, version string) (DomainRe
 	return ds.GetDomain(ctx, name, version)
 }
 
-// Domains implements metamodel.PublishedDomains: the latest published version of every domain.
+// Domains returns the latest published version of every domain (the source of the type catalogue).
 func (s *Service) Domains(ctx context.Context) ([]*methodology.Domain, error) {
 	rs, err := s.DomainVersions(ctx, false)
 	if err != nil {
@@ -155,41 +135,47 @@ func (s *Service) SaveDomain(ctx context.Context, d methodology.Domain) (DomainR
 		return DomainRecord{}, nil, err
 	}
 	s.publishDomainEvent(ctx, "saved", saved)
-	return saved, d.Validate(), nil
+	return saved, s.validateDomain(ctx, &d), nil
 }
 
-// methodologiesUsing returns the methodology versions referencing the
-// domain version: pinned to it, or unpinned (following the latest published
-// version) when floating is set.
-func (s *Service) methodologiesUsing(ctx context.Context, name, version string, floating bool) ([]Record, error) {
+// validateDomain checks a domain and its references to the types of the other domains in force.
+func (s *Service) validateDomain(ctx context.Context, d *methodology.Domain) methodology.Issues {
+	issues := d.Validate()
+	if typecat.IsMeta(d.Name) {
+		return append(issues, methodology.Issue{Path: "name", Message: d.Name + " is a built-in meta-domain"})
+	}
+	if len(issues) == 0 {
+		if _, err := s.Types(ctx, d); err != nil {
+			issues = append(issues, methodology.Issue{Path: "nodeTypes", Message: err.Error()})
+		}
+	}
+	return issues
+}
+
+// methodologiesUsing returns the methodology versions (not archived) that act on the namespace of a domain or
+// reference its types.
+func (s *Service) methodologiesUsing(ctx context.Context, name string) ([]Record, error) {
 	rs, err := s.Store.List(ctx)
 	if err != nil {
 		return nil, err
 	}
 	var out []Record
 	for _, r := range rs {
-		if r.Status == StatusArchived || r.Methodology.DomainRef == "" {
-			continue
-		}
-		n, v, err := methodology.SplitRef(r.Methodology.DomainRef)
-		if err != nil || n != name {
-			continue
-		}
-		if v == version || (floating && v == "") {
+		if r.Status != StatusArchived && slices.Contains(r.Methodology.Namespaces(), name) {
 			out = append(out, r)
 		}
 	}
 	return out, nil
 }
 
-// DomainUsage lists the methodology versions referencing a domain version
-// (unpinned references included).
+// DomainUsage lists the methodology versions using a domain (its namespace or its types); they follow the version
+// in force.
 func (s *Service) DomainUsage(ctx context.Context, name, version string) ([]Record, error) {
-	return s.methodologiesUsing(ctx, name, version, true)
+	return s.methodologiesUsing(ctx, name)
 }
 
-// PublishDomain freezes a valid draft. Published methodologies that follow
-// the latest published domain (unpinned reference) must stay valid against it.
+// PublishDomain freezes a valid draft; it becomes the version in force. The published methodologies must stay
+// valid against it.
 func (s *Service) PublishDomain(ctx context.Context, name, version string) (DomainRecord, error) {
 	ds, err := s.domains()
 	if err != nil {
@@ -205,10 +191,14 @@ func (s *Service) PublishDomain(ctx context.Context, name, version string) (Doma
 	if r.Status != StatusDraft {
 		return DomainRecord{}, fmt.Errorf("domain %s@%s: %w", name, version, ErrImmutable)
 	}
-	if issues := r.Domain.Validate(); len(issues) > 0 {
+	if issues := s.validateDomain(ctx, &r.Domain); len(issues) > 0 {
 		return DomainRecord{}, fmt.Errorf("%w: %v", ErrInvalid, issues)
 	}
-	users, err := s.methodologiesUsing(ctx, name, "", true)
+	cat, err := s.Types(ctx, &r.Domain)
+	if err != nil {
+		return DomainRecord{}, fmt.Errorf("%w: %v", ErrInvalid, err)
+	}
+	users, err := s.methodologiesUsing(ctx, name)
 	if err != nil {
 		return DomainRecord{}, err
 	}
@@ -216,9 +206,7 @@ func (s *Service) PublishDomain(ctx context.Context, name, version string) (Doma
 		if u.Status != StatusPublished {
 			continue
 		}
-		m := u.Methodology
-		m.Domain = r.Domain.Schema
-		if issues := m.Validate(); len(issues) > 0 {
+		if issues := u.Methodology.Resolve(cat).Validate(); len(issues) > 0 {
 			return DomainRecord{}, fmt.Errorf("%w: methodology %s@%s would break: %v", ErrInvalid, u.Methodology.Name, u.Methodology.Version, issues)
 		}
 	}
@@ -254,8 +242,8 @@ func (s *Service) CreateDomainVersion(ctx context.Context, name, from, to string
 	return r, err
 }
 
-// DeleteDomain removes a draft or archives a published version that no
-// methodology is pinned to.
+// DeleteDomain removes a draft, or archives a published version; the version in force cannot be archived while
+// methodologies use it.
 func (s *Service) DeleteDomain(ctx context.Context, name, version string) error {
 	ds, err := s.domains()
 	if err != nil {
@@ -269,16 +257,16 @@ func (s *Service) DeleteDomain(ctx context.Context, name, version string) error 
 		return err
 	}
 	switch r.Status {
-	case StatusDraft, StatusPublished:
-		// pinned methodologies block deletion; so do unpinned ones when this
-		// is the version they resolve to (the latest published)
-		latest, _ := ds.GetDomain(ctx, name, "")
-		users, err := s.methodologiesUsing(ctx, name, version, r.Status == StatusPublished && latest.Domain.Version == version)
-		if err != nil {
-			return err
-		}
-		if len(users) > 0 {
-			return fmt.Errorf("%w: domain %s@%s is used by %s@%s", ErrInvalid, name, version, users[0].Methodology.Name, users[0].Methodology.Version)
+	case StatusDraft:
+	case StatusPublished:
+		if latest, _ := ds.GetDomain(ctx, name, ""); latest.Domain.Version == version {
+			users, err := s.methodologiesUsing(ctx, name)
+			if err != nil {
+				return err
+			}
+			if len(users) > 0 {
+				return fmt.Errorf("%w: domain %s@%s is used by %s@%s", ErrInvalid, name, version, users[0].Methodology.Name, users[0].Methodology.Version)
+			}
 		}
 	default:
 		return nil

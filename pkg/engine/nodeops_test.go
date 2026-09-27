@@ -14,7 +14,7 @@ import (
 func TestScriptChangeImpacts(t *testing.T) {
 	ctx := context.Background()
 	e, g, base := setup(t)
-	c, err := g.CreateChange(ctx, graph.NewChange{Title: "PSP v2", BaselineID: base, OwnBranch: true})
+	c, err := g.CreateChange(ctx, graph.NewChange{Namespace: "alm", Title: "PSP v2", BaselineID: base, OwnBranch: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,8 +72,8 @@ for (const n of ctx.changeImpacts()) if (n.review === "proposed") ctx.reviewNode
 	if _, err := g.Apply(ctx, c.ID, ""); err != nil {
 		t.Fatal(err)
 	}
-	newReq, _ := g.NodeByKey(ctx, "sdlc", "REQ-1")
-	newTst, err := g.NodeByKey(ctx, "sdlc", "TST-2")
+	newReq, _ := g.NodeByKey(ctx, "alm", "REQ-1")
+	newTst, err := g.NodeByKey(ctx, "alm", "TST-2")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,7 +100,7 @@ for (const n of ctx.changeImpacts()) if (n.review === "proposed") ctx.reviewNode
 func TestScriptChangeImpactsOnAFlow(t *testing.T) {
 	ctx := context.Background()
 	e, g, base := setup(t)
-	c, err := g.CreateChange(ctx, graph.NewChange{Title: "PSP v2", BaselineID: base, OwnBranch: true})
+	c, err := g.CreateChange(ctx, graph.NewChange{Namespace: "alm", Title: "PSP v2", BaselineID: base, OwnBranch: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -138,7 +138,7 @@ func TestScriptChangeImpactsOnAFlow(t *testing.T) {
 	if _, err := g.Apply(ctx, c.ID, ""); err != nil {
 		t.Fatal(err)
 	}
-	req, _ := g.NodeByKey(ctx, "sdlc", "REQ-1")
+	req, _ := g.NodeByKey(ctx, "alm", "REQ-1")
 	if req.Properties["title"] != "B" || req.Comment != "better" {
 		t.Fatalf("the adopted flow lands: %+v", req)
 	}

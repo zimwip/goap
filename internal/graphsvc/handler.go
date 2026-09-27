@@ -17,17 +17,14 @@ import (
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/engine"
 	"github.com/zimwip/goap/pkg/graph"
-	"github.com/zimwip/goap/pkg/metamodel"
 )
 
 // Handler implements graphv1connect.GraphServiceHandler.
 type Handler struct {
 	Graph  *graph.Graph
 	Events engine.Publisher
-	// Authz gates writes to the metadata layer (NodeType nodes and extends
-	// edges, ADR 0012), resource "nodetype", and object creation (CreateObject),
-	// resource "object". Nil grants everything. Ordinary domain-node proposals
-	// and instanceOf edges are never gated by it.
+	// Authz gates object creation (CreateObject), resource "object". Nil grants everything. Ordinary
+	// change impacts are not gated by it.
 	Authz authz.Authorizer
 	// Floor gates changes to User and Policy nodes (resource "policy", action "write"). It must not depend
 	// on the policies themselves, so that no policy can lock the administrators out; nil falls back to Authz.
@@ -82,7 +79,7 @@ func (h *Handler) CreateObject(ctx context.Context, r *connect.Request[graphv1.C
 		Resource: authz.Resource{Type: "object", Name: r.Msg.NodeType, Namespace: domain.NamespaceOf(r.Msg.Namespace), Org: who.Org, Owner: who.Subject}}); err != nil {
 		return nil, rpcerr.ToConnect(err)
 	}
-	n, b, err := metamodel.CreateObject(ctx, h.Graph, r.Msg.Methodology, r.Msg.Namespace, r.Msg.NodeType, r.Msg.Key, pbconv.Map(r.Msg.Props))
+	n, b, err := h.Graph.CreateObject(ctx, r.Msg.Methodology, r.Msg.Namespace, r.Msg.NodeType, r.Msg.Key, pbconv.Map(r.Msg.Props))
 	if err == nil {
 		h.publish(ctx, "goap.graph.object.created", map[string]string{"methodology": r.Msg.Methodology, "key": n.Key})
 	}
@@ -227,15 +224,10 @@ func (h *Handler) AddItems(ctx context.Context, r *connect.Request[graphv1.AddIt
 	return res(&graphv1.AddItemsResponse{Items: pbconv.ItemsToPB(items)}, err)
 }
 
-// gateNodeType applies to a change impact the gates AddItems applies to proposals:
-// NodeType nodes need the "nodetype" permission, User and Policy nodes the access one.
-func (h *Handler) gateNodeType(ctx context.Context, typ string) error {
+// gateAccess applies to a change impact the gate of the access nodes: User and Policy nodes need the access
+// permission, checked against the floor (ADR 0020).
+func (h *Handler) gateAccess(ctx context.Context, typ string) error {
 	who := authz.From(ctx)
-	if typ == metamodel.TypeNodeType {
-		if err := authz.Check(ctx, h.Authz, authz.Request{Subject: who, Action: "write", Resource: authz.Resource{Type: "nodetype", Org: who.Org}}); err != nil {
-			return rpcerr.ToConnect(err)
-		}
-	}
 	if isAccessType(typ) {
 		gate := h.Floor
 		if gate == nil {
@@ -258,7 +250,7 @@ func (h *Handler) AddChangeImpacts(ctx context.Context, r *connect.Request[graph
 				typ = n.Type
 			}
 		}
-		if err := h.gateNodeType(ctx, typ); err != nil {
+		if err := h.gateAccess(ctx, typ); err != nil {
 			return nil, err
 		}
 	}
@@ -276,15 +268,8 @@ func (h *Handler) CommitEdits(ctx context.Context, r *connect.Request[graphv1.Co
 				typ = n.Type
 			}
 		}
-		if err := h.gateNodeType(ctx, typ); err != nil {
+		if err := h.gateAccess(ctx, typ); err != nil {
 			return nil, err
-		}
-		for _, l := range e.Links {
-			if l.Type == metamodel.LinkExtends {
-				if err := h.gateNodeType(ctx, metamodel.TypeNodeType); err != nil {
-					return nil, err
-				}
-			}
 		}
 	}
 	by := authz.From(ctx).Subject
@@ -314,16 +299,11 @@ func (h *Handler) WriteChangeImpact(ctx context.Context, r *connect.Request[grap
 			typ = cn.Type
 		}
 	}
-	if err := h.gateNodeType(ctx, typ); err != nil {
+	if err := h.gateAccess(ctx, typ); err != nil {
 		return nil, err
 	}
 	w := graph.NodeWrite{Properties: pbconv.Map(r.Msg.Props), State: r.Msg.State, Retire: r.Msg.Retire, Flow: r.Msg.Flow, Execution: r.Msg.Execution}
 	for _, l := range r.Msg.AddLinks {
-		if l.Type == metamodel.LinkExtends {
-			if err := h.gateNodeType(ctx, metamodel.TypeNodeType); err != nil {
-				return nil, err
-			}
-		}
 		w.AddLinks = append(w.AddLinks, graph.LinkWrite{Type: l.Type, To: pbconv.RefFromPB(l.To), Properties: pbconv.Map(l.Props)})
 	}
 	for _, id := range r.Msg.RemoveLinks {

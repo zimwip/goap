@@ -3,6 +3,7 @@ package domain
 import (
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/zimwip/goap/pkg/algo"
 )
@@ -75,8 +76,14 @@ type DocumentSpec struct {
 	Contains []string `yaml:"contains" json:"contains"`
 }
 
-// LinkContains is the link type between a document and the nodes it embeds.
+// LinkContains is the name of the link type between a document and the nodes it embeds (declared by the domain of
+// the document: alm@contains).
 const LinkContains = "contains"
+
+// IsContains reports a document link: a link type named LinkContains, bare or qualified.
+func IsContains(linkType string) bool {
+	return linkType == LinkContains || strings.HasSuffix(linkType, TypeSep+LinkContains)
+}
 
 // State returns the named state.
 func (l *Lifecycle) State(name string) (LifecycleState, bool) {

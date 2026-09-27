@@ -136,13 +136,21 @@ type Report struct {
 	Findings    []Finding     `json:"findings"`
 }
 
-// ElementKey returns the metamodel key of an element (see pkg/metamodel).
-func ElementKey(meth, kind, name string) string {
+// ElementKey returns the key of the definition node of an element of a methodology version (ADR 0023):
+// "MV:<name>@<version>" for the version itself, "MV:<name>@<version>/<kind>/<element>" for an element.
+func ElementKey(meth, version, kind, name string) string {
 	if kind == "methodology" {
-		return "M:" + meth
+		return "MV:" + meth + "@" + version
 	}
-	return "M:" + meth + "/" + kind + "/" + name
+	return "MV:" + meth + "@" + version + "/" + kind + "/" + name
 }
+
+// Types of the definition nodes the self-observation proposes (meta-domain methodology, ADR 0012 §4).
+const (
+	TypeAction      = "methodology@Action"
+	TypeToolRequest = "methodology@ToolRequest"
+	LinkSpecializes = "methodology@specializes"
+)
 
 func outputKey(it domain.ChangeItem) string {
 	if it.Type != "" {
@@ -254,7 +262,7 @@ func aggregateSpans(spans []Span) []SpanStats {
 
 func findings(r Report, th Thresholds) []Finding {
 	var out []Finding
-	el := func(kind, name string) string { return ElementKey(r.Methodology, kind, name) }
+	el := func(kind, name string) string { return ElementKey(r.Methodology, r.Version, kind, name) }
 	for _, s := range r.Actions {
 		base := Finding{Methodology: r.Methodology, Agent: s.Agent, Action: s.Action, Element: el("action", s.Action), Records: s.Records}
 		if s.Executions >= th.LoopExecutions {
@@ -329,6 +337,6 @@ func regular(s ActionStats, th Thresholds) bool {
 func (r *Report) WithDisabled(agent string, disabled []string) {
 	for _, a := range disabled {
 		r.Findings = append(r.Findings, Finding{Kind: FindDisabled, Methodology: r.Methodology, Agent: agent, Action: a,
-			Element: ElementKey(r.Methodology, "action", a), Evidence: a + " disabled after repeated failures"})
+			Element: ElementKey(r.Methodology, r.Version, "action", a), Evidence: a + " disabled after repeated failures"})
 	}
 }

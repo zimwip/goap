@@ -29,20 +29,26 @@ type Methodology struct {
 	Name        string `yaml:"name" json:"name"`
 	Version     string `yaml:"version" json:"version"`
 	Description string `yaml:"description,omitempty" json:"description,omitempty"`
-	// Namespace is the graph namespace the changes of the methodology act on
-	// (default sdlc). A methodology that edits the meta model (methodology
-	// nodes, node types) targets "platform".
-	Namespace string `yaml:"namespace,omitempty" json:"namespace,omitempty"`
-	// DomainRef references a shared Domain "<name>@<version>" (version empty:
-	// latest published) instead of embedding one; Resolve fills Domain from it.
-	DomainRef  string      `yaml:"domainRef,omitempty" json:"domainRef,omitempty"`
-	Domain     Schema      `yaml:"domain,omitempty" json:"domain"`
+	// Namespace is the target namespace (ADR 0013 §3): the namespace the changes of the methodology act on, hence the
+	// domain of the nodes it creates and modifies (alm; methodology for the self-observation). Required.
+	Namespace  string      `yaml:"namespace" json:"namespace"`
 	Conditions []Condition `yaml:"conditions" json:"conditions"`
 	Actions    []Action    `yaml:"actions" json:"actions"`
 	Goals      []Goal      `yaml:"goals" json:"goals"`
 	// Agents run the methodology; without agents an implicit "default" agent
 	// has every action and goal and the goap planner.
 	Agents []Agent `yaml:"agents,omitempty" json:"agents,omitempty"`
+	// Types resolves the qualified type references of the methodology (the type catalogue, set by Resolve). Nil: the
+	// references are only checked for their form.
+	Types TypeSet `yaml:"-" json:"-"`
+}
+
+// TypeSet is what a methodology needs of the types in force (pkg/typecat.Catalog, or DomainTypes): the qualified
+// node and link types ("alm@Requirement") and the ancestors of each node type.
+type TypeSet interface {
+	HasNodeType(ref string) bool
+	HasLinkType(ref string) bool
+	Supertypes() map[string][]string
 }
 
 // Planners.
@@ -365,6 +371,15 @@ func (m *Methodology) Validate() Issues {
 	return issues
 }
 
+// ValidateStored is Validate plus what a stored methodology must also have (the registry): its target namespace.
+func (m *Methodology) ValidateStored() Issues {
+	issues := m.Validate()
+	if m.Namespace == "" {
+		issues = append(Issues{{Path: "namespace", Message: "namespace required: the namespace (domain) the changes of the methodology act on"}}, issues...)
+	}
+	return issues
+}
+
 // Compile validates the methodology and compiles its conditions, including
 // the conditions generated from action expectations. The methodology itself
 // is not modified; generated effects live in the compiled actions only.
@@ -394,7 +409,7 @@ func (s Schema) check(prefix string, add func(path, format string, args ...any))
 	}
 	parents := map[string]string{}
 	for i, n := range s.NodeTypes {
-		if n.Extends == "" {
+		if n.Extends == "" || foreign(n.Extends) {
 			continue
 		}
 		if !nodeTypes[n.Extends] {
@@ -424,15 +439,19 @@ func (s Schema) check(prefix string, add func(path, format string, args ...any))
 			add(path+".name", "duplicate link type %s", l.Name)
 		}
 		linkTypes[l.Name] = true
-		if l.From != "" && !nodeTypes[l.From] {
+		if l.From != "" && !foreign(l.From) && !nodeTypes[l.From] {
 			add(path+".from", "unknown node type %s", l.From)
 		}
-		if l.To != "" && !nodeTypes[l.To] {
+		if l.To != "" && !foreign(l.To) && !nodeTypes[l.To] {
 			add(path+".to", "unknown node type %s", l.To)
 		}
 	}
 	return nodeTypes, linkTypes
 }
+
+// foreign reports a qualified reference ("base@Item"): a type of another domain, which the type catalogue resolves
+// (pkg/typecat); a bare name is a type of the domain itself.
+func foreign(ref string) bool { return strings.Contains(ref, domain.TypeSep) }
 
 // Lifecycle returns the named lifecycle of the schema.
 func (s Schema) Lifecycle(name string) *domain.Lifecycle {
@@ -499,7 +518,7 @@ func (s Schema) checkLifecycles(prefix string, nodeTypes map[string]bool, add fu
 				add(path+".document.contains", "a document contains at least one node type")
 			}
 			for _, c := range d.Contains {
-				if !nodeTypes[c] {
+				if !foreign(c) && !nodeTypes[c] {
 					add(path+".document.contains", "unknown node type %s", c)
 				}
 			}
@@ -567,20 +586,10 @@ func (m *Methodology) compile() (*Compiled, Issues) {
 	if len(m.Goals) == 0 {
 		add("goals", "at least one goal required")
 	}
-	nodeTypes, linkTypes := m.Domain.check("domain.", add)
-	if m.DomainRef == "" && m.Domain.HasAlgorithms() {
-		add("domain", "algorithms and their plugs belong to a shared domain (domainRef), not to an embedded one")
+	if m.Namespace != "" && !nameRE.MatchString(m.Namespace) {
+		add("namespace", "namespace must be lowercase letters, digits, '-' or '_' and start with a letter")
 	}
-	if m.DomainRef != "" {
-		if _, _, err := SplitRef(m.DomainRef); err != nil {
-			add("domainRef", "%v", err)
-		}
-		if len(m.Domain.NodeTypes) == 0 {
-			add("domainRef", "domain reference not resolved (see Resolve)")
-		} else {
-			m.lintDomainRefs(nodeTypes, linkTypes, add)
-		}
-	}
+	m.lintTypeRefs(add)
 
 	// conditions: each expression is compiled on its own to report every error
 	var defs []condition.Definition
@@ -681,11 +690,17 @@ func (m *Methodology) compile() (*Compiled, Issues) {
 			add(path+".permission", "permission must be <resource>:<action>")
 		}
 		if e := a.Expects; e != nil {
-			if e.Produce.NodeType != "" && len(nodeTypes) > 0 && !nodeTypes[e.Produce.NodeType] {
-				add(path+".expects.produce.nodeType", "unknown node type %s", e.Produce.NodeType)
+			if e.Produce.NodeType != "" {
+				if msg := m.checkTypeRef(e.Produce.NodeType, false); msg != "" {
+					add(path+".expects.produce.nodeType", "%s", msg)
+				} else if r, _ := domain.ParseTypeRef(e.Produce.NodeType); m.Namespace != "" && r.Namespace != m.Namespace {
+					add(path+".expects.produce.nodeType", "%s is not a type of %s: a methodology creates nodes of its namespace", e.Produce.NodeType, m.Namespace)
+				}
 			}
-			if e.Link != nil && len(linkTypes) > 0 && !linkTypes[e.Link.Type] {
-				add(path+".expects.link.type", "unknown link type %s", e.Link.Type)
+			if e.Link != nil {
+				if msg := m.checkTypeRef(e.Link.Type, true); msg != "" {
+					add(path+".expects.link.type", "%s", msg)
+				}
 			}
 			expr, err := e.Expr()
 			if err != nil {
@@ -882,23 +897,13 @@ func (c *Compiled) PlanningActions() []goap.Action {
 	return out
 }
 
-// Supertypes maps each node type to its ancestors, nearest first (ADR 0009 §6).
+// Supertypes maps each node type to its ancestors, nearest first (ADR 0009 §6), from the resolved types (nil when
+// they are not resolved).
 func (m *Methodology) Supertypes() map[string][]string {
-	parents := map[string]string{}
-	for _, n := range m.Domain.NodeTypes {
-		if n.Extends != "" {
-			parents[n.Name] = n.Extends
-		}
+	if m.Types == nil {
+		return nil
 	}
-	out := map[string][]string{}
-	for _, n := range m.Domain.NodeTypes {
-		seen := map[string]bool{n.Name: true}
-		for t := parents[n.Name]; t != "" && !seen[t]; t = parents[t] {
-			seen[t] = true
-			out[n.Name] = append(out[n.Name], t)
-		}
-	}
-	return out
+	return m.Types.Supertypes()
 }
 
 // SpecializedAction returns the action a specialization targets and whether

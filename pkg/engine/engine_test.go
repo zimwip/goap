@@ -23,7 +23,7 @@ func scripted(t *testing.T) llm.Client {
 		var out string
 		switch {
 		case strings.Contains(p, "DIRECTLY impacted"):
-			if !strings.Contains(p, "REQ-1 (Requirement)") {
+			if !strings.Contains(p, "REQ-1 (alm@Requirement)") {
 				t.Errorf("prompt misses baseline nodes:\n%s", p)
 			}
 			out = `Here: {"items":[{"kind":"changeImpact","changeImpact":{"op":"declare","intent":"modified","key":"REQ-1","rationale":"PSP API change"}}]}`
@@ -53,13 +53,14 @@ func setup(t *testing.T) (*Engine, *graph.Graph, domain.BaselineID) {
 		t.Fatal(err)
 	}
 	g := graph.New(graph.NewMemory())
-	need, _ := g.CreateNode(ctx, graph.NewNode{Key: "NEED-1", Type: "Need", Properties: map[string]any{"title": "Pay online"}})
-	req, _ := g.CreateNode(ctx, graph.NewNode{Key: "REQ-1", Type: "Requirement", Properties: map[string]any{"title": "Use PSP v1"}})
-	tst, _ := g.CreateNode(ctx, graph.NewNode{Key: "TST-1", Type: "TestCase"})
-	cmp, _ := g.CreateNode(ctx, graph.NewNode{Key: "CMP-1", Type: "Component"})
-	_, _ = g.Link(ctx, "satisfies", req.Ref(), need.Ref(), nil)
-	_, _ = g.Link(ctx, "verifies", tst.Ref(), req.Ref(), nil)
-	_, _ = g.Link(ctx, "implements", cmp.Ref(), req.Ref(), nil)
+	// the alm namespace the example methodologies act on (ADR 0013)
+	need, _ := g.CreateNode(ctx, graph.NewNode{Namespace: "alm", Key: "NEED-1", Type: "alm@Need", Properties: map[string]any{"title": "Pay online"}})
+	req, _ := g.CreateNode(ctx, graph.NewNode{Namespace: "alm", Key: "REQ-1", Type: "alm@Requirement", Properties: map[string]any{"title": "Use PSP v1"}})
+	tst, _ := g.CreateNode(ctx, graph.NewNode{Namespace: "alm", Key: "TST-1", Type: "alm@TestCase"})
+	cmp, _ := g.CreateNode(ctx, graph.NewNode{Namespace: "alm", Key: "CMP-1", Type: "alm@Component"})
+	_, _ = g.Link(ctx, "alm@satisfies", req.Ref(), need.Ref(), nil)
+	_, _ = g.Link(ctx, "alm@verifies", tst.Ref(), req.Ref(), nil)
+	_, _ = g.Link(ctx, "alm@implements", cmp.Ref(), req.Ref(), nil)
 	b, err := g.CreateBaseline(ctx, "B1", []domain.NodeRef{need.Ref(), req.Ref(), tst.Ref(), cmp.Ref()})
 	if err != nil {
 		t.Fatal(err)
@@ -178,7 +179,7 @@ func TestPrepareChangeWithClarificationAndReview(t *testing.T) {
 	}
 	found := false
 	for _, l := range links {
-		if l.Type == "verifies" && l.To.Version == 2 {
+		if l.Type == "alm@verifies" && l.To.Version == 2 {
 			found = true
 		}
 	}
