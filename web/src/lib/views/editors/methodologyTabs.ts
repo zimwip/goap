@@ -69,14 +69,6 @@ export function draftGroup(tab: Tab): string {
   return `${tab.params.m}@${tab.params.v}`;
 }
 
-/** Element edited by a tab (local id, else name). */
-export function resolveItem(tab: Tab): { draft: Draft; section: Section; index: number; item: SectionItem | undefined } {
-  const draft = draftOf(tab);
-  const section = KIND_SECTION[tab.kind];
-  const index = draft.indexOf(section, tab.params.uid ?? '', tab.params.name ?? '');
-  return { draft, section, index, item: index >= 0 ? draft.items(section)[index] : undefined };
-}
-
 /** If the element was found by its name, the tab picks up its local id. */
 export function syncTabUid(tab: Tab, section: Section, item: SectionItem | undefined): void {
   if (!item) return;

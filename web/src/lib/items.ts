@@ -1,5 +1,5 @@
 // Formatting of a change's items and change impacts (resolution of node keys).
-import type { ChangeItem, GraphNode, JsonValue, NodeRef } from './api';
+import type { ChangeItem, GraphNode } from './api';
 
 export interface ItemContext {
   /** Nodes from the starting baseline, indexed by id. */
@@ -15,14 +15,3 @@ export function makeContext(nodes: GraphNode[] = [], items: ChangeItem[] = []): 
   };
 }
 
-export function refKey(ctx: ItemContext, ref: NodeRef | undefined): string {
-  if (!ref?.id) return '';
-  const key = ctx.nodes.get(ref.id)?.key ?? ref.id.slice(0, 8);
-  return ref.version ? `${key}@v${ref.version}` : key;
-}
-
-/** Text of a JSON value for compact display. */
-export function show(v: JsonValue | undefined): string {
-  if (v === undefined || v === null) return '';
-  return typeof v === 'string' ? v : JSON.stringify(v);
-}

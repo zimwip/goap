@@ -23,7 +23,7 @@ type NodeEdit struct {
 	Pre *domain.NodeRef
 	// Props are merged over the current properties (a nil value clears one).
 	Props map[string]any
-	// Retire ends a node a projection no longer owns (see NodeWrite.Retire).
+	// Retire deletes the node (see NodeWrite.Retire).
 	Retire bool
 	// Rationale says why; the title of the commit when empty.
 	Rationale   string

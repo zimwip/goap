@@ -1,4 +1,4 @@
-// Tabs of shared domains: opening, toolbar actions.
+// Tabs of domains: opening, toolbar actions.
 import type { Tab, TabSpec, ToolbarAction } from '../../shell/types';
 import { openTab, closeWhere } from '../../shell/tabs.svelte';
 import { notify, requestReveal } from '../../shell/workbench.svelte';

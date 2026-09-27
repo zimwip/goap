@@ -35,8 +35,3 @@ export async function loadHead(signal?: AbortSignal): Promise<GraphIndex> {
   if (!id) return indexOf('', [], []);
   return loadGraph(id, signal);
 }
-
-/** Key and type of a node, or its short id when unknown. */
-export function labelOf(ix: GraphIndex, id: string): string {
-  return ix.nodes.get(id)?.key ?? id.slice(0, 8);
-}

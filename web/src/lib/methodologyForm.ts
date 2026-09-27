@@ -190,7 +190,6 @@ export type SectionItem = AgentForm | ActionForm | ConditionForm | GoalForm;
 export const ACTION_KINDS = ['llm', 'script', 'tool', 'human', 'builtin', 'abstract'] as const;
 export const SCRIPT_LANGUAGES = ['javascript', 'go'] as const;
 export const PLANNERS = ['goap', 'utility', 'hybrid'] as const;
-export const TRIGGER_TYPES = ['event', 'schedule'] as const;
 export const TRIGGER_TARGETS = ['new_change', 'event_change'] as const;
 export const FOR_EACH = ['impacts', 'proposals', 'items', 'artifacts'] as const;
 export const PRODUCE_OPS = ['create_node', 'update_node'] as const;

@@ -52,12 +52,6 @@ type Publisher interface {
 	Publish(ctx context.Context, subject string, v any) error
 }
 
-// NopPublisher discards events.
-type NopPublisher struct{}
-
-// Publish implements Publisher.
-func (NopPublisher) Publish(context.Context, string, any) error { return nil }
-
 // StaticMethodologies serves compiled methodologies from memory.
 type StaticMethodologies map[string]*methodology.Compiled
 

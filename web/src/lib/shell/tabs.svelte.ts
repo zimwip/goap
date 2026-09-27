@@ -146,10 +146,6 @@ export function closeTab(id: string, opts: { force?: boolean } = {}): boolean {
   return true;
 }
 
-export function closeOthers(id: string): void {
-  for (const t of [...tabsState.tabs]) if (t.id !== id) closeTab(t.id);
-}
-
 export function closeAll(): void {
   for (const t of [...tabsState.tabs]) closeTab(t.id);
 }
