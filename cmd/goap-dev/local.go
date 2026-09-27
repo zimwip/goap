@@ -10,8 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/labstack/echo/v4"
-	"github.com/labstack/echo/v4/middleware"
+	"github.com/labstack/echo/v5"
+	"github.com/labstack/echo/v5/middleware"
 
 	"github.com/zimwip/goap/internal/enginesvc"
 	"github.com/zimwip/goap/internal/mcpsvc"
@@ -87,9 +87,10 @@ func serveWeb(log *slog.Logger, e *echo.Echo, dir string) {
 		return
 	}
 	e.Use(middleware.StaticWithConfig(middleware.StaticConfig{
-		Root:  dir,
-		HTML5: true,
-		Skipper: func(c echo.Context) bool {
+		Filesystem: os.DirFS(dir),
+		Root:       ".",
+		HTML5:      true,
+		Skipper: func(c *echo.Context) bool {
 			p := c.Request().URL.Path
 			return strings.HasPrefix(p, "/goap.") || strings.HasPrefix(p, "/api/") || p == "/healthz" || p == "/readyz"
 		},
