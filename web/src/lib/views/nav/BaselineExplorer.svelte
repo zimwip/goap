@@ -8,12 +8,11 @@
   import { select } from '../../shell/workbench.svelte';
   import { graph, errorMessage, formatDate, nodeTitle, shortId, type Baseline, type GraphNode } from '../../api';
   import { SvelteMap } from 'svelte/reactivity';
+  import { splitType } from '../../stores/types.svelte';
 
-  // Meta-model elements authored through the methodology editor (ADR 0011):
-  // hidden here to avoid duplicating it. NodeType stays visible: unlike the
-  // others, it is graph-native metadata (ADR 0012), not a methodology
-  // projection to browse elsewhere.
-  const METHODOLOGY_AUTHORED_KINDS = new Set(['Methodology', 'Agent', 'Action', 'Goal', 'Condition', 'Trigger']);
+  // Methodologies and domains are nodes typed by the meta-domains (ADR 0023), authored in their own
+  // editors and explorers: hidden here to avoid duplicating them.
+  const META_NAMESPACES = new Set(['methodology', 'domain']);
 
   let filter = $state('');
   const graphs = new SvelteMap<string, { nodes: GraphNode[]; error: string; loading: boolean }>();
@@ -43,7 +42,7 @@
   function byType(nodes: GraphNode[]): [string, GraphNode[]][] {
     const m = new Map<string, GraphNode[]>();
     for (const n of nodes) {
-      if (METHODOLOGY_AUTHORED_KINDS.has(n.type ?? '')) continue;
+      if (META_NAMESPACES.has(splitType(n.type).namespace)) continue;
       if (q && !`${n.key} ${n.type} ${nodeTitle(n)}`.toLowerCase().includes(q)) continue;
       const t = n.type ?? '?';
       m.set(t, [...(m.get(t) ?? []), n]);

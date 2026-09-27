@@ -18,7 +18,6 @@
       const it = d.items(section)[Number(m[2])];
       return `${SINGULAR[section]} ${it?.name || `#${Number(m[2]) + 1}`}${m[3] ? ` › ${m[3]}` : ''}`;
     }
-    if (/^(nodeTypes|linkTypes)/.test(path)) return `Domain › ${path}`;
     return path ? `Methodology › ${path}` : 'Methodology';
   }
 
