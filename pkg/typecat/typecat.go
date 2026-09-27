@@ -66,11 +66,12 @@ var ErrUnknown = errors.New("unknown type")
 // ErrInvalid marks a node or a link that breaks the types of the catalogue.
 var ErrInvalid = errors.New("invalid")
 
-// Builtins returns the built-in domains (methodology, domain, organisation, platform).
+// Builtins returns the built-in domains (methodology, organisation, platform).
 func Builtins() []*methodology.Domain { return methodology.BuiltinDomains() }
 
-// IsFrozen reports a built-in domain that only changes with the code (methodology, organisation, platform).
-func IsFrozen(ns string) bool { return methodology.IsFrozenDomain(ns) }
+// IsBuiltin reports the namespace of a built-in domain (methodology, organisation, platform): frozen, it changes with
+// the code.
+func IsBuiltin(ns string) bool { return methodology.IsBuiltinDomain(ns) }
 
 // Builtin is the catalogue of the built-in domains alone: what a service knows before it has loaded the domains.
 func Builtin() *Catalog {
@@ -81,18 +82,11 @@ func Builtin() *Catalog {
 	return c
 }
 
-// New builds the catalogue of the given domains (one per namespace) and of the built-in domains; a given version of a
-// built-in domain that is not frozen (domain) replaces its embedded version. A bare reference inside a domain
-// (extends, link ends, document) is a type of that domain.
+// New builds the catalogue of the given domains (one per namespace) and of the built-in domains. A bare reference inside
+// a domain (extends, link ends, document) is a type of that domain.
 func New(ds ...*methodology.Domain) (*Catalog, error) {
-	var all []*methodology.Domain
-	for _, b := range Builtins() {
-		if IsFrozen(b.Name) || !slices.ContainsFunc(ds, func(d *methodology.Domain) bool { return d != nil && d.Name == b.Name }) {
-			all = append(all, b)
-		}
-	}
-	nb := len(all)
-	all = append(all, ds...)
+	all := append(slices.Clone(Builtins()), ds...)
+	nb := len(Builtins())
 	c := &Catalog{types: map[domain.TypeRef]*Type{}, links: map[domain.TypeRef]*LinkType{}, domains: map[string]string{}}
 	decl := map[domain.TypeRef]declared{}
 	for i, d := range all {
@@ -100,8 +94,8 @@ func New(ds ...*methodology.Domain) (*Catalog, error) {
 			continue
 		}
 		if _, dup := c.domains[d.Name]; dup {
-			if i >= nb && IsFrozen(d.Name) {
-				return nil, fmt.Errorf("domain %s: the name of a frozen built-in domain: %w", d.Name, ErrInvalid)
+			if i >= nb && IsBuiltin(d.Name) {
+				return nil, fmt.Errorf("domain %s: the name of a built-in domain: %w", d.Name, ErrInvalid)
 			}
 			return nil, fmt.Errorf("domain %s given twice: %w", d.Name, ErrInvalid)
 		}

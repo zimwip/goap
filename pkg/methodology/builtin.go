@@ -13,13 +13,12 @@ var (
 )
 
 // BuiltinDomains returns the domains that ship with the platform (ADR 0012 §4), known before any domain is loaded:
-// the meta-domains "methodology" and "domain", which type the definition nodes of the methodologies and domains
-// (ADR 0023), "organisation" and "platform", whose types the platform itself reads (units, adapters, users,
-// policies; MCPs, adapter definitions, model configuration). "methodology", "organisation" and "platform" are frozen
-// (see IsFrozenDomain); the embedded "domain" is its initial version, which published versions of the registry extend.
+// the meta-domain "methodology", which types the definition nodes of the methodologies (ADR 0023), and "organisation"
+// and "platform", whose types the platform itself reads (units, adapters, users, policies; MCPs, adapter definitions,
+// model configuration). They are frozen: they change with the code (their YAML), the registry never versions them.
 func BuiltinDomains() []*Domain {
 	builtinOnce.Do(func() {
-		for _, f := range []string{"methodology.yaml", "domain.yaml", "organisation.yaml", "platform.yaml"} {
+		for _, f := range []string{"methodology.yaml", "organisation.yaml", "platform.yaml"} {
 			src, err := builtin.FS.ReadFile(f)
 			if err != nil {
 				panic(err)
@@ -34,25 +33,12 @@ func BuiltinDomains() []*Domain {
 	return builtinDs
 }
 
-// frozenDomains are the built-in domains the registry never versions: they change with the code (their YAML).
-var frozenDomains = []string{"methodology", "organisation", "platform"}
-
-// IsFrozenDomain reports a built-in domain that only changes with the code: no version is saved in the registry.
-func IsFrozenDomain(name string) bool {
-	for _, n := range frozenDomains {
-		if n == name {
+// IsBuiltinDomain reports the name (namespace) of a built-in domain.
+func IsBuiltinDomain(name string) bool {
+	for _, d := range BuiltinDomains() {
+		if d.Name == name {
 			return true
 		}
 	}
 	return false
-}
-
-// BuiltinDomain returns the embedded version of a built-in domain (nil for another name).
-func BuiltinDomain(name string) *Domain {
-	for _, d := range BuiltinDomains() {
-		if d.Name == name {
-			return d
-		}
-	}
-	return nil
 }

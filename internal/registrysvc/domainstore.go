@@ -18,15 +18,12 @@ type DomainRecord struct {
 	UpdatedAt   time.Time
 	PublishedAt time.Time
 	UpdatedBy   string
-	// Builtin marks the version shipped with the platform (methodology.BuiltinDomains): published, not stored.
+	// Builtin marks a domain shipped with the platform (methodology.BuiltinDomains): published, frozen, not stored.
 	Builtin bool
-	// Frozen marks a built-in domain that only changes with the code (methodology, organisation, platform): no new
-	// version.
-	Frozen bool
 }
 
-// DomainStore persists domain versions (same lifecycle as methodologies).
-// The concrete stores implement both Store and DomainStore.
+// DomainStore persists domain versions (same lifecycle as methodologies): the registry's database (SQLDomainStore), or
+// the MemoryStore.
 type DomainStore interface {
 	// SaveDomain creates or replaces a draft (ErrImmutable otherwise).
 	SaveDomain(ctx context.Context, r DomainRecord) error

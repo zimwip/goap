@@ -3,7 +3,6 @@ package registrysvc
 import (
 	"context"
 	"encoding/json"
-	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -27,35 +26,11 @@ func canon(t *testing.T, v any) string {
 	return string(b)
 }
 
-func TestGraphStoreRoundTripsEveryDefinitionOfTheRepository(t *testing.T) {
+func TestGraphStoreRoundTripsEveryMethodologyOfTheRepository(t *testing.T) {
 	ctx := context.Background()
 	s := NewGraphStore(graph.New(graph.NewMemory()))
 	now := time.Date(2026, 9, 26, 10, 0, 0, 0, time.UTC)
-	files, _ := filepath.Glob("../../domains/*.yaml")
-	if len(files) == 0 {
-		t.Fatal("no domain found")
-	}
-	for _, f := range files {
-		data, err := os.ReadFile(f)
-		if err != nil {
-			t.Fatal(err)
-		}
-		d, err := methodology.ParseDomain(data)
-		if err != nil {
-			t.Fatalf("%s: %v", f, err)
-		}
-		if err := s.SaveDomain(ctx, DomainRecord{Domain: *d, Status: StatusDraft, CreatedAt: now, UpdatedAt: now}); err != nil {
-			t.Fatalf("%s: %v", f, err)
-		}
-		got, err := s.GetDomain(ctx, d.Name, d.Version)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if canon(t, got.Domain) != canon(t, *d) {
-			t.Errorf("domain %s does not round-trip:\n have %s\n want %s", d.Name, canon(t, got.Domain), canon(t, *d))
-		}
-	}
-	files, _ = filepath.Glob("../../methodologies/*.yaml")
+	files, _ := filepath.Glob("../../methodologies/*.yaml")
 	for _, f := range files {
 		m, err := methodology.LoadFile(f)
 		if err != nil {
@@ -133,7 +108,7 @@ func TestGraphStoreEditsElementsNotDocuments(t *testing.T) {
 	nodes, links, _ := g.BaselineGraph(ctx, head.ID)
 	defines := 0
 	for _, l := range links {
-		if l.Type == linkDefines(NamespaceMethodology) {
+		if l.Type == linkDefines {
 			defines++
 		}
 	}
@@ -155,7 +130,7 @@ func TestGraphStoreEditsElementsNotDocuments(t *testing.T) {
 	}
 }
 
-func TestGraphStoreKeepsMethodologiesAndDomainsInTheirNamespaces(t *testing.T) {
+func TestGraphStoreKeepsMethodologiesInTheirNamespace(t *testing.T) {
 	ctx := context.Background()
 	g := graph.New(graph.NewMemory())
 	s := NewGraphStore(g)
@@ -164,29 +139,11 @@ func TestGraphStoreKeepsMethodologiesAndDomainsInTheirNamespaces(t *testing.T) {
 	if err := s.Save(ctx, Record{Methodology: m, Status: StatusDraft, CreatedAt: now, UpdatedAt: now}); err != nil {
 		t.Fatal(err)
 	}
-	d := sharedDomainDef()
-	if err := s.SaveDomain(ctx, DomainRecord{Domain: d, Status: StatusDraft, CreatedAt: now, UpdatedAt: now}); err != nil {
-		t.Fatal(err)
-	}
 	mh, err := g.NodeByKey(ctx, NamespaceMethodology, MethodologyVersionKey(m.Name, m.Version))
 	if err != nil || mh.Type != TypeMethodologyVersion {
 		t.Fatalf("methodology header: %+v %v", mh, err)
 	}
-	dh, err := g.NodeByKey(ctx, NamespaceDomain, DomainVersionKey(d.Name, d.Version))
-	if err != nil || dh.Type != TypeDomainVersion {
-		t.Fatalf("domain header: %+v %v", dh, err)
-	}
-	if _, err := g.NodeByKey(ctx, NamespaceDomain, DomainVersionKey(d.Name, d.Version)+"/nodetype/"+d.NodeTypes[0].Name); err != nil {
-		t.Fatalf("a domain element lives in the domain namespace: %v", err)
-	}
 	if _, err := g.NodeByKey(ctx, "platform", MethodologyVersionKey(m.Name, m.Version)); err == nil {
 		t.Fatal("nothing of the registry's storage belongs to the platform namespace")
 	}
-}
-
-func sharedDomainDef() methodology.Domain {
-	return methodology.Domain{Name: "mini", Version: "1", Schema: methodology.Schema{
-		NodeTypes: []methodology.NodeType{{Name: "Need"}, {Name: "Requirement", Extends: "Need"}},
-		LinkTypes: []methodology.LinkType{{Name: "derives", From: "Requirement", To: "Need"}},
-	}}
 }

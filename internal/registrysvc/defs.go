@@ -10,10 +10,10 @@ import (
 	"github.com/zimwip/goap/pkg/methodology"
 )
 
-// A version of a methodology or a domain is a node (its header: the scalar fields, the status, the timestamps) and one node
-// per element (condition, action, goal, agent, node type, link type, lifecycle, algorithm, algorithm instance), keyed
-// "<header key>/<kind>/<name>" and typed by the built-in meta-domains (methodology@Agent, domain@NodeType, ...; ADR
-// 0023). The version is the graph content; the definition a caller gets is assembled from it.
+// A version of a methodology is a node (its header: the scalar fields, the status, the timestamps) and one node per
+// element (condition, action, goal, agent), keyed "<header key>/<kind>/<name>" and typed by the built-in meta-domain
+// methodology (methodology@Agent, ...; ADR 0023). The version is the graph content; the definition a caller gets is
+// assembled from it.
 
 // Kinds of the element nodes and the collection of the definition each one fills.
 const (
@@ -21,11 +21,6 @@ const (
 	kindAction    = "action"
 	kindGoal      = "goal"
 	kindAgent     = "agent"
-	kindNodeType  = "nodetype"
-	kindLinkType  = "linktype"
-	kindLifecycle = "lifecycle"
-	kindAlgorithm = "algorithm"
-	kindInstance  = "instance"
 )
 
 // defKinds lists the element kinds with the JSON field of the collection they belong to.
@@ -34,15 +29,7 @@ var defKinds = []struct{ kind, field, nodeType string }{
 	{kindAction, "actions", "methodology@Action"},
 	{kindGoal, "goals", "methodology@Goal"},
 	{kindAgent, "agents", "methodology@Agent"},
-	{kindNodeType, "nodeTypes", "domain@NodeType"},
-	{kindLinkType, "linkTypes", "domain@LinkType"},
-	{kindLifecycle, "lifecycles", "domain@Lifecycle"},
-	{kindAlgorithm, "algorithms", "domain@Algorithm"},
-	{kindInstance, "algorithmInstances", "domain@AlgorithmInstance"},
 }
-
-// schemaFields are the collections of a Schema (the others belong to the methodology itself).
-var schemaFields = map[string]bool{"nodeTypes": true, "linkTypes": true, "lifecycles": true, "algorithms": true, "algorithmInstances": true}
 
 // defEl is an element of a definition.
 type defEl struct {
@@ -60,43 +47,32 @@ func toMap(v any) (map[string]any, error) {
 	return m, json.Unmarshal(b, &m)
 }
 
-// split cuts a definition, given as JSON, into its header (what is not a collection) and its elements. The
-// collections of the schema sit at the top level (domain) or under "domain" (methodology).
+// split cuts a definition, given as JSON, into its header (what is not a collection) and its elements.
 func split(raw map[string]any) (header map[string]any, els []defEl) {
 	header = maps.Clone(raw)
-	collect := func(from map[string]any) {
-		for _, k := range defKinds {
-			list, _ := from[k.field].([]any)
-			delete(from, k.field)
-			seen := map[string]bool{}
-			for i, item := range list {
-				p, _ := item.(map[string]any)
-				if p == nil {
-					continue
-				}
-				name, _ := p["name"].(string)
-				if seen[name] { // names that repeat (the same link type between several pairs) are told apart by position
-					name += "~" + strconv.Itoa(i)
-				}
-				seen[name] = true
-				p["position"] = float64(i)
-				els = append(els, defEl{kind: k.kind, name: name, props: p})
+	for _, k := range defKinds {
+		list, _ := header[k.field].([]any)
+		delete(header, k.field)
+		seen := map[string]bool{}
+		for i, item := range list {
+			p, _ := item.(map[string]any)
+			if p == nil {
+				continue
 			}
-		}
-	}
-	collect(header)
-	if sch, ok := header["domain"].(map[string]any); ok {
-		collect(sch)
-		if len(sch) == 0 {
-			delete(header, "domain")
+			name, _ := p["name"].(string)
+			if seen[name] { // names that repeat are told apart by position
+				name += "~" + strconv.Itoa(i)
+			}
+			seen[name] = true
+			p["position"] = float64(i)
+			els = append(els, defEl{kind: k.kind, name: name, props: p})
 		}
 	}
 	return header, els
 }
 
 // join assembles the JSON of a definition from its header and elements (in position order).
-// nested: the schema sits under "domain" (a methodology) instead of at the top level (a domain).
-func join(header map[string]any, els []map[string]any, kinds []string, nested bool) map[string]any {
+func join(header map[string]any, els []map[string]any, kinds []string) map[string]any {
 	raw := maps.Clone(header)
 	byKind := map[string][]map[string]any{}
 	for i, e := range els {
@@ -118,16 +94,7 @@ func join(header map[string]any, els []map[string]any, kinds []string, nested bo
 			delete(p, "position")
 			out[i] = p
 		}
-		if nested && schemaFields[k.field] {
-			sch, _ := raw["domain"].(map[string]any)
-			if sch == nil {
-				sch = map[string]any{}
-			}
-			sch[k.field] = out
-			raw["domain"] = sch
-		} else {
-			raw[k.field] = out
-		}
+		raw[k.field] = out
 	}
 	return raw
 }
@@ -141,17 +108,8 @@ func encodeMethodology(m methodology.Methodology) (map[string]any, []defEl, erro
 	return header, els, nil
 }
 
-func encodeDomain(d methodology.Domain) (map[string]any, []defEl, error) {
-	raw, err := toMap(d)
-	if err != nil {
-		return nil, nil, err
-	}
-	header, els := split(raw)
-	return header, els, nil
-}
-
-func decodeInto(header map[string]any, els []map[string]any, kinds []string, isMethodology bool, out any) error {
-	raw := join(header, els, kinds, isMethodology)
+func decodeInto(header map[string]any, els []map[string]any, kinds []string, out any) error {
+	raw := join(header, els, kinds)
 	b, err := json.Marshal(raw)
 	if err != nil {
 		return err
