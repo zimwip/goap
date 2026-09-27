@@ -196,6 +196,19 @@ func (s *Snapshot) Effective(unit string) []Effective {
 	return out
 }
 
+// Scopes returns the scope of each MCP of the head of the platform namespace (ADR 0028).
+func (d *Directory) Scopes(ctx context.Context) (map[string]string, error) {
+	snap, err := d.Snapshot(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]string{}
+	for _, def := range snap.Defs() {
+		out[def.Name] = mcp.ScopeOf(def.Scope)
+	}
+	return out, nil
+}
+
 // Directory reads the snapshot of the head of the main branch, rebuilding it only when
 // the head moved.
 type Directory struct {

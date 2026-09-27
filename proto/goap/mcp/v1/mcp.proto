@@ -75,6 +75,8 @@ message Mcp {
   string name = 1;
   string description = 2;
   repeated McpTool tools = 3;
+  // where a methodology may use the MCP: action, agent or both (empty: both, ADR 0028)
+  string scope = 4;
 }
 
 message ListMcpsRequest {}
@@ -175,6 +177,8 @@ message Tool {
   string description = 2;
   google.protobuf.Struct input_schema = 3;
   bool read_only = 4;
+  // scope of the MCP of the tool: action, agent or both
+  string scope = 5;
 }
 
 message ListToolsRequest {

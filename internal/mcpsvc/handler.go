@@ -85,7 +85,7 @@ func (h *Handler) ListConnectors(ctx context.Context, r *connect.Request[mcpv1.L
 }
 
 func defToPB(d mcp.Def) *mcpv1.Mcp {
-	out := &mcpv1.Mcp{Name: d.Name, Description: d.Description}
+	out := &mcpv1.Mcp{Name: d.Name, Description: d.Description, Scope: mcp.ScopeOf(d.Scope)}
 	for _, t := range d.Tools {
 		out.Tools = append(out.Tools, &mcpv1.McpTool{Name: t.Name, Description: t.Description, InputSchema: pbconv.Struct(t.InputSchema), ReadOnly: t.ReadOnly})
 	}
@@ -185,7 +185,7 @@ func (h *Handler) ListTools(ctx context.Context, r *connect.Request[mcpv1.ListTo
 	}
 	out := &mcpv1.ListToolsResponse{Mcps: mcps}
 	for _, t := range tools {
-		out.Tools = append(out.Tools, &mcpv1.Tool{Name: t.Name, Description: t.Description, InputSchema: pbconv.Struct(t.InputSchema), ReadOnly: t.ReadOnly})
+		out.Tools = append(out.Tools, &mcpv1.Tool{Name: t.Name, Description: t.Description, InputSchema: pbconv.Struct(t.InputSchema), ReadOnly: t.ReadOnly, Scope: t.Scope})
 	}
 	return connect.NewResponse(out), nil
 }

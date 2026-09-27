@@ -223,7 +223,8 @@ func (s *Service) Tools(ctx context.Context, unit string) (tools []Tool, mcps []
 		}
 		mcps = append(mcps, e.MCP.Name)
 		for _, t := range allowed.Tools {
-			tools = append(tools, Tool{Name: mcp.ToolName(e.MCP.Name, t.Name), Description: t.Description, InputSchema: t.InputSchema, ReadOnly: t.ReadOnly})
+			tools = append(tools, Tool{Name: mcp.ToolName(e.MCP.Name, t.Name), Description: t.Description, InputSchema: t.InputSchema, ReadOnly: t.ReadOnly,
+				Scope: mcp.ScopeOf(e.MCP.Scope)})
 		}
 	}
 	return tools, mcps, nil

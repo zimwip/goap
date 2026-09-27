@@ -153,6 +153,12 @@ func TestEveryUnitGetsTheBuiltins(t *testing.T) {
 			t.Fatalf("%q: mcps %v, %v", unit, mcps, err)
 		}
 	}
+	tools, _, _ := p.hub.Tools(context.Background(), "ORG-CHECKOUT")
+	for _, tl := range tools {
+		if m, _, _ := mcp.SplitTool(tl.Name); (m == mcp.BuiltinScheduler) != (tl.Scope == mcp.ScopeAgent) {
+			t.Fatalf("%s has scope %s", tl.Name, tl.Scope)
+		}
+	}
 	if again, err := graphsvc.SeedBuiltins(context.Background(), p.g); err != nil || again {
 		t.Fatalf("seeding the built-ins twice: %v %v", again, err)
 	}

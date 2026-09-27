@@ -674,7 +674,8 @@ under the parameter name, and that the code can never read. Runs are bounded (30
   allowed tools; the engine plans a `tool` action only when its tool is allowed.
 - **Built-in MCPs** ([ADR 0028](adr/0028-builtin-mcps-and-connectors.md)): the platform as tools, split by concern —
   `goap-graph` (read / glob / grep / links / baselines), `goap-change` (create / read / write / edit / link / retire /
-  note / validate on a change; no apply), `goap-scheduler` (start / list / get processes, triggers / fire) and
+  note / validate on a change; no apply), `goap-scheduler` (start / list / get processes, triggers / fire; scope
+  `agent`) and
   `goap-admin` (units, users, MCPs, connectors, domains, methodologies). Their connectors
   (`internal/connectors/builtin`) run in the hub and act for the caller (per-type read authorization, the access gate
   on `User` / `Policy`, the engine's process authorization); the call context (`mcp.CallContext`: unit, change,
@@ -698,6 +699,10 @@ under the parameter name, and that the code can never read. Runs are bounded (30
 - **Editing.** MCPs, adapter definitions and adapter instances are nodes, created, changed and removed through changes like any
   node. The first start creates `ORG-DEFAULT`, `document-repository` and the `localfs-document-repository` adapter
   definition (`graphsvc.SeedDefaults`).
+- **Scope** ([ADR 0028](adr/0028-builtin-mcps-and-connectors.md)). An MCP says where a methodology may use it:
+  `action` (declared by actions), `agent` (declared by agents only, reached by their llm actions: orchestration such as
+  `goap-scheduler`), or `both` (default). An action never gets an agent-scoped MCP (not planned, not callable), an
+  agent never an action-scoped one; the registry reports both at validation.
 - **Scheduling.** An action declares the MCPs it uses (`mcps:` on `llm` and `script` actions; a `tool` action is
   `<mcp>/<tool>`). It is available to the planner only when the unit holding the change resolves an adapter for each
   of them; otherwise it is left out (and a specialization needing one is skipped). An action can call the tools of

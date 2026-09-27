@@ -27,6 +27,10 @@ async function loadAdapterDefs(): Promise<AdapterDef[]> {
     .sort((x, y) => x.name.localeCompare(y.name));
 }
 
+/** The MCPs of a scope (ADR 0028): the ones only agents may declare, or only actions. */
+export const mcpsOfScope = (scope: 'agent' | 'action'): string[] =>
+  tools.mcps.filter((m) => m.scope === scope).map((m) => m.name ?? '');
+
 export async function refreshTools(): Promise<void> {
   tools.loading = true;
   try {
