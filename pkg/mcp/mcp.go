@@ -22,12 +22,12 @@ import (
 const (
 	NamespacePlatform     = "platform"
 	NamespaceOrganisation = "organisation"
-	NodeTypeMCP           = "MCP"
-	NodeTypeAdapter       = "Adapter"
-	NodeTypeAdapterDef    = "AdapterDef"
-	NodeTypeOrgUnit       = "OrgUnit"
-	LinkOwner             = "owner"
-	LinkPartOf            = "part_of"
+	NodeTypeMCP           = "platform@MCP"
+	NodeTypeAdapter       = "organisation@Adapter"
+	NodeTypeAdapterDef    = "platform@AdapterDef"
+	NodeTypeOrgUnit       = "organisation@OrgUnit"
+	LinkOwner             = "organisation@owner"
+	LinkPartOf            = "organisation@part_of"
 )
 
 // MCPKey is the key of the node of an MCP.

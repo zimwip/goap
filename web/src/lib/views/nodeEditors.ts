@@ -1,8 +1,7 @@
-// Node editors: the editors that node types name in their `editor` property
-// (domains/platform.yaml, domains/organisation.yaml). Each one maps a graph node
+// Node editors: the editors that node types name in their `editor` property (the built-in meta-domains
+// methodology and domain, domains/platform.yaml, the built-in organisation domain). Each one maps a graph node
 // onto the tab of the editor; a node it cannot show (an element removed from
 // its definition, an unknown version) opens in the default node editor.
-import { registry } from '../api';
 import { registerNodeEditor } from '../shell/registry';
 import type { NodeHandle } from '../shell/types';
 import { getDraft } from '../stores/drafts.svelte';
@@ -22,18 +21,10 @@ function ownerOf(key: string): { kind: 'methodology' | 'domain'; name: string; v
   return { kind: m[1] === 'MV' ? 'methodology' : 'domain', name: m[2], version: m[3] };
 }
 
-/**
- * The methodology version a node belongs to: a stored definition node (MV:<name>@<version>...), or an element
- * of a published methodology projected onto the graph (keyed "M:<name>/<kind>/<name>", ADR 0011): its latest
- * published version, the one the graph shows.
- */
-async function methodologyOf(n: NodeHandle): Promise<{ name: string; version: string } | undefined> {
+/** The methodology version a definition node belongs to (MV:<name>@<version>...). */
+function methodologyOf(n: NodeHandle): { name: string; version: string } | undefined {
   const o = ownerOf(n.key);
-  if (o) return o.kind === 'methodology' ? o : undefined;
-  const m = /^M:([^/]+)/.exec(n.key);
-  if (!m) return undefined;
-  const version = n.type === 'Methodology' ? str(n.props.version) : ((await registry.getMethodology(m[1])).methodology?.version ?? '');
-  return version ? { name: m[1], version } : undefined;
+  return o?.kind === 'methodology' ? o : undefined;
 }
 
 /** A live element of a definition (a removed one stays as a node with removed=true). */
@@ -42,8 +33,8 @@ const element = (n: NodeHandle) => (n.props.removed === true ? '' : str(n.props.
 registerNodeEditor({
   name: 'methodology',
   title: 'Methodology editor',
-  open: async (n) => {
-    const o = await methodologyOf(n);
+  open: (n) => {
+    const o = methodologyOf(n);
     return o ? methodologySpec(o.name, o.version) : undefined;
   },
 });
@@ -57,7 +48,7 @@ registerNodeEditor({
   },
 });
 
-// agents, actions, conditions and goals of a methodology version (stored or published): their own tab, on the
+// agents, actions, conditions and goals of a methodology version: their own tab, on the
 // methodology draft
 for (const [kind, title] of [
   ['agent', 'Agent editor'],
@@ -70,7 +61,7 @@ for (const [kind, title] of [
     title,
     open: async (n) => {
       const name = element(n);
-      const o = name ? await methodologyOf(n) : undefined;
+      const o = name ? methodologyOf(n) : undefined;
       if (!o) return undefined;
       const d = getDraft(o.name, o.version);
       await d.ensureLoaded();
@@ -111,7 +102,7 @@ registerNodeEditor({
 });
 
 // node types, link types and lifecycles: the methodology or domain editor, on the element
-const DEF_FIELDS: Record<string, string> = { DefNodeType: 'nodeTypes', DefLinkType: 'linkTypes', DefLifecycle: 'lifecycles' };
+const DEF_FIELDS: Record<string, string> = { 'domain@NodeType': 'nodeTypes', 'domain@LinkType': 'linkTypes', 'domain@Lifecycle': 'lifecycles' };
 
 registerNodeEditor({
   name: 'definition',

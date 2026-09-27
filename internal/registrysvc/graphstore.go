@@ -14,19 +14,27 @@ import (
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/graphsnap"
-	"github.com/zimwip/goap/pkg/metamodel"
 )
 
-// Node types of the stored definitions (platform namespace): one header node per version of a methodology or of a domain
-// (scalar fields, status, timestamps) and one node per element of the definition (see defs.go), tied by "defines" links. The
-// definition is what these nodes hold; the elements a published methodology projects at run time (metamodel, keys M:/D:) are
-// derived from it.
+// Node types of the stored definitions (built-in meta-domains, ADR 0023): one header node per version of a methodology
+// (methodology namespace) or of a domain (domain namespace) with its scalar fields, status and timestamps, and one node per
+// element of the definition (see defs.go), tied by "defines" links.
 const (
-	TypeMethodologyVersion = "MethodologyVersion"
-	TypeDomainVersion      = "DomainVersion"
-	// LinkDefines ties a version to the elements of its definition.
-	LinkDefines = "defines"
+	TypeMethodologyVersion = "methodology@MethodologyVersion"
+	TypeDomainVersion      = "domain@DomainVersion"
 )
+
+// StoreGraph is what the store needs from the graph (*graph.Graph and the graph service client implement it).
+type StoreGraph interface {
+	BranchHead(ctx context.Context, name string) (domain.Baseline, error)
+	BaselineGraph(ctx context.Context, id domain.BaselineID) ([]domain.Node, []domain.Link, error)
+	CreateBaseline(ctx context.Context, name string, nodes []domain.NodeRef) (domain.Baseline, error)
+	// Commit runs a change of node edits (ADR 0024).
+	Commit(ctx context.Context, in graph.Commit) (graph.CommitResult, error)
+}
+
+// linkDefines is the link type that ties a version of namespace ns to the elements of its definition.
+func linkDefines(ns string) string { return ns + "@defines" }
 
 // statusDeleted marks a deleted draft: a node key is never freed on a versioned graph, so the node stays and a later
 // Save of the same version revives it. The stores treat it as absent.
@@ -49,7 +57,7 @@ func DomainVersionKey(name, version string) string { return "DV:" + key(name, ve
 // are versioned, journaled and reviewable like any node (each element has its own history), and the registry needs no database
 // of its own. It implements Store and DomainStore.
 type GraphStore struct {
-	Graph metamodel.Graph
+	Graph StoreGraph
 	Now   func() time.Time
 
 	cache graphsnap.Cache[*defs]
@@ -61,7 +69,7 @@ var (
 )
 
 // NewGraphStore returns a store over a graph (the graph itself, or a client of the graph service).
-func NewGraphStore(g metamodel.Graph) *GraphStore {
+func NewGraphStore(g StoreGraph) *GraphStore {
 	s := &GraphStore{Graph: g, Now: time.Now}
 	s.cache = graphsnap.Cache[*defs]{Graph: g, Build: buildDefs}
 	return s
@@ -242,7 +250,8 @@ func versionEdits(hkey, hType string, header map[string]any, els []defEl, old *d
 			continue
 		}
 		edits = append(edits, graph.NodeEdit{Key: k, Type: nodeType, Props: e.props})
-		head.Links = append(head.Links, graph.LinkEdit{Type: LinkDefines, ToKey: k})
+		ns, _, _ := strings.Cut(hType, "@")
+		head.Links = append(head.Links, graph.LinkEdit{Type: linkDefines(ns), ToKey: k})
 	}
 	for _, k := range slices.Sorted(maps.Keys(oldChildren)) {
 		if n := oldChildren[k]; !want[k] {

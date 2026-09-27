@@ -13,6 +13,8 @@ import (
 	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/index"
 	"github.com/zimwip/goap/pkg/llm"
+	"github.com/zimwip/goap/pkg/methodology"
+	"github.com/zimwip/goap/pkg/typecat"
 )
 
 type bagEmbedder struct{ fail bool }
@@ -64,28 +66,39 @@ func TestGraphToSearch(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	svc := New(index.NewMemory(), &bagEmbedder{}, denyType{typ: "Secret"}, log)
+	svc := New(index.NewMemory(), &bagEmbedder{}, denyType{typ: "docs@Secret"}, log)
 
+	d, err := methodology.ParseDomain([]byte(`
+name: docs
+version: 1.0.0
+nodeTypes:
+  - {name: Requirement, properties: [title, priority], search: [{property: title, text: true}, {property: priority, facet: true}]}
+  - {name: Secret, properties: [title], search: [{property: title, text: true}]}
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cat, err := typecat.New(d)
+	if err != nil {
+		t.Fatal(err)
+	}
 	g := graph.New(graph.NewMemory())
+	g.Types = func() graph.TypeCatalog { return cat }
 	mk := func(key, typ string, props map[string]any) domain.Node {
-		n, err := g.CreateNode(ctx, graph.NewNode{Key: key, Type: typ, Properties: props})
+		n, err := g.CreateNode(ctx, graph.NewNode{Namespace: "docs", Key: key, Type: typ, Properties: props})
 		if err != nil {
 			t.Fatal(err)
 		}
 		return n
 	}
-	tReq := mk("D:x/nodetype/Requirement", graph.NodeTypeNode, map[string]any{"name": "Requirement", "search": []any{
-		map[string]any{"property": "title", "text": true}, map[string]any{"property": "priority", "facet": true}}})
-	tSec := mk("D:x/nodetype/Secret", graph.NodeTypeNode, map[string]any{"name": "Secret", "search": []any{map[string]any{"property": "title", "text": true}}})
-	if _, err := g.CreateBaselineFromLatest(ctx, "B0"); err != nil {
+	if _, err := g.CreateBaseline(ctx, "B0", nil); err != nil {
 		t.Fatal(err)
 	}
-	_, _ = tReq, tSec
 
 	g.Observe(NewSink(ctx, svc))
-	r1 := mk("REQ-1", "Requirement", map[string]any{"title": "Users reset their password", "priority": "high"})
-	mk("REQ-2", "Requirement", map[string]any{"title": "Export a report", "priority": "low"})
-	mk("SEC-1", "Secret", map[string]any{"title": "password vault"})
+	r1 := mk("REQ-1", "docs@Requirement", map[string]any{"title": "Users reset their password", "priority": "high"})
+	mk("REQ-2", "docs@Requirement", map[string]any{"title": "Export a report", "priority": "low"})
+	mk("SEC-1", "docs@Secret", map[string]any{"title": "password vault"})
 	if _, err := g.CreateBaselineFromLatest(ctx, "B1"); err != nil {
 		t.Fatal(err)
 	}
@@ -95,7 +108,7 @@ func TestGraphToSearch(t *testing.T) {
 	q := index.Query{Text: "password", Filter: index.Filter{Main: &yes}, Facets: []string{"priority", index.FacetType}}
 	// the secret is filtered by ABAC, before counting
 	res := waitFor(t, svc, user, q, 1)
-	if res.Hits[0].Key != "REQ-1" || !res.Semantic || res.Facets[index.FacetType][0].Value != "Requirement" {
+	if res.Hits[0].Key != "REQ-1" || !res.Semantic || res.Facets[index.FacetType][0].Value != "docs@Requirement" {
 		t.Fatalf("res = %+v", res)
 	}
 	// an internal caller (no identity) sees both
@@ -111,7 +124,7 @@ func TestGraphToSearch(t *testing.T) {
 	}
 	waitFor(t, svc, ctx, index.Query{Text: "passkey", Filter: index.Filter{Main: &yes}}, 1)
 	waitFor(t, svc, ctx, index.Query{Text: "password", Filter: index.Filter{Main: &yes}}, 1) // SEC-1 only
-	all := waitFor(t, svc, ctx, index.Query{Text: "reset", Filter: index.Filter{Type: []string{"Requirement"}}}, 2)
+	all := waitFor(t, svc, ctx, index.Query{Text: "reset", Filter: index.Filter{Type: []string{"docs@Requirement"}}}, 2)
 	if !strings.Contains(all.Hits[0].Key, "REQ-1") || all.Hits[0].Version+all.Hits[1].Version != 3 {
 		t.Fatalf("both versions of REQ-1 expected: %+v", all.Hits)
 	}
@@ -123,7 +136,7 @@ func TestGraphToSearch(t *testing.T) {
 	if err != nil || n == 0 {
 		t.Fatalf("reindex: %d %v", n, err)
 	}
-	waitFor(t, svc, ctx, index.Query{Text: "reset", Filter: index.Filter{Type: []string{"Requirement"}}}, 2)
+	waitFor(t, svc, ctx, index.Query{Text: "reset", Filter: index.Filter{Type: []string{"docs@Requirement"}}}, 2)
 	waitFor(t, svc, ctx, index.Query{Text: "passkey", Filter: index.Filter{Main: &yes}}, 1)
 }
 

@@ -1,6 +1,6 @@
 # ADR 0018 — Algorithms: the DSL as a generic capability, plugged into the domain
 
-**Status**: accepted · **Date**: 2026-09 · Extends ADR 0007 (sandbox), ADR 0013 (shared domain), ADR 0014 (lifecycle).
+**Status**: accepted, implemented · **Date**: 2026-09 · Extends ADR 0007 (sandbox), ADR 0013 (shared domain), ADR 0014 (lifecycle).
 
 ## Context
 
@@ -42,35 +42,31 @@ could run when a transition was taken. Making the domain customizable meant chan
    `Transition.guards: [instance]` / `Transition.actions: [instance]`. **The list order is the call
    order**; validators of a supertype run before those of its subtypes; algorithm guards run after the
    CEL guard and `requires`, actions only once every transition of the change is accepted.
-5. **Evaluation** follows ADR 0014: the NodeType nodes of the graph embed the plugged instances
-   *resolved* (`validators`, and `guardAlgos` / `actionAlgos` inside the embedded lifecycle: instance
-   name, algorithm, language, code, parameter values), so a change is judged by the model of its
-   reference baseline and republishing a domain updates them in place (`Sync`, `validators` is a
-   patched key). Property validators run when items are added (early feedback: create, and update on
+5. **Evaluation** follows ADR 0014: the type catalogue (ADR 0012 §2) resolves the plugged instances
+   (`validators`, and `guardAlgos` / `actionAlgos` of the lifecycle transitions: instance name, algorithm, language,
+   code, parameter values), and publishing a domain version applies to the changes checked afterwards. Property validators run when items are added (early feedback: create, and update on
    base + patch) and when the change is applied on the target graph (created and updated nodes; also
    again after a transition action). Transition guards and actions run when the change is applied.
    A transition action's changes are written into the version the transition produced
    (`Tx.SetNodeProps`); when a node moves several times in one change, only its last transition is
    checked, and so is the only one whose actions run.
 6. **Storage**: proto `registry.v1` (`Algorithm`, `AlgorithmParam`, `AlgorithmInstance`,
-   `NodeType.validators`, `LifecycleTransition.guards/actions`, `Domain.algorithms/algorithm_instances`);
-   PostgreSQL `domain_algorithm` and `domain_algorithm_instance` (JSON definitions, migration 0010),
-   validators in the node type `meta`, guards / actions in the lifecycle definition; SQLite keeps the
-   whole domain as one JSON document. **Only shared domains** carry algorithms: a methodology that
-   embeds its domain is refused if it declares or plugs any.
+   `NodeType.validators`, `LifecycleTransition.guards/actions`, `Domain.algorithms/algorithm_instances`); in the
+   graph, `domain@Algorithm` and `domain@AlgorithmInstance` definition nodes of the domain version (ADR 0023).
+   **Only domains** carry algorithms, a methodology never does.
 7. **IDE**: an *Algorithms* section manages the algorithms and instances of a domain draft (editor,
    parameter table, instance value forms, *try it* through `RegistryService.RunAlgorithm`, which
    runs an algorithm on a sample input without storing anything); the domain editor plugs instances.
 
    The `adapter` usage is the exception: it is **not declared in a domain** (validation rejects it): it is
-   an `AdapterDef` node of the `platform` namespace, changed through a change, with `mcp`, `connector` and `secret`
+   a `platform@AdapterDef` node, changed through a change, with `mcp`, `connector` and `secret`
    parameters (never readable by the code), and it is **not plugged** into a node type or a
    lifecycle: organisational units instantiate it (ADR 0019). It calls the connector, so it is bounded by 30 s and
    32 calls, and is run by the MCP hub, not by the graph service.
 
 ## Consequences
 
-- Algorithms are versioned and published with their domain (immutable once published, ADR 0013).
+- Algorithms are versioned and published with their domain (immutable once published, ADR 0023).
   `domains/alm.yaml` ships examples: `regex-match`, `not-blank` (Go), `max-length`,
   `children-in-states`, `stamp-date`.
 - Algorithms run **in the process that judges the change** (graph service), not in a per-process

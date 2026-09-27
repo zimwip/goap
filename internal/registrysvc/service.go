@@ -100,13 +100,19 @@ func (s *Service) Save(ctx context.Context, m methodology.Methodology) (Record, 
 	return saved, s.validate(ctx, &m), nil
 }
 
-// validate checks a definition against the domain it references, if any.
+// validate checks a definition against the types in force (the published domains, ADR 0012).
 func (s *Service) validate(ctx context.Context, m *methodology.Methodology) methodology.Issues {
-	res, issues := m.Resolve(s.resolver(ctx))
-	if len(issues) > 0 {
-		return issues
+	cat, err := s.Types(ctx)
+	if err != nil {
+		return methodology.Issues{{Path: "namespace", Message: "the types in force cannot be read: " + err.Error()}}
 	}
-	return res.Validate()
+	issues := m.Resolve(cat).ValidateStored()
+	if m.Namespace != "" {
+		if _, ok := cat.Domains()[m.Namespace]; !ok {
+			issues = append(issues, methodology.Issue{Path: "namespace", Message: fmt.Sprintf("no published domain %s", m.Namespace)})
+		}
+	}
+	return issues
 }
 
 // Publish freezes a valid draft.
@@ -123,9 +129,6 @@ func (s *Service) Publish(ctx context.Context, name, version string) (Record, er
 	}
 	if issues := s.validate(ctx, &r.Methodology); len(issues) > 0 {
 		return Record{}, fmt.Errorf("%w: %v", ErrInvalid, issues)
-	}
-	if err := s.requirePublishedDomain(ctx, &r.Methodology); err != nil {
-		return Record{}, err
 	}
 	if err := s.Store.SetStatus(ctx, name, version, StatusPublished, s.clock()); err != nil {
 		return Record{}, err
@@ -262,24 +265,9 @@ func (s *Service) Methodology(ctx context.Context, name string) (*methodology.Co
 	if err != nil {
 		return nil, engine.ErrUnknownMethodology{Name: name}
 	}
-	m, issues := r.Methodology.Resolve(s.resolver(ctx))
-	if len(issues) > 0 {
-		return nil, fmt.Errorf("methodology %s: %w", name, issues)
-	}
-	return m.Compile()
-}
-
-// GetResolved returns a version whose domain is filled from its reference
-// (engine use); Get returns the definition as stored.
-func (s *Service) GetResolved(ctx context.Context, name, version string) (Record, error) {
-	r, err := s.Store.Get(ctx, name, version)
+	cat, err := s.Types(ctx)
 	if err != nil {
-		return r, err
+		return nil, err
 	}
-	m, issues := r.Methodology.Resolve(s.resolver(ctx))
-	if len(issues) > 0 {
-		return r, fmt.Errorf("methodology %s: %w", name, issues)
-	}
-	r.Methodology = *m
-	return r, nil
+	return r.Methodology.Resolve(cat).Compile()
 }

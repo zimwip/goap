@@ -16,7 +16,7 @@ func TestSDLCMethodologyIsValid(t *testing.T) {
 	if got := len(cm.SpecializationsOf("sdlc", "build")); got != 4 {
 		t.Fatalf("build specializations: %d", got)
 	}
-	if st := m.Supertypes()["SecurityRequirement"]; len(st) != 2 || st[1] != "Requirement" {
+	if st := m.Supertypes()["alm@SecurityRequirement"]; len(st) != 2 || st[1] != "alm@Requirement" {
 		t.Fatalf("supertypes: %v", st)
 	}
 }

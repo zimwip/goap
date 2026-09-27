@@ -5,7 +5,7 @@ description: >
   Example of agents (goap, utility and hybrid planners), script actions
   (JavaScript and Go) and delegation to sub-agents.
 
-domainRef: alm@1.0.0
+namespace: alm
 
 conditions:
   - name: has_scope
@@ -13,7 +13,7 @@ conditions:
     expr: size(changeImpacts) > 0
   - name: tests_designed
     description: At least one test case is created by the change
-    expr: changeImpacts.exists(n, n.intent == "created" && n.type == "TestCase")
+    expr: changeImpacts.exists(n, n.intent == "created" && n.type == "alm@TestCase")
   - name: summarized
     description: A summary of the campaign is written
     expr: artifacts.exists(a, a.type == "summary")
@@ -30,7 +30,7 @@ actions:
     effects: {has_scope: true}
     code: |
       function run(ctx) {
-        const reqs = ctx.nodes("Requirement");
+        const reqs = ctx.nodes("alm@Requirement");
         for (const r of reqs) ctx.impactNode(r.key, "in the scope of the campaign");
         ctx.log(reqs.length + " requirement(s) retained");
         return reqs.length + " requirement(s)";
@@ -53,14 +53,14 @@ actions:
 
       func Run(ctx *dsl.Ctx) error {
       	for _, n := range ctx.ChangeImpacts() {
-      		if n.Pre == nil || n.Type != "Requirement" || n.Intent != "modified" {
+      		if n.Pre == nil || n.Type != "alm@Requirement" || n.Intent != "modified" {
       			continue
       		}
       		title := fmt.Sprintf("Verify %s: %v", n.Key, n.Pre.Props["title"])
-      		t := ctx.CreateNode("TestCase", "TC-"+n.Key, "verifies "+n.Key)
+      		t := ctx.CreateNode("alm@TestCase", "TC-"+n.Key, "verifies "+n.Key)
       		ctx.WriteNode(t, map[string]any{
       			"props": map[string]any{"title": title},
-      			"links": []any{map[string]any{"type": "verifies", "to": n.Key}},
+      			"links": []any{map[string]any{"type": "alm@verifies", "to": n.Key}},
       		})
       	}
       	return nil

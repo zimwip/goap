@@ -148,8 +148,8 @@ const (
 type GraphServiceClient interface {
 	// Domain axis
 	CreateNode(context.Context, *connect.Request[v1.CreateNodeRequest]) (*connect.Response[v1.CreateNodeResponse], error)
-	// CreateObject creates a data node typed by a NodeType of the metadata layer
-	// (ADR 0012): the node and its instanceOf edge go through a change applied on main.
+	// CreateObject creates a node of a qualified type (<namespace>@<type>, ADR 0012) through a change applied on
+	// main, in the namespace of its type; the type catalogue judges it.
 	CreateObject(context.Context, *connect.Request[v1.CreateObjectRequest]) (*connect.Response[v1.CreateObjectResponse], error)
 	UpdateNode(context.Context, *connect.Request[v1.UpdateNodeRequest]) (*connect.Response[v1.UpdateNodeResponse], error)
 	GetNode(context.Context, *connect.Request[v1.GetNodeRequest]) (*connect.Response[v1.GetNodeResponse], error)
@@ -709,8 +709,8 @@ func (c *graphServiceClient) RepublishIndex(ctx context.Context, req *connect.Re
 type GraphServiceHandler interface {
 	// Domain axis
 	CreateNode(context.Context, *connect.Request[v1.CreateNodeRequest]) (*connect.Response[v1.CreateNodeResponse], error)
-	// CreateObject creates a data node typed by a NodeType of the metadata layer
-	// (ADR 0012): the node and its instanceOf edge go through a change applied on main.
+	// CreateObject creates a node of a qualified type (<namespace>@<type>, ADR 0012) through a change applied on
+	// main, in the namespace of its type; the type catalogue judges it.
 	CreateObject(context.Context, *connect.Request[v1.CreateObjectRequest]) (*connect.Response[v1.CreateObjectResponse], error)
 	UpdateNode(context.Context, *connect.Request[v1.UpdateNodeRequest]) (*connect.Response[v1.UpdateNodeResponse], error)
 	GetNode(context.Context, *connect.Request[v1.GetNodeRequest]) (*connect.Response[v1.GetNodeResponse], error)

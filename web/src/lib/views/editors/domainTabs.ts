@@ -73,7 +73,7 @@ export function domainActions(d: DomainDraft): ToolbarAction[] {
   }
   if (!d.isNew) {
     acts.push({ id: 'export', label: 'Export', icon: 'download', title: 'Export to YAML', disabled: busy, run: () => d.exportYaml() });
-    acts.push({
+    if (!d.frozen) acts.push({
       id: 'version',
       label: 'New version',
       icon: 'copy',
@@ -95,7 +95,7 @@ export function domainActions(d: DomainDraft): ToolbarAction[] {
         void d.reload();
       },
     });
-    if (d.status !== 'archived') {
+    if (d.status !== 'archived' && !d.builtin) {
       acts.push({
         id: 'delete',
         label: d.status === 'draft' ? 'Delete version' : 'Archive',

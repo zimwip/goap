@@ -6,14 +6,15 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"strings"
+	"slices"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/zimwip/goap/pkg/domain"
 )
 
 // Domain is the object part of the enterprise model: node types and link
-// types, versioned on its own and shared by the methodologies that reference
-// it (Methodology.DomainRef). Methodologies are the active part (actions,
+// types, versioned on its own, one per namespace (ADR 0013). Methodologies are the active part (actions,
 // agents, conditions, goals) and use domain types as inputs and outputs.
 type Domain struct {
 	Name        string `yaml:"name" json:"name"`
@@ -55,40 +56,52 @@ func (d *Domain) Validate() Issues {
 	return issues
 }
 
-// SplitRef splits a domain reference "<name>@<version>" (version optional).
-func SplitRef(ref string) (name, version string, err error) {
-	name, version, _ = strings.Cut(ref, "@")
-	if !nameRE.MatchString(name) {
-		return "", "", fmt.Errorf("domainRef %q must be <name>[@<version>]", ref)
+// DomainTypes is the TypeSet of a list of domains and of the built-in domains: a bare name inside a domain is a
+// type of that domain. The registry and the services use the type catalogue (pkg/typecat); this is for files and
+// tests.
+func DomainTypes(ds ...*Domain) TypeSet {
+	t := domainTypes{nodes: map[string]bool{}, links: map[string]bool{}, parents: map[string]string{}}
+	for _, d := range append(slices.Clone(BuiltinDomains()), ds...) {
+		for _, n := range d.NodeTypes {
+			ref := d.Name + domain.TypeSep + n.Name
+			t.nodes[ref] = true
+			if n.Extends != "" {
+				if p, err := domain.QualifyIn(d.Name, n.Extends); err == nil {
+					t.parents[ref] = p.String()
+				}
+			}
+		}
+		for _, l := range d.LinkTypes {
+			t.links[d.Name+domain.TypeSep+l.Name] = true
+		}
 	}
-	return name, version, nil
+	return t
 }
 
-// DomainResolver returns a domain version (empty version: latest published).
-type DomainResolver func(name, version string) (*Domain, error)
+type domainTypes struct {
+	nodes, links map[string]bool
+	parents      map[string]string
+}
 
-// Resolve returns the methodology with its Domain filled from DomainRef, so
-// that Validate and Compile check it against the shared domain. Without a
-// reference it returns m itself. Embedding a domain and referencing one are
-// exclusive.
-func (m *Methodology) Resolve(resolve DomainResolver) (*Methodology, Issues) {
-	if m.DomainRef == "" {
-		return m, nil
+func (t domainTypes) HasNodeType(ref string) bool { return t.nodes[ref] }
+func (t domainTypes) HasLinkType(ref string) bool { return t.links[ref] }
+func (t domainTypes) Supertypes() map[string][]string {
+	out := map[string][]string{}
+	for n := range t.nodes {
+		seen := map[string]bool{n: true}
+		for p := t.parents[n]; p != "" && !seen[p]; p = t.parents[p] {
+			seen[p] = true
+			out[n] = append(out[n], p)
+		}
 	}
-	if len(m.Domain.NodeTypes) > 0 || len(m.Domain.LinkTypes) > 0 || len(m.Domain.Lifecycles) > 0 {
-		return m, Issues{{Path: "domainRef", Message: "a methodology either references a domain or embeds one"}}
-	}
-	name, version, err := SplitRef(m.DomainRef)
-	if err != nil {
-		return m, Issues{{Path: "domainRef", Message: err.Error()}}
-	}
-	d, err := resolve(name, version)
-	if err != nil {
-		return m, Issues{{Path: "domainRef", Message: err.Error()}}
-	}
+	return out
+}
+
+// Resolve returns the methodology with the types in force, so that Validate and Compile check its references.
+func (m *Methodology) Resolve(types TypeSet) *Methodology {
 	out := *m
-	out.Domain = d.Schema
-	return &out, nil
+	out.Types = types
+	return &out
 }
 
 // Patterns of domain types used inside CEL expressions: `"T" in n.types` and `n.type == "T"` on change
@@ -103,21 +116,42 @@ var (
 	}
 )
 
-// lintDomainRefs checks the type names a methodology uses in CEL literals and
-// builtin params against the referenced domain.
-func (m *Methodology) lintDomainRefs(nodeTypes, linkTypes map[string]bool, add func(path, format string, args ...any)) {
+// checkTypeRef checks a reference to a node type (link false) or a link type against the resolved types: qualified
+// and known. It returns the problem, or "" (nothing is checked while the types are not resolved).
+func (m *Methodology) checkTypeRef(ref string, link bool) string {
+	if m.Types == nil {
+		return ""
+	}
+	r, err := domain.ParseTypeRef(ref)
+	if err != nil {
+		return err.Error()
+	}
+	if !r.Qualified() {
+		return fmt.Sprintf("type reference %q must be qualified: <namespace>@%s", ref, ref)
+	}
+	if link && !m.Types.HasLinkType(ref) {
+		return fmt.Sprintf("unknown link type %s", ref)
+	}
+	if !link && !m.Types.HasNodeType(ref) {
+		return fmt.Sprintf("unknown node type %s", ref)
+	}
+	return ""
+}
+
+// lintTypeRefs checks the type references a methodology uses in CEL literals and builtin params (ADR 0012).
+func (m *Methodology) lintTypeRefs(add func(path, format string, args ...any)) {
 	scan := func(path, expr string) {
 		for _, re := range nodeTypeLiterals {
 			for _, g := range re.FindAllStringSubmatch(expr, -1) {
-				if !nodeTypes[g[1]] {
-					add(path, "unknown node type %s", g[1])
+				if msg := m.checkTypeRef(g[1], false); msg != "" {
+					add(path, "%s", msg)
 				}
 			}
 		}
 		for _, re := range linkTypeLiterals {
 			for _, g := range re.FindAllStringSubmatch(expr, -1) {
-				if !linkTypes[g[1]] {
-					add(path, "unknown link type %s", g[1])
+				if msg := m.checkTypeRef(g[1], true); msg != "" {
+					add(path, "%s", msg)
 				}
 			}
 		}
@@ -135,8 +169,10 @@ func (m *Methodology) lintDomainRefs(nodeTypes, linkTypes map[string]bool, add f
 		if a.Kind == KindBuiltin {
 			if lts, ok := a.Params["linkTypes"].([]any); ok {
 				for _, lt := range lts {
-					if s, ok := lt.(string); ok && !linkTypes[s] {
-						add(path+".params.linkTypes", "unknown link type %s", s)
+					if s, ok := lt.(string); ok {
+						if msg := m.checkTypeRef(s, true); msg != "" {
+							add(path+".params.linkTypes", "%s", msg)
+						}
 					}
 				}
 			}
@@ -144,33 +180,73 @@ func (m *Methodology) lintDomainRefs(nodeTypes, linkTypes map[string]bool, add f
 	}
 }
 
-// DomainDir resolves domain references from the YAML files of a directory
-// (an empty version picks the last matching file in name order).
-func DomainDir(dir string) DomainResolver {
-	return func(name, version string) (*Domain, error) {
-		files, err := filepath.Glob(filepath.Join(dir, "*.y*ml"))
+// Namespaces lists the namespaces a methodology uses: its target namespace and the namespaces of the qualified type
+// references it makes (CEL literals, expectations, builtin link types).
+func (m *Methodology) Namespaces() []string {
+	set := map[string]bool{}
+	if m.Namespace != "" {
+		set[m.Namespace] = true
+	}
+	ref := func(s string) {
+		if r, err := domain.ParseTypeRef(s); err == nil && r.Qualified() {
+			set[r.Namespace] = true
+		}
+	}
+	scan := func(expr string) {
+		for _, re := range append(slices.Clone(nodeTypeLiterals), linkTypeLiterals...) {
+			for _, g := range re.FindAllStringSubmatch(expr, -1) {
+				ref(g[1])
+			}
+		}
+	}
+	for _, c := range m.Conditions {
+		scan(c.Expr)
+	}
+	for _, a := range m.Actions {
+		scan(a.When)
+		scan(a.Utility)
+		if e := a.Expects; e != nil {
+			scan(e.Where)
+			ref(e.Produce.NodeType)
+			if e.Link != nil {
+				ref(e.Link.Type)
+			}
+		}
+		if lts, ok := a.Params["linkTypes"].([]any); ok {
+			for _, lt := range lts {
+				if s, ok := lt.(string); ok {
+					ref(s)
+				}
+			}
+		}
+	}
+	out := make([]string, 0, len(set))
+	for n := range set {
+		out = append(out, n)
+	}
+	slices.Sort(out)
+	return out
+}
+
+// LoadDomains parses the domain files (*.yaml) of a directory.
+func LoadDomains(dir string) ([]*Domain, error) {
+	files, err := filepath.Glob(filepath.Join(dir, "*.y*ml"))
+	if err != nil {
+		return nil, err
+	}
+	var out []*Domain
+	for _, f := range files {
+		src, err := os.ReadFile(f)
 		if err != nil {
 			return nil, err
 		}
-		var found *Domain
-		for _, f := range files {
-			src, err := os.ReadFile(f)
-			if err != nil {
-				return nil, err
-			}
-			d, err := ParseDomain(src)
-			if err != nil {
-				return nil, fmt.Errorf("%s: %w", f, err)
-			}
-			if d.Name == name && (version == "" || d.Version == version) {
-				found = d
-			}
+		d, err := ParseDomain(src)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", f, err)
 		}
-		if found == nil {
-			return nil, fmt.Errorf("domain %s@%s not found in %s", name, version, dir)
-		}
-		return found, nil
+		out = append(out, d)
 	}
+	return out, nil
 }
 
 // domainsDirFor finds the "domains" directory beside the methodologies directory of a file: methodologies/x.yaml
@@ -186,9 +262,8 @@ func domainsDirFor(path string) string {
 	return filepath.Join(filepath.Dir(path), "..", "domains")
 }
 
-// LoadFile parses a methodology file. A domain reference is resolved from the
-// "domains" directory next to the methodology's directory (the layout of the
-// repository: methodologies/ and domains/).
+// LoadFile parses a methodology file and resolves its types against the domains of the "domains" directory next to
+// the methodology's directory (the layout of the repository: methodologies/ and domains/).
 func LoadFile(path string) (*Methodology, error) {
 	src, err := os.ReadFile(path)
 	if err != nil {
@@ -198,9 +273,9 @@ func LoadFile(path string) (*Methodology, error) {
 	if err != nil {
 		return nil, err
 	}
-	res, issues := m.Resolve(DomainDir(domainsDirFor(path)))
-	if len(issues) > 0 {
-		return nil, fmt.Errorf("%s: %w", path, issues)
+	ds, err := LoadDomains(domainsDirFor(path))
+	if err != nil {
+		return nil, err
 	}
-	return res, nil
+	return m.Resolve(DomainTypes(ds...)), nil
 }

@@ -90,6 +90,9 @@ const (
 	// RegistryServiceGetDomainUsageProcedure is the fully-qualified name of the RegistryService's
 	// GetDomainUsage RPC.
 	RegistryServiceGetDomainUsageProcedure = "/goap.registry.v1.RegistryService/GetDomainUsage"
+	// RegistryServiceListTypesProcedure is the fully-qualified name of the RegistryService's ListTypes
+	// RPC.
+	RegistryServiceListTypesProcedure = "/goap.registry.v1.RegistryService/ListTypes"
 	// RegistryServiceRunAlgorithmProcedure is the fully-qualified name of the RegistryService's
 	// RunAlgorithm RPC.
 	RegistryServiceRunAlgorithmProcedure = "/goap.registry.v1.RegistryService/RunAlgorithm"
@@ -111,9 +114,8 @@ type RegistryServiceClient interface {
 	DeleteMethodology(context.Context, *connect.Request[v1.DeleteMethodologyRequest]) (*connect.Response[v1.DeleteMethodologyResponse], error)
 	ImportMethodology(context.Context, *connect.Request[v1.ImportMethodologyRequest]) (*connect.Response[v1.ImportMethodologyResponse], error)
 	ExportMethodology(context.Context, *connect.Request[v1.ExportMethodologyRequest]) (*connect.Response[v1.ExportMethodologyResponse], error)
-	// Domains are the shared object part (node types, link types) that
-	// methodologies reference with domain_ref. They have the same lifecycle as
-	// methodologies but are edited on their own: no change, impact or proposal.
+	// Domains are the object part (node types, link types, lifecycles, algorithms), one per namespace (ADR 0013);
+	// methodologies reference their types as <namespace>@<type>. They have the same lifecycle as methodologies.
 	ListDomains(context.Context, *connect.Request[v1.ListDomainsRequest]) (*connect.Response[v1.ListDomainsResponse], error)
 	// version empty = latest published version
 	GetDomain(context.Context, *connect.Request[v1.GetDomainRequest]) (*connect.Response[v1.GetDomainResponse], error)
@@ -127,6 +129,9 @@ type RegistryServiceClient interface {
 	ExportDomain(context.Context, *connect.Request[v1.ExportDomainRequest]) (*connect.Response[v1.ExportDomainResponse], error)
 	// Methodology versions referencing a domain version.
 	GetDomainUsage(context.Context, *connect.Request[v1.GetDomainUsageRequest]) (*connect.Response[v1.GetDomainUsageResponse], error)
+	// The type catalogue in force (ADR 0012): the node and link types of the published domains and of the built-in
+	// meta-domains, resolved.
+	ListTypes(context.Context, *connect.Request[v1.ListTypesRequest]) (*connect.Response[v1.ListTypesResponse], error)
 	// Try an algorithm of a domain on a sample input, without saving anything.
 	RunAlgorithm(context.Context, *connect.Request[v1.RunAlgorithmRequest]) (*connect.Response[v1.RunAlgorithmResponse], error)
 }
@@ -256,6 +261,12 @@ func NewRegistryServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(registryServiceMethods.ByName("GetDomainUsage")),
 			connect.WithClientOptions(opts...),
 		),
+		listTypes: connect.NewClient[v1.ListTypesRequest, v1.ListTypesResponse](
+			httpClient,
+			baseURL+RegistryServiceListTypesProcedure,
+			connect.WithSchema(registryServiceMethods.ByName("ListTypes")),
+			connect.WithClientOptions(opts...),
+		),
 		runAlgorithm: connect.NewClient[v1.RunAlgorithmRequest, v1.RunAlgorithmResponse](
 			httpClient,
 			baseURL+RegistryServiceRunAlgorithmProcedure,
@@ -286,6 +297,7 @@ type registryServiceClient struct {
 	importDomain        *connect.Client[v1.ImportDomainRequest, v1.ImportDomainResponse]
 	exportDomain        *connect.Client[v1.ExportDomainRequest, v1.ExportDomainResponse]
 	getDomainUsage      *connect.Client[v1.GetDomainUsageRequest, v1.GetDomainUsageResponse]
+	listTypes           *connect.Client[v1.ListTypesRequest, v1.ListTypesResponse]
 	runAlgorithm        *connect.Client[v1.RunAlgorithmRequest, v1.RunAlgorithmResponse]
 }
 
@@ -384,6 +396,11 @@ func (c *registryServiceClient) GetDomainUsage(ctx context.Context, req *connect
 	return c.getDomainUsage.CallUnary(ctx, req)
 }
 
+// ListTypes calls goap.registry.v1.RegistryService.ListTypes.
+func (c *registryServiceClient) ListTypes(ctx context.Context, req *connect.Request[v1.ListTypesRequest]) (*connect.Response[v1.ListTypesResponse], error) {
+	return c.listTypes.CallUnary(ctx, req)
+}
+
 // RunAlgorithm calls goap.registry.v1.RegistryService.RunAlgorithm.
 func (c *registryServiceClient) RunAlgorithm(ctx context.Context, req *connect.Request[v1.RunAlgorithmRequest]) (*connect.Response[v1.RunAlgorithmResponse], error) {
 	return c.runAlgorithm.CallUnary(ctx, req)
@@ -405,9 +422,8 @@ type RegistryServiceHandler interface {
 	DeleteMethodology(context.Context, *connect.Request[v1.DeleteMethodologyRequest]) (*connect.Response[v1.DeleteMethodologyResponse], error)
 	ImportMethodology(context.Context, *connect.Request[v1.ImportMethodologyRequest]) (*connect.Response[v1.ImportMethodologyResponse], error)
 	ExportMethodology(context.Context, *connect.Request[v1.ExportMethodologyRequest]) (*connect.Response[v1.ExportMethodologyResponse], error)
-	// Domains are the shared object part (node types, link types) that
-	// methodologies reference with domain_ref. They have the same lifecycle as
-	// methodologies but are edited on their own: no change, impact or proposal.
+	// Domains are the object part (node types, link types, lifecycles, algorithms), one per namespace (ADR 0013);
+	// methodologies reference their types as <namespace>@<type>. They have the same lifecycle as methodologies.
 	ListDomains(context.Context, *connect.Request[v1.ListDomainsRequest]) (*connect.Response[v1.ListDomainsResponse], error)
 	// version empty = latest published version
 	GetDomain(context.Context, *connect.Request[v1.GetDomainRequest]) (*connect.Response[v1.GetDomainResponse], error)
@@ -421,6 +437,9 @@ type RegistryServiceHandler interface {
 	ExportDomain(context.Context, *connect.Request[v1.ExportDomainRequest]) (*connect.Response[v1.ExportDomainResponse], error)
 	// Methodology versions referencing a domain version.
 	GetDomainUsage(context.Context, *connect.Request[v1.GetDomainUsageRequest]) (*connect.Response[v1.GetDomainUsageResponse], error)
+	// The type catalogue in force (ADR 0012): the node and link types of the published domains and of the built-in
+	// meta-domains, resolved.
+	ListTypes(context.Context, *connect.Request[v1.ListTypesRequest]) (*connect.Response[v1.ListTypesResponse], error)
 	// Try an algorithm of a domain on a sample input, without saving anything.
 	RunAlgorithm(context.Context, *connect.Request[v1.RunAlgorithmRequest]) (*connect.Response[v1.RunAlgorithmResponse], error)
 }
@@ -546,6 +565,12 @@ func NewRegistryServiceHandler(svc RegistryServiceHandler, opts ...connect.Handl
 		connect.WithSchema(registryServiceMethods.ByName("GetDomainUsage")),
 		connect.WithHandlerOptions(opts...),
 	)
+	registryServiceListTypesHandler := connect.NewUnaryHandler(
+		RegistryServiceListTypesProcedure,
+		svc.ListTypes,
+		connect.WithSchema(registryServiceMethods.ByName("ListTypes")),
+		connect.WithHandlerOptions(opts...),
+	)
 	registryServiceRunAlgorithmHandler := connect.NewUnaryHandler(
 		RegistryServiceRunAlgorithmProcedure,
 		svc.RunAlgorithm,
@@ -592,6 +617,8 @@ func NewRegistryServiceHandler(svc RegistryServiceHandler, opts ...connect.Handl
 			registryServiceExportDomainHandler.ServeHTTP(w, r)
 		case RegistryServiceGetDomainUsageProcedure:
 			registryServiceGetDomainUsageHandler.ServeHTTP(w, r)
+		case RegistryServiceListTypesProcedure:
+			registryServiceListTypesHandler.ServeHTTP(w, r)
 		case RegistryServiceRunAlgorithmProcedure:
 			registryServiceRunAlgorithmHandler.ServeHTTP(w, r)
 		default:
@@ -677,6 +704,10 @@ func (UnimplementedRegistryServiceHandler) ExportDomain(context.Context, *connec
 
 func (UnimplementedRegistryServiceHandler) GetDomainUsage(context.Context, *connect.Request[v1.GetDomainUsageRequest]) (*connect.Response[v1.GetDomainUsageResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.registry.v1.RegistryService.GetDomainUsage is not implemented"))
+}
+
+func (UnimplementedRegistryServiceHandler) ListTypes(context.Context, *connect.Request[v1.ListTypesRequest]) (*connect.Response[v1.ListTypesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.registry.v1.RegistryService.ListTypes is not implemented"))
 }
 
 func (UnimplementedRegistryServiceHandler) RunAlgorithm(context.Context, *connect.Request[v1.RunAlgorithmRequest]) (*connect.Response[v1.RunAlgorithmResponse], error) {

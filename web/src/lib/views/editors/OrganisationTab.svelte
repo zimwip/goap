@@ -15,6 +15,7 @@
   import { headGraph, findNode, applyOnMain, createNodeItem, updateNodeItem, deleteNodeItem, refOf, type HeadGraph } from '../../graphEdit';
   import { openTab } from '../../shell/tabs.svelte';
   import { notify, provideActions } from '../../shell/workbench.svelte';
+  import { ADAPTER_TYPE, ORG_UNIT_TYPE, OWNER, PART_OF } from '../../orgTypes';
 
   let { tab }: { tab: Tab } = $props();
 
@@ -28,15 +29,15 @@
   let error = $state('');
   let pane = $state('overview');
 
-  const unit = $derived(head ? findNode(head, NS, 'OrgUnit', key) : undefined);
+  const unit = $derived(head ? findNode(head, NS, ORG_UNIT_TYPE, key) : undefined);
   const nodeById = $derived(new Map((head?.nodes ?? []).map((n) => [n.id ?? '', n])));
   const parentKey = $derived.by(() => {
-    const l = head?.links.find((x) => x.type === 'part_of' && x.from?.id === unit?.id);
+    const l = head?.links.find((x) => x.type === PART_OF && x.from?.id === unit?.id);
     return l?.to?.id ? (nodeById.get(l.to.id)?.key ?? '') : '';
   });
   const childKeys = $derived(
     (head?.links ?? [])
-      .filter((l) => l.type === 'part_of' && l.to?.id === unit?.id)
+      .filter((l) => l.type === PART_OF && l.to?.id === unit?.id)
       .map((l) => nodeById.get(l.from?.id ?? '')?.key ?? '')
       .filter(Boolean)
       .sort(),
@@ -45,9 +46,9 @@
   const ownNodes = $derived.by(() => {
     const m = new Map<string, string>();
     for (const l of head?.links ?? []) {
-      if (l.type !== 'owner' || l.to?.id !== unit?.id) continue;
+      if (l.type !== OWNER || l.to?.id !== unit?.id) continue;
       const a = nodeById.get(l.from?.id ?? '');
-      if (a?.type === 'Adapter' && a.namespace === NS) m.set(String(a.props?.['mcp'] ?? ''), a.key ?? '');
+      if (a?.type === ADAPTER_TYPE && a.namespace === NS) m.set(String(a.props?.['mcp'] ?? ''), a.key ?? '');
     }
     return m;
   });
@@ -171,11 +172,11 @@
       fWarnings = (await mcp.checkAdapter(a)).warnings ?? [];
       const h = await headGraph();
       const akey = `ADP:${key}/${a.mcp}`;
-      const existing = findNode(h, NS, 'Adapter', akey);
+      const existing = findNode(h, NS, ADAPTER_TYPE, akey);
       const props: Struct = { mcp: a.mcp ?? '', adapter: a.adapter ?? '', params: a.params ?? {} };
-      const u = findNode(h, NS, 'OrgUnit', key);
+      const u = findNode(h, NS, ORG_UNIT_TYPE, key);
       if (!u) throw new Error(`unit ${key} not found`);
-      await applyOnMain(NS, `Adapter ${a.mcp} of ${key}`, `${existing ? 'Update' : 'Create'} the adapter of ${a.mcp} for ${key}`, h.baselineId, existing ? [updateNodeItem(existing, props)] : [createNodeItem(akey, 'Adapter', props, [{ type: 'owner', to: refOf(u) }])]);
+      await applyOnMain(NS, `Adapter ${a.mcp} of ${key}`, `${existing ? 'Update' : 'Create'} the adapter of ${a.mcp} for ${key}`, h.baselineId, existing ? [updateNodeItem(existing, props)] : [createNodeItem(akey, ADAPTER_TYPE, props, [{ type: OWNER, to: refOf(u) }])]);
       notify(`Adapter ${a.mcp} saved for ${key}.`, 'ok');
       editing = false;
       await load();
@@ -190,7 +191,7 @@
     if (!confirm(`Detach ${m} from ${key}? The unit falls back on its ancestors' adapter, if any.`)) return;
     try {
       const h = await headGraph();
-      const existing = findNode(h, NS, 'Adapter', `ADP:${key}/${m}`);
+      const existing = findNode(h, NS, ADAPTER_TYPE, `ADP:${key}/${m}`);
       if (!existing) throw new Error('adapter node not found');
       await applyOnMain(NS, `Detach ${m} from ${key}`, `Delete the adapter of ${m} for ${key}`, h.baselineId, [deleteNodeItem(existing)]);
       notify(`${m} detached from ${key}.`, 'ok');

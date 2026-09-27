@@ -20,7 +20,7 @@ import (
 const mcpMethodology = `
 name: docs
 version: 1.0.0
-domainRef: alm@1.0.0
+namespace: alm
 conditions:
   - name: documented
     expr: artifacts.exists(a, a.type == "doc")
@@ -81,10 +81,11 @@ func parseDocs(t *testing.T, edit func(*methodology.Methodology)) *methodology.C
 	if edit != nil {
 		edit(m)
 	}
-	m, issues := m.Resolve(methodology.DomainDir("../../domains"))
-	if len(issues) > 0 {
-		t.Fatal(issues)
+	ds, err := methodology.LoadDomains("../../domains")
+	if err != nil {
+		t.Fatal(err)
 	}
+	m = m.Resolve(methodology.DomainTypes(ds...))
 	cm, err := m.Compile()
 	if err != nil {
 		t.Fatal(err)

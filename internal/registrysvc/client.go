@@ -48,7 +48,7 @@ func (c *Client) List(ctx context.Context) ([]*methodology.Compiled, error) {
 	return out, nil
 }
 
-// Domains implements metamodel.PublishedDomains: the latest published version of every domain.
+// Domains returns the latest published version of every domain (the source of a typecat.Live catalogue).
 func (c *Client) Domains(ctx context.Context) ([]*methodology.Domain, error) {
 	r, err := c.rpc.ListDomains(ctx, connect.NewRequest(&registryv1.ListDomainsRequest{}))
 	if err != nil {
@@ -56,8 +56,8 @@ func (c *Client) Domains(ctx context.Context) ([]*methodology.Domain, error) {
 	}
 	var out []*methodology.Domain
 	for _, s := range r.Msg.Domains {
-		if s.Status != string(StatusPublished) {
-			continue
+		if s.Status != string(StatusPublished) || s.Builtin {
+			continue // the catalogue adds the built-in domains itself
 		}
 		d, err := c.rpc.GetDomain(ctx, connect.NewRequest(&registryv1.GetDomainRequest{Name: s.Name, Version: s.Version}))
 		if err != nil {
@@ -71,7 +71,7 @@ func (c *Client) Domains(ctx context.Context) ([]*methodology.Domain, error) {
 
 // Methodology implements engine.MethodologyPort (latest published version).
 func (c *Client) Methodology(ctx context.Context, name string) (*methodology.Compiled, error) {
-	r, err := c.rpc.GetMethodology(ctx, connect.NewRequest(&registryv1.GetMethodologyRequest{Name: name, ResolveDomain: true}))
+	r, err := c.rpc.GetMethodology(ctx, connect.NewRequest(&registryv1.GetMethodologyRequest{Name: name}))
 	if connect.CodeOf(err) == connect.CodeNotFound {
 		return nil, engine.ErrUnknownMethodology{Name: name}
 	}

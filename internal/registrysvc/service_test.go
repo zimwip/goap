@@ -25,23 +25,24 @@ func as(roles ...string) context.Context {
 
 func example(t *testing.T) methodology.Methodology {
 	t.Helper()
-	// resolved and embedded: the legacy shape, independent of stored domains
 	m, err := methodology.LoadFile("../../methodologies/examples/impact-analysis.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}
-	m.DomainRef = ""
-	// algorithms belong to shared domains: an embedded domain cannot carry them
-	m.Domain.Algorithms, m.Domain.Instances = nil, nil
-	for i := range m.Domain.NodeTypes {
-		m.Domain.NodeTypes[i].Validators = nil
-	}
-	for i := range m.Domain.Lifecycles {
-		for j := range m.Domain.Lifecycles[i].Transitions {
-			m.Domain.Lifecycles[i].Transitions[j].Guards, m.Domain.Lifecycles[i].Transitions[j].Actions = nil, nil
-		}
-	}
+	m.Types = nil // resolved by the registry from its own domains
 	return *m
+}
+
+// withALM publishes the alm domain of the repository, which the example methodologies act on.
+func withALM(t *testing.T, s *Service) {
+	t.Helper()
+	src, err := os.ReadFile("../../domains/alm.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, issues, err := s.ImportDomain(as("admin"), src, true); err != nil || len(issues) > 0 {
+		t.Fatalf("alm domain: %v %v", issues, err)
+	}
 }
 
 func TestLifecycle(t *testing.T) {
@@ -49,6 +50,7 @@ func TestLifecycle(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			enf, _ := authz.NewCasbin(nil)
 			s := &Service{Store: mk(t), Authz: enf}
+			withALM(t, s)
 			ctx := as("methodologist")
 			m := example(t)
 			m.Version = "2.0.0"

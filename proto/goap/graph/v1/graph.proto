@@ -11,8 +11,8 @@ import "google/protobuf/timestamp.proto";
 service GraphService {
   // Domain axis
   rpc CreateNode(CreateNodeRequest) returns (CreateNodeResponse);
-  // CreateObject creates a data node typed by a NodeType of the metadata layer
-  // (ADR 0012): the node and its instanceOf edge go through a change applied on main.
+  // CreateObject creates a node of a qualified type (<namespace>@<type>, ADR 0012) through a change applied on
+  // main, in the namespace of its type; the type catalogue judges it.
   rpc CreateObject(CreateObjectRequest) returns (CreateObjectResponse);
   rpc UpdateNode(UpdateNodeRequest) returns (UpdateNodeResponse);
   rpc GetNode(GetNodeRequest) returns (GetNodeResponse);
@@ -102,7 +102,7 @@ message Node {
   string reason = 11;
   // state in the lifecycle of the node type (empty: none)
   string state = 12;
-  // namespace of the node (default sdlc)
+  // namespace of the node (required with a type catalogue)
   string namespace = 13;
   // change impact that produced this version, and its acceptance comment (ADR 0024)
   string change_impact = 14;
@@ -179,7 +179,7 @@ message Change {
   repeated ChangeItem items = 10;
   google.protobuf.Timestamp created_at = 11;
   string branch = 12;
-  // namespace the change acts on (default sdlc)
+  // namespace the change acts on (required with a type catalogue)
   string namespace = 13;
   // sub-change: the parent change and the responsible OrgUnit key
   string parent_id = 14;
@@ -247,7 +247,7 @@ message CreateObjectRequest {
   string node_type = 2;
   string key = 3;
   google.protobuf.Struct props = 4;
-  // namespace of the created object (default sdlc)
+  // namespace of the created object (default: the namespace of the type)
   string namespace = 5;
 }
 
@@ -270,7 +270,7 @@ message GetNodeRequest {
   NodeRef ref = 1;
   // alternative to ref: latest version of the node with this key
   string key = 2;
-  // namespace of key (default sdlc)
+  // namespace of key (required with a type catalogue)
   string namespace = 3;
 }
 
@@ -325,7 +325,7 @@ message CreateChangeRequest {
   google.protobuf.Struct data = 5;
   // branch the change applies to (default main)
   string branch = 6;
-  // namespace the change acts on (default sdlc)
+  // namespace the change acts on (required with a type catalogue)
   string namespace = 7;
   // give the change a branch of its own, merged into `branch` when applied
   bool own_branch = 8;

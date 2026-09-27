@@ -3,8 +3,9 @@
 import type { GraphNode, Policy, Struct } from './api';
 
 export const NS_ORGANISATION = 'organisation';
-export const POLICY_TYPE = 'Policy';
-export const USER_TYPE = 'User';
+export const POLICY_TYPE = 'organisation@Policy';
+export const USER_TYPE = 'organisation@User';
+export const MEMBER_OF = 'organisation@member_of';
 
 export interface User {
   subject: string;

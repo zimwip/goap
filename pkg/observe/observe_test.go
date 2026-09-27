@@ -75,7 +75,7 @@ func TestProposeAndApply(t *testing.T) {
 	for _, p := range props {
 		edits = append(edits, Edit{Op: p.Op, Key: p.Key, Type: p.Type, Props: p.Props})
 	}
-	edits = append(edits, Edit{Op: "update_node", Key: "M:other/action/x", Props: map[string]any{"cost": 1}})
+	edits = append(edits, Edit{Op: "update_node", Key: "MV:other@1.0.0/action/x", Props: map[string]any{"cost": 1}})
 	d, err := Apply(m, edits)
 	if err != nil {
 		t.Fatal(err)

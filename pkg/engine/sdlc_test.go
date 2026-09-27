@@ -15,8 +15,8 @@ import (
 	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/intent"
 	"github.com/zimwip/goap/pkg/llm"
-	"github.com/zimwip/goap/pkg/metamodel"
 	"github.com/zimwip/goap/pkg/methodology"
+	"github.com/zimwip/goap/pkg/typecat"
 )
 
 // sdlcModel answers the LLM actions of methodologies/sdlc.yaml. The matched
@@ -64,22 +64,22 @@ func TestSDLCDelivery(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	g := graph.New(graph.NewMemory())
-	if _, err := graphsvc.SeedDemo(ctx, g); err != nil {
-		t.Fatal(err)
-	}
-	// project sdlc's node types onto the graph (ADR 0012): exercises the
-	// graph-native x.types resolution instead of falling back to the
-	// declared schema.
-	if _, err := metamodel.Sync(ctx, g, m); err != nil {
-		t.Fatal(err)
-	}
-	graphTypes, err := metamodel.Supertypes(ctx, g, "sdlc")
+	// the graph and the engine judge by the types of the repository's domains (ADR 0012)
+	ds, err := methodology.LoadDomains("../../domains")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := m.Supertypes(); !reflect.DeepEqual(graphTypes, want) {
-		t.Fatalf("graph-derived supertypes = %v, want %v", graphTypes, want)
+	cat, err := typecat.New(ds...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := m.Supertypes(); !reflect.DeepEqual(cat.Supertypes()["alm@SecurityRequirement"], want["alm@SecurityRequirement"]) {
+		t.Fatalf("catalogue supertypes = %v, want %v", cat.Supertypes(), want)
+	}
+	g := graph.New(graph.NewMemory())
+	g.Types = func() graph.TypeCatalog { return cat }
+	if _, err := graphsvc.SeedDemo(ctx, g); err != nil {
+		t.Fatal(err)
 	}
 	bs, _ := g.Baselines(ctx)
 	e := &engine.Engine{
@@ -94,6 +94,7 @@ func TestSDLCDelivery(t *testing.T) {
 		Intent: intent.Resolver{Ranker: intent.Lexical{}},
 		Store:  engine.NewMemoryStore(),
 		Authz:  authorizer,
+		Types:  func() methodology.TypeSet { return cat },
 	}
 	p, err := e.Start(ctx, engine.StartRequest{Methodology: "sdlc", Agent: "delivery", Goal: "deliver", BaselineID: bs[0].ID,
 		Title: "Payment in 3 installments", Intent: "Allow payment in 3 installments with no fees"})
@@ -137,7 +138,7 @@ func TestSDLCDelivery(t *testing.T) {
 		}
 	}
 	// CMP-1, CMP-10 (java), CMP-4 (c), CMP-2 (go, generic)
-	if count["BuildArtifact"] != 4 || count["artifact:build"] != 4 || count["TestCase"] != 2 || count["FunctionalRequirement"] != 1 {
+	if count["alm@BuildArtifact"] != 4 || count["artifact:build"] != 4 || count["alm@TestCase"] != 2 || count["alm@FunctionalRequirement"] != 1 {
 		t.Fatalf("items: %v", count)
 	}
 	if p, err = e.Submit(ctx, p.ID, decisions); err != nil {
@@ -184,7 +185,7 @@ func TestSDLCDelivery(t *testing.T) {
 		types[n.Type]++
 	}
 	// releases of APP-1 (CMP-1, CMP-4) and APP-2 (CMP-2), each on 4 environments (+1 seeded deployment)
-	if types["Release"] != 3 || types["Deployment"] != 9 {
+	if types["alm@Release"] != 3 || types["alm@Deployment"] != 9 {
 		t.Fatalf("releases / deployments: %v", types)
 	}
 	art := byKey["ART-CMP-10-0.0.1"]
@@ -195,10 +196,10 @@ func TestSDLCDelivery(t *testing.T) {
 	var realized, deployed, contains, inProd bool
 	for _, l := range links {
 		from, to := l.From, l.To
-		realized = realized || (l.Type == "realizes" && from.ID == byKey["FCT-1"].ID && to.ID == byKey["REQ-10"].ID)
-		deployed = deployed || (l.Type == "deploys" && from.ID == byKey["APP-1"].ID && to.ID == byKey["ART-CMP-1-1.4.3"].ID)
-		contains = contains || (l.Type == "contains" && from.ID == rel.ID && to.ID == byKey["ART-CMP-4-3.0.2"].ID)
-		inProd = inProd || (l.Type == "in_environment" && from.ID == byKey["DEP-REL-APP-1-5.3-ENV-PRD"].ID && to.ID == byKey["ENV-PRD"].ID)
+		realized = realized || (l.Type == "alm@realizes" && from.ID == byKey["FCT-1"].ID && to.ID == byKey["REQ-10"].ID)
+		deployed = deployed || (l.Type == "alm@deploys" && from.ID == byKey["APP-1"].ID && to.ID == byKey["ART-CMP-1-1.4.3"].ID)
+		contains = contains || (l.Type == "alm@contains" && from.ID == rel.ID && to.ID == byKey["ART-CMP-4-3.0.2"].ID)
+		inProd = inProd || (l.Type == "alm@in_environment" && from.ID == byKey["DEP-REL-APP-1-5.3-ENV-PRD"].ID && to.ID == byKey["ENV-PRD"].ID)
 	}
 	if !realized || !deployed || !contains || !inProd {
 		t.Fatalf("traceability: realized=%v deployed=%v contains=%v inProd=%v", realized, deployed, contains, inProd)

@@ -24,9 +24,8 @@ service RegistryService {
   rpc ImportMethodology(ImportMethodologyRequest) returns (ImportMethodologyResponse);
   rpc ExportMethodology(ExportMethodologyRequest) returns (ExportMethodologyResponse);
 
-  // Domains are the shared object part (node types, link types) that
-  // methodologies reference with domain_ref. They have the same lifecycle as
-  // methodologies but are edited on their own: no change, impact or proposal.
+  // Domains are the object part (node types, link types, lifecycles, algorithms), one per namespace (ADR 0013);
+  // methodologies reference their types as <namespace>@<type>. They have the same lifecycle as methodologies.
   rpc ListDomains(ListDomainsRequest) returns (ListDomainsResponse);
   // version empty = latest published version
   rpc GetDomain(GetDomainRequest) returns (GetDomainResponse);
@@ -40,6 +39,9 @@ service RegistryService {
   rpc ExportDomain(ExportDomainRequest) returns (ExportDomainResponse);
   // Methodology versions referencing a domain version.
   rpc GetDomainUsage(GetDomainUsageRequest) returns (GetDomainUsageResponse);
+  // The type catalogue in force (ADR 0012): the node and link types of the published domains and of the built-in
+  // meta-domains, resolved.
+  rpc ListTypes(ListTypesRequest) returns (ListTypesResponse);
   // Try an algorithm of a domain on a sample input, without saving anything.
   rpc RunAlgorithm(RunAlgorithmRequest) returns (RunAlgorithmResponse);
 }
@@ -275,8 +277,8 @@ message Methodology {
   string description = 3;
   // draft | published | archived (read only)
   string status = 4;
-  repeated NodeType node_types = 5;
-  repeated LinkType link_types = 6;
+  reserved 5, 6, 15, 16;
+  reserved "node_types", "link_types", "domain_ref", "lifecycles";
   repeated Condition conditions = 7;
   repeated Action actions = 8;
   repeated Goal goals = 9;
@@ -285,10 +287,7 @@ message Methodology {
   google.protobuf.Timestamp published_at = 12;
   string updated_by = 13;
   repeated Agent agents = 14;
-  // shared domain "<name>[@<version>]" used instead of node_types / link_types
-  string domain_ref = 15;
-  repeated Lifecycle lifecycles = 16;
-  // graph namespace the changes of the methodology act on (default sdlc)
+  // target namespace: the namespace (domain) the changes of the methodology act on (ADR 0013)
   string namespace = 17;
 }
 
@@ -332,9 +331,8 @@ message ListMethodologiesResponse {
 message GetMethodologyRequest {
   string name = 1;
   string version = 2;
-  // fill node_types / link_types from the referenced domain (engine use);
-  // editors leave it unset to get the definition as stored
-  bool resolve_domain = 3;
+  reserved 3;
+  reserved "resolve_domain";
 }
 
 message GetMethodologyResponse {
@@ -421,6 +419,10 @@ message Domain {
   google.protobuf.Timestamp updated_at = 8;
   google.protobuf.Timestamp published_at = 9;
   string updated_by = 10;
+  // the version shipped with the platform (methodology, domain, organisation): published, read only
+  bool builtin = 14;
+  // a built-in domain that only changes with the code (methodology, organisation): no new version
+  bool frozen = 15;
 }
 
 message DomainSummary {
@@ -432,6 +434,10 @@ message DomainSummary {
   int32 link_type_count = 6;
   google.protobuf.Timestamp updated_at = 7;
   google.protobuf.Timestamp published_at = 8;
+  // the version shipped with the platform: published, read only
+  bool builtin = 9;
+  // only changes with the code: no new version
+  bool frozen = 10;
 }
 
 message ListDomainsRequest {
@@ -527,7 +533,7 @@ message DomainUser {
 }
 
 message GetDomainUsageResponse {
-  // methodology versions whose domain_ref resolves to the domain version
+  // methodology versions that act on the namespace of the domain or reference its types
   repeated DomainUser methodologies = 1;
 }
 
@@ -551,4 +557,37 @@ message RunAlgorithmResponse {
   google.protobuf.Struct set = 4;
   repeated string unset = 5;
   repeated string logs = 6;
+}
+
+message ListTypesRequest {}
+
+message ListTypesResponse {
+  repeated TypeInfo types = 1;
+  repeated LinkTypeInfo link_types = 2;
+  // namespace (domain) -> version in force
+  map<string, string> domains = 3;
+}
+
+// TypeInfo is the resolved model of a node type ("<namespace>@<name>").
+message TypeInfo {
+  string ref = 1;
+  string description = 2;
+  // declared properties, the inherited ones first
+  repeated string properties = 3;
+  // supertypes, nearest first
+  repeated string ancestors = 4;
+  // own or inherited; absent: the nodes have no state
+  Lifecycle lifecycle = 5;
+  bool change_controlled = 6;
+  // IDE editor of the nodes (ADR 0027); empty: the default node editor
+  string editor = 7;
+  // qualified types the nodes embed through "contains" links (own or inherited)
+  repeated string contains = 8;
+}
+
+// LinkTypeInfo is the resolved model of a link type; an empty end accepts any node type.
+message LinkTypeInfo {
+  string ref = 1;
+  string from = 2;
+  string to = 3;
 }

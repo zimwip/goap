@@ -33,14 +33,13 @@ func TestObserveNodeAndBaselineEvents(t *testing.T) {
 			}
 			return n
 		}
-		base := mk("D:x/nodetype/Item", NodeTypeNode, map[string]any{"name": "Item", "search": []any{
-			map[string]any{"property": "title", "text": true, "facet": true},
-			map[string]any{"property": "prio", "facet": true},
-		}})
-		sub := mk("D:x/nodetype/SubItem", NodeTypeNode, map[string]any{"name": "SubItem", "extends": "Item", "search": []any{
-			map[string]any{"property": "notes", "text": true},
-		}})
-		if _, err := g.CreateBaseline(ctx, "B1", []domain.NodeRef{base.Ref(), sub.Ref()}); err != nil {
+		g.Types = func() TypeCatalog {
+			return testTypes{
+				"Item":    {Search: []domain.SearchProperty{{Property: "title", Text: true, Facet: true}, {Property: "prio", Facet: true}}},
+				"SubItem": {Extends: "Item", Search: []domain.SearchProperty{{Property: "notes", Text: true}}},
+			}
+		}
+		if _, err := g.CreateBaseline(ctx, "B1", nil); err != nil {
 			t.Fatal(err)
 		}
 		sink := &recSink{}
@@ -60,13 +59,13 @@ func TestObserveNodeAndBaselineEvents(t *testing.T) {
 			t.Fatalf("facets = %v", ev.Facets)
 		}
 		sink.subj, sink.vals = nil, nil
-		if _, err := g.CreateBaseline(ctx, "B2", []domain.NodeRef{base.Ref(), n.Ref()}); err != nil {
+		if _, err := g.CreateBaseline(ctx, "B2", []domain.NodeRef{n.Ref()}); err != nil {
 			t.Fatal(err)
 		}
 		if len(sink.vals) != 1 || sink.subj[0] != "goap.baseline.main.advanced" {
 			t.Fatalf("baseline event: %v %v", sink.subj, sink.vals)
 		}
-		if be := sink.vals[0].(domain.BaselineEvent); be.Set[n.ID] != n.Version || len(be.Set) != 2 {
+		if be := sink.vals[0].(domain.BaselineEvent); be.Set[n.ID] != n.Version || len(be.Set) != 1 {
 			t.Fatalf("set = %v", be.Set)
 		}
 	})
