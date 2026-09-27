@@ -51,6 +51,8 @@
   let error = $state('');
 
   let subs = $state<Change[]>([]);
+  /** parent chain, the root first */
+  let ancestors = $state<Change[]>([]);
   let flows = $state<Flow[]>([]);
   let boardIssues = $state<BoardIssue[] | null>(null);
   let checking = $state(false);
@@ -89,6 +91,14 @@
       attached = (await graph.getChangeImpacts(id, signal)).nodes ?? [];
       posts = await loadPosts(c?.nodes ?? []);
       subs = (await graph.listSubChanges(id, signal)).changes ?? [];
+      const chain: Change[] = [];
+      for (let p = c?.parentId; p && chain.length < 16; ) {
+        const parent = (await graph.getChange(p, signal)).change;
+        if (!parent) break;
+        chain.unshift(parent);
+        p = parent.parentId;
+      }
+      ancestors = chain;
       flows = (await graph.listFlows(id, signal)).flows ?? [];
     } catch (e) {
       if (!signal?.aborted) error = errorMessage(e);
@@ -102,6 +112,7 @@
     change = undefined;
     attached = [];
     subs = [];
+    ancestors = [];
     flows = [];
     mergeError = '';
     extraNodes = [];
@@ -154,8 +165,9 @@
   const stuckEditable = $derived(lcRows.some((r) => r.lifecycle && r.editable && !r.removal));
   const panes = $derived<Pane[]>([
     { id: 'overview', label: 'Overview', badge: stuckEditable ? '!' : undefined },
-    { id: 'nodes', label: 'Nodes', badge: lcRows.length || undefined },
+    { id: 'impacts', label: 'Impacts', badge: change?.nodes?.length || undefined },
     { id: 'items', label: 'Items', badge: items.length || undefined },
+    { id: 'changes', label: 'Changes', badge: subs.length + ancestors.length || undefined },
   ]);
 
   /** Writes a node in this change through its change impact (the server checks the state). */
@@ -436,27 +448,6 @@
           </ul>
         {/if}
 
-        {#if ownBranch || subs.length}
-          <h3>Sub-changes <span class="count">{subs.length}</span></h3>
-          {#if subs.length}
-            <ul class="subs">
-              {#each subs as s (s.id)}
-                <li>
-                  <button type="button" class="link" onclick={() => openTab({ kind: 'change', params: { id: s.id ?? '' } })}>{s.title || shortId(s.id)}</button>
-                  {#if s.ownerOrg}<code>{s.ownerOrg}</code>{/if}
-                  <StatusBadge status={s.status} />
-                </li>
-              {/each}
-            </ul>
-          {/if}
-          {#if ownBranch && !closed}
-            <button type="button" onclick={split} disabled={splitting} title="One sub-change per unit owning the impacted nodes">
-              {splitting ? 'Splitting…' : 'Split by owner'}
-            </button>
-          {/if}
-          {#if openSubs.length}<p class="hint">Apply or abandon the {openSubs.length} open sub-change(s) before applying this change.</p>{/if}
-        {/if}
-
         <div class="apply row">
           <div class="grow">
             <label for="bname">Name of the new baseline</label>
@@ -472,14 +463,17 @@
           </div>
         {/if}
       </section>
-      {:else if active === 'nodes'}
-      <ChangeLifecycle rows={lcRows} candidates={lcCandidates} disabled={closed} busy={moving} onmove={move} onedit={edit} types={typeNames} {lifecycleOf} keys={takenKeys} oncreate={createNode} onremove={removeNode} onundo={undoDelete} onhistory={(r) => openTab({ kind: 'node', params: { id: r.node.id ?? '', key: r.node.key ?? '', pane: 'history' } }, { pin: true })} onopennode={(r) => openTab({ kind: 'node', params: { id: r.node.id ?? '', key: r.node.key ?? '', change: ch.id ?? '' } }, { pin: true })} onadd={(id) => (extraNodes = [...extraNodes, id])} />
-      {:else if active === 'items'}
+      {:else if active === 'impacts'}
       <section class="card">
         <h3>Change impacts <span class="count">{change?.nodes?.length ?? 0}</span></h3>
         <ChangeImpactList changeId={ch.id ?? ''} nodes={change?.nodes ?? []} {closed} onchange={() => load(selected)} onopennode={(n) => openTab({ kind: 'node', params: { id: n.post?.id ?? n.pre?.id ?? '', key: n.key ?? '', change: ch.id ?? '' } }, { pin: true })} />
       </section>
 
+      <section class="card">
+        <h3>Node edits <span class="count">{lcRows.length}</span></h3>
+      <ChangeLifecycle rows={lcRows} candidates={lcCandidates} disabled={closed} busy={moving} onmove={move} onedit={edit} types={typeNames} {lifecycleOf} keys={takenKeys} oncreate={createNode} onremove={removeNode} onundo={undoDelete} onhistory={(r) => openTab({ kind: 'node', params: { id: r.node.id ?? '', key: r.node.key ?? '', pane: 'history' } }, { pin: true })} onopennode={(r) => openTab({ kind: 'node', params: { id: r.node.id ?? '', key: r.node.key ?? '', change: ch.id ?? '' } }, { pin: true })} onadd={(id) => (extraNodes = [...extraNodes, id])} />
+      </section>
+      {:else if active === 'items'}
       <section class="card">
         <h3>Decisions <span class="count">{groups.decision.length}</span></h3>
         {#if groups.decision.length}
@@ -529,6 +523,46 @@
           <pre>{JSON.stringify(others, null, 2)}</pre>
         </section>
       {/if}
+      {:else if active === 'changes'}
+      <section class="card">
+        <h3>Parent changes <span class="count">{ancestors.length}</span></h3>
+        {#if ancestors.length}
+          <ul class="subs">
+            {#each ancestors as a, i (a.id)}
+              <li style="padding-left: {i * 1}rem">
+                <button type="button" class="link" onclick={() => openTab({ kind: 'change', params: { id: a.id ?? '' } })}>{a.title || shortId(a.id)}</button>
+                {#if a.ownerOrg}<code>{a.ownerOrg}</code>{/if}
+                <StatusBadge status={a.status} />
+              </li>
+            {/each}
+          </ul>
+        {:else}
+          <p class="empty">This change has no parent.</p>
+        {/if}
+      </section>
+
+      <section class="card">
+          <h3>Sub-changes <span class="count">{subs.length}</span></h3>
+          {#if subs.length}
+            <ul class="subs">
+              {#each subs as s (s.id)}
+                <li>
+                  <button type="button" class="link" onclick={() => openTab({ kind: 'change', params: { id: s.id ?? '' } })}>{s.title || shortId(s.id)}</button>
+                  {#if s.ownerOrg}<code>{s.ownerOrg}</code>{/if}
+                  <StatusBadge status={s.status} />
+                </li>
+              {/each}
+            </ul>
+          {:else}
+            <p class="empty">No sub-changes.</p>
+          {/if}
+          {#if ownBranch && !closed}
+            <button type="button" onclick={split} disabled={splitting} title="One sub-change per unit owning the impacted nodes">
+              {splitting ? 'Splitting…' : 'Split by owner'}
+            </button>
+          {/if}
+          {#if openSubs.length}<p class="hint">Apply or abandon the {openSubs.length} open sub-change(s) before applying this change.</p>{/if}
+      </section>
       {/if}
     {/snippet}
   </EditorPanes>
