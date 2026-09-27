@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 )
 
 // ServiceStatus is the health of one upstream service.
@@ -87,7 +87,7 @@ func statusHandler(routes []Route) echo.HandlerFunc {
 	hc := &http.Client{Timeout: 2 * time.Second}
 	var mu sync.Mutex
 	var cached PlatformStatus
-	return func(c echo.Context) error {
+	return func(c *echo.Context) error {
 		mu.Lock()
 		defer mu.Unlock()
 		if time.Since(cached.Time) > 3*time.Second {

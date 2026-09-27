@@ -15,7 +15,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 	"strings"
 
 	"github.com/zimwip/goap/gen/goap/engine/v1/enginev1connect"
@@ -210,7 +210,7 @@ func main() {
 	srv.Mount(indexv1connect.NewIndexServiceHandler(&indexersvc.Handler{Service: indexer, Identity: ident, Authz: authorizer}, telemetry.HandlerOptions()...))
 	srv.Mount(enginev1connect.NewEngineServiceHandler(&enginesvc.Handler{Engine: e, Log: log, DefaultPrincipal: &dev, Authz: authorizer, Broker: broker, Triggers: triggers}, telemetry.HandlerOptions()...))
 	// single process: the platform is up when this answers (the gateway serves it otherwise)
-	srv.Echo.GET("/api/status", func(c echo.Context) error {
+	srv.Echo.GET("/api/status", func(c *echo.Context) error {
 		return c.JSON(http.StatusOK, map[string]any{"status": "ok", "time": time.Now().UTC(),
 			"services": []map[string]any{{"name": "goap-dev", "status": "up", "latencyMs": 0}}})
 	})
