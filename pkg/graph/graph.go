@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"maps"
 	"slices"
-	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -33,10 +32,9 @@ type Graph struct {
 	newID func() string
 	// Authorizer, when set, is asked before every lifecycle transition.
 	Authorizer TransitionAuthorizer
-	// Types, when set, returns the type catalogue in force (ADR 0012 §2, pkg/typecat): the graph judges the nodes by
-	// it and refuses the ones whose type or link type it does not resolve. Unset: the NodeType nodes of the baseline.
+	// Types returns the type catalogue in force (ADR 0012 §2, pkg/typecat): the graph judges the nodes by it and
+	// refuses the ones whose type or link type it does not resolve. Unset: an untyped graph (tests, tools).
 	Types func() TypeCatalog
-	types sync.Map // baseline id → *typeIndex
 }
 
 // New returns a Graph backed by repo.

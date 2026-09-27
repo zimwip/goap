@@ -179,7 +179,7 @@ func scriptTemplate(a methodology.Action, s ActionStats) string {
 }
 
 // Edit is an accepted change of the methodology model: a node update,
-// creation or deletion on a metamodel key.
+// creation or deletion on the key of a definition node.
 type Edit struct {
 	Op    string // create_node | update_node | delete_node
 	Key   string

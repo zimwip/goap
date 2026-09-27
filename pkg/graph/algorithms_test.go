@@ -58,16 +58,15 @@ func newAlgoWorld(t *testing.T, repo Repo) algoWorld {
 		}
 		return n
 	}
-	tReq := mk("D:x/nodetype/Req", NodeTypeNode, map[string]any{"name": "Req", "lifecycle": asMap(t, reqLC), "validators": []any{asMap(t, regex)}}, "")
-	tSub := mk("D:x/nodetype/Sub", NodeTypeNode, map[string]any{"name": "Sub", "extends": "Req"}, "")
-	tDoc := mk("D:x/nodetype/Doc", NodeTypeNode, map[string]any{"name": "Doc", "document": asMap(t, domain.DocumentSpec{Contains: []string{"Req"}}), "lifecycle": asMap(t, docLC)}, "")
+	types := testTypes{"Req": {Lifecycle: &reqLC, Validators: []algo.Bound{regex}}, "Sub": {Extends: "Req"}, "Doc": {Lifecycle: &docLC}}
+	w.g.Types = func() TypeCatalog { return types }
 	w.req = mk("R1", "Req", map[string]any{"code": "REQ-1"}, "draft")
 	w.doc = mk("D1", "Doc", map[string]any{}, "draft")
 	if _, err := w.g.Link(ctx, domain.LinkContains, w.doc.Ref(), w.req.Ref(), nil); err != nil {
 		t.Fatal(err)
 	}
 	var err error
-	if w.base, err = w.g.CreateBaseline(ctx, "B", []domain.NodeRef{tReq.Ref(), tSub.Ref(), tDoc.Ref(), w.req.Ref(), w.doc.Ref()}); err != nil {
+	if w.base, err = w.g.CreateBaseline(ctx, "B", []domain.NodeRef{w.req.Ref(), w.doc.Ref()}); err != nil {
 		t.Fatal(err)
 	}
 	return w

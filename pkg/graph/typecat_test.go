@@ -3,14 +3,16 @@ package graph
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 
+	"github.com/zimwip/goap/pkg/algo"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/methodology"
 	"github.com/zimwip/goap/pkg/typecat"
 )
 
-// catalogGraph is a graph judged by a type catalogue (ADR 0012) instead of NodeType nodes.
+// catalogGraph is a graph judged by a type catalogue built from a domain (ADR 0012).
 func catalogGraph(t *testing.T) (*Graph, domain.Baseline) {
 	t.Helper()
 	d, err := methodology.ParseDomain([]byte(`
@@ -101,3 +103,71 @@ func TestCatalogJudgesTheNodes(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// testType is a node type of testTypes.
+type testType struct {
+	Extends    string
+	Lifecycle  *domain.Lifecycle
+	Validators []algo.Bound
+	Search     []domain.SearchProperty
+}
+
+// testTypes is a TypeCatalog for the tests that need types without a domain: names are taken as they are, a known
+// type passes the existence rule, links are not checked.
+type testTypes map[string]testType
+
+func (ts testTypes) chain(typ string) []testType { // the type, then its ancestors
+	var out []testType
+	for seen := map[string]bool{}; typ != "" && !seen[typ]; {
+		seen[typ] = true
+		t, ok := ts[typ]
+		if !ok {
+			break
+		}
+		out = append(out, t)
+		typ = t.Extends
+	}
+	return out
+}
+
+func (ts testTypes) Lifecycle(typ string) *domain.Lifecycle {
+	for _, t := range ts.chain(typ) {
+		if t.Lifecycle != nil {
+			return t.Lifecycle
+		}
+	}
+	return nil
+}
+
+func (ts testTypes) Validators(typ string) []algo.Bound {
+	var out []algo.Bound
+	for _, t := range slices.Backward(ts.chain(typ)) {
+		out = append(out, t.Validators...)
+	}
+	return out
+}
+
+func (ts testTypes) Search(typ string) []domain.SearchProperty {
+	var out []domain.SearchProperty
+	at := map[string]int{}
+	for _, t := range slices.Backward(ts.chain(typ)) {
+		for _, s := range t.Search {
+			if i, ok := at[s.Property]; ok {
+				out[i] = s
+				continue
+			}
+			at[s.Property] = len(out)
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+func (ts testTypes) CheckNode(_, typ string) error {
+	if _, ok := ts[typ]; !ok {
+		return errors.New("unknown type " + typ)
+	}
+	return nil
+}
+
+func (ts testTypes) CheckLink(string, string, string) error { return nil }

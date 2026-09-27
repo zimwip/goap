@@ -52,12 +52,10 @@ var DefaultPolicies = []Policy{
 	{Rule: `!isAnonymous(r.sub) && (r.obj.Org == "" || r.obj.Org == r.sub.Org)`, Resource: "*", Action: "read", Effect: "allow"},
 	{Rule: `hasAnyRole(r.sub, "contributor", "methodologist", "approver") && r.obj.Org == r.sub.Org`, Resource: "process", Action: "*", Effect: "allow"},
 	{Rule: `hasRole(r.sub, "methodologist") && r.obj.Org == r.sub.Org`, Resource: "methodology", Action: "*", Effect: "allow"},
-	// shared domains (node and link types), edited independently of methodologies
+	// domains (node and link types, lifecycles, algorithms), edited independently of methodologies
 	{Rule: `hasRole(r.sub, "methodologist") && r.obj.Org == r.sub.Org`, Resource: "domain", Action: "*", Effect: "allow"},
 	// data objects created on the graph (typed by a node type): same roles as processes
 	{Rule: `hasAnyRole(r.sub, "contributor", "methodologist", "approver") && r.obj.Org == r.sub.Org`, Resource: "object", Action: "create", Effect: "allow"},
-	// the metadata layer of the graph (NodeType nodes and extends edges, ADR 0012)
-	{Rule: `hasRole(r.sub, "methodologist") && r.obj.Org == r.sub.Org`, Resource: "nodetype", Action: "*", Effect: "allow"},
 	{Rule: `hasRole(r.sub, "methodologist") && r.obj.Org == r.sub.Org`, Resource: "trigger", Action: "fire", Effect: "allow"},
 	// lifecycle transitions of nodes (ADR 0014); a transition may require another permission
 	{Rule: `hasAnyRole(r.sub, "contributor", "methodologist", "approver") && r.obj.Org == r.sub.Org`, Resource: "node", Action: "transition", Effect: "allow"},

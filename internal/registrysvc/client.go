@@ -48,7 +48,7 @@ func (c *Client) List(ctx context.Context) ([]*methodology.Compiled, error) {
 	return out, nil
 }
 
-// Domains implements metamodel.PublishedDomains: the latest published version of every domain.
+// Domains returns the latest published version of every domain (the source of a typecat.Live catalogue).
 func (c *Client) Domains(ctx context.Context) ([]*methodology.Domain, error) {
 	r, err := c.rpc.ListDomains(ctx, connect.NewRequest(&registryv1.ListDomainsRequest{}))
 	if err != nil {

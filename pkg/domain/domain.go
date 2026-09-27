@@ -41,7 +41,8 @@ func OrgOf(org string) string {
 	return org
 }
 
-// DefaultNamespace is the namespace of nodes and changes that name none.
+// DefaultNamespace is the namespace of nodes and changes that name none. With a type catalogue (ADR 0012) no node
+// lives there: a node lives in the namespace of its type, and a change names the namespace it acts on.
 const DefaultNamespace = "sdlc"
 
 // NamespacePlatform is the namespace of the meta model bound to the objects the

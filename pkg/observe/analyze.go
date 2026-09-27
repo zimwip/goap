@@ -103,7 +103,7 @@ type Finding struct {
 	Methodology string `json:"methodology"`
 	Agent       string `json:"agent,omitempty"`
 	Action      string `json:"action,omitempty"`
-	// Element is the metamodel key of the element the finding is about.
+	// Element is the key of the definition node of the element the finding is about.
 	Element  string   `json:"element"`
 	Count    int      `json:"count,omitempty"`
 	Tokens   int64    `json:"tokens,omitempty"`
