@@ -3,8 +3,7 @@ version: 2.0.0
 description: >
   The platform configuration, in its own namespace ("platform"): the MCPs (the generic usage of a tool by an LLM), the
   adapter definitions (AdapterDef: code mapping an MCP onto a connector; an organisation implements an MCP with an Adapter
-  of the organisation domain, an instance of an AdapterDef) and the model gateway configuration (ADR 0021). The
-  definitions of methodologies and domains are typed by the built-in meta-domains "methodology" and "domain" (ADR 0023).
+  of the organisation domain, an instance of an AdapterDef) and the model gateway configuration (ADR 0021).
 nodeTypes:
   # `editor` names the editor of the user interface for the nodes of a type (the default node editor when empty or unknown).
   # the MCPs (MCP:<name>) and the adapter definitions (ADD:<name>, ADR 0019)

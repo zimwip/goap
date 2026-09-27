@@ -126,8 +126,7 @@ func (s *Service) DomainVersions(ctx context.Context, all bool) ([]DomainRecord,
 	if err != nil {
 		return nil, err
 	}
-	// a stored version of a built-in name (a store from before it was built in) is shadowed by the built-in one
-	rs = append(builtinDomains(), slices.DeleteFunc(rs, func(r DomainRecord) bool { return typecat.IsBuiltin(r.Domain.Name) })...)
+	rs = append(builtinDomains(), rs...)
 	if all {
 		return rs, nil
 	}
