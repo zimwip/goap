@@ -248,7 +248,7 @@
               {#each d.nodeTypeNames as t (t)}
                 {@const info = cat.type(t)}
                 <li>
-                  <code>{typeName(t)}</code>{#if info?.ancestors?.length}<span class="hint"> extends {info.ancestors.map(typeName).join(' › ')}</span>{/if}{#if info?.properties?.length}<span class="hint"> · {info.properties.join(', ')}</span>{/if}
+                  <code>{typeName(t)}</code>{#if info?.ancestors?.length}<span class="hint">{` extends ${info.ancestors.map(typeName).join(' › ')}`}</span>{/if}{#if info?.properties?.length}<span class="hint">{` · ${info.properties.join(', ')}`}</span>{/if}
                 </li>
               {:else}
                 <li class="empty">{typeCatalog.loaded ? 'No node types in this namespace.' : 'Loading…'}</li>
@@ -257,7 +257,7 @@
             <h4 class="sub">Link types</h4>
             <ul class="plain-list">
               {#each cat.links.filter((l) => d.linkTypeNames.includes(l.ref ?? '')) as l (l.ref)}
-                <li><code>{typeName(l.ref)}</code>{#if l.from || l.to}<span class="hint"> {l.from || 'any'} → {l.to || 'any'}</span>{/if}</li>
+                <li><code>{typeName(l.ref)}</code>{#if l.from || l.to}<span class="hint">{` ${l.from || 'any'} → ${l.to || 'any'}`}</span>{/if}</li>
               {:else}
                 <li class="empty">None.</li>
               {/each}
