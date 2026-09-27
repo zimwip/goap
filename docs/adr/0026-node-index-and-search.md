@@ -32,21 +32,21 @@ A node type declares its searchable properties, like its validators (ADR 0018):
 - Built-in facets, always present: `namespace`, `type`, `state`, `branch`, `main`.
 
 ### 2. The graph publishes what it writes
-A repo decorator (`graph.NewEventRepo`) observes each transaction: `PutNode` and `PutBaseline` are collected, and
+`Graph.Observe` wraps the repo in a decorator that observes each transaction: `PutNode` and `PutBaseline` are collected, and
 **only after the commit** published. It sees every write path (change impacts, merges, flows, direct writes, seeds)
 with no call-site change.
 
 | Subject | Payload |
 |---|---|
-| `goap.node.<ns>.<type>.<id>.written` (`<type>`: the type name without its namespace prefix) | `NodeEvent`: id, version, branch, namespace, key, type, state, deleted, `text` (resolved searchable text), `facets` (resolved facet values), `changeId`, time |
+| `goap.node.<ns>.<type>.<id>.written` (`<type>`: the qualified type, `alm@Requirement`; `.`, `*`, `>` and spaces escaped) | `NodeEvent`: id, version, branch, namespace, key, type, state, deleted, `text` (resolved searchable text), `facets` (resolved facet values), `changeId`, time |
 | `goap.baseline.<branch>.advanced` | `BaselineEvent`: id, branch, parent, and the **diff** with the parent baseline: `set: {nodeId: version}`, `removed: [nodeId]` |
 
 ### 3. Index everything, filter main by a facet
 Every node **version on every branch** is indexed (key `(node_id, version)`). Whether a version is the head of `main` is
 not a property of the version (a fast-forward merge keeps the version on its change branch), so the indexer maintains
 a `main` flag from the `baseline.main.advanced` diffs: `set` marks `(id, version)` main and clears the previous
-version of that node; `removed` clears it. Searching main only = facet filter `main = true`. Search results
-default to `main = true`; the caller asks for `branch` or `all` explicitly.
+version of that node; `removed` clears it. Searching main only = filter `main = true`. The RPC searches every version unless `main` is set;
+the IDE search defaults to the heads of main.
 
 ### 4. Embedding model = platform setup
 - The embedding model is a catalog model like any other (`LlmModel`, quota and roles apply) that the alias `embed`
@@ -64,7 +64,8 @@ default to `main = true`; the caller asks for `branch` or `all` explicitly.
 
 - Table `node_index`: identity, `namespace`, `type`, `key`, `state`, `branch`, `main`, `facets jsonb`, `doc text`,
   `tsv`, `embedding`.
-- RPC `Search(query, filters, facets, limit, mode)` → hits + facet counts; `Reindex()` rebuilds from the graph
+- RPC `Search(text, namespaces, types, states, branches, main, facet filters, facets, limit, offset)` → hits + facet
+  counts; `Reindex()` rebuilds from the graph
   (bootstrap, model change, lost events); `Status()`.
 - **Hybrid** retrieval: vector top-k and full-text top-k merged by reciprocal rank fusion.
 - **Authorization (ABAC)**: hits are post-filtered by `pkg/access` on the caller (the index stores no policy). The
@@ -81,8 +82,8 @@ The exact scan is fine at development scale (tens of thousands of nodes). Schema
 (`migrations/`, `migrations_sqlite/`). Deployment images move to `pgvector/pgvector` (`CREATE EXTENSION vector` in
 `deploy/postgres/init.sql`).
 
-`goap-dev` runs the indexer in process on the in-memory bus (`engine.Broker`) and runs `Reindex` at start, so no
-event is missed across restarts.
+`goap-dev` runs the indexer in process, fed by an in-process sink (`indexersvc.NewSink`, through `Graph.Observe`),
+and publishes the graph again at start (`Republish`), so no event is missed across restarts.
 
 ### 7. Limits
 - Events are published after the commit, best effort: a crash between commit and publish loses them; `Reindex`
@@ -95,5 +96,5 @@ event is missed across restarts.
 - The `main` flag depends on baseline diffs; `Reindex` recomputes it from the head of `main`.
 - Embedding cost is per node version on every branch; batching and a text hash (skip the call when the document is
   unchanged) bound it.
-- Coupling respects the design rules: the indexer knows graph events and the model gateway, no methodology,
-  connector or organisation.
+- Coupling respects the design rules: the indexer knows graph events, the model gateway and the graph (to
+  republish it and for access control), no methodology or connector.

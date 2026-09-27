@@ -245,8 +245,8 @@ func (s *GraphStore) read(ctx context.Context) (*defs, error) {
 	return d, nil
 }
 
-// commit applies the items build makes from the current versions as one change on main, once more on the new head when
-// main moved meanwhile.
+// commit applies the items build makes from the current versions as one change on main; when main moved meanwhile, it
+// reads the new head and builds them again (up to three retries).
 func (s *GraphStore) commit(ctx context.Context, ns, title string, build func(*defs) ([]graph.NodeEdit, error)) error {
 	for attempt := 0; ; attempt++ {
 		d, err := s.read(ctx)

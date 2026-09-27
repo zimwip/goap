@@ -24,7 +24,7 @@ could run when a transition was taken. Making the domain customizable meant chan
 
    | `adapter` | `AdapterCtx` (`tool()`, `args()`, `param()`, `call(operation, args)`) | `Run(ctx *dsl.AdapterCtx) error` | implements the tools of an MCP with the operations of a connector (ADR 0019) |
 
-   The first three algorithm contexts are **pure**: no LLM, tool or sub-agent call, no blackboard. They
+   The pluggable contexts (`ValidatorCtx`, `GuardCtx`, `TransitionCtx`) are **pure**: no LLM, tool or sub-agent call, no blackboard. They
    reject with `ctx.fail(message)`, by throwing / returning an error, or (JavaScript) by returning
    `false` or a string. A JavaScript algorithm is the *body* of `function (ctx)`, so it may `return`.
 2. **Action code stays in the agent declaration.** The `action` usage has no algorithms: an action
@@ -44,8 +44,8 @@ could run when a transition was taken. Making the domain customizable meant chan
    CEL guard and `requires`, actions only once every transition of the change is accepted.
 5. **Evaluation** follows ADR 0014: the type catalogue (ADR 0012 §2) resolves the plugged instances
    (`validators`, and `guardAlgos` / `actionAlgos` of the lifecycle transitions: instance name, algorithm, language,
-   code, parameter values), and publishing a domain version applies to the changes checked afterwards. Property validators run when items are added (early feedback: create, and update on
-   base + patch) and when the change is applied on the target graph (created and updated nodes; also
+   code, parameter values), and publishing a domain version applies to the changes checked afterwards. Property validators run when a version is written on the change branch (early feedback: a
+   created node, or the edit of an existing one) and when the change is applied on the target graph (created and updated nodes; also
    again after a transition action). Transition guards and actions run when the change is applied.
    A transition action's changes are written into the version the transition produced
    (`Tx.SetNodeProps`); when a node moves several times in one change, only its last transition is
