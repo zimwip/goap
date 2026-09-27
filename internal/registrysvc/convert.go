@@ -180,7 +180,7 @@ func DomainFromPB(p *registryv1.Domain) methodology.Domain {
 
 func nodeTypeToPB(n methodology.NodeType) *registryv1.NodeType {
 	out := &registryv1.NodeType{Name: n.Name, Description: n.Description, Properties: n.Properties, Extends: n.Extends,
-		Lifecycle: n.Lifecycle, ChangeControlled: n.ChangeControlled, Validators: validatorsToPB(n.Validators), Search: searchToPB(n.Search)}
+		Lifecycle: n.Lifecycle, ChangeControlled: n.ChangeControlled, Validators: validatorsToPB(n.Validators), Search: searchToPB(n.Search), Editor: n.Editor}
 	if d := n.Document; d != nil {
 		out.Document = &registryv1.DocumentSpec{Contains: d.Contains}
 	}
@@ -189,7 +189,7 @@ func nodeTypeToPB(n methodology.NodeType) *registryv1.NodeType {
 
 func nodeTypeFromPB(n *registryv1.NodeType) methodology.NodeType {
 	out := methodology.NodeType{Name: n.Name, Description: n.Description, Properties: nilIfNone(n.Properties), Extends: n.Extends,
-		Lifecycle: n.Lifecycle, ChangeControlled: n.ChangeControlled, Validators: validatorsFromPB(n.Validators), Search: searchFromPB(n.Search)}
+		Lifecycle: n.Lifecycle, ChangeControlled: n.ChangeControlled, Validators: validatorsFromPB(n.Validators), Search: searchFromPB(n.Search), Editor: n.Editor}
 	if d := n.Document; d != nil {
 		out.Document = &domain.DocumentSpec{Contains: nilIfNone(d.Contains)}
 	}

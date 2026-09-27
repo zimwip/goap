@@ -1,6 +1,7 @@
 // View registry: each IDE zone displays the views registered for it
-// (activity bar tools, console tabs, editors).
-import type { EditorView, PanelView, View, Zone } from './types';
+// (activity bar tools, console tabs, editors), and the node editors that node
+// types name.
+import type { EditorView, NodeEditor, PanelView, View, Zone } from './types';
 
 const views = new Map<string, View>();
 
@@ -26,4 +27,20 @@ export function editorView(kind: string): EditorView | undefined {
 
 export function zoneOf(id: string): Zone | undefined {
   return views.get(id)?.zone;
+}
+
+const nodeEditors = new Map<string, NodeEditor>();
+
+/** Registers the editor that node types name in their `editor` property. */
+export function registerNodeEditor(e: NodeEditor): void {
+  nodeEditors.set(e.name, e);
+}
+
+export function nodeEditor(name: string): NodeEditor | undefined {
+  return name ? nodeEditors.get(name) : undefined;
+}
+
+/** Names of the registered node editors (what a node type can name). */
+export function nodeEditorNames(): string[] {
+  return [...nodeEditors.keys()].sort();
 }

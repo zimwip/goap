@@ -247,3 +247,64 @@ nodeTypes:
 		t.Fatalf("lifecycle must be removed: %+v", n.Properties)
 	}
 }
+
+func TestSyncFollowsTheEditorOfNodeTypes(t *testing.T) {
+	ctx := context.Background()
+	g := graph.New(graph.NewMemory())
+	d, err := methodology.ParseDomain([]byte(`
+name: docs
+version: 1.0.0
+nodeTypes:
+  - {name: Req, editor: requirement}
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := SyncDomain(ctx, g, d); err != nil {
+		t.Fatal(err)
+	}
+	if n, _ := g.NodeByKey(ctx, domain.NamespacePlatform, DomainKey("docs", "Req")); n.Properties["editor"] != "requirement" {
+		t.Fatalf("the editor must be projected: %+v", n.Properties)
+	}
+	// the editor follows the published domain, like the lifecycle
+	d.NodeTypes[0].Editor = ""
+	if r, err := SyncDomain(ctx, g, d); err != nil || r.Updated != 1 {
+		t.Fatalf("sync: %+v %v", r, err)
+	}
+	if n, _ := g.NodeByKey(ctx, domain.NamespacePlatform, DomainKey("docs", "Req")); n.Properties["editor"] != nil {
+		t.Fatalf("the editor must be removed: %+v", n.Properties)
+	}
+}
+
+// registry of published methodologies and domains.
+type published struct {
+	ms []*methodology.Compiled
+	ds []*methodology.Domain
+}
+
+func (p published) List(context.Context) ([]*methodology.Compiled, error)  { return p.ms, nil }
+func (p published) Domains(context.Context) ([]*methodology.Domain, error) { return p.ds, nil }
+
+func TestSyncAllProjectsTheDomainsNoMethodologyReferences(t *testing.T) {
+	ctx := context.Background()
+	g := graph.New(graph.NewMemory())
+	org, err := methodology.ParseDomain([]byte(`
+name: org
+version: 1.0.0
+nodeTypes:
+  - {name: Unit, editor: unit}
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	rs, err := SyncAll(ctx, g, published{ds: []*methodology.Domain{org}})
+	if err != nil || len(rs) != 1 || !rs[0].Changed() {
+		t.Fatalf("sync: %+v %v", rs, err)
+	}
+	if n, err := g.NodeByKey(ctx, domain.NamespacePlatform, DomainKey("org", "Unit")); err != nil || n.Properties["editor"] != "unit" {
+		t.Fatalf("the node types of an unreferenced domain must be on the graph: %+v %v", n, err)
+	}
+	if rs, _ := SyncAll(ctx, g, published{ds: []*methodology.Domain{org}}); rs[0].Changed() {
+		t.Fatalf("second sync must be a no-op: %+v", rs)
+	}
+}

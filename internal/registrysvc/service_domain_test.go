@@ -333,3 +333,28 @@ func TestRunAlgorithm(t *testing.T) {
 		t.Fatalf("contributor: %v", err)
 	}
 }
+
+func TestDomainNodeTypeEditors(t *testing.T) {
+	src, err := os.ReadFile(filepath.Join("..", "..", "domains", "platform.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	d, err := methodology.ParseDomain(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if issues := d.Validate(); len(issues) > 0 {
+		t.Fatal(issues)
+	}
+	// wire round trip
+	back := DomainFromPB(DomainToPB(DomainRecord{Domain: *d}))
+	editors := map[string]string{}
+	for _, n := range back.NodeTypes {
+		editors[n.Name] = n.Editor
+	}
+	for typ, want := range map[string]string{"DefAgent": "agent", "DefAction": "action", "MethodologyVersion": "methodology", "Methodology": "methodology", "LlmProvider": ""} {
+		if editors[typ] != want {
+			t.Fatalf("editor of %s: %q, want %q", typ, editors[typ], want)
+		}
+	}
+}

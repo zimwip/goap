@@ -170,6 +170,17 @@ export interface NodeType {
   changeControlled?: boolean;
   /** property validator instances (ADR 0018), in call order */
   validators?: PropertyValidator[];
+  /** properties the node index keeps (ADR 0026) */
+  search?: SearchProperty[];
+  /** editor the UI opens the nodes with (inherited through extends; absent: the default node editor) */
+  editor?: string;
+}
+
+/** How the node index uses a property: text (full text and embedding), facet (filter and count). */
+export interface SearchProperty {
+  property?: string;
+  text?: boolean;
+  facet?: boolean;
 }
 
 /** Plugs an algorithm instance of type property_validator on a property. */

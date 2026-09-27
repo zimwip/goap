@@ -1,21 +1,22 @@
 name: organisation
-version: 1.2.0
+version: 1.3.0
 description: >
   Organisation structure, managed in its own namespace ("organisation"): a hierarchy of organisational units. Nodes of other namespaces reference a unit as their owner through the cross-namespace `owner` link; changes are split into sub-changes along unit boundaries.
 nodeTypes:
-  - {name: OrgUnit, description: "Organisational unit (company, direction, department, team)", properties: [name, kind, description]}
+  # `editor` names the editor of the user interface for the nodes of a type (the adapters of a unit are edited on its page).
+  - {name: OrgUnit, editor: unit, description: "Organisational unit (company, direction, department, team)", properties: [name, kind, description]}
   # an organisational unit's instance of an adapter definition (an AdapterDef node of the platform namespace):
   # the one place where unit, MCP and connector meet. mcp = the MCP implemented, adapter = the name of the
   # AdapterDef, params = its parameter values (secrets as references: env:<VAR> or <vault path>#<field>).
   # Linked to its unit by `owner`; a unit inherits the adapters of its ancestors (nearest wins).
-  - {name: Adapter, description: "Instance, by an organisational unit, of an adapter definition", properties: [mcp, adapter, params, description]}
+  - {name: Adapter, editor: unit, description: "Instance, by an organisational unit, of an adapter definition", properties: [mcp, adapter, params, description]}
   # who may do what is graph data too. A User is a person or service account: the roles of its node are
   # added to those of its token, and the unit it is `member_of` is its organisation when the token names none.
-  - {name: User, description: "Person or service account, with its profile and roles", properties: [subject, displayName, email, locale, roles]}
+  - {name: User, editor: access, description: "Person or service account, with its profile and roles", properties: [subject, displayName, email, locale, roles]}
   # one ABAC rule (Casbin): effect allow|deny for a resource type and action, when the rule expression over
   # r.sub / r.obj / r.act holds. Changes to Policy and User nodes need the "policy:write" permission, checked
   # against the compiled-in floor (administrators) only, so that no policy can lock them out.
-  - {name: Policy, description: "ABAC rule", properties: [rule, resource, action, effect]}
+  - {name: Policy, editor: access, description: "ABAC rule", properties: [rule, resource, action, effect]}
 linkTypes:
   # child -> parent: outgoing links belong to the source version, so reorganising a unit only versions that unit
   - {name: part_of, from: OrgUnit, to: OrgUnit}
