@@ -333,7 +333,7 @@ func TestRunAlgorithm(t *testing.T) {
 }
 
 func TestDomainNodeTypeEditors(t *testing.T) {
-	src, err := os.ReadFile(filepath.Join("..", "..", "pkg", "methodology", "builtin", "platform.yaml"))
+	src, err := os.ReadFile(filepath.Join("..", "..", "domains", "builtin", "platform.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}

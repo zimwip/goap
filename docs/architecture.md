@@ -829,7 +829,7 @@ pkg/index/                   node index: hybrid search, facets, stores (memory, 
 proto/                       connect-rpc contracts (buf)
 gen/                         generated code (committed)
 methodologies/               example methodologies (active part)
-domains/                     domains seeded at startup (alm; one per namespace, the built-in ones are in pkg/methodology/builtin)
+domains/                     domains: seeded at startup (alm), builtin/ embedded and frozen except domain (one per namespace)
 deploy/                      compose, postgres init, otel collector, prometheus, grafana, k8s (sandboxes)
 web/                         Svelte frontend
 docs/                        architecture, ADRs
