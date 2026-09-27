@@ -617,20 +617,6 @@
   .muted {
     color: var(--muted);
   }
-  .list {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-  }
-  .list li {
-    padding: 0.6rem 0;
-    border-bottom: 1px solid var(--border);
-    display: grid;
-    gap: 0.4rem;
-  }
-  .list li:last-child {
-    border-bottom: none;
-  }
   .flows > li {
     display: flex;
     flex-wrap: wrap;
@@ -660,7 +646,6 @@
   .superseded {
     opacity: 0.55;
   }
-  .superseded strong,
   .superseded td,
   .superseded h4 {
     text-decoration: line-through;
