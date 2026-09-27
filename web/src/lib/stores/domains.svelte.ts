@@ -1,4 +1,4 @@
-// Shared domains: the catalog (all versions) and in-memory drafts, one per
+// Domains (one per namespace): the catalog (all versions) and in-memory drafts, one per
 // domain@version. Editing a domain involves no change, impact or proposal:
 // it is saved and published straight to the registry.
 import { SvelteMap } from 'svelte/reactivity';
@@ -49,13 +49,6 @@ export function groupedDomains(): DomainGroup[] {
     out.push({ name, description: ref?.description ?? '', versions, frozen: versions.some((v) => v.frozen) });
   }
   return out.sort((a, b) => a.name.localeCompare(b.name));
-}
-
-/** Published versions of every domain, for pickers (most recent first). */
-export function publishedDomainVersions(name: string): DomainSummary[] {
-  return domains.items
-    .filter((d) => d.name === name && d.status === 'published')
-    .sort((a, b) => compareVersions(b.version, a.version));
 }
 
 export function domainKey(name: string, version: string): string {

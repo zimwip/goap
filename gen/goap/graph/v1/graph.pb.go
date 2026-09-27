@@ -4624,7 +4624,7 @@ type NodeEdit struct {
 	Pre *NodeRef `protobuf:"bytes,3,opt,name=pre,proto3" json:"pre,omitempty"`
 	// merged over the current properties (null clears one)
 	Props *structpb.Struct `protobuf:"bytes,4,opt,name=props,proto3" json:"props,omitempty"`
-	// end a node a projection no longer owns
+	// delete the node (the new version is a tombstone)
 	Retire        bool        `protobuf:"varint,5,opt,name=retire,proto3" json:"retire,omitempty"`
 	Rationale     string      `protobuf:"bytes,6,opt,name=rationale,proto3" json:"rationale,omitempty"`
 	Links         []*LinkEdit `protobuf:"bytes,7,rep,name=links,proto3" json:"links,omitempty"`
@@ -5037,7 +5037,7 @@ type WriteChangeImpactRequest struct {
 	State       string           `protobuf:"bytes,4,opt,name=state,proto3" json:"state,omitempty"`
 	AddLinks    []*NodeLinkWrite `protobuf:"bytes,5,rep,name=add_links,json=addLinks,proto3" json:"add_links,omitempty"`
 	RemoveLinks []string         `protobuf:"bytes,6,rep,name=remove_links,json=removeLinks,proto3" json:"remove_links,omitempty"`
-	// end a node a projection no longer owns
+	// delete the node (the new version is a tombstone)
 	Retire bool `protobuf:"varint,7,opt,name=retire,proto3" json:"retire,omitempty"`
 	// flow branch to write on (empty: the main flow) and the action run that writes (ADR 0025)
 	Flow          string `protobuf:"bytes,8,opt,name=flow,proto3" json:"flow,omitempty"`

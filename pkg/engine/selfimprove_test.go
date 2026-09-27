@@ -68,7 +68,7 @@ func TestSelfObservationProposesAndDrafts(t *testing.T) {
 	if p, err = e.Run(ctx, p.ID); err != nil || p.Status != StatusCompleted {
 		t.Fatalf("observed run: %v %+v", err, p)
 	}
-	// the observer methodology, and the observed one projected onto the graph
+	// the observer methodology, and the definition nodes of the observed one in the graph
 	obsM, err := methodology.LoadFile("../../methodologies/methodology-improvement.yaml")
 	if err != nil {
 		t.Fatal(err)

@@ -1,4 +1,4 @@
-// Editing model of a shared domain (node types and link types). It reuses the
+// Editing model of a domain (node types and link types). It reuses the
 // row models of the methodology form.
 import type { Domain } from './api';
 import { algorithmFromForm, algorithmToForm, instanceFromForm, instanceToForm, type AlgorithmForm, type InstanceForm } from './algorithmForm';
@@ -53,8 +53,3 @@ export function fromDomainForm(f: DomainForm): Domain {
   return d;
 }
 
-/** Splits a domain reference "<name>[@<version>]". */
-export function splitRef(ref: string): { name: string; version: string } {
-  const [name, version = ''] = ref.trim().split('@');
-  return { name, version };
-}

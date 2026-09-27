@@ -136,24 +136,3 @@ func (s *Set) Evaluate(bb domain.Blackboard) Result {
 	}
 	return res
 }
-
-// Eval evaluates a single ad-hoc expression against the blackboard.
-func Eval(expr string, bb domain.Blackboard) (any, error) {
-	env, err := NewEnv()
-	if err != nil {
-		return nil, err
-	}
-	ast, iss := env.Compile(expr)
-	if iss != nil && iss.Err() != nil {
-		return nil, iss.Err()
-	}
-	p, err := env.Program(ast, cel.CostLimit(1_000_000))
-	if err != nil {
-		return nil, err
-	}
-	out, _, err := p.Eval(Activation(bb))
-	if err != nil {
-		return nil, err
-	}
-	return out.Value(), nil
-}

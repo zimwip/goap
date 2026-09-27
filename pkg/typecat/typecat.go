@@ -69,9 +69,6 @@ var ErrInvalid = errors.New("invalid")
 // Builtins returns the built-in domains (methodology, domain, organisation).
 func Builtins() []*methodology.Domain { return methodology.BuiltinDomains() }
 
-// IsBuiltin reports the namespace of a built-in domain.
-func IsBuiltin(ns string) bool { return methodology.IsBuiltinDomain(ns) }
-
 // IsFrozen reports a built-in domain that only changes with the code (methodology, organisation).
 func IsFrozen(ns string) bool { return methodology.IsFrozenDomain(ns) }
 

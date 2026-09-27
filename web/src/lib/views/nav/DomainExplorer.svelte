@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Explorer of shared domains: domain → version → node types / link types.
+  // Explorer of domains (one per namespace): domain → version → node types / link types.
   import Icon from '../../shell/Icon.svelte';
   import TreeRow from '../TreeRow.svelte';
   import StatusBadge from '../../components/StatusBadge.svelte';

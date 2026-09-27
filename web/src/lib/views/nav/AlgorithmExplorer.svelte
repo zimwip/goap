@@ -113,7 +113,7 @@
 
   {#if domains.error}<div class="alert small">{domains.error}</div>{/if}
   {#if domains.loaded && !versions.length && !domains.error}
-    <p class="empty pad">No domains. Algorithms belong to a shared domain: create one in the Domains section.</p>
+    <p class="empty pad">No domains. Algorithms belong to a domain: create one in the Domains section.</p>
   {/if}
 
   {#if draft}
