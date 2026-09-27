@@ -383,13 +383,8 @@ export interface Methodology {
   version?: string;
   description?: string;
   status?: MethodologyStatus | string;
-  /** shared domain "<name>[@<version>]" used instead of embedded node / link types */
-  domainRef?: string;
-  /** graph namespace the changes of the methodology act on (default sdlc) */
+  /** namespace (domain) the changes of the methodology act on; its types are "<namespace>@<NodeType>" */
   namespace?: string;
-  nodeTypes?: NodeType[];
-  linkTypes?: LinkType[];
-  lifecycles?: Lifecycle[];
   conditions?: Condition[];
   actions?: Action[];
   goals?: Goal[];

@@ -175,12 +175,8 @@ export interface MethodologyForm {
   name: string;
   version: string;
   description: string;
-  /** shared domain "<name>[@<version>]"; empty: embedded node / link types */
-  domainRef: string;
-  nodeTypes: NodeTypeForm[];
-  linkTypes: LinkTypeForm[];
-  /** lifecycles of an embedded domain (edited in a shared domain; kept as they are) */
-  lifecycles: LifecycleForm[];
+  /** namespace (domain) the changes act on: the node types it uses are "<namespace>@<NodeType>" */
+  namespace: string;
   conditions: ConditionForm[];
   actions: ActionForm[];
   goals: GoalForm[];
@@ -276,10 +272,7 @@ export function emptyForm(): MethodologyForm {
     name: '',
     version: '0.1.0',
     description: '',
-    domainRef: '',
-    nodeTypes: [],
-    linkTypes: [],
-    lifecycles: [],
+    namespace: '',
     conditions: [],
     actions: [],
     goals: [],
@@ -531,10 +524,7 @@ export function toForm(m: Methodology): MethodologyForm {
     name: m.name ?? '',
     version: m.version ?? '',
     description: m.description ?? '',
-    domainRef: m.domainRef ?? '',
-    nodeTypes: (m.nodeTypes ?? []).map(nodeTypeToForm),
-    linkTypes: (m.linkTypes ?? []).map(linkTypeToForm),
-    lifecycles: (m.lifecycles ?? []).map(lifecycleToForm),
+    namespace: m.namespace ?? '',
     conditions: (m.conditions ?? []).map((c, i) => ({
       uid: cu[i],
       name: c.name ?? '',
@@ -582,10 +572,7 @@ export function fromForm(f: MethodologyForm): { methodology: Methodology; issues
   put(m, 'version', f.version.trim());
   put(m, 'description', f.description.trim());
 
-  put(m, 'domainRef', f.domainRef.trim());
-  put(m, 'nodeTypes', f.nodeTypes.map(nodeTypeFromForm));
-  put(m, 'linkTypes', f.linkTypes.map(linkTypeFromForm));
-  put(m, 'lifecycles', f.lifecycles.map(lifecycleFromForm));
+  put(m, 'namespace', f.namespace.trim());
   put(
     m,
     'conditions',
@@ -709,18 +696,6 @@ export function fromForm(f: MethodologyForm): { methodology: Methodology; issues
     }),
   );
   return { methodology: m, issues };
-}
-
-/** Properties of a node type: inherited ones first (nearest ancestor last), then its own. */
-export function typeProperties(f: { nodeTypes: NodeTypeForm[] }, name: string): string[] {
-  const chain: NodeTypeForm[] = [];
-  for (let t = f.nodeTypes.find((n) => n.name.trim() === name); t && !chain.includes(t); ) {
-    chain.unshift(t);
-    const parent = t.extends.trim();
-    t = parent ? f.nodeTypes.find((n) => n.name.trim() === parent) : undefined;
-  }
-  const props = chain.flatMap((n) => n.properties.split(',').map((p) => p.trim()).filter(Boolean));
-  return [...new Set(props)];
 }
 
 /** Conditions usable in pre / effects: declared + generated `expect:<action>`. */

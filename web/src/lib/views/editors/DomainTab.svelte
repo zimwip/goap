@@ -243,8 +243,8 @@
               <input type="text" class="mono" aria-label="Node type name" bind:value={n.name} class:bad={d.bad(`nodeTypes[${i}].name`)} data-path="nodeTypes[{i}].name" placeholder="Requirement" />
               <select aria-label="Parent type (extends)" title="Parent type: the subtype inherits its properties and the link types that accept it" bind:value={n.extends} class:bad={d.bad(`nodeTypes[${i}].extends`)} data-path="nodeTypes[{i}].extends">
                 <option value="">— no parent —</option>
-                {#if n.extends && !d.nodeTypeNames.includes(n.extends)}<option value={n.extends}>{n.extends} (unknown)</option>{/if}
-                {#each d.nodeTypeNames.filter((t) => t !== n.name.trim()) as t (t)}<option value={t}>extends {t}</option>{/each}
+                {#if n.extends && !d.typeOptions.includes(n.extends)}<option value={n.extends}>{n.extends} (unknown)</option>{/if}
+                {#each d.typeOptions.filter((t) => t !== n.name.trim()) as t (t)}<option value={t}>extends {t}</option>{/each}
               </select>
               <input type="text" aria-label="Description" bind:value={n.description} placeholder="Description" />
               <input type="text" class="mono" aria-label="Properties (comma-separated)" bind:value={n.properties} placeholder="title, description" />
@@ -283,13 +283,13 @@
               <input type="text" class="mono" aria-label="Link type name" bind:value={l.name} class:bad={d.bad(`linkTypes[${i}].name`)} data-path="linkTypes[{i}].name" placeholder="verifies" />
               <select aria-label="From" bind:value={l.from} class:bad={d.bad(`linkTypes[${i}].from`)} data-path="linkTypes[{i}].from">
                 <option value="">— from —</option>
-                {#if l.from && !d.nodeTypeNames.includes(l.from)}<option value={l.from}>{l.from} (unknown)</option>{/if}
-                {#each d.nodeTypeNames as t (t)}<option value={t}>{t}</option>{/each}
+                {#if l.from && !d.typeOptions.includes(l.from)}<option value={l.from}>{l.from} (unknown)</option>{/if}
+                {#each d.typeOptions as t (t)}<option value={t}>{t}</option>{/each}
               </select>
               <select aria-label="To" bind:value={l.to} class:bad={d.bad(`linkTypes[${i}].to`)} data-path="linkTypes[{i}].to">
                 <option value="">— to —</option>
-                {#if l.to && !d.nodeTypeNames.includes(l.to)}<option value={l.to}>{l.to} (unknown)</option>{/if}
-                {#each d.nodeTypeNames as t (t)}<option value={t}>{t}</option>{/each}
+                {#if l.to && !d.typeOptions.includes(l.to)}<option value={l.to}>{l.to} (unknown)</option>{/if}
+                {#each d.typeOptions as t (t)}<option value={t}>{t}</option>{/each}
               </select>
               {#if !d.readonly}
                 <RowTools index={i} count={f.linkTypes.length} label="the link type" onmove={(delta) => moveItem(f.linkTypes, i, delta)} onremove={() => f.linkTypes.splice(i, 1)} />

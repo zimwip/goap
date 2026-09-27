@@ -6,6 +6,7 @@ import { registry, errorMessage, bumpPatch, compareVersions, type Domain, type D
 import { emptyDomainForm, fromDomainForm, toDomainForm, type DomainForm } from '../domainForm';
 import { normalizePath } from '../methodologyForm';
 import type { NormIssue } from './drafts.svelte';
+import { loadTypes, splitType, typeCatalog } from './types.svelte';
 
 interface Catalog {
   items: DomainSummary[];
@@ -101,6 +102,11 @@ export class DomainDraft {
   readonly readonly = $derived(this.status !== 'draft');
   readonly allIssues = $derived<NormIssue[]>((this.issues ?? []).map((i) => ({ ...i, norm: normalizePath(i.path) })));
   readonly nodeTypeNames = $derived([...new Set(this.form.nodeTypes.map((n) => n.name.trim()).filter(Boolean))]);
+  /** types a link end or a parent can name: the domain's own (bare), then those of the other domains (qualified) */
+  readonly typeOptions = $derived([
+    ...this.nodeTypeNames,
+    ...typeCatalog.cat.names().filter((r) => splitType(r).namespace !== this.name),
+  ]);
   get canPublish(): boolean {
     return !this.readonly && !this.isNew && !this.dirty && !this.busy && this.issues !== null && this.allIssues.length === 0 && this.validatedAt === this.current;
   }
@@ -115,6 +121,7 @@ export class DomainDraft {
 
   private apply(d: Domain) {
     this.form = toDomainForm(d);
+    void loadTypes();
     this.snapshot = JSON.stringify(this.form);
     this.status = d.status || 'draft';
     this.meta = { createdAt: d.createdAt, updatedAt: d.updatedAt, publishedAt: d.publishedAt, updatedBy: d.updatedBy };
@@ -218,6 +225,7 @@ export class DomainDraft {
     this.status = res.domain?.status || 'published';
     if (res.domain?.publishedAt) this.meta = { ...this.meta, publishedAt: res.domain.publishedAt };
     void refreshDomains();
+    void loadTypes(true);
     return true;
   }
 
@@ -256,6 +264,7 @@ export class DomainDraft {
     });
     if (!ok) return undefined;
     void refreshDomains();
+    if (!draft) void loadTypes(true);
     if (draft) {
       domainDrafts.delete(this.key);
       return 'deleted';

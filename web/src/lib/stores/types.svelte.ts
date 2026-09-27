@@ -64,10 +64,14 @@ export class TypeCatalog {
       .sort();
   }
 
-  /** Namespaces of the published domains (the targets a methodology can name). */
+  /** Namespaces of the published domains and of the meta-domains (the targets a methodology can name). */
   namespaces(): string[] {
-    return Object.keys(this.domains).sort();
+    const ns = new Set(Object.keys(this.domains));
+    for (const r of this.types.keys()) ns.add(splitType(r).namespace);
+    ns.delete('');
+    return [...ns].sort();
   }
+
 }
 
 export const typeCatalog = $state<{ cat: TypeCatalog; loaded: boolean; error: string }>({ cat: new TypeCatalog(), loaded: false, error: '' });
