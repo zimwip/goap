@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -48,15 +49,22 @@ agents:
 type fakeHub struct {
 	mu    sync.Mutex
 	bound map[string][]string // org -> MCPs
-	calls []string
-	tools []mcp.ToolInfo
-	fail  error
+	// restricted: org -> tools the org's restrictions remove (ADR 0028)
+	restricted map[string][]string
+	// scopes: MCP -> scope (ADR 0028)
+	scopes map[string]string
+	calls  []string
+	// contexts are the call contexts the calls carried
+	contexts []mcp.CallContext
+	tools    []mcp.ToolInfo
+	fail     error
 }
 
 func (h *fakeHub) CallTool(ctx context.Context, org, name string, args map[string]any) (any, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.calls = append(h.calls, org+"|"+name+"|"+args["path"].(string))
+	h.contexts = append(h.contexts, mcp.CallFrom(ctx))
 	if authz.From(ctx).Subject == "" {
 		return nil, errors.New("the principal is not forwarded")
 	}
@@ -69,7 +77,16 @@ func (h *fakeHub) CallTool(ctx context.Context, org, name string, args map[strin
 func (h *fakeHub) Tools(_ context.Context, org string) ([]mcp.ToolInfo, []string, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	return h.tools, h.bound[org], nil
+	tools := h.tools
+	if tools == nil {
+		// every bound MCP has a read tool, unless the org restricts it
+		for _, m := range h.bound[org] {
+			if name := mcp.ToolName(m, "read"); !slices.Contains(h.restricted[org], name) {
+				tools = append(tools, mcp.ToolInfo{Name: name, Scope: h.scopes[m]})
+			}
+		}
+	}
+	return tools, h.bound[org], nil
 }
 
 func parseDocs(t *testing.T, edit func(*methodology.Methodology)) *methodology.Compiled {
@@ -167,6 +184,27 @@ func TestToolActionOnlyWhereTheOrganizationBindsTheMCP(t *testing.T) {
 	p = runDocs(t, e, base, "acme")
 	if p.Status != StatusWaiting || p.Steps[0].Action != "write_doc" {
 		t.Fatalf("no hub: %s steps=%+v", p.Status, p.Steps)
+	}
+}
+
+func TestToolActionNotScheduledWhereTheUnitRestrictsTheTool(t *testing.T) {
+	hub := &fakeHub{bound: map[string][]string{"acme": {"document-repository"}}, restricted: map[string][]string{"acme": {"document-repository/read"}}}
+	e, base := mcpEngine(t, hub, nil)
+	p := runDocs(t, e, base, "acme")
+	if p.Status != StatusWaiting || len(p.Steps) != 1 || p.Steps[0].Action != "write_doc" {
+		t.Fatalf("restricted tool planned: %s %s steps=%+v", p.Status, p.Error, p.Steps)
+	}
+	if len(hub.calls) != 0 {
+		t.Fatalf("a restricted tool was called: %v", hub.calls)
+	}
+}
+
+func TestToolCallCarriesTheChangeAndTheProcess(t *testing.T) {
+	hub := &fakeHub{bound: map[string][]string{"acme": {"document-repository"}}}
+	e, base := mcpEngine(t, hub, nil)
+	p := runDocs(t, e, base, "acme")
+	if len(hub.contexts) != 1 || hub.contexts[0].Change != string(p.ChangeID) || hub.contexts[0].Process != p.ID {
+		t.Fatalf("call contexts = %+v, want change %s process %s", hub.contexts, p.ChangeID, p.ID)
 	}
 }
 
@@ -268,5 +306,58 @@ func TestAgentMCPsExtendTheToolsOfItsLLMAndScriptActions(t *testing.T) {
 	}
 	if err := call(methodology.KindBuiltin); err == nil {
 		t.Error("a builtin action can use the agent's MCP")
+	}
+}
+
+// An MCP of scope agent is never scheduled through an action (ADR 0028): the tool action is left out.
+func TestAgentScopedMCPIsNotScheduledForActions(t *testing.T) {
+	hub := &fakeHub{bound: map[string][]string{"acme": {"document-repository"}}, scopes: map[string]string{"document-repository": mcp.ScopeAgent}}
+	e, base := mcpEngine(t, hub, nil)
+	p := runDocs(t, e, base, "acme")
+	if p.Status != StatusWaiting || len(p.Steps) != 1 || p.Steps[0].Action != "write_doc" {
+		t.Fatalf("agent-scoped tool planned for an action: %s %s steps=%+v", p.Status, p.Error, p.Steps)
+	}
+}
+
+// Where a tool can be reached from depends on the scope of its MCP: an agent-scoped MCP through the agent,
+// by llm actions only; an action-scoped MCP through the action only.
+func TestToolScopes(t *testing.T) {
+	hub := &fakeHub{bound: map[string][]string{"acme": {"orchestrator", "files", "notes"}},
+		scopes: map[string]string{"orchestrator": mcp.ScopeAgent, "files": mcp.ScopeAction}}
+	e, _ := mcpEngine(t, hub, nil)
+	p := &Process{ID: "p", Initiator: authz.Principal{Subject: "alice", Org: "acme"}, Org: "acme"}
+	agent := []string{"orchestrator", "files", "notes"}
+	cases := []struct {
+		name    string
+		action  methodology.Action
+		agent   []string
+		allowed []string
+	}{
+		// the agent level: orchestration and shared MCPs, not the action-scoped one
+		{"llm through its agent", methodology.Action{Name: "plan", Kind: methodology.KindLLM}, agent, []string{"orchestrator/read", "notes/read"}},
+		// scripts do not orchestrate
+		{"script through its agent", methodology.Action{Name: "s", Kind: methodology.KindScript}, agent, []string{"notes/read"}},
+		// an action declaring the MCPs itself: never the agent-scoped one
+		{"llm declaring them", methodology.Action{Name: "own", Kind: methodology.KindLLM, MCPs: []string{"orchestrator", "files"}}, nil, []string{"files/read"}},
+	}
+	for _, c := range cases {
+		h := e.newHost(p, c.action, c.agent)
+		tools, err := h.Tools(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		var got []string
+		for _, tl := range tools {
+			got = append(got, tl.Name)
+		}
+		if !slices.Equal(got, c.allowed) {
+			t.Errorf("%s: tools %v, want %v", c.name, got, c.allowed)
+		}
+		for _, name := range []string{"orchestrator/read", "files/read", "notes/read"} {
+			_, err := h.CallTool(context.Background(), name, map[string]any{"path": "x"})
+			if want := slices.Contains(c.allowed, name); (err == nil) != want {
+				t.Errorf("%s: call %s = %v, allowed %v", c.name, name, err, want)
+			}
+		}
 	}
 }

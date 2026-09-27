@@ -276,7 +276,9 @@ type McpTool struct {
 	Name        string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	Description string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
 	// JSON Schema of the arguments
-	InputSchema   *structpb.Struct `protobuf:"bytes,3,opt,name=input_schema,json=inputSchema,proto3" json:"input_schema,omitempty"`
+	InputSchema *structpb.Struct `protobuf:"bytes,3,opt,name=input_schema,json=inputSchema,proto3" json:"input_schema,omitempty"`
+	// the tool changes nothing (MCP readOnlyHint)
+	ReadOnly      bool `protobuf:"varint,4,opt,name=read_only,json=readOnly,proto3" json:"read_only,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -332,11 +334,20 @@ func (x *McpTool) GetInputSchema() *structpb.Struct {
 	return nil
 }
 
+func (x *McpTool) GetReadOnly() bool {
+	if x != nil {
+		return x.ReadOnly
+	}
+	return false
+}
+
 type Mcp struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Description   string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
-	Tools         []*McpTool             `protobuf:"bytes,3,rep,name=tools,proto3" json:"tools,omitempty"`
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Name        string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Description string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
+	Tools       []*McpTool             `protobuf:"bytes,3,rep,name=tools,proto3" json:"tools,omitempty"`
+	// where a methodology may use the MCP: action, agent or both (empty: both, ADR 0028)
+	Scope         string `protobuf:"bytes,4,opt,name=scope,proto3" json:"scope,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -390,6 +401,13 @@ func (x *Mcp) GetTools() []*McpTool {
 		return x.Tools
 	}
 	return nil
+}
+
+func (x *Mcp) GetScope() string {
+	if x != nil {
+		return x.Scope
+	}
+	return ""
 }
 
 type ListMcpsRequest struct {
@@ -483,7 +501,16 @@ type Adapter struct {
 	// name of the AdapterDef (platform namespace) this is an instance of
 	Adapter string `protobuf:"bytes,3,opt,name=adapter,proto3" json:"adapter,omitempty"`
 	// parameter values (secrets as references: "<vault path>#<field>" or "env:<VARIABLE>")
-	Params        *structpb.Struct `protobuf:"bytes,6,opt,name=params,proto3" json:"params,omitempty"`
+	Params *structpb.Struct `protobuf:"bytes,6,opt,name=params,proto3" json:"params,omitempty"`
+	// restrictions of the MCP for the unit and its sub-units (ADR 0028); they add up along the unit
+	// chain. An instance with no adapter only restricts.
+	Disabled bool `protobuf:"varint,7,opt,name=disabled,proto3" json:"disabled,omitempty"`
+	// when not empty, the only tools allowed
+	Tools []string `protobuf:"bytes,8,rep,name=tools,proto3" json:"tools,omitempty"`
+	// tools refused
+	Deny []string `protobuf:"bytes,9,rep,name=deny,proto3" json:"deny,omitempty"`
+	// only the read-only tools
+	ReadOnly      bool `protobuf:"varint,10,opt,name=read_only,json=readOnly,proto3" json:"read_only,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -546,6 +573,34 @@ func (x *Adapter) GetParams() *structpb.Struct {
 	return nil
 }
 
+func (x *Adapter) GetDisabled() bool {
+	if x != nil {
+		return x.Disabled
+	}
+	return false
+}
+
+func (x *Adapter) GetTools() []string {
+	if x != nil {
+		return x.Tools
+	}
+	return nil
+}
+
+func (x *Adapter) GetDeny() []string {
+	if x != nil {
+		return x.Deny
+	}
+	return nil
+}
+
+func (x *Adapter) GetReadOnly() bool {
+	if x != nil {
+		return x.ReadOnly
+	}
+	return false
+}
+
 type EffectiveMcp struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Mcp   *Mcp                   `protobuf:"bytes,1,opt,name=mcp,proto3" json:"mcp,omitempty"`
@@ -554,7 +609,15 @@ type EffectiveMcp struct {
 	// defined by an ancestor unit
 	Inherited bool `protobuf:"varint,3,opt,name=inherited,proto3" json:"inherited,omitempty"`
 	// the connector the adapter calls (from its definition; empty when it cannot be resolved)
-	Connector     string `protobuf:"bytes,4,opt,name=connector,proto3" json:"connector,omitempty"`
+	Connector string `protobuf:"bytes,4,opt,name=connector,proto3" json:"connector,omitempty"`
+	// the tools the unit may call, once the restrictions of its chain are applied (ADR 0028)
+	AllowedTools []string `protobuf:"bytes,5,rep,name=allowed_tools,json=allowedTools,proto3" json:"allowed_tools,omitempty"`
+	// the units whose instance restricts the MCP, nearest first
+	RestrictedBy []string `protobuf:"bytes,6,rep,name=restricted_by,json=restrictedBy,proto3" json:"restricted_by,omitempty"`
+	// an instance of the chain disables the MCP
+	Disabled bool `protobuf:"varint,7,opt,name=disabled,proto3" json:"disabled,omitempty"`
+	// built into the platform (goap-graph, goap-change, goap-scheduler, goap-admin)
+	Builtin       bool `protobuf:"varint,8,opt,name=builtin,proto3" json:"builtin,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -615,6 +678,34 @@ func (x *EffectiveMcp) GetConnector() string {
 		return x.Connector
 	}
 	return ""
+}
+
+func (x *EffectiveMcp) GetAllowedTools() []string {
+	if x != nil {
+		return x.AllowedTools
+	}
+	return nil
+}
+
+func (x *EffectiveMcp) GetRestrictedBy() []string {
+	if x != nil {
+		return x.RestrictedBy
+	}
+	return nil
+}
+
+func (x *EffectiveMcp) GetDisabled() bool {
+	if x != nil {
+		return x.Disabled
+	}
+	return false
+}
+
+func (x *EffectiveMcp) GetBuiltin() bool {
+	if x != nil {
+		return x.Builtin
+	}
+	return false
 }
 
 type ListEffectiveRequest struct {
@@ -983,9 +1074,12 @@ func (x *AdapterTemplateResponse) GetParams() []*TemplateParam {
 type Tool struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// "<mcp>/<tool>"
-	Name          string           `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Description   string           `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
-	InputSchema   *structpb.Struct `protobuf:"bytes,3,opt,name=input_schema,json=inputSchema,proto3" json:"input_schema,omitempty"`
+	Name        string           `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Description string           `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
+	InputSchema *structpb.Struct `protobuf:"bytes,3,opt,name=input_schema,json=inputSchema,proto3" json:"input_schema,omitempty"`
+	ReadOnly    bool             `protobuf:"varint,4,opt,name=read_only,json=readOnly,proto3" json:"read_only,omitempty"`
+	// scope of the MCP of the tool: action, agent or both
+	Scope         string `protobuf:"bytes,5,opt,name=scope,proto3" json:"scope,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1039,6 +1133,20 @@ func (x *Tool) GetInputSchema() *structpb.Struct {
 		return x.InputSchema
 	}
 	return nil
+}
+
+func (x *Tool) GetReadOnly() bool {
+	if x != nil {
+		return x.ReadOnly
+	}
+	return false
+}
+
+func (x *Tool) GetScope() string {
+	if x != nil {
+		return x.Scope
+	}
+	return ""
 }
 
 type ListToolsRequest struct {
@@ -1144,8 +1252,11 @@ type CallToolRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Unit  string                 `protobuf:"bytes,1,opt,name=unit,proto3" json:"unit,omitempty"`
 	// "<mcp>/<tool>"
-	Name          string           `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	Arguments     *structpb.Struct `protobuf:"bytes,3,opt,name=arguments,proto3" json:"arguments,omitempty"`
+	Name      string           `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Arguments *structpb.Struct `protobuf:"bytes,3,opt,name=arguments,proto3" json:"arguments,omitempty"`
+	// the change and the process the call runs for (read by the built-in connectors, ADR 0028)
+	ChangeId      string `protobuf:"bytes,4,opt,name=change_id,json=changeId,proto3" json:"change_id,omitempty"`
+	ProcessId     string `protobuf:"bytes,5,opt,name=process_id,json=processId,proto3" json:"process_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1199,6 +1310,20 @@ func (x *CallToolRequest) GetArguments() *structpb.Struct {
 		return x.Arguments
 	}
 	return nil
+}
+
+func (x *CallToolRequest) GetChangeId() string {
+	if x != nil {
+		return x.ChangeId
+	}
+	return ""
+}
+
+func (x *CallToolRequest) GetProcessId() string {
+	if x != nil {
+		return x.ProcessId
+	}
+	return ""
 }
 
 type CallToolResponse struct {
@@ -1280,28 +1405,39 @@ const file_goap_mcp_v1_mcp_proto_rawDesc = "" +
 	"\x16ListConnectorsResponse\x126\n" +
 	"\n" +
 	"connectors\x18\x01 \x03(\v2\x16.goap.mcp.v1.ConnectorR\n" +
-	"connectors\"{\n" +
+	"connectors\"\x98\x01\n" +
 	"\aMcpTool\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12:\n" +
-	"\finput_schema\x18\x03 \x01(\v2\x17.google.protobuf.StructR\vinputSchema\"g\n" +
+	"\finput_schema\x18\x03 \x01(\v2\x17.google.protobuf.StructR\vinputSchema\x12\x1b\n" +
+	"\tread_only\x18\x04 \x01(\bR\breadOnly\"}\n" +
 	"\x03Mcp\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12*\n" +
-	"\x05tools\x18\x03 \x03(\v2\x14.goap.mcp.v1.McpToolR\x05tools\"\x11\n" +
+	"\x05tools\x18\x03 \x03(\v2\x14.goap.mcp.v1.McpToolR\x05tools\x12\x14\n" +
+	"\x05scope\x18\x04 \x01(\tR\x05scope\"\x11\n" +
 	"\x0fListMcpsRequest\"8\n" +
 	"\x10ListMcpsResponse\x12$\n" +
-	"\x04mcps\x18\x01 \x03(\v2\x10.goap.mcp.v1.McpR\x04mcps\"\x86\x01\n" +
+	"\x04mcps\x18\x01 \x03(\v2\x10.goap.mcp.v1.McpR\x04mcps\"\xe9\x01\n" +
 	"\aAdapter\x12\x12\n" +
 	"\x04unit\x18\x01 \x01(\tR\x04unit\x12\x10\n" +
 	"\x03mcp\x18\x02 \x01(\tR\x03mcp\x12\x18\n" +
 	"\aadapter\x18\x03 \x01(\tR\aadapter\x12/\n" +
-	"\x06params\x18\x06 \x01(\v2\x17.google.protobuf.StructR\x06paramsJ\x04\b\x04\x10\x05J\x04\b\x05\x10\x06\"\x9e\x01\n" +
+	"\x06params\x18\x06 \x01(\v2\x17.google.protobuf.StructR\x06params\x12\x1a\n" +
+	"\bdisabled\x18\a \x01(\bR\bdisabled\x12\x14\n" +
+	"\x05tools\x18\b \x03(\tR\x05tools\x12\x12\n" +
+	"\x04deny\x18\t \x03(\tR\x04deny\x12\x1b\n" +
+	"\tread_only\x18\n" +
+	" \x01(\bR\breadOnlyJ\x04\b\x04\x10\x05J\x04\b\x05\x10\x06\"\x9e\x02\n" +
 	"\fEffectiveMcp\x12\"\n" +
 	"\x03mcp\x18\x01 \x01(\v2\x10.goap.mcp.v1.McpR\x03mcp\x12.\n" +
 	"\aadapter\x18\x02 \x01(\v2\x14.goap.mcp.v1.AdapterR\aadapter\x12\x1c\n" +
 	"\tinherited\x18\x03 \x01(\bR\tinherited\x12\x1c\n" +
-	"\tconnector\x18\x04 \x01(\tR\tconnector\"*\n" +
+	"\tconnector\x18\x04 \x01(\tR\tconnector\x12#\n" +
+	"\rallowed_tools\x18\x05 \x03(\tR\fallowedTools\x12#\n" +
+	"\rrestricted_by\x18\x06 \x03(\tR\frestrictedBy\x12\x1a\n" +
+	"\bdisabled\x18\a \x01(\bR\bdisabled\x12\x18\n" +
+	"\abuiltin\x18\b \x01(\bR\abuiltin\"*\n" +
 	"\x14ListEffectiveRequest\x12\x12\n" +
 	"\x04unit\x18\x01 \x01(\tR\x04unit\"\\\n" +
 	"\x15ListEffectiveResponse\x12\x14\n" +
@@ -1321,20 +1457,25 @@ const file_goap_mcp_v1_mcp_proto_rawDesc = "" +
 	"\brequired\x18\x04 \x01(\bR\brequired\"a\n" +
 	"\x17AdapterTemplateResponse\x12\x12\n" +
 	"\x04code\x18\x01 \x01(\tR\x04code\x122\n" +
-	"\x06params\x18\x02 \x03(\v2\x1a.goap.mcp.v1.TemplateParamR\x06params\"x\n" +
+	"\x06params\x18\x02 \x03(\v2\x1a.goap.mcp.v1.TemplateParamR\x06params\"\xab\x01\n" +
 	"\x04Tool\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12:\n" +
-	"\finput_schema\x18\x03 \x01(\v2\x17.google.protobuf.StructR\vinputSchema\"&\n" +
+	"\finput_schema\x18\x03 \x01(\v2\x17.google.protobuf.StructR\vinputSchema\x12\x1b\n" +
+	"\tread_only\x18\x04 \x01(\bR\breadOnly\x12\x14\n" +
+	"\x05scope\x18\x05 \x01(\tR\x05scope\"&\n" +
 	"\x10ListToolsRequest\x12\x12\n" +
 	"\x04unit\x18\x01 \x01(\tR\x04unit\"P\n" +
 	"\x11ListToolsResponse\x12'\n" +
 	"\x05tools\x18\x01 \x03(\v2\x11.goap.mcp.v1.ToolR\x05tools\x12\x12\n" +
-	"\x04mcps\x18\x02 \x03(\tR\x04mcps\"p\n" +
+	"\x04mcps\x18\x02 \x03(\tR\x04mcps\"\xac\x01\n" +
 	"\x0fCallToolRequest\x12\x12\n" +
 	"\x04unit\x18\x01 \x01(\tR\x04unit\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x125\n" +
-	"\targuments\x18\x03 \x01(\v2\x17.google.protobuf.StructR\targuments\"t\n" +
+	"\targuments\x18\x03 \x01(\v2\x17.google.protobuf.StructR\targuments\x12\x1b\n" +
+	"\tchange_id\x18\x04 \x01(\tR\bchangeId\x12\x1d\n" +
+	"\n" +
+	"process_id\x18\x05 \x01(\tR\tprocessId\"t\n" +
 	"\x10CallToolResponse\x12/\n" +
 	"\x06result\x18\x01 \x01(\v2\x17.google.protobuf.StructR\x06result\x12\x19\n" +
 	"\bis_error\x18\x02 \x01(\bR\aisError\x12\x14\n" +
