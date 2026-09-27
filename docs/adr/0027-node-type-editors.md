@@ -21,7 +21,7 @@ nodeTypes:
 ```
 - `editor` is a name (`^[a-z][a-z0-9_-]*$`, checked by `Schema.check`); empty: the default node editor.
 - Inherited through `extends`: a subtype opens in the editor of its nearest ancestor that names one.
-- It is part of the type's model in the catalogue (ADR 0012 §2): `methodology.NodeType.Editor`,
+- It is part of the type's model (ADR 0012 §2): `methodology.NodeType.Editor`,
   `registry.v1.NodeType.editor`.
 - The domain does not know the IDE: the name is a contract. An unknown name falls back to the default editor.
 
@@ -30,8 +30,8 @@ nodeTypes:
   node (id, key, type, namespace, properties) onto the tab of an editor, and may name a field to reveal; it returns
   nothing when it cannot show the node (an element removed from its definition, an unknown version).
 - `web/src/lib/nodeEditors.ts` `openNode` is the single way to open a node: it reads the editor of the node's type
-  from the type catalogue the graph service serves (cached per head of main), calls the node editor, and falls back to
-  the default node editor. `generic: true` forces the default editor (history, relations).
+  from the registry (the type model, ADR 0012 §2, cached and refreshed on the domain events), calls the node editor,
+  and falls back to the default node editor. `generic: true` forces the default editor (history, relations).
 - The default node editor offers "Open in …" when the type names another editor.
 - The node editors of the platform are registered in `web/src/lib/views/nodeEditors.ts`:
 

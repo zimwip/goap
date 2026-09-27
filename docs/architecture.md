@@ -331,16 +331,18 @@ an applicable specialization (e.g. `build` specialized into `build_java`, `build
 
 **Node types** ([ADR 0012](adr/0012-node-types.md)): a node's type is a qualified reference `<namespace>@<NodeType>`
 (`Node.Type`), the namespace being the domain that declares the type ([ADR 0013](adr/0013-domains.md)). Every reference
-to a type or a link type (in a domain, a methodology, CEL, `expects`) is qualified. The **type catalogue** of a baseline
-is built from the domain versions in force in it (their definition nodes, [ADR 0023](adr/0023-definitions-in-the-graph.md))
-and the built-in meta-domains `methodology` and `domain`: it resolves each type's properties, `extends` chain,
-lifecycle, validators, document, change control, search declarations and editor. The graph judges a change by the
-catalogue of its reference baseline and refuses a node whose type it does not resolve; the registry checks the
-references of a methodology or a domain against it when saving and publishing. Nothing is projected onto the graph.
+to a type or a link type (in a domain, a methodology, CEL, `expects`) is qualified; `Node.Type` is composite
+(namespace + node type key). The **registry is the reference**: it resolves each type of the published domains
+([ADR 0023](adr/0023-definitions-in-the-graph.md)) to its properties, `extends` chain, lifecycle, validators, document,
+change control, search declarations and editor, and checks the references of a methodology or a domain when saving
+and publishing. The graph and the engine hold an in-memory copy (the **type catalogue**), loaded from the registry at
+startup and kept in sync with its events, plus the built-in meta-domains `methodology` and `domain`. The graph judges
+a change by the catalogue in force and refuses a node whose type it does not resolve. Nothing is projected onto the
+graph.
 
 A node type may name the **editor** of its nodes in the IDE (`editor: agent`, inherited through `extends`,
 [ADR 0027](adr/0027-node-type-editors.md)): the IDE opens every node through `openNode` (`web/src/lib/nodeEditors.ts`),
-which reads the editor from the type catalogue and falls back to the default node editor; the editors a type can name
+which reads the editor from the registry's type model and falls back to the default node editor; the editors a type can name
 are registered in `web/src/lib/views/nodeEditors.ts` (`agent`, `action`, `methodology`, `domain`, `unit`, `mcp`, ...).
 
 > **Transition** (ADR 0012, 0013, 0023 being implemented): the code still projects published methodologies and domains
@@ -421,7 +423,7 @@ The DSL is a generic capability tied to a **usage** (which fixes the `ctx` the c
 `property_validator`, `transition_guard`, `transition_action`. A domain declares
 **algorithms** (JavaScript or Go, with typed parameters) and **instances** (parameter values);
 node types plug validator instances on their properties, lifecycle transitions plug guard and action
-instances, in call order. The type catalogue resolves the plugged instances (like the lifecycle, ADR 0014): validators run when items are added and when a change is applied, guards and
+instances, in call order. The type catalogue (the graph's copy of the registry's model) resolves the plugged instances (like the lifecycle, ADR 0014): validators run when items are added and when a change is applied, guards and
 actions when a transition is applied. Reference: [docs/dsl.md](dsl.md), IDE section *Algorithms*.
 
 ## 3. Component architecture
@@ -847,7 +849,7 @@ docs/                        architecture, ADRs
 | **M9 — self-observation** ✅ | ADR 0011: execution journal on the change axis (ticks, actions, LLM / tool calls, decisions, item provenance), `observer` agent (journal + OpenTelemetry traces → findings → proposals → review → draft), action specialization and type subtyping |
 | **M10 — SDLC** 🟡 | `sdlc` 0.3.0 methodology on the shared ALM domain (need → requirement → function → component → artifact → application → solution, data, interfaces, flows), build specialized by technology, incremental releases and deployment (dev → test → staging → production, release manager approval), incremental actions · to refine: quality (coverage, security), rollback, freezes / change windows, MCP tools (repositories, CI, artifact registry, deployment) |
 | **M7 — agents** ✅ | agents (goap / utility / hybrid), JS / Go script actions with DSL, sub-agents, sandbox per process, IDE |
-| **M11 — node types** 🟡 | ADR 0012 / 0013 / 0023: qualified type references `<namespace>@<NodeType>`, one domain per namespace, type catalogue built from the published domains with an existence rule, definitions as nodes of the `methodology` / `domain` meta-domains; removes the `NodeType` projection, the `M:` / `D:` elements and the `Def*` types · in progress |
+| **M11 — node types** 🟡 | ADR 0012 / 0013 / 0023: qualified type references `<namespace>@<NodeType>`, one domain per namespace, registry as the reference of the types, with an in-memory catalogue in the graph and the engine kept in sync by its events and an existence rule, definitions as nodes of the `methodology` / `domain` meta-domains; removes the `NodeType` projection, the `M:` / `D:` elements and the `Def*` types · in progress |
 
 ## 7. Open questions
 
@@ -895,5 +897,5 @@ the change reopens it (writes a version in an editable state), edits it and move
 it is applied. Changes are attached to the nodes they modify (several changes may be attached to one node;
 conflicts appear at Apply). A document type embeds nodes through `contains` links and its transitions
 validate the states of its children in the result baseline. The rules live in `pkg/graph/lifecycle.go`
-(checked when a change impact writes a version and again by `Apply`); the type catalogue of the reference baseline
-resolves the lifecycles (ADR 0012).
+(checked when a change impact writes a version and again by `Apply`); the type catalogue resolves the lifecycles
+(ADR 0012).

@@ -44,8 +44,7 @@ could run when a transition was taken. Making the domain customizable meant chan
    CEL guard and `requires`, actions only once every transition of the change is accepted.
 5. **Evaluation** follows ADR 0014: the type catalogue (ADR 0012 §2) resolves the plugged instances
    (`validators`, and `guardAlgos` / `actionAlgos` of the lifecycle transitions: instance name, algorithm, language,
-   code, parameter values), so a change is judged by the model of its reference baseline, and publishing a domain
-   version changes it from the next baseline on. Property validators run when items are added (early feedback: create, and update on
+   code, parameter values), and publishing a domain version applies to the changes checked afterwards. Property validators run when items are added (early feedback: create, and update on
    base + patch) and when the change is applied on the target graph (created and updated nodes; also
    again after a transition action). Transition guards and actions run when the change is applied.
    A transition action's changes are written into the version the transition produced
