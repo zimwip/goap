@@ -10,6 +10,7 @@ import NodeTab from './editors/NodeTab.svelte';
 import { draftGroup, KIND_SECTION, SECTION_ICON } from './editors/methodologyTabs';
 import { activeDraft } from './bottom/activeDraft';
 import { domainGroup } from './editors/domainTabs';
+import './nodeEditors';
 
 import MethodologyExplorer from './nav/MethodologyExplorer.svelte';
 import DomainExplorer from './nav/DomainExplorer.svelte';

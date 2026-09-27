@@ -86,3 +86,23 @@ func TestReferenceLint(t *testing.T) {
 		}
 	}
 }
+
+func TestNodeTypeEditor(t *testing.T) {
+	d := testDomain()
+	d.NodeTypes[0].Editor = "requirement-board"
+	if issues := d.Validate(); len(issues) > 0 {
+		t.Fatal(issues)
+	}
+	out, err := d.YAML()
+	if err != nil {
+		t.Fatal(err)
+	}
+	back, err := ParseDomain(out)
+	if err != nil || back.NodeTypes[0].Editor != "requirement-board" {
+		t.Fatalf("round trip: %+v %v", back, err)
+	}
+	d.NodeTypes[1].Editor = "Test Case"
+	if issues := d.Validate(); len(issues) != 1 || issues[0].Path != "nodeTypes[1].editor" {
+		t.Fatalf("issues: %v", issues)
+	}
+}

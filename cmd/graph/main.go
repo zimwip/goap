@@ -47,7 +47,7 @@ func syncAll(ctx context.Context, log *slog.Logger, g *graph.Graph, reg metamode
 		return 0, err
 	}
 	for _, res := range rs {
-		if res.Changed() {
+		if res.Changed() && res.Methodology != "" { // a domain no methodology references: no methodology cache to drop
 			publishNodeTypeChanged(ctx, events, res.Methodology)
 		}
 	}

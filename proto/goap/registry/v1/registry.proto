@@ -61,6 +61,8 @@ message NodeType {
   repeated PropertyValidator validators = 8;
   // properties the node index keeps (ADR 0026)
   repeated SearchProperty search = 9;
+  // editor the user interface opens the nodes of the type with (inherited through extends; empty: the default node editor)
+  string editor = 10;
 }
 
 // SearchProperty declares how the node index uses a property: text (full text

@@ -40,7 +40,9 @@ type NodeType struct {
 	// property validator instances (ADR 0018), in call order
 	Validators []*PropertyValidator `protobuf:"bytes,8,rep,name=validators,proto3" json:"validators,omitempty"`
 	// properties the node index keeps (ADR 0026)
-	Search        []*SearchProperty `protobuf:"bytes,9,rep,name=search,proto3" json:"search,omitempty"`
+	Search []*SearchProperty `protobuf:"bytes,9,rep,name=search,proto3" json:"search,omitempty"`
+	// editor the user interface opens the nodes of the type with (inherited through extends; empty: the default node editor)
+	Editor        string `protobuf:"bytes,10,opt,name=editor,proto3" json:"editor,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -136,6 +138,13 @@ func (x *NodeType) GetSearch() []*SearchProperty {
 		return x.Search
 	}
 	return nil
+}
+
+func (x *NodeType) GetEditor() string {
+	if x != nil {
+		return x.Editor
+	}
+	return ""
 }
 
 // SearchProperty declares how the node index uses a property: text (full text
@@ -4385,7 +4394,7 @@ var File_goap_registry_v1_registry_proto protoreflect.FileDescriptor
 
 const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\n" +
-	"\x1fgoap/registry/v1/registry.proto\x12\x10goap.registry.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x9b\x03\n" +
+	"\x1fgoap/registry/v1/registry.proto\x12\x10goap.registry.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xb3\x03\n" +
 	"\bNodeType\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x1e\n" +
@@ -4399,7 +4408,9 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\n" +
 	"validators\x18\b \x03(\v2#.goap.registry.v1.PropertyValidatorR\n" +
 	"validators\x128\n" +
-	"\x06search\x18\t \x03(\v2 .goap.registry.v1.SearchPropertyR\x06searchB\x14\n" +
+	"\x06search\x18\t \x03(\v2 .goap.registry.v1.SearchPropertyR\x06search\x12\x16\n" +
+	"\x06editor\x18\n" +
+	" \x01(\tR\x06editorB\x14\n" +
 	"\x12_change_controlled\"V\n" +
 	"\x0eSearchProperty\x12\x1a\n" +
 	"\bproperty\x18\x01 \x01(\tR\bproperty\x12\x12\n" +

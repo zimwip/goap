@@ -85,6 +85,21 @@ func (s *Service) GetDomain(ctx context.Context, name, version string) (DomainRe
 	return ds.GetDomain(ctx, name, version)
 }
 
+// Domains implements metamodel.PublishedDomains: the latest published version of every domain.
+func (s *Service) Domains(ctx context.Context) ([]*methodology.Domain, error) {
+	rs, err := s.DomainVersions(ctx, false)
+	if err != nil {
+		return nil, err
+	}
+	var out []*methodology.Domain
+	for _, r := range rs {
+		if r.Status == StatusPublished {
+			out = append(out, &r.Domain)
+		}
+	}
+	return out, nil
+}
+
 // DomainVersions returns every version, or the latest version of each domain
 // (latest published if any, latest draft otherwise).
 func (s *Service) DomainVersions(ctx context.Context, all bool) ([]DomainRecord, error) {
