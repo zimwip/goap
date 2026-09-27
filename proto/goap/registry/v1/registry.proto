@@ -38,8 +38,7 @@ service RegistryService {
   rpc ExportDomain(ExportDomainRequest) returns (ExportDomainResponse);
   // Methodology versions referencing a domain version.
   rpc GetDomainUsage(GetDomainUsageRequest) returns (GetDomainUsageResponse);
-  // The type catalogue in force (ADR 0012): the node and link types of the published domains and of the built-in
-  // meta-domains, resolved.
+  // The type catalogue in force (ADR 0012): the node and link types of the published and built-in domains, resolved.
   rpc ListTypes(ListTypesRequest) returns (ListTypesResponse);
   // Try an algorithm of a domain on a sample input, without saving anything.
   rpc RunAlgorithm(RunAlgorithmRequest) returns (RunAlgorithmResponse);
