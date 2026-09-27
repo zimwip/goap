@@ -1,13 +1,11 @@
 package methodology
 
 import (
-	"embed"
 	"fmt"
 	"sync"
-)
 
-//go:embed builtin/*.yaml
-var builtinFS embed.FS
+	"github.com/zimwip/goap/domains/builtin"
+)
 
 var (
 	builtinOnce sync.Once
@@ -16,13 +14,13 @@ var (
 
 // BuiltinDomains returns the domains that ship with the platform (ADR 0012 §4), known before any domain is loaded:
 // the meta-domains "methodology" and "domain", which type the definition nodes of the methodologies and domains
-// (ADR 0023), and "organisation", whose types the platform itself reads (units, adapters, users, policies).
-// "methodology" and "organisation" are frozen (see IsFrozenDomain); the embedded "domain" is its initial version,
-// which published versions of the registry extend.
+// (ADR 0023), "organisation" and "platform", whose types the platform itself reads (units, adapters, users,
+// policies; MCPs, adapter definitions, model configuration). "methodology", "organisation" and "platform" are frozen
+// (see IsFrozenDomain); the embedded "domain" is its initial version, which published versions of the registry extend.
 func BuiltinDomains() []*Domain {
 	builtinOnce.Do(func() {
-		for _, f := range []string{"builtin/methodology.yaml", "builtin/domain.yaml", "builtin/organisation.yaml"} {
-			src, err := builtinFS.ReadFile(f)
+		for _, f := range []string{"methodology.yaml", "domain.yaml", "organisation.yaml", "platform.yaml"} {
+			src, err := builtin.FS.ReadFile(f)
 			if err != nil {
 				panic(err)
 			}
@@ -37,7 +35,7 @@ func BuiltinDomains() []*Domain {
 }
 
 // frozenDomains are the built-in domains the registry never versions: they change with the code (their YAML).
-var frozenDomains = []string{"methodology", "organisation"}
+var frozenDomains = []string{"methodology", "organisation", "platform"}
 
 // IsFrozenDomain reports a built-in domain that only changes with the code: no version is saved in the registry.
 func IsFrozenDomain(name string) bool {

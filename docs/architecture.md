@@ -58,8 +58,8 @@ of a versioned knowledge graph, whose other axis, the **domain axis**, describes
 **Namespaces** ([ADR 0015](adr/0015-namespaces.md)): every node lives in a namespace, and a namespace is the content of
 one domain ([ADR 0013](adr/0013-domains.md)): `alm` (delivery), `organisation`, `platform` (MCPs, adapter definitions,
 model configuration), and the meta-domains `methodology` and `domain` that hold the definitions
-([ADR 0023](adr/0023-definitions-in-the-graph.md)). `methodology`, `domain` and `organisation` ship with the code;
-`methodology` and `organisation` are **frozen** (the platform reads them in its own way: initialised at startup,
+([ADR 0023](adr/0023-definitions-in-the-graph.md)). `methodology`, `domain`, `organisation` and `platform` ship
+with the code; `methodology`, `organisation` and `platform` are **frozen** (the platform reads them in its own way: initialised at startup,
 changed with the code, read-only in the domain editor), `domain` evolves from its shipped version; a new namespace is a
 new domain published from the domain editor. Keys are unique per namespace. A change acts on one namespace: it can
 only create and modify nodes of that namespace, but may link to nodes of another one.
@@ -339,7 +339,7 @@ to a type or a link type (in a domain, a methodology, CEL, `expects`) is qualifi
 ([ADR 0023](adr/0023-definitions-in-the-graph.md)) to its properties, `extends` chain, lifecycle, validators, document,
 change control, search declarations and editor, and checks the references of a methodology or a domain when saving
 and publishing. The graph and the engine hold an in-memory copy (the **type catalogue**), loaded from the registry at
-startup and kept in sync with its events, plus the built-in domains `methodology`, `domain` and `organisation`. The graph judges
+startup and kept in sync with its events, plus the built-in domains `methodology`, `domain`, `organisation` and `platform`. The graph judges
 a change by the catalogue in force and refuses a node whose type it does not resolve. Nothing is projected onto the
 graph.
 
@@ -829,7 +829,7 @@ pkg/index/                   node index: hybrid search, facets, stores (memory, 
 proto/                       connect-rpc contracts (buf)
 gen/                         generated code (committed)
 methodologies/               example methodologies (active part)
-domains/                     domains seeded at startup (alm, platform; one per namespace)
+domains/                     domains: seeded at startup (alm), builtin/ embedded and frozen except domain (one per namespace)
 deploy/                      compose, postgres init, otel collector, prometheus, grafana, k8s (sandboxes)
 web/                         Svelte frontend
 docs/                        architecture, ADRs
@@ -870,7 +870,7 @@ docs/                        architecture, ADRs
 
 Administrators (`admin` on the `platform` resource, Casbin) open **Platform settings** from the gear in the IDE
 status bar. The gateway configuration is **graph data** ([ADR 0021](adr/0021-model-configuration-in-the-graph.md)):
-`LlmProvider`, `LlmModel` and `LlmAlias` nodes of the `platform` namespace (`pkg/llmcfg`, `domains/platform.yaml`), changed
+`LlmProvider`, `LlmModel` and `LlmAlias` nodes of the `platform` namespace (`pkg/llmcfg`, the built-in `platform` domain), changed
 through changes like any node (the screen writes them with `web/src/lib/llmEdit.ts`). The gateway reads a snapshot of the head
 of `main` and rebuilds its router when it moves. `GOAP_MODELS_CONFIG` / env keys only seed a graph that holds no provider
 (`graphsvc.SeedModels`). The `modelgw` database keeps only the token usage (`llm_usage`, keyed by the key of the model node).

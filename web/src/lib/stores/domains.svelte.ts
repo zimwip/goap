@@ -70,7 +70,7 @@ export class DomainDraft {
   status = $state('draft');
   /** the version shipped with the platform: read only, cannot be archived */
   builtin = $state(false);
-  /** a namespace the code reads in its own way (methodology, organisation): changes with the code, no new version */
+  /** a namespace the code reads in its own way (methodology, organisation, platform): changes with the code, no new version */
   frozen = $state(false);
   meta = $state<Pick<Domain, 'createdAt' | 'updatedAt' | 'publishedAt' | 'updatedBy'>>({});
   loading = $state(true);

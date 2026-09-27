@@ -410,9 +410,9 @@ export interface Domain {
   updatedAt?: string;
   publishedAt?: string;
   updatedBy?: string;
-  /** the version shipped with the platform (methodology, domain, organisation): published, read only */
+  /** the version shipped with the platform (methodology, domain, organisation, platform): published, read only */
   builtin?: boolean;
-  /** a built-in domain that only changes with the code (methodology, organisation): no new version */
+  /** a built-in domain that only changes with the code (methodology, organisation, platform): no new version */
   frozen?: boolean;
 }
 

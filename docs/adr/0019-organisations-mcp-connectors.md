@@ -10,7 +10,7 @@ rooted in a different directory). Several organisations can work on one change, 
 ## Decision
 1. **Three independent concepts and the place where they meet.**
    - **MCP**: the generic usage of a tool by an LLM (name + tool signatures). A node of the **`platform`**
-     domain, type `platform@MCP`, key `MCP:<name>`, declared in `domains/platform.yaml`. It knows no connector and no adapter.
+     domain, type `platform@MCP`, key `MCP:<name>`, declared in the built-in `platform` domain (`domains/builtin/platform.yaml`, frozen, ADR 0012 §4). It knows no connector and no adapter.
      Actions and agents reference it by name (`mcps:`).
    - **Connector**: a driver wrapping a real API, **deployed as a separate service** implementing
      `connector.v1.ConnectorService` (`Describe`, `Invoke`). It registers itself with the MCP hub and renews the
