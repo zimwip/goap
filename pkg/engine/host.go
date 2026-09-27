@@ -159,7 +159,9 @@ func (h *Host) CallTool(ctx context.Context, name string, args map[string]any) (
 	case h.e.Tools == nil:
 		err = fmt.Errorf("tool %s: no MCP hub configured", name)
 	default:
-		out, err = h.e.Tools.CallTool(authz.With(ctx, h.process.Initiator), h.e.orgOf(h.process), name, args)
+		// the built-in connectors act on the change of the process by default (ADR 0028)
+		call := mcp.WithCall(authz.With(ctx, h.process.Initiator), mcp.CallContext{Change: string(h.process.ChangeID), Process: h.process.ID})
+		out, err = h.e.Tools.CallTool(call, h.e.orgOf(h.process), name, args)
 	}
 	end(err)
 	call := ToolCall{Name: name, DurationMs: time.Since(start).Milliseconds()}

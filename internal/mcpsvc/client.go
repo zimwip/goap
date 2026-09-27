@@ -12,6 +12,7 @@ import (
 	"github.com/zimwip/goap/internal/identity"
 	"github.com/zimwip/goap/internal/pbconv"
 	"github.com/zimwip/goap/pkg/authz"
+	"github.com/zimwip/goap/pkg/mcp"
 )
 
 // Client is the engine side of the hub: it lists the tools of an organization and
@@ -44,7 +45,9 @@ func forward[T any](ctx context.Context, msg *T) *connect.Request[T] {
 // CallTool calls "<mcp>/<tool>" for an organization. A failure reported by the
 // connector is returned as an error.
 func (c *Client) CallTool(ctx context.Context, org, name string, args map[string]any) (any, error) {
-	r, err := c.rpc.CallTool(ctx, forward(ctx, &mcpv1.CallToolRequest{Unit: org, Name: name, Arguments: pbconv.Struct(args)}))
+	call := mcp.CallFrom(ctx)
+	r, err := c.rpc.CallTool(ctx, forward(ctx, &mcpv1.CallToolRequest{Unit: org, Name: name, Arguments: pbconv.Struct(args),
+		ChangeId: call.Change, ProcessId: call.Process}))
 	if err != nil {
 		return nil, err
 	}
@@ -62,7 +65,7 @@ func (c *Client) Tools(ctx context.Context, org string) ([]Tool, []string, error
 	}
 	out := make([]Tool, len(r.Msg.Tools))
 	for i, t := range r.Msg.Tools {
-		out[i] = Tool{Name: t.Name, Description: t.Description, InputSchema: pbconv.Map(t.InputSchema)}
+		out[i] = Tool{Name: t.Name, Description: t.Description, InputSchema: pbconv.Map(t.InputSchema), ReadOnly: t.ReadOnly}
 	}
 	return out, r.Msg.Mcps, nil
 }

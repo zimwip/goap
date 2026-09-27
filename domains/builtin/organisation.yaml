@@ -1,5 +1,5 @@
 name: organisation
-version: 1.3.0
+version: 1.4.0
 description: >
   Organisation structure, managed in its own namespace ("organisation"): a hierarchy of organisational units. Nodes of other namespaces reference a unit as their owner through the cross-namespace `owner` link; changes are split into sub-changes along unit boundaries.
 nodeTypes:
@@ -9,7 +9,10 @@ nodeTypes:
   # the one place where unit, MCP and connector meet. mcp = the MCP implemented, adapter = the name of the
   # AdapterDef, params = its parameter values (secrets as references: env:<VAR> or <vault path>#<field>).
   # Linked to its unit by `owner`; a unit inherits the adapters of its ancestors (nearest wins).
-  - {name: Adapter, editor: unit, description: "Instance, by an organisational unit, of an adapter definition", properties: [mcp, adapter, params, description]}
+  # disabled / tools (allow-list) / deny / readOnly restrict the MCP for the unit and its sub-units (ADR 0028): the
+  # restrictions of the chain add up, so a unit narrows what it inherits and never widens it. An instance without
+  # adapter only restricts (the implementation is inherited): this is how a unit limits the built-in MCPs.
+  - {name: Adapter, editor: unit, description: "Instance, by an organisational unit, of an adapter definition, or a restriction of an MCP", properties: [mcp, adapter, params, description, disabled, tools, deny, readOnly]}
   # who may do what is graph data too. A User is a person or service account: the roles of its node are
   # added to those of its token, and the unit it is `member_of` is its organisation when the token names none.
   - {name: User, editor: access, description: "Person or service account, with its profile and roles", properties: [subject, displayName, email, locale, roles]}
