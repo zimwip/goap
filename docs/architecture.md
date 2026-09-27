@@ -50,14 +50,16 @@ of a versioned knowledge graph, whose other axis, the **domain axis**, describes
 
 | Concept | Description |
 |---|---|
-| **Node** | Typed content element (`Requirement`, `Service`, `Process`…). Stable identity `NodeID` + readable `Key` (`REQ-12`). |
+| **Node** | Typed content element. Its type is a qualified reference `<namespace>@<NodeType>` (`alm@Requirement`, [ADR 0012](adr/0012-node-types.md)). Stable identity `NodeID` + readable `Key` (`REQ-12`). |
 | **Version** | Each modification creates a new immutable version `NodeID@vN`. A version can be a *tombstone* (deletion). |
 | **Link** | Typed relationship **from version to version**: `REQ-12@v3 ─satisfies→ NEED-4@v2`. A link does not automatically "follow" new versions: if `NEED-4` moves to v3, the link becomes **suspect** — this is the model's native impact signal. |
 | **Baseline** | Coherent set `{NodeID → Version}`: a "commit" of the graph. A baseline's links are those whose two endpoints are both in the baseline. Every modification starts from a reference baseline and produces a resulting baseline. |
 
-**Namespaces** ([ADR 0015](adr/0015-namespaces.md)): every node lives in a namespace (`sdlc` by default,
-`platform` for the platform model bound to the code: methodologies, domains, MCPs). Keys are unique per namespace. A change acts on one
-namespace: it can only create and modify nodes of that namespace, but may link to nodes of another one.
+**Namespaces** ([ADR 0015](adr/0015-namespaces.md)): every node lives in a namespace, and a namespace is the content of
+one domain ([ADR 0013](adr/0013-domains.md)): `alm` (delivery), `organisation`, `platform` (MCPs, adapter definitions,
+model configuration), and the meta-domains `methodology` and `domain` that hold the definitions
+([ADR 0023](adr/0023-definitions-in-the-graph.md)). Keys are unique per namespace. A change acts on one namespace: it can
+only create and modify nodes of that namespace, but may link to nodes of another one.
 The organisation is a hierarchy of units in its own namespace (`organisation`); nodes reference their owner
 unit across namespaces, and a change is split into sub-changes along unit boundaries
 ([ADR 0016](adr/0016-organisation-and-sub-changes.md)).
@@ -249,7 +251,7 @@ organization and the owner (= the initiator) as attributes. The default policy a
 ### 2.8 ABAC access control (Casbin)
 
 All access decisions go through a [Casbin](https://casbin.org) enforcer with an
-**ABAC** model ([ADR 0005](adr/0005-abac-casbin.md)). A policy rule is:
+**ABAC** model ([ADR 0020](adr/0020-access-control.md)). A policy rule is:
 
 ```
 p, <rule on attributes>, <resource type | *>, <action | *>, <allow | deny>
@@ -275,8 +277,8 @@ Default policies (compiled in `pkg/authz`; seeded as `Policy` nodes at the first
 | `hasRole(r.sub, "approver") && r.sub.Org == r.obj.Org && r.sub.Subject != r.obj.Owner` | `change` | `apply` |
 | `hasRole(r.sub, "release_manager") && r.sub.Org == r.obj.Org && r.sub.Subject != r.obj.Owner` | `release` | `deploy` |
 
-- There is no IAM service: who may do what is **graph data** ([ADR 0020](adr/0020-access-in-the-graph.md)). A rule is a
-  `Policy` node and a caller a `User` node (profile, roles, `member_of` a unit) of the `organisation` namespace, changed
+- There is no IAM service: who may do what is **graph data** ([ADR 0020](adr/0020-access-control.md)). A rule is a
+  `Policy` node and a caller a `User` node (profile, roles, `member_of` a unit) of the `organisation` domain, changed
   through changes like any node and edited in the frontend's "Access" screen. A rule is validated (compilation + trial
   evaluation) when read.
 - Every service builds its `authz.Authorizer` in process (`pkg/access`) from a snapshot of the head of `main` (the graph
@@ -288,7 +290,7 @@ Default policies (compiled in `pkg/authz`; seeded as `Policy` nodes at the first
   checked against the floor alone (`graphsvc.Handler.Floor`); direct writes of these nodes are refused. While the graph has
   no policy, or cannot be read, the compiled-in defaults apply.
 - Enforcement points: engine (start / respond to / submit / read a process, action permission,
-  approvals), registry (write / publish / delete a methodology), graph (policies and users, node types, lifecycle).
+  approvals), registry (write / publish / delete a methodology or a domain), graph (policies and users, lifecycle transitions, object creation).
 
 Replanning at every step makes the engine robust to non-deterministic actions (LLM) and to concurrent
 modifications of the blackboard (a human can add an impact during execution).
@@ -325,19 +327,26 @@ cost, and **replaces it at execution time** when its guard is true (the highest 
 those from other methodologies). An action of `kind: abstract` has no implementation of its own: it requires
 an applicable specialization (e.g. `build` specialized into `build_java`, `build_c`, `build_shell`).
 **Subtyping** (§6): a node type can extend another (`extends`); conditions see
-`x.types` (the type and its ancestors): `"Requirement" in n.types` holds for its subtypes.
-Node types are the **metadata layer** of the graph ([ADR 0012](adr/0012-nodetype-graph-native.md)):
-unlike the rest of the meta-model, they are graph-native and no longer a registry mirror (§2.12).
-A data node carries its node type as an attribute (`Node.Type`).
+`x.types` (the type and its ancestors): `"alm@Requirement" in n.types` holds for its subtypes.
 
-What the registry stores (node types, link types, lifecycles, algorithms, [ADR 0023](adr/0023-registry-in-the-graph.md)) is the authority. The graph
-enforces only what the `NodeType` nodes carry (lifecycle, document, validators); it does not check link types or namespaces.
-The node types of every published domain are on the graph, whether a methodology references the domain or not.
+**Node types** ([ADR 0012](adr/0012-node-types.md)): a node's type is a qualified reference `<namespace>@<NodeType>`
+(`Node.Type`), the namespace being the domain that declares the type ([ADR 0013](adr/0013-domains.md)). Every reference
+to a type or a link type (in a domain, a methodology, CEL, `expects`) is qualified. The **type catalogue** of a baseline
+is built from the domain versions in force in it (their definition nodes, [ADR 0023](adr/0023-definitions-in-the-graph.md))
+and the built-in meta-domains `methodology` and `domain`: it resolves each type's properties, `extends` chain,
+lifecycle, validators, document, change control, search declarations and editor. The graph judges a change by the
+catalogue of its reference baseline and refuses a node whose type it does not resolve; the registry checks the
+references of a methodology or a domain against it when saving and publishing. Nothing is projected onto the graph.
 
 A node type may name the **editor** of its nodes in the IDE (`editor: agent`, inherited through `extends`,
 [ADR 0027](adr/0027-node-type-editors.md)): the IDE opens every node through `openNode` (`web/src/lib/nodeEditors.ts`),
-which reads the editor from the `NodeType` nodes and falls back to the default node editor; the editors a type can name
+which reads the editor from the type catalogue and falls back to the default node editor; the editors a type can name
 are registered in `web/src/lib/views/nodeEditors.ts` (`agent`, `action`, `methodology`, `domain`, `unit`, `mcp`, ...).
+
+> **Transition** (ADR 0012, 0013, 0023 being implemented): the code still projects published methodologies and domains
+> onto the graph (`pkg/metamodel`: `NodeType` nodes keyed `D:<domain>/nodetype/<name>`, elements keyed
+> `M:<methodology>/<kind>/<name>`), stores definitions as `Def*` nodes, types nodes by bare name in the `sdlc`
+> namespace and references a domain with `domainRef`. These go away as the ADRs are implemented.
 
 ### 2.11 Agent triggers
 
@@ -382,22 +391,15 @@ change CR-42
 - Every planning tick and every action execution (LLM or formal) is persisted and linked to the
   items it produced: **auditing** can trace back from a proposal to the model call that produced it, and to the
   corresponding OpenTelemetry span.
-- The **methodology is modeled in the domain** (`pkg/metamodel`): each publication projects its
-  elements (methodology, agents, actions, goals, conditions, triggers) as versioned nodes
-  `M:<methodology>/<type>/<name>` via a change applied on main. **Node types are the exception**
-  ([ADR 0012](adr/0012-nodetype-graph-native.md)): once seeded on the graph, they are authored
-  there directly — the registry's declared node types are only the bootstrap seed and a
-  compile-time validation schema afterwards, never overwritten or deleted by a later publication.
-  `x.types` resolution (§2.9) reads the graph's node types first, falling back to the declared
-  schema for a methodology never synced onto the graph. When a methodology references a shared
-  domain ([ADR 0013](adr/0013-shared-domain.md), §4) its node types are owned by the domain, one
-  node per type keyed `D:<domain>/nodetype/<name>` and shared by every methodology using it; the
-  methodology's root node carries its `domainRef` (`metamodel.TypeNamespace`).
+- The **methodology is graph data** ([ADR 0023](adr/0023-definitions-in-the-graph.md)): a journal record names the
+  version executed (`methodology@version`), i.e. a set of definition nodes of the `methodology` namespace whose
+  version history is the history of each element.
 - The **`methodology-improvement/observer`** agent triggers at the end of every root process
   (completed, failed, or stuck): it analyzes the journal and traces (pain points: loops, failures, costly
-  or systematizable LLM calls, replans, slow spans), proposes modifications **to the methodology's
-  nodes** (specialization by script, model, cost, agent, MCP tool request), submits them for human
-  review, and produces a **new draft version** of the methodology.
+  or systematizable LLM calls, replans, slow spans), proposes modifications as change impacts **on the
+  definition nodes of a new draft version** of the methodology (specialization by script, model, cost, agent) and MCP
+  tool requests, submits them for human review, and saves the draft with the accepted ones
+  ([ADR 0011](adr/0011-journal-auto-observation.md) §2).
 
 ### 2.10 Script actions and DSL
 
@@ -416,11 +418,10 @@ JavaScript: no `require`), with a timeout. The code runs in the process's **sand
 
 The DSL is a generic capability tied to a **usage** (which fixes the `ctx` the code sees): `action`
 (§2.10, code inline in the agent's action) and three *pluggable* usages of the domain —
-`property_validator`, `transition_guard`, `transition_action`. A shared domain declares
+`property_validator`, `transition_guard`, `transition_action`. A domain declares
 **algorithms** (JavaScript or Go, with typed parameters) and **instances** (parameter values);
 node types plug validator instances on their properties, lifecycle transitions plug guard and action
-instances, in call order. The NodeType nodes of the graph embed the resolved instances (like the
-lifecycle, ADR 0014): validators run when items are added and when a change is applied, guards and
+instances, in call order. The type catalogue resolves the plugged instances (like the lifecycle, ADR 0014): validators run when items are added and when a change is applied, guards and
 actions when a transition is applied. Reference: [docs/dsl.md](dsl.md), IDE section *Algorithms*.
 
 ## 3. Component architecture
@@ -457,7 +458,7 @@ actions when a transition is applied. Reference: [docs/dsl.md](dsl.md), IDE sect
 | Service | Responsibility | API | Persistence | Status |
 |---|---|---|---|---|
 | **gateway** | Single entry point, authentication (JWT/OIDC), routing to services, CORS, rate-limit | Echo HTTP, Connect reverse proxy | — | 🟢 core |
-| **registry** | Methodologies structured in the database: editing (draft), validation, publishing, versions, YAML import/export | Connect `registry.v1` | `registry` | 🟢 |
+| **registry** | Methodologies and domains (graph data, ADR 0023): editing (draft), validation, publishing, versions, YAML import/export | Connect `registry.v1` | — (the graph) | 🟢 |
 | **engine** | Intent loop, planning, process execution; deployable as a cluster | Connect `engine.v1` | `engine` | 🟢 core (memory) |
 | **graph** | Domain axis (versioned nodes, links, baselines) + change axis (Changes, items, apply) | Connect `graph.v1` | `graph` | 🟢 |
 | **modelgw** | Multi-provider / multi-model abstraction, aliases (`default`, `fast`, `reasoning`), administered catalog with global token quotas and required roles (see below), traces | Connect `model.v1` | `modelgw` (providers, catalog, usage) | 🟢 core |
@@ -498,7 +499,7 @@ an interface, replaceable with the PostgreSQL implementation without changing th
 
 - **Local without containers**: a single SQLite file shared by `goap-dev` (migrations `migrations_sqlite/`
   per component, [ADR 0010](adr/0010-mode-local-sqlite.md)).
-- **Dev**: one PostgreSQL instance, **one schema per service** (`graph`, `registry`, `engine`,
+- **Dev**: one PostgreSQL instance, **one schema per service** (`graph`, `engine`, `index`,
   `modelgw`, `mcp`) and a dedicated role per service (`deploy/postgres/init.sql`).
 - **Prod**: one database (or cluster) per service; only the DSN changes (`GOAP_DB_DSN`, read from Vault).
 - Migrations embedded in each service (`embed.FS`), applied at startup (advisory lock).
@@ -630,7 +631,7 @@ to look for pain points (slow spans, tools, model calls).
 Three independent things, and the one place where they meet:
 
 ```
-MCP        node of the `platform` namespace (with the methodology meta-model): the generic usage of a tool
+MCP        node of the `platform` namespace (`platform@MCP`): the generic usage of a tool
            by an LLM, name + tool signatures, e.g. document-repository { list, read, write }.
            Knows no connector, no adapter. Referenced by actions (`mcps:`) and agents (`mcps:`).
 Connector  a service of its own wrapping a real API (connector-localfs, connector-gdrive, ...). It registers
@@ -685,7 +686,7 @@ under the parameter name, and that the code can never read. Runs are bounded (30
 - `goap-dev` runs the hub and the localfs connector in-process (`GOAP_DEV_FS_ROOT` gives the default organisation
   an adapter instance on a directory); connectors started separately register over HTTP.
 
-### 3.8 Voice input ([ADR 0013](adr/0013-voice-interaction.md))
+### 3.8 Voice input ([ADR 0022](adr/0022-voice-interaction.md))
 
 The assistant accepts push-to-talk voice input. Speech-to-text runs **entirely in the browser**
 (Whisper `tiny` / `base` through transformers.js in a Web Worker, WebGPU with WASM fallback;
@@ -697,47 +698,42 @@ provider, or gateway WebSocket) are analyzed in the ADR but not built.
 
 ## 4. Format of a methodology
 
-Methodologies are **stored in the graph** in structured form ([ADR 0023](adr/0023-registry-in-the-graph.md), which
-supersedes the database of [ADR 0006](adr/0006-methodologies-en-base.md)), edited from the frontend: a
-`MethodologyVersion` header node per version (platform namespace, key `MV:<name>@<version>`: scalar fields, status) and one node per
-element (`DefAction`, `DefAgent`, `DefNodeType`, `DefLifecycle`, ... keyed `<header>/<kind>/<name>`, tied by `defines`),
-every save, publication or deletion being a change applied on main; editing an action versions that node only. The registry service (`registrysvc.GraphStore`,
-through a graph client) has no database. A published version is projected as elements (`M:` / `D:` keys, §2.12).
+Methodologies and domains are **graph data** ([ADR 0023](adr/0023-definitions-in-the-graph.md)), edited from the
+frontend: a version is a node `methodology@MethodologyVersion` (key `MV:<name>@<version>`, namespace `methodology`: scalar
+fields, status) or `domain@DomainVersion` (`DV:<name>@<version>`, namespace `domain`), and one node per element typed by
+the built-in meta-domains (`methodology@Agent`, `@Action`, `@Condition`, `@Goal`; `domain@NodeType`, `@LinkType`,
+`@Lifecycle`, `@Algorithm`, `@AlgorithmInstance`), keyed `<version key>/<kind>/<name>` and tied by `defines`. Every save,
+publication or deletion is a change applied on main; editing an action versions that node only. The registry service
+(`registrysvc.GraphStore`, through a graph client) has no database: it validates, compiles, publishes and emits the
+`goap.registry.*` events.
 
 Lifecycle of a version: **draft** (editable, can be invalid: anomalies are returned
 with their path, e.g. `conditions[2].expr`) → **published** (validated, immutable, the only one executable by the
 engine) → **archived**. Modifying a published version means creating a new draft version (`CreateVersion`).
 
-**Shared domain.** The object part of the model (node types, link types) can live in a
-**Domain**, versioned on its own (`domain`, `domain_node_type`, `DomainVersion` nodes, key `DV:<name>@<version>`; same
-draft → published → archived lifecycle; `registry.v1` `*Domain*` RPCs, ABAC resource `domain`, role
-`methodologist`). A methodology is then the active part only (agents, actions, conditions, goals) and
-references the domain with `domainRef: <name>[@<version>]`; an unpinned reference follows the latest
-published version. Embedding a `domain:` and referencing one are exclusive; the embedded form stays
-valid. Consistency is checked at save / publish (`Methodology.Resolve`, then `Validate`): action
-`expects`, CEL type literals (`"X" in p.node.types`, `.link.type == "x"`) and builtin `params.linkTypes`
-must name types of the domain. A methodology can only be published on a published domain, and a domain
-version is refused when it would break a published methodology that follows the latest version
-(`GetDomainUsage` lists the dependents). Editing a domain creates no change, impact or proposal.
+**Domains** ([ADR 0013](adr/0013-domains.md)). The object part of the model (node types, link types, lifecycles,
+algorithms) lives in **domains**, one per namespace (`alm`, `organisation`, `platform`), versioned on their own (same
+draft → published → archived lifecycle; `registry.v1` `*Domain*` RPCs, ABAC resource `domain`, role `methodologist`).
+A methodology is the active part only (agents, actions, conditions, goals): it names the types it works on with
+qualified references (`alm@Requirement`, [ADR 0012](adr/0012-node-types.md)) and may use several domains. Consistency is
+checked at save / publish against the domain versions in force: action `expects`, CEL type literals
+(`"alm@Requirement" in n.types`, `l.type == "alm@verifies"`) and builtin `params.linkTypes` must resolve. A methodology
+can only be published on published domains, and a domain version is refused when it would break a published
+methodology (`GetDomainUsage` lists the dependents).
 
-**YAML** is only an **import / export** format (`ImportMethodology`, `ExportMethodology`); the
+**YAML** is only an **import / export** format (`ImportMethodology`, `ExportMethodology`, `ImportDomain`, ...); the
 files in `domains/` then `methodologies/` are imported and published at registry startup if they don't already exist
 (`GOAP_DOMAINS_DIR`, `GOAP_METHODOLOGIES_DIR`; a changed file needs a new version number).
-Example YAML definition:
+Example YAML definition (target format of ADR 0012):
 
 ```yaml
 name: impact-analysis
-version: 1.0.0
+version: 1.2.0
 description: Impact analysis of a change on a requirements repository
-domain:
-  nodeTypes: [Need, Requirement, TestCase, Component]
-  linkTypes:
-    - {name: satisfies, from: Requirement, to: Need}
-    - {name: verifies,  from: TestCase,    to: Requirement}
 conditions:
   - name: has_impacts
-    expr: size(impacts) > 0
-  - name: impacts_propagated
+    expr: changeImpacts.exists(n, n.intent == "modified")
+  - name: propagated
     expr: artifacts.exists(a, a.type == "propagation")
 actions:
   - name: identify_impacts
@@ -750,19 +746,17 @@ actions:
       ...
   - name: propose_test_updates
     kind: llm
-    pre: {impacts_propagated: true}
+    pre: {propagated: true}
     expects:
-      forEach: impacts
-      where: x.target.type == "Requirement"   # x = iterated element
-      produce: {op: create_node, nodeType: TestCase}
-      link: {type: verifies}                  # direction: out (new -> target) by default
-      # forEach: changeImpacts works the same on change impacts (ADR 0024): x is a modified change impact,
-      # update_node = its node was written, create_node = a created change impact written and linked to it
+      forEach: changeImpacts                 # x = iterated change impact
+      where: x.type == "alm@Requirement"
+      produce: {op: create_node, nodeType: alm@TestCase}
+      link: {type: alm@verifies}             # direction: out (new -> target) by default
 goals:
   - name: assess_impact
     description: Measure the impact of a change without modifying anything
     examples: ["what does this break", "what is the impact"]
-    pre: {impacts_propagated: true}
+    pre: {propagated: true}
 ```
 
 See `methodologies/examples/impact-analysis.yaml` for the full executable example, and
@@ -817,7 +811,6 @@ internal/<service>/          Connect handler implementation for a service (graph
 internal/identity/           caller identity (headers set by the gateway)
 pkg/domain/                  graph model (domain axis + change axis)
 pkg/graph/                   Store (memory, PostgreSQL, SQLite), apply, branches / merge / rebase, execution journal
-pkg/metamodel/               methodology projected into versioned domain elements
 pkg/observe/                 run cost analysis (journal + traces) and improvement proposals
 pkg/goap/                    A* planner
 pkg/condition/               CEL compilation/evaluation, `expects` compilation
@@ -851,10 +844,10 @@ docs/                        architecture, ADRs
 | **M5 — UX** | ✅ methodology editor (forms, localized anomalies, publishing, versions, YAML import/export), "Access" screen (ABAC policies), approvals · remaining: graph and plan visualization |
 | **M6 — K8s** | Helm charts, engine HPA · ✅ OpenTelemetry observability, sandbox manifests |
 | **M8 — branches and decisions** 🟡 | ADR 0009 (accepted) · ✅ graph: per-branch versions, 3-way branch merge, change divergence and rebase · remaining: engine (conflict → validated merge → rebase and replanning), change budget, options explored as branches, comparison, decision loops (questions → analyses), merging the chosen option; then versioned containers and releases |
-| **M9 — self-observation** ✅ | ADR 0011: execution journal on the change axis (ticks, actions, LLM / tool calls, decisions, item provenance), methodology projected into versioned domain elements, `observer` agent (journal + OpenTelemetry traces → findings → proposals → review → draft), action specialization and type subtyping |
+| **M9 — self-observation** ✅ | ADR 0011: execution journal on the change axis (ticks, actions, LLM / tool calls, decisions, item provenance), `observer` agent (journal + OpenTelemetry traces → findings → proposals → review → draft), action specialization and type subtyping |
 | **M10 — SDLC** 🟡 | `sdlc` 0.3.0 methodology on the shared ALM domain (need → requirement → function → component → artifact → application → solution, data, interfaces, flows), build specialized by technology, incremental releases and deployment (dev → test → staging → production, release manager approval), incremental actions · to refine: quality (coverage, security), rollback, freezes / change windows, MCP tools (repositories, CI, artifact registry, deployment) |
 | **M7 — agents** ✅ | agents (goap / utility / hybrid), JS / Go script actions with DSL, sub-agents, sandbox per process, IDE |
-| **M11 — graph-native metadata layer** 🟡 | ADR 0012: `NodeType` seeded on the graph and never overwritten by `Sync`, graph-first `x.types` resolution with a permanent declared-schema fallback, `nodetype` ABAC resource · remaining: IDE screen to author node types and `extends` directly on the graph |
+| **M11 — node types** 🟡 | ADR 0012 / 0013 / 0023: qualified type references `<namespace>@<NodeType>`, one domain per namespace, type catalogue built from the published domains with an existence rule, definitions as nodes of the `methodology` / `domain` meta-domains; removes the `NodeType` projection, the `M:` / `D:` elements and the `Def*` types · in progress |
 
 ## 7. Open questions
 
@@ -898,8 +891,9 @@ A domain is composed of **node types, link types and lifecycles**. A lifecycle i
 (states with an `editable` flag, transitions with permission, CEL guard, required attributes/links and,
 for documents, allowed child states) that node types name and subtypes inherit. The state is stored on
 each node version. A node is modified only in an editable state, which it holds only through a change:
-the change reopens it (`transition_node`), edits it and moves it out of the editable states before it is
-applied. Changes are attached to the nodes they modify (several changes may be attached to one node;
+the change reopens it (writes a version in an editable state), edits it and moves it out of the editable states before
+it is applied. Changes are attached to the nodes they modify (several changes may be attached to one node;
 conflicts appear at Apply). A document type embeds nodes through `contains` links and its transitions
 validate the states of its children in the result baseline. The rules live in `pkg/graph/lifecycle.go`
-(`Graph.walk` + the checks of `Apply`); the metadata is projected on the NodeType graph nodes.
+(checked when a change impact writes a version and again by `Apply`); the type catalogue of the reference baseline
+resolves the lifecycles (ADR 0012).

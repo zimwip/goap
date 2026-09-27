@@ -10,8 +10,7 @@ rooted in a different directory). Several organisations can work on one change, 
 ## Decision
 1. **Three independent concepts and the place where they meet.**
    - **MCP**: the generic usage of a tool by an LLM (name + tool signatures). A node of the **`platform`**
-     namespace (the former `metadata`, renamed: it holds the platform model, methodologies, domains and
-     MCPs), type `MCP`, key `MCP:<name>`, in `domains/platform.yaml`. It knows no connector and no adapter.
+     domain, type `platform@MCP`, key `MCP:<name>`, declared in `domains/platform.yaml`. It knows no connector and no adapter.
      Actions and agents reference it by name (`mcps:`).
    - **Connector**: a driver wrapping a real API, **deployed as a separate service** implementing
      `connector.v1.ConnectorService` (`Describe`, `Invoke`). It registers itself with the MCP hub and renews the
@@ -21,7 +20,7 @@ rooted in a different directory). Several organisations can work on one change, 
      Registration and calls are authenticated with a shared token (`GOAP_CONNECTOR_TOKEN`).
    - **Adapter**: the code that makes the two work together. An MCP expects functions (its tools), a connector
      exposes its own (its operations); the adapter implements the former with the latter, and only it knows both.
-     It is an **`AdapterDef` node of the `platform` namespace** (key `ADD:<name>`, usage `adapter` of ADR 0018),
+     It is a **`platform@AdapterDef` node** (key `ADD:<name>`, usage `adapter` of ADR 0018),
      so creating or changing one is a change like any modification of the platform's configuration. It names one
      `mcp` and one `connector`, with typed parameters (a `secret` type holds a
      reference the code can never read). The code is the body of `function (ctx)` with `ctx.tool()`,
@@ -58,8 +57,6 @@ rooted in a different directory). Several organisations can work on one change, 
 - Adapters and MCPs are versioned and reviewed through changes like any node; secrets are references.
 - The engine depends on the hub for the MCPs of a unit, and the hub on the graph for the hierarchy: a
   graph outage makes MCP actions unschedulable rather than wrong.
-- Renaming `metadata` to `platform` moves persisted nodes and changes with a migration; the `D:metamodel/…`
-  node types of the former domain name are re-projected as `D:platform/…` at the next sync.
 - Adapter code runs in the hub process (goja / yaegi, no file, network or process access, bounded), the same
   trust model as the algorithms of ADR 0018: authors of the domain library are trusted; sandboxing them with the
   pool of ADR 0007 is the next step if that changes. The seeded definition
