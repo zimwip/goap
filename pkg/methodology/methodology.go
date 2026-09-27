@@ -169,6 +169,11 @@ type NodeType struct {
 	// goes into the full-text and embedding document, facet makes the value
 	// filterable and countable. Inherited through extends.
 	Search []SearchProperty `yaml:"search,omitempty" json:"search,omitempty"`
+	// Editor names the editor the user interface opens the nodes of the type
+	// with (agent, action, methodology, ...); the UI falls back to its default
+	// node editor when it has no editor of that name. Inherited through
+	// extends; empty: the default node editor.
+	Editor string `yaml:"editor,omitempty" json:"editor,omitempty"`
 }
 
 // SearchProperty declares how the node index uses a property of a node type.
@@ -383,6 +388,9 @@ func (s Schema) check(prefix string, add func(path, format string, args ...any))
 			add(path+".name", "duplicate node type %s", n.Name)
 		}
 		nodeTypes[n.Name] = true
+		if n.Editor != "" && !nameRE.MatchString(n.Editor) {
+			add(path+".editor", "invalid editor name %q (lowercase letters, digits, - and _)", n.Editor)
+		}
 	}
 	parents := map[string]string{}
 	for i, n := range s.NodeTypes {

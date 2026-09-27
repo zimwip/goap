@@ -3,7 +3,7 @@
   // with facets. It covers the workbench while it is open and closes as soon as a node is chosen.
   import { nodeIndex, errorMessage, type NodeHit, type NodeSearchRequest, type NodeSearchResult } from '../api';
   import Icon from './Icon.svelte';
-  import { openTab } from './tabs.svelte';
+  import { openNode } from '../nodeEditors';
   import { notify } from './workbench.svelte';
   import { searchOverlay, closeSearch } from './searchOverlay.svelte';
   import { hasAnyRole } from '../stores/session.svelte';
@@ -117,7 +117,7 @@
   /** Choosing a node closes the overlay: what was selected shows in the workbench. */
   function open(h: NodeHit) {
     closeSearch();
-    openTab({ kind: 'node', params: { id: h.id, key: h.key } }, { pin: true });
+    void openNode({ id: h.id, key: h.key, type: h.type, namespace: h.namespace }, { pin: true });
   }
 
   const total = $derived(result?.total ?? 0);

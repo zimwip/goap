@@ -1,7 +1,9 @@
 <script lang="ts">
   // What a node type says beyond its properties: its lifecycle (by name), the
-  // node types it embeds when it is a document, and whether it is change controlled.
+  // node types it embeds when it is a document, whether it is change controlled,
+  // and the editor the user interface opens its nodes with.
   import { moveItem, type NodeTypeForm } from '../methodologyForm';
+  import { nodeEditorNames } from '../shell/registry';
   import RowTools from './RowTools.svelte';
 
   let {
@@ -31,13 +33,14 @@
   } = $props();
 </script>
 
-<details class="meta" open={!!n.lifecycle || !!n.document || !n.changeControlled || n.validators.length > 0}>
+<details class="meta" open={!!n.lifecycle || !!n.document || !n.changeControlled || n.validators.length > 0 || !!n.editor}>
   <summary>
-    Lifecycle, documents &amp; validators
+    Lifecycle, documents, validators &amp; editor
     {#if n.lifecycle}<span class="tag">lifecycle: {n.lifecycle}</span>{:else if inherited}<span class="tag muted">inherits {inherited.lifecycle} from {inherited.type}</span>{/if}
     {#if n.document}<span class="tag">document</span>{/if}
     {#if !n.changeControlled}<span class="tag muted">direct writes</span>{/if}
     {#if n.validators.length}<span class="tag">{n.validators.length} validator{n.validators.length > 1 ? 's' : ''}</span>{/if}
+    {#if n.editor}<span class="tag">editor: {n.editor}</span>{/if}
   </summary>
   <div class="body" data-path="{path}.lifecycle">
     <div class="line">
@@ -53,6 +56,11 @@
       <label for="{path}-doc">Embedded node types <span class="hint">(a document: comma-separated, attached by outgoing “contains” links)</span></label>
       <input id="{path}-doc" type="text" class="mono" bind:value={n.document} placeholder="Requirement, Chapter" list="{path}-types" disabled={readonly} />
       <datalist id="{path}-types">{#each typeNames as t (t)}<option value={t}></option>{/each}</datalist>
+    </div>
+    <div class="field" data-path="{path}.editor">
+      <label for="{path}-editor">Editor <span class="hint">(the nodes open in this editor of the interface; empty: inherited from the parent type, else the default node editor)</span></label>
+      <input id="{path}-editor" type="text" class="mono" class:bad={bad(`${path}.editor`)} bind:value={n.editor} placeholder="default node editor" list="{path}-editors" disabled={readonly} />
+      <datalist id="{path}-editors">{#each nodeEditorNames() as e (e)}<option value={e}></option>{/each}</datalist>
     </div>
     <div class="validators" data-path="{path}.validators">
       <span class="label">Property validators <span class="hint">(algorithms run in this order on create / update, after those of the supertypes)</span></span>

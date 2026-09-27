@@ -332,6 +332,12 @@ A data node carries its node type as an attribute (`Node.Type`).
 
 What the registry stores (node types, link types, lifecycles, algorithms, [ADR 0023](adr/0023-registry-in-the-graph.md)) is the authority. The graph
 enforces only what the `NodeType` nodes carry (lifecycle, document, validators); it does not check link types or namespaces.
+The node types of every published domain are on the graph, whether a methodology references the domain or not.
+
+A node type may name the **editor** of its nodes in the IDE (`editor: agent`, inherited through `extends`,
+[ADR 0027](adr/0027-node-type-editors.md)): the IDE opens every node through `openNode` (`web/src/lib/nodeEditors.ts`),
+which reads the editor from the `NodeType` nodes and falls back to the default node editor; the editors a type can name
+are registered in `web/src/lib/views/nodeEditors.ts` (`agent`, `action`, `methodology`, `domain`, `unit`, `mcp`, ...).
 
 ### 2.11 Agent triggers
 

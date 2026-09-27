@@ -180,8 +180,9 @@ func nodeTypeProps(s methodology.Schema, t methodology.NodeType) map[string]any 
 	return m
 }
 
-// lifecycleKeys are the NodeType properties that carry the lifecycle and algorithm model.
-var lifecycleKeys = []string{"lifecycle", "lifecycleRef", "document", "changeControlled", "validators", "search"}
+// lifecycleKeys are the NodeType properties that carry the lifecycle and algorithm model, the index
+// declarations and the editor of the user interface.
+var lifecycleKeys = []string{"lifecycle", "lifecycleRef", "document", "changeControlled", "validators", "search", "editor"}
 
 func pick(m map[string]any, keys []string) map[string]any {
 	out := map[string]any{}
@@ -453,9 +454,9 @@ func sync(ctx context.Context, g Graph, t target) (Result, error) {
 			refs[el.Key] = &ref
 			// NodeType is the metadata layer (ADR 0012): once created, it is
 			// authored on the graph, not overwritten from the registry.
-			// The lifecycle, document and change-control declarations are the
-			// exception (ADR 0014): they are governed by the domain and follow
-			// its published version.
+			// The lifecycle, document, change-control, index and editor
+			// declarations are the exception (ADR 0014): they are governed by
+			// the domain and follow its published version.
 			if el.Type == TypeNodeType {
 				if patch := diff(pick(n.Properties, lifecycleKeys), pick(el.Props, lifecycleKeys)); patch != nil {
 					editFor(el.Key).Props = patch
@@ -573,17 +574,47 @@ type Published interface {
 	List(ctx context.Context) ([]*methodology.Compiled, error)
 }
 
-// SyncAll synchronizes every published methodology (startup).
+// PublishedDomains lists the latest published version of every shared domain. A registry
+// that implements it has SyncAll project the domains no methodology references too.
+type PublishedDomains interface {
+	Domains(ctx context.Context) ([]*methodology.Domain, error)
+}
+
+// SyncAll synchronizes every published methodology (startup), then, when reg lists the
+// published domains, the node types of the domains no methodology references (their
+// nodes, like the organisation's units and policies, are still typed on the graph).
 func SyncAll(ctx context.Context, g Graph, reg Published) ([]Result, error) {
 	ms, err := reg.List(ctx)
 	if err != nil {
 		return nil, err
 	}
 	var out []Result
+	referenced := map[string]bool{}
 	for _, m := range ms {
 		r, err := Sync(ctx, g, m.Methodology)
 		if err != nil {
 			return out, fmt.Errorf("%s: %w", m.Name, err)
+		}
+		out = append(out, r)
+		if name, _, _ := strings.Cut(m.DomainRef, "@"); name != "" {
+			referenced[name] = true
+		}
+	}
+	pd, ok := reg.(PublishedDomains)
+	if !ok {
+		return out, nil
+	}
+	ds, err := pd.Domains(ctx)
+	if err != nil {
+		return out, err
+	}
+	for _, d := range ds {
+		if referenced[d.Name] {
+			continue
+		}
+		r, err := SyncDomain(ctx, g, d)
+		if err != nil {
+			return out, fmt.Errorf("domain %s: %w", d.Name, err)
 		}
 		out = append(out, r)
 	}

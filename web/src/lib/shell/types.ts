@@ -79,3 +79,32 @@ export interface EditorView extends BaseView {
 }
 
 export type View = PanelView | EditorView;
+
+/** A graph node as a node editor receives it (a graph node, a search hit...). */
+export interface NodeHandle {
+  id: string;
+  key: string;
+  type: string;
+  namespace: string;
+  props: Record<string, unknown>;
+}
+
+/** Where a node editor shows a node: a tab, and the field to reveal in it. */
+export interface NodeEditorTarget extends TabSpec {
+  /** `[data-path]` of the field to scroll to (e.g. "nodeTypes[2]") */
+  reveal?: string;
+}
+
+/**
+ * Editor of the nodes whose type names it (NodeType `editor`, inherited
+ * through extends). Nodes of the other types, and nodes an editor cannot
+ * show, open in the default node editor.
+ */
+export interface NodeEditor {
+  /** the name node types give in their `editor` property */
+  name: string;
+  /** shown in "Open in …" */
+  title: string;
+  /** the tab showing the node; undefined: the default node editor shows it */
+  open: (node: NodeHandle) => NodeEditorTarget | undefined | Promise<NodeEditorTarget | undefined>;
+}
