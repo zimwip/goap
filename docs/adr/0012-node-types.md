@@ -12,8 +12,8 @@ existed so that the graph could "loop on itself": describe its own types with it
 problem, a synchronisation (`pkg/metamodel`) that could drift from the definitions, two sources for `extends`
 (a property and links), and name-only resolution across every namespace.
 
-A reference by name is enough: a node type is identified by the domain that declares it and its name, and the domain
-definitions are already graph data (ADR 0023). Nothing needs to be projected.
+A reference by name is enough: a node type is identified by the domain that declares it and its name, and the registry
+already versions the domain definitions (ADR 0023). Nothing needs to be projected.
 
 Question answered (CLAUDE.md, rule 8): **WHAT** is being changed — how a node says what it is.
 
@@ -22,8 +22,8 @@ Question answered (CLAUDE.md, rule 8): **WHAT** is being changed — how a node 
 ### 1. A node type is referenced as `<namespace>@<NodeType>`
 - One domain per namespace (ADR 0013): the prefix names both the namespace and the domain that declares the type
   (`alm@Requirement`, `organisation@OrgUnit`, `platform@MCP`).
-- `Node.Type` is **composite**: the namespace and the key of the node type in that namespace (`TypeRef{Namespace,
-  Name}`, written `alm@Requirement`). A node lives in the namespace of the domain that types it, so the namespace of
+- `Node.Type` is **composite**: the namespace and the key of the node type in that namespace, the string
+  `alm@Requirement` (parsed by `domain.ParseTypeRef` into `TypeRef{Namespace, Name}`). A node lives in the namespace of the domain that types it, so the namespace of
   its type is its own.
 - Every reference to a node type is qualified: `extends`, link type ends (`from`, `to`), `document.contains`,
   `expects.produce.nodeType`, the literals of CEL (`n.type == "alm@Requirement"`, `"alm@Requirement" in n.types`),
@@ -34,7 +34,7 @@ Question answered (CLAUDE.md, rule 8): **WHAT** is being changed — how a node 
   a type of another (`extends: base@Item`). `domain.TypeRef` parses and qualifies references; `pkg/typecat` is the
   catalogue.
 - At run time, the engine qualifies a bare type or link type written by an action (a script's `createNode`, an item,
-  a link) with the namespace of the change, which is the domain the methodology targets (ADR 0013 §1).
+  a link) with the namespace of the change, which is the domain the methodology targets (ADR 0013 §3).
 
 ### 2. The registry is the reference; the services hold an in-memory copy
 - The **registry** is the reference of the node types: the published version of each domain (ADR 0013, 0023). It
@@ -42,8 +42,8 @@ Question answered (CLAUDE.md, rule 8): **WHAT** is being changed — how a node 
   actions), property validators, document, change control, search declarations, editor.
 - The **type catalogue** is the in-memory copy of that model held by the services that need it: the graph (judging a
   change, the node events of the index), the engine (`x.types`). A service loads it from the registry at startup and
-  keeps it in sync with the registry's events (`goap.registry.domain.published`, archived, ...); it does not read the
-  domain definitions from the graph itself. The code is a library (`pkg/`) shared by the registry and the services.
+  keeps it in sync with the registry's events (`goap.registry.domain.published` / `deleted`); the domain definitions
+  are not in the graph. The code is a library (`pkg/`) shared by the registry and the services.
   The IDE loads the resolved catalogue from the registry (`ListTypes`: types with their properties, ancestors,
   lifecycle and editor; link types with their ends; the version in force of each domain).
 - A change is judged by the catalogue **in force when it is checked**: when a version is written, and again when the

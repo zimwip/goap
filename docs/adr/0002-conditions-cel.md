@@ -15,9 +15,10 @@ safe (executed server-side), fast, and verifiable at load time.
 4. Rego (powerful but policy-oriented, heavier).
 
 ## Decision
-CEL (`cel.dev/cel-go`). Variables: `change`, `items`, `impacts`, `proposals`, `decisions`,
-`artifacts`, `vars`. Domain references are hydrated (`type`, `key`, `props`, `out`, `in`,
-`latest`). An expression that errors makes the condition **unknown**: it satisfies no
+CEL (`cel.dev/cel-go`). Variables: `change`, `items`, `changeImpacts` (ADR 0024), `decisions`,
+`artifacts`, `merges`, `vars`. Node references (the `pre` / `post` of a change impact) are hydrated
+(`type`, `types`: the type and its supertypes, `key`, `props`, `state`, `editable`, `deleted`,
+`out`, `in`, `latest`); type literals are qualified (`"alm@Requirement" in n.types`, ADR 0012). An expression that errors makes the condition **unknown**: it satisfies no
 precondition. Actions' `expects` are compiled into CEL.
 
 ## Consequences

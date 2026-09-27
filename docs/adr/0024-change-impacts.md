@@ -1,6 +1,6 @@
 # ADR 0024 — Change impacts: the change is attached to node versions (pre / post)
 
-**Status**: accepted, implemented (see Implementation status) · **Date**: 2026-09 · Refines ADR 0011 (journal), 0014 (attachment), 0015 (pre/post
+**Status**: accepted, implemented (see Final state) · **Date**: 2026-09 · Refines ADR 0011 (journal), 0014 (attachment), 0015 (pre/post
 impacts, shared versions) and 0009 (merge). Supersedes the `impact` and `proposal` item kinds.
 
 ## Context
@@ -22,11 +22,11 @@ produced it and why it was accepted.
 
 ### 1. A change holds change impacts and facts, two separate lists
 - `Change.Nodes []ChangeImpact`: the node versions the change reads, modifies or creates.
-- `Change.Facts []ChangeItem` (the former `Items`, renamed): `decision` (about a non-node choice),
+- The facts, `Change.Items []ChangeItem` (to be renamed `Facts`): `decision` (about a non-node choice),
   `artifact`, `merge`, `flow`. A fact has no `target` / `post` / `proposal`.
 - The `impact` and `proposal` kinds disappear. CEL exposes `changeImpacts` (with `intent`, `review`,
-  `hasPost`, `pre`, `post`, `landed`) instead of `impacts` / `proposals`; `facts` and the kind filters
-  (`decisions`, `artifacts`, `merges`) stay.
+  `hasPost`, `pre`, `post`, `landed`) instead of `impacts` / `proposals`; `items` (the facts) and the kind
+  filters (`decisions`, `artifacts`, `merges`) stay.
 
 ### 2. `ChangeImpact` is the link change → node, and it carries the meaning
 ```
@@ -51,7 +51,7 @@ ChangeImpact {
   *planned*; with `post` it is *realized*.
 - `intent` is what the analysis declares; the realization must match it: `created` has no `pre`,
   `modified` has one, `post.parents` contains `pre`.
-- The pre side keeps the ADR 0015 §8 rule: when the type has a lifecycle, `pre` is a non-editable
+- The pre side keeps the ADR 0014 §3 rule: when the type has a lifecycle, `pre` is a non-editable
   (released) version; the post version is editable and must reach a non-editable state before `Apply`
   (ADR 0014 §3).
 - Applies to one namespace, the change's (ADR 0015 §2); `pre` may point to another namespace only as a read
@@ -90,28 +90,30 @@ parent, so **`pre` is the common ancestor** of the 3-way merge with whatever lan
 
 **Detection, as early as possible**
 - On `AddNodes`, any other open change holding a change impact with the same node (any version) makes both
-  sides `shared`. `GetSharedNodes` / `ListNodeChanges` (ADR 0014 §4) report it, and the journal records it.
-- When a change lands on a branch, every open change with a change impact on the same node whose `pre` is no
-  longer the head of the target branch is marked `diverged` (ADR 0009 §2).
+  sides `shared`. `GetSharedNodes` (ADR 0015 §6) / `ListNodeChanges` (ADR 0014 §4) report it, and the journal
+  records it.
+- When a change lands on a branch, the planned change impacts of the other open changes on the same node are
+  moved to the new head and flagged to re-check (below); the realized ones are merged when their change is
+  applied.
 
 **What has to be done, according to the state of the diverged change impact**
 | State of the change impact | What happens |
 |---|---|
 | *planned* (no `post`), i.e. an impact | No content to merge. `pre` is moved to the new head, the `rationale` is kept and flagged **to re-check** (`recheck = true`, with the version it was written against). The planner replans if needed. |
 | *realized*, properties and links disjoint | Auto-merge at `Apply` (3-way per property, links per source version): a `merge` version is created, `parents = [post, head]`, `reason = merge`. |
-| *realized*, same property or same link changed | **`merge_pending`**: a `merge` fact is created and attached to the change impact (`base = pre`, `theirs` = head, `ours` = post, proposed merge, conflicting keys; computed by `graph.rebase` or proposed by an agent). A human validates it (ABAC `change:merge`, one comment mandatory, as in §3). Apply resumes with the resolution. |
+| *realized*, same property or same link changed | **`merge_pending`**: the change is applied but its branch is not merged; the conflicts (`base = pre`, `theirs` = head, `ours` = post, conflicting keys) are resolved per node by a human, and `MergeChange` completes the merge with the resolutions. |
 | parent lists (children / links) | Merged as a 3-way set: additions and removals from both sides are kept, an item removed by one and modified by the other is a conflict. This is what makes "a removal is a parent modification" mergeable. |
 
 Rules:
-- **A merge is required, never skipped.** A change that is `diverged` cannot be applied until each of its
-  diverged change impacts is auto-merged or resolved. The order of application decides who merges: the
-  first to apply lands as is, the following ones merge onto it.
+- **A merge is required, never skipped.** A change whose realized change impacts conflict stays `merge_pending`
+  until each conflict is resolved. The order of application decides who merges: the first to apply lands as is,
+  the following ones merge onto it.
 - A merge does not delete the earlier work: the `post` of each change stays; the `landed` version (§6) is
   the merge version and its `parents` give the traceability to both.
-- Superseded facts follow ADR 0009 §2 (`superseded` marks replaced facts, the change replans what became
-  obsolete). A *rebase* (rebuilding `post` on the new head instead of merging) remains possible and is
-  the choice of the human or the agent; it is a new realization of the change impact, the old `post`
-  is kept in `reviews` history as superseded.
+- The planner replans what became obsolete. Rebuilding `post` on the new head instead of merging is a new
+  realization of the change impact by the human or the agent (there is no rebase operation).
+- *Not done*: a `merge` fact attached to the change impact and proposed by an agent, a merge task pausing the
+  process, a dedicated ABAC action and mandatory comment for the resolution.
 - Building a change on the unmerged versions of another one is still not supported (ADR 0015 §6).
 
 ### 6. Landing
@@ -132,7 +134,7 @@ Rules:
   `delete_node` proposal becomes a `modified` change impact on the parent with the removal, or is dropped
   with a warning when there is no parent link.
 - Code: `pkg/domain/change.go` (types, `Proposal` and `Op*` removed), `pkg/graph/apply.go` and
-  `walk` (realization from change impacts, merge at apply), `pkg/graph/namespace.go`, the engine bindings
+  `walk` (realization from change impacts, merge at apply), the engine bindings
   and `pkg/dsl`, the builtins `graph.propagate` / `graph.apply`, the impact analysis actions of
   `methodologies/`, `pkg/observe`, and the web views of a change.
 - Docs: `docs/architecture.md` (§2.1 change axis, §2.3 CEL bindings), ADR 0011 (journal items), ADR 0015
@@ -149,7 +151,9 @@ Rules:
 - Retention of a rejected change impact's post version: abandoned with the branch (chosen) versus a
   reverting version; only matters when the change is not on its own branch.
 
-## Implementation status
+## Implementation history
+The steps as they were done; the result is the **Final state** below.
+
 - **Step 1 (done)**: types, storage (both dialects), `AddNodes`, `RealizeNode`, `ReviewNode`, `ListChangeImpacts`.
 - **Step 2a (done)**: `WriteNode` creates the post versions on the change branch (own branch required);
   `Apply` refuses a change impact still `proposed` or accepted without post, drops the rejected ones, checks
@@ -171,7 +175,8 @@ Rules:
 - **Read side (done)**: CEL `changeImpacts` binding (docs/architecture.md §2.3); `Change.nodes` and
   `Node.change_impact` / `comment` in `graph.v1`; RPCs `AddChangeImpacts`, `WriteChangeImpact`,
   `ReviewChangeImpact` (a comment is mandatory; NodeType, User and Policy nodes keep their `AddItems`
-  gates); the change tab lists the change impacts with the review action, and the node history shows the
+  gates at the time; the access gate is now `policy:write` on `AddChangeImpacts`, `WriteChangeImpact` and
+  `CommitEdits`); the change tab lists the change impacts with the review action, and the node history shows the
   comment of each version.
 - **Producers, first part (done)**: `Graph.Commit` (RPC `CommitEdits`) makes a change of node edits: it
   opens the change on a branch of its own, declares a change impact per edit (rationale mandatory, the title
@@ -187,9 +192,8 @@ Rules:
   `reviewNode` and `changeImpacts` (docs/dsl.md). The calls are buffered like items (`dsl.Result.Nodes`, the
   sandbox protocol carries them as `nodes_json`) and applied in order by the engine (`applyNodeOps`, through
   `GraphPort.AddNodes` / `WriteNode` / `ReviewNode`, over RPC for the graph service client); the change impact
-  records the action and the execution that produced it. They need a change with a branch of its own and are
-  refused on a flow branch (change impacts do not belong to a flow). `addImpact`, `proposeNode`… keep working:
-  the methodologies and their conditions still use them.
+  records the action and the execution that produced it. They need a change with a branch of its own; on a
+  flow they write on the flow branch (ADR 0025 §7). The item calls were removed afterwards (Final state).
 - **Removed (done)**: the ADR 0014 attachment table (`change_attachment`, migrations `0012` / `0011`) and its
   repo methods, replaced by the change impacts: `GetChangeImpacts` returns their pre versions, `ListNodeChanges`
   and `SharedNodes` read the stored change impacts and the ones derived from the unapplied changes' items
@@ -224,11 +228,8 @@ Rules:
   say what was merged, and with which conflicts). `OpMergeNode`, `NodeDraft.from` / `ancestor` and the applier's
   merge branches are gone.
 - **Sub-changes (done)**: `SplitByOwner` splits along the change impacts of the parent (ADR 0016 §5).
-- **Remaining**: no shipped methodology writes items any more. What still reads or writes the item kinds: the
-  item forms of the DSL and of LLM / human input (kept for methodologies outside the repository), the flows of
-  items (`OpenFlow` stale closure, `MaterializeFlow`), the bridge (`changeimpact_bridge.go`), the item validation
-  (`ValidateBoard`), and the UI (change tab, flow graph). Then removing the `impact` / `proposal` kinds and
-  `Items` → `Facts`. The `merge` fact attached to a change impact is not done either.
+- **Then**: the item kinds, the bridge and `MaterializeFlow` were removed (Final state). Still not done: renaming
+  `Items` → `Facts`, the `merge` fact attached to a change impact (§5).
 
 ## Final state
 The item kinds are gone. Removed: the `impact` and `proposal` kinds with `Proposal` / `NodeDraft` / `LinkDraft`, the

@@ -1,7 +1,7 @@
 # ADR 0025 — Flow branches on change impacts
 
-**Status**: accepted, implemented (the item forms of flows are gone with the item kinds) · **Date**: 2026-09 · Extends ADR 0017 (flow branches) and ADR 0024 (change impacts). Replaces the
-candidate / stale / superseded statuses of items and `MaterializeFlow` once the item kinds are gone.
+**Status**: accepted, implemented (the item forms of flows are gone with the item kinds) · **Date**: 2026-09 · Extends ADR 0017 (flow branches) and ADR 0024 (change impacts). Replaces
+`MaterializeFlow` and the flows of items.
 
 ## Context
 ADR 0017 makes a relaunch of a step a **flow branch of the blackboard log**: the items of the relaunched step and of
@@ -19,7 +19,7 @@ A flow is a **graph branch forked from the change branch**, and adopting it make
 flow. Everything a flow writes lives on its branch; the main flow keeps what it has until the adoption.
 
 ### 1. What a flow owns
-- A **graph branch** `flow-<id8>` (origin `flow:<change>/<flow>`, parent = the branch of the flow it is forked
+- A **graph branch** `flow-<id8>` (origin `flow:<change>:<flow>`, parent = the branch of the flow it is forked
   from: the change branch, or the branch of a parent flow). It is created **on the first write** of the flow, not on
   `open`; a flow that only reads or declares needs none.
 - **Change impacts it declares** (`ChangeImpact.Flow`): candidates until adoption, invisible to the main flow, to
@@ -83,10 +83,10 @@ The history is kept: stale versions stay in the node history on the change branc
 ### 7. Engine
 - `applyNodeOps` takes the flow of the process: declarations get `Flow` and `Execution`, writes and reviews go through
   the flow view (§3, §4). The "not available on a flow branch" refusal disappears.
-- `Relaunch` passes the stale executions it already computes. `MaterializeFlow` (the preview of a flow on a graph
-  branch) has no more use for change impacts: the flow branch **is** the preview; the reviewer reads it with
-  `PlanMerge(flow branch, change branch)` before deciding. It stays for items until they are removed.
-- A flow may hold items (ADR 0017) or change impacts, not both, until the item kinds are removed.
+- `Relaunch` passes the stale executions it already computes. `MaterializeFlow` is removed: the flow branch **is**
+  the preview; the reviewer reads it with `PlanMerge(flow branch, change branch)` before deciding.
+- The facts of a flow (decisions, artifacts) keep the item statuses of ADR 0017 (`candidate` / `stale` /
+  `superseded`, `StaleClosure`); the change impacts follow this ADR.
 
 ### 8. Apply
 - `Apply` refuses a change with an open flow (unchanged), ignores superseded change impacts, and merges the change
@@ -101,9 +101,9 @@ The history is kept: stale versions stay in the node history on the change branc
   `Relaunch`), the UI flow graph and the change tab (candidates and superseded change impacts).
 - **Cost**: every write records its execution; a flow read resolves posts through branch lookups (one per change
   node); adoption writes one version per affected node.
-- **Migration**: none for data (new columns default empty). Flows opened before keep working on items.
-- **Removes** (with the item kinds, later): the `candidate` / `stale` / `superseded` item statuses,
-  `MaterializeFlow`, `MergedOnBranch`, the divergence check on proposals.
+- **Migration**: none for data (new columns default empty).
+- **Removed** with the item kinds: `MaterializeFlow`, `MergedOnBranch`, the divergence check on proposals. The
+  `candidate` / `stale` / `superseded` statuses stay for the facts of a flow.
 
 ## Open questions
 1. **Reverting on adoption**: nodes written only by stale steps are reverted by a new version (§5.2), which is

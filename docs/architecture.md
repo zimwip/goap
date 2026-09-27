@@ -72,7 +72,7 @@ change is held by one unit (`ownerOrg`; empty: the default organisation `ORG-DEF
 and the implicit root of every unit's ancestors). The units also hold the **adapters** that implement the tools of
 the platform (§3.9): a unit inherits the adapters of its ancestors, the nearest wins.
 
-Versioning rule ([ADR 0003](adr/0003-liens-version-a-version.md)): **outgoing links belong
+Versioning rule ([ADR 0003](adr/0003-version-to-version-links.md)): **outgoing links belong
 to the source node's version**. Adding/removing an outgoing link creates a new version of the source;
 a node that changes version carries its outgoing links forward; incoming links from unmodified
 nodes stay on the old version and become **suspect**. Baselines thus remain immutable.
@@ -81,7 +81,7 @@ nodes stay on the old version and become **suspect**. Baselines thus remain immu
 
 Versions are numbered **per node, across all branches** (`REQ-1@v7`), and each version carries
 its `branch` (`main` by default), its `parents`, and its `reason`: `create`, `revise` (successor on the same
-branch), `derive` (first version on a parallel branch), or `merge` (two parents).
+branch), `derive` (first version on a parallel branch), `merge` (two parents) or `adopt` (ADR 0025).
 
 ```
 REQ-1  v1(main) ── v3(main, revise) ───────────── v4(main, merge ← v3 + v2)
@@ -227,7 +227,7 @@ Before any planning:
 ### 2.7 Change application and permissions
 
 Actions never modify the domain directly: they feed the change, and the actual
-transformation only happens when the change is **applied** ([ADR 0004](adr/0004-application-du-change.md)).
+transformation only happens when the change is **applied** ([ADR 0004](adr/0004-change-application.md)).
 This application is itself a plannable action, `builtin: graph.apply`, which carries a **permission**:
 
 ```yaml
@@ -298,9 +298,9 @@ Default policies (compiled in `pkg/authz`; seeded as `Policy` nodes at the first
 Replanning at every step makes the engine robust to non-deterministic actions (LLM) and to concurrent
 modifications of the blackboard (a human can add an impact during execution).
 
-Foundational decisions: [ADR 0001 — blackboard = change axis](adr/0001-blackboard-axe-change.md),
-[ADR 0002 — CEL conditions](adr/0002-conditions-cel.md), [ADR 0003 — version-to-version links](adr/0003-liens-version-a-version.md),
-[ADR 0004 — change application](adr/0004-application-du-change.md).
+Foundational decisions: [ADR 0001 — blackboard = change axis](adr/0001-change-blackboard.md),
+[ADR 0002 — CEL conditions](adr/0002-conditions-cel.md), [ADR 0003 — version-to-version links](adr/0003-version-to-version-links.md),
+[ADR 0004 — change application](adr/0004-change-application.md).
 
 ### 2.9 Agents and planners
 
@@ -323,13 +323,13 @@ with the initiator's identity. If it completes, the action resumes with its resu
 the parent action is **suspended** (`pending.kind = agent`) then replayed when the child completes — since
 writes are only committed at the end of an action, replay is safe and finds the sub-agent already started.
 
-**Specialization** ([ADR 0009](adr/0009-branches-options-decisions.md) §5): an action can specialize
+**Specialization** ([ADR 0009](adr/0009-branches-options-decisions.md), complementary decision 5): an action can specialize
 another one (`specializes: <action>` or `<methodology>/<action>`), with a CEL guard `when` and a
 `priority`. A specialization is not planned: it inherits the specialized action's preconditions, effects, and
 cost, and **replaces it at execution time** when its guard is true (the highest priority wins, including
 those from other methodologies). An action of `kind: abstract` has no implementation of its own: it requires
 an applicable specialization (e.g. `build` specialized into `build_java`, `build_c`, `build_shell`).
-**Subtyping** (§6): a node type can extend another (`extends`); conditions see
+**Subtyping** (complementary decision 6): a node type can extend another (`extends`); conditions see
 `x.types` (the type and its ancestors): `"alm@Requirement" in n.types` holds for its subtypes.
 
 **Node types** ([ADR 0012](adr/0012-node-types.md)): a node's type is a qualified reference `<namespace>@<NodeType>`
@@ -389,7 +389,8 @@ change CR-42
   (item count of the change around the step), `reads` (node versions the step started from) and `items`
   (what it produced), see [ADR 0015](adr/0015-namespaces.md).
 - Every planning tick and every action execution (LLM or formal) is persisted and linked to the
-  items it produced: **auditing** can trace back from a proposal to the model call that produced it, and to the
+  facts and change impacts it produced (`execution`): **auditing** can trace back from a node version to the model
+  call that produced it, and to the
   corresponding OpenTelemetry span.
 - The **methodology is graph data** ([ADR 0023](adr/0023-definitions-in-the-graph.md)): a journal record names the
   version executed (`methodology@version`), i.e. a set of definition nodes of the `methodology` namespace whose
@@ -458,10 +459,10 @@ actions when a transition is applied. Reference: [docs/dsl.md](dsl.md), IDE sect
 | Service | Responsibility | API | Persistence | Status |
 |---|---|---|---|---|
 | **gateway** | Single entry point, authentication (JWT/OIDC), routing to services, CORS, rate-limit | Echo HTTP, Connect reverse proxy | — | 🟢 core |
-| **registry** | Methodologies and domains (graph data, ADR 0023): editing (draft), validation, publishing, versions, YAML import/export | Connect `registry.v1` | — (the graph) | 🟢 |
+| **registry** | Methodologies (graph data) and domains (its database), ADR 0023: editing (draft), validation, publishing, versions, the type catalogue, YAML import/export | Connect `registry.v1` | `registry` (`domain_version`) + the graph | 🟢 |
 | **engine** | Intent loop, planning, process execution; deployable as a cluster | Connect `engine.v1` | `engine` | 🟢 core (memory) |
-| **graph** | Domain axis (versioned nodes, links, baselines) + change axis (Changes, items, apply) | Connect `graph.v1` | `graph` | 🟢 |
-| **modelgw** | Multi-provider / multi-model abstraction, aliases (`default`, `fast`, `reasoning`), administered catalog with global token quotas and required roles (see below), traces | Connect `model.v1` | `modelgw` (providers, catalog, usage) | 🟢 core |
+| **graph** | Domain axis (versioned nodes, links, baselines) + change axis (Changes, change impacts, facts, apply) | Connect `graph.v1` | `graph` | 🟢 |
+| **modelgw** | Multi-provider / multi-model abstraction, aliases (`default`, `fast`, `reasoning`), administered catalog with global token quotas and required roles (see below), traces | Connect `model.v1` | `modelgw` (token usage; the configuration is graph data, ADR 0021) | 🟢 core |
 | **indexer** | Node index ([ADR 0026](adr/0026-node-index-and-search.md)): follows the node / baseline events of the graph, embeds through modelgw (alias `embed`), answers hybrid full-text + semantic searches with facets, filtered by ABAC | Connect `index.v1` | `index` (tsvector + pgvector; FTS5 + exact cosine scan in SQLite) | 🟢 |
 | **mcp** | MCP hub: connector registry (self-registration), resolution of the adapters (graph) along the organisation hierarchy, tool calls (§3.9) | Connect `mcp.v1` | `mcp` | 🟢 |
 | **connector-\*** | One service per real system (`connector-localfs`, ...), registers itself with the hub | Connect `connector.v1` | — | 🟢 localfs |
@@ -498,7 +499,7 @@ an interface, replaceable with the PostgreSQL implementation without changing th
 ### 3.3 Persistence
 
 - **Local without containers**: a single SQLite file shared by `goap-dev` (migrations `migrations_sqlite/`
-  per component, [ADR 0010](adr/0010-mode-local-sqlite.md)).
+  per component, [ADR 0010](adr/0010-local-sqlite-mode.md)).
 - **Dev**: one PostgreSQL instance, **one schema per service** (`graph`, `engine`, `index`,
   `modelgw`, `mcp`) and a dedicated role per service (`deploy/postgres/init.sql`).
 - **Prod**: one database (or cluster) per service; only the DSN changes (`GOAP_DB_DSN`, read from Vault).
@@ -561,7 +562,7 @@ each start. The compose image is `pgvector/pgvector`; the `index` schema needs `
 
 - `deploy/compose/docker-compose.yml`: postgres, nats (JetStream), vault (dev), all services, web,
   otel-collector, Jaeger, Prometheus, Grafana, restricted Docker API proxy (sandboxes).
-- **Local mode without containers** ([ADR 0010](adr/0010-mode-local-sqlite.md)): `make devlocal` launches
+- **Local mode without containers** ([ADR 0010](adr/0010-local-sqlite-mode.md)): `make devlocal` launches
   `goap-dev` (all services in one process, in-memory event bus) on a **SQLite** file
   (`.goap/goap.db`, pure Go driver) and serves the compiled IDE on http://localhost:8080. `GOAP_STORE=memory`
   (`make dev`) keeps the ephemeral mode.
@@ -598,7 +599,7 @@ methodologies' code ([ADR 0007](adr/0007-sandbox-executor.md)).
 
 ### 3.7 Observability (OpenTelemetry)
 
-`internal/telemetry` component ([ADR 0008](adr/0008-observabilite-opentelemetry.md)), enabled by the
+`internal/telemetry` component ([ADR 0008](adr/0008-opentelemetry-observability.md)), enabled by the
 standard `OTEL_EXPORTER_OTLP_ENDPOINT` / `OTEL_*` variables:
 
 - **traces** of all calls: HTTP (Echo, gateway), Connect (client and server, W3C context propagated),
@@ -847,7 +848,7 @@ docs/                        architecture, ADRs
 | **M4 — advanced change axis** | impact propagation (recursive CTE parameterized by link types), suspect links, baseline diff, merge/rebase of concurrent changesets |
 | **M5 — UX** | ✅ methodology editor (forms, localized anomalies, publishing, versions, YAML import/export), "Access" screen (ABAC policies), approvals · remaining: graph and plan visualization |
 | **M6 — K8s** | Helm charts, engine HPA · ✅ OpenTelemetry observability, sandbox manifests |
-| **M8 — branches and decisions** 🟡 | ADR 0009 (accepted) · ✅ graph: per-branch versions, 3-way branch merge, change divergence and rebase · remaining: engine (conflict → validated merge → rebase and replanning), change budget, options explored as branches, comparison, decision loops (questions → analyses), merging the chosen option; then versioned containers and releases |
+| **M8 — branches and decisions** 🟡 | ADR 0009 (partially implemented) · ✅ graph: per-branch versions, 3-way branch merge, change branches merged at apply (`merge_pending` + `MergeChange`) · remaining: earlier conflict detection and merge proposals by agents, change budget, options explored as branches, comparison, decision loops (questions → analyses), merging the chosen option; then versioned containers and releases |
 | **M9 — self-observation** ✅ | ADR 0011: execution journal on the change axis (ticks, actions, LLM / tool calls, decisions, item provenance), `observer` agent (journal + OpenTelemetry traces → findings → proposals → review → draft), action specialization and type subtyping |
 | **M10 — SDLC** 🟡 | `sdlc` 0.4.0 methodology on the `alm` namespace (ALM domain) (need → requirement → function → component → artifact → application → solution, data, interfaces, flows), build specialized by technology, incremental releases and deployment (dev → test → staging → production, release manager approval), incremental actions · to refine: quality (coverage, security), rollback, freezes / change windows, MCP tools (repositories, CI, artifact registry, deployment) |
 | **M7 — agents** ✅ | agents (goap / utility / hybrid), JS / Go script actions with DSL, sub-agents, sandbox per process, IDE |
@@ -861,9 +862,9 @@ docs/                        architecture, ADRs
 2. **Action expectation**: is `expects` enough to express every expectation, or is a real graph
    pattern language needed (a restricted Cypher-like language)?
 3. ~~**Concurrency on a baseline**~~ → [ADR 0009](adr/0009-branches-options-decisions.md): detection on the
-   base version per branch, rebase of proposals (3-way merge) validated by a human in case of conflict.
+   base version per branch, 3-way merge at apply, conflicts resolved by a human (`merge_pending`).
 4. **Action cost**: static (declared) or dynamic (estimated tokens, observed latency)?
-5. ~~**Human decisions**: mandatory validation or a separate `apply`?~~ → settled by [ADR 0004](adr/0004-application-du-change.md):
+5. ~~**Human decisions**: mandatory validation or a separate `apply`?~~ → settled by [ADR 0004](adr/0004-change-application.md):
    `apply` is a plannable action conditioned by review and protected by a permission.
 
 
