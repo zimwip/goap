@@ -133,7 +133,7 @@ func TestGraphStoreEditsElementsNotDocuments(t *testing.T) {
 	nodes, links, _ := g.BaselineGraph(ctx, head.ID)
 	defines := 0
 	for _, l := range links {
-		if l.Type == LinkDefines {
+		if l.Type == linkDefines(NamespaceMethodology) {
 			defines++
 		}
 	}

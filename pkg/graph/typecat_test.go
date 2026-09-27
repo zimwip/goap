@@ -44,7 +44,7 @@ linkTypes:
 		t.Fatal(err)
 	}
 	g := New(NewMemory())
-	g.Types = func() *typecat.Catalog { return cat }
+	g.Types = func() TypeCatalog { return cat }
 	b, err := g.CreateBaseline(context.Background(), "B0", nil)
 	if err != nil {
 		t.Fatal(err)

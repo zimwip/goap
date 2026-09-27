@@ -10,7 +10,6 @@ import (
 	"github.com/zimwip/goap/pkg/algo"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/guard"
-	"github.com/zimwip/goap/pkg/typecat"
 )
 
 // This file implements the node lifecycle rules (ADR 0014). The lifecycle of
@@ -44,7 +43,7 @@ type typeInfo struct {
 // typeIndex is the node type metadata a change is judged by: the type catalogue in force (cat), else the NodeType
 // nodes of a baseline (byName).
 type typeIndex struct {
-	cat    *typecat.Catalog
+	cat    TypeCatalog
 	byName map[string]typeInfo
 }
 
@@ -113,10 +112,7 @@ func (ix *typeIndex) find(typ string, pick func(typeInfo) bool) (typeInfo, bool)
 
 func (ix *typeIndex) lifecycleOf(typ string) *domain.Lifecycle {
 	if ix.cat != nil {
-		if t, ok := ix.cat.Type(typ); ok {
-			return t.Lifecycle
-		}
-		return nil
+		return ix.cat.Lifecycle(typ)
 	}
 	info, _ := ix.find(typ, func(i typeInfo) bool { return i.lifecycle != nil })
 	return info.lifecycle

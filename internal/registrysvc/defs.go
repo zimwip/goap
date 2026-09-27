@@ -12,9 +12,8 @@ import (
 
 // A version of a methodology or a domain is a node (its header: the scalar fields, the status, the timestamps) and one node
 // per element (condition, action, goal, agent, node type, link type, lifecycle, algorithm, algorithm instance), keyed
-// "<header key>/<kind>/<name>" and typed "Def<Kind>". The version is the graph content; the definition a caller gets is
-// assembled from it. These nodes are the authored definition; what the graph enforces at run time (NodeType, LinkType and
-// Lifecycle nodes) is projected from the published version.
+// "<header key>/<kind>/<name>" and typed by the built-in meta-domains (methodology@Agent, domain@NodeType, ...; ADR
+// 0023). The version is the graph content; the definition a caller gets is assembled from it.
 
 // Kinds of the element nodes and the collection of the definition each one fills.
 const (
@@ -31,24 +30,15 @@ const (
 
 // defKinds lists the element kinds with the JSON field of the collection they belong to.
 var defKinds = []struct{ kind, field, nodeType string }{
-	{kindCondition, "conditions", "DefCondition"},
-	{kindAction, "actions", "DefAction"},
-	{kindGoal, "goals", "DefGoal"},
-	{kindAgent, "agents", "DefAgent"},
-	{kindNodeType, "nodeTypes", "DefNodeType"},
-	{kindLinkType, "linkTypes", "DefLinkType"},
-	{kindLifecycle, "lifecycles", "DefLifecycle"},
-	{kindAlgorithm, "algorithms", "DefAlgorithm"},
-	{kindInstance, "algorithmInstances", "DefAlgorithmInstance"},
-}
-
-// DefTypes are the node types of the element nodes.
-func DefTypes() []string {
-	out := make([]string, len(defKinds))
-	for i, k := range defKinds {
-		out[i] = k.nodeType
-	}
-	return out
+	{kindCondition, "conditions", "methodology@Condition"},
+	{kindAction, "actions", "methodology@Action"},
+	{kindGoal, "goals", "methodology@Goal"},
+	{kindAgent, "agents", "methodology@Agent"},
+	{kindNodeType, "nodeTypes", "domain@NodeType"},
+	{kindLinkType, "linkTypes", "domain@LinkType"},
+	{kindLifecycle, "lifecycles", "domain@Lifecycle"},
+	{kindAlgorithm, "algorithms", "domain@Algorithm"},
+	{kindInstance, "algorithmInstances", "domain@AlgorithmInstance"},
 }
 
 // schemaFields are the collections of a Schema (the others belong to the methodology itself).
