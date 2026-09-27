@@ -20,6 +20,12 @@ import (
 // validatorsOf lists the property validators of a type in call order: the ones
 // of the supertypes first, each type's in declaration order.
 func (ix *typeIndex) validatorsOf(typ string) []algo.Bound {
+	if ix.cat != nil {
+		if t, ok := ix.cat.Type(typ); ok {
+			return t.Validators
+		}
+		return nil
+	}
 	var chain [][]algo.Bound
 	for seen := map[string]bool{}; typ != "" && !seen[typ]; {
 		seen[typ] = true

@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/typecat"
 )
 
 // Graph exposes the domain and change axes.
@@ -21,7 +22,10 @@ type Graph struct {
 	newID func() string
 	// Authorizer, when set, is asked before every lifecycle transition.
 	Authorizer TransitionAuthorizer
-	types      sync.Map // baseline id → *typeIndex
+	// Types, when set, returns the type catalogue in force (ADR 0012 §2): the graph judges the nodes by it and
+	// refuses the ones whose type or link type it does not resolve. Unset: the NodeType nodes of the baseline.
+	Types func() *typecat.Catalog
+	types sync.Map // baseline id → *typeIndex
 }
 
 // New returns a Graph backed by repo.
@@ -51,7 +55,12 @@ func (g *Graph) CreateNode(ctx context.Context, in NewNode) (domain.Node, error)
 	if n.Key == "" {
 		n.Key = string(n.ID)
 	}
-	err := g.repo.InTx(ctx, func(tx Tx) error { return tx.PutNode(ctx, n) })
+	err := g.repo.InTx(ctx, func(tx Tx) error {
+		if err := g.checkDirect(n.Namespace, n.Type); err != nil {
+			return err
+		}
+		return tx.PutNode(ctx, n)
+	})
 	return n, err
 }
 
@@ -97,15 +106,38 @@ func (g *Graph) NodeByKey(ctx context.Context, namespace, key string) (n domain.
 func (g *Graph) Link(ctx context.Context, typ string, from, to domain.NodeRef, props map[string]any) (domain.Link, error) {
 	l := domain.Link{ID: domain.LinkID(g.newID()), Type: typ, From: from, To: to, Properties: props}
 	err := g.repo.InTx(ctx, func(tx Tx) error {
-		if _, err := tx.Node(ctx, from); err != nil {
+		f, err := tx.Node(ctx, from)
+		if err != nil {
 			return err
 		}
-		if _, err := tx.Node(ctx, to); err != nil {
+		t, err := tx.Node(ctx, to)
+		if err != nil {
 			return err
+		}
+		if g.Types != nil {
+			if err := (&typeIndex{cat: g.catalog()}).checkLink(typ, f.Type, t.Type); err != nil {
+				return err
+			}
 		}
 		return tx.PutLink(ctx, l)
 	})
 	return l, err
+}
+
+// catalog returns the type catalogue in force (the built-in meta-domains until one is loaded).
+func (g *Graph) catalog() *typecat.Catalog {
+	if c := g.Types(); c != nil {
+		return c
+	}
+	return typecat.Builtin()
+}
+
+// checkDirect applies the existence rule to a direct write; nothing is checked without a catalogue.
+func (g *Graph) checkDirect(ns, typ string) error {
+	if g.Types == nil {
+		return nil
+	}
+	return (&typeIndex{cat: g.catalog()}).checkNode(ns, typ)
 }
 
 // View hydrates a node version with its neighbourhood.

@@ -47,6 +47,10 @@ func (g *Graph) AddNodes(ctx context.Context, id domain.ChangeID, nodes []domain
 		if err != nil {
 			return err
 		}
+		ix, err := g.typesAt(ctx, tx, c.BaselineID)
+		if err != nil {
+			return err
+		}
 		known := map[domain.ChangeImpactID]bool{}
 		for _, cn := range c.Nodes {
 			known[cn.ID] = true
@@ -114,6 +118,11 @@ func (g *Graph) AddNodes(ctx context.Context, id domain.ChangeID, nodes []domain
 				cn.Key, cn.Type = n.Key, n.Type
 				if got, want := domain.NamespaceOf(n.Namespace), domain.NamespaceOf(c.Namespace); got != want {
 					return fmt.Errorf("change impact %s: %s belongs to namespace %q, the change acts on %q: %w", cn.ID, n.Key, got, want, ErrInvalid)
+				}
+			}
+			if cn.Pre == nil && cn.Type != "" {
+				if err := ix.checkNode(domain.NamespaceOf(c.Namespace), cn.Type); err != nil {
+					return fmt.Errorf("change impact %s: %w", cn.ID, err)
 				}
 			}
 			cn.CreatedAt = g.now()
@@ -380,6 +389,9 @@ func (g *Graph) WriteNode(ctx context.Context, id domain.ChangeID, node domain.C
 		}
 		var cur string // state the edits and the transition start from
 		if base == nil {
+			if err := ix.checkNode(ns, typ); err != nil {
+				return err
+			}
 			n.ID, n.Version, n.Reason = domain.NodeID(g.newID()), 1, domain.ReasonCreate
 			if lc != nil {
 				cur = lc.Initial
@@ -469,7 +481,11 @@ func (g *Graph) WriteNode(ctx context.Context, id domain.ChangeID, node domain.C
 			if l.Type == "" || l.To.Version == 0 {
 				return invalidf("a link needs a type and an exact target version")
 			}
-			if _, err := tx.Node(ctx, l.To); err != nil {
+			to, err := tx.Node(ctx, l.To)
+			if err != nil {
+				return err
+			}
+			if err := ix.checkLink(l.Type, typ, to.Type); err != nil {
 				return err
 			}
 			if err := tx.PutLink(ctx, domain.Link{ID: domain.LinkID(g.newID()), Type: l.Type, From: ref, To: retarget(seen, l.To), Properties: l.Properties, ChangeID: id}); err != nil {

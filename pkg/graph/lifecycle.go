@@ -10,6 +10,7 @@ import (
 	"github.com/zimwip/goap/pkg/algo"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/guard"
+	"github.com/zimwip/goap/pkg/typecat"
 )
 
 // This file implements the node lifecycle rules (ADR 0014). The lifecycle of
@@ -40,8 +41,12 @@ type typeInfo struct {
 	search     []domain.SearchProperty
 }
 
-// typeIndex is the node type metadata of a baseline.
-type typeIndex struct{ byName map[string]typeInfo }
+// typeIndex is the node type metadata a change is judged by: the type catalogue in force (cat), else the NodeType
+// nodes of a baseline (byName).
+type typeIndex struct {
+	cat    *typecat.Catalog
+	byName map[string]typeInfo
+}
 
 func decodeProp(v any, out any) bool {
 	if v == nil {
@@ -53,6 +58,9 @@ func decodeProp(v any, out any) bool {
 
 // typesAt reads (and caches: baselines are immutable) the node type metadata of a baseline.
 func (g *Graph) typesAt(ctx context.Context, tx Tx, baseline domain.BaselineID) (*typeIndex, error) {
+	if g.Types != nil {
+		return &typeIndex{cat: g.catalog()}, nil
+	}
 	if ix, ok := g.types.Load(baseline); ok {
 		return ix.(*typeIndex), nil
 	}
@@ -104,19 +112,36 @@ func (ix *typeIndex) find(typ string, pick func(typeInfo) bool) (typeInfo, bool)
 }
 
 func (ix *typeIndex) lifecycleOf(typ string) *domain.Lifecycle {
+	if ix.cat != nil {
+		if t, ok := ix.cat.Type(typ); ok {
+			return t.Lifecycle
+		}
+		return nil
+	}
 	info, _ := ix.find(typ, func(i typeInfo) bool { return i.lifecycle != nil })
 	return info.lifecycle
 }
 
-func (ix *typeIndex) documentOf(typ string) *domain.DocumentSpec {
-	info, _ := ix.find(typ, func(i typeInfo) bool { return i.document != nil })
-	return info.document
+// checkNode is the existence rule (ADR 0012 §3) for a node of namespace ns; nothing is checked without a catalogue.
+func (ix *typeIndex) checkNode(ns, typ string) error {
+	if ix.cat == nil {
+		return nil
+	}
+	if err := ix.cat.CheckNode(ns, typ); err != nil {
+		return fmt.Errorf("%v: %w", err, ErrInvalid)
+	}
+	return nil
 }
 
-// controlledType tells whether the nodes of a type are modified through changes only.
-func (ix *typeIndex) controlledType(typ string) bool {
-	info, ok := ix.find(typ, func(i typeInfo) bool { return i.controlled != nil })
-	return !ok || *info.controlled
+// checkLink checks a link type and its ends; nothing is checked without a catalogue.
+func (ix *typeIndex) checkLink(typ, from, to string) error {
+	if ix.cat == nil {
+		return nil
+	}
+	if err := ix.cat.CheckLink(typ, from, to); err != nil {
+		return fmt.Errorf("%v: %w", err, ErrInvalid)
+	}
+	return nil
 }
 
 // LifecycleControlled tells whether direct writes to nodes of a type are refused
