@@ -40,6 +40,7 @@
   // Loads the change and its starting baseline when the task changes.
   const changeId = $derived(process.changeId);
   const step = $derived(task?.step);
+  let namespace = $state('');
   $effect(() => {
     void step;
     if (!changeId) return;
@@ -49,9 +50,14 @@
     (async () => {
       const change = (await graph.getChange(id, ctrl.signal)).change;
       changeImpacts = change?.nodes ?? [];
-      nodes = change?.baselineId
+      namespace = change?.namespace ?? '';
+      const allNodes = change?.baselineId
         ? ((await graph.getBaselineGraph(change.baselineId, ctrl.signal)).nodes ?? [])
         : [];
+      // bind the picker to the change's declared namespace (its WHAT): a
+      // change can only impact the nodes of its own domain, whatever else
+      // the baseline holds.
+      nodes = namespace ? allNodes.filter((n) => n.namespace === namespace) : allNodes;
       const initNodes: Record<string, boolean> = {};
       for (const n of changeImpacts) if (isPending(n) && n.id) initNodes[n.id] = true;
       nodeDecisions = initNodes;
