@@ -716,8 +716,10 @@ engine) → **archived**. Modifying a published version means creating a new dra
 **Domains** ([ADR 0013](adr/0013-domains.md)). The object part of the model (node types, link types, lifecycles,
 algorithms) lives in **domains**, one per namespace (`alm`, `organisation`, `platform`), versioned on their own (same
 draft → published → archived lifecycle; `registry.v1` `*Domain*` RPCs, ABAC resource `domain`, role `methodologist`).
-A methodology is the active part only (agents, actions, conditions, goals): it names the types it works on with
-qualified references (`alm@Requirement`, [ADR 0012](adr/0012-node-types.md)) and may use several domains. Consistency is
+A methodology is the active part only (agents, actions, conditions, goals): it names its **target namespace**
+(`namespace: alm`, the domain its changes act on; it replaces `domainRef`) and the types it works on with qualified
+references (`alm@Requirement`, [ADR 0012](adr/0012-node-types.md)), which may point to other domains for what it reads
+or links to. Consistency is
 checked at save / publish against the domain versions in force: action `expects`, CEL type literals
 (`"alm@Requirement" in n.types`, `l.type == "alm@verifies"`) and builtin `params.linkTypes` must resolve. A methodology
 can only be published on published domains, and a domain version is refused when it would break a published
@@ -732,6 +734,7 @@ Example YAML definition (target format of ADR 0012):
 name: impact-analysis
 version: 1.2.0
 description: Impact analysis of a change on a requirements repository
+namespace: alm                               # target namespace: the domain its changes act on
 conditions:
   - name: has_impacts
     expr: changeImpacts.exists(n, n.intent == "modified")
