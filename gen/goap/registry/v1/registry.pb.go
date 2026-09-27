@@ -2949,9 +2949,9 @@ type Domain struct {
 	UpdatedAt          *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
 	PublishedAt        *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=published_at,json=publishedAt,proto3" json:"published_at,omitempty"`
 	UpdatedBy          string                 `protobuf:"bytes,10,opt,name=updated_by,json=updatedBy,proto3" json:"updated_by,omitempty"`
-	// the version shipped with the platform (methodology, domain, organisation): published, read only
+	// the version shipped with the platform (methodology, domain, organisation, platform): published, read only
 	Builtin bool `protobuf:"varint,14,opt,name=builtin,proto3" json:"builtin,omitempty"`
-	// a built-in domain that only changes with the code (methodology, organisation): no new version
+	// a built-in domain that only changes with the code (methodology, organisation, platform): no new version
 	Frozen        bool `protobuf:"varint,15,opt,name=frozen,proto3" json:"frozen,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

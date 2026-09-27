@@ -130,7 +130,7 @@ func TestDomainLifecycle(t *testing.T) {
 				}
 				return r.Builtin
 			})
-			if len(stored) != 1 || stored[0].Domain.Version != "3" || !slices.Equal(builtin, []string{"methodology", "domain", "organisation"}) {
+			if len(stored) != 1 || stored[0].Domain.Version != "3" || !slices.Equal(builtin, []string{"methodology", "domain", "organisation", "platform"}) {
 				t.Fatalf("latest: %v %+v", builtin, stored)
 			}
 		})
@@ -154,7 +154,7 @@ func TestMethodologyNamespaceAndTypes(t *testing.T) {
 	if _, issues, _ := s.Save(ctx, m); len(issues) == 0 || issues[0].Path != "namespace" {
 		t.Fatalf("a methodology names its target namespace: %v", issues)
 	}
-	for _, name := range []string{"methodology", "organisation"} {
+	for _, name := range []string{"methodology", "organisation", "platform"} {
 		if _, _, err := s.SaveDomain(ctx, methodology.Domain{Name: name, Version: "9", Schema: methodology.Schema{NodeTypes: []methodology.NodeType{{Name: "X"}}}}); !errors.Is(err, ErrImmutable) {
 			t.Fatalf("the built-in domain %s is frozen: %v", name, err)
 		}
@@ -333,7 +333,7 @@ func TestRunAlgorithm(t *testing.T) {
 }
 
 func TestDomainNodeTypeEditors(t *testing.T) {
-	src, err := os.ReadFile(filepath.Join("..", "..", "domains", "platform.yaml"))
+	src, err := os.ReadFile(filepath.Join("..", "..", "pkg", "methodology", "builtin", "platform.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}
