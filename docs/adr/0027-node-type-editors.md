@@ -1,7 +1,7 @@
 # ADR 0027 — The editor of a node type
 
 **Status**: accepted, implemented · **Date**: 2026-09 ·
-Extends ADR 0012 (node types), ADR 0013 (domains), ADR 0023 (definitions in the graph).
+Extends ADR 0012 (node types), ADR 0013 (domains), ADR 0023 (methodologies in the graph).
 
 ## Context
 Every node opens in the default node editor of the IDE (properties, relations, lifecycle, history). Some nodes have a
@@ -40,14 +40,12 @@ nodeTypes:
 |---|---|---|
 | `methodology` | `methodology@MethodologyVersion` | the methodology version |
 | `agent`, `action`, `condition`, `goal` | `methodology@Agent`, `@Action`, `@Condition`, `@Goal` | the element's tab, on the methodology draft |
-| `domain` | `domain@DomainVersion` | the domain version |
-| `definition` | `domain@NodeType`, `@LinkType`, `@Lifecycle` | the domain version, on the element |
-| `algorithm`, `instance` | `domain@Algorithm`, `@AlgorithmInstance` | the algorithm / instance tab |
 | `unit` | `organisation@OrgUnit`, `@Adapter` | the unit's page (its adapters) |
 | `access` | `organisation@Policy`, `@User` | the access screen |
 | `mcp`, `adapter` | `platform@MCP`, `@AdapterDef` | the MCP / adapter definition |
 
-The editors of the meta-domains' types are declared in their built-in definitions (ADR 0012 §4). A new editor is a
+The editors of the built-in types are declared in their built-in definitions (ADR 0012 §4). Domains are not graph
+data (ADR 0023): they open from the Domains explorer, not through a node. A new editor is a
 registration in the IDE and a declaration in a domain.
 
 ## Consequences

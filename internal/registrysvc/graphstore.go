@@ -16,13 +16,9 @@ import (
 	"github.com/zimwip/goap/pkg/graphsnap"
 )
 
-// Node types of the stored definitions (built-in meta-domains, ADR 0023): one header node per version of a methodology
-// (methodology namespace) or of a domain (domain namespace) with its scalar fields, status and timestamps, and one node per
-// element of the definition (see defs.go), tied by "defines" links.
-const (
-	TypeMethodologyVersion = "methodology@MethodologyVersion"
-	TypeDomainVersion      = "domain@DomainVersion"
-)
+// TypeMethodologyVersion is the type of the header node of a methodology version (built-in meta-domain, ADR 0023): its
+// scalar fields, status and timestamps; one node per element of the definition (see defs.go), tied by "defines" links.
+const TypeMethodologyVersion = "methodology@MethodologyVersion"
 
 // StoreGraph is what the store needs from the graph (*graph.Graph and the graph service client implement it).
 type StoreGraph interface {
@@ -33,39 +29,30 @@ type StoreGraph interface {
 	Commit(ctx context.Context, in graph.Commit) (graph.CommitResult, error)
 }
 
-// linkDefines is the link type that ties a version of namespace ns to the elements of its definition.
-func linkDefines(ns string) string { return ns + "@defines" }
+// linkDefines is the link type that ties a methodology version to the elements of its definition.
+const linkDefines = "methodology@defines"
 
 // statusDeleted marks a deleted draft: a node key is never freed on a versioned graph, so the node stays and a later
 // Save of the same version revives it. The stores treat it as absent.
 const statusDeleted Status = "deleted"
 
-// Namespaces of the stored definitions: methodology versions and their elements live in the "methodology" namespace, domain
-// versions and theirs in the "domain" namespace. The registry API is what callers use; the graph holds the content.
-const (
-	NamespaceMethodology = "methodology"
-	NamespaceDomain      = "domain"
-)
+// NamespaceMethodology is the namespace of the methodology versions and their elements. The registry API is what callers
+// use; the graph holds the content.
+const NamespaceMethodology = "methodology"
 
 // MethodologyVersionKey is the key of the node of a methodology version.
 func MethodologyVersionKey(name, version string) string { return "MV:" + key(name, version) }
 
-// DomainVersionKey is the key of the node of a domain version.
-func DomainVersionKey(name, version string) string { return "DV:" + key(name, version) }
-
-// GraphStore keeps methodology and domain versions as nodes of the graph, changed through changes applied on main: they
-// are versioned, journaled and reviewable like any node (each element has its own history), and the registry needs no database
-// of its own. It implements Store and DomainStore.
+// GraphStore keeps methodology versions as nodes of the graph, changed through changes applied on main: they are
+// versioned, journaled and reviewable like any node (each element has its own history). It implements Store; the domains
+// are in a DomainStore of the registry (ADR 0023).
 type GraphStore struct {
 	Graph StoreGraph
 
 	cache graphsnap.Cache[*defs]
 }
 
-var (
-	_ Store       = (*GraphStore)(nil)
-	_ DomainStore = (*GraphStore)(nil)
-)
+var _ Store = (*GraphStore)(nil)
 
 // NewGraphStore returns a store over a graph (the graph itself, or a client of the graph service).
 func NewGraphStore(g StoreGraph) *GraphStore {
@@ -77,7 +64,6 @@ func NewGraphStore(g StoreGraph) *GraphStore {
 // defs is the versions of a baseline, decoded once per head of main.
 type defs struct {
 	methodologies map[string]stored[Record]
-	domains       map[string]stored[DomainRecord]
 	problems      []string
 }
 
@@ -101,7 +87,7 @@ func kindOfType(t string) string {
 }
 
 func buildDefs(_ domain.BaselineID, nodes []domain.Node, _ []domain.Link) *defs {
-	d := &defs{methodologies: map[string]stored[Record]{}, domains: map[string]stored[DomainRecord]{}}
+	d := &defs{methodologies: map[string]stored[Record]{}}
 	type owner struct{ ns, key string }
 	children := map[owner]map[string]domain.Node{} // header -> element nodes
 	for _, n := range nodes {
@@ -116,28 +102,21 @@ func buildDefs(_ domain.BaselineID, nodes []domain.Node, _ []domain.Link) *defs 
 		children[o][n.Key] = n
 	}
 	for _, n := range nodes {
-		switch {
-		case n.Namespace == NamespaceMethodology && n.Type == TypeMethodologyVersion:
-			var r Record
-			if err := decodeVersion(n, children[owner{n.Namespace, n.Key}], true, &r.Methodology, &r.Status, &r.CreatedAt, &r.UpdatedAt, &r.PublishedAt, &r.UpdatedBy); err != nil {
-				d.problems = append(d.problems, fmt.Sprintf("%s: %v", n.Key, err))
-				continue
-			}
-			d.methodologies[key(r.Methodology.Name, r.Methodology.Version)] = stored[Record]{n, r, children[owner{n.Namespace, n.Key}]}
-		case n.Namespace == NamespaceDomain && n.Type == TypeDomainVersion:
-			var r DomainRecord
-			if err := decodeVersion(n, children[owner{n.Namespace, n.Key}], false, &r.Domain, &r.Status, &r.CreatedAt, &r.UpdatedAt, &r.PublishedAt, &r.UpdatedBy); err != nil {
-				d.problems = append(d.problems, fmt.Sprintf("%s: %v", n.Key, err))
-				continue
-			}
-			d.domains[key(r.Domain.Name, r.Domain.Version)] = stored[DomainRecord]{n, r, children[owner{n.Namespace, n.Key}]}
+		if n.Namespace != NamespaceMethodology || n.Type != TypeMethodologyVersion {
+			continue
 		}
+		var r Record
+		if err := decodeVersion(n, children[owner{n.Namespace, n.Key}], &r.Methodology, &r.Status, &r.CreatedAt, &r.UpdatedAt, &r.PublishedAt, &r.UpdatedBy); err != nil {
+			d.problems = append(d.problems, fmt.Sprintf("%s: %v", n.Key, err))
+			continue
+		}
+		d.methodologies[key(r.Methodology.Name, r.Methodology.Version)] = stored[Record]{n, r, children[owner{n.Namespace, n.Key}]}
 	}
 	return d
 }
 
 // decodeVersion assembles a definition from its header node and its live element nodes.
-func decodeVersion(n domain.Node, elements map[string]domain.Node, isMethodology bool, def any, status *Status, created, updated, published *time.Time, by *string) error {
+func decodeVersion(n domain.Node, elements map[string]domain.Node, def any, status *Status, created, updated, published *time.Time, by *string) error {
 	props := maps.Clone(n.Properties)
 	s, _ := props["status"].(string)
 	*status = Status(s)
@@ -164,7 +143,7 @@ func decodeVersion(n domain.Node, elements map[string]domain.Node, isMethodology
 		els = append(els, e.Properties)
 		kinds = append(kinds, kindOfType(e.Type))
 	}
-	return decodeInto(props, els, kinds, isMethodology, def)
+	return decodeInto(props, els, kinds, def)
 }
 
 func ts(t time.Time) any {
@@ -242,8 +221,7 @@ func versionEdits(hkey, hType string, header map[string]any, els []defEl, old *d
 			continue
 		}
 		edits = append(edits, graph.NodeEdit{Key: k, Type: nodeType, Props: e.props})
-		ns, _, _ := strings.Cut(hType, "@")
-		head.Links = append(head.Links, graph.LinkEdit{Type: linkDefines(ns), ToKey: k})
+		head.Links = append(head.Links, graph.LinkEdit{Type: linkDefines, ToKey: k})
 	}
 	for _, k := range slices.Sorted(maps.Keys(oldChildren)) {
 		if n := oldChildren[k]; !want[k] {
@@ -403,101 +381,6 @@ func (s *GraphStore) Delete(ctx context.Context, name, version string) error {
 		}
 		if old.rec.Status != StatusDraft {
 			return nil, fmt.Errorf("%s: %w", k, ErrImmutable)
-		}
-		return []graph.NodeEdit{markDeleted(old.node)}, nil
-	})
-}
-
-// ---- domains -----------------------------------------------------------------
-
-func (s *GraphStore) SaveDomain(ctx context.Context, r DomainRecord) error {
-	dm := r.Domain
-	k := key(dm.Name, dm.Version)
-	return s.commit(ctx, NamespaceDomain, "Domain "+k, func(d *defs) ([]graph.NodeEdit, error) {
-		old, exists := d.domains[k]
-		revive := exists && old.rec.Status == statusDeleted
-		if exists && !revive && old.rec.Status != StatusDraft {
-			return nil, fmt.Errorf("domain %s: %w", k, ErrImmutable)
-		}
-		created := r.UpdatedAt
-		if exists && !revive {
-			created = old.rec.CreatedAt
-		}
-		header, els, err := encodeDomain(dm)
-		if err != nil {
-			return nil, err
-		}
-		props := headerProps(header, r.Status, created, r.UpdatedAt, r.PublishedAt, r.UpdatedBy)
-		var oldNode *domain.Node
-		var oldChildren map[string]domain.Node
-		if exists {
-			n := old.node
-			oldNode, oldChildren = &n, old.children
-		}
-		return versionEdits(DomainVersionKey(dm.Name, dm.Version), TypeDomainVersion, props, els, oldNode, oldChildren), nil
-	})
-}
-
-func (s *GraphStore) GetDomain(ctx context.Context, name, version string) (DomainRecord, error) {
-	d, err := s.read(ctx)
-	if err != nil {
-		return DomainRecord{}, err
-	}
-	if version != "" {
-		r, ok := d.domains[key(name, version)]
-		if !ok || r.rec.Status == statusDeleted {
-			return DomainRecord{}, fmt.Errorf("%s: %w", key(name, version), errDomainNotFound)
-		}
-		return r.rec, nil
-	}
-	var best DomainRecord
-	found := false
-	for _, r := range d.domains {
-		if r.rec.Domain.Name == name && r.rec.Status == StatusPublished && (!found || r.rec.PublishedAt.After(best.PublishedAt)) {
-			best, found = r.rec, true
-		}
-	}
-	if !found {
-		return DomainRecord{}, fmt.Errorf("%s (published): %w", name, errDomainNotFound)
-	}
-	return best, nil
-}
-
-func (s *GraphStore) ListDomains(ctx context.Context) ([]DomainRecord, error) {
-	d, err := s.read(ctx)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]DomainRecord, 0, len(d.domains))
-	for _, r := range d.domains {
-		if r.rec.Status != statusDeleted {
-			out = append(out, r.rec)
-		}
-	}
-	sortDomainRecords(out)
-	return out, nil
-}
-
-func (s *GraphStore) SetDomainStatus(ctx context.Context, name, version string, st Status, at time.Time) error {
-	k := key(name, version)
-	return s.commit(ctx, NamespaceDomain, fmt.Sprintf("Domain %s %s", k, st), func(d *defs) ([]graph.NodeEdit, error) {
-		old, ok := d.domains[k]
-		if !ok || old.rec.Status == statusDeleted {
-			return nil, fmt.Errorf("%s: %w", k, errDomainNotFound)
-		}
-		return []graph.NodeEdit{update(old.node, statusPatch(st, at))}, nil
-	})
-}
-
-func (s *GraphStore) DeleteDomain(ctx context.Context, name, version string) error {
-	k := key(name, version)
-	return s.commit(ctx, NamespaceDomain, "Delete domain "+k, func(d *defs) ([]graph.NodeEdit, error) {
-		old, ok := d.domains[k]
-		if !ok || old.rec.Status == statusDeleted {
-			return nil, fmt.Errorf("%s: %w", k, errDomainNotFound)
-		}
-		if old.rec.Status != StatusDraft {
-			return nil, fmt.Errorf("domain %s: %w", k, ErrImmutable)
 		}
 		return []graph.NodeEdit{markDeleted(old.node)}, nil
 	})

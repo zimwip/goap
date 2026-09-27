@@ -5,9 +5,8 @@ package goap.registry.v1;
 import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
 
-// RegistryService stores methodologies in the database as structured
-// definitions. A version is a draft (editable) until published (immutable).
-// YAML is only an import / export format.
+// RegistryService stores the methodologies (as nodes of the graph) and the domains (in its database, ADR 0023). A
+// version is a draft (editable) until published (immutable). YAML is only an import / export format.
 service RegistryService {
   rpc ListMethodologies(ListMethodologiesRequest) returns (ListMethodologiesResponse);
   // version empty = latest published version
@@ -403,7 +402,8 @@ message ExportMethodologyResponse {
   string filename = 2;
 }
 
-// Domain is the shared object part of the model, versioned on its own.
+// Domain is the model of a namespace (node types, link types, lifecycles, algorithms), versioned on its own in the
+// registry's database; each graph holds the published ones in memory (the type catalogue).
 message Domain {
   string name = 1;
   string version = 2;
@@ -419,10 +419,10 @@ message Domain {
   google.protobuf.Timestamp updated_at = 8;
   google.protobuf.Timestamp published_at = 9;
   string updated_by = 10;
-  // the version shipped with the platform (methodology, domain, organisation, platform): published, read only
+  // built into the platform (methodology, organisation, platform): published and frozen, it changes with the code
   bool builtin = 14;
-  // a built-in domain that only changes with the code (methodology, organisation, platform): no new version
-  bool frozen = 15;
+  reserved 15;
+  reserved "frozen";
 }
 
 message DomainSummary {
@@ -434,10 +434,10 @@ message DomainSummary {
   int32 link_type_count = 6;
   google.protobuf.Timestamp updated_at = 7;
   google.protobuf.Timestamp published_at = 8;
-  // the version shipped with the platform: published, read only
+  // built into the platform: published and frozen
   bool builtin = 9;
-  // only changes with the code: no new version
-  bool frozen = 10;
+  reserved 10;
+  reserved "frozen";
 }
 
 message ListDomainsRequest {

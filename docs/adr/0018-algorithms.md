@@ -51,8 +51,8 @@ could run when a transition was taken. Making the domain customizable meant chan
    (`Tx.SetNodeProps`); when a node moves several times in one change, only its last transition is
    checked, and so is the only one whose actions run.
 6. **Storage**: proto `registry.v1` (`Algorithm`, `AlgorithmParam`, `AlgorithmInstance`,
-   `NodeType.validators`, `LifecycleTransition.guards/actions`, `Domain.algorithms/algorithm_instances`); in the
-   graph, `domain@Algorithm` and `domain@AlgorithmInstance` definition nodes of the domain version (ADR 0023).
+   `NodeType.validators`, `LifecycleTransition.guards/actions`, `Domain.algorithms/algorithm_instances`), stored
+   with the domain version in the registry's database (ADR 0023).
    **Only domains** carry algorithms, a methodology never does.
 7. **IDE**: an *Algorithms* section manages the algorithms and instances of a domain draft (editor,
    parameter table, instance value forms, *try it* through `RegistryService.RunAlgorithm`, which

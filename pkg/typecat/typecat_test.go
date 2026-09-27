@@ -48,7 +48,7 @@ func TestTypeRef(t *testing.T) {
 
 func TestBuiltinDomainsAreAlwaysThere(t *testing.T) {
 	c := Builtin()
-	for _, ref := range []string{"methodology@Agent", "methodology@MethodologyVersion", "domain@NodeType", "domain@DomainVersion", "organisation@OrgUnit", "organisation@Policy"} {
+	for _, ref := range []string{"methodology@Agent", "methodology@MethodologyVersion", "organisation@OrgUnit", "organisation@Policy", "platform@MCP"} {
 		if _, ok := c.Type(ref); !ok {
 			t.Fatalf("%s is built in", ref)
 		}
@@ -59,18 +59,13 @@ func TestBuiltinDomainsAreAlwaysThere(t *testing.T) {
 	if err := c.CheckLink("methodology@defines", "methodology@MethodologyVersion", "methodology@Agent"); err != nil {
 		t.Fatal(err)
 	}
+	if c.HasNodeType("domain@NodeType") {
+		t.Fatal("domain definitions are not graph data (ADR 0023)")
+	}
 	for _, name := range []string{"methodology", "organisation", "platform"} {
 		if _, err := New(parse(t, "name: "+name+"\nversion: 1.0.0\nnodeTypes: [X]\n")); !errors.Is(err, ErrInvalid) {
-			t.Fatalf("a domain cannot take the name of a frozen domain: %v", err)
+			t.Fatalf("a domain cannot take the name of a built-in domain: %v", err)
 		}
-	}
-	// a published version of the domain meta-domain replaces the shipped one
-	c2, err := New(parse(t, "name: domain\nversion: 1.1.0\nnodeTypes: [DomainVersion, NodeType, Glossary]\n"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !c2.HasNodeType("domain@Glossary") || c2.HasNodeType("domain@LinkType") || c2.Domains()["domain"] != "1.1.0" {
-		t.Fatalf("the domain version in force: %v", c2.Domains())
 	}
 }
 

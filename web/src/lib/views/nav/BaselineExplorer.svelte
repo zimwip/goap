@@ -10,9 +10,9 @@
   import { SvelteMap } from 'svelte/reactivity';
   import { splitType } from '../../stores/types.svelte';
 
-  // Methodologies and domains are nodes typed by the meta-domains (ADR 0023), authored in their own
-  // editors and explorers: hidden here to avoid duplicating them.
-  const META_NAMESPACES = new Set(['methodology', 'domain']);
+  // Methodologies are nodes typed by the meta-domain methodology (ADR 0023), authored in their own editors and
+  // explorer: hidden here to avoid duplicating them.
+  const META_NAMESPACES = new Set(['methodology']);
 
   let filter = $state('');
   const graphs = new SvelteMap<string, { nodes: GraphNode[]; error: string; loading: boolean }>();

@@ -57,11 +57,11 @@ of a versioned knowledge graph, whose other axis, the **domain axis**, describes
 
 **Namespaces** ([ADR 0015](adr/0015-namespaces.md)): every node lives in a namespace, and a namespace is the content of
 one domain ([ADR 0013](adr/0013-domains.md)): `alm` (delivery), `organisation`, `platform` (MCPs, adapter definitions,
-model configuration), and the meta-domains `methodology` and `domain` that hold the definitions
-([ADR 0023](adr/0023-definitions-in-the-graph.md)). `methodology`, `domain`, `organisation` and `platform` ship
-with the code; `methodology`, `organisation` and `platform` are **frozen** (the platform reads them in its own way: initialised at startup,
-changed with the code, read-only in the domain editor), `domain` evolves from its shipped version; a new namespace is a
-new domain published from the domain editor. Keys are unique per namespace. A change acts on one namespace: it can
+model configuration), and the meta-domain `methodology` that holds the definitions of the methodologies
+([ADR 0023](adr/0023-definitions-in-the-graph.md)). `methodology`, `organisation` and `platform` are **built in and
+frozen**: the platform reads them in its own way, so they are initialised at startup from `domains/builtin/`, change
+with the code and are read-only in the domain editor; a new namespace is a new domain published from the domain editor.
+Domains themselves are not graph data: the registry keeps them in its database. Keys are unique per namespace. A change acts on one namespace: it can
 only create and modify nodes of that namespace, but may link to nodes of another one.
 The organisation is a hierarchy of units in its own namespace (`organisation`); nodes reference their owner
 unit across namespaces, and a change is split into sub-changes along unit boundaries
@@ -339,7 +339,7 @@ to a type or a link type (in a domain, a methodology, CEL, `expects`) is qualifi
 ([ADR 0023](adr/0023-definitions-in-the-graph.md)) to its properties, `extends` chain, lifecycle, validators, document,
 change control, search declarations and editor, and checks the references of a methodology or a domain when saving
 and publishing. The graph and the engine hold an in-memory copy (the **type catalogue**), loaded from the registry at
-startup and kept in sync with its events, plus the built-in domains `methodology`, `domain`, `organisation` and `platform`. The graph judges
+startup and kept in sync with its events, plus the built-in domains `methodology`, `organisation` and `platform`. The graph judges
 a change by the catalogue in force and refuses a node whose type it does not resolve. Nothing is projected onto the
 graph.
 
@@ -698,14 +698,15 @@ provider, or gateway WebSocket) are analyzed in the ADR but not built.
 
 ## 4. Format of a methodology
 
-Methodologies and domains are **graph data** ([ADR 0023](adr/0023-definitions-in-the-graph.md)), edited from the
-frontend: a version is a node `methodology@MethodologyVersion` (key `MV:<name>@<version>`, namespace `methodology`: scalar
-fields, status) or `domain@DomainVersion` (`DV:<name>@<version>`, namespace `domain`), and one node per element typed by
-the built-in meta-domains (`methodology@Agent`, `@Action`, `@Condition`, `@Goal`; `domain@NodeType`, `@LinkType`,
-`@Lifecycle`, `@Algorithm`, `@AlgorithmInstance`), keyed `<version key>/<kind>/<name>` and tied by `defines`. Every save,
-publication or deletion is a change applied on main; editing an action versions that node only. The registry service
-(`registrysvc.GraphStore`, through a graph client) has no database: it validates, compiles, publishes and emits the
-`goap.registry.*` events.
+Methodologies are **graph data** ([ADR 0023](adr/0023-definitions-in-the-graph.md)), edited from the frontend: a
+version is a node `methodology@MethodologyVersion` (key `MV:<name>@<version>`, namespace `methodology`: scalar fields,
+status) and one node per element typed by the built-in meta-domain (`methodology@Agent`, `@Action`, `@Condition`,
+`@Goal`), keyed `<version key>/<kind>/<name>` and tied by `methodology@defines`. Every save, publication or deletion is
+a change applied on main; editing an action versions that node only (`registrysvc.GraphStore`, through a graph
+client). **Domains** are the definition of a graph (namespace, node types, link types, lifecycles, algorithms): each
+graph holds them in memory (the type catalogue) to keep its data coherent, and the registry keeps their versions in its
+database (`domain_version`, PostgreSQL or SQLite, `registrysvc.SQLDomainStore`). The registry validates, compiles,
+publishes and emits the `goap.registry.*` events.
 
 Lifecycle of a version: **draft** (editable, can be invalid: anomalies are returned
 with their path, e.g. `conditions[2].expr`) → **published** (validated, immutable, the only one executable by the
@@ -850,7 +851,7 @@ docs/                        architecture, ADRs
 | **M9 — self-observation** ✅ | ADR 0011: execution journal on the change axis (ticks, actions, LLM / tool calls, decisions, item provenance), `observer` agent (journal + OpenTelemetry traces → findings → proposals → review → draft), action specialization and type subtyping |
 | **M10 — SDLC** 🟡 | `sdlc` 0.4.0 methodology on the `alm` namespace (ALM domain) (need → requirement → function → component → artifact → application → solution, data, interfaces, flows), build specialized by technology, incremental releases and deployment (dev → test → staging → production, release manager approval), incremental actions · to refine: quality (coverage, security), rollback, freezes / change windows, MCP tools (repositories, CI, artifact registry, deployment) |
 | **M7 — agents** ✅ | agents (goap / utility / hybrid), JS / Go script actions with DSL, sub-agents, sandbox per process, IDE |
-| **M11 — node types** ✅ | ADR 0012 / 0013 / 0023: qualified type references `<namespace>@<NodeType>`, one domain per namespace, registry as the reference of the types, with an in-memory catalogue in the graph and the engine kept in sync by its events and an existence rule, definitions as nodes of the `methodology` / `domain` meta-domains; no `NodeType` projection, no `M:` / `D:` elements, no `Def*` types |
+| **M11 — node types** ✅ | ADR 0012 / 0013 / 0023: qualified type references `<namespace>@<NodeType>`, one domain per namespace, registry as the reference of the types, with an in-memory catalogue in the graph and the engine kept in sync by its events and an existence rule, methodologies as nodes of the `methodology` meta-domain, domains in the registry's database; no `NodeType` projection, no `M:` / `D:` elements, no `Def*` types |
 
 ## 7. Open questions
 

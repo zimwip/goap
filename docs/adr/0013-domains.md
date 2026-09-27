@@ -12,14 +12,15 @@ own lifecycle rather than with the methodologies.
 ## Decision
 
 1. **A domain is a registry entity** with the lifecycle of a methodology (draft → published → archived, immutable once
-   published), stored in the graph (ADR 0023), served by the `registry.v1` `*Domain*` RPCs, guarded by the ABAC
-   resource `domain` (role `methodologist`). Saving a draft is a change like any other.
+   published), kept in the registry's database (ADR 0023), served by the `registry.v1` `*Domain*` RPCs, guarded by
+   the ABAC resource `domain` (role `methodologist`). A domain is the definition of a graph, not graph data: saving a
+   draft is no change of the graph.
 2. **One domain per namespace.** A domain's name is the namespace its nodes live in (`alm`, `platform`,
    `organisation`; ADR 0015), and the prefix of the references to its types (ADR 0012). **Adding a namespace is
    creating and publishing a domain** in the domain editor: its name (lowercase letters, digits, `-`, `_`) becomes the
-   namespace, and methodologies can target it. The domains shipped with the code (ADR 0012 §4) are shown in
-   the domain editor: `methodology`, `organisation` and `platform` are frozen (initialised at startup, changed with the code);
-   `domain` starts from its shipped version and evolves in the registry.
+   namespace, and methodologies can target it. The domains shipped with the code (ADR 0012 §4),
+   `methodology`, `organisation` and `platform`, are shown in the domain editor, read-only: they are initialised at
+   startup and change with the code.
 3. **A methodology names its target namespace, not a domain.** `namespace: alm` is the namespace its changes act on
    (ADR 0015 §2), hence the domain whose nodes it creates and modifies; it replaces `domainRef`, and there is no
    embedded `domain:` section. Its references to types and link types are qualified (`alm@Requirement`); they may
