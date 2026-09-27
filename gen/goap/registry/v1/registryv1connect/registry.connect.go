@@ -129,8 +129,7 @@ type RegistryServiceClient interface {
 	ExportDomain(context.Context, *connect.Request[v1.ExportDomainRequest]) (*connect.Response[v1.ExportDomainResponse], error)
 	// Methodology versions referencing a domain version.
 	GetDomainUsage(context.Context, *connect.Request[v1.GetDomainUsageRequest]) (*connect.Response[v1.GetDomainUsageResponse], error)
-	// The type catalogue in force (ADR 0012): the node and link types of the published domains and of the built-in
-	// meta-domains, resolved.
+	// The type catalogue in force (ADR 0012): the node and link types of the published and built-in domains, resolved.
 	ListTypes(context.Context, *connect.Request[v1.ListTypesRequest]) (*connect.Response[v1.ListTypesResponse], error)
 	// Try an algorithm of a domain on a sample input, without saving anything.
 	RunAlgorithm(context.Context, *connect.Request[v1.RunAlgorithmRequest]) (*connect.Response[v1.RunAlgorithmResponse], error)
@@ -437,8 +436,7 @@ type RegistryServiceHandler interface {
 	ExportDomain(context.Context, *connect.Request[v1.ExportDomainRequest]) (*connect.Response[v1.ExportDomainResponse], error)
 	// Methodology versions referencing a domain version.
 	GetDomainUsage(context.Context, *connect.Request[v1.GetDomainUsageRequest]) (*connect.Response[v1.GetDomainUsageResponse], error)
-	// The type catalogue in force (ADR 0012): the node and link types of the published domains and of the built-in
-	// meta-domains, resolved.
+	// The type catalogue in force (ADR 0012): the node and link types of the published and built-in domains, resolved.
 	ListTypes(context.Context, *connect.Request[v1.ListTypesRequest]) (*connect.Response[v1.ListTypesResponse], error)
 	// Try an algorithm of a domain on a sample input, without saving anything.
 	RunAlgorithm(context.Context, *connect.Request[v1.RunAlgorithmRequest]) (*connect.Response[v1.RunAlgorithmResponse], error)
