@@ -176,7 +176,7 @@
         {#each rows as r (r.node.id)}
           <tr class:removed={!!r.removal}>
             <td>
-              {#if r.created}<code>{r.node.key}</code>{:else}<button type="button" class="link mono" title="Open the node editor" onclick={() => onopennode(r)}>{r.node.key}</button>{/if}
+              {#if r.created}<code>{r.node.key}</code>{:else}<button type="button" class="link mono" title="Open the node in its editor" onclick={() => onopennode(r)}>{r.node.key}</button>{/if}
               <span class="hint">{r.node.type}{r.created ? '' : ` v${r.node.version ?? 0}`}</span>
               {#if r.created}<span class="tag ok" title="Created by this change; stored when it is applied">new</span>{/if}
               {#if r.removal}<span class="tag danger" title="Deletion proposed in this change">deleted when applied</span>{/if}

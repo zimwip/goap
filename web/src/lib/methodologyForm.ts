@@ -5,7 +5,7 @@
 // lists become text, JSON params become text. `toForm` / `fromForm` convert
 // between this model and the proto message.
 
-import type { Action, Agent, Issue, Lifecycle, LifecycleState, LifecycleTransition, LinkType, Methodology, NodeType, Struct, Trigger } from './api';
+import type { Action, Agent, Issue, Lifecycle, LifecycleState, LifecycleTransition, LinkType, Methodology, NodeType, SearchProperty, Struct, Trigger } from './api';
 
 export interface CondRow {
   cond: string;
@@ -58,6 +58,10 @@ export interface NodeTypeForm {
   changeControlled: boolean;
   /** property validator instances, in call order */
   validators: { property: string; instance: string }[];
+  /** editor the UI opens the nodes with ("" : inherited, or the default node editor) */
+  editor: string;
+  /** node index declarations (kept as they are: not edited by the form) */
+  search: SearchProperty[];
 }
 
 export interface LinkTypeForm {
@@ -197,7 +201,7 @@ export const PRODUCE_OPS = ['create_node', 'update_node'] as const;
 
 // --- constructors --------------------------------------------------------------
 
-export const emptyNodeType = (): NodeTypeForm => ({ name: '', description: '', properties: '', extends: '', lifecycle: '', document: '', changeControlled: true, validators: [] });
+export const emptyNodeType = (): NodeTypeForm => ({ name: '', description: '', properties: '', extends: '', lifecycle: '', document: '', changeControlled: true, validators: [], editor: '', search: [] });
 export const emptyLinkType = (): LinkTypeForm => ({ name: '', from: '', to: '' });
 let uidSeq = 0;
 /** New local id (elements created in the UI). */
@@ -411,6 +415,8 @@ export function nodeTypeToForm(n: NodeType): NodeTypeForm {
     document: (n.document?.contains ?? []).join(', '),
     changeControlled: n.changeControlled !== false,
     validators: (n.validators ?? []).map((v) => ({ property: v.property ?? '', instance: v.instance ?? '' })),
+    editor: n.editor ?? '',
+    search: (n.search ?? []).map((s) => ({ ...s })),
   };
 }
 
@@ -503,6 +509,8 @@ export function nodeTypeFromForm(n: NodeTypeForm): NodeType {
   if (contains.length) o.document = { contains };
   if (!n.changeControlled) o.changeControlled = false;
   if (n.validators.length) o.validators = n.validators.map((v) => ({ property: v.property.trim(), instance: v.instance.trim() }));
+  if (n.search.length) o.search = n.search.map((s) => ({ ...s }));
+  put(o, 'editor', n.editor.trim());
   return o;
 }
 

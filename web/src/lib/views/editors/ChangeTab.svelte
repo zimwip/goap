@@ -24,6 +24,7 @@
   import EditorPanes, { type Pane } from '../../components/EditorPanes.svelte';
   import { lifecycleRows, reopenable, nodeTypeNames, lifecycleResolver, loadPosts, writeNodeInChange, type PostVersions, type LifecycleRow } from '../../lifecycle';
   import { openTab } from '../../shell/tabs.svelte';
+  import { openNode } from '../../nodeEditors';
   import { provideActions, notify } from '../../shell/workbench.svelte';
   import { refreshChanges, refreshBaselines } from '../../stores/catalog.svelte';
   import { processes } from '../../stores/live.svelte';
@@ -466,12 +467,12 @@
       {:else if active === 'impacts'}
       <section class="card">
         <h3>Change impacts <span class="count">{change?.nodes?.length ?? 0}</span></h3>
-        <ChangeImpactList changeId={ch.id ?? ''} nodes={change?.nodes ?? []} {closed} onchange={() => load(selected)} onopennode={(n) => openTab({ kind: 'node', params: { id: n.post?.id ?? n.pre?.id ?? '', key: n.key ?? '', change: ch.id ?? '' } }, { pin: true })} />
+        <ChangeImpactList changeId={ch.id ?? ''} nodes={change?.nodes ?? []} {closed} onchange={() => load(selected)} onopennode={(n) => openNode({ id: n.post?.id ?? n.pre?.id ?? '', key: n.key ?? '' }, { pin: true, change: ch.id ?? '' })} />
       </section>
 
       <section class="card">
         <h3>Node edits <span class="count">{lcRows.length}</span></h3>
-      <ChangeLifecycle rows={lcRows} candidates={lcCandidates} disabled={closed} busy={moving} onmove={move} onedit={edit} types={typeNames} {lifecycleOf} keys={takenKeys} oncreate={createNode} onremove={removeNode} onundo={undoDelete} onhistory={(r) => openTab({ kind: 'node', params: { id: r.node.id ?? '', key: r.node.key ?? '', pane: 'history' } }, { pin: true })} onopennode={(r) => openTab({ kind: 'node', params: { id: r.node.id ?? '', key: r.node.key ?? '', change: ch.id ?? '' } }, { pin: true })} onadd={(id) => (extraNodes = [...extraNodes, id])} />
+      <ChangeLifecycle rows={lcRows} candidates={lcCandidates} disabled={closed} busy={moving} onmove={move} onedit={edit} types={typeNames} {lifecycleOf} keys={takenKeys} oncreate={createNode} onremove={removeNode} onundo={undoDelete} onhistory={(r) => openNode(r.node, { pin: true, generic: true, pane: 'history' })} onopennode={(r) => openNode(r.node, { pin: true, change: ch.id ?? '' })} onadd={(id) => (extraNodes = [...extraNodes, id])} />
       </section>
       {:else if active === 'items'}
       <section class="card">

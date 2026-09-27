@@ -22,6 +22,8 @@
   import NodeHistory from '../../components/NodeHistory.svelte';
   import NodePropertyForm from '../../components/NodePropertyForm.svelte';
   import { openTab } from '../../shell/tabs.svelte';
+  import { nodeEditor } from '../../shell/registry';
+  import { editorResolver, handleOf, openNode, openTarget } from '../../nodeEditors';
   import { provideActions, notify } from '../../shell/workbench.svelte';
   import { changes, refreshChanges } from '../../stores/catalog.svelte';
   import { loadGraph, loadHead, type GraphIndex } from '../../graphIndex';
@@ -199,12 +201,24 @@
     workId = value;
   }
 
-  const openNode = (nid: string, pane_ = 'details') => openTab({ kind: 'node', params: { id: nid, key: head?.nodes.get(nid)?.key ?? '', pane: pane_ } }, { pin: true });
+  const openNeighbour = (nid: string) => openNode(head?.nodes.get(nid) ?? { id: nid }, { pin: true });
+
+  // the editor the node type names (NodeType `editor`): this default editor offers to open the node there
+  const typeEditor = $derived(nodeEditor(editorResolver(headList)(typeName)));
+
+  async function openInTypeEditor() {
+    if (!typeEditor || !stored) return;
+    const target = await Promise.resolve(typeEditor.open(await handleOf(stored))).catch(() => undefined);
+    if (target) openTarget(target, { pin: true });
+    else notify(`The ${typeEditor.title.toLowerCase()} cannot show ${stored.key ?? 'this node'} (removed element or unknown version).`, 'info');
+  }
+
   const openChange = () => workId && openTab({ kind: 'change', params: { id: workId } }, { pin: true });
 
   provideActions(
     () => tab.id,
     () => [
+      ...(typeEditor ? [{ id: 'type-editor', label: `Open in ${typeEditor.title}`, icon: 'external' as const, title: `${typeName} nodes open in the ${typeEditor.title.toLowerCase()}`, run: openInTypeEditor }] : []),
       { id: 'refresh', label: 'Refresh', icon: 'refresh', disabled: loading, run: async () => { await loadNode(); await loadWork(); reload++; } },
     ],
   );
@@ -302,17 +316,17 @@
                 <section class="card">
                   <h3>Parents <span class="count">{head.in.get(id)?.length ?? 0}</span></h3>
                   <p class="hint">Nodes that link to this one.</p>
-                  <NodeTree index={head} root={id} dir="in" onopen={(n) => openNode(n)} />
+                  <NodeTree index={head} root={id} dir="in" onopen={(n) => openNeighbour(n)} />
                 </section>
                 <section class="card">
                   <h3>Children <span class="count">{head.out.get(id)?.length ?? 0}</span></h3>
                   <p class="hint">Nodes this one links to.</p>
-                  <NodeTree index={head} root={id} dir="out" onopen={(n) => openNode(n)} />
+                  <NodeTree index={head} root={id} dir="out" onopen={(n) => openNeighbour(n)} />
                 </section>
               </div>
               <section class="card graph">
                 <h3>Graph {#if centerId !== id}<button type="button" class="small" onclick={() => (centerId = id)}>Back to {stored.key}</button>{/if}</h3>
-                <NodeGraph index={head} center={centerId || id} onrecenter={(n) => (centerId = n)} onopen={(n) => openNode(n)} />
+                <NodeGraph index={head} center={centerId || id} onrecenter={(n) => (centerId = n)} onopen={(n) => openNeighbour(n)} />
               </section>
             </div>
           {:else}
