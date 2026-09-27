@@ -72,6 +72,9 @@ func Builtins() []*methodology.Domain { return methodology.BuiltinDomains() }
 // IsBuiltin reports the namespace of a built-in domain.
 func IsBuiltin(ns string) bool { return methodology.IsBuiltinDomain(ns) }
 
+// IsFrozen reports a built-in domain that only changes with the code (methodology, organisation).
+func IsFrozen(ns string) bool { return methodology.IsFrozenDomain(ns) }
+
 // Builtin is the catalogue of the built-in domains alone: what a service knows before it has loaded the domains.
 func Builtin() *Catalog {
 	c, err := New()
@@ -81,10 +84,18 @@ func Builtin() *Catalog {
 	return c
 }
 
-// New builds the catalogue of the given domains (one per namespace) and of the built-in domains. A bare reference inside
-// a domain (extends, link ends, document) is a type of that domain.
+// New builds the catalogue of the given domains (one per namespace) and of the built-in domains; a given version of a
+// built-in domain that is not frozen (domain) replaces its embedded version. A bare reference inside a domain
+// (extends, link ends, document) is a type of that domain.
 func New(ds ...*methodology.Domain) (*Catalog, error) {
-	all := append(slices.Clone(Builtins()), ds...)
+	var all []*methodology.Domain
+	for _, b := range Builtins() {
+		if IsFrozen(b.Name) || !slices.ContainsFunc(ds, func(d *methodology.Domain) bool { return d != nil && d.Name == b.Name }) {
+			all = append(all, b)
+		}
+	}
+	nb := len(all)
+	all = append(all, ds...)
 	c := &Catalog{types: map[domain.TypeRef]*Type{}, links: map[domain.TypeRef]*LinkType{}, domains: map[string]string{}}
 	decl := map[domain.TypeRef]declared{}
 	for i, d := range all {
@@ -92,8 +103,8 @@ func New(ds ...*methodology.Domain) (*Catalog, error) {
 			continue
 		}
 		if _, dup := c.domains[d.Name]; dup {
-			if i >= len(Builtins()) && IsBuiltin(d.Name) {
-				return nil, fmt.Errorf("domain %s: the name of a built-in domain: %w", d.Name, ErrInvalid)
+			if i >= nb && IsFrozen(d.Name) {
+				return nil, fmt.Errorf("domain %s: the name of a frozen built-in domain: %w", d.Name, ErrInvalid)
 			}
 			return nil, fmt.Errorf("domain %s given twice: %w", d.Name, ErrInvalid)
 		}

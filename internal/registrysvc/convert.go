@@ -136,7 +136,7 @@ func DomainToPB(r DomainRecord) *registryv1.Domain {
 	return &registryv1.Domain{Name: d.Name, Version: d.Version, Description: d.Description, Status: string(r.Status),
 		NodeTypes: nodeTypesToPB(d.NodeTypes), LinkTypes: linkTypesToPB(d.LinkTypes), Lifecycles: lifecyclesToPB(d.Lifecycles),
 		Algorithms: algorithmsToPB(d.Algorithms), AlgorithmInstances: instancesToPB(d.Instances),
-		CreatedAt: pbconv.Time(r.CreatedAt), UpdatedAt: pbconv.Time(r.UpdatedAt), PublishedAt: pbconv.Time(r.PublishedAt), UpdatedBy: r.UpdatedBy, Builtin: r.Builtin}
+		CreatedAt: pbconv.Time(r.CreatedAt), UpdatedAt: pbconv.Time(r.UpdatedAt), PublishedAt: pbconv.Time(r.PublishedAt), UpdatedBy: r.UpdatedBy, Builtin: r.Builtin, Frozen: r.Frozen}
 }
 
 // DomainSummaryToPB converts a record to a list entry.
@@ -144,7 +144,7 @@ func DomainSummaryToPB(r DomainRecord) *registryv1.DomainSummary {
 	d := r.Domain
 	return &registryv1.DomainSummary{Name: d.Name, Version: d.Version, Description: d.Description, Status: string(r.Status),
 		NodeTypeCount: int32(len(d.NodeTypes)), LinkTypeCount: int32(len(d.LinkTypes)),
-		UpdatedAt: pbconv.Time(r.UpdatedAt), PublishedAt: pbconv.Time(r.PublishedAt), Builtin: r.Builtin}
+		UpdatedAt: pbconv.Time(r.UpdatedAt), PublishedAt: pbconv.Time(r.PublishedAt), Builtin: r.Builtin, Frozen: r.Frozen}
 }
 
 // DomainFromPB converts an edited domain (status and timestamps are ignored).

@@ -56,37 +56,62 @@ func (s *Service) publishDomainEvent(ctx context.Context, event string, r Domain
 	}
 }
 
-// builtinDomains are the records of the domains built into the platform: always published, never stored.
+// builtinDomains are the records of the versions shipped with the platform: always published, never stored.
 func builtinDomains() []DomainRecord {
 	var out []DomainRecord
 	for _, d := range typecat.Builtins() {
-		out = append(out, DomainRecord{Domain: *d, Status: StatusPublished, UpdatedBy: "platform", Builtin: true})
+		out = append(out, builtinRecord(d))
 	}
 	return out
 }
 
-// builtinError refuses a write to a built-in domain; it is an ErrImmutable.
-type builtinError string
+func builtinRecord(d *methodology.Domain) DomainRecord {
+	return DomainRecord{Domain: *d, Status: StatusPublished, UpdatedBy: "platform", Builtin: true, Frozen: typecat.IsFrozen(d.Name)}
+}
+
+// isBuiltinVersion reports the version of a built-in domain shipped with the platform.
+func isBuiltinVersion(name, version string) bool {
+	b := methodology.BuiltinDomain(name)
+	return b != nil && b.Version == version
+}
+
+// builtinError refuses a write to a frozen domain or to the version shipped with the platform; it is an ErrImmutable.
+type builtinError struct{ name, version string }
 
 func (e builtinError) Error() string {
-	return "domain " + string(e) + " is built into the platform and cannot be changed"
+	if e.version != "" {
+		return "domain " + e.name + "@" + e.version + " ships with the platform and cannot be changed: create a new version"
+	}
+	return "domain " + e.name + " is frozen: it changes with the platform code"
 }
 func (builtinError) Is(target error) bool { return target == ErrImmutable }
 
-func errBuiltin(name string) error { return builtinError(name) }
+// errBuiltin refuses to write a version of a built-in domain (nil when the write is allowed).
+func errBuiltin(name, version string) error {
+	switch {
+	case typecat.IsFrozen(name):
+		return builtinError{name: name}
+	case isBuiltinVersion(name, version):
+		return builtinError{name: name, version: version}
+	}
+	return nil
+}
 
-// GetDomain returns a version (empty version: latest published), built-in domains included.
+// GetDomain returns a version (empty version: latest published), the versions shipped with the platform included.
 func (s *Service) GetDomain(ctx context.Context, name, version string) (DomainRecord, error) {
-	for _, r := range builtinDomains() {
-		if r.Domain.Name == name && (version == "" || version == r.Domain.Version) {
-			return r, nil
-		}
+	b := methodology.BuiltinDomain(name)
+	if b != nil && (version == b.Version || (version == "" && typecat.IsFrozen(name))) {
+		return builtinRecord(b), nil
 	}
 	ds, err := s.domains()
 	if err != nil {
 		return DomainRecord{}, err
 	}
-	return ds.GetDomain(ctx, name, version)
+	r, err := ds.GetDomain(ctx, name, version)
+	if err != nil && b != nil && version == "" && errors.Is(err, ErrNotFound) {
+		return builtinRecord(b), nil // no published version yet: the shipped one is in force
+	}
+	return r, err
 }
 
 // Domains returns the latest published version of every stored domain (the source of the type catalogue, which
@@ -116,8 +141,8 @@ func (s *Service) DomainVersions(ctx context.Context, all bool) ([]DomainRecord,
 	if err != nil {
 		return nil, err
 	}
-	// a stored version of a built-in name (a graph from before it was built in) is shadowed by the built-in one
-	rs = append(builtinDomains(), slices.DeleteFunc(rs, func(r DomainRecord) bool { return typecat.IsBuiltin(r.Domain.Name) })...)
+	// a stored version of a frozen domain (a graph from before it was frozen) is shadowed by the built-in one
+	rs = append(builtinDomains(), slices.DeleteFunc(rs, func(r DomainRecord) bool { return typecat.IsFrozen(r.Domain.Name) })...)
 	if all {
 		return rs, nil
 	}
@@ -148,8 +173,8 @@ func (s *Service) SaveDomain(ctx context.Context, d methodology.Domain) (DomainR
 	if d.Name == "" || d.Version == "" {
 		return DomainRecord{}, nil, fmt.Errorf("name and version are required: %w", ErrInvalid)
 	}
-	if typecat.IsBuiltin(d.Name) {
-		return DomainRecord{}, nil, errBuiltin(d.Name)
+	if err := errBuiltin(d.Name, d.Version); err != nil {
+		return DomainRecord{}, nil, err
 	}
 	ds, err := s.domains()
 	if err != nil {
@@ -174,8 +199,11 @@ func (s *Service) SaveDomain(ctx context.Context, d methodology.Domain) (DomainR
 // validateDomain checks a domain and its references to the types of the other domains in force.
 func (s *Service) validateDomain(ctx context.Context, d *methodology.Domain) methodology.Issues {
 	issues := d.Validate()
-	if typecat.IsBuiltin(d.Name) {
-		return append(issues, methodology.Issue{Path: "name", Message: d.Name + " is a domain built into the platform"})
+	if typecat.IsFrozen(d.Name) {
+		return append(issues, methodology.Issue{Path: "name", Message: d.Name + " is a frozen domain: it changes with the platform code"})
+	}
+	if b := methodology.BuiltinDomain(d.Name); b != nil {
+		issues = append(issues, keepsBuiltin(b, d)...)
 	}
 	if len(issues) == 0 {
 		if _, err := s.Types(ctx, d); err != nil {
@@ -210,8 +238,8 @@ func (s *Service) DomainUsage(ctx context.Context, name, version string) ([]Reco
 // PublishDomain freezes a valid draft; it becomes the version in force. The published methodologies must stay
 // valid against it.
 func (s *Service) PublishDomain(ctx context.Context, name, version string) (DomainRecord, error) {
-	if typecat.IsBuiltin(name) {
-		return DomainRecord{}, errBuiltin(name)
+	if err := errBuiltin(name, version); err != nil {
+		return DomainRecord{}, err
 	}
 	ds, err := s.domains()
 	if err != nil {
@@ -258,21 +286,21 @@ func (s *Service) PublishDomain(ctx context.Context, name, version string) (Doma
 
 // CreateDomainVersion copies a version into a new draft.
 func (s *Service) CreateDomainVersion(ctx context.Context, name, from, to string) (DomainRecord, error) {
-	if typecat.IsBuiltin(name) {
-		return DomainRecord{}, errBuiltin(name)
+	if typecat.IsFrozen(name) {
+		return DomainRecord{}, errBuiltin(name, "")
 	}
 	ds, err := s.domains()
 	if err != nil {
 		return DomainRecord{}, err
 	}
-	src, err := ds.GetDomain(ctx, name, from)
+	src, err := s.GetDomain(ctx, name, from)
 	if err != nil {
 		return DomainRecord{}, err
 	}
 	if to == "" || to == src.Domain.Version {
 		return DomainRecord{}, fmt.Errorf("a new version number is required: %w", ErrInvalid)
 	}
-	if _, err := ds.GetDomain(ctx, name, to); err == nil {
+	if _, err := ds.GetDomain(ctx, name, to); err == nil || isBuiltinVersion(name, to) {
 		return DomainRecord{}, fmt.Errorf("domain %s@%s already exists: %w", name, to, ErrImmutable)
 	}
 	d := src.Domain
@@ -284,8 +312,8 @@ func (s *Service) CreateDomainVersion(ctx context.Context, name, from, to string
 // DeleteDomain removes a draft, or archives a published version; the version in force cannot be archived while
 // methodologies use it.
 func (s *Service) DeleteDomain(ctx context.Context, name, version string) error {
-	if typecat.IsBuiltin(name) {
-		return errBuiltin(name)
+	if err := errBuiltin(name, version); err != nil {
+		return err
 	}
 	ds, err := s.domains()
 	if err != nil {
@@ -382,4 +410,28 @@ func (s *Service) SeedDomains(ctx context.Context, dir string) ([]string, error)
 		loaded = append(loaded, d.Name+"@"+d.Version)
 	}
 	return loaded, nil
+}
+
+// keepsBuiltin checks that a version of a built-in domain keeps what the platform writes with it: every node type of the
+// shipped version with its properties, and every link type (a version may add types, properties, lifecycles, ...).
+func keepsBuiltin(b, d *methodology.Domain) methodology.Issues {
+	var issues methodology.Issues
+	for _, bt := range b.NodeTypes {
+		i := slices.IndexFunc(d.NodeTypes, func(t methodology.NodeType) bool { return t.Name == bt.Name })
+		if i < 0 {
+			issues = append(issues, methodology.Issue{Path: "nodeTypes", Message: fmt.Sprintf("node type %s is used by the platform: it cannot be removed", bt.Name)})
+			continue
+		}
+		for _, p := range bt.Properties {
+			if !slices.Contains(d.NodeTypes[i].Properties, p) {
+				issues = append(issues, methodology.Issue{Path: fmt.Sprintf("nodeTypes[%d].properties", i), Message: fmt.Sprintf("property %s of %s is used by the platform: it cannot be removed", p, bt.Name)})
+			}
+		}
+	}
+	for _, bl := range b.LinkTypes {
+		if !slices.ContainsFunc(d.LinkTypes, func(l methodology.LinkType) bool { return l.Name == bl.Name }) {
+			issues = append(issues, methodology.Issue{Path: "linkTypes", Message: fmt.Sprintf("link type %s is used by the platform: it cannot be removed", bl.Name)})
+		}
+	}
+	return issues
 }

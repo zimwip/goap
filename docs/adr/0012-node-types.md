@@ -59,21 +59,27 @@ Question answered (CLAUDE.md, rule 8): **WHAT** is being changed — how a node 
 - The registry applies the same rule when a methodology or a domain is saved and published: every qualified reference
   must resolve (ADR 0013 §3).
 
-### 4. Built-in domains: frozen namespaces the platform reads
-- A namespace whose types the platform code reads in its own way is **built in**: its domain ships with the code
-  (embedded YAML, `pkg/methodology/builtin/`, `methodology.BuiltinDomains`) and is **frozen**. There are three:
+### 4. Built-in domains: shipped with the code, some frozen
+- The domains the platform writes or reads before anything is loaded ship with the code (embedded YAML,
+  `pkg/methodology/builtin/`, `methodology.BuiltinDomains`):
   - the **meta-domains** `methodology` (`MethodologyVersion`, `Agent`, `Action`, `Condition`, `Goal`, `ToolRequest`)
     and `domain` (`DomainVersion`, `NodeType`, `LinkType`, `Lifecycle`, `Algorithm`, `AlgorithmInstance`), which
     type the definitions of methodologies and domains (ADR 0023);
   - `organisation` (`OrgUnit`, `Adapter`, `User`, `Policy`), read by the sub-changes (ADR 0016), the adapters
     (CLAUDE.md, rule 3) and access control (ADR 0020).
+- `methodology` and `organisation` are **frozen**: the platform reads them in its own way, so they are initialised at
+  startup from their YAML and change with the code only; the registry never versions them (`IsFrozenDomain`).
+- `domain` is the content the methodologies drive: its shipped version is the **initial version**, and new versions
+  are created and published in the registry like any domain. A version must keep what the platform writes with it
+  (every shipped node type with its properties, every shipped link type); it may add types, properties, lifecycles,
+  validators. The latest published version replaces the shipped one in the catalogue.
 - A built-in domain is always in the catalogue, before anything is loaded from the registry: the registry writes its
   definition nodes into a graph that does not need the registry to check them, so there is no bootstrap cycle (the
   registry stores in the graph, the graph loads its catalogue from the registry), and the organisation and access
   seeds do not wait for the registry.
-- The registry lists and serves the built-in domains like the others (published, `builtin: true`), so the domain
-  editor shows them, read-only; it refuses to save, version, publish or archive them, and a domain cannot take their
-  name. Changing a built-in domain is a change of the code that reads it.
+- The registry lists and serves the shipped versions like the others (published, `builtin: true`, `frozen` for
+  methodology and organisation), so the domain editor shows them read-only. It refuses to change or archive a shipped
+  version, to version a frozen domain, and a domain cannot take a frozen name.
 - Every other namespace is an ordinary domain (`alm`, `platform`, ...): created, versioned and published from the
   domain editor; adding a namespace is publishing a new domain (ADR 0013).
 

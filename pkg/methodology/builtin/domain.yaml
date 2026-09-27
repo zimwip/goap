@@ -2,7 +2,8 @@ name: domain
 version: 1.0.0
 description: >
   Built-in meta-domain (ADR 0012 §4, ADR 0023): the definition of a domain version, one node per element, in the
-  "domain" namespace. Its types are in every type catalogue, before anything is loaded from the registry.
+  "domain" namespace. This is the version shipped with the platform, in every type catalogue before anything is
+  loaded from the registry; new versions are published in the registry and must keep its types and properties.
 nodeTypes:
   - {name: DomainVersion, editor: domain, description: "A version of a domain: its scalar fields, status and timestamps", properties: [name, version, description, status, createdAt, updatedAt, publishedAt, updatedBy]}
   - {name: NodeType, editor: definition, description: "Node type of a domain version", properties: [name, description, properties, extends, lifecycle, document, changeControlled, validators, search, editor, position, removed]}
