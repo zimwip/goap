@@ -11,6 +11,7 @@ import (
 	"github.com/zimwip/goap/internal/identity"
 	"github.com/zimwip/goap/internal/pbconv"
 	"github.com/zimwip/goap/pkg/authz"
+	"github.com/zimwip/goap/pkg/domain"
 )
 
 // Handler implements registryv1connect.RegistryServiceHandler.
@@ -215,4 +216,36 @@ func (h *Handler) RunAlgorithm(ctx context.Context, r *connect.Request[registryv
 		resp.Ok = out.OK()
 	}
 	return connect.NewResponse(resp), nil
+}
+
+func (h *Handler) ListTypes(ctx context.Context, _ *connect.Request[registryv1.ListTypesRequest]) (*connect.Response[registryv1.ListTypesResponse], error) {
+	cat, err := h.Service.Types(ctx)
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	out := &registryv1.ListTypesResponse{Domains: cat.Domains()}
+	for _, t := range cat.Types() {
+		ti := &registryv1.TypeInfo{Ref: t.Ref.String(), Description: t.Description, Properties: t.Properties, ChangeControlled: t.ChangeControlled, Editor: t.Editor}
+		for _, a := range t.Ancestors {
+			ti.Ancestors = append(ti.Ancestors, a.String())
+		}
+		if t.Lifecycle != nil {
+			ti.Lifecycle = lifecyclesToPB([]domain.Lifecycle{*t.Lifecycle})[0]
+		}
+		if t.Document != nil {
+			ti.Contains = t.Document.Contains
+		}
+		out.Types = append(out.Types, ti)
+	}
+	for _, l := range cat.LinkTypes() {
+		li := &registryv1.LinkTypeInfo{Ref: l.Ref.String()}
+		if !l.From.IsZero() {
+			li.From = l.From.String()
+		}
+		if !l.To.IsZero() {
+			li.To = l.To.String()
+		}
+		out.LinkTypes = append(out.LinkTypes, li)
+	}
+	return connect.NewResponse(out), nil
 }

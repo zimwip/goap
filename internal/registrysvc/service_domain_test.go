@@ -7,6 +7,9 @@ import (
 	"strings"
 	"testing"
 
+	"connectrpc.com/connect"
+
+	registryv1 "github.com/zimwip/goap/gen/goap/registry/v1"
 	"github.com/zimwip/goap/pkg/algo"
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/methodology"
@@ -328,5 +331,32 @@ func TestDomainNodeTypeEditors(t *testing.T) {
 		if editors[typ] != want {
 			t.Fatalf("editor of %s: %q, want %q", typ, editors[typ], want)
 		}
+	}
+}
+
+func TestListTypes(t *testing.T) {
+	s := &Service{Store: NewMemoryStore()}
+	withALM(t, s)
+	res, err := (&Handler{Service: s}).ListTypes(as("contributor"), connect.NewRequest(&registryv1.ListTypesRequest{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	byRef := map[string]*registryv1.TypeInfo{}
+	for _, ti := range res.Msg.Types {
+		byRef[ti.Ref] = ti
+	}
+	sec := byRef["alm@SecurityRequirement"]
+	if sec == nil || sec.Lifecycle.GetName() != "requirement" || len(sec.Ancestors) != 2 || byRef["methodology@Agent"].GetEditor() != "agent" {
+		t.Fatalf("types: %+v", sec)
+	}
+	if res.Msg.Domains["alm"] == "" {
+		t.Fatal("the version in force of each domain is listed")
+	}
+	found := false
+	for _, l := range res.Msg.LinkTypes {
+		found = found || (l.Ref == "alm@verifies" && l.From == "alm@TestCase" && l.To == "alm@Requirement")
+	}
+	if !found {
+		t.Fatal("link types are listed with their ends")
 	}
 }

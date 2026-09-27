@@ -156,6 +156,29 @@ export interface Lifecycle {
   transitions?: LifecycleTransition[];
 }
 
+/** Resolved model of a node type of the catalogue ("<namespace>@<name>", ADR 0012). */
+export interface TypeInfo {
+  ref?: string;
+  description?: string;
+  /** declared properties, the inherited ones first */
+  properties?: string[];
+  /** supertypes, nearest first */
+  ancestors?: string[];
+  lifecycle?: Lifecycle;
+  changeControlled?: boolean;
+  /** IDE editor of the nodes (ADR 0027) */
+  editor?: string;
+  /** qualified types the nodes embed through "contains" links */
+  contains?: string[];
+}
+
+/** Resolved model of a link type; an empty end accepts any node type. */
+export interface LinkTypeInfo {
+  ref?: string;
+  from?: string;
+  to?: string;
+}
+
 export interface NodeType {
   name?: string;
   description?: string;
@@ -1029,6 +1052,9 @@ export const registry = {
   /** Methodology versions referencing a domain version (unpinned references included). */
   getDomainUsage: (name: string, version: string, signal?: AbortSignal) =>
     rpc<NameVersion, { methodologies?: DomainUser[] }>(REGISTRY, 'GetDomainUsage', { name, version }, signal),
+  /** The type catalogue in force (ADR 0012): node and link types of the published domains and of the meta-domains. */
+  listTypes: (signal?: AbortSignal) =>
+    rpc<Record<string, never>, { types?: TypeInfo[]; linkTypes?: LinkTypeInfo[]; domains?: Record<string, string> }>(REGISTRY, 'ListTypes', {}, signal),
   /** Tries an algorithm on a sample input; nothing is saved. */
   runAlgorithm: (algorithm: Algorithm, values: Record<string, unknown>, input: Record<string, unknown>) =>
     rpc<{ algorithm: Algorithm; values: Record<string, unknown>; input: Record<string, unknown> }, RunAlgorithmResponse>(

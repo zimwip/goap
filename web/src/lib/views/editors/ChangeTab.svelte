@@ -23,6 +23,7 @@
   import ChangeLifecycle from '../../components/ChangeLifecycle.svelte';
   import EditorPanes, { type Pane } from '../../components/EditorPanes.svelte';
   import { lifecycleRows, reopenable, nodeTypeNames, lifecycleResolver, loadPosts, writeNodeInChange, type PostVersions, type LifecycleRow } from '../../lifecycle';
+  import { loadTypes, typeCatalog } from '../../stores/types.svelte';
   import { openTab } from '../../shell/tabs.svelte';
   import { openNode } from '../../nodeEditors';
   import { provideActions, notify } from '../../shell/workbench.svelte';
@@ -155,10 +156,12 @@
 
   const isApplied = $derived(change?.status === 'applied');
   const closed = $derived(change?.status === 'applied' || change?.status === 'abandoned');
-  const lcRows = $derived(lifecycleRows(nodes, attached, change?.nodes ?? [], posts, extraNodes));
-  const lcCandidates = $derived(reopenable(nodes, lcRows));
-  const typeNames = $derived(nodeTypeNames(nodes));
-  const lifecycleOf = $derived(lifecycleResolver(nodes));
+  void loadTypes();
+  const lcRows = $derived(lifecycleRows(typeCatalog.cat, nodes, attached, change?.nodes ?? [], posts, extraNodes));
+  // a change creates and modifies the nodes of its namespace (ADR 0015 §2)
+  const lcCandidates = $derived(reopenable(nodes, lcRows, change?.namespace ?? ''));
+  const typeNames = $derived(nodeTypeNames(typeCatalog.cat, change?.namespace ?? ''));
+  const lifecycleOf = $derived(lifecycleResolver(typeCatalog.cat));
   const takenKeys = $derived([
     ...nodes.map((n) => n.key ?? ''),
     ...(change?.nodes ?? []).filter((n) => n.intent === 'created' && !n.superseded && n.review !== 'rejected').map((n) => n.key ?? ''),

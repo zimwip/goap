@@ -5,9 +5,9 @@ import { applyOnMain, createNodeItem, deleteNodeItem, headGraph, updateNodeItem,
 import type { NodeEdit } from './api';
 
 export const NS_PLATFORM = 'platform';
-export const PROVIDER_TYPE = 'LlmProvider';
-export const MODEL_TYPE = 'LlmModel';
-export const ALIAS_TYPE = 'LlmAlias';
+export const PROVIDER_TYPE = 'platform@LlmProvider';
+export const MODEL_TYPE = 'platform@LlmModel';
+export const ALIAS_TYPE = 'platform@LlmAlias';
 
 export const providerKey = (name: string) => `LLP:${name}`;
 export const modelKey = (provider: string, model: string) => `LLM:${provider}/${model}`;

@@ -3,7 +3,7 @@
 import type { AlgorithmParam, GraphNode, Struct } from './api';
 
 export const NS_PLATFORM = 'platform';
-export const ADAPTER_DEF_TYPE = 'AdapterDef';
+export const ADAPTER_DEF_TYPE = 'platform@AdapterDef';
 export const adapterDefKey = (name: string) => `ADD:${name}`;
 
 export interface AdapterDef {
