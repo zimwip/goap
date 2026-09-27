@@ -65,7 +65,7 @@ func (c *Client) Tools(ctx context.Context, org string) ([]Tool, []string, error
 	}
 	out := make([]Tool, len(r.Msg.Tools))
 	for i, t := range r.Msg.Tools {
-		out[i] = Tool{Name: t.Name, Description: t.Description, InputSchema: pbconv.Map(t.InputSchema), ReadOnly: t.ReadOnly}
+		out[i] = Tool{Name: t.Name, Description: t.Description, InputSchema: pbconv.Map(t.InputSchema), ReadOnly: t.ReadOnly, Scope: t.Scope}
 	}
 	return out, r.Msg.Mcps, nil
 }

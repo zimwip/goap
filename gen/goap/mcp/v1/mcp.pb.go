@@ -342,10 +342,12 @@ func (x *McpTool) GetReadOnly() bool {
 }
 
 type Mcp struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Description   string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
-	Tools         []*McpTool             `protobuf:"bytes,3,rep,name=tools,proto3" json:"tools,omitempty"`
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Name        string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Description string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
+	Tools       []*McpTool             `protobuf:"bytes,3,rep,name=tools,proto3" json:"tools,omitempty"`
+	// where a methodology may use the MCP: action, agent or both (empty: both, ADR 0028)
+	Scope         string `protobuf:"bytes,4,opt,name=scope,proto3" json:"scope,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -399,6 +401,13 @@ func (x *Mcp) GetTools() []*McpTool {
 		return x.Tools
 	}
 	return nil
+}
+
+func (x *Mcp) GetScope() string {
+	if x != nil {
+		return x.Scope
+	}
+	return ""
 }
 
 type ListMcpsRequest struct {
@@ -1065,10 +1074,12 @@ func (x *AdapterTemplateResponse) GetParams() []*TemplateParam {
 type Tool struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// "<mcp>/<tool>"
-	Name          string           `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Description   string           `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
-	InputSchema   *structpb.Struct `protobuf:"bytes,3,opt,name=input_schema,json=inputSchema,proto3" json:"input_schema,omitempty"`
-	ReadOnly      bool             `protobuf:"varint,4,opt,name=read_only,json=readOnly,proto3" json:"read_only,omitempty"`
+	Name        string           `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Description string           `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
+	InputSchema *structpb.Struct `protobuf:"bytes,3,opt,name=input_schema,json=inputSchema,proto3" json:"input_schema,omitempty"`
+	ReadOnly    bool             `protobuf:"varint,4,opt,name=read_only,json=readOnly,proto3" json:"read_only,omitempty"`
+	// scope of the MCP of the tool: action, agent or both
+	Scope         string `protobuf:"bytes,5,opt,name=scope,proto3" json:"scope,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1129,6 +1140,13 @@ func (x *Tool) GetReadOnly() bool {
 		return x.ReadOnly
 	}
 	return false
+}
+
+func (x *Tool) GetScope() string {
+	if x != nil {
+		return x.Scope
+	}
+	return ""
 }
 
 type ListToolsRequest struct {
@@ -1392,11 +1410,12 @@ const file_goap_mcp_v1_mcp_proto_rawDesc = "" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12:\n" +
 	"\finput_schema\x18\x03 \x01(\v2\x17.google.protobuf.StructR\vinputSchema\x12\x1b\n" +
-	"\tread_only\x18\x04 \x01(\bR\breadOnly\"g\n" +
+	"\tread_only\x18\x04 \x01(\bR\breadOnly\"}\n" +
 	"\x03Mcp\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12*\n" +
-	"\x05tools\x18\x03 \x03(\v2\x14.goap.mcp.v1.McpToolR\x05tools\"\x11\n" +
+	"\x05tools\x18\x03 \x03(\v2\x14.goap.mcp.v1.McpToolR\x05tools\x12\x14\n" +
+	"\x05scope\x18\x04 \x01(\tR\x05scope\"\x11\n" +
 	"\x0fListMcpsRequest\"8\n" +
 	"\x10ListMcpsResponse\x12$\n" +
 	"\x04mcps\x18\x01 \x03(\v2\x10.goap.mcp.v1.McpR\x04mcps\"\xe9\x01\n" +
@@ -1438,12 +1457,13 @@ const file_goap_mcp_v1_mcp_proto_rawDesc = "" +
 	"\brequired\x18\x04 \x01(\bR\brequired\"a\n" +
 	"\x17AdapterTemplateResponse\x12\x12\n" +
 	"\x04code\x18\x01 \x01(\tR\x04code\x122\n" +
-	"\x06params\x18\x02 \x03(\v2\x1a.goap.mcp.v1.TemplateParamR\x06params\"\x95\x01\n" +
+	"\x06params\x18\x02 \x03(\v2\x1a.goap.mcp.v1.TemplateParamR\x06params\"\xab\x01\n" +
 	"\x04Tool\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12:\n" +
 	"\finput_schema\x18\x03 \x01(\v2\x17.google.protobuf.StructR\vinputSchema\x12\x1b\n" +
-	"\tread_only\x18\x04 \x01(\bR\breadOnly\"&\n" +
+	"\tread_only\x18\x04 \x01(\bR\breadOnly\x12\x14\n" +
+	"\x05scope\x18\x05 \x01(\tR\x05scope\"&\n" +
 	"\x10ListToolsRequest\x12\x12\n" +
 	"\x04unit\x18\x01 \x01(\tR\x04unit\"P\n" +
 	"\x11ListToolsResponse\x12'\n" +

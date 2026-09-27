@@ -54,12 +54,39 @@ type Tool struct {
 	ReadOnly bool `json:"readOnly,omitempty"`
 }
 
+// Scopes of an MCP: where a methodology may use it.
+const (
+	// ScopeAction: declared by actions (`actions[].mcps`, a tool action's `<mcp>/<tool>`).
+	ScopeAction = "action"
+	// ScopeAgent: declared by agents only (`agents[].mcps`), for the llm actions that work at the level
+	// of the agent: orchestration tools (start other agents) are not a step's business.
+	ScopeAgent = "agent"
+	// ScopeBoth: either (the default, empty).
+	ScopeBoth = "both"
+)
+
 // Def is a generic MCP definition.
 type Def struct {
 	Name        string `json:"name"`
 	Description string `json:"description,omitempty"`
-	Tools       []Tool `json:"tools"`
+	// Scope says where the MCP may be used: action, agent or both (empty: both).
+	Scope string `json:"scope,omitempty"`
+	Tools []Tool `json:"tools"`
 }
+
+// ScopeOf normalizes a scope (empty: both).
+func ScopeOf(scope string) string {
+	if scope == "" {
+		return ScopeBoth
+	}
+	return scope
+}
+
+// ForActions reports whether an MCP of this scope may be declared by actions.
+func ForActions(scope string) bool { return ScopeOf(scope) != ScopeAgent }
+
+// ForAgents reports whether an MCP of this scope may be declared by agents.
+func ForAgents(scope string) bool { return ScopeOf(scope) != ScopeAction }
 
 // AdapterDef defines an adapter: code that implements the tools of one MCP with the operations of one
 // connector, and the parameters an instance sets. It is an AdapterDef node of the "platform" namespace.
@@ -105,6 +132,8 @@ type ToolInfo struct {
 	Description string         `json:"description,omitempty"`
 	InputSchema map[string]any `json:"inputSchema,omitempty"`
 	ReadOnly    bool           `json:"readOnly,omitempty"`
+	// Scope is the scope of the MCP of the tool (empty: both).
+	Scope string `json:"scope,omitempty"`
 }
 
 // ToolName is the qualified name of a tool: "<mcp>/<tool>".
@@ -126,6 +155,11 @@ func ValidName(s string) bool { return nameRE.MatchString(s) }
 func (d Def) Validate() error {
 	if !ValidName(d.Name) {
 		return fmt.Errorf("mcp name %q must match %s: %w", d.Name, nameRE, ErrInvalid)
+	}
+	switch d.Scope {
+	case "", ScopeAction, ScopeAgent, ScopeBoth:
+	default:
+		return fmt.Errorf("mcp %s: scope %q must be action, agent or both: %w", d.Name, d.Scope, ErrInvalid)
 	}
 	seen := map[string]bool{}
 	for _, t := range d.Tools {

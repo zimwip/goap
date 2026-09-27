@@ -76,7 +76,9 @@ func main() {
 	g.Authorizer = graphsvc.TransitionAuthorizer(authorizer)
 	var triggers *engine.TriggerManager
 	// methodologies and domains are nodes of the graph: the registry needs no database
-	reg := &registrysvc.Service{Store: registrysvc.NewGraphStore(g), DomainStore: st.domains, Authz: authorizer}
+	// the scope of the MCPs (ADR 0028) is checked where methodologies declare them
+	reg := &registrysvc.Service{Store: registrysvc.NewGraphStore(g), DomainStore: st.domains, Authz: authorizer,
+		MCPScopes: (&mcpsvc.Directory{Graph: g}).Scopes}
 	// the graph judges nodes by the types of the published domains (ADR 0012): its catalogue follows the registry
 	types := typecat.NewLive(reg.Domains)
 	g.Types = func() graph.TypeCatalog { return types.Get() }

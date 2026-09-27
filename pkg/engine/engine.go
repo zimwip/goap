@@ -21,6 +21,7 @@ import (
 	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/intent"
 	"github.com/zimwip/goap/pkg/llm"
+	"github.com/zimwip/goap/pkg/mcp"
 	"github.com/zimwip/goap/pkg/methodology"
 )
 
@@ -541,8 +542,9 @@ func (e *Engine) execute(ctx context.Context, p *Process, m *methodology.Compile
 // orgOf is the organisation holding the change of a process (an OrgUnit key).
 func (e *Engine) orgOf(p *Process) string { return domain.OrgOf(p.Org) }
 
-// boundMCPs returns the MCPs the organization of the process binds and the tools it may call
-// ("<mcp>/<tool>", once its restrictions are applied, ADR 0028). Without a hub nothing is bound.
+// boundMCPs returns the MCPs the organization of the process binds for actions and the tools they may
+// call ("<mcp>/<tool>", once its restrictions and the scope of its MCP are applied, ADR 0028). Without a
+// hub nothing is bound.
 func (e *Engine) boundMCPs(ctx context.Context, p *Process) (map[string]bool, error) {
 	bound := map[string]bool{}
 	if e.Tools == nil {
@@ -552,11 +554,20 @@ func (e *Engine) boundMCPs(ctx context.Context, p *Process) (map[string]bool, er
 	if err != nil {
 		return nil, fmt.Errorf("MCPs of organization %s: %w", e.orgOf(p), err)
 	}
-	for _, n := range names {
-		bound[n] = true
-	}
+	// an MCP of scope agent is not the business of an action (ADR 0028): an action declaring it, or a tool
+	// action on it, is never scheduled; the agent level reaches it through agents[].mcps
+	agentOnly := map[string]bool{}
 	for _, t := range tools {
+		if !mcp.ForActions(t.Scope) {
+			if m, _, err := mcp.SplitTool(t.Name); err == nil {
+				agentOnly[m] = true
+			}
+			continue
+		}
 		bound[t.Name] = true
+	}
+	for _, n := range names {
+		bound[n] = !agentOnly[n]
 	}
 	return bound, nil
 }

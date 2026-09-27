@@ -1479,11 +1479,16 @@ export interface McpTool {
   readOnly?: boolean;
 }
 
+/** Where a methodology may use an MCP (ADR 0028): declared by actions, by agents only, or both. */
+export type McpScope = 'action' | 'agent' | 'both';
+
 /** An MCP: the generic usage of a tool by an LLM (node `MCP:<name>` of the platform namespace). */
 export interface Mcp {
   name?: string;
   description?: string;
   tools?: McpTool[];
+  /** empty: both */
+  scope?: McpScope;
 }
 
 /**

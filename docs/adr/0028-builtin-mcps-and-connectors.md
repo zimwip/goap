@@ -22,7 +22,7 @@ of the same name:
 |---|---|---|
 | `goap-graph` | `read`, `glob`, `grep`, `links`, `baselines` (all read-only) | read the versioned graph, as of the head of `main` of a namespace or of a baseline |
 | `goap-change` | `create`, `read`, `write`, `edit`, `link`, `retire`, `note`, `validate` | work on a change, the blackboard of every modification: open one, declare and write nodes (change impacts), add notes, check it |
-| `goap-scheduler` | `start`, `list`, `get`, `triggers`, `fire` | start a process for an intent (a sub-task), follow processes, fire triggers |
+| `goap-scheduler` (scope `agent`) | `start`, `list`, `get`, `triggers`, `fire` | start a process for an intent (another agent), follow processes, fire triggers |
 | `goap-admin` | `units`, `users`, `mcps`, `connectors`, `domains`, `methodologies` (all read-only) | describe the platform: who, with what, what, how |
 
 - The split follows the platform's own services: graph reads, changes (graph writes, always through a change —
@@ -35,7 +35,27 @@ of the same name:
 - `goap-admin` changes nothing: the organisation, the adapters and the methodologies are graph data, changed
   through changes (`goap-change`).
 
-### 2. Built-in connectors, served by the hub
+### 2. The scope of an MCP: action, agent or both
+An MCP (`platform@MCP`, any MCP, not only the built-in ones) has a `scope` saying where a methodology may use it
+(platform domain 2.1.0):
+- `action`: declared by actions (`actions[].mcps`, a tool action's `<mcp>/<tool>`);
+- `agent`: declared by agents only (`agents[].mcps`) and reached by the **llm actions** of the agent — the agent
+  (scheduler) level; script actions and the action's own declarations do not reach it;
+- `both` (the default, empty).
+
+`goap-scheduler` has scope `agent`: creating other agents and following them is orchestration, the business of the
+agent level, not of a step. The rule holds everywhere:
+- **Scheduling**: an MCP of scope agent is never bound for actions, so an action declaring it, or a tool action on it,
+  is never planned (`Engine.boundMCPs`).
+- **Calls**: the action host knows which MCPs come from the action and which from its agent; it lists and calls a
+  tool only when the scope of its MCP allows it from there (`Host.permitted`). The hub carries the scope on every
+  listed tool (`mcp.ToolInfo.Scope`, `Tool.scope`).
+- **Validation**: the registry reports an action declaring an agent-scoped MCP (`actions[i].mcps` / `.tool`) and an
+  agent declaring an action-scoped one (`agents[i].mcps`), from the scopes of the head of the platform namespace
+  (`Service.MCPScopes`); unknown MCPs stay allowed.
+- The IDE edits the scope of an MCP, and the action and agent editors say which MCPs they may not declare.
+
+### 3. Built-in connectors, served by the hub
 - `internal/connectors/builtin` implements the four connectors with `connectorkit.Connector`. The hub serves them
   in-process (`inproc://<id>`, `mcpsvc.InprocInvoker`) and registers them like any connector (`KeepRegistered`);
   `goap-dev` wires the in-process graph, engine handler, registry and hub, `cmd/mcp` the service clients
@@ -51,7 +71,7 @@ of the same name:
   `process_id`); the hub sets the unit holding the change. This is how `goap-change` defaults to the change of the
   process and `goap-scheduler/start` to its unit and namespace.
 
-### 3. Every unit gets them from the default organisation
+### 4. Every unit gets them from the default organisation
 Each built-in has a pass-through adapter definition (`ADD:<name>`, code `return ctx.call(ctx.tool(), ctx.args())`)
 and the default organisation holds an instance of each (`ADP:ORG-DEFAULT/<name>`). By the resolution of ADR 0019
 (nearest wins, `ORG-DEFAULT` last) every unit can use them without configuration.
@@ -59,7 +79,7 @@ and the default organisation holds an instance of each (`ADP:ORG-DEFAULT/<name>`
 created or brought back to what the code declares (like the built-in domains, they ship with the platform); the
 instances of the default organisation are created only when the MCP is first seeded, so that removing one sticks.
 
-### 4. A unit restricts an MCP; restrictions add up down the organisation
+### 5. A unit restricts an MCP; restrictions add up down the organisation
 An `organisation@Adapter` node gains four properties (organisation domain 1.4.0): `disabled`, `tools` (allow-list),
 `deny`, `readOnly`. An instance may **only restrict** (no `adapter`): the implementation is then the one of the
 nearest ancestor. Resolution (`mcpsvc.Snapshot`):

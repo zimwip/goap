@@ -11,7 +11,8 @@ const (
 	BuiltinGraph = "goap-graph"
 	// BuiltinChange works on a change, the blackboard of every modification (write, edit, link, note).
 	BuiltinChange = "goap-change"
-	// BuiltinScheduler starts and follows processes and fires triggers.
+	// BuiltinScheduler starts and follows processes and fires triggers. Its scope is agent: only the
+	// agent level (agents[].mcps, llm actions) may start other agents.
 	BuiltinScheduler = "goap-scheduler"
 	// BuiltinAdmin describes the platform: units, users, MCPs, connectors, domains, methodologies.
 	BuiltinAdmin = "goap-admin"
@@ -100,7 +101,8 @@ func BuiltinDefs() []Def {
 			{Name: "validate", ReadOnly: true, Description: "Check the consistency of the change: the issues a review would raise.",
 				InputSchema: schemaObj(map[string]any{"change": argChange})},
 		}},
-		{Name: BuiltinScheduler, Description: "Start and follow processes (agents running methodologies) and fire triggers (built in).", Tools: []Tool{
+		// orchestration: only the agent level may start other agents (scope agent)
+		{Name: BuiltinScheduler, Scope: ScopeAgent, Description: "Start and follow processes (agents running methodologies) and fire triggers (built in, agent level only).", Tools: []Tool{
 			{Name: "start", Description: "Start a process for an intent: an agent of a methodology on a new change or an existing one.",
 				InputSchema: schemaObj(map[string]any{"intent": str("what is wanted"), "methodology": str("methodology (default: identified from the intent)"),
 					"agent": str("agent of the methodology"), "goal": str("goal (skips the intent loop)"), "title": str("title of the change"),

@@ -106,3 +106,23 @@ func TestCallContextKeepsWhatItDoesNotSet(t *testing.T) {
 		t.Fatalf("call context = %+v", got)
 	}
 }
+
+func TestScopes(t *testing.T) {
+	for _, s := range []string{"", mcp.ScopeAction, mcp.ScopeAgent, mcp.ScopeBoth} {
+		if err := (mcp.Def{Name: "x", Scope: s}).Validate(); err != nil {
+			t.Fatalf("%q: %v", s, err)
+		}
+	}
+	if err := (mcp.Def{Name: "x", Scope: "step"}).Validate(); !errors.Is(err, mcp.ErrInvalid) {
+		t.Fatalf("unknown scope accepted: %v", err)
+	}
+	if !mcp.ForActions("") || !mcp.ForAgents("") || mcp.ForActions(mcp.ScopeAgent) || mcp.ForAgents(mcp.ScopeAction) {
+		t.Fatal("scope rules")
+	}
+	// starting other agents is the agent level's business only
+	for _, d := range mcp.BuiltinDefs() {
+		if want := d.Name == mcp.BuiltinScheduler; (d.Scope == mcp.ScopeAgent) != want {
+			t.Fatalf("%s has scope %q", d.Name, d.Scope)
+		}
+	}
+}

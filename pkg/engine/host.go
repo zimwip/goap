@@ -34,8 +34,18 @@ type Host struct {
 	e       *Engine
 	process *Process // read-only while the action runs
 	action  string
-	// mcps are the MCPs the action declared: it can call the tools of these only.
-	mcps []string
+	kind    string
+	// mcps are the MCPs the action may call (declared by the action or its agent): it can call the tools of
+	// these only. actionMCPs are the ones the action declares, agentMCPs the ones of its agent (ADR 0028:
+	// an MCP of scope agent is reached through the agent only, by llm actions; of scope action, through the
+	// action only).
+	mcps       []string
+	actionMCPs []string
+	agentMCPs  []string
+
+	toolsOnce sync.Once
+	allTools  []mcp.ToolInfo
+	toolsErr  error
 
 	mu        sync.Mutex
 	llmCalls  []LLMCall
@@ -56,15 +66,39 @@ var _ dsl.Host = (*Host)(nil)
 // newHost serves the DSL calls of an action. It may call the tools of the MCPs the action
 // requires and, for llm and script actions, of the MCPs its agent declares.
 func (e *Engine) newHost(p *Process, action methodology.Action, agentMCPs []string) *Host {
-	mcps := action.RequiredMCPs()
+	own := action.RequiredMCPs()
+	mcps := slices.Clone(own)
+	var agent []string
 	if action.Kind == methodology.KindLLM || action.Kind == methodology.KindScript {
+		agent = agentMCPs
 		for _, m := range agentMCPs {
 			if !slices.Contains(mcps, m) {
 				mcps = append(mcps, m)
 			}
 		}
 	}
-	return &Host{e: e, process: p, action: action.Name, mcps: mcps, children: map[string]string{}}
+	return &Host{e: e, process: p, action: action.Name, kind: action.Kind, mcps: mcps, actionMCPs: own, agentMCPs: agent, children: map[string]string{}}
+}
+
+// permitted reports whether the action may call a tool, given the scope of its MCP (ADR 0028).
+func (h *Host) permitted(t mcp.ToolInfo) bool {
+	m, _, err := mcp.SplitTool(t.Name)
+	if err != nil {
+		return false
+	}
+	if slices.Contains(h.actionMCPs, m) && mcp.ForActions(t.Scope) {
+		return true
+	}
+	// the agent level: an MCP of scope agent (orchestration) serves the llm actions of the agent only
+	return slices.Contains(h.agentMCPs, m) && mcp.ForAgents(t.Scope) && (mcp.ScopeOf(t.Scope) != mcp.ScopeAgent || h.kind == methodology.KindLLM)
+}
+
+// unitTools lists, once per action run, the tools the unit holding the change can call.
+func (h *Host) unitTools(ctx context.Context) ([]mcp.ToolInfo, error) {
+	h.toolsOnce.Do(func() {
+		h.allTools, _, h.toolsErr = h.e.Tools.Tools(authz.With(ctx, h.process.Initiator), h.e.orgOf(h.process))
+	})
+	return h.allTools, h.toolsErr
 }
 
 // Attributes identify the caller of platform calls (used for tracing).
@@ -126,23 +160,41 @@ func (h *Host) Complete(ctx context.Context, r dsl.CompleteRequest) (dsl.Complet
 	return out, nil
 }
 
-// Tools lists the tools the action may call: those of its declared MCPs that the
-// organization of the change binds.
+// Tools lists the tools the action may call: those of the MCPs it or its agent declares that the
+// organization of the change binds, within the scope of each MCP.
 func (h *Host) Tools(ctx context.Context) ([]mcp.ToolInfo, error) {
 	if h.e.Tools == nil || len(h.mcps) == 0 {
 		return nil, nil
 	}
-	all, _, err := h.e.Tools.Tools(authz.With(ctx, h.process.Initiator), h.e.orgOf(h.process))
+	all, err := h.unitTools(ctx)
 	if err != nil {
 		return nil, err
 	}
 	var out []mcp.ToolInfo
 	for _, t := range all {
-		if m, _, err := mcp.SplitTool(t.Name); err == nil && slices.Contains(h.mcps, m) {
+		if h.permitted(t) {
 			out = append(out, t)
 		}
 	}
 	return out, nil
+}
+
+// checkScope refuses a tool the unit cannot call or the action may not reach from where it is declared.
+func (h *Host) checkScope(ctx context.Context, name string) error {
+	all, err := h.unitTools(ctx)
+	if err != nil {
+		return err
+	}
+	for _, t := range all {
+		if t.Name != name {
+			continue
+		}
+		if !h.permitted(t) {
+			return fmt.Errorf("tool %s: its MCP has scope %s, out of reach of action %s (%s)", name, mcp.ScopeOf(t.Scope), h.action, h.kind)
+		}
+		return nil
+	}
+	return fmt.Errorf("tool %s is not available to %s (unbound or restricted)", name, h.e.orgOf(h.process))
 }
 
 // CallTool implements dsl.Host.
@@ -159,6 +211,9 @@ func (h *Host) CallTool(ctx context.Context, name string, args map[string]any) (
 	case h.e.Tools == nil:
 		err = fmt.Errorf("tool %s: no MCP hub configured", name)
 	default:
+		err = h.checkScope(ctx, name)
+	}
+	if err == nil {
 		// the built-in connectors act on the change of the process by default (ADR 0028)
 		call := mcp.WithCall(authz.With(ctx, h.process.Initiator), mcp.CallContext{Change: string(h.process.ChangeID), Process: h.process.ID})
 		out, err = h.e.Tools.CallTool(call, h.e.orgOf(h.process), name, args)
