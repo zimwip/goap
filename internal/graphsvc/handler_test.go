@@ -12,15 +12,16 @@ import (
 	"github.com/zimwip/goap/internal/graphsvc"
 	"github.com/zimwip/goap/internal/identity"
 	"github.com/zimwip/goap/internal/pbconv"
+	"github.com/zimwip/goap/pkg/access"
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/graph"
-	"github.com/zimwip/goap/pkg/metamodel"
 	"github.com/zimwip/goap/pkg/methodology"
+	"github.com/zimwip/goap/pkg/typecat"
 )
 
 func createObject(h *graphsvc.Handler, roles, key string) error {
-	req := connect.NewRequest(&graphv1.CreateObjectRequest{Methodology: "test-design", NodeType: "Requirement", Key: key})
+	req := connect.NewRequest(&graphv1.CreateObjectRequest{Methodology: "test-design", NodeType: "alm@Need", Key: key})
 	if roles != "" {
 		req.Header().Set(identity.HeaderSubject, "u")
 		req.Header().Set(identity.HeaderOrg, "acme")
@@ -31,12 +32,17 @@ func createObject(h *graphsvc.Handler, roles, key string) error {
 }
 
 func TestCreateObjectIsRoleGated(t *testing.T) {
-	m, err := methodology.LoadFile("../../methodologies/examples/test-design.yaml")
+	ds, err := methodology.LoadDomains("../../domains")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cat, err := typecat.New(ds...)
 	if err != nil {
 		t.Fatal(err)
 	}
 	g := graph.New(graph.NewMemory())
-	if _, err := metamodel.Sync(context.Background(), g, m); err != nil {
+	g.Types = func() graph.TypeCatalog { return cat }
+	if _, err := g.CreateBaseline(context.Background(), "B0", nil); err != nil {
 		t.Fatal(err)
 	}
 	authorizer, err := authz.NewCasbin(nil)
@@ -60,46 +66,26 @@ func TestCreateObjectIsRoleGated(t *testing.T) {
 			t.Errorf("%s: err=%v, want code %v", tc.name, err, tc.want)
 		}
 	}
-	// a denied caller created nothing
-	if _, err := g.NodeByKey(context.Background(), "", "REQ-2"); err == nil {
+	// a denied caller created nothing; the object lives in the namespace of its type
+	if _, err := g.NodeByKey(context.Background(), "alm", "REQ-2"); err == nil {
 		t.Error("REQ-2 must not exist")
 	}
-	if _, err := g.NodeByKey(context.Background(), "", "REQ-3"); err != nil {
-		t.Errorf("REQ-3 must exist: %v", err)
+	if n, err := g.NodeByKey(context.Background(), "alm", "REQ-3"); err != nil || n.Type != "alm@Need" {
+		t.Errorf("REQ-3 must exist: %+v %v", n, err)
+	}
+	// the type catalogue judges it
+	if err := createObjectOf(h, "alm@Nope", "X-1"); connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Errorf("unknown type: %v", err)
 	}
 }
 
-func TestNodeTypeWritesAreRoleGated(t *testing.T) {
-	ctx := context.Background()
-	g := graph.New(graph.NewMemory())
-	authorizer, err := authz.NewCasbin(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	h := &graphsvc.Handler{Graph: g, Authz: authorizer}
-	base, err := g.CreateBaseline(ctx, "Repository", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	add := func(roles string) error {
-		c, err := g.CreateChange(ctx, graph.NewChange{Title: "t", BaselineID: base.ID})
-		if err != nil {
-			t.Fatal(err)
-		}
-		req := connect.NewRequest(&graphv1.AddChangeImpactsRequest{ChangeId: string(c.ID),
-			Nodes: []*graphv1.ChangeImpact{{Intent: "created", Key: "M:x/nodetype/T", Type: metamodel.TypeNodeType, Rationale: "why"}}})
-		req.Header().Set(identity.HeaderSubject, "u")
-		req.Header().Set(identity.HeaderOrg, "acme")
-		req.Header().Set(identity.HeaderRoles, roles)
-		_, err = h.AddChangeImpacts(ctx, req)
-		return err
-	}
-	if err := add("contributor"); connect.CodeOf(err) != connect.CodePermissionDenied {
-		t.Errorf("contributor must not author node types: %v", err)
-	}
-	if err := add("methodologist"); err != nil {
-		t.Errorf("methodologist must: %v", err)
-	}
+func createObjectOf(h *graphsvc.Handler, typ, key string) error {
+	req := connect.NewRequest(&graphv1.CreateObjectRequest{NodeType: typ, Key: key})
+	req.Header().Set(identity.HeaderSubject, "u")
+	req.Header().Set(identity.HeaderOrg, "acme")
+	req.Header().Set(identity.HeaderRoles, "admin")
+	_, err := h.CreateObject(context.Background(), req)
+	return err
 }
 
 func TestAccessNodesAreGatedByTheFloor(t *testing.T) {
@@ -125,7 +111,7 @@ func TestAccessNodesAreGatedByTheFloor(t *testing.T) {
 			t.Fatal(err)
 		}
 		req := connect.NewRequest(&graphv1.AddChangeImpactsRequest{ChangeId: string(c.ID),
-			Nodes: []*graphv1.ChangeImpact{{Intent: "created", Key: "USR:x", Type: "User", Rationale: "why"}}})
+			Nodes: []*graphv1.ChangeImpact{{Intent: "created", Key: "USR:x", Type: access.NodeTypeUser, Rationale: "why"}}})
 		req.Header().Set(identity.HeaderSubject, "u")
 		req.Header().Set(identity.HeaderOrg, "acme")
 		req.Header().Set(identity.HeaderRoles, roles)
@@ -139,7 +125,7 @@ func TestAccessNodesAreGatedByTheFloor(t *testing.T) {
 		t.Errorf("admin must: %v", err)
 	}
 	// direct writes of access nodes are refused: they go through changes
-	req := connect.NewRequest(&graphv1.CreateNodeRequest{Namespace: "organisation", Key: "POL:x", Type: "Policy"})
+	req := connect.NewRequest(&graphv1.CreateNodeRequest{Namespace: "organisation", Key: "POL:x", Type: access.NodeTypePolicy})
 	if _, err := h.CreateNode(ctx, req); connect.CodeOf(err) != connect.CodeFailedPrecondition {
 		t.Errorf("direct write of a Policy node: %v", err)
 	}
@@ -157,15 +143,11 @@ func TestChangeImpactRPCs(t *testing.T) {
 		t.Fatal(err)
 	}
 	h := &graphsvc.Handler{Graph: g, Authz: authorizer, Floor: floor}
-	nt, err := g.CreateNode(ctx, graph.NewNode{Key: "M:x/nodetype/T", Type: metamodel.TypeNodeType})
-	if err != nil {
-		t.Fatal(err)
-	}
 	req1, err := g.CreateNode(ctx, graph.NewNode{Key: "REQ-1", Type: "Requirement", Properties: map[string]any{"title": "one"}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	base, err := g.CreateBaseline(ctx, "B1", []domain.NodeRef{nt.Ref(), req1.Ref()})
+	base, err := g.CreateBaseline(ctx, "B1", []domain.NodeRef{req1.Ref()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -189,9 +171,6 @@ func TestChangeImpactRPCs(t *testing.T) {
 		return out.Msg.Nodes[0], nil
 	}
 
-	if _, err := add("contributor", nt.Ref()); connect.CodeOf(err) != connect.CodePermissionDenied {
-		t.Fatalf("a contributor must not touch node types through change impacts: %v", err)
-	}
 	cn, err := add("contributor", req1.Ref())
 	if err != nil {
 		t.Fatal(err)
@@ -217,7 +196,7 @@ func TestChangeImpactRPCs(t *testing.T) {
 	}
 }
 
-func TestCommitEditsIsGated(t *testing.T) {
+func TestCommitEditsGatesAccessNodes(t *testing.T) {
 	ctx := context.Background()
 	g := graph.New(graph.NewMemory())
 	authorizer, err := authz.NewCasbin(nil)
@@ -241,14 +220,17 @@ func TestCommitEditsIsGated(t *testing.T) {
 		}
 		return out.Msg, nil
 	}
-	if _, err := commit("contributor", metamodel.TypeNodeType); connect.CodeOf(err) != connect.CodePermissionDenied {
-		t.Fatalf("a contributor must not commit node types: %v", err)
+	if _, err := commit("contributor", access.NodeTypePolicy); connect.CodeOf(err) != connect.CodePermissionDenied {
+		t.Fatalf("a contributor must not commit policies: %v", err)
 	}
-	out, err := commit("methodologist", metamodel.TypeNodeType)
+	out, err := commit("admin", access.NodeTypePolicy)
 	if err != nil || out.ChangeId == "" || out.Baseline.GetId() == "" {
-		t.Fatalf("a methodologist may: %v %v", out, err)
+		t.Fatalf("an administrator may: %v %v", out, err)
 	}
-	if n, err := g.NodeByKey(ctx, "", "K-methodologist"); err != nil || n.ChangeID != domain.ChangeID(out.ChangeId) || n.Comment != "why" {
+	if _, err := commit("contributor", "alm@Need"); err != nil {
+		t.Fatalf("ordinary nodes are not gated: %v", err)
+	}
+	if n, err := g.NodeByKey(ctx, "", "K-admin"); err != nil || n.ChangeID != domain.ChangeID(out.ChangeId) || n.Comment != "why" {
 		t.Fatalf("committed node: %+v %v", n, err)
 	}
 }

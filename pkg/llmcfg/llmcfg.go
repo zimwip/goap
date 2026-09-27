@@ -22,9 +22,9 @@ import (
 // Types and namespace of the graph objects.
 const (
 	NamespacePlatform = mcp.NamespacePlatform
-	NodeTypeProvider  = "LlmProvider"
-	NodeTypeModel     = "LlmModel"
-	NodeTypeAlias     = "LlmAlias"
+	NodeTypeProvider  = "platform@LlmProvider"
+	NodeTypeModel     = "platform@LlmModel"
+	NodeTypeAlias     = "platform@LlmAlias"
 )
 
 // Quota periods.

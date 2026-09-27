@@ -4,9 +4,13 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
+	"connectrpc.com/connect"
+
+	registryv1 "github.com/zimwip/goap/gen/goap/registry/v1"
 	"github.com/zimwip/goap/pkg/algo"
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/methodology"
@@ -19,10 +23,10 @@ func almDomain(version string) methodology.Domain {
 	}}
 }
 
-func refMeth(ref string) methodology.Methodology {
+func refMeth(name string) methodology.Methodology {
 	return methodology.Methodology{
-		Name: "uses", Version: "1", DomainRef: ref,
-		Conditions: []methodology.Condition{{Name: "c", Expr: `changeImpacts.exists(n, n.hasPost && n.post.out.exists(l, l.type == "verifies"))`}},
+		Name: name, Version: "1", Namespace: "alm",
+		Conditions: []methodology.Condition{{Name: "c", Expr: `changeImpacts.exists(n, n.hasPost && n.post.out.exists(l, l.type == "alm@verifies"))`}},
 		Actions:    []methodology.Action{{Name: "a", Kind: methodology.KindHuman, Effects: map[string]bool{"c": true}}},
 		Goals:      []methodology.Goal{{Name: "g", Pre: map[string]bool{"c": true}}},
 	}
@@ -50,12 +54,12 @@ func TestDomainLifecycle(t *testing.T) {
 				t.Fatalf("no published version yet: %v", err)
 			}
 
-			// a methodology cannot be published on a draft domain
-			if _, _, err := s.Save(ctx, refMeth("alm@1")); err != nil {
-				t.Fatal(err)
+			// a methodology is validated against the published domains: a draft one does not count
+			if _, issues, err := s.Save(ctx, refMeth("uses")); err != nil || len(issues) == 0 {
+				t.Fatalf("no published alm domain yet: %v %v", issues, err)
 			}
-			if _, err := s.Publish(ctx, "uses", "1"); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "publish it first") {
-				t.Fatalf("publish on draft domain: %v", err)
+			if _, err := s.Publish(ctx, "uses", "1"); !errors.Is(err, ErrInvalid) {
+				t.Fatalf("publish on a draft domain: %v", err)
 			}
 			if _, err := s.PublishDomain(ctx, "alm", "1"); err != nil {
 				t.Fatal(err)
@@ -63,17 +67,14 @@ func TestDomainLifecycle(t *testing.T) {
 			if _, err := s.Publish(ctx, "uses", "1"); err != nil {
 				t.Fatalf("publish methodology: %v", err)
 			}
-			if c, err := s.Methodology(ctx, "uses"); err != nil || len(c.Domain.NodeTypes) != 2 {
-				t.Fatalf("compiled methodology must see the shared domain: %v", err)
+			if c, err := s.Methodology(ctx, "uses"); err != nil || c.Types == nil || !c.Types.HasLinkType("alm@verifies") {
+				t.Fatalf("the compiled methodology sees the types in force: %v", err)
 			}
-			if r, err := s.GetResolved(ctx, "uses", "1"); err != nil || len(r.Methodology.Domain.LinkTypes) != 1 {
-				t.Fatalf("resolved get: %v", err)
-			}
-			if st, _ := s.Get(ctx, "uses", "1"); len(st.Methodology.Domain.NodeTypes) != 0 || st.Methodology.DomainRef != "alm@1" {
-				t.Fatalf("stored definition must keep the reference only: %+v", st.Methodology)
+			if cat, err := s.Types(ctx); err != nil || !cat.HasNodeType("alm@Requirement") || !cat.HasNodeType("methodology@Agent") {
+				t.Fatalf("type catalogue: %v", err)
 			}
 
-			// published versions are immutable; usage blocks archiving
+			// published versions are immutable; the version in force cannot be archived while used
 			if _, _, err := s.SaveDomain(ctx, almDomain("1")); !errors.Is(err, ErrImmutable) {
 				t.Fatalf("save published: %v", err)
 			}
@@ -85,7 +86,7 @@ func TestDomainLifecycle(t *testing.T) {
 				t.Fatalf("archive used domain: %v", err)
 			}
 
-			// a new version drops a type still used: the pinned methodology is unaffected
+			// a new version that drops a type a published methodology uses is refused
 			v2, err := s.CreateDomainVersion(ctx, "alm", "1", "2")
 			if err != nil || v2.Status != StatusDraft {
 				t.Fatalf("new version: %+v %v", v2, err)
@@ -95,84 +96,81 @@ func TestDomainLifecycle(t *testing.T) {
 			if _, _, err := s.SaveDomain(ctx, d); err != nil {
 				t.Fatal(err)
 			}
-			if _, err := s.PublishDomain(ctx, "alm", "2"); err != nil {
-				t.Fatalf("pinned methodologies do not block a new version: %v", err)
+			if _, err := s.PublishDomain(ctx, "alm", "2"); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "would break") {
+				t.Fatalf("breaking domain version: %v", err)
 			}
-			if _, err := s.Methodology(ctx, "uses"); err != nil {
-				t.Fatalf("pinned methodology still compiles: %v", err)
-			}
-
-			// a floating methodology follows the latest published domain and blocks a breaking one
-			fl := refMeth("alm")
-			fl.Name = "floating"
-			if _, _, err := s.Save(ctx, fl); err != nil {
-				t.Fatal(err)
-			}
-			if _, err := s.Publish(ctx, "floating", "1"); !errors.Is(err, ErrInvalid) {
-				t.Fatalf("floating on v2 (no verifies link type): %v", err)
-			}
-			if _, _, err := s.Save(ctx, refMeth("alm@1")); !errors.Is(err, ErrImmutable) {
-				t.Fatalf("published methodology is immutable: %v", err)
-			}
+			// a compatible one becomes the version in force; the former one can then be archived
 			v3 := almDomain("3")
+			v3.NodeTypes = append(v3.NodeTypes, methodology.NodeType{Name: "Need"})
 			if _, _, err := s.SaveDomain(ctx, v3); err != nil {
 				t.Fatal(err)
 			}
 			if _, err := s.PublishDomain(ctx, "alm", "3"); err != nil {
 				t.Fatal(err)
 			}
-			if _, err := s.Publish(ctx, "floating", "1"); err != nil {
-				t.Fatalf("floating on v3: %v", err)
+			if cat, _ := s.Types(ctx); !cat.HasNodeType("alm@Need") || cat.Domains()["alm"] != "3" {
+				t.Fatal("the latest published version is in force")
 			}
-			if err := s.DeleteDomain(ctx, "alm", "3"); !errors.Is(err, ErrInvalid) {
-				t.Fatalf("archiving the version a floating methodology resolves to: %v", err)
-			}
-			v4 := almDomain("4")
-			v4.LinkTypes = nil
-			if _, _, err := s.SaveDomain(ctx, v4); err != nil {
-				t.Fatal(err)
-			}
-			if _, err := s.PublishDomain(ctx, "alm", "4"); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "would break") {
-				t.Fatalf("breaking domain version: %v", err)
+			if err := s.DeleteDomain(ctx, "alm", "1"); err != nil {
+				t.Fatalf("a version no longer in force is archived: %v", err)
 			}
 
 			// drafts are deletable, lists show the latest published per name
-			if err := s.DeleteDomain(ctx, "alm", "4"); err != nil {
+			if err := s.DeleteDomain(ctx, "alm", "2"); err != nil {
 				t.Fatal(err)
 			}
 			list, err := s.DomainVersions(ctx, false)
-			if err != nil || len(list) != 1 || list[0].Domain.Version != "3" {
-				t.Fatalf("latest: %+v %v", list, err)
+			if err != nil {
+				t.Fatal(err)
 			}
-			all, _ := s.DomainVersions(ctx, true)
-			if len(all) != 3 {
-				t.Fatalf("all versions: %d", len(all))
+			var builtin []string
+			stored := slices.DeleteFunc(list, func(r DomainRecord) bool {
+				if r.Builtin {
+					builtin = append(builtin, r.Domain.Name)
+				}
+				return r.Builtin
+			})
+			if len(stored) != 1 || stored[0].Domain.Version != "3" || !slices.Equal(builtin, []string{"methodology", "domain", "organisation"}) {
+				t.Fatalf("latest: %v %+v", builtin, stored)
 			}
 		})
 	}
 }
 
-func TestMethodologyRejectsEmbeddedAndReferencedDomain(t *testing.T) {
+func TestMethodologyNamespaceAndTypes(t *testing.T) {
 	enf, _ := authz.NewCasbin(nil)
 	s := &Service{Store: NewMemoryStore(), Authz: enf}
 	ctx := as("methodologist")
-	if _, _, err := s.SaveDomain(ctx, almDomain("1")); err != nil {
+	if _, _, err := s.ImportDomain(ctx, []byte("name: alm\nversion: \"1\"\nnodeTypes: [Requirement]\n"), true); err != nil {
 		t.Fatal(err)
 	}
-	m := refMeth("alm@1")
-	m.Domain = methodology.Schema{NodeTypes: []methodology.NodeType{{Name: "X"}}}
+	m := refMeth("nowhere")
+	m.Namespace = "nope"
 	_, issues, err := s.Save(ctx, m)
-	if err != nil || len(issues) != 1 || issues[0].Path != "domainRef" {
+	if err != nil || !strings.Contains(issues.Error(), "no published domain nope") || !strings.Contains(issues.Error(), "unknown link type alm@verifies") {
 		t.Fatalf("issues: %v %v", issues, err)
 	}
-}
+	m.Namespace = ""
+	if _, issues, _ := s.Save(ctx, m); len(issues) == 0 || issues[0].Path != "namespace" {
+		t.Fatalf("a methodology names its target namespace: %v", issues)
+	}
+	for _, name := range []string{"methodology", "organisation"} {
+		if _, _, err := s.SaveDomain(ctx, methodology.Domain{Name: name, Version: "9", Schema: methodology.Schema{NodeTypes: []methodology.NodeType{{Name: "X"}}}}); !errors.Is(err, ErrImmutable) {
+			t.Fatalf("the built-in domain %s is frozen: %v", name, err)
+		}
+		if _, err := s.CreateDomainVersion(ctx, name, "", "9"); !errors.Is(err, ErrImmutable) {
+			t.Fatalf("no new version of the frozen domain %s: %v", name, err)
+		}
+		if r, err := s.GetDomain(ctx, name, ""); err != nil || !r.Builtin || !r.Frozen || r.Status != StatusPublished {
+			t.Fatalf("the built-in domain %s is readable: %+v %v", name, r, err)
+		}
+	}
+	if err := s.DeleteDomain(ctx, "organisation", ""); !errors.Is(err, ErrImmutable) {
+		t.Fatalf("a built-in domain cannot be archived: %v", err)
+	}
 
-func TestMissingDomainMessage(t *testing.T) {
-	enf, _ := authz.NewCasbin(nil)
-	s := &Service{Store: NewMemoryStore(), Authz: enf}
-	_, issues, err := s.Save(as("methodologist"), refMeth("nope@9"))
-	if err != nil || len(issues) != 1 || issues[0].Message != "nope@9: domain not found" {
-		t.Fatalf("issues: %v %v", issues, err)
+	if _, issues, _ := s.SaveDomain(ctx, methodology.Domain{Name: "ext", Version: "1", Schema: methodology.Schema{NodeTypes: []methodology.NodeType{{Name: "X", Extends: "alm@Nope"}}}}); len(issues) == 0 {
+		t.Fatal("a reference to an unknown type of another domain is reported")
 	}
 }
 
@@ -352,9 +350,77 @@ func TestDomainNodeTypeEditors(t *testing.T) {
 	for _, n := range back.NodeTypes {
 		editors[n.Name] = n.Editor
 	}
-	for typ, want := range map[string]string{"DefAgent": "agent", "DefAction": "action", "MethodologyVersion": "methodology", "Methodology": "methodology", "LlmProvider": ""} {
+	for typ, want := range map[string]string{"MCP": "mcp", "AdapterDef": "adapter", "LlmProvider": ""} {
 		if editors[typ] != want {
 			t.Fatalf("editor of %s: %q, want %q", typ, editors[typ], want)
 		}
+	}
+}
+
+func TestListTypes(t *testing.T) {
+	s := &Service{Store: NewMemoryStore()}
+	withALM(t, s)
+	res, err := (&Handler{Service: s}).ListTypes(as("contributor"), connect.NewRequest(&registryv1.ListTypesRequest{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	byRef := map[string]*registryv1.TypeInfo{}
+	for _, ti := range res.Msg.Types {
+		byRef[ti.Ref] = ti
+	}
+	sec := byRef["alm@SecurityRequirement"]
+	if sec == nil || sec.Lifecycle.GetName() != "requirement" || len(sec.Ancestors) != 2 || byRef["methodology@Agent"].GetEditor() != "agent" {
+		t.Fatalf("types: %+v", sec)
+	}
+	if res.Msg.Domains["alm"] == "" {
+		t.Fatal("the version in force of each domain is listed")
+	}
+	found := false
+	for _, l := range res.Msg.LinkTypes {
+		found = found || (l.Ref == "alm@verifies" && l.From == "alm@TestCase" && l.To == "alm@Requirement")
+	}
+	if !found {
+		t.Fatal("link types are listed with their ends")
+	}
+}
+
+// The domain meta-domain starts from the version shipped with the platform and evolves in the registry, keeping what
+// the platform writes with it.
+func TestDomainMetaDomainEvolves(t *testing.T) {
+	enf, _ := authz.NewCasbin(nil)
+	s := &Service{Store: NewMemoryStore(), Authz: enf}
+	ctx := as("methodologist")
+	shipped := methodology.BuiltinDomain("domain")
+	if r, err := s.GetDomain(ctx, "domain", ""); err != nil || !r.Builtin || r.Frozen || r.Domain.Version != shipped.Version {
+		t.Fatalf("the shipped version is in force: %+v %v", r, err)
+	}
+	if _, _, err := s.SaveDomain(ctx, *shipped); !errors.Is(err, ErrImmutable) {
+		t.Fatalf("the shipped version is read only: %v", err)
+	}
+	if err := s.DeleteDomain(ctx, "domain", shipped.Version); !errors.Is(err, ErrImmutable) {
+		t.Fatalf("the shipped version cannot be archived: %v", err)
+	}
+	r, err := s.CreateDomainVersion(ctx, "domain", shipped.Version, "1.1.0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := r.Domain
+	d.NodeTypes = append(slices.Clone(d.NodeTypes[1:]), methodology.NodeType{Name: "Glossary", Properties: []string{"term"}})
+	if _, issues, err := s.SaveDomain(ctx, d); err != nil || !strings.Contains(issues.Error(), "node type DomainVersion is used by the platform") {
+		t.Fatalf("a version keeps the types the platform writes: %v %v", issues, err)
+	}
+	d.NodeTypes = append(slices.Clone(shipped.NodeTypes), methodology.NodeType{Name: "Glossary", Properties: []string{"term"}})
+	if _, issues, err := s.SaveDomain(ctx, d); err != nil || len(issues) > 0 {
+		t.Fatalf("a version extends the shipped one: %v %v", issues, err)
+	}
+	if _, err := s.PublishDomain(ctx, "domain", "1.1.0"); err != nil {
+		t.Fatal(err)
+	}
+	cat, err := s.Types(ctx)
+	if err != nil || !cat.HasNodeType("domain@Glossary") || !cat.HasNodeType("domain@NodeType") || cat.Domains()["domain"] != "1.1.0" {
+		t.Fatalf("the published version is in force: %v", err)
+	}
+	if r, _ := s.GetDomain(ctx, "domain", ""); r.Builtin || r.Domain.Version != "1.1.0" {
+		t.Fatalf("latest published: %+v", r)
 	}
 }

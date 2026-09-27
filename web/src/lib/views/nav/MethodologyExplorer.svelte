@@ -1,6 +1,6 @@
 <script lang="ts">
   // Explorer: methodology → version → sections (Agents, Actions,
-  // Conditions, Goals, Domain) → items.
+  // Conditions, Goals, Types) → items.
   import Icon from '../../shell/Icon.svelte';
   import TreeRow from '../TreeRow.svelte';
   import StatusBadge from '../../components/StatusBadge.svelte';
@@ -17,13 +17,10 @@
     emptyAction,
     emptyCondition,
     emptyGoal,
-    emptyNodeType,
-    emptyLinkType,
-    typeProperties,
     type Section,
     type SectionItem,
   } from '../../methodologyForm';
-  import { revealDomainPath } from '../editors/domainTabs';
+  import { typeCatalog, typeName } from '../../stores/types.svelte';
   import {
     SECTION_LABEL,
     SECTION_ICON,
@@ -92,29 +89,9 @@
     return '';
   }
 
-  function revealDomain(d: Draft, path: string, pin = false) {
-    if (d.usesDomainRef && d.refDomain) {
-      revealDomainPath(d.refDomain.name, d.refDomain.version, path, pin);
-      return;
-    }
+  function openTypes(d: Draft, pin = false) {
     const t = openTab(methodologySpec(d.name, d.version), { pin });
-    requestReveal(t.id, path);
-  }
-
-  function openDomain(d: Draft, pin = false) {
-    revealDomain(d, 'nodeTypes', pin);
-  }
-
-  function addNodeType(d: Draft) {
-    d.form.nodeTypes.push(emptyNodeType());
-    expanded[`s:${d.key}/nodeTypes`] = true;
-    revealDomain(d, `nodeTypes[${d.form.nodeTypes.length - 1}]`);
-  }
-
-  function addLinkType(d: Draft) {
-    d.form.linkTypes.push(emptyLinkType());
-    expanded[`s:${d.key}/linkTypes`] = true;
-    revealDomain(d, `linkTypes[${d.form.linkTypes.length - 1}]`);
+    requestReveal(t.id, 'namespace');
   }
 </script>
 
@@ -239,119 +216,40 @@
                   {/each}
                 {/if}
               {/each}
-              {@const domK = `s:${k}/domain`}
+              {@const domK = `s:${k}/types`}
               <TreeRow
                 depth={2}
                 icon="graph"
-                label="Domain"
-                detail={d.usesDomainRef ? `${d.form.domainRef} · ${d.nodeTypes.length} types` : `${d.nodeTypes.length} types · ${d.linkTypes.length} links`}
+                label="Types"
+                detail={d.form.namespace ? `${d.form.namespace} · ${d.nodeTypeNames.length} types` : 'no namespace'}
                 expanded={isOpen(domK)}
-                badge={d.count('nodeTypes') + d.count('linkTypes') || undefined}
+                badge={d.count('namespace') || undefined}
                 badgeTone="danger"
-                onselect={() => openDomain(d)}
-                onopen={() => openDomain(d, true)}
+                onselect={() => openTypes(d)}
+                onopen={() => openTypes(d, true)}
                 ontoggle={() => toggle(domK)}
               />
               {#if isOpen(domK)}
-                {@const ntK = `s:${k}/nodeTypes`}
-                <TreeRow
-                  depth={3}
-                  icon="node"
-                  label="Node types"
-                  detail={String(d.nodeTypes.length)}
-                  expanded={isOpen(ntK)}
-                  badge={d.count('nodeTypes') || undefined}
-                  badgeTone="danger"
-                  ontoggle={() => toggle(ntK)}
-                  oncontextmenu={(e) =>
-                    openContextMenu(e, [
-                      { label: 'New node type', icon: 'plus', disabled: d.readonly || d.usesDomainRef, run: () => addNodeType(d) },
-                    ])}
-                >
-                  {#snippet actions()}
-                    {#if !d.readonly && !d.usesDomainRef}
-                      <button
-                        type="button"
-                        title="Add"
-                        aria-label="Add: Node type"
-                        onclick={(e) => {
-                          e.stopPropagation();
-                          addNodeType(d);
-                        }}><Icon name="plus" size={13} /></button
-                      >
-                    {/if}
-                  {/snippet}
-                </TreeRow>
-                {#if isOpen(ntK)}
-                  {#each d.nodeTypes as n, i (i)}
-                    <TreeRow
-                      depth={4}
-                      label={n.name || '(unnamed)'}
-                      italic={!n.name}
-                      detail={n.extends ? `extends ${n.extends}` : ''}
-                      badge={d.count(`nodeTypes[${i}]`) || undefined}
-                      badgeTone="danger"
-                      onselect={() => revealDomain(d, `nodeTypes[${i}]`)}
-                      onopen={() => revealDomain(d, `nodeTypes[${i}]`, true)}
-                      oncontextmenu={(e) =>
-                        openContextMenu(e, [
-                          {
-                            label: d.status === 'published' ? `New ${n.name.trim()} object` : 'New object (publish first)',
-                            icon: 'plus',
-                            disabled: d.status !== 'published' || !n.name.trim(),
-                            run: () => openObjectDialog(d.name, n.name.trim(), typeProperties(d, n.name.trim())),
-                          },
-                        ])}
-                    />
-                  {:else}
-                    <p class="empty pad3">No node types.</p>
-                  {/each}
-                {/if}
-                {@const ltK = `s:${k}/linkTypes`}
-                <TreeRow
-                  depth={3}
-                  icon="trace"
-                  label="Link types"
-                  detail={String(d.linkTypes.length)}
-                  expanded={isOpen(ltK)}
-                  badge={d.count('linkTypes') || undefined}
-                  badgeTone="danger"
-                  ontoggle={() => toggle(ltK)}
-                  oncontextmenu={(e) =>
-                    openContextMenu(e, [
-                      { label: 'New link type', icon: 'plus', disabled: d.readonly || d.usesDomainRef, run: () => addLinkType(d) },
-                    ])}
-                >
-                  {#snippet actions()}
-                    {#if !d.readonly && !d.usesDomainRef}
-                      <button
-                        type="button"
-                        title="Add"
-                        aria-label="Add: Link type"
-                        onclick={(e) => {
-                          e.stopPropagation();
-                          addLinkType(d);
-                        }}><Icon name="plus" size={13} /></button
-                      >
-                    {/if}
-                  {/snippet}
-                </TreeRow>
-                {#if isOpen(ltK)}
-                  {#each d.linkTypes as l, i (i)}
-                    <TreeRow
-                      depth={4}
-                      label={l.name || '(unnamed)'}
-                      italic={!l.name}
-                      detail={l.from && l.to ? `${l.from} → ${l.to}` : ''}
-                      badge={d.count(`linkTypes[${i}]`) || undefined}
-                      badgeTone="danger"
-                      onselect={() => revealDomain(d, `linkTypes[${i}]`)}
-                      onopen={() => revealDomain(d, `linkTypes[${i}]`, true)}
-                    />
-                  {:else}
-                    <p class="empty pad3">No link types.</p>
-                  {/each}
-                {/if}
+                {#each d.nodeTypeNames as t (t)}
+                  <TreeRow
+                    depth={3}
+                    icon="node"
+                    label={typeName(t)}
+                    detail={typeCatalog.cat.type(t)?.ancestors?.length ? `extends ${typeName(typeCatalog.cat.type(t)?.ancestors?.[0])}` : ''}
+                    onselect={() => openTypes(d)}
+                    oncontextmenu={(e) =>
+                      openContextMenu(e, [
+                        {
+                          label: d.status === 'published' ? `New ${typeName(t)} object` : 'New object (publish first)',
+                          icon: 'plus',
+                          disabled: d.status !== 'published',
+                          run: () => openObjectDialog(d.name, t, typeCatalog.cat.properties(t)),
+                        },
+                      ])}
+                  />
+                {:else}
+                  <p class="empty pad3">{d.form.namespace ? 'No node types.' : 'Choose the target namespace.'}</p>
+                {/each}
               {/if}
             {/if}
           {/if}

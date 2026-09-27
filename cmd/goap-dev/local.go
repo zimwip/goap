@@ -112,7 +112,7 @@ func (f registryEvents) Publish(ctx context.Context, subject string, v any) erro
 	switch subject {
 	case "goap.registry.methodology.published":
 		f.methodology(context.WithoutCancel(ctx), ev["name"], ev["version"])
-	case "goap.registry.domain.published":
+	case "goap.registry.domain.published", "goap.registry.domain.deleted":
 		f.domain(context.WithoutCancel(ctx), ev["name"], ev["version"])
 	}
 	return nil

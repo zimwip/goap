@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/zimwip/goap/pkg/domain"
 )
@@ -12,7 +13,7 @@ import (
 // (ADR 0024): the producer says which nodes it creates or modifies and why; the
 // change, its change impacts, the versions on the change branch, the reviews and
 // the apply follow. Services that project their own definitions into the graph
-// (registry, metamodel, seeds) use it.
+// (registry, seeds) use it.
 
 // NodeEdit is one node created or modified by a Commit.
 type NodeEdit struct {
@@ -235,4 +236,38 @@ func (g *Graph) commitOrder(ctx context.Context, edits []NodeEdit) ([]int, error
 		}
 	}
 	return order, nil
+}
+
+// CreateObject creates a node of a qualified type (ADR 0012) through one change applied on main, in the namespace of
+// its type (namespace, when given, must be it). The type catalogue judges it like any node. It fails with ErrConflict
+// when the key is taken in the namespace and ErrInvalid without a key or with an unqualified type.
+func (g *Graph) CreateObject(ctx context.Context, methodology, namespace, typ, key string, props map[string]any) (domain.Node, domain.Baseline, error) {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return domain.Node{}, domain.Baseline{}, fmt.Errorf("object key is required: %w", ErrInvalid)
+	}
+	ref, err := domain.ParseTypeRef(typ)
+	if err != nil || !ref.Qualified() {
+		return domain.Node{}, domain.Baseline{}, fmt.Errorf("object type %q must be <namespace>@<type>: %w", typ, ErrInvalid)
+	}
+	if namespace == "" {
+		namespace = ref.Namespace
+	}
+	if _, err := g.NodeByKey(ctx, namespace, key); err == nil {
+		return domain.Node{}, domain.Baseline{}, fmt.Errorf("key %q is already used: %w", key, ErrConflict)
+	} else if !errors.Is(err, ErrNotFound) {
+		return domain.Node{}, domain.Baseline{}, err
+	}
+	head, err := g.BranchHead(ctx, domain.MainBranch)
+	if err != nil {
+		return domain.Node{}, domain.Baseline{}, err
+	}
+	out, err := g.Commit(ctx, Commit{Namespace: namespace, Title: "Create " + key, Intent: "Create " + typ + " " + key,
+		Baseline: head.ID, Methodology: methodology, By: "graph.create_object", BaselineName: domain.MainBranch,
+		Edits: []NodeEdit{{Key: key, Type: typ, Props: props, Rationale: "Create " + typ + " " + key}}})
+	if err != nil {
+		return domain.Node{}, domain.Baseline{}, err
+	}
+	n, err := g.NodeByKey(ctx, namespace, key)
+	return n, out.Baseline, err
 }

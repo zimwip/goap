@@ -348,11 +348,11 @@ func TestChangeOpensInTheNamespaceOfTheMethodology(t *testing.T) {
 		t.Fatalf("change namespace = %q, %v", c.Namespace, err)
 	}
 	// an explicit namespace on the request wins over the methodology default
-	p2, err := e.Start(ctx, StartRequest{Methodology: "impact-analysis", BaselineID: base, Goal: "assess_impact", Namespace: "sdlc"})
+	p2, err := e.Start(ctx, StartRequest{Methodology: "impact-analysis", BaselineID: base, Goal: "assess_impact", Namespace: "alm"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c2, _ := g.Change(ctx, p2.ChangeID); c2.Namespace != "sdlc" {
+	if c2, _ := g.Change(ctx, p2.ChangeID); c2.Namespace != "alm" {
 		t.Fatalf("explicit namespace = %q", c2.Namespace)
 	}
 }

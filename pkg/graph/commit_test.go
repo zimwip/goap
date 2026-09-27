@@ -28,11 +28,11 @@ func testCommit(t *testing.T, repo Repo) {
 	if res.Baseline.ID == "" {
 		t.Fatal("no baseline")
 	}
-	doc, err := g.NodeByKey(ctx, "sdlc", "DOC-1")
+	doc, err := g.NodeByKey(ctx, domain.DefaultNamespace, "DOC-1")
 	if err != nil {
 		t.Fatal(err)
 	}
-	el, err := g.NodeByKey(ctx, "sdlc", "DOC-1/el")
+	el, err := g.NodeByKey(ctx, domain.DefaultNamespace, "DOC-1/el")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,8 +63,8 @@ func testCommit(t *testing.T, repo Repo) {
 		}}); err != nil {
 		t.Fatal(err)
 	}
-	doc2, _ := g.NodeByKey(ctx, "sdlc", "DOC-1")
-	el2, _ := g.NodeByKey(ctx, "sdlc", "DOC-1/el")
+	doc2, _ := g.NodeByKey(ctx, domain.DefaultNamespace, "DOC-1")
+	el2, _ := g.NodeByKey(ctx, domain.DefaultNamespace, "DOC-1/el")
 	v2, _ := g.View(ctx, doc2.Ref())
 	for _, l := range v2.Out {
 		if l.Type == "defines" && l.To != el2.Ref() {
@@ -81,8 +81,8 @@ func testCommit(t *testing.T, repo Repo) {
 	if _, err := g.Commit(ctx, Commit{Title: "Retire", Baseline: head.ID, By: "registry", Edits: []NodeEdit{{Pre: &el2Ref, Retire: true}}}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := g.NodeByKey(ctx, "sdlc", "DOC-1/el"); err == nil {
-		if n, _ := g.NodeByKey(ctx, "sdlc", "DOC-1/el"); !n.Deleted {
+	if _, err := g.NodeByKey(ctx, domain.DefaultNamespace, "DOC-1/el"); err == nil {
+		if n, _ := g.NodeByKey(ctx, domain.DefaultNamespace, "DOC-1/el"); !n.Deleted {
 			t.Fatalf("the element must be retired: %+v", n)
 		}
 	}

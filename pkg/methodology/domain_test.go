@@ -3,6 +3,8 @@ package methodology
 import (
 	"strings"
 	"testing"
+
+	"github.com/zimwip/goap/pkg/condition"
 )
 
 func testDomain() *Domain {
@@ -14,15 +16,11 @@ func testDomain() *Domain {
 
 func refMethodology() *Methodology {
 	return &Methodology{
-		Name: "m", Version: "1", DomainRef: "alm@1",
-		Conditions: []Condition{{Name: "c", Expr: `changeImpacts.exists(n, n.hasPost && n.post.out.exists(l, l.type == "verifies"))`}},
+		Name: "m", Version: "1", Namespace: "alm",
+		Conditions: []Condition{{Name: "c", Expr: `changeImpacts.exists(n, n.hasPost && n.post.out.exists(l, l.type == "alm@verifies"))`}},
 		Actions:    []Action{{Name: "a", Kind: KindHuman, Effects: map[string]bool{"c": true}}},
 		Goals:      []Goal{{Name: "g", Pre: map[string]bool{"c": true}}},
 	}
-}
-
-func resolver(d *Domain) DomainResolver {
-	return func(name, version string) (*Domain, error) { return d, nil }
 }
 
 func TestDomainValidate(t *testing.T) {
@@ -50,40 +48,33 @@ func TestDomainYAMLRoundTrip(t *testing.T) {
 	}
 }
 
-func TestResolveReferencedDomain(t *testing.T) {
-	m, issues := refMethodology().Resolve(resolver(testDomain()))
-	if len(issues) > 0 {
-		t.Fatal(issues)
-	}
+func TestResolveTypes(t *testing.T) {
+	m := refMethodology().Resolve(DomainTypes(testDomain()))
 	if issues := m.Validate(); len(issues) > 0 {
 		t.Fatal(issues)
 	}
-	if len(m.Domain.NodeTypes) != 2 {
-		t.Fatalf("domain not resolved: %+v", m.Domain)
+	if issues := refMethodology().ValidateStored(); len(issues) > 0 {
+		t.Fatal(issues)
 	}
-}
-
-func TestResolveRejectsEmbeddedAndReferenced(t *testing.T) {
-	m := refMethodology()
-	m.Domain = Schema{NodeTypes: []NodeType{{Name: "X"}}}
-	if _, issues := m.Resolve(resolver(testDomain())); len(issues) != 1 || issues[0].Path != "domainRef" {
-		t.Fatalf("issues: %v", issues)
+	m.Namespace = ""
+	if issues := m.ValidateStored(); len(issues) != 1 || issues[0].Path != "namespace" {
+		t.Fatalf("a stored methodology names its target namespace: %v", issues)
 	}
 }
 
 func TestReferenceLint(t *testing.T) {
 	m := refMethodology()
-	m.Conditions[0].Expr = `changeImpacts.exists(n, n.hasPost && n.post.out.exists(l, l.type == "satisfies")) && changeImpacts.exists(n, "Component" in n.types)`
-	m.Actions[0].Expects = nil
-	res, issues := m.Resolve(resolver(testDomain()))
-	if len(issues) > 0 {
-		t.Fatal(issues)
-	}
-	got := res.Validate().Error()
-	for _, want := range []string{"unknown link type satisfies", "unknown node type Component"} {
+	m.Conditions[0].Expr = `changeImpacts.exists(n, n.hasPost && n.post.out.exists(l, l.type == "alm@satisfies")) && changeImpacts.exists(n, "alm@Component" in n.types) && changeImpacts.exists(n, n.type == "Requirement")`
+	m.Actions[0].Expects = &condition.Expectation{ForEach: "changeImpacts", Produce: condition.ProduceSpec{Op: "create_node", NodeType: "crm@Customer"}}
+	got := m.Resolve(DomainTypes(testDomain())).Validate().Error()
+	for _, want := range []string{"unknown link type alm@satisfies", "unknown node type alm@Component", `"Requirement" must be qualified`, "unknown node type crm@Customer"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %q in %q", want, got)
 		}
+	}
+	m.Actions[0].Expects.Produce.NodeType = "organisation@OrgUnit" // built in
+	if !strings.Contains(m.Resolve(DomainTypes(testDomain())).Validate().Error(), "a methodology creates nodes of its namespace") {
+		t.Error("a methodology creates nodes of its target namespace only")
 	}
 }
 

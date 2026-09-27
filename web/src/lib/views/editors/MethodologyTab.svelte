@@ -1,27 +1,22 @@
 <script lang="ts">
-  // Methodology tab: general, domain (node types and link types), and
+  // Methodology tab: general, target namespace (the node and link types it uses), and
   // content (agents, actions, conditions, goals).
   import { untrack } from 'svelte';
   import type { Tab } from '../../shell/types';
   import Icon from '../../shell/Icon.svelte';
-  import RowTools from '../../components/RowTools.svelte';
   import EditorPanes, { type Pane } from '../../components/EditorPanes.svelte';
   import DraftHeader from './DraftHeader.svelte';
   import { provideActions, useReveal, notify, revealState } from '../../shell/workbench.svelte';
   import { replaceTab } from '../../shell/tabs.svelte';
   import { drafts, getDraft } from '../../stores/drafts.svelte';
-  import { domains, refreshDomains, publishedDomainVersions } from '../../stores/domains.svelte';
-  import { splitRef } from '../../domainForm';
+  import { typeCatalog, loadTypes, typeName } from '../../stores/types.svelte';
   import { openDomain } from './domainTabs';
   import { formatDate } from '../../api';
   import {
-    emptyNodeType,
-    emptyLinkType,
     emptyAgent,
     emptyAction,
     emptyCondition,
     emptyGoal,
-    moveItem,
     type Section,
     type SectionItem,
   } from '../../methodologyForm';
@@ -78,17 +73,12 @@
   );
 
   $effect(() => {
-    if (!domains.loaded) void refreshDomains();
+    void loadTypes();
   });
 
-  const domainNames = $derived([...new Set(domains.items.map((x) => x.name ?? '').filter(Boolean))].sort());
-  const ref = $derived(splitRef(f.domainRef));
-  const refVersions = $derived(ref.name ? publishedDomainVersions(ref.name) : []);
-
-  function pickDomain(name: string, version: string) {
-    if (name && (f.nodeTypes.length || f.linkTypes.length) && !confirm('The embedded node types and link types will be removed from this draft in favor of the shared domain. Continue?')) return;
-    d.setDomainRef(name ? (version ? `${name}@${version}` : name) : '');
-  }
+  const cat = $derived(typeCatalog.cat);
+  const ns = $derived(f.namespace.trim());
+  const namespaces = $derived(cat.namespaces());
 
   const SECTIONS: Section[] = ['agents', 'actions', 'conditions', 'goals'];
 
@@ -99,7 +89,7 @@
 
   const panes = $derived<Pane[]>([
     { id: 'overview', label: 'Overview' },
-    { id: 'domain', label: 'Domain', badge: d.usesDomainRef ? f.domainRef : `${f.nodeTypes.length} types` },
+    { id: 'types', label: 'Types', badge: ns || '—' },
     ...SECTIONS.map((s) => ({ id: s, label: SECTION_LABEL[s], badge: f[s].length })),
   ]);
 
@@ -109,7 +99,7 @@
     if (revealState.tabId !== tab.id || !revealState.path) return;
     const path = revealState.path;
     const section = SECTIONS.find((s) => path.startsWith(s));
-    pane = section ?? (/^(domainRef|domain|nodeTypes|linkTypes)/.test(path) ? 'domain' : 'overview');
+    pane = section ?? (path.startsWith('namespace') ? 'types' : 'overview');
   });
 
   function add(section: Section) {
@@ -180,7 +170,7 @@
           </p>
         {/if}
         {#if d.isNew}
-          <p class="hint">Create the draft to add the domain, agents, actions, conditions, and goals.</p>
+          <p class="hint">Create the draft to add the agents, actions, conditions, and goals.</p>
         {/if}
       </section>
       </fieldset>
@@ -232,157 +222,46 @@
           </p>
         {/if}
         {#if d.isNew}
-          <p class="hint">Create the draft to add the domain, agents, actions, conditions, and goals.</p>
+          <p class="hint">Create the draft to add the agents, actions, conditions, and goals.</p>
         {/if}
       </section>
-            {:else if active === 'domain'}
-        <section class="card" id="m-domain">
-          <h3>Domain</h3>
-          <div class="grid">
-            <div class="field">
-              <label for="m-domain-name">Shared domain</label>
-              <select id="m-domain-name" value={ref.name} onchange={(e) => pickDomain(e.currentTarget.value, '')} data-path="domainRef" class:bad={d.bad('domainRef')}>
-                <option value="">— embedded types (legacy) —</option>
-                {#if ref.name && !domainNames.includes(ref.name)}<option value={ref.name}>{ref.name} (unknown)</option>{/if}
-                {#each domainNames as n (n)}<option value={n}>{n}</option>{/each}
-              </select>
-            </div>
-            {#if ref.name}
-              <div class="field">
-                <label for="m-domain-ver">Version</label>
-                <select id="m-domain-ver" value={ref.version} onchange={(e) => pickDomain(ref.name, e.currentTarget.value)}>
-                  <option value="">latest published (floating)</option>
-                  {#if ref.version && !refVersions.some((v) => v.version === ref.version)}<option value={ref.version}>{ref.version}</option>{/if}
-                  {#each refVersions as v (v.version)}<option value={v.version}>v{v.version}</option>{/each}
-                </select>
-              </div>
-            {/if}
+            {:else if active === 'types'}
+        <section class="card" id="m-types">
+          <h3>Types</h3>
+          <div class="field">
+            <label for="m-namespace">Target namespace</label>
+            <select id="m-namespace" bind:value={f.namespace} disabled={d.readonly} data-path="namespace" class:bad={d.bad('namespace')}>
+              <option value="">— choose a namespace —</option>
+              {#if ns && !namespaces.includes(ns)}<option value={ns}>{ns} (unknown)</option>{/if}
+              {#each namespaces as n (n)}<option value={n}>{n}</option>{/each}
+            </select>
           </div>
-          {#if d.usesDomainRef}
-            {#if d.refError}<div class="alert">{d.refError}</div>{/if}
-            <p class="hint">
-              Node types and link types come from the shared domain (read-only here).
-              <button type="button" class="link" onclick={() => openDomain(ref.name, d.refDomain?.version ?? ref.version)}>Open the domain</button>
-              to edit them.
-            </p>
+          <p class="hint">
+            The changes of the methodology act on this namespace; its node types are referenced as
+            <code>{ns || '<namespace>'}@&lt;NodeType&gt;</code>. They are defined by the domain of the namespace (read-only here){#if ns && cat.domains[ns]}:
+              <button type="button" class="link" onclick={() => openDomain(ns, cat.domains[ns])}>open the domain {ns} v{cat.domains[ns]}</button> to edit them{/if}.
+          </p>
+          {#if typeCatalog.error}<div class="alert">{typeCatalog.error}</div>{/if}
+          {#if ns}
             <h4>Node types</h4>
             <ul class="plain-list">
-              {#each d.nodeTypes as n}
-                <li><code>{n.name}</code>{#if n.extends}<span class="hint"> extends {n.extends}</span>{/if}{#if n.properties}<span class="hint"> · {n.properties}</span>{/if}</li>
+              {#each d.nodeTypeNames as t (t)}
+                {@const info = cat.type(t)}
+                <li>
+                  <code>{typeName(t)}</code>{#if info?.ancestors?.length}<span class="hint">{` extends ${info.ancestors.map(typeName).join(' › ')}`}</span>{/if}{#if info?.properties?.length}<span class="hint">{` · ${info.properties.join(', ')}`}</span>{/if}
+                </li>
               {:else}
-                <li class="empty">{d.refError ? '' : 'Loading…'}</li>
+                <li class="empty">{typeCatalog.loaded ? 'No node types in this namespace.' : 'Loading…'}</li>
               {/each}
             </ul>
             <h4 class="sub">Link types</h4>
             <ul class="plain-list">
-              {#each d.linkTypes as l}
-                <li><code>{l.name}</code>{#if l.from && l.to}<span class="hint"> {l.from} → {l.to}</span>{/if}</li>
+              {#each cat.links.filter((l) => d.linkTypeNames.includes(l.ref ?? '')) as l (l.ref)}
+                <li><code>{typeName(l.ref)}</code>{#if l.from || l.to}<span class="hint">{` ${l.from || 'any'} → ${l.to || 'any'}`}</span>{/if}</li>
               {:else}
                 <li class="empty">None.</li>
               {/each}
             </ul>
-          {:else}
-            <p class="hint">Prefer a shared domain: node and link types are then shared by every methodology that references it.</p>
-          <h4 data-path="nodeTypes">Node types</h4>
-          {#each f.nodeTypes as n, i}
-            <div class="item nt" class:has-issues={d.count(`nodeTypes[${i}]`) > 0} data-path="nodeTypes[{i}]">
-              <input
-                type="text"
-                class="mono"
-                aria-label="Node type name"
-                bind:value={n.name}
-                class:bad={d.bad(`nodeTypes[${i}].name`)}
-                data-path="nodeTypes[{i}].name"
-                placeholder="Requirement"
-              />
-              <select
-                aria-label="Parent type (extends)"
-                title="Parent type: the subtype inherits its properties and the link types that accept it"
-                bind:value={n.extends}
-                class:bad={d.bad(`nodeTypes[${i}].extends`)}
-                data-path="nodeTypes[{i}].extends"
-              >
-                <option value="">— no parent —</option>
-                {#if n.extends && !d.nodeTypeNames.includes(n.extends)}<option value={n.extends}>{n.extends} (unknown)</option>{/if}
-                {#each d.nodeTypeNames.filter((t) => t !== n.name.trim()) as t (t)}<option value={t}>extends {t}</option>{/each}
-              </select>
-              <input
-                type="text"
-                aria-label="Description"
-                bind:value={n.description}
-                class:bad={d.bad(`nodeTypes[${i}].description`)}
-                data-path="nodeTypes[{i}].description"
-                placeholder="Description"
-              />
-              <input
-                type="text"
-                class="mono"
-                aria-label="Properties (comma-separated)"
-                bind:value={n.properties}
-                class:bad={d.bad(`nodeTypes[${i}].properties`)}
-                data-path="nodeTypes[{i}].properties"
-                placeholder="title, description"
-              />
-              {#if !d.readonly}
-                <RowTools
-                  index={i}
-                  count={f.nodeTypes.length}
-                  label="the node type"
-                  onmove={(delta) => moveItem(f.nodeTypes, i, delta)}
-                  onremove={() => f.nodeTypes.splice(i, 1)}
-                />
-              {/if}
-            </div>
-          {:else}
-            <p class="empty">No node types.</p>
-          {/each}
-          {#if !d.readonly}
-            <button type="button" class="small" onclick={() => f.nodeTypes.push(emptyNodeType())}>+ Node type</button>
-          {/if}
-          <p class="hint cols">
-            Columns: name · parent type · description · properties (comma-separated). A subtype inherits its parent's
-            properties and link types; conditions on the parent apply to it as well (<code>x.types</code>
-            contains all supertypes).
-          </p>
-
-          <h4 class="sub" data-path="linkTypes">Link types</h4>
-          {#each f.linkTypes as l, i}
-            <div class="item" class:has-issues={d.count(`linkTypes[${i}]`) > 0} data-path="linkTypes[{i}]">
-              <input
-                type="text"
-                class="mono"
-                aria-label="Link type name"
-                bind:value={l.name}
-                class:bad={d.bad(`linkTypes[${i}].name`)}
-                data-path="linkTypes[{i}].name"
-                placeholder="verifies"
-              />
-              <select aria-label="From" bind:value={l.from} class:bad={d.bad(`linkTypes[${i}].from`)} data-path="linkTypes[{i}].from">
-                <option value="">— from —</option>
-                {#if l.from && !d.nodeTypeNames.includes(l.from)}<option value={l.from}>{l.from} (unknown)</option>{/if}
-                {#each d.nodeTypeNames as t (t)}<option value={t}>{t}</option>{/each}
-              </select>
-              <select aria-label="To" bind:value={l.to} class:bad={d.bad(`linkTypes[${i}].to`)} data-path="linkTypes[{i}].to">
-                <option value="">— to —</option>
-                {#if l.to && !d.nodeTypeNames.includes(l.to)}<option value={l.to}>{l.to} (unknown)</option>{/if}
-                {#each d.nodeTypeNames as t (t)}<option value={t}>{t}</option>{/each}
-              </select>
-              {#if !d.readonly}
-                <RowTools
-                  index={i}
-                  count={f.linkTypes.length}
-                  label="the link type"
-                  onmove={(delta) => moveItem(f.linkTypes, i, delta)}
-                  onremove={() => f.linkTypes.splice(i, 1)}
-                />
-              {/if}
-            </div>
-          {:else}
-            <p class="empty">No link types.</p>
-          {/each}
-          {#if !d.readonly}
-            <button type="button" class="small" onclick={() => f.linkTypes.push(emptyLinkType())}>+ Link type</button>
-          {/if}
           {/if}
         </section>
             {:else if SECTIONS.includes(active as Section)}
@@ -456,24 +335,6 @@
     display: grid;
     gap: 0.15rem;
   }
-  .item {
-    display: grid;
-    grid-template-columns: minmax(120px, 1fr) minmax(140px, 1.5fr) minmax(140px, 1.3fr) auto;
-    gap: 0.4rem;
-    align-items: center;
-    margin-bottom: 0.3rem;
-    border-radius: var(--radius-sm);
-  }
-  .item.nt {
-    grid-template-columns: minmax(120px, 1fr) minmax(110px, 0.9fr) minmax(140px, 1.5fr) minmax(140px, 1.3fr) auto;
-  }
-  .item.has-issues {
-    box-shadow: inset 3px 0 0 var(--danger);
-    padding-left: 5px;
-  }
-  .cols {
-    margin: 0.3rem 0 0;
-  }
   .ell {
     overflow: hidden;
     text-overflow: ellipsis;
@@ -487,11 +348,5 @@
     color: var(--danger);
     font-weight: 700;
     font-size: 0.8rem;
-  }
-  @media (max-width: 800px) {
-    .item,
-    .item.nt {
-      grid-template-columns: 1fr;
-    }
   }
 </style>

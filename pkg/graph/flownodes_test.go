@@ -158,12 +158,12 @@ func testFlowChangeImpactsAdopt(t *testing.T, repo Repo) {
 	if adopted.Flow != "" || adopted.Superseded || adopted.Review != domain.ReviewAccepted || adopted.Post == nil {
 		t.Fatalf("the flow's change impact becomes the change's: %+v", adopted)
 	}
-	head, err := g.NodeByKeyOn(ctx, "sdlc", changeBranchName(c.ID), "REQ-1")
+	head, err := g.NodeByKeyOn(ctx, domain.DefaultNamespace, changeBranchName(c.ID), "REQ-1")
 	if err != nil || head.Ref() != *adopted.Post || head.Properties["title"] != "B" || head.Reason != domain.ReasonAdopt || head.Execution != "e3" {
 		t.Fatalf("the change branch must equal the flow: %+v %v (post %s)", head, err, adopted.Post)
 	}
 	// TST-2 was created by steps that no longer exist: it is retired on the change branch
-	if n, err := g.NodeByKeyOn(ctx, "sdlc", changeBranchName(c.ID), "TST-2"); err != nil || !n.Deleted {
+	if n, err := g.NodeByKeyOn(ctx, domain.DefaultNamespace, changeBranchName(c.ID), "TST-2"); err != nil || !n.Deleted {
 		t.Fatalf("TST-2 must be retired: %+v %v", n, err)
 	}
 	// the flow does not show any more, the main flow sees the adopted change impact only
@@ -177,7 +177,7 @@ func testFlowChangeImpactsAdopt(t *testing.T, repo Repo) {
 	if final.Properties["title"] != "B" || final.ChangeImpact != added[0].ID || final.Comment != "second look is right" {
 		t.Fatalf("landed: %+v", final)
 	}
-	if n, err := g.NodeByKey(ctx, "sdlc", "TST-2"); err == nil && !n.Deleted {
+	if n, err := g.NodeByKey(ctx, domain.DefaultNamespace, "TST-2"); err == nil && !n.Deleted {
 		t.Fatalf("TST-2 must not be live on main: %+v", n)
 	}
 }

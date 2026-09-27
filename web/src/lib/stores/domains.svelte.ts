@@ -6,6 +6,7 @@ import { registry, errorMessage, bumpPatch, compareVersions, type Domain, type D
 import { emptyDomainForm, fromDomainForm, toDomainForm, type DomainForm } from '../domainForm';
 import { normalizePath } from '../methodologyForm';
 import type { NormIssue } from './drafts.svelte';
+import { loadTypes, splitType, typeCatalog } from './types.svelte';
 
 interface Catalog {
   items: DomainSummary[];
@@ -33,6 +34,8 @@ export interface DomainGroup {
   name: string;
   description: string;
   versions: DomainSummary[];
+  /** changes with the platform code only */
+  frozen: boolean;
 }
 
 /** Versions grouped by name, from most recent to oldest. */
@@ -43,7 +46,7 @@ export function groupedDomains(): DomainGroup[] {
   for (const [name, versions] of byName) {
     versions.sort((a, b) => compareVersions(b.version, a.version));
     const ref = versions.find((v) => v.status === 'published') ?? versions[0];
-    out.push({ name, description: ref?.description ?? '', versions });
+    out.push({ name, description: ref?.description ?? '', versions, frozen: versions.some((v) => v.frozen) });
   }
   return out.sort((a, b) => a.name.localeCompare(b.name));
 }
@@ -72,6 +75,10 @@ export class DomainDraft {
   form = $state<DomainForm>(emptyDomainForm());
   snapshot = $state(JSON.stringify(emptyDomainForm()));
   status = $state('draft');
+  /** the version shipped with the platform: read only, cannot be archived */
+  builtin = $state(false);
+  /** a namespace the code reads in its own way (methodology, organisation): changes with the code, no new version */
+  frozen = $state(false);
   meta = $state<Pick<Domain, 'createdAt' | 'updatedAt' | 'publishedAt' | 'updatedBy'>>({});
   loading = $state(true);
   loadError = $state('');
@@ -101,6 +108,11 @@ export class DomainDraft {
   readonly readonly = $derived(this.status !== 'draft');
   readonly allIssues = $derived<NormIssue[]>((this.issues ?? []).map((i) => ({ ...i, norm: normalizePath(i.path) })));
   readonly nodeTypeNames = $derived([...new Set(this.form.nodeTypes.map((n) => n.name.trim()).filter(Boolean))]);
+  /** types a link end or a parent can name: the domain's own (bare), then those of the other domains (qualified) */
+  readonly typeOptions = $derived([
+    ...this.nodeTypeNames,
+    ...typeCatalog.cat.names().filter((r) => splitType(r).namespace !== this.name),
+  ]);
   get canPublish(): boolean {
     return !this.readonly && !this.isNew && !this.dirty && !this.busy && this.issues !== null && this.allIssues.length === 0 && this.validatedAt === this.current;
   }
@@ -115,8 +127,11 @@ export class DomainDraft {
 
   private apply(d: Domain) {
     this.form = toDomainForm(d);
+    void loadTypes();
     this.snapshot = JSON.stringify(this.form);
     this.status = d.status || 'draft';
+    this.builtin = !!d.builtin;
+    this.frozen = !!d.frozen;
     this.meta = { createdAt: d.createdAt, updatedAt: d.updatedAt, publishedAt: d.publishedAt, updatedBy: d.updatedBy };
   }
 
@@ -218,6 +233,7 @@ export class DomainDraft {
     this.status = res.domain?.status || 'published';
     if (res.domain?.publishedAt) this.meta = { ...this.meta, publishedAt: res.domain.publishedAt };
     void refreshDomains();
+    void loadTypes(true);
     return true;
   }
 
@@ -256,6 +272,7 @@ export class DomainDraft {
     });
     if (!ok) return undefined;
     void refreshDomains();
+    if (!draft) void loadTypes(true);
     if (draft) {
       domainDrafts.delete(this.key);
       return 'deleted';

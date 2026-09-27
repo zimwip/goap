@@ -11,13 +11,10 @@ import (
 	"github.com/zimwip/goap/pkg/methodology"
 )
 
-// TypeToolRequest is the node type of a proposed MCP tool: tools are not
-// part of a methodology definition, they are requested from the platform
-// team (the MCP connector) and referenced by tool actions once available.
-const TypeToolRequest = "ToolRequest"
-
 // Proposal is an improvement of the methodology model, expressed on its
-// metamodel nodes (so that it is reviewed like any other change).
+// definition nodes (so that it is reviewed like any other change). A proposed
+// MCP tool (TypeToolRequest) is not part of the definition: it is requested
+// from the platform team and referenced by tool actions once available.
 type Proposal struct {
 	// Finding is the index of the finding in the report.
 	Finding int `json:"finding"`
@@ -60,18 +57,18 @@ func Propose(r Report, m *methodology.Methodology) (props []Proposal, notes []st
 				continue
 			}
 			name := a.Name + "_script"
-			props = append(props, Proposal{Finding: i, Op: "create_node", Type: "Action", Key: ElementKey(m.Name, "action", name),
+			props = append(props, Proposal{Finding: i, Op: "create_node", Type: TypeAction, Key: ElementKey(m.Name, m.Version, "action", name),
 				Props: map[string]any{"name": name, "kind": methodology.KindScript, "language": methodology.LangJavaScript,
 					"specializes": a.Name, "priority": 10, "description": "Systematized version of " + a.Name + " (no LLM call).",
 					"code": scriptTemplate(a, stats[a.Name])},
 				Title:     "Specialize " + a.Name + " with a script",
 				Rationale: f.Evidence + ". The script takes priority; add a `when` guard to keep the LLM for atypical cases.",
-				LinkType:  "specializes", LinkTo: ElementKey(m.Name, "action", a.Name)})
+				LinkType:  LinkSpecializes, LinkTo: ElementKey(m.Name, m.Version, "action", a.Name)})
 		case FindLLMHeavy:
 			if !known || a.Kind != methodology.KindLLM || a.Model == "fast" || !once("model:"+a.Name) {
 				continue
 			}
-			props = append(props, Proposal{Finding: i, Op: "update_node", Key: ElementKey(m.Name, "action", a.Name),
+			props = append(props, Proposal{Finding: i, Op: "update_node", Key: ElementKey(m.Name, m.Version, "action", a.Name),
 				Props: map[string]any{"model": "fast"}, Title: "Fast model for " + a.Name,
 				Rationale: f.Evidence + ". A lighter model (fast alias) reduces cost and latency; check the quality of its outputs."})
 		case FindLoop, FindFailure:
@@ -82,7 +79,7 @@ func Propose(r Report, m *methodology.Methodology) (props []Proposal, notes []st
 			if cost < 1 {
 				cost = 1
 			}
-			props = append(props, Proposal{Finding: i, Op: "update_node", Key: ElementKey(m.Name, "action", a.Name),
+			props = append(props, Proposal{Finding: i, Op: "update_node", Key: ElementKey(m.Name, m.Version, "action", a.Name),
 				Props: map[string]any{"cost": cost * 2}, Title: "Raise the cost of " + a.Name,
 				Rationale: f.Evidence + ". Doubling its cost steers the planner toward other paths; also review its preconditions / effects."})
 		case FindDisabled:
@@ -96,7 +93,7 @@ func Propose(r Report, m *methodology.Methodology) (props []Proposal, notes []st
 					keep = append(keep, x)
 				}
 			}
-			props = append(props, Proposal{Finding: i, Op: "update_node", Key: ElementKey(m.Name, "agent", ag.Name),
+			props = append(props, Proposal{Finding: i, Op: "update_node", Key: ElementKey(m.Name, m.Version, "agent", ag.Name),
 				Props: map[string]any{"actions": keep}, Title: "Remove " + a.Name + " from agent " + ag.Name,
 				Rationale: f.Evidence + ". The action does not produce its effects for this agent: removing it avoids wasted cycles."})
 		case FindSlowSpan, FindSlowAction:
@@ -108,7 +105,7 @@ func Propose(r Report, m *methodology.Methodology) (props []Proposal, notes []st
 			if !once("tool:" + name) {
 				continue
 			}
-			props = append(props, Proposal{Finding: i, Op: "create_node", Type: TypeToolRequest, Key: ElementKey(m.Name, "tool", name),
+			props = append(props, Proposal{Finding: i, Op: "create_node", Type: TypeToolRequest, Key: ElementKey(m.Name, m.Version, "tool", name),
 				Props: map[string]any{"name": name, "description": "Dedicated MCP tool for " + tool, "motivation": f.Evidence, "span": f.Span},
 				Title: "MCP tool " + name, Rationale: f.Evidence + ". A dedicated MCP tool (caching, batch processing) would take this hot spot off the critical path."})
 		case FindReplanning:
@@ -182,7 +179,7 @@ func scriptTemplate(a methodology.Action, s ActionStats) string {
 }
 
 // Edit is an accepted change of the methodology model: a node update,
-// creation or deletion on a metamodel key.
+// creation or deletion on the key of a definition node.
 type Edit struct {
 	Op    string // create_node | update_node | delete_node
 	Key   string
@@ -265,17 +262,19 @@ func clone(m methodology.Methodology) (methodology.Methodology, error) {
 	return out, json.Unmarshal(b, &out)
 }
 
+// parseKey reads the key of a definition node (see ElementKey): the methodology, the kind and the name of the element.
 func parseKey(key string) (meth, kind, name string, ok bool) {
-	rest, ok := strings.CutPrefix(key, "M:")
+	rest, ok := strings.CutPrefix(key, "MV:")
 	if !ok {
 		return "", "", "", false
 	}
 	parts := strings.SplitN(rest, "/", 3)
+	meth, _, _ = strings.Cut(parts[0], "@")
 	switch len(parts) {
 	case 1:
-		return parts[0], "methodology", parts[0], true
+		return meth, "methodology", meth, true
 	case 3:
-		return parts[0], parts[1], parts[2], true
+		return meth, parts[1], parts[2], true
 	}
 	return "", "", "", false
 }

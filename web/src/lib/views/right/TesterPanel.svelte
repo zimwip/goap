@@ -21,6 +21,7 @@
   import { openTab } from '../../shell/tabs.svelte';
   import { headGraph } from '../../graphEdit';
   import { focusRequests } from '../../shell/workbench.svelte';
+  import { ORG_UNIT_TYPE } from '../../orgTypes';
 
   let methodology = $state('');
   /** "methodology::agent" */
@@ -37,7 +38,7 @@
 
   $effect(() => {
     void headGraph()
-      .then((h) => (units = h.nodes.filter((n) => n.namespace === 'organisation' && n.type === 'OrgUnit').map((n) => n.key ?? '').sort()))
+      .then((h) => (units = h.nodes.filter((n) => n.namespace === 'organisation' && n.type === ORG_UNIT_TYPE).map((n) => n.key ?? '').sort()))
       .catch(() => (units = []));
   });
 

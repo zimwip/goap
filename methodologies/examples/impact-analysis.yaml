@@ -5,7 +5,7 @@ description: >
   impacted elements, propagation along traceability links, update proposals
   and human review.
 
-domainRef: alm@1.0.0
+namespace: alm
 
 conditions:
   - name: has_impacts
@@ -60,7 +60,7 @@ actions:
     params:
       maxDepth: 3
       # an impact on the target of a link propagates to its source
-      linkTypes: [verifies, implements, satisfies]
+      linkTypes: [alm@verifies, alm@implements, alm@satisfies]
 
   - name: propose_requirement_updates
     kind: llm
@@ -70,12 +70,12 @@ actions:
     model: default
     expects:
       forEach: changeImpacts
-      where: x.type == "Requirement"
+      where: x.type == "alm@Requirement"
       produce: {op: update_node}
     prompt: |
       Change intent: "{{ .Change.Intent }}"
       Impacted requirements:
-      {{ range .ChangeImpacts }}{{ if eq .Type "Requirement" }}- {{ .Key }} {{ json .Pre.Properties }} (reason: {{ .Rationale }})
+      {{ range .ChangeImpacts }}{{ if eq .Type "alm@Requirement" }}- {{ .Key }} {{ json .Pre.Properties }} (reason: {{ .Rationale }})
       {{ end }}{{ end }}
       For each requirement, write its new version:
       {"kind":"changeImpact","changeImpact":{"op":"write","node":"<key>","props":{...}}}
@@ -89,17 +89,17 @@ actions:
     model: default
     expects:
       forEach: changeImpacts
-      where: x.type == "Requirement"
-      produce: {op: create_node, nodeType: TestCase}
-      link: {type: verifies}
+      where: x.type == "alm@Requirement"
+      produce: {op: create_node, nodeType: alm@TestCase}
+      link: {type: alm@verifies}
     prompt: |
       Change intent: "{{ .Change.Intent }}"
       Impacted requirements:
-      {{ range .ChangeImpacts }}{{ if eq .Type "Requirement" }}- {{ .Key }} {{ json .Post.Properties }}
+      {{ range .ChangeImpacts }}{{ if eq .Type "alm@Requirement" }}- {{ .Key }} {{ json .Post.Properties }}
       {{ end }}{{ end }}
       For each requirement, create a test case and link it to the requirement:
-      {"kind":"changeImpact","changeImpact":{"op":"declare","ref":"#t1","intent":"created","type":"TestCase","key":"TST-...","rationale":"why"}}
-      {"kind":"changeImpact","changeImpact":{"op":"write","node":"#t1","props":{"title":"..."},"links":[{"type":"verifies","to":"<requirement key>"}]}}
+      {"kind":"changeImpact","changeImpact":{"op":"declare","ref":"#t1","intent":"created","type":"alm@TestCase","key":"TST-...","rationale":"why"}}
+      {"kind":"changeImpact","changeImpact":{"op":"write","node":"#t1","props":{"title":"..."},"links":[{"type":"alm@verifies","to":"<requirement key>"}]}}
 
   - name: write_report
     kind: llm

@@ -55,9 +55,8 @@ func newLifecycleWorldG(t *testing.T, repo Repo, approveGuard string) lcWorld {
 		}
 		return n
 	}
-	tReq := mk("D:x/nodetype/Requirement", NodeTypeNode, map[string]any{"name": "Requirement", "lifecycle": asMap(t, w.reqLC)}, "")
-	tSpec := mk("D:x/nodetype/Spec", NodeTypeNode, map[string]any{"name": "Spec", "document": asMap(t, domain.DocumentSpec{Contains: []string{"Requirement"}}), "lifecycle": asMap(t, w.specLC)}, "")
-	tNote := mk("D:x/nodetype/Note", NodeTypeNode, map[string]any{"name": "Note"}, "")
+	types := testTypes{"Requirement": {Lifecycle: &w.reqLC}, "Spec": {Lifecycle: &w.specLC}, "Note": {}}
+	w.g.Types = func() TypeCatalog { return types }
 	w.req1 = mk("REQ-1", "Requirement", map[string]any{"title": "one"}, "approved")
 	w.req2 = mk("REQ-2", "Requirement", map[string]any{}, "proposed")
 	w.spec = mk("SPEC-1", "Spec", map[string]any{"title": "spec"}, "released")
@@ -68,7 +67,7 @@ func newLifecycleWorldG(t *testing.T, repo Repo, approveGuard string) lcWorld {
 	}
 	var err error
 	// Link bumps nothing: the spec still is version 1 with its links
-	w.base, err = w.g.CreateBaseline(ctx, "B1", []domain.NodeRef{tReq.Ref(), tSpec.Ref(), tNote.Ref(), w.req1.Ref(), w.req2.Ref(), w.spec.Ref()})
+	w.base, err = w.g.CreateBaseline(ctx, "B1", []domain.NodeRef{w.req1.Ref(), w.req2.Ref(), w.spec.Ref()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -186,9 +185,12 @@ func testLifecycleTransitionRules(t *testing.T, repo Repo) {
 	}
 	// a node type without lifecycle has no transitions
 	c = w.change(t, "no lifecycle")
-	tn, _ := w.g.NodeByKey(ctx, "", "D:x/nodetype/Note")
-	if err := w.write(c, w.declare(t, c, tn), NodeWrite{State: "x"}); err == nil {
-		t.Fatal("a NodeType has no lifecycle: transition must be refused")
+	notes, err := w.g.AddNodes(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentCreated, Key: "NOTE-1", Type: "Note", Rationale: "a note"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := w.write(c, notes[0].ID, NodeWrite{State: "x"}); err == nil {
+		t.Fatal("a Note has no lifecycle: a state must be refused")
 	}
 	// required attribute: REQ-2 has no title
 	c = w.change(t, "approve without title")

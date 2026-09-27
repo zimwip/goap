@@ -23,9 +23,9 @@ import (
 
 // Types and links of the graph objects.
 const (
-	NodeTypeUser   = "User"
-	NodeTypePolicy = "Policy"
-	LinkMemberOf   = "member_of"
+	NodeTypeUser   = "organisation@User"
+	NodeTypePolicy = "organisation@Policy"
+	LinkMemberOf   = "organisation@member_of"
 
 	// ResourcePolicy is the ABAC resource that guards changes to User and Policy nodes.
 	ResourcePolicy = "policy"

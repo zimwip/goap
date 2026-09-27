@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"maps"
-	"slices"
 
 	"github.com/zimwip/goap/pkg/algo"
 	"github.com/zimwip/goap/pkg/domain"
@@ -13,28 +12,16 @@ import (
 
 // This file runs the algorithms plugged in the domain (ADR 0018): the property
 // validators of a node type, and the guards and actions of lifecycle
-// transitions. Like the lifecycle they are metadata: the NodeType nodes of the
-// change's reference baseline embed them resolved (instance parameters and
-// script), so a change is judged by the model it started from.
+// transitions. Like the lifecycle they come from the type catalogue in force,
+// resolved (instance parameters and script).
 
 // validatorsOf lists the property validators of a type in call order: the ones
 // of the supertypes first, each type's in declaration order.
 func (ix *typeIndex) validatorsOf(typ string) []algo.Bound {
-	var chain [][]algo.Bound
-	for seen := map[string]bool{}; typ != "" && !seen[typ]; {
-		seen[typ] = true
-		info, ok := ix.byName[typ]
-		if !ok {
-			break
-		}
-		chain = append(chain, info.validators)
-		typ = info.extends
+	if ix == nil || ix.cat == nil {
+		return nil
 	}
-	var out []algo.Bound
-	for _, v := range slices.Backward(chain) {
-		out = append(out, v...)
-	}
-	return out
+	return ix.cat.Validators(typ)
 }
 
 func dslNode(n domain.Node, props map[string]any) dsl.Node {

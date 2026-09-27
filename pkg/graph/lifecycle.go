@@ -2,19 +2,16 @@ package graph
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
 
-	"github.com/zimwip/goap/pkg/algo"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/guard"
 )
 
 // This file implements the node lifecycle rules (ADR 0014). The lifecycle of
-// a node type is metadata: it is read from the NodeType nodes of the change's
-// reference baseline, so a change is always judged by the model it started from.
+// a node type comes from the type catalogue in force (ADR 0012 §2).
 //
 //   - a node is modified only in an editable state, and a persisted version is
 //     never editable: a change reopens a node (a transition into an editable
@@ -23,100 +20,51 @@ import (
 //     has the required attributes and links, its guard holds, and for a
 //     document its children are in an allowed state) when the change is applied.
 
-// NodeTypeNode is the type of the graph nodes that hold node types (the
-// metadata layer, ADR 0012).
-const NodeTypeNode = "NodeType"
-
 // TransitionAuthorizer decides whether the caller may take a transition on a
 // node. Nil allows every transition. n.State is the state it leaves.
 type TransitionAuthorizer func(ctx context.Context, n domain.Node, t domain.Transition) error
 
-type typeInfo struct {
-	extends    string
-	lifecycle  *domain.Lifecycle
-	document   *domain.DocumentSpec
-	controlled *bool
-	validators []algo.Bound
-	search     []domain.SearchProperty
+// typeIndex is the node type metadata a change is judged by: the type catalogue in force (ADR 0012 §2). Without one
+// (Graph.Types unset) the graph is untyped: no lifecycle, no validator, no check.
+type typeIndex struct {
+	cat TypeCatalog
 }
 
-// typeIndex is the node type metadata of a baseline.
-type typeIndex struct{ byName map[string]typeInfo }
-
-func decodeProp(v any, out any) bool {
-	if v == nil {
-		return false
+// typesAt returns the types a change of the baseline is judged by: the catalogue in force.
+func (g *Graph) typesAt(context.Context, Tx, domain.BaselineID) (*typeIndex, error) {
+	if g.Types == nil {
+		return &typeIndex{}, nil
 	}
-	b, err := json.Marshal(v)
-	return err == nil && json.Unmarshal(b, out) == nil
-}
-
-// typesAt reads (and caches: baselines are immutable) the node type metadata of a baseline.
-func (g *Graph) typesAt(ctx context.Context, tx Tx, baseline domain.BaselineID) (*typeIndex, error) {
-	if ix, ok := g.types.Load(baseline); ok {
-		return ix.(*typeIndex), nil
-	}
-	nodes, err := tx.NodesIn(ctx, baseline, NodeTypeNode)
-	if err != nil {
-		return nil, err
-	}
-	ix := &typeIndex{byName: map[string]typeInfo{}}
-	for _, n := range nodes {
-		name, _ := n.Properties["name"].(string)
-		if _, dup := ix.byName[name]; name == "" || dup {
-			continue
-		}
-		info := typeInfo{}
-		info.extends, _ = n.Properties["extends"].(string)
-		var lc domain.Lifecycle
-		if decodeProp(n.Properties["lifecycle"], &lc) {
-			info.lifecycle = &lc
-		}
-		var doc domain.DocumentSpec
-		if decodeProp(n.Properties["document"], &doc) {
-			info.document = &doc
-		}
-		if b, ok := n.Properties["changeControlled"].(bool); ok {
-			info.controlled = &b
-		}
-		decodeProp(n.Properties["validators"], &info.validators)
-		decodeProp(n.Properties["search"], &info.search)
-		ix.byName[name] = info
-	}
-	g.types.Store(baseline, ix)
-	return ix, nil
-}
-
-// find returns the nearest declaration along the extends chain.
-func (ix *typeIndex) find(typ string, pick func(typeInfo) bool) (typeInfo, bool) {
-	for seen := map[string]bool{}; typ != "" && !seen[typ]; {
-		seen[typ] = true
-		info, ok := ix.byName[typ]
-		if !ok {
-			return typeInfo{}, false
-		}
-		if pick(info) {
-			return info, true
-		}
-		typ = info.extends
-	}
-	return typeInfo{}, false
+	return &typeIndex{cat: g.catalog()}, nil
 }
 
 func (ix *typeIndex) lifecycleOf(typ string) *domain.Lifecycle {
-	info, _ := ix.find(typ, func(i typeInfo) bool { return i.lifecycle != nil })
-	return info.lifecycle
+	if ix == nil || ix.cat == nil {
+		return nil
+	}
+	return ix.cat.Lifecycle(typ)
 }
 
-func (ix *typeIndex) documentOf(typ string) *domain.DocumentSpec {
-	info, _ := ix.find(typ, func(i typeInfo) bool { return i.document != nil })
-	return info.document
+// checkNode is the existence rule (ADR 0012 §3) for a node of namespace ns; nothing is checked without a catalogue.
+func (ix *typeIndex) checkNode(ns, typ string) error {
+	if ix.cat == nil {
+		return nil
+	}
+	if err := ix.cat.CheckNode(ns, typ); err != nil {
+		return fmt.Errorf("%v: %w", err, ErrInvalid)
+	}
+	return nil
 }
 
-// controlledType tells whether the nodes of a type are modified through changes only.
-func (ix *typeIndex) controlledType(typ string) bool {
-	info, ok := ix.find(typ, func(i typeInfo) bool { return i.controlled != nil })
-	return !ok || *info.controlled
+// checkLink checks a link type and its ends; nothing is checked without a catalogue.
+func (ix *typeIndex) checkLink(typ, from, to string) error {
+	if ix.cat == nil {
+		return nil
+	}
+	if err := ix.cat.CheckLink(typ, from, to); err != nil {
+		return fmt.Errorf("%v: %w", err, ErrInvalid)
+	}
+	return nil
 }
 
 // LifecycleControlled tells whether direct writes to nodes of a type are refused
@@ -195,7 +143,7 @@ func (a *applier) checkTransition(n domain.Node, t domain.Transition) ([]domain.
 	var children []domain.Node
 	if t.Children != nil || t.Guard != "" || len(t.GuardAlgos) > 0 || len(t.ActionAlgos) > 0 {
 		for _, l := range out {
-			if l.Type != domain.LinkContains {
+			if !domain.IsContains(l.Type) {
 				continue
 			}
 			v, ok := a.target[l.To.ID]
