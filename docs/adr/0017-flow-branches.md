@@ -1,6 +1,6 @@
 # ADR 0017 — Flow branches: relaunching a step of the action flow
 
-**Status**: accepted · **Date**: 2026-09 · Extends ADR 0001 (blackboard), ADR 0011 (journal), ADR 0015 (step marks).
+**Status**: accepted, implemented (the graph branch of a flow is ADR 0025) · **Date**: 2026-09 · Extends ADR 0001 (blackboard), ADR 0011 (journal), ADR 0015 (step marks).
 
 ## Context
 Relaunching a step of an agent run may invalidate its previous output and every conclusion
@@ -51,27 +51,19 @@ rewritten. Relaunching is a **flow branch**, and every transition is an event of
   `guidance` on the branch, so only the relaunched steps read it: LLM actions get it appended to their
   prompt ("Guidance from a human reviewer..."). A board-inconsistency relaunch passes the human's
   comment the same way.
-- **Domain branch**: the proposals of a flow view (kept and candidate ones) are applied on a graph
-  branch of its own (`flow-<id>`, forked from the branch the change acts on) by `MaterializeFlow`, done
-  by the engine when the relaunched run reaches its goal, so the reviewer can read the resulting graph
-  (`PlanMerge` of the flow branch against the change branch) before deciding. Nothing is written when it
-  fails. Adopting merges the flow branch into the change branch **when the change has a branch of its
-  own** (a change acting directly on main does not publish before it is applied) and the merge has no
-  conflict; the proposals merged this way are recorded on the adopt event and are not applied a second
-  time when the change is applied (`Change.MergedOnBranch`, skipped by the applier and by the
-  divergence check). Discarding abandons every branch the flow used. If the flow changed since it was
-  materialized, adoption does not merge: the proposals are applied with the change as usual.
+- **Graph branch of a flow**: superseded by ADR 0025. A flow writes its versions eagerly on a graph branch of its
+  own, forked from the change branch; the reviewer reads the resulting graph there, and adopting the flow makes the
+  change branch equal to it (`adopt` versions). Discarding abandons the flow branch.
 
 ## Blackboard validation before each action
 The engine validates the blackboard the process reads at the start of every cycle, before planning
 (so before any action is asked, and before the goal is declared reached): `Graph.ValidateBoard`.
 
-- **Checks**: item structure; provenance and references to items that do not exist (`dangling`);
-  items built on an item that is rejected or superseded (`derived_from_invalid`, the culprit is the
-  parent); nodes outside the reference baseline (`reference`); proposals based on a node version that
-  has moved (`outdated`); lifecycle, namespace and link rules, located per proposal (`rule`); impact
-  pre/post coherence (`impact`); a node created twice (`duplicate`). Each issue names the item where
-  it shows and the **culprit** item to blame.
+- **Checks**: fact and change impact structure (`structure`); provenance and references to facts that do not
+  exist (`dangling`); facts built on a fact that is rejected or superseded (`derived_from_invalid`, the culprit is
+  the parent); change impacts whose `pre` is outside the reference baseline (`reference`); change impacts written
+  against a version that is no longer the head (`outdated`). Lifecycle, namespace and link rules are checked when a
+  version is written (ADR 0024). Each issue names the item where it shows and the **culprit** to blame.
 - **Where to restart**: the culprit items are mapped to the steps that produced them (`execution`),
   a sub-agent step to the step of its parent that started it. The earliest step over every run of the
   change is the proposal. None is proposed when the content did not come from a step (human,

@@ -19,8 +19,8 @@ through changes (CLAUDE.md, rule 4).
    (subject, displayName, email, locale, roles) are node types of the `organisation` domain; a user belongs to a unit
    through `member_of`.
 3. `pkg/access` reads them from a snapshot of the head of `main` (`Directory`, same pattern as the MCP directory) and
-   builds the enforcer (`Authorizer`). Each service does so in process (the graph service over its own graph), so no
-   service depends on another to decide.
+   builds the enforcer (`Authorizer`). Each service decides in process: the graph service over its own graph, the others
+   through a graph client, falling back to the compiled-in defaults while the graph has no policy.
 4. The principal is completed with its `User` node: roles are added to those of the token, and the unit is the
    organisation when the token names none. The gateway propagates the completed principal; `GET /api/whoami` returns
    it. Identity headers (`X-Goap-*`) are trustworthy only because services are reachable only through the gateway.
