@@ -12,8 +12,8 @@ import (
 // Organisation namespace conventions (domains/organisation.yaml).
 const (
 	NamespaceOrganisation = "organisation"
-	LinkPartOf            = "part_of" // OrgUnit -> parent OrgUnit
-	LinkOwner             = "owner"   // any node -> OrgUnit
+	LinkPartOf            = "organisation@part_of" // OrgUnit -> parent OrgUnit
+	LinkOwner             = "organisation@owner"   // any node -> OrgUnit
 )
 
 // prepareSubChange applies the rules of a sub-change to c: its parent must be

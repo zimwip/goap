@@ -11,15 +11,8 @@ import (
 // ToPB converts a stored record.
 func ToPB(r Record) *registryv1.Methodology {
 	m := r.Methodology
-	out := &registryv1.Methodology{Name: m.Name, Version: m.Version, Description: m.Description, DomainRef: m.DomainRef, Namespace: m.Namespace, Status: string(r.Status),
+	out := &registryv1.Methodology{Name: m.Name, Version: m.Version, Description: m.Description, Namespace: m.Namespace, Status: string(r.Status),
 		CreatedAt: pbconv.Time(r.CreatedAt), UpdatedAt: pbconv.Time(r.UpdatedAt), PublishedAt: pbconv.Time(r.PublishedAt), UpdatedBy: r.UpdatedBy}
-	for _, n := range m.Domain.NodeTypes {
-		out.NodeTypes = append(out.NodeTypes, nodeTypeToPB(n))
-	}
-	for _, l := range m.Domain.LinkTypes {
-		out.LinkTypes = append(out.LinkTypes, &registryv1.LinkType{Name: l.Name, From: l.From, To: l.To})
-	}
-	out.Lifecycles = lifecyclesToPB(m.Domain.Lifecycles)
 	for _, c := range m.Conditions {
 		out.Conditions = append(out.Conditions, &registryv1.Condition{Name: c.Name, Description: c.Description, Expr: c.Expr})
 	}
@@ -69,14 +62,7 @@ func FromPB(p *registryv1.Methodology) methodology.Methodology {
 	if p == nil {
 		return methodology.Methodology{}
 	}
-	m := methodology.Methodology{Name: p.Name, Version: p.Version, Description: p.Description, DomainRef: p.DomainRef, Namespace: p.Namespace}
-	for _, n := range p.NodeTypes {
-		m.Domain.NodeTypes = append(m.Domain.NodeTypes, nodeTypeFromPB(n))
-	}
-	for _, l := range p.LinkTypes {
-		m.Domain.LinkTypes = append(m.Domain.LinkTypes, methodology.LinkType{Name: l.Name, From: l.From, To: l.To})
-	}
-	m.Domain.Lifecycles = lifecyclesFromPB(p.Lifecycles)
+	m := methodology.Methodology{Name: p.Name, Version: p.Version, Description: p.Description, Namespace: p.Namespace}
 	for _, c := range p.Conditions {
 		m.Conditions = append(m.Conditions, methodology.Condition{Name: c.Name, Description: c.Description, Expr: c.Expr})
 	}

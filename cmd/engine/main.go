@@ -23,6 +23,7 @@ import (
 	"github.com/zimwip/goap/pkg/intent"
 	"github.com/zimwip/goap/pkg/llm"
 	"github.com/zimwip/goap/pkg/methodology"
+	"github.com/zimwip/goap/pkg/typecat"
 )
 
 func main() {
@@ -72,6 +73,13 @@ func main() {
 		platform.Fatal(log, "authorizer", err)
 	}
 	registry := registrysvc.NewClient(hc, platform.Env("GOAP_REGISTRY_URL", "http://localhost:8082"), copts...)
+	// the type catalogue (ADR 0012): the ancestors behind x.types, from the registry, reloaded on its domain events
+	types := typecat.NewLive(registry.Domains)
+	go func() {
+		for delay := time.Second; types.Reload(ctx) != nil; delay = min(2*delay, time.Minute) {
+			time.Sleep(delay)
+		}
+	}()
 	builtins := engine.DefaultBuiltins()
 	e := &engine.Engine{
 		Graph:         graphsvc.NewClient(hc, platform.Env("GOAP_GRAPH_URL", "http://localhost:8081"), copts...),
@@ -93,17 +101,18 @@ func main() {
 		Tracer:    telemetry.NewEngineTracer(),
 		Log:       log,
 		MaxSteps:  platform.EnvInt("GOAP_MAX_STEPS", 50),
+		Types:     func() methodology.TypeSet { return types.Get() },
 	}
 	// self-observation (methodology-improvement): journal, traces, drafts
 	maps.Copy(builtins, e.SelfImprovementBuiltins(telemetry.SelfImprovementFromEnv(registry)))
-	// the metadata layer changed (ADR 0012): drop the cached NodeType ancestry
-	if err := events.Subscribe("goap.graph.nodetype.changed", func(data []byte) {
-		var ev struct{ Methodology string }
-		if json.Unmarshal(data, &ev) == nil && ev.Methodology != "" {
-			e.InvalidateSupertypes(ev.Methodology)
+	for _, subject := range []string{"goap.registry.domain.published", "goap.registry.domain.deleted"} {
+		if err := events.Subscribe(subject, func([]byte) {
+			if err := types.Reload(context.Background()); err != nil {
+				log.Error("type catalogue", "err", err)
+			}
+		}); err != nil {
+			platform.Fatal(log, "subscribe", err)
 		}
-	}); err != nil {
-		platform.Fatal(log, "subscribe", err)
 	}
 	// triggers: agents run automatically on events and schedules
 	var triggers *engine.TriggerManager

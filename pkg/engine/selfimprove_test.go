@@ -8,7 +8,7 @@ import (
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/dsl"
-	"github.com/zimwip/goap/pkg/metamodel"
+	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/methodology"
 	"github.com/zimwip/goap/pkg/observe"
 )
@@ -35,6 +35,27 @@ func (d *memDrafts) SaveDraft(ctx context.Context, m methodology.Methodology) (m
 	return m.Validate(), nil
 }
 
+// storeDefinition writes the definition nodes of a methodology version as the registry does (ADR 0023): the version
+// node and one node per element, typed by the meta-domain methodology.
+func storeDefinition(ctx context.Context, g *graph.Graph, base domain.BaselineID, m *methodology.Methodology) (graph.CommitResult, error) {
+	hkey := observe.ElementKey(m.Name, m.Version, "methodology", "")
+	head := graph.NodeEdit{Key: hkey, Type: "methodology@MethodologyVersion", Props: map[string]any{"name": m.Name, "version": m.Version, "status": "published"}}
+	edits := []graph.NodeEdit{}
+	el := func(kind, typ, name string, props map[string]any) {
+		k := observe.ElementKey(m.Name, m.Version, kind, name)
+		props["name"] = name
+		edits = append(edits, graph.NodeEdit{Key: k, Type: typ, Props: props})
+		head.Links = append(head.Links, graph.LinkEdit{Type: "methodology@defines", ToKey: k})
+	}
+	for _, a := range m.Actions {
+		el("action", "methodology@Action", a.Name, map[string]any{"kind": a.Kind, "cost": a.Cost, "model": a.Model})
+	}
+	for _, a := range m.Agents {
+		el("agent", "methodology@Agent", a.Name, map[string]any{"actions": a.Actions})
+	}
+	return g.Commit(ctx, graph.Commit{Namespace: "methodology", Title: "Methodology " + m.Name, Baseline: base, By: "test", Edits: append(edits, head)})
+}
+
 func TestSelfObservationProposesAndDrafts(t *testing.T) {
 	ctx := authz.With(context.Background(), authz.Principal{Subject: "mia", Org: "acme", Roles: []string{"methodologist"}})
 	e, g, base := setup(t)
@@ -58,9 +79,9 @@ func TestSelfObservationProposesAndDrafts(t *testing.T) {
 	}
 	impact, _ := e.Methodologies.Methodology(ctx, "impact-analysis")
 	e.Methodologies = StaticMethodologies{"impact-analysis": impact, obs.Name: obs}
-	res, err := metamodel.Sync(ctx, g, impact.Methodology)
-	if err != nil || !res.Changed() {
-		t.Fatalf("sync: %+v %v", res, err)
+	res, err := storeDefinition(ctx, g, base, impact.Methodology)
+	if err != nil {
+		t.Fatalf("definition nodes: %v", err)
 	}
 	drafts := &memDrafts{defs: map[string]methodology.Methodology{"impact-analysis@1.2.0": *impact.Methodology}}
 	builtins := e.Executors[methodology.KindBuiltin].(BuiltinExecutor)
@@ -68,7 +89,7 @@ func TestSelfObservationProposesAndDrafts(t *testing.T) {
 		builtins[k] = v
 	}
 
-	op, err := e.Start(ctx, StartRequest{Methodology: obs.Name, Agent: "observer", Goal: "improve_methodology", BaselineID: res.Baseline,
+	op, err := e.Start(ctx, StartRequest{Methodology: obs.Name, Agent: "observer", Goal: "improve_methodology", BaselineID: res.Baseline.ID,
 		Intent: "observe", Vars: map[string]any{"event": map[string]any{"process": map[string]any{"id": p.ID}}}})
 	if err != nil {
 		t.Fatal(err)

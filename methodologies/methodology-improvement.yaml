@@ -1,6 +1,6 @@
 name: methodology-improvement
 version: 1.3.0
-namespace: platform
+namespace: methodology
 description: >
   Platform self-observation: at the end of each process, an agent analyzes the
   execution journal (planning ticks, actions, LLM and tool calls) and the
@@ -10,7 +10,6 @@ description: >
   agent definitions, new actions, MCP tools. Accepted proposals become a new
   draft version of the methodology.
 
-domainRef: platform@1.1.0
 
 conditions:
   - name: analyzed
@@ -79,15 +78,15 @@ actions:
       Here is the cost report of a run (journal + traces):
       {{range .Artifacts}}{{if eq .Type "cost_report"}}{{json .Data}}{{end}}{{end}}
 
-      Propose changes to the elements of the methodology (nodes with key
-      "M:<methodology>/<action|agent|goal|condition>/<name>"), each as a change impact
+      Propose changes to the elements of the observed methodology version (definition nodes with key
+      "MV:<methodology>@<version>/<action|agent|goal|condition>/<name>"), each as a change impact
       declared then written:
       - a modified action (kind, model, cost, prompt, code…) or agent (actions, planner):
         {"kind":"changeImpact","changeImpact":{"op":"declare","intent":"modified","key":"<element key>","rationale":"<title>: <why>"}}
         {"kind":"changeImpact","changeImpact":{"op":"write","node":"<element key>","props":{...changed properties}}}
-      - a created Action with "specializes" (a script systematizing an LLM call), or a created ToolRequest
+      - a created methodology@Action with "specializes" (a script systematizing an LLM call), or a created methodology@ToolRequest
         for an MCP tool to be created (name, description, motivation):
-        {"kind":"changeImpact","changeImpact":{"op":"declare","intent":"created","type":"Action","key":"<new key>","rationale":"<title>: <why>"}}
+        {"kind":"changeImpact","changeImpact":{"op":"declare","intent":"created","type":"methodology@Action","key":"<new key>","rationale":"<title>: <why>"}}
         {"kind":"changeImpact","changeImpact":{"op":"write","node":"<new key>","props":{...}}}
       Finish with an artifact of type "improvement_plan" with data.notes (a list of remarks).
 

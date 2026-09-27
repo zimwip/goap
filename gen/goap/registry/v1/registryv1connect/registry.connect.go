@@ -111,9 +111,8 @@ type RegistryServiceClient interface {
 	DeleteMethodology(context.Context, *connect.Request[v1.DeleteMethodologyRequest]) (*connect.Response[v1.DeleteMethodologyResponse], error)
 	ImportMethodology(context.Context, *connect.Request[v1.ImportMethodologyRequest]) (*connect.Response[v1.ImportMethodologyResponse], error)
 	ExportMethodology(context.Context, *connect.Request[v1.ExportMethodologyRequest]) (*connect.Response[v1.ExportMethodologyResponse], error)
-	// Domains are the shared object part (node types, link types) that
-	// methodologies reference with domain_ref. They have the same lifecycle as
-	// methodologies but are edited on their own: no change, impact or proposal.
+	// Domains are the object part (node types, link types, lifecycles, algorithms), one per namespace (ADR 0013);
+	// methodologies reference their types as <namespace>@<type>. They have the same lifecycle as methodologies.
 	ListDomains(context.Context, *connect.Request[v1.ListDomainsRequest]) (*connect.Response[v1.ListDomainsResponse], error)
 	// version empty = latest published version
 	GetDomain(context.Context, *connect.Request[v1.GetDomainRequest]) (*connect.Response[v1.GetDomainResponse], error)
@@ -405,9 +404,8 @@ type RegistryServiceHandler interface {
 	DeleteMethodology(context.Context, *connect.Request[v1.DeleteMethodologyRequest]) (*connect.Response[v1.DeleteMethodologyResponse], error)
 	ImportMethodology(context.Context, *connect.Request[v1.ImportMethodologyRequest]) (*connect.Response[v1.ImportMethodologyResponse], error)
 	ExportMethodology(context.Context, *connect.Request[v1.ExportMethodologyRequest]) (*connect.Response[v1.ExportMethodologyResponse], error)
-	// Domains are the shared object part (node types, link types) that
-	// methodologies reference with domain_ref. They have the same lifecycle as
-	// methodologies but are edited on their own: no change, impact or proposal.
+	// Domains are the object part (node types, link types, lifecycles, algorithms), one per namespace (ADR 0013);
+	// methodologies reference their types as <namespace>@<type>. They have the same lifecycle as methodologies.
 	ListDomains(context.Context, *connect.Request[v1.ListDomainsRequest]) (*connect.Response[v1.ListDomainsResponse], error)
 	// version empty = latest published version
 	GetDomain(context.Context, *connect.Request[v1.GetDomainRequest]) (*connect.Response[v1.GetDomainResponse], error)

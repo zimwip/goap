@@ -6,33 +6,45 @@ import (
 )
 
 func TestSubtyping(t *testing.T) {
+	d, err := ParseDomain([]byte(`
+name: sec
+version: "1.0.0"
+nodeTypes:
+  - {name: Requirement}
+  - {name: SecurityRequirement, extends: Requirement}
+  - {name: CryptoRequirement, extends: SecurityRequirement}
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
 	m, err := Parse([]byte(`
 name: st
 version: "1.0.0"
-domain:
-  nodeTypes:
-    - {name: Requirement}
-    - {name: SecurityRequirement, extends: Requirement}
-    - {name: CryptoRequirement, extends: SecurityRequirement}
-conditions: [{name: c, expr: 'changeImpacts.exists(n, "Requirement" in n.types)'}]
+namespace: sec
+conditions: [{name: c, expr: 'changeImpacts.exists(n, "sec@Requirement" in n.types)'}]
 actions: [{name: a, kind: human, effects: {c: true}}]
 goals: [{name: g, pre: {c: true}}]
 `))
 	if err != nil {
 		t.Fatal(err)
 	}
+	m = m.Resolve(DomainTypes(d))
 	if is := m.Validate(); len(is) > 0 {
 		t.Fatal(is)
 	}
-	if got := m.Supertypes()["CryptoRequirement"]; !slices.Equal(got, []string{"SecurityRequirement", "Requirement"}) {
+	if got := m.Supertypes()["sec@CryptoRequirement"]; !slices.Equal(got, []string{"sec@SecurityRequirement", "sec@Requirement"}) {
 		t.Fatalf("supertypes %v", got)
 	}
-	m.Domain.NodeTypes[0].Extends = "CryptoRequirement"
-	if is := m.Validate(); len(is) == 0 {
+	d.NodeTypes[0].Extends = "CryptoRequirement"
+	if is := d.Validate(); len(is) == 0 {
 		t.Fatal("cycle not reported")
 	}
-	m.Domain.NodeTypes[0].Extends = "Nope"
-	if is := m.Validate(); len(is) == 0 || is[0].Path != "domain.nodeTypes[0].extends" {
+	d.NodeTypes[0].Extends = "Nope"
+	if is := d.Validate(); len(is) == 0 || is[0].Path != "nodeTypes[0].extends" {
 		t.Fatalf("unknown parent: %v", is)
+	}
+	d.NodeTypes[0].Extends = "other@Base"
+	if is := d.Validate(); len(is) != 0 {
+		t.Fatalf("a type of another domain is resolved by the type catalogue: %v", is)
 	}
 }

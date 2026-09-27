@@ -52,16 +52,14 @@ type Engine struct {
 	// MaxFailures disables an action after that many executions without the
 	// promised effects (default 2).
 	MaxFailures int
+	// Types returns the type catalogue in force (ADR 0012 §2): the ancestors behind `x.types`. Unset, or nil, the
+	// methodology's own resolved types apply.
+	Types func() methodology.TypeSet
 
-	locks      sync.Map // process id -> *sync.Mutex
-	supertypes SupertypesCache
-	now        func() time.Time
-	bg         sync.WaitGroup
+	locks sync.Map // process id -> *sync.Mutex
+	now   func() time.Time
+	bg    sync.WaitGroup
 }
-
-// InvalidateSupertypes drops the cached NodeType ancestry of a methodology
-// (called when the graph service reports a metadata-layer change, ADR 0012).
-func (e *Engine) InvalidateSupertypes(methodology string) { e.supertypes.Invalidate(methodology) }
 
 // background runs f in a tracked goroutine (see Drain).
 func (e *Engine) background(f func()) {
@@ -891,7 +889,7 @@ func (e *Engine) observe(ctx context.Context, p *Process, m *methodology.Compile
 	}
 	bb.Vars = p.Vars
 	p.Org = domain.OrgOf(bb.Change.OwnerOrg)
-	bb.Supertypes = e.supertypes.Get(ctx, e.Graph, m)
+	bb.Supertypes = e.supertypesOf(m)
 	res := m.Conditions.Evaluate(bb)
 	p.World = res.State
 	p.Unknown = res.Errors
@@ -1003,4 +1001,15 @@ func truncate(s string, n int) string {
 		return s
 	}
 	return string(r[:n-1]) + "…"
+}
+
+// supertypesOf is the ancestry of the node types for the conditions (`x.types`): the catalogue in force, else the
+// types the methodology was resolved with.
+func (e *Engine) supertypesOf(m *methodology.Compiled) map[string][]string {
+	if e.Types != nil {
+		if t := e.Types(); t != nil {
+			return t.Supertypes()
+		}
+	}
+	return m.Supertypes()
 }

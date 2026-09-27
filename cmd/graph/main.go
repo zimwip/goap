@@ -3,8 +3,9 @@ package main
 
 import (
 	"context"
-	"encoding/json"
+	"fmt"
 	"log/slog"
+	"slices"
 	"time"
 
 	"github.com/zimwip/goap/gen/goap/graph/v1/graphv1connect"
@@ -14,52 +15,32 @@ import (
 	"github.com/zimwip/goap/internal/registrysvc"
 	"github.com/zimwip/goap/internal/telemetry"
 	"github.com/zimwip/goap/pkg/access"
-	"github.com/zimwip/goap/pkg/engine"
 	"github.com/zimwip/goap/pkg/graph"
-	"github.com/zimwip/goap/pkg/metamodel"
+	"github.com/zimwip/goap/pkg/methodology"
+	"github.com/zimwip/goap/pkg/typecat"
 )
 
-// syncMethodologies projects every published methodology at startup,
-// retrying while the registry is not reachable. Every synced methodology is
-// then, when the projection changed
-// the graph, reported on events so the engine invalidates its ancestor cache.
-func syncMethodologies(ctx context.Context, log *slog.Logger, g *graph.Graph, reg metamodel.Published, events engine.Publisher) {
+// loadTypes loads the type catalogue until it holds the domains the seeds write to (the registry may start after
+// the graph, and seeds its domains once the graph answers), then runs the seeds.
+func loadTypes(ctx context.Context, log *slog.Logger, types *typecat.Live, need []string, seed func()) {
 	for delay := time.Second; ; delay = min(2*delay, time.Minute) {
-		n, err := syncAll(ctx, log, g, reg, events)
+		err := types.Reload(ctx)
 		if err == nil {
-			log.Info("methodologies projected onto the graph", "methodologies", n)
-			return
+			missing := slices.DeleteFunc(slices.Clone(need), func(ns string) bool { _, ok := types.Get().Domains()[ns]; return ok })
+			if len(missing) == 0 {
+				log.Info("type catalogue loaded", "domains", len(types.Get().Domains()))
+				seed()
+				return
+			}
+			err = fmt.Errorf("domains %v not published yet", missing)
 		}
-		log.Warn("methodology projection", "err", err, "retry", delay)
+		log.Warn("type catalogue", "err", err, "retry", delay)
 		select {
 		case <-ctx.Done():
 			return
 		case <-time.After(delay):
 		}
 	}
-}
-
-// syncAll projects every published methodology (and the shared domains they
-// reference) and reports graph changes.
-func syncAll(ctx context.Context, log *slog.Logger, g *graph.Graph, reg metamodel.Published, events engine.Publisher) (int, error) {
-	rs, err := metamodel.SyncAll(ctx, g, reg)
-	if err != nil {
-		return 0, err
-	}
-	for _, res := range rs {
-		if res.Changed() && res.Methodology != "" { // a domain no methodology references: no methodology cache to drop
-			publishNodeTypeChanged(ctx, events, res.Methodology)
-		}
-	}
-	return len(rs), nil
-}
-
-// publishNodeTypeChanged reports that a methodology's metadata layer may have
-// changed (ADR 0012): the engine invalidates its NodeType ancestor cache for
-// it. Published on every graph-changing Sync, not only when the NodeType
-// elements themselves changed — over-invalidating is harmless.
-func publishNodeTypeChanged(ctx context.Context, events engine.Publisher, methodology string) {
-	_ = events.Publish(ctx, "goap.graph.nodetype.changed", map[string]string{"methodology": methodology})
 }
 
 func main() {
@@ -79,72 +60,57 @@ func main() {
 
 	g := graph.New(repo)
 	g.Observe(events) // node and baseline events feed the node index (ADR 0026)
-	if platform.Env("GOAP_GRAPH_SEED", "") == "demo" {
-		seeded, err := graphsvc.SeedDemo(ctx, g)
-		if err != nil {
-			platform.Fatal(log, "seed", err)
-		}
-		log.Info("demo seed", "loaded", seeded)
+	// the graph judges nodes by the types of the published domains (ADR 0012): the registry is the reference, the
+	// graph holds a copy reloaded on its domain events; without a registry, the domain files are the source
+	var source typecat.Source = func(context.Context) ([]*methodology.Domain, error) {
+		return methodology.LoadDomains(platform.Env("GOAP_DOMAINS_DIR", "domains"))
 	}
-	if _, err := graphsvc.SeedAccess(ctx, g); err != nil {
-		platform.Fatal(log, "seed access", err)
-	}
-	if seeded, err := graphsvc.SeedDefaults(ctx, g); err != nil {
-		platform.Fatal(log, "seed defaults", err)
-	} else if seeded {
-		log.Info("default organisation created")
-	}
-	// the model gateway configuration (providers, models, aliases) is graph data: seeded when the graph has none
-	if cfg, err := modelgw.InitialConfig(ctx, platform.Env("GOAP_MODELS_CONFIG", ""), platform.NewSecrets()); err != nil {
-		platform.Fatal(log, "models config", err)
-	} else if provs, models, aliases, err := cfg.Objects(); err != nil {
-		platform.Fatal(log, "models config", err)
-	} else if seeded, err := graphsvc.SeedModels(ctx, g, provs, models, aliases); err != nil {
-		platform.Fatal(log, "seed models", err)
-	} else if seeded {
-		log.Info("model gateway configuration created", "providers", len(provs), "models", len(models), "aliases", len(aliases))
-	}
-	// the published methodologies are projected onto the graph as versioned elements
 	if url := platform.Env("GOAP_REGISTRY_URL", ""); url != "" {
-		reg := registrysvc.NewClient(platform.H2CClient(), url, telemetry.ClientOptions()...)
-		go syncMethodologies(ctx, log, g, reg, events)
-		if err := events.Subscribe("goap.registry.methodology.published", func(data []byte) {
-			var ev struct{ Name, Version string }
-			if json.Unmarshal(data, &ev) != nil || ev.Name == "" {
-				return
+		source = registrysvc.NewClient(platform.H2CClient(), url, telemetry.ClientOptions()...).Domains
+	}
+	types := typecat.NewLive(source)
+	g.Types = func() graph.TypeCatalog { return types.Get() }
+	for _, subject := range []string{"goap.registry.domain.published", "goap.registry.domain.deleted"} {
+		if err := events.Subscribe(subject, func([]byte) {
+			if err := types.Reload(context.Background()); err != nil {
+				log.Error("type catalogue", "err", err)
 			}
-			m, err := reg.Methodology(context.Background(), ev.Name)
+		}); err != nil {
+			platform.Fatal(log, "subscribe", err)
+		}
+	}
+	need := []string{"organisation", "platform"}
+	demo := platform.Env("GOAP_GRAPH_SEED", "") == "demo"
+	if demo {
+		need = append(need, "alm")
+	}
+	go loadTypes(ctx, log, types, need, func() {
+		if demo {
+			seeded, err := graphsvc.SeedDemo(ctx, g)
 			if err != nil {
-				log.Error("published methodology", "name", ev.Name, "err", err)
-				return
+				log.Error("seed", "err", err)
 			}
-			if res, err := metamodel.Sync(context.Background(), g, m.Methodology); err != nil {
-				log.Error("methodology projection", "name", ev.Name, "err", err)
-			} else {
-				if res.Changed() {
-					log.Info("methodology projected onto the graph", "name", ev.Name, "version", ev.Version, "change", res.Change)
-					publishNodeTypeChanged(context.Background(), events, ev.Name)
-				}
-			}
-		}); err != nil {
-			platform.Fatal(log, "subscribe", err)
+			log.Info("demo seed", "loaded", seeded)
 		}
-	}
-	// a published domain reaches the methodologies that follow its latest
-	// version: project everything again (idempotent)
-	if url := platform.Env("GOAP_REGISTRY_URL", ""); url != "" {
-		reg := registrysvc.NewClient(platform.H2CClient(), url, telemetry.ClientOptions()...)
-		if err := events.Subscribe("goap.registry.domain.published", func([]byte) {
-			ctx := context.Background()
-			if n, err := syncAll(ctx, log, g, reg, events); err != nil {
-				log.Error("domain projection", "err", err)
-			} else {
-				log.Info("domain published: methodologies projected again", "methodologies", n)
-			}
-		}); err != nil {
-			platform.Fatal(log, "subscribe", err)
+		if _, err := graphsvc.SeedAccess(ctx, g); err != nil {
+			log.Error("seed access", "err", err)
 		}
-	}
+		if seeded, err := graphsvc.SeedDefaults(ctx, g); err != nil {
+			log.Error("seed defaults", "err", err)
+		} else if seeded {
+			log.Info("default organisation created")
+		}
+		// the model gateway configuration (providers, models, aliases) is graph data: seeded when the graph has none
+		if cfg, err := modelgw.InitialConfig(ctx, platform.Env("GOAP_MODELS_CONFIG", ""), platform.NewSecrets()); err != nil {
+			log.Error("models config", "err", err)
+		} else if provs, models, aliases, err := cfg.Objects(); err != nil {
+			log.Error("models config", "err", err)
+		} else if seeded, err := graphsvc.SeedModels(ctx, g, provs, models, aliases); err != nil {
+			log.Error("seed models", "err", err)
+		} else if seeded {
+			log.Info("model gateway configuration created", "providers", len(provs), "models", len(models), "aliases", len(aliases))
+		}
+	})
 	authorizer, err := access.NewAuthorizer(&access.Directory{Graph: g})
 	if err != nil {
 		platform.Fatal(log, "authorizer", err)

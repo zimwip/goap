@@ -53,11 +53,7 @@ func (h *Handler) ListMethodologies(ctx context.Context, r *connect.Request[regi
 }
 
 func (h *Handler) GetMethodology(ctx context.Context, r *connect.Request[registryv1.GetMethodologyRequest]) (*connect.Response[registryv1.GetMethodologyResponse], error) {
-	get := h.Service.Get
-	if r.Msg.ResolveDomain {
-		get = h.Service.GetResolved
-	}
-	rec, err := get(ctx, r.Msg.Name, r.Msg.Version)
+	rec, err := h.Service.Get(ctx, r.Msg.Name, r.Msg.Version)
 	if err != nil {
 		return nil, toConnect(err)
 	}

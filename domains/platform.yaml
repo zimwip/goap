@@ -1,46 +1,15 @@
 name: platform
-version: 1.1.0
+version: 2.0.0
 description: >
-  The platform model, in its own namespace ("platform"): the methodology meta-model as domain objects (methodology, agent, action, goal, condition, trigger, node type), used by the self-observation methodology, the MCPs (the generic usage of a tool by an LLM) and the adapter definitions (AdapterDef: code mapping an MCP onto a connector). An organisation implements an MCP with an Adapter (organisation domain), an instance of an AdapterDef.
+  The platform configuration, in its own namespace ("platform"): the MCPs (the generic usage of a tool by an LLM), the
+  adapter definitions (AdapterDef: code mapping an MCP onto a connector; an organisation implements an MCP with an Adapter
+  of the organisation domain, an instance of an AdapterDef) and the model gateway configuration (ADR 0021). The
+  definitions of methodologies and domains are typed by the built-in meta-domains "methodology" and "domain" (ADR 0023).
 nodeTypes:
-  # `editor` names the editor of the user interface for the nodes of a type (the default node editor when empty or unknown):
-  # the elements of a published methodology open on its version in the methodology editor.
-  - {name: Methodology, editor: methodology, properties: [name, version, description]}
-  - {name: Agent, editor: agent, properties: [name, planner, actions, goals]}
-  - {name: Action, editor: action, properties: [name, kind, cost, model, prompt, code, specializes, when, priority]}
-  - {name: Goal, editor: goal, properties: [name, pre]}
-  - {name: Condition, editor: condition, properties: [name, expr]}
-  - {name: Trigger, properties: [name, type, event]}
-  - {name: NodeType, properties: [name, extends]}
-  # the registry's stored definitions (ADR 0023): a version of a methodology or a domain is a header node (scalar fields, status,
-  # timestamps) and one node per element of its definition, tied by `defines`. Methodology nodes live in the "methodology"
-  # namespace and domain nodes in the "domain" namespace. These nodes are the authored definition; a published
-  # methodology is projected at run time onto the elements above (Methodology, Agent, Action, ..., NodeType).
-  # An element removed from a draft stays with removed=true (a node key is never freed), and comes back if it is added again.
-  - {name: MethodologyVersion, editor: methodology, description: "A version of a methodology: its header and status", properties: [name, version, description, namespace, domainRef, status, createdAt, updatedAt, publishedAt, updatedBy]}
-  - {name: DomainVersion, editor: domain, description: "A version of a shared domain: its header and status", properties: [name, version, description, status, createdAt, updatedAt, publishedAt, updatedBy]}
-  - {name: DefCondition, editor: condition, description: "Condition of a stored methodology version", properties: [name, description, expr, position, removed]}
-  - {name: DefAction, editor: action, description: "Action of a stored methodology version", properties: [name, kind, description, position, removed]}
-  - {name: DefGoal, editor: goal, description: "Goal of a stored methodology version", properties: [name, description, pre, position, removed]}
-  - {name: DefAgent, editor: agent, description: "Agent (with its triggers) of a stored methodology version", properties: [name, planner, actions, goals, triggers, position, removed]}
-  - {name: DefNodeType, editor: definition, description: "Node type of a stored methodology or domain version", properties: [name, extends, lifecycle, position, removed]}
-  - {name: DefLinkType, editor: definition, description: "Link type of a stored methodology or domain version", properties: [name, from, to, position, removed]}
-  - {name: DefLifecycle, editor: definition, description: "Lifecycle of a stored methodology or domain version", properties: [name, initial, states, transitions, position, removed]}
-  - {name: DefAlgorithm, editor: algorithm, description: "Algorithm of a stored domain version", properties: [name, type, language, code, params, position, removed]}
-  - {name: DefAlgorithmInstance, editor: instance, description: "Algorithm instance of a stored domain version", properties: [name, algorithm, values, position, removed]}
+  # `editor` names the editor of the user interface for the nodes of a type (the default node editor when empty or unknown).
   # the MCPs (MCP:<name>) and the adapter definitions (ADD:<name>, ADR 0019)
   - {name: MCP, editor: mcp, description: "Generic usage of a tool by an LLM: its tool signatures", properties: [name, description, tools]}
   - {name: AdapterDef, editor: adapter, description: "Code implementing the tools of an MCP with the operations of a connector", properties: [name, description, mcp, connector, language, code, params]}
   - {name: LlmProvider, description: "LLM provider: a kind (preset) on a wire protocol", properties: [name, kind, protocol, baseURL, enabled, apiKeyRef]}
   - {name: LlmModel, description: "Model offered on the platform, with its global quota and the roles that may call it", properties: [provider, model, displayName, enabled, quotaTokens, quotaPeriod, roles]}
   - {name: LlmAlias, description: "Name (default, fast, ...) of a model, as provider/model", properties: [alias, target]}
-linkTypes:
-  - {name: contains, from: Methodology}
-  - {name: uses, from: Agent, to: Action}
-  - {name: pursues, from: Agent, to: Goal}
-  - {name: has, from: Agent, to: Trigger}
-  - {name: requires, to: Condition}
-  - {name: achieves, from: Action, to: Condition}
-  - {name: specializes, from: Action, to: Action}
-  - {name: defines}
-  - {name: extends, from: NodeType, to: NodeType}

@@ -9,6 +9,10 @@ nodeTypes:
   - {name: Action, editor: action, description: "Action of a methodology version", properties: [name, kind, description, position, removed]}
   - {name: Condition, editor: condition, description: "Condition of a methodology version", properties: [name, description, expr, position, removed]}
   - {name: Goal, editor: goal, description: "Goal of a methodology version", properties: [name, description, pre, position, removed]}
+  # an MCP tool the self-observation asks the platform for (ADR 0011): not part of a definition
+  - {name: ToolRequest, description: "MCP tool requested by the self-observation of a methodology", properties: [name, description, motivation, span]}
 linkTypes:
   # a version -> its elements
   - {name: defines, from: MethodologyVersion}
+  # a specialization -> the action it specializes (proposed by the self-observation)
+  - {name: specializes, from: Action, to: Action}

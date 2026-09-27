@@ -24,9 +24,8 @@ service RegistryService {
   rpc ImportMethodology(ImportMethodologyRequest) returns (ImportMethodologyResponse);
   rpc ExportMethodology(ExportMethodologyRequest) returns (ExportMethodologyResponse);
 
-  // Domains are the shared object part (node types, link types) that
-  // methodologies reference with domain_ref. They have the same lifecycle as
-  // methodologies but are edited on their own: no change, impact or proposal.
+  // Domains are the object part (node types, link types, lifecycles, algorithms), one per namespace (ADR 0013);
+  // methodologies reference their types as <namespace>@<type>. They have the same lifecycle as methodologies.
   rpc ListDomains(ListDomainsRequest) returns (ListDomainsResponse);
   // version empty = latest published version
   rpc GetDomain(GetDomainRequest) returns (GetDomainResponse);
@@ -275,8 +274,8 @@ message Methodology {
   string description = 3;
   // draft | published | archived (read only)
   string status = 4;
-  repeated NodeType node_types = 5;
-  repeated LinkType link_types = 6;
+  reserved 5, 6, 15, 16;
+  reserved "node_types", "link_types", "domain_ref", "lifecycles";
   repeated Condition conditions = 7;
   repeated Action actions = 8;
   repeated Goal goals = 9;
@@ -285,10 +284,7 @@ message Methodology {
   google.protobuf.Timestamp published_at = 12;
   string updated_by = 13;
   repeated Agent agents = 14;
-  // shared domain "<name>[@<version>]" used instead of node_types / link_types
-  string domain_ref = 15;
-  repeated Lifecycle lifecycles = 16;
-  // graph namespace the changes of the methodology act on (default sdlc)
+  // target namespace: the namespace (domain) the changes of the methodology act on (ADR 0013)
   string namespace = 17;
 }
 
@@ -332,9 +328,8 @@ message ListMethodologiesResponse {
 message GetMethodologyRequest {
   string name = 1;
   string version = 2;
-  // fill node_types / link_types from the referenced domain (engine use);
-  // editors leave it unset to get the definition as stored
-  bool resolve_domain = 3;
+  reserved 3;
+  reserved "resolve_domain";
 }
 
 message GetMethodologyResponse {
@@ -527,7 +522,7 @@ message DomainUser {
 }
 
 message GetDomainUsageResponse {
-  // methodology versions whose domain_ref resolves to the domain version
+  // methodology versions that act on the namespace of the domain or reference its types
   repeated DomainUser methodologies = 1;
 }
 

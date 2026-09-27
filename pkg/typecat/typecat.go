@@ -6,12 +6,12 @@
 package typecat
 
 import (
-	"embed"
+	"context"
 	"errors"
 	"fmt"
 	"slices"
 	"sort"
-	"sync"
+	"sync/atomic"
 
 	"github.com/zimwip/goap/pkg/algo"
 	"github.com/zimwip/goap/pkg/domain"
@@ -66,37 +66,8 @@ var ErrUnknown = errors.New("unknown type")
 // ErrInvalid marks a node or a link that breaks the types of the catalogue.
 var ErrInvalid = errors.New("invalid")
 
-//go:embed meta/*.yaml
-var metaFS embed.FS
-
-var (
-	metaOnce sync.Once
-	metaDs   []*methodology.Domain
-	metaErr  error
-)
-
 // Meta returns the built-in meta-domains (methodology, domain).
-func Meta() []*methodology.Domain {
-	metaOnce.Do(func() {
-		for _, f := range []string{"meta/methodology.yaml", "meta/domain.yaml"} {
-			src, err := metaFS.ReadFile(f)
-			if err != nil {
-				metaErr = err
-				return
-			}
-			d, err := methodology.ParseDomain(src)
-			if err != nil {
-				metaErr = fmt.Errorf("%s: %w", f, err)
-				return
-			}
-			metaDs = append(metaDs, d)
-		}
-	})
-	if metaErr != nil {
-		panic(metaErr) // embedded, covered by the tests
-	}
-	return metaDs
-}
+func Meta() []*methodology.Domain { return methodology.MetaDomains() }
 
 // IsMeta reports a namespace of a built-in meta-domain.
 func IsMeta(ns string) bool {
@@ -307,6 +278,12 @@ func (c *Catalog) Search(typ string) []domain.SearchProperty {
 	return nil
 }
 
+// HasNodeType reports a known qualified node type (methodology.TypeSet).
+func (c *Catalog) HasNodeType(ref string) bool { _, ok := c.Type(ref); return ok }
+
+// HasLinkType reports a known qualified link type (methodology.TypeSet).
+func (c *Catalog) HasLinkType(ref string) bool { _, ok := c.LinkType(ref); return ok }
+
 // Types lists the node types, sorted by reference.
 func (c *Catalog) Types() []*Type {
 	out := make([]*Type, 0, len(c.types))
@@ -387,5 +364,39 @@ func (c *Catalog) CheckLink(typ, from, to string) error {
 			return fmt.Errorf("link %s: the %s must be a %s, not a %s: %w", typ, e.end, e.want, e.got, ErrInvalid)
 		}
 	}
+	return nil
+}
+
+// Source returns the latest published version of every domain (the registry: registrysvc.Service or its client).
+type Source func(ctx context.Context) ([]*methodology.Domain, error)
+
+// Live holds the catalogue in force of a service: the built-in meta-domains until Reload succeeds, then the published
+// domains of its source, reloaded when the registry reports a domain event.
+type Live struct {
+	src Source
+	cur atomic.Pointer[Catalog]
+}
+
+// NewLive returns a holder of the catalogue of src, starting with the built-in meta-domains.
+func NewLive(src Source) *Live {
+	l := &Live{src: src}
+	l.cur.Store(Builtin())
+	return l
+}
+
+// Get returns the catalogue in force.
+func (l *Live) Get() *Catalog { return l.cur.Load() }
+
+// Reload rebuilds the catalogue from the source; the previous one stays in force on failure.
+func (l *Live) Reload(ctx context.Context) error {
+	ds, err := l.src(ctx)
+	if err != nil {
+		return err
+	}
+	c, err := New(ds...)
+	if err != nil {
+		return err
+	}
+	l.cur.Store(c)
 	return nil
 }

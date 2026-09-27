@@ -116,12 +116,20 @@ func (e *Engine) applyNodeOps(ctx context.Context, p *Process, ops []dsl.NodeOp,
 		}
 		return domain.NodeRef{}, fmt.Errorf("unknown node %q", s)
 	}
+	// a bare type or link type written by an action (LLM output, script, human input) is one of the target
+	// namespace of the change (ADR 0012): "Requirement" in a change of alm is alm@Requirement
+	qualify := func(t string) string {
+		if t == "" || strings.Contains(t, domain.TypeSep) || bb.Change.Namespace == "" {
+			return t
+		}
+		return bb.Change.Namespace + domain.TypeSep + t
+	}
 	var declared []domain.ChangeImpactID
 	for i, op := range ops {
 		fail := func(err error) error { return fmt.Errorf("change impact operation %d (%s): %w", i, op.Op, err) }
 		switch op.Op {
 		case "declare":
-			cn := domain.ChangeImpact{Intent: domain.NodeIntent(op.Intent), Key: op.Key, Type: op.Type, Rationale: op.Rationale, ProducedBy: producedBy, Execution: execution, Flow: p.Flow}
+			cn := domain.ChangeImpact{Intent: domain.NodeIntent(op.Intent), Key: op.Key, Type: qualify(op.Type), Rationale: op.Rationale, ProducedBy: producedBy, Execution: execution, Flow: p.Flow}
 			if cn.Intent == domain.IntentModified {
 				ref, ok := baseline[op.Key]
 				if !ok {
@@ -146,7 +154,7 @@ func (e *Engine) applyNodeOps(ctx context.Context, p *Process, ops []dsl.NodeOp,
 				if err != nil {
 					return declared, fail(err)
 				}
-				w.AddLinks = append(w.AddLinks, graph.LinkWrite{Type: l.Type, To: to})
+				w.AddLinks = append(w.AddLinks, graph.LinkWrite{Type: qualify(l.Type), To: to})
 			}
 			for _, l := range op.RemoveLinks {
 				w.RemoveLinks = append(w.RemoveLinks, domain.LinkID(l))

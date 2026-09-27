@@ -216,7 +216,7 @@ func (a *applier) checkTransition(n domain.Node, t domain.Transition) ([]domain.
 	var children []domain.Node
 	if t.Children != nil || t.Guard != "" || len(t.GuardAlgos) > 0 || len(t.ActionAlgos) > 0 {
 		for _, l := range out {
-			if l.Type != domain.LinkContains {
+			if !domain.IsContains(l.Type) {
 				continue
 			}
 			v, ok := a.target[l.To.ID]
