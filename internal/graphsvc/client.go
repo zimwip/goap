@@ -92,6 +92,19 @@ func (c *Client) ReviewNodeOn(ctx context.Context, id domain.ChangeID, flow, exe
 	return pbconv.ChangeImpactFromPB(r.Msg.Node), nil
 }
 
+// Changes lists every change known to the graph service.
+func (c *Client) Changes(ctx context.Context) ([]domain.Change, error) {
+	r, err := c.rpc.ListChanges(ctx, connect.NewRequest(&graphv1.ListChangesRequest{}))
+	if err != nil {
+		return nil, rpcerr.FromConnect(err)
+	}
+	out := make([]domain.Change, len(r.Msg.Changes))
+	for i, ch := range r.Msg.Changes {
+		out[i] = pbconv.ChangeFromPB(ch)
+	}
+	return out, nil
+}
+
 // Commit runs a change of node edits in the graph service (see graph.Commit).
 func (c *Client) Commit(ctx context.Context, in graph.Commit) (graph.CommitResult, error) {
 	r, err := c.rpc.CommitEdits(ctx, connect.NewRequest(&graphv1.CommitEditsRequest{Namespace: in.Namespace, Title: in.Title, Intent: in.Intent,

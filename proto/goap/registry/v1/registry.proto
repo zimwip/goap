@@ -223,7 +223,7 @@ message Agent {
   string name = 1;
   string description = 2;
   repeated string examples = 3;
-  // goap | utility | hybrid
+  // goap | utility | hybrid | llm | llm-scoring
   string planner = 4;
   // admissible action names (empty: all)
   repeated string actions = 5;
@@ -233,6 +233,8 @@ message Agent {
   repeated Trigger triggers = 7;
   // MCPs whose tools the llm and script actions of the agent may use
   repeated string mcps = 8;
+  // LLM alias (required when planner is llm or llm-scoring)
+  string model = 9;
 }
 
 // A trigger starts the agent automatically.

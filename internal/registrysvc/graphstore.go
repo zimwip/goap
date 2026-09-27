@@ -27,6 +27,13 @@ type StoreGraph interface {
 	CreateBaseline(ctx context.Context, namespace, name string, nodes []domain.NodeRef) (domain.Baseline, error)
 	// Commit runs a change of node edits (ADR 0024).
 	Commit(ctx context.Context, in graph.Commit) (graph.CommitResult, error)
+	// CreateChange, AddNodes and WriteNode let a producer open a change on a namespace of its own
+	// and propose a pending (not auto-accepted) change impact on it (used for alias stubs, see
+	// aliasstubs.go); Changes lists every change, for the pending-stub dedup check.
+	CreateChange(ctx context.Context, in graph.NewChange) (domain.Change, error)
+	AddNodes(ctx context.Context, id domain.ChangeID, nodes []domain.ChangeImpact) ([]domain.ChangeImpact, error)
+	WriteNode(ctx context.Context, id domain.ChangeID, node domain.ChangeImpactID, w graph.NodeWrite) (domain.ChangeImpact, error)
+	Changes(ctx context.Context) ([]domain.Change, error)
 }
 
 // linkDefines is the link type that ties a methodology version to the elements of its definition.
@@ -53,6 +60,10 @@ type GraphStore struct {
 }
 
 var _ Store = (*GraphStore)(nil)
+
+// aliasStubGraph exposes the underlying graph to ensureAliasStubs (aliasstubs.go): satisfied by *GraphStore
+// and by anything embedding it (e.g. a Store that also holds domains), through Go's method promotion.
+func (s *GraphStore) aliasStubGraph() StoreGraph { return s.Graph }
 
 // NewGraphStore returns a store over a graph (the graph itself, or a client of the graph service).
 func NewGraphStore(g StoreGraph) *GraphStore {

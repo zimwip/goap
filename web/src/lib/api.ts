@@ -289,7 +289,7 @@ export interface Expectation {
 
 export type ActionKind = 'llm' | 'script' | 'tool' | 'human' | 'builtin' | 'abstract';
 export type ScriptLanguage = 'javascript' | 'go';
-export type PlannerKind = 'goap' | 'utility' | 'hybrid';
+export type PlannerKind = 'goap' | 'utility' | 'hybrid' | 'llm' | 'llm-scoring';
 
 export interface Action {
   name?: string;
@@ -368,6 +368,8 @@ export interface Agent {
   triggers?: Trigger[];
   /** MCPs whose tools the llm / script actions of the agent may use */
   mcps?: string[];
+  /** LLM alias the llm / llm-scoring planners call each planning cycle (required for them) */
+  model?: string;
 }
 
 export interface Goal {

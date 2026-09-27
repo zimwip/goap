@@ -7,8 +7,10 @@
   import PickList from './PickList.svelte';
   import TriggersEditor from './TriggersEditor.svelte';
   import { provideActions, useReveal } from '../../shell/workbench.svelte';
-  import { PLANNERS } from '../../methodologyForm';
+  import { PLANNERS, LLM_PLANNERS } from '../../methodologyForm';
   import { draftOf, draftActions, removeItemAction, syncTabUid } from './methodologyTabs';
+  import ModelAliasField from '../../components/ModelAliasField.svelte';
+  import { modelChoices, refreshModelChoices } from '../../stores/modelChoices.svelte';
 
   let { tab }: { tab: Tab } = $props();
 
@@ -32,7 +34,15 @@
     goap: 'GOAP — A* plan over preconditions and effects',
     utility: 'Utility — at each step, the highest-utility action',
     hybrid: 'Hybrid — GOAP plan tie-broken by utility',
+    llm: 'LLM — the model picks the next action directly',
+    'llm-scoring': 'LLM scoring — the model scores utility, GOAP plan tie-broken by it',
   };
+
+  const needsModel = $derived(!!item && (LLM_PLANNERS as readonly string[]).includes(item.planner));
+
+  $effect(() => {
+    if (needsModel && !modelChoices.loaded) void refreshModelChoices();
+  });
 
   const actionNames = $derived([...new Set(d.form.actions.map((a) => a.name.trim()).filter(Boolean))]);
   const goalNames = $derived([...new Set(d.form.goals.map((g) => g.name.trim()).filter(Boolean))]);
@@ -69,6 +79,12 @@
               {#each PLANNERS as pl (pl)}<option value={pl}>{PLANNER_LABELS[pl]}</option>{/each}
             </select>
           </div>
+          {#if needsModel}
+            <div class="field">
+              <label for="ag-model">Model <span class="opt">(this agent's planner calls it each planning cycle)</span></label>
+              <ModelAliasField id="ag-model" bind:value={item.model} bad={d.bad(`${p}.model`)} disabled={d.readonly} />
+            </div>
+          {/if}
         </div>
         <div class="field">
           <label for="ag-desc">Description <span class="opt">(used to identify the agent from an intent)</span></label>

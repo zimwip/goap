@@ -51,9 +51,11 @@ type TypeSet interface {
 
 // Planners.
 const (
-	PlannerGOAP    = "goap"    // A* over the world state
-	PlannerUtility = "utility" // greedy: the applicable action with the highest utility
-	PlannerHybrid  = "hybrid"  // A* with costs weighted by utilities
+	PlannerGOAP       = "goap"        // A* over the world state
+	PlannerUtility    = "utility"     // greedy: the applicable action with the highest utility
+	PlannerHybrid     = "hybrid"      // A* with costs weighted by utilities (CEL)
+	PlannerLLM        = "llm"         // the LLM picks the next action directly
+	PlannerLLMScoring = "llm-scoring" // the LLM scores utility; A* costs weighted by it, like hybrid
 )
 
 // DefaultAgent is the name of the implicit agent.
@@ -66,6 +68,9 @@ type Agent struct {
 	Description string   `yaml:"description,omitempty" json:"description,omitempty"`
 	Examples    []string `yaml:"examples,omitempty" json:"examples,omitempty"`
 	Planner     string   `yaml:"planner,omitempty" json:"planner,omitempty"`
+	// Model is the LLM alias (resolved by the platform, ADR 0021) the llm and llm-scoring
+	// planners call each planning cycle; required when Planner is one of them, unused otherwise.
+	Model string `yaml:"model,omitempty" json:"model,omitempty"`
 	// Actions admissible for the agent (empty: all).
 	Actions []string `yaml:"actions,omitempty" json:"actions,omitempty"`
 	// Goals of the agent (empty: all).
@@ -560,8 +565,12 @@ func (m *Methodology) compile() (*Compiled, Issues) {
 		}
 		switch ag.Planner {
 		case "", PlannerGOAP, PlannerUtility, PlannerHybrid:
+		case PlannerLLM, PlannerLLMScoring:
+			if ag.Model == "" {
+				add(path+".model", "model is required for the %s planner", ag.Planner)
+			}
 		default:
-			add(path+".planner", "planner must be goap, utility or hybrid")
+			add(path+".planner", "planner must be goap, utility, hybrid, llm or llm-scoring")
 		}
 		for _, name := range ag.MCPs {
 			if !mcp.ValidName(name) {

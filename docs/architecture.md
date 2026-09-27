@@ -312,18 +312,27 @@ Foundational decisions: [ADR 0001 — blackboard = change axis](adr/0001-change-
 
 ### 2.9 Agents and planners
 
-A methodology declares **agents** (Embabel): `{name, description, examples, planner, actions, goals}`.
+A methodology declares **agents** (Embabel): `{name, description, examples, planner, model, actions, goals}`.
 With no agent declared, an implicit `default` agent (all actions, all goals, `goap`) is used.
 
 | Planner | Choice of next action |
 |---|---|
 | `goap` | A\*: sequence of actions of minimal cost reaching the goal |
 | `utility` | the applicable action (preconditions true, effects not yet reached) with the greatest **utility**; no lookahead |
-| `hybrid` | A\* where each action's cost is divided by its utility: the goal is reached while favoring useful actions |
+| `hybrid` | A\* where each action's cost is divided by its utility (CEL): the goal is reached while favoring useful actions |
+| `llm` | the LLM (`agent.model`) picks the next action directly, given the world state, goal and candidate actions |
+| `llm-scoring` | the LLM scores each candidate action's utility; same A\* cost/utility reweighting as `hybrid` |
 
 An action's **utility** is a numeric CEL expression (`utility`), evaluated each cycle on the
 blackboard (default: 1; a utility ≤ 0 excludes the action). Example:
 `has(vars.review) && vars.review == "human" ? 0.1 : 0.9`.
+
+**Agent model** (ADR 0021): `agent.model` is an LLM alias, required when `planner` is `llm` or
+`llm-scoring` (the planner itself calls the model each planning cycle, distinct from any `kind: llm`
+action's own `model`). Authors only ever name an alias — never a raw `provider/model` — administrators
+alone decide what an alias resolves to. Publishing a methodology that references an alias with no
+`platform@LlmAlias` node yet opens a pending change proposing an empty stub for one, so an
+administrator sees it in the change-review queue and configures it.
 
 **Sub-agents**: an action can call `ctx.runAgent(name, intent)`. The sub-agent is a child
 process (`parentId`) of the **same methodology**, working on the **same change** (shared blackboard)
