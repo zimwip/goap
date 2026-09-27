@@ -481,7 +481,7 @@ actions when a transition is applied. Reference: [docs/dsl.md](dsl.md), IDE sect
 | **graph** | Domain axis (versioned nodes, links, baselines) + change axis (Changes, change impacts, facts, apply) | Connect `graph.v1` | `graph` | 🟢 |
 | **modelgw** | Multi-provider / multi-model abstraction, aliases (`default`, `fast`, `reasoning`), administered catalog with global token quotas and required roles (see below), traces | Connect `model.v1` | `modelgw` (token usage; the configuration is graph data, ADR 0021) | 🟢 core |
 | **indexer** | Node index ([ADR 0026](adr/0026-node-index-and-search.md)): follows the node / baseline events of the graph, embeds through modelgw (alias `embed`), answers hybrid full-text + semantic searches with facets, filtered by ABAC | Connect `index.v1` | `index` (tsvector + pgvector; FTS5 + exact cosine scan in SQLite) | 🟢 |
-| **mcp** | MCP hub: connector registry (self-registration), resolution of the adapters (graph) along the organisation hierarchy, tool calls (§3.9) | Connect `mcp.v1` | `mcp` | 🟢 |
+| **mcp** | MCP hub: connector registry (self-registration), resolution of the adapters and their restrictions (graph) along the organisation hierarchy, tool calls, the built-in connectors of the platform (§3.9) | Connect `mcp.v1` | `mcp` | 🟢 |
 | **connector-\*** | One service per real system (`connector-localfs`, ...), registers itself with the hub | Connect `connector.v1` | — | 🟢 localfs |
 | **goap-runner** | Sandbox for executing script actions (one per process) | Connect `runtime.v1` (SandboxService) | — | 🟢 |
 | **otel-collector** | OTLP reception, trace export (Jaeger) and metrics (Prometheus) | OTLP | — | 🟢 |
@@ -676,6 +676,21 @@ under the parameter name, and that the code can never read. Runs are bounded (30
   nearest unit along `unit -> parent (part_of) -> ... -> ORG-DEFAULT`, loads its algorithm from the library, and runs
   it. Several organisations working on a change (sub-changes split by owner) can therefore all have file access
   with the same MCP, the same adapter and the same connector, each with its own root directory.
+- **Restrictions** ([ADR 0028](adr/0028-builtin-mcps-and-connectors.md)). An `Adapter` node also restricts the MCP for
+  its unit and sub-units (`disabled`, `tools` allow-list, `deny`, `readOnly`), with or without an adapter of its own.
+  The implementation is the nearest instance naming an adapter; the restrictions of every instance of the chain add
+  up (allow-lists intersect), so a unit narrows what it inherits and never widens it. The hub lists and calls only the
+  allowed tools; the engine plans a `tool` action only when its tool is allowed.
+- **Built-in MCPs** ([ADR 0028](adr/0028-builtin-mcps-and-connectors.md)): the platform as tools, split by concern —
+  `goap-graph` (read / glob / grep / links / baselines), `goap-change` (create / read / write / edit / link / retire /
+  note / validate on a change; no apply), `goap-scheduler` (start / list / get processes, triggers / fire; scope
+  `agent`) and
+  `goap-admin` (units, users, MCPs, connectors, domains, methodologies). Their connectors
+  (`internal/connectors/builtin`) run in the hub and act for the caller (per-type read authorization, the access gate
+  on `User` / `Policy`, the engine's process authorization); the call context (`mcp.CallContext`: unit, change,
+  process) lets `goap-change` work on the change of the calling process by default. Pass-through adapter
+  definitions and instances on `ORG-DEFAULT` give them to every unit (`graphsvc.SeedBuiltins`, which keeps the
+  definitions in sync with the code at every start).
 - **Adding a connector is adding a service.** A connector implements `connector.v1.ConnectorService`
   (`Describe`, `Invoke`); `internal/connectorkit` does the rest: `connectorkit.Run("name", connector)` serves the
   protocol and registers the connector with the hub (`RegisterConnector`, renewed as a heartbeat within a
@@ -693,6 +708,10 @@ under the parameter name, and that the code can never read. Runs are bounded (30
 - **Editing.** MCPs, adapter definitions and adapter instances are nodes, created, changed and removed through changes like any
   node. The first start creates `ORG-DEFAULT`, `document-repository` and the `localfs-document-repository` adapter
   definition (`graphsvc.SeedDefaults`).
+- **Scope** ([ADR 0028](adr/0028-builtin-mcps-and-connectors.md)). An MCP says where a methodology may use it:
+  `action` (declared by actions), `agent` (declared by agents only, reached by their llm actions: orchestration such as
+  `goap-scheduler`), or `both` (default). An action never gets an agent-scoped MCP (not planned, not callable), an
+  agent never an action-scoped one; the registry reports both at validation.
 - **Scheduling.** An action declares the MCPs it uses (`mcps:` on `llm` and `script` actions; a `tool` action is
   `<mcp>/<tool>`). It is available to the planner only when the unit holding the change resolves an adapter for each
   of them; otherwise it is left out (and a specialization needing one is skipped). An action can call the tools of
@@ -701,9 +720,10 @@ under the parameter name, and that the code can never read. Runs are bounded (30
   of any model (`{"tool_calls":[...]}`, then `{"items":[...]}`); every call is journaled with its duration and
   error. Calls run with the principal of the process initiator (`tool:call` permission).
 - **Web**: *Connectors* (registry, read-only), *MCPs* (platform nodes), *Adapters* (adapter definitions, with a template generated from an MCP and a connector) and *Organisation* (units; the *MCP* pane of
-  a unit lists the MCPs it can use, own or inherited, and attaches or overrides them with an instance of an adapter
-  definition and its parameter values). A new organisation is a new unit.
-- `goap-dev` runs the hub and the localfs connector in-process (`GOAP_DEV_FS_ROOT` gives the default organisation
+  a unit lists the MCPs it can use, own or inherited, built in or not, with their allowed tools, attaches or overrides
+  them with an instance of an adapter definition and its parameter values, and restricts them). A new organisation
+  is a new unit.
+- `goap-dev` runs the hub, the built-in connectors and the localfs connector in-process (`GOAP_DEV_FS_ROOT` gives the default organisation
   an adapter instance on a directory); connectors started separately register over HTTP.
 
 ### 3.8 Voice input ([ADR 0022](adr/0022-voice-interaction.md))

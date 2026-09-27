@@ -24,7 +24,10 @@ type Service struct {
 	DomainStore DomainStore
 	Authz       authz.Authorizer
 	Events      engine.Publisher
-	now         func() time.Time
+	// MCPScopes gives the scope of each MCP of the platform (ADR 0028), checked against where a methodology
+	// declares them; nil: not checked.
+	MCPScopes func(ctx context.Context) (map[string]string, error)
+	now       func() time.Time
 }
 
 // ErrInvalid wraps validation issues.
@@ -116,7 +119,7 @@ func (s *Service) validate(ctx context.Context, m *methodology.Methodology) meth
 			issues = append(issues, methodology.Issue{Path: "namespace", Message: fmt.Sprintf("no published domain %s", m.Namespace)})
 		}
 	}
-	return issues
+	return append(issues, s.scopeIssues(ctx, m)...)
 }
 
 // Publish freezes a valid draft.

@@ -4,6 +4,10 @@
   // (`ADP:<unit>/<mcp>`, owned by the unit), the unit's INSTANCE of an adapter definition (an
   // `AdapterDef` node of the platform namespace): it names the definition and gives the parameter values (root
   // directory, secret references...). A unit inherits the adapters of its ancestors; the nearest wins.
+  // The same node can restrict the MCP for the unit and its sub-units (disabled, deny, readOnly, tools:
+  // ADR 0028), with or without an adapter of its own: restrictions add up along the chain, so a unit
+  // narrows what it inherits (the built-in MCPs every unit gets from the default organisation) and never
+  // widens it.
   import type { Tab } from '../../shell/types';
   import Icon from '../../shell/Icon.svelte';
   import EditorPanes, { type Pane } from '../../components/EditorPanes.svelte';
@@ -114,6 +118,7 @@
 
   /** opens the form for an MCP, prefilled from an adapter (its own, or the inherited one to override) */
   function edit(mcpName: string, from?: Adapter) {
+    restricting = undefined;
     fMcp = mcpName;
     const own = tools.adapterDefs.filter((l) => l.mcp === mcpName);
     const known = from?.adapter ? own.find((l) => l.name === from.adapter) : undefined;
@@ -203,6 +208,78 @@
 
   const attachable = $derived(tools.mcps.filter((m) => !ownNodes.has(m.name ?? '')));
   let pick = $state('');
+
+  // ---- restriction form (ADR 0028) ----------------------------------------------------------------------
+
+  let restricting = $state<EffectiveMcp>();
+  let rDisabled = $state(false);
+  let rReadOnly = $state(false);
+  /** the tools the unit refuses */
+  let rDeny = $state<string[]>([]);
+  /** allow-list of the unit's own node, kept as it is (edited through the node) */
+  let rAllow = $state<string[]>([]);
+  let rError = $state('');
+
+  /** the unit's own Adapter node of an MCP, if any */
+  function ownNode(h: HeadGraph, m: string) {
+    return findNode(h, NS, ADAPTER_TYPE, `ADP:${key}/${m}`);
+  }
+
+  function restrict(e: EffectiveMcp) {
+    const m = e.mcp?.name ?? '';
+    const own = head ? ownNode(head, m) : undefined;
+    const props = (own?.props ?? {}) as Record<string, unknown>;
+    rDisabled = props['disabled'] === true;
+    rReadOnly = props['readOnly'] === true;
+    rDeny = Array.isArray(props['deny']) ? (props['deny'] as string[]) : [];
+    rAllow = Array.isArray(props['tools']) ? (props['tools'] as string[]) : [];
+    rError = '';
+    restricting = e;
+    editing = false;
+  }
+
+  function toggleDeny(t: string, allowed: boolean) {
+    rDeny = allowed ? rDeny.filter((x) => x !== t) : [...rDeny, t];
+  }
+
+  async function saveRestriction() {
+    const m = restricting?.mcp?.name ?? '';
+    if (!m || !unit) return;
+    saving = true;
+    rError = '';
+    try {
+      const restricts = rDisabled || rReadOnly || rDeny.length > 0 || rAllow.length > 0;
+      const h = await headGraph(NS);
+      const existing = ownNode(h, m);
+      const u = findNode(h, NS, ORG_UNIT_TYPE, key);
+      if (!u) throw new Error(`unit ${key} not found`);
+      // a null value clears a property of the node
+      const props: Struct = {
+        mcp: m,
+        disabled: rDisabled || null,
+        readOnly: rReadOnly || null,
+        deny: rDeny.length ? rDeny : null,
+        tools: rAllow.length ? rAllow : null,
+      };
+      if (restricts) await mcp.checkAdapter({ unit: key, mcp: m, adapter: String(existing?.props?.['adapter'] ?? ''), disabled: rDisabled, readOnly: rReadOnly, deny: rDeny, tools: rAllow });
+      const title = `Restrictions of ${m} for ${key}`;
+      if (existing && !restricts && !existing.props?.['adapter']) {
+        // a restriction-only node with nothing left to restrict
+        await applyOnMain(NS, title, `Lift the restrictions of ${m} for ${key}`, h.baselineId, [deleteNodeItem(existing)]);
+      } else if (existing) {
+        await applyOnMain(NS, title, `Restrict ${m} for ${key}`, h.baselineId, [updateNodeItem(existing, props)]);
+      } else if (restricts) {
+        await applyOnMain(NS, title, `Restrict ${m} for ${key}`, h.baselineId, [createNodeItem(`ADP:${key}/${m}`, ADAPTER_TYPE, props, [{ type: OWNER, to: refOf(u) }])]);
+      }
+      notify(`Restrictions of ${m} saved for ${key}.`, 'ok');
+      restricting = undefined;
+      await load();
+    } catch (e) {
+      rError = errorMessage(e);
+    } finally {
+      saving = false;
+    }
+  }
 </script>
 
 <div class="editor-page">
@@ -242,22 +319,28 @@
           <section class="card">
             <h3>MCPs available to {key}</h3>
             <table class="tbl">
-              <thead><tr><th>MCP</th><th>Adapter</th><th>Connector</th><th>Defined in</th><th></th><th></th></tr></thead>
+              <thead><tr><th>MCP</th><th>Adapter</th><th>Connector</th><th>Defined in</th><th>Tools</th><th></th><th></th></tr></thead>
               <tbody>
                 {#each effective as e (e.mcp?.name)}
                   <tr>
-                    <td><code>{e.mcp?.name}</code></td>
+                    <td><code>{e.mcp?.name}</code>{#if e.builtin}<span class="tag"> built in</span>{/if}</td>
                     <td><code>{e.adapter?.adapter}</code></td>
                     <td>{e.connector || '?'}{#if e.connector && !connectorLive(e.connector)}<span class="tag warn" title={connectorKnown(e.connector) ? 'registration expired' : 'not registered'}> {connectorKnown(e.connector) ? 'expired' : 'not registered'}</span>{/if}</td>
                     <td><code>{e.adapter?.unit}</code></td>
+                    <td title={(e.allowedTools ?? []).join(', ')}>
+                      {#if e.disabled}<span class="tag warn">disabled</span>
+                      {:else}{e.allowedTools?.length ?? 0}/{e.mcp?.tools?.length ?? 0}{/if}
+                      {#if e.restrictedBy?.length}<span class="tag"> restricted by {e.restrictedBy.join(', ')}</span>{/if}
+                    </td>
                     <td><span class="badge">{e.inherited ? 'inherited' : 'own'}</span></td>
                     <td class="acts">
-                      <button type="button" class="small" onclick={() => edit(e.mcp?.name ?? '', e.adapter)}>{e.inherited ? 'Override' : 'Edit'}</button>
+                      <button type="button" class="small" onclick={() => restrict(e)}>Restrict</button>
+                      {#if !e.builtin}<button type="button" class="small" onclick={() => edit(e.mcp?.name ?? '', e.adapter)}>{e.inherited ? 'Override' : 'Edit'}</button>{/if}
                       {#if !e.inherited}<button type="button" class="small danger" onclick={() => detach(e.mcp?.name ?? '')}>Detach</button>{/if}
                     </td>
                   </tr>
                 {:else}
-                  <tr><td colspan="6" class="empty">No MCP is implemented for this unit or its ancestors.</td></tr>
+                  <tr><td colspan="7" class="empty">No MCP is implemented for this unit or its ancestors.</td></tr>
                 {/each}
               </tbody>
             </table>
@@ -277,6 +360,43 @@
               >
             </div>
           </section>
+
+          {#if restricting}
+            {@const rm = restricting.mcp}
+            <section class="card">
+              <h3>Restrictions of <code>{rm?.name}</code> for <code>{key}</code></h3>
+              <p class="hint">
+                They apply to {key} and its sub-units, on top of the restrictions of its ancestors{restricting.restrictedBy?.filter((u) => u !== key).length
+                  ? ` (${restricting.restrictedBy.filter((u) => u !== key).join(', ')})`
+                  : ''}: a unit narrows what it inherits, it cannot widen it. The implementation stays the one resolved for the unit.
+              </p>
+              {#if rError}<div class="alert">{rError}</div>{/if}
+              <label class="check"><input type="checkbox" bind:checked={rDisabled} /> Disable the MCP</label>
+              <label class="check"><input type="checkbox" bind:checked={rReadOnly} disabled={rDisabled} /> Read-only tools only</label>
+              <h4>Tools</h4>
+              <ul class="tools">
+                {#each rm?.tools ?? [] as t (t.name)}
+                  <li>
+                    <label class="check">
+                      <input
+                        type="checkbox"
+                        checked={!rDeny.includes(t.name ?? '')}
+                        disabled={rDisabled || (rReadOnly && !t.readOnly)}
+                        onchange={(ev) => toggleDeny(t.name ?? '', (ev.currentTarget as HTMLInputElement).checked)}
+                      />
+                      <code>{t.name}</code>{#if t.readOnly}<span class="tag"> read-only</span>{/if}
+                      {#if t.description}<span class="muted"> {t.description}</span>{/if}
+                    </label>
+                  </li>
+                {/each}
+              </ul>
+              {#if rAllow.length}<p class="hint">The node also allows only: <code>{rAllow.join(', ')}</code>.</p>{/if}
+              <div class="row">
+                <button type="button" class="small primary" disabled={saving} onclick={saveRestriction}>Save</button>
+                <button type="button" class="small" onclick={() => (restricting = undefined)}>Cancel</button>
+              </div>
+            </section>
+          {/if}
 
           {#if editing}
             <section class="card">
@@ -387,5 +507,14 @@
   }
   h4 {
     margin: 0.9rem 0 0.3rem;
+  }
+  .tools {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .check {
+    display: block;
+    margin: 0.2rem 0;
   }
 </style>

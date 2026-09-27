@@ -115,6 +115,13 @@ func (s *Service) CheckAdapter(ctx context.Context, a mcp.Adapter) (warnings []s
 	if err := a.Validate(def); err != nil {
 		return nil, err
 	}
+	if !a.Implements() {
+		// a restriction only: the implementation is inherited
+		if _, _, ok := snap.Resolve(a.Unit, a.MCP); a.Unit != "" && !ok {
+			warnings = append(warnings, fmt.Sprintf("no ancestor of %s implements %s: the restriction has nothing to restrict", a.Unit, a.MCP))
+		}
+		return warnings, nil
+	}
 	alg, err := adapterAlgorithm(snap, a)
 	if errors.Is(err, ErrAdapterDef) {
 		return nil, fmt.Errorf("%v: %w", err, mcp.ErrInvalid)
@@ -202,16 +209,22 @@ func (s *Service) ConnectorOf(ctx context.Context, a mcp.Adapter) string {
 	return ""
 }
 
-// Tools lists the tools of the MCPs a unit can use, and the MCPs.
+// Tools lists the tools a unit can call (its restrictions applied), and the MCPs it can use (those
+// with at least one tool left).
 func (s *Service) Tools(ctx context.Context, unit string) (tools []Tool, mcps []string, err error) {
 	_, eff, err := s.Effective(ctx, unit)
 	if err != nil {
 		return nil, nil, err
 	}
 	for _, e := range eff {
+		allowed := e.Allowed()
+		if len(allowed.Tools) == 0 {
+			continue
+		}
 		mcps = append(mcps, e.MCP.Name)
-		for _, t := range e.MCP.Tools {
-			tools = append(tools, Tool{Name: mcp.ToolName(e.MCP.Name, t.Name), Description: t.Description, InputSchema: t.InputSchema})
+		for _, t := range allowed.Tools {
+			tools = append(tools, Tool{Name: mcp.ToolName(e.MCP.Name, t.Name), Description: t.Description, InputSchema: t.InputSchema, ReadOnly: t.ReadOnly,
+				Scope: mcp.ScopeOf(e.MCP.Scope)})
 		}
 	}
 	return tools, mcps, nil
@@ -245,6 +258,11 @@ func (s *Service) Call(ctx context.Context, org, name string, args map[string]an
 	if !ok {
 		return nil, fmt.Errorf("mcp %s has no adapter for %s or its ancestors: %w", mcpName, domain.OrgOf(org), ErrNotBound)
 	}
+	if r := snap.Restriction(org, mcpName); !r.Allows(t) {
+		return nil, fmt.Errorf("tool %s is restricted for %s (by %s): %w", name, domain.OrgOf(org), strings.Join(r.By, ", "), ErrNotBound)
+	}
+	// connectors of the platform itself read what the call runs for (ADR 0028)
+	ctx = mcp.WithCall(ctx, mcp.CallContext{Unit: domain.OrgOf(org)})
 	alg, err := adapterAlgorithm(snap, a)
 	if errors.Is(err, ErrAdapterDef) {
 		return nil, fmt.Errorf("%v: %w", err, ErrUnavailable)

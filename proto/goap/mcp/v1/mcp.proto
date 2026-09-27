@@ -67,12 +67,16 @@ message McpTool {
   string description = 2;
   // JSON Schema of the arguments
   google.protobuf.Struct input_schema = 3;
+  // the tool changes nothing (MCP readOnlyHint)
+  bool read_only = 4;
 }
 
 message Mcp {
   string name = 1;
   string description = 2;
   repeated McpTool tools = 3;
+  // where a methodology may use the MCP: action, agent or both (empty: both, ADR 0028)
+  string scope = 4;
 }
 
 message ListMcpsRequest {}
@@ -95,6 +99,15 @@ message Adapter {
   reserved 4, 5;
   // parameter values (secrets as references: "<vault path>#<field>" or "env:<VARIABLE>")
   google.protobuf.Struct params = 6;
+  // restrictions of the MCP for the unit and its sub-units (ADR 0028); they add up along the unit
+  // chain. An instance with no adapter only restricts.
+  bool disabled = 7;
+  // when not empty, the only tools allowed
+  repeated string tools = 8;
+  // tools refused
+  repeated string deny = 9;
+  // only the read-only tools
+  bool read_only = 10;
 }
 
 message EffectiveMcp {
@@ -105,6 +118,14 @@ message EffectiveMcp {
   bool inherited = 3;
   // the connector the adapter calls (from its definition; empty when it cannot be resolved)
   string connector = 4;
+  // the tools the unit may call, once the restrictions of its chain are applied (ADR 0028)
+  repeated string allowed_tools = 5;
+  // the units whose instance restricts the MCP, nearest first
+  repeated string restricted_by = 6;
+  // an instance of the chain disables the MCP
+  bool disabled = 7;
+  // built into the platform (goap-graph, goap-change, goap-scheduler, goap-admin)
+  bool builtin = 8;
 }
 
 message ListEffectiveRequest {
@@ -155,6 +176,9 @@ message Tool {
   string name = 1;
   string description = 2;
   google.protobuf.Struct input_schema = 3;
+  bool read_only = 4;
+  // scope of the MCP of the tool: action, agent or both
+  string scope = 5;
 }
 
 message ListToolsRequest {
@@ -174,6 +198,9 @@ message CallToolRequest {
   // "<mcp>/<tool>"
   string name = 2;
   google.protobuf.Struct arguments = 3;
+  // the change and the process the call runs for (read by the built-in connectors, ADR 0028)
+  string change_id = 4;
+  string process_id = 5;
 }
 
 message CallToolResponse {

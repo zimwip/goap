@@ -6,6 +6,7 @@
   import CodeEditor from './CodeEditor.svelte';
   import { modelChoices, refreshModelChoices } from '../stores/modelChoices.svelte';
   import ModelAliasField from './ModelAliasField.svelte';
+  import { mcpsOfScope } from '../stores/tools.svelte';
 
   let {
     action = $bindable(),
@@ -66,6 +67,8 @@
     items: 'items',
     artifacts: 'artifacts',
   };
+  /** MCPs only agents may declare (ADR 0028) */
+  const agentOnly = $derived(mcpsOfScope('agent'));
 </script>
 
 <div class="grid">
@@ -262,7 +265,8 @@
       disabled={readonly}
     />
     <span class="hint"
-      >Comma separated. The action can call the tools of these MCPs only, and is scheduled only in a change whose organisation (or an ancestor) has an adapter for each of them.</span
+      >Comma separated. The action can call the tools of these MCPs only, and is scheduled only in a change whose organisation (or an ancestor) has an adapter for each of them.{#if agentOnly.length}
+        Agent level only, not here: <code>{agentOnly.join(', ')}</code>.{/if}</span
     >
   </div>
 {:else if action.kind === 'script'}
@@ -315,7 +319,8 @@
       disabled={readonly}
     />
     <span class="hint"
-      >Comma separated. The action can call the tools of these MCPs only, and is scheduled only in a change whose organisation (or an ancestor) has an adapter for each of them.</span
+      >Comma separated. The action can call the tools of these MCPs only, and is scheduled only in a change whose organisation (or an ancestor) has an adapter for each of them.{#if agentOnly.length}
+        Agent level only, not here: <code>{agentOnly.join(', ')}</code>.{/if}</span
     >
   </div>
 {:else if action.kind === 'tool'}
