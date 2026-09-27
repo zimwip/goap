@@ -73,7 +73,7 @@ export function domainActions(d: DomainDraft): ToolbarAction[] {
   }
   if (!d.isNew) {
     acts.push({ id: 'export', label: 'Export', icon: 'download', title: 'Export to YAML', disabled: busy, run: () => d.exportYaml() });
-    if (!d.builtin) acts.push({
+    if (!d.frozen) acts.push({
       id: 'version',
       label: 'New version',
       icon: 'copy',

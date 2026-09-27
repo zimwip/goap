@@ -34,8 +34,8 @@ export interface DomainGroup {
   name: string;
   description: string;
   versions: DomainSummary[];
-  /** built into the platform: frozen */
-  builtin: boolean;
+  /** changes with the platform code only */
+  frozen: boolean;
 }
 
 /** Versions grouped by name, from most recent to oldest. */
@@ -46,7 +46,7 @@ export function groupedDomains(): DomainGroup[] {
   for (const [name, versions] of byName) {
     versions.sort((a, b) => compareVersions(b.version, a.version));
     const ref = versions.find((v) => v.status === 'published') ?? versions[0];
-    out.push({ name, description: ref?.description ?? '', versions, builtin: versions.some((v) => v.builtin) });
+    out.push({ name, description: ref?.description ?? '', versions, frozen: versions.some((v) => v.frozen) });
   }
   return out.sort((a, b) => a.name.localeCompare(b.name));
 }
@@ -75,8 +75,10 @@ export class DomainDraft {
   form = $state<DomainForm>(emptyDomainForm());
   snapshot = $state(JSON.stringify(emptyDomainForm()));
   status = $state('draft');
-  /** built into the platform (its namespace is read by the code): frozen, no new version */
+  /** the version shipped with the platform: read only, cannot be archived */
   builtin = $state(false);
+  /** a namespace the code reads in its own way (methodology, organisation): changes with the code, no new version */
+  frozen = $state(false);
   meta = $state<Pick<Domain, 'createdAt' | 'updatedAt' | 'publishedAt' | 'updatedBy'>>({});
   loading = $state(true);
   loadError = $state('');
@@ -129,6 +131,7 @@ export class DomainDraft {
     this.snapshot = JSON.stringify(this.form);
     this.status = d.status || 'draft';
     this.builtin = !!d.builtin;
+    this.frozen = !!d.frozen;
     this.meta = { createdAt: d.createdAt, updatedAt: d.updatedAt, publishedAt: d.publishedAt, updatedBy: d.updatedBy };
   }
 

@@ -2949,8 +2949,10 @@ type Domain struct {
 	UpdatedAt          *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
 	PublishedAt        *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=published_at,json=publishedAt,proto3" json:"published_at,omitempty"`
 	UpdatedBy          string                 `protobuf:"bytes,10,opt,name=updated_by,json=updatedBy,proto3" json:"updated_by,omitempty"`
-	// built into the platform (methodology, domain, organisation): published and frozen (read only)
-	Builtin       bool `protobuf:"varint,14,opt,name=builtin,proto3" json:"builtin,omitempty"`
+	// the version shipped with the platform (methodology, domain, organisation): published, read only
+	Builtin bool `protobuf:"varint,14,opt,name=builtin,proto3" json:"builtin,omitempty"`
+	// a built-in domain that only changes with the code (methodology, organisation): no new version
+	Frozen        bool `protobuf:"varint,15,opt,name=frozen,proto3" json:"frozen,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3083,6 +3085,13 @@ func (x *Domain) GetBuiltin() bool {
 	return false
 }
 
+func (x *Domain) GetFrozen() bool {
+	if x != nil {
+		return x.Frozen
+	}
+	return false
+}
+
 type DomainSummary struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
@@ -3093,8 +3102,10 @@ type DomainSummary struct {
 	LinkTypeCount int32                  `protobuf:"varint,6,opt,name=link_type_count,json=linkTypeCount,proto3" json:"link_type_count,omitempty"`
 	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
 	PublishedAt   *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=published_at,json=publishedAt,proto3" json:"published_at,omitempty"`
-	// built into the platform: published and frozen
-	Builtin       bool `protobuf:"varint,9,opt,name=builtin,proto3" json:"builtin,omitempty"`
+	// the version shipped with the platform: published, read only
+	Builtin bool `protobuf:"varint,9,opt,name=builtin,proto3" json:"builtin,omitempty"`
+	// only changes with the code: no new version
+	Frozen        bool `protobuf:"varint,10,opt,name=frozen,proto3" json:"frozen,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3188,6 +3199,13 @@ func (x *DomainSummary) GetPublishedAt() *timestamppb.Timestamp {
 func (x *DomainSummary) GetBuiltin() bool {
 	if x != nil {
 		return x.Builtin
+	}
+	return false
+}
+
+func (x *DomainSummary) GetFrozen() bool {
+	if x != nil {
+		return x.Frozen
 	}
 	return false
 }
@@ -4876,7 +4894,7 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\aversion\x18\x02 \x01(\tR\aversion\"K\n" +
 	"\x19ExportMethodologyResponse\x12\x12\n" +
 	"\x04yaml\x18\x01 \x01(\tR\x04yaml\x12\x1a\n" +
-	"\bfilename\x18\x02 \x01(\tR\bfilename\"\xa4\x05\n" +
+	"\bfilename\x18\x02 \x01(\tR\bfilename\"\xbc\x05\n" +
 	"\x06Domain\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\tR\aversion\x12 \n" +
@@ -4901,7 +4919,8 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\n" +
 	"updated_by\x18\n" +
 	" \x01(\tR\tupdatedBy\x12\x18\n" +
-	"\abuiltin\x18\x0e \x01(\bR\abuiltin\"\xdb\x02\n" +
+	"\abuiltin\x18\x0e \x01(\bR\abuiltin\x12\x16\n" +
+	"\x06frozen\x18\x0f \x01(\bR\x06frozen\"\xf3\x02\n" +
 	"\rDomainSummary\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\tR\aversion\x12 \n" +
@@ -4912,7 +4931,9 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\n" +
 	"updated_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12=\n" +
 	"\fpublished_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\vpublishedAt\x12\x18\n" +
-	"\abuiltin\x18\t \x01(\bR\abuiltin\"7\n" +
+	"\abuiltin\x18\t \x01(\bR\abuiltin\x12\x16\n" +
+	"\x06frozen\x18\n" +
+	" \x01(\bR\x06frozen\"7\n" +
 	"\x12ListDomainsRequest\x12!\n" +
 	"\fall_versions\x18\x01 \x01(\bR\vallVersions\"P\n" +
 	"\x13ListDomainsResponse\x129\n" +

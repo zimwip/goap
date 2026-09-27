@@ -59,10 +59,18 @@ func TestBuiltinDomainsAreAlwaysThere(t *testing.T) {
 	if err := c.CheckLink("methodology@defines", "methodology@MethodologyVersion", "methodology@Agent"); err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"domain", "organisation"} {
+	for _, name := range []string{"methodology", "organisation"} {
 		if _, err := New(parse(t, "name: "+name+"\nversion: 1.0.0\nnodeTypes: [X]\n")); !errors.Is(err, ErrInvalid) {
-			t.Fatalf("a domain cannot take the name of a built-in domain: %v", err)
+			t.Fatalf("a domain cannot take the name of a frozen domain: %v", err)
 		}
+	}
+	// a published version of the domain meta-domain replaces the shipped one
+	c2, err := New(parse(t, "name: domain\nversion: 1.1.0\nnodeTypes: [DomainVersion, NodeType, Glossary]\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !c2.HasNodeType("domain@Glossary") || c2.HasNodeType("domain@LinkType") || c2.Domains()["domain"] != "1.1.0" {
+		t.Fatalf("the domain version in force: %v", c2.Domains())
 	}
 }
 

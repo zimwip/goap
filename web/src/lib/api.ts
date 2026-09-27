@@ -410,8 +410,10 @@ export interface Domain {
   updatedAt?: string;
   publishedAt?: string;
   updatedBy?: string;
-  /** built into the platform (methodology, domain, organisation): published and frozen */
+  /** the version shipped with the platform (methodology, domain, organisation): published, read only */
   builtin?: boolean;
+  /** a built-in domain that only changes with the code (methodology, organisation): no new version */
+  frozen?: boolean;
 }
 
 export interface DomainSummary {
@@ -423,8 +425,10 @@ export interface DomainSummary {
   linkTypeCount?: number;
   updatedAt?: string;
   publishedAt?: string;
-  /** built into the platform: published and frozen */
+  /** the version shipped with the platform: published, read only */
   builtin?: boolean;
+  /** only changes with the code: no new version */
+  frozen?: boolean;
 }
 
 /** Methodology version referencing a domain version. */

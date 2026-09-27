@@ -58,9 +58,10 @@ of a versioned knowledge graph, whose other axis, the **domain axis**, describes
 **Namespaces** ([ADR 0015](adr/0015-namespaces.md)): every node lives in a namespace, and a namespace is the content of
 one domain ([ADR 0013](adr/0013-domains.md)): `alm` (delivery), `organisation`, `platform` (MCPs, adapter definitions,
 model configuration), and the meta-domains `methodology` and `domain` that hold the definitions
-([ADR 0023](adr/0023-definitions-in-the-graph.md)). `methodology`, `domain` and `organisation` are **built in**: the
-platform reads them in its own way, so their domains ship with the code and are frozen (read-only in the domain
-editor); a new namespace is a new domain published from the domain editor. Keys are unique per namespace. A change acts on one namespace: it can
+([ADR 0023](adr/0023-definitions-in-the-graph.md)). `methodology`, `domain` and `organisation` ship with the code;
+`methodology` and `organisation` are **frozen** (the platform reads them in its own way: initialised at startup,
+changed with the code, read-only in the domain editor), `domain` evolves from its shipped version; a new namespace is a
+new domain published from the domain editor. Keys are unique per namespace. A change acts on one namespace: it can
 only create and modify nodes of that namespace, but may link to nodes of another one.
 The organisation is a hierarchy of units in its own namespace (`organisation`); nodes reference their owner
 unit across namespaces, and a change is split into sub-changes along unit boundaries
