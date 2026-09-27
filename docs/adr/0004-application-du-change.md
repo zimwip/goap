@@ -15,8 +15,7 @@ the engine, or the engine itself.
   - permission held → automatic execution;
   - otherwise → an **approval** task; `ApproveAction` by an authorized person executes the action with
     their identity (`approvedBy`); a refusal disables the action for this process.
-- Permissions are decided by `authz.Authorizer`: a static role policy today,
-  `IamService.CheckPermission` at milestone M2.
+- Permissions are decided by `authz.Authorizer` (ABAC, policies in the graph, ADR 0020).
 
 ## Consequences
 - Each methodology decides whether the application is automatic, subject to approval, or absent

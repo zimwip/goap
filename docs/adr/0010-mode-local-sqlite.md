@@ -9,14 +9,14 @@ edited methodologies, policies, processes waiting on a human action.
 
 ## Decision
 - `goap-dev` selects its storage via `GOAP_STORE`: `memory` (default) or `sqlite`, a **single file**
-  (`GOAP_SQLITE_PATH`, default `.goap/goap.db`) shared by the graph, the registry, IAM, and the engine.
+  (`GOAP_SQLITE_PATH`, default `.goap/goap.db`) shared by the graph, the index, the model gateway usage and the
+  engine (the registry and access control keep their data in the graph, ADR 0020 and 0023).
 - **`modernc.org/sqlite`** driver (pure Go, no cgo): nothing to install besides Go (and Node for the IDE).
 - Each component has its own SQLite migrations (`migrations_sqlite/`), tracked per component in
-  `schema_migrations`; same storage interfaces as PostgreSQL (`graph.Repo`, `registrysvc.Store`,
-  Casbin adapter, `engine.Store`) and the same tests (the graph, registry, and IAM run on memory,
-  SQLite, and PostgreSQL).
-- The graph keeps the normalized model (versions, links, baselines, branches); methodologies and
-  processes are JSON documents (queryable with SQLite's JSON functions).
+  `schema_migrations`; same storage interfaces as PostgreSQL (`graph.Repo`, `engine.Store`, the index store) and the
+  same tests (memory, SQLite, and PostgreSQL).
+- The graph keeps the normalized model (versions, links, baselines, branches); processes are JSON documents
+  (queryable with SQLite's JSON functions).
 - A single write connection (SQLite has only one writer), WAL, foreign keys enabled.
 - On startup, processes left `running` are marked `failed` (no work-queue to resume);
   `waiting` / `clarifying` processes resume normally.

@@ -1,6 +1,6 @@
 # ADR 0026 — Node index and search (RAG + full text)
 
-**Status**: accepted, implemented · **Date**: 2026-09 · Extends ADR 0010 (local mode), ADR 0012 (node types in the graph),
+**Status**: accepted, implemented · **Date**: 2026-09 · Extends ADR 0010 (local mode), ADR 0012 (node types),
 ADR 0021 (model configuration in the graph).
 
 ## Context
@@ -27,8 +27,8 @@ A node type declares its searchable properties, like its validators (ADR 0018):
 - `text`: the value goes into the indexed document (full text and embedding).
 - `facet`: the value is filterable and counted (`GROUP BY`).
 - Inherited through `extends` (subtype adds to, and may override by property name, its parent's).
-- The graph resolves the spec (`typeIndex.searchOf`) so the indexer never reads NodeTypes: it knows the graph
-  events and the model gateway only.
+- The graph resolves the spec from the type catalogue (ADR 0012 §2) so the indexer never reads node types: it knows
+  the graph events and the model gateway only.
 - Built-in facets, always present: `namespace`, `type`, `state`, `branch`, `main`.
 
 ### 2. The graph publishes what it writes
@@ -38,7 +38,7 @@ with no call-site change.
 
 | Subject | Payload |
 |---|---|
-| `goap.node.<ns>.<type>.<id>.written` | `NodeEvent`: id, version, branch, namespace, key, type, state, deleted, `text` (resolved searchable text), `facets` (resolved facet values), `changeId`, time |
+| `goap.node.<ns>.<type>.<id>.written` (`<type>`: the type name without its namespace prefix) | `NodeEvent`: id, version, branch, namespace, key, type, state, deleted, `text` (resolved searchable text), `facets` (resolved facet values), `changeId`, time |
 | `goap.baseline.<branch>.advanced` | `BaselineEvent`: id, branch, parent, and the **diff** with the parent baseline: `set: {nodeId: version}`, `removed: [nodeId]` |
 
 ### 3. Index everything, filter main by a facet

@@ -178,14 +178,11 @@ Rules:
   by default), writes the versions in link order (what a link points to first; a link to a node created by
   the same commit is given by key), accepts them as the producer and applies. A concurrent move of a node
   gives `ErrConflict` and abandons the change, so the producer reads again and rebuilds. The registry store,
-  the metamodel projection (`Sync`, `ApplyNodeTypes`, `LinkToType`, `BackfillInstanceOf`, `CreateObject`)
-  and the seeds use it, no longer items.
+  `CreateObject` and the seeds use it, no longer items.
   - A change whose target branch has not moved since its branch was forked **fast-forwards**: the versions
     of the branch become versions of the target (no merge version), `landed` is `post`. Otherwise the 3-way
     merge of §5 applies.
-  - `NodeWrite.Retire` / `NodeEdit.Retire` is the tombstone of a node a projection no longer owns (an
-    orphan). It is the platform clean-up of §4, not an intent: the change impact stays `modified`.
-  - `instanceOf` links may be written from a node of another namespace (ADR 0015 §3).
+  - `NodeWrite.Retire` / `NodeEdit.Retire` is the tombstone of a node: the change impact stays `modified`.
 - **DSL actions (done, next to the item calls)**: script actions get `impactNode`, `createNode`, `writeNode`,
   `reviewNode` and `changeImpacts` (docs/dsl.md). The calls are buffered like items (`dsl.Result.Nodes`, the
   sandbox protocol carries them as `nodes_json`) and applied in order by the engine (`applyNodeOps`, through
@@ -210,12 +207,12 @@ Rules:
     `expects` accept `forEach: changeImpacts`; a step and its journal record list the change impacts it declared
     (`Step.Nodes`, `ExecutionRecord.Nodes`), and the observer counts them as outputs.
 - **`methodology-improvement`**: an improvement is a change impact on an element of the observed methodology
-  (`M:<methodology>/<kind>/<name>`, platform namespace): `modified` for an existing element, `created` for a
+  (its definition nodes, ADR 0023 and ADR 0011 §2): `modified` for an existing element, `created` for a
   specialisation or a tool request; the rationale is "title: why" and the version written on the change branch
   holds the proposed properties (the change is never applied: it is the recommendation). The human review accepts
   or rejects them with a comment, and `methodology.draft` builds the draft from the accepted ones (a patch of the
   properties the version changes).
-- **`sdlc`**: conditions, scripts and prompts work on change impacts (the delivery test runs end to end, with the
+- **`sdlc`** (the methodology): conditions, scripts and prompts work on change impacts (the delivery test runs end to end, with the
   final baseline checked). A node created by the change is its working copy: the editable rule of ADR 0014 applies
   to the versions a change starts from, not to a node it creates, so a created node may be written again in its
   initial state. A deployment is created, written and accepted in the same wave (it is recorded once done), so it
@@ -236,9 +233,10 @@ Rules:
 ## Final state
 The item kinds are gone. Removed: the `impact` and `proposal` kinds with `Proposal` / `NodeDraft` / `LinkDraft`, the
 bridge that derived change impacts from items, `Rebase` / `Divergences` / `MaterializeFlow` (Go, RPC, proto), the DSL
-item calls (`addImpact`, `propose*`, `decide`, `impacts()`, `proposals()`), the CEL `impacts` / `proposals`, the graph
-namespace and impact checks, and the `instanceOf` link: `Node.Type` is the direct attribute of a node. A change holds
-change impacts and facts (`decision`, `artifact`, `merge`, `flow`); every producer (registry, metamodel projection, seeds,
+item calls (`addImpact`, `propose*`, `decide`, `impacts()`, `proposals()`), the CEL `impacts` / `proposals`, the item
+namespace and impact checks (the change impacts enforce the namespace, ADR 0015 §2), and the `instanceOf` link:
+`Node.Type` is the direct attribute of a node. A change holds
+change impacts and facts (`decision`, `artifact`, `merge`, `flow`); every producer (registry, seeds,
 merge, engine, DSL) writes change impacts, through `Graph.Commit` or `AddNodes` / `WriteNode` / `ReviewNode`. Drafts that
 still held proposal items lose them (no data migration). The Go field is still named `Items`; the unused
 `change_item.target_id` / `target_version` columns stay.

@@ -1,4 +1,4 @@
-# ADR 0013 — Voice interaction with the assistant
+# ADR 0022 — Voice interaction with the assistant
 
 **Status**: accepted (phase 1) · **Date**: 2026-09
 

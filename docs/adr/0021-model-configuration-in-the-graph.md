@@ -1,5 +1,7 @@
 # ADR 0021 — Model gateway configuration in the graph
 
+**Status**: accepted, implemented · **Date**: 2026-09
+
 ## Context
 
 What describes the enterprise is graph data, changed through changes (CLAUDE.md, rule 4). The model gateway kept its
@@ -7,7 +9,7 @@ providers, catalog (quotas, roles) and aliases in SQL tables, with API keys seal
 
 ## Decision
 
-1. Providers, models and aliases are nodes of the `platform` namespace: `LlmProvider` (`LLP:<name>`), `LlmModel`
+1. Providers, models and aliases are nodes of the `platform` domain: `LlmProvider` (`LLP:<name>`), `LlmModel`
    (`LLM:<provider>/<model>`), `LlmAlias` (`LLA:<alias>`). They reference each other by name, like an `AdapterDef` names
    its MCP and connector; a model of an unknown provider and an alias of an unknown model are reported and ignored.
 2. `pkg/llmcfg` holds the node schema and a snapshot of the head of `main` (`pkg/graphsnap.Cache`, shared with `pkg/access`);
