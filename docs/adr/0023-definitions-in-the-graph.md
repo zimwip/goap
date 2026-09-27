@@ -1,6 +1,6 @@
 # ADR 0023 — Methodologies and domains are graph data
 
-**Status**: accepted, being implemented · **Date**: 2026-09
+**Status**: accepted, implemented · **Date**: 2026-09
 
 ## Context
 

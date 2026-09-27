@@ -1,6 +1,6 @@
 # ADR 0014 — Node lifecycle, change attachment and documents
 
-**Status**: accepted (§2: being implemented on the type catalogue, ADR 0012) · **Date**: 2026-09
+**Status**: accepted, implemented · **Date**: 2026-09
 
 ## Context
 

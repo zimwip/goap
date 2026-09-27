@@ -1,6 +1,6 @@
 # ADR 0013 — Domains: the object part, one per namespace
 
-**Status**: accepted, being implemented · **Date**: 2026-09
+**Status**: accepted, implemented · **Date**: 2026-09
 
 ## Context
 

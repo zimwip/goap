@@ -35,7 +35,7 @@ func SeedDemo(ctx context.Context, g *graph.Graph) (bool, error) {
 		{Namespace: alm, Key: "CMP-2", Type: alm + "@Component", Properties: map[string]any{"title": "notification-service", "technology": "go", "version": "2.1.0"}},
 		{Namespace: alm, Key: "CMP-3", Type: alm + "@Component", Properties: map[string]any{"title": "settlement-batch", "technology": "shell", "version": "0.9.3"}},
 		{Namespace: alm, Key: "CMP-4", Type: alm + "@Component", Properties: map[string]any{"title": "card-crypto", "technology": "c", "version": "3.0.1"}},
-		// ALM chain (sdlc)
+		// ALM chain (alm)
 		{Namespace: alm, Key: "FCT-1", Type: alm + "@Function", Properties: map[string]any{"title": "Collect a payment"}},
 		{Namespace: alm, Key: "FCT-2", Type: alm + "@Function", Properties: map[string]any{"title": "Refund an order"}},
 		{Namespace: alm, Key: "FCT-3", Type: alm + "@Function", Properties: map[string]any{"title": "Notify the customer"}},

@@ -1,6 +1,6 @@
 # ADR 0027 — The editor of a node type
 
-**Status**: accepted (implemented on the projected NodeType nodes; moving to the type catalogue) · **Date**: 2026-09 ·
+**Status**: accepted, implemented · **Date**: 2026-09 ·
 Extends ADR 0012 (node types), ADR 0013 (domains), ADR 0023 (definitions in the graph).
 
 ## Context
@@ -21,8 +21,8 @@ nodeTypes:
 ```
 - `editor` is a name (`^[a-z][a-z0-9_-]*$`, checked by `Schema.check`); empty: the default node editor.
 - Inherited through `extends`: a subtype opens in the editor of its nearest ancestor that names one.
-- It is part of the type's model (ADR 0012 §2): `methodology.NodeType.Editor`,
-  `registry.v1.NodeType.editor`.
+- It is part of the type's model (ADR 0012 §2): `methodology.NodeType.Editor`, `registry.v1.NodeType.editor`, and
+  resolved in the type catalogue (`typecat.Type.Editor`, `registry.v1.TypeInfo.editor`).
 - The domain does not know the IDE: the name is a contract. An unknown name falls back to the default editor.
 
 ### 2. The IDE resolves it everywhere
@@ -30,8 +30,9 @@ nodeTypes:
   node (id, key, type, namespace, properties) onto the tab of an editor, and may name a field to reveal; it returns
   nothing when it cannot show the node (an element removed from its definition, an unknown version).
 - `web/src/lib/nodeEditors.ts` `openNode` is the single way to open a node: it reads the editor of the node's type
-  from the registry (the type model, ADR 0012 §2, cached and refreshed on the domain events), calls the node editor,
-  and falls back to the default node editor. `generic: true` forces the default editor (history, relations).
+  from the IDE's copy of the type catalogue (`web/src/lib/stores/types.svelte.ts`, loaded from the registry's
+  `ListTypes`, reloaded when the IDE publishes or archives a domain), calls the node editor, and falls back to the
+  default node editor. `generic: true` forces the default editor (history, relations).
 - The default node editor offers "Open in …" when the type names another editor.
 - The node editors of the platform are registered in `web/src/lib/views/nodeEditors.ts`:
 
@@ -51,5 +52,4 @@ registration in the IDE and a declaration in a domain.
 
 ## Consequences
 - The domain form edits `editor`, and keeps `search` on save.
-- Implemented first on the projected `NodeType` nodes (with the projection of every published domain, even one no
-  methodology references); both go away with the projection (ADR 0012).
+- The IDE resolves lifecycles, properties and editors from the same catalogue, by qualified type.

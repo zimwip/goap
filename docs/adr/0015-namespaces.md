@@ -1,6 +1,6 @@
 # ADR 0015 — Namespaces and namespace-scoped changes
 
-**Status**: accepted (§1: one domain per namespace, being implemented) · **Date**: 2026-09
+**Status**: accepted, implemented · **Date**: 2026-09
 
 ## Context
 Node keys were globally unique free strings and a change could touch any node. We want to organise the graph by

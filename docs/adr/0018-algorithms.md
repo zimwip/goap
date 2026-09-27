@@ -1,6 +1,6 @@
 # ADR 0018 — Algorithms: the DSL as a generic capability, plugged into the domain
 
-**Status**: accepted (§5-6: being implemented on the type catalogue and definition nodes) · **Date**: 2026-09 · Extends ADR 0007 (sandbox), ADR 0013 (shared domain), ADR 0014 (lifecycle).
+**Status**: accepted, implemented · **Date**: 2026-09 · Extends ADR 0007 (sandbox), ADR 0013 (shared domain), ADR 0014 (lifecycle).
 
 ## Context
 
