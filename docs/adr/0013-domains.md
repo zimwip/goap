@@ -17,20 +17,21 @@ own lifecycle rather than with the methodologies.
 2. **One domain per namespace.** A domain's name is the namespace its nodes live in (`alm`, `organisation`,
    `platform`; ADR 0015), and the prefix of the references to its types (ADR 0012). The meta-domains `methodology` and
    `domain` are built in and type the definitions themselves (ADR 0023).
-3. **A methodology references types, not a domain.** It names the qualified types and link types it works on
-   (`alm@Requirement`) and may use several domains. There is no `domainRef` and no embedded `domain:` section. When a
-   methodology is saved or published, every qualified reference is resolved against the domain version in force
-   (the latest published one): `expects.produce.nodeType`, `expects.link.type`, type literals in CEL, builtin
-   `params.linkTypes`. A methodology is published only on published domains.
+3. **A methodology names its target namespace, not a domain.** `namespace: alm` is the namespace its changes act on
+   (ADR 0015 §2), hence the domain whose nodes it creates and modifies; it replaces `domainRef`, and there is no
+   embedded `domain:` section. Its references to types and link types are qualified (`alm@Requirement`); they may
+   point to other domains for what it reads or links to (`organisation@OrgUnit`), but the nodes it writes are of its
+   target namespace. When a methodology is saved or published, every qualified reference is resolved against the
+   domain version in force (the latest published one): `expects.produce.nodeType`, `expects.link.type`, type literals
+   in CEL, builtin `params.linkTypes`. A methodology is published only on published domains.
 4. **Domain publication is checked against its users.** A new domain version is refused when a published methodology
    would break on it (a type or link type it references disappears). A domain in use cannot be deleted or archived.
-5. The version in force is the latest published one; publishing it changes what every change is judged by from the
-   next baseline on (ADR 0012 §2). Nothing is projected.
+5. The version in force is the latest published one; publishing it applies to the changes checked afterwards
+   (ADR 0012 §2). Nothing is projected.
 
 ## Consequences
 
-- The IDE has a Domain explorer and editor; a methodology no longer picks a domain, its references say which ones it
-  uses.
+- The IDE has a Domain explorer and editor; a methodology picks its target namespace instead of a domain.
 - A domain holds algorithms (ADR 0018); a methodology holds none.
 - Moving the data of a domain to another namespace is a data migration, not a rename: the namespace is part of every
   type reference.
