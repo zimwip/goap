@@ -8,7 +8,7 @@ The organisation is hierarchical and is not part of the delivery domain: it need
 namespace, and nodes of other namespaces must be able to reference it (a component is owned by a unit).
 
 ## Decision
-1. **Organisation namespace** (`organisation`, a built-in domain, `pkg/methodology/builtin/organisation.yaml`, ADR 0012 §4): `OrgUnit` nodes
+1. **Organisation namespace** (`organisation`, a built-in domain, `domains/builtin/organisation.yaml`, ADR 0012 §4): `OrgUnit` nodes
    (name, kind: company, direction, department, team). The hierarchy is the `part_of` link, **child to
    parent**: outgoing links belong to the source version (ADR 0003), so reorganising a unit only
    versions that unit. `SeedDemo` loads a small hierarchy.

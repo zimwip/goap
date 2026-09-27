@@ -61,13 +61,15 @@ Question answered (CLAUDE.md, rule 8): **WHAT** is being changed — how a node 
 
 ### 4. Built-in domains: shipped with the code, some frozen
 - The domains the platform writes or reads before anything is loaded ship with the code (embedded YAML,
-  `pkg/methodology/builtin/`, `methodology.BuiltinDomains`):
+  `domains/builtin/`, `methodology.BuiltinDomains`):
   - the **meta-domains** `methodology` (`MethodologyVersion`, `Agent`, `Action`, `Condition`, `Goal`, `ToolRequest`)
     and `domain` (`DomainVersion`, `NodeType`, `LinkType`, `Lifecycle`, `Algorithm`, `AlgorithmInstance`), which
     type the definitions of methodologies and domains (ADR 0023);
   - `organisation` (`OrgUnit`, `Adapter`, `User`, `Policy`), read by the sub-changes (ADR 0016), the adapters
-    (CLAUDE.md, rule 3) and access control (ADR 0020).
-- `methodology` and `organisation` are **frozen**: the platform reads them in its own way, so they are initialised at
+    (CLAUDE.md, rule 3) and access control (ADR 0020);
+  - `platform` (`MCP`, `AdapterDef`, `LlmProvider`, `LlmModel`, `LlmAlias`), read by the MCP hub (ADR 0019) and the
+    model gateway.
+- `methodology`, `organisation` and `platform` are **frozen**: the platform reads them in its own way, so they are initialised at
   startup from their YAML and change with the code only; the registry never versions them (`IsFrozenDomain`).
 - `domain` is the content the methodologies drive: its shipped version is the **initial version**, and new versions
   are created and published in the registry like any domain. A version must keep what the platform writes with it
@@ -75,12 +77,12 @@ Question answered (CLAUDE.md, rule 8): **WHAT** is being changed — how a node 
   validators. The latest published version replaces the shipped one in the catalogue.
 - A built-in domain is always in the catalogue, before anything is loaded from the registry: the registry writes its
   definition nodes into a graph that does not need the registry to check them, so there is no bootstrap cycle (the
-  registry stores in the graph, the graph loads its catalogue from the registry), and the organisation and access
-  seeds do not wait for the registry.
+  registry stores in the graph, the graph loads its catalogue from the registry), and the organisation, access and
+  model configuration seeds do not wait for the registry.
 - The registry lists and serves the shipped versions like the others (published, `builtin: true`, `frozen` for
-  methodology and organisation), so the domain editor shows them read-only. It refuses to change or archive a shipped
+  methodology, organisation and platform), so the domain editor shows them read-only. It refuses to change or archive a shipped
   version, to version a frozen domain, and a domain cannot take a frozen name.
-- Every other namespace is an ordinary domain (`alm`, `platform`, ...): created, versioned and published from the
+- Every other namespace is an ordinary domain (`alm`, ...): created, versioned and published from the
   domain editor; adding a namespace is publishing a new domain (ADR 0013).
 
 ## Consequences
@@ -93,5 +95,5 @@ Question answered (CLAUDE.md, rule 8): **WHAT** is being changed — how a node 
 - `Node.Type` changes format: existing graphs are not migrated, they are reset and seeded again (as for ADR 0023).
 - An unknown type is an error instead of an untyped node without lifecycle or validators.
 - Removed: `pkg/metamodel` (projection, `Supertypes`, `TypeNamespace`, `CreateObject` on NodeType nodes,
-  `ApplyNodeTypes`), the `NodeType` meta-types and links of `domains/platform.yaml`, the ABAC resource `nodetype`,
+  `ApplyNodeTypes`), the `NodeType` meta-types and links of the platform domain, the ABAC resource `nodetype`,
   the engine's `SupertypesCache`, the IDE resolvers that scanned the head graph for `NodeType` nodes.

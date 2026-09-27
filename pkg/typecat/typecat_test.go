@@ -59,7 +59,7 @@ func TestBuiltinDomainsAreAlwaysThere(t *testing.T) {
 	if err := c.CheckLink("methodology@defines", "methodology@MethodologyVersion", "methodology@Agent"); err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"methodology", "organisation"} {
+	for _, name := range []string{"methodology", "organisation", "platform"} {
 		if _, err := New(parse(t, "name: "+name+"\nversion: 1.0.0\nnodeTypes: [X]\n")); !errors.Is(err, ErrInvalid) {
 			t.Fatalf("a domain cannot take the name of a frozen domain: %v", err)
 		}
@@ -75,7 +75,7 @@ func TestBuiltinDomainsAreAlwaysThere(t *testing.T) {
 }
 
 func TestRepositoryDomains(t *testing.T) {
-	c, err := New(fromFile(t, "alm"), fromFile(t, "platform"))
+	c, err := New(fromFile(t, "alm"))
 	if err != nil {
 		t.Fatal(err)
 	}
