@@ -13,8 +13,8 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/labstack/echo/v4"
-	"github.com/labstack/echo/v4/middleware"
+	"github.com/labstack/echo/v5"
+	"github.com/labstack/echo/v5/middleware"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
 	"github.com/zimwip/goap/internal/identity"
@@ -94,7 +94,7 @@ func authenticator(cfg Config) (echo.MiddlewareFunc, error) {
 	switch cfg.AuthMode {
 	case "", "none":
 		return func(next echo.HandlerFunc) echo.HandlerFunc {
-			return func(c echo.Context) error {
+			return func(c *echo.Context) error {
 				setPrincipal(c, cfg, authz.Principal{Subject: "dev", Org: "dev", Roles: []string{"admin"}})
 				return next(c)
 			}
@@ -104,7 +104,7 @@ func authenticator(cfg Config) (echo.MiddlewareFunc, error) {
 			return nil, errors.New("hs256 auth requires a JWT secret of at least 32 bytes")
 		}
 		return func(next echo.HandlerFunc) echo.HandlerFunc {
-			return func(c echo.Context) error {
+			return func(c *echo.Context) error {
 				raw, ok := strings.CutPrefix(c.Request().Header.Get("Authorization"), "Bearer ")
 				if !ok {
 					return echo.NewHTTPError(http.StatusUnauthorized, "missing bearer token")
@@ -125,7 +125,7 @@ func authenticator(cfg Config) (echo.MiddlewareFunc, error) {
 }
 
 // setPrincipal propagates the caller to the services, completed by its User node when there is one.
-func setPrincipal(c echo.Context, cfg Config, p authz.Principal) {
+func setPrincipal(c *echo.Context, cfg Config, p authz.Principal) {
 	if cfg.Enrich != nil {
 		p = cfg.Enrich(c.Request().Context(), p)
 	}
@@ -136,7 +136,7 @@ func setPrincipal(c echo.Context, cfg Config, p authz.Principal) {
 }
 
 func devToken(cfg Config) echo.HandlerFunc {
-	return func(c echo.Context) error {
+	return func(c *echo.Context) error {
 		var in struct {
 			Subject string   `json:"subject"`
 			Org     string   `json:"org"`

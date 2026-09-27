@@ -10,14 +10,12 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/labstack/echo/v4"
-	"github.com/labstack/echo/v4/middleware"
-	"go.opentelemetry.io/contrib/instrumentation/github.com/labstack/echo/otelecho"
-	"golang.org/x/net/http2"
-	"golang.org/x/net/http2/h2c"
+	echootel "github.com/labstack/echo-opentelemetry"
+	"github.com/labstack/echo/v5"
+	"github.com/labstack/echo/v5/middleware"
 )
 
-// Server is an Echo server that also serves Connect handlers over h2c.
+// Server is an Echo server that also serves Connect handlers over HTTP/2 cleartext (h2c).
 type Server struct {
 	Echo  *echo.Echo
 	Addr  string
@@ -29,17 +27,15 @@ type Server struct {
 // panic recovery.
 func NewServer(log *slog.Logger, addr string) *Server {
 	e := echo.New()
-	e.HideBanner = true
-	e.HidePort = true
 	e.Use(middleware.Recover())
-	e.Use(otelecho.Middleware(ServiceName(), otelecho.WithSkipper(func(c echo.Context) bool {
+	e.Use(echootel.NewMiddlewareWithConfig(echootel.Config{ServerName: ServiceName(), Skipper: func(c *echo.Context) bool {
 		p := c.Request().URL.Path
 		return p == "/healthz" || p == "/readyz"
-	})))
+	}}))
 	e.Use(middleware.RequestID())
 	e.Use(middleware.RequestLoggerWithConfig(middleware.RequestLoggerConfig{
 		LogURI: true, LogStatus: true, LogLatency: true, LogMethod: true,
-		LogValuesFunc: func(c echo.Context, v middleware.RequestLoggerValues) error {
+		LogValuesFunc: func(c *echo.Context, v middleware.RequestLoggerValues) error {
 			if v.URI != "/healthz" && v.URI != "/readyz" {
 				log.Debug("request", "method", v.Method, "uri", v.URI, "status", v.Status, "latency", v.Latency)
 			}
@@ -47,8 +43,8 @@ func NewServer(log *slog.Logger, addr string) *Server {
 		},
 	}))
 	s := &Server{Echo: e, Addr: addr, log: log}
-	e.GET("/healthz", func(c echo.Context) error { return c.String(http.StatusOK, "ok") })
-	e.GET("/readyz", func(c echo.Context) error {
+	e.GET("/healthz", func(c *echo.Context) error { return c.String(http.StatusOK, "ok") })
+	e.GET("/readyz", func(c *echo.Context) error {
 		for _, f := range s.ready {
 			if err := f(c.Request().Context()); err != nil {
 				return c.String(http.StatusServiceUnavailable, err.Error())
@@ -68,9 +64,17 @@ func (s *Server) Mount(path string, h http.Handler) {
 	s.Echo.Any(path+"*", echo.WrapHandler(h))
 }
 
+// httpServer serves the Echo handler over HTTP/1.1 (browsers) and HTTP/2 cleartext (Connect clients, H2CClient).
+func (s *Server) httpServer() *http.Server {
+	var protocols http.Protocols
+	protocols.SetHTTP1(true)
+	protocols.SetUnencryptedHTTP2(true)
+	return &http.Server{Addr: s.Addr, Handler: s.Echo, Protocols: &protocols, ReadHeaderTimeout: 10 * time.Second}
+}
+
 // Run serves until SIGINT/SIGTERM, then shuts down gracefully.
 func (s *Server) Run() error {
-	srv := &http.Server{Addr: s.Addr, Handler: h2c.NewHandler(s.Echo, &http2.Server{}), ReadHeaderTimeout: 10 * time.Second}
+	srv := s.httpServer()
 	errc := make(chan error, 1)
 	go func() {
 		s.log.Info("listening", "addr", s.Addr)
