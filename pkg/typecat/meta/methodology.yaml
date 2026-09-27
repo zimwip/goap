@@ -1,0 +1,14 @@
+name: methodology
+version: 1.0.0
+description: >
+  Built-in meta-domain (ADR 0012 §4, ADR 0023): the definition of a methodology version, one node per element, in the
+  "methodology" namespace. Its types are in every type catalogue, before anything is loaded from the registry.
+nodeTypes:
+  - {name: MethodologyVersion, editor: methodology, description: "A version of a methodology: its scalar fields, status and timestamps", properties: [name, version, description, namespace, status, createdAt, updatedAt, publishedAt, updatedBy]}
+  - {name: Agent, editor: agent, description: "Agent of a methodology version, with its triggers", properties: [name, description, planner, actions, goals, triggers, position, removed]}
+  - {name: Action, editor: action, description: "Action of a methodology version", properties: [name, kind, description, position, removed]}
+  - {name: Condition, editor: condition, description: "Condition of a methodology version", properties: [name, description, expr, position, removed]}
+  - {name: Goal, editor: goal, description: "Goal of a methodology version", properties: [name, description, pre, position, removed]}
+linkTypes:
+  # a version -> its elements
+  - {name: defines, from: MethodologyVersion}

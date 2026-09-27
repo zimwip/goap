@@ -30,6 +30,9 @@ Question answered (CLAUDE.md, rule 8): **WHAT** is being changed — how a node 
   `x.types`. A reference may cross domains (`alm@Component` has an `owner` link to `organisation@OrgUnit`).
 - Link types are referenced the same way, with the prefix of the domain that declares them (`alm@verifies`,
   `organisation@owner` from a node of any domain to an `organisation@OrgUnit`).
+- Inside a domain definition, a bare name is a type of that domain (`extends: Requirement` in `alm`), a qualified one
+  a type of another (`extends: base@Item`). `domain.TypeRef` parses and qualifies references; `pkg/typecat` is the
+  catalogue.
 
 ### 2. The registry is the reference; the services hold an in-memory copy
 - The **registry** is the reference of the node types: the published version of each domain (ADR 0013, 0023). It
