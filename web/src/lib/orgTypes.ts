@@ -1,5 +1,5 @@
 // Qualified types and links of the organisation and platform domains the IDE writes and reads (ADR 0012):
-// the built-in organisation and platform domains (pkg/methodology/builtin/).
+// the built-in organisation and platform domains (domains/builtin/).
 export const ORG_UNIT_TYPE = 'organisation@OrgUnit';
 export const ADAPTER_TYPE = 'organisation@Adapter';
 export const PART_OF = 'organisation@part_of';

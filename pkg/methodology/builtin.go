@@ -1,13 +1,11 @@
 package methodology
 
 import (
-	"embed"
 	"fmt"
 	"sync"
-)
 
-//go:embed builtin/*.yaml
-var builtinFS embed.FS
+	"github.com/zimwip/goap/domains/builtin"
+)
 
 var (
 	builtinOnce sync.Once
@@ -21,8 +19,8 @@ var (
 // (see IsFrozenDomain); the embedded "domain" is its initial version, which published versions of the registry extend.
 func BuiltinDomains() []*Domain {
 	builtinOnce.Do(func() {
-		for _, f := range []string{"builtin/methodology.yaml", "builtin/domain.yaml", "builtin/organisation.yaml", "builtin/platform.yaml"} {
-			src, err := builtinFS.ReadFile(f)
+		for _, f := range []string{"methodology.yaml", "domain.yaml", "organisation.yaml", "platform.yaml"} {
+			src, err := builtin.FS.ReadFile(f)
 			if err != nil {
 				panic(err)
 			}
