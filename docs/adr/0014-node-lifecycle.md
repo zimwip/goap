@@ -24,8 +24,8 @@ the intent without any rule. Compared with plm-core, aifact and ailm, the missin
    before. `changeControlled: false` opts a type out of change control (it cannot have a lifecycle).
    Stored as `domain@Lifecycle` definition nodes of the domain version (ADR 0023).
 2. **State lives on the node version** (`node_version.state`), so a baseline reproduces the states.
-   The type catalogue (ADR 0012 §2) resolves the lifecycle of each type, with `document` and
-   `changeControlled`. A change is judged by the catalogue **of its reference baseline**.
+   The type catalogue (ADR 0012 §2, the graph's copy of the registry's model) resolves the lifecycle of each type,
+   with `document` and `changeControlled`; a change is judged by the catalogue in force when it is checked.
 3. **Editable is a working state inside a change.** A node is modified (properties, links, retirement) only when
    its effective state is editable. Persisted versions are never editable: a change **reopens** the node by writing
    a version in an editable state, edits it, and must move it to a non-editable state before it is applied. The

@@ -36,10 +36,13 @@ must not need a mechanism of its own.
 
 - Methodologies and domains are versioned per element: editing one action gives a new version of that node only; the
   edit history of a draft is the version history of its nodes.
-- The definition nodes are what the type catalogue reads (ADR 0012 §2) and what the self-observation agent improves
-  (ADR 0011 §3). What runs is the published definition; there is no projection to keep in sync.
+- The registry builds the type model from the definition nodes and serves it (ADR 0012 §2); they are what the
+  self-observation agent improves (ADR 0011 §2). What runs is the published definition; there is no projection to keep
+  in sync.
 - The registry depends on the graph: without it nothing is read or written.
 - Changing the representation (from `Def*` nodes and the `M:` / `D:` projection) is not migrated: graphs are reset and
   seeded again.
-- Not done: the engine and the web reading the definitions from the graph instead of the registry API; drafts as open
-  changes on their own branch; the graph enforcing the immutability of a published version (a rule of the registry).
+- The other services read definitions and types through the registry (API and events), never the definition nodes
+  directly.
+- Not done: drafts as open changes on their own branch; the graph enforcing the immutability of a published version
+  (a rule of the registry).

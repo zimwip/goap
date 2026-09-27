@@ -27,7 +27,7 @@ A node type declares its searchable properties, like its validators (ADR 0018):
 - `text`: the value goes into the indexed document (full text and embedding).
 - `facet`: the value is filterable and counted (`GROUP BY`).
 - Inherited through `extends` (subtype adds to, and may override by property name, its parent's).
-- The graph resolves the spec from the type catalogue (ADR 0012 §2) so the indexer never reads node types: it knows
+- The graph resolves the spec from its type catalogue (the copy of the registry's model, ADR 0012 §2) so the indexer never reads node types: it knows
   the graph events and the model gateway only.
 - Built-in facets, always present: `namespace`, `type`, `state`, `branch`, `main`.
 
