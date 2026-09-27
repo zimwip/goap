@@ -56,6 +56,19 @@ func (e *Engine) journal(ctx context.Context, p *Process, recs ...domain.Executi
 	}
 }
 
+// tickRecordWithCalls attaches planning-time LLM calls (llm/llm-scoring planners) to a
+// tick record, so they are visible in the journal (ADR 0011) even on the paths (blocked
+// board, goal reached, stuck) that never reach a Step.
+func tickRecordWithCalls(r domain.ExecutionRecord, calls []LLMCall) domain.ExecutionRecord {
+	for _, c := range calls {
+		r.ModelCalls = append(r.ModelCalls, domain.ModelCall{Provider: c.Provider, Model: c.Model, InputTokens: c.InputTokens,
+			OutputTokens: c.OutputTokens, DurationMs: c.DurationMs, Error: c.Error})
+		r.InputTokens += c.InputTokens
+		r.OutputTokens += c.OutputTokens
+	}
+	return r
+}
+
 // actionRecord describes the execution of step i.
 func actionRecord(p *Process, i int, kind, id string) domain.ExecutionRecord {
 	s := p.Steps[i]

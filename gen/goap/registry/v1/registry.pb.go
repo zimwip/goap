@@ -1347,7 +1347,7 @@ type Agent struct {
 	Name        string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	Description string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
 	Examples    []string               `protobuf:"bytes,3,rep,name=examples,proto3" json:"examples,omitempty"`
-	// goap | utility | hybrid
+	// goap | utility | hybrid | llm | llm-scoring
 	Planner string `protobuf:"bytes,4,opt,name=planner,proto3" json:"planner,omitempty"`
 	// admissible action names (empty: all)
 	Actions []string `protobuf:"bytes,5,rep,name=actions,proto3" json:"actions,omitempty"`
@@ -1356,7 +1356,9 @@ type Agent struct {
 	// automatic executions (outside the intent loop)
 	Triggers []*Trigger `protobuf:"bytes,7,rep,name=triggers,proto3" json:"triggers,omitempty"`
 	// MCPs whose tools the llm and script actions of the agent may use
-	Mcps          []string `protobuf:"bytes,8,rep,name=mcps,proto3" json:"mcps,omitempty"`
+	Mcps []string `protobuf:"bytes,8,rep,name=mcps,proto3" json:"mcps,omitempty"`
+	// LLM alias (required when planner is llm or llm-scoring)
+	Model         string `protobuf:"bytes,9,opt,name=model,proto3" json:"model,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1445,6 +1447,13 @@ func (x *Agent) GetMcps() []string {
 		return x.Mcps
 	}
 	return nil
+}
+
+func (x *Agent) GetModel() string {
+	if x != nil {
+		return x.Model
+	}
+	return ""
 }
 
 // A trigger starts the agent automatically.
@@ -4756,7 +4765,7 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\bR\x05value:\x028\x01\x1a:\n" +
 	"\fEffectsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\bR\x05value:\x028\x01\"\xee\x01\n" +
+	"\x05value\x18\x02 \x01(\bR\x05value:\x028\x01\"\x84\x02\n" +
 	"\x05Agent\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x1a\n" +
@@ -4765,7 +4774,8 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\aactions\x18\x05 \x03(\tR\aactions\x12\x14\n" +
 	"\x05goals\x18\x06 \x03(\tR\x05goals\x125\n" +
 	"\btriggers\x18\a \x03(\v2\x19.goap.registry.v1.TriggerR\btriggers\x12\x12\n" +
-	"\x04mcps\x18\b \x03(\tR\x04mcps\"\x91\x02\n" +
+	"\x04mcps\x18\b \x03(\tR\x04mcps\x12\x14\n" +
+	"\x05model\x18\t \x01(\tR\x05model\"\x91\x02\n" +
 	"\aTrigger\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x12\n" +

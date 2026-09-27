@@ -8,7 +8,9 @@ import (
 	"testing"
 
 	"github.com/zimwip/goap/pkg/authz"
+	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/graph"
+	"github.com/zimwip/goap/pkg/llmcfg"
 	"github.com/zimwip/goap/pkg/methodology"
 )
 
@@ -185,5 +187,61 @@ func TestAgentsAndScriptsRoundTrip(t *testing.T) {
 				t.Fatalf("engine port list: %v", err)
 			}
 		})
+	}
+}
+
+func pendingAliasImpacts(t *testing.T, g *graph.Graph, alias string) []domain.ChangeImpact {
+	t.Helper()
+	changes, err := g.Changes(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	key, typ := llmcfg.AliasKey(alias), llmcfg.NodeTypeAlias
+	var out []domain.ChangeImpact
+	for _, c := range changes {
+		if c.Namespace != llmcfg.NamespacePlatform {
+			continue
+		}
+		for _, cn := range c.Nodes {
+			if cn.Key == key && cn.Type == typ {
+				out = append(out, cn)
+			}
+		}
+	}
+	return out
+}
+
+func TestPublishStubsMissingAlias(t *testing.T) {
+	g := graph.New(graph.NewMemory())
+	s := &Service{Store: graphWithDomains{NewGraphStore(g), NewMemoryStore()}}
+	withALM(t, s)
+	ctx := as("methodologist")
+	m := example(t)
+	m.Version = "9.0.0"
+	m.Agents = []methodology.Agent{{Name: "plannertest", Planner: methodology.PlannerLLMScoring, Model: "unconfigured-test-alias"}}
+	src, err := m.YAML()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := s.Import(ctx, src, true); err != nil {
+		t.Fatal(err)
+	}
+	impacts := pendingAliasImpacts(t, g, "unconfigured-test-alias")
+	if len(impacts) != 1 || impacts[0].Review != domain.ReviewProposed || impacts[0].Intent != domain.IntentCreated {
+		t.Fatalf("expected one pending alias impact, got %+v", impacts)
+	}
+
+	// republishing a new version referencing the same missing alias does not duplicate the pending stub
+	m2 := m
+	m2.Version = "9.1.0"
+	src2, err := m2.YAML()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := s.Import(ctx, src2, true); err != nil {
+		t.Fatal(err)
+	}
+	if impacts := pendingAliasImpacts(t, g, "unconfigured-test-alias"); len(impacts) != 1 {
+		t.Fatalf("expected the pending stub not to be duplicated, got %+v", impacts)
 	}
 }

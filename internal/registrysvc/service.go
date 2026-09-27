@@ -139,6 +139,7 @@ func (s *Service) Publish(ctx context.Context, name, version string) (Record, er
 	}
 	r, err = s.Store.Get(ctx, name, version)
 	if err == nil {
+		s.ensureAliasStubs(ctx, &r.Methodology)
 		s.publish(ctx, "published", r)
 	}
 	return r, err

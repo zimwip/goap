@@ -35,4 +35,11 @@ export function isAvailableModel(value: string): boolean {
   return modelChoices.aliases.some((a) => a.alias === v) || modelChoices.models.some((m) => `${m.provider}/${m.model}` === v);
 }
 
+/** Is `value` ("" = default alias, or an alias) one of the configured aliases? Administrators own what an
+ * alias resolves to; authors only ever pick or type an alias name, never a raw provider/model. */
+export function isAvailableAlias(value: string): boolean {
+  const v = value.trim() || 'default';
+  return modelChoices.aliases.some((a) => a.alias === v);
+}
+
 onTokenChange(() => void refreshModelChoices());

@@ -467,13 +467,13 @@ func (e *Engine) cycle(ctx context.Context, p *Process, m *methodology.Compiled)
 		}
 	}
 	tickStart := e.clock()
-	plan, err := e.plan(ag.Planner, p.World, actions, goal.PlanningGoal(), m.Utilities(bb))
+	plan, planCalls, err := e.plan(ctx, m, ag, p.World, actions, goal.PlanningGoal(), m.Utilities(bb))
 	if errors.Is(err, goap.ErrNoPlan) {
 		p.Status = StatusStuck
 		p.Plan = nil
 		p.Error = fmt.Sprintf("no plan reaches goal %s from the current state", goal.Name)
-		e.journal(ctx, p, domain.ExecutionRecord{Kind: domain.ExecTick, Step: len(p.Steps), Before: maps.Clone(p.World), Error: p.Error,
-			StartedAt: tickStart, EndedAt: e.clock()})
+		e.journal(ctx, p, tickRecordWithCalls(domain.ExecutionRecord{Kind: domain.ExecTick, Step: len(p.Steps), Before: maps.Clone(p.World), Error: p.Error,
+			StartedAt: tickStart, EndedAt: e.clock()}, planCalls))
 		return nil
 	}
 	if err != nil {
@@ -484,9 +484,9 @@ func (e *Engine) cycle(ctx context.Context, p *Process, m *methodology.Compiled)
 	for i, a := range plan.Actions {
 		p.Plan[i] = a.Name
 	}
-	tick := domain.ExecutionRecord{Kind: domain.ExecTick, Step: len(p.Steps), Before: maps.Clone(p.World), Plan: slices.Clone(p.Plan),
+	tick := tickRecordWithCalls(domain.ExecutionRecord{Kind: domain.ExecTick, Step: len(p.Steps), Before: maps.Clone(p.World), Plan: slices.Clone(p.Plan),
 		BoardBefore: len(bb.Change.Items), BoardAfter: len(bb.Change.Items), Action: p.Plan[0], StartedAt: tickStart, EndedAt: e.clock(),
-		Data: map[string]any{"replanned": replanned(prev, p.Plan), "candidates": len(actions)}}
+		Data: map[string]any{"replanned": replanned(prev, p.Plan), "candidates": len(actions)}}, planCalls)
 	if len(p.Unknown) > 0 {
 		tick.Data["unknown"] = maps.Clone(p.Unknown)
 	}
@@ -495,6 +495,12 @@ func (e *Engine) cycle(ctx context.Context, p *Process, m *methodology.Compiled)
 	action, _ := m.Action(plan.Actions[0].Name)
 	step := Step{Index: len(p.Steps), Action: action.Name, Plan: p.Plan, Before: maps.Clone(p.World), StartedAt: e.clock(),
 		Reads: bb.Change.ReferencedNodes(), BoardBefore: len(bb.Change.Items), LastItem: lastItem(bb.Change)}
+	for _, c := range planCalls {
+		step.LLMCalls = append(step.LLMCalls, c)
+		step.Usage.LLMCalls++
+		step.Usage.InputTokens += c.InputTokens
+		step.Usage.OutputTokens += c.OutputTokens
+	}
 	// the permission is the one of the implementation that will run (a
 	// specialization may require more, e.g. a production deployment)
 	permission := action.Permission

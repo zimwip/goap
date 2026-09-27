@@ -153,6 +153,8 @@ export interface AgentForm extends Identified {
   /** one example per line */
   examples: string;
   planner: string;
+  /** LLM alias the llm / llm-scoring planners call each planning cycle (required for them) */
+  model: string;
   /** eligible actions (empty: all) */
   actions: string[];
   /** goals (empty: all) */
@@ -189,7 +191,9 @@ export type SectionItem = AgentForm | ActionForm | ConditionForm | GoalForm;
 
 export const ACTION_KINDS = ['llm', 'script', 'tool', 'human', 'builtin', 'abstract'] as const;
 export const SCRIPT_LANGUAGES = ['javascript', 'go'] as const;
-export const PLANNERS = ['goap', 'utility', 'hybrid'] as const;
+export const PLANNERS = ['goap', 'utility', 'hybrid', 'llm', 'llm-scoring'] as const;
+/** Planners that call an LLM to plan: Agent.model is required for these. */
+export const LLM_PLANNERS = ['llm', 'llm-scoring'] as const;
 export const TRIGGER_TARGETS = ['new_change', 'event_change'] as const;
 export const FOR_EACH = ['impacts', 'proposals', 'items', 'artifacts'] as const;
 export const PRODUCE_OPS = ['create_node', 'update_node'] as const;
@@ -247,6 +251,7 @@ export const emptyAgent = (): AgentForm => ({
   description: '',
   examples: '',
   planner: 'goap',
+  model: '',
   actions: [],
   goals: [],
   mcps: '',
@@ -349,6 +354,7 @@ function agentToForm(a: Agent, uid: string): AgentForm {
     description: a.description ?? '',
     examples: (a.examples ?? []).join('\n'),
     planner: a.planner || 'goap',
+    model: a.model ?? '',
     actions: [...(a.actions ?? [])],
     goals: [...(a.goals ?? [])],
     mcps: (a.mcps ?? []).join(', '),
@@ -687,6 +693,7 @@ export function fromForm(f: MethodologyForm): { methodology: Methodology; issues
           .filter(Boolean),
       );
       put(o, 'planner', a.planner);
+      put(o, 'model', a.model.trim());
       put(o, 'actions', [...a.actions]);
       put(o, 'goals', [...a.goals]);
       put(o, 'mcps', mcpList(a.mcps));
