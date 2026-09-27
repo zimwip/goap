@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/zimwip/goap/internal/graphsvc"
+	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/mcp"
 	"github.com/zimwip/goap/pkg/methodology"
@@ -67,5 +68,69 @@ func TestSeedsFollowTheDomains(t *testing.T) {
 	uv, _ := g.View(ctx, unit.Ref())
 	if len(uv.Out) != 1 || uv.Out[0].Type != mcp.LinkPartOf {
 		t.Fatalf("unit hierarchy: %+v", uv.Out)
+	}
+}
+
+// The built-in MCPs follow the code at every start; the instances of the default organisation are
+// seeded once, so that removing one sticks (ADR 0028).
+func TestSeedBuiltins(t *testing.T) {
+	ctx := context.Background()
+	g := typedGraph(t)
+	if _, err := graphsvc.SeedDefaults(ctx, g); err != nil {
+		t.Fatal(err)
+	}
+	if seeded, err := graphsvc.SeedBuiltins(ctx, g); err != nil || !seeded {
+		t.Fatalf("first seed = %v, %v", seeded, err)
+	}
+	if again, err := graphsvc.SeedBuiltins(ctx, g); err != nil || again {
+		t.Fatalf("second seed = %v, %v", again, err)
+	}
+	commit := func(ns string, e graph.NodeEdit) {
+		t.Helper()
+		head, err := g.BranchHead(ctx, ns, domain.MainBranch)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := g.Commit(ctx, graph.Commit{Namespace: ns, Title: "edit", Intent: "edit", Baseline: head.ID, By: "test", Edits: []graph.NodeEdit{e}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// an older platform: the MCP lacks a tool and says something else
+	n, err := g.NodeByKey(ctx, mcp.NamespacePlatform, mcp.MCPKey(mcp.BuiltinGraph))
+	if err != nil {
+		t.Fatal(err)
+	}
+	pre := n.Ref()
+	commit(mcp.NamespacePlatform, graph.NodeEdit{Pre: &pre, Props: map[string]any{"description": "old", "tools": []any{}}, Rationale: "older"})
+	// an administrator removes the admin MCP from the default organisation
+	a, err := g.NodeByKey(ctx, mcp.NamespaceOrganisation, mcp.AdapterKey(domain.DefaultOrg, mcp.BuiltinAdmin))
+	if err != nil {
+		t.Fatal(err)
+	}
+	apre := a.Ref()
+	commit(mcp.NamespaceOrganisation, graph.NodeEdit{Pre: &apre, Retire: true, Rationale: "no admin tools"})
+
+	if seeded, err := graphsvc.SeedBuiltins(ctx, g); err != nil || !seeded {
+		t.Fatalf("resync = %v, %v", seeded, err)
+	}
+	head, _ := g.BranchHead(ctx, mcp.NamespacePlatform, domain.MainBranch)
+	nodes, _, err := g.BaselineGraph(ctx, head.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, n := range nodes {
+		if n.Key == mcp.MCPKey(mcp.BuiltinGraph) {
+			d, err := mcp.DefFromProps(n.Properties)
+			if err != nil || d.Description != mcp.BuiltinDefs()[0].Description || len(d.Tools) != len(mcp.BuiltinDefs()[0].Tools) {
+				t.Fatalf("goap-graph not resynced: %+v %v", d, err)
+			}
+		}
+	}
+	orgHead, _ := g.BranchHead(ctx, mcp.NamespaceOrganisation, domain.MainBranch)
+	orgNodes, _, _ := g.BaselineGraph(ctx, orgHead.ID)
+	for _, n := range orgNodes {
+		if n.Key == mcp.AdapterKey(domain.DefaultOrg, mcp.BuiltinAdmin) && !n.Deleted {
+			t.Fatal("the removed instance was seeded again")
+		}
 	}
 }

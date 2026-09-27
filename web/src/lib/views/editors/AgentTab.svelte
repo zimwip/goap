@@ -8,6 +8,7 @@
   import TriggersEditor from './TriggersEditor.svelte';
   import { provideActions, useReveal } from '../../shell/workbench.svelte';
   import { PLANNERS, LLM_PLANNERS } from '../../methodologyForm';
+  import { tools, refreshTools, mcpsOfScope } from '../../stores/tools.svelte';
   import { draftOf, draftActions, removeItemAction, syncTabUid } from './methodologyTabs';
   import ModelAliasField from '../../components/ModelAliasField.svelte';
   import { modelChoices, refreshModelChoices } from '../../stores/modelChoices.svelte';
@@ -53,6 +54,11 @@
       ? d.form.actions.filter((a) => (item.actions.length === 0 || item.actions.includes(a.name)) && !a.utility.trim()).map((a) => a.name)
       : [],
   );
+  /** MCPs only actions may declare (ADR 0028) */
+  const actionOnly = $derived(mcpsOfScope('action'));
+  $effect(() => {
+    if (!tools.loaded) void refreshTools();
+  });
 </script>
 
 <div class="editor-page" bind:this={root}>
@@ -106,7 +112,9 @@
             data-path="{p}.mcps"
             placeholder="document-repository"
           />
-          <span class="hint">MCPs whose tools this agent's LLM/script actions may use, in addition to the ones the actions declare.</span>
+          <span class="hint"
+            >MCPs whose tools this agent's LLM/script actions may use, in addition to the ones the actions declare. An MCP of scope agent (orchestration: <code>goap-scheduler</code> starts other agents) is declared here only and reached by the llm actions{#if actionOnly.length}; action only, not here: <code>{actionOnly.join(', ')}</code>{/if}.</span
+          >
         </div>
         {#if noUtility.length}
           <div class="alert warn">

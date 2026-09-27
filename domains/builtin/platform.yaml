@@ -1,5 +1,5 @@
 name: platform
-version: 2.0.0
+version: 2.1.0
 description: >
   The platform configuration, in its own namespace ("platform"): the MCPs (the generic usage of a tool by an LLM), the
   adapter definitions (AdapterDef: code mapping an MCP onto a connector; an organisation implements an MCP with an Adapter
@@ -7,7 +7,8 @@ description: >
 nodeTypes:
   # `editor` names the editor of the user interface for the nodes of a type (the default node editor when empty or unknown).
   # the MCPs (MCP:<name>) and the adapter definitions (ADD:<name>, ADR 0019)
-  - {name: MCP, editor: mcp, description: "Generic usage of a tool by an LLM: its tool signatures", properties: [name, description, tools]}
+  # scope: where a methodology may use the MCP, action | agent | both (default; ADR 0028)
+  - {name: MCP, editor: mcp, description: "Generic usage of a tool by an LLM: its tool signatures and scope", properties: [name, description, scope, tools]}
   - {name: AdapterDef, editor: adapter, description: "Code implementing the tools of an MCP with the operations of a connector", properties: [name, description, mcp, connector, language, code, params]}
   - {name: LlmProvider, description: "LLM provider: a kind (preset) on a wire protocol", properties: [name, kind, protocol, baseURL, enabled, apiKeyRef]}
   - {name: LlmModel, description: "Model offered on the platform, with its global quota and the roles that may call it", properties: [provider, model, displayName, enabled, quotaTokens, quotaPeriod, roles]}

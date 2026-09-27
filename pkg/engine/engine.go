@@ -21,6 +21,7 @@ import (
 	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/intent"
 	"github.com/zimwip/goap/pkg/llm"
+	"github.com/zimwip/goap/pkg/mcp"
 	"github.com/zimwip/goap/pkg/methodology"
 )
 
@@ -547,19 +548,32 @@ func (e *Engine) execute(ctx context.Context, p *Process, m *methodology.Compile
 // orgOf is the organisation holding the change of a process (an OrgUnit key).
 func (e *Engine) orgOf(p *Process) string { return domain.OrgOf(p.Org) }
 
-// boundMCPs returns the MCPs the organization of the process binds. Without a hub
-// nothing is bound.
+// boundMCPs returns the MCPs the organization of the process binds for actions and the tools they may
+// call ("<mcp>/<tool>", once its restrictions and the scope of its MCP are applied, ADR 0028). Without a
+// hub nothing is bound.
 func (e *Engine) boundMCPs(ctx context.Context, p *Process) (map[string]bool, error) {
 	bound := map[string]bool{}
 	if e.Tools == nil {
 		return bound, nil
 	}
-	_, names, err := e.Tools.Tools(authz.With(ctx, p.Initiator), e.orgOf(p))
+	tools, names, err := e.Tools.Tools(authz.With(ctx, p.Initiator), e.orgOf(p))
 	if err != nil {
 		return nil, fmt.Errorf("MCPs of organization %s: %w", e.orgOf(p), err)
 	}
+	// an MCP of scope agent is not the business of an action (ADR 0028): an action declaring it, or a tool
+	// action on it, is never scheduled; the agent level reaches it through agents[].mcps
+	agentOnly := map[string]bool{}
+	for _, t := range tools {
+		if !mcp.ForActions(t.Scope) {
+			if m, _, err := mcp.SplitTool(t.Name); err == nil {
+				agentOnly[m] = true
+			}
+			continue
+		}
+		bound[t.Name] = true
+	}
 	for _, n := range names {
-		bound[n] = true
+		bound[n] = !agentOnly[n]
 	}
 	return bound, nil
 }
@@ -580,7 +594,8 @@ func allBound(a methodology.Action, bound map[string]bool) bool {
 			return false
 		}
 	}
-	return true
+	// a tool action also needs its tool, which the unit may have restricted
+	return a.Kind != methodology.KindTool || bound[a.Tool]
 }
 
 // specialize returns the implementation to run for a planned action: the

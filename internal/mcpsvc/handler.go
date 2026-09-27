@@ -85,22 +85,24 @@ func (h *Handler) ListConnectors(ctx context.Context, r *connect.Request[mcpv1.L
 }
 
 func defToPB(d mcp.Def) *mcpv1.Mcp {
-	out := &mcpv1.Mcp{Name: d.Name, Description: d.Description}
+	out := &mcpv1.Mcp{Name: d.Name, Description: d.Description, Scope: mcp.ScopeOf(d.Scope)}
 	for _, t := range d.Tools {
-		out.Tools = append(out.Tools, &mcpv1.McpTool{Name: t.Name, Description: t.Description, InputSchema: pbconv.Struct(t.InputSchema)})
+		out.Tools = append(out.Tools, &mcpv1.McpTool{Name: t.Name, Description: t.Description, InputSchema: pbconv.Struct(t.InputSchema), ReadOnly: t.ReadOnly})
 	}
 	return out
 }
 
 func adapterToPB(a mcp.Adapter) *mcpv1.Adapter {
-	return &mcpv1.Adapter{Unit: a.Unit, Mcp: a.MCP, Adapter: a.Adapter, Params: pbconv.Struct(a.Params)}
+	return &mcpv1.Adapter{Unit: a.Unit, Mcp: a.MCP, Adapter: a.Adapter, Params: pbconv.Struct(a.Params),
+		Disabled: a.Disabled, Tools: a.Tools, Deny: a.Deny, ReadOnly: a.ReadOnly}
 }
 
 func adapterFromPB(a *mcpv1.Adapter) mcp.Adapter {
 	if a == nil {
 		return mcp.Adapter{}
 	}
-	return mcp.Adapter{Unit: a.Unit, MCP: a.Mcp, Adapter: a.Adapter, Params: pbconv.Map(a.Params)}
+	return mcp.Adapter{Unit: a.Unit, MCP: a.Mcp, Adapter: a.Adapter, Params: pbconv.Map(a.Params),
+		Disabled: a.Disabled, Tools: a.Tools, Deny: a.Deny, ReadOnly: a.ReadOnly}
 }
 
 // unit is the requested unit, else the default organisation.
@@ -136,8 +138,12 @@ func (h *Handler) ListEffective(ctx context.Context, r *connect.Request[mcpv1.Li
 	}
 	out := &mcpv1.ListEffectiveResponse{Chain: chain}
 	for _, e := range eff {
-		out.Mcps = append(out.Mcps, &mcpv1.EffectiveMcp{Mcp: defToPB(e.MCP), Adapter: adapterToPB(e.Adapter), Inherited: e.Inherited,
-			Connector: h.Service.ConnectorOf(ctx, e.Adapter)})
+		em := &mcpv1.EffectiveMcp{Mcp: defToPB(e.MCP), Adapter: adapterToPB(e.Adapter), Inherited: e.Inherited,
+			Connector: h.Service.ConnectorOf(ctx, e.Adapter), RestrictedBy: e.Restriction.By, Disabled: e.Restriction.Disabled, Builtin: mcp.IsBuiltin(e.MCP.Name)}
+		for _, t := range e.Allowed().Tools {
+			em.AllowedTools = append(em.AllowedTools, t.Name)
+		}
+		out.Mcps = append(out.Mcps, em)
 	}
 	return connect.NewResponse(out), nil
 }
@@ -179,7 +185,7 @@ func (h *Handler) ListTools(ctx context.Context, r *connect.Request[mcpv1.ListTo
 	}
 	out := &mcpv1.ListToolsResponse{Mcps: mcps}
 	for _, t := range tools {
-		out.Tools = append(out.Tools, &mcpv1.Tool{Name: t.Name, Description: t.Description, InputSchema: pbconv.Struct(t.InputSchema)})
+		out.Tools = append(out.Tools, &mcpv1.Tool{Name: t.Name, Description: t.Description, InputSchema: pbconv.Struct(t.InputSchema), ReadOnly: t.ReadOnly, Scope: t.Scope})
 	}
 	return connect.NewResponse(out), nil
 }
@@ -189,6 +195,7 @@ func (h *Handler) CallTool(ctx context.Context, r *connect.Request[mcpv1.CallToo
 	if err != nil {
 		return nil, err
 	}
+	ctx = mcp.WithCall(ctx, mcp.CallContext{Change: r.Msg.ChangeId, Process: r.Msg.ProcessId})
 	res, err := h.Service.Call(ctx, r.Msg.Unit, r.Msg.Name, pbconv.Map(r.Msg.Arguments))
 	var te *ToolError
 	if errors.As(err, &te) {
