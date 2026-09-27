@@ -58,7 +58,6 @@ func DomainVersionKey(name, version string) string { return "DV:" + key(name, ve
 // of its own. It implements Store and DomainStore.
 type GraphStore struct {
 	Graph StoreGraph
-	Now   func() time.Time
 
 	cache graphsnap.Cache[*defs]
 }
@@ -70,7 +69,7 @@ var (
 
 // NewGraphStore returns a store over a graph (the graph itself, or a client of the graph service).
 func NewGraphStore(g StoreGraph) *GraphStore {
-	s := &GraphStore{Graph: g, Now: time.Now}
+	s := &GraphStore{Graph: g}
 	s.cache = graphsnap.Cache[*defs]{Graph: g, Build: buildDefs}
 	return s
 }
@@ -151,13 +150,6 @@ func decodeVersion(n domain.Node, elements map[string]domain.Node, isMethodology
 			}
 			*dst = t
 		}
-	}
-	if legacy, ok := props["definition"]; ok { // a version stored as one document
-		b, err := json.Marshal(legacy)
-		if err != nil {
-			return err
-		}
-		return json.Unmarshal(b, def)
 	}
 	for _, k := range metaKeys {
 		delete(props, k)
@@ -301,13 +293,6 @@ func (s *GraphStore) commit(ctx context.Context, ns, title string, build func(*d
 		}
 		return err
 	}
-}
-
-func (s *GraphStore) now() time.Time {
-	if s.Now != nil {
-		return s.Now()
-	}
-	return time.Now()
 }
 
 func update(n domain.Node, props map[string]any) graph.NodeEdit {

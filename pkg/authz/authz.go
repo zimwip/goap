@@ -69,12 +69,6 @@ type Authorizer interface {
 	Authorize(ctx context.Context, req Request) (bool, error)
 }
 
-// AllowAll grants everything (tests, single-user dev).
-type AllowAll struct{}
-
-// Authorize implements Authorizer.
-func (AllowAll) Authorize(context.Context, Request) (bool, error) { return true, nil }
-
 // Check returns ErrForbidden when the request is denied. A nil authorizer
 // grants everything.
 func Check(ctx context.Context, a Authorizer, req Request) error {

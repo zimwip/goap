@@ -593,7 +593,7 @@ message NodeEdit {
   NodeRef pre = 3;
   // merged over the current properties (null clears one)
   google.protobuf.Struct props = 4;
-  // end a node a projection no longer owns
+  // delete the node (the new version is a tombstone)
   bool retire = 5;
   string rationale = 6;
   repeated LinkEdit links = 7;
@@ -640,7 +640,7 @@ message WriteChangeImpactRequest {
   string state = 4;
   repeated NodeLinkWrite add_links = 5;
   repeated string remove_links = 6;
-  // end a node a projection no longer owns
+  // delete the node (the new version is a tombstone)
   bool retire = 7;
   // flow branch to write on (empty: the main flow) and the action run that writes (ADR 0025)
   string flow = 8;

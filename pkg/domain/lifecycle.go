@@ -49,7 +49,7 @@ type Transition struct {
 	// once the transition is accepted; they may change properties of the node.
 	Actions []string `yaml:"actions,omitempty" json:"actions,omitempty"`
 	// GuardAlgos and ActionAlgos are the instances resolved with their algorithm.
-	// They are filled when the lifecycle is projected onto the graph (never authored),
+	// They are filled when the type catalogue resolves the lifecycle (never authored),
 	// so that evaluating a change needs no other lookup.
 	GuardAlgos  []algo.Bound       `yaml:"-" json:"guardAlgos,omitempty"`
 	ActionAlgos []algo.Bound       `yaml:"-" json:"actionAlgos,omitempty"`

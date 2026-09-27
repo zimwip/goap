@@ -58,13 +58,3 @@ func BuiltinDomain(name string) *Domain {
 	}
 	return nil
 }
-
-// IsBuiltinDomain reports the name (namespace) of a built-in domain.
-func IsBuiltinDomain(name string) bool {
-	for _, d := range BuiltinDomains() {
-		if d.Name == name {
-			return true
-		}
-	}
-	return false
-}

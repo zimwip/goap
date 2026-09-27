@@ -2,23 +2,12 @@ package graph
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
 
 	"github.com/zimwip/goap/pkg/domain"
 )
-
-func asMap(t *testing.T, v any) map[string]any {
-	t.Helper()
-	b, _ := json.Marshal(v)
-	var m map[string]any
-	if err := json.Unmarshal(b, &m); err != nil {
-		t.Fatal(err)
-	}
-	return m
-}
 
 type lcWorld struct {
 	g                *Graph
