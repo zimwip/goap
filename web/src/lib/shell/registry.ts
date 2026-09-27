@@ -1,7 +1,7 @@
 // View registry: each IDE zone displays the views registered for it
 // (activity bar tools, console tabs, editors), and the node editors that node
 // types name.
-import type { EditorView, NodeEditor, PanelView, View, Zone } from './types';
+import type { EditorView, NodeEditor, PanelView, View } from './types';
 
 const views = new Map<string, View>();
 
@@ -23,10 +23,6 @@ export function panelView(id: string): PanelView | undefined {
 export function editorView(kind: string): EditorView | undefined {
   const v = views.get(`editor:${kind}`);
   return v?.zone === 'editor' ? v : undefined;
-}
-
-export function zoneOf(id: string): Zone | undefined {
-  return views.get(id)?.zone;
 }
 
 const nodeEditors = new Map<string, NodeEditor>();

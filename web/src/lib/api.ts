@@ -226,7 +226,7 @@ export interface AlgorithmParam {
   values?: string[];
 }
 
-/** Script of a fixed type with declared parameters; declared by a shared domain. */
+/** Script of a fixed type with declared parameters; declared by a domain. */
 export interface Algorithm {
   name?: string;
   description?: string;
@@ -590,7 +590,7 @@ export interface NodeReview {
 }
 
 /** The link from a change to a node (ADR 0024). */
-/** A node written by a commit: created (key, type) or modified (pre), retired when a projection no longer owns it. */
+/** A node written by a commit: created (key, type), modified (pre) or deleted (retire). */
 export interface NodeEdit {
   key?: string;
   type?: string;
@@ -1020,7 +1020,7 @@ export const registry = {
   exportMethodology: (name: string, version: string) =>
     rpc<NameVersion, { yaml?: string; filename?: string }>(REGISTRY, 'ExportMethodology', { name, version }),
 
-  // --- shared domains (no change / impact / proposal involved) ---
+  // --- domains (one per namespace; no change / impact / proposal involved) ---
   listDomains: (allVersions = false, signal?: AbortSignal) =>
     rpc<{ allVersions?: boolean }, { domains?: DomainSummary[] }>(
       REGISTRY,

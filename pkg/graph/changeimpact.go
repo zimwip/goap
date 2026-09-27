@@ -273,8 +273,7 @@ type NodeWrite struct {
 	// run that writes (ADR 0025): the version is written on the branch of the flow, and what a
 	// relaunch marks stale is found through its execution.
 	Flow, Execution string
-	// Retire ends the node: the new version is a tombstone with no outgoing link. It is the
-	// clean-up of a node a projection no longer owns (an orphan), never an intent of a change.
+	// Retire deletes the node: the new version is a tombstone with no outgoing link.
 	Retire bool
 }
 

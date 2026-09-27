@@ -81,7 +81,3 @@ export function showTool(side: 'left' | 'right' | 'bottom', id: string): void {
 export function toggleConsole(): void {
   layout.bottomOpen = !layout.bottomOpen;
 }
-
-export function clamp(v: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, v));
-}

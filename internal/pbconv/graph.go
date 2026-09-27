@@ -256,14 +256,6 @@ func BranchToPB(b domain.Branch) *graphv1.Branch {
 		Origin: b.Origin, Status: b.Status, CreatedAt: Time(b.CreatedAt)}
 }
 
-func BranchFromPB(b *graphv1.Branch) domain.Branch {
-	if b == nil {
-		return domain.Branch{}
-	}
-	return domain.Branch{Name: b.Name, Parent: b.Parent, ForkBaseline: domain.BaselineID(b.ForkBaseline), Head: domain.BaselineID(b.Head),
-		Origin: b.Origin, Status: b.Status, CreatedAt: FromTime(b.CreatedAt)}
-}
-
 func ChangeImpactToPB(cn domain.ChangeImpact) *graphv1.ChangeImpact {
 	out := &graphv1.ChangeImpact{Id: string(cn.ID), Key: cn.Key, Type: cn.Type, Intent: string(cn.Intent), Rationale: cn.Rationale,
 		Pre: RefPtrToPB(cn.Pre), Post: RefPtrToPB(cn.Post), Landed: RefPtrToPB(cn.Landed), Review: string(cn.Review),
