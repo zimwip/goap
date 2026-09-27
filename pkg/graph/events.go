@@ -162,10 +162,7 @@ func (ix *typeIndex) searchable(n domain.Node) (map[string]string, map[string]an
 // searchOf returns the search declarations of a type along its extends chain.
 func (ix *typeIndex) searchOf(typ string) []domain.SearchProperty {
 	if ix.cat != nil {
-		if t, ok := ix.cat.Type(typ); ok {
-			return t.Search
-		}
-		return nil
+		return ix.cat.Search(typ)
 	}
 	var chain []typeInfo
 	for seen := map[string]bool{}; typ != "" && !seen[typ]; {

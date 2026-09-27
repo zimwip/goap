@@ -283,6 +283,30 @@ func (c *Catalog) LinkType(ref string) (*LinkType, bool) {
 	return l, ok
 }
 
+// Lifecycle is the lifecycle of the nodes of a type (nil: none, or an unknown type).
+func (c *Catalog) Lifecycle(typ string) *domain.Lifecycle {
+	if t, ok := c.Type(typ); ok {
+		return t.Lifecycle
+	}
+	return nil
+}
+
+// Validators are the property validators of a type in call order.
+func (c *Catalog) Validators(typ string) []algo.Bound {
+	if t, ok := c.Type(typ); ok {
+		return t.Validators
+	}
+	return nil
+}
+
+// Search are the index declarations of a type.
+func (c *Catalog) Search(typ string) []domain.SearchProperty {
+	if t, ok := c.Type(typ); ok {
+		return t.Search
+	}
+	return nil
+}
+
 // Types lists the node types, sorted by reference.
 func (c *Catalog) Types() []*Type {
 	out := make([]*Type, 0, len(c.types))

@@ -111,7 +111,7 @@ registerNodeEditor({
 });
 
 // node types, link types and lifecycles: the methodology or domain editor, on the element
-const DEF_FIELDS: Record<string, string> = { DefNodeType: 'nodeTypes', DefLinkType: 'linkTypes', DefLifecycle: 'lifecycles' };
+const DEF_FIELDS: Record<string, string> = { 'domain@NodeType': 'nodeTypes', 'domain@LinkType': 'linkTypes', 'domain@Lifecycle': 'lifecycles' };
 
 registerNodeEditor({
   name: 'definition',

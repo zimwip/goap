@@ -17,16 +17,16 @@ import (
 	"github.com/zimwip/goap/pkg/metamodel"
 )
 
-// Node types of the stored definitions (platform namespace): one header node per version of a methodology or of a domain
-// (scalar fields, status, timestamps) and one node per element of the definition (see defs.go), tied by "defines" links. The
-// definition is what these nodes hold; the elements a published methodology projects at run time (metamodel, keys M:/D:) are
-// derived from it.
+// Node types of the stored definitions (built-in meta-domains, ADR 0023): one header node per version of a methodology
+// (methodology namespace) or of a domain (domain namespace) with its scalar fields, status and timestamps, and one node per
+// element of the definition (see defs.go), tied by "defines" links.
 const (
-	TypeMethodologyVersion = "MethodologyVersion"
-	TypeDomainVersion      = "DomainVersion"
-	// LinkDefines ties a version to the elements of its definition.
-	LinkDefines = "defines"
+	TypeMethodologyVersion = "methodology@MethodologyVersion"
+	TypeDomainVersion      = "domain@DomainVersion"
 )
+
+// linkDefines is the link type that ties a version of namespace ns to the elements of its definition.
+func linkDefines(ns string) string { return ns + "@defines" }
 
 // statusDeleted marks a deleted draft: a node key is never freed on a versioned graph, so the node stays and a later
 // Save of the same version revives it. The stores treat it as absent.
@@ -242,7 +242,8 @@ func versionEdits(hkey, hType string, header map[string]any, els []defEl, old *d
 			continue
 		}
 		edits = append(edits, graph.NodeEdit{Key: k, Type: nodeType, Props: e.props})
-		head.Links = append(head.Links, graph.LinkEdit{Type: LinkDefines, ToKey: k})
+		ns, _, _ := strings.Cut(hType, "@")
+		head.Links = append(head.Links, graph.LinkEdit{Type: linkDefines(ns), ToKey: k})
 	}
 	for _, k := range slices.Sorted(maps.Keys(oldChildren)) {
 		if n := oldChildren[k]; !want[k] {

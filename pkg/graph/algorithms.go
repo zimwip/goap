@@ -21,10 +21,7 @@ import (
 // of the supertypes first, each type's in declaration order.
 func (ix *typeIndex) validatorsOf(typ string) []algo.Bound {
 	if ix.cat != nil {
-		if t, ok := ix.cat.Type(typ); ok {
-			return t.Validators
-		}
-		return nil
+		return ix.cat.Validators(typ)
 	}
 	var chain [][]algo.Bound
 	for seen := map[string]bool{}; typ != "" && !seen[typ]; {

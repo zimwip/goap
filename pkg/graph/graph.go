@@ -11,9 +11,20 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/zimwip/goap/pkg/algo"
 	"github.com/zimwip/goap/pkg/domain"
-	"github.com/zimwip/goap/pkg/typecat"
 )
+
+// TypeCatalog is what the graph needs of the type catalogue (implemented by pkg/typecat.Catalog). The types are
+// qualified references ("alm@Requirement"); an unknown type has no lifecycle, validator or search declaration.
+type TypeCatalog interface {
+	Lifecycle(typ string) *domain.Lifecycle
+	Validators(typ string) []algo.Bound
+	Search(typ string) []domain.SearchProperty
+	// CheckNode is the existence rule of a node of namespace ns, CheckLink of a link between two node types.
+	CheckNode(ns, typ string) error
+	CheckLink(typ, from, to string) error
+}
 
 // Graph exposes the domain and change axes.
 type Graph struct {
@@ -22,9 +33,9 @@ type Graph struct {
 	newID func() string
 	// Authorizer, when set, is asked before every lifecycle transition.
 	Authorizer TransitionAuthorizer
-	// Types, when set, returns the type catalogue in force (ADR 0012 §2): the graph judges the nodes by it and
-	// refuses the ones whose type or link type it does not resolve. Unset: the NodeType nodes of the baseline.
-	Types func() *typecat.Catalog
+	// Types, when set, returns the type catalogue in force (ADR 0012 §2, pkg/typecat): the graph judges the nodes by
+	// it and refuses the ones whose type or link type it does not resolve. Unset: the NodeType nodes of the baseline.
+	Types func() TypeCatalog
 	types sync.Map // baseline id → *typeIndex
 }
 
@@ -124,13 +135,8 @@ func (g *Graph) Link(ctx context.Context, typ string, from, to domain.NodeRef, p
 	return l, err
 }
 
-// catalog returns the type catalogue in force (the built-in meta-domains until one is loaded).
-func (g *Graph) catalog() *typecat.Catalog {
-	if c := g.Types(); c != nil {
-		return c
-	}
-	return typecat.Builtin()
-}
+// catalog returns the type catalogue in force.
+func (g *Graph) catalog() TypeCatalog { return g.Types() }
 
 // checkDirect applies the existence rule to a direct write; nothing is checked without a catalogue.
 func (g *Graph) checkDirect(ns, typ string) error {
