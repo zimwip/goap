@@ -5,7 +5,7 @@ Extends ADR 0012 (node types), ADR 0013 (domains), ADR 0023 (methodologies in th
 
 ## Context
 Every node opens in the default node editor of the IDE (properties, relations, lifecycle, history). Some nodes have a
-richer editor: an agent or an action of a methodology, a methodology or domain version, an algorithm, an organisational
+richer editor: an agent or an action of a methodology, a methodology version, an organisational
 unit, an MCP, an adapter definition, the access policies. Which editor a node opens in was decided by each screen, and
 most screens opened the default one, so an agent found by a search or in a change opened as a bare node.
 

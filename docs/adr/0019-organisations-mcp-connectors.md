@@ -1,6 +1,6 @@
 # ADR 0019 — MCP, connectors and adapters in the organisation
 
-**Status**: accepted · **Date**: 2026-09 · Builds on ADR 0015 (namespaces), 0016 (organisation namespace and sub-changes), 0018 (algorithms).
+**Status**: accepted, implemented · **Date**: 2026-09 · Builds on ADR 0015 (namespaces), 0016 (organisation namespace and sub-changes), 0018 (algorithms).
 
 ## Context
 Actions must reach real services (documents, tickets, ...). A methodology stays generic while each
@@ -29,7 +29,7 @@ rooted in a different directory). Several organisations can work on one change, 
      case per tool) and the connector's operations, and the parameters from the connector's configuration schema.
      Parameters are handed to the connector as its configuration under the same name; secret parameters are
      resolved by the hub and passed under their name.
-     **Each organisational unit holds an instance**: an `Adapter` node of the **`organisation`** namespace
+     **Each organisational unit holds an instance**: an `organisation@Adapter` node of the **`organisation`** namespace
      (key `ADP:<unit>/<mcp>`, linked by `owner` to the OrgUnit) with the name of the definition (`adapter`) and the
      parameter values. It is the only place where unit,
      MCP and connector meet, and it is what lets units share the same adapter with different scopes.

@@ -16,7 +16,8 @@ on Docker Compose (dev), Kubernetes, and potentially bare metal.
 ## Decision
 Option 3:
 - `engine.Sandboxes` (Acquire / Release per process) implemented by `sandbox.Pool` on a
-  `Provisioner` (`process`, `docker`, `kubernetes`; `inproc` for tests) chosen via `GOAP_SANDBOX`.
+  `Provisioner` (`process`, `docker`, `kubernetes`) chosen via `GOAP_SANDBOX`. `inproc` (the default) bypasses the
+  pool: scripts run in the engine process, not isolated, for development and tests only (local mode, ADR 0010).
 - The sandbox runs `goap-runner` (SandboxService). Operations leaving the script go through the
   engine's RuntimeService with a **per-job token**: the sandbox has no identity, no secret, and no access
   to the graph or the model gateway.

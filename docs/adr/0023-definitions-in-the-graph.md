@@ -32,7 +32,7 @@ thing:
    version it started with (`methodology@version` in its journal). The latest published version of a domain is in
    force.
 4. **The registry keeps the rules.** `registrysvc.GraphStore` implements the methodology store on the graph: every
-   save, status change and deletion is a change applied on `main` (retried once on a conflict), reads come from a
+   save, status change and deletion is a change applied on `main` (rebuilt and retried up to three times when `main` moved), reads come from a
    snapshot of the head of `main` (`pkg/graphsnap`). The registry validates (a list of anomalies with field paths,
    used by the editor), compiles, publishes and emits the `goap.registry.*` events.
 5. **Nothing of a methodology is deleted**: a node key is never freed on a versioned graph. A deleted draft keeps its
