@@ -161,32 +161,10 @@ func (ix *typeIndex) searchable(n domain.Node) (map[string]string, map[string]an
 
 // searchOf returns the search declarations of a type along its extends chain.
 func (ix *typeIndex) searchOf(typ string) []domain.SearchProperty {
-	if ix.cat != nil {
-		return ix.cat.Search(typ)
+	if ix == nil || ix.cat == nil {
+		return nil
 	}
-	var chain []typeInfo
-	for seen := map[string]bool{}; typ != "" && !seen[typ]; {
-		seen[typ] = true
-		info, ok := ix.byName[typ]
-		if !ok {
-			break
-		}
-		chain = append([]typeInfo{info}, chain...)
-		typ = info.extends
-	}
-	var out []domain.SearchProperty
-	idx := map[string]int{}
-	for _, info := range chain {
-		for _, sp := range info.search {
-			if i, ok := idx[sp.Property]; ok {
-				out[i] = sp
-				continue
-			}
-			idx[sp.Property] = len(out)
-			out = append(out, sp)
-		}
-	}
-	return out
+	return ix.cat.Search(typ)
 }
 
 // Republish publishes the node event of every node version (all branches) and the head of main as a

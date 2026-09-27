@@ -11,8 +11,8 @@ import "google/protobuf/timestamp.proto";
 service GraphService {
   // Domain axis
   rpc CreateNode(CreateNodeRequest) returns (CreateNodeResponse);
-  // CreateObject creates a data node typed by a NodeType of the metadata layer
-  // (ADR 0012): the node and its instanceOf edge go through a change applied on main.
+  // CreateObject creates a node of a qualified type (<namespace>@<type>, ADR 0012) through a change applied on
+  // main, in the namespace of its type; the type catalogue judges it.
   rpc CreateObject(CreateObjectRequest) returns (CreateObjectResponse);
   rpc UpdateNode(UpdateNodeRequest) returns (UpdateNodeResponse);
   rpc GetNode(GetNodeRequest) returns (GetNodeResponse);

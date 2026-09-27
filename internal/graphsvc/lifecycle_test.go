@@ -2,7 +2,6 @@ package graphsvc_test
 
 import (
 	"context"
-	"encoding/json"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -14,6 +13,8 @@ import (
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/graph"
+	"github.com/zimwip/goap/pkg/methodology"
+	"github.com/zimwip/goap/pkg/typecat"
 )
 
 func TestLifecycleIsEnforcedByTheService(t *testing.T) {
@@ -26,30 +27,39 @@ func TestLifecycleIsEnforcedByTheService(t *testing.T) {
 	g.Authorizer = graphsvc.TransitionAuthorizer(authorizer)
 	h := &graphsvc.Handler{Graph: g, Authz: authorizer}
 
-	lc := domain.Lifecycle{Initial: "released",
-		States: []domain.LifecycleState{{Name: "draft", Editable: true}, {Name: "released"}},
-		Transitions: []domain.Transition{
-			{Name: "reopen", From: "released", To: "draft"},
-			{Name: "release", From: "draft", To: "released", Permission: "requirement:release"},
-		}}
-	raw, _ := json.Marshal(lc)
-	var lcMap map[string]any
-	_ = json.Unmarshal(raw, &lcMap)
-	nt, err := g.CreateNode(ctx, graph.NewNode{Key: "D:x/nodetype/Req", Type: graph.NodeTypeNode, Properties: map[string]any{"name": "Req", "lifecycle": lcMap}})
+	d, err := methodology.ParseDomain([]byte(`
+name: docs
+version: 1.0.0
+lifecycles:
+  - name: req
+    initial: released
+    states: [{name: draft, editable: true}, {name: released}]
+    transitions:
+      - {name: reopen, from: released, to: draft}
+      - {name: release, from: draft, to: released, permission: "requirement:release"}
+nodeTypes:
+  - {name: Req, lifecycle: req, properties: [title]}
+  - {name: Note}
+`))
 	if err != nil {
 		t.Fatal(err)
 	}
-	req, err := g.CreateNode(ctx, graph.NewNode{Key: "REQ-1", Type: "Req", Properties: map[string]any{"title": "a"}, State: "released"})
+	cat, err := typecat.New(d)
 	if err != nil {
 		t.Fatal(err)
 	}
-	note, _ := g.CreateNode(ctx, graph.NewNode{Key: "N-1", Type: "Note"})
-	base, err := g.CreateBaseline(ctx, "B", []domain.NodeRef{nt.Ref(), req.Ref(), note.Ref()})
+	g.Types = func() graph.TypeCatalog { return cat }
+	req, err := g.CreateNode(ctx, graph.NewNode{Namespace: "docs", Key: "REQ-1", Type: "docs@Req", Properties: map[string]any{"title": "a"}, State: "released"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	note, _ := g.CreateNode(ctx, graph.NewNode{Namespace: "docs", Key: "N-1", Type: "docs@Note"})
+	base, err := g.CreateBaseline(ctx, "B", []domain.NodeRef{req.Ref(), note.Ref()})
 	if err != nil {
 		t.Fatal(err)
 	}
 	// the bypass is closed for lifecycle types, open for the others
-	if _, err := h.CreateNode(ctx, connect.NewRequest(&graphv1.CreateNodeRequest{Key: "REQ-2", Type: "Req"})); connect.CodeOf(err) != connect.CodeFailedPrecondition {
+	if _, err := h.CreateNode(ctx, connect.NewRequest(&graphv1.CreateNodeRequest{Namespace: "docs", Key: "REQ-2", Type: "docs@Req"})); connect.CodeOf(err) != connect.CodeFailedPrecondition {
 		t.Errorf("CreateNode on a lifecycle type: %v", err)
 	}
 	if _, err := h.UpdateNode(ctx, connect.NewRequest(&graphv1.UpdateNodeRequest{Base: pbconv.RefToPB(req.Ref()), Props: pbconv.Struct(map[string]any{"title": "b"})})); connect.CodeOf(err) != connect.CodeFailedPrecondition {
@@ -58,12 +68,12 @@ func TestLifecycleIsEnforcedByTheService(t *testing.T) {
 	if _, err := h.CreateLink(ctx, connect.NewRequest(&graphv1.CreateLinkRequest{Type: "x", From: pbconv.RefToPB(req.Ref()), To: pbconv.RefToPB(note.Ref())})); connect.CodeOf(err) != connect.CodeFailedPrecondition {
 		t.Errorf("CreateLink from a lifecycle node: %v", err)
 	}
-	if _, err := h.CreateNode(ctx, connect.NewRequest(&graphv1.CreateNodeRequest{Key: "N-2", Type: "Note"})); err != nil {
+	if _, err := h.CreateNode(ctx, connect.NewRequest(&graphv1.CreateNodeRequest{Namespace: "docs", Key: "N-2", Type: "docs@Note"})); err != nil {
 		t.Errorf("a type without lifecycle stays writable: %v", err)
 	}
 
 	// reopen, edit, release: "release" needs requirement:release
-	c, err := g.CreateChange(ctx, graph.NewChange{Title: "t", BaselineID: base.ID})
+	c, err := g.CreateChange(ctx, graph.NewChange{Namespace: "docs", Title: "t", BaselineID: base.ID})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,7 +118,7 @@ func TestLifecycleIsEnforcedByTheService(t *testing.T) {
 	if _, err := h.ApplyChange(ctx, r); err != nil {
 		t.Fatalf("admin may release: %v", err)
 	}
-	if n, err := g.NodeByKey(ctx, "", "REQ-1"); err != nil || n.State != "released" || n.Version != 4 || n.Properties["title"] != "b" {
+	if n, err := g.NodeByKey(ctx, "docs", "REQ-1"); err != nil || n.State != "released" || n.Version != 4 || n.Properties["title"] != "b" {
 		t.Fatalf("REQ-1: %+v %v", n, err)
 	}
 }
