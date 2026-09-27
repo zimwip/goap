@@ -165,6 +165,17 @@ type NodeType struct {
 	// of the type (its own or inherited). They run in this order when a node of
 	// the type is created or modified, the validators of the supertypes first.
 	Validators []PropertyValidator `yaml:"validators,omitempty" json:"validators,omitempty"`
+	// Search declares which properties the node index keeps (ADR 0026): text
+	// goes into the full-text and embedding document, facet makes the value
+	// filterable and countable. Inherited through extends.
+	Search []SearchProperty `yaml:"search,omitempty" json:"search,omitempty"`
+}
+
+// SearchProperty declares how the node index uses a property of a node type.
+type SearchProperty struct {
+	Property string `yaml:"property" json:"property"`
+	Text     bool   `yaml:"text,omitempty" json:"text,omitempty"`
+	Facet    bool   `yaml:"facet,omitempty" json:"facet,omitempty"`
 }
 
 // PropertyValidator plugs an algorithm instance of type property_validator on a property.
@@ -1021,11 +1032,12 @@ type nodeTypeMeta struct {
 	Document         *domain.DocumentSpec `json:"document,omitempty"`
 	ChangeControlled *bool                `json:"changeControlled,omitempty"`
 	Validators       []PropertyValidator  `json:"validators,omitempty"`
+	Search           []SearchProperty     `json:"search,omitempty"`
 }
 
 // MetaJSON serializes the lifecycle, document and change-control declarations.
 func (n NodeType) MetaJSON() []byte {
-	b, _ := json.Marshal(nodeTypeMeta{Lifecycle: n.Lifecycle, Document: n.Document, ChangeControlled: n.ChangeControlled, Validators: n.Validators})
+	b, _ := json.Marshal(nodeTypeMeta{Lifecycle: n.Lifecycle, Document: n.Document, ChangeControlled: n.ChangeControlled, Validators: n.Validators, Search: n.Search})
 	return b
 }
 
@@ -1035,5 +1047,5 @@ func (n *NodeType) SetMeta(raw []byte) {
 	if len(raw) == 0 || json.Unmarshal(raw, &m) != nil {
 		return
 	}
-	n.Lifecycle, n.Document, n.ChangeControlled, n.Validators = m.Lifecycle, m.Document, m.ChangeControlled, m.Validators
+	n.Lifecycle, n.Document, n.ChangeControlled, n.Validators, n.Search = m.Lifecycle, m.Document, m.ChangeControlled, m.Validators, m.Search
 }

@@ -1,0 +1,85 @@
+syntax = "proto3";
+
+package goap.index.v1;
+
+// IndexService is the node index (ADR 0026): hybrid full-text / semantic search over the nodes of the
+// graph, with facets. Fed by the node and baseline events of the graph service.
+service IndexService {
+  rpc Search(SearchRequest) returns (SearchResponse);
+  // Empties the index and has the graph publish its nodes again (admin on `platform`).
+  rpc Reindex(ReindexRequest) returns (ReindexResponse);
+  rpc Status(StatusRequest) returns (StatusResponse);
+}
+
+message FacetFilter {
+  string name = 1;
+  // alternatives
+  repeated string values = 2;
+}
+
+message SearchRequest {
+  // free text; empty: list by key
+  string text = 1;
+  repeated string namespaces = 2;
+  repeated string types = 3;
+  repeated string states = 4;
+  repeated string branches = 5;
+  // true: heads of main only, false: not on main, absent: all
+  optional bool main = 6;
+  // filters on declared facets
+  repeated FacetFilter facet_filters = 7;
+  // facets to count (built-in: namespace, type, state, branch, main; or declared)
+  repeated string facets = 8;
+  int32 limit = 9;
+  int32 offset = 10;
+}
+
+message Hit {
+  string id = 1;
+  int32 version = 2;
+  string namespace = 3;
+  string type = 4;
+  string key = 5;
+  string state = 6;
+  string branch = 7;
+  bool main = 8;
+  map<string, string> facets = 9;
+  double score = 10;
+}
+
+message FacetCount {
+  string value = 1;
+  int32 count = 2;
+}
+
+message FacetResult {
+  string name = 1;
+  repeated FacetCount counts = 2;
+}
+
+message SearchResponse {
+  repeated Hit hits = 1;
+  int32 total = 2;
+  repeated FacetResult facets = 3;
+  // the embedding side took part in the ranking
+  bool semantic = 4;
+  // more candidates matched than the ones ranked
+  bool truncated = 5;
+}
+
+message ReindexRequest {}
+
+message ReindexResponse {
+  int32 versions = 1;
+}
+
+message StatusRequest {}
+
+message StatusResponse {
+  // an embedding model is reachable
+  bool semantic = 1;
+  string store = 2;
+  int64 nodes_indexed = 3;
+  int64 baselines_followed = 4;
+  int64 errors = 5;
+}

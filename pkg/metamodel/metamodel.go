@@ -181,7 +181,7 @@ func nodeTypeProps(s methodology.Schema, t methodology.NodeType) map[string]any 
 }
 
 // lifecycleKeys are the NodeType properties that carry the lifecycle and algorithm model.
-var lifecycleKeys = []string{"lifecycle", "lifecycleRef", "document", "changeControlled", "validators"}
+var lifecycleKeys = []string{"lifecycle", "lifecycleRef", "document", "changeControlled", "validators", "search"}
 
 func pick(m map[string]any, keys []string) map[string]any {
 	out := map[string]any{}

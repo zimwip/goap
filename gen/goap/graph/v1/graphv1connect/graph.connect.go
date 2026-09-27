@@ -139,6 +139,9 @@ const (
 	// GraphServiceListExecutionsProcedure is the fully-qualified name of the GraphService's
 	// ListExecutions RPC.
 	GraphServiceListExecutionsProcedure = "/goap.graph.v1.GraphService/ListExecutions"
+	// GraphServiceRepublishIndexProcedure is the fully-qualified name of the GraphService's
+	// RepublishIndex RPC.
+	GraphServiceRepublishIndexProcedure = "/goap.graph.v1.GraphService/RepublishIndex"
 )
 
 // GraphServiceClient is a client for the goap.graph.v1.GraphService service.
@@ -199,6 +202,9 @@ type GraphServiceClient interface {
 	// Execution journal (ADR 0011)
 	RecordExecutions(context.Context, *connect.Request[v1.RecordExecutionsRequest]) (*connect.Response[v1.RecordExecutionsResponse], error)
 	ListExecutions(context.Context, *connect.Request[v1.ListExecutionsRequest]) (*connect.Response[v1.ListExecutionsResponse], error)
+	// Node index (ADR 0026): publishes again the event of every node version and the head of main, to
+	// rebuild an index. Requires `admin` on the `platform` resource.
+	RepublishIndex(context.Context, *connect.Request[v1.RepublishIndexRequest]) (*connect.Response[v1.RepublishIndexResponse], error)
 }
 
 // NewGraphServiceClient constructs a client for the goap.graph.v1.GraphService service. By default,
@@ -446,6 +452,12 @@ func NewGraphServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(graphServiceMethods.ByName("ListExecutions")),
 			connect.WithClientOptions(opts...),
 		),
+		republishIndex: connect.NewClient[v1.RepublishIndexRequest, v1.RepublishIndexResponse](
+			httpClient,
+			baseURL+GraphServiceRepublishIndexProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("RepublishIndex")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -490,6 +502,7 @@ type graphServiceClient struct {
 	validateBoard      *connect.Client[v1.ValidateBoardRequest, v1.ValidateBoardResponse]
 	recordExecutions   *connect.Client[v1.RecordExecutionsRequest, v1.RecordExecutionsResponse]
 	listExecutions     *connect.Client[v1.ListExecutionsRequest, v1.ListExecutionsResponse]
+	republishIndex     *connect.Client[v1.RepublishIndexRequest, v1.RepublishIndexResponse]
 }
 
 // CreateNode calls goap.graph.v1.GraphService.CreateNode.
@@ -687,6 +700,11 @@ func (c *graphServiceClient) ListExecutions(ctx context.Context, req *connect.Re
 	return c.listExecutions.CallUnary(ctx, req)
 }
 
+// RepublishIndex calls goap.graph.v1.GraphService.RepublishIndex.
+func (c *graphServiceClient) RepublishIndex(ctx context.Context, req *connect.Request[v1.RepublishIndexRequest]) (*connect.Response[v1.RepublishIndexResponse], error) {
+	return c.republishIndex.CallUnary(ctx, req)
+}
+
 // GraphServiceHandler is an implementation of the goap.graph.v1.GraphService service.
 type GraphServiceHandler interface {
 	// Domain axis
@@ -745,6 +763,9 @@ type GraphServiceHandler interface {
 	// Execution journal (ADR 0011)
 	RecordExecutions(context.Context, *connect.Request[v1.RecordExecutionsRequest]) (*connect.Response[v1.RecordExecutionsResponse], error)
 	ListExecutions(context.Context, *connect.Request[v1.ListExecutionsRequest]) (*connect.Response[v1.ListExecutionsResponse], error)
+	// Node index (ADR 0026): publishes again the event of every node version and the head of main, to
+	// rebuild an index. Requires `admin` on the `platform` resource.
+	RepublishIndex(context.Context, *connect.Request[v1.RepublishIndexRequest]) (*connect.Response[v1.RepublishIndexResponse], error)
 }
 
 // NewGraphServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -988,6 +1009,12 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(graphServiceMethods.ByName("ListExecutions")),
 		connect.WithHandlerOptions(opts...),
 	)
+	graphServiceRepublishIndexHandler := connect.NewUnaryHandler(
+		GraphServiceRepublishIndexProcedure,
+		svc.RepublishIndex,
+		connect.WithSchema(graphServiceMethods.ByName("RepublishIndex")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/goap.graph.v1.GraphService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case GraphServiceCreateNodeProcedure:
@@ -1068,6 +1095,8 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 			graphServiceRecordExecutionsHandler.ServeHTTP(w, r)
 		case GraphServiceListExecutionsProcedure:
 			graphServiceListExecutionsHandler.ServeHTTP(w, r)
+		case GraphServiceRepublishIndexProcedure:
+			graphServiceRepublishIndexHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -1231,4 +1260,8 @@ func (UnimplementedGraphServiceHandler) RecordExecutions(context.Context, *conne
 
 func (UnimplementedGraphServiceHandler) ListExecutions(context.Context, *connect.Request[v1.ListExecutionsRequest]) (*connect.Response[v1.ListExecutionsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.ListExecutions is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) RepublishIndex(context.Context, *connect.Request[v1.RepublishIndexRequest]) (*connect.Response[v1.RepublishIndexResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.RepublishIndex is not implemented"))
 }

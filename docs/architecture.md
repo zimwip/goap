@@ -455,6 +455,7 @@ actions when a transition is applied. Reference: [docs/dsl.md](dsl.md), IDE sect
 | **engine** | Intent loop, planning, process execution; deployable as a cluster | Connect `engine.v1` | `engine` | 🟢 core (memory) |
 | **graph** | Domain axis (versioned nodes, links, baselines) + change axis (Changes, items, apply) | Connect `graph.v1` | `graph` | 🟢 |
 | **modelgw** | Multi-provider / multi-model abstraction, aliases (`default`, `fast`, `reasoning`), administered catalog with global token quotas and required roles (see below), traces | Connect `model.v1` | `modelgw` (providers, catalog, usage) | 🟢 core |
+| **indexer** | Node index ([ADR 0026](adr/0026-node-index-and-search.md)): follows the node / baseline events of the graph, embeds through modelgw (alias `embed`), answers hybrid full-text + semantic searches with facets, filtered by ABAC | Connect `index.v1` | `index` (tsvector + pgvector; FTS5 + exact cosine scan in SQLite) | 🟢 |
 | **mcp** | MCP hub: connector registry (self-registration), resolution of the adapters (graph) along the organisation hierarchy, tool calls (§3.9) | Connect `mcp.v1` | `mcp` | 🟢 |
 | **connector-\*** | One service per real system (`connector-localfs`, ...), registers itself with the hub | Connect `connector.v1` | — | 🟢 localfs |
 | **goap-runner** | Sandbox for executing script actions (one per process) | Connect `runtime.v1` (SandboxService) | — | 🟢 |
@@ -473,6 +474,8 @@ actions when a transition is applied. Reference: [docs/dsl.md](dsl.md), IDE sect
 |---|---|---|
 | `goap.process.<id>.started` / `.step` / `.waiting` / `.completed` / `.failed` | engine | `ProcessEvent` |
 | `goap.change.<id>.item_added` / `.applied` | graph | `ChangeEvent` |
+| `goap.node.<ns>.<type>.<id>.written` | graph | `NodeEvent`: one node version written (any branch), with its searchable text and facets resolved from the `search` declaration of its node type |
+| `goap.baseline.<branch>.advanced` | graph | `BaselineEvent`: diff with the parent baseline (the `main` facet of the index follows the head of main) |
 | `goap.registry.methodology.published` | registry | name + version |
 | `goap.engine.work` (work queue) 🟡 | engine | process tick to execute (clustering) |
 
@@ -522,6 +525,30 @@ change_item(id uuid, change_id, kind, type, status, target_id, target_version, p
   via `org_id` in all tables (organisation units of the graph).
 - Secrets are never in environment variables in prod: `internal/platform/secrets` reads from Vault
   (KV v2, token auth in dev / Kubernetes auth in prod) with a fallback to the environment in dev.
+
+### 3.4b Node index and search ([ADR 0026](adr/0026-node-index-and-search.md))
+
+A node type declares the searchable properties of its nodes (`search: [{property, text, facet}]`, inherited through
+`extends`). The graph observes every committed transaction (`Graph.Observe`) and publishes one `NodeEvent` per node
+version written and one `BaselineEvent` per baseline; the **indexer** consumes them with a durable JetStream
+consumer, embeds each document through `model.v1 Embed` (alias `embed`; no embedding model means text only) and
+upserts it, idempotently, on `(node, version)`. Every version of every branch is indexed; the built-in facet `main`
+(kept from the baseline diffs) restricts a search to the head of `main`, and `namespace`, `type`, `state`, `branch`
+and the declared facets are counted per search.
+
+`Search` merges the full-text and vector rankings (reciprocal rank fusion, vector matches under a cosine floor are
+dropped), then filters the candidates by ABAC (`read` on the node type in its namespace) *before* counting the facets
+and paging. `Reindex` empties the index and has the graph publish everything again (`RepublishIndex`).
+
+| | PostgreSQL | SQLite (`goap-dev`) |
+|---|---|---|
+| Full text | `tsvector` + GIN | FTS5 |
+| Vectors | pgvector (HNSW created for the model's dimension) | float32 BLOB, exact cosine scan |
+| Facets | `jsonb` | `json_extract` |
+
+In `goap-dev` the indexer runs in process (the graph publishes to it directly) and the graph is published again at
+each start. The compose image is `pgvector/pgvector`; the `index` schema needs `CREATE EXTENSION vector`
+(`deploy/postgres/init.sql`).
 
 ### 3.5 Deployment
 
@@ -776,7 +803,7 @@ to any other methodology.
 ## 5. Repository organization
 
 ```
-cmd/<service>/main.go        entry points (gateway, registry, engine, graph, modelgw, mcp)
+cmd/<service>/main.go        entry points (gateway, registry, engine, graph, modelgw, indexer, mcp)
 cmd/goap-dev/                all-in-one for local development (memory or SQLite, serves the IDE)
 cmd/goap-runner/             sandbox for executing script actions
 internal/platform/           config, logs, HTTP/Connect server, NATS, Postgres, Vault secrets
@@ -795,7 +822,8 @@ internal/sandbox/            sandbox pool, provisioners (process, docker, kubern
 internal/telemetry/          OpenTelemetry: exporters, interceptors, process / action / LLM / tool spans
 pkg/methodology/             methodology model, validation (localized anomalies), compilation, YAML import/export
 pkg/authz/                   ABAC: identity, requests, Casbin model and enforcer, default policies
-pkg/llm/                     completion contract (implemented by internal/modelgw)
+pkg/llm/                     completion and embedding contracts (implemented by internal/modelgw)
+pkg/index/                   node index: hybrid search, facets, stores (memory, SQLite FTS5, PostgreSQL pgvector)
 proto/                       connect-rpc contracts (buf)
 gen/                         generated code (committed)
 methodologies/               example methodologies (active part)

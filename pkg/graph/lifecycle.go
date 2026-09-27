@@ -37,6 +37,7 @@ type typeInfo struct {
 	document   *domain.DocumentSpec
 	controlled *bool
 	validators []algo.Bound
+	search     []domain.SearchProperty
 }
 
 // typeIndex is the node type metadata of a baseline.
@@ -79,6 +80,7 @@ func (g *Graph) typesAt(ctx context.Context, tx Tx, baseline domain.BaselineID) 
 			info.controlled = &b
 		}
 		decodeProp(n.Properties["validators"], &info.validators)
+		decodeProp(n.Properties["search"], &info.search)
 		ix.byName[name] = info
 	}
 	g.types.Store(baseline, ix)

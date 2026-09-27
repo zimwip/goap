@@ -78,6 +78,7 @@ func main() {
 	srv.Readiness(events.Ready)
 
 	g := graph.New(repo)
+	g.Observe(events) // node and baseline events feed the node index (ADR 0026)
 	if platform.Env("GOAP_GRAPH_SEED", "") == "demo" {
 		seeded, err := graphsvc.SeedDemo(ctx, g)
 		if err != nil {

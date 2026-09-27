@@ -20,6 +20,7 @@ import (
 
 	"github.com/zimwip/goap/gen/goap/engine/v1/enginev1connect"
 	"github.com/zimwip/goap/gen/goap/graph/v1/graphv1connect"
+	"github.com/zimwip/goap/gen/goap/index/v1/indexv1connect"
 	"github.com/zimwip/goap/gen/goap/mcp/v1/mcpv1connect"
 	"github.com/zimwip/goap/gen/goap/model/v1/modelv1connect"
 	"github.com/zimwip/goap/gen/goap/registry/v1/registryv1connect"
@@ -29,6 +30,7 @@ import (
 	"github.com/zimwip/goap/internal/enginesvc"
 	"github.com/zimwip/goap/internal/graphsvc"
 	"github.com/zimwip/goap/internal/identity"
+	"github.com/zimwip/goap/internal/indexersvc"
 	"github.com/zimwip/goap/internal/mcpsvc"
 	"github.com/zimwip/goap/internal/modelgw"
 	"github.com/zimwip/goap/internal/platform"
@@ -135,6 +137,19 @@ func main() {
 	if err := gw.Reload(ctx); err != nil {
 		platform.Fatal(log, "models", err)
 	}
+	// the node index follows the graph in-process (ADR 0026); embeddings go through the gateway, semantic search
+	// needs an "embed" alias. The graph is published again at start: an index kept in SQLite catches up, a new one fills.
+	indexer := indexersvc.New(st.index, gw, authorizer, log)
+	indexSink := indexersvc.NewSink(ctx, indexer)
+	indexer.Republish = func(ctx context.Context) (int, error) { return g.Republish(ctx, indexSink) }
+	g.Observe(indexSink)
+	go func() {
+		if n, err := indexer.Republish(ctx); err != nil {
+			log.Error("index: initial publication", "err", err)
+		} else {
+			log.Info("node index: graph published", "versions", n)
+		}
+	}()
 	// the engine calls the gateway in-process, without an identity: trusted
 	models := telemetry.LLMClient{Next: llm.ClientFunc(gw.Complete)}
 	// scripts run in-process unless GOAP_SANDBOX selects a provisioner
@@ -197,11 +212,12 @@ func main() {
 	triggers.Start(ctx)
 	go triggers.WatchProcesses(ctx, broker)
 	srv := platform.NewServer(log, platform.Env("GOAP_HTTP_ADDR", ":8080"))
-	srv.Mount(graphv1connect.NewGraphServiceHandler(&graphsvc.Handler{Graph: g, Events: changePublisher(onChange), Authz: authorizer, Floor: authorizer.Floor(), Identity: ident}, telemetry.HandlerOptions()...))
+	srv.Mount(graphv1connect.NewGraphServiceHandler(&graphsvc.Handler{Graph: g, Events: engine.Publishers{changePublisher(onChange), indexSink}, Authz: authorizer, Floor: authorizer.Floor(), Identity: ident}, telemetry.HandlerOptions()...))
 	srv.Mount(registryv1connect.NewRegistryServiceHandler(&registrysvc.Handler{Service: reg, Identity: ident}, telemetry.HandlerOptions()...))
 	srv.Echo.GET("/api/whoami", identity.WhoAmI(ident, directory.Enrich))
 	srv.Mount(mcpv1connect.NewMcpServiceHandler(&mcpsvc.Handler{Service: hub, Authz: authorizer, Identity: ident, ConnectorToken: connectorToken}, telemetry.HandlerOptions()...))
 	srv.Mount(modelv1connect.NewModelServiceHandler(&modelgw.Handler{Service: gw, Identity: ident, Authz: authorizer}, telemetry.HandlerOptions()...))
+	srv.Mount(indexv1connect.NewIndexServiceHandler(&indexersvc.Handler{Service: indexer, Identity: ident, Authz: authorizer}, telemetry.HandlerOptions()...))
 	srv.Mount(enginev1connect.NewEngineServiceHandler(&enginesvc.Handler{Engine: e, Log: log, DefaultPrincipal: &dev, Authz: authorizer, Broker: broker, Triggers: triggers}, telemetry.HandlerOptions()...))
 	// single process: the platform is up when this answers (the gateway serves it otherwise)
 	srv.Echo.GET("/api/status", func(c echo.Context) error {

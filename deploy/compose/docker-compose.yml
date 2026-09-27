@@ -22,7 +22,7 @@ x-service: &service
 
 services:
   postgres:
-    image: postgres:17-alpine
+    image: pgvector/pgvector:pg17
     environment:
       POSTGRES_USER: goap
       POSTGRES_PASSWORD: goap
@@ -89,6 +89,16 @@ services:
       GOAP_DB_DSN: postgres://modelgw:modelgw@postgres:5432/goap?sslmode=disable
       GOAP_GRAPH_URL: http://graph:8080
     ports: ["8084:8080"]
+
+  indexer:
+    <<: *service
+    build: {context: ../.., args: {SERVICE: indexer}}
+    environment:
+      <<: *env
+      GOAP_DB_DSN: postgres://index:index@postgres:5432/goap?sslmode=disable
+      GOAP_GRAPH_URL: http://graph:8080
+      GOAP_MODELGW_URL: http://modelgw:8080
+    ports: ["8086:8080"]
 
   engine:
     <<: *service
@@ -185,6 +195,7 @@ services:
       GOAP_REGISTRY_URL: http://registry:8080
       GOAP_ENGINE_URL: http://engine:8080
       GOAP_MODELGW_URL: http://modelgw:8080
+      GOAP_INDEXER_URL: http://indexer:8080
       GOAP_MCP_URL: http://mcp:8080
     ports: ["${GOAP_GATEWAY_PORT:-8080}:8080"]
 

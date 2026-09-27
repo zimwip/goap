@@ -13,6 +13,8 @@
   import Toasts from './Toasts.svelte';
   import ContextMenu from './ContextMenu.svelte';
   import ObjectDialog from './ObjectDialog.svelte';
+  import SearchOverlay from './SearchOverlay.svelte';
+  import { openSearch } from './searchOverlay.svelte';
   import StatusBar from './StatusBar.svelte';
   import { layout, LIMITS, toggleConsole } from './layout.svelte';
   import { activeTab, closeTab } from './tabs.svelte';
@@ -45,6 +47,9 @@
     } else if (mod && !e.shiftKey && k === 'b') {
       e.preventDefault();
       layout.leftOpen = !layout.leftOpen;
+    } else if (mod && e.shiftKey && k === 'f') {
+      e.preventDefault();
+      openSearch();
     } else if (mod && (k === 'p' || k === 'k')) {
       e.preventDefault();
       focusRequests.search += 1;
@@ -116,6 +121,7 @@
 <Toasts />
 <ContextMenu />
 <ObjectDialog />
+<SearchOverlay />
 
 <style>
   .shell {

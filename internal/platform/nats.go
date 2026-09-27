@@ -83,3 +83,34 @@ func (e *Events) Subscribe(subject string, fn func(data []byte)) error {
 	_, err := e.nc.Subscribe(subject, func(m *nats.Msg) { fn(m.Data) })
 	return err
 }
+
+// ConsumeDurable delivers, at least once and in order, every message of the GOAP stream matching the
+// subjects to fn through a durable consumer named name. A message is acknowledged when fn returns nil and
+// redelivered after a delay otherwise. It returns when ctx is done (or the consumer cannot be created).
+func (e *Events) ConsumeDurable(ctx context.Context, log *slog.Logger, name string, subjects []string, fn func(ctx context.Context, subject string, data []byte) error) error {
+	if e == nil {
+		return nil
+	}
+	cons, err := e.js.CreateOrUpdateConsumer(ctx, "GOAP", jetstream.ConsumerConfig{
+		Durable: name, FilterSubjects: subjects, AckPolicy: jetstream.AckExplicitPolicy, AckWait: time.Minute,
+		DeliverPolicy: jetstream.DeliverAllPolicy, MaxAckPending: 1,
+	})
+	if err != nil {
+		return err
+	}
+	cc, err := cons.Consume(func(m jetstream.Msg) {
+		mctx := otel.GetTextMapPropagator().Extract(ctx, propagation.HeaderCarrier(m.Headers()))
+		if err := fn(mctx, m.Subject(), m.Data()); err != nil {
+			log.Warn("event not processed, redelivered", "consumer", name, "subject", m.Subject(), "err", err)
+			_ = m.NakWithDelay(5 * time.Second)
+			return
+		}
+		_ = m.Ack()
+	})
+	if err != nil {
+		return err
+	}
+	<-ctx.Done()
+	cc.Stop()
+	return nil
+}

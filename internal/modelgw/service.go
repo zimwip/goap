@@ -160,38 +160,66 @@ func (s *Service) build(ctx context.Context, p ProviderRecord, overrideKey strin
 // required roles, global quota) and calls the provider. Callers without
 // identity are trusted internal services and bypass the role check only.
 func (s *Service) Complete(ctx context.Context, req llm.Request) (llm.Response, error) {
-	snap, err := s.sync(ctx)
+	t, m, period, err := s.admit(ctx, req.Model)
 	if err != nil {
 		return llm.Response{}, err
 	}
-	t, _, err := s.Router.Resolve(req.Model)
+	resp, err := s.Router.Complete(ctx, req)
+	s.recordUsage(ctx, t, m, period, int64(resp.Usage.InputTokens+resp.Usage.OutputTokens))
+	return resp, err
+}
+
+// Embed embeds texts on the embedding model of the platform (alias "embed" by default) under the same
+// catalog policy as Complete: the model must be enabled, the caller allowed, the quota not exhausted.
+func (s *Service) Embed(ctx context.Context, req llm.EmbedRequest) (llm.EmbedResponse, error) {
+	if req.Model == "" {
+		req.Model = llm.EmbedAlias
+	}
+	t, m, period, err := s.admit(ctx, req.Model)
 	if err != nil {
-		return llm.Response{}, fmt.Errorf("%w: %w", ErrInvalid, err)
+		return llm.EmbedResponse{}, err
+	}
+	resp, err := s.Router.Embed(ctx, req)
+	s.recordUsage(ctx, t, m, period, int64(resp.Tokens))
+	return resp, err
+}
+
+// admit resolves a model and applies the catalog policy (availability, required roles, global quota).
+func (s *Service) admit(ctx context.Context, model string) (Target, ModelEntry, string, error) {
+	snap, err := s.sync(ctx)
+	if err != nil {
+		return Target{}, ModelEntry{}, "", err
+	}
+	t, _, err := s.Router.Resolve(model)
+	if err != nil {
+		return Target{}, ModelEntry{}, "", fmt.Errorf("%w: %w", ErrInvalid, err)
 	}
 	m, ok := findModel(snap, t.Provider, t.Model)
 	if !ok || !m.Enabled {
-		return llm.Response{}, fmt.Errorf("%w: %s/%s is not in the platform catalog or is disabled", ErrModelDisabled, t.Provider, t.Model)
+		return t, m, "", fmt.Errorf("%w: %s/%s is not in the platform catalog or is disabled", ErrModelDisabled, t.Provider, t.Model)
 	}
 	if !allowed(authz.From(ctx), m) {
-		return llm.Response{}, fmt.Errorf("%w: %s/%s requires one of the roles %s", ErrForbidden, t.Provider, t.Model, strings.Join(m.Roles, ", "))
+		return t, m, "", fmt.Errorf("%w: %s/%s requires one of the roles %s", ErrForbidden, t.Provider, t.Model, strings.Join(m.Roles, ", "))
 	}
 	period := PeriodKey(m.QuotaPeriod, s.now())
 	if m.QuotaTokens > 0 {
 		used, err := s.Store.Usage(ctx, m.Key(), period)
 		if err != nil {
-			return llm.Response{}, err
+			return t, m, period, err
 		}
 		if used >= m.QuotaTokens {
-			return llm.Response{}, fmt.Errorf("%w: %s/%s used %d of %d tokens (%s)", ErrQuotaExceeded, t.Provider, t.Model, used, m.QuotaTokens, m.QuotaPeriod)
+			return t, m, period, fmt.Errorf("%w: %s/%s used %d of %d tokens (%s)", ErrQuotaExceeded, t.Provider, t.Model, used, m.QuotaTokens, m.QuotaPeriod)
 		}
 	}
-	resp, err := s.Router.Complete(ctx, req)
-	if tokens := int64(resp.Usage.InputTokens + resp.Usage.OutputTokens); tokens > 0 {
-		if uerr := s.Store.AddUsage(context.WithoutCancel(ctx), m.Key(), period, tokens); uerr != nil {
-			s.Log.Error("usage not recorded", "model", t.Provider+"/"+t.Model, "err", uerr)
+	return t, m, period, nil
+}
+
+func (s *Service) recordUsage(ctx context.Context, t Target, m ModelEntry, period string, tokens int64) {
+	if tokens > 0 {
+		if err := s.Store.AddUsage(context.WithoutCancel(ctx), m.Key(), period, tokens); err != nil {
+			s.Log.Error("usage not recorded", "model", t.Provider+"/"+t.Model, "err", err)
 		}
 	}
-	return resp, err
 }
 
 // allowed applies the access level of a catalog model to a caller. Callers
