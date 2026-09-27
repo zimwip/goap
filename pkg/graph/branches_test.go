@@ -64,7 +64,7 @@ func testBranchMerge(t *testing.T, repo Repo) {
 	if n := must[domain.Node](t)(g.Node(ctx, domain.NodeRef{ID: f.req.ID})); n.Version != 1 {
 		t.Fatalf("main latest must stay v1, got v%d", n.Version)
 	}
-	if h := must[domain.Baseline](t)(g.BranchHead(ctx, "opt-a")); h.ID != bA.ID {
+	if h := must[domain.Baseline](t)(g.BranchHead(ctx, "", "opt-a")); h.ID != bA.ID {
 		t.Fatalf("opt-a head %s, want %s", h.ID, bA.ID)
 	}
 
@@ -88,7 +88,7 @@ func testBranchMerge(t *testing.T, repo Repo) {
 		t.Fatalf("common ancestor v%d", anc.Version)
 	}
 
-	plan := must[MergePlan](t)(g.PlanMerge(ctx, "opt-a", ""))
+	plan := must[MergePlan](t)(g.PlanMerge(ctx, "", "opt-a", ""))
 	if len(plan.Candidates) != 2 || len(plan.Conflicting()) != 0 {
 		t.Fatalf("plan: %+v", plan)
 	}
@@ -124,13 +124,13 @@ func testBranchMerge(t *testing.T, repo Repo) {
 	if !refines || !satisfies {
 		t.Fatalf("merged links: %+v", links)
 	}
-	if br := must[domain.Branch](t)(g.Branch(ctx, "opt-a")); br.Status != domain.BranchMerged {
+	if br := must[domain.Branch](t)(g.Branch(ctx, "", "opt-a")); br.Status != domain.BranchMerged {
 		t.Fatalf("branch status %s", br.Status)
 	}
-	if h := must[domain.Baseline](t)(g.BranchHead(ctx, "")); h.ID != b.ID {
+	if h := must[domain.Baseline](t)(g.BranchHead(ctx, "", "")); h.ID != b.ID {
 		t.Fatalf("main head %s, want %s", h.ID, b.ID)
 	}
-	if _, err := g.PlanMerge(ctx, "opt-a", ""); !errors.Is(err, ErrConflict) {
+	if _, err := g.PlanMerge(ctx, "", "opt-a", ""); !errors.Is(err, ErrConflict) {
 		t.Fatalf("merged branch must not merge again: %v", err)
 	}
 }
@@ -156,7 +156,7 @@ func testBranchMergeConflict(t *testing.T, repo Repo) {
 	commitOn(t, g, "opt-b", f.base.ID, setEdit(req1, map[string]any{"title": "Use PSP B"}))
 	commitOn(t, g, "", f.base.ID, setEdit(req1, map[string]any{"title": "Use PSP M"}))
 
-	plan := must[MergePlan](t)(g.PlanMerge(ctx, "opt-b", ""))
+	plan := must[MergePlan](t)(g.PlanMerge(ctx, "", "opt-b", ""))
 	if cs := plan.Conflicting(); len(cs) != 1 || !slices.Equal(cs[0].Conflicts, []string{"title"}) || cs[0].Merged["title"] != "Use PSP M" {
 		t.Fatalf("conflicts: %+v", plan)
 	}
@@ -217,5 +217,63 @@ func testBranchMergeRecordsChangeImpacts(t *testing.T, repo Repo) {
 	}
 	if head.Comment == "" || res.Change.Status != domain.ChangeApplied {
 		t.Fatalf("origin: %+v", head)
+	}
+}
+
+func TestBranchNamesAreScopedToTheirNamespace(t *testing.T) {
+	forEachRepo(t, testBranchNamesAreScopedToTheirNamespace)
+}
+
+func testBranchNamesAreScopedToTheirNamespace(t *testing.T, repo Repo) {
+	ctx := context.Background()
+	g := New(repo)
+	def, err := g.CreateNode(ctx, NewNode{Key: "N-1", Type: "Thing"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	org, err := g.CreateNode(ctx, NewNode{Namespace: "organisation", Key: "N-1", Type: "OrgUnit"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defBase := must[domain.Baseline](t)(g.CreateBaseline(ctx, "", "B", []domain.NodeRef{def.Ref()}))
+	orgBase := must[domain.Baseline](t)(g.CreateBaseline(ctx, "organisation", "B", []domain.NodeRef{org.Ref()}))
+	// two namespaces can each have their own branch of the same name
+	defBranch := must[domain.Branch](t)(g.CreateBranch(ctx, NewBranch{Name: "feature-x", From: defBase.ID}))
+	orgBranch := must[domain.Branch](t)(g.CreateBranch(ctx, NewBranch{Namespace: "organisation", Name: "feature-x", From: orgBase.ID}))
+	if defBranch.Namespace != domain.DefaultNamespace || orgBranch.Namespace != "organisation" {
+		t.Fatalf("branch namespaces: %+v %+v", defBranch, orgBranch)
+	}
+	if got, err := g.Branch(ctx, "", "feature-x"); err != nil || got.ForkBaseline != defBase.ID {
+		t.Fatalf("default feature-x: %+v %v", got, err)
+	}
+	if got, err := g.Branch(ctx, "organisation", "feature-x"); err != nil || got.ForkBaseline != orgBase.ID {
+		t.Fatalf("organisation feature-x: %+v %v", got, err)
+	}
+}
+
+func TestCreateBaselineFromLatestScopesToOneNamespace(t *testing.T) {
+	forEachRepo(t, testCreateBaselineFromLatestScopesToOneNamespace)
+}
+
+func testCreateBaselineFromLatestScopesToOneNamespace(t *testing.T, repo Repo) {
+	ctx := context.Background()
+	g := New(repo)
+	def, err := g.CreateNode(ctx, NewNode{Key: "N-1", Type: "Thing"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	org, err := g.CreateNode(ctx, NewNode{Namespace: "organisation", Key: "N-1", Type: "OrgUnit"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	snap := must[domain.Baseline](t)(g.CreateBaselineFromLatest(ctx, "organisation", "snap"))
+	if snap.Namespace != "organisation" {
+		t.Fatalf("snapshot namespace = %q", snap.Namespace)
+	}
+	if _, ok := snap.Nodes[org.ID]; !ok {
+		t.Fatalf("snapshot must contain the organisation node: %+v", snap.Nodes)
+	}
+	if _, ok := snap.Nodes[def.ID]; ok {
+		t.Fatalf("snapshot must not contain the default-namespace node: %+v", snap.Nodes)
 	}
 }

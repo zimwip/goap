@@ -22,7 +22,7 @@
     loading = true;
     error = '';
     try {
-      const h = await headGraph();
+      const h = await headGraph(NS_ORGANISATION);
       baselineId = h.baselineId;
       policies = policiesOf(h.nodes);
       users = usersOf(h.nodes);

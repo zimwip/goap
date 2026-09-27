@@ -61,7 +61,7 @@ func setup(t *testing.T) (*Engine, *graph.Graph, domain.BaselineID) {
 	_, _ = g.Link(ctx, "alm@satisfies", req.Ref(), need.Ref(), nil)
 	_, _ = g.Link(ctx, "alm@verifies", tst.Ref(), req.Ref(), nil)
 	_, _ = g.Link(ctx, "alm@implements", cmp.Ref(), req.Ref(), nil)
-	b, err := g.CreateBaseline(ctx, "B1", []domain.NodeRef{need.Ref(), req.Ref(), tst.Ref(), cmp.Ref()})
+	b, err := g.CreateBaseline(ctx, "alm", "B1", []domain.NodeRef{need.Ref(), req.Ref(), tst.Ref(), cmp.Ref()})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -91,7 +91,7 @@ nodeTypes:
 		}
 		return n
 	}
-	if _, err := g.CreateBaseline(ctx, "B0", nil); err != nil {
+	if _, err := g.CreateBaseline(ctx, "docs", "B0", nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -99,7 +99,7 @@ nodeTypes:
 	r1 := mk("REQ-1", "docs@Requirement", map[string]any{"title": "Users reset their password", "priority": "high"})
 	mk("REQ-2", "docs@Requirement", map[string]any{"title": "Export a report", "priority": "low"})
 	mk("SEC-1", "docs@Secret", map[string]any{"title": "password vault"})
-	if _, err := g.CreateBaselineFromLatest(ctx, "B1"); err != nil {
+	if _, err := g.CreateBaselineFromLatest(ctx, "docs", "B1"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -119,7 +119,7 @@ nodeTypes:
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := g.CreateBaselineFromLatest(ctx, "B2"); err != nil {
+	if _, err := g.CreateBaselineFromLatest(ctx, "docs", "B2"); err != nil {
 		t.Fatal(err)
 	}
 	waitFor(t, svc, ctx, index.Query{Text: "passkey", Filter: index.Filter{Main: &yes}}, 1)

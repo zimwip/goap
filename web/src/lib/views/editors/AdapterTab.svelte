@@ -109,7 +109,7 @@
     }
     saving = true;
     try {
-      const h = await headGraph();
+      const h = await headGraph(NS_PLATFORM);
       const key = adapterDefKey(def.name);
       const existing = findNode(h, NS_PLATFORM, ADAPTER_DEF_TYPE, key);
       if (isNew && existing) throw new Error(`an adapter named ${def.name} already exists`);
@@ -132,7 +132,7 @@
   async function remove() {
     if (!confirm(`Delete the adapter ${a.name}? Units that instantiate it stop resolving their ${a.mcp} tools.`)) return;
     try {
-      const h = await headGraph();
+      const h = await headGraph(NS_PLATFORM);
       const existing = findNode(h, NS_PLATFORM, ADAPTER_DEF_TYPE, adapterDefKey(a.name));
       if (!existing) throw new Error(`adapter ${a.name} is not on the graph`);
       await applyOnMain(NS_PLATFORM, `Delete adapter ${a.name}`, `Delete adapter ${a.name}`, h.baselineId, [deleteNodeItem(existing)]);

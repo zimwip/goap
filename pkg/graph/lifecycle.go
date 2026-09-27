@@ -2,7 +2,6 @@ package graph
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 
@@ -68,43 +67,14 @@ func (ix *typeIndex) checkLink(typ, from, to string) error {
 }
 
 // LifecycleControlled tells whether direct writes to nodes of a type are refused
-// (the type has a lifecycle): they must go through a change. It reads the
-// metadata of the head of main.
-func (g *Graph) LifecycleControlled(ctx context.Context, typ string) (bool, error) {
-	var controlled bool
-	err := g.repo.InTx(ctx, func(tx Tx) error {
-		head, err := g.headOrLatest(ctx, tx)
-		if err != nil || head == "" {
-			return err
-		}
-		ix, err := g.typesAt(ctx, tx, head)
-		if err != nil {
-			return err
-		}
-		controlled = ix.lifecycleOf(typ) != nil
-		return nil
-	})
-	return controlled, err
-}
-
-// headOrLatest returns the head of main, else the most recent baseline ("" when none).
-func (g *Graph) headOrLatest(ctx context.Context, tx Tx) (domain.BaselineID, error) {
-	if b, err := tx.Branch(ctx, domain.MainBranch); err == nil {
-		return b.Head, nil
-	} else if !errors.Is(err, ErrNotFound) {
-		return "", err
+// (the type has a lifecycle): they must go through a change. The type catalogue is
+// process-global, not namespace-scoped graph data (typesAt ignores its baseline
+// argument), so this needs no baseline lookup at all.
+func (g *Graph) LifecycleControlled(_ context.Context, typ string) (bool, error) {
+	if g.Types == nil {
+		return false, nil
 	}
-	bs, err := tx.Baselines(ctx)
-	if err != nil || len(bs) == 0 {
-		return "", err
-	}
-	latest := bs[0]
-	for _, b := range bs[1:] {
-		if b.CreatedAt.After(latest.CreatedAt) {
-			latest = b
-		}
-	}
-	return latest.ID, nil
+	return g.catalog().Lifecycle(typ) != nil, nil
 }
 
 func invalidf(format string, args ...any) error {

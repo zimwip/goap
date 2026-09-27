@@ -47,7 +47,7 @@ linkTypes:
 	}
 	g := New(NewMemory())
 	g.Types = func() TypeCatalog { return cat }
-	b, err := g.CreateBaseline(context.Background(), "B0", nil)
+	b, err := g.CreateBaseline(context.Background(), "docs", "B0", nil)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -22,7 +22,7 @@ func ownBranch(ctx context.Context, tx Tx, c domain.Change) (domain.Branch, bool
 	if domain.BranchOf(c.Branch) == domain.MainBranch {
 		return domain.Branch{}, false, nil
 	}
-	b, err := tx.Branch(ctx, c.Branch)
+	b, err := tx.Branch(ctx, c.Namespace, c.Branch)
 	if err != nil {
 		return b, false, err
 	}
@@ -39,7 +39,7 @@ func (g *Graph) integrate(ctx context.Context, tx Tx, c domain.Change, own domai
 		c, err = tx.Change(ctx, c.ID)
 		return c, err
 	}
-	plan, err := planMerge(ctx, tx, own.Name, own.Parent)
+	plan, err := planMerge(ctx, tx, c.Namespace, own.Name, own.Parent)
 	if err != nil {
 		return c, err
 	}
@@ -79,7 +79,7 @@ func (g *Graph) MergeChange(ctx context.Context, id domain.ChangeID, resolutions
 		if !ok {
 			return fmt.Errorf("change %s has no branch of its own: %w", id, ErrInvalid)
 		}
-		if plan, err := planMerge(ctx, tx, own.Name, own.Parent); err != nil {
+		if plan, err := planMerge(ctx, tx, c.Namespace, own.Name, own.Parent); err != nil {
 			return err
 		} else if un := unresolved(plan, resolutions); len(un) > 0 {
 			return fmt.Errorf("merge %s into %s: unresolved conflicts on %v: %w", own.Name, own.Parent, un, ErrConflict)
@@ -170,7 +170,7 @@ func (g *Graph) NodeByKeyOn(ctx context.Context, namespace, branch, key string) 
 			if name == domain.MainBranch {
 				break
 			}
-			b, err := tx.Branch(ctx, name)
+			b, err := tx.Branch(ctx, namespace, name)
 			if err != nil {
 				return err
 			}
@@ -185,11 +185,11 @@ func (g *Graph) NodeByKeyOn(ctx context.Context, namespace, branch, key string) 
 // branch was forked: the versions of the branch become versions of the target,
 // no merge version is made, and each change impact lands as the version it wrote.
 func (g *Graph) fastForward(ctx context.Context, tx Tx, c domain.Change, own domain.Branch) (bool, error) {
-	into, err := branchHead(ctx, tx, own.Parent)
+	into, err := branchHead(ctx, tx, c.Namespace, own.Parent)
 	if err != nil || into.ID != own.ForkBaseline {
 		return false, err
 	}
-	from, err := branchHead(ctx, tx, own.Name)
+	from, err := branchHead(ctx, tx, c.Namespace, own.Name)
 	if err != nil {
 		return false, err
 	}
@@ -220,12 +220,12 @@ func (g *Graph) fastForward(ctx context.Context, tx Tx, c domain.Change, own dom
 			return false, err
 		}
 	}
-	res := domain.Baseline{ID: domain.BaselineID(g.newID()), Name: "merge " + c.Title, Branch: domain.BranchOf(own.Parent), ParentID: into.ID, ChangeID: c.ID,
+	res := domain.Baseline{ID: domain.BaselineID(g.newID()), Name: "merge " + c.Title, Namespace: c.Namespace, Branch: domain.BranchOf(own.Parent), ParentID: into.ID, ChangeID: c.ID,
 		Nodes: from.Nodes, CreatedAt: g.now()}
 	if err := tx.PutBaseline(ctx, res); err != nil {
 		return false, err
 	}
-	if err := g.advanceBranch(ctx, tx, domain.BranchOf(own.Parent), res.ID); err != nil {
+	if err := g.advanceBranch(ctx, tx, c.Namespace, domain.BranchOf(own.Parent), res.ID); err != nil {
 		return false, err
 	}
 	own.Status = domain.BranchMerged
@@ -246,7 +246,7 @@ func (g *Graph) ensureOwnBranch(ctx context.Context, tx Tx, c domain.Change) (do
 	if c.ParentID != "" {
 		return c, domain.Branch{}, fmt.Errorf("change %s is a sub-change without a branch of its own: %w", c.ID, ErrInvalid)
 	}
-	parent, err := branchOf(ctx, tx, c.Branch)
+	parent, err := branchOf(ctx, tx, c.Namespace, c.Branch)
 	if err != nil {
 		return c, parent, err
 	}
@@ -257,7 +257,7 @@ func (g *Graph) ensureOwnBranch(ctx context.Context, tx Tx, c domain.Change) (do
 	if err != nil {
 		return c, parent, err
 	}
-	own := domain.Branch{Name: changeBranchName(c.ID), Parent: parent.Name, ForkBaseline: fork.ID, Head: fork.ID,
+	own := domain.Branch{Name: changeBranchName(c.ID), Namespace: c.Namespace, Parent: parent.Name, ForkBaseline: fork.ID, Head: fork.ID,
 		Origin: domain.ChangeBranchOrigin(c.ID), Status: domain.BranchOpen, CreatedAt: g.now()}
 	if err := tx.PutBranch(ctx, own); err != nil {
 		return c, own, err

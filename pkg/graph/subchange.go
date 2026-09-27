@@ -46,7 +46,7 @@ func (g *Graph) prepareSubChange(ctx context.Context, tx Tx, c *domain.Change, i
 	c.Branch = own.Name
 	in.OwnBranch = true
 	if c.BaselineID == "" {
-		head, err := branchHead(ctx, tx, own.Name)
+		head, err := branchHead(ctx, tx, c.Namespace, own.Name)
 		if err != nil {
 			return err
 		}

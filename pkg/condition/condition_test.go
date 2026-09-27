@@ -17,7 +17,7 @@ func blackboard(t *testing.T, withTest bool) domain.Blackboard {
 	if _, err := g.Link(ctx, "satisfies", req.Ref(), need.Ref(), nil); err != nil {
 		t.Fatal(err)
 	}
-	b, _ := g.CreateBaseline(ctx, "B1", []domain.NodeRef{need.Ref(), req.Ref()})
+	b, _ := g.CreateBaseline(ctx, "", "B1", []domain.NodeRef{need.Ref(), req.Ref()})
 	c, _ := g.CreateChange(ctx, graph.NewChange{Title: "c", BaselineID: b.ID})
 	ref := req.Ref()
 	if _, err := g.AddNodes(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &ref, Rationale: "impacted"}}); err != nil {

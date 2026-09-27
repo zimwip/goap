@@ -131,6 +131,7 @@ type BaselineID string
 type Baseline struct {
 	ID        BaselineID         `json:"id"`
 	Name      string             `json:"name"`
+	Namespace string             `json:"namespace,omitempty"`
 	Branch    string             `json:"branch,omitempty"`
 	ParentID  BaselineID         `json:"parentId,omitempty"`
 	ChangeID  ChangeID           `json:"changeId,omitempty"`
@@ -155,6 +156,7 @@ const (
 // maintenance line…). Its head is its most recent baseline.
 type Branch struct {
 	Name         string     `json:"name"`
+	Namespace    string     `json:"namespace,omitempty"`
 	Parent       string     `json:"parent"`
 	ForkBaseline BaselineID `json:"forkBaseline"`
 	Head         BaselineID `json:"head,omitempty"`   // latest baseline of the branch

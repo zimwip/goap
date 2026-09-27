@@ -173,10 +173,11 @@ func view(ctx context.Context, tx Tx, ref domain.NodeRef) (domain.NodeView, erro
 	return domain.NodeView{Node: n, Latest: latest.Version, Out: out, In: in}, nil
 }
 
-// CreateBaseline snapshots the given node versions (Version 0 = latest).
-// Deleted versions are skipped.
-func (g *Graph) CreateBaseline(ctx context.Context, name string, nodes []domain.NodeRef) (domain.Baseline, error) {
-	b := domain.Baseline{ID: domain.BaselineID(g.newID()), Name: name, Nodes: map[domain.NodeID]domain.Version{}, CreatedAt: g.now()}
+// CreateBaseline snapshots the given node versions (Version 0 = latest), all
+// of which must belong to namespace. Deleted versions are skipped.
+func (g *Graph) CreateBaseline(ctx context.Context, namespace, name string, nodes []domain.NodeRef) (domain.Baseline, error) {
+	namespace = domain.NamespaceOf(namespace)
+	b := domain.Baseline{ID: domain.BaselineID(g.newID()), Name: name, Namespace: namespace, Nodes: map[domain.NodeID]domain.Version{}, CreatedAt: g.now()}
 	err := g.repo.InTx(ctx, func(tx Tx) error {
 		for _, r := range nodes {
 			n, err := tx.Node(ctx, r)
@@ -186,6 +187,9 @@ func (g *Graph) CreateBaseline(ctx context.Context, name string, nodes []domain.
 			if n.Deleted {
 				continue
 			}
+			if n.Namespace != namespace {
+				return fmt.Errorf("node %s is of namespace %s, baseline %s is of namespace %s: %w", n.Key, n.Namespace, name, namespace, ErrInvalid)
+			}
 			b.Nodes[n.ID] = n.Version
 		}
 		return tx.PutBaseline(ctx, b)
@@ -193,11 +197,11 @@ func (g *Graph) CreateBaseline(ctx context.Context, name string, nodes []domain.
 	return b, err
 }
 
-// CreateBaselineFromLatest snapshots the latest version of every live node.
-func (g *Graph) CreateBaselineFromLatest(ctx context.Context, name string) (domain.Baseline, error) {
+// CreateBaselineFromLatest snapshots the latest version of every live node of namespace.
+func (g *Graph) CreateBaselineFromLatest(ctx context.Context, namespace, name string) (domain.Baseline, error) {
 	var refs []domain.NodeRef
 	err := g.repo.InTx(ctx, func(tx Tx) error {
-		nodes, err := tx.LatestNodes(ctx)
+		nodes, err := tx.LatestNodes(ctx, namespace, domain.MainBranch)
 		for _, n := range nodes {
 			refs = append(refs, n.Ref())
 		}
@@ -206,7 +210,7 @@ func (g *Graph) CreateBaselineFromLatest(ctx context.Context, name string) (doma
 	if err != nil {
 		return domain.Baseline{}, err
 	}
-	return g.CreateBaseline(ctx, name, refs)
+	return g.CreateBaseline(ctx, namespace, name, refs)
 }
 
 // Baseline returns a baseline.
@@ -215,9 +219,9 @@ func (g *Graph) Baseline(ctx context.Context, id domain.BaselineID) (b domain.Ba
 	return
 }
 
-// Baselines lists baselines by creation date.
-func (g *Graph) Baselines(ctx context.Context) (bs []domain.Baseline, err error) {
-	err = g.repo.InTx(ctx, func(tx Tx) error { bs, err = tx.Baselines(ctx); return err })
+// Baselines lists the baselines of a namespace, by creation date.
+func (g *Graph) Baselines(ctx context.Context, namespace string) (bs []domain.Baseline, err error) {
+	err = g.repo.InTx(ctx, func(tx Tx) error { bs, err = tx.Baselines(ctx, namespace); return err })
 	return
 }
 
@@ -319,7 +323,11 @@ func (g *Graph) CreateChange(ctx context.Context, in NewChange) (domain.Change, 
 		if err != nil {
 			return err
 		}
-		b, err := branchOf(ctx, tx, c.Branch)
+		if fork.Namespace != c.Namespace {
+			return fmt.Errorf("change acts on namespace %s but its reference baseline %s is of namespace %s: %w",
+				c.Namespace, c.BaselineID, fork.Namespace, ErrInvalid)
+		}
+		b, err := branchOf(ctx, tx, c.Namespace, c.Branch)
 		if err != nil {
 			return err
 		}
@@ -327,7 +335,7 @@ func (g *Graph) CreateChange(ctx context.Context, in NewChange) (domain.Change, 
 			return fmt.Errorf("branch %s is %s: %w", b.Name, b.Status, ErrConflict)
 		}
 		if in.OwnBranch {
-			own := domain.Branch{Name: changeBranchName(c.ID), Parent: b.Name, ForkBaseline: fork.ID, Head: fork.ID,
+			own := domain.Branch{Name: changeBranchName(c.ID), Namespace: c.Namespace, Parent: b.Name, ForkBaseline: fork.ID, Head: fork.ID,
 				Origin: domain.ChangeBranchOrigin(c.ID), Status: domain.BranchOpen, CreatedAt: g.now()}
 			if err := tx.PutBranch(ctx, own); err != nil {
 				return err

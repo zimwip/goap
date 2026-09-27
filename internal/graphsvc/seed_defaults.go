@@ -63,9 +63,9 @@ ctx.fail("unknown tool " + ctx.tool());
 // moves (baselines made outside a change do not once main has a head). The graph gets an
 // empty initial baseline when it has none.
 func applyOn(ctx context.Context, g *graph.Graph, namespace, title string, edits []graph.NodeEdit) error {
-	head, err := g.BranchHead(ctx, domain.MainBranch)
+	head, err := g.BranchHead(ctx, namespace, domain.MainBranch)
 	if errors.Is(err, graph.ErrNotFound) {
-		head, err = g.CreateBaseline(ctx, "Initial baseline", nil)
+		head, err = g.CreateBaseline(ctx, namespace, "Initial baseline", nil)
 	}
 	if err != nil {
 		return err
@@ -181,7 +181,7 @@ func SeedPolicy(ctx context.Context, g *graph.Graph, p authz.Policy) error {
 // when the graph holds no provider yet, so that providers or models deleted on purpose stay so. It reports
 // whether it seeded.
 func SeedModels(ctx context.Context, g *graph.Graph, providers []llmcfg.Provider, models []llmcfg.Model, aliases []llmcfg.Alias) (bool, error) {
-	head, err := g.BranchHead(ctx, domain.MainBranch)
+	head, err := g.BranchHead(ctx, llmcfg.NamespacePlatform, domain.MainBranch)
 	if err == nil {
 		nodes, _, gerr := g.BaselineGraph(ctx, head.ID)
 		if gerr != nil {

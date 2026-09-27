@@ -129,23 +129,23 @@ func (t *sqliteTx) Versions(ctx context.Context, id domain.NodeID) ([]domain.Nod
 	return out, err
 }
 
-const sqliteBranchCols = `name, parent, coalesce(fork_baseline, ''), coalesce(head_baseline, ''), origin, status, created_at`
+const sqliteBranchCols = `namespace, name, parent, coalesce(fork_baseline, ''), coalesce(head_baseline, ''), origin, status, created_at`
 
 func sqliteScanBranch(row scanner) (domain.Branch, error) {
 	var b domain.Branch
 	var created string
-	err := row.Scan(&b.Name, &b.Parent, (*string)(&b.ForkBaseline), (*string)(&b.Head), &b.Origin, &b.Status, &created)
+	err := row.Scan(&b.Namespace, &b.Name, &b.Parent, (*string)(&b.ForkBaseline), (*string)(&b.Head), &b.Origin, &b.Status, &created)
 	b.CreatedAt = tsParse(created)
 	return b, err
 }
 
-func (t *sqliteTx) Branch(ctx context.Context, name string) (domain.Branch, error) {
-	b, err := sqliteScanBranch(t.tx.QueryRowContext(ctx, `SELECT `+sqliteBranchCols+` FROM branch WHERE name = ?`, name))
+func (t *sqliteTx) Branch(ctx context.Context, namespace, name string) (domain.Branch, error) {
+	b, err := sqliteScanBranch(t.tx.QueryRowContext(ctx, `SELECT `+sqliteBranchCols+` FROM branch WHERE namespace = ? AND name = ?`, domain.NamespaceOf(namespace), name))
 	return b, sqliteErr(err, "branch "+name)
 }
 
-func (t *sqliteTx) Branches(ctx context.Context) ([]domain.Branch, error) {
-	rows, err := t.tx.QueryContext(ctx, `SELECT `+sqliteBranchCols+` FROM branch ORDER BY created_at, rowid`)
+func (t *sqliteTx) Branches(ctx context.Context, namespace string) ([]domain.Branch, error) {
+	rows, err := t.tx.QueryContext(ctx, `SELECT `+sqliteBranchCols+` FROM branch WHERE namespace = ? ORDER BY created_at, rowid`, domain.NamespaceOf(namespace))
 	if err != nil {
 		return nil, err
 	}
@@ -162,9 +162,10 @@ func (t *sqliteTx) Branches(ctx context.Context) ([]domain.Branch, error) {
 }
 
 func (t *sqliteTx) PutBranch(ctx context.Context, b domain.Branch) error {
-	_, err := t.tx.ExecContext(ctx, `INSERT INTO branch (name, parent, fork_baseline, head_baseline, origin, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)
-		ON CONFLICT (name) DO UPDATE SET status = excluded.status, head_baseline = excluded.head_baseline`,
-		b.Name, b.Parent, nullUUID(string(b.ForkBaseline)), nullUUID(string(b.Head)), b.Origin, b.Status, tsText(b.CreatedAt))
+	namespace := domain.NamespaceOf(b.Namespace)
+	_, err := t.tx.ExecContext(ctx, `INSERT INTO branch (namespace, name, parent, fork_baseline, head_baseline, origin, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT (namespace, name) DO UPDATE SET status = excluded.status, head_baseline = excluded.head_baseline`,
+		namespace, b.Name, b.Parent, nullUUID(string(b.ForkBaseline)), nullUUID(string(b.Head)), b.Origin, b.Status, tsText(b.CreatedAt))
 	return sqliteErr(err, "branch "+b.Name)
 }
 
@@ -193,10 +194,15 @@ func (t *sqliteTx) NodesIn(ctx context.Context, baseline domain.BaselineID, node
 	      WHERE e.baseline_id = ? AND (? = '' OR n.type = ?) ORDER BY n.key`, string(baseline), nodeType, nodeType)
 }
 
-func (t *sqliteTx) LatestNodes(ctx context.Context) ([]domain.Node, error) {
+func (t *sqliteTx) LatestNodes(ctx context.Context, namespace, branch string) ([]domain.Node, error) {
+	ns, br := domain.NamespaceOf(namespace), domain.BranchOf(branch)
 	return t.nodes(ctx, `SELECT `+sqliteNodeCols+` FROM node n JOIN node_version v ON v.node_id = n.id
-		WHERE v.branch = 'main' AND v.version = (SELECT max(version) FROM node_version WHERE node_id = n.id AND branch = 'main')
-		ORDER BY n.key`)
+		WHERE n.namespace = ? AND v.branch = ? AND v.version = (SELECT max(version) FROM node_version WHERE node_id = n.id AND branch = ?)
+		ORDER BY n.key`, ns, br, br)
+}
+
+func (t *sqliteTx) Namespaces(ctx context.Context) ([]string, error) {
+	return t.ids(ctx, `SELECT DISTINCT namespace FROM node ORDER BY namespace`)
 }
 
 func (t *sqliteTx) links(ctx context.Context, where string, ref domain.NodeRef) ([]domain.Link, error) {
@@ -235,8 +241,8 @@ func (t *sqliteTx) Baseline(ctx context.Context, id domain.BaselineID) (domain.B
 	var b domain.Baseline
 	var parent, change sql.NullString
 	var created string
-	err := t.tx.QueryRowContext(ctx, `SELECT id, name, parent_id, change_id, created_at, branch FROM baseline WHERE id = ?`, string(id)).
-		Scan((*string)(&b.ID), &b.Name, &parent, &change, &created, &b.Branch)
+	err := t.tx.QueryRowContext(ctx, `SELECT id, name, parent_id, change_id, created_at, branch, namespace FROM baseline WHERE id = ?`, string(id)).
+		Scan((*string)(&b.ID), &b.Name, &parent, &change, &created, &b.Branch, &b.Namespace)
 	if err != nil {
 		return b, sqliteErr(err, "baseline "+string(id))
 	}
@@ -258,8 +264,8 @@ func (t *sqliteTx) Baseline(ctx context.Context, id domain.BaselineID) (domain.B
 	return b, rows.Err()
 }
 
-func (t *sqliteTx) ids(ctx context.Context, q string) ([]string, error) {
-	rows, err := t.tx.QueryContext(ctx, q)
+func (t *sqliteTx) ids(ctx context.Context, q string, args ...any) ([]string, error) {
+	rows, err := t.tx.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -275,8 +281,8 @@ func (t *sqliteTx) ids(ctx context.Context, q string) ([]string, error) {
 	return out, rows.Err()
 }
 
-func (t *sqliteTx) Baselines(ctx context.Context) ([]domain.Baseline, error) {
-	ids, err := t.ids(ctx, `SELECT id FROM baseline ORDER BY created_at, rowid`)
+func (t *sqliteTx) Baselines(ctx context.Context, namespace string) ([]domain.Baseline, error) {
+	ids, err := t.ids(ctx, `SELECT id FROM baseline WHERE namespace = ? ORDER BY created_at, rowid`, domain.NamespaceOf(namespace))
 	if err != nil {
 		return nil, err
 	}
@@ -386,8 +392,8 @@ func (t *sqliteTx) PutLink(ctx context.Context, l domain.Link) error {
 }
 
 func (t *sqliteTx) PutBaseline(ctx context.Context, b domain.Baseline) error {
-	_, err := t.tx.ExecContext(ctx, `INSERT INTO baseline (id, name, parent_id, change_id, created_at, branch) VALUES (?, ?, ?, ?, ?, ?)`,
-		string(b.ID), b.Name, nullUUID(string(b.ParentID)), nullUUID(string(b.ChangeID)), tsText(b.CreatedAt), domain.BranchOf(b.Branch))
+	_, err := t.tx.ExecContext(ctx, `INSERT INTO baseline (id, name, parent_id, change_id, created_at, branch, namespace) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		string(b.ID), b.Name, nullUUID(string(b.ParentID)), nullUUID(string(b.ChangeID)), tsText(b.CreatedAt), domain.BranchOf(b.Branch), domain.NamespaceOf(b.Namespace))
 	if err != nil {
 		return sqliteErr(err, "baseline")
 	}

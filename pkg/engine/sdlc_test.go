@@ -81,7 +81,7 @@ func TestSDLCDelivery(t *testing.T) {
 	if _, err := graphsvc.SeedDemo(ctx, g); err != nil {
 		t.Fatal(err)
 	}
-	bs, _ := g.Baselines(ctx)
+	bs, _ := g.Baselines(ctx, "alm")
 	e := &engine.Engine{
 		Graph:         g,
 		Methodologies: engine.StaticMethodologies{cm.Name: cm},

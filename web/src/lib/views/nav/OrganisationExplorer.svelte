@@ -25,14 +25,15 @@
   async function load() {
     loading = true;
     try {
-      if (!baselines.loaded) await refreshBaselines();
+      await refreshBaselines(NS);
       const latest = baselines.items[baselines.items.length - 1];
       if (!latest?.id) {
         nodes = [];
         links = [];
       } else {
         const r = await graph.getBaselineGraph(latest.id);
-        nodes = (r.nodes ?? []).filter((n) => n.namespace === NS && n.type === ORG_UNIT_TYPE);
+        // the baseline is already scoped to NS (organisation), just filter by type
+        nodes = (r.nodes ?? []).filter((n) => n.type === ORG_UNIT_TYPE);
         links = r.links ?? [];
       }
       error = '';
@@ -107,7 +108,7 @@
       name = '';
       parent = '';
       adding = false;
-      await refreshBaselines();
+      await refreshBaselines(NS);
       await load();
     } catch (e) {
       error = errorMessage(e);

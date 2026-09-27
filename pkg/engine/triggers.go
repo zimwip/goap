@@ -313,7 +313,11 @@ func (t *TriggerManager) start(ctx context.Context, key string, s TriggerState, 
 			return nil, errors.New("event_change target needs a change or process event")
 		}
 	default:
-		b, err := t.Engine.latestBaseline(ctx)
+		m, err := t.Engine.Methodologies.Methodology(ctx, s.Methodology)
+		if err != nil {
+			return nil, err
+		}
+		b, err := t.Engine.latestBaseline(ctx, domain.NamespaceOf(m.Namespace))
 		if err != nil {
 			return nil, err
 		}
@@ -330,8 +334,8 @@ func (t *TriggerManager) start(ctx context.Context, key string, s TriggerState, 
 	return p, nil
 }
 
-func (e *Engine) latestBaseline(ctx context.Context) (domain.BaselineID, error) {
-	bs, err := e.Graph.Baselines(ctx)
+func (e *Engine) latestBaseline(ctx context.Context, namespace string) (domain.BaselineID, error) {
+	bs, err := e.Graph.Baselines(ctx, namespace)
 	if err != nil {
 		return "", err
 	}

@@ -19,6 +19,7 @@
   import { baselines, refreshBaselines, methodologies } from '../../stores/catalog.svelte';
   import { openTab } from '../../shell/tabs.svelte';
   import { formatDate, shortId } from '../../api';
+  import { DEFAULT_NAMESPACE } from '../../namespace';
 
   let { mode = 'tab' }: { mode?: 'panel' | 'tab' } = $props();
 
@@ -30,7 +31,7 @@
   $effect(() => {
     loadingCatalog = true;
     void loadCatalog().finally(() => (loadingCatalog = false));
-    if (!baselines.loaded) void refreshBaselines();
+    if (!baselines.loaded) void refreshBaselines(DEFAULT_NAMESPACE);
   });
 
   $effect(() => {

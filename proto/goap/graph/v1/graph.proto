@@ -137,6 +137,7 @@ message Baseline {
   map<string, int32> nodes = 5;
   google.protobuf.Timestamp created_at = 6;
   string branch = 7;
+  string namespace = 8;
 }
 
 message Decision {
@@ -294,13 +295,17 @@ message CreateBaselineRequest {
   repeated NodeRef nodes = 2;
   // snapshot the latest version of every node
   bool all_latest = 3;
+  // namespace the baseline snapshots (every node given, or the latest ones, must belong to it)
+  string namespace = 4;
 }
 
 message CreateBaselineResponse {
   Baseline baseline = 1;
 }
 
-message ListBaselinesRequest {}
+message ListBaselinesRequest {
+  string namespace = 1;
+}
 
 message ListBaselinesResponse {
   repeated Baseline baselines = 1;
@@ -405,19 +410,23 @@ message Branch {
   // open | merged | abandoned
   string status = 6;
   google.protobuf.Timestamp created_at = 7;
+  string namespace = 8;
 }
 
 message CreateBranchRequest {
   string name = 1;
   string from_baseline = 2;
   string origin = 3;
+  string namespace = 4;
 }
 
 message CreateBranchResponse {
   Branch branch = 1;
 }
 
-message ListBranchesRequest {}
+message ListBranchesRequest {
+  string namespace = 1;
+}
 
 message ListBranchesResponse {
   repeated Branch branches = 1;
@@ -425,6 +434,7 @@ message ListBranchesResponse {
 
 message GetBranchRequest {
   string name = 1;
+  string namespace = 2;
 }
 
 message GetBranchResponse {
@@ -435,6 +445,7 @@ message GetBranchResponse {
 message SetBranchStatusRequest {
   string name = 1;
   string status = 2;
+  string namespace = 3;
 }
 
 message SetBranchStatusResponse {}
@@ -474,6 +485,7 @@ message MergePlan {
 message PlanMergeRequest {
   string from = 1;
   string into = 2;
+  string namespace = 3;
 }
 
 message PlanMergeResponse {

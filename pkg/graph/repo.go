@@ -33,19 +33,21 @@ type Tx interface {
 	LatestOn(ctx context.Context, id domain.NodeID, branch string) (domain.Node, error)
 	// Versions returns every version of a node, all branches, by version.
 	Versions(ctx context.Context, id domain.NodeID) ([]domain.Node, error)
-	Branch(ctx context.Context, name string) (domain.Branch, error)
-	Branches(ctx context.Context) ([]domain.Branch, error)
+	Branch(ctx context.Context, namespace, name string) (domain.Branch, error)
+	Branches(ctx context.Context, namespace string) ([]domain.Branch, error)
 	PutBranch(ctx context.Context, b domain.Branch) error
 	NodeByKey(ctx context.Context, namespace, key string) (domain.Node, error)
 	// NodeIDByKey resolves a key whatever the branch the node lives on.
 	NodeIDByKey(ctx context.Context, namespace, key string) (domain.NodeID, error)
 	NodesIn(ctx context.Context, baseline domain.BaselineID, nodeType string) ([]domain.Node, error)
-	// LatestNodes returns the latest version of every node.
-	LatestNodes(ctx context.Context) ([]domain.Node, error)
+	// LatestNodes returns the latest version of every node of a namespace on a branch.
+	LatestNodes(ctx context.Context, namespace, branch string) ([]domain.Node, error)
+	// Namespaces returns the distinct namespaces holding at least one node (admin/reindex use).
+	Namespaces(ctx context.Context) ([]string, error)
 	OutLinks(ctx context.Context, ref domain.NodeRef) ([]domain.Link, error)
 	InLinks(ctx context.Context, ref domain.NodeRef) ([]domain.Link, error)
 	Baseline(ctx context.Context, id domain.BaselineID) (domain.Baseline, error)
-	Baselines(ctx context.Context) ([]domain.Baseline, error)
+	Baselines(ctx context.Context, namespace string) ([]domain.Baseline, error)
 	Change(ctx context.Context, id domain.ChangeID) (domain.Change, error)
 	Changes(ctx context.Context) ([]domain.Change, error)
 

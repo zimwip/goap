@@ -34,7 +34,7 @@
       await graph.createObject(objectDialog.methodology, objectDialog.nodeType, key.trim(), props);
       notify(`${objectDialog.nodeType} ${key.trim()} created.`, 'ok');
       closeObjectDialog();
-      void refreshBaselines();
+      void refreshBaselines(objectDialog.nodeType.split('@')[0]);
     } catch (err) {
       error = errorMessage(err);
     } finally {

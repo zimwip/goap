@@ -47,11 +47,14 @@ func newOrgWorld(t *testing.T, repo Repo) orgWorld {
 	link(LinkOwner, w.cmp1, w.team1)
 	link(LinkOwner, w.cmp2, w.t2)
 	var err error
+	// the change acts on the default namespace: only its own nodes belong in its baseline.
+	// Organisation units are resolved independently of it (checkOwnerOrg / orgWithin read the
+	// organisation namespace's own head, ADR 0016).
 	all := []domain.NodeRef{}
-	for _, n := range []domain.Node{w.acme, w.digital, w.team1, w.t2, w.cmp1, w.cmp2, w.cmp3} {
+	for _, n := range []domain.Node{w.cmp1, w.cmp2, w.cmp3} {
 		all = append(all, n.Ref())
 	}
-	if w.base, err = g.CreateBaseline(ctx, "B", all); err != nil {
+	if w.base, err = g.CreateBaseline(ctx, domain.DefaultNamespace, "B", all); err != nil {
 		t.Fatal(err)
 	}
 	return w
@@ -199,7 +202,7 @@ func testSubChangeRules(t *testing.T, repo Repo) {
 	if got, _ := g.Change(ctx, sub.ID); got.Status != domain.ChangeAbandoned {
 		t.Fatalf("sub = %s", got.Status)
 	}
-	if b, _ := g.Branch(ctx, sub.Branch); b.Status != domain.BranchAbandoned {
+	if b, _ := g.Branch(ctx, sub.Namespace, sub.Branch); b.Status != domain.BranchAbandoned {
 		t.Fatalf("sub branch = %s", b.Status)
 	}
 }

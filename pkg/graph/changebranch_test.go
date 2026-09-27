@@ -59,7 +59,7 @@ func testChangeBranch(t *testing.T, repo Repo) {
 	if ac.Status != domain.ChangeApplied || ac.ResultBaselineID != ba.ID {
 		t.Fatalf("A = %s %s", ac.Status, ac.ResultBaselineID)
 	}
-	if br, _ := g.Branch(ctx, a.Branch); br.Status != domain.BranchMerged {
+	if br, _ := g.Branch(ctx, "", a.Branch); br.Status != domain.BranchMerged {
 		t.Fatalf("A branch = %s", br.Status)
 	}
 	if n, _ := g.Node(ctx, domain.NodeRef{ID: f.req.ID}); n.Properties["title"] != "A title" {
@@ -131,7 +131,7 @@ func testAbandonChangeBranch(t *testing.T, repo Repo) {
 	if _, err := f.g.UpdateChange(ctx, c.ID, ChangePatch{Status: &st}); err != nil {
 		t.Fatal(err)
 	}
-	if b, _ := f.g.Branch(ctx, c.Branch); b.Status != domain.BranchAbandoned {
+	if b, _ := f.g.Branch(ctx, "", c.Branch); b.Status != domain.BranchAbandoned {
 		t.Fatalf("branch = %s", b.Status)
 	}
 }

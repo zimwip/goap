@@ -258,7 +258,7 @@ func (g *Graph) CreateObject(ctx context.Context, methodology, namespace, typ, k
 	} else if !errors.Is(err, ErrNotFound) {
 		return domain.Node{}, domain.Baseline{}, err
 	}
-	head, err := g.BranchHead(ctx, domain.MainBranch)
+	head, err := g.BranchHead(ctx, namespace, domain.MainBranch)
 	if err != nil {
 		return domain.Node{}, domain.Baseline{}, err
 	}

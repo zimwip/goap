@@ -31,6 +31,7 @@
   import { watchEvents, type StreamStatus } from '../../stream';
   import { processes, ingestProcess, ingestEvent, childrenOf, refreshProcesses } from '../../stores/live.svelte';
   import { chainOf, inChain, restartedStepNumber } from '../../flowChain';
+  import { namespaceOf } from '../../namespace';
 
   let { tab }: { tab: Tab } = $props();
 
@@ -81,18 +82,23 @@
       .catch(() => {});
     return () => ctrl.abort();
   });
-  /** the branch the change of a run on a flow acts on (the graph branch of the flow is reviewed against it) */
+  /** the branch (and namespace) the change of a run on a flow acts on (the graph branch of the flow is reviewed against it) */
   let changeBranch = $state('');
+  let changeNamespace = $state('');
   $effect(() => {
     const changeId = process?.changeId;
     if (!changeId || !process?.flow) {
       changeBranch = '';
+      changeNamespace = '';
       return;
     }
     const ctrl = new AbortController();
     graph
       .getChange(changeId, ctrl.signal)
-      .then((r) => (changeBranch = r.change?.branch ?? ''))
+      .then((r) => {
+        changeBranch = r.change?.branch ?? '';
+        changeNamespace = r.change?.namespace ?? '';
+      })
       .catch(() => {});
     return () => ctrl.abort();
   });
@@ -297,7 +303,7 @@
         on flow <code>{shortId(process.flow)}</code>
         {#if ownFlow}
           <StatusBadge status={ownFlow.status} />
-          <FlowBranchInfo flow={ownFlow} changeBranch={changeBranch} />
+          <FlowBranchInfo flow={ownFlow} namespace={namespaceOf(changeNamespace)} changeBranch={changeBranch} />
           <FlowActions flow={ownFlow} changeId={process.changeId ?? ''} ondecided={() => { flowsTick++; void refreshProcesses(); }} />
         {/if}
       </div>

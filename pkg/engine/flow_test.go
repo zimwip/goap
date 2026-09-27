@@ -339,7 +339,12 @@ func TestChangeOpensInTheNamespaceOfTheMethodology(t *testing.T) {
 	ctx := context.Background()
 	e, g, base := setup(t)
 	e.Methodologies.(StaticMethodologies)["impact-analysis"].Namespace = "platform"
-	p, err := e.Start(ctx, StartRequest{Methodology: "impact-analysis", BaselineID: base, Goal: "assess_impact"})
+	// a change's reference baseline must be of its own (here the methodology's target) namespace
+	platformBase, err := g.CreateBaseline(ctx, "platform", "platform-base", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := e.Start(ctx, StartRequest{Methodology: "impact-analysis", BaselineID: platformBase.ID, Goal: "assess_impact"})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -14,14 +14,21 @@ import (
 
 // Graph is the part of the graph the hub reads.
 type Graph interface {
-	BranchHead(ctx context.Context, name string) (domain.Baseline, error)
+	BranchHead(ctx context.Context, namespace, name string) (domain.Baseline, error)
 	BaselineGraph(ctx context.Context, id domain.BaselineID) ([]domain.Node, []domain.Link, error)
 }
 
-// Snapshot is the organisation and the tool layer as of one baseline: the unit hierarchy
-// (part_of), the MCPs and adapter definitions of the platform namespace and the adapters of the organisation namespace.
+// Baselines identifies the two namespace heads a Snapshot was built from.
+type Baselines struct {
+	Organisation domain.BaselineID
+	Platform     domain.BaselineID
+}
+
+// Snapshot is the organisation and the tool layer as of one baseline of each of the organisation and
+// platform namespaces: the unit hierarchy (part_of), the MCPs and adapter definitions of the platform
+// namespace and the adapters of the organisation namespace.
 type Snapshot struct {
-	Baseline domain.BaselineID
+	Baselines Baselines
 	// Problems lists the nodes that could not be read (malformed adapter, adapter without unit, ...).
 	Problems []string
 
@@ -40,9 +47,9 @@ type Effective struct {
 	Inherited bool
 }
 
-// BuildSnapshot reads the objects of a baseline graph.
-func BuildSnapshot(id domain.BaselineID, nodes []domain.Node, links []domain.Link) *Snapshot {
-	s := &Snapshot{Baseline: id, parent: map[string]string{}, units: map[string]bool{}, mcps: map[string]mcp.Def{}, defs: map[string]mcp.AdapterDef{}, adapters: map[string]map[string]mcp.Adapter{}}
+// BuildSnapshot reads the objects of the combined organisation and platform baseline graphs.
+func BuildSnapshot(baselines Baselines, nodes []domain.Node, links []domain.Link) *Snapshot {
+	s := &Snapshot{Baselines: baselines, parent: map[string]string{}, units: map[string]bool{}, mcps: map[string]mcp.Def{}, defs: map[string]mcp.AdapterDef{}, adapters: map[string]map[string]mcp.Adapter{}}
 	byID := map[domain.NodeID]domain.Node{}
 	for _, n := range nodes {
 		byID[n.ID] = n
@@ -178,22 +185,36 @@ type Directory struct {
 
 // Snapshot returns the current snapshot. A graph without any baseline yields an empty one.
 func (d *Directory) Snapshot(ctx context.Context) (*Snapshot, error) {
-	head, err := d.Graph.BranchHead(ctx, domain.MainBranch)
-	if errors.Is(err, graph.ErrNotFound) {
-		return BuildSnapshot("", nil, nil), nil
-	}
-	if err != nil {
+	orgHead, err := d.Graph.BranchHead(ctx, mcp.NamespaceOrganisation, domain.MainBranch)
+	if err != nil && !errors.Is(err, graph.ErrNotFound) {
 		return nil, err
 	}
+	platHead, err := d.Graph.BranchHead(ctx, mcp.NamespacePlatform, domain.MainBranch)
+	if err != nil && !errors.Is(err, graph.ErrNotFound) {
+		return nil, err
+	}
+	baselines := Baselines{Organisation: orgHead.ID, Platform: platHead.ID}
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	if d.cur != nil && d.cur.Baseline == head.ID {
+	if d.cur != nil && d.cur.Baselines == baselines {
 		return d.cur, nil
 	}
-	nodes, links, err := d.Graph.BaselineGraph(ctx, head.ID)
-	if err != nil {
-		return nil, err
+	var nodes []domain.Node
+	var links []domain.Link
+	if orgHead.ID != "" {
+		n, l, err := d.Graph.BaselineGraph(ctx, orgHead.ID)
+		if err != nil {
+			return nil, err
+		}
+		nodes, links = append(nodes, n...), append(links, l...)
 	}
-	d.cur = BuildSnapshot(head.ID, nodes, links)
+	if platHead.ID != "" {
+		n, l, err := d.Graph.BaselineGraph(ctx, platHead.ID)
+		if err != nil {
+			return nil, err
+		}
+		nodes, links = append(nodes, n...), append(links, l...)
+	}
+	d.cur = BuildSnapshot(baselines, nodes, links)
 	return d.cur, nil
 }

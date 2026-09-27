@@ -17,7 +17,7 @@ export const tools = $state({
 async function loadAdapterDefs(): Promise<AdapterDef[]> {
   let nodes;
   try {
-    nodes = (await headGraph()).nodes;
+    nodes = (await headGraph(NS_PLATFORM)).nodes;
   } catch {
     return []; // no baseline yet
   }

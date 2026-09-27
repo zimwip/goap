@@ -200,9 +200,8 @@ type Snapshot struct {
 func BuildSnapshot(id domain.BaselineID, nodes []domain.Node, _ []domain.Link) *Snapshot {
 	s := &Snapshot{Baseline: id}
 	for _, n := range nodes {
-		if n.Namespace != NamespacePlatform {
-			continue
-		}
+		// nodes is scoped to the platform namespace by the Directory's cache
+		// (Namespace: NamespacePlatform); no need to filter it again here.
 		var err error
 		switch n.Type {
 		case NodeTypeProvider:
@@ -266,7 +265,9 @@ type Directory struct {
 
 // Snapshot returns the current snapshot; the last one keeps serving when the graph cannot be read.
 func (d *Directory) Snapshot(ctx context.Context) (*Snapshot, error) {
-	d.once.Do(func() { d.cache = graphsnap.Cache[*Snapshot]{Graph: d.Graph, TTL: d.TTL, Build: BuildSnapshot} })
+	d.once.Do(func() {
+		d.cache = graphsnap.Cache[*Snapshot]{Graph: d.Graph, Namespace: NamespacePlatform, TTL: d.TTL, Build: BuildSnapshot}
+	})
 	s, _, err := d.cache.Get(ctx)
 	return s, err
 }

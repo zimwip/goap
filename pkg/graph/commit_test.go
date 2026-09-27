@@ -54,7 +54,7 @@ func testCommit(t *testing.T, repo Repo) {
 	}
 
 	// both modified, the header linking to the element: the header follows the element's new version
-	head, _ := g.BranchHead(ctx, domain.MainBranch)
+	head, _ := g.BranchHead(ctx, "", domain.MainBranch)
 	docRef, elRef := doc.Ref(), el.Ref()
 	if _, err := g.Commit(ctx, Commit{Title: "Edit DOC-1", Baseline: head.ID, By: "registry",
 		Edits: []NodeEdit{
@@ -76,7 +76,7 @@ func testCommit(t *testing.T, repo Repo) {
 	}
 
 	// retire the element; a stale edit conflicts and leaves no open change
-	head, _ = g.BranchHead(ctx, domain.MainBranch)
+	head, _ = g.BranchHead(ctx, "", domain.MainBranch)
 	el2Ref := el2.Ref()
 	if _, err := g.Commit(ctx, Commit{Title: "Retire", Baseline: head.ID, By: "registry", Edits: []NodeEdit{{Pre: &el2Ref, Retire: true}}}); err != nil {
 		t.Fatal(err)

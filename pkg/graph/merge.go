@@ -157,9 +157,11 @@ func CommonAncestor(ctx context.Context, tx Tx, id domain.NodeID, a, b domain.Ve
 
 // NewBranch describes a branch to open from a baseline.
 type NewBranch struct {
-	Name   string
-	From   domain.BaselineID
-	Origin string // change / option that opens the branch
+	Name string
+	// Namespace the branch belongs to (default: domain.DefaultNamespace).
+	Namespace string
+	From      domain.BaselineID
+	Origin    string // change / option that opens the branch
 }
 
 // CreateBranch opens a branch forked from a baseline.
@@ -167,9 +169,10 @@ func (g *Graph) CreateBranch(ctx context.Context, in NewBranch) (b domain.Branch
 	if in.Name == "" || in.Name == domain.MainBranch || strings.ContainsAny(in.Name, " \t\n") {
 		return b, fmt.Errorf("invalid branch name %q: %w", in.Name, ErrInvalid)
 	}
+	namespace := domain.NamespaceOf(in.Namespace)
 	err = g.repo.InTx(ctx, func(tx Tx) error {
-		if _, err := tx.Branch(ctx, in.Name); err == nil {
-			return fmt.Errorf("branch %s already exists: %w", in.Name, ErrConflict)
+		if _, err := tx.Branch(ctx, namespace, in.Name); err == nil {
+			return fmt.Errorf("branch %s already exists in namespace %s: %w", in.Name, namespace, ErrConflict)
 		} else if !errors.Is(err, ErrNotFound) {
 			return err
 		}
@@ -177,34 +180,37 @@ func (g *Graph) CreateBranch(ctx context.Context, in NewBranch) (b domain.Branch
 		if err != nil {
 			return err
 		}
-		b = domain.Branch{Name: in.Name, Parent: domain.BranchOf(fork.Branch), ForkBaseline: fork.ID, Head: fork.ID,
+		if fork.Namespace != namespace {
+			return fmt.Errorf("baseline %s is of namespace %s, not %s: %w", in.From, fork.Namespace, namespace, ErrInvalid)
+		}
+		b = domain.Branch{Name: in.Name, Namespace: namespace, Parent: domain.BranchOf(fork.Branch), ForkBaseline: fork.ID, Head: fork.ID,
 			Origin: in.Origin, Status: domain.BranchOpen, CreatedAt: g.now()}
 		return tx.PutBranch(ctx, b)
 	})
 	return
 }
 
-// Branches lists the branches (main appears once it has been applied to).
-func (g *Graph) Branches(ctx context.Context) (bs []domain.Branch, err error) {
-	err = g.repo.InTx(ctx, func(tx Tx) error { bs, err = tx.Branches(ctx); return err })
+// Branches lists the branches of a namespace (main appears once it has been applied to).
+func (g *Graph) Branches(ctx context.Context, namespace string) (bs []domain.Branch, err error) {
+	err = g.repo.InTx(ctx, func(tx Tx) error { bs, err = tx.Branches(ctx, namespace); return err })
 	return
 }
 
-// Branch returns a branch.
-func (g *Graph) Branch(ctx context.Context, name string) (b domain.Branch, err error) {
-	err = g.repo.InTx(ctx, func(tx Tx) error { b, err = branchOf(ctx, tx, name); return err })
+// Branch returns a branch of a namespace.
+func (g *Graph) Branch(ctx context.Context, namespace, name string) (b domain.Branch, err error) {
+	err = g.repo.InTx(ctx, func(tx Tx) error { b, err = branchOf(ctx, tx, namespace, name); return err })
 	return
 }
 
 // SetBranchStatus closes a branch (merged / abandoned) or reopens it.
-func (g *Graph) SetBranchStatus(ctx context.Context, name, status string) error {
+func (g *Graph) SetBranchStatus(ctx context.Context, namespace, name, status string) error {
 	switch status {
 	case domain.BranchOpen, domain.BranchMerged, domain.BranchAbandoned:
 	default:
 		return fmt.Errorf("invalid branch status %q: %w", status, ErrInvalid)
 	}
 	return g.repo.InTx(ctx, func(tx Tx) error {
-		b, err := tx.Branch(ctx, name)
+		b, err := tx.Branch(ctx, namespace, name)
 		if err != nil {
 			return err
 		}
@@ -213,9 +219,9 @@ func (g *Graph) SetBranchStatus(ctx context.Context, name, status string) error 
 	})
 }
 
-// BranchHead returns the latest baseline of a branch.
-func (g *Graph) BranchHead(ctx context.Context, name string) (b domain.Baseline, err error) {
-	err = g.repo.InTx(ctx, func(tx Tx) error { b, err = branchHead(ctx, tx, name); return err })
+// BranchHead returns the latest baseline of a branch of a namespace.
+func (g *Graph) BranchHead(ctx context.Context, namespace, name string) (b domain.Baseline, err error) {
+	err = g.repo.InTx(ctx, func(tx Tx) error { b, err = branchHead(ctx, tx, namespace, name); return err })
 	return
 }
 
@@ -225,23 +231,23 @@ func (g *Graph) Versions(ctx context.Context, id domain.NodeID) (vs []domain.Nod
 	return
 }
 
-// branchOf returns a branch; main exists implicitly.
-func branchOf(ctx context.Context, tx Tx, name string) (domain.Branch, error) {
-	name = domain.BranchOf(name)
-	b, err := tx.Branch(ctx, name)
+// branchOf returns a branch of a namespace; main exists implicitly.
+func branchOf(ctx context.Context, tx Tx, namespace, name string) (domain.Branch, error) {
+	namespace, name = domain.NamespaceOf(namespace), domain.BranchOf(name)
+	b, err := tx.Branch(ctx, namespace, name)
 	if errors.Is(err, ErrNotFound) && name == domain.MainBranch {
-		head, herr := branchHead(ctx, tx, name)
+		head, herr := branchHead(ctx, tx, namespace, name)
 		if herr != nil && !errors.Is(herr, ErrNotFound) {
 			return b, herr
 		}
-		return domain.Branch{Name: name, Head: head.ID, Status: domain.BranchOpen}, nil
+		return domain.Branch{Name: name, Namespace: namespace, Head: head.ID, Status: domain.BranchOpen}, nil
 	}
 	return b, err
 }
 
-func branchHead(ctx context.Context, tx Tx, name string) (domain.Baseline, error) {
-	name = domain.BranchOf(name)
-	b, err := tx.Branch(ctx, name)
+func branchHead(ctx context.Context, tx Tx, namespace, name string) (domain.Baseline, error) {
+	namespace, name = domain.NamespaceOf(namespace), domain.BranchOf(name)
+	b, err := tx.Branch(ctx, namespace, name)
 	if err == nil && b.Head != "" {
 		return tx.Baseline(ctx, b.Head)
 	}
@@ -249,7 +255,7 @@ func branchHead(ctx context.Context, tx Tx, name string) (domain.Baseline, error
 		return domain.Baseline{}, err
 	}
 	// main without applied changes: its latest baseline
-	bs, err := tx.Baselines(ctx)
+	bs, err := tx.Baselines(ctx, namespace)
 	if err != nil {
 		return domain.Baseline{}, err
 	}
@@ -309,15 +315,15 @@ func (p MergePlan) Conflicting() []MergeCandidate {
 	return out
 }
 
-// PlanMerge computes the 3-way merge of branch from into branch into.
-func (g *Graph) PlanMerge(ctx context.Context, from, into string) (p MergePlan, err error) {
-	err = g.repo.InTx(ctx, func(tx Tx) error { p, err = planMerge(ctx, tx, from, into); return err })
+// PlanMerge computes the 3-way merge of branch from into branch into, both of namespace.
+func (g *Graph) PlanMerge(ctx context.Context, namespace, from, into string) (p MergePlan, err error) {
+	err = g.repo.InTx(ctx, func(tx Tx) error { p, err = planMerge(ctx, tx, namespace, from, into); return err })
 	return
 }
 
-func planMerge(ctx context.Context, tx Tx, from, into string) (MergePlan, error) {
-	into = domain.BranchOf(into)
-	fb, err := tx.Branch(ctx, from)
+func planMerge(ctx context.Context, tx Tx, namespace, from, into string) (MergePlan, error) {
+	namespace, into = domain.NamespaceOf(namespace), domain.BranchOf(into)
+	fb, err := tx.Branch(ctx, namespace, from)
 	if err != nil {
 		return MergePlan{}, err
 	}
@@ -332,7 +338,7 @@ func planMerge(ctx context.Context, tx Tx, from, into string) (MergePlan, error)
 	if err != nil {
 		return MergePlan{}, err
 	}
-	intoHead, err := branchHead(ctx, tx, into)
+	intoHead, err := branchHead(ctx, tx, namespace, into)
 	if err != nil {
 		return MergePlan{}, err
 	}
@@ -449,7 +455,8 @@ func (g *Graph) MergeBranch(ctx context.Context, in MergeRequest) (res MergeResu
 }
 
 func (g *Graph) mergeBranchTx(ctx context.Context, tx Tx, in MergeRequest) (res MergeResult, err error) {
-	plan, err := planMerge(ctx, tx, in.From, in.Into)
+	namespace := domain.NamespaceOf(in.Namespace)
+	plan, err := planMerge(ctx, tx, namespace, in.From, in.Into)
 	if err != nil {
 		return res, err
 	}
@@ -622,11 +629,11 @@ func (g *Graph) mergeBranchTx(ctx context.Context, tx Tx, in MergeRequest) (res 
 			}
 		}
 	}
-	res.Baseline = domain.Baseline{ID: domain.BaselineID(g.newID()), Name: title, Branch: plan.Into, ParentID: base.ID, ChangeID: c.ID, Nodes: target, CreatedAt: g.now()}
+	res.Baseline = domain.Baseline{ID: domain.BaselineID(g.newID()), Name: title, Namespace: namespace, Branch: plan.Into, ParentID: base.ID, ChangeID: c.ID, Nodes: target, CreatedAt: g.now()}
 	if err := tx.PutBaseline(ctx, res.Baseline); err != nil {
 		return res, err
 	}
-	if err := g.advanceBranch(ctx, tx, plan.Into, res.Baseline.ID); err != nil {
+	if err := g.advanceBranch(ctx, tx, namespace, plan.Into, res.Baseline.ID); err != nil {
 		return res, err
 	}
 	c.Status, c.ResultBaselineID = domain.ChangeApplied, res.Baseline.ID
@@ -634,7 +641,7 @@ func (g *Graph) mergeBranchTx(ctx context.Context, tx Tx, in MergeRequest) (res 
 		return res, err
 	}
 	res.Change = c
-	fb, err := tx.Branch(ctx, in.From)
+	fb, err := tx.Branch(ctx, namespace, in.From)
 	if err != nil {
 		return res, err
 	}

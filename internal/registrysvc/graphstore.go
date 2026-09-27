@@ -22,9 +22,9 @@ const TypeMethodologyVersion = "methodology@MethodologyVersion"
 
 // StoreGraph is what the store needs from the graph (*graph.Graph and the graph service client implement it).
 type StoreGraph interface {
-	BranchHead(ctx context.Context, name string) (domain.Baseline, error)
+	BranchHead(ctx context.Context, namespace, name string) (domain.Baseline, error)
 	BaselineGraph(ctx context.Context, id domain.BaselineID) ([]domain.Node, []domain.Link, error)
-	CreateBaseline(ctx context.Context, name string, nodes []domain.NodeRef) (domain.Baseline, error)
+	CreateBaseline(ctx context.Context, namespace, name string, nodes []domain.NodeRef) (domain.Baseline, error)
 	// Commit runs a change of node edits (ADR 0024).
 	Commit(ctx context.Context, in graph.Commit) (graph.CommitResult, error)
 }
@@ -57,7 +57,7 @@ var _ Store = (*GraphStore)(nil)
 // NewGraphStore returns a store over a graph (the graph itself, or a client of the graph service).
 func NewGraphStore(g StoreGraph) *GraphStore {
 	s := &GraphStore{Graph: g}
-	s.cache = graphsnap.Cache[*defs]{Graph: g, Build: buildDefs}
+	s.cache = graphsnap.Cache[*defs]{Graph: g, Namespace: NamespaceMethodology, Build: buildDefs}
 	return s
 }
 
@@ -257,9 +257,9 @@ func (s *GraphStore) commit(ctx context.Context, ns, title string, build func(*d
 		if err != nil || len(edits) == 0 {
 			return err
 		}
-		head, err := s.Graph.BranchHead(ctx, domain.MainBranch)
+		head, err := s.Graph.BranchHead(ctx, ns, domain.MainBranch)
 		if errors.Is(err, graph.ErrNotFound) {
-			if head, err = s.Graph.CreateBaseline(ctx, "Repository", nil); err != nil {
+			if head, err = s.Graph.CreateBaseline(ctx, ns, "Repository", nil); err != nil {
 				return err
 			}
 		} else if err != nil {

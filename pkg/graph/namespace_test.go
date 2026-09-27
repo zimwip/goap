@@ -36,7 +36,11 @@ func testNamespaces(t *testing.T, repo Repo) {
 		t.Fatalf("NodeByKey(default) = %v, %v", n.ID, err)
 	}
 
-	base, err := g.CreateBaseline(ctx, "B", []domain.NodeRef{sdlc.Ref(), org.Ref()})
+	// a baseline snapshots exactly one namespace: mixing is refused
+	if _, err := g.CreateBaseline(ctx, domain.DefaultNamespace, "mixed", []domain.NodeRef{sdlc.Ref(), org.Ref()}); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("mixed-namespace baseline: %v", err)
+	}
+	base, err := g.CreateBaseline(ctx, domain.DefaultNamespace, "B", []domain.NodeRef{sdlc.Ref()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,9 +52,10 @@ func testNamespaces(t *testing.T, repo Repo) {
 		t.Fatalf("change namespace = %q", c.Namespace)
 	}
 	orgRef, sdlcRef := org.Ref(), sdlc.Ref()
-	// modifying a node of another namespace is refused
+	// a node of another namespace can never be in the change's own (now namespace-scoped)
+	// reference baseline, so modifying it is refused even before the namespace itself is checked
 	_, err = g.AddNodes(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &orgRef, Rationale: "x"}})
-	if !errors.Is(err, ErrInvalid) {
+	if !errors.Is(err, ErrConflict) {
 		t.Fatalf("update across namespaces: %v", err)
 	}
 	// a link to a node of another namespace is allowed, and created nodes belong to the change namespace

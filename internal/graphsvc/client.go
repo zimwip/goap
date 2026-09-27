@@ -140,8 +140,8 @@ func (c *Client) Apply(ctx context.Context, id domain.ChangeID, baselineName str
 	return pbconv.BaselineFromPB(r.Msg.Baseline), nil
 }
 
-func (c *Client) Baselines(ctx context.Context) ([]domain.Baseline, error) {
-	r, err := c.rpc.ListBaselines(ctx, connect.NewRequest(&graphv1.ListBaselinesRequest{}))
+func (c *Client) Baselines(ctx context.Context, namespace string) ([]domain.Baseline, error) {
+	r, err := c.rpc.ListBaselines(ctx, connect.NewRequest(&graphv1.ListBaselinesRequest{Namespace: namespace}))
 	if err != nil {
 		return nil, rpcerr.FromConnect(err)
 	}
@@ -165,16 +165,16 @@ func (c *Client) Journal(ctx context.Context, f domain.ExecutionFilter) ([]domai
 	return pbconv.ExecutionsFromPB(r.Msg.Records), nil
 }
 
-func (c *Client) BranchHead(ctx context.Context, name string) (domain.Baseline, error) {
-	r, err := c.rpc.GetBranch(ctx, connect.NewRequest(&graphv1.GetBranchRequest{Name: name}))
+func (c *Client) BranchHead(ctx context.Context, namespace, name string) (domain.Baseline, error) {
+	r, err := c.rpc.GetBranch(ctx, connect.NewRequest(&graphv1.GetBranchRequest{Namespace: namespace, Name: name}))
 	if err != nil {
 		return domain.Baseline{}, rpcerr.FromConnect(err)
 	}
 	return pbconv.BaselineFromPB(r.Msg.Head), nil
 }
 
-func (c *Client) CreateBaseline(ctx context.Context, name string, nodes []domain.NodeRef) (domain.Baseline, error) {
-	req := &graphv1.CreateBaselineRequest{Name: name}
+func (c *Client) CreateBaseline(ctx context.Context, namespace, name string, nodes []domain.NodeRef) (domain.Baseline, error) {
+	req := &graphv1.CreateBaselineRequest{Namespace: namespace, Name: name}
 	for _, n := range nodes {
 		req.Nodes = append(req.Nodes, pbconv.RefToPB(n))
 	}
