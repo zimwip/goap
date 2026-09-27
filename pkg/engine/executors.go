@@ -96,6 +96,22 @@ var funcs = template.FuncMap{
 	"json": func(v any) string { b, _ := json.Marshal(v); return string(b) },
 }
 
+// filterNamespace keeps only the nodes of the given namespace: a change acts
+// on one namespace (its declared WHAT), so what it queries must be bound to
+// it too, whatever domains share the baseline.
+func filterNamespace(nodes []domain.Node, namespace string) []domain.Node {
+	if namespace == "" {
+		return nodes
+	}
+	kept := make([]domain.Node, 0, len(nodes))
+	for _, n := range nodes {
+		if n.Namespace == namespace {
+			kept = append(kept, n)
+		}
+	}
+	return kept
+}
+
 // RenderPrompt renders an action prompt against the blackboard.
 func RenderPrompt(ctx context.Context, ac ActionContext) (string, error) {
 	tpl, err := template.New(ac.Action.Name).Funcs(funcs).Option("missingkey=zero").Parse(ac.Action.Prompt)
@@ -107,7 +123,7 @@ func RenderPrompt(ctx context.Context, ac ActionContext) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	d.Baseline.Nodes = nodes
+	d.Baseline.Nodes = filterNamespace(nodes, ac.Blackboard.Change.Namespace)
 	for _, it := range ac.Blackboard.Change.Items {
 		if it.Kind == domain.KindArtifact {
 			d.Artifacts = append(d.Artifacts, ItemView{ChangeItem: it})
