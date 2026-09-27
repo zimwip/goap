@@ -313,14 +313,6 @@
     background: var(--danger-soft);
     color: var(--danger);
   }
-  details {
-    margin-top: 0.3rem;
-  }
-  summary {
-    cursor: pointer;
-    font-size: 0.85rem;
-    color: var(--muted);
-  }
   .raw {
     margin-top: 1rem;
   }
