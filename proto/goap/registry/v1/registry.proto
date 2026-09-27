@@ -39,6 +39,9 @@ service RegistryService {
   rpc ExportDomain(ExportDomainRequest) returns (ExportDomainResponse);
   // Methodology versions referencing a domain version.
   rpc GetDomainUsage(GetDomainUsageRequest) returns (GetDomainUsageResponse);
+  // The type catalogue in force (ADR 0012): the node and link types of the published domains and of the built-in
+  // meta-domains, resolved.
+  rpc ListTypes(ListTypesRequest) returns (ListTypesResponse);
   // Try an algorithm of a domain on a sample input, without saving anything.
   rpc RunAlgorithm(RunAlgorithmRequest) returns (RunAlgorithmResponse);
 }
@@ -546,4 +549,37 @@ message RunAlgorithmResponse {
   google.protobuf.Struct set = 4;
   repeated string unset = 5;
   repeated string logs = 6;
+}
+
+message ListTypesRequest {}
+
+message ListTypesResponse {
+  repeated TypeInfo types = 1;
+  repeated LinkTypeInfo link_types = 2;
+  // namespace (domain) -> version in force
+  map<string, string> domains = 3;
+}
+
+// TypeInfo is the resolved model of a node type ("<namespace>@<name>").
+message TypeInfo {
+  string ref = 1;
+  string description = 2;
+  // declared properties, the inherited ones first
+  repeated string properties = 3;
+  // supertypes, nearest first
+  repeated string ancestors = 4;
+  // own or inherited; absent: the nodes have no state
+  Lifecycle lifecycle = 5;
+  bool change_controlled = 6;
+  // IDE editor of the nodes (ADR 0027); empty: the default node editor
+  string editor = 7;
+  // qualified types the nodes embed through "contains" links (own or inherited)
+  repeated string contains = 8;
+}
+
+// LinkTypeInfo is the resolved model of a link type; an empty end accepts any node type.
+message LinkTypeInfo {
+  string ref = 1;
+  string from = 2;
+  string to = 3;
 }

@@ -23,7 +23,8 @@
   import NodePropertyForm from '../../components/NodePropertyForm.svelte';
   import { openTab } from '../../shell/tabs.svelte';
   import { nodeEditor } from '../../shell/registry';
-  import { editorResolver, handleOf, openNode, openTarget } from '../../nodeEditors';
+  import { handleOf, openNode, openTarget } from '../../nodeEditors';
+  import { loadTypes, typeCatalog } from '../../stores/types.svelte';
   import { provideActions, notify } from '../../shell/workbench.svelte';
   import { changes, refreshChanges } from '../../stores/catalog.svelte';
   import { loadGraph, loadHead, type GraphIndex } from '../../graphIndex';
@@ -109,14 +110,15 @@
   const stored = $derived(head?.nodes.get(id) ?? versions.at(-1));
   const typeName = $derived(stored?.type ?? '');
   const headList = $derived(head?.list ?? []);
-  const declared = $derived(declaredProperties(headList, typeName));
-  const lifecycleOf = $derived(lifecycleResolver(headList));
+  void loadTypes();
+  const declared = $derived(declaredProperties(typeCatalog.cat, typeName));
+  const lifecycleOf = $derived(lifecycleResolver(typeCatalog.cat));
   const lifecycle = $derived(lifecycleOf(typeName));
 
   /** the node in the working change, or in the current graph when there is none */
   const row = $derived.by<LifecycleRow | undefined>(() => {
-    if (work) return lifecycleRows(work.index.list, work.attached, work.change.nodes ?? [], work.posts, [id]).find((r) => r.node.id === id);
-    return lifecycleRows(headList, [], [], new Map(), [id]).find((r) => r.node.id === id);
+    if (work) return lifecycleRows(typeCatalog.cat, work.index.list, work.attached, work.change.nodes ?? [], work.posts, [id]).find((r) => r.node.id === id);
+    return lifecycleRows(typeCatalog.cat, headList, [], [], new Map(), [id]).find((r) => r.node.id === id);
   });
   const inChange = $derived(!!work && !!row);
   const nodeProps = $derived((row?.props ?? stored?.props ?? {}) as Record<string, unknown>);
@@ -126,7 +128,7 @@
   const removed = $derived(!!row?.removal);
   const reopens = $derived((row?.transitions ?? []).filter((t) => row && isReopen(row, t)));
 
-  const openChanges = $derived(changes.items.filter((c) => c.status === 'draft' || c.status === 'active'));
+  const openChanges = $derived(changes.items.filter((c) => (c.status === 'draft' || c.status === 'active') && (!stored?.namespace || c.namespace === stored.namespace)));
   const propertyNames = $derived([...new Set([...declared, ...Object.keys(nodeProps)])]);
   const text = (v: unknown): string => (v === undefined || v === null ? '' : typeof v === 'string' ? v : JSON.stringify(v));
 
@@ -142,7 +144,8 @@
     if (workId) return workId;
     const baselineId = head?.baselineId;
     if (!baselineId) throw new Error('There is no baseline to start a change from.');
-    const c = (await graph.createChange({ title: `Edit ${stored?.key ?? shortId(id)}`, baselineId })).change;
+    // the change acts on the namespace of the node (ADR 0015 §2)
+    const c = (await graph.createChange({ title: `Edit ${stored?.key ?? shortId(id)}`, baselineId, namespace: stored?.namespace })).change;
     if (!c?.id) throw new Error('The change could not be created.');
     workId = c.id;
     await loadWork();
@@ -204,7 +207,7 @@
   const openNeighbour = (nid: string) => openNode(head?.nodes.get(nid) ?? { id: nid }, { pin: true });
 
   // the editor the node type names (NodeType `editor`): this default editor offers to open the node there
-  const typeEditor = $derived(nodeEditor(editorResolver(headList)(typeName)));
+  const typeEditor = $derived(nodeEditor(typeCatalog.cat.editor(typeName)));
 
   async function openInTypeEditor() {
     if (!typeEditor || !stored) return;

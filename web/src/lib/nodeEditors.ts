@@ -1,61 +1,18 @@
 // Opening a node: a node type may name the editor of its nodes (NodeType
-// `editor`, inherited through extends); every place that opens a node goes
-// through openNode, which resolves that editor and falls back to the default
-// node editor (NodeTab) when the type names none, the editor is unknown, or it
-// cannot show the node.
+// `editor`, inherited through extends, ADR 0027); every place that opens a node
+// goes through openNode, which resolves that editor from the type catalogue and
+// falls back to the default node editor (NodeTab) when the type names none, the
+// editor is unknown, or it cannot show the node.
 import { graph, type GraphNode } from './api';
-import { loadGraph } from './graphIndex';
 import { nodeEditor } from './shell/registry';
+import { loadTypes } from './stores/types.svelte';
 import { openTab } from './shell/tabs.svelte';
 import { requestReveal } from './shell/workbench.svelte';
 import type { NodeEditor, NodeEditorTarget, NodeHandle, Tab, TabSpec } from './shell/types';
 
-/** Editor named by a node type, from the NodeType nodes of a baseline (nearest along extends; '' : the default). */
-export function editorResolver(nodes: GraphNode[]): (type: string | undefined) => string {
-  const types = new Map<string, { extends: string; editor: string }>();
-  for (const n of nodes) {
-    if (n.type !== 'NodeType') continue;
-    const p = (n.props ?? {}) as Record<string, unknown>;
-    const name = typeof p.name === 'string' ? p.name : '';
-    if (!name || types.has(name)) continue;
-    types.set(name, {
-      extends: typeof p.extends === 'string' ? p.extends : '',
-      editor: typeof p.editor === 'string' ? p.editor : '',
-    });
-  }
-  return (type) => {
-    const seen = new Set<string>();
-    for (let t = type ?? ''; t && !seen.has(t); t = types.get(t)?.extends ?? '') {
-      seen.add(t);
-      const e = types.get(t)?.editor;
-      if (e) return e;
-    }
-    return '';
-  };
-}
-
-/** Resolver of the head of main, reloaded when the head moves. */
-let cache: { head: string; resolve: Promise<(type: string | undefined) => string> } | undefined;
-
-async function headResolver(): Promise<(type: string | undefined) => string> {
-  const head = (await graph.getBranch('main')).head?.id ?? '';
-  if (cache?.head !== head) {
-    const resolve = head ? loadGraph(head).then((ix) => editorResolver(ix.list)) : Promise.resolve(() => '');
-    cache = { head, resolve };
-    resolve.catch(() => {
-      if (cache?.resolve === resolve) cache = undefined;
-    });
-  }
-  return cache.resolve;
-}
-
-/** The editor named by a node type at the head of main (undefined: the default node editor). */
+/** The editor named by a node type in the type catalogue (undefined: the default node editor). */
 export async function editorOfType(type: string): Promise<NodeEditor | undefined> {
-  try {
-    return nodeEditor((await headResolver())(type));
-  } catch {
-    return undefined;
-  }
+  return nodeEditor((await loadTypes()).editor(type));
 }
 
 /** What is known of a node where it is opened: at least its id. */

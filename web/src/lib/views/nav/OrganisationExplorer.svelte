@@ -8,6 +8,7 @@
   import { openTab } from '../../shell/tabs.svelte';
   import { notify } from '../../shell/workbench.svelte';
   import { graph, errorMessage, nodeTitle, type GraphNode, type Link } from '../../api';
+  import { ORG_UNIT_TYPE, PART_OF } from '../../orgTypes';
 
   const NS = 'organisation';
 
@@ -31,7 +32,7 @@
         links = [];
       } else {
         const r = await graph.getBaselineGraph(latest.id);
-        nodes = (r.nodes ?? []).filter((n) => n.namespace === NS && n.type === 'OrgUnit');
+        nodes = (r.nodes ?? []).filter((n) => n.namespace === NS && n.type === ORG_UNIT_TYPE);
         links = r.links ?? [];
       }
       error = '';
@@ -48,7 +49,7 @@
 
   const parentOf = $derived.by(() => {
     const m = new Map<string, string>();
-    for (const l of links) if (l.type === 'part_of' && l.from?.id && l.to?.id) m.set(l.from.id, l.to.id);
+    for (const l of links) if (l.type === PART_OF && l.from?.id && l.to?.id) m.set(l.from.id, l.to.id);
     return m;
   });
   const children = $derived.by(() => {
@@ -95,10 +96,10 @@
         edits: [
           {
             key,
-            type: 'OrgUnit',
+            type: ORG_UNIT_TYPE,
             props: { name: name.trim(), kind },
             rationale: `Create organisational unit ${name.trim()}`,
-            ...(parentNode ? { links: [{ type: 'part_of', to: { id: parentNode.id, version: parentNode.version } }] } : {}),
+            ...(parentNode ? { links: [{ type: PART_OF, to: { id: parentNode.id, version: parentNode.version } }] } : {}),
           },
         ],
       });
