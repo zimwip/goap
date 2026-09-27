@@ -125,6 +125,9 @@ func SeedDemo(ctx context.Context, g *graph.Graph) (bool, error) {
 			return false, err
 		}
 	}
-	_, err := g.CreateBaselineFromLatest(ctx, "Initial baseline")
+	if _, err := g.CreateBaselineFromLatest(ctx, alm, "Initial baseline"); err != nil {
+		return false, err
+	}
+	_, err := g.CreateBaselineFromLatest(ctx, mcp.NamespaceOrganisation, "Initial baseline")
 	return err == nil, err
 }

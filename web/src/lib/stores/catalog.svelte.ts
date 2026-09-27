@@ -42,8 +42,9 @@ export function refreshMethodologies(): Promise<void> {
   return fill(methodologies, async () => (await registry.listMethodologies(true)).methodologies ?? []);
 }
 
-export function refreshBaselines(): Promise<void> {
-  return fill(baselines, async () => (await graph.listBaselines()).baselines ?? []);
+/** Baselines are namespace-scoped: this replaces the store's contents with that namespace's baselines. */
+export function refreshBaselines(namespace: string): Promise<void> {
+  return fill(baselines, async () => (await graph.listBaselines(namespace)).baselines ?? []);
 }
 
 export function refreshChanges(): Promise<void> {

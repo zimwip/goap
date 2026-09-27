@@ -42,7 +42,7 @@ const upsert = (h: HeadGraph, type: string, key: string, props: Struct): NodeEdi
 
 /** Creates or updates a provider. */
 export async function saveProvider(p: LlmProvider): Promise<void> {
-  const h = await headGraph();
+  const h = await headGraph(NS_PLATFORM);
   await applyOnMain(NS_PLATFORM, `Provider ${p.name}`, 'Configure an LLM provider', h.baselineId, [upsert(h, PROVIDER_TYPE, providerKey(p.name), providerProps(p))]);
 }
 
@@ -50,7 +50,7 @@ const prop = (n: GraphNode, k: string) => String((n.props as Record<string, unkn
 
 /** Deletes a provider with its models and the aliases that point to them. */
 export async function deleteProvider(name: string): Promise<void> {
-  const h = await headGraph();
+  const h = await headGraph(NS_PLATFORM);
   const items: NodeEdit[] = [];
   const models = h.nodes.filter((n) => n.namespace === NS_PLATFORM && n.type === MODEL_TYPE && prop(n, 'provider') === name);
   for (const a of h.nodes.filter((n) => n.namespace === NS_PLATFORM && n.type === ALIAS_TYPE && prop(n, 'target').startsWith(`${name}/`))) items.push(deleteNodeItem(a));
@@ -62,7 +62,7 @@ export async function deleteProvider(name: string): Promise<void> {
 
 /** Adds or updates models of the catalog in one change. */
 export async function saveModels(ms: CatalogModel[]): Promise<void> {
-  const h = await headGraph();
+  const h = await headGraph(NS_PLATFORM);
   const items = ms.map((m, i) => upsert(h, MODEL_TYPE, modelKey(m.provider, m.model), modelProps(m)));
   await applyOnMain(NS_PLATFORM, `Models ${ms.map((m) => `${m.provider}/${m.model}`).join(', ')}`.slice(0, 200), 'Configure models of the catalog', h.baselineId, items);
 }
@@ -71,7 +71,7 @@ export const saveModel = (m: CatalogModel) => saveModels([m]);
 
 /** Removes a model from the catalog with the aliases that point to it. */
 export async function deleteModel(provider: string, model: string): Promise<void> {
-  const h = await headGraph();
+  const h = await headGraph(NS_PLATFORM);
   const items: NodeEdit[] = h.nodes
     .filter((n) => n.namespace === NS_PLATFORM && n.type === ALIAS_TYPE && prop(n, 'target') === `${provider}/${model}`)
     .map(deleteNodeItem);
@@ -81,14 +81,14 @@ export async function deleteModel(provider: string, model: string): Promise<void
 }
 
 export async function saveAlias(a: ModelAlias): Promise<void> {
-  const h = await headGraph();
+  const h = await headGraph(NS_PLATFORM);
   await applyOnMain(NS_PLATFORM, `Alias ${a.alias}`, 'Point an alias to a model', h.baselineId, [
     upsert(h, ALIAS_TYPE, aliasKey(a.alias), { alias: a.alias, target: `${a.provider}/${a.model}` }),
   ]);
 }
 
 export async function deleteAlias(alias: string): Promise<void> {
-  const h = await headGraph();
+  const h = await headGraph(NS_PLATFORM);
   const n = find(h, ALIAS_TYPE, aliasKey(alias));
   if (n) await applyOnMain(NS_PLATFORM, `Delete alias ${alias}`, 'Remove an alias', h.baselineId, [deleteNodeItem(n)]);
 }

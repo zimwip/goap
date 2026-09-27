@@ -42,7 +42,7 @@ func TestCreateObjectIsRoleGated(t *testing.T) {
 	}
 	g := graph.New(graph.NewMemory())
 	g.Types = func() graph.TypeCatalog { return cat }
-	if _, err := g.CreateBaseline(context.Background(), "B0", nil); err != nil {
+	if _, err := g.CreateBaseline(context.Background(), "alm", "B0", nil); err != nil {
 		t.Fatal(err)
 	}
 	authorizer, err := authz.NewCasbin(nil)
@@ -101,7 +101,7 @@ func TestAccessNodesAreGatedByTheFloor(t *testing.T) {
 	}
 	// the overall authorizer lets methodologists do everything on policies, the floor only administrators
 	h := &graphsvc.Handler{Graph: g, Authz: authorizer, Floor: floor}
-	base, err := g.CreateBaseline(ctx, "Repository", nil)
+	base, err := g.CreateBaseline(ctx, "", "Repository", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -147,7 +147,7 @@ func TestChangeImpactRPCs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	base, err := g.CreateBaseline(ctx, "B1", []domain.NodeRef{req1.Ref()})
+	base, err := g.CreateBaseline(ctx, "", "B1", []domain.NodeRef{req1.Ref()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -204,7 +204,7 @@ func TestCommitEditsGatesAccessNodes(t *testing.T) {
 		t.Fatal(err)
 	}
 	h := &graphsvc.Handler{Graph: g, Authz: authorizer}
-	base, err := g.CreateBaseline(ctx, "Repository", nil)
+	base, err := g.CreateBaseline(ctx, "", "Repository", nil)
 	if err != nil {
 		t.Fatal(err)
 	}

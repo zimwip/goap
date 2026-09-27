@@ -61,7 +61,7 @@ func TestSpecializationChosenAtExecution(t *testing.T) {
 		}
 	}
 	g := graph.New(graph.NewMemory())
-	b, _ := g.CreateBaseline(ctx, "B0", nil)
+	b, _ := g.CreateBaseline(ctx, "alm", "B0", nil)
 	e := &Engine{Graph: g, Methodologies: StaticMethodologies{"demo": demo, "golang": golang},
 		Executors: map[string]Executor{methodology.KindBuiltin: BuiltinExecutor{"build.java": builtin("java"), "build.any": builtin("any"), "build.go": builtin("go")}},
 		Intent:    intent.Resolver{Ranker: intent.Lexical{}}, Store: NewMemoryStore()}
@@ -97,7 +97,7 @@ goals: [{name: g, pre: {done: true}}]
 `
 	ctx := context.Background()
 	g := graph.New(graph.NewMemory())
-	b, _ := g.CreateBaseline(ctx, "B0", nil)
+	b, _ := g.CreateBaseline(ctx, "", "B0", nil)
 	e := &Engine{Graph: g, Methodologies: StaticMethodologies{"abs": compile(t, src)}, Executors: map[string]Executor{},
 		Intent: intent.Resolver{Ranker: intent.Lexical{}}, Store: NewMemoryStore(), MaxFailures: 1}
 	p, _ := e.Start(ctx, StartRequest{Methodology: "abs", Goal: "g", BaselineID: b.ID, Intent: "x"})

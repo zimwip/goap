@@ -66,7 +66,7 @@ func newAlgoWorld(t *testing.T, repo Repo) algoWorld {
 		t.Fatal(err)
 	}
 	var err error
-	if w.base, err = w.g.CreateBaseline(ctx, "B", []domain.NodeRef{w.req.Ref(), w.doc.Ref()}); err != nil {
+	if w.base, err = w.g.CreateBaseline(ctx, "", "B", []domain.NodeRef{w.req.Ref(), w.doc.Ref()}); err != nil {
 		t.Fatal(err)
 	}
 	return w

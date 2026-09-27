@@ -109,7 +109,7 @@ func PolicyFromProps(props map[string]any) (authz.Policy, error) {
 
 // Graph is the part of the graph the directory reads.
 type Graph interface {
-	BranchHead(ctx context.Context, name string) (domain.Baseline, error)
+	BranchHead(ctx context.Context, namespace, name string) (domain.Baseline, error)
 	BaselineGraph(ctx context.Context, id domain.BaselineID) ([]domain.Node, []domain.Link, error)
 }
 
@@ -129,9 +129,8 @@ func BuildSnapshot(id domain.BaselineID, nodes []domain.Node, links []domain.Lin
 	byID := map[domain.NodeID]domain.Node{}
 	for _, n := range nodes {
 		byID[n.ID] = n
-		if n.Namespace != mcp.NamespaceOrganisation {
-			continue
-		}
+		// nodes is scoped to the organisation namespace by the Directory's cache (Namespace:
+		// mcp.NamespaceOrganisation); this switch does not need to filter it again.
 		switch n.Type {
 		case NodeTypeUser:
 			u, err := UserFromProps(n.Properties)
@@ -212,7 +211,9 @@ type Directory struct {
 // Snapshot returns the current snapshot. A graph without any baseline yields an empty one; when the graph
 // cannot be read the last snapshot (nil if none) is returned with the error.
 func (d *Directory) Snapshot(ctx context.Context) (*Snapshot, error) {
-	d.once.Do(func() { d.cache = graphsnap.Cache[*Snapshot]{Graph: d.Graph, TTL: d.TTL, Build: BuildSnapshot} })
+	d.once.Do(func() {
+		d.cache = graphsnap.Cache[*Snapshot]{Graph: d.Graph, Namespace: mcp.NamespaceOrganisation, TTL: d.TTL, Build: BuildSnapshot}
+	})
 	s, _, err := d.cache.Get(ctx)
 	return s, err
 }

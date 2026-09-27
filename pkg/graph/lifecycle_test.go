@@ -56,7 +56,7 @@ func newLifecycleWorldG(t *testing.T, repo Repo, approveGuard string) lcWorld {
 	}
 	var err error
 	// Link bumps nothing: the spec still is version 1 with its links
-	w.base, err = w.g.CreateBaseline(ctx, "B1", []domain.NodeRef{w.req1.Ref(), w.req2.Ref(), w.spec.Ref()})
+	w.base, err = w.g.CreateBaseline(ctx, "", "B1", []domain.NodeRef{w.req1.Ref(), w.req2.Ref(), w.spec.Ref()})
 	if err != nil {
 		t.Fatal(err)
 	}

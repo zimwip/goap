@@ -9,6 +9,7 @@
   import { openTab, closeTab } from '../../shell/tabs.svelte';
   import { notify, provideActions } from '../../shell/workbench.svelte';
   import { MCP_TYPE } from '../../orgTypes';
+  import { NS_PLATFORM } from '../../adapterDef';
 
   let { tab }: { tab: Tab } = $props();
 
@@ -65,7 +66,7 @@
     }
     saving = true;
     try {
-      const h = await headGraph();
+      const h = await headGraph(NS_PLATFORM);
       const existing = findNode(h, NS, MCP_TYPE, keyOf(out.name!));
       const props: Struct = { name: out.name ?? '', description: out.description ?? '', tools: (out.tools ?? []) as unknown as Struct[] };
       const item = existing ? updateNodeItem(existing, props) : createNodeItem(keyOf(out.name!), MCP_TYPE, props);
@@ -86,7 +87,7 @@
   async function remove() {
     if (!confirm(`Delete the MCP ${name}? Adapters that implement it stop working.`)) return;
     try {
-      const h = await headGraph();
+      const h = await headGraph(NS_PLATFORM);
       const existing = findNode(h, NS, MCP_TYPE, keyOf(name));
       if (!existing) throw new Error(`MCP ${name} is not on the graph`);
       await applyOnMain(NS, `Delete MCP ${name}`, `Delete MCP ${name}`, h.baselineId, [deleteNodeItem(existing)]);

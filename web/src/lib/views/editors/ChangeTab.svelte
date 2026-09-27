@@ -28,6 +28,7 @@
   import { openNode } from '../../nodeEditors';
   import { provideActions, notify } from '../../shell/workbench.svelte';
   import { refreshChanges, refreshBaselines } from '../../stores/catalog.svelte';
+  import { namespaceOf } from '../../namespace';
   import { processes } from '../../stores/live.svelte';
   import FlowGraph from '../../components/FlowGraph.svelte';
   import FlowActions from '../../components/FlowActions.svelte';
@@ -273,7 +274,7 @@
       await graph.mergeChange(change.id);
       await load(change.id);
       void refreshChanges();
-      void refreshBaselines();
+      void refreshBaselines(namespaceOf(change?.namespace));
       notify('Change merged.', 'ok');
     } catch (e) {
       mergeError = errorMessage(e);
@@ -290,7 +291,7 @@
       applied = (await graph.applyChange(change.id, baselineName.trim())).baseline;
       await load(change.id);
       void refreshChanges();
-      void refreshBaselines();
+      void refreshBaselines(namespaceOf(change?.namespace));
       notify(`Baseline ${applied?.name || shortId(applied?.id)} created.`, 'ok');
     } catch (e) {
       error = errorMessage(e);
@@ -445,7 +446,7 @@
                 <span class="hint">· {f.stale?.length ?? 0} stale item(s)</span>
                 {#if f.process}<button type="button" class="link mono" onclick={() => openTab({ kind: 'run', params: { id: f.process ?? '' } })}>previous run</button>{/if}
                 {#if fp}<button type="button" class="link mono" onclick={() => openTab({ kind: 'run', params: { id: fp.id ?? '' } })}>relaunched run</button>{/if}
-                <div class="flow-row"><FlowBranchInfo flow={f} changeBranch={change?.branch ?? ''} /></div>
+                <div class="flow-row"><FlowBranchInfo flow={f} namespace={namespaceOf(change?.namespace)} changeBranch={change?.branch ?? ''} /></div>
                 <div class="flow-row"><FlowActions flow={f} changeId={selected} ondecided={() => load(selected)} /></div>
               </li>
             {/each}

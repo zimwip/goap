@@ -9,16 +9,20 @@
   import { graph, errorMessage, formatDate, nodeTitle, shortId, type Baseline, type GraphNode } from '../../api';
   import { SvelteMap } from 'svelte/reactivity';
   import { splitType } from '../../stores/types.svelte';
+  import { DEFAULT_NAMESPACE } from '../../namespace';
 
   // Methodologies are nodes typed by the meta-domain methodology (ADR 0023), authored in their own editors and
   // explorer: hidden here to avoid duplicating them.
   const META_NAMESPACES = new Set(['methodology']);
 
   let filter = $state('');
+  // baselines are namespace-scoped now: browse one namespace at a time.
+  let namespace = $state(DEFAULT_NAMESPACE);
   const graphs = new SvelteMap<string, { nodes: GraphNode[]; error: string; loading: boolean }>();
 
   $effect(() => {
-    if (!baselines.loaded) void refreshBaselines();
+    graphs.clear();
+    void refreshBaselines(namespace);
   });
 
   async function loadGraph(id: string) {
@@ -93,9 +97,19 @@
       disabled={baselines.loading}
       onclick={() => {
         graphs.clear();
-        void refreshBaselines();
+        void refreshBaselines(namespace);
       }}><Icon name="refresh" size={14} /></button
     >
+  </div>
+  <div class="tools">
+    <input
+      type="text"
+      placeholder="Namespace…"
+      aria-label="Namespace"
+      value={namespace}
+      onchange={(e) => (namespace = e.currentTarget.value.trim() || DEFAULT_NAMESPACE)}
+      data-no-pin
+    />
   </div>
   {#if baselines.error}<div class="alert small">{baselines.error}</div>{/if}
   {#if baselines.loaded && !baselines.items.length && !baselines.error}<p class="empty pad">No baselines.</p>{/if}

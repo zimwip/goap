@@ -39,7 +39,7 @@ func TestObserveNodeAndBaselineEvents(t *testing.T) {
 				"SubItem": {Extends: "Item", Search: []domain.SearchProperty{{Property: "notes", Text: true}}},
 			}
 		}
-		if _, err := g.CreateBaseline(ctx, "B1", nil); err != nil {
+		if _, err := g.CreateBaseline(ctx, "", "B1", nil); err != nil {
 			t.Fatal(err)
 		}
 		sink := &recSink{}
@@ -59,7 +59,7 @@ func TestObserveNodeAndBaselineEvents(t *testing.T) {
 			t.Fatalf("facets = %v", ev.Facets)
 		}
 		sink.subj, sink.vals = nil, nil
-		if _, err := g.CreateBaseline(ctx, "B2", []domain.NodeRef{n.Ref()}); err != nil {
+		if _, err := g.CreateBaseline(ctx, "", "B2", []domain.NodeRef{n.Ref()}); err != nil {
 			t.Fatal(err)
 		}
 		if len(sink.vals) != 1 || sink.subj[0] != "goap.baseline.main.advanced" {

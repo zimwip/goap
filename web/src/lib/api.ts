@@ -521,6 +521,20 @@ export interface Baseline {
   changeId?: string;
   nodes?: Record<string, number>;
   createdAt?: string;
+  branch?: string;
+  /** the namespace this baseline snapshots (a baseline holds one namespace's nodes) */
+  namespace?: string;
+}
+
+export interface Branch {
+  name?: string;
+  namespace?: string;
+  parent?: string;
+  forkBaseline?: string;
+  head?: string;
+  origin?: string;
+  status?: string;
+  createdAt?: string;
 }
 
 export interface Decision {
@@ -1080,8 +1094,9 @@ export interface SharedNode {
 }
 
 export const graph = {
-  listBaselines: (signal?: AbortSignal) =>
-    rpc<Empty, { baselines?: Baseline[] }>(GRAPH, 'ListBaselines', {}, signal),
+  /** namespace is required: baselines are scoped to one namespace each. */
+  listBaselines: (namespace: string, signal?: AbortSignal) =>
+    rpc<{ namespace: string }, { baselines?: Baseline[] }>(GRAPH, 'ListBaselines', { namespace }, signal),
   getBaselineGraph: (id: string, signal?: AbortSignal) =>
     rpc<{ id: string }, { baseline?: Baseline; nodes?: GraphNode[]; links?: Link[]; suspectLinks?: Link[] }>(
       GRAPH,
@@ -1093,8 +1108,12 @@ export const graph = {
     rpc<Empty, { changes?: Change[] }>(GRAPH, 'ListChanges', {}, signal),
   getChange: (id: string, signal?: AbortSignal) =>
     rpc<{ id: string }, { change?: Change }>(GRAPH, 'GetChange', { id }, signal),
-  getBranch: (name: string, signal?: AbortSignal) =>
-    rpc<{ name: string }, { branch?: { name?: string; head?: string }; head?: Baseline }>(GRAPH, 'GetBranch', { name }, signal),
+  getBranch: (namespace: string, name: string, signal?: AbortSignal) =>
+    rpc<{ namespace: string; name: string }, { branch?: Branch; head?: Baseline }>(GRAPH, 'GetBranch', { namespace, name }, signal),
+  listBranches: (namespace: string, signal?: AbortSignal) =>
+    rpc<{ namespace: string }, { branches?: Branch[] }>(GRAPH, 'ListBranches', { namespace }, signal),
+  createBranch: (req: { namespace: string; name: string; fromBaseline: string; origin?: string }) =>
+    rpc<typeof req, { branch?: Branch }>(GRAPH, 'CreateBranch', req),
   createChange: (req: {
     title: string;
     intent?: string;
@@ -1130,8 +1149,8 @@ export const graph = {
   discardFlow: (changeId: string, flow: string) =>
     rpc<{ changeId: string; flow: string }, { flow?: Flow }>(GRAPH, 'DiscardFlow', { changeId, flow }),
   /** What merging a branch into another would do. */
-  planMerge: (from: string, into: string, signal?: AbortSignal) =>
-    rpc<{ from: string; into: string }, { plan?: MergePlan }>(GRAPH, 'PlanMerge', { from, into }, signal),
+  planMerge: (namespace: string, from: string, into: string, signal?: AbortSignal) =>
+    rpc<{ namespace: string; from: string; into: string }, { plan?: MergePlan }>(GRAPH, 'PlanMerge', { namespace, from, into }, signal),
   getSharedNodes: (changeId: string, signal?: AbortSignal) =>
     rpc<{ changeId: string }, { nodes?: SharedNode[] }>(GRAPH, 'GetSharedNodes', { changeId }, signal),
   /** Every version of a node, all branches. */

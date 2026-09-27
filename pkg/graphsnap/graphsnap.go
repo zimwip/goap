@@ -15,15 +15,17 @@ import (
 
 // Graph is the part of the graph a snapshot reads.
 type Graph interface {
-	BranchHead(ctx context.Context, name string) (domain.Baseline, error)
+	BranchHead(ctx context.Context, namespace, name string) (domain.Baseline, error)
 	BaselineGraph(ctx context.Context, id domain.BaselineID) ([]domain.Node, []domain.Link, error)
 }
 
-// Cache holds the snapshot of the head of main. The head is looked at most once per TTL (one second by
-// default). When the graph cannot be read the last snapshot keeps serving and the error is returned with it.
+// Cache holds the snapshot of the head of Namespace's main. The head is looked at most once per TTL
+// (one second by default). When the graph cannot be read the last snapshot keeps serving and the error
+// is returned with it.
 type Cache[T any] struct {
-	Graph Graph
-	TTL   time.Duration
+	Graph     Graph
+	Namespace string
+	TTL       time.Duration
 	// Build makes the view of a baseline; the graph without any baseline yields Build("", nil, nil).
 	Build func(id domain.BaselineID, nodes []domain.Node, links []domain.Link) T
 
@@ -50,7 +52,7 @@ func (c *Cache[T]) get(ctx context.Context, fresh bool) (T, domain.BaselineID, e
 	if !fresh && c.have && time.Since(c.checked) < ttl {
 		return c.cur, c.id, nil
 	}
-	head, err := c.Graph.BranchHead(ctx, domain.MainBranch)
+	head, err := c.Graph.BranchHead(ctx, c.Namespace, domain.MainBranch)
 	if errors.Is(err, graph.ErrNotFound) {
 		c.cur, c.id, c.have, c.checked = c.Build("", nil, nil), "", true, time.Now()
 		return c.cur, c.id, nil

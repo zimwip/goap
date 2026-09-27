@@ -1,5 +1,6 @@
 // The graph of a baseline as lookup tables (nodes by id, links by node).
 import { graph, type GraphNode, type Link } from './api';
+import { MAIN_BRANCH } from './namespace';
 
 export interface GraphIndex {
   baselineId: string;
@@ -28,9 +29,9 @@ export async function loadGraph(baselineId: string, signal?: AbortSignal): Promi
   return indexOf(baselineId, g.nodes ?? [], g.links ?? []);
 }
 
-/** The graph at the head of main ("current"). */
-export async function loadHead(signal?: AbortSignal): Promise<GraphIndex> {
-  const b = await graph.getBranch('main', signal);
+/** The graph at the head of a namespace's main ("current"). */
+export async function loadHead(namespace: string, signal?: AbortSignal): Promise<GraphIndex> {
+  const b = await graph.getBranch(namespace, MAIN_BRANCH, signal);
   const id = b.head?.id;
   if (!id) return indexOf('', [], []);
   return loadGraph(id, signal);

@@ -75,7 +75,7 @@ func (g *Graph) applyTx(ctx context.Context, tx Tx, id domain.ChangeID, baseline
 	if _, isOwn, err := ownBranch(ctx, tx, c); err != nil {
 		return domain.Baseline{}, err
 	} else if isOwn {
-		head, err := branchHead(ctx, tx, c.Branch)
+		head, err := branchHead(ctx, tx, c.Namespace, c.Branch)
 		if err != nil {
 			return domain.Baseline{}, err
 		}
@@ -91,11 +91,11 @@ func (g *Graph) applyTx(ctx context.Context, tx Tx, id domain.ChangeID, baseline
 	if baselineName == "" {
 		baselineName = c.Title
 	}
-	result := domain.Baseline{ID: domain.BaselineID(g.newID()), Name: baselineName, Branch: a.branch, ParentID: parentBaseline, ChangeID: c.ID, Nodes: a.target, CreatedAt: g.now()}
+	result := domain.Baseline{ID: domain.BaselineID(g.newID()), Name: baselineName, Namespace: c.Namespace, Branch: a.branch, ParentID: parentBaseline, ChangeID: c.ID, Nodes: a.target, CreatedAt: g.now()}
 	if err := tx.PutBaseline(ctx, result); err != nil {
 		return domain.Baseline{}, err
 	}
-	if err := g.advanceBranch(ctx, tx, a.branch, result.ID); err != nil {
+	if err := g.advanceBranch(ctx, tx, c.Namespace, a.branch, result.ID); err != nil {
 		return domain.Baseline{}, err
 	}
 	c.Status = domain.ChangeApplied
@@ -104,11 +104,12 @@ func (g *Graph) applyTx(ctx context.Context, tx Tx, id domain.ChangeID, baseline
 }
 
 // advanceBranch moves the head of a branch (main is created on first use).
-func (g *Graph) advanceBranch(ctx context.Context, tx Tx, name string, head domain.BaselineID) error {
-	b, err := tx.Branch(ctx, name)
+func (g *Graph) advanceBranch(ctx context.Context, tx Tx, namespace, name string, head domain.BaselineID) error {
+	namespace = domain.NamespaceOf(namespace)
+	b, err := tx.Branch(ctx, namespace, name)
 	switch {
 	case errors.Is(err, ErrNotFound) && name == domain.MainBranch:
-		b = domain.Branch{Name: name, Status: domain.BranchOpen, CreatedAt: g.now()}
+		b = domain.Branch{Name: name, Namespace: namespace, Status: domain.BranchOpen, CreatedAt: g.now()}
 	case err != nil:
 		return err
 	}

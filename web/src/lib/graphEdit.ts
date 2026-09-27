@@ -1,5 +1,6 @@
 // Editing graph nodes the way the organisation explorer does: one change of a namespace applied on main.
 import { graph, type NodeEdit, type GraphNode, type Link, type NodeRef, type Struct } from './api';
+import { MAIN_BRANCH } from './namespace';
 
 export interface HeadGraph {
   baselineId: string;
@@ -7,11 +8,11 @@ export interface HeadGraph {
   links: Link[];
 }
 
-/** The graph at the head of main (the base of every change applied on main). */
-export async function headGraph(): Promise<HeadGraph> {
-  const b = await graph.getBranch('main');
+/** The graph at the head of a namespace's main (the base of every change applied on it). */
+export async function headGraph(namespace: string): Promise<HeadGraph> {
+  const b = await graph.getBranch(namespace, MAIN_BRANCH);
   const id = b.head?.id ?? b.branch?.head;
-  if (!id) throw new Error('main has no baseline yet');
+  if (!id) throw new Error(`${namespace} main has no baseline yet`);
   const g = await graph.getBaselineGraph(id);
   return { baselineId: id, nodes: g.nodes ?? [], links: g.links ?? [] };
 }

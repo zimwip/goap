@@ -116,30 +116,39 @@ func (t *memTx) Versions(_ context.Context, id domain.NodeID) ([]domain.Node, er
 	return slices.Clone(vs), nil
 }
 
-func (t *memTx) Branch(_ context.Context, name string) (domain.Branch, error) {
-	b, ok := t.st.branches[name]
+func (t *memTx) Branch(_ context.Context, namespace, name string) (domain.Branch, error) {
+	b, ok := t.st.branches[branchKey(namespace, name)]
 	if !ok {
-		return domain.Branch{}, fmt.Errorf("branch %s: %w", name, ErrNotFound)
+		return domain.Branch{}, fmt.Errorf("branch %s/%s: %w", domain.NamespaceOf(namespace), name, ErrNotFound)
 	}
 	return b, nil
 }
 
-func (t *memTx) Branches(_ context.Context) ([]domain.Branch, error) {
+func (t *memTx) Branches(_ context.Context, namespace string) ([]domain.Branch, error) {
+	namespace = domain.NamespaceOf(namespace)
 	out := make([]domain.Branch, 0, len(t.st.branches))
 	for _, b := range t.st.branches {
-		out = append(out, b)
+		if b.Namespace == namespace {
+			out = append(out, b)
+		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.Before(out[j].CreatedAt) })
 	return out, nil
 }
 
 func (t *memTx) PutBranch(_ context.Context, b domain.Branch) error {
-	t.st.branches[b.Name] = b
+	b.Namespace = domain.NamespaceOf(b.Namespace)
+	t.st.branches[branchKey(b.Namespace, b.Name)] = b
 	return nil
 }
 
 // nsKey scopes a node key to its namespace.
 func nsKey(namespace, key string) string { return domain.NamespaceOf(namespace) + "\x00" + key }
+
+// branchKey scopes a branch name to its namespace.
+func branchKey(namespace, name string) string {
+	return domain.NamespaceOf(namespace) + "\x00" + domain.BranchOf(name)
+}
 
 func (t *memTx) NodeIDByKey(_ context.Context, namespace, key string) (domain.NodeID, error) {
 	id, ok := t.st.keys[nsKey(namespace, key)]
@@ -176,14 +185,34 @@ func (t *memTx) NodesIn(ctx context.Context, baseline domain.BaselineID, nodeTyp
 	return out, nil
 }
 
-func (t *memTx) LatestNodes(_ context.Context) ([]domain.Node, error) {
+func (t *memTx) LatestNodes(ctx context.Context, namespace, branch string) ([]domain.Node, error) {
+	namespace = domain.NamespaceOf(namespace)
 	out := make([]domain.Node, 0, len(t.st.versions))
 	for id := range t.st.versions {
-		if n, err := t.LatestOn(context.Background(), id, domain.MainBranch); err == nil {
+		n, err := t.LatestOn(ctx, id, branch)
+		if err != nil {
+			continue
+		}
+		if n.Namespace == namespace {
 			out = append(out, n)
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Key < out[j].Key })
+	return out, nil
+}
+
+func (t *memTx) Namespaces(_ context.Context) ([]string, error) {
+	seen := map[string]bool{}
+	for _, vs := range t.st.versions {
+		if len(vs) > 0 {
+			seen[vs[0].Namespace] = true
+		}
+	}
+	out := make([]string, 0, len(seen))
+	for ns := range seen {
+		out = append(out, ns)
+	}
+	sort.Strings(out)
 	return out, nil
 }
 
@@ -216,9 +245,13 @@ func (t *memTx) Baseline(_ context.Context, id domain.BaselineID) (domain.Baseli
 	return b, nil
 }
 
-func (t *memTx) Baselines(_ context.Context) ([]domain.Baseline, error) {
+func (t *memTx) Baselines(_ context.Context, namespace string) ([]domain.Baseline, error) {
+	namespace = domain.NamespaceOf(namespace)
 	out := make([]domain.Baseline, 0, len(t.st.baselines))
 	for _, b := range t.st.baselines {
+		if b.Namespace != namespace {
+			continue
+		}
 		b.Nodes = maps.Clone(b.Nodes)
 		out = append(out, b)
 	}
@@ -280,6 +313,17 @@ func (t *memTx) PutLink(_ context.Context, l domain.Link) error {
 func (t *memTx) PutBaseline(_ context.Context, b domain.Baseline) error {
 	if _, dup := t.st.baselines[b.ID]; dup {
 		return fmt.Errorf("baseline %s: %w", b.ID, ErrConflict)
+	}
+	b.Namespace = domain.NamespaceOf(b.Namespace)
+	for id := range b.Nodes {
+		vs := t.st.versions[id]
+		if len(vs) == 0 {
+			return fmt.Errorf("baseline %s: node %s: %w", b.ID, id, ErrNotFound)
+		}
+		if vs[0].Namespace != b.Namespace {
+			return fmt.Errorf("baseline %s is of namespace %s, node %s is of namespace %s: %w",
+				b.ID, b.Namespace, id, vs[0].Namespace, ErrInvalid)
+		}
 	}
 	b.Nodes = maps.Clone(b.Nodes)
 	t.st.baselines[b.ID] = b

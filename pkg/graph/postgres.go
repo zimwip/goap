@@ -140,29 +140,30 @@ func (t *pgTx) Versions(ctx context.Context, id domain.NodeID) ([]domain.Node, e
 	return out, err
 }
 
-func (t *pgTx) Branch(ctx context.Context, name string) (domain.Branch, error) {
+func (t *pgTx) Branch(ctx context.Context, namespace, name string) (domain.Branch, error) {
 	var b domain.Branch
-	err := t.tx.QueryRow(ctx, `SELECT name, parent, coalesce(fork_baseline::text, ''), coalesce(head_baseline::text, ''), origin, status, created_at FROM branch WHERE name = $1`, name).
-		Scan(&b.Name, &b.Parent, (*string)(&b.ForkBaseline), (*string)(&b.Head), &b.Origin, &b.Status, &b.CreatedAt)
+	err := t.tx.QueryRow(ctx, `SELECT namespace, name, parent, coalesce(fork_baseline::text, ''), coalesce(head_baseline::text, ''), origin, status, created_at FROM branch WHERE namespace = $1 AND name = $2`, domain.NamespaceOf(namespace), name).
+		Scan(&b.Namespace, &b.Name, &b.Parent, (*string)(&b.ForkBaseline), (*string)(&b.Head), &b.Origin, &b.Status, &b.CreatedAt)
 	return b, mapErr(err, "branch "+name)
 }
 
-func (t *pgTx) Branches(ctx context.Context) ([]domain.Branch, error) {
-	rows, err := t.tx.Query(ctx, `SELECT name, parent, coalesce(fork_baseline::text, ''), coalesce(head_baseline::text, ''), origin, status, created_at FROM branch ORDER BY created_at`)
+func (t *pgTx) Branches(ctx context.Context, namespace string) ([]domain.Branch, error) {
+	rows, err := t.tx.Query(ctx, `SELECT namespace, name, parent, coalesce(fork_baseline::text, ''), coalesce(head_baseline::text, ''), origin, status, created_at FROM branch WHERE namespace = $1 ORDER BY created_at`, domain.NamespaceOf(namespace))
 	if err != nil {
 		return nil, err
 	}
 	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (domain.Branch, error) {
 		var b domain.Branch
-		err := r.Scan(&b.Name, &b.Parent, (*string)(&b.ForkBaseline), (*string)(&b.Head), &b.Origin, &b.Status, &b.CreatedAt)
+		err := r.Scan(&b.Namespace, &b.Name, &b.Parent, (*string)(&b.ForkBaseline), (*string)(&b.Head), &b.Origin, &b.Status, &b.CreatedAt)
 		return b, err
 	})
 }
 
 func (t *pgTx) PutBranch(ctx context.Context, b domain.Branch) error {
-	_, err := t.tx.Exec(ctx, `INSERT INTO branch (name, parent, fork_baseline, head_baseline, origin, status, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7)
-		ON CONFLICT (name) DO UPDATE SET status = EXCLUDED.status, head_baseline = EXCLUDED.head_baseline`,
-		b.Name, b.Parent, nullUUID(string(b.ForkBaseline)), nullUUID(string(b.Head)), b.Origin, b.Status, b.CreatedAt)
+	namespace := domain.NamespaceOf(b.Namespace)
+	_, err := t.tx.Exec(ctx, `INSERT INTO branch (namespace, name, parent, fork_baseline, head_baseline, origin, status, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		ON CONFLICT (namespace, name) DO UPDATE SET status = EXCLUDED.status, head_baseline = EXCLUDED.head_baseline`,
+		namespace, b.Name, b.Parent, nullUUID(string(b.ForkBaseline)), nullUUID(string(b.Head)), b.Origin, b.Status, b.CreatedAt)
 	return mapErr(err, "branch "+b.Name)
 }
 
@@ -196,13 +197,22 @@ func (t *pgTx) NodesIn(ctx context.Context, baseline domain.BaselineID, nodeType
 	return collectNodes(rows)
 }
 
-func (t *pgTx) LatestNodes(ctx context.Context) ([]domain.Node, error) {
-	q := `SELECT DISTINCT ON (n.key) ` + nodeCols + ` FROM node n JOIN node_version v ON v.node_id = n.id AND v.branch = 'main' ORDER BY n.key, v.version DESC`
-	rows, err := t.tx.Query(ctx, q)
+func (t *pgTx) LatestNodes(ctx context.Context, namespace, branch string) ([]domain.Node, error) {
+	q := `SELECT DISTINCT ON (n.key) ` + nodeCols + ` FROM node n JOIN node_version v ON v.node_id = n.id
+	      WHERE n.namespace = $1 AND v.branch = $2 ORDER BY n.key, v.version DESC`
+	rows, err := t.tx.Query(ctx, q, domain.NamespaceOf(namespace), domain.BranchOf(branch))
 	if err != nil {
 		return nil, err
 	}
 	return collectNodes(rows)
+}
+
+func (t *pgTx) Namespaces(ctx context.Context) ([]string, error) {
+	rows, err := t.tx.Query(ctx, `SELECT DISTINCT namespace FROM node ORDER BY namespace`)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, pgx.RowTo[string])
 }
 
 func (t *pgTx) links(ctx context.Context, where string, ref domain.NodeRef) ([]domain.Link, error) {
@@ -241,8 +251,8 @@ func (t *pgTx) InLinks(ctx context.Context, ref domain.NodeRef) ([]domain.Link, 
 func (t *pgTx) Baseline(ctx context.Context, id domain.BaselineID) (domain.Baseline, error) {
 	var b domain.Baseline
 	var parent, change *string
-	err := t.tx.QueryRow(ctx, `SELECT id::text, name, parent_id::text, change_id::text, created_at, branch FROM baseline WHERE id = $1`, string(id)).
-		Scan((*string)(&b.ID), &b.Name, &parent, &change, &b.CreatedAt, &b.Branch)
+	err := t.tx.QueryRow(ctx, `SELECT id::text, name, parent_id::text, change_id::text, created_at, branch, namespace FROM baseline WHERE id = $1`, string(id)).
+		Scan((*string)(&b.ID), &b.Name, &parent, &change, &b.CreatedAt, &b.Branch, &b.Namespace)
 	if err != nil {
 		return b, mapErr(err, "baseline "+string(id))
 	}
@@ -264,8 +274,8 @@ func (t *pgTx) Baseline(ctx context.Context, id domain.BaselineID) (domain.Basel
 	return b, rows.Err()
 }
 
-func (t *pgTx) Baselines(ctx context.Context) ([]domain.Baseline, error) {
-	rows, err := t.tx.Query(ctx, `SELECT id::text FROM baseline ORDER BY created_at`)
+func (t *pgTx) Baselines(ctx context.Context, namespace string) ([]domain.Baseline, error) {
+	rows, err := t.tx.Query(ctx, `SELECT id::text FROM baseline WHERE namespace = $1 ORDER BY created_at`, domain.NamespaceOf(namespace))
 	if err != nil {
 		return nil, err
 	}
@@ -381,8 +391,8 @@ func (t *pgTx) PutLink(ctx context.Context, l domain.Link) error {
 }
 
 func (t *pgTx) PutBaseline(ctx context.Context, b domain.Baseline) error {
-	_, err := t.tx.Exec(ctx, `INSERT INTO baseline (id, name, parent_id, change_id, created_at, branch) VALUES ($1, $2, $3, $4, $5, $6)`,
-		string(b.ID), b.Name, nullUUID(string(b.ParentID)), nullUUID(string(b.ChangeID)), b.CreatedAt, domain.BranchOf(b.Branch))
+	_, err := t.tx.Exec(ctx, `INSERT INTO baseline (id, name, parent_id, change_id, created_at, branch, namespace) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+		string(b.ID), b.Name, nullUUID(string(b.ParentID)), nullUUID(string(b.ChangeID)), b.CreatedAt, domain.BranchOf(b.Branch), domain.NamespaceOf(b.Namespace))
 	if err != nil {
 		return mapErr(err, "baseline")
 	}

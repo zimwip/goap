@@ -104,6 +104,7 @@
 {#if baseline}
   <p class="hint">
     <code>{baseline.id}</code>
+    {#if baseline.namespace} · namespace <code>{baseline.namespace}</code>{/if}
     {#if baseline.createdAt} · created on {formatDate(baseline.createdAt)}{/if}
     {#if baseline.changeId} · from change <button type="button" class="link mono" onclick={() => openTab({ kind: 'change', params: { id: baseline?.changeId ?? '' } })}>{baseline.changeId.slice(0, 8)}</button>{/if}
     {#if baseline.parentId} · parent <button type="button" class="link mono" onclick={() => openTab({ kind: 'baseline', params: { id: baseline?.parentId ?? '' } })}>{shortId(baseline.parentId)}</button>{/if}

@@ -79,7 +79,12 @@ func TestSelfObservationProposesAndDrafts(t *testing.T) {
 	}
 	impact, _ := e.Methodologies.Methodology(ctx, "impact-analysis")
 	e.Methodologies = StaticMethodologies{"impact-analysis": impact, obs.Name: obs}
-	res, err := storeDefinition(ctx, g, base, impact.Methodology)
+	// the definition nodes live in the methodology namespace, not the observed run's (alm)
+	mbase, err := g.CreateBaseline(ctx, "methodology", "mbase", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := storeDefinition(ctx, g, mbase.ID, impact.Methodology)
 	if err != nil {
 		t.Fatalf("definition nodes: %v", err)
 	}

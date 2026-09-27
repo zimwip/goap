@@ -496,6 +496,7 @@ type Baseline struct {
 	Nodes         map[string]int32       `protobuf:"bytes,5,rep,name=nodes,proto3" json:"nodes,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
 	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	Branch        string                 `protobuf:"bytes,7,opt,name=branch,proto3" json:"branch,omitempty"`
+	Namespace     string                 `protobuf:"bytes,8,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -575,6 +576,13 @@ func (x *Baseline) GetCreatedAt() *timestamppb.Timestamp {
 func (x *Baseline) GetBranch() string {
 	if x != nil {
 		return x.Branch
+	}
+	return ""
+}
+
+func (x *Baseline) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
 	}
 	return ""
 }
@@ -1801,7 +1809,9 @@ type CreateBaselineRequest struct {
 	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	Nodes []*NodeRef             `protobuf:"bytes,2,rep,name=nodes,proto3" json:"nodes,omitempty"`
 	// snapshot the latest version of every node
-	AllLatest     bool `protobuf:"varint,3,opt,name=all_latest,json=allLatest,proto3" json:"all_latest,omitempty"`
+	AllLatest bool `protobuf:"varint,3,opt,name=all_latest,json=allLatest,proto3" json:"all_latest,omitempty"`
+	// namespace the baseline snapshots (every node given, or the latest ones, must belong to it)
+	Namespace     string `protobuf:"bytes,4,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1857,6 +1867,13 @@ func (x *CreateBaselineRequest) GetAllLatest() bool {
 	return false
 }
 
+func (x *CreateBaselineRequest) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
+	}
+	return ""
+}
+
 type CreateBaselineResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Baseline      *Baseline              `protobuf:"bytes,1,opt,name=baseline,proto3" json:"baseline,omitempty"`
@@ -1903,6 +1920,7 @@ func (x *CreateBaselineResponse) GetBaseline() *Baseline {
 
 type ListBaselinesRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
+	Namespace     string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1935,6 +1953,13 @@ func (x *ListBaselinesRequest) ProtoReflect() protoreflect.Message {
 // Deprecated: Use ListBaselinesRequest.ProtoReflect.Descriptor instead.
 func (*ListBaselinesRequest) Descriptor() ([]byte, []int) {
 	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *ListBaselinesRequest) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
+	}
+	return ""
 }
 
 type ListBaselinesResponse struct {
@@ -2854,6 +2879,7 @@ type Branch struct {
 	// open | merged | abandoned
 	Status        string                 `protobuf:"bytes,6,opt,name=status,proto3" json:"status,omitempty"`
 	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	Namespace     string                 `protobuf:"bytes,8,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2937,11 +2963,19 @@ func (x *Branch) GetCreatedAt() *timestamppb.Timestamp {
 	return nil
 }
 
+func (x *Branch) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
+	}
+	return ""
+}
+
 type CreateBranchRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	FromBaseline  string                 `protobuf:"bytes,2,opt,name=from_baseline,json=fromBaseline,proto3" json:"from_baseline,omitempty"`
 	Origin        string                 `protobuf:"bytes,3,opt,name=origin,proto3" json:"origin,omitempty"`
+	Namespace     string                 `protobuf:"bytes,4,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2997,6 +3031,13 @@ func (x *CreateBranchRequest) GetOrigin() string {
 	return ""
 }
 
+func (x *CreateBranchRequest) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
+	}
+	return ""
+}
+
 type CreateBranchResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Branch        *Branch                `protobuf:"bytes,1,opt,name=branch,proto3" json:"branch,omitempty"`
@@ -3043,6 +3084,7 @@ func (x *CreateBranchResponse) GetBranch() *Branch {
 
 type ListBranchesRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
+	Namespace     string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3075,6 +3117,13 @@ func (x *ListBranchesRequest) ProtoReflect() protoreflect.Message {
 // Deprecated: Use ListBranchesRequest.ProtoReflect.Descriptor instead.
 func (*ListBranchesRequest) Descriptor() ([]byte, []int) {
 	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{45}
+}
+
+func (x *ListBranchesRequest) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
+	}
+	return ""
 }
 
 type ListBranchesResponse struct {
@@ -3124,6 +3173,7 @@ func (x *ListBranchesResponse) GetBranches() []*Branch {
 type GetBranchRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Namespace     string                 `protobuf:"bytes,2,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3161,6 +3211,13 @@ func (*GetBranchRequest) Descriptor() ([]byte, []int) {
 func (x *GetBranchRequest) GetName() string {
 	if x != nil {
 		return x.Name
+	}
+	return ""
+}
+
+func (x *GetBranchRequest) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
 	}
 	return ""
 }
@@ -3221,6 +3278,7 @@ type SetBranchStatusRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	Status        string                 `protobuf:"bytes,2,opt,name=status,proto3" json:"status,omitempty"`
+	Namespace     string                 `protobuf:"bytes,3,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3265,6 +3323,13 @@ func (x *SetBranchStatusRequest) GetName() string {
 func (x *SetBranchStatusRequest) GetStatus() string {
 	if x != nil {
 		return x.Status
+	}
+	return ""
+}
+
+func (x *SetBranchStatusRequest) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
 	}
 	return ""
 }
@@ -3606,6 +3671,7 @@ type PlanMergeRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	From          string                 `protobuf:"bytes,1,opt,name=from,proto3" json:"from,omitempty"`
 	Into          string                 `protobuf:"bytes,2,opt,name=into,proto3" json:"into,omitempty"`
+	Namespace     string                 `protobuf:"bytes,3,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3650,6 +3716,13 @@ func (x *PlanMergeRequest) GetFrom() string {
 func (x *PlanMergeRequest) GetInto() string {
 	if x != nil {
 		return x.Into
+	}
+	return ""
+}
+
+func (x *PlanMergeRequest) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
 	}
 	return ""
 }
@@ -6858,7 +6931,7 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\x06latest\x18\x02 \x01(\x05R\x06latest\x12%\n" +
 	"\x03out\x18\x03 \x03(\v2\x13.goap.graph.v1.LinkR\x03out\x12#\n" +
 	"\x02in\x18\x04 \x03(\v2\x13.goap.graph.v1.LinkR\x02in\x12\x16\n" +
-	"\x06frozen\x18\x05 \x01(\bR\x06frozen\"\xaf\x02\n" +
+	"\x06frozen\x18\x05 \x01(\bR\x06frozen\"\xcd\x02\n" +
 	"\bBaseline\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1b\n" +
@@ -6867,7 +6940,8 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\x05nodes\x18\x05 \x03(\v2\".goap.graph.v1.Baseline.NodesEntryR\x05nodes\x129\n" +
 	"\n" +
 	"created_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12\x16\n" +
-	"\x06branch\x18\a \x01(\tR\x06branch\x1a8\n" +
+	"\x06branch\x18\a \x01(\tR\x06branch\x12\x1c\n" +
+	"\tnamespace\x18\b \x01(\tR\tnamespace\x1a8\n" +
 	"\n" +
 	"NodesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
@@ -6985,15 +7059,17 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\x02to\x18\x03 \x01(\v2\x16.goap.graph.v1.NodeRefR\x02to\x12-\n" +
 	"\x05props\x18\x04 \x01(\v2\x17.google.protobuf.StructR\x05props\"=\n" +
 	"\x12CreateLinkResponse\x12'\n" +
-	"\x04link\x18\x01 \x01(\v2\x13.goap.graph.v1.LinkR\x04link\"x\n" +
+	"\x04link\x18\x01 \x01(\v2\x13.goap.graph.v1.LinkR\x04link\"\x96\x01\n" +
 	"\x15CreateBaselineRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12,\n" +
 	"\x05nodes\x18\x02 \x03(\v2\x16.goap.graph.v1.NodeRefR\x05nodes\x12\x1d\n" +
 	"\n" +
-	"all_latest\x18\x03 \x01(\bR\tallLatest\"M\n" +
+	"all_latest\x18\x03 \x01(\bR\tallLatest\x12\x1c\n" +
+	"\tnamespace\x18\x04 \x01(\tR\tnamespace\"M\n" +
 	"\x16CreateBaselineResponse\x123\n" +
-	"\bbaseline\x18\x01 \x01(\v2\x17.goap.graph.v1.BaselineR\bbaseline\"\x16\n" +
-	"\x14ListBaselinesRequest\"N\n" +
+	"\bbaseline\x18\x01 \x01(\v2\x17.goap.graph.v1.BaselineR\bbaseline\"4\n" +
+	"\x14ListBaselinesRequest\x12\x1c\n" +
+	"\tnamespace\x18\x01 \x01(\tR\tnamespace\"N\n" +
 	"\x15ListBaselinesResponse\x125\n" +
 	"\tbaselines\x18\x01 \x03(\v2\x17.goap.graph.v1.BaselineR\tbaselines\")\n" +
 	"\x17GetBaselineGraphRequest\x12\x0e\n" +
@@ -7051,7 +7127,7 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\tchange_id\x18\x01 \x01(\tR\bchangeId\x12#\n" +
 	"\rbaseline_name\x18\x02 \x01(\tR\fbaselineName\"J\n" +
 	"\x13ApplyChangeResponse\x123\n" +
-	"\bbaseline\x18\x01 \x01(\v2\x17.goap.graph.v1.BaselineR\bbaseline\"\xd8\x01\n" +
+	"\bbaseline\x18\x01 \x01(\v2\x17.goap.graph.v1.BaselineR\bbaseline\"\xf6\x01\n" +
 	"\x06Branch\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x16\n" +
 	"\x06parent\x18\x02 \x01(\tR\x06parent\x12#\n" +
@@ -7060,24 +7136,29 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\x06origin\x18\x05 \x01(\tR\x06origin\x12\x16\n" +
 	"\x06status\x18\x06 \x01(\tR\x06status\x129\n" +
 	"\n" +
-	"created_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\"f\n" +
+	"created_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12\x1c\n" +
+	"\tnamespace\x18\b \x01(\tR\tnamespace\"\x84\x01\n" +
 	"\x13CreateBranchRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12#\n" +
 	"\rfrom_baseline\x18\x02 \x01(\tR\ffromBaseline\x12\x16\n" +
-	"\x06origin\x18\x03 \x01(\tR\x06origin\"E\n" +
+	"\x06origin\x18\x03 \x01(\tR\x06origin\x12\x1c\n" +
+	"\tnamespace\x18\x04 \x01(\tR\tnamespace\"E\n" +
 	"\x14CreateBranchResponse\x12-\n" +
-	"\x06branch\x18\x01 \x01(\v2\x15.goap.graph.v1.BranchR\x06branch\"\x15\n" +
-	"\x13ListBranchesRequest\"I\n" +
+	"\x06branch\x18\x01 \x01(\v2\x15.goap.graph.v1.BranchR\x06branch\"3\n" +
+	"\x13ListBranchesRequest\x12\x1c\n" +
+	"\tnamespace\x18\x01 \x01(\tR\tnamespace\"I\n" +
 	"\x14ListBranchesResponse\x121\n" +
-	"\bbranches\x18\x01 \x03(\v2\x15.goap.graph.v1.BranchR\bbranches\"&\n" +
+	"\bbranches\x18\x01 \x03(\v2\x15.goap.graph.v1.BranchR\bbranches\"D\n" +
 	"\x10GetBranchRequest\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\"o\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1c\n" +
+	"\tnamespace\x18\x02 \x01(\tR\tnamespace\"o\n" +
 	"\x11GetBranchResponse\x12-\n" +
 	"\x06branch\x18\x01 \x01(\v2\x15.goap.graph.v1.BranchR\x06branch\x12+\n" +
-	"\x04head\x18\x02 \x01(\v2\x17.goap.graph.v1.BaselineR\x04head\"D\n" +
+	"\x04head\x18\x02 \x01(\v2\x17.goap.graph.v1.BaselineR\x04head\"b\n" +
 	"\x16SetBranchStatusRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x16\n" +
-	"\x06status\x18\x02 \x01(\tR\x06status\"\x19\n" +
+	"\x06status\x18\x02 \x01(\tR\x06status\x12\x1c\n" +
+	"\tnamespace\x18\x03 \x01(\tR\tnamespace\"\x19\n" +
 	"\x17SetBranchStatusResponse\")\n" +
 	"\x17ListNodeVersionsRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\"K\n" +
@@ -7105,10 +7186,11 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\tinto_head\x18\x03 \x01(\tR\bintoHead\x12=\n" +
 	"\n" +
 	"candidates\x18\x04 \x03(\v2\x1d.goap.graph.v1.MergeCandidateR\n" +
-	"candidates\":\n" +
+	"candidates\"X\n" +
 	"\x10PlanMergeRequest\x12\x12\n" +
 	"\x04from\x18\x01 \x01(\tR\x04from\x12\x12\n" +
-	"\x04into\x18\x02 \x01(\tR\x04into\"A\n" +
+	"\x04into\x18\x02 \x01(\tR\x04into\x12\x1c\n" +
+	"\tnamespace\x18\x03 \x01(\tR\tnamespace\"A\n" +
 	"\x11PlanMergeResponse\x12,\n" +
 	"\x04plan\x18\x01 \x01(\v2\x18.goap.graph.v1.MergePlanR\x04plan\"O\n" +
 	"\n" +

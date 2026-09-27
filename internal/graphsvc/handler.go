@@ -123,19 +123,19 @@ func (h *Handler) CreateBaseline(ctx context.Context, r *connect.Request[graphv1
 	var b domain.Baseline
 	var err error
 	if r.Msg.AllLatest {
-		b, err = h.Graph.CreateBaselineFromLatest(ctx, r.Msg.Name)
+		b, err = h.Graph.CreateBaselineFromLatest(ctx, r.Msg.Namespace, r.Msg.Name)
 	} else {
 		refs := make([]domain.NodeRef, len(r.Msg.Nodes))
 		for i, n := range r.Msg.Nodes {
 			refs[i] = pbconv.RefFromPB(n)
 		}
-		b, err = h.Graph.CreateBaseline(ctx, r.Msg.Name, refs)
+		b, err = h.Graph.CreateBaseline(ctx, r.Msg.Namespace, r.Msg.Name, refs)
 	}
 	return res(&graphv1.CreateBaselineResponse{Baseline: pbconv.BaselineToPB(b)}, err)
 }
 
-func (h *Handler) ListBaselines(ctx context.Context, _ *connect.Request[graphv1.ListBaselinesRequest]) (*connect.Response[graphv1.ListBaselinesResponse], error) {
-	bs, err := h.Graph.Baselines(ctx)
+func (h *Handler) ListBaselines(ctx context.Context, r *connect.Request[graphv1.ListBaselinesRequest]) (*connect.Response[graphv1.ListBaselinesResponse], error) {
+	bs, err := h.Graph.Baselines(ctx, r.Msg.Namespace)
 	out := &graphv1.ListBaselinesResponse{}
 	for _, b := range bs {
 		out.Baselines = append(out.Baselines, pbconv.BaselineToPB(b))
@@ -351,12 +351,12 @@ func (h *Handler) ApplyChange(ctx context.Context, r *connect.Request[graphv1.Ap
 }
 
 func (h *Handler) CreateBranch(ctx context.Context, r *connect.Request[graphv1.CreateBranchRequest]) (*connect.Response[graphv1.CreateBranchResponse], error) {
-	b, err := h.Graph.CreateBranch(ctx, graph.NewBranch{Name: r.Msg.Name, From: domain.BaselineID(r.Msg.FromBaseline), Origin: r.Msg.Origin})
+	b, err := h.Graph.CreateBranch(ctx, graph.NewBranch{Name: r.Msg.Name, Namespace: r.Msg.Namespace, From: domain.BaselineID(r.Msg.FromBaseline), Origin: r.Msg.Origin})
 	return res(&graphv1.CreateBranchResponse{Branch: pbconv.BranchToPB(b)}, err)
 }
 
-func (h *Handler) ListBranches(ctx context.Context, _ *connect.Request[graphv1.ListBranchesRequest]) (*connect.Response[graphv1.ListBranchesResponse], error) {
-	bs, err := h.Graph.Branches(ctx)
+func (h *Handler) ListBranches(ctx context.Context, r *connect.Request[graphv1.ListBranchesRequest]) (*connect.Response[graphv1.ListBranchesResponse], error) {
+	bs, err := h.Graph.Branches(ctx, r.Msg.Namespace)
 	out := &graphv1.ListBranchesResponse{}
 	for _, b := range bs {
 		out.Branches = append(out.Branches, pbconv.BranchToPB(b))
@@ -365,16 +365,16 @@ func (h *Handler) ListBranches(ctx context.Context, _ *connect.Request[graphv1.L
 }
 
 func (h *Handler) GetBranch(ctx context.Context, r *connect.Request[graphv1.GetBranchRequest]) (*connect.Response[graphv1.GetBranchResponse], error) {
-	b, err := h.Graph.Branch(ctx, r.Msg.Name)
+	b, err := h.Graph.Branch(ctx, r.Msg.Namespace, r.Msg.Name)
 	if err != nil {
 		return nil, rpcerr.ToConnect(err)
 	}
-	head, err := h.Graph.BranchHead(ctx, b.Name)
+	head, err := h.Graph.BranchHead(ctx, r.Msg.Namespace, b.Name)
 	return res(&graphv1.GetBranchResponse{Branch: pbconv.BranchToPB(b), Head: pbconv.BaselineToPB(head)}, err)
 }
 
 func (h *Handler) SetBranchStatus(ctx context.Context, r *connect.Request[graphv1.SetBranchStatusRequest]) (*connect.Response[graphv1.SetBranchStatusResponse], error) {
-	return res(&graphv1.SetBranchStatusResponse{}, h.Graph.SetBranchStatus(ctx, r.Msg.Name, r.Msg.Status))
+	return res(&graphv1.SetBranchStatusResponse{}, h.Graph.SetBranchStatus(ctx, r.Msg.Namespace, r.Msg.Name, r.Msg.Status))
 }
 
 func (h *Handler) ListNodeVersions(ctx context.Context, r *connect.Request[graphv1.ListNodeVersionsRequest]) (*connect.Response[graphv1.ListNodeVersionsResponse], error) {
@@ -383,7 +383,7 @@ func (h *Handler) ListNodeVersions(ctx context.Context, r *connect.Request[graph
 }
 
 func (h *Handler) PlanMerge(ctx context.Context, r *connect.Request[graphv1.PlanMergeRequest]) (*connect.Response[graphv1.PlanMergeResponse], error) {
-	p, err := h.Graph.PlanMerge(ctx, r.Msg.From, r.Msg.Into)
+	p, err := h.Graph.PlanMerge(ctx, r.Msg.Namespace, r.Msg.From, r.Msg.Into)
 	return res(&graphv1.PlanMergeResponse{Plan: pbconv.MergePlanToPB(p)}, err)
 }
 

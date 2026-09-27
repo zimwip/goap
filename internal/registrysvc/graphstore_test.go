@@ -81,11 +81,11 @@ func TestGraphStoreEditsElementsNotDocuments(t *testing.T) {
 		t.Fatalf("only the edited action must move: %d→%d, other %d→%d", a0, version(ak).Version, o0, version(other).Version)
 	}
 	// unchanged content changes nothing
-	head, _ := g.BranchHead(ctx, domain.MainBranch)
+	head, _ := g.BranchHead(ctx, NamespaceMethodology, domain.MainBranch)
 	if err := s.Save(ctx, Record{Methodology: m, Status: StatusDraft, UpdatedAt: now}); err != nil {
 		t.Fatal(err)
 	}
-	if h2, _ := g.BranchHead(ctx, domain.MainBranch); h2.ID != head.ID {
+	if h2, _ := g.BranchHead(ctx, NamespaceMethodology, domain.MainBranch); h2.ID != head.ID {
 		t.Fatal("saving the same definition must not change the graph")
 	}
 	// an element removed and added again is revived, not created twice

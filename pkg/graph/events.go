@@ -80,11 +80,11 @@ func (r *observedRepo) InTx(ctx context.Context, fn func(tx Tx) error) error {
 func (g *Graph) eventsOf(ctx context.Context, tx Tx, ot *observedTx) ([]published, error) {
 	var out []published
 	if len(ot.nodes) > 0 {
-		var ix *typeIndex
-		if head, err := branchHead(ctx, tx, domain.MainBranch); err == nil {
-			if ix, err = g.typesAt(ctx, tx, head.ID); err != nil {
-				return nil, err
-			}
+		// typesAt ignores its baseline argument (the type catalogue is process-global, not
+		// namespace-scoped graph data): no baseline lookup is needed to build it.
+		ix, err := g.typesAt(ctx, tx, "")
+		if err != nil {
+			return nil, err
 		}
 		for _, n := range ot.nodes {
 			ev := domain.NodeEvent{ID: n.ID, Version: n.Version, Branch: domain.BranchOf(n.Branch), Namespace: domain.NamespaceOf(n.Namespace), Key: n.Key,
@@ -167,13 +167,31 @@ func (ix *typeIndex) searchOf(typ string) []domain.SearchProperty {
 	return ix.cat.Search(typ)
 }
 
-// Republish publishes the node event of every node version (all branches) and the head of main as a
-// baseline event, to rebuild an index (ADR 0026). It returns the number of versions published.
+// Republish publishes the node event of every node version (all branches, every namespace) and the
+// head of each namespace's main as a baseline event, to rebuild an index (ADR 0026). It returns the
+// number of versions published.
 func (g *Graph) Republish(ctx context.Context, sink EventSink) (int, error) {
+	var namespaces []string
+	if err := g.repo.InTx(ctx, func(tx Tx) (err error) { namespaces, err = tx.Namespaces(ctx); return }); err != nil {
+		return 0, err
+	}
+	total := 0
+	for _, ns := range namespaces {
+		n, err := g.republishNamespace(ctx, ns, sink)
+		total += n
+		if err != nil {
+			return total, err
+		}
+	}
+	return total, nil
+}
+
+// republishNamespace is the per-namespace core of Republish.
+func (g *Graph) republishNamespace(ctx context.Context, namespace string, sink EventSink) (int, error) {
 	var events []published
 	err := g.repo.InTx(ctx, func(tx Tx) error {
 		ot := &observedTx{Tx: tx}
-		latest, err := tx.LatestNodes(ctx)
+		latest, err := tx.LatestNodes(ctx, namespace, domain.MainBranch)
 		if err != nil {
 			return err
 		}
@@ -184,7 +202,7 @@ func (g *Graph) Republish(ctx context.Context, sink EventSink) (int, error) {
 			}
 			ot.nodes = append(ot.nodes, vs...)
 		}
-		if head, err := branchHead(ctx, tx, domain.MainBranch); err == nil {
+		if head, err := branchHead(ctx, tx, namespace, domain.MainBranch); err == nil {
 			head.ParentID = ""
 			ot.baselines = append(ot.baselines, head)
 		}

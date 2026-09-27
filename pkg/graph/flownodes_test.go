@@ -209,7 +209,7 @@ func testFlowChangeImpactsDiscard(t *testing.T, repo Repo) {
 			}
 		}
 	}
-	if b, err := g.Branch(ctx, flowBranchName(w.flow)); err != nil || b.Status != domain.BranchAbandoned {
+	if b, err := g.Branch(ctx, "", flowBranchName(w.flow)); err != nil || b.Status != domain.BranchAbandoned {
 		t.Fatalf("the flow branch is abandoned: %+v %v", b, err)
 	}
 	// the change goes on as before: REQ-1 at the version step 1 wrote

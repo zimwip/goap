@@ -1,8 +1,9 @@
 <script lang="ts">
   // The graph branch of a flow: chip, competition, and a review of what it changes.
   import { errorMessage, graph, type Flow, type MergePlan } from '../api';
+  import { MAIN_BRANCH } from '../namespace';
 
-  let { flow, changeBranch }: { flow: Flow; changeBranch: string } = $props();
+  let { flow, namespace, changeBranch }: { flow: Flow; namespace: string; changeBranch: string } = $props();
 
   let plan = $state<MergePlan | undefined>();
   let loading = $state(false);
@@ -14,7 +15,7 @@
     loading = true;
     error = '';
     try {
-      plan = (await graph.planMerge(branch, changeBranch || 'main')).plan;
+      plan = (await graph.planMerge(namespace, branch, changeBranch || MAIN_BRANCH)).plan;
     } catch (e) {
       error = errorMessage(e);
     } finally {

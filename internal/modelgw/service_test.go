@@ -50,7 +50,7 @@ func seed(t *testing.T, g *graph.Graph, provs []ProviderRecord, models []ModelEn
 func change(t *testing.T, g *graph.Graph, edits ...graph.NodeEdit) {
 	t.Helper()
 	ctx := context.Background()
-	head, err := g.BranchHead(ctx, domain.MainBranch)
+	head, err := g.BranchHead(ctx, llmcfg.NamespacePlatform, domain.MainBranch)
 	if err != nil {
 		t.Fatal(err)
 	}

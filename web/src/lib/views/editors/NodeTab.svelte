@@ -28,6 +28,7 @@
   import { provideActions, notify } from '../../shell/workbench.svelte';
   import { changes, refreshChanges } from '../../stores/catalog.svelte';
   import { loadGraph, loadHead, type GraphIndex } from '../../graphIndex';
+  import { namespaceOf } from '../../namespace';
   import { declaredProperties, isReopen, lifecycleResolver, lifecycleRows, loadPosts, writeNodeInChange, type LifecycleRow, type PostVersions } from '../../lifecycle';
 
   let { tab }: { tab: Tab } = $props();
@@ -66,9 +67,12 @@
     loading = true;
     error = '';
     try {
-      const [h, v] = await Promise.all([loadHead(signal), graph.listNodeVersions(id, signal)]);
-      head = h;
+      // the node's namespace is only known once its versions come back, so loadHead
+      // (namespace-scoped) has to follow rather than run in parallel with it.
+      const v = await graph.listNodeVersions(id, signal);
       versions = (v.versions ?? []).slice().sort((a, b) => (a.version ?? 0) - (b.version ?? 0));
+      const namespace = namespaceOf(versions.at(-1)?.namespace);
+      head = await loadHead(namespace, signal);
       if (!changes.loaded) void refreshChanges();
     } catch (e) {
       if (!signal?.aborted) error = errorMessage(e);

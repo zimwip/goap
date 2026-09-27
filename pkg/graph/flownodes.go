@@ -169,7 +169,7 @@ func (v *flowNodes) find(ctx context.Context, id domain.ChangeImpactID) (domain.
 // ensureFlowBranch creates the graph branch of a flow on its first write.
 func (g *Graph) ensureFlowBranch(ctx context.Context, tx Tx, c domain.Change, own domain.Branch, flow string) (string, error) {
 	name := flowBranchName(flow)
-	if _, err := tx.Branch(ctx, name); err == nil {
+	if _, err := tx.Branch(ctx, c.Namespace, name); err == nil {
 		return name, nil
 	} else if !errors.Is(err, ErrNotFound) {
 		return "", err
@@ -178,15 +178,15 @@ func (g *Graph) ensureFlowBranch(ctx context.Context, tx Tx, c domain.Change, ow
 	parent := own.Name
 	if f.Parent != "" {
 		parent = flowBranchName(f.Parent)
-		if _, err := tx.Branch(ctx, parent); err != nil {
+		if _, err := tx.Branch(ctx, c.Namespace, parent); err != nil {
 			parent = own.Name // the parent flow wrote nothing: this one forks from the change branch
 		}
 	}
-	head, err := branchHead(ctx, tx, own.Name)
+	head, err := branchHead(ctx, tx, c.Namespace, own.Name)
 	if err != nil {
 		return "", err
 	}
-	return name, tx.PutBranch(ctx, domain.Branch{Name: name, Parent: parent, ForkBaseline: head.ID, Head: head.ID,
+	return name, tx.PutBranch(ctx, domain.Branch{Name: name, Namespace: c.Namespace, Parent: parent, ForkBaseline: head.ID, Head: head.ID,
 		Origin: "flow:" + string(c.ID) + ":" + flow, Status: domain.BranchOpen, CreatedAt: g.now()})
 }
 
@@ -319,7 +319,7 @@ func (g *Graph) adoptNodes(ctx context.Context, tx Tx, c domain.Change, f domain
 			}
 		}
 	}
-	if b, err := tx.Branch(ctx, flowBranch); err == nil && wrote {
+	if b, err := tx.Branch(ctx, c.Namespace, flowBranch); err == nil && wrote {
 		b.Status = domain.BranchMerged
 		if err := tx.PutBranch(ctx, b); err != nil {
 			return err
@@ -403,7 +403,7 @@ func (g *Graph) discardNodes(ctx context.Context, tx Tx, c domain.Change, f doma
 		}
 	}
 	for id := range gone {
-		if b, err := tx.Branch(ctx, flowBranchName(id)); err == nil && b.Status == domain.BranchOpen {
+		if b, err := tx.Branch(ctx, c.Namespace, flowBranchName(id)); err == nil && b.Status == domain.BranchOpen {
 			b.Status = domain.BranchAbandoned
 			if err := tx.PutBranch(ctx, b); err != nil {
 				return err

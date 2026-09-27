@@ -57,7 +57,7 @@
     loading = true;
     try {
       if (!tools.loaded) await refreshTools();
-      const [h, e] = await Promise.all([headGraph(), mcp.listEffective(key)]);
+      const [h, e] = await Promise.all([headGraph(NS), mcp.listEffective(key)]);
       head = h;
       chain = e.chain ?? [];
       effective = e.mcps ?? [];
@@ -170,7 +170,7 @@
     try {
       // blocking problems (unknown MCP or algorithm, parameters that do not fit) come back as errors
       fWarnings = (await mcp.checkAdapter(a)).warnings ?? [];
-      const h = await headGraph();
+      const h = await headGraph(NS);
       const akey = `ADP:${key}/${a.mcp}`;
       const existing = findNode(h, NS, ADAPTER_TYPE, akey);
       const props: Struct = { mcp: a.mcp ?? '', adapter: a.adapter ?? '', params: a.params ?? {} };
@@ -190,7 +190,7 @@
   async function detach(m: string) {
     if (!confirm(`Detach ${m} from ${key}? The unit falls back on its ancestors' adapter, if any.`)) return;
     try {
-      const h = await headGraph();
+      const h = await headGraph(NS);
       const existing = findNode(h, NS, ADAPTER_TYPE, `ADP:${key}/${m}`);
       if (!existing) throw new Error('adapter node not found');
       await applyOnMain(NS, `Detach ${m} from ${key}`, `Delete the adapter of ${m} for ${key}`, h.baselineId, [deleteNodeItem(existing)]);

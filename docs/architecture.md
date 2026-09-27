@@ -53,7 +53,7 @@ of a versioned knowledge graph, whose other axis, the **domain axis**, describes
 | **Node** | Typed content element. Its type is a qualified reference `<namespace>@<NodeType>` (`alm@Requirement`, [ADR 0012](adr/0012-node-types.md)). Stable identity `NodeID` + readable `Key` (`REQ-12`). |
 | **Version** | Each modification creates a new immutable version `NodeID@vN`. A version can be a *tombstone* (deletion). |
 | **Link** | Typed relationship **from version to version**: `REQ-12@v3 ─satisfies→ NEED-4@v2`. A link does not automatically "follow" new versions: if `NEED-4` moves to v3, the link becomes **suspect** — this is the model's native impact signal. |
-| **Baseline** | Coherent set `{NodeID → Version}`: a "commit" of the graph. A baseline's links are those whose two endpoints are both in the baseline. Every modification starts from a reference baseline and produces a resulting baseline. |
+| **Baseline** | Coherent set `{NodeID → Version}`, scoped to one namespace (every node in it belongs to that namespace): a "commit" of the graph. A baseline's links are those whose two endpoints are both in the baseline. Every modification starts from a reference baseline of its own namespace and produces a resulting baseline of that same namespace. |
 
 **Namespaces** ([ADR 0015](adr/0015-namespaces.md)): every node lives in a namespace, and a namespace is the content of
 one domain ([ADR 0013](adr/0013-domains.md)): `alm` (delivery), `organisation`, `platform` (MCPs, adapter definitions,
@@ -62,7 +62,14 @@ model configuration), and the meta-domain `methodology` that holds the definitio
 frozen**: the platform reads them in its own way, so they are initialised at startup from `domains/builtin/`, change
 with the code and are read-only in the domain editor; a new namespace is a new domain published from the domain editor.
 Domains themselves are not graph data: the registry keeps them in its database. Keys are unique per namespace. A change acts on one namespace: it can
-only create and modify nodes of that namespace, but may link to nodes of another one.
+only create and modify nodes of that namespace, but may link to nodes of another one. So that an action or agent's
+default queries (a prompt's `.Baseline.Nodes`, a script's `Host.Node`/`Nodes`/`Links`, a human task's node picker)
+are bound to the change's own declared namespace rather than exposing every namespace at once, baselines and
+branches are namespace-scoped too: a baseline only ever holds nodes of one namespace, and a branch's identity is
+`(namespace, name)` — "main" is really "main of namespace X", and two namespaces may each have their own branch of
+the same name. Cross-namespace capabilities (ownership links, adapter/MCP resolution, ABAC, the model gateway, the
+methodology registry) are unaffected: they read a specific namespace's own head directly (e.g. `BranchHead(ns,
+"main")`) instead of relying on one shared baseline that happened to hold every namespace's nodes together.
 The organisation is a hierarchy of units in its own namespace (`organisation`); nodes reference their owner
 unit across namespaces, and a change is split into sub-changes along unit boundaries
 ([ADR 0016](adr/0016-organisation-and-sub-changes.md)).
@@ -88,9 +95,9 @@ REQ-1  v1(main) ── v3(main, revise) ───────────── 
           └────── v2(opt-a, derive) ─────────────────┘
 ```
 
-- A **branch** (`CreateBranch`) starts from a baseline (`forkBaseline`) and advances through the changes applied
-  on it (`Change.branch`); its **head** (`head`) is the latest baseline produced. `main` exists
-  implicitly.
+- A **branch** (`CreateBranch`) belongs to one namespace (`Branch.namespace`) and starts from a baseline of that
+  same namespace (`forkBaseline`), advancing through the changes applied on it (`Change.branch`); its **head**
+  (`head`) is the latest baseline produced. `main` exists implicitly, per namespace.
 - "Latest version" is read **per branch** (`latest(node, branch)`): applying (`apply`) a change detects a
   conflict when a node has advanced **on the change's branch** since the base version.
 - **Branch merge** (`PlanMerge` / `MergeBranch`): for each node modified on the source branch since
@@ -284,8 +291,9 @@ Default policies (compiled in `pkg/authz`; seeded as `Policy` nodes at the first
   `Policy` node and a caller a `User` node (profile, roles, `member_of` a unit) of the `organisation` domain, changed
   through changes like any node and edited in the frontend's "Access" screen. A rule is validated (compilation + trial
   evaluation) when read.
-- Every service builds its `authz.Authorizer` in process (`pkg/access`) from a snapshot of the head of `main` (the graph
-  service over its own graph, the others through a graph client), rebuilt when the head moves (looked at once per second).
+- Every service builds its `authz.Authorizer` in process (`pkg/access`) from a snapshot of the head of the
+  `organisation` namespace's `main` (the graph service over its own graph, the others through a graph client),
+  rebuilt when that head moves (looked at once per second).
   The roles of the `User` node of the subject are added to those of its token, and its unit is its organisation when the
   token names none (the gateway does the same before propagating `X-Goap-*`; `GET /api/whoami` returns the result).
 - Lock-out protection: the administrator rule is a compiled-in **floor** checked before the policies, so no stored
@@ -483,7 +491,7 @@ actions when a transition is applied. Reference: [docs/dsl.md](dsl.md), IDE sect
 | `goap.process.<id>.started` / `.step` / `.waiting` / `.completed` / `.failed` | engine | `ProcessEvent` |
 | `goap.change.<id>.item_added` / `.applied` | graph | `ChangeEvent` |
 | `goap.node.<ns>.<type>.<id>.written` | graph | `NodeEvent`: one node version written (any branch), with its searchable text and facets resolved from the `search` declaration of its node type |
-| `goap.baseline.<branch>.advanced` | graph | `BaselineEvent`: diff with the parent baseline (the `main` facet of the index follows the head of main) |
+| `goap.baseline.<branch>.advanced` | graph | `BaselineEvent`: diff with the parent baseline (the `main` facet of the index follows the head of each namespace's own main) |
 | `goap.registry.methodology.published` | registry | name + version |
 | `goap.engine.work` (work queue) 🟡 | engine | process tick to execute (clustering) |
 
@@ -511,8 +519,9 @@ an interface, replaceable with the PostgreSQL implementation without changing th
 node(id uuid, key text, type text, latest int)
 node_version(node_id, version, props jsonb, deleted bool, change_id, created_at)  -- PK (node_id, version)
 link(id uuid, type, from_id, from_version, to_id, to_version, props jsonb, change_id)
-baseline(id uuid, name, parent_id, change_id, created_at)
+baseline(id uuid, name, namespace, branch, parent_id, change_id, created_at)
 baseline_entry(baseline_id, node_id, version)
+branch(namespace, name, parent, fork_baseline, head_baseline, origin, status, created_at)  -- PK (namespace, name)
 change(id uuid, title, intent, status, baseline_id, goal, methodology, result_baseline_id, data jsonb)
 change_item(id uuid, change_id, kind, type, status, target_id, target_version, payload jsonb,
             produced_by, derived_from uuid[], created_at)
@@ -665,8 +674,9 @@ under the parameter name, and that the code can never read. Runs are bounded (30
   `GOAP_MCP_URL`, `GOAP_CONNECTOR_URL` (its address as the hub reaches it) and, when set on both sides,
   the shared `GOAP_CONNECTOR_TOKEN`. `internal/connectors/localfs` is the reference implementation.
 - **The hub** (`cmd/mcp`, `internal/mcpsvc`) keeps only the registry of connectors (table `connector`, PostgreSQL and
-  SQLite). MCPs, adapter definitions, adapter instances and the unit hierarchy are read from the graph (snapshot of the head
-  of `main`, rebuilt when it moves). It checks the arguments against
+  SQLite). MCPs and adapter definitions (`platform` namespace) and adapter instances and the unit hierarchy
+  (`organisation` namespace) are read from the graph — a snapshot of each namespace's own head of `main`, combined,
+  rebuilt when either moves. It checks the arguments against
   the tool's schema, runs the adapter, resolves the secret parameters, passes the connector only the secrets it
   declares, and returns the result. `CheckAdapter` validates an instance before it is saved (unknown MCP, definition
   missing or of another MCP, missing or unknown parameter: error; unregistered connector, secret the connector needs: warnings);
@@ -873,8 +883,8 @@ docs/                        architecture, ADRs
 Administrators (`admin` on the `platform` resource, Casbin) open **Platform settings** from the gear in the IDE
 status bar. The gateway configuration is **graph data** ([ADR 0021](adr/0021-model-configuration-in-the-graph.md)):
 `LlmProvider`, `LlmModel` and `LlmAlias` nodes of the `platform` namespace (`pkg/llmcfg`, the built-in `platform` domain), changed
-through changes like any node (the screen writes them with `web/src/lib/llmEdit.ts`). The gateway reads a snapshot of the head
-of `main` and rebuilds its router when it moves. `GOAP_MODELS_CONFIG` / env keys only seed a graph that holds no provider
+through changes like any node (the screen writes them with `web/src/lib/llmEdit.ts`). The gateway reads a snapshot of the
+`platform` namespace's head of `main` and rebuilds its router when it moves. `GOAP_MODELS_CONFIG` / env keys only seed a graph that holds no provider
 (`graphsvc.SeedModels`). The `modelgw` database keeps only the token usage (`llm_usage`, keyed by the key of the model node).
 
 - **Providers** are pluggable: a `Protocol` (`anthropic`, `openai`, `gemini`, `fake`; `internal/modelgw/protocols.go`)

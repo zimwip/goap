@@ -37,7 +37,7 @@ func newFixture(t *testing.T, repo Repo) fixture {
 	must(err)
 	_, err = g.Link(ctx, "verifies", f.test.Ref(), f.req.Ref(), nil)
 	must(err)
-	f.base, err = g.CreateBaseline(ctx, "B1", []domain.NodeRef{f.need.Ref(), f.req.Ref(), f.test.Ref()})
+	f.base, err = g.CreateBaseline(ctx, "", "B1", []domain.NodeRef{f.need.Ref(), f.req.Ref(), f.test.Ref()})
 	must(err)
 	return f
 }

@@ -22,6 +22,9 @@
   import { headGraph } from '../../graphEdit';
   import { focusRequests } from '../../shell/workbench.svelte';
   import { ORG_UNIT_TYPE } from '../../orgTypes';
+  import { DEFAULT_NAMESPACE } from '../../namespace';
+
+  const NS_ORGANISATION = 'organisation';
 
   let methodology = $state('');
   /** "methodology::agent" */
@@ -37,14 +40,16 @@
   let textarea = $state<HTMLTextAreaElement>();
 
   $effect(() => {
-    void headGraph()
-      .then((h) => (units = h.nodes.filter((n) => n.namespace === 'organisation' && n.type === ORG_UNIT_TYPE).map((n) => n.key ?? '').sort()))
+    void headGraph(NS_ORGANISATION)
+      .then((h) => (units = h.nodes.filter((n) => n.type === ORG_UNIT_TYPE).map((n) => n.key ?? '').sort()))
       .catch(() => (units = []));
   });
 
   $effect(() => {
     if (!methodologies.loaded) void refreshMethodologies();
-    if (!baselines.loaded) void refreshBaselines();
+    // the methodology to test isn't chosen yet at this point, so its namespace is unknown;
+    // default namespace is a known limitation here (see plan notes).
+    if (!baselines.loaded) void refreshBaselines(DEFAULT_NAMESPACE);
   });
 
   $effect(() => {

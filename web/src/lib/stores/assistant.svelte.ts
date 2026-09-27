@@ -6,6 +6,7 @@ import { engine, registry, errorMessage, type Agent, type Methodology } from '..
 import { loadRaw, save } from '../shell/storage';
 import { ingestProcess } from './live.svelte';
 import { baselines, refreshBaselines, latestPublished, methodologies, refreshMethodologies } from './catalog.svelte';
+import { DEFAULT_NAMESPACE } from '../namespace';
 
 export interface Thread {
   id: string;
@@ -129,8 +130,10 @@ export function goalLabel(methodology: string | undefined, goal: string | undefi
 
 // --- sending -----------------------------------------------------------------------------------
 
+// The assistant identifies its methodology dynamically (no fixed namespace known ahead of
+// the request), so it falls back to the default namespace; known limitation.
 export async function latestBaselineId(): Promise<string> {
-  if (!baselines.loaded) await refreshBaselines();
+  if (!baselines.loaded) await refreshBaselines(DEFAULT_NAMESPACE);
   const sorted = [...baselines.items].sort((a, b) => (a.createdAt ?? '').localeCompare(b.createdAt ?? ''));
   return sorted[sorted.length - 1]?.id ?? '';
 }
