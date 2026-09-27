@@ -66,10 +66,10 @@ var ErrUnknown = errors.New("unknown type")
 // ErrInvalid marks a node or a link that breaks the types of the catalogue.
 var ErrInvalid = errors.New("invalid")
 
-// Builtins returns the built-in domains (methodology, domain, organisation).
+// Builtins returns the built-in domains (methodology, domain, organisation, platform).
 func Builtins() []*methodology.Domain { return methodology.BuiltinDomains() }
 
-// IsFrozen reports a built-in domain that only changes with the code (methodology, organisation).
+// IsFrozen reports a built-in domain that only changes with the code (methodology, organisation, platform).
 func IsFrozen(ns string) bool { return methodology.IsFrozenDomain(ns) }
 
 // Builtin is the catalogue of the built-in domains alone: what a service knows before it has loaded the domains.

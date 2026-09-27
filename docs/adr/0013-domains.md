@@ -18,7 +18,7 @@ own lifecycle rather than with the methodologies.
    `organisation`; ADR 0015), and the prefix of the references to its types (ADR 0012). **Adding a namespace is
    creating and publishing a domain** in the domain editor: its name (lowercase letters, digits, `-`, `_`) becomes the
    namespace, and methodologies can target it. The domains shipped with the code (ADR 0012 §4) are shown in
-   the domain editor: `methodology` and `organisation` are frozen (initialised at startup, changed with the code);
+   the domain editor: `methodology`, `organisation` and `platform` are frozen (initialised at startup, changed with the code);
    `domain` starts from its shipped version and evolves in the registry.
 3. **A methodology names its target namespace, not a domain.** `namespace: alm` is the namespace its changes act on
    (ADR 0015 §2), hence the domain whose nodes it creates and modifies; it replaces `domainRef`, and there is no

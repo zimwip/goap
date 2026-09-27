@@ -79,7 +79,8 @@ func main() {
 			platform.Fatal(log, "subscribe", err)
 		}
 	}
-	need := []string{"platform"}
+	// the built-in domains (organisation, platform) are always there; the demo seed needs alm
+	var need []string
 	demo := platform.Env("GOAP_GRAPH_SEED", "") == "demo"
 	if demo {
 		need = append(need, "alm")

@@ -419,9 +419,9 @@ message Domain {
   google.protobuf.Timestamp updated_at = 8;
   google.protobuf.Timestamp published_at = 9;
   string updated_by = 10;
-  // the version shipped with the platform (methodology, domain, organisation): published, read only
+  // the version shipped with the platform (methodology, domain, organisation, platform): published, read only
   bool builtin = 14;
-  // a built-in domain that only changes with the code (methodology, organisation): no new version
+  // a built-in domain that only changes with the code (methodology, organisation, platform): no new version
   bool frozen = 15;
 }
 
