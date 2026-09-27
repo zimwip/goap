@@ -1,5 +1,5 @@
 // The type catalogue in force (ADR 0012): the resolved node and link types of the published domains and of the
-// built-in meta-domains, served by the registry. A type is referenced as "<namespace>@<name>". Loaded once, reloaded
+// built-in domains, served by the registry. A type is referenced as "<namespace>@<name>". Loaded once, reloaded
 // after a domain is published from the IDE.
 import { registry, type LinkTypeInfo, type Lifecycle, type TypeInfo } from '../api';
 
@@ -64,7 +64,7 @@ export class TypeCatalog {
       .sort();
   }
 
-  /** Namespaces of the published domains and of the meta-domains (the targets a methodology can name). */
+  /** Namespaces of the published and built-in domains (the targets a methodology can name). */
   namespaces(): string[] {
     const ns = new Set(Object.keys(this.domains));
     for (const r of this.types.keys()) ns.add(splitType(r).namespace);

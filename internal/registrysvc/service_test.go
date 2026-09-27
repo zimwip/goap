@@ -12,10 +12,19 @@ import (
 	"github.com/zimwip/goap/pkg/methodology"
 )
 
+// graphWithDomains is the store of a registry on a graph: the methodologies in the graph, the domains in a DomainStore
+// (the Service finds it through the Store).
+type graphWithDomains struct {
+	*GraphStore
+	DomainStore
+}
+
 func stores(t *testing.T) map[string]func(t *testing.T) Store {
 	return map[string]func(t *testing.T) Store{
 		"memory": func(*testing.T) Store { return NewMemoryStore() },
-		"graph":  func(*testing.T) Store { return NewGraphStore(graph.New(graph.NewMemory())) },
+		"graph": func(*testing.T) Store {
+			return graphWithDomains{NewGraphStore(graph.New(graph.NewMemory())), NewMemoryStore()}
+		},
 	}
 }
 

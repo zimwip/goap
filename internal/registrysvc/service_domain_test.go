@@ -13,6 +13,7 @@ import (
 	registryv1 "github.com/zimwip/goap/gen/goap/registry/v1"
 	"github.com/zimwip/goap/pkg/algo"
 	"github.com/zimwip/goap/pkg/authz"
+	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/methodology"
 )
 
@@ -33,10 +34,10 @@ func refMeth(name string) methodology.Methodology {
 }
 
 func TestDomainLifecycle(t *testing.T) {
-	for name, mk := range stores(t) {
+	for name, mk := range domainStores(t) {
 		t.Run(name, func(t *testing.T) {
 			enf, _ := authz.NewCasbin(nil)
-			s := &Service{Store: mk(t), Authz: enf}
+			s := &Service{Store: NewGraphStore(graph.New(graph.NewMemory())), DomainStore: mk(t), Authz: enf}
 			ctx := as("methodologist")
 
 			if _, _, err := s.SaveDomain(as("contributor"), almDomain("1")); !errors.Is(err, authz.ErrForbidden) {
@@ -130,7 +131,7 @@ func TestDomainLifecycle(t *testing.T) {
 				}
 				return r.Builtin
 			})
-			if len(stored) != 1 || stored[0].Domain.Version != "3" || !slices.Equal(builtin, []string{"methodology", "domain", "organisation", "platform"}) {
+			if len(stored) != 1 || stored[0].Domain.Version != "3" || !slices.Equal(builtin, []string{"methodology", "organisation", "platform"}) {
 				t.Fatalf("latest: %v %+v", builtin, stored)
 			}
 		})
@@ -161,7 +162,7 @@ func TestMethodologyNamespaceAndTypes(t *testing.T) {
 		if _, err := s.CreateDomainVersion(ctx, name, "", "9"); !errors.Is(err, ErrImmutable) {
 			t.Fatalf("no new version of the frozen domain %s: %v", name, err)
 		}
-		if r, err := s.GetDomain(ctx, name, ""); err != nil || !r.Builtin || !r.Frozen || r.Status != StatusPublished {
+		if r, err := s.GetDomain(ctx, name, ""); err != nil || !r.Builtin || r.Status != StatusPublished {
 			t.Fatalf("the built-in domain %s is readable: %+v %v", name, r, err)
 		}
 	}
@@ -381,46 +382,5 @@ func TestListTypes(t *testing.T) {
 	}
 	if !found {
 		t.Fatal("link types are listed with their ends")
-	}
-}
-
-// The domain meta-domain starts from the version shipped with the platform and evolves in the registry, keeping what
-// the platform writes with it.
-func TestDomainMetaDomainEvolves(t *testing.T) {
-	enf, _ := authz.NewCasbin(nil)
-	s := &Service{Store: NewMemoryStore(), Authz: enf}
-	ctx := as("methodologist")
-	shipped := methodology.BuiltinDomain("domain")
-	if r, err := s.GetDomain(ctx, "domain", ""); err != nil || !r.Builtin || r.Frozen || r.Domain.Version != shipped.Version {
-		t.Fatalf("the shipped version is in force: %+v %v", r, err)
-	}
-	if _, _, err := s.SaveDomain(ctx, *shipped); !errors.Is(err, ErrImmutable) {
-		t.Fatalf("the shipped version is read only: %v", err)
-	}
-	if err := s.DeleteDomain(ctx, "domain", shipped.Version); !errors.Is(err, ErrImmutable) {
-		t.Fatalf("the shipped version cannot be archived: %v", err)
-	}
-	r, err := s.CreateDomainVersion(ctx, "domain", shipped.Version, "1.1.0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	d := r.Domain
-	d.NodeTypes = append(slices.Clone(d.NodeTypes[1:]), methodology.NodeType{Name: "Glossary", Properties: []string{"term"}})
-	if _, issues, err := s.SaveDomain(ctx, d); err != nil || !strings.Contains(issues.Error(), "node type DomainVersion is used by the platform") {
-		t.Fatalf("a version keeps the types the platform writes: %v %v", issues, err)
-	}
-	d.NodeTypes = append(slices.Clone(shipped.NodeTypes), methodology.NodeType{Name: "Glossary", Properties: []string{"term"}})
-	if _, issues, err := s.SaveDomain(ctx, d); err != nil || len(issues) > 0 {
-		t.Fatalf("a version extends the shipped one: %v %v", issues, err)
-	}
-	if _, err := s.PublishDomain(ctx, "domain", "1.1.0"); err != nil {
-		t.Fatal(err)
-	}
-	cat, err := s.Types(ctx)
-	if err != nil || !cat.HasNodeType("domain@Glossary") || !cat.HasNodeType("domain@NodeType") || cat.Domains()["domain"] != "1.1.0" {
-		t.Fatalf("the published version is in force: %v", err)
-	}
-	if r, _ := s.GetDomain(ctx, "domain", ""); r.Builtin || r.Domain.Version != "1.1.0" {
-		t.Fatalf("latest published: %+v", r)
 	}
 }

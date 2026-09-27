@@ -22,7 +22,7 @@ the intent without any rule. Compared with plm-core, aifact and ailm, the missin
    unique states, known targets, an editable and a non-editable state, every editable state can reach a
    non-editable one, guards compile, referenced names exist). Types without a lifecycle behave as
    before. `changeControlled: false` opts a type out of change control (it cannot have a lifecycle).
-   Stored as `domain@Lifecycle` definition nodes of the domain version (ADR 0023).
+   Stored with the domain version in the registry's database (ADR 0023).
 2. **State lives on the node version** (`node_version.state`), so a baseline reproduces the states.
    The type catalogue (ADR 0012 §2, the graph's copy of the registry's model) resolves the lifecycle of each type,
    with `document` and `changeControlled`; a change is judged by the catalogue in force when it is checked.
