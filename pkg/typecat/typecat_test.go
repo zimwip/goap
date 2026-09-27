@@ -46,9 +46,9 @@ func TestTypeRef(t *testing.T) {
 	}
 }
 
-func TestMetaDomainsAreAlwaysThere(t *testing.T) {
+func TestBuiltinDomainsAreAlwaysThere(t *testing.T) {
 	c := Builtin()
-	for _, ref := range []string{"methodology@Agent", "methodology@MethodologyVersion", "domain@NodeType", "domain@DomainVersion"} {
+	for _, ref := range []string{"methodology@Agent", "methodology@MethodologyVersion", "domain@NodeType", "domain@DomainVersion", "organisation@OrgUnit", "organisation@Policy"} {
 		if _, ok := c.Type(ref); !ok {
 			t.Fatalf("%s is built in", ref)
 		}
@@ -59,13 +59,15 @@ func TestMetaDomainsAreAlwaysThere(t *testing.T) {
 	if err := c.CheckLink("methodology@defines", "methodology@MethodologyVersion", "methodology@Agent"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := New(parse(t, "name: domain\nversion: 1.0.0\nnodeTypes: [X]\n")); !errors.Is(err, ErrInvalid) {
-		t.Fatalf("a domain cannot take the name of a meta-domain: %v", err)
+	for _, name := range []string{"domain", "organisation"} {
+		if _, err := New(parse(t, "name: "+name+"\nversion: 1.0.0\nnodeTypes: [X]\n")); !errors.Is(err, ErrInvalid) {
+			t.Fatalf("a domain cannot take the name of a built-in domain: %v", err)
+		}
 	}
 }
 
 func TestRepositoryDomains(t *testing.T) {
-	c, err := New(fromFile(t, "alm"), fromFile(t, "organisation"), fromFile(t, "platform"))
+	c, err := New(fromFile(t, "alm"), fromFile(t, "platform"))
 	if err != nil {
 		t.Fatal(err)
 	}

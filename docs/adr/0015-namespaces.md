@@ -12,7 +12,9 @@ delivery node owned by an organisation unit).
    **A namespace is the content of one domain** (ADR 0013): its name is the domain's, and it is the prefix of the
    type of its nodes (`alm@Requirement` lives in `alm`, ADR 0012). Namespaces in use: `alm` (delivery),
    `organisation` (units, adapters, users, policies), `platform` (MCPs, adapter definitions, model configuration),
-   and the meta-domains `methodology` and `domain` (the definitions, ADR 0023). There is no default namespace.
+   and the meta-domains `methodology` and `domain` (the definitions, ADR 0023); `organisation`, `methodology` and
+   `domain` are built in and frozen (ADR 0012 §4), the others are domains published from the domain editor, and a new
+   namespace is a new domain (ADR 0013). There is no default namespace.
 2. A **change** has a namespace (`change.namespace`). It may create nodes in that namespace only and modify (write,
    transition, merge, add outgoing links from) only nodes of that namespace; the change impacts enforce it when a
    version is written (ADR 0024).

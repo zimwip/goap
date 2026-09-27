@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -119,8 +120,18 @@ func TestDomainLifecycle(t *testing.T) {
 				t.Fatal(err)
 			}
 			list, err := s.DomainVersions(ctx, false)
-			if err != nil || len(list) != 1 || list[0].Domain.Version != "3" {
-				t.Fatalf("latest: %+v %v", list, err)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var builtin []string
+			stored := slices.DeleteFunc(list, func(r DomainRecord) bool {
+				if r.Builtin {
+					builtin = append(builtin, r.Domain.Name)
+				}
+				return r.Builtin
+			})
+			if len(stored) != 1 || stored[0].Domain.Version != "3" || !slices.Equal(builtin, []string{"methodology", "domain", "organisation"}) {
+				t.Fatalf("latest: %v %+v", builtin, stored)
 			}
 		})
 	}
@@ -143,8 +154,16 @@ func TestMethodologyNamespaceAndTypes(t *testing.T) {
 	if _, issues, _ := s.Save(ctx, m); len(issues) == 0 || issues[0].Path != "namespace" {
 		t.Fatalf("a methodology names its target namespace: %v", issues)
 	}
-	if _, issues, _ := s.SaveDomain(ctx, methodology.Domain{Name: "domain", Version: "1", Schema: methodology.Schema{NodeTypes: []methodology.NodeType{{Name: "X"}}}}); len(issues) == 0 {
-		t.Fatal("a domain cannot take the name of a meta-domain")
+	for _, name := range []string{"domain", "organisation"} {
+		if _, _, err := s.SaveDomain(ctx, methodology.Domain{Name: name, Version: "9", Schema: methodology.Schema{NodeTypes: []methodology.NodeType{{Name: "X"}}}}); !errors.Is(err, ErrImmutable) {
+			t.Fatalf("the built-in domain %s is frozen: %v", name, err)
+		}
+		if r, err := s.GetDomain(ctx, name, ""); err != nil || !r.Builtin || r.Status != StatusPublished {
+			t.Fatalf("the built-in domain %s is readable: %+v %v", name, r, err)
+		}
+	}
+	if err := s.DeleteDomain(ctx, "organisation", ""); !errors.Is(err, ErrImmutable) {
+		t.Fatalf("a built-in domain cannot be archived: %v", err)
 	}
 	if _, issues, _ := s.SaveDomain(ctx, methodology.Domain{Name: "ext", Version: "1", Schema: methodology.Schema{NodeTypes: []methodology.NodeType{{Name: "X", Extends: "alm@Nope"}}}}); len(issues) == 0 {
 		t.Fatal("a reference to an unknown type of another domain is reported")

@@ -80,13 +80,13 @@
 
   {#if domains.error}<div class="alert small">{domains.error}</div>{/if}
   {#if domains.loaded && !domains.items.length && !domains.error}
-    <p class="empty pad">No domains. Create one: methodologies reference it for their node and link types.</p>
+    <p class="empty pad">No domains. Create one: a domain is a namespace, with its node and link types; methodologies act on it.</p>
   {/if}
 
   <div role="tree" aria-label="Domains">
     {#each groups as g (g.name)}
       {@const gk = `dm:${g.name}`}
-      <TreeRow icon="graph" label={g.name} expanded={isOpen(gk, true)} title={g.description || g.name} ontoggle={() => toggle(gk, true)} />
+      <TreeRow icon="graph" label={g.name} detail={g.builtin ? 'built-in' : ''} expanded={isOpen(gk, true)} title={g.builtin ? `${g.name}: built into the platform (frozen)` : g.description || g.name} ontoggle={() => toggle(gk, true)} />
       {#if isOpen(gk, true)}
         {#each g.versions as v (v.version)}
           {@const k = vkey(v)}

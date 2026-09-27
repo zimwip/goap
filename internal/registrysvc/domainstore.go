@@ -18,6 +18,8 @@ type DomainRecord struct {
 	UpdatedAt   time.Time
 	PublishedAt time.Time
 	UpdatedBy   string
+	// Builtin marks a domain built into the platform (methodology.BuiltinDomains): published, frozen, not stored.
+	Builtin bool
 }
 
 // DomainStore persists domain versions (same lifecycle as methodologies).

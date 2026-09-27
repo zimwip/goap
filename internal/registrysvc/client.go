@@ -56,8 +56,8 @@ func (c *Client) Domains(ctx context.Context) ([]*methodology.Domain, error) {
 	}
 	var out []*methodology.Domain
 	for _, s := range r.Msg.Domains {
-		if s.Status != string(StatusPublished) {
-			continue
+		if s.Status != string(StatusPublished) || s.Builtin {
+			continue // the catalogue adds the built-in domains itself
 		}
 		d, err := c.rpc.GetDomain(ctx, connect.NewRequest(&registryv1.GetDomainRequest{Name: s.Name, Version: s.Version}))
 		if err != nil {

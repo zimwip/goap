@@ -58,7 +58,9 @@ of a versioned knowledge graph, whose other axis, the **domain axis**, describes
 **Namespaces** ([ADR 0015](adr/0015-namespaces.md)): every node lives in a namespace, and a namespace is the content of
 one domain ([ADR 0013](adr/0013-domains.md)): `alm` (delivery), `organisation`, `platform` (MCPs, adapter definitions,
 model configuration), and the meta-domains `methodology` and `domain` that hold the definitions
-([ADR 0023](adr/0023-definitions-in-the-graph.md)). Keys are unique per namespace. A change acts on one namespace: it can
+([ADR 0023](adr/0023-definitions-in-the-graph.md)). `methodology`, `domain` and `organisation` are **built in**: the
+platform reads them in its own way, so their domains ship with the code and are frozen (read-only in the domain
+editor); a new namespace is a new domain published from the domain editor. Keys are unique per namespace. A change acts on one namespace: it can
 only create and modify nodes of that namespace, but may link to nodes of another one.
 The organisation is a hierarchy of units in its own namespace (`organisation`); nodes reference their owner
 unit across namespaces, and a change is split into sub-changes along unit boundaries
@@ -336,7 +338,7 @@ to a type or a link type (in a domain, a methodology, CEL, `expects`) is qualifi
 ([ADR 0023](adr/0023-definitions-in-the-graph.md)) to its properties, `extends` chain, lifecycle, validators, document,
 change control, search declarations and editor, and checks the references of a methodology or a domain when saving
 and publishing. The graph and the engine hold an in-memory copy (the **type catalogue**), loaded from the registry at
-startup and kept in sync with its events, plus the built-in meta-domains `methodology` and `domain`. The graph judges
+startup and kept in sync with its events, plus the built-in domains `methodology`, `domain` and `organisation`. The graph judges
 a change by the catalogue in force and refuses a node whose type it does not resolve. Nothing is projected onto the
 graph.
 

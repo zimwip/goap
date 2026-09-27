@@ -56,12 +56,12 @@ func (d *Domain) Validate() Issues {
 	return issues
 }
 
-// DomainTypes is the TypeSet of a list of domains and of the built-in meta-domains: a bare name inside a domain is a
+// DomainTypes is the TypeSet of a list of domains and of the built-in domains: a bare name inside a domain is a
 // type of that domain. The registry and the services use the type catalogue (pkg/typecat); this is for files and
 // tests.
 func DomainTypes(ds ...*Domain) TypeSet {
 	t := domainTypes{nodes: map[string]bool{}, links: map[string]bool{}, parents: map[string]string{}}
-	for _, d := range append(slices.Clone(MetaDomains()), ds...) {
+	for _, d := range append(slices.Clone(BuiltinDomains()), ds...) {
 		for _, n := range d.NodeTypes {
 			ref := d.Name + domain.TypeSep + n.Name
 			t.nodes[ref] = true

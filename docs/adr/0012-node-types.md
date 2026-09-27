@@ -59,19 +59,30 @@ Question answered (CLAUDE.md, rule 8): **WHAT** is being changed — how a node 
 - The registry applies the same rule when a methodology or a domain is saved and published: every qualified reference
   must resolve (ADR 0013 §3).
 
-### 4. Meta-domains close the loop without projecting
-- The definitions of methodologies and domains are nodes too (ADR 0023), typed by two **meta-domains** built into the
-  platform: `methodology` (`MethodologyVersion`, `Agent`, `Action`, `Condition`, `Goal`, `ToolRequest`) and `domain`
-  (`DomainVersion`, `NodeType`, `LinkType`, `Lifecycle`, `Algorithm`, `AlgorithmInstance`).
-- They ship with the code (embedded YAML) and are always in the catalogue, before anything is loaded from the registry:
-  the registry writes its definition nodes into a graph that does not need the registry to check them, so there is no
-  bootstrap cycle (the registry stores in the graph, the graph loads its catalogue from the registry).
+### 4. Built-in domains: frozen namespaces the platform reads
+- A namespace whose types the platform code reads in its own way is **built in**: its domain ships with the code
+  (embedded YAML, `pkg/methodology/builtin/`, `methodology.BuiltinDomains`) and is **frozen**. There are three:
+  - the **meta-domains** `methodology` (`MethodologyVersion`, `Agent`, `Action`, `Condition`, `Goal`, `ToolRequest`)
+    and `domain` (`DomainVersion`, `NodeType`, `LinkType`, `Lifecycle`, `Algorithm`, `AlgorithmInstance`), which
+    type the definitions of methodologies and domains (ADR 0023);
+  - `organisation` (`OrgUnit`, `Adapter`, `User`, `Policy`), read by the sub-changes (ADR 0016), the adapters
+    (CLAUDE.md, rule 3) and access control (ADR 0020).
+- A built-in domain is always in the catalogue, before anything is loaded from the registry: the registry writes its
+  definition nodes into a graph that does not need the registry to check them, so there is no bootstrap cycle (the
+  registry stores in the graph, the graph loads its catalogue from the registry), and the organisation and access
+  seeds do not wait for the registry.
+- The registry lists and serves the built-in domains like the others (published, `builtin: true`), so the domain
+  editor shows them, read-only; it refuses to save, version, publish or archive them, and a domain cannot take their
+  name. Changing a built-in domain is a change of the code that reads it.
+- Every other namespace is an ordinary domain (`alm`, `platform`, ...): created, versioned and published from the
+  domain editor; adding a namespace is publishing a new domain (ADR 0013).
 
 ## Consequences
 
 - One reference for a type: the registry. Changing a type is publishing a domain version; the copies follow the
   registry's events and are reloaded at startup, so a missed event lasts until the next one or the next restart.
-- Until the graph has loaded its catalogue, it accepts only the nodes of the meta-domains (the registry's own writes)
+- Until the graph has loaded its catalogue, it accepts only the nodes of the built-in domains (the registry's own
+  writes, the organisation)
   and refuses the others as unknown types; it retries loading while the registry is not up.
 - `Node.Type` changes format: existing graphs are not migrated, they are reset and seeded again (as for ADR 0023).
 - An unknown type is an error instead of an untyped node without lifecycle or validators.
