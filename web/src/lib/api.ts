@@ -410,10 +410,8 @@ export interface Domain {
   updatedAt?: string;
   publishedAt?: string;
   updatedBy?: string;
-  /** the version shipped with the platform (methodology, domain, organisation, platform): published, read only */
+  /** built into the platform (methodology, organisation, platform): published and frozen, it changes with the code */
   builtin?: boolean;
-  /** a built-in domain that only changes with the code (methodology, organisation, platform): no new version */
-  frozen?: boolean;
 }
 
 export interface DomainSummary {
@@ -425,10 +423,8 @@ export interface DomainSummary {
   linkTypeCount?: number;
   updatedAt?: string;
   publishedAt?: string;
-  /** the version shipped with the platform: published, read only */
+  /** built into the platform: published and frozen */
   builtin?: boolean;
-  /** only changes with the code: no new version */
-  frozen?: boolean;
 }
 
 /** Methodology version referencing a domain version. */
@@ -1055,7 +1051,7 @@ export const registry = {
   /** Methodology versions referencing a domain version (unpinned references included). */
   getDomainUsage: (name: string, version: string, signal?: AbortSignal) =>
     rpc<NameVersion, { methodologies?: DomainUser[] }>(REGISTRY, 'GetDomainUsage', { name, version }, signal),
-  /** The type catalogue in force (ADR 0012): node and link types of the published domains and of the meta-domains. */
+  /** The type catalogue in force (ADR 0012): node and link types of the published and built-in domains. */
   listTypes: (signal?: AbortSignal) =>
     rpc<Record<string, never>, { types?: TypeInfo[]; linkTypes?: LinkTypeInfo[]; domains?: Record<string, string> }>(REGISTRY, 'ListTypes', {}, signal),
   /** Tries an algorithm on a sample input; nothing is saved. */

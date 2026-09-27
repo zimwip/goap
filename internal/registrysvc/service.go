@@ -17,10 +17,14 @@ import (
 // are immutable and must be valid, writes are authorized by ABAC rules on
 // the "methodology" resource (actions write, publish, delete).
 type Service struct {
-	Store  Store
-	Authz  authz.Authorizer
-	Events engine.Publisher
-	now    func() time.Time
+	// Store holds the methodology versions (graph data, GraphStore).
+	Store Store
+	// DomainStore holds the domain versions (the registry's database, SQLDomainStore); nil: the Store when it holds
+	// domains too (MemoryStore).
+	DomainStore DomainStore
+	Authz       authz.Authorizer
+	Events      engine.Publisher
+	now         func() time.Time
 }
 
 // ErrInvalid wraps validation issues.

@@ -151,11 +151,9 @@
     {#if d.error}<div class="alert">{d.error}</div>{/if}
     {#if d.readonly}
       <div class="alert info">
-        {d.frozen
-          ? `Frozen domain: the platform reads the "${d.name}" namespace in its own way; it is initialised at startup and changes with the platform code (read-only).`
-          : d.builtin
-            ? 'Version shipped with the platform: read-only. Create a new version to extend it (the types the platform writes are kept).'
-            : d.status === 'published'
+        {d.builtin
+          ? `Built-in domain: the platform reads the "${d.name}" namespace in its own way; it is initialised at startup and changes with the platform code (read-only).`
+          : d.status === 'published'
             ? 'Published version: it is immutable. Create a new version to modify it.'
             : 'Archived version: read-only.'}
       </div>
