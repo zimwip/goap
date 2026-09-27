@@ -1,0 +1,380 @@
+package builtin_test
+
+import (
+	"context"
+	"errors"
+	"net/http"
+	"slices"
+	"strings"
+	"testing"
+
+	"connectrpc.com/connect"
+
+	enginev1 "github.com/zimwip/goap/gen/goap/engine/v1"
+	"github.com/zimwip/goap/internal/connectors/builtin"
+	"github.com/zimwip/goap/internal/graphsvc"
+	"github.com/zimwip/goap/internal/identity"
+	"github.com/zimwip/goap/internal/mcpsvc"
+	"github.com/zimwip/goap/pkg/access"
+	"github.com/zimwip/goap/pkg/authz"
+	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/graph"
+	"github.com/zimwip/goap/pkg/mcp"
+	"github.com/zimwip/goap/pkg/methodology"
+	"github.com/zimwip/goap/pkg/typecat"
+)
+
+// fakeEngine records the requests of goap-scheduler.
+type fakeEngine struct {
+	start  *enginev1.StartProcessRequest
+	header http.Header
+}
+
+func (f *fakeEngine) StartProcess(_ context.Context, r *connect.Request[enginev1.StartProcessRequest]) (*connect.Response[enginev1.StartProcessResponse], error) {
+	f.start, f.header = r.Msg, r.Header()
+	return connect.NewResponse(&enginev1.StartProcessResponse{Process: &enginev1.Process{Id: "P9", Status: "running", Methodology: r.Msg.Methodology,
+		Steps: []*enginev1.Step{{Action: "a"}}}}), nil
+}
+
+func (f *fakeEngine) GetProcess(_ context.Context, r *connect.Request[enginev1.GetProcessRequest]) (*connect.Response[enginev1.GetProcessResponse], error) {
+	return connect.NewResponse(&enginev1.GetProcessResponse{Process: &enginev1.Process{Id: r.Msg.Id, Status: "completed", Steps: []*enginev1.Step{{Action: "a"}}}}), nil
+}
+
+func (f *fakeEngine) ListProcesses(context.Context, *connect.Request[enginev1.ListProcessesRequest]) (*connect.Response[enginev1.ListProcessesResponse], error) {
+	return connect.NewResponse(&enginev1.ListProcessesResponse{Processes: []*enginev1.Process{{Id: "P1"}, {Id: "P2"}}}), nil
+}
+
+func (f *fakeEngine) ListTriggers(context.Context, *connect.Request[enginev1.ListTriggersRequest]) (*connect.Response[enginev1.ListTriggersResponse], error) {
+	return connect.NewResponse(&enginev1.ListTriggersResponse{}), nil
+}
+
+func (f *fakeEngine) FireTrigger(_ context.Context, r *connect.Request[enginev1.FireTriggerRequest]) (*connect.Response[enginev1.FireTriggerResponse], error) {
+	return connect.NewResponse(&enginev1.FireTriggerResponse{Process: &enginev1.Process{Id: "P3", Trigger: r.Msg.Methodology + "/" + r.Msg.Agent + "/" + r.Msg.Trigger}}), nil
+}
+
+type fakeRegistry struct{ domains []*methodology.Domain }
+
+func (fakeRegistry) List(context.Context) ([]*methodology.Compiled, error) {
+	return []*methodology.Compiled{{Methodology: &methodology.Methodology{Name: "impact-analysis", Namespace: "alm"}}}, nil
+}
+func (f fakeRegistry) Domains(context.Context) ([]*methodology.Domain, error) {
+	return f.domains, nil
+}
+
+type platform struct {
+	g      *graph.Graph
+	hub    *mcpsvc.Service
+	engine *fakeEngine
+}
+
+// newPlatform is the demo graph (ALM repository and its organisation) with the defaults and the
+// built-in MCPs, and a hub serving the built-in connectors with the default policies.
+func newPlatform(t *testing.T) platform {
+	t.Helper()
+	ctx := context.Background()
+	ds, err := methodology.LoadDomains("../../../domains")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cat, err := typecat.New(ds...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	g := graph.New(graph.NewMemory())
+	g.Types = func() graph.TypeCatalog { return cat }
+	for _, seed := range []func(context.Context, *graph.Graph) (bool, error){graphsvc.SeedDemo, graphsvc.SeedAccess, graphsvc.SeedDefaults, graphsvc.SeedBuiltins} {
+		if _, err := seed(ctx, g); err != nil {
+			t.Fatal(err)
+		}
+	}
+	az, err := access.NewAuthorizer(&access.Directory{Graph: g})
+	if err != nil {
+		t.Fatal(err)
+	}
+	eng := &fakeEngine{}
+	hub := &mcpsvc.Service{Store: mcpsvc.NewMemoryStore(), Directory: &mcpsvc.Directory{Graph: g}}
+	cs := builtin.Connectors(builtin.Ports{Graph: g, Engine: eng, Hub: hub, Registry: fakeRegistry{domains: ds}, Authz: az, Floor: az.Floor()})
+	if len(cs) != 4 {
+		t.Fatalf("%d built-in connectors", len(cs))
+	}
+	hub.Invoker = mcpsvc.InprocInvoker{Connectors: cs}
+	hub.KeepRegistered(t.Context(), cs)
+	return platform{g: g, hub: hub, engine: eng}
+}
+
+func as(subject, org string, roles ...string) context.Context {
+	return authz.With(context.Background(), authz.Principal{Subject: subject, Org: org, Roles: roles})
+}
+
+func (p platform) call(t *testing.T, ctx context.Context, unit, tool string, args map[string]any) map[string]any {
+	t.Helper()
+	out, err := p.hub.Call(ctx, unit, tool, args)
+	if err != nil {
+		t.Fatalf("%s: %v", tool, err)
+	}
+	return out
+}
+
+func keys(list any) []string {
+	var out []string
+	for _, v := range list.([]any) {
+		out = append(out, v.(map[string]any)["key"].(string))
+	}
+	return out
+}
+
+// The operations of each built-in connector are the tools of the built-in MCP of the same name.
+func TestConnectorsImplementTheBuiltinMCPs(t *testing.T) {
+	cs := builtin.Connectors(builtin.Ports{Graph: &graph.Graph{}, Engine: &fakeEngine{}, Hub: &mcpsvc.Service{}, Registry: fakeRegistry{}})
+	for _, d := range mcp.BuiltinDefs() {
+		c, ok := cs[d.Name]
+		if !ok || c.Info().Id != d.Name {
+			t.Fatalf("no connector %s", d.Name)
+		}
+		var ops, tools []string
+		for _, o := range c.Info().Operations {
+			ops = append(ops, o.Name)
+		}
+		for _, tl := range d.Tools {
+			tools = append(tools, tl.Name)
+		}
+		if !slices.Equal(ops, tools) {
+			t.Fatalf("%s: operations %v, tools %v", d.Name, ops, tools)
+		}
+	}
+}
+
+// Every unit can use the built-in MCPs through the default organisation.
+func TestEveryUnitGetsTheBuiltins(t *testing.T) {
+	p := newPlatform(t)
+	for _, unit := range []string{"ORG-CHECKOUT", "ORG-ACME", "", "ORG-UNKNOWN"} {
+		_, mcps, err := p.hub.Tools(context.Background(), unit)
+		if err != nil || !slices.Equal(mcps, []string{mcp.BuiltinAdmin, mcp.BuiltinChange, mcp.BuiltinGraph, mcp.BuiltinScheduler}) {
+			t.Fatalf("%q: mcps %v, %v", unit, mcps, err)
+		}
+	}
+	if again, err := graphsvc.SeedBuiltins(context.Background(), p.g); err != nil || again {
+		t.Fatalf("seeding the built-ins twice: %v %v", again, err)
+	}
+}
+
+func TestGraphTools(t *testing.T) {
+	p := newPlatform(t)
+	ctx := as("alice", "ORG-CHECKOUT", "contributor")
+	out := p.call(t, ctx, "ORG-CHECKOUT", "goap-graph/read", map[string]any{"namespace": "alm", "key": "REQ-1"})
+	node := out["node"].(map[string]any)
+	if node["type"] != "alm@Requirement" || !strings.Contains(node["properties"].(map[string]any)["title"].(string), "PSP") {
+		t.Fatalf("read = %v", out)
+	}
+	if in := out["in"].([]any); len(in) == 0 {
+		t.Fatalf("REQ-1 has incoming links (verifies, realizes): %v", out)
+	}
+	if got := keys(p.call(t, ctx, "", "goap-graph/glob", map[string]any{"namespace": "alm", "pattern": "REQ-*"})["nodes"]); !slices.Equal(got, []string{"REQ-1", "REQ-2", "REQ-3", "REQ-4"}) {
+		t.Fatalf("glob = %v", got)
+	}
+	if got := keys(p.call(t, ctx, "", "goap-graph/glob", map[string]any{"namespace": "alm", "type": "alm@Environment", "limit": float64(2)})["nodes"]); len(got) != 2 {
+		t.Fatalf("glob limited = %v", got)
+	}
+	if got := keys(p.call(t, ctx, "", "goap-graph/grep", map[string]any{"namespace": "alm", "pattern": "psp", "ignoreCase": true})["nodes"]); !slices.Equal(got, []string{"REQ-1", "REQ-2"}) {
+		t.Fatalf("grep = %v", got)
+	}
+	links := p.call(t, ctx, "", "goap-graph/links", map[string]any{"namespace": "alm", "key": "APP-1", "direction": "out", "type": "alm@composed_of"})
+	if out := links["out"].([]any); len(out) != 2 || len(links["in"].([]any)) != 0 {
+		t.Fatalf("links = %v", links)
+	}
+	if bs := p.call(t, ctx, "", "goap-graph/baselines", map[string]any{"namespace": "alm"}); bs["head"] == nil || len(bs["baselines"].([]any)) == 0 {
+		t.Fatalf("baselines = %v", bs)
+	}
+	// the platform APIs act for a caller
+	var te *mcpsvc.ToolError
+	if _, err := p.hub.Call(context.Background(), "", "goap-graph/read", map[string]any{"namespace": "alm", "key": "REQ-1"}); !errors.As(err, &te) {
+		t.Fatalf("anonymous read: %v", err)
+	}
+}
+
+func TestChangeTools(t *testing.T) {
+	p := newPlatform(t)
+	ctx := as("alice", "ORG-CHECKOUT", "contributor")
+	created := p.call(t, ctx, "ORG-CHECKOUT", "goap-change/create", map[string]any{"title": "Refunds by voucher", "intent": "Customers may be refunded by voucher",
+		"namespace": "alm", "methodology": "sdlc"})["change"].(map[string]any)
+	id := created["id"].(string)
+	if created["unit"] != "ORG-CHECKOUT" || created["namespace"] != "alm" || created["methodology"] != "sdlc" {
+		t.Fatalf("change = %v", created)
+	}
+	// the tools work on the change of the calling process by default
+	ctx = mcp.WithCall(ctx, mcp.CallContext{Change: id, Process: "P1"})
+	p.call(t, ctx, "ORG-CHECKOUT", "goap-change/write", map[string]any{"key": "REQ-9", "type": "alm@Requirement",
+		"properties": map[string]any{"title": "Refund by voucher", "priority": "medium"}, "rationale": "new refund mode"})
+	if _, err := p.hub.Call(ctx, "ORG-CHECKOUT", "goap-change/write", map[string]any{"key": "REQ-1", "type": "alm@Requirement", "rationale": "again"}); err == nil {
+		t.Fatal("write of an existing node accepted")
+	}
+	// edit guards against a concurrent edit
+	if _, err := p.hub.Call(ctx, "ORG-CHECKOUT", "goap-change/edit", map[string]any{"key": "REQ-2", "properties": map[string]any{"priority": "high"},
+		"expect": map[string]any{"priority": "low"}, "rationale": "refunds matter"}); err == nil || !strings.Contains(err.Error(), "expects") {
+		t.Fatalf("stale edit: %v", err)
+	}
+	p.call(t, ctx, "ORG-CHECKOUT", "goap-change/edit", map[string]any{"key": "REQ-2", "properties": map[string]any{"priority": "high"},
+		"expect": map[string]any{"priority": "medium"}, "rationale": "refunds matter"})
+	p.call(t, ctx, "ORG-CHECKOUT", "goap-change/link", map[string]any{"from": "REQ-9", "type": "alm@satisfies", "to": "NEED-2"})
+	p.call(t, ctx, "ORG-CHECKOUT", "goap-change/note", map[string]any{"text": "voucher refunds need finance approval", "type": "question"})
+
+	read := p.call(t, ctx, "ORG-CHECKOUT", "goap-change/read", nil)
+	nodes := read["nodes"].([]any)
+	if len(nodes) != 2 {
+		t.Fatalf("nodes = %v", nodes)
+	}
+	for _, n := range nodes {
+		n := n.(map[string]any)
+		switch n["key"] {
+		case "REQ-9":
+			if n["intent"] != "created" || n["properties"].(map[string]any)["title"] != "Refund by voucher" {
+				t.Fatalf("REQ-9 = %v", n)
+			}
+		case "REQ-2":
+			if n["intent"] != "modified" || n["properties"].(map[string]any)["priority"] != "high" {
+				t.Fatalf("REQ-2 = %v", n)
+			}
+		}
+	}
+	if items := read["items"].([]any); len(items) != 1 || items[0].(map[string]any)["data"].(map[string]any)["text"] == nil {
+		t.Fatalf("items = %v", items)
+	}
+	bb, err := p.g.Blackboard(context.Background(), domain.ChangeID(id))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, n := range bb.Change.Nodes {
+		if n.Key == "REQ-9" && len(bb.Nodes[*n.Post].Out) != 1 {
+			t.Fatalf("REQ-9 links = %+v", bb.Nodes[*n.Post].Out)
+		}
+	}
+	if _, err := p.hub.Call(ctx, "ORG-CHECKOUT", "goap-change/validate", nil); err != nil {
+		t.Fatal(err)
+	}
+	// main is untouched until the change is applied
+	if n, err := p.g.NodeByKey(context.Background(), "alm", "REQ-9"); err == nil && n.Branch == domain.MainBranch {
+		t.Fatal("the change wrote on main")
+	}
+}
+
+// User and Policy nodes stay behind the access gate of the platform (ADR 0020).
+func TestChangeToolsKeepTheAccessGate(t *testing.T) {
+	p := newPlatform(t)
+	for _, c := range []struct {
+		who    context.Context
+		denied bool
+	}{
+		{as("alice", "ORG-CHECKOUT", "contributor"), true},
+		{as("root", "ORG-CHECKOUT", "admin"), false},
+	} {
+		ch := p.call(t, c.who, "ORG-CHECKOUT", "goap-change/create", map[string]any{"title": "Access", "intent": "a new user", "namespace": "organisation"})["change"].(map[string]any)
+		_, err := p.hub.Call(c.who, "ORG-CHECKOUT", "goap-change/write", map[string]any{"change": ch["id"], "key": access.UserKey("bob"), "type": access.NodeTypeUser,
+			"properties": map[string]any{"subject": "bob", "roles": []any{"admin"}}, "rationale": "promote bob"})
+		if denied := err != nil && strings.Contains(err.Error(), "may not write policy"); denied != c.denied {
+			t.Fatalf("%v: %v", authz.From(c.who), err)
+		}
+	}
+}
+
+// A unit restricts a built-in MCP for itself and its sub-units: goap-change read-only for the CRM team.
+func TestUnitRestrictsABuiltin(t *testing.T) {
+	p := newPlatform(t)
+	if err := graphsvc.SeedAdapter(context.Background(), p.g, mcp.Adapter{Unit: "ORG-CRM", MCP: mcp.BuiltinChange, ReadOnly: true}); err != nil {
+		t.Fatal(err)
+	}
+	if err := graphsvc.SeedAdapter(context.Background(), p.g, mcp.Adapter{Unit: "ORG-DIGITAL", MCP: mcp.BuiltinAdmin, Disabled: true}); err != nil {
+		t.Fatal(err)
+	}
+	tools, mcps, err := p.hub.Tools(context.Background(), "ORG-CRM")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var change []string
+	for _, tl := range tools {
+		if m, name, _ := mcp.SplitTool(tl.Name); m == mcp.BuiltinChange {
+			change = append(change, name)
+		}
+	}
+	if !slices.Equal(change, []string{"read", "validate"}) || slices.Contains(mcps, mcp.BuiltinAdmin) {
+		t.Fatalf("ORG-CRM: goap-change tools %v, mcps %v", change, mcps)
+	}
+	ctx := as("carol", "ORG-CRM", "contributor")
+	if _, err := p.hub.Call(ctx, "ORG-CRM", "goap-change/create", map[string]any{"title": "x", "intent": "y", "namespace": "alm"}); !errors.Is(err, mcpsvc.ErrNotBound) {
+		t.Fatalf("restricted tool called: %v", err)
+	}
+	// siblings keep everything but the admin MCP their direction disabled; the company keeps all
+	if _, mcps, _ := p.hub.Tools(context.Background(), "ORG-CHECKOUT"); slices.Contains(mcps, mcp.BuiltinAdmin) || !slices.Contains(mcps, mcp.BuiltinChange) {
+		t.Fatalf("ORG-CHECKOUT: %v", mcps)
+	}
+	if _, mcps, _ := p.hub.Tools(context.Background(), "ORG-ACME"); len(mcps) != 4 {
+		t.Fatalf("ORG-ACME: %v", mcps)
+	}
+	// goap-admin describes the restriction
+	out := p.call(t, as("root", "ORG-ACME", "admin"), "ORG-ACME", "goap-admin/mcps", map[string]any{"unit": "ORG-CRM"})
+	for _, m := range out["mcps"].([]any) {
+		m := m.(map[string]any)
+		if m["mcp"] == mcp.BuiltinChange && (len(m["tools"].([]any)) != 2 || m["restrictedBy"].([]any)[0] != "ORG-CRM" || m["definedIn"] != domain.DefaultOrg) {
+			t.Fatalf("goap-change for ORG-CRM = %v", m)
+		}
+	}
+}
+
+func TestSchedulerTools(t *testing.T) {
+	p := newPlatform(t)
+	ctx := mcp.WithCall(as("alice", "ORG-CHECKOUT", "contributor"), mcp.CallContext{Change: "C1", Process: "P1"})
+	out := p.call(t, ctx, "ORG-CHECKOUT", "goap-scheduler/start", map[string]any{"intent": "assess the impact of REQ-1", "methodology": "impact-analysis"})
+	if proc := out["process"].(map[string]any); proc["id"] != "P9" || proc["steps"] != nil {
+		t.Fatalf("start = %v", out)
+	}
+	head, err := p.g.BranchHead(context.Background(), "alm", domain.MainBranch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// a new change on the head of main of the namespace of the methodology
+	if r := p.engine.start; r.OwnerOrg != "ORG-CHECKOUT" || r.Title != "assess the impact of REQ-1" || r.ChangeId != "" || r.BaselineId != string(head.ID) {
+		t.Fatalf("start request = %+v", r)
+	}
+	if _, err := p.hub.Call(as("alice", "ORG-CHECKOUT", "contributor"), "", "goap-scheduler/start", map[string]any{"intent": "anything"}); err == nil {
+		t.Fatal("a process started without knowing its namespace")
+	}
+	if p.engine.header.Get(identity.HeaderSubject) != "alice" || p.engine.header.Get(identity.HeaderRoles) != "contributor" {
+		t.Fatalf("the caller is not forwarded: %v", p.engine.header)
+	}
+	if got := p.call(t, ctx, "", "goap-scheduler/get", map[string]any{"id": "P9"})["process"].(map[string]any); got["steps"] == nil {
+		t.Fatalf("get = %v", got)
+	}
+	if got := p.call(t, ctx, "", "goap-scheduler/list", map[string]any{"limit": float64(1)}); len(got["processes"].([]any)) != 1 || got["truncated"] != true {
+		t.Fatalf("list = %v", got)
+	}
+	if got := p.call(t, ctx, "", "goap-scheduler/fire", map[string]any{"methodology": "m", "agent": "a", "trigger": "t"}); got["process"].(map[string]any)["trigger"] != "m/a/t" {
+		t.Fatalf("fire = %v", got)
+	}
+}
+
+func TestAdminTools(t *testing.T) {
+	p := newPlatform(t)
+	ctx := as("alice", "ORG-CHECKOUT", "contributor")
+	units := p.call(t, ctx, "ORG-CHECKOUT", "goap-admin/units", nil)["units"].([]any)
+	parents := map[string]any{}
+	for _, u := range units {
+		u := u.(map[string]any)
+		parents[u["key"].(string)] = u["parent"]
+	}
+	if parents["ORG-CHECKOUT"] != "ORG-DIGITAL" || parents["ORG-ACME"] != domain.DefaultOrg || parents[domain.DefaultOrg] != nil {
+		t.Fatalf("units = %v", units)
+	}
+	mcps := p.call(t, ctx, "ORG-CHECKOUT", "goap-admin/mcps", nil)
+	if mcps["unit"] != "ORG-CHECKOUT" || len(mcps["mcps"].([]any)) != 4 {
+		t.Fatalf("mcps = %v", mcps)
+	}
+	conns := p.call(t, ctx, "", "goap-admin/connectors", nil)["connectors"].([]any)
+	if len(conns) != 4 || conns[0].(map[string]any)["builtin"] != true || conns[0].(map[string]any)["live"] != true {
+		t.Fatalf("connectors = %v", conns)
+	}
+	doms := p.call(t, ctx, "", "goap-admin/domains", nil)["domains"].([]any)
+	if len(doms) == 0 {
+		t.Fatal("no domain")
+	}
+	p.call(t, ctx, "", "goap-admin/methodologies", nil)
+	p.call(t, ctx, "", "goap-admin/users", map[string]any{"unit": "ORG-CHECKOUT"})
+}

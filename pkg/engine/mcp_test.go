@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -48,15 +49,20 @@ agents:
 type fakeHub struct {
 	mu    sync.Mutex
 	bound map[string][]string // org -> MCPs
-	calls []string
-	tools []mcp.ToolInfo
-	fail  error
+	// restricted: org -> tools the org's restrictions remove (ADR 0028)
+	restricted map[string][]string
+	calls      []string
+	// contexts are the call contexts the calls carried
+	contexts []mcp.CallContext
+	tools    []mcp.ToolInfo
+	fail     error
 }
 
 func (h *fakeHub) CallTool(ctx context.Context, org, name string, args map[string]any) (any, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.calls = append(h.calls, org+"|"+name+"|"+args["path"].(string))
+	h.contexts = append(h.contexts, mcp.CallFrom(ctx))
 	if authz.From(ctx).Subject == "" {
 		return nil, errors.New("the principal is not forwarded")
 	}
@@ -69,7 +75,16 @@ func (h *fakeHub) CallTool(ctx context.Context, org, name string, args map[strin
 func (h *fakeHub) Tools(_ context.Context, org string) ([]mcp.ToolInfo, []string, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	return h.tools, h.bound[org], nil
+	tools := h.tools
+	if tools == nil {
+		// every bound MCP has a read tool, unless the org restricts it
+		for _, m := range h.bound[org] {
+			if name := mcp.ToolName(m, "read"); !slices.Contains(h.restricted[org], name) {
+				tools = append(tools, mcp.ToolInfo{Name: name})
+			}
+		}
+	}
+	return tools, h.bound[org], nil
 }
 
 func parseDocs(t *testing.T, edit func(*methodology.Methodology)) *methodology.Compiled {
@@ -167,6 +182,27 @@ func TestToolActionOnlyWhereTheOrganizationBindsTheMCP(t *testing.T) {
 	p = runDocs(t, e, base, "acme")
 	if p.Status != StatusWaiting || p.Steps[0].Action != "write_doc" {
 		t.Fatalf("no hub: %s steps=%+v", p.Status, p.Steps)
+	}
+}
+
+func TestToolActionNotScheduledWhereTheUnitRestrictsTheTool(t *testing.T) {
+	hub := &fakeHub{bound: map[string][]string{"acme": {"document-repository"}}, restricted: map[string][]string{"acme": {"document-repository/read"}}}
+	e, base := mcpEngine(t, hub, nil)
+	p := runDocs(t, e, base, "acme")
+	if p.Status != StatusWaiting || len(p.Steps) != 1 || p.Steps[0].Action != "write_doc" {
+		t.Fatalf("restricted tool planned: %s %s steps=%+v", p.Status, p.Error, p.Steps)
+	}
+	if len(hub.calls) != 0 {
+		t.Fatalf("a restricted tool was called: %v", hub.calls)
+	}
+}
+
+func TestToolCallCarriesTheChangeAndTheProcess(t *testing.T) {
+	hub := &fakeHub{bound: map[string][]string{"acme": {"document-repository"}}}
+	e, base := mcpEngine(t, hub, nil)
+	p := runDocs(t, e, base, "acme")
+	if len(hub.contexts) != 1 || hub.contexts[0].Change != string(p.ChangeID) || hub.contexts[0].Process != p.ID {
+		t.Fatalf("call contexts = %+v, want change %s process %s", hub.contexts, p.ChangeID, p.ID)
 	}
 }
 

@@ -101,6 +101,12 @@ func main() {
 		} else if seeded {
 			log.Info("default organisation created")
 		}
+		// the built-in MCPs (ADR 0028) follow the platform; the default organisation lends them to every unit
+		if seeded, err := graphsvc.SeedBuiltins(ctx, g); err != nil {
+			log.Error("seed built-in MCPs", "err", err)
+		} else if seeded {
+			log.Info("built-in MCPs updated")
+		}
 		// the model gateway configuration (providers, models, aliases) is graph data: seeded when the graph has none
 		if cfg, err := modelgw.InitialConfig(ctx, platform.Env("GOAP_MODELS_CONFIG", ""), platform.NewSecrets()); err != nil {
 			log.Error("models config", "err", err)

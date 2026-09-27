@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/zimwip/goap/pkg/algo"
@@ -49,6 +50,8 @@ type Tool struct {
 	Name        string         `json:"name"`
 	Description string         `json:"description,omitempty"`
 	InputSchema map[string]any `json:"inputSchema,omitempty"`
+	// ReadOnly marks a tool that changes nothing (the MCP readOnlyHint): a unit can keep only these.
+	ReadOnly bool `json:"readOnly,omitempty"`
 }
 
 // Def is a generic MCP definition.
@@ -84,6 +87,16 @@ type Adapter struct {
 	Adapter string `json:"adapter"`
 	// Params are the parameter values (secrets as references).
 	Params map[string]any `json:"params,omitempty"`
+	// Restrictions of the MCP for the unit and its sub-units (ADR 0028). They add up along the unit
+	// chain: a unit can narrow what its ancestors allow, never widen it. An instance may only restrict
+	// (no Adapter): the implementation is then the one of the nearest ancestor.
+	//
+	// Disabled removes the MCP; Tools, when not empty, lists the only tools allowed; Deny lists
+	// tools refused; ReadOnly keeps only the tools marked read-only.
+	Disabled bool     `json:"disabled,omitempty"`
+	Tools    []string `json:"tools,omitempty"`
+	Deny     []string `json:"deny,omitempty"`
+	ReadOnly bool     `json:"readOnly,omitempty"`
 }
 
 // ToolInfo is a tool available to an organization, under its qualified name.
@@ -91,6 +104,7 @@ type ToolInfo struct {
 	Name        string         `json:"name"` // "<mcp>/<tool>"
 	Description string         `json:"description,omitempty"`
 	InputSchema map[string]any `json:"inputSchema,omitempty"`
+	ReadOnly    bool           `json:"readOnly,omitempty"`
 }
 
 // ToolName is the qualified name of a tool: "<mcp>/<tool>".
@@ -136,15 +150,32 @@ func (d Def) Tool(name string) (Tool, bool) {
 	return Tool{}, false
 }
 
-// Validate checks the instance against the MCP it says it implements.
+// Validate checks the instance against the MCP it says it implements: an instance names an adapter
+// definition unless it only restricts the MCP, and restricts only tools the MCP has.
 func (a Adapter) Validate(def Def) error {
 	if a.MCP != def.Name {
 		return fmt.Errorf("adapter of %s validated against %s: %w", a.MCP, def.Name, ErrInvalid)
 	}
-	if !ValidName(a.Adapter) {
+	if a.Adapter == "" && !a.Restricts() {
+		return fmt.Errorf("adapter %s: name an adapter definition or restrict the MCP: %w", a.MCP, ErrInvalid)
+	}
+	if a.Adapter != "" && !ValidName(a.Adapter) {
 		return fmt.Errorf("adapter %s: adapter must be the lowercase name of an adapter definition: %w", a.MCP, ErrInvalid)
 	}
+	for _, t := range append(slices.Clone(a.Tools), a.Deny...) {
+		if _, ok := def.Tool(t); !ok {
+			return fmt.Errorf("adapter %s: the MCP has no tool %q: %w", a.MCP, t, ErrInvalid)
+		}
+	}
 	return nil
+}
+
+// Implements reports whether the instance names an adapter definition (else it only restricts).
+func (a Adapter) Implements() bool { return a.Adapter != "" }
+
+// Restricts reports whether the instance restricts the MCP.
+func (a Adapter) Restricts() bool {
+	return a.Disabled || len(a.Tools) > 0 || len(a.Deny) > 0 || a.ReadOnly
 }
 
 // Algorithm is the definition as an algorithm of usage adapter.

@@ -541,19 +541,22 @@ func (e *Engine) execute(ctx context.Context, p *Process, m *methodology.Compile
 // orgOf is the organisation holding the change of a process (an OrgUnit key).
 func (e *Engine) orgOf(p *Process) string { return domain.OrgOf(p.Org) }
 
-// boundMCPs returns the MCPs the organization of the process binds. Without a hub
-// nothing is bound.
+// boundMCPs returns the MCPs the organization of the process binds and the tools it may call
+// ("<mcp>/<tool>", once its restrictions are applied, ADR 0028). Without a hub nothing is bound.
 func (e *Engine) boundMCPs(ctx context.Context, p *Process) (map[string]bool, error) {
 	bound := map[string]bool{}
 	if e.Tools == nil {
 		return bound, nil
 	}
-	_, names, err := e.Tools.Tools(authz.With(ctx, p.Initiator), e.orgOf(p))
+	tools, names, err := e.Tools.Tools(authz.With(ctx, p.Initiator), e.orgOf(p))
 	if err != nil {
 		return nil, fmt.Errorf("MCPs of organization %s: %w", e.orgOf(p), err)
 	}
 	for _, n := range names {
 		bound[n] = true
+	}
+	for _, t := range tools {
+		bound[t.Name] = true
 	}
 	return bound, nil
 }
@@ -574,7 +577,8 @@ func allBound(a methodology.Action, bound map[string]bool) bool {
 			return false
 		}
 	}
-	return true
+	// a tool action also needs its tool, which the unit may have restricted
+	return a.Kind != methodology.KindTool || bound[a.Tool]
 }
 
 // specialize returns the implementation to run for a planned action: the
