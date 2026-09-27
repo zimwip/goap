@@ -29,7 +29,7 @@ own lifecycle rather than with the methodologies.
    domain version in force (the latest published one): `expects.produce.nodeType`, `expects.link.type`, type literals
    in CEL, builtin `params.linkTypes`. A methodology is published only on published domains.
 4. **Domain publication is checked against its users.** A new domain version is refused when a published methodology
-   would break on it (a type or link type it references disappears). A domain in use cannot be deleted or archived.
+   would break on it (a type or link type it references disappears). The version in force of a domain in use cannot be archived.
 5. The version in force is the latest published one; publishing it applies to the changes checked afterwards
    (ADR 0012 §2). Nothing is projected.
 

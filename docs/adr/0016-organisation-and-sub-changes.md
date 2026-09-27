@@ -1,6 +1,6 @@
 # ADR 0016 — Organisation namespace and sub-changes
 
-**Status**: accepted · **Date**: 2026-09 · Builds on ADR 0015 (namespaces, change branches).
+**Status**: accepted, implemented · **Date**: 2026-09 · Builds on ADR 0015 (namespaces, change branches).
 
 ## Context
 Work on a change crosses organisational boundaries: the nodes it impacts belong to different teams.
@@ -8,12 +8,12 @@ The organisation is hierarchical and is not part of the delivery domain: it need
 namespace, and nodes of other namespaces must be able to reference it (a component is owned by a unit).
 
 ## Decision
-1. **Organisation namespace** (`organisation`, a built-in domain, `domains/builtin/organisation.yaml`, ADR 0012 §4): `OrgUnit` nodes
-   (name, kind: company, direction, department, team). The hierarchy is the `part_of` link, **child to
+1. **Organisation namespace** (`organisation`, a built-in domain, `domains/builtin/organisation.yaml`, ADR 0012 §4): `organisation@OrgUnit` nodes
+   (name, kind: company, direction, department, team). The hierarchy is the `organisation@part_of` link, **child to
    parent**: outgoing links belong to the source version (ADR 0003), so reorganising a unit only
    versions that unit. `SeedDemo` loads a small hierarchy.
-2. **Ownership** is a cross-namespace link `owner` from any node to an `OrgUnit` (it replaces the
-   free-text `owner` properties of the ALM domain).
+2. **Ownership** is a cross-namespace link `organisation@owner` from any node to an `organisation@OrgUnit` (it
+   replaces the free-text `owner` properties of the ALM domain).
 3. **Sub-change**: a change has `parentId` and `ownerOrg` (key of an `OrgUnit`; it must exist). A
    sub-change belongs to the namespace of its parent; the parent must have a branch of its own; the
    sub-change forks its own branch from the parent branch and, when applied, is merged into it (ADR
@@ -24,8 +24,8 @@ namespace, and nodes of other namespaces must be able to reference it (a compone
    starts from the head of its own branch, so what its sub-changes merged is part of its result before
    it is merged into main.
 5. **Split**: `SplitByOwner` (`SplitChange` RPC) creates one sub-change per unit owning nodes the
-   change has an impact on (`owner` link of the pre version of a `modified` change impact, ADR 0024;
-   the ones derived from impact items count too), with a copy of the change impacts of its nodes
+   change has an impact on (`organisation@owner` link of the pre version of a `modified` change impact,
+   ADR 0024), with a copy of the change impacts of its nodes
    (planned, same rationale, derived from the parent's). The parent's own change impact for a
    delegated node is accepted with the comment "delegated to <unit> (sub-change <id>)": a confirmed
    impact that `Apply` ignores, the work being the sub-change's. It is idempotent per unit; impacts
@@ -35,4 +35,4 @@ namespace, and nodes of other namespaces must be able to reference it (a compone
 ## Consequences
 - Migration `0007_subchange` / SQLite `0006_subchange`: `change.parent_id`, `owner_org`.
 - A dedicated organisation service is not needed: the graph, its namespace rules and a web editor
-  are enough. The iam `Organization` stub (M2) is unrelated (tenant isolation).
+  are enough.

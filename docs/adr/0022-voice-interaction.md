@@ -11,7 +11,8 @@ Users want to talk to the assistant instead of typing. Two families of solutions
 - **Live**: audio is streamed to a server or a realtime model provider, which transcribes,
   reasons and answers by voice with low latency.
 
-Constraints at the time of the decision:
+Constraints at the time of the decision (early 2026-09; the browser has since called `modelgw` for the model
+configuration, and `modelgw` gained embeddings, discovery and an authorization check):
 
 - The assistant sends a text intent to `EngineService.StartProcess` and follows the run
   through `WatchEvents`. The browser never calls `modelgw`.

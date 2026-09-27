@@ -46,8 +46,8 @@ func OrgOf(org string) string {
 // namespace it acts on.
 const DefaultNamespace = "default"
 
-// NamespacePlatform is the namespace of the meta model bound to the objects the
-// code manipulates (methodologies, node types, domains).
+// NamespacePlatform is the namespace of the platform configuration: the MCPs, the adapter definitions and the model
+// configuration (built-in domain platform).
 const NamespacePlatform = "platform"
 
 // NamespaceOf returns ns, defaulting to DefaultNamespace.

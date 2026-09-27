@@ -14,7 +14,8 @@ delivery node owned by an organisation unit).
    `organisation` (units, adapters, users, policies), `platform` (MCPs, adapter definitions, model configuration),
    and the meta-domain `methodology` (the definitions of the methodologies, ADR 0023); `methodology`, `organisation`
    and `platform` are built in and frozen (initialised at startup from the code, ADR 0012 §4), the others are domains
-   published from the domain editor, and a new namespace is a new domain (ADR 0013). There is no default namespace.
+   published from the domain editor, and a new namespace is a new domain (ADR 0013). The `default` namespace only holds untyped nodes (a graph
+   without a type catalogue, in tests): with a catalogue, no node lives there.
 2. A **change** has a namespace (`change.namespace`). It may create nodes in that namespace only and modify (write,
    transition, merge, add outgoing links from) only nodes of that namespace; the change impacts enforce it when a
    version is written (ADR 0024).
@@ -45,7 +46,7 @@ delivery node owned by an organisation unit).
 10. **Blackboard steps**: the change is the blackboard of an intent (`change.intent`, recorded on
     `process.started`). Each step of an agent run is journaled (ADR 0011) as a transition of the
     blackboard: `boardBefore` / `boardAfter` (item count of the change when the step starts / ends),
-    `reads` (node versions referenced on the blackboard when it started), and `items` (the proposals
+    `reads` (node versions referenced on the blackboard when it started), and `items` (the facts
     it produced). For a single process the marks chain: a step starts from the board its predecessor
     left. The marks are counts, so items added by concurrent processes also move them.
 
