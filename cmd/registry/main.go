@@ -10,6 +10,7 @@ import (
 
 	"github.com/zimwip/goap/gen/goap/registry/v1/registryv1connect"
 	"github.com/zimwip/goap/internal/graphsvc"
+	"github.com/zimwip/goap/internal/mcpsvc"
 	"github.com/zimwip/goap/internal/platform"
 	"github.com/zimwip/goap/internal/registrysvc"
 	"github.com/zimwip/goap/internal/telemetry"
@@ -38,7 +39,8 @@ func main() {
 	if err != nil {
 		platform.Fatal(log, "authorizer", err)
 	}
-	svc := &registrysvc.Service{Store: store, DomainStore: domains, Authz: authorizer, Events: events}
+	svc := &registrysvc.Service{Store: store, DomainStore: domains, Authz: authorizer, Events: events,
+		MCPScopes: (&mcpsvc.Directory{Graph: graphClient}).Scopes} // the scope of the MCPs (ADR 0028)
 	if dir := platform.Env("GOAP_METHODOLOGIES_DIR", ""); dir != "" {
 		// bootstrap: import the YAML files of versions not stored yet, once the graph answers
 		go func() {

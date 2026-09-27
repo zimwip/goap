@@ -1475,13 +1475,20 @@ export interface McpTool {
   name?: string;
   description?: string;
   inputSchema?: Struct;
+  /** the tool changes nothing (a unit can keep only these) */
+  readOnly?: boolean;
 }
+
+/** Where a methodology may use an MCP (ADR 0028): declared by actions, by agents only, or both. */
+export type McpScope = 'action' | 'agent' | 'both';
 
 /** An MCP: the generic usage of a tool by an LLM (node `MCP:<name>` of the platform namespace). */
 export interface Mcp {
   name?: string;
   description?: string;
   tools?: McpTool[];
+  /** empty: both */
+  scope?: McpScope;
 }
 
 /**
@@ -1495,6 +1502,17 @@ export interface Adapter {
   /** name of the adapter definition (node `ADD:<name>` of the platform namespace) */
   adapter?: string;
   params?: Struct;
+  /**
+   * Restrictions of the MCP for the unit and its sub-units (ADR 0028); they add up along the unit chain. An
+   * instance without `adapter` only restricts (the implementation is inherited).
+   */
+  disabled?: boolean;
+  /** when not empty, the only tools allowed */
+  tools?: string[];
+  /** tools refused */
+  deny?: string[];
+  /** only the read-only tools */
+  readOnly?: boolean;
 }
 
 export interface EffectiveMcp {
@@ -1503,6 +1521,13 @@ export interface EffectiveMcp {
   inherited?: boolean;
   /** the connector the adapter calls (empty when the adapter definition cannot say) */
   connector?: string;
+  /** the tools the unit may call once the restrictions of its chain apply */
+  allowedTools?: string[];
+  /** the units whose instance restricts the MCP, nearest first */
+  restrictedBy?: string[];
+  disabled?: boolean;
+  /** built into the platform (goap-graph, goap-change, goap-scheduler, goap-admin) */
+  builtin?: boolean;
 }
 
 export interface TemplateParam {

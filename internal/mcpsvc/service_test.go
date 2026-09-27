@@ -361,3 +361,65 @@ func TestSnapshotFollowsTheGraph(t *testing.T) {
 		t.Fatalf("empty graph = %v, %v", s, err)
 	}
 }
+
+// A unit restricts an MCP it inherits without re-implementing it, for itself and its sub-units
+// (ADR 0028); the restrictions of the chain add up.
+func TestUnitRestrictsAnInheritedMCP(t *testing.T) {
+	ctx := context.Background()
+	g := world(t)
+	// ORG-A1 keeps list and read of the adapter it inherits from ORG-A; ORG-B has document-repository disabled
+	for _, a := range []mcp.Adapter{
+		{Unit: "ORG-A1", MCP: "document-repository", Tools: []string{"list", "read"}},
+		{Unit: "ORG-B", MCP: "document-repository", Disabled: true},
+	} {
+		if err := graphsvc.SeedAdapter(ctx, g, a); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := graphsvc.SeedUnit(ctx, g, "ORG-A2", "ORG-A2", "team", "ORG-A1"); err != nil {
+		t.Fatal(err)
+	}
+	inv := &fakeInvoker{resp: &connectorv1.InvokeResponse{Result: pbconv.Struct(map[string]any{"text": "hi"})}}
+	svc := newHub(t, g, inv)
+
+	for _, unit := range []string{"ORG-A1", "ORG-A2"} { // the sub-unit inherits the restriction
+		tools, mcps, err := svc.Tools(ctx, unit)
+		if err != nil || len(tools) != 2 || len(mcps) != 1 || tools[1].Name != "document-repository/read" {
+			t.Fatalf("%s: tools = %v %v %v", unit, tools, mcps, err)
+		}
+		if _, err := svc.Call(ctx, unit, "document-repository/write", map[string]any{"path": "x", "content": "y"}); !errors.Is(err, mcpsvc.ErrNotBound) {
+			t.Fatalf("%s: restricted tool called: %v", unit, err)
+		}
+		if _, err := svc.Call(ctx, unit, "document-repository/read", map[string]any{"path": "x"}); err != nil {
+			t.Fatal(err)
+		}
+		// the implementation is still the one of ORG-A
+		if got := pbconv.Map(inv.last.Config)["root"]; got != "/a" {
+			t.Fatalf("%s: root %v", unit, got)
+		}
+	}
+	_, eff, err := svc.Effective(ctx, "ORG-A2")
+	if err != nil || len(eff) != 1 || eff[0].Adapter.Unit != "ORG-A" || len(eff[0].Restriction.By) != 1 || eff[0].Restriction.By[0] != "ORG-A1" {
+		t.Fatalf("effective = %+v, %v", eff, err)
+	}
+
+	// disabled: listed as effective (the pane shows it) but no tool left, hence no MCP to schedule
+	if tools, mcps, _ := svc.Tools(ctx, "ORG-B"); len(tools) != 0 || len(mcps) != 0 {
+		t.Fatalf("disabled MCP usable: %v %v", tools, mcps)
+	}
+	if _, eff, _ := svc.Effective(ctx, "ORG-B"); len(eff) != 1 || !eff[0].Restriction.Disabled || eff[0].Usable() {
+		t.Fatalf("effective = %+v", eff)
+	}
+	// ORG-A is not affected by the restriction of its sub-unit
+	if tools, _, _ := svc.Tools(ctx, "ORG-A"); len(tools) != 3 {
+		t.Fatalf("ORG-A tools = %v", tools)
+	}
+
+	// a restriction-only instance checks against the MCP, not against an adapter definition
+	if _, err := svc.CheckAdapter(ctx, mcp.Adapter{Unit: "ORG-A1", MCP: "document-repository", Deny: []string{"write"}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.CheckAdapter(ctx, mcp.Adapter{Unit: "ORG-A1", MCP: "document-repository", Deny: []string{"delete"}}); !errors.Is(err, mcp.ErrInvalid) {
+		t.Fatalf("unknown tool restricted: %v", err)
+	}
+}

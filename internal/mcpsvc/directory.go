@@ -45,7 +45,15 @@ type Effective struct {
 	Adapter mcp.Adapter // Adapter.Unit is where it is defined
 	// Inherited: defined by an ancestor unit.
 	Inherited bool
+	// Restriction is what the instances of the unit's chain restrict (ADR 0028).
+	Restriction mcp.Restriction
 }
+
+// Allowed returns the MCP with only the tools the unit may call.
+func (e Effective) Allowed() mcp.Def { return e.Restriction.Apply(e.MCP) }
+
+// Usable reports whether the unit can call at least one tool of the MCP.
+func (e Effective) Usable() bool { return len(e.Allowed().Tools) > 0 }
 
 // BuildSnapshot reads the objects of the combined organisation and platform baseline graphs.
 func BuildSnapshot(baselines Baselines, nodes []domain.Node, links []domain.Link) *Snapshot {
@@ -152,26 +160,53 @@ func (s *Snapshot) AdapterDefs() []mcp.AdapterDef {
 	return out
 }
 
-// Resolve returns the adapter of an MCP for a unit: the one of the nearest unit of its chain.
+// Resolve returns the adapter of an MCP for a unit: the one of the nearest unit of its chain that
+// names an adapter definition (instances that only restrict are skipped).
 func (s *Snapshot) Resolve(unit, mcpName string) (a mcp.Adapter, inherited bool, ok bool) {
 	for i, u := range s.Chain(unit) {
-		if a, ok := s.adapters[u][mcpName]; ok {
+		if a, ok := s.adapters[u][mcpName]; ok && a.Implements() {
 			return a, i > 0, true
 		}
 	}
 	return mcp.Adapter{}, false, false
 }
 
-// Effective lists the MCPs a unit can use (an adapter exists in its chain for an MCP that
-// exists), each with its resolved adapter, by MCP name.
+// Restriction returns what the instances of the unit's chain restrict of an MCP: they all add up,
+// so that a unit cannot widen what an ancestor restricted.
+func (s *Snapshot) Restriction(unit, mcpName string) mcp.Restriction {
+	var r mcp.Restriction
+	for _, u := range s.Chain(unit) {
+		if a, ok := s.adapters[u][mcpName]; ok {
+			r.Add(a)
+		}
+	}
+	return r
+}
+
+// Effective lists the MCPs implemented for a unit (an adapter exists in its chain for an MCP that
+// exists), each with its resolved adapter and its restriction, by MCP name. A restricted MCP is
+// listed even when no tool is left (see Effective.Usable).
 func (s *Snapshot) Effective(unit string) []Effective {
 	var out []Effective
 	for _, d := range s.Defs() {
 		if a, inherited, ok := s.Resolve(unit, d.Name); ok {
-			out = append(out, Effective{MCP: d, Adapter: a, Inherited: inherited})
+			out = append(out, Effective{MCP: d, Adapter: a, Inherited: inherited, Restriction: s.Restriction(unit, d.Name)})
 		}
 	}
 	return out
+}
+
+// Scopes returns the scope of each MCP of the head of the platform namespace (ADR 0028).
+func (d *Directory) Scopes(ctx context.Context) (map[string]string, error) {
+	snap, err := d.Snapshot(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]string{}
+	for _, def := range snap.Defs() {
+		out[def.Name] = mcp.ScopeOf(def.Scope)
+	}
+	return out, nil
 }
 
 // Directory reads the snapshot of the head of the main branch, rebuilding it only when

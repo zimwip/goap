@@ -64,6 +64,10 @@ rooted in a different directory). Several organisations can work on one change, 
 - Web: one **Adapters** explorer manages MCPs, connectors and adapters together; an adapter opens in a dedicated editor
   (MCP and connector pickers showing which tools / operations the code handles, parameters, code editor) edits the
   `AdapterDef` node through a change. Domains cannot declare `adapter` algorithms any more (validation rejects them).
+- ADR 0028 adds the built-in MCPs and connectors of the platform (`goap-graph`, `goap-change`, `goap-scheduler`,
+  `goap-admin`), lent to every unit by the default organisation, restrictions of an MCP on an `Adapter` node
+  that add up along the unit chain, and the scope of an MCP (action, agent or both) that decides whether actions
+  or agents may declare it (point 6).
 - Follow-ups: validating adapter instances as a node type algorithm (ADR 0018) so that a change cannot apply an
   invalid one; "try it" for adapters against a fake connector; splitting a change by owner could pick the adapter
   units automatically.

@@ -26,6 +26,7 @@ import (
 	"github.com/zimwip/goap/gen/goap/registry/v1/registryv1connect"
 	"github.com/zimwip/goap/gen/goap/runtime/v1/runtimev1connect"
 	"github.com/zimwip/goap/internal/connectorkit"
+	"github.com/zimwip/goap/internal/connectors/builtin"
 	"github.com/zimwip/goap/internal/connectors/localfs"
 	"github.com/zimwip/goap/internal/enginesvc"
 	"github.com/zimwip/goap/internal/graphsvc"
@@ -75,7 +76,9 @@ func main() {
 	g.Authorizer = graphsvc.TransitionAuthorizer(authorizer)
 	var triggers *engine.TriggerManager
 	// methodologies and domains are nodes of the graph: the registry needs no database
-	reg := &registrysvc.Service{Store: registrysvc.NewGraphStore(g), DomainStore: st.domains, Authz: authorizer}
+	// the scope of the MCPs (ADR 0028) is checked where methodologies declare them
+	reg := &registrysvc.Service{Store: registrysvc.NewGraphStore(g), DomainStore: st.domains, Authz: authorizer,
+		MCPScopes: (&mcpsvc.Directory{Graph: g}).Scopes}
 	// the graph judges nodes by the types of the published domains (ADR 0012): its catalogue follows the registry
 	types := typecat.NewLive(reg.Domains)
 	g.Types = func() graph.TypeCatalog { return types.Get() }
@@ -112,6 +115,9 @@ func main() {
 	}
 	if _, err := graphsvc.SeedDefaults(ctx, g); err != nil {
 		platform.Fatal(log, "seed defaults", err)
+	}
+	if _, err := graphsvc.SeedBuiltins(ctx, g); err != nil {
+		platform.Fatal(log, "seed built-in MCPs", err)
 	}
 	// the gateway configuration is graph data, seeded once; API keys are references resolved from the environment or Vault
 	if cfg, err := modelgw.InitialConfig(ctx, platform.Env("GOAP_MODELS_CONFIG", ""), secrets); err != nil {
@@ -152,8 +158,9 @@ func main() {
 			triggers.Handle(ctx, engine.TriggerEventOf(ev))
 		}
 	}
-	// MCP hub in-process; the local file system connector runs inside too, other connectors
-	// register over HTTP like in the distributed platform
+	// MCP hub in-process; the local file system connector and the built-in connectors (ADR 0028,
+	// added once the engine exists) run inside too, other connectors register over HTTP like in
+	// the distributed platform
 	connectors := map[string]connectorkit.Connector{"localfs": localfs.Connector{}}
 	connectorToken := os.Getenv("GOAP_CONNECTOR_TOKEN")
 	hub := &mcpsvc.Service{
@@ -163,7 +170,6 @@ func main() {
 		Secrets:   mcpsvc.ResolveSecret(secrets),
 		Lease:     platform.EnvDuration("GOAP_CONNECTOR_LEASE", mcpsvc.DefaultLease),
 	}
-	hub.KeepRegistered(ctx, connectors)
 	if root := os.Getenv("GOAP_DEV_FS_ROOT"); root != "" {
 		// demo: the default organisation implements document-repository with a directory
 		if snap, err := hub.Directory.Snapshot(ctx); err != nil {
@@ -201,6 +207,11 @@ func main() {
 	triggers = &engine.TriggerManager{Engine: e, Log: log}
 	triggers.Start(ctx)
 	go triggers.WatchProcesses(ctx, broker)
+	engineHandler := &enginesvc.Handler{Engine: e, Log: log, DefaultPrincipal: &dev, Authz: authorizer, Broker: broker, Triggers: triggers}
+	// the built-in connectors call the platform in-process, for the caller of the tool
+	maps.Copy(connectors, builtin.Connectors(builtin.Ports{Graph: engine.EventingGraph{GraphPort: g, OnEvent: onChange}, Engine: engineHandler,
+		Hub: hub, Registry: reg, Authz: authorizer, Floor: authorizer.Floor()}))
+	hub.KeepRegistered(ctx, connectors)
 	srv := platform.NewServer(log, platform.Env("GOAP_HTTP_ADDR", ":8080"))
 	srv.Mount(graphv1connect.NewGraphServiceHandler(&graphsvc.Handler{Graph: g, Events: engine.Publishers{changePublisher(onChange), indexSink}, Authz: authorizer, Floor: authorizer.Floor(), Identity: ident}, telemetry.HandlerOptions()...))
 	srv.Mount(registryv1connect.NewRegistryServiceHandler(&registrysvc.Handler{Service: reg, Identity: ident}, telemetry.HandlerOptions()...))
@@ -208,7 +219,7 @@ func main() {
 	srv.Mount(mcpv1connect.NewMcpServiceHandler(&mcpsvc.Handler{Service: hub, Authz: authorizer, Identity: ident, ConnectorToken: connectorToken}, telemetry.HandlerOptions()...))
 	srv.Mount(modelv1connect.NewModelServiceHandler(&modelgw.Handler{Service: gw, Identity: ident, Authz: authorizer}, telemetry.HandlerOptions()...))
 	srv.Mount(indexv1connect.NewIndexServiceHandler(&indexersvc.Handler{Service: indexer, Identity: ident, Authz: authorizer}, telemetry.HandlerOptions()...))
-	srv.Mount(enginev1connect.NewEngineServiceHandler(&enginesvc.Handler{Engine: e, Log: log, DefaultPrincipal: &dev, Authz: authorizer, Broker: broker, Triggers: triggers}, telemetry.HandlerOptions()...))
+	srv.Mount(enginev1connect.NewEngineServiceHandler(engineHandler, telemetry.HandlerOptions()...))
 	// single process: the platform is up when this answers (the gateway serves it otherwise)
 	srv.Echo.GET("/api/status", func(c *echo.Context) error {
 		return c.JSON(http.StatusOK, map[string]any{"status": "ok", "time": time.Now().UTC(),

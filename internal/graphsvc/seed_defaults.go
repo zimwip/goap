@@ -2,7 +2,9 @@ package graphsvc
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"maps"
 
 	"github.com/zimwip/goap/pkg/access"
 	"github.com/zimwip/goap/pkg/algo"
@@ -209,4 +211,89 @@ func SeedModels(ctx context.Context, g *graph.Graph, providers []llmcfg.Provider
 		return false, nil
 	}
 	return true, applyOn(ctx, g, llmcfg.NamespacePlatform, "Model gateway configuration", items)
+}
+
+// SeedBuiltins makes sure, at every start, that the built-in MCPs and their adapter definitions exist
+// and match the code (ADR 0028): like the built-in domains they ship with the platform. The first
+// time a built-in MCP is seeded the default organisation gets an instance of its adapter, so that
+// every unit can use it; the instance is never recreated afterwards, so that a unit restricting or an
+// administrator removing it stays so. It reports whether it wrote anything; SeedDefaults runs first.
+func SeedBuiltins(ctx context.Context, g *graph.Graph) (bool, error) {
+	head, err := g.BranchHead(ctx, mcp.NamespacePlatform, domain.MainBranch)
+	if err != nil && !errors.Is(err, graph.ErrNotFound) {
+		return false, err
+	}
+	current := map[string]domain.Node{}
+	if head.ID != "" {
+		nodes, _, err := g.BaselineGraph(ctx, head.ID)
+		if err != nil {
+			return false, err
+		}
+		for _, n := range nodes {
+			if !n.Deleted {
+				current[n.Key] = n
+			}
+		}
+	}
+	var edits []graph.NodeEdit
+	var fresh []string
+	sync := func(key, typ string, props map[string]any) {
+		n, ok := current[key]
+		switch {
+		case !ok:
+			edits = append(edits, createNode(key, typ, props))
+		case !sameProps(n.Properties, props):
+			pre := n.Ref()
+			set := maps.Clone(props)
+			for k := range n.Properties {
+				if _, keep := props[k]; !keep {
+					set[k] = nil // properties are merged: clear the ones the code dropped
+				}
+			}
+			edits = append(edits, graph.NodeEdit{Pre: &pre, Props: set, Rationale: "Built-in " + key + " follows the platform"})
+		}
+	}
+	defs := mcp.BuiltinAdapterDefs()
+	for i, d := range mcp.BuiltinDefs() {
+		if _, ok := current[mcp.MCPKey(d.Name)]; !ok {
+			fresh = append(fresh, d.Name)
+		}
+		sync(mcp.MCPKey(d.Name), mcp.NodeTypeMCP, d.Props())
+		sync(mcp.AdapterDefKey(defs[i].Name), mcp.NodeTypeAdapterDef, defs[i].Props())
+	}
+	if len(edits) > 0 {
+		if err := applyOn(ctx, g, mcp.NamespacePlatform, "Built-in MCPs", edits); err != nil {
+			return false, err
+		}
+	}
+	if len(fresh) == 0 {
+		return len(edits) > 0, nil
+	}
+	org, err := g.NodeByKey(ctx, mcp.NamespaceOrganisation, domain.DefaultOrg)
+	if err != nil {
+		return false, err
+	}
+	var instances []graph.NodeEdit
+	for _, name := range fresh {
+		a := mcp.BuiltinAdapter(domain.DefaultOrg, name)
+		if _, err := g.NodeByKey(ctx, mcp.NamespaceOrganisation, mcp.AdapterKey(a.Unit, a.MCP)); err == nil {
+			continue
+		} else if !errors.Is(err, graph.ErrNotFound) {
+			return false, err
+		}
+		instances = append(instances, linkTo(createNode(mcp.AdapterKey(a.Unit, a.MCP), mcp.NodeTypeAdapter, a.Props()), mcp.LinkOwner, org.Ref()))
+	}
+	if len(instances) > 0 {
+		if err := applyOn(ctx, g, mcp.NamespaceOrganisation, "Built-in adapters of the default organisation", instances); err != nil {
+			return false, err
+		}
+	}
+	return true, nil
+}
+
+// sameProps reports whether the properties of a node hold the wanted ones (compared as JSON).
+func sameProps(have, want map[string]any) bool {
+	a, _ := json.Marshal(have)
+	b, _ := json.Marshal(want)
+	return string(a) == string(b)
 }
