@@ -1,6 +1,6 @@
 # ADR 0012 — Node types: qualified references resolved from the published domains
 
-**Status**: accepted, being implemented · **Date**: 2026-09
+**Status**: accepted, implemented · **Date**: 2026-09
 
 ## Context
 
@@ -33,6 +33,8 @@ Question answered (CLAUDE.md, rule 8): **WHAT** is being changed — how a node 
 - Inside a domain definition, a bare name is a type of that domain (`extends: Requirement` in `alm`), a qualified one
   a type of another (`extends: base@Item`). `domain.TypeRef` parses and qualifies references; `pkg/typecat` is the
   catalogue.
+- At run time, the engine qualifies a bare type or link type written by an action (a script's `createNode`, an item,
+  a link) with the namespace of the change, which is the domain the methodology targets (ADR 0013 §1).
 
 ### 2. The registry is the reference; the services hold an in-memory copy
 - The **registry** is the reference of the node types: the published version of each domain (ADR 0013, 0023). It
@@ -42,7 +44,8 @@ Question answered (CLAUDE.md, rule 8): **WHAT** is being changed — how a node 
   change, the node events of the index), the engine (`x.types`). A service loads it from the registry at startup and
   keeps it in sync with the registry's events (`goap.registry.domain.published`, archived, ...); it does not read the
   domain definitions from the graph itself. The code is a library (`pkg/`) shared by the registry and the services.
-  The IDE asks the registry.
+  The IDE loads the resolved catalogue from the registry (`ListTypes`: types with their properties, ancestors,
+  lifecycle and editor; link types with their ends; the version in force of each domain).
 - A change is judged by the catalogue **in force when it is checked**: when a version is written, and again when the
   change is applied. Publishing a domain version applies to the changes checked afterwards.
 - Nothing is projected: no metadata nodes the graph enforces, no `M:` / `D:` keys, no `pkg/metamodel`
@@ -58,7 +61,7 @@ Question answered (CLAUDE.md, rule 8): **WHAT** is being changed — how a node 
 
 ### 4. Meta-domains close the loop without projecting
 - The definitions of methodologies and domains are nodes too (ADR 0023), typed by two **meta-domains** built into the
-  platform: `methodology` (`MethodologyVersion`, `Agent`, `Action`, `Condition`, `Goal`) and `domain`
+  platform: `methodology` (`MethodologyVersion`, `Agent`, `Action`, `Condition`, `Goal`, `ToolRequest`) and `domain`
   (`DomainVersion`, `NodeType`, `LinkType`, `Lifecycle`, `Algorithm`, `AlgorithmInstance`).
 - They ship with the code (embedded YAML) and are always in the catalogue, before anything is loaded from the registry:
   the registry writes its definition nodes into a graph that does not need the registry to check them, so there is no

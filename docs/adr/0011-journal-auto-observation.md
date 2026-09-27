@@ -1,6 +1,6 @@
 # ADR 0011 — Execution journal and self-observation
 
-**Status**: accepted (§2: being implemented on the definition nodes, ADR 0023) · **Date**: 2026-09
+**Status**: accepted, implemented · **Date**: 2026-09
 
 ## Context
 The execution of a change must be **traceable and auditable end to end**: not just the blackboard
@@ -35,10 +35,13 @@ OpenTelemetry remains the source of truth for durations and technical pain point
   an **LLM** (`vars.llm_review`): proposals on the definition nodes of the observed methodology
   (ADR 0023) — specialization by a script for a systematizable LLM action, `fast` model, cost, an agent's
   actions — and **MCP tool requests** for a slow point. Each proposal is a change impact (ADR 0024) of the
-  observer's change, in the `methodology` namespace, on an element of a **new draft version** (next patch
-  version) of the methodology: `modified` for an existing element, `created` for a specialization.
+  observer's change, in the `methodology` namespace, on a definition node of the **observed version**
+  (`MV:<methodology>@<version>/<kind>/<name>`, typed `methodology@Action`, `@Agent`, `@ToolRequest`, ...):
+  `modified` for an existing element, `created` for a specialization (with its `methodology@specializes` link) or a
+  tool request. The observed version is published: the accepted proposals land in a new version.
 - Human review of the change impacts (a comment each), then `draft_methodology` (`methodology.draft`,
-  permission `methodology:write`) saves the draft with the accepted ones, to be published from the editor.
+  permission `methodology:write`) saves a **new draft version** (next patch version) of the methodology with the
+  accepted ones, to be published from the editor.
 
 ## Consequences
 - The journal grows with executions: retention / archiving to plan (M1).

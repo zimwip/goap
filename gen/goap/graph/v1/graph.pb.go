@@ -173,7 +173,7 @@ type Node struct {
 	Reason string `protobuf:"bytes,11,opt,name=reason,proto3" json:"reason,omitempty"`
 	// state in the lifecycle of the node type (empty: none)
 	State string `protobuf:"bytes,12,opt,name=state,proto3" json:"state,omitempty"`
-	// namespace of the node (default sdlc)
+	// namespace of the node (required with a type catalogue)
 	Namespace string `protobuf:"bytes,13,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	// change impact that produced this version, and its acceptance comment (ADR 0024)
 	ChangeImpact string `protobuf:"bytes,14,opt,name=change_impact,json=changeImpact,proto3" json:"change_impact,omitempty"`
@@ -797,7 +797,7 @@ type Change struct {
 	Items            []*ChangeItem          `protobuf:"bytes,10,rep,name=items,proto3" json:"items,omitempty"`
 	CreatedAt        *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	Branch           string                 `protobuf:"bytes,12,opt,name=branch,proto3" json:"branch,omitempty"`
-	// namespace the change acts on (default sdlc)
+	// namespace the change acts on (required with a type catalogue)
 	Namespace string `protobuf:"bytes,13,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	// sub-change: the parent change and the responsible OrgUnit key
 	ParentId string `protobuf:"bytes,14,opt,name=parent_id,json=parentId,proto3" json:"parent_id,omitempty"`
@@ -1358,7 +1358,7 @@ type CreateObjectRequest struct {
 	NodeType    string                 `protobuf:"bytes,2,opt,name=node_type,json=nodeType,proto3" json:"node_type,omitempty"`
 	Key         string                 `protobuf:"bytes,3,opt,name=key,proto3" json:"key,omitempty"`
 	Props       *structpb.Struct       `protobuf:"bytes,4,opt,name=props,proto3" json:"props,omitempty"`
-	// namespace of the created object (default sdlc)
+	// namespace of the created object (default: the namespace of the type)
 	Namespace     string `protobuf:"bytes,5,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1583,7 +1583,7 @@ type GetNodeRequest struct {
 	Ref *NodeRef `protobuf:"bytes,1,opt,name=ref,proto3" json:"ref,omitempty"`
 	// alternative to ref: latest version of the node with this key
 	Key string `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
-	// namespace of key (default sdlc)
+	// namespace of key (required with a type catalogue)
 	Namespace     string `protobuf:"bytes,3,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -2102,7 +2102,7 @@ type CreateChangeRequest struct {
 	Data        *structpb.Struct       `protobuf:"bytes,5,opt,name=data,proto3" json:"data,omitempty"`
 	// branch the change applies to (default main)
 	Branch string `protobuf:"bytes,6,opt,name=branch,proto3" json:"branch,omitempty"`
-	// namespace the change acts on (default sdlc)
+	// namespace the change acts on (required with a type catalogue)
 	Namespace string `protobuf:"bytes,7,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	// give the change a branch of its own, merged into `branch` when applied
 	OwnBranch bool `protobuf:"varint,8,opt,name=own_branch,json=ownBranch,proto3" json:"own_branch,omitempty"`

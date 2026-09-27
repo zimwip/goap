@@ -342,13 +342,8 @@ graph.
 
 A node type may name the **editor** of its nodes in the IDE (`editor: agent`, inherited through `extends`,
 [ADR 0027](adr/0027-node-type-editors.md)): the IDE opens every node through `openNode` (`web/src/lib/nodeEditors.ts`),
-which reads the editor from the registry's type model and falls back to the default node editor; the editors a type can name
+which reads the editor from the type catalogue the IDE loads from the registry (`ListTypes`) and falls back to the default node editor; the editors a type can name
 are registered in `web/src/lib/views/nodeEditors.ts` (`agent`, `action`, `methodology`, `domain`, `unit`, `mcp`, ...).
-
-> **Transition** (ADR 0012, 0013, 0023 being implemented): the code still projects published methodologies and domains
-> onto the graph (`pkg/metamodel`: `NodeType` nodes keyed `D:<domain>/nodetype/<name>`, elements keyed
-> `M:<methodology>/<kind>/<name>`), stores definitions as `Def*` nodes, types nodes by bare name in the `sdlc`
-> namespace and references a domain with `domainRef`. These go away as the ADRs are implemented.
 
 ### 2.11 Agent triggers
 
@@ -850,9 +845,9 @@ docs/                        architecture, ADRs
 | **M6 — K8s** | Helm charts, engine HPA · ✅ OpenTelemetry observability, sandbox manifests |
 | **M8 — branches and decisions** 🟡 | ADR 0009 (accepted) · ✅ graph: per-branch versions, 3-way branch merge, change divergence and rebase · remaining: engine (conflict → validated merge → rebase and replanning), change budget, options explored as branches, comparison, decision loops (questions → analyses), merging the chosen option; then versioned containers and releases |
 | **M9 — self-observation** ✅ | ADR 0011: execution journal on the change axis (ticks, actions, LLM / tool calls, decisions, item provenance), `observer` agent (journal + OpenTelemetry traces → findings → proposals → review → draft), action specialization and type subtyping |
-| **M10 — SDLC** 🟡 | `sdlc` 0.3.0 methodology on the shared ALM domain (need → requirement → function → component → artifact → application → solution, data, interfaces, flows), build specialized by technology, incremental releases and deployment (dev → test → staging → production, release manager approval), incremental actions · to refine: quality (coverage, security), rollback, freezes / change windows, MCP tools (repositories, CI, artifact registry, deployment) |
+| **M10 — SDLC** 🟡 | `sdlc` 0.4.0 methodology on the `alm` namespace (ALM domain) (need → requirement → function → component → artifact → application → solution, data, interfaces, flows), build specialized by technology, incremental releases and deployment (dev → test → staging → production, release manager approval), incremental actions · to refine: quality (coverage, security), rollback, freezes / change windows, MCP tools (repositories, CI, artifact registry, deployment) |
 | **M7 — agents** ✅ | agents (goap / utility / hybrid), JS / Go script actions with DSL, sub-agents, sandbox per process, IDE |
-| **M11 — node types** 🟡 | ADR 0012 / 0013 / 0023: qualified type references `<namespace>@<NodeType>`, one domain per namespace, registry as the reference of the types, with an in-memory catalogue in the graph and the engine kept in sync by its events and an existence rule, definitions as nodes of the `methodology` / `domain` meta-domains; removes the `NodeType` projection, the `M:` / `D:` elements and the `Def*` types · in progress |
+| **M11 — node types** ✅ | ADR 0012 / 0013 / 0023: qualified type references `<namespace>@<NodeType>`, one domain per namespace, registry as the reference of the types, with an in-memory catalogue in the graph and the engine kept in sync by its events and an existence rule, definitions as nodes of the `methodology` / `domain` meta-domains; no `NodeType` projection, no `M:` / `D:` elements, no `Def*` types |
 
 ## 7. Open questions
 
