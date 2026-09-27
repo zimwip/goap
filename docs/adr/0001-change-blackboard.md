@@ -8,10 +8,12 @@ methodologies, an agent's work must be persistent, auditable, shareable between 
 agents, and linked to the reference repository it modifies.
 
 ## Decision
-A process's blackboard is a **Change** stored by the graph service. Its elements
-(`impact`, `proposal`, `decision`, `artifact`) reference **exact versions** of nodes in the
-reference graph. Actions only write ChangeItems; the domain graph is modified
-only by `ApplyChange`, which produces a new baseline.
+A process's blackboard is a **Change** stored by the graph service. It holds the change's facts
+(items of kind `decision`, `artifact`, `merge`, `flow`) and its **change impacts** (ADR 0024): the
+nodes it declares, each with the exact version it starts from (`pre`) and the version it writes
+(`post`). Actions write facts and versions on the change's own branch (ADR 0015 §5); the target
+branch is modified only when the change is applied (`ApplyChange`, a merge that produces a new
+baseline).
 
 ## Consequences
 - Full traceability (`producedBy` / `derivedFrom` provenance) and possible resumption of a process.

@@ -34,14 +34,14 @@ the intent without any rule. Compared with plm-core, aifact and ailm, the missin
 4. **Attachment.** A change is attached to the nodes it modifies through its change impacts (ADR 0024;
    `GetChangeImpacts`, `ListNodeChanges`). **Several open changes may be attached to the same node**:
    conflicts are detected when they are applied (3-way merge, ADR 0009). The change stays an unversioned entity; its status now follows a machine
-   (`draft → active → applied | abandoned`, only `Apply` applies).
+   (`draft → active → (merge_pending →) applied | abandoned`, only `Apply` applies; ADR 0015 §5).
 5. **Transitions are checked when the change is applied**, for the actor who applies it: the
    transition exists, the actor holds its permission (`type:action`, default `node:transition`;
    callers without identity are trusted internal services), the node has the required attributes
    and links, the CEL guard holds. A node created with `create_node` starts in the initial state
    (or in `state` when a transition `initial → state` exists). A created node is the change's working copy: it may be
    written again in its initial state (ADR 0024).
-6. **Documents.** A type with `document.contains` embeds nodes through outgoing `contains` links. The
+6. **Documents.** A type with `document.contains` embeds nodes through outgoing `<namespace>@contains` links (`alm@contains`). The
    document gets a new version when its child set changes (outgoing links belong to the source
    version). A document transition with `children.states` is **validated, not cascaded**: every
    contained child, **in the result baseline** (so children moved by the same change count with
@@ -56,6 +56,6 @@ the intent without any rule. Compared with plm-core, aifact and ailm, the missin
 - A lifecycle is opt-in per type (`domains/alm.yaml`: `Requirement` family, `Release`).
 - Actions that update approved nodes must reopen them first (llm actions are told so).
 - Default policy `node:transition` (contributor / methodologist / approver of the org).
-- Not done: refusing to publish a domain that removes a state still used by nodes (the registry has
-  no access to the graph), a change-scoped read of the effective state in the UI, cascading
+- Not done: refusing to publish a domain that removes a state still used by nodes (the registry does
+  not query node states), a change-scoped read of the effective state in the UI, cascading
   transitions, suspect-link review workflow on state changes.
