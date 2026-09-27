@@ -59,6 +59,16 @@ message NodeType {
   optional bool change_controlled = 7;
   // property validator instances (ADR 0018), in call order
   repeated PropertyValidator validators = 8;
+  // properties the node index keeps (ADR 0026)
+  repeated SearchProperty search = 9;
+}
+
+// SearchProperty declares how the node index uses a property: text (full text
+// and embedding document), facet (filter and count).
+message SearchProperty {
+  string property = 1;
+  bool text = 2;
+  bool facet = 3;
 }
 
 // PropertyValidator plugs an algorithm instance of type property_validator on a property.

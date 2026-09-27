@@ -37,6 +37,8 @@ const (
 	ModelServiceCompleteProcedure = "/goap.model.v1.ModelService/Complete"
 	// ModelServiceListModelsProcedure is the fully-qualified name of the ModelService's ListModels RPC.
 	ModelServiceListModelsProcedure = "/goap.model.v1.ModelService/ListModels"
+	// ModelServiceEmbedProcedure is the fully-qualified name of the ModelService's Embed RPC.
+	ModelServiceEmbedProcedure = "/goap.model.v1.ModelService/Embed"
 	// ModelServiceListProviderKindsProcedure is the fully-qualified name of the ModelService's
 	// ListProviderKinds RPC.
 	ModelServiceListProviderKindsProcedure = "/goap.model.v1.ModelService/ListProviderKinds"
@@ -55,6 +57,8 @@ const (
 type ModelServiceClient interface {
 	Complete(context.Context, *connect.Request[v1.CompleteRequest]) (*connect.Response[v1.CompleteResponse], error)
 	ListModels(context.Context, *connect.Request[v1.ListModelsRequest]) (*connect.Response[v1.ListModelsResponse], error)
+	// Embeds texts on the embedding model (alias "embed" by default), one vector per text (ADR 0026).
+	Embed(context.Context, *connect.Request[v1.EmbedRequest]) (*connect.Response[v1.EmbedResponse], error)
 	// Platform administration of the gateway (`admin` on the `platform`
 	// resource), read-only: providers, models and aliases are nodes of the
 	// platform namespace of the graph, changed through changes. Providers are
@@ -91,6 +95,12 @@ func NewModelServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(modelServiceMethods.ByName("ListModels")),
 			connect.WithClientOptions(opts...),
 		),
+		embed: connect.NewClient[v1.EmbedRequest, v1.EmbedResponse](
+			httpClient,
+			baseURL+ModelServiceEmbedProcedure,
+			connect.WithSchema(modelServiceMethods.ByName("Embed")),
+			connect.WithClientOptions(opts...),
+		),
 		listProviderKinds: connect.NewClient[v1.ListProviderKindsRequest, v1.ListProviderKindsResponse](
 			httpClient,
 			baseURL+ModelServiceListProviderKindsProcedure,
@@ -122,6 +132,7 @@ func NewModelServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 type modelServiceClient struct {
 	complete          *connect.Client[v1.CompleteRequest, v1.CompleteResponse]
 	listModels        *connect.Client[v1.ListModelsRequest, v1.ListModelsResponse]
+	embed             *connect.Client[v1.EmbedRequest, v1.EmbedResponse]
 	listProviderKinds *connect.Client[v1.ListProviderKindsRequest, v1.ListProviderKindsResponse]
 	listProviders     *connect.Client[v1.ListProvidersRequest, v1.ListProvidersResponse]
 	discoverModels    *connect.Client[v1.DiscoverModelsRequest, v1.DiscoverModelsResponse]
@@ -136,6 +147,11 @@ func (c *modelServiceClient) Complete(ctx context.Context, req *connect.Request[
 // ListModels calls goap.model.v1.ModelService.ListModels.
 func (c *modelServiceClient) ListModels(ctx context.Context, req *connect.Request[v1.ListModelsRequest]) (*connect.Response[v1.ListModelsResponse], error) {
 	return c.listModels.CallUnary(ctx, req)
+}
+
+// Embed calls goap.model.v1.ModelService.Embed.
+func (c *modelServiceClient) Embed(ctx context.Context, req *connect.Request[v1.EmbedRequest]) (*connect.Response[v1.EmbedResponse], error) {
+	return c.embed.CallUnary(ctx, req)
 }
 
 // ListProviderKinds calls goap.model.v1.ModelService.ListProviderKinds.
@@ -162,6 +178,8 @@ func (c *modelServiceClient) ListCatalog(ctx context.Context, req *connect.Reque
 type ModelServiceHandler interface {
 	Complete(context.Context, *connect.Request[v1.CompleteRequest]) (*connect.Response[v1.CompleteResponse], error)
 	ListModels(context.Context, *connect.Request[v1.ListModelsRequest]) (*connect.Response[v1.ListModelsResponse], error)
+	// Embeds texts on the embedding model (alias "embed" by default), one vector per text (ADR 0026).
+	Embed(context.Context, *connect.Request[v1.EmbedRequest]) (*connect.Response[v1.EmbedResponse], error)
 	// Platform administration of the gateway (`admin` on the `platform`
 	// resource), read-only: providers, models and aliases are nodes of the
 	// platform namespace of the graph, changed through changes. Providers are
@@ -194,6 +212,12 @@ func NewModelServiceHandler(svc ModelServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(modelServiceMethods.ByName("ListModels")),
 		connect.WithHandlerOptions(opts...),
 	)
+	modelServiceEmbedHandler := connect.NewUnaryHandler(
+		ModelServiceEmbedProcedure,
+		svc.Embed,
+		connect.WithSchema(modelServiceMethods.ByName("Embed")),
+		connect.WithHandlerOptions(opts...),
+	)
 	modelServiceListProviderKindsHandler := connect.NewUnaryHandler(
 		ModelServiceListProviderKindsProcedure,
 		svc.ListProviderKinds,
@@ -224,6 +248,8 @@ func NewModelServiceHandler(svc ModelServiceHandler, opts ...connect.HandlerOpti
 			modelServiceCompleteHandler.ServeHTTP(w, r)
 		case ModelServiceListModelsProcedure:
 			modelServiceListModelsHandler.ServeHTTP(w, r)
+		case ModelServiceEmbedProcedure:
+			modelServiceEmbedHandler.ServeHTTP(w, r)
 		case ModelServiceListProviderKindsProcedure:
 			modelServiceListProviderKindsHandler.ServeHTTP(w, r)
 		case ModelServiceListProvidersProcedure:
@@ -247,6 +273,10 @@ func (UnimplementedModelServiceHandler) Complete(context.Context, *connect.Reque
 
 func (UnimplementedModelServiceHandler) ListModels(context.Context, *connect.Request[v1.ListModelsRequest]) (*connect.Response[v1.ListModelsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.model.v1.ModelService.ListModels is not implemented"))
+}
+
+func (UnimplementedModelServiceHandler) Embed(context.Context, *connect.Request[v1.EmbedRequest]) (*connect.Response[v1.EmbedResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.model.v1.ModelService.Embed is not implemented"))
 }
 
 func (UnimplementedModelServiceHandler) ListProviderKinds(context.Context, *connect.Request[v1.ListProviderKindsRequest]) (*connect.Response[v1.ListProviderKindsResponse], error) {

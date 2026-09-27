@@ -3,29 +3,31 @@ version: 1.0.0
 description: >
   Application lifecycle management domain: needs, requirements, functions, components, builds, releases and deployments. Shared by the delivery methodologies (impact-analysis, test-design, sdlc).
 nodeTypes:
-  - {name: Need, description: Business need expressed by a stakeholder, properties: [title, description, stakeholder]}
+  - {name: Need, description: Business need expressed by a stakeholder, properties: [title, description, stakeholder], search: [{property: title, text: true}, {property: description, text: true}, {property: stakeholder, facet: true}]}
   - name: Requirement
     description: Requirement satisfying a need
     properties: [title, description, priority, status, approvedAt]
     lifecycle: requirement
+    search: [{property: title, text: true}, {property: description, text: true}, {property: priority, facet: true}, {property: status, facet: true}]
     validators:
       - {property: title, instance: title-max-200}
   - {name: FunctionalRequirement, extends: Requirement, description: Functional requirement}
-  - {name: NonFunctionalRequirement, extends: Requirement, description: Non-functional requirement (performance, availability…), properties: [category]}
+  - {name: NonFunctionalRequirement, extends: Requirement, description: Non-functional requirement (performance, availability…), properties: [category], search: [{property: category, facet: true}]}
   - {name: SecurityRequirement, extends: NonFunctionalRequirement, description: Security requirement}
-  - {name: Function, description: Function (capability) realizing requirements, properties: [title, description]}
-  - {name: Component, description: Software component implementing functions, properties: [title, technology, version, repository]}
+  - {name: Function, description: Function (capability) realizing requirements, properties: [title, description], search: [{property: title, text: true}, {property: description, text: true}]}
+  - {name: Component, description: Software component implementing functions, properties: [title, technology, version, repository], search: [{property: title, text: true}, {property: technology, facet: true}, {property: version, facet: true}]}
   - {name: BuildArtifact, description: Artifact produced by the build of a component, properties: [name, format, version, technology, coordinates, toolchain, checks]}
-  - {name: Application, description: Deployable application composed of components, properties: [title, version]}
-  - {name: Solution, description: Solution grouping applications serving needs, properties: [title]}
+  - {name: Application, description: Deployable application composed of components, properties: [title, version], search: [{property: title, text: true}, {property: version, facet: true}]}
+  - {name: Solution, description: Solution grouping applications serving needs, properties: [title], search: [{property: title, text: true}]}
   - {name: Data, description: Data object, properties: [title, classification]}
-  - {name: Interface, description: Interface (API, file, event) exposed by an application, properties: [title, protocol, version]}
+  - {name: Interface, description: Interface (API, file, event) exposed by an application, properties: [title, protocol, version], search: [{property: title, text: true}, {property: protocol, facet: true}]}
   - {name: Flow, description: Data flow between applications through an interface, properties: [title, mode, frequency]}
-  - {name: TestCase, description: Test case verifying a requirement, properties: [title, level, steps]}
+  - {name: TestCase, description: Test case verifying a requirement, properties: [title, level, steps], search: [{property: title, text: true}, {property: steps, text: true}, {property: level, facet: true}]}
   - name: Release
     description: Deliverable version of an application (a set of artifacts)
     properties: [title, version, status, notes]
     lifecycle: release
+    search: [{property: title, text: true}, {property: notes, text: true}, {property: version, facet: true}]
     validators:
       - {property: version, instance: dotted-version}
   - {name: Environment, description: Execution environment (dev, test, staging, production), properties: [name, stage, order, url]}

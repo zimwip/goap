@@ -529,3 +529,16 @@ func (h *Handler) ListExecutions(ctx context.Context, r *connect.Request[graphv1
 	rs, err := h.Graph.Journal(ctx, domain.ExecutionFilter{ChangeID: domain.ChangeID(r.Msg.ChangeId), ProcessIDs: r.Msg.ProcessIds})
 	return res(&graphv1.ListExecutionsResponse{Records: pbconv.ExecutionsToPB(rs)}, err)
 }
+
+// RepublishIndex publishes again the node and baseline events so that an index can be rebuilt (ADR 0026).
+func (h *Handler) RepublishIndex(ctx context.Context, r *connect.Request[graphv1.RepublishIndexRequest]) (*connect.Response[graphv1.RepublishIndexResponse], error) {
+	ctx = h.Identity.Context(ctx, r.Header())
+	if err := authz.Check(ctx, h.Authz, authz.Request{Subject: authz.From(ctx), Action: "admin", Resource: authz.Resource{Type: "platform"}}); err != nil {
+		return nil, rpcerr.ToConnect(err)
+	}
+	if h.Events == nil {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("no event bus"))
+	}
+	n, err := h.Graph.Republish(ctx, h.Events)
+	return res(&graphv1.RepublishIndexResponse{Versions: int32(n)}, err)
+}

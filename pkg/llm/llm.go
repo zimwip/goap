@@ -64,3 +64,25 @@ func DecodeJSON(text string, v any) error {
 	}
 	return nil
 }
+
+// EmbedRequest asks for the embedding of texts. Model is an alias ("embed" when empty) or "provider/model".
+type EmbedRequest struct {
+	Model string   `json:"model,omitempty"`
+	Texts []string `json:"texts"`
+}
+
+// EmbedResponse holds one vector per text, in order.
+type EmbedResponse struct {
+	Vectors  [][]float32 `json:"vectors"`
+	Provider string      `json:"provider"`
+	Model    string      `json:"model"`
+	Tokens   int         `json:"tokens,omitempty"`
+}
+
+// Embedder embeds texts (implemented by the model gateway).
+type Embedder interface {
+	Embed(ctx context.Context, req EmbedRequest) (EmbedResponse, error)
+}
+
+// EmbedAlias is the alias of the embedding model of the platform.
+const EmbedAlias = "embed"

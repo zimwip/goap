@@ -257,7 +257,7 @@ func TestDefaultConfigIsSeededOnce(t *testing.T) {
 	if _, _, err := svc.Router.Resolve("default"); err != nil {
 		t.Fatal(err)
 	}
-	if cat, _, _ := svc.Catalog(ctx); len(cat) != 1 || !cat[0].Enabled {
+	if cat, _, _ := svc.Catalog(ctx); len(cat) != 2 || !cat[0].Enabled || !cat[1].Enabled { // echo and the embedding model
 		t.Fatalf("alias targets must be in the catalog: %+v", cat)
 	}
 	change(t, g, deleteNode(t, g, llmcfg.AliasKey("default")))
@@ -269,5 +269,31 @@ func TestDefaultConfigIsSeededOnce(t *testing.T) {
 	}
 	if _, _, err := svc.Router.Resolve("default"); err == nil {
 		t.Fatal("the deleted alias must be gone")
+	}
+}
+
+func TestEmbed(t *testing.T) {
+	ctx := context.Background()
+	svc, g := newService(NewMemoryStore())
+	emb := ModelEntry{Provider: "fake", Model: "hash", Enabled: true, Roles: []string{"methodologist"}}
+	seed(t, g, []ProviderRecord{{Name: "fake", Kind: "fake", Protocol: "fake", Enabled: true}}, []ModelEntry{emb}, []AliasEntry{{Alias: "embed", Target: "fake/hash"}})
+	r, err := svc.Embed(ctx, llm.EmbedRequest{Texts: []string{"reset a password by mail", "export the report as pdf", "password reset"}})
+	if err != nil || len(r.Vectors) != 3 || len(r.Vectors[0]) != FakeEmbedDim {
+		t.Fatalf("embed: %v %+v", err, r)
+	}
+	// texts sharing words are nearer
+	dot := func(a, b []float32) (s float32) {
+		for i := range a {
+			s += a[i] * b[i]
+		}
+		return
+	}
+	if dot(r.Vectors[0], r.Vectors[2]) <= dot(r.Vectors[0], r.Vectors[1]) {
+		t.Fatal("similar texts must be nearer")
+	}
+	// the catalog policy applies like for completions
+	user := authz.With(ctx, authz.Principal{Subject: "u", Roles: []string{"contributor"}})
+	if _, err := svc.Embed(user, llm.EmbedRequest{Texts: []string{"x"}}); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("role required: %v", err)
 	}
 }

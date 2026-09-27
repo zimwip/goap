@@ -8,6 +8,7 @@
   import { editorView } from './registry';
   import { focusRequests } from './workbench.svelte';
   import { getToken, setToken, shortId } from '../api';
+  import { openSearch } from './searchOverlay.svelte';
   import { session, refreshIdentity } from '../stores/session.svelte';
   import { methodologies, baselines, changes } from '../stores/catalog.svelte';
   import { live, processes } from '../stores/live.svelte';
@@ -103,7 +104,15 @@
           icon: 'diff',
           run: () => openTab({ kind: 'change', params: { id: c.id ?? '' } }),
         });
-    return out.slice(0, 40);
+    // nodes of the graph: the search overlay (index, facets)
+    out.push({
+      key: 'search:nodes',
+      label: `Search nodes for “${raw}”…`,
+      detail: 'full text + semantic, facets',
+      icon: 'search',
+      run: () => openSearch(raw),
+    });
+    return out.slice(0, 41);
   });
 
   $effect(() => {

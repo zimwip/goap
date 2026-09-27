@@ -175,7 +175,8 @@ func DefaultConfig(hasAnthropicKey bool) Config {
 	if hasAnthropicKey {
 		c.Aliases = map[string]string{"default": "anthropic/claude-opus-5", "fast": "anthropic/claude-haiku-4-5"}
 	} else {
-		c.Aliases = map[string]string{"default": "fake/echo", "fast": "fake/echo"}
+		// "embed" is the embedding model of the node index (ADR 0026): the fake one hashes words, enough for dev
+		c.Aliases = map[string]string{"default": "fake/echo", "fast": "fake/echo", llm.EmbedAlias: "fake/hash"}
 	}
 	return c
 }

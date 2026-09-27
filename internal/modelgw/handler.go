@@ -194,7 +194,10 @@ type Client struct {
 	rpc modelv1connect.ModelServiceClient
 }
 
-var _ llm.Client = (*Client)(nil)
+var (
+	_ llm.Client   = (*Client)(nil)
+	_ llm.Embedder = (*Client)(nil)
+)
 
 // NewClient returns a model gateway client.
 func NewClient(hc *http.Client, baseURL string, opts ...connect.ClientOption) *Client {
@@ -214,6 +217,35 @@ func (c *Client) Complete(ctx context.Context, req llm.Request) (llm.Response, e
 	out := llm.Response{Text: r.Msg.Text, Provider: r.Msg.Provider, Model: r.Msg.Model}
 	if u := r.Msg.Usage; u != nil {
 		out.Usage = llm.Usage{InputTokens: int(u.InputTokens), OutputTokens: int(u.OutputTokens)}
+	}
+	return out, nil
+}
+
+func (h *Handler) Embed(ctx context.Context, r *connect.Request[modelv1.EmbedRequest]) (*connect.Response[modelv1.EmbedResponse], error) {
+	ctx = h.Identity.Context(ctx, r.Header())
+	resp, err := h.Service.Embed(ctx, llm.EmbedRequest{Model: r.Msg.Model, Texts: r.Msg.Texts})
+	if err != nil {
+		if errors.Is(err, ErrForbidden) || errors.Is(err, ErrQuotaExceeded) || errors.Is(err, ErrModelDisabled) || errors.Is(err, ErrInvalid) {
+			return nil, rpcErr(err)
+		}
+		return nil, connect.NewError(connect.CodeUnavailable, err)
+	}
+	out := &modelv1.EmbedResponse{Provider: resp.Provider, Model: resp.Model, Tokens: int32(resp.Tokens)}
+	for _, v := range resp.Vectors {
+		out.Vectors = append(out.Vectors, &modelv1.Vector{Values: v})
+	}
+	return connect.NewResponse(out), nil
+}
+
+// Embed implements llm.Embedder.
+func (c *Client) Embed(ctx context.Context, req llm.EmbedRequest) (llm.EmbedResponse, error) {
+	r, err := c.rpc.Embed(ctx, connect.NewRequest(&modelv1.EmbedRequest{Model: req.Model, Texts: req.Texts}))
+	if err != nil {
+		return llm.EmbedResponse{}, err
+	}
+	out := llm.EmbedResponse{Provider: r.Msg.Provider, Model: r.Msg.Model, Tokens: int(r.Msg.Tokens)}
+	for _, v := range r.Msg.Vectors {
+		out.Vectors = append(out.Vectors, v.Values)
 	}
 	return out, nil
 }

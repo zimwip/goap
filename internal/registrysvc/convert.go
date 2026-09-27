@@ -180,7 +180,7 @@ func DomainFromPB(p *registryv1.Domain) methodology.Domain {
 
 func nodeTypeToPB(n methodology.NodeType) *registryv1.NodeType {
 	out := &registryv1.NodeType{Name: n.Name, Description: n.Description, Properties: n.Properties, Extends: n.Extends,
-		Lifecycle: n.Lifecycle, ChangeControlled: n.ChangeControlled, Validators: validatorsToPB(n.Validators)}
+		Lifecycle: n.Lifecycle, ChangeControlled: n.ChangeControlled, Validators: validatorsToPB(n.Validators), Search: searchToPB(n.Search)}
 	if d := n.Document; d != nil {
 		out.Document = &registryv1.DocumentSpec{Contains: d.Contains}
 	}
@@ -189,7 +189,7 @@ func nodeTypeToPB(n methodology.NodeType) *registryv1.NodeType {
 
 func nodeTypeFromPB(n *registryv1.NodeType) methodology.NodeType {
 	out := methodology.NodeType{Name: n.Name, Description: n.Description, Properties: nilIfNone(n.Properties), Extends: n.Extends,
-		Lifecycle: n.Lifecycle, ChangeControlled: n.ChangeControlled, Validators: validatorsFromPB(n.Validators)}
+		Lifecycle: n.Lifecycle, ChangeControlled: n.ChangeControlled, Validators: validatorsFromPB(n.Validators), Search: searchFromPB(n.Search)}
 	if d := n.Document; d != nil {
 		out.Document = &domain.DocumentSpec{Contains: nilIfNone(d.Contains)}
 	}
@@ -242,4 +242,20 @@ func nilIfEmpty[M ~map[K]V, K comparable, V any](m M) M {
 		return nil
 	}
 	return m
+}
+
+func searchToPB(in []methodology.SearchProperty) []*registryv1.SearchProperty {
+	var out []*registryv1.SearchProperty
+	for _, s := range in {
+		out = append(out, &registryv1.SearchProperty{Property: s.Property, Text: s.Text, Facet: s.Facet})
+	}
+	return out
+}
+
+func searchFromPB(in []*registryv1.SearchProperty) []methodology.SearchProperty {
+	var out []methodology.SearchProperty
+	for _, s := range in {
+		out = append(out, methodology.SearchProperty{Property: s.Property, Text: s.Text, Facet: s.Facet})
+	}
+	return out
 }

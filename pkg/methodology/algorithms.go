@@ -97,6 +97,18 @@ func (s Schema) checkAlgorithms(prefix string, add func(path, format string, arg
 			plug(path+".instance", v.Instance, algo.UsagePropertyValidator)
 		}
 	}
+	for i, n := range s.NodeTypes {
+		for j, sp := range n.Search {
+			if props[n.Name] == nil {
+				props[n.Name] = s.propertiesOf(n.Name)
+			}
+			if !props[n.Name][sp.Property] {
+				add(fmt.Sprintf(prefix+"nodeTypes[%d].search[%d].property", i, j), "unknown property %q of %s", sp.Property, n.Name)
+			} else if !sp.Text && !sp.Facet {
+				add(fmt.Sprintf(prefix+"nodeTypes[%d].search[%d]", i, j), "property %q is neither text nor facet", sp.Property)
+			}
+		}
+	}
 	for i, l := range s.Lifecycles {
 		for j, t := range l.Transitions {
 			for k, g := range t.Guards {

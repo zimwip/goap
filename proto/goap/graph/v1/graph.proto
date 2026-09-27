@@ -68,6 +68,16 @@ service GraphService {
   // Execution journal (ADR 0011)
   rpc RecordExecutions(RecordExecutionsRequest) returns (RecordExecutionsResponse);
   rpc ListExecutions(ListExecutionsRequest) returns (ListExecutionsResponse);
+
+  // Node index (ADR 0026): publishes again the event of every node version and the head of main, to
+  // rebuild an index. Requires `admin` on the `platform` resource.
+  rpc RepublishIndex(RepublishIndexRequest) returns (RepublishIndexResponse);
+}
+
+message RepublishIndexRequest {}
+
+message RepublishIndexResponse {
+  int32 versions = 1;
 }
 
 message NodeRef {

@@ -939,6 +939,7 @@ const GRAPH = 'goap.graph.v1.GraphService';
 const ENGINE = 'goap.engine.v1.EngineService';
 
 const MODEL = 'goap.model.v1.ModelService';
+const INDEX = 'goap.index.v1.IndexService';
 
 export const ENGINE_SERVICE = ENGINE;
 
@@ -1480,4 +1481,52 @@ export const mcp = {
     rpc<{ mcp: string; connector: string }, AdapterTemplate>(MCP, 'AdapterTemplate', { mcp: mcpName, connector }),
   listTools: (unit = '', signal?: AbortSignal) =>
     rpc<{ unit: string }, { tools?: HubTool[]; mcps?: string[] }>(MCP, 'ListTools', { unit }, signal),
+};
+
+// ---------------------------------------------------------------------------
+// Node index (ADR 0026): hybrid full-text / semantic search with facets
+// ---------------------------------------------------------------------------
+
+export interface NodeHit {
+  id: string;
+  version: number;
+  namespace: string;
+  type: string;
+  key: string;
+  state?: string;
+  branch: string;
+  main?: boolean;
+  facets?: Record<string, string>;
+  score?: number;
+}
+
+export interface NodeSearchRequest {
+  text?: string;
+  namespaces?: string[];
+  types?: string[];
+  states?: string[];
+  branches?: string[];
+  /** true: heads of main only; false: not on main; absent: every branch. */
+  main?: boolean;
+  facetFilters?: { name: string; values: string[] }[];
+  /** Facets to count: namespace, type, state, branch, main, or a facet the node types declare. */
+  facets?: string[];
+  limit?: number;
+  offset?: number;
+}
+
+export interface NodeSearchResult {
+  hits?: NodeHit[];
+  total?: number;
+  facets?: { name: string; counts?: { value: string; count: number }[] }[];
+  /** The embedding side took part in the ranking. */
+  semantic?: boolean;
+  truncated?: boolean;
+}
+
+export const nodeIndex = {
+  search: (req: NodeSearchRequest, signal?: AbortSignal) => rpc<NodeSearchRequest, NodeSearchResult>(INDEX, 'Search', req, signal),
+  reindex: () => rpc<object, { versions?: number }>(INDEX, 'Reindex', {}),
+  status: () =>
+    rpc<object, { semantic?: boolean; store?: string; nodesIndexed?: string; baselinesFollowed?: string; errors?: string }>(INDEX, 'Status', {}),
 };

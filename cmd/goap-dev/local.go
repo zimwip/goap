@@ -19,6 +19,7 @@ import (
 	"github.com/zimwip/goap/internal/platform"
 	"github.com/zimwip/goap/pkg/engine"
 	"github.com/zimwip/goap/pkg/graph"
+	"github.com/zimwip/goap/pkg/index"
 )
 
 // stores are the storage backends of the single-process platform.
@@ -27,6 +28,7 @@ type stores struct {
 	processes engine.Store
 	models    modelgw.Store
 	mcp       mcpsvc.Store
+	index     index.Store
 	close     func()
 }
 
@@ -35,7 +37,7 @@ type stores struct {
 func openStores(ctx context.Context, log *slog.Logger) (stores, error) {
 	switch kind := platform.Env("GOAP_STORE", "memory"); kind {
 	case "memory":
-		return stores{graph: graph.NewMemory(), processes: engine.NewMemoryStore(), models: modelgw.NewMemoryStore(), mcp: mcpsvc.NewMemoryStore(), close: func() {}}, nil
+		return stores{graph: graph.NewMemory(), processes: engine.NewMemoryStore(), models: modelgw.NewMemoryStore(), mcp: mcpsvc.NewMemoryStore(), index: index.NewMemory(), close: func() {}}, nil
 	case "sqlite":
 		path := platform.Env("GOAP_SQLITE_PATH", filepath.Join(".goap", "goap.db"))
 		db, err := platform.OpenSQLite(ctx, path)
@@ -48,7 +50,7 @@ func openStores(ctx context.Context, log *slog.Logger) (stores, error) {
 		}{
 			{"graph", graph.SQLiteMigrations},
 			{"engine", enginesvc.SQLiteMigrations},
-			{"modelgw", modelgw.SQLiteMigrations}, {"mcp", mcpsvc.SQLiteMigrations},
+			{"modelgw", modelgw.SQLiteMigrations}, {"mcp", mcpsvc.SQLiteMigrations}, {"index", index.SQLiteMigrations},
 		} {
 			if err := platform.MigrateSQLite(ctx, db, m.component, m.fs, "migrations_sqlite"); err != nil {
 				db.Close()
@@ -65,7 +67,7 @@ func openStores(ctx context.Context, log *slog.Logger) (stores, error) {
 		abs, _ := filepath.Abs(path)
 		log.Info("local storage", "sqlite", abs)
 		return stores{graph: graph.NewSQLite(db),
-			processes: processes, models: modelgw.SQLStore{DB: db}, mcp: mcpsvc.SQLStore{DB: db}, close: func() { closeDB(log, db) }}, nil
+			processes: processes, models: modelgw.SQLStore{DB: db}, mcp: mcpsvc.SQLStore{DB: db}, index: index.NewSQLite(db), close: func() { closeDB(log, db) }}, nil
 	default:
 		return stores{}, fmt.Errorf("GOAP_STORE must be memory or sqlite, got %q", kind)
 	}

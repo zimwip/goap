@@ -3,6 +3,7 @@ import type { IconName } from './Icon.svelte';
 import { layout, showTool, toggleConsole } from './layout.svelte';
 import { activeTab, closeAll, closeTab, openTab } from './tabs.svelte';
 import { focusRequests, runTabAction } from './workbench.svelte';
+import { openSearch } from './searchOverlay.svelte';
 
 export interface Command {
   id: string;
@@ -57,6 +58,7 @@ export const COMMANDS: Command[] = [
     icon: 'plus',
     run: () => openTab({ kind: 'methodology', params: { name: '', version: '' } }, { pin: true }),
   },
+  { id: 'searchNodes', label: 'Search nodes', icon: 'search', shortcut: 'Ctrl+Shift+F', run: () => openSearch() },
   { id: 'tokenUsage', label: 'Token usage dashboard', icon: 'coins', run: () => openTab({ kind: 'tokenUsage', params: {} }, { pin: true }) },
   { id: 'import', label: 'Import a methodology (YAML)', icon: 'upload', run: () => openTab({ kind: 'import', params: {} }, { pin: true }) },
   { id: 'policies', label: 'Open access policies', icon: 'shield', run: () => openTab({ kind: 'policies', params: {} }) },
