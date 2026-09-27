@@ -410,6 +410,8 @@ export interface Domain {
   updatedAt?: string;
   publishedAt?: string;
   updatedBy?: string;
+  /** built into the platform (methodology, domain, organisation): published and frozen */
+  builtin?: boolean;
 }
 
 export interface DomainSummary {
@@ -421,6 +423,8 @@ export interface DomainSummary {
   linkTypeCount?: number;
   updatedAt?: string;
   publishedAt?: string;
+  /** built into the platform: published and frozen */
+  builtin?: boolean;
 }
 
 /** Methodology version referencing a domain version. */

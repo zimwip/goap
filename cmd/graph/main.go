@@ -79,7 +79,7 @@ func main() {
 			platform.Fatal(log, "subscribe", err)
 		}
 	}
-	need := []string{"organisation", "platform"}
+	need := []string{"platform"}
 	demo := platform.Env("GOAP_GRAPH_SEED", "") == "demo"
 	if demo {
 		need = append(need, "alm")

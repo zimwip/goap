@@ -1,5 +1,5 @@
 // Package typecat is the type catalogue (ADR 0012 §2): the resolved model of every node type and link type of the
-// domains in force and of the built-in meta-domains, keyed by their qualified reference ("<namespace>@<name>").
+// domains in force and of the built-in domains, keyed by their qualified reference ("<namespace>@<name>").
 //
 // The registry is the reference of the types; the services that judge or use nodes (graph, engine) hold a catalogue
 // built from the published domains it serves, and replace it when a domain is published. A catalogue is immutable.
@@ -66,20 +66,13 @@ var ErrUnknown = errors.New("unknown type")
 // ErrInvalid marks a node or a link that breaks the types of the catalogue.
 var ErrInvalid = errors.New("invalid")
 
-// Meta returns the built-in meta-domains (methodology, domain).
-func Meta() []*methodology.Domain { return methodology.MetaDomains() }
+// Builtins returns the built-in domains (methodology, domain, organisation).
+func Builtins() []*methodology.Domain { return methodology.BuiltinDomains() }
 
-// IsMeta reports a namespace of a built-in meta-domain.
-func IsMeta(ns string) bool {
-	for _, d := range Meta() {
-		if d.Name == ns {
-			return true
-		}
-	}
-	return false
-}
+// IsBuiltin reports the namespace of a built-in domain.
+func IsBuiltin(ns string) bool { return methodology.IsBuiltinDomain(ns) }
 
-// Builtin is the catalogue of the meta-domains alone: what a service knows before it has loaded the domains.
+// Builtin is the catalogue of the built-in domains alone: what a service knows before it has loaded the domains.
 func Builtin() *Catalog {
 	c, err := New()
 	if err != nil {
@@ -88,10 +81,10 @@ func Builtin() *Catalog {
 	return c
 }
 
-// New builds the catalogue of the given domains (one per namespace) and of the meta-domains. A bare reference inside
+// New builds the catalogue of the given domains (one per namespace) and of the built-in domains. A bare reference inside
 // a domain (extends, link ends, document) is a type of that domain.
 func New(ds ...*methodology.Domain) (*Catalog, error) {
-	all := append(slices.Clone(Meta()), ds...)
+	all := append(slices.Clone(Builtins()), ds...)
 	c := &Catalog{types: map[domain.TypeRef]*Type{}, links: map[domain.TypeRef]*LinkType{}, domains: map[string]string{}}
 	decl := map[domain.TypeRef]declared{}
 	for i, d := range all {
@@ -99,8 +92,8 @@ func New(ds ...*methodology.Domain) (*Catalog, error) {
 			continue
 		}
 		if _, dup := c.domains[d.Name]; dup {
-			if i >= len(Meta()) && IsMeta(d.Name) {
-				return nil, fmt.Errorf("domain %s: the name of a built-in meta-domain: %w", d.Name, ErrInvalid)
+			if i >= len(Builtins()) && IsBuiltin(d.Name) {
+				return nil, fmt.Errorf("domain %s: the name of a built-in domain: %w", d.Name, ErrInvalid)
 			}
 			return nil, fmt.Errorf("domain %s given twice: %w", d.Name, ErrInvalid)
 		}
@@ -370,14 +363,14 @@ func (c *Catalog) CheckLink(typ, from, to string) error {
 // Source returns the latest published version of every domain (the registry: registrysvc.Service or its client).
 type Source func(ctx context.Context) ([]*methodology.Domain, error)
 
-// Live holds the catalogue in force of a service: the built-in meta-domains until Reload succeeds, then the published
+// Live holds the catalogue in force of a service: the built-in domains until Reload succeeds, then the published
 // domains of its source, reloaded when the registry reports a domain event.
 type Live struct {
 	src Source
 	cur atomic.Pointer[Catalog]
 }
 
-// NewLive returns a holder of the catalogue of src, starting with the built-in meta-domains.
+// NewLive returns a holder of the catalogue of src, starting with the built-in domains.
 func NewLive(src Source) *Live {
 	l := &Live{src: src}
 	l.cur.Store(Builtin())

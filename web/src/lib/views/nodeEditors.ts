@@ -1,5 +1,5 @@
 // Node editors: the editors that node types name in their `editor` property (the built-in meta-domains
-// methodology and domain, domains/platform.yaml, domains/organisation.yaml). Each one maps a graph node
+// methodology and domain, domains/platform.yaml, the built-in organisation domain). Each one maps a graph node
 // onto the tab of the editor; a node it cannot show (an element removed from
 // its definition, an unknown version) opens in the default node editor.
 import { registerNodeEditor } from '../shell/registry';

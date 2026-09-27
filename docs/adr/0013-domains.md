@@ -14,9 +14,11 @@ own lifecycle rather than with the methodologies.
 1. **A domain is a registry entity** with the lifecycle of a methodology (draft → published → archived, immutable once
    published), stored in the graph (ADR 0023), served by the `registry.v1` `*Domain*` RPCs, guarded by the ABAC
    resource `domain` (role `methodologist`). Saving a draft is a change like any other.
-2. **One domain per namespace.** A domain's name is the namespace its nodes live in (`alm`, `organisation`,
-   `platform`; ADR 0015), and the prefix of the references to its types (ADR 0012). The meta-domains `methodology` and
-   `domain` are built in and type the definitions themselves (ADR 0023).
+2. **One domain per namespace.** A domain's name is the namespace its nodes live in (`alm`, `platform`,
+   `organisation`; ADR 0015), and the prefix of the references to its types (ADR 0012). **Adding a namespace is
+   creating and publishing a domain** in the domain editor: its name (lowercase letters, digits, `-`, `_`) becomes the
+   namespace, and methodologies can target it. The namespaces the platform code reads (`methodology`, `domain`,
+   `organisation`) are **built-in domains** (ADR 0012 §4): shown in the domain editor, frozen.
 3. **A methodology names its target namespace, not a domain.** `namespace: alm` is the namespace its changes act on
    (ADR 0015 §2), hence the domain whose nodes it creates and modifies; it replaces `domainRef`, and there is no
    embedded `domain:` section. Its references to types and link types are qualified (`alm@Requirement`); they may
@@ -31,7 +33,8 @@ own lifecycle rather than with the methodologies.
 
 ## Consequences
 
-- The IDE has a Domain explorer and editor; a methodology picks its target namespace instead of a domain.
+- The IDE has a Domain explorer and editor for every namespace (the built-in ones read-only); a methodology picks
+  its target namespace instead of a domain.
 - A domain holds algorithms (ADR 0018); a methodology holds none.
 - Moving the data of a domain to another namespace is a data migration, not a rename: the namespace is part of every
   type reference.

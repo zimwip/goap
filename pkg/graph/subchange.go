@@ -9,7 +9,7 @@ import (
 	"github.com/zimwip/goap/pkg/domain"
 )
 
-// Organisation namespace conventions (domains/organisation.yaml).
+// Organisation namespace conventions (the built-in organisation domain, pkg/methodology/builtin/organisation.yaml).
 const (
 	NamespaceOrganisation = "organisation"
 	LinkPartOf            = "organisation@part_of" // OrgUnit -> parent OrgUnit

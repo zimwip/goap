@@ -65,14 +65,15 @@ func TestResolveTypes(t *testing.T) {
 func TestReferenceLint(t *testing.T) {
 	m := refMethodology()
 	m.Conditions[0].Expr = `changeImpacts.exists(n, n.hasPost && n.post.out.exists(l, l.type == "alm@satisfies")) && changeImpacts.exists(n, "alm@Component" in n.types) && changeImpacts.exists(n, n.type == "Requirement")`
-	m.Actions[0].Expects = &condition.Expectation{ForEach: "changeImpacts", Produce: condition.ProduceSpec{Op: "create_node", NodeType: "organisation@OrgUnit"}}
+	m.Actions[0].Expects = &condition.Expectation{ForEach: "changeImpacts", Produce: condition.ProduceSpec{Op: "create_node", NodeType: "crm@Customer"}}
 	got := m.Resolve(DomainTypes(testDomain())).Validate().Error()
-	for _, want := range []string{"unknown link type alm@satisfies", "unknown node type alm@Component", `"Requirement" must be qualified`, "unknown node type organisation@OrgUnit"} {
+	for _, want := range []string{"unknown link type alm@satisfies", "unknown node type alm@Component", `"Requirement" must be qualified`, "unknown node type crm@Customer"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %q in %q", want, got)
 		}
 	}
-	if !strings.Contains(m.Resolve(DomainTypes(testDomain(), &Domain{Name: "organisation", Schema: Schema{NodeTypes: []NodeType{{Name: "OrgUnit"}}}})).Validate().Error(), "a methodology creates nodes of its namespace") {
+	m.Actions[0].Expects.Produce.NodeType = "organisation@OrgUnit" // built in
+	if !strings.Contains(m.Resolve(DomainTypes(testDomain())).Validate().Error(), "a methodology creates nodes of its namespace") {
 		t.Error("a methodology creates nodes of its target namespace only")
 	}
 }

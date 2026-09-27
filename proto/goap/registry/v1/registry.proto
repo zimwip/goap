@@ -419,6 +419,8 @@ message Domain {
   google.protobuf.Timestamp updated_at = 8;
   google.protobuf.Timestamp published_at = 9;
   string updated_by = 10;
+  // built into the platform (methodology, domain, organisation): published and frozen (read only)
+  bool builtin = 14;
 }
 
 message DomainSummary {
@@ -430,6 +432,8 @@ message DomainSummary {
   int32 link_type_count = 6;
   google.protobuf.Timestamp updated_at = 7;
   google.protobuf.Timestamp published_at = 8;
+  // built into the platform: published and frozen
+  bool builtin = 9;
 }
 
 message ListDomainsRequest {

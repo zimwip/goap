@@ -151,9 +151,11 @@
     {#if d.error}<div class="alert">{d.error}</div>{/if}
     {#if d.readonly}
       <div class="alert info">
-        {d.status === 'published'
-          ? 'Published version: it is immutable. Create a new version to modify it.'
-          : 'Archived version: read-only.'}
+        {d.builtin
+          ? `Built-in domain: the platform reads the "${d.name}" namespace in its own way, so its types are frozen (read-only).`
+          : d.status === 'published'
+            ? 'Published version: it is immutable. Create a new version to modify it.'
+            : 'Archived version: read-only.'}
       </div>
     {/if}
 

@@ -56,8 +56,32 @@ func (s *Service) publishDomainEvent(ctx context.Context, event string, r Domain
 	}
 }
 
-// GetDomain returns a version (empty version: latest published).
+// builtinDomains are the records of the domains built into the platform: always published, never stored.
+func builtinDomains() []DomainRecord {
+	var out []DomainRecord
+	for _, d := range typecat.Builtins() {
+		out = append(out, DomainRecord{Domain: *d, Status: StatusPublished, UpdatedBy: "platform", Builtin: true})
+	}
+	return out
+}
+
+// builtinError refuses a write to a built-in domain; it is an ErrImmutable.
+type builtinError string
+
+func (e builtinError) Error() string {
+	return "domain " + string(e) + " is built into the platform and cannot be changed"
+}
+func (builtinError) Is(target error) bool { return target == ErrImmutable }
+
+func errBuiltin(name string) error { return builtinError(name) }
+
+// GetDomain returns a version (empty version: latest published), built-in domains included.
 func (s *Service) GetDomain(ctx context.Context, name, version string) (DomainRecord, error) {
+	for _, r := range builtinDomains() {
+		if r.Domain.Name == name && (version == "" || version == r.Domain.Version) {
+			return r, nil
+		}
+	}
 	ds, err := s.domains()
 	if err != nil {
 		return DomainRecord{}, err
@@ -65,7 +89,8 @@ func (s *Service) GetDomain(ctx context.Context, name, version string) (DomainRe
 	return ds.GetDomain(ctx, name, version)
 }
 
-// Domains returns the latest published version of every domain (the source of the type catalogue).
+// Domains returns the latest published version of every stored domain (the source of the type catalogue, which
+// adds the built-in ones itself).
 func (s *Service) Domains(ctx context.Context) ([]*methodology.Domain, error) {
 	rs, err := s.DomainVersions(ctx, false)
 	if err != nil {
@@ -73,7 +98,7 @@ func (s *Service) Domains(ctx context.Context) ([]*methodology.Domain, error) {
 	}
 	var out []*methodology.Domain
 	for _, r := range rs {
-		if r.Status == StatusPublished {
+		if r.Status == StatusPublished && !r.Builtin {
 			out = append(out, &r.Domain)
 		}
 	}
@@ -81,15 +106,20 @@ func (s *Service) Domains(ctx context.Context) ([]*methodology.Domain, error) {
 }
 
 // DomainVersions returns every version, or the latest version of each domain
-// (latest published if any, latest draft otherwise).
+// (latest published if any, latest draft otherwise); the built-in domains come first.
 func (s *Service) DomainVersions(ctx context.Context, all bool) ([]DomainRecord, error) {
 	ds, err := s.domains()
 	if err != nil {
 		return nil, err
 	}
 	rs, err := ds.ListDomains(ctx)
-	if err != nil || all {
-		return rs, err
+	if err != nil {
+		return nil, err
+	}
+	// a stored version of a built-in name (a graph from before it was built in) is shadowed by the built-in one
+	rs = append(builtinDomains(), slices.DeleteFunc(rs, func(r DomainRecord) bool { return typecat.IsBuiltin(r.Domain.Name) })...)
+	if all {
+		return rs, nil
 	}
 	latest := map[string]DomainRecord{}
 	var order []string
@@ -118,6 +148,9 @@ func (s *Service) SaveDomain(ctx context.Context, d methodology.Domain) (DomainR
 	if d.Name == "" || d.Version == "" {
 		return DomainRecord{}, nil, fmt.Errorf("name and version are required: %w", ErrInvalid)
 	}
+	if typecat.IsBuiltin(d.Name) {
+		return DomainRecord{}, nil, errBuiltin(d.Name)
+	}
 	ds, err := s.domains()
 	if err != nil {
 		return DomainRecord{}, nil, err
@@ -141,8 +174,8 @@ func (s *Service) SaveDomain(ctx context.Context, d methodology.Domain) (DomainR
 // validateDomain checks a domain and its references to the types of the other domains in force.
 func (s *Service) validateDomain(ctx context.Context, d *methodology.Domain) methodology.Issues {
 	issues := d.Validate()
-	if typecat.IsMeta(d.Name) {
-		return append(issues, methodology.Issue{Path: "name", Message: d.Name + " is a built-in meta-domain"})
+	if typecat.IsBuiltin(d.Name) {
+		return append(issues, methodology.Issue{Path: "name", Message: d.Name + " is a domain built into the platform"})
 	}
 	if len(issues) == 0 {
 		if _, err := s.Types(ctx, d); err != nil {
@@ -177,6 +210,9 @@ func (s *Service) DomainUsage(ctx context.Context, name, version string) ([]Reco
 // PublishDomain freezes a valid draft; it becomes the version in force. The published methodologies must stay
 // valid against it.
 func (s *Service) PublishDomain(ctx context.Context, name, version string) (DomainRecord, error) {
+	if typecat.IsBuiltin(name) {
+		return DomainRecord{}, errBuiltin(name)
+	}
 	ds, err := s.domains()
 	if err != nil {
 		return DomainRecord{}, err
@@ -222,6 +258,9 @@ func (s *Service) PublishDomain(ctx context.Context, name, version string) (Doma
 
 // CreateDomainVersion copies a version into a new draft.
 func (s *Service) CreateDomainVersion(ctx context.Context, name, from, to string) (DomainRecord, error) {
+	if typecat.IsBuiltin(name) {
+		return DomainRecord{}, errBuiltin(name)
+	}
 	ds, err := s.domains()
 	if err != nil {
 		return DomainRecord{}, err
@@ -245,6 +284,9 @@ func (s *Service) CreateDomainVersion(ctx context.Context, name, from, to string
 // DeleteDomain removes a draft, or archives a published version; the version in force cannot be archived while
 // methodologies use it.
 func (s *Service) DeleteDomain(ctx context.Context, name, version string) error {
+	if typecat.IsBuiltin(name) {
+		return errBuiltin(name)
+	}
 	ds, err := s.domains()
 	if err != nil {
 		return err
