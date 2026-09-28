@@ -14,7 +14,7 @@
   import ContextMenu from './ContextMenu.svelte';
   import ObjectDialog from './ObjectDialog.svelte';
   import SearchOverlay from './SearchOverlay.svelte';
-  import { openSearch } from './searchOverlay.svelte';
+  import { openSearch } from './searchOverlay.svelte.ts';
   import StatusBar from './StatusBar.svelte';
   import { layout, LIMITS, toggleConsole } from './layout.svelte';
   import { activeTab, closeTab } from './tabs.svelte';

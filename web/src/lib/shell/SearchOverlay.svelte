@@ -5,7 +5,7 @@
   import Icon from './Icon.svelte';
   import { openNode } from '../nodeEditors';
   import { notify } from './workbench.svelte';
-  import { searchOverlay, closeSearch } from './searchOverlay.svelte';
+  import { searchOverlay, closeSearch } from './searchOverlay.svelte.ts';
   import { hasAnyRole } from '../stores/session.svelte';
 
   const PAGE = 25;
