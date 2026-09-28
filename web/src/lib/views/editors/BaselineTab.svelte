@@ -283,7 +283,10 @@
                     {#if nodeTitle(r.other)}<span class="hint"> {nodeTitle(r.other)}</span>{/if}
                   </td>
                   <td>{r.other?.type ?? ''}</td>
-                  <td>{#if r.suspect}<span class="tag" title="One end of the link has changed since it was created">suspect</span>{/if}</td>
+                  <td>{#if r.suspect}<span
+                        class="tag"
+                        title={`A more recent version of ${r.outgoing ? r.other?.key ?? 'the target' : center?.key ?? 'this node'} exists: check whether the link should use it`}>suspect</span
+                      >{/if}</td>
                 </tr>
               {/each}
             </tbody>
