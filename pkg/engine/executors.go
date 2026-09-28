@@ -39,8 +39,15 @@ type ActionResult struct {
 	// when it completes.
 	Suspended bool
 	Child     string
-	Logs      []LogLine
-	Sandbox   string
+	// WakeOn lists signal names that, if emitted (addressed to this process)
+	// before Child terminates, wake this process early instead of waiting for
+	// Child's termination.
+	WakeOn  []string
+	Logs    []LogLine
+	Sandbox string
+	// VarsSet holds process-private variables set by the action (engine-owned
+	// execution state, not a graph write) — merged into Process.Vars.
+	VarsSet map[string]any
 }
 
 // Executor runs one kind of action.

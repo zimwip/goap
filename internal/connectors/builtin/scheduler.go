@@ -25,6 +25,7 @@ import (
 // the caller whose identity the request carries.
 type EngineAPI interface {
 	StartProcess(context.Context, *connect.Request[enginev1.StartProcessRequest]) (*connect.Response[enginev1.StartProcessResponse], error)
+	AttachChange(context.Context, *connect.Request[enginev1.AttachChangeRequest]) (*connect.Response[enginev1.AttachChangeResponse], error)
 	GetProcess(context.Context, *connect.Request[enginev1.GetProcessRequest]) (*connect.Response[enginev1.GetProcessResponse], error)
 	ListProcesses(context.Context, *connect.Request[enginev1.ListProcessesRequest]) (*connect.Response[enginev1.ListProcessesResponse], error)
 	ListTriggers(context.Context, *connect.Request[enginev1.ListTriggersRequest]) (*connect.Response[enginev1.ListTriggersResponse], error)
@@ -39,6 +40,7 @@ var _ connectorkit.Connector = Scheduler{}
 
 var schedulerOps = []op{
 	{"start", "Start a process: {process}", schema(map[string]string{"intent": "string", "methodology": "string", "agent": "string", "goal": "string", "title": "string", "change": "string", "namespace": "string", "unit": "string", "vars": "object"}, "intent")},
+	{"attach", "Bind a process (default: the caller's own) to a change, existing (change) or new: {process}", schema(map[string]string{"process": "string", "change": "string", "title": "string", "intent": "string", "namespace": "string", "unit": "string", "baseline": "string"})},
 	{"list", "List processes, the latest first: {processes, truncated}", schema(map[string]string{"mine": "boolean", "status": "string", "limit": "integer"})},
 	{"get", "Read a process: {process}", schema(map[string]string{"id": "string"}, "id")},
 	{"triggers", "List the triggers: {triggers}", schema(map[string]string{})},
@@ -81,6 +83,21 @@ func (s Scheduler) Invoke(ctx context.Context, op string, raw, _ map[string]any,
 			}
 		}
 		r, err := s.p.Engine.StartProcess(ctx, request(who, req))
+		if err != nil {
+			return nil, err
+		}
+		return protoResult("process", processView(r.Msg.Process, false))
+	case "attach":
+		process := a.str("process")
+		if process == "" {
+			process = mcp.CallFrom(ctx).Process
+		}
+		if process == "" {
+			return nil, errors.New(`argument "process" is required outside a process`)
+		}
+		req := &enginev1.AttachChangeRequest{ProcessId: process, ChangeId: a.str("change"), Title: a.str("title"),
+			Intent: a.str("intent"), Namespace: a.str("namespace"), BaselineId: a.str("baseline"), OwnerOrg: a.unit(ctx, who)}
+		r, err := s.p.Engine.AttachChange(ctx, request(who, req))
 		if err != nil {
 			return nil, err
 		}

@@ -97,6 +97,10 @@ type Process struct {
 	MethodologyVersion string `json:"methodologyVersion,omitempty"`
 	// JournalSeq numbers the execution journal records of the process.
 	JournalSeq int `json:"journalSeq,omitempty"`
+	// Started marks that the process.started journal record was written (Run
+	// no longer uses JournalSeq==0 for this, since a deferred process (ADR
+	// 0031, gap 5) may journal an attach record before it ever gets to Run).
+	Started bool `json:"started,omitempty"`
 }
 
 // Task kinds.
@@ -122,6 +126,9 @@ type HumanTask struct {
 	Step         int    `json:"step"`
 	// ChildProcessID is the sub-agent a TaskAgent waits for.
 	ChildProcessID string `json:"childProcessId,omitempty"`
+	// WakeOn lists signal names (TaskAgent) that, if emitted by the child and
+	// addressed to this process before it terminates, wake this process early.
+	WakeOn []string `json:"wakeOn,omitempty"`
 	// TaskBoard: what is wrong, and the earliest step to restart from (nil when none can be).
 	Issues   []domain.BoardIssue `json:"issues,omitempty"`
 	Proposal *RelaunchProposal   `json:"proposal,omitempty"`
@@ -218,6 +225,21 @@ type Store interface {
 	Get(ctx context.Context, id string) (*Process, error)
 	Put(ctx context.Context, p *Process) error
 	List(ctx context.Context) ([]*Process, error)
+	// AppendProcessLog records entries of a process's own log (ADR 0031):
+	// turn-by-turn state that would otherwise force a full rewrite of the
+	// process row (e.g. the intent/clarification dialogue), independent of
+	// any change.
+	AppendProcessLog(ctx context.Context, processID string, entries ...ProcessLogEntry) error
+	ListProcessLog(ctx context.Context, processID string) ([]ProcessLogEntry, error)
+}
+
+// ProcessLogEntry is one append-only entry of a process's own log.
+type ProcessLogEntry struct {
+	Seq       int64          `json:"seq"`
+	ProcessID string         `json:"processId"`
+	Type      string         `json:"type"`
+	Payload   map[string]any `json:"payload,omitempty"`
+	At        time.Time      `json:"at"`
 }
 
 // ErrNotFound is returned for unknown processes.
@@ -225,12 +247,34 @@ var ErrNotFound = fmt.Errorf("process not found")
 
 // MemoryStore is an in-memory Store.
 type MemoryStore struct {
-	mu sync.RWMutex
-	m  map[string]*Process
+	mu  sync.RWMutex
+	m   map[string]*Process
+	log map[string][]ProcessLogEntry
 }
 
 // NewMemoryStore returns an empty store.
-func NewMemoryStore() *MemoryStore { return &MemoryStore{m: map[string]*Process{}} }
+func NewMemoryStore() *MemoryStore {
+	return &MemoryStore{m: map[string]*Process{}, log: map[string][]ProcessLogEntry{}}
+}
+
+// AppendProcessLog implements Store.
+func (s *MemoryStore) AppendProcessLog(_ context.Context, processID string, entries ...ProcessLogEntry) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, e := range entries {
+		e.ProcessID = processID
+		e.Seq = int64(len(s.log[processID])) + 1
+		s.log[processID] = append(s.log[processID], e)
+	}
+	return nil
+}
+
+// ListProcessLog implements Store.
+func (s *MemoryStore) ListProcessLog(_ context.Context, processID string) ([]ProcessLogEntry, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return append([]ProcessLogEntry(nil), s.log[processID]...), nil
+}
 
 func clone(p *Process) *Process {
 	c := *p
@@ -238,6 +282,7 @@ func clone(p *Process) *Process {
 	c.Intent.Turns = append([]intent.Turn(nil), p.Intent.Turns...)
 	c.Children = maps.Clone(p.Children)
 	c.Disabled = maps.Clone(p.Disabled)
+	c.Vars = maps.Clone(p.Vars)
 	return &c
 }
 

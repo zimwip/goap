@@ -1,0 +1,40 @@
+name: deferred-bind
+version: 0.1.0
+description: >
+  Minimal fixture exercising a process that defers binding its Change (ADR
+  0031, gap 5): the agent declares its own action to bind one, instead of
+  relying on the engine's eager default.
+
+namespace: alm
+
+conditions:
+  - name: change_bound
+    description: >
+      Engine-managed (ADR 0031): true once the process is bound to a change.
+      The expression here is a placeholder only, to satisfy validation — the
+      engine always overrides this fact from the process's own ChangeID.
+    expr: "false"
+
+actions:
+  - name: bind
+    kind: script
+    language: javascript
+    description: Bind the process to a change (stands in for goap-scheduler/attach)
+    pre: {change_bound: false}
+    effects: {change_bound: true}
+    code: |
+      function run(ctx) {
+        return "bind requested";
+      }
+
+goals:
+  - name: bound
+    description: The process is bound to a change
+    pre: {change_bound: true}
+
+agents:
+  - name: intake
+    description: Defers binding until its own action runs
+    planner: goap
+    actions: [bind]
+    goals: [bound]

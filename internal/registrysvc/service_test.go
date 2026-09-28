@@ -183,7 +183,7 @@ func TestAgentsAndScriptsRoundTrip(t *testing.T) {
 				t.Fatalf("agents/scripts not stored:\n%+v", got.Methodology.Agents)
 			}
 			all, err := s.List(context.Background())
-			if err != nil || len(all) != 1 || len(all[0].AgentList()) != 3 {
+			if err != nil || len(all) != 1 || len(all[0].AgentList()) != len(want.Agents) {
 				t.Fatalf("engine port list: %v", err)
 			}
 		})

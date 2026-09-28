@@ -39,12 +39,13 @@ func Run(ctx context.Context, job Job, host Host) (Result, error) {
 		}
 		return func() error { return run(c) }, nil
 	})
-	res := Result{Logs: c.logs}
+	res := Result{Logs: c.logs, VarsSet: c.vars}
 	if c.result != nil {
 		res.Output = fmt.Sprint(c.result)
 	}
 	if c.suspended {
 		res.Suspended = true
+		res.WakeOn = c.wakeOn
 		return res, nil
 	}
 	if err != nil {

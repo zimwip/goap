@@ -90,3 +90,35 @@ func TestManualFireOfScheduleTrigger(t *testing.T) {
 		t.Fatal("unknown trigger must fail")
 	}
 }
+
+func TestLeaderGatesScheduleFiring(t *testing.T) {
+	ctx := context.Background()
+	e, _ := agentsSetup(t)
+	tm := &TriggerManager{Engine: e, Leader: func() bool { return false }}
+	if err := tm.Reload(ctx); err != nil {
+		t.Fatal(err)
+	}
+	// Reload/States must stay available on every replica regardless of leadership.
+	states := tm.States()
+	if len(states) != 2 {
+		t.Fatalf("expected 2 triggers, got %+v", states)
+	}
+	// a non-leader replica's cron callback must not actually fire the trigger.
+	tm.cronFire("test-design/test-designer/nightly")
+	for _, s := range tm.States() {
+		if s.Name == "nightly" && s.Fires != 0 {
+			t.Fatalf("non-leader replica fired a schedule trigger: %+v", s)
+		}
+	}
+	ps, err := e.Store.List(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ps) != 0 {
+		t.Fatalf("non-leader replica started a process: %+v", ps)
+	}
+	// manual Fire is unaffected by Leader and must still work.
+	if _, err := tm.Fire(ctx, "test-design", "test-designer", "nightly"); err != nil {
+		t.Fatal(err)
+	}
+}

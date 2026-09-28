@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -9,6 +10,32 @@ import (
 	"github.com/zimwip/goap/pkg/dsl"
 	"github.com/zimwip/goap/pkg/graph"
 )
+
+// impactWriteRetries bounds the retry of a single change-impact write on
+// graph.ErrConflict (ADR 0031, gap 6): with concurrent processes now sharing
+// one change's main branch by default, a transient version clash on a node
+// the graph layer re-validates internally (e.g. a concurrent WriteNode) is
+// expected rather than rare. graph.ErrConflict is a single sentinel shared by
+// several non-transient conditions too (an unresolved merge, a flow that
+// needs a decision, a key already in use); retrying those is harmless (the
+// graph layer re-checks live state on every call, so a non-transient cause
+// fails identically each time) but not effective — this is a best-effort net
+// for the genuinely transient case, not a fix for every ErrConflict cause.
+const impactWriteRetries = 3
+
+func retryOnConflict[T any](call func() (T, error)) (T, error) {
+	var (
+		out T
+		err error
+	)
+	for attempt := 0; attempt < impactWriteRetries; attempt++ {
+		out, err = call()
+		if err == nil || !errors.Is(err, graph.ErrConflict) {
+			return out, err
+		}
+	}
+	return out, err
+}
 
 // ChangeImpactsFromBlackboard builds the change impact snapshot given to scripts.
 func ChangeImpactsFromBlackboard(bb domain.Blackboard) []dsl.ChangeImpact {
@@ -58,6 +85,9 @@ func ChangeImpactsFromBlackboard(bb domain.Blackboard) []dsl.ChangeImpact {
 func (e *Engine) applyNodeOps(ctx context.Context, p *Process, ops []dsl.NodeOp, producedBy, execution string) ([]domain.ChangeImpactID, error) {
 	if len(ops) == 0 {
 		return nil, nil
+	}
+	if p.ChangeID == "" {
+		return nil, fmt.Errorf("process %s has no change attached: call goap-scheduler/attach first (ADR 0031)", p.ID)
 	}
 	bb, err := e.Graph.BlackboardIn(ctx, p.ChangeID, p.Flow)
 	if err != nil {
@@ -137,7 +167,9 @@ func (e *Engine) applyNodeOps(ctx context.Context, p *Process, ops []dsl.NodeOp,
 				}
 				cn.Pre = &ref
 			}
-			added, err := e.Graph.AddNodes(ctx, p.ChangeID, []domain.ChangeImpact{cn})
+			added, err := retryOnConflict(func() ([]domain.ChangeImpact, error) {
+				return e.Graph.AddNodes(ctx, p.ChangeID, []domain.ChangeImpact{cn})
+			})
 			if err != nil {
 				return declared, fail(err)
 			}
@@ -159,7 +191,9 @@ func (e *Engine) applyNodeOps(ctx context.Context, p *Process, ops []dsl.NodeOp,
 			for _, l := range op.RemoveLinks {
 				w.RemoveLinks = append(w.RemoveLinks, domain.LinkID(l))
 			}
-			cn, err := e.Graph.WriteNode(ctx, p.ChangeID, id, w)
+			cn, err := retryOnConflict(func() (domain.ChangeImpact, error) {
+				return e.Graph.WriteNode(ctx, p.ChangeID, id, w)
+			})
 			if err != nil {
 				return declared, fail(err)
 			}
@@ -175,7 +209,9 @@ func (e *Engine) applyNodeOps(ctx context.Context, p *Process, ops []dsl.NodeOp,
 			if op.Accept {
 				status = domain.ReviewAccepted
 			}
-			if _, err := e.Graph.ReviewNodeOn(ctx, p.ChangeID, p.Flow, execution, id, status, producedBy, op.Comment); err != nil {
+			if _, err := retryOnConflict(func() (domain.ChangeImpact, error) {
+				return e.Graph.ReviewNodeOn(ctx, p.ChangeID, p.Flow, execution, id, status, producedBy, op.Comment)
+			}); err != nil {
 				return declared, fail(err)
 			}
 		default:

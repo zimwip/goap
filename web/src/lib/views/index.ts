@@ -26,6 +26,7 @@ import ConnectorTab from './editors/ConnectorTab.svelte';
 import OrganisationTab from './editors/OrganisationTab.svelte';
 import McpTab from './editors/McpTab.svelte';
 import TriggersExplorer from './nav/TriggersExplorer.svelte';
+import ProcessesExplorer from './nav/ProcessesExplorer.svelte';
 import AssistantPanel from './assistant/AssistantPanel.svelte';
 import AssistantTab from './assistant/AssistantTab.svelte';
 
@@ -59,6 +60,7 @@ registerView({ id: 'assistant', zone: 'left', title: 'Assistant', icon: 'chat', 
 registerView({ id: 'methodologies', zone: 'left', title: 'Methodologies', icon: 'book', component: MethodologyExplorer, order: 1 });
 registerView({ id: 'domains', zone: 'left', title: 'Domains', icon: 'graph', component: DomainExplorer, order: 1.5 });
 registerView({ id: 'algorithms', zone: 'left', title: 'Algorithms', icon: 'code', component: AlgorithmExplorer, order: 1.6 });
+registerView({ id: 'processes', zone: 'left', title: 'My processes', icon: 'runs', component: ProcessesExplorer, order: 2.2 });
 registerView({ id: 'triggers', zone: 'left', title: 'Triggers', icon: 'clock', component: TriggersExplorer, order: 2.5 });
 registerView({ id: 'baselines', zone: 'left', title: 'Baseline', icon: 'database', component: BaselineExplorer, order: 3 });
 registerView({

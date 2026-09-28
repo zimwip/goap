@@ -16,6 +16,9 @@ const (
 	// is when it was queued, EndedAt when the run picked it up.
 	ExecSchedule     = "schedule"
 	ExecProcessEnded = "process.ended"
+	// ExecAttach records a process being bound to a change (ADR 0031): the eager
+	// default at Start, or an agent's own explicit bind of a deferred process.
+	ExecAttach = "attach"
 )
 
 // ExecutionRecord is one entry of the execution journal of a change.

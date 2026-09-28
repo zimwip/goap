@@ -20,6 +20,18 @@ conditions:
   - name: reviewed
     description: All the test cases have received a decision
     expr: changeImpacts.exists(n, n.intent == "created") && changeImpacts.filter(n, n.intent == "created").all(n, n.review != "proposed")
+  - name: pinger_ready
+    description: A human let the pinger proceed
+    expr: artifacts.exists(a, a.type == "go")
+  - name: pinger_pinged
+    description: The pinger sent its progress signal to its parent
+    expr: has(vars.pinged) && vars.pinged == true
+  - name: pinger_wrapped
+    description: A human let the pinger finish
+    expr: artifacts.exists(a, a.type == "wrapped")
+  - name: ping_done
+    description: The watcher's sub-agent call to the pinger has returned
+    expr: has(vars.childStatus)
 
 actions:
   - name: collect_scope
@@ -114,6 +126,42 @@ actions:
       if (review.status !== "completed") throw new Error("review: " + review.status);
       ctx.log("campaign designed and reviewed");
 
+  - name: wait_ready
+    kind: human
+    description: Wait for a human to let the pinger proceed
+    pre: {pinger_ready: false}
+    effects: {pinger_ready: true}
+    instructions: Submit an artifact of type "go".
+
+  - name: ping
+    kind: script
+    language: javascript
+    description: Signal progress to the parent process, then wait to finish
+    pre: {pinger_ready: true, pinger_pinged: false}
+    effects: {pinger_pinged: true}
+    code: |
+      ctx.signal("progress", { note: "halfway" }, ctx.parentID());
+      ctx.setVar("pinged", true);
+
+  - name: wait_wrap
+    kind: human
+    description: Wait for a human to let the pinger finish
+    pre: {pinger_pinged: true, pinger_wrapped: false}
+    effects: {pinger_wrapped: true}
+    instructions: Submit an artifact of type "wrapped".
+
+  - name: wait_for_ping
+    kind: script
+    language: javascript
+    description: Start the pinger and wake early on its progress signal
+    pre: {ping_done: false}
+    effects: {ping_done: true}
+    code: |
+      ctx.wakeOn("progress");
+      const r = ctx.runAgent("pinger", "notify the parent step by step");
+      ctx.setVar("childStatus", r.status);
+      ctx.log("child status: " + r.status);
+
 goals:
   - name: designed
     description: Design the test cases and their summary
@@ -127,6 +175,14 @@ goals:
     description: Design, summarize and get a test campaign validated
     pre: {tests_designed: true, summarized: true, reviewed: true}
     value: 20
+  - name: notified
+    description: The pinger has sent its progress signal and finished
+    pre: {pinger_pinged: true, pinger_wrapped: true}
+    value: 10
+  - name: pinged_back
+    description: The watcher started the pinger and got its result
+    pre: {ping_done: true}
+    value: 10
 
 agents:
   - name: test-designer
@@ -165,3 +221,15 @@ agents:
     planner: hybrid
     actions: [delegate]
     goals: [delivered]
+  - name: pinger
+    description: Sends a progress signal to its parent before finishing
+    examples: [notify the parent step by step]
+    planner: goap
+    actions: [wait_ready, ping, wait_wrap]
+    goals: [notified]
+  - name: watcher
+    description: Starts a pinger and wakes early on its progress signal
+    examples: [watch a pinger and wake on its signal]
+    planner: hybrid
+    actions: [wait_for_ping]
+    goals: [pinged_back]

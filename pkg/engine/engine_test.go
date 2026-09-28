@@ -158,6 +158,20 @@ func TestPrepareChangeWithClarificationAndReview(t *testing.T) {
 	if p.Goal != "prepare_change" {
 		t.Fatalf("got goal %q", p.Goal)
 	}
+	if entries, err := e.Store.ListProcessLog(ctx, p.ID); err != nil {
+		t.Fatal(err)
+	} else if len(entries) != len(p.Intent.Turns) {
+		t.Fatalf("expected %d intent.turn log entries (one per turn), got %d: %+v", len(p.Intent.Turns), len(entries), entries)
+	} else {
+		for i, en := range entries {
+			if en.Type != "intent.turn" || en.Seq != int64(i+1) {
+				t.Fatalf("entry %d: %+v", i, en)
+			}
+		}
+		if entries[len(entries)-1].Payload["text"] != "prepare_change" {
+			t.Fatalf("last entry should be the user's answer, got %+v", entries[len(entries)-1])
+		}
+	}
 	p, _ = e.Run(ctx, p.ID)
 	if p.Status != StatusWaiting || p.Pending == nil || p.Pending.Action != "review_proposals" {
 		t.Fatalf("expected review task, got %s %+v %s steps=%+v", p.Status, p.Pending, p.Error, p.Steps)
