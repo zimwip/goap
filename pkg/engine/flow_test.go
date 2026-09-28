@@ -103,6 +103,19 @@ func TestRelaunchStepAdoptFlow(t *testing.T) {
 	if np.Status != StatusWaiting || np.Pending == nil || np.Pending.Kind != TaskFlow {
 		t.Fatalf("after the run: %s %+v", np.Status, np.Pending)
 	}
+	// the journal of the relaunched run is on the flow, and starts with why it was scheduled
+	recs, err := e.Graph.Journal(ctx, domain.ExecutionFilter{ChangeID: old.ChangeID, ProcessIDs: []string{np.ID}})
+	if err != nil || len(recs) < 2 {
+		t.Fatalf("journal of the relaunched run: %d records, %v", len(recs), err)
+	}
+	if sch := recs[1]; sch.Kind != domain.ExecSchedule || sch.Data["reason"] != "relaunched" || sch.Data["flow"] != np.Flow || sch.Data["process"] != old.ID {
+		t.Fatalf("schedule record of the relaunched run: %+v", recs[1])
+	}
+	for _, r := range recs {
+		if r.Flow != np.Flow {
+			t.Fatalf("record %s of the relaunched run is on flow %q", r.Kind, r.Flow)
+		}
+	}
 	c, _ = g.Change(ctx, old.ChangeID)
 	candidates := 0
 	for _, it := range c.Items {
@@ -172,7 +185,7 @@ func TestRelaunchStepAdoptFlow(t *testing.T) {
 		}
 	}
 	// the journal records the decision
-	recs, _ := e.Graph.Journal(ctx, domain.ExecutionFilter{ChangeID: old.ChangeID})
+	recs, _ = e.Graph.Journal(ctx, domain.ExecutionFilter{ChangeID: old.ChangeID})
 	found := false
 	for _, r := range recs {
 		found = found || (r.Kind == domain.ExecApproval && r.Action == "flow" && r.Data["decision"] == "adopted")

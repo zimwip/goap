@@ -168,7 +168,6 @@ func (g *Graph) land(ctx context.Context, tx Tx, c domain.Change, own domain.Bra
 			continue // left as is on the target: nothing of this change landed
 		}
 		ref := head.Ref()
-		cn.Landed = &ref
 		comment := cn.Rationale
 		if len(cn.Reviews) > 0 {
 			comment = cn.Reviews[len(cn.Reviews)-1].Comment
@@ -176,7 +175,7 @@ func (g *Graph) land(ctx context.Context, tx Tx, c domain.Change, own domain.Bra
 		if err := tx.SetNodeOrigin(ctx, ref, c.ID, cn.ID, comment); err != nil {
 			return err
 		}
-		if err := tx.PutChangeImpact(ctx, c.ID, cn); err != nil {
+		if err := g.emit(ctx, tx, domain.ImpactEvent{Change: c.ID, Impact: cn.ID, Op: domain.ImpactLanded, Landed: &ref}); err != nil {
 			return err
 		}
 		others, err := tx.NodeChangeImpacts(ctx, ref.ID)
@@ -198,8 +197,8 @@ func (g *Graph) land(ctx context.Context, tx Tx, c domain.Change, own domain.Bra
 				if o.Post != nil || o.Pre == nil || o.Pre.ID != ref.ID || o.Pre.Version >= ref.Version {
 					continue
 				}
-				o.Pre, o.Recheck = &ref, true
-				if err := tx.PutChangeImpact(ctx, oid, o); err != nil {
+				// moved to the new head, to be re-checked
+				if err := g.emit(ctx, tx, domain.ImpactEvent{Change: oid, Impact: o.ID, Op: domain.ImpactRebased, Pre: &ref}); err != nil {
 					return err
 				}
 			}

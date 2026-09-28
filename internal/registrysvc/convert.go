@@ -47,7 +47,7 @@ func ToPB(r Record) *registryv1.Methodology {
 // SummaryToPB converts a record to a list entry.
 func SummaryToPB(r Record) *registryv1.MethodologySummary {
 	out := &registryv1.MethodologySummary{Name: r.Methodology.Name, Version: r.Methodology.Version, Description: r.Methodology.Description,
-		Status: string(r.Status), UpdatedAt: pbconv.Time(r.UpdatedAt), PublishedAt: pbconv.Time(r.PublishedAt)}
+		Status: string(r.Status), UpdatedAt: pbconv.Time(r.UpdatedAt), PublishedAt: pbconv.Time(r.PublishedAt), Namespace: domain.NamespaceOf(r.Methodology.Namespace)}
 	for _, g := range r.Methodology.Goals {
 		out.Goals = append(out.Goals, &registryv1.GoalSummary{Name: g.Name, Description: g.Description})
 	}

@@ -16,10 +16,9 @@
     sendRequest,
     newConversation,
   } from '../../stores/assistant.svelte';
-  import { baselines, refreshBaselines, methodologies } from '../../stores/catalog.svelte';
+  import { baselinesByNamespace, methodologies } from '../../stores/catalog.svelte';
   import { openTab } from '../../shell/tabs.svelte';
-  import { formatDate, shortId } from '../../api';
-  import { DEFAULT_NAMESPACE } from '../../namespace';
+  import { formatDate, shortId, type Baseline } from '../../api';
 
   let { mode = 'tab' }: { mode?: 'panel' | 'tab' } = $props();
 
@@ -31,7 +30,17 @@
   $effect(() => {
     loadingCatalog = true;
     void loadCatalog().finally(() => (loadingCatalog = false));
-    if (!baselines.loaded) void refreshBaselines(DEFAULT_NAMESPACE);
+  });
+
+  // Baselines are namespace-scoped: the settings offer those of every namespace, loaded when opened.
+  let groups = $state<{ namespace: string; baselines: Baseline[] }[]>([]);
+  $effect(() => {
+    if (!settingsOpen) return;
+    const ctrl = new AbortController();
+    baselinesByNamespace(ctrl.signal)
+      .then((g) => (groups = g))
+      .catch(() => {});
+    return () => ctrl.abort();
   });
 
   $effect(() => {
@@ -75,7 +84,6 @@
     newConversation();
   }
 
-  const sortedBaselines = $derived([...baselines.items].sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? '')));
 </script>
 
 <div class="assistant {mode}">
@@ -95,9 +103,17 @@
         <div class="set">
           <label for="as-base">Working baseline</label>
           <select id="as-base" bind:value={conversation.baselineId}>
-            <option value="">Most recent</option>
-            {#each sortedBaselines as b (b.id)}<option value={b.id}>{b.name || shortId(b.id)} — {formatDate(b.createdAt)}</option>{/each}
+            <option value="">Most recent (of the identified methodology's namespace)</option>
+            {#if conversation.baselineId && !groups.some((g) => g.baselines.some((b) => b.id === conversation.baselineId))}
+              <option value={conversation.baselineId}>{shortId(conversation.baselineId)}</option>
+            {/if}
+            {#each groups as g (g.namespace)}
+              <optgroup label={g.namespace}>
+                {#each g.baselines as b (b.id)}<option value={b.id}>{b.name || shortId(b.id)} — {formatDate(b.createdAt)}</option>{/each}
+              </optgroup>
+            {/each}
           </select>
+          {#if conversation.baselineId}<p class="hint">A chosen baseline fixes the namespace: only a methodology acting on it can handle the request.</p>{/if}
         </div>
         <div class="set">
           <label class="check"><input type="checkbox" bind:checked={voiceSettings.enabled} /> Voice input (push-to-talk)</label>

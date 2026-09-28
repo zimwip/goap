@@ -393,7 +393,7 @@ registerView({
   icon: 'database',
   component: BaselineTab,
   key: (p) => p.id ?? '',
-  tabTitle: (t) => baselines.items.find((b) => b.id === t.params.id)?.name || `Baseline ${shortId(t.params.id)}`,
+  tabTitle: (t) => t.params.name || baselines.items.find((b) => b.id === t.params.id)?.name || `Baseline ${shortId(t.params.id)}`,
 });
 
 registerView({

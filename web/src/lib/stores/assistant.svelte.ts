@@ -5,8 +5,7 @@ import { SvelteMap } from 'svelte/reactivity';
 import { engine, registry, errorMessage, type Agent, type Methodology } from '../api';
 import { loadRaw, save } from '../shell/storage';
 import { ingestProcess } from './live.svelte';
-import { baselines, refreshBaselines, latestPublished, methodologies, refreshMethodologies } from './catalog.svelte';
-import { DEFAULT_NAMESPACE } from '../namespace';
+import { latestPublished, methodologies, refreshMethodologies } from './catalog.svelte';
 
 export interface Thread {
   id: string;
@@ -19,7 +18,7 @@ export interface Thread {
 
 interface Conversation {
   threads: Thread[];
-  /** chosen baseline ('': the most recent) */
+  /** chosen baseline ('': the most recent of the identified methodology's namespace) */
   baselineId: string;
   /** draft of the input box */
   draft: string;
@@ -130,14 +129,6 @@ export function goalLabel(methodology: string | undefined, goal: string | undefi
 
 // --- sending -----------------------------------------------------------------------------------
 
-// The assistant identifies its methodology dynamically (no fixed namespace known ahead of
-// the request), so it falls back to the default namespace; known limitation.
-export async function latestBaselineId(): Promise<string> {
-  if (!baselines.loaded) await refreshBaselines(DEFAULT_NAMESPACE);
-  const sorted = [...baselines.items].sort((a, b) => (a.createdAt ?? '').localeCompare(b.createdAt ?? ''));
-  return sorted[sorted.length - 1]?.id ?? '';
-}
-
 export async function sendRequest(text: string): Promise<void> {
   const t = text.trim();
   if (!t || assistantUi.sending) return;
@@ -147,7 +138,8 @@ export async function sendRequest(text: string): Promise<void> {
   const th = conversation.threads[conversation.threads.length - 1];
   conversation.draft = '';
   try {
-    const baselineId = conversation.baselineId || (await latestBaselineId());
+    // no baseline chosen: the engine starts from the latest one of the identified methodology's namespace
+    const baselineId = conversation.baselineId;
     const res = await engine.startProcess({ intent: t, ...(baselineId ? { baselineId } : {}) });
     if (res.process?.id) {
       ingestProcess(res.process);

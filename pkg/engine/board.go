@@ -155,6 +155,7 @@ func (e *Engine) ResolveBoard(ctx context.Context, id string, relaunch bool, com
 		}
 		p.Dismissed[issuesKey(pend.Issues)] = true
 		p.Pending, p.Status = nil, StatusRunning
+		e.queue(ctx, p, "board-ignored", map[string]any{"issues": len(pend.Issues)})
 		e.journal(ctx, p, domain.ExecutionRecord{Kind: domain.ExecApproval, Step: pend.Step, Action: "validate_board", Actor: by,
 			Data: map[string]any{"decision": "ignored", "comment": comment, "issues": len(pend.Issues)}})
 		return p, nil, e.save(ctx, p, "step")
@@ -205,6 +206,7 @@ func (e *Engine) resumeWaiting(ctx context.Context, p *Process, discarded bool) 
 				cur.Dismissed[issuesKey(cur.Pending.Issues)] = true
 			}
 			cur.Pending, cur.Status = nil, StatusRunning
+			e.queue(ctx, cur, map[bool]string{true: "flow-discarded", false: "flow-adopted"}[discarded], map[string]any{"flow": p.Flow})
 			if err := e.save(ctx, cur, "step"); err != nil {
 				e.log().Warn("resume after flow decision", "process", cur.ID, "err", err)
 				return
