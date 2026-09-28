@@ -20,6 +20,11 @@ service GraphService {
   rpc CreateBaseline(CreateBaselineRequest) returns (CreateBaselineResponse);
   rpc ListBaselines(ListBaselinesRequest) returns (ListBaselinesResponse);
   rpc GetBaselineGraph(GetBaselineGraphRequest) returns (GetBaselineGraphResponse);
+  // Browsing a large baseline: a page of its nodes (by type, filtered) and the neighbourhood of one node.
+  rpc ListBaselineNodes(ListBaselineNodesRequest) returns (ListBaselineNodesResponse);
+  rpc GetNodeNeighbourhood(GetNodeNeighbourhoodRequest) returns (GetNodeNeighbourhoodResponse);
+  // The namespaces holding at least one node.
+  rpc ListNamespaces(ListNamespacesRequest) returns (ListNamespacesResponse);
 
   // Change axis
   rpc CreateChange(CreateChangeRequest) returns (CreateChangeResponse);
@@ -320,6 +325,52 @@ message GetBaselineGraphResponse {
   repeated Node nodes = 2;
   repeated Link links = 3;
   repeated Link suspect_links = 4;
+}
+
+message ListBaselineNodesRequest {
+  string baseline_id = 1;
+  // qualified node type ("alm@Requirement"); empty: every type
+  string type = 2;
+  // case-insensitive text matched against the key, the type and the string properties
+  string query = 3;
+  int32 offset = 4;
+  // page size (default and max 500)
+  int32 limit = 5;
+  bool include_deleted = 6;
+}
+
+message TypeCount {
+  string type = 1;
+  int32 count = 2;
+}
+
+message ListBaselineNodesResponse {
+  repeated Node nodes = 1;
+  // number of nodes matching the query, all pages
+  int32 total = 2;
+  // nodes per type matching the text query (the type filter aside)
+  repeated TypeCount types = 3;
+  Baseline baseline = 4;
+}
+
+message GetNodeNeighbourhoodRequest {
+  string baseline_id = 1;
+  string node_id = 2;
+}
+
+message GetNodeNeighbourhoodResponse {
+  Node node = 1;
+  // targets of its outgoing links and sources (in the baseline) of its incoming links
+  repeated Node nodes = 2;
+  repeated Link links = 3;
+  // ids of the links whose target changed since they were created
+  repeated string suspect_link_ids = 4;
+}
+
+message ListNamespacesRequest {}
+
+message ListNamespacesResponse {
+  repeated string namespaces = 1;
 }
 
 message CreateChangeRequest {

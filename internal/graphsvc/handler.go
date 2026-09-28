@@ -158,6 +158,41 @@ func (h *Handler) GetBaselineGraph(ctx context.Context, r *connect.Request[graph
 		Links: pbconv.LinksToPB(links), SuspectLinks: pbconv.LinksToPB(suspects)}, err)
 }
 
+func (h *Handler) ListBaselineNodes(ctx context.Context, r *connect.Request[graphv1.ListBaselineNodesRequest]) (*connect.Response[graphv1.ListBaselineNodesResponse], error) {
+	id := domain.BaselineID(r.Msg.BaselineId)
+	b, err := h.Graph.Baseline(ctx, id)
+	if err != nil {
+		return nil, rpcerr.ToConnect(err)
+	}
+	page, err := h.Graph.BaselineNodes(ctx, id, graph.NodeQuery{Type: r.Msg.Type, Text: r.Msg.Query,
+		IncludeDeleted: r.Msg.IncludeDeleted, Offset: int(r.Msg.Offset), Limit: int(r.Msg.Limit)})
+	if err != nil {
+		return nil, rpcerr.ToConnect(err)
+	}
+	out := &graphv1.ListBaselineNodesResponse{Baseline: pbconv.BaselineToPB(b), Nodes: pbconv.NodesToPB(page.Nodes), Total: int32(page.Total)}
+	for _, t := range page.Types {
+		out.Types = append(out.Types, &graphv1.TypeCount{Type: t.Type, Count: int32(t.Count)})
+	}
+	return connect.NewResponse(out), nil
+}
+
+func (h *Handler) GetNodeNeighbourhood(ctx context.Context, r *connect.Request[graphv1.GetNodeNeighbourhoodRequest]) (*connect.Response[graphv1.GetNodeNeighbourhoodResponse], error) {
+	nb, err := h.Graph.NodeNeighbourhood(ctx, domain.BaselineID(r.Msg.BaselineId), domain.NodeID(r.Msg.NodeId))
+	if err != nil {
+		return nil, rpcerr.ToConnect(err)
+	}
+	out := &graphv1.GetNodeNeighbourhoodResponse{Node: pbconv.NodeToPB(nb.Node), Nodes: pbconv.NodesToPB(nb.Nodes), Links: pbconv.LinksToPB(nb.Links)}
+	for _, l := range nb.Suspect {
+		out.SuspectLinkIds = append(out.SuspectLinkIds, string(l))
+	}
+	return connect.NewResponse(out), nil
+}
+
+func (h *Handler) ListNamespaces(ctx context.Context, _ *connect.Request[graphv1.ListNamespacesRequest]) (*connect.Response[graphv1.ListNamespacesResponse], error) {
+	ns, err := h.Graph.Namespaces(ctx)
+	return res(&graphv1.ListNamespacesResponse{Namespaces: ns}, err)
+}
+
 func (h *Handler) CreateChange(ctx context.Context, r *connect.Request[graphv1.CreateChangeRequest]) (*connect.Response[graphv1.CreateChangeResponse], error) {
 	c, err := h.Graph.CreateChange(ctx, graph.NewChange{ParentID: domain.ChangeID(r.Msg.ParentId), OwnerOrg: r.Msg.OwnerOrg, OwnBranch: r.Msg.OwnBranch, Namespace: r.Msg.Namespace, Title: r.Msg.Title, Intent: r.Msg.Intent, Methodology: r.Msg.Methodology,
 		BaselineID: domain.BaselineID(r.Msg.BaselineId), Branch: r.Msg.Branch, Data: pbconv.Map(r.Msg.Data)})

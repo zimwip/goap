@@ -516,6 +516,23 @@ export interface Link {
   changeId?: string;
 }
 
+export interface BaselineNodesQuery {
+  baselineId: string;
+  /** qualified node type; empty: every type */
+  type?: string;
+  /** matched against the key, the type and the string properties */
+  query?: string;
+  offset?: number;
+  /** page size (max 500) */
+  limit?: number;
+  includeDeleted?: boolean;
+}
+
+export interface TypeCount {
+  type?: string;
+  count?: number;
+}
+
 export interface Baseline {
   id?: string;
   name?: string;
@@ -1106,6 +1123,24 @@ export const graph = {
       { id },
       signal,
     ),
+  /** A page of the nodes of a baseline (by type, text-filtered), with the node count of every type. */
+  listBaselineNodes: (req: BaselineNodesQuery, signal?: AbortSignal) =>
+    rpc<BaselineNodesQuery, { baseline?: Baseline; nodes?: GraphNode[]; total?: number; types?: TypeCount[] }>(
+      GRAPH,
+      'ListBaselineNodes',
+      req,
+      signal,
+    ),
+  /** A node of a baseline with its direct neighbours (both directions). */
+  getNodeNeighbourhood: (baselineId: string, nodeId: string, signal?: AbortSignal) =>
+    rpc<{ baselineId: string; nodeId: string }, { node?: GraphNode; nodes?: GraphNode[]; links?: Link[]; suspectLinkIds?: string[] }>(
+      GRAPH,
+      'GetNodeNeighbourhood',
+      { baselineId, nodeId },
+      signal,
+    ),
+  /** The namespaces holding at least one node. */
+  listNamespaces: (signal?: AbortSignal) => rpc<Empty, { namespaces?: string[] }>(GRAPH, 'ListNamespaces', {}, signal),
   listChanges: (signal?: AbortSignal) =>
     rpc<Empty, { changes?: Change[] }>(GRAPH, 'ListChanges', {}, signal),
   getChange: (id: string, signal?: AbortSignal) =>
