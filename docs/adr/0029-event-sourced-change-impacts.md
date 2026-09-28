@@ -37,7 +37,6 @@ Insert-only: nothing updates or deletes an event.
 | `adopted` | change level: the flow and its stale executions | `AdoptFlow` |
 | `landed` | the version on the target branch | `land` (apply) |
 | `rebased` | the new `pre` of a planned change impact, to re-check | `land`, for the other open changes |
-| `imported` | the whole change impact | the migration of data recorded before the log (§6) |
 
 Every event carries its **caller**: `by` (the principal, or the component: `graph.merge`, `graph.split_by_owner`),
 `execution` (the journal record of the action run, which gives the process, the step and the action: ADR 0011) and
@@ -72,17 +71,20 @@ directly. A test replays the log of every change after each graph test and compa
   stale for it. The branch lookup of ADR 0025 read the latest version of a flow branch whatever run wrote it; the fold
   applies the stale runs to the writes of the chain too.
 
-### 6. Migration
-Change impacts recorded before the log get one `imported` event with their whole state, the first time the graph
-opens the store (`Graph.MigrateImpactEvents`, idempotent: a change that has events is skipped).
+### 6. No migration
+The platform starts from an empty store: there is no data recorded before the log to convert.
 
 ### 7. Reading the log
-`ListChangeEvents(change)` returns the log; the change tab shows it as a timeline (who, which action run, which flow,
-what changed).
+`ListChangeEvents(change)` returns the log. The **Audit** pane of the change tab merges it with the execution journal
+(processes, plans, actions with their model and tool calls, human approvals: ADR 0011) and the facts of the blackboard
+(items, flow events: ADR 0017) into one chronological trail: when, what, on which flow, by whom and through which action
+run, each entry expanding to its full record. It filters by source, flow, action run and text, and exports the trail
+(CSV) or the raw logs (JSON). A run scheduled in the background acts for the principal who started the process, so its
+events name that principal; the graph client forwards the principal of its context in distributed mode.
 
 ## Consequences
 - **Storage**: table `change_event` (PostgreSQL `0017`, SQLite `0016`). The projection is unchanged.
-- **Code**: `pkg/domain/impactevent.go` (events, folds), `pkg/graph/impactevents.go` (`emit`, migration), the write
+- **Code**: `pkg/domain/impactevent.go` (events, folds), `pkg/graph/impactevents.go` (`emit`), the write
   paths of `changeimpact.go`, `changeimpact_apply.go`, `flownodes.go`, `merge.go`, `subchange.go` emit events instead of
   writing rows; the flow view (`flowNodes.nodes`) folds the log. `Graph.Caller` gives the caller of an operation (set by
   the graph service from the principal; `pkg/graph` does not depend on `pkg/authz`).

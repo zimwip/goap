@@ -4,7 +4,6 @@ package graphsvc
 import (
 	"context"
 	"fmt"
-	"log/slog"
 
 	"connectrpc.com/connect"
 
@@ -162,17 +161,6 @@ func (h *Handler) GetBaselineGraph(ctx context.Context, r *connect.Request[graph
 // Caller names the principal of a request, recorded on the events of the change impacts (graph.Graph.Caller,
 // ADR 0029).
 func Caller(ctx context.Context) string { return authz.From(ctx).Subject }
-
-// PrepareGraph wires the caller of the impact events and gives the change impacts recorded before the log their
-// imported event (ADR 0029 §6).
-func PrepareGraph(ctx context.Context, g *graph.Graph, log *slog.Logger) error {
-	g.Caller = Caller
-	n, err := g.MigrateImpactEvents(ctx)
-	if n > 0 {
-		log.Info("change impacts moved to the impact log", "changes", n)
-	}
-	return err
-}
 
 func (h *Handler) ListChangeEvents(ctx context.Context, r *connect.Request[graphv1.ListChangeEventsRequest]) (*connect.Response[graphv1.ListChangeEventsResponse], error) {
 	evs, err := h.Graph.ChangeEvents(ctx, domain.ChangeID(r.Msg.ChangeId))

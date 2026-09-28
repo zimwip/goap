@@ -78,6 +78,7 @@ func TestSDLCDelivery(t *testing.T) {
 	}
 	g := graph.New(graph.NewMemory())
 	g.Types = func() graph.TypeCatalog { return cat }
+	g.Caller = graphsvc.Caller
 	if _, err := graphsvc.SeedDemo(ctx, g); err != nil {
 		t.Fatal(err)
 	}
@@ -101,7 +102,8 @@ func TestSDLCDelivery(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p, err = e.Run(ctx, p.ID); err != nil {
+	// run as the background scheduler does, without a caller: the run acts for the initiator
+	if p, err = e.Run(context.Background(), p.ID); err != nil {
 		t.Fatal(err)
 	}
 	if p.Status != engine.StatusWaiting || p.Pending.Action != "review" {
@@ -127,6 +129,9 @@ func TestSDLCDelivery(t *testing.T) {
 	for _, e := range evs {
 		if (e.Op == domain.ImpactDeclared || e.Op == domain.ImpactWritten) && e.Execution == "" {
 			t.Fatalf("event %d (%s of %s) has no action run", e.Seq, e.Op, e.Impact)
+		}
+		if e.By != "dev" {
+			t.Fatalf("event %d (%s of %s) is recorded for %q, not the initiator", e.Seq, e.Op, e.Impact, e.By)
 		}
 	}
 	count := map[string]int{}
