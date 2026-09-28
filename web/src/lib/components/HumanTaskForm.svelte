@@ -7,15 +7,32 @@
     type ChangeImpact,
     type GraphNode,
     type ItemInput,
+    type LifecycleTransition,
+    type NodeRef,
     type Process,
   } from '../api';
-  
+  import ChangeLifecycle from './ChangeLifecycle.svelte';
+  import {
+    lifecycleResolver,
+    lifecycleRows,
+    loadPosts,
+    nodeTypeNames,
+    reopenable,
+    writeNodeInChange,
+    type LifecycleRow,
+    type PostVersions,
+  } from '../lifecycle';
+  import { loadTypes, typeCatalog } from '../stores/types.svelte';
+  import { openNode } from '../nodeEditors';
+
   let { process, onsubmitted }: { process: Process; onsubmitted: (p: Process) => void } = $props();
 
   const task = $derived(process.pending);
   const action = $derived(task?.action ?? '');
-  const mode = $derived<'select' | 'review' | 'raw'>(
-    /select/i.test(action) ? 'select' : /review|revue|valid|approv/i.test(action) ? 'review' : 'raw',
+  // 'nodes': the default for any human task that is not clearly a selection or a
+  // review — creating or editing nodes goes through the node editor, never raw JSON.
+  const mode = $derived<'select' | 'review' | 'nodes'>(
+    /select/i.test(action) ? 'select' : /review|revue|valid|approv/i.test(action) ? 'review' : 'nodes',
   );
 
   let nodes = $state<GraphNode[]>([]);
@@ -33,7 +50,13 @@
   let nodeDecisions = $state<Record<string, boolean>>({});
   let comment = $state('');
 
-  // --- raw JSON
+  // --- node creation / edition (the default fallback for any other human task)
+  let attached = $state<NodeRef[]>([]);
+  let posts = $state<PostVersions>(new Map());
+  let extraNodes = $state<string[]>([]);
+  let moving = $state('');
+
+  // --- raw JSON (escape hatch, kept for tasks a node editor cannot express)
   let raw = $state('');
   let showRaw = $state(false);
 
@@ -41,31 +64,110 @@
   const changeId = $derived(process.changeId);
   const step = $derived(task?.step);
   let namespace = $state('');
+  void loadTypes();
+
+  async function reload(id: string, signal?: AbortSignal) {
+    const change = (await graph.getChange(id, signal)).change;
+    changeImpacts = change?.nodes ?? [];
+    namespace = change?.namespace ?? '';
+    const allNodes = change?.baselineId ? ((await graph.getBaselineGraph(change.baselineId, signal)).nodes ?? []) : [];
+    // bind the picker to the change's declared namespace (its WHAT): a
+    // change can only impact the nodes of its own domain, whatever else
+    // the baseline holds.
+    nodes = namespace ? allNodes.filter((n) => n.namespace === namespace) : allNodes;
+    attached = (await graph.getChangeImpacts(id, signal)).nodes ?? [];
+    posts = await loadPosts(changeImpacts);
+    const initNodes: Record<string, boolean> = {};
+    for (const n of changeImpacts) if (isPending(n) && n.id) initNodes[n.id] = true;
+    nodeDecisions = initNodes;
+  }
+
   $effect(() => {
     void step;
     if (!changeId) return;
     const ctrl = new AbortController();
     const id = changeId;
     loadError = '';
-    (async () => {
-      const change = (await graph.getChange(id, ctrl.signal)).change;
-      changeImpacts = change?.nodes ?? [];
-      namespace = change?.namespace ?? '';
-      const allNodes = change?.baselineId
-        ? ((await graph.getBaselineGraph(change.baselineId, ctrl.signal)).nodes ?? [])
-        : [];
-      // bind the picker to the change's declared namespace (its WHAT): a
-      // change can only impact the nodes of its own domain, whatever else
-      // the baseline holds.
-      nodes = namespace ? allNodes.filter((n) => n.namespace === namespace) : allNodes;
-      const initNodes: Record<string, boolean> = {};
-      for (const n of changeImpacts) if (isPending(n) && n.id) initNodes[n.id] = true;
-      nodeDecisions = initNodes;
-    })().catch((e) => {
+    reload(id, ctrl.signal).catch((e) => {
       if (!ctrl.signal.aborted) loadError = errorMessage(e);
     });
     return () => ctrl.abort();
   });
+
+  const lcRows = $derived(lifecycleRows(typeCatalog.cat, nodes, attached, changeImpacts, posts, extraNodes));
+  const lcCandidates = $derived(reopenable(nodes, lcRows, namespace));
+  const typeNames = $derived(nodeTypeNames(typeCatalog.cat, namespace));
+  const lifecycleOf = $derived(lifecycleResolver(typeCatalog.cat));
+  const takenKeys = $derived([
+    ...nodes.map((n) => n.key ?? ''),
+    ...changeImpacts.filter((n) => n.intent === 'created' && !n.superseded && n.review !== 'rejected').map((n) => n.key ?? ''),
+  ]);
+
+  /** Writes a node of this change through its change impact (mirrors ChangeTab's own `write`). */
+  async function write(label: string, target: { pre?: NodeRef; key?: string; type?: string }, w: { props?: Record<string, unknown>; state?: string; retire?: boolean }, rationale: string): Promise<boolean> {
+    if (!changeId) return false;
+    moving = label;
+    error = '';
+    try {
+      await writeNodeInChange(changeId, changeImpacts, target, w, rationale);
+      await reload(changeId);
+      return true;
+    } catch (e) {
+      error = errorMessage(e);
+      return false;
+    } finally {
+      moving = '';
+    }
+  }
+
+  const move = (row: LifecycleRow, t: LifecycleTransition) =>
+    row.node.id ? write(`${row.node.id}:${t.name}`, { pre: { id: row.node.id, version: row.node.version } }, { state: t.to }, `${t.name} ${row.node.key}`) : Promise.resolve(false);
+
+  function edit(row: LifecycleRow, patch: Record<string, unknown>, state?: string): Promise<boolean> {
+    if (row.created) return write(`${row.node.id}:edit`, { key: row.node.key, type: row.node.type }, { props: patch, state }, `edit ${row.node.key}`);
+    if (!row.node.id) return Promise.resolve(false);
+    return write(`${row.node.id}:edit`, { pre: { id: row.node.id, version: row.node.version } }, { props: patch }, `edit ${row.node.key}`);
+  }
+
+  function createNode(key: string, type: string, state: string): Promise<boolean> {
+    const born = lifecycleOf(type) && state && state !== lifecycleOf(type)?.initial ? state : undefined;
+    return write('create', { key, type }, { props: {}, state: born }, `create ${key}`);
+  }
+
+  async function removeNode(row: LifecycleRow): Promise<boolean> {
+    if (!changeId) return false;
+    if (row.created?.id) {
+      moving = `${row.node.id}:delete`;
+      error = '';
+      try {
+        await graph.reviewChangeImpact(changeId, row.created.id, false, `discarded ${row.node.key}`);
+        await reload(changeId);
+        return true;
+      } catch (e) {
+        error = errorMessage(e);
+        return false;
+      } finally {
+        moving = '';
+      }
+    }
+    return write(`${row.node.id}:delete`, { pre: { id: row.node.id, version: row.node.version } }, { retire: true }, `delete ${row.node.key}`);
+  }
+
+  async function undoDelete(row: LifecycleRow): Promise<boolean> {
+    if (!changeId || !row.removal?.id) return false;
+    moving = `${row.node.id}:delete`;
+    error = '';
+    try {
+      await graph.reviewChangeImpact(changeId, row.removal.id, false, `keep ${row.node.key}`);
+      await reload(changeId);
+      return true;
+    } catch (e) {
+      error = errorMessage(e);
+      return false;
+    } finally {
+      moving = '';
+    }
+  }
 
   /** a change impact awaiting a decision: written directly, on the main flow, not replaced */
   const isPending = (n: ChangeImpact) => n.review === 'proposed' && !n.flow && !n.superseded;
@@ -209,9 +311,32 @@
         <button type="button" class="small" onclick={openRaw}>View / edit as JSON</button>
       </div>
     </form>
+  {:else if mode === 'nodes'}
+    <ChangeLifecycle
+      rows={lcRows}
+      candidates={lcCandidates}
+      busy={moving}
+      onmove={move}
+      onedit={edit}
+      types={typeNames}
+      {lifecycleOf}
+      keys={takenKeys}
+      oncreate={createNode}
+      onremove={removeNode}
+      onundo={undoDelete}
+      onhistory={(r) => openNode(r.node, { pin: true, generic: true, pane: 'history' })}
+      onopennode={(r) => openNode(r.node, { pin: true, change: changeId })}
+      onadd={(id) => (extraNodes = [...extraNodes, id])}
+    />
+    <div class="row" style="margin-top: 0.75rem">
+      <button class="primary" type="button" onclick={() => send([])} disabled={submitting}>
+        {submitting ? 'Sending…' : 'Done'}
+      </button>
+      <button type="button" class="small" onclick={openRaw}>View / edit as JSON</button>
+    </div>
   {/if}
 
-  {#if mode === 'raw' || showRaw}
+  {#if showRaw}
     <div class="raw">
       <label for="ht-raw">Items (engine input format, JSON array)</label>
       <textarea
@@ -225,9 +350,7 @@
         <button class="primary" type="button" onclick={submitRaw} disabled={submitting}>
           {submitting ? 'Sending…' : 'Send JSON'}
         </button>
-        {#if mode !== 'raw'}
-          <button type="button" class="small" onclick={() => (showRaw = false)}>Hide</button>
-        {/if}
+        <button type="button" class="small" onclick={() => (showRaw = false)}>Hide</button>
       </div>
     </div>
   {/if}
