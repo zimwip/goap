@@ -70,6 +70,10 @@ branches are namespace-scoped too: a baseline only ever holds nodes of one names
 the same name. Cross-namespace capabilities (ownership links, adapter/MCP resolution, ABAC, the model gateway, the
 methodology registry) are unaffected: they read a specific namespace's own head directly (e.g. `BranchHead(ns,
 "main")`) instead of relying on one shared baseline that happened to hold every namespace's nodes together.
+A baseline can be browsed without loading it whole (`ListNamespaces`, `ListBaselineNodes`: the node count per type
+and a page of the nodes of one type, text-filtered on the server; `GetNodeNeighbourhood`: a node, its direct
+neighbours in both directions and the suspect links among them, `pkg/graph/browse.go`). The IDE's Baseline explorer
+and tab navigate namespace → baseline → node type → paged nodes, and show the neighbour graph of the selected node.
 The organisation is a hierarchy of units in its own namespace (`organisation`); nodes reference their owner
 unit across namespaces, and a change is split into sub-changes along unit boundaries
 ([ADR 0016](adr/0016-organisation-and-sub-changes.md)).

@@ -167,7 +167,7 @@ func BaselineToPB(b domain.Baseline) *graphv1.Baseline {
 		nodes[string(id)] = int32(v)
 	}
 	return &graphv1.Baseline{Id: string(b.ID), Name: b.Name, ParentId: string(b.ParentID), ChangeId: string(b.ChangeID), Nodes: nodes, CreatedAt: Time(b.CreatedAt),
-		Branch: domain.BranchOf(b.Branch)}
+		Branch: domain.BranchOf(b.Branch), Namespace: domain.NamespaceOf(b.Namespace)}
 }
 
 func BaselineFromPB(b *graphv1.Baseline) domain.Baseline {
@@ -176,7 +176,7 @@ func BaselineFromPB(b *graphv1.Baseline) domain.Baseline {
 		nodes[domain.NodeID(id)] = domain.Version(v)
 	}
 	return domain.Baseline{ID: domain.BaselineID(b.Id), Name: b.Name, ParentID: domain.BaselineID(b.ParentId), ChangeID: domain.ChangeID(b.ChangeId), Nodes: nodes, CreatedAt: FromTime(b.CreatedAt),
-		Branch: b.Branch}
+		Branch: b.Branch, Namespace: b.Namespace}
 }
 
 func ItemToPB(it domain.ChangeItem) *graphv1.ChangeItem {
