@@ -743,6 +743,8 @@ export interface ExecutionRecord {
   startedAt?: string;
   endedAt?: string;
   durationMs?: Int64;
+  /** flow branch the process runs on ('' = the main flow) */
+  flow?: string;
 }
 
 // --- engine -----------------------------------------------------------------

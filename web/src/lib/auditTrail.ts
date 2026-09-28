@@ -1,13 +1,16 @@
 // The audit trail of a change: one chronological list of everything that happened to it, merged from its three
-// append-only sources: the execution journal (processes, plans, actions, human approvals: ADR 0011), the impact log
-// (every operation on its change impacts: ADR 0029) and the facts of its blackboard (items, flow events: ADR 0017).
-// Each entry says when, who, on which flow and through which action run.
+// append-only sources: the execution journal (processes, scheduling, plans, actions, human approvals: ADR 0011), the
+// impact log (every operation on its change impacts: ADR 0029) and the facts of its blackboard (items, flow events:
+// ADR 0017). Each entry says when, who, on which flow and through which action run. A change is a flow of events:
+// flow branches fork from it (a relaunch, alternatives to compare), and are merged back (adopted) or dropped
+// (discarded); the entries carry these marks so the trail can be drawn as branches.
 import { shortId, type Change, type ChangeItem, type ExecutionRecord, type ImpactEvent, type JsonValue, type NodeRef } from './api';
 
-export type AuditSource = 'change' | 'process' | 'plan' | 'action' | 'approval' | 'impact' | 'fact' | 'flow';
+export type AuditSource = 'change' | 'process' | 'schedule' | 'plan' | 'action' | 'approval' | 'impact' | 'fact' | 'flow';
 
 export const AUDIT_SOURCES: { id: AuditSource; label: string }[] = [
   { id: 'process', label: 'Processes' },
+  { id: 'schedule', label: 'Scheduling' },
   { id: 'action', label: 'Actions' },
   { id: 'approval', label: 'Approvals' },
   { id: 'impact', label: 'Impacts' },
@@ -26,8 +29,12 @@ export interface AuditEntry {
   /** what it happened to: action name, change impact key, fact type */
   subject: string;
   summary: string;
-  /** flow branch ('' = the main flow) */
+  /** flow branch the entry happened on ('' = the main flow) */
   flow: string;
+  /** a flow branch forks here (opened), is merged back here (adopted) or ends here (discarded) */
+  fork?: string;
+  merge?: string;
+  end?: boolean;
   /** the principal, the agent or the component */
   by: string;
   /** the journal record of the action run behind it (an action's own record for an action) */
@@ -48,12 +55,20 @@ export function runLabel(r: ExecutionRecord | undefined): string {
   return [r.agent, r.step !== undefined ? `step ${r.step + 1}` : '', r.specialization || r.action].filter(Boolean).join(' · ');
 }
 
+/** The rest of a plan after its next action, the first steps only (the full plan is in the record). */
+function planSummary(plan: string[] | undefined): string {
+  if (!plan?.length) return 'no plan';
+  const rest = plan.slice(1);
+  if (!rest.length) return 'last step of the plan';
+  return `then ${rest.slice(0, 3).join(' → ')}${rest.length > 3 ? ` (+${rest.length - 3})` : ''}`;
+}
+
 function fromRecord(r: ExecutionRecord): AuditEntry {
   const base = {
     key: `r:${r.id ?? `${r.processId}:${r.seq}`}`,
     at: r.startedAt ?? '',
-    flow: '',
     by: r.actor || r.agent || '',
+    flow: r.flow ?? '',
     execution: r.id ?? '',
     processId: r.processId ?? '',
     record: r,
@@ -82,8 +97,31 @@ function fromRecord(r: ExecutionRecord): AuditEntry {
         tone: approved ? 'ok' : 'warn',
       };
     }
-    case 'tick':
-      return { ...base, source: 'plan', label: 'plan', subject: r.plan?.[0] ?? '', summary: r.plan?.length ? r.plan.join(' → ') : 'no plan', tone: r.error ? 'error' : 'neutral' };
+    case 'tick': {
+      const done = r.data?.['goalSatisfied'] === true;
+      return {
+        ...base,
+        source: 'plan',
+        label: done ? 'goal reached' : 'plan',
+        subject: done ? r.goal ?? '' : `next: ${r.plan?.[0] ?? '—'}`,
+        summary: done ? (r.data?.['awaitingDecision'] ? 'waiting for the decision on the flow' : '') : r.error || planSummary(r.plan),
+        tone: r.error ? 'error' : done ? 'ok' : 'neutral',
+      };
+    }
+    case 'schedule': {
+      const reason = str(r.data?.['reason']);
+      const waited = r.startedAt && r.endedAt ? Date.parse(r.endedAt) - Date.parse(r.startedAt) : 0;
+      const cause = [
+        str(r.data?.['action']) && `after ${str(r.data?.['action'])}`,
+        str(r.data?.['parent']) && `for process ${shortId(str(r.data?.['parent']))}${str(r.data?.['call']) ? ` (${str(r.data?.['call'])})` : ''}`,
+        str(r.data?.['child']) && `sub-agent ${shortId(str(r.data?.['child']))} ended`,
+        str(r.data?.['process']) && `relaunch of ${shortId(str(r.data?.['process']))}${typeof r.data?.['fromStep'] === 'number' ? ` from step ${(r.data['fromStep'] as number) + 1}` : ''}`,
+        str(r.data?.['trigger']) && `trigger ${str(r.data?.['trigger'])}`,
+        str(r.data?.['why']),
+        waited > 0 ? `waited ${waited} ms` : '',
+      ].filter(Boolean);
+      return { ...base, source: 'schedule', label: `scheduled: ${reason}`, subject: r.agent ?? '', summary: cause.join(' · '), tone: 'neutral' };
+    }
     case 'process.started':
       return { ...base, source: 'process', label: 'started', subject: r.agent ?? '', summary: [str(r.data?.['title']), r.goal ? `goal ${r.goal}` : '', str(r.data?.['intent'])].filter(Boolean).join(' · '), tone: 'neutral' };
     case 'process.ended':
@@ -92,7 +130,7 @@ function fromRecord(r: ExecutionRecord): AuditEntry {
   return { ...base, source: 'process', label: r.kind ?? '', subject: r.action ?? '', summary: '', tone: 'neutral' };
 }
 
-function fromEvent(e: ImpactEvent, keys: Map<string, string>): AuditEntry {
+function fromEvent(e: ImpactEvent, keys: Map<string, string>, parents: Map<string, string>): AuditEntry {
   let summary = '';
   switch (e.op) {
     case 'declared':
@@ -122,7 +160,8 @@ function fromEvent(e: ImpactEvent, keys: Map<string, string>): AuditEntry {
     label: e.op ?? '',
     subject: e.impactId ? (keys.get(e.impactId) ?? shortId(e.impactId)) : '',
     summary,
-    flow: e.flow ?? '',
+    // the adoption of a flow happens on the flow it merges into
+    flow: e.op === 'adopted' ? (parents.get(e.flow ?? '') ?? '') : (e.flow ?? ''),
     by: e.by ?? '',
     execution: e.execution ?? '',
     processId: '',
@@ -131,17 +170,31 @@ function fromEvent(e: ImpactEvent, keys: Map<string, string>): AuditEntry {
   };
 }
 
-function fromItem(it: ChangeItem): AuditEntry {
+function fromItem(it: ChangeItem, parents: Map<string, string>): AuditEntry {
   const base = { key: `i:${it.id}`, at: it.createdAt ?? '', flow: it.flow ?? '', by: it.producedBy ?? '', execution: it.execution ?? '', processId: '', item: it };
   if (it.kind === 'flow' && it.flowEvent) {
     const f = it.flowEvent;
+    const id = f.flow ?? '';
+    const parent = parents.get(id) ?? '';
+    const labels: Record<string, string> = { open: 'flow opened', adopt: 'flow adopted', discard: 'flow discarded' };
     return {
       ...base,
       source: 'flow',
-      label: `flow ${f.op ?? ''}`,
-      subject: shortId(f.flow),
-      summary: [f.fromStep !== undefined && f.op === 'open' ? `from step ${f.fromStep + 1}` : '', f.reason, f.stale?.length ? `${f.stale.length} stale item(s)` : ''].filter(Boolean).join(' · '),
-      flow: f.flow ?? base.flow,
+      label: labels[f.op ?? ''] ?? `flow ${f.op ?? ''}`,
+      subject: shortId(id),
+      summary: [
+        f.op === 'open' ? `from ${parent ? `flow ${shortId(parent)}` : 'the main flow'}${f.fromStep !== undefined ? `, step ${f.fromStep + 1}` : ''}` : '',
+        f.op === 'adopt' ? `merged into ${parent ? `flow ${shortId(parent)}` : 'the main flow'}` : '',
+        f.reason,
+        f.stale?.length ? `${f.stale.length} stale item(s)` : '',
+      ]
+        .filter(Boolean)
+        .join(' · '),
+      // opened and adopted on the flow it forks from / merges into; discarded on its own
+      flow: f.op === 'discard' ? id : parent,
+      fork: f.op === 'open' ? id : undefined,
+      merge: f.op === 'adopt' ? id : undefined,
+      end: f.op === 'discard',
       by: f.by || base.by,
       tone: f.op === 'discard' ? 'warn' : f.op === 'adopt' ? 'ok' : 'neutral',
     };
@@ -165,6 +218,9 @@ export function buildTrail(change: Change, events: ImpactEvent[], records: Execu
   const keys = new Map<string, string>();
   for (const cn of change.nodes ?? []) keys.set(cn.id ?? '', cn.key ?? '');
   for (const e of events) if (e.state?.key) keys.set(e.impactId ?? '', e.state.key);
+  // the flow each flow branch forks from
+  const parents = new Map<string, string>();
+  for (const it of change.items ?? []) if (it.flowEvent?.op === 'open') parents.set(it.flowEvent.flow ?? '', it.flowEvent.parent ?? '');
   const out: AuditEntry[] = [];
   if (change.createdAt) {
     out.push({
@@ -181,8 +237,12 @@ export function buildTrail(change: Change, events: ImpactEvent[], records: Execu
       tone: 'neutral',
     });
   }
-  out.push(...records.map(fromRecord), ...events.map((e) => fromEvent(e, keys)), ...(change.items ?? []).map(fromItem));
-  const order: Record<AuditSource, number> = { change: 0, process: 1, plan: 2, action: 3, approval: 4, flow: 5, fact: 6, impact: 7 };
+  out.push(
+    ...records.map(fromRecord),
+    ...events.map((e) => fromEvent(e, keys, parents)),
+    ...(change.items ?? []).map((it) => fromItem(it, parents)),
+  );
+  const order: Record<AuditSource, number> = { change: 0, flow: 1, process: 2, schedule: 3, plan: 4, action: 5, approval: 6, fact: 7, impact: 8 };
   return out
     .map((e, i) => ({ e, i }))
     .sort((a, b) => a.e.at.localeCompare(b.e.at) || order[a.e.source] - order[b.e.source] || a.i - b.i)
@@ -197,4 +257,39 @@ export function trailCSV(entries: AuditEntry[], runs: Map<string, ExecutionRecor
     [e.at, e.source, e.label, e.subject, e.summary, e.flow || 'main', e.by, runLabel(runs.get(e.execution)), e.execution].map(cell).join(','),
   );
   return [head.join(','), ...lines].join('\n');
+}
+
+/** Where each entry of a trail (in display order) is drawn: one lane per flow branch, main on the left, a lane reused
+ * once its branch is merged or dropped (as git draws branches). */
+export interface FlowLanes {
+  /** lane of each flow ('' = main = 0) */
+  lane: Map<string, number>;
+  count: number;
+  /** first and last row of each flow */
+  span: Map<string, [number, number]>;
+}
+
+export function flowLanes(entries: AuditEntry[]): FlowLanes {
+  const span = new Map<string, [number, number]>();
+  const extend = (f: string, i: number) => {
+    const s = span.get(f);
+    span.set(f, s ? [Math.min(s[0], i), Math.max(s[1], i)] : [i, i]);
+  };
+  entries.forEach((e, i) => {
+    extend(e.flow, i);
+    if (e.fork) extend(e.fork, i);
+    if (e.merge) extend(e.merge, i);
+  });
+  extend('', 0);
+  extend('', Math.max(entries.length - 1, 0));
+  const lane = new Map<string, number>([['', 0]]);
+  const used: [number, number][][] = [[]];
+  const flows = [...span.entries()].filter(([f]) => f !== '').sort((a, b) => a[1][0] - b[1][0]);
+  for (const [f, [a, b]] of flows) {
+    let l = 1;
+    while (used[l]?.some(([x, y]) => a <= y && b >= x)) l++;
+    (used[l] ??= []).push([a, b]);
+    lane.set(f, l);
+  }
+  return { lane, count: Math.max(1, ...[...lane.values()].map((l) => l + 1)), span };
 }

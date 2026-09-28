@@ -194,6 +194,7 @@
 
   const KIND_LABELS: Record<string, string> = {
     'process.started': 'start',
+    schedule: 'scheduled',
     tick: 'tick',
     action: 'action',
     approval: 'decision',

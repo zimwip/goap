@@ -32,7 +32,7 @@ func TestJournalRecordsTicksAndActions(t *testing.T) {
 			t.Fatalf("record %d: %+v", i, r)
 		}
 	}
-	want := []string{"process.started", "tick", "action", "tick", "action", "tick", "action", "tick", "process.ended"}
+	want := []string{"process.started", "schedule", "tick", "action", "tick", "action", "tick", "action", "tick", "process.ended"}
 	if len(kinds) != len(want) {
 		t.Fatalf("kinds %v", kinds)
 	}
@@ -41,7 +41,11 @@ func TestJournalRecordsTicksAndActions(t *testing.T) {
 			t.Fatalf("kinds %v", kinds)
 		}
 	}
-	act := recs[2]
+	// the run says why it happens: the process was started, queued, then picked up
+	if sch := recs[1]; sch.Data["reason"] != "started" || sch.EndedAt.Before(sch.StartedAt) {
+		t.Fatalf("schedule record: %+v", sch)
+	}
+	act := recs[3]
 	if act.Action != "identify_impacts" || act.ActionKind != "llm" || len(act.ModelCalls) != 1 || act.EffectsMet == nil || !*act.EffectsMet || len(act.Nodes) != 1 {
 		t.Fatalf("action record: %+v", act)
 	}
@@ -62,8 +66,8 @@ func TestJournalRecordsTicksAndActions(t *testing.T) {
 	if end := recs[len(recs)-1]; end.Status != string(StatusCompleted) || end.Data["steps"] != 3 {
 		t.Fatalf("end record: %+v", end)
 	}
-	if recs[1].Plan[0] != "identify_impacts" || recs[1].Data["replanned"] != false {
-		t.Fatalf("tick: %+v", recs[1])
+	if recs[2].Plan[0] != "identify_impacts" || recs[2].Data["replanned"] != false {
+		t.Fatalf("tick: %+v", recs[2])
 	}
 }
 

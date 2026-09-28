@@ -11,7 +11,11 @@ const (
 	ExecTick           = "tick"     // observe + plan: world state, plan, chosen action
 	ExecAction         = "action"   // one action execution
 	ExecApproval       = "approval" // a human approval decision
-	ExecProcessEnded   = "process.ended"
+	// ExecSchedule records that a run picked up a process made runnable (started, resumed after a human input, an
+	// approval or a sub-agent, relaunched on a flow, fired by a trigger): why, by whom and what caused it; StartedAt
+	// is when it was queued, EndedAt when the run picked it up.
+	ExecSchedule     = "schedule"
+	ExecProcessEnded = "process.ended"
 )
 
 // ExecutionRecord is one entry of the execution journal of a change.
@@ -62,12 +66,14 @@ type ExecutionRecord struct {
 	Output       string      `json:"output,omitempty"`
 	Error        string      `json:"error,omitempty"`
 	// TraceID / SpanID link the record to its OpenTelemetry span.
-	TraceID    string         `json:"traceId,omitempty"`
-	SpanID     string         `json:"spanId,omitempty"`
-	Data       map[string]any `json:"data,omitempty"`
-	StartedAt  time.Time      `json:"startedAt"`
-	EndedAt    time.Time      `json:"endedAt,omitempty"`
-	DurationMs int64          `json:"durationMs,omitempty"`
+	TraceID string         `json:"traceId,omitempty"`
+	SpanID  string         `json:"spanId,omitempty"`
+	Data    map[string]any `json:"data,omitempty"`
+	// Flow is the flow branch the process runs on ("" = the main flow, ADR 0017).
+	Flow       string    `json:"flow,omitempty"`
+	StartedAt  time.Time `json:"startedAt"`
+	EndedAt    time.Time `json:"endedAt,omitempty"`
+	DurationMs int64     `json:"durationMs,omitempty"`
 }
 
 // ModelCall is one LLM call of an action.

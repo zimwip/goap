@@ -78,7 +78,10 @@ The platform starts from an empty store: there is no data recorded before the lo
 `ListChangeEvents(change)` returns the log. The **Audit** pane of the change tab merges it with the execution journal
 (processes, plans, actions with their model and tool calls, human approvals: ADR 0011) and the facts of the blackboard
 (items, flow events: ADR 0017) into one chronological trail: when, what, on which flow, by whom and through which action
-run, each entry expanding to its full record. It filters by source, flow, action run and text, and exports the trail
+run, each entry expanding to its full record. The change is drawn as a flow of events: one lane per flow branch, the
+main flow on the left; a flow forks from its parent where it is opened (several flows side by side to compare
+alternatives), and merges back where it is adopted or ends where it is discarded. The scheduling of the runs is in the
+trail too (the journal's `schedule` records: why each run happened, by whom, after what). It filters by source, flow, action run and text, and exports the trail
 (CSV) or the raw logs (JSON). A run scheduled in the background acts for the principal who started the process, so its
 events name that principal; the graph client forwards the principal of its context in distributed mode.
 

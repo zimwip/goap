@@ -4806,7 +4806,9 @@ type ExecutionRecord struct {
 	BoardBefore int32      `protobuf:"varint,36,opt,name=board_before,json=boardBefore,proto3" json:"board_before,omitempty"`
 	BoardAfter  int32      `protobuf:"varint,37,opt,name=board_after,json=boardAfter,proto3" json:"board_after,omitempty"`
 	// last item of the flow before the step: where a relaunch of the step forks
-	BoardLast     string `protobuf:"bytes,38,opt,name=board_last,json=boardLast,proto3" json:"board_last,omitempty"`
+	BoardLast string `protobuf:"bytes,38,opt,name=board_last,json=boardLast,proto3" json:"board_last,omitempty"`
+	// flow branch the process runs on ("" = the main flow)
+	Flow          string `protobuf:"bytes,39,opt,name=flow,proto3" json:"flow,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -5103,6 +5105,13 @@ func (x *ExecutionRecord) GetBoardAfter() int32 {
 func (x *ExecutionRecord) GetBoardLast() string {
 	if x != nil {
 		return x.BoardLast
+	}
+	return ""
+}
+
+func (x *ExecutionRecord) GetFlow() string {
+	if x != nil {
+		return x.Flow
 	}
 	return ""
 }
@@ -7936,7 +7945,7 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1f\n" +
 	"\vduration_ms\x18\x02 \x01(\x03R\n" +
 	"durationMs\x12\x14\n" +
-	"\x05error\x18\x03 \x01(\tR\x05error\"\xb0\v\n" +
+	"\x05error\x18\x03 \x01(\tR\x05error\"\xc4\v\n" +
 	"\x0fExecutionRecord\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1b\n" +
 	"\tchange_id\x18\x02 \x01(\tR\bchangeId\x12\x1d\n" +
@@ -7985,7 +7994,8 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\vboard_after\x18% \x01(\x05R\n" +
 	"boardAfter\x12\x1d\n" +
 	"\n" +
-	"board_last\x18& \x01(\tR\tboardLast\x1a9\n" +
+	"board_last\x18& \x01(\tR\tboardLast\x12\x12\n" +
+	"\x04flow\x18' \x01(\tR\x04flow\x1a9\n" +
 	"\vBeforeEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\bR\x05value:\x028\x01\x1a8\n" +
