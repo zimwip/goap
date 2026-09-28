@@ -219,7 +219,8 @@ message StartProcessRequest {
   // empty: the intent loop identifies the methodology and agent among every
   // published methodology
   string methodology = 1;
-  // continue an existing change, or open one on baseline_id
+  // continue an existing change, or open one on baseline_id (empty: the latest baseline of the namespace of the
+  // identified methodology)
   string change_id = 2;
   string baseline_id = 3;
   string title = 4;

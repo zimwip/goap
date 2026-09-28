@@ -68,6 +68,7 @@ func main() {
 	}
 	defer st.close()
 	g := graph.New(st.graph)
+	g.Caller = graphsvc.Caller // the principal behind each event of the impact logs (ADR 0029)
 	directory := &access.Directory{Graph: g}
 	authorizer, err := access.NewAuthorizer(directory)
 	if err != nil {
@@ -104,16 +105,9 @@ func main() {
 	if err := types.Reload(ctx); err != nil {
 		platform.Fatal(log, "type catalogue", err)
 	}
-	// the platform (MCPs, model aliases) is seeded before the methodologies: publishing one that
-	// references a model alias (e.g. "default") would otherwise open a pending alias stub (ADR
-	// 0021) for an alias the seeding below is about to create anyway.
-	if _, err := graphsvc.SeedDefaults(ctx, g); err != nil {
-		platform.Fatal(log, "seed defaults", err)
-	}
-	if _, err := graphsvc.SeedBuiltins(ctx, g); err != nil {
-		platform.Fatal(log, "seed built-in MCPs", err)
-	}
-	// the gateway configuration is graph data, seeded once; API keys are references resolved from the environment or Vault
+	// the gateway configuration (providers, models, aliases) must exist before methodologies are seeded below:
+	// publishing a methodology stubs any alias it references that the platform namespace doesn't have yet
+	// (registrysvc.ensureAliasStubs), and that stub would otherwise collide with the alias this seeds.
 	if cfg, err := modelgw.InitialConfig(ctx, platform.Env("GOAP_MODELS_CONFIG", ""), secrets); err != nil {
 		platform.Fatal(log, "models config", err)
 	} else if provs, models, aliases, err := cfg.Objects(); err != nil {
@@ -129,6 +123,12 @@ func main() {
 	}
 	if _, err := graphsvc.SeedAccess(ctx, g); err != nil {
 		platform.Fatal(log, "seed access", err)
+	}
+	if _, err := graphsvc.SeedDefaults(ctx, g); err != nil {
+		platform.Fatal(log, "seed defaults", err)
+	}
+	if _, err := graphsvc.SeedBuiltins(ctx, g); err != nil {
+		platform.Fatal(log, "seed built-in MCPs", err)
 	}
 	gw := modelgw.NewService(&llmcfg.Directory{Graph: g}, st.models, secrets.Resolve, log)
 	gw.Router.Instrument = telemetry.NewGenAI().Instrument

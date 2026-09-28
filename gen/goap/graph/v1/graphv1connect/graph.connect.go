@@ -53,6 +53,21 @@ const (
 	// GraphServiceGetBaselineGraphProcedure is the fully-qualified name of the GraphService's
 	// GetBaselineGraph RPC.
 	GraphServiceGetBaselineGraphProcedure = "/goap.graph.v1.GraphService/GetBaselineGraph"
+	// GraphServiceListBaselineNodesProcedure is the fully-qualified name of the GraphService's
+	// ListBaselineNodes RPC.
+	GraphServiceListBaselineNodesProcedure = "/goap.graph.v1.GraphService/ListBaselineNodes"
+	// GraphServiceGetNodeNeighbourhoodProcedure is the fully-qualified name of the GraphService's
+	// GetNodeNeighbourhood RPC.
+	GraphServiceGetNodeNeighbourhoodProcedure = "/goap.graph.v1.GraphService/GetNodeNeighbourhood"
+	// GraphServiceListNamespacesProcedure is the fully-qualified name of the GraphService's
+	// ListNamespaces RPC.
+	GraphServiceListNamespacesProcedure = "/goap.graph.v1.GraphService/ListNamespaces"
+	// GraphServiceListChangeEventsProcedure is the fully-qualified name of the GraphService's
+	// ListChangeEvents RPC.
+	GraphServiceListChangeEventsProcedure = "/goap.graph.v1.GraphService/ListChangeEvents"
+	// GraphServiceListChangeLogProcedure is the fully-qualified name of the GraphService's
+	// ListChangeLog RPC.
+	GraphServiceListChangeLogProcedure = "/goap.graph.v1.GraphService/ListChangeLog"
 	// GraphServiceCreateChangeProcedure is the fully-qualified name of the GraphService's CreateChange
 	// RPC.
 	GraphServiceCreateChangeProcedure = "/goap.graph.v1.GraphService/CreateChange"
@@ -157,6 +172,15 @@ type GraphServiceClient interface {
 	CreateBaseline(context.Context, *connect.Request[v1.CreateBaselineRequest]) (*connect.Response[v1.CreateBaselineResponse], error)
 	ListBaselines(context.Context, *connect.Request[v1.ListBaselinesRequest]) (*connect.Response[v1.ListBaselinesResponse], error)
 	GetBaselineGraph(context.Context, *connect.Request[v1.GetBaselineGraphRequest]) (*connect.Response[v1.GetBaselineGraphResponse], error)
+	// Browsing a large baseline: a page of its nodes (by type, filtered) and the neighbourhood of one node.
+	ListBaselineNodes(context.Context, *connect.Request[v1.ListBaselineNodesRequest]) (*connect.Response[v1.ListBaselineNodesResponse], error)
+	GetNodeNeighbourhood(context.Context, *connect.Request[v1.GetNodeNeighbourhoodRequest]) (*connect.Response[v1.GetNodeNeighbourhoodResponse], error)
+	// The namespaces holding at least one node.
+	ListNamespaces(context.Context, *connect.Request[v1.ListNamespacesRequest]) (*connect.Response[v1.ListNamespacesResponse], error)
+	// The impact log of a change (ADR 0029): every operation on its change impacts, with its caller.
+	ListChangeEvents(context.Context, *connect.Request[v1.ListChangeEventsRequest]) (*connect.Response[v1.ListChangeEventsResponse], error)
+	// The log of a change (ADR 0030): its facts, journal records and impact events in one order, filtered on columns.
+	ListChangeLog(context.Context, *connect.Request[v1.ListChangeLogRequest]) (*connect.Response[v1.ListChangeLogResponse], error)
 	// Change axis
 	CreateChange(context.Context, *connect.Request[v1.CreateChangeRequest]) (*connect.Response[v1.CreateChangeResponse], error)
 	GetChange(context.Context, *connect.Request[v1.GetChangeRequest]) (*connect.Response[v1.GetChangeResponse], error)
@@ -264,6 +288,36 @@ func NewGraphServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			httpClient,
 			baseURL+GraphServiceGetBaselineGraphProcedure,
 			connect.WithSchema(graphServiceMethods.ByName("GetBaselineGraph")),
+			connect.WithClientOptions(opts...),
+		),
+		listBaselineNodes: connect.NewClient[v1.ListBaselineNodesRequest, v1.ListBaselineNodesResponse](
+			httpClient,
+			baseURL+GraphServiceListBaselineNodesProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("ListBaselineNodes")),
+			connect.WithClientOptions(opts...),
+		),
+		getNodeNeighbourhood: connect.NewClient[v1.GetNodeNeighbourhoodRequest, v1.GetNodeNeighbourhoodResponse](
+			httpClient,
+			baseURL+GraphServiceGetNodeNeighbourhoodProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("GetNodeNeighbourhood")),
+			connect.WithClientOptions(opts...),
+		),
+		listNamespaces: connect.NewClient[v1.ListNamespacesRequest, v1.ListNamespacesResponse](
+			httpClient,
+			baseURL+GraphServiceListNamespacesProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("ListNamespaces")),
+			connect.WithClientOptions(opts...),
+		),
+		listChangeEvents: connect.NewClient[v1.ListChangeEventsRequest, v1.ListChangeEventsResponse](
+			httpClient,
+			baseURL+GraphServiceListChangeEventsProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("ListChangeEvents")),
+			connect.WithClientOptions(opts...),
+		),
+		listChangeLog: connect.NewClient[v1.ListChangeLogRequest, v1.ListChangeLogResponse](
+			httpClient,
+			baseURL+GraphServiceListChangeLogProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("ListChangeLog")),
 			connect.WithClientOptions(opts...),
 		),
 		createChange: connect.NewClient[v1.CreateChangeRequest, v1.CreateChangeResponse](
@@ -463,46 +517,51 @@ func NewGraphServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 
 // graphServiceClient implements GraphServiceClient.
 type graphServiceClient struct {
-	createNode         *connect.Client[v1.CreateNodeRequest, v1.CreateNodeResponse]
-	createObject       *connect.Client[v1.CreateObjectRequest, v1.CreateObjectResponse]
-	updateNode         *connect.Client[v1.UpdateNodeRequest, v1.UpdateNodeResponse]
-	getNode            *connect.Client[v1.GetNodeRequest, v1.GetNodeResponse]
-	createLink         *connect.Client[v1.CreateLinkRequest, v1.CreateLinkResponse]
-	createBaseline     *connect.Client[v1.CreateBaselineRequest, v1.CreateBaselineResponse]
-	listBaselines      *connect.Client[v1.ListBaselinesRequest, v1.ListBaselinesResponse]
-	getBaselineGraph   *connect.Client[v1.GetBaselineGraphRequest, v1.GetBaselineGraphResponse]
-	createChange       *connect.Client[v1.CreateChangeRequest, v1.CreateChangeResponse]
-	getChange          *connect.Client[v1.GetChangeRequest, v1.GetChangeResponse]
-	listChanges        *connect.Client[v1.ListChangesRequest, v1.ListChangesResponse]
-	getChangeImpacts   *connect.Client[v1.GetChangeImpactsRequest, v1.GetChangeImpactsResponse]
-	listNodeChanges    *connect.Client[v1.ListNodeChangesRequest, v1.ListNodeChangesResponse]
-	updateChange       *connect.Client[v1.UpdateChangeRequest, v1.UpdateChangeResponse]
-	addItems           *connect.Client[v1.AddItemsRequest, v1.AddItemsResponse]
-	addChangeImpacts   *connect.Client[v1.AddChangeImpactsRequest, v1.AddChangeImpactsResponse]
-	writeChangeImpact  *connect.Client[v1.WriteChangeImpactRequest, v1.WriteChangeImpactResponse]
-	reviewChangeImpact *connect.Client[v1.ReviewChangeImpactRequest, v1.ReviewChangeImpactResponse]
-	commitEdits        *connect.Client[v1.CommitEditsRequest, v1.CommitEditsResponse]
-	getBlackboard      *connect.Client[v1.GetBlackboardRequest, v1.GetBlackboardResponse]
-	applyChange        *connect.Client[v1.ApplyChangeRequest, v1.ApplyChangeResponse]
-	createBranch       *connect.Client[v1.CreateBranchRequest, v1.CreateBranchResponse]
-	listBranches       *connect.Client[v1.ListBranchesRequest, v1.ListBranchesResponse]
-	getBranch          *connect.Client[v1.GetBranchRequest, v1.GetBranchResponse]
-	setBranchStatus    *connect.Client[v1.SetBranchStatusRequest, v1.SetBranchStatusResponse]
-	listNodeVersions   *connect.Client[v1.ListNodeVersionsRequest, v1.ListNodeVersionsResponse]
-	planMerge          *connect.Client[v1.PlanMergeRequest, v1.PlanMergeResponse]
-	mergeBranch        *connect.Client[v1.MergeBranchRequest, v1.MergeBranchResponse]
-	mergeChange        *connect.Client[v1.MergeChangeRequest, v1.MergeChangeResponse]
-	getSharedNodes     *connect.Client[v1.GetSharedNodesRequest, v1.GetSharedNodesResponse]
-	splitChange        *connect.Client[v1.SplitChangeRequest, v1.SplitChangeResponse]
-	listSubChanges     *connect.Client[v1.ListSubChangesRequest, v1.ListSubChangesResponse]
-	openFlow           *connect.Client[v1.OpenFlowRequest, v1.OpenFlowResponse]
-	adoptFlow          *connect.Client[v1.AdoptFlowRequest, v1.AdoptFlowResponse]
-	discardFlow        *connect.Client[v1.DiscardFlowRequest, v1.DiscardFlowResponse]
-	listFlows          *connect.Client[v1.ListFlowsRequest, v1.ListFlowsResponse]
-	validateBoard      *connect.Client[v1.ValidateBoardRequest, v1.ValidateBoardResponse]
-	recordExecutions   *connect.Client[v1.RecordExecutionsRequest, v1.RecordExecutionsResponse]
-	listExecutions     *connect.Client[v1.ListExecutionsRequest, v1.ListExecutionsResponse]
-	republishIndex     *connect.Client[v1.RepublishIndexRequest, v1.RepublishIndexResponse]
+	createNode           *connect.Client[v1.CreateNodeRequest, v1.CreateNodeResponse]
+	createObject         *connect.Client[v1.CreateObjectRequest, v1.CreateObjectResponse]
+	updateNode           *connect.Client[v1.UpdateNodeRequest, v1.UpdateNodeResponse]
+	getNode              *connect.Client[v1.GetNodeRequest, v1.GetNodeResponse]
+	createLink           *connect.Client[v1.CreateLinkRequest, v1.CreateLinkResponse]
+	createBaseline       *connect.Client[v1.CreateBaselineRequest, v1.CreateBaselineResponse]
+	listBaselines        *connect.Client[v1.ListBaselinesRequest, v1.ListBaselinesResponse]
+	getBaselineGraph     *connect.Client[v1.GetBaselineGraphRequest, v1.GetBaselineGraphResponse]
+	listBaselineNodes    *connect.Client[v1.ListBaselineNodesRequest, v1.ListBaselineNodesResponse]
+	getNodeNeighbourhood *connect.Client[v1.GetNodeNeighbourhoodRequest, v1.GetNodeNeighbourhoodResponse]
+	listNamespaces       *connect.Client[v1.ListNamespacesRequest, v1.ListNamespacesResponse]
+	listChangeEvents     *connect.Client[v1.ListChangeEventsRequest, v1.ListChangeEventsResponse]
+	listChangeLog        *connect.Client[v1.ListChangeLogRequest, v1.ListChangeLogResponse]
+	createChange         *connect.Client[v1.CreateChangeRequest, v1.CreateChangeResponse]
+	getChange            *connect.Client[v1.GetChangeRequest, v1.GetChangeResponse]
+	listChanges          *connect.Client[v1.ListChangesRequest, v1.ListChangesResponse]
+	getChangeImpacts     *connect.Client[v1.GetChangeImpactsRequest, v1.GetChangeImpactsResponse]
+	listNodeChanges      *connect.Client[v1.ListNodeChangesRequest, v1.ListNodeChangesResponse]
+	updateChange         *connect.Client[v1.UpdateChangeRequest, v1.UpdateChangeResponse]
+	addItems             *connect.Client[v1.AddItemsRequest, v1.AddItemsResponse]
+	addChangeImpacts     *connect.Client[v1.AddChangeImpactsRequest, v1.AddChangeImpactsResponse]
+	writeChangeImpact    *connect.Client[v1.WriteChangeImpactRequest, v1.WriteChangeImpactResponse]
+	reviewChangeImpact   *connect.Client[v1.ReviewChangeImpactRequest, v1.ReviewChangeImpactResponse]
+	commitEdits          *connect.Client[v1.CommitEditsRequest, v1.CommitEditsResponse]
+	getBlackboard        *connect.Client[v1.GetBlackboardRequest, v1.GetBlackboardResponse]
+	applyChange          *connect.Client[v1.ApplyChangeRequest, v1.ApplyChangeResponse]
+	createBranch         *connect.Client[v1.CreateBranchRequest, v1.CreateBranchResponse]
+	listBranches         *connect.Client[v1.ListBranchesRequest, v1.ListBranchesResponse]
+	getBranch            *connect.Client[v1.GetBranchRequest, v1.GetBranchResponse]
+	setBranchStatus      *connect.Client[v1.SetBranchStatusRequest, v1.SetBranchStatusResponse]
+	listNodeVersions     *connect.Client[v1.ListNodeVersionsRequest, v1.ListNodeVersionsResponse]
+	planMerge            *connect.Client[v1.PlanMergeRequest, v1.PlanMergeResponse]
+	mergeBranch          *connect.Client[v1.MergeBranchRequest, v1.MergeBranchResponse]
+	mergeChange          *connect.Client[v1.MergeChangeRequest, v1.MergeChangeResponse]
+	getSharedNodes       *connect.Client[v1.GetSharedNodesRequest, v1.GetSharedNodesResponse]
+	splitChange          *connect.Client[v1.SplitChangeRequest, v1.SplitChangeResponse]
+	listSubChanges       *connect.Client[v1.ListSubChangesRequest, v1.ListSubChangesResponse]
+	openFlow             *connect.Client[v1.OpenFlowRequest, v1.OpenFlowResponse]
+	adoptFlow            *connect.Client[v1.AdoptFlowRequest, v1.AdoptFlowResponse]
+	discardFlow          *connect.Client[v1.DiscardFlowRequest, v1.DiscardFlowResponse]
+	listFlows            *connect.Client[v1.ListFlowsRequest, v1.ListFlowsResponse]
+	validateBoard        *connect.Client[v1.ValidateBoardRequest, v1.ValidateBoardResponse]
+	recordExecutions     *connect.Client[v1.RecordExecutionsRequest, v1.RecordExecutionsResponse]
+	listExecutions       *connect.Client[v1.ListExecutionsRequest, v1.ListExecutionsResponse]
+	republishIndex       *connect.Client[v1.RepublishIndexRequest, v1.RepublishIndexResponse]
 }
 
 // CreateNode calls goap.graph.v1.GraphService.CreateNode.
@@ -543,6 +602,31 @@ func (c *graphServiceClient) ListBaselines(ctx context.Context, req *connect.Req
 // GetBaselineGraph calls goap.graph.v1.GraphService.GetBaselineGraph.
 func (c *graphServiceClient) GetBaselineGraph(ctx context.Context, req *connect.Request[v1.GetBaselineGraphRequest]) (*connect.Response[v1.GetBaselineGraphResponse], error) {
 	return c.getBaselineGraph.CallUnary(ctx, req)
+}
+
+// ListBaselineNodes calls goap.graph.v1.GraphService.ListBaselineNodes.
+func (c *graphServiceClient) ListBaselineNodes(ctx context.Context, req *connect.Request[v1.ListBaselineNodesRequest]) (*connect.Response[v1.ListBaselineNodesResponse], error) {
+	return c.listBaselineNodes.CallUnary(ctx, req)
+}
+
+// GetNodeNeighbourhood calls goap.graph.v1.GraphService.GetNodeNeighbourhood.
+func (c *graphServiceClient) GetNodeNeighbourhood(ctx context.Context, req *connect.Request[v1.GetNodeNeighbourhoodRequest]) (*connect.Response[v1.GetNodeNeighbourhoodResponse], error) {
+	return c.getNodeNeighbourhood.CallUnary(ctx, req)
+}
+
+// ListNamespaces calls goap.graph.v1.GraphService.ListNamespaces.
+func (c *graphServiceClient) ListNamespaces(ctx context.Context, req *connect.Request[v1.ListNamespacesRequest]) (*connect.Response[v1.ListNamespacesResponse], error) {
+	return c.listNamespaces.CallUnary(ctx, req)
+}
+
+// ListChangeEvents calls goap.graph.v1.GraphService.ListChangeEvents.
+func (c *graphServiceClient) ListChangeEvents(ctx context.Context, req *connect.Request[v1.ListChangeEventsRequest]) (*connect.Response[v1.ListChangeEventsResponse], error) {
+	return c.listChangeEvents.CallUnary(ctx, req)
+}
+
+// ListChangeLog calls goap.graph.v1.GraphService.ListChangeLog.
+func (c *graphServiceClient) ListChangeLog(ctx context.Context, req *connect.Request[v1.ListChangeLogRequest]) (*connect.Response[v1.ListChangeLogResponse], error) {
+	return c.listChangeLog.CallUnary(ctx, req)
 }
 
 // CreateChange calls goap.graph.v1.GraphService.CreateChange.
@@ -718,6 +802,15 @@ type GraphServiceHandler interface {
 	CreateBaseline(context.Context, *connect.Request[v1.CreateBaselineRequest]) (*connect.Response[v1.CreateBaselineResponse], error)
 	ListBaselines(context.Context, *connect.Request[v1.ListBaselinesRequest]) (*connect.Response[v1.ListBaselinesResponse], error)
 	GetBaselineGraph(context.Context, *connect.Request[v1.GetBaselineGraphRequest]) (*connect.Response[v1.GetBaselineGraphResponse], error)
+	// Browsing a large baseline: a page of its nodes (by type, filtered) and the neighbourhood of one node.
+	ListBaselineNodes(context.Context, *connect.Request[v1.ListBaselineNodesRequest]) (*connect.Response[v1.ListBaselineNodesResponse], error)
+	GetNodeNeighbourhood(context.Context, *connect.Request[v1.GetNodeNeighbourhoodRequest]) (*connect.Response[v1.GetNodeNeighbourhoodResponse], error)
+	// The namespaces holding at least one node.
+	ListNamespaces(context.Context, *connect.Request[v1.ListNamespacesRequest]) (*connect.Response[v1.ListNamespacesResponse], error)
+	// The impact log of a change (ADR 0029): every operation on its change impacts, with its caller.
+	ListChangeEvents(context.Context, *connect.Request[v1.ListChangeEventsRequest]) (*connect.Response[v1.ListChangeEventsResponse], error)
+	// The log of a change (ADR 0030): its facts, journal records and impact events in one order, filtered on columns.
+	ListChangeLog(context.Context, *connect.Request[v1.ListChangeLogRequest]) (*connect.Response[v1.ListChangeLogResponse], error)
 	// Change axis
 	CreateChange(context.Context, *connect.Request[v1.CreateChangeRequest]) (*connect.Response[v1.CreateChangeResponse], error)
 	GetChange(context.Context, *connect.Request[v1.GetChangeRequest]) (*connect.Response[v1.GetChangeResponse], error)
@@ -821,6 +914,36 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 		GraphServiceGetBaselineGraphProcedure,
 		svc.GetBaselineGraph,
 		connect.WithSchema(graphServiceMethods.ByName("GetBaselineGraph")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceListBaselineNodesHandler := connect.NewUnaryHandler(
+		GraphServiceListBaselineNodesProcedure,
+		svc.ListBaselineNodes,
+		connect.WithSchema(graphServiceMethods.ByName("ListBaselineNodes")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceGetNodeNeighbourhoodHandler := connect.NewUnaryHandler(
+		GraphServiceGetNodeNeighbourhoodProcedure,
+		svc.GetNodeNeighbourhood,
+		connect.WithSchema(graphServiceMethods.ByName("GetNodeNeighbourhood")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceListNamespacesHandler := connect.NewUnaryHandler(
+		GraphServiceListNamespacesProcedure,
+		svc.ListNamespaces,
+		connect.WithSchema(graphServiceMethods.ByName("ListNamespaces")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceListChangeEventsHandler := connect.NewUnaryHandler(
+		GraphServiceListChangeEventsProcedure,
+		svc.ListChangeEvents,
+		connect.WithSchema(graphServiceMethods.ByName("ListChangeEvents")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceListChangeLogHandler := connect.NewUnaryHandler(
+		GraphServiceListChangeLogProcedure,
+		svc.ListChangeLog,
+		connect.WithSchema(graphServiceMethods.ByName("ListChangeLog")),
 		connect.WithHandlerOptions(opts...),
 	)
 	graphServiceCreateChangeHandler := connect.NewUnaryHandler(
@@ -1033,6 +1156,16 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 			graphServiceListBaselinesHandler.ServeHTTP(w, r)
 		case GraphServiceGetBaselineGraphProcedure:
 			graphServiceGetBaselineGraphHandler.ServeHTTP(w, r)
+		case GraphServiceListBaselineNodesProcedure:
+			graphServiceListBaselineNodesHandler.ServeHTTP(w, r)
+		case GraphServiceGetNodeNeighbourhoodProcedure:
+			graphServiceGetNodeNeighbourhoodHandler.ServeHTTP(w, r)
+		case GraphServiceListNamespacesProcedure:
+			graphServiceListNamespacesHandler.ServeHTTP(w, r)
+		case GraphServiceListChangeEventsProcedure:
+			graphServiceListChangeEventsHandler.ServeHTTP(w, r)
+		case GraphServiceListChangeLogProcedure:
+			graphServiceListChangeLogHandler.ServeHTTP(w, r)
 		case GraphServiceCreateChangeProcedure:
 			graphServiceCreateChangeHandler.ServeHTTP(w, r)
 		case GraphServiceGetChangeProcedure:
@@ -1136,6 +1269,26 @@ func (UnimplementedGraphServiceHandler) ListBaselines(context.Context, *connect.
 
 func (UnimplementedGraphServiceHandler) GetBaselineGraph(context.Context, *connect.Request[v1.GetBaselineGraphRequest]) (*connect.Response[v1.GetBaselineGraphResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.GetBaselineGraph is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) ListBaselineNodes(context.Context, *connect.Request[v1.ListBaselineNodesRequest]) (*connect.Response[v1.ListBaselineNodesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.ListBaselineNodes is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) GetNodeNeighbourhood(context.Context, *connect.Request[v1.GetNodeNeighbourhoodRequest]) (*connect.Response[v1.GetNodeNeighbourhoodResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.GetNodeNeighbourhood is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) ListNamespaces(context.Context, *connect.Request[v1.ListNamespacesRequest]) (*connect.Response[v1.ListNamespacesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.ListNamespaces is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) ListChangeEvents(context.Context, *connect.Request[v1.ListChangeEventsRequest]) (*connect.Response[v1.ListChangeEventsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.ListChangeEvents is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) ListChangeLog(context.Context, *connect.Request[v1.ListChangeLogRequest]) (*connect.Response[v1.ListChangeLogResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.ListChangeLog is not implemented"))
 }
 
 func (UnimplementedGraphServiceHandler) CreateChange(context.Context, *connect.Request[v1.CreateChangeRequest]) (*connect.Response[v1.CreateChangeResponse], error) {

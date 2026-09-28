@@ -32,7 +32,7 @@ type OpenFlowRequest struct {
 
 // openFlowEvent appends a flow event to the log of a change.
 func (g *Graph) flowEvent(ctx context.Context, tx Tx, id domain.ChangeID, e domain.FlowEvent) error {
-	return tx.PutItem(ctx, id, domain.ChangeItem{ID: domain.ItemID(g.newID()), Kind: domain.KindFlow, Type: "flow." + e.Op,
+	return putItem(ctx, tx, id, domain.ChangeItem{ID: domain.ItemID(g.newID()), Kind: domain.KindFlow, Type: "flow." + e.Op,
 		Status: domain.ItemAccepted, ProducedBy: "graph.flow", FlowEvent: &e, CreatedAt: g.now()})
 }
 
@@ -80,7 +80,7 @@ func (g *Graph) OpenFlow(ctx context.Context, id domain.ChangeID, in OpenFlowReq
 			return err
 		}
 		if in.Guidance != "" {
-			if err := tx.PutItem(ctx, id, domain.ChangeItem{ID: domain.ItemID(g.newID()), Kind: domain.KindArtifact, Type: "guidance", Status: domain.ItemAccepted,
+			if err := putItem(ctx, tx, id, domain.ChangeItem{ID: domain.ItemID(g.newID()), Kind: domain.KindArtifact, Type: "guidance", Status: domain.ItemAccepted,
 				Flow: flow, ProducedBy: firstNonEmpty(in.By, "human"), Data: map[string]any{"text": in.Guidance, "step": in.FromStep}, CreatedAt: g.now()}); err != nil {
 				return err
 			}

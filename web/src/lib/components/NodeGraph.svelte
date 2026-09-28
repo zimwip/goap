@@ -8,11 +8,17 @@
     center,
     onrecenter,
     onopen,
+    maxDepth = 2,
+    suspect,
   }: {
     index: GraphIndex;
     center: string;
     onrecenter: (id: string) => void;
     onopen: (id: string) => void;
+    /** 1: the index only holds the direct neighbours of the center (no level choice) */
+    maxDepth?: 1 | 2;
+    /** ids of the suspect links (drawn dashed) */
+    suspect?: Set<string>;
   } = $props();
 
   let depth = $state<1 | 2>(1);
@@ -47,7 +53,7 @@
     };
     expand(0, 'in', -1);
     expand(0, 'out', 1);
-    if (depth === 2) {
+    if (depth === 2 && maxDepth === 2) {
       expand(-1, 'in', -1);
       expand(1, 'out', 1);
     }
@@ -83,6 +89,7 @@
     type: string;
     color: string;
     touchesCenter: boolean;
+    suspect: boolean;
   }
 
   const edges = $derived.by<Edge[]>(() => {
@@ -119,6 +126,7 @@
           type: l.type ?? '',
           color: colorOf(l.type),
           touchesCenter: b.id === center || t.id === center,
+          suspect: !!suspect?.has(l.id ?? ''),
         });
       }
     }
@@ -139,15 +147,17 @@
 
 <div class="graph">
   <div class="tools" role="group" aria-label="Graph depth">
-    <span class="hint">Levels</span>
-    <button type="button" class="small" class:primary={depth === 1} onclick={() => (depth = 1)}>1</button>
-    <button type="button" class="small" class:primary={depth === 2} onclick={() => (depth = 2)}>2</button>
+    {#if maxDepth === 2}
+      <span class="hint">Levels</span>
+      <button type="button" class="small" class:primary={depth === 1} onclick={() => (depth = 1)}>1</button>
+      <button type="button" class="small" class:primary={depth === 2} onclick={() => (depth = 2)}>2</button>
+    {/if}
     <span class="hint legend">parents ← node → children</span>
   </div>
   <div class="scroll">
     <svg viewBox={`${view.x} ${view.y} ${view.w} ${view.h}`} style={`width:${Math.max(view.w, 320)}px;height:${Math.max(view.h, 120)}px`} role="img" aria-label="Graph of the node and its neighbours">
       {#each edges as e (e.key)}
-        <g class="edge" class:dim={!e.touchesCenter} style={`--c:${e.color}`}>
+        <g class="edge" class:dim={!e.touchesCenter} class:suspect={e.suspect} style={`--c:${e.color}`}>
           <path d={e.d} />
           <polygon points={e.head} />
           <g transform={`translate(${e.lx} ${e.ly})`}>
@@ -250,6 +260,13 @@
   .edge text {
     fill: currentColor;
     font-size: 10px;
+  }
+  .edge.suspect path {
+    stroke: var(--warn);
+    stroke-dasharray: 5 3;
+  }
+  .edge.suspect polygon {
+    fill: var(--warn);
   }
   .edge.dim {
     opacity: 0.45;

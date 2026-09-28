@@ -3,7 +3,7 @@ import type { IconName } from './Icon.svelte';
 import { layout, showTool, toggleConsole } from './layout.svelte';
 import { activeTab, closeAll, closeTab, openTab } from './tabs.svelte';
 import { focusRequests, runTabAction } from './workbench.svelte';
-import { openSearch } from './searchOverlay.svelte';
+import { openSearch } from './searchOverlay.svelte.ts';
 
 export interface Command {
   id: string;

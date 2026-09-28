@@ -70,6 +70,12 @@ branches are namespace-scoped too: a baseline only ever holds nodes of one names
 the same name. Cross-namespace capabilities (ownership links, adapter/MCP resolution, ABAC, the model gateway, the
 methodology registry) are unaffected: they read a specific namespace's own head directly (e.g. `BranchHead(ns,
 "main")`) instead of relying on one shared baseline that happened to hold every namespace's nodes together.
+A baseline can be browsed without loading it whole (`ListNamespaces`, `ListBaselineNodes`: the node count per type
+and a page of the nodes of one type, text-filtered on the server; `GetNodeNeighbourhood`: a node, its direct
+neighbours in both directions and the suspect links among them, `pkg/graph/browse.go`). The IDE's Baseline explorer
+and tab navigate namespace → baseline → node type → paged nodes, and show the neighbour graph of the selected node.
+A request started without a baseline or a change (the assistant, a trigger) opens its change on the latest baseline
+of the namespace its methodology acts on, known once the intent is identified.
 The organisation is a hierarchy of units in its own namespace (`organisation`); nodes reference their owner
 unit across namespaces, and a change is split into sub-changes along unit boundaries
 ([ADR 0016](adr/0016-organisation-and-sub-changes.md)).
@@ -112,7 +118,7 @@ REQ-1  v1(main) ── v3(main, revise) ───────────── 
 |---|---|
 | **Change** | A modification request. References a starting baseline, carries the initial intent and the chosen goal. It is **the blackboard** of an agentic process. |
 | **ChangeItem** | Blackboard **fact** with no node: `kind` ∈ `decision`, `artifact`, `merge`, `flow`. Each item has a provenance (`producedBy` = action, `derivedFrom` = other items). |
-| **ChangeImpact** | Link from the change to a node ([ADR 0024](adr/0024-change-impacts.md)): `intent` (`created` / `modified`), `rationale`, `pre` (released version), `post` (version written on the change branch, empty while only planned: an impact without a proposal), `landed` (version on the target branch once applied), `review` with a mandatory comment. `WriteNode` creates the post version, `ReviewNode` accepts or rejects, `Apply` lands the branch (fast-forward, else auto-merge or `merge_pending`, then `MergeChange`). A node version records its `changeId`, `changeImpact` and `comment`. A node's type is a direct attribute of the node (`Node.Type`), there is no `instanceOf` link. |
+| **ChangeImpact** | Link from the change to a node ([ADR 0024](adr/0024-change-impacts.md)): `intent` (`created` / `modified`), `rationale`, `pre` (released version), `post` (version written on the change branch, empty while only planned: an impact without a proposal), `landed` (version on the target branch once applied), `review` with a mandatory comment. `WriteNode` creates the post version, `ReviewNode` accepts or rejects, `Apply` lands the branch (fast-forward, else auto-merge or `merge_pending`, then `MergeChange`). A node version records its `changeId`, `changeImpact` and `comment`. A node's type is a direct attribute of the node (`Node.Type`), there is no `instanceOf` link. Everything that happens to a change is an entry of **one log** ([ADR 0030](adr/0030-one-change-log.md)): its facts, its journal records (scheduling included) and its impact events, in one order, with the type, flow branch, process and action run as columns to filter on (`ListChangeLog`). The change impacts are **event-sourced** ([ADR 0029](adr/0029-event-sourced-change-impacts.md)): every operation (`declared`, `written`, `reviewed`, `discarded`, `adopted`, `landed`, `rebased`) is an event of the change's impact log with its caller (principal, action run, flow); the `change_impact` table is its projection, and what a flow sees is a fold of the log (`ListChangeEvents`; the **Audit** pane of the change merges it with the execution journal and the facts into one chronological trail, with CSV / JSON export). |
 | **Decision** | A choice about something that is not a node (human or agent); the acceptance of a node is the review of its change impact. |
 | **Artifact** | Free-form data produced by an action (summary, report, tool response). |
 
@@ -393,8 +399,10 @@ The execution of a change is **captured on the change axis**, alongside the blac
 change CR-42
  ├─ items (blackboard) ── item.execution ──┐
  └─ journal                                ▼
-     process.started · tick (world, plan, replanned?) · action (specialization, effects, items,
+     process.started · schedule (why the run happens: started, input, approved, sub-agent, relaunched…,
+     by whom, queue time) · tick (world, plan, replanned?) · action (specialization, effects, items,
      tokens, LLM / tool calls, traceId/spanId) · approval · process.ended (status, totals)
+     every record carries the flow branch its process runs on
 ```
 
 - A step can be **relaunched**: the blackboard is an append-only log, the relaunch opens a *flow branch*,

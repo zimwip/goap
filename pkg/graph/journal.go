@@ -21,7 +21,7 @@ func (g *Graph) Record(ctx context.Context, recs []domain.ExecutionRecord) error
 			if r.StartedAt.IsZero() {
 				r.StartedAt = g.now()
 			}
-			if err := tx.PutExecution(ctx, r); err != nil {
+			if err := putExecution(ctx, tx, r); err != nil {
 				return err
 			}
 		}
@@ -34,6 +34,6 @@ func (g *Graph) Journal(ctx context.Context, f domain.ExecutionFilter) (rs []dom
 	if f.ChangeID == "" && len(f.ProcessIDs) == 0 {
 		return nil, fmt.Errorf("journal filter needs a change or processes: %w", ErrInvalid)
 	}
-	err = g.repo.InTx(ctx, func(tx Tx) error { rs, err = tx.Executions(ctx, f); return err })
+	err = g.repo.InTx(ctx, func(tx Tx) error { rs, err = executions(ctx, tx, f); return err })
 	return
 }

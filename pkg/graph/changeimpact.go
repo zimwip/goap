@@ -129,7 +129,8 @@ func (g *Graph) AddNodes(ctx context.Context, id domain.ChangeID, nodes []domain
 			if err := cn.Validate(); err != nil {
 				return fmt.Errorf("change impact %s: %v: %w", cn.ID, err, ErrInvalid)
 			}
-			if err := tx.PutChangeImpact(ctx, id, cn); err != nil {
+			cn := cn
+			if err := g.emit(ctx, tx, domain.ImpactEvent{Change: id, Impact: cn.ID, Op: domain.ImpactDeclared, Flow: cn.Flow, Execution: cn.Execution, State: &cn}); err != nil {
 				return err
 			}
 			out = append(out, cn)
@@ -198,7 +199,7 @@ func (g *Graph) RealizeNode(ctx context.Context, id domain.ChangeID, node domain
 		if err := tx.SetNodeOrigin(ctx, *cn.Post, id, cn.ID, comment); err != nil {
 			return err
 		}
-		return tx.PutChangeImpact(ctx, id, cn)
+		return g.emit(ctx, tx, domain.ImpactEvent{Change: id, Impact: cn.ID, Op: domain.ImpactWritten, Post: cn.Post})
 	})
 	return
 }
@@ -245,16 +246,17 @@ func (g *Graph) ReviewNodeOn(ctx context.Context, id domain.ChangeID, flow, exec
 		if seen.Review != domain.ReviewProposed {
 			return fmt.Errorf("change impact %s is already %s: %w", node, seen.Review, ErrConflict)
 		}
+		r := domain.Review{Status: status, By: by, Comment: comment, At: g.now(), Flow: flow, Execution: execution}
 		if flow == "" {
 			cn.Review = status
 		}
-		cn.Reviews = append(cn.Reviews, domain.Review{Status: status, By: by, Comment: comment, At: g.now(), Flow: flow, Execution: execution})
+		cn.Reviews = append(cn.Reviews, r)
 		if flow == "" && status == domain.ReviewAccepted && cn.Post != nil {
 			if err := tx.SetNodeOrigin(ctx, *cn.Post, id, cn.ID, comment); err != nil {
 				return err
 			}
 		}
-		return tx.PutChangeImpact(ctx, id, cn)
+		return g.emit(ctx, tx, domain.ImpactEvent{Change: id, Impact: cn.ID, Op: domain.ImpactReviewed, Flow: flow, Execution: execution, By: by, Review: &r})
 	})
 	return
 }
@@ -346,10 +348,12 @@ func (g *Graph) WriteNode(ctx context.Context, id domain.ChangeID, node domain.C
 		var base *domain.Node
 		switch {
 		case flow != "":
-			if nid := nodeOf(vcn); nid != "" {
-				if base, err = fv.latest(ctx, nid); err != nil {
+			if vcn.Post != nil { // the version the flow sees (ADR 0029 §3)
+				n, err := tx.Node(ctx, *vcn.Post)
+				if err != nil {
 					return err
 				}
+				base = &n
 			}
 			if base == nil && cn.Pre != nil {
 				n, err := tx.Node(ctx, *cn.Pre)
@@ -491,17 +495,19 @@ func (g *Graph) WriteNode(ctx context.Context, id domain.ChangeID, node domain.C
 				return err
 			}
 		}
+		written := domain.ImpactEvent{Change: id, Impact: cn.ID, Op: domain.ImpactWritten, Flow: flow, Execution: w.Execution, Post: &ref}
 		if flow != "" && cn.Flow != flow {
-			// a change impact of the main flow (or of an ancestor) written on the flow: its stored post is not this flow's
+			// a change impact of the main flow (or of an ancestor) written on the flow: the stored post stays the
+			// main flow's, the flow's is in the log (ADR 0029)
 			cn = vcn
 			cn.Post = &ref
-			return nil
+			return g.emit(ctx, tx, written)
 		}
 		cn.Post = &ref
 		if err := cn.Validate(); err != nil {
 			return invalidf("change impact %s: %v", node, err)
 		}
-		return tx.PutChangeImpact(ctx, id, cn)
+		return g.emit(ctx, tx, written)
 	})
 	return
 }
