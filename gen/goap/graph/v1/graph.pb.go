@@ -2372,7 +2372,13 @@ func (x *GetChangeResponse) GetChange() *Change {
 }
 
 type ListChangesRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// namespace the change acts on (empty: every namespace)
+	Namespace string `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	// draft | active | merge_pending | applied | abandoned (empty: every status)
+	Status []string `protobuf:"bytes,2,rep,name=status,proto3" json:"status,omitempty"`
+	// key of the responsible OrgUnit (empty: every unit)
+	OwnerOrg      string `protobuf:"bytes,3,opt,name=owner_org,json=ownerOrg,proto3" json:"owner_org,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2405,6 +2411,27 @@ func (x *ListChangesRequest) ProtoReflect() protoreflect.Message {
 // Deprecated: Use ListChangesRequest.ProtoReflect.Descriptor instead.
 func (*ListChangesRequest) Descriptor() ([]byte, []int) {
 	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{32}
+}
+
+func (x *ListChangesRequest) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
+	}
+	return ""
+}
+
+func (x *ListChangesRequest) GetStatus() []string {
+	if x != nil {
+		return x.Status
+	}
+	return nil
+}
+
+func (x *ListChangesRequest) GetOwnerOrg() string {
+	if x != nil {
+		return x.OwnerOrg
+	}
+	return ""
 }
 
 type ListChangesResponse struct {
@@ -2452,11 +2479,15 @@ func (x *ListChangesResponse) GetChanges() []*Change {
 }
 
 type UpdateChangeRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Goal          *string                `protobuf:"bytes,2,opt,name=goal,proto3,oneof" json:"goal,omitempty"`
-	Status        *string                `protobuf:"bytes,3,opt,name=status,proto3,oneof" json:"status,omitempty"`
-	Data          *structpb.Struct       `protobuf:"bytes,4,opt,name=data,proto3" json:"data,omitempty"`
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Id     string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Goal   *string                `protobuf:"bytes,2,opt,name=goal,proto3,oneof" json:"goal,omitempty"`
+	Status *string                `protobuf:"bytes,3,opt,name=status,proto3,oneof" json:"status,omitempty"`
+	Data   *structpb.Struct       `protobuf:"bytes,4,opt,name=data,proto3" json:"data,omitempty"`
+	// title / intent: the current definition of the change. goap-change/reformulate patches these
+	// after superseding the previous definition as an "intent" item, so the history is kept.
+	Title         *string `protobuf:"bytes,5,opt,name=title,proto3,oneof" json:"title,omitempty"`
+	Intent        *string `protobuf:"bytes,6,opt,name=intent,proto3,oneof" json:"intent,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2517,6 +2548,20 @@ func (x *UpdateChangeRequest) GetData() *structpb.Struct {
 		return x.Data
 	}
 	return nil
+}
+
+func (x *UpdateChangeRequest) GetTitle() string {
+	if x != nil && x.Title != nil {
+		return *x.Title
+	}
+	return ""
+}
+
+func (x *UpdateChangeRequest) GetIntent() string {
+	if x != nil && x.Intent != nil {
+		return *x.Intent
+	}
+	return ""
 }
 
 type UpdateChangeResponse struct {
@@ -7098,17 +7143,24 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\x10GetChangeRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\"B\n" +
 	"\x11GetChangeResponse\x12-\n" +
-	"\x06change\x18\x01 \x01(\v2\x15.goap.graph.v1.ChangeR\x06change\"\x14\n" +
-	"\x12ListChangesRequest\"F\n" +
+	"\x06change\x18\x01 \x01(\v2\x15.goap.graph.v1.ChangeR\x06change\"g\n" +
+	"\x12ListChangesRequest\x12\x1c\n" +
+	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x16\n" +
+	"\x06status\x18\x02 \x03(\tR\x06status\x12\x1b\n" +
+	"\towner_org\x18\x03 \x01(\tR\bownerOrg\"F\n" +
 	"\x13ListChangesResponse\x12/\n" +
-	"\achanges\x18\x01 \x03(\v2\x15.goap.graph.v1.ChangeR\achanges\"\x9c\x01\n" +
+	"\achanges\x18\x01 \x03(\v2\x15.goap.graph.v1.ChangeR\achanges\"\xe9\x01\n" +
 	"\x13UpdateChangeRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
 	"\x04goal\x18\x02 \x01(\tH\x00R\x04goal\x88\x01\x01\x12\x1b\n" +
 	"\x06status\x18\x03 \x01(\tH\x01R\x06status\x88\x01\x01\x12+\n" +
-	"\x04data\x18\x04 \x01(\v2\x17.google.protobuf.StructR\x04dataB\a\n" +
+	"\x04data\x18\x04 \x01(\v2\x17.google.protobuf.StructR\x04data\x12\x19\n" +
+	"\x05title\x18\x05 \x01(\tH\x02R\x05title\x88\x01\x01\x12\x1b\n" +
+	"\x06intent\x18\x06 \x01(\tH\x03R\x06intent\x88\x01\x01B\a\n" +
 	"\x05_goalB\t\n" +
-	"\a_status\"E\n" +
+	"\a_statusB\b\n" +
+	"\x06_titleB\t\n" +
+	"\a_intent\"E\n" +
 	"\x14UpdateChangeResponse\x12-\n" +
 	"\x06change\x18\x01 \x01(\v2\x15.goap.graph.v1.ChangeR\x06change\"_\n" +
 	"\x0fAddItemsRequest\x12\x1b\n" +

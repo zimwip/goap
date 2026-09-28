@@ -263,6 +263,100 @@ func TestChangeTools(t *testing.T) {
 	}
 }
 
+// A request either continues an open change or needs a new one: goap-change.list finds the
+// candidates, filtered by namespace, status and unit, the latest first, capped by limit.
+func TestChangeList(t *testing.T) {
+	p := newPlatform(t)
+	ctx := as("alice", "ORG-CHECKOUT", "contributor")
+	almID := p.call(t, ctx, "ORG-CHECKOUT", "goap-change/create", map[string]any{"title": "Refunds by voucher", "intent": "refund by voucher",
+		"namespace": "alm", "methodology": "sdlc"})["change"].(map[string]any)["id"].(string)
+	orgID := p.call(t, ctx, "ORG-CHECKOUT", "goap-change/create", map[string]any{"title": "Reorg checkout", "intent": "reorg checkout",
+		"namespace": "organisation"})["change"].(map[string]any)["id"].(string)
+
+	all := p.call(t, ctx, "ORG-CHECKOUT", "goap-change/list", nil)["changes"].([]any)
+	var ids []string
+	for _, c := range all {
+		ids = append(ids, c.(map[string]any)["id"].(string))
+	}
+	if !slices.Contains(ids, almID) || !slices.Contains(ids, orgID) {
+		t.Fatalf("list = %v, want %s and %s", ids, almID, orgID)
+	}
+
+	almOnly := p.call(t, ctx, "ORG-CHECKOUT", "goap-change/list", map[string]any{"namespace": "alm"})["changes"].([]any)
+	for _, c := range almOnly {
+		if c.(map[string]any)["namespace"] != "alm" {
+			t.Fatalf("namespace filter leaked: %v", c)
+		}
+	}
+	var sawAlm bool
+	for _, c := range almOnly {
+		if c.(map[string]any)["id"] == almID {
+			sawAlm = true
+		}
+	}
+	if !sawAlm {
+		t.Fatalf("namespace filter dropped %s: %v", almID, almOnly)
+	}
+
+	none := p.call(t, ctx, "ORG-CHECKOUT", "goap-change/list", map[string]any{"status": "applied"})["changes"].([]any)
+	for _, c := range none {
+		if c.(map[string]any)["id"] == almID || c.(map[string]any)["id"] == orgID {
+			t.Fatalf("status filter leaked a draft change: %v", c)
+		}
+	}
+
+	capped := p.call(t, ctx, "ORG-CHECKOUT", "goap-change/list", map[string]any{"limit": float64(1)})
+	if changes := capped["changes"].([]any); len(changes) != 1 || capped["truncated"] != true {
+		t.Fatalf("limit = %v, truncated = %v", changes, capped["truncated"])
+	}
+}
+
+// Reformulating a change never erases its definition: the previous title/intent is superseded as
+// an "intent" item (the one set at creation included), the header always holding the current one.
+func TestChangeReformulate(t *testing.T) {
+	p := newPlatform(t)
+	ctx := as("alice", "ORG-CHECKOUT", "contributor")
+	created := p.call(t, ctx, "ORG-CHECKOUT", "goap-change/create", map[string]any{"title": "Refunds", "intent": "refund by voucher",
+		"namespace": "alm", "methodology": "sdlc"})["change"].(map[string]any)
+	id := created["id"].(string)
+	ctx = mcp.WithCall(ctx, mcp.CallContext{Change: id, Process: "P1"})
+
+	out := p.call(t, ctx, "ORG-CHECKOUT", "goap-change/reformulate", map[string]any{"title": "Refunds by voucher",
+		"intent": "customers may be refunded by voucher up to 30 days after purchase", "rationale": "clarified with support"})
+	ch := out["change"].(map[string]any)
+	if ch["title"] != "Refunds by voucher" || ch["intent"] != "customers may be refunded by voucher up to 30 days after purchase" {
+		t.Fatalf("change after reformulate = %v", ch)
+	}
+	item1 := out["item"].(map[string]any)
+
+	out2 := p.call(t, ctx, "ORG-CHECKOUT", "goap-change/reformulate", map[string]any{
+		"intent": "customers may be refunded by voucher or bank transfer up to 30 days after purchase", "rationale": "finance asked for a bank transfer option"})
+	ch2 := out2["change"].(map[string]any)
+	if ch2["title"] != "Refunds by voucher" || ch2["intent"] != "customers may be refunded by voucher or bank transfer up to 30 days after purchase" {
+		t.Fatalf("change after 2nd reformulate = %v", ch2)
+	}
+	item2 := out2["item"].(map[string]any)
+	if s := item2["supersedes"].([]any); len(s) != 1 || s[0] != item1["id"] {
+		t.Fatalf("item2 supersedes = %v, want [%v]", s, item1["id"])
+	}
+
+	read := p.call(t, ctx, "ORG-CHECKOUT", "goap-change/read", nil)
+	items := read["items"].([]any)
+	var intents []map[string]any
+	for _, it := range items {
+		it := it.(map[string]any)
+		if it["type"] == "intent" {
+			intents = append(intents, it)
+		}
+	}
+	if len(intents) != 3 {
+		t.Fatalf("intent items = %v, want 3 (original snapshot + 2 reformulations)", intents)
+	}
+	if orig := intents[0]["data"].(map[string]any); orig["title"] != "Refunds" || orig["intent"] != "refund by voucher" {
+		t.Fatalf("original snapshot lost: %v", orig)
+	}
+}
+
 // User and Policy nodes stay behind the access gate of the platform (ADR 0020).
 func TestChangeToolsKeepTheAccessGate(t *testing.T) {
 	p := newPlatform(t)
@@ -301,7 +395,7 @@ func TestUnitRestrictsABuiltin(t *testing.T) {
 			change = append(change, name)
 		}
 	}
-	if !slices.Equal(change, []string{"read", "validate"}) || slices.Contains(mcps, mcp.BuiltinAdmin) {
+	if !slices.Equal(change, []string{"read", "list", "validate"}) || slices.Contains(mcps, mcp.BuiltinAdmin) {
 		t.Fatalf("ORG-CRM: goap-change tools %v, mcps %v", change, mcps)
 	}
 	ctx := as("carol", "ORG-CRM", "contributor")
@@ -319,7 +413,7 @@ func TestUnitRestrictsABuiltin(t *testing.T) {
 	out := p.call(t, as("root", "ORG-ACME", "admin"), "ORG-ACME", "goap-admin/mcps", map[string]any{"unit": "ORG-CRM"})
 	for _, m := range out["mcps"].([]any) {
 		m := m.(map[string]any)
-		if m["mcp"] == mcp.BuiltinChange && (len(m["tools"].([]any)) != 2 || m["restrictedBy"].([]any)[0] != "ORG-CRM" || m["definedIn"] != domain.DefaultOrg) {
+		if m["mcp"] == mcp.BuiltinChange && (len(m["tools"].([]any)) != 3 || m["restrictedBy"].([]any)[0] != "ORG-CRM" || m["definedIn"] != domain.DefaultOrg) {
 			t.Fatalf("goap-change for ORG-CRM = %v", m)
 		}
 	}

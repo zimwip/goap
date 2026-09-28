@@ -364,8 +364,49 @@ func (g *Graph) Changes(ctx context.Context) (cs []domain.Change, err error) {
 	return
 }
 
-// ChangePatch updates mutable fields of a change header. Nil fields are kept.
+// ChangesFilter narrows ListChanges; the zero value matches every change.
+type ChangesFilter struct {
+	Namespace string
+	OwnerOrg  string
+	// Status: draft, active, merge_pending, applied, abandoned (empty: every status).
+	Status []domain.ChangeStatus
+}
+
+// Match reports whether a change satisfies the filter.
+func (f ChangesFilter) Match(c domain.Change) bool {
+	if f.Namespace != "" && c.Namespace != f.Namespace {
+		return false
+	}
+	if f.OwnerOrg != "" && c.OwnerOrg != f.OwnerOrg {
+		return false
+	}
+	if len(f.Status) > 0 && !slices.Contains(f.Status, c.Status) {
+		return false
+	}
+	return true
+}
+
+// ListChanges lists the changes matching a filter, in no particular order (the caller sorts and caps).
+func (g *Graph) ListChanges(ctx context.Context, f ChangesFilter) ([]domain.Change, error) {
+	cs, err := g.Changes(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]domain.Change, 0, len(cs))
+	for _, c := range cs {
+		if f.Match(c) {
+			out = append(out, c)
+		}
+	}
+	return out, nil
+}
+
+// ChangePatch updates mutable fields of a change header. Nil fields are kept. Title and Intent are
+// the current definition of the change; goap-change/reformulate is the only caller that sets them,
+// after superseding the previous definition as an "intent" item so the history is kept.
 type ChangePatch struct {
+	Title  *string
+	Intent *string
 	Goal   *string
 	Status *domain.ChangeStatus
 	Data   map[string]any // merged
@@ -377,6 +418,12 @@ func (g *Graph) UpdateChange(ctx context.Context, id domain.ChangeID, p ChangePa
 		c, err = tx.Change(ctx, id)
 		if err != nil {
 			return err
+		}
+		if p.Title != nil {
+			c.Title = *p.Title
+		}
+		if p.Intent != nil {
+			c.Intent = *p.Intent
 		}
 		if p.Goal != nil {
 			c.Goal = *p.Goal

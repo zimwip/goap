@@ -172,8 +172,12 @@ func (h *Handler) GetChange(ctx context.Context, r *connect.Request[graphv1.GetC
 	return res(&graphv1.GetChangeResponse{Change: pbconv.ChangeToPB(c)}, err)
 }
 
-func (h *Handler) ListChanges(ctx context.Context, _ *connect.Request[graphv1.ListChangesRequest]) (*connect.Response[graphv1.ListChangesResponse], error) {
-	cs, err := h.Graph.Changes(ctx)
+func (h *Handler) ListChanges(ctx context.Context, r *connect.Request[graphv1.ListChangesRequest]) (*connect.Response[graphv1.ListChangesResponse], error) {
+	f := graph.ChangesFilter{Namespace: r.Msg.Namespace, OwnerOrg: r.Msg.OwnerOrg}
+	for _, s := range r.Msg.Status {
+		f.Status = append(f.Status, domain.ChangeStatus(s))
+	}
+	cs, err := h.Graph.ListChanges(ctx, f)
 	out := &graphv1.ListChangesResponse{}
 	for _, c := range cs {
 		out.Changes = append(out.Changes, pbconv.ChangeToPB(c))
@@ -200,7 +204,7 @@ func (h *Handler) ListNodeChanges(ctx context.Context, r *connect.Request[graphv
 }
 
 func (h *Handler) UpdateChange(ctx context.Context, r *connect.Request[graphv1.UpdateChangeRequest]) (*connect.Response[graphv1.UpdateChangeResponse], error) {
-	p := graph.ChangePatch{Goal: r.Msg.Goal, Data: pbconv.Map(r.Msg.Data)}
+	p := graph.ChangePatch{Title: r.Msg.Title, Intent: r.Msg.Intent, Goal: r.Msg.Goal, Data: pbconv.Map(r.Msg.Data)}
 	if r.Msg.Status != nil {
 		st := domain.ChangeStatus(*r.Msg.Status)
 		p.Status = &st

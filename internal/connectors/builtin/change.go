@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"slices"
 
 	connectorv1 "github.com/zimwip/goap/gen/goap/connector/v1"
 	"github.com/zimwip/goap/internal/connectorkit"
@@ -27,6 +28,9 @@ var _ connectorkit.Connector = Change{}
 var changeOps = []op{
 	{"create", "Open a change on the head of main of a namespace: {change}", schema(map[string]string{"title": "string", "intent": "string", "namespace": "string", "methodology": "string", "unit": "string"}, "title", "intent", "namespace")},
 	{"read", "Read a change: {change, nodes, items}", schema(map[string]string{"change": "string"})},
+	{"list", "List changes, the latest first: {changes, truncated}", schema(map[string]string{"namespace": "string", "unit": "string", "status": "string", "limit": "integer"})},
+	{"reformulate", "Revise the title/intent of a change, superseding the previous definition (history kept): {change, item}",
+		schema(map[string]string{"change": "string", "title": "string", "intent": "string", "rationale": "string"}, "intent", "rationale")},
 	{"write", "Create a node in the change: {node}", schema(map[string]string{"change": "string", "key": "string", "type": "string", "properties": "object", "rationale": "string"}, "key", "type", "rationale")},
 	{"edit", "Modify the properties or the state of a node in the change: {node}", schema(map[string]string{"change": "string", "key": "string", "properties": "object", "expect": "object", "state": "string", "rationale": "string"}, "key", "rationale")},
 	{"link", "Add a link from a node of the change: {node}", schema(map[string]string{"change": "string", "from": "string", "type": "string", "to": "string", "rationale": "string"}, "from", "type", "to")},
@@ -58,8 +62,11 @@ func (c Change) Invoke(ctx context.Context, op string, raw, _ map[string]any, _ 
 		return nil, err
 	}
 	a := args(raw)
-	if op == "create" {
+	switch op {
+	case "create":
 		return c.create(ctx, who, a)
+	case "list":
+		return c.list(ctx, a)
 	}
 	id, err := changeID(ctx, a)
 	if err != nil {
@@ -73,6 +80,8 @@ func (c Change) Invoke(ctx context.Context, op string, raw, _ map[string]any, _ 
 	switch op {
 	case "read":
 		return result(map[string]any{"change": changeSummary(bb.Change), "nodes": w.impacts(), "items": bb.Change.Items})
+	case "reformulate":
+		return c.reformulate(ctx, bb, a)
 	case "validate":
 		issues, err := c.p.Graph.ValidateBoard(ctx, id, "")
 		if err != nil {
@@ -176,6 +185,85 @@ func (c Change) create(ctx context.Context, who authz.Principal, a args) (map[st
 		return nil, err
 	}
 	return result(map[string]any{"change": changeSummary(ch)})
+}
+
+// intentItemType is the item type reformulate uses to keep the history of a change's definition:
+// each revision supersedes the previous one (never overwritten), the header (title, intent) always
+// holding the current one.
+const intentItemType = "intent"
+
+// latestIntentItem returns the current "intent" item of a change, if any has been recorded yet
+// (none: the change is still on the definition it was created with).
+func latestIntentItem(c domain.Change) *domain.ChangeItem {
+	for i := len(c.Items) - 1; i >= 0; i-- {
+		if c.Items[i].Kind == domain.KindArtifact && c.Items[i].Type == intentItemType {
+			return &c.Items[i]
+		}
+	}
+	return nil
+}
+
+// reformulate revises the definition (title, intent) of a change: the current one is superseded as
+// an "intent" item, never erased, so the change keeps its full history; the header is then patched
+// to the new definition, the one prompts and reads see.
+func (c Change) reformulate(ctx context.Context, bb domain.Blackboard, a args) (map[string]any, error) {
+	newIntent, err := a.required("intent")
+	if err != nil {
+		return nil, err
+	}
+	rationale, err := a.required("rationale")
+	if err != nil {
+		return nil, err
+	}
+	title := a.str("title")
+	if title == "" {
+		title = bb.Change.Title
+	}
+	id := bb.Change.ID
+	prev := latestIntentItem(bb.Change)
+	if prev == nil {
+		// the definition set at creation has no item of its own yet: snapshot it first, so the
+		// history stays complete in the items once the header is overwritten below.
+		snap, err := c.p.Graph.AddItems(ctx, id, []domain.ChangeItem{{Kind: domain.KindArtifact, Type: intentItemType, Status: domain.ItemAccepted,
+			Data: map[string]any{"title": bb.Change.Title, "intent": bb.Change.Intent}, ProducedBy: "create"}})
+		if err != nil {
+			return nil, err
+		}
+		prev = &snap[0]
+	}
+	items, err := c.p.Graph.AddItems(ctx, id, []domain.ChangeItem{{Kind: domain.KindArtifact, Type: intentItemType, Status: domain.ItemAccepted,
+		Data: map[string]any{"title": title, "intent": newIntent, "rationale": rationale}, ProducedBy: producer(ctx), Supersedes: []domain.ItemID{prev.ID}}})
+	if err != nil {
+		return nil, err
+	}
+	ch, err := c.p.Graph.UpdateChange(ctx, id, graph.ChangePatch{Title: &title, Intent: &newIntent})
+	if err != nil {
+		return nil, err
+	}
+	return result(map[string]any{"change": changeSummary(ch), "item": items[0]})
+}
+
+// list lists changes matching a filter, the latest first: the caller checks whether a request
+// continues one of them before opening a new one (goap-change.create).
+func (c Change) list(ctx context.Context, a args) (map[string]any, error) {
+	f := graph.ChangesFilter{Namespace: a.str("namespace"), OwnerOrg: a.str("unit")}
+	if st := a.str("status"); st != "" {
+		f.Status = []domain.ChangeStatus{domain.ChangeStatus(st)}
+	}
+	cs, err := c.p.Graph.ListChanges(ctx, f)
+	if err != nil {
+		return nil, err
+	}
+	slices.SortFunc(cs, func(x, y domain.Change) int { return y.CreatedAt.Compare(x.CreatedAt) })
+	truncated := len(cs) > a.limit()
+	if truncated {
+		cs = cs[:a.limit()]
+	}
+	list := make([]map[string]any, 0, len(cs))
+	for _, ch := range cs {
+		list = append(list, changeSummary(ch))
+	}
+	return result(map[string]any{"changes": list, "truncated": truncated})
 }
 
 // gate applies the access gate of the platform to the access nodes (User, Policy: ADR 0020).

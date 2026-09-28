@@ -38,6 +38,9 @@ type GraphPort interface {
 	// BranchHead / CreateBaseline give the head of a branch and make a baseline.
 	BranchHead(ctx context.Context, namespace, name string) (domain.Baseline, error)
 	CreateBaseline(ctx context.Context, namespace, name string, nodes []domain.NodeRef) (domain.Baseline, error)
+	// ListChanges lists the changes matching a filter (goap-change.list): which open change a request
+	// continues, else a new one is proposed.
+	ListChanges(ctx context.Context, f graph.ChangesFilter) ([]domain.Change, error)
 }
 
 // MethodologyPort resolves methodologies (the registry): the latest
