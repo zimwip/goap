@@ -29,9 +29,9 @@ type Repo interface {
 type Tx interface {
 	// Node returns an exact node version, or the latest one on main when ref.Version is 0.
 	Node(ctx context.Context, ref domain.NodeRef) (domain.Node, error)
-	// LatestOn returns the latest version of a node on a branch (ErrNotFound if none).
+	// LatestOn returns the latest version of a node on a branch: written there or joined (ErrNotFound if none).
 	LatestOn(ctx context.Context, id domain.NodeID, branch string) (domain.Node, error)
-	// Versions returns every version of a node, all branches, by version.
+	// Versions returns every version of a node, all branches, by version, with the branches each one joined.
 	Versions(ctx context.Context, id domain.NodeID) ([]domain.Node, error)
 	Branch(ctx context.Context, namespace, name string) (domain.Branch, error)
 	Branches(ctx context.Context, namespace string) ([]domain.Branch, error)
@@ -79,6 +79,7 @@ type Tx interface {
 	// SetNodeOrigin records on a node version the change and change impact that produced it and its comment.
 	SetNodeOrigin(ctx context.Context, ref domain.NodeRef, change domain.ChangeID, cn domain.ChangeImpactID, comment string) error
 
-	// MoveVersion moves a node version to another branch (a fast-forward merge).
-	MoveVersion(ctx context.Context, ref domain.NodeRef, to string) error
+	// JoinBranch makes a node version part of a branch it was not written on (a merge that lands it as is,
+	// ADR 0032): the version is not copied and keeps the branch it was written on.
+	JoinBranch(ctx context.Context, ref domain.NodeRef, branch string) error
 }

@@ -106,6 +106,20 @@ func MergeLinks(anc, ours, theirs []domain.Link) []domain.Link {
 	return out
 }
 
+// onBranch reports whether a node version is part of a branch: written there, or joined (ADR 0032).
+func onBranch(ctx context.Context, tx Tx, ref domain.NodeRef, branch string) (bool, error) {
+	vs, err := tx.Versions(ctx, ref.ID)
+	if err != nil {
+		return false, err
+	}
+	for _, n := range vs {
+		if n.Version == ref.Version {
+			return n.On(branch), nil
+		}
+	}
+	return false, nil
+}
+
 // parentsOf returns the parents of a version (legacy versions without
 // parents descend from the previous version).
 func parentsOf(n domain.Node) []domain.Version {
@@ -490,6 +504,8 @@ func (g *Graph) mergeBranchTx(ctx context.Context, tx Tx, in MergeRequest) (res 
 		from, ours *domain.Node
 		anc        *domain.Node
 		next       domain.NodeRef
+		// join: the source version lands as is (added or fast-forward, no resolution), no merge version (ADR 0032)
+		join bool
 	}
 	var todo []*merged
 	for _, cand := range plan.Candidates {
@@ -501,7 +517,7 @@ func (g *Graph) mergeBranchTx(ctx context.Context, tx Tx, in MergeRequest) (res 
 		if err != nil {
 			return res, err
 		}
-		m := &merged{cand: cand, from: &from}
+		m := &merged{cand: cand, from: &from, join: (cand.Kind == MergeAdded || cand.Kind == MergeFastForward) && !(resolved && r.Props != nil)}
 		props := cand.Merged
 		if resolved && r.Props != nil {
 			props = r.Props
@@ -547,7 +563,9 @@ func (g *Graph) mergeBranchTx(ctx context.Context, tx Tx, in MergeRequest) (res 
 		m.from.Properties = props // the merged properties, carried by the version below
 		todo = append(todo, m)
 	}
-	// 1. the merge versions, with the change impact that explains each
+	// 1. the merge versions, with the change impact that explains each: a node changed on one side only joins the
+	// target as is (ADR 0032), a node changed on both sides gets a merge version
+	res.Baseline.ID = domain.BaselineID(g.newID())
 	var editable []string
 	for _, m := range todo {
 		n := *m.from
@@ -556,10 +574,6 @@ func (g *Graph) mergeBranchTx(ctx context.Context, tx Tx, in MergeRequest) (res 
 		if m.ours != nil {
 			n.Parents = []domain.Version{m.ours.Version, m.from.Version}
 			deleted = deleted || m.ours.Deleted
-		}
-		v, err := nextVersion(ctx, tx, n.ID)
-		if err != nil {
-			return res, err
 		}
 		why := fmt.Sprintf("merge of %s into %s", in.From, plan.Into)
 		if len(m.cand.Conflicts) > 0 {
@@ -570,9 +584,20 @@ func (g *Graph) mergeBranchTx(ctx context.Context, tx Tx, in MergeRequest) (res 
 		if m.ours != nil {
 			cn.Intent, cn.Pre = domain.IntentModified, m.cand.Ours
 		}
-		n.Version, n.Branch, n.Deleted, n.ChangeID, n.ChangeImpact, n.Comment, n.CreatedAt = v, plan.Into, deleted, c.ID, cn.ID, why, g.now()
-		if err := tx.PutNode(ctx, n); err != nil {
-			return res, err
+		if m.join {
+			n = *m.from
+			if err := tx.JoinBranch(ctx, n.Ref(), plan.Into); err != nil {
+				return res, err
+			}
+		} else {
+			v, err := nextVersion(ctx, tx, n.ID)
+			if err != nil {
+				return res, err
+			}
+			n.Version, n.Branch, n.Deleted, n.ChangeID, n.ChangeImpact, n.Comment, n.CreatedAt = v, plan.Into, deleted, c.ID, cn.ID, why, g.now()
+			if err := tx.PutNode(ctx, n); err != nil {
+				return res, err
+			}
 		}
 		m.next = n.Ref()
 		// the merge records its change impact as events: declared, accepted, written and landed at once
@@ -583,11 +608,11 @@ func (g *Graph) mergeBranchTx(ctx context.Context, tx Tx, in MergeRequest) (res 
 			domain.ImpactEvent{Change: c.ID, Impact: cn.ID, Op: domain.ImpactDeclared, By: "graph.merge", State: &declared},
 			domain.ImpactEvent{Change: c.ID, Impact: cn.ID, Op: domain.ImpactReviewed, By: "graph.merge", Review: &review},
 			domain.ImpactEvent{Change: c.ID, Impact: cn.ID, Op: domain.ImpactWritten, By: "graph.merge", Post: &m.next},
-			domain.ImpactEvent{Change: c.ID, Impact: cn.ID, Op: domain.ImpactLanded, By: "graph.merge", Landed: &m.next},
+			domain.ImpactEvent{Change: c.ID, Impact: cn.ID, Op: domain.ImpactLanded, By: "graph.merge", Landed: &m.next, Baseline: res.Baseline.ID},
 		); err != nil {
 			return res, err
 		}
-		if deleted {
+		if n.Deleted {
 			delete(target, n.ID)
 			continue
 		}
@@ -605,8 +630,8 @@ func (g *Graph) mergeBranchTx(ctx context.Context, tx Tx, in MergeRequest) (res 
 		newRef[m.next.ID] = m.next
 	}
 	for _, m := range todo {
-		if v, ok := target[m.next.ID]; !ok || v != m.next.Version {
-			continue // deleted
+		if v, ok := target[m.next.ID]; !ok || v != m.next.Version || m.join {
+			continue // deleted, or joined with the links it has
 		}
 		theirs, err := tx.OutLinks(ctx, m.from.Ref())
 		if err != nil {
@@ -636,7 +661,7 @@ func (g *Graph) mergeBranchTx(ctx context.Context, tx Tx, in MergeRequest) (res 
 			}
 		}
 	}
-	res.Baseline = domain.Baseline{ID: domain.BaselineID(g.newID()), Name: title, Namespace: namespace, Branch: plan.Into, ParentID: base.ID, ChangeID: c.ID, Nodes: target, CreatedAt: g.now()}
+	res.Baseline = domain.Baseline{ID: res.Baseline.ID, Name: title, Namespace: namespace, Branch: plan.Into, ParentID: base.ID, ChangeID: c.ID, Nodes: target, CreatedAt: g.now()}
 	if err := tx.PutBaseline(ctx, res.Baseline); err != nil {
 		return res, err
 	}

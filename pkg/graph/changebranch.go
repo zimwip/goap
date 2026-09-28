@@ -56,7 +56,7 @@ func (g *Graph) integrate(ctx context.Context, tx Tx, c domain.Change, own domai
 	}
 	c.Status = domain.ChangeApplied
 	c.ResultBaselineID = res.Baseline.ID
-	if err := g.land(ctx, tx, c, own, res.Change.ID); err != nil {
+	if err := g.land(ctx, tx, c, own, res.Change.ID, res.Baseline.ID); err != nil {
 		return c, err
 	}
 	return c, tx.PutChange(ctx, c)
@@ -182,7 +182,7 @@ func (g *Graph) NodeByKeyOn(ctx context.Context, namespace, branch, key string) 
 }
 
 // fastForward lands a change whose target branch has not moved since its
-// branch was forked: the versions of the branch become versions of the target,
+// branch was forked: the versions of the branch join the target (ADR 0032),
 // no merge version is made, and each change impact lands as the version it wrote.
 func (g *Graph) fastForward(ctx context.Context, tx Tx, c domain.Change, own domain.Branch) (bool, error) {
 	into, err := branchHead(ctx, tx, c.Namespace, own.Parent)
@@ -193,30 +193,27 @@ func (g *Graph) fastForward(ctx context.Context, tx Tx, c domain.Change, own dom
 	if err != nil {
 		return false, err
 	}
-	// only what the change lands moves: the versions of its head baseline (a rejected or replaced version stays behind)
-	moves := map[domain.NodeID]domain.Version{}
+	// what the branch changed since its fork joins the target: the versions of its head baseline (a rejected or
+	// replaced version stays behind), and the tombstones of the nodes it retired
+	target := domain.BranchOf(own.Parent)
+	var moves []domain.NodeRef
 	for id, v := range from.Nodes {
-		moves[id] = v
+		if into.Nodes[id] != v {
+			moves = append(moves, domain.NodeRef{ID: id, Version: v})
+		}
 	}
-	for _, cn := range c.Nodes { // the retired nodes are not in the baseline any more: their tombstone lands too
-		if cn.Post == nil || cn.Review != domain.ReviewAccepted || cn.Flow != "" || cn.Superseded {
+	for id := range into.Nodes {
+		if _, ok := from.Nodes[id]; ok {
 			continue
 		}
-		if n, err := tx.LatestOn(ctx, cn.Post.ID, own.Name); err == nil && n.Deleted {
-			moves[n.ID] = n.Version
+		if n, err := tx.LatestOn(ctx, id, own.Name); err == nil && n.Deleted {
+			moves = append(moves, n.Ref())
 		} else if err != nil && !errors.Is(err, ErrNotFound) {
 			return false, err
 		}
 	}
-	for id, v := range moves {
-		n, err := tx.Node(ctx, domain.NodeRef{ID: id, Version: v})
-		if err != nil {
-			return false, err
-		}
-		if domain.BranchOf(n.Branch) != own.Name {
-			continue
-		}
-		if err := tx.MoveVersion(ctx, n.Ref(), domain.BranchOf(own.Parent)); err != nil {
+	for _, r := range moves {
+		if err := tx.JoinBranch(ctx, r, target); err != nil {
 			return false, err
 		}
 	}
@@ -233,7 +230,7 @@ func (g *Graph) fastForward(ctx context.Context, tx Tx, c domain.Change, own dom
 		return false, err
 	}
 	c.Status, c.ResultBaselineID = domain.ChangeApplied, res.ID
-	if err := g.land(ctx, tx, c, own, c.ID); err != nil {
+	if err := g.land(ctx, tx, c, own, c.ID, res.ID); err != nil {
 		return false, err
 	}
 	return true, tx.PutChange(ctx, c)

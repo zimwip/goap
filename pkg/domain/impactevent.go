@@ -47,8 +47,10 @@ type ImpactEvent struct {
 	Post   *NodeRef      `json:"post,omitempty"`  // written
 	Pre    *NodeRef      `json:"pre,omitempty"`   // rebased
 	Landed *NodeRef      `json:"landed,omitempty"`
-	Review *Review       `json:"review,omitempty"` // reviewed, discarded
-	Stale  []string      `json:"stale,omitempty"`  // adopted: the stale executions
+	// Baseline is, on landed, the baseline of the target branch the version landed in (ADR 0032).
+	Baseline BaselineID `json:"baseline,omitempty"`
+	Review   *Review    `json:"review,omitempty"` // reviewed, discarded
+	Stale    []string   `json:"stale,omitempty"`  // adopted: the stale executions
 }
 
 // Validate checks that an event carries what its operation needs.

@@ -25,7 +25,9 @@ type memState struct {
 	baselines map[domain.BaselineID]domain.Baseline
 	changes   map[domain.ChangeID]domain.Change
 	branches  map[string]domain.Branch
-	nodes     map[domain.ChangeID][]domain.ChangeImpact
+	// joins are the branches a version is part of besides the one it was written on (ADR 0032)
+	joins map[joinKey]bool
+	nodes map[domain.ChangeID][]domain.ChangeImpact
 	// log holds the entries of every change's log, in their order (ADR 0030)
 	log []domain.LogEntry
 }
@@ -38,6 +40,7 @@ func NewMemory() *Memory {
 		baselines: map[domain.BaselineID]domain.Baseline{},
 		changes:   map[domain.ChangeID]domain.Change{},
 		branches:  map[string]domain.Branch{},
+		joins:     map[joinKey]bool{},
 		nodes:     map[domain.ChangeID][]domain.ChangeImpact{},
 	}}
 }
@@ -50,6 +53,7 @@ func (s memState) clone() memState {
 		baselines: maps.Clone(s.baselines),
 		changes:   make(map[domain.ChangeID]domain.Change, len(s.changes)),
 		branches:  maps.Clone(s.branches),
+		joins:     maps.Clone(s.joins),
 		log:       slices.Clone(s.log),
 		nodes:     make(map[domain.ChangeID][]domain.ChangeImpact, len(s.nodes)),
 	}
@@ -79,18 +83,24 @@ func (m *Memory) InTx(ctx context.Context, fn func(tx Tx) error) error {
 
 type memTx struct{ st *memState }
 
+type joinKey struct {
+	ref    domain.NodeRef
+	branch string
+}
+
+// on reports whether a version is part of a branch: written there, or joined.
+func (t *memTx) on(n domain.Node, branch string) bool {
+	branch = domain.BranchOf(branch)
+	return domain.BranchOf(n.Branch) == branch || t.st.joins[joinKey{n.Ref(), branch}]
+}
+
 func (t *memTx) Node(_ context.Context, ref domain.NodeRef) (domain.Node, error) {
 	vs, ok := t.st.versions[ref.ID]
 	if !ok || len(vs) == 0 {
 		return domain.Node{}, fmt.Errorf("node %s: %w", ref.ID, ErrNotFound)
 	}
 	if ref.Version == 0 {
-		for i := len(vs) - 1; i >= 0; i-- {
-			if domain.BranchOf(vs[i].Branch) == domain.MainBranch {
-				return vs[i], nil
-			}
-		}
-		return domain.Node{}, fmt.Errorf("node %s has no version on main: %w", ref.ID, ErrNotFound)
+		return t.LatestOn(context.Background(), ref.ID, domain.MainBranch)
 	}
 	if int(ref.Version) > len(vs) || ref.Version < 1 {
 		return domain.Node{}, fmt.Errorf("node %s: %w", ref, ErrNotFound)
@@ -101,7 +111,7 @@ func (t *memTx) Node(_ context.Context, ref domain.NodeRef) (domain.Node, error)
 func (t *memTx) LatestOn(_ context.Context, id domain.NodeID, branch string) (domain.Node, error) {
 	vs := t.st.versions[id]
 	for i := len(vs) - 1; i >= 0; i-- {
-		if domain.BranchOf(vs[i].Branch) == domain.BranchOf(branch) {
+		if t.on(vs[i], branch) {
 			return vs[i], nil
 		}
 	}
@@ -113,7 +123,16 @@ func (t *memTx) Versions(_ context.Context, id domain.NodeID) ([]domain.Node, er
 	if !ok {
 		return nil, fmt.Errorf("node %s: %w", id, ErrNotFound)
 	}
-	return slices.Clone(vs), nil
+	vs = slices.Clone(vs)
+	for k := range t.st.joins {
+		if k.ref.ID == id {
+			vs[k.ref.Version-1].Joined = append(vs[k.ref.Version-1].Joined, k.branch)
+		}
+	}
+	for i := range vs {
+		slices.Sort(vs[i].Joined)
+	}
+	return vs, nil
 }
 
 func (t *memTx) Branch(_ context.Context, namespace, name string) (domain.Branch, error) {
@@ -436,11 +455,13 @@ func (t *memTx) SetNodeOrigin(_ context.Context, ref domain.NodeRef, change doma
 	return nil
 }
 
-func (t *memTx) MoveVersion(_ context.Context, ref domain.NodeRef, to string) error {
+func (t *memTx) JoinBranch(_ context.Context, ref domain.NodeRef, branch string) error {
 	vs := t.st.versions[ref.ID]
 	if ref.Version < 1 || int(ref.Version) > len(vs) {
 		return fmt.Errorf("node %s: %w", ref, ErrNotFound)
 	}
-	vs[ref.Version-1].Branch = to
+	if branch = domain.BranchOf(branch); domain.BranchOf(vs[ref.Version-1].Branch) != branch {
+		t.st.joins[joinKey{ref, branch}] = true
+	}
 	return nil
 }

@@ -85,7 +85,7 @@ func (v *flowNodes) onChangeBranch(ctx context.Context, node domain.NodeID) (*do
 		return nil, err
 	}
 	for _, n := range slices.Backward(vs) {
-		if domain.BranchOf(n.Branch) == v.branch && !v.isStale(n.Execution) {
+		if n.On(v.branch) && !v.isStale(n.Execution) {
 			return &n, nil
 		}
 	}
@@ -197,12 +197,12 @@ func (g *Graph) adoptNodes(ctx context.Context, tx Tx, c domain.Change, f domain
 		var head, flowVer *domain.Node
 		staleHead := false
 		for _, n := range vs {
-			switch domain.BranchOf(n.Branch) {
-			case changeBranch:
+			switch {
+			case n.On(changeBranch):
 				n := n
 				head = &n
 				staleHead = staleHead || isStale(n.Execution)
-			case flowBranch:
+			case domain.BranchOf(n.Branch) == flowBranch:
 				n := n
 				flowVer = &n
 			}

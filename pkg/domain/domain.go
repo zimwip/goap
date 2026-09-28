@@ -8,6 +8,7 @@ package domain
 
 import (
 	"fmt"
+	"slices"
 	"time"
 )
 
@@ -83,10 +84,14 @@ func BranchOf(b string) string {
 
 // Node is one immutable version of a domain node. Versions are numbered per
 // node across all branches; Parents link a version to the one(s) it comes from.
+// A version is written on one branch (Branch, never changed) and may join other
+// branches when a merge lands it there as is (Joined, ADR 0032).
 type Node struct {
-	ID         NodeID         `json:"id"`
-	Version    Version        `json:"version"`
-	Branch     string         `json:"branch,omitempty"`
+	ID      NodeID  `json:"id"`
+	Version Version `json:"version"`
+	Branch  string  `json:"branch,omitempty"`
+	// Joined lists the other branches the version is part of (filled by Versions only).
+	Joined     []string       `json:"joined,omitempty"`
 	Parents    []Version      `json:"parents,omitempty"`
 	Reason     string         `json:"reason,omitempty"`
 	Namespace  string         `json:"namespace,omitempty"`
@@ -109,6 +114,12 @@ type Node struct {
 
 // Ref returns the exact reference of this node version.
 func (n Node) Ref() NodeRef { return NodeRef{ID: n.ID, Version: n.Version} }
+
+// On reports whether the version is part of a branch: written there, or joined (Joined is filled by Versions).
+func (n Node) On(branch string) bool {
+	branch = BranchOf(branch)
+	return BranchOf(n.Branch) == branch || slices.Contains(n.Joined, branch)
+}
 
 // LinkID identifies a link.
 type LinkID string

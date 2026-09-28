@@ -123,7 +123,7 @@ func (t *pgTx) Node(ctx context.Context, ref domain.NodeRef) (domain.Node, error
 }
 
 func (t *pgTx) LatestOn(ctx context.Context, id domain.NodeID, branch string) (domain.Node, error) {
-	q := `SELECT ` + nodeCols + ` FROM node n JOIN node_version v ON v.node_id = n.id WHERE n.id = $1 AND v.branch = $2 ORDER BY v.version DESC LIMIT 1`
+	q := `SELECT ` + nodeCols + ` FROM node n JOIN node_version v ON v.node_id = n.id WHERE n.id = $1 AND ` + pgOnBranch + ` ORDER BY v.version DESC LIMIT 1`
 	n, err := scanNode(t.tx.QueryRow(ctx, q, string(id), domain.BranchOf(branch)))
 	return n, mapErr(err, "node "+string(id)+" on "+domain.BranchOf(branch))
 }
@@ -137,8 +137,29 @@ func (t *pgTx) Versions(ctx context.Context, id domain.NodeID) ([]domain.Node, e
 	if err == nil && len(out) == 0 {
 		err = fmt.Errorf("node %s: %w", id, ErrNotFound)
 	}
-	return out, err
+	if err != nil {
+		return out, err
+	}
+	rows, err = t.tx.Query(ctx, `SELECT version, branch FROM node_branch WHERE node_id = $1 ORDER BY branch`, string(id))
+	if err != nil {
+		return out, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var v int
+		var b string
+		if err := rows.Scan(&v, &b); err != nil {
+			return out, err
+		}
+		if v >= 1 && v <= len(out) {
+			out[v-1].Joined = append(out[v-1].Joined, b)
+		}
+	}
+	return out, rows.Err()
 }
+
+// pgOnBranch selects the versions v that are part of branch $2: written there, or joined (ADR 0032).
+const pgOnBranch = `(v.branch = $2 OR EXISTS (SELECT 1 FROM node_branch j WHERE j.node_id = v.node_id AND j.version = v.version AND j.branch = $2))`
 
 func (t *pgTx) Branch(ctx context.Context, namespace, name string) (domain.Branch, error) {
 	var b domain.Branch
@@ -187,9 +208,9 @@ func (t *pgTx) NodesIn(ctx context.Context, baseline domain.BaselineID, nodeType
 	if _, err := t.Baseline(ctx, baseline); err != nil {
 		return nil, err
 	}
-	q := `SELECT ` + nodeCols + ` FROM baseline_entry e JOIN node n ON n.id = e.node_id
+	q := baselineEntriesSQL("$1") + ` SELECT ` + nodeCols + ` FROM eff e JOIN node n ON n.id = e.node_id
 	      JOIN node_version v ON v.node_id = e.node_id AND v.version = e.version
-	      WHERE e.baseline_id = $1 AND ($2 = '' OR n.type = $2) ORDER BY n.key`
+	      WHERE e.rn = 1 AND NOT e.removed AND ($2 = '' OR n.type = $2) ORDER BY n.key`
 	rows, err := t.tx.Query(ctx, q, string(baseline), nodeType)
 	if err != nil {
 		return nil, mapErr(err, "baseline nodes")
@@ -199,7 +220,7 @@ func (t *pgTx) NodesIn(ctx context.Context, baseline domain.BaselineID, nodeType
 
 func (t *pgTx) LatestNodes(ctx context.Context, namespace, branch string) ([]domain.Node, error) {
 	q := `SELECT DISTINCT ON (n.key) ` + nodeCols + ` FROM node n JOIN node_version v ON v.node_id = n.id
-	      WHERE n.namespace = $1 AND v.branch = $2 ORDER BY n.key, v.version DESC`
+	      WHERE n.namespace = $1 AND ` + pgOnBranch + ` ORDER BY n.key, v.version DESC`
 	rows, err := t.tx.Query(ctx, q, domain.NamespaceOf(namespace), domain.BranchOf(branch))
 	if err != nil {
 		return nil, err
@@ -258,7 +279,7 @@ func (t *pgTx) Baseline(ctx context.Context, id domain.BaselineID) (domain.Basel
 	}
 	b.ParentID, b.ChangeID = domain.BaselineID(str(parent)), domain.ChangeID(str(change))
 	b.Nodes = map[domain.NodeID]domain.Version{}
-	rows, err := t.tx.Query(ctx, `SELECT node_id::text, version FROM baseline_entry WHERE baseline_id = $1`, string(id))
+	rows, err := t.tx.Query(ctx, baselineEntriesSQL("$1")+` SELECT node_id::text, version FROM eff WHERE rn = 1 AND NOT removed`, string(id))
 	if err != nil {
 		return b, err
 	}
@@ -377,17 +398,31 @@ func (t *pgTx) PutLink(ctx context.Context, l domain.Link) error {
 	return mapErr(err, "link")
 }
 
+// PutBaseline stores the baseline as a delta from its parent, or whole at a checkpoint (ADR 0032).
 func (t *pgTx) PutBaseline(ctx context.Context, b domain.Baseline) error {
-	_, err := t.tx.Exec(ctx, `INSERT INTO baseline (id, name, parent_id, change_id, created_at, branch, namespace) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-		string(b.ID), b.Name, nullUUID(string(b.ParentID)), nullUUID(string(b.ChangeID)), b.CreatedAt, domain.BranchOf(b.Branch), domain.NamespaceOf(b.Namespace))
+	var parent *domain.Baseline
+	parentDepth := 0
+	if b.ParentID != "" {
+		if err := t.tx.QueryRow(ctx, `SELECT depth FROM baseline WHERE id = $1`, string(b.ParentID)).Scan(&parentDepth); err != nil {
+			return mapErr(err, "baseline "+string(b.ParentID))
+		}
+		p, err := t.Baseline(ctx, b.ParentID)
+		if err != nil {
+			return err
+		}
+		parent = &p
+	}
+	depth, entries := storedEntries(parent, parentDepth, b.Nodes)
+	_, err := t.tx.Exec(ctx, `INSERT INTO baseline (id, name, parent_id, change_id, created_at, branch, namespace, depth) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+		string(b.ID), b.Name, nullUUID(string(b.ParentID)), nullUUID(string(b.ChangeID)), b.CreatedAt, domain.BranchOf(b.Branch), domain.NamespaceOf(b.Namespace), depth)
 	if err != nil {
 		return mapErr(err, "baseline")
 	}
-	rows := make([][]any, 0, len(b.Nodes))
-	for id, v := range b.Nodes {
-		rows = append(rows, []any{string(b.ID), string(id), int(v)})
+	rows := make([][]any, 0, len(entries))
+	for _, e := range entries {
+		rows = append(rows, []any{string(b.ID), string(e.node), int(e.version), e.removed})
 	}
-	_, err = t.tx.CopyFrom(ctx, pgx.Identifier{"baseline_entry"}, []string{"baseline_id", "node_id", "version"}, pgx.CopyFromRows(rows))
+	_, err = t.tx.CopyFrom(ctx, pgx.Identifier{"baseline_entry"}, []string{"baseline_id", "node_id", "version", "removed"}, pgx.CopyFromRows(rows))
 	return mapErr(err, "baseline entries")
 }
 
@@ -534,7 +569,8 @@ func (t *pgTx) SetNodeOrigin(ctx context.Context, ref domain.NodeRef, change dom
 	return nil
 }
 
-func (t *pgTx) MoveVersion(ctx context.Context, ref domain.NodeRef, to string) error {
-	_, err := t.tx.Exec(ctx, `UPDATE node_version SET branch = $3 WHERE node_id = $1 AND version = $2`, string(ref.ID), int(ref.Version), to)
+func (t *pgTx) JoinBranch(ctx context.Context, ref domain.NodeRef, branch string) error {
+	_, err := t.tx.Exec(ctx, `INSERT INTO node_branch (node_id, version, branch) SELECT node_id, version, $3 FROM node_version
+		WHERE node_id = $1 AND version = $2 AND branch <> $3 ON CONFLICT DO NOTHING`, string(ref.ID), int(ref.Version), domain.BranchOf(branch))
 	return mapErr(err, "node "+ref.String())
 }
