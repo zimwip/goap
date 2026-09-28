@@ -44,6 +44,9 @@ type Process struct {
 	// Org is the organisation holding the change: its owner unit, or the default one (a cache:
 	// the change is the source). Its adapters decide which MCPs the actions can use.
 	Org string `json:"org,omitempty"`
+	// Queued says why the process was last made runnable; the run that picks it up journals it as a schedule
+	// record (ADR 0011) and clears it.
+	Queued *Queued `json:"queued,omitempty"`
 	// Initiator is the principal who started the process; automatic actions
 	// run with its permissions.
 	Initiator authz.Principal `json:"initiator"`
@@ -278,4 +281,14 @@ type RelaunchProposal struct {
 	Reason  string `json:"reason"`
 	// Culprits are the faulty items the step produced.
 	Culprits []domain.ItemID `json:"culprits"`
+}
+
+// Queued is why and by whom a process was made runnable, and what caused it.
+type Queued struct {
+	// Reason: started, sub-agent, trigger, answered, input, approved, rejected, relaunched, sub-agent-ended,
+	// board-ignored, flow-adopted, flow-discarded.
+	Reason string         `json:"reason"`
+	By     string         `json:"by,omitempty"`
+	At     time.Time      `json:"at"`
+	Cause  map[string]any `json:"cause,omitempty"`
 }

@@ -399,8 +399,10 @@ The execution of a change is **captured on the change axis**, alongside the blac
 change CR-42
  ├─ items (blackboard) ── item.execution ──┐
  └─ journal                                ▼
-     process.started · tick (world, plan, replanned?) · action (specialization, effects, items,
+     process.started · schedule (why the run happens: started, input, approved, sub-agent, relaunched…,
+     by whom, queue time) · tick (world, plan, replanned?) · action (specialization, effects, items,
      tokens, LLM / tool calls, traceId/spanId) · approval · process.ended (status, totals)
+     every record carries the flow branch its process runs on
 ```
 
 - A step can be **relaunched**: the blackboard is an append-only log, the relaunch opens a *flow branch*,

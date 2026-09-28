@@ -1,7 +1,8 @@
 <script lang="ts">
   // Audit of a change: every event and action, oldest first, from the execution journal, the impact log and the
-  // blackboard facts (lib/auditTrail.ts). Each entry expands to its full record; the trail can be filtered by
-  // source, flow, action run and text, and exported (CSV, or the raw logs as JSON).
+  // blackboard facts (lib/auditTrail.ts), drawn as a flow of events: flow branches fork from the main flow, run side by
+  // side (alternatives to compare), and are merged back or dropped. Each entry expands to its full record; the trail
+  // can be filtered by source, flow, action run and text, and exported (CSV, or the raw logs as JSON).
   import {
     graph,
     errorMessage,
@@ -15,7 +16,7 @@
     type ExecutionRecord,
     type ImpactEvent,
   } from '../api';
-  import { AUDIT_SOURCES, buildTrail, runLabel, trailCSV, type AuditEntry, type AuditSource } from '../auditTrail';
+  import { AUDIT_SOURCES, buildTrail, flowLanes, runLabel, trailCSV, type AuditEntry, type AuditSource } from '../auditTrail';
   import { loadRaw, save } from '../shell/storage';
 
   let {
@@ -60,10 +61,10 @@
   const trail = $derived(buildTrail(change, events, records));
   const runs = $derived(new Map(records.map((r) => [r.id ?? '', r])));
 
-  // filters: sources (plans hidden by default, remembered), flow, action run, text
-  const KEY = 'goap.ide.audit.sources';
+  // filters: sources (all by default, remembered), flow, action run, text
+  const KEY = 'goap.ide.audit.sources.v2';
   const stored = loadRaw(KEY);
-  let sources = $state<AuditSource[]>(Array.isArray(stored) ? (stored as AuditSource[]) : AUDIT_SOURCES.map((s) => s.id).filter((s) => s !== 'plan'));
+  let sources = $state<AuditSource[]>(Array.isArray(stored) ? (stored as AuditSource[]) : AUDIT_SOURCES.map((s) => s.id));
   $effect(() => save(KEY, sources));
   let flow = $state('*');
   let run = $state('');
@@ -84,6 +85,59 @@
     return newestFirst ? out.reverse() : out;
   });
   const count = (s: AuditSource) => trail.filter((e) => e.source === s).length;
+
+  // ---- the flow of events: one lane per flow branch -------------------------------------------------------
+  const LANE = 16;
+  const PAD = 10;
+  const DOT = 13; // y of the dot, from the top of the row
+  const BEND = 10;
+  const HUES = [28, 145, 340, 265, 175, 300, 100, 0, 200, 60];
+  const lanes = $derived(flowLanes(shown));
+  const laneWidth = $derived(PAD * 2 + (lanes.count - 1) * LANE);
+  const flowOrder = $derived([...new Set(trail.flatMap((e) => [e.flow, e.fork ?? '', e.merge ?? '']).filter(Boolean))]);
+  const colorOf = (f: string) => (f ? `hsl(${HUES[Math.max(0, flowOrder.indexOf(f)) % HUES.length]} 62% 50%)` : 'var(--accent)');
+  const xOf = (f: string) => PAD + (lanes.lane.get(f) ?? 0) * LANE;
+  /** the flows of the change and how they ended */
+  const flowStates = $derived.by(() => {
+    const m = new Map<string, string>();
+    for (const e of trail) {
+      if (e.fork) m.set(e.fork, 'open');
+      if (e.merge) m.set(e.merge, 'adopted');
+      if (e.end) m.set(e.flow, 'discarded');
+    }
+    return m;
+  });
+
+  interface Segment {
+    flow: string;
+    top: number | null; // null: from the top of the row
+    bottom: number | null; // null: to the bottom of the row
+  }
+  /** the lines crossing row i, the curves joining a forked / merged flow to its parent, and the dot */
+  function rowGraph(e: AuditEntry, i: number) {
+    const segs: Segment[] = [];
+    const joined = e.fork ?? e.merge ?? '';
+    for (const [f, [a, b]] of lanes.span) {
+      if (i < a || i > b || a === b) continue;
+      let top: number | null = i > a ? null : DOT;
+      let bottom: number | null = i < b ? null : DOT;
+      if (f === joined) {
+        // the curve reaches the lane BEND px towards the rest of the flow
+        if (i === a) top = DOT + BEND;
+        if (i === b) bottom = DOT - BEND;
+      }
+      segs.push({ flow: f, top, bottom });
+    }
+    let curve = '';
+    if (joined) {
+      const [a] = lanes.span.get(joined) ?? [i, i];
+      const dir = i === a ? 1 : -1;
+      const x1 = xOf(e.flow);
+      const x2 = xOf(joined);
+      curve = `M${x1},${DOT} Q${x2},${DOT} ${x2},${DOT + dir * BEND}`;
+    }
+    return { segs, curve, joined, x: xOf(e.flow) };
+  }
 
   const totals = $derived.by(() => {
     const actions = records.filter((r) => r.kind === 'action');
@@ -149,6 +203,16 @@
     <input type="search" placeholder="Filter…" aria-label="Filter the audit trail" bind:value={filter} data-no-pin />
     <button type="button" class="small" onclick={() => (newestFirst = !newestFirst)}>{newestFirst ? 'Newest first' : 'Oldest first'}</button>
   </div>
+  {#if flowStates.size}
+    <div class="legend" aria-label="Flows">
+      <span class="flowchip" style={`--c:${colorOf('')}`}>main</span>
+      {#each [...flowStates] as [f, st] (f)}
+        <button type="button" class="flowchip" class:sel={flow === f} style={`--c:${colorOf(f)}`} title="Show this flow only" onclick={() => (flow = flow === f ? '*' : f)}>
+          flow {shortId(f)} <span class="st">{st}</span>
+        </button>
+      {/each}
+    </div>
+  {/if}
   {#if run}
     <p class="runbar">
       Everything done by <strong>{runLabel(runs.get(run)) || shortId(run)}</strong>
@@ -162,11 +226,33 @@
   {#if shown.length}
     <div class="scroll">
       <table>
-        <thead><tr><th>When</th><th>Source</th><th>What</th><th>Subject</th><th>Details</th><th>Flow</th><th>By</th><th>Action run</th></tr></thead>
+        <thead><tr><th class="lanes" style={`width:${laneWidth}px`}><span class="sr">Flow</span></th><th>When</th><th>Source</th><th>What</th><th>Subject</th><th>Details</th><th>Flow</th><th>By</th><th>Action run</th></tr></thead>
         <tbody>
-          {#each shown as e (e.key)}
+          {#each shown as e, i (e.key)}
             {@const isOpen = open.includes(e.key)}
+            {@const gr = rowGraph(e, i)}
             <tr class="entry {e.tone}" class:open={isOpen} onclick={() => toggle(e.key)}>
+              <td class="lanes" style={`width:${laneWidth}px`} aria-hidden="true">
+                {#each gr.segs as s (s.flow)}
+                  <span
+                    class="line"
+                    style={`left:${xOf(s.flow) - 1}px;top:${s.top ?? 0}px;${s.bottom === null ? 'bottom:0' : `height:${Math.max(0, s.bottom - (s.top ?? 0))}px`};background:${colorOf(s.flow)}`}
+                  ></span>
+                {/each}
+                {#if gr.curve}
+                  <svg width={laneWidth} height={DOT + BEND + 2} class="curve"><path d={gr.curve} style={`stroke:${colorOf(gr.joined)}`} /></svg>
+                {/if}
+                {#if e.end}
+                  <span class="cross" style={`left:${gr.x - 6}px;top:${DOT - 8}px;color:${colorOf(e.flow)}`}>✕</span>
+                {:else}
+                  <span
+                    class="dot"
+                    class:merge={!!e.merge}
+                    class:fork={!!e.fork}
+                    style={`left:${gr.x - 5}px;top:${DOT - 5}px;border-color:${colorOf(e.flow)};background:${e.source === 'flow' || e.source === 'action' || e.source === 'approval' ? colorOf(e.flow) : 'var(--surface)'}`}
+                  ></span>
+                {/if}
+              </td>
               <td class="nowrap" title={e.at}>{formatDate(e.at)}</td>
               <td><span class="src {e.source}">{e.source}</span></td>
               <td class="nowrap">{e.label}</td>
@@ -184,6 +270,11 @@
             </tr>
             {#if isOpen}
               <tr class="detail">
+                <td class="lanes" style={`width:${laneWidth}px`} aria-hidden="true">
+                  {#each gr.segs as s (s.flow)}
+                    {#if s.bottom === null}<span class="line" style={`left:${xOf(s.flow) - 1}px;top:0;bottom:0;background:${colorOf(s.flow)}`}></span>{/if}
+                  {/each}
+                </td>
                 <td colspan="8">{@render details(e)}</td>
               </tr>
             {/if}
@@ -269,6 +360,78 @@
 {/snippet}
 
 <style>
+  td.lanes,
+  th.lanes {
+    position: relative;
+    padding: 0;
+    min-width: 0;
+  }
+  td.lanes .line {
+    position: absolute;
+    width: 2px;
+  }
+  td.lanes .dot {
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    border: 2px solid;
+    box-sizing: border-box;
+  }
+  td.lanes .dot.merge,
+  td.lanes .dot.fork {
+    outline: 2px solid var(--surface);
+    width: 12px;
+    height: 12px;
+    margin: -1px 0 0 -1px;
+  }
+  td.lanes .cross {
+    position: absolute;
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1;
+  }
+  td.lanes .curve {
+    position: absolute;
+    left: 0;
+    top: 0;
+    overflow: visible;
+  }
+  td.lanes .curve path {
+    fill: none;
+    stroke-width: 2;
+  }
+  .sr {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+  }
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin-bottom: 0.5rem;
+  }
+  .flowchip {
+    border: 1px solid var(--c);
+    color: var(--c);
+    background: none;
+    border-radius: 999px;
+    padding: 0 0.55rem;
+    font-size: 0.8rem;
+    font-family: var(--mono);
+    cursor: pointer;
+  }
+  .flowchip.sel {
+    background: var(--c);
+    color: var(--surface);
+  }
+  .flowchip .st {
+    font-family: inherit;
+    opacity: 0.8;
+  }
   .stats,
   .filters {
     display: flex;
@@ -318,13 +481,13 @@
   tr.entry.open td {
     background: var(--hover);
   }
-  tr.entry.error td:first-child {
+  tr.entry.error td:nth-child(2) {
     box-shadow: inset 3px 0 var(--danger);
   }
-  tr.entry.warn td:first-child {
+  tr.entry.warn td:nth-child(2) {
     box-shadow: inset 3px 0 var(--warn);
   }
-  tr.entry.ok td:first-child {
+  tr.entry.ok td:nth-child(2) {
     box-shadow: inset 3px 0 var(--ok);
   }
   tr.detail td {

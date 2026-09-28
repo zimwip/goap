@@ -14,11 +14,15 @@ OpenTelemetry remains the source of truth for durations and technical pain point
 
 ### 1. Execution journal (change axis)
 - Each change carries an `ExecutionRecord` **journal** (`pkg/domain/execution.go`), written by the engine:
-  `process.started`, `tick` (world state, plan, chosen action, `replanned`, unknown conditions),
+  `process.started`, `schedule` (a run picks up a process made runnable: why — started, sub-agent, trigger,
+  answered, input, approved / rejected, relaunched, sub-agent-ended, board-ignored, flow-adopted / flow-discarded —,
+  by whom, what caused it, from queuing to pick-up), `tick` (world state, plan, chosen action, `replanned`, unknown
+  conditions),
   `action` (action, specialization executed, type, effects held, items produced, tokens, model and
   tool calls, output, error, waiting on human / sub-agent), `approval` (decider, decision), `process.ended`
   (status, totals, disabled actions).
-- Each record carries `methodology@version`, agent, planner, goal, `traceId` / `spanId`
+- Each record carries the flow branch its process runs on (`flow`, empty for the main flow), `methodology@version`,
+  agent, planner, goal, `traceId` / `spanId`
   (link to the OpenTelemetry span). Blackboard items carry `execution`: the record that
   produced them (provenance down to the LLM calls).
 - Stored by the graph service (memory, PostgreSQL, SQLite), write order; RPC `RecordExecutions` /

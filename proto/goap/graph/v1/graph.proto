@@ -660,6 +660,8 @@ message ExecutionRecord {
   int32 board_after = 37;
   // last item of the flow before the step: where a relaunch of the step forks
   string board_last = 38;
+  // flow branch the process runs on ("" = the main flow)
+  string flow = 39;
 }
 
 message RecordExecutionsRequest {
