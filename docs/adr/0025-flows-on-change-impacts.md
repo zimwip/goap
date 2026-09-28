@@ -1,6 +1,6 @@
 # ADR 0025 — Flow branches on change impacts
 
-**Status**: accepted, implemented (the item forms of flows are gone with the item kinds) · **Date**: 2026-09 · Extends ADR 0017 (flow branches) and ADR 0024 (change impacts). Replaces
+**Status**: accepted, implemented (the item forms of flows are gone with the item kinds; the post resolution by branch of §1/§3 and the row rewrites of §5.3 are replaced by the event log of [ADR 0029](0029-event-sourced-change-impacts.md)) · **Date**: 2026-09 · Extends ADR 0017 (flow branches) and ADR 0024 (change impacts). Replaces
 `MaterializeFlow` and the flows of items.
 
 ## Context

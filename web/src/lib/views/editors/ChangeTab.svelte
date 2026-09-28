@@ -18,6 +18,7 @@
   import { untrack } from 'svelte';
   import type { Tab } from '../../shell/types';
   import Icon from '../../shell/Icon.svelte';
+  import ChangeAudit from '../../components/ChangeAudit.svelte';
   import { makeContext } from '../../items';
   import StatusBadge from '../../components/StatusBadge.svelte';
   import ChangeLifecycle from '../../components/ChangeLifecycle.svelte';
@@ -173,6 +174,7 @@
     { id: 'impacts', label: 'Impacts', badge: change?.nodes?.length || undefined },
     { id: 'items', label: 'Items', badge: items.length || undefined },
     { id: 'changes', label: 'Changes', badge: subs.length + ancestors.length || undefined },
+    { id: 'audit', label: 'Audit' },
   ]);
 
   /** Writes a node in this change through its change impact (the server checks the state). */
@@ -528,6 +530,10 @@
           <pre>{JSON.stringify(others, null, 2)}</pre>
         </section>
       {/if}
+      {:else if active === 'audit'}
+      <section class="card">
+        <ChangeAudit change={ch} onjournal={(record) => openJournal(record)} onrun={(pid) => openTab({ kind: 'run', params: { id: pid } })} />
+      </section>
       {:else if active === 'changes'}
       <section class="card">
         <h3>Parent changes <span class="count">{ancestors.length}</span></h3>

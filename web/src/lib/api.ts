@@ -456,6 +456,8 @@ export interface MethodologySummary {
   agents?: AgentSummary[];
   updatedAt?: string;
   publishedAt?: string;
+  /** namespace (domain) the changes of the methodology act on */
+  namespace?: string;
 }
 
 /** Validation issue; `path` locates the field, e.g. "conditions[2].expr". */
@@ -514,6 +516,75 @@ export interface Link {
   to?: NodeRef;
   props?: Struct;
   changeId?: string;
+}
+
+/** An entry of the log of a change (ADR 0030): a fact, a journal record or an impact event. */
+export interface LogEntry {
+  /** position in the log (int64: a string in JSON) */
+  seq?: Int64;
+  id?: string;
+  changeId?: string;
+  /** <stream>.<kind>: fact.artifact, journal.schedule, impact.written… */
+  type?: string;
+  /** flow branch ('' = the main flow) */
+  flow?: string;
+  processId?: string;
+  execution?: string;
+  subject?: string;
+  by?: string;
+  at?: string;
+  /** the whole fact, journal record or impact event, as JSON */
+  payload?: string;
+}
+
+export interface ChangeLogQuery {
+  changeId: string;
+  /** exact types or streams ('journal.') */
+  types?: string[];
+  /** flow branches; 'main' is the main flow */
+  flows?: string[];
+  processIds?: string[];
+  execution?: string;
+  afterSeq?: number;
+  limit?: number;
+}
+
+/** An operation on the change impacts of a change (ADR 0029). */
+export interface ImpactEvent {
+  id?: string;
+  changeId?: string;
+  seq?: number;
+  /** empty for a change-level event (adopted) */
+  impactId?: string;
+  op?: 'declared' | 'written' | 'reviewed' | 'discarded' | 'adopted' | 'landed' | 'rebased' | string;
+  /** the caller: flow branch ('' = main flow), journal record of the action run, principal or component */
+  flow?: string;
+  execution?: string;
+  by?: string;
+  at?: string;
+  state?: ChangeImpact;
+  post?: NodeRef;
+  pre?: NodeRef;
+  landed?: NodeRef;
+  review?: NodeReview;
+  stale?: string[];
+}
+
+export interface BaselineNodesQuery {
+  baselineId: string;
+  /** qualified node type; empty: every type */
+  type?: string;
+  /** matched against the key, the type and the string properties */
+  query?: string;
+  offset?: number;
+  /** page size (max 500) */
+  limit?: number;
+  includeDeleted?: boolean;
+}
+
+export interface TypeCount {
+  type?: string;
+  count?: number;
 }
 
 export interface Baseline {
@@ -703,6 +774,8 @@ export interface ExecutionRecord {
   startedAt?: string;
   endedAt?: string;
   durationMs?: Int64;
+  /** flow branch the process runs on ('' = the main flow) */
+  flow?: string;
 }
 
 // --- engine -----------------------------------------------------------------
@@ -1106,6 +1179,30 @@ export const graph = {
       { id },
       signal,
     ),
+  /** A page of the nodes of a baseline (by type, text-filtered), with the node count of every type. */
+  listBaselineNodes: (req: BaselineNodesQuery, signal?: AbortSignal) =>
+    rpc<BaselineNodesQuery, { baseline?: Baseline; nodes?: GraphNode[]; total?: number; types?: TypeCount[] }>(
+      GRAPH,
+      'ListBaselineNodes',
+      req,
+      signal,
+    ),
+  /** A node of a baseline with its direct neighbours (both directions). */
+  getNodeNeighbourhood: (baselineId: string, nodeId: string, signal?: AbortSignal) =>
+    rpc<{ baselineId: string; nodeId: string }, { node?: GraphNode; nodes?: GraphNode[]; links?: Link[]; suspectLinkIds?: string[] }>(
+      GRAPH,
+      'GetNodeNeighbourhood',
+      { baselineId, nodeId },
+      signal,
+    ),
+  /** The impact log of a change (ADR 0029): every operation on its change impacts, with its caller. */
+  listChangeEvents: (changeId: string, signal?: AbortSignal) =>
+    rpc<{ changeId: string }, { events?: ImpactEvent[] }>(GRAPH, 'ListChangeEvents', { changeId }, signal),
+  /** The log of a change (ADR 0030), filtered on its columns; counts: entries per type without the types filter. */
+  listChangeLog: (req: ChangeLogQuery, signal?: AbortSignal) =>
+    rpc<ChangeLogQuery, { entries?: LogEntry[]; counts?: Record<string, number> }>(GRAPH, 'ListChangeLog', req, signal),
+  /** The namespaces holding at least one node. */
+  listNamespaces: (signal?: AbortSignal) => rpc<Empty, { namespaces?: string[] }>(GRAPH, 'ListNamespaces', {}, signal),
   listChanges: (signal?: AbortSignal) =>
     rpc<Empty, { changes?: Change[] }>(GRAPH, 'ListChanges', {}, signal),
   getChange: (id: string, signal?: AbortSignal) =>

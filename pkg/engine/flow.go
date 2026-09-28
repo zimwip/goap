@@ -84,6 +84,7 @@ func (e *Engine) relaunchLocked(ctx context.Context, id string, step int, reason
 		Trigger: old.Trigger, Initiator: who, Vars: maps.Clone(old.Vars), Disabled: map[string]bool{}, Status: StatusRunning,
 		Flow: flow.ID, RelaunchOf: old.ID, FromStep: step, CreatedAt: e.clock(), UpdatedAt: e.clock()}
 	p.Intent = old.Intent
+	e.queue(authz.With(ctx, who), p, "relaunched", map[string]any{"process": old.ID, "fromStep": step, "flow": flow.ID, "why": reason})
 	if err := e.Store.Put(ctx, p); err != nil {
 		return nil, err
 	}

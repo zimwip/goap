@@ -20,6 +20,15 @@ service GraphService {
   rpc CreateBaseline(CreateBaselineRequest) returns (CreateBaselineResponse);
   rpc ListBaselines(ListBaselinesRequest) returns (ListBaselinesResponse);
   rpc GetBaselineGraph(GetBaselineGraphRequest) returns (GetBaselineGraphResponse);
+  // Browsing a large baseline: a page of its nodes (by type, filtered) and the neighbourhood of one node.
+  rpc ListBaselineNodes(ListBaselineNodesRequest) returns (ListBaselineNodesResponse);
+  rpc GetNodeNeighbourhood(GetNodeNeighbourhoodRequest) returns (GetNodeNeighbourhoodResponse);
+  // The namespaces holding at least one node.
+  rpc ListNamespaces(ListNamespacesRequest) returns (ListNamespacesResponse);
+  // The impact log of a change (ADR 0029): every operation on its change impacts, with its caller.
+  rpc ListChangeEvents(ListChangeEventsRequest) returns (ListChangeEventsResponse);
+  // The log of a change (ADR 0030): its facts, journal records and impact events in one order, filtered on columns.
+  rpc ListChangeLog(ListChangeLogRequest) returns (ListChangeLogResponse);
 
   // Change axis
   rpc CreateChange(CreateChangeRequest) returns (CreateChangeResponse);
@@ -322,6 +331,127 @@ message GetBaselineGraphResponse {
   repeated Link suspect_links = 4;
 }
 
+message ListBaselineNodesRequest {
+  string baseline_id = 1;
+  // qualified node type ("alm@Requirement"); empty: every type
+  string type = 2;
+  // case-insensitive text matched against the key, the type and the string properties
+  string query = 3;
+  int32 offset = 4;
+  // page size (default and max 500)
+  int32 limit = 5;
+  bool include_deleted = 6;
+}
+
+message TypeCount {
+  string type = 1;
+  int32 count = 2;
+}
+
+message ListBaselineNodesResponse {
+  repeated Node nodes = 1;
+  // number of nodes matching the query, all pages
+  int32 total = 2;
+  // nodes per type matching the text query (the type filter aside)
+  repeated TypeCount types = 3;
+  Baseline baseline = 4;
+}
+
+message GetNodeNeighbourhoodRequest {
+  string baseline_id = 1;
+  string node_id = 2;
+}
+
+message GetNodeNeighbourhoodResponse {
+  Node node = 1;
+  // targets of its outgoing links and sources (in the baseline) of its incoming links
+  repeated Node nodes = 2;
+  repeated Link links = 3;
+  // ids of the links whose target changed since they were created
+  repeated string suspect_link_ids = 4;
+}
+
+// An operation on the change impacts of a change (ADR 0029).
+message ImpactEvent {
+  string id = 1;
+  string change_id = 2;
+  int32 seq = 3;
+  // empty for a change-level event (adopted)
+  string impact_id = 4;
+  // declared | written | reviewed | discarded | adopted | landed | rebased
+  string op = 5;
+  // the caller: the flow branch ("" = the main flow), the journal record of the action run, the principal or component
+  string flow = 6;
+  string execution = 7;
+  string by = 8;
+  google.protobuf.Timestamp at = 9;
+  // declared
+  ChangeImpact state = 10;
+  // written
+  NodeRef post = 11;
+  // rebased
+  NodeRef pre = 12;
+  NodeRef landed = 13;
+  // reviewed, discarded
+  Review review = 14;
+  // adopted: the action runs the flow replaces
+  repeated string stale = 15;
+}
+
+// An entry of the log of a change (ADR 0030).
+message LogEntry {
+  // position in the log (one order for the entries of a change)
+  int64 seq = 1;
+  string id = 2;
+  string change_id = 3;
+  // <stream>.<kind>: fact.artifact, journal.schedule, impact.written...
+  string type = 4;
+  // flow branch ("" = the main flow)
+  string flow = 5;
+  string process_id = 6;
+  // the action run behind the entry (a journal record is its own)
+  string execution = 7;
+  // what it is about: the action, the fact type, the change impact
+  string subject = 8;
+  string by = 9;
+  google.protobuf.Timestamp at = 10;
+  // the whole fact, journal record or impact event, as JSON
+  string payload = 11;
+}
+
+message ListChangeLogRequest {
+  string change_id = 1;
+  // exact types ("journal.action") or streams ("journal.")
+  repeated string types = 2;
+  // flow branches; "main" is the main flow
+  repeated string flows = 3;
+  repeated string process_ids = 4;
+  string execution = 5;
+  // entries after this position (to follow the log)
+  int64 after_seq = 6;
+  int32 limit = 7;
+}
+
+message ListChangeLogResponse {
+  repeated LogEntry entries = 1;
+  // entries of each type matching the request without its types
+  map<string, int32> counts = 2;
+}
+
+message ListChangeEventsRequest {
+  string change_id = 1;
+}
+
+message ListChangeEventsResponse {
+  repeated ImpactEvent events = 1;
+}
+
+message ListNamespacesRequest {}
+
+message ListNamespacesResponse {
+  repeated string namespaces = 1;
+}
+
 message CreateChangeRequest {
   string title = 1;
   string intent = 2;
@@ -572,6 +702,8 @@ message ExecutionRecord {
   int32 board_after = 37;
   // last item of the flow before the step: where a relaunch of the step forks
   string board_last = 38;
+  // flow branch the process runs on ("" = the main flow)
+  string flow = 39;
 }
 
 message RecordExecutionsRequest {

@@ -1,156 +1,210 @@
 <script lang="ts">
-  // Baseline explorer: baselines → nodes (by type).
+  // Baseline explorer: namespace → baselines → node types → nodes, paged and filtered on the server so that a large
+  // graph is never loaded whole. Selecting a node opens the baseline tab on it (neighbour graph).
   import Icon from '../../shell/Icon.svelte';
   import TreeRow from '../TreeRow.svelte';
-  import { toggle, isOpen, expanded } from './expanded.svelte';
-  import { baselines, refreshBaselines } from '../../stores/catalog.svelte';
+  import { toggle, isOpen } from './expanded.svelte';
   import { openTab, tabsState } from '../../shell/tabs.svelte';
-  import { select } from '../../shell/workbench.svelte';
-  import { graph, errorMessage, formatDate, nodeTitle, shortId, type Baseline, type GraphNode } from '../../api';
+  import { loadRaw, save } from '../../shell/storage';
+  import { openNode } from '../../nodeEditors';
+  import { graph, errorMessage, formatDate, nodeTitle, shortId, type Baseline, type GraphNode, type TypeCount } from '../../api';
   import { SvelteMap } from 'svelte/reactivity';
+  import { untrack } from 'svelte';
   import { splitType } from '../../stores/types.svelte';
-  import { DEFAULT_NAMESPACE } from '../../namespace';
 
   // Methodologies are nodes typed by the meta-domain methodology (ADR 0023), authored in their own editors and
-  // explorer: hidden here to avoid duplicating them.
+  // explorer: not offered here by default.
   const META_NAMESPACES = new Set(['methodology']);
+  const PAGE = 50;
+  const NS_KEY = 'goap.ide.baselines.namespace';
+
+  let namespaces = $state<string[]>([]);
+  let namespace = $state(typeof loadRaw(NS_KEY) === 'string' ? (loadRaw(NS_KEY) as string) : '');
+  let baselines = $state<Baseline[]>([]);
+  let loading = $state(false);
+  let error = $state('');
+  let reload = $state(0);
 
   let filter = $state('');
-  // baselines are namespace-scoped now: browse one namespace at a time.
-  let namespace = $state(DEFAULT_NAMESPACE);
-  const graphs = new SvelteMap<string, { nodes: GraphNode[]; error: string; loading: boolean }>();
+  let query = $state('');
+  let debounce: ReturnType<typeof setTimeout> | undefined;
+  function onFilter(v: string) {
+    filter = v;
+    clearTimeout(debounce);
+    debounce = setTimeout(() => {
+      if (filter.trim() === query) return;
+      types.clear();
+      pages.clear();
+      query = filter.trim();
+    }, 250);
+  }
+
+  interface Load<T> {
+    items: T;
+    error: string;
+    loading: boolean;
+  }
+  // type counts per baseline, node pages per baseline + type (for the current query)
+  const types = new SvelteMap<string, Load<TypeCount[]>>();
+  const pages = new SvelteMap<string, Load<GraphNode[]> & { total: number }>();
 
   $effect(() => {
-    graphs.clear();
-    void refreshBaselines(namespace);
+    void reload;
+    graph
+      .listNamespaces()
+      .then((r) => {
+        namespaces = r.namespaces ?? [];
+        if (!namespace || !namespaces.includes(namespace)) namespace = namespaces.find((n) => !META_NAMESPACES.has(n)) ?? namespaces[0] ?? '';
+      })
+      .catch((e) => (error = errorMessage(e)));
   });
 
-  async function loadGraph(id: string) {
-    if (graphs.get(id)?.nodes.length || graphs.get(id)?.loading) return;
-    graphs.set(id, { nodes: [], error: '', loading: true });
+  $effect(() => {
+    void reload;
+    const ns = namespace;
+    if (!ns) return;
+    save(NS_KEY, ns);
+    const ctrl = new AbortController();
+    loading = true;
+    error = '';
+    graph
+      .listBaselines(ns, ctrl.signal)
+      .then((r) => (baselines = [...(r.baselines ?? [])].reverse()))
+      .catch((e) => {
+        if (!ctrl.signal.aborted) error = errorMessage(e);
+      })
+      .finally(() => {
+        if (!ctrl.signal.aborted) loading = false;
+      });
+    return () => ctrl.abort();
+  });
+
+  async function loadTypes(id: string) {
+    const k = `${id}|${query}`;
+    if (types.has(k)) return;
+    types.set(k, { items: [], error: '', loading: true });
     try {
-      const r = await graph.getBaselineGraph(id);
-      graphs.set(id, { nodes: r.nodes ?? [], error: '', loading: false });
+      const r = await graph.listBaselineNodes({ baselineId: id, query, limit: 1 });
+      types.set(k, { items: r.types ?? [], error: '', loading: false });
     } catch (e) {
-      graphs.set(id, { nodes: [], error: errorMessage(e), loading: false });
+      types.set(k, { items: [], error: errorMessage(e), loading: false });
     }
   }
 
+  async function loadPage(id: string, type: string, more = false) {
+    const k = `${id}|${type}|${query}`;
+    const cur = pages.get(k);
+    if (cur?.loading || (cur && !more)) return;
+    const have = cur?.items ?? [];
+    pages.set(k, { items: have, total: cur?.total ?? 0, error: '', loading: true });
+    try {
+      const r = await graph.listBaselineNodes({ baselineId: id, type, query, offset: have.length, limit: PAGE });
+      pages.set(k, { items: [...have, ...(r.nodes ?? [])], total: r.total ?? 0, error: '', loading: false });
+    } catch (e) {
+      pages.set(k, { items: have, total: cur?.total ?? 0, error: errorMessage(e), loading: false });
+    }
+  }
+
+  const q = $derived(!!query);
+  const bKey = (b: Baseline) => `b:${b.id}`;
+  const tKey = (b: Baseline, t: string) => `bt:${b.id}/${t}`;
+
+  // Load what the expanded rows show.
   $effect(() => {
-    for (const b of baselines.items) if (b.id && expanded[`b:${b.id}`]) void loadGraph(b.id);
+    for (const b of baselines) {
+      if (!b.id || !isOpen(bKey(b))) continue;
+      const id = b.id;
+      untrack(() => void loadTypes(id));
+      for (const t of types.get(`${id}|${query}`)?.items ?? []) {
+        const type = t.type ?? '';
+        if (type && isOpen(tKey(b, type), q)) untrack(() => void loadPage(id, type));
+      }
+    }
   });
 
-  const sorted = $derived([...baselines.items].reverse());
-  const q = $derived(filter.trim().toLowerCase());
-
-  function byType(nodes: GraphNode[]): [string, GraphNode[]][] {
-    const m = new Map<string, GraphNode[]>();
-    for (const n of nodes) {
-      if (META_NAMESPACES.has(splitType(n.type).namespace)) continue;
-      if (q && !`${n.key} ${n.type} ${nodeTitle(n)}`.toLowerCase().includes(q)) continue;
-      const t = n.type ?? '?';
-      m.set(t, [...(m.get(t) ?? []), n]);
-    }
-    return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0]));
-  }
-
-  function openBaseline(b: Baseline, pin = false) {
-    openTab({ kind: 'baseline', params: { id: b.id ?? '' } }, { pin });
-    select({
-      title: b.name || shortId(b.id),
-      subtitle: 'Baseline',
-      rows: [
-        ['Id', b.id ?? ''],
-        ['Parent', b.parentId ?? ''],
-        ['Change', b.changeId ?? ''],
-        ['Nodes', String(Object.keys(b.nodes ?? {}).length)],
-        ['Created', formatDate(b.createdAt)],
-      ],
-    });
-  }
-
-  function openNode(b: Baseline, n: GraphNode, pin = false) {
-    openTab({ kind: 'baseline', params: { id: b.id ?? '' } }, { pin });
-    select({
-      title: n.key ?? '',
-      subtitle: `Node ${n.type ?? ''} v${n.version ?? 0}`,
-      rows: [
-        ['Id', n.id ?? ''],
-        ['Type', n.type ?? ''],
-        ['Version', String(n.version ?? 0)],
-        ...Object.entries(n.props ?? {}).map(([k, v]): [string, string] => [k, typeof v === 'string' ? v : JSON.stringify(v)]),
-        ['Change', n.changeId ?? ''],
-        ['Created', formatDate(n.createdAt)],
-      ],
-    });
+  function openBaseline(b: Baseline, pin = false, params: Record<string, string> = {}) {
+    openTab({ kind: 'baseline', params: { id: b.id ?? '', name: b.name ?? '', type: '', node: '', ...params } }, { pin });
   }
 </script>
 
 <div class="explorer">
   <div class="tools">
-    <input type="search" placeholder="Filter nodes…" aria-label="Filter nodes" bind:value={filter} data-no-pin />
-    <button
-      type="button"
-      class="ghost small"
-      title="Refresh"
-      aria-label="Refresh"
-      disabled={baselines.loading}
-      onclick={() => {
-        graphs.clear();
-        void refreshBaselines(namespace);
-      }}><Icon name="refresh" size={14} /></button
+    <select aria-label="Namespace" title="Namespace" bind:value={namespace} data-no-pin>
+      {#if namespace && !namespaces.includes(namespace)}<option value={namespace}>{namespace}</option>{/if}
+      {#each namespaces as ns (ns)}<option value={ns}>{ns}</option>{/each}
+    </select>
+    <button type="button" class="ghost small" title="Refresh" aria-label="Refresh" disabled={loading} onclick={() => {
+        types.clear();
+        pages.clear();
+        reload++;
+      }}
+      ><Icon name="refresh" size={14} /></button
     >
   </div>
   <div class="tools">
-    <input
-      type="text"
-      placeholder="Namespace…"
-      aria-label="Namespace"
-      value={namespace}
-      onchange={(e) => (namespace = e.currentTarget.value.trim() || DEFAULT_NAMESPACE)}
-      data-no-pin
-    />
+    <input type="search" placeholder="Filter nodes…" aria-label="Filter nodes" value={filter} oninput={(e) => onFilter(e.currentTarget.value)} data-no-pin />
   </div>
-  {#if baselines.error}<div class="alert small">{baselines.error}</div>{/if}
-  {#if baselines.loaded && !baselines.items.length && !baselines.error}<p class="empty pad">No baselines.</p>{/if}
+  {#if error}<div class="alert small">{error}</div>{/if}
+  {#if !loading && !error && namespace && !baselines.length}<p class="empty pad">No baselines in {namespace}.</p>{/if}
+  {#if !namespace && !error}<p class="empty pad">The graph holds no nodes yet.</p>{/if}
   <div role="tree" aria-label="Baselines">
-    {#each sorted as b (b.id)}
-      {@const k = `b:${b.id}`}
-      {@const g = graphs.get(b.id ?? '')}
+    {#each baselines as b (b.id)}
+      {@const tl = types.get(`${b.id}|${query}`)}
       <TreeRow
         icon="database"
         label={b.name || shortId(b.id)}
         detail={formatDate(b.createdAt)}
-        expanded={isOpen(k)}
+        expanded={isOpen(bKey(b))}
         active={tabsState.active === `baseline:${b.id}`}
         onselect={() => openBaseline(b)}
         onopen={() => openBaseline(b, true)}
-        ontoggle={() => toggle(k)}
+        ontoggle={() => toggle(bKey(b))}
       />
-      {#if isOpen(k)}
-        {#if !g || g.loading}
+      {#if isOpen(bKey(b))}
+        {#if !tl || tl.loading}
           <p class="empty pad2">Loading…</p>
-        {:else if g.error}
-          <p class="alert small">{g.error}</p>
+        {:else if tl.error}
+          <p class="alert small">{tl.error}</p>
         {:else}
-          {#each byType(g.nodes) as [type, nodes] (type)}
-            {@const tk = `bt:${b.id}/${type}`}
-            <TreeRow depth={1} icon="folder" label={type} detail={String(nodes.length)} expanded={isOpen(tk, !!q)} ontoggle={() => toggle(tk, !!q)} />
-            {#if isOpen(tk, !!q)}
-              {#each nodes as n (n.id)}
+          {#each tl.items as t (t.type)}
+            {@const type = t.type ?? ''}
+            {@const pg = pages.get(`${b.id}|${type}|${query}`)}
+            {@const st = splitType(type)}
+            <TreeRow
+              depth={1}
+              icon="folder"
+              label={st.name || type}
+              title={type}
+              detail={String(t.count ?? 0)}
+              expanded={isOpen(tKey(b, type), q)}
+              onselect={() => openBaseline(b, false, { type })}
+              onopen={() => openBaseline(b, true, { type })}
+              ontoggle={() => toggle(tKey(b, type), q)}
+            />
+            {#if isOpen(tKey(b, type), q)}
+              {#each pg?.items ?? [] as n (n.id)}
                 <TreeRow
                   depth={2}
                   icon="node"
                   label={n.key ?? ''}
                   detail={nodeTitle(n)}
                   muted={n.deleted}
-                  onselect={() => openNode(b, n)}
-                  onopen={() => openNode(b, n, true)}
+                  onselect={() => openBaseline(b, false, { type, node: n.id ?? '' })}
+                  onopen={() => void openNode(n, { pin: true })}
                 />
               {/each}
+              {#if pg?.error}
+                <p class="alert small">{pg.error}</p>
+              {:else if !pg || pg.loading}
+                <p class="empty pad3">Loading…</p>
+              {:else if pg.items.length < pg.total}
+                <button type="button" class="link small pad3 more" onclick={() => void loadPage(b.id ?? '', type, true)}>
+                  Load more ({pg.items.length} of {pg.total})
+                </button>
+              {/if}
             {/if}
           {:else}
-            <p class="empty pad2">No nodes.</p>
+            <p class="empty pad2">{query ? 'No matching nodes.' : 'No nodes.'}</p>
           {/each}
         {/if}
       {/if}
@@ -171,10 +225,13 @@
     background: var(--chrome);
     z-index: 1;
   }
-  .tools input {
+  .tools input,
+  .tools select {
     min-height: 24px;
     height: 24px;
     margin-right: 0.2rem;
+    flex: 1;
+    min-width: 0;
   }
   .tools button {
     padding: 0.1rem 0.3rem;
@@ -185,6 +242,14 @@
   .pad2 {
     padding: 0.1rem 0 0.1rem 34px;
     margin: 0;
+  }
+  .pad3 {
+    padding: 0.1rem 0 0.1rem 50px;
+    margin: 0;
+  }
+  .more {
+    display: block;
+    text-align: left;
   }
   .alert.small {
     margin: 0.3rem 0.5rem;

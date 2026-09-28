@@ -575,9 +575,16 @@ func (g *Graph) mergeBranchTx(ctx context.Context, tx Tx, in MergeRequest) (res 
 			return res, err
 		}
 		m.next = n.Ref()
-		cn.Post, cn.Landed = &m.next, &m.next
-		cn.Reviews = []domain.Review{{Status: domain.ReviewAccepted, By: "graph.merge", Comment: why, At: g.now()}}
-		if err := tx.PutChangeImpact(ctx, c.ID, cn); err != nil {
+		// the merge records its change impact as events: declared, accepted, written and landed at once
+		declared := cn
+		declared.Review = domain.ReviewProposed
+		review := domain.Review{Status: domain.ReviewAccepted, By: "graph.merge", Comment: why, At: g.now()}
+		if err := g.emit(ctx, tx,
+			domain.ImpactEvent{Change: c.ID, Impact: cn.ID, Op: domain.ImpactDeclared, By: "graph.merge", State: &declared},
+			domain.ImpactEvent{Change: c.ID, Impact: cn.ID, Op: domain.ImpactReviewed, By: "graph.merge", Review: &review},
+			domain.ImpactEvent{Change: c.ID, Impact: cn.ID, Op: domain.ImpactWritten, By: "graph.merge", Post: &m.next},
+			domain.ImpactEvent{Change: c.ID, Impact: cn.ID, Op: domain.ImpactLanded, By: "graph.merge", Landed: &m.next},
+		); err != nil {
 			return res, err
 		}
 		if deleted {

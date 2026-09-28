@@ -3,6 +3,7 @@ package graphsvc_test
 import (
 	"context"
 	"net/http"
+	"strings"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -143,6 +144,7 @@ func TestChangeImpactRPCs(t *testing.T) {
 		t.Fatal(err)
 	}
 	h := &graphsvc.Handler{Graph: g, Authz: authorizer, Floor: floor}
+	g.Caller = graphsvc.Caller
 	req1, err := g.CreateNode(ctx, graph.NewNode{Key: "REQ-1", Type: "Requirement", Properties: map[string]any{"title": "one"}})
 	if err != nil {
 		t.Fatal(err)
@@ -193,6 +195,21 @@ func TestChangeImpactRPCs(t *testing.T) {
 	get, err := h.GetChange(ctx, connect.NewRequest(&graphv1.GetChangeRequest{Id: string(c.ID)}))
 	if err != nil || len(get.Msg.Change.Nodes) != 1 || get.Msg.Change.Nodes[0].Review != "accepted" {
 		t.Fatalf("GetChange carries the change impacts: %v %v", get, err)
+	}
+	// every operation is an event of the impact log, with its caller (ADR 0029)
+	log, err := h.ListChangeEvents(ctx, connect.NewRequest(&graphv1.ListChangeEventsRequest{ChangeId: string(c.ID)}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ops []string
+	for _, e := range log.Msg.Events {
+		ops = append(ops, e.Op)
+		if e.By != "u" || e.ImpactId != cn.Id {
+			t.Fatalf("event %s: by %q, impact %s", e.Op, e.By, e.ImpactId)
+		}
+	}
+	if strings.Join(ops, ",") != "declared,written,reviewed" {
+		t.Fatalf("impact log = %v", ops)
 	}
 }
 

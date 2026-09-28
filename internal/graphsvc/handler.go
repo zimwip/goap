@@ -158,6 +158,81 @@ func (h *Handler) GetBaselineGraph(ctx context.Context, r *connect.Request[graph
 		Links: pbconv.LinksToPB(links), SuspectLinks: pbconv.LinksToPB(suspects)}, err)
 }
 
+// Caller names the principal of a request, recorded on the events of the change impacts (graph.Graph.Caller,
+// ADR 0029).
+func Caller(ctx context.Context) string { return authz.From(ctx).Subject }
+
+func (h *Handler) ListChangeLog(ctx context.Context, r *connect.Request[graphv1.ListChangeLogRequest]) (*connect.Response[graphv1.ListChangeLogResponse], error) {
+	f := domain.LogFilter{Change: domain.ChangeID(r.Msg.ChangeId), Types: r.Msg.Types, Processes: r.Msg.ProcessIds, Execution: r.Msg.Execution,
+		AfterSeq: r.Msg.AfterSeq, Limit: int(r.Msg.Limit)}
+	for _, fl := range r.Msg.Flows {
+		if fl == "main" {
+			fl = ""
+		}
+		f.Flows = append(f.Flows, fl)
+	}
+	entries, counts, err := h.Graph.ChangeLog(ctx, f)
+	if err != nil {
+		return nil, rpcerr.ToConnect(err)
+	}
+	out := &graphv1.ListChangeLogResponse{Counts: map[string]int32{}}
+	for t, n := range counts {
+		out.Counts[t] = int32(n)
+	}
+	for _, e := range entries {
+		out.Entries = append(out.Entries, &graphv1.LogEntry{Seq: e.Seq, Id: e.ID, ChangeId: string(e.Change), Type: e.Type, Flow: e.Flow, ProcessId: e.Process,
+			Execution: e.Execution, Subject: e.Subject, By: e.By, At: pbconv.Time(e.At), Payload: string(e.Payload)})
+	}
+	return connect.NewResponse(out), nil
+}
+
+func (h *Handler) ListChangeEvents(ctx context.Context, r *connect.Request[graphv1.ListChangeEventsRequest]) (*connect.Response[graphv1.ListChangeEventsResponse], error) {
+	evs, err := h.Graph.ChangeEvents(ctx, domain.ChangeID(r.Msg.ChangeId))
+	if err != nil {
+		return nil, rpcerr.ToConnect(err)
+	}
+	out := &graphv1.ListChangeEventsResponse{}
+	for _, e := range evs {
+		out.Events = append(out.Events, pbconv.ImpactEventToPB(e))
+	}
+	return connect.NewResponse(out), nil
+}
+
+func (h *Handler) ListBaselineNodes(ctx context.Context, r *connect.Request[graphv1.ListBaselineNodesRequest]) (*connect.Response[graphv1.ListBaselineNodesResponse], error) {
+	id := domain.BaselineID(r.Msg.BaselineId)
+	b, err := h.Graph.Baseline(ctx, id)
+	if err != nil {
+		return nil, rpcerr.ToConnect(err)
+	}
+	page, err := h.Graph.BaselineNodes(ctx, id, graph.NodeQuery{Type: r.Msg.Type, Text: r.Msg.Query,
+		IncludeDeleted: r.Msg.IncludeDeleted, Offset: int(r.Msg.Offset), Limit: int(r.Msg.Limit)})
+	if err != nil {
+		return nil, rpcerr.ToConnect(err)
+	}
+	out := &graphv1.ListBaselineNodesResponse{Baseline: pbconv.BaselineToPB(b), Nodes: pbconv.NodesToPB(page.Nodes), Total: int32(page.Total)}
+	for _, t := range page.Types {
+		out.Types = append(out.Types, &graphv1.TypeCount{Type: t.Type, Count: int32(t.Count)})
+	}
+	return connect.NewResponse(out), nil
+}
+
+func (h *Handler) GetNodeNeighbourhood(ctx context.Context, r *connect.Request[graphv1.GetNodeNeighbourhoodRequest]) (*connect.Response[graphv1.GetNodeNeighbourhoodResponse], error) {
+	nb, err := h.Graph.NodeNeighbourhood(ctx, domain.BaselineID(r.Msg.BaselineId), domain.NodeID(r.Msg.NodeId))
+	if err != nil {
+		return nil, rpcerr.ToConnect(err)
+	}
+	out := &graphv1.GetNodeNeighbourhoodResponse{Node: pbconv.NodeToPB(nb.Node), Nodes: pbconv.NodesToPB(nb.Nodes), Links: pbconv.LinksToPB(nb.Links)}
+	for _, l := range nb.Suspect {
+		out.SuspectLinkIds = append(out.SuspectLinkIds, string(l))
+	}
+	return connect.NewResponse(out), nil
+}
+
+func (h *Handler) ListNamespaces(ctx context.Context, _ *connect.Request[graphv1.ListNamespacesRequest]) (*connect.Response[graphv1.ListNamespacesResponse], error) {
+	ns, err := h.Graph.Namespaces(ctx)
+	return res(&graphv1.ListNamespacesResponse{Namespaces: ns}, err)
+}
+
 func (h *Handler) CreateChange(ctx context.Context, r *connect.Request[graphv1.CreateChangeRequest]) (*connect.Response[graphv1.CreateChangeResponse], error) {
 	c, err := h.Graph.CreateChange(ctx, graph.NewChange{ParentID: domain.ChangeID(r.Msg.ParentId), OwnerOrg: r.Msg.OwnerOrg, OwnBranch: r.Msg.OwnBranch, Namespace: r.Msg.Namespace, Title: r.Msg.Title, Intent: r.Msg.Intent, Methodology: r.Msg.Methodology,
 		BaselineID: domain.BaselineID(r.Msg.BaselineId), Branch: r.Msg.Branch, Data: pbconv.Map(r.Msg.Data)})

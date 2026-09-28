@@ -311,6 +311,8 @@ message MethodologySummary {
   repeated AgentSummary agents = 8;
   google.protobuf.Timestamp updated_at = 6;
   google.protobuf.Timestamp published_at = 7;
+  // namespace (domain) the changes of the methodology act on
+  string namespace = 9;
 }
 
 // A validation issue. `path` locates the field, e.g. "conditions[2].expr".

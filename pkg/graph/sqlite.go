@@ -308,26 +308,13 @@ func (t *sqliteTx) Change(ctx context.Context, id domain.ChangeID) (domain.Chang
 		return c, sqliteErr(err, "change "+string(id))
 	}
 	c.ResultBaselineID, c.Data, c.CreatedAt = domain.BaselineID(result.String), props([]byte(data)), tsParse(created)
-	rows, err := t.tx.QueryContext(ctx, `SELECT payload FROM change_item WHERE change_id = ? ORDER BY seq`, string(id))
+	facts, err := t.Log(ctx, factsFilter(id))
 	if err != nil {
 		return c, err
 	}
-	defer rows.Close()
-	for rows.Next() {
-		var payload string
-		if err := rows.Scan(&payload); err != nil {
-			return c, err
-		}
-		var it domain.ChangeItem
-		if err := json.Unmarshal([]byte(payload), &it); err != nil {
-			return c, err
-		}
-		c.Items = append(c.Items, it)
-	}
-	if err := rows.Err(); err != nil {
+	if c.Items, err = itemsOf(facts); err != nil {
 		return c, err
 	}
-	rows.Close()
 	c.Nodes, err = t.ChangeImpacts(ctx, id)
 	return c, err
 }
@@ -420,14 +407,59 @@ func (t *sqliteTx) PutChange(ctx context.Context, c domain.Change) error {
 	return sqliteErr(err, "change")
 }
 
-func (t *sqliteTx) PutItem(ctx context.Context, change domain.ChangeID, it domain.ChangeItem) error {
-	payload, err := json.Marshal(it)
+func (t *sqliteTx) AppendLog(ctx context.Context, e domain.LogEntry) (domain.LogEntry, error) {
+	res, err := t.tx.ExecContext(ctx, `INSERT INTO change_log (id, change_id, type, flow, process_id, execution, subject, by_whom, at, payload)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		e.ID, string(e.Change), e.Type, e.Flow, e.Process, e.Execution, e.Subject, e.By, tsText(e.At), string(e.Payload))
 	if err != nil {
-		return err
+		return e, sqliteErr(err, "log entry "+e.Type)
 	}
-	_, err = t.tx.ExecContext(ctx, `INSERT INTO change_item (id, change_id, kind, payload, created_at) VALUES (?, ?, ?, ?, ?)`,
-		string(it.ID), string(change), string(it.Kind), string(payload), tsText(it.CreatedAt))
-	return sqliteErr(err, "change item")
+	e.Seq, err = res.LastInsertId()
+	return e, err
+}
+
+func (t *sqliteTx) LogCounts(ctx context.Context, f domain.LogFilter) (map[string]int, error) {
+	f.AfterSeq = 0
+	where, args := logWhere(f, func(int) string { return "?" })
+	rows, err := t.tx.QueryContext(ctx, `SELECT type, count(*) FROM change_log`+where+` GROUP BY type`, args...)
+	if err != nil {
+		return nil, sqliteErr(err, "log counts")
+	}
+	defer rows.Close()
+	out := map[string]int{}
+	for rows.Next() {
+		var typ string
+		var n int
+		if err := rows.Scan(&typ, &n); err != nil {
+			return nil, err
+		}
+		out[typ] = n
+	}
+	return out, rows.Err()
+}
+
+func (t *sqliteTx) Log(ctx context.Context, f domain.LogFilter) ([]domain.LogEntry, error) {
+	where, args := logWhere(f, func(int) string { return "?" })
+	q := `SELECT seq, id, change_id, type, flow, process_id, execution, subject, by_whom, at, payload FROM change_log` + where + ` ORDER BY seq`
+	if f.Limit > 0 {
+		q += fmt.Sprintf(" LIMIT %d", f.Limit)
+	}
+	rows, err := t.tx.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, sqliteErr(err, "log")
+	}
+	defer rows.Close()
+	var out []domain.LogEntry
+	for rows.Next() {
+		var e domain.LogEntry
+		var change, at, payload string
+		if err := rows.Scan(&e.Seq, &e.ID, &change, &e.Type, &e.Flow, &e.Process, &e.Execution, &e.Subject, &e.By, &at, &payload); err != nil {
+			return nil, err
+		}
+		e.Change, e.At, e.Payload = domain.ChangeID(change), tsParse(at), json.RawMessage(payload)
+		out = append(out, e)
+	}
+	return out, rows.Err()
 }
 
 func (t *sqliteTx) OpenChangeIDs(ctx context.Context) ([]domain.ChangeID, error) {
@@ -443,49 +475,6 @@ func (t *sqliteTx) OpenChangeIDs(ctx context.Context) ([]domain.ChangeID, error)
 			return nil, err
 		}
 		out = append(out, domain.ChangeID(id))
-	}
-	return out, rows.Err()
-}
-
-func (t *sqliteTx) PutExecution(ctx context.Context, r domain.ExecutionRecord) error {
-	payload, err := json.Marshal(r)
-	if err != nil {
-		return err
-	}
-	_, err = t.tx.ExecContext(ctx, `INSERT INTO execution (id, change_id, process_id, seq, kind, action, started_at, payload) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		r.ID, string(r.ChangeID), r.ProcessID, r.Seq, r.Kind, r.Action, tsText(r.StartedAt), string(payload))
-	return sqliteErr(err, "execution")
-}
-
-func (t *sqliteTx) Executions(ctx context.Context, f domain.ExecutionFilter) ([]domain.ExecutionRecord, error) {
-	q := `SELECT payload FROM execution WHERE 1 = 1`
-	var args []any
-	if f.ChangeID != "" {
-		q += ` AND change_id = ?`
-		args = append(args, string(f.ChangeID))
-	}
-	if len(f.ProcessIDs) > 0 {
-		q += ` AND process_id IN (?` + strings.Repeat(", ?", len(f.ProcessIDs)-1) + `)`
-		for _, p := range f.ProcessIDs {
-			args = append(args, p)
-		}
-	}
-	rows, err := t.tx.QueryContext(ctx, q+` ORDER BY rowid`, args...)
-	if err != nil {
-		return nil, sqliteErr(err, "executions")
-	}
-	defer rows.Close()
-	var out []domain.ExecutionRecord
-	for rows.Next() {
-		var payload string
-		if err := rows.Scan(&payload); err != nil {
-			return nil, err
-		}
-		var r domain.ExecutionRecord
-		if err := json.Unmarshal([]byte(payload), &r); err != nil {
-			return nil, err
-		}
-		out = append(out, r)
 	}
 	return out, rows.Err()
 }
