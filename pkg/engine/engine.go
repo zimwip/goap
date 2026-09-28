@@ -900,7 +900,7 @@ func (e *Engine) executeStep(ctx context.Context, p *Process, m *methodology.Com
 	e.forgetChildren(p, action.Name)
 	if res.Wait {
 		p.Status = StatusWaiting
-		p.Pending = &HumanTask{Kind: TaskInput, Action: action.Name, Description: action.Description, Instructions: action.Instructions, Step: i}
+		p.Pending = &HumanTask{Kind: TaskInput, Action: action.Name, Description: action.Description, Instructions: action.Instructions, NodeTypes: action.NodeTypes, Step: i}
 		return nil
 	}
 	ids, nodes, err := e.addItems(ctx, p, res.Items, action.Name, step.Execution)

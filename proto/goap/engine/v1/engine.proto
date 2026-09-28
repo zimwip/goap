@@ -139,6 +139,9 @@ message HumanTask {
   RelaunchProposal proposal = 9;
   // kind "relaunched": the flow whose decision the process waits for
   string flow_id = 10;
+  // kind "input": qualified node types (<namespace>@<NodeType>) the task may create or
+  // pick to edit (empty: every type of the change's namespace)
+  repeated string node_types = 11;
 }
 
 message BoardIssue {

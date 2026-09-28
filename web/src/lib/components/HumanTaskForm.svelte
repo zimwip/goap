@@ -95,8 +95,12 @@
   });
 
   const lcRows = $derived(lifecycleRows(typeCatalog.cat, nodes, attached, changeImpacts, posts, extraNodes));
-  const lcCandidates = $derived(reopenable(nodes, lcRows, namespace));
-  const typeNames = $derived(nodeTypeNames(typeCatalog.cat, namespace));
+  /** the action may restrict node creation/edition to a subset of the namespace's types */
+  const allowedTypes = $derived(task?.nodeTypes?.length ? new Set(task.nodeTypes) : undefined);
+  const lcCandidates = $derived(
+    reopenable(nodes, lcRows, namespace).filter((n) => !allowedTypes || allowedTypes.has(n.type ?? '')),
+  );
+  const typeNames = $derived(nodeTypeNames(typeCatalog.cat, namespace).filter((t) => !allowedTypes || allowedTypes.has(t)));
   const lifecycleOf = $derived(lifecycleResolver(typeCatalog.cat));
   const takenKeys = $derived([
     ...nodes.map((n) => n.key ?? ''),

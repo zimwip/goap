@@ -123,7 +123,11 @@ type HumanTask struct {
 	Action       string `json:"action"`
 	Description  string `json:"description"`
 	Instructions string `json:"instructions,omitempty"`
-	Step         int    `json:"step"`
+	// NodeTypes restricts which qualified node types (<namespace>@<NodeType>) a
+	// TaskInput may create or pick to edit; empty: every type of the change's
+	// namespace (methodology.Action.NodeTypes).
+	NodeTypes []string `json:"nodeTypes,omitempty"`
+	Step      int      `json:"step"`
 	// ChildProcessID is the sub-agent a TaskAgent waits for.
 	ChildProcessID string `json:"childProcessId,omitempty"`
 	// WakeOn lists signal names (TaskAgent) that, if emitted by the child and
