@@ -51,6 +51,27 @@
   $effect(() => {
     tab.params.pane = pane;
   });
+  // reopening this tab (already mounted) with different params — e.g. from a process's "Audit" link — should still
+  // jump there, so also sync the other way
+  $effect(() => {
+    if (tab.params.pane && tab.params.pane !== pane) pane = tab.params.pane;
+  });
+  /** the process the Audit pane is restricted to, opened from elsewhere (e.g. a process's "Audit" link) */
+  let auditProcess = $state(untrack(() => tab.params.process) || '');
+  $effect(() => {
+    tab.params.process = auditProcess;
+  });
+  $effect(() => {
+    if (tab.params.process !== undefined && tab.params.process !== auditProcess) auditProcess = tab.params.process;
+  });
+  /** the action run the Audit pane is restricted to, opened from elsewhere (e.g. an item's producer link) */
+  let auditRun = $state(untrack(() => tab.params.run) || '');
+  $effect(() => {
+    tab.params.run = auditRun;
+  });
+  $effect(() => {
+    if (tab.params.run !== undefined && tab.params.run !== auditRun) auditRun = tab.params.run;
+  });
   let loading = $state(false);
   let error = $state('');
 
@@ -309,14 +330,16 @@
 
   const related = $derived([...processes.values()].filter((p) => p.changeId && p.changeId === selected));
 
-  /** Execution journal of the change, optionally centered on a record. */
-  function openJournal(record = '') {
-    if (change?.id) openTab({ kind: 'journal', params: { id: change.id, process: '', record } }, { pin: true });
+  /** Switches to the Audit pane, optionally restricted to one action run. */
+  function openAudit(run = '') {
+    pane = 'audit';
+    auditProcess = '';
+    auditRun = run;
   }
 
   function provenance(i: ChangeItem): string {
     const parts = [i.producedBy ? `Produced by ${i.producedBy}` : 'Unknown producer'];
-    if (i.execution) parts.push(`execution ${shortId(i.execution)} — open in the execution journal`);
+    if (i.execution) parts.push(`execution ${shortId(i.execution)} — open in the audit trail`);
     if (i.supersedes?.length) parts.push(`supersedes ${i.supersedes.map(shortId).join(', ')}`);
     if (i.status === ITEM_SUPERSEDED) parts.push('superseded by a more recent item');
     return parts.join(' · ');
@@ -331,12 +354,12 @@
     () => [
       { id: 'refresh', label: 'Refresh', icon: 'refresh', disabled: loading, run: () => load(selected) },
       {
-        id: 'journal',
-        label: "Execution journal",
+        id: 'audit',
+        label: 'Audit',
         icon: 'list',
         disabled: !change,
-        title: 'Ticks, actions, model calls and decisions of this change\'s processes',
-        run: () => openJournal(),
+        title: 'Ticks, actions, model calls, decisions and impacts of this change',
+        run: () => openAudit(),
       },
       {
         id: 'apply',
@@ -354,7 +377,7 @@
 
 {#snippet producer(i: ChangeItem)}
   {#if i.execution}
-    <button type="button" class="link" title={provenance(i)} onclick={() => openJournal(i.execution)}>{i.producedBy || shortId(i.execution)}</button>
+    <button type="button" class="link" title={provenance(i)} onclick={() => openAudit(i.execution)}>{i.producedBy || shortId(i.execution)}</button>
   {:else}
     <span title={provenance(i)}>{i.producedBy}</span>
   {/if}
@@ -399,8 +422,8 @@
             <dd><button type="button" class="link mono" onclick={() => openBaseline(ch.resultBaselineId)}>{shortId(ch.resultBaselineId)}</button></dd>
           {/if}
           {#if ch.createdAt}<dt>Created on</dt><dd>{formatDate(ch.createdAt)}</dd>{/if}
-          <dt>Journal</dt>
-          <dd><button type="button" class="link" onclick={() => openJournal()}>Execution journal</button></dd>
+          <dt>Audit</dt>
+          <dd><button type="button" class="link" onclick={() => openAudit()}>Ticks, actions, model calls, decisions and impacts</button></dd>
           {#if related.length}
             <dt>Executions</dt>
             <dd class="runs">
@@ -532,7 +555,7 @@
       {/if}
       {:else if active === 'audit'}
       <section class="card">
-        <ChangeAudit change={ch} onjournal={(record) => openJournal(record)} onrun={(pid) => openTab({ kind: 'run', params: { id: pid } })} />
+        <ChangeAudit change={ch} bind:process={auditProcess} bind:run={auditRun} onrun={(pid) => openTab({ kind: 'run', params: { id: pid } })} />
       </section>
       {:else if active === 'changes'}
       <section class="card">

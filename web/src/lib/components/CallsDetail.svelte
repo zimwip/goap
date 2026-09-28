@@ -1,6 +1,6 @@
 <script lang="ts">
-  // Model / tool calls of a step or action run: shared by StepsTimeline (a run's steps) and JournalTab (a
-  // change's execution journal) — both list the calls of an ExecutionRecord / Step, same shape.
+  // Model / tool calls of a step or action run: shared by StepsTimeline (a run's steps) and ChangeAudit (a
+  // change's audit trail) — both list the calls of an ExecutionRecord / Step, same shape.
   import { formatDuration, formatInt } from '../api';
 
   interface Call {

@@ -7,6 +7,7 @@
   import {
     graph,
     decodeLogEntry,
+    executionsFromLog,
     errorMessage,
     formatDate,
     formatDuration,
@@ -20,10 +21,12 @@
   } from '../api';
   import {
     AUDIT_SOURCES,
+    JOURNAL_TYPES,
     SOURCE_TYPES,
     buildTrail,
     flowLanes,
     flowParents,
+    processSummaries,
     runLabel,
     sourceOfType,
     trailCSV,
@@ -31,27 +34,33 @@
     type AuditSource,
   } from '../auditTrail';
   import { loadRaw, save } from '../shell/storage';
+  import { makeContext } from '../items';
+  import CallsDetail from './CallsDetail.svelte';
+  import StatusBadge from './StatusBadge.svelte';
 
   let {
     change,
-    onjournal,
+    process = $bindable(''),
+    run = $bindable(''),
     onrun,
   }: {
     /** reloaded whenever the change is */
     change: Change;
-    /** open the execution journal on a record */
-    onjournal?: (record: string) => void;
+    /** restricts the trail to one process (its record kinds still filtered by the sources below) */
+    process?: string;
+    /** restricts the trail to everything done by one action run */
+    run?: string;
     /** open a process */
     onrun?: (process: string) => void;
   } = $props();
 
-  // filters: sources (all by default, remembered), flow, action run: sent to the server; text: on the entries shown
+  // filters: sources (all by default, remembered), flow, process, action run: sent to the server; text: on the
+  // entries shown
   const KEY = 'goap.ide.audit.sources.v2';
   const stored = loadRaw(KEY);
   let sources = $state<AuditSource[]>(Array.isArray(stored) ? (stored as AuditSource[]) : AUDIT_SOURCES.map((s) => s.id));
   $effect(() => save(KEY, sources));
   let flow = $state('*');
-  let run = $state('');
   let filter = $state('');
   let newestFirst = $state(false);
   let open = $state<string[]>([]);
@@ -61,6 +70,8 @@
   // the whole change, whatever the filters: the action runs (to name them) and the flow events (forks, merges)
   let runLog = $state<LogEntry[]>([]);
   let flowLog = $state<LogEntry[]>([]);
+  // the whole execution journal of the change, to group by process (the process filter and its summary)
+  let journalLog = $state<LogEntry[]>([]);
   let error = $state('');
   let loading = $state(false);
 
@@ -71,6 +82,7 @@
       types: types.length ? types : ['none.'],
       ...(flow === '*' ? {} : { flows: [flow || 'main'] }),
       ...(run ? { execution: run } : {}),
+      ...(process ? { processIds: [process] } : {}),
     };
   });
 
@@ -84,12 +96,14 @@
       graph.listChangeLog(q, ctrl.signal),
       graph.listChangeLog({ changeId: q.changeId, types: ['journal.action'] }, ctrl.signal),
       graph.listChangeLog({ changeId: q.changeId, types: ['fact.flow'] }, ctrl.signal),
+      graph.listChangeLog({ changeId: q.changeId, types: JOURNAL_TYPES }, ctrl.signal),
     ])
-      .then(([l, r, f]) => {
+      .then(([l, r, f, j]) => {
         log = l.entries ?? [];
         counts = l.counts ?? {};
         runLog = r.entries ?? [];
         flowLog = f.entries ?? [];
+        journalLog = j.entries ?? [];
         error = '';
       })
       .catch((e) => {
@@ -109,6 +123,13 @@
   const records = $derived([...runs.values()]);
   /** the whole flow lifecycle, for the legend and the lanes */
   const flowTrail = $derived(buildTrail(change, flowLog, parents, false));
+  /** one summary per process of the change: agent / methodology / goal and totals, for the process filter */
+  const processGroups = $derived(processSummaries(executionsFromLog(journalLog)));
+  const ctx = $derived(makeContext([], change.items ?? []));
+  function itemLabel(id: string): string {
+    const it = ctx.items.get(id);
+    return it ? `${it.kind ?? 'item'}${it.type ? ` ${it.type}` : ''}` : shortId(id);
+  }
 
   const q = $derived(filter.trim().toLowerCase());
   const shown = $derived.by(() => {
@@ -230,6 +251,12 @@
       <label class="check"><input type="checkbox" checked={sources.includes(s.id)} onchange={() => toggleSource(s.id)} /> {s.label} <span class="n">{count(s.id)}</span></label>
     {/each}
     <span class="grow"></span>
+    {#if processGroups.length}
+      <select bind:value={process} aria-label="Process">
+        <option value="">All processes</option>
+        {#each processGroups as g (g.processId)}<option value={g.processId}>{g.agent || shortId(g.processId)} · {shortId(g.processId)}</option>{/each}
+      </select>
+    {/if}
     {#if flows.length}
       <select bind:value={flow} aria-label="Flow">
         <option value="*">All flows</option>
@@ -249,6 +276,26 @@
         </button>
       {/each}
     </div>
+  {/if}
+  {#if process}
+    {@const g = processGroups.find((x) => x.processId === process)}
+    <p class="runbar">
+      {#if g}
+        <strong>{g.agent || shortId(process)}</strong>
+        {#if g.methodology}· {g.methodology}{g.version ? ` v${g.version}` : ''}{/if}
+        {#if g.planner}· planner {g.planner}{/if}
+        {#if g.goal}· goal <code>{g.goal}</code>{/if}
+        <StatusBadge status={g.status} />
+        · {formatInt(g.inputTokens)} → {formatInt(g.outputTokens)} tok
+        · {g.modelCalls} model call{g.modelCalls === 1 ? '' : 's'}
+        {#if g.toolCalls}· {g.toolCalls} tool call{g.toolCalls === 1 ? '' : 's'}{/if}
+        · {g.actions} action{g.actions === 1 ? '' : 's'}
+        · {formatDuration(g.durationMs)}
+      {:else}
+        Process <code>{shortId(process)}</code>
+      {/if}
+      <button type="button" class="link" onclick={() => (process = '')}>show all</button>
+    </p>
   {/if}
   {#if run}
     <p class="runbar">
@@ -335,7 +382,7 @@
         <code>{e.execution}</code>
         {#if runs.has(e.execution)}
           {runLabel(runs.get(e.execution))}
-          <button type="button" class="link" onclick={() => onjournal?.(e.execution)}>open in the journal</button>
+          <button type="button" class="link" onclick={() => (run = e.execution)}>show this run</button>
         {/if}
       </dd>
     {/if}
@@ -349,6 +396,7 @@
           <button type="button" class="link mono" onclick={() => onrun?.(r.processId ?? '')}>{shortId(r.processId)}</button>
           {r.agent ?? ''}{r.methodology ? ` · ${r.methodology}${r.methodologyVersion ? ` v${r.methodologyVersion}` : ''}` : ''}{r.planner ? ` · planner ${r.planner}` : ''}{r.goal ? ` · goal ${r.goal}` : ''}
           {#if r.parentProcessId} · sub-agent of <code>{shortId(r.parentProcessId)}</code>{/if}
+          <button type="button" class="link" onclick={() => (process = r.processId ?? '')}>show only this process</button>
         </dd>
       {/if}
       {#if r.plan?.length}<dt>Plan</dt><dd>{r.plan.join(' → ')}</dd>{/if}
@@ -365,28 +413,16 @@
         <p class="sub">Conditions changed: {#each names as n (n)}<code class="cond">{n} {r.before?.[n] ? 'true' : 'false'} → {r.after?.[n] ? 'true' : 'false'}</code>{/each}</p>
       {/if}
     {/if}
-    {#if r.modelCalls?.length}
-      <p class="sub">Model calls</p>
-      <table class="calls">
-        <thead><tr><th>Provider</th><th>Model</th><th class="num">Input</th><th class="num">Output</th><th class="num">Duration</th><th>Error</th></tr></thead>
-        <tbody>
-          {#each r.modelCalls as c, k (k)}
-            <tr><td>{c.provider}</td><td><code>{c.model}</code></td><td class="num">{formatInt(c.inputTokens)}</td><td class="num">{formatInt(c.outputTokens)}</td><td class="num">{formatDuration(c.durationMs)}</td><td>{c.error ?? ''}</td></tr>
-          {/each}
-        </tbody>
-      </table>
-    {/if}
-    {#if r.toolCalls?.length}
-      <p class="sub">Tool calls</p>
-      <table class="calls">
-        <thead><tr><th>Tool</th><th class="num">Duration</th><th>Error</th></tr></thead>
-        <tbody>
-          {#each r.toolCalls as c, k (k)}<tr><td><code>{c.name}</code></td><td class="num">{formatDuration(c.durationMs)}</td><td>{c.error ?? ''}</td></tr>{/each}
-        </tbody>
-      </table>
-    {/if}
+    <CallsDetail modelCalls={r.modelCalls} toolCalls={r.toolCalls} />
     {#if r.reads?.length}<p class="sub">Read {r.reads.length} node version(s): {#each r.reads as n (`${n.id}@${n.version}`)}<code class="cond">{shortId(n.id)}@{n.version}</code>{/each}</p>{/if}
-    {#if r.items?.length}<p class="sub">Produced {r.items.length} fact(s): {#each r.items as it (it)}<code class="cond">{shortId(it)}</code>{/each}</p>{/if}
+    {#if r.items?.length}
+      <p class="sub">Produced {r.items.length} item(s):
+        {#each r.items as it (it)}
+          {@const ci = ctx.items.get(it)}
+          <code class="cond" class:superseded={ci?.status === 'superseded'}>{shortId(it)} {itemLabel(it)}{ci?.status ? ` · ${ci.status}` : ''}</code>
+        {/each}
+      </p>
+    {/if}
     {#if r.output}<p class="sub">Output</p><pre>{r.output}</pre>{/if}
     {#if r.error}<p class="sub">Error</p><pre class="error">{r.error}</pre>{/if}
   {/if}
@@ -571,11 +607,9 @@
     margin-left: 0.35rem;
     font-weight: normal;
   }
-  .calls {
-    width: auto;
-  }
-  .num {
-    text-align: right;
+  .cond.superseded {
+    text-decoration: line-through;
+    opacity: 0.6;
   }
   pre {
     max-height: 22rem;

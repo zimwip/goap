@@ -194,13 +194,13 @@
         run: () => openTab({ kind: 'change', params: { id: process?.changeId ?? '' } }),
       },
       {
-        id: 'journal',
-        label: 'Execution journal',
+        id: 'audit',
+        label: 'Audit',
         icon: 'list',
         disabled: !process?.changeId,
-        title: process?.changeId ? 'Execution journal for this process (ticks, actions, model calls)' : 'Process without a change',
+        title: process?.changeId ? 'Ticks, actions and model calls of this process, in the change audit' : 'Process without a change',
         run: () =>
-          openTab({ kind: 'journal', params: { id: process?.changeId ?? '', process: process?.id ?? '', record: '' } }, { pin: true }),
+          openTab({ kind: 'change', params: { id: process?.changeId ?? '', pane: 'audit', process: process?.id ?? '', run: '' } }, { pin: true }),
       },
       {
         id: 'parent',
@@ -264,8 +264,8 @@
                 type="button"
                 class="link"
                 onclick={() =>
-                  openTab({ kind: 'journal', params: { id: process.changeId ?? '', process: process.id ?? '', record: '' } }, { pin: true })}
-                >execution journal</button
+                  openTab({ kind: 'change', params: { id: process.changeId ?? '', pane: 'audit', process: process.id ?? '', run: '' } }, { pin: true })}
+                >audit trail</button
               >
             </dd>
           {/if}

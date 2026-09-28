@@ -32,6 +32,10 @@ export const SOURCE_TYPES: Record<Exclude<AuditSource, 'change'>, string[]> = {
   flow: ['fact.flow'],
 };
 
+/** Every journal.* type (one per ExecutionRecord.kind): to read the whole execution journal regardless of source
+ * filters, e.g. to group a change's records by process. */
+export const JOURNAL_TYPES: string[] = [...SOURCE_TYPES.process, ...SOURCE_TYPES.schedule, ...SOURCE_TYPES.plan, ...SOURCE_TYPES.action, ...SOURCE_TYPES.approval];
+
 /** The source of a log type. */
 export function sourceOfType(type: string): AuditSource | undefined {
   for (const [s, types] of Object.entries(SOURCE_TYPES)) {
@@ -326,4 +330,86 @@ export function flowLanes(entries: AuditEntry[]): FlowLanes {
     lane.set(f, l);
   }
   return { lane, count: Math.max(1, ...[...lane.values()].map((l) => l + 1)), span };
+}
+
+/** One summary per process, aggregated from its execution journal records (ADR 0011). */
+export interface ProcessSummary {
+  processId: string;
+  parentProcessId: string;
+  agent: string;
+  methodology: string;
+  version: string;
+  planner: string;
+  goal: string;
+  status: string;
+  inputTokens: number;
+  outputTokens: number;
+  modelCalls: number;
+  toolCalls: number;
+  actions: number;
+  durationMs: number;
+  traceId: string;
+}
+
+function recordSpan(rs: ExecutionRecord[]): number {
+  let start = Infinity;
+  let end = -Infinity;
+  for (const r of rs) {
+    const s = r.startedAt ? Date.parse(r.startedAt) : NaN;
+    const e = r.endedAt ? Date.parse(r.endedAt) : s;
+    if (Number.isFinite(s)) start = Math.min(start, s);
+    if (Number.isFinite(e)) end = Math.max(end, e);
+  }
+  return Number.isFinite(start) && Number.isFinite(end) && end >= start ? end - start : 0;
+}
+
+/** Groups execution journal records by process and summarizes each: agent / methodology / goal, and the totals
+ * (tokens, model and tool calls, actions, duration) a process card used to show. */
+export function processSummaries(records: ExecutionRecord[]): ProcessSummary[] {
+  const byProcess = new Map<string, ExecutionRecord[]>();
+  for (const r of records) {
+    const pid = r.processId ?? '';
+    if (!pid) continue;
+    let list = byProcess.get(pid);
+    if (!list) byProcess.set(pid, (list = []));
+    list.push(r);
+  }
+  return [...byProcess].map(([pid, rs]) => {
+    const last = rs[rs.length - 1];
+    const first = rs[0];
+    const ended = [...rs].reverse().find((r) => r.kind === 'process.ended');
+    const acts = rs.filter((r) => r.kind === 'action');
+    let inTok = 0;
+    let outTok = 0;
+    let model = 0;
+    let tools = 0;
+    for (const r of acts) {
+      inTok += int(r.inputTokens);
+      outTok += int(r.outputTokens);
+      model += r.modelCalls?.length ?? 0;
+      tools += r.toolCalls?.length ?? 0;
+    }
+    // The end-of-process record carries the authoritative totals (process usage).
+    if (ended && (int(ended.inputTokens) || int(ended.outputTokens))) {
+      inTok = int(ended.inputTokens);
+      outTok = int(ended.outputTokens);
+    }
+    return {
+      processId: pid,
+      parentProcessId: first.parentProcessId ?? '',
+      agent: last.agent || first.agent || '',
+      methodology: last.methodology || '',
+      version: last.methodologyVersion || '',
+      planner: last.planner || '',
+      goal: last.goal || '',
+      status: ended?.status || last.status || '',
+      inputTokens: inTok,
+      outputTokens: outTok,
+      modelCalls: model,
+      toolCalls: tools,
+      actions: acts.length,
+      durationMs: int(ended?.durationMs) || recordSpan(rs),
+      traceId: rs.find((r) => r.traceId)?.traceId ?? '',
+    };
+  });
 }
