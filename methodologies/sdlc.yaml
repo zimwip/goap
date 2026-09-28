@@ -15,6 +15,10 @@ namespace: alm
 conditions:
   # A change impact is a node the change acts on (ADR 0024): declared as impacted (modified) or created,
   # written when its new version exists, reviewed when it has received a decision.
+  # --- intake
+  - name: formulated
+    description: The request has been attached to a change (an open one it continues, or this new one, now well-defined)
+    expr: artifacts.exists(a, a.type == "change_formulated")
   # --- analysis
   - name: scoped
     description: The scope of the change is identified (directly impacted elements)
@@ -81,6 +85,38 @@ conditions:
     expr: change.status == "applied"
 
 actions:
+  # ======================= intake
+  - name: find_or_create_change
+    kind: llm
+    description: >
+      List the open changes of the requesting unit and compare them to the request: continue a
+      clear match, else clarify this new change (title, intent, scope) with the requester,
+      looping (a note per round) until it is well-defined enough to start.
+    pre: {formulated: false}
+    effects: {formulated: true}
+    cost: 1
+    model: default
+    mcps: [goap-change]
+    prompt: |
+      A request came in: "{{ .Change.Intent }}"
+      Notes exchanged with the requester so far (oldest first):
+      {{ range .Artifacts }}{{ if .Data.text }}- {{ .Data.text }}
+      {{ end }}{{ end }}
+
+      1. Call goap-change/list (status draft, active or merge_pending; filter by namespace "alm" and,
+         if known, the requester's unit) to see the open changes.
+      2. If one of them clearly is the same piece of work as the request, hand it off:
+         call goap-scheduler/start with change=<its id> and intent="{{ .Change.Intent }}", then finish with
+         {"kind":"artifact","type":"change_formulated","data":{"continued":true,"changeId":"<its id>"}}.
+      3. Otherwise this change is the right one, but only once its definition is clear: a concrete
+         outcome, its scope (what it touches), and why it is needed. If that is still missing or
+         ambiguous, ask ONE clarifying question and finish with
+         {"kind":"artifact","type":"question","data":{"text":"<question>"}} (do not set change_formulated:
+         the requester's next note is read back in on the next round).
+      4. Once it is clear, call goap-change/reformulate with the clarified title, a one-paragraph
+         intent (concrete outcome and scope) and a rationale, then finish with
+         {"kind":"artifact","type":"change_formulated","data":{"continued":false,"changeId":"{{ .Change.ID }}"}}.
+
   # ======================= impact analysis
   - name: identify_scope
     kind: llm
@@ -595,6 +631,11 @@ actions:
     permission: change:apply
 
 goals:
+  - name: formulate
+    description: Attach a request to the change that should carry it (an open one it continues, or this new one, well-defined)
+    examples: ["I need the checkout flow changed to support vouchers", "please fix the refund bug reported by support", "add a new requirement for SSO login"]
+    pre: {formulated: true}
+    value: 1
   - name: analyze_impact
     description: Measure the impact of a change on the ALM chain
     examples: ["what is the impact", "what does this break", "impact analysis"]
@@ -627,6 +668,13 @@ goals:
     value: 10
 
 agents:
+  - name: intake
+    description: Change formulation — finds the open change a request continues, or clarifies it into a new one
+    examples: ["I need the checkout flow changed to support vouchers", "please fix the refund bug reported by support", "add a new requirement for SSO login"]
+    planner: goap
+    actions: [find_or_create_change]
+    goals: [formulate]
+    mcps: [goap-scheduler]
   - name: analyst
     description: Analyst — scope, impacts, requirements, traceability, test plan
     examples: ["impact analysis", "specify the requirements", "what is the impact of this need"]

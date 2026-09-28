@@ -353,7 +353,14 @@ message GetChangeResponse {
   Change change = 1;
 }
 
-message ListChangesRequest {}
+message ListChangesRequest {
+  // namespace the change acts on (empty: every namespace)
+  string namespace = 1;
+  // draft | active | merge_pending | applied | abandoned (empty: every status)
+  repeated string status = 2;
+  // key of the responsible OrgUnit (empty: every unit)
+  string owner_org = 3;
+}
 
 message ListChangesResponse {
   repeated Change changes = 1;
@@ -364,6 +371,10 @@ message UpdateChangeRequest {
   optional string goal = 2;
   optional string status = 3;
   google.protobuf.Struct data = 4;
+  // title / intent: the current definition of the change. goap-change/reformulate patches these
+  // after superseding the previous definition as an "intent" item, so the history is kept.
+  optional string title = 5;
+  optional string intent = 6;
 }
 
 message UpdateChangeResponse {

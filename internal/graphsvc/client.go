@@ -37,7 +37,7 @@ func (c *Client) CreateChange(ctx context.Context, in graph.NewChange) (domain.C
 }
 
 func (c *Client) UpdateChange(ctx context.Context, id domain.ChangeID, p graph.ChangePatch) (domain.Change, error) {
-	req := &graphv1.UpdateChangeRequest{Id: string(id), Goal: p.Goal, Data: pbconv.Struct(p.Data)}
+	req := &graphv1.UpdateChangeRequest{Id: string(id), Title: p.Title, Intent: p.Intent, Goal: p.Goal, Data: pbconv.Struct(p.Data)}
 	if p.Status != nil {
 		s := string(*p.Status)
 		req.Status = &s
@@ -95,6 +95,23 @@ func (c *Client) ReviewNodeOn(ctx context.Context, id domain.ChangeID, flow, exe
 // Changes lists every change known to the graph service.
 func (c *Client) Changes(ctx context.Context) ([]domain.Change, error) {
 	r, err := c.rpc.ListChanges(ctx, connect.NewRequest(&graphv1.ListChangesRequest{}))
+	if err != nil {
+		return nil, rpcerr.FromConnect(err)
+	}
+	out := make([]domain.Change, len(r.Msg.Changes))
+	for i, ch := range r.Msg.Changes {
+		out[i] = pbconv.ChangeFromPB(ch)
+	}
+	return out, nil
+}
+
+// ListChanges implements engine.GraphPort.
+func (c *Client) ListChanges(ctx context.Context, f graph.ChangesFilter) ([]domain.Change, error) {
+	req := &graphv1.ListChangesRequest{Namespace: f.Namespace, OwnerOrg: f.OwnerOrg}
+	for _, s := range f.Status {
+		req.Status = append(req.Status, string(s))
+	}
+	r, err := c.rpc.ListChanges(ctx, connect.NewRequest(req))
 	if err != nil {
 		return nil, rpcerr.FromConnect(err)
 	}
