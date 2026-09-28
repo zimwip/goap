@@ -112,11 +112,7 @@ func caller(ctx context.Context) (authz.Principal, error) {
 }
 
 // headers are the identity headers of the caller, for the platform APIs reached as Connect services.
-func headers(p authz.Principal, h http.Header) {
-	h.Set(identity.HeaderSubject, p.Subject)
-	h.Set(identity.HeaderOrg, p.Org)
-	h.Set(identity.HeaderRoles, strings.Join(p.Roles, ","))
-}
+func headers(p authz.Principal, h http.Header) { identity.SetHeaders(p, h) }
 
 // result converts a value to the JSON object an operation returns.
 func result(v any) (map[string]any, error) {
@@ -176,15 +172,6 @@ func (a args) unit(ctx context.Context, p authz.Principal) string {
 
 // ForwardIdentity is the client option of the platform clients the built-in connectors use: the
 // requests carry the identity of the caller of the tool.
-func ForwardIdentity() connect.ClientOption {
-	return connect.WithInterceptors(connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
-		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-			if p := authz.From(ctx); !p.Anonymous() && req.Spec().IsClient && req.Header().Get(identity.HeaderSubject) == "" {
-				headers(p, req.Header())
-			}
-			return next(ctx, req)
-		}
-	}))
-}
+func ForwardIdentity() connect.ClientOption { return identity.Forward() }
 
 func unknown(op string) error { return fmt.Errorf("%s: %w", op, connectorkit.ErrUnknownOperation) }

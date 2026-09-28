@@ -376,14 +376,14 @@ message ImpactEvent {
   int32 seq = 3;
   // empty for a change-level event (adopted)
   string impact_id = 4;
-  // declared | written | reviewed | discarded | adopted | landed | rebased | imported
+  // declared | written | reviewed | discarded | adopted | landed | rebased
   string op = 5;
   // the caller: the flow branch ("" = the main flow), the journal record of the action run, the principal or component
   string flow = 6;
   string execution = 7;
   string by = 8;
   google.protobuf.Timestamp at = 9;
-  // declared, imported
+  // declared
   ChangeImpact state = 10;
   // written
   NodeRef post = 11;

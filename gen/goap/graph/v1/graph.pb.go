@@ -2457,14 +2457,14 @@ type ImpactEvent struct {
 	Seq      int32                  `protobuf:"varint,3,opt,name=seq,proto3" json:"seq,omitempty"`
 	// empty for a change-level event (adopted)
 	ImpactId string `protobuf:"bytes,4,opt,name=impact_id,json=impactId,proto3" json:"impact_id,omitempty"`
-	// declared | written | reviewed | discarded | adopted | landed | rebased | imported
+	// declared | written | reviewed | discarded | adopted | landed | rebased
 	Op string `protobuf:"bytes,5,opt,name=op,proto3" json:"op,omitempty"`
 	// the caller: the flow branch ("" = the main flow), the journal record of the action run, the principal or component
 	Flow      string                 `protobuf:"bytes,6,opt,name=flow,proto3" json:"flow,omitempty"`
 	Execution string                 `protobuf:"bytes,7,opt,name=execution,proto3" json:"execution,omitempty"`
 	By        string                 `protobuf:"bytes,8,opt,name=by,proto3" json:"by,omitempty"`
 	At        *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=at,proto3" json:"at,omitempty"`
-	// declared, imported
+	// declared
 	State *ChangeImpact `protobuf:"bytes,10,opt,name=state,proto3" json:"state,omitempty"`
 	// written
 	Post *NodeRef `protobuf:"bytes,11,opt,name=post,proto3" json:"post,omitempty"`

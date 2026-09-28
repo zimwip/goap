@@ -377,6 +377,11 @@ func (e *Engine) Run(ctx context.Context, id string) (*Process, error) {
 	if err != nil {
 		return nil, err
 	}
+	// a run scheduled in the background acts for the principal who started the process: what it writes is
+	// recorded under that name (ADR 0029)
+	if authz.From(ctx).Anonymous() {
+		ctx = authz.With(ctx, p.Initiator)
+	}
 	ctx, end := e.tracer().StartProcess(ctx, p)
 	defer func() { end(p) }()
 	p.MethodologyVersion = m.Version

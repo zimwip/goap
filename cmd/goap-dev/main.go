@@ -68,9 +68,7 @@ func main() {
 	}
 	defer st.close()
 	g := graph.New(st.graph)
-	if err := graphsvc.PrepareGraph(ctx, g, log); err != nil {
-		platform.Fatal(log, "impact log", err)
-	}
+	g.Caller = graphsvc.Caller // the principal behind each event of the impact logs (ADR 0029)
 	directory := &access.Directory{Graph: g}
 	authorizer, err := access.NewAuthorizer(directory)
 	if err != nil {

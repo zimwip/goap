@@ -525,7 +525,7 @@ export interface ImpactEvent {
   seq?: number;
   /** empty for a change-level event (adopted) */
   impactId?: string;
-  op?: 'declared' | 'written' | 'reviewed' | 'discarded' | 'adopted' | 'landed' | 'rebased' | 'imported' | string;
+  op?: 'declared' | 'written' | 'reviewed' | 'discarded' | 'adopted' | 'landed' | 'rebased' | string;
   /** the caller: flow branch ('' = main flow), journal record of the action run, principal or component */
   flow?: string;
   execution?: string;

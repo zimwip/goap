@@ -27,8 +27,6 @@ const (
 	ImpactLanded ImpactOp = "landed"
 	// ImpactRebased moves the pre version of a planned change impact to a newer head, to re-check (Pre).
 	ImpactRebased ImpactOp = "rebased"
-	// ImpactImported is the whole state of a change impact recorded before the log existed (Impact).
-	ImpactImported ImpactOp = "imported"
 )
 
 // ImpactEvent is one operation on the change impacts of a change.
@@ -45,7 +43,7 @@ type ImpactEvent struct {
 	By        string    `json:"by,omitempty"`
 	At        time.Time `json:"at"`
 
-	State  *ChangeImpact `json:"state,omitempty"` // declared, imported
+	State  *ChangeImpact `json:"state,omitempty"` // declared
 	Post   *NodeRef      `json:"post,omitempty"`  // written
 	Pre    *NodeRef      `json:"pre,omitempty"`   // rebased
 	Landed *NodeRef      `json:"landed,omitempty"`
@@ -62,7 +60,7 @@ func (e ImpactEvent) Validate() error {
 		return nil
 	}
 	switch e.Op {
-	case ImpactDeclared, ImpactImported:
+	case ImpactDeclared:
 		return need(e.State != nil && e.State.ID == e.Impact, "the change impact")
 	case ImpactWritten:
 		return need(e.Impact != "" && e.Post != nil, "a change impact and a post version")
@@ -91,7 +89,7 @@ func FoldImpacts(events []ImpactEvent) []ChangeImpact {
 func ApplyImpactEvent(impacts []ChangeImpact, e ImpactEvent) []ChangeImpact {
 	out := slices.Clone(impacts)
 	at := slices.IndexFunc(out, func(c ChangeImpact) bool { return c.ID == e.Impact })
-	if e.Op == ImpactDeclared || e.Op == ImpactImported {
+	if e.Op == ImpactDeclared {
 		cn := cloneImpact(*e.State)
 		if at >= 0 {
 			out[at] = cn

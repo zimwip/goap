@@ -59,9 +59,8 @@ func main() {
 	srv.Readiness(events.Ready)
 
 	g := graph.New(repo)
-	if err := graphsvc.PrepareGraph(ctx, g, log); err != nil {
-		platform.Fatal(log, "impact log", err)
-	}
+	// the principal behind each event of the impact logs (ADR 0029)
+	g.Caller = graphsvc.Caller
 	g.Observe(events) // node and baseline events feed the node index (ADR 0026)
 	// the graph judges nodes by the types of the published domains (ADR 0012): the registry is the reference, the
 	// graph holds a copy reloaded on its domain events; without a registry, the domain files are the source
