@@ -101,7 +101,7 @@ func (a *applier) checkChangeImpacts() error {
 		}
 		var last *domain.Transition
 		for _, v := range vs {
-			if domain.BranchOf(v.Branch) != a.branch || int(v.Version) <= from || v.State == prev {
+			if !v.On(a.branch) || int(v.Version) <= from || v.State == prev {
 				continue
 			}
 			t, ok := lc.Move(prev, v.State)
@@ -152,10 +152,11 @@ func joinSorted(s []string) string {
 	return out
 }
 
-// land records, once the branch of a change is merged into its parent, the
-// version each change impact landed as, and moves the planned change impacts of the
-// other open changes on the same nodes to the new head, to be re-checked.
-func (g *Graph) land(ctx context.Context, tx Tx, c domain.Change, own domain.Branch, mergeChange domain.ChangeID) error {
+// land records, once the branch of a change is merged into its parent (the baseline result), the
+// version each change impact landed as: the version it wrote, joined to the parent, or the merge
+// version of mergeChange; and moves the planned change impacts of the other open changes on the
+// same nodes to the new head, to be re-checked.
+func (g *Graph) land(ctx context.Context, tx Tx, c domain.Change, own domain.Branch, mergeChange domain.ChangeID, result domain.BaselineID) error {
 	for _, cn := range c.Nodes {
 		if cn.Post == nil || cn.Review != domain.ReviewAccepted || cn.Flow != "" || cn.Superseded {
 			continue
@@ -164,7 +165,7 @@ func (g *Graph) land(ctx context.Context, tx Tx, c domain.Change, own domain.Bra
 		if err != nil {
 			return err
 		}
-		if head.ChangeID != mergeChange {
+		if head.ChangeID != mergeChange && head.Ref() != *cn.Post {
 			continue // left as is on the target: nothing of this change landed
 		}
 		ref := head.Ref()
@@ -175,7 +176,7 @@ func (g *Graph) land(ctx context.Context, tx Tx, c domain.Change, own domain.Bra
 		if err := tx.SetNodeOrigin(ctx, ref, c.ID, cn.ID, comment); err != nil {
 			return err
 		}
-		if err := g.emit(ctx, tx, domain.ImpactEvent{Change: c.ID, Impact: cn.ID, Op: domain.ImpactLanded, Landed: &ref}); err != nil {
+		if err := g.emit(ctx, tx, domain.ImpactEvent{Change: c.ID, Impact: cn.ID, Op: domain.ImpactLanded, Landed: &ref, Baseline: result}); err != nil {
 			return err
 		}
 		others, err := tx.NodeChangeImpacts(ctx, ref.ID)

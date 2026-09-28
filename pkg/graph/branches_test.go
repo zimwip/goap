@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/zimwip/goap/pkg/domain"
@@ -57,8 +58,10 @@ func testBranchMerge(t *testing.T, repo Repo) {
 	if bA.Branch != "opt-a" || bA.Nodes[f.req.ID] != 2 {
 		t.Fatalf("opt-a baseline: %+v", bA)
 	}
-	v2 := must[domain.Node](t)(g.Node(ctx, domain.NodeRef{ID: f.req.ID, Version: 2}))
-	if v2.Branch != "opt-a" || v2.Reason != domain.ReasonDerive || !slices.Equal(v2.Parents, []domain.Version{1}) {
+	versions := func() []domain.Node { return must[[]domain.Node](t)(g.Versions(ctx, f.req.ID)) }
+	// written on the branch of the change, joined opt-a when the change landed there (ADR 0032)
+	v2 := versions()[1]
+	if !strings.HasPrefix(v2.Branch, "change-") || !slices.Equal(v2.Joined, []string{"opt-a"}) || v2.Reason != domain.ReasonDerive || !slices.Equal(v2.Parents, []domain.Version{1}) {
 		t.Fatalf("derived version: %+v", v2)
 	}
 	if n := must[domain.Node](t)(g.Node(ctx, domain.NodeRef{ID: f.req.ID})); n.Version != 1 {
@@ -70,8 +73,8 @@ func testBranchMerge(t *testing.T, repo Repo) {
 
 	// main moves in parallel: REQ-1 v3, derived from v1 on the branch of the change and landed on main.
 	bM := commitOn(t, g, "", f.base.ID, setEdit(req1, map[string]any{"prio": "high"}))
-	v3 := must[domain.Node](t)(g.Node(ctx, domain.NodeRef{ID: f.req.ID, Version: 3}))
-	if v3.Branch != domain.MainBranch || !slices.Equal(v3.Parents, []domain.Version{1}) || bM.Nodes[f.req.ID] != 3 {
+	v3 := versions()[2]
+	if !slices.Equal(v3.Joined, []string{domain.MainBranch}) || !slices.Equal(v3.Parents, []domain.Version{1}) || bM.Nodes[f.req.ID] != 3 {
 		t.Fatalf("main version: %+v", v3)
 	}
 	// a change that started before and changes the same property conflicts
@@ -116,13 +119,22 @@ func testBranchMerge(t *testing.T, repo Repo) {
 	if len(nodes) != 4 {
 		t.Fatalf("merged nodes: %+v", nodes)
 	}
-	var refines, satisfies bool
+	satisfies := false
 	for _, l := range links {
-		refines = refines || (l.Type == "refines" && l.To == v4.Ref())
 		satisfies = satisfies || (l.Type == "satisfies" && l.From == v4.Ref())
 	}
-	if !refines || !satisfies {
+	if !satisfies {
 		t.Fatalf("merged links: %+v", links)
+	}
+	// DES-1, added on opt-a only, joins main as is (no merge version, ADR 0032): its link to the REQ-1 it refined on
+	// the branch is suspect, REQ-1 got a merge version with the changes of main
+	des := must[domain.Node](t)(g.NodeByKey(ctx, "", "DES-1"))
+	if des.Version != 1 || b.Nodes[des.ID] != 1 {
+		t.Fatalf("DES-1 must land as is: %+v", des)
+	}
+	suspect := must[[]domain.Link](t)(g.SuspectLinks(ctx, b.ID))
+	if !slices.ContainsFunc(suspect, func(l domain.Link) bool { return l.Type == "refines" && l.From == des.Ref() && l.To == v2.Ref() }) {
+		t.Fatalf("suspect links: %+v", suspect)
 	}
 	if br := must[domain.Branch](t)(g.Branch(ctx, "", "opt-a")); br.Status != domain.BranchMerged {
 		t.Fatalf("branch status %s", br.Status)
@@ -275,5 +287,60 @@ func testCreateBaselineFromLatestScopesToOneNamespace(t *testing.T, repo Repo) {
 	}
 	if _, ok := snap.Nodes[def.ID]; ok {
 		t.Fatalf("snapshot must not contain the default-namespace node: %+v", snap.Nodes)
+	}
+}
+
+// A merge without conflict writes no version (ADR 0032): what changed on one side only joins the target as is.
+func TestMergeWithoutConflictJoinsVersions(t *testing.T) {
+	forEachRepo(t, testMergeWithoutConflictJoinsVersions)
+}
+
+func testMergeWithoutConflictJoinsVersions(t *testing.T, repo Repo) {
+	ctx := context.Background()
+	f := newFixture(t, repo)
+	g := f.g
+	// main moves on REQ-1, then a change that started before lands NEED-1 and a new node: a merge, not a fast-forward
+	commitOn(t, g, "", f.base.ID, setEdit(f.req.Ref(), map[string]any{"prio": "high"}))
+	res, err := g.Commit(ctx, Commit{Title: "late", Baseline: f.base.ID, By: "test", Edits: []NodeEdit{
+		setEdit(f.need.Ref(), map[string]any{"title": "Pay online, twice"}),
+		{Key: "DES-2", Type: "Design"},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	vs := must[[]domain.Node](t)(g.Versions(ctx, f.need.ID))
+	if len(vs) != 2 || vs[1].Reason == domain.ReasonMerge || !slices.Contains(vs[1].Joined, domain.MainBranch) {
+		t.Fatalf("NEED-1 must join main as the version the change wrote: %+v", vs)
+	}
+	if n := must[domain.Node](t)(g.Node(ctx, domain.NodeRef{ID: f.need.ID})); n.Version != 2 || n.Properties["title"] != "Pay online, twice" {
+		t.Fatalf("latest on main: %+v", n)
+	}
+	head := must[domain.Baseline](t)(g.BranchHead(ctx, "", ""))
+	if head.ID != res.Baseline.ID || head.Nodes[f.need.ID] != 2 || head.Nodes[f.req.ID] != 2 {
+		t.Fatalf("head: %+v, result %+v", head, res.Baseline)
+	}
+	des := must[domain.Node](t)(g.NodeByKey(ctx, "", "DES-2"))
+	if des.Version != 1 || head.Nodes[des.ID] != 1 {
+		t.Fatalf("DES-2 must land as is: %+v", des)
+	}
+	// the change impacts of the change landed as the versions they wrote, in the result baseline
+	impacts := must[[]domain.ChangeImpact](t)(g.ListChangeImpacts(ctx, res.Change))
+	for _, cn := range impacts {
+		if cn.Landed == nil || cn.Post == nil || *cn.Landed != *cn.Post {
+			t.Fatalf("landed: %+v", cn)
+		}
+	}
+	events := must[[]domain.ImpactEvent](t)(g.ChangeEvents(ctx, res.Change))
+	landed := 0
+	for _, e := range events {
+		if e.Op == domain.ImpactLanded {
+			landed++
+			if e.Baseline != res.Baseline.ID {
+				t.Fatalf("landed event baseline %s, want %s", e.Baseline, res.Baseline.ID)
+			}
+		}
+	}
+	if landed != len(impacts) {
+		t.Fatalf("%d landed events for %d impacts", landed, len(impacts))
 	}
 }

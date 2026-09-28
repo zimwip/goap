@@ -25,6 +25,7 @@ func forEachRepo(t *testing.T, f func(t *testing.T, repo Repo)) {
 		repo := NewMemory()
 		f(t, repo)
 		checkImpactLogs(t, repo)
+		checkLandings(t, repo)
 	})
 	t.Run("sqlite", func(t *testing.T) {
 		ctx := context.Background()
@@ -39,6 +40,7 @@ func forEachRepo(t *testing.T, f func(t *testing.T, repo Repo)) {
 		repo := NewSQLite(db)
 		f(t, repo)
 		checkImpactLogs(t, repo)
+		checkLandings(t, repo)
 	})
 	dsn := os.Getenv("GOAP_TEST_PG_DSN")
 	if dsn == "" {
@@ -72,6 +74,7 @@ func forEachRepo(t *testing.T, f func(t *testing.T, repo Repo)) {
 		repo := NewPostgres(pool)
 		f(t, repo)
 		checkImpactLogs(t, repo)
+		checkLandings(t, repo)
 	})
 }
 

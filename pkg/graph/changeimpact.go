@@ -406,7 +406,9 @@ func (g *Graph) WriteNode(ctx context.Context, id domain.ChangeID, node domain.C
 			}
 			n.ID, n.Version, n.Parents, n.Properties = base.ID, v, []domain.Version{base.Version}, maps.Clone(base.Properties)
 			n.Reason = domain.ReasonRevise
-			if domain.BranchOf(base.Branch) != branch {
+			if on, err := onBranch(ctx, tx, base.Ref(), branch); err != nil {
+				return err
+			} else if !on {
 				n.Reason = domain.ReasonDerive
 			}
 			cur = base.State
