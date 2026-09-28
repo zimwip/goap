@@ -1923,15 +1923,17 @@ func (x *AgentSummary) GetPlanner() string {
 }
 
 type MethodologySummary struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Version       string                 `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
-	Description   string                 `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
-	Status        string                 `protobuf:"bytes,4,opt,name=status,proto3" json:"status,omitempty"`
-	Goals         []*GoalSummary         `protobuf:"bytes,5,rep,name=goals,proto3" json:"goals,omitempty"`
-	Agents        []*AgentSummary        `protobuf:"bytes,8,rep,name=agents,proto3" json:"agents,omitempty"`
-	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
-	PublishedAt   *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=published_at,json=publishedAt,proto3" json:"published_at,omitempty"`
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Name        string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Version     string                 `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
+	Description string                 `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
+	Status      string                 `protobuf:"bytes,4,opt,name=status,proto3" json:"status,omitempty"`
+	Goals       []*GoalSummary         `protobuf:"bytes,5,rep,name=goals,proto3" json:"goals,omitempty"`
+	Agents      []*AgentSummary        `protobuf:"bytes,8,rep,name=agents,proto3" json:"agents,omitempty"`
+	UpdatedAt   *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	PublishedAt *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=published_at,json=publishedAt,proto3" json:"published_at,omitempty"`
+	// namespace (domain) the changes of the methodology act on
+	Namespace     string `protobuf:"bytes,9,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2020,6 +2022,13 @@ func (x *MethodologySummary) GetPublishedAt() *timestamppb.Timestamp {
 		return x.PublishedAt
 	}
 	return nil
+}
+
+func (x *MethodologySummary) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
+	}
+	return ""
 }
 
 // A validation issue. `path` locates the field, e.g. "conditions[2].expr".
@@ -4828,7 +4837,7 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\fAgentSummary\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x18\n" +
-	"\aplanner\x18\x03 \x01(\tR\aplanner\"\xe3\x02\n" +
+	"\aplanner\x18\x03 \x01(\tR\aplanner\"\x81\x03\n" +
 	"\x12MethodologySummary\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\tR\aversion\x12 \n" +
@@ -4838,7 +4847,8 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\x06agents\x18\b \x03(\v2\x1e.goap.registry.v1.AgentSummaryR\x06agents\x129\n" +
 	"\n" +
 	"updated_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12=\n" +
-	"\fpublished_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\vpublishedAt\"5\n" +
+	"\fpublished_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\vpublishedAt\x12\x1c\n" +
+	"\tnamespace\x18\t \x01(\tR\tnamespace\"5\n" +
 	"\x05Issue\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\"=\n" +

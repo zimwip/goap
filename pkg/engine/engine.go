@@ -150,9 +150,6 @@ func (e *Engine) Start(ctx context.Context, req StartRequest) (*Process, error) 
 		}
 		p.BaselineID = bb.Change.BaselineID
 	}
-	if p.ChangeID == "" && p.BaselineID == "" {
-		return nil, fmt.Errorf("a baseline or a change is required: %w", ErrInvalidState)
-	}
 	if req.Goal != "" {
 		m, err := e.Methodologies.Methodology(ctx, req.Methodology)
 		if err != nil {
@@ -301,7 +298,17 @@ func (e *Engine) selectTarget(ctx context.Context, p *Process, m *methodology.Co
 		if p.Trigger != "" {
 			data = map[string]any{"trigger": p.Trigger}
 		}
-		c, err := e.Graph.CreateChange(ctx, graph.NewChange{Title: title, Intent: firstUserTurn(p), Methodology: m.Name, OwnerOrg: p.Org, Namespace: firstNonEmpty(p.Namespace, m.Namespace), OwnBranch: p.OwnBranch, BaselineID: p.BaselineID, Data: data})
+		ns := firstNonEmpty(p.Namespace, m.Namespace)
+		// Without a baseline, the change starts from the latest one of the namespace it acts on: a request may
+		// only know its methodology (hence its namespace) once its intent is identified.
+		if p.BaselineID == "" {
+			b, err := e.latestBaseline(ctx, domain.NamespaceOf(ns))
+			if err != nil {
+				return fmt.Errorf("methodology %s: %w", m.Name, err)
+			}
+			p.BaselineID = b
+		}
+		c, err := e.Graph.CreateChange(ctx, graph.NewChange{Title: title, Intent: firstUserTurn(p), Methodology: m.Name, OwnerOrg: p.Org, Namespace: ns, OwnBranch: p.OwnBranch, BaselineID: p.BaselineID, Data: data})
 		if err != nil {
 			return err
 		}

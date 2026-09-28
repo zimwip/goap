@@ -9,20 +9,14 @@
   import Icon from '../../shell/Icon.svelte';
   import StatusBadge from '../../components/StatusBadge.svelte';
   import IntentDialogue from '../editors/IntentDialogue.svelte';
-  import { engine, errorMessage, shortId, type Process } from '../../api';
-  import {
-    methodologies,
-    baselines,
-    refreshMethodologies,
-    refreshBaselines,
-    latestPublished,
-  } from '../../stores/catalog.svelte';
+  import { engine, graph, errorMessage, formatDate, shortId, type Baseline, type Process } from '../../api';
+  import { methodologies, refreshMethodologies, latestPublished } from '../../stores/catalog.svelte';
   import { processes, ingestProcess } from '../../stores/live.svelte';
   import { openTab } from '../../shell/tabs.svelte';
   import { headGraph } from '../../graphEdit';
   import { focusRequests } from '../../shell/workbench.svelte';
   import { ORG_UNIT_TYPE } from '../../orgTypes';
-  import { DEFAULT_NAMESPACE } from '../../namespace';
+  import { namespaceOf } from '../../namespace';
 
   const NS_ORGANISATION = 'organisation';
 
@@ -47,9 +41,6 @@
 
   $effect(() => {
     if (!methodologies.loaded) void refreshMethodologies();
-    // the methodology to test isn't chosen yet at this point, so its namespace is unknown;
-    // default namespace is a known limitation here (see plan notes).
-    if (!baselines.loaded) void refreshBaselines(DEFAULT_NAMESPACE);
   });
 
   $effect(() => {
@@ -67,16 +58,33 @@
   );
   const goals = $derived(published.find((m) => m.name === methodology)?.goals ?? []);
 
-  // Default values and consistency of selections.
+  // Baselines are namespace-scoped: those of the namespace the chosen methodology (or agent's) acts on. Without a
+  // methodology, the engine starts from the latest baseline of the identified one's namespace.
+  const chosen = $derived(methodology || (agentKey ? agentKey.split('::')[0] : ''));
+  const namespace = $derived(chosen ? namespaceOf(published.find((m) => m.name === chosen)?.namespace) : '');
+  let baselines = $state<Baseline[]>([]);
   $effect(() => {
-    if (!baselineId && baselines.items.length) baselineId = baselines.items[baselines.items.length - 1].id ?? '';
+    const ns = namespace;
+    baselines = [];
+    if (!ns) return;
+    const ctrl = new AbortController();
+    graph
+      .listBaselines(ns, ctrl.signal)
+      .then((r) => (baselines = [...(r.baselines ?? [])].reverse()))
+      .catch(() => {});
+    return () => ctrl.abort();
+  });
+
+  // Consistency of selections.
+  $effect(() => {
+    if (baselineId && !baselines.some((b) => b.id === baselineId)) baselineId = '';
   });
   $effect(() => {
     if (agentKey && !agents.some((a) => a.key === agentKey)) agentKey = '';
     if (goal && !goals.some((g) => g.name === goal)) goal = '';
   });
 
-  const canSubmit = $derived(!!session.intent.trim() && !submitting && (!!baselineId || !baselines.items.length));
+  const canSubmit = $derived(!!session.intent.trim() && !submitting);
   const last = $derived<Process | undefined>(session.recent.length ? processes.get(session.recent[0]) : undefined);
 
   async function submit(e?: SubmitEvent) {
@@ -157,8 +165,8 @@
     <div class="field">
       <label for="t-base">Baseline</label>
       <select id="t-base" bind:value={baselineId}>
-        {#if !baselines.items.length}<option value="">— none —</option>{/if}
-        {#each [...baselines.items].reverse() as b (b.id)}<option value={b.id}>{b.name || shortId(b.id)}</option>{/each}
+        <option value="">{namespace ? `Most recent of ${namespace}` : "Most recent of the identified methodology's namespace"}</option>
+        {#each baselines as b (b.id)}<option value={b.id}>{b.name || shortId(b.id)} — {formatDate(b.createdAt)}</option>{/each}
       </select>
     </div>
     <div class="field">

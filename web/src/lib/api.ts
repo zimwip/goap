@@ -456,6 +456,8 @@ export interface MethodologySummary {
   agents?: AgentSummary[];
   updatedAt?: string;
   publishedAt?: string;
+  /** namespace (domain) the changes of the methodology act on */
+  namespace?: string;
 }
 
 /** Validation issue; `path` locates the field, e.g. "conditions[2].expr". */
