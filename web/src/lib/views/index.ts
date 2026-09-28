@@ -40,7 +40,6 @@ import ConditionTab from './editors/ConditionTab.svelte';
 import GoalTab from './editors/GoalTab.svelte';
 import RunTab from './editors/RunTab.svelte';
 import ChangeTab from './editors/ChangeTab.svelte';
-import JournalTab from './editors/JournalTab.svelte';
 import BaselineTab from './editors/BaselineTab.svelte';
 import PoliciesTab from './editors/PoliciesTab.svelte';
 import ImportTab from './editors/ImportTab.svelte';
@@ -370,20 +369,6 @@ registerView({
   component: ChangeTab,
   key: (p) => p.id ?? '',
   tabTitle: (t) => changes.items.find((c) => c.id === t.params.id)?.title || `Change ${shortId(t.params.id)}`,
-});
-
-registerView({
-  id: 'journal',
-  zone: 'editor',
-  title: 'Execution journal',
-  icon: 'list',
-  component: JournalTab,
-  key: (p) => p.id ?? '',
-  tabTitle: (t) => {
-    const c = changes.items.find((x) => x.id === t.params.id);
-    return `Journal · ${c?.title || shortId(t.params.id)}`;
-  },
-  tooltip: (t) => `Execution journal of change ${t.params.id}`,
 });
 
 registerView({
