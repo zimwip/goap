@@ -4,7 +4,7 @@
 // ADR 0017). Each entry says when, who, on which flow and through which action run. A change is a flow of events:
 // flow branches fork from it (a relaunch, alternatives to compare), and are merged back (adopted) or dropped
 // (discarded); the entries carry these marks so the trail can be drawn as branches.
-import { int, shortId, type Change, type ChangeItem, type ExecutionRecord, type ImpactEvent, type JsonValue, type LogEntry, type NodeRef } from './api';
+import { decodeLogEntry, int, shortId, type Change, type ChangeItem, type ExecutionRecord, type ImpactEvent, type JsonValue, type LogEntry, type NodeRef } from './api';
 
 export type AuditSource = 'change' | 'process' | 'schedule' | 'plan' | 'action' | 'approval' | 'impact' | 'fact' | 'flow';
 
@@ -243,7 +243,7 @@ export function flowParents(entries: LogEntry[]): Map<string, string> {
   const parents = new Map<string, string>();
   for (const l of entries) {
     if (l.type !== 'fact.flow') continue;
-    const it = JSON.parse(l.payload ?? '{}') as ChangeItem;
+    const it = decodeLogEntry<ChangeItem>(l);
     if (it.flowEvent?.op === 'open') parents.set(it.flowEvent.flow ?? '', it.flowEvent.parent ?? '');
   }
   return parents;
@@ -271,14 +271,13 @@ export function buildTrail(change: Change, log: LogEntry[], parents: Map<string,
     });
   }
   for (const l of log) {
-    const payload = JSON.parse(l.payload ?? '{}');
     let e: Entry;
-    if (l.type?.startsWith('journal.')) e = fromRecord(payload as ExecutionRecord);
+    if (l.type?.startsWith('journal.')) e = fromRecord(decodeLogEntry<ExecutionRecord>(l));
     else if (l.type?.startsWith('impact.')) {
-      const ev = payload as ImpactEvent;
+      const ev = decodeLogEntry<ImpactEvent>(l);
       if (ev.state?.key) keys.set(ev.impactId ?? '', ev.state.key);
       e = fromEvent(ev, keys, parents);
-    } else e = fromItem(payload as ChangeItem, parents);
+    } else e = fromItem(decodeLogEntry<ChangeItem>(l), parents);
     out.push({ ...e, seq: int(l.seq) });
   }
   return out;

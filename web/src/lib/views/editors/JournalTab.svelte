@@ -1,11 +1,12 @@
 <script lang="ts">
-  // "Execution journal" tab for a change (ADR 0011): ticks
-  // (observation + planning), action executions, human decisions,
-  // process start / end, grouped by process in journal order.
+  // "Execution journal" tab for a change: the journal.* entries of its log (ADR 0011, ADR 0030) — ticks
+  // (observation + planning), action executions, human decisions, process start / end — grouped by process
+  // in journal order.
   import { tick } from 'svelte';
   import type { Tab } from '../../shell/types';
   import Icon from '../../shell/Icon.svelte';
   import StatusBadge from '../../components/StatusBadge.svelte';
+  import CallsDetail from '../../components/CallsDetail.svelte';
   import { provideActions } from '../../shell/workbench.svelte';
   import { openTab } from '../../shell/tabs.svelte';
   import { processes } from '../../stores/live.svelte';
@@ -13,6 +14,7 @@
   import {
     graph,
     errorMessage,
+    executionsFromLog,
     formatDate,
     formatDuration,
     formatInt,
@@ -46,10 +48,10 @@
     error = '';
     try {
       const [j, c] = await Promise.all([
-        graph.listExecutions(id, pid ? [pid] : [], signal),
+        graph.listChangeLog({ changeId: id, types: ['journal.'], ...(pid ? { processIds: [pid] } : {}) }, signal),
         graph.getChange(id, signal).catch(() => ({ change: undefined })),
       ]);
-      records = j.records ?? [];
+      records = executionsFromLog(j.entries ?? []);
       items = c.change?.items ?? [];
       loaded = true;
     } catch (e) {
@@ -447,45 +449,7 @@
                     </ul>
                   </details>
                 {/if}
-                {#if r.modelCalls?.length}
-                  <details>
-                    <summary>Model calls ({r.modelCalls.length})</summary>
-                    <table class="calls">
-                      <thead>
-                        <tr><th>Provider</th><th>Model</th><th class="num">Input</th><th class="num">Output</th><th class="num">Duration</th><th>Error</th></tr>
-                      </thead>
-                      <tbody>
-                        {#each r.modelCalls as c, k (k)}
-                          <tr class:err={!!c.error}>
-                            <td>{c.provider}</td>
-                            <td><code>{c.model}</code></td>
-                            <td class="num">{formatInt(c.inputTokens)}</td>
-                            <td class="num">{formatInt(c.outputTokens)}</td>
-                            <td class="num">{formatDuration(c.durationMs)}</td>
-                            <td>{c.error ?? ''}</td>
-                          </tr>
-                        {/each}
-                      </tbody>
-                    </table>
-                  </details>
-                {/if}
-                {#if r.toolCalls?.length}
-                  <details>
-                    <summary>Tool calls ({r.toolCalls.length})</summary>
-                    <table class="calls">
-                      <thead><tr><th>Tool</th><th class="num">Duration</th><th>Error</th></tr></thead>
-                      <tbody>
-                        {#each r.toolCalls as c, k (k)}
-                          <tr class:err={!!c.error}>
-                            <td><code>{c.name}</code></td>
-                            <td class="num">{formatDuration(c.durationMs)}</td>
-                            <td>{c.error ?? ''}</td>
-                          </tr>
-                        {/each}
-                      </tbody>
-                    </table>
-                  </details>
-                {/if}
+                <CallsDetail modelCalls={r.modelCalls} toolCalls={r.toolCalls} />
                 {#if r.output}
                   <details>
                     <summary>Output</summary>
@@ -713,13 +677,6 @@
   details pre {
     margin-top: 0.3rem;
     max-height: 22rem;
-  }
-  .calls {
-    margin-top: 0.25rem;
-    font-size: 0.9em;
-  }
-  tr.err td {
-    color: var(--danger);
   }
   .board {
     color: var(--text-muted, inherit);

@@ -6,6 +6,7 @@
   import { formatDate, formatDuration, formatInt, formatTime, int, shortId, type Process, type Step } from '../api';
   import { offsetOf, runKind, type RunKind } from '../flowChain';
   import StatusBadge from './StatusBadge.svelte';
+  import CallsDetail from './CallsDetail.svelte';
 
   let {
     steps = [],
@@ -156,45 +157,7 @@
       {/each}
     </div>
   {/if}
-  {#if s.llmCalls?.length}
-    <details>
-      <summary>LLM calls ({s.llmCalls.length})</summary>
-      <table class="calls">
-        <thead>
-          <tr><th>Provider</th><th>Model</th><th class="num">Input</th><th class="num">Output</th><th class="num">Duration</th><th>Error</th></tr>
-        </thead>
-        <tbody>
-          {#each s.llmCalls as c, k (k)}
-            <tr class:err={!!c.error}>
-              <td>{c.provider}</td>
-              <td><code>{c.model}</code></td>
-              <td class="num">{formatInt(c.inputTokens)}</td>
-              <td class="num">{formatInt(c.outputTokens)}</td>
-              <td class="num">{formatDuration(c.durationMs)}</td>
-              <td>{c.error ?? ''}</td>
-            </tr>
-          {/each}
-        </tbody>
-      </table>
-    </details>
-  {/if}
-  {#if s.toolCalls?.length}
-    <details>
-      <summary>Tool calls ({s.toolCalls.length})</summary>
-      <table class="calls">
-        <thead><tr><th>Tool</th><th class="num">Duration</th><th>Error</th></tr></thead>
-        <tbody>
-          {#each s.toolCalls as c, k (k)}
-            <tr class:err={!!c.error}>
-              <td><code>{c.name}</code></td>
-              <td class="num">{formatDuration(c.durationMs)}</td>
-              <td>{c.error ?? ''}</td>
-            </tr>
-          {/each}
-        </tbody>
-      </table>
-    </details>
-  {/if}
+  <CallsDetail modelCalls={s.llmCalls} toolCalls={s.toolCalls} />
   {#if logs.length}
     <details open={st === 'pending' || st === 'error'}>
       <summary>Log ({logs.length})</summary>
@@ -542,13 +505,6 @@
   details pre {
     margin-top: 0.3rem;
     max-height: 22rem;
-  }
-  .calls {
-    margin-top: 0.25rem;
-    font-size: 0.9em;
-  }
-  tr.err td {
-    color: var(--danger);
   }
   .logs {
     list-style: none;
