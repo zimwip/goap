@@ -25,6 +25,10 @@ type TriggerEvent struct {
 	Process     *Process       `json:"process,omitempty"`
 	Methodology string         `json:"methodology,omitempty"`
 	Version     string         `json:"version,omitempty"`
+	// Items are the change items written by the operation that raised the
+	// event (set for change.item_added / change.signal), so a trigger filter
+	// can select on their content (event.items.exists(...)).
+	Items []domain.ChangeItem `json:"items,omitempty"`
 }
 
 func (ev TriggerEvent) activation() map[string]any {
@@ -43,6 +47,18 @@ func (ev TriggerEvent) activation() map[string]any {
 	}
 	if ev.Methodology != "" {
 		out["methodology"] = map[string]any{"name": ev.Methodology, "version": ev.Version}
+	}
+	if len(ev.Items) > 0 {
+		items := make([]any, len(ev.Items))
+		for i, it := range ev.Items {
+			data := it.Data
+			if data == nil {
+				data = map[string]any{}
+			}
+			items[i] = map[string]any{"kind": string(it.Kind), "type": it.Type, "data": data,
+				"producedBy": it.ProducedBy, "target": it.Target}
+		}
+		out["items"] = items
 	}
 	return out
 }
@@ -80,18 +96,30 @@ type triggerEntry struct {
 // on its own output (loop protection), and a trigger fires at most once per
 // MinInterval.
 //
-// With several engine replicas, only one must run the manager (leader
-// election: milestone M1).
+// With several engine replicas, event delivery is deduplicated by the
+// caller binding every replica's ConsumeDurable to the same durable
+// consumer name (competing consumers); schedule (cron) firing has no such
+// natural per-message semantics, so it is gated by Leader instead — only
+// the replica for which Leader() is true actually fires a cron entry.
+// Reload, States and a manual Fire are unaffected by Leader and stay
+// available on every replica.
 type TriggerManager struct {
 	Engine *Engine
 	Log    *slog.Logger
 	// MinInterval between two fires of the same trigger (default 2s).
 	MinInterval time.Duration
+	// Leader reports whether this replica may fire schedule (cron) triggers.
+	// nil means always leader (single-process deployments, tests).
+	Leader func() bool
 
 	mu      sync.Mutex
 	entries map[string]*triggerEntry
 	cron    *cron.Cron
 	now     func() time.Time
+}
+
+func (t *TriggerManager) isLeader() bool {
+	return t.Leader == nil || t.Leader()
 }
 
 var errUnknownTrigger = errors.New("unknown trigger")
@@ -181,11 +209,7 @@ func (t *TriggerManager) Reload(ctx context.Context) error {
 				}
 				key := e.state.Key()
 				if def.Type == methodology.TriggerSchedule && def.Enabled && t.cron != nil {
-					id, err := t.cron.AddFunc(def.Schedule, func() {
-						if _, err := t.fireKey(context.Background(), key, nil); err != nil {
-							t.log().Warn("scheduled trigger", "trigger", key, "err", err)
-						}
-					})
+					id, err := t.cron.AddFunc(def.Schedule, func() { t.cronFire(key) })
 					if err != nil {
 						e.state.LastError = err.Error()
 					}
@@ -235,6 +259,21 @@ func (t *TriggerManager) Handle(ctx context.Context, ev TriggerEvent) {
 		if _, err := t.fireKey(ctx, key, &ev); err != nil && !errors.Is(err, errSkipped) {
 			t.log().Warn("event trigger", "trigger", key, "event", ev.Type, "err", err)
 		}
+	}
+}
+
+// cronFire is the cron callback for a schedule trigger: it fires only on
+// the leader replica (see TriggerManager.Leader), so with several engine
+// replicas sharing the same methodology only one of them actually starts
+// the process. Exposed as its own method (rather than inlined in the cron
+// closure) so tests can invoke a scheduled trigger's firing directly
+// instead of waiting on real wall-clock cron ticks.
+func (t *TriggerManager) cronFire(key string) {
+	if !t.isLeader() {
+		return
+	}
+	if _, err := t.fireKey(context.Background(), key, nil); err != nil {
+		t.log().Warn("scheduled trigger", "trigger", key, "err", err)
 	}
 }
 

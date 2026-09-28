@@ -32,7 +32,9 @@ func TestJournalRecordsTicksAndActions(t *testing.T) {
 			t.Fatalf("record %d: %+v", i, r)
 		}
 	}
-	want := []string{"process.started", "schedule", "tick", "action", "tick", "action", "tick", "action", "tick", "process.ended"}
+	// attach (ADR 0031, gap 5) precedes process.started: the change is bound
+	// eagerly inside Start, before Run's own first cycle ever runs.
+	want := []string{"attach", "process.started", "schedule", "tick", "action", "tick", "action", "tick", "action", "tick", "process.ended"}
 	if len(kinds) != len(want) {
 		t.Fatalf("kinds %v", kinds)
 	}
@@ -42,10 +44,10 @@ func TestJournalRecordsTicksAndActions(t *testing.T) {
 		}
 	}
 	// the run says why it happens: the process was started, queued, then picked up
-	if sch := recs[1]; sch.Data["reason"] != "started" || sch.EndedAt.Before(sch.StartedAt) {
+	if sch := recs[2]; sch.Data["reason"] != "started" || sch.EndedAt.Before(sch.StartedAt) {
 		t.Fatalf("schedule record: %+v", sch)
 	}
-	act := recs[3]
+	act := recs[4]
 	if act.Action != "identify_impacts" || act.ActionKind != "llm" || len(act.ModelCalls) != 1 || act.EffectsMet == nil || !*act.EffectsMet || len(act.Nodes) != 1 {
 		t.Fatalf("action record: %+v", act)
 	}
@@ -66,8 +68,8 @@ func TestJournalRecordsTicksAndActions(t *testing.T) {
 	if end := recs[len(recs)-1]; end.Status != string(StatusCompleted) || end.Data["steps"] != float64(3) { // JSON numbers, as every store returns them
 		t.Fatalf("end record: %+v", end)
 	}
-	if recs[2].Plan[0] != "identify_impacts" || recs[2].Data["replanned"] != false {
-		t.Fatalf("tick: %+v", recs[2])
+	if recs[3].Plan[0] != "identify_impacts" || recs[3].Data["replanned"] != false {
+		t.Fatalf("tick: %+v", recs[3])
 	}
 }
 

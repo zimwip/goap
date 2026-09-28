@@ -120,6 +120,16 @@ type StartRequest struct {
 	// Trigger is set for processes started by a trigger.
 	Trigger string
 	Vars    map[string]any
+	// Flow puts the process on an already-open flow branch of ChangeID (ADR
+	// 0017), e.g. a "solution branch" (ADR 0031, gap 6) several concurrent
+	// processes are deliberately pointed at so their impacts are isolated
+	// together and reviewed as one merge decision later. "" (default) is the
+	// main flow. Unlike Vars/ParentID, this is never defaulted automatically:
+	// Change.View returns nothing for a flow that was never opened via
+	// Graph.OpenFlow (pkg/domain/flow.go), so passing an ad-hoc id here
+	// without having opened it first would make the process see an empty
+	// blackboard, not an isolated-but-readable one.
+	Flow string
 }
 
 func (e *Engine) lock(id string) func() {
@@ -148,10 +158,12 @@ func (e *Engine) log() *slog.Logger {
 // methodology, identification ranks the agents of every published methodology.
 func (e *Engine) Start(ctx context.Context, req StartRequest) (*Process, error) {
 	p := &Process{ID: uuid.NewString(), Methodology: req.Methodology, Agent: req.Agent, ChangeID: req.ChangeID, BaselineID: req.BaselineID, Namespace: req.Namespace, OwnBranch: req.OwnBranch, Org: req.OwnerOrg,
-		Title: req.Title, ParentID: req.ParentID, Trigger: req.Trigger, Initiator: authz.From(ctx), Vars: req.Vars, Disabled: map[string]bool{},
+		Title: req.Title, ParentID: req.ParentID, Trigger: req.Trigger, Flow: req.Flow, Initiator: authz.From(ctx), Vars: maps.Clone(req.Vars), Disabled: map[string]bool{},
 		CreatedAt: e.clock(), UpdatedAt: e.clock()}
 	if req.Intent != "" {
-		p.Intent.Turns = append(p.Intent.Turns, intent.Turn{Role: "user", Text: req.Intent})
+		if err := e.appendIntentTurns(ctx, p, intent.Turn{Role: "user", Text: req.Intent}); err != nil {
+			return nil, err
+		}
 	}
 	if req.ChangeID != "" && req.BaselineID == "" {
 		bb, err := e.Graph.Blackboard(ctx, req.ChangeID)
@@ -209,7 +221,9 @@ func (e *Engine) Answer(ctx context.Context, id, answer string) (*Process, error
 	if p.Status != StatusClarifying {
 		return nil, fmt.Errorf("process %s is %s, not clarifying", id, p.Status)
 	}
-	p.Intent.Turns = append(p.Intent.Turns, intent.Turn{Role: "user", Text: answer})
+	if err := e.appendIntentTurns(ctx, p, intent.Turn{Role: "user", Text: answer}); err != nil {
+		return nil, err
+	}
 	if err := e.resolveIntent(ctx, p); err != nil {
 		return nil, err
 	}
@@ -217,6 +231,23 @@ func (e *Engine) Answer(ctx context.Context, id, answer string) (*Process, error
 		e.queue(ctx, p, "answered", nil)
 	}
 	return p, e.save(ctx, p, "intent")
+}
+
+// appendIntentTurns adds turns to the in-memory session and logs them
+// (ADR 0031): the intent dialogue is never persisted in the Process row's
+// body, only in process_log, so a growing conversation never forces a full
+// rewrite of the process.
+func (e *Engine) appendIntentTurns(ctx context.Context, p *Process, turns ...intent.Turn) error {
+	p.Intent.Turns = append(p.Intent.Turns, turns...)
+	return e.logIntentTurns(ctx, p.ID, turns...)
+}
+
+func (e *Engine) logIntentTurns(ctx context.Context, processID string, turns ...intent.Turn) error {
+	entries := make([]ProcessLogEntry, len(turns))
+	for i, t := range turns {
+		entries[i] = ProcessLogEntry{Type: "intent.turn", At: e.clock(), Payload: map[string]any{"role": t.Role, "text": t.Text}}
+	}
+	return e.Store.AppendProcessLog(ctx, processID, entries...)
 }
 
 // target is an identifiable (methodology, agent, goal) triple.
@@ -276,9 +307,15 @@ func (e *Engine) resolveIntent(ctx context.Context, p *Process) error {
 		}
 		goals = append(goals, intent.GoalInfo{Name: t.key(), Description: desc, Examples: append(slices.Clone(t.agent.Examples), t.goal.Examples...)})
 	}
+	before := len(p.Intent.Turns)
 	res, err := e.Intent.Resolve(ctx, &p.Intent, goals)
 	if err != nil {
 		return err
+	}
+	if added := p.Intent.Turns[before:]; len(added) > 0 {
+		if err := e.logIntentTurns(ctx, p.ID, added...); err != nil {
+			return err
+		}
 	}
 	p.Candidates = nil
 	for _, c := range res.Candidates {
@@ -296,7 +333,9 @@ func (e *Engine) resolveIntent(ctx context.Context, p *Process) error {
 	return e.selectTarget(ctx, p, t.m, t.agent.Name, t.goal.Name)
 }
 
-// selectTarget fixes the methodology, agent and goal and opens the change.
+// selectTarget fixes the methodology, agent and goal and, unless the agent
+// declares its own action to bind one (an `effects: {change_bound: true}`
+// action, ADR 0031), opens the change eagerly, exactly as before.
 func (e *Engine) selectTarget(ctx context.Context, p *Process, m *methodology.Compiled, agentName, goal string) error {
 	if agentName == "" {
 		agentName = m.AgentList()[0].Name
@@ -306,42 +345,132 @@ func (e *Engine) selectTarget(ctx context.Context, p *Process, m *methodology.Co
 		return fmt.Errorf("unknown agent %q in %s: %w", agentName, m.Name, ErrInvalidState)
 	}
 	p.Methodology, p.Agent, p.Planner, p.Goal = m.Name, ag.Name, ag.Planner, goal
+	// set early (Run refreshes it to the current published version before it
+	// runs) so an eager bindChange's journal.attach record, journaled here
+	// before Run ever executes, still carries it.
+	p.MethodologyVersion = m.Version
 	p.Question = ""
 	p.Status = StatusRunning
-	if p.ChangeID == "" {
-		title := p.Title
-		if title == "" {
-			title = truncate(firstUserTurn(p), 80)
-		}
-		if title == "" {
-			title = m.Name + " / " + goal
-		}
-		p.Title = title
-		var data map[string]any
-		if p.Trigger != "" {
-			data = map[string]any{"trigger": p.Trigger}
-		}
-		ns := firstNonEmpty(p.Namespace, m.Namespace)
-		// Without a baseline, the change starts from the latest one of the namespace it acts on: a request may
-		// only know its methodology (hence its namespace) once its intent is identified.
-		if p.BaselineID == "" {
-			b, err := e.latestBaseline(ctx, domain.NamespaceOf(ns))
-			if err != nil {
-				return fmt.Errorf("methodology %s: %w", m.Name, err)
-			}
-			p.BaselineID = b
-		}
-		c, err := e.Graph.CreateChange(ctx, graph.NewChange{Title: title, Intent: firstUserTurn(p), Methodology: m.Name, OwnerOrg: p.Org, Namespace: ns, OwnBranch: p.OwnBranch, BaselineID: p.BaselineID, Data: data})
-		if err != nil {
+	if p.ChangeID == "" && !agentBindsOwnChange(m, ag) {
+		if err := e.bindChange(ctx, p, m, AttachRequest{}); err != nil {
 			return err
 		}
-		p.ChangeID = c.ID
 	}
-	if p.ParentID != "" {
-		return nil // the change goal belongs to the parent process
+	if p.ChangeID == "" || p.ParentID != "" {
+		// deferred (the agent's own action will bind it later), or the change goal belongs to the parent process
+		return nil
 	}
 	_, err := e.Graph.UpdateChange(ctx, p.ChangeID, graph.ChangePatch{Goal: &goal})
 	return err
+}
+
+// agentBindsOwnChange reports whether the agent declares its own action to
+// bind a change (an action whose effects establish change_bound), rather than
+// relying on the engine's eager default (ADR 0031, gap 5). No shipped
+// methodology declares this today, so this is always false for them.
+func agentBindsOwnChange(m *methodology.Compiled, ag methodology.Agent) bool {
+	for _, a := range m.AgentActions(ag) {
+		if a.Effects["change_bound"] {
+			return true
+		}
+	}
+	return false
+}
+
+// AttachRequest binds a process to a change: an existing one by ChangeID, or
+// a new one resolved from the given (or process-derived) defaults.
+type AttachRequest struct {
+	ChangeID                           domain.ChangeID // reuse an existing change if set
+	Title, Intent, Namespace, OwnerOrg string
+	BaselineID                         domain.BaselineID
+}
+
+// AttachChange binds a standalone (not-yet-bound) process to a change: the
+// deferred counterpart of selectTarget's eager default (ADR 0031, gap 5). It
+// locks and reloads the process, so it is safe to call from outside the
+// process's own run loop (e.g. a human/UI action, or a tool call that does
+// not already hold the process's lock).
+func (e *Engine) AttachChange(ctx context.Context, processID string, req AttachRequest) error {
+	defer e.lock(processID)()
+	p, err := e.Store.Get(ctx, processID)
+	if err != nil {
+		return err
+	}
+	m, err := e.Methodologies.Methodology(ctx, p.Methodology)
+	if err != nil {
+		return err
+	}
+	if err := e.bindChange(ctx, p, m, req); err != nil {
+		return err
+	}
+	// the process was idle (outside any active Run loop, e.g. StatusWaiting or
+	// between Run calls); selectTarget's own eager path never reaches here, it
+	// runs inside Start's/Answer's existing queue/save flow instead.
+	e.schedule(p.ID)
+	return nil
+}
+
+// bindChange resolves and binds the change of an already-locked process (used
+// by selectTarget's eager default, and by AttachChange). It journals a
+// journal.attach record and persists+publishes an "attached" process event
+// (ADR 0031, gap 5) for every bind, eager or deferred: WatchProcesses turns
+// that into the fixed process.attached trigger event, the same way it already
+// does for process.completed/failed/stuck.
+func (e *Engine) bindChange(ctx context.Context, p *Process, m *methodology.Compiled, req AttachRequest) error {
+	id := req.ChangeID
+	if id == "" {
+		var err error
+		if id, err = e.resolveChange(ctx, p, m, req); err != nil {
+			return err
+		}
+	} else if _, err := e.Graph.Blackboard(ctx, id); err != nil {
+		return fmt.Errorf("attach %s: %w", id, err)
+	}
+	p.ChangeID = id
+	e.journal(ctx, p, domain.ExecutionRecord{Kind: domain.ExecAttach, Step: len(p.Steps),
+		Data: map[string]any{"changeId": string(id), "reused": req.ChangeID != ""}})
+	return e.save(ctx, p, "attached")
+}
+
+// resolveChange creates a new change for p, defaulting from req where given
+// and from p/its methodology otherwise (identical defaults to what selectTarget
+// always did eagerly: title from the first user turn or "<methodology> / <goal>",
+// namespace from the methodology, baseline the latest of that namespace).
+func (e *Engine) resolveChange(ctx context.Context, p *Process, m *methodology.Compiled, req AttachRequest) (domain.ChangeID, error) {
+	title := firstNonEmpty(req.Title, p.Title)
+	if title == "" {
+		title = truncate(firstUserTurn(p), 80)
+	}
+	if title == "" {
+		title = m.Name + " / " + p.Goal
+	}
+	p.Title = title
+	intent := firstNonEmpty(req.Intent, firstUserTurn(p))
+	ownerOrg := firstNonEmpty(req.OwnerOrg, p.Org)
+	var data map[string]any
+	if p.Trigger != "" {
+		data = map[string]any{"trigger": p.Trigger}
+	}
+	ns := firstNonEmpty(req.Namespace, p.Namespace, m.Namespace)
+	baseline := req.BaselineID
+	if baseline == "" {
+		baseline = p.BaselineID
+	}
+	// Without a baseline, the change starts from the latest one of the namespace it acts on: a request may
+	// only know its methodology (hence its namespace) once its intent is identified.
+	if baseline == "" {
+		b, err := e.latestBaseline(ctx, domain.NamespaceOf(ns))
+		if err != nil {
+			return "", fmt.Errorf("methodology %s: %w", m.Name, err)
+		}
+		baseline = b
+	}
+	p.BaselineID = baseline
+	c, err := e.Graph.CreateChange(ctx, graph.NewChange{Title: title, Intent: intent, Methodology: m.Name, OwnerOrg: ownerOrg, Namespace: ns, OwnBranch: p.OwnBranch, BaselineID: baseline, Data: data})
+	if err != nil {
+		return "", err
+	}
+	return c.ID, nil
 }
 
 func firstUserTurn(p *Process) string {
@@ -410,9 +539,15 @@ func (e *Engine) Run(ctx context.Context, id string) (*Process, error) {
 	ctx, end := e.tracer().StartProcess(ctx, p)
 	defer func() { end(p) }()
 	p.MethodologyVersion = m.Version
-	if p.JournalSeq == 0 {
+	// process.started is written the first time a process has a change to journal to.
+	// JournalSeq can't gate this any more (a deferred process, ADR 0031 gap 5, may
+	// journal an attach record before it ever reaches here); an eager bind always has
+	// one by now (bindChange runs inside Start, before Run's first call), so this is
+	// the common case, kept at its original position, before the schedule record.
+	if !p.Started && p.ChangeID != "" {
 		e.journal(ctx, p, domain.ExecutionRecord{Kind: domain.ExecProcessStarted, StartedAt: p.CreatedAt,
 			Data: map[string]any{"intent": firstUserTurn(p), "trigger": p.Trigger, "title": p.Title}})
+		p.Started = true
 	}
 	if q := p.Queued; q != nil && p.Status == StatusRunning {
 		// why this run happens: what made the process runnable, by whom, and how long it waited
@@ -432,6 +567,13 @@ func (e *Engine) Run(ctx context.Context, id string) (*Process, error) {
 		if len(p.Steps) >= maxSteps {
 			e.fail(p, fmt.Errorf("step limit %d reached", maxSteps))
 			break
+		}
+		// fallback for a deferred process that only attaches mid-loop, after the
+		// check above already ran once with ChangeID still empty.
+		if !p.Started && p.ChangeID != "" {
+			e.journal(ctx, p, domain.ExecutionRecord{Kind: domain.ExecProcessStarted, StartedAt: p.CreatedAt,
+				Data: map[string]any{"intent": firstUserTurn(p), "trigger": p.Trigger, "title": p.Title}})
+			p.Started = true
 		}
 		if err := e.cycle(ctx, p, m); err != nil {
 			e.fail(p, err)
@@ -732,6 +874,14 @@ func (e *Engine) executeStep(ctx context.Context, p *Process, m *methodology.Com
 		}
 		maps.Copy(p.Children, host.children)
 	}
+	if len(res.VarsSet) > 0 {
+		nv := maps.Clone(p.Vars)
+		if nv == nil {
+			nv = map[string]any{}
+		}
+		maps.Copy(nv, res.VarsSet)
+		p.Vars = nv
+	}
 	end(step, err)
 	if err != nil {
 		step.Error = err.Error()
@@ -739,11 +889,12 @@ func (e *Engine) executeStep(ctx context.Context, p *Process, m *methodology.Com
 		return e.recordFailure(p, action.Name)
 	}
 	if res.Suspended {
-		// the action waits for a sub-agent: it is retried when the child ends
+		// the action waits for a sub-agent: it is retried when the child ends,
+		// or earlier if it emits a signal this action declared via WakeOn.
 		step.EndedAt = e.clock()
 		step.Output = "suspended: waiting for sub-agent " + res.Child
 		p.Status = StatusWaiting
-		p.Pending = &HumanTask{Kind: TaskAgent, Action: action.Name, Description: action.Description, Step: i, ChildProcessID: res.Child}
+		p.Pending = &HumanTask{Kind: TaskAgent, Action: action.Name, Description: action.Description, Step: i, ChildProcessID: res.Child, WakeOn: res.WakeOn}
 		return nil
 	}
 	e.forgetChildren(p, action.Name)
@@ -789,7 +940,7 @@ func (e *Engine) runChild(ctx context.Context, h *Host, key, agentName, intentTe
 		child = c
 	} else {
 		c, err := e.Start(ctx, StartRequest{Methodology: parent.Methodology, ChangeID: parent.ChangeID, BaselineID: parent.BaselineID,
-			Agent: agentName, Intent: intentText, ParentID: parent.ID, Call: key, Vars: parent.Vars})
+			Agent: agentName, Intent: intentText, ParentID: parent.ID, Call: key, Vars: maps.Clone(parent.Vars)})
 		if err != nil {
 			return dsl.AgentResult{}, err
 		}
@@ -949,15 +1100,28 @@ func (e *Engine) recordFailure(p *Process, action string) error {
 	return nil
 }
 
+// observe reads the blackboard of p and evaluates the methodology's conditions
+// against it. A process not yet bound to a change (ADR 0031, gap 5) has no
+// graph-backed blackboard to read: it observes only its own Vars, and the
+// synthetic change_bound fact is false. change_bound is ordinary condition
+// data a methodology may reference in its own Pre/Effects — it is never
+// implied by the engine onto a goal (CLAUDE.md rule 2 gates graph writes, not
+// a process's existence: a process that never writes may finish unbound).
 func (e *Engine) observe(ctx context.Context, p *Process, m *methodology.Compiled) (domain.Blackboard, error) {
-	bb, err := e.Graph.BlackboardIn(ctx, p.ChangeID, p.Flow)
-	if err != nil {
-		return bb, err
+	var bb domain.Blackboard
+	if p.ChangeID == "" {
+		bb = domain.Blackboard{Vars: p.Vars}
+	} else {
+		var err error
+		if bb, err = e.Graph.BlackboardIn(ctx, p.ChangeID, p.Flow); err != nil {
+			return bb, err
+		}
+		bb.Vars = p.Vars
+		p.Org = domain.OrgOf(bb.Change.OwnerOrg)
 	}
-	bb.Vars = p.Vars
-	p.Org = domain.OrgOf(bb.Change.OwnerOrg)
 	bb.Supertypes = e.supertypesOf(m)
 	res := m.Conditions.Evaluate(bb)
+	res.State["change_bound"] = p.ChangeID != ""
 	p.World = res.State
 	p.Unknown = res.Errors
 	return bb, nil
@@ -989,6 +1153,9 @@ func (e *Engine) addPlainItems(ctx context.Context, p *Process, in []ItemInput, 
 	if len(in) == 0 {
 		return nil, nil
 	}
+	if p.ChangeID == "" {
+		return nil, fmt.Errorf("process %s has no change attached: call goap-scheduler/attach first (ADR 0031)", p.ID)
+	}
 	bb, err := e.Graph.BlackboardIn(ctx, p.ChangeID, p.Flow)
 	if err != nil {
 		return nil, err
@@ -1008,7 +1175,41 @@ func (e *Engine) addPlainItems(ctx context.Context, p *Process, in []ItemInput, 
 	for i, it := range added {
 		ids[i] = it.ID
 	}
+	e.wakeOnSignals(ctx, p, added)
 	return ids, nil
+}
+
+// wakeOnSignals wakes a live parent process suspended on this process (a
+// TaskAgent Pending whose ChildProcessID is p.ID) as soon as one of the newly
+// written items is a signal, addressed to it or broadcast, whose name the
+// parent's action declared via WakeOn — instead of only at child termination.
+// resumeParent already re-checks Pending under the process lock, so a signal
+// that arrives after the parent has already moved on, or several signals in a
+// row before the parent is actually rescheduled, are harmless no-ops.
+func (e *Engine) wakeOnSignals(ctx context.Context, p *Process, items []domain.ChangeItem) {
+	if p.ParentID == "" {
+		return
+	}
+	var names []string
+	for _, it := range items {
+		if it.Kind == domain.KindSignal && (it.Target == "" || it.Target == p.ParentID) {
+			names = append(names, it.Type)
+		}
+	}
+	if len(names) == 0 {
+		return
+	}
+	parent, err := e.Store.Get(ctx, p.ParentID)
+	if err != nil || parent.Status != StatusWaiting || parent.Pending == nil || parent.Pending.Kind != TaskAgent || parent.Pending.ChildProcessID != p.ID {
+		return
+	}
+	for _, name := range names {
+		if slices.Contains(parent.Pending.WakeOn, name) {
+			parentID, childID := p.ParentID, p.ID
+			e.background(func() { e.resumeParent(parentID, childID) })
+			return
+		}
+	}
 }
 
 // ProcessEvent is published on every process save, and for log lines.

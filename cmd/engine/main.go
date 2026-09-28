@@ -4,7 +4,10 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"maps"
+	"os"
+	"sync/atomic"
 	"time"
 
 	"github.com/zimwip/goap/gen/goap/engine/v1/enginev1connect"
@@ -118,23 +121,61 @@ func main() {
 	var triggers *engine.TriggerManager
 	if platform.Env("GOAP_TRIGGERS", "on") == "on" {
 		triggers = &engine.TriggerManager{Engine: e, Log: log}
+		if events != nil {
+			// several replicas may run this binary; only one may fire schedule
+			// (cron) triggers at a time (event triggers are instead deduplicated
+			// below by binding every replica to the same durable consumer name).
+			host, _ := os.Hostname()
+			holder := fmt.Sprintf("%s-%d", host, os.Getpid())
+			if lease, err := events.NewLease(ctx, "goap-leases"); err != nil {
+				log.Warn("trigger leadership lease", "err", err)
+			} else {
+				const ttl = 30 * time.Second
+				var leader atomic.Bool
+				renew := func() {
+					held, err := lease.Acquire(ctx, "trigger-manager", holder, ttl)
+					if err != nil {
+						log.Warn("trigger leadership", "err", err)
+						return
+					}
+					leader.Store(held)
+				}
+				renew()
+				go func() {
+					tick := time.NewTicker(ttl / 3)
+					defer tick.Stop()
+					for {
+						select {
+						case <-ctx.Done():
+							return
+						case <-tick.C:
+							renew()
+						}
+					}
+				}()
+				triggers.Leader = leader.Load
+			}
+			go func() {
+				handle := func(ctx context.Context, subject string, data []byte) error {
+					if subject == "goap.registry.methodology.published" {
+						var m struct{ Name, Version string }
+						_ = json.Unmarshal(data, &m)
+						triggers.Handle(ctx, engine.TriggerEvent{Type: "methodology.published", Methodology: m.Name, Version: m.Version})
+						return nil
+					}
+					var ev domain.ChangeEvent
+					if json.Unmarshal(data, &ev) == nil && ev.Type != "" {
+						triggers.Handle(ctx, engine.TriggerEventOf(ev))
+					}
+					return nil
+				}
+				if err := events.ConsumeDurable(ctx, log, "trigger-manager", []string{"goap.change.>", "goap.registry.methodology.published"}, handle); err != nil {
+					log.Error("trigger events consumer", "err", err)
+				}
+			}()
+		}
 		triggers.Start(ctx)
 		go triggers.WatchProcesses(ctx, broker)
-		if err := events.Subscribe("goap.change.>", func(data []byte) {
-			var ev domain.ChangeEvent
-			if json.Unmarshal(data, &ev) == nil && ev.Type != "" {
-				triggers.Handle(context.Background(), engine.TriggerEventOf(ev))
-			}
-		}); err != nil {
-			platform.Fatal(log, "subscribe", err)
-		}
-		if err := events.Subscribe("goap.registry.methodology.published", func(data []byte) {
-			var m struct{ Name, Version string }
-			_ = json.Unmarshal(data, &m)
-			triggers.Handle(context.Background(), engine.TriggerEvent{Type: "methodology.published", Methodology: m.Name, Version: m.Version})
-		}); err != nil {
-			platform.Fatal(log, "subscribe", err)
-		}
 	}
 	srv := platform.NewServer(log, platform.Env("GOAP_HTTP_ADDR", ":8080"))
 	srv.Readiness(events.Ready)

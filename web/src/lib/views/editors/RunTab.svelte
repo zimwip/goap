@@ -27,6 +27,7 @@
     type Flow,
     type LogLine,
     type Process,
+    type ProcessLogEntry,
   } from '../../api';
   import { watchEvents, type StreamStatus } from '../../stream';
   import { processes, ingestProcess, ingestEvent, childrenOf, refreshProcesses } from '../../stores/live.svelte';
@@ -48,6 +49,22 @@
   let loading = $state(false);
   let stream = $state<StreamStatus>('connecting');
   let liveLogs = $state<LogLine[]>([]);
+  // the process's own log (ADR 0031): independent of whether it has a change yet
+  let processLog = $state<ProcessLogEntry[]>([]);
+
+  function payloadText(payload?: string): string {
+    if (!payload) return '';
+    try {
+      const obj = JSON.parse(payload);
+      if (obj && typeof obj === 'object') {
+        if ('role' in obj && 'text' in obj) return `${obj.role}: ${obj.text}`;
+        return JSON.stringify(obj);
+      }
+      return String(obj);
+    } catch {
+      return payload;
+    }
+  }
 
   const POLL_MS = 2000;
   /**
@@ -126,6 +143,7 @@
     loading = true;
     try {
       set((await engine.getProcess(id, signal)).process);
+      processLog = (await engine.getProcessLog(id, signal)).entries ?? [];
       error = '';
     } catch (e) {
       if (!signal?.aborted) error = errorMessage(e);
@@ -301,6 +319,29 @@
         <div class="stat"><span class="v">{process.usage?.toolCalls ?? 0}</span><span class="k">tool calls</span></div>
       </section>
     </div>
+
+    {#if processLog.length || !process.changeId}
+      <section class="card">
+        <h3>Process log <span class="hint">{processLog.length}</span></h3>
+        {#if processLog.length}
+          <ul class="plog">
+            {#each processLog as e (e.seq)}
+              <li>
+                <span class="ptype">{e.type}</span>
+                <span class="ptext">{payloadText(e.payload)}</span>
+                <span class="ptime">{formatDate(e.at)}</span>
+              </li>
+            {/each}
+          </ul>
+        {:else}
+          <p class="empty">
+            No entries yet. This process is not attached to a change{process.status === 'clarifying'
+              ? ' — still narrowing down what it should work on.'
+              : '.'}
+          </p>
+        {/if}
+      </section>
+    {/if}
 
     {#if process.flow}
       <div class="card flow-banner">
@@ -491,6 +532,36 @@
   }
   .waiting-agent {
     border-left: 3px solid var(--warn);
+  }
+  .plog {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0.3rem;
+  }
+  .plog li {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 0.5rem;
+    align-items: baseline;
+    font-size: 0.88em;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0.3rem;
+  }
+  .ptype {
+    font-family: var(--mono, monospace);
+    color: var(--info);
+    white-space: nowrap;
+  }
+  .ptext {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .ptime {
+    color: var(--muted);
+    white-space: nowrap;
   }
   .chip.done {
     background: var(--ok-soft);

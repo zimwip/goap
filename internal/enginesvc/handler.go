@@ -109,6 +109,47 @@ func (h *Handler) StartProcess(ctx context.Context, r *connect.Request[enginev1.
 	return connect.NewResponse(&enginev1.StartProcessResponse{Process: ProcessToPB(p)}), nil
 }
 
+func (h *Handler) AttachChange(ctx context.Context, r *connect.Request[enginev1.AttachChangeRequest]) (*connect.Response[enginev1.AttachChangeResponse], error) {
+	ctx = h.principal(ctx, r.Header())
+	if err := h.loadAuthorized(ctx, r.Msg.ProcessId, "attach"); err != nil {
+		return nil, toConnect(err)
+	}
+	if err := h.Engine.AttachChange(ctx, r.Msg.ProcessId, engine.AttachRequest{
+		ChangeID: domain.ChangeID(r.Msg.ChangeId), Title: r.Msg.Title, Intent: r.Msg.Intent,
+		Namespace: r.Msg.Namespace, OwnerOrg: r.Msg.OwnerOrg, BaselineID: domain.BaselineID(r.Msg.BaselineId),
+	}); err != nil {
+		return nil, toConnect(err)
+	}
+	p, err := h.Engine.Store.Get(ctx, r.Msg.ProcessId)
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	h.run(p)
+	return connect.NewResponse(&enginev1.AttachChangeResponse{Process: ProcessToPB(p)}), nil
+}
+
+func (h *Handler) GetProcessLog(ctx context.Context, r *connect.Request[enginev1.GetProcessLogRequest]) (*connect.Response[enginev1.GetProcessLogResponse], error) {
+	ctx = h.principal(ctx, r.Header())
+	if err := h.loadAuthorized(ctx, r.Msg.ProcessId, "read"); err != nil {
+		return nil, toConnect(err)
+	}
+	entries, err := h.Engine.Store.ListProcessLog(ctx, r.Msg.ProcessId)
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	out := &enginev1.GetProcessLogResponse{}
+	for _, e := range entries {
+		payload, err := json.Marshal(e.Payload)
+		if err != nil {
+			return nil, toConnect(err)
+		}
+		out.Entries = append(out.Entries, &enginev1.ProcessLogEntry{
+			Seq: e.Seq, ProcessId: e.ProcessID, Type: e.Type, Payload: string(payload), At: pbconv.Time(e.At),
+		})
+	}
+	return connect.NewResponse(out), nil
+}
+
 func (h *Handler) AnswerIntent(ctx context.Context, r *connect.Request[enginev1.AnswerIntentRequest]) (*connect.Response[enginev1.AnswerIntentResponse], error) {
 	ctx = h.principal(ctx, r.Header())
 	if err := h.loadAuthorized(ctx, r.Msg.ProcessId, "submit"); err != nil {

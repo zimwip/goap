@@ -1024,6 +1024,28 @@ export interface ListProcessesRequest {
   rootsOnly?: boolean;
 }
 
+export interface AttachChangeRequest {
+  processId: string;
+  /** reuse an existing change, or empty to create one (same defaulting as StartProcess) */
+  changeId?: string;
+  title?: string;
+  intent?: string;
+  namespace?: string;
+  ownerOrg?: string;
+  baselineId?: string;
+}
+
+/** One append-only entry of a process's own log (ADR 0031): turn-by-turn state independent
+ *  of any change, covering a process whether or not it ever attaches to one. */
+export interface ProcessLogEntry {
+  seq?: Int64;
+  processId?: string;
+  type?: string;
+  /** the entry's payload, as JSON */
+  payload?: string;
+  at?: string;
+}
+
 export type EventType = 'started' | 'intent' | 'step' | 'waiting' | 'completed' | 'stuck' | 'failed' | 'log';
 
 /** Message on the WatchEvents stream. */
@@ -1365,6 +1387,11 @@ export const engine = {
     rpc<{ id: string }, { process?: Process }>(ENGINE, 'GetProcess', { id }, signal),
   listProcesses: (req: ListProcessesRequest = {}, signal?: AbortSignal) =>
     rpc<ListProcessesRequest, { processes?: Process[] }>(ENGINE, 'ListProcesses', req, signal),
+  /** Binds an unbound process (ADR 0031) to an existing change (changeId set) or a new one. */
+  attachChange: (req: AttachChangeRequest) => rpc<AttachChangeRequest, { process?: Process }>(ENGINE, 'AttachChange', req),
+  /** The process's own log (ADR 0031), independent of whether it has a change. */
+  getProcessLog: (processId: string, signal?: AbortSignal) =>
+    rpc<{ processId: string }, { entries?: ProcessLogEntry[] }>(ENGINE, 'GetProcessLog', { processId }, signal),
   listTriggers: (signal?: AbortSignal) =>
     rpc<Empty, { triggers?: TriggerState[] }>(ENGINE, 'ListTriggers', {}, signal),
   fireTrigger: (methodology: string, agent: string, trigger: string) =>

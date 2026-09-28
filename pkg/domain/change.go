@@ -75,6 +75,9 @@ const (
 	// KindFlow is an event of the action flow: a step is relaunched on a new flow
 	// branch, and the branch is adopted or discarded (see flow.go).
 	KindFlow ItemKind = "flow"
+	// KindSignal is a named notification other agents or a live parent may react
+	// to (Type is the signal's name, Target addresses a process, "" = broadcast).
+	KindSignal ItemKind = "signal"
 )
 
 // ItemStatus is the review state of an item.
@@ -101,9 +104,11 @@ type ChangeItem struct {
 	Status ItemStatus `json:"status"`
 	// Flow is the flow branch that produced the item ("" = the main flow);
 	// FlowEvent is set on KindFlow items.
-	Flow        string         `json:"flow,omitempty"`
-	FlowEvent   *FlowEvent     `json:"flowEvent,omitempty"`
-	Decision    *Decision      `json:"decision,omitempty"` // decision only
+	Flow      string     `json:"flow,omitempty"`
+	FlowEvent *FlowEvent `json:"flowEvent,omitempty"`
+	Decision  *Decision  `json:"decision,omitempty"` // decision only
+	// Target addresses a signal item to a process id ("" = broadcast).
+	Target      string         `json:"target,omitempty"`
 	Data        map[string]any `json:"data,omitempty"`
 	ProducedBy  string         `json:"producedBy,omitempty"`
 	DerivedFrom []ItemID       `json:"derivedFrom,omitempty"`
@@ -134,6 +139,10 @@ func (it ChangeItem) Validate() error {
 			return fmt.Errorf("decision item requires decision.item")
 		}
 	case KindArtifact, KindMerge:
+	case KindSignal:
+		if it.Type == "" {
+			return fmt.Errorf("signal item requires type")
+		}
 	default:
 		return fmt.Errorf("unknown item kind %q", it.Kind)
 	}

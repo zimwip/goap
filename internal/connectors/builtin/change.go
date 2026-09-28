@@ -36,6 +36,7 @@ var changeOps = []op{
 	{"link", "Add a link from a node of the change: {node}", schema(map[string]string{"change": "string", "from": "string", "type": "string", "to": "string", "rationale": "string"}, "from", "type", "to")},
 	{"retire", "Retire a node in the change: {node}", schema(map[string]string{"change": "string", "key": "string", "rationale": "string"}, "key", "rationale")},
 	{"note", "Add an artifact item to the blackboard: {item}", schema(map[string]string{"change": "string", "type": "string", "text": "string", "data": "object"}, "text")},
+	{"signal", "Emit a named notification other agents or a live parent may react to: {item}", schema(map[string]string{"change": "string", "type": "string", "data": "object", "target": "string"}, "type")},
 	{"validate", "Check the consistency of the change: {issues}", schema(map[string]string{"change": "string"})},
 }
 
@@ -104,6 +105,17 @@ func (c Change) Invoke(ctx context.Context, op string, raw, _ map[string]any, _ 
 		data["text"] = text
 		items, err := c.p.Graph.AddItems(ctx, id, []domain.ChangeItem{{Kind: domain.KindArtifact, Type: typ, Status: domain.ItemProposed,
 			Data: data, ProducedBy: producer(ctx)}})
+		if err != nil {
+			return nil, err
+		}
+		return result(map[string]any{"item": items[0]})
+	case "signal":
+		typ, err := a.required("type")
+		if err != nil {
+			return nil, err
+		}
+		items, err := c.p.Graph.AddItems(ctx, id, []domain.ChangeItem{{Kind: domain.KindSignal, Type: typ, Status: domain.ItemProposed,
+			Data: a.object("data"), Target: a.str("target"), ProducedBy: producer(ctx)}})
 		if err != nil {
 			return nil, err
 		}

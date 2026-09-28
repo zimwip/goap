@@ -36,6 +36,10 @@ func (f *fakeEngine) StartProcess(_ context.Context, r *connect.Request[enginev1
 		Steps: []*enginev1.Step{{Action: "a"}}}}), nil
 }
 
+func (f *fakeEngine) AttachChange(_ context.Context, r *connect.Request[enginev1.AttachChangeRequest]) (*connect.Response[enginev1.AttachChangeResponse], error) {
+	return connect.NewResponse(&enginev1.AttachChangeResponse{Process: &enginev1.Process{Id: r.Msg.ProcessId, Status: "running", ChangeId: r.Msg.ChangeId}}), nil
+}
+
 func (f *fakeEngine) GetProcess(_ context.Context, r *connect.Request[enginev1.GetProcessRequest]) (*connect.Response[enginev1.GetProcessResponse], error) {
 	return connect.NewResponse(&enginev1.GetProcessResponse{Process: &enginev1.Process{Id: r.Msg.Id, Status: "completed", Steps: []*enginev1.Step{{Action: "a"}}}}), nil
 }
@@ -260,6 +264,29 @@ func TestChangeTools(t *testing.T) {
 	// main is untouched until the change is applied
 	if n, err := p.g.NodeByKey(context.Background(), "alm", "REQ-9"); err == nil && n.Branch == domain.MainBranch {
 		t.Fatal("the change wrote on main")
+	}
+}
+
+func TestChangeSignal(t *testing.T) {
+	p := newPlatform(t)
+	ctx := as("alice", "ORG-CHECKOUT", "contributor")
+	created := p.call(t, ctx, "ORG-CHECKOUT", "goap-change/create", map[string]any{"title": "Refunds by voucher", "intent": "Customers may be refunded by voucher",
+		"namespace": "alm", "methodology": "sdlc"})["change"].(map[string]any)
+	id := created["id"].(string)
+	ctx = mcp.WithCall(ctx, mcp.CallContext{Change: id, Process: "P1"})
+
+	out := p.call(t, ctx, "ORG-CHECKOUT", "goap-change/signal", map[string]any{"type": "review_needed",
+		"data": map[string]any{"reason": "voucher policy"}, "target": "P0"})
+	item := out["item"].(map[string]any)
+	if item["kind"] != "signal" || item["type"] != "review_needed" || item["target"] != "P0" || item["producedBy"] != "P1" {
+		t.Fatalf("item = %v", item)
+	}
+	if data := item["data"].(map[string]any); data["reason"] != "voucher policy" {
+		t.Fatalf("data = %v", data)
+	}
+
+	if _, err := p.hub.Call(ctx, "ORG-CHECKOUT", "goap-change/signal", map[string]any{"data": map[string]any{}}); err == nil {
+		t.Fatal("signal without a type accepted")
 	}
 }
 

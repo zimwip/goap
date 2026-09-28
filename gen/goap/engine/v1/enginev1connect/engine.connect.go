@@ -60,6 +60,12 @@ const (
 	// EngineServiceListProcessesProcedure is the fully-qualified name of the EngineService's
 	// ListProcesses RPC.
 	EngineServiceListProcessesProcedure = "/goap.engine.v1.EngineService/ListProcesses"
+	// EngineServiceAttachChangeProcedure is the fully-qualified name of the EngineService's
+	// AttachChange RPC.
+	EngineServiceAttachChangeProcedure = "/goap.engine.v1.EngineService/AttachChange"
+	// EngineServiceGetProcessLogProcedure is the fully-qualified name of the EngineService's
+	// GetProcessLog RPC.
+	EngineServiceGetProcessLogProcedure = "/goap.engine.v1.EngineService/GetProcessLog"
 	// EngineServiceWatchEventsProcedure is the fully-qualified name of the EngineService's WatchEvents
 	// RPC.
 	EngineServiceWatchEventsProcedure = "/goap.engine.v1.EngineService/WatchEvents"
@@ -88,6 +94,12 @@ type EngineServiceClient interface {
 	ResolveBoard(context.Context, *connect.Request[v1.ResolveBoardRequest]) (*connect.Response[v1.ResolveBoardResponse], error)
 	GetProcess(context.Context, *connect.Request[v1.GetProcessRequest]) (*connect.Response[v1.GetProcessResponse], error)
 	ListProcesses(context.Context, *connect.Request[v1.ListProcessesRequest]) (*connect.Response[v1.ListProcessesResponse], error)
+	// Binds an unbound process (ADR 0031, process_id with no change) to a change: an existing one
+	// (change_id) or a new one, defaulted the same way StartProcess defaults one.
+	AttachChange(context.Context, *connect.Request[v1.AttachChangeRequest]) (*connect.Response[v1.AttachChangeResponse], error)
+	// The process's own log (ADR 0031): turn-by-turn state independent of any change (e.g. the
+	// intent/clarification dialogue), covering it whether or not it ever attaches to one.
+	GetProcessLog(context.Context, *connect.Request[v1.GetProcessLogRequest]) (*connect.Response[v1.GetProcessLogResponse], error)
 	// Live process events and logs (server streaming). Empty process_id: every
 	// process the caller may read.
 	WatchEvents(context.Context, *connect.Request[v1.WatchEventsRequest]) (*connect.ServerStreamForClient[v1.WatchEventsResponse], error)
@@ -162,6 +174,18 @@ func NewEngineServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(engineServiceMethods.ByName("ListProcesses")),
 			connect.WithClientOptions(opts...),
 		),
+		attachChange: connect.NewClient[v1.AttachChangeRequest, v1.AttachChangeResponse](
+			httpClient,
+			baseURL+EngineServiceAttachChangeProcedure,
+			connect.WithSchema(engineServiceMethods.ByName("AttachChange")),
+			connect.WithClientOptions(opts...),
+		),
+		getProcessLog: connect.NewClient[v1.GetProcessLogRequest, v1.GetProcessLogResponse](
+			httpClient,
+			baseURL+EngineServiceGetProcessLogProcedure,
+			connect.WithSchema(engineServiceMethods.ByName("GetProcessLog")),
+			connect.WithClientOptions(opts...),
+		),
 		watchEvents: connect.NewClient[v1.WatchEventsRequest, v1.WatchEventsResponse](
 			httpClient,
 			baseURL+EngineServiceWatchEventsProcedure,
@@ -194,6 +218,8 @@ type engineServiceClient struct {
 	resolveBoard     *connect.Client[v1.ResolveBoardRequest, v1.ResolveBoardResponse]
 	getProcess       *connect.Client[v1.GetProcessRequest, v1.GetProcessResponse]
 	listProcesses    *connect.Client[v1.ListProcessesRequest, v1.ListProcessesResponse]
+	attachChange     *connect.Client[v1.AttachChangeRequest, v1.AttachChangeResponse]
+	getProcessLog    *connect.Client[v1.GetProcessLogRequest, v1.GetProcessLogResponse]
 	watchEvents      *connect.Client[v1.WatchEventsRequest, v1.WatchEventsResponse]
 	listTriggers     *connect.Client[v1.ListTriggersRequest, v1.ListTriggersResponse]
 	fireTrigger      *connect.Client[v1.FireTriggerRequest, v1.FireTriggerResponse]
@@ -244,6 +270,16 @@ func (c *engineServiceClient) ListProcesses(ctx context.Context, req *connect.Re
 	return c.listProcesses.CallUnary(ctx, req)
 }
 
+// AttachChange calls goap.engine.v1.EngineService.AttachChange.
+func (c *engineServiceClient) AttachChange(ctx context.Context, req *connect.Request[v1.AttachChangeRequest]) (*connect.Response[v1.AttachChangeResponse], error) {
+	return c.attachChange.CallUnary(ctx, req)
+}
+
+// GetProcessLog calls goap.engine.v1.EngineService.GetProcessLog.
+func (c *engineServiceClient) GetProcessLog(ctx context.Context, req *connect.Request[v1.GetProcessLogRequest]) (*connect.Response[v1.GetProcessLogResponse], error) {
+	return c.getProcessLog.CallUnary(ctx, req)
+}
+
 // WatchEvents calls goap.engine.v1.EngineService.WatchEvents.
 func (c *engineServiceClient) WatchEvents(ctx context.Context, req *connect.Request[v1.WatchEventsRequest]) (*connect.ServerStreamForClient[v1.WatchEventsResponse], error) {
 	return c.watchEvents.CallServerStream(ctx, req)
@@ -276,6 +312,12 @@ type EngineServiceHandler interface {
 	ResolveBoard(context.Context, *connect.Request[v1.ResolveBoardRequest]) (*connect.Response[v1.ResolveBoardResponse], error)
 	GetProcess(context.Context, *connect.Request[v1.GetProcessRequest]) (*connect.Response[v1.GetProcessResponse], error)
 	ListProcesses(context.Context, *connect.Request[v1.ListProcessesRequest]) (*connect.Response[v1.ListProcessesResponse], error)
+	// Binds an unbound process (ADR 0031, process_id with no change) to a change: an existing one
+	// (change_id) or a new one, defaulted the same way StartProcess defaults one.
+	AttachChange(context.Context, *connect.Request[v1.AttachChangeRequest]) (*connect.Response[v1.AttachChangeResponse], error)
+	// The process's own log (ADR 0031): turn-by-turn state independent of any change (e.g. the
+	// intent/clarification dialogue), covering it whether or not it ever attaches to one.
+	GetProcessLog(context.Context, *connect.Request[v1.GetProcessLogRequest]) (*connect.Response[v1.GetProcessLogResponse], error)
 	// Live process events and logs (server streaming). Empty process_id: every
 	// process the caller may read.
 	WatchEvents(context.Context, *connect.Request[v1.WatchEventsRequest], *connect.ServerStream[v1.WatchEventsResponse]) error
@@ -346,6 +388,18 @@ func NewEngineServiceHandler(svc EngineServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(engineServiceMethods.ByName("ListProcesses")),
 		connect.WithHandlerOptions(opts...),
 	)
+	engineServiceAttachChangeHandler := connect.NewUnaryHandler(
+		EngineServiceAttachChangeProcedure,
+		svc.AttachChange,
+		connect.WithSchema(engineServiceMethods.ByName("AttachChange")),
+		connect.WithHandlerOptions(opts...),
+	)
+	engineServiceGetProcessLogHandler := connect.NewUnaryHandler(
+		EngineServiceGetProcessLogProcedure,
+		svc.GetProcessLog,
+		connect.WithSchema(engineServiceMethods.ByName("GetProcessLog")),
+		connect.WithHandlerOptions(opts...),
+	)
 	engineServiceWatchEventsHandler := connect.NewServerStreamHandler(
 		EngineServiceWatchEventsProcedure,
 		svc.WatchEvents,
@@ -384,6 +438,10 @@ func NewEngineServiceHandler(svc EngineServiceHandler, opts ...connect.HandlerOp
 			engineServiceGetProcessHandler.ServeHTTP(w, r)
 		case EngineServiceListProcessesProcedure:
 			engineServiceListProcessesHandler.ServeHTTP(w, r)
+		case EngineServiceAttachChangeProcedure:
+			engineServiceAttachChangeHandler.ServeHTTP(w, r)
+		case EngineServiceGetProcessLogProcedure:
+			engineServiceGetProcessLogHandler.ServeHTTP(w, r)
 		case EngineServiceWatchEventsProcedure:
 			engineServiceWatchEventsHandler.ServeHTTP(w, r)
 		case EngineServiceListTriggersProcedure:
@@ -433,6 +491,14 @@ func (UnimplementedEngineServiceHandler) GetProcess(context.Context, *connect.Re
 
 func (UnimplementedEngineServiceHandler) ListProcesses(context.Context, *connect.Request[v1.ListProcessesRequest]) (*connect.Response[v1.ListProcessesResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.engine.v1.EngineService.ListProcesses is not implemented"))
+}
+
+func (UnimplementedEngineServiceHandler) AttachChange(context.Context, *connect.Request[v1.AttachChangeRequest]) (*connect.Response[v1.AttachChangeResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.engine.v1.EngineService.AttachChange is not implemented"))
+}
+
+func (UnimplementedEngineServiceHandler) GetProcessLog(context.Context, *connect.Request[v1.GetProcessLogRequest]) (*connect.Response[v1.GetProcessLogResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.engine.v1.EngineService.GetProcessLog is not implemented"))
 }
 
 func (UnimplementedEngineServiceHandler) WatchEvents(context.Context, *connect.Request[v1.WatchEventsRequest], *connect.ServerStream[v1.WatchEventsResponse]) error {

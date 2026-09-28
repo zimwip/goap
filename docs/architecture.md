@@ -379,7 +379,7 @@ declared on the agent (`agents[].triggers`):
 | Field | Role |
 |---|---|
 | `type` | `event` or `schedule` |
-| `event` + `filter` | `change.created`, `change.applied`, `change.item_added`, `process.completed`, `process.failed`, `process.stuck`, `methodology.published`; CEL filter on `event` (`event.change.*`, `event.process.*`) |
+| `event` + `filter` | `change.created`, `change.applied`, `change.item_added`, `change.signal`, `process.completed`, `process.failed`, `process.stuck`, `process.attached`, `methodology.published`; CEL filter on `event` (`event.change.*`, `event.process.*`, `event.items` for `change.signal`'s payload) |
 | `schedule` | cron expression (5 fields, UTC) |
 | `goal`, `intent` | targeted goal (otherwise identification is limited to the agent) and intent text |
 | `target` | `new_change` (new change on the latest baseline) or `event_change` (the event's change) |
@@ -389,7 +389,18 @@ Safeguards: a trigger never reacts to its own productions (the change it opens i
 `data.trigger`, the process carries `trigger`), and it does not run more than once every 2 s.
 Events come from NATS (graph, engine, registry services) or the local bus in all-in-one mode.
 `ListTriggers` / `FireTrigger` expose the state and manual firing (permission `trigger:fire`).
-With several engine replicas, only one must run the triggers (leader election: M1).
+With several engine replicas, event triggers are delivered through a durable JetStream consumer
+(competing consumers, one replica handles each event) and schedule (cron) firing is gated by a
+JetStream-KV lease (`TriggerManager.Leader`) — `Reload`/`States()`/manual `fire` stay available
+on every replica regardless of leadership (ADR 0031). This resolves leader election for trigger
+firing specifically, not the broader engine-clustering work of §3.2, which is unrelated and
+still open.
+
+A process can now run, and even finish, without ever being attached to a Change — binding stays
+eager by default for existing methodologies; an agent can declare its own binding action to defer
+it (`change_bound` condition, `Engine.AttachChange`, `goap-scheduler attach`), and a fixed
+`"process.attached"` event plus the custom `"change.signal"` event (above) both fire on a bind,
+for different purposes — see ADR 0031.
 
 ### 2.12 Execution journal and self-observation ([ADR 0011](adr/0011-journal-auto-observation.md))
 

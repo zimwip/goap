@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/zimwip/goap/pkg/engine"
+	"github.com/zimwip/goap/pkg/intent"
 )
 
 // SQLiteMigrations holds the process schema of the local development mode.
@@ -35,12 +36,24 @@ func (s SQLiteStore) Get(ctx context.Context, id string) (*engine.Process, error
 		return nil, err
 	}
 	var p engine.Process
-	return &p, json.Unmarshal([]byte(body), &p)
+	if err := json.Unmarshal([]byte(body), &p); err != nil {
+		return nil, err
+	}
+	if err := s.fillIntentTurns(ctx, &p); err != nil {
+		return nil, err
+	}
+	return &p, nil
 }
 
-// Put implements engine.Store.
+// Put implements engine.Store. Intent.Turns is stripped from the stored body:
+// it only ever grows, and re-serializing the whole (possibly long) dialogue
+// on every turn would rewrite the row for no reason (ADR 0031) — each turn
+// is instead appended to process_log by the engine (AppendProcessLog) and
+// folded back in by Get/List.
 func (s SQLiteStore) Put(ctx context.Context, p *engine.Process) error {
-	body, err := json.Marshal(p)
+	stripped := *p
+	stripped.Intent.Turns = nil
+	body, err := json.Marshal(&stripped)
 	if err != nil {
 		return err
 	}
@@ -72,8 +85,82 @@ func (s SQLiteStore) List(ctx context.Context) ([]*engine.Process, error) {
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
+	for _, p := range out {
+		if err := s.fillIntentTurns(ctx, p); err != nil {
+			return nil, err
+		}
+	}
 	sortNewest(out)
 	return out, nil
+}
+
+// fillIntentTurns reconstructs p.Intent.Turns from process_log, since Put no
+// longer persists it in the process row's body.
+func (s SQLiteStore) fillIntentTurns(ctx context.Context, p *engine.Process) error {
+	entries, err := s.ListProcessLog(ctx, p.ID)
+	if err != nil {
+		return err
+	}
+	for _, e := range entries {
+		if e.Type != "intent.turn" {
+			continue
+		}
+		p.Intent.Turns = append(p.Intent.Turns, intent.Turn{
+			Role: fmt.Sprint(e.Payload["role"]),
+			Text: fmt.Sprint(e.Payload["text"]),
+		})
+	}
+	return nil
+}
+
+// AppendProcessLog implements engine.Store.
+func (s SQLiteStore) AppendProcessLog(ctx context.Context, processID string, entries ...engine.ProcessLogEntry) error {
+	for _, e := range entries {
+		payload, err := json.Marshal(e.Payload)
+		if err != nil {
+			return err
+		}
+		at := e.At
+		if at.IsZero() {
+			at = time.Now().UTC()
+		}
+		if _, err := s.DB.ExecContext(ctx, `INSERT INTO process_log (process_id, type, payload, at) VALUES (?, ?, ?, ?)`,
+			processID, e.Type, string(payload), at.UTC().Format(time.RFC3339Nano)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// ListProcessLog implements engine.Store (oldest first).
+func (s SQLiteStore) ListProcessLog(ctx context.Context, processID string) ([]engine.ProcessLogEntry, error) {
+	rows, err := s.DB.QueryContext(ctx, `SELECT seq, type, payload, at FROM process_log WHERE process_id = ? ORDER BY seq`, processID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []engine.ProcessLogEntry
+	for rows.Next() {
+		var (
+			e       engine.ProcessLogEntry
+			payload string
+			at      string
+		)
+		if err := rows.Scan(&e.Seq, &e.Type, &payload, &at); err != nil {
+			return nil, err
+		}
+		e.ProcessID = processID
+		if payload != "" {
+			if err := json.Unmarshal([]byte(payload), &e.Payload); err != nil {
+				return nil, err
+			}
+		}
+		if e.At, err = time.Parse(time.RFC3339Nano, at); err != nil {
+			return nil, err
+		}
+		out = append(out, e)
+	}
+	return out, rows.Err()
 }
 
 // Interrupted marks the processes left running by a previous run (the local

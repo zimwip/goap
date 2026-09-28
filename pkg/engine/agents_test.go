@@ -142,6 +142,110 @@ func TestSubAgentsWithSuspension(t *testing.T) {
 	}
 }
 
+func TestSubAgentWakesParentOnSignal(t *testing.T) {
+	ctx := context.Background()
+	e, base := agentsSetup(t)
+	p, err := e.Start(ctx, StartRequest{Methodology: "test-design", Agent: "watcher", BaselineID: base, Intent: "watch a pinger and wake on its signal"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, _ = e.Run(ctx, p.ID)
+	if p.Status != StatusWaiting || p.Pending == nil || p.Pending.Kind != TaskAgent || p.Pending.ChildProcessID == "" {
+		t.Fatalf("expected the watcher suspended on the pinger, got %s %+v %s", p.Status, p.Pending, p.Error)
+	}
+	if len(p.Pending.WakeOn) != 1 || p.Pending.WakeOn[0] != "progress" {
+		t.Fatalf("wakeOn not recorded on the pending task: %+v", p.Pending)
+	}
+	child := p.Pending.ChildProcessID
+	pinger, _ := e.Store.Get(ctx, child)
+	if pinger.Agent != "pinger" || pinger.ParentID != p.ID || pinger.Status != StatusWaiting {
+		t.Fatalf("unexpected pinger %+v", pinger)
+	}
+	stepsBeforeSignal := len(p.Steps)
+
+	// let the pinger send its progress signal, without letting it terminate
+	if _, err := e.Submit(ctx, child, []ItemInput{{Kind: "artifact", Type: "go"}}); err != nil {
+		t.Fatal(err)
+	}
+	e.schedule(child)
+	e.Drain()
+
+	pinger, _ = e.Store.Get(ctx, child)
+	if pinger.Status.Terminal() {
+		t.Fatalf("pinger must still be running (not terminated) when it signals, got %s", pinger.Status)
+	}
+	if pinger.Status != StatusWaiting {
+		t.Fatalf("pinger expected waiting again after signaling: %s %+v", pinger.Status, pinger.Error)
+	}
+
+	// the watcher must have been woken and replayed wait_for_ping BEFORE the
+	// pinger terminated (the old behavior only wakes a parent at child
+	// termination): a new step, and a fresh suspension on the same child.
+	p, _ = e.Store.Get(ctx, p.ID)
+	if len(p.Steps) != stepsBeforeSignal+1 || p.Steps[len(p.Steps)-1].Action != "wait_for_ping" {
+		t.Fatalf("watcher was not woken early by the signal (steps before=%d after=%d): %+v", stepsBeforeSignal, len(p.Steps), p.Steps)
+	}
+	if p.Status != StatusWaiting || p.Pending == nil || p.Pending.ChildProcessID != child {
+		t.Fatalf("watcher must have re-suspended on the still-running pinger: %s %+v", p.Status, p.Pending)
+	}
+
+	// now let the pinger actually finish, and the watcher complete
+	if _, err := e.Submit(ctx, child, []ItemInput{{Kind: "artifact", Type: "wrapped"}}); err != nil {
+		t.Fatal(err)
+	}
+	e.schedule(child)
+	e.Drain()
+	p, _ = e.Store.Get(ctx, p.ID)
+	if p.Status != StatusCompleted {
+		t.Fatalf("watcher not completed: %s %+v %s", p.Status, p.Pending, p.Error)
+	}
+}
+
+// TestChildVarsAreIsolated (gap 4): a sub-agent's Vars are cloned at spawn, so
+// a mutation on either side (SetVar) is not visible to the other.
+func TestChildVarsAreIsolated(t *testing.T) {
+	ctx := context.Background()
+	e, base := agentsSetup(t)
+	p, err := e.Start(ctx, StartRequest{Methodology: "test-design", Agent: "watcher", BaselineID: base,
+		Intent: "watch a pinger and wake on its signal", Vars: map[string]any{"shared": "parent"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, _ = e.Run(ctx, p.ID)
+	if p.Status != StatusWaiting || p.Pending == nil {
+		t.Fatalf("expected the watcher suspended on the pinger, got %s %+v %s", p.Status, p.Pending, p.Error)
+	}
+	child := p.Pending.ChildProcessID
+	pinger, _ := e.Store.Get(ctx, child)
+	if pinger.Vars["shared"] != "parent" {
+		t.Fatalf("child did not inherit the parent's vars at spawn: %+v", pinger.Vars)
+	}
+
+	// the pinger's own ping/wait_ready scripts set vars ("pinged"); the parent
+	// must not see them, and the parent's own var must stay untouched by the child.
+	if _, err := e.Submit(ctx, child, []ItemInput{{Kind: "artifact", Type: "go"}}); err != nil {
+		t.Fatal(err)
+	}
+	e.schedule(child)
+	e.Drain()
+
+	pinger, _ = e.Store.Get(ctx, child)
+	if pinger.Vars["pinged"] != true {
+		t.Fatalf("child's own SetVar was not recorded: %+v", pinger.Vars)
+	}
+	if pinger.Vars["shared"] != "parent" {
+		t.Fatalf("child lost the inherited var: %+v", pinger.Vars)
+	}
+
+	p, _ = e.Store.Get(ctx, p.ID)
+	if _, ok := p.Vars["pinged"]; ok {
+		t.Fatalf("child's SetVar leaked into the parent's vars: %+v", p.Vars)
+	}
+	if p.Vars["shared"] != "parent" {
+		t.Fatalf("parent's own var was affected by the child: %+v", p.Vars)
+	}
+}
+
 func TestUtilityPlannerAutoReview(t *testing.T) {
 	ctx := context.Background()
 	e, base := agentsSetup(t)

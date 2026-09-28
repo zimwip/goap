@@ -23,6 +23,12 @@ service EngineService {
   rpc ResolveBoard(ResolveBoardRequest) returns (ResolveBoardResponse);
   rpc GetProcess(GetProcessRequest) returns (GetProcessResponse);
   rpc ListProcesses(ListProcessesRequest) returns (ListProcessesResponse);
+  // Binds an unbound process (ADR 0031, process_id with no change) to a change: an existing one
+  // (change_id) or a new one, defaulted the same way StartProcess defaults one.
+  rpc AttachChange(AttachChangeRequest) returns (AttachChangeResponse);
+  // The process's own log (ADR 0031): turn-by-turn state independent of any change (e.g. the
+  // intent/clarification dialogue), covering it whether or not it ever attaches to one.
+  rpc GetProcessLog(GetProcessLogRequest) returns (GetProcessLogResponse);
   // Live process events and logs (server streaming). Empty process_id: every
   // process the caller may read.
   rpc WatchEvents(WatchEventsRequest) returns (stream WatchEventsResponse);
@@ -266,6 +272,38 @@ message ApproveActionRequest {
 
 message ApproveActionResponse {
   Process process = 1;
+}
+
+message AttachChangeRequest {
+  string process_id = 1;
+  // reuse an existing change, or empty to create one (same defaulting as StartProcess)
+  string change_id = 2;
+  string title = 3;
+  string intent = 4;
+  string namespace = 5;
+  string owner_org = 6;
+  string baseline_id = 7;
+}
+
+message AttachChangeResponse {
+  Process process = 1;
+}
+
+message ProcessLogEntry {
+  int64 seq = 1;
+  string process_id = 2;
+  string type = 3;
+  // the entry's payload, as JSON
+  string payload = 4;
+  google.protobuf.Timestamp at = 5;
+}
+
+message GetProcessLogRequest {
+  string process_id = 1;
+}
+
+message GetProcessLogResponse {
+  repeated ProcessLogEntry entries = 1;
 }
 
 message GetProcessRequest {

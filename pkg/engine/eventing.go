@@ -42,6 +42,12 @@ func (g EventingGraph) AddItems(ctx context.Context, id domain.ChangeID, items [
 	out, err := g.GraphPort.AddItems(ctx, id, items)
 	if err == nil {
 		g.emit(ctx, "change.item_added", id, nil, out)
+		for _, it := range out {
+			if it.Kind == domain.KindSignal {
+				g.emit(ctx, "change.signal", id, nil, out)
+				break
+			}
+		}
 	}
 	return out, err
 }
@@ -58,7 +64,7 @@ func (g EventingGraph) Apply(ctx context.Context, id domain.ChangeID, name strin
 // TriggerEventOf converts a change event.
 func TriggerEventOf(ev domain.ChangeEvent) TriggerEvent {
 	c := ev.Change
-	return TriggerEvent{Type: ev.Type, Change: &c}
+	return TriggerEvent{Type: ev.Type, Change: &c, Items: ev.Items}
 }
 
 // WatchProcesses feeds process events of the broker to the trigger manager
@@ -75,6 +81,10 @@ func (t *TriggerManager) WatchProcesses(ctx context.Context, b *Broker) {
 				return
 			}
 			if ev.Process == nil {
+				continue
+			}
+			if ev.Event == "attached" {
+				t.Handle(ctx, TriggerEvent{Type: "process.attached", Process: ev.Process})
 				continue
 			}
 			switch ev.Process.Status {

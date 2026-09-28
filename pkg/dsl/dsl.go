@@ -155,6 +155,7 @@ type Job struct {
 	Language  string         `json:"language"`
 	Code      string         `json:"code"`
 	ProcessID string         `json:"processId"`
+	ParentID  string         `json:"parentId,omitempty"`
 	Agent     string         `json:"agent"`
 	Action    string         `json:"action"`
 	Intent    string         `json:"intent"`
@@ -175,6 +176,12 @@ type Result struct {
 	Output    string    `json:"output"`
 	Logs      []LogLine `json:"logs"`
 	Suspended bool      `json:"suspended"`
+	// WakeOn lists signal names that, if emitted (addressed to this process)
+	// before a suspended sub-agent terminates, wake this process early.
+	WakeOn []string `json:"wakeOn,omitempty"`
+	// VarsSet holds the process-private variables set by SetVar during this
+	// run (engine-owned execution state, not a graph write).
+	VarsSet map[string]any `json:"varsSet,omitempty"`
 }
 
 // Ctx is the object injected as `ctx` in scripts.
@@ -188,6 +195,8 @@ type Ctx struct {
 	logs      []LogLine
 	seq       int
 	suspended bool
+	wakeOn    []string
+	vars      map[string]any
 	result    any
 }
 
@@ -197,16 +206,36 @@ func newCtx(gctx context.Context, job Job, host Host) *Ctx {
 
 // ---- context ----------------------------------------------------------------
 
-func (c *Ctx) Intent() string { return c.job.Intent }
-func (c *Ctx) Goal() string   { return c.job.Goal }
-func (c *Ctx) Agent() string  { return c.job.Agent }
-func (c *Ctx) Action() string { return c.job.Action }
+func (c *Ctx) Intent() string    { return c.job.Intent }
+func (c *Ctx) Goal() string      { return c.job.Goal }
+func (c *Ctx) Agent() string     { return c.job.Agent }
+func (c *Ctx) Action() string    { return c.job.Action }
+func (c *Ctx) ProcessID() string { return c.job.ProcessID }
+
+// ParentID is the process that called this one as a sub-agent (empty if
+// none): the target to address a Signal to so the parent may wake on it.
+func (c *Ctx) ParentID() string { return c.job.ParentID }
 
 // Param returns an action parameter.
 func (c *Ctx) Param(name string) any { return c.job.Params[name] }
 
 // Var returns a process variable.
 func (c *Ctx) Var(name string) any { return c.job.Vars[name] }
+
+// SetVar sets a process-private variable: engine-owned execution state, not a
+// graph write, visible only to this process's own conditions/scripts.
+func (c *Ctx) SetVar(name string, v any) {
+	if c.vars == nil {
+		c.vars = map[string]any{}
+	}
+	c.vars[name] = v
+}
+
+// WakeOn declares signal names that, if emitted (addressed to this process)
+// before a sub-agent this script suspends on terminates, wake it early.
+func (c *Ctx) WakeOn(names ...string) {
+	c.wakeOn = append(c.wakeOn, names...)
+}
 
 // ---- blackboard (read) ----------------------------------------------------
 
@@ -321,6 +350,13 @@ func (c *Ctx) ReviewNode(node string, accept bool, comment string) {
 // AddArtifact records free data (report…).
 func (c *Ctx) AddArtifact(artifactType string, data map[string]any) string {
 	return c.emit(map[string]any{"kind": "artifact", "type": artifactType, "data": data})
+}
+
+// Signal emits a named notification other agents or a live parent may react
+// to. target addresses a process id ("" = broadcast, visible to triggers and
+// to readers of the change).
+func (c *Ctx) Signal(name string, data map[string]any, target string) string {
+	return c.emit(map[string]any{"kind": "signal", "type": name, "data": data, "target": target})
 }
 
 // ---- platform calls ---------------------------------------------------------
