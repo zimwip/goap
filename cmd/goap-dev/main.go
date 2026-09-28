@@ -104,6 +104,16 @@ func main() {
 	if err := types.Reload(ctx); err != nil {
 		platform.Fatal(log, "type catalogue", err)
 	}
+	// the gateway configuration (providers, models, aliases) must exist before methodologies are seeded below:
+	// publishing a methodology stubs any alias it references that the platform namespace doesn't have yet
+	// (registrysvc.ensureAliasStubs), and that stub would otherwise collide with the alias this seeds.
+	if cfg, err := modelgw.InitialConfig(ctx, platform.Env("GOAP_MODELS_CONFIG", ""), secrets); err != nil {
+		platform.Fatal(log, "models config", err)
+	} else if provs, models, aliases, err := cfg.Objects(); err != nil {
+		platform.Fatal(log, "models config", err)
+	} else if _, err := graphsvc.SeedModels(ctx, g, provs, models, aliases); err != nil {
+		platform.Fatal(log, "seed models", err)
+	}
 	if _, err := reg.Seed(system, platform.Env("GOAP_METHODOLOGIES_DIR", "methodologies")); err != nil {
 		platform.Fatal(log, "methodologies", err)
 	}
@@ -118,14 +128,6 @@ func main() {
 	}
 	if _, err := graphsvc.SeedBuiltins(ctx, g); err != nil {
 		platform.Fatal(log, "seed built-in MCPs", err)
-	}
-	// the gateway configuration is graph data, seeded once; API keys are references resolved from the environment or Vault
-	if cfg, err := modelgw.InitialConfig(ctx, platform.Env("GOAP_MODELS_CONFIG", ""), secrets); err != nil {
-		platform.Fatal(log, "models config", err)
-	} else if provs, models, aliases, err := cfg.Objects(); err != nil {
-		platform.Fatal(log, "models config", err)
-	} else if _, err := graphsvc.SeedModels(ctx, g, provs, models, aliases); err != nil {
-		platform.Fatal(log, "seed models", err)
 	}
 	gw := modelgw.NewService(&llmcfg.Directory{Graph: g}, st.models, secrets.Resolve, log)
 	gw.Router.Instrument = telemetry.NewGenAI().Instrument
