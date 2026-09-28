@@ -244,3 +244,67 @@ func testFlowChangeImpactsConflict(t *testing.T, repo Repo) {
 		t.Fatalf("adopting a flow whose node moved on the change branch must conflict, got %v", err)
 	}
 }
+
+func TestParallelAndNestedFlowsOnChangeImpacts(t *testing.T) {
+	forEachRepo(t, testParallelAndNestedFlowsOnChangeImpacts)
+}
+
+// Each flow sees the change impacts through its own chain of events (ADR 0029 §5): parallel flows do not see each
+// other, a flow inside a flow sees its parent's writes except the ones of the step it relaunches.
+func testParallelAndNestedFlowsOnChangeImpacts(t *testing.T, repo Repo) {
+	ctx := context.Background()
+	w := newFlowWorld(t, repo) // REQ-1 written by e1 ("A"), TST-2 by e2; w.flow relaunches from e1
+	g, c := w.g, w.change
+	open := func(parent string, stale ...string) string {
+		t.Helper()
+		f, err := g.OpenFlow(ctx, c.ID, OpenFlowRequest{Parent: parent, FromStep: 1, Reason: "again", StaleExecutions: stale})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return f.ID
+	}
+	title := func(flow string) any {
+		t.Helper()
+		v := viewOf(t, g, c.ID, flow)["REQ-1"]
+		if v.Post == nil {
+			return nil
+		}
+		n, err := g.Node(ctx, *v.Post)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return n.Properties["title"]
+	}
+	// two parallel flows relaunch the second step: both keep REQ-1 as the main flow wrote it
+	f1, f2 := open("", "e2"), open("", "e2")
+	if title(f1) != "A" || title(f2) != "A" {
+		t.Fatalf("parallel flows start from the main flow: %v %v", title(f1), title(f2))
+	}
+	// f1 rewrites REQ-1 (a change impact of the main flow): only f1 sees it
+	if _, err := g.WriteNode(ctx, c.ID, w.req.ID, NodeWrite{Flow: f1, Execution: "e4", Properties: map[string]any{"title": "F1"}}); err != nil {
+		t.Fatal(err)
+	}
+	if title(f1) != "F1" || title(f2) != "A" || title("") != "A" {
+		t.Fatalf("after f1 wrote: f1 %v, f2 %v, main %v", title(f1), title(f2), title(""))
+	}
+	// a flow inside f1 sees f1's write; one that relaunches f1's writing step does not
+	if inner := open(f1); title(inner) != "F1" {
+		t.Fatalf("a flow inside f1 sees f1's writes: %v", title(inner))
+	}
+	redo := open(f1, "e4")
+	if title(redo) != "A" {
+		t.Fatalf("a flow relaunching f1's step does not see what it wrote: %v", title(redo))
+	}
+	// it writes its own version, derived from the one it sees
+	cn, err := g.WriteNode(ctx, c.ID, w.req.ID, NodeWrite{Flow: redo, Execution: "e5", Properties: map[string]any{"title": "R"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	n, err := g.Node(ctx, *cn.Post)
+	if err != nil || n.Branch != flowBranchName(redo) || n.Parents[0] != w.req.Post.Version {
+		t.Fatalf("version of the nested flow: %+v %v", n, err)
+	}
+	if title(redo) != "R" || title(f1) != "F1" || title("") != "A" {
+		t.Fatalf("after the nested flow wrote: redo %v, f1 %v, main %v", title(redo), title(f1), title(""))
+	}
+}

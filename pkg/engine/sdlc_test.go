@@ -119,6 +119,16 @@ func TestSDLCDelivery(t *testing.T) {
 		t.Fatalf("builds %v (steps %v)", builds, actions)
 	}
 	c, _ := g.Change(ctx, p.ChangeID)
+	// every operation of the run on the change impacts is an event linked to its action run (ADR 0029)
+	evs, err := g.ChangeEvents(ctx, p.ChangeID)
+	if err != nil || len(evs) == 0 {
+		t.Fatalf("impact log: %d events, %v", len(evs), err)
+	}
+	for _, e := range evs {
+		if (e.Op == domain.ImpactDeclared || e.Op == domain.ImpactWritten) && e.Execution == "" {
+			t.Fatalf("event %d (%s of %s) has no action run", e.Seq, e.Op, e.Impact)
+		}
+	}
 	count := map[string]int{}
 	var decisions []engine.ItemInput
 	for _, n := range c.Nodes {

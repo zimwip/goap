@@ -18,6 +18,7 @@
   import { untrack } from 'svelte';
   import type { Tab } from '../../shell/types';
   import Icon from '../../shell/Icon.svelte';
+  import ImpactLog from '../../components/ImpactLog.svelte';
   import { makeContext } from '../../items';
   import StatusBadge from '../../components/StatusBadge.svelte';
   import ChangeLifecycle from '../../components/ChangeLifecycle.svelte';
@@ -472,6 +473,10 @@
       <section class="card">
         <h3>Change impacts <span class="count">{change?.nodes?.length ?? 0}</span></h3>
         <ChangeImpactList changeId={ch.id ?? ''} nodes={change?.nodes ?? []} {closed} onchange={() => load(selected)} onopennode={(n) => openNode({ id: n.post?.id ?? n.pre?.id ?? '', key: n.key ?? '' }, { pin: true, change: ch.id ?? '' })} />
+      </section>
+
+      <section class="card">
+        <ImpactLog change={ch} onjournal={(record) => openJournal(record)} />
       </section>
 
       <section class="card">

@@ -518,6 +518,27 @@ export interface Link {
   changeId?: string;
 }
 
+/** An operation on the change impacts of a change (ADR 0029). */
+export interface ImpactEvent {
+  id?: string;
+  changeId?: string;
+  seq?: number;
+  /** empty for a change-level event (adopted) */
+  impactId?: string;
+  op?: 'declared' | 'written' | 'reviewed' | 'discarded' | 'adopted' | 'landed' | 'rebased' | 'imported' | string;
+  /** the caller: flow branch ('' = main flow), journal record of the action run, principal or component */
+  flow?: string;
+  execution?: string;
+  by?: string;
+  at?: string;
+  state?: ChangeImpact;
+  post?: NodeRef;
+  pre?: NodeRef;
+  landed?: NodeRef;
+  review?: NodeReview;
+  stale?: string[];
+}
+
 export interface BaselineNodesQuery {
   baselineId: string;
   /** qualified node type; empty: every type */
@@ -1141,6 +1162,9 @@ export const graph = {
       { baselineId, nodeId },
       signal,
     ),
+  /** The impact log of a change (ADR 0029): every operation on its change impacts, with its caller. */
+  listChangeEvents: (changeId: string, signal?: AbortSignal) =>
+    rpc<{ changeId: string }, { events?: ImpactEvent[] }>(GRAPH, 'ListChangeEvents', { changeId }, signal),
   /** The namespaces holding at least one node. */
   listNamespaces: (signal?: AbortSignal) => rpc<Empty, { namespaces?: string[] }>(GRAPH, 'ListNamespaces', {}, signal),
   listChanges: (signal?: AbortSignal) =>

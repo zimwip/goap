@@ -35,6 +35,9 @@ type Graph struct {
 	// Types returns the type catalogue in force (ADR 0012 §2, pkg/typecat): the graph judges the nodes by it and
 	// refuses the ones whose type or link type it does not resolve. Unset: an untyped graph (tests, tools).
 	Types func() TypeCatalog
+	// Caller names the principal behind an operation, recorded on the events of the change impacts (ADR 0029).
+	// Set by the services from the authenticated principal; unset, the events carry no caller.
+	Caller func(ctx context.Context) string
 }
 
 // New returns a Graph backed by repo.

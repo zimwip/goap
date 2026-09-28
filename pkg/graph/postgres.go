@@ -495,6 +495,41 @@ func (t *pgTx) PutChangeImpact(ctx context.Context, change domain.ChangeID, cn d
 	return mapErr(err, "change impact "+cn.Key)
 }
 
+func (t *pgTx) AppendChangeEvent(ctx context.Context, e domain.ImpactEvent) (domain.ImpactEvent, error) {
+	if err := t.tx.QueryRow(ctx, `SELECT COALESCE(MAX(seq), 0) + 1 FROM change_event WHERE change_id = $1`, string(e.Change)).Scan(&e.Seq); err != nil {
+		return e, mapErr(err, "change event")
+	}
+	payload, err := json.Marshal(e)
+	if err != nil {
+		return e, err
+	}
+	_, err = t.tx.Exec(ctx, `INSERT INTO change_event (id, change_id, seq, impact_id, op, flow, execution, by_whom, payload, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+		e.ID, string(e.Change), e.Seq, string(e.Impact), string(e.Op), e.Flow, e.Execution, e.By, payload, e.At)
+	return e, mapErr(err, "change event")
+}
+
+func (t *pgTx) ChangeEvents(ctx context.Context, change domain.ChangeID) ([]domain.ImpactEvent, error) {
+	rows, err := t.tx.Query(ctx, `SELECT payload FROM change_event WHERE change_id = $1 ORDER BY seq`, string(change))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []domain.ImpactEvent
+	for rows.Next() {
+		var raw []byte
+		var e domain.ImpactEvent
+		if err := rows.Scan(&raw); err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal(raw, &e); err != nil {
+			return nil, err
+		}
+		out = append(out, e)
+	}
+	return out, rows.Err()
+}
+
 func (t *pgTx) ChangeImpacts(ctx context.Context, change domain.ChangeID) ([]domain.ChangeImpact, error) {
 	rows, err := t.tx.Query(ctx, `SELECT `+pgChangeImpactCols+` FROM change_impact WHERE change_id = $1 ORDER BY seq`, string(change))
 	if err != nil {

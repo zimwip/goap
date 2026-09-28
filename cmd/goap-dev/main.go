@@ -68,6 +68,9 @@ func main() {
 	}
 	defer st.close()
 	g := graph.New(st.graph)
+	if err := graphsvc.PrepareGraph(ctx, g, log); err != nil {
+		platform.Fatal(log, "impact log", err)
+	}
 	directory := &access.Directory{Graph: g}
 	authorizer, err := access.NewAuthorizer(directory)
 	if err != nil {
