@@ -78,21 +78,6 @@ func (v *flowNodes) visible(cn domain.ChangeImpact) bool {
 	return true
 }
 
-// latest resolves the version of a node the flow sees: its latest version on the
-// flow branches (innermost first), else its latest non-stale version on the change branch.
-func (v *flowNodes) latest(ctx context.Context, node domain.NodeID) (*domain.Node, error) {
-	for _, f := range v.chain {
-		n, err := v.tx.LatestOn(ctx, node, flowBranchName(f.ID))
-		if err == nil {
-			return &n, nil
-		}
-		if !errors.Is(err, ErrNotFound) {
-			return nil, err
-		}
-	}
-	return v.onChangeBranch(ctx, node)
-}
-
 // onChangeBranch is the latest version of a node on the change branch that no stale run wrote.
 func (v *flowNodes) onChangeBranch(ctx context.Context, node domain.NodeID) (*domain.Node, error) {
 	vs, err := v.tx.Versions(ctx, node)
@@ -117,39 +102,21 @@ func nodeOf(cn domain.ChangeImpact) domain.NodeID {
 	return ""
 }
 
-// nodes returns the change impacts the flow sees, with the post version and the review it resolves to.
+// nodes returns the change impacts the flow sees, with the post version and the review it resolves to: a fold of the
+// impact log (ADR 0029 §3).
 func (v *flowNodes) nodes(ctx context.Context) ([]domain.ChangeImpact, error) {
-	var out []domain.ChangeImpact
-	for _, cn := range v.c.Nodes {
-		if !v.visible(cn) {
-			continue
-		}
-		if v.flow == "" {
-			out = append(out, cn)
-			continue
-		}
-		if id := nodeOf(cn); id != "" {
-			n, err := v.latest(ctx, id)
-			if err != nil {
-				return nil, err
-			}
-			cn.Post = nil
-			// a post is a version this change wrote: not the released pre version
-			if n != nil && (cn.Pre == nil || n.Version > cn.Pre.Version) && (cn.Pre == nil || n.ID == cn.Pre.ID) {
-				ref := n.Ref()
-				cn.Post = &ref
-			}
-		}
-		cn.Review = domain.ReviewProposed
-		for _, r := range cn.Reviews {
-			if r.Superseded || (r.Flow != "" && !v.inFlow[r.Flow]) || v.isStale(r.Execution) {
-				continue
-			}
-			cn.Review = r.Status
-		}
-		out = append(out, cn)
+	if v.flow == "" {
+		return domain.ImpactsSeenBy(v.c.Nodes, nil, nil, v.stale), nil
 	}
-	return out, nil
+	events, err := v.tx.ChangeEvents(ctx, v.c.ID)
+	if err != nil {
+		return nil, err
+	}
+	chain := make([]string, len(v.chain))
+	for i, f := range v.chain {
+		chain[i] = f.ID
+	}
+	return domain.ImpactsSeenBy(v.c.Nodes, events, chain, v.stale), nil
 }
 
 // find returns the change impact a flow sees under an id.
@@ -205,11 +172,11 @@ func (g *Graph) adoptNodes(ctx context.Context, tx Tx, c domain.Change, f domain
 	isStale := func(e string) bool { return e != "" && stale[e] }
 	if !hasOwn {
 		// nothing was written on a branch: only the change impacts move
-		return g.adoptChangeImpacts(ctx, tx, c, f, map[domain.NodeID]domain.NodeRef{}, isStale)
+		return g.adoptChangeImpacts(ctx, tx, c, f, nil, by)
 	}
 	changeBranch, flowBranch := own.Name, flowBranchName(f.ID)
 	view := &flowNodes{g: g, tx: tx, c: c, flow: "", branch: changeBranch, stale: stale}
-	newRefs := map[domain.NodeID]domain.NodeRef{}
+	newRefs := map[domain.NodeID]domain.Node{}
 	type plan struct {
 		desired, head *domain.Node
 	}
@@ -297,7 +264,7 @@ func (g *Graph) adoptNodes(ctx context.Context, tx Tx, c domain.Change, f domain
 		if err := tx.PutNode(ctx, n); err != nil {
 			return err
 		}
-		newRefs[id] = n.Ref()
+		newRefs[id] = n
 	}
 	// 2. their links, retargeted to the new versions
 	for _, id := range order {
@@ -312,9 +279,9 @@ func (g *Graph) adoptNodes(ctx context.Context, tx Tx, c domain.Change, f domain
 		for _, l := range out {
 			to := l.To
 			if r, ok := newRefs[to.ID]; ok {
-				to = r
+				to = r.Ref()
 			}
-			if err := tx.PutLink(ctx, domain.Link{ID: domain.LinkID(g.newID()), Type: l.Type, From: newRefs[id], To: to, Properties: l.Properties, ChangeID: c.ID}); err != nil {
+			if err := tx.PutLink(ctx, domain.Link{ID: domain.LinkID(g.newID()), Type: l.Type, From: newRefs[id].Ref(), To: to, Properties: l.Properties, ChangeID: c.ID}); err != nil {
 				return err
 			}
 		}
@@ -325,58 +292,30 @@ func (g *Graph) adoptNodes(ctx context.Context, tx Tx, c domain.Change, f domain
 			return err
 		}
 	}
-	return g.adoptChangeImpacts(ctx, tx, c, f, newRefs, isStale)
+	return g.adoptChangeImpacts(ctx, tx, c, f, newRefs, by)
 }
 
-// adoptChangeImpacts moves the change impacts and reviews of an adopted flow to the main flow.
-func (g *Graph) adoptChangeImpacts(ctx context.Context, tx Tx, c domain.Change, f domain.Flow, newRefs map[domain.NodeID]domain.NodeRef, isStale func(string) bool) error {
-	var changed []domain.ChangeImpact
-	for _, cn := range c.Nodes {
-		before := cn
-		cn.Reviews = slices.Clone(cn.Reviews)
-		switch {
-		case cn.Flow == f.ID:
-			cn.Flow = ""
-		case cn.Flow == "" && !cn.Superseded && isStale(cn.Execution):
-			cn.Superseded = true
-		}
-		for i, r := range cn.Reviews {
-			switch {
-			case r.Flow == f.ID:
-				cn.Reviews[i].Flow = ""
-			case r.Flow == "" && isStale(r.Execution):
-				cn.Reviews[i].Superseded = true
-			}
-		}
-		if id := nodeOf(cn); id != "" {
-			if r, ok := newRefs[id]; ok && !cn.Superseded {
-				cn.Post = &r
-			}
-		}
-		if !cn.Superseded {
-			cn.Review = domain.ReviewProposed
-			for _, r := range cn.Reviews {
-				if !r.Superseded && r.Flow == "" {
-					cn.Review = r.Status
-				}
-			}
-		}
-		if before.Flow != cn.Flow || before.Superseded != cn.Superseded || before.Review != cn.Review || !sameRef(before.Post, cn.Post) || !slices.Equal(before.Reviews, cn.Reviews) {
-			changed = append(changed, cn)
-		}
+// adoptChangeImpacts moves the change impacts and reviews of an adopted flow to the main flow (ADR 0025 §5.3): one
+// adopted event, folded over every change impact, then the version each one now resolves to (ADR 0029).
+func (g *Graph) adoptChangeImpacts(ctx context.Context, tx Tx, c domain.Change, f domain.Flow, newRefs map[domain.NodeID]domain.Node, by string) error {
+	if err := g.emit(ctx, tx, domain.ImpactEvent{Change: c.ID, Op: domain.ImpactAdopted, Flow: f.ID, Stale: f.StaleExecutions, By: by}); err != nil {
+		return err
 	}
-	// the superseded ones first: a node has one live change impact per flow
-	slices.SortStableFunc(changed, func(a, b domain.ChangeImpact) int {
-		if a.Superseded == b.Superseded {
-			return 0
+	impacts, err := tx.ChangeImpacts(ctx, c.ID)
+	if err != nil {
+		return err
+	}
+	for _, cn := range impacts {
+		id := nodeOf(cn)
+		n, ok := newRefs[id]
+		if id == "" || !ok || cn.Superseded {
+			continue
 		}
-		if a.Superseded {
-			return -1
+		ref := n.Ref()
+		if sameRef(cn.Post, &ref) {
+			continue
 		}
-		return 1
-	})
-	for _, cn := range changed {
-		if err := tx.PutChangeImpact(ctx, c.ID, cn); err != nil {
+		if err := g.emit(ctx, tx, domain.ImpactEvent{Change: c.ID, Impact: cn.ID, Op: domain.ImpactWritten, Execution: n.Execution, By: by, Post: &ref}); err != nil {
 			return err
 		}
 	}
@@ -414,9 +353,8 @@ func (g *Graph) discardNodes(ctx context.Context, tx Tx, c domain.Change, f doma
 		if !gone[cn.Flow] || cn.Review == domain.ReviewRejected {
 			continue
 		}
-		cn.Review = domain.ReviewRejected
-		cn.Reviews = append(cn.Reviews, domain.Review{Status: domain.ReviewRejected, By: by, Comment: "flow discarded", At: g.now(), Flow: cn.Flow})
-		if err := tx.PutChangeImpact(ctx, c.ID, cn); err != nil {
+		r := domain.Review{Status: domain.ReviewRejected, By: by, Comment: "flow discarded", At: g.now(), Flow: cn.Flow}
+		if err := g.emit(ctx, tx, domain.ImpactEvent{Change: c.ID, Impact: cn.ID, Op: domain.ImpactDiscarded, Flow: cn.Flow, By: by, Review: &r}); err != nil {
 			return err
 		}
 	}

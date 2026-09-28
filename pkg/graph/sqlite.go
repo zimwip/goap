@@ -504,6 +504,41 @@ func (t *sqliteTx) PutChangeImpact(ctx context.Context, change domain.ChangeID, 
 	return sqliteErr(err, "change impact "+cn.Key)
 }
 
+func (t *sqliteTx) AppendChangeEvent(ctx context.Context, e domain.ImpactEvent) (domain.ImpactEvent, error) {
+	if err := t.tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(seq), 0) + 1 FROM change_event WHERE change_id = ?`, string(e.Change)).Scan(&e.Seq); err != nil {
+		return e, sqliteErr(err, "change event")
+	}
+	payload, err := json.Marshal(e)
+	if err != nil {
+		return e, err
+	}
+	_, err = t.tx.ExecContext(ctx, `INSERT INTO change_event (id, change_id, seq, impact_id, op, flow, execution, by_whom, payload, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		e.ID, string(e.Change), e.Seq, string(e.Impact), string(e.Op), e.Flow, e.Execution, e.By, string(payload), tsText(e.At))
+	return e, sqliteErr(err, "change event")
+}
+
+func (t *sqliteTx) ChangeEvents(ctx context.Context, change domain.ChangeID) ([]domain.ImpactEvent, error) {
+	rows, err := t.tx.QueryContext(ctx, `SELECT payload FROM change_event WHERE change_id = ? ORDER BY seq`, string(change))
+	if err != nil {
+		return nil, sqliteErr(err, "change events")
+	}
+	defer rows.Close()
+	var out []domain.ImpactEvent
+	for rows.Next() {
+		var raw string
+		var e domain.ImpactEvent
+		if err := rows.Scan(&raw); err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal([]byte(raw), &e); err != nil {
+			return nil, err
+		}
+		out = append(out, e)
+	}
+	return out, rows.Err()
+}
+
 func (t *sqliteTx) ChangeImpacts(ctx context.Context, change domain.ChangeID) ([]domain.ChangeImpact, error) {
 	rows, err := t.tx.QueryContext(ctx, `SELECT id, node_id, key, type, intent, rationale, pre_version, post_version, landed_version, review, reviews, COALESCE(via, ''), recheck, produced_by, derived_from, items, execution, created_at, flow, superseded
 		FROM change_impact WHERE change_id = ? ORDER BY seq`, string(change))

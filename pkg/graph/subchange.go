@@ -272,18 +272,16 @@ func (g *Graph) SplitByOwner(ctx context.Context, id domain.ChangeID) (created [
 			for _, cn := range gr.nodes {
 				// the impact is confirmed for the parent, the work moves to the sub-change
 				if stored := slices.IndexFunc(parent.Nodes, func(x domain.ChangeImpact) bool { return x.ID == cn.ID && len(x.Items) == 0 }); stored >= 0 && cn.Review == domain.ReviewProposed && cn.Post == nil {
-					del := cn
-					del.Review = domain.ReviewAccepted
-					del.Reviews = append(slices.Clone(del.Reviews), domain.Review{Status: domain.ReviewAccepted, By: "graph.split_by_owner", At: g.now(),
-						Comment: fmt.Sprintf("delegated to %s (sub-change %s)", gr.org, sub.ID)})
-					if err := tx.PutChangeImpact(ctx, id, del); err != nil {
+					r := domain.Review{Status: domain.ReviewAccepted, By: "graph.split_by_owner", At: g.now(),
+						Comment: fmt.Sprintf("delegated to %s (sub-change %s)", gr.org, sub.ID)}
+					if err := g.emit(ctx, tx, domain.ImpactEvent{Change: id, Impact: cn.ID, Op: domain.ImpactReviewed, By: r.By, Review: &r}); err != nil {
 						return err
 					}
 				}
 				// DerivedFrom holds the id of the parent's change impact it is copied from
 				cp := domain.ChangeImpact{ID: domain.ChangeImpactID(g.newID()), Key: cn.Key, Type: cn.Type, Intent: domain.IntentModified, Rationale: cn.Rationale,
 					Pre: cn.Pre, Review: domain.ReviewProposed, ProducedBy: "graph.split_by_owner", DerivedFrom: []domain.ItemID{domain.ItemID(cn.ID)}, CreatedAt: g.now()}
-				if err := tx.PutChangeImpact(ctx, sub.ID, cp); err != nil {
+				if err := g.emit(ctx, tx, domain.ImpactEvent{Change: sub.ID, Impact: cp.ID, Op: domain.ImpactDeclared, By: cp.ProducedBy, State: &cp}); err != nil {
 					return err
 				}
 			}

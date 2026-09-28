@@ -62,6 +62,9 @@ const (
 	// GraphServiceListNamespacesProcedure is the fully-qualified name of the GraphService's
 	// ListNamespaces RPC.
 	GraphServiceListNamespacesProcedure = "/goap.graph.v1.GraphService/ListNamespaces"
+	// GraphServiceListChangeEventsProcedure is the fully-qualified name of the GraphService's
+	// ListChangeEvents RPC.
+	GraphServiceListChangeEventsProcedure = "/goap.graph.v1.GraphService/ListChangeEvents"
 	// GraphServiceCreateChangeProcedure is the fully-qualified name of the GraphService's CreateChange
 	// RPC.
 	GraphServiceCreateChangeProcedure = "/goap.graph.v1.GraphService/CreateChange"
@@ -171,6 +174,8 @@ type GraphServiceClient interface {
 	GetNodeNeighbourhood(context.Context, *connect.Request[v1.GetNodeNeighbourhoodRequest]) (*connect.Response[v1.GetNodeNeighbourhoodResponse], error)
 	// The namespaces holding at least one node.
 	ListNamespaces(context.Context, *connect.Request[v1.ListNamespacesRequest]) (*connect.Response[v1.ListNamespacesResponse], error)
+	// The impact log of a change (ADR 0029): every operation on its change impacts, with its caller.
+	ListChangeEvents(context.Context, *connect.Request[v1.ListChangeEventsRequest]) (*connect.Response[v1.ListChangeEventsResponse], error)
 	// Change axis
 	CreateChange(context.Context, *connect.Request[v1.CreateChangeRequest]) (*connect.Response[v1.CreateChangeResponse], error)
 	GetChange(context.Context, *connect.Request[v1.GetChangeRequest]) (*connect.Response[v1.GetChangeResponse], error)
@@ -296,6 +301,12 @@ func NewGraphServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			httpClient,
 			baseURL+GraphServiceListNamespacesProcedure,
 			connect.WithSchema(graphServiceMethods.ByName("ListNamespaces")),
+			connect.WithClientOptions(opts...),
+		),
+		listChangeEvents: connect.NewClient[v1.ListChangeEventsRequest, v1.ListChangeEventsResponse](
+			httpClient,
+			baseURL+GraphServiceListChangeEventsProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("ListChangeEvents")),
 			connect.WithClientOptions(opts...),
 		),
 		createChange: connect.NewClient[v1.CreateChangeRequest, v1.CreateChangeResponse](
@@ -506,6 +517,7 @@ type graphServiceClient struct {
 	listBaselineNodes    *connect.Client[v1.ListBaselineNodesRequest, v1.ListBaselineNodesResponse]
 	getNodeNeighbourhood *connect.Client[v1.GetNodeNeighbourhoodRequest, v1.GetNodeNeighbourhoodResponse]
 	listNamespaces       *connect.Client[v1.ListNamespacesRequest, v1.ListNamespacesResponse]
+	listChangeEvents     *connect.Client[v1.ListChangeEventsRequest, v1.ListChangeEventsResponse]
 	createChange         *connect.Client[v1.CreateChangeRequest, v1.CreateChangeResponse]
 	getChange            *connect.Client[v1.GetChangeRequest, v1.GetChangeResponse]
 	listChanges          *connect.Client[v1.ListChangesRequest, v1.ListChangesResponse]
@@ -593,6 +605,11 @@ func (c *graphServiceClient) GetNodeNeighbourhood(ctx context.Context, req *conn
 // ListNamespaces calls goap.graph.v1.GraphService.ListNamespaces.
 func (c *graphServiceClient) ListNamespaces(ctx context.Context, req *connect.Request[v1.ListNamespacesRequest]) (*connect.Response[v1.ListNamespacesResponse], error) {
 	return c.listNamespaces.CallUnary(ctx, req)
+}
+
+// ListChangeEvents calls goap.graph.v1.GraphService.ListChangeEvents.
+func (c *graphServiceClient) ListChangeEvents(ctx context.Context, req *connect.Request[v1.ListChangeEventsRequest]) (*connect.Response[v1.ListChangeEventsResponse], error) {
+	return c.listChangeEvents.CallUnary(ctx, req)
 }
 
 // CreateChange calls goap.graph.v1.GraphService.CreateChange.
@@ -773,6 +790,8 @@ type GraphServiceHandler interface {
 	GetNodeNeighbourhood(context.Context, *connect.Request[v1.GetNodeNeighbourhoodRequest]) (*connect.Response[v1.GetNodeNeighbourhoodResponse], error)
 	// The namespaces holding at least one node.
 	ListNamespaces(context.Context, *connect.Request[v1.ListNamespacesRequest]) (*connect.Response[v1.ListNamespacesResponse], error)
+	// The impact log of a change (ADR 0029): every operation on its change impacts, with its caller.
+	ListChangeEvents(context.Context, *connect.Request[v1.ListChangeEventsRequest]) (*connect.Response[v1.ListChangeEventsResponse], error)
 	// Change axis
 	CreateChange(context.Context, *connect.Request[v1.CreateChangeRequest]) (*connect.Response[v1.CreateChangeResponse], error)
 	GetChange(context.Context, *connect.Request[v1.GetChangeRequest]) (*connect.Response[v1.GetChangeResponse], error)
@@ -894,6 +913,12 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 		GraphServiceListNamespacesProcedure,
 		svc.ListNamespaces,
 		connect.WithSchema(graphServiceMethods.ByName("ListNamespaces")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceListChangeEventsHandler := connect.NewUnaryHandler(
+		GraphServiceListChangeEventsProcedure,
+		svc.ListChangeEvents,
+		connect.WithSchema(graphServiceMethods.ByName("ListChangeEvents")),
 		connect.WithHandlerOptions(opts...),
 	)
 	graphServiceCreateChangeHandler := connect.NewUnaryHandler(
@@ -1112,6 +1137,8 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 			graphServiceGetNodeNeighbourhoodHandler.ServeHTTP(w, r)
 		case GraphServiceListNamespacesProcedure:
 			graphServiceListNamespacesHandler.ServeHTTP(w, r)
+		case GraphServiceListChangeEventsProcedure:
+			graphServiceListChangeEventsHandler.ServeHTTP(w, r)
 		case GraphServiceCreateChangeProcedure:
 			graphServiceCreateChangeHandler.ServeHTTP(w, r)
 		case GraphServiceGetChangeProcedure:
@@ -1227,6 +1254,10 @@ func (UnimplementedGraphServiceHandler) GetNodeNeighbourhood(context.Context, *c
 
 func (UnimplementedGraphServiceHandler) ListNamespaces(context.Context, *connect.Request[v1.ListNamespacesRequest]) (*connect.Response[v1.ListNamespacesResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.ListNamespaces is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) ListChangeEvents(context.Context, *connect.Request[v1.ListChangeEventsRequest]) (*connect.Response[v1.ListChangeEventsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.ListChangeEvents is not implemented"))
 }
 
 func (UnimplementedGraphServiceHandler) CreateChange(context.Context, *connect.Request[v1.CreateChangeRequest]) (*connect.Response[v1.CreateChangeResponse], error) {

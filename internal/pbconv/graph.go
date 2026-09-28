@@ -341,3 +341,17 @@ func EditsFromPB(edits []*graphv1.NodeEdit) []graph.NodeEdit {
 	}
 	return out
 }
+
+// ImpactEventToPB converts an event of the impact log (ADR 0029).
+func ImpactEventToPB(e domain.ImpactEvent) *graphv1.ImpactEvent {
+	out := &graphv1.ImpactEvent{Id: e.ID, ChangeId: string(e.Change), Seq: int32(e.Seq), ImpactId: string(e.Impact), Op: string(e.Op),
+		Flow: e.Flow, Execution: e.Execution, By: e.By, At: Time(e.At), Post: RefPtrToPB(e.Post), Pre: RefPtrToPB(e.Pre),
+		Landed: RefPtrToPB(e.Landed), Stale: e.Stale}
+	if e.State != nil {
+		out.State = ChangeImpactToPB(*e.State)
+	}
+	if r := e.Review; r != nil {
+		out.Review = &graphv1.Review{Status: string(r.Status), By: r.By, Comment: r.Comment, At: Time(r.At), Flow: r.Flow, Execution: r.Execution, Superseded: r.Superseded}
+	}
+	return out
+}

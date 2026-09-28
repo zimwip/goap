@@ -4,6 +4,7 @@ package graphsvc
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	"connectrpc.com/connect"
 
@@ -156,6 +157,33 @@ func (h *Handler) GetBaselineGraph(ctx context.Context, r *connect.Request[graph
 	suspects, err := h.Graph.SuspectLinks(ctx, id)
 	return res(&graphv1.GetBaselineGraphResponse{Baseline: pbconv.BaselineToPB(b), Nodes: pbconv.NodesToPB(nodes),
 		Links: pbconv.LinksToPB(links), SuspectLinks: pbconv.LinksToPB(suspects)}, err)
+}
+
+// Caller names the principal of a request, recorded on the events of the change impacts (graph.Graph.Caller,
+// ADR 0029).
+func Caller(ctx context.Context) string { return authz.From(ctx).Subject }
+
+// PrepareGraph wires the caller of the impact events and gives the change impacts recorded before the log their
+// imported event (ADR 0029 §6).
+func PrepareGraph(ctx context.Context, g *graph.Graph, log *slog.Logger) error {
+	g.Caller = Caller
+	n, err := g.MigrateImpactEvents(ctx)
+	if n > 0 {
+		log.Info("change impacts moved to the impact log", "changes", n)
+	}
+	return err
+}
+
+func (h *Handler) ListChangeEvents(ctx context.Context, r *connect.Request[graphv1.ListChangeEventsRequest]) (*connect.Response[graphv1.ListChangeEventsResponse], error) {
+	evs, err := h.Graph.ChangeEvents(ctx, domain.ChangeID(r.Msg.ChangeId))
+	if err != nil {
+		return nil, rpcerr.ToConnect(err)
+	}
+	out := &graphv1.ListChangeEventsResponse{}
+	for _, e := range evs {
+		out.Events = append(out.Events, pbconv.ImpactEventToPB(e))
+	}
+	return connect.NewResponse(out), nil
 }
 
 func (h *Handler) ListBaselineNodes(ctx context.Context, r *connect.Request[graphv1.ListBaselineNodesRequest]) (*connect.Response[graphv1.ListBaselineNodesResponse], error) {

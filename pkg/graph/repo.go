@@ -63,8 +63,14 @@ type Tx interface {
 
 	// OpenChangeIDs lists the changes that are neither applied nor abandoned.
 	OpenChangeIDs(ctx context.Context) ([]domain.ChangeID, error)
-	// PutChangeImpact inserts or updates a change impact of a change (ADR 0024).
+	// PutChangeImpact inserts or updates a change impact of a change (ADR 0024). The table is the projection of the
+	// impact log (ADR 0029): only Graph.emit writes it.
 	PutChangeImpact(ctx context.Context, change domain.ChangeID, cn domain.ChangeImpact) error
+	// AppendChangeEvent appends an event to the impact log of a change (ADR 0029) and returns it with its Seq.
+	// The log is insert-only: nothing updates or deletes an event.
+	AppendChangeEvent(ctx context.Context, e domain.ImpactEvent) (domain.ImpactEvent, error)
+	// ChangeEvents returns the impact log of a change, in order.
+	ChangeEvents(ctx context.Context, change domain.ChangeID) ([]domain.ImpactEvent, error)
 	// ChangeImpacts lists the change impacts of a change, in creation order.
 	ChangeImpacts(ctx context.Context, change domain.ChangeID) ([]domain.ChangeImpact, error)
 	// NodeChangeImpacts lists the changes holding a change impact on a node, oldest first.

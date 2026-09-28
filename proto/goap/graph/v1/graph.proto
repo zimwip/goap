@@ -25,6 +25,8 @@ service GraphService {
   rpc GetNodeNeighbourhood(GetNodeNeighbourhoodRequest) returns (GetNodeNeighbourhoodResponse);
   // The namespaces holding at least one node.
   rpc ListNamespaces(ListNamespacesRequest) returns (ListNamespacesResponse);
+  // The impact log of a change (ADR 0029): every operation on its change impacts, with its caller.
+  rpc ListChangeEvents(ListChangeEventsRequest) returns (ListChangeEventsResponse);
 
   // Change axis
   rpc CreateChange(CreateChangeRequest) returns (CreateChangeResponse);
@@ -365,6 +367,41 @@ message GetNodeNeighbourhoodResponse {
   repeated Link links = 3;
   // ids of the links whose target changed since they were created
   repeated string suspect_link_ids = 4;
+}
+
+// An operation on the change impacts of a change (ADR 0029).
+message ImpactEvent {
+  string id = 1;
+  string change_id = 2;
+  int32 seq = 3;
+  // empty for a change-level event (adopted)
+  string impact_id = 4;
+  // declared | written | reviewed | discarded | adopted | landed | rebased | imported
+  string op = 5;
+  // the caller: the flow branch ("" = the main flow), the journal record of the action run, the principal or component
+  string flow = 6;
+  string execution = 7;
+  string by = 8;
+  google.protobuf.Timestamp at = 9;
+  // declared, imported
+  ChangeImpact state = 10;
+  // written
+  NodeRef post = 11;
+  // rebased
+  NodeRef pre = 12;
+  NodeRef landed = 13;
+  // reviewed, discarded
+  Review review = 14;
+  // adopted: the action runs the flow replaces
+  repeated string stale = 15;
+}
+
+message ListChangeEventsRequest {
+  string change_id = 1;
+}
+
+message ListChangeEventsResponse {
+  repeated ImpactEvent events = 1;
 }
 
 message ListNamespacesRequest {}
