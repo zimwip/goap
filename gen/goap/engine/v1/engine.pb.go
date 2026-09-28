@@ -1571,7 +1571,8 @@ type StartProcessRequest struct {
 	// empty: the intent loop identifies the methodology and agent among every
 	// published methodology
 	Methodology string `protobuf:"bytes,1,opt,name=methodology,proto3" json:"methodology,omitempty"`
-	// continue an existing change, or open one on baseline_id
+	// continue an existing change, or open one on baseline_id (empty: the latest baseline of the namespace of the
+	// identified methodology)
 	ChangeId   string `protobuf:"bytes,2,opt,name=change_id,json=changeId,proto3" json:"change_id,omitempty"`
 	BaselineId string `protobuf:"bytes,3,opt,name=baseline_id,json=baselineId,proto3" json:"baseline_id,omitempty"`
 	Title      string `protobuf:"bytes,4,opt,name=title,proto3" json:"title,omitempty"`
