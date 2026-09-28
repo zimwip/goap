@@ -86,6 +86,15 @@ func (e *Engine) schedule(id string) {
 	})
 }
 
+// queue notes why p is runnable: the run that picks it up journals it as a schedule record.
+func (e *Engine) queue(ctx context.Context, p *Process, reason string, cause map[string]any) {
+	by := authz.From(ctx).Subject
+	if by == "" {
+		by = p.Initiator.Subject
+	}
+	p.Queued = &Queued{Reason: reason, By: by, At: e.clock(), Cause: cause}
+}
+
 // StartRequest starts a process.
 type StartRequest struct {
 	Methodology string
@@ -105,8 +114,9 @@ type StartRequest struct {
 	Goal string
 	// Agent restricts identification to one agent of the methodology.
 	Agent string
-	// ParentID is set for sub-agent processes.
+	// ParentID is set for sub-agent processes, Call names the call of the parent's action that started it.
 	ParentID string
+	Call     string
 	// Trigger is set for processes started by a trigger.
 	Trigger string
 	Vars    map[string]any
@@ -150,9 +160,6 @@ func (e *Engine) Start(ctx context.Context, req StartRequest) (*Process, error) 
 		}
 		p.BaselineID = bb.Change.BaselineID
 	}
-	if p.ChangeID == "" && p.BaselineID == "" {
-		return nil, fmt.Errorf("a baseline or a change is required: %w", ErrInvalidState)
-	}
 	if req.Goal != "" {
 		m, err := e.Methodologies.Methodology(ctx, req.Methodology)
 		if err != nil {
@@ -176,6 +183,16 @@ func (e *Engine) Start(ctx context.Context, req StartRequest) (*Process, error) 
 	} else if err := e.resolveIntent(ctx, p); err != nil {
 		return nil, err
 	}
+	if p.Status == StatusRunning {
+		switch {
+		case p.ParentID != "":
+			e.queue(ctx, p, "sub-agent", map[string]any{"parent": p.ParentID, "call": req.Call})
+		case p.Trigger != "":
+			e.queue(ctx, p, "trigger", map[string]any{"trigger": p.Trigger})
+		default:
+			e.queue(ctx, p, "started", nil)
+		}
+	}
 	if err := e.save(ctx, p, "started"); err != nil {
 		return nil, err
 	}
@@ -195,6 +212,9 @@ func (e *Engine) Answer(ctx context.Context, id, answer string) (*Process, error
 	p.Intent.Turns = append(p.Intent.Turns, intent.Turn{Role: "user", Text: answer})
 	if err := e.resolveIntent(ctx, p); err != nil {
 		return nil, err
+	}
+	if p.Status == StatusRunning {
+		e.queue(ctx, p, "answered", nil)
 	}
 	return p, e.save(ctx, p, "intent")
 }
@@ -301,7 +321,17 @@ func (e *Engine) selectTarget(ctx context.Context, p *Process, m *methodology.Co
 		if p.Trigger != "" {
 			data = map[string]any{"trigger": p.Trigger}
 		}
-		c, err := e.Graph.CreateChange(ctx, graph.NewChange{Title: title, Intent: firstUserTurn(p), Methodology: m.Name, OwnerOrg: p.Org, Namespace: firstNonEmpty(p.Namespace, m.Namespace), OwnBranch: p.OwnBranch, BaselineID: p.BaselineID, Data: data})
+		ns := firstNonEmpty(p.Namespace, m.Namespace)
+		// Without a baseline, the change starts from the latest one of the namespace it acts on: a request may
+		// only know its methodology (hence its namespace) once its intent is identified.
+		if p.BaselineID == "" {
+			b, err := e.latestBaseline(ctx, domain.NamespaceOf(ns))
+			if err != nil {
+				return fmt.Errorf("methodology %s: %w", m.Name, err)
+			}
+			p.BaselineID = b
+		}
+		c, err := e.Graph.CreateChange(ctx, graph.NewChange{Title: title, Intent: firstUserTurn(p), Methodology: m.Name, OwnerOrg: p.Org, Namespace: ns, OwnBranch: p.OwnBranch, BaselineID: p.BaselineID, Data: data})
 		if err != nil {
 			return err
 		}
@@ -339,6 +369,7 @@ func (e *Engine) Submit(ctx context.Context, id string, items []ItemInput) (*Pro
 		return nil, err
 	}
 	i := p.Pending.Step
+	waitedOn := p.Pending.Action
 	step := &p.Steps[i]
 	rec := uuid.NewString()
 	submitted := e.clock()
@@ -352,6 +383,7 @@ func (e *Engine) Submit(ctx context.Context, id string, items []ItemInput) (*Pro
 	}
 	p.Pending = nil
 	p.Status = StatusRunning
+	e.queue(ctx, p, "input", map[string]any{"step": i, "action": waitedOn})
 	r := actionRecord(p, i, methodology.KindHuman, rec)
 	r.Actor, r.StartedAt = authz.From(ctx).Subject, submitted
 	r.Data = map[string]any{"submitted": len(ids)}
@@ -370,12 +402,24 @@ func (e *Engine) Run(ctx context.Context, id string) (*Process, error) {
 	if err != nil {
 		return nil, err
 	}
+	// a run scheduled in the background acts for the principal who started the process: what it writes is
+	// recorded under that name (ADR 0029)
+	if authz.From(ctx).Anonymous() {
+		ctx = authz.With(ctx, p.Initiator)
+	}
 	ctx, end := e.tracer().StartProcess(ctx, p)
 	defer func() { end(p) }()
 	p.MethodologyVersion = m.Version
 	if p.JournalSeq == 0 {
 		e.journal(ctx, p, domain.ExecutionRecord{Kind: domain.ExecProcessStarted, StartedAt: p.CreatedAt,
 			Data: map[string]any{"intent": firstUserTurn(p), "trigger": p.Trigger, "title": p.Title}})
+	}
+	if q := p.Queued; q != nil && p.Status == StatusRunning {
+		// why this run happens: what made the process runnable, by whom, and how long it waited
+		data := map[string]any{"reason": q.Reason}
+		maps.Copy(data, q.Cause)
+		e.journal(ctx, p, domain.ExecutionRecord{Kind: domain.ExecSchedule, Step: len(p.Steps), Actor: q.By, StartedAt: q.At, EndedAt: e.clock(), Data: data})
+		p.Queued = nil
 	}
 	maxSteps := e.MaxSteps
 	if maxSteps == 0 {
@@ -745,7 +789,7 @@ func (e *Engine) runChild(ctx context.Context, h *Host, key, agentName, intentTe
 		child = c
 	} else {
 		c, err := e.Start(ctx, StartRequest{Methodology: parent.Methodology, ChangeID: parent.ChangeID, BaselineID: parent.BaselineID,
-			Agent: agentName, Intent: intentText, ParentID: parent.ID, Vars: parent.Vars})
+			Agent: agentName, Intent: intentText, ParentID: parent.ID, Call: key, Vars: parent.Vars})
 		if err != nil {
 			return dsl.AgentResult{}, err
 		}
@@ -782,6 +826,7 @@ func (e *Engine) resumeParent(parentID, childID string) {
 	}
 	p.Pending = nil
 	p.Status = StatusRunning
+	e.queue(ctx, p, "sub-agent-ended", map[string]any{"child": childID})
 	err = e.save(ctx, p, "step")
 	unlock()
 	if err == nil {
@@ -840,6 +885,7 @@ func (e *Engine) Approve(ctx context.Context, id string, approve bool, comment s
 	p.Pending = nil
 	p.Status = StatusRunning
 	p.Steps[i].ApprovedBy = approver.Subject
+	e.queue(ctx, p, map[bool]string{true: "approved", false: "rejected"}[approve], map[string]any{"step": i, "action": action.Name})
 	e.journal(ctx, p, domain.ExecutionRecord{Kind: domain.ExecApproval, Step: i, Action: action.Name, Actor: approver.Subject,
 		Data: map[string]any{"approved": approve, "comment": comment, "permission": permission}})
 	if !approve {

@@ -8,6 +8,7 @@ import (
 
 	graphv1 "github.com/zimwip/goap/gen/goap/graph/v1"
 	"github.com/zimwip/goap/gen/goap/graph/v1/graphv1connect"
+	"github.com/zimwip/goap/internal/identity"
 	"github.com/zimwip/goap/internal/pbconv"
 	"github.com/zimwip/goap/internal/rpcerr"
 	"github.com/zimwip/goap/pkg/domain"
@@ -23,8 +24,10 @@ type Client struct {
 var _ engine.GraphPort = (*Client)(nil)
 
 // NewClient returns a client for the graph service at baseURL.
+// The requests carry the principal of their context: the engine acts for the initiator of a process, which the graph
+// records on the events of the change impacts (ADR 0029).
 func NewClient(hc *http.Client, baseURL string, opts ...connect.ClientOption) *Client {
-	return &Client{rpc: graphv1connect.NewGraphServiceClient(hc, baseURL, opts...)}
+	return &Client{rpc: graphv1connect.NewGraphServiceClient(hc, baseURL, append([]connect.ClientOption{identity.Forward()}, opts...)...)}
 }
 
 func (c *Client) CreateChange(ctx context.Context, in graph.NewChange) (domain.Change, error) {

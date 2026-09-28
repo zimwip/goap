@@ -167,7 +167,7 @@ func BaselineToPB(b domain.Baseline) *graphv1.Baseline {
 		nodes[string(id)] = int32(v)
 	}
 	return &graphv1.Baseline{Id: string(b.ID), Name: b.Name, ParentId: string(b.ParentID), ChangeId: string(b.ChangeID), Nodes: nodes, CreatedAt: Time(b.CreatedAt),
-		Branch: domain.BranchOf(b.Branch)}
+		Branch: domain.BranchOf(b.Branch), Namespace: domain.NamespaceOf(b.Namespace)}
 }
 
 func BaselineFromPB(b *graphv1.Baseline) domain.Baseline {
@@ -176,7 +176,7 @@ func BaselineFromPB(b *graphv1.Baseline) domain.Baseline {
 		nodes[domain.NodeID(id)] = domain.Version(v)
 	}
 	return domain.Baseline{ID: domain.BaselineID(b.Id), Name: b.Name, ParentID: domain.BaselineID(b.ParentId), ChangeID: domain.ChangeID(b.ChangeId), Nodes: nodes, CreatedAt: FromTime(b.CreatedAt),
-		Branch: b.Branch}
+		Branch: b.Branch, Namespace: b.Namespace}
 }
 
 func ItemToPB(it domain.ChangeItem) *graphv1.ChangeItem {
@@ -338,6 +338,20 @@ func EditsFromPB(edits []*graphv1.NodeEdit) []graph.NodeEdit {
 			e.RemoveLinks = append(e.RemoveLinks, domain.LinkID(id))
 		}
 		out[i] = e
+	}
+	return out
+}
+
+// ImpactEventToPB converts an event of the impact log (ADR 0029).
+func ImpactEventToPB(e domain.ImpactEvent) *graphv1.ImpactEvent {
+	out := &graphv1.ImpactEvent{Id: e.ID, ChangeId: string(e.Change), Seq: int32(e.Seq), ImpactId: string(e.Impact), Op: string(e.Op),
+		Flow: e.Flow, Execution: e.Execution, By: e.By, At: Time(e.At), Post: RefPtrToPB(e.Post), Pre: RefPtrToPB(e.Pre),
+		Landed: RefPtrToPB(e.Landed), Stale: e.Stale}
+	if e.State != nil {
+		out.State = ChangeImpactToPB(*e.State)
+	}
+	if r := e.Review; r != nil {
+		out.Review = &graphv1.Review{Status: string(r.Status), By: r.By, Comment: r.Comment, At: Time(r.At), Flow: r.Flow, Execution: r.Execution, Superseded: r.Superseded}
 	}
 	return out
 }

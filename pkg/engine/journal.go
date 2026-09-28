@@ -36,7 +36,7 @@ func (e *Engine) journal(ctx context.Context, p *Process, recs ...domain.Executi
 		}
 		p.JournalSeq++
 		r.Seq = p.JournalSeq
-		r.ChangeID, r.ProcessID, r.ParentProcessID = p.ChangeID, p.ID, p.ParentID
+		r.ChangeID, r.ProcessID, r.ParentProcessID, r.Flow = p.ChangeID, p.ID, p.ParentID, p.Flow
 		r.Methodology, r.MethodologyVersion, r.Agent, r.Planner, r.Goal = p.Methodology, p.MethodologyVersion, p.Agent, p.Planner, p.Goal
 		if r.Status == "" {
 			r.Status = string(p.Status)

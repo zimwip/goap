@@ -47,6 +47,14 @@ export function refreshBaselines(namespace: string): Promise<void> {
   return fill(baselines, async () => (await graph.listBaselines(namespace)).baselines ?? []);
 }
 
+/** The baselines of every namespace holding nodes (newest first in each), the meta-domain methodology aside. */
+export async function baselinesByNamespace(signal?: AbortSignal): Promise<{ namespace: string; baselines: Baseline[] }[]> {
+  const nss = ((await graph.listNamespaces(signal)).namespaces ?? []).filter((ns) => ns !== 'methodology');
+  return Promise.all(
+    nss.map(async (namespace) => ({ namespace, baselines: [...((await graph.listBaselines(namespace, signal)).baselines ?? [])].reverse() })),
+  );
+}
+
 export function refreshChanges(): Promise<void> {
   return fill(changes, async () => {
     const list = (await graph.listChanges()).changes ?? [];

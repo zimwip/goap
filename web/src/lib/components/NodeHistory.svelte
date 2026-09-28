@@ -4,6 +4,8 @@
   import { graph, errorMessage, formatDate, shortId, type GraphNode } from '../api';
   import { openTab } from '../shell/tabs.svelte';
   import { changes, refreshChanges } from '../stores/catalog.svelte';
+  import { loadRaw, save } from '../shell/storage';
+  import NodeBranchGraph from './NodeBranchGraph.svelte';
 
   let { id, reloadKey = 0 }: { id: string; /** bump to reload */ reloadKey?: number } = $props();
 
@@ -11,6 +13,13 @@
   let loading = $state(true);
   let error = $state('');
   let open = $state<number[]>([]);
+
+  // "branches": the versions as a branch graph (git log --graph), "table": one row per version
+  const VIEW_KEY = 'goap.ide.history.view';
+  let view = $state<'branches' | 'table'>(loadRaw(VIEW_KEY) === 'table' ? 'table' : 'branches');
+  $effect(() => save(VIEW_KEY, view));
+  /** version shown under the branch graph */
+  let picked = $state<number | undefined>();
 
   async function load(signal?: AbortSignal) {
     loading = true;
@@ -67,6 +76,11 @@
   );
 
   const shown = $derived([...entries].reverse());
+  const branches = $derived(new Set(versions.map((v) => v.branch || 'main')).size);
+  const pickedEntry = $derived(entries.find((e) => e.v.version === (picked ?? latest?.version)));
+
+  const describe = (v: GraphNode) =>
+    [v.deleted ? 'deleted' : v.reason, v.changeId ? changeTitle(v.changeId) : '', formatDate(v.createdAt)].filter(Boolean).join(' · ');
 
   function toggle(v: number) {
     open = open.includes(v) ? open.filter((x) => x !== v) : [...open, v];
@@ -84,6 +98,37 @@
         {#each path as s, i (i)}<li><span class="state">{s}</span></li>{/each}
       </ol>
     {/if}
+    <div class="views" role="group" aria-label="History view">
+      <button type="button" class="small" class:primary={view === 'branches'} aria-pressed={view === 'branches'} onclick={() => (view = 'branches')}>Branches</button>
+      <button type="button" class="small" class:primary={view === 'table'} aria-pressed={view === 'table'} onclick={() => (view = 'table')}>Table</button>
+      <span class="hint">{branches} branch{branches > 1 ? 'es' : ''}</span>
+    </div>
+    {#if view === 'branches'}
+      <section class="card">
+        <NodeBranchGraph {versions} {describe} selected={pickedEntry?.v.version} onselect={(v) => (picked = v)} />
+      </section>
+      {#if pickedEntry}
+        {@const e = pickedEntry}
+        <section class="card">
+          <h3>
+            v{e.v.version} <span class="hint">on {e.v.branch || 'main'}</span>
+            {#if e.v.state}{#if e.moved}<span class="from">{e.from || 'none'} →</span>{/if}<span class="state" class:moved={e.moved}>{e.v.state}</span>{/if}
+          </h3>
+          <p class="meta">
+            <span>{e.v.deleted ? 'deleted' : (e.v.reason ?? '')}{e.v.parents?.length ? ` from v${e.v.parents.join(' + v')}` : ''}</span>
+            <span>·</span>
+            {#if e.v.changeId}
+              <button type="button" class="link" onclick={() => openTab({ kind: 'change', params: { id: e.v.changeId ?? '' } }, { pin: true })}>{changeTitle(e.v.changeId)}</button>
+            {:else}
+              <span>{changeTitle(undefined)}</span>
+            {/if}
+            <span>· {formatDate(e.v.createdAt)}</span>
+          </p>
+          {#if e.v.comment}<p>{e.v.comment}</p>{/if}
+          {@render detail(e)}
+        </section>
+      {/if}
+    {:else}
     <section class="card">
       <table>
         <thead><tr><th>Version</th><th>State</th><th>How</th><th>Change</th><th>Why</th><th>Date</th><th>Properties</th></tr></thead>
@@ -117,31 +162,34 @@
             </tr>
             {#if open.includes(e.v.version ?? 0)}
               <tr class="detail">
-                <td colspan="7">
-                  {#if e.diff.length}
-                    <table class="diff">
-                      <tbody>
-                        {#each e.diff as d (d.key)}
-                          <tr><th>{d.key}</th><td class="before">{d.before}</td><td class="arrow">→</td><td class="after">{d.after}</td></tr>
-                        {/each}
-                      </tbody>
-                    </table>
-                  {/if}
-                  <details>
-                    <summary>All properties of v{e.v.version}</summary>
-                    <pre>{JSON.stringify(e.v.props ?? {}, null, 2)}</pre>
-                  </details>
-                </td>
+                <td colspan="7">{@render detail(e)}</td>
               </tr>
             {/if}
           {/each}
         </tbody>
       </table>
     </section>
+    {/if}
   {:else}
     <p class="empty">No version found.</p>
   {/if}
 </div>
+
+{#snippet detail(e: Entry)}
+  {#if e.diff.length}
+    <table class="diff">
+      <tbody>
+        {#each e.diff as d (d.key)}
+          <tr><th>{d.key}</th><td class="before">{d.before}</td><td class="arrow">→</td><td class="after">{d.after}</td></tr>
+        {/each}
+      </tbody>
+    </table>
+  {/if}
+  <details>
+    <summary>All properties of v{e.v.version}</summary>
+    <pre>{JSON.stringify(e.v.props ?? {}, null, 2)}</pre>
+  </details>
+{/snippet}
 
 <style>
   .path {
@@ -200,5 +248,27 @@
   }
   pre {
     margin: 0.4rem 0 0;
+  }
+  .views {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    margin-bottom: 0.5rem;
+  }
+  .views .hint {
+    margin-left: 0.4rem;
+  }
+  h3 .state,
+  h3 .from {
+    margin-left: 0.4rem;
+    font-weight: normal;
+  }
+  .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+    align-items: baseline;
+    color: var(--muted);
+    margin: 0 0 0.5rem;
   }
 </style>

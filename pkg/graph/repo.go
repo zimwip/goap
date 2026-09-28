@@ -59,11 +59,18 @@ type Tx interface {
 	PutBaseline(ctx context.Context, b domain.Baseline) error
 	// PutChange inserts or updates the change header (items are ignored).
 	PutChange(ctx context.Context, c domain.Change) error
-	PutItem(ctx context.Context, change domain.ChangeID, it domain.ChangeItem) error
+	// AppendLog appends an entry to the log of its change (ADR 0030: facts, journal records and impact events in
+	// one order) and returns it with its Seq. The log is insert-only: nothing updates or deletes an entry.
+	AppendLog(ctx context.Context, e domain.LogEntry) (domain.LogEntry, error)
+	// Log returns the entries matching f, in the order of the log.
+	Log(ctx context.Context, f domain.LogFilter) ([]domain.LogEntry, error)
+	// LogCounts counts the entries matching f by type (the limit and the position aside).
+	LogCounts(ctx context.Context, f domain.LogFilter) (map[string]int, error)
 
 	// OpenChangeIDs lists the changes that are neither applied nor abandoned.
 	OpenChangeIDs(ctx context.Context) ([]domain.ChangeID, error)
-	// PutChangeImpact inserts or updates a change impact of a change (ADR 0024).
+	// PutChangeImpact inserts or updates a change impact of a change (ADR 0024). The table is the projection of the
+	// impact log (ADR 0029): only Graph.emit writes it.
 	PutChangeImpact(ctx context.Context, change domain.ChangeID, cn domain.ChangeImpact) error
 	// ChangeImpacts lists the change impacts of a change, in creation order.
 	ChangeImpacts(ctx context.Context, change domain.ChangeID) ([]domain.ChangeImpact, error)
@@ -74,9 +81,4 @@ type Tx interface {
 
 	// MoveVersion moves a node version to another branch (a fast-forward merge).
 	MoveVersion(ctx context.Context, ref domain.NodeRef, to string) error
-
-	// PutExecution appends a record to the execution journal.
-	PutExecution(ctx context.Context, r domain.ExecutionRecord) error
-	// Executions returns the journal records matching f, in recording order.
-	Executions(ctx context.Context, f domain.ExecutionFilter) ([]domain.ExecutionRecord, error)
 }

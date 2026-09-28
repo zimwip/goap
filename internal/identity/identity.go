@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 
+	"connectrpc.com/connect"
 	"github.com/labstack/echo/v5"
 
 	"github.com/zimwip/goap/pkg/authz"
@@ -26,6 +27,26 @@ func FromHeaders(h http.Header) authz.Principal {
 		p.Roles = strings.Split(roles, ",")
 	}
 	return p
+}
+
+// SetHeaders writes the identity headers of a principal, for a platform service reached as a Connect service.
+func SetHeaders(p authz.Principal, h http.Header) {
+	h.Set(HeaderSubject, p.Subject)
+	h.Set(HeaderOrg, p.Org)
+	h.Set(HeaderRoles, strings.Join(p.Roles, ","))
+}
+
+// Forward is the client option of a platform client that acts for its caller: the requests carry the principal of
+// their context (unless they already name one).
+func Forward() connect.ClientOption {
+	return connect.WithInterceptors(connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
+		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
+			if p := authz.From(ctx); !p.Anonymous() && req.Spec().IsClient && req.Header().Get(HeaderSubject) == "" {
+				SetHeaders(p, req.Header())
+			}
+			return next(ctx, req)
+		}
+	}))
 }
 
 // Extractor puts the caller identity in the context. Default is used when

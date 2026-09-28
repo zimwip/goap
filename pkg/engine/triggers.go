@@ -340,7 +340,7 @@ func (e *Engine) latestBaseline(ctx context.Context, namespace string) (domain.B
 		return "", err
 	}
 	if len(bs) == 0 {
-		return "", errors.New("no baseline")
+		return "", fmt.Errorf("no baseline in namespace %s: %w", domain.NamespaceOf(namespace), ErrInvalidState)
 	}
 	latest := bs[0]
 	for _, b := range bs[1:] {

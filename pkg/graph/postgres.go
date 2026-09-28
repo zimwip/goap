@@ -305,26 +305,13 @@ func (t *pgTx) Change(ctx context.Context, id domain.ChangeID) (domain.Change, e
 		return c, mapErr(err, "change "+string(id))
 	}
 	c.ResultBaselineID, c.Data = domain.BaselineID(str(result)), props(data)
-	rows, err := t.tx.Query(ctx, `SELECT payload FROM change_item WHERE change_id = $1 ORDER BY seq`, string(id))
+	facts, err := t.Log(ctx, factsFilter(id))
 	if err != nil {
 		return c, err
 	}
-	defer rows.Close()
-	for rows.Next() {
-		var payload []byte
-		if err := rows.Scan(&payload); err != nil {
-			return c, err
-		}
-		var it domain.ChangeItem
-		if err := json.Unmarshal(payload, &it); err != nil {
-			return c, err
-		}
-		c.Items = append(c.Items, it)
-	}
-	if err := rows.Err(); err != nil {
+	if c.Items, err = itemsOf(facts); err != nil {
 		return c, err
 	}
-	rows.Close()
 	c.Nodes, err = t.ChangeImpacts(ctx, id)
 	return c, err
 }
@@ -414,14 +401,56 @@ func (t *pgTx) PutChange(ctx context.Context, c domain.Change) error {
 	return mapErr(err, "change")
 }
 
-func (t *pgTx) PutItem(ctx context.Context, change domain.ChangeID, it domain.ChangeItem) error {
-	payload, err := json.Marshal(it)
+func (t *pgTx) AppendLog(ctx context.Context, e domain.LogEntry) (domain.LogEntry, error) {
+	err := t.tx.QueryRow(ctx, `INSERT INTO change_log (id, change_id, type, flow, process_id, execution, subject, by_whom, at, payload)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING seq`,
+		e.ID, string(e.Change), e.Type, e.Flow, e.Process, e.Execution, e.Subject, e.By, e.At, []byte(e.Payload)).Scan(&e.Seq)
+	return e, mapErr(err, "log entry "+e.Type)
+}
+
+func (t *pgTx) LogCounts(ctx context.Context, f domain.LogFilter) (map[string]int, error) {
+	f.AfterSeq = 0
+	where, args := logWhere(f, func(n int) string { return fmt.Sprintf("$%d", n) })
+	rows, err := t.tx.Query(ctx, `SELECT type, count(*) FROM change_log`+where+` GROUP BY type`, args...)
 	if err != nil {
-		return err
+		return nil, mapErr(err, "log counts")
 	}
-	_, err = t.tx.Exec(ctx, `INSERT INTO change_item (id, change_id, kind, payload, created_at) VALUES ($1, $2, $3, $4, $5)`,
-		string(it.ID), string(change), string(it.Kind), payload, it.CreatedAt)
-	return mapErr(err, "change item")
+	defer rows.Close()
+	out := map[string]int{}
+	for rows.Next() {
+		var typ string
+		var n int
+		if err := rows.Scan(&typ, &n); err != nil {
+			return nil, err
+		}
+		out[typ] = n
+	}
+	return out, rows.Err()
+}
+
+func (t *pgTx) Log(ctx context.Context, f domain.LogFilter) ([]domain.LogEntry, error) {
+	where, args := logWhere(f, func(n int) string { return fmt.Sprintf("$%d", n) })
+	q := `SELECT seq, id, change_id::text, type, flow, process_id, execution, subject, by_whom, at, payload FROM change_log` + where + ` ORDER BY seq`
+	if f.Limit > 0 {
+		q += fmt.Sprintf(" LIMIT %d", f.Limit)
+	}
+	rows, err := t.tx.Query(ctx, q, args...)
+	if err != nil {
+		return nil, mapErr(err, "log")
+	}
+	defer rows.Close()
+	var out []domain.LogEntry
+	for rows.Next() {
+		var e domain.LogEntry
+		var change string
+		var payload []byte
+		if err := rows.Scan(&e.Seq, &e.ID, &change, &e.Type, &e.Flow, &e.Process, &e.Execution, &e.Subject, &e.By, &e.At, &payload); err != nil {
+			return nil, err
+		}
+		e.Change, e.Payload = domain.ChangeID(change), json.RawMessage(payload)
+		out = append(out, e)
+	}
+	return out, rows.Err()
 }
 
 func (t *pgTx) OpenChangeIDs(ctx context.Context) ([]domain.ChangeID, error) {
@@ -438,46 +467,6 @@ func (t *pgTx) OpenChangeIDs(ctx context.Context) ([]domain.ChangeID, error) {
 		out[i] = domain.ChangeID(id)
 	}
 	return out, nil
-}
-
-func (t *pgTx) PutExecution(ctx context.Context, r domain.ExecutionRecord) error {
-	payload, err := json.Marshal(r)
-	if err != nil {
-		return err
-	}
-	_, err = t.tx.Exec(ctx, `INSERT INTO execution (id, change_id, process_id, seq, kind, action, started_at, payload) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-		r.ID, string(r.ChangeID), r.ProcessID, r.Seq, r.Kind, r.Action, r.StartedAt, payload)
-	return mapErr(err, "execution")
-}
-
-func (t *pgTx) Executions(ctx context.Context, f domain.ExecutionFilter) ([]domain.ExecutionRecord, error) {
-	var change *string
-	if f.ChangeID != "" {
-		change = nullUUID(string(f.ChangeID))
-	}
-	procs := f.ProcessIDs
-	if procs == nil {
-		procs = []string{}
-	}
-	rows, err := t.tx.Query(ctx, `SELECT payload FROM execution WHERE ($1::uuid IS NULL OR change_id = $1::uuid)
-		AND (cardinality($2::text[]) = 0 OR process_id = ANY($2::text[])) ORDER BY n`, change, procs)
-	if err != nil {
-		return nil, mapErr(err, "executions")
-	}
-	defer rows.Close()
-	var out []domain.ExecutionRecord
-	for rows.Next() {
-		var payload []byte
-		if err := rows.Scan(&payload); err != nil {
-			return nil, err
-		}
-		var r domain.ExecutionRecord
-		if err := json.Unmarshal(payload, &r); err != nil {
-			return nil, err
-		}
-		out = append(out, r)
-	}
-	return out, rows.Err()
 }
 
 const pgChangeImpactCols = `id::text, node_id::text, key, type, intent, rationale, pre_version, post_version, landed_version, review, reviews, COALESCE(via::text, ''), recheck, produced_by, derived_from, items, execution, created_at, flow, superseded`

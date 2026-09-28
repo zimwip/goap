@@ -8,7 +8,7 @@
   import { editorView } from './registry';
   import { focusRequests } from './workbench.svelte';
   import { getToken, setToken, shortId } from '../api';
-  import { openSearch } from './searchOverlay.svelte';
+  import { openSearch } from './searchOverlay.svelte.ts';
   import { session, refreshIdentity } from '../stores/session.svelte';
   import { methodologies, baselines, changes } from '../stores/catalog.svelte';
   import { live, processes } from '../stores/live.svelte';
