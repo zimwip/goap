@@ -760,6 +760,8 @@ export interface ExecutionRecord {
   /** item count of the change (blackboard state) when the step started / ended */
   boardBefore?: number;
   boardAfter?: number;
+  /** last item of the flow before the step: where a relaunch of the step forks */
+  boardLast?: string;
   inputTokens?: Int64;
   outputTokens?: Int64;
   modelCalls?: ModelCall[];
@@ -776,6 +778,16 @@ export interface ExecutionRecord {
   durationMs?: Int64;
   /** flow branch the process runs on ('' = the main flow) */
   flow?: string;
+}
+
+/** Decodes a log entry's payload (ADR 0030) as T: a fact, a journal record or an impact event. */
+export function decodeLogEntry<T>(l: LogEntry): T {
+  return JSON.parse(l.payload ?? '{}') as T;
+}
+
+/** The execution journal records among log entries (ADR 0011 records, stored as journal.* entries, ADR 0030). */
+export function executionsFromLog(entries: LogEntry[]): ExecutionRecord[] {
+  return entries.filter((l) => l.type?.startsWith('journal.')).map((l) => decodeLogEntry<ExecutionRecord>(l));
 }
 
 // --- engine -----------------------------------------------------------------

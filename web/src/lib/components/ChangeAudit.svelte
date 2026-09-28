@@ -6,6 +6,7 @@
   // entries shown as JSON.
   import {
     graph,
+    decodeLogEntry,
     errorMessage,
     formatDate,
     formatDuration,
@@ -104,7 +105,7 @@
   // the creation of the change belongs to the main flow, and to no action run
   const withChange = $derived(sources.includes('change') && (flow === '*' || flow === '') && !run);
   const trail = $derived(buildTrail(change, log, parents, withChange));
-  const runs = $derived(new Map(runLog.map((l) => [l.id ?? '', JSON.parse(l.payload ?? '{}') as ExecutionRecord])));
+  const runs = $derived(new Map(runLog.map((l) => [l.id ?? '', decodeLogEntry<ExecutionRecord>(l)])));
   const records = $derived([...runs.values()]);
   /** the whole flow lifecycle, for the legend and the lanes */
   const flowTrail = $derived(buildTrail(change, flowLog, parents, false));
