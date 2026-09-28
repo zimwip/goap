@@ -74,6 +74,8 @@ A baseline can be browsed without loading it whole (`ListNamespaces`, `ListBasel
 and a page of the nodes of one type, text-filtered on the server; `GetNodeNeighbourhood`: a node, its direct
 neighbours in both directions and the suspect links among them, `pkg/graph/browse.go`). The IDE's Baseline explorer
 and tab navigate namespace → baseline → node type → paged nodes, and show the neighbour graph of the selected node.
+A request started without a baseline or a change (the assistant, a trigger) opens its change on the latest baseline
+of the namespace its methodology acts on, known once the intent is identified.
 The organisation is a hierarchy of units in its own namespace (`organisation`); nodes reference their owner
 unit across namespaces, and a change is split into sub-changes along unit boundaries
 ([ADR 0016](adr/0016-organisation-and-sub-changes.md)).
