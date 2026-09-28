@@ -27,6 +27,8 @@ service GraphService {
   rpc ListNamespaces(ListNamespacesRequest) returns (ListNamespacesResponse);
   // The impact log of a change (ADR 0029): every operation on its change impacts, with its caller.
   rpc ListChangeEvents(ListChangeEventsRequest) returns (ListChangeEventsResponse);
+  // The log of a change (ADR 0030): its facts, journal records and impact events in one order, filtered on columns.
+  rpc ListChangeLog(ListChangeLogRequest) returns (ListChangeLogResponse);
 
   // Change axis
   rpc CreateChange(CreateChangeRequest) returns (CreateChangeResponse);
@@ -394,6 +396,46 @@ message ImpactEvent {
   Review review = 14;
   // adopted: the action runs the flow replaces
   repeated string stale = 15;
+}
+
+// An entry of the log of a change (ADR 0030).
+message LogEntry {
+  // position in the log (one order for the entries of a change)
+  int64 seq = 1;
+  string id = 2;
+  string change_id = 3;
+  // <stream>.<kind>: fact.artifact, journal.schedule, impact.written...
+  string type = 4;
+  // flow branch ("" = the main flow)
+  string flow = 5;
+  string process_id = 6;
+  // the action run behind the entry (a journal record is its own)
+  string execution = 7;
+  // what it is about: the action, the fact type, the change impact
+  string subject = 8;
+  string by = 9;
+  google.protobuf.Timestamp at = 10;
+  // the whole fact, journal record or impact event, as JSON
+  string payload = 11;
+}
+
+message ListChangeLogRequest {
+  string change_id = 1;
+  // exact types ("journal.action") or streams ("journal.")
+  repeated string types = 2;
+  // flow branches; "main" is the main flow
+  repeated string flows = 3;
+  repeated string process_ids = 4;
+  string execution = 5;
+  // entries after this position (to follow the log)
+  int64 after_seq = 6;
+  int32 limit = 7;
+}
+
+message ListChangeLogResponse {
+  repeated LogEntry entries = 1;
+  // entries of each type matching the request without its types
+  map<string, int32> counts = 2;
 }
 
 message ListChangeEventsRequest {

@@ -162,6 +162,30 @@ func (h *Handler) GetBaselineGraph(ctx context.Context, r *connect.Request[graph
 // ADR 0029).
 func Caller(ctx context.Context) string { return authz.From(ctx).Subject }
 
+func (h *Handler) ListChangeLog(ctx context.Context, r *connect.Request[graphv1.ListChangeLogRequest]) (*connect.Response[graphv1.ListChangeLogResponse], error) {
+	f := domain.LogFilter{Change: domain.ChangeID(r.Msg.ChangeId), Types: r.Msg.Types, Processes: r.Msg.ProcessIds, Execution: r.Msg.Execution,
+		AfterSeq: r.Msg.AfterSeq, Limit: int(r.Msg.Limit)}
+	for _, fl := range r.Msg.Flows {
+		if fl == "main" {
+			fl = ""
+		}
+		f.Flows = append(f.Flows, fl)
+	}
+	entries, counts, err := h.Graph.ChangeLog(ctx, f)
+	if err != nil {
+		return nil, rpcerr.ToConnect(err)
+	}
+	out := &graphv1.ListChangeLogResponse{Counts: map[string]int32{}}
+	for t, n := range counts {
+		out.Counts[t] = int32(n)
+	}
+	for _, e := range entries {
+		out.Entries = append(out.Entries, &graphv1.LogEntry{Seq: e.Seq, Id: e.ID, ChangeId: string(e.Change), Type: e.Type, Flow: e.Flow, ProcessId: e.Process,
+			Execution: e.Execution, Subject: e.Subject, By: e.By, At: pbconv.Time(e.At), Payload: string(e.Payload)})
+	}
+	return connect.NewResponse(out), nil
+}
+
 func (h *Handler) ListChangeEvents(ctx context.Context, r *connect.Request[graphv1.ListChangeEventsRequest]) (*connect.Response[graphv1.ListChangeEventsResponse], error) {
 	evs, err := h.Graph.ChangeEvents(ctx, domain.ChangeID(r.Msg.ChangeId))
 	if err != nil {

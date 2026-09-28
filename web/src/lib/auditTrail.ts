@@ -4,7 +4,7 @@
 // ADR 0017). Each entry says when, who, on which flow and through which action run. A change is a flow of events:
 // flow branches fork from it (a relaunch, alternatives to compare), and are merged back (adopted) or dropped
 // (discarded); the entries carry these marks so the trail can be drawn as branches.
-import { shortId, type Change, type ChangeItem, type ExecutionRecord, type ImpactEvent, type JsonValue, type NodeRef } from './api';
+import { int, shortId, type Change, type ChangeItem, type ExecutionRecord, type ImpactEvent, type JsonValue, type LogEntry, type NodeRef } from './api';
 
 export type AuditSource = 'change' | 'process' | 'schedule' | 'plan' | 'action' | 'approval' | 'impact' | 'fact' | 'flow';
 
@@ -20,8 +20,30 @@ export const AUDIT_SOURCES: { id: AuditSource; label: string }[] = [
   { id: 'change', label: 'Change' },
 ];
 
+/** The types of the log each source reads (the server filters on them). */
+export const SOURCE_TYPES: Record<Exclude<AuditSource, 'change'>, string[]> = {
+  process: ['journal.process.started', 'journal.process.ended'],
+  schedule: ['journal.schedule'],
+  plan: ['journal.tick'],
+  action: ['journal.action'],
+  approval: ['journal.approval'],
+  impact: ['impact.'],
+  fact: ['fact.artifact', 'fact.decision', 'fact.merge'],
+  flow: ['fact.flow'],
+};
+
+/** The source of a log type. */
+export function sourceOfType(type: string): AuditSource | undefined {
+  for (const [s, types] of Object.entries(SOURCE_TYPES)) {
+    if (types.some((t) => t === type || (t.endsWith('.') && type.startsWith(t)))) return s as AuditSource;
+  }
+  return undefined;
+}
+
 export interface AuditEntry {
   key: string;
+  /** position in the log of the change (0: the change itself) */
+  seq: number;
   at: string;
   source: AuditSource;
   /** what happened: action, written, decision, flow open… */
@@ -55,6 +77,9 @@ export function runLabel(r: ExecutionRecord | undefined): string {
   return [r.agent, r.step !== undefined ? `step ${r.step + 1}` : '', r.specialization || r.action].filter(Boolean).join(' · ');
 }
 
+/** An entry before it gets its position in the log. */
+type Entry = Omit<AuditEntry, 'seq'>;
+
 /** The rest of a plan after its next action, the first steps only (the full plan is in the record). */
 function planSummary(plan: string[] | undefined): string {
   if (!plan?.length) return 'no plan';
@@ -63,7 +88,7 @@ function planSummary(plan: string[] | undefined): string {
   return `then ${rest.slice(0, 3).join(' → ')}${rest.length > 3 ? ` (+${rest.length - 3})` : ''}`;
 }
 
-function fromRecord(r: ExecutionRecord): AuditEntry {
+function fromRecord(r: ExecutionRecord): Entry {
   const base = {
     key: `r:${r.id ?? `${r.processId}:${r.seq}`}`,
     at: r.startedAt ?? '',
@@ -130,7 +155,7 @@ function fromRecord(r: ExecutionRecord): AuditEntry {
   return { ...base, source: 'process', label: r.kind ?? '', subject: r.action ?? '', summary: '', tone: 'neutral' };
 }
 
-function fromEvent(e: ImpactEvent, keys: Map<string, string>, parents: Map<string, string>): AuditEntry {
+function fromEvent(e: ImpactEvent, keys: Map<string, string>, parents: Map<string, string>): Entry {
   let summary = '';
   switch (e.op) {
     case 'declared':
@@ -170,7 +195,7 @@ function fromEvent(e: ImpactEvent, keys: Map<string, string>, parents: Map<strin
   };
 }
 
-function fromItem(it: ChangeItem, parents: Map<string, string>): AuditEntry {
+function fromItem(it: ChangeItem, parents: Map<string, string>): Entry {
   const base = { key: `i:${it.id}`, at: it.createdAt ?? '', flow: it.flow ?? '', by: it.producedBy ?? '', execution: it.execution ?? '', processId: '', item: it };
   if (it.kind === 'flow' && it.flowEvent) {
     const f = it.flowEvent;
@@ -213,18 +238,26 @@ function fromItem(it: ChangeItem, parents: Map<string, string>): AuditEntry {
   return { ...base, source: 'fact', label: it.kind ?? 'fact', subject: it.type ?? '', summary: [title, it.status].filter(Boolean).join(' · '), tone: 'neutral' };
 }
 
-/** The audit trail of a change, oldest first. */
-export function buildTrail(change: Change, events: ImpactEvent[], records: ExecutionRecord[]): AuditEntry[] {
+/** The flow each flow branch forks from, from the flow events of the log. */
+export function flowParents(entries: LogEntry[]): Map<string, string> {
+  const parents = new Map<string, string>();
+  for (const l of entries) {
+    if (l.type !== 'fact.flow') continue;
+    const it = JSON.parse(l.payload ?? '{}') as ChangeItem;
+    if (it.flowEvent?.op === 'open') parents.set(it.flowEvent.flow ?? '', it.flowEvent.parent ?? '');
+  }
+  return parents;
+}
+
+/** The audit trail of a change from its log (ADR 0030), in the order of the log. */
+export function buildTrail(change: Change, log: LogEntry[], parents: Map<string, string>, withChange = true): AuditEntry[] {
   const keys = new Map<string, string>();
   for (const cn of change.nodes ?? []) keys.set(cn.id ?? '', cn.key ?? '');
-  for (const e of events) if (e.state?.key) keys.set(e.impactId ?? '', e.state.key);
-  // the flow each flow branch forks from
-  const parents = new Map<string, string>();
-  for (const it of change.items ?? []) if (it.flowEvent?.op === 'open') parents.set(it.flowEvent.flow ?? '', it.flowEvent.parent ?? '');
   const out: AuditEntry[] = [];
-  if (change.createdAt) {
+  if (withChange && change.createdAt) {
     out.push({
       key: 'change',
+      seq: 0,
       at: change.createdAt,
       source: 'change',
       label: 'created',
@@ -237,16 +270,18 @@ export function buildTrail(change: Change, events: ImpactEvent[], records: Execu
       tone: 'neutral',
     });
   }
-  out.push(
-    ...records.map(fromRecord),
-    ...events.map((e) => fromEvent(e, keys, parents)),
-    ...(change.items ?? []).map((it) => fromItem(it, parents)),
-  );
-  const order: Record<AuditSource, number> = { change: 0, flow: 1, process: 2, schedule: 3, plan: 4, action: 5, approval: 6, fact: 7, impact: 8 };
-  return out
-    .map((e, i) => ({ e, i }))
-    .sort((a, b) => a.e.at.localeCompare(b.e.at) || order[a.e.source] - order[b.e.source] || a.i - b.i)
-    .map(({ e }) => e);
+  for (const l of log) {
+    const payload = JSON.parse(l.payload ?? '{}');
+    let e: Entry;
+    if (l.type?.startsWith('journal.')) e = fromRecord(payload as ExecutionRecord);
+    else if (l.type?.startsWith('impact.')) {
+      const ev = payload as ImpactEvent;
+      if (ev.state?.key) keys.set(ev.impactId ?? '', ev.state.key);
+      e = fromEvent(ev, keys, parents);
+    } else e = fromItem(payload as ChangeItem, parents);
+    out.push({ ...e, seq: int(l.seq) });
+  }
+  return out;
 }
 
 /** The trail as CSV (one line per entry). */

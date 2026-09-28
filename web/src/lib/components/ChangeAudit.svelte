@@ -1,8 +1,9 @@
 <script lang="ts">
-  // Audit of a change: every event and action, oldest first, from the execution journal, the impact log and the
-  // blackboard facts (lib/auditTrail.ts), drawn as a flow of events: flow branches fork from the main flow, run side by
-  // side (alternatives to compare), and are merged back or dropped. Each entry expands to its full record; the trail
-  // can be filtered by source, flow, action run and text, and exported (CSV, or the raw logs as JSON).
+  // Audit of a change: its log (ADR 0030: facts, journal records with the scheduling, impact events, in one order),
+  // drawn as a flow of events: flow branches fork from the main flow, run side by side (alternatives to compare), and
+  // are merged back or dropped. The sources, the flow and the action run are filtered by the server on the columns of
+  // the log; the text on the entries shown. Each entry expands to its full record; the trail exports as CSV, and the
+  // entries shown as JSON.
   import {
     graph,
     errorMessage,
@@ -14,9 +15,20 @@
     JAEGER_URL,
     type Change,
     type ExecutionRecord,
-    type ImpactEvent,
+    type LogEntry,
   } from '../api';
-  import { AUDIT_SOURCES, buildTrail, flowLanes, runLabel, trailCSV, type AuditEntry, type AuditSource } from '../auditTrail';
+  import {
+    AUDIT_SOURCES,
+    SOURCE_TYPES,
+    buildTrail,
+    flowLanes,
+    flowParents,
+    runLabel,
+    sourceOfType,
+    trailCSV,
+    type AuditEntry,
+    type AuditSource,
+  } from '../auditTrail';
   import { loadRaw, save } from '../shell/storage';
 
   let {
@@ -32,21 +44,51 @@
     onrun?: (process: string) => void;
   } = $props();
 
-  let events = $state<ImpactEvent[]>([]);
-  let records = $state<ExecutionRecord[]>([]);
+  // filters: sources (all by default, remembered), flow, action run: sent to the server; text: on the entries shown
+  const KEY = 'goap.ide.audit.sources.v2';
+  const stored = loadRaw(KEY);
+  let sources = $state<AuditSource[]>(Array.isArray(stored) ? (stored as AuditSource[]) : AUDIT_SOURCES.map((s) => s.id));
+  $effect(() => save(KEY, sources));
+  let flow = $state('*');
+  let run = $state('');
+  let filter = $state('');
+  let newestFirst = $state(false);
+  let open = $state<string[]>([]);
+
+  let log = $state<LogEntry[]>([]);
+  let counts = $state<Record<string, number>>({});
+  // the whole change, whatever the filters: the action runs (to name them) and the flow events (forks, merges)
+  let runLog = $state<LogEntry[]>([]);
+  let flowLog = $state<LogEntry[]>([]);
   let error = $state('');
   let loading = $state(false);
 
+  const query = $derived.by(() => {
+    const types = sources.flatMap((s) => (s === 'change' ? [] : SOURCE_TYPES[s]));
+    return {
+      changeId: change.id ?? '',
+      types: types.length ? types : ['none.'],
+      ...(flow === '*' ? {} : { flows: [flow || 'main'] }),
+      ...(run ? { execution: run } : {}),
+    };
+  });
+
   $effect(() => {
-    const id = change.id ?? '';
+    const q = query;
     void change;
-    if (!id) return;
+    if (!q.changeId) return;
     const ctrl = new AbortController();
     loading = true;
-    Promise.all([graph.listChangeEvents(id, ctrl.signal), graph.listExecutions(id, [], ctrl.signal)])
-      .then(([e, j]) => {
-        events = e.events ?? [];
-        records = j.records ?? [];
+    Promise.all([
+      graph.listChangeLog(q, ctrl.signal),
+      graph.listChangeLog({ changeId: q.changeId, types: ['journal.action'] }, ctrl.signal),
+      graph.listChangeLog({ changeId: q.changeId, types: ['fact.flow'] }, ctrl.signal),
+    ])
+      .then(([l, r, f]) => {
+        log = l.entries ?? [];
+        counts = l.counts ?? {};
+        runLog = r.entries ?? [];
+        flowLog = f.entries ?? [];
         error = '';
       })
       .catch((e) => {
@@ -58,33 +100,23 @@
     return () => ctrl.abort();
   });
 
-  const trail = $derived(buildTrail(change, events, records));
-  const runs = $derived(new Map(records.map((r) => [r.id ?? '', r])));
+  const parents = $derived(flowParents(flowLog));
+  // the creation of the change belongs to the main flow, and to no action run
+  const withChange = $derived(sources.includes('change') && (flow === '*' || flow === '') && !run);
+  const trail = $derived(buildTrail(change, log, parents, withChange));
+  const runs = $derived(new Map(runLog.map((l) => [l.id ?? '', JSON.parse(l.payload ?? '{}') as ExecutionRecord])));
+  const records = $derived([...runs.values()]);
+  /** the whole flow lifecycle, for the legend and the lanes */
+  const flowTrail = $derived(buildTrail(change, flowLog, parents, false));
 
-  // filters: sources (all by default, remembered), flow, action run, text
-  const KEY = 'goap.ide.audit.sources.v2';
-  const stored = loadRaw(KEY);
-  let sources = $state<AuditSource[]>(Array.isArray(stored) ? (stored as AuditSource[]) : AUDIT_SOURCES.map((s) => s.id));
-  $effect(() => save(KEY, sources));
-  let flow = $state('*');
-  let run = $state('');
-  let filter = $state('');
-  let newestFirst = $state(false);
-  let open = $state<string[]>([]);
-
-  const flows = $derived([...new Set(trail.map((e) => e.flow).filter(Boolean))]);
   const q = $derived(filter.trim().toLowerCase());
   const shown = $derived.by(() => {
-    const out = trail.filter(
-      (e) =>
-        sources.includes(e.source) &&
-        (flow === '*' || e.flow === flow) &&
-        (!run || e.execution === run) &&
-        (!q || `${e.label} ${e.subject} ${e.summary} ${e.by} ${runLabel(runs.get(e.execution))}`.toLowerCase().includes(q)),
-    );
+    const out = trail.filter((e) => !q || `${e.label} ${e.subject} ${e.summary} ${e.by} ${runLabel(runs.get(e.execution))}`.toLowerCase().includes(q));
     return newestFirst ? out.reverse() : out;
   });
-  const count = (s: AuditSource) => trail.filter((e) => e.source === s).length;
+  const count = (s: AuditSource) =>
+    s === 'change' ? 1 : Object.entries(counts).reduce((n, [t, c]) => n + (sourceOfType(t) === s ? c : 0), 0);
+  const flows = $derived([...parents.keys()]);
 
   // ---- the flow of events: one lane per flow branch -------------------------------------------------------
   const LANE = 16;
@@ -94,13 +126,13 @@
   const HUES = [28, 145, 340, 265, 175, 300, 100, 0, 200, 60];
   const lanes = $derived(flowLanes(shown));
   const laneWidth = $derived(PAD * 2 + (lanes.count - 1) * LANE);
-  const flowOrder = $derived([...new Set(trail.flatMap((e) => [e.flow, e.fork ?? '', e.merge ?? '']).filter(Boolean))]);
+  const flowOrder = $derived([...parents.keys()]);
   const colorOf = (f: string) => (f ? `hsl(${HUES[Math.max(0, flowOrder.indexOf(f)) % HUES.length]} 62% 50%)` : 'var(--accent)');
   const xOf = (f: string) => PAD + (lanes.lane.get(f) ?? 0) * LANE;
   /** the flows of the change and how they ended */
   const flowStates = $derived.by(() => {
     const m = new Map<string, string>();
-    for (const e of trail) {
+    for (const e of flowTrail) {
       if (e.fork) m.set(e.fork, 'open');
       if (e.merge) m.set(e.merge, 'adopted');
       if (e.end) m.set(e.flow, 'discarded');
@@ -170,7 +202,11 @@
   const base = $derived(`change-${shortId(change.id)}-audit`);
   const exportCSV = () => download(`${base}.csv`, 'text/csv', trailCSV(shown, runs));
   const exportJSON = () =>
-    download(`${base}.json`, 'application/json', JSON.stringify({ change, impactEvents: events, journal: records, facts: change.items ?? [] }, null, 2));
+    download(
+      `${base}.json`,
+      'application/json',
+      JSON.stringify({ change: change.id, query, entries: log.map((l) => ({ ...l, payload: JSON.parse(l.payload ?? '{}') })) }, null, 2),
+    );
 
   const json = (x: unknown) => JSON.stringify(x, null, 2);
 </script>
@@ -185,7 +221,7 @@
     <span>actors <strong>{totals.people.join(', ') || '—'}</strong></span>
     <span class="grow"></span>
     <button type="button" class="small" onclick={exportCSV} disabled={!shown.length} title="The entries shown, as CSV">Export CSV</button>
-    <button type="button" class="small" onclick={exportJSON} title="The raw logs of the change: journal, impact log, facts">Export JSON</button>
+    <button type="button" class="small" onclick={exportJSON} title="The log entries shown (sources, flow, action run), with their payload">Export JSON</button>
   </div>
 
   <div class="filters">

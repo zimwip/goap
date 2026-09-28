@@ -32,9 +32,9 @@ const (
 // ImpactEvent is one operation on the change impacts of a change.
 type ImpactEvent struct {
 	ID     string         `json:"id"`
-	Change ChangeID       `json:"change"`
+	Change ChangeID       `json:"changeId"`
 	Seq    int            `json:"seq"`
-	Impact ChangeImpactID `json:"impact,omitempty"`
+	Impact ChangeImpactID `json:"impactId,omitempty"`
 	Op     ImpactOp       `json:"op"`
 	// The caller: the flow branch the operation was made on ("" = the main flow), the journal record of the action
 	// run (process, step, action: ADR 0011) and the principal or component.

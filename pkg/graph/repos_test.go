@@ -114,7 +114,7 @@ func checkImpactLogs(t *testing.T, repo Repo) {
 			if err != nil {
 				return err
 			}
-			events, err := tx.ChangeEvents(context.Background(), c.ID)
+			events, err := impactEvents(context.Background(), tx, c.ID)
 			if err != nil {
 				return err
 			}

@@ -33,7 +33,7 @@ func (g *Graph) emit(ctx context.Context, tx Tx, events ...domain.ImpactEvent) e
 		if err := e.Validate(); err != nil {
 			return fmt.Errorf("change %s: %v: %w", e.Change, err, ErrInvalid)
 		}
-		e, err := tx.AppendChangeEvent(ctx, e)
+		e, err := appendImpactEvent(ctx, tx, e)
 		if err != nil {
 			return err
 		}
@@ -68,7 +68,7 @@ func (g *Graph) ChangeEvents(ctx context.Context, id domain.ChangeID) (out []dom
 		if _, err := tx.Change(ctx, id); err != nil {
 			return err
 		}
-		out, err = tx.ChangeEvents(ctx, id)
+		out, err = impactEvents(ctx, tx, id)
 		return err
 	})
 	return
