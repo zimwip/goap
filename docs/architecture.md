@@ -53,7 +53,7 @@ of a versioned knowledge graph, whose other axis, the **domain axis**, describes
 | **Node** | Typed content element. Its type is a qualified reference `<namespace>@<NodeType>` (`alm@Requirement`, [ADR 0012](adr/0012-node-types.md)). Stable identity `NodeID` + readable `Key` (`REQ-12`). |
 | **Version** | Each modification creates a new immutable version `NodeID@vN`. A version can be a *tombstone* (deletion). |
 | **Link** | Typed relationship **from version to version**: `REQ-12@v3 ─satisfies→ NEED-4@v2`. A link does not automatically "follow" new versions: if `NEED-4` moves to v3, the link becomes **suspect** — this is the model's native impact signal. |
-| **Baseline** | Coherent set `{NodeID → Version}`, scoped to one namespace (every node in it belongs to that namespace): a "commit" of the graph. A baseline's links are those whose two endpoints are both in the baseline. Every modification starts from a reference baseline of its own namespace and produces a resulting baseline of that same namespace. |
+| **Baseline** | Coherent set `{NodeID → Version}`, scoped to one namespace (every node in it belongs to that namespace): a "commit" of the graph. A baseline's links are those whose two endpoints are both in the baseline. Every modification starts from a reference baseline of its own namespace and produces a resulting baseline of that same namespace. It is stored as the entries that differ from its parent, whole every 50 baselines along a chain (a checkpoint, [ADR 0032](adr/0032-branches-as-pointers-baselines-as-deltas.md)). |
 
 **Namespaces** ([ADR 0015](adr/0015-namespaces.md)): every node lives in a namespace, and a namespace is the content of
 one domain ([ADR 0013](adr/0013-domains.md)): `alm` (delivery), `organisation`, `platform` (MCPs, adapter definitions,
@@ -93,8 +93,10 @@ nodes stay on the old version and become **suspect**. Baselines thus remain immu
 #### Version branches ([ADR 0009](adr/0009-branches-options-decisions.md))
 
 Versions are numbered **per node, across all branches** (`REQ-1@v7`), and each version carries
-its `branch` (`main` by default), its `parents`, and its `reason`: `create`, `revise` (successor on the same
+the `branch` it was written on (`main` by default, never changed), its `parents`, and its `reason`: `create`, `revise` (successor on the same
 branch), `derive` (first version on a parallel branch), `merge` (two parents) or `adopt` (ADR 0025).
+A version is **part of several branches** when a merge lands it as is: it *joins* the target (`node_branch`,
+`Node.Joined`, [ADR 0032](adr/0032-branches-as-pointers-baselines-as-deltas.md)) instead of being copied.
 
 ```
 REQ-1  v1(main) ── v3(main, revise) ───────────── v4(main, merge ← v3 + v2)
@@ -104,13 +106,22 @@ REQ-1  v1(main) ── v3(main, revise) ───────────── 
 - A **branch** (`CreateBranch`) belongs to one namespace (`Branch.namespace`) and starts from a baseline of that
   same namespace (`forkBaseline`), advancing through the changes applied on it (`Change.branch`); its **head**
   (`head`) is the latest baseline produced. `main` exists implicitly, per namespace.
-- "Latest version" is read **per branch** (`latest(node, branch)`): applying (`apply`) a change detects a
-  conflict when a node has advanced **on the change's branch** since the base version.
+- "Latest version" is read **per branch** (`LatestOn(node, branch)`: the highest version written on the branch or
+  joined to it): applying (`apply`) a change detects a conflict when a node has advanced **on the change's branch**
+  since the base version.
 - **Branch merge** (`PlanMerge` / `MergeBranch`): for each node modified on the source branch since
-  the fork, a 3-way merge against the common ancestor (walking up `parents`) — property by property (one side
-  equal to the ancestor takes the other, otherwise **conflict**) and outgoing links as a set (key = type + target
-  node: added on one side → kept, removed on one side → removed). The merge is a change of the platform (one change impact per merged node, the versions written directly) on
+  the fork: a node changed on the source only (`added`, `fast_forward`) **joins** the target as is, no version is
+  written; a node changed on both sides gets a 3-way merge against the common ancestor (walking up `parents`) —
+  property by property (one side equal to the ancestor takes the other, otherwise **conflict**) and outgoing links
+  as a set (key = type + target node: added on one side → kept, removed on one side → removed), written as a
+  `merge` version. A joined version keeps its links: one that targets a node that got a merge version is suspect
+  (ADR 0003). The merge is a change of the platform (one change impact per merged node) on
   the target; conflicts require a resolution (resolved properties, or `skip`). The branch moves to `merged`.
+  A change branch that the target did not move since its fork lands by a **fast-forward**: its versions join the
+  target, nothing is copied.
+- **Views of a change** (`ChangeView`): the head of the change branch with the change impacts of a flow counted at a
+  level — `written` (proposed or accepted, not rejected: what the change or an option would look like),
+  `accepted` (what would land), `landed` (its result baseline). Only `landed` is stored.
 
 #### Change axis
 
@@ -118,7 +129,7 @@ REQ-1  v1(main) ── v3(main, revise) ───────────── 
 |---|---|
 | **Change** | A modification request. References a starting baseline, carries the initial intent and the chosen goal. It is **the blackboard** of an agentic process. |
 | **ChangeItem** | Blackboard **fact** with no node: `kind` ∈ `decision`, `artifact`, `merge`, `flow`. Each item has a provenance (`producedBy` = action, `derivedFrom` = other items). |
-| **ChangeImpact** | Link from the change to a node ([ADR 0024](adr/0024-change-impacts.md)): `intent` (`created` / `modified`), `rationale`, `pre` (released version), `post` (version written on the change branch, empty while only planned: an impact without a proposal), `landed` (version on the target branch once applied), `review` with a mandatory comment. `WriteNode` creates the post version, `ReviewNode` accepts or rejects, `Apply` lands the branch (fast-forward, else auto-merge or `merge_pending`, then `MergeChange`). A node version records its `changeId`, `changeImpact` and `comment`. A node's type is a direct attribute of the node (`Node.Type`), there is no `instanceOf` link. Everything that happens to a change is an entry of **one log** ([ADR 0030](adr/0030-one-change-log.md)): its facts, its journal records (scheduling included) and its impact events, in one order, with the type, flow branch, process and action run as columns to filter on (`ListChangeLog`). The change impacts are **event-sourced** ([ADR 0029](adr/0029-event-sourced-change-impacts.md)): every operation (`declared`, `written`, `reviewed`, `discarded`, `adopted`, `landed`, `rebased`) is an event of the change's impact log with its caller (principal, action run, flow); the `change_impact` table is its projection, and what a flow sees is a fold of the log (`ListChangeEvents`; the **Audit** pane of the change merges it with the execution journal and the facts into one chronological trail, with CSV / JSON export). |
+| **ChangeImpact** | Link from the change to a node ([ADR 0024](adr/0024-change-impacts.md)): `intent` (`created` / `modified`), `rationale`, `pre` (released version), `post` (version written on the change branch, empty while only planned: an impact without a proposal), `landed` (version on the target branch once applied: the post version itself when it joined the target, a merge version when the node changed on both sides), `review` with a mandatory comment. `WriteNode` creates the post version, `ReviewNode` accepts or rejects, `Apply` lands the branch (fast-forward, else auto-merge or `merge_pending`, then `MergeChange`). A node version records its `changeId`, `changeImpact` and `comment`. A node's type is a direct attribute of the node (`Node.Type`), there is no `instanceOf` link. Everything that happens to a change is an entry of **one log** ([ADR 0030](adr/0030-one-change-log.md)): its facts, its journal records (scheduling included) and its impact events, in one order, with the type, flow branch, process and action run as columns to filter on (`ListChangeLog`). The change impacts are **event-sourced** ([ADR 0029](adr/0029-event-sourced-change-impacts.md)): every operation (`declared`, `written`, `reviewed`, `discarded`, `adopted`, `landed`, `rebased`) is an event of the change's impact log with its caller (principal, action run, flow); the `change_impact` table is its projection, and what a flow sees is a fold of the log (`ListChangeEvents`; the **Audit** pane of the change merges it with the execution journal and the facts into one chronological trail, with CSV / JSON export). |
 | **Decision** | A choice about something that is not a node (human or agent); the acceptance of a node is the review of its change impact. |
 | **Artifact** | Free-form data produced by an action (summary, report, tool response). |
 
@@ -547,8 +558,9 @@ an interface, replaceable with the PostgreSQL implementation without changing th
 node(id uuid, key text, type text, latest int)
 node_version(node_id, version, props jsonb, deleted bool, change_id, created_at)  -- PK (node_id, version)
 link(id uuid, type, from_id, from_version, to_id, to_version, props jsonb, change_id)
-baseline(id uuid, name, namespace, branch, parent_id, change_id, created_at)
-baseline_entry(baseline_id, node_id, version)
+node_branch(node_id, version, branch)  -- the branches a version joined besides the one it was written on (ADR 0032)
+baseline(id uuid, name, namespace, branch, parent_id, change_id, created_at, depth)  -- depth 0: a checkpoint
+baseline_entry(baseline_id, node_id, version, removed)  -- whole at a checkpoint, else the difference with the parent
 branch(namespace, name, parent, fork_baseline, head_baseline, origin, status, created_at)  -- PK (namespace, name)
 change(id uuid, title, intent, status, baseline_id, goal, methodology, result_baseline_id, data jsonb)
 change_item(id uuid, change_id, kind, type, status, target_id, target_version, payload jsonb,
@@ -906,7 +918,7 @@ docs/                        architecture, ADRs
 | **M4 — advanced change axis** | impact propagation (recursive CTE parameterized by link types), suspect links, baseline diff, merge/rebase of concurrent changesets |
 | **M5 — UX** | ✅ methodology editor (forms, localized anomalies, publishing, versions, YAML import/export), "Access" screen (ABAC policies), approvals · remaining: graph and plan visualization |
 | **M6 — K8s** | Helm charts, engine HPA · ✅ OpenTelemetry observability, sandbox manifests |
-| **M8 — branches and decisions** 🟡 | ADR 0009 (partially implemented) · ✅ graph: per-branch versions, 3-way branch merge, change branches merged at apply (`merge_pending` + `MergeChange`) · remaining: earlier conflict detection and merge proposals by agents, change budget, options explored as branches, comparison, decision loops (questions → analyses), merging the chosen option; then versioned containers and releases |
+| **M8 — branches and decisions** 🟡 | ADR 0009 (partially implemented) · ✅ graph: per-branch versions, 3-way branch merge, change branches merged at apply (`merge_pending` + `MergeChange`), versions joining branches instead of merge copies, baselines stored as deltas with checkpoints, written / accepted / landed views of a change (ADR 0032) · remaining: earlier conflict detection and merge proposals by agents, change budget, options explored as branches, comparison, decision loops (questions → analyses), merging the chosen option; then versioned containers and releases |
 | **M9 — self-observation** ✅ | ADR 0011: execution journal on the change axis (ticks, actions, LLM / tool calls, decisions, item provenance), `observer` agent (journal + OpenTelemetry traces → findings → proposals → review → draft), action specialization and type subtyping |
 | **M10 — SDLC** 🟡 | `sdlc` 0.4.0 methodology on the `alm` namespace (ALM domain) (need → requirement → function → component → artifact → application → solution, data, interfaces, flows), build specialized by technology, incremental releases and deployment (dev → test → staging → production, release manager approval), incremental actions · to refine: quality (coverage, security), rollback, freezes / change windows, MCP tools (repositories, CI, artifact registry, deployment) |
 | **M7 — agents** ✅ | agents (goap / utility / hybrid), JS / Go script actions with DSL, sub-agents, sandbox per process, IDE |

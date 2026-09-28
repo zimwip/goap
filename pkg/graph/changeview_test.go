@@ -27,7 +27,9 @@ func testChangeViewLevels(t *testing.T, repo Repo) {
 	must[domain.ChangeImpact](t)(g.ReviewNode(ctx, c.ID, reqW.ID, domain.ReviewAccepted, "u", "ok"))
 	must[domain.ChangeImpact](t)(g.ReviewNode(ctx, c.ID, added[2].ID, domain.ReviewAccepted, "u", "ok"))
 
-	view := func(level string) domain.Baseline { return must[domain.Baseline](t)(g.ChangeView(ctx, c.ID, "", level)) }
+	view := func(level string) domain.Baseline {
+		return must[domain.Baseline](t)(g.ChangeView(ctx, c.ID, "", level))
+	}
 	// written: everything proposed or accepted
 	w := view(ViewWritten)
 	if !w.Contains(*reqW.Post) || !w.Contains(*needW.Post) {

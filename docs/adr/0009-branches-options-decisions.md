@@ -1,7 +1,9 @@
 # ADR 0009 — Version branches, analysis options, decision loops, and merge
 
 **Status**: accepted, partially implemented (see Implementation status) · **Date**: 2026-09 · Extends ADR 0003
-(versioning) and the conflict scenario (merge validated by a human, replanning).
+(versioning) and the conflict scenario (merge validated by a human, replanning). The version model, the merge and the
+baseline storage are refined by [ADR 0032](0032-branches-as-pointers-baselines-as-deltas.md) (versions joining
+branches, no merge copies, baselines as deltas).
 
 ## Context
 1. Two concurrent changes can modify the same nodes: a conflict must produce a **merge
