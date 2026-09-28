@@ -518,6 +518,37 @@ export interface Link {
   changeId?: string;
 }
 
+/** An entry of the log of a change (ADR 0030): a fact, a journal record or an impact event. */
+export interface LogEntry {
+  /** position in the log (int64: a string in JSON) */
+  seq?: Int64;
+  id?: string;
+  changeId?: string;
+  /** <stream>.<kind>: fact.artifact, journal.schedule, impact.written… */
+  type?: string;
+  /** flow branch ('' = the main flow) */
+  flow?: string;
+  processId?: string;
+  execution?: string;
+  subject?: string;
+  by?: string;
+  at?: string;
+  /** the whole fact, journal record or impact event, as JSON */
+  payload?: string;
+}
+
+export interface ChangeLogQuery {
+  changeId: string;
+  /** exact types or streams ('journal.') */
+  types?: string[];
+  /** flow branches; 'main' is the main flow */
+  flows?: string[];
+  processIds?: string[];
+  execution?: string;
+  afterSeq?: number;
+  limit?: number;
+}
+
 /** An operation on the change impacts of a change (ADR 0029). */
 export interface ImpactEvent {
   id?: string;
@@ -1167,6 +1198,9 @@ export const graph = {
   /** The impact log of a change (ADR 0029): every operation on its change impacts, with its caller. */
   listChangeEvents: (changeId: string, signal?: AbortSignal) =>
     rpc<{ changeId: string }, { events?: ImpactEvent[] }>(GRAPH, 'ListChangeEvents', { changeId }, signal),
+  /** The log of a change (ADR 0030), filtered on its columns; counts: entries per type without the types filter. */
+  listChangeLog: (req: ChangeLogQuery, signal?: AbortSignal) =>
+    rpc<ChangeLogQuery, { entries?: LogEntry[]; counts?: Record<string, number> }>(GRAPH, 'ListChangeLog', req, signal),
   /** The namespaces holding at least one node. */
   listNamespaces: (signal?: AbortSignal) => rpc<Empty, { namespaces?: string[] }>(GRAPH, 'ListNamespaces', {}, signal),
   listChanges: (signal?: AbortSignal) =>

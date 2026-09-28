@@ -2,7 +2,6 @@ package graph
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"maps"
 	"slices"
@@ -26,9 +25,9 @@ type memState struct {
 	baselines map[domain.BaselineID]domain.Baseline
 	changes   map[domain.ChangeID]domain.Change
 	branches  map[string]domain.Branch
-	journal   []domain.ExecutionRecord
 	nodes     map[domain.ChangeID][]domain.ChangeImpact
-	events    map[domain.ChangeID][]domain.ImpactEvent
+	// log holds the entries of every change's log, in their order (ADR 0030)
+	log []domain.LogEntry
 }
 
 // NewMemory returns an empty in-memory repository.
@@ -40,7 +39,6 @@ func NewMemory() *Memory {
 		changes:   map[domain.ChangeID]domain.Change{},
 		branches:  map[string]domain.Branch{},
 		nodes:     map[domain.ChangeID][]domain.ChangeImpact{},
-		events:    map[domain.ChangeID][]domain.ImpactEvent{},
 	}}
 }
 
@@ -52,21 +50,16 @@ func (s memState) clone() memState {
 		baselines: maps.Clone(s.baselines),
 		changes:   make(map[domain.ChangeID]domain.Change, len(s.changes)),
 		branches:  maps.Clone(s.branches),
-		journal:   slices.Clone(s.journal),
+		log:       slices.Clone(s.log),
 		nodes:     make(map[domain.ChangeID][]domain.ChangeImpact, len(s.nodes)),
-		events:    make(map[domain.ChangeID][]domain.ImpactEvent, len(s.events)),
 	}
 	for k, v := range s.nodes {
 		c.nodes[k] = slices.Clone(v)
-	}
-	for k, v := range s.events {
-		c.events[k] = slices.Clone(v)
 	}
 	for k, v := range s.versions {
 		c.versions[k] = slices.Clone(v)
 	}
 	for k, v := range s.changes {
-		v.Items = slices.Clone(v.Items)
 		c.changes[k] = v
 	}
 	return c
@@ -271,7 +264,12 @@ func (t *memTx) Change(_ context.Context, id domain.ChangeID) (domain.Change, er
 	if !ok {
 		return domain.Change{}, fmt.Errorf("change %s: %w", id, ErrNotFound)
 	}
-	c.Items = slices.Clone(c.Items)
+	facts, _ := t.Log(context.Background(), factsFilter(id))
+	items, err := itemsOf(facts)
+	if err != nil {
+		return c, err
+	}
+	c.Items = items
 	c.Nodes = slices.Clone(t.st.nodes[id])
 	return c, nil
 }
@@ -338,24 +336,48 @@ func (t *memTx) PutBaseline(_ context.Context, b domain.Baseline) error {
 }
 
 func (t *memTx) PutChange(_ context.Context, c domain.Change) error {
-	if old, ok := t.st.changes[c.ID]; ok {
-		c.Items = old.Items
-	} else {
-		c.Items = nil
-	}
-	c.Nodes = nil
+	c.Items, c.Nodes = nil, nil // the facts are in the log
 	t.st.changes[c.ID] = c
 	return nil
 }
 
-func (t *memTx) PutItem(_ context.Context, id domain.ChangeID, it domain.ChangeItem) error {
-	c, ok := t.st.changes[id]
-	if !ok {
-		return fmt.Errorf("change %s: %w", id, ErrNotFound)
+func (t *memTx) AppendLog(_ context.Context, e domain.LogEntry) (domain.LogEntry, error) {
+	if _, ok := t.st.changes[e.Change]; !ok { // a reference to an unknown change, as the SQL foreign key
+		return e, fmt.Errorf("change %s: %w", e.Change, ErrInvalid)
 	}
-	c.Items = append(c.Items, it)
-	t.st.changes[id] = c
-	return nil
+	for _, x := range t.st.log {
+		if x.ID == e.ID {
+			return e, fmt.Errorf("log entry %s: %w", e.ID, ErrConflict)
+		}
+	}
+	e.Payload = slices.Clone(e.Payload)
+	e.Seq = int64(len(t.st.log) + 1)
+	t.st.log = append(t.st.log, e)
+	return e, nil
+}
+
+func (t *memTx) LogCounts(_ context.Context, f domain.LogFilter) (map[string]int, error) {
+	f.AfterSeq = 0
+	out := map[string]int{}
+	for _, e := range t.st.log {
+		if f.Match(e) {
+			out[e.Type]++
+		}
+	}
+	return out, nil
+}
+
+func (t *memTx) Log(_ context.Context, f domain.LogFilter) ([]domain.LogEntry, error) {
+	var out []domain.LogEntry
+	for _, e := range t.st.log {
+		if f.Match(e) {
+			out = append(out, e)
+			if f.Limit > 0 && len(out) == f.Limit {
+				break
+			}
+		}
+	}
+	return out, nil
 }
 
 func (t *memTx) OpenChangeIDs(_ context.Context) ([]domain.ChangeID, error) {
@@ -367,36 +389,6 @@ func (t *memTx) OpenChangeIDs(_ context.Context) ([]domain.ChangeID, error) {
 	}
 	sort.Slice(out, func(i, j int) bool { return t.st.changes[out[i]].CreatedAt.Before(t.st.changes[out[j]].CreatedAt) })
 	return out, nil
-}
-
-func (t *memTx) PutExecution(_ context.Context, r domain.ExecutionRecord) error {
-	if _, ok := t.st.changes[r.ChangeID]; !ok {
-		return fmt.Errorf("change %s: %w", r.ChangeID, ErrInvalid)
-	}
-	for _, x := range t.st.journal {
-		if x.ID == r.ID {
-			return fmt.Errorf("execution %s: %w", r.ID, ErrConflict)
-		}
-	}
-	t.st.journal = append(t.st.journal, r)
-	return nil
-}
-
-func (t *memTx) Executions(_ context.Context, f domain.ExecutionFilter) ([]domain.ExecutionRecord, error) {
-	var out []domain.ExecutionRecord
-	for _, r := range t.st.journal {
-		if matchExecution(r, f) {
-			out = append(out, r)
-		}
-	}
-	return out, nil
-}
-
-func matchExecution(r domain.ExecutionRecord, f domain.ExecutionFilter) bool {
-	if f.ChangeID != "" && r.ChangeID != f.ChangeID {
-		return false
-	}
-	return len(f.ProcessIDs) == 0 || slices.Contains(f.ProcessIDs, r.ProcessID)
 }
 
 func (t *memTx) PutChangeImpact(_ context.Context, change domain.ChangeID, cn domain.ChangeImpact) error {
@@ -415,28 +407,6 @@ func (t *memTx) PutChangeImpact(_ context.Context, change domain.ChangeID, cn do
 	}
 	t.st.nodes[change] = append(list, cn)
 	return nil
-}
-
-func (t *memTx) AppendChangeEvent(_ context.Context, e domain.ImpactEvent) (domain.ImpactEvent, error) {
-	if _, ok := t.st.changes[e.Change]; !ok {
-		return e, fmt.Errorf("change %s: %w", e.Change, ErrNotFound)
-	}
-	// stored as JSON by the SQL repositories: the same copy semantics here
-	raw, err := json.Marshal(e)
-	if err != nil {
-		return e, err
-	}
-	var cp domain.ImpactEvent
-	if err := json.Unmarshal(raw, &cp); err != nil {
-		return e, err
-	}
-	cp.Seq = len(t.st.events[e.Change]) + 1
-	t.st.events[e.Change] = append(t.st.events[e.Change], cp)
-	return cp, nil
-}
-
-func (t *memTx) ChangeEvents(_ context.Context, change domain.ChangeID) ([]domain.ImpactEvent, error) {
-	return slices.Clone(t.st.events[change]), nil
 }
 
 func (t *memTx) ChangeImpacts(_ context.Context, change domain.ChangeID) ([]domain.ChangeImpact, error) {

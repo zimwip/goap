@@ -23,9 +23,9 @@ Every operation on a change impact is an **event** appended to the change's impa
 the change impacts, for the main flow or for any flow, is a **fold** of that log.
 
 ### 1. The log
-`change_event` (both SQL dialects, and the memory repository): `id`, `change_id`, `seq` (order within the change),
-`impact_id` (empty for a change-level event), `op`, `flow`, `execution`, `by`, `payload` (JSON), `created_at`.
-Insert-only: nothing updates or deletes an event.
+The impact events are entries of the log of the change (`impact.<op>`), with its facts and journal records, in one
+order ([ADR 0030](0030-one-change-log.md)); the impact log is that log filtered on the `impact.` stream. Insert-only:
+nothing updates or deletes an event.
 
 ### 2. Events (`domain.ImpactEvent`)
 | op | payload | written by |
@@ -86,7 +86,7 @@ trail too (the journal's `schedule` records: why each run happened, by whom, aft
 events name that principal; the graph client forwards the principal of its context in distributed mode.
 
 ## Consequences
-- **Storage**: table `change_event` (PostgreSQL `0017`, SQLite `0016`). The projection is unchanged.
+- **Storage**: the log of the change (ADR 0030). The projection is unchanged.
 - **Code**: `pkg/domain/impactevent.go` (events, folds), `pkg/graph/impactevents.go` (`emit`), the write
   paths of `changeimpact.go`, `changeimpact_apply.go`, `flownodes.go`, `merge.go`, `subchange.go` emit events instead of
   writing rows; the flow view (`flowNodes.nodes`) folds the log. `Graph.Caller` gives the caller of an operation (set by

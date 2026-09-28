@@ -462,7 +462,7 @@ func (g *Graph) AddItems(ctx context.Context, id domain.ChangeID, items []domain
 			if it.Decision != nil && !known[it.Decision.Item] {
 				return fmt.Errorf("decision %s targets unknown item %s: %w", it.ID, it.Decision.Item, ErrInvalid)
 			}
-			if err := tx.PutItem(ctx, id, it); err != nil {
+			if err := putItem(ctx, tx, id, it); err != nil {
 				return err
 			}
 			known[it.ID] = true

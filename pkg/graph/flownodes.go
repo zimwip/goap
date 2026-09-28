@@ -108,7 +108,7 @@ func (v *flowNodes) nodes(ctx context.Context) ([]domain.ChangeImpact, error) {
 	if v.flow == "" {
 		return domain.ImpactsSeenBy(v.c.Nodes, nil, nil, v.stale), nil
 	}
-	events, err := v.tx.ChangeEvents(ctx, v.c.ID)
+	events, err := impactEvents(ctx, v.tx, v.c.ID)
 	if err != nil {
 		return nil, err
 	}

@@ -63,7 +63,7 @@ func TestJournalRecordsTicksAndActions(t *testing.T) {
 			t.Fatalf("change impact %s (%s) without journal provenance", n.Key, n.ProducedBy)
 		}
 	}
-	if end := recs[len(recs)-1]; end.Status != string(StatusCompleted) || end.Data["steps"] != 3 {
+	if end := recs[len(recs)-1]; end.Status != string(StatusCompleted) || end.Data["steps"] != float64(3) { // JSON numbers, as every store returns them
 		t.Fatalf("end record: %+v", end)
 	}
 	if recs[2].Plan[0] != "identify_impacts" || recs[2].Data["replanned"] != false {
