@@ -850,7 +850,10 @@ type HumanTask struct {
 	Issues   []*BoardIssue     `protobuf:"bytes,8,rep,name=issues,proto3" json:"issues,omitempty"`
 	Proposal *RelaunchProposal `protobuf:"bytes,9,opt,name=proposal,proto3" json:"proposal,omitempty"`
 	// kind "relaunched": the flow whose decision the process waits for
-	FlowId        string `protobuf:"bytes,10,opt,name=flow_id,json=flowId,proto3" json:"flow_id,omitempty"`
+	FlowId string `protobuf:"bytes,10,opt,name=flow_id,json=flowId,proto3" json:"flow_id,omitempty"`
+	// kind "input": qualified node types (<namespace>@<NodeType>) the task may create or
+	// pick to edit (empty: every type of the change's namespace)
+	NodeTypes     []string `protobuf:"bytes,11,rep,name=node_types,json=nodeTypes,proto3" json:"node_types,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -953,6 +956,13 @@ func (x *HumanTask) GetFlowId() string {
 		return x.FlowId
 	}
 	return ""
+}
+
+func (x *HumanTask) GetNodeTypes() []string {
+	if x != nil {
+		return x.NodeTypes
+	}
+	return nil
 }
 
 type BoardIssue struct {
@@ -3037,7 +3047,7 @@ const file_goap_engine_v1_engine_proto_rawDesc = "" +
 	"\tPrincipal\x12\x18\n" +
 	"\asubject\x18\x01 \x01(\tR\asubject\x12\x10\n" +
 	"\x03org\x18\x02 \x01(\tR\x03org\x12\x14\n" +
-	"\x05roles\x18\x03 \x03(\tR\x05roles\"\xe6\x02\n" +
+	"\x05roles\x18\x03 \x03(\tR\x05roles\"\x85\x03\n" +
 	"\tHumanTask\x12\x16\n" +
 	"\x06action\x18\x01 \x01(\tR\x06action\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\"\n" +
@@ -3051,7 +3061,9 @@ const file_goap_engine_v1_engine_proto_rawDesc = "" +
 	"\x06issues\x18\b \x03(\v2\x1a.goap.engine.v1.BoardIssueR\x06issues\x12<\n" +
 	"\bproposal\x18\t \x01(\v2 .goap.engine.v1.RelaunchProposalR\bproposal\x12\x17\n" +
 	"\aflow_id\x18\n" +
-	" \x01(\tR\x06flowId\"\x84\x01\n" +
+	" \x01(\tR\x06flowId\x12\x1d\n" +
+	"\n" +
+	"node_types\x18\v \x03(\tR\tnodeTypes\"\x84\x01\n" +
 	"\n" +
 	"BoardIssue\x12\x12\n" +
 	"\x04item\x18\x01 \x01(\tR\x04item\x12\x18\n" +

@@ -1,5 +1,5 @@
 name: sdlc
-version: 0.4.0
+version: 0.4.2
 description: >
   Software Development Life Cycle (SDLC) on the ALM repository: needs →
   requirements → functions → components → build artifacts → applications →
@@ -96,7 +96,7 @@ actions:
     effects: {formulated: true}
     cost: 1
     model: default
-    mcps: [goap-change, goap-scheduler]
+    mcps: [goap-change]
     prompt: |
       A request came in: "{{ .Change.Intent }}"
       Notes exchanged with the requester so far (oldest first):
@@ -188,6 +188,7 @@ actions:
     pre: {propagated: true, requirements_specified: false}
     effects: {requirements_specified: true}
     cost: 8
+    nodeTypes: [alm@Requirement, alm@FunctionalRequirement, alm@NonFunctionalRequirement, alm@SecurityRequirement]
     instructions: >
       Write the new versions of the impacted requirements and create the new
       requirements (with their "satisfies" link to the need).
@@ -228,6 +229,7 @@ actions:
     pre: {requirements_specified: true, requirements_traced: false}
     effects: {requirements_traced: true}
     cost: 6
+    nodeTypes: [alm@Need, alm@Requirement, alm@FunctionalRequirement, alm@NonFunctionalRequirement, alm@SecurityRequirement]
     instructions: Link each new requirement to the need it satisfies (or the requirement it refines).
 
   - name: plan_tests
@@ -317,6 +319,7 @@ actions:
     effects: {design_done: true}
     cost: 8
     utility: 'has(vars.design) && vars.design == "manual" ? 2.0 : 0.3'
+    nodeTypes: [alm@Component, alm@Interface, alm@Flow, alm@Data]
     instructions: >
       Write the changes to components, interfaces, flows and data (change impacts), then a
       "design" artifact summarizing the decisions.

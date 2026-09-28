@@ -884,6 +884,8 @@ export interface HumanTask {
   action?: string;
   description?: string;
   instructions?: string;
+  /** kind "input": qualified node types (<namespace>@<NodeType>) the task may create or pick to edit (empty: every type of the change's namespace) */
+  nodeTypes?: string[];
   step?: number;
 }
 

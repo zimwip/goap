@@ -230,6 +230,10 @@ type Action struct {
 	// human
 	Instructions string         `yaml:"instructions,omitempty" json:"instructions,omitempty"`
 	Params       map[string]any `yaml:"params,omitempty" json:"params,omitempty"`
+	// NodeTypes restricts which qualified node types (<namespace>@<NodeType>) a
+	// human task may create or pick to edit; empty: every type of the change's
+	// namespace.
+	NodeTypes []string `yaml:"nodeTypes,omitempty" json:"nodeTypes,omitempty"`
 	// script: code run in the sandbox with the DSL (docs/dsl.md)
 	Language string `yaml:"language,omitempty" json:"language,omitempty"`
 	Code     string `yaml:"code,omitempty" json:"code,omitempty"`
