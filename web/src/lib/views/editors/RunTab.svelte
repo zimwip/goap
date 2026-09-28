@@ -32,11 +32,18 @@
   import { processes, ingestProcess, ingestEvent, childrenOf, refreshProcesses } from '../../stores/live.svelte';
   import { chainOf, inChain, restartedStepNumber } from '../../flowChain';
   import { namespaceOf } from '../../namespace';
+  import { loadMethodology, published } from '../../stores/assistant.svelte';
 
   let { tab }: { tab: Tab } = $props();
 
   const id = $derived(tab.params.id ?? '');
   const process = $derived<Process | undefined>(processes.get(id));
+
+  // the definitions of the methodology: where each condition of the world state comes from
+  const definition = $derived(published.get(process?.methodology ?? ''));
+  $effect(() => {
+    if (process?.methodology) void loadMethodology(process.methodology);
+  });
   let error = $state('');
   let loading = $state(false);
   let stream = $state<StreamStatus>('connecting');
@@ -391,7 +398,7 @@
     <div class="two">
       <section class="card">
         <h3>World state</h3>
-        <WorldState world={process.world} unknown={process.unknown} />
+        <WorldState world={process.world} unknown={process.unknown} conditions={definition?.conditions} actions={definition?.actions} />
       </section>
       <section class="card">
         <h3>Steps <span class="hint">{process.steps?.length ?? 0}</span></h3>
