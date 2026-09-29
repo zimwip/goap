@@ -175,6 +175,9 @@ var Symbols = interp.Exports{
 		"CompleteRequest": reflect.ValueOf((*CompleteRequest)(nil)),
 		"CompleteResult":  reflect.ValueOf((*CompleteResult)(nil)),
 		"AgentResult":     reflect.ValueOf((*AgentResult)(nil)),
+		"Option":          reflect.ValueOf((*Option)(nil)),
+		"Question":        reflect.ValueOf((*Question)(nil)),
+		"DecisionPoint":   reflect.ValueOf((*DecisionPoint)(nil)),
 		"ErrSuspended":    reflect.ValueOf(&ErrSuspended).Elem(),
 	},
 }

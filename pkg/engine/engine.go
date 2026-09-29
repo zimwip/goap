@@ -502,11 +502,11 @@ func (e *Engine) Submit(ctx context.Context, id string, items []ItemInput) (*Pro
 	step := &p.Steps[i]
 	rec := uuid.NewString()
 	submitted := e.clock()
-	ids, nodes, err := e.addItems(ctx, p, items, p.Pending.Action, rec)
+	ids, nodes, points, err := e.addItems(ctx, p, items, p.Pending.Action, rec, true, firstNonEmpty(authz.From(ctx).Subject, p.Pending.Action))
 	if err != nil {
 		return nil, err
 	}
-	step.Items, step.Nodes = ids, nodes
+	step.Items, step.Nodes, step.Decisions = ids, nodes, points
 	if err := e.finishStep(ctx, p, m, step); err != nil {
 		return nil, err
 	}
@@ -903,7 +903,7 @@ func (e *Engine) executeStep(ctx context.Context, p *Process, m *methodology.Com
 		p.Pending = &HumanTask{Kind: TaskInput, Action: action.Name, Description: action.Description, Instructions: action.Instructions, NodeTypes: action.NodeTypes, Step: i}
 		return nil
 	}
-	ids, nodes, err := e.addItems(ctx, p, res.Items, action.Name, step.Execution)
+	ids, nodes, points, err := e.addItems(ctx, p, res.Items, action.Name, step.Execution, false, action.Name)
 	if err == nil {
 		var more []domain.ChangeImpactID
 		more, err = e.applyNodeOps(ctx, p, res.Nodes, action.Name, step.Execution)
@@ -914,7 +914,7 @@ func (e *Engine) executeStep(ctx context.Context, p *Process, m *methodology.Com
 		step.EndedAt = e.clock()
 		return e.recordFailure(p, action.Name)
 	}
-	step.Items, step.Nodes = ids, nodes
+	step.Items, step.Nodes, step.Decisions = ids, nodes, points
 	return e.finishStep(ctx, p, m, step)
 }
 
@@ -928,9 +928,18 @@ func (e *Engine) forgetChildren(p *Process, action string) {
 	}
 }
 
-// runChild runs (or resumes) a sub-agent for a host call.
+// runChild runs (or resumes) a sub-agent for a host call, in the methodology of the parent.
 func (e *Engine) runChild(ctx context.Context, h *Host, key, agentName, intentText string) (dsl.AgentResult, error) {
+	return e.runChildIn(ctx, h, key, h.process.Methodology, agentName, intentText, false)
+}
+
+// runChildIn runs (or resumes) a sub-agent for a host call in a methodology, or, with anyMethodology, in the one
+// identification picks among every published methodology.
+func (e *Engine) runChildIn(ctx context.Context, h *Host, key, methodologyName, agentName, intentText string, anyMethodology bool) (dsl.AgentResult, error) {
 	parent := h.process
+	if anyMethodology {
+		methodologyName = ""
+	}
 	var child *Process
 	if id, ok := parent.Children[key]; ok {
 		c, err := e.Store.Get(ctx, id)
@@ -939,7 +948,7 @@ func (e *Engine) runChild(ctx context.Context, h *Host, key, agentName, intentTe
 		}
 		child = c
 	} else {
-		c, err := e.Start(ctx, StartRequest{Methodology: parent.Methodology, ChangeID: parent.ChangeID, BaselineID: parent.BaselineID,
+		c, err := e.Start(ctx, StartRequest{Methodology: methodologyName, ChangeID: parent.ChangeID, BaselineID: parent.BaselineID,
 			Agent: agentName, Intent: intentText, ParentID: parent.ID, Call: key, Vars: maps.Clone(parent.Vars)})
 		if err != nil {
 			return dsl.AgentResult{}, err
@@ -1070,7 +1079,7 @@ func (e *Engine) finishStep(ctx context.Context, p *Process, m *methodology.Comp
 	step.EndedAt = e.clock()
 	step.EffectsMet = p.World.Satisfies(action.Effects)
 	if !step.EffectsMet {
-		if action.Incremental && len(step.Items)+len(step.Nodes) > 0 {
+		if action.Incremental && len(step.Items)+len(step.Nodes)+len(step.Decisions) > 0 {
 			step.Progress = true // the action runs again on the next cycle
 			return nil
 		}
@@ -1127,14 +1136,23 @@ func (e *Engine) observe(ctx context.Context, p *Process, m *methodology.Compile
 	return bb, nil
 }
 
-func (e *Engine) addItems(ctx context.Context, p *Process, in []ItemInput, producedBy, execution string) ([]domain.ItemID, []domain.ChangeImpactID, error) {
-	// change impact operations (LLM output, human input) are applied in order, after the items
+func (e *Engine) addItems(ctx context.Context, p *Process, in []ItemInput, producedBy, execution string, human bool, by string) ([]domain.ItemID, []domain.ChangeImpactID, []string, error) {
+	// change impact operations (LLM output, human input) are applied in order, after the items; the decision
+	// operations last (ADR 0009 §4)
 	var ops []dsl.NodeOp
+	var decisions []DecisionOp
 	items := make([]ItemInput, 0, len(in))
 	for _, it := range in {
+		if it.Kind == "decisionPoint" {
+			if it.DecisionPoint == nil {
+				return nil, nil, nil, fmt.Errorf("item of kind decisionPoint needs a decisionPoint operation: %w", ErrInvalidState)
+			}
+			decisions = append(decisions, *it.DecisionPoint)
+			continue
+		}
 		if it.Kind == "changeImpact" {
 			if it.ChangeImpact == nil {
-				return nil, nil, fmt.Errorf("item of kind changeImpact needs a changeImpact operation: %w", ErrInvalidState)
+				return nil, nil, nil, fmt.Errorf("item of kind changeImpact needs a changeImpact operation: %w", ErrInvalidState)
 			}
 			ops = append(ops, *it.ChangeImpact)
 			continue
@@ -1143,10 +1161,14 @@ func (e *Engine) addItems(ctx context.Context, p *Process, in []ItemInput, produ
 	}
 	ids, err := e.addPlainItems(ctx, p, items, producedBy, execution)
 	if err != nil {
-		return ids, nil, err
+		return ids, nil, nil, err
 	}
 	nodes, err := e.applyNodeOps(ctx, p, ops, producedBy, execution)
-	return ids, nodes, err
+	if err != nil {
+		return ids, nodes, nil, err
+	}
+	points, err := e.applyDecisionOps(ctx, p, decisions, human, by)
+	return ids, nodes, points, err
 }
 
 func (e *Engine) addPlainItems(ctx context.Context, p *Process, in []ItemInput, producedBy, execution string) ([]domain.ItemID, error) {

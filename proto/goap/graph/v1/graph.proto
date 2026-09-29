@@ -85,6 +85,13 @@ service GraphService {
   // The graph a change sees at a level (written, accepted, landed) on a flow (ADR 0032 §5), and the graph a call on
   // the change reads (the active option's, else the reference baseline).
   rpc GetChangeView(GetChangeViewRequest) returns (GetChangeViewResponse);
+  // Decision points of a change (ADR 0009 §4): opened, ruled (decided or undecidable with questions), their questions
+  // answered, an agent ruling below the threshold ratified by a person; a decided point selects its option.
+  rpc OpenDecision(OpenDecisionRequest) returns (OpenDecisionResponse);
+  rpc RuleDecision(RuleDecisionRequest) returns (RuleDecisionResponse);
+  rpc AnswerQuestion(AnswerQuestionRequest) returns (AnswerQuestionResponse);
+  rpc RatifyDecision(RatifyDecisionRequest) returns (RatifyDecisionResponse);
+  rpc ListDecisionPoints(ListDecisionPointsRequest) returns (ListDecisionPointsResponse);
   rpc GetChangeGraph(GetChangeGraphRequest) returns (GetChangeGraphResponse);
 
   // Execution journal (ADR 0011)
@@ -189,6 +196,8 @@ message ChangeItem {
   // flow branch that produced the item; flow_event on kind = flow
   string flow = 15;
   FlowEvent flow_event = 16;
+  // event of a decision point on kind = decision_point (ADR 0009 §4)
+  DecisionEvent decision_event = 17;
 }
 
 message Change {
@@ -545,6 +554,12 @@ message GetBlackboardResponse {
   Change change = 1;
   repeated NodeView nodes = 2;
   repeated Node neighbors = 3;
+  // what the view of a flow does not carry: the options of the change, the active one, and its decision points
+  // replayed at `at` (ADR 0009, ADR 0032 §6)
+  repeated Flow options = 4;
+  string active_option = 5;
+  repeated DecisionPoint decision_points = 6;
+  google.protobuf.Timestamp at = 7;
 }
 
 message ApplyChangeRequest {
@@ -1125,4 +1140,147 @@ message GetChangeGraphRequest {
 message GetChangeGraphResponse {
   repeated Node nodes = 1;
   repeated Link links = 2;
+}
+
+// DecisionEvent is an event of a decision point (ADR 0009 §4).
+message DecisionEvent {
+  // open | rule | answer | ratify
+  string op = 1;
+  string point = 2;
+  string question = 3;
+  repeated string options = 4;
+  repeated string criteria = 5;
+  string decider = 6;
+  double threshold = 7;
+  int32 max_rounds = 8;
+  google.protobuf.Timestamp deadline = 9;
+  string outcome = 10;
+  string option = 11;
+  double confidence = 12;
+  string justification = 13;
+  repeated string questions = 14;
+  bool human = 15;
+  string question_id = 16;
+  string answer = 17;
+  string process = 18;
+  bool accept = 19;
+  string comment = 20;
+  string by = 21;
+}
+
+message Question {
+  string id = 1;
+  string point = 2;
+  string text = 3;
+  // open | answered
+  string status = 4;
+  string answer = 5;
+  string answered_by = 6;
+  // the process that investigated it
+  string process = 7;
+  google.protobuf.Timestamp asked_at = 8;
+}
+
+message Ruling {
+  // decided | undecidable
+  string outcome = 1;
+  string option = 2;
+  double confidence = 3;
+  string justification = 4;
+  string by = 5;
+  bool human = 6;
+  google.protobuf.Timestamp at = 7;
+}
+
+// DecisionPoint is a decision point replayed from its events.
+message DecisionPoint {
+  string id = 1;
+  string question = 2;
+  repeated string options = 3;
+  repeated string criteria = 4;
+  // agent | human
+  string decider = 5;
+  double threshold = 6;
+  int32 max_rounds = 7;
+  google.protobuf.Timestamp deadline = 8;
+  google.protobuf.Timestamp opened_at = 9;
+  string opened_by = 10;
+  // open | blocked | ratifying | escalated | decided
+  string status = 11;
+  int32 rounds = 12;
+  repeated Question questions = 13;
+  Ruling ruling = 14;
+  // why only a person may rule it now (empty: not escalated)
+  string escalation = 15;
+  string option = 16;
+  google.protobuf.Timestamp decided_at = 17;
+  string decided_by = 18;
+}
+
+message OpenDecisionRequest {
+  string change_id = 1;
+  string question = 2;
+  // the options it chooses among; unset (with all_options) the open options of the change
+  repeated string options = 3;
+  bool all_options = 4;
+  repeated string criteria = 5;
+  // agent (default) | human
+  string decider = 6;
+  double threshold = 7;
+  int32 max_rounds = 8;
+  // Go duration ("24h"); empty: no deadline
+  string max_duration = 9;
+}
+
+message OpenDecisionResponse {
+  DecisionPoint point = 1;
+}
+
+message RuleDecisionRequest {
+  string change_id = 1;
+  // empty: the only pending point
+  string point = 2;
+  // decided | undecidable
+  string outcome = 3;
+  string option = 4;
+  double confidence = 5;
+  string justification = 6;
+  repeated string questions = 7;
+  // ruled by an agent of a process (the engine): below the threshold it waits for a ratification, and it is refused
+  // on a point a person rules; unset, the caller rules as a person
+  bool agent = 8;
+}
+
+message RuleDecisionResponse {
+  DecisionPoint point = 1;
+}
+
+message AnswerQuestionRequest {
+  string change_id = 1;
+  string question = 2;
+  string answer = 3;
+  string process = 4;
+}
+
+message AnswerQuestionResponse {
+  DecisionPoint point = 1;
+}
+
+message RatifyDecisionRequest {
+  string change_id = 1;
+  string point = 2;
+  bool accept = 3;
+  string comment = 4;
+}
+
+message RatifyDecisionResponse {
+  DecisionPoint point = 1;
+}
+
+message ListDecisionPointsRequest {
+  string change_id = 1;
+}
+
+message ListDecisionPointsResponse {
+  repeated DecisionPoint points = 1;
 }

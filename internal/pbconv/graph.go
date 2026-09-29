@@ -193,6 +193,9 @@ func ItemToPB(it domain.ChangeItem) *graphv1.ChangeItem {
 	if e := it.FlowEvent; e != nil {
 		out.FlowEvent = FlowEventToPB(*e)
 	}
+	if e := it.DecisionEvent; e != nil {
+		out.DecisionEvent = DecisionEventToPB(*e)
+	}
 	if d := it.Decision; d != nil {
 		out.Decision = &graphv1.Decision{Item: string(d.Item), Accept: d.Accept, Comment: d.Comment}
 	}
@@ -213,6 +216,10 @@ func ItemFromPB(it *graphv1.ChangeItem) domain.ChangeItem {
 	if e := it.FlowEvent; e != nil {
 		fe := FlowEventFromPB(e)
 		out.FlowEvent = &fe
+	}
+	if e := it.DecisionEvent; e != nil {
+		de := DecisionEventFromPB(e)
+		out.DecisionEvent = &de
 	}
 	if d := it.Decision; d != nil {
 		out.Decision = &domain.Decision{Item: domain.ItemID(d.Item), Accept: d.Accept, Comment: d.Comment}

@@ -108,7 +108,7 @@ type ChangeItem struct {
 	FlowEvent *FlowEvent `json:"flowEvent,omitempty"`
 	// DecisionEvent is set on KindDecisionPoint items (ADR 0009 §4).
 	DecisionEvent *DecisionEvent `json:"decisionEvent,omitempty"`
-	Decision  *Decision  `json:"decision,omitempty"` // decision only
+	Decision      *Decision      `json:"decision,omitempty"` // decision only
 	// Target addresses a signal item to a process id ("" = broadcast).
 	Target      string         `json:"target,omitempty"`
 	Data        map[string]any `json:"data,omitempty"`

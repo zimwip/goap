@@ -72,6 +72,11 @@ The nodes the change acts on are change impacts: items of kind "changeImpact", a
 {"kind":"changeImpact","changeImpact":{"op":"declare","ref":"#n2","intent":"created","type":"<node type>","key":"<new key>","rationale":"why"}}
 {"kind":"changeImpact","changeImpact":{"op":"write","node":"<node key or #n1>","props":{...},"state":"<lifecycle state>","links":[{"type":"...","to":"<node key or a #nN already written>"}]}}
 {"kind":"changeImpact","changeImpact":{"op":"review","node":"<node key>","accept":true,"comment":"why"}}
+Decision points of the change (a question to settle, usually which option) are items of kind "decisionPoint":
+{"kind":"decisionPoint","decisionPoint":{"op":"open","ref":"#d1","question":"...","options":["<option name>"],"criteria":["..."]}}
+{"kind":"decisionPoint","decisionPoint":{"op":"rule","point":"<point id or #d1>","outcome":"decided","option":"<option name>","confidence":0.8,"justification":"why"}}
+{"kind":"decisionPoint","decisionPoint":{"op":"rule","point":"<point id>","outcome":"undecidable","justification":"why it cannot be decided","questions":["what must be known first"]}}
+{"kind":"decisionPoint","decisionPoint":{"op":"answer","questionId":"<question id>","answer":"..."}}
 A node whose type has a lifecycle can only be modified in an editable state: reopen it with a write that sets "state" first, and finish with a write to a non-editable state.
 Reference nodes by their key. Reference items and change impacts created in the same answer by "#<ref>".`
 
@@ -85,6 +90,10 @@ type PromptData struct {
 	Artifacts []ItemView
 	// ChangeImpacts are the nodes the change acts on (ADR 0024), as the process sees them.
 	ChangeImpacts []ChangeImpactView
+	// Options and DecisionPoints of the change (ADR 0009 §3-4), ActiveOption the option it works on.
+	Options        []domain.Flow
+	ActiveOption   string
+	DecisionPoints []domain.DecisionPoint
 }
 
 // ChangeImpactView is a change impact with its hydrated pre and post versions.
@@ -125,7 +134,8 @@ func RenderPrompt(ctx context.Context, ac ActionContext) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("prompt template: %w", err)
 	}
-	d := PromptData{Change: ac.Blackboard.Change, Goal: ac.Process.Goal, Action: ac.Action, Vars: ac.Process.Vars}
+	d := PromptData{Change: ac.Blackboard.Change, Goal: ac.Process.Goal, Action: ac.Action, Vars: ac.Process.Vars,
+		Options: ac.Blackboard.Options, ActiveOption: ac.Blackboard.ActiveOption, DecisionPoints: ac.Blackboard.DecisionPoints}
 	nodes, _, err := readGraph(ctx, ac.Graph, ac.Blackboard.Change.ID, ac.Process.Flow, ac.Blackboard.Change.BaselineID)
 	if err != nil {
 		return "", err
@@ -327,7 +337,7 @@ func (b BuiltinExecutor) Execute(ctx context.Context, ac ActionContext) (ActionR
 
 // DefaultBuiltins returns the builtin actions shipped with the engine.
 func DefaultBuiltins() BuiltinExecutor {
-	return BuiltinExecutor{"graph.propagate": Propagate, "graph.apply": ApplyChange}
+	return BuiltinExecutor{"graph.propagate": Propagate, "graph.apply": ApplyChange, "decision.investigate": Investigate}
 }
 
 // Propagate follows links backwards from impacted nodes (an impact on the

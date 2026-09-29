@@ -1,0 +1,108 @@
+name: option-decision
+version: 0.1.0
+description: >
+  Decision loop over the options of a change (ADR 0009 §4): a decision point is opened on the open options,
+  the decider rules it; when it cannot decide it says why and asks questions, an analyst sub-agent investigates
+  each question (identification picks it from the question), and the decider comes back to the decision. A ruling
+  below the confidence threshold waits for a person's ratification. The decider here is a script standing in for
+  an LLM action; the platform conditions (decision_ready, open_questions, no_decision_pending...) need no
+  declaration.
+
+namespace: alm
+
+conditions:
+  - name: decision_opened
+    description: The change has a decision point
+    expr: size(decisionPoints) > 0
+  - name: fees_known
+    description: An analysis of the fees is on the blackboard
+    expr: artifacts.exists(a, a.type == "fees")
+
+actions:
+  - name: open_decision
+    kind: script
+    language: javascript
+    description: Open a decision point on the open options of the change
+    pre: {options_open: true, decision_opened: false}
+    effects: {decision_opened: true}
+    cost: 1
+    code: |
+      function run(ctx) {
+        ctx.openDecision("Which payment provider?", {criteria: ["fees", "markets"], threshold: 0.7, maxRounds: 3});
+        return "decision point opened";
+      }
+
+  - name: decide
+    kind: script
+    language: javascript
+    description: >
+      Rule the decision point: undecidable while the fees are unknown (asking for them), then decided on the
+      cheapest option. Stands in for an LLM decider.
+    pre: {decision_ready: true, no_open_questions: true}
+    effects: {no_decision_pending: true}
+    incremental: true
+    cost: 2
+    code: |
+      function run(ctx) {
+        const d = ctx.decisionPoints().find(p => p.status === "open" || p.status === "escalated");
+        if (!d) return "nothing to decide";
+        const answered = d.questions.filter(q => q.status === "answered");
+        if (answered.length === 0) {
+          ctx.undecidable(d.id, "the fees decide between the options and are unknown", ["What are the fees of each payment provider?"]);
+          return "undecidable: fees unknown";
+        }
+        const pick = ctx.options().find(o => o.name === "stripe") || ctx.options()[0];
+        ctx.decide(d.id, pick.name, 0.9, "the lowest fees in our markets");
+        return "decided " + pick.name;
+      }
+
+  - name: investigate
+    kind: builtin
+    builtin: decision.investigate
+    description: >
+      Answer the open questions of the decision points, one sub-agent per question: the points they blocked are
+      ready to be ruled again
+    pre: {open_questions: true}
+    effects: {open_questions: false, no_open_questions: true, decision_ready: true}
+    cost: 3
+
+  - name: analyse_fees
+    kind: script
+    language: javascript
+    description: Analyse the fees of the payment providers
+    pre: {fees_known: false}
+    effects: {fees_known: true}
+    cost: 1
+    code: |
+      function run(ctx) {
+        ctx.addArtifact("fees", {stripe: "1.4%", adyen: "1.6%"});
+        return "fees analysed";
+      }
+
+goals:
+  - name: decide_option
+    description: Choose among the options of the change
+    examples:
+      - choose among the options
+      - decide which option
+    pre: {decision_opened: true, no_decision_pending: true}
+    value: 10
+  - name: know_fees
+    description: Find out the fees of the payment providers
+    examples:
+      - what are the fees of each payment provider
+      - fees of the payment providers
+    pre: {fees_known: true}
+    value: 5
+
+agents:
+  - name: decider
+    description: Opens and rules the decision over the options of a change
+    planner: goap
+    actions: [open_decision, decide, investigate]
+    goals: [decide_option]
+  - name: analyst
+    description: Answers questions about payment providers
+    planner: goap
+    actions: [analyse_fees]
+    goals: [know_fees]
