@@ -412,6 +412,8 @@ export interface ProcessStep {
   process?: string;
   /** the capability the step needs done, provided by methods */
   method?: string;
+  /** roles assigned to the step (its sub-steps inherit them) */
+  roles?: Responsibilities;
 }
 
 /** Process (ADR 0034): the steps that reach an objective, run by an agent of its name towards a goal of its name. */
@@ -443,6 +445,24 @@ export interface MethodologyMethod {
   /** the actor: an agent of the methodology, and the goal it reaches (default: its only goal) */
   agent?: string;
   goal?: string;
+  /** roles involved when the method is used (replacing those of the step) */
+  roles?: Responsibilities;
+}
+
+/** A role a methodology needs; the organisation assigns it to users per unit ("developer@TEAM-PAY"). */
+export interface MethodologyRole {
+  name?: string;
+  description?: string;
+}
+
+/** Roles assigned to a step or a method, RACI style (ADR 0035 §2). */
+export interface Responsibilities {
+  /** performs its human tasks */
+  responsible?: string;
+  /** may approve its gates, never on its own change */
+  accountable?: string;
+  consulted?: string[];
+  informed?: string[];
 }
 
 /** A reference document: "doc:<key>" (a document of the graph), "<mcp>:<path>" (a document repository) or a URL. */
@@ -465,6 +485,8 @@ export interface Methodology {
   agents?: Agent[];
   processes?: MethodologyProcess[];
   methods?: MethodologyMethod[];
+  /** the roles the processes and methods assign (ADR 0035 §2) */
+  roles?: MethodologyRole[];
   createdAt?: string;
   updatedAt?: string;
   publishedAt?: string;
@@ -981,6 +1003,8 @@ export interface StepContext {
   references?: DocumentReference[];
   /** the method chosen to carry the step out */
   method?: string;
+  /** the roles of the step */
+  roles?: Responsibilities;
 }
 
 /** Where a run stands in the steps of the process its agent runs (ADR 0035 §3). */
@@ -1019,6 +1043,8 @@ export interface StepProgress {
   steps?: StepProgress[];
   /** the method chosen for a step that names a capability */
   chosen?: string;
+  /** the roles in force for the step */
+  roles?: Responsibilities;
 }
 
 export interface Step {

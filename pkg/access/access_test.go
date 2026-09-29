@@ -2,12 +2,15 @@ package access_test
 
 import (
 	"context"
+	"slices"
 	"testing"
 
 	"github.com/zimwip/goap/internal/graphsvc"
 	"github.com/zimwip/goap/pkg/access"
 	"github.com/zimwip/goap/pkg/authz"
+	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/graph"
+	"github.com/zimwip/goap/pkg/mcp"
 )
 
 func setup(t *testing.T) (*graph.Graph, *access.Authorizer) {
@@ -109,5 +112,22 @@ func TestUserNodeGrantsRolesAndUnit(t *testing.T) {
 	}
 	if p := dir.Enrich(ctx, authz.Principal{Subject: "bob"}); len(p.Roles) != 0 || p.Org != "" {
 		t.Fatalf("unknown subject must be left alone: %+v", p)
+	}
+}
+
+func TestRolesHeldInAUnitHoldBelowIt(t *testing.T) {
+	unit := func(id, key string) domain.Node {
+		return domain.Node{ID: domain.NodeID(id), Key: key, Type: mcp.NodeTypeOrgUnit, Namespace: "organisation"}
+	}
+	nodes := []domain.Node{unit("1", "ORG-DEFAULT"), unit("2", "DEP-IT"), unit("3", "TEAM-PAY")}
+	partOf := func(from, to string) domain.Link {
+		return domain.Link{Type: access.LinkPartOf, From: domain.NodeRef{ID: domain.NodeID(from)}, To: domain.NodeRef{ID: domain.NodeID(to)}}
+	}
+	s := access.BuildSnapshot("b", nodes, []domain.Link{partOf("3", "2"), partOf("2", "1")})
+	if got := s.Chain("TEAM-PAY"); !slices.Equal(got, []string{"TEAM-PAY", "DEP-IT", "ORG-DEFAULT"}) {
+		t.Fatalf("chain %v", got)
+	}
+	if got := s.Chain("UNKNOWN"); !slices.Equal(got, []string{"UNKNOWN", "ORG-DEFAULT"}) {
+		t.Fatalf("an unknown unit is under the default unit: %v", got)
 	}
 }

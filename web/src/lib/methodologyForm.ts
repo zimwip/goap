@@ -5,7 +5,7 @@
 // lists become text, JSON params become text. `toForm` / `fromForm` convert
 // between this model and the proto message.
 
-import type { Action, Agent, Issue, Lifecycle, LifecycleState, LifecycleTransition, LinkType, DocumentReference, Methodology, MethodologyMethod, MethodologyProcess, NodeType, ProcessStep, SearchProperty, Struct, Trigger } from './api';
+import type { Action, Agent, Issue, Lifecycle, LifecycleState, LifecycleTransition, LinkType, DocumentReference, Methodology, MethodologyMethod, MethodologyProcess, MethodologyRole, Responsibilities, NodeType, ProcessStep, SearchProperty, Struct, Trigger } from './api';
 
 export interface CondRow {
   cond: string;
@@ -209,6 +209,7 @@ export interface StepForm {
   checklist: string;
   /** comma separated: what the step produces (document types) */
   deliverables: string;
+  roles: ResponsibilitiesForm;
   steps: StepForm[];
 }
 
@@ -225,6 +226,34 @@ export interface ProcessForm extends Identified {
   examples: string;
   references: ReferenceForm[];
   steps: StepForm[];
+}
+
+export interface RoleForm {
+  name: string;
+  description: string;
+}
+
+/** RACI roles of a step or a method; consulted and informed comma separated. */
+export interface ResponsibilitiesForm {
+  responsible: string;
+  accountable: string;
+  consulted: string;
+  informed: string;
+}
+
+export const emptyResponsibilities = (): ResponsibilitiesForm => ({ responsible: '', accountable: '', consulted: '', informed: '' });
+
+function respToForm(r: Responsibilities | undefined): ResponsibilitiesForm {
+  return { responsible: r?.responsible ?? '', accountable: r?.accountable ?? '', consulted: (r?.consulted ?? []).join(', '), informed: (r?.informed ?? []).join(', ') };
+}
+
+function respFromForm(r: ResponsibilitiesForm): Responsibilities | undefined {
+  const o: Responsibilities = {};
+  put(o, 'responsible', r.responsible.trim());
+  put(o, 'accountable', r.accountable.trim());
+  put(o, 'consulted', csv(r.consulted));
+  put(o, 'informed', csv(r.informed));
+  return Object.keys(o).length ? o : undefined;
 }
 
 export interface MethodForm extends Identified {
@@ -244,6 +273,7 @@ export interface MethodForm extends Identified {
   /** the actor */
   agent: string;
   goal: string;
+  roles: ResponsibilitiesForm;
 }
 
 export interface MethodologyForm {
@@ -258,6 +288,7 @@ export interface MethodologyForm {
   agents: AgentForm[];
   processes: ProcessForm[];
   methods: MethodForm[];
+  roles: RoleForm[];
 }
 
 /** Sections whose elements open in a tab. */
@@ -350,6 +381,7 @@ export const emptyStep = (name = ''): StepForm => ({
   guidance: '',
   checklist: '',
   deliverables: '',
+  roles: emptyResponsibilities(),
   steps: [],
 });
 export const emptyMethod = (): MethodForm => ({
@@ -365,6 +397,7 @@ export const emptyMethod = (): MethodForm => ({
   references: [],
   agent: '',
   goal: '',
+  roles: emptyResponsibilities(),
 });
 export const emptyProcess = (): ProcessForm => ({ uid: newUid(), name: '', description: '', examples: '', references: [], steps: [emptyStep('first')] });
 export const emptyTrigger = (): TriggerForm => ({
@@ -393,6 +426,7 @@ export function emptyForm(): MethodologyForm {
     agents: [],
     processes: [],
     methods: [],
+    roles: [],
   };
 }
 
@@ -681,7 +715,9 @@ export function toForm(m: Methodology): MethodologyForm {
       references: refsToForm(x.references),
       agent: x.agent ?? '',
       goal: x.goal ?? '',
+      roles: respToForm(x.roles),
     })),
+    roles: (m.roles ?? []).map((r) => ({ name: r.name ?? '', description: r.description ?? '' })),
   };
 }
 
@@ -714,6 +750,7 @@ function stepToForm(s: ProcessStep): StepForm {
     guidance: s.guidance ?? '',
     checklist: (s.checklist ?? []).join('\n'),
     deliverables: (s.deliverables ?? []).join(', '),
+    roles: respToForm(s.roles),
     steps: (s.steps ?? []).map(stepToForm),
   };
 }
@@ -766,6 +803,7 @@ export function stepFromForm(s: StepForm): ProcessStep {
       .filter(Boolean),
   );
   put(o, 'deliverables', csv(s.deliverables));
+  put(o, 'roles', respFromForm(s.roles));
   switch (s.method) {
     case 'manual':
       put(o, 'instructions', s.instructions.trim());
@@ -997,6 +1035,17 @@ export function fromForm(f: MethodologyForm): { methodology: Methodology; issues
       put(o, 'references', refsFromForm(x.references));
       put(o, 'agent', x.agent.trim());
       put(o, 'goal', x.goal.trim());
+      put(o, 'roles', respFromForm(x.roles));
+      return o;
+    }),
+  );
+  put(
+    m,
+    'roles',
+    f.roles.map((r) => {
+      const o: MethodologyRole = {};
+      put(o, 'name', r.name.trim());
+      put(o, 'description', r.description.trim());
       return o;
     }),
   );

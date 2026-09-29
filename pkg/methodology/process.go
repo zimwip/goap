@@ -62,6 +62,8 @@ type Step struct {
 	Guidance     string   `yaml:"guidance,omitempty" json:"guidance,omitempty"`
 	Checklist    []string `yaml:"checklist,omitempty" json:"checklist,omitempty"`
 	Deliverables []string `yaml:"deliverables,omitempty" json:"deliverables,omitempty"`
+	// Roles assign the step, RACI style (ADR 0035 §2); sub-steps without their own inherit them.
+	Roles *Responsibilities `yaml:"roles,omitempty" json:"roles,omitempty"`
 	// Pre are the entry conditions of the step (and of its sub-steps). A condition "step:<path>" is true once the
 	// step of that path, done once it has run, has run.
 	Pre map[string]bool `yaml:"pre,omitempty" json:"pre,omitempty"`
@@ -156,7 +158,7 @@ type stepCriteria struct{ entry, done map[string]bool }
 
 // compileProcesses validates the processes and generates what runs them. actions are the compiled actions (effects
 // include the expectations), known the condition names.
-func (m *Methodology) compileProcesses(add func(path, format string, args ...any), actions map[string]Action, known map[string]bool, agents map[string]Agent, methods compiledMethods) compiledProcesses {
+func (m *Methodology) compileProcesses(add func(path, format string, args ...any), actions map[string]Action, known map[string]bool, agents map[string]Agent, methods compiledMethods, roles map[string]bool) compiledProcesses {
 	out := compiledProcesses{criteria: map[string]stepCriteria{}}
 	names := map[string]bool{}
 	for i, p := range m.Processes {
@@ -184,7 +186,7 @@ func (m *Methodology) compileProcesses(add func(path, format string, args ...any
 	if m.checkProcessCycles(add) {
 		return out
 	}
-	w := &stepWalker{m: m, add: add, actions: actions, known: known, agents: agents, methods: methods, root: &out, done: map[string]*processCriteria{}}
+	w := &stepWalker{m: m, add: add, actions: actions, known: known, agents: agents, methods: methods, roles: roles, root: &out, done: map[string]*processCriteria{}}
 	for i, p := range m.Processes {
 		if names[p.Name] {
 			w.process(i)
@@ -287,6 +289,7 @@ type stepWalker struct {
 	known   map[string]bool
 	agents  map[string]Agent
 	methods compiledMethods
+	roles   map[string]bool
 	out     *compiledProcesses // what the process being generated adds
 	root    *compiledProcesses // what every process adds
 	// done holds the criteria of the processes generated so far (nil while one is being generated)
@@ -314,6 +317,7 @@ func (w *stepWalker) walk(steps []Step, path, prefix string, inherited map[strin
 		}
 		seen[s.Name] = true
 		checkReferences(w.add, sp+".references", s.References)
+		checkResponsibilities(w.add, sp+".roles", s.Roles, w.roles)
 		for field, c := range map[string]map[string]bool{"pre": s.Pre, "done": s.Done} {
 			for k := range c {
 				w.refs = append(w.refs, conditionRef{fmt.Sprintf("%s.%s.%s", sp, field, k), k})
@@ -553,11 +557,13 @@ func (m *Methodology) checkProcessCycles(add func(path, format string, args ...a
 // actions it compiled to (none for a step of sub-steps).
 type StepInfo struct {
 	Step
-	Path    string
-	Entry   map[string]bool
-	Exit    map[string]bool
-	Planned []string
-	Steps   []StepInfo
+	// Effective are the roles in force for the step: its own, else those of the steps containing it.
+	Effective *Responsibilities
+	Path      string
+	Entry     map[string]bool
+	Exit      map[string]bool
+	Planned   []string
+	Steps     []StepInfo
 }
 
 // Leaves returns the steps that run something (no sub-steps), depth first.
@@ -582,13 +588,17 @@ func (c *Compiled) ProcessSteps(name string) []StepInfo {
 	for _, a := range c.processes.actions {
 		planned[a.Step] = append(planned[a.Step], a)
 	}
-	var build func(steps []Step, prefix string) []StepInfo
-	build = func(steps []Step, prefix string) []StepInfo {
+	var build func(steps []Step, prefix string, roles *Responsibilities) []StepInfo
+	build = func(steps []Step, prefix string, roles *Responsibilities) []StepInfo {
 		out := make([]StepInfo, 0, len(steps))
 		for _, s := range steps {
 			path := prefix + "/" + s.Name
 			cr := c.processes.criteria[path]
-			info := StepInfo{Step: s, Path: path, Entry: cr.entry, Exit: cr.done, Steps: build(s.Steps, path)}
+			eff := roles
+			if s.Roles != nil {
+				eff = s.Roles
+			}
+			info := StepInfo{Step: s, Effective: eff, Path: path, Entry: cr.entry, Exit: cr.done, Steps: build(s.Steps, path, eff)}
 			info.Step.Steps = nil
 			for i, a := range planned[path] {
 				info.Planned = append(info.Planned, a.Name)
@@ -600,7 +610,7 @@ func (c *Compiled) ProcessSteps(name string) []StepInfo {
 		}
 		return out
 	}
-	return build(p.Steps, name)
+	return build(p.Steps, name, nil)
 }
 
 // StepByPath returns the step of a path ("<process>/<step>/<sub-step>").

@@ -80,3 +80,29 @@ func TestParsePermission(t *testing.T) {
 		t.Fatal("expected error")
 	}
 }
+
+func TestStepRolesHeldInAUnitHoldBelowIt(t *testing.T) {
+	c, err := NewCasbin(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	step := Resource{Type: "step", Name: "delivery/build", Org: "TEAM-PAY", OrgChain: []string{"TEAM-PAY", "DEP-IT", "ORG-DEFAULT"},
+		Owner: "alice", Role: "developer", Accountable: "tech_lead"}
+	for _, tc := range []struct {
+		who     Principal
+		act     string
+		allowed bool
+	}{
+		{Principal{Subject: "bob", Roles: []string{"developer@DEP-IT"}}, "perform", true},      // held above the unit
+		{Principal{Subject: "bob", Roles: []string{"developer@TEAM-OPS"}}, "perform", false},   // held elsewhere
+		{Principal{Subject: "bob", Roles: []string{"developer"}}, "perform", true},             // unscoped
+		{Principal{Subject: "bob", Roles: []string{"tech_lead@TEAM-PAY"}}, "perform", false},   // another role
+		{Principal{Subject: "bob", Roles: []string{"tech_lead@TEAM-PAY"}}, "approve", true},    // accountable
+		{Principal{Subject: "alice", Roles: []string{"tech_lead@TEAM-PAY"}}, "approve", false}, // never on its own change
+	} {
+		ok, err := c.Authorize(context.Background(), Request{Subject: tc.who, Action: tc.act, Resource: step})
+		if err != nil || ok != tc.allowed {
+			t.Fatalf("%v %s: %v %v, want %v", tc.who.Roles, tc.act, ok, err, tc.allowed)
+		}
+	}
+}

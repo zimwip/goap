@@ -2,6 +2,7 @@ package engine_test
 
 import (
 	"context"
+	"errors"
 	"reflect"
 	"slices"
 	"strings"
@@ -237,7 +238,9 @@ func TestSDLCDelivery(t *testing.T) {
 // step, the analysis sub-steps done by actions or their alternatives, the design by the architect agent, the build,
 // then the release_train process nested as a sub-agent, and the application.
 func TestSDLCProcess(t *testing.T) {
-	ctx := devCtx
+	// the roles of the process's steps, held in the default unit (the one holding the change) or unscoped
+	ctx := authz.With(context.Background(), authz.Principal{Subject: "dev", Org: "acme",
+		Roles: []string{"contributor", "business_analyst@ORG-DEFAULT", "tech_lead"}})
 	e, g, base := sdlcSetup(t)
 	p, err := e.Start(ctx, engine.StartRequest{Methodology: "sdlc", Goal: "software_delivery", BaselineID: base,
 		Title: "Payment in 3 installments", Intent: "Allow payment in 3 installments with no fees"})
@@ -353,7 +356,17 @@ func TestSDLCProcess(t *testing.T) {
 	if p, err = e.Store.Get(ctx, p.ID); err != nil || p.Status != engine.StatusWaiting || p.Pending.Permission != "change:apply" || p.Pending.Action != "software_delivery/application" {
 		t.Fatalf("application must wait for an approver: %v %s %+v", err, p.Status, p.Pending)
 	}
-	if _, err = e.Approve(approverCtx, p.ID, true, ""); err != nil {
+	// the accountable role of the application step answers for it: a change_approver of the unit may approve the
+	// gate, without the approver role the change:apply permission asks for; never on its own change
+	if c := p.Pending.Context; c == nil || c.Roles == nil || c.Roles.Accountable != "change_approver" {
+		t.Fatalf("the application gate carries its roles: %+v", c)
+	}
+	own := authz.With(context.Background(), authz.Principal{Subject: "dev", Org: "acme", Roles: []string{"change_approver"}})
+	if _, err = e.Approve(own, p.ID, true, ""); !errors.Is(err, authz.ErrForbidden) {
+		t.Fatalf("an accountable role never approves its own change: %v", err)
+	}
+	accountable := authz.With(context.Background(), authz.Principal{Subject: "ca", Org: "acme", Roles: []string{"change_approver@ORG-DEFAULT"}})
+	if _, err = e.Approve(accountable, p.ID, true, ""); err != nil {
 		t.Fatal(err)
 	}
 	if p, err = e.Run(ctx, p.ID); err != nil || p.Status != engine.StatusCompleted {

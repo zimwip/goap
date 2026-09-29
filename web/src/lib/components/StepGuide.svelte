@@ -17,6 +17,14 @@
     {#if context.method}with the method <strong>{context.method}</strong>{/if}
     <span class="hint mono">{context.path}</span>
   </div>
+  {#if context.roles?.responsible || context.roles?.accountable}
+    <p class="roles">
+      {#if context.roles.responsible}Done by the <strong>{context.roles.responsible}</strong>{/if}
+      {#if context.roles.accountable}{context.roles.responsible ? ', ' : ''}answered for by the <strong>{context.roles.accountable}</strong>{/if}
+      {#if context.roles.consulted?.length} · consult: {context.roles.consulted.join(', ')}{/if}
+      {#if context.roles.informed?.length} · inform: {context.roles.informed.join(', ')}{/if}
+    </p>
+  {/if}
   {#if context.description}<p class="desc">{context.description}</p>{/if}
   {#if context.guidance}<div class="md">{@html renderMarkdown(context.guidance)}</div>{/if}
   {#if context.checklist?.length}

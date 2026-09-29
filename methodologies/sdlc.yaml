@@ -1,5 +1,5 @@
 name: sdlc
-version: 0.5.3
+version: 0.5.4
 description: >
   Software Development Life Cycle (SDLC) on the ALM repository: needs →
   requirements → functions → components → build artifacts → applications →
@@ -717,6 +717,20 @@ agents:
     planner: goap
     goals: [deliver]
 
+# Roles (ADR 0035 §2): the roles the processes and methods assign, RACI style. The methodology names roles, never
+# people: the organisation assigns them to users per unit ("developer@TEAM-PAY"), and a role held in a unit holds in
+# the units below it. The responsible role performs the human tasks of a step, the accountable role may approve its
+# gates (never on its own change).
+roles:
+  - {name: product_owner, description: Owns the need and accepts how a change is framed and analysed}
+  - {name: business_analyst, description: Frames the changes with their requesters and analyses them}
+  - {name: solution_architect, description: "Designs the components, interfaces, flows and data"}
+  - {name: tech_lead, description: Answers for the technical quality of a delivery; reviews it}
+  - {name: developer, description: Builds and tests the components}
+  - {name: release_manager, description: Plans and carries out releases and deployments}
+  - {name: service_owner, description: Answers for the service in operation}
+  - {name: change_approver, description: Approves the application of changes to the repository}
+
 # Methods (ADR 0035 §1): the documentary references of how a step capability is carried out in a context; each names
 # the agent that acts. A step names the capability (`method: design`); the applicable method with the highest priority
 # is chosen at execution, and its guidance and references reach its agent.
@@ -732,6 +746,7 @@ methods:
     references:
       - {title: Architecture standard, ref: "document-repository:sdlc/architecture-standard.md"}
     deliverables: [DesignDossier]
+    roles: {responsible: solution_architect, accountable: tech_lead, consulted: [business_analyst]}
     agent: architect
   - name: functional_design
     for: design
@@ -740,6 +755,7 @@ methods:
       No component is impacted: allocate the requirements to functions and write a short design note (what changes
       in behaviour, which functions realize it).
     deliverables: [DesignNote]
+    roles: {responsible: business_analyst, accountable: tech_lead}
     agent: designer
 
 # The route of a change, described as steps and sub-steps with the precision the methodology has for each (ADR 0034):
@@ -757,6 +773,7 @@ processes:
     steps:
       - name: framing
         description: Frame the change with its requester
+        roles: {responsible: business_analyst, accountable: product_owner}
         instructions: >
           Check with the requester that the intent states a concrete outcome, its scope (what it touches) and why it
           is needed; amend the intent of the change if it does not, then mark the step done.
@@ -771,6 +788,7 @@ processes:
           - {title: Software delivery guide, ref: "document-repository:sdlc/software-delivery-guide.md", section: Framing a change}
       - name: analysis
         description: Scope, impacts, requirements, traceability and test plan, once the change is framed
+        roles: {responsible: business_analyst, accountable: product_owner, consulted: [solution_architect]}
         pre: {"step:software_delivery/framing": true}
         steps:
           - name: scope
@@ -791,12 +809,15 @@ processes:
         method: design
       - name: build
         description: Build every component in scope, according to its technology (once the design is checked)
+        roles: {responsible: developer, accountable: tech_lead}
         action: build
       - name: release
         description: Plan, note, review and roll out the releases (entered once what the release train needs holds)
+        roles: {responsible: release_manager, accountable: service_owner, informed: [product_owner]}
         process: release_train
       - name: application
         description: Apply the change to the ALM repository once reviewed and rolled out
+        roles: {responsible: release_manager, accountable: change_approver, informed: [product_owner, service_owner]}
         action: apply_change
 
   - name: release_train
@@ -807,5 +828,8 @@ processes:
     steps:
       - {name: plan, action: plan_release}
       - {name: release_note, actions: [write_release_note, assemble_release_note]}
-      - {name: review, action: review}
-      - {name: rollout, description: "Deploy each release wave by wave, from dev to production", action: deploy}
+      - {name: review, action: review, roles: {responsible: tech_lead, accountable: service_owner}}
+      - name: rollout
+        description: Deploy each release wave by wave, from dev to production
+        action: deploy
+        roles: {responsible: release_manager, accountable: service_owner}

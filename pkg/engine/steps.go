@@ -119,6 +119,9 @@ func (s *StepContext) withMethod(me methodology.Method) *StepContext {
 	out.Checklist = append(slices.Clone(out.Checklist), me.Checklist...)
 	out.Deliverables = append(slices.Clone(out.Deliverables), me.Deliverables...)
 	out.References = append(slices.Clone(out.References), me.References...)
+	if me.Roles != nil {
+		out.Roles = me.Roles // the method is the more precise reference
+	}
 	return &out
 }
 
@@ -127,6 +130,9 @@ func (s *StepContext) withMethod(me methodology.Method) *StepContext {
 type StepContext struct {
 	Process string `json:"process"`
 	Path    string `json:"path"`
+	// Roles assign the step (ADR 0035 §2): the responsible role performs its tasks, the accountable role may approve
+	// its gates.
+	Roles *methodology.Responsibilities `json:"roles,omitempty"`
 	// Method is the method chosen to carry the step out, whose guidance and references are included.
 	Method       string                  `json:"method,omitempty"`
 	Name         string                  `json:"name"`
@@ -149,7 +155,7 @@ func stepContext(m *methodology.Compiled, p *Process, a methodology.Action) *Ste
 	}
 	process, _, _ := strings.Cut(s.Path, "/")
 	return &StepContext{Process: process, Path: s.Path, Name: s.Name, Description: s.Description, Guidance: s.Guidance,
-		Checklist: s.Checklist, Deliverables: s.Deliverables, References: s.References}
+		Checklist: s.Checklist, Deliverables: s.Deliverables, References: s.References, Roles: s.Effective}
 }
 
 // section is the step as the system prompt of an LLM action tells it ("" when there is none).
@@ -179,4 +185,22 @@ func (s *StepContext) section() string {
 		}
 	}
 	return b.String()
+}
+
+// stepAllowed reports whether who may act on the step of a context: "perform" (its responsible role) or "approve" (its
+// accountable role), in the unit holding the change (ADR 0035 §2). A step that assigns no such role leaves the
+// decision to the process's own permissions (true).
+func (e *Engine) stepAllowed(ctx context.Context, p *Process, who authz.Principal, sc *StepContext, act string) (bool, error) {
+	if e.Authz == nil || sc == nil || sc.Roles == nil {
+		return true, nil
+	}
+	role := sc.Roles.Responsible
+	if act == "approve" {
+		role = sc.Roles.Accountable
+	}
+	if role == "" {
+		return true, nil
+	}
+	return e.Authz.Authorize(ctx, authz.Request{Subject: who, Action: act, Resource: authz.Resource{Type: "step", ID: p.ID, Name: sc.Path,
+		Org: e.orgOf(p), Owner: p.Initiator.Subject, Role: sc.Roles.Responsible, Accountable: sc.Roles.Accountable}})
 }

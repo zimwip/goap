@@ -124,6 +124,11 @@ processes:
 processes:
   - name: x
     steps: [{name: s, action: do_a, pre: {"step:x/nope": true}}]`, `unknown condition "step:x/nope"`},
+		"undeclared role": {`
+roles: [{name: dev}]
+processes:
+  - name: x
+    steps: [{name: s, roles: {responsible: dev, accountable: boss}}]`, `unknown role "boss"`},
 		"reference without document": {`
 processes:
   - name: x

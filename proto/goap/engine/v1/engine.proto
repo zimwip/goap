@@ -159,6 +159,15 @@ message StepContext {
   repeated DocumentReference references = 8;
   // the method chosen to carry the step out (its guidance and references are included)
   string method = 9;
+  // the roles of the step: the responsible performs its tasks, the accountable may approve its gates
+  Responsibilities roles = 10;
+}
+
+message Responsibilities {
+  string responsible = 1;
+  string accountable = 2;
+  repeated string consulted = 3;
+  repeated string informed = 4;
 }
 
 // A reference document: "doc:<key>" (a document of the graph), "<mcp>:<path>" (a document repository) or a URL.
@@ -386,6 +395,8 @@ message StepProgress {
   repeated StepProgress steps = 15;
   // the method chosen for a step that names a capability
   string chosen = 16;
+  // the roles in force for the step
+  Responsibilities roles = 17;
 }
 
 message ListProcessesRequest {
