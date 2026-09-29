@@ -230,6 +230,30 @@
           <p class="hint">Create the draft to add the agents, actions, conditions, and goals.</p>
         {/if}
       </section>
+      {#if !d.isNew}
+        <section class="card" data-path="roles">
+          <div class="row head">
+            <h3 class="grow">Roles <span class="hint">{f.roles.length}</span></h3>
+            {#if !d.readonly}<button type="button" class="small" onclick={() => f.roles.push({ name: '', description: '' })}>+ Role</button>{/if}
+          </div>
+          <p class="hint">
+            The roles the processes and methods assign (responsible, accountable, consulted, informed). The methodology
+            names roles, never people: the organisation assigns them to users per unit (<code>developer@TEAM-PAY</code>), and a
+            role held in a unit holds in the units below it.
+          </p>
+          <fieldset class="plain" disabled={d.readonly}>
+            {#each f.roles as r, i (i)}
+              <div class="role-row" class:bad={d.bad(`roles[${i}]`)}>
+                <input type="text" class="mono" aria-label="Role name" placeholder="developer" bind:value={r.name} data-path="roles[{i}].name" />
+                <input type="text" aria-label="Role description" placeholder="What the role does" bind:value={r.description} />
+                {#if !d.readonly}<button type="button" class="small icon" aria-label="Remove the role" onclick={() => f.roles.splice(i, 1)}>✕</button>{/if}
+              </div>
+            {:else}
+              <p class="empty">No role declared.</p>
+            {/each}
+          </fieldset>
+        </section>
+      {/if}
             {:else if active === 'types'}
         <section class="card" id="m-types">
           <h3>Types</h3>
@@ -353,5 +377,11 @@
     color: var(--danger);
     font-weight: 700;
     font-size: 0.8rem;
+  }
+  .role-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 3fr) auto;
+    gap: 6px;
+    margin-bottom: 4px;
   }
 </style>

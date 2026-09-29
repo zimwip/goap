@@ -45,7 +45,9 @@ type StepProgress struct {
 	Target string `json:"target,omitempty"`
 	// Chosen is the method chosen for a step that names a capability.
 	Chosen string `json:"chosen,omitempty"`
-	State  string `json:"state"`
+	// Roles in force for the step (ADR 0035 §2).
+	Roles *methodology.Responsibilities `json:"roles,omitempty"`
+	State string                        `json:"state"`
 	// Missing are the entry conditions that do not hold ("name" when expected true, "!name" when expected false).
 	Missing []string `json:"missing,omitempty"`
 	// Runs counts the executions of the step's actions; ChildProcessIDs are the sub-agents it started.
@@ -101,7 +103,7 @@ func (e *Engine) Progress(ctx context.Context, id string) (*ProcessProgress, err
 
 func stepProgress(p *Process, s methodology.StepInfo) StepProgress {
 	sp := StepProgress{Path: s.Path, Name: s.Name, Description: s.Description, Method: s.Method(), Guidance: s.Guidance,
-		Checklist: s.Checklist, References: s.References}
+		Checklist: s.Checklist, References: s.References, Roles: s.Effective}
 	switch sp.Method {
 	case methodology.MethodAction:
 		sp.Target = s.Action

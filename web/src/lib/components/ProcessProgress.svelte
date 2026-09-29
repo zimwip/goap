@@ -59,7 +59,7 @@
       {#if s.target}<span class="hint mono">{s.method} {s.target}{s.chosen ? ` → ${s.chosen}` : ''}</span>{/if}
     </div>
     {#if s.state === 'waiting'}
-      <div class="note">Waiting for {waitingText(s)}.</div>
+      <div class="note">Waiting for {waitingText(s)}{s.roles?.responsible && s.waiting === 'input' ? ` (${s.roles.responsible})` : ''}{s.roles?.accountable && s.waiting === 'approval' ? ` — or the ${s.roles.accountable}` : ''}.</div>
     {:else if s.state === 'todo' && s.missing?.length}
       <div class="note">Needs: {#each s.missing as m, i (m)}{i ? ', ' : ''}<code>{m}</code>{/each}</div>
     {/if}

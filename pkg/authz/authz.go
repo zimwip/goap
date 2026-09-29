@@ -7,6 +7,7 @@ package authz
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 )
 
@@ -30,6 +31,37 @@ type Resource struct {
 	Namespace string `json:"namespace,omitempty"` // graph namespace of the object
 	Owner     string `json:"owner,omitempty"`     // subject who created / owns it
 	Name      string `json:"name,omitempty"`      // human name (methodology name, goal…)
+	// Role and Accountable are the responsible and accountable roles of a step of a process (ADR 0035 §2).
+	Role        string `json:"role,omitempty"`
+	Accountable string `json:"accountable,omitempty"`
+	// OrgChain is Org followed by its ancestor units (part_of), filled by the authorizer that knows the
+	// organisation: a role held in a unit holds in the units below it.
+	OrgChain []string `json:"orgChain,omitempty"`
+}
+
+// RoleScope separates a role from the unit it is held in: "developer@TEAM-PAY".
+const RoleScope = "@"
+
+// HasRoleIn reports whether the principal holds the role for a resource: unscoped ("developer"), or held in the
+// resource's unit or one of its ancestors ("developer@DEP-IT" holds for every unit below DEP-IT).
+func (p Principal) HasRoleIn(role string, res Resource) bool {
+	if role == "" {
+		return false
+	}
+	chain := res.OrgChain
+	if len(chain) == 0 && res.Org != "" {
+		chain = []string{res.Org}
+	}
+	for _, r := range p.Roles {
+		name, unit, scoped := strings.Cut(r, RoleScope)
+		if name != role {
+			continue
+		}
+		if !scoped || slices.Contains(chain, unit) {
+			return true
+		}
+	}
+	return false
 }
 
 // Request is an ABAC access request.

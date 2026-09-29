@@ -7,6 +7,7 @@
   import DraftHeader from './DraftHeader.svelte';
   import ItemMissing from './ItemMissing.svelte';
   import ReferencesEditor from './ReferencesEditor.svelte';
+  import ResponsibilitiesEditor from './ResponsibilitiesEditor.svelte';
   import { provideActions, useReveal } from '../../shell/workbench.svelte';
   import { walkSteps } from '../../methodologyForm';
   import { draftOf, draftActions, removeItemAction, syncTabUid, openItem } from './methodologyTabs';
@@ -119,6 +120,13 @@
           </div>
         </div>
         <ReferencesEditor bind:refs={item.references} path="{p}.references" bad={d.bad} readonly={d.readonly} />
+        <ResponsibilitiesEditor
+          bind:roles={item.roles}
+          declared={d.form.roles.map((r) => r.name).filter(Boolean)}
+          path="{p}.roles"
+          bad={d.bad}
+          hint="(when set, they replace the roles of the step)"
+        />
       </section>
     </fieldset>
     <p class="hint">

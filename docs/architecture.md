@@ -364,6 +364,16 @@ Default policies (compiled in `pkg/authz`; seeded as `Policy` nodes at the first
 | `hasRole(r.sub, "methodologist") && r.obj.Org == r.sub.Org` | `methodology` | `*` |
 | `hasRole(r.sub, "approver") && r.sub.Org == r.obj.Org && r.sub.Subject != r.obj.Owner` | `change` | `apply` |
 | `hasRole(r.sub, "release_manager") && r.sub.Org == r.obj.Org && r.sub.Subject != r.obj.Owner` | `release` | `deploy` |
+| `hasRoleIn(r.sub, r.obj.Role, r.obj)` | `step` | `perform` |
+| `hasRoleIn(r.sub, r.obj.Accountable, r.obj) && r.sub.Subject != r.obj.Owner` | `step` | `approve` |
+
+**Roles of a methodology** ([ADR 0035](adr/0035-methods-roles-operations-documents.md) §2): a methodology declares the
+roles its processes and methods assign, RACI style (`roles: {responsible, accountable, consulted, informed}` on a step,
+inherited by its sub-steps, or on a method). It names roles, never people: a user holds a role unscoped (`developer`)
+or in a unit (`developer@TEAM-PAY`, in its `roles`), and a role held in a unit holds in the units below it
+(`hasRoleIn` over `r.obj.OrgChain`, the unit holding the change and its ancestors, filled by the authorizer from
+`part_of`). The responsible role performs a step's human tasks (`step:perform`, checked on submit), the accountable role
+may approve its gates (`step:approve`), never on its own change.
 
 - There is no IAM service: who may do what is **graph data** ([ADR 0020](adr/0020-access-control.md)). A rule is a
   `Policy` node and a caller a `User` node (profile, roles, `member_of` a unit) of the `organisation` domain, changed

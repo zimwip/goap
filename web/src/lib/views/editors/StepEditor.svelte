@@ -7,6 +7,7 @@
   import RowTools from '../../components/RowTools.svelte';
   import PickList from './PickList.svelte';
   import ReferencesEditor from './ReferencesEditor.svelte';
+  import ResponsibilitiesEditor from './ResponsibilitiesEditor.svelte';
   import { STEP_METHODS, emptyStep, moveItem, stepConditionNames, type StepForm } from '../../methodologyForm';
   import type { Draft } from '../../stores/drafts.svelte';
 
@@ -174,8 +175,15 @@
         </div>
       {/if}
 
-      <details class="more" open={!!step.guidance || !!step.checklist.trim()}>
-        <summary>Guidance, checklist, deliverables</summary>
+      <details class="more" open={!!step.guidance || !!step.checklist.trim() || !!step.roles.responsible || !!step.roles.accountable}>
+        <summary>Roles, guidance, checklist, deliverables</summary>
+        <ResponsibilitiesEditor
+          bind:roles={step.roles}
+          declared={f.roles.map((r) => r.name).filter(Boolean)}
+          path="{path}.roles"
+          bad={d.bad}
+          hint="(empty: those of the step containing it; a method's roles replace them)"
+        />
         <div class="field">
           <label for="{step.key}-guid">Guidance <span class="opt">(markdown: what the step is for and how to go about it; shown to the person, given to the agent)</span></label>
           <textarea id="{step.key}-guid" rows="3" bind:value={step.guidance} data-path="{path}.guidance"></textarea>

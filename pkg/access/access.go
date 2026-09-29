@@ -26,6 +26,7 @@ const (
 	NodeTypeUser   = "organisation@User"
 	NodeTypePolicy = "organisation@Policy"
 	LinkMemberOf   = "organisation@member_of"
+	LinkPartOf     = "organisation@part_of"
 
 	// ResourcePolicy is the ABAC resource that guards changes to User and Policy nodes.
 	ResourcePolicy = "policy"
@@ -121,11 +122,13 @@ type Snapshot struct {
 	Policies []authz.Policy
 
 	users map[string]User
+	// parents maps a unit to the unit it is part of (organisation@part_of)
+	parents map[string]string
 }
 
 // BuildSnapshot reads the users and policies of a baseline graph.
 func BuildSnapshot(id domain.BaselineID, nodes []domain.Node, links []domain.Link) *Snapshot {
-	s := &Snapshot{Baseline: id, users: map[string]User{}}
+	s := &Snapshot{Baseline: id, users: map[string]User{}, parents: map[string]string{}}
 	byID := map[domain.NodeID]domain.Node{}
 	for _, n := range nodes {
 		byID[n.ID] = n
@@ -150,6 +153,9 @@ func BuildSnapshot(id domain.BaselineID, nodes []domain.Node, links []domain.Lin
 	}
 	for _, l := range links {
 		from, to := byID[l.From.ID], byID[l.To.ID]
+		if l.Type == LinkPartOf && from.Type == mcp.NodeTypeOrgUnit && to.Type == mcp.NodeTypeOrgUnit {
+			s.parents[from.Key] = to.Key
+		}
 		if l.Type == LinkMemberOf && from.Type == NodeTypeUser && to.Type == mcp.NodeTypeOrgUnit {
 			if u, ok := s.users[str(from.Properties, "subject")]; ok {
 				u.Unit = to.Key
@@ -159,6 +165,24 @@ func BuildSnapshot(id domain.BaselineID, nodes []domain.Node, links []domain.Lin
 	}
 	sort.Slice(s.Policies, func(i, j int) bool { return PolicyKey(s.Policies[i]) < PolicyKey(s.Policies[j]) })
 	return s
+}
+
+// Chain returns a unit followed by its ancestors (part_of), nearest first, ending with the default unit: where a role
+// held in a unit holds (design rule 3, ADR 0035 §2).
+func (s *Snapshot) Chain(unit string) []string {
+	out := []string{unit}
+	for u := unit; ; {
+		p, ok := s.parents[u]
+		if !ok || slices.Contains(out, p) {
+			break
+		}
+		out = append(out, p)
+		u = p
+	}
+	if !slices.Contains(out, domain.DefaultOrg) {
+		out = append(out, domain.DefaultOrg)
+	}
+	return out
 }
 
 // User returns the user of a subject.
@@ -295,6 +319,9 @@ func (a *Authorizer) Authorize(ctx context.Context, req authz.Request) (bool, er
 	c, snap := a.enforcer(ctx)
 	if snap != nil {
 		req.Subject = snap.Enrich(req.Subject)
+		if req.Resource.Org != "" && len(req.Resource.OrgChain) == 0 {
+			req.Resource.OrgChain = snap.Chain(req.Resource.Org)
+		}
 	}
 	if ok, err := a.floor.Authorize(ctx, req); err != nil || ok {
 		return ok, err

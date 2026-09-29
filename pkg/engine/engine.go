@@ -495,6 +495,13 @@ func (e *Engine) Submit(ctx context.Context, id string, items []ItemInput) (*Pro
 	if p.Status != StatusWaiting || p.Pending == nil || p.Pending.Kind != TaskInput {
 		return nil, fmt.Errorf("process %s has no pending human task: %w", id, ErrInvalidState)
 	}
+	// the task of a step is performed by the step's responsible role, in the unit holding the change (ADR 0035 §2)
+	if ok, err := e.stepAllowed(ctx, p, authz.From(ctx), p.Pending.Context, "perform"); err != nil {
+		return nil, err
+	} else if !ok {
+		return nil, fmt.Errorf("%q does not hold the role %s for step %s: %w", authz.From(ctx).Subject, p.Pending.Context.Roles.Responsible,
+			p.Pending.Context.Path, authz.ErrForbidden)
+	}
 	m, err := e.Methodologies.Methodology(ctx, p.Methodology)
 	if err != nil {
 		return nil, err
@@ -1053,6 +1060,12 @@ func (e *Engine) Approve(ctx context.Context, id string, approve bool, comment s
 	ok, err := e.allowed(ctx, p, approver, p.Pending.Permission)
 	if err != nil {
 		return nil, err
+	}
+	if !ok && p.Pending.Context != nil && p.Pending.Context.Roles != nil && p.Pending.Context.Roles.Accountable != "" {
+		// the accountable role of the step answers for it: it may approve its gates (ADR 0035 §2)
+		if ok, err = e.stepAllowed(ctx, p, approver, p.Pending.Context, "approve"); err != nil {
+			return nil, err
+		}
 	}
 	if !ok {
 		return nil, fmt.Errorf("%q lacks %s: %w", approver.Subject, p.Pending.Permission, authz.ErrForbidden)

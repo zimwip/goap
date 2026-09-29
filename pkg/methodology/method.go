@@ -30,6 +30,9 @@ type Method struct {
 	Deliverables []string    `yaml:"deliverables,omitempty" json:"deliverables,omitempty"`
 	References   []Reference `yaml:"references,omitempty" json:"references,omitempty"`
 
+	// Roles involved when the method is used (replacing those of the step, the method being more precise).
+	Roles *Responsibilities `yaml:"roles,omitempty" json:"roles,omitempty"`
+
 	// Agent is the actor: an agent of the methodology; Goal the goal it reaches (default: its only goal).
 	Agent string `yaml:"agent" json:"agent"`
 	Goal  string `yaml:"goal,omitempty" json:"goal,omitempty"`
@@ -48,7 +51,7 @@ type compiledMethods struct {
 }
 
 // compileMethods validates the methods: their names, capabilities, contexts and actors.
-func (m *Methodology) compileMethods(add func(path, format string, args ...any), agents map[string]Agent) compiledMethods {
+func (m *Methodology) compileMethods(add func(path, format string, args ...any), agents map[string]Agent, roles map[string]bool) compiledMethods {
 	out := compiledMethods{goals: map[string]Goal{}}
 	seen := map[string]bool{}
 	for i, me := range m.Methods {
@@ -66,6 +69,7 @@ func (m *Methodology) compileMethods(add func(path, format string, args ...any),
 			add(path+".for", "for names the capability the method provides: lowercase letters, digits, '-' or '_'")
 		}
 		checkReferences(add, path+".references", me.References)
+		checkResponsibilities(add, path+".roles", me.Roles, roles)
 		if me.When != "" {
 			d := condition.Definition{Name: me.GuardCondition(), Expr: me.When}
 			if _, err := condition.Compile([]condition.Definition{d}); err != nil {
@@ -173,3 +177,57 @@ func (c *Compiled) MethodByName(name string) (Method, bool) {
 
 // MethodGoal is the goal the agent of a valid method reaches ("" for an unknown method).
 func (c *Compiled) MethodGoal(name string) string { return c.methods.goals[name].Name }
+
+// Role is a role a methodology needs (ADR 0035 §2): the methodology names roles, never users or units; the
+// organisation assigns them to users, per unit ("developer@TEAM-PAY", held in the units below it too).
+type Role struct {
+	Name        string `yaml:"name" json:"name"`
+	Description string `yaml:"description,omitempty" json:"description,omitempty"`
+}
+
+// Responsibilities assign roles to a step or a method, RACI style: the responsible role carries it out (performs its
+// human tasks), the accountable role answers for it (may approve its gates, never on its own change), the consulted
+// and informed roles are involved.
+type Responsibilities struct {
+	Responsible string   `yaml:"responsible,omitempty" json:"responsible,omitempty"`
+	Accountable string   `yaml:"accountable,omitempty" json:"accountable,omitempty"`
+	Consulted   []string `yaml:"consulted,omitempty" json:"consulted,omitempty"`
+	Informed    []string `yaml:"informed,omitempty" json:"informed,omitempty"`
+}
+
+// compileRoles validates the declared roles and returns their names.
+func (m *Methodology) compileRoles(add func(path, format string, args ...any)) map[string]bool {
+	out := map[string]bool{}
+	for i, r := range m.Roles {
+		path := fmt.Sprintf("roles[%d].name", i)
+		switch {
+		case !nameRE.MatchString(r.Name):
+			add(path, "role name required: lowercase letters, digits, '-' or '_', starting with a letter")
+		case out[r.Name]:
+			add(path, "duplicate role %s", r.Name)
+		default:
+			out[r.Name] = true
+		}
+	}
+	return out
+}
+
+// checkResponsibilities reports the roles a step or a method names that the methodology does not declare.
+func checkResponsibilities(add func(path, format string, args ...any), path string, r *Responsibilities, roles map[string]bool) {
+	if r == nil {
+		return
+	}
+	check := func(field, role string) {
+		if role != "" && !roles[role] {
+			add(path+"."+field, "unknown role %q (declare it in roles)", role)
+		}
+	}
+	check("responsible", r.Responsible)
+	check("accountable", r.Accountable)
+	for _, x := range r.Consulted {
+		check("consulted", x)
+	}
+	for _, x := range r.Informed {
+		check("informed", x)
+	}
+}

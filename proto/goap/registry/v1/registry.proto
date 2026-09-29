@@ -293,6 +293,22 @@ message Methodology {
   repeated Process processes = 18;
   // how a step capability is carried out per context, each naming the agent that acts (ADR 0035 §1)
   repeated Method methods = 19;
+  // the roles the processes and methods assign (ADR 0035 §2)
+  repeated Role roles = 20;
+}
+
+// A role a methodology needs; the organisation assigns it to users per unit ("developer@TEAM-PAY").
+message Role {
+  string name = 1;
+  string description = 2;
+}
+
+// Roles assigned to a step or a method, RACI style.
+message Responsibilities {
+  string responsible = 1;
+  string accountable = 2;
+  repeated string consulted = 3;
+  repeated string informed = 4;
 }
 
 // A method: the documentary reference of how a capability is carried out in a context, and the agent that acts.
@@ -311,6 +327,8 @@ message Method {
   // the actor: an agent of the methodology, and the goal it reaches (default: its only goal)
   string agent = 10;
   string goal = 11;
+  // the roles involved when the method is used (replacing those of the step)
+  Responsibilities roles = 12;
 }
 
 // A process: the steps that reach an objective, run by an agent of its name towards a goal of its name (ADR 0034).
@@ -362,6 +380,8 @@ message Step {
   repeated string deliverables = 17;
   // the capability the step needs done, provided by methods (ADR 0035 §1)
   string method = 18;
+  // the roles assigned to the step (its sub-steps inherit them)
+  Responsibilities roles = 19;
 }
 
 message GoalSummary {

@@ -42,6 +42,8 @@ type Methodology struct {
 	// Methods are the documentary references of how a step capability is carried out in a context, each naming the
 	// agent that acts (ADR 0035 §1).
 	Methods []Method `yaml:"methods,omitempty" json:"methods,omitempty"`
+	// Roles are the roles the processes and methods assign (ADR 0035 §2).
+	Roles []Role `yaml:"roles,omitempty" json:"roles,omitempty"`
 	// Types resolves the qualified type references of the methodology (the type catalogue, set by Resolve). Nil: the
 	// references are only checked for their form.
 	Types TypeSet `yaml:"-" json:"-"`
@@ -674,8 +676,9 @@ func (m *Methodology) compile() (*Compiled, Issues) {
 	if len(m.Agents) == 0 && len(m.Goals) > 0 {
 		agents[DefaultAgent] = Agent{Name: DefaultAgent, Description: m.Description, Planner: PlannerGOAP}
 	}
-	meths := m.compileMethods(add, agents)
-	procs := m.compileProcesses(add, actions, known, agents, meths)
+	roles := m.compileRoles(add)
+	meths := m.compileMethods(add, agents, roles)
+	procs := m.compileProcesses(add, actions, known, agents, meths, roles)
 	defs = append(defs, procs.conditions...)
 	for _, a := range procs.actions {
 		actions[a.Name] = a

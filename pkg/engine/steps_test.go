@@ -2,9 +2,11 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
+	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/methodology"
 )
 
@@ -25,6 +27,10 @@ goals:
   - {name: check_done, pre: {checked: true}}
 agents:
   - {name: checker, actions: [check], goals: [check_done]}
+roles:
+  - {name: writer, description: Writes the notes}
+  - {name: reviewer}
+  - {name: signer}
 methods:
   - name: peer_check
     for: verification
@@ -37,13 +43,14 @@ methods:
 processes:
   - name: sign_off
     steps:
-      - {name: sign, instructions: Sign the delivery off}
+      - {name: sign, instructions: Sign the delivery off, roles: {responsible: signer}}
   - name: delivery
     description: Deliver the change
     steps:
       - {name: approve, process: sign_off, pre: {checked: true}}
       - {name: verify, method: verification, pre: {noted: true}}
       - name: prepare
+        roles: {responsible: writer, accountable: reviewer}
         steps:
           - {name: note, action: write_note}
 `
@@ -94,7 +101,17 @@ func TestProcessStepsAndNestedProcesses(t *testing.T) {
 	if v := findStep(pr.Steps, "delivery/verify"); len(v.Missing) != 1 || v.Missing[0] != "noted" {
 		t.Fatalf("the verify step misses the note: %+v", v)
 	}
-	if _, err := e.Submit(ctx, p.ID, []ItemInput{{Kind: "artifact", Type: "note"}}); err != nil {
+	// the task of a step is performed by its responsible role (inherited from the phase), held in the unit of the
+	// change or above it
+	if c := p.Pending.Context; c.Roles == nil || c.Roles.Responsible != "writer" || c.Roles.Accountable != "reviewer" {
+		t.Fatalf("the note step inherits the roles of its phase: %+v", c.Roles)
+	}
+	outsider := authz.With(ctx, authz.Principal{Subject: "o", Roles: []string{"contributor", "writer@TEAM-OTHER"}})
+	if _, err := e.Submit(outsider, p.ID, []ItemInput{{Kind: "artifact", Type: "note"}}); !errors.Is(err, authz.ErrForbidden) {
+		t.Fatalf("a person without the responsible role here may not perform the step: %v", err)
+	}
+	writer := authz.With(ctx, authz.Principal{Subject: "w", Roles: []string{"writer@ORG-DEFAULT"}})
+	if _, err := e.Submit(writer, p.ID, []ItemInput{{Kind: "artifact", Type: "note"}}); err != nil {
 		t.Fatal(err)
 	}
 	p, _ = e.Run(ctx, p.ID)
@@ -120,7 +137,7 @@ func TestProcessStepsAndNestedProcesses(t *testing.T) {
 	if checker.Agent != "checker" || checker.Goal != "check_done" || checker.ChangeID != p.ChangeID || checker.Pending == nil || checker.Pending.Action != "check" {
 		t.Fatalf("unexpected checker %+v", checker)
 	}
-	if _, err := e.Submit(ctx, checker.ID, []ItemInput{{Kind: "artifact", Type: "check"}}); err != nil {
+	if _, err := e.Submit(ctx, checker.ID, []ItemInput{{Kind: "artifact", Type: "check"}}); err != nil { // the method assigns no role
 		t.Fatal(err)
 	}
 	e.schedule(checker.ID)
@@ -134,7 +151,7 @@ func TestProcessStepsAndNestedProcesses(t *testing.T) {
 	if signer.Agent != "sign_off" || signer.Pending == nil || signer.Pending.Action != "sign_off/sign" || signer.Pending.Instructions != "Sign the delivery off" {
 		t.Fatalf("unexpected nested process %+v", signer)
 	}
-	if _, err := e.Submit(ctx, signer.ID, nil); err != nil {
+	if _, err := e.Submit(authz.With(ctx, authz.Principal{Subject: "s", Roles: []string{"signer"}}), signer.ID, nil); err != nil {
 		t.Fatal(err)
 	}
 	e.schedule(signer.ID)

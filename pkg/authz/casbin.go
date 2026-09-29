@@ -65,6 +65,10 @@ var DefaultPolicies = []Policy{
 	{Rule: `hasRole(r.sub, "approver") && r.sub.Org == r.obj.Org && r.sub.Subject != r.obj.Owner`, Resource: "change", Action: "apply", Effect: "allow"},
 	// production deployments: a release manager of the organization, never on its own change
 	{Rule: `hasRole(r.sub, "release_manager") && r.sub.Org == r.obj.Org && r.sub.Subject != r.obj.Owner`, Resource: "release", Action: "deploy", Effect: "allow"},
+	// steps of a process (ADR 0035 §2): whoever holds the responsible role in the unit holding the change (or above
+	// it) carries them out; whoever holds the accountable role approves them, never on its own change
+	{Rule: `hasRoleIn(r.sub, r.obj.Role, r.obj)`, Resource: "step", Action: "perform", Effect: "allow"},
+	{Rule: `hasRoleIn(r.sub, r.obj.Accountable, r.obj) && r.sub.Subject != r.obj.Owner`, Resource: "step", Action: "approve", Effect: "allow"},
 }
 
 // FloorPolicies are the rules that hold whatever the stored policies say, so that a faulty
@@ -141,6 +145,15 @@ func newCasbin(adapter persist.Adapter) (*Casbin, error) {
 			}
 		}
 		return false, nil
+	})
+	e.AddFunction("hasRoleIn", func(args ...any) (any, error) {
+		if len(args) != 3 {
+			return false, fmt.Errorf("hasRoleIn(sub, role, obj)")
+		}
+		p, _ := args[0].(Principal)
+		role, _ := args[1].(string)
+		res, _ := args[2].(Resource)
+		return p.HasRoleIn(role, res), nil
 	})
 	e.AddFunction("isAnonymous", func(args ...any) (any, error) {
 		p, _ := args[0].(Principal)
