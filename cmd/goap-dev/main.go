@@ -69,6 +69,14 @@ func main() {
 	defer st.close()
 	g := graph.New(st.graph)
 	g.Caller = graphsvc.Caller // the principal behind each event of the impact logs (ADR 0029)
+	// baselines written whole before they were stored as deltas are compacted, once, in the background (ADR 0032)
+	go func() {
+		if n, err := g.CompactBaselines(ctx); err != nil {
+			log.Error("compact baselines", "err", err)
+		} else if n > 0 {
+			log.Info("baselines compacted", "rewritten", n)
+		}
+	}()
 	directory := &access.Directory{Graph: g}
 	authorizer, err := access.NewAuthorizer(directory)
 	if err != nil {
