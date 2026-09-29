@@ -500,6 +500,9 @@ func (g *Graph) AddItems(ctx context.Context, id domain.ChangeID, items []domain
 			if it.Kind == domain.KindFlow {
 				return fmt.Errorf("flow events are recorded by OpenFlow, AdoptFlow and DiscardFlow: %w", ErrInvalid)
 			}
+			if it.Kind == domain.KindDecisionPoint {
+				return fmt.Errorf("decision points are recorded by OpenDecision, RuleDecision, AnswerQuestion and RatifyDecision: %w", ErrInvalid)
+			}
 			if it.Flow != batchFlow {
 				return fmt.Errorf("the items of a batch belong to one flow: %w", ErrInvalid)
 			}
@@ -557,9 +560,13 @@ func (g *Graph) BlackboardIn(ctx context.Context, id domain.ChangeID, flow strin
 		if err != nil {
 			return err
 		}
+		// what the view of a flow does not carry: the options and the decision points of the change (ADR 0009)
+		now := g.now()
+		options, active, points := c.Options(), c.ActiveOption(), c.DecisionPointsAt(now)
 		c = c.View(flow)
 		c.Nodes = nodes
-		bb = domain.Blackboard{Change: c, Nodes: map[domain.NodeRef]domain.NodeView{}, Neighbors: map[domain.NodeRef]domain.Node{}}
+		bb = domain.Blackboard{Change: c, Nodes: map[domain.NodeRef]domain.NodeView{}, Neighbors: map[domain.NodeRef]domain.Node{},
+			Options: options, ActiveOption: active, DecisionPoints: points, At: now}
 		ix, err := g.typesAt(ctx, tx, c.BaselineID)
 		if err != nil {
 			return err

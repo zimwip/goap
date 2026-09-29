@@ -20,6 +20,8 @@ func (g *Graph) Apply(ctx context.Context, id domain.ChangeID, baselineName stri
 			return err
 		} else if of := openFlows(c); len(of) > 0 {
 			return fmt.Errorf("change %s has an open flow (%s): adopt or discard it first: %w", id, of[0].ID, ErrConflict)
+		} else if pd := pendingDecisions(c, g.now()); len(pd) > 0 {
+			return fmt.Errorf("change %s has a pending decision point (%q): decide it first: %w", id, pd[0].Question, ErrConflict)
 		}
 		if open, err := openSubChanges(ctx, tx, id); err != nil {
 			return err
