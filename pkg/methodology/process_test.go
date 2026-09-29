@@ -81,9 +81,14 @@ processes:
 		t.Fatalf("an agent step is entered by its own conditions and done by the agent's goal: %+v", agentic)
 	}
 	manual, _ := c.Action("flow/manual")
-	if manual.Kind != KindHuman || !strings.HasPrefix(manual.Instructions, "Sign off") || !strings.Contains(manual.Instructions, "Checklist (doc:CHK-1), 2") ||
-		!manual.Effects[StepCondition("flow/manual")] || len(manual.Pre) != 0 {
-		t.Fatalf("a manual step is a human task with its references, done once submitted: %+v", manual)
+	if manual.Kind != KindHuman || manual.Instructions != "Sign off" || !manual.Effects[StepCondition("flow/manual")] || len(manual.Pre) != 0 {
+		t.Fatalf("a manual step is a human task, done once submitted: %+v", manual)
+	}
+	if info, ok := c.StepByPath("flow/manual"); !ok || len(info.References) != 1 || info.References[0].String() != "Checklist (doc:CHK-1), 2" || info.Planned[0] != "flow/manual" {
+		t.Fatalf("the compiled step keeps its references: %+v", info)
+	}
+	if info, _ := c.StepByPath("flow/phase"); len(info.Steps) != 3 || !info.Exit["b"] || info.Entry["c"] {
+		t.Fatalf("a phase has its sub-steps, entry and exit: %+v", info)
 	}
 	g, ok := c.Goal("flow")
 	if !ok || !g.Pre[StepCondition("flow/manual")] || !g.Pre["c"] {

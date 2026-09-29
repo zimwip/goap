@@ -56,6 +56,12 @@ type Step struct {
 	Instructions string `yaml:"instructions,omitempty" json:"instructions,omitempty"`
 	// References are the reference documents that describe the step.
 	References []Reference `yaml:"references,omitempty" json:"references,omitempty"`
+	// Guidance (markdown) tells whoever does the step, person or agent, what it is for and how to go about it; the
+	// Checklist lists what a person checks before marking it done; Deliverables name what it produces (document
+	// types, ADR 0035 §5).
+	Guidance     string   `yaml:"guidance,omitempty" json:"guidance,omitempty"`
+	Checklist    []string `yaml:"checklist,omitempty" json:"checklist,omitempty"`
+	Deliverables []string `yaml:"deliverables,omitempty" json:"deliverables,omitempty"`
 	// Pre are the entry conditions of the step (and of its sub-steps). A condition "step:<path>" is true once the
 	// step of that path, done once it has run, has run.
 	Pre map[string]bool `yaml:"pre,omitempty" json:"pre,omitempty"`
@@ -137,12 +143,16 @@ type compiledProcesses struct {
 	goals      []Goal
 	agents     []Agent
 	conditions []condition.Definition
+	// criteria are the entry and exit criteria of every step, by path
+	criteria map[string]stepCriteria
 }
+
+type stepCriteria struct{ entry, done map[string]bool }
 
 // compileProcesses validates the processes and generates what runs them. actions are the compiled actions (effects
 // include the expectations), known the condition names.
 func (m *Methodology) compileProcesses(add func(path, format string, args ...any), actions map[string]Action, known map[string]bool, agents map[string]Agent) compiledProcesses {
-	var out compiledProcesses
+	out := compiledProcesses{criteria: map[string]stepCriteria{}}
 	names := map[string]bool{}
 	for i, p := range m.Processes {
 		path := fmt.Sprintf("processes[%d]", i)
@@ -308,7 +318,9 @@ func (w *stepWalker) walk(steps []Step, path, prefix string, inherited map[strin
 			need = map[string]bool{}
 		}
 		w.merge(sp+".pre", need, s.Pre)
-		w.merge(sp+".done", all, w.step(s, sp, prefix+"/"+s.Name, need))
+		d := w.step(s, sp, prefix+"/"+s.Name, need)
+		w.root.criteria[prefix+"/"+s.Name] = stepCriteria{entry: need, done: d}
+		w.merge(sp+".done", all, d)
 	}
 	return all
 }
@@ -428,13 +440,6 @@ func (w *stepWalker) step(s Step, sp, path string, need map[string]bool) map[str
 		if gen.Instructions == "" {
 			gen.Instructions = s.Description
 		}
-		if len(s.References) > 0 {
-			refs := make([]string, len(s.References))
-			for i, r := range s.References {
-				refs[i] = "- " + r.String()
-			}
-			gen.Instructions = strings.TrimSpace(gen.Instructions + "\n\nReferences:\n" + strings.Join(refs, "\n"))
-		}
 		if gen.Description == "" {
 			gen.Description = "Step " + path
 		}
@@ -522,4 +527,76 @@ func (m *Methodology) checkProcessCycles(add func(path, format string, args ...a
 		}
 	}
 	return found
+}
+
+// StepInfo is a step of a compiled process: its definition, its path, what it needs and makes true, and the planned
+// actions it compiled to (none for a step of sub-steps).
+type StepInfo struct {
+	Step
+	Path    string
+	Entry   map[string]bool
+	Exit    map[string]bool
+	Planned []string
+	Steps   []StepInfo
+}
+
+// Leaves returns the steps that run something (no sub-steps), depth first.
+func (s StepInfo) Leaves() []StepInfo {
+	if len(s.Steps) == 0 {
+		return []StepInfo{s}
+	}
+	var out []StepInfo
+	for _, c := range s.Steps {
+		out = append(out, c.Leaves()...)
+	}
+	return out
+}
+
+// ProcessSteps returns the compiled step tree of a process (nil when the methodology has no such process).
+func (c *Compiled) ProcessSteps(name string) []StepInfo {
+	p, ok := c.ProcessByName(name)
+	if !ok {
+		return nil
+	}
+	planned := map[string][]Action{}
+	for _, a := range c.processes.actions {
+		planned[a.Step] = append(planned[a.Step], a)
+	}
+	var build func(steps []Step, prefix string) []StepInfo
+	build = func(steps []Step, prefix string) []StepInfo {
+		out := make([]StepInfo, 0, len(steps))
+		for _, s := range steps {
+			path := prefix + "/" + s.Name
+			cr := c.processes.criteria[path]
+			info := StepInfo{Step: s, Path: path, Entry: cr.entry, Exit: cr.done, Steps: build(s.Steps, path)}
+			info.Step.Steps = nil
+			for i, a := range planned[path] {
+				info.Planned = append(info.Planned, a.Name)
+				if i == 0 {
+					info.Entry = a.Pre // with the preconditions of what it runs
+				}
+			}
+			out = append(out, info)
+		}
+		return out
+	}
+	return build(p.Steps, name)
+}
+
+// StepByPath returns the step of a path ("<process>/<step>/<sub-step>").
+func (c *Compiled) StepByPath(path string) (StepInfo, bool) {
+	process, _, _ := strings.Cut(path, "/")
+	var find func([]StepInfo) (StepInfo, bool)
+	find = func(steps []StepInfo) (StepInfo, bool) {
+		for _, s := range steps {
+			if s.Path == path {
+				return s, true
+			}
+			if strings.HasPrefix(path, s.Path+"/") {
+				return find(s.Steps)
+			}
+		}
+		return StepInfo{}, false
+	}
+	return find(c.ProcessSteps(process))
 }

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import StepGuide from './StepGuide.svelte';
   import { engine, errorMessage, type Process } from '../api';
 
   let { process, ondecided }: { process: Process; ondecided: (p: Process) => void } = $props();
@@ -26,6 +27,7 @@
 
 <section class="card approval">
   <h3>Approval required</h3>
+  {#if process.pending?.context}<StepGuide context={process.pending.context} />{/if}
   <p>
     Action <code>{task?.action}</code> requires permission <code>{task?.permission}</code>, which
     the process initiator does not have. An authorized person must approve it.

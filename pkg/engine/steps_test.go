@@ -70,6 +70,21 @@ func TestProcessStepsAndNestedProcesses(t *testing.T) {
 	if p.Status != StatusWaiting || p.Pending.Kind != TaskInput || p.Pending.Action != "delivery/prepare/note" {
 		t.Fatalf("expected the note step, got %s %+v %s", p.Status, p.Pending, p.Error)
 	}
+	if c := p.Pending.Context; c == nil || c.Path != "delivery/prepare/note" || c.Process != "delivery" {
+		t.Fatalf("a task of a step carries the step: %+v", c)
+	}
+	pr, err := e.Progress(ctx, p.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	states := progressStates(pr.Steps)
+	if states["delivery/prepare"] != StepWaiting || states["delivery/prepare/note"] != StepWaiting || states["delivery/verify"] != StepTodo ||
+		states["delivery/approve"] != StepTodo || pr.Done != 0 || pr.Total != 3 {
+		t.Fatalf("progress at the start: %v %d/%d", states, pr.Done, pr.Total)
+	}
+	if v := findStep(pr.Steps, "delivery/verify"); len(v.Missing) != 1 || v.Missing[0] != "noted" {
+		t.Fatalf("the verify step misses the note: %+v", v)
+	}
 	if _, err := e.Submit(ctx, p.ID, []ItemInput{{Kind: "artifact", Type: "note"}}); err != nil {
 		t.Fatal(err)
 	}
@@ -78,7 +93,13 @@ func TestProcessStepsAndNestedProcesses(t *testing.T) {
 	if p.Status != StatusWaiting || p.Pending.Kind != TaskAgent || p.Pending.Action != "delivery/verify" {
 		t.Fatalf("expected the agent step, got %s %+v %s", p.Status, p.Pending, p.Error)
 	}
+	if st := progressStates(mustProgress(t, e, p.ID).Steps); st["delivery/prepare/note"] != StepDone || st["delivery/verify"] != StepActive {
+		t.Fatalf("progress with the checker at work: %v", st)
+	}
 	checker, _ := e.Store.Get(ctx, p.Pending.ChildProcessID)
+	if checker.Step == nil || checker.Step.Path != "delivery/verify" || checker.Pending.Context == nil || checker.Pending.Context.Path != "delivery/verify" {
+		t.Fatalf("the sub-agent of a step carries the step to its tasks: %+v %+v", checker.Step, checker.Pending)
+	}
 	if checker.Agent != "checker" || checker.Goal != "check_done" || checker.ChangeID != p.ChangeID || checker.Pending == nil || checker.Pending.Action != "check" {
 		t.Fatalf("unexpected checker %+v", checker)
 	}
@@ -105,6 +126,9 @@ func TestProcessStepsAndNestedProcesses(t *testing.T) {
 	if p.Status != StatusCompleted {
 		t.Fatalf("delivery not completed: %s %+v %s", p.Status, p.Pending, p.Error)
 	}
+	if pr := mustProgress(t, e, p.ID); pr.Done != pr.Total || progressStates(pr.Steps)["delivery/prepare"] != StepDone {
+		t.Fatalf("progress at the end: %v %d/%d", progressStates(pr.Steps), pr.Done, pr.Total)
+	}
 	var steps []string
 	for _, s := range p.Steps {
 		if len(steps) == 0 || steps[len(steps)-1] != s.Action { // a step waiting for its sub-agent runs again once it has ended
@@ -125,4 +149,36 @@ func TestProcessStepsAndNestedProcesses(t *testing.T) {
 	if done["delivery/prepare/note"] || !done["sign_off/sign"] {
 		t.Fatalf("only a manual step records step_done when submitted: %v", done)
 	}
+}
+
+func mustProgress(t *testing.T, e *Engine, id string) *ProcessProgress {
+	t.Helper()
+	pr, err := e.Progress(context.Background(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return pr
+}
+
+func progressStates(steps []StepProgress) map[string]string {
+	out := map[string]string{}
+	for _, s := range steps {
+		out[s.Path] = s.State
+		for k, v := range progressStates(s.Steps) {
+			out[k] = v
+		}
+	}
+	return out
+}
+
+func findStep(steps []StepProgress, path string) StepProgress {
+	for _, s := range steps {
+		if s.Path == path {
+			return s
+		}
+		if f := findStep(s.Steps, path); f.Path != "" {
+			return f
+		}
+	}
+	return StepProgress{}
 }

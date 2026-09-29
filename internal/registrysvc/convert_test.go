@@ -27,7 +27,7 @@ func TestProcessesRoundTripThroughPB(t *testing.T) {
 		References: []methodology.Reference{{Title: "Delivery guide", Ref: "document-repository:procedures/delivery.md", Section: "§2"}}, Steps: []methodology.Step{
 			{Name: "phase", Steps: []methodology.Step{{Name: "a", Action: "do", Pre: map[string]bool{"x": true}}, {Name: "b", Agent: "ag", Goal: "g", References: []methodology.Reference{{Ref: "doc:SAD-1"}}}}},
 			{Name: "nested", Process: "other/p", Done: map[string]bool{"y": true}},
-			{Name: "sign", Instructions: "sign it"},
+			{Name: "sign", Instructions: "sign it", Guidance: "how", Checklist: []string{"one"}, Deliverables: []string{"Report"}},
 			{Name: "alt", Actions: []string{"x", "y"}},
 		}}}}
 	out := FromPB(ToPB(Record{Methodology: in}))

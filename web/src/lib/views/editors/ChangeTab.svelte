@@ -32,6 +32,7 @@
   import { refreshChanges, refreshBaselines } from '../../stores/catalog.svelte';
   import { namespaceOf } from '../../namespace';
   import { processes } from '../../stores/live.svelte';
+  import ProcessProgress from '../../components/ProcessProgress.svelte';
   import FlowGraph from '../../components/FlowGraph.svelte';
   import FlowActions from '../../components/FlowActions.svelte';
   import FlowBranchInfo from '../../components/FlowBranchInfo.svelte';
@@ -596,6 +597,9 @@
             </dd>
           {/if}
         </dl>
+        {#each related.filter((p) => !p.parentId) as p (p.id)}
+          <ProcessProgress processId={p.id ?? ''} onopen={(id) => openTab({ kind: 'run', params: { id } })} />
+        {/each}
 
         {#if ch.status === 'merge_pending'}
           <div class="alert warn" style="margin: 0.75rem 0">

@@ -1,5 +1,5 @@
 name: sdlc
-version: 0.5.1
+version: 0.5.2
 description: >
   Software Development Life Cycle (SDLC) on the ALM repository: needs →
   requirements → functions → components → build artifacts → applications →
@@ -730,6 +730,13 @@ processes:
         instructions: >
           Check with the requester that the intent states a concrete outcome, its scope (what it touches) and why it
           is needed; amend the intent of the change if it does not, then mark the step done.
+        guidance: >
+          A well-framed change can be analysed without going back to the requester: the outcome is observable, the
+          scope names the applications or requirements concerned, and the reason says what happens if nothing is done.
+        checklist:
+          - The outcome is concrete and observable
+          - The scope names what the change touches
+          - The reason for the change is stated
         references:
           - {title: Software delivery guide, ref: "document-repository:sdlc/software-delivery-guide.md", section: Framing a change}
       - name: analysis

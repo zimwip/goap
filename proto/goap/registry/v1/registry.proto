@@ -336,6 +336,10 @@ message Step {
   repeated string actions = 13;
   // the reference documents that describe the step
   repeated Reference references = 14;
+  // what the step is for and how to go about it (markdown), what a person checks, what it produces
+  string guidance = 15;
+  repeated string checklist = 16;
+  repeated string deliverables = 17;
 }
 
 message GoalSummary {

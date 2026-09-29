@@ -1,4 +1,5 @@
 <script lang="ts">
+  import StepGuide from './StepGuide.svelte';
   import {
     engine,
     graph,
@@ -248,7 +249,8 @@
   <div class="row">
     <h3 class="grow" style="margin: 0">Human task: <code>{action}</code></h3>
   </div>
-  {#if task?.description}<p class="desc">{task.description}</p>{/if}
+  {#if task?.context}<StepGuide context={task.context} />{/if}
+  {#if task?.description && task.description !== task.context?.description}<p class="desc">{task.description}</p>{/if}
   {#if task?.instructions}<p class="instructions">{task.instructions}</p>{/if}
 
   {#if loadError}<div class="alert">{loadError}</div>{/if}

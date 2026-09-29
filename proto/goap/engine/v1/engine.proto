@@ -22,6 +22,8 @@ service EngineService {
   // Answers a blackboard inconsistency found before an action: relaunch the proposed step or ignore.
   rpc ResolveBoard(ResolveBoardRequest) returns (ResolveBoardResponse);
   rpc GetProcess(GetProcessRequest) returns (GetProcessResponse);
+  // Where a run stands in the steps of the process its agent runs (ADR 0035 §3).
+  rpc GetProcessProgress(GetProcessProgressRequest) returns (GetProcessProgressResponse);
   rpc ListProcesses(ListProcessesRequest) returns (ListProcessesResponse);
   // Binds an unbound process (ADR 0031, process_id with no change) to a change: an existing one
   // (change_id) or a new one, defaulted the same way StartProcess defaults one.
@@ -142,6 +144,26 @@ message HumanTask {
   // kind "input": qualified node types (<namespace>@<NodeType>) the task may create or
   // pick to edit (empty: every type of the change's namespace)
   repeated string node_types = 11;
+  // the step of a process the task belongs to: what to do and how (ADR 0034, ADR 0035 §2)
+  StepContext context = 12;
+}
+
+message StepContext {
+  string process = 1;
+  string path = 2;
+  string name = 3;
+  string description = 4;
+  string guidance = 5;
+  repeated string checklist = 6;
+  repeated string deliverables = 7;
+  repeated DocumentReference references = 8;
+}
+
+// A reference document: "doc:<key>" (a document of the graph), "<mcp>:<path>" (a document repository) or a URL.
+message DocumentReference {
+  string title = 1;
+  string ref = 2;
+  string section = 3;
 }
 
 message BoardIssue {
@@ -315,6 +337,51 @@ message GetProcessRequest {
 
 message GetProcessResponse {
   Process process = 1;
+}
+
+message GetProcessProgressRequest {
+  string id = 1;
+}
+
+message GetProcessProgressResponse {
+  ProcessProgress progress = 1;
+}
+
+message ProcessProgress {
+  string process_id = 1;
+  string methodology = 2;
+  // the process the run follows
+  string process = 3;
+  string description = 4;
+  string status = 5;
+  string error = 6;
+  repeated StepProgress steps = 7;
+  // steps that run something (no sub-steps): done or skipped, out of total
+  int32 done = 8;
+  int32 total = 9;
+}
+
+message StepProgress {
+  string path = 1;
+  string name = 2;
+  string description = 3;
+  // steps | action | agent | process | manual
+  string method = 4;
+  // what it runs: action(s), agent (→ goal), process
+  string target = 5;
+  // done | skipped | active | waiting | ready | todo | blocked
+  string state = 6;
+  // entry conditions that do not hold ("!name": expected false)
+  repeated string missing = 7;
+  int32 runs = 8;
+  repeated string child_process_ids = 9;
+  // waiting: the kind of the task (input, approval) and the permission an approval needs
+  string waiting = 10;
+  string permission = 11;
+  string guidance = 12;
+  repeated string checklist = 13;
+  repeated DocumentReference references = 14;
+  repeated StepProgress steps = 15;
 }
 
 message ListProcessesRequest {

@@ -19,6 +19,7 @@ import (
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/engine"
+	"github.com/zimwip/goap/pkg/methodology"
 )
 
 // Handler implements enginev1connect.EngineServiceHandler. Processes run in
@@ -252,6 +253,51 @@ func (h *Handler) GetProcess(ctx context.Context, r *connect.Request[enginev1.Ge
 	return connect.NewResponse(&enginev1.GetProcessResponse{Process: ProcessToPB(p)}), nil
 }
 
+// GetProcessProgress serves where a run stands in the steps of its process (ADR 0035 §3).
+func (h *Handler) GetProcessProgress(ctx context.Context, r *connect.Request[enginev1.GetProcessProgressRequest]) (*connect.Response[enginev1.GetProcessProgressResponse], error) {
+	ctx = h.principal(ctx, r.Header())
+	p, err := h.Engine.Store.Get(ctx, r.Msg.Id)
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	if err := h.authorize(ctx, "read", "", p); err != nil {
+		return nil, toConnect(err)
+	}
+	pr, err := h.Engine.Progress(ctx, p.ID)
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	return connect.NewResponse(&enginev1.GetProcessProgressResponse{Progress: &enginev1.ProcessProgress{ProcessId: pr.ProcessID,
+		Methodology: pr.Methodology, Process: pr.Process, Description: pr.Description, Status: string(pr.Status), Error: pr.Error,
+		Steps: stepProgressToPB(pr.Steps), Done: int32(pr.Done), Total: int32(pr.Total)}}), nil
+}
+
+func stepProgressToPB(steps []engine.StepProgress) []*enginev1.StepProgress {
+	out := make([]*enginev1.StepProgress, 0, len(steps))
+	for _, s := range steps {
+		out = append(out, &enginev1.StepProgress{Path: s.Path, Name: s.Name, Description: s.Description, Method: s.Method, Target: s.Target,
+			State: s.State, Missing: s.Missing, Runs: int32(s.Runs), ChildProcessIds: s.ChildProcessIDs, Waiting: s.Waiting, Permission: s.Permission,
+			Guidance: s.Guidance, Checklist: s.Checklist, References: docRefsToPB(s.References), Steps: stepProgressToPB(s.Steps)})
+	}
+	return out
+}
+
+func stepContextToPB(c *engine.StepContext) *enginev1.StepContext {
+	if c == nil {
+		return nil
+	}
+	return &enginev1.StepContext{Process: c.Process, Path: c.Path, Name: c.Name, Description: c.Description, Guidance: c.Guidance,
+		Checklist: c.Checklist, Deliverables: c.Deliverables, References: docRefsToPB(c.References)}
+}
+
+func docRefsToPB(refs []methodology.Reference) []*enginev1.DocumentReference {
+	var out []*enginev1.DocumentReference
+	for _, r := range refs {
+		out = append(out, &enginev1.DocumentReference{Title: r.Title, Ref: r.Ref, Section: r.Section})
+	}
+	return out
+}
+
 func (h *Handler) ListProcesses(ctx context.Context, r *connect.Request[enginev1.ListProcessesRequest]) (*connect.Response[enginev1.ListProcessesResponse], error) {
 	ctx = h.principal(ctx, r.Header())
 	me := authz.From(ctx)
@@ -410,7 +456,8 @@ func ProcessToPB(p *engine.Process) *enginev1.Process {
 	}
 	if t := p.Pending; t != nil {
 		out.Pending = &enginev1.HumanTask{Kind: t.Kind, Permission: t.Permission, Action: t.Action, Description: t.Description,
-			Instructions: t.Instructions, NodeTypes: t.NodeTypes, Step: int32(t.Step), ChildProcessId: t.ChildProcessID, FlowId: t.FlowID}
+			Instructions: t.Instructions, NodeTypes: t.NodeTypes, Step: int32(t.Step), ChildProcessId: t.ChildProcessID, FlowId: t.FlowID,
+			Context: stepContextToPB(t.Context)}
 		for _, i := range t.Issues {
 			out.Pending.Issues = append(out.Pending.Issues, &enginev1.BoardIssue{Item: string(i.Item), Culprit: string(i.Culprit), Code: i.Code, Message: i.Message, Severity: i.Severity})
 		}

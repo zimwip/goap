@@ -922,7 +922,11 @@ a nested process's prerequisites) — and whose effects are its exit criteria (`
 the agent's goal, the sub-steps' criteria, the nested process's criteria, or a `step:<path>` condition over a
 `step_done` artifact once it has run, which other steps can name). `references` link a process or a step to its
 reference documents (`doc:<key>`, `<mcp>:<path>`, URL). An agent or nested
-process step is the builtin `process.step`: a sub-agent on the same change, so processes nest.
+process step is the builtin `process.step`: a sub-agent on the same change, so processes nest. A step's `guidance`,
+`checklist`, `deliverables` and `references` reach whoever carries it out: its human tasks carry the step
+(`HumanTask.context`), its LLM actions get it in their system prompt (and `{{ .Step }}`), and the sub-agent of an agent
+or process step inherits it. `GetProcessProgress` computes where a run stands in its process (each step done, skipped,
+active, waiting for someone, ready, to do with what it still needs, or blocked), shown on the run and the change.
 
 See `methodologies/examples/impact-analysis.yaml` for the full executable example, and
 `methodologies/methodology-improvement.yaml` (self-observation: abstract action specialized by rules

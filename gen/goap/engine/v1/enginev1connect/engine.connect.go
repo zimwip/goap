@@ -57,6 +57,9 @@ const (
 	// EngineServiceGetProcessProcedure is the fully-qualified name of the EngineService's GetProcess
 	// RPC.
 	EngineServiceGetProcessProcedure = "/goap.engine.v1.EngineService/GetProcess"
+	// EngineServiceGetProcessProgressProcedure is the fully-qualified name of the EngineService's
+	// GetProcessProgress RPC.
+	EngineServiceGetProcessProgressProcedure = "/goap.engine.v1.EngineService/GetProcessProgress"
 	// EngineServiceListProcessesProcedure is the fully-qualified name of the EngineService's
 	// ListProcesses RPC.
 	EngineServiceListProcessesProcedure = "/goap.engine.v1.EngineService/ListProcesses"
@@ -93,6 +96,8 @@ type EngineServiceClient interface {
 	// Answers a blackboard inconsistency found before an action: relaunch the proposed step or ignore.
 	ResolveBoard(context.Context, *connect.Request[v1.ResolveBoardRequest]) (*connect.Response[v1.ResolveBoardResponse], error)
 	GetProcess(context.Context, *connect.Request[v1.GetProcessRequest]) (*connect.Response[v1.GetProcessResponse], error)
+	// Where a run stands in the steps of the process its agent runs (ADR 0035 §3).
+	GetProcessProgress(context.Context, *connect.Request[v1.GetProcessProgressRequest]) (*connect.Response[v1.GetProcessProgressResponse], error)
 	ListProcesses(context.Context, *connect.Request[v1.ListProcessesRequest]) (*connect.Response[v1.ListProcessesResponse], error)
 	// Binds an unbound process (ADR 0031, process_id with no change) to a change: an existing one
 	// (change_id) or a new one, defaulted the same way StartProcess defaults one.
@@ -168,6 +173,12 @@ func NewEngineServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(engineServiceMethods.ByName("GetProcess")),
 			connect.WithClientOptions(opts...),
 		),
+		getProcessProgress: connect.NewClient[v1.GetProcessProgressRequest, v1.GetProcessProgressResponse](
+			httpClient,
+			baseURL+EngineServiceGetProcessProgressProcedure,
+			connect.WithSchema(engineServiceMethods.ByName("GetProcessProgress")),
+			connect.WithClientOptions(opts...),
+		),
 		listProcesses: connect.NewClient[v1.ListProcessesRequest, v1.ListProcessesResponse](
 			httpClient,
 			baseURL+EngineServiceListProcessesProcedure,
@@ -209,20 +220,21 @@ func NewEngineServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 
 // engineServiceClient implements EngineServiceClient.
 type engineServiceClient struct {
-	startProcess     *connect.Client[v1.StartProcessRequest, v1.StartProcessResponse]
-	answerIntent     *connect.Client[v1.AnswerIntentRequest, v1.AnswerIntentResponse]
-	submitHumanInput *connect.Client[v1.SubmitHumanInputRequest, v1.SubmitHumanInputResponse]
-	approveAction    *connect.Client[v1.ApproveActionRequest, v1.ApproveActionResponse]
-	relaunchStep     *connect.Client[v1.RelaunchStepRequest, v1.RelaunchStepResponse]
-	decideFlow       *connect.Client[v1.DecideFlowRequest, v1.DecideFlowResponse]
-	resolveBoard     *connect.Client[v1.ResolveBoardRequest, v1.ResolveBoardResponse]
-	getProcess       *connect.Client[v1.GetProcessRequest, v1.GetProcessResponse]
-	listProcesses    *connect.Client[v1.ListProcessesRequest, v1.ListProcessesResponse]
-	attachChange     *connect.Client[v1.AttachChangeRequest, v1.AttachChangeResponse]
-	getProcessLog    *connect.Client[v1.GetProcessLogRequest, v1.GetProcessLogResponse]
-	watchEvents      *connect.Client[v1.WatchEventsRequest, v1.WatchEventsResponse]
-	listTriggers     *connect.Client[v1.ListTriggersRequest, v1.ListTriggersResponse]
-	fireTrigger      *connect.Client[v1.FireTriggerRequest, v1.FireTriggerResponse]
+	startProcess       *connect.Client[v1.StartProcessRequest, v1.StartProcessResponse]
+	answerIntent       *connect.Client[v1.AnswerIntentRequest, v1.AnswerIntentResponse]
+	submitHumanInput   *connect.Client[v1.SubmitHumanInputRequest, v1.SubmitHumanInputResponse]
+	approveAction      *connect.Client[v1.ApproveActionRequest, v1.ApproveActionResponse]
+	relaunchStep       *connect.Client[v1.RelaunchStepRequest, v1.RelaunchStepResponse]
+	decideFlow         *connect.Client[v1.DecideFlowRequest, v1.DecideFlowResponse]
+	resolveBoard       *connect.Client[v1.ResolveBoardRequest, v1.ResolveBoardResponse]
+	getProcess         *connect.Client[v1.GetProcessRequest, v1.GetProcessResponse]
+	getProcessProgress *connect.Client[v1.GetProcessProgressRequest, v1.GetProcessProgressResponse]
+	listProcesses      *connect.Client[v1.ListProcessesRequest, v1.ListProcessesResponse]
+	attachChange       *connect.Client[v1.AttachChangeRequest, v1.AttachChangeResponse]
+	getProcessLog      *connect.Client[v1.GetProcessLogRequest, v1.GetProcessLogResponse]
+	watchEvents        *connect.Client[v1.WatchEventsRequest, v1.WatchEventsResponse]
+	listTriggers       *connect.Client[v1.ListTriggersRequest, v1.ListTriggersResponse]
+	fireTrigger        *connect.Client[v1.FireTriggerRequest, v1.FireTriggerResponse]
 }
 
 // StartProcess calls goap.engine.v1.EngineService.StartProcess.
@@ -263,6 +275,11 @@ func (c *engineServiceClient) ResolveBoard(ctx context.Context, req *connect.Req
 // GetProcess calls goap.engine.v1.EngineService.GetProcess.
 func (c *engineServiceClient) GetProcess(ctx context.Context, req *connect.Request[v1.GetProcessRequest]) (*connect.Response[v1.GetProcessResponse], error) {
 	return c.getProcess.CallUnary(ctx, req)
+}
+
+// GetProcessProgress calls goap.engine.v1.EngineService.GetProcessProgress.
+func (c *engineServiceClient) GetProcessProgress(ctx context.Context, req *connect.Request[v1.GetProcessProgressRequest]) (*connect.Response[v1.GetProcessProgressResponse], error) {
+	return c.getProcessProgress.CallUnary(ctx, req)
 }
 
 // ListProcesses calls goap.engine.v1.EngineService.ListProcesses.
@@ -311,6 +328,8 @@ type EngineServiceHandler interface {
 	// Answers a blackboard inconsistency found before an action: relaunch the proposed step or ignore.
 	ResolveBoard(context.Context, *connect.Request[v1.ResolveBoardRequest]) (*connect.Response[v1.ResolveBoardResponse], error)
 	GetProcess(context.Context, *connect.Request[v1.GetProcessRequest]) (*connect.Response[v1.GetProcessResponse], error)
+	// Where a run stands in the steps of the process its agent runs (ADR 0035 §3).
+	GetProcessProgress(context.Context, *connect.Request[v1.GetProcessProgressRequest]) (*connect.Response[v1.GetProcessProgressResponse], error)
 	ListProcesses(context.Context, *connect.Request[v1.ListProcessesRequest]) (*connect.Response[v1.ListProcessesResponse], error)
 	// Binds an unbound process (ADR 0031, process_id with no change) to a change: an existing one
 	// (change_id) or a new one, defaulted the same way StartProcess defaults one.
@@ -382,6 +401,12 @@ func NewEngineServiceHandler(svc EngineServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(engineServiceMethods.ByName("GetProcess")),
 		connect.WithHandlerOptions(opts...),
 	)
+	engineServiceGetProcessProgressHandler := connect.NewUnaryHandler(
+		EngineServiceGetProcessProgressProcedure,
+		svc.GetProcessProgress,
+		connect.WithSchema(engineServiceMethods.ByName("GetProcessProgress")),
+		connect.WithHandlerOptions(opts...),
+	)
 	engineServiceListProcessesHandler := connect.NewUnaryHandler(
 		EngineServiceListProcessesProcedure,
 		svc.ListProcesses,
@@ -436,6 +461,8 @@ func NewEngineServiceHandler(svc EngineServiceHandler, opts ...connect.HandlerOp
 			engineServiceResolveBoardHandler.ServeHTTP(w, r)
 		case EngineServiceGetProcessProcedure:
 			engineServiceGetProcessHandler.ServeHTTP(w, r)
+		case EngineServiceGetProcessProgressProcedure:
+			engineServiceGetProcessProgressHandler.ServeHTTP(w, r)
 		case EngineServiceListProcessesProcedure:
 			engineServiceListProcessesHandler.ServeHTTP(w, r)
 		case EngineServiceAttachChangeProcedure:
@@ -487,6 +514,10 @@ func (UnimplementedEngineServiceHandler) ResolveBoard(context.Context, *connect.
 
 func (UnimplementedEngineServiceHandler) GetProcess(context.Context, *connect.Request[v1.GetProcessRequest]) (*connect.Response[v1.GetProcessResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.engine.v1.EngineService.GetProcess is not implemented"))
+}
+
+func (UnimplementedEngineServiceHandler) GetProcessProgress(context.Context, *connect.Request[v1.GetProcessProgressRequest]) (*connect.Response[v1.GetProcessProgressResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.engine.v1.EngineService.GetProcessProgress is not implemented"))
 }
 
 func (UnimplementedEngineServiceHandler) ListProcesses(context.Context, *connect.Request[v1.ListProcessesRequest]) (*connect.Response[v1.ListProcessesResponse], error) {

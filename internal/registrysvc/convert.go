@@ -51,7 +51,7 @@ func stepsToPB(steps []methodology.Step) []*registryv1.Step {
 	out := make([]*registryv1.Step, 0, len(steps))
 	for _, s := range steps {
 		out = append(out, &registryv1.Step{Name: s.Name, Description: s.Description, Instructions: s.Instructions, Pre: s.Pre, Done: s.Done,
-			References: refsToPB(s.References), Steps: stepsToPB(s.Steps), Action: s.Action, Actions: s.Actions, Agent: s.Agent, Goal: s.Goal, Process: s.Process})
+			References: refsToPB(s.References), Guidance: s.Guidance, Checklist: s.Checklist, Deliverables: s.Deliverables, Steps: stepsToPB(s.Steps), Action: s.Action, Actions: s.Actions, Agent: s.Agent, Goal: s.Goal, Process: s.Process})
 	}
 	return out
 }
@@ -63,7 +63,7 @@ func stepsFromPB(steps []*registryv1.Step) []methodology.Step {
 	out := make([]methodology.Step, 0, len(steps))
 	for _, s := range steps {
 		out = append(out, methodology.Step{Name: s.Name, Description: s.Description, Instructions: s.Instructions, Pre: nilIfEmpty(s.Pre), Done: nilIfEmpty(s.Done),
-			References: refsFromPB(s.References), Steps: stepsFromPB(s.Steps), Action: s.Action, Actions: nilIfNone(s.Actions), Agent: s.Agent, Goal: s.Goal, Process: s.Process})
+			References: refsFromPB(s.References), Guidance: s.Guidance, Checklist: nilIfNone(s.Checklist), Deliverables: nilIfNone(s.Deliverables), Steps: stepsFromPB(s.Steps), Action: s.Action, Actions: nilIfNone(s.Actions), Agent: s.Agent, Goal: s.Goal, Process: s.Process})
 	}
 	return out
 }

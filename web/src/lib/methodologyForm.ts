@@ -200,6 +200,12 @@ export interface StepForm {
   pre: CondRow[];
   done: CondRow[];
   references: ReferenceForm[];
+  /** markdown: what the step is for and how to go about it */
+  guidance: string;
+  /** one item per line: what a person checks */
+  checklist: string;
+  /** comma separated: what the step produces (document types) */
+  deliverables: string;
   steps: StepForm[];
 }
 
@@ -317,6 +323,9 @@ export const emptyStep = (name = ''): StepForm => ({
   pre: [],
   done: [],
   references: [],
+  guidance: '',
+  checklist: '',
+  deliverables: '',
   steps: [],
 });
 export const emptyProcess = (): ProcessForm => ({ uid: newUid(), name: '', description: '', examples: '', references: [], steps: [emptyStep('first')] });
@@ -646,6 +655,9 @@ function stepToForm(s: ProcessStep): StepForm {
     pre: rows(s.pre),
     done: rows(s.done),
     references: refsToForm(s.references),
+    guidance: s.guidance ?? '',
+    checklist: (s.checklist ?? []).join('\n'),
+    deliverables: (s.deliverables ?? []).join(', '),
     steps: (s.steps ?? []).map(stepToForm),
   };
 }
@@ -688,6 +700,16 @@ export function stepFromForm(s: StepForm): ProcessStep {
   put(o, 'pre', toMap(s.pre));
   put(o, 'done', toMap(s.done));
   put(o, 'references', refsFromForm(s.references));
+  put(o, 'guidance', s.guidance.trim());
+  put(
+    o,
+    'checklist',
+    s.checklist
+      .split('\n')
+      .map((x) => x.trim())
+      .filter(Boolean),
+  );
+  put(o, 'deliverables', csv(s.deliverables));
   switch (s.method) {
     case 'manual':
       put(o, 'instructions', s.instructions.trim());
