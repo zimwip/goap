@@ -41,6 +41,8 @@
   import BoardIssueList from '../../components/BoardIssueList.svelte';
   import ChangeOptions from '../../components/ChangeOptions.svelte';
   import ChangeDecisions from '../../components/ChangeDecisions.svelte';
+  import ChangeRisks from '../../components/ChangeRisks.svelte';
+  import { riskRegister, liveRisk } from '../../risks';
   import ScopeBar from '../../components/ScopeBar.svelte';
   import MergeResolver from '../../components/MergeResolver.svelte';
   import { MAIN_SCOPE, candidatesByOption, scopeColor, scopeName, scopeWritable } from '../../changeScope';
@@ -269,6 +271,7 @@
     { id: 'items', label: `${scopeLabel} ▸ Items`, badge: items.length || undefined },
     { id: 'compare', label: 'Compare', badge: options.filter((f) => f.status === 'open').length || undefined },
     { id: 'decisions', label: 'Decisions', badge: pendingDecisions || undefined },
+    { id: 'risks', label: 'Risks & actions', badge: riskRegister(change?.items ?? []).filter(liveRisk).length || undefined },
     { id: 'changes', label: 'Changes', badge: subs.length + ancestors.length || undefined },
     { id: 'audit', label: 'Audit' },
   ]);
@@ -670,6 +673,8 @@
         <h3>Decision points</h3>
         <ChangeDecisions changeId={ch.id ?? ''} {closed} onchange={() => load(selected)} />
       </section>
+      {:else if active === 'risks'}
+        <ChangeRisks change={ch} {closed} onchange={() => load(selected)} />
       {:else if active === 'impacts'}
       <div class="scoped" style="--scope: {scopeTint}">
       {@render scopeHead('Change impacts', lcRows.length)}

@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/zimwip/goap/pkg/authz"
+	"github.com/zimwip/goap/pkg/brief"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/dsl"
 	"github.com/zimwip/goap/pkg/methodology"
@@ -203,4 +204,20 @@ func (e *Engine) stepAllowed(ctx context.Context, p *Process, who authz.Principa
 	}
 	return e.Authz.Authorize(ctx, authz.Request{Subject: who, Action: act, Resource: authz.Resource{Type: "step", ID: p.ID, Name: sc.Path,
 		Org: e.orgOf(p), Owner: p.Initiator.Subject, Role: sc.Roles.Responsible, Accountable: sc.Roles.Accountable}})
+}
+
+// briefSection is the compact brief of the change an LLM action works on (ADR 0036 §2): the most information in the
+// fewest tokens, one line per fact.
+func briefSection(ac ActionContext) string {
+	if ac.Blackboard.Change.ID == "" {
+		return ""
+	}
+	var st *brief.Step
+	if s := ac.Step; s != nil {
+		st = &brief.Step{Process: s.Process, Path: s.Path, Method: s.Method}
+		if s.Roles != nil {
+			st.Responsible, st.Accountable = s.Roles.Responsible, s.Roles.Accountable
+		}
+	}
+	return "\n\nThe change you work on, in brief (goap-change/trace follows an item, a risk or a node through it):\n" + brief.Of(ac.Blackboard, st)
 }
