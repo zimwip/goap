@@ -94,6 +94,12 @@ func FactEntry(change ChangeID, it ChangeItem) (LogEntry, error) {
 			e.By = f.By
 		}
 	}
+	if d := it.DecisionEvent; d != nil {
+		e.Subject = "decision." + d.Op
+		if d.By != "" {
+			e.By = d.By
+		}
+	}
 	return e, err
 }
 

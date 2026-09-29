@@ -400,6 +400,13 @@ func (m *Methodology) compile() (*Compiled, Issues) {
 		}
 		defs = append(defs, d)
 	}
+	// the platform conditions (decision loops, options: ADR 0009 §4), unless the methodology declares its own
+	for _, d := range condition.Platform {
+		if !known[d.Name] {
+			known[d.Name] = true
+			defs = append(defs, d)
+		}
+	}
 
 	actions := map[string]Action{}
 	var utilities, whens []condition.Definition

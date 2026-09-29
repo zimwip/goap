@@ -106,6 +106,8 @@ type ChangeItem struct {
 	// FlowEvent is set on KindFlow items.
 	Flow      string     `json:"flow,omitempty"`
 	FlowEvent *FlowEvent `json:"flowEvent,omitempty"`
+	// DecisionEvent is set on KindDecisionPoint items (ADR 0009 §4).
+	DecisionEvent *DecisionEvent `json:"decisionEvent,omitempty"`
 	Decision  *Decision  `json:"decision,omitempty"` // decision only
 	// Target addresses a signal item to a process id ("" = broadcast).
 	Target      string         `json:"target,omitempty"`
@@ -132,6 +134,10 @@ func (it ChangeItem) Validate() error {
 	switch it.Kind {
 	case KindFlow:
 		if err := it.FlowEvent.validate(); err != nil {
+			return err
+		}
+	case KindDecisionPoint:
+		if err := it.DecisionEvent.validate(); err != nil {
 			return err
 		}
 	case KindDecision:

@@ -1,5 +1,7 @@
 package domain
 
+import "time"
+
 // NodeView is a node version hydrated with its neighbourhood in the domain
 // graph. It lets conditions navigate the reference graph without I/O.
 type NodeView struct {
@@ -23,6 +25,12 @@ type Blackboard struct {
 	// Supertypes maps node types to their ancestors (subtyping of the
 	// methodology schema), exposed to conditions as x.types.
 	Supertypes map[string][]string `json:"-"`
+	// Options are the options of the change and ActiveOption the one it works on (ADR 0032 §6): the view of a flow
+	// carries no flow event, so the graph gives them apart. DecisionPoints are replayed at At (ADR 0009 §4).
+	Options        []Flow          `json:"options,omitempty"`
+	ActiveOption   string          `json:"activeOption,omitempty"`
+	DecisionPoints []DecisionPoint `json:"decisionPoints,omitempty"`
+	At             time.Time       `json:"at,omitempty"`
 }
 
 // TypesOf returns a type followed by its supertypes.

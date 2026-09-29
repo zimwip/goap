@@ -24,18 +24,66 @@ func Activation(bb domain.Blackboard) map[string]any {
 	if vars == nil {
 		vars = map[string]any{}
 	}
+	points, questions := decisions(bb)
 	return map[string]any{
 		"change": map[string]any{
 			"id": string(c.ID), "title": c.Title, "intent": c.Intent, "status": string(c.Status),
 			"goal": c.Goal, "methodology": c.Methodology, "branch": domain.BranchOf(c.Branch), "baseline": string(c.BaselineID), "resultBaseline": string(c.ResultBaselineID), "data": orEmpty(c.Data),
 		},
-		"items":         items,
-		"changeImpacts": h.changeImpacts(),
-		"decisions":     orEmptyList(byKind[domain.KindDecision]),
-		"artifacts":     orEmptyList(byKind[domain.KindArtifact]),
-		"merges":        orEmptyList(byKind[domain.KindMerge]),
-		"vars":          vars,
+		"items":          items,
+		"changeImpacts":  h.changeImpacts(),
+		"decisions":      orEmptyList(byKind[domain.KindDecision]),
+		"artifacts":      orEmptyList(byKind[domain.KindArtifact]),
+		"merges":         orEmptyList(byKind[domain.KindMerge]),
+		"vars":           vars,
+		"options":        h.options(),
+		"activeOption":   bb.ActiveOption,
+		"decisionPoints": points,
+		"questions":      questions,
 	}
+}
+
+// options are the options of the change (ADR 0032 §6).
+func (h hydrator) options() []any {
+	out := make([]any, 0, len(h.bb.Options))
+	for _, o := range h.bb.Options {
+		name, hyp := "", ""
+		if o.Option != nil {
+			name, hyp = o.Option.Name, o.Option.Hypothesis
+		}
+		out = append(out, map[string]any{"id": o.ID, "name": name, "hypothesis": hyp, "status": o.OptionStatus(),
+			"active": o.Active, "evaluation": o.Evaluation, "evaluated": o.Evaluated})
+	}
+	return out
+}
+
+// decisions are the decision points of the change and all their questions (ADR 0009 §4).
+func decisions(bb domain.Blackboard) (points, questions []any) {
+	points, questions = []any{}, []any{}
+	for _, d := range bb.DecisionPoints {
+		qs := make([]any, 0, len(d.Questions))
+		for _, q := range d.Questions {
+			m := map[string]any{"id": q.ID, "point": q.Point, "text": q.Text, "status": q.Status, "answer": q.Answer, "answeredBy": q.AnsweredBy}
+			qs = append(qs, m)
+			questions = append(questions, m)
+		}
+		var ruling any
+		if r := d.Ruling; r != nil {
+			ruling = map[string]any{"outcome": r.Outcome, "option": r.Option, "confidence": r.Confidence, "justification": r.Justification,
+				"by": r.By, "human": r.Human}
+		}
+		options, criteria := make([]any, 0, len(d.Options)), make([]any, 0, len(d.Criteria))
+		for _, o := range d.Options {
+			options = append(options, o)
+		}
+		for _, c := range d.Criteria {
+			criteria = append(criteria, c)
+		}
+		points = append(points, map[string]any{"id": d.ID, "question": d.Question, "status": d.Status, "options": options, "criteria": criteria,
+			"decider": d.Decider, "threshold": d.Threshold, "rounds": int64(d.Rounds), "maxRounds": int64(d.MaxRounds), "escalation": d.Escalation,
+			"openQuestions": int64(d.OpenQuestions()), "questions": qs, "ruling": ruling, "option": d.Option, "decidedBy": d.DecidedBy})
+	}
+	return points, questions
 }
 
 type hydrator struct{ bb domain.Blackboard }

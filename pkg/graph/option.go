@@ -117,27 +117,46 @@ func (g *Graph) SelectOption(ctx context.Context, id domain.ChangeID, option, by
 		if err != nil {
 			return err
 		}
-		if _, err := openOption(c, option); err != nil {
+		if err := g.selectOptionTx(ctx, tx, c, option, by); err != nil {
 			return err
 		}
-		for _, o := range c.Options() {
-			if o.ID == option || o.Status != domain.FlowOpen {
-				continue
-			}
-			if err := g.decideFlowTx(ctx, tx, c, o.ID, domain.FlowDiscardOp, by); err != nil {
-				return err
-			}
-			if c, err = tx.Change(ctx, id); err != nil {
-				return err
-			}
-		}
-		if err := g.decideFlowTx(ctx, tx, c, option, domain.FlowAdoptOp, by); err != nil {
+		// a selection by hand settles the decision points that were choosing among the options (ADR 0009 §4)
+		c, err = tx.Change(ctx, id)
+		if err != nil {
 			return err
+		}
+		for _, d := range c.DecisionPointsAt(g.now()) {
+			if d.Pending() && slices.Contains(d.Options, option) {
+				if err := g.decisionEvent(ctx, tx, id, domain.DecisionEvent{Op: domain.DecisionRuleOp, Point: d.ID, Outcome: domain.OutcomeDecided,
+					Option: option, Confidence: 1, Justification: "option selected by hand", Human: true, By: by}); err != nil {
+					return err
+				}
+			}
 		}
 		f, err = optionOf(ctx, tx, id, option)
 		return err
 	})
 	return
+}
+
+// selectOptionTx rejects the other open options of c, then adopts the flow of option.
+func (g *Graph) selectOptionTx(ctx context.Context, tx Tx, c domain.Change, option, by string) error {
+	if _, err := openOption(c, option); err != nil {
+		return err
+	}
+	for _, o := range c.Options() {
+		if o.ID == option || o.Status != domain.FlowOpen {
+			continue
+		}
+		if err := g.decideFlowTx(ctx, tx, c, o.ID, domain.FlowDiscardOp, by); err != nil {
+			return err
+		}
+		var err error
+		if c, err = tx.Change(ctx, c.ID); err != nil {
+			return err
+		}
+	}
+	return g.decideFlowTx(ctx, tx, c, option, domain.FlowAdoptOp, by)
 }
 
 // RejectOption rejects an open option: its flow is discarded, what it wrote stays on its branch for the audit.
