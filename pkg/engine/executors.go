@@ -25,6 +25,8 @@ type ActionContext struct {
 	// Host serves the DSL operations of the action (LLM, sub-agents, tools,
 	// domain) and records their usage in the step.
 	Host *Host
+	// Step is the step of a process the action carries out (nil outside processes).
+	Step *StepContext
 }
 
 // ActionResult is what an executor produced.
@@ -94,6 +96,8 @@ type PromptData struct {
 	Options        []domain.Flow
 	ActiveOption   string
 	DecisionPoints []domain.DecisionPoint
+	// Step is the step of a process the action carries out (nil outside processes): {{ .Step.Guidance }}.
+	Step *StepContext
 }
 
 // ChangeImpactView is a change impact with its hydrated pre and post versions.
@@ -135,7 +139,7 @@ func RenderPrompt(ctx context.Context, ac ActionContext) (string, error) {
 		return "", fmt.Errorf("prompt template: %w", err)
 	}
 	d := PromptData{Change: ac.Blackboard.Change, Goal: ac.Process.Goal, Action: ac.Action, Vars: ac.Process.Vars,
-		Options: ac.Blackboard.Options, ActiveOption: ac.Blackboard.ActiveOption, DecisionPoints: ac.Blackboard.DecisionPoints}
+		Options: ac.Blackboard.Options, ActiveOption: ac.Blackboard.ActiveOption, DecisionPoints: ac.Blackboard.DecisionPoints, Step: ac.Step}
 	nodes, _, err := readGraph(ctx, ac.Graph, ac.Blackboard.Change.ID, ac.Process.Flow, ac.Blackboard.Change.BaselineID)
 	if err != nil {
 		return "", err
@@ -226,7 +230,7 @@ func (e LLMExecutor) Execute(ctx context.Context, ac ActionContext) (ActionResul
 	if model == "" {
 		model = "default"
 	}
-	system := llmSystem
+	system := llmSystem + ac.Step.section()
 	var tools []mcp.ToolInfo
 	if ac.Host != nil && len(ac.Host.mcps) > 0 {
 		if tools, err = ac.Host.Tools(ctx); err != nil {

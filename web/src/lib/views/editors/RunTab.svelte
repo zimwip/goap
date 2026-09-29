@@ -7,6 +7,7 @@
   import WorldState from '../../components/WorldState.svelte';
   import StepsTimeline from '../../components/StepsTimeline.svelte';
   import HumanTaskForm from '../../components/HumanTaskForm.svelte';
+  import ProcessProgress from '../../components/ProcessProgress.svelte';
   import ApprovalPanel from '../../components/ApprovalPanel.svelte';
   import FlowDecisionPanel from '../../components/FlowDecisionPanel.svelte';
   import BoardIssuesPanel from '../../components/BoardIssuesPanel.svelte';
@@ -319,6 +320,8 @@
         <div class="stat"><span class="v">{process.usage?.toolCalls ?? 0}</span><span class="k">tool calls</span></div>
       </section>
     </div>
+
+    <ProcessProgress processId={process.id ?? ''} onopen={(id) => openRun(id, true)} />
 
     {#if processLog.length || !process.changeId}
       <section class="card">

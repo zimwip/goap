@@ -156,6 +156,23 @@
         </div>
       {/if}
 
+      <details class="more" open={!!step.guidance || !!step.checklist.trim()}>
+        <summary>Guidance, checklist, deliverables</summary>
+        <div class="field">
+          <label for="{step.key}-guid">Guidance <span class="opt">(markdown: what the step is for and how to go about it; shown to the person, given to the agent)</span></label>
+          <textarea id="{step.key}-guid" rows="3" bind:value={step.guidance} data-path="{path}.guidance"></textarea>
+        </div>
+        <div class="grid2">
+          <div class="field">
+            <label for="{step.key}-chk">Checklist <span class="opt">(one item per line)</span></label>
+            <textarea id="{step.key}-chk" rows="3" bind:value={step.checklist} data-path="{path}.checklist"></textarea>
+          </div>
+          <div class="field">
+            <label for="{step.key}-dlv">Deliverables <span class="opt">(comma separated)</span></label>
+            <input id="{step.key}-dlv" type="text" bind:value={step.deliverables} data-path="{path}.deliverables" placeholder="ReleaseNote, TestReport" />
+          </div>
+        </div>
+      </details>
       <details class="more" open={step.pre.length > 0 || step.done.length > 0 || step.references.length > 0}>
         <summary>Entry conditions, exit criteria, reference documents</summary>
         <div class="grid2">

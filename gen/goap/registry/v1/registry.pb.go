@@ -1980,7 +1980,11 @@ type Step struct {
 	// alternative actions the planner chooses among (instead of action)
 	Actions []string `protobuf:"bytes,13,rep,name=actions,proto3" json:"actions,omitempty"`
 	// the reference documents that describe the step
-	References    []*Reference `protobuf:"bytes,14,rep,name=references,proto3" json:"references,omitempty"`
+	References []*Reference `protobuf:"bytes,14,rep,name=references,proto3" json:"references,omitempty"`
+	// what the step is for and how to go about it (markdown), what a person checks, what it produces
+	Guidance      string   `protobuf:"bytes,15,opt,name=guidance,proto3" json:"guidance,omitempty"`
+	Checklist     []string `protobuf:"bytes,16,rep,name=checklist,proto3" json:"checklist,omitempty"`
+	Deliverables  []string `protobuf:"bytes,17,rep,name=deliverables,proto3" json:"deliverables,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2095,6 +2099,27 @@ func (x *Step) GetActions() []string {
 func (x *Step) GetReferences() []*Reference {
 	if x != nil {
 		return x.References
+	}
+	return nil
+}
+
+func (x *Step) GetGuidance() string {
+	if x != nil {
+		return x.Guidance
+	}
+	return ""
+}
+
+func (x *Step) GetChecklist() []string {
+	if x != nil {
+		return x.Checklist
+	}
+	return nil
+}
+
+func (x *Step) GetDeliverables() []string {
+	if x != nil {
+		return x.Deliverables
 	}
 	return nil
 }
@@ -5132,7 +5157,7 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\tReference\x12\x14\n" +
 	"\x05title\x18\x01 \x01(\tR\x05title\x12\x10\n" +
 	"\x03ref\x18\x02 \x01(\tR\x03ref\x12\x18\n" +
-	"\asection\x18\x03 \x01(\tR\asection\"\xb8\x04\n" +
+	"\asection\x18\x03 \x01(\tR\asection\"\x96\x05\n" +
 	"\x04Step\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\"\n" +
@@ -5148,7 +5173,10 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\aactions\x18\r \x03(\tR\aactions\x12;\n" +
 	"\n" +
 	"references\x18\x0e \x03(\v2\x1b.goap.registry.v1.ReferenceR\n" +
-	"references\x1a6\n" +
+	"references\x12\x1a\n" +
+	"\bguidance\x18\x0f \x01(\tR\bguidance\x12\x1c\n" +
+	"\tchecklist\x18\x10 \x03(\tR\tchecklist\x12\"\n" +
+	"\fdeliverables\x18\x11 \x03(\tR\fdeliverables\x1a6\n" +
 	"\bPreEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\bR\x05value:\x028\x01\x1a7\n" +

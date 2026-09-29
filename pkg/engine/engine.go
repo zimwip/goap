@@ -120,6 +120,8 @@ type StartRequest struct {
 	// Trigger is set for processes started by a trigger.
 	Trigger string
 	Vars    map[string]any
+	// Step is the step of the parent's process a sub-agent carries out (ADR 0034).
+	Step *StepContext
 	// Flow puts the process on an already-open flow branch of ChangeID (ADR
 	// 0017), e.g. a "solution branch" (ADR 0031, gap 6) several concurrent
 	// processes are deliberately pointed at so their impacts are isolated
@@ -158,7 +160,7 @@ func (e *Engine) log() *slog.Logger {
 // methodology, identification ranks the agents of every published methodology.
 func (e *Engine) Start(ctx context.Context, req StartRequest) (*Process, error) {
 	p := &Process{ID: uuid.NewString(), Methodology: req.Methodology, Agent: req.Agent, ChangeID: req.ChangeID, BaselineID: req.BaselineID, Namespace: req.Namespace, OwnBranch: req.OwnBranch, Org: req.OwnerOrg,
-		Title: req.Title, ParentID: req.ParentID, Trigger: req.Trigger, Flow: req.Flow, Initiator: authz.From(ctx), Vars: maps.Clone(req.Vars), Disabled: map[string]bool{},
+		Title: req.Title, ParentID: req.ParentID, Trigger: req.Trigger, Flow: req.Flow, Initiator: authz.From(ctx), Vars: maps.Clone(req.Vars), Step: req.Step, Disabled: map[string]bool{},
 		CreatedAt: e.clock(), UpdatedAt: e.clock()}
 	if req.Intent != "" {
 		if err := e.appendIntentTurns(ctx, p, intent.Turn{Role: "user", Text: req.Intent}); err != nil {
@@ -710,7 +712,7 @@ func (e *Engine) cycle(ctx context.Context, p *Process, m *methodology.Compiled)
 			p.Steps = append(p.Steps, step)
 			p.Status = StatusWaiting
 			p.Pending = &HumanTask{Kind: TaskApproval, Permission: permission, Action: action.Name,
-				Description: action.Description, Instructions: action.Instructions, Step: step.Index}
+				Description: action.Description, Instructions: action.Instructions, Step: step.Index, Context: stepContext(m, p, action)}
 			return nil
 		}
 	}
@@ -860,7 +862,8 @@ func (e *Engine) executeStep(ctx context.Context, p *Process, m *methodology.Com
 		agentMCPs = ag.MCPs
 	}
 	host := e.newHost(p, action, agentMCPs)
-	res, err := exec.Execute(ctx, ActionContext{Process: p, Action: action, Blackboard: bb, Graph: e.Graph, Host: host})
+	sc := stepContext(m, p, action)
+	res, err := exec.Execute(ctx, ActionContext{Process: p, Action: action, Blackboard: bb, Graph: e.Graph, Host: host, Step: sc})
 	step := &p.Steps[i]
 	host.record(step)
 	step.Output, step.Sandbox = res.Output, res.Sandbox
@@ -899,13 +902,13 @@ func (e *Engine) executeStep(ctx context.Context, p *Process, m *methodology.Com
 		step.EndedAt = e.clock()
 		step.Output = "suspended: waiting for sub-agent " + res.Child
 		p.Status = StatusWaiting
-		p.Pending = &HumanTask{Kind: TaskAgent, Action: action.Name, Description: action.Description, Step: i, ChildProcessID: res.Child, WakeOn: res.WakeOn}
+		p.Pending = &HumanTask{Kind: TaskAgent, Action: action.Name, Description: action.Description, Step: i, ChildProcessID: res.Child, WakeOn: res.WakeOn, Context: sc}
 		return nil
 	}
 	e.forgetChildren(p, action.Name)
 	if res.Wait {
 		p.Status = StatusWaiting
-		p.Pending = &HumanTask{Kind: TaskInput, Action: action.Name, Description: action.Description, Instructions: action.Instructions, NodeTypes: action.NodeTypes, Step: i}
+		p.Pending = &HumanTask{Kind: TaskInput, Action: action.Name, Description: action.Description, Instructions: action.Instructions, NodeTypes: action.NodeTypes, Step: i, Context: sc}
 		return nil
 	}
 	ids, nodes, points, err := e.addItems(ctx, p, res.Items, action.Name, step.Execution, false, action.Name)
@@ -947,6 +950,11 @@ func (e *Engine) runChildIn(ctx context.Context, h *Host, key, methodologyName, 
 // runChildGoal is runChildIn with the goal of the sub-agent fixed (no identification), as a step of a process runs
 // its agent or nested process (ADR 0034).
 func (e *Engine) runChildGoal(ctx context.Context, h *Host, key, methodologyName, agentName, goal, intentText string, anyMethodology bool) (dsl.AgentResult, error) {
+	return e.runChildStep(ctx, h, key, methodologyName, agentName, goal, intentText, anyMethodology, nil)
+}
+
+// runChildStep is runChildGoal for a sub-agent carrying out a step of a process: it gets the step's context.
+func (e *Engine) runChildStep(ctx context.Context, h *Host, key, methodologyName, agentName, goal, intentText string, anyMethodology bool, step *StepContext) (dsl.AgentResult, error) {
 	parent := h.process
 	if anyMethodology {
 		methodologyName = ""
@@ -960,7 +968,7 @@ func (e *Engine) runChildGoal(ctx context.Context, h *Host, key, methodologyName
 		child = c
 	} else {
 		c, err := e.Start(ctx, StartRequest{Methodology: methodologyName, ChangeID: parent.ChangeID, BaselineID: parent.BaselineID,
-			Agent: agentName, Goal: goal, Intent: intentText, ParentID: parent.ID, Call: key, Vars: maps.Clone(parent.Vars)})
+			Agent: agentName, Goal: goal, Intent: intentText, ParentID: parent.ID, Call: key, Vars: maps.Clone(parent.Vars), Step: step})
 		if err != nil {
 			return dsl.AgentResult{}, err
 		}

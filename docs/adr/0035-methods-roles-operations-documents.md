@@ -213,7 +213,7 @@ inside one namespace.
 
 | Phase | Content |
 |---|---|
-| 1 | Process progress (§3) in the engine and the IDE; `{{ .Step }}` and guidance / checklist / deliverables on steps (§2) |
+| 1 ✅ | Process progress (§3): `Engine.Progress`, `GetProcessProgress`, shown on the run and the change (nested processes unfold); guidance / checklist / deliverables on steps (§2), the step's context on its human tasks (`HumanTask.context`), in the system prompt of its LLM actions and `{{ .Step }}`, and passed to the sub-agent of an agent or process step |
 | 2 | Methods (§1): declaration, selection by context in `process.step`, sdlc `build` / `deploy` / `test` as methods |
 | 3 | Roles (§2): methodology roles, role held in a unit, `hasRoleIn`, step resources, task addressees, Access screen |
 | 4 | Documents (§5) and companion changes (§6) |

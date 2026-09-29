@@ -250,6 +250,9 @@ func TestSDLCProcess(t *testing.T) {
 	if p.Agent != "software_delivery" || p.Status != engine.StatusWaiting || p.Pending.Action != "software_delivery/framing" || p.Pending.Instructions == "" {
 		t.Fatalf("the process starts with its manual framing step: %s %s %+v %s", p.Agent, p.Status, p.Pending, p.Error)
 	}
+	if c := p.Pending.Context; c == nil || c.Guidance == "" || len(c.Checklist) != 3 || len(c.References) != 1 {
+		t.Fatalf("the framing task carries its guidance, checklist and references: %+v", c)
+	}
 	if _, err = e.Submit(ctx, p.ID, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -271,6 +274,32 @@ func TestSDLCProcess(t *testing.T) {
 		"software_delivery/analysis/specification/requirements:specify_requirements", "software_delivery/analysis/specification/test_plan", "software_delivery/design", "software_delivery/build", "software_delivery/release"}
 	if !slices.Equal(steps, want) {
 		t.Fatalf("steps %v", steps)
+	}
+	// where the delivery stands while the release train works
+	pr, err := e.Progress(ctx, p.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	states := map[string]string{}
+	var walk func([]engine.StepProgress)
+	walk = func(steps []engine.StepProgress) {
+		for _, s := range steps {
+			states[s.Path] = s.State
+			walk(s.Steps)
+		}
+	}
+	walk(pr.Steps)
+	for path, want := range map[string]string{
+		"software_delivery/framing": engine.StepDone, "software_delivery/analysis": engine.StepDone,
+		"software_delivery/analysis/specification/traceability": engine.StepSkipped, "software_delivery/design": engine.StepDone,
+		"software_delivery/build": engine.StepDone, "software_delivery/release": engine.StepActive, "software_delivery/application": engine.StepTodo,
+	} {
+		if states[path] != want {
+			t.Fatalf("%s is %s, want %s (%v)", path, states[path], want, states)
+		}
+	}
+	if pr.Total != 10 || pr.Done != 8 {
+		t.Fatalf("progress %d/%d", pr.Done, pr.Total)
 	}
 	var builds []string
 	for _, s := range p.Steps {

@@ -87,6 +87,9 @@ type Process struct {
 	Unknown     map[string]string  `json:"unknown,omitempty"`
 	Steps       []Step             `json:"steps"`
 	Vars        map[string]any     `json:"vars,omitempty"`
+	// Step is the step of a process of the parent that this process carries out (a sub-agent started by
+	// process.step, ADR 0034): its guidance reaches the actions of this process.
+	Step *StepContext `json:"step,omitempty"`
 	// Disabled lists actions excluded from planning after repeatedly failing
 	// to deliver their effects.
 	Disabled  map[string]bool `json:"disabled,omitempty"`
@@ -138,6 +141,8 @@ type HumanTask struct {
 	Proposal *RelaunchProposal   `json:"proposal,omitempty"`
 	// FlowID is the flow a TaskRelaunched waits for.
 	FlowID string `json:"flowId,omitempty"`
+	// Context is the step of a process the task belongs to (ADR 0034, ADR 0035 §2): what to do and how.
+	Context *StepContext `json:"context,omitempty"`
 }
 
 // Usage accounts LLM tokens and calls.

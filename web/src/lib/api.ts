@@ -395,6 +395,12 @@ export interface ProcessStep {
   done?: Record<string, boolean>;
   /** reference documents that describe the step */
   references?: DocumentReference[];
+  /** markdown: what the step is for and how to go about it */
+  guidance?: string;
+  /** what a person checks before marking the step done */
+  checklist?: string[];
+  /** what the step produces (document types) */
+  deliverables?: string[];
   steps?: ProcessStep[];
   action?: string;
   /** alternative actions the planner chooses among */
@@ -935,6 +941,56 @@ export interface HumanTask {
   /** kind "input": qualified node types (<namespace>@<NodeType>) the task may create or pick to edit (empty: every type of the change's namespace) */
   nodeTypes?: string[];
   step?: number;
+  /** the step of a process the task belongs to: what to do and how (ADR 0034, ADR 0035 §2) */
+  context?: StepContext;
+}
+
+/** The step of a process a task or an action carries out. */
+export interface StepContext {
+  process?: string;
+  path?: string;
+  name?: string;
+  description?: string;
+  guidance?: string;
+  checklist?: string[];
+  deliverables?: string[];
+  references?: DocumentReference[];
+}
+
+/** Where a run stands in the steps of the process its agent runs (ADR 0035 §3). */
+export interface ProcessProgress {
+  processId?: string;
+  methodology?: string;
+  process?: string;
+  description?: string;
+  status?: string;
+  error?: string;
+  steps?: StepProgress[];
+  /** steps that run something: done or skipped, out of total */
+  done?: number;
+  total?: number;
+}
+
+export type StepState = 'done' | 'skipped' | 'active' | 'waiting' | 'ready' | 'todo' | 'blocked';
+
+export interface StepProgress {
+  path?: string;
+  name?: string;
+  description?: string;
+  method?: string;
+  target?: string;
+  state?: StepState | string;
+  /** entry conditions that do not hold ("!name": expected false) */
+  missing?: string[];
+  runs?: number;
+  childProcessIds?: string[];
+  /** waiting: the kind of the task (input, approval) and the permission an approval needs */
+  waiting?: string;
+  permission?: string;
+  guidance?: string;
+  checklist?: string[];
+  references?: DocumentReference[];
+  steps?: StepProgress[];
 }
 
 export interface Step {
@@ -1615,6 +1671,8 @@ export const engine = {
     ),
   getProcess: (id: string, signal?: AbortSignal) =>
     rpc<{ id: string }, { process?: Process }>(ENGINE, 'GetProcess', { id }, signal),
+  getProcessProgress: (id: string, signal?: AbortSignal) =>
+    rpc<{ id: string }, { progress?: ProcessProgress }>(ENGINE, 'GetProcessProgress', { id }, signal),
   listProcesses: (req: ListProcessesRequest = {}, signal?: AbortSignal) =>
     rpc<ListProcessesRequest, { processes?: Process[] }>(ENGINE, 'ListProcesses', req, signal),
   /** Binds an unbound process (ADR 0031) to an existing change (changeId set) or a new one. */
