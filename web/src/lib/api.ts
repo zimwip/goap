@@ -631,6 +631,8 @@ export interface ChangeItem {
   /** flow branch that produced the item (empty: the main flow); flowEvent on kind 'flow' */
   flow?: string;
   flowEvent?: FlowEvent;
+  /** event of a decision point on kind 'decision_point' (ADR 0009 §4) */
+  decisionEvent?: { op?: string; point?: string; outcome?: string; confidence?: number; threshold?: number; human?: boolean; accept?: boolean };
   decision?: Decision;
   data?: Struct;
   producedBy?: string;
@@ -1011,6 +1013,52 @@ export interface OptionNode {
   props?: Record<string, Struct>;
 }
 
+/** A question raised by an undecidable ruling: it blocks its decision point until answered (ADR 0009 §4). */
+export interface Question {
+  id?: string;
+  point?: string;
+  text?: string;
+  status?: 'open' | 'answered' | string;
+  answer?: string;
+  answeredBy?: string;
+  /** the process that investigated it */
+  process?: string;
+  askedAt?: string;
+}
+
+export interface Ruling {
+  outcome?: 'decided' | 'undecidable' | string;
+  option?: string;
+  confidence?: number;
+  justification?: string;
+  by?: string;
+  human?: boolean;
+  at?: string;
+}
+
+/** A decision point of a change: a question to settle, usually which option (ADR 0009 §4). */
+export interface DecisionPoint {
+  id?: string;
+  question?: string;
+  options?: string[];
+  criteria?: string[];
+  decider?: 'agent' | 'human' | string;
+  threshold?: number;
+  maxRounds?: number;
+  deadline?: string;
+  openedAt?: string;
+  openedBy?: string;
+  status?: 'open' | 'blocked' | 'ratifying' | 'escalated' | 'decided' | string;
+  rounds?: number;
+  questions?: Question[];
+  ruling?: Ruling;
+  /** why only a person may rule it now */
+  escalation?: string;
+  option?: string;
+  decidedAt?: string;
+  decidedBy?: string;
+}
+
 export interface OptionComparison {
   level?: string;
   options?: Flow[];
@@ -1336,6 +1384,18 @@ export const graph = {
   /** The nodes the options changed, each side against the main flow, at written or accepted. */
   compareOptions: (changeId: string, level: string, all = false, signal?: AbortSignal) =>
     rpc<{ changeId: string; level: string; all: boolean }, OptionComparison>(GRAPH, 'CompareOptions', { changeId, level, all }, signal),
+  /** Decision points of a change (ADR 0009 §4). */
+  listDecisionPoints: (changeId: string, signal?: AbortSignal) =>
+    rpc<{ changeId: string }, { points?: DecisionPoint[] }>(GRAPH, 'ListDecisionPoints', { changeId }, signal),
+  openDecision: (req: { changeId: string; question: string; allOptions: boolean; options?: string[]; criteria?: string[]; decider?: string; threshold?: number; maxRounds?: number; maxDuration?: string }) =>
+    rpc<typeof req, { point?: DecisionPoint }>(GRAPH, 'OpenDecision', req),
+  /** A ruling from the IDE is a person's: it needs no ratification. */
+  ruleDecision: (req: { changeId: string; point: string; outcome: string; option?: string; confidence?: number; justification: string; questions?: string[] }) =>
+    rpc<typeof req, { point?: DecisionPoint }>(GRAPH, 'RuleDecision', req),
+  answerQuestion: (changeId: string, question: string, answer: string) =>
+    rpc<{ changeId: string; question: string; answer: string }, { point?: DecisionPoint }>(GRAPH, 'AnswerQuestion', { changeId, question, answer }),
+  ratifyDecision: (changeId: string, point: string, accept: boolean, comment: string) =>
+    rpc<{ changeId: string; point: string; accept: boolean; comment: string }, { point?: DecisionPoint }>(GRAPH, 'RatifyDecision', { changeId, point, accept, comment }),
   /** The graph of a change at a level (written, accepted, landed) on a flow (ADR 0032 §5). */
   getChangeView: (changeId: string, flow: string, level: string, signal?: AbortSignal) =>
     rpc<{ changeId: string; flow: string; level: string }, { baseline?: Baseline }>(GRAPH, 'GetChangeView', { changeId, flow, level }, signal),
