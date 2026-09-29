@@ -1,6 +1,6 @@
 # ADR 0036 — Risks and actions, the change brief, transverse methodologies, visualizers
 
-**Status**: accepted, implemented · **Date**: 2026-09 ·
+**Status**: accepted, implemented (§4 visualizers: see the web) · **Date**: 2026-09 ·
 Builds on ADR 0001 (the change as blackboard), ADR 0009 §4 (decision points), ADR 0030 (one change log), ADR 0034
 (processes), ADR 0035 (methods, roles).
 

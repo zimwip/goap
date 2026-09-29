@@ -44,6 +44,9 @@ type Methodology struct {
 	Methods []Method `yaml:"methods,omitempty" json:"methods,omitempty"`
 	// Roles are the roles the processes and methods assign (ADR 0035 §2).
 	Roles []Role `yaml:"roles,omitempty" json:"roles,omitempty"`
+	// AppliesTo makes the methodology transverse (ADR 0036 §3): its processes run alongside the changes of these
+	// methodologies, on the same change. A transverse methodology acts in the namespace of the change.
+	AppliesTo []string `yaml:"appliesTo,omitempty" json:"appliesTo,omitempty"`
 	// Types resolves the qualified type references of the methodology (the type catalogue, set by Resolve). Nil: the
 	// references are only checked for their form.
 	Types TypeSet `yaml:"-" json:"-"`
@@ -371,7 +374,7 @@ func (m *Methodology) Validate() Issues {
 // ValidateStored is Validate plus what a stored methodology must also have (the registry): its target namespace.
 func (m *Methodology) ValidateStored() Issues {
 	issues := m.Validate()
-	if m.Namespace == "" {
+	if m.Namespace == "" && len(m.AppliesTo) == 0 {
 		issues = append(Issues{{Path: "namespace", Message: "namespace required: the namespace (domain) the changes of the methodology act on"}}, issues...)
 	}
 	return issues
@@ -675,6 +678,17 @@ func (m *Methodology) compile() (*Compiled, Issues) {
 	}
 	if len(m.Agents) == 0 && len(m.Goals) > 0 {
 		agents[DefaultAgent] = Agent{Name: DefaultAgent, Description: m.Description, Planner: PlannerGOAP}
+	}
+	for i, other := range m.AppliesTo {
+		switch {
+		case !nameRE.MatchString(other):
+			add(fmt.Sprintf("appliesTo[%d]", i), "appliesTo names methodologies")
+		case other == m.Name:
+			add(fmt.Sprintf("appliesTo[%d]", i), "a methodology does not apply to itself")
+		}
+	}
+	if len(m.AppliesTo) > 0 && len(m.Processes) == 0 {
+		add("appliesTo", "a transverse methodology runs its processes alongside the changes: declare at least one process")
 	}
 	roles := m.compileRoles(add)
 	meths := m.compileMethods(add, agents, roles)

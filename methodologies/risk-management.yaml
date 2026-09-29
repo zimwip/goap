@@ -1,0 +1,100 @@
+name: risk-management
+version: 1.0.0
+description: >
+  Transverse risk management (ADR 0036 §3): runs alongside every change of the methodologies it applies to, on the
+  same change. It identifies and assesses the risks of the change as it goes (probability and impact 1-5), and has an
+  action defined for every high one (score >= 9); it runs again whenever the change moves, and completes as soon as
+  its risks are reviewed for the change as it is and under control.
+
+# no namespace of its own: a transverse methodology acts in the namespace of the change
+appliesTo: [sdlc]
+
+roles:
+  - {name: risk_manager, description: Identifies and assesses the risks of the changes and follows their mitigation}
+  - {name: product_owner, description: Answers for the risks the change takes}
+
+conditions:
+  # the risks were reviewed on the change as it is now: the last review counted as many change impacts as there are
+  - name: risks_reviewed
+    description: The risks of the change were reviewed since it last grew
+    expr: >
+      artifacts.exists(a, a.type == "risk_review" && has(a.data.impacts)
+        && double(a.data.impacts) >= double(size(changeImpacts)))
+
+actions:
+  - name: identify_risks
+    kind: llm
+    description: Identify and assess the risks of the change
+    pre: {risks_reviewed: false}
+    effects: {risks_reviewed: true}
+    cost: 1
+    model: default
+    prompt: |
+      Review the change described in the brief for its risks: what could make it fail, be late, break what exists,
+      or harm its users (delivery, technical, security, compliance, operation).
+      For each NEW risk (not already in the RISKS of the brief), and for each existing one whose probability or impact
+      changed, answer an item of kind "risk":
+        {"kind":"risk","data":{"key":"<RSK-n: the next free number, or the key of the risk you update>","title":"<the risk>",
+         "description":"<cause and consequence>","probability":<1-5>,"impact":<1-5>,"owner":"<the role that owns it>","status":"open"}}
+      Close the risks the change no longer runs ({"kind":"risk","data":{"key":"RSK-n","title":"<its title>","status":"closed"}}).
+      Finish with {"kind":"artifact","type":"risk_review","data":{"impacts":<the number of IMPACTS in the brief, 0 if none>,
+      "summary":"<one sentence>"}}.
+      Answer {"items":[...]}.
+
+  - name: review_risks
+    kind: human
+    description: Review the risks of the change by hand
+    pre: {risks_reviewed: false}
+    effects: {risks_reviewed: true}
+    cost: 6
+    instructions: >
+      Raise or update the risks of the change on its Risks & actions pane, then record the review: an artifact
+      risk_review with data.impacts = the number of change impacts reviewed.
+
+  - name: plan_mitigation
+    kind: llm
+    description: Define the mitigation actions of the high risks
+    pre: {risks_reviewed: true}
+    effects: {risks_under_control: true}
+    cost: 1
+    model: default
+    prompt: |
+      Among the RISKS of the brief, take the live ones (open or mitigating) with a score of 9 or more that no action
+      answers yet. For each, answer an action that reduces its probability or its impact, and the new version of the risk:
+        {"kind":"action","data":{"key":"<ACT-n: the next free number>","title":"<what to do>","owner":"<the role that does it>","for":"<RSK-n>","status":"open"}}
+        {"kind":"risk","data":{"key":"<RSK-n>","title":"<its title>","status":"mitigating","actions":["<ACT-n>"]}}
+      If a risk is better accepted than mitigated, say so: {"kind":"risk","data":{"key":"<RSK-n>","title":"<its title>","status":"accepted"}}.
+      Answer {"items":[...]}.
+
+  - name: mitigate_by_hand
+    kind: human
+    description: Define the mitigation of the high risks by hand
+    pre: {risks_reviewed: true}
+    effects: {risks_under_control: true}
+    cost: 6
+    instructions: >
+      For every live risk of score 9 or more without an action, add an action on the Risks & actions pane (for the
+      risk), or accept the risk.
+
+processes:
+  - name: risk_management
+    description: Risks of the change — identification and assessment, then mitigation of the high ones — as the change goes
+    examples: ["review the risks of the change", "what are the risks of this change"]
+    references:
+      - {title: Risk management policy, ref: "document-repository:governance/risk-management-policy.md"}
+    steps:
+      - name: identification
+        description: Identify and assess the risks of the change as it is
+        actions: [identify_risks, review_risks]
+        roles: {responsible: risk_manager, accountable: product_owner}
+        guidance: >
+          Probability and impact from 1 (rare, negligible) to 5 (almost certain, critical); the score is their
+          product. Look at what the change touches (its impacts) and at what it decided.
+        deliverables: [RiskRegister]
+      - name: mitigation
+        description: An action for every high risk, or its acceptance
+        actions: [plan_mitigation, mitigate_by_hand]
+        roles: {responsible: risk_manager, accountable: product_owner, informed: [product_owner]}
+        guidance: >
+          A high risk (score >= 9) has an action that reduces its probability or its impact, owned by a role; a risk
+          may be accepted instead, by whoever answers for the change.
