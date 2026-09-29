@@ -122,6 +122,13 @@ REQ-1  v1(main) ── v3(main, revise) ───────────── 
 - **Views of a change** (`ChangeView`): the head of the change branch with the change impacts of a flow counted at a
   level — `written` (proposed or accepted, not rejected: what the change or an option would look like),
   `accepted` (what would land), `landed` (its result baseline). Only `landed` is stored.
+- **Options** ([ADR 0009](adr/0009-branches-options-decisions.md) §3, ADR 0032 §6): an option is a flow opened as a
+  hypothesis (`OpenOption`); several are explored at once, each writing its own versions of the same nodes. The
+  **active option** is the one the change works on: every call that names no flow goes to it
+  (`Change.ResolveFlow`; `main` names the main flow), and a process on the main flow reads its graph
+  (`ChangeGraph`). Options are compared node by node at `written` or `accepted` (`CompareOptions`), evaluated,
+  then one is selected (its flow is adopted: its versions join the change branch, no copy) and the others are
+  rejected. The IDE shows them in the Options pane of a change.
 
 #### Change axis
 
@@ -714,7 +721,8 @@ under the parameter name, and that the code can never read. Runs are bounded (30
   allowed tools; the engine plans a `tool` action only when its tool is allowed.
 - **Built-in MCPs** ([ADR 0028](adr/0028-builtin-mcps-and-connectors.md)): the platform as tools, split by concern —
   `goap-graph` (read / glob / grep / links / baselines), `goap-change` (create / read / write / edit / link / retire /
-  note / validate on a change; no apply), `goap-scheduler` (start / list / get processes, triggers / fire; scope
+  note / validate on a change, options / option / activate / evaluate / compare for its options; no apply, no
+  selection), `goap-scheduler` (start / list / get processes, triggers / fire; scope
   `agent`) and
   `goap-admin` (units, users, MCPs, connectors, domains, methodologies). Their connectors
   (`internal/connectors/builtin`) run in the hub and act for the caller (per-type read authorization, the access gate
@@ -918,7 +926,7 @@ docs/                        architecture, ADRs
 | **M4 — advanced change axis** | impact propagation (recursive CTE parameterized by link types), suspect links, baseline diff, merge/rebase of concurrent changesets |
 | **M5 — UX** | ✅ methodology editor (forms, localized anomalies, publishing, versions, YAML import/export), "Access" screen (ABAC policies), approvals · remaining: graph and plan visualization |
 | **M6 — K8s** | Helm charts, engine HPA · ✅ OpenTelemetry observability, sandbox manifests |
-| **M8 — branches and decisions** 🟡 | ADR 0009 (partially implemented) · ✅ graph: per-branch versions, 3-way branch merge, change branches merged at apply (`merge_pending` + `MergeChange`), versions joining branches instead of merge copies, baselines stored as deltas with checkpoints, written / accepted / landed views of a change (ADR 0032) · remaining: earlier conflict detection and merge proposals by agents, change budget, options explored as branches, comparison, decision loops (questions → analyses), merging the chosen option; then versioned containers and releases |
+| **M8 — branches and decisions** 🟡 | ADR 0009 (partially implemented) · ✅ graph: per-branch versions, 3-way branch merge, change branches merged at apply (`merge_pending` + `MergeChange`), versions joining branches instead of merge copies, baselines stored as deltas with checkpoints, written / accepted / landed views of a change, options explored on flows with an active option, compared, evaluated, the chosen one selected (ADR 0032) · remaining: earlier conflict detection and merge proposals by agents, change budget, CEL conditions on options, decision loops (questions → analyses); then versioned containers and releases |
 | **M9 — self-observation** ✅ | ADR 0011: execution journal on the change axis (ticks, actions, LLM / tool calls, decisions, item provenance), `observer` agent (journal + OpenTelemetry traces → findings → proposals → review → draft), action specialization and type subtyping |
 | **M10 — SDLC** 🟡 | `sdlc` 0.4.0 methodology on the `alm` namespace (ALM domain) (need → requirement → function → component → artifact → application → solution, data, interfaces, flows), build specialized by technology, incremental releases and deployment (dev → test → staging → production, release manager approval), incremental actions · to refine: quality (coverage, security), rollback, freezes / change windows, MCP tools (repositories, CI, artifact registry, deployment) |
 | **M7 — agents** ✅ | agents (goap / utility / hybrid), JS / Go script actions with DSL, sub-agents, sandbox per process, IDE |
