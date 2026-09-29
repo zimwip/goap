@@ -333,6 +333,9 @@ export const TRIGGER_EVENTS = [
   'process.completed',
   'process.failed',
   'process.stuck',
+  'process.attached',
+  'step.completed',
+  'change.signal',
   'methodology.published',
 ] as const;
 
@@ -533,6 +536,10 @@ export interface Methodology {
   methods?: MethodologyMethod[];
   /** the roles the processes and methods assign (ADR 0035 §2) */
   roles?: MethodologyRole[];
+  /** transverse: its processes run alongside the changes of these methodologies (ADR 0036 §3) */
+  appliesTo?: string[];
+  /** the events of those changes it reacts to */
+  on?: { event?: string; filter?: string }[];
   createdAt?: string;
   updatedAt?: string;
   publishedAt?: string;

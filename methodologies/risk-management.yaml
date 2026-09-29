@@ -1,25 +1,31 @@
 name: risk-management
-version: 1.0.0
+version: 1.1.0
 description: >
   Transverse risk management (ADR 0036 §3): runs alongside every change of the methodologies it applies to, on the
-  same change. It identifies and assesses the risks of the change as it goes (probability and impact 1-5), and has an
-  action defined for every high one (score >= 9); it runs again whenever the change moves, and completes as soon as
-  its risks are reviewed for the change as it is and under control.
+  same change, coupled to them by events only. At each step they complete it reviews the risks that step introduces
+  or changes (probability and impact 1-5), and has an action defined for every high one (score >= 9). The
+  methodologies it serves may wait for its outcome through the platform condition risks_under_control.
 
 # no namespace of its own: a transverse methodology acts in the namespace of the change
 appliesTo: [sdlc]
+
+# the events of those changes it reacts to: each one runs the review again, with the event in vars.event (those that
+# arrive while it works wait their turn)
+on:
+  - {event: process.attached}
+  - {event: step.completed, filter: 'event.step.process == "software_delivery" || event.step.process == "release_train"'}
+  - {event: change.item_added, filter: 'event.items.exists(i, i.kind == "risk" || i.kind == "action")'}
 
 roles:
   - {name: risk_manager, description: Identifies and assesses the risks of the changes and follows their mitigation}
   - {name: product_owner, description: Answers for the risks the change takes}
 
 conditions:
-  # the risks were reviewed on the change as it is now: the last review counted as many change impacts as there are
+  # the risks were reviewed for the event that woke the process: a review written after it
   - name: risks_reviewed
-    description: The risks of the change were reviewed since it last grew
+    description: The risks were reviewed since the change last moved (the step that completed, the risk that was raised)
     expr: >
-      artifacts.exists(a, a.type == "risk_review" && has(a.data.impacts)
-        && double(a.data.impacts) >= double(size(changeImpacts)))
+      artifacts.exists(a, a.type == "risk_review" && has(vars.event) && double(a.at) >= double(vars.event.at))
 
 actions:
   - name: identify_risks
@@ -30,15 +36,15 @@ actions:
     cost: 1
     model: default
     prompt: |
-      Review the change described in the brief for its risks: what could make it fail, be late, break what exists,
-      or harm its users (delivery, technical, security, compliance, operation).
+      The change moved: {{ with .Vars.event }}{{ .type }}{{ with .step }} — the step {{ .path }}{{ with .method }} (method {{ . }}){{ end }} completed{{ end }}{{ end }}.
+      Review the change described in the brief for the risks this move introduces or changes: what could make it fail,
+      be late, break what exists, or harm its users (delivery, technical, security, compliance, operation).
       For each NEW risk (not already in the RISKS of the brief), and for each existing one whose probability or impact
       changed, answer an item of kind "risk":
         {"kind":"risk","data":{"key":"<RSK-n: the next free number, or the key of the risk you update>","title":"<the risk>",
          "description":"<cause and consequence>","probability":<1-5>,"impact":<1-5>,"owner":"<the role that owns it>","status":"open"}}
       Close the risks the change no longer runs ({"kind":"risk","data":{"key":"RSK-n","title":"<its title>","status":"closed"}}).
-      Finish with {"kind":"artifact","type":"risk_review","data":{"impacts":<the number of IMPACTS in the brief, 0 if none>,
-      "summary":"<one sentence>"}}.
+      Finish with {"kind":"artifact","type":"risk_review","data":{"summary":"<one sentence>"}}.
       Answer {"items":[...]}.
 
   - name: review_risks
@@ -48,8 +54,8 @@ actions:
     effects: {risks_reviewed: true}
     cost: 6
     instructions: >
-      Raise or update the risks of the change on its Risks & actions pane, then record the review: an artifact
-      risk_review with data.impacts = the number of change impacts reviewed.
+      Raise or update the risks the last move of the change introduces (its Risks & actions pane), then submit this
+      task with an artifact risk_review (its summary in data.summary).
 
   - name: plan_mitigation
     kind: llm

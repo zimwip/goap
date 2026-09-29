@@ -299,6 +299,14 @@ message Methodology {
   repeated Role roles = 20;
   // transverse: its processes run alongside the changes of these methodologies (ADR 0036 §3)
   repeated string applies_to = 21;
+  // the events of those changes it reacts to (default: a process attached, a step completed, a risk or an action added)
+  repeated Subscription on = 22;
+}
+
+// An event a transverse methodology reacts to, with a CEL filter over event ({type, change, process, step, items}).
+message Subscription {
+  string event = 1;
+  string filter = 2;
 }
 
 // A role a methodology needs; the organisation assigns it to users per unit ("developer@TEAM-PAY").

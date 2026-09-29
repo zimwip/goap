@@ -11,7 +11,7 @@
   import { drafts, getDraft } from '../../stores/drafts.svelte';
   import { typeCatalog, loadTypes, typeName } from '../../stores/types.svelte';
   import { openDomain } from './domainTabs';
-  import { formatDate } from '../../api';
+  import { formatDate, TRIGGER_EVENTS } from '../../api';
   import {
     emptyAgent,
     emptyAction,
@@ -231,6 +231,33 @@
         {/if}
       </section>
       {#if !d.isNew}
+        <section class="card" data-path="appliesTo">
+          <h3>Transverse</h3>
+          <p class="hint">
+            A transverse methodology runs its processes alongside the changes of the methodologies it applies to, on the same
+            change, coupled to them by events only: each event it reacts to runs its processes again, with the event in
+            <code>vars.event</code>. The others may wait for its outcome through conditions (e.g. <code>risks_under_control</code>).
+          </p>
+          <fieldset class="plain" disabled={d.readonly}>
+            <div class="field">
+              <label for="m-applies">Applies to <span class="opt">(methodologies, comma separated; empty: not transverse)</span></label>
+              <input id="m-applies" type="text" class="mono" bind:value={f.appliesTo} class:bad={d.bad('appliesTo')} data-path="appliesTo" placeholder="sdlc" />
+            </div>
+            {#if f.appliesTo.trim()}
+              <div class="label">Reacts to <span class="opt">(empty: a run attached, a step completed, a risk or an action added)</span></div>
+              {#each f.on as sub, i (i)}
+                <div class="role-row" class:bad={d.bad(`on[${i}]`)}>
+                  <select bind:value={sub.event} aria-label="Event" data-path="on[{i}].event">
+                    {#each TRIGGER_EVENTS as ev (ev)}<option value={ev}>{ev}</option>{/each}
+                  </select>
+                  <input type="text" class="mono" aria-label="Filter" placeholder={'CEL over event, e.g. event.step.process == "software_delivery"'} bind:value={sub.filter} data-path="on[{i}].filter" />
+                  {#if !d.readonly}<button type="button" class="small icon" aria-label="Remove the event" onclick={() => f.on.splice(i, 1)}>✕</button>{/if}
+                </div>
+              {/each}
+              {#if !d.readonly}<button type="button" class="small" onclick={() => f.on.push({ event: 'step.completed', filter: '' })}>+ Event</button>{/if}
+            {/if}
+          </fieldset>
+        </section>
         <section class="card" data-path="roles">
           <div class="row head">
             <h3 class="grow">Roles <span class="hint">{f.roles.length}</span></h3>

@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/methodology"
@@ -107,5 +108,130 @@ func TestTransverseProcessRunsAlongsideTheChange(t *testing.T) {
 	e.Drain()
 	if cs := companionOf(t, e, p.ChangeID); len(cs) != 1 {
 		t.Fatalf("one companion per change: %d", len(cs))
+	}
+}
+
+// choreography of two methodologies through the events of the change they share (ADR 0036 §3): the risk watch reviews
+// the risks at each step of the flow (the events that arrive while it works wait in its inbox), and the flow's approval
+// waits for the risks to be under control — it is tried again when the watch has mitigated them.
+const choreoYAML = `
+name: choreo
+version: 1.0.0
+namespace: alm
+conditions:
+  - {name: noted, expr: 'artifacts.exists(a, a.type == "note")'}
+actions:
+  - {name: write_note, kind: human, effects: {noted: true}}
+processes:
+  - name: flow
+    steps:
+      - {name: note, action: write_note}
+      - {name: approve, instructions: Approve the delivery, pre: {noted: true, risks_under_control: true}}
+`
+
+const watchYAML = `
+name: watch
+version: 1.0.0
+appliesTo: [choreo]
+on:
+  - {event: process.attached}
+  - {event: step.completed, filter: 'event.step.process == "flow"'}
+conditions:
+  # reviewed for the event that woke the watch: a review written after it
+  - {name: reviewed, expr: 'artifacts.exists(a, a.type == "risk_review" && has(vars.event) && double(a.at) >= double(vars.event.at))'}
+actions:
+  - {name: review, kind: human, effects: {reviewed: true}}
+  - {name: mitigate, kind: human, pre: {reviewed: true}, effects: {risks_under_control: true}}
+processes:
+  - name: risk_watch
+    steps:
+      - {name: review, action: review}
+      - {name: mitigate, action: mitigate}
+`
+
+func eventually(t *testing.T, what string, ok func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		if ok() {
+			return
+		}
+		time.Sleep(15 * time.Millisecond)
+	}
+	t.Fatalf("never: %s", what)
+}
+
+func TestChoreographyThroughTheEventsOfTheChange(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	e := stagedEngine(t)
+	e.Schedule = nil // runs in the background, as the service does
+	for _, y := range []string{choreoYAML, watchYAML} {
+		m, err := methodology.Parse([]byte(y))
+		if err != nil {
+			t.Fatal(err)
+		}
+		c, err := m.Compile()
+		if err != nil {
+			t.Fatal(err)
+		}
+		e.Methodologies.(StaticMethodologies)[c.Name] = c
+	}
+	broker := NewBroker()
+	e.Events = broker
+	tm := &TriggerManager{Engine: e}
+	go tm.WatchProcesses(ctx, broker)
+	time.Sleep(20 * time.Millisecond) // subscription ready
+
+	p, err := e.Start(ctx, StartRequest{Methodology: "choreo", Goal: "flow", Intent: "deliver"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.schedule(p.ID)
+	get := func(id string) *Process { q, _ := e.Store.Get(ctx, id); return q }
+	var watch *Process
+	eventually(t, "the watch joins the change and asks for a review", func() bool {
+		cs := companionOf(t, e, p.ChangeID)
+		if len(cs) == 1 && cs[0].Pending != nil && cs[0].Pending.Action == "risk_watch/review" {
+			watch = cs[0]
+			return true
+		}
+		return false
+	})
+	// the review raises a high risk: its mitigation is asked
+	if _, err := e.Submit(ctx, watch.ID, []ItemInput{{Kind: "artifact", Type: "risk_review"},
+		{Kind: "risk", Data: map[string]any{"key": "RSK-1", "title": "wrong note", "probability": 4.0, "impact": 4.0}}}); err != nil {
+		t.Fatal(err)
+	}
+	e.schedule(watch.ID)
+	eventually(t, "mitigation asked", func() bool { w := get(watch.ID); return w.Pending != nil && w.Pending.Action == "risk_watch/mitigate" })
+	eventually(t, "the flow asks for the note", func() bool { q := get(p.ID); return q.Pending != nil && q.Pending.Action == "flow/note" })
+
+	// the flow completes its note step: the event waits in the watch's inbox; the approval waits for the risks
+	if _, err := e.Submit(ctx, p.ID, []ItemInput{{Kind: "artifact", Type: "note"}}); err != nil {
+		t.Fatal(err)
+	}
+	e.schedule(p.ID)
+	eventually(t, "the flow is blocked by the risk and the watch has the step in its inbox", func() bool {
+		return get(p.ID).Status == StatusStuck && len(get(watch.ID).Inbox) == 1
+	})
+	if pr := mustProgress(t, e, p.ID); findStep(pr.Steps, "flow/approve").State != StepBlocked {
+		t.Fatalf("approval: %+v", findStep(pr.Steps, "flow/approve"))
+	}
+
+	// the watch mitigates: the flow is tried again and reaches its approval; the watch reviews the risks of the step
+	if _, err := e.Submit(ctx, watch.ID, []ItemInput{{Kind: "action", Data: map[string]any{"key": "ACT-1", "title": "check the note", "for": "RSK-1"}}}); err != nil {
+		t.Fatal(err)
+	}
+	e.schedule(watch.ID)
+	eventually(t, "the flow resumes to its approval", func() bool { q := get(p.ID); return q.Pending != nil && q.Pending.Action == "flow/approve" })
+	eventually(t, "the watch reviews the risks of the step that completed", func() bool {
+		w := get(watch.ID)
+		ev, _ := w.Vars["event"].(map[string]any)
+		step, _ := ev["step"].(map[string]any)
+		return w.Pending != nil && w.Pending.Action == "risk_watch/review" && step["path"] == "flow/note" && len(w.Inbox) == 0
+	})
+	if cs := companionOf(t, e, p.ChangeID); len(cs) != 1 {
+		t.Fatalf("one watch per change: %d", len(cs))
 	}
 }
