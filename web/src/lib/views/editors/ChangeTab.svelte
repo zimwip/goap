@@ -38,6 +38,7 @@
   import { processOfFlow } from '../../flowDecision';
   import BoardIssueList from '../../components/BoardIssueList.svelte';
   import ChangeImpactList from '../../components/ChangeImpactList.svelte';
+  import ChangeOptions from '../../components/ChangeOptions.svelte';
 
   let { tab }: { tab: Tab } = $props();
 
@@ -164,6 +165,10 @@
   // flow events are part of the log but not shown as items
   const items = $derived((change?.items ?? []).filter((i) => i.kind !== 'flow').map((i) => ({ ...i, status: effectiveStatus(i) })));
   const flowProcess = (f: Flow) => processOfFlow(f);
+  // options are flows opened as hypotheses (ADR 0032 §6): they have a pane of their own
+  const options = $derived(flows.filter((f) => f.option));
+  const relaunches = $derived(flows.filter((f) => !f.option));
+  const activeOption = $derived(options.find((f) => f.active));
   /** the badge of a flow: open flows that compete cannot be adopted any more */
   const flowBadge = (f: Flow) => (f.status === 'open' && f.competesWith?.length ? 'competing' : f.status);
   const ctx = $derived(makeContext(nodes, items));
@@ -193,6 +198,7 @@
   const panes = $derived<Pane[]>([
     { id: 'overview', label: 'Overview', badge: stuckEditable ? '!' : undefined },
     { id: 'impacts', label: 'Impacts', badge: change?.nodes?.length || undefined },
+    { id: 'options', label: 'Options', badge: options.filter((f) => f.status === 'open').length || undefined },
     { id: 'items', label: 'Items', badge: items.length || undefined },
     { id: 'changes', label: 'Changes', badge: subs.length + ancestors.length || undefined },
     { id: 'audit', label: 'Audit' },
@@ -403,6 +409,12 @@
           <StatusBadge status={ch.status} />
         </div>
         {#if ch.intent}<p class="intent">"{ch.intent}"</p>{/if}
+        {#if activeOption}
+          <div class="alert info">
+            Working on the option <strong>{activeOption.option?.name}</strong>: edits that name no flow go to it.
+            <button type="button" class="link" onclick={() => (pane = 'options')}>Options</button>
+          </div>
+        {/if}
         <dl class="meta">
           <dt>ID</dt><dd><code>{ch.id}</code></dd>
           {#if ch.namespace}<dt>Namespace</dt><dd>{ch.namespace}</dd>{/if}
@@ -457,11 +469,11 @@
           {/if}
         </div>
 
-        {#if flows.length}
-          <h3>Flow branches <span class="count">{flows.length}</span></h3>
-          <FlowGraph {processes} changeId={selected} {flows} onopen={(pid) => openTab({ kind: 'run', params: { id: pid } })} />
+        {#if relaunches.length}
+          <h3>Flow branches <span class="count">{relaunches.length}</span></h3>
+          <FlowGraph {processes} changeId={selected} flows={relaunches} onopen={(pid) => openTab({ kind: 'run', params: { id: pid } })} />
           <ul class="subs flows">
-            {#each flows as f (f.id)}
+            {#each relaunches as f (f.id)}
               {@const fp = flowProcess(f)}
               <li>
                 <StatusBadge status={flowBadge(f)} />
@@ -492,6 +504,11 @@
             Baseline <button type="button" class="link" onclick={() => openBaseline(applied?.id)}>{applied.name || applied.id}</button> created.
           </div>
         {/if}
+      </section>
+      {:else if active === 'options'}
+      <section class="card">
+        <h3>Options <span class="count">{options.length}</span></h3>
+        <ChangeOptions changeId={ch.id ?? ''} {closed} onchange={() => load(selected)} />
       </section>
       {:else if active === 'impacts'}
       <section class="card">

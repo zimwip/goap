@@ -111,7 +111,7 @@
         {@const e = pickedEntry}
         <section class="card">
           <h3>
-            v{e.v.version} <span class="hint">on {e.v.branch || 'main'}</span>
+            v{e.v.version} <span class="hint">on {e.v.branch || 'main'}{#if e.v.joined?.length}, joined {e.v.joined.join(', ')}{/if}</span>
             {#if e.v.state}{#if e.moved}<span class="from">{e.from || 'none'} →</span>{/if}<span class="state" class:moved={e.moved}>{e.v.state}</span>{/if}
           </h3>
           <p class="meta">
@@ -135,7 +135,10 @@
         <tbody>
           {#each shown as e (e.v.version)}
             <tr class:deleted={e.v.deleted}>
-              <td><strong>v{e.v.version}</strong>{#if e.v.branch && e.v.branch !== 'main'} <span class="hint">{e.v.branch}</span>{/if}</td>
+              <td>
+                <strong>v{e.v.version}</strong>{#if e.v.branch && e.v.branch !== 'main'} <span class="hint">{e.v.branch}</span>{/if}
+                {#if e.v.joined?.length}<span class="hint" title="also part of these branches: landed there as is (ADR 0032)">→ {e.v.joined.join(', ')}</span>{/if}
+              </td>
               <td>
                 {#if e.v.state}
                   {#if e.moved}<span class="from">{e.from || 'none'} →</span>{/if}

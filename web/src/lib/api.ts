@@ -507,6 +507,8 @@ export interface GraphNode {
   comment?: string;
   /** action run that wrote this version (what a relaunch marks stale) */
   execution?: string;
+  /** the branches the version joined besides the one it was written on (ADR 0032; filled by listNodeVersions) */
+  joined?: string[];
 }
 
 export interface Link {
@@ -961,6 +963,15 @@ export interface FlowEvent {
   reason?: string;
   stale?: string[];
   by?: string;
+  /** open: the flow is an option of the change; evaluate: the evaluation */
+  option?: OptionSpec;
+  comment?: string;
+}
+
+/** The hypothesis of a flow opened as an option (ADR 0009 §3). */
+export interface OptionSpec {
+  name?: string;
+  hypothesis?: string;
 }
 
 /** Flow branch of a change: a relaunched step, adopted or discarded by a human. */
@@ -981,6 +992,29 @@ export interface Flow {
   decidedBy?: string;
   /** adopted flows that replace the same items: an open flow that competes cannot be adopted */
   competesWith?: string[];
+  /** set on an option (ADR 0032 §6): its hypothesis, status, last evaluation, and whether the change works on it */
+  option?: OptionSpec;
+  optionStatus?: 'exploring' | 'evaluated' | 'selected' | 'rejected' | string;
+  evaluation?: string;
+  active?: boolean;
+}
+
+/** A node written by at least one option, with its version on the main flow and on each option. */
+export interface OptionNode {
+  node?: string;
+  key?: string;
+  type?: string;
+  main?: NodeRef;
+  /** by option id (absent: not in the graph of that option) */
+  options?: Record<string, NodeRef>;
+  /** properties by side: 'main' or the option id */
+  props?: Record<string, Struct>;
+}
+
+export interface OptionComparison {
+  level?: string;
+  options?: Flow[];
+  nodes?: OptionNode[];
 }
 
 /** A node changed on the source branch of a merge. */
@@ -1283,6 +1317,28 @@ export const graph = {
   /** Discards an open flow branch straight on the graph (its candidates are rejected, its graph branch abandoned). */
   discardFlow: (changeId: string, flow: string) =>
     rpc<{ changeId: string; flow: string }, { flow?: Flow }>(GRAPH, 'DiscardFlow', { changeId, flow }),
+  /** Options of a change (ADR 0009 §3, ADR 0032 §6): hypotheses explored on flows of their own; the active one is
+   * where every call that names no flow goes. */
+  listOptions: (changeId: string, signal?: AbortSignal) =>
+    rpc<{ changeId: string }, { options?: Flow[]; active?: string }>(GRAPH, 'ListOptions', { changeId }, signal),
+  openOption: (changeId: string, name: string, hypothesis: string, activate: boolean) =>
+    rpc<{ changeId: string; name: string; hypothesis: string; activate: boolean }, { option?: Flow }>(GRAPH, 'OpenOption', { changeId, name, hypothesis, activate }),
+  /** Works on an option; '' or 'main': back to the main flow. */
+  activateOption: (changeId: string, option: string) =>
+    rpc<{ changeId: string; option: string }, { active?: string }>(GRAPH, 'ActivateOption', { changeId, option }),
+  evaluateOption: (changeId: string, option: string, comment: string) =>
+    rpc<{ changeId: string; option: string; comment: string }, { option?: Flow }>(GRAPH, 'EvaluateOption', { changeId, option, comment }),
+  /** Selects an option: its versions join the change branch, the other open options are rejected. */
+  selectOption: (changeId: string, option: string) =>
+    rpc<{ changeId: string; option: string }, { option?: Flow }>(GRAPH, 'SelectOption', { changeId, option }),
+  rejectOption: (changeId: string, option: string) =>
+    rpc<{ changeId: string; option: string }, { option?: Flow }>(GRAPH, 'RejectOption', { changeId, option }),
+  /** The nodes the options changed, each side against the main flow, at written or accepted. */
+  compareOptions: (changeId: string, level: string, all = false, signal?: AbortSignal) =>
+    rpc<{ changeId: string; level: string; all: boolean }, OptionComparison>(GRAPH, 'CompareOptions', { changeId, level, all }, signal),
+  /** The graph of a change at a level (written, accepted, landed) on a flow (ADR 0032 §5). */
+  getChangeView: (changeId: string, flow: string, level: string, signal?: AbortSignal) =>
+    rpc<{ changeId: string; flow: string; level: string }, { baseline?: Baseline }>(GRAPH, 'GetChangeView', { changeId, flow, level }, signal),
   /** What merging a branch into another would do. */
   planMerge: (namespace: string, from: string, into: string, signal?: AbortSignal) =>
     rpc<{ namespace: string; from: string; into: string }, { plan?: MergePlan }>(GRAPH, 'PlanMerge', { namespace, from, into }, signal),
