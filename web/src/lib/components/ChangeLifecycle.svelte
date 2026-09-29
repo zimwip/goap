@@ -1,10 +1,13 @@
 <script lang="ts">
   // Nodes a change works on: reopen a node for edition, move it through its
   // lifecycle, edit its properties, and see which ones must still leave an
-  // editable state before the change can be applied (ADR 0014).
+  // editable state before the change can be applied (ADR 0014). With `impacts`,
+  // each row is also the change impact of its node (ADR 0024): why, the versions
+  // it starts from and writes, its review — one list, no second table.
   import type { GraphNode, LifecycleTransition } from '../api';
   import { birthStates, isReopen, type LifecycleRow } from '../lifecycle';
   import type { Lifecycle } from '../api';
+  import StatusBadge from './StatusBadge.svelte';
 
   let {
     rows,
@@ -22,6 +25,9 @@
     onundo,
     onhistory,
     onopennode,
+    impacts = false,
+    scope = '',
+    onreview,
   }: {
     rows: LifecycleRow[];
     /** nodes the change could take on */
@@ -31,7 +37,8 @@
     onmove: (row: LifecycleRow, t: LifecycleTransition) => void;
     /** proposes new values for properties (only the changed ones) */
     onedit: (row: LifecycleRow, patch: Record<string, unknown>, state?: string) => Promise<boolean> | boolean;
-    onadd: (id: string) => void;
+    /** takes on a node of the baseline; with impacts, rationale says why the change impacts it */
+    onadd: (id: string, rationale?: string) => void;
     /** node types a new node can have */
     types: string[];
     lifecycleOf: (type: string) => Lifecycle | undefined;
@@ -47,7 +54,26 @@
     onhistory: (row: LifecycleRow) => void;
     /** opens the node editor on a stored node */
     onopennode: (row: LifecycleRow) => void;
+    /** show each row as the change impact of its node: why, versions, review */
+    impacts?: boolean;
+    /** the flow the rows are the view of: 'main' or an option id (ADR 0032 §6) */
+    scope?: string;
+    /** accepts or rejects the change impact of a row; the comment is mandatory */
+    onreview?: (row: LifecycleRow, accept: boolean, comment: string) => Promise<boolean> | boolean;
   } = $props();
+
+  const onOption = $derived(impacts && !!scope && scope !== 'main');
+  const version = (r?: { id?: string; version?: number }) => (r?.id ? `v${r.version}` : '—');
+  let reviewing = $state('');
+  let reviewComment = $state('');
+  let rationale = $state('');
+  async function review(r: LifecycleRow, accept: boolean) {
+    if (onreview && (await onreview(r, accept, reviewComment.trim()))) {
+      reviewing = '';
+      reviewComment = '';
+    }
+  }
+  const openable = (r: LifecycleRow) => !r.created || !!r.impact?.post?.id;
 
   function remove(r: LifecycleRow) {
     const what = r.created
@@ -151,13 +177,14 @@
 
   function add() {
     if (!picked) return;
-    onadd(picked);
+    onadd(picked, rationale.trim());
     picked = '';
+    rationale = '';
   }
 </script>
 
 <section class="card" id="change-lifecycle">
-  <h3>Nodes <span class="count">{rows.length}</span></h3>
+  <h3>{impacts ? 'Change impacts' : 'Nodes'} <span class="count">{rows.length}</span></h3>
   <p class="hint">
     A node is modified only in an editable state, which it holds only through a change: reopen it, edit it, then move it to a
     non-editable state before applying. Nodes without a lifecycle can be edited directly.
@@ -171,17 +198,26 @@
 
   {#if rows.length}
     <table>
-      <thead><tr><th>Node</th><th>State</th><th>Actions</th></tr></thead>
+      <thead><tr><th>Node</th>{#if impacts}<th>Why</th><th>Versions</th>{/if}<th>State</th>{#if impacts}<th>Review</th>{/if}<th>Actions</th></tr></thead>
       <tbody>
         {#each rows as r (r.node.id)}
           <tr class:removed={!!r.removal}>
             <td>
-              {#if r.created}<code>{r.node.key}</code>{:else}<button type="button" class="link mono" title="Open the node in its editor" onclick={() => onopennode(r)}>{r.node.key}</button>{/if}
+              {#if !openable(r)}<code>{r.node.key}</code>{:else}<button type="button" class="link mono" title="Open the node in its editor, as this change has it" onclick={() => onopennode(r)}>{r.node.key}</button>{/if}
               <span class="hint">{r.node.type}{r.created ? '' : ` v${r.node.version ?? 0}`}</span>
               {#if r.created}<span class="tag ok" title="Created by this change; stored when it is applied">new</span>{/if}
               {#if r.removal}<span class="tag danger" title="Deletion proposed in this change">deleted when applied</span>{/if}
               {#if r.edits}<span class="tag ok" title="Property edits proposed in this change">{r.edits} edit{r.edits > 1 ? 's' : ''}</span>{/if}
+              {#if onOption && r.impact}
+                {#if r.impact.flow === scope}<span class="origin own" title="declared by this option: it lands only if the option is selected">this option</span>{:else}<span class="origin" title="declared on the main flow: every option sees it">main flow</span>{/if}
+              {/if}
             </td>
+            {#if impacts}
+              <td class="why">{r.impact?.rationale ?? ''}{#if r.impact && !r.impact.post}<span class="hint" title="declared, no version written yet"> · planned</span>{/if}</td>
+              <td class="mono">
+                {#if r.impact}{version(r.impact.pre)} → {version(r.impact.post)}{#if r.impact.landed?.id}<span class="hint"> · landed {version(r.impact.landed)}</span>{/if}{:else}—{/if}
+              </td>
+            {/if}
             <td>
               {#if r.lifecycle}
                 <span class="state" class:editable={r.editable}>{r.effective}</span>
@@ -193,6 +229,17 @@
                 <span class="hint">no lifecycle</span>
               {/if}
             </td>
+            {#if impacts}
+              <td>
+                {#if r.impact}
+                  <StatusBadge status={r.impact.review} />
+                  {#if r.impact.reviews?.length}<div class="hint">{r.impact.reviews.at(-1)?.by}: {r.impact.reviews.at(-1)?.comment}</div>{/if}
+                  {#if !disabled && onreview && r.impact.review === 'proposed' && !r.impact.superseded}
+                    <button type="button" class="link small" onclick={() => ((reviewing = reviewing === r.impact?.id ? '' : (r.impact?.id ?? '')), (reviewComment = ''))}>Review…</button>
+                  {/if}
+                {/if}
+              </td>
+            {/if}
             <td class="actions">
               {#if disabled}
                 <span class="hint">change closed</span>
@@ -242,9 +289,21 @@
               {/if}
             </td>
           </tr>
+          {#if impacts && reviewing && reviewing === r.impact?.id && !disabled}
+            <tr class="editrow">
+              <td colspan="6">
+                <div class="row review">
+                  <input type="text" class="grow" placeholder="Comment (mandatory)" aria-label="Review comment" bind:value={reviewComment} />
+                  <button type="button" class="small primary" disabled={!reviewComment.trim() || busy !== ''} onclick={() => review(r, true)}>Accept</button>
+                  <button type="button" class="small danger" disabled={!reviewComment.trim() || busy !== ''} onclick={() => review(r, false)}>Reject</button>
+                  <button type="button" class="small" onclick={() => (reviewing = '')}>Cancel</button>
+                </div>
+              </td>
+            </tr>
+          {/if}
           {#if editing === r.node.id && !disabled}
             <tr class="editrow">
-              <td colspan="3">
+              <td colspan={impacts ? 6 : 3}>
                 <form
                   class="edit"
                   onsubmit={(e) => {
@@ -302,7 +361,7 @@
         void create();
       }}
     >
-      <strong>New node</strong>
+      <strong>{impacts ? 'New impact: create a node' : 'New node'}</strong>
       <input type="text" class="mono" placeholder="key (e.g. REQ-12)" aria-label="Key of the new node" bind:value={newNodeKey} />
       <select aria-label="Type of the new node" bind:value={newNodeType}>
         <option value="">— type —</option>
@@ -326,7 +385,8 @@
         <option value="">— node —</option>
         {#each shown as n (n.id)}<option value={n.id}>{n.key} ({n.type}{n.state ? `, ${n.state}` : ''})</option>{/each}
       </select>
-      <button type="button" disabled={!picked} onclick={add}>Add to the change</button>
+      {#if impacts}<input type="text" class="why-input" placeholder="why it is impacted" aria-label="Why the change impacts the node" bind:value={rationale} />{/if}
+      <button type="button" disabled={!picked || (impacts && !rationale.trim())} onclick={add}>{impacts ? 'Add the impact' : 'Add to the change'}</button>
     </div>
   {/if}
 </section>
@@ -383,6 +443,28 @@
   .add select {
     width: auto;
     min-width: 16rem;
+  }
+  .origin {
+    margin-left: 0.3rem;
+    font-size: 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 0 6px;
+    color: var(--muted);
+  }
+  .origin.own {
+    color: var(--scope, var(--accent));
+    border-color: var(--scope, var(--accent));
+  }
+  .why {
+    max-width: 22rem;
+  }
+  .add .why-input {
+    width: 16rem;
+  }
+  .review .grow {
+    flex: 1;
+    min-width: 14rem;
   }
   .editrow td {
     background: var(--surface-2);

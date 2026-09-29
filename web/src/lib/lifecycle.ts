@@ -31,6 +31,8 @@ export interface LifecycleRow {
   created?: ChangeImpact;
   /** the change impact whose written version retires this node */
   removal?: ChangeImpact;
+  /** the change impact of the node: the one standing in the flow shown, else the last one declared on it (rejected) */
+  impact?: ChangeImpact;
 }
 
 /** Versions written by the change impacts, by `id@version` (the change impacts carry references only). */
@@ -121,6 +123,7 @@ export function createdRows(cat: TypeCatalog, cns: ChangeImpact[], posts: PostVe
       edits: 0,
       declared: cat.properties(cn.type),
       created: cn,
+      impact: cn,
     });
   }
   return rows;
@@ -179,6 +182,7 @@ export function lifecycleRows(
       edits,
       declared: cat.properties(node.type),
       removal,
+      impact: cn ?? cns.filter((c) => c.pre?.id === id && !c.superseded).at(-1),
     });
   }
   rows.sort((a, b) => (a.node.key ?? '').localeCompare(b.node.key ?? ''));

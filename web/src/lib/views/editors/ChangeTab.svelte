@@ -37,7 +37,6 @@
   import { flowStepNumber } from '../../flowChain';
   import { processOfFlow } from '../../flowDecision';
   import BoardIssueList from '../../components/BoardIssueList.svelte';
-  import ChangeImpactList from '../../components/ChangeImpactList.svelte';
   import ChangeOptions from '../../components/ChangeOptions.svelte';
   import ChangeDecisions from '../../components/ChangeDecisions.svelte';
   import ScopeBar from '../../components/ScopeBar.svelte';
@@ -287,6 +286,39 @@
     if (row.created) return write(`${row.node.id}:edit`, { key: row.node.key, type: row.node.type }, { props: patch, state }, `edit ${row.node.key}`);
     if (!row.node.id) return false;
     return write(`${row.node.id}:edit`, { pre: { id: row.node.id, version: row.node.version } }, { props: patch }, `edit ${row.node.key}`);
+  }
+
+  /** Declares that the change (on the scope) impacts a node of its baseline, and why: a planned change impact. */
+  async function addImpact(id: string, rationale = '') {
+    const n = nodes.find((x) => x.id === id);
+    if (!change?.id || !n?.id) return;
+    moving = `${id}:add`;
+    error = '';
+    try {
+      await graph.addChangeImpacts(change.id, [{ intent: 'modified', pre: { id: n.id, version: n.version }, rationale: rationale || `work on ${n.key}`, flow: scope || MAIN_SCOPE }]);
+      await load(change.id);
+    } catch (e) {
+      error = errorMessage(e);
+    } finally {
+      moving = '';
+    }
+  }
+
+  /** Accepts or rejects the change impact of a row, on the scope. */
+  async function reviewRow(row: LifecycleRow, accept: boolean, comment: string): Promise<boolean> {
+    if (!change?.id || !row.impact?.id) return false;
+    moving = `${row.node.id}:review`;
+    error = '';
+    try {
+      await graph.reviewChangeImpact(change.id, row.impact.id, accept, comment, scope || MAIN_SCOPE);
+      await load(change.id);
+      return true;
+    } catch (e) {
+      error = errorMessage(e);
+      return false;
+    } finally {
+      moving = '';
+    }
   }
 
   /** Creates a node: identity and type only. */
@@ -581,15 +613,27 @@
       </section>
       {:else if active === 'impacts'}
       <div class="scoped" style="--scope: {scopeTint}">
-      {@render scopeHead('Change impacts', view?.nodes?.length ?? 0)}
-      <section class="card">
-        <ChangeImpactList changeId={ch.id ?? ''} nodes={view?.nodes ?? []} scope={scope || MAIN_SCOPE} closed={!writable} onchange={() => load(selected)} onopennode={(n) => openNode({ id: n.post?.id ?? n.pre?.id ?? '', key: n.key ?? '' }, { pin: true, change: ch.id ?? '' })} />
-      </section>
-
-      <section class="card">
-        <h3>Node edits <span class="count">{lcRows.length}</span>{#if writable}<span class="hint">&nbsp;· written on {scopeLabel}</span>{/if}</h3>
-      <ChangeLifecycle rows={lcRows} candidates={lcCandidates} disabled={!writable} busy={moving} onmove={move} onedit={edit} types={typeNames} {lifecycleOf} keys={takenKeys} oncreate={createNode} onremove={removeNode} onundo={undoDelete} onhistory={(r) => openNode(r.node, { pin: true, generic: true, pane: 'history' })} onopennode={(r) => openNode(r.node, { pin: true, change: ch.id ?? '' })} onadd={(id) => (extraNodes = [...extraNodes, id])} />
-      </section>
+      {@render scopeHead('Change impacts', lcRows.length)}
+      <ChangeLifecycle
+        impacts
+        scope={scope || MAIN_SCOPE}
+        rows={lcRows}
+        candidates={lcCandidates}
+        disabled={!writable}
+        busy={moving}
+        onmove={move}
+        onedit={edit}
+        types={typeNames}
+        {lifecycleOf}
+        keys={takenKeys}
+        oncreate={createNode}
+        onremove={removeNode}
+        onundo={undoDelete}
+        onreview={reviewRow}
+        onhistory={(r) => openNode(r.node, { pin: true, generic: true, pane: 'history' })}
+        onopennode={(r) => openNode({ id: r.impact?.post?.id ?? r.node.id ?? '', key: r.node.key ?? '' }, { pin: true, change: ch.id ?? '', flow: scope || MAIN_SCOPE })}
+        onadd={addImpact}
+      />
       </div>
       {:else if active === 'items'}
       <div class="scoped" style="--scope: {scopeTint}">

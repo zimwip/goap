@@ -58,13 +58,16 @@ export interface OpenNodeOptions {
   pane?: string;
   /** working change of the default node editor */
   change?: string;
+  /** flow or option of the working change the node is seen and edited on ('main' or an option id, ADR 0032 §6) */
+  flow?: string;
 }
 
 /** The tab of a node in the default node editor. */
-export function nodeTabSpec(n: NodeLike, opts: Pick<OpenNodeOptions, 'pane' | 'change'> = {}): TabSpec {
+export function nodeTabSpec(n: NodeLike, opts: Pick<OpenNodeOptions, 'pane' | 'change' | 'flow'> = {}): TabSpec {
   const params: Record<string, string> = { id: n.id ?? '', key: n.key ?? '' };
   if (opts.pane) params.pane = opts.pane;
   if (opts.change) params.change = opts.change;
+  if (opts.change && opts.flow) params.flow = opts.flow;
   return { kind: 'node', params };
 }
 

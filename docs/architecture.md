@@ -133,6 +133,9 @@ REQ-1  v1(main) ── v3(main, revise) ───────────── 
   Impacts`, `<scope> ▸ Items`) show the change as that flow sees it (`GetBlackboard` on the flow), each impact
   marked *this option* or *main flow*; reviews and edits made there name that flow explicitly. Looking at an
   option is local to the editor; *Work on it* moves the active pointer (where agents and calls without a flow go).
+  The Impacts pane is one list: a row per impacted node (why, versions `pre → post`, state and edits, review), an
+  impact is added by creating a node or picking one with the reason it is impacted, and the node link opens the
+  version the change wrote in that scope (the node editor is bound to the change and the flow, its edits go there).
   Comparing, evaluating, selecting and rejecting are the Compare pane.
 - **Decision loops** ([ADR 0009](adr/0009-branches-options-decisions.md) §4): a **decision point** is a question the
   change must settle, usually which option (`OpenDecision`). Its decider (an agent, or a person) rules it:
