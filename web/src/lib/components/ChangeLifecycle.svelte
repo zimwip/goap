@@ -184,11 +184,14 @@
 </script>
 
 <section class="card" id="change-lifecycle">
-  <h3>{impacts ? 'Change impacts' : 'Nodes'} <span class="count">{rows.length}</span></h3>
-  <p class="hint">
-    A node is modified only in an editable state, which it holds only through a change: reopen it, edit it, then move it to a
-    non-editable state before applying. Nodes without a lifecycle can be edited directly.
-  </p>
+  {#if !impacts}<h3>Nodes <span class="count">{rows.length}</span></h3>{/if}
+  <details class="rules">
+    <summary class="hint">How nodes are edited</summary>
+    <p class="hint">
+      A node is modified only in an editable state, which it holds only through a change: reopen it, edit it, then move it to a
+      non-editable state before applying. Nodes without a lifecycle can be edited directly.
+    </p>
+  </details>
   {#if leftEditable.length}
     <div class="alert" role="status">
       {leftEditable.map((r) => r.node.key).join(', ')} {leftEditable.length > 1 ? 'are' : 'is'} still in an editable state: move
@@ -213,7 +216,7 @@
               {/if}
             </td>
             {#if impacts}
-              <td class="why">{r.impact?.rationale ?? ''}{#if r.impact && !r.impact.post}<span class="hint" title="declared, no version written yet"> · planned</span>{/if}</td>
+              <td class="why">{r.impact?.rationale ?? ''}{#if r.impact && !r.impact.post}<span class="hint planned" title="declared, no version written yet">planned</span>{/if}</td>
               <td class="mono">
                 {#if r.impact}{version(r.impact.pre)} → {version(r.impact.post)}{#if r.impact.landed?.id}<span class="hint"> · landed {version(r.impact.landed)}</span>{/if}{:else}—{/if}
               </td>
@@ -444,6 +447,22 @@
     width: auto;
     min-width: 16rem;
   }
+  .rules {
+    margin: 0 0 6px;
+  }
+  .rules summary {
+    cursor: pointer;
+    width: fit-content;
+  }
+  .rules p {
+    margin: 4px 0 0;
+  }
+  /* a chip never breaks inside: the cell wraps between chips */
+  .tag,
+  .origin {
+    white-space: nowrap;
+    display: inline-block;
+  }
   .origin {
     margin-left: 0.3rem;
     font-size: 0.75rem;
@@ -458,6 +477,10 @@
   }
   .why {
     max-width: 22rem;
+  }
+  .planned {
+    display: block;
+    white-space: nowrap;
   }
   .add .why-input {
     width: 16rem;
