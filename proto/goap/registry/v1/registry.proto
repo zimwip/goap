@@ -298,25 +298,33 @@ message Process {
   string name = 1;
   string description = 2;
   repeated string examples = 3;
-  // the top steps run in any order (default: in declaration order)
-  bool parallel = 4;
+  reserved 4;
+  reserved "parallel";
   repeated Step steps = 5;
+  // the reference documents that describe the process
+  repeated Reference references = 6;
 }
 
-// A step of a process, done by one method: sub-steps, an action, an agent, a nested process, or by hand (none).
+// A reference document: "doc:<key>" (a document of the graph), "<mcp>:<path>" (a document repository) or a URL.
+message Reference {
+  string title = 1;
+  string ref = 2;
+  string section = 3;
+}
+
+// A step of a process, done by one method: sub-steps, an action, an agent, a nested process, or by hand (none). Steps
+// are sequenced by their conditions, not by their position.
 message Step {
   string name = 1;
   string description = 2;
   // what a person does, for a manual step
   string instructions = 3;
-  // entry conditions, on top of the steps before it being done
+  // entry conditions (also of its sub-steps)
   map<string, bool> pre = 4;
   // exit criteria (default: derived from the method)
   map<string, bool> done = 5;
-  // earlier sibling steps it waits for, in a parallel level
-  repeated string after = 6;
-  // the sub-steps run in any order
-  bool parallel = 7;
+  reserved 6, 7;
+  reserved "after", "parallel";
   repeated Step steps = 8;
   string action = 9;
   string agent = 10;
@@ -326,6 +334,8 @@ message Step {
   string process = 12;
   // alternative actions the planner chooses among (instead of action)
   repeated string actions = 13;
+  // the reference documents that describe the step
+  repeated Reference references = 14;
 }
 
 message GoalSummary {

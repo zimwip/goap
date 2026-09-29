@@ -15,27 +15,43 @@ which runs a deployment procedure).
 
 ## Decision
 
-1. **A methodology declares `processes`.** A process has a name, a description, intent examples and a tree of
-   **steps**. A step has a name, a description, entry conditions (`pre`), exit criteria (`done`) and **one method**:
+1. **A methodology declares `processes`.** A process has a name, a description, intent examples, its **reference
+   documents** and a tree of **steps**. A step has a name, a description, reference documents, entry conditions
+   (`pre`), exit criteria (`done`) and **one method**:
 
    | Method | Field | The step is done by | Default exit criteria |
    |---|---|---|---|
-   | sub-steps | `steps` | its sub-steps (in order, or `parallel: true` with `after`) | those of its sub-steps |
+   | sub-steps | `steps` | its sub-steps | those of its sub-steps |
    | action | `action` | one action of the methodology (its specializations apply) | the action's effects |
    | alternatives | `actions` | the actions the planner chooses among (the cheapest first, another one when it fails) | the first one's effects |
    | agent | `agent`, `goal` | an agent of the methodology, which plans towards the goal (default: its only goal) | the goal's conditions |
    | nested process | `process` | another process: `<process>` of this methodology or `<methodology>/<process>` | those of the nested process; for another methodology's process, once it has run |
    | by hand | (none) | a person, from `instructions` | once submitted |
 
-   Steps run in declaration order unless their level is `parallel`; `after` then names the earlier siblings a step
-   waits for. A step waits for the whole chain before it (entry is transitive), so the order holds even when the
-   criteria of an earlier step already hold at the start.
+   **Steps are sequenced by their conditions, not by their position.** Their order in the tree is only how the
+   method reads; steps do not wait for one another. A step can be planned once its **entry** holds:
+
+   - the entry conditions of the steps containing it (a phase's `pre` applies to its sub-steps);
+   - its own `pre`;
+   - the preconditions of what it runs: its action's `pre`; for a nested process of the methodology, its
+     **prerequisites** — the preconditions of its steps that none of its steps establishes (what it needs from outside
+     before it can make progress).
+
+   A step done "once it has run" (manual, or a process of another methodology, without `done`) has a condition
+   `step:<process>/<path>` that any other step may name in its `pre`, wherever it is declared. A good sequence is
+   therefore a matter of designing the conditions: what a step needs, and what it makes true.
+
+   **Reference documents** (`references: [{title, ref, section}]`) say where the process or the step is described in
+   the documentary repository: a document of the graph (`doc:<key>`), a document repository reached through an MCP
+   (`<mcp>:<path>`, e.g. the built-in `document-repository`), or a URL. A manual step lists them in its task; they are
+   the link between the executable method and the reference documents the organisation already maintains
+   (ADR 0035 §5).
 
 2. **A process compiles to the planner's vocabulary**; nothing new runs at execution. For each process, the
    methodology gets an **agent** and a **goal** of the process name (the name must not collide with a declared agent
    or goal). Each step other than sub-steps becomes a planned **action** named by its path
-   (`software_delivery/analysis/scope`, alternatives suffixed `:<action>`): its preconditions are the step's entry
-   conditions plus the exit criteria of what precedes it, its effects the step's exit criteria. An action step is a
+   (`software_delivery/analysis/scope`, alternatives suffixed `:<action>`): its preconditions are the step's entry,
+   its effects the step's exit criteria. An action step is a
    copy of the action (same implementation, `Action.Implements` names it so its specializations apply); an agent or
    nested process step is the builtin `process.step`; a manual step is a human action. A step done "once it has run"
    gets a generated condition `step:<path>` over a `step_done` artifact, recorded by `process.step` when its
@@ -63,9 +79,13 @@ which runs a deployment procedure).
   actions, agents and sub-processes over time without changing how it runs.
 - The planner still decides within a step (alternatives, an agent's own plan) and replans when the world changes:
   a step whose criteria stop holding (a new requirement not yet traced) is planned again before the steps after it.
-- `methodologies/sdlc.yaml` 0.5.0 describes `software_delivery` (framing by hand, analysis in sub-steps with
-  alternatives, design by the architect agent, build by the specialized `build` action, `release_train` nested,
-  application) next to its existing agents; `pkg/engine/sdlc_test.go` runs it end to end.
+- `methodologies/sdlc.yaml` 0.5.1 describes `software_delivery` (framing by hand, analysis entered once framed
+  (`step:software_delivery/framing`) in sub-steps with alternatives, design by the architect agent once the
+  requirements are specified, build by the specialized `build` action, `release_train` nested and entered on its
+  prerequisites, application) next to its existing agents, with its reference documents; `pkg/engine/sdlc_test.go`
+  runs it end to end, and `pkg/engine/steps_test.go` a process declared out of order that its conditions sequence.
+- A step whose entry is under-specified can be planned too early (the planner minimizes cost among what is
+  possible): the conditions are the design, and the validation only checks that they exist and do not contradict.
 - A step retried after its sub-agent ended appears twice in the run's steps (suspended, then completed), as for any
   action waiting for a sub-agent.
 - Not done yet: a step's own permission or addressee (who is expected to do a manual step: ADR 0033 §5), and

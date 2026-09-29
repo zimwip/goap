@@ -905,18 +905,23 @@ processes:
     steps:
       - name: framing                        # by hand: a human task, done once submitted
         instructions: Check the intent with the requester
-      - name: analysis                       # sub-steps, in order (parallel: true + after: for any order)
+        references: [{title: Delivery guide, ref: "document-repository:sdlc/guide.md", section: Framing}]
+      - name: analysis                       # sub-steps; the phase's pre applies to them
+        pre: {"step:software_delivery/framing": true}
         steps:
           - {name: scope, actions: [identify_scope, select_scope]}   # alternatives the planner chooses among
           - {name: impacts, action: propagate_impacts}
-      - {name: design, agent: architect}     # an agent plans it (goal: default its only goal)
+      - {name: design, agent: architect, pre: {requirements_specified: true}}   # an agent plans it
       - {name: release, process: release_train}   # a nested process (or <methodology>/<process>)
 ```
 
-A process compiles to planner inputs: an agent and a goal of its name, and one action per step (named by its path,
-`software_delivery/analysis/scope`) whose preconditions are the step's entry conditions plus the exit criteria of the
-steps before it, and whose effects are its exit criteria (`done`, default: the action's effects, the agent's goal, the
-sub-steps' criteria, the nested process's criteria, or a `step_done` artifact once it has run). An agent or nested
+Steps are sequenced by their conditions, not by their position. A process compiles to planner inputs: an agent and a
+goal of its name, and one action per step (named by its path, `software_delivery/analysis/scope`) whose preconditions
+are the step's entry — the `pre` of the steps containing it, its own, and those of what it runs (its action's `pre`,
+a nested process's prerequisites) — and whose effects are its exit criteria (`done`, default: the action's effects,
+the agent's goal, the sub-steps' criteria, the nested process's criteria, or a `step:<path>` condition over a
+`step_done` artifact once it has run, which other steps can name). `references` link a process or a step to its
+reference documents (`doc:<key>`, `<mcp>:<path>`, URL). An agent or nested
 process step is the builtin `process.step`: a sub-agent on the same change, so processes nest.
 
 See `methodologies/examples/impact-analysis.yaml` for the full executable example, and
@@ -925,7 +930,7 @@ or an LLM). Action specialization fields: `specializes`, `when`, `priority`, `ki
 node type subtyping: `extends`. An `incremental: true` action reaches its effects across several
 executions: an execution that produces items without reaching them is **progress**, not a failure.
 
-### 4.1 SDLC methodology on the ALM domain (`methodologies/sdlc.yaml`, version 0.5.0, on the shared `alm` domain of `domains/alm.yaml`)
+### 4.1 SDLC methodology on the ALM domain (`methodologies/sdlc.yaml`, version 0.5.1, on the shared `alm` domain of `domains/alm.yaml`)
 
 ALM domain (demo data: `internal/graphsvc/seed.go`):
 
@@ -954,9 +959,10 @@ Cycle (goals, from most partial to most complete):
 
 Agents: `analyst` (goap), `architect` (hybrid), `builder` (goap), `release_manager` (goap), `delivery`
 (goap, the whole cycle). Processes (ADR 0034): `software_delivery` walks the cycle phase by phase — framing by hand,
-analysis in sub-steps (scope and requirements with their human alternatives, impacts, then traceability and test plan
-in any order), design by the `architect` agent, the specialized `build`, the nested `release_train` (plan, release
-note, review, deployment waves), then the application. Review covers content; deployments, recorded after it, do not
+analysis once framed, in sub-steps (scope and requirements with their human alternatives, impacts, traceability, test
+plan), design by the `architect` agent once the requirements are specified, the specialized `build`, the nested
+`release_train` (plan, release note, review, deployment waves) entered on its prerequisites, then the application —
+all sequenced by their conditions, each process linked to its reference documents. Review covers content; deployments, recorded after it, do not
 require it. The permission for a specialization (e.g. `deploy_production`) is checked before its
 execution: without it, the process waits for approval from an authorized person. Since the
 "each element …" conditions hold on an empty set, the design, build, and delivery actions also require

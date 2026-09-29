@@ -1,5 +1,5 @@
 name: sdlc
-version: 0.5.0
+version: 0.5.1
 description: >
   Software Development Life Cycle (SDLC) on the ALM repository: needs →
   requirements → functions → components → build artifacts → applications →
@@ -714,49 +714,59 @@ agents:
 
 # The route of a change, described as steps and sub-steps with the precision the methodology has for each (ADR 0034):
 # a step names the action that does it, alternatives the planner chooses among, an agent that plans it, a process it
-# nests, or only what a person does. Each process is run by an agent of its name, towards a goal of its name.
+# nests, or only what a person does. Steps are sequenced by their conditions, not by their position: a step can be
+# planned once its entry conditions hold (those of the phase containing it, its own, and those of what it runs). Each
+# process is run by an agent of its name, towards a goal of its name; its reference documents say where it is
+# described in the documentary repository.
 processes:
   - name: software_delivery
     description: Deliver a change phase by phase — framing, analysis, design, build, release, application
     examples: ["deliver the change step by step", "run the software delivery process"]
+    references:
+      - {title: Software delivery guide, ref: "document-repository:sdlc/software-delivery-guide.md"}
     steps:
       - name: framing
         description: Frame the change with its requester
         instructions: >
           Check with the requester that the intent states a concrete outcome, its scope (what it touches) and why it
           is needed; amend the intent of the change if it does not, then mark the step done.
+        references:
+          - {title: Software delivery guide, ref: "document-repository:sdlc/software-delivery-guide.md", section: Framing a change}
       - name: analysis
-        description: Scope, impacts, requirements, traceability and test plan
+        description: Scope, impacts, requirements, traceability and test plan, once the change is framed
+        pre: {"step:software_delivery/framing": true}
         steps:
           - name: scope
             description: Identify the elements the change directly concerns
             actions: [identify_scope, select_scope]
           - name: impacts
-            description: Propagate the impacts along the ALM links
+            description: Propagate the impacts along the ALM links (once scoped)
             action: propagate_impacts
           - name: specification
-            description: Requirements first, then their traceability and their tests, in any order
-            parallel: true
+            description: Requirements (once the impacts are known), then their traceability and their tests
             steps:
               - {name: requirements, actions: [specify_requirements, write_requirements]}
-              - {name: traceability, actions: [trace_requirements, trace_manually], after: [requirements]}
-              - {name: test_plan, action: plan_tests, after: [requirements]}
+              - {name: traceability, actions: [trace_requirements, trace_manually]}
+              - {name: test_plan, action: plan_tests}
       - name: design
-        description: Allocate the functions and design the solution (the architect plans it)
+        description: Allocate the functions and design the solution (the architect plans it) once the requirements are specified
+        pre: {propagated: true, requirements_specified: true}
         agent: architect
       - name: build
-        description: Build every component in scope, according to its technology
+        description: Build every component in scope, according to its technology (once the design is checked)
         action: build
       - name: release
-        description: Plan, note, review and roll out the releases
+        description: Plan, note, review and roll out the releases (entered once what the release train needs holds)
         process: release_train
       - name: application
-        description: Apply the change to the ALM repository
+        description: Apply the change to the ALM repository once reviewed and rolled out
         action: apply_change
 
   - name: release_train
     description: Release — plan the releases, write the release note, review, deploy environment by environment
     examples: ["release the change", "run the release train"]
+    references:
+      - {title: Release management procedure, ref: "document-repository:sdlc/release-management.md"}
     steps:
       - {name: plan, action: plan_release}
       - {name: release_note, actions: [write_release_note, assemble_release_note]}

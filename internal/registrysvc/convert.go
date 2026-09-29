@@ -42,7 +42,7 @@ func ToPB(r Record) *registryv1.Methodology {
 		out.Agents = append(out.Agents, pa)
 	}
 	for _, p := range m.Processes {
-		out.Processes = append(out.Processes, &registryv1.Process{Name: p.Name, Description: p.Description, Examples: p.Examples, Parallel: p.Parallel, Steps: stepsToPB(p.Steps)})
+		out.Processes = append(out.Processes, &registryv1.Process{Name: p.Name, Description: p.Description, Examples: p.Examples, Steps: stepsToPB(p.Steps), References: refsToPB(p.References)})
 	}
 	return out
 }
@@ -51,7 +51,7 @@ func stepsToPB(steps []methodology.Step) []*registryv1.Step {
 	out := make([]*registryv1.Step, 0, len(steps))
 	for _, s := range steps {
 		out = append(out, &registryv1.Step{Name: s.Name, Description: s.Description, Instructions: s.Instructions, Pre: s.Pre, Done: s.Done,
-			After: s.After, Parallel: s.Parallel, Steps: stepsToPB(s.Steps), Action: s.Action, Actions: s.Actions, Agent: s.Agent, Goal: s.Goal, Process: s.Process})
+			References: refsToPB(s.References), Steps: stepsToPB(s.Steps), Action: s.Action, Actions: s.Actions, Agent: s.Agent, Goal: s.Goal, Process: s.Process})
 	}
 	return out
 }
@@ -63,7 +63,23 @@ func stepsFromPB(steps []*registryv1.Step) []methodology.Step {
 	out := make([]methodology.Step, 0, len(steps))
 	for _, s := range steps {
 		out = append(out, methodology.Step{Name: s.Name, Description: s.Description, Instructions: s.Instructions, Pre: nilIfEmpty(s.Pre), Done: nilIfEmpty(s.Done),
-			After: nilIfNone(s.After), Parallel: s.Parallel, Steps: stepsFromPB(s.Steps), Action: s.Action, Actions: nilIfNone(s.Actions), Agent: s.Agent, Goal: s.Goal, Process: s.Process})
+			References: refsFromPB(s.References), Steps: stepsFromPB(s.Steps), Action: s.Action, Actions: nilIfNone(s.Actions), Agent: s.Agent, Goal: s.Goal, Process: s.Process})
+	}
+	return out
+}
+
+func refsToPB(refs []methodology.Reference) []*registryv1.Reference {
+	var out []*registryv1.Reference
+	for _, r := range refs {
+		out = append(out, &registryv1.Reference{Title: r.Title, Ref: r.Ref, Section: r.Section})
+	}
+	return out
+}
+
+func refsFromPB(refs []*registryv1.Reference) []methodology.Reference {
+	var out []methodology.Reference
+	for _, r := range refs {
+		out = append(out, methodology.Reference{Title: r.Title, Ref: r.Ref, Section: r.Section})
 	}
 	return out
 }
@@ -125,7 +141,7 @@ func FromPB(p *registryv1.Methodology) methodology.Methodology {
 		m.Agents = append(m.Agents, ma)
 	}
 	for _, p := range p.Processes {
-		m.Processes = append(m.Processes, methodology.Process{Name: p.Name, Description: p.Description, Examples: nilIfNone(p.Examples), Parallel: p.Parallel, Steps: stepsFromPB(p.Steps)})
+		m.Processes = append(m.Processes, methodology.Process{Name: p.Name, Description: p.Description, Examples: nilIfNone(p.Examples), Steps: stepsFromPB(p.Steps), References: refsFromPB(p.References)})
 	}
 	return m
 }

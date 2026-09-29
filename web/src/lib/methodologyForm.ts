@@ -5,7 +5,7 @@
 // lists become text, JSON params become text. `toForm` / `fromForm` convert
 // between this model and the proto message.
 
-import type { Action, Agent, Issue, Lifecycle, LifecycleState, LifecycleTransition, LinkType, Methodology, MethodologyProcess, NodeType, ProcessStep, SearchProperty, Struct, Trigger } from './api';
+import type { Action, Agent, Issue, Lifecycle, LifecycleState, LifecycleTransition, LinkType, DocumentReference, Methodology, MethodologyProcess, NodeType, ProcessStep, SearchProperty, Struct, Trigger } from './api';
 
 export interface CondRow {
   cond: string;
@@ -199,10 +199,14 @@ export interface StepForm {
   process: string;
   pre: CondRow[];
   done: CondRow[];
-  after: string[];
-  /** its sub-steps run in any order */
-  parallel: boolean;
+  references: ReferenceForm[];
   steps: StepForm[];
+}
+
+export interface ReferenceForm {
+  title: string;
+  ref: string;
+  section: string;
 }
 
 export interface ProcessForm extends Identified {
@@ -210,7 +214,7 @@ export interface ProcessForm extends Identified {
   description: string;
   /** one example per line */
   examples: string;
-  parallel: boolean;
+  references: ReferenceForm[];
   steps: StepForm[];
 }
 
@@ -312,11 +316,10 @@ export const emptyStep = (name = ''): StepForm => ({
   process: '',
   pre: [],
   done: [],
-  after: [],
-  parallel: false,
+  references: [],
   steps: [],
 });
-export const emptyProcess = (): ProcessForm => ({ uid: newUid(), name: '', description: '', examples: '', parallel: false, steps: [emptyStep('first')] });
+export const emptyProcess = (): ProcessForm => ({ uid: newUid(), name: '', description: '', examples: '', references: [], steps: [emptyStep('first')] });
 export const emptyTrigger = (): TriggerForm => ({
   name: '',
   description: '',
@@ -613,7 +616,7 @@ export function toForm(m: Methodology): MethodologyForm {
       name: p.name ?? '',
       description: p.description ?? '',
       examples: (p.examples ?? []).join('\n'),
-      parallel: !!p.parallel,
+      references: refsToForm(p.references),
       steps: (p.steps ?? []).map(stepToForm),
     })),
   };
@@ -642,10 +645,39 @@ function stepToForm(s: ProcessStep): StepForm {
     process: s.process ?? '',
     pre: rows(s.pre),
     done: rows(s.done),
-    after: [...(s.after ?? [])],
-    parallel: !!s.parallel,
+    references: refsToForm(s.references),
     steps: (s.steps ?? []).map(stepToForm),
   };
+}
+
+function refsToForm(rs: DocumentReference[] | undefined): ReferenceForm[] {
+  return (rs ?? []).map((r) => ({ title: r.title ?? '', ref: r.ref ?? '', section: r.section ?? '' }));
+}
+
+function refsFromForm(rs: ReferenceForm[]): DocumentReference[] {
+  return rs.map((r) => {
+    const o: DocumentReference = {};
+    put(o, 'title', r.title.trim());
+    put(o, 'ref', r.ref.trim());
+    put(o, 'section', r.section.trim());
+    return o;
+  });
+}
+
+/**
+ * Conditions of the steps done once they have run ("step:<process>/<path>"): manual steps and processes of other
+ * methodologies without exit criteria. Any step may name them in its entry conditions.
+ */
+export function stepConditionNames(f: MethodologyForm): string[] {
+  const out: string[] = [];
+  for (const p of f.processes) {
+    for (const x of walkSteps(p.steps)) {
+      const s = x.step;
+      const once = s.method === 'manual' || (s.method === 'process' && s.process.includes('/') && !s.process.startsWith(`${f.name.trim()}/`));
+      if (once && !s.done.some((r) => r.cond.trim())) out.push(`step:${p.name}/${x.path}`);
+    }
+  }
+  return out;
 }
 
 /** The step as the server expects it: only the fields of its method. */
@@ -655,13 +687,12 @@ export function stepFromForm(s: StepForm): ProcessStep {
   put(o, 'description', s.description.trim());
   put(o, 'pre', toMap(s.pre));
   put(o, 'done', toMap(s.done));
-  put(o, 'after', s.after.filter(Boolean));
+  put(o, 'references', refsFromForm(s.references));
   switch (s.method) {
     case 'manual':
       put(o, 'instructions', s.instructions.trim());
       break;
     case 'steps':
-      if (s.parallel) o.parallel = true;
       put(o, 'steps', s.steps.map(stepFromForm));
       break;
     case 'action':
@@ -857,7 +888,7 @@ export function fromForm(f: MethodologyForm): { methodology: Methodology; issues
           .map((x) => x.trim())
           .filter(Boolean),
       );
-      if (p.parallel) o.parallel = true;
+      put(o, 'references', refsFromForm(p.references));
       put(o, 'steps', p.steps.map(stepFromForm));
       return o;
     }),

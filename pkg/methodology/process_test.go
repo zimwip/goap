@@ -36,15 +36,18 @@ func TestProcessCompilesToStepActions(t *testing.T) {
 	c, issues := compileProcess(t, `
 processes:
   - name: flow
+    references: [{title: Guide, ref: "document-repository:flow.md"}]
     steps:
       - name: phase
-        parallel: true
+        pre: {c: false}
         steps:
           - {name: first, action: do_a}
-          - {name: other, actions: [do_c, do_a]}
-          - {name: second, action: do_b, after: [first]}
-      - {name: agentic, agent: worker}
-      - {name: manual, description: Sign off}
+          - {name: other, actions: [do_c, do_a], pre: {"step:flow/manual": true}}
+          - {name: second, action: do_b}
+      - {name: agentic, agent: worker, pre: {b: true}}
+      - name: manual
+        description: Sign off
+        references: [{title: Checklist, ref: "doc:CHK-1", section: "2"}]
 `)
 	if len(issues) > 0 {
 		t.Fatal(issues)
@@ -60,21 +63,27 @@ processes:
 	if got := strings.Join(names, ","); got != "flow/phase/first,flow/phase/other:do_c,flow/phase/other:do_a,flow/phase/second,flow/agentic,flow/manual" {
 		t.Fatalf("step actions %s", got)
 	}
+	// no implicit order: a step needs what the phase needs, its own entry conditions and its action's preconditions
+	first, _ := c.Action("flow/phase/first")
+	if len(first.Pre) != 1 || first.Pre["c"] {
+		t.Fatalf("the first step only inherits the phase's entry: %+v", first.Pre)
+	}
 	second, _ := c.Action("flow/phase/second")
-	if second.Implements != "do_b" || !second.Pre["a"] || len(second.Pre) != 1 || second.Declared() != "do_b" {
-		t.Fatalf("an action step keeps its action and waits for the steps it follows: %+v", second)
+	if second.Implements != "do_b" || !second.Pre["a"] || second.Pre["c"] || len(second.Pre) != 2 || second.Declared() != "do_b" {
+		t.Fatalf("an action step keeps its action's preconditions, not the steps before it: %+v", second)
 	}
 	other, _ := c.Action("flow/phase/other:do_a")
-	if len(other.Pre) != 0 || !other.Effects["c"] || !other.Effects["a"] || other.Declared() != "do_a" {
-		t.Fatalf("a parallel step waits for nothing; each alternative reaches the step's criteria (the first's effects): %+v", other)
+	if !other.Pre[StepCondition("flow/manual")] || !other.Effects["c"] || !other.Effects["a"] || other.Declared() != "do_a" {
+		t.Fatalf("a step may wait for a later step; each alternative reaches the step's criteria: %+v", other)
 	}
 	agentic, _ := c.Action("flow/agentic")
-	if agentic.Builtin != BuiltinStep || agentic.Params["goal"] != "all" || !agentic.Pre["a"] || !agentic.Pre["b"] || !agentic.Pre["c"] || !agentic.Effects["c"] {
-		t.Fatalf("an agent step follows the phase and is done by the agent's goal: %+v", agentic)
+	if agentic.Builtin != BuiltinStep || agentic.Params["goal"] != "all" || len(agentic.Pre) != 1 || !agentic.Pre["b"] || !agentic.Effects["c"] {
+		t.Fatalf("an agent step is entered by its own conditions and done by the agent's goal: %+v", agentic)
 	}
 	manual, _ := c.Action("flow/manual")
-	if manual.Kind != KindHuman || manual.Instructions != "Sign off" || !manual.Effects[StepCondition("flow/manual")] {
-		t.Fatalf("a manual step is a human task done once submitted: %+v", manual)
+	if manual.Kind != KindHuman || !strings.HasPrefix(manual.Instructions, "Sign off") || !strings.Contains(manual.Instructions, "Checklist (doc:CHK-1), 2") ||
+		!manual.Effects[StepCondition("flow/manual")] || len(manual.Pre) != 0 {
+		t.Fatalf("a manual step is a human task with its references, done once submitted: %+v", manual)
 	}
 	g, ok := c.Goal("flow")
 	if !ok || !g.Pre[StepCondition("flow/manual")] || !g.Pre["c"] {
@@ -105,15 +114,14 @@ processes:
 processes:
   - name: x
     steps: [{name: s, action: nope}]`, `unknown action "nope"`},
-		"after in a sequence": {`
+		"unknown step condition": {`
 processes:
   - name: x
-    steps: [{name: s, action: do_a}, {name: t, action: do_c, after: [s]}]`, "after applies"},
-		"after a later step": {`
+    steps: [{name: s, action: do_a, pre: {"step:x/nope": true}}]`, `unknown condition "step:x/nope"`},
+		"reference without document": {`
 processes:
   - name: x
-    parallel: true
-    steps: [{name: s, action: do_a, after: [t]}, {name: t, action: do_c}]`, "not an earlier step"},
+    steps: [{name: s, references: [{title: Guide}]}]`, "names its document"},
 		"nesting itself": {`
 processes:
   - name: x
@@ -131,7 +139,7 @@ processes:
 		"conflicting conditions": {`
 processes:
   - name: x
-    steps: [{name: s, action: do_a}, {name: t, action: do_c, pre: {a: false}}]`, "both true and false"},
+    steps: [{name: t, action: do_b, pre: {a: false}}]`, "both true and false"},
 		"goal without agent": {`
 processes:
   - name: x
@@ -158,7 +166,7 @@ version: 1.0.0
 namespace: alm
 processes:
   - name: checklist
-    steps: [{name: one}, {name: two, process: other/flow}]
+    steps: [{name: one}, {name: two, process: other/flow, pre: {"step:checklist/one": true}}]
 `))
 	if err != nil {
 		t.Fatal(err)
@@ -192,8 +200,24 @@ processes:
 		t.Fatal(issues)
 	}
 	run, _ := c.Action("outer/inner_run")
-	if !run.Effects["a"] || !run.Effects[StepCondition("inner/sign")] {
-		t.Fatalf("a nested process of the methodology is done by its exit criteria: %+v", run.Effects)
+	if !run.Effects["a"] || !run.Effects[StepCondition("inner/sign")] || len(run.Pre) != 0 {
+		t.Fatalf("a nested process of the methodology is done by its exit criteria and needs nothing it makes itself: %+v", run)
+	}
+	// what a nested process needs from outside is the entry of the step nesting it
+	c2, issues := compileProcess(t, `
+processes:
+  - name: outer
+    steps: [{name: run, process: needy}]
+  - name: needy
+    steps:
+      - {name: b_step, action: do_b}
+      - {name: c_step, action: do_c, pre: {b: true}}
+`)
+	if len(issues) > 0 {
+		t.Fatal(issues)
+	}
+	if r, _ := c2.Action("outer/run"); len(r.Pre) != 1 || !r.Pre["a"] {
+		t.Fatalf("prerequisites of needy: a (do_b needs it, nothing in needy makes it; b is made by b_step): %+v", r.Pre)
 	}
 	outer, _ := c.Agent("outer")
 	var names []string

@@ -192,6 +192,13 @@ to a methodology publication, needs cross-namespace changes (C1) and version pin
   dossier, test report, runbook) are declared once and reused.
 - The node index (ADR 0026) indexes documents and their sections, so "find the runbook of the payment service" works
   from the assistant.
+- **The existing documentary repository stays the reference.** Processes and steps already point at their reference
+  documents (`references`, ADR 0034): a `doc:<key>` document of the graph, or a file of a repository the
+  organisation already has, reached through an MCP (`document-repository:<path>`, served by a connector per unit,
+  design rule 3). A reference document can be **imported** as a `document@Document` (its sections and embeds
+  recognised) or stay external; either way the method (executable) and its description (the reference documents)
+  are linked both ways: from a step to the sections that describe it, and from a document to the steps it governs,
+  so a change to a reference document can raise a change on the methodology, and the reverse.
 
 ### 6. Changes across namespaces (C1)
 

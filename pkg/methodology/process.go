@@ -12,15 +12,40 @@ import (
 // Process describes how an objective (the realization of a change) is reached, as a tree of steps (ADR 0034): phases,
 // steps and sub-steps, each described with the precision the methodology has for it. A step is done by one method:
 // sub-steps, an action, an agent (which plans), another process (nested), or by hand (only described). A process is
-// run by an agent of its own name, whose goal (also of its name) is that every top step is done; a step that runs an
-// agent or a process starts it as a sub-agent on the same change, so processes nest.
+// run by an agent of its own name, whose goal (also of its name) is that every step is done; a step that runs an agent
+// or a process starts it as a sub-agent on the same change, so processes nest.
+//
+// Steps are not ordered by their position: the planner sequences them by their conditions. A step can be planned once
+// its entry conditions hold — those of the steps containing it, its own (Pre), and those of what it runs (the
+// preconditions of its action, the prerequisites of a nested process) — and it makes its exit criteria (Done) true.
 type Process struct {
 	Name        string   `yaml:"name" json:"name"`
 	Description string   `yaml:"description,omitempty" json:"description,omitempty"`
 	Examples    []string `yaml:"examples,omitempty" json:"examples,omitempty"`
-	// Parallel lets the top steps run in any order (default: in declaration order).
-	Parallel bool   `yaml:"parallel,omitempty" json:"parallel,omitempty"`
-	Steps    []Step `yaml:"steps" json:"steps"`
+	// References are the reference documents that describe the process.
+	References []Reference `yaml:"references,omitempty" json:"references,omitempty"`
+	Steps      []Step      `yaml:"steps" json:"steps"`
+}
+
+// Reference points at a document of the documentary repository that describes a process or a step: a document of the
+// graph ("doc:<key>"), a file of a document repository reached through an MCP ("<mcp>:<path>", e.g.
+// "document-repository:procedures/delivery.md"), or a URL; Section narrows it to a part of the document.
+type Reference struct {
+	Title   string `yaml:"title,omitempty" json:"title,omitempty"`
+	Ref     string `yaml:"ref" json:"ref"`
+	Section string `yaml:"section,omitempty" json:"section,omitempty"`
+}
+
+// String is the reference as a person reads it.
+func (r Reference) String() string {
+	out := r.Ref
+	if r.Title != "" {
+		out = r.Title + " (" + r.Ref + ")"
+	}
+	if r.Section != "" {
+		out += ", " + r.Section
+	}
+	return out
 }
 
 // Step is a step of a process. Its method is at most one of Steps, Action (or Actions), Agent and Process; none: a
@@ -29,17 +54,16 @@ type Step struct {
 	Name         string `yaml:"name" json:"name"`
 	Description  string `yaml:"description,omitempty" json:"description,omitempty"`
 	Instructions string `yaml:"instructions,omitempty" json:"instructions,omitempty"`
-	// Pre are the entry conditions of the step, on top of the steps before it being done.
+	// References are the reference documents that describe the step.
+	References []Reference `yaml:"references,omitempty" json:"references,omitempty"`
+	// Pre are the entry conditions of the step (and of its sub-steps). A condition "step:<path>" is true once the
+	// step of that path, done once it has run, has run.
 	Pre map[string]bool `yaml:"pre,omitempty" json:"pre,omitempty"`
 	// Done are the exit criteria. Default: the effects of the action, the goal of the agent, the exit criteria of the
-	// sub-steps; for a nested process or a manual step, the step is done once it has run (a step_done artifact).
-	Done map[string]bool `yaml:"done,omitempty" json:"done,omitempty"`
-	// After names earlier sibling steps this one waits for, when the parent runs its steps in any order (Parallel);
-	// in a sequence, a step waits for the one before it.
-	After []string `yaml:"after,omitempty" json:"after,omitempty"`
-	// Parallel lets the sub-steps run in any order (default: in declaration order).
-	Parallel bool   `yaml:"parallel,omitempty" json:"parallel,omitempty"`
-	Steps    []Step `yaml:"steps,omitempty" json:"steps,omitempty"`
+	// sub-steps or of the nested process; for a manual step or a process of another methodology, the step is done
+	// once it has run (the "step:<path>" condition, over a step_done artifact).
+	Done  map[string]bool `yaml:"done,omitempty" json:"done,omitempty"`
+	Steps []Step          `yaml:"steps,omitempty" json:"steps,omitempty"`
 	// Action of the methodology that does the step, or Actions: alternatives the planner chooses among (the cheapest
 	// first, another one when it fails).
 	Action  string   `yaml:"action,omitempty" json:"action,omitempty"`
@@ -140,14 +164,21 @@ func (m *Methodology) compileProcesses(add func(path, format string, args ...any
 			continue
 		}
 		names[p.Name] = true
+		checkReferences(add, path+".references", p.References)
 	}
 	if m.checkProcessCycles(add) {
 		return out
 	}
-	w := &stepWalker{m: m, add: add, actions: actions, known: known, agents: agents, root: &out, done: map[string]map[string]bool{}}
+	w := &stepWalker{m: m, add: add, actions: actions, known: known, agents: agents, root: &out, done: map[string]*processCriteria{}}
 	for i, p := range m.Processes {
 		if names[p.Name] {
 			w.process(i)
+		}
+	}
+	// the conditions a step names are checked once every step has its own: a step may name "step:<path>" of any other
+	for _, r := range w.refs {
+		if !known[r.cond] {
+			add(r.path, "unknown condition %q", r.cond)
 		}
 	}
 	// in declaration order
@@ -156,16 +187,29 @@ func (m *Methodology) compileProcesses(add func(path, format string, args ...any
 	return out
 }
 
+func checkReferences(add func(path, format string, args ...any), path string, refs []Reference) {
+	for i, r := range refs {
+		if strings.TrimSpace(r.Ref) == "" {
+			add(fmt.Sprintf("%s[%d].ref", path, i), "a reference names its document (doc:<key>, <mcp>:<path> or a URL)")
+		}
+	}
+}
+
 func (m *Methodology) processIndex(name string) int {
 	return slices.IndexFunc(m.Processes, func(p Process) bool { return p.Name == name })
 }
 
-// process generates the process at index i once (a process nesting another one of the methodology needs its exit
-// criteria first) and returns what it makes true once done.
-func (w *stepWalker) process(i int) map[string]bool {
+// processCriteria is what a process makes true once done, and what it needs from outside to get there.
+type processCriteria struct {
+	done, needs map[string]bool
+}
+
+// process generates the process at index i once (a process nesting another one of the methodology needs its criteria
+// first) and returns them (nil when the process is invalid).
+func (w *stepWalker) process(i int) *processCriteria {
 	p := w.m.Processes[i]
-	if d, ok := w.done[p.Name]; ok {
-		return d
+	if c, ok := w.done[p.Name]; ok {
+		return c
 	}
 	w.done[p.Name] = nil
 	path := fmt.Sprintf("processes[%d]", i)
@@ -175,13 +219,15 @@ func (w *stepWalker) process(i int) map[string]bool {
 	}
 	sub := *w
 	sub.out = &compiledProcesses{}
-	done := sub.walk(p.Steps, path+".steps", p.Name, nil, p.Parallel)
+	done := sub.walk(p.Steps, path+".steps", p.Name, nil)
+	w.refs = sub.refs
 	w.root.conditions = append(w.root.conditions, sub.out.conditions...)
 	w.root.actions = append(w.root.actions, sub.out.actions...)
 	if len(done) == 0 {
 		return nil
 	}
-	w.done[p.Name] = done
+	c := &processCriteria{done: done, needs: prerequisites(sub.out.actions)}
+	w.done[p.Name] = c
 	var own []string
 	for _, a := range sub.out.actions {
 		own = append(own, a.Name)
@@ -189,7 +235,34 @@ func (w *stepWalker) process(i int) map[string]bool {
 	w.root.goals = append(w.root.goals, Goal{Name: p.Name, Description: p.Description, Examples: p.Examples, Pre: done})
 	w.root.agents = append(w.root.agents, Agent{Name: p.Name, Description: p.Description, Examples: p.Examples, Planner: PlannerGOAP,
 		Actions: own, Goals: []string{p.Name}, process: p.Name})
-	return done
+	return c
+}
+
+// prerequisites are the preconditions of a process's steps that none of its steps establishes: what must hold before
+// the process can make any progress on them. A condition required both true and false by two steps is left out.
+func prerequisites(actions []Action) map[string]bool {
+	produced := map[string]bool{}
+	for _, a := range actions {
+		for k := range a.Effects {
+			produced[k] = true
+		}
+	}
+	out, conflict := map[string]bool{}, map[string]bool{}
+	for _, a := range actions {
+		for k, v := range a.Pre {
+			if produced[k] {
+				continue
+			}
+			if have, ok := out[k]; ok && have != v {
+				conflict[k] = true
+			}
+			out[k] = v
+		}
+	}
+	for k := range conflict {
+		delete(out, k)
+	}
+	return out
 }
 
 type stepWalker struct {
@@ -200,65 +273,42 @@ type stepWalker struct {
 	agents  map[string]Agent
 	out     *compiledProcesses // what the process being generated adds
 	root    *compiledProcesses // what every process adds
-	// done holds the exit criteria of the processes generated so far (nil while one is being generated)
-	done map[string]map[string]bool
+	// done holds the criteria of the processes generated so far (nil while one is being generated)
+	done map[string]*processCriteria
+	// refs are the conditions the steps name, checked once every step condition exists
+	refs []conditionRef
 }
 
-// walk generates the steps of one level and returns what they make true once all done. ready is what a step of the
-// level needs before its own entry conditions and predecessors.
-func (w *stepWalker) walk(steps []Step, path, prefix string, ready map[string]bool, parallel bool) map[string]bool {
+type conditionRef struct{ path, cond string }
+
+// walk generates the steps of one level and returns what they make true once all done. inherited are the entry
+// conditions of the steps containing the level.
+func (w *stepWalker) walk(steps []Step, path, prefix string, inherited map[string]bool) map[string]bool {
 	all := map[string]bool{}
-	done := map[string]map[string]bool{}
-	// after holds what a step makes true once done together with what it needed: a step waits for the whole chain
-	// before it, not only for the criteria of the previous step, which may already hold
-	after := map[string]map[string]bool{}
+	seen := map[string]bool{}
 	for i, s := range steps {
 		sp := fmt.Sprintf("%s[%d]", path, i)
 		if s.Name == "" || !nameRE.MatchString(s.Name) {
 			w.add(sp+".name", "step name required: lowercase letters, digits, '-' or '_', starting with a letter")
 			continue
 		}
-		if _, dup := done[s.Name]; dup {
+		if seen[s.Name] {
 			w.add(sp+".name", "duplicate step %s", s.Name)
 			continue
 		}
-		stepPath := prefix + "/" + s.Name
-		need := maps.Clone(ready)
+		seen[s.Name] = true
+		checkReferences(w.add, sp+".references", s.References)
+		for field, c := range map[string]map[string]bool{"pre": s.Pre, "done": s.Done} {
+			for k := range c {
+				w.refs = append(w.refs, conditionRef{fmt.Sprintf("%s.%s.%s", sp, field, k), k})
+			}
+		}
+		need := maps.Clone(inherited)
 		if need == nil {
 			need = map[string]bool{}
 		}
 		w.merge(sp+".pre", need, s.Pre)
-		for _, c := range []map[string]bool{s.Pre, s.Done} {
-			for k := range c {
-				if !w.known[k] {
-					w.add(sp, "unknown condition %q", k)
-				}
-			}
-		}
-		var preds []string
-		if !parallel && i > 0 && steps[i-1].Name != "" {
-			preds = append(preds, steps[i-1].Name)
-		}
-		for _, a := range s.After {
-			if !parallel {
-				w.add(sp+".after", "after applies to the steps of a parallel level: in a sequence a step follows the one before it")
-				break
-			}
-			if !slices.ContainsFunc(steps[:i], func(o Step) bool { return o.Name == a }) {
-				w.add(sp+".after", "%q is not an earlier step of the same level", a)
-				continue
-			}
-			preds = append(preds, a)
-		}
-		for _, p := range preds {
-			w.merge(sp+".after", need, after[p])
-		}
-		d := w.step(s, sp, stepPath, need)
-		done[s.Name] = d
-		chain := maps.Clone(need)
-		w.merge(sp+".done", chain, d)
-		after[s.Name] = chain
-		w.merge(sp+".done", all, d)
+		w.merge(sp+".done", all, w.step(s, sp, prefix+"/"+s.Name, need))
 	}
 	return all
 }
@@ -282,7 +332,7 @@ func (w *stepWalker) step(s Step, sp, path string, need map[string]bool) map[str
 	gen := Action{Name: path, Description: s.Description, Pre: need, Cost: 1, Step: path}
 	switch s.Method() {
 	case MethodSteps:
-		sub := w.walk(s.Steps, sp+".steps", path, need, s.Parallel)
+		sub := w.walk(s.Steps, sp+".steps", path, need)
 		if done == nil {
 			done = map[string]bool{}
 		}
@@ -359,9 +409,16 @@ func (w *stepWalker) step(s Step, sp, path string, need map[string]bool) map[str
 		if other == w.m.Name {
 			other = ""
 		}
-		if other == "" && done == nil {
-			// a process of this methodology: done by its exit criteria, which the planner can then chain on
-			done = maps.Clone(w.process(w.m.processIndex(proc)))
+		if other == "" {
+			// a process of this methodology: done by its exit criteria, which the planner can then chain on, and
+			// entered once what it needs from outside holds
+			if c := w.process(w.m.processIndex(proc)); c != nil {
+				if done == nil {
+					done = maps.Clone(c.done)
+				}
+				gen.Pre = maps.Clone(need)
+				w.merge(sp+".pre", gen.Pre, c.needs)
+			}
 		}
 		gen.Kind, gen.Builtin = KindBuiltin, BuiltinStep
 		gen.Params = map[string]any{"step": path, "methodology": other, "agent": proc, "goal": proc}
@@ -370,6 +427,13 @@ func (w *stepWalker) step(s Step, sp, path string, need map[string]bool) map[str
 		gen.Instructions = s.Instructions
 		if gen.Instructions == "" {
 			gen.Instructions = s.Description
+		}
+		if len(s.References) > 0 {
+			refs := make([]string, len(s.References))
+			for i, r := range s.References {
+				refs[i] = "- " + r.String()
+			}
+			gen.Instructions = strings.TrimSpace(gen.Instructions + "\n\nReferences:\n" + strings.Join(refs, "\n"))
 		}
 		if gen.Description == "" {
 			gen.Description = "Step " + path
