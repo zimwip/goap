@@ -95,7 +95,7 @@ func (g *Graph) OpenDecision(ctx context.Context, id domain.ChangeID, in OpenDec
 		if err != nil {
 			return err
 		}
-		options := in.Options
+		options := slices.Clone(in.Options)
 		if options == nil {
 			for _, o := range c.Options() {
 				if o.Status == domain.FlowOpen {
@@ -103,8 +103,9 @@ func (g *Graph) OpenDecision(ctx context.Context, id domain.ChangeID, in OpenDec
 				}
 			}
 		}
-		for _, o := range options {
-			if _, err := openOption(c, o); err != nil {
+		for i, o := range options {
+			options[i] = optionID(c, o)
+			if _, err := openOption(c, options[i]); err != nil {
 				return err
 			}
 		}
@@ -158,6 +159,9 @@ func (g *Graph) RuleDecision(ctx context.Context, id domain.ChangeID, in RuleReq
 		e := domain.DecisionEvent{Op: domain.DecisionRuleOp, Point: cur.ID, Outcome: in.Outcome, Justification: in.Justification, Human: in.Human, By: in.By}
 		switch in.Outcome {
 		case domain.OutcomeDecided:
+			if in.Option != "" {
+				in.Option = optionID(c, in.Option)
+			}
 			if len(cur.Options) > 0 && !slices.Contains(cur.Options, in.Option) {
 				return fmt.Errorf("decision point %s chooses among %v, not %q: %w", cur.ID, cur.Options, in.Option, ErrInvalid)
 			}
@@ -293,6 +297,24 @@ func (g *Graph) decisionOf(ctx context.Context, tx Tx, id domain.ChangeID, point
 		return d, fmt.Errorf("decision point %s of change %s: %w", point, id, ErrNotFound)
 	}
 	return d, nil
+}
+
+// optionID resolves an option of c by id or by name (the names of the open options first).
+func optionID(c domain.Change, s string) string {
+	options := c.Options()
+	for _, o := range options {
+		if o.ID == s {
+			return s
+		}
+	}
+	for _, open := range []bool{true, false} {
+		for _, o := range options {
+			if (o.Status == domain.FlowOpen) == open && strings.EqualFold(o.Option.Name, s) {
+				return o.ID
+			}
+		}
+	}
+	return s
 }
 
 func pendingPoint(c domain.Change, point string, now time.Time) (domain.DecisionPoint, error) {
