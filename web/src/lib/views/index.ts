@@ -323,7 +323,7 @@ for (const kind of ['agent', 'action', 'condition', 'goal', 'process'] as const)
       }
       if ('expr' in it) rows.push(['Expression', it.expr]);
       if ('value' in it) rows.push(['Value', String(it.value)]);
-      if ('steps' in it) rows.push(['Steps', String(walkSteps(it.steps).length)], ['Order', it.parallel ? 'any' : 'in sequence']);
+      if ('steps' in it) rows.push(['Steps', String(walkSteps(it.steps).length)], ['References', String(it.references.length)]);
       return { title: it.name || '(unnamed)', subtitle: ITEM_TITLES[kind], rows };
     },
   });

@@ -10,7 +10,7 @@ nodeTypes:
   - {name: Condition, editor: condition, description: "Condition of a methodology version", properties: [name, description, expr, position, removed]}
   - {name: Goal, editor: goal, description: "Goal of a methodology version", properties: [name, description, pre, position, removed]}
   # ADR 0034: the steps and sub-steps that reach an objective, each done by an action, an agent, a nested process or a person
-  - {name: Process, editor: process, description: "Process of a methodology version: its steps and sub-steps", properties: [name, description, examples, parallel, steps, position, removed]}
+  - {name: Process, editor: process, description: "Process of a methodology version: its steps and sub-steps", properties: [name, description, examples, references, steps, position, removed]}
   # an MCP tool the self-observation asks the platform for (ADR 0011): not part of a definition
   - {name: ToolRequest, description: "MCP tool requested by the self-observation of a methodology", properties: [name, description, motivation, span]}
 linkTypes:

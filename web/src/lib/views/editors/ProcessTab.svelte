@@ -7,6 +7,7 @@
   import DraftHeader from './DraftHeader.svelte';
   import ItemMissing from './ItemMissing.svelte';
   import StepEditor from './StepEditor.svelte';
+  import ReferencesEditor from './ReferencesEditor.svelte';
   import { provideActions, useReveal } from '../../shell/workbench.svelte';
   import { emptyStep, walkSteps } from '../../methodologyForm';
   import { draftOf, draftActions, removeItemAction, syncTabUid, openItem } from './methodologyTabs';
@@ -68,9 +69,6 @@
               }}
             />
           </div>
-          <div class="field">
-            <label class="check"><input type="checkbox" bind:checked={item.parallel} /> Top steps in any order</label>
-          </div>
         </div>
         <div class="grid2">
           <div class="field">
@@ -82,18 +80,21 @@
             <textarea id="p-ex" rows="2" bind:value={item.examples} data-path="{p}.examples"></textarea>
           </div>
         </div>
+        <ReferencesEditor bind:refs={item.references} path="{p}.references" bad={d.bad} readonly={d.readonly} />
       </section>
 
       <section class="card" data-path="{p}.steps">
         <h3>Steps <span class="hint">{all.length}</span></h3>
         <p class="hint">
-          A step follows the one before it (unless its level runs in any order) and is described with the precision the
-          methodology has for it: by hand, with sub-steps, by an action or alternative actions the planner chooses among,
-          by an agent that plans towards its goal, or by another process nested in it. Open "Entry conditions, exit
-          criteria" to state more than the method implies.
+          A step is described with the precision the methodology has for it: by hand, with sub-steps, by an action or
+          alternative actions the planner chooses among, by an agent that plans towards its goal, or by another process
+          nested in it. Steps are not ordered by their position: the planner sequences them by their conditions — a step
+          can start once its entry conditions hold (those of the steps containing it, its own, and those of what it runs)
+          and it makes its exit criteria true. A manual step's condition <code>step:&lt;process&gt;/&lt;path&gt;</code> can
+          be named by any other step.
         </p>
         {#each item.steps as step, i (step.key)}
-          <StepEditor bind:step={item.steps[i]} siblings={item.steps} index={i} path="{p}.steps[{i}]" draft={d} parallel={item.parallel} />
+          <StepEditor bind:step={item.steps[i]} siblings={item.steps} index={i} path="{p}.steps[{i}]" draft={d} />
         {/each}
         {#if !d.readonly}
           <button type="button" class="small primary" onclick={() => item.steps.push(emptyStep(`step_${item.steps.length + 1}`))}>+ Step</button>
@@ -124,11 +125,3 @@
   {/if}
 </div>
 
-<style>
-  .check {
-    display: flex;
-    gap: 6px;
-    align-items: center;
-    margin-top: 1.4em;
-  }
-</style>

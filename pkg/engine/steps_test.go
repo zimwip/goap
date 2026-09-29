@@ -9,7 +9,8 @@ import (
 )
 
 // stagedYAML describes a delivery as a process: a phase with a sub-step done by an action, a step done by an agent
-// that plans, and a step that nests another process whose only step is manual (ADR 0034).
+// that plans, and a step that nests another process whose only step is manual (ADR 0034). The steps are declared out
+// of order: their conditions sequence them.
 const stagedYAML = `
 name: staged
 version: 1.0.0
@@ -31,11 +32,11 @@ processes:
   - name: delivery
     description: Deliver the change
     steps:
+      - {name: approve, process: sign_off, pre: {checked: true}}
+      - {name: verify, agent: checker, pre: {noted: true}}
       - name: prepare
         steps:
           - {name: note, action: write_note}
-      - {name: verify, agent: checker}
-      - {name: approve, process: sign_off}
 `
 
 func stagedEngine(t *testing.T) *Engine {

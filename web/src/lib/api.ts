@@ -389,14 +389,12 @@ export interface ProcessStep {
   description?: string;
   /** what a person does, for a manual step */
   instructions?: string;
-  /** entry conditions, on top of the steps before it being done */
+  /** entry conditions (also of its sub-steps); steps are sequenced by their conditions, not their position */
   pre?: Record<string, boolean>;
   /** exit criteria (default: derived from the method) */
   done?: Record<string, boolean>;
-  /** earlier sibling steps it waits for, in a parallel level */
-  after?: string[];
-  /** the sub-steps run in any order */
-  parallel?: boolean;
+  /** reference documents that describe the step */
+  references?: DocumentReference[];
   steps?: ProcessStep[];
   action?: string;
   /** alternative actions the planner chooses among */
@@ -413,9 +411,16 @@ export interface MethodologyProcess {
   name?: string;
   description?: string;
   examples?: string[];
-  /** the top steps run in any order */
-  parallel?: boolean;
+  /** reference documents that describe the process */
+  references?: DocumentReference[];
   steps?: ProcessStep[];
+}
+
+/** A reference document: "doc:<key>" (a document of the graph), "<mcp>:<path>" (a document repository) or a URL. */
+export interface DocumentReference {
+  title?: string;
+  ref?: string;
+  section?: string;
 }
 
 export interface Methodology {

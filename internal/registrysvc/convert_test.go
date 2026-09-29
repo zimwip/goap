@@ -23,12 +23,13 @@ func TestAgentModelRoundTripsThroughPB(t *testing.T) {
 }
 
 func TestProcessesRoundTripThroughPB(t *testing.T) {
-	in := methodology.Methodology{Name: "m", Version: "1", Processes: []methodology.Process{{Name: "flow", Description: "d", Parallel: true, Steps: []methodology.Step{
-		{Name: "phase", Steps: []methodology.Step{{Name: "a", Action: "do", Pre: map[string]bool{"x": true}}, {Name: "b", Agent: "ag", Goal: "g", After: []string{"a"}}}},
-		{Name: "nested", Process: "other/p", Done: map[string]bool{"y": true}},
-		{Name: "sign", Instructions: "sign it"},
-		{Name: "alt", Actions: []string{"x", "y"}},
-	}}}}
+	in := methodology.Methodology{Name: "m", Version: "1", Processes: []methodology.Process{{Name: "flow", Description: "d",
+		References: []methodology.Reference{{Title: "Delivery guide", Ref: "document-repository:procedures/delivery.md", Section: "§2"}}, Steps: []methodology.Step{
+			{Name: "phase", Steps: []methodology.Step{{Name: "a", Action: "do", Pre: map[string]bool{"x": true}}, {Name: "b", Agent: "ag", Goal: "g", References: []methodology.Reference{{Ref: "doc:SAD-1"}}}}},
+			{Name: "nested", Process: "other/p", Done: map[string]bool{"y": true}},
+			{Name: "sign", Instructions: "sign it"},
+			{Name: "alt", Actions: []string{"x", "y"}},
+		}}}}
 	out := FromPB(ToPB(Record{Methodology: in}))
 	if !reflect.DeepEqual(out.Processes, in.Processes) {
 		t.Fatalf("processes changed through PB:\n%+v\n%+v", in.Processes, out.Processes)

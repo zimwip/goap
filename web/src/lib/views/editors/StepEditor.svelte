@@ -6,7 +6,8 @@
   import CondRows from '../../components/CondRows.svelte';
   import RowTools from '../../components/RowTools.svelte';
   import PickList from './PickList.svelte';
-  import { STEP_METHODS, emptyStep, moveItem, type StepForm } from '../../methodologyForm';
+  import ReferencesEditor from './ReferencesEditor.svelte';
+  import { STEP_METHODS, emptyStep, moveItem, stepConditionNames, type StepForm } from '../../methodologyForm';
   import type { Draft } from '../../stores/drafts.svelte';
 
   let {
@@ -15,7 +16,6 @@
     index,
     path,
     draft: d,
-    parallel,
     depth = 0,
   }: {
     step: StepForm;
@@ -25,8 +25,6 @@
     /** issue path of the step, e.g. "processes[0].steps[1]" */
     path: string;
     draft: Draft;
-    /** the steps of this level run in any order */
-    parallel: boolean;
     depth?: number;
   } = $props();
 
@@ -38,13 +36,14 @@
   const agent = $derived(f.agents.find((a) => a.name === step.agent));
   const goalNames = $derived((agent && agent.goals.length ? agent.goals : f.goals.map((g) => g.name)).filter(Boolean));
   const processNames = $derived(f.processes.map((p) => p.name).filter(Boolean));
-  const earlier = $derived(siblings.slice(0, index).map((s) => s.name).filter(Boolean));
+  // the declared conditions and the conditions of the steps done once they have run
+  const conditions = $derived([...d.conditionOptions, ...stepConditionNames(f)]);
   const listId = $derived(`procs-${step.key}`);
 
   function summary(s: StepForm): string {
     switch (s.method) {
       case 'steps':
-        return `${s.steps.length} sub-step(s)${s.parallel ? ', any order' : ''}`;
+        return `${s.steps.length} sub-step(s)`;
       case 'action':
         return s.action ? `action ${s.action}` : 'action ?';
       case 'actions':
@@ -157,30 +156,26 @@
         </div>
       {/if}
 
-      <details class="more">
-        <summary>Entry conditions, exit criteria{parallel ? ', order' : ''}</summary>
+      <details class="more" open={step.pre.length > 0 || step.done.length > 0 || step.references.length > 0}>
+        <summary>Entry conditions, exit criteria, reference documents</summary>
         <div class="grid2">
-          <CondRows bind:rows={step.pre} options={d.conditionOptions} path="{path}.pre" label="Entry conditions (on top of the steps before it)" bad={d.bad} readonly={d.readonly} />
-          <CondRows bind:rows={step.done} options={d.conditionOptions} path="{path}.done" label="Done when (default: from how it is done)" bad={d.bad} readonly={d.readonly} />
-        </div>
-        {#if parallel}
-          <PickList
-            bind:selected={step.after}
-            options={earlier}
-            allLabel="waits for none"
-            label="Waits for (earlier steps of this level)"
-            path="{path}.after"
+          <CondRows
+            bind:rows={step.pre}
+            options={conditions}
+            path="{path}.pre"
+            label="Entry conditions (with those of what it runs; they sequence the steps)"
             bad={d.bad}
             readonly={d.readonly}
           />
-        {/if}
+          <CondRows bind:rows={step.done} options={conditions} path="{path}.done" label="Done when (default: from how it is done)" bad={d.bad} readonly={d.readonly} />
+        </div>
+        <ReferencesEditor bind:refs={step.references} path="{path}.references" bad={d.bad} readonly={d.readonly} />
       </details>
 
       {#if step.method === 'steps'}
         <div class="subs">
-          <label class="check"><input type="checkbox" bind:checked={step.parallel} disabled={d.readonly} /> Sub-steps in any order</label>
           {#each step.steps as sub, i (sub.key)}
-            <StepEditor bind:step={step.steps[i]} siblings={step.steps} index={i} path="{path}.steps[{i}]" draft={d} parallel={step.parallel} depth={depth + 1} />
+            <StepEditor bind:step={step.steps[i]} siblings={step.steps} index={i} path="{path}.steps[{i}]" draft={d} depth={depth + 1} />
           {/each}
           {#if !d.readonly}
             <button type="button" class="small" onclick={addSub}>+ Sub-step</button>
@@ -240,10 +235,5 @@
     cursor: pointer;
     color: var(--muted);
     margin: 4px 0;
-  }
-  .check {
-    display: flex;
-    gap: 6px;
-    align-items: center;
   }
 </style>
