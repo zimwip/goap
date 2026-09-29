@@ -304,6 +304,29 @@ func TestChangeOptionTools(t *testing.T) {
 	if nodes := p.call(t, ctx, "ORG-CHECKOUT", "goap-change/read", nil)["nodes"].([]any); len(nodes) != 0 {
 		t.Fatalf("main flow nodes = %v", nodes)
 	}
+	// a decision point on the two options (ADR 0009 §4): undecidable, answered, then decided above the threshold
+	point := p.call(t, ctx, "ORG-CHECKOUT", "goap-change/decision", map[string]any{"question": "How urgent are refunds?", "criteria": []any{"cost"}})["point"].(map[string]any)
+	if point["status"] != "open" || len(point["options"].([]any)) != 2 {
+		t.Fatalf("decision = %v", point)
+	}
+	ruled := p.call(t, ctx, "ORG-CHECKOUT", "goap-change/rule", map[string]any{"outcome": "undecidable", "justification": "cost unknown",
+		"questions": []any{"What does an urgent refund cost?"}})["point"].(map[string]any)
+	q := ruled["questions"].([]any)[0].(map[string]any)
+	if ruled["status"] != "blocked" {
+		t.Fatalf("undecidable = %v", ruled)
+	}
+	p.call(t, ctx, "ORG-CHECKOUT", "goap-change/answer", map[string]any{"question": q["id"], "answer": "2 EUR"})
+	decided := p.call(t, ctx, "ORG-CHECKOUT", "goap-change/rule", map[string]any{"outcome": "decided", "option": "high", "confidence": 0.95,
+		"justification": "cheap enough"})["point"].(map[string]any)
+	if decided["status"] != "decided" || decided["option"] != a["id"] {
+		t.Fatalf("decided = %v", decided)
+	}
+	if pts := p.call(t, ctx, "ORG-CHECKOUT", "goap-change/decisions", nil)["points"].([]any); len(pts) != 1 {
+		t.Fatalf("decisions = %v", pts)
+	}
+	if list := p.call(t, ctx, "ORG-CHECKOUT", "goap-change/options", nil); list["options"].([]any)[0].(map[string]any)["status"] != "selected" {
+		t.Fatalf("the decision selects its option: %v", list)
+	}
 }
 
 func TestChangeSignal(t *testing.T) {
@@ -461,7 +484,7 @@ func TestUnitRestrictsABuiltin(t *testing.T) {
 			change = append(change, name)
 		}
 	}
-	if !slices.Equal(change, []string{"read", "list", "validate", "options", "compare"}) || slices.Contains(mcps, mcp.BuiltinAdmin) {
+	if !slices.Equal(change, []string{"read", "list", "validate", "options", "compare", "decisions"}) || slices.Contains(mcps, mcp.BuiltinAdmin) {
 		t.Fatalf("ORG-CRM: goap-change tools %v, mcps %v", change, mcps)
 	}
 	ctx := as("carol", "ORG-CRM", "contributor")
@@ -479,7 +502,7 @@ func TestUnitRestrictsABuiltin(t *testing.T) {
 	out := p.call(t, as("root", "ORG-ACME", "admin"), "ORG-ACME", "goap-admin/mcps", map[string]any{"unit": "ORG-CRM"})
 	for _, m := range out["mcps"].([]any) {
 		m := m.(map[string]any)
-		if m["mcp"] == mcp.BuiltinChange && (len(m["tools"].([]any)) != 5 || m["restrictedBy"].([]any)[0] != "ORG-CRM" || m["definedIn"] != domain.DefaultOrg) {
+		if m["mcp"] == mcp.BuiltinChange && (len(m["tools"].([]any)) != 6 || m["restrictedBy"].([]any)[0] != "ORG-CRM" || m["definedIn"] != domain.DefaultOrg) {
 			t.Fatalf("goap-change for ORG-CRM = %v", m)
 		}
 	}

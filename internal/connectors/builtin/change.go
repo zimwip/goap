@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"reflect"
 	"slices"
+	"time"
 
 	connectorv1 "github.com/zimwip/goap/gen/goap/connector/v1"
 	"github.com/zimwip/goap/internal/connectorkit"
@@ -43,6 +44,10 @@ var changeOps = []op{
 	{"activate", "Work on an option of the change (\"main\": the main flow): {active}", schema(map[string]string{"change": "string", "option": "string"}, "option")},
 	{"evaluate", "Record the evaluation of an option: {option}", schema(map[string]string{"change": "string", "option": "string", "comment": "string"}, "option", "comment")},
 	{"compare", "Compare the options of the change on the nodes they changed: {level, options, nodes}", schema(map[string]string{"change": "string", "level": "string", "all": "boolean"})},
+	{"decisions", "List the decision points of the change and their questions: {points}", schema(map[string]string{"change": "string"})},
+	{"decision", "Open a decision point on a question, among the open options by default: {point}", schema(map[string]string{"change": "string", "question": "string", "options": "array", "criteria": "array", "decider": "string", "threshold": "number", "maxRounds": "integer", "maxDuration": "string"}, "question")},
+	{"rule", "Rule a decision point: decided (option, confidence, justification) or undecidable (justification, questions): {point}", schema(map[string]string{"change": "string", "point": "string", "outcome": "string", "option": "string", "confidence": "number", "justification": "string", "questions": "array"}, "outcome", "justification")},
+	{"answer", "Answer an open question of a decision point: {point}", schema(map[string]string{"change": "string", "question": "string", "answer": "string"}, "question", "answer")},
 }
 
 // Info implements connectorkit.Connector.
@@ -81,6 +86,8 @@ func (c Change) Invoke(ctx context.Context, op string, raw, _ map[string]any, _ 
 	switch op {
 	case "options", "option", "activate", "evaluate", "compare":
 		return c.options(ctx, who, id, op, a)
+	case "decisions", "decision", "rule", "answer":
+		return c.decisions(ctx, who, id, op, a)
 	}
 	bb, err := c.p.Graph.Blackboard(ctx, id)
 	if err != nil {
@@ -256,6 +263,58 @@ func (c Change) options(ctx context.Context, who authz.Principal, id domain.Chan
 		opts = append(opts, summary(f))
 	}
 	return result(map[string]any{"level": cmp.Level, "options": opts, "nodes": cmp.Nodes})
+}
+
+// decisions works on the decision points of a change (ADR 0009 §4). A ruling made through a tool is an agent's:
+// below the threshold of its point it waits for a person's ratification, which is not a tool.
+func (c Change) decisions(ctx context.Context, who authz.Principal, id domain.ChangeID, op string, a args) (map[string]any, error) {
+	strs := func(name string) []string {
+		var out []string
+		if l, ok := a[name].([]any); ok {
+			for _, v := range l {
+				out = append(out, fmt.Sprint(v))
+			}
+		}
+		return out
+	}
+	num := func(name string) float64 {
+		f, _ := a[name].(float64)
+		return f
+	}
+	var d domain.DecisionPoint
+	var err error
+	switch op {
+	case "decisions":
+		ps, err := c.p.Graph.DecisionPoints(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		if ps == nil {
+			ps = []domain.DecisionPoint{}
+		}
+		return result(map[string]any{"points": ps})
+	case "decision":
+		in := graph.OpenDecisionRequest{Question: a.str("question"), Criteria: strs("criteria"), Decider: a.str("decider"), Threshold: num("threshold"),
+			MaxRounds: int(num("maxRounds")), By: who.Subject}
+		if _, ok := a["options"]; ok {
+			in.Options = append([]string{}, strs("options")...)
+		}
+		if s := a.str("maxDuration"); s != "" {
+			if in.MaxDuration, err = time.ParseDuration(s); err != nil {
+				return nil, fmt.Errorf("maxDuration: %w", err)
+			}
+		}
+		d, err = c.p.Graph.OpenDecision(ctx, id, in)
+	case "rule":
+		d, err = c.p.Graph.RuleDecision(ctx, id, graph.RuleRequest{Point: a.str("point"), Outcome: a.str("outcome"), Option: a.str("option"),
+			Confidence: num("confidence"), Justification: a.str("justification"), Questions: strs("questions"), By: who.Subject})
+	case "answer":
+		d, err = c.p.Graph.AnswerQuestion(ctx, id, a.str("question"), a.str("answer"), mcp.CallFrom(ctx).Process, who.Subject)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return result(map[string]any{"point": d})
 }
 
 // create opens a change: intent (why), unit (who), methodology (how) and namespace (what).

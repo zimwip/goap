@@ -49,6 +49,10 @@ func boolean(desc string) map[string]any {
 	return map[string]any{"type": "boolean", "description": desc}
 }
 func object(desc string) map[string]any { return map[string]any{"type": "object", "description": desc} }
+func number(desc string) map[string]any { return map[string]any{"type": "number", "description": desc} }
+func list(desc string) map[string]any {
+	return map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": desc}
+}
 
 // argument descriptions shared by several tools
 var (
@@ -122,6 +126,17 @@ func BuiltinDefs() []Def {
 			{Name: "compare", ReadOnly: true, Description: "Compare the options of the change on the nodes they changed, each against the main flow.",
 				InputSchema: schemaObj(map[string]any{"change": argChange, "level": str("written (default: every version not rejected) or accepted"),
 					"all": boolean("include the decided options")})},
+			{Name: "decisions", ReadOnly: true, Description: "List the decision points of the change (open, blocked by questions, ratifying, escalated, decided) and their questions.",
+				InputSchema: schemaObj(map[string]any{"change": argChange})},
+			{Name: "decision", Description: "Open a decision point: a question the change must settle, among the open options by default.",
+				InputSchema: schemaObj(map[string]any{"change": argChange, "question": str("what to decide"), "options": list("option ids or names (default: the open options)"),
+					"criteria": list("the criteria of the decision"), "decider": str("agent (default) or human"), "threshold": number("confidence under which a ruling waits for a person (default 0.7)"),
+					"maxRounds": num("rulings that may fail to settle it before a person rules it (default 3)"), "maxDuration": str("duration after which a person rules it (48h)")}, "question")},
+			{Name: "rule", Description: "Rule a decision point: decided (option, confidence 0-1, justification) or undecidable (why, and the questions to answer first). Below the threshold a person ratifies.",
+				InputSchema: schemaObj(map[string]any{"change": argChange, "point": str("decision point id (default: the only pending one)"), "outcome": str("decided or undecidable"),
+					"option": str("the option chosen (id or name)"), "confidence": number("0 to 1"), "justification": str("why"), "questions": list("what must be known first (undecidable)")}, "outcome", "justification")},
+			{Name: "answer", Description: "Answer an open question of a decision point: the point can be ruled again once its questions are answered.",
+				InputSchema: schemaObj(map[string]any{"change": argChange, "question": str("question id"), "answer": str("the answer")}, "question", "answer")},
 		}},
 		// orchestration: only the agent level may start other agents (scope agent)
 		{Name: BuiltinScheduler, Scope: ScopeAgent, Description: "Start and follow processes (agents running methodologies) and fire triggers (built in, agent level only).", Tools: []Tool{
