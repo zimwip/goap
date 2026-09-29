@@ -73,6 +73,19 @@ service GraphService {
   // Applies the proposals of a flow on a graph branch of its own (a preview, merged when the flow is adopted).
   // Consistency check of the blackboard as a process on a flow sees it.
   rpc ValidateBoard(ValidateBoardRequest) returns (ValidateBoardResponse);
+  // Options of a change (ADR 0009 §3, ADR 0032 §6): hypotheses explored on flows of their own; the active one is
+  // where every call that names no flow goes ("main" names the main flow).
+  rpc OpenOption(OpenOptionRequest) returns (OpenOptionResponse);
+  rpc ActivateOption(ActivateOptionRequest) returns (ActivateOptionResponse);
+  rpc EvaluateOption(EvaluateOptionRequest) returns (EvaluateOptionResponse);
+  rpc SelectOption(SelectOptionRequest) returns (SelectOptionResponse);
+  rpc RejectOption(RejectOptionRequest) returns (RejectOptionResponse);
+  rpc ListOptions(ListOptionsRequest) returns (ListOptionsResponse);
+  rpc CompareOptions(CompareOptionsRequest) returns (CompareOptionsResponse);
+  // The graph a change sees at a level (written, accepted, landed) on a flow (ADR 0032 §5), and the graph a call on
+  // the change reads (the active option's, else the reference baseline).
+  rpc GetChangeView(GetChangeViewRequest) returns (GetChangeViewResponse);
+  rpc GetChangeGraph(GetChangeGraphRequest) returns (GetChangeGraphResponse);
 
   // Execution journal (ADR 0011)
   rpc RecordExecutions(RecordExecutionsRequest) returns (RecordExecutionsResponse);
@@ -118,6 +131,8 @@ message Node {
   string comment = 15;
   // action run that wrote this version (what a relaunch marks stale, ADR 0025)
   string execution = 16;
+  // the branches the version joined besides the one it was written on (ADR 0032; filled by ListNodeVersions)
+  repeated string joined = 17;
 }
 
 message Link {
@@ -893,6 +908,15 @@ message FlowEvent {
   reserved 11, 12, 13, 14; // branch, items, merged, nodes (MaterializeFlow is gone: the flow branch is the preview)
   // action runs invalidated by the relaunch (ADR 0025)
   repeated string stale_executions = 15;
+  // open: the flow is an option of the change (ADR 0009 §3); evaluate: the evaluation
+  Option option = 16;
+  string comment = 17;
+}
+
+// Option is the hypothesis of a flow opened as an option.
+message Option {
+  string name = 1;
+  string hypothesis = 2;
 }
 
 // Flow is a flow branch of a change, replayed from its events.
@@ -916,6 +940,12 @@ message Flow {
   repeated string competes_with = 17;
   // action runs invalidated by the relaunch (ADR 0025)
   repeated string stale_executions = 18;
+  // set on an option: its hypothesis, its status (exploring | evaluated | selected | rejected), its last evaluation,
+  // and whether the change works on it
+  Option option = 19;
+  string option_status = 20;
+  string evaluation = 21;
+  bool active = 22;
 }
 
 message OpenFlowRequest {
@@ -983,4 +1013,116 @@ message ValidateBoardRequest {
 
 message ValidateBoardResponse {
   repeated BoardIssue issues = 1;
+}
+
+message OpenOptionRequest {
+  string change_id = 1;
+  string name = 2;
+  string hypothesis = 3;
+  // make it the option the change works on
+  bool activate = 4;
+}
+
+message OpenOptionResponse {
+  Flow option = 1;
+}
+
+message ActivateOptionRequest {
+  string change_id = 1;
+  // the option to work on; empty or "main": the main flow
+  string option = 2;
+}
+
+message ActivateOptionResponse {
+  // the active option (empty: the main flow)
+  string active = 1;
+}
+
+message EvaluateOptionRequest {
+  string change_id = 1;
+  string option = 2;
+  string comment = 3;
+}
+
+message EvaluateOptionResponse {
+  Flow option = 1;
+}
+
+message SelectOptionRequest {
+  string change_id = 1;
+  string option = 2;
+}
+
+message SelectOptionResponse {
+  Flow option = 1;
+}
+
+message RejectOptionRequest {
+  string change_id = 1;
+  string option = 2;
+}
+
+message RejectOptionResponse {
+  Flow option = 1;
+}
+
+message ListOptionsRequest {
+  string change_id = 1;
+}
+
+message ListOptionsResponse {
+  repeated Flow options = 1;
+  // the option the change works on (empty: the main flow)
+  string active = 2;
+}
+
+message CompareOptionsRequest {
+  string change_id = 1;
+  // written (default) | accepted
+  string level = 2;
+  // every option, decided ones included (default: the open ones)
+  bool all = 3;
+}
+
+// OptionNode is a node written by at least one option, with its version on the main flow and on each option (absent:
+// not in the graph of that side).
+message OptionNode {
+  string node = 1;
+  string key = 2;
+  string type = 3;
+  NodeRef main = 4;
+  // by option id
+  map<string, NodeRef> options = 5;
+  // properties by side: "main" or the option id
+  map<string, google.protobuf.Struct> props = 6;
+}
+
+message CompareOptionsResponse {
+  string level = 1;
+  repeated Flow options = 2;
+  repeated OptionNode nodes = 3;
+}
+
+message GetChangeViewRequest {
+  string change_id = 1;
+  // flow or option (empty: the active option, else the main flow; "main": the main flow)
+  string flow = 2;
+  // written (default) | accepted | landed
+  string level = 3;
+}
+
+message GetChangeViewResponse {
+  // a baseline without an id below landed: computed, not stored
+  Baseline baseline = 1;
+}
+
+message GetChangeGraphRequest {
+  string change_id = 1;
+  // flow or option (empty: the active option, else the main flow; "main": the main flow)
+  string flow = 2;
+}
+
+message GetChangeGraphResponse {
+  repeated Node nodes = 1;
+  repeated Link links = 2;
 }

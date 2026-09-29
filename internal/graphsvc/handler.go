@@ -17,6 +17,7 @@ import (
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/engine"
 	"github.com/zimwip/goap/pkg/graph"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 // Handler implements graphv1connect.GraphServiceHandler.
@@ -600,4 +601,94 @@ func (h *Handler) RepublishIndex(ctx context.Context, r *connect.Request[graphv1
 	}
 	n, err := h.Graph.Republish(ctx, h.Events)
 	return res(&graphv1.RepublishIndexResponse{Versions: int32(n)}, err)
+}
+
+// ---- Options (ADR 0009 §3, ADR 0032 §6) ------------------------------------------------------------------
+
+func (h *Handler) OpenOption(ctx context.Context, r *connect.Request[graphv1.OpenOptionRequest]) (*connect.Response[graphv1.OpenOptionResponse], error) {
+	ctx = h.Identity.Context(ctx, r.Header())
+	m := r.Msg
+	f, err := h.Graph.OpenOption(ctx, domain.ChangeID(m.ChangeId), graph.OpenOptionRequest{Name: m.Name, Hypothesis: m.Hypothesis, Activate: m.Activate,
+		By: authz.From(ctx).Subject})
+	if err == nil {
+		h.publish(ctx, "goap.change."+m.ChangeId+".option_opened", f)
+	}
+	return res(&graphv1.OpenOptionResponse{Option: pbconv.FlowToPB(f)}, err)
+}
+
+func (h *Handler) ActivateOption(ctx context.Context, r *connect.Request[graphv1.ActivateOptionRequest]) (*connect.Response[graphv1.ActivateOptionResponse], error) {
+	ctx = h.Identity.Context(ctx, r.Header())
+	active, err := h.Graph.ActivateOption(ctx, domain.ChangeID(r.Msg.ChangeId), r.Msg.Option, authz.From(ctx).Subject)
+	if err == nil {
+		h.publish(ctx, "goap.change."+r.Msg.ChangeId+".option_activated", map[string]any{"active": active})
+	}
+	return res(&graphv1.ActivateOptionResponse{Active: active}, err)
+}
+
+func (h *Handler) EvaluateOption(ctx context.Context, r *connect.Request[graphv1.EvaluateOptionRequest]) (*connect.Response[graphv1.EvaluateOptionResponse], error) {
+	ctx = h.Identity.Context(ctx, r.Header())
+	f, err := h.Graph.EvaluateOption(ctx, domain.ChangeID(r.Msg.ChangeId), r.Msg.Option, authz.From(ctx).Subject, r.Msg.Comment)
+	return res(&graphv1.EvaluateOptionResponse{Option: pbconv.FlowToPB(f)}, err)
+}
+
+func (h *Handler) SelectOption(ctx context.Context, r *connect.Request[graphv1.SelectOptionRequest]) (*connect.Response[graphv1.SelectOptionResponse], error) {
+	ctx = h.Identity.Context(ctx, r.Header())
+	f, err := h.Graph.SelectOption(ctx, domain.ChangeID(r.Msg.ChangeId), r.Msg.Option, authz.From(ctx).Subject)
+	if err == nil {
+		h.publish(ctx, "goap.change."+r.Msg.ChangeId+".option_selected", f)
+	}
+	return res(&graphv1.SelectOptionResponse{Option: pbconv.FlowToPB(f)}, err)
+}
+
+func (h *Handler) RejectOption(ctx context.Context, r *connect.Request[graphv1.RejectOptionRequest]) (*connect.Response[graphv1.RejectOptionResponse], error) {
+	ctx = h.Identity.Context(ctx, r.Header())
+	f, err := h.Graph.RejectOption(ctx, domain.ChangeID(r.Msg.ChangeId), r.Msg.Option, authz.From(ctx).Subject)
+	if err == nil {
+		h.publish(ctx, "goap.change."+r.Msg.ChangeId+".option_rejected", f)
+	}
+	return res(&graphv1.RejectOptionResponse{Option: pbconv.FlowToPB(f)}, err)
+}
+
+func (h *Handler) ListOptions(ctx context.Context, r *connect.Request[graphv1.ListOptionsRequest]) (*connect.Response[graphv1.ListOptionsResponse], error) {
+	os, err := h.Graph.Options(ctx, domain.ChangeID(r.Msg.ChangeId))
+	out := &graphv1.ListOptionsResponse{}
+	for _, f := range os {
+		out.Options = append(out.Options, pbconv.FlowToPB(f))
+		if f.Active {
+			out.Active = f.ID
+		}
+	}
+	return res(out, err)
+}
+
+func (h *Handler) CompareOptions(ctx context.Context, r *connect.Request[graphv1.CompareOptionsRequest]) (*connect.Response[graphv1.CompareOptionsResponse], error) {
+	cmp, err := h.Graph.CompareOptions(ctx, domain.ChangeID(r.Msg.ChangeId), r.Msg.Level, r.Msg.All)
+	out := &graphv1.CompareOptionsResponse{Level: cmp.Level}
+	for _, f := range cmp.Options {
+		out.Options = append(out.Options, pbconv.FlowToPB(f))
+	}
+	for _, n := range cmp.Nodes {
+		on := &graphv1.OptionNode{Node: string(n.Node), Key: n.Key, Type: n.Type, Main: pbconv.RefPtrToPB(n.Main),
+			Options: map[string]*graphv1.NodeRef{}, Props: map[string]*structpb.Struct{}}
+		for id, ref := range n.Options {
+			if ref != nil {
+				on.Options[id] = pbconv.RefToPB(*ref)
+			}
+		}
+		for side, p := range n.Props {
+			on.Props[side] = pbconv.Struct(p)
+		}
+		out.Nodes = append(out.Nodes, on)
+	}
+	return res(out, err)
+}
+
+func (h *Handler) GetChangeView(ctx context.Context, r *connect.Request[graphv1.GetChangeViewRequest]) (*connect.Response[graphv1.GetChangeViewResponse], error) {
+	b, err := h.Graph.ChangeView(ctx, domain.ChangeID(r.Msg.ChangeId), r.Msg.Flow, r.Msg.Level)
+	return res(&graphv1.GetChangeViewResponse{Baseline: pbconv.BaselineToPB(b)}, err)
+}
+
+func (h *Handler) GetChangeGraph(ctx context.Context, r *connect.Request[graphv1.GetChangeGraphRequest]) (*connect.Response[graphv1.GetChangeGraphResponse], error) {
+	nodes, links, err := h.Graph.ChangeGraph(ctx, domain.ChangeID(r.Msg.ChangeId), r.Msg.Flow)
+	return res(&graphv1.GetChangeGraphResponse{Nodes: pbconv.NodesToPB(nodes), Links: pbconv.LinksToPB(links)}, err)
 }

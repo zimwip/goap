@@ -110,6 +110,18 @@ func BuiltinDefs() []Def {
 					"target": str("process id to address it to (default: broadcast)")}, "type")},
 			{Name: "validate", ReadOnly: true, Description: "Check the consistency of the change: the issues a review would raise.",
 				InputSchema: schemaObj(map[string]any{"change": argChange})},
+			{Name: "options", ReadOnly: true, Description: "List the options of the change (hypotheses explored on flows of their own) and the active one: the change works on it.",
+				InputSchema: schemaObj(map[string]any{"change": argChange})},
+			{Name: "option", Description: "Open an option of the change: a hypothesis explored on a flow of its own; activate it to work on it.",
+				InputSchema: schemaObj(map[string]any{"change": argChange, "name": str("short name of the option"), "hypothesis": str("what the option assumes"),
+					"activate": boolean("work on the option from now on")}, "name", "hypothesis")},
+			{Name: "activate", Description: "Work on an option of the change: every call that names no flow goes to it (\"main\": back to the main flow).",
+				InputSchema: schemaObj(map[string]any{"change": argChange, "option": str("id of the option, or main")}, "option")},
+			{Name: "evaluate", Description: "Record the evaluation of an option (criteria, scores, rationale): it moves to evaluated.",
+				InputSchema: schemaObj(map[string]any{"change": argChange, "option": str("id of the option"), "comment": str("the evaluation")}, "option", "comment")},
+			{Name: "compare", ReadOnly: true, Description: "Compare the options of the change on the nodes they changed, each against the main flow.",
+				InputSchema: schemaObj(map[string]any{"change": argChange, "level": str("written (default: every version not rejected) or accepted"),
+					"all": boolean("include the decided options")})},
 		}},
 		// orchestration: only the agent level may start other agents (scope agent)
 		{Name: BuiltinScheduler, Scope: ScopeAgent, Description: "Start and follow processes (agents running methodologies) and fire triggers (built in, agent level only).", Tools: []Tool{

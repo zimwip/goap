@@ -84,7 +84,7 @@ func NodeToPB(n domain.Node) *graphv1.Node {
 	return &graphv1.Node{Id: string(n.ID), Version: int32(n.Version), Namespace: n.Namespace, Key: n.Key, Type: n.Type, Props: Struct(n.Properties),
 		Deleted: n.Deleted, ChangeId: string(n.ChangeID), CreatedAt: Time(n.CreatedAt),
 		Branch: domain.BranchOf(n.Branch), Parents: versionsToPB(n.Parents), Reason: n.Reason, State: n.State,
-		ChangeImpact: string(n.ChangeImpact), Comment: n.Comment, Execution: n.Execution}
+		ChangeImpact: string(n.ChangeImpact), Comment: n.Comment, Execution: n.Execution, Joined: n.Joined}
 }
 
 func versionsToPB(vs []domain.Version) []int32 {
@@ -102,7 +102,7 @@ func NodeFromPB(n *graphv1.Node) domain.Node {
 	return domain.Node{ID: domain.NodeID(n.Id), Version: domain.Version(n.Version), Namespace: n.Namespace, Key: n.Key, Type: n.Type, Properties: Map(n.Props),
 		Deleted: n.Deleted, ChangeID: domain.ChangeID(n.ChangeId), CreatedAt: FromTime(n.CreatedAt),
 		Branch: n.Branch, Parents: versionsFromPB(n.Parents), Reason: n.Reason, State: n.State,
-		ChangeImpact: domain.ChangeImpactID(n.ChangeImpact), Comment: n.Comment, Execution: n.Execution}
+		ChangeImpact: domain.ChangeImpactID(n.ChangeImpact), Comment: n.Comment, Execution: n.Execution, Joined: n.Joined}
 }
 
 func versionsFromPB(vs []int32) []domain.Version {

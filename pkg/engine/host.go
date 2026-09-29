@@ -240,7 +240,7 @@ func (h *Host) RunAgent(ctx context.Context, name, intentText string) (dsl.Agent
 
 func (h *Host) graph(ctx context.Context) ([]domain.Node, []domain.Link, error) {
 	h.graphOnce.Do(func() {
-		h.nodes, h.links, h.graphErr = h.e.Graph.BaselineGraph(ctx, h.process.BaselineID)
+		h.nodes, h.links, h.graphErr = readGraph(ctx, h.e.Graph, h.process.ChangeID, h.process.Flow, h.process.BaselineID)
 	})
 	return h.nodes, h.links, h.graphErr
 }

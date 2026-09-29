@@ -267,6 +267,45 @@ func TestChangeTools(t *testing.T) {
 	}
 }
 
+// Options through goap-change (ADR 0032 §6): an agent opens two hypotheses, works on each in turn (the edits go to
+// the active option), and compares them.
+func TestChangeOptionTools(t *testing.T) {
+	p := newPlatform(t)
+	ctx := as("alice", "ORG-CHECKOUT", "contributor")
+	id := p.call(t, ctx, "ORG-CHECKOUT", "goap-change/create", map[string]any{"title": "Refunds", "intent": "Refund faster",
+		"namespace": "alm", "methodology": "sdlc"})["change"].(map[string]any)["id"].(string)
+	ctx = mcp.WithCall(ctx, mcp.CallContext{Change: id, Process: "P1"})
+	a := p.call(t, ctx, "ORG-CHECKOUT", "goap-change/option", map[string]any{"name": "high", "hypothesis": "refunds are urgent", "activate": true})["option"].(map[string]any)
+	p.call(t, ctx, "ORG-CHECKOUT", "goap-change/edit", map[string]any{"key": "REQ-2", "properties": map[string]any{"priority": "high"}, "rationale": "urgent"})
+	b := p.call(t, ctx, "ORG-CHECKOUT", "goap-change/option", map[string]any{"name": "low", "hypothesis": "refunds can wait"})["option"].(map[string]any)
+	if act := p.call(t, ctx, "ORG-CHECKOUT", "goap-change/activate", map[string]any{"option": b["id"]}); act["active"] != b["id"] {
+		t.Fatalf("activate = %v", act)
+	}
+	p.call(t, ctx, "ORG-CHECKOUT", "goap-change/edit", map[string]any{"key": "REQ-2", "properties": map[string]any{"priority": "low"}, "rationale": "can wait"})
+	list := p.call(t, ctx, "ORG-CHECKOUT", "goap-change/options", nil)
+	if list["active"] != b["id"] || len(list["options"].([]any)) != 2 {
+		t.Fatalf("options = %v", list)
+	}
+	cmp := p.call(t, ctx, "ORG-CHECKOUT", "goap-change/compare", nil)
+	nodes := cmp["nodes"].([]any)
+	if len(nodes) != 1 {
+		t.Fatalf("compare = %v", cmp)
+	}
+	props := nodes[0].(map[string]any)["props"].(map[string]any)
+	if props[a["id"].(string)].(map[string]any)["priority"] != "high" || props[b["id"].(string)].(map[string]any)["priority"] != "low" ||
+		props["main"].(map[string]any)["priority"] != "medium" {
+		t.Fatalf("compared properties = %v", props)
+	}
+	p.call(t, ctx, "ORG-CHECKOUT", "goap-change/evaluate", map[string]any{"option": a["id"], "comment": "finance agrees"})
+	if act := p.call(t, ctx, "ORG-CHECKOUT", "goap-change/activate", map[string]any{"option": "main"}); act["active"] != "main" {
+		t.Fatalf("back to main = %v", act)
+	}
+	// the main flow did not see the options' edits
+	if nodes := p.call(t, ctx, "ORG-CHECKOUT", "goap-change/read", nil)["nodes"].([]any); len(nodes) != 0 {
+		t.Fatalf("main flow nodes = %v", nodes)
+	}
+}
+
 func TestChangeSignal(t *testing.T) {
 	p := newPlatform(t)
 	ctx := as("alice", "ORG-CHECKOUT", "contributor")
@@ -422,7 +461,7 @@ func TestUnitRestrictsABuiltin(t *testing.T) {
 			change = append(change, name)
 		}
 	}
-	if !slices.Equal(change, []string{"read", "list", "validate"}) || slices.Contains(mcps, mcp.BuiltinAdmin) {
+	if !slices.Equal(change, []string{"read", "list", "validate", "options", "compare"}) || slices.Contains(mcps, mcp.BuiltinAdmin) {
 		t.Fatalf("ORG-CRM: goap-change tools %v, mcps %v", change, mcps)
 	}
 	ctx := as("carol", "ORG-CRM", "contributor")
@@ -440,7 +479,7 @@ func TestUnitRestrictsABuiltin(t *testing.T) {
 	out := p.call(t, as("root", "ORG-ACME", "admin"), "ORG-ACME", "goap-admin/mcps", map[string]any{"unit": "ORG-CRM"})
 	for _, m := range out["mcps"].([]any) {
 		m := m.(map[string]any)
-		if m["mcp"] == mcp.BuiltinChange && (len(m["tools"].([]any)) != 3 || m["restrictedBy"].([]any)[0] != "ORG-CRM" || m["definedIn"] != domain.DefaultOrg) {
+		if m["mcp"] == mcp.BuiltinChange && (len(m["tools"].([]any)) != 5 || m["restrictedBy"].([]any)[0] != "ORG-CRM" || m["definedIn"] != domain.DefaultOrg) {
 			t.Fatalf("goap-change for ORG-CRM = %v", m)
 		}
 	}

@@ -30,6 +30,18 @@ type GraphPort interface {
 	// ValidateBoard checks the consistency of the blackboard seen from a flow.
 	ValidateBoard(ctx context.Context, id domain.ChangeID, flow string) ([]domain.BoardIssue, error)
 	BaselineGraph(ctx context.Context, id domain.BaselineID) ([]domain.Node, []domain.Link, error)
+	// ChangeGraph is the graph a call on a change reads: the active option's (or the option flow names), else the
+	// reference baseline of the change (ADR 0032 §6).
+	ChangeGraph(ctx context.Context, id domain.ChangeID, flow string) ([]domain.Node, []domain.Link, error)
+	// ChangeView is the graph of a change at a level (written, accepted, landed) on a flow (ADR 0032 §5).
+	ChangeView(ctx context.Context, id domain.ChangeID, flow, level string) (domain.Baseline, error)
+	// Options of a change (ADR 0009 §3, ADR 0032 §6): open, activate, evaluate, list and compare them. Selecting and
+	// rejecting one is a decision, made through the graph service.
+	OpenOption(ctx context.Context, id domain.ChangeID, in graph.OpenOptionRequest) (domain.Flow, error)
+	ActivateOption(ctx context.Context, id domain.ChangeID, option, by string) (string, error)
+	EvaluateOption(ctx context.Context, id domain.ChangeID, option, by, comment string) (domain.Flow, error)
+	Options(ctx context.Context, id domain.ChangeID) ([]domain.Flow, error)
+	CompareOptions(ctx context.Context, id domain.ChangeID, level string, all bool) (graph.OptionComparison, error)
 	Apply(ctx context.Context, id domain.ChangeID, baselineName string) (domain.Baseline, error)
 	Baselines(ctx context.Context, namespace string) ([]domain.Baseline, error)
 	// Record / Journal write and read the execution journal of changes (ADR 0011).
@@ -41,6 +53,15 @@ type GraphPort interface {
 	// ListChanges lists the changes matching a filter (goap-change.list): which open change a request
 	// continues, else a new one is proposed.
 	ListChanges(ctx context.Context, f graph.ChangesFilter) ([]domain.Change, error)
+}
+
+// readGraph is the graph a process reads: the graph of its change on its flow (the active option when it runs on
+// the main flow), else the baseline it started from.
+func readGraph(ctx context.Context, g GraphPort, change domain.ChangeID, flow string, baseline domain.BaselineID) ([]domain.Node, []domain.Link, error) {
+	if change != "" {
+		return g.ChangeGraph(ctx, change, flow)
+	}
+	return g.BaselineGraph(ctx, baseline)
 }
 
 // MethodologyPort resolves methodologies (the registry): the latest
