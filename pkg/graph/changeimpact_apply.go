@@ -111,8 +111,16 @@ func (a *applier) checkChangeImpacts() error {
 			if a.g.Authorizer != nil {
 				at := v
 				at.State = prev
-				if err := a.g.Authorizer(a.ctx, at, t); err != nil {
-					return err
+				m := pendingMove{node: at, t: t}
+				switch {
+				case a.collect != nil:
+					*a.collect = append(*a.collect, m)
+				case a.authorized != nil && !a.authorized[m.key()]:
+					return fmt.Errorf("%s moved to %s while the change was applied: apply it again: %w", n.Key, v.State, ErrConflict)
+				case a.authorized == nil:
+					if err := a.g.Authorizer(a.ctx, at, t); err != nil {
+						return err
+					}
 				}
 			}
 			last, prev = &t, v.State

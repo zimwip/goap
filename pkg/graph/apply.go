@@ -15,7 +15,11 @@ import (
 // of its own of accepted change impacts applies as an empty baseline.
 func (g *Graph) Apply(ctx context.Context, id domain.ChangeID, baselineName string) (domain.Baseline, error) {
 	var result domain.Baseline
-	err := g.repo.InTx(ctx, func(tx Tx) (err error) {
+	authorized, err := g.authorizeMoves(ctx, id)
+	if err != nil {
+		return result, err
+	}
+	err = g.repo.InTx(ctx, func(tx Tx) (err error) {
 		if c, err := tx.Change(ctx, id); err != nil {
 			return err
 		} else if of := openFlows(c); len(of) > 0 {
@@ -28,7 +32,7 @@ func (g *Graph) Apply(ctx context.Context, id domain.ChangeID, baselineName stri
 		} else if len(open) > 0 {
 			return fmt.Errorf("change %s has %d open sub-change(s), apply or abandon them first: %w", id, len(open), ErrConflict)
 		}
-		if result, err = g.applyTx(ctx, tx, id, baselineName); err != nil {
+		if result, err = g.applyTx(ctx, tx, id, baselineName, authorized); err != nil {
 			return err
 		}
 		c, err := tx.Change(ctx, id)
@@ -55,35 +59,93 @@ func (g *Graph) Apply(ctx context.Context, id domain.ChangeID, baselineName stri
 	return result, err
 }
 
-func (g *Graph) applyTx(ctx context.Context, tx Tx, id domain.ChangeID, baselineName string) (domain.Baseline, error) {
+// errCollected rolls back the pass that only collects the transitions to authorize.
+var errCollected = errors.New("transitions collected")
+
+// authorizeMoves asks the authorizer about every lifecycle transition the change makes, before the transaction that
+// applies it: the authorizer reads the access graph, which a transaction held by the apply would block (the stores
+// are not reentrant). A pass that is rolled back collects the transitions; the apply then checks it makes these.
+func (g *Graph) authorizeMoves(ctx context.Context, id domain.ChangeID) (map[string]bool, error) {
+	if g.Authorizer == nil {
+		return nil, nil
+	}
+	var moves []pendingMove
+	// An error other than errCollected is met again by the apply in its own transaction, after the transitions
+	// collected before it: those are authorized all the same.
+	_ = g.repo.InTx(ctx, func(tx Tx) error {
+		a, _, err := g.newApplier(ctx, tx, id)
+		if err != nil {
+			return err
+		}
+		a.collect = &moves
+		if err := a.prepareChangeImpacts(); err != nil {
+			return err
+		}
+		if err := a.checkChangeImpacts(); err != nil {
+			return err
+		}
+		return errCollected
+	})
+	authorized := map[string]bool{}
+	for _, m := range moves {
+		if err := g.Authorizer(ctx, m.node, m.t); err != nil {
+			return nil, err
+		}
+		authorized[m.key()] = true
+	}
+	return authorized, nil
+}
+
+// pendingMove is a lifecycle transition a change makes, from the state of node.
+type pendingMove struct {
+	node domain.Node
+	t    domain.Transition
+}
+
+func (m pendingMove) key() string {
+	return fmt.Sprintf("%s@%d:%s>%s", m.node.ID, m.node.Version, m.t.From, m.t.To)
+}
+
+// newApplier prepares what applying a change starts from: its reference baseline, or the head of its own branch.
+func (g *Graph) newApplier(ctx context.Context, tx Tx, id domain.ChangeID) (*applier, domain.BaselineID, error) {
 	c, err := tx.Change(ctx, id)
 	if err != nil {
-		return domain.Baseline{}, err
+		return nil, "", err
 	}
 	if c.Status == domain.ChangeApplied || c.Status == domain.ChangeAbandoned || c.Status == domain.ChangeMergePending {
-		return domain.Baseline{}, fmt.Errorf("change %s is %s: %w", id, c.Status, ErrConflict)
+		return nil, "", fmt.Errorf("change %s is %s: %w", id, c.Status, ErrConflict)
 	}
 	base, err := tx.Baseline(ctx, c.BaselineID)
 	if err != nil {
-		return domain.Baseline{}, err
+		return nil, "", err
 	}
 	ix, err := g.typesAt(ctx, tx, c.BaselineID)
 	if err != nil {
-		return domain.Baseline{}, err
+		return nil, "", err
 	}
 	target, parentBaseline := maps.Clone(base.Nodes), base.ID
 	// A change on its own branch starts from the head of that branch: what its
 	// sub-changes merged into it since the fork is part of the result.
 	if _, isOwn, err := ownBranch(ctx, tx, c); err != nil {
-		return domain.Baseline{}, err
+		return nil, "", err
 	} else if isOwn {
 		head, err := branchHead(ctx, tx, c.Namespace, c.Branch)
 		if err != nil {
-			return domain.Baseline{}, err
+			return nil, "", err
 		}
 		target, parentBaseline = maps.Clone(head.Nodes), head.ID
 	}
-	a := &applier{g: g, tx: tx, ctx: ctx, change: c, ix: ix, branch: domain.BranchOf(c.Branch), target: target}
+	return &applier{g: g, tx: tx, ctx: ctx, change: c, ix: ix, branch: domain.BranchOf(c.Branch), target: target}, parentBaseline, nil
+}
+
+// applyTx applies a change; authorized are the transitions authorizeMoves let through (nil: no authorizer).
+func (g *Graph) applyTx(ctx context.Context, tx Tx, id domain.ChangeID, baselineName string, authorized map[string]bool) (domain.Baseline, error) {
+	a, parentBaseline, err := g.newApplier(ctx, tx, id)
+	if err != nil {
+		return domain.Baseline{}, err
+	}
+	a.authorized = authorized
+	c := a.change
 	if err := a.prepareChangeImpacts(); err != nil {
 		return domain.Baseline{}, err
 	}
@@ -139,4 +201,7 @@ type applier struct {
 	target map[domain.NodeID]domain.Version
 	// cposts are the versions produced by the accepted change impacts (ADR 0024).
 	cposts []cpost
+	// collect gathers the transitions to authorize (the pass of authorizeMoves); authorized are the ones let through
+	collect    *[]pendingMove
+	authorized map[string]bool
 }
