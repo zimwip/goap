@@ -12,6 +12,7 @@ import (
 	"github.com/zimwip/goap/internal/connectorkit"
 	"github.com/zimwip/goap/pkg/access"
 	"github.com/zimwip/goap/pkg/authz"
+	"github.com/zimwip/goap/pkg/brief"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/mcp"
@@ -48,6 +49,16 @@ var changeOps = []op{
 	{"decision", "Open a decision point on a question, among the open options by default: {point}", schema(map[string]string{"change": "string", "question": "string", "options": "array", "criteria": "array", "decider": "string", "threshold": "number", "maxRounds": "integer", "maxDuration": "string"}, "question")},
 	{"rule", "Rule a decision point: decided (option, confidence, justification) or undecidable (justification, questions): {point}", schema(map[string]string{"change": "string", "point": "string", "outcome": "string", "option": "string", "confidence": "number", "justification": "string", "questions": "array"}, "outcome", "justification")},
 	{"answer", "Answer an open question of a decision point: {point}", schema(map[string]string{"change": "string", "question": "string", "answer": "string"}, "question", "answer")},
+	{"brief", "The change in brief, one line per fact (intent, impacts, decisions, risks, actions, latest artifacts): {brief}", schema(map[string]string{"change": "string"})},
+	{"trace", "Follow an information through the change — an item id, a risk or action key, or a node key: what produced it, what it derives from, what it led to, what replaced it: {trace}",
+		schema(map[string]string{"change": "string", "ref": "string"}, "ref")},
+	{"risks", "The risk register and the actions of the change: {risks, actions}", schema(map[string]string{"change": "string"})},
+	{"risk", "Raise a risk, or update one by its key (a new version keeps what it does not restate); probability and impact 1-5, status open|mitigating|accepted|occurred|closed: {risk}",
+		schema(map[string]string{"change": "string", "key": "string", "title": "string", "description": "string", "probability": "integer", "impact": "integer",
+			"status": "string", "owner": "string", "actions": "array", "rationale": "string"})},
+	{"action", "Create an action, or update one by its key; status open|done|cancelled, for: the risk key or decision point it answers: {action}",
+		schema(map[string]string{"change": "string", "key": "string", "title": "string", "status": "string", "owner": "string", "due": "string", "for": "string",
+			"result": "string"})},
 }
 
 // Info implements connectorkit.Connector.
@@ -105,6 +116,22 @@ func (c Change) Invoke(ctx context.Context, op string, raw, _ map[string]any, _ 
 			return nil, err
 		}
 		return result(map[string]any{"issues": issues})
+	case "brief":
+		return result(map[string]any{"brief": brief.Of(bb, nil)})
+	case "trace":
+		ref, err := a.required("ref")
+		if err != nil {
+			return nil, err
+		}
+		t, err := brief.Trace(bb.Change, ref)
+		if err != nil {
+			return nil, err
+		}
+		return result(map[string]any{"trace": t})
+	case "risks":
+		return result(map[string]any{"risks": bb.Change.Risks(), "actions": bb.Change.ActionItems()})
+	case "risk", "action":
+		return c.record(ctx, bb, op, a)
 	case "note":
 		text, err := a.required("text")
 		if err != nil {
@@ -597,4 +624,68 @@ func (w *working) write(imp domain.ChangeImpact, nw graph.NodeWrite) (map[string
 		return nil, err
 	}
 	return result(map[string]any{"node": map[string]any{"key": out.Key, "type": out.Type, "intent": out.Intent, "review": out.Review, "post": out.Post}})
+}
+
+// record raises or updates a risk or an action of the change (ADR 0036 §1): a new version of the record of its key,
+// keeping what it does not restate. Without a key, a new record gets the next free one (RSK-n, ACT-n).
+func (c Change) record(ctx context.Context, bb domain.Blackboard, op string, a args) (map[string]any, error) {
+	kind, prefix, fields := domain.KindRisk, "RSK-", []string{"title", "description", "status", "owner"}
+	if op == "action" {
+		kind, prefix, fields = domain.KindAction, "ACT-", []string{"title", "status", "owner", "due", "for", "result"}
+	}
+	key := a.str("key")
+	var existing bool
+	n := 0
+	for _, it := range bb.Change.Items {
+		if it.Kind != kind {
+			continue
+		}
+		k, _ := it.Data["key"].(string)
+		existing = existing || (key != "" && k == key)
+		var i int
+		if _, err := fmt.Sscanf(k, prefix+"%d", &i); err == nil && i > n {
+			n = i
+		}
+	}
+	if key == "" {
+		key = fmt.Sprintf("%s%d", prefix, n+1)
+	}
+	data := map[string]any{"key": key}
+	for _, f := range fields {
+		if v := a.str(f); v != "" {
+			data[f] = v
+		}
+	}
+	if kind == domain.KindRisk {
+		for _, f := range []string{"probability", "impact"} {
+			if v, ok := a[f].(float64); ok {
+				data[f] = v
+			}
+		}
+		if acts, ok := a["actions"].([]any); ok {
+			data["actions"] = acts
+		}
+		if r := a.str("rationale"); r != "" {
+			data["rationale"] = r
+		}
+	}
+	if !existing && a.str("title") == "" {
+		return nil, fmt.Errorf("a new %s needs a title", op)
+	}
+	if existing {
+		// the title is required on every version: keep the current one
+		for _, it := range slices.Backward(bb.Change.Items) {
+			if k, _ := it.Data["key"].(string); it.Kind == kind && k == key {
+				if _, ok := data["title"]; !ok {
+					data["title"] = it.Data["title"]
+				}
+				break
+			}
+		}
+	}
+	items, err := c.p.Graph.AddItems(ctx, bb.Change.ID, []domain.ChangeItem{{Kind: kind, Type: op, Status: domain.ItemProposed, Data: data, ProducedBy: producer(ctx)}})
+	if err != nil {
+		return nil, err
+	}
+	return result(map[string]any{op: items[0]})
 }

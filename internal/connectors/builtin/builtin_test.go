@@ -265,6 +265,38 @@ func TestChangeTools(t *testing.T) {
 	if n, err := p.g.NodeByKey(context.Background(), "alm", "REQ-9"); err == nil && n.Branch == domain.MainBranch {
 		t.Fatal("the change wrote on main")
 	}
+	// risks and actions (ADR 0036 §1): raised, updated as new versions, traced; the brief tells it all in a few lines
+	r1 := p.call(t, ctx, "ORG-CHECKOUT", "goap-change/risk", map[string]any{"title": "Finance rejects voucher refunds", "probability": 3.0, "impact": 4.0, "owner": "product_owner"})
+	if r1["risk"].(map[string]any)["data"].(map[string]any)["key"] != "RSK-1" {
+		t.Fatalf("risk = %v", r1)
+	}
+	p.call(t, ctx, "ORG-CHECKOUT", "goap-change/action", map[string]any{"title": "Get the finance approval", "owner": "business_analyst", "for": "RSK-1"})
+	p.call(t, ctx, "ORG-CHECKOUT", "goap-change/risk", map[string]any{"key": "RSK-1", "status": "mitigating", "actions": []any{"ACT-1"}})
+	if _, err := p.hub.Call(ctx, "ORG-CHECKOUT", "goap-change/risk", map[string]any{"probability": 2.0}); err == nil {
+		t.Fatal("a new risk without a title")
+	}
+	reg := p.call(t, ctx, "ORG-CHECKOUT", "goap-change/risks", nil)
+	risks := reg["risks"].([]any)
+	if len(risks) != 1 {
+		t.Fatalf("register = %v", reg)
+	}
+	r := risks[0].(map[string]any)
+	if r["status"] != "mitigating" || r["title"] != "Finance rejects voucher refunds" || r["probability"] != 3.0 || r["versions"] != 2.0 {
+		t.Fatalf("a new version keeps what it does not restate: %v", r)
+	}
+	brief := p.call(t, ctx, "ORG-CHECKOUT", "goap-change/brief", nil)["brief"].(string)
+	for _, want := range []string{"INTENT Customers may be refunded by voucher", "- REQ-9 Requirement created written", "- RSK-1 12=3x4 mitigating product_owner", "ACTIONS 1 open", "- ACT-1 business_analyst - RSK-1"} {
+		if !strings.Contains(brief, want) {
+			t.Fatalf("brief lacks %q:\n%s", want, brief)
+		}
+	}
+	trace := p.call(t, ctx, "ORG-CHECKOUT", "goap-change/trace", map[string]any{"ref": "RSK-1"})["trace"].(string)
+	if strings.Count(trace, "ITEM ") != 2 {
+		t.Fatalf("the trace of a risk shows its versions:\n%s", trace)
+	}
+	if trace := p.call(t, ctx, "ORG-CHECKOUT", "goap-change/trace", map[string]any{"ref": "REQ-2"})["trace"].(string); !strings.Contains(trace, "NODE REQ-2") {
+		t.Fatalf("trace of a node:\n%s", trace)
+	}
 }
 
 // Options through goap-change (ADR 0032 §6): an agent opens two hypotheses, works on each in turn (the edits go to
@@ -484,7 +516,7 @@ func TestUnitRestrictsABuiltin(t *testing.T) {
 			change = append(change, name)
 		}
 	}
-	if !slices.Equal(change, []string{"read", "list", "validate", "options", "compare", "decisions"}) || slices.Contains(mcps, mcp.BuiltinAdmin) {
+	if !slices.Equal(change, []string{"read", "list", "validate", "options", "compare", "decisions", "brief", "trace", "risks"}) || slices.Contains(mcps, mcp.BuiltinAdmin) {
 		t.Fatalf("ORG-CRM: goap-change tools %v, mcps %v", change, mcps)
 	}
 	ctx := as("carol", "ORG-CRM", "contributor")
@@ -502,7 +534,7 @@ func TestUnitRestrictsABuiltin(t *testing.T) {
 	out := p.call(t, as("root", "ORG-ACME", "admin"), "ORG-ACME", "goap-admin/mcps", map[string]any{"unit": "ORG-CRM"})
 	for _, m := range out["mcps"].([]any) {
 		m := m.(map[string]any)
-		if m["mcp"] == mcp.BuiltinChange && (len(m["tools"].([]any)) != 6 || m["restrictedBy"].([]any)[0] != "ORG-CRM" || m["definedIn"] != domain.DefaultOrg) {
+		if m["mcp"] == mcp.BuiltinChange && (len(m["tools"].([]any)) != 9 || m["restrictedBy"].([]any)[0] != "ORG-CRM" || m["definedIn"] != domain.DefaultOrg) {
 			t.Fatalf("goap-change for ORG-CRM = %v", m)
 		}
 	}

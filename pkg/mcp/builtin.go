@@ -137,6 +137,22 @@ func BuiltinDefs() []Def {
 					"option": str("the option chosen (id or name)"), "confidence": number("0 to 1"), "justification": str("why"), "questions": list("what must be known first (undecidable)")}, "outcome", "justification")},
 			{Name: "answer", Description: "Answer an open question of a decision point: the point can be ruled again once its questions are answered.",
 				InputSchema: schemaObj(map[string]any{"change": argChange, "question": str("question id"), "answer": str("the answer")}, "question", "answer")},
+			// ADR 0036: the change in few tokens, following an information through it, its risks and actions
+			{Name: "brief", ReadOnly: true, Description: "The change in brief, one line per fact: intent, impacts, decisions, risks, actions, latest artifacts.",
+				InputSchema: schemaObj(map[string]any{"change": argChange})},
+			{Name: "trace", ReadOnly: true, Description: "Follow an information through the change (an item id, a risk or action key, a node key): what produced it, what it derives from, what it led to, what replaced it.",
+				InputSchema: schemaObj(map[string]any{"change": argChange, "ref": str("item id, risk / action key, or node key")}, "ref")},
+			{Name: "risks", ReadOnly: true, Description: "The risk register of the change (key, probability, impact, score, status, owner, actions) and its actions.",
+				InputSchema: schemaObj(map[string]any{"change": argChange})},
+			{Name: "risk", Description: "Raise a risk, or update one by its key (a new version keeps what it does not restate).",
+				InputSchema: schemaObj(map[string]any{"change": argChange, "key": str("RSK-n to update (default: a new risk)"), "title": str("the risk"),
+					"description": str("cause and consequence"), "probability": num("1 to 5"), "impact": num("1 to 5"),
+					"status": str("open, mitigating, accepted, occurred or closed"), "owner": str("the role that owns it"), "actions": list("the keys of its mitigation actions"),
+					"rationale": str("why this version")})},
+			{Name: "action", Description: "Create an action, or update one by its key: what must be done, by which role, for which risk or decision.",
+				InputSchema: schemaObj(map[string]any{"change": argChange, "key": str("ACT-n to update (default: a new action)"), "title": str("what to do"),
+					"status": str("open, done or cancelled"), "owner": str("the role that does it"), "due": str("due date"), "for": str("the risk key or decision point it answers"),
+					"result": str("what was done")})},
 		}},
 		// orchestration: only the agent level may start other agents (scope agent)
 		{Name: BuiltinScheduler, Scope: ScopeAgent, Description: "Start and follow processes (agents running methodologies) and fire triggers (built in, agent level only).", Tools: []Tool{

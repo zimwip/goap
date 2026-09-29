@@ -37,7 +37,7 @@ type compiled struct {
 
 // Variables exposed to expressions.
 var Variables = []string{"change", "items", "changeImpacts", "decisions", "artifacts", "merges", "vars",
-	"options", "activeOption", "decisionPoints", "questions"}
+	"options", "activeOption", "decisionPoints", "questions", "risks", "actions"}
 
 // NewEnv returns the CEL environment used for conditions.
 func NewEnv() (*cel.Env, error) {
@@ -54,6 +54,9 @@ func NewEnv() (*cel.Env, error) {
 		cel.Variable("activeOption", cel.StringType),
 		cel.Variable("decisionPoints", cel.ListType(cel.DynType)),
 		cel.Variable("questions", cel.ListType(cel.DynType)),
+		// the risk register and the actions of the change (ADR 0036 §1)
+		cel.Variable("risks", cel.ListType(cel.DynType)),
+		cel.Variable("actions", cel.ListType(cel.DynType)),
 		ext.Strings(),
 		ext.Lists(),
 		ext.Sets(),
@@ -75,6 +78,12 @@ var Platform = []Definition{
 	// every open option is evaluated (and there is one)
 	{Name: "options_evaluated", Expr: `options.exists(o, o.status == "evaluated") && !options.exists(o, o.status == "exploring")`},
 	{Name: "option_selected", Expr: `options.exists(o, o.status == "selected")`},
+	// risks and actions (ADR 0036 §1): a live risk is open or being mitigated; a high one (score >= 9) needs an action
+	{Name: "open_risks", Expr: `risks.exists(r, r.live)`},
+	{Name: "unmitigated_risks", Expr: `risks.exists(r, r.live && r.score >= 9 && !actions.exists(a, a.for == r.key && a.status != "cancelled"))`},
+	{Name: "risks_under_control", Expr: `!risks.exists(r, r.live && r.score >= 9 && !actions.exists(a, a.for == r.key && a.status != "cancelled"))`},
+	{Name: "open_actions", Expr: `actions.exists(a, a.status == "open")`},
+	{Name: "no_open_actions", Expr: `!actions.exists(a, a.status == "open")`},
 }
 
 // IsPlatform reports whether a condition is a platform one.

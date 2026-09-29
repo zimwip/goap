@@ -145,6 +145,8 @@ func (it ChangeItem) Validate() error {
 			return fmt.Errorf("decision item requires decision.item")
 		}
 	case KindArtifact, KindMerge:
+	case KindRisk, KindAction:
+		return validateRecord(it)
 	case KindSignal:
 		if it.Type == "" {
 			return fmt.Errorf("signal item requires type")

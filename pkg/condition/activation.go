@@ -40,7 +40,36 @@ func Activation(bb domain.Blackboard) map[string]any {
 		"activeOption":   bb.ActiveOption,
 		"decisionPoints": points,
 		"questions":      questions,
+		"risks":          risks(&c),
+		"actions":        actionItems(&c),
 	}
+}
+
+// risks is the risk register of the change (ADR 0036 §1).
+func risks(c *domain.Change) []any {
+	rs := c.Risks()
+	out := make([]any, 0, len(rs))
+	for _, r := range rs {
+		acts := make([]any, len(r.Actions))
+		for i, a := range r.Actions {
+			acts[i] = a
+		}
+		out = append(out, map[string]any{"key": r.Key, "title": r.Title, "description": r.Description, "probability": int64(r.Probability),
+			"impact": int64(r.Impact), "score": int64(r.Score()), "status": r.Status, "live": r.Live(), "owner": r.Owner, "actions": acts,
+			"step": r.Step, "item": string(r.Item), "versions": int64(r.Versions)})
+	}
+	return out
+}
+
+// actionItems are the actions of the change (ADR 0036 §1).
+func actionItems(c *domain.Change) []any {
+	as := c.ActionItems()
+	out := make([]any, 0, len(as))
+	for _, a := range as {
+		out = append(out, map[string]any{"key": a.Key, "title": a.Title, "status": a.Status, "owner": a.Owner, "due": a.Due, "for": a.For,
+			"result": a.Result, "item": string(a.Item), "versions": int64(a.Versions)})
+	}
+	return out
 }
 
 // options are the options of the change (ADR 0032 §6).

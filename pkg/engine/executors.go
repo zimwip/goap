@@ -232,7 +232,7 @@ func (e LLMExecutor) Execute(ctx context.Context, ac ActionContext) (ActionResul
 	if model == "" {
 		model = "default"
 	}
-	system := llmSystem + ac.Step.section()
+	system := llmSystem + ac.Step.section() + briefSection(ac)
 	var tools []mcp.ToolInfo
 	if ac.Host != nil && len(ac.Host.mcps) > 0 {
 		if tools, err = ac.Host.Tools(ctx); err != nil {
