@@ -7,12 +7,12 @@
 
   const d = $derived(activeDraft());
 
-  const SINGULAR: Record<Section, string> = { agents: 'Agent', actions: 'Action', conditions: 'Condition', goals: 'Goal' };
+  const SINGULAR: Record<Section, string> = { agents: 'Agent', actions: 'Action', conditions: 'Condition', goals: 'Goal', processes: 'Process' };
 
   /** "actions[2].pre.x" → "Action identify › pre.x". */
   function where(path: string): string {
     if (!d) return path;
-    const m = /^(agents|actions|conditions|goals)\[(\d+)\]\.?(.*)$/.exec(path);
+    const m = /^(agents|actions|conditions|goals|processes)\[(\d+)\]\.?(.*)$/.exec(path);
     if (m) {
       const section = m[1] as Section;
       const it = d.items(section)[Number(m[2])];

@@ -41,6 +41,30 @@ func ToPB(r Record) *registryv1.Methodology {
 		}
 		out.Agents = append(out.Agents, pa)
 	}
+	for _, p := range m.Processes {
+		out.Processes = append(out.Processes, &registryv1.Process{Name: p.Name, Description: p.Description, Examples: p.Examples, Parallel: p.Parallel, Steps: stepsToPB(p.Steps)})
+	}
+	return out
+}
+
+func stepsToPB(steps []methodology.Step) []*registryv1.Step {
+	out := make([]*registryv1.Step, 0, len(steps))
+	for _, s := range steps {
+		out = append(out, &registryv1.Step{Name: s.Name, Description: s.Description, Instructions: s.Instructions, Pre: s.Pre, Done: s.Done,
+			After: s.After, Parallel: s.Parallel, Steps: stepsToPB(s.Steps), Action: s.Action, Actions: s.Actions, Agent: s.Agent, Goal: s.Goal, Process: s.Process})
+	}
+	return out
+}
+
+func stepsFromPB(steps []*registryv1.Step) []methodology.Step {
+	if len(steps) == 0 {
+		return nil
+	}
+	out := make([]methodology.Step, 0, len(steps))
+	for _, s := range steps {
+		out = append(out, methodology.Step{Name: s.Name, Description: s.Description, Instructions: s.Instructions, Pre: nilIfEmpty(s.Pre), Done: nilIfEmpty(s.Done),
+			After: nilIfNone(s.After), Parallel: s.Parallel, Steps: stepsFromPB(s.Steps), Action: s.Action, Actions: nilIfNone(s.Actions), Agent: s.Agent, Goal: s.Goal, Process: s.Process})
+	}
 	return out
 }
 
@@ -53,6 +77,11 @@ func SummaryToPB(r Record) *registryv1.MethodologySummary {
 	}
 	for _, a := range r.Methodology.Agents {
 		out.Agents = append(out.Agents, &registryv1.AgentSummary{Name: a.Name, Description: a.Description, Planner: a.Planner})
+	}
+	// a process is run by an agent of its name towards a goal of its name (ADR 0034)
+	for _, p := range r.Methodology.Processes {
+		out.Goals = append(out.Goals, &registryv1.GoalSummary{Name: p.Name, Description: p.Description})
+		out.Agents = append(out.Agents, &registryv1.AgentSummary{Name: p.Name, Description: p.Description, Planner: "process"})
 	}
 	return out
 }
@@ -94,6 +123,9 @@ func FromPB(p *registryv1.Methodology) methodology.Methodology {
 				Schedule: t.Schedule, Goal: t.Goal, Intent: t.Intent, Target: t.Target, Roles: nilIfNone(t.Roles), Enabled: t.Enabled})
 		}
 		m.Agents = append(m.Agents, ma)
+	}
+	for _, p := range p.Processes {
+		m.Processes = append(m.Processes, methodology.Process{Name: p.Name, Description: p.Description, Examples: nilIfNone(p.Examples), Parallel: p.Parallel, Steps: stepsFromPB(p.Steps)})
 	}
 	return m
 }

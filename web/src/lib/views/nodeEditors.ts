@@ -30,13 +30,14 @@ registerNodeEditor({
   },
 });
 
-// agents, actions, conditions and goals of a methodology version: their own tab, on the
+// agents, actions, conditions, goals and processes of a methodology version: their own tab, on the
 // methodology draft
 for (const [kind, title] of [
   ['agent', 'Agent editor'],
   ['action', 'Action editor'],
   ['condition', 'Condition editor'],
   ['goal', 'Goal editor'],
+  ['process', 'Process editor'],
 ] as const) {
   registerNodeEditor({
     name: kind,

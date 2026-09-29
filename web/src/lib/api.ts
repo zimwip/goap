@@ -380,6 +380,44 @@ export interface Goal {
   value?: number;
 }
 
+/**
+ * Step of a process (ADR 0034): done by one method — sub-steps, an action (or alternative actions), an agent, a nested
+ * process — or by hand (none: a manual step showing its instructions).
+ */
+export interface ProcessStep {
+  name?: string;
+  description?: string;
+  /** what a person does, for a manual step */
+  instructions?: string;
+  /** entry conditions, on top of the steps before it being done */
+  pre?: Record<string, boolean>;
+  /** exit criteria (default: derived from the method) */
+  done?: Record<string, boolean>;
+  /** earlier sibling steps it waits for, in a parallel level */
+  after?: string[];
+  /** the sub-steps run in any order */
+  parallel?: boolean;
+  steps?: ProcessStep[];
+  action?: string;
+  /** alternative actions the planner chooses among */
+  actions?: string[];
+  agent?: string;
+  /** goal of the agent the step reaches (default: its only goal) */
+  goal?: string;
+  /** nested process: "<process>" or "<methodology>/<process>" */
+  process?: string;
+}
+
+/** Process (ADR 0034): the steps that reach an objective, run by an agent of its name towards a goal of its name. */
+export interface MethodologyProcess {
+  name?: string;
+  description?: string;
+  examples?: string[];
+  /** the top steps run in any order */
+  parallel?: boolean;
+  steps?: ProcessStep[];
+}
+
 export interface Methodology {
   name?: string;
   version?: string;
@@ -391,6 +429,7 @@ export interface Methodology {
   actions?: Action[];
   goals?: Goal[];
   agents?: Agent[];
+  processes?: MethodologyProcess[];
   createdAt?: string;
   updatedAt?: string;
   publishedAt?: string;

@@ -38,7 +38,9 @@ import InstanceTab from './editors/InstanceTab.svelte';
 import AgentTab from './editors/AgentTab.svelte';
 import ActionTab from './editors/ActionTab.svelte';
 import ConditionTab from './editors/ConditionTab.svelte';
+import { walkSteps } from '../methodologyForm';
 import GoalTab from './editors/GoalTab.svelte';
+import ProcessTab from './editors/ProcessTab.svelte';
 import RunTab from './editors/RunTab.svelte';
 import ChangeTab from './editors/ChangeTab.svelte';
 import BaselineTab from './editors/BaselineTab.svelte';
@@ -277,10 +279,10 @@ registerView({
   properties: algorithmProps('instance'),
 });
 
-const ITEM_TITLES: Record<string, string> = { agent: 'Agent', action: 'Action', condition: 'Condition', goal: 'Goal' };
-const ITEM_VIEWS = { agent: AgentTab, action: ActionTab, condition: ConditionTab, goal: GoalTab };
+const ITEM_TITLES: Record<string, string> = { agent: 'Agent', action: 'Action', condition: 'Condition', goal: 'Goal', process: 'Process' };
+const ITEM_VIEWS = { agent: AgentTab, action: ActionTab, condition: ConditionTab, goal: GoalTab, process: ProcessTab };
 
-for (const kind of ['agent', 'action', 'condition', 'goal'] as const) {
+for (const kind of ['agent', 'action', 'condition', 'goal', 'process'] as const) {
   const section = KIND_SECTION[kind];
   const itemOf = (t: Tab) => {
     const d = peekDraft(draftGroup(t));
@@ -321,6 +323,7 @@ for (const kind of ['agent', 'action', 'condition', 'goal'] as const) {
       }
       if ('expr' in it) rows.push(['Expression', it.expr]);
       if ('value' in it) rows.push(['Value', String(it.value)]);
+      if ('steps' in it) rows.push(['Steps', String(walkSteps(it.steps).length)], ['Order', it.parallel ? 'any' : 'in sequence']);
       return { title: it.name || '(unnamed)', subtitle: ITEM_TITLES[kind], rows };
     },
   });

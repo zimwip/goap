@@ -337,7 +337,7 @@ func (b BuiltinExecutor) Execute(ctx context.Context, ac ActionContext) (ActionR
 
 // DefaultBuiltins returns the builtin actions shipped with the engine.
 func DefaultBuiltins() BuiltinExecutor {
-	return BuiltinExecutor{"graph.propagate": Propagate, "graph.apply": ApplyChange, "decision.investigate": Investigate}
+	return BuiltinExecutor{"graph.propagate": Propagate, "graph.apply": ApplyChange, "decision.investigate": Investigate, methodology.BuiltinStep: RunStep}
 }
 
 // Propagate follows links backwards from impacted nodes (an impact on the

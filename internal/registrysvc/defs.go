@@ -11,7 +11,7 @@ import (
 )
 
 // A version of a methodology is a node (its header: the scalar fields, the status, the timestamps) and one node per
-// element (condition, action, goal, agent), keyed "<header key>/<kind>/<name>" and typed by the built-in meta-domain
+// element (condition, action, goal, agent, process), keyed "<header key>/<kind>/<name>" and typed by the built-in meta-domain
 // methodology (methodology@Agent, ...; ADR 0023). The version is the graph content; the definition a caller gets is
 // assembled from it.
 
@@ -21,6 +21,7 @@ const (
 	kindAction    = "action"
 	kindGoal      = "goal"
 	kindAgent     = "agent"
+	kindProcess   = "process"
 )
 
 // defKinds lists the element kinds with the JSON field of the collection they belong to.
@@ -29,6 +30,7 @@ var defKinds = []struct{ kind, field, nodeType string }{
 	{kindAction, "actions", "methodology@Action"},
 	{kindGoal, "goals", "methodology@Goal"},
 	{kindAgent, "agents", "methodology@Agent"},
+	{kindProcess, "processes", "methodology@Process"},
 }
 
 // defEl is an element of a definition.

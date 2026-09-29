@@ -17,6 +17,8 @@
     emptyAction,
     emptyCondition,
     emptyGoal,
+    emptyProcess,
+    walkSteps,
     type Section,
     type SectionItem,
   } from '../../methodologyForm';
@@ -80,7 +82,7 @@
   const ns = $derived(f.namespace.trim());
   const namespaces = $derived(cat.namespaces());
 
-  const SECTIONS: Section[] = ['agents', 'actions', 'conditions', 'goals'];
+  const SECTIONS: Section[] = ['processes', 'agents', 'actions', 'conditions', 'goals'];
 
   let pane = $state(untrack(() => tab.params.pane) || 'overview');
   $effect(() => {
@@ -103,7 +105,7 @@
   });
 
   function add(section: Section) {
-    const factories = { agents: emptyAgent, actions: emptyAction, conditions: emptyCondition, goals: emptyGoal };
+    const factories = { agents: emptyAgent, actions: emptyAction, conditions: emptyCondition, goals: emptyGoal, processes: emptyProcess };
     (d.form[section] as SectionItem[]).push(factories[section]());
     const list = d.form[section];
     openItem(d, section, list[list.length - 1], true);
@@ -113,6 +115,7 @@
     if ('kind' in it) return it.kind;
     if ('planner' in it) return it.planner;
     if ('expr' in it) return it.expr;
+    if ('steps' in it) return `${walkSteps(it.steps).length} step(s)${it.description ? ` — ${it.description}` : ''}`;
     return it.description;
   }
 </script>
@@ -284,7 +287,7 @@
                       {#if n}<span class="count bad" title="Issues">{n}</span>{/if}
                     </li>
                   {:else}
-                    <li class="empty">{s === 'agents' ? 'No agent: the default agent runs every action.' : 'None yet.'}</li>
+                    <li class="empty">{s === 'agents' ? 'No agent: the default agent runs every action.' : s === 'processes' ? 'No process: describe the steps that reach the objective of a change, each done by an action, an agent, a nested process or a person.' : 'None yet.'}</li>
                   {/each}
                 </ul>
               </section>
