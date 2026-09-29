@@ -39,6 +39,7 @@
   import BoardIssueList from '../../components/BoardIssueList.svelte';
   import ChangeImpactList from '../../components/ChangeImpactList.svelte';
   import ChangeOptions from '../../components/ChangeOptions.svelte';
+  import ChangeDecisions from '../../components/ChangeDecisions.svelte';
 
   let { tab }: { tab: Tab } = $props();
 
@@ -169,6 +170,20 @@
   const options = $derived(flows.filter((f) => f.option));
   const relaunches = $derived(flows.filter((f) => !f.option));
   const activeOption = $derived(options.find((f) => f.active));
+  // decision points that are not decided yet (ADR 0009 §4), replayed from the facts of the main flow
+  const pendingDecisions = $derived.by(() => {
+    const threshold = new Map<string, number>();
+    const decided = new Set<string>();
+    for (const it of change?.items ?? []) {
+      const e = it.decisionEvent;
+      if (it.kind !== 'decision_point' || !e || it.flow) continue;
+      if (e.op === 'open') threshold.set(it.id ?? '', e.threshold ?? 0);
+      else if (e.op === 'rule' && e.outcome === 'decided' && (e.human || (e.confidence ?? 0) >= (threshold.get(e.point ?? '') ?? 1))) decided.add(e.point ?? '');
+      else if (e.op === 'ratify' && e.accept) decided.add(e.point ?? '');
+    }
+    const opened = [...threshold.keys()];
+    return opened.filter((id) => !decided.has(id)).length;
+  });
   /** the badge of a flow: open flows that compete cannot be adopted any more */
   const flowBadge = (f: Flow) => (f.status === 'open' && f.competesWith?.length ? 'competing' : f.status);
   const ctx = $derived(makeContext(nodes, items));
@@ -199,6 +214,7 @@
     { id: 'overview', label: 'Overview', badge: stuckEditable ? '!' : undefined },
     { id: 'impacts', label: 'Impacts', badge: change?.nodes?.length || undefined },
     { id: 'options', label: 'Options', badge: options.filter((f) => f.status === 'open').length || undefined },
+    { id: 'decisions', label: 'Decisions', badge: pendingDecisions || undefined },
     { id: 'items', label: 'Items', badge: items.length || undefined },
     { id: 'changes', label: 'Changes', badge: subs.length + ancestors.length || undefined },
     { id: 'audit', label: 'Audit' },
@@ -509,6 +525,11 @@
       <section class="card">
         <h3>Options <span class="count">{options.length}</span></h3>
         <ChangeOptions changeId={ch.id ?? ''} {closed} onchange={() => load(selected)} />
+      </section>
+      {:else if active === 'decisions'}
+      <section class="card">
+        <h3>Decision points</h3>
+        <ChangeDecisions changeId={ch.id ?? ''} {closed} onchange={() => load(selected)} />
       </section>
       {:else if active === 'impacts'}
       <section class="card">
