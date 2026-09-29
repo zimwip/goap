@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/zimwip/goap/pkg/domain"
 )
@@ -338,6 +339,44 @@ func testLifecycleAuthorizerAndGuard(t *testing.T, repo Repo) {
 	w.accept(t, c)
 	if _, err := w.g.Apply(ctx, c.ID, ""); !errors.Is(err, deny) {
 		t.Fatalf("authorizer: %v", err)
+	}
+}
+
+// The authorizer reads the graph (the access policies are graph data): it runs outside the transaction of the
+// apply, which would otherwise wait for itself.
+func TestLifecycleAuthorizerReadsTheGraph(t *testing.T) {
+	forEachRepo(t, testLifecycleAuthorizerReadsTheGraph)
+}
+
+func testLifecycleAuthorizerReadsTheGraph(t *testing.T, repo Repo) {
+	ctx := context.Background()
+	w := newLifecycleWorld(t, repo)
+	var asked []string
+	w.g.Authorizer = func(ctx context.Context, n domain.Node, tr domain.Transition) error {
+		if _, err := w.g.Baselines(ctx, n.Namespace); err != nil {
+			return err
+		}
+		asked = append(asked, tr.Name)
+		return nil
+	}
+	c := w.change(t, "reads")
+	id := w.declare(t, c, w.req1)
+	if err := w.write(c, id, NodeWrite{State: "draft"}); err != nil {
+		t.Fatal(err)
+	}
+	w.accept(t, c)
+	done := make(chan error, 1)
+	go func() { _, err := w.g.Apply(ctx, c.ID, ""); done <- err }()
+	select {
+	case err := <-done:
+		if err != nil && !errors.Is(err, ErrInvalid) {
+			t.Fatalf("apply: %v", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("apply waits for itself: the authorizer runs inside its transaction")
+	}
+	if len(asked) == 0 {
+		t.Fatal("the transition was not authorized")
 	}
 }
 
