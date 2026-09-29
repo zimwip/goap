@@ -62,6 +62,14 @@ func main() {
 	// the principal behind each event of the impact logs (ADR 0029)
 	g.Caller = graphsvc.Caller
 	g.Observe(events) // node and baseline events feed the node index (ADR 0026)
+	// baselines written whole before they were stored as deltas are compacted, once, in the background (ADR 0032)
+	go func() {
+		if n, err := g.CompactBaselines(ctx); err != nil {
+			log.Error("compact baselines", "err", err)
+		} else if n > 0 {
+			log.Info("baselines compacted", "rewritten", n)
+		}
+	}()
 	// the graph judges nodes by the types of the published domains (ADR 0012): the registry is the reference, the
 	// graph holds a copy reloaded on its domain events; without a registry, the domain files are the source
 	var source typecat.Source = func(context.Context) ([]*methodology.Domain, error) {

@@ -574,3 +574,30 @@ func (t *pgTx) JoinBranch(ctx context.Context, ref domain.NodeRef, branch string
 		WHERE node_id = $1 AND version = $2 AND branch <> $3 ON CONFLICT DO NOTHING`, string(ref.ID), int(ref.Version), domain.BranchOf(branch))
 	return mapErr(err, "node "+ref.String())
 }
+
+func (t *pgTx) baselineHeaders(ctx context.Context) ([]baselineHeader, error) {
+	rows, err := t.tx.Query(ctx, `SELECT id::text, coalesce(parent_id::text, ''), depth FROM baseline ORDER BY created_at, id`)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (baselineHeader, error) {
+		var h baselineHeader
+		err := r.Scan((*string)(&h.id), (*string)(&h.parent), &h.depth)
+		return h, err
+	})
+}
+
+func (t *pgTx) rewriteBaseline(ctx context.Context, id domain.BaselineID, depth int, entries []baselineEntry) error {
+	if _, err := t.tx.Exec(ctx, `DELETE FROM baseline_entry WHERE baseline_id = $1`, string(id)); err != nil {
+		return err
+	}
+	if _, err := t.tx.Exec(ctx, `UPDATE baseline SET depth = $2 WHERE id = $1`, string(id), depth); err != nil {
+		return err
+	}
+	rows := make([][]any, 0, len(entries))
+	for _, e := range entries {
+		rows = append(rows, []any{string(id), string(e.node), int(e.version), e.removed})
+	}
+	_, err := t.tx.CopyFrom(ctx, pgx.Identifier{"baseline_entry"}, []string{"baseline_id", "node_id", "version", "removed"}, pgx.CopyFromRows(rows))
+	return mapErr(err, "baseline entries")
+}

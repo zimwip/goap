@@ -146,3 +146,58 @@ func checkLandings(t *testing.T, repo Repo) {
 		t.Fatal(err)
 	}
 }
+
+// Baselines stored whole (before ADR 0032, or under another checkpoint interval) are compacted to deltas without
+// changing their content, and compacting again changes nothing.
+func TestCompactBaselines(t *testing.T) { forEachRepo(t, testCompactBaselines) }
+
+func testCompactBaselines(t *testing.T, repo Repo) {
+	ctx := context.Background()
+	old := checkpointEvery
+	defer func() { checkpointEvery = old }()
+	checkpointEvery = 1 // every baseline written whole, as before deltas
+	f := newFixture(t, repo)
+	g := f.g
+	written := []domain.Baseline{f.base}
+	head := f.base
+	for i := range 6 {
+		head = commitOn(t, g, "", head.ID, NodeEdit{Key: fmt.Sprintf("DES-%d", i), Type: "Design"})
+		written = append(written, head)
+	}
+	before := storedEntryCounts(t, repo, written)
+	checkpointEvery = 4
+	n, err := g.CompactBaselines(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, want := range written {
+		got := must[domain.Baseline](t)(g.Baseline(ctx, want.ID))
+		if !maps.Equal(got.Nodes, want.Nodes) {
+			t.Fatalf("baseline %d after compaction: %v, want %v", i, got.Nodes, want.Nodes)
+		}
+	}
+	if before == nil {
+		if n != 0 {
+			t.Fatalf("the memory store keeps whole maps, %d compacted", n)
+		}
+		return
+	}
+	after := storedEntryCounts(t, repo, written)
+	total := func(cs []int) (s int) {
+		for _, c := range cs {
+			s += c
+		}
+		return
+	}
+	if n == 0 || total(after) >= total(before) {
+		t.Fatalf("compacted %d: entries %v -> %v", n, before, after)
+	}
+	if again, err := g.CompactBaselines(ctx); err != nil || again != 0 {
+		t.Fatalf("second compaction: %d %v", again, err)
+	}
+	// a baseline written after the compaction continues the chains
+	next := commitOn(t, g, "", head.ID, NodeEdit{Key: "DES-X", Type: "Design"})
+	if got := must[domain.Baseline](t)(g.Baseline(ctx, next.ID)); !maps.Equal(got.Nodes, next.Nodes) {
+		t.Fatalf("next baseline: %v", got.Nodes)
+	}
+}

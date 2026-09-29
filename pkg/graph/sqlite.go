@@ -603,3 +603,40 @@ func (t *sqliteTx) JoinBranch(ctx context.Context, ref domain.NodeRef, branch st
 		WHERE node_id = ? AND version = ? AND branch <> ? ON CONFLICT DO NOTHING`, domain.BranchOf(branch), string(ref.ID), int(ref.Version), domain.BranchOf(branch))
 	return sqliteErr(err, "node "+ref.String())
 }
+
+func (t *sqliteTx) baselineHeaders(ctx context.Context) ([]baselineHeader, error) {
+	rows, err := t.tx.QueryContext(ctx, `SELECT id, coalesce(parent_id, ''), depth FROM baseline ORDER BY created_at, rowid`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []baselineHeader
+	for rows.Next() {
+		var h baselineHeader
+		if err := rows.Scan((*string)(&h.id), (*string)(&h.parent), &h.depth); err != nil {
+			return nil, err
+		}
+		out = append(out, h)
+	}
+	return out, rows.Err()
+}
+
+func (t *sqliteTx) rewriteBaseline(ctx context.Context, id domain.BaselineID, depth int, entries []baselineEntry) error {
+	if _, err := t.tx.ExecContext(ctx, `DELETE FROM baseline_entry WHERE baseline_id = ?`, string(id)); err != nil {
+		return err
+	}
+	if _, err := t.tx.ExecContext(ctx, `UPDATE baseline SET depth = ? WHERE id = ?`, depth, string(id)); err != nil {
+		return err
+	}
+	stmt, err := t.tx.PrepareContext(ctx, `INSERT INTO baseline_entry (baseline_id, node_id, version, removed) VALUES (?, ?, ?, ?)`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+	for _, e := range entries {
+		if _, err := stmt.ExecContext(ctx, string(id), string(e.node), int(e.version), e.removed); err != nil {
+			return sqliteErr(err, "baseline entries")
+		}
+	}
+	return nil
+}

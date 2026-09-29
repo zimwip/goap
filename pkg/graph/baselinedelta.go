@@ -1,6 +1,7 @@
 package graph
 
 import (
+	"context"
 	"fmt"
 	"slices"
 
@@ -70,4 +71,95 @@ func baselineEntriesSQL(param string) string {
 		SELECT e.node_id, e.version, e.removed, row_number() OVER (PARTITION BY e.node_id ORDER BY c.d) AS rn
 		FROM chain c JOIN baseline_entry e ON e.baseline_id = c.id
 	)`, param)
+}
+
+// baselineHeader is what compaction needs of a stored baseline.
+type baselineHeader struct {
+	id     domain.BaselineID
+	parent domain.BaselineID
+	depth  int
+}
+
+// baselineRewriter is implemented by the transactions of the stores that keep baselines as deltas (the SQL ones).
+type baselineRewriter interface {
+	baselineHeaders(ctx context.Context) ([]baselineHeader, error)
+	// rewriteBaseline replaces the stored entries of a baseline, whose content does not change.
+	rewriteBaseline(ctx context.Context, id domain.BaselineID, depth int, entries []baselineEntry) error
+}
+
+// CompactBaselines stores every baseline the way PutBaseline would today (ADR 0032 §3): the whole copies written
+// before baselines were deltas become deltas, and the checkpoints fall every checkpointEvery baselines along each
+// chain. The content of a baseline never changes, so it can run at any time; each baseline is rewritten in a
+// transaction of its own. It returns how many were rewritten (0 on a store that keeps whole maps).
+func (g *Graph) CompactBaselines(ctx context.Context) (int, error) {
+	var headers []baselineHeader
+	supported := true
+	if err := g.repo.InTx(ctx, func(tx Tx) (err error) {
+		rw, ok := rewriterOf(tx)
+		if !ok {
+			supported = false
+			return nil
+		}
+		headers, err = rw.baselineHeaders(ctx)
+		return err
+	}); err != nil || !supported {
+		return 0, err
+	}
+	byID := map[domain.BaselineID]baselineHeader{}
+	for _, h := range headers {
+		byID[h.id] = h
+	}
+	depth := map[domain.BaselineID]int{}
+	var desired func(h baselineHeader, hops int) int
+	desired = func(h baselineHeader, hops int) int {
+		if d, ok := depth[h.id]; ok {
+			return d
+		}
+		d := 0
+		if p, ok := byID[h.parent]; ok && hops < 1<<20 {
+			if pd := desired(p, hops+1); pd+1 < checkpointEvery {
+				d = pd + 1
+			}
+		}
+		depth[h.id] = d
+		return d
+	}
+	n := 0
+	for _, h := range headers { // parents first: desired walks up before a child is rewritten
+		d := desired(h, 0)
+		if d == h.depth {
+			continue
+		}
+		err := g.repo.InTx(ctx, func(tx Tx) error {
+			b, err := tx.Baseline(ctx, h.id)
+			if err != nil {
+				return err
+			}
+			var parent *domain.Baseline
+			if d > 0 {
+				p, err := tx.Baseline(ctx, h.parent)
+				if err != nil {
+					return err
+				}
+				parent = &p
+			}
+			_, entries := storedEntries(parent, d-1, b.Nodes)
+			rw, _ := rewriterOf(tx)
+			return rw.rewriteBaseline(ctx, h.id, d, entries)
+		})
+		if err != nil {
+			return n, fmt.Errorf("compact baseline %s: %w", h.id, err)
+		}
+		n++
+	}
+	return n, nil
+}
+
+// rewriterOf returns the store transaction under tx when it keeps baselines as deltas.
+func rewriterOf(tx Tx) (baselineRewriter, bool) {
+	if ot, ok := tx.(*observedTx); ok {
+		tx = ot.Tx
+	}
+	rw, ok := tx.(baselineRewriter)
+	return rw, ok
 }
