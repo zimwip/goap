@@ -165,6 +165,91 @@ func (c *Client) BaselineGraph(ctx context.Context, id domain.BaselineID) ([]dom
 	return pbconv.NodesFromPB(r.Msg.Nodes), pbconv.LinksFromPB(r.Msg.Links), nil
 }
 
+// ChangeView implements engine.GraphPort.
+func (c *Client) ChangeView(ctx context.Context, id domain.ChangeID, flow, level string) (domain.Baseline, error) {
+	r, err := c.rpc.GetChangeView(ctx, connect.NewRequest(&graphv1.GetChangeViewRequest{ChangeId: string(id), Flow: flow, Level: level}))
+	if err != nil {
+		return domain.Baseline{}, rpcerr.FromConnect(err)
+	}
+	return pbconv.BaselineFromPB(r.Msg.Baseline), nil
+}
+
+// OpenOption implements engine.GraphPort (the principal comes from the request identity).
+func (c *Client) OpenOption(ctx context.Context, id domain.ChangeID, in graph.OpenOptionRequest) (domain.Flow, error) {
+	r, err := c.rpc.OpenOption(ctx, connect.NewRequest(&graphv1.OpenOptionRequest{ChangeId: string(id), Name: in.Name, Hypothesis: in.Hypothesis, Activate: in.Activate}))
+	if err != nil {
+		return domain.Flow{}, rpcerr.FromConnect(err)
+	}
+	return pbconv.FlowFromPB(r.Msg.Option), nil
+}
+
+// ActivateOption implements engine.GraphPort.
+func (c *Client) ActivateOption(ctx context.Context, id domain.ChangeID, option, _ string) (string, error) {
+	r, err := c.rpc.ActivateOption(ctx, connect.NewRequest(&graphv1.ActivateOptionRequest{ChangeId: string(id), Option: option}))
+	if err != nil {
+		return "", rpcerr.FromConnect(err)
+	}
+	return r.Msg.Active, nil
+}
+
+// EvaluateOption implements engine.GraphPort.
+func (c *Client) EvaluateOption(ctx context.Context, id domain.ChangeID, option, _, comment string) (domain.Flow, error) {
+	r, err := c.rpc.EvaluateOption(ctx, connect.NewRequest(&graphv1.EvaluateOptionRequest{ChangeId: string(id), Option: option, Comment: comment}))
+	if err != nil {
+		return domain.Flow{}, rpcerr.FromConnect(err)
+	}
+	return pbconv.FlowFromPB(r.Msg.Option), nil
+}
+
+// Options implements engine.GraphPort.
+func (c *Client) Options(ctx context.Context, id domain.ChangeID) ([]domain.Flow, error) {
+	r, err := c.rpc.ListOptions(ctx, connect.NewRequest(&graphv1.ListOptionsRequest{ChangeId: string(id)}))
+	if err != nil {
+		return nil, rpcerr.FromConnect(err)
+	}
+	var out []domain.Flow
+	for _, f := range r.Msg.Options {
+		out = append(out, pbconv.FlowFromPB(f))
+	}
+	return out, nil
+}
+
+// CompareOptions implements engine.GraphPort.
+func (c *Client) CompareOptions(ctx context.Context, id domain.ChangeID, level string, all bool) (graph.OptionComparison, error) {
+	r, err := c.rpc.CompareOptions(ctx, connect.NewRequest(&graphv1.CompareOptionsRequest{ChangeId: string(id), Level: level, All: all}))
+	if err != nil {
+		return graph.OptionComparison{}, rpcerr.FromConnect(err)
+	}
+	out := graph.OptionComparison{Level: r.Msg.Level}
+	for _, f := range r.Msg.Options {
+		out.Options = append(out.Options, pbconv.FlowFromPB(f))
+	}
+	for _, n := range r.Msg.Nodes {
+		on := graph.OptionNode{Node: domain.NodeID(n.Node), Key: n.Key, Type: n.Type, Main: pbconv.RefPtrFromPB(n.Main),
+			Options: map[string]*domain.NodeRef{}, Props: map[string]map[string]any{}}
+		for _, f := range out.Options {
+			on.Options[f.ID] = nil
+		}
+		for oid, ref := range n.Options {
+			on.Options[oid] = pbconv.RefPtrFromPB(ref)
+		}
+		for side, p := range n.Props {
+			on.Props[side] = pbconv.Map(p)
+		}
+		out.Nodes = append(out.Nodes, on)
+	}
+	return out, nil
+}
+
+// ChangeGraph implements engine.GraphPort.
+func (c *Client) ChangeGraph(ctx context.Context, id domain.ChangeID, flow string) ([]domain.Node, []domain.Link, error) {
+	r, err := c.rpc.GetChangeGraph(ctx, connect.NewRequest(&graphv1.GetChangeGraphRequest{ChangeId: string(id), Flow: flow}))
+	if err != nil {
+		return nil, nil, rpcerr.FromConnect(err)
+	}
+	return pbconv.NodesFromPB(r.Msg.Nodes), pbconv.LinksFromPB(r.Msg.Links), nil
+}
+
 func (c *Client) Apply(ctx context.Context, id domain.ChangeID, baselineName string) (domain.Baseline, error) {
 	r, err := c.rpc.ApplyChange(ctx, connect.NewRequest(&graphv1.ApplyChangeRequest{ChangeId: string(id), BaselineName: baselineName}))
 	if err != nil {

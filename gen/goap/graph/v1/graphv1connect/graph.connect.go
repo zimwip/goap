@@ -148,6 +148,32 @@ const (
 	// GraphServiceValidateBoardProcedure is the fully-qualified name of the GraphService's
 	// ValidateBoard RPC.
 	GraphServiceValidateBoardProcedure = "/goap.graph.v1.GraphService/ValidateBoard"
+	// GraphServiceOpenOptionProcedure is the fully-qualified name of the GraphService's OpenOption RPC.
+	GraphServiceOpenOptionProcedure = "/goap.graph.v1.GraphService/OpenOption"
+	// GraphServiceActivateOptionProcedure is the fully-qualified name of the GraphService's
+	// ActivateOption RPC.
+	GraphServiceActivateOptionProcedure = "/goap.graph.v1.GraphService/ActivateOption"
+	// GraphServiceEvaluateOptionProcedure is the fully-qualified name of the GraphService's
+	// EvaluateOption RPC.
+	GraphServiceEvaluateOptionProcedure = "/goap.graph.v1.GraphService/EvaluateOption"
+	// GraphServiceSelectOptionProcedure is the fully-qualified name of the GraphService's SelectOption
+	// RPC.
+	GraphServiceSelectOptionProcedure = "/goap.graph.v1.GraphService/SelectOption"
+	// GraphServiceRejectOptionProcedure is the fully-qualified name of the GraphService's RejectOption
+	// RPC.
+	GraphServiceRejectOptionProcedure = "/goap.graph.v1.GraphService/RejectOption"
+	// GraphServiceListOptionsProcedure is the fully-qualified name of the GraphService's ListOptions
+	// RPC.
+	GraphServiceListOptionsProcedure = "/goap.graph.v1.GraphService/ListOptions"
+	// GraphServiceCompareOptionsProcedure is the fully-qualified name of the GraphService's
+	// CompareOptions RPC.
+	GraphServiceCompareOptionsProcedure = "/goap.graph.v1.GraphService/CompareOptions"
+	// GraphServiceGetChangeViewProcedure is the fully-qualified name of the GraphService's
+	// GetChangeView RPC.
+	GraphServiceGetChangeViewProcedure = "/goap.graph.v1.GraphService/GetChangeView"
+	// GraphServiceGetChangeGraphProcedure is the fully-qualified name of the GraphService's
+	// GetChangeGraph RPC.
+	GraphServiceGetChangeGraphProcedure = "/goap.graph.v1.GraphService/GetChangeGraph"
 	// GraphServiceRecordExecutionsProcedure is the fully-qualified name of the GraphService's
 	// RecordExecutions RPC.
 	GraphServiceRecordExecutionsProcedure = "/goap.graph.v1.GraphService/RecordExecutions"
@@ -223,6 +249,19 @@ type GraphServiceClient interface {
 	// Applies the proposals of a flow on a graph branch of its own (a preview, merged when the flow is adopted).
 	// Consistency check of the blackboard as a process on a flow sees it.
 	ValidateBoard(context.Context, *connect.Request[v1.ValidateBoardRequest]) (*connect.Response[v1.ValidateBoardResponse], error)
+	// Options of a change (ADR 0009 §3, ADR 0032 §6): hypotheses explored on flows of their own; the active one is
+	// where every call that names no flow goes ("main" names the main flow).
+	OpenOption(context.Context, *connect.Request[v1.OpenOptionRequest]) (*connect.Response[v1.OpenOptionResponse], error)
+	ActivateOption(context.Context, *connect.Request[v1.ActivateOptionRequest]) (*connect.Response[v1.ActivateOptionResponse], error)
+	EvaluateOption(context.Context, *connect.Request[v1.EvaluateOptionRequest]) (*connect.Response[v1.EvaluateOptionResponse], error)
+	SelectOption(context.Context, *connect.Request[v1.SelectOptionRequest]) (*connect.Response[v1.SelectOptionResponse], error)
+	RejectOption(context.Context, *connect.Request[v1.RejectOptionRequest]) (*connect.Response[v1.RejectOptionResponse], error)
+	ListOptions(context.Context, *connect.Request[v1.ListOptionsRequest]) (*connect.Response[v1.ListOptionsResponse], error)
+	CompareOptions(context.Context, *connect.Request[v1.CompareOptionsRequest]) (*connect.Response[v1.CompareOptionsResponse], error)
+	// The graph a change sees at a level (written, accepted, landed) on a flow (ADR 0032 §5), and the graph a call on
+	// the change reads (the active option's, else the reference baseline).
+	GetChangeView(context.Context, *connect.Request[v1.GetChangeViewRequest]) (*connect.Response[v1.GetChangeViewResponse], error)
+	GetChangeGraph(context.Context, *connect.Request[v1.GetChangeGraphRequest]) (*connect.Response[v1.GetChangeGraphResponse], error)
 	// Execution journal (ADR 0011)
 	RecordExecutions(context.Context, *connect.Request[v1.RecordExecutionsRequest]) (*connect.Response[v1.RecordExecutionsResponse], error)
 	ListExecutions(context.Context, *connect.Request[v1.ListExecutionsRequest]) (*connect.Response[v1.ListExecutionsResponse], error)
@@ -494,6 +533,60 @@ func NewGraphServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(graphServiceMethods.ByName("ValidateBoard")),
 			connect.WithClientOptions(opts...),
 		),
+		openOption: connect.NewClient[v1.OpenOptionRequest, v1.OpenOptionResponse](
+			httpClient,
+			baseURL+GraphServiceOpenOptionProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("OpenOption")),
+			connect.WithClientOptions(opts...),
+		),
+		activateOption: connect.NewClient[v1.ActivateOptionRequest, v1.ActivateOptionResponse](
+			httpClient,
+			baseURL+GraphServiceActivateOptionProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("ActivateOption")),
+			connect.WithClientOptions(opts...),
+		),
+		evaluateOption: connect.NewClient[v1.EvaluateOptionRequest, v1.EvaluateOptionResponse](
+			httpClient,
+			baseURL+GraphServiceEvaluateOptionProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("EvaluateOption")),
+			connect.WithClientOptions(opts...),
+		),
+		selectOption: connect.NewClient[v1.SelectOptionRequest, v1.SelectOptionResponse](
+			httpClient,
+			baseURL+GraphServiceSelectOptionProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("SelectOption")),
+			connect.WithClientOptions(opts...),
+		),
+		rejectOption: connect.NewClient[v1.RejectOptionRequest, v1.RejectOptionResponse](
+			httpClient,
+			baseURL+GraphServiceRejectOptionProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("RejectOption")),
+			connect.WithClientOptions(opts...),
+		),
+		listOptions: connect.NewClient[v1.ListOptionsRequest, v1.ListOptionsResponse](
+			httpClient,
+			baseURL+GraphServiceListOptionsProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("ListOptions")),
+			connect.WithClientOptions(opts...),
+		),
+		compareOptions: connect.NewClient[v1.CompareOptionsRequest, v1.CompareOptionsResponse](
+			httpClient,
+			baseURL+GraphServiceCompareOptionsProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("CompareOptions")),
+			connect.WithClientOptions(opts...),
+		),
+		getChangeView: connect.NewClient[v1.GetChangeViewRequest, v1.GetChangeViewResponse](
+			httpClient,
+			baseURL+GraphServiceGetChangeViewProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("GetChangeView")),
+			connect.WithClientOptions(opts...),
+		),
+		getChangeGraph: connect.NewClient[v1.GetChangeGraphRequest, v1.GetChangeGraphResponse](
+			httpClient,
+			baseURL+GraphServiceGetChangeGraphProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("GetChangeGraph")),
+			connect.WithClientOptions(opts...),
+		),
 		recordExecutions: connect.NewClient[v1.RecordExecutionsRequest, v1.RecordExecutionsResponse](
 			httpClient,
 			baseURL+GraphServiceRecordExecutionsProcedure,
@@ -559,6 +652,15 @@ type graphServiceClient struct {
 	discardFlow          *connect.Client[v1.DiscardFlowRequest, v1.DiscardFlowResponse]
 	listFlows            *connect.Client[v1.ListFlowsRequest, v1.ListFlowsResponse]
 	validateBoard        *connect.Client[v1.ValidateBoardRequest, v1.ValidateBoardResponse]
+	openOption           *connect.Client[v1.OpenOptionRequest, v1.OpenOptionResponse]
+	activateOption       *connect.Client[v1.ActivateOptionRequest, v1.ActivateOptionResponse]
+	evaluateOption       *connect.Client[v1.EvaluateOptionRequest, v1.EvaluateOptionResponse]
+	selectOption         *connect.Client[v1.SelectOptionRequest, v1.SelectOptionResponse]
+	rejectOption         *connect.Client[v1.RejectOptionRequest, v1.RejectOptionResponse]
+	listOptions          *connect.Client[v1.ListOptionsRequest, v1.ListOptionsResponse]
+	compareOptions       *connect.Client[v1.CompareOptionsRequest, v1.CompareOptionsResponse]
+	getChangeView        *connect.Client[v1.GetChangeViewRequest, v1.GetChangeViewResponse]
+	getChangeGraph       *connect.Client[v1.GetChangeGraphRequest, v1.GetChangeGraphResponse]
 	recordExecutions     *connect.Client[v1.RecordExecutionsRequest, v1.RecordExecutionsResponse]
 	listExecutions       *connect.Client[v1.ListExecutionsRequest, v1.ListExecutionsResponse]
 	republishIndex       *connect.Client[v1.RepublishIndexRequest, v1.RepublishIndexResponse]
@@ -774,6 +876,51 @@ func (c *graphServiceClient) ValidateBoard(ctx context.Context, req *connect.Req
 	return c.validateBoard.CallUnary(ctx, req)
 }
 
+// OpenOption calls goap.graph.v1.GraphService.OpenOption.
+func (c *graphServiceClient) OpenOption(ctx context.Context, req *connect.Request[v1.OpenOptionRequest]) (*connect.Response[v1.OpenOptionResponse], error) {
+	return c.openOption.CallUnary(ctx, req)
+}
+
+// ActivateOption calls goap.graph.v1.GraphService.ActivateOption.
+func (c *graphServiceClient) ActivateOption(ctx context.Context, req *connect.Request[v1.ActivateOptionRequest]) (*connect.Response[v1.ActivateOptionResponse], error) {
+	return c.activateOption.CallUnary(ctx, req)
+}
+
+// EvaluateOption calls goap.graph.v1.GraphService.EvaluateOption.
+func (c *graphServiceClient) EvaluateOption(ctx context.Context, req *connect.Request[v1.EvaluateOptionRequest]) (*connect.Response[v1.EvaluateOptionResponse], error) {
+	return c.evaluateOption.CallUnary(ctx, req)
+}
+
+// SelectOption calls goap.graph.v1.GraphService.SelectOption.
+func (c *graphServiceClient) SelectOption(ctx context.Context, req *connect.Request[v1.SelectOptionRequest]) (*connect.Response[v1.SelectOptionResponse], error) {
+	return c.selectOption.CallUnary(ctx, req)
+}
+
+// RejectOption calls goap.graph.v1.GraphService.RejectOption.
+func (c *graphServiceClient) RejectOption(ctx context.Context, req *connect.Request[v1.RejectOptionRequest]) (*connect.Response[v1.RejectOptionResponse], error) {
+	return c.rejectOption.CallUnary(ctx, req)
+}
+
+// ListOptions calls goap.graph.v1.GraphService.ListOptions.
+func (c *graphServiceClient) ListOptions(ctx context.Context, req *connect.Request[v1.ListOptionsRequest]) (*connect.Response[v1.ListOptionsResponse], error) {
+	return c.listOptions.CallUnary(ctx, req)
+}
+
+// CompareOptions calls goap.graph.v1.GraphService.CompareOptions.
+func (c *graphServiceClient) CompareOptions(ctx context.Context, req *connect.Request[v1.CompareOptionsRequest]) (*connect.Response[v1.CompareOptionsResponse], error) {
+	return c.compareOptions.CallUnary(ctx, req)
+}
+
+// GetChangeView calls goap.graph.v1.GraphService.GetChangeView.
+func (c *graphServiceClient) GetChangeView(ctx context.Context, req *connect.Request[v1.GetChangeViewRequest]) (*connect.Response[v1.GetChangeViewResponse], error) {
+	return c.getChangeView.CallUnary(ctx, req)
+}
+
+// GetChangeGraph calls goap.graph.v1.GraphService.GetChangeGraph.
+func (c *graphServiceClient) GetChangeGraph(ctx context.Context, req *connect.Request[v1.GetChangeGraphRequest]) (*connect.Response[v1.GetChangeGraphResponse], error) {
+	return c.getChangeGraph.CallUnary(ctx, req)
+}
+
 // RecordExecutions calls goap.graph.v1.GraphService.RecordExecutions.
 func (c *graphServiceClient) RecordExecutions(ctx context.Context, req *connect.Request[v1.RecordExecutionsRequest]) (*connect.Response[v1.RecordExecutionsResponse], error) {
 	return c.recordExecutions.CallUnary(ctx, req)
@@ -853,6 +1000,19 @@ type GraphServiceHandler interface {
 	// Applies the proposals of a flow on a graph branch of its own (a preview, merged when the flow is adopted).
 	// Consistency check of the blackboard as a process on a flow sees it.
 	ValidateBoard(context.Context, *connect.Request[v1.ValidateBoardRequest]) (*connect.Response[v1.ValidateBoardResponse], error)
+	// Options of a change (ADR 0009 §3, ADR 0032 §6): hypotheses explored on flows of their own; the active one is
+	// where every call that names no flow goes ("main" names the main flow).
+	OpenOption(context.Context, *connect.Request[v1.OpenOptionRequest]) (*connect.Response[v1.OpenOptionResponse], error)
+	ActivateOption(context.Context, *connect.Request[v1.ActivateOptionRequest]) (*connect.Response[v1.ActivateOptionResponse], error)
+	EvaluateOption(context.Context, *connect.Request[v1.EvaluateOptionRequest]) (*connect.Response[v1.EvaluateOptionResponse], error)
+	SelectOption(context.Context, *connect.Request[v1.SelectOptionRequest]) (*connect.Response[v1.SelectOptionResponse], error)
+	RejectOption(context.Context, *connect.Request[v1.RejectOptionRequest]) (*connect.Response[v1.RejectOptionResponse], error)
+	ListOptions(context.Context, *connect.Request[v1.ListOptionsRequest]) (*connect.Response[v1.ListOptionsResponse], error)
+	CompareOptions(context.Context, *connect.Request[v1.CompareOptionsRequest]) (*connect.Response[v1.CompareOptionsResponse], error)
+	// The graph a change sees at a level (written, accepted, landed) on a flow (ADR 0032 §5), and the graph a call on
+	// the change reads (the active option's, else the reference baseline).
+	GetChangeView(context.Context, *connect.Request[v1.GetChangeViewRequest]) (*connect.Response[v1.GetChangeViewResponse], error)
+	GetChangeGraph(context.Context, *connect.Request[v1.GetChangeGraphRequest]) (*connect.Response[v1.GetChangeGraphResponse], error)
 	// Execution journal (ADR 0011)
 	RecordExecutions(context.Context, *connect.Request[v1.RecordExecutionsRequest]) (*connect.Response[v1.RecordExecutionsResponse], error)
 	ListExecutions(context.Context, *connect.Request[v1.ListExecutionsRequest]) (*connect.Response[v1.ListExecutionsResponse], error)
@@ -1120,6 +1280,60 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(graphServiceMethods.ByName("ValidateBoard")),
 		connect.WithHandlerOptions(opts...),
 	)
+	graphServiceOpenOptionHandler := connect.NewUnaryHandler(
+		GraphServiceOpenOptionProcedure,
+		svc.OpenOption,
+		connect.WithSchema(graphServiceMethods.ByName("OpenOption")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceActivateOptionHandler := connect.NewUnaryHandler(
+		GraphServiceActivateOptionProcedure,
+		svc.ActivateOption,
+		connect.WithSchema(graphServiceMethods.ByName("ActivateOption")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceEvaluateOptionHandler := connect.NewUnaryHandler(
+		GraphServiceEvaluateOptionProcedure,
+		svc.EvaluateOption,
+		connect.WithSchema(graphServiceMethods.ByName("EvaluateOption")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceSelectOptionHandler := connect.NewUnaryHandler(
+		GraphServiceSelectOptionProcedure,
+		svc.SelectOption,
+		connect.WithSchema(graphServiceMethods.ByName("SelectOption")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceRejectOptionHandler := connect.NewUnaryHandler(
+		GraphServiceRejectOptionProcedure,
+		svc.RejectOption,
+		connect.WithSchema(graphServiceMethods.ByName("RejectOption")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceListOptionsHandler := connect.NewUnaryHandler(
+		GraphServiceListOptionsProcedure,
+		svc.ListOptions,
+		connect.WithSchema(graphServiceMethods.ByName("ListOptions")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceCompareOptionsHandler := connect.NewUnaryHandler(
+		GraphServiceCompareOptionsProcedure,
+		svc.CompareOptions,
+		connect.WithSchema(graphServiceMethods.ByName("CompareOptions")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceGetChangeViewHandler := connect.NewUnaryHandler(
+		GraphServiceGetChangeViewProcedure,
+		svc.GetChangeView,
+		connect.WithSchema(graphServiceMethods.ByName("GetChangeView")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceGetChangeGraphHandler := connect.NewUnaryHandler(
+		GraphServiceGetChangeGraphProcedure,
+		svc.GetChangeGraph,
+		connect.WithSchema(graphServiceMethods.ByName("GetChangeGraph")),
+		connect.WithHandlerOptions(opts...),
+	)
 	graphServiceRecordExecutionsHandler := connect.NewUnaryHandler(
 		GraphServiceRecordExecutionsProcedure,
 		svc.RecordExecutions,
@@ -1224,6 +1438,24 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 			graphServiceListFlowsHandler.ServeHTTP(w, r)
 		case GraphServiceValidateBoardProcedure:
 			graphServiceValidateBoardHandler.ServeHTTP(w, r)
+		case GraphServiceOpenOptionProcedure:
+			graphServiceOpenOptionHandler.ServeHTTP(w, r)
+		case GraphServiceActivateOptionProcedure:
+			graphServiceActivateOptionHandler.ServeHTTP(w, r)
+		case GraphServiceEvaluateOptionProcedure:
+			graphServiceEvaluateOptionHandler.ServeHTTP(w, r)
+		case GraphServiceSelectOptionProcedure:
+			graphServiceSelectOptionHandler.ServeHTTP(w, r)
+		case GraphServiceRejectOptionProcedure:
+			graphServiceRejectOptionHandler.ServeHTTP(w, r)
+		case GraphServiceListOptionsProcedure:
+			graphServiceListOptionsHandler.ServeHTTP(w, r)
+		case GraphServiceCompareOptionsProcedure:
+			graphServiceCompareOptionsHandler.ServeHTTP(w, r)
+		case GraphServiceGetChangeViewProcedure:
+			graphServiceGetChangeViewHandler.ServeHTTP(w, r)
+		case GraphServiceGetChangeGraphProcedure:
+			graphServiceGetChangeGraphHandler.ServeHTTP(w, r)
 		case GraphServiceRecordExecutionsProcedure:
 			graphServiceRecordExecutionsHandler.ServeHTTP(w, r)
 		case GraphServiceListExecutionsProcedure:
@@ -1405,6 +1637,42 @@ func (UnimplementedGraphServiceHandler) ListFlows(context.Context, *connect.Requ
 
 func (UnimplementedGraphServiceHandler) ValidateBoard(context.Context, *connect.Request[v1.ValidateBoardRequest]) (*connect.Response[v1.ValidateBoardResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.ValidateBoard is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) OpenOption(context.Context, *connect.Request[v1.OpenOptionRequest]) (*connect.Response[v1.OpenOptionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.OpenOption is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) ActivateOption(context.Context, *connect.Request[v1.ActivateOptionRequest]) (*connect.Response[v1.ActivateOptionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.ActivateOption is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) EvaluateOption(context.Context, *connect.Request[v1.EvaluateOptionRequest]) (*connect.Response[v1.EvaluateOptionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.EvaluateOption is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) SelectOption(context.Context, *connect.Request[v1.SelectOptionRequest]) (*connect.Response[v1.SelectOptionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.SelectOption is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) RejectOption(context.Context, *connect.Request[v1.RejectOptionRequest]) (*connect.Response[v1.RejectOptionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.RejectOption is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) ListOptions(context.Context, *connect.Request[v1.ListOptionsRequest]) (*connect.Response[v1.ListOptionsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.ListOptions is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) CompareOptions(context.Context, *connect.Request[v1.CompareOptionsRequest]) (*connect.Response[v1.CompareOptionsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.CompareOptions is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) GetChangeView(context.Context, *connect.Request[v1.GetChangeViewRequest]) (*connect.Response[v1.GetChangeViewResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.GetChangeView is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) GetChangeGraph(context.Context, *connect.Request[v1.GetChangeGraphRequest]) (*connect.Response[v1.GetChangeGraphResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.GetChangeGraph is not implemented"))
 }
 
 func (UnimplementedGraphServiceHandler) RecordExecutions(context.Context, *connect.Request[v1.RecordExecutionsRequest]) (*connect.Response[v1.RecordExecutionsResponse], error) {

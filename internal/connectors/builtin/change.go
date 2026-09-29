@@ -38,6 +38,11 @@ var changeOps = []op{
 	{"note", "Add an artifact item to the blackboard: {item}", schema(map[string]string{"change": "string", "type": "string", "text": "string", "data": "object"}, "text")},
 	{"signal", "Emit a named notification other agents or a live parent may react to: {item}", schema(map[string]string{"change": "string", "type": "string", "data": "object", "target": "string"}, "type")},
 	{"validate", "Check the consistency of the change: {issues}", schema(map[string]string{"change": "string"})},
+	{"options", "List the options of the change and the active one: {active, options}", schema(map[string]string{"change": "string"})},
+	{"option", "Open an option of the change, a hypothesis explored on its own flow: {option}", schema(map[string]string{"change": "string", "name": "string", "hypothesis": "string", "activate": "boolean"}, "name", "hypothesis")},
+	{"activate", "Work on an option of the change (\"main\": the main flow): {active}", schema(map[string]string{"change": "string", "option": "string"}, "option")},
+	{"evaluate", "Record the evaluation of an option: {option}", schema(map[string]string{"change": "string", "option": "string", "comment": "string"}, "option", "comment")},
+	{"compare", "Compare the options of the change on the nodes they changed: {level, options, nodes}", schema(map[string]string{"change": "string", "level": "string", "all": "boolean"})},
 }
 
 // Info implements connectorkit.Connector.
@@ -72,6 +77,10 @@ func (c Change) Invoke(ctx context.Context, op string, raw, _ map[string]any, _ 
 	id, err := changeID(ctx, a)
 	if err != nil {
 		return nil, err
+	}
+	switch op {
+	case "options", "option", "activate", "evaluate", "compare":
+		return c.options(ctx, who, id, op, a)
 	}
 	bb, err := c.p.Graph.Blackboard(ctx, id)
 	if err != nil {
@@ -179,6 +188,74 @@ func (c Change) Invoke(ctx context.Context, op string, raw, _ map[string]any, _ 
 		return w.write(imp, graph.NodeWrite{AddLinks: []graph.LinkWrite{{Type: typ, To: ref}}})
 	}
 	return nil, unknown(op)
+}
+
+// options works on the options of a change (ADR 0009 §3, ADR 0032 §6); selecting or rejecting one is a decision
+// made through the graph service, not a tool.
+func (c Change) options(ctx context.Context, who authz.Principal, id domain.ChangeID, op string, a args) (map[string]any, error) {
+	summary := func(f domain.Flow) map[string]any {
+		out := map[string]any{"id": f.ID, "status": f.OptionStatus(), "active": f.Active}
+		if f.Option != nil {
+			out["name"], out["hypothesis"] = f.Option.Name, f.Option.Hypothesis
+		}
+		if f.Evaluation != "" {
+			out["evaluation"] = f.Evaluation
+		}
+		return out
+	}
+	switch op {
+	case "options":
+		os, err := c.p.Graph.Options(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		list, active := []map[string]any{}, domain.MainFlow
+		for _, f := range os {
+			list = append(list, summary(f))
+			if f.Active {
+				active = f.ID
+			}
+		}
+		return result(map[string]any{"active": active, "options": list})
+	case "option":
+		name, err := a.required("name")
+		if err != nil {
+			return nil, err
+		}
+		f, err := c.p.Graph.OpenOption(ctx, id, graph.OpenOptionRequest{Name: name, Hypothesis: a.str("hypothesis"), Activate: a.boolean("activate"), By: who.Subject})
+		if err != nil {
+			return nil, err
+		}
+		return result(map[string]any{"option": summary(f)})
+	case "activate":
+		active, err := c.p.Graph.ActivateOption(ctx, id, a.str("option"), who.Subject)
+		if err != nil {
+			return nil, err
+		}
+		if active == "" {
+			active = domain.MainFlow
+		}
+		return result(map[string]any{"active": active})
+	case "evaluate":
+		option, err := a.required("option")
+		if err != nil {
+			return nil, err
+		}
+		f, err := c.p.Graph.EvaluateOption(ctx, id, option, who.Subject, a.str("comment"))
+		if err != nil {
+			return nil, err
+		}
+		return result(map[string]any{"option": summary(f)})
+	}
+	cmp, err := c.p.Graph.CompareOptions(ctx, id, a.str("level"), a.boolean("all"))
+	if err != nil {
+		return nil, err
+	}
+	opts := []map[string]any{}
+	for _, f := range cmp.Options {
+		opts = append(opts, summary(f))
+	}
+	return result(map[string]any{"level": cmp.Level, "options": opts, "nodes": cmp.Nodes})
 }
 
 // create opens a change: intent (why), unit (who), methodology (how) and namespace (what).
@@ -317,10 +394,11 @@ type working struct {
 	baseRead  bool
 }
 
-// impact returns the change impact of a node on the main flow.
+// impact returns the change impact of a node as the flow the call works on sees it (the main flow, or the active
+// option: the blackboard is the one of that flow).
 func (w *working) impact(key string) (domain.ChangeImpact, bool) {
 	for _, n := range w.bb.Change.Nodes {
-		if n.Key == key && n.Flow == "" && !n.Superseded {
+		if n.Key == key && !n.Superseded {
 			return n, true
 		}
 	}

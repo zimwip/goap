@@ -126,7 +126,7 @@ func RenderPrompt(ctx context.Context, ac ActionContext) (string, error) {
 		return "", fmt.Errorf("prompt template: %w", err)
 	}
 	d := PromptData{Change: ac.Blackboard.Change, Goal: ac.Process.Goal, Action: ac.Action, Vars: ac.Process.Vars}
-	nodes, _, err := ac.Graph.BaselineGraph(ctx, ac.Blackboard.Change.BaselineID)
+	nodes, _, err := readGraph(ctx, ac.Graph, ac.Blackboard.Change.ID, ac.Process.Flow, ac.Blackboard.Change.BaselineID)
 	if err != nil {
 		return "", err
 	}
@@ -347,7 +347,7 @@ func Propagate(ctx context.Context, ac ActionContext) (ActionResult, error) {
 			allowed[fmt.Sprint(lt)] = true
 		}
 	}
-	nodes, links, err := ac.Graph.BaselineGraph(ctx, ac.Blackboard.Change.BaselineID)
+	nodes, links, err := readGraph(ctx, ac.Graph, ac.Blackboard.Change.ID, ac.Process.Flow, ac.Blackboard.Change.BaselineID)
 	if err != nil {
 		return ActionResult{}, err
 	}

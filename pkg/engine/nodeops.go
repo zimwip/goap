@@ -93,6 +93,7 @@ func (e *Engine) applyNodeOps(ctx context.Context, p *Process, ops []dsl.NodeOp,
 	if err != nil {
 		return nil, err
 	}
+	// the pre version of a change impact is the released one: the reference baseline, whatever option is active
 	nodes, _, err := e.Graph.BaselineGraph(ctx, bb.Change.BaselineID)
 	if err != nil {
 		return nil, err

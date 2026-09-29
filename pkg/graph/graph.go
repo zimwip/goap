@@ -552,7 +552,7 @@ func (g *Graph) BlackboardIn(ctx context.Context, id domain.ChangeID, flow strin
 		if err != nil {
 			return err
 		}
-		flow := c.ResolveFlow(flow) // no flow: the active option (ADR 0032 §6)
+		flow := c.ResolveFlow(flow)                          // no flow: the active option (ADR 0032 §6)
 		nodes, err := g.newFlowNodes(tx, c, flow).nodes(ctx) // the change impacts as the flow sees them (ADR 0025)
 		if err != nil {
 			return err
