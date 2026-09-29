@@ -484,11 +484,15 @@ still open.
 
 **Transverse methodologies** ([ADR 0036](adr/0036-risks-actions-brief-transverse-methodologies.md) §3): a methodology
 that declares `appliesTo: [sdlc]` has its processes run **alongside** the changes of those methodologies, on the same
-change: one companion run per change and process (`Trigger` = `companion:<methodology>/<process>`), started when a
-process is attached to the change, run again in place when the change moves (a process on it completes, someone else
-adds a risk or an action), completing as soon as its goal holds (`Engine.Accompany`, fed by the trigger manager's
-events). A transverse methodology has no namespace of its own. `methodologies/risk-management.yaml` applies to `sdlc`:
-the risks of the change are identified and assessed as it grows, and every high one gets an action.
+change, choreographed by the events of the change rather than orchestrated. The engine publishes `step.completed` for
+every step of a process; a transverse methodology declares the events it reacts to (`on: [{event, filter}]`); one
+companion run per change and process (`Trigger` = `companion:<methodology>/<process>`) runs again in place for each
+matching event, with the event in `vars.event` (items carry `at` to compare with `vars.event.at`), the events arriving
+while it works waiting in its inbox. Back the other way, through the state: a step may need what the transverse process
+establishes (`risks_under_control`), and a process stuck on a change is tried again when the change moves
+(`Engine.Accompany`, fed by the trigger manager's events). A transverse methodology has no namespace of its own.
+`methodologies/risk-management.yaml` applies to `sdlc`: at each step of its processes the risks that step introduces
+are reviewed, and every high one gets an action; sdlc's release waits for `risks_under_control`.
 
 A process can now run, and even finish, without ever being attached to a Change — binding stays
 eager by default for existing methodologies; an agent can declare its own binding action to defer

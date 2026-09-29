@@ -87,6 +87,10 @@ func (t *TriggerManager) WatchProcesses(ctx context.Context, b *Broker) {
 				t.Handle(ctx, TriggerEvent{Type: "process.attached", Process: ev.Process})
 				continue
 			}
+			if ev.Event == "step_completed" {
+				t.Handle(ctx, TriggerEvent{Type: "step.completed", Process: ev.Process, Step: ev.Step})
+				continue
+			}
 			switch ev.Process.Status {
 			case StatusCompleted:
 				if ev.Event == string(StatusCompleted) {

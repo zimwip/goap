@@ -1,5 +1,5 @@
 name: sdlc
-version: 0.5.4
+version: 0.5.5
 description: >
   Software Development Life Cycle (SDLC) on the ALM repository: needs →
   requirements → functions → components → build artifacts → applications →
@@ -812,8 +812,11 @@ processes:
         roles: {responsible: developer, accountable: tech_lead}
         action: build
       - name: release
-        description: Plan, note, review and roll out the releases (entered once what the release train needs holds)
+        description: Plan, note, review and roll out the releases, once what the release train needs holds and the risks are under control
         roles: {responsible: release_manager, accountable: service_owner, informed: [product_owner]}
+        # the transverse risk management (methodologies/risk-management.yaml) answers it: no live high risk without an
+        # action; the process is tried again when the change moves
+        pre: {risks_under_control: true}
         process: release_train
       - name: application
         description: Apply the change to the ALM repository once reviewed and rolled out

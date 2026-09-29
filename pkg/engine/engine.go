@@ -1120,6 +1120,9 @@ func (e *Engine) finishStep(ctx context.Context, p *Process, m *methodology.Comp
 		}
 		return e.recordFailure(p, action.Name)
 	}
+	if action.Step != "" {
+		e.stepCompleted(ctx, p, action, step)
+	}
 	return nil
 }
 
@@ -1271,10 +1274,12 @@ func (e *Engine) wakeOnSignals(ctx context.Context, p *Process, items []domain.C
 
 // ProcessEvent is published on every process save, and for log lines.
 type ProcessEvent struct {
-	Event   string    `json:"event"`
-	Process *Process  `json:"process,omitempty"`
-	Log     *LogLine  `json:"log,omitempty"`
-	Time    time.Time `json:"time"`
+	Event   string   `json:"event"`
+	Process *Process `json:"process,omitempty"`
+	// Step is the step of a process that completed (Event "step_completed", ADR 0036 §3).
+	Step *StepEvent `json:"step,omitempty"`
+	Log  *LogLine   `json:"log,omitempty"`
+	Time time.Time  `json:"time"`
 }
 
 func (e *Engine) emitLog(ctx context.Context, p *Process, l LogLine) {

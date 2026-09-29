@@ -231,3 +231,25 @@ func checkResponsibilities(add func(path, format string, args ...any), path stri
 		check("informed", x)
 	}
 }
+
+// Subscription is an event a transverse methodology reacts to: its type and a CEL filter over `event` ({type, change,
+// process, step, items}).
+type Subscription struct {
+	Event  string `yaml:"event" json:"event"`
+	Filter string `yaml:"filter,omitempty" json:"filter,omitempty"`
+}
+
+// DefaultSubscriptions are the events a transverse methodology without `on` reacts to.
+var DefaultSubscriptions = []Subscription{
+	{Event: "process.attached"},
+	{Event: "step.completed"},
+	{Event: "change.item_added", Filter: `event.items.exists(i, i.kind == "risk" || i.kind == "action")`},
+}
+
+// Subscriptions returns the events the methodology reacts to (its own, or the default ones).
+func (m *Methodology) Subscriptions() []Subscription {
+	if len(m.On) > 0 {
+		return m.On
+	}
+	return DefaultSubscriptions
+}

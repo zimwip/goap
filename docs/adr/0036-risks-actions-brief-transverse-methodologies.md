@@ -49,18 +49,34 @@ and in which run (ADR 0030).
   those derived from it, the action and run that produced it and what superseded it; for a node, the events of its
   change impact (declared, written, reviewed, landed) with their callers.
 
-### 3. Transverse methodologies: `appliesTo`
+### 3. Transverse methodologies: `appliesTo`, coupled by events
 
 A methodology may declare `appliesTo: [sdlc, ...]`: its processes run **alongside** the changes of those
-methodologies. The engine keeps, per change, one run of each such process (its companion): started when the change
-is created, run again when the change moves (a process on it completes, a risk or an action is added by someone
-else), completing as soon as its goal holds. It works on the same change, so what it produces (risks, actions,
-decisions) is part of the change's traceability, and the change page shows its progress next to the main process.
+methodologies, on the same change. The two methodologies are not orchestrated: they are **choreographed** by the
+events of the change they share, and by its state.
+
+- **Events.** Besides the change and process events, the engine publishes `step.completed` when a step of a process
+  completes (`{path, process, name, action, method}`), so another methodology can react to each step, asynchronously.
+- **Subscriptions.** A transverse methodology declares what it reacts to: `on: [{event, filter}]` (a CEL filter over
+  `event`: `{type, change, process, step, items}`); default: a process attached to the change, a step completed, a
+  risk or an action added by someone else. Its own productions never wake it.
+- **One companion run per change and process**, run again in place for each matching event, with the event in
+  `vars.event` (`id`, `at` in milliseconds, and what the event carries): its conditions and prompts work on *this*
+  event — `risks_reviewed` holds when a review was written after it (`a.at >= vars.event.at`: items carry `at`), the
+  prompt names the step that completed. Events that arrive while it works wait in its **inbox** and are handled one
+  after the other: no step goes unreviewed.
+- **Back to the served methodology, through the state.** A step may wait for what the transverse process establishes
+  (sdlc's `release` needs `risks_under_control`). Until then the served process is stuck (the progress shows the step
+  blocked with what it needs); a process stuck on a change is **tried again when the change moves** because of
+  someone else (a step completed, a process completed, an item added), so it resumes as soon as the risks are
+  mitigated. Signals (`change.signal`, ADR 0031) remain for what must wake a process that is not stuck.
+
 A transverse methodology has no namespace of its own: it acts in the namespace of the change.
 
-`methodologies/risk-management.yaml` applies to `sdlc`: identify the risks of the change, assess them, define the
-mitigation actions of the high ones, all by an LLM risk analyst with a human alternative, under the roles
-`risk_manager` (responsible) and `product_owner` (accountable).
+`methodologies/risk-management.yaml` applies to `sdlc` and reacts to the steps of `software_delivery` and
+`release_train`: at each step it reviews the risks that step introduces or changes (an LLM risk analyst, or by hand),
+and has an action defined for every high one, under the roles `risk_manager` (responsible) and `product_owner`
+(accountable).
 
 ### 4. Visualizers
 

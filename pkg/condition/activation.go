@@ -126,6 +126,8 @@ func (h hydrator) item(it domain.ChangeItem) map[string]any {
 		"id": string(it.ID), "kind": string(it.Kind), "type": it.Type,
 		"status":     string(h.bb.Change.EffectiveStatus(it.ID)),
 		"producedBy": it.ProducedBy, "derivedFrom": derived, "data": orEmpty(it.Data), "decision": nil,
+		// when it was written, in milliseconds since the epoch: compared with vars.event.at (ADR 0036 §3)
+		"at": it.CreatedAt.UnixMilli(),
 	}
 	if d := it.Decision; d != nil {
 		m["decision"] = map[string]any{"item": string(d.Item), "accept": d.Accept, "comment": d.Comment}

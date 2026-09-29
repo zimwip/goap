@@ -289,6 +289,10 @@ export interface MethodologyForm {
   processes: ProcessForm[];
   methods: MethodForm[];
   roles: RoleForm[];
+  /** transverse: the methodologies it applies to, comma separated (ADR 0036 §3) */
+  appliesTo: string;
+  /** the events of their changes it reacts to */
+  on: { event: string; filter: string }[];
 }
 
 /** Sections whose elements open in a tab. */
@@ -427,6 +431,8 @@ export function emptyForm(): MethodologyForm {
     processes: [],
     methods: [],
     roles: [],
+    appliesTo: '',
+    on: [],
   };
 }
 
@@ -718,6 +724,8 @@ export function toForm(m: Methodology): MethodologyForm {
       roles: respToForm(x.roles),
     })),
     roles: (m.roles ?? []).map((r) => ({ name: r.name ?? '', description: r.description ?? '' })),
+    appliesTo: (m.appliesTo ?? []).join(', '),
+    on: (m.on ?? []).map((x) => ({ event: x.event ?? '', filter: x.filter ?? '' })),
   };
 }
 
@@ -1038,6 +1046,18 @@ export function fromForm(f: MethodologyForm): { methodology: Methodology; issues
       put(o, 'roles', respFromForm(x.roles));
       return o;
     }),
+  );
+  put(m, 'appliesTo', csv(f.appliesTo));
+  put(
+    m,
+    'on',
+    f.on
+      .filter((x) => x.event.trim())
+      .map((x) => {
+        const o: { event?: string; filter?: string } = { event: x.event.trim() };
+        put(o, 'filter', x.filter.trim());
+        return o;
+      }),
   );
   put(
     m,

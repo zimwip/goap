@@ -90,6 +90,8 @@ type Process struct {
 	// Step is the step of a process of the parent that this process carries out (a sub-agent started by
 	// process.step, ADR 0034): its guidance reaches the actions of this process.
 	Step *StepContext `json:"step,omitempty"`
+	// Inbox holds the events a companion run received while it was at work, handled one after the other (ADR 0036 §3).
+	Inbox []map[string]any `json:"inbox,omitempty"`
 	// Disabled lists actions excluded from planning after repeatedly failing
 	// to deliver their effects.
 	Disabled  map[string]bool `json:"disabled,omitempty"`

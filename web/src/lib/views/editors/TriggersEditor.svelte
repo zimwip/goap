@@ -30,6 +30,9 @@
     'process.completed': 'process.completed — run completed',
     'process.failed': 'process.failed — run failed',
     'process.stuck': 'process.stuck — run stuck (no plan)',
+    'process.attached': 'process.attached — run attached to a change',
+    'step.completed': 'step.completed — step of a process completed',
+    'change.signal': 'change.signal — signal emitted on a change',
     'methodology.published': 'methodology.published — methodology published',
   };
   const TARGET_LABELS: Record<string, string> = {

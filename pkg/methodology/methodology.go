@@ -47,6 +47,10 @@ type Methodology struct {
 	// AppliesTo makes the methodology transverse (ADR 0036 §3): its processes run alongside the changes of these
 	// methodologies, on the same change. A transverse methodology acts in the namespace of the change.
 	AppliesTo []string `yaml:"appliesTo,omitempty" json:"appliesTo,omitempty"`
+	// On are the events of those changes a transverse methodology reacts to (ADR 0036 §3): each matching event runs its
+	// processes again, with the event in vars.event. Default: a process attached to the change, a step completed, a
+	// risk or an action added by someone else.
+	On []Subscription `yaml:"on,omitempty" json:"on,omitempty"`
 	// Types resolves the qualified type references of the methodology (the type catalogue, set by Resolve). Nil: the
 	// references are only checked for their form.
 	Types TypeSet `yaml:"-" json:"-"`
@@ -105,7 +109,7 @@ const (
 )
 
 // TriggerEvents lists the events a trigger can react to.
-var TriggerEvents = []string{"change.created", "change.applied", "change.item_added", "change.signal", "process.completed", "process.failed", "process.stuck", "process.attached", "methodology.published"}
+var TriggerEvents = []string{"change.created", "change.applied", "change.item_added", "change.signal", "process.completed", "process.failed", "process.stuck", "process.attached", "step.completed", "methodology.published"}
 
 // Trigger starts an agent automatically on an event or a schedule.
 type Trigger struct {
@@ -685,6 +689,18 @@ func (m *Methodology) compile() (*Compiled, Issues) {
 			add(fmt.Sprintf("appliesTo[%d]", i), "appliesTo names methodologies")
 		case other == m.Name:
 			add(fmt.Sprintf("appliesTo[%d]", i), "a methodology does not apply to itself")
+		}
+	}
+	for i, sub := range m.On {
+		path := fmt.Sprintf("on[%d]", i)
+		if len(m.AppliesTo) == 0 {
+			add(path, "on applies to transverse methodologies (appliesTo)")
+		}
+		if !slices.Contains(TriggerEvents, sub.Event) {
+			add(path+".event", "event must be one of %s", strings.Join(TriggerEvents, ", "))
+		}
+		if _, err := condition.CompileEventFilter(sub.Filter); err != nil {
+			add(path+".filter", "%v", err)
 		}
 	}
 	if len(m.AppliesTo) > 0 && len(m.Processes) == 0 {
