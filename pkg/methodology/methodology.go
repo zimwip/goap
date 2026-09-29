@@ -36,6 +36,9 @@ type Methodology struct {
 	// Agents run the methodology; without agents an implicit "default" agent
 	// has every action and goal and the goap planner.
 	Agents []Agent `yaml:"agents,omitempty" json:"agents,omitempty"`
+	// Processes describe how the objective of a change is reached, as steps and sub-steps done by actions, agents,
+	// nested processes or people (ADR 0034); each is run by an agent and reaches a goal of its name.
+	Processes []Process `yaml:"processes,omitempty" json:"processes,omitempty"`
 	// Types resolves the qualified type references of the methodology (the type catalogue, set by Resolve). Nil: the
 	// references are only checked for their form.
 	Types TypeSet `yaml:"-" json:"-"`
@@ -80,6 +83,8 @@ type Agent struct {
 	// MCPs whose tools the llm and script actions of the agent may use, in addition to the ones
 	// the actions declare themselves. They do not make an action unschedulable when unbound.
 	MCPs []string `yaml:"mcps,omitempty" json:"mcps,omitempty"`
+	// process is set on the agent generated to run a process (ADR 0034).
+	process string
 }
 
 // Trigger types, events and targets.
@@ -252,6 +257,19 @@ type Action struct {
 	// per technology, per batch…): an execution that produced items without
 	// reaching the effects is progress, not a failure.
 	Incremental bool `yaml:"incremental,omitempty" json:"incremental,omitempty"`
+	// Step is set on the actions generated for the steps of a process (ADR 0034): the step path
+	// "<process>/<step>/<sub-step>"; Implements names the declared action a step runs (its
+	// specializations apply).
+	Step       string `yaml:"-" json:"-"`
+	Implements string `yaml:"-" json:"-"`
+}
+
+// Declared returns the name of the declared action behind a planned one: the action a step runs, or the action itself.
+func (a Action) Declared() string {
+	if a.Implements != "" {
+		return a.Implements
+	}
+	return a.Name
 }
 
 // RequiredMCPs returns the MCPs the action needs: its declared ones and the MCP of its tool.
@@ -303,6 +321,8 @@ type Compiled struct {
 	agents     map[string]Agent
 	// whens are the guards of the specializations (not part of the world state)
 	whens *condition.Set
+	// processes are the actions, goals and agents generated for the processes (ADR 0034)
+	processes compiledProcesses
 }
 
 // Issue is a validation problem located by a field path such as
@@ -371,8 +391,8 @@ func (m *Methodology) compile() (*Compiled, Issues) {
 	case !nameRE.MatchString(m.Name):
 		add("name", "name must be lowercase letters, digits, '-' or '_' and start with a letter")
 	}
-	if len(m.Goals) == 0 {
-		add("goals", "at least one goal required")
+	if len(m.Goals) == 0 && len(m.Processes) == 0 {
+		add("goals", "at least one goal or process required")
 	}
 	if m.Namespace != "" && !nameRE.MatchString(m.Namespace) {
 		add("namespace", "namespace must be lowercase letters, digits, '-' or '_' and start with a letter")
@@ -645,8 +665,16 @@ func (m *Methodology) compile() (*Compiled, Issues) {
 		}
 		agents[ag.Name] = ag
 	}
-	if len(m.Agents) == 0 {
+	if len(m.Agents) == 0 && len(m.Goals) > 0 {
 		agents[DefaultAgent] = Agent{Name: DefaultAgent, Description: m.Description, Planner: PlannerGOAP}
+	}
+	procs := m.compileProcesses(add, actions, known, agents)
+	defs = append(defs, procs.conditions...)
+	for _, a := range procs.actions {
+		actions[a.Name] = a
+	}
+	for _, ag := range procs.agents {
+		agents[ag.Name] = ag
 	}
 	if len(issues) > 0 {
 		sort.SliceStable(issues, func(i, j int) bool { return issues[i].Path < issues[j].Path })
@@ -664,7 +692,7 @@ func (m *Methodology) compile() (*Compiled, Issues) {
 	if err != nil {
 		return nil, Issues{{Message: err.Error()}}
 	}
-	return &Compiled{Methodology: m, Conditions: set, actions: actions, utilities: uset, agents: agents, whens: wset}, nil
+	return &Compiled{Methodology: m, Conditions: set, actions: actions, utilities: uset, agents: agents, whens: wset, processes: procs}, nil
 }
 
 // Action returns an action by name.
@@ -673,14 +701,30 @@ func (c *Compiled) Action(name string) (Action, bool) {
 	return a, ok
 }
 
-// Goal returns a goal by name.
+// Goal returns a goal by name (a declared goal, or the goal of a process).
 func (c *Compiled) Goal(name string) (Goal, bool) {
 	for _, g := range c.Goals {
 		if g.Name == name {
 			return g, true
 		}
 	}
+	for _, g := range c.processes.goals {
+		if g.Name == name {
+			return g, true
+		}
+	}
 	return Goal{}, false
+}
+
+// StepActions returns the actions generated for the steps of a process, in step order.
+func (c *Compiled) StepActions(process string) []Action {
+	var out []Action
+	for _, a := range c.processes.actions {
+		if p, _, _ := strings.Cut(a.Step, "/"); p == process {
+			out = append(out, a)
+		}
+	}
+	return out
 }
 
 // PlanningActions returns the planner operators (every action).
@@ -751,16 +795,18 @@ func (c *Compiled) Agent(name string) (Agent, bool) {
 	return a, ok
 }
 
-// AgentList returns the agents in declaration order.
+// AgentList returns the agents in declaration order, then the agents of the processes.
 func (c *Compiled) AgentList() []Agent {
+	var out []Agent
 	if len(c.Methodology.Agents) == 0 {
-		return []Agent{c.agents[DefaultAgent]}
+		if ag, ok := c.agents[DefaultAgent]; ok {
+			out = append(out, ag)
+		}
 	}
-	out := make([]Agent, 0, len(c.Methodology.Agents))
 	for _, a := range c.Methodology.Agents {
 		out = append(out, c.agents[a.Name])
 	}
-	return out
+	return append(out, c.processes.agents...)
 }
 
 // UsesMCPs reports whether an action of the methodology needs an MCP.
@@ -773,8 +819,16 @@ func (c *Compiled) UsesMCPs() bool {
 	return false
 }
 
-// AgentActions returns the planner operators admissible for an agent.
+// AgentActions returns the planner operators admissible for an agent: for the agent of a process, the actions of its
+// steps.
 func (c *Compiled) AgentActions(ag Agent) []goap.Action {
+	if ag.process != "" {
+		var out []goap.Action
+		for _, a := range c.StepActions(ag.process) {
+			out = append(out, goap.Action{Name: a.Name, Pre: a.Pre, Effects: a.Effects, Cost: a.Cost})
+		}
+		return out
+	}
 	all := c.PlanningActions()
 	if len(ag.Actions) == 0 {
 		return all
@@ -794,7 +848,7 @@ func (c *Compiled) AgentGoals(ag Agent) []Goal {
 		return c.Goals
 	}
 	var out []Goal
-	for _, g := range c.Goals {
+	for _, g := range slices.Concat(c.Goals, c.processes.goals) {
 		if slices.Contains(ag.Goals, g.Name) {
 			out = append(out, g)
 		}

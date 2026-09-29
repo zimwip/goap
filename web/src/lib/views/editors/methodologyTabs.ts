@@ -14,6 +14,7 @@ export const SECTION_KIND: Record<Section, string> = {
   actions: 'action',
   conditions: 'condition',
   goals: 'goal',
+  processes: 'process',
 };
 
 export const KIND_SECTION: Record<string, Section> = {
@@ -21,6 +22,7 @@ export const KIND_SECTION: Record<string, Section> = {
   action: 'actions',
   condition: 'conditions',
   goal: 'goals',
+  process: 'processes',
 };
 
 export const SECTION_LABEL: Record<Section, string> = {
@@ -28,6 +30,7 @@ export const SECTION_LABEL: Record<Section, string> = {
   actions: 'Actions',
   conditions: 'Conditions',
   goals: 'Goals',
+  processes: 'Processes',
 };
 
 export const SECTION_ICON: Record<Section, IconName> = {
@@ -35,6 +38,7 @@ export const SECTION_ICON: Record<Section, IconName> = {
   actions: 'zap',
   conditions: 'branch',
   goals: 'target',
+  processes: 'list',
 };
 
 /** Singular name of an element, for messages. */
@@ -43,6 +47,7 @@ export const SECTION_SINGULAR: Record<Section, string> = {
   actions: 'the action',
   conditions: 'the condition',
   goals: 'the goal',
+  processes: 'the process',
 };
 
 export function methodologySpec(name: string, version: string): TabSpec {
@@ -176,7 +181,7 @@ export function draftActions(d: Draft, extra: ToolbarAction[] = []): ToolbarActi
 
 /** Opens the tab concerned by an issue path and highlights the field. */
 export function revealIssue(d: Draft, path: string): void {
-  const m = /^(agents|actions|conditions|goals)\[(\d+)\]/.exec(path);
+  const m = /^(agents|actions|conditions|goals|processes)\[(\d+)\]/.exec(path);
   let spec: TabSpec = methodologySpec(d.name, d.version);
   if (m) {
     const section = m[1] as Section;
@@ -188,7 +193,7 @@ export function revealIssue(d: Draft, path: string): void {
 }
 
 export function isDraftTab(tab: Tab | undefined): boolean {
-  return !!tab && !!editorView(tab.kind) && ['methodology', 'agent', 'action', 'condition', 'goal'].includes(tab.kind);
+  return !!tab && !!editorView(tab.kind) && ['methodology', 'agent', 'action', 'condition', 'goal', 'process'].includes(tab.kind);
 }
 
 /** "Delete <element>" action of element tabs. */

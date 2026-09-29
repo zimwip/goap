@@ -17,6 +17,7 @@
     emptyAction,
     emptyCondition,
     emptyGoal,
+    emptyProcess,
     type Section,
     type SectionItem,
   } from '../../methodologyForm';
@@ -42,7 +43,7 @@
     return all.filter((g) => `${g.name} ${g.description}`.toLowerCase().includes(q));
   });
 
-  const SECTIONS: Section[] = ['agents', 'actions', 'conditions', 'goals'];
+  const SECTIONS: Section[] = ['processes', 'agents', 'actions', 'conditions', 'goals'];
 
   function vkey(v: MethodologySummary) {
     return draftKey(v.name ?? '', v.version ?? '');
@@ -76,7 +77,7 @@
   }
 
   function add(d: Draft, section: Section) {
-    const factories = { agents: emptyAgent, actions: emptyAction, conditions: emptyCondition, goals: emptyGoal };
+    const factories = { agents: emptyAgent, actions: emptyAction, conditions: emptyCondition, goals: emptyGoal, processes: emptyProcess };
     const item = factories[section]();
     (d.form[section] as SectionItem[]).push(item);
     expanded[`s:${d.key}/${section}`] = true;
@@ -86,6 +87,7 @@
   function itemDetail(section: Section, it: SectionItem): string {
     if (section === 'actions' && 'kind' in it) return it.kind;
     if (section === 'agents' && 'planner' in it) return it.planner;
+    if (section === 'processes' && 'steps' in it) return `${it.steps.length} step(s)`;
     return '';
   }
 

@@ -46,12 +46,18 @@ func sdlcModel(t *testing.T) llm.Client {
 	})
 }
 
-func TestSDLCDelivery(t *testing.T) {
-	// an ordinary contributor delivers; a release manager approves the production
-	// deployment and an approver applies the change (four-eyes)
-	ctx := authz.With(context.Background(), authz.Principal{Subject: "dev", Org: "acme", Roles: []string{"contributor"}})
-	rm := authz.With(context.Background(), authz.Principal{Subject: "rm", Org: "acme", Roles: []string{"release_manager"}})
-	approver := authz.With(context.Background(), authz.Principal{Subject: "ap", Org: "acme", Roles: []string{"approver"}})
+// an ordinary contributor delivers; a release manager approves the production
+// deployment and an approver applies the change (four-eyes)
+var (
+	devCtx      = authz.With(context.Background(), authz.Principal{Subject: "dev", Org: "acme", Roles: []string{"contributor"}})
+	rmCtx       = authz.With(context.Background(), authz.Principal{Subject: "rm", Org: "acme", Roles: []string{"release_manager"}})
+	approverCtx = authz.With(context.Background(), authz.Principal{Subject: "ap", Org: "acme", Roles: []string{"approver"}})
+)
+
+// sdlcSetup runs methodologies/sdlc.yaml on the demo ALM repository, with the types of the repository's domains.
+func sdlcSetup(t *testing.T) (*engine.Engine, *graph.Graph, domain.BaselineID) {
+	t.Helper()
+	ctx := devCtx
 	authorizer, err := authz.NewCasbin(nil)
 	if err != nil {
 		t.Fatal(err)
@@ -97,7 +103,13 @@ func TestSDLCDelivery(t *testing.T) {
 		Authz:  authorizer,
 		Types:  func() methodology.TypeSet { return cat },
 	}
-	p, err := e.Start(ctx, engine.StartRequest{Methodology: "sdlc", Agent: "delivery", Goal: "deliver", BaselineID: bs[0].ID,
+	return e, g, bs[0].ID
+}
+
+func TestSDLCDelivery(t *testing.T) {
+	ctx, rm, approver := devCtx, rmCtx, approverCtx
+	e, g, base := sdlcSetup(t)
+	p, err := e.Start(ctx, engine.StartRequest{Methodology: "sdlc", Agent: "delivery", Goal: "deliver", BaselineID: base,
 		Title: "Payment in 3 installments", Intent: "Allow payment in 3 installments with no fees"})
 	if err != nil {
 		t.Fatal(err)
@@ -218,5 +230,102 @@ func TestSDLCDelivery(t *testing.T) {
 	}
 	if !realized || !deployed || !contains || !inProd {
 		t.Fatalf("traceability: realized=%v deployed=%v contains=%v inProd=%v", realized, deployed, contains, inProd)
+	}
+}
+
+// TestSDLCProcess runs the change through the software_delivery process of the SDLC (ADR 0034): a manual framing
+// step, the analysis sub-steps done by actions or their alternatives, the design by the architect agent, the build,
+// then the release_train process nested as a sub-agent, and the application.
+func TestSDLCProcess(t *testing.T) {
+	ctx := devCtx
+	e, g, base := sdlcSetup(t)
+	p, err := e.Start(ctx, engine.StartRequest{Methodology: "sdlc", Goal: "software_delivery", BaselineID: base,
+		Title: "Payment in 3 installments", Intent: "Allow payment in 3 installments with no fees"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p, err = e.Run(context.Background(), p.ID); err != nil {
+		t.Fatal(err)
+	}
+	if p.Agent != "software_delivery" || p.Status != engine.StatusWaiting || p.Pending.Action != "software_delivery/framing" || p.Pending.Instructions == "" {
+		t.Fatalf("the process starts with its manual framing step: %s %s %+v %s", p.Agent, p.Status, p.Pending, p.Error)
+	}
+	if _, err = e.Submit(ctx, p.ID, nil); err != nil {
+		t.Fatal(err)
+	}
+	if p, err = e.Run(context.Background(), p.ID); err != nil {
+		t.Fatal(err)
+	}
+	// the nested release process waits for the review
+	if p.Status != engine.StatusWaiting || p.Pending.Kind != engine.TaskAgent || p.Pending.Action != "software_delivery/release" {
+		t.Fatalf("expected the release train: %s %s %+v", p.Status, p.Error, p.Pending)
+	}
+	var steps []string
+	for _, s := range p.Steps {
+		if len(steps) == 0 || steps[len(steps)-1] != s.Action {
+			steps = append(steps, s.Action)
+		}
+	}
+	want := []string{"software_delivery/framing", "software_delivery/analysis/scope:identify_scope", "software_delivery/analysis/impacts",
+		// the traceability sub-step is skipped: its criteria hold (the new requirement satisfies a need)
+		"software_delivery/analysis/specification/requirements:specify_requirements", "software_delivery/analysis/specification/test_plan", "software_delivery/design", "software_delivery/build", "software_delivery/release"}
+	if !slices.Equal(steps, want) {
+		t.Fatalf("steps %v", steps)
+	}
+	var builds []string
+	for _, s := range p.Steps {
+		if s.Action == "software_delivery/build" {
+			builds = append(builds, s.Specialization) // the specializations of the action a step runs apply
+		}
+	}
+	if !slices.Equal(builds, []string{"build_java", "build_c", "build_generic"}) {
+		t.Fatalf("builds %v", builds)
+	}
+	// the design step ran the architect as a sub-agent on the same change, towards its goal
+	for _, s := range p.Steps {
+		if s.Action != "software_delivery/design" || len(s.Children) == 0 {
+			continue
+		}
+		architect, err := e.Store.Get(ctx, s.Children[0])
+		if err != nil || architect.Agent != "architect" || architect.Goal != "design" || architect.ChangeID != p.ChangeID || architect.Status != engine.StatusCompleted {
+			t.Fatalf("design step: %+v %v", architect, err)
+		}
+	}
+	train, err := e.Store.Get(ctx, p.Pending.ChildProcessID)
+	if err != nil || train.Agent != "release_train" || train.ParentID != p.ID || train.Pending == nil || train.Pending.Action != "release_train/review" {
+		t.Fatalf("release train %+v %v", train, err)
+	}
+	c, _ := g.Change(ctx, p.ChangeID)
+	var decisions []engine.ItemInput
+	for _, n := range c.Nodes {
+		if n.Review == domain.ReviewProposed {
+			decisions = append(decisions, engine.ItemInput{Kind: "changeImpact", ChangeImpact: &dsl.NodeOp{Op: "review", Node: n.Key, Accept: true, Comment: "reviewed"}})
+		}
+	}
+	if _, err = e.Submit(ctx, train.ID, decisions); err != nil {
+		t.Fatal(err)
+	}
+	if train, err = e.Run(ctx, train.ID); err != nil || train.Pending == nil || train.Pending.Permission != "release:deploy" {
+		t.Fatalf("production must wait for a release manager: %v %+v", err, train)
+	}
+	if _, err = e.Approve(rmCtx, train.ID, true, ""); err != nil {
+		t.Fatal(err)
+	}
+	if train, err = e.Run(ctx, train.ID); err != nil || train.Status != engine.StatusCompleted {
+		t.Fatalf("release train: %v %s %s", err, train.Status, train.Error)
+	}
+	e.Drain()
+	// back in the delivery: the application waits for an approver (four-eyes)
+	if p, err = e.Store.Get(ctx, p.ID); err != nil || p.Status != engine.StatusWaiting || p.Pending.Permission != "change:apply" || p.Pending.Action != "software_delivery/application" {
+		t.Fatalf("application must wait for an approver: %v %s %+v", err, p.Status, p.Pending)
+	}
+	if _, err = e.Approve(approverCtx, p.ID, true, ""); err != nil {
+		t.Fatal(err)
+	}
+	if p, err = e.Run(ctx, p.ID); err != nil || p.Status != engine.StatusCompleted {
+		t.Fatalf("delivery: %v %s %s", err, p.Status, p.Error)
+	}
+	if c, _ = g.Change(ctx, p.ChangeID); c.Status != domain.ChangeApplied {
+		t.Fatalf("change %s", c.Status)
 	}
 }

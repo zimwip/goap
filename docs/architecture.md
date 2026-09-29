@@ -834,7 +834,7 @@ provider, or gateway WebSocket) are analyzed in the ADR but not built.
 Methodologies are **graph data** ([ADR 0023](adr/0023-definitions-in-the-graph.md)), edited from the frontend: a
 version is a node `methodology@MethodologyVersion` (key `MV:<name>@<version>`, namespace `methodology`: scalar fields,
 status) and one node per element typed by the built-in meta-domain (`methodology@Agent`, `@Action`, `@Condition`,
-`@Goal`), keyed `<version key>/<kind>/<name>` and tied by `methodology@defines`. Every save, publication or deletion is
+`@Goal`, `@Process`), keyed `<version key>/<kind>/<name>` and tied by `methodology@defines`. Every save, publication or deletion is
 a change applied on main; editing an action versions that node only (`registrysvc.GraphStore`, through a graph
 client). **Domains** are the definition of a graph (namespace, node types, link types, lifecycles, algorithms): each
 graph holds them in memory (the type catalogue) to keep its data coherent, and the registry keeps their versions in its
@@ -848,7 +848,7 @@ engine) → **archived**. Modifying a published version means creating a new dra
 **Domains** ([ADR 0013](adr/0013-domains.md)). The object part of the model (node types, link types, lifecycles,
 algorithms) lives in **domains**, one per namespace (`alm`, `organisation`, `platform`), versioned on their own (same
 draft → published → archived lifecycle; `registry.v1` `*Domain*` RPCs, ABAC resource `domain`, role `methodologist`).
-A methodology is the active part only (agents, actions, conditions, goals): it names its **target namespace**
+A methodology is the active part only (agents, actions, conditions, goals, processes): it names its **target namespace**
 (`namespace: alm`, the domain its changes act on; it replaces `domainRef`) and the types it works on with qualified
 references (`alm@Requirement`, [ADR 0012](adr/0012-node-types.md)), which may point to other domains for what it reads
 or links to. Consistency is
@@ -896,13 +896,36 @@ goals:
     pre: {propagated: true}
 ```
 
+**Processes** ([ADR 0034](adr/0034-processes-and-steps.md)) describe the route to the objective of a change as steps
+and sub-steps, each done by one method, with the precision the methodology has for it:
+
+```yaml
+processes:
+  - name: software_delivery                  # also the agent that runs it and its goal
+    steps:
+      - name: framing                        # by hand: a human task, done once submitted
+        instructions: Check the intent with the requester
+      - name: analysis                       # sub-steps, in order (parallel: true + after: for any order)
+        steps:
+          - {name: scope, actions: [identify_scope, select_scope]}   # alternatives the planner chooses among
+          - {name: impacts, action: propagate_impacts}
+      - {name: design, agent: architect}     # an agent plans it (goal: default its only goal)
+      - {name: release, process: release_train}   # a nested process (or <methodology>/<process>)
+```
+
+A process compiles to planner inputs: an agent and a goal of its name, and one action per step (named by its path,
+`software_delivery/analysis/scope`) whose preconditions are the step's entry conditions plus the exit criteria of the
+steps before it, and whose effects are its exit criteria (`done`, default: the action's effects, the agent's goal, the
+sub-steps' criteria, the nested process's criteria, or a `step_done` artifact once it has run). An agent or nested
+process step is the builtin `process.step`: a sub-agent on the same change, so processes nest.
+
 See `methodologies/examples/impact-analysis.yaml` for the full executable example, and
 `methodologies/methodology-improvement.yaml` (self-observation: abstract action specialized by rules
 or an LLM). Action specialization fields: `specializes`, `when`, `priority`, `kind: abstract`;
 node type subtyping: `extends`. An `incremental: true` action reaches its effects across several
 executions: an execution that produces items without reaching them is **progress**, not a failure.
 
-### 4.1 SDLC methodology on the ALM domain (`methodologies/sdlc.yaml`, version 0.3.0, on the shared `alm` domain of `domains/alm.yaml`)
+### 4.1 SDLC methodology on the ALM domain (`methodologies/sdlc.yaml`, version 0.5.0, on the shared `alm` domain of `domains/alm.yaml`)
 
 ALM domain (demo data: `internal/graphsvc/seed.go`):
 
@@ -930,7 +953,10 @@ Cycle (goals, from most partial to most complete):
 | `deliver` | the whole cycle, then `graph.apply` (permission `change:apply`): the reference repository receives requirements, design, artifacts, releases, and deployments |
 
 Agents: `analyst` (goap), `architect` (hybrid), `builder` (goap), `release_manager` (goap), `delivery`
-(goap, the whole cycle). Review covers content; deployments, recorded after it, do not
+(goap, the whole cycle). Processes (ADR 0034): `software_delivery` walks the cycle phase by phase — framing by hand,
+analysis in sub-steps (scope and requirements with their human alternatives, impacts, then traceability and test plan
+in any order), design by the `architect` agent, the specialized `build`, the nested `release_train` (plan, release
+note, review, deployment waves), then the application. Review covers content; deployments, recorded after it, do not
 require it. The permission for a specialization (e.g. `deploy_production`) is checked before its
 execution: without it, the process waits for approval from an authorized person. Since the
 "each element …" conditions hold on an empty set, the design, build, and delivery actions also require
@@ -986,6 +1012,7 @@ docs/                        architecture, ADRs
 | **M7 — agents** ✅ | agents (goap / utility / hybrid), JS / Go script actions with DSL, sub-agents, sandbox per process, IDE |
 | **M11 — node types** ✅ | ADR 0012 / 0013 / 0023: qualified type references `<namespace>@<NodeType>`, one domain per namespace, registry as the reference of the types, with an in-memory catalogue in the graph and the engine kept in sync by its events and an existence rule, methodologies as nodes of the `methodology` meta-domain, domains in the registry's database; no `NodeType` projection, no `M:` / `D:` elements, no `Def*` types |
 | **M12 — request to shipped change** (proposed) | [ADR 0033](adr/0033-from-request-to-shipped-change.md): assistant requests as intake conversations with deferred binding, proposals accepted before a change is created or its intent amended, ship as the default goal, participants, task addressees and a server-side work list, a workspace for requesters and contributors next to the authoring studio |
+| **M13 — processes** ✅ | [ADR 0034](adr/0034-processes-and-steps.md): methodologies describe their route as processes of steps and sub-steps, each done by an action, alternative actions, an agent, a nested process or a person, compiled to planner inputs and nested as sub-agents on the same change; IDE process editor · remaining: step addressees and permissions, run progress shown as the process |
 
 ## 7. Open questions
 

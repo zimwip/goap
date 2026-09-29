@@ -1,5 +1,5 @@
 name: sdlc
-version: 0.4.2
+version: 0.5.0
 description: >
   Software Development Life Cycle (SDLC) on the ALM repository: needs →
   requirements → functions → components → build artifacts → applications →
@@ -711,3 +711,54 @@ agents:
     examples: ["deliver an enhancement", "develop a feature end-to-end"]
     planner: goap
     goals: [deliver]
+
+# The route of a change, described as steps and sub-steps with the precision the methodology has for each (ADR 0034):
+# a step names the action that does it, alternatives the planner chooses among, an agent that plans it, a process it
+# nests, or only what a person does. Each process is run by an agent of its name, towards a goal of its name.
+processes:
+  - name: software_delivery
+    description: Deliver a change phase by phase — framing, analysis, design, build, release, application
+    examples: ["deliver the change step by step", "run the software delivery process"]
+    steps:
+      - name: framing
+        description: Frame the change with its requester
+        instructions: >
+          Check with the requester that the intent states a concrete outcome, its scope (what it touches) and why it
+          is needed; amend the intent of the change if it does not, then mark the step done.
+      - name: analysis
+        description: Scope, impacts, requirements, traceability and test plan
+        steps:
+          - name: scope
+            description: Identify the elements the change directly concerns
+            actions: [identify_scope, select_scope]
+          - name: impacts
+            description: Propagate the impacts along the ALM links
+            action: propagate_impacts
+          - name: specification
+            description: Requirements first, then their traceability and their tests, in any order
+            parallel: true
+            steps:
+              - {name: requirements, actions: [specify_requirements, write_requirements]}
+              - {name: traceability, actions: [trace_requirements, trace_manually], after: [requirements]}
+              - {name: test_plan, action: plan_tests, after: [requirements]}
+      - name: design
+        description: Allocate the functions and design the solution (the architect plans it)
+        agent: architect
+      - name: build
+        description: Build every component in scope, according to its technology
+        action: build
+      - name: release
+        description: Plan, note, review and roll out the releases
+        process: release_train
+      - name: application
+        description: Apply the change to the ALM repository
+        action: apply_change
+
+  - name: release_train
+    description: Release — plan the releases, write the release note, review, deploy environment by environment
+    examples: ["release the change", "run the release train"]
+    steps:
+      - {name: plan, action: plan_release}
+      - {name: release_note, actions: [write_release_note, assemble_release_note]}
+      - {name: review, action: review}
+      - {name: rollout, description: "Deploy each release wave by wave, from dev to production", action: deploy}

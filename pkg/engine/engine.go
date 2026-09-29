@@ -502,6 +502,11 @@ func (e *Engine) Submit(ctx context.Context, id string, items []ItemInput) (*Pro
 	step := &p.Steps[i]
 	rec := uuid.NewString()
 	submitted := e.clock()
+	if a, ok := m.Action(waitedOn); ok && a.Step != "" && a.Implements == "" {
+		// a manual step of a process is done once a person has submitted it (ADR 0034)
+		items = append(slices.Clone(items), ItemInput{Kind: string(domain.KindArtifact), Type: methodology.ArtifactStepDone,
+			Data: map[string]any{"step": a.Step, "by": authz.From(ctx).Subject}})
+	}
 	ids, nodes, points, err := e.addItems(ctx, p, items, p.Pending.Action, rec, true, firstNonEmpty(authz.From(ctx).Subject, p.Pending.Action))
 	if err != nil {
 		return nil, err
@@ -808,7 +813,7 @@ func (e *Engine) specialize(ctx context.Context, p *Process, m *methodology.Comp
 	}
 	var best *candidate
 	consider := func(owner *methodology.Compiled) {
-		for _, s := range owner.SpecializationsOf(m.Name, action.Name) {
+		for _, s := range owner.SpecializationsOf(m.Name, action.Declared()) {
 			if !owner.Applicable(s, bb) || (best != nil && s.Priority <= best.a.Priority) || !isBound(s) {
 				continue
 			}
@@ -936,6 +941,12 @@ func (e *Engine) runChild(ctx context.Context, h *Host, key, agentName, intentTe
 // runChildIn runs (or resumes) a sub-agent for a host call in a methodology, or, with anyMethodology, in the one
 // identification picks among every published methodology.
 func (e *Engine) runChildIn(ctx context.Context, h *Host, key, methodologyName, agentName, intentText string, anyMethodology bool) (dsl.AgentResult, error) {
+	return e.runChildGoal(ctx, h, key, methodologyName, agentName, "", intentText, anyMethodology)
+}
+
+// runChildGoal is runChildIn with the goal of the sub-agent fixed (no identification), as a step of a process runs
+// its agent or nested process (ADR 0034).
+func (e *Engine) runChildGoal(ctx context.Context, h *Host, key, methodologyName, agentName, goal, intentText string, anyMethodology bool) (dsl.AgentResult, error) {
 	parent := h.process
 	if anyMethodology {
 		methodologyName = ""
@@ -949,7 +960,7 @@ func (e *Engine) runChildIn(ctx context.Context, h *Host, key, methodologyName, 
 		child = c
 	} else {
 		c, err := e.Start(ctx, StartRequest{Methodology: methodologyName, ChangeID: parent.ChangeID, BaselineID: parent.BaselineID,
-			Agent: agentName, Intent: intentText, ParentID: parent.ID, Call: key, Vars: maps.Clone(parent.Vars)})
+			Agent: agentName, Goal: goal, Intent: intentText, ParentID: parent.ID, Call: key, Vars: maps.Clone(parent.Vars)})
 		if err != nil {
 			return dsl.AgentResult{}, err
 		}

@@ -289,6 +289,43 @@ message Methodology {
   repeated Agent agents = 14;
   // target namespace: the namespace (domain) the changes of the methodology act on (ADR 0013)
   string namespace = 17;
+  // how the objective of a change is reached, as steps and sub-steps (ADR 0034)
+  repeated Process processes = 18;
+}
+
+// A process: the steps that reach an objective, run by an agent of its name towards a goal of its name (ADR 0034).
+message Process {
+  string name = 1;
+  string description = 2;
+  repeated string examples = 3;
+  // the top steps run in any order (default: in declaration order)
+  bool parallel = 4;
+  repeated Step steps = 5;
+}
+
+// A step of a process, done by one method: sub-steps, an action, an agent, a nested process, or by hand (none).
+message Step {
+  string name = 1;
+  string description = 2;
+  // what a person does, for a manual step
+  string instructions = 3;
+  // entry conditions, on top of the steps before it being done
+  map<string, bool> pre = 4;
+  // exit criteria (default: derived from the method)
+  map<string, bool> done = 5;
+  // earlier sibling steps it waits for, in a parallel level
+  repeated string after = 6;
+  // the sub-steps run in any order
+  bool parallel = 7;
+  repeated Step steps = 8;
+  string action = 9;
+  string agent = 10;
+  // goal of the agent the step reaches (default: its only goal)
+  string goal = 11;
+  // nested process: "<process>" or "<methodology>/<process>"
+  string process = 12;
+  // alternative actions the planner chooses among (instead of action)
+  repeated string actions = 13;
 }
 
 message GoalSummary {

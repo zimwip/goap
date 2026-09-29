@@ -1,6 +1,7 @@
 package registrysvc
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/zimwip/goap/pkg/methodology"
@@ -18,5 +19,22 @@ func TestAgentModelRoundTripsThroughPB(t *testing.T) {
 	m := FromPB(p)
 	if len(m.Agents) != 1 || m.Agents[0].Model != "fast" {
 		t.Fatalf("FromPB dropped Agent.Model: %+v", m.Agents)
+	}
+}
+
+func TestProcessesRoundTripThroughPB(t *testing.T) {
+	in := methodology.Methodology{Name: "m", Version: "1", Processes: []methodology.Process{{Name: "flow", Description: "d", Parallel: true, Steps: []methodology.Step{
+		{Name: "phase", Steps: []methodology.Step{{Name: "a", Action: "do", Pre: map[string]bool{"x": true}}, {Name: "b", Agent: "ag", Goal: "g", After: []string{"a"}}}},
+		{Name: "nested", Process: "other/p", Done: map[string]bool{"y": true}},
+		{Name: "sign", Instructions: "sign it"},
+		{Name: "alt", Actions: []string{"x", "y"}},
+	}}}}
+	out := FromPB(ToPB(Record{Methodology: in}))
+	if !reflect.DeepEqual(out.Processes, in.Processes) {
+		t.Fatalf("processes changed through PB:\n%+v\n%+v", in.Processes, out.Processes)
+	}
+	s := SummaryToPB(Record{Methodology: in})
+	if len(s.Agents) != 1 || s.Agents[0].Name != "flow" || s.Agents[0].Planner != "process" {
+		t.Fatalf("a process is listed as the agent that runs it: %+v", s.Agents)
 	}
 }
