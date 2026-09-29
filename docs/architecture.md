@@ -985,6 +985,7 @@ docs/                        architecture, ADRs
 | **M10 — SDLC** 🟡 | `sdlc` 0.4.0 methodology on the `alm` namespace (ALM domain) (need → requirement → function → component → artifact → application → solution, data, interfaces, flows), build specialized by technology, incremental releases and deployment (dev → test → staging → production, release manager approval), incremental actions · to refine: quality (coverage, security), rollback, freezes / change windows, MCP tools (repositories, CI, artifact registry, deployment) |
 | **M7 — agents** ✅ | agents (goap / utility / hybrid), JS / Go script actions with DSL, sub-agents, sandbox per process, IDE |
 | **M11 — node types** ✅ | ADR 0012 / 0013 / 0023: qualified type references `<namespace>@<NodeType>`, one domain per namespace, registry as the reference of the types, with an in-memory catalogue in the graph and the engine kept in sync by its events and an existence rule, methodologies as nodes of the `methodology` meta-domain, domains in the registry's database; no `NodeType` projection, no `M:` / `D:` elements, no `Def*` types |
+| **M12 — request to shipped change** (proposed) | [ADR 0033](adr/0033-from-request-to-shipped-change.md): assistant requests as intake conversations with deferred binding, proposals accepted before a change is created or its intent amended, ship as the default goal, participants, task addressees and a server-side work list, a workspace for requesters and contributors next to the authoring studio |
 
 ## 7. Open questions
 
