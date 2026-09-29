@@ -9,7 +9,9 @@
   import StepEditor from './StepEditor.svelte';
   import ReferencesEditor from './ReferencesEditor.svelte';
   import { provideActions, useReveal } from '../../shell/workbench.svelte';
-  import { emptyStep, walkSteps } from '../../methodologyForm';
+  import { emptyStep, walkSteps, fromForm } from '../../methodologyForm';
+  import ProcessGraphView from '../../components/ProcessGraphView.svelte';
+  import { registry, errorMessage, type ProcessGraph } from '../../api';
   import { draftOf, draftActions, removeItemAction, syncTabUid, openItem } from './methodologyTabs';
 
   let { tab }: { tab: Tab } = $props();
@@ -43,6 +45,34 @@
   const nestedIn = $derived(
     item ? d.form.processes.filter((o) => o !== item && walkSteps(o.steps).some((x) => x.step.method === 'process' && x.step.process === item.name)) : [],
   );
+  // the process as a graph, from the draft as edited (ADR 0036 §4), rebuilt a moment after an edit
+  let view = $state<'graph' | 'steps'>('graph');
+  let graph = $state<ProcessGraph | undefined>();
+  let graphIssue = $state('');
+  const snapshot = $derived(JSON.stringify(d.form));
+  $effect(() => {
+    void snapshot;
+    const name = item?.name;
+    if (!name || view !== 'graph') return;
+    const ctl = new AbortController();
+    const timer = setTimeout(() => {
+      registry
+        .processGraph(fromForm(d.form).methodology, name, ctl.signal)
+        .then((r) => {
+          graph = r.graph;
+          graphIssue = r.issues?.length ? `The draft does not compile (${r.issues.length} issue(s), see the Issues console): the graph shows its last valid state.` : '';
+        })
+        .catch((e) => {
+          if (!ctl.signal.aborted) graphIssue = errorMessage(e);
+        });
+    }, 400);
+    return () => (clearTimeout(timer), ctl.abort());
+  });
+  function openProcess(name: string) {
+    const o = d.form.processes.find((x) => x.name === name);
+    if (o) openItem(d, 'processes', o);
+  }
+
   const agentsUsed = $derived([...new Set(all.filter((x) => x.step.method === 'agent' && x.step.agent).map((x) => x.step.agent))]);
 </script>
 
@@ -83,6 +113,22 @@
         <ReferencesEditor bind:refs={item.references} path="{p}.references" bad={d.bad} readonly={d.readonly} />
       </section>
 
+    </fieldset>
+      <div class="row switch" role="tablist" aria-label="View">
+        <button type="button" role="tab" class="small" class:primary={view === 'graph'} aria-selected={view === 'graph'} onclick={() => (view = 'graph')}>Graph</button>
+        <button type="button" role="tab" class="small" class:primary={view === 'steps'} aria-selected={view === 'steps'} onclick={() => (view = 'steps')}>Steps</button>
+      </div>
+      {#if view === 'graph'}
+        <section class="card">
+          {#if graphIssue}<p class="hint">{graphIssue}</p>{/if}
+          {#if graph}
+            <ProcessGraphView {graph} onprocess={openProcess} />
+          {:else if !graphIssue}
+            <p class="empty">Building the graph…</p>
+          {/if}
+        </section>
+      {:else}
+      <fieldset class="plain" disabled={d.readonly}>
       <section class="card" data-path="{p}.steps">
         <h3>Steps <span class="hint">{all.length}</span></h3>
         <p class="hint">
@@ -100,7 +146,8 @@
           <button type="button" class="small primary" onclick={() => item.steps.push(emptyStep(`step_${item.steps.length + 1}`))}>+ Step</button>
         {/if}
       </section>
-    </fieldset>
+      </fieldset>
+      {/if}
     <p class="hint">
       {Object.entries(byMethod)
         .map(([m, n]) => `${n} ${m}`)
@@ -125,3 +172,10 @@
   {/if}
 </div>
 
+<style>
+  .switch {
+    display: flex;
+    gap: 4px;
+    margin: 4px 0 8px;
+  }
+</style>

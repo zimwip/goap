@@ -53,6 +53,12 @@ export const COMMANDS: Command[] = [
     },
   },
   {
+    id: 'graphExplorer',
+    label: 'Explore the graph (every namespace, the organisation)',
+    icon: 'graph',
+    run: () => openTab({ kind: 'graphExplorer', params: {} }, { pin: true }),
+  },
+  {
     id: 'newMethodology',
     label: 'New methodology',
     icon: 'plus',

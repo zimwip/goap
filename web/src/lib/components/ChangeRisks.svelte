@@ -163,8 +163,14 @@
     min-width: 280px;
     overflow-x: auto;
   }
+  .heat {
+    width: auto;
+    flex: none;
+    border-collapse: collapse;
+  }
   .heat td {
     width: 28px;
+    min-width: 28px;
     height: 24px;
     text-align: center;
     border: 1px solid var(--border);
@@ -221,7 +227,22 @@
     margin-top: 8px;
     align-items: center;
   }
+  .add input,
+  .add select {
+    width: auto;
+    flex: 1 1 140px;
+  }
+  .add label {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex: none;
+  }
   .add input[type='number'] {
     width: 3.5em;
+    flex: none;
+  }
+  .add button {
+    flex: none;
   }
 </style>

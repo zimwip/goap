@@ -321,3 +321,30 @@ func searchFromPB(in []*registryv1.SearchProperty) []methodology.SearchProperty 
 	}
 	return out
 }
+
+// ProcessGraphToPB converts the graph of a process (ADR 0036 §4).
+func ProcessGraphToPB(g methodology.ProcessGraph) *registryv1.ProcessGraph {
+	out := &registryv1.ProcessGraph{Process: g.Process, Description: g.Description, References: refsToPB(g.References), MethodGoals: map[string]string{}}
+	for _, s := range g.Steps {
+		out.Steps = append(out.Steps, &registryv1.GraphStep{Path: s.Path, Name: s.Name, Description: s.Description, Parent: s.Parent, Depth: int32(s.Depth),
+			Leaf: s.Leaf, Method: s.Method, Target: s.Target, Entry: s.Entry, Exit: s.Exit, Roles: respToPB(s.Roles), Guidance: s.Guidance,
+			References: refsToPB(s.References), Process: s.Process, Capability: s.Capability})
+	}
+	for _, e := range g.Edges {
+		out.Edges = append(out.Edges, &registryv1.GraphEdge{From: e.From, To: e.To, Conditions: e.Conditions})
+	}
+	for _, me := range g.Methods {
+		out.Methods = append(out.Methods, &registryv1.Method{Name: me.Name, For: me.For, When: me.When, Priority: int32(me.Priority), Description: me.Description,
+			Guidance: me.Guidance, Checklist: me.Checklist, Deliverables: me.Deliverables, References: refsToPB(me.References), Agent: me.Agent, Goal: me.Goal,
+			Roles: respToPB(me.Roles)})
+		out.MethodGoals[me.Name] = me.AgentGoal
+	}
+	for _, a := range g.Agents {
+		ga := &registryv1.GraphAgent{Name: a.Name, Description: a.Description, Planner: a.Planner, Goals: a.Goals}
+		for _, x := range a.Actions {
+			ga.Actions = append(ga.Actions, &registryv1.GraphAction{Name: x.Name, Kind: x.Kind, Description: x.Description, Pre: x.Pre, Effects: x.Effects})
+		}
+		out.Agents = append(out.Agents, ga)
+	}
+	return out
+}

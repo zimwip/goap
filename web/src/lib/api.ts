@@ -449,6 +449,52 @@ export interface MethodologyMethod {
   roles?: Responsibilities;
 }
 
+/** A process as a graph: its steps, the edges its conditions draw, the methods of its capabilities (ADR 0036 §4). */
+export interface ProcessGraph {
+  process?: string;
+  description?: string;
+  steps?: GraphStep[];
+  edges?: GraphEdge[];
+  methods?: MethodologyMethod[];
+  /** the goal the agent of each method reaches */
+  methodGoals?: Record<string, string>;
+  agents?: GraphAgent[];
+  references?: DocumentReference[];
+}
+
+export interface GraphStep {
+  path?: string;
+  name?: string;
+  description?: string;
+  parent?: string;
+  depth?: number;
+  leaf?: boolean;
+  method?: string;
+  target?: string;
+  entry?: Record<string, boolean>;
+  exit?: Record<string, boolean>;
+  roles?: Responsibilities;
+  guidance?: string;
+  references?: DocumentReference[];
+  process?: string;
+  capability?: string;
+}
+
+/** The exit criteria of from meet the entry of to, on these conditions. */
+export interface GraphEdge {
+  from?: string;
+  to?: string;
+  conditions?: string[];
+}
+
+export interface GraphAgent {
+  name?: string;
+  description?: string;
+  planner?: string;
+  goals?: string[];
+  actions?: { name?: string; kind?: string; description?: string; pre?: Record<string, boolean>; effects?: Record<string, boolean> }[];
+}
+
 /** A role a methodology needs; the organisation assigns it to users per unit ("developer@TEAM-PAY"). */
 export interface MethodologyRole {
   name?: string;
@@ -1399,6 +1445,9 @@ export const registry = {
     }),
   validateMethodology: (methodology: Methodology) =>
     rpc<{ methodology: Methodology }, { issues?: Issue[] }>(REGISTRY, 'ValidateMethodology', { methodology }),
+  /** a process of a methodology as edited, as a graph (ADR 0036 §4) */
+  processGraph: (methodology: Methodology, process: string, signal?: AbortSignal) =>
+    rpc<{ methodology: Methodology; process: string }, { graph?: ProcessGraph; issues?: Issue[] }>(REGISTRY, 'GetProcessGraph', { methodology, process }, signal),
   publishMethodology: (name: string, version: string) =>
     rpc<NameVersion, { methodology?: Methodology }>(REGISTRY, 'PublishMethodology', { name, version }),
   createVersion: (name: string, fromVersion: string, newVersion: string) =>

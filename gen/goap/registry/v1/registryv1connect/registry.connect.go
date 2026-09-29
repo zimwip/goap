@@ -45,6 +45,9 @@ const (
 	// RegistryServiceValidateMethodologyProcedure is the fully-qualified name of the RegistryService's
 	// ValidateMethodology RPC.
 	RegistryServiceValidateMethodologyProcedure = "/goap.registry.v1.RegistryService/ValidateMethodology"
+	// RegistryServiceGetProcessGraphProcedure is the fully-qualified name of the RegistryService's
+	// GetProcessGraph RPC.
+	RegistryServiceGetProcessGraphProcedure = "/goap.registry.v1.RegistryService/GetProcessGraph"
 	// RegistryServicePublishMethodologyProcedure is the fully-qualified name of the RegistryService's
 	// PublishMethodology RPC.
 	RegistryServicePublishMethodologyProcedure = "/goap.registry.v1.RegistryService/PublishMethodology"
@@ -106,6 +109,8 @@ type RegistryServiceClient interface {
 	// Create or replace a draft. Invalid drafts are saved and their issues returned.
 	SaveMethodology(context.Context, *connect.Request[v1.SaveMethodologyRequest]) (*connect.Response[v1.SaveMethodologyResponse], error)
 	ValidateMethodology(context.Context, *connect.Request[v1.ValidateMethodologyRequest]) (*connect.Response[v1.ValidateMethodologyResponse], error)
+	// A process of a methodology (as edited, saved or not) as a graph: steps, the edges its conditions draw, methods (ADR 0036 §4).
+	GetProcessGraph(context.Context, *connect.Request[v1.GetProcessGraphRequest]) (*connect.Response[v1.GetProcessGraphResponse], error)
 	// Freeze a valid draft; the engine only runs published versions.
 	PublishMethodology(context.Context, *connect.Request[v1.PublishMethodologyRequest]) (*connect.Response[v1.PublishMethodologyResponse], error)
 	// Copy a version into a new draft version.
@@ -168,6 +173,12 @@ func NewRegistryServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			httpClient,
 			baseURL+RegistryServiceValidateMethodologyProcedure,
 			connect.WithSchema(registryServiceMethods.ByName("ValidateMethodology")),
+			connect.WithClientOptions(opts...),
+		),
+		getProcessGraph: connect.NewClient[v1.GetProcessGraphRequest, v1.GetProcessGraphResponse](
+			httpClient,
+			baseURL+RegistryServiceGetProcessGraphProcedure,
+			connect.WithSchema(registryServiceMethods.ByName("GetProcessGraph")),
 			connect.WithClientOptions(opts...),
 		),
 		publishMethodology: connect.NewClient[v1.PublishMethodologyRequest, v1.PublishMethodologyResponse](
@@ -281,6 +292,7 @@ type registryServiceClient struct {
 	getMethodology      *connect.Client[v1.GetMethodologyRequest, v1.GetMethodologyResponse]
 	saveMethodology     *connect.Client[v1.SaveMethodologyRequest, v1.SaveMethodologyResponse]
 	validateMethodology *connect.Client[v1.ValidateMethodologyRequest, v1.ValidateMethodologyResponse]
+	getProcessGraph     *connect.Client[v1.GetProcessGraphRequest, v1.GetProcessGraphResponse]
 	publishMethodology  *connect.Client[v1.PublishMethodologyRequest, v1.PublishMethodologyResponse]
 	createVersion       *connect.Client[v1.CreateVersionRequest, v1.CreateVersionResponse]
 	deleteMethodology   *connect.Client[v1.DeleteMethodologyRequest, v1.DeleteMethodologyResponse]
@@ -318,6 +330,11 @@ func (c *registryServiceClient) SaveMethodology(ctx context.Context, req *connec
 // ValidateMethodology calls goap.registry.v1.RegistryService.ValidateMethodology.
 func (c *registryServiceClient) ValidateMethodology(ctx context.Context, req *connect.Request[v1.ValidateMethodologyRequest]) (*connect.Response[v1.ValidateMethodologyResponse], error) {
 	return c.validateMethodology.CallUnary(ctx, req)
+}
+
+// GetProcessGraph calls goap.registry.v1.RegistryService.GetProcessGraph.
+func (c *registryServiceClient) GetProcessGraph(ctx context.Context, req *connect.Request[v1.GetProcessGraphRequest]) (*connect.Response[v1.GetProcessGraphResponse], error) {
+	return c.getProcessGraph.CallUnary(ctx, req)
 }
 
 // PublishMethodology calls goap.registry.v1.RegistryService.PublishMethodology.
@@ -413,6 +430,8 @@ type RegistryServiceHandler interface {
 	// Create or replace a draft. Invalid drafts are saved and their issues returned.
 	SaveMethodology(context.Context, *connect.Request[v1.SaveMethodologyRequest]) (*connect.Response[v1.SaveMethodologyResponse], error)
 	ValidateMethodology(context.Context, *connect.Request[v1.ValidateMethodologyRequest]) (*connect.Response[v1.ValidateMethodologyResponse], error)
+	// A process of a methodology (as edited, saved or not) as a graph: steps, the edges its conditions draw, methods (ADR 0036 §4).
+	GetProcessGraph(context.Context, *connect.Request[v1.GetProcessGraphRequest]) (*connect.Response[v1.GetProcessGraphResponse], error)
 	// Freeze a valid draft; the engine only runs published versions.
 	PublishMethodology(context.Context, *connect.Request[v1.PublishMethodologyRequest]) (*connect.Response[v1.PublishMethodologyResponse], error)
 	// Copy a version into a new draft version.
@@ -471,6 +490,12 @@ func NewRegistryServiceHandler(svc RegistryServiceHandler, opts ...connect.Handl
 		RegistryServiceValidateMethodologyProcedure,
 		svc.ValidateMethodology,
 		connect.WithSchema(registryServiceMethods.ByName("ValidateMethodology")),
+		connect.WithHandlerOptions(opts...),
+	)
+	registryServiceGetProcessGraphHandler := connect.NewUnaryHandler(
+		RegistryServiceGetProcessGraphProcedure,
+		svc.GetProcessGraph,
+		connect.WithSchema(registryServiceMethods.ByName("GetProcessGraph")),
 		connect.WithHandlerOptions(opts...),
 	)
 	registryServicePublishMethodologyHandler := connect.NewUnaryHandler(
@@ -585,6 +610,8 @@ func NewRegistryServiceHandler(svc RegistryServiceHandler, opts ...connect.Handl
 			registryServiceSaveMethodologyHandler.ServeHTTP(w, r)
 		case RegistryServiceValidateMethodologyProcedure:
 			registryServiceValidateMethodologyHandler.ServeHTTP(w, r)
+		case RegistryServiceGetProcessGraphProcedure:
+			registryServiceGetProcessGraphHandler.ServeHTTP(w, r)
 		case RegistryServicePublishMethodologyProcedure:
 			registryServicePublishMethodologyHandler.ServeHTTP(w, r)
 		case RegistryServiceCreateVersionProcedure:
@@ -642,6 +669,10 @@ func (UnimplementedRegistryServiceHandler) SaveMethodology(context.Context, *con
 
 func (UnimplementedRegistryServiceHandler) ValidateMethodology(context.Context, *connect.Request[v1.ValidateMethodologyRequest]) (*connect.Response[v1.ValidateMethodologyResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.registry.v1.RegistryService.ValidateMethodology is not implemented"))
+}
+
+func (UnimplementedRegistryServiceHandler) GetProcessGraph(context.Context, *connect.Request[v1.GetProcessGraphRequest]) (*connect.Response[v1.GetProcessGraphResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.registry.v1.RegistryService.GetProcessGraph is not implemented"))
 }
 
 func (UnimplementedRegistryServiceHandler) PublishMethodology(context.Context, *connect.Request[v1.PublishMethodologyRequest]) (*connect.Response[v1.PublishMethodologyResponse], error) {

@@ -14,6 +14,8 @@ service RegistryService {
   // Create or replace a draft. Invalid drafts are saved and their issues returned.
   rpc SaveMethodology(SaveMethodologyRequest) returns (SaveMethodologyResponse);
   rpc ValidateMethodology(ValidateMethodologyRequest) returns (ValidateMethodologyResponse);
+  // A process of a methodology (as edited, saved or not) as a graph: steps, the edges its conditions draw, methods (ADR 0036 §4).
+  rpc GetProcessGraph(GetProcessGraphRequest) returns (GetProcessGraphResponse);
   // Freeze a valid draft; the engine only runs published versions.
   rpc PublishMethodology(PublishMethodologyRequest) returns (PublishMethodologyResponse);
   // Copy a version into a new draft version.
@@ -688,4 +690,71 @@ message LinkTypeInfo {
   string ref = 1;
   string from = 2;
   string to = 3;
+}
+
+message GetProcessGraphRequest {
+  Methodology methodology = 1;
+  string process = 2;
+}
+
+message GetProcessGraphResponse {
+  ProcessGraph graph = 1;
+  // why the graph could not be built (the methodology does not compile)
+  repeated Issue issues = 2;
+}
+
+message ProcessGraph {
+  string process = 1;
+  string description = 2;
+  repeated GraphStep steps = 3;
+  repeated GraphEdge edges = 4;
+  repeated Method methods = 5;
+  // the goal the agent of each method reaches, by method name
+  map<string, string> method_goals = 6;
+  repeated GraphAgent agents = 7;
+  repeated Reference references = 8;
+}
+
+message GraphStep {
+  string path = 1;
+  string name = 2;
+  string description = 3;
+  // the path of the step containing it ("" at the top)
+  string parent = 4;
+  int32 depth = 5;
+  // it runs something (no sub-steps)
+  bool leaf = 6;
+  // steps | action | agent | process | method | manual
+  string method = 7;
+  string target = 8;
+  map<string, bool> entry = 9;
+  map<string, bool> exit = 10;
+  Responsibilities roles = 11;
+  string guidance = 12;
+  repeated Reference references = 13;
+  string process = 14;
+  string capability = 15;
+}
+
+// The exit criteria of from meet the entry of to, on these conditions.
+message GraphEdge {
+  string from = 1;
+  string to = 2;
+  repeated string conditions = 3;
+}
+
+message GraphAgent {
+  string name = 1;
+  string description = 2;
+  string planner = 3;
+  repeated string goals = 4;
+  repeated GraphAction actions = 5;
+}
+
+message GraphAction {
+  string name = 1;
+  string kind = 2;
+  string description = 3;
+  map<string, bool> pre = 4;
+  map<string, bool> effects = 5;
 }
