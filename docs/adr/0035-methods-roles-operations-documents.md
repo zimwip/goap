@@ -1,6 +1,6 @@
 # ADR 0035 — Methods, roles, operations and documents
 
-**Status**: proposed · **Date**: 2026-09 ·
+**Status**: accepted (decisions below; implemented in phases, see the Phasing table) · **Date**: 2026-09 ·
 Builds on ADR 0009 §5 (specializations), ADR 0012–0015 (types, domains, namespaces), ADR 0014 (lifecycles and
 documents), ADR 0016 (sub-changes), ADR 0018 (library and instance), ADR 0020 (access control), ADR 0034 (processes and
 steps). Relates to ADR 0033 (request to shipped change).
@@ -36,9 +36,11 @@ Two constraints of the current model come up repeatedly below and are named here
 
 ### 1. Methods: context-specific ways to do a step
 
-A methodology declares **methods**. A method names the step capability it provides, the context where it applies,
-and the tools it brings. It generalizes what action specializations (`specializes` / `when` / `priority`) already do,
-from one action to a whole way of working:
+A methodology declares **methods**. A method is the **documentary reference** of how a step capability is carried out
+in a context (what is being worked on, which technology): its guidance, its reference documents, its deliverables, the
+roles it involves. **A method is not an actor: it names its agent**, which is the actor (planner, actions, MCPs,
+model), even when the method amounts to one action (the agent then has that one action). Action specializations
+(`specializes` / `when` / `priority`) stay for one-action variations inside an agent.
 
 ```yaml
 methods:
@@ -47,28 +49,26 @@ methods:
     when: 'changeImpacts.exists(n, "alm@Component" in n.types && n.post.props.technology == "java")'
     priority: 10
     description: Maven build, JDK 21, unit tests and SBOM
-    guidance: |                      # shown to the person, injected into the prompts of the agent
+    guidance: |                      # shown to the person, given to the agent in its prompts
       Build with `mvn -B verify`; publish the SBOM; the artifact version follows the component version.
-    planner: goap                    # a method is a specialized agent: planner, actions, MCPs, model
-    actions: [compile_java, test_java, publish_artifact]
-    mcps: [ci, artifact-registry]
-    deliverables: [document@BuildReport]
+    references: [{title: Java build standard, ref: "document-repository:build/java.md"}]
+    deliverables: [BuildReport]
     roles: {responsible: developer, accountable: tech_lead}
+    agent: java_builder              # the actor: an agent of the methodology
+    goal: build_components           # default: the agent's only goal
   - name: build_generic
     for: build
-    actions: [build_generic]
+    agent: builder
 ```
 
-- A step names a capability instead of an agent: `{name: build, method: build}`. At execution, `process.step` evaluates
-  the `when` of every method providing `build` on the blackboard, keeps the applicable ones whose MCPs the unit holding
-  the change resolves (design rule 5), and runs the one with the highest priority as a sub-agent. If several contexts
-  apply at once (Java and C components), the step runs one method per context, the same way incremental actions run one
-  wave per technology today.
-- A method compiles to an agent (planner, actions, MCPs, model) plus a guard; `agent:` on a step stays as the
-  "one method, no context" case. Action specializations stay for one-action variations.
+- A step names a capability: `{name: build, method: build}`. At execution, `process.step` evaluates the `when` of
+  every method providing `build` on the blackboard, keeps the applicable ones whose agent the unit holding the change
+  can run (its MCPs resolve, design rule 5), and runs the agent of the one with the highest priority as a sub-agent,
+  with the method's guidance and references in its context. A step's exit criteria default to what every method's
+  goal makes true (the criteria they share).
 - The planner therefore selects tools in two stages, both from the definitions: the **method** from the context,
-  then the **actions** within the method by planning. Methods from other methodologies may provide a capability too
-  (`for: sdlc/build`), as action specializations already can.
+  then the **actions** within the method's agent by planning.
+- `agent:` on a step stays the case of a step with a single way of working and no reference of its own.
 
 ### 2. Guidance, roles and responsibilities
 
@@ -219,7 +219,20 @@ inside one namespace.
 | 4 | Documents (§5) and companion changes (§6) |
 | 5 | Operations (§4): `shipped` stage, standard changes, deployment waves recorded per environment, `EffectiveIn`, operating processes per scope, version pinning |
 
-## Open questions
+## Decisions
+
+1. **Methods** (§1): accepted, with the method as the documentary reference and not the actor: a method always names
+   its agent, even for a single action (answers open question 1: a method always runs its agent as a sub-agent).
+2. **Guidance, roles and responsibilities** (§2): accepted. Roles held in a unit are inherited by the units below it
+   (`part_of`), like adapters (design rule 3) — answers open question 2.
+3. **Progress** (§3): accepted.
+4. **Operations** (§4): the recommended option is accepted — run procedures are delivered with the release and take
+   effect from its deployment in each environment; the generic run methodology is pinned per operated scope. A change
+   is applied at the approval of its release and **shipped** at the end of its rollout, for the methodologies that
+   declare a rollout; for the others, applied is shipped (open question 3). Operating procedures are **documents**
+   (`document@Document` of a Runbook type, §5), reviewed and published as such (open question 4).
+
+## Open questions (answered by the decisions above)
 
 1. Is a method always a sub-agent (its own run in the journal), or can a method made of one action run inline as
    today's action steps do?
