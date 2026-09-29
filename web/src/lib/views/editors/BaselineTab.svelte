@@ -15,6 +15,7 @@
   import type { Tab } from '../../shell/types';
   import Icon from '../../shell/Icon.svelte';
   import NodeGraph from '../../components/NodeGraph.svelte';
+  import BaselineCompare from '../../components/BaselineCompare.svelte';
   import { openTab } from '../../shell/tabs.svelte';
   import { openNode } from '../../nodeEditors';
   import { indexOf } from '../../graphIndex';
@@ -305,6 +306,7 @@
       {/if}
     </section>
   </div>
+  {#if baseline}<BaselineCompare {baseline} />{/if}
 </div>
 
 <style>

@@ -163,6 +163,32 @@ REQ-1  v1(main) ── v3(main, revise) ───────────── 
 
 Applying a Change (`ApplyChange`) lands the accepted change impacts' versions and creates a new baseline. The Change remains the explainable history of *why* the graph changed.
 
+#### Operating the graph by hand
+
+The graph is fully operable from the IDE with no methodology, agent or action running: a change needs none
+(`CreateChange` names a methodology only when a process drives it), and every step below is a graph call the IDE
+makes for the person.
+
+| Step | Where in the IDE | Graph calls |
+|---|---|---|
+| Start an empty namespace | Baseline explorer: *Start {namespace}* (a namespace a domain declares, without a baseline) | `CreateBaseline` (empty, on `main`) |
+| Create a change | Changes explorer **+**: title, intent, namespace, the branch it lands on, the baseline it starts from, own branch, or a parent change (a sub-change) | `CreateChange` |
+| Edit or abandon it | Change → Overview: *Edit* (title, intent), *Abandon* (its sub-changes too, its branch closed) | `UpdateChange` |
+| Declare impacts | Change → Impacts: create a node, or pick one with the reason it is impacted | `AddChangeImpacts` |
+| Edit a node | Node editor bound to the change and its scope: properties, lifecycle moves, retire | `WriteChangeImpact`, `ReviewChangeImpact` |
+| Edit its links | Node editor → Relations → *Links*: the outgoing links of the version the change wrote (add: a link type the node type allows and a target; remove) | `WriteChangeImpact` (`addLinks`, `removeLinks`) |
+| Review | Change → Impacts: *Review…* (comment mandatory) | `ReviewChangeImpact` |
+| Options, decisions | Scope bar, Compare, Decisions panes (a ruling made there is a person's) | `OpenOption` … `SelectOption`, `OpenDecision` … `RuleDecision` |
+| Adopt or discard a flow | Change → Overview (a flow no run works on is adopted straight on the graph) | `AdoptFlow`, `DiscardFlow` |
+| Apply | Change → Overview: *Apply* | `ApplyChange` |
+| Resolve a merge | A `merge_pending` change shows each node changed on both sides: keep the target, or merge taking a side per conflicting property | `PlanMerge`, `MergeChange` |
+| Branches | Baseline explorer → Branches: open one from a baseline, merge it into another (same resolver), abandon or reopen it | `ListBranches`, `CreateBranch`, `MergeBranch`, `SetBranchStatus` |
+| Compare baselines | Baseline tab → *Compare*: the nodes added, removed or changed from another baseline (its parent by default), with the properties that differ | `DiffBaselines` |
+| A node's history | Node editor → History: the changes that acted on it, its versions and the branches each joined | `ListNodeChanges`, `ListNodeVersions` |
+
+The lifecycle transitions a change makes are authorized when it is applied (ADR 0014) before its transaction:
+the authorizer reads the access graph, which the transaction of the apply would otherwise block.
+
 ### 2.2 Correspondence with Embabel
 
 | Embabel | GOAP | Comment |

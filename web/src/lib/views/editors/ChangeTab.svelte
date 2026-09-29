@@ -14,6 +14,7 @@
     type GraphNode,
     type LifecycleTransition,
     type NodeRef,
+    type Resolution,
   } from '../../api';
   import { untrack } from 'svelte';
   import type { Tab } from '../../shell/types';
@@ -40,6 +41,7 @@
   import ChangeOptions from '../../components/ChangeOptions.svelte';
   import ChangeDecisions from '../../components/ChangeDecisions.svelte';
   import ScopeBar from '../../components/ScopeBar.svelte';
+  import MergeResolver from '../../components/MergeResolver.svelte';
   import { MAIN_SCOPE, candidatesByOption, scopeColor, scopeName, scopeWritable } from '../../changeScope';
 
   let { tab }: { tab: Tab } = $props();
@@ -107,8 +109,13 @@
     }
   }
   let splitting = $state(false);
-  let merging = $state(false);
-  let mergeError = $state('');
+  /** the branch a change on its own branch merges into (its parent branch) */
+  let mergeInto = $state('');
+  // editing the definition of the change (title, intent) and abandoning it
+  let defining = $state(false);
+  let defTitle = $state('');
+  let defIntent = $state('');
+  let defBusy = $state(false);
 
   let baselineName = $state('');
   let applying = $state(false);
@@ -180,7 +187,7 @@
     subs = [];
     ancestors = [];
     flows = [];
-    mergeError = '';
+    defining = false;
     extraNodes = [];
     applied = undefined;
     baselineName = '';
@@ -235,7 +242,8 @@
   };
   const others = $derived(items.filter((i) => !['decision', 'artifact'].includes(i.kind ?? '')));
 
-  const isApplied = $derived(change?.status === 'applied');
+  // applied, or applied on its own branch and waiting for its merge: nothing to apply any more
+  const isApplied = $derived(change?.status === 'applied' || change?.status === 'merge_pending');
   const closed = $derived(change?.status === 'applied' || change?.status === 'abandoned');
   void loadTypes();
   const lcRows = $derived(lifecycleRows(typeCatalog.cat, nodes, attached, view?.nodes ?? [], posts, extraNodes, true));
@@ -388,22 +396,52 @@
     }
   }
 
-  async function merge() {
+  $effect(() => {
+    const ch = change;
+    mergeInto = '';
+    if (ch?.status !== 'merge_pending' || !ch.branch) return;
+    graph
+      .getBranch(namespaceOf(ch.namespace), ch.branch)
+      .then((r) => (mergeInto = r.branch?.parent || 'main'))
+      .catch(() => (mergeInto = 'main'));
+  });
+
+  async function merge(resolutions: Record<string, Resolution>): Promise<boolean> {
+    if (!change?.id) return false;
+    await graph.mergeChange(change.id, resolutions);
+    await load(change.id);
+    void refreshChanges();
+    void refreshBaselines(namespaceOf(change?.namespace));
+    notify('Change merged.', 'ok');
+    return true;
+  }
+
+  function startDefine() {
+    defTitle = change?.title ?? '';
+    defIntent = change?.intent ?? '';
+    defining = true;
+  }
+
+  async function define(patch: { title?: string; intent?: string; status?: string }, done: string) {
     if (!change?.id) return;
-    merging = true;
-    mergeError = '';
+    defBusy = true;
+    error = '';
     try {
-      await graph.mergeChange(change.id);
+      await graph.updateChange(change.id, patch);
+      defining = false;
       await load(change.id);
       void refreshChanges();
-      void refreshBaselines(namespaceOf(change?.namespace));
-      notify('Change merged.', 'ok');
+      notify(done, 'ok');
     } catch (e) {
-      mergeError = errorMessage(e);
+      error = errorMessage(e);
     } finally {
-      merging = false;
+      defBusy = false;
     }
   }
+
+  const abandon = () =>
+    confirm(`Abandon “${change?.title}”? Its sub-changes are abandoned too and its branch is closed; nothing it wrote lands.`) &&
+    define({ status: 'abandoned' }, 'Change abandoned.');
 
   async function apply() {
     if (!change?.id) return;
@@ -509,8 +547,24 @@
           <Icon name="diff" size={18} />
           <h2>{ch.title || 'Untitled'}</h2>
           <StatusBadge status={ch.status} />
+          <span class="grow"></span>
+          {#if !closed && !defining}
+            <button type="button" class="small" onclick={startDefine}>Edit</button>
+            <button type="button" class="small danger" disabled={defBusy} onclick={abandon}>Abandon</button>
+          {/if}
         </div>
-        {#if ch.intent}<p class="intent">"{ch.intent}"</p>{/if}
+        {#if defining}
+          <form class="define" onsubmit={(e) => (e.preventDefault(), define({ title: defTitle.trim(), intent: defIntent.trim() }, 'Change updated.'))}>
+            <label for="def-title">Title</label>
+            <input id="def-title" type="text" bind:value={defTitle} />
+            <label for="def-intent">Intent</label>
+            <textarea id="def-intent" rows="2" bind:value={defIntent}></textarea>
+            <div class="row">
+              <button type="submit" class="primary small" disabled={defBusy || !defTitle.trim()}>Save</button>
+              <button type="button" class="small" onclick={() => (defining = false)}>Cancel</button>
+            </div>
+          </form>
+        {:else if ch.intent}<p class="intent">"{ch.intent}"</p>{/if}
         <dl class="meta">
           <dt>ID</dt><dd><code>{ch.id}</code></dd>
           {#if ch.namespace}<dt>Namespace</dt><dd>{ch.namespace}</dd>{/if}
@@ -545,9 +599,10 @@
 
         {#if ch.status === 'merge_pending'}
           <div class="alert warn" style="margin: 0.75rem 0">
-            <p>Applied on its own branch; the merge into the parent branch is pending.</p>
-            <button class="primary" onclick={merge} disabled={merging}>{merging ? 'Merging…' : 'Merge'}</button>
-            {#if mergeError}<pre class="error">{mergeError}</pre>{/if}
+            <p>Applied on its own branch; the merge into {mergeInto || 'the parent branch'} is pending: resolve the nodes changed on both sides.</p>
+            {#if mergeInto}
+              <MergeResolver namespace={namespaceOf(ch.namespace)} from={ch.branch ?? ''} into={mergeInto} onmerge={merge} />
+            {/if}
           </div>
         {/if}
 
@@ -787,6 +842,16 @@
   .intent {
     margin: 0.6rem 0;
     font-style: italic;
+  }
+  .define {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    margin: 0.6rem 0;
+  }
+  .define label {
+    font-size: 0.8rem;
+    color: var(--muted);
   }
   .meta {
     margin: 0.5rem 0 0.8rem;

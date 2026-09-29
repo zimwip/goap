@@ -124,6 +124,9 @@ const (
 	// GraphServiceMergeBranchProcedure is the fully-qualified name of the GraphService's MergeBranch
 	// RPC.
 	GraphServiceMergeBranchProcedure = "/goap.graph.v1.GraphService/MergeBranch"
+	// GraphServiceDiffBaselinesProcedure is the fully-qualified name of the GraphService's
+	// DiffBaselines RPC.
+	GraphServiceDiffBaselinesProcedure = "/goap.graph.v1.GraphService/DiffBaselines"
 	// GraphServiceMergeChangeProcedure is the fully-qualified name of the GraphService's MergeChange
 	// RPC.
 	GraphServiceMergeChangeProcedure = "/goap.graph.v1.GraphService/MergeChange"
@@ -249,6 +252,8 @@ type GraphServiceClient interface {
 	ListNodeVersions(context.Context, *connect.Request[v1.ListNodeVersionsRequest]) (*connect.Response[v1.ListNodeVersionsResponse], error)
 	PlanMerge(context.Context, *connect.Request[v1.PlanMergeRequest]) (*connect.Response[v1.PlanMergeResponse], error)
 	MergeBranch(context.Context, *connect.Request[v1.MergeBranchRequest]) (*connect.Response[v1.MergeBranchResponse], error)
+	// What going from a baseline to another changes, node by node (same namespace).
+	DiffBaselines(context.Context, *connect.Request[v1.DiffBaselinesRequest]) (*connect.Response[v1.DiffBaselinesResponse], error)
 	// Completes a merge_pending change: merges its branch into the branch it forked from.
 	MergeChange(context.Context, *connect.Request[v1.MergeChangeRequest]) (*connect.Response[v1.MergeChangeResponse], error)
 	// Nodes the change shares with other open changes (a merge will be needed).
@@ -501,6 +506,12 @@ func NewGraphServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(graphServiceMethods.ByName("MergeBranch")),
 			connect.WithClientOptions(opts...),
 		),
+		diffBaselines: connect.NewClient[v1.DiffBaselinesRequest, v1.DiffBaselinesResponse](
+			httpClient,
+			baseURL+GraphServiceDiffBaselinesProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("DiffBaselines")),
+			connect.WithClientOptions(opts...),
+		),
 		mergeChange: connect.NewClient[v1.MergeChangeRequest, v1.MergeChangeResponse](
 			httpClient,
 			baseURL+GraphServiceMergeChangeProcedure,
@@ -695,6 +706,7 @@ type graphServiceClient struct {
 	listNodeVersions     *connect.Client[v1.ListNodeVersionsRequest, v1.ListNodeVersionsResponse]
 	planMerge            *connect.Client[v1.PlanMergeRequest, v1.PlanMergeResponse]
 	mergeBranch          *connect.Client[v1.MergeBranchRequest, v1.MergeBranchResponse]
+	diffBaselines        *connect.Client[v1.DiffBaselinesRequest, v1.DiffBaselinesResponse]
 	mergeChange          *connect.Client[v1.MergeChangeRequest, v1.MergeChangeResponse]
 	getSharedNodes       *connect.Client[v1.GetSharedNodesRequest, v1.GetSharedNodesResponse]
 	splitChange          *connect.Client[v1.SplitChangeRequest, v1.SplitChangeResponse]
@@ -888,6 +900,11 @@ func (c *graphServiceClient) MergeBranch(ctx context.Context, req *connect.Reque
 	return c.mergeBranch.CallUnary(ctx, req)
 }
 
+// DiffBaselines calls goap.graph.v1.GraphService.DiffBaselines.
+func (c *graphServiceClient) DiffBaselines(ctx context.Context, req *connect.Request[v1.DiffBaselinesRequest]) (*connect.Response[v1.DiffBaselinesResponse], error) {
+	return c.diffBaselines.CallUnary(ctx, req)
+}
+
 // MergeChange calls goap.graph.v1.GraphService.MergeChange.
 func (c *graphServiceClient) MergeChange(ctx context.Context, req *connect.Request[v1.MergeChangeRequest]) (*connect.Response[v1.MergeChangeResponse], error) {
 	return c.mergeChange.CallUnary(ctx, req)
@@ -1067,6 +1084,8 @@ type GraphServiceHandler interface {
 	ListNodeVersions(context.Context, *connect.Request[v1.ListNodeVersionsRequest]) (*connect.Response[v1.ListNodeVersionsResponse], error)
 	PlanMerge(context.Context, *connect.Request[v1.PlanMergeRequest]) (*connect.Response[v1.PlanMergeResponse], error)
 	MergeBranch(context.Context, *connect.Request[v1.MergeBranchRequest]) (*connect.Response[v1.MergeBranchResponse], error)
+	// What going from a baseline to another changes, node by node (same namespace).
+	DiffBaselines(context.Context, *connect.Request[v1.DiffBaselinesRequest]) (*connect.Response[v1.DiffBaselinesResponse], error)
 	// Completes a merge_pending change: merges its branch into the branch it forked from.
 	MergeChange(context.Context, *connect.Request[v1.MergeChangeRequest]) (*connect.Response[v1.MergeChangeResponse], error)
 	// Nodes the change shares with other open changes (a merge will be needed).
@@ -1315,6 +1334,12 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(graphServiceMethods.ByName("MergeBranch")),
 		connect.WithHandlerOptions(opts...),
 	)
+	graphServiceDiffBaselinesHandler := connect.NewUnaryHandler(
+		GraphServiceDiffBaselinesProcedure,
+		svc.DiffBaselines,
+		connect.WithSchema(graphServiceMethods.ByName("DiffBaselines")),
+		connect.WithHandlerOptions(opts...),
+	)
 	graphServiceMergeChangeHandler := connect.NewUnaryHandler(
 		GraphServiceMergeChangeProcedure,
 		svc.MergeChange,
@@ -1539,6 +1564,8 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 			graphServicePlanMergeHandler.ServeHTTP(w, r)
 		case GraphServiceMergeBranchProcedure:
 			graphServiceMergeBranchHandler.ServeHTTP(w, r)
+		case GraphServiceDiffBaselinesProcedure:
+			graphServiceDiffBaselinesHandler.ServeHTTP(w, r)
 		case GraphServiceMergeChangeProcedure:
 			graphServiceMergeChangeHandler.ServeHTTP(w, r)
 		case GraphServiceGetSharedNodesProcedure:
@@ -1730,6 +1757,10 @@ func (UnimplementedGraphServiceHandler) PlanMerge(context.Context, *connect.Requ
 
 func (UnimplementedGraphServiceHandler) MergeBranch(context.Context, *connect.Request[v1.MergeBranchRequest]) (*connect.Response[v1.MergeBranchResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.MergeBranch is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) DiffBaselines(context.Context, *connect.Request[v1.DiffBaselinesRequest]) (*connect.Response[v1.DiffBaselinesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.DiffBaselines is not implemented"))
 }
 
 func (UnimplementedGraphServiceHandler) MergeChange(context.Context, *connect.Request[v1.MergeChangeRequest]) (*connect.Response[v1.MergeChangeResponse], error) {

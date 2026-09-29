@@ -10,6 +10,8 @@
     type Change,
     type GraphNode,
     type LifecycleTransition,
+    type Link,
+    type LinkWrite,
     type NodeRef,
   } from '../../api';
   import { untrack } from 'svelte';
@@ -21,6 +23,8 @@
   import LifecycleDiagram from '../../components/LifecycleDiagram.svelte';
   import NodeHistory from '../../components/NodeHistory.svelte';
   import NodePropertyForm from '../../components/NodePropertyForm.svelte';
+  import NodeLinks from '../../components/NodeLinks.svelte';
+  import StatusBadge from '../../components/StatusBadge.svelte';
   import { openTab } from '../../shell/tabs.svelte';
   import { nodeEditor } from '../../shell/registry';
   import { handleOf, openNode, openTarget } from '../../nodeEditors';
@@ -179,7 +183,11 @@
   }
 
   /** Runs a modification: creates the working change if needed, writes the node on its branch, reloads. */
-  async function propose(label: string, w: { props?: Record<string, unknown>; state?: string; retire?: boolean }, rationale: string): Promise<boolean> {
+  async function propose(
+    label: string,
+    w: { props?: Record<string, unknown>; state?: string; retire?: boolean; addLinks?: LinkWrite[]; removeLinks?: string[] },
+    rationale: string,
+  ): Promise<boolean> {
     busy = label;
     error = '';
     try {
@@ -188,7 +196,7 @@
       const target = row?.created ? { key: row.node.key, type: row.node.type } : node?.id ? { pre: { id: node.id, version: node.version } } : undefined;
       if (!target) throw new Error('This node is not in the baseline of the working change: choose another change.');
       await writeNodeInChange(cid, work?.change.nodes ?? [], target, w, rationale, workFlow);
-      await loadWork();
+      await Promise.all([loadWork(), loadNode()]);
       reload++;
       return true;
     } catch (e) {
@@ -198,6 +206,37 @@
       busy = '';
     }
   }
+
+  // --- links and changes of the node -------------------------------------------------
+  /** the version shown: the one the working change wrote, else the stored one */
+  const shownRef = $derived<NodeRef | undefined>(
+    inChange && row?.impact?.post?.id ? row.impact.post : stored?.id ? { id: stored.id, version: stored.version } : undefined,
+  );
+  let outLinks = $state<Link[]>([]);
+  let nodeChanges = $state<Change[]>([]);
+  $effect(() => {
+    const ref = shownRef;
+    void reload;
+    if (!ref?.id) return;
+    const ctrl = new AbortController();
+    graph
+      .getNode({ id: ref.id, version: ref.version }, ctrl.signal)
+      .then((r) => (outLinks = r.view?.out ?? []))
+      .catch(() => (outLinks = []));
+    return () => ctrl.abort();
+  });
+  $effect(() => {
+    void reload;
+    if (!id) return;
+    const ctrl = new AbortController();
+    graph
+      .listNodeChanges(id, ctrl.signal)
+      .then((r) => (nodeChanges = r.changes ?? []))
+      .catch(() => (nodeChanges = []));
+    return () => ctrl.abort();
+  });
+  const addLink = (type: string, to: NodeRef) => propose('link', { addLinks: [{ type, to }] }, `Link ${stored?.key} ${type} ${head?.nodes.get(to.id ?? '')?.key ?? ''}`.trim());
+  const removeLink = (l: Link) => propose('link', { removeLinks: [l.id ?? ''] }, `Unlink ${stored?.key} ${l.type}`);
 
   const transition = (t: LifecycleTransition) => propose('move', { state: t.to }, `Move ${stored?.key} to ${t.to}`);
 
@@ -342,6 +381,17 @@
             </dl>
           </section>
         {:else if active === 'relations'}
+          <NodeLinks
+            node={stored}
+            links={outLinks}
+            index={work?.index ?? head}
+            readonly={!editable || removed || !!stored.deleted}
+            why={stored.deleted || removed ? 'The node is deleted.' : `${stored.key} is ${nodeState}, not an editable state: reopen it (Details) to change its links.`}
+            busy={busy !== ''}
+            onadd={addLink}
+            onremove={removeLink}
+            onopen={openNeighbour}
+          />
           {#if head && head.nodes.has(id)}
             <div class="rel">
               <div class="trees">
@@ -376,6 +426,22 @@
             </section>
           {/if}
         {:else if active === 'history'}
+          <section class="card">
+            <h3>Changes <span class="count">{nodeChanges.length}</span></h3>
+            {#if nodeChanges.length}
+              <ul class="changes">
+                {#each nodeChanges as c (c.id)}
+                  <li>
+                    <StatusBadge status={c.status} />
+                    <button type="button" class="link" onclick={() => openTab({ kind: 'change', params: { id: c.id ?? '' } }, { pin: true })}>{c.title || shortId(c.id)}</button>
+                    <span class="hint">{c.branch} · {formatDate(c.createdAt)}</span>
+                  </li>
+                {/each}
+              </ul>
+            {:else}
+              <p class="empty">No change acted on this node.</p>
+            {/if}
+          </section>
           <NodeHistory {id} reloadKey={reload} />
         {/if}
       {/snippet}
@@ -429,6 +495,20 @@
   }
   .pending {
     color: var(--muted);
+  }
+  .changes {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .changes li {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    flex-wrap: wrap;
   }
   .rel {
     display: grid;

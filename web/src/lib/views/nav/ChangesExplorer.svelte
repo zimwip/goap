@@ -4,6 +4,7 @@
   import Icon from '../../shell/Icon.svelte';
   import TreeRow from '../TreeRow.svelte';
   import StatusBadge from '../../components/StatusBadge.svelte';
+  import NewChangeForm from '../../components/NewChangeForm.svelte';
   import { toggle, isOpen } from './expanded.svelte';
   import { changes, refreshChanges } from '../../stores/catalog.svelte';
   import { live, processes, refreshProcesses } from '../../stores/live.svelte';
@@ -14,6 +15,7 @@
 
   let filter = $state('');
   let manualId = $state('');
+  let creating = $state(false);
 
   $effect(() => {
     if (!changes.loaded) void refreshChanges();
@@ -143,6 +145,9 @@
 <div class="explorer">
   <div class="tools">
     <input type="search" placeholder="Filter…" aria-label="Filter changes" bind:value={filter} data-no-pin />
+    <button type="button" class="ghost small" title="New change (by hand, no methodology needed)" aria-label="New change" aria-pressed={creating} onclick={() => (creating = !creating)}
+      ><Icon name="plus" size={14} /></button
+    >
     <button type="button" class="ghost small" title="New intent test" aria-label="New intent test" onclick={newTest}
       ><Icon name="flask" size={14} /></button
     >
@@ -158,6 +163,12 @@
       }}><Icon name="refresh" size={14} /></button
     >
   </div>
+  {#if creating}
+    <NewChangeForm
+      oncreated={(cid) => ((creating = false), openTab({ kind: 'change', params: { id: cid } }, { pin: true }))}
+      oncancel={() => (creating = false)}
+    />
+  {/if}
   {#if changes.error}<div class="alert small">{changes.error}</div>{/if}
   <div role="tree" aria-label="Changes">
     {#each STATUSES as s (s.id)}
