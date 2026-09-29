@@ -52,15 +52,21 @@
 
   interface Work {
     change: Change;
+    /** the name of the flow the change is seen on ('' : the change as a whole) */
+    flowName: string;
     index: GraphIndex;
     attached: NodeRef[];
     posts: PostVersions;
   }
   let workId = $state(untrack(() => tab.params.change) ?? '');
+  /** the flow of the working change the node is seen and edited on: 'main' or an option (ADR 0032 §6); empty: the
+   * change as a whole (its edits go to its active option) */
+  let workFlow = $state(untrack(() => tab.params.flow) ?? '');
   let work = $state<Work | undefined>();
 
   $effect(() => {
     tab.params.change = workId;
+    tab.params.flow = workFlow;
   });
 
   async function loadNode(signal?: AbortSignal) {
@@ -87,10 +93,20 @@
       return;
     }
     try {
+      if (workFlow) {
+        // the change as the flow sees it: its change impacts with the versions that flow wrote
+        const bb = await graph.getBlackboard(workId, workFlow);
+        const change = bb.change;
+        if (!change?.baselineId) throw new Error('unknown change');
+        const attached = (change.nodes ?? []).filter((n) => n.pre?.id && !n.superseded).map((n) => n.pre!);
+        const flowName = workFlow === 'main' ? 'main flow' : (bb.options?.find((o) => o.id === workFlow)?.option?.name ?? shortId(workFlow));
+        work = { change, flowName, index: await loadGraph(change.baselineId), attached, posts: await loadPosts(change.nodes ?? [], true) };
+        return;
+      }
       const change = (await graph.getChange(workId)).change;
       if (!change?.baselineId) throw new Error('unknown change');
       const [index, attached] = await Promise.all([loadGraph(change.baselineId), graph.getChangeImpacts(workId)]);
-      work = { change, index, attached: attached.nodes ?? [], posts: await loadPosts(change.nodes ?? []) };
+      work = { change, flowName: '', index, attached: attached.nodes ?? [], posts: await loadPosts(change.nodes ?? []) };
     } catch (e) {
       error = errorMessage(e);
       work = undefined;
@@ -121,7 +137,11 @@
 
   /** the node in the working change, or in the current graph when there is none */
   const row = $derived.by<LifecycleRow | undefined>(() => {
-    if (work) return lifecycleRows(typeCatalog.cat, work.index.list, work.attached, work.change.nodes ?? [], work.posts, [id]).find((r) => r.node.id === id);
+    // a node the change creates is not in its baseline: its row is the one whose written version is this node
+    if (work)
+      return lifecycleRows(typeCatalog.cat, work.index.list, work.attached, work.change.nodes ?? [], work.posts, [id], !!workFlow).find(
+        (r) => r.node.id === id || (!!r.created && r.impact?.post?.id === id),
+      );
     return lifecycleRows(typeCatalog.cat, headList, [], [], new Map(), [id]).find((r) => r.node.id === id);
   });
   const inChange = $derived(!!work && !!row);
@@ -165,8 +185,9 @@
     try {
       const cid = await ensureChange();
       const node = work?.index.nodes.get(id);
-      if (!node?.id) throw new Error('This node is not in the baseline of the working change: choose another change.');
-      await writeNodeInChange(cid, work?.change.nodes ?? [], { pre: { id: node.id, version: node.version } }, w, rationale);
+      const target = row?.created ? { key: row.node.key, type: row.node.type } : node?.id ? { pre: { id: node.id, version: node.version } } : undefined;
+      if (!target) throw new Error('This node is not in the baseline of the working change: choose another change.');
+      await writeNodeInChange(cid, work?.change.nodes ?? [], target, w, rationale, workFlow);
       await loadWork();
       reload++;
       return true;
@@ -193,7 +214,7 @@
     busy = 'delete';
     error = '';
     try {
-      await graph.reviewChangeImpact(workId, rid, false, 'keep the node');
+      await graph.reviewChangeImpact(workId, rid, false, 'keep the node', workFlow);
       await loadWork();
       reload++;
     } catch (e) {
@@ -205,6 +226,7 @@
 
   function pickChange(value: string) {
     editing = false;
+    workFlow = ''; // another change: seen as a whole
     workId = value;
   }
 
@@ -237,7 +259,9 @@
     <h2>{stored?.key || tab.params.key || shortId(id)}</h2>
     {#if typeName}<span class="hint">{typeName}</span>{/if}
     {#if nodeState}<span class="state" class:editable={!!lifecycle && !editable}>{nodeState}</span>{/if}
-    {#if stored?.version}<span class="hint">v{stored.version}</span>{/if}
+    {#if inChange && row?.impact?.post?.id}
+      <span class="hint" title="the version the working change wrote; the released one is v{stored?.version ?? '—'}">v{row.impact.post.version} in the change</span>
+    {:else if stored?.version}<span class="hint">v{stored.version}</span>{/if}
     {#if stored?.deleted}<span class="tag bad">deleted</span>{/if}
     {#if removed}<span class="tag bad" title="Deletion proposed in the working change">deleted when applied</span>{/if}
   </div>
@@ -256,6 +280,7 @@
           {#each openChanges as c (c.id)}<option value={c.id}>{c.title || shortId(c.id)} ({c.status})</option>{/each}
           {#if workId && !openChanges.some((c) => c.id === workId)}<option value={workId}>{work?.change.title || shortId(workId)}</option>{/if}
         </select>
+        {#if workId && work?.flowName}<span class="hint" title="the node is seen and edited as this flow of the change has it">on {work.flowName}</span>{/if}
         {#if workId}<button type="button" class="small" onclick={openChange}>Open change</button>{/if}
       {/snippet}
 
