@@ -36,8 +36,9 @@ func TestProcessesRoundTripThroughPB(t *testing.T) {
 		Deliverables: []string{"D"}, References: []methodology.Reference{{Ref: "doc:X"}}, Agent: "a", Goal: "g",
 		Roles: &methodology.Responsibilities{Accountable: "lead", Informed: []string{"po"}}}}
 	in.Roles = []methodology.Role{{Name: "dev", Description: "d"}, {Name: "lead"}}
+	in.AppliesTo = []string{"sdlc"}
 	out = FromPB(ToPB(Record{Methodology: in}))
-	if !reflect.DeepEqual(out.Methods, in.Methods) || !reflect.DeepEqual(out.Roles, in.Roles) {
+	if !reflect.DeepEqual(out.Methods, in.Methods) || !reflect.DeepEqual(out.Roles, in.Roles) || !reflect.DeepEqual(out.AppliesTo, in.AppliesTo) {
 		t.Fatalf("methods changed through PB:\n%+v\n%+v", in.Methods, out.Methods)
 	}
 	if !reflect.DeepEqual(out.Processes, in.Processes) {

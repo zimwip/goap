@@ -295,6 +295,8 @@ message Methodology {
   repeated Method methods = 19;
   // the roles the processes and methods assign (ADR 0035 §2)
   repeated Role roles = 20;
+  // transverse: its processes run alongside the changes of these methodologies (ADR 0036 §3)
+  repeated string applies_to = 21;
 }
 
 // A role a methodology needs; the organisation assigns it to users per unit ("developer@TEAM-PAY").

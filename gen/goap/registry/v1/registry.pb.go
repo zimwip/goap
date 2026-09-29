@@ -1690,7 +1690,9 @@ type Methodology struct {
 	// how a step capability is carried out per context, each naming the agent that acts (ADR 0035 §1)
 	Methods []*Method `protobuf:"bytes,19,rep,name=methods,proto3" json:"methods,omitempty"`
 	// the roles the processes and methods assign (ADR 0035 §2)
-	Roles         []*Role `protobuf:"bytes,20,rep,name=roles,proto3" json:"roles,omitempty"`
+	Roles []*Role `protobuf:"bytes,20,rep,name=roles,proto3" json:"roles,omitempty"`
+	// transverse: its processes run alongside the changes of these methodologies (ADR 0036 §3)
+	AppliesTo     []string `protobuf:"bytes,21,rep,name=applies_to,json=appliesTo,proto3" json:"applies_to,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1833,6 +1835,13 @@ func (x *Methodology) GetMethods() []*Method {
 func (x *Methodology) GetRoles() []*Role {
 	if x != nil {
 		return x.Roles
+	}
+	return nil
+}
+
+func (x *Methodology) GetAppliesTo() []string {
+	if x != nil {
+		return x.AppliesTo
 	}
 	return nil
 }
@@ -5415,7 +5424,7 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\x05value\x18\x05 \x01(\x01R\x05value\x1a6\n" +
 	"\bPreEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\bR\x05value:\x028\x01\"\x9a\x06\n" +
+	"\x05value\x18\x02 \x01(\bR\x05value:\x028\x01\"\xb9\x06\n" +
 	"\vMethodology\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\tR\aversion\x12 \n" +
@@ -5438,7 +5447,9 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\tnamespace\x18\x11 \x01(\tR\tnamespace\x127\n" +
 	"\tprocesses\x18\x12 \x03(\v2\x19.goap.registry.v1.ProcessR\tprocesses\x122\n" +
 	"\amethods\x18\x13 \x03(\v2\x18.goap.registry.v1.MethodR\amethods\x12,\n" +
-	"\x05roles\x18\x14 \x03(\v2\x16.goap.registry.v1.RoleR\x05rolesJ\x04\b\x05\x10\x06J\x04\b\x06\x10\aJ\x04\b\x0f\x10\x10J\x04\b\x10\x10\x11R\n" +
+	"\x05roles\x18\x14 \x03(\v2\x16.goap.registry.v1.RoleR\x05roles\x12\x1d\n" +
+	"\n" +
+	"applies_to\x18\x15 \x03(\tR\tappliesToJ\x04\b\x05\x10\x06J\x04\b\x06\x10\aJ\x04\b\x0f\x10\x10J\x04\b\x10\x10\x11R\n" +
 	"node_typesR\n" +
 	"link_typesR\n" +
 	"domain_refR\n" +

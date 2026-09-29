@@ -482,6 +482,14 @@ on every replica regardless of leadership (ADR 0031). This resolves leader elect
 firing specifically, not the broader engine-clustering work of §3.2, which is unrelated and
 still open.
 
+**Transverse methodologies** ([ADR 0036](adr/0036-risks-actions-brief-transverse-methodologies.md) §3): a methodology
+that declares `appliesTo: [sdlc]` has its processes run **alongside** the changes of those methodologies, on the same
+change: one companion run per change and process (`Trigger` = `companion:<methodology>/<process>`), started when a
+process is attached to the change, run again in place when the change moves (a process on it completes, someone else
+adds a risk or an action), completing as soon as its goal holds (`Engine.Accompany`, fed by the trigger manager's
+events). A transverse methodology has no namespace of its own. `methodologies/risk-management.yaml` applies to `sdlc`:
+the risks of the change are identified and assessed as it grows, and every high one gets an action.
+
 A process can now run, and even finish, without ever being attached to a Change — binding stays
 eager by default for existing methodologies; an agent can declare its own binding action to defer
 it (`change_bound` condition, `Engine.AttachChange`, `goap-scheduler attach`), and a fixed
