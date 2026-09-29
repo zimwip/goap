@@ -4,6 +4,7 @@ package graphsvc
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"connectrpc.com/connect"
 
@@ -408,7 +409,13 @@ func (h *Handler) GetBlackboard(ctx context.Context, r *connect.Request[graphv1.
 	if err != nil {
 		return nil, rpcerr.ToConnect(err)
 	}
-	out := &graphv1.GetBlackboardResponse{Change: pbconv.ChangeToPB(bb.Change)}
+	out := &graphv1.GetBlackboardResponse{Change: pbconv.ChangeToPB(bb.Change), ActiveOption: bb.ActiveOption, At: pbconv.Time(bb.At)}
+	for _, f := range bb.Options {
+		out.Options = append(out.Options, pbconv.FlowToPB(f))
+	}
+	for _, d := range bb.DecisionPoints {
+		out.DecisionPoints = append(out.DecisionPoints, pbconv.DecisionPointToPB(d))
+	}
 	for _, v := range bb.Nodes {
 		out.Nodes = append(out.Nodes, pbconv.ViewToPB(v))
 	}
@@ -691,4 +698,70 @@ func (h *Handler) GetChangeView(ctx context.Context, r *connect.Request[graphv1.
 func (h *Handler) GetChangeGraph(ctx context.Context, r *connect.Request[graphv1.GetChangeGraphRequest]) (*connect.Response[graphv1.GetChangeGraphResponse], error) {
 	nodes, links, err := h.Graph.ChangeGraph(ctx, domain.ChangeID(r.Msg.ChangeId), r.Msg.Flow)
 	return res(&graphv1.GetChangeGraphResponse{Nodes: pbconv.NodesToPB(nodes), Links: pbconv.LinksToPB(links)}, err)
+}
+
+// ---- Decision points (ADR 0009 §4) ----------------------------------------------------------------------------
+
+func (h *Handler) OpenDecision(ctx context.Context, r *connect.Request[graphv1.OpenDecisionRequest]) (*connect.Response[graphv1.OpenDecisionResponse], error) {
+	ctx = h.Identity.Context(ctx, r.Header())
+	m := r.Msg
+	in := graph.OpenDecisionRequest{Question: m.Question, Options: m.Options, Criteria: m.Criteria, Decider: m.Decider, Threshold: m.Threshold,
+		MaxRounds: int(m.MaxRounds), By: authz.From(ctx).Subject}
+	if m.AllOptions {
+		in.Options = nil
+	} else if in.Options == nil {
+		in.Options = []string{}
+	}
+	if m.MaxDuration != "" {
+		d, err := time.ParseDuration(m.MaxDuration)
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("max duration: %w", err))
+		}
+		in.MaxDuration = d
+	}
+	d, err := h.Graph.OpenDecision(ctx, domain.ChangeID(m.ChangeId), in)
+	if err == nil {
+		h.publish(ctx, "goap.change."+m.ChangeId+".decision_opened", d)
+	}
+	return res(&graphv1.OpenDecisionResponse{Point: pbconv.DecisionPointToPB(d)}, err)
+}
+
+func (h *Handler) RuleDecision(ctx context.Context, r *connect.Request[graphv1.RuleDecisionRequest]) (*connect.Response[graphv1.RuleDecisionResponse], error) {
+	ctx = h.Identity.Context(ctx, r.Header())
+	m := r.Msg
+	d, err := h.Graph.RuleDecision(ctx, domain.ChangeID(m.ChangeId), graph.RuleRequest{Point: m.Point, Outcome: m.Outcome, Option: m.Option,
+		Confidence: m.Confidence, Justification: m.Justification, Questions: m.Questions, Human: !m.Agent, By: authz.From(ctx).Subject})
+	if err == nil {
+		h.publish(ctx, "goap.change."+m.ChangeId+".decision_ruled", d)
+	}
+	return res(&graphv1.RuleDecisionResponse{Point: pbconv.DecisionPointToPB(d)}, err)
+}
+
+func (h *Handler) AnswerQuestion(ctx context.Context, r *connect.Request[graphv1.AnswerQuestionRequest]) (*connect.Response[graphv1.AnswerQuestionResponse], error) {
+	ctx = h.Identity.Context(ctx, r.Header())
+	m := r.Msg
+	d, err := h.Graph.AnswerQuestion(ctx, domain.ChangeID(m.ChangeId), m.Question, m.Answer, m.Process, authz.From(ctx).Subject)
+	if err == nil {
+		h.publish(ctx, "goap.change."+m.ChangeId+".question_answered", d)
+	}
+	return res(&graphv1.AnswerQuestionResponse{Point: pbconv.DecisionPointToPB(d)}, err)
+}
+
+func (h *Handler) RatifyDecision(ctx context.Context, r *connect.Request[graphv1.RatifyDecisionRequest]) (*connect.Response[graphv1.RatifyDecisionResponse], error) {
+	ctx = h.Identity.Context(ctx, r.Header())
+	m := r.Msg
+	d, err := h.Graph.RatifyDecision(ctx, domain.ChangeID(m.ChangeId), m.Point, m.Accept, authz.From(ctx).Subject, m.Comment)
+	if err == nil {
+		h.publish(ctx, "goap.change."+m.ChangeId+".decision_ratified", d)
+	}
+	return res(&graphv1.RatifyDecisionResponse{Point: pbconv.DecisionPointToPB(d)}, err)
+}
+
+func (h *Handler) ListDecisionPoints(ctx context.Context, r *connect.Request[graphv1.ListDecisionPointsRequest]) (*connect.Response[graphv1.ListDecisionPointsResponse], error) {
+	ds, err := h.Graph.DecisionPoints(ctx, domain.ChangeID(r.Msg.ChangeId))
+	out := &graphv1.ListDecisionPointsResponse{}
+	for _, d := range ds {
+		out.Points = append(out.Points, pbconv.DecisionPointToPB(d))
+	}
+	return res(out, err)
 }

@@ -145,7 +145,14 @@ func (c *Client) BlackboardIn(ctx context.Context, id domain.ChangeID, flow stri
 	if err != nil {
 		return domain.Blackboard{}, rpcerr.FromConnect(err)
 	}
-	bb := domain.Blackboard{Change: pbconv.ChangeFromPB(r.Msg.Change), Nodes: map[domain.NodeRef]domain.NodeView{}, Neighbors: map[domain.NodeRef]domain.Node{}}
+	bb := domain.Blackboard{Change: pbconv.ChangeFromPB(r.Msg.Change), Nodes: map[domain.NodeRef]domain.NodeView{}, Neighbors: map[domain.NodeRef]domain.Node{},
+		ActiveOption: r.Msg.ActiveOption, At: pbconv.FromTime(r.Msg.At)}
+	for _, f := range r.Msg.Options {
+		bb.Options = append(bb.Options, pbconv.FlowFromPB(f))
+	}
+	for _, d := range r.Msg.DecisionPoints {
+		bb.DecisionPoints = append(bb.DecisionPoints, pbconv.DecisionPointFromPB(d))
+	}
 	for _, v := range r.Msg.Nodes {
 		nv := pbconv.ViewFromPB(v)
 		bb.Nodes[nv.Ref()] = nv
@@ -349,6 +356,61 @@ func (c *Client) ValidateBoard(ctx context.Context, id domain.ChangeID, flow str
 	var out []domain.BoardIssue
 	for _, i := range r.Msg.Issues {
 		out = append(out, pbconv.BoardIssueFromPB(i))
+	}
+	return out, nil
+}
+
+// OpenDecision implements engine.GraphPort (the principal comes from the request identity).
+func (c *Client) OpenDecision(ctx context.Context, id domain.ChangeID, in graph.OpenDecisionRequest) (domain.DecisionPoint, error) {
+	req := &graphv1.OpenDecisionRequest{ChangeId: string(id), Question: in.Question, Options: in.Options, AllOptions: in.Options == nil,
+		Criteria: in.Criteria, Decider: in.Decider, Threshold: in.Threshold, MaxRounds: int32(in.MaxRounds)}
+	if in.MaxDuration > 0 {
+		req.MaxDuration = in.MaxDuration.String()
+	}
+	r, err := c.rpc.OpenDecision(ctx, connect.NewRequest(req))
+	if err != nil {
+		return domain.DecisionPoint{}, rpcerr.FromConnect(err)
+	}
+	return pbconv.DecisionPointFromPB(r.Msg.Point), nil
+}
+
+// RuleDecision implements engine.GraphPort.
+func (c *Client) RuleDecision(ctx context.Context, id domain.ChangeID, in graph.RuleRequest) (domain.DecisionPoint, error) {
+	r, err := c.rpc.RuleDecision(ctx, connect.NewRequest(&graphv1.RuleDecisionRequest{ChangeId: string(id), Point: in.Point, Outcome: in.Outcome,
+		Option: in.Option, Confidence: in.Confidence, Justification: in.Justification, Questions: in.Questions, Agent: !in.Human}))
+	if err != nil {
+		return domain.DecisionPoint{}, rpcerr.FromConnect(err)
+	}
+	return pbconv.DecisionPointFromPB(r.Msg.Point), nil
+}
+
+// AnswerQuestion implements engine.GraphPort.
+func (c *Client) AnswerQuestion(ctx context.Context, id domain.ChangeID, question, answer, process, _ string) (domain.DecisionPoint, error) {
+	r, err := c.rpc.AnswerQuestion(ctx, connect.NewRequest(&graphv1.AnswerQuestionRequest{ChangeId: string(id), Question: question, Answer: answer, Process: process}))
+	if err != nil {
+		return domain.DecisionPoint{}, rpcerr.FromConnect(err)
+	}
+	return pbconv.DecisionPointFromPB(r.Msg.Point), nil
+}
+
+// RatifyDecision implements engine.GraphPort.
+func (c *Client) RatifyDecision(ctx context.Context, id domain.ChangeID, point string, accept bool, _, comment string) (domain.DecisionPoint, error) {
+	r, err := c.rpc.RatifyDecision(ctx, connect.NewRequest(&graphv1.RatifyDecisionRequest{ChangeId: string(id), Point: point, Accept: accept, Comment: comment}))
+	if err != nil {
+		return domain.DecisionPoint{}, rpcerr.FromConnect(err)
+	}
+	return pbconv.DecisionPointFromPB(r.Msg.Point), nil
+}
+
+// DecisionPoints implements engine.GraphPort.
+func (c *Client) DecisionPoints(ctx context.Context, id domain.ChangeID) ([]domain.DecisionPoint, error) {
+	r, err := c.rpc.ListDecisionPoints(ctx, connect.NewRequest(&graphv1.ListDecisionPointsRequest{ChangeId: string(id)}))
+	if err != nil {
+		return nil, rpcerr.FromConnect(err)
+	}
+	var out []domain.DecisionPoint
+	for _, d := range r.Msg.Points {
+		out = append(out, pbconv.DecisionPointFromPB(d))
 	}
 	return out, nil
 }

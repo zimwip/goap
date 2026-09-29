@@ -378,7 +378,8 @@ func (s ScriptExecutor) Execute(ctx context.Context, ac ActionContext) (ActionRe
 	}
 	job := dsl.Job{Language: ac.Action.Language, Code: ac.Action.Code, ProcessID: ac.Process.ID, ParentID: ac.Process.ParentID, Agent: ac.Process.Agent,
 		Action: ac.Action.Name, Intent: intentText, Goal: ac.Process.Goal, Params: ac.Action.Params, Vars: ac.Process.Vars,
-		Items: dsl.ItemsFromBlackboard(ac.Blackboard), Nodes: ChangeImpactsFromBlackboard(ac.Blackboard)}
+		Items: dsl.ItemsFromBlackboard(ac.Blackboard), Nodes: ChangeImpactsFromBlackboard(ac.Blackboard),
+		Options: dsl.OptionsFromBlackboard(ac.Blackboard), DecisionPoints: dsl.DecisionPointsFromBlackboard(ac.Blackboard)}
 	res, err := sb.Execute(ctx, job, ac.Host)
 	out := ActionResult{Output: res.Output, Sandbox: sb.ID(), VarsSet: res.VarsSet}
 	for _, l := range res.Logs {

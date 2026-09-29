@@ -23,6 +23,8 @@ type ItemInput struct {
 	DerivedFrom []string       `json:"derivedFrom,omitempty"`
 	// ChangeImpact is the operation of a "changeImpact" item.
 	ChangeImpact *dsl.NodeOp `json:"changeImpact,omitempty"`
+	// DecisionPoint is the operation of a "decisionPoint" item (ADR 0009 §4).
+	DecisionPoint *DecisionOp `json:"decisionPoint,omitempty"`
 }
 
 // DecisionInput is the external representation of a decision.

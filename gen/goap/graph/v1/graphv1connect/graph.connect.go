@@ -171,6 +171,21 @@ const (
 	// GraphServiceGetChangeViewProcedure is the fully-qualified name of the GraphService's
 	// GetChangeView RPC.
 	GraphServiceGetChangeViewProcedure = "/goap.graph.v1.GraphService/GetChangeView"
+	// GraphServiceOpenDecisionProcedure is the fully-qualified name of the GraphService's OpenDecision
+	// RPC.
+	GraphServiceOpenDecisionProcedure = "/goap.graph.v1.GraphService/OpenDecision"
+	// GraphServiceRuleDecisionProcedure is the fully-qualified name of the GraphService's RuleDecision
+	// RPC.
+	GraphServiceRuleDecisionProcedure = "/goap.graph.v1.GraphService/RuleDecision"
+	// GraphServiceAnswerQuestionProcedure is the fully-qualified name of the GraphService's
+	// AnswerQuestion RPC.
+	GraphServiceAnswerQuestionProcedure = "/goap.graph.v1.GraphService/AnswerQuestion"
+	// GraphServiceRatifyDecisionProcedure is the fully-qualified name of the GraphService's
+	// RatifyDecision RPC.
+	GraphServiceRatifyDecisionProcedure = "/goap.graph.v1.GraphService/RatifyDecision"
+	// GraphServiceListDecisionPointsProcedure is the fully-qualified name of the GraphService's
+	// ListDecisionPoints RPC.
+	GraphServiceListDecisionPointsProcedure = "/goap.graph.v1.GraphService/ListDecisionPoints"
 	// GraphServiceGetChangeGraphProcedure is the fully-qualified name of the GraphService's
 	// GetChangeGraph RPC.
 	GraphServiceGetChangeGraphProcedure = "/goap.graph.v1.GraphService/GetChangeGraph"
@@ -261,6 +276,13 @@ type GraphServiceClient interface {
 	// The graph a change sees at a level (written, accepted, landed) on a flow (ADR 0032 §5), and the graph a call on
 	// the change reads (the active option's, else the reference baseline).
 	GetChangeView(context.Context, *connect.Request[v1.GetChangeViewRequest]) (*connect.Response[v1.GetChangeViewResponse], error)
+	// Decision points of a change (ADR 0009 §4): opened, ruled (decided or undecidable with questions), their questions
+	// answered, an agent ruling below the threshold ratified by a person; a decided point selects its option.
+	OpenDecision(context.Context, *connect.Request[v1.OpenDecisionRequest]) (*connect.Response[v1.OpenDecisionResponse], error)
+	RuleDecision(context.Context, *connect.Request[v1.RuleDecisionRequest]) (*connect.Response[v1.RuleDecisionResponse], error)
+	AnswerQuestion(context.Context, *connect.Request[v1.AnswerQuestionRequest]) (*connect.Response[v1.AnswerQuestionResponse], error)
+	RatifyDecision(context.Context, *connect.Request[v1.RatifyDecisionRequest]) (*connect.Response[v1.RatifyDecisionResponse], error)
+	ListDecisionPoints(context.Context, *connect.Request[v1.ListDecisionPointsRequest]) (*connect.Response[v1.ListDecisionPointsResponse], error)
 	GetChangeGraph(context.Context, *connect.Request[v1.GetChangeGraphRequest]) (*connect.Response[v1.GetChangeGraphResponse], error)
 	// Execution journal (ADR 0011)
 	RecordExecutions(context.Context, *connect.Request[v1.RecordExecutionsRequest]) (*connect.Response[v1.RecordExecutionsResponse], error)
@@ -581,6 +603,36 @@ func NewGraphServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(graphServiceMethods.ByName("GetChangeView")),
 			connect.WithClientOptions(opts...),
 		),
+		openDecision: connect.NewClient[v1.OpenDecisionRequest, v1.OpenDecisionResponse](
+			httpClient,
+			baseURL+GraphServiceOpenDecisionProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("OpenDecision")),
+			connect.WithClientOptions(opts...),
+		),
+		ruleDecision: connect.NewClient[v1.RuleDecisionRequest, v1.RuleDecisionResponse](
+			httpClient,
+			baseURL+GraphServiceRuleDecisionProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("RuleDecision")),
+			connect.WithClientOptions(opts...),
+		),
+		answerQuestion: connect.NewClient[v1.AnswerQuestionRequest, v1.AnswerQuestionResponse](
+			httpClient,
+			baseURL+GraphServiceAnswerQuestionProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("AnswerQuestion")),
+			connect.WithClientOptions(opts...),
+		),
+		ratifyDecision: connect.NewClient[v1.RatifyDecisionRequest, v1.RatifyDecisionResponse](
+			httpClient,
+			baseURL+GraphServiceRatifyDecisionProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("RatifyDecision")),
+			connect.WithClientOptions(opts...),
+		),
+		listDecisionPoints: connect.NewClient[v1.ListDecisionPointsRequest, v1.ListDecisionPointsResponse](
+			httpClient,
+			baseURL+GraphServiceListDecisionPointsProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("ListDecisionPoints")),
+			connect.WithClientOptions(opts...),
+		),
 		getChangeGraph: connect.NewClient[v1.GetChangeGraphRequest, v1.GetChangeGraphResponse](
 			httpClient,
 			baseURL+GraphServiceGetChangeGraphProcedure,
@@ -660,6 +712,11 @@ type graphServiceClient struct {
 	listOptions          *connect.Client[v1.ListOptionsRequest, v1.ListOptionsResponse]
 	compareOptions       *connect.Client[v1.CompareOptionsRequest, v1.CompareOptionsResponse]
 	getChangeView        *connect.Client[v1.GetChangeViewRequest, v1.GetChangeViewResponse]
+	openDecision         *connect.Client[v1.OpenDecisionRequest, v1.OpenDecisionResponse]
+	ruleDecision         *connect.Client[v1.RuleDecisionRequest, v1.RuleDecisionResponse]
+	answerQuestion       *connect.Client[v1.AnswerQuestionRequest, v1.AnswerQuestionResponse]
+	ratifyDecision       *connect.Client[v1.RatifyDecisionRequest, v1.RatifyDecisionResponse]
+	listDecisionPoints   *connect.Client[v1.ListDecisionPointsRequest, v1.ListDecisionPointsResponse]
 	getChangeGraph       *connect.Client[v1.GetChangeGraphRequest, v1.GetChangeGraphResponse]
 	recordExecutions     *connect.Client[v1.RecordExecutionsRequest, v1.RecordExecutionsResponse]
 	listExecutions       *connect.Client[v1.ListExecutionsRequest, v1.ListExecutionsResponse]
@@ -916,6 +973,31 @@ func (c *graphServiceClient) GetChangeView(ctx context.Context, req *connect.Req
 	return c.getChangeView.CallUnary(ctx, req)
 }
 
+// OpenDecision calls goap.graph.v1.GraphService.OpenDecision.
+func (c *graphServiceClient) OpenDecision(ctx context.Context, req *connect.Request[v1.OpenDecisionRequest]) (*connect.Response[v1.OpenDecisionResponse], error) {
+	return c.openDecision.CallUnary(ctx, req)
+}
+
+// RuleDecision calls goap.graph.v1.GraphService.RuleDecision.
+func (c *graphServiceClient) RuleDecision(ctx context.Context, req *connect.Request[v1.RuleDecisionRequest]) (*connect.Response[v1.RuleDecisionResponse], error) {
+	return c.ruleDecision.CallUnary(ctx, req)
+}
+
+// AnswerQuestion calls goap.graph.v1.GraphService.AnswerQuestion.
+func (c *graphServiceClient) AnswerQuestion(ctx context.Context, req *connect.Request[v1.AnswerQuestionRequest]) (*connect.Response[v1.AnswerQuestionResponse], error) {
+	return c.answerQuestion.CallUnary(ctx, req)
+}
+
+// RatifyDecision calls goap.graph.v1.GraphService.RatifyDecision.
+func (c *graphServiceClient) RatifyDecision(ctx context.Context, req *connect.Request[v1.RatifyDecisionRequest]) (*connect.Response[v1.RatifyDecisionResponse], error) {
+	return c.ratifyDecision.CallUnary(ctx, req)
+}
+
+// ListDecisionPoints calls goap.graph.v1.GraphService.ListDecisionPoints.
+func (c *graphServiceClient) ListDecisionPoints(ctx context.Context, req *connect.Request[v1.ListDecisionPointsRequest]) (*connect.Response[v1.ListDecisionPointsResponse], error) {
+	return c.listDecisionPoints.CallUnary(ctx, req)
+}
+
 // GetChangeGraph calls goap.graph.v1.GraphService.GetChangeGraph.
 func (c *graphServiceClient) GetChangeGraph(ctx context.Context, req *connect.Request[v1.GetChangeGraphRequest]) (*connect.Response[v1.GetChangeGraphResponse], error) {
 	return c.getChangeGraph.CallUnary(ctx, req)
@@ -1012,6 +1094,13 @@ type GraphServiceHandler interface {
 	// The graph a change sees at a level (written, accepted, landed) on a flow (ADR 0032 §5), and the graph a call on
 	// the change reads (the active option's, else the reference baseline).
 	GetChangeView(context.Context, *connect.Request[v1.GetChangeViewRequest]) (*connect.Response[v1.GetChangeViewResponse], error)
+	// Decision points of a change (ADR 0009 §4): opened, ruled (decided or undecidable with questions), their questions
+	// answered, an agent ruling below the threshold ratified by a person; a decided point selects its option.
+	OpenDecision(context.Context, *connect.Request[v1.OpenDecisionRequest]) (*connect.Response[v1.OpenDecisionResponse], error)
+	RuleDecision(context.Context, *connect.Request[v1.RuleDecisionRequest]) (*connect.Response[v1.RuleDecisionResponse], error)
+	AnswerQuestion(context.Context, *connect.Request[v1.AnswerQuestionRequest]) (*connect.Response[v1.AnswerQuestionResponse], error)
+	RatifyDecision(context.Context, *connect.Request[v1.RatifyDecisionRequest]) (*connect.Response[v1.RatifyDecisionResponse], error)
+	ListDecisionPoints(context.Context, *connect.Request[v1.ListDecisionPointsRequest]) (*connect.Response[v1.ListDecisionPointsResponse], error)
 	GetChangeGraph(context.Context, *connect.Request[v1.GetChangeGraphRequest]) (*connect.Response[v1.GetChangeGraphResponse], error)
 	// Execution journal (ADR 0011)
 	RecordExecutions(context.Context, *connect.Request[v1.RecordExecutionsRequest]) (*connect.Response[v1.RecordExecutionsResponse], error)
@@ -1328,6 +1417,36 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(graphServiceMethods.ByName("GetChangeView")),
 		connect.WithHandlerOptions(opts...),
 	)
+	graphServiceOpenDecisionHandler := connect.NewUnaryHandler(
+		GraphServiceOpenDecisionProcedure,
+		svc.OpenDecision,
+		connect.WithSchema(graphServiceMethods.ByName("OpenDecision")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceRuleDecisionHandler := connect.NewUnaryHandler(
+		GraphServiceRuleDecisionProcedure,
+		svc.RuleDecision,
+		connect.WithSchema(graphServiceMethods.ByName("RuleDecision")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceAnswerQuestionHandler := connect.NewUnaryHandler(
+		GraphServiceAnswerQuestionProcedure,
+		svc.AnswerQuestion,
+		connect.WithSchema(graphServiceMethods.ByName("AnswerQuestion")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceRatifyDecisionHandler := connect.NewUnaryHandler(
+		GraphServiceRatifyDecisionProcedure,
+		svc.RatifyDecision,
+		connect.WithSchema(graphServiceMethods.ByName("RatifyDecision")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceListDecisionPointsHandler := connect.NewUnaryHandler(
+		GraphServiceListDecisionPointsProcedure,
+		svc.ListDecisionPoints,
+		connect.WithSchema(graphServiceMethods.ByName("ListDecisionPoints")),
+		connect.WithHandlerOptions(opts...),
+	)
 	graphServiceGetChangeGraphHandler := connect.NewUnaryHandler(
 		GraphServiceGetChangeGraphProcedure,
 		svc.GetChangeGraph,
@@ -1454,6 +1573,16 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 			graphServiceCompareOptionsHandler.ServeHTTP(w, r)
 		case GraphServiceGetChangeViewProcedure:
 			graphServiceGetChangeViewHandler.ServeHTTP(w, r)
+		case GraphServiceOpenDecisionProcedure:
+			graphServiceOpenDecisionHandler.ServeHTTP(w, r)
+		case GraphServiceRuleDecisionProcedure:
+			graphServiceRuleDecisionHandler.ServeHTTP(w, r)
+		case GraphServiceAnswerQuestionProcedure:
+			graphServiceAnswerQuestionHandler.ServeHTTP(w, r)
+		case GraphServiceRatifyDecisionProcedure:
+			graphServiceRatifyDecisionHandler.ServeHTTP(w, r)
+		case GraphServiceListDecisionPointsProcedure:
+			graphServiceListDecisionPointsHandler.ServeHTTP(w, r)
 		case GraphServiceGetChangeGraphProcedure:
 			graphServiceGetChangeGraphHandler.ServeHTTP(w, r)
 		case GraphServiceRecordExecutionsProcedure:
@@ -1669,6 +1798,26 @@ func (UnimplementedGraphServiceHandler) CompareOptions(context.Context, *connect
 
 func (UnimplementedGraphServiceHandler) GetChangeView(context.Context, *connect.Request[v1.GetChangeViewRequest]) (*connect.Response[v1.GetChangeViewResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.GetChangeView is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) OpenDecision(context.Context, *connect.Request[v1.OpenDecisionRequest]) (*connect.Response[v1.OpenDecisionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.OpenDecision is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) RuleDecision(context.Context, *connect.Request[v1.RuleDecisionRequest]) (*connect.Response[v1.RuleDecisionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.RuleDecision is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) AnswerQuestion(context.Context, *connect.Request[v1.AnswerQuestionRequest]) (*connect.Response[v1.AnswerQuestionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.AnswerQuestion is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) RatifyDecision(context.Context, *connect.Request[v1.RatifyDecisionRequest]) (*connect.Response[v1.RatifyDecisionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.RatifyDecision is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) ListDecisionPoints(context.Context, *connect.Request[v1.ListDecisionPointsRequest]) (*connect.Response[v1.ListDecisionPointsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.ListDecisionPoints is not implemented"))
 }
 
 func (UnimplementedGraphServiceHandler) GetChangeGraph(context.Context, *connect.Request[v1.GetChangeGraphRequest]) (*connect.Response[v1.GetChangeGraphResponse], error) {

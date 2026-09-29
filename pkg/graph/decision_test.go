@@ -115,7 +115,9 @@ func testDecisionEscalation(t *testing.T, repo Repo) {
 }
 
 // Selecting an option by hand settles the decision points that chose among the options.
-func TestSelectOptionSettlesItsDecision(t *testing.T) { forEachRepo(t, testSelectOptionSettlesItsDecision) }
+func TestSelectOptionSettlesItsDecision(t *testing.T) {
+	forEachRepo(t, testSelectOptionSettlesItsDecision)
+}
 
 func testSelectOptionSettlesItsDecision(t *testing.T, repo Repo) {
 	ctx := context.Background()

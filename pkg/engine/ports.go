@@ -42,6 +42,12 @@ type GraphPort interface {
 	EvaluateOption(ctx context.Context, id domain.ChangeID, option, by, comment string) (domain.Flow, error)
 	Options(ctx context.Context, id domain.ChangeID) ([]domain.Flow, error)
 	CompareOptions(ctx context.Context, id domain.ChangeID, level string, all bool) (graph.OptionComparison, error)
+	// Decision points (ADR 0009 §4): the item operations of kind decisionPoint and decision.investigate go through them.
+	OpenDecision(ctx context.Context, id domain.ChangeID, in graph.OpenDecisionRequest) (domain.DecisionPoint, error)
+	RuleDecision(ctx context.Context, id domain.ChangeID, in graph.RuleRequest) (domain.DecisionPoint, error)
+	AnswerQuestion(ctx context.Context, id domain.ChangeID, question, answer, process, by string) (domain.DecisionPoint, error)
+	RatifyDecision(ctx context.Context, id domain.ChangeID, point string, accept bool, by, comment string) (domain.DecisionPoint, error)
+	DecisionPoints(ctx context.Context, id domain.ChangeID) ([]domain.DecisionPoint, error)
 	Apply(ctx context.Context, id domain.ChangeID, baselineName string) (domain.Baseline, error)
 	Baselines(ctx context.Context, namespace string) ([]domain.Baseline, error)
 	// Record / Journal write and read the execution journal of changes (ADR 0011).

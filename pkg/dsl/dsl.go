@@ -164,7 +164,10 @@ type Job struct {
 	Vars      map[string]any `json:"vars"`
 	Items     []Item         `json:"items"`
 	Nodes     []ChangeImpact `json:"nodes"`
-	Timeout   time.Duration  `json:"timeout"`
+	// Options and DecisionPoints of the change (ADR 0009 §3-4).
+	Options        []Option        `json:"options"`
+	DecisionPoints []DecisionPoint `json:"decisionPoints"`
+	Timeout        time.Duration   `json:"timeout"`
 }
 
 // Result is the outcome of a script: the items to add to the change (engine
@@ -192,6 +195,7 @@ type Ctx struct {
 	out       []map[string]any
 	nodeOps   []NodeOp
 	nseq      int
+	dseq      int
 	logs      []LogLine
 	seq       int
 	suspended bool
