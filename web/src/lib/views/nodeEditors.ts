@@ -38,6 +38,7 @@ for (const [kind, title] of [
   ['condition', 'Condition editor'],
   ['goal', 'Goal editor'],
   ['process', 'Process editor'],
+  ['method', 'Method editor'],
 ] as const) {
   registerNodeEditor({
     name: kind,

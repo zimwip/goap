@@ -18,6 +18,7 @@
     emptyCondition,
     emptyGoal,
     emptyProcess,
+    emptyMethod,
     walkSteps,
     type Section,
     type SectionItem,
@@ -82,7 +83,7 @@
   const ns = $derived(f.namespace.trim());
   const namespaces = $derived(cat.namespaces());
 
-  const SECTIONS: Section[] = ['processes', 'agents', 'actions', 'conditions', 'goals'];
+  const SECTIONS: Section[] = ['processes', 'methods', 'agents', 'actions', 'conditions', 'goals'];
 
   let pane = $state(untrack(() => tab.params.pane) || 'overview');
   $effect(() => {
@@ -105,7 +106,7 @@
   });
 
   function add(section: Section) {
-    const factories = { agents: emptyAgent, actions: emptyAction, conditions: emptyCondition, goals: emptyGoal, processes: emptyProcess };
+    const factories = { agents: emptyAgent, actions: emptyAction, conditions: emptyCondition, goals: emptyGoal, processes: emptyProcess, methods: emptyMethod };
     (d.form[section] as SectionItem[]).push(factories[section]());
     const list = d.form[section];
     openItem(d, section, list[list.length - 1], true);
@@ -115,6 +116,7 @@
     if ('kind' in it) return it.kind;
     if ('planner' in it) return it.planner;
     if ('expr' in it) return it.expr;
+    if ('for' in it) return `${it.for} · agent ${it.agent || '?'}${it.when ? ` · when ${it.when}` : ''}`;
     if ('steps' in it) return `${walkSteps(it.steps).length} step(s)${it.description ? ` — ${it.description}` : ''}`;
     return it.description;
   }

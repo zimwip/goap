@@ -1,6 +1,7 @@
 package methodology
 
 import (
+	"github.com/zimwip/goap/pkg/domain"
 	"strings"
 	"testing"
 )
@@ -114,7 +115,7 @@ func TestProcessValidation(t *testing.T) {
 		"two methods": {`
 processes:
   - name: x
-    steps: [{name: s, action: do_a, agent: worker}]`, "one method"},
+    steps: [{name: s, action: do_a, agent: worker}]`, "one way"},
 		"unknown action": {`
 processes:
   - name: x
@@ -234,5 +235,66 @@ processes:
 	}
 	if list := c.AgentList(); list[1].Name != "outer" || list[2].Name != "inner" {
 		t.Fatalf("process agents in declaration order: %+v", list)
+	}
+}
+
+func TestMethodsProvideACapabilityPerContext(t *testing.T) {
+	c, issues := compileProcess(t, `
+methods:
+  - name: quick
+    for: finishing
+    agent: worker
+    priority: 5
+    when: 'artifacts.exists(x, x.type == "urgent")'
+    guidance: Do it quickly
+    references: [{ref: "doc:QUICK"}]
+  - {name: thorough, for: finishing, agent: worker, description: Do it well}
+processes:
+  - name: flow
+    steps:
+      - {name: finish, method: finishing, pre: {a: true}}
+`)
+	if len(issues) > 0 {
+		t.Fatal(issues)
+	}
+	a, _ := c.Action("flow/finish")
+	if a.Builtin != BuiltinStep || a.Params["capability"] != "finishing" || !a.Effects["c"] || !a.Pre["a"] {
+		t.Fatalf("a method step runs the chosen method, done by what the methods' goals share: %+v", a)
+	}
+	var bb domain.Blackboard
+	if got := c.MethodsFor("finishing", bb); len(got) != 1 || got[0].Name != "thorough" || got[0].AgentGoal != "all" {
+		t.Fatalf("outside its context a method does not apply: %+v", got)
+	}
+	bb.Change.Items = []domain.ChangeItem{{ID: "i1", Kind: domain.KindArtifact, Type: "urgent"}}
+	if got := c.MethodsFor("finishing", bb); len(got) != 2 || got[0].Name != "quick" {
+		t.Fatalf("the highest priority applicable method comes first: %+v", got)
+	}
+	if info, _ := c.StepByPath("flow/finish"); info.Method() != MethodCapability || info.Capability != "finishing" {
+		t.Fatalf("step %+v", info)
+	}
+}
+
+func TestMethodValidation(t *testing.T) {
+	cases := map[string]struct{ yaml, want string }{
+		"no actor": {`
+methods: [{name: m, for: f}]
+processes: [{name: x, steps: [{name: s, method: f}]}]`, "names its actor"},
+		"unknown capability": {`
+methods: [{name: m, for: f, agent: worker}]
+processes: [{name: x, steps: [{name: s, method: g}]}]`, `no valid method provides "g"`},
+		"bad context": {`
+methods: [{name: m, for: f, agent: worker, when: "nope("}]
+processes: [{name: x, steps: [{name: s, method: f}]}]`, "methods[0].when"},
+		"unknown goal": {`
+methods: [{name: m, for: f, agent: worker, goal: nope}]
+processes: [{name: x, steps: [{name: s, method: f}]}]`, `"nope" is not a goal of agent worker`},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			_, issues := compileProcess(t, tc.yaml)
+			if !strings.Contains(issues.Error(), tc.want) {
+				t.Fatalf("want %q in %v", tc.want, issues)
+			}
+		})
 	}
 }

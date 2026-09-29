@@ -5,7 +5,7 @@
 // lists become text, JSON params become text. `toForm` / `fromForm` convert
 // between this model and the proto message.
 
-import type { Action, Agent, Issue, Lifecycle, LifecycleState, LifecycleTransition, LinkType, DocumentReference, Methodology, MethodologyProcess, NodeType, ProcessStep, SearchProperty, Struct, Trigger } from './api';
+import type { Action, Agent, Issue, Lifecycle, LifecycleState, LifecycleTransition, LinkType, DocumentReference, Methodology, MethodologyMethod, MethodologyProcess, NodeType, ProcessStep, SearchProperty, Struct, Trigger } from './api';
 
 export interface CondRow {
   cond: string;
@@ -174,7 +174,7 @@ export interface GoalForm extends Identified {
 }
 
 /** How a step is done (ADR 0034). */
-export type StepMethod = 'manual' | 'steps' | 'action' | 'actions' | 'agent' | 'process';
+export type StepMethod = 'manual' | 'steps' | 'action' | 'actions' | 'agent' | 'process' | 'capability';
 export const STEP_METHODS: { id: StepMethod; label: string }[] = [
   { id: 'manual', label: 'By hand (described only)' },
   { id: 'steps', label: 'Sub-steps' },
@@ -182,6 +182,7 @@ export const STEP_METHODS: { id: StepMethod; label: string }[] = [
   { id: 'actions', label: 'Alternative actions (the planner chooses)' },
   { id: 'agent', label: 'An agent (plans towards a goal)' },
   { id: 'process', label: 'A nested process' },
+  { id: 'capability', label: 'A method (chosen by context)' },
 ];
 
 export interface StepForm {
@@ -197,6 +198,8 @@ export interface StepForm {
   goal: string;
   /** "<process>" or "<methodology>/<process>" */
   process: string;
+  /** the capability provided by methods */
+  capability: string;
   pre: CondRow[];
   done: CondRow[];
   references: ReferenceForm[];
@@ -224,6 +227,25 @@ export interface ProcessForm extends Identified {
   steps: StepForm[];
 }
 
+export interface MethodForm extends Identified {
+  name: string;
+  /** the capability it provides */
+  for: string;
+  /** CEL condition of its context */
+  when: string;
+  priority: number;
+  description: string;
+  guidance: string;
+  /** one item per line */
+  checklist: string;
+  /** comma separated */
+  deliverables: string;
+  references: ReferenceForm[];
+  /** the actor */
+  agent: string;
+  goal: string;
+}
+
 export interface MethodologyForm {
   name: string;
   version: string;
@@ -235,11 +257,12 @@ export interface MethodologyForm {
   goals: GoalForm[];
   agents: AgentForm[];
   processes: ProcessForm[];
+  methods: MethodForm[];
 }
 
 /** Sections whose elements open in a tab. */
-export type Section = 'agents' | 'actions' | 'conditions' | 'goals' | 'processes';
-export type SectionItem = AgentForm | ActionForm | ConditionForm | GoalForm | ProcessForm;
+export type Section = 'agents' | 'actions' | 'conditions' | 'goals' | 'processes' | 'methods';
+export type SectionItem = AgentForm | ActionForm | ConditionForm | GoalForm | ProcessForm | MethodForm;
 
 export const ACTION_KINDS = ['llm', 'script', 'tool', 'human', 'builtin', 'abstract'] as const;
 export const SCRIPT_LANGUAGES = ['javascript', 'go'] as const;
@@ -320,6 +343,7 @@ export const emptyStep = (name = ''): StepForm => ({
   agent: '',
   goal: '',
   process: '',
+  capability: '',
   pre: [],
   done: [],
   references: [],
@@ -327,6 +351,20 @@ export const emptyStep = (name = ''): StepForm => ({
   checklist: '',
   deliverables: '',
   steps: [],
+});
+export const emptyMethod = (): MethodForm => ({
+  uid: newUid(),
+  name: '',
+  for: '',
+  when: '',
+  priority: 0,
+  description: '',
+  guidance: '',
+  checklist: '',
+  deliverables: '',
+  references: [],
+  agent: '',
+  goal: '',
 });
 export const emptyProcess = (): ProcessForm => ({ uid: newUid(), name: '', description: '', examples: '', references: [], steps: [emptyStep('first')] });
 export const emptyTrigger = (): TriggerForm => ({
@@ -354,6 +392,7 @@ export function emptyForm(): MethodologyForm {
     goals: [],
     agents: [],
     processes: [],
+    methods: [],
   };
 }
 
@@ -599,6 +638,7 @@ export function toForm(m: Methodology): MethodologyForm {
   const gu = uids(m.goals);
   const agu = uids(m.agents);
   const pu = uids(m.processes);
+  const mu = uids(m.methods);
   return {
     name: m.name ?? '',
     version: m.version ?? '',
@@ -628,6 +668,20 @@ export function toForm(m: Methodology): MethodologyForm {
       references: refsToForm(p.references),
       steps: (p.steps ?? []).map(stepToForm),
     })),
+    methods: (m.methods ?? []).map((x, i) => ({
+      uid: mu[i],
+      name: x.name ?? '',
+      for: x.for ?? '',
+      when: x.when ?? '',
+      priority: x.priority ?? 0,
+      description: x.description ?? '',
+      guidance: x.guidance ?? '',
+      checklist: (x.checklist ?? []).join('\n'),
+      deliverables: (x.deliverables ?? []).join(', '),
+      references: refsToForm(x.references),
+      agent: x.agent ?? '',
+      goal: x.goal ?? '',
+    })),
   };
 }
 
@@ -637,6 +691,7 @@ function stepMethod(s: ProcessStep): StepMethod {
   if (s.actions?.length) return 'actions';
   if (s.agent) return 'agent';
   if (s.process) return 'process';
+  if (s.method) return 'capability';
   return 'manual';
 }
 
@@ -652,6 +707,7 @@ function stepToForm(s: ProcessStep): StepForm {
     agent: s.agent ?? '',
     goal: s.goal ?? '',
     process: s.process ?? '',
+    capability: s.method ?? '',
     pre: rows(s.pre),
     done: rows(s.done),
     references: refsToForm(s.references),
@@ -729,6 +785,9 @@ export function stepFromForm(s: StepForm): ProcessStep {
       break;
     case 'process':
       put(o, 'process', s.process.trim());
+      break;
+    case 'capability':
+      put(o, 'method', s.capability.trim());
       break;
   }
   return o;
@@ -915,6 +974,32 @@ export function fromForm(f: MethodologyForm): { methodology: Methodology; issues
       return o;
     }),
   );
+  put(
+    m,
+    'methods',
+    f.methods.map((x) => {
+      const o: MethodologyMethod = {};
+      put(o, 'name', x.name.trim());
+      put(o, 'for', x.for.trim());
+      put(o, 'when', x.when.trim());
+      put(o, 'priority', num(Math.trunc(x.priority)));
+      put(o, 'description', x.description.trim());
+      put(o, 'guidance', x.guidance.trim());
+      put(
+        o,
+        'checklist',
+        x.checklist
+          .split('\n')
+          .map((y) => y.trim())
+          .filter(Boolean),
+      );
+      put(o, 'deliverables', csv(x.deliverables));
+      put(o, 'references', refsFromForm(x.references));
+      put(o, 'agent', x.agent.trim());
+      put(o, 'goal', x.goal.trim());
+      return o;
+    }),
+  );
   return { methodology: m, issues };
 }
 
@@ -968,8 +1053,10 @@ export function renameReferences(f: MethodologyForm, section: Section, from: str
       for (const t of ag.triggers) if (t.goal === from) t.goal = to;
     }
     for (const s of steps) if (s.goal === from) s.goal = to;
+    for (const x of f.methods) if (x.goal === from) x.goal = to;
   } else if (section === 'agents') {
     for (const s of steps) if (s.agent === from) s.agent = to;
+    for (const x of f.methods) if (x.agent === from) x.agent = to;
   } else if (section === 'processes') {
     const self = f.name.trim();
     for (const s of steps) {

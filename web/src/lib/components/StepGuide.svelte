@@ -14,6 +14,7 @@
 <div class="guide">
   <div class="where">
     Step <strong>{context.name}</strong> of the process <strong>{context.process}</strong>
+    {#if context.method}with the method <strong>{context.method}</strong>{/if}
     <span class="hint mono">{context.path}</span>
   </div>
   {#if context.description}<p class="desc">{context.description}</p>{/if}

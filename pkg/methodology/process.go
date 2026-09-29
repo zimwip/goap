@@ -79,6 +79,9 @@ type Step struct {
 	Goal  string `yaml:"goal,omitempty" json:"goal,omitempty"`
 	// Process nested in the step: "<process>" of this methodology or "<methodology>/<process>".
 	Process string `yaml:"process,omitempty" json:"process,omitempty"`
+	// Capability names what the step needs done; the methods providing it (`for`) say how, per context, and which
+	// agent acts (ADR 0035 §1). YAML: `method: <capability>`.
+	Capability string `yaml:"method,omitempty" json:"method,omitempty"`
 }
 
 // Step methods.
@@ -108,6 +111,8 @@ func (s Step) Method() string {
 		return MethodAgent
 	case s.Process != "":
 		return MethodProcess
+	case s.Capability != "":
+		return MethodCapability
 	}
 	return MethodManual
 }
@@ -151,7 +156,7 @@ type stepCriteria struct{ entry, done map[string]bool }
 
 // compileProcesses validates the processes and generates what runs them. actions are the compiled actions (effects
 // include the expectations), known the condition names.
-func (m *Methodology) compileProcesses(add func(path, format string, args ...any), actions map[string]Action, known map[string]bool, agents map[string]Agent) compiledProcesses {
+func (m *Methodology) compileProcesses(add func(path, format string, args ...any), actions map[string]Action, known map[string]bool, agents map[string]Agent, methods compiledMethods) compiledProcesses {
 	out := compiledProcesses{criteria: map[string]stepCriteria{}}
 	names := map[string]bool{}
 	for i, p := range m.Processes {
@@ -179,7 +184,7 @@ func (m *Methodology) compileProcesses(add func(path, format string, args ...any
 	if m.checkProcessCycles(add) {
 		return out
 	}
-	w := &stepWalker{m: m, add: add, actions: actions, known: known, agents: agents, root: &out, done: map[string]*processCriteria{}}
+	w := &stepWalker{m: m, add: add, actions: actions, known: known, agents: agents, methods: methods, root: &out, done: map[string]*processCriteria{}}
 	for i, p := range m.Processes {
 		if names[p.Name] {
 			w.process(i)
@@ -281,6 +286,7 @@ type stepWalker struct {
 	actions map[string]Action
 	known   map[string]bool
 	agents  map[string]Agent
+	methods compiledMethods
 	out     *compiledProcesses // what the process being generated adds
 	root    *compiledProcesses // what every process adds
 	// done holds the criteria of the processes generated so far (nil while one is being generated)
@@ -328,13 +334,13 @@ func (w *stepWalker) walk(steps []Step, path, prefix string, inherited map[strin
 // step generates one step and returns its exit criteria.
 func (w *stepWalker) step(s Step, sp, path string, need map[string]bool) map[string]bool {
 	methods := 0
-	for _, set := range []bool{len(s.Steps) > 0, s.Action != "", len(s.Actions) > 0, s.Agent != "", s.Process != ""} {
+	for _, set := range []bool{len(s.Steps) > 0, s.Action != "", len(s.Actions) > 0, s.Agent != "", s.Process != "", s.Capability != ""} {
 		if set {
 			methods++
 		}
 	}
 	if methods > 1 {
-		w.add(sp, "a step is done by one method: sub-steps, an action, an agent or a process")
+		w.add(sp, "a step is done by one way: sub-steps, an action, an agent, a process or a method")
 		return nil
 	}
 	if s.Goal != "" && s.Agent == "" {
@@ -434,6 +440,20 @@ func (w *stepWalker) step(s Step, sp, path string, need map[string]bool) map[str
 		}
 		gen.Kind, gen.Builtin = KindBuiltin, BuiltinStep
 		gen.Params = map[string]any{"step": path, "methodology": other, "agent": proc, "goal": proc}
+	case MethodCapability:
+		candidates := w.m.methodsFor(s.Capability, w.methods.goals)
+		if len(candidates) == 0 {
+			w.add(sp+".method", "no valid method provides %q (methods[].for)", s.Capability)
+			return nil
+		}
+		if done == nil {
+			if done = sharedCriteria(candidates, w.methods.goals); len(done) == 0 {
+				w.add(sp+".done", "the methods providing %q reach nothing in common: state the exit criteria of the step", s.Capability)
+				return nil
+			}
+		}
+		gen.Kind, gen.Builtin = KindBuiltin, BuiltinStep
+		gen.Params = map[string]any{"step": path, "capability": s.Capability}
 	case MethodManual:
 		gen.Kind = KindHuman
 		gen.Instructions = s.Instructions

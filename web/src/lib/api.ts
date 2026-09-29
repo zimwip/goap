@@ -410,6 +410,8 @@ export interface ProcessStep {
   goal?: string;
   /** nested process: "<process>" or "<methodology>/<process>" */
   process?: string;
+  /** the capability the step needs done, provided by methods */
+  method?: string;
 }
 
 /** Process (ADR 0034): the steps that reach an objective, run by an agent of its name towards a goal of its name. */
@@ -420,6 +422,27 @@ export interface MethodologyProcess {
   /** reference documents that describe the process */
   references?: DocumentReference[];
   steps?: ProcessStep[];
+}
+
+/**
+ * Method (ADR 0035 §1): the documentary reference of how a step capability is carried out in a context, naming the
+ * agent that acts.
+ */
+export interface MethodologyMethod {
+  name?: string;
+  /** the capability it provides */
+  for?: string;
+  /** CEL condition of its context (empty: always) */
+  when?: string;
+  priority?: number;
+  description?: string;
+  guidance?: string;
+  checklist?: string[];
+  deliverables?: string[];
+  references?: DocumentReference[];
+  /** the actor: an agent of the methodology, and the goal it reaches (default: its only goal) */
+  agent?: string;
+  goal?: string;
 }
 
 /** A reference document: "doc:<key>" (a document of the graph), "<mcp>:<path>" (a document repository) or a URL. */
@@ -441,6 +464,7 @@ export interface Methodology {
   goals?: Goal[];
   agents?: Agent[];
   processes?: MethodologyProcess[];
+  methods?: MethodologyMethod[];
   createdAt?: string;
   updatedAt?: string;
   publishedAt?: string;
@@ -955,6 +979,8 @@ export interface StepContext {
   checklist?: string[];
   deliverables?: string[];
   references?: DocumentReference[];
+  /** the method chosen to carry the step out */
+  method?: string;
 }
 
 /** Where a run stands in the steps of the process its agent runs (ADR 0035 §3). */
@@ -991,6 +1017,8 @@ export interface StepProgress {
   checklist?: string[];
   references?: DocumentReference[];
   steps?: StepProgress[];
+  /** the method chosen for a step that names a capability */
+  chosen?: string;
 }
 
 export interface Step {

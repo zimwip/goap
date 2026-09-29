@@ -214,7 +214,7 @@ inside one namespace.
 | Phase | Content |
 |---|---|
 | 1 ✅ | Process progress (§3): `Engine.Progress`, `GetProcessProgress`, shown on the run and the change (nested processes unfold); guidance / checklist / deliverables on steps (§2), the step's context on its human tasks (`HumanTask.context`), in the system prompt of its LLM actions and `{{ .Step }}`, and passed to the sub-agent of an agent or process step |
-| 2 | Methods (§1): declaration, selection by context in `process.step`, sdlc `build` / `deploy` / `test` as methods |
+| 2 ✅ | Methods (§1): `methods` (capability `for`, context `when`, `priority`, guidance, checklist, deliverables, references, `agent` + `goal`), steps naming a capability (`method:`), the choice in `process.step` (applicable, highest priority, agent runnable by the unit; kept when the step resumes), recorded as the step's specialization and shown in the progress, the method's guidance added to the step context of its agent; node type `methodology@Method` (meta-domain 1.2.0), Method tab in the IDE; sdlc 0.5.3 designs by `solution_design` (architect) or `functional_design` (designer). Methods of other methodologies providing a capability: not yet |
 | 3 | Roles (§2): methodology roles, role held in a unit, `hasRoleIn`, step resources, task addressees, Access screen |
 | 4 | Documents (§5) and companion changes (§6) |
 | 5 | Operations (§4): `shipped` stage, standard changes, deployment waves recorded per environment, `EffectiveIn`, operating processes per scope, version pinning |

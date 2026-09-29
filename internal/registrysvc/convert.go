@@ -41,6 +41,10 @@ func ToPB(r Record) *registryv1.Methodology {
 		}
 		out.Agents = append(out.Agents, pa)
 	}
+	for _, me := range m.Methods {
+		out.Methods = append(out.Methods, &registryv1.Method{Name: me.Name, For: me.For, When: me.When, Priority: int32(me.Priority), Description: me.Description,
+			Guidance: me.Guidance, Checklist: me.Checklist, Deliverables: me.Deliverables, References: refsToPB(me.References), Agent: me.Agent, Goal: me.Goal})
+	}
 	for _, p := range m.Processes {
 		out.Processes = append(out.Processes, &registryv1.Process{Name: p.Name, Description: p.Description, Examples: p.Examples, Steps: stepsToPB(p.Steps), References: refsToPB(p.References)})
 	}
@@ -51,7 +55,7 @@ func stepsToPB(steps []methodology.Step) []*registryv1.Step {
 	out := make([]*registryv1.Step, 0, len(steps))
 	for _, s := range steps {
 		out = append(out, &registryv1.Step{Name: s.Name, Description: s.Description, Instructions: s.Instructions, Pre: s.Pre, Done: s.Done,
-			References: refsToPB(s.References), Guidance: s.Guidance, Checklist: s.Checklist, Deliverables: s.Deliverables, Steps: stepsToPB(s.Steps), Action: s.Action, Actions: s.Actions, Agent: s.Agent, Goal: s.Goal, Process: s.Process})
+			References: refsToPB(s.References), Guidance: s.Guidance, Checklist: s.Checklist, Deliverables: s.Deliverables, Method: s.Capability, Steps: stepsToPB(s.Steps), Action: s.Action, Actions: s.Actions, Agent: s.Agent, Goal: s.Goal, Process: s.Process})
 	}
 	return out
 }
@@ -63,7 +67,7 @@ func stepsFromPB(steps []*registryv1.Step) []methodology.Step {
 	out := make([]methodology.Step, 0, len(steps))
 	for _, s := range steps {
 		out = append(out, methodology.Step{Name: s.Name, Description: s.Description, Instructions: s.Instructions, Pre: nilIfEmpty(s.Pre), Done: nilIfEmpty(s.Done),
-			References: refsFromPB(s.References), Guidance: s.Guidance, Checklist: nilIfNone(s.Checklist), Deliverables: nilIfNone(s.Deliverables), Steps: stepsFromPB(s.Steps), Action: s.Action, Actions: nilIfNone(s.Actions), Agent: s.Agent, Goal: s.Goal, Process: s.Process})
+			References: refsFromPB(s.References), Guidance: s.Guidance, Checklist: nilIfNone(s.Checklist), Deliverables: nilIfNone(s.Deliverables), Capability: s.Method, Steps: stepsFromPB(s.Steps), Action: s.Action, Actions: nilIfNone(s.Actions), Agent: s.Agent, Goal: s.Goal, Process: s.Process})
 	}
 	return out
 }
@@ -139,6 +143,10 @@ func FromPB(p *registryv1.Methodology) methodology.Methodology {
 				Schedule: t.Schedule, Goal: t.Goal, Intent: t.Intent, Target: t.Target, Roles: nilIfNone(t.Roles), Enabled: t.Enabled})
 		}
 		m.Agents = append(m.Agents, ma)
+	}
+	for _, me := range p.Methods {
+		m.Methods = append(m.Methods, methodology.Method{Name: me.Name, For: me.For, When: me.When, Priority: int(me.Priority), Description: me.Description,
+			Guidance: me.Guidance, Checklist: nilIfNone(me.Checklist), Deliverables: nilIfNone(me.Deliverables), References: refsFromPB(me.References), Agent: me.Agent, Goal: me.Goal})
 	}
 	for _, p := range p.Processes {
 		m.Processes = append(m.Processes, methodology.Process{Name: p.Name, Description: p.Description, Examples: nilIfNone(p.Examples), Steps: stepsFromPB(p.Steps), References: refsFromPB(p.References)})

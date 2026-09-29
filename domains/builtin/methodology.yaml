@@ -1,5 +1,5 @@
 name: methodology
-version: 1.1.0
+version: 1.2.0
 description: >
   Built-in meta-domain (ADR 0012 §4, ADR 0023): the definition of a methodology version, one node per element, in the
   "methodology" namespace. Its types are in every type catalogue, before anything is loaded from the registry.
@@ -10,6 +10,8 @@ nodeTypes:
   - {name: Condition, editor: condition, description: "Condition of a methodology version", properties: [name, description, expr, position, removed]}
   - {name: Goal, editor: goal, description: "Goal of a methodology version", properties: [name, description, pre, position, removed]}
   # ADR 0034: the steps and sub-steps that reach an objective, each done by an action, an agent, a nested process or a person
+  # ADR 0035 §1: how a step capability is carried out in a context, and the agent that acts
+  - {name: Method, editor: method, description: "Method of a methodology version: the reference of how a capability is carried out in a context", properties: [name, for, when, priority, description, guidance, checklist, deliverables, references, agent, goal, position, removed]}
   - {name: Process, editor: process, description: "Process of a methodology version: its steps and sub-steps", properties: [name, description, examples, references, steps, position, removed]}
   # an MCP tool the self-observation asks the platform for (ADR 0011): not part of a definition
   - {name: ToolRequest, description: "MCP tool requested by the self-observation of a methodology", properties: [name, description, motivation, span]}

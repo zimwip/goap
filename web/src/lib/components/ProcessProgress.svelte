@@ -56,7 +56,7 @@
       <span class="chip {s.state}">{LABEL[s.state ?? ''] ?? s.state}</span>
       <strong>{s.name}</strong>
       {#if s.description}<span class="hint ell">{s.description}</span>{/if}
-      {#if s.target}<span class="hint mono">{s.method} {s.target}</span>{/if}
+      {#if s.target}<span class="hint mono">{s.method} {s.target}{s.chosen ? ` → ${s.chosen}` : ''}</span>{/if}
     </div>
     {#if s.state === 'waiting'}
       <div class="note">Waiting for {waitingText(s)}.</div>

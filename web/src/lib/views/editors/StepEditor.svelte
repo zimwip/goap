@@ -36,6 +36,8 @@
   const agent = $derived(f.agents.find((a) => a.name === step.agent));
   const goalNames = $derived((agent && agent.goals.length ? agent.goals : f.goals.map((g) => g.name)).filter(Boolean));
   const processNames = $derived(f.processes.map((p) => p.name).filter(Boolean));
+  const capabilities = $derived([...new Set(f.methods.map((m) => m.for.trim()).filter(Boolean))]);
+  const providers = $derived(f.methods.filter((m) => m.for.trim() && m.for === step.capability));
   // the declared conditions and the conditions of the steps done once they have run
   const conditions = $derived([...d.conditionOptions, ...stepConditionNames(f)]);
   const listId = $derived(`procs-${step.key}`);
@@ -52,6 +54,8 @@
         return s.agent ? `agent ${s.agent}${s.goal ? ` → ${s.goal}` : ''}` : 'agent ?';
       case 'process':
         return s.process ? `process ${s.process}` : 'process ?';
+      case 'capability':
+        return s.capability ? `method ${s.capability}` : 'method ?';
     }
     return 'by hand';
   }
@@ -153,6 +157,20 @@
             placeholder="release_train"
           />
           <datalist id={listId}>{#each processNames as p (p)}<option value={p}></option>{/each}</datalist>
+        </div>
+      {:else if step.method === 'capability'}
+        <div class="field">
+          <label for="{step.key}-cap">Capability <span class="opt">(the methods providing it say how, per context, and which agent acts)</span></label>
+          <select id="{step.key}-cap" bind:value={step.capability} class:bad={d.bad(`${path}.method`)} data-path="{path}.method">
+            <option value="">— capability —</option>
+            {#if step.capability && !capabilities.includes(step.capability)}<option value={step.capability}>{step.capability} (no method)</option>{/if}
+            {#each capabilities as c (c)}<option value={c}>{c}</option>{/each}
+          </select>
+          {#if providers.length}
+            <p class="hint">
+              Methods: {#each providers as m, i (m.uid)}{i ? ', ' : ''}<code>{m.name}</code> ({m.when ? `when ${m.when}` : 'always'}{m.priority ? `, priority ${m.priority}` : ''}, agent {m.agent || '?'}){/each}
+            </p>
+          {/if}
         </div>
       {/if}
 

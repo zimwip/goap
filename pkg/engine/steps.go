@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/zimwip/goap/pkg/authz"
@@ -28,6 +29,15 @@ func RunStep(ctx context.Context, ac ActionContext) (ActionResult, error) {
 	if methodologyName == "" {
 		methodologyName = ac.Process.Methodology
 	}
+	sc := ac.Step
+	method := ""
+	if capability, _ := ac.Action.Params["capability"].(string); capability != "" {
+		me, err := h.e.chooseMethod(ctx, ac, capability)
+		if err != nil {
+			return ActionResult{}, fmt.Errorf("step %s: %w", step, err)
+		}
+		agent, goal, method, sc = me.Agent, me.AgentGoal, me.Name, sc.withMethod(me.Method)
+	}
 	if step == "" || agent == "" || goal == "" {
 		return ActionResult{}, fmt.Errorf("process.step %s: step, agent and goal are required", ac.Action.Name)
 	}
@@ -38,9 +48,9 @@ func RunStep(ctx context.Context, ac ActionContext) (ActionResult, error) {
 	if ac.Blackboard.Change.Intent != "" {
 		intent += "\n\n(change: " + ac.Blackboard.Change.Intent + ")"
 	}
-	res, err := h.e.runChildStep(authz.With(ctx, ac.Process.Initiator), h, ac.Action.Name+"#step", methodologyName, agent, goal, intent, false, ac.Step)
+	res, err := h.e.runChildStep(authz.With(ctx, ac.Process.Initiator), h, ac.Action.Name+"#step", methodologyName, agent, goal, intent, false, sc)
 	if errors.Is(err, dsl.ErrSuspended) {
-		return ActionResult{Suspended: true, Child: h.waitingOn, Output: fmt.Sprintf("step %s: %s/%s at work", step, methodologyName, agent)}, nil
+		return ActionResult{Suspended: true, Child: h.waitingOn, Method: method, Output: fmt.Sprintf("step %s: %s/%s at work", step, methodologyName, agent)}, nil
 	}
 	if err != nil {
 		return ActionResult{}, fmt.Errorf("step %s: %w", step, err)
@@ -50,16 +60,75 @@ func RunStep(ctx context.Context, ac ActionContext) (ActionResult, error) {
 	}
 	return ActionResult{
 		Items: []ItemInput{{Kind: string(domain.KindArtifact), Type: methodology.ArtifactStepDone,
-			Data: map[string]any{"step": step, "process": res.ProcessID, "agent": agent, "goal": goal}}},
+			Data: map[string]any{"step": step, "process": res.ProcessID, "agent": agent, "goal": goal, "method": method}}},
+		Method: method,
 		Output: fmt.Sprintf("step %s done by %s/%s (process %s)", step, methodologyName, agent, res.ProcessID),
 	}, nil
+}
+
+// chooseMethod picks the method of a capability for the step being run (ADR 0035 §1): the applicable one (its context
+// holds on the blackboard) with the highest priority whose agent the unit holding the change can run (the MCPs the
+// agent declares are bound, design rule 5). A step resumed after its sub-agent keeps the sub-agent it started.
+func (e *Engine) chooseMethod(ctx context.Context, ac ActionContext, capability string) (methodology.MethodChoice, error) {
+	m, err := e.Methodologies.Methodology(ctx, ac.Process.Methodology)
+	if err != nil {
+		return methodology.MethodChoice{}, err
+	}
+	if _, resumed := ac.Process.Children[ac.Action.Name+"#step"]; resumed {
+		// the sub-agent started for the step is at work: keep the method it was started for
+		for i := len(ac.Process.Steps) - 1; i >= 0; i-- {
+			if st := ac.Process.Steps[i]; st.Action == ac.Action.Name && st.Specialization != "" {
+				for _, me := range m.MethodsFor(capability, ac.Blackboard) {
+					if me.Name == st.Specialization {
+						return me, nil
+					}
+				}
+				if me, ok := m.MethodByName(st.Specialization); ok {
+					return methodology.MethodChoice{Method: me, AgentGoal: m.MethodGoal(me.Name)}, nil
+				}
+			}
+		}
+	}
+	candidates := m.MethodsFor(capability, ac.Blackboard)
+	var bound map[string]bool
+	for _, me := range candidates {
+		ag, _ := m.Agent(me.Agent)
+		if len(ag.MCPs) > 0 && bound == nil {
+			if bound, err = e.boundMCPs(ctx, ac.Process); err != nil {
+				return methodology.MethodChoice{}, err
+			}
+		}
+		if !slices.ContainsFunc(ag.MCPs, func(n string) bool { return !bound[n] }) {
+			return me, nil
+		}
+	}
+	return methodology.MethodChoice{}, fmt.Errorf("no method for %q applies here (%d in this context, none the unit can run)", capability, len(candidates))
+}
+
+// withMethod adds what the chosen method says to the step's context: the method is the documentary reference of how
+// the step is carried out here.
+func (s *StepContext) withMethod(me methodology.Method) *StepContext {
+	out := StepContext{Method: me.Name}
+	if s != nil {
+		out = *s
+		out.Method = me.Name
+	}
+	if me.Guidance != "" {
+		out.Guidance = strings.TrimSpace(strings.TrimSpace(out.Guidance) + "\n\n" + me.Guidance)
+	}
+	out.Checklist = append(slices.Clone(out.Checklist), me.Checklist...)
+	out.Deliverables = append(slices.Clone(out.Deliverables), me.Deliverables...)
+	out.References = append(slices.Clone(out.References), me.References...)
+	return &out
 }
 
 // StepContext is the step of a process an action or a human task carries out (ADR 0034, ADR 0035 §2): what it is for
 // and how to go about it, for the person doing it or the agent.
 type StepContext struct {
-	Process      string                  `json:"process"`
-	Path         string                  `json:"path"`
+	Process string `json:"process"`
+	Path    string `json:"path"`
+	// Method is the method chosen to carry the step out, whose guidance and references are included.
+	Method       string                  `json:"method,omitempty"`
 	Name         string                  `json:"name"`
 	Description  string                  `json:"description,omitempty"`
 	Guidance     string                  `json:"guidance,omitempty"`
@@ -90,6 +159,9 @@ func (s *StepContext) section() string {
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "\n\nYou are carrying out the step %q of the process %q", s.Path, s.Process)
+	if s.Method != "" {
+		fmt.Fprintf(&b, " with the method %q", s.Method)
+	}
 	if s.Description != "" {
 		fmt.Fprintf(&b, ": %s", s.Description)
 	}
