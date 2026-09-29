@@ -867,6 +867,9 @@ func (e *Engine) executeStep(ctx context.Context, p *Process, m *methodology.Com
 	step := &p.Steps[i]
 	host.record(step)
 	step.Output, step.Sandbox = res.Output, res.Sandbox
+	if res.Method != "" {
+		step.Specialization = res.Method
+	}
 	for _, l := range res.Logs {
 		l.Step = i
 		step.Logs = append(step.Logs, l)

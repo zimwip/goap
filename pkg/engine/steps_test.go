@@ -25,6 +25,15 @@ goals:
   - {name: check_done, pre: {checked: true}}
 agents:
   - {name: checker, actions: [check], goals: [check_done]}
+methods:
+  - name: peer_check
+    for: verification
+    when: 'artifacts.exists(a, a.type == "note")'
+    priority: 10
+    guidance: Check the note with a peer
+    references: [{title: Peer review guide, ref: "doc:PEER"}]
+    agent: checker
+  - {name: self_check, for: verification, agent: checker}
 processes:
   - name: sign_off
     steps:
@@ -33,7 +42,7 @@ processes:
     description: Deliver the change
     steps:
       - {name: approve, process: sign_off, pre: {checked: true}}
-      - {name: verify, agent: checker, pre: {noted: true}}
+      - {name: verify, method: verification, pre: {noted: true}}
       - name: prepare
         steps:
           - {name: note, action: write_note}
@@ -99,6 +108,14 @@ func TestProcessStepsAndNestedProcesses(t *testing.T) {
 	checker, _ := e.Store.Get(ctx, p.Pending.ChildProcessID)
 	if checker.Step == nil || checker.Step.Path != "delivery/verify" || checker.Pending.Context == nil || checker.Pending.Context.Path != "delivery/verify" {
 		t.Fatalf("the sub-agent of a step carries the step to its tasks: %+v %+v", checker.Step, checker.Pending)
+	}
+	// the step names a capability: the applicable method with the highest priority was chosen, and its guidance
+	// and references reach the agent that acts
+	if c := checker.Pending.Context; c.Method != "peer_check" || !strings.Contains(c.Guidance, "with a peer") || len(c.References) != 1 {
+		t.Fatalf("the method's guidance reaches its agent: %+v", c)
+	}
+	if v := findStep(mustProgress(t, e, p.ID).Steps, "delivery/verify"); v.Chosen != "peer_check" || v.Target != "verification" {
+		t.Fatalf("the progress shows the chosen method: %+v", v)
 	}
 	if checker.Agent != "checker" || checker.Goal != "check_done" || checker.ChangeID != p.ChangeID || checker.Pending == nil || checker.Pending.Action != "check" {
 		t.Fatalf("unexpected checker %+v", checker)

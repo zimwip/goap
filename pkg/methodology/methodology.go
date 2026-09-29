@@ -39,6 +39,9 @@ type Methodology struct {
 	// Processes describe how the objective of a change is reached, as steps and sub-steps done by actions, agents,
 	// nested processes or people (ADR 0034); each is run by an agent and reaches a goal of its name.
 	Processes []Process `yaml:"processes,omitempty" json:"processes,omitempty"`
+	// Methods are the documentary references of how a step capability is carried out in a context, each naming the
+	// agent that acts (ADR 0035 §1).
+	Methods []Method `yaml:"methods,omitempty" json:"methods,omitempty"`
 	// Types resolves the qualified type references of the methodology (the type catalogue, set by Resolve). Nil: the
 	// references are only checked for their form.
 	Types TypeSet `yaml:"-" json:"-"`
@@ -323,6 +326,9 @@ type Compiled struct {
 	whens *condition.Set
 	// processes are the actions, goals and agents generated for the processes (ADR 0034)
 	processes compiledProcesses
+	// methods are the valid methods and the guards of their contexts (ADR 0035 §1)
+	methods      compiledMethods
+	methodGuards *condition.Set
 }
 
 // Issue is a validation problem located by a field path such as
@@ -668,7 +674,8 @@ func (m *Methodology) compile() (*Compiled, Issues) {
 	if len(m.Agents) == 0 && len(m.Goals) > 0 {
 		agents[DefaultAgent] = Agent{Name: DefaultAgent, Description: m.Description, Planner: PlannerGOAP}
 	}
-	procs := m.compileProcesses(add, actions, known, agents)
+	meths := m.compileMethods(add, agents)
+	procs := m.compileProcesses(add, actions, known, agents, meths)
 	defs = append(defs, procs.conditions...)
 	for _, a := range procs.actions {
 		actions[a.Name] = a
@@ -692,7 +699,12 @@ func (m *Methodology) compile() (*Compiled, Issues) {
 	if err != nil {
 		return nil, Issues{{Message: err.Error()}}
 	}
-	return &Compiled{Methodology: m, Conditions: set, actions: actions, utilities: uset, agents: agents, whens: wset, processes: procs}, nil
+	mset, err := condition.Compile(meths.guards)
+	if err != nil {
+		return nil, Issues{{Message: err.Error()}}
+	}
+	return &Compiled{Methodology: m, Conditions: set, actions: actions, utilities: uset, agents: agents, whens: wset, processes: procs,
+		methods: meths, methodGuards: mset}, nil
 }
 
 // Action returns an action by name.

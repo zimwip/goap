@@ -50,6 +50,8 @@ type ActionResult struct {
 	// VarsSet holds process-private variables set by the action (engine-owned
 	// execution state, not a graph write) — merged into Process.Vars.
 	VarsSet map[string]any
+	// Method is the method a step chose to carry it out (ADR 0035 §1), recorded as the step's specialization.
+	Method string
 }
 
 // Executor runs one kind of action.

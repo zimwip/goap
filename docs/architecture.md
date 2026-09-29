@@ -925,7 +925,11 @@ reference documents (`doc:<key>`, `<mcp>:<path>`, URL). An agent or nested
 process step is the builtin `process.step`: a sub-agent on the same change, so processes nest. A step's `guidance`,
 `checklist`, `deliverables` and `references` reach whoever carries it out: its human tasks carry the step
 (`HumanTask.context`), its LLM actions get it in their system prompt (and `{{ .Step }}`), and the sub-agent of an agent
-or process step inherits it. `GetProcessProgress` computes where a run stands in its process (each step done, skipped,
+or process step inherits it. A step can also name a **capability** (`method: design`): the methodology's **methods** ([ADR 0035](adr/0035-methods-roles-operations-documents.md))
+are the documentary references of how a capability is carried out in a context (`for`, `when`, `priority`, guidance,
+references, deliverables) and each names the **agent** that acts; `process.step` runs the agent of the applicable
+method with the highest priority, with the method's guidance in its step context.
+`GetProcessProgress` computes where a run stands in its process (each step done, skipped,
 active, waiting for someone, ready, to do with what it still needs, or blocked), shown on the run and the change.
 
 See `methodologies/examples/impact-analysis.yaml` for the full executable example, and

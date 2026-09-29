@@ -1,5 +1,5 @@
 name: sdlc
-version: 0.5.2
+version: 0.5.3
 description: >
   Software Development Life Cycle (SDLC) on the ALM repository: needs →
   requirements → functions → components → build artifacts → applications →
@@ -694,6 +694,11 @@ agents:
     actions: [identify_scope, select_scope, propagate_impacts, specify_requirements, write_requirements,
               trace_requirements, trace_manually, allocate_functions, design_solution, write_design, check_design]
     goals: [design]
+  - name: designer
+    description: Designer — functional allocation and a design written by hand, checked for consistency
+    planner: goap
+    actions: [allocate_functions, write_design, check_design]
+    goals: [design]
   - name: builder
     description: Integrator — build the components according to their technology
     examples: ["build the components", "build"]
@@ -711,6 +716,31 @@ agents:
     examples: ["deliver an enhancement", "develop a feature end-to-end"]
     planner: goap
     goals: [deliver]
+
+# Methods (ADR 0035 §1): the documentary references of how a step capability is carried out in a context; each names
+# the agent that acts. A step names the capability (`method: design`); the applicable method with the highest priority
+# is chosen at execution, and its guidance and references reach its agent.
+methods:
+  - name: solution_design
+    for: design
+    description: Architecture of the components, interfaces, flows and data the change touches
+    when: 'changeImpacts.exists(n, "alm@Component" in n.types)'
+    priority: 10
+    guidance: >
+      Components are impacted: design their evolution (new or modified components, interfaces, flows, data), keep
+      every new requirement realized by a function, and record the design decisions.
+    references:
+      - {title: Architecture standard, ref: "document-repository:sdlc/architecture-standard.md"}
+    deliverables: [DesignDossier]
+    agent: architect
+  - name: functional_design
+    for: design
+    description: Functional allocation and a design note written by hand, when no component is touched
+    guidance: >
+      No component is impacted: allocate the requirements to functions and write a short design note (what changes
+      in behaviour, which functions realize it).
+    deliverables: [DesignNote]
+    agent: designer
 
 # The route of a change, described as steps and sub-steps with the precision the methodology has for each (ADR 0034):
 # a step names the action that does it, alternatives the planner chooses among, an agent that plans it, a process it
@@ -756,9 +786,9 @@ processes:
               - {name: traceability, actions: [trace_requirements, trace_manually]}
               - {name: test_plan, action: plan_tests}
       - name: design
-        description: Allocate the functions and design the solution (the architect plans it) once the requirements are specified
+        description: Allocate the functions and design the solution, by the method that fits the change, once the requirements are specified
         pre: {propagated: true, requirements_specified: true}
-        agent: architect
+        method: design
       - name: build
         description: Build every component in scope, according to its technology (once the design is checked)
         action: build

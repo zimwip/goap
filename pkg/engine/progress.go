@@ -43,6 +43,8 @@ type StepProgress struct {
 	// Method: steps, action, agent, process or manual; Target what it runs (action names, agent, process).
 	Method string `json:"method"`
 	Target string `json:"target,omitempty"`
+	// Chosen is the method chosen for a step that names a capability.
+	Chosen string `json:"chosen,omitempty"`
 	State  string `json:"state"`
 	// Missing are the entry conditions that do not hold ("name" when expected true, "!name" when expected false).
 	Missing []string `json:"missing,omitempty"`
@@ -113,6 +115,8 @@ func stepProgress(p *Process, s methodology.StepInfo) StepProgress {
 		}
 	case methodology.MethodProcess:
 		sp.Target = s.Process
+	case methodology.MethodCapability:
+		sp.Target = s.Capability
 	}
 	sp.Missing = missing(p, s.Entry, s.Exit)
 	done := len(s.Exit) > 0 && p.World.Satisfies(s.Exit)
@@ -143,6 +147,12 @@ func stepProgress(p *Process, s methodology.StepInfo) StepProgress {
 					sp.ChildProcessIDs = append(sp.ChildProcessIDs, c)
 				}
 			}
+		}
+	}
+	for i := len(p.Steps) - 1; i >= 0 && sp.Method == methodology.MethodCapability; i-- {
+		if slices.Contains(s.Planned, p.Steps[i].Action) && p.Steps[i].Specialization != "" {
+			sp.Chosen = p.Steps[i].Specialization // the method chosen for it
+			break
 		}
 	}
 	pending := p.Pending != nil && slices.Contains(s.Planned, p.Pending.Action)

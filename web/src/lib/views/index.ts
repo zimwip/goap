@@ -41,6 +41,7 @@ import ConditionTab from './editors/ConditionTab.svelte';
 import { walkSteps } from '../methodologyForm';
 import GoalTab from './editors/GoalTab.svelte';
 import ProcessTab from './editors/ProcessTab.svelte';
+import MethodTab from './editors/MethodTab.svelte';
 import RunTab from './editors/RunTab.svelte';
 import ChangeTab from './editors/ChangeTab.svelte';
 import BaselineTab from './editors/BaselineTab.svelte';
@@ -279,10 +280,10 @@ registerView({
   properties: algorithmProps('instance'),
 });
 
-const ITEM_TITLES: Record<string, string> = { agent: 'Agent', action: 'Action', condition: 'Condition', goal: 'Goal', process: 'Process' };
-const ITEM_VIEWS = { agent: AgentTab, action: ActionTab, condition: ConditionTab, goal: GoalTab, process: ProcessTab };
+const ITEM_TITLES: Record<string, string> = { agent: 'Agent', action: 'Action', condition: 'Condition', goal: 'Goal', process: 'Process', method: 'Method' };
+const ITEM_VIEWS = { agent: AgentTab, action: ActionTab, condition: ConditionTab, goal: GoalTab, process: ProcessTab, method: MethodTab };
 
-for (const kind of ['agent', 'action', 'condition', 'goal', 'process'] as const) {
+for (const kind of ['agent', 'action', 'condition', 'goal', 'process', 'method'] as const) {
   const section = KIND_SECTION[kind];
   const itemOf = (t: Tab) => {
     const d = peekDraft(draftGroup(t));
@@ -323,6 +324,7 @@ for (const kind of ['agent', 'action', 'condition', 'goal', 'process'] as const)
       }
       if ('expr' in it) rows.push(['Expression', it.expr]);
       if ('value' in it) rows.push(['Value', String(it.value)]);
+      if ('for' in it) rows.push(['Capability', it.for], ['Agent', it.agent], ['Context', it.when || 'always'], ['Priority', String(it.priority)]);
       if ('steps' in it) rows.push(['Steps', String(walkSteps(it.steps).length)], ['References', String(it.references.length)]);
       return { title: it.name || '(unnamed)', subtitle: ITEM_TITLES[kind], rows };
     },

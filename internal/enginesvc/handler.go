@@ -277,7 +277,7 @@ func stepProgressToPB(steps []engine.StepProgress) []*enginev1.StepProgress {
 	for _, s := range steps {
 		out = append(out, &enginev1.StepProgress{Path: s.Path, Name: s.Name, Description: s.Description, Method: s.Method, Target: s.Target,
 			State: s.State, Missing: s.Missing, Runs: int32(s.Runs), ChildProcessIds: s.ChildProcessIDs, Waiting: s.Waiting, Permission: s.Permission,
-			Guidance: s.Guidance, Checklist: s.Checklist, References: docRefsToPB(s.References), Steps: stepProgressToPB(s.Steps)})
+			Guidance: s.Guidance, Checklist: s.Checklist, References: docRefsToPB(s.References), Steps: stepProgressToPB(s.Steps), Chosen: s.Chosen})
 	}
 	return out
 }
@@ -287,7 +287,7 @@ func stepContextToPB(c *engine.StepContext) *enginev1.StepContext {
 		return nil
 	}
 	return &enginev1.StepContext{Process: c.Process, Path: c.Path, Name: c.Name, Description: c.Description, Guidance: c.Guidance,
-		Checklist: c.Checklist, Deliverables: c.Deliverables, References: docRefsToPB(c.References)}
+		Checklist: c.Checklist, Deliverables: c.Deliverables, References: docRefsToPB(c.References), Method: c.Method}
 }
 
 func docRefsToPB(refs []methodology.Reference) []*enginev1.DocumentReference {

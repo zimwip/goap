@@ -159,6 +159,9 @@ func (m *Methodology) lintTypeRefs(add func(path, format string, args ...any)) {
 	for i, c := range m.Conditions {
 		scan(fmt.Sprintf("conditions[%d].expr", i), c.Expr)
 	}
+	for i, me := range m.Methods {
+		scan(fmt.Sprintf("methods[%d].when", i), me.When)
+	}
 	for i, a := range m.Actions {
 		path := fmt.Sprintf("actions[%d]", i)
 		scan(path+".when", a.When)

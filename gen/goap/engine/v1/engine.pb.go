@@ -975,15 +975,17 @@ func (x *HumanTask) GetContext() *StepContext {
 }
 
 type StepContext struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Process       string                 `protobuf:"bytes,1,opt,name=process,proto3" json:"process,omitempty"`
-	Path          string                 `protobuf:"bytes,2,opt,name=path,proto3" json:"path,omitempty"`
-	Name          string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
-	Description   string                 `protobuf:"bytes,4,opt,name=description,proto3" json:"description,omitempty"`
-	Guidance      string                 `protobuf:"bytes,5,opt,name=guidance,proto3" json:"guidance,omitempty"`
-	Checklist     []string               `protobuf:"bytes,6,rep,name=checklist,proto3" json:"checklist,omitempty"`
-	Deliverables  []string               `protobuf:"bytes,7,rep,name=deliverables,proto3" json:"deliverables,omitempty"`
-	References    []*DocumentReference   `protobuf:"bytes,8,rep,name=references,proto3" json:"references,omitempty"`
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	Process      string                 `protobuf:"bytes,1,opt,name=process,proto3" json:"process,omitempty"`
+	Path         string                 `protobuf:"bytes,2,opt,name=path,proto3" json:"path,omitempty"`
+	Name         string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
+	Description  string                 `protobuf:"bytes,4,opt,name=description,proto3" json:"description,omitempty"`
+	Guidance     string                 `protobuf:"bytes,5,opt,name=guidance,proto3" json:"guidance,omitempty"`
+	Checklist    []string               `protobuf:"bytes,6,rep,name=checklist,proto3" json:"checklist,omitempty"`
+	Deliverables []string               `protobuf:"bytes,7,rep,name=deliverables,proto3" json:"deliverables,omitempty"`
+	References   []*DocumentReference   `protobuf:"bytes,8,rep,name=references,proto3" json:"references,omitempty"`
+	// the method chosen to carry the step out (its guidance and references are included)
+	Method        string `protobuf:"bytes,9,opt,name=method,proto3" json:"method,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1072,6 +1074,13 @@ func (x *StepContext) GetReferences() []*DocumentReference {
 		return x.References
 	}
 	return nil
+}
+
+func (x *StepContext) GetMethod() string {
+	if x != nil {
+		return x.Method
+	}
+	return ""
 }
 
 // A reference document: "doc:<key>" (a document of the graph), "<mcp>:<path>" (a document repository) or a URL.
@@ -2807,12 +2816,14 @@ type StepProgress struct {
 	Runs            int32    `protobuf:"varint,8,opt,name=runs,proto3" json:"runs,omitempty"`
 	ChildProcessIds []string `protobuf:"bytes,9,rep,name=child_process_ids,json=childProcessIds,proto3" json:"child_process_ids,omitempty"`
 	// waiting: the kind of the task (input, approval) and the permission an approval needs
-	Waiting       string               `protobuf:"bytes,10,opt,name=waiting,proto3" json:"waiting,omitempty"`
-	Permission    string               `protobuf:"bytes,11,opt,name=permission,proto3" json:"permission,omitempty"`
-	Guidance      string               `protobuf:"bytes,12,opt,name=guidance,proto3" json:"guidance,omitempty"`
-	Checklist     []string             `protobuf:"bytes,13,rep,name=checklist,proto3" json:"checklist,omitempty"`
-	References    []*DocumentReference `protobuf:"bytes,14,rep,name=references,proto3" json:"references,omitempty"`
-	Steps         []*StepProgress      `protobuf:"bytes,15,rep,name=steps,proto3" json:"steps,omitempty"`
+	Waiting    string               `protobuf:"bytes,10,opt,name=waiting,proto3" json:"waiting,omitempty"`
+	Permission string               `protobuf:"bytes,11,opt,name=permission,proto3" json:"permission,omitempty"`
+	Guidance   string               `protobuf:"bytes,12,opt,name=guidance,proto3" json:"guidance,omitempty"`
+	Checklist  []string             `protobuf:"bytes,13,rep,name=checklist,proto3" json:"checklist,omitempty"`
+	References []*DocumentReference `protobuf:"bytes,14,rep,name=references,proto3" json:"references,omitempty"`
+	Steps      []*StepProgress      `protobuf:"bytes,15,rep,name=steps,proto3" json:"steps,omitempty"`
+	// the method chosen for a step that names a capability
+	Chosen        string `protobuf:"bytes,16,opt,name=chosen,proto3" json:"chosen,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2950,6 +2961,13 @@ func (x *StepProgress) GetSteps() []*StepProgress {
 		return x.Steps
 	}
 	return nil
+}
+
+func (x *StepProgress) GetChosen() string {
+	if x != nil {
+		return x.Chosen
+	}
+	return ""
 }
 
 type ListProcessesRequest struct {
@@ -3593,7 +3611,7 @@ const file_goap_engine_v1_engine_proto_rawDesc = "" +
 	" \x01(\tR\x06flowId\x12\x1d\n" +
 	"\n" +
 	"node_types\x18\v \x03(\tR\tnodeTypes\x125\n" +
-	"\acontext\x18\f \x01(\v2\x1b.goap.engine.v1.StepContextR\acontext\"\x92\x02\n" +
+	"\acontext\x18\f \x01(\v2\x1b.goap.engine.v1.StepContextR\acontext\"\xaa\x02\n" +
 	"\vStepContext\x12\x18\n" +
 	"\aprocess\x18\x01 \x01(\tR\aprocess\x12\x12\n" +
 	"\x04path\x18\x02 \x01(\tR\x04path\x12\x12\n" +
@@ -3604,7 +3622,8 @@ const file_goap_engine_v1_engine_proto_rawDesc = "" +
 	"\fdeliverables\x18\a \x03(\tR\fdeliverables\x12A\n" +
 	"\n" +
 	"references\x18\b \x03(\v2!.goap.engine.v1.DocumentReferenceR\n" +
-	"references\"U\n" +
+	"references\x12\x16\n" +
+	"\x06method\x18\t \x01(\tR\x06method\"U\n" +
 	"\x11DocumentReference\x12\x14\n" +
 	"\x05title\x18\x01 \x01(\tR\x05title\x12\x10\n" +
 	"\x03ref\x18\x02 \x01(\tR\x03ref\x12\x18\n" +
@@ -3771,7 +3790,7 @@ const file_goap_engine_v1_engine_proto_rawDesc = "" +
 	"\x05error\x18\x06 \x01(\tR\x05error\x122\n" +
 	"\x05steps\x18\a \x03(\v2\x1c.goap.engine.v1.StepProgressR\x05steps\x12\x12\n" +
 	"\x04done\x18\b \x01(\x05R\x04done\x12\x14\n" +
-	"\x05total\x18\t \x01(\x05R\x05total\"\xe3\x03\n" +
+	"\x05total\x18\t \x01(\x05R\x05total\"\xfb\x03\n" +
 	"\fStepProgress\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
@@ -3792,7 +3811,8 @@ const file_goap_engine_v1_engine_proto_rawDesc = "" +
 	"\n" +
 	"references\x18\x0e \x03(\v2!.goap.engine.v1.DocumentReferenceR\n" +
 	"references\x122\n" +
-	"\x05steps\x18\x0f \x03(\v2\x1c.goap.engine.v1.StepProgressR\x05steps\"e\n" +
+	"\x05steps\x18\x0f \x03(\v2\x1c.goap.engine.v1.StepProgressR\x05steps\x12\x16\n" +
+	"\x06chosen\x18\x10 \x01(\tR\x06chosen\"e\n" +
 	"\x14ListProcessesRequest\x12\x12\n" +
 	"\x04mine\x18\x01 \x01(\bR\x04mine\x12\x1a\n" +
 	"\bstatuses\x18\x02 \x03(\tR\bstatuses\x12\x1d\n" +

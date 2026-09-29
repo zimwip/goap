@@ -29,8 +29,15 @@ func TestProcessesRoundTripThroughPB(t *testing.T) {
 			{Name: "nested", Process: "other/p", Done: map[string]bool{"y": true}},
 			{Name: "sign", Instructions: "sign it", Guidance: "how", Checklist: []string{"one"}, Deliverables: []string{"Report"}},
 			{Name: "alt", Actions: []string{"x", "y"}},
+			{Name: "cap", Capability: "design"},
 		}}}}
 	out := FromPB(ToPB(Record{Methodology: in}))
+	in.Methods = []methodology.Method{{Name: "m", For: "design", When: "true", Priority: 3, Guidance: "g", Checklist: []string{"c"},
+		Deliverables: []string{"D"}, References: []methodology.Reference{{Ref: "doc:X"}}, Agent: "a", Goal: "g"}}
+	out = FromPB(ToPB(Record{Methodology: in}))
+	if !reflect.DeepEqual(out.Methods, in.Methods) {
+		t.Fatalf("methods changed through PB:\n%+v\n%+v", in.Methods, out.Methods)
+	}
 	if !reflect.DeepEqual(out.Processes, in.Processes) {
 		t.Fatalf("processes changed through PB:\n%+v\n%+v", in.Processes, out.Processes)
 	}

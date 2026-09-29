@@ -291,6 +291,26 @@ message Methodology {
   string namespace = 17;
   // how the objective of a change is reached, as steps and sub-steps (ADR 0034)
   repeated Process processes = 18;
+  // how a step capability is carried out per context, each naming the agent that acts (ADR 0035 §1)
+  repeated Method methods = 19;
+}
+
+// A method: the documentary reference of how a capability is carried out in a context, and the agent that acts.
+message Method {
+  string name = 1;
+  // the capability it provides
+  string for = 2;
+  // CEL condition of its context (empty: always)
+  string when = 3;
+  int32 priority = 4;
+  string description = 5;
+  string guidance = 6;
+  repeated string checklist = 7;
+  repeated string deliverables = 8;
+  repeated Reference references = 9;
+  // the actor: an agent of the methodology, and the goal it reaches (default: its only goal)
+  string agent = 10;
+  string goal = 11;
 }
 
 // A process: the steps that reach an objective, run by an agent of its name towards a goal of its name (ADR 0034).
@@ -340,6 +360,8 @@ message Step {
   string guidance = 15;
   repeated string checklist = 16;
   repeated string deliverables = 17;
+  // the capability the step needs done, provided by methods (ADR 0035 §1)
+  string method = 18;
 }
 
 message GoalSummary {
