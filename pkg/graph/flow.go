@@ -107,31 +107,7 @@ func (g *Graph) decideFlow(ctx context.Context, id domain.ChangeID, flow, op, by
 		if err != nil {
 			return err
 		}
-		cur, ok := c.Flow(flow)
-		if !ok {
-			return fmt.Errorf("flow %s: %w", flow, ErrNotFound)
-		}
-		if cur.Status != domain.FlowOpen {
-			return fmt.Errorf("flow %s is %s: %w", flow, cur.Status, ErrConflict)
-		}
-		ev := domain.FlowEvent{Op: op, Flow: flow, By: by}
-		switch op {
-		case domain.FlowAdoptOp:
-			if cur.Parent != "" && c.FlowStatusOf(cur.Parent) != domain.FlowAdopted {
-				return fmt.Errorf("flow %s: its parent %s is not adopted: %w", flow, cur.Parent, ErrConflict)
-			}
-			if len(cur.CompetesWith) > 0 {
-				return fmt.Errorf("flow %s competes with the adopted flow %s (it replaces the same items): relaunch or discard it: %w", flow, cur.CompetesWith[0], ErrConflict)
-			}
-			if err := g.adoptNodes(ctx, tx, c, cur, by); err != nil {
-				return err
-			}
-		case domain.FlowDiscardOp:
-			if err := g.discardNodes(ctx, tx, c, cur, by); err != nil {
-				return err
-			}
-		}
-		if err := g.flowEvent(ctx, tx, id, ev); err != nil {
+		if err := g.decideFlowTx(ctx, tx, c, flow, op, by); err != nil {
 			return err
 		}
 		full, err := tx.Change(ctx, id)
@@ -142,6 +118,34 @@ func (g *Graph) decideFlow(ctx context.Context, id domain.ChangeID, flow, op, by
 		return nil
 	})
 	return
+}
+
+// decideFlowTx adopts or discards an open flow of c.
+func (g *Graph) decideFlowTx(ctx context.Context, tx Tx, c domain.Change, flow, op, by string) error {
+	cur, ok := c.Flow(flow)
+	if !ok {
+		return fmt.Errorf("flow %s: %w", flow, ErrNotFound)
+	}
+	if cur.Status != domain.FlowOpen {
+		return fmt.Errorf("flow %s is %s: %w", flow, cur.Status, ErrConflict)
+	}
+	switch op {
+	case domain.FlowAdoptOp:
+		if cur.Parent != "" && c.FlowStatusOf(cur.Parent) != domain.FlowAdopted {
+			return fmt.Errorf("flow %s: its parent %s is not adopted: %w", flow, cur.Parent, ErrConflict)
+		}
+		if len(cur.CompetesWith) > 0 {
+			return fmt.Errorf("flow %s competes with the adopted flow %s (it replaces the same items): relaunch or discard it: %w", flow, cur.CompetesWith[0], ErrConflict)
+		}
+		if err := g.adoptNodes(ctx, tx, c, cur, by); err != nil {
+			return err
+		}
+	case domain.FlowDiscardOp:
+		if err := g.discardNodes(ctx, tx, c, cur, by); err != nil {
+			return err
+		}
+	}
+	return g.flowEvent(ctx, tx, c.ID, domain.FlowEvent{Op: op, Flow: flow, By: by})
 }
 
 // AdoptFlow adopts an open flow branch: its items count, the items it

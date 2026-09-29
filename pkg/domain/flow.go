@@ -24,11 +24,32 @@ const (
 	FlowDiscarded FlowStatus = "discarded"
 )
 
-// Flow event operations.
+// Flow event operations. activate / deactivate / evaluate apply to options (ADR 0032 §6).
 const (
-	FlowOpenOp    = "open"
-	FlowAdoptOp   = "adopt"
-	FlowDiscardOp = "discard"
+	FlowOpenOp       = "open"
+	FlowAdoptOp      = "adopt"
+	FlowDiscardOp    = "discard"
+	FlowActivateOp   = "activate"
+	FlowDeactivateOp = "deactivate"
+	FlowEvaluateOp   = "evaluate"
+)
+
+// MainFlow names the main flow explicitly. An empty flow is the active option of the change when it has one,
+// else the main flow (ADR 0032 §6).
+const MainFlow = "main"
+
+// OptionSpec describes an option of a change (ADR 0009 §3): a hypothesis explored on a flow branch of its own.
+type OptionSpec struct {
+	Name       string `json:"name"`
+	Hypothesis string `json:"hypothesis,omitempty"`
+}
+
+// Option statuses (ADR 0009 §3), derived from the flow of the option.
+const (
+	OptionExploring = "exploring"
+	OptionEvaluated = "evaluated"
+	OptionSelected  = "selected"
+	OptionRejected  = "rejected"
 )
 
 // FlowEvent is the payload of a KindFlow item.
@@ -51,6 +72,10 @@ type FlowEvent struct {
 	StaleExecutions []string `json:"staleExecutions,omitempty"`
 	// By is the principal that adopted or discarded the branch.
 	By string `json:"by,omitempty"`
+	// Option makes the opened flow an option of the change (open only).
+	Option *OptionSpec `json:"option,omitempty"`
+	// Comment is the evaluation of an option (evaluate).
+	Comment string `json:"comment,omitempty"`
 }
 
 func (e *FlowEvent) validate() error {
@@ -58,7 +83,7 @@ func (e *FlowEvent) validate() error {
 		return fmt.Errorf("flow item requires flowEvent.flow")
 	}
 	switch e.Op {
-	case FlowOpenOp, FlowAdoptOp, FlowDiscardOp:
+	case FlowOpenOp, FlowAdoptOp, FlowDiscardOp, FlowActivateOp, FlowDeactivateOp, FlowEvaluateOp:
 		return nil
 	}
 	return fmt.Errorf("unknown flow op %q", e.Op)
@@ -84,11 +109,32 @@ type Flow struct {
 	// the same items, or whose replaced items its candidates build on: an open flow
 	// that competes cannot be adopted any more, it is relaunched or discarded.
 	CompetesWith []string `json:"competesWith,omitempty"`
+	// Option is set when the flow is an option of the change (ADR 0009 §3); Evaluation is its last evaluation.
+	Option     *OptionSpec `json:"option,omitempty"`
+	Evaluation string      `json:"evaluation,omitempty"`
+	Evaluated  bool        `json:"evaluated,omitempty"`
+	// Active tells the option is the one the change works on (ADR 0032 §6).
+	Active bool `json:"active,omitempty"`
+}
+
+// OptionStatus is the status of an option: exploring, evaluated, selected (adopted) or rejected (discarded).
+func (f Flow) OptionStatus() string {
+	switch {
+	case f.Status == FlowAdopted:
+		return OptionSelected
+	case f.Status == FlowDiscarded:
+		return OptionRejected
+	case f.Evaluated:
+		return OptionEvaluated
+	}
+	return OptionExploring
 }
 
 type flowIndex struct {
 	list []Flow
 	byID map[string]int
+	// active is the open option the change works on ("" = the main flow)
+	active string
 }
 
 func (fx *flowIndex) get(id string) (Flow, bool) {
@@ -139,8 +185,25 @@ func (c *Change) flows() *flowIndex {
 			}
 			fx.byID[e.Flow] = len(fx.list)
 			openAt[e.Flow] = pos
-			fx.list = append(fx.list, Flow{ID: e.Flow, Parent: e.Parent, ForkAfter: e.ForkAfter, FromStep: e.FromStep, Execution: e.Execution,
-				Process: e.Process, Reason: e.Reason, Status: FlowOpen, Stale: slices.Clone(e.Stale), StaleExecutions: slices.Clone(e.StaleExecutions), OpenedAt: it.CreatedAt})
+			f := Flow{ID: e.Flow, Parent: e.Parent, ForkAfter: e.ForkAfter, FromStep: e.FromStep, Execution: e.Execution,
+				Process: e.Process, Reason: e.Reason, Status: FlowOpen, Stale: slices.Clone(e.Stale), StaleExecutions: slices.Clone(e.StaleExecutions), OpenedAt: it.CreatedAt}
+			if e.Option != nil {
+				o := *e.Option
+				f.Option = &o
+			}
+			fx.list = append(fx.list, f)
+		case FlowActivateOp:
+			if i, ok := fx.byID[e.Flow]; ok && fx.list[i].Status == FlowOpen && fx.list[i].Option != nil {
+				fx.active = e.Flow
+			}
+		case FlowDeactivateOp:
+			if fx.active == e.Flow {
+				fx.active = ""
+			}
+		case FlowEvaluateOp:
+			if i, ok := fx.byID[e.Flow]; ok && fx.list[i].Status == FlowOpen {
+				fx.list[i].Evaluated, fx.list[i].Evaluation = true, e.Comment
+			}
 		case FlowAdoptOp, FlowDiscardOp:
 			if i, ok := fx.byID[e.Flow]; ok && fx.list[i].Status == FlowOpen {
 				f := &fx.list[i]
@@ -148,6 +211,9 @@ func (c *Change) flows() *flowIndex {
 				decidedAt[e.Flow] = pos
 				if e.Op == FlowDiscardOp {
 					f.Status = FlowDiscarded
+				}
+				if fx.active == e.Flow {
+					fx.active = "" // a decided option is not worked on any more
 				}
 			}
 		}
@@ -177,8 +243,32 @@ func (c *Change) flows() *flowIndex {
 			}
 		}
 	}
+	if i, ok := fx.byID[fx.active]; ok {
+		fx.list[i].Active = true
+	}
 	c.flx, c.flxN = fx, len(c.Items)
 	return fx
+}
+
+// ActiveOption is the open option the change works on, "" when it works on its main flow (ADR 0032 §6). It is read
+// from the flow events: on the whole change, not on the view of a flow (which carries none).
+func (c *Change) ActiveOption() string { return c.flows().active }
+
+// Options lists the options of the change (the flows opened as options), oldest first.
+func (c *Change) Options() []Flow {
+	return slices.DeleteFunc(c.Flows(), func(f Flow) bool { return f.Option == nil })
+}
+
+// ResolveFlow is the flow a call works on: "main" names the main flow, an empty flow is the active option (else the
+// main flow), any other is itself.
+func (c *Change) ResolveFlow(flow string) string {
+	switch flow {
+	case MainFlow:
+		return ""
+	case "":
+		return c.ActiveOption()
+	}
+	return flow
 }
 
 // Flows lists the flow branches of the change, oldest first.

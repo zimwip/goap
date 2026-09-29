@@ -76,6 +76,7 @@ func (g *Graph) AddNodes(ctx context.Context, id domain.ChangeID, nodes []domain
 			if batch[i].ID == "" {
 				batch[i].ID = domain.ChangeImpactID(g.newID())
 			}
+			batch[i].Flow = c.ResolveFlow(batch[i].Flow) // no flow: the active option (ADR 0032 §6)
 			known[batch[i].ID] = true
 		}
 		for _, cn := range batch {
@@ -226,6 +227,7 @@ func (g *Graph) ReviewNodeOn(ctx context.Context, id domain.ChangeID, flow, exec
 		if err != nil {
 			return err
 		}
+		flow := c.ResolveFlow(flow)
 		if flow != "" {
 			if _, ok := c.Flow(flow); !ok {
 				return fmt.Errorf("flow %s: %w", flow, ErrNotFound)
@@ -306,7 +308,7 @@ func (g *Graph) WriteNode(ctx context.Context, id domain.ChangeID, node domain.C
 				return err
 			}
 		}
-		flow := w.Flow
+		flow := c.ResolveFlow(w.Flow)
 		if flow != "" {
 			if _, ok := c.Flow(flow); !ok {
 				return fmt.Errorf("flow %s: %w", flow, ErrNotFound)
