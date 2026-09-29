@@ -36,6 +36,7 @@ func (g *Graph) ChangeView(ctx context.Context, id domain.ChangeID, flow, level 
 		if err != nil {
 			return err
 		}
+		flow := c.ResolveFlow(flow) // no flow: the active option
 		if flow != "" {
 			if _, ok := c.Flow(flow); !ok {
 				return fmt.Errorf("flow %s of change %s: %w", flow, id, ErrNotFound)

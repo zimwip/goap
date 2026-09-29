@@ -21,7 +21,7 @@ func (g *Graph) ValidateBoard(ctx context.Context, id domain.ChangeID, flow stri
 		if err != nil {
 			return err
 		}
-		out, err = g.validateBoard(ctx, tx, c, flow)
+		out, err = g.validateBoard(ctx, tx, c, c.ResolveFlow(flow))
 		return err
 	})
 	return

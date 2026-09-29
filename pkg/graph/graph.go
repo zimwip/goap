@@ -230,29 +230,38 @@ func (g *Graph) Baselines(ctx context.Context, namespace string) (bs []domain.Ba
 
 // BaselineGraph returns the nodes and links of a baseline.
 func (g *Graph) BaselineGraph(ctx context.Context, id domain.BaselineID) (nodes []domain.Node, links []domain.Link, err error) {
-	err = g.repo.InTx(ctx, func(tx Tx) error {
-		b, err := tx.Baseline(ctx, id)
-		if err != nil {
-			return err
-		}
-		nodes, err = tx.NodesIn(ctx, id, "")
-		if err != nil {
-			return err
-		}
-		for _, n := range nodes {
-			out, err := tx.OutLinks(ctx, n.Ref())
-			if err != nil {
-				return err
-			}
-			for _, l := range out {
-				if b.Contains(l.To) {
-					links = append(links, l)
-				}
-			}
-		}
-		return nil
-	})
+	err = g.repo.InTx(ctx, func(tx Tx) error { nodes, links, err = baselineGraphTx(ctx, tx, id); return err })
 	return
+}
+
+func baselineGraphTx(ctx context.Context, tx Tx, id domain.BaselineID) ([]domain.Node, []domain.Link, error) {
+	b, err := tx.Baseline(ctx, id)
+	if err != nil {
+		return nil, nil, err
+	}
+	nodes, err := tx.NodesIn(ctx, id, "")
+	if err != nil {
+		return nil, nil, err
+	}
+	links, err := linksWithin(ctx, tx, b, nodes)
+	return nodes, links, err
+}
+
+// linksWithin returns the outgoing links of the nodes whose target is in b.
+func linksWithin(ctx context.Context, tx Tx, b domain.Baseline, nodes []domain.Node) ([]domain.Link, error) {
+	var links []domain.Link
+	for _, n := range nodes {
+		out, err := tx.OutLinks(ctx, n.Ref())
+		if err != nil {
+			return nil, err
+		}
+		for _, l := range out {
+			if b.Contains(l.To) {
+				links = append(links, l)
+			}
+		}
+	}
+	return links, nil
 }
 
 // SuspectLinks returns the links whose source is in the baseline but whose
@@ -478,6 +487,11 @@ func (g *Graph) AddItems(ctx context.Context, id domain.ChangeID, items []domain
 			known[it.ID] = true
 		}
 		items = slices.Clone(items)
+		for i := range items {
+			if items[i].Kind != domain.KindFlow {
+				items[i].Flow = c.ResolveFlow(items[i].Flow) // no flow: the active option (ADR 0032 §6)
+			}
+		}
 		batchFlow := ""
 		if len(items) > 0 {
 			batchFlow = items[0].Flow
@@ -538,6 +552,7 @@ func (g *Graph) BlackboardIn(ctx context.Context, id domain.ChangeID, flow strin
 		if err != nil {
 			return err
 		}
+		flow := c.ResolveFlow(flow) // no flow: the active option (ADR 0032 §6)
 		nodes, err := g.newFlowNodes(tx, c, flow).nodes(ctx) // the change impacts as the flow sees them (ADR 0025)
 		if err != nil {
 			return err

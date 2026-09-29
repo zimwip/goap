@@ -240,6 +240,25 @@ func (g *Graph) adoptNodes(ctx context.Context, tx Tx, c domain.Change, f domain
 		plans[id] = plan{desired, head}
 		order = append(order, id)
 	}
+	// A flow that invalidated nothing (an option) and wrote every node it changes, each derived from the head of the
+	// change branch, lands as is: its versions join the change branch, no copy (ADR 0032 §2). Otherwise its versions
+	// are copied as adopt versions (a reset to an older version needs a new one).
+	join := len(f.StaleExecutions) == 0
+	for _, id := range order {
+		if p := plans[id]; p.desired == nil || domain.BranchOf(p.desired.Branch) != flowBranch {
+			join = false
+		}
+	}
+	if join {
+		for _, id := range order {
+			d := *plans[id].desired
+			if err := tx.JoinBranch(ctx, d.Ref(), changeBranch); err != nil {
+				return err
+			}
+			newRefs[id] = d
+		}
+		order = nil
+	}
 	// 1. the versions
 	for _, id := range order {
 		p := plans[id]
