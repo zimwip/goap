@@ -129,6 +129,19 @@ REQ-1  v1(main) ── v3(main, revise) ───────────── 
   (`ChangeGraph`). Options are compared node by node at `written` or `accepted` (`CompareOptions`), evaluated,
   then one is selected (its flow is adopted: its versions join the change branch, no copy) and the others are
   rejected. The IDE shows them in the Options pane of a change.
+- **Decision loops** ([ADR 0009](adr/0009-branches-options-decisions.md) §4): a **decision point** is a question the
+  change must settle, usually which option (`OpenDecision`). Its decider (an agent, or a person) rules it:
+  *decided* (an option, a confidence, a justification) or *undecidable* (why, and the questions to answer first).
+  Open questions **block** the point; they are answered by hand or by `decision.investigate`, a builtin that runs one
+  sub-agent per question, whose intent is the question (identification picks the agent in any methodology), and the
+  planner comes back to the decision. An agent ruling below the point's confidence threshold waits for a person's
+  **ratification**; after `maxRounds` rulings that did not settle it, or past its deadline, the point is
+  **escalated**: only a person rules it. A decided point selects its option; `Apply` refuses a change with a
+  pending decision. The points are facts of the main flow (`KindDecisionPoint`, replayed by
+  `Change.DecisionPointsAt`); actions work on them through items of kind `decisionPoint` (LLM, script, human task:
+  a human task's ruling is a person's), scripts through `ctx.decisionPoints()` / `openDecision` / `decide` /
+  `undecidable` / `answer`, agents through the `goap-change` tools `decisions` / `decision` / `rule` / `answer`,
+  people through the Decisions pane of a change (`methodologies/examples/option-decision.yaml` runs the loop).
 
 #### Change axis
 
@@ -170,6 +183,13 @@ Variables exposed to the expression:
 | `decisions`, `artifacts`, `merges` | items filtered by `kind` |
 | `changeImpacts` | the change impacts ([ADR 0024](adr/0024-change-impacts.md)), `{id, key, type, types, intent, rationale, review, reviews, comment, pre, post, landed, planned, hasPost, recheck, props, via}`; `pre`, `post`, `landed` are hydrated node views or `null` |
 | `vars` | free process variables (clarification answers, parameters) |
+| `options`, `activeOption` | the options of the change ([ADR 0032](adr/0032-branches-as-pointers-baselines-as-deltas.md) §6), `{id, name, hypothesis, status (exploring / evaluated / selected / rejected), active, evaluation}`, and the id of the one it works on (`""`: the main flow) |
+| `decisionPoints`, `questions` | the decision points ([ADR 0009](adr/0009-branches-options-decisions.md) §4), `{id, question, status (open / blocked / ratifying / escalated / decided), options, criteria, decider, threshold, rounds, maxRounds, escalation, openQuestions, questions, ruling, option, decidedBy}`, and all their questions `{id, point, text, status (open / answered), answer, answeredBy}` |
+
+**Platform conditions**: every methodology knows `open_questions`, `no_open_questions`, `decision_ready` (a point
+can be ruled now), `decision_pending`, `no_decision_pending`, `ratification_pending`, `decision_escalated`,
+`options_open`, `options_evaluated` and `option_selected` without declaring them (`condition.Platform`); a condition
+it declares under the same name replaces the platform one.
 
 Each node reference of a change impact (`pre`, `post`, `landed`, link endpoints) is **hydrated**:
 `{id, version, key, type, props, out: [{type, to}], in: [{type, from}], latest}`. A condition can thus
@@ -721,8 +741,8 @@ under the parameter name, and that the code can never read. Runs are bounded (30
   allowed tools; the engine plans a `tool` action only when its tool is allowed.
 - **Built-in MCPs** ([ADR 0028](adr/0028-builtin-mcps-and-connectors.md)): the platform as tools, split by concern —
   `goap-graph` (read / glob / grep / links / baselines), `goap-change` (create / read / write / edit / link / retire /
-  note / validate on a change, options / option / activate / evaluate / compare for its options; no apply, no
-  selection), `goap-scheduler` (start / list / get processes, triggers / fire; scope
+  note / validate on a change, options / option / activate / evaluate / compare for its options, decisions /
+  decision / rule / answer for its decision points; no apply, no selection, no ratification), `goap-scheduler` (start / list / get processes, triggers / fire; scope
   `agent`) and
   `goap-admin` (units, users, MCPs, connectors, domains, methodologies). Their connectors
   (`internal/connectors/builtin`) run in the hub and act for the caller (per-type read authorization, the access gate
@@ -926,7 +946,7 @@ docs/                        architecture, ADRs
 | **M4 — advanced change axis** | impact propagation (recursive CTE parameterized by link types), suspect links, baseline diff, merge/rebase of concurrent changesets |
 | **M5 — UX** | ✅ methodology editor (forms, localized anomalies, publishing, versions, YAML import/export), "Access" screen (ABAC policies), approvals · remaining: graph and plan visualization |
 | **M6 — K8s** | Helm charts, engine HPA · ✅ OpenTelemetry observability, sandbox manifests |
-| **M8 — branches and decisions** 🟡 | ADR 0009 (partially implemented) · ✅ graph: per-branch versions, 3-way branch merge, change branches merged at apply (`merge_pending` + `MergeChange`), versions joining branches instead of merge copies, baselines stored as deltas with checkpoints, written / accepted / landed views of a change, options explored on flows with an active option, compared, evaluated, the chosen one selected (ADR 0032) · remaining: earlier conflict detection and merge proposals by agents, change budget, CEL conditions on options, decision loops (questions → analyses); then versioned containers and releases |
+| **M8 — branches and decisions** 🟡 | ADR 0009 (partially implemented) · ✅ graph: per-branch versions, 3-way branch merge, change branches merged at apply (`merge_pending` + `MergeChange`), versions joining branches instead of merge copies, baselines stored as deltas with checkpoints, written / accepted / landed views of a change, options explored on flows with an active option, compared, evaluated, the chosen one selected (ADR 0032), decision points with their loops (questions investigated by sub-agents, ratification, escalation) and the CEL variables and platform conditions on options and decisions (ADR 0009 §4) · remaining: earlier conflict detection and merge proposals by agents, the change budget; then versioned containers and releases |
 | **M9 — self-observation** ✅ | ADR 0011: execution journal on the change axis (ticks, actions, LLM / tool calls, decisions, item provenance), `observer` agent (journal + OpenTelemetry traces → findings → proposals → review → draft), action specialization and type subtyping |
 | **M10 — SDLC** 🟡 | `sdlc` 0.4.0 methodology on the `alm` namespace (ALM domain) (need → requirement → function → component → artifact → application → solution, data, interfaces, flows), build specialized by technology, incremental releases and deployment (dev → test → staging → production, release manager approval), incremental actions · to refine: quality (coverage, security), rollback, freezes / change windows, MCP tools (repositories, CI, artifact registry, deployment) |
 | **M7 — agents** ✅ | agents (goap / utility / hybrid), JS / Go script actions with DSL, sub-agents, sandbox per process, IDE |

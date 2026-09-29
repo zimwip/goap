@@ -115,8 +115,9 @@ children of v1.
 - The baselines written whole before this ADR are compacted to deltas at start (`CompactBaselines`, in the
   background: a baseline's content never changes, so it can run while the graph is in use).
 
-**Implemented**: all of the above. **Not done**: the decision points, questions and decision loops of ADR 0009 §4
-and the CEL conditions on options (`options.all(o, o.status == "evaluated")`).
+**Implemented**: all of the above. The decision points that choose among the options, their loops and the CEL
+conditions on options are ADR 0009 §4 (implemented: a decided point selects its option, and selecting an option by
+hand settles the pending points that chose among the options).
 
 ## Consequences
 - History is no longer rewritten by a merge; `reason = merge` marks only versions with two parents.

@@ -1,6 +1,6 @@
 # ADR 0009 — Version branches, analysis options, decision loops, and merge
 
-**Status**: accepted, partially implemented (see Implementation status) · **Date**: 2026-09 · Extends ADR 0003
+**Status**: accepted, mostly implemented (see Implementation status) · **Date**: 2026-09 · Extends ADR 0003
 (versioning) and the conflict scenario (merge validated by a human, replanning). The version model, the merge and the
 baseline storage are refined by [ADR 0032](0032-branches-as-pointers-baselines-as-deltas.md) (versions joining
 branches, no merge copies, baselines as deltas).
@@ -135,7 +135,22 @@ The change then continues toward its application or its release.
   hypotheses, with an active option the change works on, compared at the written or accepted level, evaluated,
   and the finalization (§5): the selected option is adopted (its versions join the change branch), the others are
   rejected, their branches kept for the audit.
-- **Not done**: the planned part of §2; the CEL conditions on options (`options`); decision points and
-  decision loops (§4: `open_questions` / `no_open_questions`, `investigate`, question / answer);
-  the change budget (complementary decision 4: `budget` in conditions); the decider with a confidence threshold
-  (complementary decision 3); sub-agents of another methodology (a sub-agent runs in its parent's methodology).
+- **Done (§4, complementary decision 3)**: decision points `{question, options, criteria, decider, threshold,
+  maxRounds, deadline}` replayed from facts of the main flow (`KindDecisionPoint`, `pkg/domain/decision.go`), with
+  the statuses `open | blocked | ratifying | escalated | decided` (the ADR's `blocked` is kept; `ratifying` and
+  `escalated` are the confidence threshold and the safeguards). A ruling is *decided* (option, confidence,
+  justification) or *undecidable* (the why, and the questions: open `question`s that block the point); an answer
+  closes a question and the planner comes back to the decision. An agent ruling below the threshold waits for a
+  person's ratification (refusing it counts as a round); after `maxRounds` rulings that did not settle the point,
+  or past its deadline, it is escalated and only a person rules it. A decided point selects its option (§5);
+  `Apply` refuses a change with a pending decision. The CEL variables `options`, `activeOption`, `decisionPoints`,
+  `questions`, and the platform conditions `open_questions` / `no_open_questions` (with `decision_ready`,
+  `decision_pending`, `no_decision_pending`, `ratification_pending`, `decision_escalated`, `options_open`,
+  `options_evaluated`, `option_selected`) known to every methodology without a declaration. The generic
+  `investigate` action is the builtin `decision.investigate`: one sub-agent per open question, whose intent is the
+  question, identified among every methodology (the multi-methodology axis); its outcome answers the question.
+  Actions rule through items of kind `decisionPoint`; a human task's ruling is a person's.
+- **Not done**: the planned part of §2; the change budget (complementary decision 4: `budget` in conditions, and the
+  token budget of a decision point: its safeguards are the rounds and the deadline); `runAgent` of a sub-agent of
+  another methodology from a script (`decision.investigate` identifies across methodologies, `runAgent` stays in
+  the parent's).
