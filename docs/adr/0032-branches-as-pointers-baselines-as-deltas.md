@@ -1,6 +1,6 @@
 # ADR 0032 — Versions on several branches, baselines stored as deltas
 
-**Status**: accepted, partially implemented (see §6) · **Date**: 2026-09 · Extends ADR 0003 (version-to-version
+**Status**: accepted, implemented (see §6) · **Date**: 2026-09 · Extends ADR 0003 (version-to-version
 links), ADR 0009 (branches, options, merge), ADR 0024 (change impacts), ADR 0029 (event-sourced change impacts).
 
 ## Context
@@ -84,16 +84,39 @@ the change, or its starting point before it is applied. A rejected or superseded
 
 ### 6. Options (ADR 0009 §3–5)
 Two versions of a node coexist, each on the branch of its option: `REQ-1@v2` on option A, `REQ-1@v3` on option B, both
-children of v1. An option is seen at `written` or `accepted` while it is explored (§5), compared against the other
-on the nodes either wrote (both fork from the same baseline), and landed only when it is selected: the selection is
-a merge, a pointer move when the change branch did not move (§2). The rejected option's branch is abandoned; its
-versions stay, reachable from its branch, for the audit.
+children of v1.
 
-**Implemented**: §1 to §5. **Not done**: the options themselves (ADR 0009 §3 is not implemented: they are expected to
-reuse the flows, with a pointer to the active option through which the change reads the graph); `ChangeView` is not
-exposed on the API or the built-in MCPs yet; a flow's adoption (ADR 0025 §5) still copies the versions of the flow
-onto the change branch (a reset to an older version needs a version, the common case could join); compacting the
-full copies written before this ADR.
+- An **option is a flow** (ADR 0025) opened as a hypothesis (`OpenOption`: a flow event `open` carrying
+  `option: {name, hypothesis}`), forked from the main flow and invalidating nothing. What it declares, writes and
+  reviews is a candidate of its flow until it is decided; its versions live on its flow branch.
+- **The active pointer**: `activate` / `deactivate` flow events name the option the change works on
+  (`Change.ActiveOption`, `ActivateOption`; "" or `main` goes back to the main flow). Every graph call that names no
+  flow resolves to it (`Change.ResolveFlow`): declaring, writing and reviewing change impacts, adding items, the
+  blackboard, the board check, the views. `main` names the main flow explicitly. So a process running on the main
+  flow, the IDE and the `goap-change` tools all work on the active option without knowing it, and switching the
+  option (as many times as the process needs) is one event. The graph a process reads (prompt `.Baseline`, the
+  script `Host`, `ChangeGraph`) is the active option's view at `written`; the pre version of a new change impact is
+  still the released one (the reference baseline).
+- **Status**: `exploring` → `evaluated` (`EvaluateOption`, an `evaluate` flow event with its comment) →
+  `selected` (the flow adopted) or `rejected` (the flow discarded). A decided option is not active any more.
+- **Comparison** (`CompareOptions`, at `written` or `accepted`): the nodes any open option changed from the main
+  flow, with the version and the properties on each side (both sides fork from the same graph).
+- **Selection** (`SelectOption`) is a decision: the other open options are rejected, then the flow of the selected
+  one is adopted. A flow that invalidated nothing (an option) and wrote every node it changes on top of the head of
+  the change branch is adopted **without copies**: its versions join the change branch (§1). A flow that relaunched
+  steps still writes `adopt` versions (resetting a node to an older version needs a new one). The change is then
+  applied as usual; `Apply` refuses a change with an open option.
+- **Surfaces**: the graph service (`OpenOption`, `ActivateOption`, `EvaluateOption`, `SelectOption`,
+  `RejectOption`, `ListOptions`, `CompareOptions`, `GetChangeView`, `GetChangeGraph`; `ListNodeVersions` reports
+  `joined`), the engine port (`ChangeGraph`, `ChangeView`, the options except selecting and rejecting), the
+  `goap-change` tools `options`, `option`, `activate`, `evaluate`, `compare` (selecting and rejecting stay a
+  decision of the service, not a tool), the Options pane of the change editor and the joined branches in the node
+  history.
+- The baselines written whole before this ADR are compacted to deltas at start (`CompactBaselines`, in the
+  background: a baseline's content never changes, so it can run while the graph is in use).
+
+**Implemented**: all of the above. **Not done**: the decision points, questions and decision loops of ADR 0009 §4
+and the CEL conditions on options (`options.all(o, o.status == "evaluated")`).
 
 ## Consequences
 - History is no longer rewritten by a merge; `reason = merge` marks only versions with two parents.

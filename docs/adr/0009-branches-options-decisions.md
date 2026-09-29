@@ -131,7 +131,11 @@ The change then continues toward its application or its release.
 - **Done**: versions per branch (`branch`, `parents`, `reason`), branches, `latest` per branch, 3-way merge of
   branches (`PlanMerge`, `MergeBranch`), change branches merged at apply with `merge_pending` + `MergeChange`
   (§2), specialization (complementary decision 5), subtyping (complementary decision 6).
-- **Not done**: the planned part of §2; options (§3) and their CEL conditions (`options`); decision points and
-  decision loops (§4: `open_questions` / `no_open_questions`, `investigate`, question / answer); finalization (§5);
+- **Done ([ADR 0032](0032-branches-as-pointers-baselines-as-deltas.md) §6)**: options (§3) as flows opened as
+  hypotheses, with an active option the change works on, compared at the written or accepted level, evaluated,
+  and the finalization (§5): the selected option is adopted (its versions join the change branch), the others are
+  rejected, their branches kept for the audit.
+- **Not done**: the planned part of §2; the CEL conditions on options (`options`); decision points and
+  decision loops (§4: `open_questions` / `no_open_questions`, `investigate`, question / answer);
   the change budget (complementary decision 4: `budget` in conditions); the decider with a confidence threshold
   (complementary decision 3); sub-agents of another methodology (a sub-agent runs in its parent's methodology).
