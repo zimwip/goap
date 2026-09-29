@@ -40,6 +40,8 @@
   import ChangeImpactList from '../../components/ChangeImpactList.svelte';
   import ChangeOptions from '../../components/ChangeOptions.svelte';
   import ChangeDecisions from '../../components/ChangeDecisions.svelte';
+  import ScopeBar from '../../components/ScopeBar.svelte';
+  import { MAIN_SCOPE, candidatesByOption, scopeColor, scopeName, scopeWritable } from '../../changeScope';
 
   let { tab }: { tab: Tab } = $props();
 
@@ -76,6 +78,14 @@
   });
   let loading = $state(false);
   let error = $state('');
+  /** the flow the editor looks at: the main flow or one option (ADR 0032 §6); local to the editor, it does not
+   * move the active option. The impacts and items panes show the change as that flow sees it. */
+  let scope = $state(untrack(() => tab.params.scope) || '');
+  $effect(() => {
+    tab.params.scope = scope;
+  });
+  /** the change as the scope sees it: its change impacts (with the posts of that flow) and items */
+  let view = $state<Change | undefined>();
 
   let subs = $state<Change[]>([]);
   /** parent chain, the root first */
@@ -90,7 +100,7 @@
     checking = true;
     checkError = '';
     try {
-      boardIssues = (await graph.validateBoard(selected)).issues ?? [];
+      boardIssues = (await graph.validateBoard(selected, scope || MAIN_SCOPE)).issues ?? [];
     } catch (e) {
       checkError = errorMessage(e);
     } finally {
@@ -115,8 +125,6 @@
       change = c;
       if (!baselineName) baselineName = c?.title ? `${c.title}` : `change-${shortId(id)}`;
       nodes = c?.baselineId ? ((await graph.getBaselineGraph(c.baselineId, signal)).nodes ?? []) : [];
-      attached = (await graph.getChangeImpacts(id, signal)).nodes ?? [];
-      posts = await loadPosts(c?.nodes ?? []);
       subs = (await graph.listSubChanges(id, signal)).changes ?? [];
       const chain: Change[] = [];
       for (let p = c?.parentId; p && chain.length < 16; ) {
@@ -127,6 +135,10 @@
       }
       ancestors = chain;
       flows = (await graph.listFlows(id, signal)).flows ?? [];
+      // no scope yet, or one decided since: the option agents work on, else the main flow
+      const opts = flows.filter((f) => f.option);
+      if (!scope || (scope !== MAIN_SCOPE && !opts.some((o) => o.id === scope))) scope = opts.find((o) => o.active)?.id ?? MAIN_SCOPE;
+      await loadScope(id, scope, signal);
     } catch (e) {
       if (!signal?.aborted) error = errorMessage(e);
     } finally {
@@ -134,9 +146,37 @@
     }
   }
 
+  /** Loads the change as the scope sees it. */
+  async function loadScope(id: string, sc: string, signal?: AbortSignal) {
+    loadedScope = sc;
+    const v = (await graph.getBlackboard(id, sc || MAIN_SCOPE, signal)).change;
+    const ps = await loadPosts(v?.nodes ?? [], true);
+    if (signal?.aborted || sc !== scope) return;
+    view = v;
+    posts = ps;
+    attached = (v?.nodes ?? []).filter((n) => n.pre?.id && !n.superseded).map((n) => n.pre!);
+    boardIssues = null;
+  }
+
+  // switching the scope reloads what the scoped panes show
+  let loadedScope = '';
+  $effect(() => {
+    const sc = scope;
+    const id = untrack(() => change?.id);
+    if (!id || !sc || sc === loadedScope) return;
+    loadedScope = sc;
+    const ctrl = new AbortController();
+    loadScope(id, sc, ctrl.signal).catch((e) => {
+      if (!ctrl.signal.aborted) error = errorMessage(e);
+    });
+    return () => ctrl.abort();
+  });
+
   $effect(() => {
     const id = selected;
     change = undefined;
+    view = undefined;
+    loadedScope = '';
     attached = [];
     subs = [];
     ancestors = [];
@@ -164,12 +204,11 @@
     return i.status;
   }
   // flow events are part of the log but not shown as items
-  const items = $derived((change?.items ?? []).filter((i) => i.kind !== 'flow').map((i) => ({ ...i, status: effectiveStatus(i) })));
+  const items = $derived((view?.items ?? []).filter((i) => i.kind !== 'flow' && i.kind !== 'decision_point').map((i) => ({ ...i, status: effectiveStatus(i) })));
   const flowProcess = (f: Flow) => processOfFlow(f);
   // options are flows opened as hypotheses (ADR 0032 §6): they have a pane of their own
   const options = $derived(flows.filter((f) => f.option));
   const relaunches = $derived(flows.filter((f) => !f.option));
-  const activeOption = $derived(options.find((f) => f.active));
   // decision points that are not decided yet (ADR 0009 §4), replayed from the facts of the main flow
   const pendingDecisions = $derived.by(() => {
     const threshold = new Map<string, number>();
@@ -200,22 +239,28 @@
   const isApplied = $derived(change?.status === 'applied');
   const closed = $derived(change?.status === 'applied' || change?.status === 'abandoned');
   void loadTypes();
-  const lcRows = $derived(lifecycleRows(typeCatalog.cat, nodes, attached, change?.nodes ?? [], posts, extraNodes));
+  const lcRows = $derived(lifecycleRows(typeCatalog.cat, nodes, attached, view?.nodes ?? [], posts, extraNodes, true));
+  // the scope: what it shows, whether it can be edited, its colour
+  const writable = $derived(scopeWritable(options, scope, closed));
+  const scopeLabel = $derived(scopeName(options, scope));
+  const scopeTint = $derived(scopeColor(options, scope));
+  const candidates = $derived(candidatesByOption(change?.nodes ?? []));
+  const mainImpacts = $derived((change?.nodes ?? []).filter((n) => !n.flow && !n.superseded).length);
   // a change creates and modifies the nodes of its namespace (ADR 0015 §2)
   const lcCandidates = $derived(reopenable(nodes, lcRows, change?.namespace ?? ''));
   const typeNames = $derived(nodeTypeNames(typeCatalog.cat, change?.namespace ?? ''));
   const lifecycleOf = $derived(lifecycleResolver(typeCatalog.cat));
   const takenKeys = $derived([
     ...nodes.map((n) => n.key ?? ''),
-    ...(change?.nodes ?? []).filter((n) => n.intent === 'created' && !n.superseded && n.review !== 'rejected').map((n) => n.key ?? ''),
+    ...(view?.nodes ?? []).filter((n) => n.intent === 'created' && !n.superseded && n.review !== 'rejected').map((n) => n.key ?? ''),
   ]);
   const stuckEditable = $derived(lcRows.some((r) => r.lifecycle && r.editable && !r.removal));
   const panes = $derived<Pane[]>([
     { id: 'overview', label: 'Overview', badge: stuckEditable ? '!' : undefined },
-    { id: 'impacts', label: 'Impacts', badge: change?.nodes?.length || undefined },
-    { id: 'options', label: 'Options', badge: options.filter((f) => f.status === 'open').length || undefined },
+    { id: 'impacts', label: `${scopeLabel} ▸ Impacts`, badge: view?.nodes?.length || undefined },
+    { id: 'items', label: `${scopeLabel} ▸ Items`, badge: items.length || undefined },
+    { id: 'compare', label: 'Compare', badge: options.filter((f) => f.status === 'open').length || undefined },
     { id: 'decisions', label: 'Decisions', badge: pendingDecisions || undefined },
-    { id: 'items', label: 'Items', badge: items.length || undefined },
     { id: 'changes', label: 'Changes', badge: subs.length + ancestors.length || undefined },
     { id: 'audit', label: 'Audit' },
   ]);
@@ -226,7 +271,7 @@
     moving = label;
     error = '';
     try {
-      await writeNodeInChange(change.id, change?.nodes ?? [], target, w, rationale);
+      await writeNodeInChange(change.id, view?.nodes ?? [], target, w, rationale, scope || MAIN_SCOPE);
       await load(change.id);
       return true;
     } catch (e) {
@@ -257,7 +302,7 @@
       moving = `${row.node.id}:delete`;
       error = '';
       try {
-        await graph.reviewChangeImpact(change.id, row.created.id, false, `discarded ${row.node.key}`);
+        await graph.reviewChangeImpact(change.id, row.created.id, false, `discarded ${row.node.key}`, scope || MAIN_SCOPE);
         await load(change.id);
         return true;
       } catch (e) {
@@ -276,7 +321,7 @@
     moving = `${row.node.id}:delete`;
     error = '';
     try {
-      await graph.reviewChangeImpact(change.id, row.removal.id, false, `keep ${row.node.key}`);
+      await graph.reviewChangeImpact(change.id, row.removal.id, false, `keep ${row.node.key}`, scope || MAIN_SCOPE);
       await load(change.id);
       return true;
     } catch (e) {
@@ -397,6 +442,14 @@
 </script>
 
 
+{#snippet scopeHead(what: string, count: number)}
+  <div class="scope-head">
+    <span class="crumb"><span class="dot"></span>{scopeLabel}</span> ▸ <strong>{what}</strong> <span class="count">{count}</span>
+    {#if scope && scope !== MAIN_SCOPE}<span class="hint">what this option sees: the main flow, and what it changes</span>{/if}
+    {#if !writable && !closed}<span class="hint">· read-only: the option is decided</span>{/if}
+  </div>
+{/snippet}
+
 {#snippet producer(i: ChangeItem)}
   {#if i.execution}
     <button type="button" class="link" title={provenance(i)} onclick={() => openAudit(i.execution)}>{i.producedBy || shortId(i.execution)}</button>
@@ -415,6 +468,7 @@
 
 {#if change}
   {@const ch = change}
+  <ScopeBar changeId={ch.id ?? ''} {options} bind:scope {candidates} {mainImpacts} {closed} onchange={() => load(selected)} oncompare={() => (pane = 'compare')} />
   <EditorPanes {panes} bind:active={pane} label="Change sections">
     {#snippet children(active)}
       {#if active === 'overview'}
@@ -425,12 +479,6 @@
           <StatusBadge status={ch.status} />
         </div>
         {#if ch.intent}<p class="intent">"{ch.intent}"</p>{/if}
-        {#if activeOption}
-          <div class="alert info">
-            Working on the option <strong>{activeOption.option?.name}</strong>: edits that name no flow go to it.
-            <button type="button" class="link" onclick={() => (pane = 'options')}>Options</button>
-          </div>
-        {/if}
         <dl class="meta">
           <dt>ID</dt><dd><code>{ch.id}</code></dd>
           {#if ch.namespace}<dt>Namespace</dt><dd>{ch.namespace}</dd>{/if}
@@ -479,7 +527,7 @@
             {@const nWarn = boardIssues.filter((i) => i.severity === 'warning').length}
             {@const nErr = boardIssues.length - nWarn}
             <p class="hint">
-              {nErr} error{nErr === 1 ? '' : 's'}, {nWarn} warning{nWarn === 1 ? '' : 's'} on the main flow
+              {nErr} error{nErr === 1 ? '' : 's'}, {nWarn} warning{nWarn === 1 ? '' : 's'} on {scopeLabel}
             </p>
             <BoardIssueList issues={boardIssues} sections />
           {/if}
@@ -521,10 +569,10 @@
           </div>
         {/if}
       </section>
-      {:else if active === 'options'}
+      {:else if active === 'compare'}
       <section class="card">
-        <h3>Options <span class="count">{options.length}</span></h3>
-        <ChangeOptions changeId={ch.id ?? ''} {closed} onchange={() => load(selected)} />
+        <h3>Compare the options <span class="count">{options.length}</span></h3>
+        <ChangeOptions changeId={ch.id ?? ''} {closed} onchange={() => load(selected)} onview={(id) => ((scope = id), (pane = 'impacts'))} />
       </section>
       {:else if active === 'decisions'}
       <section class="card">
@@ -532,16 +580,20 @@
         <ChangeDecisions changeId={ch.id ?? ''} {closed} onchange={() => load(selected)} />
       </section>
       {:else if active === 'impacts'}
+      <div class="scoped" style="--scope: {scopeTint}">
+      {@render scopeHead('Change impacts', view?.nodes?.length ?? 0)}
       <section class="card">
-        <h3>Change impacts <span class="count">{change?.nodes?.length ?? 0}</span></h3>
-        <ChangeImpactList changeId={ch.id ?? ''} nodes={change?.nodes ?? []} {closed} onchange={() => load(selected)} onopennode={(n) => openNode({ id: n.post?.id ?? n.pre?.id ?? '', key: n.key ?? '' }, { pin: true, change: ch.id ?? '' })} />
+        <ChangeImpactList changeId={ch.id ?? ''} nodes={view?.nodes ?? []} scope={scope || MAIN_SCOPE} closed={!writable} onchange={() => load(selected)} onopennode={(n) => openNode({ id: n.post?.id ?? n.pre?.id ?? '', key: n.key ?? '' }, { pin: true, change: ch.id ?? '' })} />
       </section>
 
       <section class="card">
-        <h3>Node edits <span class="count">{lcRows.length}</span></h3>
-      <ChangeLifecycle rows={lcRows} candidates={lcCandidates} disabled={closed} busy={moving} onmove={move} onedit={edit} types={typeNames} {lifecycleOf} keys={takenKeys} oncreate={createNode} onremove={removeNode} onundo={undoDelete} onhistory={(r) => openNode(r.node, { pin: true, generic: true, pane: 'history' })} onopennode={(r) => openNode(r.node, { pin: true, change: ch.id ?? '' })} onadd={(id) => (extraNodes = [...extraNodes, id])} />
+        <h3>Node edits <span class="count">{lcRows.length}</span>{#if writable}<span class="hint">&nbsp;· written on {scopeLabel}</span>{/if}</h3>
+      <ChangeLifecycle rows={lcRows} candidates={lcCandidates} disabled={!writable} busy={moving} onmove={move} onedit={edit} types={typeNames} {lifecycleOf} keys={takenKeys} oncreate={createNode} onremove={removeNode} onundo={undoDelete} onhistory={(r) => openNode(r.node, { pin: true, generic: true, pane: 'history' })} onopennode={(r) => openNode(r.node, { pin: true, change: ch.id ?? '' })} onadd={(id) => (extraNodes = [...extraNodes, id])} />
       </section>
+      </div>
       {:else if active === 'items'}
+      <div class="scoped" style="--scope: {scopeTint}">
+      {@render scopeHead('Items', items.length)}
       <section class="card">
         <h3>Decisions <span class="count">{groups.decision.length}</span></h3>
         {#if groups.decision.length}
@@ -591,6 +643,7 @@
           <pre>{JSON.stringify(others, null, 2)}</pre>
         </section>
       {/if}
+      </div>
       {:else if active === 'audit'}
       <section class="card">
         <ChangeAudit change={ch} bind:process={auditProcess} bind:run={auditRun} onrun={(pid) => openTab({ kind: 'run', params: { id: pid } })} />
@@ -642,6 +695,30 @@
 </div>
 
 <style>
+  .scoped {
+    border-left: 3px solid var(--scope);
+    padding-left: 8px;
+  }
+  .scope-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin: 4px 0 8px;
+  }
+  .scope-head .crumb {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    color: var(--scope);
+    font-weight: 600;
+  }
+  .scope-head .dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--scope);
+  }
   .subs {
     list-style: none;
     margin: 0 0 0.5rem;

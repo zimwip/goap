@@ -1,19 +1,20 @@
 <script lang="ts">
-  // Options of a change (ADR 0009 §3, ADR 0032 §6): hypotheses explored on flows of their own. The active option is
-  // the one the change works on: every edit that names no flow goes to it. Options are compared on the nodes they
+  // Comparing and deciding the options of a change (ADR 0009 §3, ADR 0032 §6): they are compared on the nodes they
   // changed, evaluated, then one is selected (its versions join the change branch) and the others are rejected.
+  // Opening an option, looking at it and working on it (the active option) is the scope bar's.
   import { graph, errorMessage, shortId, type Flow, type OptionComparison, type JsonValue } from '../api';
   import StatusBadge from './StatusBadge.svelte';
 
-  let { changeId, closed = false, onchange }: { changeId: string; closed?: boolean; onchange?: () => void } = $props();
+  let {
+    changeId,
+    closed = false,
+    onchange,
+    onview,
+  }: { changeId: string; closed?: boolean; onchange?: () => void; onview?: (option: string) => void } = $props();
 
   let options = $state<Flow[]>([]);
-  let active = $state('');
   let error = $state('');
   let busy = $state('');
-  let name = $state('');
-  let hypothesis = $state('');
-  let activate = $state(true);
   let level = $state<'written' | 'accepted'>('written');
   let cmp = $state<OptionComparison | undefined>();
   let evaluating = $state('');
@@ -26,7 +27,6 @@
     try {
       const r = await graph.listOptions(changeId, signal);
       options = r.options ?? [];
-      active = r.active ?? '';
       cmp = open.length ? await graph.compareOptions(changeId, level, false, signal) : undefined;
       error = '';
     } catch (e) {
@@ -56,13 +56,6 @@
     }
   }
 
-  const openOption = () =>
-    act('open', async () => {
-      await graph.openOption(changeId, name.trim(), hypothesis.trim(), activate);
-      name = '';
-      hypothesis = '';
-    });
-
   const evaluate = (id: string) =>
     act(`evaluate:${id}`, async () => {
       await graph.evaluateOption(changeId, id, evaluation.trim());
@@ -80,15 +73,6 @@
 </script>
 
 <div class="options">
-  {#if active}
-    <div class="alert info">
-      The change works on the option <strong>{nameOf(active)}</strong>: the edits go to it.
-      {#if !closed}
-        <button type="button" class="link" disabled={!!busy} onclick={() => act('main', () => graph.activateOption(changeId, 'main'))}>Back to the main flow</button>
-      {/if}
-    </div>
-  {/if}
-
   {#if options.length}
     <ul class="list">
       {#each options as o (o.id)}
@@ -103,9 +87,7 @@
           {#if o.evaluation}<p class="eval"><span class="muted">Evaluation:</span> {o.evaluation}</p>{/if}
           {#if o.status === 'open' && !closed}
             <div class="row">
-              {#if !o.active}
-                <button type="button" disabled={!!busy} onclick={() => act(`activate:${o.id}`, () => graph.activateOption(changeId, o.id ?? ''))}>Work on it</button>
-              {/if}
+              <button type="button" onclick={() => onview?.(o.id ?? '')}>View its impacts</button>
               <button type="button" disabled={!!busy} onclick={() => ((evaluating = evaluating === o.id ? '' : (o.id ?? '')), (evaluation = o.evaluation ?? ''))}>Evaluate</button>
               <button type="button" class="primary" disabled={!!busy} title="Its versions join the change branch; the other open options are rejected" onclick={() => act(`select:${o.id}`, () => graph.selectOption(changeId, o.id ?? ''))}>Select</button>
               <button type="button" class="danger" disabled={!!busy} onclick={() => act(`reject:${o.id}`, () => graph.rejectOption(changeId, o.id ?? ''))}>Reject</button>
@@ -121,17 +103,9 @@
       {/each}
     </ul>
   {:else}
-    <p class="hint">No option: open one to explore a hypothesis without touching the main flow of the change.</p>
+    <p class="hint">No option: open one from the scope bar (+ Option) to explore a hypothesis without touching the main flow of the change.</p>
   {/if}
 
-  {#if !closed}
-    <form class="new" onsubmit={(e) => (e.preventDefault(), openOption())}>
-      <input type="text" class="name" placeholder="Name" bind:value={name} />
-      <input type="text" class="grow" placeholder="Hypothesis" bind:value={hypothesis} />
-      <label class="check"><input type="checkbox" bind:checked={activate} /> work on it</label>
-      <button type="submit" disabled={!!busy || !name.trim()}>Open option</button>
-    </form>
-  {/if}
 
   {#if cmp && open.length}
     <div class="cmp-head">
@@ -219,7 +193,6 @@
     margin: 4px 0;
   }
   .row,
-  .new,
   .cmp-head {
     display: flex;
     gap: 6px;
@@ -229,14 +202,6 @@
   .grow {
     flex: 1;
     min-width: 12em;
-  }
-  .new .name {
-    width: 12em;
-  }
-  .check {
-    display: inline-flex;
-    gap: 4px;
-    align-items: center;
   }
   .cmp-head h4 {
     margin: 0;
