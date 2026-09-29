@@ -3,6 +3,7 @@ package registrysvc
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"connectrpc.com/connect"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/zimwip/goap/internal/pbconv"
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/methodology"
 )
 
 // Handler implements registryv1connect.RegistryServiceHandler.
@@ -72,6 +74,24 @@ func (h *Handler) SaveMethodology(ctx context.Context, r *connect.Request[regist
 func (h *Handler) ValidateMethodology(ctx context.Context, r *connect.Request[registryv1.ValidateMethodologyRequest]) (*connect.Response[registryv1.ValidateMethodologyResponse], error) {
 	m := FromPB(r.Msg.Methodology)
 	return connect.NewResponse(&registryv1.ValidateMethodologyResponse{Issues: IssuesToPB(h.Service.validate(ctx, &m))}), nil
+}
+
+// GetProcessGraph builds the graph of a process of a methodology as edited (ADR 0036 §4).
+func (h *Handler) GetProcessGraph(ctx context.Context, r *connect.Request[registryv1.GetProcessGraphRequest]) (*connect.Response[registryv1.GetProcessGraphResponse], error) {
+	m := FromPB(r.Msg.Methodology)
+	c, err := m.Compile()
+	if err != nil {
+		var issues methodology.Issues
+		if !errors.As(err, &issues) {
+			issues = methodology.Issues{{Message: err.Error()}}
+		}
+		return connect.NewResponse(&registryv1.GetProcessGraphResponse{Issues: IssuesToPB(issues)}), nil
+	}
+	g, ok := c.ProcessGraph(r.Msg.Process)
+	if !ok {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("no process %q in %s", r.Msg.Process, m.Name))
+	}
+	return connect.NewResponse(&registryv1.GetProcessGraphResponse{Graph: ProcessGraphToPB(g)}), nil
 }
 
 func (h *Handler) PublishMethodology(ctx context.Context, r *connect.Request[registryv1.PublishMethodologyRequest]) (*connect.Response[registryv1.PublishMethodologyResponse], error) {

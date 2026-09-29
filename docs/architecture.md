@@ -951,6 +951,12 @@ or process step inherits it. A step can also name a **capability** (`method: des
 are the documentary references of how a capability is carried out in a context (`for`, `when`, `priority`, guidance,
 references, deliverables) and each names the **agent** that acts; `process.step` runs the agent of the applicable
 method with the highest priority, with the method's guidance in its step context.
+The methodology editor draws a process as a graph (`GetProcessGraph` on the registry, from the draft as edited): the
+steps that run something, laid out in layers by the edges their conditions draw (a step whose exit criteria meet
+another's entry, implied edges left out), phases as colours, the methods of a capability under its step; selecting a
+method focuses on its context, guidance, references, roles, agent and the agent's actions. The **graph explorer**
+(command "Explore the graph") lays out the head of main of every namespace with a force simulation (d3-force), to
+navigate the organisation as it is (units, users, adapters, what they own) and the data of the domains.
 `GetProcessProgress` computes where a run stands in its process (each step done, skipped,
 active, waiting for someone, ready, to do with what it still needs, or blocked), shown on the run and the change.
 

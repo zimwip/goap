@@ -42,6 +42,7 @@ import { walkSteps } from '../methodologyForm';
 import GoalTab from './editors/GoalTab.svelte';
 import ProcessTab from './editors/ProcessTab.svelte';
 import MethodTab from './editors/MethodTab.svelte';
+import GraphExplorerTab from './editors/GraphExplorerTab.svelte';
 import RunTab from './editors/RunTab.svelte';
 import ChangeTab from './editors/ChangeTab.svelte';
 import BaselineTab from './editors/BaselineTab.svelte';
@@ -457,6 +458,16 @@ registerView({
   component: TokensTab,
   key: () => 'main',
   tabTitle: () => 'Token usage',
+});
+
+registerView({
+  id: 'graphExplorer',
+  zone: 'editor',
+  title: 'Graph explorer',
+  icon: 'graph',
+  component: GraphExplorerTab,
+  key: () => 'main',
+  tabTitle: () => 'Graph explorer',
 });
 
 registerView({

@@ -303,3 +303,48 @@ processes: [{name: x, steps: [{name: s, method: f}]}]`, `"nope" is not a goal of
 		})
 	}
 }
+
+func TestProcessGraphDrawsTheConditions(t *testing.T) {
+	m, err := LoadFile("../../methodologies/sdlc.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := m.Compile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	g, ok := c.ProcessGraph("software_delivery")
+	if !ok {
+		t.Fatal("no graph")
+	}
+	edges := map[string]string{}
+	for _, e := range g.Edges {
+		edges[e.From+" -> "+e.To] = strings.Join(e.Conditions, ",")
+	}
+	for from, to := range map[string]string{
+		"software_delivery/framing":                             "software_delivery/analysis/scope",
+		"software_delivery/analysis/scope":                      "software_delivery/analysis/impacts",
+		"software_delivery/analysis/specification/requirements": "software_delivery/design",
+		"software_delivery/release":                             "software_delivery/application",
+	} {
+		if _, ok := edges[from+" -> "+to]; !ok {
+			t.Errorf("no edge %s -> %s in %v", from, to, edges)
+		}
+	}
+	// transitive reduction: framing does not point at the application directly
+	if _, ok := edges["software_delivery/framing -> software_delivery/application"]; ok {
+		t.Error("implied edge kept")
+	}
+	if len(g.Methods) != 2 || g.Methods[0].AgentGoal != "design" {
+		t.Fatalf("methods of the design capability: %+v", g.Methods)
+	}
+	var architect *GraphAgent
+	for i := range g.Agents {
+		if g.Agents[i].Name == "architect" {
+			architect = &g.Agents[i]
+		}
+	}
+	if architect == nil || len(architect.Actions) == 0 {
+		t.Fatalf("the agents of the methods, with their actions: %+v", g.Agents)
+	}
+}

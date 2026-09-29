@@ -195,13 +195,13 @@ func aggregate(steps []StepProgress) string {
 	return StepTodo
 }
 
-// missing lists the entry conditions that do not hold in the world the run last observed, leaving out the ones the
-// step itself establishes (an action's "not done yet" guard, such as traced: false for a step done when traced).
+// missing lists the entry conditions that do not hold in the world the run last observed, leaving out the step's own
+// "not done yet" guards (traced: false for a step done when traced).
 func missing(p *Process, entry, exit map[string]bool) []string {
 	var out []string
 	for k, v := range entry {
-		if _, own := exit[k]; own {
-			continue
+		if w, own := exit[k]; own && w != v {
+			continue // the step's own "not done yet" guard
 		}
 		if have, ok := p.World[k]; !ok || have != v {
 			if v {
