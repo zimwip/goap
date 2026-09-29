@@ -1414,11 +1414,15 @@ export const graph = {
   addChangeImpacts: (changeId: string, nodes: ChangeImpact[]) =>
     rpc<{ changeId: string; nodes: ChangeImpact[] }, { nodes?: ChangeImpact[] }>(GRAPH, 'AddChangeImpacts', { changeId, nodes }),
   /** Write the next version of a change impact's node on the change branch. */
-  writeChangeImpact: (changeId: string, changeImpactId: string, w: { props?: Struct; state?: string; retire?: boolean }) =>
-    rpc<{ changeId: string; changeImpactId: string; props?: Struct; state?: string; retire?: boolean }, { node?: ChangeImpact }>(GRAPH, 'WriteChangeImpact', { changeId, changeImpactId, ...w }),
+  writeChangeImpact: (changeId: string, changeImpactId: string, w: { props?: Struct; state?: string; retire?: boolean }, flow = '') =>
+    rpc<{ changeId: string; changeImpactId: string; props?: Struct; state?: string; retire?: boolean; flow: string }, { node?: ChangeImpact }>(GRAPH, 'WriteChangeImpact', { changeId, changeImpactId, ...w, flow }),
   /** Accept or reject a change impact; the comment is mandatory. */
-  reviewChangeImpact: (changeId: string, changeImpactId: string, accept: boolean, comment: string) =>
-    rpc<{ changeId: string; changeImpactId: string; accept: boolean; comment: string }, { node?: ChangeImpact }>(GRAPH, 'ReviewChangeImpact', { changeId, changeImpactId, accept, comment }),
+  /** flow: the flow or option the review is made on ('main' names the main flow; '' is the active option). */
+  reviewChangeImpact: (changeId: string, changeImpactId: string, accept: boolean, comment: string, flow = '') =>
+    rpc<{ changeId: string; changeImpactId: string; accept: boolean; comment: string; flow: string }, { node?: ChangeImpact }>(GRAPH, 'ReviewChangeImpact', { changeId, changeImpactId, accept, comment, flow }),
+  /** The change as a flow or an option sees it: its change impacts (with the post versions of that flow) and items. */
+  getBlackboard: (changeId: string, flow: string, signal?: AbortSignal) =>
+    rpc<{ changeId: string; flow: string }, { change?: Change; options?: Flow[]; activeOption?: string; decisionPoints?: DecisionPoint[] }>(GRAPH, 'GetBlackboard', { changeId, flow }, signal),
   /** Create a change, write the edits on its branch, accept them and apply it (one call). */
   commitEdits: (req: { namespace: string; title: string; intent: string; baselineId: string; edits: NodeEdit[] }) =>
     rpc<typeof req, { changeId?: string }>(GRAPH, 'CommitEdits', req),

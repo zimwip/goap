@@ -128,7 +128,12 @@ REQ-1  v1(main) ── v3(main, revise) ───────────── 
   (`Change.ResolveFlow`; `main` names the main flow), and a process on the main flow reads its graph
   (`ChangeGraph`). Options are compared node by node at `written` or `accepted` (`CompareOptions`), evaluated,
   then one is selected (its flow is adopted: its versions join the change branch, no copy) and the others are
-  rejected. The IDE shows them in the Options pane of a change.
+  rejected. In the IDE the change editor opens on a **scope bar**: the main flow and one chip per option (status,
+  the active one marked, the impacts it declared). The scope is chosen first, and the scoped panes (`<scope> ▸
+  Impacts`, `<scope> ▸ Items`) show the change as that flow sees it (`GetBlackboard` on the flow), each impact
+  marked *this option* or *main flow*; reviews and edits made there name that flow explicitly. Looking at an
+  option is local to the editor; *Work on it* moves the active pointer (where agents and calls without a flow go).
+  Comparing, evaluating, selecting and rejecting are the Compare pane.
 - **Decision loops** ([ADR 0009](adr/0009-branches-options-decisions.md) §4): a **decision point** is a question the
   change must settle, usually which option (`OpenDecision`). Its decider (an agent, or a person) rules it:
   *decided* (an option, a confidence, a justification) or *undecidable* (why, and the questions to answer first).

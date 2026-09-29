@@ -8,11 +8,14 @@
     changeId,
     nodes,
     closed = false,
+    scope = '',
     onchange,
     onopennode,
   }: {
     changeId: string;
     nodes: ChangeImpact[];
+    /** the flow the list is the view of ('main' or an option id, ADR 0032 §6); empty: the whole list of the change */
+    scope?: string;
     /** the change is applied or abandoned */
     closed?: boolean;
     onchange?: () => void;
@@ -25,13 +28,16 @@
   let error = $state('');
 
   const version = (r?: { id?: string; version?: number }) => (r?.id ? `v${r.version}` : '—');
-  const canReview = (n: ChangeImpact) => !closed && !n.flow && !n.superseded && n.review === 'proposed';
+  const scoped = $derived(scope !== '');
+  const onOption = $derived(scoped && scope !== 'main');
+  // a scoped list holds what its flow sees: its reviews go to that flow; the whole list reviews the main flow only
+  const canReview = (n: ChangeImpact) => !closed && (scoped || !n.flow) && !n.superseded && n.review === 'proposed';
 
   async function review(n: ChangeImpact, accept: boolean) {
     busy = true;
     error = '';
     try {
-      await graph.reviewChangeImpact(changeId, n.id ?? '', accept, comment);
+      await graph.reviewChangeImpact(changeId, n.id ?? '', accept, comment, scoped ? scope : '');
       reviewing = '';
       comment = '';
       onchange?.();
@@ -58,7 +64,7 @@
             {/if}
             <span class="hint">{n.type}</span>
           </td>
-          <td>{n.intent}{#if n.flow} <span class="hint" title="declared on a flow branch: a candidate until the flow is adopted">candidate</span>{/if}{#if n.superseded} <span class="hint" title="replaced by an adopted flow">superseded</span>{/if}{#if n.recheck} <span class="hint" title="written against a version that is no longer the head">re-check</span>{/if}</td>
+          <td>{n.intent}{#if onOption}{#if n.flow === scope} <span class="origin own" title="declared by this option: it lands only if the option is selected">this option</span>{:else} <span class="origin" title="declared on the main flow: every option sees it">main flow</span>{/if}{:else if n.flow} <span class="hint" title="declared on a flow branch: a candidate until the flow is adopted">candidate</span>{/if}{#if n.superseded} <span class="hint" title="replaced by an adopted flow">superseded</span>{/if}{#if n.recheck} <span class="hint" title="written against a version that is no longer the head">re-check</span>{/if}</td>
           <td>{n.rationale}</td>
           <td>{version(n.pre)}</td>
           <td>{version(n.post)}</td>
@@ -91,5 +97,16 @@
   tr.superseded {
     opacity: 0.55;
     text-decoration: line-through;
+  }
+  .origin {
+    font-size: 0.8em;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 0 6px;
+    color: var(--muted);
+  }
+  .origin.own {
+    color: var(--scope, var(--accent));
+    border-color: var(--scope, var(--accent));
   }
 </style>
