@@ -64,6 +64,17 @@ export class TypeCatalog {
       .sort();
   }
 
+  /** Link types a node of the type can have as outgoing links (an empty end accepts any node type). */
+  linksFrom(ref: string | undefined): LinkTypeInfo[] {
+    const types = this.typesOf(ref);
+    return this.links.filter((l) => l.ref && (!l.from || types.includes(l.from))).sort((a, b) => (a.ref ?? '').localeCompare(b.ref ?? ''));
+  }
+
+  /** Can a link of this type point to a node of the type? */
+  linkAccepts(link: LinkTypeInfo, to: string | undefined): boolean {
+    return !link.to || this.typesOf(to).includes(link.to);
+  }
+
   /** Namespaces of the published and built-in domains (the targets a methodology can name). */
   namespaces(): string[] {
     const ns = new Set(Object.keys(this.domains));

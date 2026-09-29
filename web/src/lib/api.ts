@@ -1072,8 +1072,50 @@ export interface MergeCandidate {
   type?: string;
   /** added | fast_forward | merge */
   kind?: string;
+  ancestor?: NodeRef;
+  ours?: NodeRef;
+  theirs?: NodeRef;
   deleted?: boolean;
+  /** properties at the common ancestor, on the target (ours), on the merged branch (theirs), and merged */
+  base?: Struct;
+  oursProps?: Struct;
+  theirsProps?: Struct;
+  merged?: Struct;
+  /** the properties changed on both sides with different values */
   conflicts?: string[];
+}
+
+/** How a merge settles a node: its properties (a merge version is written), or skip (the target stays as is). */
+export interface Resolution {
+  props?: Struct;
+  skip?: boolean;
+}
+
+/** A node whose version differs between two baselines. */
+export interface BaselineDiff {
+  node?: string;
+  key?: string;
+  type?: string;
+  /** added | removed | changed */
+  kind?: string;
+  from?: GraphNode;
+  to?: GraphNode;
+}
+
+/** What a write of a change impact changes: properties, lifecycle state, links, or the node retired. */
+export interface ImpactWrite {
+  props?: Struct;
+  state?: string;
+  retire?: boolean;
+  addLinks?: LinkWrite[];
+  removeLinks?: string[];
+}
+
+/** A link written with a node version: its type and the node version it points to. */
+export interface LinkWrite {
+  type: string;
+  to: NodeRef;
+  props?: Struct;
 }
 
 export interface MergePlan {
@@ -1331,6 +1373,24 @@ export const graph = {
     rpc<{ namespace: string }, { branches?: Branch[] }>(GRAPH, 'ListBranches', { namespace }, signal),
   createBranch: (req: { namespace: string; name: string; fromBaseline: string; origin?: string }) =>
     rpc<typeof req, { branch?: Branch }>(GRAPH, 'CreateBranch', req),
+  /** open | merged | abandoned (an abandoned branch takes no change any more). */
+  setBranchStatus: (namespace: string, name: string, status: string) =>
+    rpc<{ namespace: string; name: string; status: string }, Empty>(GRAPH, 'SetBranchStatus', { namespace, name, status }),
+  /** Merges a branch into another; a node changed on both sides needs a resolution (by node id). */
+  mergeBranch: (req: { namespace: string; from: string; into: string; title?: string; resolutions?: Record<string, Resolution> }) =>
+    rpc<typeof req, { change?: Change; baseline?: Baseline; plan?: MergePlan }>(GRAPH, 'MergeBranch', req),
+  /** A baseline of the given node versions (none: an empty baseline, the start of a namespace). */
+  createBaseline: (namespace: string, name: string, nodes: NodeRef[] = []) =>
+    rpc<{ namespace: string; name: string; nodes: NodeRef[] }, { baseline?: Baseline }>(GRAPH, 'CreateBaseline', { namespace, name, nodes }),
+  /** What going from a baseline to another changes, node by node. */
+  diffBaselines: (from: string, to: string, signal?: AbortSignal) =>
+    rpc<{ from: string; to: string }, { nodes?: BaselineDiff[] }>(GRAPH, 'DiffBaselines', { from, to }, signal),
+  /** The changes that acted on a node (headers only). */
+  listNodeChanges: (nodeId: string, signal?: AbortSignal) =>
+    rpc<{ nodeId: string }, { changes?: Change[] }>(GRAPH, 'ListNodeChanges', { nodeId }, signal),
+  /** Edits a change: title, intent, goal; status 'abandoned' abandons it (its sub-changes and its branch too). */
+  updateChange: (id: string, patch: { title?: string; intent?: string; goal?: string; status?: string }) =>
+    rpc<{ id: string; title?: string; intent?: string; goal?: string; status?: string }, { change?: Change }>(GRAPH, 'UpdateChange', { id, ...patch }),
   createChange: (req: {
     title: string;
     intent?: string;
@@ -1349,9 +1409,9 @@ export const graph = {
   listSubChanges: (changeId: string, signal?: AbortSignal) =>
     rpc<{ changeId: string }, { changes?: Change[] }>(GRAPH, 'ListSubChanges', { changeId }, signal),
   /** Completes a merge_pending change; resolutions are by node id. */
-  mergeChange: (changeId: string, resolutions: Record<string, { props?: Struct; skip?: boolean }> = {}) =>
+  mergeChange: (changeId: string, resolutions: Record<string, Resolution> = {}) =>
     rpc<
-      { changeId: string; resolutions: Record<string, { props?: Struct; skip?: boolean }> },
+      { changeId: string; resolutions: Record<string, Resolution> },
       { change?: Change }
     >(GRAPH, 'MergeChange', { changeId, resolutions }),
   /** Flow branches of a change (relaunched steps). */
@@ -1404,6 +1464,9 @@ export const graph = {
     rpc<{ namespace: string; from: string; into: string }, { plan?: MergePlan }>(GRAPH, 'PlanMerge', { namespace, from, into }, signal),
   getSharedNodes: (changeId: string, signal?: AbortSignal) =>
     rpc<{ changeId: string }, { nodes?: SharedNode[] }>(GRAPH, 'GetSharedNodes', { changeId }, signal),
+  /** A node version with its outgoing and incoming links (version 0: the latest). */
+  getNode: (ref: NodeRef, signal?: AbortSignal) =>
+    rpc<{ ref: NodeRef }, { view?: { node?: GraphNode; latest?: number; out?: Link[]; in?: Link[]; frozen?: boolean } }>(GRAPH, 'GetNode', { ref }, signal),
   /** Every version of a node, all branches. */
   listNodeVersions: (id: string, signal?: AbortSignal) =>
     rpc<{ id: string }, { versions?: GraphNode[] }>(GRAPH, 'ListNodeVersions', { id }, signal),
@@ -1414,8 +1477,9 @@ export const graph = {
   addChangeImpacts: (changeId: string, nodes: ChangeImpact[]) =>
     rpc<{ changeId: string; nodes: ChangeImpact[] }, { nodes?: ChangeImpact[] }>(GRAPH, 'AddChangeImpacts', { changeId, nodes }),
   /** Write the next version of a change impact's node on the change branch. */
-  writeChangeImpact: (changeId: string, changeImpactId: string, w: { props?: Struct; state?: string; retire?: boolean }, flow = '') =>
-    rpc<{ changeId: string; changeImpactId: string; props?: Struct; state?: string; retire?: boolean; flow: string }, { node?: ChangeImpact }>(GRAPH, 'WriteChangeImpact', { changeId, changeImpactId, ...w, flow }),
+  /** addLinks / removeLinks: links of the new version (removeLinks by link id, from the version written before). */
+  writeChangeImpact: (changeId: string, changeImpactId: string, w: ImpactWrite, flow = '') =>
+    rpc<ImpactWrite & { changeId: string; changeImpactId: string; flow: string }, { node?: ChangeImpact }>(GRAPH, 'WriteChangeImpact', { changeId, changeImpactId, ...w, flow }),
   /** Accept or reject a change impact; the comment is mandatory. */
   /** flow: the flow or option the review is made on ('main' names the main flow; '' is the active option). */
   reviewChangeImpact: (changeId: string, changeImpactId: string, accept: boolean, comment: string, flow = '') =>

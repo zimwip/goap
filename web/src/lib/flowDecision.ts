@@ -1,6 +1,6 @@
 // Adopting or discarding a flow branch from anywhere in the UI.
 import { engine, graph, type Flow, type Process } from './api';
-import { processes, refreshProcesses } from './stores/live.svelte';
+import { live, processes, refreshProcesses } from './stores/live.svelte';
 
 /** the run working on a flow branch */
 export function processOfFlow(flow: Flow): Process | undefined {
@@ -13,7 +13,8 @@ export function adoptBlockedReason(flow: Flow, p: Process | undefined): string {
   if (flow.competesWith?.length) {
     return `It competes with the adopted flow ${flow.competesWith[0].slice(0, 8)} (it replaces the same items): discard it or relaunch the step.`;
   }
-  if (!p) return 'Its run is not loaded yet.';
+  // no run works on it (or none is left): the flow is adopted straight on the graph
+  if (!p) return live.processesLoaded ? '' : 'Its run is not loaded yet.';
   if (p.pending?.kind !== 'flow' || p.status !== 'waiting') {
     return 'Its run has not reached the goal yet: wait for it, then adopt.';
   }

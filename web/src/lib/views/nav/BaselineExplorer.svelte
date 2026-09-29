@@ -10,7 +10,8 @@
   import { graph, errorMessage, formatDate, nodeTitle, shortId, type Baseline, type GraphNode, type TypeCount } from '../../api';
   import { SvelteMap } from 'svelte/reactivity';
   import { untrack } from 'svelte';
-  import { splitType } from '../../stores/types.svelte';
+  import { loadTypes as loadCatalog, splitType, typeCatalog } from '../../stores/types.svelte';
+  import { refreshBaselines } from '../../stores/catalog.svelte';
 
   // Methodologies are nodes typed by the meta-domain methodology (ADR 0023), authored in their own editors and
   // explorer: not offered here by default.
@@ -24,6 +25,26 @@
   let loading = $state(false);
   let error = $state('');
   let reload = $state(0);
+  let starting = $state(false);
+
+  void loadCatalog();
+  /** namespaces holding nodes, plus the ones a domain declares (a namespace without a baseline can be started) */
+  const choices = $derived([...new Set([...namespaces, ...typeCatalog.cat.namespaces().filter((n) => !META_NAMESPACES.has(n))])].sort());
+
+  /** Starts a namespace: an empty baseline on main, that changes then fill. */
+  async function startNamespace() {
+    starting = true;
+    error = '';
+    try {
+      await graph.createBaseline(namespace, `start ${namespace}`);
+      void refreshBaselines(namespace);
+      reload++;
+    } catch (e) {
+      error = errorMessage(e);
+    } finally {
+      starting = false;
+    }
+  }
 
   let filter = $state('');
   let query = $state('');
@@ -54,7 +75,7 @@
       .listNamespaces()
       .then((r) => {
         namespaces = r.namespaces ?? [];
-        if (!namespace || !namespaces.includes(namespace)) namespace = namespaces.find((n) => !META_NAMESPACES.has(n)) ?? namespaces[0] ?? '';
+        if (!namespace || !(namespaces.includes(namespace) || typeCatalog.cat.namespaces().includes(namespace))) namespace = namespaces.find((n) => !META_NAMESPACES.has(n)) ?? namespaces[0] ?? '';
       })
       .catch((e) => (error = errorMessage(e)));
   });
@@ -131,8 +152,11 @@
   <div class="tools">
     <select aria-label="Namespace" title="Namespace" bind:value={namespace} data-no-pin>
       {#if namespace && !namespaces.includes(namespace)}<option value={namespace}>{namespace}</option>{/if}
-      {#each namespaces as ns (ns)}<option value={ns}>{ns}</option>{/each}
+      {#each choices as ns (ns)}<option value={ns}>{ns}</option>{/each}
     </select>
+    <button type="button" class="ghost small" title="Branches of the namespace" aria-label="Branches" disabled={!namespace} onclick={() => openTab({ kind: 'branches', params: { namespace } }, { pin: true })}
+      ><Icon name="branch" size={14} /></button
+    >
     <button type="button" class="ghost small" title="Refresh" aria-label="Refresh" disabled={loading} onclick={() => {
         types.clear();
         pages.clear();
@@ -145,7 +169,12 @@
     <input type="search" placeholder="Filter nodes…" aria-label="Filter nodes" value={filter} oninput={(e) => onFilter(e.currentTarget.value)} data-no-pin />
   </div>
   {#if error}<div class="alert small">{error}</div>{/if}
-  {#if !loading && !error && namespace && !baselines.length}<p class="empty pad">No baselines in {namespace}.</p>{/if}
+  {#if !loading && !error && namespace && !baselines.length}
+    <div class="empty pad">
+      No baselines in {namespace}.
+      <button type="button" class="small" disabled={starting} onclick={startNamespace} title="An empty baseline on main: changes then create its nodes">Start {namespace}</button>
+    </div>
+  {/if}
   {#if !namespace && !error}<p class="empty pad">The graph holds no nodes yet.</p>{/if}
   <div role="tree" aria-label="Baselines">
     {#each baselines as b (b.id)}

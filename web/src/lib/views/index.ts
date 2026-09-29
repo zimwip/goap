@@ -42,6 +42,7 @@ import GoalTab from './editors/GoalTab.svelte';
 import RunTab from './editors/RunTab.svelte';
 import ChangeTab from './editors/ChangeTab.svelte';
 import BaselineTab from './editors/BaselineTab.svelte';
+import BranchesTab from './editors/BranchesTab.svelte';
 import PoliciesTab from './editors/PoliciesTab.svelte';
 import ImportTab from './editors/ImportTab.svelte';
 
@@ -381,6 +382,16 @@ registerView({
   component: BaselineTab,
   key: (p) => p.id ?? '',
   tabTitle: (t) => t.params.name || baselines.items.find((b) => b.id === t.params.id)?.name || `Baseline ${shortId(t.params.id)}`,
+});
+
+registerView({
+  id: 'branches',
+  zone: 'editor',
+  title: 'Branches',
+  icon: 'branch',
+  component: BranchesTab,
+  key: (p) => p.namespace ?? '',
+  tabTitle: (t) => `Branches ${t.params.namespace ?? ''}`,
 });
 
 registerView({

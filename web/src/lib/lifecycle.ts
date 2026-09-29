@@ -1,6 +1,6 @@
 // Node lifecycles as seen by a change (ADR 0014): the state a node has in the
 // change once its change impacts are counted, and the transitions it can take.
-import { graph, type ChangeImpact, type GraphNode, type Lifecycle, type LifecycleTransition, type NodeRef } from './api';
+import { graph, type ChangeImpact, type GraphNode, type Lifecycle, type LifecycleTransition, type LinkWrite, type NodeRef } from './api';
 import type { TypeCatalog } from './stores/types.svelte';
 
 /** Lifecycle of a node type, from the type catalogue (extends chain included). */
@@ -71,7 +71,7 @@ export async function writeNodeInChange(
   changeId: string,
   cns: ChangeImpact[],
   target: { pre?: NodeRef; key?: string; type?: string },
-  w: { props?: Record<string, unknown>; state?: string; retire?: boolean },
+  w: { props?: Record<string, unknown>; state?: string; retire?: boolean; addLinks?: LinkWrite[]; removeLinks?: string[] },
   rationale: string,
   flow = '',
 ): Promise<void> {
@@ -84,8 +84,9 @@ export async function writeNodeInChange(
     cn = (await graph.addChangeImpacts(changeId, [decl])).nodes?.[0];
   }
   if (!cn?.id) throw new Error('The change impact could not be declared.');
-  await graph.writeChangeImpact(changeId, cn.id, { props: w.props as never, state: w.state, retire: w.retire }, flow);
-  await graph.reviewChangeImpact(changeId, cn.id, true, rationale, flow);
+  await graph.writeChangeImpact(changeId, cn.id, { ...w, props: w.props as never }, flow);
+  // an accepted impact stays accepted when it is written again: only a proposed one is reviewed
+  if (cn.review !== 'accepted') await graph.reviewChangeImpact(changeId, cn.id, true, rationale, flow);
 }
 
 /** Qualified node types a change of the namespace can create (all of them without a namespace). */

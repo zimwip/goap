@@ -475,7 +475,7 @@ func (h *Handler) PlanMerge(ctx context.Context, r *connect.Request[graphv1.Plan
 }
 
 func (h *Handler) MergeBranch(ctx context.Context, r *connect.Request[graphv1.MergeBranchRequest]) (*connect.Response[graphv1.MergeBranchResponse], error) {
-	req := graph.MergeRequest{From: r.Msg.From, Into: r.Msg.Into, Title: r.Msg.Title, Resolutions: map[domain.NodeID]graph.Resolution{}}
+	req := graph.MergeRequest{From: r.Msg.From, Into: r.Msg.Into, Title: r.Msg.Title, Namespace: r.Msg.Namespace, Resolutions: map[domain.NodeID]graph.Resolution{}}
 	for id, res := range r.Msg.Resolutions {
 		req.Resolutions[domain.NodeID(id)] = graph.Resolution{Props: pbconv.Map(res.GetProps()), Skip: res.GetSkip()}
 	}
@@ -486,6 +486,22 @@ func (h *Handler) MergeBranch(ctx context.Context, r *connect.Request[graphv1.Me
 		h.publish(ctx, "goap.change."+string(c.ID)+".applied", domain.ChangeEvent{Type: "change.applied", Change: c, Baseline: &out.Baseline})
 	}
 	return res(&graphv1.MergeBranchResponse{Change: pbconv.ChangeToPB(out.Change), Baseline: pbconv.BaselineToPB(out.Baseline), Plan: pbconv.MergePlanToPB(out.Plan)}, err)
+}
+
+func (h *Handler) DiffBaselines(ctx context.Context, r *connect.Request[graphv1.DiffBaselinesRequest]) (*connect.Response[graphv1.DiffBaselinesResponse], error) {
+	ds, err := h.Graph.DiffBaselines(ctx, domain.BaselineID(r.Msg.From), domain.BaselineID(r.Msg.To))
+	out := &graphv1.DiffBaselinesResponse{}
+	for _, d := range ds {
+		pb := &graphv1.BaselineDiff{Node: string(d.Node), Key: d.Key, Type: d.Type, Kind: d.Kind}
+		if d.From != nil {
+			pb.From = pbconv.NodeToPB(*d.From)
+		}
+		if d.To != nil {
+			pb.To = pbconv.NodeToPB(*d.To)
+		}
+		out.Nodes = append(out.Nodes, pb)
+	}
+	return res(out, err)
 }
 
 func (h *Handler) MergeChange(ctx context.Context, r *connect.Request[graphv1.MergeChangeRequest]) (*connect.Response[graphv1.MergeChangeResponse], error) {

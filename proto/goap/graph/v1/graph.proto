@@ -58,6 +58,8 @@ service GraphService {
   rpc ListNodeVersions(ListNodeVersionsRequest) returns (ListNodeVersionsResponse);
   rpc PlanMerge(PlanMergeRequest) returns (PlanMergeResponse);
   rpc MergeBranch(MergeBranchRequest) returns (MergeBranchResponse);
+  // What going from a baseline to another changes, node by node (same namespace).
+  rpc DiffBaselines(DiffBaselinesRequest) returns (DiffBaselinesResponse);
   // Completes a merge_pending change: merges its branch into the branch it forked from.
   rpc MergeChange(MergeChangeRequest) returns (MergeChangeResponse);
   // Nodes the change shares with other open changes (a merge will be needed).
@@ -659,6 +661,23 @@ message PlanMergeRequest {
   string namespace = 3;
 }
 
+message DiffBaselinesRequest {
+  string from = 1;
+  string to = 2;
+}
+message DiffBaselinesResponse {
+  repeated BaselineDiff nodes = 1;
+}
+message BaselineDiff {
+  string node = 1;
+  string key = 2;
+  string type = 3;
+  // added | removed | changed
+  string kind = 4;
+  // the node as each baseline holds it (absent where the node is not in it)
+  Node from = 5;
+  Node to = 6;
+}
 message PlanMergeResponse {
   MergePlan plan = 1;
 }
@@ -675,6 +694,8 @@ message MergeBranchRequest {
   string title = 3;
   // by node id
   map<string, Resolution> resolutions = 4;
+  // namespace of the branches (default: the default namespace)
+  string namespace = 5;
 }
 
 message MergeBranchResponse {
