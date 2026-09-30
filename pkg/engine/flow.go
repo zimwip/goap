@@ -134,9 +134,13 @@ func (e *Engine) relaunchedItems(ctx context.Context, old *Process, step int) ([
 	return seeds, slices.Sorted(maps.Keys(execs)), nil
 }
 
-// DecideFlow adopts or discards the flow branch of a relaunched process. Adopting requires the
-// process to have reached its goal (it waits for this decision): the run it replaces becomes
-// superseded. Discarding is possible at any time while the branch is open.
+// DecideFlow adopts or discards the flow branch of a relaunched process. Adopting normally happens
+// once the process has reached its goal (it waits for this decision), but a process that stopped
+// short of the goal (failed, or stuck with no plan) can be adopted too: what it wrote so far is
+// banked onto the change branch and the run can be relaunched further later on. Adopting a process
+// still actively working (running, clarifying, or waiting on something other than the flow decision)
+// is refused: let it finish or fail first. The run the flow replaces becomes superseded. Discarding
+// is possible at any time while the branch is open.
 func (e *Engine) DecideFlow(ctx context.Context, id string, adopt bool, comment string) (*Process, error) {
 	defer e.lock(id)()
 	p, err := e.Store.Get(ctx, id)
@@ -149,8 +153,9 @@ func (e *Engine) DecideFlow(ctx context.Context, id string, adopt bool, comment 
 	by := authz.From(ctx).Subject
 	decision := "discarded"
 	if adopt {
-		if p.Status != StatusWaiting || p.Pending == nil || p.Pending.Kind != TaskFlow {
-			return nil, fmt.Errorf("process %s has not reached its goal on flow %s yet: %w", id, p.Flow, ErrInvalidState)
+		goalReached := p.Status == StatusWaiting && p.Pending != nil && p.Pending.Kind == TaskFlow
+		if !goalReached && p.Status != StatusFailed && p.Status != StatusStuck {
+			return nil, fmt.Errorf("process %s is %s: not ready to adopt on flow %s: %w", id, p.Status, p.Flow, ErrInvalidState)
 		}
 		if _, err := e.Graph.AdoptFlow(ctx, p.ChangeID, p.Flow, by); err != nil {
 			return nil, err
@@ -161,7 +166,9 @@ func (e *Engine) DecideFlow(ctx context.Context, id string, adopt bool, comment 
 				return nil, err
 			}
 		}
-		p.Status = StatusCompleted
+		if goalReached {
+			p.Status = StatusCompleted
+		}
 	} else {
 		if _, err := e.Graph.DiscardFlow(ctx, p.ChangeID, p.Flow, by); err != nil {
 			return nil, err
