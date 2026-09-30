@@ -365,6 +365,11 @@ func TestCentralizeAlgorithms(t *testing.T) {
 			if vs := cat.Validators("b@Other"); len(vs) != 1 || vs[0].Algorithm != "regex-match" || vs[0].Params["pattern"] != "^[0-9]+$" {
 				t.Fatalf("platform@ validator did not resolve: %+v", vs)
 			}
+			views, err := s.PlatformAlgorithms(ctx)
+			if err != nil || len(views) != 1 || len(views[0].Usages) != 1 ||
+				views[0].Usages[0].Domain != "b" || views[0].Usages[0].Instance != "shared" || views[0].Usages[0].Values["pattern"] != "^[0-9]+$" {
+				t.Fatalf("platform algorithm usage: %+v %v", views, err)
+			}
 
 			// c redeclares the same name with different code: refused
 			c := methodology.Domain{Name: "c", Version: "1", Schema: methodology.Schema{

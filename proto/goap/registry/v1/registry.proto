@@ -670,12 +670,23 @@ message RunAlgorithmResponse {
   repeated string logs = 6;
 }
 
+// AlgorithmInstanceUsage is a domain's algorithm instance referencing a platform-wide algorithm as
+// "platform@<name>" instead of redeclaring it (ADR 0041).
+message AlgorithmInstanceUsage {
+  string domain = 1;
+  string version = 2;
+  string instance = 3;
+  google.protobuf.Struct values = 4;
+}
+
 // PlatformAlgorithm is an algorithm centralized in the platform-wide registry (ADR 0041): the domain that first
-// published it, and its canonical definition (name, type, language, code, params).
+// published it, its canonical definition (name, type, language, code, params), and every algorithm instance of a
+// published domain that references it instead of redeclaring it.
 message PlatformAlgorithm {
   Algorithm algorithm = 1;
   string source_domain = 2;
   string source_version = 3;
+  repeated AlgorithmInstanceUsage instances = 4;
 }
 
 message ListPlatformAlgorithmsRequest {}
