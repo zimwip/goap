@@ -20,7 +20,7 @@
   import { headGraph, findNode, applyOnMain, createNodeItem, updateNodeItem, deleteNodeItem, moveNodeItem, currentLink, refOf, type HeadGraph } from '../../graphEdit';
   import { openTab } from '../../shell/tabs.svelte';
   import { notify, provideActions } from '../../shell/workbench.svelte';
-  import { ADAPTER_TYPE, ORG_UNIT_TYPE, OWNER, PART_OF, DEFAULT_ORG } from '../../orgTypes';
+  import { ADAPTER_TYPE, ORG_UNIT_TYPE, OWNER, PART_OF, DEFAULT_ORG, DEFAULT_UNIT_PROP } from '../../orgTypes';
   import { confirmDialog } from '../../shell/confirmState.svelte';
 
   let { tab }: { tab: Tab } = $props();
@@ -106,6 +106,39 @@
       error = errorMessage(e);
     } finally {
       movingBusy = false;
+    }
+  }
+
+  // The unit new users join (ADR 0042): the OrgUnit flagged `default`, else ORG-DEFAULT (a graph seeded before
+  // the flag existed). Making this unit the default moves the flag in one change: set here, cleared on every
+  // unit that carries it, so exactly one unit keeps it.
+  const flagged = $derived((head?.nodes ?? []).filter((n) => n.type === ORG_UNIT_TYPE && n.props?.[DEFAULT_UNIT_PROP] === true));
+  const defaultKey = $derived(flagged.map((n) => n.key ?? '').sort()[0] || DEFAULT_ORG);
+  const isDefault = $derived(defaultKey === key);
+  let defaultBusy = $state(false);
+
+  async function makeDefault() {
+    if (!unit || !head || isDefault) return;
+    const ok = await confirmDialog({
+      title: 'Default unit for new users',
+      message: `Users signing in for the first time will join ${key} instead of ${defaultKey}. Existing users stay where they are.`,
+      confirmLabel: 'Make default',
+    });
+    if (!ok) return;
+    defaultBusy = true;
+    error = '';
+    try {
+      const edits = [
+        updateNodeItem(unit, { [DEFAULT_UNIT_PROP]: true }),
+        ...flagged.filter((n) => n.id !== unit.id).map((n) => updateNodeItem(n, { [DEFAULT_UNIT_PROP]: null })),
+      ];
+      await applyOnMain(NS, `Default unit ${key}`, `New users join ${key}`, head.baselineId, edits);
+      notify(`New users now join ${key}.`, 'ok');
+      await load();
+    } catch (e) {
+      error = errorMessage(e);
+    } finally {
+      defaultBusy = false;
     }
   }
 
@@ -345,6 +378,15 @@
                   </select>
                   <button type="button" class="small primary" disabled={movingBusy} onclick={move}>Move</button>
                   <button type="button" class="small" disabled={movingBusy} onclick={() => (moving = false)}>Cancel</button>
+                {/if}
+              </dd>
+              <dt>New users</dt>
+              <dd>
+                {#if isDefault}
+                  <span class="badge">join this unit</span>
+                {:else}
+                  <span class="muted">join <button type="button" class="link mono" onclick={() => openTab({ kind: 'unit', params: { key: defaultKey } })}>{defaultKey}</button></span>
+                  <button type="button" class="small ghost" disabled={defaultBusy} onclick={makeDefault}>Make default</button>
                 {/if}
               </dd>
               {#if childKeys.length}

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 
@@ -136,7 +137,15 @@ func TestLocalAuth(t *testing.T) {
 	e := echo.New()
 	secret := []byte(strings.Repeat("s", 32))
 	creds := &fakeCredentials{passwords: map[string]string{}}
-	if err := Mount(e, Config{AuthMode: "local", JWTSecret: secret, Credentials: creds,
+	var declared []string // subjects OnSignIn was called for (ADR 0042: the User node is created at sign-in)
+	onSignIn := func(_ context.Context, subject string) error {
+		if subject == "broken" {
+			return errors.New("graph unavailable")
+		}
+		declared = append(declared, subject)
+		return nil
+	}
+	if err := Mount(e, Config{AuthMode: "local", JWTSecret: secret, Credentials: creds, OnSignIn: onSignIn,
 		Routes: []Route{{Prefix: "/goap.graph.v1.GraphService/", Upstream: upstream.URL}}}); err != nil {
 		t.Fatal(err)
 	}
@@ -206,6 +215,30 @@ func TestLocalAuth(t *testing.T) {
 	}
 	if gotSubject != "alice" {
 		t.Fatalf("subject propagated = %q", gotSubject)
+	}
+
+	if !slices.Equal(declared, []string{"alice", "alice"}) {
+		t.Fatalf("OnSignIn must run on register and on login only: %v", declared)
+	}
+	// a user that cannot be declared in the graph is not signed in
+	creds.passwords["broken"] = "some password"
+	if code, tok := login("broken", "some password"); code != http.StatusServiceUnavailable || tok != "" {
+		t.Fatalf("login when OnSignIn fails: %d %q", code, tok)
+	}
+
+	// switching project reissues the token in local mode too (ADR 0039)
+	switchReq, _ := http.NewRequest(http.MethodPost, srv.URL+"/auth/dev-token/project", strings.NewReader(`{"project":"PROJ-A"}`))
+	switchReq.Header.Set("Content-Type", "application/json")
+	switchReq.Header.Set("Authorization", "Bearer "+tok)
+	switchResp, err := http.DefaultClient.Do(switchReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var switched struct{ Token string }
+	_ = json.NewDecoder(switchResp.Body).Decode(&switched)
+	switchResp.Body.Close()
+	if switchResp.StatusCode != http.StatusOK || switched.Token == "" {
+		t.Fatalf("switch project: %d %q", switchResp.StatusCode, switched.Token)
 	}
 
 	// logout has nothing to revoke (stateless HS256) but must answer

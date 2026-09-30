@@ -1,12 +1,15 @@
 name: organisation
-version: 1.5.0
+version: 1.6.0
 description: >
   Organisation structure, managed in its own namespace ("organisation"): a hierarchy of organisational units,
   mirrored by a hierarchy of projects (ADR 0039). Nodes of other namespaces reference a unit as their owner
   through the cross-namespace `owner` link; changes are split into sub-changes along unit boundaries.
 nodeTypes:
   # `editor` names the editor of the user interface for the nodes of a type (the adapters of a unit are edited on its page).
-  - {name: OrgUnit, editor: unit, description: "Organisational unit (company, direction, department, team)", properties: [name, kind, description]}
+  # `default: true` flags the unit new users join (ADR 0042): a User created on first sign-in is linked
+  # member_of it. One unit carries it (seeded on ORG-DEFAULT; moving it clears the previous one in the same
+  # change); with none, new users join ORG-DEFAULT.
+  - {name: OrgUnit, editor: unit, description: "Organisational unit (company, direction, department, team)", properties: [name, kind, description, default]}
   # an organisational unit's instance of an adapter definition (an AdapterDef node of the platform namespace):
   # the one place where unit, MCP and connector meet. mcp = the MCP implemented, adapter = the name of the
   # AdapterDef, params = its parameter values (secrets as references: env:<VAR> or <vault path>#<field>).

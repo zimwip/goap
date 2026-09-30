@@ -3,10 +3,10 @@
 // in-memory (GOAP_STORE=memory, default) or a local SQLite file
 // (GOAP_STORE=sqlite, GOAP_SQLITE_PATH) that keeps the graph, methodologies,
 // access policies (graph nodes) and processes across restarts. When GOAP_WEB_DIR (default
-// web/dist) holds a built IDE, it is served too. Callers act as the principal
-// GOAP_DEV_SUBJECT / GOAP_DEV_ROLES unless the request carries X-Goap-*
-// identity headers. GOAP_AUTH_MODE=local (ADR 0040) turns this off in favor of real sign-in
-// (register/login/logout, internal/credsvc), the same auth code cmd/gateway uses.
+// web/dist) holds a built IDE, it is served too. By default (ADR 0040, 0042) users sign in
+// (register/login/logout, internal/credsvc), the same auth code cmd/gateway uses; with
+// GOAP_AUTH_MODE=none, callers act as the principal GOAP_DEV_SUBJECT / GOAP_DEV_ROLES unless the
+// request carries X-Goap-* identity headers.
 package main
 
 import (
@@ -233,19 +233,30 @@ func main() {
 	hub.KeepRegistered(ctx, connectors)
 	srv := platform.NewServer(log, platform.Env("GOAP_HTTP_ADDR", ":8080"))
 
-	// Local sign-in (ADR 0040), opt-in: GOAP_AUTH_MODE=local turns this single process into its own
+	// Sign-in (ADR 0040, 0042): local by default (GOAP_AUTH_MODE unset) — this single process is its own
 	// identity provider (register/login/logout, no external IdP), the same way cmd/gateway's AuthMode does
-	// for the distributed platform — reusing its authenticator and auth endpoints rather than the fixed
-	// GOAP_DEV_SUBJECT/ORG/ROLES principal every request gets by default. Applied per-route (not e.Use),
-	// so the built IDE's static assets and /api/status/health stay reachable with no token.
+	// for the distributed platform, reusing its authenticator and auth endpoints. GOAP_AUTH_MODE=none turns it
+	// off for development: every request then acts as the fixed GOAP_DEV_SUBJECT/ORG/ROLES principal. Applied
+	// per-route (not e.Use), so the built IDE's static assets and /api/status/health stay reachable with no
+	// token.
 	var authMW echo.MiddlewareFunc
-	if authMode := platform.Env("GOAP_AUTH_MODE", "none"); authMode != "none" && authMode != "" {
+	if authMode := platform.Env("GOAP_AUTH_MODE", gateway.DefaultAuthMode); authMode != "none" && authMode != "" {
 		secret, err := secrets.Get(ctx, "goap/gateway#jwt_secret", "GOAP_JWT_SECRET")
+		if err == nil && secret == "" && authMode == "local" {
+			secret, err = localJWTSecret(st.dir)
+		}
 		if err != nil {
 			platform.Fatal(log, "jwt secret", err)
 		}
 		authCfg := gateway.Config{AuthMode: authMode, JWTSecret: []byte(secret), DevTokens: platform.Env("GOAP_DEV_TOKENS", "") == "true",
-			Credentials: &credsvc.Service{Store: st.creds}, Enrich: directory.Enrich}
+			Credentials: &credsvc.Service{Store: st.creds}, Enrich: directory.Enrich,
+			// the user exists in the graph from their first sign-in, member of the unit new users join (ADR 0042)
+			OnSignIn: func(ctx context.Context, subject string) error {
+				if err := graphsvc.EnsureUser(ctx, g, subject); err != nil {
+					return err
+				}
+				return directory.Refresh(ctx)
+			}}
 		if err := gateway.MountAuthEndpoints(srv.Echo, authCfg); err != nil {
 			platform.Fatal(log, "auth", err)
 		}
