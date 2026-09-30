@@ -20,6 +20,7 @@
   import { openTab } from '../../shell/tabs.svelte';
   import { notify, provideActions } from '../../shell/workbench.svelte';
   import { ADAPTER_TYPE, ORG_UNIT_TYPE, OWNER, PART_OF } from '../../orgTypes';
+  import { confirmDialog } from '../../shell/confirmState.svelte';
 
   let { tab }: { tab: Tab } = $props();
 
@@ -193,7 +194,7 @@
   }
 
   async function detach(m: string) {
-    if (!confirm(`Detach ${m} from ${key}? The unit falls back on its ancestors' adapter, if any.`)) return;
+    if (!(await confirmDialog({ message: `Detach ${m} from ${key}? The unit falls back on its ancestors' adapter, if any.`, danger: true }))) return;
     try {
       const h = await headGraph(NS);
       const existing = findNode(h, NS, ADAPTER_TYPE, `ADP:${key}/${m}`);

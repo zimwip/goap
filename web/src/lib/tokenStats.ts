@@ -15,11 +15,16 @@ export interface TokenEvent {
   error: boolean;
 }
 
+/** Aggregation axes of the consumption over time. */
+export type Dim = 'model' | 'agent' | 'action';
+
 export interface Bucket {
   key: string;
   label: string;
   input: number;
   output: number;
+  /** input / output tokens of the bucket per value of each axis */
+  by: Record<Dim, Record<string, { input: number; output: number }>>;
 }
 
 export interface Slice {
@@ -114,7 +119,7 @@ function slices(events: TokenEvent[], key: (e: TokenEvent) => string): Slice[] {
   return [...m.values()].sort((a, b) => b.total - a.total);
 }
 
-function bucketsOf(events: TokenEvent[], from: number, to: number, hourly: boolean): Bucket[] {
+function bucketsOf(events: TokenEvent[], from: number, to: number, hourly: boolean, keys: Record<Dim, (e: TokenEvent) => string>): Bucket[] {
   const step = hourly ? 3_600_000 : 86_400_000;
   const start = new Date(from);
   if (hourly) start.setMinutes(0, 0, 0);
@@ -129,6 +134,7 @@ function bucketsOf(events: TokenEvent[], from: number, to: number, hourly: boole
       label: hourly ? d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }),
       input: 0,
       output: 0,
+      by: { model: {}, agent: {}, action: {} },
     });
   }
   for (const e of events) {
@@ -136,6 +142,12 @@ function bucketsOf(events: TokenEvent[], from: number, to: number, hourly: boole
     if (i >= 0 && i < out.length) {
       out[i].input += e.input;
       out[i].output += e.output;
+      for (const d of ['model', 'agent', 'action'] as Dim[]) {
+        const k = keys[d](e);
+        const c = (out[i].by[d][k] ??= { input: 0, output: 0 });
+        c.input += e.input;
+        c.output += e.output;
+      }
     }
   }
   return out;
@@ -196,6 +208,11 @@ export function computeStats(processes: Process[], sinceMs: number, now = Date.n
   const output = events.reduce((a, e) => a + e.output, 0);
   const from = sinceMs || (events.length ? Math.min(...events.map((e) => e.time)) : now);
   const hourly = !!sinceMs && now - sinceMs <= 2 * 86_400_000;
+  const keys: Record<Dim, (e: TokenEvent) => string> = {
+    model: (e) => e.model,
+    agent: (e) => byId.get(e.processId)?.agent || byId.get(e.processId)?.methodology || 'unknown',
+    action: (e) => e.action || 'unknown',
+  };
   const titleOf = (id: string) => runs.get(rootOf(id))?.title ?? id.slice(0, 8);
   return {
     input,
@@ -206,10 +223,10 @@ export function computeStats(processes: Process[], sinceMs: number, now = Date.n
     runs: list.length,
     avgPerRun: avg,
     medianPerRun: median,
-    buckets: bucketsOf(events, from, now, hourly),
-    byModel: slices(events, (e) => e.model),
-    byAgent: slices(events, (e) => byId.get(e.processId)?.agent || byId.get(e.processId)?.methodology || 'unknown'),
-    byAction: slices(events, (e) => e.action || 'unknown'),
+    buckets: bucketsOf(events, from, now, hourly, keys),
+    byModel: slices(events, keys.model),
+    byAgent: slices(events, keys.agent),
+    byAction: slices(events, keys.action),
     topRuns: list,
     topCalls: events
       .map((e) => ({ ...e, title: titleOf(e.processId), total: e.input + e.output }))

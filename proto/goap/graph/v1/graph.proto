@@ -49,12 +49,15 @@ service GraphService {
   rpc CommitEdits(CommitEditsRequest) returns (CommitEditsResponse);
   rpc GetBlackboard(GetBlackboardRequest) returns (GetBlackboardResponse);
   rpc ApplyChange(ApplyChangeRequest) returns (ApplyChangeResponse);
+  // Remove a change that landed nothing, with its log (ADR 0037). Refused once anything of it is applied or used.
+  rpc DeleteChange(DeleteChangeRequest) returns (DeleteChangeResponse);
 
   // Version branches (ADR 0009)
   rpc CreateBranch(CreateBranchRequest) returns (CreateBranchResponse);
   rpc ListBranches(ListBranchesRequest) returns (ListBranchesResponse);
   rpc GetBranch(GetBranchRequest) returns (GetBranchResponse);
   rpc SetBranchStatus(SetBranchStatusRequest) returns (SetBranchStatusResponse);
+  rpc SetBranchDescription(SetBranchDescriptionRequest) returns (SetBranchDescriptionResponse);
   rpc ListNodeVersions(ListNodeVersionsRequest) returns (ListNodeVersionsResponse);
   rpc PlanMerge(PlanMergeRequest) returns (PlanMergeResponse);
   rpc MergeBranch(MergeBranchRequest) returns (MergeBranchResponse);
@@ -171,6 +174,8 @@ message Baseline {
   google.protobuf.Timestamp created_at = 6;
   string branch = 7;
   string namespace = 8;
+  // the head of the branch merged in, when this baseline is the result of a merge (a second parent)
+  string merged_from = 9;
 }
 
 message Decision {
@@ -492,7 +497,8 @@ message CreateChangeRequest {
   bool own_branch = 8;
   // make the change a sub-change of another one (namespace, branch and baseline follow the parent)
   string parent_id = 9;
-  // key of the responsible OrgUnit (organisation namespace)
+  // key of the responsible OrgUnit (organisation namespace); "@me": the personal unit of the caller, which
+  // makes the change personal (ADR 0037)
   string owner_org = 10;
   reserved 11;
 }
@@ -569,6 +575,15 @@ message ApplyChangeRequest {
   string baseline_name = 2;
 }
 
+message DeleteChangeRequest {
+  string change_id = 1;
+}
+
+message DeleteChangeResponse {
+  // the removed change (as it was)
+  Change change = 1;
+}
+
 message ApplyChangeResponse {
   Baseline baseline = 1;
 }
@@ -584,6 +599,7 @@ message Branch {
   string status = 6;
   google.protobuf.Timestamp created_at = 7;
   string namespace = 8;
+  string description = 9;
 }
 
 message CreateBranchRequest {
@@ -591,6 +607,7 @@ message CreateBranchRequest {
   string from_baseline = 2;
   string origin = 3;
   string namespace = 4;
+  string description = 5;
 }
 
 message CreateBranchResponse {
@@ -622,6 +639,14 @@ message SetBranchStatusRequest {
 }
 
 message SetBranchStatusResponse {}
+
+message SetBranchDescriptionRequest {
+  string name = 1;
+  string namespace = 2;
+  string description = 3;
+}
+
+message SetBranchDescriptionResponse {}
 
 message ListNodeVersionsRequest {
   string id = 1;

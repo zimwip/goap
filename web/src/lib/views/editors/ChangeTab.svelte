@@ -43,6 +43,7 @@
   import ChangeDecisions from '../../components/ChangeDecisions.svelte';
   import ChangeRisks from '../../components/ChangeRisks.svelte';
   import { riskRegister, liveRisk } from '../../risks';
+  import { confirmDialog } from '../../shell/confirmState.svelte';
   import ScopeBar from '../../components/ScopeBar.svelte';
   import MergeResolver from '../../components/MergeResolver.svelte';
   import { MAIN_SCOPE, candidatesByOption, scopeColor, scopeName, scopeWritable } from '../../changeScope';
@@ -443,9 +444,15 @@
     }
   }
 
-  const abandon = () =>
-    confirm(`Abandon “${change?.title}”? Its sub-changes are abandoned too and its branch is closed; nothing it wrote lands.`) &&
-    define({ status: 'abandoned' }, 'Change abandoned.');
+  const abandon = async () => {
+    if (
+      await confirmDialog({
+        message: `Abandon “${change?.title}”? Its sub-changes are abandoned too and its branch is closed; nothing it wrote lands.`,
+        danger: true,
+      })
+    )
+      void define({ status: 'abandoned' }, 'Change abandoned.');
+  };
 
   async function apply() {
     if (!change?.id) return;

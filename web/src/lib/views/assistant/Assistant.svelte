@@ -19,6 +19,7 @@
   import { baselinesByNamespace, methodologies } from '../../stores/catalog.svelte';
   import { openTab } from '../../shell/tabs.svelte';
   import { formatDate, shortId, type Baseline } from '../../api';
+  import { confirmDialog } from '../../shell/confirmState.svelte';
 
   let { mode = 'tab' }: { mode?: 'panel' | 'tab' } = $props();
 
@@ -79,8 +80,8 @@
     input?.focus();
   }
 
-  function reset() {
-    if (threads.length && !confirm('Start a new conversation? The current history will be erased.')) return;
+  async function reset() {
+    if (threads.length && !(await confirmDialog('Start a new conversation? The current history will be erased.'))) return;
     newConversation();
   }
 

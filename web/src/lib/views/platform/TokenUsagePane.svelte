@@ -1,16 +1,16 @@
 <script lang="ts">
-  // Token consumption dashboard: overall, over time, by model / agent / action,
-  // the runs that consume the most (sub-agents included) and the most expensive calls.
-  import type { Tab } from '../../shell/types';
+  // "Token usage" section of the settings modal: the caller's own consumption (overall, over
+  // time, by model / agent / action, the runs that consume the most, the most expensive calls).
+  // Platform administrators can switch to the consumption of the whole platform, with the quotas.
   import Icon from '../../shell/Icon.svelte';
   import StatusBadge from '../../components/StatusBadge.svelte';
-  import { provideActions } from '../../shell/workbench.svelte';
   import { openTab } from '../../shell/tabs.svelte';
+  import { openSettings } from '../../shell/settingsState.svelte';
+  import { closeUsage } from '../../shell/usageState.svelte';
   import { engine, models, errorMessage, formatDate, type CatalogModel, type Process } from '../../api';
   import { hasAnyRole } from '../../stores/session.svelte';
-  import { computeStats, type Slice } from '../../tokenStats';
-
-  let { tab }: { tab: Tab } = $props();
+  import { prefs } from '../../stores/preferences.svelte';
+  import { computeStats, type Dim, type Slice } from '../../tokenStats';
 
   const RANGES: [string, string, number][] = [
     ['24h', 'Last 24 hours', 86_400_000],
@@ -22,21 +22,24 @@
   let processes = $state<Process[]>([]);
   let loading = $state(true);
   let error = $state('');
-  let range = $state('7d');
+  let range = $state(prefs.values.usagePeriod);
   let sort = $state<'total' | 'input' | 'output' | 'calls'>('total');
   let loadedAt = $state(Date.now());
   let catalog = $state<CatalogModel[]>([]);
   let quotaError = $state('');
   const isAdmin = $derived(hasAnyRole('admin'));
+  // only administrators may look beyond their own consumption
+  let scope = $state<'mine' | 'platform'>(prefs.values.usageScope);
+  const platform = $derived(isAdmin && scope === 'platform');
 
   async function load() {
     loading = true;
     try {
-      processes = (await engine.listProcesses({})).processes ?? [];
+      processes = (await engine.listProcesses({ mine: !platform })).processes ?? [];
       loadedAt = Date.now();
       error = '';
       // global quotas are administered (and readable) by platform admins only
-      if (isAdmin) {
+      if (platform) {
         try {
           catalog = (await models.listCatalog()).models ?? [];
           quotaError = '';
@@ -52,13 +55,9 @@
   }
 
   $effect(() => {
+    void platform;
     void load();
   });
-
-  provideActions(
-    () => tab.id,
-    () => [{ id: 'refresh', label: 'Refresh', icon: 'refresh', disabled: loading, run: load }],
-  );
 
   const since = $derived.by(() => {
     const ms = RANGES.find((r) => r[0] === range)?.[2] ?? 0;
@@ -73,7 +72,42 @@
 
   // --- time chart -----------------------------------------------------------------------
   const CH = { w: 720, h: 190, l: 44, r: 8, t: 8, b: 24 };
-  const maxBucket = $derived(Math.max(1, ...stats.buckets.map((b) => b.input + b.output)));
+  const DIMS: [Dim, string][] = [['model', 'By model'], ['agent', 'By agent'], ['action', 'By action']];
+  const PALETTE = ['#4f7fd8', '#e0873a', '#3fa672', '#a96ad0', '#d9534f', '#2fa3b8', '#c2a02c'];
+  const OTHER = '#8a8f98';
+  const MAX_SERIES = PALETTE.length;
+  let dim = $state<Dim>('model');
+  // stacked series: the biggest values of the axis over the period, the rest merged as "other"
+  const series = $derived.by(() => {
+    const tot = new Map<string, number>();
+    for (const b of stats.buckets) for (const [k, v] of Object.entries(b.by[dim])) tot.set(k, (tot.get(k) ?? 0) + v.input + v.output);
+    const ranked = [...tot.entries()].sort((a, b) => b[1] - a[1]).map(([k]) => k);
+    const shown = ranked.slice(0, ranked.length > MAX_SERIES ? MAX_SERIES - 1 : MAX_SERIES);
+    const list = shown.map((key, i) => ({ key, color: PALETTE[i] }));
+    if (ranked.length > shown.length) list.push({ key: 'other', color: OTHER });
+    return list;
+  });
+  // per period, one stack for the input and one for the output, side by side
+  const stacks = $derived(
+    stats.buckets.map((b) => {
+      const shown = new Set(series.map((s) => s.key));
+      const stack = (side: 'input' | 'output') => {
+        let acc = 0;
+        const segs = series.map((s) => {
+          const v =
+            s.key === 'other' && !b.by[dim]['other']
+              ? Object.entries(b.by[dim]).reduce((a, [k, x]) => a + (shown.has(k) ? 0 : x[side]), 0)
+              : (b.by[dim][s.key]?.[side] ?? 0);
+          const seg = { ...s, v, from: acc };
+          acc += v;
+          return seg;
+        });
+        return { segs, total: acc };
+      };
+      return { b, input: stack('input'), output: stack('output') };
+    }),
+  );
+  const maxBucket = $derived(Math.max(1, ...stacks.map((s) => Math.max(s.input.total, s.output.total))));
   const bw = $derived((CH.w - CH.l - CH.r) / Math.max(1, stats.buckets.length));
   const y = (v: number) => CH.h - CH.b - (v / maxBucket) * (CH.h - CH.t - CH.b);
   const labelEvery = $derived(Math.max(1, Math.ceil(stats.buckets.length / 8)));
@@ -93,30 +127,38 @@
   }
 
   function open(id: string) {
+    closeUsage();
     openTab({ kind: 'run', params: { id } }, { pin: true });
   }
 </script>
 
-<div class="editor-page">
-  <div class="editor-head">
-    <Icon name="coins" size={18} />
-    <h2>Token usage</h2>
+<div class="pane">
+  <div class="head">
+    {#if isAdmin}
+      <select aria-label="Scope" bind:value={scope}>
+        <option value="mine">My consumption</option>
+        <option value="platform">Whole platform</option>
+      </select>
+    {:else}
+      <span class="hint">Your own consumption.</span>
+    {/if}
     <span class="grow"></span>
+    <button type="button" class="small refresh" disabled={loading} onclick={load}><Icon name="refresh" size={13} />Refresh</button>
     <select aria-label="Period" bind:value={range}>
       {#each RANGES as [v, l] (v)}<option value={v}>{l}</option>{/each}
     </select>
   </div>
   {#if error}<div class="alert">{error}</div>{/if}
-  {#if isAdmin}
+  {#if platform}
     <section class="card">
       <div class="row">
         <h3 class="grow">Quota usage</h3>
-        <button type="button" class="small" onclick={() => openTab({ kind: 'platform', params: {} }, { pin: true })}>Manage quotas</button>
+        <button type="button" class="small" onclick={() => { closeUsage(); openSettings('catalog'); }}>Manage quotas</button>
       </div>
       {#if quotaError}
         <p class="alert">{quotaError}</p>
       {:else if quotas.length === 0}
-        <p class="empty">No model has a global quota. Set one in Platform settings.</p>
+        <p class="empty">No model has a global quota. Set one in Models & quotas.</p>
       {:else}
         <ul class="quotas">
           {#each quotas as q (q.m.provider + '/' + q.m.model)}
@@ -153,20 +195,32 @@
     </div>
 
     <section class="card">
-      <h3>Consumption over time <span class="legend"><i class="sw in"></i>input <i class="sw out"></i>output</span></h3>
-      <svg viewBox={`0 0 ${CH.w} ${CH.h}`} class="chart" role="img" aria-label="Tokens per period, input and output">
+      <div class="row">
+        <h3 class="grow">Consumption over time</h3>
+        <select aria-label="Aggregation axis" bind:value={dim}>
+          {#each DIMS as [v, l] (v)}<option value={v}>{l}</option>{/each}
+        </select>
+      </div>
+      <div class="legend">
+        {#each series as s (s.key)}<span class="lg"><i class="sw" style={`background:${s.color}`}></i>{s.key}</span>{/each}
+        <span class="lg note">left bar: input · right bar (lighter): output</span>
+      </div>
+      <svg viewBox={`0 0 ${CH.w} ${CH.h}`} class="chart" role="img" aria-label={`Tokens per period, stacked ${dim}`}>
         {#each [0, 0.5, 1] as f (f)}
           <line x1={CH.l} x2={CH.w - CH.r} y1={y(maxBucket * f)} y2={y(maxBucket * f)} class="grid" />
           <text x={CH.l - 6} y={y(maxBucket * f) + 4} text-anchor="end" class="axis">{compact(maxBucket * f)}</text>
         {/each}
-        {#each stats.buckets as b, i (b.key)}
+        {#each stacks as st, i (st.b.key)}
           {@const x = CH.l + i * bw}
           <g>
-            <rect {x} y={y(b.input + b.output)} width={Math.max(1, bw - 2)} height={y(b.output) - y(b.input + b.output)} class="in" />
-            <rect {x} y={y(b.output)} width={Math.max(1, bw - 2)} height={CH.h - CH.b - y(b.output)} class="out" />
-            <title>{b.label}: {n(b.input)} in · {n(b.output)} out</title>
+            {#each [['input', st.input, 0], ['output', st.output, 1]] as [side, stk, k] (side as string)}
+              {#each (stk as typeof st.input).segs as g (g.key)}
+                {#if g.v > 0}<rect x={x + (k as number) * (bw / 2)} y={y(g.from + g.v)} width={Math.max(1, bw / 2 - 1.5)} height={y(g.from) - y(g.from + g.v)} fill={g.color} class:out={side === 'output'}><title>{st.b.label} · {side} · {g.key}: {n(g.v)}</title></rect>{/if}
+              {/each}
+            {/each}
+            <title>{st.b.label}: {n(st.b.input)} in · {n(st.b.output)} out</title>
           </g>
-          {#if i % labelEvery === 0}<text x={x + bw / 2} y={CH.h - 8} text-anchor="middle" class="axis">{b.label}</text>{/if}
+          {#if i % labelEvery === 0}<text x={x + bw / 2} y={CH.h - 8} text-anchor="middle" class="axis">{st.b.label}</text>{/if}
         {/each}
       </svg>
     </section>
@@ -251,12 +305,30 @@
         </table>
       </div>
     </section>
-    <p class="hint">Computed from the runs visible to you. Global quotas per model are set in Platform settings.</p>
+    <p class="hint">{platform ? 'Computed from every run of the platform.' : 'Computed from the runs you started.'}</p>
   {/if}
 </div>
 
 <style>
-  .editor-head select {
+  .pane {
+    display: grid;
+    gap: 0.8rem;
+  }
+  .head {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .grow {
+    flex: 1;
+  }
+  .refresh {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    white-space: nowrap;
+  }
+  .head select {
     width: auto;
   }
   .kpis {
@@ -294,30 +366,38 @@
     fill: var(--muted);
     font-size: 10px;
   }
-  .in {
-    fill: var(--accent);
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.2rem 0.9rem;
+    font-size: 0.8rem;
+    color: var(--muted);
+    margin: 0.4rem 0;
   }
   .out {
-    fill: var(--ok);
+    opacity: 0.6;
   }
-  .legend {
-    font-size: 0.8rem;
-    font-weight: 400;
-    color: var(--muted);
-    margin-left: 0.6rem;
+  .note {
+    margin-left: auto;
+  }
+  .lg {
+    display: inline-flex;
+    align-items: center;
+    max-width: 16rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .row select {
+    width: auto;
   }
   .sw {
     display: inline-block;
     width: 10px;
     height: 10px;
     border-radius: 2px;
-    margin: 0 0.25rem 0 0.5rem;
-  }
-  .sw.in {
-    background: var(--accent);
-  }
-  .sw.out {
-    background: var(--ok);
+    margin-right: 0.3rem;
+    flex: none;
   }
   .cols {
     display: grid;

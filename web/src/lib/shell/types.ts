@@ -53,6 +53,8 @@ export interface PanelView extends BaseView {
   component: Component;
   /** badge (counter) shown on the icon or tab */
   badge?: () => string | number | undefined;
+  /** while this is the active tool of its zone, it replaces the editor area's tabbed view; unset: EditorArea shows tabs as usual */
+  editorArea?: Component;
 }
 
 /** Editor type: a component that receives the tab, plus hooks. */

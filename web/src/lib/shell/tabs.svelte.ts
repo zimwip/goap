@@ -5,6 +5,7 @@
 import { editorView } from './registry';
 import { loadRaw, save } from './storage';
 import type { Tab, TabSpec } from './types';
+import { confirmDialog } from './confirmState.svelte';
 
 const KEY = 'goap.ide.tabs';
 
@@ -118,7 +119,7 @@ function forget(id: string): void {
  * Closes a tab. If its changes are not shared by any other open tab, asks
  * for confirmation then discards them.
  */
-export function closeTab(id: string, opts: { force?: boolean } = {}): boolean {
+export async function closeTab(id: string, opts: { force?: boolean } = {}): Promise<boolean> {
   const idx = tabsState.tabs.findIndex((t) => t.id === id);
   if (idx < 0) return false;
   const tab = tabsState.tabs[idx];
@@ -129,11 +130,14 @@ export function closeTab(id: string, opts: { force?: boolean } = {}): boolean {
       !!group && tabsState.tabs.some((t) => t.id !== id && editorView(t.kind)?.group?.(t) === group);
     if (!shared) {
       const title = view.tabTitle(tab);
-      if (!confirm(`"${title}" has unsaved changes. Close and discard them?`)) return false;
+      if (!(await confirmDialog({ message: `"${title}" has unsaved changes. Close and discard them?`, danger: true })))
+        return false;
       view.discard?.(tab);
     }
   }
-  tabsState.tabs.splice(idx, 1);
+  const closeIdx = tabsState.tabs.findIndex((t) => t.id === id);
+  if (closeIdx < 0) return false;
+  tabsState.tabs.splice(closeIdx, 1);
   forget(id);
   if (tabsState.active === id) {
     let next = '';
@@ -141,13 +145,13 @@ export function closeTab(id: string, opts: { force?: boolean } = {}): boolean {
       const h = history.pop() ?? '';
       if (findTab(h)) next = h;
     }
-    tabsState.active = next || tabsState.tabs[Math.min(idx, tabsState.tabs.length - 1)]?.id || '';
+    tabsState.active = next || tabsState.tabs[Math.min(closeIdx, tabsState.tabs.length - 1)]?.id || '';
   }
   return true;
 }
 
 export function closeAll(): void {
-  for (const t of [...tabsState.tabs]) closeTab(t.id);
+  for (const t of [...tabsState.tabs]) void closeTab(t.id);
 }
 
 /** Replaces a tab with another object (e.g. newly saved methodology). */

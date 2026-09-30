@@ -1,0 +1,36 @@
+syntax = "proto3";
+
+package goap.preferences.v1;
+
+import "google/protobuf/struct.proto";
+
+// PreferencesService keeps the personal preferences of the users (theme, voice input, dashboard defaults…),
+// outside the graph (ADR 0038). A user is declared in the graph (User node); what they like is theirs alone and
+// is saved as they change it, with no change to go through. A caller only ever reads and writes their own.
+service PreferencesService {
+  // The preferences of the caller (an empty document until they set one).
+  rpc GetPreferences(GetPreferencesRequest) returns (GetPreferencesResponse);
+  // Merges values into the preferences of the caller: a null value clears a key.
+  rpc SetPreferences(SetPreferencesRequest) returns (SetPreferencesResponse);
+  // Forgets every preference of the caller.
+  rpc ResetPreferences(ResetPreferencesRequest) returns (ResetPreferencesResponse);
+}
+
+message GetPreferencesRequest {}
+
+message GetPreferencesResponse {
+  google.protobuf.Struct values = 1;
+}
+
+message SetPreferencesRequest {
+  google.protobuf.Struct values = 1;
+}
+
+message SetPreferencesResponse {
+  // the preferences after the merge
+  google.protobuf.Struct values = 1;
+}
+
+message ResetPreferencesRequest {}
+
+message ResetPreferencesResponse {}

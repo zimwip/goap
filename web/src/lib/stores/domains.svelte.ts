@@ -7,6 +7,7 @@ import { emptyDomainForm, fromDomainForm, toDomainForm, type DomainForm } from '
 import { normalizePath } from '../methodologyForm';
 import type { NormIssue } from './drafts.svelte';
 import { loadTypes, splitType, typeCatalog } from './types.svelte';
+import { confirmDialog } from '../shell/confirmState.svelte';
 
 interface Catalog {
   items: DomainSummary[];
@@ -217,7 +218,8 @@ export class DomainDraft {
   }
 
   async publish(): Promise<boolean> {
-    if (!confirm(`Publish ${this.label}? The version will become immutable and usable by methodologies.`)) return false;
+    if (!(await confirmDialog(`Publish ${this.label}? The version will become immutable and usable by methodologies.`)))
+      return false;
     const res = await this.run('publish', () => registry.publishDomain(this.name, this.version));
     if (!res) return false;
     this.status = res.domain?.status || 'published';
@@ -228,7 +230,11 @@ export class DomainDraft {
   }
 
   async newVersion(): Promise<string | undefined> {
-    if (this.dirty && !confirm('There are unsaved changes: the new version is copied from the saved version. Continue?')) return undefined;
+    if (
+      this.dirty &&
+      !(await confirmDialog('There are unsaved changes: the new version is copied from the saved version. Continue?'))
+    )
+      return undefined;
     const v = prompt(`Number of the new version (copy of v${this.version}):`, bumpPatch(this.version))?.trim();
     if (!v) return undefined;
     const res = await this.run('version', () => registry.createDomainVersion(this.name, this.version, v));
@@ -255,7 +261,7 @@ export class DomainDraft {
   async remove(): Promise<'deleted' | 'archived' | undefined> {
     const draft = this.status === 'draft';
     const msg = draft ? `Permanently delete the draft ${this.label}?` : `Archive ${this.label}? Methodologies can no longer reference it.`;
-    if (!confirm(msg)) return undefined;
+    if (!(await confirmDialog({ message: msg, danger: true }))) return undefined;
     const ok = await this.run('delete', async () => {
       await registry.deleteDomain(this.name, this.version);
       return true;

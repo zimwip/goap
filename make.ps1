@@ -14,7 +14,7 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-Location $PSScriptRoot
 
-$Services = 'graph', 'registry', 'engine', 'modelgw', 'gateway', 'mcp', 'goap-dev', 'goap-runner'
+$Services = 'graph', 'registry', 'engine', 'modelgw', 'preferences', 'gateway', 'mcp', 'goap-dev', 'goap-runner'
 $Compose = @('compose', '-f', 'deploy/compose/docker-compose.yml')
 $Exe = if ($env:OS -eq 'Windows_NT') { '.exe' } else { '' }
 

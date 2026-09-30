@@ -16,9 +16,8 @@ import MethodologyExplorer from './nav/MethodologyExplorer.svelte';
 import DomainExplorer from './nav/DomainExplorer.svelte';
 import AlgorithmExplorer from './nav/AlgorithmExplorer.svelte';
 import BaselineExplorer from './nav/BaselineExplorer.svelte';
+import BaselineWorkspace from './nav/BaselineWorkspace.svelte';
 import ChangesExplorer from './nav/ChangesExplorer.svelte';
-import TokensTab from './dashboard/TokensTab.svelte';
-import PlatformTab from './platform/PlatformTab.svelte';
 import AccessExplorer from './nav/AccessExplorer.svelte';
 import OrganisationExplorer from './nav/OrganisationExplorer.svelte';
 import AdaptersExplorer from './nav/AdaptersExplorer.svelte';
@@ -46,7 +45,6 @@ import GraphExplorerTab from './editors/GraphExplorerTab.svelte';
 import RunTab from './editors/RunTab.svelte';
 import ChangeTab from './editors/ChangeTab.svelte';
 import BaselineTab from './editors/BaselineTab.svelte';
-import BranchesTab from './editors/BranchesTab.svelte';
 import PoliciesTab from './editors/PoliciesTab.svelte';
 import ImportTab from './editors/ImportTab.svelte';
 
@@ -67,7 +65,7 @@ registerView({ id: 'domains', zone: 'left', title: 'Domains', icon: 'graph', com
 registerView({ id: 'algorithms', zone: 'left', title: 'Algorithms', icon: 'code', component: AlgorithmExplorer, order: 1.6 });
 registerView({ id: 'processes', zone: 'left', title: 'My processes', icon: 'runs', component: ProcessesExplorer, order: 2.2 });
 registerView({ id: 'triggers', zone: 'left', title: 'Triggers', icon: 'clock', component: TriggersExplorer, order: 2.5 });
-registerView({ id: 'baselines', zone: 'left', title: 'Baseline', icon: 'database', component: BaselineExplorer, order: 3 });
+registerView({ id: 'baselines', zone: 'left', title: 'Baseline', icon: 'database', component: BaselineExplorer, editorArea: BaselineWorkspace, order: 3 });
 registerView({
   id: 'changes',
   zone: 'left',
@@ -393,16 +391,6 @@ registerView({
 });
 
 registerView({
-  id: 'branches',
-  zone: 'editor',
-  title: 'Branches',
-  icon: 'branch',
-  component: BranchesTab,
-  key: (p) => p.namespace ?? '',
-  tabTitle: (t) => `Branches ${t.params.namespace ?? ''}`,
-});
-
-registerView({
   id: 'connector',
   zone: 'editor',
   title: 'Connector',
@@ -453,16 +441,6 @@ registerView({
 });
 
 registerView({
-  id: 'tokenUsage',
-  zone: 'editor',
-  title: 'Token usage',
-  icon: 'coins',
-  component: TokensTab,
-  key: () => 'main',
-  tabTitle: () => 'Token usage',
-});
-
-registerView({
   id: 'graphExplorer',
   zone: 'editor',
   title: 'Graph explorer',
@@ -470,16 +448,6 @@ registerView({
   component: GraphExplorerTab,
   key: () => 'main',
   tabTitle: () => 'Graph explorer',
-});
-
-registerView({
-  id: 'platform',
-  zone: 'editor',
-  title: 'Platform settings',
-  icon: 'settings',
-  component: PlatformTab,
-  key: () => 'main',
-  tabTitle: () => 'Platform settings',
 });
 
 registerView({

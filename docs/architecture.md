@@ -342,6 +342,14 @@ Permissions are decided **ABAC**-style by Casbin (§2.8): the resource is the ch
 organization and the owner (= the initiator) as attributes. The default policy applies the
 **four-eyes principle**: an approver applies changes from their own organization, never their own.
 
+
+**Personal changes** ([ADR 0037](adr/0037-personal-changes-and-preferences.md)). A change held by the personal unit of a
+person (`USR:<subject>`) is visible to and changeable by that person only, and is never split into sub-changes. A change
+that landed nothing can be purged with its log (`DeleteChange`), unless a business rule (`Graph.PurgePolicy`) keeps it.
+The settings of the platform edited in the web dialog are staged this way: each edit is an impact of the personal
+change, **Save** applies it, **Discard** (or leaving the dialog and accepting to lose the edits) purges it. Personal
+preferences are not graph data ([ADR 0038](adr/0038-user-preferences-service.md)).
+
 ### 2.8 ABAC access control (Casbin)
 
 All access decisions go through a [Casbin](https://casbin.org) enforcer with an
@@ -603,6 +611,7 @@ actions when a transition is applied. Reference: [docs/dsl.md](dsl.md), IDE sect
 | **engine** | Intent loop, planning, process execution; deployable as a cluster | Connect `engine.v1` | `engine` | 🟢 core (memory) |
 | **graph** | Domain axis (versioned nodes, links, baselines) + change axis (Changes, change impacts, facts, apply) | Connect `graph.v1` | `graph` | 🟢 |
 | **modelgw** | Multi-provider / multi-model abstraction, aliases (`default`, `fast`, `reasoning`), administered catalog with global token quotas and required roles (see below), traces | Connect `model.v1` | `modelgw` (token usage; the configuration is graph data, ADR 0021) | 🟢 core |
+| **preferences** | Personal preferences of the users (theme, voice input, dashboard defaults), one document per subject, outside the graph ([ADR 0038](adr/0038-user-preferences-service.md)); a caller reaches only their own, saved as they change it | Connect `preferences.v1` | `preferences` (`user_preference`) | 🟢 |
 | **indexer** | Node index ([ADR 0026](adr/0026-node-index-and-search.md)): follows the node / baseline events of the graph, embeds through modelgw (alias `embed`), answers hybrid full-text + semantic searches with facets, filtered by ABAC | Connect `index.v1` | `index` (tsvector + pgvector; FTS5 + exact cosine scan in SQLite) | 🟢 |
 | **mcp** | MCP hub: connector registry (self-registration), resolution of the adapters and their restrictions (graph) along the organisation hierarchy, tool calls, the built-in connectors of the platform (§3.9) | Connect `mcp.v1` | `mcp` | 🟢 |
 | **connector-\*** | One service per real system (`connector-localfs`, ...), registers itself with the hub | Connect `connector.v1` | — | 🟢 localfs |
@@ -641,7 +650,7 @@ an interface, replaceable with the PostgreSQL implementation without changing th
 - **Local without containers**: a single SQLite file shared by `goap-dev` (migrations `migrations_sqlite/`
   per component, [ADR 0010](adr/0010-local-sqlite-mode.md)).
 - **Dev**: one PostgreSQL instance, **one schema per service** (`graph`, `engine`, `index`,
-  `modelgw`, `mcp`) and a dedicated role per service (`deploy/postgres/init.sql`).
+  `modelgw`, `preferences`, `mcp`) and a dedicated role per service (`deploy/postgres/init.sql`).
 - **Prod**: one database (or cluster) per service; only the DSN changes (`GOAP_DB_DSN`, read from Vault).
 - Migrations embedded in each service (`embed.FS`), applied at startup (advisory lock).
 

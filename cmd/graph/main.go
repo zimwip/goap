@@ -2,6 +2,8 @@
 package main
 
 import (
+	"connectrpc.com/connect"
+
 	"context"
 	"fmt"
 	"log/slog"
@@ -133,7 +135,8 @@ func main() {
 		platform.Fatal(log, "authorizer", err)
 	}
 	g.Authorizer = graphsvc.TransitionAuthorizer(authorizer)
-	srv.Mount(graphv1connect.NewGraphServiceHandler(&graphsvc.Handler{Graph: g, Events: events, Authz: authorizer, Floor: authorizer.Floor()}, telemetry.HandlerOptions()...))
+	graphHandler := &graphsvc.Handler{Graph: g, Events: events, Authz: authorizer, Floor: authorizer.Floor()}
+	srv.Mount(graphv1connect.NewGraphServiceHandler(graphHandler, append(telemetry.HandlerOptions(), connect.WithInterceptors(graphHandler.PersonalScope()))...))
 	if err := srv.Run(); err != nil {
 		platform.Fatal(log, "server", err)
 	}

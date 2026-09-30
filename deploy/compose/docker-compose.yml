@@ -91,6 +91,14 @@ services:
       GOAP_GRAPH_URL: http://graph:8080
     ports: ["8084:8080"]
 
+  preferences:
+    <<: *service
+    build: {context: ../.., args: {SERVICE: preferences}}
+    environment:
+      <<: *env
+      GOAP_DB_DSN: postgres://preferences:preferences@postgres:5432/goap?sslmode=disable
+    ports: ["8087:8080"]
+
   indexer:
     <<: *service
     build: {context: ../.., args: {SERVICE: indexer}}
@@ -199,6 +207,7 @@ services:
       GOAP_REGISTRY_URL: http://registry:8080
       GOAP_ENGINE_URL: http://engine:8080
       GOAP_MODELGW_URL: http://modelgw:8080
+      GOAP_PREFERENCES_URL: http://preferences:8080
       GOAP_INDEXER_URL: http://indexer:8080
       GOAP_MCP_URL: http://mcp:8080
     ports: ["${GOAP_GATEWAY_PORT:-8080}:8080"]

@@ -5,3 +5,7 @@ export const MAIN_BRANCH = 'main';
 
 /** Normalizes a namespace, defaulting an empty one (mirrors domain.NamespaceOf). */
 export const namespaceOf = (ns?: string): string => ns || DEFAULT_NAMESPACE;
+
+/** A branch a change (or a flow) owns for its own scratch work (changeBranchName / flowBranchName, pkg/graph):
+ * plumbing, not a branch a person opened. */
+export const isEphemeralBranch = (b: string): boolean => b.startsWith('change-') || b.startsWith('flow-');

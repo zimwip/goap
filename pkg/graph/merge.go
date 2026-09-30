@@ -173,9 +173,10 @@ func CommonAncestor(ctx context.Context, tx Tx, id domain.NodeID, a, b domain.Ve
 type NewBranch struct {
 	Name string
 	// Namespace the branch belongs to (default: domain.DefaultNamespace).
-	Namespace string
-	From      domain.BaselineID
-	Origin    string // change / option that opens the branch
+	Namespace   string
+	From        domain.BaselineID
+	Origin      string // change / option that opens the branch
+	Description string
 }
 
 // CreateBranch opens a branch forked from a baseline.
@@ -198,7 +199,7 @@ func (g *Graph) CreateBranch(ctx context.Context, in NewBranch) (b domain.Branch
 			return fmt.Errorf("baseline %s is of namespace %s, not %s: %w", in.From, fork.Namespace, namespace, ErrInvalid)
 		}
 		b = domain.Branch{Name: in.Name, Namespace: namespace, Parent: domain.BranchOf(fork.Branch), ForkBaseline: fork.ID, Head: fork.ID,
-			Origin: in.Origin, Status: domain.BranchOpen, CreatedAt: g.now()}
+			Origin: in.Origin, Status: domain.BranchOpen, CreatedAt: g.now(), Description: in.Description}
 		return tx.PutBranch(ctx, b)
 	})
 	return
@@ -229,6 +230,19 @@ func (g *Graph) SetBranchStatus(ctx context.Context, namespace, name, status str
 			return err
 		}
 		b.Status = status
+		return tx.PutBranch(ctx, b)
+	})
+}
+
+// SetBranchDescription sets the free-text description of a branch (main included: unlike CreateBranch, this may
+// target main, persisting its row on first use).
+func (g *Graph) SetBranchDescription(ctx context.Context, namespace, name, description string) error {
+	return g.repo.InTx(ctx, func(tx Tx) error {
+		b, err := branchOf(ctx, tx, namespace, name)
+		if err != nil {
+			return err
+		}
+		b.Description = description
 		return tx.PutBranch(ctx, b)
 	})
 }
@@ -494,6 +508,10 @@ func (g *Graph) mergeBranchTx(ctx context.Context, tx Tx, in MergeRequest) (res 
 	if err != nil {
 		return res, err
 	}
+	fb, err := tx.Branch(ctx, namespace, in.From)
+	if err != nil {
+		return res, err
+	}
 	ix, err := g.typesAt(ctx, tx, plan.IntoHead)
 	if err != nil {
 		return res, err
@@ -661,7 +679,7 @@ func (g *Graph) mergeBranchTx(ctx context.Context, tx Tx, in MergeRequest) (res 
 			}
 		}
 	}
-	res.Baseline = domain.Baseline{ID: res.Baseline.ID, Name: title, Namespace: namespace, Branch: plan.Into, ParentID: base.ID, ChangeID: c.ID, Nodes: target, CreatedAt: g.now()}
+	res.Baseline = domain.Baseline{ID: res.Baseline.ID, Name: title, Namespace: namespace, Branch: plan.Into, ParentID: base.ID, MergedFrom: fb.Head, ChangeID: c.ID, Nodes: target, CreatedAt: g.now()}
 	if err := tx.PutBaseline(ctx, res.Baseline); err != nil {
 		return res, err
 	}
@@ -673,10 +691,6 @@ func (g *Graph) mergeBranchTx(ctx context.Context, tx Tx, in MergeRequest) (res 
 		return res, err
 	}
 	res.Change = c
-	fb, err := tx.Branch(ctx, namespace, in.From)
-	if err != nil {
-		return res, err
-	}
 	fb.Status = domain.BranchMerged
 	return res, tx.PutBranch(ctx, fb)
 }

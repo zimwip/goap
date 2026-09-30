@@ -60,3 +60,5 @@ too, to name the runs and draw the flow branches whatever the filters.
   `Data` are floats).
 - **Migrations**: PostgreSQL `0017_change_log`, SQLite `0016_change_log` (they replace the `change_event` migration of
   ADR 0029, which never left its branch).
+
+**Note (ADR 0037)**: a change that landed nothing can be purged with its whole log (`Graph.PurgeChange`); nothing that is part of the graph is ever deleted.

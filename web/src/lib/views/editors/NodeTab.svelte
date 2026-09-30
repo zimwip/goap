@@ -33,6 +33,7 @@
   import { changes, refreshChanges } from '../../stores/catalog.svelte';
   import { loadGraph, loadHead, type GraphIndex } from '../../graphIndex';
   import { namespaceOf } from '../../namespace';
+  import { confirmDialog } from '../../shell/confirmState.svelte';
   import { declaredProperties, isReopen, lifecycleResolver, lifecycleRows, loadPosts, writeNodeInChange, type LifecycleRow, type PostVersions } from '../../lifecycle';
 
   let { tab }: { tab: Tab } = $props();
@@ -243,7 +244,7 @@
   const saveProps = (patch: Record<string, unknown>) => propose('edit', { props: patch }, `Edit ${stored?.key}`);
 
   async function remove() {
-    if (!confirm(`Delete ${stored?.key} (${typeName}) when the change is applied? Links pointing to it become suspect.`)) return;
+    if (!(await confirmDialog({ message: `Delete ${stored?.key} (${typeName}) when the change is applied? Links pointing to it become suspect.`, danger: true }))) return;
     await propose('delete', { retire: true }, `Delete ${stored?.key}`);
   }
 

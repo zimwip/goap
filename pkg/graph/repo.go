@@ -82,4 +82,10 @@ type Tx interface {
 	// JoinBranch makes a node version part of a branch it was not written on (a merge that lands it as is,
 	// ADR 0032): the version is not copied and keeps the branch it was written on.
 	JoinBranch(ctx context.Context, ref domain.NodeRef, branch string) error
+
+	// DeleteChange removes a change that landed nothing (ADR 0037): its log, impacts, node versions and links, the
+	// nodes it alone created, and its branch when it has one of its own (empty: none). It refuses (ErrConflict) when
+	// what the change wrote is used: a baseline holds one of its versions, a later version or a link of another
+	// change builds on one, or it produced a baseline.
+	DeleteChange(ctx context.Context, id domain.ChangeID, namespace, branch string) error
 }

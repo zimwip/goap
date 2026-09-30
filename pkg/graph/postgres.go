@@ -163,28 +163,28 @@ const pgOnBranch = `(v.branch = $2 OR EXISTS (SELECT 1 FROM node_branch j WHERE 
 
 func (t *pgTx) Branch(ctx context.Context, namespace, name string) (domain.Branch, error) {
 	var b domain.Branch
-	err := t.tx.QueryRow(ctx, `SELECT namespace, name, parent, coalesce(fork_baseline::text, ''), coalesce(head_baseline::text, ''), origin, status, created_at FROM branch WHERE namespace = $1 AND name = $2`, domain.NamespaceOf(namespace), name).
-		Scan(&b.Namespace, &b.Name, &b.Parent, (*string)(&b.ForkBaseline), (*string)(&b.Head), &b.Origin, &b.Status, &b.CreatedAt)
+	err := t.tx.QueryRow(ctx, `SELECT namespace, name, parent, coalesce(fork_baseline::text, ''), coalesce(head_baseline::text, ''), origin, status, created_at, description FROM branch WHERE namespace = $1 AND name = $2`, domain.NamespaceOf(namespace), name).
+		Scan(&b.Namespace, &b.Name, &b.Parent, (*string)(&b.ForkBaseline), (*string)(&b.Head), &b.Origin, &b.Status, &b.CreatedAt, &b.Description)
 	return b, mapErr(err, "branch "+name)
 }
 
 func (t *pgTx) Branches(ctx context.Context, namespace string) ([]domain.Branch, error) {
-	rows, err := t.tx.Query(ctx, `SELECT namespace, name, parent, coalesce(fork_baseline::text, ''), coalesce(head_baseline::text, ''), origin, status, created_at FROM branch WHERE namespace = $1 ORDER BY created_at`, domain.NamespaceOf(namespace))
+	rows, err := t.tx.Query(ctx, `SELECT namespace, name, parent, coalesce(fork_baseline::text, ''), coalesce(head_baseline::text, ''), origin, status, created_at, description FROM branch WHERE namespace = $1 ORDER BY created_at`, domain.NamespaceOf(namespace))
 	if err != nil {
 		return nil, err
 	}
 	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (domain.Branch, error) {
 		var b domain.Branch
-		err := r.Scan(&b.Namespace, &b.Name, &b.Parent, (*string)(&b.ForkBaseline), (*string)(&b.Head), &b.Origin, &b.Status, &b.CreatedAt)
+		err := r.Scan(&b.Namespace, &b.Name, &b.Parent, (*string)(&b.ForkBaseline), (*string)(&b.Head), &b.Origin, &b.Status, &b.CreatedAt, &b.Description)
 		return b, err
 	})
 }
 
 func (t *pgTx) PutBranch(ctx context.Context, b domain.Branch) error {
 	namespace := domain.NamespaceOf(b.Namespace)
-	_, err := t.tx.Exec(ctx, `INSERT INTO branch (namespace, name, parent, fork_baseline, head_baseline, origin, status, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-		ON CONFLICT (namespace, name) DO UPDATE SET status = EXCLUDED.status, head_baseline = EXCLUDED.head_baseline`,
-		namespace, b.Name, b.Parent, nullUUID(string(b.ForkBaseline)), nullUUID(string(b.Head)), b.Origin, b.Status, b.CreatedAt)
+	_, err := t.tx.Exec(ctx, `INSERT INTO branch (namespace, name, parent, fork_baseline, head_baseline, origin, status, created_at, description) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		ON CONFLICT (namespace, name) DO UPDATE SET status = EXCLUDED.status, head_baseline = EXCLUDED.head_baseline, description = EXCLUDED.description`,
+		namespace, b.Name, b.Parent, nullUUID(string(b.ForkBaseline)), nullUUID(string(b.Head)), b.Origin, b.Status, b.CreatedAt, b.Description)
 	return mapErr(err, "branch "+b.Name)
 }
 
@@ -271,13 +271,13 @@ func (t *pgTx) InLinks(ctx context.Context, ref domain.NodeRef) ([]domain.Link, 
 
 func (t *pgTx) Baseline(ctx context.Context, id domain.BaselineID) (domain.Baseline, error) {
 	var b domain.Baseline
-	var parent, change *string
-	err := t.tx.QueryRow(ctx, `SELECT id::text, name, parent_id::text, change_id::text, created_at, branch, namespace FROM baseline WHERE id = $1`, string(id)).
-		Scan((*string)(&b.ID), &b.Name, &parent, &change, &b.CreatedAt, &b.Branch, &b.Namespace)
+	var parent, mergedFrom, change *string
+	err := t.tx.QueryRow(ctx, `SELECT id::text, name, parent_id::text, merged_from::text, change_id::text, created_at, branch, namespace FROM baseline WHERE id = $1`, string(id)).
+		Scan((*string)(&b.ID), &b.Name, &parent, &mergedFrom, &change, &b.CreatedAt, &b.Branch, &b.Namespace)
 	if err != nil {
 		return b, mapErr(err, "baseline "+string(id))
 	}
-	b.ParentID, b.ChangeID = domain.BaselineID(str(parent)), domain.ChangeID(str(change))
+	b.ParentID, b.MergedFrom, b.ChangeID = domain.BaselineID(str(parent)), domain.BaselineID(str(mergedFrom)), domain.ChangeID(str(change))
 	b.Nodes = map[domain.NodeID]domain.Version{}
 	rows, err := t.tx.Query(ctx, baselineEntriesSQL("$1")+` SELECT node_id::text, version FROM eff WHERE rn = 1 AND NOT removed`, string(id))
 	if err != nil {
@@ -413,8 +413,8 @@ func (t *pgTx) PutBaseline(ctx context.Context, b domain.Baseline) error {
 		parent = &p
 	}
 	depth, entries := storedEntries(parent, parentDepth, b.Nodes)
-	_, err := t.tx.Exec(ctx, `INSERT INTO baseline (id, name, parent_id, change_id, created_at, branch, namespace, depth) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-		string(b.ID), b.Name, nullUUID(string(b.ParentID)), nullUUID(string(b.ChangeID)), b.CreatedAt, domain.BranchOf(b.Branch), domain.NamespaceOf(b.Namespace), depth)
+	_, err := t.tx.Exec(ctx, `INSERT INTO baseline (id, name, parent_id, merged_from, change_id, created_at, branch, namespace, depth) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+		string(b.ID), b.Name, nullUUID(string(b.ParentID)), nullUUID(string(b.MergedFrom)), nullUUID(string(b.ChangeID)), b.CreatedAt, domain.BranchOf(b.Branch), domain.NamespaceOf(b.Namespace), depth)
 	if err != nil {
 		return mapErr(err, "baseline")
 	}
@@ -600,4 +600,71 @@ func (t *pgTx) rewriteBaseline(ctx context.Context, id domain.BaselineID, depth 
 	}
 	_, err := t.tx.CopyFrom(ctx, pgx.Identifier{"baseline_entry"}, []string{"baseline_id", "node_id", "version", "removed"}, pgx.CopyFromRows(rows))
 	return mapErr(err, "baseline entries")
+}
+
+func (t *pgTx) DeleteChange(ctx context.Context, id domain.ChangeID, namespace, branch string) error {
+	var used int
+	for _, q := range []string{
+		`SELECT count(*) FROM baseline_entry e JOIN node_version v ON e.node_id = v.node_id AND e.version = v.version WHERE v.change_id = $1`,
+		`SELECT count(*) FROM baseline WHERE change_id = $1`,
+		`SELECT count(*) FROM link l JOIN node_version v ON l.to_id = v.node_id AND l.to_version = v.version WHERE v.change_id = $1 AND l.change_id IS DISTINCT FROM $1::uuid`,
+		`SELECT count(*) FROM node_version o JOIN node_version v ON o.node_id = v.node_id AND o.version > v.version WHERE v.change_id = $1 AND o.change_id IS DISTINCT FROM $1::uuid`,
+	} {
+		if err := t.tx.QueryRow(ctx, q, string(id)).Scan(&used); err != nil {
+			return err
+		}
+		if used > 0 {
+			return fmt.Errorf("change %s: what it wrote is used by the graph: %w", id, ErrConflict)
+		}
+	}
+	rows, err := t.tx.Query(ctx, `SELECT DISTINCT node_id::text FROM node_version WHERE change_id = $1`, string(id))
+	if err != nil {
+		return err
+	}
+	var nodes []string
+	for rows.Next() {
+		var n string
+		if err := rows.Scan(&n); err != nil {
+			rows.Close()
+			return err
+		}
+		nodes = append(nodes, n)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	const mine = `(SELECT node_id, version FROM node_version WHERE change_id = $1)`
+	for _, q := range []string{
+		`DELETE FROM link WHERE change_id = $1 OR (from_id, from_version) IN ` + mine,
+		`DELETE FROM node_branch WHERE (node_id, version) IN ` + mine,
+		`DELETE FROM node_version WHERE change_id = $1`,
+		`DELETE FROM change_impact WHERE change_id = $1`,
+		`DELETE FROM change_log WHERE change_id = $1`,
+	} {
+		if _, err := t.tx.Exec(ctx, q, string(id)); err != nil {
+			return mapErr(err, "change "+string(id))
+		}
+	}
+	for _, n := range nodes {
+		if _, err := t.tx.Exec(ctx, `DELETE FROM node WHERE id = $1 AND NOT EXISTS (SELECT 1 FROM node_version WHERE node_id = $1)`, n); err != nil {
+			return mapErr(err, "node "+n)
+		}
+		if _, err := t.tx.Exec(ctx, `UPDATE node SET latest = (SELECT max(version) FROM node_version WHERE node_id = $1) WHERE id = $1`, n); err != nil {
+			return mapErr(err, "node "+n)
+		}
+	}
+	if branch != "" {
+		if _, err := t.tx.Exec(ctx, `DELETE FROM branch WHERE namespace = $1 AND name = $2`, namespace, branch); err != nil {
+			return mapErr(err, "branch "+branch)
+		}
+	}
+	tag, err := t.tx.Exec(ctx, `DELETE FROM change WHERE id = $1`, string(id))
+	if err != nil {
+		return mapErr(err, "change "+string(id))
+	}
+	if tag.RowsAffected() != 1 {
+		return fmt.Errorf("change %s: %w", id, ErrNotFound)
+	}
+	return nil
 }

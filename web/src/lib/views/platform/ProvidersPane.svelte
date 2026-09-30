@@ -3,7 +3,8 @@
   // A provider is a node of the graph; the API key itself is never stored, only where to find it.
   import { models, errorMessage, type CatalogModel, type DiscoveredModel, type LlmProvider, type ProviderKind } from '../../api';
   import { SvelteSet } from 'svelte/reactivity';
-  import { deleteProvider, saveModels, saveProvider as saveProviderNode } from '../../llmEdit';
+  import { deleteProvider, saveModels, saveProvider as saveProviderNode, type Unsaved } from '../../llmEdit';
+  import { confirmDialog } from '../../shell/confirmState.svelte';
 
   let {
     providers,
@@ -115,7 +116,7 @@
     error = '';
     notice = '';
     if (await saveProvider()) {
-      notice = `Provider "${form?.name}" saved.`;
+      notice = `Provider "${form?.name}" staged: save the settings to apply it.`;
     }
     busy = '';
   }
@@ -181,7 +182,13 @@
 
   async function remove(p: LlmProvider) {
     const n = modelCount(p.name);
-    if (!confirm(`Delete the provider "${p.name}"${n ? ` and its ${n} model${n > 1 ? 's' : ''} in the catalog` : ''}? Aliases pointing to it are removed too.`)) return;
+    if (
+      !(await confirmDialog({
+        message: `Delete the provider "${p.name}"${n ? ` and its ${n} model${n > 1 ? 's' : ''} in the catalog` : ''}? Aliases pointing to it are removed too.`,
+        danger: true,
+      }))
+    )
+      return;
     error = '';
     try {
       await deleteProvider(p.name);
@@ -229,7 +236,8 @@
                 <button type="button" class="link" onclick={openCatalog}>{modelCount(p.name)}</button>
               </td>
               <td>
-                {#if !p.enabled}<span class="st off">disabled</span>
+                {#if (p as Unsaved<LlmProvider>).pending}<span class="st bad" title="Saved with the dialog's Save button: the provider is loaded once saved">unsaved</span>
+                {:else if !p.enabled}<span class="st off">disabled</span>
                 {:else if p.active}<span class="st on">active</span>
                 {:else}<span class="st bad" title="Enabled but not loaded: check the API key and the endpoint">not loaded</span>{/if}
               </td>

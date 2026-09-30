@@ -7,6 +7,7 @@ import { notify, requestReveal } from '../../shell/workbench.svelte';
 import { editorView } from '../../shell/registry';
 import { tabId } from '../../shell/tabs.svelte';
 import { getDraft, type Draft } from '../../stores/drafts.svelte';
+import { confirmDialog } from '../../shell/confirmState.svelte';
 import type { Section, SectionItem } from '../../methodologyForm';
 
 export const SECTION_KIND: Record<Section, string> = {
@@ -155,8 +156,8 @@ export function draftActions(d: Draft, extra: ToolbarAction[] = []): ToolbarActi
       icon: 'refresh',
       disabled: busy,
       title: 'Reload from the registry (discards changes)',
-      run: () => {
-        if (d.dirty && !confirm('Discard unsaved changes and reload?')) return;
+      run: async () => {
+        if (d.dirty && !(await confirmDialog('Discard unsaved changes and reload?'))) return;
         void d.reload();
       },
     });
@@ -211,10 +212,11 @@ export function removeItemAction(d: Draft, section: Section, tab: Tab, index: ()
       icon: 'trash',
       danger: true,
       disabled: index() < 0,
-      run: () => {
+      run: async () => {
         const i = index();
         const item = d.items(section)[i];
-        if (!item || !confirm(`Delete ${SECTION_SINGULAR[section]} "${item.name || 'unnamed'}" from the draft?`)) return;
+        if (!item || !(await confirmDialog({ message: `Delete ${SECTION_SINGULAR[section]} "${item.name || 'unnamed'}" from the draft?`, danger: true })))
+          return;
         d.form[section].splice(i, 1);
         closeWhere((t) => t.id === tab.id);
       },

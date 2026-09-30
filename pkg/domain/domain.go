@@ -140,14 +140,18 @@ type BaselineID string
 // Baseline is a consistent snapshot of the domain graph: which version of each
 // node is part of it. Links belong to a baseline when both endpoints do.
 type Baseline struct {
-	ID        BaselineID         `json:"id"`
-	Name      string             `json:"name"`
-	Namespace string             `json:"namespace,omitempty"`
-	Branch    string             `json:"branch,omitempty"`
-	ParentID  BaselineID         `json:"parentId,omitempty"`
-	ChangeID  ChangeID           `json:"changeId,omitempty"`
-	Nodes     map[NodeID]Version `json:"nodes"`
-	CreatedAt time.Time          `json:"createdAt"`
+	ID        BaselineID `json:"id"`
+	Name      string     `json:"name"`
+	Namespace string     `json:"namespace,omitempty"`
+	Branch    string     `json:"branch,omitempty"`
+	ParentID  BaselineID `json:"parentId,omitempty"`
+	// MergedFrom is the head baseline of the branch merged in, when this baseline is the result of a merge
+	// (ADR 0032): a baseline has at most one such second parent, ParentID being the first (the target branch's
+	// previous head).
+	MergedFrom BaselineID         `json:"mergedFrom,omitempty"`
+	ChangeID   ChangeID           `json:"changeId,omitempty"`
+	Nodes      map[NodeID]Version `json:"nodes"`
+	CreatedAt  time.Time          `json:"createdAt"`
 }
 
 // Contains reports whether the exact node version is part of the baseline.
@@ -174,4 +178,5 @@ type Branch struct {
 	Origin       string     `json:"origin,omitempty"` // change / option that opened it
 	Status       string     `json:"status"`
 	CreatedAt    time.Time  `json:"createdAt"`
+	Description  string     `json:"description,omitempty"`
 }

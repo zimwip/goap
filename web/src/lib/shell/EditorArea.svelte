@@ -1,7 +1,8 @@
 <script lang="ts">
   // Editor area: tabs and the active tab's editor.
   import TabBar from './TabBar.svelte';
-  import { editorView } from './registry';
+  import { editorView, panelView } from './registry';
+  import { layout } from './layout.svelte';
   import { tabsState, activeTab, pinTab, isDirty } from './tabs.svelte';
   import type { Component } from 'svelte';
 
@@ -9,6 +10,8 @@
 
   const tab = $derived(activeTab());
   const view = $derived(tab ? editorView(tab.kind) : undefined);
+  // the active left tool may take over the editor area instead of showing tabs (e.g. the Baseline workspace)
+  const override = $derived(panelView(layout.left)?.editorArea);
 
   // A preview becomes pinned as soon as it's modified.
   $effect(() => {
@@ -25,11 +28,14 @@
 </script>
 
 <div class="area">
-  {#if tabsState.tabs.length}
+  {#if !override && tabsState.tabs.length}
     <TabBar />
   {/if}
-  <div class="content" role="tabpanel" aria-label={view?.tabTitle(tab!) ?? 'Home'} oninput={edited}>
-    {#if tab && view}
+  <div class="content" role="tabpanel" aria-label={override ? undefined : (view?.tabTitle(tab!) ?? 'Home')} oninput={edited}>
+    {#if override}
+      {@const O = override}
+      <O />
+    {:else if tab && view}
       {#key tab.id}
         {@const C = view.component}
         <C {tab} />

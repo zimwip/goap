@@ -217,7 +217,8 @@ func (g *Graph) fastForward(ctx context.Context, tx Tx, c domain.Change, own dom
 			return false, err
 		}
 	}
-	res := domain.Baseline{ID: domain.BaselineID(g.newID()), Name: "merge " + c.Title, Namespace: c.Namespace, Branch: domain.BranchOf(own.Parent), ParentID: into.ID, ChangeID: c.ID,
+	// a fast-forward, not a merge (own.Parent did not move since the fork): name it after the change, not "merge …"
+	res := domain.Baseline{ID: domain.BaselineID(g.newID()), Name: c.Title, Namespace: c.Namespace, Branch: domain.BranchOf(own.Parent), ParentID: into.ID, ChangeID: c.ID,
 		Nodes: from.Nodes, CreatedAt: g.now()}
 	if err := tx.PutBaseline(ctx, res); err != nil {
 		return false, err

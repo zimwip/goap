@@ -3,6 +3,7 @@ package graphsvc
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -236,7 +237,18 @@ func (h *Handler) ListNamespaces(ctx context.Context, _ *connect.Request[graphv1
 }
 
 func (h *Handler) CreateChange(ctx context.Context, r *connect.Request[graphv1.CreateChangeRequest]) (*connect.Response[graphv1.CreateChangeResponse], error) {
-	c, err := h.Graph.CreateChange(ctx, graph.NewChange{ParentID: domain.ChangeID(r.Msg.ParentId), OwnerOrg: r.Msg.OwnerOrg, OwnBranch: r.Msg.OwnBranch, Namespace: r.Msg.Namespace, Title: r.Msg.Title, Intent: r.Msg.Intent, Methodology: r.Msg.Methodology,
+	ctx = h.Identity.Context(ctx, r.Header())
+	owner, err := h.resolveOwner(ctx, r.Msg.OwnerOrg)
+	if err != nil {
+		return nil, err
+	}
+	if p := r.Msg.ParentId; p != "" {
+		// a personal change is never split, and nothing is split off a personal change
+		if parent, perr := h.Graph.Change(ctx, domain.ChangeID(p)); perr == nil && (parent.Personal() || domain.IsPersonalUnit(owner)) {
+			return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("a personal change has no sub-changes"))
+		}
+	}
+	c, err := h.Graph.CreateChange(ctx, graph.NewChange{ParentID: domain.ChangeID(r.Msg.ParentId), OwnerOrg: owner, OwnBranch: r.Msg.OwnBranch, Namespace: r.Msg.Namespace, Title: r.Msg.Title, Intent: r.Msg.Intent, Methodology: r.Msg.Methodology,
 		BaselineID: domain.BaselineID(r.Msg.BaselineId), Branch: r.Msg.Branch, Data: pbconv.Map(r.Msg.Data)})
 	if err == nil {
 		h.publish(ctx, "goap.change."+string(c.ID)+".created", domain.ChangeEvent{Type: "change.created", Change: c})
@@ -254,9 +266,13 @@ func (h *Handler) ListChanges(ctx context.Context, r *connect.Request[graphv1.Li
 	for _, s := range r.Msg.Status {
 		f.Status = append(f.Status, domain.ChangeStatus(s))
 	}
+	ctx = h.Identity.Context(ctx, r.Header())
 	cs, err := h.Graph.ListChanges(ctx, f)
 	out := &graphv1.ListChangesResponse{}
 	for _, c := range cs {
+		if !visibleTo(ctx, c) {
+			continue
+		}
 		out.Changes = append(out.Changes, pbconv.ChangeToPB(c))
 	}
 	return res(out, err)
@@ -272,9 +288,13 @@ func (h *Handler) GetChangeImpacts(ctx context.Context, r *connect.Request[graph
 }
 
 func (h *Handler) ListNodeChanges(ctx context.Context, r *connect.Request[graphv1.ListNodeChangesRequest]) (*connect.Response[graphv1.ListNodeChangesResponse], error) {
+	ctx = h.Identity.Context(ctx, r.Header())
 	cs, err := h.Graph.NodeChanges(ctx, domain.NodeID(r.Msg.NodeId))
 	out := &graphv1.ListNodeChangesResponse{}
 	for _, c := range cs {
+		if !visibleTo(ctx, c) {
+			continue
+		}
 		out.Changes = append(out.Changes, pbconv.ChangeToPB(c))
 	}
 	return res(out, err)
@@ -438,7 +458,7 @@ func (h *Handler) ApplyChange(ctx context.Context, r *connect.Request[graphv1.Ap
 }
 
 func (h *Handler) CreateBranch(ctx context.Context, r *connect.Request[graphv1.CreateBranchRequest]) (*connect.Response[graphv1.CreateBranchResponse], error) {
-	b, err := h.Graph.CreateBranch(ctx, graph.NewBranch{Name: r.Msg.Name, Namespace: r.Msg.Namespace, From: domain.BaselineID(r.Msg.FromBaseline), Origin: r.Msg.Origin})
+	b, err := h.Graph.CreateBranch(ctx, graph.NewBranch{Name: r.Msg.Name, Namespace: r.Msg.Namespace, From: domain.BaselineID(r.Msg.FromBaseline), Origin: r.Msg.Origin, Description: r.Msg.Description})
 	return res(&graphv1.CreateBranchResponse{Branch: pbconv.BranchToPB(b)}, err)
 }
 
@@ -462,6 +482,10 @@ func (h *Handler) GetBranch(ctx context.Context, r *connect.Request[graphv1.GetB
 
 func (h *Handler) SetBranchStatus(ctx context.Context, r *connect.Request[graphv1.SetBranchStatusRequest]) (*connect.Response[graphv1.SetBranchStatusResponse], error) {
 	return res(&graphv1.SetBranchStatusResponse{}, h.Graph.SetBranchStatus(ctx, r.Msg.Namespace, r.Msg.Name, r.Msg.Status))
+}
+
+func (h *Handler) SetBranchDescription(ctx context.Context, r *connect.Request[graphv1.SetBranchDescriptionRequest]) (*connect.Response[graphv1.SetBranchDescriptionResponse], error) {
+	return res(&graphv1.SetBranchDescriptionResponse{}, h.Graph.SetBranchDescription(ctx, r.Msg.Namespace, r.Msg.Name, r.Msg.Description))
 }
 
 func (h *Handler) ListNodeVersions(ctx context.Context, r *connect.Request[graphv1.ListNodeVersionsRequest]) (*connect.Response[graphv1.ListNodeVersionsResponse], error) {

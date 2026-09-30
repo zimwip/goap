@@ -4,6 +4,7 @@
   import Assistant from './Assistant.svelte';
   import { provideActions } from '../../shell/workbench.svelte';
   import { newConversation, conversation } from '../../stores/assistant.svelte';
+  import { confirmDialog } from '../../shell/confirmState.svelte';
 
   let { tab }: { tab: Tab } = $props();
 
@@ -15,8 +16,8 @@
         label: 'New conversation',
         icon: 'plus',
         disabled: !conversation.threads.length,
-        run: () => {
-          if (confirm('Start a new conversation? The current history will be erased.')) newConversation();
+        run: async () => {
+          if (await confirmDialog('Start a new conversation? The current history will be erased.')) newConversation();
         },
       },
     ],

@@ -10,6 +10,7 @@
   import { notify, provideActions } from '../../shell/workbench.svelte';
   import { MCP_TYPE } from '../../orgTypes';
   import { NS_PLATFORM } from '../../adapterDef';
+  import { confirmDialog } from '../../shell/confirmState.svelte';
 
   let { tab }: { tab: Tab } = $props();
 
@@ -90,7 +91,7 @@
   }
 
   async function remove() {
-    if (!confirm(`Delete the MCP ${name}? Adapters that implement it stop working.`)) return;
+    if (!(await confirmDialog({ message: `Delete the MCP ${name}? Adapters that implement it stop working.`, danger: true }))) return;
     try {
       const h = await headGraph(NS_PLATFORM);
       const existing = findNode(h, NS, MCP_TYPE, keyOf(name));

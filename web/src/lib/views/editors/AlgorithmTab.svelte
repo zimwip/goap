@@ -14,6 +14,7 @@
   import { moveItem } from '../../methodologyForm';
   import { ALGORITHM_TEMPLATES, ALGORITHM_USAGES, algorithmUsage, type AlgorithmUsage } from '../../dsl';
   import { algorithmIndex, algorithmToolbar, domainDraftOf, instanceSpec } from './domainTabs';
+  import { confirmDialog } from '../../shell/confirmState.svelte';
 
   let { tab }: { tab: Tab } = $props();
 
@@ -56,13 +57,13 @@
     });
   });
 
-  function remove() {
+  async function remove() {
     if (!a) return;
     if (instances.length) {
       notify(`Delete the ${instances.length} instance(s) of ${a.name} first.`, 'error');
       return;
     }
-    if (!confirm(`Remove the algorithm "${a.name || 'unnamed'}" from the draft?`)) return;
+    if (!(await confirmDialog({ message: `Remove the algorithm "${a.name || 'unnamed'}" from the draft?`, danger: true }))) return;
     const uid = a.uid;
     closeWhere((t) => t.kind === 'algorithm' && t.params.uid === uid);
     d.form.algorithms.splice(index, 1);

@@ -16,6 +16,7 @@
   import { ADAPTER_DEF_TYPE, NS_PLATFORM, adapterDefKey, adapterDefProps } from '../../adapterDef';
   import { tools, refreshTools } from '../../stores/tools.svelte';
   import { ALGORITHM_TEMPLATES, algorithmUsage } from '../../dsl';
+  import { confirmDialog } from '../../shell/confirmState.svelte';
 
   let { tab }: { tab: Tab } = $props();
 
@@ -71,7 +72,7 @@
       genError = 'Pick an MCP and a connector first.';
       return;
     }
-    if (!untouched() && !confirm('Replace the code of the adapter with a generated template?')) return;
+    if (!untouched() && !(await confirmDialog('Replace the code of the adapter with a generated template?'))) return;
     generating = true;
     try {
       const t = await hub.adapterTemplate(a.mcp, a.connector);
@@ -130,7 +131,7 @@
   }
 
   async function remove() {
-    if (!confirm(`Delete the adapter ${a.name}? Units that instantiate it stop resolving their ${a.mcp} tools.`)) return;
+    if (!(await confirmDialog({ message: `Delete the adapter ${a.name}? Units that instantiate it stop resolving their ${a.mcp} tools.`, danger: true }))) return;
     try {
       const h = await headGraph(NS_PLATFORM);
       const existing = findNode(h, NS_PLATFORM, ADAPTER_DEF_TYPE, adapterDefKey(a.name));
