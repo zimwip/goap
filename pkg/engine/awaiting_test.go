@@ -91,7 +91,7 @@ func TestAPersonCanWaiveWhatARunWaitsFor(t *testing.T) {
 		t.Fatal(err)
 	}
 	e.Methodologies.(StaticMethodologies)[c.Name] = c
-	p, err := e.Start(ctx, StartRequest{Methodology: "choreo", Goal: "flow", Intent: "deliver"})
+	p, err := e.Start(ctx, StartRequest{Methodology: "choreo", Goal: "flow", Intent: "deliver", ProjectID: testProject})
 	if err != nil {
 		t.Fatal(err)
 	}

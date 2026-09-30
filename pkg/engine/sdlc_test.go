@@ -47,6 +47,9 @@ func sdlcModel(t *testing.T) llm.Client {
 	})
 }
 
+// testProject is the key of the project these tests start their (non-administrative) processes in (ADR 0039).
+const testProject = "PROJ-TEST"
+
 // an ordinary contributor delivers; a release manager approves the production
 // deployment and an approver applies the change (four-eyes)
 var (
@@ -89,6 +92,9 @@ func sdlcSetup(t *testing.T) (*engine.Engine, *graph.Graph, domain.BaselineID) {
 	if _, err := graphsvc.SeedDemo(ctx, g); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := g.CreateNode(ctx, graph.NewNode{Namespace: "organisation", Key: testProject, Type: "organisation@ProjectUnit", Properties: map[string]any{"name": "Test"}}); err != nil {
+		t.Fatal(err)
+	}
 	bs, _ := g.Baselines(ctx, "alm")
 	e := &engine.Engine{
 		Graph:         g,
@@ -111,7 +117,7 @@ func TestSDLCDelivery(t *testing.T) {
 	ctx, rm, approver := devCtx, rmCtx, approverCtx
 	e, g, base := sdlcSetup(t)
 	p, err := e.Start(ctx, engine.StartRequest{Methodology: "sdlc", Agent: "delivery", Goal: "deliver", BaselineID: base,
-		Title: "Payment in 3 installments", Intent: "Allow payment in 3 installments with no fees"})
+		Title: "Payment in 3 installments", Intent: "Allow payment in 3 installments with no fees", ProjectID: testProject})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -243,7 +249,7 @@ func TestSDLCProcess(t *testing.T) {
 		Roles: []string{"contributor", "business_analyst@ORG-DEFAULT", "tech_lead"}})
 	e, g, base := sdlcSetup(t)
 	p, err := e.Start(ctx, engine.StartRequest{Methodology: "sdlc", Goal: "software_delivery", BaselineID: base,
-		Title: "Payment in 3 installments", Intent: "Allow payment in 3 installments with no fees"})
+		Title: "Payment in 3 installments", Intent: "Allow payment in 3 installments with no fees", ProjectID: testProject})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -49,7 +49,7 @@ func TestIdentifyAgentAcrossMethodologies(t *testing.T) {
 	e, base := agentsSetup(t)
 	// the intent text deliberately echoes the coordinator's example phrase
 	// in methodologies/examples/test-design.yaml.
-	p, err := e.Start(ctx, StartRequest{BaselineID: base, Intent: "prepare and validate the test campaign"})
+	p, err := e.Start(ctx, StartRequest{BaselineID: base, ProjectID: testProject, Intent: "prepare and validate the test campaign"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,7 +64,7 @@ func TestIdentifyAgentAcrossMethodologies(t *testing.T) {
 func TestScriptAgentWithLLMUsage(t *testing.T) {
 	ctx := context.Background()
 	e, base := agentsSetup(t)
-	p, err := e.Start(ctx, StartRequest{Methodology: "test-design", Agent: "test-designer", BaselineID: base, Intent: "design the test cases"})
+	p, err := e.Start(ctx, StartRequest{Methodology: "test-design", Agent: "test-designer", BaselineID: base, ProjectID: testProject, Intent: "design the test cases"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,7 +96,7 @@ func TestScriptAgentWithLLMUsage(t *testing.T) {
 func TestSubAgentsWithSuspension(t *testing.T) {
 	ctx := context.Background()
 	e, base := agentsSetup(t)
-	p, err := e.Start(ctx, StartRequest{Methodology: "test-design", Agent: "coordinator", BaselineID: base,
+	p, err := e.Start(ctx, StartRequest{Methodology: "test-design", Agent: "coordinator", BaselineID: base, ProjectID: testProject,
 		Intent: "prepare and validate the test campaign", Vars: map[string]any{"review": "human"}})
 	if err != nil {
 		t.Fatal(err)
@@ -145,7 +145,7 @@ func TestSubAgentsWithSuspension(t *testing.T) {
 func TestSubAgentWakesParentOnSignal(t *testing.T) {
 	ctx := context.Background()
 	e, base := agentsSetup(t)
-	p, err := e.Start(ctx, StartRequest{Methodology: "test-design", Agent: "watcher", BaselineID: base, Intent: "watch a pinger and wake on its signal"})
+	p, err := e.Start(ctx, StartRequest{Methodology: "test-design", Agent: "watcher", BaselineID: base, ProjectID: testProject, Intent: "watch a pinger and wake on its signal"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -206,7 +206,7 @@ func TestSubAgentWakesParentOnSignal(t *testing.T) {
 func TestChildVarsAreIsolated(t *testing.T) {
 	ctx := context.Background()
 	e, base := agentsSetup(t)
-	p, err := e.Start(ctx, StartRequest{Methodology: "test-design", Agent: "watcher", BaselineID: base,
+	p, err := e.Start(ctx, StartRequest{Methodology: "test-design", Agent: "watcher", BaselineID: base, ProjectID: testProject,
 		Intent: "watch a pinger and wake on its signal", Vars: map[string]any{"shared": "parent"}})
 	if err != nil {
 		t.Fatal(err)
@@ -249,7 +249,7 @@ func TestChildVarsAreIsolated(t *testing.T) {
 func TestUtilityPlannerAutoReview(t *testing.T) {
 	ctx := context.Background()
 	e, base := agentsSetup(t)
-	d, _ := e.Start(ctx, StartRequest{Methodology: "test-design", Agent: "test-designer", BaselineID: base, Intent: "design"})
+	d, _ := e.Start(ctx, StartRequest{Methodology: "test-design", Agent: "test-designer", BaselineID: base, ProjectID: testProject, Intent: "design"})
 	d, _ = e.Run(ctx, d.ID)
 	r, err := e.Start(ctx, StartRequest{Methodology: "test-design", Agent: "reviewer", ChangeID: d.ChangeID, Intent: "review"})
 	if err != nil {

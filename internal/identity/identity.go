@@ -18,11 +18,12 @@ const (
 	HeaderSubject = "X-Goap-Subject"
 	HeaderOrg     = "X-Goap-Org"
 	HeaderRoles   = "X-Goap-Roles"
+	HeaderProject = "X-Goap-Project"
 )
 
 // FromHeaders reads the principal of a request.
 func FromHeaders(h http.Header) authz.Principal {
-	p := authz.Principal{Subject: h.Get(HeaderSubject), Org: h.Get(HeaderOrg)}
+	p := authz.Principal{Subject: h.Get(HeaderSubject), Org: h.Get(HeaderOrg), Project: h.Get(HeaderProject)}
 	if roles := h.Get(HeaderRoles); roles != "" {
 		p.Roles = strings.Split(roles, ",")
 	}
@@ -33,6 +34,7 @@ func FromHeaders(h http.Header) authz.Principal {
 func SetHeaders(p authz.Principal, h http.Header) {
 	h.Set(HeaderSubject, p.Subject)
 	h.Set(HeaderOrg, p.Org)
+	h.Set(HeaderProject, p.Project)
 	h.Set(HeaderRoles, strings.Join(p.Roles, ","))
 }
 

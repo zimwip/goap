@@ -74,7 +74,7 @@ func stagedEngine(t *testing.T) *Engine {
 func TestProcessStepsAndNestedProcesses(t *testing.T) {
 	ctx := context.Background()
 	e := stagedEngine(t)
-	p, err := e.Start(ctx, StartRequest{Methodology: "staged", Goal: "delivery", Intent: "deliver the note"})
+	p, err := e.Start(ctx, StartRequest{Methodology: "staged", Goal: "delivery", Intent: "deliver the note", ProjectID: testProject})
 	if err != nil {
 		t.Fatal(err)
 	}

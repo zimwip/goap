@@ -124,12 +124,23 @@ type Snapshot struct {
 	users map[string]User
 	// parents maps a unit to the unit it is part of (organisation@part_of)
 	parents map[string]string
+	// projectParents maps a project to the project it is part of (organisation@project_part_of, ADR 0039)
+	projectParents map[string]string
+	// assignments are the Assignment nodes (ADR 0039), resolved from their assigns_org/assigns_project links
+	assignments []assignment
+}
+
+// assignment is a resolved Assignment node: the roles an org unit holds on a project.
+type assignment struct {
+	Org, Project string
+	Roles        []string
 }
 
 // BuildSnapshot reads the users and policies of a baseline graph.
 func BuildSnapshot(id domain.BaselineID, nodes []domain.Node, links []domain.Link) *Snapshot {
-	s := &Snapshot{Baseline: id, users: map[string]User{}, parents: map[string]string{}}
+	s := &Snapshot{Baseline: id, users: map[string]User{}, parents: map[string]string{}, projectParents: map[string]string{}}
 	byID := map[domain.NodeID]domain.Node{}
+	assignBuild := map[domain.NodeID]*assignment{}
 	for _, n := range nodes {
 		byID[n.ID] = n
 		// nodes is scoped to the organisation namespace by the Directory's cache (Namespace:
@@ -149,6 +160,13 @@ func BuildSnapshot(id domain.BaselineID, nodes []domain.Node, links []domain.Lin
 				continue
 			}
 			s.Policies = append(s.Policies, p)
+		case NodeTypeAssignment:
+			a, err := AssignmentFromProps(n.Properties)
+			if err != nil {
+				s.Problems = append(s.Problems, fmt.Sprintf("%s: %v", n.Key, err))
+				continue
+			}
+			assignBuild[n.ID] = &assignment{Roles: a.Roles}
 		}
 	}
 	for _, l := range links {
@@ -161,6 +179,24 @@ func BuildSnapshot(id domain.BaselineID, nodes []domain.Node, links []domain.Lin
 				u.Unit = to.Key
 				s.users[u.Subject] = u
 			}
+		}
+		if l.Type == LinkProjectPartOf && from.Type == NodeTypeProjectUnit && to.Type == NodeTypeProjectUnit && from.Key != to.Key {
+			s.projectParents[from.Key] = to.Key
+		}
+		if l.Type == LinkAssignsOrg && from.Type == NodeTypeAssignment {
+			if a, ok := assignBuild[l.From.ID]; ok {
+				a.Org = to.Key
+			}
+		}
+		if l.Type == LinkAssignsProject && from.Type == NodeTypeAssignment {
+			if a, ok := assignBuild[l.From.ID]; ok {
+				a.Project = to.Key
+			}
+		}
+	}
+	for _, a := range assignBuild {
+		if a.Org != "" && a.Project != "" && len(a.Roles) > 0 {
+			s.assignments = append(s.assignments, *a)
 		}
 	}
 	sort.Slice(s.Policies, func(i, j int) bool { return PolicyKey(s.Policies[i]) < PolicyKey(s.Policies[j]) })
@@ -181,6 +217,46 @@ func (s *Snapshot) Chain(unit string) []string {
 	}
 	if !slices.Contains(out, domain.DefaultOrg) {
 		out = append(out, domain.DefaultOrg)
+	}
+	return out
+}
+
+// ProjectChain returns a project followed by its ancestors (project_part_of), nearest first, ending with
+// the root project (ADR 0039; mirrors Chain). The root project links project_part_of to itself, but that
+// self-link is never recorded as a parent (BuildSnapshot), so it terminates the walk the same way
+// ORG-DEFAULT's absent part_of link terminates Chain.
+func (s *Snapshot) ProjectChain(project string) []string {
+	out := []string{project}
+	for p := project; ; {
+		up, ok := s.projectParents[p]
+		if !ok || slices.Contains(out, up) {
+			break
+		}
+		out = append(out, up)
+		p = up
+	}
+	if !slices.Contains(out, domain.DefaultProject) {
+		out = append(out, domain.DefaultProject)
+	}
+	return out
+}
+
+// ProjectRoles returns the roles granted, by an Assignment node, to any unit of orgChain on any project of
+// projectChain (ADR 0039): "resolve the role of a user in a project" resolves orgChain (the subject's own
+// org chain, or the org chain of the resource it acts on) and projectChain (the change's project chain)
+// first, then unions the roles of every matching Assignment. Unscoped: the membership test already
+// happened, so the result can be merged straight into a Principal's Roles (Principal.HasRoleIn).
+func (s *Snapshot) ProjectRoles(orgChain, projectChain []string) []string {
+	var out []string
+	for _, a := range s.assignments {
+		if !slices.Contains(orgChain, a.Org) || !slices.Contains(projectChain, a.Project) {
+			continue
+		}
+		for _, r := range a.Roles {
+			if !slices.Contains(out, r) {
+				out = append(out, r)
+			}
+		}
 	}
 	return out
 }
@@ -321,6 +397,16 @@ func (a *Authorizer) Authorize(ctx context.Context, req authz.Request) (bool, er
 		req.Subject = snap.Enrich(req.Subject)
 		if req.Resource.Org != "" && len(req.Resource.OrgChain) == 0 {
 			req.Resource.OrgChain = snap.Chain(req.Resource.Org)
+		}
+		if req.Resource.ProjectID != "" && len(req.Resource.OrgChain) > 0 {
+			projectChain := snap.ProjectChain(req.Resource.ProjectID)
+			roles := slices.Clone(req.Subject.Roles)
+			for _, r := range snap.ProjectRoles(req.Resource.OrgChain, projectChain) {
+				if !slices.Contains(roles, r) {
+					roles = append(roles, r)
+				}
+			}
+			req.Subject.Roles = roles
 		}
 	}
 	if ok, err := a.floor.Authorize(ctx, req); err != nil || ok {

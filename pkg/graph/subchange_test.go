@@ -3,8 +3,10 @@ package graph
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/zimwip/goap/pkg/domain"
 )
@@ -204,5 +206,116 @@ func testSubChangeRules(t *testing.T, repo Repo) {
 	}
 	if b, _ := g.Branch(ctx, sub.Namespace, sub.Branch); b.Status != domain.BranchAbandoned {
 		t.Fatalf("sub branch = %s", b.Status)
+	}
+}
+
+// A root project links project_part_of to itself (ADR 0039, mirroring how ORG-DEFAULT is the organisation
+// chain's root, but by a self-link rather than by omission, per the domain design). checkProject and
+// projectWithin must handle it without looping forever.
+func TestProjectSelfLinkTerminates(t *testing.T) {
+	ctx := context.Background()
+	g := New(NewMemory())
+	mk := func(key string, props map[string]any) domain.Node {
+		n, err := g.CreateNode(ctx, NewNode{Namespace: "organisation", Key: key, Type: "ProjectUnit", Properties: props})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	root := mk("PROJ-ROOT", map[string]any{"name": "Root project"})
+	if _, err := g.Link(ctx, LinkProjectPartOf, root.Ref(), root.Ref(), nil); err != nil {
+		t.Fatalf("a project can link project_part_of to itself: %v", err)
+	}
+	sub := mk("PROJ-SUB", map[string]any{"name": "Sub project"})
+	if _, err := g.Link(ctx, LinkProjectPartOf, sub.Ref(), root.Ref(), nil); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() {
+		done <- g.repo.InTx(ctx, func(tx Tx) error {
+			if err := checkProject(ctx, tx, "PROJ-ROOT"); err != nil {
+				return fmt.Errorf("root project must check out: %w", err)
+			}
+			if ok, err := projectWithin(ctx, tx, "PROJ-ROOT", "PROJ-ROOT"); err != nil || !ok {
+				return fmt.Errorf("the root project is within itself: %v %v", ok, err)
+			}
+			if ok, err := projectWithin(ctx, tx, "PROJ-SUB", "PROJ-ROOT"); err != nil || !ok {
+				return fmt.Errorf("the sub project is within the root project: %v %v", ok, err)
+			}
+			if ok, err := projectWithin(ctx, tx, "PROJ-ROOT", "PROJ-SUB"); err != nil || ok {
+				return fmt.Errorf("the root project is not within the sub project: %v %v", ok, err)
+			}
+			return nil
+		})
+	}()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("a self-link made the walk loop forever")
+	}
+}
+
+// Project rules mirror the owner-org ones (ADR 0039): an unknown project is refused, a sub-change's
+// project must be within the parent's, and it is inherited when unset. Administrative changes are exempt.
+func TestProjectSubChangeRules(t *testing.T) { forEachRepo(t, testProjectSubChangeRules) }
+
+func testProjectSubChangeRules(t *testing.T, repo Repo) {
+	ctx := context.Background()
+	g := New(repo)
+	mk := func(key string, props map[string]any) domain.Node {
+		n, err := g.CreateNode(ctx, NewNode{Namespace: "organisation", Key: key, Type: "ProjectUnit", Properties: props})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	root := mk("PROJ-ROOT", map[string]any{"name": "Root"})
+	if _, err := g.Link(ctx, LinkProjectPartOf, root.Ref(), root.Ref(), nil); err != nil {
+		t.Fatal(err)
+	}
+	a := mk("PROJ-A", map[string]any{"name": "A"})
+	if _, err := g.Link(ctx, LinkProjectPartOf, a.Ref(), root.Ref(), nil); err != nil {
+		t.Fatal(err)
+	}
+	a1 := mk("PROJ-A1", map[string]any{"name": "A1"})
+	if _, err := g.Link(ctx, LinkProjectPartOf, a1.Ref(), a.Ref(), nil); err != nil {
+		t.Fatal(err)
+	}
+	b := mk("PROJ-B", map[string]any{"name": "B"})
+	if _, err := g.Link(ctx, LinkProjectPartOf, b.Ref(), root.Ref(), nil); err != nil {
+		t.Fatal(err)
+	}
+	base, err := g.CreateBaseline(ctx, domain.DefaultNamespace, "B", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// unknown project
+	if _, err := g.CreateChange(ctx, NewChange{Title: "x", BaselineID: base.ID, ProjectID: "PROJ-NOPE"}); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("unknown project: %v", err)
+	}
+	// administrative: no project needed, and none is checked
+	if _, err := g.CreateChange(ctx, NewChange{Title: "x", BaselineID: base.ID, Administrative: true}); err != nil {
+		t.Fatalf("administrative without a project: %v", err)
+	}
+	parent, err := g.CreateChange(ctx, NewChange{Title: "p", BaselineID: base.ID, OwnBranch: true, ProjectID: "PROJ-A"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// the sub-change's project must be within the parent's project
+	if _, err := g.CreateChange(ctx, NewChange{Title: "x", ParentID: parent.ID, ProjectID: "PROJ-B"}); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("project outside the parent project: %v", err)
+	}
+	// within (a descendant) is accepted
+	if sub, err := g.CreateChange(ctx, NewChange{Title: "x", ParentID: parent.ID, ProjectID: "PROJ-A1"}); err != nil {
+		t.Fatalf("project within the parent project: %v", err)
+	} else if sub.ProjectID != "PROJ-A1" {
+		t.Fatalf("sub.ProjectID = %q", sub.ProjectID)
+	}
+	// unset: inherited from the parent
+	if sub, err := g.CreateChange(ctx, NewChange{Title: "x", ParentID: parent.ID}); err != nil || sub.ProjectID != "PROJ-A" {
+		t.Fatalf("project inherited from the parent: %+v, %v", sub, err)
 	}
 }

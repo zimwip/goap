@@ -61,12 +61,15 @@ func TestSpecializationChosenAtExecution(t *testing.T) {
 		}
 	}
 	g := graph.New(graph.NewMemory())
+	if _, err := g.CreateNode(ctx, graph.NewNode{Namespace: "organisation", Key: testProject, Type: "organisation@ProjectUnit"}); err != nil {
+		t.Fatal(err)
+	}
 	b, _ := g.CreateBaseline(ctx, "alm", "B0", nil)
 	e := &Engine{Graph: g, Methodologies: StaticMethodologies{"demo": demo, "golang": golang},
 		Executors: map[string]Executor{methodology.KindBuiltin: BuiltinExecutor{"build.java": builtin("java"), "build.any": builtin("any"), "build.go": builtin("go")}},
 		Intent:    intent.Resolver{Ranker: intent.Lexical{}}, Store: NewMemoryStore()}
 	for lang, want := range map[string]string{"java": "build_java", "c": "build_any", "go": "golang/build_go"} {
-		p, err := e.Start(ctx, StartRequest{Methodology: "demo", Goal: "build_it", BaselineID: b.ID, Intent: "build", Vars: map[string]any{"lang": lang}})
+		p, err := e.Start(ctx, StartRequest{Methodology: "demo", Goal: "build_it", BaselineID: b.ID, Intent: "build", Vars: map[string]any{"lang": lang}, ProjectID: testProject})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -97,10 +100,13 @@ goals: [{name: g, pre: {done: true}}]
 `
 	ctx := context.Background()
 	g := graph.New(graph.NewMemory())
+	if _, err := g.CreateNode(ctx, graph.NewNode{Namespace: "organisation", Key: testProject, Type: "organisation@ProjectUnit"}); err != nil {
+		t.Fatal(err)
+	}
 	b, _ := g.CreateBaseline(ctx, "", "B0", nil)
 	e := &Engine{Graph: g, Methodologies: StaticMethodologies{"abs": compile(t, src)}, Executors: map[string]Executor{},
 		Intent: intent.Resolver{Ranker: intent.Lexical{}}, Store: NewMemoryStore(), MaxFailures: 1}
-	p, _ := e.Start(ctx, StartRequest{Methodology: "abs", Goal: "g", BaselineID: b.ID, Intent: "x"})
+	p, _ := e.Start(ctx, StartRequest{Methodology: "abs", Goal: "g", BaselineID: b.ID, Intent: "x", ProjectID: testProject})
 	p, _ = e.Run(ctx, p.ID)
 	if p.Status != StatusStuck || p.Steps[0].Error == "" {
 		t.Fatalf("abstract action must fail then disable: %+v", p)

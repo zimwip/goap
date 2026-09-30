@@ -12,8 +12,10 @@ import (
 	"github.com/zimwip/goap/gen/goap/graph/v1/graphv1connect"
 	"github.com/zimwip/goap/internal/graphsvc"
 	"github.com/zimwip/goap/internal/identity"
+	"github.com/zimwip/goap/pkg/access"
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/graph"
+	"github.com/zimwip/goap/pkg/mcp"
 )
 
 // A personal change (ADR 0037) belongs to its owner: another caller neither sees nor touches it, and only its
@@ -92,5 +94,47 @@ func TestPersonalChange(t *testing.T) {
 	call("alice", get)
 	if _, err := cl.GetChange(ctx, get); connect.CodeOf(err) != connect.CodeNotFound {
 		t.Fatalf("GetChange after the purge: %v", err)
+	}
+}
+
+// A User node is created automatically the first time a subject is seen (ADR 0039), not only when they
+// resolve "@me": any authenticated call ensures it, via the EnsureCaller interceptor. It doubles as the
+// subject's personal unit (organisation@User extends organisation@OrgUnit, same "USR:<subject>" key).
+func TestUserCreatedAutomatically(t *testing.T) {
+	ctx := context.Background()
+	g := graph.New(graph.NewMemory())
+	h := &graphsvc.Handler{Graph: g}
+	path, handler := graphv1connect.NewGraphServiceHandler(h, connect.WithInterceptors(h.PersonalScope(), h.EnsureCaller()))
+	mux := http.NewServeMux()
+	mux.Handle(path, handler)
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	cl := graphv1connect.NewGraphServiceClient(srv.Client(), srv.URL)
+
+	// bob only lists changes (no @me, no personal change involved): he still gets a User node.
+	list := connect.NewRequest(&graphv1.ListChangesRequest{})
+	identity.SetHeaders(authz.Principal{Subject: "bob"}, list.Header())
+	if _, err := cl.ListChanges(ctx, list); err != nil {
+		t.Fatal(err)
+	}
+	n, err := g.NodeByKey(ctx, mcp.NamespaceOrganisation, "USR:bob")
+	if err != nil {
+		t.Fatalf("bob's User node: %v", err)
+	}
+	if n.Type != access.NodeTypeUser {
+		t.Fatalf("type = %s, want %s", n.Type, access.NodeTypeUser)
+	}
+	if n.Properties["subject"] != "bob" {
+		t.Fatalf("properties = %+v", n.Properties)
+	}
+	// calling again must not create a second version (deduplicated per subject)
+	list2 := connect.NewRequest(&graphv1.ListChangesRequest{})
+	identity.SetHeaders(authz.Principal{Subject: "bob"}, list2.Header())
+	if _, err := cl.ListChanges(ctx, list2); err != nil {
+		t.Fatal(err)
+	}
+	again, err := g.NodeByKey(ctx, mcp.NamespaceOrganisation, "USR:bob")
+	if err != nil || again.Version != n.Version {
+		t.Fatalf("a second call must not write again: %+v, %v", again, err)
 	}
 }

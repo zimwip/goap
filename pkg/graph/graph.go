@@ -317,7 +317,15 @@ type NewChange struct {
 	ParentID domain.ChangeID
 	// OwnerOrg is the key of the OrgUnit responsible for the change (empty: the default organisation).
 	OwnerOrg string
-	Data     map[string]any
+	// ProjectID is the key of the ProjectUnit this change's nodes belong to (ADR 0039; empty: the root
+	// project). A sub-change inherits it from its parent when unset, and must stay within the parent's
+	// project when set. Selecting one before acting is a UX-level gate (ADR 0039), not enforced here.
+	ProjectID string
+	// Administrative marks a change of a methodology that manages organisation/project/policy/adapter
+	// data, the admin surface itself (ADR 0039): exempt from the project selector gate. A sub-change
+	// inherits it from its parent.
+	Administrative bool
+	Data           map[string]any
 }
 
 // CreateChange opens a change on a reference baseline. A sub-change
@@ -329,13 +337,23 @@ func (g *Graph) CreateChange(ctx context.Context, in NewChange) (domain.Change, 
 		c = domain.Change{
 			ID: domain.ChangeID(g.newID()), Title: in.Title, Intent: in.Intent, Methodology: in.Methodology, Namespace: domain.NamespaceOf(in.Namespace),
 			Status: domain.ChangeDraft, BaselineID: in.BaselineID, Branch: domain.BranchOf(in.Branch), Data: in.Data, CreatedAt: g.now(),
-			ParentID: in.ParentID, OwnerOrg: in.OwnerOrg,
+			ParentID: in.ParentID, OwnerOrg: in.OwnerOrg, ProjectID: in.ProjectID, Administrative: in.Administrative,
 		}
 		if err := g.prepareSubChange(ctx, tx, &c, &in); err != nil {
 			return err
 		}
 		if in.OwnerOrg != "" {
 			if err := checkOwnerOrg(ctx, tx, in.OwnerOrg); err != nil {
+				return err
+			}
+		}
+		// a change belongs to a project (ADR 0039: empty resolves to the root project, domain.ProjectOf,
+		// the same way an empty OwnerOrg resolves to the default organisation). A sub-change may have
+		// inherited one from its parent above (prepareSubChange). Requiring every caller to name one
+		// (rather than defaulting) is a UX-level gate (the project selector, ADR 0039), not a graph-level
+		// one: most callers (tests, tools, methodologies not yet updated) still have no project to give.
+		if c.ProjectID != "" {
+			if err := checkProject(ctx, tx, c.ProjectID); err != nil {
 				return err
 			}
 		}

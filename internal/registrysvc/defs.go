@@ -23,6 +23,7 @@ const (
 	kindAgent     = "agent"
 	kindProcess   = "process"
 	kindMethod    = "method"
+	kindRole      = "role"
 )
 
 // defKinds lists the element kinds with the JSON field of the collection they belong to.
@@ -33,6 +34,7 @@ var defKinds = []struct{ kind, field, nodeType string }{
 	{kindAgent, "agents", "methodology@Agent"},
 	{kindProcess, "processes", "methodology@Process"},
 	{kindMethod, "methods", "methodology@Method"},
+	{kindRole, "roles", "methodology@Role"},
 }
 
 // defEl is an element of a definition.

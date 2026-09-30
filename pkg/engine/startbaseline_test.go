@@ -43,7 +43,7 @@ func TestStartWithoutBaseline(t *testing.T) {
 		Store:         engine.NewMemoryStore(),
 		Types:         func() methodology.TypeSet { return cat },
 	}
-	req := engine.StartRequest{Methodology: "sdlc", Agent: "delivery", Goal: "deliver", Intent: "Allow payment in 3 installments"}
+	req := engine.StartRequest{Methodology: "sdlc", Agent: "delivery", Goal: "deliver", Intent: "Allow payment in 3 installments", ProjectID: testProject}
 
 	// no baseline in the methodology's namespace yet
 	if _, err := e.Start(ctx, req); !errors.Is(err, engine.ErrInvalidState) {
@@ -51,6 +51,9 @@ func TestStartWithoutBaseline(t *testing.T) {
 	}
 
 	if _, err := graphsvc.SeedDemo(ctx, g); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := g.CreateNode(ctx, graph.NewNode{Namespace: "organisation", Key: testProject, Type: "organisation@ProjectUnit", Properties: map[string]any{"name": "Test"}}); err != nil {
 		t.Fatal(err)
 	}
 	bs, err := g.Baselines(ctx, cm.Namespace)

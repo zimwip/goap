@@ -203,7 +203,7 @@ func (e *Engine) stepAllowed(ctx context.Context, p *Process, who authz.Principa
 		return true, nil
 	}
 	return e.Authz.Authorize(ctx, authz.Request{Subject: who, Action: act, Resource: authz.Resource{Type: "step", ID: p.ID, Name: sc.Path,
-		Org: e.orgOf(p), Owner: p.Initiator.Subject, Role: sc.Roles.Responsible, Accountable: sc.Roles.Accountable}})
+		Org: e.orgOf(p), ProjectID: e.projectOf(p), Owner: p.Initiator.Subject, Role: sc.Roles.Responsible, Accountable: sc.Roles.Accountable}})
 }
 
 // briefSection is the compact brief of the change an LLM action works on (ADR 0036 §2): the most information in the

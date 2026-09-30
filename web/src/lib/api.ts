@@ -1013,6 +1013,8 @@ export interface LogLine {
 export interface Principal {
   subject?: string;
   org?: string;
+  /** the caller's active project (ADR 0039), from their token */
+  project?: string;
   roles?: string[];
 }
 /** Inconsistency found in the content of a blackboard. */
@@ -1547,6 +1549,25 @@ export async function whoAmI(signal?: AbortSignal): Promise<Principal> {
   const res = await fetch(`${BASE}/api/whoami`, { headers, signal });
   if (!res.ok) throw new RpcError('unauthenticated', res.statusText, res.status);
   return (await res.json()) as Principal;
+}
+
+/**
+ * Switches the active project (ADR 0039): reissues the token with the same subject/org/roles, pointed at
+ * a different project (POST /auth/dev-token/project), and stores it — every call from here on carries it.
+ * Requires a token (the dev-token / hs256 auth flow; a deployment without one has no project to switch).
+ */
+export async function switchProject(project: string): Promise<void> {
+  const token = getToken();
+  if (!token) throw new RpcError('unauthenticated', 'no active token', 401);
+  const res = await fetch(`${BASE}/auth/dev-token/project`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ project }),
+  });
+  if (!res.ok) throw new RpcError('failed', res.statusText, res.status);
+  const data = (await res.json()) as { token?: string };
+  if (!data.token) throw new RpcError('failed', 'no token returned', res.status);
+  setToken(data.token);
 }
 
 export interface SharedNode {

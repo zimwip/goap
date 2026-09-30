@@ -37,11 +37,21 @@ type Change struct {
 	// organisational boundary. OwnerOrg is the key of the OrgUnit ("organisation"
 	// namespace) responsible for it: the organisation holding the change (empty: the default
 	// organisation). It decides which MCP adapters its actions resolve (ADR 0019).
-	ParentID   ChangeID     `json:"parentId,omitempty"`
-	OwnerOrg   string       `json:"ownerOrg,omitempty"`
-	Goal       string       `json:"goal,omitempty"`
-	Status     ChangeStatus `json:"status"`
-	BaselineID BaselineID   `json:"baselineId"`
+	ParentID ChangeID `json:"parentId,omitempty"`
+	OwnerOrg string   `json:"ownerOrg,omitempty"`
+	// ProjectID is the key of the ProjectUnit ("organisation" namespace) this change's nodes
+	// belong to (ADR 0039), checked when given (pkg/graph.CreateChange); empty resolves to the
+	// root project (domain.ProjectOf), the same way an empty OwnerOrg resolves to DefaultOrg. A
+	// sub-change inherits it from its parent when unset. Requiring a caller to name one (the
+	// project selector, "no action but the administrative ones without a project") is a UX-level
+	// gate, not enforced by the graph itself: most callers have no project to give yet.
+	ProjectID string `json:"projectId,omitempty"`
+	// Administrative marks a change of a methodology that manages organisation/project/policy/
+	// adapter data, the admin surface itself (ADR 0039): exempt from the project selector gate.
+	Administrative bool         `json:"administrative,omitempty"`
+	Goal           string       `json:"goal,omitempty"`
+	Status         ChangeStatus `json:"status"`
+	BaselineID     BaselineID   `json:"baselineId"`
 	// Branch the change is applied to (default main).
 	Branch           string         `json:"branch,omitempty"`
 	ResultBaselineID BaselineID     `json:"resultBaselineId,omitempty"`

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/zimwip/goap/internal/graphsvc"
+	"github.com/zimwip/goap/pkg/access"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/mcp"
@@ -132,5 +133,28 @@ func TestSeedBuiltins(t *testing.T) {
 		if n.Key == mcp.AdapterKey(domain.DefaultOrg, mcp.BuiltinAdmin) && !n.Deleted {
 			t.Fatal("the removed instance was seeded again")
 		}
+	}
+}
+
+// The root project is seeded like ORG-DEFAULT, self-linked project_part_of, and seeding is idempotent.
+func TestRootProjectSeeded(t *testing.T) {
+	ctx := context.Background()
+	g := typedGraph(t)
+	if _, err := graphsvc.SeedDefaults(ctx, g); err != nil {
+		t.Fatal(err)
+	}
+	root, err := g.NodeByKey(ctx, mcp.NamespaceOrganisation, domain.DefaultProject)
+	if err != nil || root.Type != access.NodeTypeProjectUnit {
+		t.Fatalf("root project = %+v, %v", root, err)
+	}
+	v, err := g.View(ctx, root.Ref())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(v.Out) != 1 || v.Out[0].Type != access.LinkProjectPartOf || v.Out[0].To.ID != root.ID {
+		t.Fatalf("the root project must link project_part_of to itself: %+v", v.Out)
+	}
+	if again, err := graphsvc.SeedDefaults(ctx, g); err != nil || again {
+		t.Fatalf("seeding twice must not touch the root project again: %v %v", again, err)
 	}
 }

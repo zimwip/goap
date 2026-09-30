@@ -19,10 +19,12 @@ import BaselineExplorer from './nav/BaselineExplorer.svelte';
 import BaselineWorkspace from './nav/BaselineWorkspace.svelte';
 import ChangesExplorer from './nav/ChangesExplorer.svelte';
 import AccessExplorer from './nav/AccessExplorer.svelte';
-import OrganisationExplorer from './nav/OrganisationExplorer.svelte';
+import PeopleOrgExplorer from './nav/PeopleOrgExplorer.svelte';
 import AdaptersExplorer from './nav/AdaptersExplorer.svelte';
 import ConnectorTab from './editors/ConnectorTab.svelte';
 import OrganisationTab from './editors/OrganisationTab.svelte';
+import ProjectTab from './editors/ProjectTab.svelte';
+import UserTab from './editors/UserTab.svelte';
 import McpTab from './editors/McpTab.svelte';
 import TriggersExplorer from './nav/TriggersExplorer.svelte';
 import ProcessesExplorer from './nav/ProcessesExplorer.svelte';
@@ -80,7 +82,7 @@ registerView({
     return n || undefined;
   },
 });
-registerView({ id: 'organisation', zone: 'left', title: 'Organisation', icon: 'user', component: OrganisationExplorer, order: 4.5 });
+registerView({ id: 'peopleOrg', zone: 'left', title: 'People & Organisation', icon: 'user', component: PeopleOrgExplorer, order: 4.5 });
 registerView({ id: 'adapters', zone: 'left', title: 'Adapters', icon: 'zap', component: AdaptersExplorer, order: 4.6 });
 registerView({ id: 'access', zone: 'left', title: 'Access', icon: 'shield', component: AccessExplorer, order: 5 });
 
@@ -407,6 +409,26 @@ registerView({
   component: OrganisationTab,
   key: (p) => p.key ?? '',
   tabTitle: (t) => t.params.key ?? 'Organisation',
+});
+
+registerView({
+  id: 'project',
+  zone: 'editor',
+  title: 'Project',
+  icon: 'diff',
+  component: ProjectTab,
+  key: (p) => p.key ?? '',
+  tabTitle: (t) => t.params.key ?? 'Project',
+});
+
+registerView({
+  id: 'user',
+  zone: 'editor',
+  title: 'User',
+  icon: 'user',
+  component: UserTab,
+  key: (p) => p.key ?? '',
+  tabTitle: (t) => t.params.key ?? 'User',
 });
 
 registerView({

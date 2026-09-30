@@ -12,7 +12,7 @@ func TestJournalRecordsTicksAndActions(t *testing.T) {
 	e, g, base := setup(t)
 	// the intent text deliberately echoes the "assess_impact" goal example
 	// in methodologies/examples/impact-analysis.yaml.
-	p, err := e.Start(ctx, StartRequest{Methodology: "impact-analysis", BaselineID: base, Intent: "The PSP changes its API, what does this break?"})
+	p, err := e.Start(ctx, StartRequest{Methodology: "impact-analysis", BaselineID: base, Intent: "The PSP changes its API, what does this break?", ProjectID: testProject})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,7 +79,7 @@ func TestJournalRecordsTicksAndActions(t *testing.T) {
 func TestJournalStepsChainBlackboardStates(t *testing.T) {
 	ctx := context.Background()
 	e, g, base := setup(t)
-	p, err := e.Start(ctx, StartRequest{Methodology: "impact-analysis", BaselineID: base, Intent: "The PSP changes its API, what does this break?"})
+	p, err := e.Start(ctx, StartRequest{Methodology: "impact-analysis", BaselineID: base, Intent: "The PSP changes its API, what does this break?", ProjectID: testProject})
 	if err != nil {
 		t.Fatal(err)
 	}

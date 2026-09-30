@@ -41,6 +41,9 @@ func scripted(t *testing.T) llm.Client {
 	})
 }
 
+// testProject is the key of the project these tests start their (non-administrative) processes in (ADR 0039).
+const testProject = "PROJ-TEST"
+
 func setup(t *testing.T) (*Engine, *graph.Graph, domain.BaselineID) {
 	t.Helper()
 	ctx := context.Background()
@@ -53,6 +56,10 @@ func setup(t *testing.T) (*Engine, *graph.Graph, domain.BaselineID) {
 		t.Fatal(err)
 	}
 	g := graph.New(graph.NewMemory())
+	// a project every test starts its (non-administrative) processes in (ADR 0039)
+	if _, err := g.CreateNode(ctx, graph.NewNode{Namespace: "organisation", Key: testProject, Type: "organisation@ProjectUnit", Properties: map[string]any{"name": "Test"}}); err != nil {
+		t.Fatal(err)
+	}
 	// the alm namespace the example methodologies act on (ADR 0013)
 	need, _ := g.CreateNode(ctx, graph.NewNode{Namespace: "alm", Key: "NEED-1", Type: "alm@Need", Properties: map[string]any{"title": "Pay online"}})
 	req, _ := g.CreateNode(ctx, graph.NewNode{Namespace: "alm", Key: "REQ-1", Type: "alm@Requirement", Properties: map[string]any{"title": "Use PSP v1"}})
@@ -105,7 +112,7 @@ func TestAssessImpact(t *testing.T) {
 	e, g, base := setup(t)
 	// the intent text deliberately echoes the "assess_impact" goal example
 	// ("what does this break") in methodologies/examples/impact-analysis.yaml.
-	p, err := e.Start(ctx, StartRequest{Methodology: "impact-analysis", BaselineID: base, Intent: "The PSP changes its API, what does this break?"})
+	p, err := e.Start(ctx, StartRequest{Methodology: "impact-analysis", BaselineID: base, ProjectID: testProject, Intent: "The PSP changes its API, what does this break?"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,7 +151,7 @@ func TestAssessImpact(t *testing.T) {
 func TestPrepareChangeWithClarificationAndReview(t *testing.T) {
 	ctx := context.Background()
 	e, g, base := setup(t)
-	p, err := e.Start(ctx, StartRequest{Methodology: "impact-analysis", BaselineID: base, Intent: "The payment provider is changing"})
+	p, err := e.Start(ctx, StartRequest{Methodology: "impact-analysis", BaselineID: base, ProjectID: testProject, Intent: "The payment provider is changing"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -210,7 +217,7 @@ func TestStuckWhenNoPlan(t *testing.T) {
 	e.Executors[methodology.KindLLM] = LLMExecutor{Client: llm.ClientFunc(func(context.Context, llm.Request) (llm.Response, error) {
 		return llm.Response{Text: `{"items":[]}`}, nil
 	})}
-	p, _ := e.Start(ctx, StartRequest{Methodology: "impact-analysis", BaselineID: base, Goal: "assess_impact"})
+	p, _ := e.Start(ctx, StartRequest{Methodology: "impact-analysis", BaselineID: base, ProjectID: testProject, Goal: "assess_impact"})
 	p, _ = e.Run(ctx, p.ID)
 	if p.Status != StatusWaiting || p.Pending.Action != "select_impacts" {
 		t.Fatalf("expected fallback to human selection, got %s %+v", p.Status, p.Pending)
@@ -241,7 +248,7 @@ func deliverUntilReviewed(t *testing.T, who authz.Principal) (*Engine, *graph.Gr
 	t.Helper()
 	e, g, base := setup(t)
 	ctx := authz.With(context.Background(), who)
-	p, err := e.Start(ctx, StartRequest{Methodology: "impact-analysis", BaselineID: base, Goal: "deliver_change"})
+	p, err := e.Start(ctx, StartRequest{Methodology: "impact-analysis", BaselineID: base, ProjectID: testProject, Goal: "deliver_change"})
 	if err != nil {
 		t.Fatal(err)
 	}

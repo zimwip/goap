@@ -29,10 +29,14 @@ type Methodology struct {
 	Description string `yaml:"description,omitempty" json:"description,omitempty"`
 	// Namespace is the target namespace (ADR 0013 §3): the namespace the changes of the methodology act on, hence the
 	// domain of the nodes it creates and modifies (alm; methodology for the self-observation). Required.
-	Namespace  string      `yaml:"namespace" json:"namespace"`
-	Conditions []Condition `yaml:"conditions" json:"conditions"`
-	Actions    []Action    `yaml:"actions" json:"actions"`
-	Goals      []Goal      `yaml:"goals" json:"goals"`
+	Namespace string `yaml:"namespace" json:"namespace"`
+	// Administrative exempts the changes of the methodology from naming a project (ADR 0039): set on
+	// methodologies that manage organisation/project/policy/adapter data (the admin surface itself), not on
+	// methodologies that do the enterprise's actual work, which must run in the context of a project.
+	Administrative bool        `yaml:"administrative,omitempty" json:"administrative,omitempty"`
+	Conditions     []Condition `yaml:"conditions" json:"conditions"`
+	Actions        []Action    `yaml:"actions" json:"actions"`
+	Goals          []Goal      `yaml:"goals" json:"goals"`
 	// Agents run the methodology; without agents an implicit "default" agent
 	// has every action and goal and the goap planner.
 	Agents []Agent `yaml:"agents,omitempty" json:"agents,omitempty"`

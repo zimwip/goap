@@ -14,7 +14,7 @@ import (
 func TestEagerBindJournalsAttach(t *testing.T) {
 	ctx := context.Background()
 	e, g, base := setup(t)
-	p, err := e.Start(ctx, StartRequest{Methodology: "impact-analysis", BaselineID: base, Intent: "The PSP changes its API, what does this break?"})
+	p, err := e.Start(ctx, StartRequest{Methodology: "impact-analysis", BaselineID: base, ProjectID: testProject, Intent: "The PSP changes its API, what does this break?"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,7 +52,7 @@ func TestDeferredBindStartsUnbound(t *testing.T) {
 	statics := e.Methodologies.(StaticMethodologies)
 	statics["deferred-bind"] = loadMethodology(t, "deferred-bind.yaml")
 
-	p, err := e.Start(ctx, StartRequest{Methodology: "deferred-bind", Agent: "intake", Goal: "bound", BaselineID: base})
+	p, err := e.Start(ctx, StartRequest{Methodology: "deferred-bind", Agent: "intake", Goal: "bound", BaselineID: base, ProjectID: testProject})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -118,7 +118,7 @@ func TestAttachChangeReusesExistingChange(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	p, err := e.Start(ctx, StartRequest{Methodology: "deferred-bind", Agent: "intake", Goal: "bound", BaselineID: base})
+	p, err := e.Start(ctx, StartRequest{Methodology: "deferred-bind", Agent: "intake", Goal: "bound", BaselineID: base, ProjectID: testProject})
 	if err != nil {
 		t.Fatal(err)
 	}

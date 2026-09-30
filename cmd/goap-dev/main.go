@@ -62,6 +62,7 @@ func main() {
 	dev := authz.Principal{
 		Subject: platform.Env("GOAP_DEV_SUBJECT", "dev"),
 		Org:     platform.Env("GOAP_DEV_ORG", "dev"),
+		Project: platform.Env("GOAP_DEV_PROJECT", ""),
 		Roles:   strings.Split(platform.Env("GOAP_DEV_ROLES", "admin"), ","),
 	}
 	ident := identity.Extractor{Default: &dev}
@@ -229,7 +230,7 @@ func main() {
 	hub.KeepRegistered(ctx, connectors)
 	srv := platform.NewServer(log, platform.Env("GOAP_HTTP_ADDR", ":8080"))
 	graphHandler := &graphsvc.Handler{Graph: g, Events: engine.Publishers{changePublisher(onChange), indexSink}, Authz: authorizer, Floor: authorizer.Floor(), Identity: ident}
-	srv.Mount(graphv1connect.NewGraphServiceHandler(graphHandler, append(telemetry.HandlerOptions(), connect.WithInterceptors(graphHandler.PersonalScope()))...))
+	srv.Mount(graphv1connect.NewGraphServiceHandler(graphHandler, append(telemetry.HandlerOptions(), connect.WithInterceptors(graphHandler.PersonalScope(), graphHandler.EnsureCaller()))...))
 	srv.Mount(registryv1connect.NewRegistryServiceHandler(&registrysvc.Handler{Service: reg, Identity: ident}, telemetry.HandlerOptions()...))
 	srv.Echo.GET("/api/whoami", identity.WhoAmI(ident, directory.Enrich))
 	srv.Mount(mcpv1connect.NewMcpServiceHandler(&mcpsvc.Handler{Service: hub, Authz: authorizer, Identity: ident, ConnectorToken: connectorToken}, telemetry.HandlerOptions()...))

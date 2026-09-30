@@ -21,6 +21,7 @@
   import { notifications, markRead, markAllRead, clearNotifications, type Notice } from '../stores/notifications.svelte';
   import { formatTime } from '../api';
   import Popover from './Popover.svelte';
+  import ProjectSelector from './ProjectSelector.svelte';
 
   $effect(() => startHealth());
 
@@ -219,7 +220,8 @@
 </script>
 
 <header class="header">
-  <div class="brand"><span class="logo" aria-hidden="true">◆</span> GOAP <span class="sub">Workshop</span></div>
+  <div class="brand"><span class="logo" aria-hidden="true">◆</span> GOAP</div>
+  <ProjectSelector />
 
   <div class="search">
     <span class="sicon"><Icon name="search" size={14} /></span>
@@ -389,12 +391,6 @@
   }
   .logo {
     color: var(--accent);
-  }
-  .sub {
-    font-weight: 500;
-    letter-spacing: 0;
-    color: var(--muted);
-    margin-left: 0.2rem;
   }
   .search {
     position: relative;
@@ -634,7 +630,6 @@
     flex: 1;
   }
   @media (max-width: 900px) {
-    .sub,
     .sl,
     .uname {
       display: none;
