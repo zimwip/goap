@@ -3,14 +3,16 @@
   // is seen (internal/graphsvc.EnsureUser), not only by an administrator's hand. User extends OrgUnit (the
   // smallest organisational unit is a person), so it is assignable to a project the same way a team is
   // (ADR 0039): its Assignments pane is the meeting point with project.
-  import type { Tab } from '../../shell/types';
+  import type { Tab, ToolbarAction } from '../../shell/types';
   import Icon from '../../shell/Icon.svelte';
   import EditorPanes, { type Pane } from '../../components/EditorPanes.svelte';
   import AssignmentsPane from '../../components/AssignmentsPane.svelte';
-  import { errorMessage } from '../../api';
-  import { headGraph, findNode, applyOnMain, updateNodeItem, type HeadGraph } from '../../graphEdit';
+  import { errorMessage, logout } from '../../api';
+  import { headGraph, findNode, applyOnMain, updateNodeItem, currentLink, moveNodeItem, refOf, type HeadGraph } from '../../graphEdit';
   import { notify, provideActions } from '../../shell/workbench.svelte';
-  import { USER_TYPE } from '../../orgTypes';
+  import { USER_TYPE, ORG_UNIT_TYPE, MEMBER_OF } from '../../orgTypes';
+  import { session, me } from '../../stores/session.svelte';
+  import { authState } from '../../stores/auth.svelte';
 
   let { tab }: { tab: Tab } = $props();
 
@@ -23,6 +25,9 @@
   let pane = $state(tab.params.pane === 'assignments' ? 'assignments' : 'overview');
 
   const user = $derived(head ? findNode(head, NS, USER_TYPE, key) : undefined);
+  const orgLink = $derived(head && user ? currentLink(head, user, MEMBER_OF) : undefined);
+  const org = $derived(head && orgLink ? head.nodes.find((n) => n.id === orgLink.to?.id) : undefined);
+  const orgUnits = $derived(head ? head.nodes.filter((n) => n.type === ORG_UNIT_TYPE) : []);
 
   async function load() {
     loading = true;
@@ -41,9 +46,23 @@
     void load();
   });
 
+  const isSelf = $derived(!!user && user.props?.['subject'] === me());
+  // Logout (ADR 0040): stateless HS256 has nothing to revoke server-side, so this is a client-side sign-out;
+  // hidden once the deployment gains a real SSO mode (OIDC/OAuth), where signing out goes through the IdP.
+  const canLogout = $derived(isSelf && session.hasToken && authState.mode !== 'oidc');
+
+  async function doLogout() {
+    await logout();
+    notify('Signed out.', 'ok');
+  }
+
   provideActions(
     () => tab.id,
-    () => [{ id: 'refresh', label: 'Refresh', icon: 'refresh', disabled: loading, run: load }],
+    () => {
+      const actions: ToolbarAction[] = [{ id: 'refresh', label: 'Refresh', icon: 'refresh', disabled: loading, run: load }];
+      if (canLogout) actions.push({ id: 'logout', label: 'Log out', icon: 'logout', run: doLogout });
+      return actions;
+    },
   );
 
   const panes = $derived<Pane[]>([
@@ -57,6 +76,36 @@
   let fLocale = $state('');
   let fRoles = $state('');
   let saving = $state(false);
+
+  let moving = $state(false);
+  let fOrg = $state('');
+  let movingBusy = $state(false);
+
+  function startMove() {
+    fOrg = org?.key ?? '';
+    moving = true;
+  }
+
+  async function move() {
+    if (!user || !head || !fOrg || fOrg === org?.key) {
+      moving = false;
+      return;
+    }
+    const target = head.nodes.find((n) => n.type === ORG_UNIT_TYPE && n.key === fOrg);
+    if (!target) return;
+    movingBusy = true;
+    error = '';
+    try {
+      await applyOnMain(NS, `Move ${key}`, `Move ${key} to ${fOrg}`, head.baselineId, [moveNodeItem(user, MEMBER_OF, orgLink, refOf(target))]);
+      notify(`${key} moved to ${fOrg}.`, 'ok');
+      moving = false;
+      await load();
+    } catch (e) {
+      error = errorMessage(e);
+    } finally {
+      movingBusy = false;
+    }
+  }
 
   function startEdit() {
     fDisplayName = typeof user?.props?.['displayName'] === 'string' ? (user!.props!['displayName'] as string) : '';
@@ -105,6 +154,21 @@
                 <dt>Subject</dt><dd><code>{user.props?.['subject'] ?? ''}</code></dd>
                 {#if user.props?.['email']}<dt>Email</dt><dd>{user.props['email']}</dd>{/if}
                 {#if user.props?.['locale']}<dt>Locale</dt><dd>{user.props['locale']}</dd>{/if}
+                <dt>Organisation</dt>
+                <dd>
+                  {#if !moving}
+                    <code>{org?.props?.['name'] ?? org?.key ?? 'none'}</code>
+                    <button type="button" class="small ghost" onclick={startMove}>Move to…</button>
+                  {:else}
+                    <select bind:value={fOrg} disabled={movingBusy}>
+                      {#each orgUnits as o (o.id)}
+                        <option value={o.key}>{String(o.props?.['name'] ?? o.key)}</option>
+                      {/each}
+                    </select>
+                    <button type="button" class="small primary" disabled={movingBusy} onclick={move}>Move</button>
+                    <button type="button" class="small" disabled={movingBusy} onclick={() => (moving = false)}>Cancel</button>
+                  {/if}
+                </dd>
                 <dt>Global roles</dt>
                 <dd>
                   {#if Array.isArray(user.props?.['roles']) && (user.props['roles'] as string[]).length}

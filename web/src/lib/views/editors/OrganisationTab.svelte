@@ -17,10 +17,10 @@
   import { tools, refreshTools } from '../../stores/tools.svelte';
   import type { AdapterDef } from '../../adapterDef';
   import { defaultToText, type ParamForm } from '../../algorithmForm';
-  import { headGraph, findNode, applyOnMain, createNodeItem, updateNodeItem, deleteNodeItem, refOf, type HeadGraph } from '../../graphEdit';
+  import { headGraph, findNode, applyOnMain, createNodeItem, updateNodeItem, deleteNodeItem, moveNodeItem, currentLink, refOf, type HeadGraph } from '../../graphEdit';
   import { openTab } from '../../shell/tabs.svelte';
   import { notify, provideActions } from '../../shell/workbench.svelte';
-  import { ADAPTER_TYPE, ORG_UNIT_TYPE, OWNER, PART_OF } from '../../orgTypes';
+  import { ADAPTER_TYPE, ORG_UNIT_TYPE, OWNER, PART_OF, DEFAULT_ORG } from '../../orgTypes';
   import { confirmDialog } from '../../shell/confirmState.svelte';
 
   let { tab }: { tab: Tab } = $props();
@@ -37,10 +37,9 @@
 
   const unit = $derived(head ? findNode(head, NS, ORG_UNIT_TYPE, key) : undefined);
   const nodeById = $derived(new Map((head?.nodes ?? []).map((n) => [n.id ?? '', n])));
-  const parentKey = $derived.by(() => {
-    const l = head?.links.find((x) => x.type === PART_OF && x.from?.id === unit?.id);
-    return l?.to?.id ? (nodeById.get(l.to.id)?.key ?? '') : '';
-  });
+  const parentLink = $derived(head && unit ? currentLink(head, unit, PART_OF) : undefined);
+  const parentKey = $derived(parentLink?.to?.id ? (nodeById.get(parentLink.to.id)?.key ?? '') : '');
+  const orgUnits = $derived((head?.nodes ?? []).filter((n) => n.type === ORG_UNIT_TYPE && n.key !== key));
   const childKeys = $derived(
     (head?.links ?? [])
       .filter((l) => l.type === PART_OF && l.to?.id === unit?.id)
@@ -79,6 +78,36 @@
     void key;
     void load();
   });
+
+  let moving = $state(false);
+  let fParent = $state('');
+  let movingBusy = $state(false);
+
+  function startMove() {
+    fParent = parentKey;
+    moving = true;
+  }
+
+  async function move() {
+    if (!unit || !head || !fParent || fParent === parentKey) {
+      moving = false;
+      return;
+    }
+    const target = head.nodes.find((n) => n.type === ORG_UNIT_TYPE && n.key === fParent);
+    if (!target) return;
+    movingBusy = true;
+    error = '';
+    try {
+      await applyOnMain(NS, `Move ${key}`, `Move ${key} under ${fParent}`, head.baselineId, [moveNodeItem(unit, PART_OF, parentLink, refOf(target))]);
+      notify(`${key} moved under ${fParent}.`, 'ok');
+      moving = false;
+      await load();
+    } catch (e) {
+      error = errorMessage(e);
+    } finally {
+      movingBusy = false;
+    }
+  }
 
   provideActions(
     () => tab.id,
@@ -301,9 +330,22 @@
               {#if unit.props?.['description']}<dt>Description</dt><dd>{unit.props['description']}</dd>{/if}
               <dt>Part of</dt>
               <dd>
-                {#if parentKey}
-                  <button type="button" class="link mono" onclick={() => openTab({ kind: 'unit', params: { key: parentKey } })}>{parentKey}</button>
-                {:else}<span class="muted">none (root)</span>{/if}
+                {#if !moving}
+                  {#if parentKey}
+                    <button type="button" class="link mono" onclick={() => openTab({ kind: 'unit', params: { key: parentKey } })}>{parentKey}</button>
+                  {:else}<span class="muted">none (root)</span>{/if}
+                  {#if key !== DEFAULT_ORG}
+                    <button type="button" class="small ghost" onclick={startMove}>Move to…</button>
+                  {/if}
+                {:else}
+                  <select bind:value={fParent} disabled={movingBusy}>
+                    {#each orgUnits as o (o.id)}
+                      <option value={o.key}>{String(o.props?.['name'] ?? o.key)}</option>
+                    {/each}
+                  </select>
+                  <button type="button" class="small primary" disabled={movingBusy} onclick={move}>Move</button>
+                  <button type="button" class="small" disabled={movingBusy} onclick={() => (moving = false)}>Cancel</button>
+                {/if}
               </dd>
               {#if childKeys.length}
                 <dt>Sub-units</dt>

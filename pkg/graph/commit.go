@@ -69,6 +69,11 @@ func (g *Graph) Commit(ctx context.Context, in Commit) (res CommitResult, err er
 	if len(in.Edits) == 0 {
 		return res, fmt.Errorf("a commit needs at least one edit: %w", ErrInvalid)
 	}
+	for _, e := range in.Edits {
+		if err := checkRequiredParent(e); err != nil {
+			return res, err
+		}
+	}
 	c, err := g.CreateChange(ctx, NewChange{Namespace: in.Namespace, Title: in.Title, Intent: in.Intent, Methodology: in.Methodology,
 		BaselineID: in.Baseline, Branch: in.Branch, Data: in.Data, OwnBranch: true})
 	if err != nil {
@@ -125,6 +130,11 @@ func (g *Graph) Commit(ctx context.Context, in Commit) (res CommitResult, err er
 		cn, err := g.WriteNode(ctx, c.ID, added[i].ID, w)
 		if err != nil {
 			return res, fmt.Errorf("%s: %w", nodeName(e), err)
+		}
+		if cn.Post != nil && !e.Retire {
+			if err := g.checkParentInvariant(ctx, *cn.Post); err != nil {
+				return res, fmt.Errorf("%s: %w", nodeName(e), err)
+			}
 		}
 		if e.Pre == nil {
 			written[e.Key] = *cn.Post

@@ -5,7 +5,8 @@
 // access policies (graph nodes) and processes across restarts. When GOAP_WEB_DIR (default
 // web/dist) holds a built IDE, it is served too. Callers act as the principal
 // GOAP_DEV_SUBJECT / GOAP_DEV_ROLES unless the request carries X-Goap-*
-// identity headers.
+// identity headers. GOAP_AUTH_MODE=local (ADR 0040) turns this off in favor of real sign-in
+// (register/login/logout, internal/credsvc), the same auth code cmd/gateway uses.
 package main
 
 import (
@@ -31,7 +32,9 @@ import (
 	"github.com/zimwip/goap/internal/connectorkit"
 	"github.com/zimwip/goap/internal/connectors/builtin"
 	"github.com/zimwip/goap/internal/connectors/localfs"
+	"github.com/zimwip/goap/internal/credsvc"
 	"github.com/zimwip/goap/internal/enginesvc"
+	"github.com/zimwip/goap/internal/gateway"
 	"github.com/zimwip/goap/internal/graphsvc"
 	"github.com/zimwip/goap/internal/identity"
 	"github.com/zimwip/goap/internal/indexersvc"
@@ -91,10 +94,10 @@ func main() {
 	var triggers *engine.TriggerManager
 	// methodologies and domains are nodes of the graph: the registry needs no database
 	// the scope of the MCPs (ADR 0028) is checked where methodologies declare them
-	reg := &registrysvc.Service{Store: registrysvc.NewGraphStore(g), DomainStore: st.domains, Authz: authorizer,
+	reg := &registrysvc.Service{Store: registrysvc.NewGraphStore(g), DomainStore: st.domains, AlgorithmStore: st.algorithms, Authz: authorizer,
 		MCPScopes: (&mcpsvc.Directory{Graph: g}).Scopes}
 	// the graph judges nodes by the types of the published domains (ADR 0012): its catalogue follows the registry
-	types := typecat.NewLive(reg.Domains)
+	types := typecat.NewLiveWithAlgorithms(reg.Domains, reg.Algorithms)
 	g.Types = func() graph.TypeCatalog { return types.Get() }
 	// publications reload the triggers and the type catalogue
 	reg.Events = registryEvents{
@@ -229,15 +232,49 @@ func main() {
 		Hub: hub, Registry: reg, Authz: authorizer, Floor: authorizer.Floor()}))
 	hub.KeepRegistered(ctx, connectors)
 	srv := platform.NewServer(log, platform.Env("GOAP_HTTP_ADDR", ":8080"))
+
+	// Local sign-in (ADR 0040), opt-in: GOAP_AUTH_MODE=local turns this single process into its own
+	// identity provider (register/login/logout, no external IdP), the same way cmd/gateway's AuthMode does
+	// for the distributed platform — reusing its authenticator and auth endpoints rather than the fixed
+	// GOAP_DEV_SUBJECT/ORG/ROLES principal every request gets by default. Applied per-route (not e.Use),
+	// so the built IDE's static assets and /api/status/health stay reachable with no token.
+	var authMW echo.MiddlewareFunc
+	if authMode := platform.Env("GOAP_AUTH_MODE", "none"); authMode != "none" && authMode != "" {
+		secret, err := secrets.Get(ctx, "goap/gateway#jwt_secret", "GOAP_JWT_SECRET")
+		if err != nil {
+			platform.Fatal(log, "jwt secret", err)
+		}
+		authCfg := gateway.Config{AuthMode: authMode, JWTSecret: []byte(secret), DevTokens: platform.Env("GOAP_DEV_TOKENS", "") == "true",
+			Credentials: &credsvc.Service{Store: st.creds}, Enrich: directory.Enrich}
+		if err := gateway.MountAuthEndpoints(srv.Echo, authCfg); err != nil {
+			platform.Fatal(log, "auth", err)
+		}
+		if authMW, err = gateway.Authenticator(authCfg); err != nil {
+			platform.Fatal(log, "auth", err)
+		}
+		log.Info("local sign-in enabled", "mode", authMode)
+	}
+	mount := func(path string, h http.Handler) {
+		if authMW != nil {
+			srv.Echo.Any(path+"*", echo.WrapHandler(h), authMW)
+			return
+		}
+		srv.Mount(path, h)
+	}
+
 	graphHandler := &graphsvc.Handler{Graph: g, Events: engine.Publishers{changePublisher(onChange), indexSink}, Authz: authorizer, Floor: authorizer.Floor(), Identity: ident}
-	srv.Mount(graphv1connect.NewGraphServiceHandler(graphHandler, append(telemetry.HandlerOptions(), connect.WithInterceptors(graphHandler.PersonalScope(), graphHandler.EnsureCaller()))...))
-	srv.Mount(registryv1connect.NewRegistryServiceHandler(&registrysvc.Handler{Service: reg, Identity: ident}, telemetry.HandlerOptions()...))
-	srv.Echo.GET("/api/whoami", identity.WhoAmI(ident, directory.Enrich))
-	srv.Mount(mcpv1connect.NewMcpServiceHandler(&mcpsvc.Handler{Service: hub, Authz: authorizer, Identity: ident, ConnectorToken: connectorToken}, telemetry.HandlerOptions()...))
-	srv.Mount(modelv1connect.NewModelServiceHandler(&modelgw.Handler{Service: gw, Identity: ident, Authz: authorizer}, telemetry.HandlerOptions()...))
-	srv.Mount(preferencesv1connect.NewPreferencesServiceHandler(&prefssvc.Handler{Service: &prefssvc.Service{Store: st.prefs}, Identity: ident}, telemetry.HandlerOptions()...))
-	srv.Mount(indexv1connect.NewIndexServiceHandler(&indexersvc.Handler{Service: indexer, Identity: ident, Authz: authorizer}, telemetry.HandlerOptions()...))
-	srv.Mount(enginev1connect.NewEngineServiceHandler(engineHandler, telemetry.HandlerOptions()...))
+	mount(graphv1connect.NewGraphServiceHandler(graphHandler, append(telemetry.HandlerOptions(), connect.WithInterceptors(graphHandler.PersonalScope(), graphHandler.EnsureCaller()))...))
+	mount(registryv1connect.NewRegistryServiceHandler(&registrysvc.Handler{Service: reg, Identity: ident}, telemetry.HandlerOptions()...))
+	if authMW != nil {
+		srv.Echo.GET("/api/whoami", identity.WhoAmI(identity.Extractor{}, directory.Enrich), authMW)
+	} else {
+		srv.Echo.GET("/api/whoami", identity.WhoAmI(ident, directory.Enrich))
+	}
+	mount(mcpv1connect.NewMcpServiceHandler(&mcpsvc.Handler{Service: hub, Authz: authorizer, Identity: ident, ConnectorToken: connectorToken}, telemetry.HandlerOptions()...))
+	mount(modelv1connect.NewModelServiceHandler(&modelgw.Handler{Service: gw, Identity: ident, Authz: authorizer}, telemetry.HandlerOptions()...))
+	mount(preferencesv1connect.NewPreferencesServiceHandler(&prefssvc.Handler{Service: &prefssvc.Service{Store: st.prefs}, Identity: ident}, telemetry.HandlerOptions()...))
+	mount(indexv1connect.NewIndexServiceHandler(&indexersvc.Handler{Service: indexer, Identity: ident, Authz: authorizer}, telemetry.HandlerOptions()...))
+	mount(enginev1connect.NewEngineServiceHandler(engineHandler, telemetry.HandlerOptions()...))
 	// single process: the platform is up when this answers (the gateway serves it otherwise)
 	srv.Echo.GET("/api/status", func(c *echo.Context) error {
 		return c.JSON(http.StatusOK, map[string]any{"status": "ok", "time": time.Now().UTC(),
@@ -245,7 +282,7 @@ func main() {
 	})
 	serveWeb(log, srv.Echo, platform.Env("GOAP_WEB_DIR", "web/dist"))
 	if runtime != nil {
-		srv.Mount(runtimev1connect.NewRuntimeServiceHandler(runtime, telemetry.HandlerOptions()...))
+		mount(runtimev1connect.NewRuntimeServiceHandler(runtime, telemetry.HandlerOptions()...))
 	}
 	if err := srv.Run(); err != nil {
 		platform.Fatal(log, "server", err)

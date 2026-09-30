@@ -2,8 +2,10 @@ package graphsvc_test
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -23,6 +25,9 @@ import (
 func TestPersonalChange(t *testing.T) {
 	ctx := context.Background()
 	g := graph.New(graph.NewMemory())
+	if _, err := graphsvc.SeedDefaults(ctx, g); err != nil {
+		t.Fatal(err)
+	}
 	h := &graphsvc.Handler{Graph: g}
 	path, handler := graphv1connect.NewGraphServiceHandler(h, connect.WithInterceptors(h.PersonalScope()))
 	mux := http.NewServeMux()
@@ -39,6 +44,14 @@ func TestPersonalChange(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	baseline := connect.NewRequest(&graphv1.ListChangesRequest{})
+	call("bob", baseline)
+	before, err := cl.ListChanges(ctx, baseline)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seeded := len(before.Msg.Changes) // the changes SeedDefaults made, visible to everyone (not personal)
+
 	req := connect.NewRequest(&graphv1.CreateChangeRequest{Title: "prefs", Namespace: "platform", BaselineId: string(base.ID), OwnBranch: true, OwnerOrg: graphsvc.OwnerMe})
 	call("alice", req)
 	created, err := cl.CreateChange(ctx, req)
@@ -63,7 +76,7 @@ func TestPersonalChange(t *testing.T) {
 	}
 	list := connect.NewRequest(&graphv1.ListChangesRequest{})
 	call("bob", list)
-	if l, err := cl.ListChanges(ctx, list); err != nil || len(l.Msg.Changes) != 0 {
+	if l, err := cl.ListChanges(ctx, list); err != nil || len(l.Msg.Changes) != seeded {
 		t.Fatalf("bob ListChanges = %v, %v", l, err)
 	}
 	claim := connect.NewRequest(&graphv1.CreateChangeRequest{Title: "x", Namespace: "platform", BaselineId: string(base.ID), OwnerOrg: "USR:alice"})
@@ -75,7 +88,7 @@ func TestPersonalChange(t *testing.T) {
 	// alice sees it, and no sub-change is split off it
 	list = connect.NewRequest(&graphv1.ListChangesRequest{})
 	call("alice", list)
-	if l, err := cl.ListChanges(ctx, list); err != nil || len(l.Msg.Changes) != 1 {
+	if l, err := cl.ListChanges(ctx, list); err != nil || len(l.Msg.Changes) != seeded+1 {
 		t.Fatalf("alice ListChanges = %v, %v", l, err)
 	}
 	sub := connect.NewRequest(&graphv1.CreateChangeRequest{Title: "sub", ParentId: id, OwnerOrg: "@me"})
@@ -103,6 +116,9 @@ func TestPersonalChange(t *testing.T) {
 func TestUserCreatedAutomatically(t *testing.T) {
 	ctx := context.Background()
 	g := graph.New(graph.NewMemory())
+	if _, err := graphsvc.SeedDefaults(ctx, g); err != nil {
+		t.Fatal(err)
+	}
 	h := &graphsvc.Handler{Graph: g}
 	path, handler := graphv1connect.NewGraphServiceHandler(h, connect.WithInterceptors(h.PersonalScope(), h.EnsureCaller()))
 	mux := http.NewServeMux()
@@ -136,5 +152,67 @@ func TestUserCreatedAutomatically(t *testing.T) {
 	again, err := g.NodeByKey(ctx, mcp.NamespaceOrganisation, "USR:bob")
 	if err != nil || again.Version != n.Version {
 		t.Fatalf("a second call must not write again: %+v, %v", again, err)
+	}
+}
+
+// EnsureUser must not create a broken User (no member_of, no shot at the first-admin bootstrap) when the
+// default organisation does not exist yet — SeedDefaults can still be seeding at startup (ADR 0040). Failing
+// leaves nothing behind, so a later, correctly-timed call for the same subject still succeeds.
+func TestEnsureUserWaitsForDefaultOrg(t *testing.T) {
+	ctx := context.Background()
+	g := graph.New(graph.NewMemory())
+
+	if err := graphsvc.EnsureUser(ctx, g, "alice"); !errors.Is(err, graph.ErrNotFound) {
+		t.Fatalf("EnsureUser before SeedDefaults = %v, want ErrNotFound", err)
+	}
+	if _, err := g.NodeByKey(ctx, mcp.NamespaceOrganisation, "USR:alice"); !errors.Is(err, graph.ErrNotFound) {
+		t.Fatalf("a failed EnsureUser must leave no node: %v", err)
+	}
+
+	if _, err := graphsvc.SeedDefaults(ctx, g); err != nil {
+		t.Fatal(err)
+	}
+	if err := graphsvc.EnsureUser(ctx, g, "alice"); err != nil {
+		t.Fatalf("EnsureUser after SeedDefaults: %v", err)
+	}
+	n, err := g.NodeByKey(ctx, mcp.NamespaceOrganisation, "USR:alice")
+	if err != nil {
+		t.Fatalf("alice's User node: %v", err)
+	}
+	u, err := access.UserFromProps(n.Properties)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(u.Roles, "admin") {
+		t.Fatalf("first user must be admin: %+v", u)
+	}
+	links, err := g.OutLinksOf(ctx, n.Ref())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var linked bool
+	for _, l := range links {
+		if l.Type == access.LinkMemberOf {
+			linked = true
+		}
+	}
+	if !linked {
+		t.Fatalf("alice must be member_of the default org: %+v", links)
+	}
+
+	// a second subject is not the first user: no admin role
+	if err := graphsvc.EnsureUser(ctx, g, "bob"); err != nil {
+		t.Fatal(err)
+	}
+	bobNode, err := g.NodeByKey(ctx, mcp.NamespaceOrganisation, "USR:bob")
+	if err != nil {
+		t.Fatal(err)
+	}
+	bob, err := access.UserFromProps(bobNode.Properties)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if slices.Contains(bob.Roles, "admin") {
+		t.Fatalf("second user must not be admin: %+v", bob)
 	}
 }

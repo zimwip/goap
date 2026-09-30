@@ -14,18 +14,20 @@ import (
 	"github.com/zimwip/goap/pkg/methodology"
 )
 
-// graphWithDomains is the store of a registry on a graph: the methodologies in the graph, the domains in a DomainStore
-// (the Service finds it through the Store).
+// graphWithDomains is the store of a registry on a graph: the methodologies in the graph, the domains and the
+// platform-wide algorithm registry in a MemoryStore (the Service finds them through the Store).
 type graphWithDomains struct {
 	*GraphStore
 	DomainStore
+	AlgorithmStore
 }
 
 func stores(t *testing.T) map[string]func(t *testing.T) Store {
 	return map[string]func(t *testing.T) Store{
 		"memory": func(*testing.T) Store { return NewMemoryStore() },
 		"graph": func(*testing.T) Store {
-			return graphWithDomains{NewGraphStore(graph.New(graph.NewMemory())), NewMemoryStore()}
+			mem := NewMemoryStore()
+			return graphWithDomains{NewGraphStore(graph.New(graph.NewMemory())), mem, mem}
 		},
 	}
 }
@@ -213,7 +215,8 @@ func pendingAliasImpacts(t *testing.T, g *graph.Graph, alias string) []domain.Ch
 
 func TestPublishStubsMissingAlias(t *testing.T) {
 	g := graph.New(graph.NewMemory())
-	s := &Service{Store: graphWithDomains{NewGraphStore(g), NewMemoryStore()}}
+	mem := NewMemoryStore()
+	s := &Service{Store: graphWithDomains{NewGraphStore(g), mem, mem}}
 	withALM(t, s)
 	ctx := as("methodologist")
 	m := example(t)

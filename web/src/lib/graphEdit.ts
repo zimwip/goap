@@ -48,3 +48,23 @@ export const deleteNodeItem = (n: GraphNode): NodeEdit => ({
   retire: true,
   rationale: `Delete ${n.key}`,
 });
+
+/** The current outgoing link of `type` from `n`, if any (its single parent/membership link, ADR 0040). */
+export const currentLink = (h: HeadGraph, n: GraphNode, type: string): Link | undefined =>
+  h.links.find((l) => l.type === type && l.from?.id === n.id);
+
+/**
+ * Moves `n` to a new parent/organisation: replaces its single outgoing link of `type` (part_of,
+ * project_part_of or member_of) with one to `to` in the same edit, so the node is never left with zero or
+ * two (ADR 0040's "move" action). `current` is the link found by currentLink, if any — `headGraph` is a
+ * baseline snapshot, which can predate a link written outside of any change (EnsureUser's own member_of),
+ * so `current` can come back empty even though the node already has one; the commit is refused in that case
+ * (the server re-checks the live link count after writing, not just this edit's own declared links) rather
+ * than silently leaving two — surface that error and have the caller reload before retrying.
+ */
+export const moveNodeItem = (n: GraphNode, type: string, current: Link | undefined, to: NodeRef): NodeEdit => ({
+  pre: refOf(n),
+  rationale: `Move ${n.key}`,
+  ...(current?.id ? { removeLinks: [current.id] } : {}),
+  links: [{ type, to }],
+});

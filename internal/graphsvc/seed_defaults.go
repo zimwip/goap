@@ -143,15 +143,15 @@ func seedRootProject(ctx context.Context, g *graph.Graph) error {
 func ptr[T any](v T) *T { return &v }
 
 // SeedUnit creates an organisational unit, under parent when it is not empty.
+// SeedUnit creates an OrgUnit, part_of parent (domain.DefaultOrg when parent is empty: every unit but the
+// root itself needs one, ADR 0040).
 func SeedUnit(ctx context.Context, g *graph.Graph, key, name, kind, parent string) error {
 	unit := createNode(key, mcp.NodeTypeOrgUnit, map[string]any{"name": name, "kind": kind})
-	if parent != "" {
-		p, err := g.NodeByKey(ctx, mcp.NamespaceOrganisation, parent)
-		if err != nil {
-			return err
-		}
-		unit = linkTo(unit, mcp.LinkPartOf, p.Ref())
+	p, err := g.NodeByKey(ctx, mcp.NamespaceOrganisation, domain.OrgOf(parent))
+	if err != nil {
+		return err
 	}
+	unit = linkTo(unit, mcp.LinkPartOf, p.Ref())
 	return applyOn(ctx, g, mcp.NamespaceOrganisation, "Unit "+key, []graph.NodeEdit{unit})
 }
 
@@ -192,16 +192,15 @@ func SeedAccess(ctx context.Context, g *graph.Graph) (bool, error) {
 	return true, applyOn(ctx, g, mcp.NamespaceOrganisation, "Default policies", items)
 }
 
-// SeedUser creates the User node of a subject, member of a unit when unit is not empty.
+// SeedUser creates the User node of a subject, member of a unit (domain.DefaultOrg when u.Unit is empty:
+// member_of is exactly one link, ADR 0040, never left unset).
 func SeedUser(ctx context.Context, g *graph.Graph, u access.User) error {
 	user := createNode(access.UserKey(u.Subject), access.NodeTypeUser, u.Props())
-	if u.Unit != "" {
-		unit, err := g.NodeByKey(ctx, mcp.NamespaceOrganisation, u.Unit)
-		if err != nil {
-			return err
-		}
-		user = linkTo(user, access.LinkMemberOf, unit.Ref())
+	unit, err := g.NodeByKey(ctx, mcp.NamespaceOrganisation, domain.OrgOf(u.Unit))
+	if err != nil {
+		return err
 	}
+	user = linkTo(user, access.LinkMemberOf, unit.Ref())
 	return applyOn(ctx, g, mcp.NamespaceOrganisation, "User "+u.Subject, []graph.NodeEdit{user})
 }
 

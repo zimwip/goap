@@ -49,12 +49,24 @@ func (h *Handler) resolveOwner(ctx context.Context, owner string) (string, error
 	return owner, nil
 }
 
-// EnsureUser makes sure the organisation@User node of a subject exists, creating a minimal one (subject
-// only) when it does not (ADR 0039: a user is created automatically, not by an administrator by hand, so
-// they can be assigned roles and appear in the organisation navigation as soon as they are seen). Its key
-// (access.UserKey, "USR:<subject>") is also domain.PersonalUnit's: since organisation@User extends
-// organisation@OrgUnit (ADR 0039), the same node doubles as the personal unit that holds a subject's
-// personal changes (ADR 0037) — one node, not two competing for the same key.
+// EnsureUser makes sure the organisation@User node of a subject exists, creating one when it does not (ADR
+// 0039: a user is created automatically, not by an administrator by hand, so they can be assigned roles and
+// appear in the organisation navigation as soon as they are seen). Its key (access.UserKey,
+// "USR:<subject>") is also domain.PersonalUnit's: since organisation@User extends organisation@OrgUnit (ADR
+// 0039), the same node doubles as the personal unit that holds a subject's personal changes (ADR 0037) —
+// one node, not two competing for the same key.
+//
+// A new user is linked member_of the default organisation, and granted the admin role when it is the very
+// first User node the namespace has ever held (ADR 0040): a fresh deployment otherwise has no path to a
+// first administrator at all. A benign race between two simultaneous first connections can grant admin to
+// more than one subject; it never grants it to none, which is what the floor policy (ADR 0020) relies on.
+//
+// The default org is resolved *before* the node is created: SeedDefaults can still be seeding at startup (it
+// waits on the registry to publish the type catalogue), and a caller seen in that window must not leave a
+// permanently broken User behind — one with no member_of and no admin, since a node once created would make
+// every later subject see the namespace as "already has a User" and never get the first-admin bootstrap
+// either. Failing here (graph.ErrNotFound: the org doesn't exist yet) leaves nothing created, so the next
+// call for this subject starts clean.
 func EnsureUser(ctx context.Context, g *graph.Graph, subject string) error {
 	if subject == "" {
 		return nil
@@ -65,11 +77,26 @@ func EnsureUser(ctx context.Context, g *graph.Graph, subject string) error {
 	} else if !errors.Is(err, graph.ErrNotFound) {
 		return err
 	}
-	_, err := g.CreateNode(ctx, graph.NewNode{Namespace: mcp.NamespaceOrganisation, Key: key, Type: access.NodeTypeUser,
-		Properties: access.User{Subject: subject}.Props()})
+	org, err := g.NodeByKey(ctx, mcp.NamespaceOrganisation, domain.DefaultOrg)
+	if err != nil {
+		return err
+	}
+	existing, err := g.NodesOfType(ctx, mcp.NamespaceOrganisation, access.NodeTypeUser)
+	if err != nil {
+		return err
+	}
+	u := access.User{Subject: subject}
+	if len(existing) == 0 {
+		u.Roles = []string{"admin"}
+	}
+	n, err := g.CreateNode(ctx, graph.NewNode{Namespace: mcp.NamespaceOrganisation, Key: key, Type: access.NodeTypeUser, Properties: u.Props()})
 	if errors.Is(err, graph.ErrConflict) { // created meanwhile by a concurrent request
 		return nil
 	}
+	if err != nil {
+		return err
+	}
+	_, err = g.Link(ctx, access.LinkMemberOf, n.Ref(), org.Ref(), nil)
 	return err
 }
 

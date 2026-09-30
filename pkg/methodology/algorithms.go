@@ -63,6 +63,9 @@ func (s Schema) checkAlgorithms(prefix string, add func(path, format string, arg
 			}
 			insts[in.Name] = in
 		}
+		if _, ok := algo.PlatformRef(in.Algorithm); ok {
+			continue // resolved and validated against the platform-wide registry at publish time (ADR 0041)
+		}
 		a, ok := algs[in.Algorithm]
 		if !ok {
 			add(path+".algorithm", "unknown algorithm %q", in.Algorithm)
@@ -79,6 +82,9 @@ func (s Schema) checkAlgorithms(prefix string, add func(path, format string, arg
 		if !ok {
 			add(path, "unknown algorithm instance %s", instance)
 			return
+		}
+		if _, ok := algo.PlatformRef(in.Algorithm); ok {
+			return // checked at publish time
 		}
 		if a, ok := algs[in.Algorithm]; ok && a.Type != want {
 			add(path, "instance %s is of type %s, expected %s", instance, a.Type, want)
@@ -123,8 +129,9 @@ func (s Schema) checkAlgorithms(prefix string, add func(path, format string, arg
 
 // BoundValidators returns the property validators of a node type resolved with
 // their algorithm, in call order: the ones declared by the supertypes first.
-// Instances that do not resolve are left out (Validate reports them).
-func (s Schema) BoundValidators(name string) []algo.Bound {
+// Instances that do not resolve are left out (Validate reports them). platform resolves a
+// "platform@<name>" algorithm reference (ADR 0041).
+func (s Schema) BoundValidators(name string, platform algo.Set) []algo.Bound {
 	byName := map[string]NodeType{}
 	for _, n := range s.NodeTypes {
 		byName[n.Name] = n
@@ -136,7 +143,7 @@ func (s Schema) BoundValidators(name string) []algo.Bound {
 			chain = append([]NodeType{n}, chain...)
 		}
 	}
-	set := s.algorithms()
+	set := s.algorithms(platform)
 	var out []algo.Bound
 	for _, n := range chain {
 		for _, v := range n.Validators {
@@ -150,8 +157,8 @@ func (s Schema) BoundValidators(name string) []algo.Bound {
 }
 
 // OwnBoundValidators is BoundValidators of the type itself, without the inherited ones.
-func (s Schema) OwnBoundValidators(t NodeType) []algo.Bound {
-	set := s.algorithms()
+func (s Schema) OwnBoundValidators(t NodeType, platform algo.Set) []algo.Bound {
+	set := s.algorithms(platform)
 	var out []algo.Bound
 	for _, v := range t.Validators {
 		if b, err := set.Bind(v.Instance, algo.UsagePropertyValidator); err == nil {
@@ -163,12 +170,13 @@ func (s Schema) OwnBoundValidators(t NodeType) []algo.Bound {
 }
 
 // BindLifecycle returns a copy of the lifecycle with the guard and action
-// instances of its transitions resolved (GuardAlgos, ActionAlgos).
-func (s Schema) BindLifecycle(l *domain.Lifecycle) *domain.Lifecycle {
+// instances of its transitions resolved (GuardAlgos, ActionAlgos). platform resolves a
+// "platform@<name>" algorithm reference (ADR 0041).
+func (s Schema) BindLifecycle(l *domain.Lifecycle, platform algo.Set) *domain.Lifecycle {
 	if l == nil {
 		return nil
 	}
-	set := s.algorithms()
+	set := s.algorithms(platform)
 	c := l.Clone()
 	for i, t := range c.Transitions {
 		c.Transitions[i].GuardAlgos, c.Transitions[i].ActionAlgos = nil, nil

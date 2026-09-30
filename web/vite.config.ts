@@ -15,6 +15,8 @@ export default defineConfig({
       '^/goap\\.': { target: gateway, changeOrigin: true },
       // Gateway HTTP endpoints (platform status…).
       '/api': { target: gateway, changeOrigin: true },
+      // Sign-in (dev-token, ADR 0040 local register/login/logout).
+      '/auth': { target: gateway, changeOrigin: true },
     },
   },
 });

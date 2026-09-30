@@ -153,10 +153,17 @@ func TestAssignmentGrantsRoleOnAProject(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	root, err := g.NodeByKey(ctx, mcp.NamespaceOrganisation, domain.DefaultProject)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rootRef := root.Ref()
 	teamRef := team.Ref()
 	edits := []graph.NodeEdit{
-		{Key: "PROJ-X", Type: access.NodeTypeProjectUnit, Props: access.ProjectUnit{Name: "X"}.Props(), Rationale: "t"},
-		{Key: "PROJ-Y", Type: access.NodeTypeProjectUnit, Props: access.ProjectUnit{Name: "Y"}.Props(), Rationale: "t"},
+		{Key: "PROJ-X", Type: access.NodeTypeProjectUnit, Props: access.ProjectUnit{Name: "X"}.Props(), Rationale: "t",
+			Links: []graph.LinkEdit{{Type: access.LinkProjectPartOf, To: &rootRef}}},
+		{Key: "PROJ-Y", Type: access.NodeTypeProjectUnit, Props: access.ProjectUnit{Name: "Y"}.Props(), Rationale: "t",
+			Links: []graph.LinkEdit{{Type: access.LinkProjectPartOf, To: &rootRef}}},
 		{Key: "ASG:team-a/PROJ-X", Type: access.NodeTypeAssignment, Props: access.Assignment{Roles: []string{"developer"}}.Props(), Rationale: "t",
 			Links: []graph.LinkEdit{{Type: access.LinkAssignsOrg, To: &teamRef}, {Type: access.LinkAssignsProject, ToKey: "PROJ-X"}}},
 	}

@@ -4,12 +4,22 @@
   import './lib/views';
   import './lib/stores/notifications.svelte';
   import Shell from './lib/shell/Shell.svelte';
+  import Signin from './lib/shell/Signin.svelte';
   import Welcome from './lib/views/Welcome.svelte';
   import { startLive, refreshProcesses } from './lib/stores/live.svelte';
   import { anyDirty } from './lib/stores/drafts.svelte';
   import { activeDraft } from './lib/views/bottom/activeDraft';
+  import { authState, loadAuthConfig } from './lib/stores/auth.svelte';
+  import { session } from './lib/stores/session.svelte';
 
   $effect(() => {
+    void loadAuthConfig();
+  });
+
+  const needsSignin = $derived(authState.loaded && authState.mode === 'local' && !session.hasToken);
+
+  $effect(() => {
+    if (needsSignin) return;
     const stop = startLive();
     void refreshProcesses();
     return stop;
@@ -36,4 +46,10 @@
   });
 </script>
 
-<Shell welcome={Welcome} />
+{#if !authState.loaded}
+  <!-- deciding whether to show sign-in: avoids a Shell flash for a "local" deployment with no token -->
+{:else if needsSignin}
+  <Signin />
+{:else}
+  <Shell welcome={Welcome} />
+{/if}

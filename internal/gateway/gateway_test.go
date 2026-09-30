@@ -1,14 +1,32 @@
 package gateway
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"connectrpc.com/connect"
 	"github.com/labstack/echo/v5"
 )
+
+// fakeCredentials is an in-memory Credentials for local auth tests (ADR 0040).
+type fakeCredentials struct{ passwords map[string]string }
+
+func (f *fakeCredentials) Register(_ context.Context, subject, password string) error {
+	if _, ok := f.passwords[subject]; ok {
+		return connect.NewError(connect.CodeAlreadyExists, errors.New("already exists"))
+	}
+	f.passwords[subject] = password
+	return nil
+}
+
+func (f *fakeCredentials) Verify(_ context.Context, subject, password string) (bool, error) {
+	return f.passwords[subject] != "" && f.passwords[subject] == password, nil
+}
 
 func TestAuthAndRouting(t *testing.T) {
 	var gotSubject, gotRoles, gotProject string
@@ -102,5 +120,103 @@ func TestAuthAndRouting(t *testing.T) {
 	// the fake upstream answers 200 on /readyz
 	if status.Status != "ok" || len(status.Services) != 1 || status.Services[0].Name != "graph" {
 		t.Fatalf("status %+v", status)
+	}
+}
+
+// Local auth (ADR 0040): a subject registers, logs in and calls through with the token; a duplicate
+// registration and a wrong password are refused; /api/auth/config tells the web which mode is active.
+func TestLocalAuth(t *testing.T) {
+	var gotSubject string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotSubject = r.Header.Get(HeaderSubject)
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	defer upstream.Close()
+
+	e := echo.New()
+	secret := []byte(strings.Repeat("s", 32))
+	creds := &fakeCredentials{passwords: map[string]string{}}
+	if err := Mount(e, Config{AuthMode: "local", JWTSecret: secret, Credentials: creds,
+		Routes: []Route{{Prefix: "/goap.graph.v1.GraphService/", Upstream: upstream.URL}}}); err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(e)
+	defer srv.Close()
+
+	cfgResp, err := http.Get(srv.URL + "/api/auth/config")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var authCfg struct{ AuthMode string }
+	_ = json.NewDecoder(cfgResp.Body).Decode(&authCfg)
+	cfgResp.Body.Close()
+	if authCfg.AuthMode != "local" {
+		t.Fatalf("auth config = %+v", authCfg)
+	}
+
+	register := func(subject, password string) (int, string) {
+		resp, err := http.Post(srv.URL+"/auth/register", "application/json",
+			strings.NewReader(`{"subject":"`+subject+`","password":"`+password+`"}`))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var tok struct{ Token string }
+		_ = json.NewDecoder(resp.Body).Decode(&tok)
+		resp.Body.Close()
+		return resp.StatusCode, tok.Token
+	}
+	login := func(subject, password string) (int, string) {
+		resp, err := http.Post(srv.URL+"/auth/login", "application/json",
+			strings.NewReader(`{"subject":"`+subject+`","password":"`+password+`"}`))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var tok struct{ Token string }
+		_ = json.NewDecoder(resp.Body).Decode(&tok)
+		resp.Body.Close()
+		return resp.StatusCode, tok.Token
+	}
+	call := func(token string) int {
+		req, _ := http.NewRequest(http.MethodPost, srv.URL+"/goap.graph.v1.GraphService/ListBaselines", strings.NewReader("{}"))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+token)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		return resp.StatusCode
+	}
+
+	if code, tok := register("alice", "correct horse"); code != http.StatusOK || tok == "" {
+		t.Fatalf("register: %d %q", code, tok)
+	}
+	if code, _ := register("alice", "another password"); code != http.StatusConflict {
+		t.Fatalf("duplicate register: %d", code)
+	}
+	if code, _ := login("alice", "wrong password"); code != http.StatusUnauthorized {
+		t.Fatalf("login with wrong password: %d", code)
+	}
+	code, tok := login("alice", "correct horse")
+	if code != http.StatusOK || tok == "" {
+		t.Fatalf("login: %d %q", code, tok)
+	}
+	if code := call(tok); code != http.StatusOK {
+		t.Fatalf("call with login token: %d", code)
+	}
+	if gotSubject != "alice" {
+		t.Fatalf("subject propagated = %q", gotSubject)
+	}
+
+	// logout has nothing to revoke (stateless HS256) but must answer
+	logoutReq, _ := http.NewRequest(http.MethodPost, srv.URL+"/auth/logout", nil)
+	logoutReq.Header.Set("Authorization", "Bearer "+tok)
+	logoutResp, err := http.DefaultClient.Do(logoutReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	logoutResp.Body.Close()
+	if logoutResp.StatusCode != http.StatusNoContent {
+		t.Fatalf("logout: %d", logoutResp.StatusCode)
 	}
 }

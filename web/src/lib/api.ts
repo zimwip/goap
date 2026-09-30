@@ -247,6 +247,14 @@ export interface AlgorithmInstance {
   values?: Record<string, unknown>;
 }
 
+/** An algorithm centralized in the platform-wide registry (ADR 0041): the domain that first published it, and its
+ *  canonical definition, addressable as `platform@<name>` from any domain's algorithm instances. */
+export interface PlatformAlgorithm {
+  algorithm?: Algorithm;
+  sourceDomain?: string;
+  sourceVersion?: string;
+}
+
 export interface RunAlgorithmResponse {
   ok?: boolean;
   failures?: string[];
@@ -1539,6 +1547,9 @@ export const registry = {
       'RunAlgorithm',
       { algorithm, values, input },
     ),
+  /** The platform-wide algorithm registry (ADR 0041): algorithms centralized from the domains that declared them. */
+  listPlatformAlgorithms: (signal?: AbortSignal) =>
+    rpc<Record<string, never>, { algorithms?: PlatformAlgorithm[] }>(REGISTRY, 'ListPlatformAlgorithms', {}, signal),
 };
 
 /** The caller as the platform sees it: token principal completed by its User node (GET /api/whoami). */
@@ -1568,6 +1579,44 @@ export async function switchProject(project: string): Promise<void> {
   const data = (await res.json()) as { token?: string };
   if (!data.token) throw new RpcError('failed', 'no token returned', res.status);
   setToken(data.token);
+}
+
+/** Which sign-in UI to show (GET /api/auth/config, unauthenticated — ADR 0040): 'none', 'hs256' or 'local'. */
+export async function authConfig(signal?: AbortSignal): Promise<{ authMode: string }> {
+  const res = await fetch(`${BASE}/api/auth/config`, { signal });
+  if (!res.ok) throw new RpcError('failed', res.statusText, res.status);
+  return (await res.json()) as { authMode: string };
+}
+
+async function authToken(path: string, subject: string, password: string): Promise<void> {
+  const res = await fetch(`${BASE}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ subject, password }),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new RpcError('failed', text || res.statusText, res.status);
+  }
+  const data = (await res.json()) as { token?: string };
+  if (!data.token) throw new RpcError('failed', 'no token returned', res.status);
+  setToken(data.token);
+}
+
+/** Creates a local account and signs in (POST /auth/register, ADR 0040: no external identity provider). */
+export const register = (subject: string, password: string): Promise<void> => authToken('/auth/register', subject, password);
+
+/** Signs in with a local account (POST /auth/login). */
+export const login = (subject: string, password: string): Promise<void> => authToken('/auth/login', subject, password);
+
+/** Signs out (POST /auth/logout: nothing to revoke server-side today, HS256 is stateless) and clears the local token. */
+export async function logout(): Promise<void> {
+  const token = getToken();
+  try {
+    await fetch(`${BASE}/auth/logout`, { method: 'POST', headers: token ? { Authorization: `Bearer ${token}` } : {} });
+  } finally {
+    setToken(null);
+  }
 }
 
 export interface SharedNode {

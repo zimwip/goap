@@ -11,6 +11,7 @@ import (
 	"github.com/zimwip/goap/gen/goap/registry/v1/registryv1connect"
 	"github.com/zimwip/goap/internal/identity"
 	"github.com/zimwip/goap/internal/pbconv"
+	"github.com/zimwip/goap/pkg/algo"
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/methodology"
@@ -33,7 +34,7 @@ func toConnect(err error) error {
 		return connect.NewError(connect.CodeNotFound, err)
 	case errors.Is(err, ErrImmutable):
 		return connect.NewError(connect.CodeFailedPrecondition, err)
-	case errors.Is(err, ErrNoDomainStore):
+	case errors.Is(err, ErrNoDomainStore), errors.Is(err, ErrNoAlgorithmStore):
 		return connect.NewError(connect.CodeUnimplemented, err)
 	case errors.Is(err, ErrInvalid):
 		return connect.NewError(connect.CodeInvalidArgument, err)
@@ -236,6 +237,23 @@ func (h *Handler) RunAlgorithm(ctx context.Context, r *connect.Request[registryv
 		resp.Ok = out.OK()
 	}
 	return connect.NewResponse(resp), nil
+}
+
+func (h *Handler) ListPlatformAlgorithms(ctx context.Context, _ *connect.Request[registryv1.ListPlatformAlgorithmsRequest]) (*connect.Response[registryv1.ListPlatformAlgorithmsResponse], error) {
+	as, err := h.Service.algorithms()
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	rs, err := as.ListAlgorithms(ctx)
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	out := &registryv1.ListPlatformAlgorithmsResponse{}
+	for _, r := range rs {
+		out.Algorithms = append(out.Algorithms, &registryv1.PlatformAlgorithm{
+			Algorithm: algorithmsToPB([]algo.Algorithm{r.Algorithm})[0], SourceDomain: r.SourceDomain, SourceVersion: r.SourceVersion})
+	}
+	return connect.NewResponse(out), nil
 }
 
 func (h *Handler) ListTypes(ctx context.Context, _ *connect.Request[registryv1.ListTypesRequest]) (*connect.Response[registryv1.ListTypesResponse], error) {
