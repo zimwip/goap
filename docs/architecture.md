@@ -948,7 +948,7 @@ function, later. `GET /api/auth/config` (unauthenticated) tells the web which si
 "Log out" toolbar action shows only on a caller's own profile and hides itself once a real SSO `AuthMode`
 (OIDC/OAuth, not yet implemented) exists — a forward seam only.
 
-**Sign-in by default, users declared at sign-in, the default unit** ([ADR 0042](adr/0042-local-sign-in-by-default-and-default-unit.md)).
+**Sign-in by default, users declared at sign-in, the waiting unit** ([ADR 0042](adr/0042-local-sign-in-by-default-and-waiting-unit.md)).
 `"local"` is the default `AuthMode` (`gateway.DefaultAuthMode`) of the gateway, `goap-dev` and the compose
 file, unless an external identity provider issues the tokens (`hs256` today); `"none"` must be asked for.
 `goap-dev` generates its JWT secret when none is configured (kept in `.goap/jwt_secret` with SQLite).
@@ -956,9 +956,10 @@ file, unless an external identity provider issues the tokens (`hs256` today); `"
 in process, `graphsvc.Client.DeclareUser` from the gateway) and refreshes the `access.Directory`, so the first
 calls carry the user's unit and roles. `EnsureUser` commits the `User` node and its `member_of` as one change
 on `main` (journaled, moves the head the access snapshot reads — the import write described above no longer
-happens), serialized per process. New users join the `OrgUnit` flagged `default` (`access.PropDefaultUnit`,
-`graphsvc.DefaultUnit`; seeded on `ORG-DEFAULT`, which is also the fallback; several flagged: smallest key);
-the Organisation tab's "Make default" moves the flag in one change. The header's user menu offers "My
+happens), serialized per process. New users join the waiting unit, an `OrgUnit` an administrator created and
+flagged `waiting` at their discretion (`access.PropWaitingUnit`, `graphsvc.NewUserUnit`; none flagged by
+default: `ORG-DEFAULT`; several flagged: smallest key); administrators set it when creating a unit or from the
+Organisation tab ("Make waiting unit" moves the flag in one change, "Clear" removes it). The header's user menu offers "My
 profile" and, with local sign-in, "Log out"; the token box shows in `hs256` mode only.
 
 **Not implemented**: OIDC/OAuth itself (only the `AuthMode` seam is prepared) and server-side token

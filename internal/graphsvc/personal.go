@@ -56,8 +56,8 @@ func (h *Handler) resolveOwner(ctx context.Context, owner string) (string, error
 // 0039), the same node doubles as the personal unit that holds a subject's personal changes (ADR 0037) —
 // one node, not two competing for the same key.
 //
-// A new user is linked member_of the unit new users join (DefaultUnit: the OrgUnit flagged `default`, else
-// the default organisation, ADR 0042), and granted the admin role when it is the very
+// A new user is linked member_of the unit new users join (NewUserUnit: the waiting unit an administrator
+// flagged, else the default organisation, ADR 0042), and granted the admin role when it is the very
 // first User node the namespace has ever held (ADR 0040): a fresh deployment otherwise has no path to a
 // first administrator at all. Creations are serialized within a process; a benign race between two
 // processes' simultaneous first connections can grant admin to more than one subject; it never grants it to
@@ -108,7 +108,7 @@ var ensureMu sync.Mutex
 // its own (ADR 0042: every modification is a change, so a new user is journaled and moves the head of main —
 // the snapshot pkg/access reads roles and units from sees them at once, which a write by import did not).
 func createUser(ctx context.Context, g *graph.Graph, subject string) error {
-	org, err := DefaultUnit(ctx, g)
+	org, err := NewUserUnit(ctx, g)
 	if err != nil {
 		return err
 	}
@@ -125,19 +125,19 @@ func createUser(ctx context.Context, g *graph.Graph, subject string) error {
 	return applyOn(ctx, g, mcp.NamespaceOrganisation, "User "+subject, []graph.NodeEdit{user})
 }
 
-// DefaultUnit returns the organisational unit new users join (ADR 0042): the OrgUnit flagged `default`
-// (access.PropDefaultUnit), or domain.DefaultOrg when none is — a graph seeded before the flag existed, or
-// whose flag was cleared. Should several units carry the flag (two concurrent changes each moving it), the
+// NewUserUnit returns the organisational unit new users join (ADR 0042): the waiting unit, an OrgUnit an
+// administrator created and flagged `waiting` (access.PropWaitingUnit) at their discretion, or
+// domain.DefaultOrg when none is flagged. Should several units carry the flag (two concurrent changes each moving it), the
 // smallest key wins, so the answer stays deterministic until someone clears the extra one. Read against live
 // state, like the rest of EnsureUser: a flag moved by a change is seen at once.
-func DefaultUnit(ctx context.Context, g *graph.Graph) (domain.Node, error) {
+func NewUserUnit(ctx context.Context, g *graph.Graph) (domain.Node, error) {
 	units, err := g.NodesOfType(ctx, mcp.NamespaceOrganisation, mcp.NodeTypeOrgUnit)
 	if err != nil {
 		return domain.Node{}, err
 	}
 	var found *domain.Node
 	for i := range units {
-		if access.IsDefaultUnit(units[i].Properties) && (found == nil || units[i].Key < found.Key) {
+		if access.IsWaitingUnit(units[i].Properties) && (found == nil || units[i].Key < found.Key) {
 			found = &units[i]
 		}
 	}

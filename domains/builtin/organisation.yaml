@@ -6,10 +6,11 @@ description: >
   through the cross-namespace `owner` link; changes are split into sub-changes along unit boundaries.
 nodeTypes:
   # `editor` names the editor of the user interface for the nodes of a type (the adapters of a unit are edited on its page).
-  # `default: true` flags the unit new users join (ADR 0042): a User created on first sign-in is linked
-  # member_of it. One unit carries it (seeded on ORG-DEFAULT; moving it clears the previous one in the same
-  # change); with none, new users join ORG-DEFAULT.
-  - {name: OrgUnit, editor: unit, description: "Organisational unit (company, direction, department, team)", properties: [name, kind, description, default]}
+  # `waiting: true` flags the waiting unit (ADR 0042): a unit an administrator creates at their discretion for
+  # users signing in for the first time, linked member_of it until an administrator moves them. One unit
+  # carries it at most (setting it clears the previous one in the same change); with none, new users join
+  # ORG-DEFAULT.
+  - {name: OrgUnit, editor: unit, description: "Organisational unit (company, direction, department, team)", properties: [name, kind, description, waiting]}
   # an organisational unit's instance of an adapter definition (an AdapterDef node of the platform namespace):
   # the one place where unit, MCP and connector meet. mcp = the MCP implemented, adapter = the name of the
   # AdapterDef, params = its parameter values (secrets as references: env:<VAR> or <vault path>#<field>).

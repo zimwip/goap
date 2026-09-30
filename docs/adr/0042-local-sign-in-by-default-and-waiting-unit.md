@@ -1,4 +1,4 @@
-# ADR 0042 — Local sign-in by default, users declared at sign-in, the default unit flag
+# ADR 0042 — Local sign-in by default, users declared at sign-in, the waiting unit
 
 **Status**: accepted, implemented · **Date**: 2026-09 ·
 Completes ADR 0040 (user bootstrap, local auth), builds on ADR 0039 (`EnsureUser`, `User extends OrgUnit`).
@@ -16,7 +16,8 @@ every caller is a fixed dev principal. Three gaps remained to make users a real 
   including the first administrator, got neither their unit nor their roles until some unrelated change
   happened to fold them in. It also broke design rule 2 (every modification is a change).
 - **The unit new users join was hardcoded** to `ORG-DEFAULT`, the root of adapter resolution — two different
-  responsibilities on one node, with no way for an organisation to say "newcomers go to *this* unit".
+  responsibilities on one node, with no way for an administrator to keep newcomers aside in a unit of their
+  own until they are placed.
 - Smaller: the profile menu had no sign-out (only the user tab did, as a toolbar action), still showed the
   pasted-token box in every mode, and switching project (`POST /auth/dev-token/project`, ADR 0039) was only
   mounted for dev tokens, so a locally signed-in user could not change project.
@@ -40,13 +41,16 @@ every caller is a fixed dev principal. Three gaps remained to make users a real 
   (`createUser`, the same `applyOn` the seeds use): atomic, journaled, and it moves the head, so the access
   snapshot sees the user at once. Creations are serialized within a process (the web fires several calls at
   once right after signing in) and retried when another change moved `main` meanwhile (`ErrConflict`).
-- **The default unit is a flag.** `OrgUnit` gains a `default` property (`access.PropDefaultUnit`,
-  `organisation` domain 1.6.0): new users join the unit that carries it (`graphsvc.DefaultUnit`, read from
-  live state). `SeedDefaults` sets it on `ORG-DEFAULT`; with no flagged unit (a graph seeded before the flag)
-  `ORG-DEFAULT` is used, and with several (two concurrent changes each moving it) the smallest key wins, so
-  the answer stays deterministic. The Organisation tab shows which unit new users join and offers "Make
-  default", which moves the flag in one change (set on this unit, cleared on every unit carrying it). Existing
-  users stay where they are; `ORG-DEFAULT` remains the root of adapter resolution whatever carries the flag.
+- **The waiting unit is a flag of its own, at the administrator's discretion.** `OrgUnit` gains a `waiting`
+  property (`access.PropWaitingUnit`, `organisation` domain 1.6.0): an administrator creates a unit for
+  newcomers and flags it; users signing in for the first time are linked `member_of` it
+  (`graphsvc.NewUserUnit`, read from live state) until an administrator moves them ("Move to…" on the User
+  tab, ADR 0040). Nothing is flagged by default: with no waiting unit, new users join `ORG-DEFAULT`, which
+  keeps its own role (root of adapter resolution) whatever carries the flag. With several flagged (two
+  concurrent changes each setting it) the smallest key wins, so the answer stays deterministic. The web offers
+  it to administrators only: a "Waiting unit for new users" checkbox when creating a unit (Organisation
+  explorer), and on the Organisation tab "Make waiting unit" / "Clear"; setting it moves the flag in one
+  change (set on this unit, cleared on every unit carrying it). Existing users stay where they are.
 - **Profile menu.** The header's user menu offers "My profile" (the user's own tab) and, with local sign-in,
   "Log out" (`POST /auth/logout`, then the sign-in page replaces the shell). The pasted-token box shows only
   in `hs256` mode. The user tab's own "Log out" action follows the same rule (`signsInLocally`), so an SSO
