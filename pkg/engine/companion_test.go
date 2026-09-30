@@ -59,7 +59,7 @@ func TestTransverseProcessRunsAlongsideTheChange(t *testing.T) {
 	}
 	e.Methodologies.(StaticMethodologies)["risky"] = c
 
-	p, err := e.Start(ctx, StartRequest{Methodology: "staged", Goal: "delivery", Intent: "deliver the note"})
+	p, err := e.Start(ctx, StartRequest{Methodology: "staged", Goal: "delivery", Intent: "deliver the note", ProjectID: testProject})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -184,7 +184,7 @@ func TestChoreographyThroughTheEventsOfTheChange(t *testing.T) {
 	go tm.WatchProcesses(ctx, broker)
 	time.Sleep(20 * time.Millisecond) // subscription ready
 
-	p, err := e.Start(ctx, StartRequest{Methodology: "choreo", Goal: "flow", Intent: "deliver"})
+	p, err := e.Start(ctx, StartRequest{Methodology: "choreo", Goal: "flow", Intent: "deliver", ProjectID: testProject})
 	if err != nil {
 		t.Fatal(err)
 	}

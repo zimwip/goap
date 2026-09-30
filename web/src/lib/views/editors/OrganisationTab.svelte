@@ -12,6 +12,7 @@
   import Icon from '../../shell/Icon.svelte';
   import EditorPanes, { type Pane } from '../../components/EditorPanes.svelte';
   import AlgorithmParamValues from '../../components/AlgorithmParamValues.svelte';
+  import AssignmentsPane from '../../components/AssignmentsPane.svelte';
   import { mcp, errorMessage, type Adapter, type EffectiveMcp, type Struct } from '../../api';
   import { tools, refreshTools } from '../../stores/tools.svelte';
   import type { AdapterDef } from '../../adapterDef';
@@ -32,7 +33,7 @@
   let effective = $state<EffectiveMcp[]>([]);
   let loading = $state(false);
   let error = $state('');
-  let pane = $state('overview');
+  let pane = $state(tab.params.pane === 'assignments' ? 'assignments' : 'overview');
 
   const unit = $derived(head ? findNode(head, NS, ORG_UNIT_TYPE, key) : undefined);
   const nodeById = $derived(new Map((head?.nodes ?? []).map((n) => [n.id ?? '', n])));
@@ -87,6 +88,7 @@
   const panes = $derived<Pane[]>([
     { id: 'overview', label: 'Overview' },
     { id: 'mcp', label: 'MCP', badge: effective.length || undefined },
+    { id: 'assignments', label: 'Assignments' },
   ]);
 
   // ---- adapter instance form -------------------------------------------------------------------------
@@ -316,7 +318,7 @@
               The unit holds the changes that name it. The MCPs its actions can use are the ones an adapter implements for it or, failing that, for the nearest ancestor (the default organisation is the root of every unit).
             </p>
           </section>
-        {:else}
+        {:else if active === 'mcp'}
           <section class="card">
             <h3>MCPs available to {key}</h3>
             <table class="tbl">
@@ -457,6 +459,8 @@
               </div>
             </section>
           {/if}
+        {:else if active === 'assignments' && head}
+          <AssignmentsPane {head} fixedOrg={key} autoOpen={tab.params.newAssignment === '1'} onChanged={load} />
         {/if}
       {/snippet}
     </EditorPanes>

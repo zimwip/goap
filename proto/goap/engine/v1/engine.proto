@@ -283,6 +283,9 @@ message StartProcessRequest {
   // key of the OrgUnit holding the new change (empty: the default organisation); its adapters
   // decide which MCPs the actions can use
   string owner_org = 9;
+  // key of the ProjectUnit the new change belongs to (empty: the caller's active project, from its
+  // token, else the root project, ADR 0039)
+  string project_id = 10;
 }
 
 message StartProcessResponse {
@@ -341,6 +344,9 @@ message AttachChangeRequest {
   string namespace = 5;
   string owner_org = 6;
   string baseline_id = 7;
+  // key of the ProjectUnit the new change belongs to (empty: the caller's active project, from its
+  // token, else the root project, ADR 0039)
+  string project_id = 8;
 }
 
 message AttachChangeResponse {

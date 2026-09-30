@@ -246,7 +246,7 @@ func ItemsFromPB(its []*graphv1.ChangeItem) []domain.ChangeItem {
 func ChangeToPB(c domain.Change) *graphv1.Change {
 	return &graphv1.Change{Id: string(c.ID), Title: c.Title, Intent: c.Intent, Methodology: c.Methodology, Goal: c.Goal, Namespace: c.Namespace, ParentId: string(c.ParentID), OwnerOrg: c.OwnerOrg, Status: string(c.Status),
 		BaselineId: string(c.BaselineID), ResultBaselineId: string(c.ResultBaselineID), Data: Struct(c.Data), Items: ItemsToPB(c.Items), CreatedAt: Time(c.CreatedAt),
-		Branch: domain.BranchOf(c.Branch), Nodes: ChangeImpactsToPB(c.Nodes)}
+		Branch: domain.BranchOf(c.Branch), Nodes: ChangeImpactsToPB(c.Nodes), ProjectId: c.ProjectID, Administrative: c.Administrative}
 }
 
 func ChangeFromPB(c *graphv1.Change) domain.Change {
@@ -255,7 +255,7 @@ func ChangeFromPB(c *graphv1.Change) domain.Change {
 	}
 	return domain.Change{ID: domain.ChangeID(c.Id), Title: c.Title, Intent: c.Intent, Methodology: c.Methodology, Goal: c.Goal, Namespace: c.Namespace, ParentID: domain.ChangeID(c.ParentId), OwnerOrg: c.OwnerOrg, Status: domain.ChangeStatus(c.Status),
 		BaselineID: domain.BaselineID(c.BaselineId), ResultBaselineID: domain.BaselineID(c.ResultBaselineId), Data: Map(c.Data), Items: ItemsFromPB(c.Items), CreatedAt: FromTime(c.CreatedAt),
-		Branch: c.Branch, Nodes: ChangeImpactsFromPB(c.Nodes)}
+		Branch: c.Branch, Nodes: ChangeImpactsFromPB(c.Nodes), ProjectID: c.ProjectId, Administrative: c.Administrative}
 }
 
 func BranchToPB(b domain.Branch) *graphv1.Branch {

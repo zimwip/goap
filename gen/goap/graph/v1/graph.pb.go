@@ -838,9 +838,15 @@ type Change struct {
 	ParentId string `protobuf:"bytes,14,opt,name=parent_id,json=parentId,proto3" json:"parent_id,omitempty"`
 	OwnerOrg string `protobuf:"bytes,15,opt,name=owner_org,json=ownerOrg,proto3" json:"owner_org,omitempty"`
 	// the nodes the change reads, modifies or creates: stored, and derived from its items (ADR 0024)
-	Nodes         []*ChangeImpact `protobuf:"bytes,17,rep,name=nodes,proto3" json:"nodes,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Nodes []*ChangeImpact `protobuf:"bytes,17,rep,name=nodes,proto3" json:"nodes,omitempty"`
+	// key of the ProjectUnit (organisation namespace) this change's nodes belong to (ADR 0039);
+	// required unless administrative
+	ProjectId string `protobuf:"bytes,18,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
+	// exempts the change from naming a project: a change managing organisation/project/policy/adapter
+	// data, the admin surface itself (ADR 0039)
+	Administrative bool `protobuf:"varint,19,opt,name=administrative,proto3" json:"administrative,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *Change) Reset() {
@@ -983,6 +989,20 @@ func (x *Change) GetNodes() []*ChangeImpact {
 		return x.Nodes
 	}
 	return nil
+}
+
+func (x *Change) GetProjectId() string {
+	if x != nil {
+		return x.ProjectId
+	}
+	return ""
+}
+
+func (x *Change) GetAdministrative() bool {
+	if x != nil {
+		return x.Administrative
+	}
+	return false
 }
 
 type Review struct {
@@ -3254,9 +3274,15 @@ type CreateChangeRequest struct {
 	ParentId string `protobuf:"bytes,9,opt,name=parent_id,json=parentId,proto3" json:"parent_id,omitempty"`
 	// key of the responsible OrgUnit (organisation namespace); "@me": the personal unit of the caller, which
 	// makes the change personal (ADR 0037)
-	OwnerOrg      string `protobuf:"bytes,10,opt,name=owner_org,json=ownerOrg,proto3" json:"owner_org,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	OwnerOrg string `protobuf:"bytes,10,opt,name=owner_org,json=ownerOrg,proto3" json:"owner_org,omitempty"`
+	// key of the ProjectUnit (organisation namespace) this change's nodes belong to (ADR 0039);
+	// required unless administrative
+	ProjectId string `protobuf:"bytes,12,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
+	// exempts the change from naming a project: a change managing organisation/project/policy/adapter
+	// data, the admin surface itself (ADR 0039)
+	Administrative bool `protobuf:"varint,13,opt,name=administrative,proto3" json:"administrative,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *CreateChangeRequest) Reset() {
@@ -3357,6 +3383,20 @@ func (x *CreateChangeRequest) GetOwnerOrg() string {
 		return x.OwnerOrg
 	}
 	return ""
+}
+
+func (x *CreateChangeRequest) GetProjectId() string {
+	if x != nil {
+		return x.ProjectId
+	}
+	return ""
+}
+
+func (x *CreateChangeRequest) GetAdministrative() bool {
+	if x != nil {
+		return x.Administrative
+	}
+	return false
 }
 
 type CreateChangeResponse struct {
@@ -10904,7 +10944,7 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\x04flow\x18\x0f \x01(\tR\x04flow\x127\n" +
 	"\n" +
 	"flow_event\x18\x10 \x01(\v2\x18.goap.graph.v1.FlowEventR\tflowEvent\x12C\n" +
-	"\x0edecision_event\x18\x11 \x01(\v2\x1c.goap.graph.v1.DecisionEventR\rdecisionEventJ\x04\b\x05\x10\x06J\x04\b\x06\x10\aJ\x04\b\x0e\x10\x0f\"\xa5\x04\n" +
+	"\x0edecision_event\x18\x11 \x01(\v2\x1c.goap.graph.v1.DecisionEventR\rdecisionEventJ\x04\b\x05\x10\x06J\x04\b\x06\x10\aJ\x04\b\x0e\x10\x0f\"\xec\x04\n" +
 	"\x06Change\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05title\x18\x02 \x01(\tR\x05title\x12\x16\n" +
@@ -10924,7 +10964,10 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\tnamespace\x18\r \x01(\tR\tnamespace\x12\x1b\n" +
 	"\tparent_id\x18\x0e \x01(\tR\bparentId\x12\x1b\n" +
 	"\towner_org\x18\x0f \x01(\tR\bownerOrg\x121\n" +
-	"\x05nodes\x18\x11 \x03(\v2\x1b.goap.graph.v1.ChangeImpactR\x05nodesJ\x04\b\x10\x10\x11\"\xc8\x01\n" +
+	"\x05nodes\x18\x11 \x03(\v2\x1b.goap.graph.v1.ChangeImpactR\x05nodes\x12\x1d\n" +
+	"\n" +
+	"project_id\x18\x12 \x01(\tR\tprojectId\x12&\n" +
+	"\x0eadministrative\x18\x13 \x01(\bR\x0eadministrativeJ\x04\b\x10\x10\x11\"\xc8\x01\n" +
 	"\x06Review\x12\x16\n" +
 	"\x06status\x18\x01 \x01(\tR\x06status\x12\x0e\n" +
 	"\x02by\x18\x02 \x01(\tR\x02by\x12\x18\n" +
@@ -11104,7 +11147,7 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\x16ListNamespacesResponse\x12\x1e\n" +
 	"\n" +
 	"namespaces\x18\x01 \x03(\tR\n" +
-	"namespaces\"\xc8\x02\n" +
+	"namespaces\"\x8f\x03\n" +
 	"\x13CreateChangeRequest\x12\x14\n" +
 	"\x05title\x18\x01 \x01(\tR\x05title\x12\x16\n" +
 	"\x06intent\x18\x02 \x01(\tR\x06intent\x12 \n" +
@@ -11118,7 +11161,10 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"own_branch\x18\b \x01(\bR\townBranch\x12\x1b\n" +
 	"\tparent_id\x18\t \x01(\tR\bparentId\x12\x1b\n" +
 	"\towner_org\x18\n" +
-	" \x01(\tR\bownerOrgJ\x04\b\v\x10\f\"E\n" +
+	" \x01(\tR\bownerOrg\x12\x1d\n" +
+	"\n" +
+	"project_id\x18\f \x01(\tR\tprojectId\x12&\n" +
+	"\x0eadministrative\x18\r \x01(\bR\x0eadministrativeJ\x04\b\v\x10\f\"E\n" +
 	"\x14CreateChangeResponse\x12-\n" +
 	"\x06change\x18\x01 \x01(\v2\x15.goap.graph.v1.ChangeR\x06change\"\"\n" +
 	"\x10GetChangeRequest\x12\x0e\n" +

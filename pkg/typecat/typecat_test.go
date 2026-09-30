@@ -176,3 +176,30 @@ linkTypes:
 		t.Fatalf("unknown link end: %v", err)
 	}
 }
+
+// TestUserSatisfiesOrgUnit checks ADR 0039: User extends OrgUnit in the built-in organisation domain, so a
+// User node satisfies an OrgUnit-typed link end (Assignment's assigns_org link can target a unit, a team or
+// a person uniformly), without member_of folding User into the part_of unit tree.
+func TestUserSatisfiesOrgUnit(t *testing.T) {
+	c := Builtin()
+	ut, ok := c.Type("organisation@User")
+	if !ok || !ut.Is(domain.TypeRef{Namespace: "organisation", Name: "OrgUnit"}) {
+		t.Fatalf("organisation@User must extend organisation@OrgUnit: %+v", ut)
+	}
+	if err := c.CheckLink("organisation@assigns_org", "organisation@Assignment", "organisation@User"); err != nil {
+		t.Fatalf("a User satisfies the OrgUnit end of assigns_org: %v", err)
+	}
+	if err := c.CheckLink("organisation@assigns_org", "organisation@Assignment", "organisation@OrgUnit"); err != nil {
+		t.Fatalf("an OrgUnit satisfies the OrgUnit end of assigns_org: %v", err)
+	}
+	// part_of and project_part_of share a shape (child -> parent) but not a name, on purpose: the
+	// catalogue merges same-named link types declared for several end pairs into "accepts any pair"
+	// (pkg/typecat.New), which would erase part_of's OrgUnit-only constraint. A ProjectUnit must stay
+	// rejected by part_of.
+	if err := c.CheckLink("organisation@part_of", "organisation@ProjectUnit", "organisation@ProjectUnit"); err == nil {
+		t.Fatalf("part_of must still reject a ProjectUnit: its OrgUnit-only constraint must not have been erased")
+	}
+	if err := c.CheckLink("organisation@project_part_of", "organisation@ProjectUnit", "organisation@ProjectUnit"); err != nil {
+		t.Fatalf("project_part_of accepts a ProjectUnit at both ends: %v", err)
+	}
+}

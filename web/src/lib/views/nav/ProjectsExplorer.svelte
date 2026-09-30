@@ -1,6 +1,8 @@
 <script lang="ts">
-  // "Organisation" tool: the OrgUnit hierarchy of the `organisation` namespace
-  // (child --part_of--> parent). Units are edited through changes like any node.
+  // "Projects" tool: the ProjectUnit hierarchy of the `organisation` namespace (ADR 0039), mirroring the
+  // Organisation tool's OrgUnit hierarchy (child --project_part_of--> parent). Projects are edited through
+  // changes like any node. Right-clicking a project offers "New assignment" (ADR 0039: Assignment is
+  // reachable from Organisation, Project or User, via an action or a context menu).
   import Icon from '../../shell/Icon.svelte';
   import TreeRow from '../TreeRow.svelte';
   import { toggle, isOpen } from './expanded.svelte';
@@ -9,7 +11,7 @@
   import { openContextMenu } from '../../shell/contextMenuState.svelte';
   import { notify } from '../../shell/workbench.svelte';
   import { graph, errorMessage, nodeTitle, type GraphNode, type Link } from '../../api';
-  import { ORG_UNIT_TYPE, PART_OF } from '../../orgTypes';
+  import { PROJECT_UNIT_TYPE, PROJECT_PART_OF } from '../../orgTypes';
 
   const NS = 'organisation';
 
@@ -19,7 +21,7 @@
   let error = $state('');
   let adding = $state(false);
   let name = $state('');
-  let kind = $state('team');
+  let kind = $state('project');
   let parent = $state('');
   let saving = $state(false);
 
@@ -33,8 +35,7 @@
         links = [];
       } else {
         const r = await graph.getBaselineGraph(latest.id);
-        // the baseline is already scoped to NS (organisation), just filter by type
-        nodes = (r.nodes ?? []).filter((n) => n.type === ORG_UNIT_TYPE);
+        nodes = (r.nodes ?? []).filter((n) => n.type === PROJECT_UNIT_TYPE);
         links = r.links ?? [];
       }
       error = '';
@@ -51,7 +52,7 @@
 
   const parentOf = $derived.by(() => {
     const m = new Map<string, string>();
-    for (const l of links) if (l.type === PART_OF && l.from?.id && l.to?.id) m.set(l.from.id, l.to.id);
+    for (const l of links) if (l.type === PROJECT_PART_OF && l.from?.id && l.to?.id && l.from.id !== l.to.id) m.set(l.from.id, l.to.id);
     return m;
   });
   const children = $derived.by(() => {
@@ -71,7 +72,7 @@
   }
 
   function open(n: GraphNode, pin = false, openAssignment = false) {
-    openTab({ kind: 'unit', params: { key: n.key ?? '', ...(openAssignment ? { pane: 'assignments', newAssignment: '1' } : {}) } }, { pin });
+    openTab({ kind: 'project', params: { key: n.key ?? '', ...(openAssignment ? { pane: 'assignments', newAssignment: '1' } : {}) } }, { pin });
   }
 
   function slug(s: string): string {
@@ -88,24 +89,24 @@
     saving = true;
     error = '';
     try {
-      const key = `ORG-${slug(name)}`;
+      const key = `PROJ-${slug(name)}`;
       const parentNode = nodes.find((n) => n.id === parent);
       await graph.commitEdits({
-        title: `Unit ${key}`,
-        intent: `Create organisational unit ${name.trim()}`,
+        title: `Project ${key}`,
+        intent: `Create project ${name.trim()}`,
         baselineId: latest.id,
         namespace: NS,
         edits: [
           {
             key,
-            type: ORG_UNIT_TYPE,
-            props: { name: name.trim(), kind },
-            rationale: `Create organisational unit ${name.trim()}`,
-            ...(parentNode ? { links: [{ type: PART_OF, to: { id: parentNode.id, version: parentNode.version } }] } : {}),
+            type: PROJECT_UNIT_TYPE,
+            props: { name: name.trim(), kind, status: 'active' },
+            rationale: `Create project ${name.trim()}`,
+            ...(parentNode ? { links: [{ type: PROJECT_PART_OF, to: { id: parentNode.id, version: parentNode.version } }] } : {}),
           },
         ],
       });
-      notify(`Unit ${key} created.`, 'ok');
+      notify(`Project ${key} created.`, 'ok');
       name = '';
       parent = '';
       adding = false;
@@ -123,28 +124,28 @@
   {@const kids = children.get(n.id ?? '') ?? []}
   <TreeRow
     {depth}
-    icon={kids.length ? 'folder' : 'user'}
+    icon={kids.length ? 'folder' : 'diff'}
     label={label(n)}
     detail={n.key}
-    expanded={kids.length ? isOpen(`org:${n.id}`, true) : undefined}
-    ontoggle={() => toggle(`org:${n.id}`, true)}
+    expanded={kids.length ? isOpen(`proj:${n.id}`, true) : undefined}
+    ontoggle={() => toggle(`proj:${n.id}`, true)}
     onselect={() => open(n)}
     onopen={() => open(n, true)}
     badge={typeof n.props?.['kind'] === 'string' ? (n.props['kind'] as string) : undefined}
     oncontextmenu={(e) =>
       openContextMenu(e, [
-        { label: 'Open', icon: 'user', run: () => open(n, true) },
+        { label: 'Open', icon: 'diff', run: () => open(n, true) },
         { label: 'New assignment', icon: 'plus', run: () => open(n, true, true) },
       ])}
   />
-  {#if kids.length && isOpen(`org:${n.id}`, true)}
+  {#if kids.length && isOpen(`proj:${n.id}`, true)}
     {#each kids as k (k.id)}{@render branch(k, depth + 1)}{/each}
   {/if}
 {/snippet}
 
 <div class="explorer">
   <div class="tools">
-    <button type="button" class="small" onclick={() => (adding = !adding)}><Icon name="plus" size={13} /> New unit</button>
+    <button type="button" class="small" onclick={() => (adding = !adding)}><Icon name="plus" size={13} /> New project</button>
     <span class="grow"></span>
     <button type="button" class="ghost small" title="Refresh" aria-label="Refresh" disabled={loading} onclick={load}
       ><Icon name="refresh" size={14} /></button
@@ -160,9 +161,9 @@
     >
       <input placeholder="Name" bind:value={name} required />
       <select bind:value={kind} aria-label="Kind">
-        {#each ['company', 'direction', 'department', 'team'] as k (k)}<option value={k}>{k}</option>{/each}
+        {#each ['program', 'project', 'subproject'] as k (k)}<option value={k}>{k}</option>{/each}
       </select>
-      <select bind:value={parent} aria-label="Parent unit">
+      <select bind:value={parent} aria-label="Parent project">
         <option value="">No parent</option>
         {#each nodes as n (n.id)}<option value={n.id}>{label(n)}</option>{/each}
       </select>
@@ -170,9 +171,9 @@
     </form>
   {/if}
   {#if error}<div class="alert small">{error}</div>{/if}
-  <div role="tree" aria-label="Organisation">
+  <div role="tree" aria-label="Projects">
     {#each roots as n (n.id)}{@render branch(n, 0)}{:else}
-      {#if !loading && !error}<p class="empty pad">No organisational units.</p>{/if}
+      {#if !loading && !error}<p class="empty pad">No project.</p>{/if}
     {/each}
   </div>
 </div>

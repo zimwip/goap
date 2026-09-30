@@ -14,7 +14,7 @@ func completedRun(t *testing.T) (*Engine, context.Context, *Process, domain.Chan
 	t.Helper()
 	ctx := context.Background()
 	e, g, base := setup(t)
-	p, err := e.Start(ctx, StartRequest{Methodology: "impact-analysis", BaselineID: base, Intent: "The PSP changes its API, what does this break?"})
+	p, err := e.Start(ctx, StartRequest{Methodology: "impact-analysis", BaselineID: base, Intent: "The PSP changes its API, what does this break?", ProjectID: testProject})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -408,7 +408,7 @@ func TestChangeOpensInTheNamespaceOfTheMethodology(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	p, err := e.Start(ctx, StartRequest{Methodology: "impact-analysis", BaselineID: platformBase.ID, Goal: "assess_impact"})
+	p, err := e.Start(ctx, StartRequest{Methodology: "impact-analysis", BaselineID: platformBase.ID, Goal: "assess_impact", ProjectID: testProject})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -417,7 +417,7 @@ func TestChangeOpensInTheNamespaceOfTheMethodology(t *testing.T) {
 		t.Fatalf("change namespace = %q, %v", c.Namespace, err)
 	}
 	// an explicit namespace on the request wins over the methodology default
-	p2, err := e.Start(ctx, StartRequest{Methodology: "impact-analysis", BaselineID: base, Goal: "assess_impact", Namespace: "alm"})
+	p2, err := e.Start(ctx, StartRequest{Methodology: "impact-analysis", BaselineID: base, Goal: "assess_impact", Namespace: "alm", ProjectID: testProject})
 	if err != nil {
 		t.Fatal(err)
 	}

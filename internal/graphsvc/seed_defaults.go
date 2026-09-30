@@ -87,8 +87,9 @@ func linkTo(e graph.NodeEdit, typ string, to domain.NodeRef) graph.NodeEdit {
 }
 
 // SeedDefaults makes sure, at every start, that the default organisation (the root of every
-// unit's adapter resolution), the document-repository MCP and its localfs adapter definition exist. It is idempotent: once the
-// default organisation exists nothing is touched, so that edited or deleted MCPs stay so.
+// unit's adapter resolution), the root project, the document-repository MCP and its localfs adapter
+// definition exist. It is idempotent: once the default organisation exists nothing is touched, so that
+// edited or deleted MCPs stay so.
 func SeedDefaults(ctx context.Context, g *graph.Graph) (bool, error) {
 	if _, err := g.NodeByKey(ctx, mcp.NamespaceOrganisation, domain.DefaultOrg); err == nil {
 		return false, nil
@@ -101,6 +102,9 @@ func SeedDefaults(ctx context.Context, g *graph.Graph) (bool, error) {
 	}); err != nil {
 		return false, err
 	}
+	if err := seedRootProject(ctx, g); err != nil {
+		return false, err
+	}
 	d := documentRepository()
 	a := localFSAdapterDef()
 	err := applyOn(ctx, g, mcp.NamespacePlatform, "MCP "+d.Name, []graph.NodeEdit{
@@ -109,6 +113,34 @@ func SeedDefaults(ctx context.Context, g *graph.Graph) (bool, error) {
 	})
 	return err == nil, err
 }
+
+// seedRootProject creates the root project (ADR 0039), linked project_part_of to itself: every project not
+// folded into another one resolves to it, the same way ORG-DEFAULT is the root of adapter resolution. A
+// self-link cannot be made in the same commit as the node it targets (the commit orderer refuses a cycle
+// among created nodes), so this writes the node, then a second edit adding the link to its own new version.
+func seedRootProject(ctx context.Context, g *graph.Graph) error {
+	if _, err := g.NodeByKey(ctx, mcp.NamespaceOrganisation, domain.DefaultProject); err == nil {
+		return nil
+	} else if !errors.Is(err, graph.ErrNotFound) {
+		return err
+	}
+	if err := applyOn(ctx, g, mcp.NamespaceOrganisation, "Root project", []graph.NodeEdit{
+		createNode(domain.DefaultProject, access.NodeTypeProjectUnit, access.ProjectUnit{
+			Name: "Root project", Status: "active", Description: "Every project not folded into another one resolves to it.",
+		}.Props()),
+	}); err != nil {
+		return err
+	}
+	root, err := g.NodeByKey(ctx, mcp.NamespaceOrganisation, domain.DefaultProject)
+	if err != nil {
+		return err
+	}
+	return applyOn(ctx, g, mcp.NamespaceOrganisation, "Root project is its own parent", []graph.NodeEdit{
+		linkTo(graph.NodeEdit{Pre: ptr(root.Ref()), Rationale: "Root project is its own parent"}, access.LinkProjectPartOf, root.Ref()),
+	})
+}
+
+func ptr[T any](v T) *T { return &v }
 
 // SeedUnit creates an organisational unit, under parent when it is not empty.
 func SeedUnit(ctx context.Context, g *graph.Graph, key, name, kind, parent string) error {

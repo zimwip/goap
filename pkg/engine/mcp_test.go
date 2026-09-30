@@ -131,7 +131,7 @@ func mcpEngine(t *testing.T, hub ToolPort, client llm.Client) (*Engine, domain.B
 func runDocs(t *testing.T, e *Engine, base domain.BaselineID, org string) *Process {
 	t.Helper()
 	ctx := authz.With(context.Background(), authz.Principal{Subject: "alice", Org: org, Roles: []string{"admin"}})
-	p, err := e.Start(ctx, StartRequest{Methodology: "docs", Agent: "writer", Goal: "done", BaselineID: base, Intent: "document it", OwnerOrg: org})
+	p, err := e.Start(ctx, StartRequest{Methodology: "docs", Agent: "writer", Goal: "done", BaselineID: base, Intent: "document it", OwnerOrg: org, ProjectID: testProject})
 	if err != nil {
 		t.Fatal(err)
 	}

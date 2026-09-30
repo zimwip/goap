@@ -147,3 +147,33 @@ func TestGraphStoreKeepsMethodologiesInTheirNamespace(t *testing.T) {
 		t.Fatal("nothing of the registry's storage belongs to the platform namespace")
 	}
 }
+
+// A methodology's declared roles materialize as their own methodology@Role nodes (ADR 0035 §2 / ADR 0039),
+// the same generic element-kind mechanism as agents, actions, goals, processes and methods.
+func TestGraphStoreMaterializesRoles(t *testing.T) {
+	ctx := context.Background()
+	g := graph.New(graph.NewMemory())
+	s := NewGraphStore(g)
+	now := time.Now()
+	m := example(t)
+	m.Version = "9.1.0"
+	m.Roles = []methodology.Role{{Name: "developer", Description: "Implements the change"}}
+	if err := s.Save(ctx, Record{Methodology: m, Status: StatusDraft, CreatedAt: now, UpdatedAt: now}); err != nil {
+		t.Fatal(err)
+	}
+	key := MethodologyVersionKey(m.Name, m.Version) + "/role/developer"
+	n, err := g.NodeByKey(ctx, NamespaceMethodology, key)
+	if err != nil {
+		t.Fatalf("role node %s: %v", key, err)
+	}
+	if n.Type != "methodology@Role" {
+		t.Fatalf("role node type = %s", n.Type)
+	}
+	if n.Properties["description"] != "Implements the change" {
+		t.Fatalf("role node properties = %+v", n.Properties)
+	}
+	got, err := s.Get(ctx, m.Name, m.Version)
+	if err != nil || len(got.Methodology.Roles) != 1 || got.Methodology.Roles[0].Name != "developer" {
+		t.Fatalf("roles must round-trip: %+v, %v", got.Methodology.Roles, err)
+	}
+}

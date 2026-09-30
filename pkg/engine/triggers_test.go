@@ -21,7 +21,7 @@ func TestEventTriggerStartsReviewerOnSameChange(t *testing.T) {
 	if len(states) != 2 {
 		t.Fatalf("expected 2 triggers, got %+v", states)
 	}
-	d, _ := e.Start(ctx, StartRequest{Methodology: "test-design", Agent: "test-designer", BaselineID: base, Intent: "concevoir"})
+	d, _ := e.Start(ctx, StartRequest{Methodology: "test-design", Agent: "test-designer", BaselineID: base, Intent: "concevoir", ProjectID: testProject})
 	d, _ = e.Run(ctx, d.ID)
 	if d.Status != StatusCompleted {
 		t.Fatalf("designer %s", d.Status)

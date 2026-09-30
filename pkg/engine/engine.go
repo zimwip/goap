@@ -108,8 +108,11 @@ type StartRequest struct {
 	// OwnerOrg is the key of the OrgUnit holding the new change (empty: the default organisation):
 	// its adapters decide which MCPs the actions can use.
 	OwnerOrg string
-	Title    string
-	Intent   string
+	// ProjectID is the key of the ProjectUnit the new change belongs to (empty: the root project,
+	// ADR 0039): Assignment nodes on its chain grant the roles step checks see.
+	ProjectID string
+	Title     string
+	Intent    string
 	// Goal skips the intent loop (with Agent, or the first agent having it).
 	Goal string
 	// Agent restricts identification to one agent of the methodology.
@@ -160,7 +163,7 @@ func (e *Engine) log() *slog.Logger {
 // methodology, identification ranks the agents of every published methodology.
 func (e *Engine) Start(ctx context.Context, req StartRequest) (*Process, error) {
 	p := &Process{ID: uuid.NewString(), Methodology: req.Methodology, Agent: req.Agent, ChangeID: req.ChangeID, BaselineID: req.BaselineID, Namespace: req.Namespace, OwnBranch: req.OwnBranch, Org: req.OwnerOrg,
-		Title: req.Title, ParentID: req.ParentID, Trigger: req.Trigger, Flow: req.Flow, Initiator: authz.From(ctx), Vars: maps.Clone(req.Vars), Step: req.Step, Disabled: map[string]bool{},
+		Project: req.ProjectID, Title: req.Title, ParentID: req.ParentID, Trigger: req.Trigger, Flow: req.Flow, Initiator: authz.From(ctx), Vars: maps.Clone(req.Vars), Step: req.Step, Disabled: map[string]bool{},
 		CreatedAt: e.clock(), UpdatedAt: e.clock()}
 	if req.Intent != "" {
 		if err := e.appendIntentTurns(ctx, p, intent.Turn{Role: "user", Text: req.Intent}); err != nil {
@@ -382,9 +385,9 @@ func agentBindsOwnChange(m *methodology.Compiled, ag methodology.Agent) bool {
 // AttachRequest binds a process to a change: an existing one by ChangeID, or
 // a new one resolved from the given (or process-derived) defaults.
 type AttachRequest struct {
-	ChangeID                           domain.ChangeID // reuse an existing change if set
-	Title, Intent, Namespace, OwnerOrg string
-	BaselineID                         domain.BaselineID
+	ChangeID                                      domain.ChangeID // reuse an existing change if set
+	Title, Intent, Namespace, OwnerOrg, ProjectID string
+	BaselineID                                    domain.BaselineID
 }
 
 // AttachChange binds a standalone (not-yet-bound) process to a change: the
@@ -449,6 +452,12 @@ func (e *Engine) resolveChange(ctx context.Context, p *Process, m *methodology.C
 	p.Title = title
 	intent := firstNonEmpty(req.Intent, firstUserTurn(p))
 	ownerOrg := firstNonEmpty(req.OwnerOrg, p.Org)
+	projectID := firstNonEmpty(req.ProjectID, p.Project)
+	// a trigger acts automatically, with no one at the keyboard to pick a project (system-initiated, like
+	// its OwnerOrg defaulting silently above): only a person starting a process is asked for one.
+	if projectID == "" && !m.Administrative && p.Trigger == "" {
+		return "", fmt.Errorf("methodology %s: %w", m.Name, ErrNoProject)
+	}
 	var data map[string]any
 	if p.Trigger != "" {
 		data = map[string]any{"trigger": p.Trigger}
@@ -468,7 +477,8 @@ func (e *Engine) resolveChange(ctx context.Context, p *Process, m *methodology.C
 		baseline = b
 	}
 	p.BaselineID = baseline
-	c, err := e.Graph.CreateChange(ctx, graph.NewChange{Title: title, Intent: intent, Methodology: m.Name, OwnerOrg: ownerOrg, Namespace: ns, OwnBranch: p.OwnBranch, BaselineID: baseline, Data: data})
+	c, err := e.Graph.CreateChange(ctx, graph.NewChange{Title: title, Intent: intent, Methodology: m.Name, OwnerOrg: ownerOrg, ProjectID: projectID, Administrative: m.Administrative,
+		Namespace: ns, OwnBranch: p.OwnBranch, BaselineID: baseline, Data: data})
 	if err != nil {
 		return "", err
 	}
@@ -759,6 +769,8 @@ func (e *Engine) execute(ctx context.Context, p *Process, m *methodology.Compile
 
 // orgOf is the organisation holding the change of a process (an OrgUnit key).
 func (e *Engine) orgOf(p *Process) string { return domain.OrgOf(p.Org) }
+
+func (e *Engine) projectOf(p *Process) string { return domain.ProjectOf(p.Project) }
 
 // boundMCPs returns the MCPs the organization of the process binds for actions and the tools they may
 // call ("<mcp>/<tool>", once its restrictions and the scope of its MCP are applied, ADR 0028). Without a
@@ -1055,6 +1067,10 @@ func (e *Engine) allowed(ctx context.Context, p *Process, who authz.Principal, p
 // ErrInvalidState is returned when an operation does not match the process state.
 var ErrInvalidState = errors.New("invalid process state")
 
+// ErrNoProject is returned when a non-administrative methodology is started with no project selected
+// (ADR 0039): "the user must select the project context they are working on before any action".
+var ErrNoProject = errors.New("no project selected")
+
 // Approve decides a pending approval with the permissions of the principal of
 // ctx. On approval the action runs immediately (call Run afterwards to
 // continue); on rejection the action is disabled for this process and the
@@ -1177,6 +1193,7 @@ func (e *Engine) observe(ctx context.Context, p *Process, m *methodology.Compile
 		}
 		bb.Vars = p.Vars
 		p.Org = domain.OrgOf(bb.Change.OwnerOrg)
+		p.Project = domain.ProjectOf(bb.Change.ProjectID)
 	}
 	bb.Supertypes = e.supertypesOf(m)
 	res := m.Conditions.Evaluate(bb)

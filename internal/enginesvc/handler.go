@@ -88,7 +88,7 @@ func toConnect(err error) error {
 		return connect.NewError(connect.CodeNotFound, err)
 	case errors.Is(err, authz.ErrForbidden):
 		return connect.NewError(connect.CodePermissionDenied, err)
-	case errors.Is(err, engine.ErrInvalidState):
+	case errors.Is(err, engine.ErrInvalidState), errors.Is(err, engine.ErrNoProject):
 		return connect.NewError(connect.CodeFailedPrecondition, err)
 	}
 	return rpcerr.ToConnect(err)
@@ -99,9 +99,13 @@ func (h *Handler) StartProcess(ctx context.Context, r *connect.Request[enginev1.
 	if err := h.authorize(ctx, "start", r.Msg.Methodology, nil); err != nil {
 		return nil, toConnect(err)
 	}
+	projectID := r.Msg.ProjectId
+	if projectID == "" {
+		projectID = authz.From(ctx).Project
+	}
 	p, err := h.Engine.Start(ctx, engine.StartRequest{
 		Methodology: r.Msg.Methodology, ChangeID: domain.ChangeID(r.Msg.ChangeId), BaselineID: domain.BaselineID(r.Msg.BaselineId),
-		Title: r.Msg.Title, Intent: r.Msg.Intent, Goal: r.Msg.Goal, Agent: r.Msg.Agent, OwnerOrg: r.Msg.OwnerOrg, Vars: pbconv.Map(r.Msg.Vars),
+		Title: r.Msg.Title, Intent: r.Msg.Intent, Goal: r.Msg.Goal, Agent: r.Msg.Agent, OwnerOrg: r.Msg.OwnerOrg, ProjectID: projectID, Vars: pbconv.Map(r.Msg.Vars),
 	})
 	if err != nil {
 		return nil, toConnect(err)
@@ -115,9 +119,13 @@ func (h *Handler) AttachChange(ctx context.Context, r *connect.Request[enginev1.
 	if err := h.loadAuthorized(ctx, r.Msg.ProcessId, "attach"); err != nil {
 		return nil, toConnect(err)
 	}
+	projectID := r.Msg.ProjectId
+	if projectID == "" {
+		projectID = authz.From(ctx).Project
+	}
 	if err := h.Engine.AttachChange(ctx, r.Msg.ProcessId, engine.AttachRequest{
 		ChangeID: domain.ChangeID(r.Msg.ChangeId), Title: r.Msg.Title, Intent: r.Msg.Intent,
-		Namespace: r.Msg.Namespace, OwnerOrg: r.Msg.OwnerOrg, BaselineID: domain.BaselineID(r.Msg.BaselineId),
+		Namespace: r.Msg.Namespace, OwnerOrg: r.Msg.OwnerOrg, ProjectID: projectID, BaselineID: domain.BaselineID(r.Msg.BaselineId),
 	}); err != nil {
 		return nil, toConnect(err)
 	}

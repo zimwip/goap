@@ -26,6 +26,7 @@ const (
 	HeaderSubject = identity.HeaderSubject
 	HeaderOrg     = identity.HeaderOrg
 	HeaderRoles   = identity.HeaderRoles
+	HeaderProject = identity.HeaderProject
 )
 
 // Route maps a Connect service prefix to an upstream base URL.
@@ -52,8 +53,11 @@ type Config struct {
 
 // Claims are the GOAP JWT claims.
 type Claims struct {
-	Org   string   `json:"org,omitempty"`
-	Roles []string `json:"roles,omitempty"`
+	Org string `json:"org,omitempty"`
+	// Project is the caller's active project (ADR 0039): re-issued by /auth/dev-token/project each time
+	// the user switches, so every call carries it without the caller having to pass it explicitly.
+	Project string   `json:"project,omitempty"`
+	Roles   []string `json:"roles,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -70,6 +74,7 @@ func Mount(e *echo.Echo, cfg Config) error {
 	// dev tokens only make sense with hs256; ignored otherwise
 	if cfg.DevTokens && cfg.AuthMode == "hs256" {
 		e.POST("/auth/dev-token", devToken(cfg))
+		e.POST("/auth/dev-token/project", switchProject(cfg))
 	}
 	auth, err := authenticator(cfg)
 	if err != nil {
@@ -105,18 +110,12 @@ func authenticator(cfg Config) (echo.MiddlewareFunc, error) {
 		}
 		return func(next echo.HandlerFunc) echo.HandlerFunc {
 			return func(c *echo.Context) error {
-				raw, ok := strings.CutPrefix(c.Request().Header.Get("Authorization"), "Bearer ")
-				if !ok {
-					return echo.NewHTTPError(http.StatusUnauthorized, "missing bearer token")
-				}
-				claims := &Claims{}
-				_, err := jwt.ParseWithClaims(raw, claims, func(*jwt.Token) (any, error) { return cfg.JWTSecret, nil },
-					jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}), jwt.WithExpirationRequired())
+				claims, err := parseToken(cfg, c.Request().Header.Get("Authorization"))
 				if err != nil {
 					return echo.NewHTTPError(http.StatusUnauthorized, "invalid token")
 				}
 				c.Request().Header.Del("Authorization")
-				setPrincipal(c, cfg, authz.Principal{Subject: claims.Subject, Org: claims.Org, Roles: claims.Roles})
+				setPrincipal(c, cfg, authz.Principal{Subject: claims.Subject, Org: claims.Org, Project: claims.Project, Roles: claims.Roles})
 				return next(c)
 			}
 		}, nil
@@ -132,7 +131,28 @@ func setPrincipal(c *echo.Context, cfg Config, p authz.Principal) {
 	h := c.Request().Header
 	h.Set(HeaderSubject, p.Subject)
 	h.Set(HeaderOrg, p.Org)
+	h.Set(HeaderProject, p.Project)
 	h.Set(HeaderRoles, strings.Join(p.Roles, ","))
+}
+
+// parseToken validates a "Bearer <token>" Authorization header value and returns its claims.
+func parseToken(cfg Config, authorization string) (*Claims, error) {
+	raw, ok := strings.CutPrefix(authorization, "Bearer ")
+	if !ok {
+		return nil, errors.New("missing bearer token")
+	}
+	claims := &Claims{}
+	_, err := jwt.ParseWithClaims(raw, claims, func(*jwt.Token) (any, error) { return cfg.JWTSecret, nil },
+		jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}), jwt.WithExpirationRequired())
+	return claims, err
+}
+
+func sign(cfg Config, subject, org, project string, roles []string) (string, error) {
+	claims := Claims{Org: org, Project: project, Roles: roles, RegisteredClaims: jwt.RegisteredClaims{
+		Subject: subject, Issuer: "goap-gateway", IssuedAt: jwt.NewNumericDate(time.Now()),
+		ExpiresAt: jwt.NewNumericDate(time.Now().Add(12 * time.Hour)),
+	}}
+	return jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(cfg.JWTSecret)
 }
 
 func devToken(cfg Config) echo.HandlerFunc {
@@ -140,16 +160,36 @@ func devToken(cfg Config) echo.HandlerFunc {
 		var in struct {
 			Subject string   `json:"subject"`
 			Org     string   `json:"org"`
+			Project string   `json:"project"`
 			Roles   []string `json:"roles"`
 		}
 		if err := c.Bind(&in); err != nil || in.Subject == "" {
 			return echo.NewHTTPError(http.StatusBadRequest, "subject required")
 		}
-		claims := Claims{Org: in.Org, Roles: in.Roles, RegisteredClaims: jwt.RegisteredClaims{
-			Subject: in.Subject, Issuer: "goap-gateway", IssuedAt: jwt.NewNumericDate(time.Now()),
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(12 * time.Hour)),
-		}}
-		tok, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(cfg.JWTSecret)
+		tok, err := sign(cfg, in.Subject, in.Org, in.Project, in.Roles)
+		if err != nil {
+			return err
+		}
+		return c.JSON(http.StatusOK, map[string]string{"token": tok})
+	}
+}
+
+// switchProject reissues the caller's token with a new active project (ADR 0039: "a token regenerated each
+// time the user changes project"), keeping its subject, org and roles: the identity a caller already
+// proved, unchanged, just pointed at a different project from here on.
+func switchProject(cfg Config) echo.HandlerFunc {
+	return func(c *echo.Context) error {
+		claims, err := parseToken(cfg, c.Request().Header.Get("Authorization"))
+		if err != nil {
+			return echo.NewHTTPError(http.StatusUnauthorized, "invalid token")
+		}
+		var in struct {
+			Project string `json:"project"`
+		}
+		if err := c.Bind(&in); err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "project required")
+		}
+		tok, err := sign(cfg, claims.Subject, claims.Org, in.Project, claims.Roles)
 		if err != nil {
 			return err
 		}

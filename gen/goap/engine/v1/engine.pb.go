@@ -1862,7 +1862,10 @@ type StartProcessRequest struct {
 	Agent string `protobuf:"bytes,8,opt,name=agent,proto3" json:"agent,omitempty"`
 	// key of the OrgUnit holding the new change (empty: the default organisation); its adapters
 	// decide which MCPs the actions can use
-	OwnerOrg      string `protobuf:"bytes,9,opt,name=owner_org,json=ownerOrg,proto3" json:"owner_org,omitempty"`
+	OwnerOrg string `protobuf:"bytes,9,opt,name=owner_org,json=ownerOrg,proto3" json:"owner_org,omitempty"`
+	// key of the ProjectUnit the new change belongs to (empty: the caller's active project, from its
+	// token, else the root project, ADR 0039)
+	ProjectId     string `protobuf:"bytes,10,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1956,6 +1959,13 @@ func (x *StartProcessRequest) GetAgent() string {
 func (x *StartProcessRequest) GetOwnerOrg() string {
 	if x != nil {
 		return x.OwnerOrg
+	}
+	return ""
+}
+
+func (x *StartProcessRequest) GetProjectId() string {
+	if x != nil {
+		return x.ProjectId
 	}
 	return ""
 }
@@ -2420,12 +2430,15 @@ type AttachChangeRequest struct {
 	state     protoimpl.MessageState `protogen:"open.v1"`
 	ProcessId string                 `protobuf:"bytes,1,opt,name=process_id,json=processId,proto3" json:"process_id,omitempty"`
 	// reuse an existing change, or empty to create one (same defaulting as StartProcess)
-	ChangeId      string `protobuf:"bytes,2,opt,name=change_id,json=changeId,proto3" json:"change_id,omitempty"`
-	Title         string `protobuf:"bytes,3,opt,name=title,proto3" json:"title,omitempty"`
-	Intent        string `protobuf:"bytes,4,opt,name=intent,proto3" json:"intent,omitempty"`
-	Namespace     string `protobuf:"bytes,5,opt,name=namespace,proto3" json:"namespace,omitempty"`
-	OwnerOrg      string `protobuf:"bytes,6,opt,name=owner_org,json=ownerOrg,proto3" json:"owner_org,omitempty"`
-	BaselineId    string `protobuf:"bytes,7,opt,name=baseline_id,json=baselineId,proto3" json:"baseline_id,omitempty"`
+	ChangeId   string `protobuf:"bytes,2,opt,name=change_id,json=changeId,proto3" json:"change_id,omitempty"`
+	Title      string `protobuf:"bytes,3,opt,name=title,proto3" json:"title,omitempty"`
+	Intent     string `protobuf:"bytes,4,opt,name=intent,proto3" json:"intent,omitempty"`
+	Namespace  string `protobuf:"bytes,5,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	OwnerOrg   string `protobuf:"bytes,6,opt,name=owner_org,json=ownerOrg,proto3" json:"owner_org,omitempty"`
+	BaselineId string `protobuf:"bytes,7,opt,name=baseline_id,json=baselineId,proto3" json:"baseline_id,omitempty"`
+	// key of the ProjectUnit the new change belongs to (empty: the caller's active project, from its
+	// token, else the root project, ADR 0039)
+	ProjectId     string `protobuf:"bytes,8,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2505,6 +2518,13 @@ func (x *AttachChangeRequest) GetOwnerOrg() string {
 func (x *AttachChangeRequest) GetBaselineId() string {
 	if x != nil {
 		return x.BaselineId
+	}
+	return ""
+}
+
+func (x *AttachChangeRequest) GetProjectId() string {
+	if x != nil {
+		return x.ProjectId
 	}
 	return ""
 }
@@ -3938,7 +3958,7 @@ const file_goap_engine_v1_engine_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\bR\x05value:\x028\x01\x1a:\n" +
 	"\fUnknownEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x97\x02\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xb6\x02\n" +
 	"\x13StartProcessRequest\x12 \n" +
 	"\vmethodology\x18\x01 \x01(\tR\vmethodology\x12\x1b\n" +
 	"\tchange_id\x18\x02 \x01(\tR\bchangeId\x12\x1f\n" +
@@ -3949,7 +3969,10 @@ const file_goap_engine_v1_engine_proto_rawDesc = "" +
 	"\x04goal\x18\x06 \x01(\tR\x04goal\x12+\n" +
 	"\x04vars\x18\a \x01(\v2\x17.google.protobuf.StructR\x04vars\x12\x14\n" +
 	"\x05agent\x18\b \x01(\tR\x05agent\x12\x1b\n" +
-	"\towner_org\x18\t \x01(\tR\bownerOrg\"I\n" +
+	"\towner_org\x18\t \x01(\tR\bownerOrg\x12\x1d\n" +
+	"\n" +
+	"project_id\x18\n" +
+	" \x01(\tR\tprojectId\"I\n" +
 	"\x14StartProcessResponse\x121\n" +
 	"\aprocess\x18\x01 \x01(\v2\x17.goap.engine.v1.ProcessR\aprocess\"L\n" +
 	"\x13AnswerIntentRequest\x12\x1d\n" +
@@ -3980,7 +4003,7 @@ const file_goap_engine_v1_engine_proto_rawDesc = "" +
 	"conditions\x12\x16\n" +
 	"\x06reason\x18\x04 \x01(\tR\x06reason\"K\n" +
 	"\x16UnblockProcessResponse\x121\n" +
-	"\aprocess\x18\x01 \x01(\v2\x17.goap.engine.v1.ProcessR\aprocess\"\xdb\x01\n" +
+	"\aprocess\x18\x01 \x01(\v2\x17.goap.engine.v1.ProcessR\aprocess\"\xfa\x01\n" +
 	"\x13AttachChangeRequest\x12\x1d\n" +
 	"\n" +
 	"process_id\x18\x01 \x01(\tR\tprocessId\x12\x1b\n" +
@@ -3990,7 +4013,9 @@ const file_goap_engine_v1_engine_proto_rawDesc = "" +
 	"\tnamespace\x18\x05 \x01(\tR\tnamespace\x12\x1b\n" +
 	"\towner_org\x18\x06 \x01(\tR\bownerOrg\x12\x1f\n" +
 	"\vbaseline_id\x18\a \x01(\tR\n" +
-	"baselineId\"I\n" +
+	"baselineId\x12\x1d\n" +
+	"\n" +
+	"project_id\x18\b \x01(\tR\tprojectId\"I\n" +
 	"\x14AttachChangeResponse\x121\n" +
 	"\aprocess\x18\x01 \x01(\v2\x17.goap.engine.v1.ProcessR\aprocess\"\x9c\x01\n" +
 	"\x0fProcessLogEntry\x12\x10\n" +

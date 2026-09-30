@@ -61,7 +61,7 @@ func TestSelfObservationProposesAndDrafts(t *testing.T) {
 	e, g, base := setup(t)
 	// the observed run; the intent text deliberately echoes the
 	// "assess_impact" goal example in methodologies/examples/impact-analysis.yaml.
-	p, err := e.Start(ctx, StartRequest{Methodology: "impact-analysis", BaselineID: base, Intent: "The PSP changes its API, what does this break?"})
+	p, err := e.Start(ctx, StartRequest{Methodology: "impact-analysis", BaselineID: base, Intent: "The PSP changes its API, what does this break?", ProjectID: testProject})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,7 +95,7 @@ func TestSelfObservationProposesAndDrafts(t *testing.T) {
 	}
 
 	op, err := e.Start(ctx, StartRequest{Methodology: obs.Name, Agent: "observer", Goal: "improve_methodology", BaselineID: res.Baseline.ID,
-		Intent: "observe", Vars: map[string]any{"event": map[string]any{"process": map[string]any{"id": p.ID}}}})
+		Intent: "observe", Vars: map[string]any{"event": map[string]any{"process": map[string]any{"id": p.ID}}}, ProjectID: testProject})
 	if err != nil {
 		t.Fatal(err)
 	}

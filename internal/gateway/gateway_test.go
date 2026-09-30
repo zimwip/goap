@@ -11,9 +11,9 @@ import (
 )
 
 func TestAuthAndRouting(t *testing.T) {
-	var gotSubject, gotRoles string
+	var gotSubject, gotRoles, gotProject string
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotSubject, gotRoles = r.Header.Get(HeaderSubject), r.Header.Get(HeaderRoles)
+		gotSubject, gotRoles, gotProject = r.Header.Get(HeaderSubject), r.Header.Get(HeaderRoles), r.Header.Get(HeaderProject)
 		_, _ = w.Write([]byte(`{}`))
 	}))
 	defer upstream.Close()
@@ -47,7 +47,7 @@ func TestAuthAndRouting(t *testing.T) {
 	if code := call("garbage"); code != http.StatusUnauthorized {
 		t.Fatalf("expected 401, got %d", code)
 	}
-	resp, err := http.Post(srv.URL+"/auth/dev-token", "application/json", strings.NewReader(`{"subject":"alice","org":"acme","roles":["admin"]}`))
+	resp, err := http.Post(srv.URL+"/auth/dev-token", "application/json", strings.NewReader(`{"subject":"alice","org":"acme","project":"PROJ-X","roles":["admin"]}`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,8 +57,40 @@ func TestAuthAndRouting(t *testing.T) {
 	if code := call(tok.Token); code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", code)
 	}
-	if gotSubject != "alice" || gotRoles != "admin" {
-		t.Fatalf("identity not propagated: %q %q", gotSubject, gotRoles)
+	if gotSubject != "alice" || gotRoles != "admin" || gotProject != "PROJ-X" {
+		t.Fatalf("identity not propagated: %q %q %q", gotSubject, gotRoles, gotProject)
+	}
+
+	// switching project reissues the token with the same subject/org/roles but a new project (ADR 0039)
+	req, _ := http.NewRequest(http.MethodPost, srv.URL+"/auth/dev-token/project", strings.NewReader(`{"project":"PROJ-Y"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+tok.Token)
+	swResp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var swTok struct{ Token string }
+	_ = json.NewDecoder(swResp.Body).Decode(&swTok)
+	swResp.Body.Close()
+	if swResp.StatusCode != http.StatusOK || swTok.Token == "" {
+		t.Fatalf("switch project: status %d, token %q", swResp.StatusCode, swTok.Token)
+	}
+	if code := call(swTok.Token); code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", code)
+	}
+	if gotSubject != "alice" || gotRoles != "admin" || gotProject != "PROJ-Y" {
+		t.Fatalf("switched identity not propagated: %q %q %q", gotSubject, gotRoles, gotProject)
+	}
+	// a bogus/expired token cannot switch project
+	badReq, _ := http.NewRequest(http.MethodPost, srv.URL+"/auth/dev-token/project", strings.NewReader(`{"project":"PROJ-Z"}`))
+	badReq.Header.Set("Authorization", "Bearer garbage")
+	badResp, err := http.DefaultClient.Do(badReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	badResp.Body.Close()
+	if badResp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("switch project with a bad token: expected 401, got %d", badResp.StatusCode)
 	}
 	st, err := http.Get(srv.URL + "/api/status")
 	if err != nil {

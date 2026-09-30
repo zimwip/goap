@@ -12,8 +12,9 @@ import (
 // Organisation namespace conventions (the built-in organisation domain, domains/builtin/organisation.yaml).
 const (
 	NamespaceOrganisation = "organisation"
-	LinkPartOf            = "organisation@part_of" // OrgUnit -> parent OrgUnit
-	LinkOwner             = "organisation@owner"   // any node -> OrgUnit
+	LinkPartOf            = "organisation@part_of"         // OrgUnit -> parent OrgUnit
+	LinkOwner             = "organisation@owner"           // any node -> OrgUnit
+	LinkProjectPartOf     = "organisation@project_part_of" // ProjectUnit -> parent ProjectUnit (ADR 0039)
 )
 
 // prepareSubChange applies the rules of a sub-change to c: its parent must be
@@ -64,6 +65,21 @@ func (g *Graph) prepareSubChange(ctx context.Context, tx Tx, c *domain.Change, i
 			return fmt.Errorf("unit %s is not part of %s, the unit of the parent change: %w", c.OwnerOrg, parent.OwnerOrg, ErrInvalid)
 		}
 	}
+	if !in.Administrative {
+		in.Administrative = parent.Administrative
+	}
+	c.Administrative = in.Administrative
+	if c.ProjectID == "" {
+		c.ProjectID = parent.ProjectID
+	} else if parent.ProjectID != "" && c.ProjectID != parent.ProjectID {
+		ok, err := projectWithin(ctx, tx, c.ProjectID, parent.ProjectID)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return fmt.Errorf("project %s is not part of %s, the project of the parent change: %w", c.ProjectID, parent.ProjectID, ErrInvalid)
+		}
+	}
 	return nil
 }
 
@@ -84,6 +100,62 @@ func checkOwnerOrg(ctx context.Context, tx Tx, key string) error {
 		return fmt.Errorf("owner org %q is deleted: %w", key, ErrInvalid)
 	}
 	return nil
+}
+
+// checkProject verifies that key designates a ProjectUnit of the organisation namespace (ADR 0039).
+func checkProject(ctx context.Context, tx Tx, key string) error {
+	id, err := tx.NodeIDByKey(ctx, NamespaceOrganisation, key)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return fmt.Errorf("project %q is not a node of namespace %s: %w", key, NamespaceOrganisation, ErrInvalid)
+		}
+		return err
+	}
+	n, err := tx.LatestOn(ctx, id, domain.MainBranch)
+	if err != nil {
+		return err
+	}
+	if n.Deleted {
+		return fmt.Errorf("project %q is deleted: %w", key, ErrInvalid)
+	}
+	return nil
+}
+
+// projectWithin reports whether the project with key `project` is `ancestor` or below it, following the
+// project_part_of links (child -> parent) of the latest version on main (mirrors orgWithin).
+func projectWithin(ctx context.Context, tx Tx, project, ancestor string) (bool, error) {
+	seen := map[string]bool{}
+	for cur := project; cur != "" && !seen[cur]; {
+		if cur == ancestor {
+			return true, nil
+		}
+		seen[cur] = true
+		id, err := tx.NodeIDByKey(ctx, NamespaceOrganisation, cur)
+		if err != nil {
+			return false, err
+		}
+		n, err := tx.LatestOn(ctx, id, domain.MainBranch)
+		if err != nil {
+			return false, err
+		}
+		links, err := tx.OutLinks(ctx, n.Ref())
+		if err != nil {
+			return false, err
+		}
+		cur = ""
+		for _, l := range links {
+			if l.Type != LinkProjectPartOf {
+				continue
+			}
+			p, err := tx.Node(ctx, l.To)
+			if err != nil {
+				return false, err
+			}
+			cur = p.Key
+			break
+		}
+	}
+	return false, nil
 }
 
 // orgWithin reports whether the unit with key `unit` is `ancestor` or below it,

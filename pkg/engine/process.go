@@ -46,6 +46,9 @@ type Process struct {
 	// Org is the organisation holding the change: its owner unit, or the default one (a cache:
 	// the change is the source). Its adapters decide which MCPs the actions can use.
 	Org string `json:"org,omitempty"`
+	// Project is the project the change belongs to: its ProjectID, or the root project (a cache: the
+	// change is the source, ADR 0039). Assignment nodes on its chain grant the roles step checks see.
+	Project string `json:"project,omitempty"`
 	// Queued says why the process was last made runnable; the run that picks it up journals it as a schedule
 	// record (ADR 0011) and clears it.
 	Queued *Queued `json:"queued,omitempty"`

@@ -860,6 +860,57 @@ under the parameter name, and that the code can never read. Runs are bounded (30
 - `goap-dev` runs the hub, the built-in connectors and the localfs connector in-process (`GOAP_DEV_FS_ROOT` gives the default organisation
   an adapter instance on a directory); connectors started separately register over HTTP.
 
+### 3.9b Project ([ADR 0039](adr/0039-project-organisation.md))
+
+Organisation says who may act; Project says what the organisation is working on. `organisation@ProjectUnit`
+mirrors `OrgUnit`'s hierarchy (`project_part_of`, child → parent) in the same `organisation` namespace, and
+names the methodologies that apply to it, so it inherits their declared roles (ADR 0035 §2) without
+redeclaring them. The root project `PROJ-ROOT` (`domain.DefaultProject`) is seeded self-linked
+(`project_part_of` to itself) rather than rootless like `ORG-DEFAULT`; every chain walk already guards
+against revisiting a node, so the self-link terminates safely.
+
+`organisation@Assignment` is the meeting point of organisation and project — the same shape as `Adapter`:
+it links an `OrgUnit` (`assigns_org`) to a `ProjectUnit` (`assigns_project`) and carries the `roles` that
+unit locally holds there. `organisation@User` is a subtype of `OrgUnit` (`extends`), so a person satisfies
+`assigns_org` the same way a unit or a team does, without folding `User` into the `part_of` unit tree
+(`member_of` still names a user's home unit).
+
+A change belongs to a project (`domain.Change.ProjectID`; empty resolves to `PROJ-ROOT`, the way an empty
+`OwnerOrg` resolves to `ORG-DEFAULT`), checked for existence at `CreateChange` when given; a sub-change
+inherits its parent's project when unset and must stay within it when set (mirroring the `OwnerOrg` rules
+of ADR 0016). `CreateChange` itself only defaults, never requires, a project: the "select a project before
+any action" rule is enforced one layer up, at `Engine.Start`, for any process that is neither
+`Methodology.Administrative` nor trigger-started (no one at the keyboard to ask) — most direct graph
+callers (seeding, admin tooling, tests) are administrative by nature and would otherwise all need a project
+they have no use for.
+
+**Role resolution.** `pkg/access.Snapshot` resolves `ProjectChain` (mirrors `Chain`) and `ProjectRoles`
+(unions the `roles` of every `Assignment` whose org is in a subject's org chain and whose project is in the
+change's project chain). `access.Authorizer.Authorize` merges them into the subject's roles when
+`authz.Resource.ProjectID` is set, riding the existing `hasRoleIn` step policy unscoped (the membership
+test already happened) — no new Casbin function. `pkg/engine` threads a project through `Process.Project`
+(mirroring `Process.Org`) into `stepAllowed`'s `Resource.ProjectID`.
+
+**Identity.** `organisation@User` is created automatically, not by an administrator's hand: the same key
+(`USR:<subject>`) that ADR 0037 uses for a subject's personal unit, since `User extends OrgUnit` lets one
+node serve both. `internal/graphsvc.EnsureUser` creates it on first sight, called by `resolveOwner`'s `@me`
+path and by the `EnsureCaller` Connect interceptor on every authenticated call (deduplicated per process).
+The active project rides the JWT as a `project` claim (`X-Goap-Project` header, `POST
+/auth/dev-token/project` reissues it with the same subject/org/roles) the same way `org` and `roles`
+already do; `graphsvc.CreateChange` and `enginesvc.StartProcess`/`AttachChange` default their project from
+it when a request names none.
+
+**Web.** One left-nav entry, "People & Organisation", sub-navigated into Organisation / Projects / Users
+(not three separate entries); a project selector next to the brand mark reissues the token
+(`stores/project.svelte.ts`) and persists the choice locally (`goap-dev`, with no token to reissue, keeps a
+fixed `GOAP_DEV_PROJECT` env var instead, like `GOAP_DEV_ORG`). Assignment has no nav entry of its own: an
+"Assignments" pane on the Organisation, Project and User editors (one `AssignmentsPane.svelte`,
+parametrized by which side is fixed) offers a "+ Assignment" action, and each explorer's context menu
+offers "New assignment", opening the entity's tab with that pane pre-opened.
+
+**Not implemented**: OrgUnit-side action restriction on a project (mirroring `mcp.Restriction`'s shape,
+ADR 0028) — an Assignment grants roles but cannot yet narrow which actions a unit may run locally.
+
 ### 3.8 Voice input ([ADR 0022](adr/0022-voice-interaction.md))
 
 The assistant accepts push-to-talk voice input. Speech-to-text runs **entirely in the browser**

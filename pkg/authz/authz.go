@@ -14,8 +14,11 @@ import (
 // Principal is an authenticated caller (subject attributes of ABAC rules:
 // r.sub.Subject, r.sub.Org, r.sub.Roles).
 type Principal struct {
-	Subject string   `json:"subject,omitempty"`
-	Org     string   `json:"org,omitempty"`
+	Subject string `json:"subject,omitempty"`
+	Org     string `json:"org,omitempty"`
+	// Project is the caller's active project (ADR 0039), from their token; a call that names no project
+	// of its own (Change.ProjectID, StartProcessRequest.project_id, ...) defaults to it.
+	Project string   `json:"project,omitempty"`
 	Roles   []string `json:"roles,omitempty"`
 }
 
@@ -37,6 +40,10 @@ type Resource struct {
 	// OrgChain is Org followed by its ancestor units (part_of), filled by the authorizer that knows the
 	// organisation: a role held in a unit holds in the units below it.
 	OrgChain []string `json:"orgChain,omitempty"`
+	// ProjectID is the project the resource's change belongs to (ADR 0039); when set, the authorizer that
+	// knows the organisation merges the roles an Assignment grants the subject's org chain on this
+	// project's chain into the subject's roles before evaluating the request.
+	ProjectID string `json:"projectId,omitempty"`
 }
 
 // RoleScope separates a role from the unit it is held in: "developer@TEAM-PAY".
