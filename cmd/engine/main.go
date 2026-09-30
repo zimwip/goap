@@ -76,9 +76,8 @@ func main() {
 		platform.Fatal(log, "authorizer", err)
 	}
 	registry := registrysvc.NewClient(hc, platform.Env("GOAP_REGISTRY_URL", "http://localhost:8082"), copts...)
-	// the type catalogue (ADR 0012): the ancestors behind x.types, from the registry, reloaded on its domain events;
-	// registry.Algorithms is the platform-wide algorithm registry a "platform@<name>" reference resolves against (ADR 0041)
-	types := typecat.NewLiveWithAlgorithms(registry.Domains, registry.Algorithms)
+	// the type catalogue (ADR 0012): the ancestors behind x.types, from the registry, reloaded on its domain events
+	types := typecat.NewLive(registry.Domains)
 	go func() {
 		for delay := time.Second; types.Reload(ctx) != nil; delay = min(2*delay, time.Minute) {
 			time.Sleep(delay)

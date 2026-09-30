@@ -44,9 +44,6 @@ service RegistryService {
   rpc ListTypes(ListTypesRequest) returns (ListTypesResponse);
   // Try an algorithm of a domain on a sample input, without saving anything.
   rpc RunAlgorithm(RunAlgorithmRequest) returns (RunAlgorithmResponse);
-  // The platform-wide algorithm registry (ADR 0041): algorithms centralized from the domains that declared them,
-  // addressable as "platform@<name>" from any domain's algorithm instances instead of being redeclared.
-  rpc ListPlatformAlgorithms(ListPlatformAlgorithmsRequest) returns (ListPlatformAlgorithmsResponse);
 }
 
 message NodeType {
@@ -668,31 +665,6 @@ message RunAlgorithmResponse {
   google.protobuf.Struct set = 4;
   repeated string unset = 5;
   repeated string logs = 6;
-}
-
-// AlgorithmInstanceUsage is a domain's algorithm instance referencing a platform-wide algorithm as
-// "platform@<name>" instead of redeclaring it (ADR 0041).
-message AlgorithmInstanceUsage {
-  string domain = 1;
-  string version = 2;
-  string instance = 3;
-  google.protobuf.Struct values = 4;
-}
-
-// PlatformAlgorithm is an algorithm centralized in the platform-wide registry (ADR 0041): the domain that first
-// published it, its canonical definition (name, type, language, code, params), and every algorithm instance of a
-// published domain that references it instead of redeclaring it.
-message PlatformAlgorithm {
-  Algorithm algorithm = 1;
-  string source_domain = 2;
-  string source_version = 3;
-  repeated AlgorithmInstanceUsage instances = 4;
-}
-
-message ListPlatformAlgorithmsRequest {}
-
-message ListPlatformAlgorithmsResponse {
-  repeated PlatformAlgorithm algorithms = 1;
 }
 
 message ListTypesRequest {}

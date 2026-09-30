@@ -30,11 +30,8 @@ type SQLDomainStore struct {
 
 var _ DomainStore = SQLDomainStore{}
 
-func (s SQLDomainStore) q(query string) string { return rewritePlaceholders(s.Dollar, query) }
-
-// rewritePlaceholders rewrites "?" placeholders as "$1", "$2"… for PostgreSQL; a no-op for SQLite.
-func rewritePlaceholders(dollar bool, query string) string {
-	if !dollar {
+func (s SQLDomainStore) q(query string) string {
+	if !s.Dollar {
 		return query
 	}
 	var b strings.Builder

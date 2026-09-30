@@ -99,9 +99,6 @@ const (
 	// RegistryServiceRunAlgorithmProcedure is the fully-qualified name of the RegistryService's
 	// RunAlgorithm RPC.
 	RegistryServiceRunAlgorithmProcedure = "/goap.registry.v1.RegistryService/RunAlgorithm"
-	// RegistryServiceListPlatformAlgorithmsProcedure is the fully-qualified name of the
-	// RegistryService's ListPlatformAlgorithms RPC.
-	RegistryServiceListPlatformAlgorithmsProcedure = "/goap.registry.v1.RegistryService/ListPlatformAlgorithms"
 )
 
 // RegistryServiceClient is a client for the goap.registry.v1.RegistryService service.
@@ -141,9 +138,6 @@ type RegistryServiceClient interface {
 	ListTypes(context.Context, *connect.Request[v1.ListTypesRequest]) (*connect.Response[v1.ListTypesResponse], error)
 	// Try an algorithm of a domain on a sample input, without saving anything.
 	RunAlgorithm(context.Context, *connect.Request[v1.RunAlgorithmRequest]) (*connect.Response[v1.RunAlgorithmResponse], error)
-	// The platform-wide algorithm registry (ADR 0041): algorithms centralized from the domains that declared them,
-	// addressable as "platform@<name>" from any domain's algorithm instances instead of being redeclared.
-	ListPlatformAlgorithms(context.Context, *connect.Request[v1.ListPlatformAlgorithmsRequest]) (*connect.Response[v1.ListPlatformAlgorithmsResponse], error)
 }
 
 // NewRegistryServiceClient constructs a client for the goap.registry.v1.RegistryService service. By
@@ -289,40 +283,33 @@ func NewRegistryServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(registryServiceMethods.ByName("RunAlgorithm")),
 			connect.WithClientOptions(opts...),
 		),
-		listPlatformAlgorithms: connect.NewClient[v1.ListPlatformAlgorithmsRequest, v1.ListPlatformAlgorithmsResponse](
-			httpClient,
-			baseURL+RegistryServiceListPlatformAlgorithmsProcedure,
-			connect.WithSchema(registryServiceMethods.ByName("ListPlatformAlgorithms")),
-			connect.WithClientOptions(opts...),
-		),
 	}
 }
 
 // registryServiceClient implements RegistryServiceClient.
 type registryServiceClient struct {
-	listMethodologies      *connect.Client[v1.ListMethodologiesRequest, v1.ListMethodologiesResponse]
-	getMethodology         *connect.Client[v1.GetMethodologyRequest, v1.GetMethodologyResponse]
-	saveMethodology        *connect.Client[v1.SaveMethodologyRequest, v1.SaveMethodologyResponse]
-	validateMethodology    *connect.Client[v1.ValidateMethodologyRequest, v1.ValidateMethodologyResponse]
-	getProcessGraph        *connect.Client[v1.GetProcessGraphRequest, v1.GetProcessGraphResponse]
-	publishMethodology     *connect.Client[v1.PublishMethodologyRequest, v1.PublishMethodologyResponse]
-	createVersion          *connect.Client[v1.CreateVersionRequest, v1.CreateVersionResponse]
-	deleteMethodology      *connect.Client[v1.DeleteMethodologyRequest, v1.DeleteMethodologyResponse]
-	importMethodology      *connect.Client[v1.ImportMethodologyRequest, v1.ImportMethodologyResponse]
-	exportMethodology      *connect.Client[v1.ExportMethodologyRequest, v1.ExportMethodologyResponse]
-	listDomains            *connect.Client[v1.ListDomainsRequest, v1.ListDomainsResponse]
-	getDomain              *connect.Client[v1.GetDomainRequest, v1.GetDomainResponse]
-	saveDomain             *connect.Client[v1.SaveDomainRequest, v1.SaveDomainResponse]
-	validateDomain         *connect.Client[v1.ValidateDomainRequest, v1.ValidateDomainResponse]
-	publishDomain          *connect.Client[v1.PublishDomainRequest, v1.PublishDomainResponse]
-	createDomainVersion    *connect.Client[v1.CreateDomainVersionRequest, v1.CreateDomainVersionResponse]
-	deleteDomain           *connect.Client[v1.DeleteDomainRequest, v1.DeleteDomainResponse]
-	importDomain           *connect.Client[v1.ImportDomainRequest, v1.ImportDomainResponse]
-	exportDomain           *connect.Client[v1.ExportDomainRequest, v1.ExportDomainResponse]
-	getDomainUsage         *connect.Client[v1.GetDomainUsageRequest, v1.GetDomainUsageResponse]
-	listTypes              *connect.Client[v1.ListTypesRequest, v1.ListTypesResponse]
-	runAlgorithm           *connect.Client[v1.RunAlgorithmRequest, v1.RunAlgorithmResponse]
-	listPlatformAlgorithms *connect.Client[v1.ListPlatformAlgorithmsRequest, v1.ListPlatformAlgorithmsResponse]
+	listMethodologies   *connect.Client[v1.ListMethodologiesRequest, v1.ListMethodologiesResponse]
+	getMethodology      *connect.Client[v1.GetMethodologyRequest, v1.GetMethodologyResponse]
+	saveMethodology     *connect.Client[v1.SaveMethodologyRequest, v1.SaveMethodologyResponse]
+	validateMethodology *connect.Client[v1.ValidateMethodologyRequest, v1.ValidateMethodologyResponse]
+	getProcessGraph     *connect.Client[v1.GetProcessGraphRequest, v1.GetProcessGraphResponse]
+	publishMethodology  *connect.Client[v1.PublishMethodologyRequest, v1.PublishMethodologyResponse]
+	createVersion       *connect.Client[v1.CreateVersionRequest, v1.CreateVersionResponse]
+	deleteMethodology   *connect.Client[v1.DeleteMethodologyRequest, v1.DeleteMethodologyResponse]
+	importMethodology   *connect.Client[v1.ImportMethodologyRequest, v1.ImportMethodologyResponse]
+	exportMethodology   *connect.Client[v1.ExportMethodologyRequest, v1.ExportMethodologyResponse]
+	listDomains         *connect.Client[v1.ListDomainsRequest, v1.ListDomainsResponse]
+	getDomain           *connect.Client[v1.GetDomainRequest, v1.GetDomainResponse]
+	saveDomain          *connect.Client[v1.SaveDomainRequest, v1.SaveDomainResponse]
+	validateDomain      *connect.Client[v1.ValidateDomainRequest, v1.ValidateDomainResponse]
+	publishDomain       *connect.Client[v1.PublishDomainRequest, v1.PublishDomainResponse]
+	createDomainVersion *connect.Client[v1.CreateDomainVersionRequest, v1.CreateDomainVersionResponse]
+	deleteDomain        *connect.Client[v1.DeleteDomainRequest, v1.DeleteDomainResponse]
+	importDomain        *connect.Client[v1.ImportDomainRequest, v1.ImportDomainResponse]
+	exportDomain        *connect.Client[v1.ExportDomainRequest, v1.ExportDomainResponse]
+	getDomainUsage      *connect.Client[v1.GetDomainUsageRequest, v1.GetDomainUsageResponse]
+	listTypes           *connect.Client[v1.ListTypesRequest, v1.ListTypesResponse]
+	runAlgorithm        *connect.Client[v1.RunAlgorithmRequest, v1.RunAlgorithmResponse]
 }
 
 // ListMethodologies calls goap.registry.v1.RegistryService.ListMethodologies.
@@ -435,11 +422,6 @@ func (c *registryServiceClient) RunAlgorithm(ctx context.Context, req *connect.R
 	return c.runAlgorithm.CallUnary(ctx, req)
 }
 
-// ListPlatformAlgorithms calls goap.registry.v1.RegistryService.ListPlatformAlgorithms.
-func (c *registryServiceClient) ListPlatformAlgorithms(ctx context.Context, req *connect.Request[v1.ListPlatformAlgorithmsRequest]) (*connect.Response[v1.ListPlatformAlgorithmsResponse], error) {
-	return c.listPlatformAlgorithms.CallUnary(ctx, req)
-}
-
 // RegistryServiceHandler is an implementation of the goap.registry.v1.RegistryService service.
 type RegistryServiceHandler interface {
 	ListMethodologies(context.Context, *connect.Request[v1.ListMethodologiesRequest]) (*connect.Response[v1.ListMethodologiesResponse], error)
@@ -477,9 +459,6 @@ type RegistryServiceHandler interface {
 	ListTypes(context.Context, *connect.Request[v1.ListTypesRequest]) (*connect.Response[v1.ListTypesResponse], error)
 	// Try an algorithm of a domain on a sample input, without saving anything.
 	RunAlgorithm(context.Context, *connect.Request[v1.RunAlgorithmRequest]) (*connect.Response[v1.RunAlgorithmResponse], error)
-	// The platform-wide algorithm registry (ADR 0041): algorithms centralized from the domains that declared them,
-	// addressable as "platform@<name>" from any domain's algorithm instances instead of being redeclared.
-	ListPlatformAlgorithms(context.Context, *connect.Request[v1.ListPlatformAlgorithmsRequest]) (*connect.Response[v1.ListPlatformAlgorithmsResponse], error)
 }
 
 // NewRegistryServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -621,12 +600,6 @@ func NewRegistryServiceHandler(svc RegistryServiceHandler, opts ...connect.Handl
 		connect.WithSchema(registryServiceMethods.ByName("RunAlgorithm")),
 		connect.WithHandlerOptions(opts...),
 	)
-	registryServiceListPlatformAlgorithmsHandler := connect.NewUnaryHandler(
-		RegistryServiceListPlatformAlgorithmsProcedure,
-		svc.ListPlatformAlgorithms,
-		connect.WithSchema(registryServiceMethods.ByName("ListPlatformAlgorithms")),
-		connect.WithHandlerOptions(opts...),
-	)
 	return "/goap.registry.v1.RegistryService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case RegistryServiceListMethodologiesProcedure:
@@ -673,8 +646,6 @@ func NewRegistryServiceHandler(svc RegistryServiceHandler, opts ...connect.Handl
 			registryServiceListTypesHandler.ServeHTTP(w, r)
 		case RegistryServiceRunAlgorithmProcedure:
 			registryServiceRunAlgorithmHandler.ServeHTTP(w, r)
-		case RegistryServiceListPlatformAlgorithmsProcedure:
-			registryServiceListPlatformAlgorithmsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -770,8 +741,4 @@ func (UnimplementedRegistryServiceHandler) ListTypes(context.Context, *connect.R
 
 func (UnimplementedRegistryServiceHandler) RunAlgorithm(context.Context, *connect.Request[v1.RunAlgorithmRequest]) (*connect.Response[v1.RunAlgorithmResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.registry.v1.RegistryService.RunAlgorithm is not implemented"))
-}
-
-func (UnimplementedRegistryServiceHandler) ListPlatformAlgorithms(context.Context, *connect.Request[v1.ListPlatformAlgorithmsRequest]) (*connect.Response[v1.ListPlatformAlgorithmsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.registry.v1.RegistryService.ListPlatformAlgorithms is not implemented"))
 }

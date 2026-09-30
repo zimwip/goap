@@ -9,7 +9,6 @@ import (
 
 	registryv1 "github.com/zimwip/goap/gen/goap/registry/v1"
 	"github.com/zimwip/goap/gen/goap/registry/v1/registryv1connect"
-	"github.com/zimwip/goap/pkg/algo"
 	"github.com/zimwip/goap/pkg/engine"
 	"github.com/zimwip/goap/pkg/methodology"
 )
@@ -66,20 +65,6 @@ func (c *Client) Domains(ctx context.Context) ([]*methodology.Domain, error) {
 		}
 		dom := DomainFromPB(d.Msg.Domain)
 		out = append(out, &dom)
-	}
-	return out, nil
-}
-
-// Algorithms returns the platform-wide algorithm registry (ADR 0041, typecat.AlgorithmSource): the source of a
-// "platform@<name>" algorithm reference.
-func (c *Client) Algorithms(ctx context.Context) ([]algo.Algorithm, error) {
-	r, err := c.rpc.ListPlatformAlgorithms(ctx, connect.NewRequest(&registryv1.ListPlatformAlgorithmsRequest{}))
-	if err != nil {
-		return nil, err
-	}
-	var out []algo.Algorithm
-	for _, pa := range r.Msg.Algorithms {
-		out = append(out, algorithmsFromPB([]*registryv1.Algorithm{pa.Algorithm})[0])
 	}
 	return out, nil
 }

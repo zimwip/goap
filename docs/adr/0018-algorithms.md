@@ -77,7 +77,6 @@ could run when a transition was taken. Making the domain customizable meant chan
   authors are expected.
 - Property validators are not run on nodes that a change merely moves, links or deletes, nor on
   branch merge results; existing invalid data is never rejected retroactively.
-- Not done: algorithms for other extension points (link validators, conditions), a dry run of the plugs
-  against existing nodes when a domain is published, running the PostgreSQL migration in the automated
-  tests without `GOAP_TEST_PG_DSN`. Algorithms shared across domains: closed by ADR 0041 (a platform-wide
-  registry at the registry-DB tier, `platform@<name>` references).
+- Not done: algorithms shared across domains, algorithms for other extension points (link
+  validators, conditions), a dry run of the plugs against existing nodes when a domain is published,
+  running the PostgreSQL migration in the automated tests without `GOAP_TEST_PG_DSN`.
