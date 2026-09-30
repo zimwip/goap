@@ -11,7 +11,6 @@
   import PreferencesPane from '../views/platform/PreferencesPane.svelte';
   import ProvidersPane from '../views/platform/ProvidersPane.svelte';
   import CatalogPane from '../views/platform/CatalogPane.svelte';
-  import PlatformAlgorithmsPane from '../views/platform/PlatformAlgorithmsPane.svelte';
   import { models, errorMessage, type CatalogModel, type LlmProvider, type ModelAlias, type ProviderKind } from '../api';
   import { overlayAliases, overlayCatalog, overlayProviders, listAliasProposals, type AliasProposal } from '../llmEdit';
 
@@ -26,7 +25,6 @@
     { id: 'preferences', label: 'Preferences', icon: 'user' },
     { id: 'providers', label: 'LLM providers', icon: 'zap', admin: true },
     { id: 'catalog', label: 'Models & quotas', icon: 'database', admin: true },
-    { id: 'algorithms', label: 'Algorithms', icon: 'code' },
   ];
 
   const visible = $derived(SECTIONS.filter((s) => !s.admin || hasAnyRole('admin')));
@@ -135,8 +133,6 @@
           {:else if active.id === 'catalog'}
             {#if gatewayError}<div class="alert">{gatewayError}</div>{/if}
             <CatalogPane {providers} {catalog} {aliases} {proposals} onchange={refreshGateway} openProviders={() => (settingsState.section = 'providers')} />
-          {:else if active.id === 'algorithms'}
-            <PlatformAlgorithmsPane />
           {/if}
         </div>
         <div class="savebar" class:dirty={count > 0}>

@@ -85,12 +85,6 @@ func Builtin() *Catalog {
 // New builds the catalogue of the given domains (one per namespace) and of the built-in domains. A bare reference inside
 // a domain (extends, link ends, document) is a type of that domain.
 func New(ds ...*methodology.Domain) (*Catalog, error) {
-	return NewWithPlatform(algo.Set{}, ds...)
-}
-
-// NewWithPlatform is New, additionally resolving a "platform@<name>" algorithm reference (ADR 0041) of any domain's
-// algorithm instances against platform: the platform-wide algorithm registry.
-func NewWithPlatform(platform algo.Set, ds ...*methodology.Domain) (*Catalog, error) {
 	all := append(slices.Clone(Builtins()), ds...)
 	nb := len(Builtins())
 	c := &Catalog{types: map[domain.TypeRef]*Type{}, links: map[domain.TypeRef]*LinkType{}, domains: map[string]string{}}
@@ -133,7 +127,7 @@ func NewWithPlatform(platform algo.Set, ds ...*methodology.Domain) (*Catalog, er
 		}
 	}
 	for ref := range decl {
-		t, err := resolve(ref, decl, platform)
+		t, err := resolve(ref, decl)
 		if err != nil {
 			return nil, err
 		}
@@ -155,7 +149,7 @@ type declared struct {
 }
 
 // resolve builds the model of a type along its extends chain.
-func resolve(ref domain.TypeRef, decl map[domain.TypeRef]declared, platform algo.Set) (*Type, error) {
+func resolve(ref domain.TypeRef, decl map[domain.TypeRef]declared) (*Type, error) {
 	var chain []domain.TypeRef // the type, then its ancestors
 	for cur := ref; ; {
 		if slices.Contains(chain, cur) {
@@ -185,7 +179,7 @@ func resolve(ref domain.TypeRef, decl map[domain.TypeRef]declared, platform algo
 		dc := decl[cur]
 		if !lifecycleSet && dc.t.Lifecycle != "" {
 			lifecycleSet = true
-			t.Lifecycle = dc.d.BindLifecycle(dc.d.Lifecycle(dc.t.Lifecycle), platform)
+			t.Lifecycle = dc.d.BindLifecycle(dc.d.Lifecycle(dc.t.Lifecycle))
 			if t.Lifecycle == nil {
 				return nil, fmt.Errorf("type %s: lifecycle %s: %w", cur, dc.t.Lifecycle, ErrUnknown)
 			}
@@ -218,7 +212,7 @@ func resolve(ref domain.TypeRef, decl map[domain.TypeRef]declared, platform algo
 				t.Properties = append(t.Properties, p)
 			}
 		}
-		t.Validators = append(t.Validators, dc.d.OwnBoundValidators(dc.t, platform)...)
+		t.Validators = append(t.Validators, dc.d.OwnBoundValidators(dc.t)...)
 		for _, sp := range dc.t.Search {
 			s := domain.SearchProperty{Property: sp.Property, Text: sp.Text, Facet: sp.Facet}
 			if i, ok := searchAt[sp.Property]; ok {
@@ -371,30 +365,16 @@ func (c *Catalog) CheckLink(typ, from, to string) error {
 // Source returns the latest published version of every domain (the registry: registrysvc.Service or its client).
 type Source func(ctx context.Context) ([]*methodology.Domain, error)
 
-// AlgorithmSource returns the platform-wide algorithm registry in force (ADR 0041): the registry: registrysvc.Service
-// or its client.
-type AlgorithmSource func(ctx context.Context) ([]algo.Algorithm, error)
-
 // Live holds the catalogue in force of a service: the built-in domains until Reload succeeds, then the published
 // domains of its source, reloaded when the registry reports a domain event.
 type Live struct {
-	src    Source
-	algSrc AlgorithmSource
-	cur    atomic.Pointer[Catalog]
+	src Source
+	cur atomic.Pointer[Catalog]
 }
 
-// NewLive returns a holder of the catalogue of src, starting with the built-in domains. No "platform@<name>"
-// algorithm reference resolves; use NewLiveWithAlgorithms for that.
+// NewLive returns a holder of the catalogue of src, starting with the built-in domains.
 func NewLive(src Source) *Live {
 	l := &Live{src: src}
-	l.cur.Store(Builtin())
-	return l
-}
-
-// NewLiveWithAlgorithms is NewLive, additionally resolving a "platform@<name>" algorithm reference (ADR 0041)
-// against algSrc.
-func NewLiveWithAlgorithms(src Source, algSrc AlgorithmSource) *Live {
-	l := &Live{src: src, algSrc: algSrc}
 	l.cur.Store(Builtin())
 	return l
 }
@@ -408,15 +388,7 @@ func (l *Live) Reload(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	var platform algo.Set
-	if l.algSrc != nil {
-		algs, err := l.algSrc(ctx)
-		if err != nil {
-			return err
-		}
-		platform.Algorithms = algs
-	}
-	c, err := NewWithPlatform(platform, ds...)
+	c, err := New(ds...)
 	if err != nil {
 		return err
 	}

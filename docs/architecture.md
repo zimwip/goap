@@ -573,12 +573,6 @@ node types plug validator instances on their properties, lifecycle transitions p
 instances, in call order. The type catalogue (the graph's copy of the registry's model) resolves the plugged instances (like the lifecycle, ADR 0014): validators run when items are added and when a change is applied, guards and
 actions when a transition is applied. Reference: [docs/dsl.md](dsl.md), IDE section *Algorithms*.
 
-A domain still declares its algorithms directly, but publishing one centralizes its canonical definition
-in a platform-wide registry at the same tier as the domains themselves (the registry's database, not the
-graph — see ADR 0041 for why): another domain's instance references it as `platform@<name>` instead of
-redeclaring it, and a name already centralized under a different definition refuses the publish
-([ADR 0041](adr/0041-centralized-algorithm-registry.md)).
-
 ## 3. Component architecture
 
 ```

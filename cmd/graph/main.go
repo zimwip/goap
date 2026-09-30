@@ -77,12 +77,10 @@ func main() {
 	var source typecat.Source = func(context.Context) ([]*methodology.Domain, error) {
 		return methodology.LoadDomains(platform.Env("GOAP_DOMAINS_DIR", "domains"))
 	}
-	var algSource typecat.AlgorithmSource
 	if url := platform.Env("GOAP_REGISTRY_URL", ""); url != "" {
-		client := registrysvc.NewClient(platform.H2CClient(), url, telemetry.ClientOptions()...)
-		source, algSource = client.Domains, client.Algorithms
+		source = registrysvc.NewClient(platform.H2CClient(), url, telemetry.ClientOptions()...).Domains
 	}
-	types := typecat.NewLiveWithAlgorithms(source, algSource)
+	types := typecat.NewLive(source)
 	g.Types = func() graph.TypeCatalog { return types.Get() }
 	for _, subject := range []string{"goap.registry.domain.published", "goap.registry.domain.deleted"} {
 		if err := events.Subscribe(subject, func([]byte) {

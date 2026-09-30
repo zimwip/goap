@@ -247,25 +247,6 @@ export interface AlgorithmInstance {
   values?: Record<string, unknown>;
 }
 
-/** A domain's algorithm instance referencing a platform-wide algorithm as `platform@<name>` instead of
- *  redeclaring it (ADR 0041). */
-export interface AlgorithmInstanceUsage {
-  domain?: string;
-  version?: string;
-  instance?: string;
-  values?: Record<string, unknown>;
-}
-
-/** An algorithm centralized in the platform-wide registry (ADR 0041): the domain that first published it, its
- *  canonical definition, addressable as `platform@<name>` from any domain's algorithm instances, and every
- *  instance that references it instead of redeclaring it. */
-export interface PlatformAlgorithm {
-  algorithm?: Algorithm;
-  sourceDomain?: string;
-  sourceVersion?: string;
-  instances?: AlgorithmInstanceUsage[];
-}
-
 export interface RunAlgorithmResponse {
   ok?: boolean;
   failures?: string[];
@@ -1558,9 +1539,6 @@ export const registry = {
       'RunAlgorithm',
       { algorithm, values, input },
     ),
-  /** The platform-wide algorithm registry (ADR 0041): algorithms centralized from the domains that declared them. */
-  listPlatformAlgorithms: (signal?: AbortSignal) =>
-    rpc<Record<string, never>, { algorithms?: PlatformAlgorithm[] }>(REGISTRY, 'ListPlatformAlgorithms', {}, signal),
 };
 
 /** The caller as the platform sees it: token principal completed by its User node (GET /api/whoami). */
