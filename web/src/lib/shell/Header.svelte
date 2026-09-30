@@ -10,6 +10,7 @@
   import { openSearch } from './searchOverlay.svelte.ts';
   import { session, refreshIdentity } from '../stores/session.svelte';
   import { methodologies, baselines, changes } from '../stores/catalog.svelte';
+  import { viewBaseline } from '../stores/baselineTool.svelte';
   import { live, processes } from '../stores/live.svelte';
   import { health, startHealth } from '../stores/status.svelte';
   import { openPlatformStatus } from './platformStatusState.svelte';
@@ -112,7 +113,7 @@
           label: b.name || shortId(b.id),
           detail: 'baseline',
           icon: 'database',
-          run: () => openTab({ kind: 'baseline', params: { id: b.id ?? '' } }),
+          run: () => void viewBaseline(b.id ?? '', b.namespace ?? ''),
         });
     for (const c of changes.items)
       if (match(`${c.title ?? ''} ${c.id} ${c.intent ?? ''}`, q))

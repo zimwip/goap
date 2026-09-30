@@ -74,6 +74,87 @@ func (g *Graph) BaselineNodes(ctx context.Context, id domain.BaselineID, q NodeQ
 	return page, nil
 }
 
+// LinkQuery selects a page of the links of a baseline.
+type LinkQuery struct {
+	// Type keeps the links of this type (empty: every type).
+	Type string
+	// Text keeps the links whose type or a string property contains it (case-insensitive).
+	Text          string
+	Offset, Limit int
+}
+
+// LinkPage is a page of the links of a baseline.
+type LinkPage struct {
+	Links []domain.Link
+	// Total is the number of links matching the query (all pages).
+	Total int
+	// Types counts the links of each type matching the text filter (the type filter aside), sorted by type.
+	Types []TypeCount
+}
+
+// BaselineLinks returns a page of the links of a baseline (both ends held by it), ordered by type then id.
+func (g *Graph) BaselineLinks(ctx context.Context, id domain.BaselineID, q LinkQuery) (page LinkPage, err error) {
+	if q.Limit <= 0 || q.Limit > MaxBrowseLimit {
+		q.Limit = MaxBrowseLimit
+	}
+	q.Offset = max(q.Offset, 0)
+	text := strings.ToLower(strings.TrimSpace(q.Text))
+	var links []domain.Link
+	if err = g.repo.InTx(ctx, func(tx Tx) (err error) {
+		b, err := tx.Baseline(ctx, id)
+		if err != nil {
+			return err
+		}
+		nodes, err := tx.NodesIn(ctx, id, "")
+		if err != nil {
+			return err
+		}
+		links, err = linksWithin(ctx, tx, b, nodes)
+		return err
+	}); err != nil {
+		return page, err
+	}
+	sort.Slice(links, func(i, j int) bool {
+		if links[i].Type != links[j].Type {
+			return links[i].Type < links[j].Type
+		}
+		return links[i].ID < links[j].ID
+	})
+	counts := map[string]int{}
+	var matched []domain.Link
+	for _, l := range links {
+		if text != "" && !linkMatches(l, text) {
+			continue
+		}
+		counts[l.Type]++
+		if q.Type == "" || l.Type == q.Type {
+			matched = append(matched, l)
+		}
+	}
+	for t, c := range counts {
+		page.Types = append(page.Types, TypeCount{Type: t, Count: c})
+	}
+	sort.Slice(page.Types, func(i, j int) bool { return page.Types[i].Type < page.Types[j].Type })
+	page.Total = len(matched)
+	if q.Offset < len(matched) {
+		page.Links = matched[q.Offset:min(q.Offset+q.Limit, len(matched))]
+	}
+	return page, nil
+}
+
+// linkMatches reports whether the type or a string property of l contains text (lower case).
+func linkMatches(l domain.Link, text string) bool {
+	if strings.Contains(strings.ToLower(l.Type), text) {
+		return true
+	}
+	for _, v := range l.Properties {
+		if s, ok := v.(string); ok && strings.Contains(strings.ToLower(s), text) {
+			return true
+		}
+	}
+	return false
+}
+
 // nodeMatches reports whether the key, the type or a string property of n contains text (lower case).
 func nodeMatches(n domain.Node, text string) bool {
 	if strings.Contains(strings.ToLower(n.Key), text) || strings.Contains(strings.ToLower(n.Type), text) {

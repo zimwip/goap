@@ -219,6 +219,24 @@ func (h *Handler) ListBaselineNodes(ctx context.Context, r *connect.Request[grap
 	return connect.NewResponse(out), nil
 }
 
+func (h *Handler) ListBaselineLinks(ctx context.Context, r *connect.Request[graphv1.ListBaselineLinksRequest]) (*connect.Response[graphv1.ListBaselineLinksResponse], error) {
+	id := domain.BaselineID(r.Msg.BaselineId)
+	b, err := h.Graph.Baseline(ctx, id)
+	if err != nil {
+		return nil, rpcerr.ToConnect(err)
+	}
+	page, err := h.Graph.BaselineLinks(ctx, id, graph.LinkQuery{Type: r.Msg.Type, Text: r.Msg.Query,
+		Offset: int(r.Msg.Offset), Limit: int(r.Msg.Limit)})
+	if err != nil {
+		return nil, rpcerr.ToConnect(err)
+	}
+	out := &graphv1.ListBaselineLinksResponse{Baseline: pbconv.BaselineToPB(b), Links: pbconv.LinksToPB(page.Links), Total: int32(page.Total)}
+	for _, t := range page.Types {
+		out.Types = append(out.Types, &graphv1.TypeCount{Type: t.Type, Count: int32(t.Count)})
+	}
+	return connect.NewResponse(out), nil
+}
+
 func (h *Handler) GetNodeNeighbourhood(ctx context.Context, r *connect.Request[graphv1.GetNodeNeighbourhoodRequest]) (*connect.Response[graphv1.GetNodeNeighbourhoodResponse], error) {
 	nb, err := h.Graph.NodeNeighbourhood(ctx, domain.BaselineID(r.Msg.BaselineId), domain.NodeID(r.Msg.NodeId))
 	if err != nil {

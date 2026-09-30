@@ -30,6 +30,7 @@
   import { openNode } from '../../nodeEditors';
   import { provideActions, notify } from '../../shell/workbench.svelte';
   import { refreshChanges, refreshBaselines } from '../../stores/catalog.svelte';
+  import { viewBaseline } from '../../stores/baselineTool.svelte';
   import { namespaceOf } from '../../namespace';
   import { processes } from '../../stores/live.svelte';
   import ProcessProgress from '../../components/ProcessProgress.svelte';
@@ -494,7 +495,7 @@
   }
 
   function openBaseline(id: string | undefined) {
-    if (id) openTab({ kind: 'baseline', params: { id } });
+    if (id) void viewBaseline(id, change?.namespace ?? '');
   }
 
   provideActions(

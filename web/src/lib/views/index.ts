@@ -5,7 +5,7 @@ import { formatDate, formatInt, shortId } from '../api';
 import { peekDraft, drafts } from '../stores/drafts.svelte';
 import { peekDomainDraft, domainDrafts } from '../stores/domains.svelte';
 import { processes, live } from '../stores/live.svelte';
-import { baselines, changes } from '../stores/catalog.svelte';
+import { changes } from '../stores/catalog.svelte';
 import NodeTab from './editors/NodeTab.svelte';
 import { draftGroup, KIND_SECTION, SECTION_ICON } from './editors/methodologyTabs';
 import { activeDraft } from './bottom/activeDraft';
@@ -44,7 +44,6 @@ import MethodTab from './editors/MethodTab.svelte';
 import GraphExplorerTab from './editors/GraphExplorerTab.svelte';
 import RunTab from './editors/RunTab.svelte';
 import ChangeTab from './editors/ChangeTab.svelte';
-import BaselineTab from './editors/BaselineTab.svelte';
 import PoliciesTab from './editors/PoliciesTab.svelte';
 import ImportTab from './editors/ImportTab.svelte';
 
@@ -378,16 +377,6 @@ registerView({
   component: ChangeTab,
   key: (p) => p.id ?? '',
   tabTitle: (t) => changes.items.find((c) => c.id === t.params.id)?.title || `Change ${shortId(t.params.id)}`,
-});
-
-registerView({
-  id: 'baseline',
-  zone: 'editor',
-  title: 'Baseline',
-  icon: 'database',
-  component: BaselineTab,
-  key: (p) => p.id ?? '',
-  tabTitle: (t) => t.params.name || baselines.items.find((b) => b.id === t.params.id)?.name || `Baseline ${shortId(t.params.id)}`,
 });
 
 registerView({

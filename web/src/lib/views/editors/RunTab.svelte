@@ -33,6 +33,8 @@
   } from '../../api';
   import { watchEvents, type StreamStatus } from '../../stream';
   import { processes, ingestProcess, ingestEvent, childrenOf, refreshProcesses } from '../../stores/live.svelte';
+  import { changes, refreshChanges } from '../../stores/catalog.svelte';
+  import { viewBaseline } from '../../stores/baselineTool.svelte';
   import { chainOf, inChain, restartedStepNumber } from '../../flowChain';
   import { namespaceOf } from '../../namespace';
   import { loadMethodology, published } from '../../stores/assistant.svelte';
@@ -194,6 +196,13 @@
     openTab({ kind: 'run', params: { id: pid } }, { pin });
   }
 
+  async function openBaseline(id: string | undefined) {
+    if (!id) return;
+    if (!changes.loaded) await refreshChanges();
+    const ns = changes.items.find((c) => c.id === process?.changeId)?.namespace ?? '';
+    void viewBaseline(id, ns);
+  }
+
   provideActions(
     () => tab.id,
     () => [
@@ -291,7 +300,7 @@
           {/if}
           {#if process.baselineId}
             <dt>Baseline</dt>
-            <dd><button type="button" class="link mono" onclick={() => openTab({ kind: 'baseline', params: { id: process.baselineId ?? '' } })}>{shortId(process.baselineId)}</button></dd>
+            <dd><button type="button" class="link mono" onclick={() => void openBaseline(process.baselineId)}>{shortId(process.baselineId)}</button></dd>
           {/if}
           {#if process.parentId}
             <dt>Parent</dt>
