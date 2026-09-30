@@ -229,9 +229,9 @@ func TestEnsureUserWaitsForDefaultOrg(t *testing.T) {
 	}
 }
 
-// A new user joins the unit flagged `default` (ADR 0042), ORG-DEFAULT when no other unit carries the flag;
-// with several flagged, the smallest key wins.
-func TestEnsureUserJoinsDefaultUnit(t *testing.T) {
+// A new user joins the waiting unit an administrator flagged (ADR 0042), ORG-DEFAULT when none is; with
+// several flagged, the smallest key wins; clearing the flag sends newcomers back to ORG-DEFAULT.
+func TestEnsureUserJoinsWaitingUnit(t *testing.T) {
 	ctx := context.Background()
 	g := graph.New(graph.NewMemory())
 	if _, err := graphsvc.SeedDefaults(ctx, g); err != nil {
@@ -277,24 +277,35 @@ func TestEnsureUserJoinsDefaultUnit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !access.IsDefaultUnit(root.Properties) {
-		t.Fatalf("ORG-DEFAULT must be seeded as the default unit: %+v", root.Properties)
+	if access.IsWaitingUnit(root.Properties) {
+		t.Fatalf("no unit is a waiting unit until an administrator says so: %+v", root.Properties)
 	}
 	if got := unitOf("alice"); got != domain.DefaultOrg {
 		t.Fatalf("alice joined %s, want %s", got, domain.DefaultOrg)
 	}
 
-	// a second flagged unit: both carry the flag, the smallest key wins
+	// the administrator creates a waiting unit
 	rootRef := root.Ref()
-	commit(graph.NodeEdit{Key: "TEAM-A", Type: mcp.NodeTypeOrgUnit, Props: map[string]any{"name": "Team A", access.PropDefaultUnit: true},
-		Links: []graph.LinkEdit{{Type: access.LinkPartOf, To: &rootRef}}})
-	if got := unitOf("bob"); got != domain.DefaultOrg {
-		t.Fatalf("bob joined %s, want %s (smallest key of the flagged units)", got, domain.DefaultOrg)
+	flag := map[string]any{"name": "Waiting", access.PropWaitingUnit: true}
+	commit(graph.NodeEdit{Key: "WAIT-B", Type: mcp.NodeTypeOrgUnit, Props: flag, Links: []graph.LinkEdit{{Type: access.LinkPartOf, To: &rootRef}}})
+	if got := unitOf("bob"); got != "WAIT-B" {
+		t.Fatalf("bob joined %s, want WAIT-B", got)
 	}
-
-	// the flag moved: new users join TEAM-A
-	commit(graph.NodeEdit{Pre: &rootRef, Props: map[string]any{access.PropDefaultUnit: nil}})
-	if got := unitOf("carol"); got != "TEAM-A" {
-		t.Fatalf("carol joined %s, want TEAM-A", got)
+	// a second one flagged: the smallest key wins
+	commit(graph.NodeEdit{Key: "WAIT-A", Type: mcp.NodeTypeOrgUnit, Props: flag, Links: []graph.LinkEdit{{Type: access.LinkPartOf, To: &rootRef}}})
+	if got := unitOf("carol"); got != "WAIT-A" {
+		t.Fatalf("carol joined %s, want WAIT-A (smallest key of the flagged units)", got)
+	}
+	// flags cleared: back to ORG-DEFAULT
+	for _, k := range []string{"WAIT-A", "WAIT-B"} {
+		n, err := g.NodeByKey(ctx, mcp.NamespaceOrganisation, k)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ref := n.Ref()
+		commit(graph.NodeEdit{Pre: &ref, Props: map[string]any{access.PropWaitingUnit: nil}})
+	}
+	if got := unitOf("dave"); got != domain.DefaultOrg {
+		t.Fatalf("dave joined %s, want %s", got, domain.DefaultOrg)
 	}
 }

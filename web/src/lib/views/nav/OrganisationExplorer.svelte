@@ -9,7 +9,8 @@
   import { openContextMenu } from '../../shell/contextMenuState.svelte';
   import { notify } from '../../shell/workbench.svelte';
   import { graph, errorMessage, nodeTitle, type GraphNode, type Link } from '../../api';
-  import { ORG_UNIT_TYPE, PART_OF } from '../../orgTypes';
+  import { ORG_UNIT_TYPE, PART_OF, WAITING_UNIT_PROP } from '../../orgTypes';
+  import { hasAnyRole } from '../../stores/session.svelte';
 
   const NS = 'organisation';
 
@@ -21,6 +22,8 @@
   let name = $state('');
   let kind = $state('team');
   let parent = $state('');
+  // the new unit is the waiting unit of new users (ADR 0042), at the administrator's discretion
+  let waiting = $state(false);
   let saving = $state(false);
 
   async function load() {
@@ -99,15 +102,22 @@
           {
             key,
             type: ORG_UNIT_TYPE,
-            props: { name: name.trim(), kind },
+            props: { name: name.trim(), kind, ...(waiting ? { [WAITING_UNIT_PROP]: true } : {}) },
             rationale: `Create organisational unit ${name.trim()}`,
             ...(parentNode ? { links: [{ type: PART_OF, to: { id: parentNode.id, version: parentNode.version } }] } : {}),
           },
+          // one waiting unit at a time: the flag moves to the new unit
+          ...(waiting
+            ? nodes
+                .filter((n) => n.props?.[WAITING_UNIT_PROP] === true)
+                .map((n) => ({ pre: { id: n.id, version: n.version }, props: { [WAITING_UNIT_PROP]: null }, rationale: `${key} is the waiting unit now` }))
+            : []),
         ],
       });
       notify(`Unit ${key} created.`, 'ok');
       name = '';
       parent = '';
+      waiting = false;
       adding = false;
       await refreshBaselines(NS);
       await load();
@@ -130,7 +140,7 @@
     ontoggle={() => toggle(`org:${n.id}`, true)}
     onselect={() => open(n)}
     onopen={() => open(n, true)}
-    badge={typeof n.props?.['kind'] === 'string' ? (n.props['kind'] as string) : undefined}
+    badge={n.props?.[WAITING_UNIT_PROP] === true ? 'waiting' : typeof n.props?.['kind'] === 'string' ? (n.props['kind'] as string) : undefined}
     oncontextmenu={(e) =>
       openContextMenu(e, [
         { label: 'Open', icon: 'user', run: () => open(n, true) },
@@ -166,6 +176,11 @@
         <option value="">No parent</option>
         {#each nodes as n (n.id)}<option value={n.id}>{label(n)}</option>{/each}
       </select>
+      {#if hasAnyRole('admin')}
+        <label class="check" title="Users signing in for the first time join this unit until an administrator moves them">
+          <input type="checkbox" bind:checked={waiting} /> Waiting unit for new users
+        </label>
+      {/if}
       <button type="submit" class="small" disabled={saving || !name.trim()}>Create</button>
     </form>
   {/if}

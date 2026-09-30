@@ -31,14 +31,15 @@ const (
 	// ResourcePolicy is the ABAC resource that guards changes to User and Policy nodes.
 	ResourcePolicy = "policy"
 
-	// PropDefaultUnit is the OrgUnit property that flags the unit new users join (ADR 0042): the one a
-	// User created on first sign-in is linked member_of.
-	PropDefaultUnit = "default"
+	// PropWaitingUnit is the OrgUnit property that flags the waiting unit (ADR 0042): a unit an administrator
+	// creates, at their discretion, for users signing in for the first time — they are linked member_of it
+	// until an administrator moves them. Without one, new users join domain.DefaultOrg.
+	PropWaitingUnit = "waiting"
 )
 
-// IsDefaultUnit reports whether the properties of an OrgUnit flag it as the unit new users join.
-func IsDefaultUnit(props map[string]any) bool {
-	v, _ := props[PropDefaultUnit].(bool)
+// IsWaitingUnit reports whether the properties of an OrgUnit flag it as the waiting unit of new users.
+func IsWaitingUnit(props map[string]any) bool {
+	v, _ := props[PropWaitingUnit].(bool)
 	return v
 }
 

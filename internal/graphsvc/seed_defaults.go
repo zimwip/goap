@@ -98,7 +98,7 @@ func SeedDefaults(ctx context.Context, g *graph.Graph) (bool, error) {
 	}
 	if err := applyOn(ctx, g, mcp.NamespaceOrganisation, "Default organisation", []graph.NodeEdit{
 		createNode(domain.DefaultOrg, mcp.NodeTypeOrgUnit, map[string]any{"name": "Default organisation", "kind": "company",
-			"description": "Holds the changes that name no unit, and the adapters every unit inherits.", access.PropDefaultUnit: true}),
+			"description": "Holds the changes that name no unit, and the adapters every unit inherits."}),
 	}); err != nil {
 		return false, err
 	}
@@ -192,14 +192,14 @@ func SeedAccess(ctx context.Context, g *graph.Graph) (bool, error) {
 	return true, applyOn(ctx, g, mcp.NamespaceOrganisation, "Default policies", items)
 }
 
-// SeedUser creates the User node of a subject, member of a unit (DefaultUnit when u.Unit is empty:
+// SeedUser creates the User node of a subject, member of a unit (NewUserUnit when u.Unit is empty:
 // member_of is exactly one link, ADR 0040, never left unset).
 func SeedUser(ctx context.Context, g *graph.Graph, u access.User) error {
 	user := createNode(access.UserKey(u.Subject), access.NodeTypeUser, u.Props())
 	var unit domain.Node
 	var err error
 	if u.Unit == "" {
-		unit, err = DefaultUnit(ctx, g)
+		unit, err = NewUserUnit(ctx, g)
 	} else {
 		unit, err = g.NodeByKey(ctx, mcp.NamespaceOrganisation, u.Unit)
 	}

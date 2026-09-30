@@ -45,7 +45,7 @@
       <input id="signin-password" type="password" bind:value={password} autocomplete={mode === 'login' ? 'current-password' : 'new-password'} minlength="8" required />
     </div>
     <button type="submit" class="primary" disabled={busy}>{mode === 'login' ? 'Sign in' : 'Create account'}</button>
-    {#if mode === 'register'}<p class="hint">New accounts join the default organisation; the first one created becomes the administrator.</p>{/if}
+    {#if mode === 'register'}<p class="hint">New accounts wait in the unit chosen by the administrator; the first one created becomes the administrator.</p>{/if}
   </form>
 </div>
 

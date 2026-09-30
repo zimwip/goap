@@ -20,7 +20,8 @@
   import { headGraph, findNode, applyOnMain, createNodeItem, updateNodeItem, deleteNodeItem, moveNodeItem, currentLink, refOf, type HeadGraph } from '../../graphEdit';
   import { openTab } from '../../shell/tabs.svelte';
   import { notify, provideActions } from '../../shell/workbench.svelte';
-  import { ADAPTER_TYPE, ORG_UNIT_TYPE, OWNER, PART_OF, DEFAULT_ORG, DEFAULT_UNIT_PROP } from '../../orgTypes';
+  import { ADAPTER_TYPE, ORG_UNIT_TYPE, OWNER, PART_OF, DEFAULT_ORG, WAITING_UNIT_PROP, newUserUnit } from '../../orgTypes';
+  import { hasAnyRole } from '../../stores/session.svelte';
   import { confirmDialog } from '../../shell/confirmState.svelte';
 
   let { tab }: { tab: Tab } = $props();
@@ -109,36 +110,40 @@
     }
   }
 
-  // The unit new users join (ADR 0042): the OrgUnit flagged `default`, else ORG-DEFAULT (a graph seeded before
-  // the flag existed). Making this unit the default moves the flag in one change: set here, cleared on every
-  // unit that carries it, so exactly one unit keeps it.
-  const flagged = $derived((head?.nodes ?? []).filter((n) => n.type === ORG_UNIT_TYPE && n.props?.[DEFAULT_UNIT_PROP] === true));
-  const defaultKey = $derived(flagged.map((n) => n.key ?? '').sort()[0] || DEFAULT_ORG);
-  const isDefault = $derived(defaultKey === key);
-  let defaultBusy = $state(false);
+  // The waiting unit (ADR 0042): a unit an administrator flags, at their discretion, for users signing in
+  // for the first time; with none, they join ORG-DEFAULT. Making this unit the waiting unit moves the flag in
+  // one change (set here, cleared on every unit carrying it); clearing it sends newcomers back to ORG-DEFAULT.
+  const flagged = $derived((head?.nodes ?? []).filter((n) => n.type === ORG_UNIT_TYPE && n.props?.[WAITING_UNIT_PROP] === true));
+  const joinKey = $derived(newUserUnit(flagged));
+  const isWaiting = $derived(flagged.some((n) => n.key === key));
+  const isAdmin = $derived(hasAnyRole('admin'));
+  let waitingBusy = $state(false);
 
-  async function makeDefault() {
-    if (!unit || !head || isDefault) return;
-    const ok = await confirmDialog({
-      title: 'Default unit for new users',
-      message: `Users signing in for the first time will join ${key} instead of ${defaultKey}. Existing users stay where they are.`,
-      confirmLabel: 'Make default',
-    });
+  async function setWaiting(on: boolean) {
+    if (!unit || !head || on === isWaiting) return;
+    const ok = await confirmDialog(
+      on
+        ? {
+            title: 'Waiting unit',
+            message: `Users signing in for the first time will join ${key} (instead of ${joinKey}) until an administrator moves them. Existing users stay where they are.`,
+            confirmLabel: 'Make waiting unit',
+          }
+        : { title: 'Waiting unit', message: `New users will join ${DEFAULT_ORG} again instead of ${key}.`, confirmLabel: 'Clear' },
+    );
     if (!ok) return;
-    defaultBusy = true;
+    waitingBusy = true;
     error = '';
     try {
-      const edits = [
-        updateNodeItem(unit, { [DEFAULT_UNIT_PROP]: true }),
-        ...flagged.filter((n) => n.id !== unit.id).map((n) => updateNodeItem(n, { [DEFAULT_UNIT_PROP]: null })),
-      ];
-      await applyOnMain(NS, `Default unit ${key}`, `New users join ${key}`, head.baselineId, edits);
-      notify(`New users now join ${key}.`, 'ok');
+      const edits = on
+        ? [updateNodeItem(unit, { [WAITING_UNIT_PROP]: true }), ...flagged.filter((n) => n.id !== unit.id).map((n) => updateNodeItem(n, { [WAITING_UNIT_PROP]: null }))]
+        : flagged.map((n) => updateNodeItem(n, { [WAITING_UNIT_PROP]: null }));
+      await applyOnMain(NS, `Waiting unit ${on ? key : 'cleared'}`, on ? `New users wait in ${key}` : `New users join ${DEFAULT_ORG}`, head.baselineId, edits);
+      notify(on ? `New users now wait in ${key}.` : `New users now join ${DEFAULT_ORG}.`, 'ok');
       await load();
     } catch (e) {
       error = errorMessage(e);
     } finally {
-      defaultBusy = false;
+      waitingBusy = false;
     }
   }
 
@@ -382,11 +387,12 @@
               </dd>
               <dt>New users</dt>
               <dd>
-                {#if isDefault}
-                  <span class="badge">join this unit</span>
+                {#if isWaiting}
+                  <span class="badge">waiting unit: new users join it</span>
+                  {#if isAdmin}<button type="button" class="small ghost" disabled={waitingBusy} onclick={() => setWaiting(false)}>Clear</button>{/if}
                 {:else}
-                  <span class="muted">join <button type="button" class="link mono" onclick={() => openTab({ kind: 'unit', params: { key: defaultKey } })}>{defaultKey}</button></span>
-                  <button type="button" class="small ghost" disabled={defaultBusy} onclick={makeDefault}>Make default</button>
+                  <span class="muted">join <button type="button" class="link mono" onclick={() => openTab({ kind: 'unit', params: { key: joinKey } })}>{joinKey}</button></span>
+                  {#if isAdmin}<button type="button" class="small ghost" disabled={waitingBusy} onclick={() => setWaiting(true)}>Make waiting unit</button>{/if}
                 {/if}
               </dd>
               {#if childKeys.length}
