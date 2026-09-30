@@ -267,7 +267,7 @@ observed, the step is marked `effectsMet=false`; after 2 failures the action is 
 process and the planner replans toward another action producing the same effect (e.g. fallback
 `identify_impacts` (LLM) → `select_impacts` (human)). If no plan exists, the process **waits** (task `condition`)
 when what is missing is established outside it (no action of its agent produces it, and assuming it the goal is
-reachable: another process, a person, the state of the change), else it goes to `stuck` (ADR 0036 §3).
+reachable: another process, a person, the state of the change), else it goes to `stuck`, waiting for a person to unblock it (ADR 0036 §3).
 
 Executor types:
 
@@ -306,7 +306,7 @@ Before any planning:
    ┌──► observe: hydrate blackboard, evaluate conditions ──► goal reached? ── yes ──► completed
    │           │ no
    │           ▼
-   │    plan: A*(WorldState, actions, goal) ── no plan ──► waiting (conditions from outside) | stuck
+   │    plan: A*(WorldState, actions, goal) ── no plan ──► waiting (conditions from outside) | stuck (a person unblocks)
    │           │
    │           ▼
    │    act: execute the plan's 1st action
@@ -493,7 +493,10 @@ matching event, with the event in `vars.event` (items carry `at` to compare with
 while it works waiting in its inbox. Back the other way, through the state: a step may need what the transverse process
 establishes (`risks_under_control`): the process then **waits** for those conditions (`waiting`, task `condition`),
 told from a genuinely **stuck** one (nothing established outside would unblock it, `Engine.awaited`); both are tried
-again when the change moves (`Engine.Accompany`, fed by the trigger manager's events). A transverse methodology has no namespace of its own.
+again when the change moves (`Engine.Accompany`, fed by the trigger manager's events). Neither is an end: a person who
+answers for the run (its initiator, the accountable role of its step, a member of its organisation) can always unblock
+it (`Engine.Unblock`): waive conditions (a `waiver` item on the change, with its reason, applied to that run only),
+retry the actions it gave up on, or abandon it. A transverse methodology has no namespace of its own.
 `methodologies/risk-management.yaml` applies to `sdlc`: at each step of its processes the risks that step introduces
 are reviewed, and every high one gets an action; sdlc's release waits for `risks_under_control`.
 

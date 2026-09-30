@@ -682,6 +682,9 @@ func (e *Engine) cycle(ctx context.Context, p *Process, m *methodology.Compiled)
 		}
 		p.Status = StatusStuck
 		p.Error = fmt.Sprintf("no plan reaches goal %s from the current state", goal.Name)
+		// a person can always unblock it: what would, if they declare it established
+		p.Pending = &HumanTask{Kind: TaskUnblock, Step: len(p.Steps), Conditions: e.unblocking(p.World, actions, goal.PlanningGoal()),
+			Description: "Stuck: " + p.Error + ". Declare conditions established, retry the actions it gave up on, or abandon it."}
 		e.journal(ctx, p, tickRecordWithCalls(domain.ExecutionRecord{Kind: domain.ExecTick, Step: len(p.Steps), Before: maps.Clone(p.World), Error: p.Error,
 			StartedAt: tickStart, EndedAt: e.clock()}, planCalls))
 		return nil
@@ -1004,8 +1007,8 @@ func (e *Engine) runChildStep(ctx context.Context, h *Host, key, methodologyName
 	}
 	res := dsl.AgentResult{Status: string(child.Status), Goal: child.Goal, ProcessID: child.ID}
 	switch child.Status {
-	case StatusCompleted, StatusStuck, StatusFailed:
-		return res, nil
+	case StatusCompleted, StatusFailed:
+		return res, nil // a stuck child is not an end: the step waits until a person unblocks it
 	}
 	h.mu.Lock()
 	h.waitingOn = child.ID
@@ -1178,6 +1181,11 @@ func (e *Engine) observe(ctx context.Context, p *Process, m *methodology.Compile
 	bb.Supertypes = e.supertypesOf(m)
 	res := m.Conditions.Evaluate(bb)
 	res.State["change_bound"] = p.ChangeID != ""
+	// what people declared established for this run (Engine.Unblock)
+	for k, v := range bb.Change.Waivers(p.ID) {
+		res.State[k] = v
+		delete(res.Errors, k)
+	}
 	p.World = res.State
 	p.Unknown = res.Errors
 	return bb, nil
@@ -1317,10 +1325,12 @@ func (e *Engine) save(ctx context.Context, p *Process, event string) error {
 	if err := e.Store.Put(ctx, p); err != nil {
 		return err
 	}
-	if p.Status.Terminal() {
+	if p.Status.Terminal() || p.Status == StatusStuck {
 		if e.Sandboxes != nil {
 			e.Sandboxes.Release(ctx, p.ID)
 		}
+	}
+	if p.Status.Terminal() {
 		if p.ParentID != "" {
 			parent, child := p.ParentID, p.ID
 			e.background(func() { e.resumeParent(parent, child) })

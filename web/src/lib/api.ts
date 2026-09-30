@@ -1024,8 +1024,8 @@ export interface RelaunchProposal {
 
 export interface HumanTask {
   /** input: enter items · approval: approve or reject · agent: waiting on a sub-agent · flow: adopt or discard a relaunched flow · board: inconsistent blackboard · relaunched: waiting for a relaunched flow · condition: waiting for conditions established outside the process */
-  kind?: 'input' | 'approval' | 'agent' | 'flow' | 'board' | 'relaunched' | 'condition' | string;
-  /** kind "condition": the conditions awaited ("name" expected true, "!name" expected false) */
+  kind?: 'input' | 'approval' | 'agent' | 'flow' | 'board' | 'relaunched' | 'condition' | 'unblock' | string;
+  /** kind "condition": the conditions awaited; "unblock" (stuck): those that would unblock it ("name" expected true, "!name" expected false) */
   conditions?: string[];
   /** kind "board": what is wrong, and the step to restart from (absent when none can be) */
   issues?: BoardIssue[];
@@ -1758,6 +1758,14 @@ export const engine = {
       processId,
       approve,
       comment,
+    }),
+  /** Unblocks a run waiting for conditions or stuck (ADR 0036 §3): waive conditions (with a reason), retry, or abandon (with a reason). */
+  unblockProcess: (processId: string, decision: 'waive' | 'retry' | 'abandon', conditions: string[] = [], reason = '') =>
+    rpc<{ processId: string; decision: string; conditions: string[]; reason: string }, { process?: Process }>(ENGINE, 'UnblockProcess', {
+      processId,
+      decision,
+      conditions,
+      reason,
     }),
   /** Restarts a run from one of its steps on a new flow branch; returns the new process. */
   relaunchStep: (processId: string, step: number, reason: string, guidance = '') =>

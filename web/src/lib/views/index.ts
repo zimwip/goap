@@ -77,8 +77,9 @@ registerView({
   order: 2,
   badge: () => {
     let n = 0;
-    // what waits for someone: not the runs waiting for conditions another process establishes
-    for (const p of processes.values()) if ((p.status === 'waiting' && p.pending?.kind !== 'condition') || p.status === 'clarifying') n++;
+    // what waits for someone (stuck runs included): not the runs waiting for conditions another process establishes
+    for (const p of processes.values())
+      if ((p.status === 'waiting' && p.pending?.kind !== 'condition') || p.status === 'stuck' || p.status === 'clarifying') n++;
     return n || undefined;
   },
 });

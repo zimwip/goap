@@ -78,6 +78,16 @@ events of the change they share, and by its state.
   item added), so a waiting process resumes as soon as the risks are mitigated. A companion waiting for conditions is
   run again by its next event. Signals (`change.signal`, ADR 0031) remain for what must wake a process that neither
   waits for conditions nor is stuck.
+- **A person can always unblock a run.** Neither state is an end: a stuck process is not terminal (its parent step
+  keeps waiting), it carries a task `unblock` with the conditions that would unblock it, and a waiting one may be
+  decided on as well (`Engine.Unblock`, `UnblockProcess`). Whoever answers for the run decides: its initiator or the
+  initiator of a run above it (the owner of the work), the accountable role of the step it carries out, or a holder of
+  `process:unblock` (by default the members of its organisation who may run processes, and the administrators):
+  - **waive**: declare conditions established for this run, with a reason. It is a `waiver` item on the change
+    (`{process, conditions, reason, by}`), applied over the evaluated conditions of that run only, and journaled
+    (`unblock` record): the change keeps who took the decision and why (the owner accepts the risks, say);
+  - **retry**: the actions the run gave up on (disabled after failures or a rejection) are tried again;
+  - **abandon**: the run fails with the reason; the step that started it fails with it.
 
 A transverse methodology has no namespace of its own: it acts in the namespace of the change.
 

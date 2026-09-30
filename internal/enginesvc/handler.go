@@ -198,6 +198,16 @@ func (h *Handler) ApproveAction(ctx context.Context, r *connect.Request[enginev1
 	return connect.NewResponse(&enginev1.ApproveActionResponse{Process: ProcessToPB(p)}), nil
 }
 
+func (h *Handler) UnblockProcess(ctx context.Context, r *connect.Request[enginev1.UnblockProcessRequest]) (*connect.Response[enginev1.UnblockProcessResponse], error) {
+	p, err := h.Engine.Unblock(h.principal(ctx, r.Header()), r.Msg.ProcessId,
+		engine.UnblockRequest{Decision: r.Msg.Decision, Conditions: r.Msg.Conditions, Reason: r.Msg.Reason})
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	h.run(p)
+	return connect.NewResponse(&enginev1.UnblockProcessResponse{Process: ProcessToPB(p)}), nil
+}
+
 func (h *Handler) RelaunchStep(ctx context.Context, r *connect.Request[enginev1.RelaunchStepRequest]) (*connect.Response[enginev1.RelaunchStepResponse], error) {
 	ctx = h.principal(ctx, r.Header())
 	if err := h.loadAuthorized(ctx, r.Msg.ProcessId, "relaunch"); err != nil {

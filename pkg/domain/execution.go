@@ -19,6 +19,9 @@ const (
 	// ExecAttach records a process being bound to a change (ADR 0031): the eager
 	// default at Start, or an agent's own explicit bind of a deferred process.
 	ExecAttach = "attach"
+	// ExecUnblock records a person's decision on a run waiting for conditions or stuck (ADR 0036 §3): waive
+	// conditions, retry, abandon.
+	ExecUnblock = "unblock"
 )
 
 // ExecutionRecord is one entry of the execution journal of a change.
