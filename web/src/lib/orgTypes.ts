@@ -21,3 +21,7 @@ export const ASSIGNS_PROJECT = 'organisation@assigns_project';
 // units that need no parent (ADR 0040).
 export const DEFAULT_ORG = 'ORG-DEFAULT';
 export const DEFAULT_PROJECT = 'PROJ-ROOT';
+
+// The OrgUnit property flagging the unit new users join (ADR 0042; mirrors access.PropDefaultUnit): a User
+// created on first sign-in is linked member_of it, ORG-DEFAULT when no unit carries it.
+export const DEFAULT_UNIT_PROP = 'default';

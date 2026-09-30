@@ -30,7 +30,17 @@ const (
 
 	// ResourcePolicy is the ABAC resource that guards changes to User and Policy nodes.
 	ResourcePolicy = "policy"
+
+	// PropDefaultUnit is the OrgUnit property that flags the unit new users join (ADR 0042): the one a
+	// User created on first sign-in is linked member_of.
+	PropDefaultUnit = "default"
 )
+
+// IsDefaultUnit reports whether the properties of an OrgUnit flag it as the unit new users join.
+func IsDefaultUnit(props map[string]any) bool {
+	v, _ := props[PropDefaultUnit].(bool)
+	return v
+}
 
 // User is a person or a service account. Roles are granted to the subject whatever the token carries.
 type User struct {
@@ -311,11 +321,22 @@ type Directory struct {
 // Snapshot returns the current snapshot. A graph without any baseline yields an empty one; when the graph
 // cannot be read the last snapshot (nil if none) is returned with the error.
 func (d *Directory) Snapshot(ctx context.Context) (*Snapshot, error) {
+	s, _, err := d.snapshots().Get(ctx)
+	return s, err
+}
+
+// Refresh reads the head now, past the TTL: after a write the next calls must see (a user just declared at
+// sign-in, ADR 0042).
+func (d *Directory) Refresh(ctx context.Context) error {
+	_, _, err := d.snapshots().Fresh(ctx)
+	return err
+}
+
+func (d *Directory) snapshots() *graphsnap.Cache[*Snapshot] {
 	d.once.Do(func() {
 		d.cache = graphsnap.Cache[*Snapshot]{Graph: d.Graph, Namespace: mcp.NamespaceOrganisation, TTL: d.TTL, Build: BuildSnapshot}
 	})
-	s, _, err := d.cache.Get(ctx)
-	return s, err
+	return &d.cache
 }
 
 // Enrich completes a principal from the current snapshot; when the graph cannot be read the
