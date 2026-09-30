@@ -66,10 +66,18 @@ events of the change they share, and by its state.
   prompt names the step that completed. Events that arrive while it works wait in its **inbox** and are handled one
   after the other: no step goes unreviewed.
 - **Back to the served methodology, through the state.** A step may wait for what the transverse process establishes
-  (sdlc's `release` needs `risks_under_control`). Until then the served process is stuck (the progress shows the step
-  blocked with what it needs); a process stuck on a change is **tried again when the change moves** because of
-  someone else (a step completed, a process completed, an item added), so it resumes as soon as the risks are
-  mitigated. Signals (`change.signal`, ADR 0031) remain for what must wake a process that is not stuck.
+  (sdlc's `release` needs `risks_under_control`). A process whose goal no plan reaches is told apart:
+  - **waiting** (`waiting`, task `condition` with the awaited `conditions`) when what is missing is established
+    outside it: no action of its agent has it as an effect, and assuming it lets the admissible actions reach the goal.
+    The progress shows the step `waiting` for those conditions; it is not a task for anyone, and no notice is raised;
+  - **stuck** otherwise: nothing established outside would unblock it (the agent's action that would is disabled
+    after repeated failures or not bound by the organisation, or the methodology cannot reach the goal). The progress
+    shows the step `blocked` with what it needs.
+
+  Both are **tried again when the change moves** because of someone else (a step completed, a process completed, an
+  item added), so a waiting process resumes as soon as the risks are mitigated. A companion waiting for conditions is
+  run again by its next event. Signals (`change.signal`, ADR 0031) remain for what must wake a process that neither
+  waits for conditions nor is stuck.
 
 A transverse methodology has no namespace of its own: it acts in the namespace of the change.
 

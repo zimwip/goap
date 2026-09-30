@@ -222,6 +222,8 @@
           <div class="inline"><ApprovalPanel process={p} ondecided={ingestProcess} /></div>
         {:else if p.pending.kind === 'agent'}
           <div class="working"><span class="spin" aria-hidden="true"></span> Waiting for another agent…</div>
+        {:else if p.pending.kind === 'condition'}
+          <div class="working">Waiting for {(p.pending.conditions ?? []).join(', ')}: another process or person establishes it; I resume when the change moves.</div>
         {/if}
       {/key}
     {:else if status === 'stuck'}

@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"slices"
 	"testing"
 	"time"
 
@@ -212,11 +213,15 @@ func TestChoreographyThroughTheEventsOfTheChange(t *testing.T) {
 		t.Fatal(err)
 	}
 	e.schedule(p.ID)
-	eventually(t, "the flow is blocked by the risk and the watch has the step in its inbox", func() bool {
-		return get(p.ID).Status == StatusStuck && len(get(watch.ID).Inbox) == 1
+	eventually(t, "the flow waits for the risks to be under control and the watch has the step in its inbox", func() bool {
+		return get(p.ID).WaitsForConditions() && len(get(watch.ID).Inbox) == 1
 	})
-	if pr := mustProgress(t, e, p.ID); findStep(pr.Steps, "flow/approve").State != StepBlocked {
-		t.Fatalf("approval: %+v", findStep(pr.Steps, "flow/approve"))
+	if q := get(p.ID); !slices.Equal(q.Pending.Conditions, []string{"risks_under_control"}) {
+		t.Fatalf("waiting for %v", q.Pending.Conditions)
+	}
+	if st := findStep(mustProgress(t, e, p.ID).Steps, "flow/approve"); st.State != StepWaiting || st.Waiting != TaskCondition ||
+		!slices.Contains(st.Missing, "risks_under_control") {
+		t.Fatalf("approval: %+v", st)
 	}
 
 	// the watch mitigates: the flow is tried again and reaches its approval; the watch reviews the risks of the step

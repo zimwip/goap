@@ -22,9 +22,9 @@ type Status string
 const (
 	StatusClarifying Status = "clarifying" // waiting for the user to answer an intent question
 	StatusRunning    Status = "running"
-	StatusWaiting    Status = "waiting" // waiting for a human action
+	StatusWaiting    Status = "waiting" // waiting for a person, a sub-agent, or conditions established outside the process
 	StatusCompleted  Status = "completed"
-	StatusStuck      Status = "stuck" // no plan reaches the goal
+	StatusStuck      Status = "stuck" // no plan reaches the goal, whatever is established outside the process
 	StatusFailed     Status = "failed"
 	// StatusSuperseded: the run was replaced by a relaunched flow that was adopted,
 	// or it is the relaunched flow itself that was discarded.
@@ -119,6 +119,10 @@ const (
 	// decision of the flow relaunched to fix it.
 	TaskBoard      = "board"
 	TaskRelaunched = "relaunched"
+	// TaskCondition: no plan reaches the goal only because of conditions none of the agent's actions establish
+	// (another process, a person, the state of the change will): the process waits for them, and is tried again
+	// when the change moves. A process that no such condition would unblock is stuck.
+	TaskCondition = "condition"
 )
 
 // HumanTask is a pending human action or approval.
@@ -145,6 +149,13 @@ type HumanTask struct {
 	FlowID string `json:"flowId,omitempty"`
 	// Context is the step of a process the task belongs to (ADR 0034, ADR 0035 §2): what to do and how.
 	Context *StepContext `json:"context,omitempty"`
+	// Conditions a TaskCondition waits for ("name" when expected true, "!name" when expected false).
+	Conditions []string `json:"conditions,omitempty"`
+}
+
+// WaitsForConditions reports whether the process waits for conditions established outside it (TaskCondition).
+func (p *Process) WaitsForConditions() bool {
+	return p.Status == StatusWaiting && p.Pending != nil && p.Pending.Kind == TaskCondition
 }
 
 // Usage accounts LLM tokens and calls.

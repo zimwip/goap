@@ -265,7 +265,9 @@ Thus the link on the domain axis is simultaneously the action's **specification*
 criterion**, and a **plannable effect**. After execution, the engine re-evaluates: if the promised effect is not
 observed, the step is marked `effectsMet=false`; after 2 failures the action is **disabled** for this
 process and the planner replans toward another action producing the same effect (e.g. fallback
-`identify_impacts` (LLM) → `select_impacts` (human)). If no plan exists, the process goes to `stuck`.
+`identify_impacts` (LLM) → `select_impacts` (human)). If no plan exists, the process **waits** (task `condition`)
+when what is missing is established outside it (no action of its agent produces it, and assuming it the goal is
+reachable: another process, a person, the state of the change), else it goes to `stuck` (ADR 0036 §3).
 
 Executor types:
 
@@ -304,7 +306,7 @@ Before any planning:
    ┌──► observe: hydrate blackboard, evaluate conditions ──► goal reached? ── yes ──► completed
    │           │ no
    │           ▼
-   │    plan: A*(WorldState, actions, goal) ── no plan ──► stuck
+   │    plan: A*(WorldState, actions, goal) ── no plan ──► waiting (conditions from outside) | stuck
    │           │
    │           ▼
    │    act: execute the plan's 1st action
@@ -489,8 +491,9 @@ every step of a process; a transverse methodology declares the events it reacts 
 companion run per change and process (`Trigger` = `companion:<methodology>/<process>`) runs again in place for each
 matching event, with the event in `vars.event` (items carry `at` to compare with `vars.event.at`), the events arriving
 while it works waiting in its inbox. Back the other way, through the state: a step may need what the transverse process
-establishes (`risks_under_control`), and a process stuck on a change is tried again when the change moves
-(`Engine.Accompany`, fed by the trigger manager's events). A transverse methodology has no namespace of its own.
+establishes (`risks_under_control`): the process then **waits** for those conditions (`waiting`, task `condition`),
+told from a genuinely **stuck** one (nothing established outside would unblock it, `Engine.awaited`); both are tried
+again when the change moves (`Engine.Accompany`, fed by the trigger manager's events). A transverse methodology has no namespace of its own.
 `methodologies/risk-management.yaml` applies to `sdlc`: at each step of its processes the risks that step introduces
 are reviewed, and every high one gets an action; sdlc's release waits for `risks_under_control`.
 

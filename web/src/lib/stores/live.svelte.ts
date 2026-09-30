@@ -144,6 +144,7 @@ function describe(e: WatchEvent): string {
   }
   const p = e.process;
   if (!p) return '';
+  if (e.type === 'waiting' && p.pending?.kind === 'condition') return `waiting for ${(p.pending.conditions ?? []).join(', ')}`;
   if (e.type === 'waiting' && p.pending) return `${p.pending.kind ?? 'input'} · ${p.pending.action ?? ''}`;
   if (e.type === 'intent') return p.question ? 'clarification' : p.goal ? `goal ${p.goal}` : '';
   const last = p.steps?.[p.steps.length - 1];

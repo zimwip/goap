@@ -29,8 +29,8 @@ func (p *Process) IsCompanion() bool { return strings.HasPrefix(p.Trigger, Compa
 // of the change they share. The processes of the transverse methodologies run alongside the changes of the
 // methodologies they apply to (appliesTo): each event they subscribe to (on) runs their companion run on the change
 // again, with the event in vars.event (the events that arrive while it is at work wait in its inbox); and when the
-// change moves because of someone else, the processes stuck on it are tried again (a step may wait for what another
-// process establishes, such as risks_under_control).
+// change moves because of someone else, the processes waiting on it for conditions they do not establish (such as
+// risks_under_control), and those stuck on it, are tried again.
 func (e *Engine) Accompany(ctx context.Context, ev TriggerEvent) {
 	var changeID domain.ChangeID
 	var of, from string // the methodology the change is worked with, the process the event comes from
@@ -46,10 +46,10 @@ func (e *Engine) Accompany(ctx context.Context, ev TriggerEvent) {
 	default:
 		return
 	}
-	// what someone else did may be what a stuck process waits for
+	// what someone else did may be what a process waits for
 	switch ev.Type {
 	case "step.completed", "process.completed", "change.item_added":
-		e.retryStuck(ctx, changeID, from)
+		e.retryBlocked(ctx, changeID, from)
 	}
 	if companion {
 		// a companion's own events do not wake companions; when it completes, it takes the next event of its inbox
@@ -122,8 +122,7 @@ func (e *Engine) accompany(ctx context.Context, m *methodology.Compiled, process
 		if p.ChangeID != changeID || p.Trigger != key {
 			continue
 		}
-		switch p.Status {
-		case StatusCompleted, StatusStuck, StatusFailed:
+		if p.Status == StatusCompleted || p.Status == StatusStuck || p.Status == StatusFailed || p.WaitsForConditions() {
 			return e.rerun(ctx, p.ID, event)
 		}
 		return e.enqueue(ctx, p.ID, event) // at work, or waiting for someone: after this run
@@ -170,23 +169,24 @@ func (e *Engine) nextInInbox(ctx context.Context, id string) error {
 	return e.rerun(ctx, id, nil)
 }
 
-// retryStuck tries again the processes stuck on a change (companions aside, and the one the event comes from).
-func (e *Engine) retryStuck(ctx context.Context, changeID domain.ChangeID, except string) {
+// retryBlocked tries again the processes of a change that wait for conditions established outside them, or are stuck
+// (companions aside, their events run them again, and the one the event comes from).
+func (e *Engine) retryBlocked(ctx context.Context, changeID domain.ChangeID, except string) {
 	all, err := e.Store.List(ctx)
 	if err != nil {
 		return
 	}
 	for _, p := range all {
-		if p.ChangeID == changeID && p.Status == StatusStuck && p.ID != except && !p.IsCompanion() {
+		if p.ChangeID == changeID && (p.Status == StatusStuck || p.WaitsForConditions()) && p.ID != except && !p.IsCompanion() {
 			if err := e.rerun(ctx, p.ID, nil); err != nil {
-				e.log().Warn("retry stuck", "process", p.ID, "err", err)
+				e.log().Warn("retry", "process", p.ID, "err", err)
 			}
 		}
 	}
 }
 
-// rerun runs an ended process again, on the change as it is now: for a companion, for the event given, else the next
-// of its inbox.
+// rerun runs an ended process, or one waiting for conditions, again on the change as it is now: for a companion, for
+// the event given, else the next of its inbox.
 func (e *Engine) rerun(ctx context.Context, id string, event map[string]any) error {
 	unlock := e.lock(id)
 	p, err := e.Store.Get(ctx, id)
@@ -194,7 +194,7 @@ func (e *Engine) rerun(ctx context.Context, id string, event map[string]any) err
 		unlock()
 		return err
 	}
-	if p.Status != StatusCompleted && p.Status != StatusStuck && p.Status != StatusFailed {
+	if p.Status != StatusCompleted && p.Status != StatusStuck && p.Status != StatusFailed && !p.WaitsForConditions() {
 		unlock()
 		return nil
 	}

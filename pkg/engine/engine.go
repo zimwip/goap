@@ -670,8 +670,17 @@ func (e *Engine) cycle(ctx context.Context, p *Process, m *methodology.Compiled)
 	tickStart := e.clock()
 	plan, planCalls, err := e.plan(ctx, m, ag, p.World, actions, goal.PlanningGoal(), m.Utilities(bb))
 	if errors.Is(err, goap.ErrNoPlan) {
-		p.Status = StatusStuck
 		p.Plan = nil
+		if awaited := e.awaited(p.World, m.AgentActions(ag), actions, goal.PlanningGoal()); len(awaited) > 0 {
+			// what is missing is established outside the process: it waits for it, and is tried again when the change moves
+			p.Status = StatusWaiting
+			p.Pending = &HumanTask{Kind: TaskCondition, Step: len(p.Steps), Conditions: awaited,
+				Description: "Waiting for " + strings.Join(awaited, ", ") + ": conditions this agent's actions do not establish"}
+			e.journal(ctx, p, tickRecordWithCalls(domain.ExecutionRecord{Kind: domain.ExecTick, Step: len(p.Steps), Before: maps.Clone(p.World),
+				StartedAt: tickStart, EndedAt: e.clock(), Data: map[string]any{"awaiting": slices.Clone(awaited)}}, planCalls))
+			return nil
+		}
+		p.Status = StatusStuck
 		p.Error = fmt.Sprintf("no plan reaches goal %s from the current state", goal.Name)
 		e.journal(ctx, p, tickRecordWithCalls(domain.ExecutionRecord{Kind: domain.ExecTick, Step: len(p.Steps), Before: maps.Clone(p.World), Error: p.Error,
 			StartedAt: tickStart, EndedAt: e.clock()}, planCalls))

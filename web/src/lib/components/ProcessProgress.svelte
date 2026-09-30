@@ -46,6 +46,7 @@
   function waitingText(s: StepProgress): string {
     if (s.waiting === 'approval') return `an approval${s.permission ? ` (${s.permission})` : ''}`;
     if (s.waiting === 'input') return 'a person to do it';
+    if (s.waiting === 'condition') return `${(s.missing ?? []).join(', ')}, established outside this process`;
     return s.waiting ?? '';
   }
 </script>
@@ -60,7 +61,7 @@
     </div>
     {#if s.state === 'waiting'}
       <div class="note">Waiting for {waitingText(s)}{s.roles?.responsible && s.waiting === 'input' ? ` (${s.roles.responsible})` : ''}{s.roles?.accountable && s.waiting === 'approval' ? ` — or the ${s.roles.accountable}` : ''}.</div>
-    {:else if s.state === 'todo' && s.missing?.length}
+    {:else if (s.state === 'todo' || s.state === 'blocked') && s.missing?.length}
       <div class="note">Needs: {#each s.missing as m, i (m)}{i ? ', ' : ''}<code>{m}</code>{/each}</div>
     {/if}
     {#if s.childProcessIds?.length}

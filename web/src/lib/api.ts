@@ -1023,8 +1023,10 @@ export interface RelaunchProposal {
 }
 
 export interface HumanTask {
-  /** input: enter items · approval: approve or reject · agent: waiting on a sub-agent · flow: adopt or discard a relaunched flow · board: inconsistent blackboard · relaunched: waiting for a relaunched flow */
-  kind?: 'input' | 'approval' | 'agent' | 'flow' | 'board' | 'relaunched' | string;
+  /** input: enter items · approval: approve or reject · agent: waiting on a sub-agent · flow: adopt or discard a relaunched flow · board: inconsistent blackboard · relaunched: waiting for a relaunched flow · condition: waiting for conditions established outside the process */
+  kind?: 'input' | 'approval' | 'agent' | 'flow' | 'board' | 'relaunched' | 'condition' | string;
+  /** kind "condition": the conditions awaited ("name" expected true, "!name" expected false) */
+  conditions?: string[];
   /** kind "board": what is wrong, and the step to restart from (absent when none can be) */
   issues?: BoardIssue[];
   proposal?: RelaunchProposal;
