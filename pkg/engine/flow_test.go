@@ -195,6 +195,57 @@ func TestRelaunchStepAdoptFlow(t *testing.T) {
 	}
 }
 
+// A relaunched run that stopped short of the goal (failed, or stuck with no plan) can still be
+// adopted: what it wrote so far is banked onto the change branch, so a later relaunch can continue
+// from there instead of being stuck with only discard as an option.
+func TestRelaunchStepAdoptIncompleteFlow(t *testing.T) {
+	for _, status := range []Status{StatusFailed, StatusStuck} {
+		t.Run(string(status), func(t *testing.T) {
+			e, ctx, old, _ := completedRun(t)
+			np, err := e.Relaunch(ctx, old.ID, 1, "try again", "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			// running: not ready to decide yet
+			if _, err := e.DecideFlow(ctx, np.ID, true, ""); !errors.Is(err, ErrInvalidState) {
+				t.Fatalf("adopting a running flow: %v", err)
+			}
+			np.Status, np.Error = status, "simulated"
+			if err := e.Store.Put(ctx, np); err != nil {
+				t.Fatal(err)
+			}
+			np, err = e.DecideFlow(ctx, np.ID, true, "bank the partial progress")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if np.Status != status {
+				t.Fatalf("adopted incomplete run = %s, want unchanged %s", np.Status, status)
+			}
+			if cur, _ := e.Store.Get(ctx, old.ID); cur.Status != StatusSuperseded {
+				t.Fatalf("old run = %s, want superseded", cur.Status)
+			}
+			fs, err := e.Graph.(interface {
+				Flows(context.Context, domain.ChangeID) ([]domain.Flow, error)
+			}).Flows(ctx, old.ChangeID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var found bool
+			for _, f := range fs {
+				if f.ID == np.Flow {
+					found = true
+					if f.Status != domain.FlowAdopted {
+						t.Fatalf("flow %s = %s, want adopted", f.ID, f.Status)
+					}
+				}
+			}
+			if !found {
+				t.Fatalf("flow %s not found", np.Flow)
+			}
+		})
+	}
+}
+
 func TestRelaunchStepDiscardFlow(t *testing.T) {
 	e, ctx, old, c := completedRun(t)
 	g := e.Graph.(interface {

@@ -163,12 +163,27 @@ type Fake struct{}
 
 // Complete implements Provider.
 func (Fake) Complete(_ context.Context, model string, req llm.Request) (llm.Response, error) {
+	inputTokens := estimateTokens(req.System)
+	for _, m := range req.Messages {
+		inputTokens += estimateTokens(m.Content)
+	}
 	if req.JSON {
-		return llm.Response{Text: `{"items":[],"candidates":[]}`, Provider: "fake", Model: model}, nil
+		text := `{"items":[],"candidates":[]}`
+		return llm.Response{Text: text, Provider: "fake", Model: model,
+			Usage: llm.Usage{InputTokens: inputTokens, OutputTokens: estimateTokens(text)}}, nil
 	}
 	last := ""
 	if n := len(req.Messages); n > 0 {
 		last = req.Messages[n-1].Content
 	}
-	return llm.Response{Text: "echo: " + last, Provider: "fake", Model: model}, nil
+	text := "echo: " + last
+	return llm.Response{Text: text, Provider: "fake", Model: model,
+		Usage: llm.Usage{InputTokens: inputTokens, OutputTokens: estimateTokens(text)}}, nil
+}
+
+// estimateTokens is a rough (~4 chars/token) size for the Fake provider, whose whole point is to
+// run without a real model: it lets a dev running on goap-dev see the actual context size pushed
+// to the agent (system + messages) without paying for or needing a real completion.
+func estimateTokens(s string) int {
+	return (len(s) + 3) / 4
 }
