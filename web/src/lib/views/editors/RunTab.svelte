@@ -395,6 +395,15 @@
             </p>
             {#if process.pending.description}<p class="hint">{process.pending.description}</p>{/if}
           </section>
+        {:else if process.pending.kind === 'condition'}
+          <section class="card waiting-agent">
+            <h3>Waiting for conditions</h3>
+            <p>
+              No action of this agent establishes
+              {#each process.pending.conditions ?? [] as c, i (c)}{i ? ', ' : ''}<code>{c}</code>{/each}: another process, a person or the
+              state of the change will. The run is tried again whenever the change moves.
+            </p>
+          </section>
         {:else if process.pending.kind === 'agent'}
           <section class="card waiting-agent">
             <h3>Waiting for a sub-agent</h3>

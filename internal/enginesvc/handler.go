@@ -464,7 +464,7 @@ func ProcessToPB(p *engine.Process) *enginev1.Process {
 	if t := p.Pending; t != nil {
 		out.Pending = &enginev1.HumanTask{Kind: t.Kind, Permission: t.Permission, Action: t.Action, Description: t.Description,
 			Instructions: t.Instructions, NodeTypes: t.NodeTypes, Step: int32(t.Step), ChildProcessId: t.ChildProcessID, FlowId: t.FlowID,
-			Context: stepContextToPB(t.Context)}
+			Context: stepContextToPB(t.Context), Conditions: t.Conditions}
 		for _, i := range t.Issues {
 			out.Pending.Issues = append(out.Pending.Issues, &enginev1.BoardIssue{Item: string(i.Item), Culprit: string(i.Culprit), Code: i.Code, Message: i.Message, Severity: i.Severity})
 		}

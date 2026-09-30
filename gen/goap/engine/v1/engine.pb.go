@@ -841,6 +841,7 @@ type HumanTask struct {
 	Instructions string                 `protobuf:"bytes,3,opt,name=instructions,proto3" json:"instructions,omitempty"`
 	Step         int32                  `protobuf:"varint,4,opt,name=step,proto3" json:"step,omitempty"`
 	// input (submit items) | approval (approve or reject the action) | agent | flow (adopt or discard a relaunched flow) | board | relaunched
+	// | condition (conditions established outside the process: another process, a person, the state of the change)
 	Kind string `protobuf:"bytes,5,opt,name=kind,proto3" json:"kind,omitempty"`
 	// permission required to approve
 	Permission string `protobuf:"bytes,6,opt,name=permission,proto3" json:"permission,omitempty"`
@@ -855,7 +856,9 @@ type HumanTask struct {
 	// pick to edit (empty: every type of the change's namespace)
 	NodeTypes []string `protobuf:"bytes,11,rep,name=node_types,json=nodeTypes,proto3" json:"node_types,omitempty"`
 	// the step of a process the task belongs to: what to do and how (ADR 0034, ADR 0035 §2)
-	Context       *StepContext `protobuf:"bytes,12,opt,name=context,proto3" json:"context,omitempty"`
+	Context *StepContext `protobuf:"bytes,12,opt,name=context,proto3" json:"context,omitempty"`
+	// kind "condition": the conditions the process waits for ("name" expected true, "!name" expected false)
+	Conditions    []string `protobuf:"bytes,13,rep,name=conditions,proto3" json:"conditions,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -970,6 +973,13 @@ func (x *HumanTask) GetNodeTypes() []string {
 func (x *HumanTask) GetContext() *StepContext {
 	if x != nil {
 		return x.Context
+	}
+	return nil
+}
+
+func (x *HumanTask) GetConditions() []string {
+	if x != nil {
+		return x.Conditions
 	}
 	return nil
 }
@@ -3680,7 +3690,7 @@ const file_goap_engine_v1_engine_proto_rawDesc = "" +
 	"\tPrincipal\x12\x18\n" +
 	"\asubject\x18\x01 \x01(\tR\asubject\x12\x10\n" +
 	"\x03org\x18\x02 \x01(\tR\x03org\x12\x14\n" +
-	"\x05roles\x18\x03 \x03(\tR\x05roles\"\xbc\x03\n" +
+	"\x05roles\x18\x03 \x03(\tR\x05roles\"\xdc\x03\n" +
 	"\tHumanTask\x12\x16\n" +
 	"\x06action\x18\x01 \x01(\tR\x06action\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\"\n" +
@@ -3697,7 +3707,10 @@ const file_goap_engine_v1_engine_proto_rawDesc = "" +
 	" \x01(\tR\x06flowId\x12\x1d\n" +
 	"\n" +
 	"node_types\x18\v \x03(\tR\tnodeTypes\x125\n" +
-	"\acontext\x18\f \x01(\v2\x1b.goap.engine.v1.StepContextR\acontext\"\xe2\x02\n" +
+	"\acontext\x18\f \x01(\v2\x1b.goap.engine.v1.StepContextR\acontext\x12\x1e\n" +
+	"\n" +
+	"conditions\x18\r \x03(\tR\n" +
+	"conditions\"\xe2\x02\n" +
 	"\vStepContext\x12\x18\n" +
 	"\aprocess\x18\x01 \x01(\tR\aprocess\x12\x12\n" +
 	"\x04path\x18\x02 \x01(\tR\x04path\x12\x12\n" +

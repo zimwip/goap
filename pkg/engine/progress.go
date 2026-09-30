@@ -15,10 +15,10 @@ const (
 	StepDone    = "done"    // its exit criteria hold, and it ran
 	StepSkipped = "skipped" // its entry holds and its exit criteria held without it running: nothing to do
 	StepActive  = "active"  // being carried out (its action runs, or its sub-agent / nested process works)
-	StepWaiting = "waiting" // waiting for a person (a task to submit, an action to approve)
+	StepWaiting = "waiting" // waiting for a person (a task to submit, an action to approve), or for conditions another process or person establishes
 	StepReady   = "ready"   // its entry holds: the planner may take it
 	StepTodo    = "todo"    // its entry does not hold yet (Missing says what is missing)
-	StepBlocked = "blocked" // the process is stuck or failed before it was done
+	StepBlocked = "blocked" // the process is stuck (nothing established outside it would unblock it) or failed before it was done
 )
 
 // ProcessProgress is where a process run stands in the steps of its process: a read model computed from the
@@ -53,7 +53,7 @@ type StepProgress struct {
 	// Runs counts the executions of the step's actions; ChildProcessIDs are the sub-agents it started.
 	Runs            int      `json:"runs,omitempty"`
 	ChildProcessIDs []string `json:"childProcessIds,omitempty"`
-	// Waiting: the kind of the task (input, approval, agent) and the permission an approval needs.
+	// Waiting: the kind of the task (input, approval, agent, condition) and the permission an approval needs.
 	Waiting    string                  `json:"waiting,omitempty"`
 	Permission string                  `json:"permission,omitempty"`
 	Guidance   string                  `json:"guidance,omitempty"`
@@ -170,6 +170,8 @@ func stepProgress(p *Process, s methodology.StepInfo) StepProgress {
 		sp.State = StepActive
 	case pending:
 		sp.State, sp.Waiting, sp.Permission = StepWaiting, p.Pending.Kind, p.Pending.Permission
+	case p.WaitsForConditions() && slices.ContainsFunc(sp.Missing, func(c string) bool { return slices.Contains(p.Pending.Conditions, c) }):
+		sp.State, sp.Waiting = StepWaiting, TaskCondition // its Missing say for what
 	case p.Status == StatusRunning && len(p.Plan) > 0 && slices.Contains(s.Planned, p.Plan[0]):
 		sp.State = StepActive
 	case p.Status == StatusStuck || p.Status == StatusFailed:

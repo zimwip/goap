@@ -131,6 +131,7 @@ message HumanTask {
   string instructions = 3;
   int32 step = 4;
   // input (submit items) | approval (approve or reject the action) | agent | flow (adopt or discard a relaunched flow) | board | relaunched
+  // | condition (conditions established outside the process: another process, a person, the state of the change)
   string kind = 5;
   // permission required to approve
   string permission = 6;
@@ -146,6 +147,8 @@ message HumanTask {
   repeated string node_types = 11;
   // the step of a process the task belongs to: what to do and how (ADR 0034, ADR 0035 §2)
   StepContext context = 12;
+  // kind "condition": the conditions the process waits for ("name" expected true, "!name" expected false)
+  repeated string conditions = 13;
 }
 
 message StepContext {
