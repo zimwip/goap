@@ -6,6 +6,39 @@
 
   let dragFrom = -1;
   let list: HTMLDivElement;
+  let overflow = $state(false);
+  let canLeft = $state(false);
+  let canRight = $state(false);
+  let menu = $state(false);
+
+  function measure() {
+    if (!list) return;
+    overflow = list.scrollWidth > list.clientWidth + 1;
+    canLeft = list.scrollLeft > 0;
+    canRight = list.scrollLeft + list.clientWidth < list.scrollWidth - 1;
+  }
+
+  function scrollBy(dir: number) {
+    list.scrollBy({ left: dir * Math.max(120, list.clientWidth * 0.6), behavior: 'smooth' });
+  }
+
+  function pick(id: string) {
+    menu = false;
+    activate(id);
+  }
+
+  $effect(() => {
+    if (!list) return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(list);
+    return () => ro.disconnect();
+  });
+
+  // Re-measure when tabs come and go.
+  $effect(() => {
+    void tabsState.tabs.length;
+    queueMicrotask(measure);
+  });
 
   function aux(e: MouseEvent, id: string) {
     if (e.button === 1) {
@@ -38,6 +71,10 @@
     list.querySelector<HTMLElement>(`[data-tab="${CSS.escape(id)}"]`)?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   });
 
+  function outside(e: MouseEvent) {
+    if (menu && !(e.target as HTMLElement).closest('.more')) menu = false;
+  }
+
   function wheel(e: WheelEvent) {
     if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
       list.scrollLeft += e.deltaY;
@@ -45,7 +82,14 @@
   }
 </script>
 
-<div class="tabs" role="tablist" aria-label="Open tabs" bind:this={list} onwheel={wheel}>
+<svelte:window onclick={outside} />
+<div class="bar">
+  {#if overflow}
+    <button type="button" class="nav" title="Scroll tabs left" aria-label="Scroll tabs left" disabled={!canLeft} onclick={() => scrollBy(-1)}
+      ><Icon name="chevronLeft" size={14} /></button
+    >
+  {/if}
+<div class="tabs" role="tablist" aria-label="Open tabs" bind:this={list} onwheel={wheel} onscroll={measure}>
   {#each tabsState.tabs as tab, i (tab.id)}
     {@const v = editorView(tab.kind)}
     {@const on = tab.id === tabsState.active}
@@ -110,24 +154,121 @@
     </div>
   {/each}
 </div>
+  {#if overflow}
+    <button type="button" class="nav" title="Scroll tabs right" aria-label="Scroll tabs right" disabled={!canRight} onclick={() => scrollBy(1)}
+      ><Icon name="chevronRight" size={14} /></button
+    >
+    <div class="more">
+      <button type="button" class="nav" title="All open tabs" aria-label="All open tabs" aria-expanded={menu} onclick={() => (menu = !menu)}
+        ><Icon name="more" size={14} /></button
+      >
+      {#if menu}
+        <ul class="menu" role="menu">
+          {#each tabsState.tabs as tab (tab.id)}
+            {@const v = editorView(tab.kind)}
+            {@const t = v?.tabTitle(tab) ?? tab.id}
+            <li role="none">
+              <button type="button" role="menuitem" class:on={tab.id === tabsState.active} title={v?.tooltip?.(tab) ?? t} onclick={() => pick(tab.id)}>
+                {#if v}<Icon name={v.tabIcon?.(tab) ?? v.icon} size={13} />{/if}
+                <span>{t}</span>
+              </button>
+            </li>
+          {/each}
+        </ul>
+      {/if}
+    </div>
+  {/if}
+</div>
 
 <style>
+  .bar {
+    display: flex;
+    flex: none;
+    align-items: stretch;
+    background: var(--chrome);
+    border-bottom: 1px solid var(--border);
+    position: relative;
+  }
+  .nav {
+    display: grid;
+    place-items: center;
+    width: 24px;
+    min-height: 0;
+    padding: 0;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    color: var(--muted);
+    flex: none;
+  }
+  .nav:hover:not(:disabled) {
+    background: var(--hover);
+    color: var(--text);
+  }
+  .nav:disabled {
+    opacity: 0.35;
+  }
+  .more {
+    position: relative;
+    display: flex;
+    border-left: 1px solid var(--border);
+  }
+  .menu {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    z-index: 50;
+    margin: 0;
+    padding: 0.2rem;
+    list-style: none;
+    min-width: 200px;
+    max-width: 380px;
+    max-height: 60vh;
+    overflow-y: auto;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    box-shadow: 0 6px 24px rgb(0 0 0 / 0.35);
+  }
+  .menu button {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    width: 100%;
+    min-height: 0;
+    padding: 0.3rem 0.5rem;
+    border: none;
+    background: transparent;
+    color: var(--text);
+    text-align: left;
+  }
+  .menu button:hover {
+    background: var(--hover);
+  }
+  .menu button.on {
+    color: var(--accent);
+  }
+  .menu span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
   .tabs {
+    flex: 1;
+    min-width: 0;
     display: flex;
     height: 34px;
     flex: none;
     overflow-x: auto;
     overflow-y: hidden;
-    background: var(--chrome);
-    border-bottom: 1px solid var(--border);
-    scrollbar-width: thin;
+    scrollbar-width: none;
   }
   .tab {
     display: flex;
     align-items: center;
     gap: 0.35rem;
-    flex: none;
-    max-width: 240px;
+    flex: 0 1 200px;
+    min-width: 96px;
     padding: 0 0.3rem 0 0.7rem;
     border-right: 1px solid var(--border);
     color: var(--muted);
@@ -149,6 +290,8 @@
     outline-offset: -2px;
   }
   .label {
+    flex: 1;
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
   }

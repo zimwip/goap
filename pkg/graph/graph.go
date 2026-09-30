@@ -38,6 +38,9 @@ type Graph struct {
 	// Caller names the principal behind an operation, recorded on the events of the change impacts (ADR 0029).
 	// Set by the services from the authenticated principal; unset, the events carry no caller.
 	Caller func(ctx context.Context) string
+	// PurgePolicy, when set, is asked before a change that landed nothing is removed (PurgeChange, ADR 0037): a
+	// business rule that must keep discarded changes (to reuse their information) refuses it with an error.
+	PurgePolicy func(ctx context.Context, c domain.Change) error
 }
 
 // New returns a Graph backed by repo.
@@ -195,7 +198,12 @@ func (g *Graph) CreateBaseline(ctx context.Context, namespace, name string, node
 			}
 			b.Nodes[n.ID] = n.Version
 		}
-		return tx.PutBaseline(ctx, b)
+		if err := tx.PutBaseline(ctx, b); err != nil {
+			return err
+		}
+		// Persists the branch row from the baseline's first version on, main included: nothing but an applied
+		// change advances it otherwise, so a namespace started this way would leave main implicit until then.
+		return g.advanceBranch(ctx, tx, namespace, domain.BranchOf(b.Branch), b.ID)
 	})
 	return b, err
 }

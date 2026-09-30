@@ -13,6 +13,7 @@
   import { ALGORITHM_USAGES, emptyAlgorithm, emptyInstance, freeName } from '../../algorithmForm';
   import type { AlgorithmUsage } from '../../dsl';
   import { algorithmSpec, instanceSpec, openAlgorithm, openInstance } from '../editors/domainTabs';
+  import { confirmDialog } from '../../shell/confirmState.svelte';
   import { openContextMenu } from '../../shell/contextMenuState.svelte';
 
   const SEL_KEY = 'goap.ide.algorithms.domain';
@@ -61,22 +62,23 @@
     openInstance(d, d.form.instances.length - 1);
   }
 
-  function removeAlgorithm(i: number) {
+  async function removeAlgorithm(i: number) {
     const d = draft;
     if (!d) return;
     const a = d.form.algorithms[i];
     const n = d.form.instances.filter((x) => x.algorithm === a.name).length;
     if (n) return void notify(`Delete the ${n} instance(s) of ${a.name || 'this algorithm'} first.`, 'error');
-    if (!confirm(`Remove the algorithm "${a.name || 'unnamed'}" from the draft?`)) return;
+    if (!(await confirmDialog({ message: `Remove the algorithm "${a.name || 'unnamed'}" from the draft?`, danger: true }))) return;
     closeWhere((t) => t.kind === 'algorithm' && t.params.uid === a.uid);
     d.form.algorithms.splice(i, 1);
   }
 
-  function removeInstance(i: number) {
+  async function removeInstance(i: number) {
     const d = draft;
     if (!d) return;
     const x = d.form.instances[i];
-    if (!confirm(`Remove the instance "${x.name || 'unnamed'}" from the draft? Plugs that use it become invalid.`)) return;
+    if (!(await confirmDialog({ message: `Remove the instance "${x.name || 'unnamed'}" from the draft? Plugs that use it become invalid.`, danger: true })))
+      return;
     closeWhere((t) => t.kind === 'instance' && t.params.uid === x.uid);
     d.form.instances.splice(i, 1);
   }

@@ -105,6 +105,9 @@ const (
 	// GraphServiceApplyChangeProcedure is the fully-qualified name of the GraphService's ApplyChange
 	// RPC.
 	GraphServiceApplyChangeProcedure = "/goap.graph.v1.GraphService/ApplyChange"
+	// GraphServiceDeleteChangeProcedure is the fully-qualified name of the GraphService's DeleteChange
+	// RPC.
+	GraphServiceDeleteChangeProcedure = "/goap.graph.v1.GraphService/DeleteChange"
 	// GraphServiceCreateBranchProcedure is the fully-qualified name of the GraphService's CreateBranch
 	// RPC.
 	GraphServiceCreateBranchProcedure = "/goap.graph.v1.GraphService/CreateBranch"
@@ -116,6 +119,9 @@ const (
 	// GraphServiceSetBranchStatusProcedure is the fully-qualified name of the GraphService's
 	// SetBranchStatus RPC.
 	GraphServiceSetBranchStatusProcedure = "/goap.graph.v1.GraphService/SetBranchStatus"
+	// GraphServiceSetBranchDescriptionProcedure is the fully-qualified name of the GraphService's
+	// SetBranchDescription RPC.
+	GraphServiceSetBranchDescriptionProcedure = "/goap.graph.v1.GraphService/SetBranchDescription"
 	// GraphServiceListNodeVersionsProcedure is the fully-qualified name of the GraphService's
 	// ListNodeVersions RPC.
 	GraphServiceListNodeVersionsProcedure = "/goap.graph.v1.GraphService/ListNodeVersions"
@@ -244,11 +250,14 @@ type GraphServiceClient interface {
 	CommitEdits(context.Context, *connect.Request[v1.CommitEditsRequest]) (*connect.Response[v1.CommitEditsResponse], error)
 	GetBlackboard(context.Context, *connect.Request[v1.GetBlackboardRequest]) (*connect.Response[v1.GetBlackboardResponse], error)
 	ApplyChange(context.Context, *connect.Request[v1.ApplyChangeRequest]) (*connect.Response[v1.ApplyChangeResponse], error)
+	// Remove a change that landed nothing, with its log (ADR 0037). Refused once anything of it is applied or used.
+	DeleteChange(context.Context, *connect.Request[v1.DeleteChangeRequest]) (*connect.Response[v1.DeleteChangeResponse], error)
 	// Version branches (ADR 0009)
 	CreateBranch(context.Context, *connect.Request[v1.CreateBranchRequest]) (*connect.Response[v1.CreateBranchResponse], error)
 	ListBranches(context.Context, *connect.Request[v1.ListBranchesRequest]) (*connect.Response[v1.ListBranchesResponse], error)
 	GetBranch(context.Context, *connect.Request[v1.GetBranchRequest]) (*connect.Response[v1.GetBranchResponse], error)
 	SetBranchStatus(context.Context, *connect.Request[v1.SetBranchStatusRequest]) (*connect.Response[v1.SetBranchStatusResponse], error)
+	SetBranchDescription(context.Context, *connect.Request[v1.SetBranchDescriptionRequest]) (*connect.Response[v1.SetBranchDescriptionResponse], error)
 	ListNodeVersions(context.Context, *connect.Request[v1.ListNodeVersionsRequest]) (*connect.Response[v1.ListNodeVersionsResponse], error)
 	PlanMerge(context.Context, *connect.Request[v1.PlanMergeRequest]) (*connect.Response[v1.PlanMergeResponse], error)
 	MergeBranch(context.Context, *connect.Request[v1.MergeBranchRequest]) (*connect.Response[v1.MergeBranchResponse], error)
@@ -464,6 +473,12 @@ func NewGraphServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(graphServiceMethods.ByName("ApplyChange")),
 			connect.WithClientOptions(opts...),
 		),
+		deleteChange: connect.NewClient[v1.DeleteChangeRequest, v1.DeleteChangeResponse](
+			httpClient,
+			baseURL+GraphServiceDeleteChangeProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("DeleteChange")),
+			connect.WithClientOptions(opts...),
+		),
 		createBranch: connect.NewClient[v1.CreateBranchRequest, v1.CreateBranchResponse](
 			httpClient,
 			baseURL+GraphServiceCreateBranchProcedure,
@@ -486,6 +501,12 @@ func NewGraphServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			httpClient,
 			baseURL+GraphServiceSetBranchStatusProcedure,
 			connect.WithSchema(graphServiceMethods.ByName("SetBranchStatus")),
+			connect.WithClientOptions(opts...),
+		),
+		setBranchDescription: connect.NewClient[v1.SetBranchDescriptionRequest, v1.SetBranchDescriptionResponse](
+			httpClient,
+			baseURL+GraphServiceSetBranchDescriptionProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("SetBranchDescription")),
 			connect.WithClientOptions(opts...),
 		),
 		listNodeVersions: connect.NewClient[v1.ListNodeVersionsRequest, v1.ListNodeVersionsResponse](
@@ -699,10 +720,12 @@ type graphServiceClient struct {
 	commitEdits          *connect.Client[v1.CommitEditsRequest, v1.CommitEditsResponse]
 	getBlackboard        *connect.Client[v1.GetBlackboardRequest, v1.GetBlackboardResponse]
 	applyChange          *connect.Client[v1.ApplyChangeRequest, v1.ApplyChangeResponse]
+	deleteChange         *connect.Client[v1.DeleteChangeRequest, v1.DeleteChangeResponse]
 	createBranch         *connect.Client[v1.CreateBranchRequest, v1.CreateBranchResponse]
 	listBranches         *connect.Client[v1.ListBranchesRequest, v1.ListBranchesResponse]
 	getBranch            *connect.Client[v1.GetBranchRequest, v1.GetBranchResponse]
 	setBranchStatus      *connect.Client[v1.SetBranchStatusRequest, v1.SetBranchStatusResponse]
+	setBranchDescription *connect.Client[v1.SetBranchDescriptionRequest, v1.SetBranchDescriptionResponse]
 	listNodeVersions     *connect.Client[v1.ListNodeVersionsRequest, v1.ListNodeVersionsResponse]
 	planMerge            *connect.Client[v1.PlanMergeRequest, v1.PlanMergeResponse]
 	mergeBranch          *connect.Client[v1.MergeBranchRequest, v1.MergeBranchResponse]
@@ -865,6 +888,11 @@ func (c *graphServiceClient) ApplyChange(ctx context.Context, req *connect.Reque
 	return c.applyChange.CallUnary(ctx, req)
 }
 
+// DeleteChange calls goap.graph.v1.GraphService.DeleteChange.
+func (c *graphServiceClient) DeleteChange(ctx context.Context, req *connect.Request[v1.DeleteChangeRequest]) (*connect.Response[v1.DeleteChangeResponse], error) {
+	return c.deleteChange.CallUnary(ctx, req)
+}
+
 // CreateBranch calls goap.graph.v1.GraphService.CreateBranch.
 func (c *graphServiceClient) CreateBranch(ctx context.Context, req *connect.Request[v1.CreateBranchRequest]) (*connect.Response[v1.CreateBranchResponse], error) {
 	return c.createBranch.CallUnary(ctx, req)
@@ -883,6 +911,11 @@ func (c *graphServiceClient) GetBranch(ctx context.Context, req *connect.Request
 // SetBranchStatus calls goap.graph.v1.GraphService.SetBranchStatus.
 func (c *graphServiceClient) SetBranchStatus(ctx context.Context, req *connect.Request[v1.SetBranchStatusRequest]) (*connect.Response[v1.SetBranchStatusResponse], error) {
 	return c.setBranchStatus.CallUnary(ctx, req)
+}
+
+// SetBranchDescription calls goap.graph.v1.GraphService.SetBranchDescription.
+func (c *graphServiceClient) SetBranchDescription(ctx context.Context, req *connect.Request[v1.SetBranchDescriptionRequest]) (*connect.Response[v1.SetBranchDescriptionResponse], error) {
+	return c.setBranchDescription.CallUnary(ctx, req)
 }
 
 // ListNodeVersions calls goap.graph.v1.GraphService.ListNodeVersions.
@@ -1076,11 +1109,14 @@ type GraphServiceHandler interface {
 	CommitEdits(context.Context, *connect.Request[v1.CommitEditsRequest]) (*connect.Response[v1.CommitEditsResponse], error)
 	GetBlackboard(context.Context, *connect.Request[v1.GetBlackboardRequest]) (*connect.Response[v1.GetBlackboardResponse], error)
 	ApplyChange(context.Context, *connect.Request[v1.ApplyChangeRequest]) (*connect.Response[v1.ApplyChangeResponse], error)
+	// Remove a change that landed nothing, with its log (ADR 0037). Refused once anything of it is applied or used.
+	DeleteChange(context.Context, *connect.Request[v1.DeleteChangeRequest]) (*connect.Response[v1.DeleteChangeResponse], error)
 	// Version branches (ADR 0009)
 	CreateBranch(context.Context, *connect.Request[v1.CreateBranchRequest]) (*connect.Response[v1.CreateBranchResponse], error)
 	ListBranches(context.Context, *connect.Request[v1.ListBranchesRequest]) (*connect.Response[v1.ListBranchesResponse], error)
 	GetBranch(context.Context, *connect.Request[v1.GetBranchRequest]) (*connect.Response[v1.GetBranchResponse], error)
 	SetBranchStatus(context.Context, *connect.Request[v1.SetBranchStatusRequest]) (*connect.Response[v1.SetBranchStatusResponse], error)
+	SetBranchDescription(context.Context, *connect.Request[v1.SetBranchDescriptionRequest]) (*connect.Response[v1.SetBranchDescriptionResponse], error)
 	ListNodeVersions(context.Context, *connect.Request[v1.ListNodeVersionsRequest]) (*connect.Response[v1.ListNodeVersionsResponse], error)
 	PlanMerge(context.Context, *connect.Request[v1.PlanMergeRequest]) (*connect.Response[v1.PlanMergeResponse], error)
 	MergeBranch(context.Context, *connect.Request[v1.MergeBranchRequest]) (*connect.Response[v1.MergeBranchResponse], error)
@@ -1292,6 +1328,12 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(graphServiceMethods.ByName("ApplyChange")),
 		connect.WithHandlerOptions(opts...),
 	)
+	graphServiceDeleteChangeHandler := connect.NewUnaryHandler(
+		GraphServiceDeleteChangeProcedure,
+		svc.DeleteChange,
+		connect.WithSchema(graphServiceMethods.ByName("DeleteChange")),
+		connect.WithHandlerOptions(opts...),
+	)
 	graphServiceCreateBranchHandler := connect.NewUnaryHandler(
 		GraphServiceCreateBranchProcedure,
 		svc.CreateBranch,
@@ -1314,6 +1356,12 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 		GraphServiceSetBranchStatusProcedure,
 		svc.SetBranchStatus,
 		connect.WithSchema(graphServiceMethods.ByName("SetBranchStatus")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceSetBranchDescriptionHandler := connect.NewUnaryHandler(
+		GraphServiceSetBranchDescriptionProcedure,
+		svc.SetBranchDescription,
+		connect.WithSchema(graphServiceMethods.ByName("SetBranchDescription")),
 		connect.WithHandlerOptions(opts...),
 	)
 	graphServiceListNodeVersionsHandler := connect.NewUnaryHandler(
@@ -1550,6 +1598,8 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 			graphServiceGetBlackboardHandler.ServeHTTP(w, r)
 		case GraphServiceApplyChangeProcedure:
 			graphServiceApplyChangeHandler.ServeHTTP(w, r)
+		case GraphServiceDeleteChangeProcedure:
+			graphServiceDeleteChangeHandler.ServeHTTP(w, r)
 		case GraphServiceCreateBranchProcedure:
 			graphServiceCreateBranchHandler.ServeHTTP(w, r)
 		case GraphServiceListBranchesProcedure:
@@ -1558,6 +1608,8 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 			graphServiceGetBranchHandler.ServeHTTP(w, r)
 		case GraphServiceSetBranchStatusProcedure:
 			graphServiceSetBranchStatusHandler.ServeHTTP(w, r)
+		case GraphServiceSetBranchDescriptionProcedure:
+			graphServiceSetBranchDescriptionHandler.ServeHTTP(w, r)
 		case GraphServiceListNodeVersionsProcedure:
 			graphServiceListNodeVersionsHandler.ServeHTTP(w, r)
 		case GraphServicePlanMergeProcedure:
@@ -1731,6 +1783,10 @@ func (UnimplementedGraphServiceHandler) ApplyChange(context.Context, *connect.Re
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.ApplyChange is not implemented"))
 }
 
+func (UnimplementedGraphServiceHandler) DeleteChange(context.Context, *connect.Request[v1.DeleteChangeRequest]) (*connect.Response[v1.DeleteChangeResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.DeleteChange is not implemented"))
+}
+
 func (UnimplementedGraphServiceHandler) CreateBranch(context.Context, *connect.Request[v1.CreateBranchRequest]) (*connect.Response[v1.CreateBranchResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.CreateBranch is not implemented"))
 }
@@ -1745,6 +1801,10 @@ func (UnimplementedGraphServiceHandler) GetBranch(context.Context, *connect.Requ
 
 func (UnimplementedGraphServiceHandler) SetBranchStatus(context.Context, *connect.Request[v1.SetBranchStatusRequest]) (*connect.Response[v1.SetBranchStatusResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.SetBranchStatus is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) SetBranchDescription(context.Context, *connect.Request[v1.SetBranchDescriptionRequest]) (*connect.Response[v1.SetBranchDescriptionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.SetBranchDescription is not implemented"))
 }
 
 func (UnimplementedGraphServiceHandler) ListNodeVersions(context.Context, *connect.Request[v1.ListNodeVersionsRequest]) (*connect.Response[v1.ListNodeVersionsResponse], error) {

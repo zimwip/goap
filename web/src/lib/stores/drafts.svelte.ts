@@ -16,6 +16,7 @@ import {
 } from '../methodologyForm';
 import { loadTypes, typeCatalog } from './types.svelte';
 import { refreshMethodologies } from './catalog.svelte';
+import { confirmDialog } from '../shell/confirmState.svelte';
 
 export interface NormIssue extends Issue {
   norm: string;
@@ -254,7 +255,8 @@ export class Draft {
   }
 
   async publish(): Promise<boolean> {
-    if (!confirm(`Publish ${this.label}? The version will become immutable and executable by the engine.`)) return false;
+    if (!(await confirmDialog(`Publish ${this.label}? The version will become immutable and executable by the engine.`)))
+      return false;
     const res = await this.run('publish', () => registry.publishMethodology(this.name, this.version));
     if (!res) return false;
     this.status = res.methodology?.status || 'published';
@@ -265,7 +267,10 @@ export class Draft {
 
   /** Creates a new version (copy of the saved version); returns its number. */
   async newVersion(): Promise<string | undefined> {
-    if (this.dirty && !confirm('There are unsaved changes: the new version is copied from the saved version. Continue?'))
+    if (
+      this.dirty &&
+      !(await confirmDialog('There are unsaved changes: the new version is copied from the saved version. Continue?'))
+    )
       return undefined;
     const v = prompt(`Number of the new version (copy of v${this.version}):`, bumpPatch(this.version))?.trim();
     if (!v) return undefined;
@@ -296,7 +301,7 @@ export class Draft {
     const msg = draft
       ? `Permanently delete the draft ${this.label}?`
       : `Archive ${this.label}? It will no longer be usable to start a process.`;
-    if (!confirm(msg)) return undefined;
+    if (!(await confirmDialog({ message: msg, danger: true }))) return undefined;
     const ok = await this.run('delete', async () => {
       await registry.deleteMethodology(this.name, this.version);
       return true;

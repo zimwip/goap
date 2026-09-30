@@ -8,6 +8,7 @@
   import { birthStates, isReopen, type LifecycleRow } from '../lifecycle';
   import type { Lifecycle } from '../api';
   import StatusBadge from './StatusBadge.svelte';
+  import { confirmDialog } from '../shell/confirmState.svelte';
 
   let {
     rows,
@@ -75,11 +76,11 @@
   }
   const openable = (r: LifecycleRow) => !r.created || !!r.impact?.post?.id;
 
-  function remove(r: LifecycleRow) {
+  async function remove(r: LifecycleRow) {
     const what = r.created
       ? `Discard the new node ${r.node.key}?`
       : `Delete ${r.node.key} (${r.node.type}) when this change is applied? Links pointing to it become suspect.`;
-    if (confirm(what)) void onremove(r);
+    if (await confirmDialog({ message: what, danger: true })) void onremove(r);
   }
 
   let newNodeKey = $state('');

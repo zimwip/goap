@@ -151,12 +151,12 @@ func (t *sqliteTx) Versions(ctx context.Context, id domain.NodeID) ([]domain.Nod
 // there, or joined (ADR 0032).
 const sqliteOnBranch = `(v.branch = ? OR EXISTS (SELECT 1 FROM node_branch j WHERE j.node_id = v.node_id AND j.version = v.version AND j.branch = ?))`
 
-const sqliteBranchCols = `namespace, name, parent, coalesce(fork_baseline, ''), coalesce(head_baseline, ''), origin, status, created_at`
+const sqliteBranchCols = `namespace, name, parent, coalesce(fork_baseline, ''), coalesce(head_baseline, ''), origin, status, created_at, description`
 
 func sqliteScanBranch(row scanner) (domain.Branch, error) {
 	var b domain.Branch
 	var created string
-	err := row.Scan(&b.Namespace, &b.Name, &b.Parent, (*string)(&b.ForkBaseline), (*string)(&b.Head), &b.Origin, &b.Status, &created)
+	err := row.Scan(&b.Namespace, &b.Name, &b.Parent, (*string)(&b.ForkBaseline), (*string)(&b.Head), &b.Origin, &b.Status, &created, &b.Description)
 	b.CreatedAt = tsParse(created)
 	return b, err
 }
@@ -185,9 +185,9 @@ func (t *sqliteTx) Branches(ctx context.Context, namespace string) ([]domain.Bra
 
 func (t *sqliteTx) PutBranch(ctx context.Context, b domain.Branch) error {
 	namespace := domain.NamespaceOf(b.Namespace)
-	_, err := t.tx.ExecContext(ctx, `INSERT INTO branch (namespace, name, parent, fork_baseline, head_baseline, origin, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-		ON CONFLICT (namespace, name) DO UPDATE SET status = excluded.status, head_baseline = excluded.head_baseline`,
-		namespace, b.Name, b.Parent, nullUUID(string(b.ForkBaseline)), nullUUID(string(b.Head)), b.Origin, b.Status, tsText(b.CreatedAt))
+	_, err := t.tx.ExecContext(ctx, `INSERT INTO branch (namespace, name, parent, fork_baseline, head_baseline, origin, status, created_at, description) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT (namespace, name) DO UPDATE SET status = excluded.status, head_baseline = excluded.head_baseline, description = excluded.description`,
+		namespace, b.Name, b.Parent, nullUUID(string(b.ForkBaseline)), nullUUID(string(b.Head)), b.Origin, b.Status, tsText(b.CreatedAt), b.Description)
 	return sqliteErr(err, "branch "+b.Name)
 }
 
@@ -263,14 +263,14 @@ func (t *sqliteTx) InLinks(ctx context.Context, ref domain.NodeRef) ([]domain.Li
 
 func (t *sqliteTx) Baseline(ctx context.Context, id domain.BaselineID) (domain.Baseline, error) {
 	var b domain.Baseline
-	var parent, change sql.NullString
+	var parent, mergedFrom, change sql.NullString
 	var created string
-	err := t.tx.QueryRowContext(ctx, `SELECT id, name, parent_id, change_id, created_at, branch, namespace FROM baseline WHERE id = ?`, string(id)).
-		Scan((*string)(&b.ID), &b.Name, &parent, &change, &created, &b.Branch, &b.Namespace)
+	err := t.tx.QueryRowContext(ctx, `SELECT id, name, parent_id, merged_from, change_id, created_at, branch, namespace FROM baseline WHERE id = ?`, string(id)).
+		Scan((*string)(&b.ID), &b.Name, &parent, &mergedFrom, &change, &created, &b.Branch, &b.Namespace)
 	if err != nil {
 		return b, sqliteErr(err, "baseline "+string(id))
 	}
-	b.ParentID, b.ChangeID, b.CreatedAt = domain.BaselineID(parent.String), domain.ChangeID(change.String), tsParse(created)
+	b.ParentID, b.MergedFrom, b.ChangeID, b.CreatedAt = domain.BaselineID(parent.String), domain.BaselineID(mergedFrom.String), domain.ChangeID(change.String), tsParse(created)
 	b.Nodes = map[domain.NodeID]domain.Version{}
 	rows, err := t.tx.QueryContext(ctx, baselineEntriesSQL("?")+` SELECT node_id, version FROM eff WHERE rn = 1 AND NOT removed`, string(id))
 	if err != nil {
@@ -417,8 +417,8 @@ func (t *sqliteTx) PutBaseline(ctx context.Context, b domain.Baseline) error {
 		parent = &p
 	}
 	depth, entries := storedEntries(parent, parentDepth, b.Nodes)
-	_, err := t.tx.ExecContext(ctx, `INSERT INTO baseline (id, name, parent_id, change_id, created_at, branch, namespace, depth) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		string(b.ID), b.Name, nullUUID(string(b.ParentID)), nullUUID(string(b.ChangeID)), tsText(b.CreatedAt), domain.BranchOf(b.Branch), domain.NamespaceOf(b.Namespace), depth)
+	_, err := t.tx.ExecContext(ctx, `INSERT INTO baseline (id, name, parent_id, merged_from, change_id, created_at, branch, namespace, depth) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		string(b.ID), b.Name, nullUUID(string(b.ParentID)), nullUUID(string(b.MergedFrom)), nullUUID(string(b.ChangeID)), tsText(b.CreatedAt), domain.BranchOf(b.Branch), domain.NamespaceOf(b.Namespace), depth)
 	if err != nil {
 		return sqliteErr(err, "baseline")
 	}
@@ -637,6 +637,73 @@ func (t *sqliteTx) rewriteBaseline(ctx context.Context, id domain.BaselineID, de
 		if _, err := stmt.ExecContext(ctx, string(id), string(e.node), int(e.version), e.removed); err != nil {
 			return sqliteErr(err, "baseline entries")
 		}
+	}
+	return nil
+}
+
+func (t *sqliteTx) DeleteChange(ctx context.Context, id domain.ChangeID, namespace, branch string) error {
+	for _, q := range []string{
+		`SELECT count(*) FROM baseline_entry e JOIN node_version v ON e.node_id = v.node_id AND e.version = v.version WHERE v.change_id = ?1`,
+		`SELECT count(*) FROM baseline WHERE change_id = ?1`,
+		`SELECT count(*) FROM link l JOIN node_version v ON l.to_id = v.node_id AND l.to_version = v.version WHERE v.change_id = ?1 AND (l.change_id IS NULL OR l.change_id != ?1)`,
+		`SELECT count(*) FROM node_version o JOIN node_version v ON o.node_id = v.node_id AND o.version > v.version WHERE v.change_id = ?1 AND (o.change_id IS NULL OR o.change_id != ?1)`,
+	} {
+		var used int
+		if err := t.tx.QueryRowContext(ctx, q, string(id)).Scan(&used); err != nil {
+			return err
+		}
+		if used > 0 {
+			return fmt.Errorf("change %s: what it wrote is used by the graph: %w", id, ErrConflict)
+		}
+	}
+	rows, err := t.tx.QueryContext(ctx, `SELECT DISTINCT node_id FROM node_version WHERE change_id = ?`, string(id))
+	if err != nil {
+		return err
+	}
+	var nodes []string
+	for rows.Next() {
+		var n string
+		if err := rows.Scan(&n); err != nil {
+			rows.Close()
+			return err
+		}
+		nodes = append(nodes, n)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	const mine = `(SELECT node_id, version FROM node_version WHERE change_id = ?1)`
+	for _, q := range []string{
+		`DELETE FROM link WHERE change_id = ?1 OR (from_id, from_version) IN ` + mine,
+		`DELETE FROM node_branch WHERE (node_id, version) IN ` + mine,
+		`DELETE FROM node_version WHERE change_id = ?1`,
+		`DELETE FROM change_impact WHERE change_id = ?1`,
+		`DELETE FROM change_log WHERE change_id = ?1`,
+	} {
+		if _, err := t.tx.ExecContext(ctx, q, string(id)); err != nil {
+			return sqliteErr(err, "change "+string(id))
+		}
+	}
+	for _, n := range nodes {
+		if _, err := t.tx.ExecContext(ctx, `DELETE FROM node WHERE id = ?1 AND NOT EXISTS (SELECT 1 FROM node_version WHERE node_id = ?1)`, n); err != nil {
+			return sqliteErr(err, "node "+n)
+		}
+		if _, err := t.tx.ExecContext(ctx, `UPDATE node SET latest = (SELECT max(version) FROM node_version WHERE node_id = ?1) WHERE id = ?1`, n); err != nil {
+			return sqliteErr(err, "node "+n)
+		}
+	}
+	if branch != "" {
+		if _, err := t.tx.ExecContext(ctx, `DELETE FROM branch WHERE namespace = ? AND name = ?`, namespace, branch); err != nil {
+			return sqliteErr(err, "branch "+branch)
+		}
+	}
+	res, err := t.tx.ExecContext(ctx, `DELETE FROM change WHERE id = ?`, string(id))
+	if err != nil {
+		return sqliteErr(err, "change "+string(id))
+	}
+	if k, _ := res.RowsAffected(); k != 1 {
+		return fmt.Errorf("change %s: %w", id, ErrNotFound)
 	}
 	return nil
 }

@@ -465,3 +465,81 @@ func (t *memTx) JoinBranch(_ context.Context, ref domain.NodeRef, branch string)
 	}
 	return nil
 }
+
+func (t *memTx) DeleteChange(_ context.Context, id domain.ChangeID, namespace, branch string) error {
+	used := fmt.Errorf("change %s: what it wrote is used by the graph: %w", id, ErrConflict)
+	for _, b := range t.st.baselines {
+		if b.ChangeID == id {
+			return used
+		}
+	}
+	// what the change wrote must be the tail of its nodes: nothing was built on it
+	cut := map[domain.NodeID]int{} // first version to remove
+	for nid, vs := range t.st.versions {
+		for i, v := range vs {
+			if v.ChangeID != id {
+				continue
+			}
+			if _, ok := cut[nid]; !ok {
+				cut[nid] = i
+			}
+			for _, b := range t.st.baselines {
+				if b.Contains(v.Ref()) {
+					return used
+				}
+			}
+		}
+		if i, ok := cut[nid]; ok {
+			for _, v := range vs[i:] {
+				if v.ChangeID != id {
+					return used
+				}
+			}
+		}
+	}
+	removed := func(r domain.NodeRef) bool {
+		i, ok := cut[r.ID]
+		return ok && int(r.Version) > i
+	}
+	var kept []domain.Link
+	for _, l := range t.st.links {
+		switch {
+		case l.ChangeID == id, removed(l.From):
+		case removed(l.To):
+			return used
+		default:
+			kept = append(kept, l)
+		}
+	}
+	t.st.links = kept
+	for nid, i := range cut {
+		for _, v := range t.st.versions[nid][i:] {
+			delete(t.st.joins, joinKey{v.Ref(), domain.BranchOf(v.Branch)})
+		}
+		if i == 0 {
+			for k, kid := range t.st.keys {
+				if kid == nid {
+					delete(t.st.keys, k)
+				}
+			}
+			delete(t.st.versions, nid)
+		} else {
+			t.st.versions[nid] = t.st.versions[nid][:i]
+		}
+	}
+	for k := range t.st.joins {
+		if removed(k.ref) {
+			delete(t.st.joins, k)
+		}
+	}
+	t.st.log = slices.DeleteFunc(t.st.log, func(e domain.LogEntry) bool { return e.Change == id })
+	delete(t.st.nodes, id)
+	if branch != "" {
+		delete(t.st.branches, branchKey(namespace, branch))
+	}
+	if _, ok := t.st.changes[id]; !ok {
+		return fmt.Errorf("change %s: %w", id, ErrNotFound)
+	}
+	delete(t.st.changes, id)
+	return nil
+}

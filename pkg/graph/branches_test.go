@@ -112,6 +112,9 @@ func testBranchMerge(t *testing.T, repo Repo) {
 	if b.Branch != domain.MainBranch || b.Nodes[f.req.ID] != v4.Version {
 		t.Fatalf("merged baseline: %+v", b)
 	}
+	if b.ParentID != bM.ID || b.MergedFrom != bA.ID {
+		t.Fatalf("merged baseline parents: parent %s (want %s), mergedFrom %s (want %s)", b.ParentID, bM.ID, b.MergedFrom, bA.ID)
+	}
 	if v4.Version < 4 || v4.Reason != domain.ReasonMerge || !slices.Equal(v4.Parents, []domain.Version{3, 2}) || v4.Properties["prio"] != "high" || v4.Properties["psp"] != "stripe" {
 		t.Fatalf("merge version: %+v", v4)
 	}

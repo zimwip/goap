@@ -11,6 +11,7 @@
   import { domainSpec, openDomain, revealDomainPath } from '../editors/domainTabs';
   import { emptyNodeType, emptyLinkType } from '../../methodologyForm';
   import { openContextMenu } from '../../shell/contextMenuState.svelte';
+  import { confirmDialog } from '../../shell/confirmState.svelte';
 
   let filter = $state('');
 
@@ -153,8 +154,9 @@
                           label: 'Remove node type',
                           icon: 'trash',
                           disabled: d.readonly,
-                          run: () => {
-                            if (confirm(`Remove the node type "${n.name || 'unnamed'}" from the draft?`)) d.form.nodeTypes.splice(i, 1);
+                          run: async () => {
+                            if (await confirmDialog({ message: `Remove the node type "${n.name || 'unnamed'}" from the draft?`, danger: true }))
+                              d.form.nodeTypes.splice(i, 1);
                           },
                         },
                       ])}
@@ -200,8 +202,9 @@
                           label: 'Remove link type',
                           icon: 'trash',
                           disabled: d.readonly,
-                          run: () => {
-                            if (confirm(`Remove the link type "${l.name || 'unnamed'}" from the draft?`)) d.form.linkTypes.splice(i, 1);
+                          run: async () => {
+                            if (await confirmDialog({ message: `Remove the link type "${l.name || 'unnamed'}" from the draft?`, danger: true }))
+                              d.form.linkTypes.splice(i, 1);
                           },
                         },
                       ])}

@@ -742,6 +742,8 @@ export interface Baseline {
   id?: string;
   name?: string;
   parentId?: string;
+  /** the head of the branch merged in, when this baseline is the result of a merge (a second parent) */
+  mergedFrom?: string;
   changeId?: string;
   nodes?: Record<string, number>;
   createdAt?: string;
@@ -759,6 +761,7 @@ export interface Branch {
   origin?: string;
   status?: string;
   createdAt?: string;
+  description?: string;
 }
 
 export interface Decision {
@@ -1430,6 +1433,7 @@ const GRAPH = 'goap.graph.v1.GraphService';
 const ENGINE = 'goap.engine.v1.EngineService';
 
 const MODEL = 'goap.model.v1.ModelService';
+const PREFERENCES = 'goap.preferences.v1.PreferencesService';
 const INDEX = 'goap.index.v1.IndexService';
 
 export const ENGINE_SERVICE = ENGINE;
@@ -1583,11 +1587,13 @@ export const graph = {
     rpc<{ namespace: string; name: string }, { branch?: Branch; head?: Baseline }>(GRAPH, 'GetBranch', { namespace, name }, signal),
   listBranches: (namespace: string, signal?: AbortSignal) =>
     rpc<{ namespace: string }, { branches?: Branch[] }>(GRAPH, 'ListBranches', { namespace }, signal),
-  createBranch: (req: { namespace: string; name: string; fromBaseline: string; origin?: string }) =>
+  createBranch: (req: { namespace: string; name: string; fromBaseline: string; origin?: string; description?: string }) =>
     rpc<typeof req, { branch?: Branch }>(GRAPH, 'CreateBranch', req),
   /** open | merged | abandoned (an abandoned branch takes no change any more). */
   setBranchStatus: (namespace: string, name: string, status: string) =>
     rpc<{ namespace: string; name: string; status: string }, Empty>(GRAPH, 'SetBranchStatus', { namespace, name, status }),
+  setBranchDescription: (namespace: string, name: string, description: string) =>
+    rpc<{ namespace: string; name: string; description: string }, Empty>(GRAPH, 'SetBranchDescription', { namespace, name, description }),
   /** Merges a branch into another; a node changed on both sides needs a resolution (by node id). */
   mergeBranch: (req: { namespace: string; from: string; into: string; title?: string; resolutions?: Record<string, Resolution> }) =>
     rpc<typeof req, { change?: Change; baseline?: Baseline; plan?: MergePlan }>(GRAPH, 'MergeBranch', req),
@@ -1613,6 +1619,7 @@ export const graph = {
     branch?: string;
     ownBranch?: boolean;
     parentId?: string;
+    /** key of the responsible unit; '@me': the personal unit of the caller (a personal change, ADR 0037) */
     ownerOrg?: string;
   }) => rpc<typeof req, { change?: Change }>(GRAPH, 'CreateChange', req),
   /** Splits a change into one sub-change per organisational unit owning impacted nodes. */
@@ -1718,6 +1725,8 @@ export const graph = {
       { methodology: string; nodeType: string; key: string; props: Struct },
       { node?: GraphNode; baseline?: Baseline }
     >(GRAPH, 'CreateObject', { methodology, nodeType, key, props }),
+  /** Removes a change that landed nothing, with its log (ADR 0037); refused once anything of it is applied or used. */
+  deleteChange: (changeId: string) => rpc<{ changeId: string }, { change?: Change }>(GRAPH, 'DeleteChange', { changeId }),
   applyChange: (changeId: string, baselineName: string) =>
     rpc<{ changeId: string; baselineName: string }, { baseline?: Baseline }>(GRAPH, 'ApplyChange', {
       changeId,
@@ -1973,6 +1982,14 @@ export interface AvailableModel {
   model: string;
   displayName?: string;
 }
+
+/** The personal preferences of the caller, kept outside the graph (ADR 0038): theme, voice input, dashboard defaults. */
+export const preferencesApi = {
+  get: (signal?: AbortSignal) => rpc<Empty, { values?: Struct }>(PREFERENCES, 'GetPreferences', {}, signal),
+  /** Merges values in: a null value clears a key. Answers the preferences after the merge. */
+  set: (values: Struct) => rpc<{ values: Struct }, { values?: Struct }>(PREFERENCES, 'SetPreferences', { values }),
+  reset: () => rpc<Empty, Empty>(PREFERENCES, 'ResetPreferences', {}),
+};
 
 export const models = {
   /** Models (and aliases) the caller may use. */

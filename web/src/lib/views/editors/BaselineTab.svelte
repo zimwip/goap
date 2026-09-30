@@ -16,11 +16,13 @@
   import Icon from '../../shell/Icon.svelte';
   import NodeGraph from '../../components/NodeGraph.svelte';
   import BaselineCompare from '../../components/BaselineCompare.svelte';
+  import BaselineBranchGraph from '../../components/BaselineBranchGraph.svelte';
   import { openTab } from '../../shell/tabs.svelte';
   import { openNode } from '../../nodeEditors';
   import { indexOf } from '../../graphIndex';
   import { splitType } from '../../stores/types.svelte';
   import { provideActions } from '../../shell/workbench.svelte';
+  import { MAIN_BRANCH } from '../../namespace';
 
   let { tab }: { tab: Tab } = $props();
 
@@ -82,6 +84,41 @@
       });
     return () => ctrl.abort();
   });
+
+  // ---- history: every baseline of the namespace, across branches, newest first -----------------
+
+  let history = $state<Baseline[]>([]);
+
+  $effect(() => {
+    const ns = baseline?.namespace;
+    if (!ns) return;
+    const ctrl = new AbortController();
+    graph
+      .listBaselines(ns, ctrl.signal)
+      .then((r) => (history = [...(r.baselines ?? [])].sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''))))
+      .catch(() => {});
+    return () => ctrl.abort();
+  });
+
+  function openHistoryBaseline(hid: string) {
+    const h = history.find((b) => b.id === hid);
+    if (h) viewBaseline(h);
+  }
+  function pinHistoryBaseline(hid: string) {
+    const h = history.find((b) => b.id === hid);
+    if (h?.id) openTab({ kind: 'baseline', params: { id: h.id, name: h.name ?? '', type: '', node: '' } }, { pin: true });
+  }
+
+  function viewBaseline(b: Baseline) {
+    if (!b.id || b.id === id) return;
+    tab.params.id = b.id;
+    tab.params.name = b.name ?? '';
+    tab.params.type = '';
+    tab.params.node = '';
+    filter = '';
+    query = '';
+    offset = 0;
+  }
 
   const typeTotal = $derived(types.reduce((s, t) => s + (t.count ?? 0), 0));
   const pageCount = $derived(Math.max(1, Math.ceil(total / size)));
@@ -182,6 +219,11 @@
   {/if}
 
   <div class="browse">
+    <nav class="card history" aria-label="History">
+      <h3>History <span class="hint">{baseline?.branch || MAIN_BRANCH}</span></h3>
+      <BaselineBranchGraph baselines={history} branch={baseline?.branch || MAIN_BRANCH} selected={id} onselect={openHistoryBaseline} onopen={pinHistoryBaseline} />
+    </nav>
+
     <nav class="card types" aria-label="Node types">
       <h3>Node types</h3>
       <button type="button" class="type" class:sel={!type} onclick={() => pickType('')}>
@@ -315,17 +357,36 @@
   }
   .browse {
     display: grid;
-    grid-template-columns: minmax(170px, 220px) minmax(320px, 1fr) minmax(400px, 1.3fr);
+    grid-template-columns: minmax(260px, 340px) minmax(170px, 220px) minmax(320px, 1fr) minmax(400px, 1.3fr);
     gap: 0.8rem;
-    align-items: start;
+    align-items: stretch;
   }
-  @media (max-width: 1100px) {
+  @media (max-width: 1300px) {
     .browse {
-      grid-template-columns: minmax(160px, 200px) 1fr;
+      grid-template-columns: minmax(220px, 260px) minmax(160px, 200px) 1fr;
     }
     .neighbours {
       grid-column: 1 / -1;
     }
+  }
+  @media (max-width: 800px) {
+    .browse {
+      grid-template-columns: 1fr;
+    }
+    .history {
+      max-height: 30vh;
+    }
+  }
+  .history {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .history h3 {
+    margin: 0 0 0.2rem;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
   }
   .card {
     min-width: 0;

@@ -496,10 +496,9 @@ th.num {
   white-space: nowrap;
 }
 
-/* Éditeurs : conteneur défilant commun. */
+/* Editors: common scrolling container. */
 .editor-page {
   padding: 0.9rem 1.1rem 2rem;
-  max-width: 1100px;
 }
 .editor-head {
   display: flex;

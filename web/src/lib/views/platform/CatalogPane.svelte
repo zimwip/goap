@@ -1,18 +1,32 @@
 <script lang="ts">
-  // Catalog: which models the platform exposes, their global token quota and who may use them.
+  // Catalog: which models the platform exposes, their global token quota and who may use them, and the aliases.
+  // Edits are staged (a personal change of the platform namespace) and saved from the dialog's Save bar; an alias
+  // that a methodology references and nobody configured is proposed by an open change and reviewed here.
   import { errorMessage, formatInt, type CatalogModel, type LlmProvider, type ModelAlias } from '../../api';
-  import { saveModel, deleteModel, saveAlias as saveAliasNode, deleteAlias } from '../../llmEdit';
+  import {
+    saveModel,
+    deleteModel,
+    saveAlias as saveAliasNode,
+    deleteAlias,
+    acceptAliasProposal,
+    declineAliasProposal,
+    type AliasProposal,
+    type Unsaved,
+  } from '../../llmEdit';
+  import { confirmDialog } from '../../shell/confirmState.svelte';
 
   let {
     providers,
     catalog,
     aliases,
+    proposals = [],
     onchange,
     openProviders,
   }: {
     providers: LlmProvider[];
-    catalog: CatalogModel[];
-    aliases: ModelAlias[];
+    catalog: Unsaved<CatalogModel>[];
+    aliases: Unsaved<ModelAlias>[];
+    proposals?: AliasProposal[];
     onchange: () => Promise<void> | void;
     openProviders: () => void;
   } = $props();
@@ -71,6 +85,7 @@
   function toggleRole(r: Row, role: string) {
     const x = row(r.m);
     x.roles = x.roles.includes(role) ? x.roles.filter((v) => v !== role) : [...x.roles, role];
+    void save(x);
   }
 
   async function save(r: Row) {
@@ -87,12 +102,8 @@
     }
   }
 
-  function revert(r: Row) {
-    delete edits[key(r.m)];
-  }
-
   async function remove(m: CatalogModel) {
-    if (!confirm(`Remove ${key(m)} from the catalog? Aliases pointing to it are removed too.`)) return;
+    if (!(await confirmDialog({ message: `Remove ${key(m)} from the catalog? Aliases pointing to it are removed too.`, danger: true }))) return;
     error = '';
     try {
       await deleteModel(m.provider, m.model);
@@ -124,6 +135,35 @@
       await onchange();
     } catch (e) {
       error = errorMessage(e);
+    }
+  }
+
+  // proposals: the target the reviewer picks (defaults to the proposed one)
+  let proposalTarget = $state<Record<string, string>>({});
+
+  async function accept(p: AliasProposal) {
+    busy = p.impactId;
+    error = '';
+    try {
+      await acceptAliasProposal(p, proposalTarget[p.impactId] || p.target);
+      await onchange();
+    } catch (e) {
+      error = errorMessage(e);
+    } finally {
+      busy = '';
+    }
+  }
+
+  async function decline(p: AliasProposal) {
+    busy = p.impactId;
+    error = '';
+    try {
+      await declineAliasProposal(p);
+      await onchange();
+    } catch (e) {
+      error = errorMessage(e);
+    } finally {
+      busy = '';
     }
   }
 
@@ -161,27 +201,29 @@
         </thead>
         <tbody>
           {#each rows as r (key(r.m))}
-            <tr class:dirty={dirty(r)} class:off={!r.enabled}>
+            <tr class:dirty={dirty(r) || (r.m as Unsaved<CatalogModel>).pending} class:off={!r.enabled}>
               <td>
                 <code>{key(r.m)}</code>
                 {#if r.m.displayName && r.m.displayName !== r.m.model}<div class="hint">{r.m.displayName}</div>{/if}
               </td>
               <td>
-                <input type="checkbox" checked={r.enabled} onchange={(e) => (row(r.m).enabled = e.currentTarget.checked)} aria-label={`Enable ${key(r.m)}`} />
+                <input type="checkbox" checked={r.enabled} onchange={(e) => { row(r.m).enabled = e.currentTarget.checked; void save(row(r.m)); }} aria-label={`Enable ${key(r.m)}`} />
               </td>
               <td class="quota">
-                <input
-                  type="number"
-                  min="0"
-                  step="1000"
-                  value={r.quota}
-                  placeholder="0"
-                  aria-label={`Quota of ${key(r.m)}`}
-                  oninput={(e) => (row(r.m).quota = Math.max(0, Math.floor(Number(e.currentTarget.value) || 0)))}
-                />
-                <select value={r.period} aria-label="Quota period" onchange={(e) => (row(r.m).period = e.currentTarget.value)}>
-                  {#each PERIODS as [v, l] (v)}<option value={v}>{l}</option>{/each}
-                </select>
+                <div class="quota-controls">
+                  <input
+                    type="number"
+                    min="0"
+                    step="1000"
+                    value={r.quota}
+                    placeholder="0"
+                    aria-label={`Quota of ${key(r.m)}`}
+                    onchange={(e) => { row(r.m).quota = Math.max(0, Math.floor(Number(e.currentTarget.value) || 0)); void save(row(r.m)); }}
+                  />
+                  <select value={r.period} aria-label="Quota period" onchange={(e) => { row(r.m).period = e.currentTarget.value; void save(row(r.m)); }}>
+                    {#each PERIODS as [v, l] (v)}<option value={v}>{l}</option>{/each}
+                  </select>
+                </div>
                 {#if r.quota === 0}<span class="hint">unlimited</span>{/if}
               </td>
               <td class="used">
@@ -205,12 +247,8 @@
                 </details>
               </td>
               <td class="actions">
-                {#if dirty(r)}
-                  <button type="button" class="small primary" disabled={busy !== ''} onclick={() => save(r)}>{busy === key(r.m) ? '…' : 'Save'}</button>
-                  <button type="button" class="small" onclick={() => revert(r)}>Undo</button>
-                {:else}
-                  <button type="button" class="small danger" onclick={() => remove(r.m)}>Remove</button>
-                {/if}
+                {#if (r.m as Unsaved<CatalogModel>).pending}<span class="pending" title="Not saved yet">unsaved</span>{/if}
+                <button type="button" class="small danger" onclick={() => remove(r.m)}>Remove</button>
               </td>
             </tr>
           {/each}
@@ -225,11 +263,27 @@
   <p class="hint">
     Callers ask for an alias (<code>default</code>, <code>fast</code>…) instead of a precise model, so a model can be swapped here without touching methodologies.
   </p>
+  {#if proposals.length}
+    <ul class="aliases proposals">
+      {#each proposals as p (p.impactId)}
+        <li>
+          <code>{p.alias}</code> →
+          <select bind:value={proposalTarget[p.impactId]} aria-label={`Target of ${p.alias}`}>
+            <option value="" disabled>model…</option>
+            {#each catalog as m (key(m))}<option value={key(m)}>{key(m)}</option>{/each}
+          </select>
+          <button type="button" class="small primary" disabled={!(proposalTarget[p.impactId] ?? p.target) || busy !== ''} onclick={() => accept(p)}>Accept</button>
+          <button type="button" class="small danger" disabled={busy !== ''} onclick={() => decline(p)}>Decline</button>
+          <span class="hint">proposed{p.by ? ` by ${p.by}` : ''}{p.reason ? `: ${p.reason}` : ''}</span>
+        </li>
+      {/each}
+    </ul>
+  {/if}
   {#if aliases.length}
     <ul class="aliases">
       {#each aliases as a (a.alias)}
         <li>
-          <code>{a.alias}</code> →
+          <code>{a.alias}</code>{#if a.pending} <span class="pending" title="Not saved yet">unsaved</span>{/if} →
           <select value={`${a.provider}/${a.model}`} aria-label={`Target of ${a.alias}`} onchange={(e) => saveAlias(a.alias, e.currentTarget.value)}>
             {#each catalog as m (key(m))}<option value={key(m)}>{key(m)}</option>{/each}
           </select>
@@ -261,8 +315,30 @@
 {/if}
 
 <style>
+  .pending {
+    display: inline-block;
+    margin-right: 0.4rem;
+    padding: 0 0.4rem;
+    border: 1px solid var(--warn);
+    border-radius: 999px;
+    color: var(--warn);
+    font-size: 0.75rem;
+  }
+  .proposals {
+    border-left: 3px solid var(--warn);
+    padding-left: 0.6rem;
+    margin-bottom: 0.6rem;
+  }
   .scroll {
     overflow-x: auto;
+  }
+  table {
+    min-width: 52rem;
+  }
+  th,
+  td {
+    padding: 0.5rem 0.6rem;
+    vertical-align: top;
   }
   .row {
     display: flex;
@@ -283,11 +359,13 @@
   tr.off code {
     opacity: 0.55;
   }
-  .quota {
-    white-space: nowrap;
+  .quota-controls {
+    display: flex;
+    gap: 0.35rem;
+    flex-wrap: wrap;
   }
   .quota input[type='number'] {
-    width: 8.5rem;
+    width: 7rem;
   }
   .used {
     min-width: 8rem;
@@ -312,8 +390,8 @@
   }
   .roles {
     display: grid;
-    gap: 0.15rem;
-    padding: 0.3rem 0;
+    gap: 0.3rem;
+    padding: 0.4rem 0;
   }
   .roles label {
     display: flex;

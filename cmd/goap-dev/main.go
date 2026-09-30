@@ -9,6 +9,8 @@
 package main
 
 import (
+	"connectrpc.com/connect"
+
 	"context"
 	"maps"
 	"net/http"
@@ -23,6 +25,7 @@ import (
 	"github.com/zimwip/goap/gen/goap/index/v1/indexv1connect"
 	"github.com/zimwip/goap/gen/goap/mcp/v1/mcpv1connect"
 	"github.com/zimwip/goap/gen/goap/model/v1/modelv1connect"
+	"github.com/zimwip/goap/gen/goap/preferences/v1/preferencesv1connect"
 	"github.com/zimwip/goap/gen/goap/registry/v1/registryv1connect"
 	"github.com/zimwip/goap/gen/goap/runtime/v1/runtimev1connect"
 	"github.com/zimwip/goap/internal/connectorkit"
@@ -35,6 +38,7 @@ import (
 	"github.com/zimwip/goap/internal/mcpsvc"
 	"github.com/zimwip/goap/internal/modelgw"
 	"github.com/zimwip/goap/internal/platform"
+	"github.com/zimwip/goap/internal/prefssvc"
 	"github.com/zimwip/goap/internal/registrysvc"
 	"github.com/zimwip/goap/internal/sandbox"
 	"github.com/zimwip/goap/internal/telemetry"
@@ -224,11 +228,13 @@ func main() {
 		Hub: hub, Registry: reg, Authz: authorizer, Floor: authorizer.Floor()}))
 	hub.KeepRegistered(ctx, connectors)
 	srv := platform.NewServer(log, platform.Env("GOAP_HTTP_ADDR", ":8080"))
-	srv.Mount(graphv1connect.NewGraphServiceHandler(&graphsvc.Handler{Graph: g, Events: engine.Publishers{changePublisher(onChange), indexSink}, Authz: authorizer, Floor: authorizer.Floor(), Identity: ident}, telemetry.HandlerOptions()...))
+	graphHandler := &graphsvc.Handler{Graph: g, Events: engine.Publishers{changePublisher(onChange), indexSink}, Authz: authorizer, Floor: authorizer.Floor(), Identity: ident}
+	srv.Mount(graphv1connect.NewGraphServiceHandler(graphHandler, append(telemetry.HandlerOptions(), connect.WithInterceptors(graphHandler.PersonalScope()))...))
 	srv.Mount(registryv1connect.NewRegistryServiceHandler(&registrysvc.Handler{Service: reg, Identity: ident}, telemetry.HandlerOptions()...))
 	srv.Echo.GET("/api/whoami", identity.WhoAmI(ident, directory.Enrich))
 	srv.Mount(mcpv1connect.NewMcpServiceHandler(&mcpsvc.Handler{Service: hub, Authz: authorizer, Identity: ident, ConnectorToken: connectorToken}, telemetry.HandlerOptions()...))
 	srv.Mount(modelv1connect.NewModelServiceHandler(&modelgw.Handler{Service: gw, Identity: ident, Authz: authorizer}, telemetry.HandlerOptions()...))
+	srv.Mount(preferencesv1connect.NewPreferencesServiceHandler(&prefssvc.Handler{Service: &prefssvc.Service{Store: st.prefs}, Identity: ident}, telemetry.HandlerOptions()...))
 	srv.Mount(indexv1connect.NewIndexServiceHandler(&indexersvc.Handler{Service: indexer, Identity: ident, Authz: authorizer}, telemetry.HandlerOptions()...))
 	srv.Mount(enginev1connect.NewEngineServiceHandler(engineHandler, telemetry.HandlerOptions()...))
 	// single process: the platform is up when this answers (the gateway serves it otherwise)

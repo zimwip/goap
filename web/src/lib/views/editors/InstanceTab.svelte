@@ -11,6 +11,7 @@
   import { closeWhere, openTab } from '../../shell/tabs.svelte';
   import { plugsOf } from '../../algorithmForm';
   import { algorithmSpec, algorithmToolbar, domainDraftOf, instanceIndex } from './domainTabs';
+  import { confirmDialog } from '../../shell/confirmState.svelte';
 
   let { tab }: { tab: Tab } = $props();
 
@@ -47,13 +48,13 @@
   const bad = (p: string) => d.bad(`algorithmInstances[${index}]${p}`);
   const issues = $derived(d.allIssues.filter((i) => i.norm === `algorithmInstances[${index}]` || i.norm.startsWith(`algorithmInstances[${index}].`)));
 
-  function remove() {
+  async function remove() {
     if (!inst) return;
     if (plugs.length) {
       notify(`${inst.name} is plugged (${plugs.length}): unplug it first.`, 'error');
       return;
     }
-    if (!confirm(`Remove the instance "${inst.name || 'unnamed'}" from the draft?`)) return;
+    if (!(await confirmDialog({ message: `Remove the instance "${inst.name || 'unnamed'}" from the draft?`, danger: true }))) return;
     const uid = inst.uid;
     closeWhere((t) => t.kind === 'instance' && t.params.uid === uid);
     d.form.instances.splice(index, 1);

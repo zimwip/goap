@@ -8,6 +8,7 @@
   import Icon from '../../shell/Icon.svelte';
   import StatusBadge from '../../components/StatusBadge.svelte';
   import { provideActions } from '../../shell/workbench.svelte';
+  import { confirmDialog } from '../../shell/confirmState.svelte';
 
   let { tab }: { tab: Tab } = $props();
 
@@ -38,7 +39,7 @@
   });
 
   async function remove(n: GraphNode, p: Policy, i: number) {
-    if (!confirm(`Delete the policy "${p.effect} ${p.resource}/${p.action}"?\n\n${p.rule}`)) return;
+    if (!(await confirmDialog({ message: `Delete the policy "${p.effect} ${p.resource}/${p.action}"?\n\n${p.rule}`, danger: true }))) return;
     removing = i;
     error = '';
     try {
@@ -80,7 +81,7 @@
   }
 
   async function removeUser(n: GraphNode, u: User) {
-    if (!confirm(`Delete the user "${u.subject}"?`)) return;
+    if (!(await confirmDialog({ message: `Delete the user "${u.subject}"?`, danger: true }))) return;
     error = '';
     try {
       await applyOnMain(NS_ORGANISATION, `Delete user ${u.subject}`, 'Delete a user', baselineId, [deleteNodeItem(n)]);

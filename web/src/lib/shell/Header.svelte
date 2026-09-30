@@ -1,9 +1,8 @@
 <script lang="ts">
   // Header: product, search / command palette, stream status,
-  // user menu (access token, theme).
+  // user menu (access token, theme: a shortcut to the preference, saved as it changes).
   import Icon, { type IconName } from './Icon.svelte';
   import { COMMANDS } from './commands';
-  import { layout } from './layout.svelte';
   import { tabsState, openTab, activate } from './tabs.svelte';
   import { editorView } from './registry';
   import { focusRequests } from './workbench.svelte';
@@ -12,6 +11,26 @@
   import { session, refreshIdentity } from '../stores/session.svelte';
   import { methodologies, baselines, changes } from '../stores/catalog.svelte';
   import { live, processes } from '../stores/live.svelte';
+  import { health, startHealth } from '../stores/status.svelte';
+  import { openPlatformStatus } from './platformStatusState.svelte';
+  import { openSettings } from './settingsState.svelte';
+  import type { Theme } from './layout.svelte';
+  import { prefs, editPrefs } from '../stores/preferences.svelte';
+  import { openUsage } from './usageState.svelte';
+  import { notifications, markRead, markAllRead, clearNotifications, type Notice } from '../stores/notifications.svelte';
+  import { formatTime } from '../api';
+  import Popover from './Popover.svelte';
+
+  $effect(() => startHealth());
+
+  // Worst of the event stream and the platform health, for one combined dot.
+  // "connecting" is the normal state while the stream handshakes (same as the
+  // status modal, which shows it green too) — only "retrying" is a problem.
+  const combined = $derived.by((): 'ok' | 'warn' | 'down' => {
+    if (health.status === 'down' || live.status === 'stopped') return 'down';
+    if (health.status === 'degraded' || live.status === 'retrying') return 'warn';
+    return 'ok';
+  });
 
   // --- search -------------------------------------------------------------------
 
@@ -151,6 +170,7 @@
   // --- user ---------------------------------------------------------------------
 
   let menuOpen = $state(false);
+  let bellOpen = $state(false);
   let tokenDraft = $state('');
   const principal = $derived(session.principal);
   const hasToken = $derived(session.hasToken);
@@ -173,6 +193,12 @@
   function clearToken() {
     setToken(null);
     tokenDraft = '';
+  }
+
+  function openNotice(n: Notice) {
+    markRead(n.id);
+    if (n.processId) openTab({ kind: 'run', params: { id: n.processId } }, { pin: true });
+    bellOpen = false;
   }
 
   const STREAM_LABEL: Record<string, string> = {
@@ -234,10 +260,57 @@
   </div>
 
   <div class="right">
-    <span class="stream {live.status}" title={`${STREAM_LABEL[live.status]}${live.error ? ` : ${live.error}` : ''}`}>
+    <button
+      type="button"
+      class="stream {combined}"
+      title={`${STREAM_LABEL[live.status]}${live.error ? ` : ${live.error}` : ''}`}
+      aria-haspopup="dialog"
+      onclick={openPlatformStatus}
+    >
       <span class="led" aria-hidden="true"></span>
       <span class="sl">{live.status === 'retrying' ? 'reconnecting' : live.status === 'stopped' ? 'offline' : 'live'}</span>
-    </span>
+    </button>
+
+    <div class="item-wrap">
+      <button
+        type="button"
+        class="bell"
+        aria-haspopup="dialog"
+        aria-expanded={bellOpen}
+        aria-label={`Notifications${notifications.unread ? ` (${notifications.unread} unread)` : ''}`}
+        onclick={() => (bellOpen = !bellOpen)}
+      >
+        <Icon name="bell" size={15} />
+        {#if notifications.unread}<span class="count">{notifications.unread}</span>{/if}
+      </button>
+      <Popover bind:open={bellOpen} label="Notifications" align="right" placement="below" width="380px">
+        <div class="pop-head">
+          <strong>Notifications</strong>
+          <span class="grow"></span>
+          <button type="button" class="small ghost" disabled={!notifications.unread} onclick={markAllRead}>Mark all read</button>
+          <button type="button" class="small ghost" disabled={!notifications.items.length} onclick={clearNotifications}>Clear</button>
+        </div>
+        {#if notifications.items.length}
+          <ul class="list">
+            {#each notifications.items as n (n.id)}
+              <li class:unread={!n.read}>
+                <button type="button" class="row-btn" onclick={() => openNotice(n)}>
+                  <span class="tone {n.tone}" aria-hidden="true"></span>
+                  <span class="main">
+                    <strong>{n.title}</strong>
+                    <span class="txt">{n.text}</span>
+                  </span>
+                  <span class="hint el">{formatTime(n.time)}</span>
+                </button>
+              </li>
+            {/each}
+          </ul>
+        {:else}
+          <p class="pad hint">No notifications.</p>
+        {/if}
+      </Popover>
+    </div>
+
     <div class="user" use:outside>
       <button type="button" class="ghost ubtn" aria-haspopup="true" aria-expanded={menuOpen} onclick={toggleMenu}>
         <Icon name="user" size={15} />
@@ -263,11 +336,33 @@
           </form>
           <div class="theme">
             <label for="theme">Theme</label>
-            <select id="theme" bind:value={layout.theme}>
+            <select id="theme" value={prefs.values.theme} onchange={(e) => void editPrefs({ theme: e.currentTarget.value as Theme })}>
               <option value="auto">System</option>
               <option value="light">Light</option>
               <option value="dark">Dark</option>
             </select>
+          </div>
+          <div class="menu-actions">
+            <button
+              type="button"
+              class="small settings-btn"
+              onclick={() => {
+                menuOpen = false;
+                openUsage();
+              }}
+            >
+              <Icon name="coins" size={13} />Token usage
+            </button>
+            <button
+              type="button"
+              class="small settings-btn"
+              onclick={() => {
+                menuOpen = false;
+                openSettings();
+              }}
+            >
+              <Icon name="settings" size={13} />Settings
+            </button>
           </div>
         </div>
       {/if}
@@ -280,7 +375,7 @@
     display: flex;
     align-items: center;
     gap: 0.8rem;
-    height: 38px;
+    height: 46px;
     padding: 0 0.6rem 0 0.8rem;
     flex: none;
     background: var(--chrome-2);
@@ -317,7 +412,7 @@
   .search input {
     padding-left: 1.8rem;
     background: var(--surface);
-    height: 26px;
+    height: 30px;
   }
   .results {
     position: absolute;
@@ -366,9 +461,18 @@
     display: inline-flex;
     align-items: center;
     gap: 0.35rem;
+    padding: 0 0.3rem;
+    min-height: 0;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: transparent;
     font-size: 0.85rem;
+    font-weight: 500;
     color: var(--muted);
     white-space: nowrap;
+  }
+  .stream:hover {
+    background: var(--hover);
   }
   .led {
     width: 8px;
@@ -376,11 +480,114 @@
     border-radius: 50%;
     background: var(--muted);
   }
-  .open .led,
-  .connecting .led {
+  .stream.ok .led {
     background: var(--ok);
   }
-  .retrying .led {
+  .stream.warn .led {
+    background: var(--warn);
+  }
+  .stream.down .led {
+    background: var(--danger);
+  }
+  .item-wrap {
+    position: relative;
+    display: flex;
+  }
+  .bell {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    padding: 0.35rem;
+    min-height: 0;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: inherit;
+  }
+  .bell:hover {
+    background: var(--hover);
+  }
+  .count {
+    position: absolute;
+    top: 0;
+    right: 0;
+    min-width: 15px;
+    height: 15px;
+    border-radius: 8px;
+    padding: 0 4px;
+    background: var(--danger);
+    color: #fff;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 15px;
+    text-align: center;
+  }
+  .pop-head {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.45rem 0.6rem;
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    background: var(--surface);
+  }
+  .pad {
+    padding: 0.4rem 0.6rem;
+    margin: 0;
+  }
+  .list {
+    list-style: none;
+    margin: 0;
+    padding: 0.2rem 0;
+  }
+  .row-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+    border: none;
+    border-radius: 0;
+    background: none;
+    text-align: left;
+    font-weight: 400;
+    padding: 0.3rem 0.6rem;
+    min-height: 0;
+  }
+  .row-btn:hover:not(:disabled) {
+    background: var(--hover);
+  }
+  .main {
+    flex: 1;
+    min-width: 0;
+    display: grid;
+  }
+  .main .txt {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--muted);
+  }
+  .unread .main strong::after {
+    content: ' ●';
+    color: var(--accent);
+  }
+  .el {
+    white-space: nowrap;
+  }
+  .tone {
+    width: 4px;
+    align-self: stretch;
+    border-radius: 2px;
+    background: var(--info);
+  }
+  .tone.ok {
+    background: var(--ok);
+  }
+  .tone.error {
+    background: var(--danger);
+  }
+  .tone.warn {
     background: var(--warn);
   }
   .user {
@@ -412,6 +619,18 @@
   }
   .theme {
     margin-top: 0.7rem;
+  }
+  .menu-actions {
+    display: flex;
+    gap: 0.4rem;
+    margin-top: 0.7rem;
+  }
+  .settings-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    flex: 1;
   }
   @media (max-width: 900px) {
     .sub,

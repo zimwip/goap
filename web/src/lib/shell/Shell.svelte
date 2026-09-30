@@ -13,14 +13,32 @@
   import Toasts from './Toasts.svelte';
   import ContextMenu from './ContextMenu.svelte';
   import ObjectDialog from './ObjectDialog.svelte';
+  import ConfirmDialog from './ConfirmDialog.svelte';
+  import SettingsDialog from './SettingsDialog.svelte';
+  import UsageDialog from './UsageDialog.svelte';
+  import PlatformStatusModal from './PlatformStatusModal.svelte';
   import SearchOverlay from './SearchOverlay.svelte';
   import { openSearch } from './searchOverlay.svelte.ts';
   import StatusBar from './StatusBar.svelte';
   import { layout, LIMITS, toggleConsole } from './layout.svelte';
   import { activeTab, closeTab } from './tabs.svelte';
   import { runTabAction, focusRequests } from './workbench.svelte';
+  import { session } from '../stores/session.svelte';
+  import { isPending } from '../stores/pending.svelte';
+  import { loadSettingsState } from '../stores/settings.svelte';
 
   let { welcome }: { welcome: Component } = $props();
+
+  // the preferences are graph data of the signed-in user: read them once the identity is known (and again when it changes)
+  $effect(() => {
+    void session.principal?.subject;
+    if (session.loaded) void loadSettingsState();
+  });
+
+  // unsaved settings are lost on leaving the page: the browser asks first
+  function beforeUnload(e: BeforeUnloadEvent) {
+    if (isPending()) e.preventDefault();
+  }
 
   let width = $state(window.innerWidth);
   let height = $state(window.innerHeight);
@@ -57,7 +75,7 @@
   }
 </script>
 
-<svelte:window bind:innerWidth={width} bind:innerHeight={height} onkeydown={keydown} />
+<svelte:window bind:innerWidth={width} bind:innerHeight={height} onkeydown={keydown} onbeforeunload={beforeUnload} />
 
 <div class="shell" class:narrow>
   <Header />
@@ -121,6 +139,10 @@
 <Toasts />
 <ContextMenu />
 <ObjectDialog />
+<ConfirmDialog />
+<SettingsDialog />
+<UsageDialog />
+<PlatformStatusModal />
 <SearchOverlay />
 
 <style>

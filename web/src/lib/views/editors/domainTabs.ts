@@ -3,6 +3,7 @@ import type { Tab, TabSpec, ToolbarAction } from '../../shell/types';
 import { openTab, closeWhere } from '../../shell/tabs.svelte';
 import { notify, requestReveal } from '../../shell/workbench.svelte';
 import { getDomainDraft, type DomainDraft } from '../../stores/domains.svelte';
+import { confirmDialog } from '../../shell/confirmState.svelte';
 
 export function domainSpec(name: string, version: string): TabSpec {
   return { kind: 'domain', params: { name, version } };
@@ -90,8 +91,8 @@ export function domainActions(d: DomainDraft): ToolbarAction[] {
       icon: 'refresh',
       disabled: busy,
       title: 'Reload from the registry (discards changes)',
-      run: () => {
-        if (d.dirty && !confirm('Discard unsaved changes and reload?')) return;
+      run: async () => {
+        if (d.dirty && !(await confirmDialog('Discard unsaved changes and reload?'))) return;
         void d.reload();
       },
     });
