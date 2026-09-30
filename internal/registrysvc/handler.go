@@ -240,18 +240,19 @@ func (h *Handler) RunAlgorithm(ctx context.Context, r *connect.Request[registryv
 }
 
 func (h *Handler) ListPlatformAlgorithms(ctx context.Context, _ *connect.Request[registryv1.ListPlatformAlgorithmsRequest]) (*connect.Response[registryv1.ListPlatformAlgorithmsResponse], error) {
-	as, err := h.Service.algorithms()
-	if err != nil {
-		return nil, toConnect(err)
-	}
-	rs, err := as.ListAlgorithms(ctx)
+	views, err := h.Service.PlatformAlgorithms(ctx)
 	if err != nil {
 		return nil, toConnect(err)
 	}
 	out := &registryv1.ListPlatformAlgorithmsResponse{}
-	for _, r := range rs {
-		out.Algorithms = append(out.Algorithms, &registryv1.PlatformAlgorithm{
-			Algorithm: algorithmsToPB([]algo.Algorithm{r.Algorithm})[0], SourceDomain: r.SourceDomain, SourceVersion: r.SourceVersion})
+	for _, v := range views {
+		pa := &registryv1.PlatformAlgorithm{
+			Algorithm: algorithmsToPB([]algo.Algorithm{v.Algorithm})[0], SourceDomain: v.SourceDomain, SourceVersion: v.SourceVersion,
+		}
+		for _, u := range v.Usages {
+			pa.Instances = append(pa.Instances, &registryv1.AlgorithmInstanceUsage{Domain: u.Domain, Version: u.Version, Instance: u.Instance, Values: pbconv.Struct(u.Values)})
+		}
+		out.Algorithms = append(out.Algorithms, pa)
 	}
 	return connect.NewResponse(out), nil
 }

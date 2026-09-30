@@ -71,6 +71,52 @@ func (s *Service) platformAlgorithms(ctx context.Context) algo.Set {
 	return algo.Set{Algorithms: algs}
 }
 
+// AlgorithmUsage is a domain's algorithm instance referencing a platform-wide algorithm as "platform@<name>"
+// instead of redeclaring it (ADR 0041).
+type AlgorithmUsage struct {
+	Domain, Version, Instance string
+	Values                    map[string]any
+}
+
+// PlatformAlgorithmView is an algorithm of the platform-wide registry together with every algorithm instance, of
+// any published domain, that references it (ADR 0041).
+type PlatformAlgorithmView struct {
+	AlgorithmRecord
+	Usages []AlgorithmUsage
+}
+
+// PlatformAlgorithms returns every algorithm of the platform-wide registry (ADR 0041) together with the algorithm
+// instances of the published domains that reference each one as "platform@<name>" instead of redeclaring it. A
+// domain that cannot be listed (no domain store, say) simply contributes no usage: the algorithms themselves still
+// come back.
+func (s *Service) PlatformAlgorithms(ctx context.Context) ([]PlatformAlgorithmView, error) {
+	as, err := s.algorithms()
+	if err != nil {
+		return nil, err
+	}
+	recs, err := as.ListAlgorithms(ctx)
+	if err != nil {
+		return nil, err
+	}
+	usageByName := map[string][]AlgorithmUsage{}
+	if ds, err := s.Domains(ctx); err == nil {
+		for _, d := range ds {
+			for _, inst := range d.Instances {
+				name, ok := algo.PlatformRef(inst.Algorithm)
+				if !ok {
+					continue
+				}
+				usageByName[name] = append(usageByName[name], AlgorithmUsage{Domain: d.Name, Version: d.Version, Instance: inst.Name, Values: inst.Values})
+			}
+		}
+	}
+	out := make([]PlatformAlgorithmView, len(recs))
+	for i, r := range recs {
+		out[i] = PlatformAlgorithmView{AlgorithmRecord: r, Usages: usageByName[r.Algorithm.Name]}
+	}
+	return out, nil
+}
+
 // centralizeAlgorithms upserts the algorithms a domain declares into the platform-wide registry (ADR 0041): the
 // domain still declares its algorithms directly, but the registry centralizes their canonical definition so another
 // domain can reference one ("platform@<name>") instead of redeclaring it. A name already centralized by a different

@@ -1,9 +1,13 @@
 <script lang="ts">
   // Platform-wide algorithm registry (ADR 0041): algorithms centralized from the domains that declared them, on
-  // publish. Read-only here (a domain still declares its algorithms directly; this only lists what got centralized)
-  // — no staged edits, so no save bar involvement.
+  // publish, grouped by type then algorithm then the domain instances that reference it — the same organisation as
+  // the per-domain Algorithms explorer (AlgorithmExplorer.svelte), minus the editing (this is read-only: a domain
+  // still declares its algorithms directly, only the registry centralizes them).
   import Icon from '../../shell/Icon.svelte';
+  import TreeRow from '../TreeRow.svelte';
+  import { toggle, isOpen } from '../nav/expanded.svelte';
   import { registry, errorMessage, type PlatformAlgorithm } from '../../api';
+  import { ALGORITHM_USAGES } from '../../dsl';
 
   let algorithms = $state<PlatformAlgorithm[]>([]);
   let loading = $state(true);
@@ -27,14 +31,17 @@
     void load();
   });
 
-  const rows = $derived(
-    algorithms
-      .filter((p) => {
-        const name = p.algorithm?.name ?? '';
-        return !filter || name.toLowerCase().includes(filter.toLowerCase()) || (p.sourceDomain ?? '').toLowerCase().includes(filter.toLowerCase());
-      })
-      .sort((a, b) => (a.algorithm?.name ?? '').localeCompare(b.algorithm?.name ?? '')),
-  );
+  const q = $derived(filter.trim().toLowerCase());
+  const match = (s: string | undefined) => !q || (s ?? '').toLowerCase().includes(q);
+  const matches = (p: PlatformAlgorithm) =>
+    match(p.algorithm?.name) || match(p.sourceDomain) || (p.instances ?? []).some((u) => match(u.domain) || match(u.instance));
+
+  const sorted = $derived([...algorithms].sort((a, b) => (a.algorithm?.name ?? '').localeCompare(b.algorithm?.name ?? '')));
+  const usages = $derived(ALGORITHM_USAGES.filter((u) => u.usage !== 'adapter'));
+
+  function forType(type: string) {
+    return sorted.filter((p) => p.algorithm?.type === type && matches(p));
+  }
 
   async function copyRef(name: string) {
     const ref = `platform@${name}`;
@@ -46,6 +53,8 @@
       // clipboard access denied: nothing to fall back to
     }
   }
+
+  const valuesTitle = (v: Record<string, unknown> | undefined) => (v && Object.keys(v).length ? JSON.stringify(v) : '');
 </script>
 
 <div class="pane">
@@ -57,39 +66,52 @@
     <button type="button" class="small refresh" disabled={loading} onclick={load}><Icon name="refresh" size={13} />Refresh</button>
   </div>
   {#if error}<div class="alert">{error}</div>{/if}
-  <section class="card">
+  <section class="card tree-card">
     <div class="row head">
       <h3 class="grow">Algorithms</h3>
       {#if algorithms.length > 6}<input type="search" placeholder="Filter…" bind:value={filter} aria-label="Filter algorithms" />{/if}
     </div>
     {#if loading && !algorithms.length}
       <p class="empty">Loading…</p>
-    {:else if rows.length === 0}
-      <p class="empty">{algorithms.length === 0 ? 'No algorithm has been centralized yet.' : 'No match.'}</p>
+    {:else if algorithms.length === 0}
+      <p class="empty">No algorithm has been centralized yet.</p>
     {:else}
-      <div class="scroll">
-        <table>
-          <thead>
-            <tr><th>Reference</th><th>Type</th><th>Language</th><th>Declared by</th></tr>
-          </thead>
-          <tbody>
-            {#each rows as p (p.algorithm?.name)}
-              <tr>
-                <td>
-                  <button type="button" class="ref" title="Copy the platform@ reference" onclick={() => copyRef(p.algorithm?.name ?? '')}>
-                    <code>platform@{p.algorithm?.name}</code>
-                    <Icon name="copy" size={12} />
+      <div role="tree" aria-label="Platform algorithms">
+        {#each usages as u (u.usage)}
+          {@const gk = `platformalg:${u.usage}`}
+          {@const algs = forType(u.usage)}
+          <TreeRow icon="code" label={u.title} detail={String(algs.length)} title={u.description} expanded={isOpen(gk, true)} ontoggle={() => toggle(gk, true)} />
+          {#if isOpen(gk, true)}
+            {#each algs as p (p.algorithm?.name)}
+              {@const name = p.algorithm?.name ?? ''}
+              {@const ak = `platformalg:${u.usage}:${name}`}
+              {@const insts = p.instances ?? []}
+              <TreeRow
+                depth={1}
+                icon="zap"
+                label={`platform@${name}`}
+                detail={`${p.algorithm?.language ?? ''} · ${p.sourceDomain}@${p.sourceVersion}`}
+                title={p.algorithm?.description || name}
+                expanded={insts.length ? isOpen(ak, false) : undefined}
+                ontoggle={() => toggle(ak, false)}
+                badge={insts.length || undefined}
+              >
+                {#snippet actions()}
+                  <button type="button" title="Copy the platform@ reference" aria-label={`Copy platform@${name}`} onclick={(e) => { e.stopPropagation(); copyRef(name); }}>
+                    <Icon name={copied === name ? 'check' : 'copy'} size={12} />
                   </button>
-                  {#if copied === p.algorithm?.name}<span class="hint copied">copied</span>{/if}
-                  {#if p.algorithm?.description}<div class="hint">{p.algorithm.description}</div>{/if}
-                </td>
-                <td><code>{p.algorithm?.type}</code></td>
-                <td><code>{p.algorithm?.language}</code></td>
-                <td>{p.sourceDomain}@{p.sourceVersion}</td>
-              </tr>
+                {/snippet}
+              </TreeRow>
+              {#if insts.length && isOpen(ak, false)}
+                {#each insts as x, k (x.domain + '/' + x.version + '/' + x.instance + k)}
+                  <TreeRow depth={2} icon="tag" label={x.instance || '(unnamed)'} detail={`${x.domain}@${x.version}`} title={valuesTitle(x.values) || undefined} />
+                {/each}
+              {/if}
+            {:else}
+              <p class="empty pad3">No {u.title.toLowerCase()} algorithms.</p>
             {/each}
-          </tbody>
-        </table>
+          {/if}
+        {/each}
       </div>
     {/if}
   </section>
@@ -122,30 +144,12 @@
     gap: 0.4rem;
     white-space: nowrap;
   }
-  .scroll {
-    overflow-x: auto;
+  .tree-card {
+    padding-bottom: 0.4rem;
   }
-  th,
-  td {
-    padding: 0.5rem 0.6rem;
-    vertical-align: top;
-  }
-  .ref {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
-    border: none;
-    background: none;
-    padding: 0;
-    min-height: 0;
-    color: inherit;
-    font: inherit;
-  }
-  .ref:hover {
-    color: var(--accent);
-  }
-  .copied {
-    margin-left: 0.3rem;
-    color: var(--accent);
+  .pad3 {
+    padding: 0.1rem 0 0.1rem 46px;
+    margin: 0;
+    font-size: 0.9em;
   }
 </style>

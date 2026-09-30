@@ -247,12 +247,23 @@ export interface AlgorithmInstance {
   values?: Record<string, unknown>;
 }
 
-/** An algorithm centralized in the platform-wide registry (ADR 0041): the domain that first published it, and its
- *  canonical definition, addressable as `platform@<name>` from any domain's algorithm instances. */
+/** A domain's algorithm instance referencing a platform-wide algorithm as `platform@<name>` instead of
+ *  redeclaring it (ADR 0041). */
+export interface AlgorithmInstanceUsage {
+  domain?: string;
+  version?: string;
+  instance?: string;
+  values?: Record<string, unknown>;
+}
+
+/** An algorithm centralized in the platform-wide registry (ADR 0041): the domain that first published it, its
+ *  canonical definition, addressable as `platform@<name>` from any domain's algorithm instances, and every
+ *  instance that references it instead of redeclaring it. */
 export interface PlatformAlgorithm {
   algorithm?: Algorithm;
   sourceDomain?: string;
   sourceVersion?: string;
+  instances?: AlgorithmInstanceUsage[];
 }
 
 export interface RunAlgorithmResponse {
