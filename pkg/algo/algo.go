@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"slices"
 	"strconv"
+	"strings"
 )
 
 // Usage is the fixed list of algorithm types: the extension points of the platform.
@@ -39,6 +40,20 @@ const (
 // Usages lists every usage.
 func Usages() []Usage {
 	return []Usage{UsageAction, UsagePropertyValidator, UsageTransitionGuard, UsageTransitionAction, UsageAdapter}
+}
+
+// PlatformNamespace names the platform-wide algorithm registry (ADR 0041): the shared store a domain's algorithms
+// are centralized into on publish, so another domain can reference one instead of redeclaring it.
+const PlatformNamespace = "platform"
+
+// PlatformRef reports the name a "platform@<name>" algorithm reference names, and whether ref uses that namespace.
+// A bare name (no "@") is a domain-local algorithm, resolved in the declaring domain's own Algorithms.
+func PlatformRef(ref string) (name string, ok bool) {
+	ns, n, hasAt := strings.Cut(ref, "@")
+	if !hasAt || ns != PlatformNamespace {
+		return "", false
+	}
+	return n, true
 }
 
 // Pluggable tells whether algorithms of this type can be declared and plugged.
@@ -339,6 +354,9 @@ func (a Algorithm) Split(values map[string]any) (config map[string]any, secrets 
 type Set struct {
 	Algorithms []Algorithm
 	Instances  []Instance
+	// Platform is the platform-wide algorithm registry (ADR 0041): an instance whose Algorithm field is
+	// "platform@<name>" resolves against it instead of Algorithms. Nil: a platform reference does not resolve.
+	Platform *Set
 }
 
 // Algorithm returns the named algorithm.
@@ -361,15 +379,32 @@ func (s Set) Instance(name string) (Instance, bool) {
 	return Instance{}, false
 }
 
+// resolveAlgorithm looks up the algorithm ref names: in Platform for a "platform@<name>" reference
+// (ADR 0041), locally otherwise.
+func (s Set) resolveAlgorithm(ref string) (Algorithm, error) {
+	if name, ok := PlatformRef(ref); ok {
+		if s.Platform != nil {
+			if a, ok := s.Platform.Algorithm(name); ok {
+				return a, nil
+			}
+		}
+		return Algorithm{}, fmt.Errorf("unknown platform algorithm %s", name)
+	}
+	if a, ok := s.Algorithm(ref); ok {
+		return a, nil
+	}
+	return Algorithm{}, fmt.Errorf("unknown algorithm %s", ref)
+}
+
 // Bind resolves an instance that must be of type want.
 func (s Set) Bind(name string, want Usage) (Bound, error) {
 	inst, ok := s.Instance(name)
 	if !ok {
 		return Bound{}, fmt.Errorf("unknown algorithm instance %s", name)
 	}
-	alg, ok := s.Algorithm(inst.Algorithm)
-	if !ok {
-		return Bound{}, fmt.Errorf("instance %s: unknown algorithm %s", name, inst.Algorithm)
+	alg, err := s.resolveAlgorithm(inst.Algorithm)
+	if err != nil {
+		return Bound{}, fmt.Errorf("instance %s: %w", name, err)
 	}
 	if alg.Type != want {
 		return Bound{}, fmt.Errorf("instance %s is of type %s, expected %s", name, alg.Type, want)

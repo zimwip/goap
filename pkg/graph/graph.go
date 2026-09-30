@@ -117,6 +117,35 @@ func (g *Graph) NodeByKey(ctx context.Context, namespace, key string) (n domain.
 	return
 }
 
+// NodesOfType returns the latest nodes of a type in a namespace, live on main (existence checks, e.g. ADR
+// 0040's first-user bootstrap). Deliberately not baseline-scoped: EnsureUser writes with CreateNode/Link
+// (import, outside of any change), which is visible on main immediately but does not itself advance a
+// baseline — a baseline-scoped read (NodesIn) would miss a User created this way until an unrelated Commit
+// happened to recompute one, silently defeating the first-admin bootstrap for every user after the first.
+func (g *Graph) NodesOfType(ctx context.Context, namespace, typ string) (ns []domain.Node, err error) {
+	err = g.repo.InTx(ctx, func(tx Tx) error {
+		all, err := tx.LatestNodes(ctx, namespace, domain.MainBranch)
+		if err != nil {
+			return err
+		}
+		for _, n := range all {
+			if n.Type == typ && !n.Deleted {
+				ns = append(ns, n)
+			}
+		}
+		return nil
+	})
+	return
+}
+
+// OutLinksOf returns the outgoing links of a node version, live on main (not scoped to a baseline snapshot:
+// an import write, e.g. EnsureUser's member_of, is visible on main immediately, before any baseline is next
+// recomputed from it).
+func (g *Graph) OutLinksOf(ctx context.Context, ref domain.NodeRef) (ls []domain.Link, err error) {
+	err = g.repo.InTx(ctx, func(tx Tx) error { ls, err = tx.OutLinks(ctx, ref); return err })
+	return
+}
+
 // Link creates a link between two node versions outside of any change (import).
 func (g *Graph) Link(ctx context.Context, typ string, from, to domain.NodeRef, props map[string]any) (domain.Link, error) {
 	l := domain.Link{ID: domain.LinkID(g.newID()), Type: typ, From: from, To: to, Properties: props}

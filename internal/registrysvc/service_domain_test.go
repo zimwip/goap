@@ -315,6 +315,93 @@ func TestDomainAlgorithms(t *testing.T) {
 	}
 }
 
+// regexMatch is a minimal property_validator algorithm reused across the platform-registry tests.
+func regexMatch() algo.Algorithm {
+	return algo.Algorithm{Name: "regex-match", Type: algo.UsagePropertyValidator, Language: algo.JavaScript,
+		Params: []algo.Param{{Name: "pattern", Type: algo.ParamRegex, Required: true}},
+		Code:   `if (!new RegExp(ctx.param("pattern")).test(String(ctx.value()))) ctx.fail("does not match " + ctx.param("pattern"))`}
+}
+
+// Publishing a domain centralizes its algorithms into the platform-wide registry (ADR 0041): a second domain
+// referencing one as "platform@<name>" resolves it without redeclaring it, and a mismatched redeclaration is
+// refused at publish time.
+func TestCentralizeAlgorithms(t *testing.T) {
+	for name, mk := range stores(t) {
+		t.Run(name, func(t *testing.T) {
+			enf, _ := authz.NewCasbin(nil)
+			s := &Service{Store: mk(t), Authz: enf}
+			ctx := as("methodologist")
+
+			a := methodology.Domain{Name: "a", Version: "1", Schema: methodology.Schema{
+				NodeTypes:  []methodology.NodeType{{Name: "Thing", Properties: []string{"code"}, Validators: []methodology.PropertyValidator{{Property: "code", Instance: "code-fmt"}}}},
+				Algorithms: []algo.Algorithm{regexMatch()}, Instances: []algo.Instance{{Name: "code-fmt", Algorithm: "regex-match", Values: map[string]any{"pattern": "^[A-Z]+$"}}},
+			}}
+			if _, issues, err := s.SaveDomain(ctx, a); err != nil || len(issues) > 0 {
+				t.Fatalf("save a: %v %v", issues, err)
+			}
+			if _, err := s.PublishDomain(ctx, "a", "1"); err != nil {
+				t.Fatalf("publish a: %v", err)
+			}
+			algs, err := s.Algorithms(ctx)
+			if err != nil || len(algs) != 1 || algs[0].Name != "regex-match" {
+				t.Fatalf("platform registry: %+v %v", algs, err)
+			}
+
+			// b references a's algorithm instead of redeclaring it
+			b := methodology.Domain{Name: "b", Version: "1", Schema: methodology.Schema{
+				NodeTypes: []methodology.NodeType{{Name: "Other", Properties: []string{"code"}, Validators: []methodology.PropertyValidator{{Property: "code", Instance: "shared"}}}},
+				Instances: []algo.Instance{{Name: "shared", Algorithm: "platform@regex-match", Values: map[string]any{"pattern": "^[0-9]+$"}}},
+			}}
+			if _, issues, err := s.SaveDomain(ctx, b); err != nil || len(issues) > 0 {
+				t.Fatalf("save b: %v %v", issues, err)
+			}
+			if _, err := s.PublishDomain(ctx, "b", "1"); err != nil {
+				t.Fatalf("publish b: %v", err)
+			}
+			cat, err := s.Types(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if vs := cat.Validators("b@Other"); len(vs) != 1 || vs[0].Algorithm != "regex-match" || vs[0].Params["pattern"] != "^[0-9]+$" {
+				t.Fatalf("platform@ validator did not resolve: %+v", vs)
+			}
+
+			// c redeclares the same name with different code: refused
+			c := methodology.Domain{Name: "c", Version: "1", Schema: methodology.Schema{
+				NodeTypes:  []methodology.NodeType{{Name: "Thing"}},
+				Algorithms: []algo.Algorithm{{Name: "regex-match", Type: algo.UsagePropertyValidator, Language: algo.JavaScript, Code: "different"}},
+			}}
+			if _, issues, err := s.SaveDomain(ctx, c); err != nil || len(issues) > 0 {
+				t.Fatalf("save c: %v %v", issues, err)
+			}
+			if _, err := s.PublishDomain(ctx, "c", "1"); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "already centralized") {
+				t.Fatalf("conflicting redeclaration must be refused: %v", err)
+			}
+
+			// d redeclares the same name identically: accepted (idempotent)
+			d := methodology.Domain{Name: "d", Version: "1", Schema: methodology.Schema{
+				NodeTypes:  []methodology.NodeType{{Name: "Thing"}},
+				Algorithms: []algo.Algorithm{regexMatch()},
+			}}
+			if _, issues, err := s.SaveDomain(ctx, d); err != nil || len(issues) > 0 {
+				t.Fatalf("save d: %v %v", issues, err)
+			}
+			if _, err := s.PublishDomain(ctx, "d", "1"); err != nil {
+				t.Fatalf("identical redeclaration must be accepted: %v", err)
+			}
+
+			// e references an algorithm the platform registry does not have: reported at save time
+			e := methodology.Domain{Name: "e", Version: "1", Schema: methodology.Schema{
+				NodeTypes: []methodology.NodeType{{Name: "Thing", Properties: []string{"code"}, Validators: []methodology.PropertyValidator{{Property: "code", Instance: "unresolved"}}}},
+				Instances: []algo.Instance{{Name: "unresolved", Algorithm: "platform@nope"}},
+			}}
+			if _, issues, err := s.SaveDomain(ctx, e); err != nil || len(issues) == 0 {
+				t.Fatalf("an unresolved platform@ reference must be reported: %v %v", issues, err)
+			}
+		})
+	}
+}
+
 func TestRunAlgorithm(t *testing.T) {
 	enf, _ := authz.NewCasbin(nil)
 	s := &Service{Store: NewMemoryStore(), Authz: enf}

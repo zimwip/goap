@@ -15,7 +15,90 @@ const (
 	LinkPartOf            = "organisation@part_of"         // OrgUnit -> parent OrgUnit
 	LinkOwner             = "organisation@owner"           // any node -> OrgUnit
 	LinkProjectPartOf     = "organisation@project_part_of" // ProjectUnit -> parent ProjectUnit (ADR 0039)
+	LinkMemberOf          = "organisation@member_of"       // User -> its OrgUnit (ADR 0040)
+	NodeTypeOrgUnit       = "organisation@OrgUnit"
+	NodeTypeProjectUnit   = "organisation@ProjectUnit"
+	NodeTypeUser          = "organisation@User"
 )
+
+// checkRequiredParent enforces that a created OrgUnit/ProjectUnit/User names exactly one parent/membership
+// link of the expected type (ADR 0040): OrgUnit needs one part_of, ProjectUnit one project_part_of, User one
+// member_of — except the two roots (domain.DefaultOrg, domain.DefaultProject), seeded once, rootless or
+// self-linked in a later edit (SeedDefaults/seedRootProject), never through this generic commit path. Only
+// creation is checked here: an edit that modifies an existing node's membership (the move action) is
+// responsible for its own atomicity (removing the old link and adding the new one in the same edit).
+// parentLinkRule returns the link type an OrgUnit/ProjectUnit/User must have exactly one of, and a
+// description for error messages; ok is false for any other type, or for the two roots that are exempt
+// (domain.DefaultOrg, domain.DefaultProject).
+func parentLinkRule(typ, key string) (linkType, of string, ok bool) {
+	switch typ {
+	case NodeTypeOrgUnit:
+		if key == domain.DefaultOrg {
+			return "", "", false
+		}
+		return LinkPartOf, "a parent OrgUnit (part_of)", true
+	case NodeTypeProjectUnit:
+		if key == domain.DefaultProject {
+			return "", "", false
+		}
+		return LinkProjectPartOf, "a parent ProjectUnit (project_part_of)", true
+	case NodeTypeUser:
+		return LinkMemberOf, "exactly one organisation (member_of)", true
+	default:
+		return "", "", false
+	}
+}
+
+func checkRequiredParent(e NodeEdit) error {
+	if e.Pre != nil {
+		return nil
+	}
+	linkType, of, ok := parentLinkRule(e.Type, e.Key)
+	if !ok {
+		return nil
+	}
+	n := 0
+	for _, l := range e.Links {
+		if l.Type == linkType {
+			n++
+		}
+	}
+	if n != 1 {
+		return fmt.Errorf("%s needs %s, got %d: %w", nodeName(e), of, n, ErrInvalid)
+	}
+	return nil
+}
+
+// checkParentInvariant re-verifies, after a write lands a node version, that an OrgUnit/ProjectUnit/User
+// still has exactly one parent/membership link of its expected type. Unlike checkRequiredParent (creation
+// only, checked against the edit's own declared links before anything is written), this reads the node's
+// actual links back from the version just written: a client that built its edit from a stale read (e.g. a
+// baseline snapshot older than an import write outside of any change, see EnsureUser/ADR 0040) would
+// otherwise silently leave the node with zero or two links instead of failing loudly.
+func (g *Graph) checkParentInvariant(ctx context.Context, ref domain.NodeRef) error {
+	n, err := g.Node(ctx, ref)
+	if err != nil {
+		return err
+	}
+	linkType, of, ok := parentLinkRule(n.Type, n.Key)
+	if !ok {
+		return nil
+	}
+	links, err := g.OutLinksOf(ctx, ref)
+	if err != nil {
+		return err
+	}
+	count := 0
+	for _, l := range links {
+		if l.Type == linkType {
+			count++
+		}
+	}
+	if count != 1 {
+		return fmt.Errorf("%s needs %s, got %d: %w", n.Key, of, count, ErrInvalid)
+	}
+	return nil
+}
 
 // prepareSubChange applies the rules of a sub-change to c: its parent must be
 // open and have a branch of its own, the namespace is the parent's, and the

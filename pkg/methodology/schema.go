@@ -21,9 +21,10 @@ type Schema struct {
 	Instances  []algo.Instance  `yaml:"algorithmInstances,omitempty" json:"algorithmInstances,omitempty"`
 }
 
-// algorithms returns the algorithm set of the schema.
-func (s Schema) algorithms() algo.Set {
-	return algo.Set{Algorithms: s.Algorithms, Instances: s.Instances}
+// algorithms returns the algorithm set of the schema; platform resolves a "platform@<name>" algorithm
+// reference in an instance (ADR 0041).
+func (s Schema) algorithms(platform algo.Set) algo.Set {
+	return algo.Set{Algorithms: s.Algorithms, Instances: s.Instances, Platform: &platform}
 }
 
 // HasAlgorithms tells whether the schema declares or plugs algorithms.

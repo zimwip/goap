@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"slices"
 
+	"github.com/zimwip/goap/pkg/algo"
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/methodology"
 	"github.com/zimwip/goap/pkg/typecat"
@@ -15,6 +16,9 @@ import (
 
 // ErrNoDomainStore is returned when the registry has no store for the domains.
 var ErrNoDomainStore = errors.New("the registry has no domain store")
+
+// ErrNoAlgorithmStore is returned when the registry has no store for the platform-wide algorithm registry.
+var ErrNoAlgorithmStore = errors.New("the registry has no algorithm store")
 
 // domains is the store of the domain versions: DomainStore, else the Store when it holds domains too (MemoryStore).
 func (s *Service) domains() (DomainStore, error) {
@@ -25,6 +29,108 @@ func (s *Service) domains() (DomainStore, error) {
 		return ds, nil
 	}
 	return nil, ErrNoDomainStore
+}
+
+// algorithms is the store of the platform-wide algorithm registry: AlgorithmStore, else the Store when it holds
+// algorithms too (MemoryStore).
+func (s *Service) algorithms() (AlgorithmStore, error) {
+	if s.AlgorithmStore != nil {
+		return s.AlgorithmStore, nil
+	}
+	if as, ok := s.Store.(AlgorithmStore); ok {
+		return as, nil
+	}
+	return nil, ErrNoAlgorithmStore
+}
+
+// Algorithms returns every algorithm of the platform-wide registry (ADR 0041): the source of the "platform@<name>"
+// references a domain's algorithm instances may resolve against.
+func (s *Service) Algorithms(ctx context.Context) ([]algo.Algorithm, error) {
+	as, err := s.algorithms()
+	if err != nil {
+		return nil, err
+	}
+	rs, err := as.ListAlgorithms(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]algo.Algorithm, len(rs))
+	for i, r := range rs {
+		out[i] = r.Algorithm
+	}
+	return out, nil
+}
+
+// platformAlgorithms is the algo.Set the type catalogue resolves a "platform@<name>" reference against; empty when
+// the registry has no algorithm store configured.
+func (s *Service) platformAlgorithms(ctx context.Context) algo.Set {
+	algs, err := s.Algorithms(ctx)
+	if err != nil {
+		return algo.Set{}
+	}
+	return algo.Set{Algorithms: algs}
+}
+
+// centralizeAlgorithms upserts the algorithms a domain declares into the platform-wide registry (ADR 0041): the
+// domain still declares its algorithms directly, but the registry centralizes their canonical definition so another
+// domain can reference one ("platform@<name>") instead of redeclaring it. A name already centralized by a different
+// definition refuses the publish.
+func (s *Service) centralizeAlgorithms(ctx context.Context, d methodology.Domain) error {
+	if len(d.Algorithms) == 0 {
+		return nil
+	}
+	as, err := s.algorithms()
+	if err != nil {
+		return nil // no algorithm store configured: centralization is skipped, not required
+	}
+	now := s.clock()
+	for _, a := range d.Algorithms {
+		existing, err := as.GetAlgorithm(ctx, a.Name)
+		switch {
+		case errors.Is(err, ErrNotFound):
+			if err := as.SaveAlgorithm(ctx, AlgorithmRecord{Algorithm: a, SourceDomain: d.Name, SourceVersion: d.Version, CreatedAt: now, UpdatedAt: now}); err != nil {
+				return err
+			}
+		case err != nil:
+			return err
+		case algorithmsEqual(existing.Algorithm, a):
+			// already centralized, identical: nothing to do
+		default:
+			return fmt.Errorf("%w: algorithm %s is already centralized by domain %s: declare it identically, or reference it as platform@%s instead of redeclaring it",
+				ErrInvalid, a.Name, existing.SourceDomain, a.Name)
+		}
+	}
+	return nil
+}
+
+// checkPlatformAlgorithms reports an algorithm instance that fails to resolve once the platform-wide registry is
+// reachable (ADR 0041): pkg/methodology's own validation only checks a domain's local algorithms, since it has no
+// registry access, and BoundValidators / BindLifecycle silently drop an instance that does not resolve (an unknown
+// algorithm, an unknown "platform@<name>" reference, a type mismatch, or bad parameter values) rather than fail the
+// catalogue build, so it must be caught here or it would fail silently at run time.
+func (s *Service) checkPlatformAlgorithms(ctx context.Context, d *methodology.Domain) methodology.Issues {
+	var issues methodology.Issues
+	platform := s.platformAlgorithms(ctx)
+	for i, n := range d.NodeTypes {
+		if got := len(d.Schema.OwnBoundValidators(n, platform)); got != len(n.Validators) {
+			issues = append(issues, methodology.Issue{Path: fmt.Sprintf("nodeTypes[%d].validators", i),
+				Message: fmt.Sprintf("%d of %d validator instances failed to resolve", len(n.Validators)-got, len(n.Validators))})
+		}
+	}
+	for i, l := range d.Lifecycles {
+		bound := d.Schema.BindLifecycle(&l, platform)
+		for j, t := range l.Transitions {
+			if len(bound.Transitions[j].GuardAlgos) != len(t.Guards) {
+				issues = append(issues, methodology.Issue{Path: fmt.Sprintf("lifecycles[%d].transitions[%d].guards", i, j),
+					Message: "some guard instances failed to resolve"})
+			}
+			if len(bound.Transitions[j].ActionAlgos) != len(t.Actions) {
+				issues = append(issues, methodology.Issue{Path: fmt.Sprintf("lifecycles[%d].transitions[%d].actions", i, j),
+					Message: "some action instances failed to resolve"})
+			}
+		}
+	}
+	return issues
 }
 
 // Types is the type catalogue in force (ADR 0012 §2): the latest published version of every domain and the built-in
@@ -46,7 +152,7 @@ func (s *Service) Types(ctx context.Context, over ...*methodology.Domain) (*type
 	for _, n := range order {
 		list = append(list, byName[n])
 	}
-	return typecat.New(list...)
+	return typecat.NewWithPlatform(s.platformAlgorithms(ctx), list...)
 }
 
 func (s *Service) authorizeDomain(ctx context.Context, action string, d *methodology.Domain) error {
@@ -189,6 +295,8 @@ func (s *Service) validateDomain(ctx context.Context, d *methodology.Domain) met
 	if len(issues) == 0 {
 		if _, err := s.Types(ctx, d); err != nil {
 			issues = append(issues, methodology.Issue{Path: "nodeTypes", Message: err.Error()})
+		} else {
+			issues = append(issues, s.checkPlatformAlgorithms(ctx, d)...)
 		}
 	}
 	return issues
@@ -254,6 +362,9 @@ func (s *Service) PublishDomain(ctx context.Context, name, version string) (Doma
 		if issues := u.Methodology.Resolve(cat).Validate(); len(issues) > 0 {
 			return DomainRecord{}, fmt.Errorf("%w: methodology %s@%s would break: %v", ErrInvalid, u.Methodology.Name, u.Methodology.Version, issues)
 		}
+	}
+	if err := s.centralizeAlgorithms(ctx, r.Domain); err != nil {
+		return DomainRecord{}, err
 	}
 	if err := ds.SetDomainStatus(ctx, name, version, StatusPublished, s.clock()); err != nil {
 		return DomainRecord{}, err

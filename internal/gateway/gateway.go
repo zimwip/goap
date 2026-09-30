@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"connectrpc.com/connect"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/labstack/echo/v5"
 	"github.com/labstack/echo/v5/middleware"
@@ -38,17 +39,29 @@ type Route struct {
 // Config configures the gateway.
 type Config struct {
 	Routes []Route
-	// AuthMode is "none" (dev: every caller is "dev") or "hs256".
+	// AuthMode is "none" (dev: every caller is "dev"), "hs256" (bearer tokens minted out of band, dev-token
+	// only) or "local" (ADR 0040: signup/login against Credentials, backed by internal/credsvc, for a
+	// deployment with no external identity provider). "local" verifies bearer tokens the same way "hs256"
+	// does: only how a token is first obtained differs.
 	AuthMode string
 	// JWTSecret signs and validates HS256 tokens.
 	JWTSecret []byte
 	// DevTokens enables POST /auth/dev-token (never in production).
 	DevTokens bool
+	// Credentials backs the local AuthMode's register/login endpoints (ADR 0040). Required when
+	// AuthMode == "local".
+	Credentials Credentials
 	// AllowOrigins for CORS.
 	AllowOrigins []string
 	// Enrich completes the authenticated principal with what the graph knows of its subject (roles and unit
 	// of its User node). Nil leaves the principal as the token gives it.
 	Enrich func(ctx context.Context, p authz.Principal) authz.Principal
+}
+
+// Credentials is what the local AuthMode needs of the credentials service (internal/credsvc, ADR 0040).
+type Credentials interface {
+	Register(ctx context.Context, subject, password string) error
+	Verify(ctx context.Context, subject, password string) (bool, error)
 }
 
 // Claims are the GOAP JWT claims.
@@ -61,6 +74,36 @@ type Claims struct {
 	jwt.RegisteredClaims
 }
 
+// MountAuthEndpoints registers the sign-in HTTP endpoints alone (no CORS, no proxying, no /api/whoami or
+// /api/status): the dev-token endpoints (hs256, DevTokens), local register/login/logout (AuthMode "local")
+// and /api/auth/config (always). Split out of Mount so a single-process deployment (cmd/goap-dev) can offer
+// the same sign-in UI as the distributed gateway without also wanting a reverse proxy.
+func MountAuthEndpoints(e *echo.Echo, cfg Config) error {
+	// dev tokens only make sense with hs256; ignored otherwise
+	if cfg.DevTokens && cfg.AuthMode == "hs256" {
+		e.POST("/auth/dev-token", devToken(cfg))
+		e.POST("/auth/dev-token/project", switchProject(cfg))
+	}
+	if cfg.AuthMode == "local" {
+		if len(cfg.JWTSecret) < 32 {
+			return errors.New("local auth requires a JWT secret of at least 32 bytes")
+		}
+		if cfg.Credentials == nil {
+			return errors.New("local auth requires Credentials")
+		}
+		e.POST("/auth/register", register(cfg))
+		e.POST("/auth/login", login(cfg))
+		e.POST("/auth/logout", logout())
+	}
+	e.GET("/api/auth/config", authConfig(cfg))
+	return nil
+}
+
+// Authenticator returns the middleware that turns a request's credentials (a bearer token, or nothing in
+// AuthMode "none") into the propagated identity headers (setPrincipal): exported so a single-process
+// deployment (cmd/goap-dev) can apply it globally instead of per-route.
+func Authenticator(cfg Config) (echo.MiddlewareFunc, error) { return authenticator(cfg) }
+
 // Mount installs the gateway on e.
 func Mount(e *echo.Echo, cfg Config) error {
 	if len(cfg.AllowOrigins) > 0 {
@@ -71,10 +114,8 @@ func Mount(e *echo.Echo, cfg Config) error {
 			AllowMethods:  []string{http.MethodGet, http.MethodPost, http.MethodOptions},
 		}))
 	}
-	// dev tokens only make sense with hs256; ignored otherwise
-	if cfg.DevTokens && cfg.AuthMode == "hs256" {
-		e.POST("/auth/dev-token", devToken(cfg))
-		e.POST("/auth/dev-token/project", switchProject(cfg))
+	if err := MountAuthEndpoints(e, cfg); err != nil {
+		return err
 	}
 	auth, err := authenticator(cfg)
 	if err != nil {
@@ -104,9 +145,9 @@ func authenticator(cfg Config) (echo.MiddlewareFunc, error) {
 				return next(c)
 			}
 		}, nil
-	case "hs256":
+	case "hs256", "local":
 		if len(cfg.JWTSecret) < 32 {
-			return nil, errors.New("hs256 auth requires a JWT secret of at least 32 bytes")
+			return nil, fmt.Errorf("%s auth requires a JWT secret of at least 32 bytes", cfg.AuthMode)
 		}
 		return func(next echo.HandlerFunc) echo.HandlerFunc {
 			return func(c *echo.Context) error {
@@ -172,6 +213,66 @@ func devToken(cfg Config) echo.HandlerFunc {
 		}
 		return c.JSON(http.StatusOK, map[string]string{"token": tok})
 	}
+}
+
+// authConfig tells the web which sign-in UI to show: unauthenticated, so it can be called before any token
+// exists (ADR 0040 — the signin/signup screens, and the Logout action's own SSO seam, both read it).
+func authConfig(cfg Config) echo.HandlerFunc {
+	return func(c *echo.Context) error {
+		return c.JSON(http.StatusOK, map[string]string{"authMode": cfg.AuthMode})
+	}
+}
+
+// register creates the credential of a new subject and signs them straight in (ADR 0040): the returned
+// token carries no org/roles of its own, filled in by Enrich from the subject's User node — created, with
+// the org-membership/first-admin bootstrap, the moment this token is first used (EnsureCaller).
+func register(cfg Config) echo.HandlerFunc {
+	return func(c *echo.Context) error {
+		var in struct{ Subject, Password string }
+		if err := c.Bind(&in); err != nil || in.Subject == "" {
+			return echo.NewHTTPError(http.StatusBadRequest, "subject required")
+		}
+		if err := cfg.Credentials.Register(c.Request().Context(), in.Subject, in.Password); err != nil {
+			status := http.StatusBadRequest
+			if connect.CodeOf(err) == connect.CodeAlreadyExists {
+				status = http.StatusConflict
+			}
+			return echo.NewHTTPError(status, err.Error())
+		}
+		tok, err := sign(cfg, in.Subject, "", "", nil)
+		if err != nil {
+			return err
+		}
+		return c.JSON(http.StatusOK, map[string]string{"token": tok})
+	}
+}
+
+// login verifies a subject's password and signs a token the same shape register's is.
+func login(cfg Config) echo.HandlerFunc {
+	return func(c *echo.Context) error {
+		var in struct{ Subject, Password string }
+		if err := c.Bind(&in); err != nil || in.Subject == "" {
+			return echo.NewHTTPError(http.StatusBadRequest, "subject required")
+		}
+		ok, err := cfg.Credentials.Verify(c.Request().Context(), in.Subject, in.Password)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return echo.NewHTTPError(http.StatusUnauthorized, "wrong subject or password")
+		}
+		tok, err := sign(cfg, in.Subject, "", "", nil)
+		if err != nil {
+			return err
+		}
+		return c.JSON(http.StatusOK, map[string]string{"token": tok})
+	}
+}
+
+// logout has nothing to revoke (HS256 tokens are stateless, ADR 0040's known limitation): it exists so the
+// web has one endpoint to call, and so a real revocation list is a change to this function alone, later.
+func logout() echo.HandlerFunc {
+	return func(c *echo.Context) error { return c.NoContent(http.StatusNoContent) }
 }
 
 // switchProject reissues the caller's token with a new active project (ADR 0039: "a token regenerated each

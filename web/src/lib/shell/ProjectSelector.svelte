@@ -25,7 +25,7 @@
     <Icon name="diff" size={14} />
     <span class="pl">{label}</span>
   </button>
-  <Popover bind:open label="Project" align="right" placement="below" width="260px">
+  <Popover bind:open label="Project" align="left" placement="below" width="260px">
     <div class="pop-head">
       <strong>Project</strong>
       <span class="grow"></span>

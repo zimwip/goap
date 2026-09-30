@@ -5,12 +5,34 @@ import (
 	"context"
 	"strings"
 
+	"connectrpc.com/connect"
+
+	credentialsv1 "github.com/zimwip/goap/gen/goap/credentials/v1"
+	"github.com/zimwip/goap/gen/goap/credentials/v1/credentialsv1connect"
 	"github.com/zimwip/goap/internal/gateway"
 	"github.com/zimwip/goap/internal/graphsvc"
 	"github.com/zimwip/goap/internal/platform"
 	"github.com/zimwip/goap/internal/telemetry"
 	"github.com/zimwip/goap/pkg/access"
 )
+
+// credentialsClient adapts the credentials Connect client to gateway.Credentials.
+type credentialsClient struct {
+	rpc credentialsv1connect.CredentialsServiceClient
+}
+
+func (c credentialsClient) Register(ctx context.Context, subject, password string) error {
+	_, err := c.rpc.Register(ctx, connect.NewRequest(&credentialsv1.RegisterRequest{Subject: subject, Password: password}))
+	return err
+}
+
+func (c credentialsClient) Verify(ctx context.Context, subject, password string) (bool, error) {
+	r, err := c.rpc.Verify(ctx, connect.NewRequest(&credentialsv1.VerifyRequest{Subject: subject, Password: password}))
+	if err != nil {
+		return false, err
+	}
+	return r.Msg.GetOk(), nil
+}
 
 func main() {
 	ctx := context.Background()
@@ -35,12 +57,16 @@ func main() {
 	if origins := platform.Env("GOAP_CORS_ORIGINS", ""); origins != "" {
 		cfg.AllowOrigins = strings.Split(origins, ",")
 	}
-	if cfg.AuthMode == "hs256" {
+	if cfg.AuthMode == "hs256" || cfg.AuthMode == "local" {
 		secret, err := secrets.Get(ctx, "goap/gateway#jwt_secret", "GOAP_JWT_SECRET")
 		if err != nil {
 			platform.Fatal(log, "jwt secret", err)
 		}
 		cfg.JWTSecret = []byte(secret)
+	}
+	if cfg.AuthMode == "local" {
+		cfg.Credentials = credentialsClient{rpc: credentialsv1connect.NewCredentialsServiceClient(platform.H2CClient(),
+			platform.Env("GOAP_CREDENTIALS_URL", "http://localhost:8088"), telemetry.ClientOptions()...)}
 	}
 	srv := platform.NewServer(log, platform.Env("GOAP_HTTP_ADDR", ":8080"))
 	if err := gateway.Mount(srv.Echo, cfg); err != nil {

@@ -3,6 +3,7 @@
 export const ORG_UNIT_TYPE = 'organisation@OrgUnit';
 export const ADAPTER_TYPE = 'organisation@Adapter';
 export const PART_OF = 'organisation@part_of';
+export const MEMBER_OF = 'organisation@member_of';
 export const OWNER = 'organisation@owner';
 export const MCP_TYPE = 'platform@MCP';
 
@@ -15,3 +16,8 @@ export const ASSIGNMENT_TYPE = 'organisation@Assignment';
 export const PROJECT_PART_OF = 'organisation@project_part_of';
 export const ASSIGNS_ORG = 'organisation@assigns_org';
 export const ASSIGNS_PROJECT = 'organisation@assigns_project';
+
+// Mirrors domain.DefaultOrg / domain.DefaultProject (pkg/domain/domain.go): the two seeded roots, the only
+// units that need no parent (ADR 0040).
+export const DEFAULT_ORG = 'ORG-DEFAULT';
+export const DEFAULT_PROJECT = 'PROJ-ROOT';

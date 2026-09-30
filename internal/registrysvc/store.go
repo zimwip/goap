@@ -66,6 +66,7 @@ type MemoryStore struct {
 	mu  sync.RWMutex
 	m   map[string]Record // key name@version
 	dom memoryDomains
+	alg memoryAlgorithms
 }
 
 // NewMemoryStore returns an empty store.

@@ -22,8 +22,11 @@ type Service struct {
 	// DomainStore holds the domain versions (the registry's database, SQLDomainStore); nil: the Store when it holds
 	// domains too (MemoryStore).
 	DomainStore DomainStore
-	Authz       authz.Authorizer
-	Events      engine.Publisher
+	// AlgorithmStore holds the platform-wide algorithm registry (ADR 0041, SQLAlgorithmStore); nil: the Store when it
+	// holds algorithms too (MemoryStore).
+	AlgorithmStore AlgorithmStore
+	Authz          authz.Authorizer
+	Events         engine.Publisher
 	// MCPScopes gives the scope of each MCP of the platform (ADR 0028), checked against where a methodology
 	// declares them; nil: not checked.
 	MCPScopes func(ctx context.Context) (map[string]string, error)

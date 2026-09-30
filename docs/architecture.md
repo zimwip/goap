@@ -573,6 +573,12 @@ node types plug validator instances on their properties, lifecycle transitions p
 instances, in call order. The type catalogue (the graph's copy of the registry's model) resolves the plugged instances (like the lifecycle, ADR 0014): validators run when items are added and when a change is applied, guards and
 actions when a transition is applied. Reference: [docs/dsl.md](dsl.md), IDE section *Algorithms*.
 
+A domain still declares its algorithms directly, but publishing one centralizes its canonical definition
+in a platform-wide registry at the same tier as the domains themselves (the registry's database, not the
+graph — see ADR 0041 for why): another domain's instance references it as `platform@<name>` instead of
+redeclaring it, and a name already centralized under a different definition refuses the publish
+([ADR 0041](adr/0041-centralized-algorithm-registry.md)).
+
 ## 3. Component architecture
 
 ```
@@ -910,6 +916,46 @@ offers "New assignment", opening the entity's tab with that pane pre-opened.
 
 **Not implemented**: OrgUnit-side action restriction on a project (mirroring `mcp.Restriction`'s shape,
 ADR 0028) — an Assignment grants roles but cannot yet narrow which actions a unit may run locally.
+
+### 3.9c User bootstrap, mandatory parenting, local auth ([ADR 0040](adr/0040-user-bootstrap-org-membership-local-auth.md))
+
+`EnsureUser` resolves `ORG-DEFAULT` *before* creating anything: `SeedDefaults` can still be seeding at
+startup (it waits on the registry to publish the type catalogue), and creating the `User` node first would
+leave a permanently broken one on that race (no `member_of`, no admin) — worse, one that makes every later
+subject see the namespace as "already has a `User`" and never get the first-admin bootstrap either. Once the
+org is confirmed, it links the new `User` `member_of` it and grants `Roles: ["admin"]` when it is the first
+`User` node the namespace has ever held; the existence check (`g.NodesOfType`) reads *live* state
+(`tx.LatestNodes`), not a baseline snapshot — `EnsureUser` writes by import (`CreateNode`/`Link`, outside of
+any change), which does not itself advance a baseline, so a baseline-scoped read would miss every user but
+the ones incidentally folded in by some unrelated later change. A benign race between two simultaneous first
+connections can only ever grant admin to more than one subject, never to none. `pkg/graph.Commit` (the
+single choke point behind `CommitEdits`, seeding and the registry) now refuses to create an
+`OrgUnit`/`ProjectUnit` with anything but exactly one `part_of`/`project_part_of` link, and a `User` with
+anything but exactly one `member_of` — except `ORG-DEFAULT`/`PROJ-ROOT` themselves (`checkRequiredParent`,
+`pkg/graph/subchange.go`, checked against the edit's own declared links before anything is written). A
+second check, `checkParentInvariant`, re-reads a *modified* node's actual live links right after the write
+lands: a client can build its edit from a `headGraph`-style baseline snapshot that predates an import-written
+link (again, `EnsureUser`'s own `member_of`), so its "current link to remove" can come back empty even though
+one already exists — without this the "move" action (`graphEdit.moveNodeItem`, adds the new link and removes
+the one it saw, in one edit) could silently leave a node with two links instead of failing loudly. "Move to…"
+controls on the Organisation and User tabs build this edit from the graph's own outgoing links
+(`graphEdit.currentLink`).
+
+**Local auth.** A third gateway `AuthMode`, `"local"` (alongside `"none"`/`"hs256"`), verifies bearer tokens
+exactly as `"hs256"` does; the difference is only how a token is first obtained. `POST /auth/register` and
+`POST /auth/login` (`internal/gateway`) call a new `internal/credsvc` service (shaped like `internal/prefssvc`,
+ADR 0038: its own store, its own migrations, both dialects) that keeps one bcrypt password hash per subject,
+outside the graph — a failed login never touches the audited graph/change log, and no secret material ever
+becomes graph data. `credsvc.Store` is a small interface so the concrete backend can move from its own SQL
+table to being `platform.Secrets`/Vault-backed later with no call-site change. `POST /auth/logout` has
+nothing to revoke server-side (HS256 is stateless) — it exists so a real revocation list is a change to one
+function, later. `GET /api/auth/config` (unauthenticated) tells the web which sign-in UI to show: the web's
+`Signin.svelte` replaces the shell when `AuthMode` is `"local"` and there is no token yet; `UserTab.svelte`'s
+"Log out" toolbar action shows only on a caller's own profile and hides itself once a real SSO `AuthMode`
+(OIDC/OAuth, not yet implemented) exists — a forward seam only.
+
+**Not implemented**: OIDC/OAuth itself (only the `AuthMode` seam is prepared) and server-side token
+revocation.
 
 ### 3.8 Voice input ([ADR 0022](adr/0022-voice-interaction.md))
 
