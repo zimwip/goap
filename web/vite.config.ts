@@ -7,7 +7,7 @@ declare const process: { env: Record<string, string | undefined> };
 const gateway = process.env.GOAP_GATEWAY_URL ?? 'http://localhost:8080';
 
 export default defineConfig({
-  plugins: [svelte()],
+  plugins: [svelte({ compilerOptions: { dev: true } })],
   server: {
     proxy: {
       // All Connect RPCs (/goap.<pkg>.v1.<Service>/<Method>) go to the gateway.

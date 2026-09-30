@@ -1,16 +1,20 @@
 <script lang="ts">
   // Baseline explorer: namespace → branches, open ones first. Selecting a branch drives the Baseline tool's
-  // workspace (BaselineWorkspace.svelte) directly, in the editor area; double-click still pins its head baseline
-  // as a tab for node-level browsing.
+  // workspace (BaselineWorkspace.svelte) directly, in the editor area. Branch management (open/merge/abandon/
+  // describe) is a right-click on the row, not shown inline here or in the workspace.
   import TreeRow from '../TreeRow.svelte';
   import StatusBadge from '../../components/StatusBadge.svelte';
-  import { openTab } from '../../shell/tabs.svelte';
   import { loadRaw, save } from '../../shell/storage';
   import { graph, errorMessage, formatDate, type Baseline, type Branch } from '../../api';
   import { isEphemeralBranch } from '../../namespace';
   import { loadTypes as loadCatalog, typeCatalog } from '../../stores/types.svelte';
   import { refreshBaselines } from '../../stores/catalog.svelte';
-  import { baselineTool, selectNamespace, selectBranch } from '../../stores/baselineTool.svelte';
+  import { baselineTool, selectNamespace, selectBranch, refreshBranches } from '../../stores/baselineTool.svelte';
+  import { openContextMenu, type ContextMenuItem } from '../../shell/contextMenuState.svelte';
+  import { openFieldDialog } from '../../shell/fieldDialogState.svelte';
+  import { openMergeDialog } from '../../shell/mergeDialogState.svelte';
+  import { confirmDialog } from '../../shell/confirmState.svelte';
+  import { notify } from '../../shell/workbench.svelte';
   import Icon from '../../shell/Icon.svelte';
 
   // Methodologies are nodes typed by the meta-domain methodology (ADR 0023), authored in their own editors and
@@ -69,6 +73,7 @@
 
   $effect(() => {
     void reload;
+    void baselineTool.reload;
     const ns = baselineTool.namespace;
     if (!ns) return;
     const ctrl = new AbortController();
@@ -102,10 +107,70 @@
   const headOf = (b: Branch) => (b.head ? baselinesById.get(b.head) : undefined);
   const countOf = (b: Branch) => baselinesByBranch.get(b.name ?? '')?.length ?? 0;
 
-  function openBranchPin(b: Branch) {
+  async function abandon(name: string) {
+    if (!(await confirmDialog({ message: `Abandon the branch ${name}? It takes no change any more.`, danger: true }))) return;
+    try {
+      await graph.setBranchStatus(baselineTool.namespace, name, 'abandoned');
+      notify(`Branch ${name} abandoned.`, 'ok');
+      refreshBranches();
+    } catch (e) {
+      error = errorMessage(e);
+    }
+  }
+
+  async function setStatus(name: string, status: 'open' | 'abandoned') {
+    try {
+      await graph.setBranchStatus(baselineTool.namespace, name, status);
+      notify(`Branch ${name} ${status === 'open' ? 'reopened' : status}.`, 'ok');
+      refreshBranches();
+    } catch (e) {
+      error = errorMessage(e);
+    }
+  }
+
+  function editDescription(b: Branch) {
+    openFieldDialog({
+      title: `Description of ${b.name}`,
+      submitLabel: 'Save',
+      fields: [{ key: 'description', label: 'Description', type: 'textarea', default: b.description ?? '' }],
+      onsubmit: async (v) => {
+        await graph.setBranchDescription(baselineTool.namespace, b.name ?? '', v.description.trim());
+        notify(`Description of ${b.name} saved.`, 'ok');
+        refreshBranches();
+      },
+    });
+  }
+
+  function openFrom(b: Branch) {
     const head = headOf(b);
-    if (!head?.id) return;
-    openTab({ kind: 'baseline', params: { id: head.id, name: head.name ?? '', type: '', node: '' } }, { pin: true });
+    openFieldDialog({
+      title: `Open a branch from ${b.name}`,
+      submitLabel: 'Open',
+      fields: [
+        { key: 'name', label: 'Name', required: true, placeholder: 'no spaces' },
+        { key: 'description', label: 'Description' },
+      ],
+      onsubmit: async (v) => {
+        await graph.createBranch({ namespace: baselineTool.namespace, name: v.name.trim(), fromBaseline: head?.id ?? '', description: v.description?.trim() || undefined });
+        notify(`Branch ${v.name.trim()} opened.`, 'ok');
+        refreshBranches();
+      },
+    });
+  }
+
+  function menu(e: MouseEvent, b: Branch) {
+    const items: ContextMenuItem[] = [{ label: 'Open branch from here…', icon: 'branch', disabled: !headOf(b)?.id, run: () => openFrom(b) }];
+    if (b.name !== 'main' && !internal(b)) {
+      if (b.status === 'open') {
+        for (const target of branches.filter((x) => x.status === 'open' && x.name !== b.name))
+          items.push({ label: `Merge into ${target.name}`, icon: 'branch', run: () => openMergeDialog(baselineTool.namespace, b.name ?? '', target.name ?? '') });
+        items.push({ label: 'Abandon', icon: 'trash', danger: true, run: () => abandon(b.name ?? '') });
+      } else if (b.status === 'abandoned') {
+        items.push({ label: 'Reopen', icon: 'refresh', run: () => setStatus(b.name ?? '', 'open') });
+      }
+      items.push({ label: 'Edit description…', run: () => editDescription(b) });
+    }
+    openContextMenu(e, items);
   }
 </script>
 
@@ -139,7 +204,7 @@
         detail={head ? formatDate(head.createdAt) : '—'}
         active={baselineTool.branch === (b.name ?? '')}
         onselect={() => selectBranch(b.name ?? '')}
-        onopen={() => openBranchPin(b)}
+        oncontextmenu={(e) => menu(e, b)}
       >
         {#snippet trail()}
           <StatusBadge status={b.status} />

@@ -5,6 +5,8 @@
     id: string;
     /** shown on the edge (e.g. the change that produced this transition), as a native SVG tooltip */
     label?: string;
+    /** draws this one edge dashed, regardless of either endpoint's own `ephemeral` */
+    dashed?: boolean;
   }
 
   export interface LaneEntry<T = unknown> {
@@ -138,11 +140,11 @@
     for (const e of entries) {
       const cr = rowOf.get(e.id) ?? 0;
       const cl = laneOf(e.lane);
-      for (const { id: pid, label } of e.parents) {
+      for (const { id: pid, label, dashed } of e.parents) {
         const p = byId.get(pid);
         const pr = rowOf.get(pid);
         if (!p || pr === undefined) continue;
-        const ephemeral = e.ephemeral || p.ephemeral;
+        const ephemeral = e.ephemeral || p.ephemeral || dashed;
         const pl = laneOf(p.lane);
         const [x1, y1, x2, y2] = [x(cl), y(cr), x(pl), y(pr)];
         let d: string;

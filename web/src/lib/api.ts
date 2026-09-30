@@ -733,6 +733,17 @@ export interface BaselineNodesQuery {
   includeDeleted?: boolean;
 }
 
+export interface BaselineLinksQuery {
+  baselineId: string;
+  /** link type; empty: every type */
+  type?: string;
+  /** matched against the type and the string properties */
+  query?: string;
+  offset?: number;
+  /** page size (max 500) */
+  limit?: number;
+}
+
 export interface TypeCount {
   type?: string;
   count?: number;
@@ -1560,6 +1571,14 @@ export const graph = {
     rpc<BaselineNodesQuery, { baseline?: Baseline; nodes?: GraphNode[]; total?: number; types?: TypeCount[] }>(
       GRAPH,
       'ListBaselineNodes',
+      req,
+      signal,
+    ),
+  /** A page of the links of a baseline (by type, text-filtered), with the link count of every type. */
+  listBaselineLinks: (req: BaselineLinksQuery, signal?: AbortSignal) =>
+    rpc<BaselineLinksQuery, { baseline?: Baseline; links?: Link[]; total?: number; types?: TypeCount[] }>(
+      GRAPH,
+      'ListBaselineLinks',
       req,
       signal,
     ),

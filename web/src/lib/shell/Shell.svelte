@@ -13,6 +13,8 @@
   import Toasts from './Toasts.svelte';
   import ContextMenu from './ContextMenu.svelte';
   import ObjectDialog from './ObjectDialog.svelte';
+  import FieldDialog from './FieldDialog.svelte';
+  import MergeDialog from './MergeDialog.svelte';
   import ConfirmDialog from './ConfirmDialog.svelte';
   import SettingsDialog from './SettingsDialog.svelte';
   import UsageDialog from './UsageDialog.svelte';
@@ -139,6 +141,8 @@
 <Toasts />
 <ContextMenu />
 <ObjectDialog />
+<FieldDialog />
+<MergeDialog />
 <ConfirmDialog />
 <SettingsDialog />
 <UsageDialog />

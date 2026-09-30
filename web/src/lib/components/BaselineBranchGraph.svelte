@@ -4,7 +4,7 @@
   // (ADR 0032). Unlike a namespace-wide graph, a branch never runs as a parallel lane for its whole life here.
   import type { Baseline } from '../api';
   import { formatDate, shortId } from '../api';
-  import { MAIN_BRANCH } from '../namespace';
+  import { MAIN_BRANCH, isEphemeralBranch } from '../namespace';
   import { changes, refreshChanges } from '../stores/catalog.svelte';
   import HistoryGraph, { type LaneEntry } from './HistoryGraph.svelte';
 
@@ -15,7 +15,7 @@
     branch,
     forkBaseline,
     selected,
-    rowHeight = 44,
+    rowHeight = 58,
     wrap = true,
     onselect,
     onopen,
@@ -41,32 +41,53 @@
     (b.changeId && changes.items.find((c) => c.id === b.changeId)?.title) || b.name || shortId(b.id);
 
   const own = $derived(baselines.filter((b) => branchOf(b) === branch));
+  const byId = $derived(new Map(baselines.map((b) => [b.id, b])));
 
-  /** a parent/mergedFrom id that isn't itself on this branch: the branch's fork point, or a merge source */
+  /** a merge from a change's own scratch branch (ADR 0032): plumbing, not a branch worth showing as its own row */
+  const ephemeralSource = (b: Baseline) => {
+    const src = b.mergedFrom && byId.get(b.mergedFrom);
+    return !!src && isEphemeralBranch(branchOf(src));
+  };
+  /** the change's own starting baseline, when it differs from the plain previous head (a real 3-way merge that
+   * needed rework, not just the structural wrapper every change's own branch uses to land) */
+  const startOf = (b: Baseline) => {
+    if (!ephemeralSource(b)) return undefined;
+    const start = b.changeId && changes.items.find((c) => c.id === b.changeId)?.baselineId;
+    return start && start !== b.parentId ? start : undefined;
+  };
+
+  /** a parent/mergedFrom id that isn't itself on this branch: the branch's fork point, or a (named-branch) merge source */
   const ghosts = $derived.by(() => {
     const ownIds = new Set(own.map((b) => b.id));
-    const byId = new Map(baselines.map((b) => [b.id, b]));
     const ids = new Set<string>();
     if (forkBaseline && !ownIds.has(forkBaseline)) ids.add(forkBaseline);
     for (const b of own) {
       if (b.parentId && !ownIds.has(b.parentId)) ids.add(b.parentId);
-      if (b.mergedFrom && !ownIds.has(b.mergedFrom)) ids.add(b.mergedFrom);
+      if (b.mergedFrom && !ownIds.has(b.mergedFrom) && !ephemeralSource(b)) ids.add(b.mergedFrom);
     }
     return [...ids].map((id) => byId.get(id)).filter((b): b is Baseline => !!b);
   });
 
   const entries = $derived<LaneEntry<Baseline>[]>(
     [
-      ...own.map((h) => ({
-        id: h.id ?? '',
-        // what descends a baseline from another is the change that produced it: the edge, not the dot
-        parents: [
+      ...own.map((h) => {
+        const start = startOf(h);
+        // a branch merged back with no changes of its own has parentId === mergedFrom (or === start): dedupe by
+        // id so the same edge is never listed twice (a keyed each block would throw on the duplicate key)
+        const seen = new Set<string>();
+        const parents = [
           ...(h.parentId ? [{ id: h.parentId, label: changeLabel(h) }] : []),
-          ...(h.mergedFrom ? [{ id: h.mergedFrom, label: changeLabel(h) }] : []),
-        ],
-        lane: branch,
-        item: h,
-      })),
+          ...(h.mergedFrom && !ephemeralSource(h) ? [{ id: h.mergedFrom, label: changeLabel(h) }] : []),
+          ...(start ? [{ id: start, label: changeLabel(h), dashed: true }] : []),
+        ].filter((p) => (seen.has(p.id) ? false : (seen.add(p.id), true)));
+        return {
+          id: h.id ?? '',
+          // what descends a baseline from another is the change that produced it: the edge, not the dot
+          parents,
+          lane: branch,
+          item: h,
+        };
+      }),
       ...ghosts.map((h) => ({ id: h.id ?? '', parents: [], lane: branchOf(h), item: h })),
     ].sort((a, b) => (b.item.createdAt ?? '').localeCompare(a.item.createdAt ?? '')),
   );
@@ -115,8 +136,12 @@
     min-width: 0;
   }
   .hname {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
     overflow: hidden;
-    text-overflow: ellipsis;
+    word-break: break-word;
   }
   .hchange {
     color: var(--muted);

@@ -22,6 +22,7 @@ service GraphService {
   rpc GetBaselineGraph(GetBaselineGraphRequest) returns (GetBaselineGraphResponse);
   // Browsing a large baseline: a page of its nodes (by type, filtered) and the neighbourhood of one node.
   rpc ListBaselineNodes(ListBaselineNodesRequest) returns (ListBaselineNodesResponse);
+  rpc ListBaselineLinks(ListBaselineLinksRequest) returns (ListBaselineLinksResponse);
   rpc GetNodeNeighbourhood(GetNodeNeighbourhoodRequest) returns (GetNodeNeighbourhoodResponse);
   // The namespaces holding at least one node.
   rpc ListNamespaces(ListNamespacesRequest) returns (ListNamespacesResponse);
@@ -384,6 +385,26 @@ message ListBaselineNodesResponse {
   // number of nodes matching the query, all pages
   int32 total = 2;
   // nodes per type matching the text query (the type filter aside)
+  repeated TypeCount types = 3;
+  Baseline baseline = 4;
+}
+
+message ListBaselineLinksRequest {
+  string baseline_id = 1;
+  // link type; empty: every type
+  string type = 2;
+  // case-insensitive text matched against the type and the string properties
+  string query = 3;
+  int32 offset = 4;
+  // page size (default and max 500)
+  int32 limit = 5;
+}
+
+message ListBaselineLinksResponse {
+  repeated Link links = 1;
+  // number of links matching the query, all pages
+  int32 total = 2;
+  // links per type matching the text query (the type filter aside)
   repeated TypeCount types = 3;
   Baseline baseline = 4;
 }
