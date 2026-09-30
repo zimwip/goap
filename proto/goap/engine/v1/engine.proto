@@ -14,6 +14,9 @@ service EngineService {
   // Decide a pending approval (an action needing a permission the initiator
   // lacks) with the caller's permissions.
   rpc ApproveAction(ApproveActionRequest) returns (ApproveActionResponse);
+  // A person unblocks a run waiting for conditions established outside it, or stuck (ADR 0036 §3): waive
+  // conditions (a waiver on the change), retry the actions it gave up on, or abandon it.
+  rpc UnblockProcess(UnblockProcessRequest) returns (UnblockProcessResponse);
   // Restarts a run from one of its steps on a new flow branch of the change; the
   // outputs of that step and of what followed are marked stale until a human decides.
   rpc RelaunchStep(RelaunchStepRequest) returns (RelaunchStepResponse);
@@ -132,6 +135,7 @@ message HumanTask {
   int32 step = 4;
   // input (submit items) | approval (approve or reject the action) | agent | flow (adopt or discard a relaunched flow) | board | relaunched
   // | condition (conditions established outside the process: another process, a person, the state of the change)
+  // | unblock (the process is stuck: a person waives conditions, retries or abandons it, UnblockProcess)
   string kind = 5;
   // permission required to approve
   string permission = 6;
@@ -147,7 +151,8 @@ message HumanTask {
   repeated string node_types = 11;
   // the step of a process the task belongs to: what to do and how (ADR 0034, ADR 0035 §2)
   StepContext context = 12;
-  // kind "condition": the conditions the process waits for ("name" expected true, "!name" expected false)
+  // kind "condition": the conditions the process waits for; "unblock": those that would unblock it
+  // ("name" expected true, "!name" expected false)
   repeated string conditions = 13;
 }
 
@@ -310,6 +315,20 @@ message ApproveActionRequest {
 }
 
 message ApproveActionResponse {
+  Process process = 1;
+}
+
+message UnblockProcessRequest {
+  string process_id = 1;
+  // waive | retry | abandon
+  string decision = 2;
+  // waive: the conditions declared established ("name" true, "!name" false)
+  repeated string conditions = 3;
+  // required to waive or abandon
+  string reason = 4;
+}
+
+message UnblockProcessResponse {
   Process process = 1;
 }
 

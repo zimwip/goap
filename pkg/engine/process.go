@@ -24,16 +24,18 @@ const (
 	StatusRunning    Status = "running"
 	StatusWaiting    Status = "waiting" // waiting for a person, a sub-agent, or conditions established outside the process
 	StatusCompleted  Status = "completed"
-	StatusStuck      Status = "stuck" // no plan reaches the goal, whatever is established outside the process
-	StatusFailed     Status = "failed"
+	// StatusStuck: no plan reaches the goal, whatever is established outside the process; it waits for a person to
+	// unblock it (TaskUnblock), and is tried again when the change moves.
+	StatusStuck  Status = "stuck"
+	StatusFailed Status = "failed"
 	// StatusSuperseded: the run was replaced by a relaunched flow that was adopted,
 	// or it is the relaunched flow itself that was discarded.
 	StatusSuperseded Status = "superseded"
 )
 
-// Terminal reports whether the process can no longer progress by itself.
+// Terminal reports whether the process has ended. A stuck process has not: a person can always unblock it.
 func (s Status) Terminal() bool {
-	return s == StatusCompleted || s == StatusStuck || s == StatusFailed || s == StatusSuperseded
+	return s == StatusCompleted || s == StatusFailed || s == StatusSuperseded
 }
 
 // Process is an agent process working on a change.
@@ -123,6 +125,10 @@ const (
 	// (another process, a person, the state of the change will): the process waits for them, and is tried again
 	// when the change moves. A process that no such condition would unblock is stuck.
 	TaskCondition = "condition"
+	// TaskUnblock: the process is stuck; whoever answers for it declares conditions established (a waiver on the
+	// change), retries the actions it gave up on, or abandons it (Engine.Unblock). The same decision answers a
+	// TaskCondition: a person may always unblock a run instead of waiting.
+	TaskUnblock = "unblock"
 )
 
 // HumanTask is a pending human action or approval.
@@ -149,7 +155,8 @@ type HumanTask struct {
 	FlowID string `json:"flowId,omitempty"`
 	// Context is the step of a process the task belongs to (ADR 0034, ADR 0035 §2): what to do and how.
 	Context *StepContext `json:"context,omitempty"`
-	// Conditions a TaskCondition waits for ("name" when expected true, "!name" when expected false).
+	// Conditions a TaskCondition waits for, or that would unblock a TaskUnblock ("name" when expected true, "!name"
+	// when expected false).
 	Conditions []string `json:"conditions,omitempty"`
 }
 

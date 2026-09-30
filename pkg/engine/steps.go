@@ -17,7 +17,7 @@ import (
 // RunStep is the builtin process.step (ADR 0034): the action generated for a step of a process done by an agent or a
 // nested process. It starts that agent (towards the step's goal) or the agent of the nested process as a sub-agent on
 // the same change and waits for it; once it has completed, a step_done artifact records the step. A sub-agent that
-// ends stuck or failed fails the step. Params: step (path), agent, goal, methodology (empty: this one).
+// fails (or is abandoned) fails the step; one that is stuck keeps the step waiting until a person unblocks it. Params: step (path), agent, goal, methodology (empty: this one).
 func RunStep(ctx context.Context, ac ActionContext) (ActionResult, error) {
 	h := ac.Host
 	if h == nil || ac.Process.ChangeID == "" {

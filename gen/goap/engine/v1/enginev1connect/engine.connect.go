@@ -45,6 +45,9 @@ const (
 	// EngineServiceApproveActionProcedure is the fully-qualified name of the EngineService's
 	// ApproveAction RPC.
 	EngineServiceApproveActionProcedure = "/goap.engine.v1.EngineService/ApproveAction"
+	// EngineServiceUnblockProcessProcedure is the fully-qualified name of the EngineService's
+	// UnblockProcess RPC.
+	EngineServiceUnblockProcessProcedure = "/goap.engine.v1.EngineService/UnblockProcess"
 	// EngineServiceRelaunchStepProcedure is the fully-qualified name of the EngineService's
 	// RelaunchStep RPC.
 	EngineServiceRelaunchStepProcedure = "/goap.engine.v1.EngineService/RelaunchStep"
@@ -88,6 +91,9 @@ type EngineServiceClient interface {
 	// Decide a pending approval (an action needing a permission the initiator
 	// lacks) with the caller's permissions.
 	ApproveAction(context.Context, *connect.Request[v1.ApproveActionRequest]) (*connect.Response[v1.ApproveActionResponse], error)
+	// A person unblocks a run waiting for conditions established outside it, or stuck (ADR 0036 §3): waive
+	// conditions (a waiver on the change), retry the actions it gave up on, or abandon it.
+	UnblockProcess(context.Context, *connect.Request[v1.UnblockProcessRequest]) (*connect.Response[v1.UnblockProcessResponse], error)
 	// Restarts a run from one of its steps on a new flow branch of the change; the
 	// outputs of that step and of what followed are marked stale until a human decides.
 	RelaunchStep(context.Context, *connect.Request[v1.RelaunchStepRequest]) (*connect.Response[v1.RelaunchStepResponse], error)
@@ -147,6 +153,12 @@ func NewEngineServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			httpClient,
 			baseURL+EngineServiceApproveActionProcedure,
 			connect.WithSchema(engineServiceMethods.ByName("ApproveAction")),
+			connect.WithClientOptions(opts...),
+		),
+		unblockProcess: connect.NewClient[v1.UnblockProcessRequest, v1.UnblockProcessResponse](
+			httpClient,
+			baseURL+EngineServiceUnblockProcessProcedure,
+			connect.WithSchema(engineServiceMethods.ByName("UnblockProcess")),
 			connect.WithClientOptions(opts...),
 		),
 		relaunchStep: connect.NewClient[v1.RelaunchStepRequest, v1.RelaunchStepResponse](
@@ -224,6 +236,7 @@ type engineServiceClient struct {
 	answerIntent       *connect.Client[v1.AnswerIntentRequest, v1.AnswerIntentResponse]
 	submitHumanInput   *connect.Client[v1.SubmitHumanInputRequest, v1.SubmitHumanInputResponse]
 	approveAction      *connect.Client[v1.ApproveActionRequest, v1.ApproveActionResponse]
+	unblockProcess     *connect.Client[v1.UnblockProcessRequest, v1.UnblockProcessResponse]
 	relaunchStep       *connect.Client[v1.RelaunchStepRequest, v1.RelaunchStepResponse]
 	decideFlow         *connect.Client[v1.DecideFlowRequest, v1.DecideFlowResponse]
 	resolveBoard       *connect.Client[v1.ResolveBoardRequest, v1.ResolveBoardResponse]
@@ -255,6 +268,11 @@ func (c *engineServiceClient) SubmitHumanInput(ctx context.Context, req *connect
 // ApproveAction calls goap.engine.v1.EngineService.ApproveAction.
 func (c *engineServiceClient) ApproveAction(ctx context.Context, req *connect.Request[v1.ApproveActionRequest]) (*connect.Response[v1.ApproveActionResponse], error) {
 	return c.approveAction.CallUnary(ctx, req)
+}
+
+// UnblockProcess calls goap.engine.v1.EngineService.UnblockProcess.
+func (c *engineServiceClient) UnblockProcess(ctx context.Context, req *connect.Request[v1.UnblockProcessRequest]) (*connect.Response[v1.UnblockProcessResponse], error) {
+	return c.unblockProcess.CallUnary(ctx, req)
 }
 
 // RelaunchStep calls goap.engine.v1.EngineService.RelaunchStep.
@@ -320,6 +338,9 @@ type EngineServiceHandler interface {
 	// Decide a pending approval (an action needing a permission the initiator
 	// lacks) with the caller's permissions.
 	ApproveAction(context.Context, *connect.Request[v1.ApproveActionRequest]) (*connect.Response[v1.ApproveActionResponse], error)
+	// A person unblocks a run waiting for conditions established outside it, or stuck (ADR 0036 §3): waive
+	// conditions (a waiver on the change), retry the actions it gave up on, or abandon it.
+	UnblockProcess(context.Context, *connect.Request[v1.UnblockProcessRequest]) (*connect.Response[v1.UnblockProcessResponse], error)
 	// Restarts a run from one of its steps on a new flow branch of the change; the
 	// outputs of that step and of what followed are marked stale until a human decides.
 	RelaunchStep(context.Context, *connect.Request[v1.RelaunchStepRequest]) (*connect.Response[v1.RelaunchStepResponse], error)
@@ -375,6 +396,12 @@ func NewEngineServiceHandler(svc EngineServiceHandler, opts ...connect.HandlerOp
 		EngineServiceApproveActionProcedure,
 		svc.ApproveAction,
 		connect.WithSchema(engineServiceMethods.ByName("ApproveAction")),
+		connect.WithHandlerOptions(opts...),
+	)
+	engineServiceUnblockProcessHandler := connect.NewUnaryHandler(
+		EngineServiceUnblockProcessProcedure,
+		svc.UnblockProcess,
+		connect.WithSchema(engineServiceMethods.ByName("UnblockProcess")),
 		connect.WithHandlerOptions(opts...),
 	)
 	engineServiceRelaunchStepHandler := connect.NewUnaryHandler(
@@ -453,6 +480,8 @@ func NewEngineServiceHandler(svc EngineServiceHandler, opts ...connect.HandlerOp
 			engineServiceSubmitHumanInputHandler.ServeHTTP(w, r)
 		case EngineServiceApproveActionProcedure:
 			engineServiceApproveActionHandler.ServeHTTP(w, r)
+		case EngineServiceUnblockProcessProcedure:
+			engineServiceUnblockProcessHandler.ServeHTTP(w, r)
 		case EngineServiceRelaunchStepProcedure:
 			engineServiceRelaunchStepHandler.ServeHTTP(w, r)
 		case EngineServiceDecideFlowProcedure:
@@ -498,6 +527,10 @@ func (UnimplementedEngineServiceHandler) SubmitHumanInput(context.Context, *conn
 
 func (UnimplementedEngineServiceHandler) ApproveAction(context.Context, *connect.Request[v1.ApproveActionRequest]) (*connect.Response[v1.ApproveActionResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.engine.v1.EngineService.ApproveAction is not implemented"))
+}
+
+func (UnimplementedEngineServiceHandler) UnblockProcess(context.Context, *connect.Request[v1.UnblockProcessRequest]) (*connect.Response[v1.UnblockProcessResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.engine.v1.EngineService.UnblockProcess is not implemented"))
 }
 
 func (UnimplementedEngineServiceHandler) RelaunchStep(context.Context, *connect.Request[v1.RelaunchStepRequest]) (*connect.Response[v1.RelaunchStepResponse], error) {

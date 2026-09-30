@@ -5,6 +5,7 @@
   import AssistantRun from './AssistantRun.svelte';
   import HumanTaskForm from '../../components/HumanTaskForm.svelte';
   import ApprovalPanel from '../../components/ApprovalPanel.svelte';
+  import UnblockPanel from '../../components/UnblockPanel.svelte';
   import { engine, graph, errorMessage, int, formatInt, type Change, type LogLine, type Process } from '../../api';
   import { watchEvents, type StreamStatus } from '../../stream';
   import { processes, ingestProcess, ingestEvent } from '../../stores/live.svelte';
@@ -223,11 +224,13 @@
         {:else if p.pending.kind === 'agent'}
           <div class="working"><span class="spin" aria-hidden="true"></span> Waiting for another agent…</div>
         {:else if p.pending.kind === 'condition'}
-          <div class="working">Waiting for {(p.pending.conditions ?? []).join(', ')}: another process or person establishes it; I resume when the change moves.</div>
+          <div class="bubble bot">Waiting for {(p.pending.conditions ?? []).join(', ')}: another process or person establishes it; I resume when the change moves. You may also decide now.</div>
+          <div class="inline"><UnblockPanel process={p} ondecided={ingestProcess} /></div>
         {/if}
       {/key}
     {:else if status === 'stuck'}
-      <div class="bubble bot warn">I am stuck: no action can reach the goal with the information available.{#if p.error} ({p.error}){/if}</div>
+      <div class="bubble bot warn">I am stuck: no action can reach the goal with the information available.{#if p.error} ({p.error}){/if} Tell me how to go on.</div>
+      {#if p.pending?.kind === 'unblock'}<div class="inline"><UnblockPanel process={p} ondecided={ingestProcess} /></div>{/if}
     {:else if status === 'failed'}
       <div class="bubble bot err">The request failed{#if p.error}: {p.error}{/if}.</div>
     {:else if status === 'completed' && depth > 0}

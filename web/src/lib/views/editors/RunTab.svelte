@@ -9,6 +9,7 @@
   import HumanTaskForm from '../../components/HumanTaskForm.svelte';
   import ProcessProgress from '../../components/ProcessProgress.svelte';
   import ApprovalPanel from '../../components/ApprovalPanel.svelte';
+  import UnblockPanel from '../../components/UnblockPanel.svelte';
   import FlowDecisionPanel from '../../components/FlowDecisionPanel.svelte';
   import BoardIssuesPanel from '../../components/BoardIssuesPanel.svelte';
   import FlowGraph from '../../components/FlowGraph.svelte';
@@ -377,7 +378,7 @@
       <IntentDialogue {process} onupdate={set} />
     {/if}
 
-    {#if process.status === 'waiting' && process.pending}
+    {#if (process.status === 'waiting' || process.status === 'stuck') && process.pending}
       {#key `${process.id}:${process.pending.step}:${process.pending.action}:${process.pending.kind}`}
         {#if process.pending.kind === 'approval'}
           <ApprovalPanel {process} ondecided={set} />
@@ -395,15 +396,8 @@
             </p>
             {#if process.pending.description}<p class="hint">{process.pending.description}</p>{/if}
           </section>
-        {:else if process.pending.kind === 'condition'}
-          <section class="card waiting-agent">
-            <h3>Waiting for conditions</h3>
-            <p>
-              No action of this agent establishes
-              {#each process.pending.conditions ?? [] as c, i (c)}{i ? ', ' : ''}<code>{c}</code>{/each}: another process, a person or the
-              state of the change will. The run is tried again whenever the change moves.
-            </p>
-          </section>
+        {:else if process.pending.kind === 'condition' || process.pending.kind === 'unblock'}
+          <UnblockPanel {process} ondecided={set} />
         {:else if process.pending.kind === 'agent'}
           <section class="card waiting-agent">
             <h3>Waiting for a sub-agent</h3>
