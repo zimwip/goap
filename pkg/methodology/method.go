@@ -206,14 +206,12 @@ func sharedCriteria(methods []Method, goals map[string]Goal) map[string]bool {
 // (declaration order among equals), each with the goal its agent reaches.
 func (c *Compiled) MethodsFor(capability string, bb domain.Blackboard) []MethodChoice {
 	state := c.methodGuards.Evaluate(bb).State
-	var out []MethodChoice
-	for _, me := range c.Methodology.methodsFor(capability, c.methods.goals) {
-		if me.When != "" && !state[me.GuardCondition()] {
-			continue
-		}
+	applicable := func(me Method) bool { return me.When == "" || state[me.GuardCondition()] }
+	ranked := RankByPriority(c.Methodology.methodsFor(capability, c.methods.goals), applicable, func(me Method) int { return me.Priority })
+	out := make([]MethodChoice, 0, len(ranked))
+	for _, me := range ranked {
 		out = append(out, MethodChoice{Method: me, AgentGoal: c.methods.goals[me.Name].Name})
 	}
-	slices.SortStableFunc(out, func(a, b MethodChoice) int { return b.Priority - a.Priority })
 	return out
 }
 

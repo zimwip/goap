@@ -881,17 +881,17 @@ func (e *Engine) specialize(ctx context.Context, p *Process, m *methodology.Comp
 		a    methodology.Action
 		name string
 	}
-	var best *candidate
+	var candidates []candidate
 	consider := func(owner *methodology.Compiled) {
 		for _, s := range owner.SpecializationsOf(m.Name, action.Declared()) {
-			if !owner.Applicable(s, bb) || (best != nil && s.Priority <= best.a.Priority) || !isBound(s) {
+			if !owner.Applicable(s, bb) || !isBound(s) {
 				continue
 			}
 			name := s.Name
 			if owner.Name != m.Name {
 				name = owner.Name + "/" + s.Name
 			}
-			best = &candidate{a: s, name: name}
+			candidates = append(candidates, candidate{a: s, name: name})
 		}
 	}
 	consider(m)
@@ -904,12 +904,16 @@ func (e *Engine) specialize(ctx context.Context, p *Process, m *methodology.Comp
 			}
 		}
 	}
-	if best == nil {
+	// the generic Activity-specialization mechanism (methodology.RankByPriority, ADR 0009 §5): the applicable
+	// candidate with the highest priority wins, ties keeping declaration order (methodology m first).
+	ranked := methodology.RankByPriority(candidates, func(candidate) bool { return true }, func(c candidate) int { return c.a.Priority })
+	if len(ranked) == 0 {
 		if action.Kind == methodology.KindAbstract {
 			return action, "", fmt.Errorf("no applicable specialization for abstract action %s", action.Name)
 		}
 		return action, "", nil
 	}
+	best := ranked[0]
 	impl := best.a
 	impl.Name, impl.Pre, impl.Effects, impl.Expects, impl.Cost = action.Name, action.Pre, action.Effects, action.Expects, action.Cost
 	impl.Incremental = action.Incremental

@@ -23,6 +23,25 @@ func refMethodology() *Methodology {
 	}
 }
 
+// A link type may declare what it carries (architecture plan "Activity concept": specializes declares
+// when/priority), documentary only - not yet enforced by the type catalogue, same as node property lists are
+// for search/display rather than a hard schema.
+func TestLinkTypePropertiesParse(t *testing.T) {
+	d, err := ParseDomain([]byte(`
+name: m
+version: "1"
+nodeTypes: [{name: A}]
+linkTypes:
+  - {name: specializes, from: A, to: A, properties: [when, priority]}
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(d.LinkTypes) != 1 || len(d.LinkTypes[0].Properties) != 2 || d.LinkTypes[0].Properties[1] != "priority" {
+		t.Fatalf("link type properties: %+v", d.LinkTypes)
+	}
+}
+
 func TestDomainValidate(t *testing.T) {
 	if issues := testDomain().Validate(); len(issues) > 0 {
 		t.Fatal(issues)
