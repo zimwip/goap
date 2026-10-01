@@ -158,6 +158,22 @@ func (g *Graph) ListChangeImpacts(ctx context.Context, id domain.ChangeID) (out 
 	return
 }
 
+// ImpactsOf returns the change impacts one execution (an Activity Run, architecture plan "Activity concept")
+// declared: its Pre (the context graph) and Post (the modified graph) node versions, scoped to exactly what that
+// run touched rather than the whole change. Empty when the execution declared none.
+func (g *Graph) ImpactsOf(ctx context.Context, id domain.ChangeID, execution string) (out []domain.ChangeImpact, err error) {
+	all, err := g.ListChangeImpacts(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	for _, cn := range all {
+		if cn.Execution == execution {
+			out = append(out, cn)
+		}
+	}
+	return out, nil
+}
+
 // RealizeNode sets the post version of a change impact: a version created by the
 // change (its ChangeID) that succeeds the pre version, or the first version of
 // a created node. The version records the change impact and its comment.
