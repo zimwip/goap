@@ -14,6 +14,7 @@
   import ContextMenu from './ContextMenu.svelte';
   import ObjectDialog from './ObjectDialog.svelte';
   import FieldDialog from './FieldDialog.svelte';
+  import PickerModal from './PickerModal.svelte';
   import MergeDialog from './MergeDialog.svelte';
   import ConfirmDialog from './ConfirmDialog.svelte';
   import SettingsDialog from './SettingsDialog.svelte';
@@ -142,6 +143,7 @@
 <ContextMenu />
 <ObjectDialog />
 <FieldDialog />
+<PickerModal />
 <MergeDialog />
 <ConfirmDialog />
 <SettingsDialog />
