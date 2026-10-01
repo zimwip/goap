@@ -19,8 +19,15 @@
   const loc = $derived(findStep(d, tab.params.skey ?? ''));
   const index = $derived(loc ? loc.siblings.indexOf(loc.step) : -1);
   const p = $derived(loc ? `${loc.section}[${d.indexOf(loc.section, loc.owner.uid, loc.owner.name)}].${loc.at}` : '');
-  // a step has a level of its own when it has sub-steps, an agent operating it, or methods that specialize it (an action is not broken down)
-  const hasLevel = $derived(!!loc && (loc.step.steps.length > 0 || ['agent', 'capability'].includes(loc.step.method)));
+  // a step has a level of its own when it has sub-steps, methods that specialize it, or the action(s) that do it: they are
+  // its internal steps
+  const hasLevel = $derived(
+    !!loc &&
+      (loc.step.steps.length > 0 ||
+        ['agent', 'capability'].includes(loc.step.method) ||
+        (loc.step.method === 'action' && !!loc.step.action) ||
+        (loc.step.method === 'actions' && loc.step.actions.length > 0)),
+  );
   const root = $derived(loc?.owner.name ?? '');
   const parentPath = $derived(loc ? loc.path.slice(0, loc.path.lastIndexOf('/')) : '');
   let rootEl = $state<HTMLElement>();

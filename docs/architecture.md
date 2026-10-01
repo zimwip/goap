@@ -1123,7 +1123,7 @@ the scheduler picks the applicable method (highest priority, then the most speci
 responsible role, planning over the method's actions towards its goal. The instance starts fresh and reads what it needs from the change (brief,
 trace); what it produces goes on the change. A method with no steps states what it reaches (`done`; the flow then shows its actions).
 A step cannot name an agent for a capability: it names the capability, and the scheduler resolves the method.
-The flow shows **one level at a time** (the system of interest is a parent and its direct steps, from `CheckLevels`: each level carries
+The flow shows **one level at a time** (the system of interest is a parent and its direct steps, from `CheckLevels`: each level carries A leaf step done by an action or alternative actions opens on them (kind `action`): the actions are its internal steps, with their own entry and exit; a method of actions alone opens on its pool. A step with `foreach` carries a ∀ marker (and `groupBy`), and the run's progress draws one lane per stream.
 its steps, their entry and exit and the links their conditions draw). A step with sub-steps is a node; zooming into it (double-click, or
 the breadcrumb to come back) changes the system of interest. A step not resolved inside (one of its own levels, or one below, is broken)
 is flagged `incomplete` in the level above (gap `inner`), which is then broken too: the process cannot run through it until it is reworked.

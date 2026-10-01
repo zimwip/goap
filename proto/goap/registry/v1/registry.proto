@@ -787,6 +787,9 @@ message LevelNode {
   // that level, or one below it, is not resolved: the level above cannot run through the step
   bool broken = 9;
   int32 sub_steps = 10;
+  // the step runs once per element (or group) of a CEL list, in parallel streams (ADR 0050)
+  string foreach = 11;
+  string group_by = 12;
 }
 
 message LevelStep {
@@ -835,6 +838,9 @@ message GraphStep {
   repeated Reference references = 13;
   string process = 14;
   string capability = 15;
+  // the step runs once per element (or group) of a CEL list, in parallel streams (ADR 0050)
+  string foreach = 16;
+  string group_by = 17;
 }
 
 // The exit criteria of from meet the entry of to, on these conditions.

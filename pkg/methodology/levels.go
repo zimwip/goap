@@ -10,6 +10,7 @@ import (
 // Level kinds. Process -> Step -> Method -> MethodStep -> Action: below the last step, an agent operates the actions.
 const (
 	LevelAgent   = "agent"
+	LevelAction  = "action" // the actions that do a leaf step: its internal steps
 	LevelProcess = "process"
 	LevelMethod  = "method"
 	LevelOfStep  = "step"
@@ -57,7 +58,9 @@ type LevelCheck struct {
 // LevelNode is a direct step of a level.
 type LevelNode struct {
 	Name, Path, Method, Target, Capability string
-	Entry, Exit                            map[string]bool
+	// Foreach and GroupBy: the step runs once per element (or group) of the list, in parallel streams (ADR 0050).
+	Foreach, GroupBy string
+	Entry, Exit      map[string]bool
 	// Composite: the step has sub-steps, a level of its own. Broken: that level, or one below it, is not resolved.
 	Composite, Broken bool
 	// SubSteps counts the direct sub-steps.
@@ -126,6 +129,8 @@ func (c *Compiled) CheckLevels(name string) (levels []LevelCheck, ok bool) {
 			if len(s.Steps) > 0 {
 				walk(s, LevelOfStep)
 			} else if lc, ok := c.capabilityLevel(s); ok {
+				levels = append(levels, lc)
+			} else if lc, ok := c.actionLevel(s); ok {
 				levels = append(levels, lc)
 			}
 		}
@@ -240,6 +245,20 @@ func (c *Compiled) capabilityLevel(s StepInfo) (LevelCheck, bool) {
 	return lc, true
 }
 
+// actionLevel is the level below a leaf step done by an action or by alternative actions: the actions themselves are
+// its internal steps (the smallest activity has no flow of its own, it is a node).
+func (c *Compiled) actionLevel(s StepInfo) (LevelCheck, bool) {
+	if s.Method() != MethodAction {
+		return LevelCheck{}, false
+	}
+	lc, ok := c.operatorLevel(s.Path, s.Actions, "", "", s.Entry, s.Exit, s.Action)
+	if !ok {
+		return LevelCheck{}, false
+	}
+	lc.Kind = LevelAction
+	return lc, true
+}
+
 // operatorLevel is the level below a step done by an action, alternative actions or an agent (or a method naming an
 // agent): the actions themselves, which the agent carries out in the order that reaches the goal.
 func (c *Compiled) operatorLevel(path string, alternatives []string, agent, goal string, entry, exit map[string]bool, action ...string) (LevelCheck, bool) {
@@ -290,7 +309,7 @@ func checkLevel(parent StepInfo, kind string) LevelCheck {
 	lc := LevelCheck{Path: parent.Path, Kind: kind, Inputs: maps.Clone(parent.Entry), Outputs: maps.Clone(parent.Exit)}
 	var nodes []GraphStep
 	for _, s := range parent.Steps {
-		n := LevelNode{Name: s.Name, Path: s.Path, Method: s.Method(), Capability: s.Capability, Entry: s.Entry, Exit: s.Exit,
+		n := LevelNode{Name: s.Name, Path: s.Path, Method: s.Method(), Capability: s.Capability, Foreach: s.Foreach, GroupBy: s.GroupBy, Entry: s.Entry, Exit: s.Exit,
 			Composite: len(s.Steps) > 0, SubSteps: len(s.Steps)}
 		switch n.Method {
 		case MethodAction:

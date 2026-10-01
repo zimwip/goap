@@ -351,7 +351,7 @@ func LevelsToPB(ls []methodology.LevelCheck) []*registryv1.LevelCheck {
 		}
 		for _, n := range l.Steps {
 			pb.Steps = append(pb.Steps, &registryv1.LevelNode{Name: n.Name, Path: n.Path, Method: n.Method, Target: n.Target, Capability: n.Capability,
-				Entry: n.Entry, Exit: n.Exit, Composite: n.Composite, Broken: n.Broken, SubSteps: int32(n.SubSteps)})
+				Entry: n.Entry, Exit: n.Exit, Composite: n.Composite, Broken: n.Broken, SubSteps: int32(n.SubSteps), Foreach: n.Foreach, GroupBy: n.GroupBy})
 		}
 		for _, e := range l.Edges {
 			pb.Edges = append(pb.Edges, &registryv1.GraphEdge{From: e.From, To: e.To, Conditions: e.Conditions})
@@ -370,7 +370,7 @@ func ProcessGraphToPB(g methodology.ProcessGraph) *registryv1.ProcessGraph {
 	for _, s := range g.Steps {
 		out.Steps = append(out.Steps, &registryv1.GraphStep{Path: s.Path, Name: s.Name, Description: s.Description, Parent: s.Parent, Depth: int32(s.Depth),
 			Leaf: s.Leaf, Method: s.Method, Target: s.Target, Entry: s.Entry, Exit: s.Exit, Roles: respToPB(s.Roles), Guidance: s.Guidance,
-			References: refsToPB(s.References), Process: s.Process, Capability: s.Capability})
+			References: refsToPB(s.References), Process: s.Process, Capability: s.Capability, Foreach: s.Foreach, GroupBy: s.GroupBy})
 	}
 	for _, e := range g.Edges {
 		out.Edges = append(out.Edges, &registryv1.GraphEdge{From: e.From, To: e.To, Conditions: e.Conditions})

@@ -525,7 +525,7 @@ export interface ProcessGraph {
 export interface LevelCheck {
   /** the root name, or the path of a step with sub-steps */
   path?: string;
-  kind?: 'process' | 'method' | 'step' | 'agent';
+  kind?: 'process' | 'method' | 'step' | 'agent' | 'action';
   /** who operates the level (kind agent, or a method naming an agent) and the goal it plans towards */
   agent?: string;
   goal?: string;
@@ -546,6 +546,9 @@ export interface LevelNode {
   method?: string;
   target?: string;
   capability?: string;
+  /** the step runs once per element (or group) of this CEL list, in parallel streams (ADR 0050) */
+  foreach?: string;
+  groupBy?: string;
   entry?: Record<string, boolean>;
   exit?: Record<string, boolean>;
   /** the step has sub-steps: a level of its own */
@@ -579,6 +582,8 @@ export interface GraphStep {
   references?: DocumentReference[];
   process?: string;
   capability?: string;
+  foreach?: string;
+  groupBy?: string;
 }
 
 /** The exit criteria of from meet the entry of to, on these conditions. */

@@ -119,7 +119,7 @@ processes:
 		t.Fatalf("agent: %+v, %v", ag, ok)
 	}
 	ls, _ := c.CheckLevels("assemble")
-	if len(ls) != 1 || ls[0].Agent != "assemble" || ls[0].Goal != "assemble" || len(ls[0].Steps) != 2 {
+	if len(ls) != 3 || ls[0].Agent != "assemble" || ls[0].Goal != "assemble" || len(ls[0].Steps) != 2 || ls[1].Kind != LevelAction {
 		t.Fatalf("levels: %+v", ls)
 	}
 }
