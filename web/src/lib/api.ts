@@ -542,6 +542,30 @@ export interface GraphAgent {
   actions?: { name?: string; kind?: string; description?: string; pre?: Record<string, boolean>; effects?: Record<string, boolean> }[];
 }
 
+/**
+ * The result of planning a goal from a (possibly condition-overridden) world state, with the planner the agent is
+ * actually configured with (goap, utility or hybrid); an llm/llm-scoring agent cannot be previewed.
+ */
+export interface PlanPreview {
+  agent?: string;
+  goal?: string;
+  planner?: string;
+  /** the goal already holds in the given world: actions is then empty */
+  reached?: boolean;
+  actions?: PlanStep[];
+  cost?: number;
+  /** conditions missing that no action of this agent establishes ("name" / "!name"); set only when no plan reaches the goal */
+  awaiting?: string[];
+}
+
+export interface PlanStep {
+  name?: string;
+  /** the step path the action was generated from */
+  step?: string;
+  kind?: string;
+  cost?: number;
+}
+
 /** A role a methodology needs; the organisation assigns it to users per unit ("developer@TEAM-PAY"). */
 export interface MethodologyRole {
   name?: string;
@@ -1518,6 +1542,18 @@ export const registry = {
   /** a process of a methodology as edited, as a graph (ADR 0036 §4) */
   processGraph: (methodology: Methodology, process: string, signal?: AbortSignal) =>
     rpc<{ methodology: Methodology; process: string }, { graph?: ProcessGraph; issues?: Issue[] }>(REGISTRY, 'GetProcessGraph', { methodology, process }, signal),
+  /**
+   * Plans toward `goal` with the planner `agent` is actually configured with, from an empty blackboard whose
+   * evaluated conditions `overrides` patch on top: no live Change needed. For a process, pass its name as both
+   * agent and goal; for a step naming an agent or a capability, pass the step's (or chosen method's) agent/goal.
+   */
+  previewPlan: (methodology: Methodology, agent: string, goal: string, overrides: Record<string, boolean>, signal?: AbortSignal) =>
+    rpc<{ methodology: Methodology; agent: string; goal: string; overrides: Record<string, boolean> }, { preview?: PlanPreview; issues?: Issue[] }>(
+      REGISTRY,
+      'PreviewPlan',
+      { methodology, agent, goal, overrides },
+      signal,
+    ),
   publishMethodology: (name: string, version: string) =>
     rpc<NameVersion, { methodology?: Methodology }>(REGISTRY, 'PublishMethodology', { name, version }),
   createVersion: (name: string, fromVersion: string, newVersion: string) =>

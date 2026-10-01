@@ -11,7 +11,7 @@
   import { provideActions, useReveal } from '../../shell/workbench.svelte';
   import { emptyStep, walkSteps, fromForm } from '../../methodologyForm';
   import ProcessGraphView from '../../components/ProcessGraphView.svelte';
-  import { registry, errorMessage, type ProcessGraph } from '../../api';
+  import { registry, errorMessage, type ProcessGraph, type PlanPreview } from '../../api';
   import { draftOf, draftActions, removeItemAction, syncTabUid, openItem } from './methodologyTabs';
 
   let { tab }: { tab: Tab } = $props();
@@ -68,6 +68,51 @@
     }, 400);
     return () => (clearTimeout(timer), ctl.abort());
   });
+
+  // the plan the process's agent (goap, utility or hybrid) actually reaches from the conditions toggled in the
+  // graph view, overridden on top of an empty blackboard (ADR 0034; no live Change needed)
+  let overrides = $state<Record<string, boolean>>({});
+  let plan = $state<PlanPreview | undefined>();
+  let planIssue = $state('');
+  $effect(() => {
+    void snapshot;
+    const name = item?.name;
+    const ov = overrides;
+    if (!name || view !== 'graph') return;
+    const ctl = new AbortController();
+    const timer = setTimeout(() => {
+      registry
+        .previewPlan(fromForm(d.form).methodology, name, name, ov, ctl.signal)
+        .then((r) => {
+          plan = r.preview;
+          planIssue = r.issues?.length ? r.issues.map((i) => i.message).join('; ') : '';
+        })
+        .catch((e) => {
+          if (!ctl.signal.aborted) planIssue = errorMessage(e);
+        });
+    }, 300);
+    return () => (clearTimeout(timer), ctl.abort());
+  });
+  function setOverride(name: string, value: boolean | undefined) {
+    if (value === undefined) {
+      const { [name]: _, ...rest } = overrides;
+      overrides = rest;
+    } else {
+      overrides = { ...overrides, [name]: value };
+    }
+  }
+  // plans toward an agent/goal that is not the process itself (a method's actor): where a hybrid or utility
+  // planner, if configured, actually runs (ADR 0034: the process's own agent is always goap)
+  function previewAgent(agent: string, goal: string) {
+    return registry.previewPlan(fromForm(d.form).methodology, agent, goal, overrides);
+  }
+  let overridesFor = '';
+  $effect(() => {
+    if (item?.name !== overridesFor) {
+      overridesFor = item?.name ?? '';
+      overrides = {};
+    }
+  });
   function openProcess(name: string) {
     const o = d.form.processes.find((x) => x.name === name);
     if (o) openItem(d, 'processes', o);
@@ -122,7 +167,7 @@
         <section class="card">
           {#if graphIssue}<p class="hint">{graphIssue}</p>{/if}
           {#if graph}
-            <ProcessGraphView {graph} onprocess={openProcess} />
+            <ProcessGraphView {graph} onprocess={openProcess} {plan} {planIssue} {overrides} {setOverride} {previewAgent} />
           {:else if !graphIssue}
             <p class="empty">Building the graph…</p>
           {/if}

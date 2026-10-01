@@ -48,6 +48,9 @@ const (
 	// RegistryServiceGetProcessGraphProcedure is the fully-qualified name of the RegistryService's
 	// GetProcessGraph RPC.
 	RegistryServiceGetProcessGraphProcedure = "/goap.registry.v1.RegistryService/GetProcessGraph"
+	// RegistryServicePreviewPlanProcedure is the fully-qualified name of the RegistryService's
+	// PreviewPlan RPC.
+	RegistryServicePreviewPlanProcedure = "/goap.registry.v1.RegistryService/PreviewPlan"
 	// RegistryServicePublishMethodologyProcedure is the fully-qualified name of the RegistryService's
 	// PublishMethodology RPC.
 	RegistryServicePublishMethodologyProcedure = "/goap.registry.v1.RegistryService/PublishMethodology"
@@ -111,6 +114,11 @@ type RegistryServiceClient interface {
 	ValidateMethodology(context.Context, *connect.Request[v1.ValidateMethodologyRequest]) (*connect.Response[v1.ValidateMethodologyResponse], error)
 	// A process of a methodology (as edited, saved or not) as a graph: steps, the edges its conditions draw, methods (ADR 0036 §4).
 	GetProcessGraph(context.Context, *connect.Request[v1.GetProcessGraphRequest]) (*connect.Response[v1.GetProcessGraphResponse], error)
+	// Plans toward a goal with the planner its agent is actually configured with (goap, utility or hybrid), from a
+	// world state the given condition overrides patch on top of an empty blackboard: no live Change is needed. For a
+	// process, name it as both agent and goal; for an agent a step names directly (or a capability's chosen method),
+	// name its agent and goal instead - that is where a hybrid or utility planner actually runs.
+	PreviewPlan(context.Context, *connect.Request[v1.PreviewPlanRequest]) (*connect.Response[v1.PreviewPlanResponse], error)
 	// Freeze a valid draft; the engine only runs published versions.
 	PublishMethodology(context.Context, *connect.Request[v1.PublishMethodologyRequest]) (*connect.Response[v1.PublishMethodologyResponse], error)
 	// Copy a version into a new draft version.
@@ -179,6 +187,12 @@ func NewRegistryServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			httpClient,
 			baseURL+RegistryServiceGetProcessGraphProcedure,
 			connect.WithSchema(registryServiceMethods.ByName("GetProcessGraph")),
+			connect.WithClientOptions(opts...),
+		),
+		previewPlan: connect.NewClient[v1.PreviewPlanRequest, v1.PreviewPlanResponse](
+			httpClient,
+			baseURL+RegistryServicePreviewPlanProcedure,
+			connect.WithSchema(registryServiceMethods.ByName("PreviewPlan")),
 			connect.WithClientOptions(opts...),
 		),
 		publishMethodology: connect.NewClient[v1.PublishMethodologyRequest, v1.PublishMethodologyResponse](
@@ -293,6 +307,7 @@ type registryServiceClient struct {
 	saveMethodology     *connect.Client[v1.SaveMethodologyRequest, v1.SaveMethodologyResponse]
 	validateMethodology *connect.Client[v1.ValidateMethodologyRequest, v1.ValidateMethodologyResponse]
 	getProcessGraph     *connect.Client[v1.GetProcessGraphRequest, v1.GetProcessGraphResponse]
+	previewPlan         *connect.Client[v1.PreviewPlanRequest, v1.PreviewPlanResponse]
 	publishMethodology  *connect.Client[v1.PublishMethodologyRequest, v1.PublishMethodologyResponse]
 	createVersion       *connect.Client[v1.CreateVersionRequest, v1.CreateVersionResponse]
 	deleteMethodology   *connect.Client[v1.DeleteMethodologyRequest, v1.DeleteMethodologyResponse]
@@ -335,6 +350,11 @@ func (c *registryServiceClient) ValidateMethodology(ctx context.Context, req *co
 // GetProcessGraph calls goap.registry.v1.RegistryService.GetProcessGraph.
 func (c *registryServiceClient) GetProcessGraph(ctx context.Context, req *connect.Request[v1.GetProcessGraphRequest]) (*connect.Response[v1.GetProcessGraphResponse], error) {
 	return c.getProcessGraph.CallUnary(ctx, req)
+}
+
+// PreviewPlan calls goap.registry.v1.RegistryService.PreviewPlan.
+func (c *registryServiceClient) PreviewPlan(ctx context.Context, req *connect.Request[v1.PreviewPlanRequest]) (*connect.Response[v1.PreviewPlanResponse], error) {
+	return c.previewPlan.CallUnary(ctx, req)
 }
 
 // PublishMethodology calls goap.registry.v1.RegistryService.PublishMethodology.
@@ -432,6 +452,11 @@ type RegistryServiceHandler interface {
 	ValidateMethodology(context.Context, *connect.Request[v1.ValidateMethodologyRequest]) (*connect.Response[v1.ValidateMethodologyResponse], error)
 	// A process of a methodology (as edited, saved or not) as a graph: steps, the edges its conditions draw, methods (ADR 0036 §4).
 	GetProcessGraph(context.Context, *connect.Request[v1.GetProcessGraphRequest]) (*connect.Response[v1.GetProcessGraphResponse], error)
+	// Plans toward a goal with the planner its agent is actually configured with (goap, utility or hybrid), from a
+	// world state the given condition overrides patch on top of an empty blackboard: no live Change is needed. For a
+	// process, name it as both agent and goal; for an agent a step names directly (or a capability's chosen method),
+	// name its agent and goal instead - that is where a hybrid or utility planner actually runs.
+	PreviewPlan(context.Context, *connect.Request[v1.PreviewPlanRequest]) (*connect.Response[v1.PreviewPlanResponse], error)
 	// Freeze a valid draft; the engine only runs published versions.
 	PublishMethodology(context.Context, *connect.Request[v1.PublishMethodologyRequest]) (*connect.Response[v1.PublishMethodologyResponse], error)
 	// Copy a version into a new draft version.
@@ -496,6 +521,12 @@ func NewRegistryServiceHandler(svc RegistryServiceHandler, opts ...connect.Handl
 		RegistryServiceGetProcessGraphProcedure,
 		svc.GetProcessGraph,
 		connect.WithSchema(registryServiceMethods.ByName("GetProcessGraph")),
+		connect.WithHandlerOptions(opts...),
+	)
+	registryServicePreviewPlanHandler := connect.NewUnaryHandler(
+		RegistryServicePreviewPlanProcedure,
+		svc.PreviewPlan,
+		connect.WithSchema(registryServiceMethods.ByName("PreviewPlan")),
 		connect.WithHandlerOptions(opts...),
 	)
 	registryServicePublishMethodologyHandler := connect.NewUnaryHandler(
@@ -612,6 +643,8 @@ func NewRegistryServiceHandler(svc RegistryServiceHandler, opts ...connect.Handl
 			registryServiceValidateMethodologyHandler.ServeHTTP(w, r)
 		case RegistryServiceGetProcessGraphProcedure:
 			registryServiceGetProcessGraphHandler.ServeHTTP(w, r)
+		case RegistryServicePreviewPlanProcedure:
+			registryServicePreviewPlanHandler.ServeHTTP(w, r)
 		case RegistryServicePublishMethodologyProcedure:
 			registryServicePublishMethodologyHandler.ServeHTTP(w, r)
 		case RegistryServiceCreateVersionProcedure:
@@ -673,6 +706,10 @@ func (UnimplementedRegistryServiceHandler) ValidateMethodology(context.Context, 
 
 func (UnimplementedRegistryServiceHandler) GetProcessGraph(context.Context, *connect.Request[v1.GetProcessGraphRequest]) (*connect.Response[v1.GetProcessGraphResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.registry.v1.RegistryService.GetProcessGraph is not implemented"))
+}
+
+func (UnimplementedRegistryServiceHandler) PreviewPlan(context.Context, *connect.Request[v1.PreviewPlanRequest]) (*connect.Response[v1.PreviewPlanResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.registry.v1.RegistryService.PreviewPlan is not implemented"))
 }
 
 func (UnimplementedRegistryServiceHandler) PublishMethodology(context.Context, *connect.Request[v1.PublishMethodologyRequest]) (*connect.Response[v1.PublishMethodologyResponse], error) {

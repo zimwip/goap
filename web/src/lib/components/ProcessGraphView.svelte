@@ -3,10 +3,44 @@
   // whose exit criteria meet what another step needs to be entered (the conditions sequence the steps, not their
   // position), implied edges left out; the colour is the top-level phase. A step naming a capability shows its methods;
   // selecting a method focuses on it: its context, guidance, references, roles, and the agent that acts with its actions.
-  import type { GraphStep, MethodologyMethod, ProcessGraph } from '../api';
+  import type { GraphStep, MethodologyMethod, PlanPreview, ProcessGraph } from '../api';
   import { renderMarkdown } from '../markdown';
 
-  let { graph, onprocess }: { graph: ProcessGraph; onprocess?: (name: string) => void } = $props();
+  let {
+    graph,
+    onprocess,
+    plan,
+    planIssue = '',
+    overrides = {},
+    setOverride,
+    previewAgent,
+  }: {
+    graph: ProcessGraph;
+    onprocess?: (name: string) => void;
+    /** the plan the process's agent reaches from the conditions below, overridden on top of an empty blackboard */
+    plan?: PlanPreview;
+    planIssue?: string;
+    overrides?: Record<string, boolean>;
+    setOverride?: (name: string, value: boolean | undefined) => void;
+    /**
+     * Plans toward an agent/goal that is not the process itself - a method's actor, typically - with the same
+     * condition overrides: this is where a hybrid or utility planner actually runs (the process's own agent is
+     * always goap, ADR 0034).
+     */
+    previewAgent?: (agent: string, goal: string) => Promise<{ preview?: PlanPreview; issues?: { message?: string }[] }>;
+  } = $props();
+
+  let subPlan = $state<{ for: string; preview?: PlanPreview; issue?: string } | undefined>();
+  let subPlanBusy = $state(false);
+  async function runSubPreview(agent: string, goal: string) {
+    subPlanBusy = true;
+    try {
+      const r = await previewAgent?.(agent, goal);
+      subPlan = { for: agent, preview: r?.preview, issue: r?.issues?.length ? r.issues.map((i) => i.message).join('; ') : '' };
+    } finally {
+      subPlanBusy = false;
+    }
+  }
 
   const W = 210;
   const H = 58;
@@ -14,12 +48,18 @@
   const GY = 44;
   const PAD = 24;
   const TOP = 16;
-  const CHIP = 20;
+  const MH = 46;
+  const MGAP = 16;
 
   const steps = $derived(graph.steps ?? []);
   const leaves = $derived(steps.filter((s) => s.leaf));
   const methodsOf = (cap: string | undefined): MethodologyMethod[] => (graph.methods ?? []).filter((m) => cap && m.for === cap);
-  const heightOf = (s: GraphStep) => H + (s.method === 'method' ? CHIP + 4 : 0);
+  const heightOf = (s: GraphStep) => H + (s.method === 'method' ? MGAP + MH : 0);
+
+  // every condition name a leaf step's entry or exit names: the world the process-level plan preview plans over
+  const conditionNames = $derived([...new Set(leaves.flatMap((s) => [...Object.keys(s.entry ?? {}), ...Object.keys(s.exit ?? {})]))].sort());
+  const inPlan = $derived(new Set((plan?.actions ?? []).map((a) => a.step ?? '')));
+  const planIndex = $derived(new Map((plan?.actions ?? []).map((a, i) => [a.step ?? '', i])));
 
   // top-level phase of a step: its first segment after the process
   const phaseOf = (path: string) => path.split('/')[1] ?? '';
@@ -124,7 +164,7 @@
     zoomBy(k);
   }
   function down(e: PointerEvent) {
-    if ((e.target as Element).closest('.node, .chip')) return;
+    if ((e.target as Element).closest('.node')) return;
     drag = { x: e.clientX, y: e.clientY, tx, ty };
     (e.currentTarget as Element).setPointerCapture(e.pointerId);
   }
@@ -158,7 +198,41 @@
   <div class="left">
   <div class="legend">
     {#each phases as ph (ph)}<span><i style="background: {colour(`x/${ph}`)}"></i>{ph}</span>{/each}
-    <span class="hint">edges: the conditions that chain the steps · wheel to zoom, drag to pan</span>
+    <span class="hint">edges: the conditions that chain the steps · methods: the candidates below a capability step · wheel to zoom, drag to pan</span>
+  </div>
+  {#if conditionNames.length}
+    <div class="conditions" aria-label="Condition overrides">
+      <span class="hint">Conditions (click to force true/false, again for auto):</span>
+      {#each conditionNames as name (name)}
+        {@const v = overrides[name]}
+        <button
+          type="button"
+          class="cond"
+          class:t={v === true}
+          class:f={v === false}
+          title="{name}: {v === undefined ? 'auto — the planner evaluates it live' : v ? 'forced true' : 'forced false'}"
+          onclick={() => setOverride?.(name, v === undefined ? true : v === true ? false : undefined)}
+        >
+          {name}{v === true ? ' = true' : v === false ? ' = false' : ''}
+        </button>
+      {/each}
+    </div>
+  {/if}
+  <div class="plan-banner">
+    {#if planIssue}
+      <span class="hint">{planIssue}</span>
+    {:else if plan?.reached}
+      <span class="ok">✓ the goal already holds in this world</span>
+    {:else if plan?.actions?.length}
+      <span>
+        <strong>{plan.planner}</strong> plans ({plan.actions.length} step(s), cost {plan.cost}):
+        {plan.actions.map((a) => a.step?.split('/').pop()).join(' → ')}
+      </span>
+    {:else if plan?.awaiting?.length}
+      <span class="hint">waiting on: {plan.awaiting.join(', ')} (established outside this process)</span>
+    {:else if plan}
+      <span class="hint">no plan reaches the goal from this world</span>
+    {/if}
   </div>
   <div class="canvas" role="presentation" bind:clientWidth={cw} bind:clientHeight={ch} onwheel={wheel} onpointerdown={down} onpointermove={move} onpointerup={() => (drag = null)}>
     <svg width="100%" height="100%" aria-label="Process graph of {graph.process}">
@@ -172,7 +246,13 @@
           {@const a = layout.boxes.get(e.from ?? '')}
           {@const b = layout.boxes.get(e.to ?? '')}
           {#if a && b}
-            <path class="edge" class:hot={focus?.kind === 'step' && (focus.path === e.from || focus.path === e.to)} d={edgePath(a, b)} marker-end="url(#pg-arrow)">
+            <path
+              class="edge"
+              class:hot={focus?.kind === 'step' && (focus.path === e.from || focus.path === e.to)}
+              class:planned={inPlan.has(e.from ?? '') && inPlan.has(e.to ?? '')}
+              d={edgePath(a, b)}
+              marker-end="url(#pg-arrow)"
+            >
               <title>{e.from} → {e.to}: {(e.conditions ?? []).join(', ')}</title>
             </path>
           {/if}
@@ -183,6 +263,7 @@
             class="node"
             class:sel={focus?.kind === 'step' && focus.path === s.path}
             class:dim={focus?.kind === 'step' && !related.has(s.path) && focus.path !== s.path}
+            class:planned={inPlan.has(s.path ?? '')}
             transform="translate({b.x},{b.y})"
             role="button"
             tabindex="0"
@@ -190,24 +271,33 @@
             ondblclick={() => s.method === 'process' && s.process && !s.process.includes('/') && onprocess?.(s.process)}
             onkeydown={(ev) => ev.key === 'Enter' && (focus = { kind: 'step', path: s.path ?? '' })}
           >
-            <rect width={W} height={b.h} rx="6" style="stroke: {colour(s.path ?? '')}" />
-            <rect width="6" height={b.h} rx="3" style="fill: {colour(s.path ?? '')}" />
+            <rect width={W} height={H} rx="6" style="stroke: {colour(s.path ?? '')}" />
+            <rect width="6" height={H} rx="3" style="fill: {colour(s.path ?? '')}" />
+            {#if inPlan.has(s.path ?? '')}
+              <circle cx={W - 14} cy="14" r="10" class="plan-badge" />
+              <text x={W - 14} y="18" text-anchor="middle" class="plan-badge-text">{(planIndex.get(s.path ?? '') ?? 0) + 1}</text>
+            {/if}
             <text x="14" y="18" class="name">{s.name}</text>
             <text x="14" y="34" class="sub">{label(s).slice(0, 34)}</text>
             <text x="14" y="49" class="sub">{s.roles?.responsible ? `R ${s.roles.responsible}` : ''}{s.roles?.accountable ? ` · A ${s.roles.accountable}` : ''}</text>
             {#if s.method === 'method'}
-              {#each methodsOf(s.capability) as m, i (m.name)}
+              {@const ms = methodsOf(s.capability)}
+              {@const mw = Math.min(W, (W - 6 * Math.max(0, ms.length - 1)) / Math.max(1, ms.length))}
+              <line x1={W / 2} y1={H} x2={W / 2} y2={H + MGAP} class="connector" marker-end="url(#pg-arrow)" />
+              {#each ms as m, i (m.name)}
                 <g
-                  class="chip"
+                  class="node method-box"
                   class:sel={focus?.kind === 'method' && focus.name === m.name}
-                  transform="translate({14 + i * 96},{H})"
+                  transform="translate({i * (mw + 6)},{H + MGAP})"
                   role="button"
                   tabindex="0"
                   onclick={(ev) => (ev.stopPropagation(), (focus = { kind: 'method', name: m.name ?? '' }))}
                   onkeydown={(ev) => ev.key === 'Enter' && (focus = { kind: 'method', name: m.name ?? '' })}
                 >
-                  <rect width="90" height={CHIP} rx="10" />
-                  <text x="45" y="14" text-anchor="middle">{(m.name ?? '').slice(0, 13)}</text>
+                  <rect width={mw} height={MH} rx="6" />
+                  <text x="8" y="16" class="name">{(m.name ?? '').slice(0, 20)}</text>
+                  <text x="8" y="30" class="sub">{m.when ? `when ${m.when}`.slice(0, 26) : 'always'}</text>
+                  {#if m.priority}<text x={mw - 6} y="16" text-anchor="end" class="sub">p{m.priority}</text>{/if}
                 </g>
               {/each}
             {/if}
@@ -255,6 +345,23 @@
       {/if}
       <p><span class="k">Actor</span> agent <strong>{focusMethod.agent}</strong> → goal <code>{graph.methodGoals?.[focusMethod.name ?? ''] ?? focusMethod.goal}</code>
         {#if ag}<span class="hint">({ag.planner})</span>{/if}</p>
+      {#if previewAgent && focusMethod.agent}
+        {@const goalName = graph.methodGoals?.[focusMethod.name ?? ''] ?? focusMethod.goal ?? ''}
+        <button type="button" class="small" disabled={subPlanBusy} onclick={() => runSubPreview(focusMethod.agent ?? '', goalName)}>
+          {subPlanBusy ? 'Planning…' : `Preview this agent's plan (${ag?.planner ?? 'goap'})`}
+        </button>
+        {#if subPlan?.for === focusMethod.agent}
+          <p class="hint">
+            {#if subPlan.issue}{subPlan.issue}
+            {:else if subPlan.preview?.reached}✓ the goal already holds in this world
+            {:else if subPlan.preview?.actions?.length}plan ({subPlan.preview.actions.length} step(s), cost {subPlan.preview.cost}): {subPlan.preview.actions
+                .map((a) => a.name)
+                .join(' → ')}
+            {:else if subPlan.preview?.awaiting?.length}waiting on: {subPlan.preview.awaiting.join(', ')}
+            {:else}no plan reaches the goal from this world{/if}
+          </p>
+        {/if}
+      {/if}
       {#if ag?.actions?.length}
         <table class="acts">
           <thead><tr><th>Action</th><th>Kind</th><th>Needs</th><th>Makes</th></tr></thead>
@@ -359,16 +466,77 @@
     fill: var(--muted);
     font-family: var(--mono);
   }
-  .chip rect {
-    fill: var(--accent-soft);
-    stroke: var(--accent);
+  .node.planned rect:first-of-type {
+    stroke-width: 3;
+    stroke-dasharray: none;
   }
-  .chip.sel rect {
+  .plan-badge {
     fill: var(--accent);
   }
-  .chip text {
-    font-size: 11px;
+  .plan-badge-text {
+    font-size: 10px;
+    font-weight: 700;
+    fill: var(--bg);
+  }
+  .connector {
+    stroke: var(--muted);
+    stroke-width: 1.3;
+    opacity: 0.6;
+    fill: none;
+  }
+  .method-box rect {
+    fill: var(--accent-soft);
+    stroke: var(--accent);
+    stroke-width: 1.2;
+  }
+  .method-box.sel rect {
+    fill: var(--accent);
+  }
+  .method-box text {
+    font-size: 10.5px;
     fill: var(--text);
+  }
+  .edge.planned {
+    stroke: var(--accent);
+    opacity: 1;
+    stroke-width: 2.4;
+  }
+  .conditions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.8em;
+    margin-bottom: 4px;
+    max-height: 72px;
+    overflow: auto;
+  }
+  .cond {
+    border: 1px dashed var(--border);
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text);
+    font-size: 0.85em;
+    padding: 1px 6px;
+    cursor: pointer;
+  }
+  .cond.t {
+    border-color: var(--accent);
+    border-style: solid;
+    background: var(--accent-soft);
+  }
+  .cond.f {
+    border-color: #e45756;
+    border-style: solid;
+    background: #e4575622;
+  }
+  .plan-banner {
+    font-size: 0.85em;
+    margin-bottom: 4px;
+    min-height: 1.2em;
+  }
+  .plan-banner .ok {
+    color: #54a24b;
   }
   .focus {
     border: 1px solid var(--border);
