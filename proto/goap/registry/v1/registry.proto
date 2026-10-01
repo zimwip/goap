@@ -16,6 +16,11 @@ service RegistryService {
   rpc ValidateMethodology(ValidateMethodologyRequest) returns (ValidateMethodologyResponse);
   // A process of a methodology (as edited, saved or not) as a graph: steps, the edges its conditions draw, methods (ADR 0036 §4).
   rpc GetProcessGraph(GetProcessGraphRequest) returns (GetProcessGraphResponse);
+  // Plans toward a goal with the planner its agent is actually configured with (goap, utility or hybrid), from a
+  // world state the given condition overrides patch on top of an empty blackboard: no live Change is needed. For a
+  // process, name it as both agent and goal; for an agent a step names directly (or a capability's chosen method),
+  // name its agent and goal instead - that is where a hybrid or utility planner actually runs.
+  rpc PreviewPlan(PreviewPlanRequest) returns (PreviewPlanResponse);
   // Freeze a valid draft; the engine only runs published versions.
   rpc PublishMethodology(PublishMethodologyRequest) returns (PublishMethodologyResponse);
   // Copy a version into a new draft version.
@@ -769,4 +774,39 @@ message GraphAction {
   string description = 3;
   map<string, bool> pre = 4;
   map<string, bool> effects = 5;
+}
+
+message PreviewPlanRequest {
+  Methodology methodology = 1;
+  string agent = 2;
+  string goal = 3;
+  // condition names overridden true/false on top of the empty blackboard's evaluation
+  map<string, bool> overrides = 4;
+}
+
+message PreviewPlanResponse {
+  PlanPreview preview = 1;
+  // why the methodology does not compile, or the agent/goal is unknown
+  repeated Issue issues = 2;
+}
+
+message PlanPreview {
+  string agent = 1;
+  string goal = 2;
+  string planner = 3;
+  // the goal already holds in the given world: actions is then empty
+  bool reached = 4;
+  repeated PlanStep actions = 5;
+  double cost = 6;
+  // conditions missing that no action of this agent establishes ("name" / "!name"), set only when no plan reaches
+  // the goal (ADR 0036 §3's distinction between waiting and stuck)
+  repeated string awaiting = 7;
+}
+
+message PlanStep {
+  string name = 1;
+  // the step path the action was generated from
+  string step = 2;
+  string kind = 3;
+  double cost = 4;
 }

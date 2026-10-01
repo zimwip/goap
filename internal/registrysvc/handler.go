@@ -13,6 +13,7 @@ import (
 	"github.com/zimwip/goap/internal/pbconv"
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/engine"
 	"github.com/zimwip/goap/pkg/methodology"
 )
 
@@ -92,6 +93,28 @@ func (h *Handler) GetProcessGraph(ctx context.Context, r *connect.Request[regist
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("no process %q in %s", r.Msg.Process, m.Name))
 	}
 	return connect.NewResponse(&registryv1.GetProcessGraphResponse{Graph: ProcessGraphToPB(g)}), nil
+}
+
+// PreviewPlan plans toward a goal with the planner its agent is actually configured with, from an empty
+// blackboard whose evaluated conditions the request's overrides patch on top (ADR 0034; no live Change needed).
+func (h *Handler) PreviewPlan(ctx context.Context, r *connect.Request[registryv1.PreviewPlanRequest]) (*connect.Response[registryv1.PreviewPlanResponse], error) {
+	m := FromPB(r.Msg.Methodology)
+	c, err := m.Compile()
+	if err != nil {
+		var issues methodology.Issues
+		if !errors.As(err, &issues) {
+			issues = methodology.Issues{{Message: err.Error()}}
+		}
+		return connect.NewResponse(&registryv1.PreviewPlanResponse{Issues: IssuesToPB(issues)}), nil
+	}
+	p, err := engine.PreviewPlan(c, domain.Blackboard{}, r.Msg.Agent, r.Msg.Goal, r.Msg.Overrides)
+	if err != nil {
+		if errors.Is(err, engine.ErrLivePlanner) {
+			return connect.NewResponse(&registryv1.PreviewPlanResponse{Issues: IssuesToPB(methodology.Issues{{Message: err.Error()}})}), nil
+		}
+		return nil, connect.NewError(connect.CodeNotFound, err)
+	}
+	return connect.NewResponse(&registryv1.PreviewPlanResponse{Preview: PlanPreviewToPB(p)}), nil
 }
 
 func (h *Handler) PublishMethodology(ctx context.Context, r *connect.Request[registryv1.PublishMethodologyRequest]) (*connect.Response[registryv1.PublishMethodologyResponse], error) {

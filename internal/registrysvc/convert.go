@@ -5,6 +5,7 @@ import (
 	"github.com/zimwip/goap/internal/pbconv"
 	"github.com/zimwip/goap/pkg/condition"
 	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/engine"
 	"github.com/zimwip/goap/pkg/methodology"
 )
 
@@ -363,6 +364,15 @@ func ProcessGraphToPB(g methodology.ProcessGraph) *registryv1.ProcessGraph {
 			ga.Actions = append(ga.Actions, &registryv1.GraphAction{Name: x.Name, Kind: x.Kind, Description: x.Description, Pre: x.Pre, Effects: x.Effects})
 		}
 		out.Agents = append(out.Agents, ga)
+	}
+	return out
+}
+
+// PlanPreviewToPB converts the result of planning a goal from a (possibly overridden) world state.
+func PlanPreviewToPB(p *engine.PlanPreview) *registryv1.PlanPreview {
+	out := &registryv1.PlanPreview{Agent: p.Agent, Goal: p.Goal, Planner: p.Planner, Reached: p.Reached, Cost: p.Cost, Awaiting: p.Awaiting}
+	for _, a := range p.Actions {
+		out.Actions = append(out.Actions, &registryv1.PlanStep{Name: a.Name, Step: a.Step, Kind: a.Kind, Cost: a.Cost})
 	}
 	return out
 }
