@@ -10,6 +10,7 @@
   import { confirmDialog } from '../shell/confirmState.svelte';
   import { openTab } from '../shell/tabs.svelte';
   import { ORG_UNIT_TYPE, USER_TYPE, PROJECT_UNIT_TYPE, ASSIGNMENT_TYPE, ASSIGNS_ORG, ASSIGNS_PROJECT } from '../orgTypes';
+  import { projectRoles, applicableMethodologies, type ProjectRole } from '../projectRoles';
 
   const NS = 'organisation';
 
@@ -66,7 +67,30 @@
   let adding = $state(autoOpen);
   let fOrg = $state(fixedOrg ?? '');
   let fProject = $state(fixedProject ?? '');
-  let fRoles = $state('');
+  let fRoles = $state<string[]>([]);
+  // the roles the chosen project needs (ADR 0043): an assignment grants some of them
+  const project = $derived(fixedProject ?? fProject);
+  let available = $state<ProjectRole[]>([]);
+  $effect(() => {
+    const p = project;
+    if (!p) {
+      available = [];
+      return;
+    }
+    let cancelled = false;
+    void projectRoles(head, p).then((r) => {
+      if (!cancelled) available = r;
+    });
+    return () => {
+      cancelled = true;
+    };
+  });
+  /** roles of the assignment no applicable methodology declares (any more) */
+  const stray = $derived(fRoles.filter((r) => !available.some((a) => a.name === r)));
+
+  function toggleRole(name: string, on: boolean) {
+    fRoles = on ? [...fRoles, name] : fRoles.filter((r) => r !== name);
+  }
   let fDescription = $state('');
   let error = $state('');
   let saving = $state(false);
@@ -76,7 +100,7 @@
     editing = undefined;
     fOrg = fixedOrg ?? '';
     fProject = fixedProject ?? '';
-    fRoles = '';
+    fRoles = [];
     fDescription = '';
     error = '';
     adding = true;
@@ -86,7 +110,7 @@
     editing = r;
     fOrg = r.org;
     fProject = r.project;
-    fRoles = r.roles.join(', ');
+    fRoles = [...r.roles];
     fDescription = r.description;
     error = '';
     adding = true;
@@ -105,10 +129,11 @@
       error = 'Unknown organisation unit or project.';
       return;
     }
-    const roles = fRoles
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean);
+    const roles = fRoles;
+    if (!roles.length) {
+      error = 'Pick at least one role.';
+      return;
+    }
     saving = true;
     error = '';
     try {
@@ -152,7 +177,7 @@
     <button type="button" class="small" onclick={startCreate}><Icon name="plus" size={13} /> Assignment</button>
   </div>
   <p class="hint">
-    The roles an organisation unit or a user locally holds on a project (a subset of the roles the project's applicable methodologies declare): this is how the engine resolves what a user may do there.
+    The roles an organisation unit or a user holds on a project, among those the project's applicable methodologies declare: what a person may do on a project (the steps, agents and actions they may run) depends on the roles they hold there, by their own assignments and those of their units.
   </p>
   {#if error && !adding}<div class="alert">{error}</div>{/if}
   <table class="tbl">
@@ -216,10 +241,26 @@
           </select>
         </div>
       {/if}
-      <div class="field">
-        <label for="asg-roles">Roles</label>
-        <input id="asg-roles" placeholder="developer, tech_lead…" bind:value={fRoles} />
-      </div>
+      <fieldset class="field roles">
+        <legend>Roles</legend>
+        {#if !project}
+          <span class="muted">Pick a project first.</span>
+        {:else if !available.length && !stray.length}
+          <span class="muted">{applicableMethodologies(head, project).length ? 'The methodologies of this project declare no role.' : 'This project names no methodology: choose its applicable methodologies on its page first.'}</span>
+        {/if}
+        {#each available as r (r.name)}
+          <label class="check" title={`${r.description}${r.description ? ' — ' : ''}${r.methodologies.join(', ')}`}>
+            <input type="checkbox" checked={fRoles.includes(r.name)} onchange={(e) => toggleRole(r.name, e.currentTarget.checked)} />
+            {r.name}
+          </label>
+        {/each}
+        {#each stray as r (r)}
+          <label class="check" title="No applicable methodology of the project declares this role">
+            <input type="checkbox" checked onchange={(e) => toggleRole(r, e.currentTarget.checked)} />
+            {r} <span class="muted">(not declared)</span>
+          </label>
+        {/each}
+      </fieldset>
       <div class="field">
         <label for="asg-desc">Description</label>
         <input id="asg-desc" bind:value={fDescription} />
@@ -260,6 +301,15 @@
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 0.5rem;
+  }
+  .roles {
+    grid-column: 1 / -1;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 0.3rem 1rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 0.4rem 0.6rem;
   }
   .field {
     display: flex;

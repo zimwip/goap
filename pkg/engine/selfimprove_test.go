@@ -57,7 +57,8 @@ func storeDefinition(ctx context.Context, g *graph.Graph, base domain.BaselineID
 }
 
 func TestSelfObservationProposesAndDrafts(t *testing.T) {
-	ctx := authz.With(context.Background(), authz.Principal{Subject: "mia", Org: "acme", Roles: []string{"methodologist"}})
+	// drafting a methodology is administration (ADR 0043)
+	ctx := authz.With(context.Background(), authz.Principal{Subject: "mia", Org: "acme", Roles: []string{"admin"}})
 	e, g, base := setup(t)
 	// the observed run; the intent text deliberately echoes the
 	// "assess_impact" goal example in methodologies/examples/impact-analysis.yaml.

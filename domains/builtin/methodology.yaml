@@ -1,17 +1,17 @@
 name: methodology
-version: 1.3.0
+version: 1.4.0
 description: >
   Built-in meta-domain (ADR 0012 §4, ADR 0023): the definition of a methodology version, one node per element, in the
   "methodology" namespace. Its types are in every type catalogue, before anything is loaded from the registry.
 nodeTypes:
   - {name: MethodologyVersion, editor: methodology, description: "A version of a methodology: its scalar fields, status and timestamps", properties: [name, version, description, namespace, status, createdAt, updatedAt, publishedAt, updatedBy]}
-  - {name: Agent, editor: agent, description: "Agent of a methodology version, with its triggers", properties: [name, description, planner, model, actions, goals, triggers, position, removed]}
-  - {name: Action, editor: action, description: "Action of a methodology version", properties: [name, kind, description, position, removed]}
+  - {name: Agent, editor: agent, description: "Agent of a methodology version, with its triggers", properties: [name, description, planner, model, actions, goals, triggers, roles, position, removed]}
+  - {name: Action, editor: action, description: "Action of a methodology version", properties: [name, kind, description, roles, position, removed]}
   - {name: Condition, editor: condition, description: "Condition of a methodology version", properties: [name, description, expr, position, removed]}
   - {name: Goal, editor: goal, description: "Goal of a methodology version", properties: [name, description, pre, position, removed]}
   # ADR 0035 §2: a role processes and methods assign RACI style; ADR 0039: what Assignment (organisation namespace)
   # grants a unit or user on a project is named from a project's applicable methodologies' roles.
-  - {name: Role, editor: role, description: "Role of a methodology version, assigned RACI style by its processes and methods", properties: [name, description, position, removed]}
+  - {name: Role, editor: role, description: "Role of a methodology version: assigned RACI style by its processes and methods, allowed to run its agents and actions, held on a project through an Assignment", properties: [name, description, position, removed]}
   # ADR 0034: the steps and sub-steps that reach an objective, each done by an action, an agent, a nested process or a person
   # ADR 0035 §1: how a step capability is carried out in a context, and the agent that acts
   - {name: Method, editor: method, description: "Method of a methodology version: the reference of how a capability is carried out in a context", properties: [name, for, when, priority, description, guidance, checklist, deliverables, references, agent, goal, position, removed]}

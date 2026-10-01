@@ -148,6 +148,7 @@ func main() {
 	}
 	gw := modelgw.NewService(&llmcfg.Directory{Graph: g}, st.models, secrets.Resolve, log)
 	gw.Router.Instrument = telemetry.NewGenAI().Instrument
+	gw.Authz = authorizer // the roles a model requires are held on the caller's project (ADR 0043)
 	if err := gw.Reload(ctx); err != nil {
 		platform.Fatal(log, "models", err)
 	}

@@ -179,7 +179,7 @@ func (c Admin) organisation(ctx context.Context, op, unit string) (map[string]an
 			if err != nil {
 				continue
 			}
-			list = append(list, map[string]any{"subject": usr.Subject, "displayName": usr.DisplayName, "email": usr.Email, "roles": usr.Roles, "unit": member[n.Key]})
+			list = append(list, map[string]any{"subject": usr.Subject, "displayName": usr.DisplayName, "email": usr.Email, "admin": usr.Admin, "unit": member[n.Key]})
 		}
 	}
 	sort.Slice(list, func(i, j int) bool { return sortKey(list[i]) < sortKey(list[j]) })

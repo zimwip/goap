@@ -1,8 +1,10 @@
 <script lang="ts">
-  // Access tab: the ABAC policies (Policy nodes, evaluated by Casbin) and the users (User nodes: profile and roles)
-  // of the organisation namespace, changed through changes applied on main.
+  // Access tab: the ABAC policies (Policy nodes, evaluated by Casbin) and the users (User nodes: profile and
+  // administrator flag; their roles are held on projects, ADR 0043) of the organisation namespace, changed through
+  // changes applied on main.
   import { errorMessage, type GraphNode, type Policy } from '../../api';
-  import { headGraph, applyOnMain, createNodeItem, deleteNodeItem } from '../../graphEdit';
+  import { headGraph, applyOnMain, createNodeItem, deleteNodeItem, refOf, type HeadGraph } from '../../graphEdit';
+  import { ORG_UNIT_TYPE, MEMBER_OF, newUserUnit } from '../../orgTypes';
   import { NS_ORGANISATION, POLICY_TYPE, USER_TYPE, newPolicyKey, policiesOf, policyProps, userKey, userProps, usersOf, type User } from '../../access';
   import type { Tab } from '../../shell/types';
   import Icon from '../../shell/Icon.svelte';
@@ -15,6 +17,7 @@
   let policies = $state<{ node: GraphNode; policy: Policy }[]>([]);
   let users = $state<{ node: GraphNode; user: User }[]>([]);
   let baselineId = '';
+  let head: HeadGraph | undefined;
   let loading = $state(true);
   let error = $state('');
   let removing = $state(-1);
@@ -25,6 +28,7 @@
     try {
       const h = await headGraph(NS_ORGANISATION);
       baselineId = h.baselineId;
+      head = h;
       policies = policiesOf(h.nodes);
       users = usersOf(h.nodes);
     } catch (e) {
@@ -57,7 +61,7 @@
   let uSubject = $state('');
   let uName = $state('');
   let uEmail = $state('');
-  let uRoles = $state('');
+  let uAdmin = $state(false);
   let uAdding = $state(false);
   let uError = $state('');
 
@@ -68,10 +72,16 @@
     uAdding = true;
     uError = '';
     try {
-      const roles = uRoles.split(',').map((r) => r.trim()).filter(Boolean);
-      const u: User = { subject, displayName: uName.trim(), email: uEmail.trim(), locale: '', roles };
-      await applyOnMain(NS_ORGANISATION, `User ${subject}`, 'Add a user', baselineId, [createNodeItem(userKey(subject), USER_TYPE, userProps(u))]);
-      uSubject = uName = uEmail = uRoles = '';
+      const u: User = { subject, displayName: uName.trim(), email: uEmail.trim(), locale: '', admin: uAdmin };
+      // a user is a member of exactly one unit (ADR 0040): the one new users join (the waiting unit, ADR 0042)
+      const units = (head?.nodes ?? []).filter((n) => n.type === ORG_UNIT_TYPE);
+      const unit = units.find((n) => n.key === newUserUnit(units));
+      if (!unit) throw new Error('no organisation unit to put the user in');
+      await applyOnMain(NS_ORGANISATION, `User ${subject}`, 'Add a user', baselineId, [
+        createNodeItem(userKey(subject), USER_TYPE, userProps(u), [{ type: MEMBER_OF, to: refOf(unit) }]),
+      ]);
+      uSubject = uName = uEmail = '';
+      uAdmin = false;
       await load();
     } catch (err) {
       uError = errorMessage(err);
@@ -126,9 +136,9 @@
 
   const EXAMPLES: { title: string; policy: Required<Policy> }[] = [
     {
-      title: 'Four-eyes principle: an approver from the same organization, other than the author, applies the change',
+      title: 'Four-eyes principle: a tech lead of the project, other than the author, applies the change',
       policy: {
-        rule: 'hasRole(r.sub, "approver") && r.sub.Org == r.obj.Org && r.sub.Subject != r.obj.Owner',
+        rule: 'hasRole(r.sub, "tech_lead") && r.sub.Subject != r.obj.Owner',
         resource: 'change',
         action: 'apply',
         effect: 'allow',
@@ -213,14 +223,15 @@
 <section class="card">
   <h3>Users</h3>
   <p class="hint">
-    The roles of a user are added to those of its token; the unit it is a member of (link <code>member_of</code>, edited in
-    the organisation) is its organisation when the token names none.
+    A user holds no role of their own: an administrator administers the platform, every other role is held on a project
+    (assignments, ADR 0043) and is what <code>hasRole</code> sees for a resource of that project. The unit a user is a
+    member of (link <code>member_of</code>, edited in the organisation) is their organisation when the token names none.
   </p>
   {#if users.length}
     <div class="scroll">
       <table>
         <thead>
-          <tr><th>Subject</th><th>Name</th><th>Email</th><th>Roles</th><th><span class="sr-only">Delete</span></th></tr>
+          <tr><th>Subject</th><th>Name</th><th>Email</th><th>Administrator</th><th><span class="sr-only">Delete</span></th></tr>
         </thead>
         <tbody>
           {#each users as { node, user } (node.id)}
@@ -228,7 +239,7 @@
               <td><code>{user.subject}</code></td>
               <td>{user.displayName}</td>
               <td>{user.email}</td>
-              <td>{user.roles.join(', ')}</td>
+              <td>{user.admin ? 'yes' : ''}</td>
               <td class="actions"><button class="small danger" onclick={() => removeUser(node, user)}>Delete</button></td>
             </tr>
           {/each}
@@ -243,7 +254,7 @@
       <div class="field"><label for="usr-sub">Subject</label><input id="usr-sub" type="text" class="mono" bind:value={uSubject} /></div>
       <div class="field"><label for="usr-name">Name</label><input id="usr-name" type="text" bind:value={uName} /></div>
       <div class="field"><label for="usr-mail">Email</label><input id="usr-mail" type="text" bind:value={uEmail} /></div>
-      <div class="field"><label for="usr-roles">Roles</label><input id="usr-roles" type="text" class="mono" bind:value={uRoles} placeholder="approver, contributor" /></div>
+      <label class="check"><input type="checkbox" bind:checked={uAdmin} /> Administrator</label>
     </div>
     {#if uError}<div class="alert">{uError}</div>{/if}
     <button class="primary" type="submit" disabled={!uSubject.trim() || uAdding}>{uAdding ? 'Adding…' : 'Add user'}</button>

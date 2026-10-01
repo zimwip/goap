@@ -201,6 +201,9 @@ func (e *Engine) Start(ctx context.Context, req StartRequest) (*Process, error) 
 		return nil, err
 	}
 	if p.Status == StatusRunning {
+		if err := e.checkAgentRoles(ctx, p); err != nil {
+			return nil, err
+		}
 		switch {
 		case p.ParentID != "":
 			e.queue(ctx, p, "sub-agent", map[string]any{"parent": p.ParentID, "call": req.Call})
@@ -516,6 +519,17 @@ func (e *Engine) Submit(ctx context.Context, id string, items []ItemInput) (*Pro
 	if err != nil {
 		return nil, err
 	}
+	// a human action only some roles may run is performed by a person holding one (ADR 0043)
+	if a, ok := m.Action(p.Pending.Action); ok {
+		if roles := e.runRoles(m, p, a); len(roles) > 0 {
+			if ok, err := e.mayRun(ctx, p, authz.From(ctx), "action", a.Name, roles); err != nil {
+				return nil, err
+			} else if !ok {
+				return nil, fmt.Errorf("%q holds none of the roles %s on the project for %s: %w", authz.From(ctx).Subject,
+					strings.Join(roles, ", "), a.Name, authz.ErrForbidden)
+			}
+		}
+	}
 	i := p.Pending.Step
 	waitedOn := p.Pending.Action
 	step := &p.Steps[i]
@@ -558,7 +572,7 @@ func (e *Engine) Run(ctx context.Context, id string) (*Process, error) {
 	// a run scheduled in the background acts for the principal who started the process: what it writes is
 	// recorded under that name (ADR 0029)
 	if authz.From(ctx).Anonymous() {
-		ctx = authz.With(ctx, p.Initiator)
+		ctx = authz.With(ctx, e.actor(p))
 	}
 	ctx, end := e.tracer().StartProcess(ctx, p)
 	defer func() { end(p) }()
@@ -731,6 +745,21 @@ func (e *Engine) cycle(ctx context.Context, p *Process, m *methodology.Compiled)
 		permission = impl.Permission
 		step.Specialization = spec
 	}
+	// the roles allowed to run the action (ADR 0043): a human action waits for a person holding one (Submit),
+	// any other waits for one to approve it when the initiator holds none
+	if roles := e.runRoles(m, p, action); len(roles) > 0 && action.Kind != methodology.KindHuman {
+		ok, err := e.mayRun(ctx, p, p.Initiator, "action", action.Name, roles)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			p.Steps = append(p.Steps, step)
+			p.Status = StatusWaiting
+			p.Pending = &HumanTask{Kind: TaskApproval, Permission: PermissionRunAction, Roles: roles, Action: action.Name,
+				Description: action.Description, Instructions: action.Instructions, Step: step.Index, Context: stepContext(m, p, action)}
+			return nil
+		}
+	}
 	if permission != "" {
 		ok, err := e.allowed(ctx, p, p.Initiator, permission)
 		if err != nil {
@@ -772,6 +801,14 @@ func (e *Engine) orgOf(p *Process) string { return domain.OrgOf(p.Org) }
 
 func (e *Engine) projectOf(p *Process) string { return domain.ProjectOf(p.Project) }
 
+// actor is who a process acts as: its initiator, on the project of the process (ADR 0043: what the initiator may
+// do there depends on the roles they hold on that project), whatever project their token had active.
+func (e *Engine) actor(p *Process) authz.Principal {
+	a := p.Initiator
+	a.Project = e.projectOf(p)
+	return a
+}
+
 // boundMCPs returns the MCPs the organization of the process binds for actions and the tools they may
 // call ("<mcp>/<tool>", once its restrictions and the scope of its MCP are applied, ADR 0028). Without a
 // hub nothing is bound.
@@ -780,7 +817,7 @@ func (e *Engine) boundMCPs(ctx context.Context, p *Process) (map[string]bool, er
 	if e.Tools == nil {
 		return bound, nil
 	}
-	tools, names, err := e.Tools.Tools(authz.With(ctx, p.Initiator), e.orgOf(p))
+	tools, names, err := e.Tools.Tools(authz.With(ctx, e.actor(p)), e.orgOf(p))
 	if err != nil {
 		return nil, fmt.Errorf("MCPs of organization %s: %w", e.orgOf(p), err)
 	}
@@ -1055,13 +1092,59 @@ func (e *Engine) allowed(ctx context.Context, p *Process, who authz.Principal, p
 	if err != nil {
 		return false, err
 	}
-	res := authz.Resource{Type: typ, Org: p.Initiator.Org, Owner: p.Initiator.Subject, Name: p.Methodology}
+	res := authz.Resource{Type: typ, Org: p.Initiator.Org, Owner: p.Initiator.Subject, Name: p.Methodology, ProjectID: e.projectOf(p)}
 	if typ == "change" {
 		res.ID = string(p.ChangeID)
 	} else {
 		res.ID = p.ID
 	}
 	return e.Authz.Authorize(ctx, authz.Request{Subject: who, Action: act, Resource: res})
+}
+
+// PermissionRunAction is the permission of an approval an action waits for when its initiator holds none of the
+// roles allowed to run it (ADR 0043): someone holding one approves it.
+const PermissionRunAction = "action:run"
+
+// runRoles are the roles allowed to run an action of a process (ADR 0043): its own, else those of the agent
+// running it; none means any member of the project (already checked when the process started).
+func (e *Engine) runRoles(m *methodology.Compiled, p *Process, a methodology.Action) []string {
+	if len(a.Roles) > 0 {
+		return a.Roles
+	}
+	if ag, ok := m.Agent(p.Agent); ok {
+		return ag.Roles
+	}
+	return nil
+}
+
+// mayRun reports whether who holds, on the project of the process, one of the roles allowed to run an agent or
+// an action (resource agent or action, act run).
+func (e *Engine) mayRun(ctx context.Context, p *Process, who authz.Principal, typ, name string, roles []string) (bool, error) {
+	if e.Authz == nil {
+		return true, nil
+	}
+	return e.Authz.Authorize(ctx, authz.Request{Subject: who, Action: "run", Resource: authz.Resource{Type: typ, ID: p.ID, Name: name,
+		Org: e.orgOf(p), ProjectID: e.projectOf(p), Owner: p.Initiator.Subject, Roles: roles}})
+}
+
+// checkAgentRoles refuses to start an agent its initiator may not run: it declares roles and they hold none of
+// them on the project (ADR 0043).
+func (e *Engine) checkAgentRoles(ctx context.Context, p *Process) error {
+	m, err := e.Methodologies.Methodology(ctx, p.Methodology)
+	if err != nil {
+		return err
+	}
+	ag, ok := m.Agent(p.Agent)
+	if !ok || len(ag.Roles) == 0 {
+		return nil
+	}
+	if ok, err := e.mayRun(ctx, p, p.Initiator, "agent", ag.Name, ag.Roles); err != nil {
+		return err
+	} else if !ok {
+		return fmt.Errorf("%q holds none of the roles %s on project %s to run %s: %w", p.Initiator.Subject, strings.Join(ag.Roles, ", "),
+			e.projectOf(p), ag.Name, authz.ErrForbidden)
+	}
+	return nil
 }
 
 // ErrInvalidState is returned when an operation does not match the process state.
@@ -1085,7 +1168,22 @@ func (e *Engine) Approve(ctx context.Context, id string, approve bool, comment s
 		return nil, fmt.Errorf("process %s has no pending approval: %w", id, ErrInvalidState)
 	}
 	approver := authz.From(ctx)
-	ok, err := e.allowed(ctx, p, approver, p.Pending.Permission)
+	var ok bool
+	if p.Pending.Permission == PermissionRunAction {
+		// an action only some roles may run (ADR 0043): one of them approves it, holding the permission the
+		// action requires as well
+		ok, err = e.mayRun(ctx, p, approver, "action", p.Pending.Action, p.Pending.Roles)
+		if ok && err == nil {
+			var m *methodology.Compiled
+			if m, err = e.Methodologies.Methodology(ctx, p.Methodology); err == nil {
+				if a, found := m.Action(p.Pending.Action); found && a.Permission != "" {
+					ok, err = e.allowed(ctx, p, approver, a.Permission)
+				}
+			}
+		}
+	} else {
+		ok, err = e.allowed(ctx, p, approver, p.Pending.Permission)
+	}
 	if err != nil {
 		return nil, err
 	}

@@ -18,7 +18,11 @@ import (
 // where the subject rule is an expression over r.sub (Principal), r.obj
 // (Resource) and r.act, e.g.
 //
-//	hasRole(r.sub, "approver") && r.sub.Org == r.obj.Org && r.sub.Subject != r.obj.Owner
+//	hasRole(r.sub, "tech_lead") && r.sub.Subject != r.obj.Owner
+//
+// Functions: hasRole(sub, role), hasAnyRole(sub, role...), hasRoleIn(sub, role, obj), onProject(sub) (holds a
+// role on the resource's project), mayRun(sub, obj) (holds one of obj.Roles, or any role when it lists none),
+// isAnonymous(sub).
 //
 // A request is allowed when at least one allow rule matches and no deny rule does.
 const Model = `
@@ -45,8 +49,41 @@ type Policy struct {
 
 func (p Policy) params() []any { return []any{p.Rule, p.Resource, p.Action, p.Effect} }
 
-// DefaultPolicies seeds an empty policy store.
+// DefaultPolicies seeds an empty policy store (ADR 0043). A user holds no role of their own: an administrator
+// (the User's admin flag, RoleAdmin) may do everything; anyone else acts on a project with the roles their
+// Assignments grant there, which the authorizer merges into the principal for the resource's project. Holding
+// any role on the project (onProject) lets them work on it; what they write goes through the steps, agents and
+// actions their roles may run (step perform/approve, action run). The platform itself (methodologies, domains,
+// triggers, organisation, policies, adapters) is administered by administrators.
 var DefaultPolicies = []Policy{
+	{Rule: `hasRole(r.sub, "admin")`, Resource: "*", Action: "*", Effect: "allow"},
+	// read access within the organization of the resource (multi-tenant isolation), or on a project one works on
+	{Rule: `!isAnonymous(r.sub) && (r.obj.Org == "" || r.obj.Org == r.sub.Org || onProject(r.sub))`, Resource: "*", Action: "read", Effect: "allow"},
+	// processes, data objects, lifecycle transitions (ADR 0014) and tools (ADR 0019) of a project: its members
+	{Rule: `onProject(r.sub)`, Resource: "process", Action: "*", Effect: "allow"},
+	{Rule: `onProject(r.sub)`, Resource: "object", Action: "create", Effect: "allow"},
+	{Rule: `onProject(r.sub)`, Resource: "node", Action: "transition", Effect: "allow"},
+	{Rule: `onProject(r.sub)`, Resource: "tool", Action: "call", Effect: "allow"},
+	// four-eyes principle: a member of the project applies its changes, never their own
+	{Rule: `onProject(r.sub) && r.sub.Subject != r.obj.Owner`, Resource: "change", Action: "apply", Effect: "allow"},
+	// production deployments: a release manager of the project, never on its own change
+	{Rule: `hasRole(r.sub, "release_manager") && r.sub.Subject != r.obj.Owner`, Resource: "release", Action: "deploy", Effect: "allow"},
+	// steps of a process (ADR 0035 §2): whoever holds the responsible role on the project carries them out;
+	// whoever holds the accountable role approves them, never on its own change
+	{Rule: `hasRoleIn(r.sub, r.obj.Role, r.obj)`, Resource: "step", Action: "perform", Effect: "allow"},
+	{Rule: `hasRoleIn(r.sub, r.obj.Accountable, r.obj) && r.sub.Subject != r.obj.Owner`, Resource: "step", Action: "approve", Effect: "allow"},
+	// agents and actions (ADR 0043): one of the roles they declare (r.obj.Roles), any member of the project
+	// when they declare none
+	{Rule: `mayRun(r.sub, r.obj)`, Resource: "action", Action: "run", Effect: "allow"},
+	{Rule: `mayRun(r.sub, r.obj)`, Resource: "agent", Action: "run", Effect: "allow"},
+	// a model of the catalog restricted to some roles (ADR 0021): one of them, held on the caller's project
+	{Rule: `mayRun(r.sub, r.obj)`, Resource: "model", Action: "use", Effect: "allow"},
+}
+
+// LegacyDefaultPolicies are the default policies before ADR 0043, when users held roles of their own
+// (contributor, methodologist, approver...): a graph still holding them unchanged gets the current defaults
+// instead (graphsvc.SeedAccess).
+var LegacyDefaultPolicies = []Policy{
 	{Rule: `hasRole(r.sub, "admin")`, Resource: "*", Action: "*", Effect: "allow"},
 	// read access within the organization of the resource (multi-tenant isolation)
 	{Rule: `!isAnonymous(r.sub) && (r.obj.Org == "" || r.obj.Org == r.sub.Org)`, Resource: "*", Action: "read", Effect: "allow"},
@@ -154,6 +191,21 @@ func newCasbin(adapter persist.Adapter) (*Casbin, error) {
 		role, _ := args[1].(string)
 		res, _ := args[2].(Resource)
 		return p.HasRoleIn(role, res), nil
+	})
+	e.AddFunction("onProject", func(args ...any) (any, error) {
+		if len(args) != 1 {
+			return false, fmt.Errorf("onProject(sub)")
+		}
+		p, _ := args[0].(Principal)
+		return p.OnProject(), nil
+	})
+	e.AddFunction("mayRun", func(args ...any) (any, error) {
+		if len(args) != 2 {
+			return false, fmt.Errorf("mayRun(sub, obj)")
+		}
+		p, _ := args[0].(Principal)
+		res, _ := args[1].(Resource)
+		return p.MayRun(res), nil
 	})
 	e.AddFunction("isAnonymous", func(args ...any) (any, error) {
 		p, _ := args[0].(Principal)

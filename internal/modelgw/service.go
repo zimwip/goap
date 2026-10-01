@@ -38,6 +38,9 @@ type Service struct {
 	// HTTP is used to list the models of a provider.
 	HTTP *http.Client
 	Now  func() time.Time
+	// Authz resolves the roles a caller holds on its project (ADR 0043) for the models restricted to some
+	// roles; nil checks the roles the caller's principal carries.
+	Authz authz.Authorizer
 
 	mu     sync.RWMutex
 	snap   *llmcfg.Snapshot
@@ -198,7 +201,7 @@ func (s *Service) admit(ctx context.Context, model string) (Target, ModelEntry, 
 	if !ok || !m.Enabled {
 		return t, m, "", fmt.Errorf("%w: %s/%s is not in the platform catalog or is disabled", ErrModelDisabled, t.Provider, t.Model)
 	}
-	if !allowed(authz.From(ctx), m) {
+	if !s.allowed(ctx, authz.From(ctx), m) {
 		return t, m, "", fmt.Errorf("%w: %s/%s requires one of the roles %s", ErrForbidden, t.Provider, t.Model, strings.Join(m.Roles, ", "))
 	}
 	period := PeriodKey(m.QuotaPeriod, s.now())
@@ -222,11 +225,17 @@ func (s *Service) recordUsage(ctx context.Context, t Target, m ModelEntry, perio
 	}
 }
 
-// allowed applies the access level of a catalog model to a caller. Callers
-// without identity are trusted internal services.
-func allowed(p authz.Principal, m ModelEntry) bool {
+// allowed applies the access level of a catalog model to a caller. Callers without identity are trusted internal
+// services. The roles a model requires are held on the caller's project (ADR 0043): resolved by Authz (resource
+// model, act use) when set.
+func (s *Service) allowed(ctx context.Context, p authz.Principal, m ModelEntry) bool {
 	if p.Anonymous() || len(m.Roles) == 0 || slices.Contains(p.Roles, "admin") {
 		return true
+	}
+	if s.Authz != nil {
+		ok, err := s.Authz.Authorize(ctx, authz.Request{Subject: p, Action: "use",
+			Resource: authz.Resource{Type: "model", Name: m.Key(), ProjectID: p.Project, Roles: m.Roles}})
+		return err == nil && ok
 	}
 	return slices.ContainsFunc(m.Roles, func(r string) bool { return slices.Contains(p.Roles, r) })
 }
@@ -253,7 +262,7 @@ func (s *Service) Available(ctx context.Context) ([]ModelEntry, []AliasEntry, er
 	ok := map[string]bool{}
 	var models []ModelEntry
 	for _, m := range snap.Models {
-		if reason, known := s.active[m.Provider]; m.Enabled && known && reason == "" && allowed(p, m) {
+		if reason, known := s.active[m.Provider]; m.Enabled && known && reason == "" && s.allowed(ctx, p, m) {
 			models = append(models, m)
 			ok[m.Provider+"/"+m.Model] = true
 		}

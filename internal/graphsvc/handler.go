@@ -79,7 +79,7 @@ func (h *Handler) CreateObject(ctx context.Context, r *connect.Request[graphv1.C
 	ctx = h.Identity.Context(ctx, r.Header())
 	who := authz.From(ctx)
 	if err := authz.Check(ctx, h.Authz, authz.Request{Subject: who, Action: "create",
-		Resource: authz.Resource{Type: "object", Name: r.Msg.NodeType, Namespace: domain.NamespaceOf(r.Msg.Namespace), Org: who.Org, Owner: who.Subject}}); err != nil {
+		Resource: authz.Resource{Type: "object", Name: r.Msg.NodeType, Namespace: domain.NamespaceOf(r.Msg.Namespace), Org: who.Org, Owner: who.Subject, ProjectID: who.Project}}); err != nil {
 		return nil, rpcerr.ToConnect(err)
 	}
 	n, b, err := h.Graph.CreateObject(ctx, r.Msg.Methodology, r.Msg.Namespace, r.Msg.NodeType, r.Msg.Key, pbconv.Map(r.Msg.Props))

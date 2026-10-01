@@ -50,7 +50,7 @@ func TestAPersonCanAlwaysUnblockAStuckRun(t *testing.T) {
 		t.Fatalf("stuck with a task to unblock it: %s %+v", p.Status, p.Pending)
 	}
 	// someone who does not answer for the run may not
-	other := authz.Principal{Subject: "dave", Org: "globex", Roles: []string{"contributor"}}
+	other := authz.Principal{Subject: "dave", Org: "globex"}
 	if _, err := e.Unblock(authz.With(context.Background(), other), p.ID, UnblockRequest{Decision: UnblockRetry}); !errors.Is(err, authz.ErrForbidden) {
 		t.Fatalf("forbidden: %v", err)
 	}

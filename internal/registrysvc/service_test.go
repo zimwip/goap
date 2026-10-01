@@ -62,7 +62,7 @@ func TestLifecycle(t *testing.T) {
 			enf, _ := authz.NewCasbin(nil)
 			s := &Service{Store: mk(t), Authz: enf}
 			withALM(t, s)
-			ctx := as("methodologist")
+			ctx := as("admin")
 			m := example(t)
 			m.Version = "2.0.0"
 
@@ -215,7 +215,7 @@ func TestPublishStubsMissingAlias(t *testing.T) {
 	g := graph.New(graph.NewMemory())
 	s := &Service{Store: graphWithDomains{NewGraphStore(g), NewMemoryStore()}}
 	withALM(t, s)
-	ctx := as("methodologist")
+	ctx := as("admin")
 	m := example(t)
 	m.Version = "9.0.0"
 	m.Agents = []methodology.Agent{{Name: "plannertest", Planner: methodology.PlannerLLMScoring, Model: "unconfigured-test-alias"}}

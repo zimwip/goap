@@ -2,10 +2,12 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"os"
 	"strings"
 	"testing"
 
+	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/dsl"
 	"github.com/zimwip/goap/pkg/llm"
@@ -124,7 +126,12 @@ func TestSubAgentsWithSuspension(t *testing.T) {
 	if len(decisions) == 0 {
 		t.Fatalf("no test case to review: %+v", bb.Change.Nodes)
 	}
-	if _, err := e.Submit(ctx, reviewer.ID, decisions); err != nil {
+	// human_review is a test_reviewer's (ADR 0043): another role on the project may not perform it
+	dan := authz.With(ctx, authz.Principal{Subject: "dan", Roles: []string{"test_designer"}})
+	if _, err := e.Submit(dan, reviewer.ID, decisions); !errors.Is(err, authz.ErrForbidden) {
+		t.Fatalf("a test_designer performed the review: %v", err)
+	}
+	if _, err := e.Submit(authz.With(ctx, authz.Principal{Subject: "rita", Roles: []string{"test_reviewer"}}), reviewer.ID, decisions); err != nil {
 		t.Fatal(err)
 	}
 	e.schedule(reviewer.ID)

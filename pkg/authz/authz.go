@@ -44,6 +44,9 @@ type Resource struct {
 	// knows the organisation merges the roles an Assignment grants the subject's org chain on this
 	// project's chain into the subject's roles before evaluating the request.
 	ProjectID string `json:"projectId,omitempty"`
+	// Roles are the roles allowed to run an agent or an action (ADR 0043): one of them is required, held on
+	// the project; none means any member of the project.
+	Roles []string `json:"roles,omitempty"`
 }
 
 // RoleScope separates a role from the unit it is held in: "developer@TEAM-PAY".
@@ -65,6 +68,25 @@ func (p Principal) HasRoleIn(role string, res Resource) bool {
 			continue
 		}
 		if !scoped || slices.Contains(chain, unit) {
+			return true
+		}
+	}
+	return false
+}
+
+// OnProject reports whether the principal holds a role on the resource it is checked against: one an
+// Assignment grants on the resource's project (merged by the authorizer that knows the organisation, ADR
+// 0043), one its token carries (an external identity provider, a service identity), or RoleAdmin.
+func (p Principal) OnProject() bool { return len(p.Roles) > 0 }
+
+// MayRun reports whether the principal may run an agent or an action allowed to res.Roles: one of them, or
+// any role on the project when it lists none.
+func (p Principal) MayRun(res Resource) bool {
+	if len(res.Roles) == 0 {
+		return p.OnProject()
+	}
+	for _, r := range res.Roles {
+		if p.HasRoleIn(r, res) {
 			return true
 		}
 	}

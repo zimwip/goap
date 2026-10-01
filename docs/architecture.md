@@ -361,36 +361,51 @@ p, <rule on attributes>, <resource type | *>, <action | *>, <allow | deny>
 
 | Attribute | Content |
 |---|---|
-| `r.sub` | caller: `Subject`, `Org`, `Roles` (from the JWT, propagated by the gateway) |
-| `r.obj` | resource: `Type`, `ID`, `Org`, `Owner`, `Name` |
-| `r.act` | action: `read`, `start`, `submit`, `write`, `publish`, `delete`, `apply`… |
+| `r.sub` | caller: `Subject`, `Org`, `Roles` — `admin` for an administrator (the `admin` flag of its `User` node), the roles its token carries, and the roles it holds on the resource's project (merged by the authorizer, ADR 0043) |
+| `r.obj` | resource: `Type`, `ID`, `Org`, `Owner`, `Name`, `ProjectID`, `Roles` (roles allowed to run an agent / action) |
+| `r.act` | action: `read`, `start`, `submit`, `write`, `publish`, `delete`, `apply`, `run`… |
 
-Functions available in rules: `hasRole(r.sub, "x")`, `hasAnyRole(r.sub, "a", "b")`,
-`isAnonymous(r.sub)`. A matching `deny` overrides any `allow`.
+Functions available in rules: `hasRole(r.sub, "x")`, `hasAnyRole(r.sub, "a", "b")`, `hasRoleIn(r.sub, role, r.obj)`,
+`onProject(r.sub)` (holds a role on the resource's project), `mayRun(r.sub, r.obj)` (one of `r.obj.Roles`, any role
+on the project when it lists none), `isAnonymous(r.sub)`. A matching `deny` overrides any `allow`.
 
-Default policies (compiled in `pkg/authz`; seeded as `Policy` nodes at the first start, and applied as they are while the graph holds none):
+Default policies (compiled in `pkg/authz`; seeded as `Policy` nodes at the first start, and applied as they are while
+the graph holds none; a graph still holding the defaults of before ADR 0043 unchanged gets these instead,
+`graphsvc.SeedAccess`):
 
 | Rule | Resource | Action |
 |---|---|---|
 | `hasRole(r.sub, "admin")` | `*` | `*` |
-| `!isAnonymous(r.sub) && (r.obj.Org == "" \|\| r.obj.Org == r.sub.Org)` | `*` | `read` |
-| `hasAnyRole(r.sub, "contributor", "methodologist", "approver") && r.obj.Org == r.sub.Org` | `process` | `*` |
-| `hasRole(r.sub, "methodologist") && r.obj.Org == r.sub.Org` | `methodology` | `*` |
-| `hasRole(r.sub, "approver") && r.sub.Org == r.obj.Org && r.sub.Subject != r.obj.Owner` | `change` | `apply` |
-| `hasRole(r.sub, "release_manager") && r.sub.Org == r.obj.Org && r.sub.Subject != r.obj.Owner` | `release` | `deploy` |
+| `!isAnonymous(r.sub) && (r.obj.Org == "" \|\| r.obj.Org == r.sub.Org \|\| onProject(r.sub))` | `*` | `read` |
+| `onProject(r.sub)` | `process`, `object`, `node`, `tool` | `*`, `create`, `transition`, `call` |
+| `onProject(r.sub) && r.sub.Subject != r.obj.Owner` | `change` | `apply` |
+| `hasRole(r.sub, "release_manager") && r.sub.Subject != r.obj.Owner` | `release` | `deploy` |
 | `hasRoleIn(r.sub, r.obj.Role, r.obj)` | `step` | `perform` |
 | `hasRoleIn(r.sub, r.obj.Accountable, r.obj) && r.sub.Subject != r.obj.Owner` | `step` | `approve` |
+| `mayRun(r.sub, r.obj)` | `action`, `agent`, `model` | `run`, `run`, `use` |
 
-**Roles of a methodology** ([ADR 0035](adr/0035-methods-roles-operations-documents.md) §2): a methodology declares the
-roles its processes and methods assign, RACI style (`roles: {responsible, accountable, consulted, informed}` on a step,
-inherited by its sub-steps, or on a method). It names roles, never people: a user holds a role unscoped (`developer`)
-or in a unit (`developer@TEAM-PAY`, in its `roles`), and a role held in a unit holds in the units below it
-(`hasRoleIn` over `r.obj.OrgChain`, the unit holding the change and its ancestors, filled by the authorizer from
-`part_of`). The responsible role performs a step's human tasks (`step:perform`, checked on submit), the accountable role
-may approve its gates (`step:approve`), never on its own change.
+Methodologies, domains, triggers, the organisation, policies and adapters have no rule of their own: administrators
+administer them.
+
+**Roles** ([ADR 0035](adr/0035-methods-roles-operations-documents.md) §2, [ADR 0043](adr/0043-project-scoped-roles-admin-flag.md)):
+a methodology declares its roles (`methodology@Role` nodes, ADR 0039); its processes and methods assign them RACI
+style (`roles: {responsible, accountable, consulted, informed}` on a step, inherited by its sub-steps, or on a method),
+its agents and actions name the roles allowed to run them (`roles: [...]`; an action without roles takes its agent's,
+none at all: any member of the project). It names roles, never people. A user holds no role of their own (only the
+`admin` flag): a project names the methodologies that apply to it (inherited by its sub-projects), which identifies the
+roles it needs, and an `Assignment` grants some of them to a unit or a user on the project. The authorizer resolves
+the roles of the subject — its own `User` node, then its unit and that unit's ancestors (`Snapshot.SubjectChain`) — on
+the resource's project and its ancestors (`ProjectChain`), and merges them into `r.sub.Roles`: from one project to
+another the same person holds different roles, and so may do different things. The responsible role performs a step's
+human tasks (`step:perform`, checked on submit), the accountable role may approve its gates (`step:approve`), never on
+its own change; an action its initiator holds none of the roles of waits for someone who does (`action:run` approval;
+a human action is submitted by one of them), and an agent is started only by someone holding one of its roles. The
+engine acts as its initiator on the process's project (`Engine.actor`), so tool calls and model use resolve the same
+roles. Nodes carry no project (a node is shared by the changes of several projects): object access is the work of
+processes, changes and tools of a project, not of a node's own project.
 
 - There is no IAM service: who may do what is **graph data** ([ADR 0020](adr/0020-access-control.md)). A rule is a
-  `Policy` node and a caller a `User` node (profile, roles, `member_of` a unit) of the `organisation` domain, changed
+  `Policy` node and a caller a `User` node (profile, `admin` flag, `member_of` a unit) of the `organisation` domain, changed
   through changes like any node and edited in the frontend's "Access" screen. A rule is validated (compilation + trial
   evaluation) when read.
 - Every service builds its `authz.Authorizer` in process (`pkg/access`) from a snapshot of the head of the
@@ -993,7 +1008,7 @@ engine) → **archived**. Modifying a published version means creating a new dra
 
 **Domains** ([ADR 0013](adr/0013-domains.md)). The object part of the model (node types, link types, lifecycles,
 algorithms) lives in **domains**, one per namespace (`alm`, `organisation`, `platform`), versioned on their own (same
-draft → published → archived lifecycle; `registry.v1` `*Domain*` RPCs, ABAC resource `domain`, role `methodologist`).
+draft → published → archived lifecycle; `registry.v1` `*Domain*` RPCs, ABAC resource `domain`, administrators).
 A methodology is the active part only (agents, actions, conditions, goals, processes): it names its **target namespace**
 (`namespace: alm`, the domain its changes act on; it replaces `domainRef`) and the types it works on with qualified
 references (`alm@Requirement`, [ADR 0012](adr/0012-node-types.md)), which may point to other domains for what it reads

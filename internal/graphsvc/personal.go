@@ -116,10 +116,7 @@ func createUser(ctx context.Context, g *graph.Graph, subject string) error {
 	if err != nil {
 		return err
 	}
-	u := access.User{Subject: subject}
-	if len(existing) == 0 {
-		u.Roles = []string{"admin"}
-	}
+	u := access.User{Subject: subject, Admin: len(existing) == 0}
 	user := linkTo(createNode(access.UserKey(subject), access.NodeTypeUser, u.Props()), access.LinkMemberOf, org.Ref())
 	user.Rationale = "First sign-in of " + subject
 	return applyOn(ctx, g, mcp.NamespaceOrganisation, "User "+subject, []graph.NodeEdit{user})
