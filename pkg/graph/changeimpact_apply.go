@@ -132,12 +132,16 @@ func (a *applier) checkChangeImpacts() error {
 	if len(editable) > 0 && !a.activityGated() {
 		return invalidf("the change leaves nodes in an editable state, move them out of it before applying: %s", joinSorted(editable))
 	}
-	if a.activityGated() {
-		met, err := a.g.ActivityGoalsMet(a.ctx, a.change.ActivityRef, a.change.Nodes)
-		if err != nil {
-			return err
+	// ActivityGoalsMet may itself need to read the graph (e.g. the methodology namespace), which this transaction
+	// would block (the stores are not reentrant): authorizeMoves evaluates it in its own rolled-back pass before
+	// this transaction opens, and passes the result in as a.activityMet (same reason and pattern as authorized,
+	// just above). a.collect != nil means this call IS that earlier pass: nothing to check yet, just leave the
+	// blackboard for the caller (activityGated()/activityBlackboard() below) to build and evaluate outside it.
+	if a.activityGated() && a.collect == nil {
+		if a.activityMet == nil {
+			return fmt.Errorf("change %s: activity %s was not evaluated before this transaction: %w", a.change.ID, a.change.ActivityRef, ErrInvalid)
 		}
-		if !met {
+		if !*a.activityMet {
 			return invalidf("the change does not satisfy the goal of its activity %s", a.change.ActivityRef)
 		}
 	}
@@ -160,6 +164,30 @@ func (a *applier) checkChangeImpacts() error {
 // (Graph.ActivityGoalsMet) instead of the node-type lifecycle's Editable floor.
 func (a *applier) activityGated() bool {
 	return a.change.ActivityRef != "" && a.g.ActivityGoalsMet != nil
+}
+
+// activityBlackboard builds the blackboard ActivityGoalsMet evaluates the activity's own goal condition
+// against: the change with its impacts (for the changeImpacts condition variable), hydrated with the pre/post
+// node content this Apply already resolved (ADR 0024) - not a fresh read, since this change's own pending
+// writes are not yet visible outside this transaction.
+func (a *applier) activityBlackboard() domain.Blackboard {
+	bb := domain.Blackboard{Change: a.change, Nodes: map[domain.NodeRef]domain.NodeView{}}
+	add := func(n *domain.Node) {
+		if n == nil {
+			return
+		}
+		v := domain.NodeView{Node: *n}
+		if lc := a.ix.lifecycleOf(n.Type); lc != nil && n.State != "" {
+			v.Frozen = !lc.Editable(n.State)
+		}
+		bb.Nodes[n.Ref()] = v
+	}
+	for _, cp := range a.cposts {
+		add(cp.pre)
+		post := cp.post
+		add(&post)
+	}
+	return bb
 }
 
 func joinSorted(s []string) string {

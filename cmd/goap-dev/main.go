@@ -100,6 +100,9 @@ func main() {
 	// the graph judges nodes by the types of the published domains (ADR 0012): its catalogue follows the registry
 	types := typecat.NewLive(reg.Domains)
 	g.Types = func() graph.TypeCatalog { return types.Get() }
+	// a change scoped to an Activity is gated by its own goal condition at Apply, not the node-type lifecycle's
+	// Editable floor (architecture plan "Activity concept")
+	g.ActivityGoalsMet = reg.ActivityGoalsMet
 	// publications reload the triggers and the type catalogue
 	reg.Events = registryEvents{
 		methodology: func(ctx context.Context, name, version string) {
