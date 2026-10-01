@@ -77,6 +77,16 @@ export async function rolesOf(names: string[]): Promise<ProjectRole[]> {
 /** The roles a project needs: those of its applicable methodologies. */
 export const projectRoles = (head: HeadGraph, key: string): Promise<ProjectRole[]> => rolesOf(applicableMethodologies(head, key));
 
+/**
+ * Built-in platform roles (ADR 0046, mirrors pkg/access.PlatformRoles): granted by an Assignment naming no
+ * project (assigns_org only), held everywhere, independent of any project's methodologies. Fixed, not read
+ * from the graph.
+ */
+export const PLATFORM_ROLES: ProjectRole[] = [{ name: 'reader', description: 'Reads everything on the platform, past the usual organisation/project scoping.', methodologies: [] }];
+
+/** The key of the Assignment node granting an org unit a platform-wide role (mirrors access.PlatformAssignmentKey). */
+export const platformAssignmentKey = (org: string): string => `ASG:${org}/PLATFORM`;
+
 /** Who holds each role on a project (its Assignments, and those of its ancestors): role -> org unit / user keys. */
 export function holders(head: HeadGraph, key: string): Map<string, string[]> {
   const chain = projectChain(head, key);

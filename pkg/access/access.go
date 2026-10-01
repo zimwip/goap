@@ -61,6 +61,16 @@ type User struct {
 // checks. It is not a methodology role and no Assignment grants it.
 const RoleAdmin = "admin"
 
+// RoleReader is a built-in platform role (ADR 0046): granted by an Assignment naming no project (`assigns_org`
+// only), it holds everywhere, regardless of what methodologies a project applies — unlike a methodology role,
+// which only exists where a project names the methodology declaring it. A policy that wants it scoped to a
+// project reads that project's own Assignments itself (ProjectRoles); the grant itself is project-independent.
+const RoleReader = "reader"
+
+// PlatformRoles are the built-in roles an Assignment can grant platform-wide (no assigns_project link).
+// Unlike methodology roles, this is a fixed set, not read from the graph.
+var PlatformRoles = []string{RoleReader}
+
 // UserKey is the key of the node of a user.
 func UserKey(subject string) string { return "USR:" + subject }
 
@@ -140,7 +150,8 @@ type Snapshot struct {
 	assignments []assignment
 }
 
-// assignment is a resolved Assignment node: the roles an org unit holds on a project.
+// assignment is a resolved Assignment node: the roles an org unit holds on a project, or, when Project is
+// empty (no assigns_project link), platform-wide (ADR 0046).
 type assignment struct {
 	Org, Project string
 	Roles        []string
@@ -205,7 +216,8 @@ func BuildSnapshot(id domain.BaselineID, nodes []domain.Node, links []domain.Lin
 		}
 	}
 	for _, a := range assignBuild {
-		if a.Org != "" && a.Project != "" && len(a.Roles) > 0 {
+		// Project is empty for a platform-wide assignment (no assigns_project link, ADR 0046); still kept.
+		if a.Org != "" && len(a.Roles) > 0 {
 			s.assignments = append(s.assignments, *a)
 		}
 	}
@@ -270,6 +282,23 @@ func (s *Snapshot) ProjectRoles(orgChain, projectChain []string) []string {
 	var out []string
 	for _, a := range s.assignments {
 		if !slices.Contains(orgChain, a.Org) || !slices.Contains(projectChain, a.Project) {
+			continue
+		}
+		for _, r := range a.Roles {
+			if !slices.Contains(out, r) {
+				out = append(out, r)
+			}
+		}
+	}
+	return out
+}
+
+// PlatformRoles returns the platform-wide roles (ADR 0046) granted to any unit of orgChain by an Assignment
+// naming no project: unlike ProjectRoles, these hold everywhere, not just on a project chain.
+func (s *Snapshot) PlatformRoles(orgChain []string) []string {
+	var out []string
+	for _, a := range s.assignments {
+		if a.Project != "" || !slices.Contains(orgChain, a.Org) {
 			continue
 		}
 		for _, r := range a.Roles {
@@ -426,10 +455,17 @@ func (a *Authorizer) Authorize(ctx context.Context, req authz.Request) (bool, er
 			req.Resource.OrgChain = snap.Chain(req.Resource.Org)
 		}
 		// the roles the subject holds on the resource's project (the root project when it names none), granted
-		// by Assignments to the subject itself or to a unit it belongs to (ADR 0043)
+		// by Assignments to the subject itself or to a unit it belongs to (ADR 0043), plus the platform-wide
+		// roles held regardless of project (ADR 0046)
 		projectChain := snap.ProjectChain(domain.ProjectOf(req.Resource.ProjectID))
+		subjectChain := snap.SubjectChain(req.Subject)
 		roles := slices.Clone(req.Subject.Roles)
-		for _, r := range snap.ProjectRoles(snap.SubjectChain(req.Subject), projectChain) {
+		for _, r := range snap.ProjectRoles(subjectChain, projectChain) {
+			if !slices.Contains(roles, r) {
+				roles = append(roles, r)
+			}
+		}
+		for _, r := range snap.PlatformRoles(subjectChain) {
 			if !slices.Contains(roles, r) {
 				roles = append(roles, r)
 			}

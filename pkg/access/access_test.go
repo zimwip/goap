@@ -191,6 +191,53 @@ func TestAssignmentGrantsRoleOnAProject(t *testing.T) {
 	}
 }
 
+// A platform-wide Assignment (no assigns_project link, ADR 0046) grants a role everywhere, independent of
+// any project's methodologies: a project needing no methodology can still be reached by its members once an
+// administrator grants them "reader" platform-wide.
+func TestPlatformAssignmentGrantsRoleEverywhere(t *testing.T) {
+	ctx := context.Background()
+	g, a := setup(t)
+	if _, err := graphsvc.SeedDefaults(ctx, g); err != nil {
+		t.Fatal(err)
+	}
+	if err := graphsvc.SeedUnit(ctx, g, "team-a", "Team A", "team", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := graphsvc.SeedUnit(ctx, g, "other-org", "Other", "org", ""); err != nil {
+		t.Fatal(err)
+	}
+	team, err := g.NodeByKey(ctx, mcp.NamespaceOrganisation, "team-a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	head, err := g.BranchHead(ctx, mcp.NamespaceOrganisation, domain.MainBranch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	teamRef := team.Ref()
+	edits := []graph.NodeEdit{
+		{Key: access.PlatformAssignmentKey("team-a"), Type: access.NodeTypeAssignment, Props: access.Assignment{Roles: []string{access.RoleReader}}.Props(), Rationale: "t",
+			Links: []graph.LinkEdit{{Type: access.LinkAssignsOrg, To: &teamRef}}},
+	}
+	if _, err := g.Commit(ctx, graph.Commit{Namespace: mcp.NamespaceOrganisation, Title: "platform assignment", Baseline: head.ID, By: "test", BaselineName: "platform assignment", Edits: edits}); err != nil {
+		t.Fatal(err)
+	}
+
+	reader := authz.Principal{Subject: "dev", Org: "team-a"}
+	// a platform reader reads an object of an unrelated org, past the usual org/project scoping
+	if ok, err := a.Authorize(ctx, authz.Request{Subject: reader, Action: "read", Resource: authz.Resource{Type: "x", Org: "other-org"}}); err != nil {
+		t.Fatal(err)
+	} else if !ok {
+		t.Fatal("the platform assignment must grant read everywhere")
+	}
+	stranger := authz.Principal{Subject: "stranger", Org: "other-org"}
+	if ok, err := a.Authorize(ctx, authz.Request{Subject: stranger, Action: "read", Resource: authz.Resource{Type: "x", Org: "team-a"}}); err != nil {
+		t.Fatal(err)
+	} else if ok {
+		t.Fatal("a unit without the platform assignment must not read another org's resource")
+	}
+}
+
 func TestProjectChainAndRoles(t *testing.T) {
 	proj := func(id, key string) domain.Node {
 		return domain.Node{ID: domain.NodeID(id), Key: key, Type: access.NodeTypeProjectUnit, Namespace: "organisation"}

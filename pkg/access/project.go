@@ -50,8 +50,13 @@ func ProjectFromProps(props map[string]any) (ProjectUnit, error) {
 // AssignmentKey is the key of the Assignment node granting an org unit (or user) roles on a project.
 func AssignmentKey(org, project string) string { return "ASG:" + org + "/" + project }
 
+// PlatformAssignmentKey is the key of the Assignment node granting an org unit (or user) a platform-wide
+// role (ADR 0046): no assigns_project link, so it never collides with a per-project AssignmentKey.
+func PlatformAssignmentKey(org string) string { return "ASG:" + org + "/PLATFORM" }
+
 // Assignment grants an organisational unit (or, through subtyping, a user) the roles it locally
-// holds on a project: a subset of the roles declared by the project's applicable methodologies.
+// holds on a project — a subset of the roles declared by the project's applicable methodologies —
+// or, when it names no project, one of the built-in platform roles (ADR 0046), held everywhere.
 type Assignment struct {
 	Roles       []string
 	Description string
