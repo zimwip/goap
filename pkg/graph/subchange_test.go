@@ -322,3 +322,120 @@ func testProjectSubChangeRules(t *testing.T, repo Repo) {
 		t.Fatalf("project inherited from the parent: %+v, %v", sub, err)
 	}
 }
+
+// A sub-change's Activity, when it names one, must be the parent's own or a descendant of it reached by
+// sub_activity links (architecture plan "Activity concept" cascade); unset is fine (no inheritance, since a
+// sub-change is usually scoped to a more specific sub-activity, not the parent's own). The branch it gets
+// defaults to Intent derive.
+func TestSubChangeActivityCascade(t *testing.T) { forEachRepo(t, testSubChangeActivityCascade) }
+
+func testSubChangeActivityCascade(t *testing.T, repo Repo) {
+	ctx := context.Background()
+	w := newOrgWorld(t, repo)
+	g := w.g
+	mk := func(key string) domain.Node {
+		n, err := g.CreateNode(ctx, NewNode{Namespace: NamespaceMethodology, Key: key, Type: "methodology@Process"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	act := mk("ACT-PARENT")
+	sub := mk("ACT-CHILD")
+	other := mk("ACT-OTHER")
+	c0 := testChange(t, g, NamespaceMethodology)
+	if _, err := g.Link(ctx, c0, LinkSubActivity, act.Ref(), sub.Ref(), nil); err != nil {
+		t.Fatal(err)
+	}
+
+	parent, err := g.CreateChange(ctx, NewChange{Title: "p", BaselineID: w.base.ID, OwnBranch: true, ActivityRef: "ACT-PARENT"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// a descendant activity is accepted, and the sub-change's branch defaults to Intent derive
+	within, err := g.CreateChange(ctx, NewChange{Title: "within", ParentID: parent.ID, ActivityRef: "ACT-CHILD"})
+	if err != nil {
+		t.Fatalf("activity within the parent's: %v", err)
+	}
+	if within.ActivityRef != "ACT-CHILD" {
+		t.Fatalf("activityRef = %q", within.ActivityRef)
+	}
+	if b, err := g.Branch(ctx, within.Namespace, within.Branch); err != nil || b.Intent != domain.IntentDerive {
+		t.Fatalf("branch intent defaults to derive: %+v, %v", b, err)
+	}
+	// an unrelated activity is refused
+	if _, err := g.CreateChange(ctx, NewChange{Title: "outside", ParentID: parent.ID, ActivityRef: other.Key}); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("activity outside the parent's: %v", err)
+	}
+	// unset: not inherited, no error
+	if noAct, err := g.CreateChange(ctx, NewChange{Title: "unscoped", ParentID: parent.ID}); err != nil || noAct.ActivityRef != "" {
+		t.Fatalf("activity ref not inherited: %+v, %v", noAct, err)
+	}
+}
+
+// Two sibling sub-changes, each on its own branch forked from the same parent branch, touching the same node:
+// whichever applies (merges into the parent branch) first wins; the other goes merge_pending and needs a
+// resolution, exactly the precedence the parent/parallel-sub-activity design relies on.
+func TestSubChangeMergePrecedence(t *testing.T) { forEachRepo(t, testSubChangeMergePrecedence) }
+
+func testSubChangeMergePrecedence(t *testing.T, repo Repo) {
+	ctx := context.Background()
+	w := newOrgWorld(t, repo)
+	g := w.g
+	parent, err := g.CreateChange(ctx, NewChange{Title: "parent", BaselineID: w.base.ID, OwnBranch: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, err := g.CreateChange(ctx, NewChange{Title: "sub A", ParentID: parent.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := g.CreateChange(ctx, NewChange{Title: "sub B", ParentID: parent.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a.Branch == b.Branch || a.Branch == parent.Branch {
+		t.Fatalf("sibling sub-changes must each have their own branch: a=%s b=%s parent=%s", a.Branch, b.Branch, parent.Branch)
+	}
+	pre := w.cmp3.Ref()
+	writeTitle := func(c domain.Change, title string) domain.ChangeImpactID {
+		t.Helper()
+		added, err := g.AddNodes(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &pre, Rationale: title}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := g.WriteNode(ctx, c.ID, added[0].ID, NodeWrite{Properties: map[string]any{"title": title}}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := g.ReviewNode(ctx, c.ID, added[0].ID, domain.ReviewAccepted, "u", "ok"); err != nil {
+			t.Fatal(err)
+		}
+		return added[0].ID
+	}
+	writeTitle(a, "from A")
+	writeTitle(b, "from B")
+
+	// A applies first: fast-forwards cleanly into the parent branch
+	if _, err := g.Apply(ctx, a.ID, ""); err != nil {
+		t.Fatalf("sub A applies first: %v", err)
+	}
+	if head, err := g.NodeByKeyOn(ctx, domain.DefaultNamespace, parent.Branch, "CMP-3"); err != nil || head.Properties["title"] != "from A" {
+		t.Fatalf("parent branch after A: %+v, %v", head, err)
+	}
+
+	// B, forked from the same base as A, now conflicts: merge_pending, not a silent clobber
+	if _, err := g.Apply(ctx, b.ID, ""); err != nil {
+		t.Fatalf("sub B apply: %v", err)
+	}
+	if got, _ := g.Change(ctx, b.ID); got.Status != domain.ChangeMergePending {
+		t.Fatalf("sub B must be merge_pending after A landed first, got %s", got.Status)
+	}
+
+	// B's author adapts: resolve and complete the merge
+	if _, err := g.MergeChange(ctx, b.ID, map[domain.NodeID]Resolution{w.cmp3.ID: {Props: map[string]any{"title": "from A and B"}}}); err != nil {
+		t.Fatal(err)
+	}
+	if head, err := g.NodeByKeyOn(ctx, domain.DefaultNamespace, parent.Branch, "CMP-3"); err != nil || head.Properties["title"] != "from A and B" {
+		t.Fatalf("parent branch after B's resolved merge: %+v, %v", head, err)
+	}
+}

@@ -365,6 +365,9 @@ type NewChange struct {
 	// OwnBranch gives the change a branch of its own, named after it and forked
 	// from BaselineID: its versions live there until the change is merged.
 	OwnBranch bool
+	// BranchIntent says why the own branch exists relative to its parent (derive/revise/refine, same vocabulary
+	// as an Option's); only meaningful with OwnBranch or ParentID. "" (the default) is domain.IntentDerive.
+	BranchIntent domain.OptionIntent
 	// ParentID makes the change a sub-change of another one (see prepareSubChange).
 	ParentID domain.ChangeID
 	// OwnerOrg is the key of the OrgUnit responsible for the change (empty: the default organisation).
@@ -428,8 +431,15 @@ func (g *Graph) CreateChange(ctx context.Context, in NewChange) (domain.Change, 
 			return fmt.Errorf("branch %s is %s: %w", b.Name, b.Status, ErrConflict)
 		}
 		if in.OwnBranch {
+			if !domain.ValidOptionIntent(in.BranchIntent) {
+				return fmt.Errorf("unknown branch intent %q: %w", in.BranchIntent, ErrInvalid)
+			}
+			intent := in.BranchIntent
+			if intent == "" {
+				intent = domain.IntentDerive
+			}
 			own := domain.Branch{Name: changeBranchName(c.ID), Namespace: c.Namespace, Parent: b.Name, ForkBaseline: fork.ID, Head: fork.ID,
-				Origin: domain.ChangeBranchOrigin(c.ID), Status: domain.BranchOpen, CreatedAt: g.now()}
+				Origin: domain.ChangeBranchOrigin(c.ID), Intent: intent, Status: domain.BranchOpen, CreatedAt: g.now()}
 			if err := tx.PutBranch(ctx, own); err != nil {
 				return err
 			}

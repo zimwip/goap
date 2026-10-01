@@ -163,28 +163,28 @@ const pgOnBranch = `(v.branch = $2 OR EXISTS (SELECT 1 FROM node_branch j WHERE 
 
 func (t *pgTx) Branch(ctx context.Context, namespace, name string) (domain.Branch, error) {
 	var b domain.Branch
-	err := t.tx.QueryRow(ctx, `SELECT namespace, name, parent, coalesce(fork_baseline::text, ''), coalesce(head_baseline::text, ''), origin, status, created_at, description FROM branch WHERE namespace = $1 AND name = $2`, domain.NamespaceOf(namespace), name).
-		Scan(&b.Namespace, &b.Name, &b.Parent, (*string)(&b.ForkBaseline), (*string)(&b.Head), &b.Origin, &b.Status, &b.CreatedAt, &b.Description)
+	err := t.tx.QueryRow(ctx, `SELECT namespace, name, parent, coalesce(fork_baseline::text, ''), coalesce(head_baseline::text, ''), origin, status, created_at, description, intent FROM branch WHERE namespace = $1 AND name = $2`, domain.NamespaceOf(namespace), name).
+		Scan(&b.Namespace, &b.Name, &b.Parent, (*string)(&b.ForkBaseline), (*string)(&b.Head), &b.Origin, &b.Status, &b.CreatedAt, &b.Description, (*string)(&b.Intent))
 	return b, mapErr(err, "branch "+name)
 }
 
 func (t *pgTx) Branches(ctx context.Context, namespace string) ([]domain.Branch, error) {
-	rows, err := t.tx.Query(ctx, `SELECT namespace, name, parent, coalesce(fork_baseline::text, ''), coalesce(head_baseline::text, ''), origin, status, created_at, description FROM branch WHERE namespace = $1 ORDER BY created_at`, domain.NamespaceOf(namespace))
+	rows, err := t.tx.Query(ctx, `SELECT namespace, name, parent, coalesce(fork_baseline::text, ''), coalesce(head_baseline::text, ''), origin, status, created_at, description, intent FROM branch WHERE namespace = $1 ORDER BY created_at`, domain.NamespaceOf(namespace))
 	if err != nil {
 		return nil, err
 	}
 	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (domain.Branch, error) {
 		var b domain.Branch
-		err := r.Scan(&b.Namespace, &b.Name, &b.Parent, (*string)(&b.ForkBaseline), (*string)(&b.Head), &b.Origin, &b.Status, &b.CreatedAt, &b.Description)
+		err := r.Scan(&b.Namespace, &b.Name, &b.Parent, (*string)(&b.ForkBaseline), (*string)(&b.Head), &b.Origin, &b.Status, &b.CreatedAt, &b.Description, (*string)(&b.Intent))
 		return b, err
 	})
 }
 
 func (t *pgTx) PutBranch(ctx context.Context, b domain.Branch) error {
 	namespace := domain.NamespaceOf(b.Namespace)
-	_, err := t.tx.Exec(ctx, `INSERT INTO branch (namespace, name, parent, fork_baseline, head_baseline, origin, status, created_at, description) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+	_, err := t.tx.Exec(ctx, `INSERT INTO branch (namespace, name, parent, fork_baseline, head_baseline, origin, status, created_at, description, intent) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 		ON CONFLICT (namespace, name) DO UPDATE SET status = EXCLUDED.status, head_baseline = EXCLUDED.head_baseline, description = EXCLUDED.description`,
-		namespace, b.Name, b.Parent, nullUUID(string(b.ForkBaseline)), nullUUID(string(b.Head)), b.Origin, b.Status, b.CreatedAt, b.Description)
+		namespace, b.Name, b.Parent, nullUUID(string(b.ForkBaseline)), nullUUID(string(b.Head)), b.Origin, b.Status, b.CreatedAt, b.Description, string(b.Intent))
 	return mapErr(err, "branch "+b.Name)
 }
 
