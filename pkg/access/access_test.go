@@ -87,7 +87,7 @@ func TestAdministratorsAreNeverLockedOut(t *testing.T) {
 	}
 }
 
-func TestUserNodeGrantsRolesAndUnit(t *testing.T) {
+func TestAdminFlagAndUnitOfTheUserNode(t *testing.T) {
 	ctx := context.Background()
 	g, a := setup(t)
 	if _, err := graphsvc.SeedDefaults(ctx, g); err != nil {
@@ -99,15 +99,15 @@ func TestUserNodeGrantsRolesAndUnit(t *testing.T) {
 	if err := graphsvc.SeedUnit(ctx, g, "team-a", "Team A", "team", ""); err != nil {
 		t.Fatal(err)
 	}
-	if err := graphsvc.SeedUser(ctx, g, access.User{Subject: "alice", Roles: []string{"admin"}, Unit: "team-a"}); err != nil {
+	if err := graphsvc.SeedUser(ctx, g, access.User{Subject: "alice", Admin: true, Unit: "team-a"}); err != nil {
 		t.Fatal(err)
 	}
 	alice := authz.Principal{Subject: "alice"}
 	if !can(t, a, alice, "policy", "write") || !can(t, a.Floor(), alice, "policy", "write") {
-		t.Fatal("the roles of the User node were not granted")
+		t.Fatal("the admin flag of the User node was not granted")
 	}
 	dir := &access.Directory{Graph: g, TTL: 1}
-	if p := dir.Enrich(ctx, alice); p.Org != "team-a" || len(p.Roles) != 1 {
+	if p := dir.Enrich(ctx, alice); p.Org != "team-a" || !slices.Equal(p.Roles, []string{access.RoleAdmin}) {
 		t.Fatalf("enriched principal: %+v", p)
 	}
 	if p := dir.Enrich(ctx, authz.Principal{Subject: "bob"}); len(p.Roles) != 0 || p.Org != "" {
@@ -232,5 +232,107 @@ func TestProjectChainAndRoles(t *testing.T) {
 	}
 	if got := s.ProjectRoles(s.Chain("OTHER-UNIT"), s.ProjectChain("PROJ-A1")); len(got) != 0 {
 		t.Fatalf("the assignment must not leak to another unit: %v", got)
+	}
+}
+
+// A user's roles depend on the project (ADR 0043): an Assignment to the user itself (User extends OrgUnit)
+// and one to its unit add up on the project they name, and nowhere else. A role the user's unit holds does not
+// pass to someone outside it acting on that unit's change.
+func TestRolesDependOnTheProject(t *testing.T) {
+	ctx := context.Background()
+	g, a := setup(t)
+	if _, err := graphsvc.SeedDefaults(ctx, g); err != nil {
+		t.Fatal(err)
+	}
+	if err := graphsvc.SeedUnit(ctx, g, "team-a", "Team A", "team", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := graphsvc.SeedUser(ctx, g, access.User{Subject: "eve", Unit: "team-a"}); err != nil {
+		t.Fatal(err)
+	}
+	ref := func(key string) *domain.NodeRef {
+		n, err := g.NodeByKey(ctx, mcp.NamespaceOrganisation, key)
+		if err != nil {
+			t.Fatal(err)
+		}
+		r := n.Ref()
+		return &r
+	}
+	head, err := g.BranchHead(ctx, mcp.NamespaceOrganisation, domain.MainBranch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := ref(domain.DefaultProject)
+	project := func(key string) graph.NodeEdit {
+		return graph.NodeEdit{Key: key, Type: access.NodeTypeProjectUnit, Props: access.ProjectUnit{Name: key}.Props(), Rationale: "t",
+			Links: []graph.LinkEdit{{Type: access.LinkProjectPartOf, To: root}}}
+	}
+	assign := func(org, proj string, roles ...string) graph.NodeEdit {
+		return graph.NodeEdit{Key: "ASG:" + org + "/" + proj, Type: access.NodeTypeAssignment, Props: access.Assignment{Roles: roles}.Props(), Rationale: "t",
+			Links: []graph.LinkEdit{{Type: access.LinkAssignsOrg, To: ref(org)}, {Type: access.LinkAssignsProject, ToKey: proj}}}
+	}
+	edits := []graph.NodeEdit{project("PROJ-A"), project("PROJ-B"), project("PROJ-C"),
+		assign("USR:eve", "PROJ-A", "developer"), assign("team-a", "PROJ-A", "tester"), assign("USR:eve", "PROJ-B", "tech_lead")}
+	if _, err := g.Commit(ctx, graph.Commit{Namespace: mcp.NamespaceOrganisation, Title: "assignments", Baseline: head.ID, By: "test", Edits: edits}); err != nil {
+		t.Fatal(err)
+	}
+	eve := authz.Principal{Subject: "eve"}
+	run := func(who authz.Principal, project string, roles ...string) bool {
+		ok, err := a.Authorize(ctx, authz.Request{Subject: who, Action: "run", Resource: authz.Resource{Type: "action", ProjectID: project, Roles: roles}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return ok
+	}
+	for _, tc := range []struct {
+		project string
+		roles   []string
+		want    bool
+	}{
+		{"PROJ-A", []string{"developer"}, true},  // held by eve herself
+		{"PROJ-A", []string{"tester"}, true},     // held by her unit
+		{"PROJ-A", []string{"tech_lead"}, false}, // held on another project
+		{"PROJ-B", []string{"tech_lead"}, true},
+		{"PROJ-B", []string{"developer"}, false},
+		{"PROJ-C", nil, false}, // not a member of PROJ-C at all
+		{"PROJ-B", nil, true},  // any role on PROJ-B
+	} {
+		if got := run(eve, tc.project, tc.roles...); got != tc.want {
+			t.Errorf("eve on %s for %v: %v, want %v", tc.project, tc.roles, got, tc.want)
+		}
+	}
+	// someone outside team-a acting on a change team-a holds does not get team-a's roles
+	mallory := authz.Principal{Subject: "mallory", Org: "other"}
+	ok, err := a.Authorize(ctx, authz.Request{Subject: mallory, Action: "run", Resource: authz.Resource{Type: "action", Org: "team-a", ProjectID: "PROJ-A", Roles: []string{"tester"}}})
+	if err != nil || ok {
+		t.Fatalf("mallory got team-a's role: %v %v", ok, err)
+	}
+}
+
+// A graph seeded with the default policies of before ADR 0043 gets the current ones: the legacy rules left as
+// seeded are retired, the current defaults created, once.
+func TestLegacyDefaultPoliciesAreUpgraded(t *testing.T) {
+	ctx := context.Background()
+	g, a := setup(t)
+	for _, p := range authz.LegacyDefaultPolicies {
+		if err := graphsvc.SeedPolicy(ctx, g, p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	methodologist := authz.Principal{Subject: "mia", Org: "o", Roles: []string{"methodologist"}}
+	if !can(t, a, methodologist, "methodology", "write") {
+		t.Fatal("the legacy policies must apply before the upgrade")
+	}
+	if upgraded, err := graphsvc.SeedAccess(ctx, g); err != nil || !upgraded {
+		t.Fatalf("upgrade: %v %v", upgraded, err)
+	}
+	if upgraded, err := graphsvc.SeedAccess(ctx, g); err != nil || upgraded {
+		t.Fatalf("the upgrade must happen once: %v %v", upgraded, err)
+	}
+	if can(t, a, methodologist, "methodology", "write") {
+		t.Fatal("a legacy global role still administers methodologies")
+	}
+	if !can(t, a, authz.Principal{Subject: "eve", Roles: []string{"developer"}}, "action", "run") {
+		t.Fatal("the current defaults are missing")
 	}
 }

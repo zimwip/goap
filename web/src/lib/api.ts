@@ -301,6 +301,8 @@ export interface Action {
   expects?: Expectation;
   /** "<resource>:<action>" required of the initiator, e.g. change:apply */
   permission?: string;
+  /** roles allowed to run the action (ADR 0043), declared by the methodology; empty: those of the agent */
+  roles?: string[];
   model?: string;
   prompt?: string;
   tool?: string;
@@ -371,6 +373,8 @@ export interface Agent {
   triggers?: Trigger[];
   /** MCPs whose tools the llm / script actions of the agent may use */
   mcps?: string[];
+  /** roles allowed to run the agent (ADR 0043), declared by the methodology; empty: any member of the project */
+  roles?: string[];
   /** LLM alias the llm / llm-scoring planners call each planning cycle (required for them) */
   model?: string;
 }
@@ -534,7 +538,7 @@ export interface Methodology {
   agents?: Agent[];
   processes?: MethodologyProcess[];
   methods?: MethodologyMethod[];
-  /** the roles the processes and methods assign (ADR 0035 §2) */
+  /** the roles the processes and methods assign (ADR 0035 §2), its agents and actions are run by (ADR 0043) */
   roles?: MethodologyRole[];
   /** transverse: its processes run alongside the changes of these methodologies (ADR 0036 §3) */
   appliesTo?: string[];

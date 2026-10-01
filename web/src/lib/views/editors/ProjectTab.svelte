@@ -1,7 +1,8 @@
 <script lang="ts">
   // Project tab (ADR 0039): a ProjectUnit node of the organisation namespace, mirroring OrganisationTab.
-  // Its Assignments pane is the meeting point with organisation (ADR 0039): which org units or users hold
-  // which roles here.
+  // It names the methodologies that apply (inherited by its sub-projects), which identifies the roles the
+  // project needs (ADR 0043); its Assignments pane is the meeting point with organisation: which org units or
+  // users hold which of those roles here.
   import type { Tab } from '../../shell/types';
   import Icon from '../../shell/Icon.svelte';
   import EditorPanes, { type Pane } from '../../components/EditorPanes.svelte';
@@ -11,6 +12,8 @@
   import { openTab } from '../../shell/tabs.svelte';
   import { notify, provideActions } from '../../shell/workbench.svelte';
   import { PROJECT_UNIT_TYPE, PROJECT_PART_OF } from '../../orgTypes';
+  import { methodologies, refreshMethodologies } from '../../stores/catalog.svelte';
+  import { applicableMethodologies, projectRoles, holders, type ProjectRole } from '../../projectRoles';
 
   let { tab }: { tab: Tab } = $props();
 
@@ -36,9 +39,29 @@
       .sort(),
   );
 
+  // the roles the project needs (its applicable methodologies, ADR 0043) and who holds them here
+  const applicable = $derived(head ? applicableMethodologies(head, key) : []);
+  const inherited = $derived(applicable.filter((m) => !ownMethodologies.includes(m)));
+  const ownMethodologies = $derived(Array.isArray(project?.props?.['methodologies']) ? (project!.props!['methodologies'] as string[]) : []);
+  const held = $derived(head ? holders(head, key) : new Map<string, string[]>());
+  let roles = $state<ProjectRole[]>([]);
+  $effect(() => {
+    if (!head) return;
+    let cancelled = false;
+    void projectRoles(head, key).then((r) => {
+      if (!cancelled) roles = r;
+    });
+    return () => {
+      cancelled = true;
+    };
+  });
+  /** the methodology names the registry knows (any version), to choose from */
+  const known = $derived([...new Set(methodologies.items.map((m) => m.name ?? '').filter(Boolean))].sort());
+
   async function load() {
     loading = true;
     try {
+      if (!methodologies.items.length) void refreshMethodologies();
       head = await headGraph(NS);
       error = '';
     } catch (e) {
@@ -68,14 +91,18 @@
   let editing = $state(false);
   let fDescription = $state('');
   let fStatus = $state('active');
-  let fMethodologies = $state('');
+  let fMethodologies = $state<string[]>([]);
   let saving = $state(false);
 
   function startEdit() {
     fDescription = typeof project?.props?.['description'] === 'string' ? (project!.props!['description'] as string) : '';
     fStatus = typeof project?.props?.['status'] === 'string' ? (project!.props!['status'] as string) : 'active';
-    fMethodologies = Array.isArray(project?.props?.['methodologies']) ? (project!.props!['methodologies'] as string[]).join(', ') : '';
+    fMethodologies = [...ownMethodologies];
     editing = true;
+  }
+
+  function toggleMethodology(name: string, on: boolean) {
+    fMethodologies = on ? [...fMethodologies, name] : fMethodologies.filter((m) => m !== name);
   }
 
   async function save() {
@@ -83,10 +110,7 @@
     saving = true;
     error = '';
     try {
-      const methodologies = fMethodologies
-        .split(',')
-        .map((s) => s.trim())
-        .filter(Boolean);
+      const methodologies = fMethodologies;
       await applyOnMain(NS, `Project ${key}`, `Update project ${key}`, head.baselineId, [
         updateNodeItem(project, { description: fDescription.trim() || null, status: fStatus.trim() || null, methodologies: methodologies.length ? methodologies : null }),
       ]);
@@ -131,12 +155,11 @@
                 {/if}
                 <dt>Applicable methodologies</dt>
                 <dd>
-                  {#if Array.isArray(project.props?.['methodologies']) && (project.props['methodologies'] as string[]).length}
-                    <code>{(project.props['methodologies'] as string[]).join(', ')}</code>
-                  {:else}<span class="muted">none</span>{/if}
+                  {#if ownMethodologies.length}<code>{ownMethodologies.join(', ')}</code>{:else}<span class="muted">none of its own</span>{/if}
+                  {#if inherited.length}<span class="muted"> · inherited: <code>{inherited.join(', ')}</code></span>{/if}
                 </dd>
               </dl>
-              <p class="hint">A project identifies the methodologies that apply to it, so it inherits the roles they declare (ADR 0035 §2): an Assignment grants a subset of them to an org unit or user.</p>
+              <p class="hint">A project names the methodologies that apply to it (its sub-projects inherit them): the roles they declare are the ones the project needs, and an Assignment grants some of them to an org unit or a user here. From one project to another, the same person can hold different roles, and so do different things.</p>
               <button type="button" class="small" onclick={startEdit}>Edit</button>
             {:else}
               <div class="grid">
@@ -148,17 +171,52 @@
                   <label for="proj-desc">Description</label>
                   <input id="proj-desc" bind:value={fDescription} />
                 </div>
-                <div class="field">
-                  <label for="proj-meth">Applicable methodologies</label>
-                  <input id="proj-meth" placeholder="sdlc, impact-analysis…" bind:value={fMethodologies} />
-                </div>
               </div>
+              <fieldset class="meths">
+                <legend>Applicable methodologies</legend>
+                {#each [...new Set([...known, ...fMethodologies])] as name (name)}
+                  <label class="check">
+                    <input type="checkbox" checked={fMethodologies.includes(name)} onchange={(e) => toggleMethodology(name, e.currentTarget.checked)} />
+                    {name}{#if !known.includes(name)}<span class="muted"> (not in the registry)</span>{/if}{#if inherited.includes(name)}<span class="muted"> (inherited)</span>{/if}
+                  </label>
+                {:else}
+                  <span class="muted">No methodology in the registry.</span>
+                {/each}
+              </fieldset>
               <div class="row">
                 <button type="button" class="small primary" disabled={saving} onclick={save}>Save</button>
                 <button type="button" class="small" onclick={() => (editing = false)}>Cancel</button>
               </div>
             {/if}
           </section>
+          {#if !editing}
+            <section class="card">
+              <h3>Roles needed on this project</h3>
+              {#if !applicable.length}
+                <p class="muted">The project names no methodology: it needs no role yet. Edit it to choose the methodologies that apply.</p>
+              {:else}
+                <table class="tbl">
+                  <thead><tr><th>Role</th><th>Declared by</th><th>Held by</th></tr></thead>
+                  <tbody>
+                    {#each roles as r (r.name)}
+                      <tr>
+                        <td><code>{r.name}</code>{#if r.description}<div class="muted small-text">{r.description}</div>{/if}</td>
+                        <td>{r.methodologies.join(', ')}</td>
+                        <td>
+                          {#each held.get(r.name) ?? [] as who (who)}
+                            <button type="button" class="link mono" onclick={() => openTab({ kind: who.startsWith('USR:') ? 'user' : 'unit', params: { key: who } })}>{who}</button>{' '}
+                          {:else}<span class="tag warn">unassigned</span>{/each}
+                        </td>
+                      </tr>
+                    {:else}
+                      <tr><td colspan="3" class="muted">The applicable methodologies declare no role.</td></tr>
+                    {/each}
+                  </tbody>
+                </table>
+                <button type="button" class="small" onclick={() => (pane = 'assignments')}>Assign roles…</button>
+              {/if}
+            </section>
+          {/if}
         {:else if head}
           <AssignmentsPane {head} fixedProject={key} autoOpen={tab.params.newAssignment === '1'} onChanged={load} />
         {/if}
@@ -192,6 +250,33 @@
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 0.5rem;
+  }
+  .meths {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem 1rem;
+    margin: 0.6rem 0;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 0.4rem 0.6rem;
+  }
+  .tbl {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 0.5rem;
+  }
+  .tbl th,
+  .tbl td {
+    text-align: left;
+    padding: 0.25rem 0.5rem;
+    border-bottom: 1px solid var(--border, #8884);
+    vertical-align: top;
+  }
+  .small-text {
+    font-size: 0.85em;
+  }
+  .tag.warn {
+    color: var(--warn);
   }
   .field {
     display: flex;

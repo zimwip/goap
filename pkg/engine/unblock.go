@@ -33,13 +33,14 @@ type UnblockRequest struct {
 	Reason     string
 }
 
-// PermissionUnblock lets a principal unblock the runs of its organisation, beyond those who answer for a run (by
-// default, process:* of the contributors, methodologists and approvers of the organisation).
+// PermissionUnblock lets a principal unblock runs beyond those who answer for a run (by default, process:* of the
+// members of the run's project, ADR 0043).
 const PermissionUnblock = "process:unblock"
 
 // Unblock decides on a run that waits for conditions established outside it, or is stuck. Whoever answers for the run
 // may: the initiator of the run or of a run above it, the accountable role of the step it carries out, or a holder of
-// process:unblock (by default the contributors, methodologists and approvers of its organisation, the administrators). Call Run (or schedule) afterwards to continue.
+// process:unblock (by default the members of its project, the administrators). Call Run (or schedule) afterwards to
+// continue.
 func (e *Engine) Unblock(ctx context.Context, id string, req UnblockRequest) (*Process, error) {
 	defer e.lock(id)()
 	p, err := e.Store.Get(ctx, id)

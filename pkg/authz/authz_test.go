@@ -12,7 +12,8 @@ func TestDefaultPolicies(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	change := Resource{Type: "change", ID: "c1", Org: "acme", Owner: "carol"}
+	// a principal's roles are the ones it holds on the resource's project (merged by the authorizer, ADR 0043)
+	change := Resource{Type: "change", ID: "c1", Org: "acme", Owner: "carol", ProjectID: "PROJ-A"}
 	cases := []struct {
 		name string
 		sub  Principal
@@ -21,17 +22,23 @@ func TestDefaultPolicies(t *testing.T) {
 		want bool
 	}{
 		{"admin", Principal{Subject: "root", Roles: []string{"admin"}}, "apply", change, true},
-		{"approver same org", Principal{Subject: "alice", Org: "acme", Roles: []string{"approver"}}, "apply", change, true},
-		{"four eyes", Principal{Subject: "carol", Org: "acme", Roles: []string{"approver"}}, "apply", change, false},
-		{"other org", Principal{Subject: "bob", Org: "globex", Roles: []string{"approver"}}, "apply", change, false},
-		{"contributor", Principal{Subject: "dave", Org: "acme", Roles: []string{"contributor"}}, "apply", change, false},
-		{"contributor process", Principal{Subject: "dave", Org: "acme", Roles: []string{"contributor"}}, "start", Resource{Type: "process", Org: "acme"}, true},
-		{"contributor other org", Principal{Subject: "dave", Org: "acme", Roles: []string{"contributor"}}, "read", Resource{Type: "process", Org: "globex"}, false},
+		{"member of the project", Principal{Subject: "alice", Org: "acme", Roles: []string{"tech_lead"}}, "apply", change, true},
+		{"four eyes", Principal{Subject: "carol", Org: "acme", Roles: []string{"tech_lead"}}, "apply", change, false},
+		{"member from another org", Principal{Subject: "bob", Org: "globex", Roles: []string{"developer"}}, "apply", change, true},
+		{"not on the project", Principal{Subject: "dave", Org: "acme"}, "apply", change, false},
+		{"process", Principal{Subject: "dave", Org: "acme", Roles: []string{"developer"}}, "start", Resource{Type: "process", Org: "acme"}, true},
+		{"process off the project", Principal{Subject: "dave", Org: "acme"}, "start", Resource{Type: "process", Org: "acme"}, false},
+		{"read the project of another org", Principal{Subject: "dave", Org: "acme", Roles: []string{"developer"}}, "read", Resource{Type: "process", Org: "globex"}, true},
 		{"read", Principal{Subject: "eve", Org: "acme"}, "read", Resource{Type: "methodology"}, true},
 		{"read same org", Principal{Subject: "eve", Org: "acme"}, "read", Resource{Type: "process", Org: "acme"}, true},
 		{"read other org", Principal{Subject: "eve", Org: "acme"}, "read", Resource{Type: "process", Org: "globex"}, false},
-		{"write methodology", Principal{Subject: "eve", Org: "acme", Roles: []string{"contributor"}}, "write", Resource{Type: "methodology"}, false},
-		{"methodologist", Principal{Subject: "mia", Org: "acme", Roles: []string{"methodologist"}}, "publish", Resource{Type: "methodology", Org: "acme"}, true},
+		{"write methodology", Principal{Subject: "eve", Org: "acme", Roles: []string{"developer"}}, "write", Resource{Type: "methodology"}, false},
+		{"methodology: administrators only", Principal{Subject: "mia", Org: "acme", Roles: []string{"methodologist"}}, "publish", Resource{Type: "methodology", Org: "acme"}, false},
+		{"action open to the project", Principal{Subject: "eve", Roles: []string{"developer"}}, "run", Resource{Type: "action"}, true},
+		{"action off the project", Principal{Subject: "eve"}, "run", Resource{Type: "action"}, false},
+		{"action of the role", Principal{Subject: "eve", Roles: []string{"developer"}}, "run", Resource{Type: "action", Roles: []string{"tester", "developer"}}, true},
+		{"action of another role", Principal{Subject: "eve", Roles: []string{"developer"}}, "run", Resource{Type: "action", Roles: []string{"tester"}}, false},
+		{"agent of another role", Principal{Subject: "eve", Roles: []string{"developer"}}, "run", Resource{Type: "agent", Roles: []string{"tester"}}, false},
 		{"anonymous", Principal{Roles: []string{"admin"}}, "read", Resource{Type: "methodology"}, false},
 	}
 	for _, tc := range cases {

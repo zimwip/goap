@@ -5,7 +5,6 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
-	"slices"
 	"strings"
 	"testing"
 
@@ -195,7 +194,7 @@ func TestEnsureUserWaitsForDefaultOrg(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Contains(u.Roles, "admin") {
+	if !u.Admin {
 		t.Fatalf("first user must be admin: %+v", u)
 	}
 	links, err := g.OutLinksOf(ctx, n.Ref())
@@ -224,7 +223,7 @@ func TestEnsureUserWaitsForDefaultOrg(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if slices.Contains(bob.Roles, "admin") {
+	if bob.Admin {
 		t.Fatalf("second user must not be admin: %+v", bob)
 	}
 }

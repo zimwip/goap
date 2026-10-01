@@ -1,11 +1,16 @@
 name: test-design
-version: 1.2.0
+version: 1.3.0
 description: >
   Design and review of a test campaign from the repository's requirements.
   Example of agents (goap, utility and hybrid planners), script actions
   (JavaScript and Go) and delegation to sub-agents.
 
 namespace: alm
+
+# who may run what (ADR 0043): a project member holding one of these roles, granted by an Assignment
+roles:
+  - {name: test_designer, description: Designs the test cases of a campaign}
+  - {name: test_reviewer, description: Reviews the designed test cases}
 
 conditions:
   - name: has_scope
@@ -108,6 +113,7 @@ actions:
   - name: human_review
     kind: human
     description: Human review of the test cases
+    roles: [test_reviewer]
     pre: {tests_designed: true, reviewed: false}
     effects: {reviewed: true}
     utility: "0.5"
@@ -197,7 +203,7 @@ agents:
         type: schedule
         schedule: "0 2 * * *"
         goal: designed
-        roles: [contributor]
+        roles: [test_designer]
         enabled: false
   - name: reviewer
     description: Test campaign reviewer
@@ -213,7 +219,7 @@ agents:
         filter: event.process.agent == "test-designer" && event.process.parent == ""
         target: event_change
         goal: review
-        roles: [contributor]
+        roles: [test_designer]
         enabled: true
   - name: coordinator
     description: Test campaign coordinator

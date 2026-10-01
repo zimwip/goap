@@ -1,5 +1,5 @@
 name: methodology-improvement
-version: 1.3.0
+version: 1.4.0
 namespace: methodology
 description: >
   Platform self-observation: at the end of each process, an agent analyzes the
@@ -10,6 +10,10 @@ description: >
   agent definitions, new actions, MCP tools. Accepted proposals become a new
   draft version of the methodology.
 
+# who may run what (ADR 0043): the review of the proposals is a methodologist's; the observer itself runs as a
+# service identity administering the platform (its triggers' roles: drafting a methodology is administration).
+roles:
+  - {name: methodologist, description: Reviews the improvements proposed to a methodology}
 
 conditions:
   - name: analyzed
@@ -93,6 +97,7 @@ actions:
   - name: review_improvements
     kind: human
     description: Review of improvement proposals by a methodologist
+    roles: [methodologist]
     instructions: >
       Accept or reject each improvement (a comment is required). Accepted
       improvements will be integrated into a new draft version of the methodology,
@@ -134,7 +139,7 @@ agents:
         event: process.completed
         filter: event.process.methodology != "methodology-improvement" && event.process.parent == ""
         goal: improve_methodology
-        roles: [methodologist]
+        roles: [admin]
         enabled: true
       - name: on_process_failure
         description: Observe failed processes
@@ -142,7 +147,7 @@ agents:
         event: process.failed
         filter: event.process.methodology != "methodology-improvement" && event.process.parent == ""
         goal: improve_methodology
-        roles: [methodologist]
+        roles: [admin]
         enabled: true
       - name: on_process_stuck
         description: Observe stuck processes (no plan reaches the goal)
@@ -150,5 +155,5 @@ agents:
         event: process.stuck
         filter: event.process.methodology != "methodology-improvement" && event.process.parent == ""
         goal: improve_methodology
-        roles: [methodologist]
+        roles: [admin]
         enabled: true

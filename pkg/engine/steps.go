@@ -49,7 +49,7 @@ func RunStep(ctx context.Context, ac ActionContext) (ActionResult, error) {
 	if ac.Blackboard.Change.Intent != "" {
 		intent += "\n\n(change: " + ac.Blackboard.Change.Intent + ")"
 	}
-	res, err := h.e.runChildStep(authz.With(ctx, ac.Process.Initiator), h, ac.Action.Name+"#step", methodologyName, agent, goal, intent, false, sc)
+	res, err := h.e.runChildStep(authz.With(ctx, h.e.actor(ac.Process)), h, ac.Action.Name+"#step", methodologyName, agent, goal, intent, false, sc)
 	if errors.Is(err, dsl.ErrSuspended) {
 		return ActionResult{Suspended: true, Child: h.waitingOn, Method: method, Output: fmt.Sprintf("step %s: %s/%s at work", step, methodologyName, agent)}, nil
 	}

@@ -41,12 +41,13 @@ type Handler struct {
 	Triggers *engine.TriggerManager
 }
 
-// authorize checks an operation on a process (p nil for start).
+// authorize checks an operation on a process (p nil for start, on the caller's active project): on the
+// project of the process, where the caller's roles are held (ADR 0043).
 func (h *Handler) authorize(ctx context.Context, action, methodology string, p *engine.Process) error {
 	who := authz.From(ctx)
-	res := authz.Resource{Type: "process", Name: methodology, Org: who.Org, Owner: who.Subject}
+	res := authz.Resource{Type: "process", Name: methodology, Org: who.Org, Owner: who.Subject, ProjectID: who.Project}
 	if p != nil {
-		res = authz.Resource{Type: "process", ID: p.ID, Name: p.Methodology, Org: p.Initiator.Org, Owner: p.Initiator.Subject}
+		res = authz.Resource{Type: "process", ID: p.ID, Name: p.Methodology, Org: p.Initiator.Org, Owner: p.Initiator.Subject, ProjectID: p.Project}
 	}
 	return authz.Check(ctx, h.Authz, authz.Request{Subject: who, Action: action, Resource: res})
 }
@@ -96,12 +97,15 @@ func toConnect(err error) error {
 
 func (h *Handler) StartProcess(ctx context.Context, r *connect.Request[enginev1.StartProcessRequest]) (*connect.Response[enginev1.StartProcessResponse], error) {
 	ctx = h.principal(ctx, r.Header())
-	if err := h.authorize(ctx, "start", r.Msg.Methodology, nil); err != nil {
-		return nil, toConnect(err)
-	}
 	projectID := r.Msg.ProjectId
 	if projectID == "" {
 		projectID = authz.From(ctx).Project
+	}
+	// starting is checked on the project the process will work on, where the caller's roles are held
+	who := authz.From(ctx)
+	who.Project = projectID
+	if err := h.authorize(authz.With(ctx, who), "start", r.Msg.Methodology, nil); err != nil {
+		return nil, toConnect(err)
 	}
 	p, err := h.Engine.Start(ctx, engine.StartRequest{
 		Methodology: r.Msg.Methodology, ChangeID: domain.ChangeID(r.Msg.ChangeId), BaselineID: domain.BaselineID(r.Msg.BaselineId),

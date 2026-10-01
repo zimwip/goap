@@ -38,7 +38,7 @@ func TestDomainLifecycle(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			enf, _ := authz.NewCasbin(nil)
 			s := &Service{Store: NewGraphStore(graph.New(graph.NewMemory())), DomainStore: mk(t), Authz: enf}
-			ctx := as("methodologist")
+			ctx := as("admin")
 
 			if _, _, err := s.SaveDomain(as("contributor"), almDomain("1")); !errors.Is(err, authz.ErrForbidden) {
 				t.Fatalf("contributor save: %v", err)
@@ -141,7 +141,7 @@ func TestDomainLifecycle(t *testing.T) {
 func TestMethodologyNamespaceAndTypes(t *testing.T) {
 	enf, _ := authz.NewCasbin(nil)
 	s := &Service{Store: NewMemoryStore(), Authz: enf}
-	ctx := as("methodologist")
+	ctx := as("admin")
 	if _, _, err := s.ImportDomain(ctx, []byte("name: alm\nversion: \"1\"\nnodeTypes: [Requirement]\n"), true); err != nil {
 		t.Fatal(err)
 	}
@@ -178,7 +178,7 @@ func TestMethodologyNamespaceAndTypes(t *testing.T) {
 func TestDomainImportExport(t *testing.T) {
 	enf, _ := authz.NewCasbin(nil)
 	s := &Service{Store: NewMemoryStore(), Authz: enf}
-	ctx := as("methodologist")
+	ctx := as("admin")
 	src := "name: alm\nversion: \"1\"\nnodeTypes:\n  - name: Need\n  - name: Requirement\n    extends: Need\nlinkTypes:\n  - name: derives\n    from: Requirement\n    to: Need\n"
 	r, _, err := s.ImportDomain(ctx, []byte(src), true)
 	if err != nil || r.Status != StatusPublished {
@@ -237,7 +237,7 @@ linkTypes:
 		t.Run(name, func(t *testing.T) {
 			enf, _ := authz.NewCasbin(nil)
 			s := &Service{Store: mk(t), Authz: enf}
-			ctx := as("methodologist")
+			ctx := as("admin")
 			if _, issues, err := s.SaveDomain(ctx, *d); err != nil || len(issues) > 0 {
 				t.Fatalf("save: %v %v", err, issues)
 			}
@@ -288,7 +288,7 @@ func TestDomainAlgorithms(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			enf, _ := authz.NewCasbin(nil)
 			s := &Service{Store: mk(t), Authz: enf}
-			ctx := as("methodologist")
+			ctx := as("admin")
 			if _, issues, err := s.SaveDomain(ctx, *d); err != nil || len(issues) > 0 {
 				t.Fatalf("save: %v %v", issues, err)
 			}
@@ -321,11 +321,11 @@ func TestRunAlgorithm(t *testing.T) {
 	a := algo.Algorithm{Name: "len", Type: algo.UsagePropertyValidator, Language: "javascript",
 		Params: []algo.Param{{Name: "max", Type: "number", Required: true}},
 		Code:   `if (String(ctx.value()).length > ctx.param("max")) ctx.fail("too long")`}
-	out, err := s.RunAlgorithm(as("methodologist"), a, map[string]any{"max": 3.0}, map[string]any{"property": "p", "value": "abcd"})
+	out, err := s.RunAlgorithm(as("admin"), a, map[string]any{"max": 3.0}, map[string]any{"property": "p", "value": "abcd"})
 	if err != nil || out.OK() || out.Failures[0] != "too long" {
 		t.Fatalf("%v %+v", err, out)
 	}
-	if _, err := s.RunAlgorithm(as("methodologist"), a, map[string]any{}, nil); !errors.Is(err, ErrInvalid) {
+	if _, err := s.RunAlgorithm(as("admin"), a, map[string]any{}, nil); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("missing required param: %v", err)
 	}
 	if _, err := s.RunAlgorithm(as("contributor"), a, map[string]any{"max": 3.0}, nil); !errors.Is(err, authz.ErrForbidden) {

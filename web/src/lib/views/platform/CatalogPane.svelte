@@ -14,6 +14,8 @@
     type Unsaved,
   } from '../../llmEdit';
   import { confirmDialog } from '../../shell/confirmState.svelte';
+  import { methodologies, refreshMethodologies } from '../../stores/catalog.svelte';
+  import { rolesOf } from '../../projectRoles';
 
   let {
     providers,
@@ -31,8 +33,24 @@
     openProviders: () => void;
   } = $props();
 
-  // Roles a model can be restricted to. Administrators always have access.
-  const ROLES = ['contributor', 'methodologist', 'approver', 'release_manager'];
+  // Roles a model can be restricted to: those the methodologies declare, held on the caller's project (ADR 0043).
+  // Administrators always have access.
+  let declared = $state<string[]>([]);
+  $effect(() => {
+    if (!methodologies.items.length) void refreshMethodologies();
+  });
+  $effect(() => {
+    const names = [...new Set(methodologies.items.map((m) => m.name ?? '').filter(Boolean))];
+    let cancelled = false;
+    void rolesOf(names).then((r) => {
+      if (!cancelled) declared = r.map((x) => x.name);
+    });
+    return () => {
+      cancelled = true;
+    };
+  });
+  /** the roles to choose from: the declared ones, and any a model already requires */
+  const rolesFor = (r: { roles: string[] }) => [...new Set([...declared, ...r.roles])].sort();
   const PERIODS = [
     ['day', 'per day'],
     ['month', 'per month'],
@@ -240,7 +258,7 @@
                 <details>
                   <summary>{level(r)}</summary>
                   <div class="roles">
-                    {#each ROLES as role (role)}
+                    {#each rolesFor(r) as role (role)}
                       <label><input type="checkbox" checked={r.roles.includes(role)} onchange={() => toggleRole(r, role)} /> {role}</label>
                     {/each}
                   </div>

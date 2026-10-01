@@ -110,7 +110,8 @@ func unit(u string) string { return domain.OrgOf(u) }
 
 // callerResource is the resource of a request made on behalf of the caller's own tenant.
 func (h *Handler) callerResource(ctx context.Context, hdr http.Header, typ, name string) authz.Resource {
-	return authz.Resource{Type: typ, Name: name, Org: authz.From(h.Identity.Context(ctx, hdr)).Org}
+	who := authz.From(h.Identity.Context(ctx, hdr))
+	return authz.Resource{Type: typ, Name: name, Org: who.Org, ProjectID: who.Project}
 }
 
 func (h *Handler) ListMcps(ctx context.Context, r *connect.Request[mcpv1.ListMcpsRequest]) (*connect.Response[mcpv1.ListMcpsResponse], error) {

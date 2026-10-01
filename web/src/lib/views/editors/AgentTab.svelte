@@ -116,6 +116,21 @@
             >MCPs whose tools this agent's LLM/script actions may use, in addition to the ones the actions declare. An MCP of scope agent (orchestration: <code>goap-scheduler</code> starts other agents) is declared here only and reached by the llm actions{#if actionOnly.length}; action only, not here: <code>{actionOnly.join(', ')}</code>{/if}.</span
           >
         </div>
+        <div class="field">
+          <label for="ag-roles">Roles <span class="opt">(comma separated, declared by the methodology)</span></label>
+          <input
+            id="ag-roles"
+            type="text"
+            class="mono"
+            bind:value={item.roles}
+            class:bad={d.bad(`${p}.roles`)}
+            data-path="{p}.roles"
+            placeholder={(d.form.roles ?? []).map((r) => r.name).join(', ') || 'developer'}
+          />
+          <span class="hint"
+            >Who may run this agent: someone holding one of these roles on the project of the change (ADR 0043). Its actions that name no roles of their own need one too. Empty: any member of the project.</span
+          >
+        </div>
         {#if noUtility.length}
           <div class="alert warn">
             Planner {item.planner}: these actions have no utility expression —

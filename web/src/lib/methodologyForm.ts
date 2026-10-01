@@ -102,6 +102,8 @@ export interface ActionForm extends Identified {
   effects: CondRow[];
   cost: number;
   permission: string;
+  /** roles allowed to run the action (ADR 0043), comma separated; empty: those of the agent */
+  roles: string;
   model: string;
   prompt: string;
   tool: string;
@@ -161,6 +163,8 @@ export interface AgentForm extends Identified {
   goals: string[];
   /** MCPs whose tools the llm / script actions of the agent may use, comma separated */
   mcps: string;
+  /** roles allowed to run the agent (ADR 0043), comma separated; empty: any member of the project */
+  roles: string;
   triggers: TriggerForm[];
 }
 
@@ -337,6 +341,7 @@ export const emptyAction = (): ActionForm => ({
   effects: [],
   cost: 1,
   permission: '',
+  roles: '',
   model: '',
   prompt: '',
   tool: '',
@@ -365,6 +370,7 @@ export const emptyAgent = (): AgentForm => ({
   actions: [],
   goals: [],
   mcps: '',
+  roles: '',
   triggers: [],
 });
 export const emptyStep = (name = ''): StepForm => ({
@@ -473,6 +479,7 @@ function actionToForm(a: Action, uid: string): ActionForm {
     effects: rows(a.effects),
     cost: a.cost ?? 0,
     permission: a.permission ?? '',
+    roles: (a.roles ?? []).join(', '),
     model: a.model ?? '',
     prompt: a.prompt ?? '',
     tool: a.tool ?? '',
@@ -510,6 +517,7 @@ function agentToForm(a: Agent, uid: string): AgentForm {
     actions: [...(a.actions ?? [])],
     goals: [...(a.goals ?? [])],
     mcps: (a.mcps ?? []).join(', '),
+    roles: (a.roles ?? []).join(', '),
     triggers: (a.triggers ?? []).map(triggerToForm),
   };
 }
@@ -909,6 +917,7 @@ export function fromForm(f: MethodologyForm): { methodology: Methodology; issues
         if (a.incremental) o.incremental = true;
       }
       put(o, 'permission', a.permission.trim());
+      put(o, 'roles', mcpList(a.roles));
       put(o, 'utility', a.utility.trim());
       // Fields specific to the action type: the others are ignored.
       if (a.kind === 'llm') {
@@ -996,6 +1005,7 @@ export function fromForm(f: MethodologyForm): { methodology: Methodology; issues
       put(o, 'actions', [...a.actions]);
       put(o, 'goals', [...a.goals]);
       put(o, 'mcps', mcpList(a.mcps));
+      put(o, 'roles', mcpList(a.roles));
       put(o, 'triggers', a.triggers.map(triggerFromForm));
       return o;
     }),
