@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/methodology"
 )
 
 // SpanIDer is implemented by tracers that expose the current span id, so that
@@ -69,10 +70,18 @@ func tickRecordWithCalls(r domain.ExecutionRecord, calls []LLMCall) domain.Execu
 	return r
 }
 
-// actionRecord describes the execution of step i.
-func actionRecord(p *Process, i int, kind, id string) domain.ExecutionRecord {
+// actionStep is the Activity (process/step/method/method-step) path of a declared action, "" when it was not
+// generated from one.
+func actionStep(m *methodology.Compiled, name string) string {
+	a, _ := m.Action(name)
+	return a.Step
+}
+
+// actionRecord describes the execution of step i: the Activity Run of activityRef (the methodology@Process/Step/
+// Method/MethodStep node key the planned action was generated for, "" when it was not generated from one).
+func actionRecord(p *Process, i int, kind, activityRef, id string) domain.ExecutionRecord {
 	s := p.Steps[i]
-	r := domain.ExecutionRecord{ID: id, Kind: domain.ExecAction, Step: i, Action: s.Action, ActionKind: kind, Specialization: s.Specialization,
+	r := domain.ExecutionRecord{ID: id, Kind: domain.ExecAction, Step: i, Action: s.Action, ActionKind: kind, ActivityRef: activityRef, Specialization: s.Specialization,
 		Plan: s.Plan, Before: maps.Clone(s.Before), After: maps.Clone(s.After), Items: slices.Clone(s.Items), Nodes: slices.Clone(s.Nodes),
 		Reads: slices.Clone(s.Reads), BoardBefore: s.BoardBefore, BoardAfter: max(s.BoardAfter, s.BoardBefore), BoardLast: s.LastItem,
 		InputTokens: s.Usage.InputTokens, OutputTokens: s.Usage.OutputTokens, Actor: s.ApprovedBy, Output: truncate(s.Output, 2000),
