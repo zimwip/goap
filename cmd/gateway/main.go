@@ -42,6 +42,9 @@ func main() {
 	cfg := gateway.Config{
 		AuthMode:  platform.Env("GOAP_AUTH_MODE", gateway.DefaultAuthMode),
 		DevTokens: platform.Env("GOAP_DEV_TOKENS", "") == "true",
+		// a token lives GOAP_TOKEN_TTL and is refreshed by the web up to GOAP_SESSION_MAX after the sign-in
+		TokenTTL:   platform.EnvDuration("GOAP_TOKEN_TTL", gateway.DefaultTokenTTL),
+		MaxSession: platform.EnvDuration("GOAP_SESSION_MAX", gateway.DefaultMaxSession),
 		Routes: []gateway.Route{
 			{Prefix: "/goap.graph.v1.GraphService/", Upstream: platform.Env("GOAP_GRAPH_URL", "http://localhost:8081")},
 			{Prefix: "/goap.registry.v1.RegistryService/", Upstream: platform.Env("GOAP_REGISTRY_URL", "http://localhost:8082")},

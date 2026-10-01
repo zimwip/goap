@@ -1,25 +1,62 @@
 <script lang="ts">
   // Sign-in / sign-up screen (ADR 0040): shown instead of the shell when the gateway has no external
   // identity provider (AuthMode "local") and there is no token yet. Backed by /auth/register and
-  // /auth/login (internal/credsvc), the same JWT the hs256/dev-token flow already produces.
-  import { register, login, errorMessage } from '../api';
+  // /auth/login (internal/credsvc), the same JWT the hs256/dev-token flow already produces. It tells why the
+  // user is here when their session ended (expired, refused) and remembers the last subject that signed in.
+  import { register, login, RpcError } from '../api';
+  import { authState, lastSubject, rememberSubject } from '../stores/auth.svelte';
 
+  const MIN_PASSWORD = 8; // credsvc.MinPasswordLen
+
+  const remembered = lastSubject();
   let mode = $state<'login' | 'register'>('login');
-  let subject = $state('');
+  let subject = $state(remembered);
   let password = $state('');
+  let confirm = $state('');
+  let showPassword = $state(false);
   let busy = $state(false);
   let error = $state('');
 
+  const mismatch = $derived(mode === 'register' && confirm !== '' && confirm !== password);
+  const tooShort = $derived(mode === 'register' && password !== '' && password.length < MIN_PASSWORD);
+
+  function switchMode(m: 'login' | 'register') {
+    mode = m;
+    error = '';
+    confirm = '';
+  }
+
+  /** A message for the person, not the HTTP status. */
+  function explain(err: unknown): string {
+    if (err instanceof RpcError) {
+      if (err.status === 0) return 'The platform cannot be reached. Check your connection and try again.';
+      if (err.status === 401) return 'Wrong subject or password.';
+      if (err.status === 409) return 'An account already exists for this subject: sign in instead.';
+      if (err.status === 503) return `The platform is not ready to sign you in yet (${err.message}). Try again in a moment.`;
+      if (err.status === 400) return err.message.replace(/^.*?:\s*/, '') || 'Invalid subject or password.';
+      return err.message || 'Sign-in failed.';
+    }
+    return err instanceof Error ? err.message : String(err);
+  }
+
   async function submit(e: Event) {
     e.preventDefault();
-    if (!subject.trim() || !password) return;
+    const who = subject.trim();
+    if (!who || !password || busy) return;
+    if (mode === 'register' && (tooShort || mismatch || !confirm)) {
+      error = tooShort ? `The password needs at least ${MIN_PASSWORD} characters.` : 'The two passwords differ.';
+      return;
+    }
     busy = true;
     error = '';
     try {
-      await (mode === 'login' ? login(subject.trim(), password) : register(subject.trim(), password));
+      await (mode === 'login' ? login(who, password) : register(who, password));
+      rememberSubject(who);
       // a successful call sets the token; the app re-renders the shell once session picks it up
     } catch (err) {
-      error = errorMessage(err);
+      error = explain(err);
+      password = '';
+      confirm = '';
     } finally {
       busy = false;
     }
@@ -27,24 +64,51 @@
 </script>
 
 <div class="signin">
-  <form class="card" onsubmit={submit}>
-    <h1>GOAP</h1>
+  <form class="card" onsubmit={submit} aria-busy={busy}>
+    <h1><span class="logo" aria-hidden="true">◆</span> GOAP</h1>
+    {#if authState.notice}<p class="notice" role="status">{authState.notice}</p>{/if}
     <div class="tabs" role="tablist">
-      <button type="button" role="tab" aria-selected={mode === 'login'} class:active={mode === 'login'} onclick={() => (mode = 'login')}>Sign in</button>
-      <button type="button" role="tab" aria-selected={mode === 'register'} class:active={mode === 'register'} onclick={() => (mode = 'register')}>
+      <button type="button" role="tab" aria-selected={mode === 'login'} class:active={mode === 'login'} onclick={() => switchMode('login')}>Sign in</button>
+      <button type="button" role="tab" aria-selected={mode === 'register'} class:active={mode === 'register'} onclick={() => switchMode('register')}>
         Create account
       </button>
     </div>
-    {#if error}<p class="alert">{error}</p>{/if}
+    {#if error}<p class="alert" role="alert">{error}</p>{/if}
     <div class="field">
       <label for="signin-subject">Subject</label>
-      <input id="signin-subject" bind:value={subject} autocomplete="username" required />
+      <!-- svelte-ignore a11y_autofocus -->
+      <input id="signin-subject" bind:value={subject} autocomplete="username" autocapitalize="none" spellcheck="false" required disabled={busy} autofocus={!remembered} />
     </div>
     <div class="field">
       <label for="signin-password">Password</label>
-      <input id="signin-password" type="password" bind:value={password} autocomplete={mode === 'login' ? 'current-password' : 'new-password'} minlength="8" required />
+      <div class="pw">
+        <!-- svelte-ignore a11y_autofocus -->
+        <input
+          id="signin-password"
+          type={showPassword ? 'text' : 'password'}
+          bind:value={password}
+          autocomplete={mode === 'login' ? 'current-password' : 'new-password'}
+          required
+          disabled={busy}
+          autofocus={!!remembered}
+          aria-invalid={tooShort}
+        />
+        <button type="button" class="eye" onclick={() => (showPassword = !showPassword)} aria-pressed={showPassword} aria-label={showPassword ? 'Hide the password' : 'Show the password'}>
+          {showPassword ? 'Hide' : 'Show'}
+        </button>
+      </div>
+      {#if tooShort}<span class="hint left">At least {MIN_PASSWORD} characters.</span>{/if}
     </div>
-    <button type="submit" class="primary" disabled={busy}>{mode === 'login' ? 'Sign in' : 'Create account'}</button>
+    {#if mode === 'register'}
+      <div class="field">
+        <label for="signin-confirm">Confirm the password</label>
+        <input id="signin-confirm" type={showPassword ? 'text' : 'password'} bind:value={confirm} autocomplete="new-password" required disabled={busy} aria-invalid={mismatch} />
+        {#if mismatch}<span class="hint left warn">The two passwords differ.</span>{/if}
+      </div>
+    {/if}
+    <button type="submit" class="primary" disabled={busy || !subject.trim() || !password}>
+      {busy ? (mode === 'login' ? 'Signing in…' : 'Creating the account…') : mode === 'login' ? 'Sign in' : 'Create account'}
+    </button>
     {#if mode === 'register'}<p class="hint">New accounts wait in the unit chosen by the administrator; the first one created becomes the administrator.</p>{/if}
   </form>
 </div>
@@ -123,6 +187,42 @@
   button.primary:disabled {
     opacity: 0.6;
     cursor: default;
+  }
+  .logo {
+    color: var(--accent, #4a7cff);
+  }
+  .notice {
+    margin: 0;
+    padding: 0.45rem 0.6rem;
+    border-radius: 6px;
+    background: var(--accent-soft, #eef3ff);
+    font-size: 0.85rem;
+  }
+  .pw {
+    display: flex;
+    gap: 0.3rem;
+  }
+  .pw input {
+    flex: 1;
+    min-width: 0;
+  }
+  .eye {
+    padding: 0 0.6rem;
+    border: 1px solid var(--border, #8884);
+    border-radius: 6px;
+    background: none;
+    color: var(--muted, #666);
+    font-size: 0.8rem;
+    cursor: pointer;
+  }
+  input[aria-invalid='true'] {
+    border-color: var(--danger, #c33);
+  }
+  .hint.left {
+    text-align: left;
+  }
+  .hint.warn {
+    color: var(--danger, #c33);
   }
   .alert {
     margin: 0;

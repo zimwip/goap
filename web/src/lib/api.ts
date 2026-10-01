@@ -55,6 +55,46 @@ export function setToken(token: string | null): void {
   for (const fn of tokenListeners) fn();
 }
 
+/** The claims of a JWT the web reads (payload only: the gateway verifies the signature). */
+export interface TokenClaims {
+  sub?: string;
+  exp?: number;
+  iat?: number;
+  auth_time?: number;
+}
+
+/** Decodes the payload of a JWT (undefined when it is not one). */
+export function tokenClaims(token: string | null): TokenClaims | undefined {
+  const part = token?.split('.')[1];
+  if (!part) return undefined;
+  try {
+    const b64 = part.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(part.length / 4) * 4, '=');
+    return JSON.parse(atob(b64)) as TokenClaims;
+  } catch {
+    return undefined;
+  }
+}
+
+const unauthorizedListeners = new Set<(message: string) => void>();
+
+/**
+ * Subscribe to the requests refused for their token (401 while one was sent): the session expired or is no longer
+ * valid. Returns the unsubscribe function.
+ */
+export function onUnauthorized(fn: (message: string) => void): () => void {
+  unauthorizedListeners.add(fn);
+  return () => unauthorizedListeners.delete(fn);
+}
+
+/**
+ * Reports a 401 on a request that carried `sent`: ignored when the token changed meanwhile (a refresh or a new
+ * sign-in raced the request), so only the current token can end the session.
+ */
+export function reportUnauthorized(sent: string | null, status: number, message: string): void {
+  if (status !== 401 || !sent || sent !== getToken()) return;
+  for (const fn of unauthorizedListeners) fn(message);
+}
+
 export async function rpc<TReq extends object, TRes>(
   service: string,
   method: string,
@@ -90,7 +130,8 @@ export async function rpc<TReq extends object, TRes>(
 
   if (!res.ok) {
     const err = (data ?? {}) as { code?: string; message?: string };
-    throw new RpcError(err.code ?? 'unknown', err.message ?? (text || res.statusText), res.status);
+    reportUnauthorized(token, res.status, err.message ?? '');
+    throw new RpcError(err.code ?? (res.status === 401 ? 'unauthenticated' : 'unknown'), err.message ?? (text || res.statusText), res.status);
   }
   return (data ?? {}) as TRes;
 }
@@ -100,8 +141,7 @@ export function errorMessage(e: unknown): string {
   if (e instanceof RpcError) {
     if (e.code === 'permission_denied')
       return `Access denied: you do not have the rights required for this operation${e.message ? ` (${e.message})` : ''}.`;
-    if (e.code === 'unauthenticated')
-      return `Authentication required: configure a valid access token${e.message ? ` (${e.message})` : ''}.`;
+    if (e.code === 'unauthenticated') return `Authentication required: sign in again${e.message ? ` (${e.message})` : ''}.`;
     return e.code ? `${e.code}: ${e.message}` : e.message;
   }
   if (e instanceof Error) return e.message;
@@ -1551,7 +1591,11 @@ export async function whoAmI(signal?: AbortSignal): Promise<Principal> {
   const token = getToken();
   if (token) headers['Authorization'] = `Bearer ${token}`;
   const res = await fetch(`${BASE}/api/whoami`, { headers, signal });
-  if (!res.ok) throw new RpcError('unauthenticated', res.statusText, res.status);
+  if (!res.ok) {
+    const message = await errorText(res);
+    reportUnauthorized(token, res.status, message);
+    throw new RpcError('unauthenticated', message, res.status);
+  }
   return (await res.json()) as Principal;
 }
 
@@ -1568,10 +1612,42 @@ export async function switchProject(project: string): Promise<void> {
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: JSON.stringify({ project }),
   });
-  if (!res.ok) throw new RpcError('failed', res.statusText, res.status);
+  if (!res.ok) throw new RpcError(res.status === 401 ? 'unauthenticated' : 'failed', await errorText(res), res.status);
   const data = (await res.json()) as { token?: string };
   if (!data.token) throw new RpcError('failed', 'no token returned', res.status);
   setToken(data.token);
+}
+
+/** The message of an HTTP error response: the `message` of a JSON body (echo, Connect), else its text. */
+async function errorText(res: Response): Promise<string> {
+  const text = await res.text().catch(() => '');
+  try {
+    const m = (JSON.parse(text) as { message?: string }).message;
+    if (m) return m;
+  } catch {
+    // not JSON
+  }
+  return text || res.statusText;
+}
+
+/**
+ * Reissues the current token with a fresh expiry (POST /auth/refresh, local sign-in): keeps an active session
+ * going. Refused (401) when the token expired, is invalid, or the session reached its maximum age.
+ */
+export async function refreshToken(): Promise<void> {
+  const token = getToken();
+  if (!token) throw new RpcError('unauthenticated', 'no active token', 401);
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}/auth/refresh`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
+  } catch (e) {
+    throw new RpcError('unavailable', `Gateway unreachable: ${String(e)}`, 0);
+  }
+  if (!res.ok) throw new RpcError(res.status === 401 ? 'unauthenticated' : 'failed', await errorText(res), res.status);
+  const data = (await res.json()) as { token?: string };
+  if (!data.token) throw new RpcError('failed', 'no token returned', res.status);
+  // a sign-out or another refresh meanwhile wins
+  if (getToken() === token) setToken(data.token);
 }
 
 /** Which sign-in UI to show (GET /api/auth/config, unauthenticated — ADR 0040): 'none', 'hs256' or 'local'. */
@@ -1587,10 +1663,7 @@ async function authToken(path: string, subject: string, password: string): Promi
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ subject, password }),
   });
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new RpcError('failed', text || res.statusText, res.status);
-  }
+  if (!res.ok) throw new RpcError(res.status === 401 ? 'unauthenticated' : 'failed', await errorText(res), res.status);
   const data = (await res.json()) as { token?: string };
   if (!data.token) throw new RpcError('failed', 'no token returned', res.status);
   setToken(data.token);
