@@ -630,3 +630,12 @@ func (c *Compiled) StepByPath(path string) (StepInfo, bool) {
 	}
 	return find(c.ProcessSteps(process))
 }
+
+// StepCriteria returns the entry and exit criteria of a compiled step or method-step by its full path
+// ("<process-or-method>/<step>/..."): unlike ProcessSteps/StepByPath, which walk a process's own step tree,
+// this reads the shared criteria map directly, so it works for a step owned by a Method's Steps too (method
+// steps compile into the same pool, architecture plan "Activity concept").
+func (c *Compiled) StepCriteria(path string) (entry, exit map[string]bool, ok bool) {
+	cr, ok := c.processes.criteria[path]
+	return cr.entry, cr.done, ok
+}

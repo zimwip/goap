@@ -135,10 +135,10 @@ func testActivityGoalsGateReplacesEditableFloor(t *testing.T, repo Repo) {
 	}
 
 	var gotRef string
-	var gotImpacts []domain.ChangeImpact
+	var gotBB domain.Blackboard
 	met := false
-	w.g.ActivityGoalsMet = func(_ context.Context, activityRef string, impacts []domain.ChangeImpact) (bool, error) {
-		gotRef, gotImpacts = activityRef, impacts
+	w.g.ActivityGoalsMet = func(_ context.Context, activityRef string, bb domain.Blackboard) (bool, error) {
+		gotRef, gotBB = activityRef, bb
 		return met, nil
 	}
 
@@ -146,8 +146,16 @@ func testActivityGoalsGateReplacesEditableFloor(t *testing.T, repo Repo) {
 	if _, err := w.g.Apply(ctx, c.ID, ""); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "does not satisfy the goal") {
 		t.Fatalf("hook unmet: %v", err)
 	}
-	if gotRef != "deliver/draft-requirement" || len(gotImpacts) != 1 || gotImpacts[0].ID != id {
-		t.Fatalf("hook arguments: ref=%q impacts=%+v", gotRef, gotImpacts)
+	if gotRef != "deliver/draft-requirement" || len(gotBB.Change.Nodes) != 1 || gotBB.Change.Nodes[0].ID != id {
+		t.Fatalf("hook arguments: ref=%q change=%+v", gotRef, gotBB.Change)
+	}
+	// the blackboard is hydrated with the pending write this Apply is about to land, including its draft state
+	post := gotBB.Change.Nodes[0].Post
+	if post == nil {
+		t.Fatalf("no post version on the impact: %+v", gotBB.Change.Nodes[0])
+	}
+	if v, ok := gotBB.Nodes[*post]; !ok || v.State != "draft" || v.Properties["title"] != "two" {
+		t.Fatalf("blackboard must see this change's own pending write: %+v, ok=%v", v, ok)
 	}
 
 	// the hook says yes: applies even though REQ-2 is left in the editable "draft" state

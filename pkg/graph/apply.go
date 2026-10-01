@@ -15,7 +15,7 @@ import (
 // of its own of accepted change impacts applies as an empty baseline.
 func (g *Graph) Apply(ctx context.Context, id domain.ChangeID, baselineName string) (domain.Baseline, error) {
 	var result domain.Baseline
-	authorized, err := g.authorizeMoves(ctx, id)
+	authorized, activityMet, err := g.authorizeMoves(ctx, id)
 	if err != nil {
 		return result, err
 	}
@@ -32,7 +32,7 @@ func (g *Graph) Apply(ctx context.Context, id domain.ChangeID, baselineName stri
 		} else if len(open) > 0 {
 			return fmt.Errorf("change %s has %d open sub-change(s), apply or abandon them first: %w", id, len(open), ErrConflict)
 		}
-		if result, err = g.applyTx(ctx, tx, id, baselineName, authorized); err != nil {
+		if result, err = g.applyTx(ctx, tx, id, baselineName, authorized, activityMet); err != nil {
 			return err
 		}
 		c, err := tx.Change(ctx, id)
@@ -62,14 +62,19 @@ func (g *Graph) Apply(ctx context.Context, id domain.ChangeID, baselineName stri
 // errCollected rolls back the pass that only collects the transitions to authorize.
 var errCollected = errors.New("transitions collected")
 
-// authorizeMoves asks the authorizer about every lifecycle transition the change makes, before the transaction that
-// applies it: the authorizer reads the access graph, which a transaction held by the apply would block (the stores
-// are not reentrant). A pass that is rolled back collects the transitions; the apply then checks it makes these.
-func (g *Graph) authorizeMoves(ctx context.Context, id domain.ChangeID) (map[string]bool, error) {
-	if g.Authorizer == nil {
-		return nil, nil
+// authorizeMoves asks the authorizer about every lifecycle transition the change makes, and ActivityGoalsMet
+// about the change's own activity (if any), before the transaction that applies it: both may need to read the
+// graph themselves (the access graph; the methodology namespace), which a transaction held by the apply would
+// block (the stores are not reentrant). A pass that is rolled back collects what they need; the apply then
+// checks it makes good on what was authorized / evaluated.
+func (g *Graph) authorizeMoves(ctx context.Context, id domain.ChangeID) (authorized map[string]bool, activityMet *bool, err error) {
+	if g.Authorizer == nil && g.ActivityGoalsMet == nil {
+		return nil, nil, nil
 	}
 	var moves []pendingMove
+	var activityRef string
+	var bb domain.Blackboard
+	var haveActivity bool
 	// An error other than errCollected is met again by the apply in its own transaction, after the transitions
 	// collected before it: those are authorized all the same.
 	_ = g.repo.InTx(ctx, func(tx Tx) error {
@@ -84,16 +89,28 @@ func (g *Graph) authorizeMoves(ctx context.Context, id domain.ChangeID) (map[str
 		if err := a.checkChangeImpacts(); err != nil {
 			return err
 		}
+		if a.activityGated() {
+			activityRef, bb, haveActivity = a.change.ActivityRef, a.activityBlackboard(), true
+		}
 		return errCollected
 	})
-	authorized := map[string]bool{}
+	authorized = map[string]bool{}
 	for _, m := range moves {
+		// moves is only ever populated when g.Authorizer is set (checkChangeImpacts collects transitions under
+		// the same guard it uses to call the authorizer directly).
 		if err := g.Authorizer(ctx, m.node, m.t); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		authorized[m.key()] = true
 	}
-	return authorized, nil
+	if haveActivity {
+		met, err := g.ActivityGoalsMet(ctx, activityRef, bb)
+		if err != nil {
+			return nil, nil, err
+		}
+		activityMet = &met
+	}
+	return authorized, activityMet, nil
 }
 
 // pendingMove is a lifecycle transition a change makes, from the state of node.
@@ -139,12 +156,13 @@ func (g *Graph) newApplier(ctx context.Context, tx Tx, id domain.ChangeID) (*app
 }
 
 // applyTx applies a change; authorized are the transitions authorizeMoves let through (nil: no authorizer).
-func (g *Graph) applyTx(ctx context.Context, tx Tx, id domain.ChangeID, baselineName string, authorized map[string]bool) (domain.Baseline, error) {
+func (g *Graph) applyTx(ctx context.Context, tx Tx, id domain.ChangeID, baselineName string, authorized map[string]bool, activityMet *bool) (domain.Baseline, error) {
 	a, parentBaseline, err := g.newApplier(ctx, tx, id)
 	if err != nil {
 		return domain.Baseline{}, err
 	}
 	a.authorized = authorized
+	a.activityMet = activityMet
 	c := a.change
 	if err := a.prepareChangeImpacts(); err != nil {
 		return domain.Baseline{}, err
@@ -207,4 +225,8 @@ type applier struct {
 	// collect gathers the transitions to authorize (the pass of authorizeMoves); authorized are the ones let through
 	collect    *[]pendingMove
 	authorized map[string]bool
+	// activityMet is the result of ActivityGoalsMet, evaluated by authorizeMoves's rolled-back pass before this
+	// transaction (same reason as authorized: the hook may itself read the graph); nil in that earlier pass
+	// itself, where checkChangeImpacts only builds the blackboard for the caller to evaluate outside it.
+	activityMet *bool
 }

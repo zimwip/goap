@@ -44,14 +44,15 @@ type Graph struct {
 	// Validators are the NodeValidator plugins checked once per Apply (ADR 0048), keyed by the node types they
 	// declare interest in via Types(). Unset: no plugin validators run (tests, tools).
 	Validators []NodeValidator
-	// ActivityGoalsMet, when set, is asked at Apply time for a change whose ActivityRef names a Step or
-	// MethodStep (architecture plan "Activity concept"): true once the activity's own goal condition holds for
-	// the change's impacts, given its compiled methodology (which pkg/graph has no access to - resolving it is
-	// the caller's job, e.g. the registry + methodology packages, wired from internal/graphsvc). It replaces the
-	// node-type lifecycle's Editable floor as the landing gate for that change, maturity of content and state
-	// being the activity's call, not a fixed per-type flag; unset, or a change with no ActivityRef, falls back to
-	// the Editable floor unchanged.
-	ActivityGoalsMet func(ctx context.Context, activityRef string, impacts []domain.ChangeImpact) (bool, error)
+	// ActivityGoalsMet, when set, is asked at Apply time for a change whose ActivityRef names a Process/Step/
+	// Method/MethodStep (architecture plan "Activity concept"): true once that activity's own goal condition
+	// holds against bb, given its compiled methodology (which pkg/graph has no access to - resolving it is the
+	// caller's job, e.g. internal/registrysvc, wired from main). bb is built from this Apply's own cposts (ADR
+	// 0024), not a fresh read, since it must see the change's own pending writes before they are visible outside
+	// this transaction. It replaces the node-type lifecycle's Editable floor as the landing gate for that change,
+	// maturity of content and state being the activity's call, not a fixed per-type flag; unset, or a change with
+	// no ActivityRef, falls back to the Editable floor unchanged.
+	ActivityGoalsMet func(ctx context.Context, activityRef string, bb domain.Blackboard) (bool, error)
 }
 
 // New returns a Graph backed by repo.
