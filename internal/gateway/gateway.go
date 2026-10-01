@@ -10,6 +10,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"connectrpc.com/connect"
@@ -55,6 +56,12 @@ type Config struct {
 	// MaxSession bounds how long tokens are refreshed after a sign-in (DefaultMaxSession when zero): past it,
 	// the user signs in again.
 	MaxSession time.Duration
+	// SessionCheckTTL is how long the authenticator trusts that a session is still open before asking Credentials
+	// again (DefaultSessionCheckTTL when zero): a session ended elsewhere is refused within it (ADR 0045), at once
+	// by the gateway that ended it.
+	SessionCheckTTL time.Duration
+	// sessions caches the state of the sessions (Prepare): shared by the authenticator and the endpoints.
+	sessions *sessionCache
 	// Credentials backs the local AuthMode's register/login endpoints (ADR 0040). Required when
 	// AuthMode == "local".
 	Credentials Credentials
@@ -72,24 +79,95 @@ type Config struct {
 
 // DefaultTokenTTL and DefaultMaxSession are the lifetimes of a token and of a session when Config names none.
 const (
-	DefaultTokenTTL   = 12 * time.Hour
-	DefaultMaxSession = 7 * 24 * time.Hour
+	DefaultTokenTTL        = 12 * time.Hour
+	DefaultMaxSession      = 7 * 24 * time.Hour
+	DefaultSessionCheckTTL = 15 * time.Second
 )
+
+// Prepare returns cfg ready to be shared by MountAuthEndpoints and Authenticator: they then see the same state of
+// the sessions, so a sign-out is refused at once by the authenticator of the same process (ADR 0045). Mount does
+// it itself.
+func Prepare(cfg Config) Config {
+	if cfg.sessions == nil && cfg.AuthMode == "local" && cfg.Credentials != nil {
+		ttl := cfg.SessionCheckTTL
+		if ttl <= 0 {
+			ttl = DefaultSessionCheckTTL
+		}
+		cfg.sessions = &sessionCache{creds: cfg.Credentials, ttl: ttl, entries: map[string]sessionEntry{}}
+	}
+	return cfg
+}
+
+// sessionCache remembers for a while whether a session is open, so the authenticator does not ask Credentials on
+// every request.
+type sessionCache struct {
+	creds   Credentials
+	ttl     time.Duration
+	mu      sync.Mutex
+	entries map[string]sessionEntry
+}
+
+type sessionEntry struct {
+	active bool
+	at     time.Time
+}
+
+// active reports whether a session is open: from the cache while fresh, else from Credentials (the last known
+// state when they cannot answer; an error when nothing is known).
+func (c *sessionCache) active(ctx context.Context, id, subject string) (bool, error) {
+	c.mu.Lock()
+	e, ok := c.entries[id]
+	c.mu.Unlock()
+	if ok && (!e.active || time.Since(e.at) < c.ttl) {
+		return e.active, nil // an ended session never reopens
+	}
+	active, err := c.creds.SessionActive(ctx, id, subject)
+	if err != nil {
+		if ok {
+			return e.active, nil
+		}
+		return false, err
+	}
+	c.set(id, active)
+	return active, nil
+}
+
+func (c *sessionCache) set(id string, active bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if len(c.entries) > 10000 { // forget the old entries rather than grow without bound
+		for k, e := range c.entries {
+			if time.Since(e.at) > c.ttl {
+				delete(c.entries, k)
+			}
+		}
+	}
+	c.entries[id] = sessionEntry{active: active, at: time.Now()}
+}
 
 // DefaultAuthMode is the AuthMode of a deployment that names none (GOAP_AUTH_MODE unset, ADR 0042): local
 // sign-in, since no external identity provider (SSO) is configured. "none" (no sign-in at all) is for local
 // development only and must be asked for explicitly.
 const DefaultAuthMode = "local"
 
-// Credentials is what the local AuthMode needs of the credentials service (internal/credsvc, ADR 0040).
+// Credentials is what the local AuthMode needs of the credentials service (internal/credsvc, ADR 0040, 0045).
 type Credentials interface {
 	Register(ctx context.Context, subject, password string) error
 	Verify(ctx context.Context, subject, password string) (bool, error)
+	// StartSession opens a sign-in session lasting maxAge at most and returns its id (the token's sid).
+	StartSession(ctx context.Context, subject string, maxAge time.Duration) (string, error)
+	// SessionActive reports whether a session of subject still accepts its tokens.
+	SessionActive(ctx context.Context, id, subject string) (bool, error)
+	// EndSession ends a session; EndSessions every session of a subject.
+	EndSession(ctx context.Context, id string) error
+	EndSessions(ctx context.Context, subject string) error
 }
 
 // Claims are the GOAP JWT claims.
 type Claims struct {
 	Org string `json:"org,omitempty"`
+	// Sid is the sign-in session the token belongs to (ADR 0045, local AuthMode): refused once it ended.
+	Sid string `json:"sid,omitempty"`
 	// Project is the caller's active project (ADR 0039): re-issued by /auth/dev-token/project each time
 	// the user switches, so every call carries it without the caller having to pass it explicitly.
 	Project string   `json:"project,omitempty"`
@@ -105,6 +183,7 @@ type Claims struct {
 // and /api/auth/config (always). Split out of Mount so a single-process deployment (cmd/goap-dev) can offer
 // the same sign-in UI as the distributed gateway without also wanting a reverse proxy.
 func MountAuthEndpoints(e *echo.Echo, cfg Config) error {
+	cfg = Prepare(cfg)
 	// dev tokens only make sense with hs256; ignored otherwise
 	if cfg.DevTokens && cfg.AuthMode == "hs256" {
 		e.POST("/auth/dev-token", devToken(cfg))
@@ -119,7 +198,7 @@ func MountAuthEndpoints(e *echo.Echo, cfg Config) error {
 		}
 		e.POST("/auth/register", register(cfg))
 		e.POST("/auth/login", login(cfg))
-		e.POST("/auth/logout", logout())
+		e.POST("/auth/logout", logout(cfg))
 		e.POST("/auth/refresh", refresh(cfg))
 		// switching project reissues the token (ADR 0039): a signed-in user needs it as much as a dev token
 		e.POST("/auth/dev-token/project", switchProject(cfg))
@@ -131,10 +210,11 @@ func MountAuthEndpoints(e *echo.Echo, cfg Config) error {
 // Authenticator returns the middleware that turns a request's credentials (a bearer token, or nothing in
 // AuthMode "none") into the propagated identity headers (setPrincipal): exported so a single-process
 // deployment (cmd/goap-dev) can apply it globally instead of per-route.
-func Authenticator(cfg Config) (echo.MiddlewareFunc, error) { return authenticator(cfg) }
+func Authenticator(cfg Config) (echo.MiddlewareFunc, error) { return authenticator(Prepare(cfg)) }
 
 // Mount installs the gateway on e.
 func Mount(e *echo.Echo, cfg Config) error {
+	cfg = Prepare(cfg)
 	if len(cfg.AllowOrigins) > 0 {
 		e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
 			AllowOrigins:  cfg.AllowOrigins,
@@ -184,6 +264,9 @@ func authenticator(cfg Config) (echo.MiddlewareFunc, error) {
 				if err != nil {
 					return unauthorized(err)
 				}
+				if err := checkSession(c.Request().Context(), cfg, claims, false); err != nil {
+					return err
+				}
 				c.Request().Header.Del("Authorization")
 				setPrincipal(c, cfg, authz.Principal{Subject: claims.Subject, Org: claims.Org, Project: claims.Project, Roles: claims.Roles})
 				return next(c)
@@ -226,15 +309,44 @@ func unauthorized(err error) error {
 	return echo.NewHTTPError(http.StatusUnauthorized, "invalid token")
 }
 
+// checkSession refuses a token of the local AuthMode whose sign-in session ended or that belongs to none (ADR
+// 0045): from the cache of the sessions, or asking Credentials when fresh is set (a refresh).
+func checkSession(ctx context.Context, cfg Config, claims *Claims, fresh bool) error {
+	if cfg.AuthMode != "local" || cfg.Credentials == nil {
+		return nil
+	}
+	if claims.Sid == "" {
+		return echo.NewHTTPError(http.StatusUnauthorized, "invalid token") // issued before sessions: sign in again
+	}
+	var active bool
+	var err error
+	if fresh || cfg.sessions == nil {
+		active, err = cfg.Credentials.SessionActive(ctx, claims.Sid, claims.Subject)
+		if err == nil && cfg.sessions != nil {
+			cfg.sessions.set(claims.Sid, active)
+		}
+	} else {
+		active, err = cfg.sessions.active(ctx, claims.Sid, claims.Subject)
+	}
+	if err != nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "cannot check the session: "+err.Error())
+	}
+	if !active {
+		return echo.NewHTTPError(http.StatusUnauthorized, "session ended")
+	}
+	return nil
+}
+
 // session is a token's identity, kept when it is reissued (refresh, project switch).
 type session struct {
+	sid                   string
 	subject, org, project string
 	roles                 []string
 	authTime              time.Time
 }
 
 func sessionOf(c *Claims) session {
-	s := session{subject: c.Subject, org: c.Org, project: c.Project, roles: c.Roles, authTime: time.Now()}
+	s := session{sid: c.Sid, subject: c.Subject, org: c.Org, project: c.Project, roles: c.Roles, authTime: time.Now()}
 	if c.AuthTime != nil {
 		s.authTime = c.AuthTime.Time
 	} else if c.IssuedAt != nil {
@@ -262,7 +374,7 @@ func signSession(cfg Config, s session) (issued, error) {
 	}
 	now := time.Now()
 	exp := now.Add(ttl)
-	claims := Claims{Org: s.org, Project: s.project, Roles: s.roles, AuthTime: jwt.NewNumericDate(s.authTime), RegisteredClaims: jwt.RegisteredClaims{
+	claims := Claims{Sid: s.sid, Org: s.org, Project: s.project, Roles: s.roles, AuthTime: jwt.NewNumericDate(s.authTime), RegisteredClaims: jwt.RegisteredClaims{
 		Subject: s.subject, Issuer: "goap-gateway", IssuedAt: jwt.NewNumericDate(now), ExpiresAt: jwt.NewNumericDate(exp),
 	}}
 	tok, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(cfg.JWTSecret)
@@ -285,6 +397,9 @@ func refresh(cfg Config) echo.HandlerFunc {
 		}
 		if time.Since(s.authTime) > maxSession {
 			return echo.NewHTTPError(http.StatusUnauthorized, "session expired: sign in again")
+		}
+		if err := checkSession(c.Request().Context(), cfg, claims, true); err != nil {
+			return err
 		}
 		if err := signedIn(c, cfg, s.subject); err != nil {
 			return err
@@ -344,7 +459,7 @@ func register(cfg Config) echo.HandlerFunc {
 		if err := signedIn(c, cfg, in.Subject); err != nil {
 			return err
 		}
-		t, err := signSession(cfg, session{subject: in.Subject, authTime: time.Now()})
+		t, err := startSession(c, cfg, in.Subject)
 		if err != nil {
 			return err
 		}
@@ -369,12 +484,26 @@ func login(cfg Config) echo.HandlerFunc {
 		if err := signedIn(c, cfg, in.Subject); err != nil {
 			return err
 		}
-		t, err := signSession(cfg, session{subject: in.Subject, authTime: time.Now()})
+		t, err := startSession(c, cfg, in.Subject)
 		if err != nil {
 			return err
 		}
 		return c.JSON(http.StatusOK, t)
 	}
+}
+
+// startSession opens the sign-in session of a subject whose credentials were just accepted, and signs its first
+// token (ADR 0045).
+func startSession(c *echo.Context, cfg Config, subject string) (issued, error) {
+	maxSession := cfg.MaxSession
+	if maxSession <= 0 {
+		maxSession = DefaultMaxSession
+	}
+	sid, err := cfg.Credentials.StartSession(c.Request().Context(), subject, maxSession)
+	if err != nil {
+		return issued{}, echo.NewHTTPError(http.StatusServiceUnavailable, "cannot open the session: "+err.Error())
+	}
+	return signSession(cfg, session{sid: sid, subject: subject, authTime: time.Now()})
 }
 
 // signedIn runs OnSignIn for a subject whose credentials were just accepted: the user is declared in the
@@ -389,10 +518,40 @@ func signedIn(c *echo.Context, cfg Config, subject string) error {
 	return nil
 }
 
-// logout has nothing to revoke (HS256 tokens are stateless, ADR 0040's known limitation): it exists so the
-// web has one endpoint to call, and so a real revocation list is a change to this function alone, later.
-func logout() echo.HandlerFunc {
-	return func(c *echo.Context) error { return c.NoContent(http.StatusNoContent) }
+// logout ends the sign-in session of the token (ADR 0045): its tokens, and every token refreshed from it, are
+// refused from now on — at once by this gateway, within SessionCheckTTL by the others. {"everywhere": true} ends
+// every session of the subject (all their devices). An expired token still names its session; an invalid one
+// has nothing to end.
+func logout(cfg Config) echo.HandlerFunc {
+	return func(c *echo.Context) error {
+		raw, ok := strings.CutPrefix(c.Request().Header.Get("Authorization"), "Bearer ")
+		claims := &Claims{}
+		if !ok {
+			return c.NoContent(http.StatusNoContent)
+		}
+		if _, err := jwt.ParseWithClaims(raw, claims, func(*jwt.Token) (any, error) { return cfg.JWTSecret, nil },
+			jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}), jwt.WithoutClaimsValidation()); err != nil {
+			return c.NoContent(http.StatusNoContent)
+		}
+		var in struct {
+			Everywhere bool `json:"everywhere"`
+		}
+		_ = c.Bind(&in)
+		ctx := c.Request().Context()
+		var err error
+		if in.Everywhere {
+			err = cfg.Credentials.EndSessions(ctx, claims.Subject)
+		} else {
+			err = cfg.Credentials.EndSession(ctx, claims.Sid)
+		}
+		if err != nil {
+			return echo.NewHTTPError(http.StatusServiceUnavailable, "cannot end the session: "+err.Error())
+		}
+		if cfg.sessions != nil && claims.Sid != "" {
+			cfg.sessions.set(claims.Sid, false)
+		}
+		return c.NoContent(http.StatusNoContent)
+	}
 }
 
 // switchProject reissues the caller's token with a new active project (ADR 0039: "a token regenerated each

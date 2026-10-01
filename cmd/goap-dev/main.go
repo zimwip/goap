@@ -259,6 +259,8 @@ func main() {
 				}
 				return directory.Refresh(ctx)
 			}}
+		// one state of the sessions for the endpoints and the authenticator: a sign-out is refused at once (ADR 0045)
+		authCfg = gateway.Prepare(authCfg)
 		if err := gateway.MountAuthEndpoints(srv.Echo, authCfg); err != nil {
 			platform.Fatal(log, "auth", err)
 		}

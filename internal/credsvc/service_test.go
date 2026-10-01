@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/stdlib"
 
@@ -86,5 +87,73 @@ func TestServiceValidation(t *testing.T) {
 	}
 	if err := s.Register(ctx, "dave", "short"); !errors.Is(err, credsvc.ErrInvalid) {
 		t.Fatalf("short password = %v, want ErrInvalid", err)
+	}
+}
+
+// A session accepts its tokens until it is ended, expires, or its subject changes their password; signing out
+// everywhere ends every session of the subject, and only theirs (ADR 0045).
+func TestSessions(t *testing.T) {
+	for name, store := range stores(t) {
+		t.Run(name, func(t *testing.T) {
+			ctx := context.Background()
+			s := &credsvc.Service{Store: store}
+			if err := s.Register(ctx, "alice", "correct horse"); err != nil {
+				t.Fatal(err)
+			}
+			active := func(id, subject string) bool {
+				t.Helper()
+				ok, err := s.SessionActive(ctx, id, subject)
+				if err != nil {
+					t.Fatal(err)
+				}
+				return ok
+			}
+			start := func(subject string, d time.Duration) string {
+				t.Helper()
+				id, err := s.StartSession(ctx, subject, d)
+				if err != nil {
+					t.Fatal(err)
+				}
+				return id
+			}
+			a1, a2, b := start("alice", time.Hour), start("alice", time.Hour), start("bob", time.Hour)
+			if a1 == a2 || !active(a1, "alice") || !active(a2, "alice") || !active(b, "bob") {
+				t.Fatal("new sessions must be distinct and active")
+			}
+			if active(a1, "bob") || active("unknown", "alice") || active("", "alice") {
+				t.Fatal("a session is someone's, and an unknown one is not active")
+			}
+			// signing out ends that session only
+			if err := s.EndSession(ctx, a1); err != nil {
+				t.Fatal(err)
+			}
+			if active(a1, "alice") || !active(a2, "alice") {
+				t.Fatal("signing out ends that session only")
+			}
+			if err := s.EndSession(ctx, a1); err != nil {
+				t.Fatalf("ending an ended session again: %v", err)
+			}
+			// a new password ends every session of its subject, not the others'
+			if err := s.SetPassword(ctx, "alice", "battery staple"); err != nil {
+				t.Fatal(err)
+			}
+			if active(a2, "alice") || !active(b, "bob") {
+				t.Fatal("a new password ends the subject's sessions only")
+			}
+			// everywhere
+			b2 := start("bob", time.Hour)
+			if err := s.EndSessions(ctx, "bob"); err != nil {
+				t.Fatal(err)
+			}
+			if active(b, "bob") || active(b2, "bob") {
+				t.Fatal("signing out everywhere ends every session")
+			}
+			// expiry
+			short := start("alice", 50*time.Millisecond)
+			time.Sleep(80 * time.Millisecond)
+			if active(short, "alice") {
+				t.Fatal("an expired session is not active")
+			}
+		})
 	}
 }

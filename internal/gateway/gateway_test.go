@@ -13,10 +13,44 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/labstack/echo/v5"
+
+	"github.com/zimwip/goap/internal/credsvc"
 )
 
-// fakeCredentials is an in-memory Credentials for local auth tests (ADR 0040).
-type fakeCredentials struct{ passwords map[string]string }
+// fakeCredentials is an in-memory Credentials for local auth tests (ADR 0040): passwords in clear, sessions kept by
+// a credsvc service on a memory store (ADR 0045).
+type fakeCredentials struct {
+	passwords map[string]string
+	sessions  *credsvc.Service
+	// down makes the session checks fail, as an unreachable credentials service
+	down bool
+}
+
+func (f *fakeCredentials) svc() *credsvc.Service {
+	if f.sessions == nil {
+		f.sessions = &credsvc.Service{Store: credsvc.NewMemoryStore()}
+	}
+	return f.sessions
+}
+
+func (f *fakeCredentials) StartSession(ctx context.Context, subject string, maxAge time.Duration) (string, error) {
+	return f.svc().StartSession(ctx, subject, maxAge)
+}
+
+func (f *fakeCredentials) SessionActive(ctx context.Context, id, subject string) (bool, error) {
+	if f.down {
+		return false, errors.New("credentials unreachable")
+	}
+	return f.svc().SessionActive(ctx, id, subject)
+}
+
+func (f *fakeCredentials) EndSession(ctx context.Context, id string) error {
+	return f.svc().EndSession(ctx, id)
+}
+
+func (f *fakeCredentials) EndSessions(ctx context.Context, subject string) error {
+	return f.svc().EndSessions(ctx, subject)
+}
 
 func (f *fakeCredentials) Register(_ context.Context, subject, password string) error {
 	if _, ok := f.passwords[subject]; ok {
@@ -331,5 +365,103 @@ func TestRefreshToken(t *testing.T) {
 	_, fresh, _ := post(old, "/auth/login", "", `{"subject":"alice","password":"correct horse"}`)
 	if code, _, body := post(old, "/auth/refresh", fresh.Token, ""); code != http.StatusUnauthorized || !strings.Contains(body, "session expired") {
 		t.Fatalf("refresh past the maximum session: %d %s", code, body)
+	}
+}
+
+// Signing out ends the session server side (ADR 0045): its tokens, and the ones refreshed from it, are refused
+// at once; signing out everywhere ends the subject's other sessions; a token from before sessions is refused; a
+// session check the credentials service cannot answer is a 503, not a sign-out.
+func TestLogoutRevokesTheSession(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte(`{}`)) }))
+	defer upstream.Close()
+	secret := []byte(strings.Repeat("s", 32))
+	creds := &fakeCredentials{passwords: map[string]string{"alice": "correct horse"}}
+	cfg := Config{AuthMode: "local", JWTSecret: secret, Credentials: creds, SessionCheckTTL: time.Hour,
+		Routes: []Route{{Prefix: "/goap.graph.v1.GraphService/", Upstream: upstream.URL}}}
+	e := echo.New()
+	if err := Mount(e, cfg); err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(e)
+	defer srv.Close()
+	post := func(path, token, body string) (int, string) {
+		req, _ := http.NewRequest(http.MethodPost, srv.URL+path, strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		if token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		var raw json.RawMessage
+		_ = json.NewDecoder(resp.Body).Decode(&raw)
+		return resp.StatusCode, string(raw)
+	}
+	login := func() string {
+		code, body := post("/auth/login", "", `{"subject":"alice","password":"correct horse"}`)
+		var out issued
+		_ = json.Unmarshal([]byte(body), &out)
+		if code != http.StatusOK || out.Token == "" {
+			t.Fatalf("login: %d %s", code, body)
+		}
+		return out.Token
+	}
+	call := func(token string) (int, string) {
+		return post("/goap.graph.v1.GraphService/ListBaselines", token, "{}")
+	}
+
+	tok := login()
+	if code, _ := call(tok); code != http.StatusOK {
+		t.Fatalf("call with a fresh token: %d", code)
+	}
+	code, body := post("/auth/refresh", tok, "")
+	var refreshed issued
+	_ = json.Unmarshal([]byte(body), &refreshed)
+	if code != http.StatusOK {
+		t.Fatalf("refresh: %d %s", code, body)
+	}
+	// sign out with the first token: the refreshed one, of the same session, is refused at once
+	if code, _ := post("/auth/logout", tok, ""); code != http.StatusNoContent {
+		t.Fatalf("logout: %d", code)
+	}
+	if code, body := call(refreshed.Token); code != http.StatusUnauthorized || !strings.Contains(body, "session ended") {
+		t.Fatalf("call after sign-out: %d %s", code, body)
+	}
+	if code, _ := post("/auth/refresh", refreshed.Token, ""); code != http.StatusUnauthorized {
+		t.Fatalf("refresh after sign-out: %d", code)
+	}
+
+	// signing out everywhere ends the other sessions too (checked afresh by a refresh)
+	a, b := login(), login()
+	if code, _ := post("/auth/logout", a, `{"everywhere":true}`); code != http.StatusNoContent {
+		t.Fatalf("logout everywhere: %d", code)
+	}
+	if code, _ := post("/auth/refresh", b, ""); code != http.StatusUnauthorized {
+		t.Fatalf("another session after signing out everywhere: %d", code)
+	}
+
+	// a token from before sessions (no sid) is refused
+	old, err := sign(cfg, "alice", "", "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if code, _ := call(old); code != http.StatusUnauthorized {
+		t.Fatalf("token without a session: %d", code)
+	}
+
+	// the credentials service down: a session never checked is a 503, a known one keeps its last state
+	known := login()
+	if code, _ := call(known); code != http.StatusOK {
+		t.Fatalf("call: %d", code)
+	}
+	unknown := login()
+	creds.down = true
+	if code, _ := call(unknown); code != http.StatusServiceUnavailable {
+		t.Fatalf("unchecked session while credentials are down: %d", code)
+	}
+	if code, _ := call(known); code != http.StatusOK {
+		t.Fatalf("known session while credentials are down: %d", code)
 	}
 }

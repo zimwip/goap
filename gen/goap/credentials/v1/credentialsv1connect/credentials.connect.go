@@ -45,6 +45,18 @@ const (
 	// CredentialsServiceExistsProcedure is the fully-qualified name of the CredentialsService's Exists
 	// RPC.
 	CredentialsServiceExistsProcedure = "/goap.credentials.v1.CredentialsService/Exists"
+	// CredentialsServiceStartSessionProcedure is the fully-qualified name of the CredentialsService's
+	// StartSession RPC.
+	CredentialsServiceStartSessionProcedure = "/goap.credentials.v1.CredentialsService/StartSession"
+	// CredentialsServiceCheckSessionProcedure is the fully-qualified name of the CredentialsService's
+	// CheckSession RPC.
+	CredentialsServiceCheckSessionProcedure = "/goap.credentials.v1.CredentialsService/CheckSession"
+	// CredentialsServiceEndSessionProcedure is the fully-qualified name of the CredentialsService's
+	// EndSession RPC.
+	CredentialsServiceEndSessionProcedure = "/goap.credentials.v1.CredentialsService/EndSession"
+	// CredentialsServiceEndSessionsProcedure is the fully-qualified name of the CredentialsService's
+	// EndSessions RPC.
+	CredentialsServiceEndSessionsProcedure = "/goap.credentials.v1.CredentialsService/EndSessions"
 )
 
 // CredentialsServiceClient is a client for the goap.credentials.v1.CredentialsService service.
@@ -53,10 +65,18 @@ type CredentialsServiceClient interface {
 	Register(context.Context, *connect.Request[v1.RegisterRequest]) (*connect.Response[v1.RegisterResponse], error)
 	// Verify checks a subject's password.
 	Verify(context.Context, *connect.Request[v1.VerifyRequest]) (*connect.Response[v1.VerifyResponse], error)
-	// SetPassword replaces a subject's password (self-service change).
+	// SetPassword replaces a subject's password (self-service change); it ends the subject's sessions.
 	SetPassword(context.Context, *connect.Request[v1.SetPasswordRequest]) (*connect.Response[v1.SetPasswordResponse], error)
 	// Exists reports whether a subject already has a local credential.
 	Exists(context.Context, *connect.Request[v1.ExistsRequest]) (*connect.Response[v1.ExistsResponse], error)
+	// StartSession opens a sign-in session (ADR 0045): every token of this sign-in carries its id.
+	StartSession(context.Context, *connect.Request[v1.StartSessionRequest]) (*connect.Response[v1.StartSessionResponse], error)
+	// CheckSession reports whether a session of a subject still accepts its tokens.
+	CheckSession(context.Context, *connect.Request[v1.CheckSessionRequest]) (*connect.Response[v1.CheckSessionResponse], error)
+	// EndSession ends a session (signing out).
+	EndSession(context.Context, *connect.Request[v1.EndSessionRequest]) (*connect.Response[v1.EndSessionResponse], error)
+	// EndSessions ends every session of a subject (signing out everywhere).
+	EndSessions(context.Context, *connect.Request[v1.EndSessionsRequest]) (*connect.Response[v1.EndSessionsResponse], error)
 }
 
 // NewCredentialsServiceClient constructs a client for the goap.credentials.v1.CredentialsService
@@ -94,15 +114,43 @@ func NewCredentialsServiceClient(httpClient connect.HTTPClient, baseURL string, 
 			connect.WithSchema(credentialsServiceMethods.ByName("Exists")),
 			connect.WithClientOptions(opts...),
 		),
+		startSession: connect.NewClient[v1.StartSessionRequest, v1.StartSessionResponse](
+			httpClient,
+			baseURL+CredentialsServiceStartSessionProcedure,
+			connect.WithSchema(credentialsServiceMethods.ByName("StartSession")),
+			connect.WithClientOptions(opts...),
+		),
+		checkSession: connect.NewClient[v1.CheckSessionRequest, v1.CheckSessionResponse](
+			httpClient,
+			baseURL+CredentialsServiceCheckSessionProcedure,
+			connect.WithSchema(credentialsServiceMethods.ByName("CheckSession")),
+			connect.WithClientOptions(opts...),
+		),
+		endSession: connect.NewClient[v1.EndSessionRequest, v1.EndSessionResponse](
+			httpClient,
+			baseURL+CredentialsServiceEndSessionProcedure,
+			connect.WithSchema(credentialsServiceMethods.ByName("EndSession")),
+			connect.WithClientOptions(opts...),
+		),
+		endSessions: connect.NewClient[v1.EndSessionsRequest, v1.EndSessionsResponse](
+			httpClient,
+			baseURL+CredentialsServiceEndSessionsProcedure,
+			connect.WithSchema(credentialsServiceMethods.ByName("EndSessions")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // credentialsServiceClient implements CredentialsServiceClient.
 type credentialsServiceClient struct {
-	register    *connect.Client[v1.RegisterRequest, v1.RegisterResponse]
-	verify      *connect.Client[v1.VerifyRequest, v1.VerifyResponse]
-	setPassword *connect.Client[v1.SetPasswordRequest, v1.SetPasswordResponse]
-	exists      *connect.Client[v1.ExistsRequest, v1.ExistsResponse]
+	register     *connect.Client[v1.RegisterRequest, v1.RegisterResponse]
+	verify       *connect.Client[v1.VerifyRequest, v1.VerifyResponse]
+	setPassword  *connect.Client[v1.SetPasswordRequest, v1.SetPasswordResponse]
+	exists       *connect.Client[v1.ExistsRequest, v1.ExistsResponse]
+	startSession *connect.Client[v1.StartSessionRequest, v1.StartSessionResponse]
+	checkSession *connect.Client[v1.CheckSessionRequest, v1.CheckSessionResponse]
+	endSession   *connect.Client[v1.EndSessionRequest, v1.EndSessionResponse]
+	endSessions  *connect.Client[v1.EndSessionsRequest, v1.EndSessionsResponse]
 }
 
 // Register calls goap.credentials.v1.CredentialsService.Register.
@@ -125,6 +173,26 @@ func (c *credentialsServiceClient) Exists(ctx context.Context, req *connect.Requ
 	return c.exists.CallUnary(ctx, req)
 }
 
+// StartSession calls goap.credentials.v1.CredentialsService.StartSession.
+func (c *credentialsServiceClient) StartSession(ctx context.Context, req *connect.Request[v1.StartSessionRequest]) (*connect.Response[v1.StartSessionResponse], error) {
+	return c.startSession.CallUnary(ctx, req)
+}
+
+// CheckSession calls goap.credentials.v1.CredentialsService.CheckSession.
+func (c *credentialsServiceClient) CheckSession(ctx context.Context, req *connect.Request[v1.CheckSessionRequest]) (*connect.Response[v1.CheckSessionResponse], error) {
+	return c.checkSession.CallUnary(ctx, req)
+}
+
+// EndSession calls goap.credentials.v1.CredentialsService.EndSession.
+func (c *credentialsServiceClient) EndSession(ctx context.Context, req *connect.Request[v1.EndSessionRequest]) (*connect.Response[v1.EndSessionResponse], error) {
+	return c.endSession.CallUnary(ctx, req)
+}
+
+// EndSessions calls goap.credentials.v1.CredentialsService.EndSessions.
+func (c *credentialsServiceClient) EndSessions(ctx context.Context, req *connect.Request[v1.EndSessionsRequest]) (*connect.Response[v1.EndSessionsResponse], error) {
+	return c.endSessions.CallUnary(ctx, req)
+}
+
 // CredentialsServiceHandler is an implementation of the goap.credentials.v1.CredentialsService
 // service.
 type CredentialsServiceHandler interface {
@@ -132,10 +200,18 @@ type CredentialsServiceHandler interface {
 	Register(context.Context, *connect.Request[v1.RegisterRequest]) (*connect.Response[v1.RegisterResponse], error)
 	// Verify checks a subject's password.
 	Verify(context.Context, *connect.Request[v1.VerifyRequest]) (*connect.Response[v1.VerifyResponse], error)
-	// SetPassword replaces a subject's password (self-service change).
+	// SetPassword replaces a subject's password (self-service change); it ends the subject's sessions.
 	SetPassword(context.Context, *connect.Request[v1.SetPasswordRequest]) (*connect.Response[v1.SetPasswordResponse], error)
 	// Exists reports whether a subject already has a local credential.
 	Exists(context.Context, *connect.Request[v1.ExistsRequest]) (*connect.Response[v1.ExistsResponse], error)
+	// StartSession opens a sign-in session (ADR 0045): every token of this sign-in carries its id.
+	StartSession(context.Context, *connect.Request[v1.StartSessionRequest]) (*connect.Response[v1.StartSessionResponse], error)
+	// CheckSession reports whether a session of a subject still accepts its tokens.
+	CheckSession(context.Context, *connect.Request[v1.CheckSessionRequest]) (*connect.Response[v1.CheckSessionResponse], error)
+	// EndSession ends a session (signing out).
+	EndSession(context.Context, *connect.Request[v1.EndSessionRequest]) (*connect.Response[v1.EndSessionResponse], error)
+	// EndSessions ends every session of a subject (signing out everywhere).
+	EndSessions(context.Context, *connect.Request[v1.EndSessionsRequest]) (*connect.Response[v1.EndSessionsResponse], error)
 }
 
 // NewCredentialsServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -169,6 +245,30 @@ func NewCredentialsServiceHandler(svc CredentialsServiceHandler, opts ...connect
 		connect.WithSchema(credentialsServiceMethods.ByName("Exists")),
 		connect.WithHandlerOptions(opts...),
 	)
+	credentialsServiceStartSessionHandler := connect.NewUnaryHandler(
+		CredentialsServiceStartSessionProcedure,
+		svc.StartSession,
+		connect.WithSchema(credentialsServiceMethods.ByName("StartSession")),
+		connect.WithHandlerOptions(opts...),
+	)
+	credentialsServiceCheckSessionHandler := connect.NewUnaryHandler(
+		CredentialsServiceCheckSessionProcedure,
+		svc.CheckSession,
+		connect.WithSchema(credentialsServiceMethods.ByName("CheckSession")),
+		connect.WithHandlerOptions(opts...),
+	)
+	credentialsServiceEndSessionHandler := connect.NewUnaryHandler(
+		CredentialsServiceEndSessionProcedure,
+		svc.EndSession,
+		connect.WithSchema(credentialsServiceMethods.ByName("EndSession")),
+		connect.WithHandlerOptions(opts...),
+	)
+	credentialsServiceEndSessionsHandler := connect.NewUnaryHandler(
+		CredentialsServiceEndSessionsProcedure,
+		svc.EndSessions,
+		connect.WithSchema(credentialsServiceMethods.ByName("EndSessions")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/goap.credentials.v1.CredentialsService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case CredentialsServiceRegisterProcedure:
@@ -179,6 +279,14 @@ func NewCredentialsServiceHandler(svc CredentialsServiceHandler, opts ...connect
 			credentialsServiceSetPasswordHandler.ServeHTTP(w, r)
 		case CredentialsServiceExistsProcedure:
 			credentialsServiceExistsHandler.ServeHTTP(w, r)
+		case CredentialsServiceStartSessionProcedure:
+			credentialsServiceStartSessionHandler.ServeHTTP(w, r)
+		case CredentialsServiceCheckSessionProcedure:
+			credentialsServiceCheckSessionHandler.ServeHTTP(w, r)
+		case CredentialsServiceEndSessionProcedure:
+			credentialsServiceEndSessionHandler.ServeHTTP(w, r)
+		case CredentialsServiceEndSessionsProcedure:
+			credentialsServiceEndSessionsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -202,4 +310,20 @@ func (UnimplementedCredentialsServiceHandler) SetPassword(context.Context, *conn
 
 func (UnimplementedCredentialsServiceHandler) Exists(context.Context, *connect.Request[v1.ExistsRequest]) (*connect.Response[v1.ExistsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.credentials.v1.CredentialsService.Exists is not implemented"))
+}
+
+func (UnimplementedCredentialsServiceHandler) StartSession(context.Context, *connect.Request[v1.StartSessionRequest]) (*connect.Response[v1.StartSessionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.credentials.v1.CredentialsService.StartSession is not implemented"))
+}
+
+func (UnimplementedCredentialsServiceHandler) CheckSession(context.Context, *connect.Request[v1.CheckSessionRequest]) (*connect.Response[v1.CheckSessionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.credentials.v1.CredentialsService.CheckSession is not implemented"))
+}
+
+func (UnimplementedCredentialsServiceHandler) EndSession(context.Context, *connect.Request[v1.EndSessionRequest]) (*connect.Response[v1.EndSessionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.credentials.v1.CredentialsService.EndSession is not implemented"))
+}
+
+func (UnimplementedCredentialsServiceHandler) EndSessions(context.Context, *connect.Request[v1.EndSessionsRequest]) (*connect.Response[v1.EndSessionsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.credentials.v1.CredentialsService.EndSessions is not implemented"))
 }

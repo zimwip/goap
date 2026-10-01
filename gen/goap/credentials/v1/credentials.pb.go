@@ -381,6 +381,359 @@ func (x *ExistsResponse) GetExists() bool {
 	return false
 }
 
+type StartSessionRequest struct {
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Subject string                 `protobuf:"bytes,1,opt,name=subject,proto3" json:"subject,omitempty"`
+	// max_age_seconds is how long the session lasts at most (the maximum session of the gateway).
+	MaxAgeSeconds int64 `protobuf:"varint,2,opt,name=max_age_seconds,json=maxAgeSeconds,proto3" json:"max_age_seconds,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StartSessionRequest) Reset() {
+	*x = StartSessionRequest{}
+	mi := &file_goap_credentials_v1_credentials_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StartSessionRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StartSessionRequest) ProtoMessage() {}
+
+func (x *StartSessionRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_credentials_v1_credentials_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StartSessionRequest.ProtoReflect.Descriptor instead.
+func (*StartSessionRequest) Descriptor() ([]byte, []int) {
+	return file_goap_credentials_v1_credentials_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *StartSessionRequest) GetSubject() string {
+	if x != nil {
+		return x.Subject
+	}
+	return ""
+}
+
+func (x *StartSessionRequest) GetMaxAgeSeconds() int64 {
+	if x != nil {
+		return x.MaxAgeSeconds
+	}
+	return 0
+}
+
+type StartSessionResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StartSessionResponse) Reset() {
+	*x = StartSessionResponse{}
+	mi := &file_goap_credentials_v1_credentials_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StartSessionResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StartSessionResponse) ProtoMessage() {}
+
+func (x *StartSessionResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_credentials_v1_credentials_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StartSessionResponse.ProtoReflect.Descriptor instead.
+func (*StartSessionResponse) Descriptor() ([]byte, []int) {
+	return file_goap_credentials_v1_credentials_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *StartSessionResponse) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+type CheckSessionRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Subject       string                 `protobuf:"bytes,2,opt,name=subject,proto3" json:"subject,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CheckSessionRequest) Reset() {
+	*x = CheckSessionRequest{}
+	mi := &file_goap_credentials_v1_credentials_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CheckSessionRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CheckSessionRequest) ProtoMessage() {}
+
+func (x *CheckSessionRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_credentials_v1_credentials_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CheckSessionRequest.ProtoReflect.Descriptor instead.
+func (*CheckSessionRequest) Descriptor() ([]byte, []int) {
+	return file_goap_credentials_v1_credentials_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *CheckSessionRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *CheckSessionRequest) GetSubject() string {
+	if x != nil {
+		return x.Subject
+	}
+	return ""
+}
+
+type CheckSessionResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Active        bool                   `protobuf:"varint,1,opt,name=active,proto3" json:"active,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CheckSessionResponse) Reset() {
+	*x = CheckSessionResponse{}
+	mi := &file_goap_credentials_v1_credentials_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CheckSessionResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CheckSessionResponse) ProtoMessage() {}
+
+func (x *CheckSessionResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_credentials_v1_credentials_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CheckSessionResponse.ProtoReflect.Descriptor instead.
+func (*CheckSessionResponse) Descriptor() ([]byte, []int) {
+	return file_goap_credentials_v1_credentials_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *CheckSessionResponse) GetActive() bool {
+	if x != nil {
+		return x.Active
+	}
+	return false
+}
+
+type EndSessionRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EndSessionRequest) Reset() {
+	*x = EndSessionRequest{}
+	mi := &file_goap_credentials_v1_credentials_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EndSessionRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EndSessionRequest) ProtoMessage() {}
+
+func (x *EndSessionRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_credentials_v1_credentials_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EndSessionRequest.ProtoReflect.Descriptor instead.
+func (*EndSessionRequest) Descriptor() ([]byte, []int) {
+	return file_goap_credentials_v1_credentials_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *EndSessionRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+type EndSessionResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EndSessionResponse) Reset() {
+	*x = EndSessionResponse{}
+	mi := &file_goap_credentials_v1_credentials_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EndSessionResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EndSessionResponse) ProtoMessage() {}
+
+func (x *EndSessionResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_credentials_v1_credentials_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EndSessionResponse.ProtoReflect.Descriptor instead.
+func (*EndSessionResponse) Descriptor() ([]byte, []int) {
+	return file_goap_credentials_v1_credentials_proto_rawDescGZIP(), []int{13}
+}
+
+type EndSessionsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Subject       string                 `protobuf:"bytes,1,opt,name=subject,proto3" json:"subject,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EndSessionsRequest) Reset() {
+	*x = EndSessionsRequest{}
+	mi := &file_goap_credentials_v1_credentials_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EndSessionsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EndSessionsRequest) ProtoMessage() {}
+
+func (x *EndSessionsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_credentials_v1_credentials_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EndSessionsRequest.ProtoReflect.Descriptor instead.
+func (*EndSessionsRequest) Descriptor() ([]byte, []int) {
+	return file_goap_credentials_v1_credentials_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *EndSessionsRequest) GetSubject() string {
+	if x != nil {
+		return x.Subject
+	}
+	return ""
+}
+
+type EndSessionsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EndSessionsResponse) Reset() {
+	*x = EndSessionsResponse{}
+	mi := &file_goap_credentials_v1_credentials_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EndSessionsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EndSessionsResponse) ProtoMessage() {}
+
+func (x *EndSessionsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_credentials_v1_credentials_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EndSessionsResponse.ProtoReflect.Descriptor instead.
+func (*EndSessionsResponse) Descriptor() ([]byte, []int) {
+	return file_goap_credentials_v1_credentials_proto_rawDescGZIP(), []int{15}
+}
+
 var File_goap_credentials_v1_credentials_proto protoreflect.FileDescriptor
 
 const file_goap_credentials_v1_credentials_proto_rawDesc = "" +
@@ -402,12 +755,33 @@ const file_goap_credentials_v1_credentials_proto_rawDesc = "" +
 	"\rExistsRequest\x12\x18\n" +
 	"\asubject\x18\x01 \x01(\tR\asubject\"(\n" +
 	"\x0eExistsResponse\x12\x16\n" +
-	"\x06exists\x18\x01 \x01(\bR\x06exists2\xf5\x02\n" +
+	"\x06exists\x18\x01 \x01(\bR\x06exists\"W\n" +
+	"\x13StartSessionRequest\x12\x18\n" +
+	"\asubject\x18\x01 \x01(\tR\asubject\x12&\n" +
+	"\x0fmax_age_seconds\x18\x02 \x01(\x03R\rmaxAgeSeconds\"&\n" +
+	"\x14StartSessionResponse\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\"?\n" +
+	"\x13CheckSessionRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
+	"\asubject\x18\x02 \x01(\tR\asubject\".\n" +
+	"\x14CheckSessionResponse\x12\x16\n" +
+	"\x06active\x18\x01 \x01(\bR\x06active\"#\n" +
+	"\x11EndSessionRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\"\x14\n" +
+	"\x12EndSessionResponse\".\n" +
+	"\x12EndSessionsRequest\x12\x18\n" +
+	"\asubject\x18\x01 \x01(\tR\asubject\"\x15\n" +
+	"\x13EndSessionsResponse2\x80\x06\n" +
 	"\x12CredentialsService\x12W\n" +
 	"\bRegister\x12$.goap.credentials.v1.RegisterRequest\x1a%.goap.credentials.v1.RegisterResponse\x12Q\n" +
 	"\x06Verify\x12\".goap.credentials.v1.VerifyRequest\x1a#.goap.credentials.v1.VerifyResponse\x12`\n" +
 	"\vSetPassword\x12'.goap.credentials.v1.SetPasswordRequest\x1a(.goap.credentials.v1.SetPasswordResponse\x12Q\n" +
-	"\x06Exists\x12\".goap.credentials.v1.ExistsRequest\x1a#.goap.credentials.v1.ExistsResponseB\xd7\x01\n" +
+	"\x06Exists\x12\".goap.credentials.v1.ExistsRequest\x1a#.goap.credentials.v1.ExistsResponse\x12c\n" +
+	"\fStartSession\x12(.goap.credentials.v1.StartSessionRequest\x1a).goap.credentials.v1.StartSessionResponse\x12c\n" +
+	"\fCheckSession\x12(.goap.credentials.v1.CheckSessionRequest\x1a).goap.credentials.v1.CheckSessionResponse\x12]\n" +
+	"\n" +
+	"EndSession\x12&.goap.credentials.v1.EndSessionRequest\x1a'.goap.credentials.v1.EndSessionResponse\x12`\n" +
+	"\vEndSessions\x12'.goap.credentials.v1.EndSessionsRequest\x1a(.goap.credentials.v1.EndSessionsResponseB\xd7\x01\n" +
 	"\x17com.goap.credentials.v1B\x10CredentialsProtoP\x01Z<github.com/zimwip/goap/gen/goap/credentials/v1;credentialsv1\xa2\x02\x03GCX\xaa\x02\x13Goap.Credentials.V1\xca\x02\x13Goap\\Credentials\\V1\xe2\x02\x1fGoap\\Credentials\\V1\\GPBMetadata\xea\x02\x15Goap::Credentials::V1b\x06proto3"
 
 var (
@@ -422,31 +796,47 @@ func file_goap_credentials_v1_credentials_proto_rawDescGZIP() []byte {
 	return file_goap_credentials_v1_credentials_proto_rawDescData
 }
 
-var file_goap_credentials_v1_credentials_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
+var file_goap_credentials_v1_credentials_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
 var file_goap_credentials_v1_credentials_proto_goTypes = []any{
-	(*RegisterRequest)(nil),     // 0: goap.credentials.v1.RegisterRequest
-	(*RegisterResponse)(nil),    // 1: goap.credentials.v1.RegisterResponse
-	(*VerifyRequest)(nil),       // 2: goap.credentials.v1.VerifyRequest
-	(*VerifyResponse)(nil),      // 3: goap.credentials.v1.VerifyResponse
-	(*SetPasswordRequest)(nil),  // 4: goap.credentials.v1.SetPasswordRequest
-	(*SetPasswordResponse)(nil), // 5: goap.credentials.v1.SetPasswordResponse
-	(*ExistsRequest)(nil),       // 6: goap.credentials.v1.ExistsRequest
-	(*ExistsResponse)(nil),      // 7: goap.credentials.v1.ExistsResponse
+	(*RegisterRequest)(nil),      // 0: goap.credentials.v1.RegisterRequest
+	(*RegisterResponse)(nil),     // 1: goap.credentials.v1.RegisterResponse
+	(*VerifyRequest)(nil),        // 2: goap.credentials.v1.VerifyRequest
+	(*VerifyResponse)(nil),       // 3: goap.credentials.v1.VerifyResponse
+	(*SetPasswordRequest)(nil),   // 4: goap.credentials.v1.SetPasswordRequest
+	(*SetPasswordResponse)(nil),  // 5: goap.credentials.v1.SetPasswordResponse
+	(*ExistsRequest)(nil),        // 6: goap.credentials.v1.ExistsRequest
+	(*ExistsResponse)(nil),       // 7: goap.credentials.v1.ExistsResponse
+	(*StartSessionRequest)(nil),  // 8: goap.credentials.v1.StartSessionRequest
+	(*StartSessionResponse)(nil), // 9: goap.credentials.v1.StartSessionResponse
+	(*CheckSessionRequest)(nil),  // 10: goap.credentials.v1.CheckSessionRequest
+	(*CheckSessionResponse)(nil), // 11: goap.credentials.v1.CheckSessionResponse
+	(*EndSessionRequest)(nil),    // 12: goap.credentials.v1.EndSessionRequest
+	(*EndSessionResponse)(nil),   // 13: goap.credentials.v1.EndSessionResponse
+	(*EndSessionsRequest)(nil),   // 14: goap.credentials.v1.EndSessionsRequest
+	(*EndSessionsResponse)(nil),  // 15: goap.credentials.v1.EndSessionsResponse
 }
 var file_goap_credentials_v1_credentials_proto_depIdxs = []int32{
-	0, // 0: goap.credentials.v1.CredentialsService.Register:input_type -> goap.credentials.v1.RegisterRequest
-	2, // 1: goap.credentials.v1.CredentialsService.Verify:input_type -> goap.credentials.v1.VerifyRequest
-	4, // 2: goap.credentials.v1.CredentialsService.SetPassword:input_type -> goap.credentials.v1.SetPasswordRequest
-	6, // 3: goap.credentials.v1.CredentialsService.Exists:input_type -> goap.credentials.v1.ExistsRequest
-	1, // 4: goap.credentials.v1.CredentialsService.Register:output_type -> goap.credentials.v1.RegisterResponse
-	3, // 5: goap.credentials.v1.CredentialsService.Verify:output_type -> goap.credentials.v1.VerifyResponse
-	5, // 6: goap.credentials.v1.CredentialsService.SetPassword:output_type -> goap.credentials.v1.SetPasswordResponse
-	7, // 7: goap.credentials.v1.CredentialsService.Exists:output_type -> goap.credentials.v1.ExistsResponse
-	4, // [4:8] is the sub-list for method output_type
-	0, // [0:4] is the sub-list for method input_type
-	0, // [0:0] is the sub-list for extension type_name
-	0, // [0:0] is the sub-list for extension extendee
-	0, // [0:0] is the sub-list for field type_name
+	0,  // 0: goap.credentials.v1.CredentialsService.Register:input_type -> goap.credentials.v1.RegisterRequest
+	2,  // 1: goap.credentials.v1.CredentialsService.Verify:input_type -> goap.credentials.v1.VerifyRequest
+	4,  // 2: goap.credentials.v1.CredentialsService.SetPassword:input_type -> goap.credentials.v1.SetPasswordRequest
+	6,  // 3: goap.credentials.v1.CredentialsService.Exists:input_type -> goap.credentials.v1.ExistsRequest
+	8,  // 4: goap.credentials.v1.CredentialsService.StartSession:input_type -> goap.credentials.v1.StartSessionRequest
+	10, // 5: goap.credentials.v1.CredentialsService.CheckSession:input_type -> goap.credentials.v1.CheckSessionRequest
+	12, // 6: goap.credentials.v1.CredentialsService.EndSession:input_type -> goap.credentials.v1.EndSessionRequest
+	14, // 7: goap.credentials.v1.CredentialsService.EndSessions:input_type -> goap.credentials.v1.EndSessionsRequest
+	1,  // 8: goap.credentials.v1.CredentialsService.Register:output_type -> goap.credentials.v1.RegisterResponse
+	3,  // 9: goap.credentials.v1.CredentialsService.Verify:output_type -> goap.credentials.v1.VerifyResponse
+	5,  // 10: goap.credentials.v1.CredentialsService.SetPassword:output_type -> goap.credentials.v1.SetPasswordResponse
+	7,  // 11: goap.credentials.v1.CredentialsService.Exists:output_type -> goap.credentials.v1.ExistsResponse
+	9,  // 12: goap.credentials.v1.CredentialsService.StartSession:output_type -> goap.credentials.v1.StartSessionResponse
+	11, // 13: goap.credentials.v1.CredentialsService.CheckSession:output_type -> goap.credentials.v1.CheckSessionResponse
+	13, // 14: goap.credentials.v1.CredentialsService.EndSession:output_type -> goap.credentials.v1.EndSessionResponse
+	15, // 15: goap.credentials.v1.CredentialsService.EndSessions:output_type -> goap.credentials.v1.EndSessionsResponse
+	8,  // [8:16] is the sub-list for method output_type
+	0,  // [0:8] is the sub-list for method input_type
+	0,  // [0:0] is the sub-list for extension type_name
+	0,  // [0:0] is the sub-list for extension extendee
+	0,  // [0:0] is the sub-list for field type_name
 }
 
 func init() { file_goap_credentials_v1_credentials_proto_init() }
@@ -460,7 +850,7 @@ func file_goap_credentials_v1_credentials_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_goap_credentials_v1_credentials_proto_rawDesc), len(file_goap_credentials_v1_credentials_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   8,
+			NumMessages:   16,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
