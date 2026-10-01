@@ -49,6 +49,12 @@ type Config struct {
 	JWTSecret []byte
 	// DevTokens enables POST /auth/dev-token (never in production).
 	DevTokens bool
+	// TokenTTL is how long a signed token is valid (DefaultTokenTTL when zero). The web refreshes it before it
+	// expires (POST /auth/refresh), so it is also how long an idle session survives.
+	TokenTTL time.Duration
+	// MaxSession bounds how long tokens are refreshed after a sign-in (DefaultMaxSession when zero): past it,
+	// the user signs in again.
+	MaxSession time.Duration
 	// Credentials backs the local AuthMode's register/login endpoints (ADR 0040). Required when
 	// AuthMode == "local".
 	Credentials Credentials
@@ -63,6 +69,12 @@ type Config struct {
 	// of its User node). Nil leaves the principal as the token gives it.
 	Enrich func(ctx context.Context, p authz.Principal) authz.Principal
 }
+
+// DefaultTokenTTL and DefaultMaxSession are the lifetimes of a token and of a session when Config names none.
+const (
+	DefaultTokenTTL   = 12 * time.Hour
+	DefaultMaxSession = 7 * 24 * time.Hour
+)
 
 // DefaultAuthMode is the AuthMode of a deployment that names none (GOAP_AUTH_MODE unset, ADR 0042): local
 // sign-in, since no external identity provider (SSO) is configured. "none" (no sign-in at all) is for local
@@ -82,6 +94,9 @@ type Claims struct {
 	// the user switches, so every call carries it without the caller having to pass it explicitly.
 	Project string   `json:"project,omitempty"`
 	Roles   []string `json:"roles,omitempty"`
+	// AuthTime is when the subject signed in (OIDC auth_time): kept across refreshes, it bounds the session
+	// (Config.MaxSession).
+	AuthTime *jwt.NumericDate `json:"auth_time,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -105,6 +120,7 @@ func MountAuthEndpoints(e *echo.Echo, cfg Config) error {
 		e.POST("/auth/register", register(cfg))
 		e.POST("/auth/login", login(cfg))
 		e.POST("/auth/logout", logout())
+		e.POST("/auth/refresh", refresh(cfg))
 		// switching project reissues the token (ADR 0039): a signed-in user needs it as much as a dev token
 		e.POST("/auth/dev-token/project", switchProject(cfg))
 	}
@@ -166,7 +182,7 @@ func authenticator(cfg Config) (echo.MiddlewareFunc, error) {
 			return func(c *echo.Context) error {
 				claims, err := parseToken(cfg, c.Request().Header.Get("Authorization"))
 				if err != nil {
-					return echo.NewHTTPError(http.StatusUnauthorized, "invalid token")
+					return unauthorized(err)
 				}
 				c.Request().Header.Del("Authorization")
 				setPrincipal(c, cfg, authz.Principal{Subject: claims.Subject, Org: claims.Org, Project: claims.Project, Roles: claims.Roles})
@@ -201,12 +217,84 @@ func parseToken(cfg Config, authorization string) (*Claims, error) {
 	return claims, err
 }
 
+// unauthorized is the 401 of a request whose token was refused, telling an expired token (sign in again, or
+// refresh earlier) from an invalid one.
+func unauthorized(err error) error {
+	if errors.Is(err, jwt.ErrTokenExpired) {
+		return echo.NewHTTPError(http.StatusUnauthorized, "token expired")
+	}
+	return echo.NewHTTPError(http.StatusUnauthorized, "invalid token")
+}
+
+// session is a token's identity, kept when it is reissued (refresh, project switch).
+type session struct {
+	subject, org, project string
+	roles                 []string
+	authTime              time.Time
+}
+
+func sessionOf(c *Claims) session {
+	s := session{subject: c.Subject, org: c.Org, project: c.Project, roles: c.Roles, authTime: time.Now()}
+	if c.AuthTime != nil {
+		s.authTime = c.AuthTime.Time
+	} else if c.IssuedAt != nil {
+		s.authTime = c.IssuedAt.Time
+	}
+	return s
+}
+
+// issued is the response of an endpoint signing a token: the token and when it expires, for the web to refresh
+// it in time.
+type issued struct {
+	Token     string    `json:"token"`
+	ExpiresAt time.Time `json:"expiresAt"`
+}
+
 func sign(cfg Config, subject, org, project string, roles []string) (string, error) {
-	claims := Claims{Org: org, Project: project, Roles: roles, RegisteredClaims: jwt.RegisteredClaims{
-		Subject: subject, Issuer: "goap-gateway", IssuedAt: jwt.NewNumericDate(time.Now()),
-		ExpiresAt: jwt.NewNumericDate(time.Now().Add(12 * time.Hour)),
+	t, err := signSession(cfg, session{subject: subject, org: org, project: project, roles: roles, authTime: time.Now()})
+	return t.Token, err
+}
+
+func signSession(cfg Config, s session) (issued, error) {
+	ttl := cfg.TokenTTL
+	if ttl <= 0 {
+		ttl = DefaultTokenTTL
+	}
+	now := time.Now()
+	exp := now.Add(ttl)
+	claims := Claims{Org: s.org, Project: s.project, Roles: s.roles, AuthTime: jwt.NewNumericDate(s.authTime), RegisteredClaims: jwt.RegisteredClaims{
+		Subject: s.subject, Issuer: "goap-gateway", IssuedAt: jwt.NewNumericDate(now), ExpiresAt: jwt.NewNumericDate(exp),
 	}}
-	return jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(cfg.JWTSecret)
+	tok, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(cfg.JWTSecret)
+	return issued{Token: tok, ExpiresAt: exp.Truncate(time.Second)}, err
+}
+
+// refresh reissues a valid token with a fresh expiry, keeping its identity and its sign-in time: the web calls it
+// before its token expires, so an active session goes on without signing in again, up to Config.MaxSession after
+// the sign-in. An expired or invalid token is refused (401): the user signs in again.
+func refresh(cfg Config) echo.HandlerFunc {
+	return func(c *echo.Context) error {
+		claims, err := parseToken(cfg, c.Request().Header.Get("Authorization"))
+		if err != nil {
+			return unauthorized(err)
+		}
+		s := sessionOf(claims)
+		maxSession := cfg.MaxSession
+		if maxSession <= 0 {
+			maxSession = DefaultMaxSession
+		}
+		if time.Since(s.authTime) > maxSession {
+			return echo.NewHTTPError(http.StatusUnauthorized, "session expired: sign in again")
+		}
+		if err := signedIn(c, cfg, s.subject); err != nil {
+			return err
+		}
+		t, err := signSession(cfg, s)
+		if err != nil {
+			return err
+		}
+		return c.JSON(http.StatusOK, t)
+	}
 }
 
 func devToken(cfg Config) echo.HandlerFunc {
@@ -256,11 +344,11 @@ func register(cfg Config) echo.HandlerFunc {
 		if err := signedIn(c, cfg, in.Subject); err != nil {
 			return err
 		}
-		tok, err := sign(cfg, in.Subject, "", "", nil)
+		t, err := signSession(cfg, session{subject: in.Subject, authTime: time.Now()})
 		if err != nil {
 			return err
 		}
-		return c.JSON(http.StatusOK, map[string]string{"token": tok})
+		return c.JSON(http.StatusOK, t)
 	}
 }
 
@@ -281,11 +369,11 @@ func login(cfg Config) echo.HandlerFunc {
 		if err := signedIn(c, cfg, in.Subject); err != nil {
 			return err
 		}
-		tok, err := sign(cfg, in.Subject, "", "", nil)
+		t, err := signSession(cfg, session{subject: in.Subject, authTime: time.Now()})
 		if err != nil {
 			return err
 		}
-		return c.JSON(http.StatusOK, map[string]string{"token": tok})
+		return c.JSON(http.StatusOK, t)
 	}
 }
 
@@ -314,7 +402,7 @@ func switchProject(cfg Config) echo.HandlerFunc {
 	return func(c *echo.Context) error {
 		claims, err := parseToken(cfg, c.Request().Header.Get("Authorization"))
 		if err != nil {
-			return echo.NewHTTPError(http.StatusUnauthorized, "invalid token")
+			return unauthorized(err)
 		}
 		var in struct {
 			Project string `json:"project"`
@@ -322,10 +410,12 @@ func switchProject(cfg Config) echo.HandlerFunc {
 		if err := c.Bind(&in); err != nil {
 			return echo.NewHTTPError(http.StatusBadRequest, "project required")
 		}
-		tok, err := sign(cfg, claims.Subject, claims.Org, in.Project, claims.Roles)
+		s := sessionOf(claims)
+		s.project = in.Project
+		t, err := signSession(cfg, s)
 		if err != nil {
 			return err
 		}
-		return c.JSON(http.StatusOK, map[string]string{"token": tok})
+		return c.JSON(http.StatusOK, t)
 	}
 }

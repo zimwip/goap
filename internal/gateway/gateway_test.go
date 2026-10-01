@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"connectrpc.com/connect"
 	"github.com/labstack/echo/v5"
@@ -251,5 +252,84 @@ func TestLocalAuth(t *testing.T) {
 	logoutResp.Body.Close()
 	if logoutResp.StatusCode != http.StatusNoContent {
 		t.Fatalf("logout: %d", logoutResp.StatusCode)
+	}
+}
+
+// A valid token is refreshed with a fresh expiry, keeping its identity and its sign-in time; an expired one is
+// refused as such (401 "token expired"), and so is a refresh past the maximum session.
+func TestRefreshToken(t *testing.T) {
+	secret := []byte(strings.Repeat("s", 32))
+	creds := &fakeCredentials{passwords: map[string]string{}}
+	newServer := func(ttl, maxSession time.Duration) *httptest.Server {
+		e := echo.New()
+		if err := Mount(e, Config{AuthMode: "local", JWTSecret: secret, Credentials: creds, TokenTTL: ttl, MaxSession: maxSession}); err != nil {
+			t.Fatal(err)
+		}
+		return httptest.NewServer(e)
+	}
+	post := func(srv *httptest.Server, path, token, body string) (int, issued, string) {
+		req, _ := http.NewRequest(http.MethodPost, srv.URL+path, strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		if token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		var raw json.RawMessage
+		_ = json.NewDecoder(resp.Body).Decode(&raw)
+		var out issued
+		_ = json.Unmarshal(raw, &out)
+		return resp.StatusCode, out, string(raw)
+	}
+	claimsOf := func(tok string) *Claims {
+		c, err := parseToken(Config{JWTSecret: secret}, "Bearer "+tok)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return c
+	}
+
+	srv := newServer(time.Hour, 24*time.Hour)
+	defer srv.Close()
+	code, reg, _ := post(srv, "/auth/register", "", `{"subject":"alice","password":"correct horse"}`)
+	if code != http.StatusOK || reg.Token == "" || time.Until(reg.ExpiresAt) < 59*time.Minute || time.Until(reg.ExpiresAt) > time.Hour {
+		t.Fatalf("register: %d %+v", code, reg)
+	}
+	signedInAt := claimsOf(reg.Token).AuthTime.Time
+
+	// switch project, then refresh: subject, project and sign-in time are kept
+	code, sw, _ := post(srv, "/auth/dev-token/project", reg.Token, `{"project":"PROJ-A"}`)
+	if code != http.StatusOK {
+		t.Fatalf("switch: %d", code)
+	}
+	code, ref, _ := post(srv, "/auth/refresh", sw.Token, "")
+	if code != http.StatusOK || ref.Token == "" {
+		t.Fatalf("refresh: %d %+v", code, ref)
+	}
+	if c := claimsOf(ref.Token); c.Subject != "alice" || c.Project != "PROJ-A" || !c.AuthTime.Time.Equal(signedInAt) {
+		t.Fatalf("refreshed claims: %+v", c)
+	}
+	if code, _, _ := post(srv, "/auth/refresh", "", ""); code != http.StatusUnauthorized {
+		t.Fatalf("refresh without a token: %d", code)
+	}
+
+	// an expired token is refused, and says so
+	expired := newServer(time.Millisecond, 24*time.Hour)
+	defer expired.Close()
+	_, short, _ := post(expired, "/auth/login", "", `{"subject":"alice","password":"correct horse"}`)
+	time.Sleep(1100 * time.Millisecond) // JWT times have a one-second resolution
+	if code, _, body := post(expired, "/auth/refresh", short.Token, ""); code != http.StatusUnauthorized || !strings.Contains(body, "token expired") {
+		t.Fatalf("refresh of an expired token: %d %s", code, body)
+	}
+
+	// past the maximum session, a valid token is not refreshed any more
+	old := newServer(time.Hour, time.Nanosecond)
+	defer old.Close()
+	_, fresh, _ := post(old, "/auth/login", "", `{"subject":"alice","password":"correct horse"}`)
+	if code, _, body := post(old, "/auth/refresh", fresh.Token, ""); code != http.StatusUnauthorized || !strings.Contains(body, "session expired") {
+		t.Fatalf("refresh past the maximum session: %d %s", code, body)
 	}
 }
