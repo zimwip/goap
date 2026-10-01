@@ -26,7 +26,7 @@ import (
 // owner removes it, as long as it landed nothing.
 func TestPersonalChange(t *testing.T) {
 	ctx := context.Background()
-	g := graph.New(graph.NewMemory())
+	g := typedGraph(t)
 	if _, err := graphsvc.SeedDefaults(ctx, g); err != nil {
 		t.Fatal(err)
 	}
@@ -127,7 +127,7 @@ func TestPersonalChange(t *testing.T) {
 // subject's personal unit (organisation@User extends organisation@OrgUnit, same "USR:<subject>" key).
 func TestUserCreatedAutomatically(t *testing.T) {
 	ctx := context.Background()
-	g := graph.New(graph.NewMemory())
+	g := typedGraph(t)
 	if _, err := graphsvc.SeedDefaults(ctx, g); err != nil {
 		t.Fatal(err)
 	}
@@ -172,7 +172,7 @@ func TestUserCreatedAutomatically(t *testing.T) {
 // leaves nothing behind, so a later, correctly-timed call for the same subject still succeeds.
 func TestEnsureUserWaitsForDefaultOrg(t *testing.T) {
 	ctx := context.Background()
-	g := graph.New(graph.NewMemory())
+	g := typedGraph(t)
 
 	if err := graphsvc.EnsureUser(ctx, g, "alice"); !errors.Is(err, graph.ErrNotFound) {
 		t.Fatalf("EnsureUser before SeedDefaults = %v, want ErrNotFound", err)
@@ -242,7 +242,7 @@ func TestEnsureUserWaitsForDefaultOrg(t *testing.T) {
 // several flagged, the smallest key wins; clearing the flag sends newcomers back to ORG-DEFAULT.
 func TestEnsureUserJoinsWaitingUnit(t *testing.T) {
 	ctx := context.Background()
-	g := graph.New(graph.NewMemory())
+	g := typedGraph(t)
 	if _, err := graphsvc.SeedDefaults(ctx, g); err != nil {
 		t.Fatal(err)
 	}

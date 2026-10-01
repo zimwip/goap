@@ -29,7 +29,8 @@ func testBrowseBaseline(t *testing.T, repo Repo) {
 	if _, err := g.CreateNode(ctx, NewNode{Key: "TEST-2", Type: "Test"}); err != nil {
 		t.Fatal(err)
 	}
-	verifies, err := g.Link(ctx, "verifies", test.Ref(), refs[0], nil)
+	c0 := testChange(t, g, "")
+	verifies, err := g.Link(ctx, c0, "verifies", test.Ref(), refs[0], nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -38,7 +39,7 @@ func testBrowseBaseline(t *testing.T, repo Repo) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := g.Link(ctx, "depends", req0.Ref(), refs[1], nil); err != nil {
+	if _, err := g.Link(ctx, c0, "depends", req0.Ref(), refs[1], nil); err != nil {
 		t.Fatal(err)
 	}
 	b, err := g.CreateBaselineFromLatest(ctx, domain.DefaultNamespace, "B")

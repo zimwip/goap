@@ -72,6 +72,48 @@ func TestSeedsFollowTheDomains(t *testing.T) {
 	}
 }
 
+// SeedDemo creates ORG-ACME before the default organisation exists, through the raw write path that
+// bypasses checkRequiredParent (ADR 0040): without LinkOrphanUnits it stays a second root beside
+// ORG-DEFAULT, which is why the navigation tree would show it ahead of the default organisation.
+func TestLinkOrphanUnits(t *testing.T) {
+	ctx := context.Background()
+	g := typedGraph(t)
+	if _, err := graphsvc.SeedDemo(ctx, g); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := graphsvc.SeedDefaults(ctx, g); err != nil {
+		t.Fatal(err)
+	}
+	acme, err := g.NodeByKey(ctx, "organisation", "ORG-ACME")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v, _ := g.View(ctx, acme.Ref()); len(v.Out) != 0 {
+		t.Fatalf("ORG-ACME should still be rootless before LinkOrphanUnits: %+v", v.Out)
+	}
+	if linked, err := graphsvc.LinkOrphanUnits(ctx, g); err != nil || !linked {
+		t.Fatalf("first link = %v, %v", linked, err)
+	}
+	def, err := g.NodeByKey(ctx, "organisation", domain.DefaultOrg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	acme, err = g.NodeByKey(ctx, "organisation", "ORG-ACME")
+	if err != nil {
+		t.Fatal(err)
+	}
+	v, err := g.View(ctx, acme.Ref())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(v.Out) != 1 || v.Out[0].Type != mcp.LinkPartOf || v.Out[0].To.ID != def.ID {
+		t.Fatalf("ORG-ACME must be part_of ORG-DEFAULT: %+v", v.Out)
+	}
+	if again, err := graphsvc.LinkOrphanUnits(ctx, g); err != nil || again {
+		t.Fatalf("second link = %v, %v", again, err)
+	}
+}
+
 // The built-in MCPs follow the code at every start; the instances of the default organisation are
 // seeded once, so that removing one sticks (ADR 0028).
 func TestSeedBuiltins(t *testing.T) {

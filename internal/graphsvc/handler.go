@@ -119,7 +119,7 @@ func (h *Handler) CreateLink(ctx context.Context, r *connect.Request[graphv1.Cre
 			return nil, err
 		}
 	}
-	l, err := h.Graph.Link(ctx, r.Msg.Type, pbconv.RefFromPB(r.Msg.From), pbconv.RefFromPB(r.Msg.To), pbconv.Map(r.Msg.Props))
+	l, err := h.Graph.Link(ctx, domain.ChangeID(r.Msg.ChangeId), r.Msg.Type, pbconv.RefFromPB(r.Msg.From), pbconv.RefFromPB(r.Msg.To), pbconv.Map(r.Msg.Props))
 	return res(&graphv1.CreateLinkResponse{Link: pbconv.LinkToPB(l)}, err)
 }
 

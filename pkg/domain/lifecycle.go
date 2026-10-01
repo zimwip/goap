@@ -11,15 +11,23 @@ import (
 // Lifecycle is a named state machine of a domain (ADR 0014). Node types refer
 // to it by name (NodeType.Lifecycle), inherit it through extends (a subtype that
 // names its own lifecycle replaces the inherited one), and every node version
-// stores its state. A state is either editable or not: an editable state is a working
-// state that a node only holds through a change it is attached to, so a change
-// can only be applied when its nodes end in a non-editable state.
+// stores its state. A state is either editable or not: an editable state is normally
+// a working state that a node only holds through a change it is attached to, so a
+// change can only be applied when its nodes end in a non-editable state — unless the
+// lifecycle itself declares RestInEditable (ADR 0048), for a type whose editable
+// states are ordinary long-lived statuses (not a review draft) rather than a document
+// workflow's checkout state.
 type Lifecycle struct {
 	// Name identifies the lifecycle in its domain; node types refer to it.
-	Name        string           `yaml:"name" json:"name"`
-	Initial     string           `yaml:"initial" json:"initial"`
-	States      []LifecycleState `yaml:"states" json:"states"`
-	Transitions []Transition     `yaml:"transitions,omitempty" json:"transitions,omitempty"`
+	Name    string           `yaml:"name" json:"name"`
+	Initial string           `yaml:"initial" json:"initial"`
+	States  []LifecycleState `yaml:"states" json:"states"`
+	// RestInEditable allows a change to apply with a node of this lifecycle left in an editable state (ADR
+	// 0048): the type's editable states are ordinary statuses a node may rest in indefinitely, not a draft a
+	// change must move the node out of before landing. Default false preserves ADR 0014's original invariant
+	// for every lifecycle declared before this field existed.
+	RestInEditable bool         `yaml:"restInEditable,omitempty" json:"restInEditable,omitempty"`
+	Transitions    []Transition `yaml:"transitions,omitempty" json:"transitions,omitempty"`
 }
 
 // LifecycleState is one state of a lifecycle.
@@ -249,7 +257,7 @@ func (l *Lifecycle) Clone() *Lifecycle {
 	if l == nil {
 		return nil
 	}
-	c := &Lifecycle{Name: l.Name, Initial: l.Initial, States: slices.Clone(l.States), Transitions: slices.Clone(l.Transitions)}
+	c := &Lifecycle{Name: l.Name, Initial: l.Initial, States: slices.Clone(l.States), RestInEditable: l.RestInEditable, Transitions: slices.Clone(l.Transitions)}
 	for i, t := range c.Transitions {
 		c.Transitions[i].Guards, c.Transitions[i].Actions = slices.Clone(t.Guards), slices.Clone(t.Actions)
 		c.Transitions[i].GuardAlgos, c.Transitions[i].ActionAlgos = slices.Clone(t.GuardAlgos), slices.Clone(t.ActionAlgos)

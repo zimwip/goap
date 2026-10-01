@@ -23,6 +23,8 @@ type NodeEdit struct {
 	Pre *domain.NodeRef
 	// Props are merged over the current properties (a nil value clears one).
 	Props map[string]any
+	// State moves the node to a lifecycle state, after its other edits (see NodeWrite.State).
+	State string
 	// Retire deletes the node (see NodeWrite.Retire).
 	Retire bool
 	// Rationale says why; the title of the commit when empty.
@@ -64,15 +66,42 @@ type CommitResult struct {
 // (the rationale is the comment) and applies the change. When the branch
 // cannot be merged without conflict (another change moved a node meanwhile) the
 // change is abandoned and ErrConflict returned: the producer reads again and
-// rebuilds its edits.
-func (g *Graph) Commit(ctx context.Context, in Commit) (res CommitResult, err error) {
+// rebuilds its edits. A created OrgUnit/ProjectUnit/User must name its required
+// parent (checkRequiredParent, ADR 0040) — the producer-level guarantee
+// CreateNode/UpdateNode do not make (commitEdits' parenting param), since they
+// stand in for the single-node writes the engine itself makes while landing an
+// ordinary change's own impacts (AddNodes/WriteNode), which never enforced it either.
+func (g *Graph) Commit(ctx context.Context, in Commit) (CommitResult, error) {
+	return g.commitEdits(ctx, in, true)
+}
+
+func (g *Graph) commitEdits(ctx context.Context, in Commit, parenting bool) (res CommitResult, err error) {
 	if len(in.Edits) == 0 {
 		return res, fmt.Errorf("a commit needs at least one edit: %w", ErrInvalid)
 	}
-	for _, e := range in.Edits {
-		if err := checkRequiredParent(e); err != nil {
+	if parenting {
+		for _, e := range in.Edits {
+			if err := checkRequiredParent(e); err != nil {
+				return res, err
+			}
+		}
+	}
+	if in.Baseline == "" {
+		// a namespace Commit touches for the first time has no baseline yet to reference (ADR 0049: every
+		// write, even the first one of a namespace, goes through a change) — give it an empty one, exactly
+		// what a caller doing this by hand (graphsvc.applyOn) already did.
+		branch := in.Branch
+		if branch == "" {
+			branch = domain.MainBranch
+		}
+		head, err := g.BranchHead(ctx, in.Namespace, branch)
+		if errors.Is(err, ErrNotFound) {
+			head, err = g.CreateBaseline(ctx, in.Namespace, "Initial baseline", nil)
+		}
+		if err != nil {
 			return res, err
 		}
+		in.Baseline = head.ID
 	}
 	c, err := g.CreateChange(ctx, NewChange{Namespace: in.Namespace, Title: in.Title, Intent: in.Intent, Methodology: in.Methodology,
 		BaselineID: in.Baseline, Branch: in.Branch, Data: in.Data, OwnBranch: true})
@@ -112,7 +141,7 @@ func (g *Graph) Commit(ctx context.Context, in Commit) (res CommitResult, err er
 	written := map[string]domain.NodeRef{} // key of a created node → its version
 	for _, i := range order {
 		e := in.Edits[i]
-		w := NodeWrite{Properties: e.Props, RemoveLinks: e.RemoveLinks, Retire: e.Retire}
+		w := NodeWrite{Properties: e.Props, State: e.State, RemoveLinks: e.RemoveLinks, Retire: e.Retire}
 		for _, l := range e.Links {
 			to := l.To
 			if l.ToKey != "" {
@@ -131,7 +160,7 @@ func (g *Graph) Commit(ctx context.Context, in Commit) (res CommitResult, err er
 		if err != nil {
 			return res, fmt.Errorf("%s: %w", nodeName(e), err)
 		}
-		if cn.Post != nil && !e.Retire {
+		if parenting && cn.Post != nil && !e.Retire {
 			if err := g.checkParentInvariant(ctx, *cn.Post); err != nil {
 				return res, fmt.Errorf("%s: %w", nodeName(e), err)
 			}

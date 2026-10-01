@@ -11,11 +11,24 @@ import (
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/mcp"
+	"github.com/zimwip/goap/pkg/methodology"
+	"github.com/zimwip/goap/pkg/typecat"
 )
 
+// setup returns a graph judged by the domains of the repository (ADR 0012), so a User node seeded here goes
+// through the same user lifecycle (ADR 0048) a real deployment enforces.
 func setup(t *testing.T) (*graph.Graph, *access.Authorizer) {
 	t.Helper()
+	ds, err := methodology.LoadDomains("../../domains")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cat, err := typecat.New(ds...)
+	if err != nil {
+		t.Fatal(err)
+	}
 	g := graph.New(graph.NewMemory())
+	g.Types = func() graph.TypeCatalog { return cat }
 	a, err := access.NewAuthorizer(&access.Directory{Graph: g, TTL: 1})
 	if err != nil {
 		t.Fatal(err)

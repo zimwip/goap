@@ -152,6 +152,9 @@ func (g *Graph) applyTx(ctx context.Context, tx Tx, id domain.ChangeID, baseline
 	if err := a.checkChangeImpacts(); err != nil {
 		return domain.Baseline{}, err
 	}
+	if err := g.runNodeValidators(ctx, tx, a.target, a.cposts); err != nil {
+		return domain.Baseline{}, err
+	}
 	if baselineName == "" {
 		baselineName = c.Title
 	}

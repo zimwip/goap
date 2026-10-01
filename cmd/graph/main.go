@@ -113,6 +113,11 @@ func main() {
 		} else if seeded {
 			log.Info("default organisation created")
 		}
+		if linked, err := graphsvc.LinkOrphanUnits(ctx, g); err != nil {
+			log.Error("link orphan units", "err", err)
+		} else if linked {
+			log.Info("orphan units joined the default organisation")
+		}
 		// the built-in MCPs (ADR 0028) follow the platform; the default organisation lends them to every unit
 		if seeded, err := graphsvc.SeedBuiltins(ctx, g); err != nil {
 			log.Error("seed built-in MCPs", "err", err)
@@ -135,6 +140,7 @@ func main() {
 		platform.Fatal(log, "authorizer", err)
 	}
 	g.Authorizer = graphsvc.TransitionAuthorizer(authorizer)
+	g.Validators = []graph.NodeValidator{access.AdminFloorValidator{}}
 	graphHandler := &graphsvc.Handler{Graph: g, Events: events, Authz: authorizer, Floor: authorizer.Floor()}
 	srv.Mount(graphv1connect.NewGraphServiceHandler(graphHandler, append(telemetry.HandlerOptions(), connect.WithInterceptors(graphHandler.PersonalScope(), graphHandler.EnsureCaller()))...))
 	if err := srv.Run(); err != nil {

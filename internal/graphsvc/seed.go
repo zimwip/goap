@@ -116,18 +116,36 @@ func SeedDemo(ctx context.Context, g *graph.Graph) (bool, error) {
 		{"APP-1", "owner", "ORG-CHECKOUT"}, {"APP-2", "owner", "ORG-CRM"}, {"APP-3", "owner", "ORG-FINANCE"},
 		{"SOL-1", "owner", "ORG-DIGITAL"},
 	}
+	// the links are added attributed to one change of their own (ADR 0049), the same no-new-version way
+	// LinkOrphanUnits does: a seed link crosses namespaces (alm ↔ organisation ownership) and does not version
+	// either endpoint, so it is not a Commit's NodeEdit.Links either.
+	head, err := g.BranchHead(ctx, alm, domain.MainBranch)
+	if err != nil {
+		return false, err
+	}
+	c, err := g.CreateChange(ctx, graph.NewChange{Namespace: alm, Title: "Demo seed links", Intent: "Seed demo data", BaselineID: head.ID, Administrative: true})
+	if err != nil {
+		return false, err
+	}
+	abandoned := domain.ChangeAbandoned
 	for _, l := range links {
 		typ := alm + "@" + l[1]
 		if l[1] == "part_of" || l[1] == "owner" {
 			typ = mcp.NamespaceOrganisation + "@" + l[1]
 		}
-		if _, err := g.Link(ctx, typ, refs[l[0]], refs[l[2]], nil); err != nil {
+		if _, err := g.Link(ctx, c.ID, typ, refs[l[0]], refs[l[2]], nil); err != nil {
+			if _, aerr := g.UpdateChange(ctx, c.ID, graph.ChangePatch{Status: &abandoned}); aerr != nil {
+				err = errors.Join(err, aerr)
+			}
 			return false, err
 		}
+	}
+	if _, err := g.UpdateChange(ctx, c.ID, graph.ChangePatch{Status: &abandoned}); err != nil {
+		return false, err
 	}
 	if _, err := g.CreateBaselineFromLatest(ctx, alm, "Initial baseline"); err != nil {
 		return false, err
 	}
-	_, err := g.CreateBaselineFromLatest(ctx, mcp.NamespaceOrganisation, "Initial baseline")
+	_, err = g.CreateBaselineFromLatest(ctx, mcp.NamespaceOrganisation, "Initial baseline")
 	return err == nil, err
 }

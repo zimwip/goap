@@ -39,7 +39,7 @@ func newLifecycleWorldG(t *testing.T, repo Repo, approveGuard string) lcWorld {
 			{Name: "release", From: "draft", To: "released", Children: &domain.ChildrenRule{States: []string{"approved"}}},
 		}}
 	mk := func(key, typ string, props map[string]any, state string) domain.Node {
-		n, err := w.g.CreateNode(ctx, NewNode{Key: key, Type: typ, Properties: props, State: state})
+		n, err := seedNode(ctx, w.g, NewNode{Key: key, Type: typ, Properties: props, State: state})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -50,13 +50,14 @@ func newLifecycleWorldG(t *testing.T, repo Repo, approveGuard string) lcWorld {
 	w.req1 = mk("REQ-1", "Requirement", map[string]any{"title": "one"}, "approved")
 	w.req2 = mk("REQ-2", "Requirement", map[string]any{}, "proposed")
 	w.spec = mk("SPEC-1", "Spec", map[string]any{"title": "spec"}, "released")
+	c0 := testChange(t, w.g, "")
 	for _, to := range []domain.Node{w.req1, w.req2} {
-		if _, err := w.g.Link(ctx, domain.LinkContains, w.spec.Ref(), to.Ref(), nil); err != nil {
+		if _, err := w.g.Link(ctx, c0, domain.LinkContains, w.spec.Ref(), to.Ref(), nil); err != nil {
 			t.Fatal(err)
 		}
 	}
-	var err error
 	// Link bumps nothing: the spec still is version 1 with its links
+	var err error
 	w.base, err = w.g.CreateBaseline(ctx, "", "B1", []domain.NodeRef{w.req1.Ref(), w.req2.Ref(), w.spec.Ref()})
 	if err != nil {
 		t.Fatal(err)

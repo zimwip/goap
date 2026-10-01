@@ -91,6 +91,7 @@ func main() {
 		platform.Fatal(log, "authorizer", err)
 	}
 	g.Authorizer = graphsvc.TransitionAuthorizer(authorizer)
+	g.Validators = []graph.NodeValidator{access.AdminFloorValidator{}}
 	var triggers *engine.TriggerManager
 	// methodologies and domains are nodes of the graph: the registry needs no database
 	// the scope of the MCPs (ADR 0028) is checked where methodologies declare them
@@ -142,6 +143,9 @@ func main() {
 	}
 	if _, err := graphsvc.SeedDefaults(ctx, g); err != nil {
 		platform.Fatal(log, "seed defaults", err)
+	}
+	if _, err := graphsvc.LinkOrphanUnits(ctx, g); err != nil {
+		platform.Fatal(log, "link orphan units", err)
 	}
 	if _, err := graphsvc.SeedBuiltins(ctx, g); err != nil {
 		platform.Fatal(log, "seed built-in MCPs", err)

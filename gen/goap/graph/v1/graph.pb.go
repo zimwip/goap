@@ -1740,11 +1740,14 @@ func (x *GetNodeResponse) GetView() *NodeView {
 }
 
 type CreateLinkRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Type          string                 `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
-	From          *NodeRef               `protobuf:"bytes,2,opt,name=from,proto3" json:"from,omitempty"`
-	To            *NodeRef               `protobuf:"bytes,3,opt,name=to,proto3" json:"to,omitempty"`
-	Props         *structpb.Struct       `protobuf:"bytes,4,opt,name=props,proto3" json:"props,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Type  string                 `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
+	From  *NodeRef               `protobuf:"bytes,2,opt,name=from,proto3" json:"from,omitempty"`
+	To    *NodeRef               `protobuf:"bytes,3,opt,name=to,proto3" json:"to,omitempty"`
+	Props *structpb.Struct       `protobuf:"bytes,4,opt,name=props,proto3" json:"props,omitempty"`
+	// change_id attributes the link to an open change (ADR 0049): every graph mutation, including a link that
+	// intentionally does not version either endpoint, happens in the frame of a change.
+	ChangeId      string `protobuf:"bytes,5,opt,name=change_id,json=changeId,proto3" json:"change_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1805,6 +1808,13 @@ func (x *CreateLinkRequest) GetProps() *structpb.Struct {
 		return x.Props
 	}
 	return nil
+}
+
+func (x *CreateLinkRequest) GetChangeId() string {
+	if x != nil {
+		return x.ChangeId
+	}
+	return ""
 }
 
 type CreateLinkResponse struct {
@@ -11029,12 +11039,13 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\x03key\x18\x02 \x01(\tR\x03key\x12\x1c\n" +
 	"\tnamespace\x18\x03 \x01(\tR\tnamespace\">\n" +
 	"\x0fGetNodeResponse\x12+\n" +
-	"\x04view\x18\x01 \x01(\v2\x17.goap.graph.v1.NodeViewR\x04view\"\xaa\x01\n" +
+	"\x04view\x18\x01 \x01(\v2\x17.goap.graph.v1.NodeViewR\x04view\"\xc7\x01\n" +
 	"\x11CreateLinkRequest\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12*\n" +
 	"\x04from\x18\x02 \x01(\v2\x16.goap.graph.v1.NodeRefR\x04from\x12&\n" +
 	"\x02to\x18\x03 \x01(\v2\x16.goap.graph.v1.NodeRefR\x02to\x12-\n" +
-	"\x05props\x18\x04 \x01(\v2\x17.google.protobuf.StructR\x05props\"=\n" +
+	"\x05props\x18\x04 \x01(\v2\x17.google.protobuf.StructR\x05props\x12\x1b\n" +
+	"\tchange_id\x18\x05 \x01(\tR\bchangeId\"=\n" +
 	"\x12CreateLinkResponse\x12'\n" +
 	"\x04link\x18\x01 \x01(\v2\x13.goap.graph.v1.LinkR\x04link\"\x96\x01\n" +
 	"\x15CreateBaselineRequest\x12\x12\n" +

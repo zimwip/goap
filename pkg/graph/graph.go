@@ -41,6 +41,9 @@ type Graph struct {
 	// PurgePolicy, when set, is asked before a change that landed nothing is removed (PurgeChange, ADR 0037): a
 	// business rule that must keep discarded changes (to reuse their information) refuses it with an error.
 	PurgePolicy func(ctx context.Context, c domain.Change) error
+	// Validators are the NodeValidator plugins checked once per Apply (ADR 0048), keyed by the node types they
+	// declare interest in via Types(). Unset: no plugin validators run (tests, tools).
+	Validators []NodeValidator
 }
 
 // New returns a Graph backed by repo.
@@ -61,48 +64,52 @@ type NewNode struct {
 	State string
 }
 
-// CreateNode creates version 1 of a node outside of any change (import).
+// CreateNode creates version 1 of a node as a change of its own (ADR 0049): every write is change-shaped, even
+// an import, so it gets the same impact log, NodeValidator and lifecycle-initial-state handling an ordinary
+// change gets. checkDirect's existence check is now checkNode's own job inside Commit (ix.checkNode). Unlike
+// Commit, it does not enforce checkRequiredParent/checkParentInvariant (ADR 0040): those were always a
+// Commit-specific producer guarantee, never made of a raw node write, and a caller importing a single node at
+// a time (e.g. a demo seed landing a unit LinkOrphanUnits parents afterward) relies on that staying true.
 func (g *Graph) CreateNode(ctx context.Context, in NewNode) (domain.Node, error) {
 	if in.Type == "" {
 		return domain.Node{}, fmt.Errorf("node type required: %w", ErrInvalid)
 	}
-	n := domain.Node{ID: domain.NodeID(g.newID()), Version: 1, Branch: domain.MainBranch, Reason: domain.ReasonCreate, Namespace: domain.NamespaceOf(in.Namespace), Key: in.Key, Type: in.Type, Properties: in.Properties, CreatedAt: g.now(), State: in.State}
-	if n.Key == "" {
-		n.Key = string(n.ID)
+	ns := domain.NamespaceOf(in.Namespace)
+	key := in.Key
+	if key == "" {
+		key = g.newID()
 	}
-	err := g.repo.InTx(ctx, func(tx Tx) error {
-		if err := g.checkDirect(n.Namespace, n.Type); err != nil {
-			return err
-		}
-		return tx.PutNode(ctx, n)
-	})
-	return n, err
+	if _, err := g.commitEdits(ctx, Commit{Namespace: ns, Title: "Import " + in.Type + " " + key, Intent: "Import " + in.Type + " " + key,
+		By: "graph.import", Edits: []NodeEdit{{Key: key, Type: in.Type, Props: in.Properties, State: in.State, Rationale: "Import " + key}}}, false); err != nil {
+		return domain.Node{}, err
+	}
+	return g.NodeByKey(ctx, ns, key)
 }
 
-// UpdateNode creates a new version of a node on main outside of any change
-// (import). base must be the latest version on main.
+// UpdateNode creates a new version of a node on main as a change of its own (ADR 0049). base must be the
+// latest version on main; props replaces the current properties entirely (a property not repeated here is
+// cleared), the same full-replace contract this had before it went through Commit (whose own NodeEdit.Props
+// merges): the ones base already has and props does not repeat are set to nil to reproduce that.
 func (g *Graph) UpdateNode(ctx context.Context, base domain.NodeRef, props map[string]any) (domain.Node, error) {
-	var n domain.Node
-	err := g.repo.InTx(ctx, func(tx Tx) error {
-		latest, err := tx.Node(ctx, domain.NodeRef{ID: base.ID})
-		if err != nil {
-			return err
+	cur, err := g.Node(ctx, domain.NodeRef{ID: base.ID})
+	if err != nil {
+		return domain.Node{}, err
+	}
+	merged := maps.Clone(props)
+	if merged == nil {
+		merged = map[string]any{}
+	}
+	for k := range cur.Properties {
+		if _, ok := props[k]; !ok {
+			merged[k] = nil
 		}
-		if latest.Version != base.Version {
-			return fmt.Errorf("node %s is at v%d: %w", base, latest.Version, ErrConflict)
-		}
-		v, err := nextVersion(ctx, tx, base.ID)
-		if err != nil {
-			return err
-		}
-		n = latest
-		n.Version, n.Branch, n.Parents, n.Reason = v, domain.MainBranch, []domain.Version{latest.Version}, domain.ReasonRevise
-		n.Properties = props
-		n.ChangeID = ""
-		n.CreatedAt = g.now()
-		return tx.PutNode(ctx, n)
-	})
-	return n, err
+	}
+	ref := base
+	if _, err := g.commitEdits(ctx, Commit{Namespace: cur.Namespace, Title: "Import " + cur.Key, Intent: "Import " + cur.Key, By: "graph.import",
+		Edits: []NodeEdit{{Pre: &ref, Props: merged, Rationale: "Import " + cur.Key}}}, false); err != nil {
+		return domain.Node{}, err
+	}
+	return g.Node(ctx, domain.NodeRef{ID: base.ID})
 }
 
 // Node returns a node version (latest when ref.Version == 0).
@@ -146,10 +153,18 @@ func (g *Graph) OutLinksOf(ctx context.Context, ref domain.NodeRef) (ls []domain
 	return
 }
 
-// Link creates a link between two node versions outside of any change (import).
-func (g *Graph) Link(ctx context.Context, typ string, from, to domain.NodeRef, props map[string]any) (domain.Link, error) {
-	l := domain.Link{ID: domain.LinkID(g.newID()), Type: typ, From: from, To: to, Properties: props}
+// Link creates a link between two node versions, attributed to an open change (ADR 0049), without versioning
+// either endpoint: the one kind of graph mutation that intentionally stays outside the Commit/Apply pipeline,
+// because giving the source node a new version here would turn its own existing outgoing links into suspect
+// links (SuspectLinks) — independently wrong, not merely inconvenient. id must name a change still accepting
+// writes (changeOpen): there is no implicit change for a link, unlike CreateNode/UpdateNode, because picking
+// one silently would defeat the point of a link that is deliberately not part of a reviewable change impact.
+func (g *Graph) Link(ctx context.Context, id domain.ChangeID, typ string, from, to domain.NodeRef, props map[string]any) (domain.Link, error) {
+	l := domain.Link{ID: domain.LinkID(g.newID()), Type: typ, From: from, To: to, Properties: props, ChangeID: id}
 	err := g.repo.InTx(ctx, func(tx Tx) error {
+		if _, err := changeOpen(ctx, tx, id); err != nil {
+			return err
+		}
 		f, err := tx.Node(ctx, from)
 		if err != nil {
 			return err
@@ -170,14 +185,6 @@ func (g *Graph) Link(ctx context.Context, typ string, from, to domain.NodeRef, p
 
 // catalog returns the type catalogue in force.
 func (g *Graph) catalog() TypeCatalog { return g.Types() }
-
-// checkDirect applies the existence rule to a direct write; nothing is checked without a catalogue.
-func (g *Graph) checkDirect(ns, typ string) error {
-	if g.Types == nil {
-		return nil
-	}
-	return (&typeIndex{cat: g.catalog()}).checkNode(ns, typ)
-}
 
 // View hydrates a node version with its neighbourhood.
 func (g *Graph) View(ctx context.Context, ref domain.NodeRef) (v domain.NodeView, err error) {

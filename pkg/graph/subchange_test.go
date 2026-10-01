@@ -31,8 +31,9 @@ func newOrgWorld(t *testing.T, repo Repo) orgWorld {
 		}
 		return n
 	}
+	c0 := testChange(t, g, "")
 	link := func(typ string, from, to domain.Node) {
-		if _, err := g.Link(ctx, typ, from.Ref(), to.Ref(), nil); err != nil {
+		if _, err := g.Link(ctx, c0, typ, from.Ref(), to.Ref(), nil); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -48,7 +49,6 @@ func newOrgWorld(t *testing.T, repo Repo) orgWorld {
 	w.cmp3 = mk("", "CMP-3", "Component", map[string]any{"title": "three"})
 	link(LinkOwner, w.cmp1, w.team1)
 	link(LinkOwner, w.cmp2, w.t2)
-	var err error
 	// the change acts on the default namespace: only its own nodes belong in its baseline.
 	// Organisation units are resolved independently of it (checkOwnerOrg / orgWithin read the
 	// organisation namespace's own head, ADR 0016).
@@ -56,6 +56,7 @@ func newOrgWorld(t *testing.T, repo Repo) orgWorld {
 	for _, n := range []domain.Node{w.cmp1, w.cmp2, w.cmp3} {
 		all = append(all, n.Ref())
 	}
+	var err error
 	if w.base, err = g.CreateBaseline(ctx, domain.DefaultNamespace, "B", all); err != nil {
 		t.Fatal(err)
 	}
@@ -223,11 +224,12 @@ func TestProjectSelfLinkTerminates(t *testing.T) {
 		return n
 	}
 	root := mk("PROJ-ROOT", map[string]any{"name": "Root project"})
-	if _, err := g.Link(ctx, LinkProjectPartOf, root.Ref(), root.Ref(), nil); err != nil {
+	c0 := testChange(t, g, "organisation")
+	if _, err := g.Link(ctx, c0, LinkProjectPartOf, root.Ref(), root.Ref(), nil); err != nil {
 		t.Fatalf("a project can link project_part_of to itself: %v", err)
 	}
 	sub := mk("PROJ-SUB", map[string]any{"name": "Sub project"})
-	if _, err := g.Link(ctx, LinkProjectPartOf, sub.Ref(), root.Ref(), nil); err != nil {
+	if _, err := g.Link(ctx, c0, LinkProjectPartOf, sub.Ref(), root.Ref(), nil); err != nil {
 		t.Fatal(err)
 	}
 	done := make(chan error, 1)
@@ -273,19 +275,20 @@ func testProjectSubChangeRules(t *testing.T, repo Repo) {
 		return n
 	}
 	root := mk("PROJ-ROOT", map[string]any{"name": "Root"})
-	if _, err := g.Link(ctx, LinkProjectPartOf, root.Ref(), root.Ref(), nil); err != nil {
+	c0 := testChange(t, g, "organisation")
+	if _, err := g.Link(ctx, c0, LinkProjectPartOf, root.Ref(), root.Ref(), nil); err != nil {
 		t.Fatal(err)
 	}
 	a := mk("PROJ-A", map[string]any{"name": "A"})
-	if _, err := g.Link(ctx, LinkProjectPartOf, a.Ref(), root.Ref(), nil); err != nil {
+	if _, err := g.Link(ctx, c0, LinkProjectPartOf, a.Ref(), root.Ref(), nil); err != nil {
 		t.Fatal(err)
 	}
 	a1 := mk("PROJ-A1", map[string]any{"name": "A1"})
-	if _, err := g.Link(ctx, LinkProjectPartOf, a1.Ref(), a.Ref(), nil); err != nil {
+	if _, err := g.Link(ctx, c0, LinkProjectPartOf, a1.Ref(), a.Ref(), nil); err != nil {
 		t.Fatal(err)
 	}
 	b := mk("PROJ-B", map[string]any{"name": "B"})
-	if _, err := g.Link(ctx, LinkProjectPartOf, b.Ref(), root.Ref(), nil); err != nil {
+	if _, err := g.Link(ctx, c0, LinkProjectPartOf, b.Ref(), root.Ref(), nil); err != nil {
 		t.Fatal(err)
 	}
 	base, err := g.CreateBaseline(ctx, domain.DefaultNamespace, "B", nil)
