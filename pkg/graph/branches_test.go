@@ -293,6 +293,42 @@ func testCreateBaselineFromLatestScopesToOneNamespace(t *testing.T, repo Repo) {
 	}
 }
 
+// A direct-write baseline (CreateBaseline/CreateBaselineFromLatest) must chain onto the branch's real head
+// when one exists, so it can never silently sever/orphan real history; only a branch truly starting now (no
+// head yet) stays parentless.
+func TestCreateBaselineChainsOntoTheRealHead(t *testing.T) {
+	forEachRepo(t, testCreateBaselineChainsOntoTheRealHead)
+}
+
+func testCreateBaselineChainsOntoTheRealHead(t *testing.T, repo Repo) {
+	ctx := context.Background()
+	g := New(repo)
+	n, err := g.CreateNode(ctx, NewNode{Namespace: "organisation", Key: "N-1", Type: "OrgUnit"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	head, err := g.BranchHead(ctx, "organisation", domain.MainBranch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := g.CreateBaseline(ctx, "organisation", "repair", []domain.NodeRef{n.Ref()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b.ParentID != head.ID {
+		t.Fatalf("parent = %q, want real prior head %q", b.ParentID, head.ID)
+	}
+
+	// a namespace with no head yet is the one legitimate case that stays parentless
+	empty, err := g.CreateBaseline(ctx, "nothing-here-yet", "initial", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if empty.ParentID != "" {
+		t.Fatalf("initial baseline of a fresh namespace must stay parentless, got %q", empty.ParentID)
+	}
+}
+
 // A merge without conflict writes no version (ADR 0032): what changed on one side only joins the target as is.
 func TestMergeWithoutConflictJoinsVersions(t *testing.T) {
 	forEachRepo(t, testMergeWithoutConflictJoinsVersions)

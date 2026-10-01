@@ -3,7 +3,7 @@
 // onto the tab of the editor; a node it cannot show (an element removed from
 // its definition, an unknown version) opens in the default node editor.
 import { registerNodeEditor } from '../shell/registry';
-import type { NodeHandle } from '../shell/types';
+import type { NodeHandle, NodeEditorTarget } from '../shell/types';
 import { getDraft } from '../stores/drafts.svelte';
 import { KIND_SECTION, itemSpec, methodologySpec } from './editors/methodologyTabs';
 
@@ -69,11 +69,12 @@ registerNodeEditor({
   },
 });
 
-// policies and users
+// policies and users: a User opens its own editor (profile, organisation, assignments); a Policy opens the
+// access tab (policies and the flat list of users)
 registerNodeEditor({
   name: 'access',
   title: 'Access editor',
-  open: () => ({ kind: 'policies', params: {} }),
+  open: (n): NodeEditorTarget => (n.type === 'organisation@User' ? { kind: 'user', params: { key: n.key } } : { kind: 'policies', params: {} }),
 });
 
 registerNodeEditor({

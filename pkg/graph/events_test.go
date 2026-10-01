@@ -80,7 +80,9 @@ func TestObserveNodeAndBaselineEvents(t *testing.T) {
 		if len(sink.vals) != 1 || sink.subj[0] != "goap.baseline.main.advanced" {
 			t.Fatalf("baseline event: %v %v", sink.subj, sink.vals)
 		}
-		if be := sink.vals[0].(domain.BaselineEvent); be.Set[n.ID] != n.Version || len(be.Set) != 1 {
+		// B2 chains onto the real head (CreateBaseline now always does, so a direct write can never
+		// silently orphan branch history): n's version is unchanged from the head, so nothing is newly Set.
+		if be := sink.vals[0].(domain.BaselineEvent); len(be.Set) != 0 {
 			t.Fatalf("set = %v", be.Set)
 		}
 	})

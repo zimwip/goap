@@ -20,7 +20,7 @@
   import { headGraph, findNode, applyOnMain, createNodeItem, updateNodeItem, deleteNodeItem, moveNodeItem, currentLink, refOf, type HeadGraph } from '../../graphEdit';
   import { openTab } from '../../shell/tabs.svelte';
   import { notify, provideActions } from '../../shell/workbench.svelte';
-  import { ADAPTER_TYPE, ORG_UNIT_TYPE, OWNER, PART_OF, DEFAULT_ORG, WAITING_UNIT_PROP, newUserUnit } from '../../orgTypes';
+  import { ADAPTER_TYPE, ORG_UNIT_TYPE, USER_TYPE, OWNER, PART_OF, MEMBER_OF, DEFAULT_ORG, WAITING_UNIT_PROP, newUserUnit } from '../../orgTypes';
   import { hasAnyRole } from '../../stores/session.svelte';
   import { confirmDialog } from '../../shell/confirmState.svelte';
 
@@ -48,6 +48,16 @@
       .filter(Boolean)
       .sort(),
   );
+  /** the users whose member_of (ADR 0040) points at this unit */
+  const members = $derived(
+    (head?.links ?? [])
+      .filter((l) => l.type === MEMBER_OF && l.to?.id === unit?.id)
+      .map((l) => nodeById.get(l.from?.id ?? ''))
+      .filter((n): n is NonNullable<typeof n> => !!n)
+      .sort((a, b) => (a.key ?? '').localeCompare(b.key ?? '')),
+  );
+  /** users not already a member of this unit, to add */
+  const otherUsers = $derived((head?.nodes ?? []).filter((n) => n.type === USER_TYPE && !members.some((m) => m.id === n.id)));
   /** the Adapter nodes owned by this unit, by MCP name */
   const ownNodes = $derived.by(() => {
     const m = new Map<string, string>();
@@ -110,6 +120,27 @@
     }
   }
 
+  let fMember = $state('');
+  let addingMember = $state(false);
+
+  async function addMember() {
+    if (!unit || !head || !fMember) return;
+    const u = head.nodes.find((n) => n.type === USER_TYPE && n.key === fMember);
+    if (!u) return;
+    addingMember = true;
+    error = '';
+    try {
+      await applyOnMain(NS, `Move ${fMember}`, `Move ${fMember} to ${key}`, head.baselineId, [moveNodeItem(u, MEMBER_OF, currentLink(head, u, MEMBER_OF), refOf(unit))]);
+      notify(`${fMember} moved to ${key}.`, 'ok');
+      fMember = '';
+      await load();
+    } catch (e) {
+      error = errorMessage(e);
+    } finally {
+      addingMember = false;
+    }
+  }
+
   // The waiting unit (ADR 0042): a unit an administrator flags, at their discretion, for users signing in
   // for the first time; with none, they join ORG-DEFAULT. Making this unit the waiting unit moves the flag in
   // one change (set here, cleared on every unit carrying it); clearing it sends newcomers back to ORG-DEFAULT.
@@ -155,6 +186,7 @@
   const panes = $derived<Pane[]>([
     { id: 'overview', label: 'Overview' },
     { id: 'mcp', label: 'MCP', badge: effective.length || undefined },
+    { id: 'members', label: 'Members', badge: members.length || undefined },
     { id: 'assignments', label: 'Assignments' },
   ]);
 
@@ -549,6 +581,36 @@
               </div>
             </section>
           {/if}
+        {:else if active === 'members'}
+          <section class="card">
+            <h3>Members of {key}</h3>
+            <p class="hint">The users whose organisation (link <code>member_of</code>, ADR 0040) is this unit. A user is a member of exactly one unit; moving it here removes it from its previous one.</p>
+            {#if members.length}
+              <table class="tbl">
+                <thead><tr><th>User</th><th>Subject</th><th></th></tr></thead>
+                <tbody>
+                  {#each members as m (m.id)}
+                    <tr>
+                      <td>{String(m.props?.['displayName'] ?? m.key)}</td>
+                      <td><code>{m.props?.['subject'] ?? ''}</code></td>
+                      <td class="acts"><button type="button" class="small" onclick={() => openTab({ kind: 'user', params: { key: m.key ?? '' } })}>Open</button></td>
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            {:else}
+              <p class="empty">No member yet.</p>
+            {/if}
+            {#if otherUsers.length}
+              <div class="row">
+                <select bind:value={fMember} disabled={addingMember} aria-label="User to add">
+                  <option value="">Add member…</option>
+                  {#each otherUsers as o (o.id)}<option value={o.key}>{String(o.props?.['displayName'] ?? o.key)}</option>{/each}
+                </select>
+                <button type="button" class="small primary" disabled={!fMember || addingMember} onclick={addMember}>Add</button>
+              </div>
+            {/if}
+          </section>
         {:else if active === 'assignments' && head}
           <AssignmentsPane {head} fixedOrg={key} autoOpen={tab.params.newAssignment === '1'} onChanged={load} />
         {/if}

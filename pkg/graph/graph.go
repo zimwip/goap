@@ -234,12 +234,20 @@ func (g *Graph) CreateBaseline(ctx context.Context, namespace, name string, node
 			}
 			b.Nodes[n.ID] = n.Version
 		}
+		// Chains onto the branch's real head when one already exists, so a direct write can never silently
+		// sever a namespace's history; only a branch with no head yet (ErrNotFound) stays parentless.
+		branch := domain.BranchOf(b.Branch)
+		if head, err := branchHead(ctx, tx, namespace, branch); err == nil {
+			b.ParentID = head.ID
+		} else if !errors.Is(err, ErrNotFound) {
+			return err
+		}
 		if err := tx.PutBaseline(ctx, b); err != nil {
 			return err
 		}
 		// Persists the branch row from the baseline's first version on, main included: nothing but an applied
 		// change advances it otherwise, so a namespace started this way would leave main implicit until then.
-		return g.advanceBranch(ctx, tx, namespace, domain.BranchOf(b.Branch), b.ID)
+		return g.advanceBranch(ctx, tx, namespace, branch, b.ID)
 	})
 	return b, err
 }

@@ -148,8 +148,9 @@ func ptr[T any](v T) *T { return &v }
 // turn its own children's part_of links into suspect links (they would still point at its old version,
 // pkg/graph.SuspectLinks) — invisible to a plain BaselineGraph read and so to the navigation tree, orphaning a
 // whole subtree instead of fixing one unit. The change carries no change impact (nothing it does is a node
-// version): it is closed abandoned once every orphan found is linked, a change-log entry of "this ran,
-// changed nothing node-version-shaped" rather than evidence something was discarded.
+// version): it is applied once every orphan found is linked, landing through the normal Apply machinery so
+// the resulting baseline carries a real ParentID (the previous head) and ChangeID like any other applied
+// change (a change that declares no change impacts applies as an empty baseline, pkg/graph.Apply).
 func LinkOrphanUnits(ctx context.Context, g *graph.Graph) (bool, error) {
 	head, err := g.BranchHead(ctx, mcp.NamespaceOrganisation, domain.MainBranch)
 	if errors.Is(err, graph.ErrNotFound) {
@@ -185,20 +186,19 @@ func LinkOrphanUnits(ctx context.Context, g *graph.Graph) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	abandoned := domain.ChangeAbandoned
 	for _, n := range orphans {
 		if _, err := g.Link(ctx, c.ID, mcp.LinkPartOf, n.Ref(), def.Ref(), nil); err != nil {
+			abandoned := domain.ChangeAbandoned
 			if _, aerr := g.UpdateChange(ctx, c.ID, graph.ChangePatch{Status: &abandoned}); aerr != nil {
 				err = errors.Join(err, aerr)
 			}
 			return false, err
 		}
 	}
-	if _, err := g.UpdateChange(ctx, c.ID, graph.ChangePatch{Status: &abandoned}); err != nil {
+	if _, err := g.Apply(ctx, c.ID, "Orphan units join the default organisation"); err != nil {
 		return false, err
 	}
-	_, err = g.CreateBaselineFromLatest(ctx, mcp.NamespaceOrganisation, "Orphan units join the default organisation")
-	return err == nil, err
+	return true, nil
 }
 
 // SeedUnit creates an organisational unit, under parent when it is not empty.

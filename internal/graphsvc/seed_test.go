@@ -91,8 +91,27 @@ func TestLinkOrphanUnits(t *testing.T) {
 	if v, _ := g.View(ctx, acme.Ref()); len(v.Out) != 0 {
 		t.Fatalf("ORG-ACME should still be rootless before LinkOrphanUnits: %+v", v.Out)
 	}
+	before, err := g.BranchHead(ctx, "organisation", domain.MainBranch)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if linked, err := graphsvc.LinkOrphanUnits(ctx, g); err != nil || !linked {
 		t.Fatalf("first link = %v, %v", linked, err)
+	}
+	// the repair must land as an applied change, chained from the real head it ran against (not a
+	// disconnected baseline with no change, which would discontinue the organisation branch history).
+	after, err := g.BranchHead(ctx, "organisation", domain.MainBranch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.ParentID != before.ID {
+		t.Fatalf("head parent = %q, want previous head %q", after.ParentID, before.ID)
+	}
+	if after.ChangeID == "" {
+		t.Fatal("head has no ChangeID")
+	}
+	if c, err := g.Change(ctx, after.ChangeID); err != nil || c.Status != domain.ChangeApplied {
+		t.Fatalf("change = %+v, %v, want status %q", c, err, domain.ChangeApplied)
 	}
 	def, err := g.NodeByKey(ctx, "organisation", domain.DefaultOrg)
 	if err != nil {

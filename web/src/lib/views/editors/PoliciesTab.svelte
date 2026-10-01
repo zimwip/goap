@@ -3,7 +3,7 @@
   // administrator flag; their roles are held on projects, ADR 0043) of the organisation namespace, changed through
   // changes applied on main.
   import { errorMessage, type GraphNode, type Policy } from '../../api';
-  import { headGraph, applyOnMain, createNodeItem, deleteNodeItem, refOf, type HeadGraph } from '../../graphEdit';
+  import { headGraph, applyOnMain, createNodeItem, deleteNodeItem, currentLink, refOf, type HeadGraph } from '../../graphEdit';
   import { ORG_UNIT_TYPE, MEMBER_OF, newUserUnit } from '../../orgTypes';
   import { NS_ORGANISATION, POLICY_TYPE, USER_TYPE, newPolicyKey, policiesOf, policyProps, userKey, userProps, usersOf, type User } from '../../access';
   import type { Tab } from '../../shell/types';
@@ -11,6 +11,7 @@
   import StatusBadge from '../../components/StatusBadge.svelte';
   import { provideActions } from '../../shell/workbench.svelte';
   import { confirmDialog } from '../../shell/confirmState.svelte';
+  import { openTab } from '../../shell/tabs.svelte';
 
   let { tab }: { tab: Tab } = $props();
 
@@ -57,6 +58,17 @@
   }
 
   // --- users -----------------------------------------------------------------------
+
+  /** the unit a user is a member of (link member_of), for the Organisation column */
+  function orgOf(n: GraphNode): GraphNode | undefined {
+    if (!head) return undefined;
+    const l = currentLink(head, n, MEMBER_OF);
+    return l?.to?.id ? head.nodes.find((u) => u.id === l.to?.id) : undefined;
+  }
+
+  function openUser(n: GraphNode) {
+    openTab({ kind: 'user', params: { key: n.key ?? '' } });
+  }
 
   let uSubject = $state('');
   let uName = $state('');
@@ -231,16 +243,21 @@
     <div class="scroll">
       <table>
         <thead>
-          <tr><th>Subject</th><th>Name</th><th>Email</th><th>Administrator</th><th><span class="sr-only">Delete</span></th></tr>
+          <tr><th>Subject</th><th>Name</th><th>Email</th><th>Organisation</th><th>Administrator</th><th><span class="sr-only">Open</span></th></tr>
         </thead>
         <tbody>
           {#each users as { node, user } (node.id)}
+            {@const unit = orgOf(node)}
             <tr>
               <td><code>{user.subject}</code></td>
               <td>{user.displayName}</td>
               <td>{user.email}</td>
+              <td>{#if unit}<code>{String(unit.props?.['name'] ?? unit.key)}</code>{:else}<span class="muted">none</span>{/if}</td>
               <td>{user.admin ? 'yes' : ''}</td>
-              <td class="actions"><button class="small danger" onclick={() => removeUser(node, user)}>Delete</button></td>
+              <td class="actions">
+                <button class="small" onclick={() => openUser(node)}>Open</button>
+                <button class="small danger" onclick={() => removeUser(node, user)}>Delete</button>
+              </td>
             </tr>
           {/each}
         </tbody>
