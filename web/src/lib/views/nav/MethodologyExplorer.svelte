@@ -12,7 +12,7 @@
   import { openContextMenu } from '../../shell/contextMenuState.svelte';
   import { openObjectDialog } from '../../shell/objectDialogState.svelte';
   import { formatDate, type MethodologySummary } from '../../api';
-  import type { Section, SectionItem } from '../../methodologyForm';
+  import { walkSteps, type Section, type SectionItem } from '../../methodologyForm';
   import { typeCatalog, typeName } from '../../stores/types.svelte';
   import {
     COLLECTION_ICON,
@@ -88,6 +88,12 @@
       icon: 'plus' as const,
       run: () => add(d, c),
     }));
+  }
+
+  /** A step: a part of its process or method, opened on the owner at the step. */
+  function openPart(d: Draft, s: Section, it: SectionItem, at: string, pin = false) {
+    const t = openTab(itemSpec(d, s, it), { pin });
+    requestReveal(t.id, at);
   }
 
   function openRoles(d: Draft, i: number, pin = false) {
@@ -249,6 +255,18 @@
                           openContextMenu(e, [{ label: 'New step', icon: 'plus', run: () => addStep(d, s, it) }]);
                       }}
                     />
+                    {#if hasSteps(typeCatalog.cat, s, it)}
+                      {#each walkSteps(it.steps) as p (p.path)}
+                        <TreeRow
+                          depth={4 + p.path.split('/').length - 1}
+                          icon="node"
+                          label={p.step.name || '(unnamed)'}
+                          detail={s === 'methods' ? 'method step' : 'step'}
+                          onselect={() => openPart(d, s, it, p.at)}
+                          onopen={() => openPart(d, s, it, p.at, true)}
+                        />
+                      {/each}
+                    {/if}
                   {:else}
                     <p class="empty pad3">
                       {s === 'agents' ? 'No agent (default agent: all actions).' : 'No items.'}

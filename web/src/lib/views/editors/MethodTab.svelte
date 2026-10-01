@@ -9,7 +9,8 @@
   import ReferencesEditor from './ReferencesEditor.svelte';
   import ResponsibilitiesEditor from './ResponsibilitiesEditor.svelte';
   import { provideActions, useReveal } from '../../shell/workbench.svelte';
-  import { walkSteps } from '../../methodologyForm';
+  import { emptyStep, walkSteps } from '../../methodologyForm';
+  import StepEditor from './StepEditor.svelte';
   import { draftOf, draftActions, removeItemAction, syncTabUid, openItem } from './methodologyTabs';
 
   let { tab }: { tab: Tab } = $props();
@@ -101,6 +102,21 @@
             </select>
           </div>
         </div>
+      </section>
+
+      <section class="card" data-path="{p}.steps">
+        <h3>Steps <span class="hint">{walkSteps(item.steps).length}</span></h3>
+        <p class="hint">
+          Instead of naming an agent, a method may compose its own steps and sub-steps, like a process: they are
+          sequenced by their conditions, and an agent of the method's own name carries them out. A method names an agent
+          or composes steps, not both.
+        </p>
+        {#each item.steps as step, i (step.key)}
+          <StepEditor bind:step={item.steps[i]} siblings={item.steps} index={i} path="{p}.steps[{i}]" draft={d} />
+        {/each}
+        {#if !d.readonly}
+          <button type="button" class="small primary" onclick={() => item.steps.push(emptyStep(`step_${item.steps.length + 1}`))}>+ Step</button>
+        {/if}
       </section>
 
       <section class="card">
