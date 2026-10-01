@@ -19,6 +19,7 @@ import (
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/engine"
 	"github.com/zimwip/goap/pkg/graph"
+	"github.com/zimwip/goap/pkg/mcp"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
@@ -332,7 +333,22 @@ func (h *Handler) UpdateChange(ctx context.Context, r *connect.Request[graphv1.U
 	return res(&graphv1.UpdateChangeResponse{Change: pbconv.ChangeToPB(c)}, err)
 }
 
-func isAccessType(typ string) bool { return typ == access.NodeTypeUser || typ == access.NodeTypePolicy }
+// isAccessType reports whether a node type governs access itself — who may do what (User, Policy), the
+// organisation and project structure (OrgUnit, ProjectUnit), who holds what role or platform role where
+// (Assignment, ADR 0043/0046/0047), and what an organisational unit may reach (Adapter, ADR 0028). None of
+// these are domain data a project's own members write through the ordinary change/object/node rules
+// (authz.DefaultPolicies): administered by administrators only, gated here (security fix: CommitEdits and
+// AddChangeImpacts/WriteChangeImpact otherwise let any authenticated subject write them unchecked, which,
+// since Assignment can grant the "admin" platform role (ADR 0047), amounted to unauthenticated privilege
+// escalation to full administrator).
+func isAccessType(typ string) bool {
+	switch typ {
+	case access.NodeTypeUser, access.NodeTypePolicy, access.NodeTypeProjectUnit, access.NodeTypeAssignment, mcp.NodeTypeOrgUnit, mcp.NodeTypeAdapter:
+		return true
+	default:
+		return false
+	}
+}
 
 func (h *Handler) AddItems(ctx context.Context, r *connect.Request[graphv1.AddItemsRequest]) (*connect.Response[graphv1.AddItemsResponse], error) {
 	ctx = h.Identity.Context(ctx, r.Header())
@@ -347,8 +363,9 @@ func (h *Handler) AddItems(ctx context.Context, r *connect.Request[graphv1.AddIt
 	return res(&graphv1.AddItemsResponse{Items: pbconv.ItemsToPB(items)}, err)
 }
 
-// gateAccess applies to a change impact the gate of the access nodes: User and Policy nodes need the access
-// permission, checked against the floor (ADR 0020).
+// gateAccess applies to a change impact the gate of the access nodes (isAccessType): they need the access
+// permission ("policy":"write"), checked against the floor (ADR 0020) — administrator-only, same as every
+// other organisation-namespace write (authz.DefaultPolicies has no rule for "node"/"object" write on it).
 func (h *Handler) gateAccess(ctx context.Context, typ string) error {
 	who := authz.From(ctx)
 	if isAccessType(typ) {
