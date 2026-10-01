@@ -280,6 +280,8 @@ export interface MethodForm extends Identified {
   agent: string;
   goal: string;
   roles: ResponsibilitiesForm;
+  /** the method composes its own steps and sub-steps, like a process (exclusive with agent) */
+  steps: StepForm[];
 }
 
 export interface MethodologyForm {
@@ -410,6 +412,7 @@ export const emptyMethod = (): MethodForm => ({
   agent: '',
   goal: '',
   roles: emptyResponsibilities(),
+  steps: [],
 });
 export const emptyProcess = (): ProcessForm => ({ uid: newUid(), name: '', description: '', examples: '', references: [], steps: [emptyStep('first')] });
 export const emptyTrigger = (): TriggerForm => ({
@@ -733,6 +736,7 @@ export function toForm(m: Methodology): MethodologyForm {
       agent: x.agent ?? '',
       goal: x.goal ?? '',
       roles: respToForm(x.roles),
+      steps: (x.steps ?? []).map(stepToForm),
     })),
     roles: (m.roles ?? []).map((r) => ({ name: r.name ?? '', description: r.description ?? '' })),
     appliesTo: (m.appliesTo ?? []).join(', '),
@@ -1057,6 +1061,7 @@ export function fromForm(f: MethodologyForm): { methodology: Methodology; issues
       put(o, 'agent', x.agent.trim());
       put(o, 'goal', x.goal.trim());
       put(o, 'roles', respFromForm(x.roles));
+      put(o, 'steps', x.steps.map(stepFromForm));
       return o;
     }),
   );

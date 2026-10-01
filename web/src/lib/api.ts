@@ -498,6 +498,8 @@ export interface MethodologyMethod {
   goal?: string;
   /** roles involved when the method is used (replacing those of the step) */
   roles?: Responsibilities;
+  /** the method composes its own steps and sub-steps, like a process (exclusive with agent/goal) */
+  steps?: ProcessStep[];
 }
 
 /** A process as a graph: its steps, the edges its conditions draw, the methods of its capabilities (ADR 0036 §4). */
