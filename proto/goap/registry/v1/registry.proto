@@ -162,6 +162,8 @@ message LinkType {
   string name = 1;
   string from = 2;
   string to = 3;
+  // composition link: the target is a part of the source, shown as its child
+  bool compose = 4;
 }
 
 message Condition {
@@ -707,6 +709,7 @@ message LinkTypeInfo {
   string ref = 1;
   string from = 2;
   string to = 3;
+  bool compose = 4;
 }
 
 message GetProcessGraphRequest {

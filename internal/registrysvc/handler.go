@@ -281,7 +281,7 @@ func (h *Handler) ListTypes(ctx context.Context, _ *connect.Request[registryv1.L
 		out.Types = append(out.Types, ti)
 	}
 	for _, l := range cat.LinkTypes() {
-		li := &registryv1.LinkTypeInfo{Ref: l.Ref.String()}
+		li := &registryv1.LinkTypeInfo{Ref: l.Ref.String(), Compose: l.Compose}
 		if !l.From.IsZero() {
 			li.From = l.From.String()
 		}

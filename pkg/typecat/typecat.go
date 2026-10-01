@@ -51,6 +51,8 @@ func (x *Type) Is(t domain.TypeRef) bool {
 type LinkType struct {
 	Ref      domain.TypeRef
 	From, To domain.TypeRef
+	// Compose: the target is a part of the source (methodology.LinkType.Compose).
+	Compose bool
 }
 
 // Catalog is the set of the types in force.
@@ -106,7 +108,7 @@ func New(ds ...*methodology.Domain) (*Catalog, error) {
 		}
 		for _, l := range d.LinkTypes {
 			ref := domain.TypeRef{Namespace: d.Name, Name: l.Name}
-			lt := &LinkType{Ref: ref}
+			lt := &LinkType{Ref: ref, Compose: l.Compose}
 			var err error
 			if l.From != "" {
 				if lt.From, err = domain.QualifyIn(d.Name, l.From); err != nil {
@@ -120,7 +122,7 @@ func New(ds ...*methodology.Domain) (*Catalog, error) {
 			}
 			if _, dup := c.links[ref]; dup {
 				// a link type declared for several pairs of ends: it accepts any pair
-				c.links[ref] = &LinkType{Ref: ref}
+				c.links[ref] = &LinkType{Ref: ref, Compose: l.Compose || c.links[ref].Compose}
 				continue
 			}
 			c.links[ref] = lt

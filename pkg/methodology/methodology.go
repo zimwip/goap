@@ -208,6 +208,10 @@ type LinkType struct {
 	// endpoints' types). "specializes" declares when/priority this way: the generic Activity-specialization
 	// condition (architecture plan "Activity concept") a link of that type would carry once one is created.
 	Properties []string `yaml:"properties,omitempty" json:"properties,omitempty"`
+	// Compose flags a composition link: the target is a part of the source (an aggregate), so a browser or
+	// editor shows the targets as the children of the source. It is the semantics the editors read from the
+	// domain instead of knowing the link by name ("defines", "sub_activity").
+	Compose bool `yaml:"compose,omitempty" json:"compose,omitempty"`
 }
 
 // Condition is a named CEL predicate on the blackboard.
