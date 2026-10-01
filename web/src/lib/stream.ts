@@ -6,7 +6,7 @@
 // end-of-stream envelope, whose JSON may contain
 // `{"error": {"code", "message"}}`.
 
-import { BASE, RpcError, getToken, ENGINE_SERVICE, type WatchEvent } from './api';
+import { BASE, RpcError, getToken, reportUnauthorized, ENGINE_SERVICE, type WatchEvent } from './api';
 
 const FLAG_COMPRESSED = 0x01;
 const FLAG_END_STREAM = 0x02;
@@ -70,7 +70,12 @@ export async function serverStream<TReq extends object, TRes>(
     } catch {
       // non-JSON body
     }
-    throw new RpcError(err.code ?? (res.status === 404 ? 'unimplemented' : 'unknown'), err.message ?? (text || res.statusText), res.status);
+    reportUnauthorized(token, res.status, err.message ?? '');
+    throw new RpcError(
+      err.code ?? (res.status === 404 ? 'unimplemented' : res.status === 401 ? 'unauthenticated' : 'unknown'),
+      err.message ?? (text || res.statusText),
+      res.status,
+    );
   }
   onOpen?.();
 

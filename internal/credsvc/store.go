@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -39,17 +40,47 @@ type Store interface {
 	Set(ctx context.Context, subject, hash string) error
 	// Exists reports whether a subject has a credential.
 	Exists(ctx context.Context, subject string) (bool, error)
+
+	// CreateSession records a new sign-in session (ADR 0045), and forgets the sessions expired before purgeBefore.
+	CreateSession(ctx context.Context, sess Session, purgeBefore time.Time) error
+	// Session returns a session. ErrNotFound if there is none.
+	Session(ctx context.Context, id string) (Session, error)
+	// RevokeSession ends a session (no error when it is unknown or already ended).
+	RevokeSession(ctx context.Context, id string, at time.Time) error
+	// RevokeSessions ends every session of a subject still open.
+	RevokeSessions(ctx context.Context, subject string, at time.Time) error
 }
 
+// Session is a sign-in (ADR 0045): every token issued from it carries its id; it ends when its subject signs out
+// (Revoked), changes their password, or it expires.
+type Session struct {
+	ID, Subject string
+	Created     time.Time
+	Expires     time.Time
+	// Revoked is when the session was ended, zero while it is open.
+	Revoked time.Time
+}
+
+// Active reports whether the session still accepts its tokens at t.
+func (s Session) Active(t time.Time) bool { return s.Revoked.IsZero() && t.Before(s.Expires) }
+
 // MemoryStore is an in-memory Store (tests, GOAP_STORE=memory).
-type MemoryStore struct{ hashes map[string]string }
+type MemoryStore struct {
+	mu       sync.Mutex
+	hashes   map[string]string
+	sessions map[string]Session
+}
 
 var _ Store = (*MemoryStore)(nil)
 
 // NewMemoryStore returns an empty in-memory store.
-func NewMemoryStore() *MemoryStore { return &MemoryStore{hashes: map[string]string{}} }
+func NewMemoryStore() *MemoryStore {
+	return &MemoryStore{hashes: map[string]string{}, sessions: map[string]Session{}}
+}
 
 func (s *MemoryStore) Create(_ context.Context, subject, hash string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if _, ok := s.hashes[subject]; ok {
 		return ErrExists
 	}
@@ -58,6 +89,8 @@ func (s *MemoryStore) Create(_ context.Context, subject, hash string) error {
 }
 
 func (s *MemoryStore) Hash(_ context.Context, subject string) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	h, ok := s.hashes[subject]
 	if !ok {
 		return "", ErrNotFound
@@ -66,6 +99,8 @@ func (s *MemoryStore) Hash(_ context.Context, subject string) (string, error) {
 }
 
 func (s *MemoryStore) Set(_ context.Context, subject, hash string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if _, ok := s.hashes[subject]; !ok {
 		return ErrNotFound
 	}
@@ -74,8 +109,57 @@ func (s *MemoryStore) Set(_ context.Context, subject, hash string) error {
 }
 
 func (s *MemoryStore) Exists(_ context.Context, subject string) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	_, ok := s.hashes[subject]
 	return ok, nil
+}
+
+func (s *MemoryStore) CreateSession(_ context.Context, sess Session, purgeBefore time.Time) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for id, o := range s.sessions {
+		if o.Expires.Before(purgeBefore) {
+			delete(s.sessions, id)
+		}
+	}
+	if _, ok := s.sessions[sess.ID]; ok {
+		return ErrExists
+	}
+	s.sessions[sess.ID] = sess
+	return nil
+}
+
+func (s *MemoryStore) Session(_ context.Context, id string) (Session, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	sess, ok := s.sessions[id]
+	if !ok {
+		return Session{}, ErrNotFound
+	}
+	return sess, nil
+}
+
+func (s *MemoryStore) RevokeSession(_ context.Context, id string, at time.Time) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if sess, ok := s.sessions[id]; ok && sess.Revoked.IsZero() {
+		sess.Revoked = at
+		s.sessions[id] = sess
+	}
+	return nil
+}
+
+func (s *MemoryStore) RevokeSessions(_ context.Context, subject string, at time.Time) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for id, sess := range s.sessions {
+		if sess.Subject == subject && sess.Revoked.IsZero() {
+			sess.Revoked = at
+			s.sessions[id] = sess
+		}
+	}
+	return nil
 }
 
 // SQLStore is the Store on database/sql, for SQLite (local mode) and PostgreSQL (through the pgx stdlib
@@ -144,4 +228,65 @@ func (s SQLStore) Exists(ctx context.Context, subject string) (bool, error) {
 		return false, nil
 	}
 	return err == nil, err
+}
+
+// stamp is how the SQL store writes a time: RFC 3339 in UTC, which sorts as text (SQLite) and casts to timestamptz
+// (PostgreSQL).
+func stamp(t time.Time) string { return t.UTC().Format(time.RFC3339Nano) }
+
+// sqlTime scans a time written by stamp: text in SQLite, timestamptz in PostgreSQL; NULL is the zero time.
+type sqlTime struct{ t *time.Time }
+
+func (s sqlTime) Scan(v any) error {
+	switch x := v.(type) {
+	case nil:
+		*s.t = time.Time{}
+	case time.Time:
+		*s.t = x
+	case string:
+		return s.parse(x)
+	case []byte:
+		return s.parse(string(x))
+	default:
+		return fmt.Errorf("unexpected time %T", v)
+	}
+	return nil
+}
+
+func (s sqlTime) parse(v string) error {
+	t, err := time.Parse(time.RFC3339Nano, v)
+	*s.t = t
+	return err
+}
+
+func (s SQLStore) CreateSession(ctx context.Context, sess Session, purgeBefore time.Time) error {
+	if _, err := s.DB.ExecContext(ctx, s.q(`DELETE FROM auth_session WHERE expires_at < ?`), stamp(purgeBefore)); err != nil {
+		return err
+	}
+	_, err := s.DB.ExecContext(ctx, s.q(`INSERT INTO auth_session (id, subject, created_at, expires_at) VALUES (?, ?, ?, ?)`),
+		sess.ID, sess.Subject, stamp(sess.Created), stamp(sess.Expires))
+	if err != nil && strings.Contains(strings.ToLower(err.Error()), "unique") {
+		return ErrExists
+	}
+	return err
+}
+
+func (s SQLStore) Session(ctx context.Context, id string) (Session, error) {
+	sess := Session{ID: id}
+	err := s.DB.QueryRowContext(ctx, s.q(`SELECT subject, created_at, expires_at, revoked_at FROM auth_session WHERE id = ?`), id).
+		Scan(&sess.Subject, sqlTime{&sess.Created}, sqlTime{&sess.Expires}, sqlTime{&sess.Revoked})
+	if errors.Is(err, sql.ErrNoRows) {
+		return Session{}, ErrNotFound
+	}
+	return sess, err
+}
+
+func (s SQLStore) RevokeSession(ctx context.Context, id string, at time.Time) error {
+	_, err := s.DB.ExecContext(ctx, s.q(`UPDATE auth_session SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL`), stamp(at), id)
+	return err
+}
+
+func (s SQLStore) RevokeSessions(ctx context.Context, subject string, at time.Time) error {
+	_, err := s.DB.ExecContext(ctx, s.q(`UPDATE auth_session SET revoked_at = ? WHERE subject = ? AND revoked_at IS NULL`), stamp(at), subject)
+	return err
 }
