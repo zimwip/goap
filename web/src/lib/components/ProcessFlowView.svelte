@@ -330,7 +330,7 @@
     position: absolute;
     top: 10px;
     right: 10px;
-    z-index: 5;
+    z-index: 6;
     display: grid;
     place-items: center;
     width: 30px;
@@ -365,10 +365,17 @@
     position: absolute;
     top: 10px;
     left: 10px;
+    /* leave the full screen icon (top right) uncovered: the legend wraps instead of running under it */
+    right: 52px;
     z-index: 5;
     display: flex;
+    flex-wrap: wrap;
     gap: 6px;
     align-items: center;
+    pointer-events: none;
+  }
+  .overlay > * {
+    pointer-events: auto;
   }
   .legend {
     display: flex;
