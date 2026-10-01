@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 
@@ -190,12 +191,18 @@ func TestEnsureUserWaitsForDefaultOrg(t *testing.T) {
 	if err != nil {
 		t.Fatalf("alice's User node: %v", err)
 	}
-	u, err := access.UserFromProps(n.Properties)
+	// the first user is granted admin through a platform Assignment (ADR 0046, 0047), not the legacy
+	// User.Admin flag
+	asgNode, err := g.NodeByKey(ctx, mcp.NamespaceOrganisation, access.PlatformAssignmentKey("USR:alice"))
+	if err != nil {
+		t.Fatalf("alice's platform assignment: %v", err)
+	}
+	asg, err := access.AssignmentFromProps(asgNode.Properties)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !u.Admin {
-		t.Fatalf("first user must be admin: %+v", u)
+	if !slices.Contains(asg.Roles, access.RoleAdmin) {
+		t.Fatalf("first user must be granted admin: %+v", asg)
 	}
 	links, err := g.OutLinksOf(ctx, n.Ref())
 	if err != nil {
@@ -225,6 +232,9 @@ func TestEnsureUserWaitsForDefaultOrg(t *testing.T) {
 	}
 	if bob.Admin {
 		t.Fatalf("second user must not be admin: %+v", bob)
+	}
+	if _, err := g.NodeByKey(ctx, mcp.NamespaceOrganisation, access.PlatformAssignmentKey("USR:bob")); !errors.Is(err, graph.ErrNotFound) {
+		t.Fatalf("a second user must get no platform assignment: %v", err)
 	}
 }
 
