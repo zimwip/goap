@@ -335,6 +335,9 @@ func SeedBuiltins(ctx context.Context, g *graph.Graph) (bool, error) {
 		sync(mcp.MCPKey(d.Name), mcp.NodeTypeMCP, d.Props())
 		sync(mcp.AdapterDefKey(defs[i].Name), mcp.NodeTypeAdapterDef, defs[i].Props())
 	}
+	for _, r := range mcp.BuiltinRoles() {
+		sync(mcp.RoleKey(r.Name), mcp.NodeTypeRole, r.Props())
+	}
 	if len(edits) > 0 {
 		if err := applyOn(ctx, g, mcp.NamespacePlatform, "Built-in MCPs", edits); err != nil {
 			return false, err

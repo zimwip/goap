@@ -1,5 +1,5 @@
 name: platform
-version: 2.1.0
+version: 2.2.0
 description: >
   The platform configuration, in its own namespace ("platform"): the MCPs (the generic usage of a tool by an LLM), the
   adapter definitions (AdapterDef: code mapping an MCP onto a connector; an organisation implements an MCP with an Adapter
@@ -13,3 +13,10 @@ nodeTypes:
   - {name: LlmProvider, description: "LLM provider: a kind (preset) on a wire protocol", properties: [name, kind, protocol, baseURL, enabled, apiKeyRef]}
   - {name: LlmModel, description: "Model offered on the platform, with its global quota and the roles that may call it", properties: [provider, model, displayName, enabled, quotaTokens, quotaPeriod, roles]}
   - {name: LlmAlias, description: "Name (default, fast, ...) of a model, as provider/model", properties: [alias, target]}
+  # a built-in, platform-wide role (ADR 0046): granted by an organisation@Assignment naming no project
+  # (assigns_org only), it holds everywhere, independent of any project's applicable methodologies — unlike
+  # methodology@Role, which only exists where a project names the methodology declaring it. A fixed catalog
+  # kept in sync with the code (pkg/mcp.BuiltinRoles) by SeedBuiltins, documenting the role; not consulted to
+  # decide what it may do (authz.DefaultPolicies) or to validate an Assignment's roles (not checked server-side).
+  # Administration (User.Admin) is not one of these: it stays the ADR 0043 flag.
+  - {name: Role, editor: role, description: "Built-in platform-wide role, granted by an Assignment naming no project", properties: [name, description]}

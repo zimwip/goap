@@ -18,9 +18,14 @@ administration itself into a general mechanism.
 
 ## Decision
 
-- **A platform role is a fixed, built-in role name, not read from the graph.** `access.PlatformRoles` lists them
-  (today: `access.RoleReader`, "reader"); unlike `methodology@Role`, there is no node type or registry version
-  for them — they are as fixed as `access.RoleAdmin` already is, just not elevated to a bool flag of their own.
+- **A platform role is a fixed, built-in catalog entry of the platform namespace** (`platform@Role`,
+  `pkg/mcp.BuiltinRoles`, today just "reader"; `access.RoleReader` names it for the ABAC rules, `access.
+  PlatformRoles` lists the grantable names). `SeedBuiltins` keeps its node in sync with the code at every start,
+  the same way it does for the built-in MCPs (ADR 0028) — unlike `methodology@Role`, there is no registry version
+  for it, it ships with the platform. The node documents the role for the IDE; it is not consulted to decide what
+  the role may do (that is `authz.DefaultPolicies`) or to validate an Assignment's roles (not checked
+  server-side, same gap as methodology roles, ADR 0043). Administration stays `access.RoleAdmin` / `User.Admin`,
+  not one of these.
 - **An Assignment naming no project grants one.** The `organisation@Assignment` node type is unchanged; its
   `assigns_project` link is simply optional. An Assignment with `assigns_org` and no `assigns_project` grants
   the platform role(s) in its `roles` to that org unit (or user) everywhere — independent of any project's
@@ -46,7 +51,7 @@ administration itself into a general mechanism.
 
 - A project needing no methodology-specific role (a holding area, a project still being set up) is no longer a
   trap: a platform role reaches it like it reaches everything else.
-- Platform roles stay a short, built-in list curated in code (`access.PlatformRoles`), not something a
+- Platform roles stay a short, built-in catalog curated in code (`pkg/mcp.BuiltinRoles`), not something a
   methodology or a project can extend — deliberately narrower than `methodology@Role`, to keep "what a role can
   do platform-wide" reviewable in one place rather than spread across methodologies.
 - A policy wanting a platform role scoped to particular projects writes that scoping itself (reads the project's
