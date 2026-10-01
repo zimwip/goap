@@ -203,3 +203,26 @@ func TestUserSatisfiesOrgUnit(t *testing.T) {
 		t.Fatalf("project_part_of accepts a ProjectUnit at both ends: %v", err)
 	}
 }
+
+// TestActivitySpecializesIsTransitive checks that Process/Step/Method/MethodStep/Action all extend
+// methodology@Activity (architecture plan "Activity concept"), so the generic specializes link (declared
+// from/to Activity) accepts any of them, at either end, without naming each one - Action satisfies it through
+// Activity transitively, the same way User satisfies OrgUnit above.
+func TestActivitySpecializesIsTransitive(t *testing.T) {
+	c := Builtin()
+	activity := domain.TypeRef{Namespace: "methodology", Name: "Activity"}
+	for _, name := range []string{"Process", "Step", "Method", "MethodStep", "Action"} {
+		typ, ok := c.Type("methodology@" + name)
+		if !ok || !typ.Is(activity) {
+			t.Fatalf("methodology@%s must extend methodology@Activity: %+v", name, typ)
+		}
+	}
+	for _, pair := range [][2]string{{"Action", "Action"}, {"Method", "Action"}, {"Process", "Process"}, {"Step", "MethodStep"}} {
+		if err := c.CheckLink("methodology@specializes", "methodology@"+pair[0], "methodology@"+pair[1]); err != nil {
+			t.Fatalf("specializes(%s, %s): %v", pair[0], pair[1], err)
+		}
+	}
+	if err := c.CheckLink("methodology@specializes", "methodology@Role", "methodology@Action"); err == nil {
+		t.Fatal("a Role is not an Activity: specializes must still reject it")
+	}
+}

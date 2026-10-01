@@ -203,6 +203,11 @@ type LinkType struct {
 	Name string `yaml:"name" json:"name"`
 	From string `yaml:"from,omitempty" json:"from,omitempty"`
 	To   string `yaml:"to,omitempty" json:"to,omitempty"`
+	// Properties names what a link of this type carries (its own property names, documentary only: unlike a node
+	// type's, not yet enforced or validated by the type catalogue - pkg/typecat.CheckLink only checks the
+	// endpoints' types). "specializes" declares when/priority this way: the generic Activity-specialization
+	// condition (architecture plan "Activity concept") a link of that type would carry once one is created.
+	Properties []string `yaml:"properties,omitempty" json:"properties,omitempty"`
 }
 
 // Condition is a named CEL predicate on the blackboard.
