@@ -33,9 +33,12 @@ processes:
 		t.Fatal(issues)
 	}
 	ls, ok := c.CheckLevels("flow")
-	// the process and its phase: an action is a node, not a level
-	if !ok || len(ls) != 2 {
+	// the process and its phase, and below each leaf step the action that does it as its internal step
+	if !ok || len(ls) != 5 {
 		t.Fatalf("levels %+v, %v", ls, ok)
+	}
+	if a := levelOf(t, ls, "flow/last"); a.Kind != LevelAction || len(a.Steps) != 1 || a.Steps[0].Name != "do_c" || !a.OK() {
+		t.Fatalf("a step done by an action opens on it: %+v", a)
 	}
 	root := levelOf(t, ls, "flow")
 	if !root.OK() || len(root.Order) != 2 || root.Order[0].Name != "phase" || root.Order[1].Name != "last" || root.Order[1].Layer != 1 {

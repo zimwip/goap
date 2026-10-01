@@ -33,6 +33,8 @@ type GraphStep struct {
 	References     []Reference
 	// Process is the nested process ("<process>" or "<methodology>/<process>"), Capability the capability.
 	Process, Capability string
+	// Foreach and GroupBy: the step runs once per element (or group) of the list (ADR 0050).
+	Foreach, GroupBy string
 }
 
 // GraphEdge says that the exit criteria of From meet the entry of To, on the given conditions.
@@ -82,7 +84,7 @@ func (c *Compiled) ProcessGraph(name string) (ProcessGraph, bool) {
 		for _, s := range steps {
 			gs := GraphStep{Path: s.Path, Name: s.Name, Description: s.Description, Parent: parent, Depth: depth, Leaf: len(s.Steps) == 0,
 				Method: s.Method(), Entry: s.Entry, Exit: s.Exit, Roles: s.Effective, Guidance: s.Guidance, References: s.References,
-				Process: s.Process, Capability: s.Capability}
+				Process: s.Process, Capability: s.Capability, Foreach: s.Foreach, GroupBy: s.GroupBy}
 			switch gs.Method {
 			case MethodAction:
 				gs.Target = s.Action

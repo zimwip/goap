@@ -5746,8 +5746,11 @@ type LevelNode struct {
 	// the step has sub-steps: a level of its own
 	Composite bool `protobuf:"varint,8,opt,name=composite,proto3" json:"composite,omitempty"`
 	// that level, or one below it, is not resolved: the level above cannot run through the step
-	Broken        bool  `protobuf:"varint,9,opt,name=broken,proto3" json:"broken,omitempty"`
-	SubSteps      int32 `protobuf:"varint,10,opt,name=sub_steps,json=subSteps,proto3" json:"sub_steps,omitempty"`
+	Broken   bool  `protobuf:"varint,9,opt,name=broken,proto3" json:"broken,omitempty"`
+	SubSteps int32 `protobuf:"varint,10,opt,name=sub_steps,json=subSteps,proto3" json:"sub_steps,omitempty"`
+	// the step runs once per element (or group) of a CEL list, in parallel streams (ADR 0050)
+	Foreach       string `protobuf:"bytes,11,opt,name=foreach,proto3" json:"foreach,omitempty"`
+	GroupBy       string `protobuf:"bytes,12,opt,name=group_by,json=groupBy,proto3" json:"group_by,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -5850,6 +5853,20 @@ func (x *LevelNode) GetSubSteps() int32 {
 		return x.SubSteps
 	}
 	return 0
+}
+
+func (x *LevelNode) GetForeach() string {
+	if x != nil {
+		return x.Foreach
+	}
+	return ""
+}
+
+func (x *LevelNode) GetGroupBy() string {
+	if x != nil {
+		return x.GroupBy
+	}
+	return ""
 }
 
 type LevelStep struct {
@@ -6087,15 +6104,18 @@ type GraphStep struct {
 	// it runs something (no sub-steps)
 	Leaf bool `protobuf:"varint,6,opt,name=leaf,proto3" json:"leaf,omitempty"`
 	// steps | action | agent | process | method | manual
-	Method        string            `protobuf:"bytes,7,opt,name=method,proto3" json:"method,omitempty"`
-	Target        string            `protobuf:"bytes,8,opt,name=target,proto3" json:"target,omitempty"`
-	Entry         map[string]bool   `protobuf:"bytes,9,rep,name=entry,proto3" json:"entry,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
-	Exit          map[string]bool   `protobuf:"bytes,10,rep,name=exit,proto3" json:"exit,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
-	Roles         *Responsibilities `protobuf:"bytes,11,opt,name=roles,proto3" json:"roles,omitempty"`
-	Guidance      string            `protobuf:"bytes,12,opt,name=guidance,proto3" json:"guidance,omitempty"`
-	References    []*Reference      `protobuf:"bytes,13,rep,name=references,proto3" json:"references,omitempty"`
-	Process       string            `protobuf:"bytes,14,opt,name=process,proto3" json:"process,omitempty"`
-	Capability    string            `protobuf:"bytes,15,opt,name=capability,proto3" json:"capability,omitempty"`
+	Method     string            `protobuf:"bytes,7,opt,name=method,proto3" json:"method,omitempty"`
+	Target     string            `protobuf:"bytes,8,opt,name=target,proto3" json:"target,omitempty"`
+	Entry      map[string]bool   `protobuf:"bytes,9,rep,name=entry,proto3" json:"entry,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
+	Exit       map[string]bool   `protobuf:"bytes,10,rep,name=exit,proto3" json:"exit,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
+	Roles      *Responsibilities `protobuf:"bytes,11,opt,name=roles,proto3" json:"roles,omitempty"`
+	Guidance   string            `protobuf:"bytes,12,opt,name=guidance,proto3" json:"guidance,omitempty"`
+	References []*Reference      `protobuf:"bytes,13,rep,name=references,proto3" json:"references,omitempty"`
+	Process    string            `protobuf:"bytes,14,opt,name=process,proto3" json:"process,omitempty"`
+	Capability string            `protobuf:"bytes,15,opt,name=capability,proto3" json:"capability,omitempty"`
+	// the step runs once per element (or group) of a CEL list, in parallel streams (ADR 0050)
+	Foreach       string `protobuf:"bytes,16,opt,name=foreach,proto3" json:"foreach,omitempty"`
+	GroupBy       string `protobuf:"bytes,17,opt,name=group_by,json=groupBy,proto3" json:"group_by,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -6231,6 +6251,20 @@ func (x *GraphStep) GetProcess() string {
 func (x *GraphStep) GetCapability() string {
 	if x != nil {
 		return x.Capability
+	}
+	return ""
+}
+
+func (x *GraphStep) GetForeach() string {
+	if x != nil {
+		return x.Foreach
+	}
+	return ""
+}
+
+func (x *GraphStep) GetGroupBy() string {
+	if x != nil {
+		return x.GroupBy
 	}
 	return ""
 }
@@ -7230,7 +7264,7 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\bR\x05value:\x028\x01\x1a:\n" +
 	"\fOutputsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\bR\x05value:\x028\x01\"\xc2\x03\n" +
+	"\x05value\x18\x02 \x01(\bR\x05value:\x028\x01\"\xf7\x03\n" +
 	"\tLevelNode\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
 	"\x04path\x18\x02 \x01(\tR\x04path\x12\x16\n" +
@@ -7244,7 +7278,9 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\tcomposite\x18\b \x01(\bR\tcomposite\x12\x16\n" +
 	"\x06broken\x18\t \x01(\bR\x06broken\x12\x1b\n" +
 	"\tsub_steps\x18\n" +
-	" \x01(\x05R\bsubSteps\x1a8\n" +
+	" \x01(\x05R\bsubSteps\x12\x18\n" +
+	"\aforeach\x18\v \x01(\tR\aforeach\x12\x19\n" +
+	"\bgroup_by\x18\f \x01(\tR\agroupBy\x1a8\n" +
 	"\n" +
 	"EntryEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
@@ -7273,7 +7309,7 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"references\x1a>\n" +
 	"\x10MethodGoalsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x80\x05\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xb5\x05\n" +
 	"\tGraphStep\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
@@ -7294,7 +7330,9 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\aprocess\x18\x0e \x01(\tR\aprocess\x12\x1e\n" +
 	"\n" +
 	"capability\x18\x0f \x01(\tR\n" +
-	"capability\x1a8\n" +
+	"capability\x12\x18\n" +
+	"\aforeach\x18\x10 \x01(\tR\aforeach\x12\x19\n" +
+	"\bgroup_by\x18\x11 \x01(\tR\agroupBy\x1a8\n" +
 	"\n" +
 	"EntryEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +

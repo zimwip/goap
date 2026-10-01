@@ -16,6 +16,9 @@
     /** the step has sub-steps: zoom into its own level */
     composite?: boolean;
     subSteps?: number;
+    /** the step runs once per element (or group) of this CEL list, in parallel streams (ADR 0050) */
+    foreach?: string;
+    groupBy?: string;
     /** that level, or one below it, is not resolved: this level cannot run through the step */
     broken?: boolean;
     onzoom?: () => void;
@@ -72,6 +75,12 @@
     <div class="zoom">
       <button type="button" class="chip" title="Open the method: its steps are drawn in a graph of their own" onclick={(e) => (e.stopPropagation(), data.onvariant?.(data.name))}>open method</button>
       <span class="hint">{data.target}</span>
+    </div>
+  {/if}
+  {#if data.foreach}
+    <div class="zoom">
+      <span class="chip" title="One parallel stream per element, each with the most specific method for it: {data.foreach}">∀ {data.foreach}</span>
+      {#if data.groupBy}<span class="hint" title="One stream per group: {data.groupBy}">by {data.groupBy}</span>{/if}
     </div>
   {/if}
   {#if data.composite}

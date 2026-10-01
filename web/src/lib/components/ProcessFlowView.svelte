@@ -162,6 +162,8 @@
         composite: !!n.composite,
         broken: !!n.broken,
         subSteps: n.subSteps ?? 0,
+        foreach: n.foreach,
+        groupBy: n.groupBy,
         onzoom: () => (path = p),
         ontrace: trace,
         variants: n.method === 'method' ? (graph.methods ?? []).filter((m) => m.for === n.capability).map((m) => m.name ?? '') : undefined,
@@ -223,7 +225,7 @@
 
   function place(ns: Node[], es: Edge[]) {
     const pos = layered(
-      ns.map((n) => ({ id: n.id, h: nodeHeight(Math.max((n.data as StepNodeData).inputs.length, (n.data as StepNodeData).outputs.length) + ((n.data as StepNodeData).composite ? 1 : 0)), w: NODE_W })),
+      ns.map((n) => ({ id: n.id, h: nodeHeight(Math.max((n.data as StepNodeData).inputs.length, (n.data as StepNodeData).outputs.length) + ((n.data as StepNodeData).composite ? 1 : 0) + ((n.data as StepNodeData).foreach ? 1 : 0)), w: NODE_W })),
       es,
     );
     for (const n of ns) n.position = moved.get(n.id) ?? pos.get(n.id) ?? { x: 0, y: 0 };
