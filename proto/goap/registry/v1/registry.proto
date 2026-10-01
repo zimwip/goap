@@ -336,11 +336,15 @@ message Method {
   repeated string checklist = 7;
   repeated string deliverables = 8;
   repeated Reference references = 9;
-  // the actor: an agent of the methodology, and the goal it reaches (default: its only goal)
+  // the actor: an agent of the methodology, and the goal it reaches (default: its only goal). Exactly one of
+  // agent or steps is set.
   string agent = 10;
   string goal = 11;
   // the roles involved when the method is used (replacing those of the step)
   Responsibilities roles = 12;
+  // composes the method from its own steps and sub-steps, the same shape and compilation as a process's,
+  // generating an agent and a goal of the method's own name. Mutually exclusive with agent/goal.
+  repeated Step steps = 13;
 }
 
 // A process: the steps that reach an objective, run by an agent of its name towards a goal of its name (ADR 0034).

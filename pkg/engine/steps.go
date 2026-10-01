@@ -37,7 +37,7 @@ func RunStep(ctx context.Context, ac ActionContext) (ActionResult, error) {
 		if err != nil {
 			return ActionResult{}, fmt.Errorf("step %s: %w", step, err)
 		}
-		agent, goal, method, sc = me.Agent, me.AgentGoal, me.Name, sc.withMethod(me.Method)
+		agent, goal, method, sc = me.ActorAgent(), me.AgentGoal, me.Name, sc.withMethod(me.Method)
 	}
 	if step == "" || agent == "" || goal == "" {
 		return ActionResult{}, fmt.Errorf("process.step %s: step, agent and goal are required", ac.Action.Name)
@@ -93,7 +93,7 @@ func (e *Engine) chooseMethod(ctx context.Context, ac ActionContext, capability 
 	candidates := m.MethodsFor(capability, ac.Blackboard)
 	var bound map[string]bool
 	for _, me := range candidates {
-		ag, _ := m.Agent(me.Agent)
+		ag, _ := m.Agent(me.ActorAgent())
 		if len(ag.MCPs) > 0 && bound == nil {
 			if bound, err = e.boundMCPs(ctx, ac.Process); err != nil {
 				return methodology.MethodChoice{}, err

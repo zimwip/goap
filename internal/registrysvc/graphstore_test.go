@@ -256,3 +256,59 @@ func TestGraphStoreMaterializesSteps(t *testing.T) {
 		t.Fatalf("processes must round-trip unaffected: %+v, %v", got.Methodology.Processes, err)
 	}
 }
+
+// A method composing its own steps (architecture plan "Activity concept") materializes methodology@MethodStep
+// nodes the same way a process's steps materialize methodology@Step ones.
+func TestGraphStoreMaterializesMethodSteps(t *testing.T) {
+	ctx := context.Background()
+	g := graph.New(graph.NewMemory())
+	s := NewGraphStore(g)
+	now := time.Now()
+	m := example(t)
+	m.Version = "9.3.0"
+	m.Methods = []methodology.Method{{
+		Name: "inspect",
+		For:  "verification",
+		Steps: []methodology.Step{
+			{Name: "note", Action: "write_note"},
+			{Name: "verify", Action: "check"},
+		},
+	}}
+	if err := s.Save(ctx, Record{Methodology: m, Status: StatusDraft, CreatedAt: now, UpdatedAt: now}); err != nil {
+		t.Fatal(err)
+	}
+	hk := MethodologyVersionKey(m.Name, m.Version)
+	n, err := g.NodeByKey(ctx, NamespaceMethodology, hk+"/methodStep/inspect/note")
+	if err != nil {
+		t.Fatalf("method step node: %v", err)
+	}
+	if n.Type != "methodology@MethodStep" || n.Properties["action"] != "write_note" {
+		t.Fatalf("method step node: %+v", n)
+	}
+	head, err := g.BranchHead(ctx, NamespaceMethodology, domain.MainBranch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, links, err := g.BaselineGraph(ctx, head.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	method, err := g.NodeByKey(ctx, NamespaceMethodology, hk+"/method/inspect")
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, l := range links {
+		if l.Type == linkSubActivity && l.From.ID == method.ID && l.To.ID == n.ID {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("method -> method step sub_activity link missing")
+	}
+	// decode ignores the method step nodes: the methodology still round-trips to exactly what was saved
+	got, err := s.Get(ctx, m.Name, m.Version)
+	if err != nil || canon(t, got.Methodology.Methods) != canon(t, m.Methods) {
+		t.Fatalf("methods must round-trip unaffected: %+v, %v", got.Methodology.Methods, err)
+	}
+}
