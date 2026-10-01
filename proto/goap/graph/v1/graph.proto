@@ -331,6 +331,9 @@ message CreateLinkRequest {
   NodeRef from = 2;
   NodeRef to = 3;
   google.protobuf.Struct props = 4;
+  // change_id attributes the link to an open change (ADR 0049): every graph mutation, including a link that
+  // intentionally does not version either endpoint, happens in the frame of a change.
+  string change_id = 5;
 }
 
 message CreateLinkResponse {

@@ -2,6 +2,7 @@ package graphsvc_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -10,12 +11,67 @@ import (
 	"github.com/zimwip/goap/internal/graphsvc"
 	"github.com/zimwip/goap/internal/identity"
 	"github.com/zimwip/goap/internal/pbconv"
+	"github.com/zimwip/goap/pkg/access"
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/graph"
+	"github.com/zimwip/goap/pkg/mcp"
 	"github.com/zimwip/goap/pkg/methodology"
 	"github.com/zimwip/goap/pkg/typecat"
 )
+
+// A User's deactivate/reactivate transitions (ADR 0048) require the admin role, like any other
+// permission-gated transition: the floor policy (hasRole(admin) -> "*","*") grants it, nobody else gets it by
+// default.
+func TestUserDeactivateReactivateRequireAdmin(t *testing.T) {
+	ctx := context.Background()
+	g := typedGraph(t)
+	authorizer, err := authz.NewCasbin(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	g.Authorizer = graphsvc.TransitionAuthorizer(authorizer)
+
+	if _, err := graphsvc.SeedDefaults(ctx, g); err != nil {
+		t.Fatal(err)
+	}
+	if err := graphsvc.EnsureUser(ctx, g, "carol"); err != nil {
+		t.Fatal(err)
+	}
+	move := func(principal authz.Principal, title, state string) error {
+		t.Helper()
+		head, err := g.BranchHead(ctx, mcp.NamespaceOrganisation, domain.MainBranch)
+		if err != nil {
+			t.Fatal(err)
+		}
+		carol, err := g.NodeByKey(ctx, mcp.NamespaceOrganisation, access.UserKey("carol"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		ref := carol.Ref()
+		_, err = g.Commit(authz.With(ctx, principal), graph.Commit{Namespace: mcp.NamespaceOrganisation, Title: title, Baseline: head.ID,
+			Edits: []graph.NodeEdit{{Pre: &ref, State: state, Rationale: "test"}}})
+		return err
+	}
+	if err := move(authz.Principal{Subject: "mallory"}, "deactivate carol", "deactivated"); !errors.Is(err, authz.ErrForbidden) {
+		t.Fatalf("a non-admin must not deactivate a user: %v", err)
+	}
+	if err := move(authz.Principal{Subject: "admin1", Roles: []string{"admin"}}, "deactivate carol", "deactivated"); err != nil {
+		t.Fatalf("an admin may deactivate a user: %v", err)
+	}
+	if n, err := g.NodeByKey(ctx, mcp.NamespaceOrganisation, access.UserKey("carol")); err != nil || n.State != "deactivated" {
+		t.Fatalf("carol should be deactivated: %+v %v", n, err)
+	}
+	if err := move(authz.Principal{Subject: "mallory"}, "reactivate carol", "active"); !errors.Is(err, authz.ErrForbidden) {
+		t.Fatalf("a non-admin must not reactivate a user: %v", err)
+	}
+	if err := move(authz.Principal{Subject: "admin1", Roles: []string{"admin"}}, "reactivate carol", "active"); err != nil {
+		t.Fatalf("an admin may reactivate a user: %v", err)
+	}
+	if n, err := g.NodeByKey(ctx, mcp.NamespaceOrganisation, access.UserKey("carol")); err != nil || n.State != "active" {
+		t.Fatalf("carol should be active again: %+v %v", n, err)
+	}
+}
 
 func TestLifecycleIsEnforcedByTheService(t *testing.T) {
 	ctx := context.Background()

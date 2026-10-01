@@ -3,6 +3,7 @@ package graph
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -17,6 +18,41 @@ import (
 	"github.com/zimwip/goap/internal/platform"
 	"github.com/zimwip/goap/pkg/domain"
 )
+
+// testChange opens a change on the current head of a namespace's main branch (an empty baseline if none
+// exists yet), for a test that needs a domain.ChangeID to attribute a raw g.Link call to (ADR 0049) without
+// disturbing whatever real content is already on main: CreateBaseline always advances the branch, even to an
+// empty one, so blindly calling it mid-test would silently reset main out from under earlier commits.
+func testChange(t *testing.T, g *Graph, namespace string) domain.ChangeID {
+	t.Helper()
+	ctx := context.Background()
+	head, err := g.BranchHead(ctx, namespace, domain.MainBranch)
+	if errors.Is(err, ErrNotFound) {
+		head, err = g.CreateBaseline(ctx, namespace, "B0", nil)
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := g.CreateChange(ctx, NewChange{Namespace: namespace, BaselineID: head.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return c.ID
+}
+
+// seedNode writes a node version directly, the way CreateNode did before ADR 0049 made it go through Commit:
+// test fixtures use it to arrange a world already sitting in a given lifecycle state (including an editable
+// one, or one not reachable from the lifecycle's initial state by a single transition) without walking every
+// transition to get there — something no real caller needs, since every production write is change-shaped.
+func seedNode(ctx context.Context, g *Graph, in NewNode) (domain.Node, error) {
+	n := domain.Node{ID: domain.NodeID(g.newID()), Version: 1, Branch: domain.MainBranch, Reason: domain.ReasonCreate,
+		Namespace: domain.NamespaceOf(in.Namespace), Key: in.Key, Type: in.Type, Properties: in.Properties, CreatedAt: g.now(), State: in.State}
+	if n.Key == "" {
+		n.Key = string(n.ID)
+	}
+	err := g.repo.InTx(ctx, func(tx Tx) error { return tx.PutNode(ctx, n) })
+	return n, err
+}
 
 // forEachRepo runs f against the in-memory repository and, when
 // GOAP_TEST_PG_DSN is set, against PostgreSQL in a fresh schema.

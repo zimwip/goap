@@ -121,6 +121,9 @@ func createUser(ctx context.Context, g *graph.Graph, subject string) error {
 	key := access.UserKey(subject)
 	user := linkTo(createNode(key, access.NodeTypeUser, u.Props()), access.LinkMemberOf, org.Ref())
 	user.Rationale = "First sign-in of " + subject
+	// activate it in the same commit (ADR 0048's user lifecycle starts a new account "proposed"): a sign-in
+	// lands it usable right away, with no separate admin step needed for every single new user.
+	user.State = "active"
 	edits := []graph.NodeEdit{user}
 	if len(existing) == 0 {
 		// the first user: grant admin through a platform Assignment created in the same commit (ToKey
@@ -132,7 +135,12 @@ func createUser(ctx context.Context, g *graph.Graph, subject string) error {
 			Links:     []graph.LinkEdit{{Type: access.LinkAssignsOrg, ToKey: key}},
 		})
 	}
-	return applyOn(ctx, g, mcp.NamespaceOrganisation, "User "+subject, edits)
+	// the activating transition (and, for the first user, the admin grant) is internal bookkeeping of the
+	// sign-in flow, not an action the caller is themselves authorized for: a brand-new subject holds no role
+	// or project yet, so running this under their own identity would make TransitionAuthorizer deny its own
+	// activation for every single new user. An anonymous context is trusted as an internal service (ADR 0048,
+	// internal/graphsvc/lifecycle.go's TransitionAuthorizer).
+	return applyOn(authz.With(ctx, authz.Principal{}), g, mcp.NamespaceOrganisation, "User "+subject, edits)
 }
 
 // NewUserUnit returns the organisational unit new users join (ADR 0042): the waiting unit, an OrgUnit an

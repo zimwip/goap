@@ -63,17 +63,10 @@ ctx.fail("unknown tool " + ctx.tool());
 }
 
 // applyOn commits node edits on main as one change of a namespace, so that the head of main
-// moves (baselines made outside a change do not once main has a head). The graph gets an
-// empty initial baseline when it has none.
+// moves (baselines made outside a change do not once main has a head). Commit itself gives the
+// namespace an empty initial baseline when it has none (ADR 0049).
 func applyOn(ctx context.Context, g *graph.Graph, namespace, title string, edits []graph.NodeEdit) error {
-	head, err := g.BranchHead(ctx, namespace, domain.MainBranch)
-	if errors.Is(err, graph.ErrNotFound) {
-		head, err = g.CreateBaseline(ctx, namespace, "Initial baseline", nil)
-	}
-	if err != nil {
-		return err
-	}
-	_, err = g.Commit(ctx, graph.Commit{Namespace: namespace, Title: title, Intent: title, Baseline: head.ID, By: "graphsvc.seed", BaselineName: title, Edits: edits})
+	_, err := g.Commit(ctx, graph.Commit{Namespace: namespace, Title: title, Intent: title, By: "graphsvc.seed", BaselineName: title, Edits: edits})
 	return err
 }
 
@@ -142,6 +135,71 @@ func seedRootProject(ctx context.Context, g *graph.Graph) error {
 }
 
 func ptr[T any](v T) *T { return &v }
+
+// LinkOrphanUnits links any OrgUnit other than the default organisation that has no part_of link to it
+// (ADR 0040 exempts only domain.DefaultOrg from needing one): the demo seed (SeedDemo) creates ORG-ACME
+// as a company of its own, through the raw write path that bypasses checkRequiredParent, before the
+// default organisation even exists. Idempotent: a unit that already has a part_of link (from here or from
+// an administrator's own move) is left alone, so the default organisation stays the single root of the
+// navigation tree without undoing a deliberate reorganisation.
+//
+// The link is added the same raw way SeedDemo adds its own (g.Link, no new node version, attributed to a
+// change of its own, ADR 0049): going through Commit instead would give the unit a new version, which would
+// turn its own children's part_of links into suspect links (they would still point at its old version,
+// pkg/graph.SuspectLinks) — invisible to a plain BaselineGraph read and so to the navigation tree, orphaning a
+// whole subtree instead of fixing one unit. The change carries no change impact (nothing it does is a node
+// version): it is closed abandoned once every orphan found is linked, a change-log entry of "this ran,
+// changed nothing node-version-shaped" rather than evidence something was discarded.
+func LinkOrphanUnits(ctx context.Context, g *graph.Graph) (bool, error) {
+	head, err := g.BranchHead(ctx, mcp.NamespaceOrganisation, domain.MainBranch)
+	if errors.Is(err, graph.ErrNotFound) {
+		return false, nil
+	} else if err != nil {
+		return false, err
+	}
+	nodes, links, err := g.BaselineGraph(ctx, head.ID)
+	if err != nil {
+		return false, err
+	}
+	parented := map[domain.NodeID]bool{}
+	for _, l := range links {
+		if l.Type == mcp.LinkPartOf {
+			parented[l.From.ID] = true
+		}
+	}
+	var orphans []domain.Node
+	for _, n := range nodes {
+		if !n.Deleted && n.Type == mcp.NodeTypeOrgUnit && n.Key != domain.DefaultOrg && !parented[n.ID] {
+			orphans = append(orphans, n)
+		}
+	}
+	if len(orphans) == 0 {
+		return false, nil
+	}
+	def, err := g.NodeByKey(ctx, mcp.NamespaceOrganisation, domain.DefaultOrg)
+	if err != nil {
+		return false, err
+	}
+	c, err := g.CreateChange(ctx, graph.NewChange{Namespace: mcp.NamespaceOrganisation, Title: "Orphan units join the default organisation",
+		Intent: "Structural repair (ADR 0040)", BaselineID: head.ID, Administrative: true})
+	if err != nil {
+		return false, err
+	}
+	abandoned := domain.ChangeAbandoned
+	for _, n := range orphans {
+		if _, err := g.Link(ctx, c.ID, mcp.LinkPartOf, n.Ref(), def.Ref(), nil); err != nil {
+			if _, aerr := g.UpdateChange(ctx, c.ID, graph.ChangePatch{Status: &abandoned}); aerr != nil {
+				err = errors.Join(err, aerr)
+			}
+			return false, err
+		}
+	}
+	if _, err := g.UpdateChange(ctx, c.ID, graph.ChangePatch{Status: &abandoned}); err != nil {
+		return false, err
+	}
+	_, err = g.CreateBaselineFromLatest(ctx, mcp.NamespaceOrganisation, "Orphan units join the default organisation")
+	return err == nil, err
+}
 
 // SeedUnit creates an organisational unit, under parent when it is not empty.
 // SeedUnit creates an OrgUnit, part_of parent (domain.DefaultOrg when parent is empty: every unit but the
@@ -233,6 +291,10 @@ func upgradeLegacyPolicies(ctx context.Context, g *graph.Graph) (bool, error) {
 // member_of is exactly one link, ADR 0040, never left unset).
 func SeedUser(ctx context.Context, g *graph.Graph, u access.User) error {
 	user := createNode(access.UserKey(u.Subject), access.NodeTypeUser, u.Props())
+	// land it active (ADR 0048's user lifecycle): a User seeded this way (tools, tests) must be usable right
+	// away, the same as one created by createUser's sign-in flow — left "proposed" it would silently never
+	// count toward the admin floor until some unrelated later commit happened to touch User/Assignment.
+	user.State = "active"
 	var unit domain.Node
 	var err error
 	if u.Unit == "" {

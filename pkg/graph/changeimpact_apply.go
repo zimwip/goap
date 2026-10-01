@@ -85,7 +85,7 @@ func (a *applier) checkChangeImpacts() error {
 		if lc == nil || n.State == "" {
 			continue
 		}
-		if lc.Editable(n.State) {
+		if lc.Editable(n.State) && !lc.RestInEditable {
 			editable = append(editable, fmt.Sprintf("%s (%s) in %s", n.Key, n.Type, n.State))
 		}
 		prev, from := lc.Initial, 0

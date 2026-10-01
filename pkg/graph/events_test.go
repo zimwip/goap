@@ -44,13 +44,28 @@ func TestObserveNodeAndBaselineEvents(t *testing.T) {
 		}
 		sink := &recSink{}
 		g.Observe(sink)
+		// a creation now lands as a change of its own (ADR 0049): besides the node's own NodeEvent, its
+		// Apply (and the merge of its own branch into main) advance one or more baselines, each a
+		// BaselineEvent — so the node's event is looked up among them, not assumed to be the only one.
 		n := mk("ITEM-1", "SubItem", map[string]any{"title": "hello", "prio": "high", "notes": "long text", "other": 1})
-		if len(sink.vals) != 1 {
-			t.Fatalf("want 1 event, got %d", len(sink.vals))
+		var ev domain.NodeEvent
+		found := false
+		for i, v := range sink.vals {
+			if e, ok := v.(domain.NodeEvent); ok && e.ID == n.ID {
+				if found {
+					t.Fatalf("more than one NodeEvent for %s", n.ID)
+				}
+				ev, found = e, true
+				if !strings.HasSuffix(sink.subj[i], "."+string(n.ID)+".written") {
+					t.Fatalf("bad subject %s", sink.subj[i])
+				}
+			}
 		}
-		ev := sink.vals[0].(domain.NodeEvent)
-		if ev.ID != n.ID || ev.Type != "SubItem" || !strings.HasSuffix(sink.subj[0], "."+string(n.ID)+".written") {
-			t.Fatalf("bad event %+v on %s", ev, sink.subj[0])
+		if !found {
+			t.Fatalf("no NodeEvent for %s among %d events", n.ID, len(sink.vals))
+		}
+		if ev.ID != n.ID || ev.Type != "SubItem" {
+			t.Fatalf("bad event %+v", ev)
 		}
 		if ev.Text["title"] != "hello" || ev.Text["notes"] != "long text" || len(ev.Text) != 2 {
 			t.Fatalf("text = %v", ev.Text)

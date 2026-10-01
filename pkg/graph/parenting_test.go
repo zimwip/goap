@@ -86,8 +86,8 @@ func testCommitRejectsASecondMembership(t *testing.T, repo Repo) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// member_of ORG-A, written outside of any change (EnsureUser's own path)
-	if _, err := g.Link(ctx, LinkMemberOf, user.Ref(), orgA.Ref(), nil); err != nil {
+	// member_of ORG-A, a raw link attributed to a change of its own (no new node version, ADR 0049)
+	if _, err := g.Link(ctx, testChange(t, g, ns), LinkMemberOf, user.Ref(), orgA.Ref(), nil); err != nil {
 		t.Fatal(err)
 	}
 	base, err := g.CreateBaselineFromLatest(ctx, ns, "b0")

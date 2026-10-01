@@ -14,7 +14,9 @@ func blackboard(t *testing.T, withTest bool) domain.Blackboard {
 	g := graph.New(graph.NewMemory())
 	need, _ := g.CreateNode(ctx, graph.NewNode{Key: "NEED-1", Type: "Need"})
 	req, _ := g.CreateNode(ctx, graph.NewNode{Key: "REQ-1", Type: "Requirement"})
-	if _, err := g.Link(ctx, "satisfies", req.Ref(), need.Ref(), nil); err != nil {
+	b0, _ := g.CreateBaseline(ctx, "", "B0", nil)
+	c0, _ := g.CreateChange(ctx, graph.NewChange{Title: "link", BaselineID: b0.ID})
+	if _, err := g.Link(ctx, c0.ID, "satisfies", req.Ref(), need.Ref(), nil); err != nil {
 		t.Fatal(err)
 	}
 	b, _ := g.CreateBaseline(ctx, "", "B1", []domain.NodeRef{need.Ref(), req.Ref()})

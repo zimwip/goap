@@ -52,7 +52,7 @@ func newAlgoWorld(t *testing.T, repo Repo) algoWorld {
 		States:      []domain.LifecycleState{{Name: "draft", Editable: true}, {Name: "released"}},
 		Transitions: []domain.Transition{{Name: "release", From: "draft", To: "released", GuardAlgos: []algo.Bound{guard}}}}
 	mk := func(key, typ string, props map[string]any, state string) domain.Node {
-		n, err := w.g.CreateNode(ctx, NewNode{Key: key, Type: typ, Properties: props, State: state})
+		n, err := seedNode(ctx, w.g, NewNode{Key: key, Type: typ, Properties: props, State: state})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -62,7 +62,7 @@ func newAlgoWorld(t *testing.T, repo Repo) algoWorld {
 	w.g.Types = func() TypeCatalog { return types }
 	w.req = mk("R1", "Req", map[string]any{"code": "REQ-1"}, "draft")
 	w.doc = mk("D1", "Doc", map[string]any{}, "draft")
-	if _, err := w.g.Link(ctx, domain.LinkContains, w.doc.Ref(), w.req.Ref(), nil); err != nil {
+	if _, err := w.g.Link(ctx, testChange(t, w.g, ""), domain.LinkContains, w.doc.Ref(), w.req.Ref(), nil); err != nil {
 		t.Fatal(err)
 	}
 	var err error
