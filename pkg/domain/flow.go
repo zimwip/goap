@@ -38,10 +38,31 @@ const (
 // else the main flow (ADR 0032 §6).
 const MainFlow = "main"
 
+// OptionIntent names why an option exists relative to its parent flow (derive: a new alternative, forked from
+// main; revise: a correction/adjustment to an already-active option or landed state; refine: a sub-branch of
+// another option, isolating narrower work within it).
+type OptionIntent string
+
+const (
+	IntentDerive OptionIntent = "derive"
+	IntentRevise OptionIntent = "revise"
+	IntentRefine OptionIntent = "refine"
+)
+
+// ValidOptionIntent reports whether s is a known OptionIntent ("" included: unspecified).
+func ValidOptionIntent(s OptionIntent) bool {
+	switch s {
+	case "", IntentDerive, IntentRevise, IntentRefine:
+		return true
+	}
+	return false
+}
+
 // OptionSpec describes an option of a change (ADR 0009 §3): a hypothesis explored on a flow branch of its own.
 type OptionSpec struct {
-	Name       string `json:"name"`
-	Hypothesis string `json:"hypothesis,omitempty"`
+	Name       string       `json:"name"`
+	Hypothesis string       `json:"hypothesis,omitempty"`
+	Intent     OptionIntent `json:"intent,omitempty"`
 }
 
 // Option statuses (ADR 0009 §3), derived from the flow of the option.

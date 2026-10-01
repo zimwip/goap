@@ -10,7 +10,8 @@ import (
 )
 
 // Options of a change (ADR 0009 §3, ADR 0032 §6): an option is a flow branch opened as a hypothesis, forked from the
-// main flow. Several are explored at once; one of them may be active: the change works on it (every call that names
+// main flow (Intent derive/revise) or from another open option (Intent refine: a sub-branch isolating narrower work
+// within it). Several are explored at once; one of them may be active: the change works on it (every call that names
 // no flow goes to it, "main" names the main flow). Selecting an option adopts its flow (its versions join the change
 // branch) and rejects the other open ones; rejecting one discards its flow.
 
@@ -18,16 +19,25 @@ import (
 type OpenOptionRequest struct {
 	Name       string
 	Hypothesis string
+	// Parent is the option this one is a sub-branch of ("" = forked from the main flow). Non-empty only makes
+	// sense with Intent refine: isolating narrower work within an already-open option.
+	Parent string
+	// Intent says why the option exists relative to Parent (derive, revise or refine; "" = unspecified).
+	Intent domain.OptionIntent
 	// Activate makes the new option the one the change works on.
 	Activate bool
 	By       string
 }
 
-// OpenOption opens an option: a flow branch of its own, forked from the main flow, that invalidates nothing.
+// OpenOption opens an option: a flow branch of its own, forked from the main flow (or, with Parent set, from
+// another open option - refine), that invalidates nothing.
 func (g *Graph) OpenOption(ctx context.Context, id domain.ChangeID, in OpenOptionRequest) (f domain.Flow, err error) {
 	name := strings.TrimSpace(in.Name)
 	if name == "" {
 		return f, fmt.Errorf("an option needs a name: %w", ErrInvalid)
+	}
+	if !domain.ValidOptionIntent(in.Intent) {
+		return f, fmt.Errorf("unknown option intent %q: %w", in.Intent, ErrInvalid)
 	}
 	err = g.repo.InTx(ctx, func(tx Tx) error {
 		c, err := flowChange(ctx, tx, id)
@@ -39,9 +49,14 @@ func (g *Graph) OpenOption(ctx context.Context, id domain.ChangeID, in OpenOptio
 				return fmt.Errorf("change %s already has an open option %q: %w", id, name, ErrConflict)
 			}
 		}
+		if in.Parent != "" {
+			if _, err := openOption(c, in.Parent); err != nil {
+				return fmt.Errorf("parent option: %w", err)
+			}
+		}
 		flow := g.newID()
-		if err := g.flowEvent(ctx, tx, id, domain.FlowEvent{Op: domain.FlowOpenOp, Flow: flow, Reason: in.Hypothesis, By: in.By,
-			Option: &domain.OptionSpec{Name: name, Hypothesis: in.Hypothesis}}); err != nil {
+		if err := g.flowEvent(ctx, tx, id, domain.FlowEvent{Op: domain.FlowOpenOp, Flow: flow, Parent: in.Parent, Reason: in.Hypothesis, By: in.By,
+			Option: &domain.OptionSpec{Name: name, Hypothesis: in.Hypothesis, Intent: in.Intent}}); err != nil {
 			return err
 		}
 		if in.Activate {

@@ -110,3 +110,37 @@ func testOptions(t *testing.T, repo Repo) {
 		t.Fatalf("main: %+v", head)
 	}
 }
+
+// Option intent (derive/revise/refine): refine is a sub-branch of another open option, not of the main flow.
+func TestOptionRefine(t *testing.T) { forEachRepo(t, testOptionRefine) }
+
+func testOptionRefine(t *testing.T, repo Repo) {
+	ctx := context.Background()
+	f := newFixture(t, repo)
+	g := f.g
+	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{Title: "PSP", BaselineID: f.base.ID, OwnBranch: true}))
+
+	if _, err := g.OpenOption(ctx, c.ID, OpenOptionRequest{Name: "stripe", Intent: "bogus"}); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("unknown intent: %v", err)
+	}
+
+	a := must[domain.Flow](t)(g.OpenOption(ctx, c.ID, OpenOptionRequest{Name: "stripe", Hypothesis: "Stripe covers every market", Intent: domain.IntentDerive, By: "u"}))
+	if a.Option.Intent != domain.IntentDerive || a.Parent != "" {
+		t.Fatalf("derive option: %+v", a)
+	}
+
+	// refine: a sub-branch of the open option A, not of main
+	sub := must[domain.Flow](t)(g.OpenOption(ctx, c.ID, OpenOptionRequest{Name: "stripe-eu", Hypothesis: "Stripe, EU entities only", Parent: a.ID, Intent: domain.IntentRefine, By: "u"}))
+	if sub.Parent != a.ID || sub.Option.Intent != domain.IntentRefine {
+		t.Fatalf("refine option: %+v", sub)
+	}
+
+	// a parent that isn't an open option of this change is refused
+	if _, err := g.OpenOption(ctx, c.ID, OpenOptionRequest{Name: "other", Parent: "no-such-flow"}); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("unknown parent: %v", err)
+	}
+	must[domain.Flow](t)(g.RejectOption(ctx, c.ID, a.ID, "u"))
+	if _, err := g.OpenOption(ctx, c.ID, OpenOptionRequest{Name: "other", Parent: a.ID}); !errors.Is(err, ErrConflict) {
+		t.Fatalf("discarded parent: %v", err)
+	}
+}
