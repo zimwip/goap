@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"fmt"
+	"maps"
 	"slices"
 	"sort"
 	"strings"
@@ -35,6 +36,15 @@ type ProcessProgress struct {
 	Done, Total int
 }
 
+// Lane is one stream of a step with foreach: the element it is carried out for, the method chosen for it and where
+// its agent instance stands.
+type Lane struct {
+	Item      string `json:"item"`
+	Method    string `json:"method,omitempty"`
+	ProcessID string `json:"processId"`
+	Status    Status `json:"status"`
+}
+
 // StepProgress is the state of one step, with its sub-steps.
 type StepProgress struct {
 	Path        string `json:"path"`
@@ -54,6 +64,8 @@ type StepProgress struct {
 	Runs            int      `json:"runs,omitempty"`
 	ChildProcessIDs []string `json:"childProcessIds,omitempty"`
 	// Waiting: the kind of the task (input, approval, agent, condition) and the permission an approval needs.
+	// Lanes are the parallel streams of a step with foreach (ADR 0050), one per element or group.
+	Lanes      []Lane                  `json:"lanes,omitempty"`
 	Waiting    string                  `json:"waiting,omitempty"`
 	Permission string                  `json:"permission,omitempty"`
 	Guidance   string                  `json:"guidance,omitempty"`
@@ -83,6 +95,9 @@ func (e *Engine) Progress(ctx context.Context, id string) (*ProcessProgress, err
 	out := &ProcessProgress{ProcessID: p.ID, Methodology: p.Methodology, Process: proc.Name, Description: proc.Description, Status: p.Status, Error: p.Error}
 	for _, s := range m.ProcessSteps(proc.Name) {
 		out.Steps = append(out.Steps, stepProgress(p, s))
+	}
+	if err := e.addLanes(ctx, p, out.Steps); err != nil {
+		return nil, err
 	}
 	var count func([]StepProgress)
 	count = func(steps []StepProgress) {
@@ -210,4 +225,30 @@ func missing(p *Process, entry, exit map[string]bool) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// addLanes lists, for the steps that run for each element of a list, the streams started for them.
+func (e *Engine) addLanes(ctx context.Context, p *Process, steps []StepProgress) error {
+	for i := range steps {
+		if err := e.addLanes(ctx, p, steps[i].Steps); err != nil {
+			return err
+		}
+		prefix := steps[i].Path + foreachSuffix
+		for _, key := range slices.Sorted(maps.Keys(p.Children)) {
+			item, ok := strings.CutPrefix(key, prefix)
+			if !ok {
+				continue
+			}
+			c, err := e.Store.Get(ctx, p.Children[key])
+			if err != nil {
+				return err
+			}
+			lane := Lane{Item: item, ProcessID: c.ID, Status: c.Status}
+			if c.Step != nil {
+				lane.Method = c.Step.Method
+			}
+			steps[i].Lanes = append(steps[i].Lanes, lane)
+		}
+	}
+	return nil
 }

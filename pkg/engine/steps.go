@@ -32,8 +32,11 @@ func RunStep(ctx context.Context, ac ActionContext) (ActionResult, error) {
 	}
 	sc := ac.Step
 	method := ""
+	if foreach, _ := ac.Action.Params["foreach"].(string); foreach != "" {
+		return runForeach(ctx, ac, foreach)
+	}
 	if capability, _ := ac.Action.Params["capability"].(string); capability != "" {
-		me, err := h.e.chooseMethod(ctx, ac, capability)
+		me, err := h.e.chooseMethod(ctx, ac, capability, ac.Blackboard, true)
 		if err != nil {
 			return ActionResult{}, fmt.Errorf("step %s: %w", step, err)
 		}
@@ -70,16 +73,16 @@ func RunStep(ctx context.Context, ac ActionContext) (ActionResult, error) {
 // chooseMethod picks the method of a capability for the step being run (ADR 0035 §1): the applicable one (its context
 // holds on the blackboard) with the highest priority whose agent the unit holding the change can run (the MCPs the
 // agent declares are bound, design rule 5). A step resumed after its sub-agent keeps the sub-agent it started.
-func (e *Engine) chooseMethod(ctx context.Context, ac ActionContext, capability string) (methodology.MethodChoice, error) {
+func (e *Engine) chooseMethod(ctx context.Context, ac ActionContext, capability string, bb domain.Blackboard, resumable bool) (methodology.MethodChoice, error) {
 	m, err := e.Methodologies.Methodology(ctx, ac.Process.Methodology)
 	if err != nil {
 		return methodology.MethodChoice{}, err
 	}
-	if _, resumed := ac.Process.Children[ac.Action.Name+"#step"]; resumed {
+	if _, resumed := ac.Process.Children[ac.Action.Name+"#step"]; resumed && resumable {
 		// the sub-agent started for the step is at work: keep the method it was started for
 		for i := len(ac.Process.Steps) - 1; i >= 0; i-- {
 			if st := ac.Process.Steps[i]; st.Action == ac.Action.Name && st.Specialization != "" {
-				for _, me := range m.MethodsFor(capability, ac.Blackboard) {
+				for _, me := range m.MethodsFor(capability, bb) {
 					if me.Name == st.Specialization {
 						return me, nil
 					}
@@ -90,7 +93,7 @@ func (e *Engine) chooseMethod(ctx context.Context, ac ActionContext, capability 
 			}
 		}
 	}
-	candidates := m.MethodsFor(capability, ac.Blackboard)
+	candidates := m.MethodsFor(capability, bb)
 	var bound map[string]bool
 	for _, me := range candidates {
 		ag, _ := m.Agent(me.ActorAgent())
@@ -135,7 +138,10 @@ type StepContext struct {
 	// its gates.
 	Roles *methodology.Responsibilities `json:"roles,omitempty"`
 	// Method is the method chosen to carry the step out, whose guidance and references are included.
-	Method       string                  `json:"method,omitempty"`
+	Method string `json:"method,omitempty"`
+	// Item is the element a stream of a step with foreach is carried out for, and ItemKey its identity (ADR 0050).
+	Item         any                     `json:"item,omitempty"`
+	ItemKey      string                  `json:"itemKey,omitempty"`
 	Name         string                  `json:"name"`
 	Description  string                  `json:"description,omitempty"`
 	Guidance     string                  `json:"guidance,omitempty"`
@@ -173,6 +179,11 @@ func (s *StepContext) section() string {
 		fmt.Fprintf(&b, ": %s", s.Description)
 	}
 	b.WriteString(".\n")
+	if s.Roles != nil && s.Roles.Responsible != "" {
+		fmt.Fprintf(&b, "You act as the role %q for this step.\n", s.Roles.Responsible)
+	}
+	// ADR 0050: an agent instance is created for the step, it has no memory of the earlier ones
+	b.WriteString("You start this step fresh: nothing was said to you before. What matters is on the change; read it (the brief below, goap-change/brief, trace) and record what you produce on the change as items, not only in your answer.\n")
 	if s.Guidance != "" {
 		fmt.Fprintf(&b, "Guidance for this step:\n%s\n", strings.TrimSpace(s.Guidance))
 	}

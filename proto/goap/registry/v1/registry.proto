@@ -347,15 +347,22 @@ message Method {
   repeated string checklist = 7;
   repeated string deliverables = 8;
   repeated Reference references = 9;
-  // the actor: an agent of the methodology, and the goal it reaches (default: its only goal). Exactly one of
-  // agent or steps is set.
-  string agent = 10;
-  string goal = 11;
+  // 10 and 11 were agent and goal: a method names no actor (ADR 0050)
+  reserved 10, 11;
+  reserved "agent", "goal";
   // the roles involved when the method is used (replacing those of the step)
   Responsibilities roles = 12;
   // composes the method from its own steps and sub-steps, the same shape and compilation as a process's,
-  // generating an agent and a goal of the method's own name. Mutually exclusive with agent/goal.
+  // generating a goal of the method's own name
   repeated Step steps = 13;
+  // the actions that realize the method: the pool of the agent applying it, with those of its steps (ADR 0050)
+  repeated string actions = 14;
+  // exit criteria of a method without steps
+  map<string, bool> done = 15;
+  // planner (goap by default), LLM alias and MCPs of the agent applying the method
+  string planner = 16;
+  string model = 17;
+  repeated string mcps = 18;
 }
 
 // A process: the steps that reach an objective, run by an agent of its name towards a goal of its name (ADR 0034).
@@ -409,6 +416,10 @@ message Step {
   string method = 18;
   // the roles assigned to the step (its sub-steps inherit them)
   Responsibilities roles = 19;
+  // CEL list on the blackboard: the step naming a capability runs once per element, in parallel streams (ADR 0050)
+  string foreach = 20;
+  // CEL key of the group of each element of foreach: one stream per group, whose item is {key, items}
+  string group_by = 21;
 }
 
 message GoalSummary {

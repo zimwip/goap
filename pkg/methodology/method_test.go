@@ -40,8 +40,8 @@ processes:
 		t.Fatalf("method step actions: %+v", acts)
 	}
 	me, ok := c.MethodByName("assemble")
-	if !ok || me.ActorAgent() != "assemble" || me.Agent != "" {
-		t.Fatalf("method: %+v, %v (ActorAgent falls back to the method's own name; Agent itself is untouched)", me, ok)
+	if !ok || me.ActorAgent() != "assemble" {
+		t.Fatalf("method: %+v, %v (its agent is generated, of its name)", me, ok)
 	}
 	var bb domain.Blackboard
 	choices := c.MethodsFor("assembling", bb)
@@ -54,17 +54,19 @@ processes:
 	}
 }
 
-// Exactly one of Agent or Steps; a method's own step may not name a capability (methods are not compiled yet
-// while another method's steps are being walked, so a circular method->method resolution is refused, not
-// silently wrong).
+// A method needs actions or steps; a method of actions alone states what it reaches; a method step may not name a
+// capability (methods are not compiled yet while another method's steps are being walked, so a circular
+// method->method resolution is refused, not silently wrong).
 func TestMethodStepsValidation(t *testing.T) {
 	cases := map[string]struct{ yaml, want string }{
-		"goal with steps": {`
-methods: [{name: m, for: f, agent: worker, goal: all, steps: [{name: s, action: do_a}]}]`, "goal applies"},
-		"unknown agent with steps": {`
-methods: [{name: m, for: f, agent: nobody, steps: [{name: s, action: do_a}]}]`, "unknown"},
-		"neither agent nor steps": {`
-methods: [{name: m, for: f}]`, "names its actor"},
+		"done with steps": {`
+methods: [{name: m, for: f, done: {c: true}, steps: [{name: s, action: do_a}]}]`, "done applies"},
+		"unknown action with steps": {`
+methods: [{name: m, for: f, actions: [nobody], steps: [{name: s, action: do_a}]}]`, "unknown action"},
+		"neither actions nor steps": {`
+methods: [{name: m, for: f}]`, "declare the actions"},
+		"llm planner needs a model": {`
+methods: [{name: m, for: f, planner: llm, actions: [do_c], done: {c: true}}]`, "model is required"},
 		"name collides with an agent": {`
 methods: [{name: worker, for: f, steps: [{name: s, action: do_a}]}]`, "already an agent"},
 		"name collides with a process": {`
@@ -74,7 +76,7 @@ processes: [{name: flow, steps: [{name: s, action: do_a}]}]`, "already a process
 methods: [{name: all, for: f, steps: [{name: s, action: do_a}]}]`, "already a goal"},
 		"a method step may not name a capability": {`
 methods:
-  - {name: inner, for: g, agent: worker}
+  - {name: inner, for: g, actions: [do_c], done: {c: true}}
   - name: outer
     for: f
     steps: [{name: s, method: g}]`, `no valid method provides "g"`},
@@ -89,13 +91,17 @@ methods:
 	}
 }
 
-// The agent performs the method: it gets the activities that compose it and the goal they reach, and is the actor.
-func TestAgentPerformsAMethodComposingSteps(t *testing.T) {
+// The agent applying a method is generated from it: its pool is the method's actions plus those of its steps, its
+// planner, model and role come from the method.
+func TestMethodGeneratesItsAgent(t *testing.T) {
 	c, issues := compileProcess(t, `
+roles: [{name: builder}]
 methods:
   - name: assemble
     for: assembling
-    agent: worker
+    planner: hybrid
+    roles: {responsible: builder}
+    actions: [do_c]
     steps:
       - {name: first, action: do_a}
       - {name: second, action: do_b}
@@ -107,19 +113,36 @@ processes:
 	if len(issues) > 0 {
 		t.Fatal(issues)
 	}
-	me, _ := c.MethodByName("assemble")
-	if me.ActorAgent() != "worker" || c.MethodGoal("assemble") != "assemble" {
-		t.Fatalf("actor %s goal %s", me.ActorAgent(), c.MethodGoal("assemble"))
-	}
-	w, _ := c.Agent("worker")
-	if !slices.Contains(w.Goals, "assemble") || !slices.Contains(w.Actions, "assemble/first") || !slices.Contains(w.Actions, "do_c") {
-		t.Fatalf("worker: %+v", w)
-	}
-	if _, ok := c.Agent("assemble"); ok {
-		t.Fatal("no agent is generated when the method names its actor")
+	ag, ok := c.Agent("assemble")
+	if !ok || ag.Planner != PlannerHybrid || ag.Role != "builder" || !slices.Contains(ag.Goals, "assemble") ||
+		!slices.Contains(ag.Actions, "assemble/first") || !slices.Contains(ag.Actions, "do_c") {
+		t.Fatalf("agent: %+v, %v", ag, ok)
 	}
 	ls, _ := c.CheckLevels("assemble")
-	if len(ls) != 1 || ls[0].Agent != "worker" || ls[0].Goal != "assemble" || len(ls[0].Steps) != 2 {
+	if len(ls) != 1 || ls[0].Agent != "assemble" || ls[0].Goal != "assemble" || len(ls[0].Steps) != 2 {
 		t.Fatalf("levels: %+v", ls)
+	}
+}
+
+// Among the methods whose context holds, the highest priority wins, then the most specific context.
+func TestMethodsRankBySpecificity(t *testing.T) {
+	c, issues := compileProcess(t, `
+methods:
+  - {name: generic, for: f, actions: [do_c], done: {c: true}}
+  - {name: one, for: f, actions: [do_c], done: {c: true}, when: 'artifacts.exists(x, x.type == "u")'}
+  - {name: two, for: f, actions: [do_c], done: {c: true}, when: 'artifacts.exists(x, x.type == "u") && artifacts.exists(x, x.type == "v")'}
+  - {name: forced, for: f, actions: [do_c], done: {c: true}, priority: 1, when: 'artifacts.exists(x, x.type == "u")'}
+`)
+	if len(issues) > 0 {
+		t.Fatal(issues)
+	}
+	var bb domain.Blackboard
+	bb.Change.Items = []domain.ChangeItem{{ID: "1", Kind: domain.KindArtifact, Type: "u"}, {ID: "2", Kind: domain.KindArtifact, Type: "v"}}
+	var names []string
+	for _, m := range c.MethodsFor("f", bb) {
+		names = append(names, m.Name)
+	}
+	if want := []string{"forced", "two", "one", "generic"}; !slices.Equal(names, want) {
+		t.Fatalf("order %v, want %v", names, want)
 	}
 }

@@ -460,6 +460,10 @@ export interface ProcessStep {
   process?: string;
   /** the capability the step needs done, provided by methods */
   method?: string;
+  /** CEL list: the step naming a capability runs once per element, in parallel streams (ADR 0050) */
+  foreach?: string;
+  /** CEL key of the group of each element: one stream per group */
+  groupBy?: string;
   /** roles assigned to the step (its sub-steps inherit them) */
   roles?: Responsibilities;
 }
@@ -490,13 +494,18 @@ export interface MethodologyMethod {
   checklist?: string[];
   deliverables?: string[];
   references?: DocumentReference[];
-  /** the actor: an agent of the methodology, and the goal it reaches (default: its only goal) */
-  agent?: string;
-  goal?: string;
   /** roles involved when the method is used (replacing those of the step) */
   roles?: Responsibilities;
-  /** the method composes its own steps and sub-steps, like a process (exclusive with agent/goal) */
+  /** the method composes its own steps and sub-steps, like a process */
   steps?: ProcessStep[];
+  /** the actions that realize the method: the pool of the agent applying it, with those of its steps (ADR 0050) */
+  actions?: string[];
+  /** exit criteria of a method without steps */
+  done?: Record<string, boolean>;
+  /** planner (goap by default), LLM alias and MCPs of the agent applying the method */
+  planner?: string;
+  model?: string;
+  mcps?: string[];
 }
 
 /** A process as a graph: its steps, the edges its conditions draw, the methods of its capabilities (ADR 0036 §4). */
@@ -1207,8 +1216,17 @@ export interface ProcessProgress {
 
 export type StepState = 'done' | 'skipped' | 'active' | 'waiting' | 'ready' | 'todo' | 'blocked';
 
+/** A stream of a step with foreach (ADR 0050): the element or group, the method chosen for it, its agent instance. */
+export interface Lane {
+  item?: string;
+  method?: string;
+  processId?: string;
+  status?: string;
+}
+
 export interface StepProgress {
   path?: string;
+  lanes?: Lane[];
   name?: string;
   description?: string;
   method?: string;

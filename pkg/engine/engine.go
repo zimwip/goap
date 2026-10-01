@@ -1042,8 +1042,16 @@ func (e *Engine) runChildStep(ctx context.Context, h *Host, key, methodologyName
 		}
 		child = c
 	} else {
+		vars := maps.Clone(parent.Vars)
+		if step != nil && step.ItemKey != "" {
+			// a stream of a step with foreach (ADR 0050): the element it is carried out for
+			if vars == nil {
+				vars = map[string]any{}
+			}
+			vars["item"] = step.Item
+		}
 		c, err := e.Start(ctx, StartRequest{Methodology: methodologyName, ChangeID: parent.ChangeID, BaselineID: parent.BaselineID,
-			Agent: agentName, Goal: goal, Intent: intentText, ParentID: parent.ID, Call: key, Vars: maps.Clone(parent.Vars), Step: step})
+			Agent: agentName, Goal: goal, Intent: intentText, ParentID: parent.ID, Call: key, Vars: vars, Step: step})
 		if err != nil {
 			return dsl.AgentResult{}, err
 		}

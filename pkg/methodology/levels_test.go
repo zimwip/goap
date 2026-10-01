@@ -141,13 +141,14 @@ processes:
 	}
 }
 
-// A method naming an agent has, as its level, the actions the agent carries out; an action itself is a node.
+// A method of actions has, as its level, the actions its agent carries out; an action itself is a node.
 func TestCheckLevelsDownToTheActions(t *testing.T) {
 	c, issues := compileProcess(t, `
 methods:
   - name: by_agent
     for: working
-    agent: worker
+    actions: [do_c]
+    done: {c: true}
 processes:
   - name: flow
     steps:
@@ -157,7 +158,7 @@ processes:
 		t.Fatal(issues)
 	}
 	ms, ok := c.CheckLevels("by_agent")
-	if !ok || len(ms) != 1 || ms[0].Kind != LevelMethod || ms[0].Agent != "worker" || len(ms[0].Steps) == 0 || ms[0].Steps[0].Name != "do_c" {
+	if !ok || len(ms) != 1 || ms[0].Kind != LevelMethod || ms[0].Agent != "by_agent" || len(ms[0].Steps) == 0 || ms[0].Steps[0].Name != "do_c" {
 		t.Fatalf("method level: %+v, %v", ms, ok)
 	}
 	if g, ok := c.ProcessGraph("by_agent"); !ok || g.Process != "by_agent" {
@@ -171,7 +172,8 @@ func TestCheckLevelsOfACapabilityStepListsItsMethods(t *testing.T) {
 methods:
   - name: by_agent
     for: working
-    agent: worker
+    actions: [do_c]
+    done: {c: true}
   - name: by_steps
     for: working
     steps:

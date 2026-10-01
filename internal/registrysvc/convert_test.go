@@ -34,7 +34,7 @@ func TestProcessesRoundTripThroughPB(t *testing.T) {
 	out := FromPB(ToPB(Record{Methodology: in}))
 	in.Methods = []methodology.Method{
 		{Name: "m", For: "design", When: "true", Priority: 3, Guidance: "g", Checklist: []string{"c"},
-			Deliverables: []string{"D"}, References: []methodology.Reference{{Ref: "doc:X"}}, Agent: "a", Goal: "g",
+			Deliverables: []string{"D"}, References: []methodology.Reference{{Ref: "doc:X"}}, Actions: []string{"a"}, Done: map[string]bool{"d": true}, Planner: "hybrid", Model: "m", MCPs: []string{"goap-graph"},
 			Roles: &methodology.Responsibilities{Accountable: "lead", Informed: []string{"po"}}},
 		{Name: "inspect", For: "verification", Steps: []methodology.Step{{Name: "note", Action: "write_note"}, {Name: "verify", Action: "check"}}},
 	}

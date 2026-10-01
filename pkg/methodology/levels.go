@@ -100,12 +100,12 @@ func (c *Compiled) CheckLevels(name string) (levels []LevelCheck, ok bool) {
 		kind, steps = LevelMethod, c.MethodSteps(name)
 	}
 	if steps == nil {
-		// a method naming an agent: the agent operates the actions
+		// a method of actions alone: its agent operates them
 		me, ok := c.MethodByName(name)
-		if !ok || me.Agent == "" {
+		if !ok || len(me.Actions) == 0 {
 			return nil, false
 		}
-		lc, ok := c.operatorLevel(name, nil, me.Agent, me.Goal, nil, nil)
+		lc, ok := c.operatorLevel(name, nil, me.ActorAgent(), me.Name, nil, nil)
 		if !ok {
 			return nil, false
 		}
@@ -131,8 +131,8 @@ func (c *Compiled) CheckLevels(name string) (levels []LevelCheck, ok bool) {
 		}
 	}
 	walk(root, kind)
-	if me, ok := c.MethodByName(name); ok && kind == LevelMethod && me.Agent != "" {
-		levels[0].Agent, levels[0].Goal = me.Agent, me.Name // the agent performs the activities that compose it
+	if me, ok := c.MethodByName(name); ok && kind == LevelMethod {
+		levels[0].Agent, levels[0].Goal = me.ActorAgent(), me.Name // the agent performs the activities that compose it
 	}
 	// what is not resolved inside a step surfaces in the level above: the process cannot run through it
 	byPath := map[string]*LevelCheck{}

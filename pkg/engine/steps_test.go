@@ -38,8 +38,9 @@ methods:
     priority: 10
     guidance: Check the note with a peer
     references: [{title: Peer review guide, ref: "doc:PEER"}]
-    agent: checker
-  - {name: self_check, for: verification, agent: checker}
+    actions: [check]
+    done: {checked: true}
+  - {name: self_check, for: verification, actions: [check], done: {checked: true}}
 processes:
   - name: sign_off
     steps:
@@ -134,7 +135,7 @@ func TestProcessStepsAndNestedProcesses(t *testing.T) {
 	if v := findStep(mustProgress(t, e, p.ID).Steps, "delivery/verify"); v.Chosen != "peer_check" || v.Target != "verification" {
 		t.Fatalf("the progress shows the chosen method: %+v", v)
 	}
-	if checker.Agent != "checker" || checker.Goal != "check_done" || checker.ChangeID != p.ChangeID || checker.Pending == nil || checker.Pending.Action != "check" {
+	if checker.Agent != "peer_check" || checker.Goal != "peer_check" || checker.ChangeID != p.ChangeID || checker.Pending == nil || checker.Pending.Action != "check" {
 		t.Fatalf("unexpected checker %+v", checker)
 	}
 	if _, err := e.Submit(ctx, checker.ID, []ItemInput{{Kind: "artifact", Type: "check"}}); err != nil { // the method assigns no role
@@ -295,4 +296,13 @@ func findStep(steps []StepProgress, path string) StepProgress {
 		}
 	}
 	return StepProgress{}
+}
+
+// The brief of a step tells the agent instance its role and that it starts fresh (ADR 0050).
+func TestStepSectionTellsRoleAndFreshStart(t *testing.T) {
+	sc := &StepContext{Process: "p", Path: "p/s", Roles: &methodology.Responsibilities{Responsible: "builder"}}
+	got := sc.section()
+	if !strings.Contains(got, `role "builder"`) || !strings.Contains(got, "start this step fresh") {
+		t.Fatalf("section: %s", got)
+	}
 }

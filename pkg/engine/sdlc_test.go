@@ -332,7 +332,7 @@ func TestSDLCProcess(t *testing.T) {
 		t.Fatalf("builds %v", builds)
 	}
 	// the design step names a capability: components are impacted, so the solution_design method was chosen, and its
-	// agent, the architect, ran as a sub-agent on the same change, towards its goal
+	// agent generated for the method ran as a sub-agent on the same change, towards its goal
 	for _, s := range p.Steps {
 		if s.Action != "software_delivery/design" || len(s.Children) == 0 {
 			continue
@@ -341,7 +341,7 @@ func TestSDLCProcess(t *testing.T) {
 			t.Fatalf("design method: %q", s.Specialization)
 		}
 		architect, err := e.Store.Get(ctx, s.Children[0])
-		if err != nil || architect.Agent != "architect" || architect.Goal != "solution_design" || architect.ChangeID != p.ChangeID || architect.Status != engine.StatusCompleted ||
+		if err != nil || architect.Agent != "solution_design" || architect.Goal != "solution_design" || architect.ChangeID != p.ChangeID || architect.Status != engine.StatusCompleted ||
 			architect.Step == nil || architect.Step.Method != "solution_design" {
 			t.Fatalf("design step: %+v %v", architect, err)
 		}
