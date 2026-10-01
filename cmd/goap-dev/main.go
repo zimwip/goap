@@ -250,6 +250,7 @@ func main() {
 			platform.Fatal(log, "jwt secret", err)
 		}
 		authCfg := gateway.Config{AuthMode: authMode, JWTSecret: []byte(secret), DevTokens: platform.Env("GOAP_DEV_TOKENS", "") == "true",
+			TokenTTL: platform.EnvDuration("GOAP_TOKEN_TTL", gateway.DefaultTokenTTL), MaxSession: platform.EnvDuration("GOAP_SESSION_MAX", gateway.DefaultMaxSession),
 			Credentials: &credsvc.Service{Store: st.creds}, Enrich: directory.Enrich,
 			// the user exists in the graph from their first sign-in, member of the unit new users join (ADR 0042)
 			OnSignIn: func(ctx context.Context, subject string) error {
@@ -258,6 +259,8 @@ func main() {
 				}
 				return directory.Refresh(ctx)
 			}}
+		// one state of the sessions for the endpoints and the authenticator: a sign-out is refused at once (ADR 0045)
+		authCfg = gateway.Prepare(authCfg)
 		if err := gateway.MountAuthEndpoints(srv.Echo, authCfg); err != nil {
 			platform.Fatal(log, "auth", err)
 		}

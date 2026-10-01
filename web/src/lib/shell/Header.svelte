@@ -210,10 +210,10 @@
     if (subject) openTab({ kind: 'user', params: { key: `USR:${subject}` } }, { pin: true });
   }
 
-  async function signOut() {
+  async function signOut(everywhere = false) {
     menuOpen = false;
-    await logout();
-    notify('Signed out.', 'ok');
+    await logout(everywhere);
+    notify(everywhere ? 'Signed out on every device.' : 'Signed out.', 'ok');
   }
 
   function openNotice(n: Notice) {
@@ -395,6 +395,11 @@
                 <button type="button" class="small settings-btn" onclick={() => void signOut()}><Icon name="logout" size={13} />Log out</button>
               {/if}
             </div>
+            {#if local && hasToken}
+              <button type="button" class="small ghost everywhere" onclick={() => void signOut(true)} title="End every session of your account, on all your devices"
+                >Log out on every device</button
+              >
+            {/if}
           {/if}
         </div>
       {/if}
@@ -650,6 +655,11 @@
     display: flex;
     gap: 0.4rem;
     margin-top: 0.7rem;
+  }
+  .everywhere {
+    width: 100%;
+    margin-top: 0.3rem;
+    color: var(--muted);
   }
   .settings-btn {
     display: flex;

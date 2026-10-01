@@ -3,6 +3,7 @@ package credsvc
 import (
 	"context"
 	"errors"
+	"time"
 
 	"connectrpc.com/connect"
 
@@ -62,4 +63,34 @@ func (h *Handler) Exists(ctx context.Context, r *connect.Request[credentialsv1.E
 		return nil, rpcErr(err)
 	}
 	return connect.NewResponse(&credentialsv1.ExistsResponse{Exists: ok}), nil
+}
+
+func (h *Handler) StartSession(ctx context.Context, r *connect.Request[credentialsv1.StartSessionRequest]) (*connect.Response[credentialsv1.StartSessionResponse], error) {
+	id, err := h.Service.StartSession(ctx, r.Msg.GetSubject(), time.Duration(r.Msg.GetMaxAgeSeconds())*time.Second)
+	if err != nil {
+		return nil, rpcErr(err)
+	}
+	return connect.NewResponse(&credentialsv1.StartSessionResponse{Id: id}), nil
+}
+
+func (h *Handler) CheckSession(ctx context.Context, r *connect.Request[credentialsv1.CheckSessionRequest]) (*connect.Response[credentialsv1.CheckSessionResponse], error) {
+	ok, err := h.Service.SessionActive(ctx, r.Msg.GetId(), r.Msg.GetSubject())
+	if err != nil {
+		return nil, rpcErr(err)
+	}
+	return connect.NewResponse(&credentialsv1.CheckSessionResponse{Active: ok}), nil
+}
+
+func (h *Handler) EndSession(ctx context.Context, r *connect.Request[credentialsv1.EndSessionRequest]) (*connect.Response[credentialsv1.EndSessionResponse], error) {
+	if err := h.Service.EndSession(ctx, r.Msg.GetId()); err != nil {
+		return nil, rpcErr(err)
+	}
+	return connect.NewResponse(&credentialsv1.EndSessionResponse{}), nil
+}
+
+func (h *Handler) EndSessions(ctx context.Context, r *connect.Request[credentialsv1.EndSessionsRequest]) (*connect.Response[credentialsv1.EndSessionsResponse], error) {
+	if err := h.Service.EndSessions(ctx, r.Msg.GetSubject()); err != nil {
+		return nil, rpcErr(err)
+	}
+	return connect.NewResponse(&credentialsv1.EndSessionsResponse{}), nil
 }

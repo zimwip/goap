@@ -977,8 +977,21 @@ default: `ORG-DEFAULT`; several flagged: smallest key); administrators set it wh
 Organisation tab ("Make waiting unit" moves the flag in one change, "Clear" removes it). The header's user menu offers "My
 profile" and, with local sign-in, "Log out"; the token box shows in `hs256` mode only.
 
-**Not implemented**: OIDC/OAuth itself (only the `AuthMode` seam is prepared) and server-side token
-revocation.
+**Keeping a session** ([ADR 0044](adr/0044-session-refresh-and-expiry.md)). `POST /auth/refresh` reissues a valid
+token with a fresh expiry (`GOAP_TOKEN_TTL`, 12h), keeping its identity and sign-in time (`auth_time`), up to
+`GOAP_SESSION_MAX` (7 days) after the sign-in; a 401 says `token expired` or `invalid token`. The web
+(`stores/auth.svelte.ts`) refreshes a quarter of the lifetime before expiry, re-checks when the tab comes back and
+follows other tabs; an expired token or a 401 for the current token (`api.reportUnauthorized`) ends the session and
+the sign-in page says why, with the last subject filled in.
+
+**Server-side sessions** ([ADR 0045](adr/0045-server-side-sessions.md)). A sign-in opens a session in the
+credentials service (`auth_session`, `credentials.v1` `StartSession` / `CheckSession` / `EndSession` /
+`EndSessions`); every token carries its id (`sid`). The gateway refuses the tokens of an ended session (401
+`session ended`), trusting a checked state for `SessionCheckTTL` (15 s; a refresh checks afresh; 503 when the
+service cannot answer an unchecked session). `POST /auth/logout` ends the session (`{"everywhere": true}`: all the
+subject's sessions), a new password ends them all; the web offers "Log out on every device".
+
+**Not implemented**: OIDC/OAuth itself (only the `AuthMode` seam is prepared).
 
 ### 3.8 Voice input ([ADR 0022](adr/0022-voice-interaction.md))
 
