@@ -2,7 +2,10 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
 	"database/sql"
+	"encoding/hex"
+	"errors"
 	"fmt"
 	"io/fs"
 	"log/slog"
@@ -35,7 +38,10 @@ type stores struct {
 	mcp       mcpsvc.Store
 	index     index.Store
 	domains   registrysvc.DomainStore
-	close     func()
+	// dir is the directory of the local database (sqlite), empty in memory: where the generated JWT
+	// secret of local sign-in is kept (localJWTSecret).
+	dir   string
+	close func()
 }
 
 // openStores selects the storage (GOAP_STORE): memory, or sqlite for the
@@ -75,10 +81,38 @@ func openStores(ctx context.Context, log *slog.Logger) (stores, error) {
 		abs, _ := filepath.Abs(path)
 		log.Info("local storage", "sqlite", abs)
 		return stores{graph: graph.NewSQLite(db),
-			processes: processes, models: modelgw.SQLStore{DB: db}, prefs: prefssvc.SQLStore{DB: db}, creds: credsvc.SQLStore{DB: db}, mcp: mcpsvc.SQLStore{DB: db}, index: index.NewSQLite(db), domains: registrysvc.SQLDomainStore{DB: db}, close: func() { closeDB(log, db) }}, nil
+			processes: processes, models: modelgw.SQLStore{DB: db}, prefs: prefssvc.SQLStore{DB: db}, creds: credsvc.SQLStore{DB: db}, mcp: mcpsvc.SQLStore{DB: db}, index: index.NewSQLite(db), domains: registrysvc.SQLDomainStore{DB: db}, dir: filepath.Dir(path), close: func() { closeDB(log, db) }}, nil
 	default:
 		return stores{}, fmt.Errorf("GOAP_STORE must be memory or sqlite, got %q", kind)
 	}
+}
+
+// localJWTSecret is the secret local sign-in (ADR 0042, on by default) signs its tokens with when none is
+// configured (GOAP_JWT_SECRET, Vault): generated once and kept next to the local database (dir/jwt_secret),
+// so a restart does not sign everyone out; in memory (dir empty) the accounts do not survive a restart
+// either, so a fresh secret per process is right.
+func localJWTSecret(dir string) (string, error) {
+	gen := func() (string, error) {
+		b := make([]byte, 32)
+		if _, err := rand.Read(b); err != nil {
+			return "", err
+		}
+		return hex.EncodeToString(b), nil
+	}
+	if dir == "" {
+		return gen()
+	}
+	path := filepath.Join(dir, "jwt_secret")
+	if b, err := os.ReadFile(path); err == nil && len(strings.TrimSpace(string(b))) >= 32 {
+		return strings.TrimSpace(string(b)), nil
+	} else if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return "", err
+	}
+	secret, err := gen()
+	if err != nil {
+		return "", err
+	}
+	return secret, os.WriteFile(path, []byte(secret+"\n"), 0o600)
 }
 
 func closeDB(log *slog.Logger, db *sql.DB) {

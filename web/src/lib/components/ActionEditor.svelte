@@ -127,6 +127,19 @@
       placeholder="change:apply"
     />
   </div>
+  <div class="field">
+    <label for="{id}-roles">Roles <span class="opt">(optional, comma separated)</span></label>
+    <input
+      id="{id}-roles"
+      type="text"
+      class="mono"
+      bind:value={action.roles}
+      class:bad={bad(`${p}.roles`)}
+      data-path="{p}.roles"
+      title="Who may run the action: one of these roles, declared by the methodology and held on the project (ADR 0043). Empty: the roles of the agent running it."
+      placeholder="developer"
+    />
+  </div>
 </div>
 
 <div class="field">

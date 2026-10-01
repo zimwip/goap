@@ -136,11 +136,13 @@ const (
 
 // HumanTask is a pending human action or approval.
 type HumanTask struct {
-	Kind         string `json:"kind"`
-	Permission   string `json:"permission,omitempty"`
-	Action       string `json:"action"`
-	Description  string `json:"description"`
-	Instructions string `json:"instructions,omitempty"`
+	Kind       string `json:"kind"`
+	Permission string `json:"permission,omitempty"`
+	// Roles allowed to approve an action waiting for one of them (Permission PermissionRunAction, ADR 0043).
+	Roles        []string `json:"roles,omitempty"`
+	Action       string   `json:"action"`
+	Description  string   `json:"description"`
+	Instructions string   `json:"instructions,omitempty"`
 	// NodeTypes restricts which qualified node types (<namespace>@<NodeType>) a
 	// TaskInput may create or pick to edit; empty: every type of the change's
 	// namespace (methodology.Action.NodeTypes).

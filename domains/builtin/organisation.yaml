@@ -1,12 +1,16 @@
 name: organisation
-version: 1.5.0
+version: 1.7.0
 description: >
   Organisation structure, managed in its own namespace ("organisation"): a hierarchy of organisational units,
   mirrored by a hierarchy of projects (ADR 0039). Nodes of other namespaces reference a unit as their owner
   through the cross-namespace `owner` link; changes are split into sub-changes along unit boundaries.
 nodeTypes:
   # `editor` names the editor of the user interface for the nodes of a type (the adapters of a unit are edited on its page).
-  - {name: OrgUnit, editor: unit, description: "Organisational unit (company, direction, department, team)", properties: [name, kind, description]}
+  # `waiting: true` flags the waiting unit (ADR 0042): a unit an administrator creates at their discretion for
+  # users signing in for the first time, linked member_of it until an administrator moves them. One unit
+  # carries it at most (setting it clears the previous one in the same change); with none, new users join
+  # ORG-DEFAULT.
+  - {name: OrgUnit, editor: unit, description: "Organisational unit (company, direction, department, team)", properties: [name, kind, description, waiting]}
   # an organisational unit's instance of an adapter definition (an AdapterDef node of the platform namespace):
   # the one place where unit, MCP and connector meet. mcp = the MCP implemented, adapter = the name of the
   # AdapterDef, params = its parameter values (secrets as references: env:<VAR> or <vault path>#<field>).
@@ -15,13 +19,14 @@ nodeTypes:
   # restrictions of the chain add up, so a unit narrows what it inherits and never widens it. An instance without
   # adapter only restricts (the implementation is inherited): this is how a unit limits the built-in MCPs.
   - {name: Adapter, editor: unit, description: "Instance, by an organisational unit, of an adapter definition, or a restriction of an MCP", properties: [mcp, adapter, params, description, disabled, tools, deny, readOnly]}
-  # who may do what is graph data too. A User is a person or service account: the roles of its node are
-  # added to those of its token, and the unit it is `member_of` is its organisation when the token names none.
+  # who may do what is graph data too. A User is a person or service account: `admin: true` makes it an
+  # administrator (ADR 0043); it holds no other role of its own — roles are held on projects, granted by
+  # Assignments. The unit it is `member_of` is its organisation when the token names none.
   # User extends OrgUnit (ADR 0039): the smallest organisational unit is a single person, so a User node
   # satisfies an OrgUnit-typed reference (Assignment's `assigns_org` link can target a unit, a team or a
   # person uniformly). This does not fold User into the `part_of` unit tree; `member_of` still names its
   # home unit.
-  - {name: User, extends: OrgUnit, editor: access, description: "Person or service account, with its profile and roles", properties: [subject, displayName, email, locale, roles]}
+  - {name: User, extends: OrgUnit, editor: access, description: "Person or service account, with its profile and roles", properties: [subject, displayName, email, locale, admin]}
   # one ABAC rule (Casbin): effect allow|deny for a resource type and action, when the rule expression over
   # r.sub / r.obj / r.act holds. Changes to Policy and User nodes need the "policy:write" permission, checked
   # against the compiled-in floor (administrators) only, so that no policy can lock them out.

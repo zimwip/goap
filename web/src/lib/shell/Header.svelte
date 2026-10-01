@@ -1,12 +1,15 @@
 <script lang="ts">
   // Header: product, search / command palette, stream status,
-  // user menu (access token, theme: a shortcut to the preference, saved as it changes).
+  // user menu (profile, sign-out in local mode, access token with hs256, theme: a shortcut to the
+  // preference, saved as it changes).
   import Icon, { type IconName } from './Icon.svelte';
   import { COMMANDS } from './commands';
   import { tabsState, openTab, activate } from './tabs.svelte';
   import { editorView } from './registry';
   import { focusRequests } from './workbench.svelte';
-  import { getToken, setToken, shortId } from '../api';
+  import { getToken, setToken, shortId, logout } from '../api';
+  import { authState, signsInLocally } from '../stores/auth.svelte';
+  import { notify } from './workbench.svelte';
   import { openSearch } from './searchOverlay.svelte.ts';
   import { session, refreshIdentity } from '../stores/session.svelte';
   import { methodologies, baselines, changes } from '../stores/catalog.svelte';
@@ -197,6 +200,22 @@
     tokenDraft = '';
   }
 
+  // Local sign-in (ADR 0042): the menu offers the profile and signing out; a pasted token is only for a
+  // deployment whose tokens are issued elsewhere (hs256), and "none" needs neither.
+  const local = $derived(signsInLocally(authState.mode));
+
+  function openProfile() {
+    menuOpen = false;
+    const subject = principal?.subject;
+    if (subject) openTab({ kind: 'user', params: { key: `USR:${subject}` } }, { pin: true });
+  }
+
+  async function signOut() {
+    menuOpen = false;
+    await logout();
+    notify('Signed out.', 'ok');
+  }
+
   function openNotice(n: Notice) {
     markRead(n.id);
     if (n.processId) openTab({ kind: 'run', params: { id: n.processId } }, { pin: true });
@@ -329,14 +348,16 @@
               {session.error || 'No identity.'}
             {/if}
           </p>
-          <form onsubmit={saveToken}>
-            <label for="token">Access token (Bearer)</label>
-            <input id="token" type="password" bind:value={tokenDraft} autocomplete="off" placeholder="token…" />
-            <div class="row" style="margin-top: 0.4rem">
-              <button class="small primary" type="submit">Save</button>
-              {#if hasToken}<button class="small" type="button" onclick={clearToken}>Remove</button>{/if}
-            </div>
-          </form>
+          {#if authState.mode === 'hs256'}
+            <form onsubmit={saveToken}>
+              <label for="token">Access token (Bearer)</label>
+              <input id="token" type="password" bind:value={tokenDraft} autocomplete="off" placeholder="token…" />
+              <div class="row" style="margin-top: 0.4rem">
+                <button class="small primary" type="submit">Save</button>
+                {#if hasToken}<button class="small" type="button" onclick={clearToken}>Remove</button>{/if}
+              </div>
+            </form>
+          {/if}
           <div class="theme">
             <label for="theme">Theme</label>
             <select id="theme" value={prefs.values.theme} onchange={(e) => void editPrefs({ theme: e.currentTarget.value as Theme })}>
@@ -367,6 +388,14 @@
               <Icon name="settings" size={13} />Settings
             </button>
           </div>
+          {#if principal?.subject}
+            <div class="menu-actions">
+              <button type="button" class="small settings-btn" onclick={openProfile}><Icon name="user" size={13} />My profile</button>
+              {#if local && hasToken}
+                <button type="button" class="small settings-btn" onclick={() => void signOut()}><Icon name="logout" size={13} />Log out</button>
+              {/if}
+            </div>
+          {/if}
         </div>
       {/if}
     </div>

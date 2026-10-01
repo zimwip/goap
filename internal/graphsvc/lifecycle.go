@@ -26,6 +26,6 @@ func TransitionAuthorizer(a authz.Authorizer) graph.TransitionAuthorizer {
 			}
 		}
 		return authz.Check(ctx, a, authz.Request{Subject: who, Action: action,
-			Resource: authz.Resource{Type: typ, ID: string(n.ID), Name: n.Key, Org: who.Org}})
+			Resource: authz.Resource{Type: typ, ID: string(n.ID), Name: n.Key, Org: who.Org, ProjectID: who.Project}})
 	}
 }

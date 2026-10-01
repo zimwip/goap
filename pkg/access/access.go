@@ -30,18 +30,36 @@ const (
 
 	// ResourcePolicy is the ABAC resource that guards changes to User and Policy nodes.
 	ResourcePolicy = "policy"
+
+	// PropWaitingUnit is the OrgUnit property that flags the waiting unit (ADR 0042): a unit an administrator
+	// creates, at their discretion, for users signing in for the first time — they are linked member_of it
+	// until an administrator moves them. Without one, new users join domain.DefaultOrg.
+	PropWaitingUnit = "waiting"
 )
 
-// User is a person or a service account. Roles are granted to the subject whatever the token carries.
+// IsWaitingUnit reports whether the properties of an OrgUnit flag it as the waiting unit of new users.
+func IsWaitingUnit(props map[string]any) bool {
+	v, _ := props[PropWaitingUnit].(bool)
+	return v
+}
+
+// User is a person or a service account. It holds no role of its own (ADR 0043): administration is a flag,
+// every other role is held on a project, granted by an Assignment.
 type User struct {
-	Subject     string   `json:"subject"`
-	DisplayName string   `json:"displayName,omitempty"`
-	Email       string   `json:"email,omitempty"`
-	Locale      string   `json:"locale,omitempty"`
-	Roles       []string `json:"roles,omitempty"`
+	Subject     string `json:"subject"`
+	DisplayName string `json:"displayName,omitempty"`
+	Email       string `json:"email,omitempty"`
+	Locale      string `json:"locale,omitempty"`
+	// Admin makes the user an administrator of the platform: the principal gets RoleAdmin, which the floor
+	// policy lets do everything (ADR 0020).
+	Admin bool `json:"admin,omitempty"`
 	// Unit is the organisational unit the user belongs to (the member_of link).
 	Unit string `json:"-"`
 }
+
+// RoleAdmin is the role the principal of an administrator carries (User.Admin), the one the floor policy
+// checks. It is not a methodology role and no Assignment grants it.
+const RoleAdmin = "admin"
 
 // UserKey is the key of the node of a user.
 func UserKey(subject string) string { return "USR:" + subject }
@@ -60,12 +78,8 @@ func (u User) Props() map[string]any {
 			m[k] = v
 		}
 	}
-	if len(u.Roles) > 0 {
-		roles := make([]any, len(u.Roles))
-		for i, r := range u.Roles {
-			roles[i] = r
-		}
-		m["roles"] = roles
+	if u.Admin {
+		m["admin"] = true
 	}
 	return m
 }
@@ -81,18 +95,14 @@ func UserFromProps(props map[string]any) (User, error) {
 	if u.Subject == "" {
 		return u, errors.New("user without subject")
 	}
+	u.Admin, _ = props["admin"].(bool)
+	// a node written before ADR 0043 lists its roles: "admin" among them still makes an administrator, the
+	// others (held on projects now) are ignored
 	switch r := props["roles"].(type) {
-	case nil:
 	case []any:
-		for _, x := range r {
-			if s, ok := x.(string); ok && s != "" {
-				u.Roles = append(u.Roles, s)
-			}
-		}
+		u.Admin = u.Admin || slices.Contains(r, any(RoleAdmin))
 	case []string:
-		u.Roles = slices.Clone(r)
-	default:
-		return u, fmt.Errorf("user %s: roles must be a list of strings", u.Subject)
+		u.Admin = u.Admin || slices.Contains(r, RoleAdmin)
 	}
 	return u, nil
 }
@@ -241,10 +251,20 @@ func (s *Snapshot) ProjectChain(project string) []string {
 	return out
 }
 
+// SubjectChain is what an Assignment can name to grant a subject roles (ADR 0039, 0043): the subject's own
+// User node (User extends OrgUnit), then the unit it belongs to and that unit's ancestors.
+func (s *Snapshot) SubjectChain(p authz.Principal) []string {
+	unit := p.Org
+	if u, ok := s.users[p.Subject]; ok && u.Unit != "" {
+		unit = u.Unit
+	}
+	return append([]string{UserKey(p.Subject)}, s.Chain(domain.OrgOf(unit))...)
+}
+
 // ProjectRoles returns the roles granted, by an Assignment node, to any unit of orgChain on any project of
-// projectChain (ADR 0039): "resolve the role of a user in a project" resolves orgChain (the subject's own
-// org chain, or the org chain of the resource it acts on) and projectChain (the change's project chain)
-// first, then unions the roles of every matching Assignment. Unscoped: the membership test already
+// projectChain (ADR 0039): "resolve the role of a user in a project" resolves orgChain (the subject's chain,
+// SubjectChain) and projectChain (the change's project chain) first, then unions the roles of every matching
+// Assignment. Unscoped: the membership test already
 // happened, so the result can be merged straight into a Principal's Roles (Principal.HasRoleIn).
 func (s *Snapshot) ProjectRoles(orgChain, projectChain []string) []string {
 	var out []string
@@ -277,21 +297,17 @@ func (s *Snapshot) Users() []User {
 	return out
 }
 
-// Enrich completes a principal with what the graph knows of its subject: the roles of its User
-// node are added to those of the token, and the unit it belongs to is its organisation when the
-// token names none.
+// Enrich completes a principal with what the graph knows of its subject: an administrator gets RoleAdmin
+// (User.Admin), and the unit it belongs to is its organisation when the token names none. Its other roles are
+// held on projects: the Authorizer adds those of the resource's project (ADR 0043).
 func (s *Snapshot) Enrich(p authz.Principal) authz.Principal {
 	u, ok := s.users[p.Subject]
 	if !ok || p.Anonymous() {
 		return p
 	}
-	roles := slices.Clone(p.Roles)
-	for _, r := range u.Roles {
-		if !slices.Contains(roles, r) {
-			roles = append(roles, r)
-		}
+	if u.Admin && !slices.Contains(p.Roles, RoleAdmin) {
+		p.Roles = append(slices.Clone(p.Roles), RoleAdmin)
 	}
-	p.Roles = roles
 	if p.Org == "" {
 		p.Org = u.Unit
 	}
@@ -311,11 +327,22 @@ type Directory struct {
 // Snapshot returns the current snapshot. A graph without any baseline yields an empty one; when the graph
 // cannot be read the last snapshot (nil if none) is returned with the error.
 func (d *Directory) Snapshot(ctx context.Context) (*Snapshot, error) {
+	s, _, err := d.snapshots().Get(ctx)
+	return s, err
+}
+
+// Refresh reads the head now, past the TTL: after a write the next calls must see (a user just declared at
+// sign-in, ADR 0042).
+func (d *Directory) Refresh(ctx context.Context) error {
+	_, _, err := d.snapshots().Fresh(ctx)
+	return err
+}
+
+func (d *Directory) snapshots() *graphsnap.Cache[*Snapshot] {
 	d.once.Do(func() {
 		d.cache = graphsnap.Cache[*Snapshot]{Graph: d.Graph, Namespace: mcp.NamespaceOrganisation, TTL: d.TTL, Build: BuildSnapshot}
 	})
-	s, _, err := d.cache.Get(ctx)
-	return s, err
+	return &d.cache
 }
 
 // Enrich completes a principal from the current snapshot; when the graph cannot be read the
@@ -398,16 +425,16 @@ func (a *Authorizer) Authorize(ctx context.Context, req authz.Request) (bool, er
 		if req.Resource.Org != "" && len(req.Resource.OrgChain) == 0 {
 			req.Resource.OrgChain = snap.Chain(req.Resource.Org)
 		}
-		if req.Resource.ProjectID != "" && len(req.Resource.OrgChain) > 0 {
-			projectChain := snap.ProjectChain(req.Resource.ProjectID)
-			roles := slices.Clone(req.Subject.Roles)
-			for _, r := range snap.ProjectRoles(req.Resource.OrgChain, projectChain) {
-				if !slices.Contains(roles, r) {
-					roles = append(roles, r)
-				}
+		// the roles the subject holds on the resource's project (the root project when it names none), granted
+		// by Assignments to the subject itself or to a unit it belongs to (ADR 0043)
+		projectChain := snap.ProjectChain(domain.ProjectOf(req.Resource.ProjectID))
+		roles := slices.Clone(req.Subject.Roles)
+		for _, r := range snap.ProjectRoles(snap.SubjectChain(req.Subject), projectChain) {
+			if !slices.Contains(roles, r) {
+				roles = append(roles, r)
 			}
-			req.Subject.Roles = roles
 		}
+		req.Subject.Roles = roles
 	}
 	if ok, err := a.floor.Authorize(ctx, req); err != nil || ok {
 		return ok, err

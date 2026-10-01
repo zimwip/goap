@@ -99,6 +99,10 @@ type Agent struct {
 	// MCPs whose tools the llm and script actions of the agent may use, in addition to the ones
 	// the actions declare themselves. They do not make an action unschedulable when unbound.
 	MCPs []string `yaml:"mcps,omitempty" json:"mcps,omitempty"`
+	// Roles allowed to run the agent (ADR 0043), roles the methodology declares: starting it needs one of them
+	// on the project, and its actions that declare no roles of their own need it too. Empty: any member of the
+	// project.
+	Roles []string `yaml:"roles,omitempty" json:"roles,omitempty"`
 	// process is set on the agent generated to run a process (ADR 0034).
 	process string
 }
@@ -238,6 +242,10 @@ type Action struct {
 	// Permission required from the process initiator to run the action
 	// automatically; otherwise the process waits for an authorized approver.
 	Permission string `yaml:"permission,omitempty" json:"permission,omitempty"`
+	// Roles allowed to run the action (ADR 0043), roles the methodology declares: the process initiator must
+	// hold one of them on the project of the change, otherwise the process waits for someone who does. Empty:
+	// the roles of the agent running it, any member of the project when it declares none either.
+	Roles []string `yaml:"roles,omitempty" json:"roles,omitempty"`
 	// llm
 	Model  string `yaml:"model,omitempty" json:"model,omitempty"`
 	Prompt string `yaml:"prompt,omitempty" json:"prompt,omitempty"`
@@ -711,6 +719,7 @@ func (m *Methodology) compile() (*Compiled, Issues) {
 		add("appliesTo", "a transverse methodology runs its processes alongside the changes: declare at least one process")
 	}
 	roles := m.compileRoles(add)
+	m.checkElementRoles(add, roles)
 	meths := m.compileMethods(add, agents, roles)
 	procs := m.compileProcesses(add, actions, known, agents, meths, roles)
 	defs = append(defs, procs.conditions...)

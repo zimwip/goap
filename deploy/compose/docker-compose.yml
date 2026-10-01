@@ -208,7 +208,7 @@ services:
     build: {context: ../.., args: {SERVICE: gateway}}
     environment:
       <<: *env
-      GOAP_AUTH_MODE: ${GOAP_AUTH_MODE:-none}
+      GOAP_AUTH_MODE: ${GOAP_AUTH_MODE:-local}
       GOAP_DEV_TOKENS: "true"
       GOAP_CORS_ORIGINS: http://localhost:5173
       GOAP_GRAPH_URL: http://graph:8080

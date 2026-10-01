@@ -96,7 +96,7 @@ func (h *Host) permitted(t mcp.ToolInfo) bool {
 // unitTools lists, once per action run, the tools the unit holding the change can call.
 func (h *Host) unitTools(ctx context.Context) ([]mcp.ToolInfo, error) {
 	h.toolsOnce.Do(func() {
-		h.allTools, _, h.toolsErr = h.e.Tools.Tools(authz.With(ctx, h.process.Initiator), h.e.orgOf(h.process))
+		h.allTools, _, h.toolsErr = h.e.Tools.Tools(authz.With(ctx, h.e.actor(h.process)), h.e.orgOf(h.process))
 	})
 	return h.allTools, h.toolsErr
 }
@@ -215,7 +215,7 @@ func (h *Host) CallTool(ctx context.Context, name string, args map[string]any) (
 	}
 	if err == nil {
 		// the built-in connectors act on the change of the process by default (ADR 0028)
-		call := mcp.WithCall(authz.With(ctx, h.process.Initiator), mcp.CallContext{Change: string(h.process.ChangeID), Process: h.process.ID})
+		call := mcp.WithCall(authz.With(ctx, h.e.actor(h.process)), mcp.CallContext{Change: string(h.process.ChangeID), Process: h.process.ID})
 		out, err = h.e.Tools.CallTool(call, h.e.orgOf(h.process), name, args)
 	}
 	end(err)
@@ -235,7 +235,7 @@ func (h *Host) RunAgent(ctx context.Context, name, intentText string) (dsl.Agent
 	key := fmt.Sprintf("%s#%d:%s", h.action, h.calls, name)
 	h.calls++
 	h.mu.Unlock()
-	return h.e.runChild(authz.With(ctx, h.process.Initiator), h, key, name, intentText)
+	return h.e.runChild(authz.With(ctx, h.e.actor(h.process)), h, key, name, intentText)
 }
 
 func (h *Host) graph(ctx context.Context) ([]domain.Node, []domain.Link, error) {

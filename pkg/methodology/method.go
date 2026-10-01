@@ -212,6 +212,25 @@ func (m *Methodology) compileRoles(add func(path, format string, args ...any)) m
 	return out
 }
 
+// checkElementRoles reports the roles agents and actions name that the methodology does not declare (ADR 0043):
+// who may run them is said with the methodology's own roles. The roles of a trigger are those of the service
+// identity running its process, not checked: they may be platform roles (admin) no methodology declares.
+func (m *Methodology) checkElementRoles(add func(path, format string, args ...any), roles map[string]bool) {
+	check := func(path string, list []string) {
+		for j, r := range list {
+			if !roles[r] {
+				add(fmt.Sprintf("%s[%d]", path, j), "unknown role %q (declare it in roles)", r)
+			}
+		}
+	}
+	for i, ag := range m.Agents {
+		check(fmt.Sprintf("agents[%d].roles", i), ag.Roles)
+	}
+	for i, a := range m.Actions {
+		check(fmt.Sprintf("actions[%d].roles", i), a.Roles)
+	}
+}
+
 // checkResponsibilities reports the roles a step or a method names that the methodology does not declare.
 func checkResponsibilities(add func(path, format string, args ...any), path string, r *Responsibilities, roles map[string]bool) {
 	if r == nil {

@@ -53,7 +53,7 @@ curl -s localhost:8080/goap.engine.v1.EngineService/StartProcess -H 'Content-Typ
 
 | Service | Port (compose) | Role |
 |---|---|---|
-| gateway | 8080 | entry point, authentication (none / HS256 + dev tokens), Connect routing |
+| gateway | 8080 | entry point, authentication (local sign-in by default / HS256 + dev tokens / none), Connect routing |
 | graph | 8081 | domain axis (versioned nodes, version-to-version links, baselines) + change axis |
 | registry | 8082 | methodologies structured in the database (draft → published), YAML import/export |
 | engine | 8083 | agentic processes: intent → planning → execution |

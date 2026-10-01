@@ -56,10 +56,13 @@ func (h *Handler) resolveOwner(ctx context.Context, owner string) (string, error
 // 0039), the same node doubles as the personal unit that holds a subject's personal changes (ADR 0037) —
 // one node, not two competing for the same key.
 //
-// A new user is linked member_of the default organisation, and granted the admin role when it is the very
+// A new user is linked member_of the unit new users join (NewUserUnit: the waiting unit an administrator
+// flagged, else the default organisation, ADR 0042), and granted the admin role when it is the very
 // first User node the namespace has ever held (ADR 0040): a fresh deployment otherwise has no path to a
-// first administrator at all. A benign race between two simultaneous first connections can grant admin to
-// more than one subject; it never grants it to none, which is what the floor policy (ADR 0020) relies on.
+// first administrator at all. Creations are serialized within a process; a benign race between two
+// processes' simultaneous first connections can grant admin to more than one subject; it never grants it to
+// none, which is what the floor policy (ADR 0020) relies on. The node and its member_of are committed
+// together, as a change of their own on main (createUser, ADR 0042).
 //
 // The default org is resolved *before* the node is created: SeedDefaults can still be seeding at startup (it
 // waits on the registry to publish the type catalogue), and a caller seen in that window must not leave a
@@ -72,12 +75,40 @@ func EnsureUser(ctx context.Context, g *graph.Graph, subject string) error {
 		return nil
 	}
 	key := access.UserKey(subject)
-	if _, err := g.NodeByKey(ctx, mcp.NamespaceOrganisation, key); err == nil {
-		return nil
-	} else if !errors.Is(err, graph.ErrNotFound) {
+	exists := func() (bool, error) {
+		_, err := g.NodeByKey(ctx, mcp.NamespaceOrganisation, key)
+		if errors.Is(err, graph.ErrNotFound) {
+			return false, nil
+		}
+		return err == nil, err
+	}
+	if ok, err := exists(); ok || err != nil {
 		return err
 	}
-	org, err := g.NodeByKey(ctx, mcp.NamespaceOrganisation, domain.DefaultOrg)
+	// one creation at a time in this process: the web fires several calls at once right after signing in,
+	// and two commits creating the same key must not race
+	ensureMu.Lock()
+	defer ensureMu.Unlock()
+	var err error
+	for attempt := 0; attempt < 3; attempt++ {
+		if ok, xerr := exists(); ok || xerr != nil {
+			return xerr
+		}
+		if err = createUser(ctx, g, subject); !errors.Is(err, graph.ErrConflict) {
+			return err
+		}
+		// another change moved main meanwhile, or another process created the user: read again
+	}
+	return err
+}
+
+var ensureMu sync.Mutex
+
+// createUser commits the User node of a subject on main, member_of the unit new users join, as a change of
+// its own (ADR 0042: every modification is a change, so a new user is journaled and moves the head of main —
+// the snapshot pkg/access reads roles and units from sees them at once, which a write by import did not).
+func createUser(ctx context.Context, g *graph.Graph, subject string) error {
+	org, err := NewUserUnit(ctx, g)
 	if err != nil {
 		return err
 	}
@@ -85,19 +116,32 @@ func EnsureUser(ctx context.Context, g *graph.Graph, subject string) error {
 	if err != nil {
 		return err
 	}
-	u := access.User{Subject: subject}
-	if len(existing) == 0 {
-		u.Roles = []string{"admin"}
-	}
-	n, err := g.CreateNode(ctx, graph.NewNode{Namespace: mcp.NamespaceOrganisation, Key: key, Type: access.NodeTypeUser, Properties: u.Props()})
-	if errors.Is(err, graph.ErrConflict) { // created meanwhile by a concurrent request
-		return nil
-	}
+	u := access.User{Subject: subject, Admin: len(existing) == 0}
+	user := linkTo(createNode(access.UserKey(subject), access.NodeTypeUser, u.Props()), access.LinkMemberOf, org.Ref())
+	user.Rationale = "First sign-in of " + subject
+	return applyOn(ctx, g, mcp.NamespaceOrganisation, "User "+subject, []graph.NodeEdit{user})
+}
+
+// NewUserUnit returns the organisational unit new users join (ADR 0042): the waiting unit, an OrgUnit an
+// administrator created and flagged `waiting` (access.PropWaitingUnit) at their discretion, or
+// domain.DefaultOrg when none is flagged. Should several units carry the flag (two concurrent changes each moving it), the
+// smallest key wins, so the answer stays deterministic until someone clears the extra one. Read against live
+// state, like the rest of EnsureUser: a flag moved by a change is seen at once.
+func NewUserUnit(ctx context.Context, g *graph.Graph) (domain.Node, error) {
+	units, err := g.NodesOfType(ctx, mcp.NamespaceOrganisation, mcp.NodeTypeOrgUnit)
 	if err != nil {
-		return err
+		return domain.Node{}, err
 	}
-	_, err = g.Link(ctx, access.LinkMemberOf, n.Ref(), org.Ref(), nil)
-	return err
+	var found *domain.Node
+	for i := range units {
+		if access.IsWaitingUnit(units[i].Properties) && (found == nil || units[i].Key < found.Key) {
+			found = &units[i]
+		}
+	}
+	if found != nil {
+		return *found, nil
+	}
+	return g.NodeByKey(ctx, mcp.NamespaceOrganisation, domain.DefaultOrg)
 }
 
 // EnsureCaller is the interceptor that calls EnsureUser for every authenticated caller (ADR 0039),
