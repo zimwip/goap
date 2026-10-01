@@ -687,18 +687,6 @@ agents:
     actions: [identify_scope, select_scope, propagate_impacts, specify_requirements, write_requirements,
               trace_requirements, trace_manually, plan_tests]
     goals: [analyze_impact, specify]
-  - name: architect
-    description: Architect — functional allocation, design of components, interfaces, flows and data
-    examples: ["design the solution", "which components and interfaces to modify"]
-    planner: hybrid
-    actions: [identify_scope, select_scope, propagate_impacts, specify_requirements, write_requirements,
-              trace_requirements, trace_manually, allocate_functions, design_solution, write_design, check_design]
-    goals: [design]
-  - name: designer
-    description: Designer — functional allocation and a design written by hand, checked for consistency
-    planner: goap
-    actions: [allocate_functions, write_design, check_design]
-    goals: [design]
   - name: builder
     description: Integrator — build the components according to their technology
     examples: ["build the components", "build"]
@@ -749,7 +737,9 @@ methods:
       - {title: Architecture standard, ref: "document-repository:sdlc/architecture-standard.md"}
     deliverables: [DesignDossier]
     roles: {responsible: solution_architect, accountable: tech_lead, consulted: [business_analyst]}
-    agent: architect
+    planner: hybrid
+    actions: [identify_scope, select_scope, propagate_impacts, specify_requirements, write_requirements,
+              trace_requirements, trace_manually, allocate_functions, design_solution, write_design, check_design]
     steps:
       - {name: allocation, description: "Allocate the requirements to functions", action: allocate_functions}
       - {name: design, description: "Design the components, interfaces, flows and data (by the agent, a person if it fails)", actions: [design_solution, write_design]}
@@ -762,7 +752,7 @@ methods:
       in behaviour, which functions realize it).
     deliverables: [DesignNote]
     roles: {responsible: business_analyst, accountable: tech_lead}
-    agent: designer
+    actions: [allocate_functions, write_design, check_design]
     steps:
       - {name: allocation, description: "Allocate the requirements to functions", action: allocate_functions}
       - {name: note, description: "Write the design note by hand", action: write_design}

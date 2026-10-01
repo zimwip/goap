@@ -19,15 +19,15 @@ nodeTypes:
   # an Activity Run (pkg/domain.ExecutionRecord) is one execution instance of one, against one Change.
   - {name: Activity, editor: activity, description: "Common shape of Process/Step/Method/MethodStep: input, goals and output conditions, composed from sub-activities", properties: [name, description, input, goals, output, position, removed]}
   # ADR 0034: the steps and sub-steps that reach an objective, each done by an action, an agent, a nested process or a person
-  # ADR 0035 §1: how a step capability is carried out in a context, and the agent that acts
-  - {name: Method, extends: Activity, editor: method, description: "Method of a methodology version: the reference of how a capability is carried out in a context", properties: [for, when, priority, guidance, checklist, deliverables, references, agent, steps]}
+  # ADR 0035 §1, ADR 0050: how a step capability is carried out in a context, with which actions; the scheduler creates the agent applying it
+  - {name: Method, extends: Activity, editor: method, description: "Method of a methodology version: the reference of how a capability is carried out in a context", properties: [for, when, priority, guidance, checklist, deliverables, references, roles, actions, done, planner, model, mcps, steps]}
   - {name: Process, extends: Activity, editor: process, description: "Process of a methodology version: its steps and sub-steps", properties: [examples, references, steps]}
   # Step and MethodStep (architecture plan point 2): one step of a Process/Method, materialized as its own
   # node (not just compiled in-memory) so it can be an Activity in its own right - its own input/goals/output,
   # its own ActivityRuns. Still authored inline in the owning Process/Method's YAML for ergonomics; the
   # registry additionally materializes one node per step at save time, linked by sub_activity.
-  - {name: Step, extends: Activity, editor: step, description: "Step of a Process: its own input/goals/output, done by an action, an agent, a nested process or a person", properties: [instructions, guidance, checklist, deliverables, references, roles, action, actions, agent, process, method]}
-  - {name: MethodStep, extends: Activity, editor: step, description: "Step of a Method: its own input/goals/output, done by an action, an agent, a nested process or a person", properties: [instructions, guidance, checklist, deliverables, references, roles, action, actions, agent, process, method]}
+  - {name: Step, extends: Activity, editor: step, description: "Step of a Process: its own input/goals/output, done by an action, an agent, a nested process or a person", properties: [instructions, guidance, checklist, deliverables, references, roles, action, actions, agent, process, method, foreach, groupBy]}
+  - {name: MethodStep, extends: Activity, editor: step, description: "Step of a Method: its own input/goals/output, done by an action, an agent, a nested process or a person", properties: [instructions, guidance, checklist, deliverables, references, roles, action, actions, agent, process, method, foreach, groupBy]}
   # an MCP tool the self-observation asks the platform for (ADR 0011): not part of a definition
   - {name: ToolRequest, description: "MCP tool requested by the self-observation of a methodology", properties: [name, description, motivation, span]}
 linkTypes:

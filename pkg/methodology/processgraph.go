@@ -67,7 +67,7 @@ func (c *Compiled) ProcessGraph(name string) (ProcessGraph, bool) {
 	if p, ok := c.ProcessByName(name); ok {
 		g = ProcessGraph{Process: p.Name, Description: p.Description, References: p.References}
 		top = c.ProcessSteps(name)
-	} else if me, ok := c.MethodByName(name); ok && (len(me.Steps) > 0 || me.Agent != "") {
+	} else if me, ok := c.MethodByName(name); ok && (len(me.Steps) > 0 || len(me.Actions) > 0) {
 		// a method composing its own steps has a graph of its own, apart from the process of the step that names its
 		// capability: the method specializes that step, which cuts the traceability (it adds variability)
 		g = ProcessGraph{Process: me.Name, Description: me.Description, References: me.References}

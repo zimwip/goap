@@ -64,7 +64,13 @@
     {:else if (s.state === 'todo' || s.state === 'blocked') && s.missing?.length}
       <div class="note">Needs: {#each s.missing as m, i (m)}{i ? ', ' : ''}<code>{m}</code>{/each}</div>
     {/if}
-    {#if s.childProcessIds?.length}
+    {#if s.lanes?.length}
+      <ul class="lanes">
+        {#each s.lanes as l (l.processId)}
+          <li><button type="button" class="link" onclick={() => l.processId && onopen?.(l.processId)}><code>{l.item}</code></button> <span class="hint">{l.method}</span> <span class="chip {l.status === 'completed' ? 'done' : 'active'}">{l.status}</span></li>
+        {/each}
+      </ul>
+    {:else if s.childProcessIds?.length}
       <div class="note">
         {#each s.childProcessIds as c (c)}
           <button type="button" class="link" onclick={() => onopen?.(c)}>{processes.get(c)?.agent || 'sub-agent'}</button>

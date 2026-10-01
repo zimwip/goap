@@ -1117,10 +1117,12 @@ navigate the organisation as it is (units, users, adapters, what they own) and t
 `sub_activity` link; the `specializes` link defines **variants** (the methods that specialize a step's capability, one chosen by context), which
 cuts the traceability by adding variability, so each variant has a graph of its own. An **action** is the smallest activity, not broken down further:
 it has no flow, it is a node (a step is made of sub-steps, an action, alternative actions, variants, a nested process, or is done by hand).
-An **agent** is not a way to do a step: it is the actor. The method says how and with what (the activities that compose it, down to actions, and
-the tools their actions declare); the agent it names performs them, has access to them (the compiler gives it the actions of the method's steps
-and the method's goal) and executes them in the order that reaches the goal. A method with no steps reaches the goal with the agent's own actions
-(the flow then shows those actions, operated by the agent). A step cannot name an agent: it names a capability, and the method that specializes it names the agent.
+An **agent** is not a way to do a step: it is the actor, created for the step ([ADR 0050](adr/0050-methods-own-actions-roles-drive-agents.md)). A method
+owns the actions that realize it (a pool, and/or its steps, which inherit the pool) and its planner, model and MCPs; when a step names a capability
+the scheduler picks the applicable method (highest priority, then the most specific context) and runs an agent instance acting as the method's
+responsible role, planning over the method's actions towards its goal. The instance starts fresh and reads what it needs from the change (brief,
+trace); what it produces goes on the change. A method with no steps states what it reaches (`done`; the flow then shows its actions).
+A step cannot name an agent for a capability: it names the capability, and the scheduler resolves the method.
 The flow shows **one level at a time** (the system of interest is a parent and its direct steps, from `CheckLevels`: each level carries
 its steps, their entry and exit and the links their conditions draw). A step with sub-steps is a node; zooming into it (double-click, or
 the breadcrumb to come back) changes the system of interest. A step not resolved inside (one of its own levels, or one below, is broken)

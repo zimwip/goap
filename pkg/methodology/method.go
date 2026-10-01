@@ -10,13 +10,12 @@ import (
 	"github.com/zimwip/goap/pkg/domain"
 )
 
-// Method is the documentary reference of how a step capability is carried out in a context (ADR 0035 §1): what is
-// being worked on, which technology. It carries the guidance, the reference documents, the checklist and the
-// deliverables of that way of working, and names its actor: either an agent of the methodology (and the goal it
-// reaches), even when the method amounts to one action, or - composing its own Steps, exactly like a Process - an
-// agent generated for it, of its own name (architecture plan "Activity concept": Method and MethodStep are
-// Activities too). A step names a capability (`method: build`); at execution, the applicable method (When holds)
-// with the highest Priority is chosen and its agent carries out the step as a sub-agent, with the method's guidance.
+// Method is how a step capability is carried out in a context (ADR 0035 §1, reshaped by ADR 0050): what is being
+// worked on, which technology. It carries the guidance, reference documents, checklist and deliverables of that way of
+// working, and the activities that realize it: the Actions of its pool and/or its own Steps (a method step inherits
+// the pool). A method is not an actor and names none: when a step names a capability (`method: build`), the
+// scheduler picks the applicable method (When holds; highest Priority, then the most specific context) and creates
+// the agent instance that applies it, of the method's name, which plans over the method's actions towards its goal.
 type Method struct {
 	Name string `yaml:"name" json:"name"`
 	// For is the capability the method provides; several methods provide one, in different contexts.
@@ -34,26 +33,33 @@ type Method struct {
 	// Roles involved when the method is used (replacing those of the step, the method being more precise).
 	Roles *Responsibilities `yaml:"roles,omitempty" json:"roles,omitempty"`
 
-	// Agent is the actor: an agent of the methodology that carries the method out. Alone, it reaches Goal (default: its
-	// only goal) with its own actions. With Steps, it performs the activities that compose the method, which it has
-	// access to (and the tools their actions declare): the method says how and with what, the agent executes.
-	Agent string `yaml:"agent,omitempty" json:"agent,omitempty"`
-	Goal  string `yaml:"goal,omitempty" json:"goal,omitempty"`
 	// Steps composes the method from its own steps and sub-steps, done by actions, agents or nested processes -
 	// the same shape and compilation as a Process's (not a capability dispatch: a method step may not itself name
 	// a capability, to avoid methods resolving each other circularly while methods are still being compiled).
-	// Compiling it generates a goal of the method's own name, and an agent of that name unless Agent names the actor,
-	// which is then given those steps' actions and that goal. Goal applies to an agent alone.
 	Steps []Step `yaml:"steps,omitempty" json:"steps,omitempty"`
+	// Actions are the actions that realize the method (ADR 0050): the pool its agent plans over, in addition to the
+	// actions of its Steps, which are part of it too. A method step inherits the pool of its method. With no Steps,
+	// Done states what the method reaches.
+	Actions []string `yaml:"actions,omitempty" json:"actions,omitempty"`
+	// Done are the exit criteria of a method composing no Steps (a method with Steps reaches theirs).
+	Done map[string]bool `yaml:"done,omitempty" json:"done,omitempty"`
+	// Planner (goap by default), Model and MCPs configure the agent instance the scheduler creates to apply the
+	// method: how it plans depends on the work, not on the actor.
+	Planner string   `yaml:"planner,omitempty" json:"planner,omitempty"`
+	Model   string   `yaml:"model,omitempty" json:"model,omitempty"`
+	MCPs    []string `yaml:"mcps,omitempty" json:"mcps,omitempty"`
 }
 
-// ActorAgent is the agent that carries out the method: the one it names, or - composing its own Steps without
-// naming one - the agent generated for it, of its own name.
-func (m Method) ActorAgent() string {
-	if m.Agent != "" {
-		return m.Agent
+// ActorAgent is the agent generated for the method (ADR 0050): the agent instance that applies it, of its name.
+func (m Method) ActorAgent() string { return m.Name }
+
+// Specificity ranks methods of equal priority: how many conditions a method's context states (none: the generic
+// method, the fallback). The conjuncts of its `when` are counted.
+func (m Method) Specificity() int {
+	if strings.TrimSpace(m.When) == "" {
+		return 0
 	}
-	return m.Name
+	return 1 + strings.Count(m.When, "&&")
 }
 
 // GuardCondition is the name of the condition of the method's context.
@@ -79,7 +85,7 @@ func (m *Methodology) compileMethods(add func(path, format string, args ...any),
 	seen := map[string]bool{}
 	for i, me := range m.Methods {
 		path := fmt.Sprintf("methods[%d]", i)
-		hasAgent, hasSteps := me.Agent != "", len(me.Steps) > 0
+		hasSteps, hasActions := len(me.Steps) > 0, len(me.Actions) > 0
 		switch {
 		case !nameRE.MatchString(me.Name):
 			add(path+".name", "name required: lowercase letters, digits, '-' or '_', starting with a letter")
@@ -87,14 +93,14 @@ func (m *Methodology) compileMethods(add func(path, format string, args ...any),
 		case seen[me.Name]:
 			add(path+".name", "duplicate method %s", me.Name)
 			continue
-		case hasSteps && agents[me.Name].Name != "":
-			add(path+".name", "%s is already an agent: a method composing its own steps is run by an agent of its name", me.Name)
+		case agents[me.Name].Name != "":
+			add(path+".name", "%s is already an agent: the agent applying a method is generated, of the method's name", me.Name)
 			continue
-		case hasSteps && slices.ContainsFunc(m.Processes, func(p Process) bool { return p.Name == me.Name }):
-			add(path+".name", "%s is already a process: a method composing its own steps is run by an agent of its name", me.Name)
+		case slices.ContainsFunc(m.Processes, func(p Process) bool { return p.Name == me.Name }):
+			add(path+".name", "%s is already a process: the agent applying a method is generated, of the method's name", me.Name)
 			continue
-		case hasSteps && slices.ContainsFunc(m.Goals, func(g Goal) bool { return g.Name == me.Name }):
-			add(path+".name", "%s is already a goal: a method composing its own steps reaches a goal of its name", me.Name)
+		case slices.ContainsFunc(m.Goals, func(g Goal) bool { return g.Name == me.Name }):
+			add(path+".name", "%s is already a goal: a method reaches a goal of its name", me.Name)
 			continue
 		}
 		seen[me.Name] = true
@@ -111,21 +117,36 @@ func (m *Methodology) compileMethods(add func(path, format string, args ...any),
 				out.guards = append(out.guards, d)
 			}
 		}
-		switch {
-		case !hasAgent && !hasSteps:
-			add(path+".agent", "a method names its actor: an agent of the methodology, or declares its own steps")
-		case hasSteps:
-			if me.Goal != "" {
-				add(path+".goal", "goal applies to a method naming an agent alone: the goal of a method composing steps is generated")
+		for j, a := range me.Actions {
+			if _, ok := actions[a]; !ok {
+				add(fmt.Sprintf("%s.actions[%d]", path, j), "unknown action %q", a)
 			}
-			var actor *Agent
-			if hasAgent {
-				ag, ok := agents[me.Agent]
-				if !ok || ag.process != "" {
-					add(path+".agent", "a method names its actor: an agent of the methodology (unknown %q)", me.Agent)
-					continue
-				}
-				actor = &ag
+		}
+		switch me.Planner {
+		case "", PlannerGOAP, PlannerUtility, PlannerHybrid:
+		case PlannerLLM, PlannerLLMScoring:
+			if me.Model == "" {
+				add(path+".model", "model is required for the %s planner", me.Planner)
+			}
+		default:
+			add(path+".planner", "planner must be goap, utility, hybrid, llm or llm-scoring")
+		}
+		agent := Agent{Name: me.Name, Description: me.Description, Planner: me.Planner, Model: me.Model, MCPs: me.MCPs,
+			Actions: slices.Clone(me.Actions), Goals: []string{me.Name}, process: me.Name}
+		if agent.Planner == "" {
+			agent.Planner = PlannerGOAP
+		}
+		if me.Roles != nil {
+			agent.Role = me.Roles.Responsible
+		}
+		var goal Goal
+		switch {
+		case !hasSteps && !hasActions:
+			add(path+".steps", "a method says how: declare the actions that realize it, or its own steps")
+			continue
+		case hasSteps:
+			if len(me.Done) > 0 {
+				add(path+".done", "done applies to a method without steps: the exit criteria of a method composing steps are theirs")
 			}
 			sub := *w
 			sub.out = &compiledProcesses{}
@@ -135,59 +156,27 @@ func (m *Methodology) compileMethods(add func(path, format string, args ...any),
 			if len(done) == 0 {
 				continue
 			}
-			own := make([]string, 0, len(sub.out.actions))
 			for _, a := range sub.out.actions {
-				own = append(own, a.Name)
+				agent.Actions = append(agent.Actions, a.Name)
 			}
-			goal := Goal{Name: me.Name, Description: me.Description, Pre: done}
-			gen.goals = append(gen.goals, goal)
-			if actor != nil {
-				// the named agent performs the method: it gets the activities that compose it and their goal
-				x := gen.extend[actor.Name]
-				x.actions, x.goals = append(x.actions, own...), append(x.goals, me.Name)
-				gen.extend[actor.Name] = x
-			} else {
-				gen.agents = append(gen.agents, Agent{Name: me.Name, Description: me.Description, Planner: PlannerGOAP,
-					Actions: own, Goals: []string{me.Name}, process: me.Name})
-			}
-			out.goals[me.Name] = goal
-		default: // hasAgent
-			ag, ok := agents[me.Agent]
-			if !ok {
-				add(path+".agent", "a method names its actor: an agent of the methodology (unknown %q)", me.Agent)
+			goal = Goal{Name: me.Name, Description: me.Description, Pre: done}
+		default:
+			if len(me.Done) == 0 {
+				add(path+".done", "a method without steps states what it reaches: its exit criteria")
 				continue
 			}
-			goals := goalsOf(m, ag)
-			goal := me.Goal
-			if goal == "" {
-				if len(goals) != 1 {
-					add(path+".goal", "agent %s has several goals: name the one the method reaches", ag.Name)
-					continue
+			for c := range me.Done {
+				if !known[c] {
+					add(path+".done", "unknown condition %q", c)
 				}
-				goal = goals[0].Name
 			}
-			i := slices.IndexFunc(goals, func(g Goal) bool { return g.Name == goal })
-			if i < 0 {
-				add(path+".goal", "%q is not a goal of agent %s", goal, ag.Name)
-				continue
-			}
-			out.goals[me.Name] = goals[i]
+			goal = Goal{Name: me.Name, Description: me.Description, Pre: maps.Clone(me.Done)}
 		}
+		gen.goals = append(gen.goals, goal)
+		gen.agents = append(gen.agents, agent)
+		out.goals[me.Name] = goal
 	}
 	return out, gen
-}
-
-func goalsOf(m *Methodology, ag Agent) []Goal {
-	if len(ag.Goals) == 0 {
-		return m.Goals
-	}
-	var out []Goal
-	for _, g := range m.Goals {
-		if slices.Contains(ag.Goals, g.Name) {
-			out = append(out, g)
-		}
-	}
-	return out
 }
 
 // methodsFor returns the valid methods providing a capability, in declaration order.
@@ -221,11 +210,11 @@ func sharedCriteria(methods []Method, goals map[string]Goal) map[string]bool {
 }
 
 // MethodsFor returns the methods providing a capability that apply on the blackboard, the highest priority first
-// (declaration order among equals), each with the goal its agent reaches.
+// then the most specific context (declaration order among equals), each with the goal its agent reaches.
 func (c *Compiled) MethodsFor(capability string, bb domain.Blackboard) []MethodChoice {
 	state := c.methodGuards.Evaluate(bb).State
 	applicable := func(me Method) bool { return me.When == "" || state[me.GuardCondition()] }
-	ranked := RankByPriority(c.Methodology.methodsFor(capability, c.methods.goals), applicable, func(me Method) int { return me.Priority })
+	ranked := RankByPriority(c.Methodology.methodsFor(capability, c.methods.goals), applicable, func(me Method) int { return me.Priority*100 + min(me.Specificity(), 99) })
 	out := make([]MethodChoice, 0, len(ranked))
 	for _, me := range ranked {
 		out = append(out, MethodChoice{Method: me, AgentGoal: c.methods.goals[me.Name].Name})

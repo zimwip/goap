@@ -123,9 +123,9 @@
 
   function summary(section: Section, it: SectionItem): string {
     if ('kind' in it) return it.kind;
-    if ('planner' in it) return it.planner;
     if ('expr' in it) return it.expr;
-    if ('for' in it) return `${it.for} · agent ${it.agent || '?'}${it.when ? ` · when ${it.when}` : ''}`;
+    if ('for' in it) return `${it.for}${it.actions.length ? ` · ${it.actions.length} actions` : ''}${it.when ? ` · when ${it.when}` : ''}`;
+    if ('planner' in it) return it.planner;
     if ('steps' in it) return `${walkSteps(it.steps).length} step(s)${it.description ? ` — ${it.description}` : ''}`;
     return it.description;
   }

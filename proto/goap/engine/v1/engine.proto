@@ -425,6 +425,16 @@ message StepProgress {
   string chosen = 16;
   // the roles in force for the step
   Responsibilities roles = 17;
+  // the parallel streams of a step with foreach, one per element or group (ADR 0050)
+  repeated Lane lanes = 18;
+}
+
+// A stream of a step with foreach: its element, the method chosen for it, and its agent instance.
+message Lane {
+  string item = 1;
+  string method = 2;
+  string process_id = 3;
+  string status = 4;
 }
 
 message ListProcessesRequest {

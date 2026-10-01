@@ -143,8 +143,20 @@
           </select>
           {#if providers.length}
             <p class="hint">
-              Methods: {#each providers as m, i (m.uid)}{i ? ', ' : ''}<code>{m.name}</code> ({m.when ? `when ${m.when}` : 'always'}{m.priority ? `, priority ${m.priority}` : ''}, agent {m.agent || '?'}){/each}
+              Methods: {#each providers as m, i (m.uid)}{i ? ', ' : ''}<code>{m.name}</code> ({m.when ? `when ${m.when}` : 'always'}{m.priority ? `, priority ${m.priority}` : ''}){/each}
             </p>
+          {/if}
+        </div>
+        <div class="grid">
+          <div class="field">
+            <label for="{step.key}-foreach">For each <span class="opt">(CEL list; one parallel stream per element, <code>vars.item</code>; empty: once)</span></label>
+            <input id="{step.key}-foreach" type="text" class="mono" bind:value={step.foreach} class:bad={d.bad(`${path}.foreach`)} data-path="{path}.foreach" placeholder="vars.components" />
+          </div>
+          {#if step.foreach.trim()}
+            <div class="field">
+              <label for="{step.key}-groupby">Group by <span class="opt">(CEL key per element; one stream per group, item is {'{key, items}'})</span></label>
+              <input id="{step.key}-groupby" type="text" class="mono" bind:value={step.groupBy} class:bad={d.bad(`${path}.groupBy`)} data-path="{path}.groupBy" placeholder="vars.item.lang" />
+            </div>
           {/if}
         </div>
       {/if}

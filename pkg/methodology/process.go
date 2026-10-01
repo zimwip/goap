@@ -81,6 +81,17 @@ type Step struct {
 	// Capability names what the step needs done; the methods providing it (`for`) say how, per context, and which
 	// agent acts (ADR 0035 §1). YAML: `method: <capability>`.
 	Capability string `yaml:"method,omitempty" json:"method,omitempty"`
+	// Foreach (ADR 0050) is a CEL expression on the blackboard returning a list, on a step naming a capability: the
+	// step is carried out once per element, in parallel streams, each element bound to `vars.item` and given the most
+	// specific method for it (a method's `when` can read `vars.item`). The step is done when every stream is. Unless
+	// the step states its exit criteria (`done`, which may read `vars.item` for what each stream reaches), it is done
+	// once it has run.
+	Foreach string `yaml:"foreach,omitempty" json:"foreach,omitempty"`
+	// GroupBy is a CEL expression evaluated for each element of Foreach (the element is `vars.item`) whose result is
+	// the key of its group: one stream per group instead of one per element, so that what belongs together is done
+	// together (the Java components in one build, the Go ones in another). In a stream, `vars.item` is the group
+	// `{key, items}`.
+	GroupBy string `yaml:"groupBy,omitempty" json:"groupBy,omitempty"`
 }
 
 // Step methods.
@@ -335,6 +346,14 @@ func (w *stepWalker) walk(steps []Step, path, prefix string, inherited map[strin
 
 // step generates one step and returns its exit criteria.
 func (w *stepWalker) step(s Step, sp, path string, need map[string]bool) map[string]bool {
+	if s.GroupBy != "" && s.Foreach == "" {
+		w.add(sp+".groupBy", "groupBy groups the elements of foreach: declare foreach")
+		return nil
+	}
+	if s.Foreach != "" && s.Capability == "" {
+		w.add(sp+".foreach", "foreach applies to a step naming a capability (method): each element is given the most specific method")
+		return nil
+	}
 	methods := 0
 	for _, set := range []bool{len(s.Steps) > 0, s.Action != "", len(s.Actions) > 0, s.Process != "", s.Capability != ""} {
 		if set {
@@ -420,14 +439,29 @@ func (w *stepWalker) step(s Step, sp, path string, need map[string]bool) map[str
 			w.add(sp+".method", "no valid method provides %q (methods[].for)", s.Capability)
 			return nil
 		}
-		if done == nil {
+		if s.Foreach != "" {
+			if err := condition.CheckList(s.Foreach); err != nil {
+				w.add(sp+".foreach", "%s", err)
+				return nil
+			}
+			gen.Params = map[string]any{"step": path, "capability": s.Capability, "foreach": s.Foreach}
+			if s.GroupBy != "" {
+				if _, err := condition.CompileValue(s.GroupBy); err != nil {
+					w.add(sp+".groupBy", "%s", err)
+					return nil
+				}
+				gen.Params["groupBy"] = s.GroupBy
+			}
+		} else if done == nil {
 			if done = sharedCriteria(candidates, w.methods.goals); len(done) == 0 {
 				w.add(sp+".done", "the methods providing %q reach nothing in common: state the exit criteria of the step", s.Capability)
 				return nil
 			}
 		}
 		gen.Kind, gen.Builtin = KindBuiltin, BuiltinStep
-		gen.Params = map[string]any{"step": path, "capability": s.Capability}
+		if gen.Params == nil {
+			gen.Params = map[string]any{"step": path, "capability": s.Capability}
+		}
 	case MethodManual:
 		gen.Kind = KindHuman
 		gen.Instructions = s.Instructions

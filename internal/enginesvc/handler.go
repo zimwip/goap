@@ -299,7 +299,15 @@ func stepProgressToPB(steps []engine.StepProgress) []*enginev1.StepProgress {
 	for _, s := range steps {
 		out = append(out, &enginev1.StepProgress{Path: s.Path, Name: s.Name, Description: s.Description, Method: s.Method, Target: s.Target,
 			State: s.State, Missing: s.Missing, Runs: int32(s.Runs), ChildProcessIds: s.ChildProcessIDs, Waiting: s.Waiting, Permission: s.Permission,
-			Guidance: s.Guidance, Checklist: s.Checklist, References: docRefsToPB(s.References), Steps: stepProgressToPB(s.Steps), Chosen: s.Chosen, Roles: respToPB(s.Roles)})
+			Guidance: s.Guidance, Checklist: s.Checklist, References: docRefsToPB(s.References), Steps: stepProgressToPB(s.Steps), Chosen: s.Chosen, Roles: respToPB(s.Roles), Lanes: lanesToPB(s.Lanes)})
+	}
+	return out
+}
+
+func lanesToPB(lanes []engine.Lane) []*enginev1.Lane {
+	var out []*enginev1.Lane
+	for _, l := range lanes {
+		out = append(out, &enginev1.Lane{Item: l.Item, Method: l.Method, ProcessId: l.ProcessID, Status: string(l.Status)})
 	}
 	return out
 }

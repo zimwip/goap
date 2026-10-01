@@ -318,7 +318,7 @@ for (const kind of ['agent', 'action', 'condition', 'goal', 'process', 'method']
         ['Methodology', x.d.label],
         ['Description', it.description],
       ];
-      if ('planner' in it) rows.push(['Planner', it.planner], ['Actions', it.actions.join(', ') || 'all'], ['Goals', it.goals.join(', ') || 'all']);
+      if ('planner' in it && !('for' in it)) rows.push(['Planner', it.planner], ['Actions', it.actions.join(', ') || 'all'], ['Goals', it.goals.join(', ') || 'all']);
       if ('kind' in it) {
         rows.push(['Type', it.kind]);
         if (it.specializes) rows.push(['Specializes', it.specializes], ['Guard', it.when], ['Priority', String(it.priority)]);
@@ -327,7 +327,7 @@ for (const kind of ['agent', 'action', 'condition', 'goal', 'process', 'method']
       }
       if ('expr' in it) rows.push(['Expression', it.expr]);
       if ('value' in it) rows.push(['Value', String(it.value)]);
-      if ('for' in it) rows.push(['Capability', it.for], ['Agent', it.agent], ['Context', it.when || 'always'], ['Priority', String(it.priority)]);
+      if ('for' in it) rows.push(['Capability', it.for], ['Planner', it.planner], ['Actions', it.actions.join(', ') || 'none'], ['Context', it.when || 'always'], ['Priority', String(it.priority)]);
       if ('steps' in it) rows.push(['Steps', String(walkSteps(it.steps).length)], ['References', String(it.references.length)]);
       return { title: it.name || '(unnamed)', subtitle: ITEM_TITLES[kind], rows };
     },

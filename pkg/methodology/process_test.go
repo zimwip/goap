@@ -36,7 +36,7 @@ func compileProcess(t *testing.T, processes string) (*Compiled, Issues) {
 func TestProcessCompilesToStepActions(t *testing.T) {
 	c, issues := compileProcess(t, `
 methods:
-  - {name: by_worker, for: working, agent: worker}
+  - {name: by_worker, for: working, actions: [do_c], done: {c: true}}
 processes:
   - name: flow
     references: [{title: Guide, ref: "document-repository:flow.md"}]
@@ -107,7 +107,7 @@ processes:
 			t.Fatalf("worker plans with a step: %s", a.Name)
 		}
 	}
-	if list := c.AgentList(); len(list) != 2 || list[1].Name != "flow" {
+	if list := c.AgentList(); len(list) != 3 || list[1].Name != "flow" {
 		t.Fatalf("agents %+v", list)
 	}
 }
@@ -246,12 +246,13 @@ func TestMethodsProvideACapabilityPerContext(t *testing.T) {
 methods:
   - name: quick
     for: finishing
-    agent: worker
+    actions: [do_c]
+    done: {c: true}
     priority: 5
     when: 'artifacts.exists(x, x.type == "urgent")'
     guidance: Do it quickly
     references: [{ref: "doc:QUICK"}]
-  - {name: thorough, for: finishing, agent: worker, description: Do it well}
+  - {name: thorough, for: finishing, actions: [do_c], done: {c: true}, description: Do it well}
 processes:
   - name: flow
     steps:
@@ -265,7 +266,7 @@ processes:
 		t.Fatalf("a method step runs the chosen method, done by what the methods' goals share: %+v", a)
 	}
 	var bb domain.Blackboard
-	if got := c.MethodsFor("finishing", bb); len(got) != 1 || got[0].Name != "thorough" || got[0].AgentGoal != "all" {
+	if got := c.MethodsFor("finishing", bb); len(got) != 1 || got[0].Name != "thorough" || got[0].AgentGoal != "thorough" {
 		t.Fatalf("outside its context a method does not apply: %+v", got)
 	}
 	bb.Change.Items = []domain.ChangeItem{{ID: "i1", Kind: domain.KindArtifact, Type: "urgent"}}
@@ -279,18 +280,19 @@ processes:
 
 func TestMethodValidation(t *testing.T) {
 	cases := map[string]struct{ yaml, want string }{
-		"no actor": {`
+		"no actions nor steps": {`
 methods: [{name: m, for: f}]
-processes: [{name: x, steps: [{name: s, method: f}]}]`, "names its actor"},
+processes: [{name: x, steps: [{name: s, method: f}]}]`, "declare the actions"},
+		"actions without done": {`
+methods: [{name: m, for: f, actions: [do_c]}]`, "states what it reaches"},
+		"unknown action": {`
+methods: [{name: m, for: f, actions: [nope], done: {c: true}}]`, `unknown action "nope"`},
 		"unknown capability": {`
-methods: [{name: m, for: f, agent: worker}]
+methods: [{name: m, for: f, actions: [do_c], done: {c: true}}]
 processes: [{name: x, steps: [{name: s, method: g}]}]`, `no valid method provides "g"`},
 		"bad context": {`
-methods: [{name: m, for: f, agent: worker, when: "nope("}]
+methods: [{name: m, for: f, actions: [do_c], done: {c: true}, when: "nope("}]
 processes: [{name: x, steps: [{name: s, method: f}]}]`, "methods[0].when"},
-		"unknown goal": {`
-methods: [{name: m, for: f, agent: worker, goal: nope}]
-processes: [{name: x, steps: [{name: s, method: f}]}]`, `"nope" is not a goal of agent worker`},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -338,7 +340,7 @@ func TestProcessGraphDrawsTheConditions(t *testing.T) {
 	}
 	var architect *GraphAgent
 	for i := range g.Agents {
-		if g.Agents[i].Name == "architect" {
+		if g.Agents[i].Name == "solution_design" {
 			architect = &g.Agents[i]
 		}
 	}

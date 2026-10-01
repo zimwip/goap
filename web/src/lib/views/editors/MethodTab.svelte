@@ -1,15 +1,20 @@
 <script lang="ts">
   // "Method" tab (ADR 0035 §1): the documentary reference of how a step capability is carried out in a context — its
-  // guidance, checklist, deliverables and reference documents — and the agent that acts. A step names the capability;
-  // the applicable method (its context holds) with the highest priority is chosen when the step runs.
+  // guidance, checklist, deliverables and reference documents — and the actions that realize it (ADR 0050). A step
+  // names the capability; the applicable method (its context holds; highest priority, then the most specific
+  // context) is chosen when the step runs, and an agent instance is created to apply it.
   import { untrack } from 'svelte';
   import type { Tab } from '../../shell/types';
   import DraftHeader from './DraftHeader.svelte';
   import ItemMissing from './ItemMissing.svelte';
+  import CondRows from '../../components/CondRows.svelte';
+  import PickList from './PickList.svelte';
+  import ModelAliasField from '../../components/ModelAliasField.svelte';
+  import { modelChoices, refreshModelChoices } from '../../stores/modelChoices.svelte';
   import ReferencesEditor from './ReferencesEditor.svelte';
   import ResponsibilitiesEditor from './ResponsibilitiesEditor.svelte';
   import { provideActions, useReveal } from '../../shell/workbench.svelte';
-  import { emptyStep, walkSteps } from '../../methodologyForm';
+  import { emptyStep, walkSteps, PLANNERS, LLM_PLANNERS } from '../../methodologyForm';
   import StepEditor from './StepEditor.svelte';
   import DraftFlow from '../../components/DraftFlow.svelte';
   import { draftOf, draftActions, removeItemAction, syncTabUid, openItem, openStep } from './methodologyTabs';
@@ -32,9 +37,12 @@
     () => root,
   );
 
-  const agentNames = $derived(d.form.agents.map((a) => a.name).filter(Boolean));
-  const agent = $derived(item ? d.form.agents.find((a) => a.name === item.agent) : undefined);
-  const goalNames = $derived((agent && agent.goals.length ? agent.goals : d.form.goals.map((g) => g.name)).filter(Boolean));
+  const actionNames = $derived([...new Set(d.form.actions.map((a) => a.name.trim()).filter(Boolean))]);
+  const actionDetails = $derived(Object.fromEntries(d.form.actions.map((a) => [a.name, a.kind])));
+  const needsModel = $derived(!!item && (LLM_PLANNERS as readonly string[]).includes(item.planner));
+  $effect(() => {
+    if (needsModel && !modelChoices.loaded) void refreshModelChoices();
+  });
   const capabilities = $derived([...new Set(d.form.methods.map((m) => m.for.trim()).filter(Boolean))]);
   // the other methods of the same capability, and the steps that name it
   const siblings = $derived(item ? d.form.methods.filter((m) => m !== item && m.for.trim() && m.for === item.for) : []);
@@ -64,9 +72,9 @@
 <div class="editor-page" bind:this={root}>
   {#if item}
     <DraftHeader draft={d} icon="book" kind="Method" title={item.name || '(unnamed)'} dirty={d.itemDirty('methods', item.uid)} />
-    {#if (item.steps.length || item.agent) && item.name}
+    {#if (item.steps.length || item.actions.length) && item.name}
       <section class="card">
-        <h3>{item.agent ? `Actions operated by ${item.agent}` : "Flow of the method's steps"}</h3>
+        <h3>{item.steps.length ? "Flow of the method's steps" : 'Actions of the method'}</h3>
         <DraftFlow draft={d} root={item.name} onstep={openStepAt} />
       </section>
     {/if}
@@ -93,35 +101,53 @@
             <input id="me-when" type="text" class="mono" bind:value={item.when} class:bad={d.bad(`${p}.when`)} data-path="{p}.when" placeholder={'changeImpacts.exists(n, "alm@Component" in n.types)'} />
           </div>
           <div class="field">
-            <label for="me-prio">Priority <span class="opt">(the highest applicable wins)</span></label>
+            <label for="me-prio">Priority <span class="opt">(the highest applicable wins, then the most specific context)</span></label>
             <input id="me-prio" type="number" step="1" bind:value={item.priority} data-path="{p}.priority" />
           </div>
         </div>
       </section>
 
       <section class="card">
-        <h3>Agent</h3>
-        <p class="hint">The method says how and with what; the agent executes. With steps below, the agent performs the activities that compose the method and has access to them and to the tools their actions declare. Without steps, it reaches the goal with its own actions.</p>
+        <h3>Actions</h3>
+        <p class="hint">
+          The actions that realize the method. When a step names its capability, an agent instance is created for the
+          step, acting as the responsible role: it plans over these actions and those of the steps below (a step
+          inherits the pool) towards the goal of the method. Without steps, state what the method reaches.
+        </p>
+        <div class="grid2">
+          <PickList
+            bind:selected={item.actions}
+            options={actionNames}
+            details={actionDetails}
+            allLabel="no pool (steps only)"
+            label="Actions"
+            path="{p}.actions"
+            bad={d.bad}
+            readonly={d.readonly}
+          />
+          {#if !item.steps.length}
+            <div class="field">
+              <CondRows bind:rows={item.done} options={d.conditionOptions} path="{p}.done" label="Conditions it reaches" bad={d.bad} readonly={d.readonly} />
+            </div>
+          {/if}
+        </div>
         <div class="grid">
           <div class="field">
-            <label for="me-agent">Agent</label>
-            <select id="me-agent" bind:value={item.agent} class:bad={d.bad(`${p}.agent`)} data-path="{p}.agent">
-              <option value="">— agent —</option>
-              {#if item.agent && !agentNames.includes(item.agent)}<option value={item.agent}>{item.agent} (unknown)</option>{/if}
-              {#each agentNames as a (a)}<option value={a}>{a}</option>{/each}
-            </select>
-            {#if agent}<button type="button" class="link" onclick={() => openItem(d, 'agents', agent)}>open the agent</button>{/if}
-          </div>
-          {#if !item.steps.length}
-          <div class="field">
-            <label for="me-goal">Goal <span class="opt">(default: the agent's only goal)</span></label>
-            <select id="me-goal" bind:value={item.goal} class:bad={d.bad(`${p}.goal`)} data-path="{p}.goal">
-              <option value="">— default —</option>
-              {#if item.goal && !goalNames.includes(item.goal)}<option value={item.goal}>{item.goal} (unknown)</option>{/if}
-              {#each goalNames as g (g)}<option value={g}>{g}</option>{/each}
+            <label for="me-planner">Planner</label>
+            <select id="me-planner" bind:value={item.planner} class:bad={d.bad(`${p}.planner`)} data-path="{p}.planner">
+              {#each PLANNERS as pl (pl)}<option value={pl}>{pl}</option>{/each}
             </select>
           </div>
+          {#if needsModel}
+            <div class="field">
+              <label for="me-model">Model</label>
+              <ModelAliasField id="me-model" bind:value={item.model} bad={d.bad(`${p}.model`)} disabled={d.readonly} />
+            </div>
           {/if}
+          <div class="field">
+            <label for="me-mcps">MCPs <span class="opt">(comma separated; for its llm / script actions)</span></label>
+            <input id="me-mcps" type="text" class="mono" bind:value={item.mcps} data-path="{p}.mcps" />
+          </div>
         </div>
       </section>
 
@@ -129,8 +155,7 @@
         <h3>Steps <span class="hint">{walkSteps(item.steps).length}</span></h3>
         <p class="hint">
           A method is an activity made of activities: its steps and sub-steps, down to actions, sequenced by their
-          conditions like a process's. The agent above performs them; without one, an agent of the method's own name
-          does.
+          conditions like a process's. The agent instance created for the method performs them.
         </p>
         {#each item.steps as step, i (step.key)}
           <StepEditor bind:step={item.steps[i]} siblings={item.steps} index={i} path="{p}.steps[{i}]" draft={d} />

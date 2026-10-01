@@ -103,6 +103,9 @@ type Agent struct {
 	// on the project, and its actions that declare no roles of their own need it too. Empty: any member of the
 	// project.
 	Roles []string `yaml:"roles,omitempty" json:"roles,omitempty"`
+	// Role is the role the agent acts as (ADR 0050): the one responsible for the method an agent generated for it
+	// applies. It gives the agent its overall objective; the method says how.
+	Role string `yaml:"role,omitempty" json:"role,omitempty"`
 	// process is set on the agent generated to run a process (ADR 0034).
 	process string
 }
@@ -914,6 +917,12 @@ func (c *Compiled) AgentActions(ag Agent) []goap.Action {
 		var out []goap.Action
 		for _, a := range c.StepActions(ag.process) {
 			out = append(out, goap.Action{Name: a.Name, Pre: a.Pre, Effects: a.Effects, Cost: a.Cost})
+		}
+		// the agent generated for a method plans over the actions of its pool too (ADR 0050)
+		for _, a := range c.PlanningActions() {
+			if slices.Contains(ag.Actions, a.Name) {
+				out = append(out, a)
+			}
 		}
 		return out
 	}
