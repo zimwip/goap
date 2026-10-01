@@ -9,6 +9,7 @@
   import { notify } from '../shell/workbench.svelte';
   import { confirmDialog } from '../shell/confirmState.svelte';
   import { openTab } from '../shell/tabs.svelte';
+  import { openPicker } from '../shell/pickerState.svelte';
   import { ORG_UNIT_TYPE, USER_TYPE, PROJECT_UNIT_TYPE, ASSIGNMENT_TYPE, ASSIGNS_ORG, ASSIGNS_PROJECT } from '../orgTypes';
   import { projectRoles, applicableMethodologies, PLATFORM_ROLES, platformAssignmentKey, type ProjectRole } from '../projectRoles';
 
@@ -112,6 +113,38 @@
   let error = $state('');
   let saving = $state(false);
   let editing: Row | undefined = $state(undefined);
+  const org = $derived(fixedOrg ?? fOrg);
+  /** the existing row for the current org/project selection, while creating (not editing) one: an org can
+      hold several roles on the same project (or platform-wide) — one Assignment node, several roles — so
+      picking a combination that already has one continues it instead of silently overwriting it (ADR 0043). */
+  const matchingRow = $derived(adding && !editing && org && project ? rows.find((r) => r.org === org && r.project === (isPlatformChoice ? '' : project)) : undefined);
+  $effect(() => {
+    if (matchingRow) {
+      fRoles = [...matchingRow.roles];
+      fDescription = matchingRow.description;
+    } else if (adding && !editing) {
+      fRoles = [];
+      fDescription = '';
+    }
+  });
+
+  /** opens a searchable picker instead of a plain <select>: stays usable as the organisation grows */
+  function pickOrg() {
+    openPicker({
+      title: 'Organisation unit / user',
+      placeholder: 'Search units and users…',
+      items: orgNodes.map((n) => ({ key: n.key ?? '', label: nodeTitle(n) || n.key || '', hint: n.type === USER_TYPE ? 'user' : undefined })),
+      onchoose: (key) => (fOrg = key),
+    });
+  }
+  function pickProject() {
+    openPicker({
+      title: 'Project',
+      placeholder: 'Search projects…',
+      items: [{ key: PLATFORM, label: '— Platform-wide (no project) —' }, ...projectNodes.map((n) => ({ key: n.key ?? '', label: nodeTitle(n) || n.key || '' }))],
+      onchoose: (key) => (fProject = key),
+    });
+  }
 
   function startCreate() {
     editing = undefined;
@@ -241,16 +274,14 @@
   <section class="card">
     <h3>{editing ? 'Edit' : 'New'} assignment</h3>
     {#if error}<div class="alert">{error}</div>{/if}
+    {#if matchingRow}<div class="hint">An assignment already exists for this selection, holding {matchingRow.roles.join(', ')}: pre-filled below. Check more roles to add them, uncheck to remove.</div>{/if}
     <div class="grid">
       {#if fixedOrg}
         <div class="field"><label for="asg-org">Organisation</label><input id="asg-org" value={label(fixedOrg, orgNodes)} disabled /></div>
       {:else}
         <div class="field">
           <label for="asg-org">Organisation unit / user</label>
-          <select id="asg-org" bind:value={fOrg} disabled={!!editing}>
-            <option value="">Choose…</option>
-            {#each orgNodes as n (n.id)}<option value={n.key}>{nodeTitle(n) || n.key} {n.type === USER_TYPE ? '(user)' : ''}</option>{/each}
-          </select>
+          <button type="button" id="asg-org" class="picker-btn" disabled={!!editing} onclick={pickOrg}>{fOrg ? label(fOrg, orgNodes) : 'Choose…'}</button>
         </div>
       {/if}
       {#if fixedProject}
@@ -258,11 +289,7 @@
       {:else}
         <div class="field">
           <label for="asg-proj">Project</label>
-          <select id="asg-proj" bind:value={fProject} disabled={!!editing}>
-            <option value="">Choose…</option>
-            <option value={PLATFORM}>— Platform-wide (no project) —</option>
-            {#each projectNodes as n (n.id)}<option value={n.key}>{nodeTitle(n) || n.key}</option>{/each}
-          </select>
+          <button type="button" id="asg-proj" class="picker-btn" disabled={!!editing} onclick={pickProject}>{fProject === PLATFORM ? '— Platform-wide (no project) —' : fProject ? label(fProject, projectNodes) : 'Choose…'}</button>
         </div>
       {/if}
       <fieldset class="field roles">
@@ -340,6 +367,22 @@
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     padding: 0.4rem 0.6rem;
+  }
+  .picker-btn {
+    width: 100%;
+    font: inherit;
+    color: inherit;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 0.25rem 0.45rem;
+    min-height: 26px;
+    text-align: left;
+    cursor: pointer;
+  }
+  .picker-btn:disabled {
+    opacity: 0.6;
+    cursor: default;
   }
   .field {
     display: flex;
