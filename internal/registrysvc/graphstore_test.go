@@ -177,3 +177,82 @@ func TestGraphStoreMaterializesRoles(t *testing.T) {
 		t.Fatalf("roles must round-trip: %+v, %v", got.Methodology.Roles, err)
 	}
 }
+
+// A process's steps and sub-steps materialize as their own methodology@Step nodes, in addition to staying inline in
+// the process's own JSON (decode ignores the step nodes: the round-trip is unaffected). Each parent (the process, or
+// a step with sub-steps) links to its direct children by sub_activity.
+func TestGraphStoreMaterializesSteps(t *testing.T) {
+	ctx := context.Background()
+	g := graph.New(graph.NewMemory())
+	s := NewGraphStore(g)
+	now := time.Now()
+	m := example(t)
+	m.Version = "9.2.0"
+	m.Processes = []methodology.Process{{
+		Name: "deliver",
+		Steps: []methodology.Step{
+			{Name: "analysis", Pre: map[string]bool{"framed": true}, Steps: []methodology.Step{
+				{Name: "scope", Action: "identify_scope"},
+			}},
+		},
+	}}
+	if err := s.Save(ctx, Record{Methodology: m, Status: StatusDraft, CreatedAt: now, UpdatedAt: now}); err != nil {
+		t.Fatal(err)
+	}
+	hk := MethodologyVersionKey(m.Name, m.Version)
+	n, err := g.NodeByKey(ctx, NamespaceMethodology, hk+"/step/deliver/analysis")
+	if err != nil {
+		t.Fatalf("step node: %v", err)
+	}
+	if n.Type != "methodology@Step" {
+		t.Fatalf("step node type = %s", n.Type)
+	}
+	if got, want := n.Properties["input"], map[string]any{"framed": true}; canon(t, got) != canon(t, want) {
+		t.Fatalf("pre renamed to input: %+v", n.Properties)
+	}
+	if _, ok := n.Properties["steps"]; ok {
+		t.Fatalf("nested steps are not duplicated onto the step node: %+v", n.Properties)
+	}
+	sub, err := g.NodeByKey(ctx, NamespaceMethodology, hk+"/step/deliver/analysis/scope")
+	if err != nil {
+		t.Fatalf("sub-step node: %v", err)
+	}
+	if sub.Properties["action"] != "identify_scope" {
+		t.Fatalf("sub-step properties: %+v", sub.Properties)
+	}
+	head, err := g.BranchHead(ctx, NamespaceMethodology, domain.MainBranch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, links, err := g.BaselineGraph(ctx, head.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hasSubActivity := func(fromKey, toKey string) bool {
+		from, err := g.NodeByKey(ctx, NamespaceMethodology, fromKey)
+		if err != nil {
+			return false
+		}
+		to, err := g.NodeByKey(ctx, NamespaceMethodology, toKey)
+		if err != nil {
+			return false
+		}
+		for _, l := range links {
+			if l.Type == linkSubActivity && l.From.ID == from.ID && l.To.ID == to.ID {
+				return true
+			}
+		}
+		return false
+	}
+	if !hasSubActivity(hk+"/process/deliver", hk+"/step/deliver/analysis") {
+		t.Fatal("process -> step sub_activity link missing")
+	}
+	if !hasSubActivity(hk+"/step/deliver/analysis", hk+"/step/deliver/analysis/scope") {
+		t.Fatal("step -> sub-step sub_activity link missing")
+	}
+	// decode ignores the step nodes: the methodology still round-trips to exactly what was saved
+	got, err := s.Get(ctx, m.Name, m.Version)
+	if err != nil || canon(t, got.Methodology.Processes) != canon(t, m.Processes) {
+		t.Fatalf("processes must round-trip unaffected: %+v, %v", got.Methodology.Processes, err)
+	}
+}
