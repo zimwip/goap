@@ -12,10 +12,21 @@ nodeTypes:
   # ADR 0035 §2: a role processes and methods assign RACI style; ADR 0039: what Assignment (organisation namespace)
   # grants a unit or user on a project is named from a project's applicable methodologies' roles.
   - {name: Role, editor: role, description: "Role of a methodology version: assigned RACI style by its processes and methods, allowed to run its agents and actions, held on a project through an Assignment", properties: [name, description, position, removed]}
+  # Activity (architecture plan "Activity concept, Activity Runs, Change scoping"): the common shape of
+  # Process/Step/Method/MethodStep. Takes input, names its goals, produces output; breaks down into
+  # sub-activities (sub_activity link) that feed it. A Change scopes to one Activity node (ActivityRef);
+  # an Activity Run (pkg/domain.ExecutionRecord) is one execution instance of one, against one Change.
+  - {name: Activity, editor: activity, description: "Common shape of Process/Step/Method/MethodStep: input, goals and output conditions, composed from sub-activities", properties: [name, description, input, goals, output, position, removed]}
   # ADR 0034: the steps and sub-steps that reach an objective, each done by an action, an agent, a nested process or a person
   # ADR 0035 §1: how a step capability is carried out in a context, and the agent that acts
-  - {name: Method, editor: method, description: "Method of a methodology version: the reference of how a capability is carried out in a context", properties: [name, for, when, priority, description, guidance, checklist, deliverables, references, agent, goal, position, removed]}
-  - {name: Process, editor: process, description: "Process of a methodology version: its steps and sub-steps", properties: [name, description, examples, references, steps, position, removed]}
+  - {name: Method, extends: Activity, editor: method, description: "Method of a methodology version: the reference of how a capability is carried out in a context", properties: [for, when, priority, guidance, checklist, deliverables, references, agent, steps]}
+  - {name: Process, extends: Activity, editor: process, description: "Process of a methodology version: its steps and sub-steps", properties: [examples, references, steps]}
+  # Step and MethodStep (architecture plan point 2): one step of a Process/Method, materialized as its own
+  # node (not just compiled in-memory) so it can be an Activity in its own right - its own input/goals/output,
+  # its own ActivityRuns. Still authored inline in the owning Process/Method's YAML for ergonomics; the
+  # registry additionally materializes one node per step at save time, linked by sub_activity.
+  - {name: Step, extends: Activity, editor: step, description: "Step of a Process: its own input/goals/output, done by an action, an agent, a nested process or a person", properties: [instructions, guidance, checklist, deliverables, references, roles, action, actions, agent, process, method]}
+  - {name: MethodStep, extends: Activity, editor: step, description: "Step of a Method: its own input/goals/output, done by an action, an agent, a nested process or a person", properties: [instructions, guidance, checklist, deliverables, references, roles, action, actions, agent, process, method]}
   # an MCP tool the self-observation asks the platform for (ADR 0011): not part of a definition
   - {name: ToolRequest, description: "MCP tool requested by the self-observation of a methodology", properties: [name, description, motivation, span]}
 linkTypes:
@@ -23,3 +34,5 @@ linkTypes:
   - {name: defines, from: MethodologyVersion}
   # a specialization -> the action it specializes (proposed by the self-observation)
   - {name: specializes, from: Action, to: Action}
+  # an Activity -> the sub-activities (Step/MethodStep, or a nested Process/Method) it is composed from
+  - {name: sub_activity, from: Activity, to: Activity}
