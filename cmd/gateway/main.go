@@ -40,7 +40,7 @@ func main() {
 	defer telemetry.Setup(context.Background(), log, "gateway")(context.Background())
 	secrets := platform.NewSecrets()
 	cfg := gateway.Config{
-		AuthMode:  platform.Env("GOAP_AUTH_MODE", "none"),
+		AuthMode:  platform.Env("GOAP_AUTH_MODE", gateway.DefaultAuthMode),
 		DevTokens: platform.Env("GOAP_DEV_TOKENS", "") == "true",
 		Routes: []gateway.Route{
 			{Prefix: "/goap.graph.v1.GraphService/", Upstream: platform.Env("GOAP_GRAPH_URL", "http://localhost:8081")},
@@ -53,7 +53,9 @@ func main() {
 		},
 	}
 	// who a caller is comes from the User nodes of the graph as well as from its token
-	cfg.Enrich = (&access.Directory{Graph: graphsvc.NewClient(platform.H2CClient(), platform.Env("GOAP_GRAPH_URL", "http://localhost:8081"), telemetry.ClientOptions()...)}).Enrich
+	graphClient := graphsvc.NewClient(platform.H2CClient(), platform.Env("GOAP_GRAPH_URL", "http://localhost:8081"), telemetry.ClientOptions()...)
+	directory := &access.Directory{Graph: graphClient}
+	cfg.Enrich = directory.Enrich
 	if origins := platform.Env("GOAP_CORS_ORIGINS", ""); origins != "" {
 		cfg.AllowOrigins = strings.Split(origins, ",")
 	}
@@ -67,6 +69,13 @@ func main() {
 	if cfg.AuthMode == "local" {
 		cfg.Credentials = credentialsClient{rpc: credentialsv1connect.NewCredentialsServiceClient(platform.H2CClient(),
 			platform.Env("GOAP_CREDENTIALS_URL", "http://localhost:8088"), telemetry.ClientOptions()...)}
+		// the user exists in the graph from their first sign-in (ADR 0042), and their first calls see it
+		cfg.OnSignIn = func(ctx context.Context, subject string) error {
+			if err := graphClient.DeclareUser(ctx, subject); err != nil {
+				return err
+			}
+			return directory.Refresh(ctx)
+		}
 	}
 	srv := platform.NewServer(log, platform.Env("GOAP_HTTP_ADDR", ":8080"))
 	if err := gateway.Mount(srv.Echo, cfg); err != nil {

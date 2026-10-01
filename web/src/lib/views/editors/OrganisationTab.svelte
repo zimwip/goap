@@ -20,7 +20,8 @@
   import { headGraph, findNode, applyOnMain, createNodeItem, updateNodeItem, deleteNodeItem, moveNodeItem, currentLink, refOf, type HeadGraph } from '../../graphEdit';
   import { openTab } from '../../shell/tabs.svelte';
   import { notify, provideActions } from '../../shell/workbench.svelte';
-  import { ADAPTER_TYPE, ORG_UNIT_TYPE, OWNER, PART_OF, DEFAULT_ORG } from '../../orgTypes';
+  import { ADAPTER_TYPE, ORG_UNIT_TYPE, OWNER, PART_OF, DEFAULT_ORG, WAITING_UNIT_PROP, newUserUnit } from '../../orgTypes';
+  import { hasAnyRole } from '../../stores/session.svelte';
   import { confirmDialog } from '../../shell/confirmState.svelte';
 
   let { tab }: { tab: Tab } = $props();
@@ -106,6 +107,43 @@
       error = errorMessage(e);
     } finally {
       movingBusy = false;
+    }
+  }
+
+  // The waiting unit (ADR 0042): a unit an administrator flags, at their discretion, for users signing in
+  // for the first time; with none, they join ORG-DEFAULT. Making this unit the waiting unit moves the flag in
+  // one change (set here, cleared on every unit carrying it); clearing it sends newcomers back to ORG-DEFAULT.
+  const flagged = $derived((head?.nodes ?? []).filter((n) => n.type === ORG_UNIT_TYPE && n.props?.[WAITING_UNIT_PROP] === true));
+  const joinKey = $derived(newUserUnit(flagged));
+  const isWaiting = $derived(flagged.some((n) => n.key === key));
+  const isAdmin = $derived(hasAnyRole('admin'));
+  let waitingBusy = $state(false);
+
+  async function setWaiting(on: boolean) {
+    if (!unit || !head || on === isWaiting) return;
+    const ok = await confirmDialog(
+      on
+        ? {
+            title: 'Waiting unit',
+            message: `Users signing in for the first time will join ${key} (instead of ${joinKey}) until an administrator moves them. Existing users stay where they are.`,
+            confirmLabel: 'Make waiting unit',
+          }
+        : { title: 'Waiting unit', message: `New users will join ${DEFAULT_ORG} again instead of ${key}.`, confirmLabel: 'Clear' },
+    );
+    if (!ok) return;
+    waitingBusy = true;
+    error = '';
+    try {
+      const edits = on
+        ? [updateNodeItem(unit, { [WAITING_UNIT_PROP]: true }), ...flagged.filter((n) => n.id !== unit.id).map((n) => updateNodeItem(n, { [WAITING_UNIT_PROP]: null }))]
+        : flagged.map((n) => updateNodeItem(n, { [WAITING_UNIT_PROP]: null }));
+      await applyOnMain(NS, `Waiting unit ${on ? key : 'cleared'}`, on ? `New users wait in ${key}` : `New users join ${DEFAULT_ORG}`, head.baselineId, edits);
+      notify(on ? `New users now wait in ${key}.` : `New users now join ${DEFAULT_ORG}.`, 'ok');
+      await load();
+    } catch (e) {
+      error = errorMessage(e);
+    } finally {
+      waitingBusy = false;
     }
   }
 
@@ -345,6 +383,16 @@
                   </select>
                   <button type="button" class="small primary" disabled={movingBusy} onclick={move}>Move</button>
                   <button type="button" class="small" disabled={movingBusy} onclick={() => (moving = false)}>Cancel</button>
+                {/if}
+              </dd>
+              <dt>New users</dt>
+              <dd>
+                {#if isWaiting}
+                  <span class="badge">waiting unit: new users join it</span>
+                  {#if isAdmin}<button type="button" class="small ghost" disabled={waitingBusy} onclick={() => setWaiting(false)}>Clear</button>{/if}
+                {:else}
+                  <span class="muted">join <button type="button" class="link mono" onclick={() => openTab({ kind: 'unit', params: { key: joinKey } })}>{joinKey}</button></span>
+                  {#if isAdmin}<button type="button" class="small ghost" disabled={waitingBusy} onclick={() => setWaiting(true)}>Make waiting unit</button>{/if}
                 {/if}
               </dd>
               {#if childKeys.length}

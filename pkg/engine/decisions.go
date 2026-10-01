@@ -170,7 +170,7 @@ func Investigate(ctx context.Context, ac ActionContext) (ActionResult, error) {
 				continue
 			}
 			intent := fmt.Sprintf("%s\n\n(to decide: %s)", q.Text, d.Question)
-			res, err := h.e.runInvestigation(authz.With(ctx, ac.Process.Initiator), h, ac.Action.Name+"#"+q.ID, methodologyName, agent, intent)
+			res, err := h.e.runInvestigation(authz.With(ctx, h.e.actor(ac.Process)), h, ac.Action.Name+"#"+q.ID, methodologyName, agent, intent)
 			if errors.Is(err, dsl.ErrSuspended) {
 				return ActionResult{Suspended: true, Child: h.waitingOn, Output: fmt.Sprintf("investigating %q", q.Text)}, nil
 			}

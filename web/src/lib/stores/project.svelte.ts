@@ -1,7 +1,7 @@
 // The active project (ADR 0039): selected before any non-administrative action, shown in the header
 // between the live indicator and the notification bell. Switching it reissues the caller's token
 // (api.switchProject) so every call from here on carries it — best effort: a deployment with no token
-// (goap-dev, AuthMode "none") has nothing to reissue, so the selection stays local-display only there.
+// (AuthMode "none", e.g. goap-dev with GOAP_AUTH_MODE=none) has nothing to reissue, so the selection stays local-display only there.
 import { headGraph } from '../graphEdit';
 import { errorMessage, nodeTitle, switchProject as reissueToken, type GraphNode } from '../api';
 import { PROJECT_UNIT_TYPE } from '../orgTypes';
@@ -59,7 +59,7 @@ export async function selectProject(key: string): Promise<void> {
     await reissueToken(key);
     await refreshIdentity();
   } catch {
-    // no active token to reissue (goap-dev, or auth mode "none"): the selection stays local-display only
+    // no active token to reissue (auth mode "none"): the selection stays local-display only
     notify('Project selection is local to this browser only: no token to carry it to the server.', 'info');
   }
 }

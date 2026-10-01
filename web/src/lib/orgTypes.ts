@@ -21,3 +21,18 @@ export const ASSIGNS_PROJECT = 'organisation@assigns_project';
 // units that need no parent (ADR 0040).
 export const DEFAULT_ORG = 'ORG-DEFAULT';
 export const DEFAULT_PROJECT = 'PROJ-ROOT';
+
+// The OrgUnit property flagging the waiting unit (ADR 0042; mirrors access.PropWaitingUnit): a unit an
+// administrator creates at their discretion for users signing in for the first time, linked member_of it
+// until an administrator moves them; with none flagged, new users join ORG-DEFAULT.
+export const WAITING_UNIT_PROP = 'waiting';
+
+/** The key of the unit new users join: the waiting unit (smallest key if several carry the flag), else ORG-DEFAULT. */
+export function newUserUnit(units: { key?: string; props?: Record<string, unknown> }[]): string {
+  return (
+    units
+      .filter((n) => n.props?.[WAITING_UNIT_PROP] === true)
+      .map((n) => n.key ?? '')
+      .sort()[0] || DEFAULT_ORG
+  );
+}

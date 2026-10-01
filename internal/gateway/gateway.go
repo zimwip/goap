@@ -42,7 +42,8 @@ type Config struct {
 	// AuthMode is "none" (dev: every caller is "dev"), "hs256" (bearer tokens minted out of band, dev-token
 	// only) or "local" (ADR 0040: signup/login against Credentials, backed by internal/credsvc, for a
 	// deployment with no external identity provider). "local" verifies bearer tokens the same way "hs256"
-	// does: only how a token is first obtained differs.
+	// does: only how a token is first obtained differs. It is the default (DefaultAuthMode, ADR 0042): a
+	// deployment signs its users in itself unless an external identity provider issues their tokens.
 	AuthMode string
 	// JWTSecret signs and validates HS256 tokens.
 	JWTSecret []byte
@@ -51,12 +52,22 @@ type Config struct {
 	// Credentials backs the local AuthMode's register/login endpoints (ADR 0040). Required when
 	// AuthMode == "local".
 	Credentials Credentials
+	// OnSignIn runs after a successful local register/login, before the token is signed (ADR 0042): it
+	// creates the subject's User node when the graph has none yet (graphsvc.EnsureUser, member of the unit
+	// new users join), so a user exists from the moment they sign in rather than from their first call.
+	// A failure refuses the sign-in. Nil skips it (the node is then created on the first call, EnsureCaller).
+	OnSignIn func(ctx context.Context, subject string) error
 	// AllowOrigins for CORS.
 	AllowOrigins []string
 	// Enrich completes the authenticated principal with what the graph knows of its subject (roles and unit
 	// of its User node). Nil leaves the principal as the token gives it.
 	Enrich func(ctx context.Context, p authz.Principal) authz.Principal
 }
+
+// DefaultAuthMode is the AuthMode of a deployment that names none (GOAP_AUTH_MODE unset, ADR 0042): local
+// sign-in, since no external identity provider (SSO) is configured. "none" (no sign-in at all) is for local
+// development only and must be asked for explicitly.
+const DefaultAuthMode = "local"
 
 // Credentials is what the local AuthMode needs of the credentials service (internal/credsvc, ADR 0040).
 type Credentials interface {
@@ -94,6 +105,8 @@ func MountAuthEndpoints(e *echo.Echo, cfg Config) error {
 		e.POST("/auth/register", register(cfg))
 		e.POST("/auth/login", login(cfg))
 		e.POST("/auth/logout", logout())
+		// switching project reissues the token (ADR 0039): a signed-in user needs it as much as a dev token
+		e.POST("/auth/dev-token/project", switchProject(cfg))
 	}
 	e.GET("/api/auth/config", authConfig(cfg))
 	return nil
@@ -225,7 +238,8 @@ func authConfig(cfg Config) echo.HandlerFunc {
 
 // register creates the credential of a new subject and signs them straight in (ADR 0040): the returned
 // token carries no org/roles of its own, filled in by Enrich from the subject's User node — created, with
-// the org-membership/first-admin bootstrap, the moment this token is first used (EnsureCaller).
+// the org-membership/first-admin bootstrap, by OnSignIn (ADR 0042), or else the moment this token is first
+// used (EnsureCaller).
 func register(cfg Config) echo.HandlerFunc {
 	return func(c *echo.Context) error {
 		var in struct{ Subject, Password string }
@@ -238,6 +252,9 @@ func register(cfg Config) echo.HandlerFunc {
 				status = http.StatusConflict
 			}
 			return echo.NewHTTPError(status, err.Error())
+		}
+		if err := signedIn(c, cfg, in.Subject); err != nil {
+			return err
 		}
 		tok, err := sign(cfg, in.Subject, "", "", nil)
 		if err != nil {
@@ -261,12 +278,27 @@ func login(cfg Config) echo.HandlerFunc {
 		if !ok {
 			return echo.NewHTTPError(http.StatusUnauthorized, "wrong subject or password")
 		}
+		if err := signedIn(c, cfg, in.Subject); err != nil {
+			return err
+		}
 		tok, err := sign(cfg, in.Subject, "", "", nil)
 		if err != nil {
 			return err
 		}
 		return c.JSON(http.StatusOK, map[string]string{"token": tok})
 	}
+}
+
+// signedIn runs OnSignIn for a subject whose credentials were just accepted: the user is declared in the
+// graph (created, member of the unit new users join) before they get a token.
+func signedIn(c *echo.Context, cfg Config, subject string) error {
+	if cfg.OnSignIn == nil {
+		return nil
+	}
+	if err := cfg.OnSignIn(c.Request().Context(), subject); err != nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "cannot declare the user: "+err.Error())
+	}
+	return nil
 }
 
 // logout has nothing to revoke (HS256 tokens are stateless, ADR 0040's known limitation): it exists so the

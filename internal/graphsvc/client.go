@@ -11,9 +11,12 @@ import (
 	"github.com/zimwip/goap/internal/identity"
 	"github.com/zimwip/goap/internal/pbconv"
 	"github.com/zimwip/goap/internal/rpcerr"
+	"github.com/zimwip/goap/pkg/access"
+	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/engine"
 	"github.com/zimwip/goap/pkg/graph"
+	"github.com/zimwip/goap/pkg/mcp"
 )
 
 // Client adapts the graph Connect client to engine.GraphPort.
@@ -28,6 +31,16 @@ var _ engine.GraphPort = (*Client)(nil)
 // records on the events of the change impacts (ADR 0029).
 func NewClient(hc *http.Client, baseURL string, opts ...connect.ClientOption) *Client {
 	return &Client{rpc: graphv1connect.NewGraphServiceClient(hc, baseURL, append([]connect.ClientOption{identity.Forward()}, opts...)...)}
+}
+
+// DeclareUser makes sure the User node of a subject exists (ADR 0042: a user is declared the moment they sign
+// in), for a caller with no graph in process (the gateway). It reads that node as the subject: the service's
+// EnsureCaller interceptor creates it first when missing (EnsureUser, member of the unit new users join), so
+// finding it proves it was created, and not finding it reports why it could not be.
+func (c *Client) DeclareUser(ctx context.Context, subject string) error {
+	ctx = authz.With(ctx, authz.Principal{Subject: subject})
+	_, err := c.rpc.GetNode(ctx, connect.NewRequest(&graphv1.GetNodeRequest{Namespace: mcp.NamespaceOrganisation, Key: access.UserKey(subject)}))
+	return rpcerr.FromConnect(err)
 }
 
 func (c *Client) CreateChange(ctx context.Context, in graph.NewChange) (domain.Change, error) {

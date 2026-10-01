@@ -5,7 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
-	"slices"
+	"strings"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -16,6 +16,7 @@ import (
 	"github.com/zimwip/goap/internal/identity"
 	"github.com/zimwip/goap/pkg/access"
 	"github.com/zimwip/goap/pkg/authz"
+	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/mcp"
 )
@@ -50,7 +51,17 @@ func TestPersonalChange(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	seeded := len(before.Msg.Changes) // the changes SeedDefaults made, visible to everyone (not personal)
+	// the changes that are not the creation of a User (ADR 0042: each caller seen first gets one, public)
+	notUsers := func(cs []*graphv1.Change) int {
+		n := 0
+		for _, c := range cs {
+			if !strings.HasPrefix(c.Title, "User ") {
+				n++
+			}
+		}
+		return n
+	}
+	seeded := notUsers(before.Msg.Changes) // the changes SeedDefaults made, visible to everyone (not personal)
 
 	req := connect.NewRequest(&graphv1.CreateChangeRequest{Title: "prefs", Namespace: "platform", BaselineId: string(base.ID), OwnBranch: true, OwnerOrg: graphsvc.OwnerMe})
 	call("alice", req)
@@ -76,7 +87,7 @@ func TestPersonalChange(t *testing.T) {
 	}
 	list := connect.NewRequest(&graphv1.ListChangesRequest{})
 	call("bob", list)
-	if l, err := cl.ListChanges(ctx, list); err != nil || len(l.Msg.Changes) != seeded {
+	if l, err := cl.ListChanges(ctx, list); err != nil || notUsers(l.Msg.Changes) != seeded {
 		t.Fatalf("bob ListChanges = %v, %v", l, err)
 	}
 	claim := connect.NewRequest(&graphv1.CreateChangeRequest{Title: "x", Namespace: "platform", BaselineId: string(base.ID), OwnerOrg: "USR:alice"})
@@ -88,7 +99,7 @@ func TestPersonalChange(t *testing.T) {
 	// alice sees it, and no sub-change is split off it
 	list = connect.NewRequest(&graphv1.ListChangesRequest{})
 	call("alice", list)
-	if l, err := cl.ListChanges(ctx, list); err != nil || len(l.Msg.Changes) != seeded+1 {
+	if l, err := cl.ListChanges(ctx, list); err != nil || notUsers(l.Msg.Changes) != seeded+1 {
 		t.Fatalf("alice ListChanges = %v, %v", l, err)
 	}
 	sub := connect.NewRequest(&graphv1.CreateChangeRequest{Title: "sub", ParentId: id, OwnerOrg: "@me"})
@@ -183,7 +194,7 @@ func TestEnsureUserWaitsForDefaultOrg(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Contains(u.Roles, "admin") {
+	if !u.Admin {
 		t.Fatalf("first user must be admin: %+v", u)
 	}
 	links, err := g.OutLinksOf(ctx, n.Ref())
@@ -212,7 +223,88 @@ func TestEnsureUserWaitsForDefaultOrg(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if slices.Contains(bob.Roles, "admin") {
+	if bob.Admin {
 		t.Fatalf("second user must not be admin: %+v", bob)
+	}
+}
+
+// A new user joins the waiting unit an administrator flagged (ADR 0042), ORG-DEFAULT when none is; with
+// several flagged, the smallest key wins; clearing the flag sends newcomers back to ORG-DEFAULT.
+func TestEnsureUserJoinsWaitingUnit(t *testing.T) {
+	ctx := context.Background()
+	g := graph.New(graph.NewMemory())
+	if _, err := graphsvc.SeedDefaults(ctx, g); err != nil {
+		t.Fatal(err)
+	}
+	commit := func(edits ...graph.NodeEdit) {
+		t.Helper()
+		head, err := g.BranchHead(ctx, mcp.NamespaceOrganisation, domain.MainBranch)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := g.Commit(ctx, graph.Commit{Namespace: mcp.NamespaceOrganisation, Title: "t", Intent: "t", Baseline: head.ID, By: "test", Edits: edits}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	unitOf := func(subject string) string {
+		t.Helper()
+		if err := graphsvc.EnsureUser(ctx, g, subject); err != nil {
+			t.Fatal(err)
+		}
+		n, err := g.NodeByKey(ctx, mcp.NamespaceOrganisation, access.UserKey(subject))
+		if err != nil {
+			t.Fatal(err)
+		}
+		links, err := g.OutLinksOf(ctx, n.Ref())
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, l := range links {
+			if l.Type == access.LinkMemberOf {
+				to, err := g.Node(ctx, l.To)
+				if err != nil {
+					t.Fatal(err)
+				}
+				return to.Key
+			}
+		}
+		t.Fatalf("%s has no member_of", subject)
+		return ""
+	}
+
+	root, err := g.NodeByKey(ctx, mcp.NamespaceOrganisation, domain.DefaultOrg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if access.IsWaitingUnit(root.Properties) {
+		t.Fatalf("no unit is a waiting unit until an administrator says so: %+v", root.Properties)
+	}
+	if got := unitOf("alice"); got != domain.DefaultOrg {
+		t.Fatalf("alice joined %s, want %s", got, domain.DefaultOrg)
+	}
+
+	// the administrator creates a waiting unit
+	rootRef := root.Ref()
+	flag := map[string]any{"name": "Waiting", access.PropWaitingUnit: true}
+	commit(graph.NodeEdit{Key: "WAIT-B", Type: mcp.NodeTypeOrgUnit, Props: flag, Links: []graph.LinkEdit{{Type: access.LinkPartOf, To: &rootRef}}})
+	if got := unitOf("bob"); got != "WAIT-B" {
+		t.Fatalf("bob joined %s, want WAIT-B", got)
+	}
+	// a second one flagged: the smallest key wins
+	commit(graph.NodeEdit{Key: "WAIT-A", Type: mcp.NodeTypeOrgUnit, Props: flag, Links: []graph.LinkEdit{{Type: access.LinkPartOf, To: &rootRef}}})
+	if got := unitOf("carol"); got != "WAIT-A" {
+		t.Fatalf("carol joined %s, want WAIT-A (smallest key of the flagged units)", got)
+	}
+	// flags cleared: back to ORG-DEFAULT
+	for _, k := range []string{"WAIT-A", "WAIT-B"} {
+		n, err := g.NodeByKey(ctx, mcp.NamespaceOrganisation, k)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ref := n.Ref()
+		commit(graph.NodeEdit{Pre: &ref, Props: map[string]any{access.PropWaitingUnit: nil}})
+	}
+	if got := unitOf("dave"); got != domain.DefaultOrg {
+		t.Fatalf("dave joined %s, want %s", got, domain.DefaultOrg)
 	}
 }

@@ -23,7 +23,7 @@ import (
 
 func createObject(h *graphsvc.Handler, roles, key string) error {
 	req := connect.NewRequest(&graphv1.CreateObjectRequest{Methodology: "test-design", NodeType: "alm@Need", Key: key})
-	if roles != "" {
+	if roles != "-" {
 		req.Header().Set(identity.HeaderSubject, "u")
 		req.Header().Set(identity.HeaderOrg, "acme")
 		req.Header().Set(identity.HeaderRoles, roles)
@@ -56,10 +56,10 @@ func TestCreateObjectIsRoleGated(t *testing.T) {
 		name, roles, key string
 		want             connect.Code
 	}{
-		{"anonymous", "", "REQ-1", connect.CodePermissionDenied},
-		{"no role", "viewer", "REQ-2", connect.CodePermissionDenied},
-		{"contributor", "contributor", "REQ-3", 0},
-		{"methodologist", "methodologist", "REQ-4", 0},
+		{"anonymous", "-", "REQ-1", connect.CodePermissionDenied},
+		{"not on the project", "", "REQ-2", connect.CodePermissionDenied},
+		{"member of the project", "developer", "REQ-3", 0},
+		{"another role on the project", "tester", "REQ-4", 0},
 		{"admin", "admin", "REQ-5", 0},
 	} {
 		err := createObject(h, tc.roles, tc.key)
