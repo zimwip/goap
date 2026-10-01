@@ -12,23 +12,20 @@
   import { openContextMenu } from '../../shell/contextMenuState.svelte';
   import { openObjectDialog } from '../../shell/objectDialogState.svelte';
   import { formatDate, type MethodologySummary } from '../../api';
-  import {
-    emptyAgent,
-    emptyAction,
-    emptyCondition,
-    emptyGoal,
-    emptyProcess,
-    emptyMethod,
-    type Section,
-    type SectionItem,
-  } from '../../methodologyForm';
+  import type { Section, SectionItem } from '../../methodologyForm';
   import { typeCatalog, typeName } from '../../stores/types.svelte';
   import {
-    SECTION_LABEL,
-    SECTION_ICON,
+    COLLECTION_ICON,
+    COLLECTION_LABEL,
+    addElement,
+    addStep,
+    collectionNoun,
+    hasSteps,
     itemSpec,
     methodologySpec,
     openItem,
+    sectionsFor,
+    type Collection,
   } from '../editors/methodologyTabs';
 
   let filter = $state('');
@@ -44,7 +41,8 @@
     return all.filter((g) => `${g.name} ${g.description}`.toLowerCase().includes(q));
   });
 
-  const SECTIONS: Section[] = ['processes', 'methods', 'agents', 'actions', 'conditions', 'goals'];
+  // the sections come from the domain: the element types a version is composed of
+  const SECTIONS = $derived(sectionsFor(typeCatalog.cat));
 
   function vkey(v: MethodologySummary) {
     return draftKey(v.name ?? '', v.version ?? '');
@@ -77,12 +75,25 @@
     });
   }
 
-  function add(d: Draft, section: Section) {
-    const factories = { agents: emptyAgent, actions: emptyAction, conditions: emptyCondition, goals: emptyGoal, processes: emptyProcess, methods: emptyMethod };
-    const item = factories[section]();
-    (d.form[section] as SectionItem[]).push(item);
-    expanded[`s:${d.key}/${section}`] = true;
-    openItem(d, section, d.form[section][d.form[section].length - 1], true);
+  function add(d: Draft, c: Collection) {
+    expanded[`s:${d.key}/${c}`] = true;
+    addElement(d, c);
+  }
+
+  /** "New <element>" entries of a version: one per element type it is composed of. */
+  function newMenu(d: Draft, only?: Collection) {
+    if (d.readonly) return [];
+    return SECTIONS.filter((c) => !only || c === only).map((c) => ({
+      label: `New ${collectionNoun(c)}`,
+      icon: 'plus' as const,
+      run: () => add(d, c),
+    }));
+  }
+
+  function openRoles(d: Draft, i: number, pin = false) {
+    const t = openTab(methodologySpec(d.name, d.version), { pin });
+    t.params.pane = 'roles';
+    requestReveal(t.id, `roles[${i}]`);
   }
 
   function itemDetail(section: Section, it: SectionItem): string {
@@ -158,6 +169,9 @@
               onselect={() => selectVersion(v)}
               onopen={() => selectVersion(v, true)}
               ontoggle={() => toggleVersion(v)}
+              oncontextmenu={(e) => {
+                if (d && !d.loading && !d.loadError && newMenu(d).length) openContextMenu(e, newMenu(d));
+              }}
             >
             {#snippet trail()}
               <StatusBadge status={v.status} />
@@ -171,24 +185,27 @@
             {:else}
               {#each SECTIONS as s (s)}
                 {@const sk = `s:${k}/${s}`}
-                {@const items = d.items(s)}
+                {@const items = s === 'roles' ? [] : d.items(s)}
                 {@const n = d.count(s)}
                 <TreeRow
                   depth={2}
-                  icon={SECTION_ICON[s]}
-                  label={SECTION_LABEL[s]}
-                  detail={String(items.length)}
+                  icon={COLLECTION_ICON(s)}
+                  label={COLLECTION_LABEL(s)}
+                  detail={String(d.form[s].length)}
                   expanded={isOpen(sk)}
                   badge={n || undefined}
                   badgeTone="danger"
                   ontoggle={() => toggle(sk)}
+                  oncontextmenu={(e) => {
+                    if (newMenu(d, s).length) openContextMenu(e, newMenu(d, s));
+                  }}
                 >
                   {#snippet actions()}
                     {#if !d.readonly}
                       <button
                         type="button"
                         title="Add"
-                        aria-label={`Add: ${SECTION_LABEL[s]}`}
+                        aria-label={`Add: ${COLLECTION_LABEL(s)}`}
                         onclick={(e) => {
                           e.stopPropagation();
                           add(d, s);
@@ -197,7 +214,22 @@
                     {/if}
                   {/snippet}
                 </TreeRow>
-                {#if isOpen(sk)}
+                {#if isOpen(sk) && s === 'roles'}
+                  {#each d.form.roles as r, i (i)}
+                    <TreeRow
+                      depth={3}
+                      label={r.name || '(unnamed)'}
+                      italic={!r.name}
+                      detail={r.description}
+                      badge={d.count(`roles[${i}]`) || undefined}
+                      badgeTone="danger"
+                      onselect={() => openRoles(d, i)}
+                      onopen={() => openRoles(d, i, true)}
+                    />
+                  {:else}
+                    <p class="empty pad3">No role.</p>
+                  {/each}
+                {:else if isOpen(sk) && s !== 'roles'}
                   {#each items as it, i (it.uid)}
                     {@const id = tabId(itemSpec(d, s, it))}
                     {@const issues = d.count(`${s}[${i}]`)}
@@ -212,6 +244,10 @@
                       badgeTone={issues ? 'danger' : 'accent'}
                       onselect={() => openItem(d, s, it)}
                       onopen={() => openItem(d, s, it, true)}
+                      oncontextmenu={(e) => {
+                        if (!d.readonly && hasSteps(typeCatalog.cat, s, it))
+                          openContextMenu(e, [{ label: 'New step', icon: 'plus', run: () => addStep(d, s, it) }]);
+                      }}
                     />
                   {:else}
                     <p class="empty pad3">
