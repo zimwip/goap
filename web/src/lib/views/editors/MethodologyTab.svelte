@@ -356,7 +356,7 @@
                       </li>
                     {/each}
                   {:else}
-                    <li class="empty">{s === 'agents' ? 'No agent: the default agent runs every action.' : s === 'processes' ? 'No process: describe the steps that reach the objective of a change, each done by an action, an agent, a nested process or a person.' : 'None yet.'}</li>
+                    <li class="empty">{s === 'agents' ? 'No agent: the default agent runs every action.' : s === 'processes' ? 'No process: describe the steps that reach the objective of a change, each made of sub-steps, actions, variants (methods), a nested process or a person.' : 'None yet.'}</li>
                   {/each}
                 </ul>
               </section>

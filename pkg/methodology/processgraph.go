@@ -62,11 +62,19 @@ type GraphAction struct {
 
 // ProcessGraph builds the graph of a process (false when the methodology has no such process).
 func (c *Compiled) ProcessGraph(name string) (ProcessGraph, bool) {
-	p, ok := c.ProcessByName(name)
-	if !ok {
+	var g ProcessGraph
+	var top []StepInfo
+	if p, ok := c.ProcessByName(name); ok {
+		g = ProcessGraph{Process: p.Name, Description: p.Description, References: p.References}
+		top = c.ProcessSteps(name)
+	} else if me, ok := c.MethodByName(name); ok && (len(me.Steps) > 0 || me.Agent != "") {
+		// a method composing its own steps has a graph of its own, apart from the process of the step that names its
+		// capability: the method specializes that step, which cuts the traceability (it adds variability)
+		g = ProcessGraph{Process: me.Name, Description: me.Description, References: me.References}
+		top = c.MethodSteps(name)
+	} else {
 		return ProcessGraph{}, false
 	}
-	g := ProcessGraph{Process: p.Name, Description: p.Description, References: p.References}
 	var walk func(steps []StepInfo, parent string, depth int)
 	agents := map[string]bool{}
 	capabilities := map[string]bool{}
@@ -81,9 +89,6 @@ func (c *Compiled) ProcessGraph(name string) (ProcessGraph, bool) {
 				if gs.Target == "" {
 					gs.Target = fmt.Sprint(s.Actions)
 				}
-			case MethodAgent:
-				gs.Target = s.Agent
-				agents[s.Agent] = true
 			case MethodProcess:
 				gs.Target = s.Process
 			case MethodCapability:
@@ -94,7 +99,7 @@ func (c *Compiled) ProcessGraph(name string) (ProcessGraph, bool) {
 			walk(s.Steps, s.Path, depth+1)
 		}
 	}
-	walk(c.ProcessSteps(name), "", 0)
+	walk(top, "", 0)
 	g.Edges = conditionEdges(g.Steps)
 	for _, me := range c.Methodology.Methods {
 		if capabilities[me.For] {

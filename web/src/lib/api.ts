@@ -456,9 +456,6 @@ export interface ProcessStep {
   action?: string;
   /** alternative actions the planner chooses among */
   actions?: string[];
-  agent?: string;
-  /** goal of the agent the step reaches (default: its only goal) */
-  goal?: string;
   /** nested process: "<process>" or "<methodology>/<process>" */
   process?: string;
   /** the capability the step needs done, provided by methods */
@@ -513,6 +510,48 @@ export interface ProcessGraph {
   methodGoals?: Record<string, string>;
   agents?: GraphAgent[];
   references?: DocumentReference[];
+}
+
+/** One level of a process or method: the direct steps of a parent, chained from its inputs to its outputs. */
+export interface LevelCheck {
+  /** the root name, or the path of a step with sub-steps */
+  path?: string;
+  kind?: 'process' | 'method' | 'step' | 'agent';
+  /** who operates the level (kind agent, or a method naming an agent) and the goal it plans towards */
+  agent?: string;
+  goal?: string;
+  inputs?: Record<string, boolean>;
+  outputs?: Record<string, boolean>;
+  /** the direct steps in the order the conditions allow; one layer = independent steps */
+  order?: { name?: string; layer?: number }[];
+  gaps?: LevelGap[];
+  ok?: boolean;
+  /** the direct steps of the level (the system of interest) and the links their conditions draw */
+  steps?: LevelNode[];
+  edges?: GraphEdge[];
+}
+
+export interface LevelNode {
+  name?: string;
+  path?: string;
+  method?: string;
+  target?: string;
+  capability?: string;
+  entry?: Record<string, boolean>;
+  exit?: Record<string, boolean>;
+  /** the step has sub-steps: a level of its own */
+  composite?: boolean;
+  /** that level, or one below it, is not resolved */
+  broken?: boolean;
+  subSteps?: number;
+}
+
+export interface LevelGap {
+  /** the direct step concerned (empty: the outputs of the level) */
+  step?: string;
+  kind?: 'blocked' | 'output' | 'external' | 'inner' | 'noop';
+  missing?: string[];
+  message?: string;
 }
 
 export interface GraphStep {
@@ -1548,6 +1587,9 @@ export const registry = {
   /** a process of a methodology as edited, as a graph (ADR 0036 §4) */
   processGraph: (methodology: Methodology, process: string, signal?: AbortSignal) =>
     rpc<{ methodology: Methodology; process: string }, { graph?: ProcessGraph; issues?: Issue[] }>(REGISTRY, 'GetProcessGraph', { methodology, process }, signal),
+  /** coherence of a process or method, level by level, as edited */
+  checkLevels: (methodology: Methodology, root: string, signal?: AbortSignal) =>
+    rpc<{ methodology: Methodology; root: string }, { levels?: LevelCheck[]; issues?: Issue[]; conditions?: Record<string, string> }>(REGISTRY, 'CheckLevels', { methodology, root }, signal),
   /**
    * Plans toward `goal` with the planner `agent` is actually configured with, from an empty blackboard whose
    * evaluated conditions `overrides` patch on top: no live Change needed. For a process, pass its name as both

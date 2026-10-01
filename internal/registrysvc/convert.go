@@ -60,7 +60,7 @@ func stepsToPB(steps []methodology.Step) []*registryv1.Step {
 	out := make([]*registryv1.Step, 0, len(steps))
 	for _, s := range steps {
 		out = append(out, &registryv1.Step{Name: s.Name, Description: s.Description, Instructions: s.Instructions, Pre: s.Pre, Done: s.Done,
-			References: refsToPB(s.References), Guidance: s.Guidance, Checklist: s.Checklist, Deliverables: s.Deliverables, Method: s.Capability, Roles: respToPB(s.Roles), Steps: stepsToPB(s.Steps), Action: s.Action, Actions: s.Actions, Agent: s.Agent, Goal: s.Goal, Process: s.Process})
+			References: refsToPB(s.References), Guidance: s.Guidance, Checklist: s.Checklist, Deliverables: s.Deliverables, Method: s.Capability, Roles: respToPB(s.Roles), Steps: stepsToPB(s.Steps), Action: s.Action, Actions: s.Actions, Process: s.Process})
 	}
 	return out
 }
@@ -72,7 +72,7 @@ func stepsFromPB(steps []*registryv1.Step) []methodology.Step {
 	out := make([]methodology.Step, 0, len(steps))
 	for _, s := range steps {
 		out = append(out, methodology.Step{Name: s.Name, Description: s.Description, Instructions: s.Instructions, Pre: nilIfEmpty(s.Pre), Done: nilIfEmpty(s.Done),
-			References: refsFromPB(s.References), Guidance: s.Guidance, Checklist: nilIfNone(s.Checklist), Deliverables: nilIfNone(s.Deliverables), Capability: s.Method, Roles: respFromPB(s.Roles), Steps: stepsFromPB(s.Steps), Action: s.Action, Actions: nilIfNone(s.Actions), Agent: s.Agent, Goal: s.Goal, Process: s.Process})
+			References: refsFromPB(s.References), Guidance: s.Guidance, Checklist: nilIfNone(s.Checklist), Deliverables: nilIfNone(s.Deliverables), Capability: s.Method, Roles: respFromPB(s.Roles), Steps: stepsFromPB(s.Steps), Action: s.Action, Actions: nilIfNone(s.Actions), Process: s.Process})
 	}
 	return out
 }
@@ -337,6 +337,29 @@ func searchFromPB(in []*registryv1.SearchProperty) []methodology.SearchProperty 
 	var out []methodology.SearchProperty
 	for _, s := range in {
 		out = append(out, methodology.SearchProperty{Property: s.Property, Text: s.Text, Facet: s.Facet})
+	}
+	return out
+}
+
+// LevelsToPB converts the level-by-level coherence of a process or method.
+func LevelsToPB(ls []methodology.LevelCheck) []*registryv1.LevelCheck {
+	out := make([]*registryv1.LevelCheck, 0, len(ls))
+	for _, l := range ls {
+		pb := &registryv1.LevelCheck{Path: l.Path, Kind: l.Kind, Inputs: l.Inputs, Outputs: l.Outputs, Ok: l.OK(), Agent: l.Agent, Goal: l.Goal}
+		for _, s := range l.Order {
+			pb.Order = append(pb.Order, &registryv1.LevelStep{Name: s.Name, Layer: int32(s.Layer)})
+		}
+		for _, n := range l.Steps {
+			pb.Steps = append(pb.Steps, &registryv1.LevelNode{Name: n.Name, Path: n.Path, Method: n.Method, Target: n.Target, Capability: n.Capability,
+				Entry: n.Entry, Exit: n.Exit, Composite: n.Composite, Broken: n.Broken, SubSteps: int32(n.SubSteps)})
+		}
+		for _, e := range l.Edges {
+			pb.Edges = append(pb.Edges, &registryv1.GraphEdge{From: e.From, To: e.To, Conditions: e.Conditions})
+		}
+		for _, g := range l.Gaps {
+			pb.Gaps = append(pb.Gaps, &registryv1.LevelGap{Step: g.Step, Kind: g.Kind, Missing: g.Missing, Message: g.Message})
+		}
+		out = append(out, pb)
 	}
 	return out
 }

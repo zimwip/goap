@@ -35,6 +35,8 @@ func compileProcess(t *testing.T, processes string) (*Compiled, Issues) {
 
 func TestProcessCompilesToStepActions(t *testing.T) {
 	c, issues := compileProcess(t, `
+methods:
+  - {name: by_worker, for: working, agent: worker}
 processes:
   - name: flow
     references: [{title: Guide, ref: "document-repository:flow.md"}]
@@ -45,7 +47,7 @@ processes:
           - {name: first, action: do_a}
           - {name: other, actions: [do_c, do_a], pre: {"step:flow/manual": true}}
           - {name: second, action: do_b}
-      - {name: agentic, agent: worker, pre: {b: true}}
+      - {name: agentic, method: working, pre: {b: true}}
       - name: manual
         description: Sign off
         references: [{title: Checklist, ref: "doc:CHK-1", section: "2"}]
@@ -78,8 +80,8 @@ processes:
 		t.Fatalf("a step may wait for a later step; each alternative reaches the step's criteria: %+v", other)
 	}
 	agentic, _ := c.Action("flow/agentic")
-	if agentic.Builtin != BuiltinStep || agentic.Params["goal"] != "all" || len(agentic.Pre) != 1 || !agentic.Pre["b"] || !agentic.Effects["c"] {
-		t.Fatalf("an agent step is entered by its own conditions and done by the agent's goal: %+v", agentic)
+	if agentic.Builtin != BuiltinStep || agentic.Params["capability"] != "working" || len(agentic.Pre) != 1 || !agentic.Pre["b"] || !agentic.Effects["c"] {
+		t.Fatalf("a capability step is entered by its own conditions and done by the goal of its method's agent: %+v", agentic)
 	}
 	manual, _ := c.Action("flow/manual")
 	if manual.Kind != KindHuman || manual.Instructions != "Sign off" || !manual.Effects[StepCondition("flow/manual")] || len(manual.Pre) != 0 {
@@ -115,7 +117,7 @@ func TestProcessValidation(t *testing.T) {
 		"two methods": {`
 processes:
   - name: x
-    steps: [{name: s, action: do_a, agent: worker}]`, "one way"},
+    steps: [{name: s, action: do_a, method: working}]`, "one thing"},
 		"unknown action": {`
 processes:
   - name: x
@@ -151,10 +153,6 @@ processes:
 processes:
   - name: x
     steps: [{name: t, action: do_b, pre: {a: false}}]`, "both true and false"},
-		"goal without agent": {`
-processes:
-  - name: x
-    steps: [{name: s, action: do_a, goal: all}]`, "goal applies"},
 		"no steps": {`
 processes:
   - name: x
@@ -324,7 +322,7 @@ func TestProcessGraphDrawsTheConditions(t *testing.T) {
 	for from, to := range map[string]string{
 		"software_delivery/framing":                             "software_delivery/analysis/scope",
 		"software_delivery/analysis/scope":                      "software_delivery/analysis/impacts",
-		"software_delivery/analysis/specification/requirements": "software_delivery/design",
+		"software_delivery/analysis/specification/traceability": "software_delivery/design",
 		"software_delivery/release":                             "software_delivery/application",
 	} {
 		if _, ok := edges[from+" -> "+to]; !ok {
@@ -335,7 +333,7 @@ func TestProcessGraphDrawsTheConditions(t *testing.T) {
 	if _, ok := edges["software_delivery/framing -> software_delivery/application"]; ok {
 		t.Error("implied edge kept")
 	}
-	if len(g.Methods) != 2 || g.Methods[0].AgentGoal != "design" {
+	if len(g.Methods) != 2 || g.Methods[0].AgentGoal != "solution_design" {
 		t.Fatalf("methods of the design capability: %+v", g.Methods)
 	}
 	var architect *GraphAgent

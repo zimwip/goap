@@ -76,9 +76,6 @@ type Step struct {
 	// first, another one when it fails).
 	Action  string   `yaml:"action,omitempty" json:"action,omitempty"`
 	Actions []string `yaml:"actions,omitempty" json:"actions,omitempty"`
-	// Agent of the methodology that does the step, planning towards Goal (default: its only goal).
-	Agent string `yaml:"agent,omitempty" json:"agent,omitempty"`
-	Goal  string `yaml:"goal,omitempty" json:"goal,omitempty"`
 	// Process nested in the step: "<process>" of this methodology or "<methodology>/<process>".
 	Process string `yaml:"process,omitempty" json:"process,omitempty"`
 	// Capability names what the step needs done; the methods providing it (`for`) say how, per context, and which
@@ -90,7 +87,6 @@ type Step struct {
 const (
 	MethodSteps   = "steps"
 	MethodAction  = "action"
-	MethodAgent   = "agent"
 	MethodProcess = "process"
 	MethodManual  = "manual"
 )
@@ -109,8 +105,6 @@ func (s Step) Method() string {
 		return MethodSteps
 	case s.Action != "" || len(s.Actions) > 0:
 		return MethodAction
-	case s.Agent != "":
-		return MethodAgent
 	case s.Process != "":
 		return MethodProcess
 	case s.Capability != "":
@@ -152,7 +146,11 @@ type compiledProcesses struct {
 	conditions []condition.Definition
 	// criteria are the entry and exit criteria of every step, by path
 	criteria map[string]stepCriteria
+	// extend gives an agent that performs a method the activities that compose it and their goal
+	extend map[string]agentExt
 }
+
+type agentExt struct{ actions, goals []string }
 
 type stepCriteria struct{ entry, done map[string]bool }
 
@@ -338,17 +336,14 @@ func (w *stepWalker) walk(steps []Step, path, prefix string, inherited map[strin
 // step generates one step and returns its exit criteria.
 func (w *stepWalker) step(s Step, sp, path string, need map[string]bool) map[string]bool {
 	methods := 0
-	for _, set := range []bool{len(s.Steps) > 0, s.Action != "", len(s.Actions) > 0, s.Agent != "", s.Process != "", s.Capability != ""} {
+	for _, set := range []bool{len(s.Steps) > 0, s.Action != "", len(s.Actions) > 0, s.Process != "", s.Capability != ""} {
 		if set {
 			methods++
 		}
 	}
 	if methods > 1 {
-		w.add(sp, "a step is done by one way: sub-steps, an action, an agent, a process or a method")
+		w.add(sp, "a step is made of one thing: sub-steps, an action, a process or a method")
 		return nil
-	}
-	if s.Goal != "" && s.Agent == "" {
-		w.add(sp+".goal", "goal applies to a step done by an agent")
 	}
 	done := maps.Clone(s.Done)
 	gen := Action{Name: path, Description: s.Description, Pre: need, Cost: 1, Step: path}
@@ -393,31 +388,6 @@ func (w *stepWalker) step(s Step, sp, path string, need map[string]bool) map[str
 			w.out.actions = append(w.out.actions, alt)
 		}
 		return done
-	case MethodAgent:
-		ag, ok := w.agents[s.Agent]
-		if !ok || ag.process != "" {
-			w.add(sp+".agent", "unknown agent %q", s.Agent)
-			return nil
-		}
-		goal := s.Goal
-		if goal == "" {
-			if gs := w.agentGoals(ag); len(gs) == 1 {
-				goal = gs[0].Name
-			} else {
-				w.add(sp+".goal", "agent %s has several goals: name the one the step reaches", ag.Name)
-				return nil
-			}
-		}
-		g, ok := w.goal(goal)
-		if !ok || (len(ag.Goals) > 0 && !slices.Contains(ag.Goals, goal)) {
-			w.add(sp+".goal", "%q is not a goal of agent %s", goal, ag.Name)
-			return nil
-		}
-		if done == nil {
-			done = maps.Clone(g.Pre)
-		}
-		gen.Kind, gen.Builtin = KindBuiltin, BuiltinStep
-		gen.Params = map[string]any{"step": path, "agent": ag.Name, "goal": goal}
 	case MethodProcess:
 		other, proc := s.NestedProcess()
 		switch {
@@ -483,19 +453,6 @@ func (w *stepWalker) step(s Step, sp, path string, need map[string]bool) map[str
 	}
 	w.out.actions = append(w.out.actions, gen)
 	return done
-}
-
-func (w *stepWalker) agentGoals(ag Agent) []Goal {
-	if len(ag.Goals) == 0 {
-		return w.m.Goals
-	}
-	var out []Goal
-	for _, name := range ag.Goals {
-		if g, ok := w.goal(name); ok {
-			out = append(out, g)
-		}
-	}
-	return out
 }
 
 func (w *stepWalker) goal(name string) (Goal, bool) {
@@ -584,6 +541,21 @@ func (c *Compiled) ProcessSteps(name string) []StepInfo {
 	if !ok {
 		return nil
 	}
+	return c.stepTree(p.Steps, name)
+}
+
+// MethodSteps returns the compiled step tree of a method composing its own steps (nil when it has none).
+func (c *Compiled) MethodSteps(name string) []StepInfo {
+	for _, me := range c.Methods {
+		if me.Name == name && len(me.Steps) > 0 {
+			return c.stepTree(me.Steps, name)
+		}
+	}
+	return nil
+}
+
+// stepTree builds the compiled step tree under prefix (the name of the process or method).
+func (c *Compiled) stepTree(top []Step, prefix string) []StepInfo {
 	planned := map[string][]Action{}
 	for _, a := range c.processes.actions {
 		planned[a.Step] = append(planned[a.Step], a)
@@ -610,7 +582,7 @@ func (c *Compiled) ProcessSteps(name string) []StepInfo {
 		}
 		return out
 	}
-	return build(p.Steps, name, nil)
+	return build(top, prefix, nil)
 }
 
 // StepByPath returns the step of a path ("<process>/<step>/<sub-step>").

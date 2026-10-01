@@ -731,9 +731,11 @@ roles:
   - {name: service_owner, description: Answers for the service in operation}
   - {name: change_approver, description: Approves the application of changes to the repository}
 
-# Methods (ADR 0035 §1): the documentary references of how a step capability is carried out in a context; each names
-# the agent that acts. A step names the capability (`method: design`); the applicable method with the highest priority
-# is chosen at execution, and its guidance and references reach its agent.
+# Methods (ADR 0035 §1): everything is an activity. A method is the variant of a step capability for a context
+# (`for`, `when`, `priority`): it says how and with what, as the activities that compose it (steps, down to actions,
+# which are not broken down further) with their tools. The agent it names is the actor: it performs those activities
+# and has access to them, and to the tools their actions declare. A step names the capability (`method: design`); the
+# applicable method with the highest priority is chosen at execution, and its guidance and references reach its agent.
 methods:
   - name: solution_design
     for: design
@@ -748,6 +750,10 @@ methods:
     deliverables: [DesignDossier]
     roles: {responsible: solution_architect, accountable: tech_lead, consulted: [business_analyst]}
     agent: architect
+    steps:
+      - {name: allocation, description: "Allocate the requirements to functions", action: allocate_functions}
+      - {name: design, description: "Design the components, interfaces, flows and data (by the agent, a person if it fails)", actions: [design_solution, write_design]}
+      - {name: check, description: "Check the consistency of the design", action: check_design}
   - name: functional_design
     for: design
     description: Functional allocation and a design note written by hand, when no component is touched
@@ -757,10 +763,15 @@ methods:
     deliverables: [DesignNote]
     roles: {responsible: business_analyst, accountable: tech_lead}
     agent: designer
+    steps:
+      - {name: allocation, description: "Allocate the requirements to functions", action: allocate_functions}
+      - {name: note, description: "Write the design note by hand", action: write_design}
+      - {name: check, description: "Check the consistency of the design", action: check_design}
 
 # The route of a change, described as steps and sub-steps with the precision the methodology has for each (ADR 0034):
-# a step names the action that does it, alternatives the planner chooses among, an agent that plans it, a process it
-# nests, or only what a person does. Steps are sequenced by their conditions, not by their position: a step can be
+# a step is made of sub-steps, of the action that does it (not broken down further), of alternatives the planner
+# chooses among, of the methods that specialize it (variants, one chosen by context), of a process it nests, or only of
+# what a person does. Steps are sequenced by their conditions, not by their position: a step can be
 # planned once its entry conditions hold (those of the phase containing it, its own, and those of what it runs). Each
 # process is run by an agent of its name, towards a goal of its name; its reference documents say where it is
 # described in the documentary repository.
@@ -805,7 +816,7 @@ processes:
               - {name: test_plan, action: plan_tests}
       - name: design
         description: Allocate the functions and design the solution, by the method that fits the change, once the requirements are specified
-        pre: {propagated: true, requirements_specified: true}
+        pre: {propagated: true, requirements_specified: true, requirements_traced: true}
         method: design
       - name: build
         description: Build every component in scope, according to its technology (once the design is checked)

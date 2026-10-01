@@ -10,9 +10,9 @@
   import ReferencesEditor from './ReferencesEditor.svelte';
   import { provideActions, useReveal } from '../../shell/workbench.svelte';
   import { emptyStep, walkSteps, fromForm } from '../../methodologyForm';
-  import ProcessGraphView from '../../components/ProcessGraphView.svelte';
-  import { registry, errorMessage, type ProcessGraph, type PlanPreview } from '../../api';
-  import { draftOf, draftActions, removeItemAction, syncTabUid, openItem } from './methodologyTabs';
+  import DraftFlow from '../../components/DraftFlow.svelte';
+  import { registry, type PlanPreview } from '../../api';
+  import { draftOf, draftActions, removeItemAction, syncTabUid, openItem, openStep } from './methodologyTabs';
 
   let { tab }: { tab: Tab } = $props();
 
@@ -45,80 +45,38 @@
   const nestedIn = $derived(
     item ? d.form.processes.filter((o) => o !== item && walkSteps(o.steps).some((x) => x.step.method === 'process' && x.step.process === item.name)) : [],
   );
-  // the process as a graph, from the draft as edited (ADR 0036 §4), rebuilt a moment after an edit
-  let view = $state<'graph' | 'steps'>('graph');
-  let graph = $state<ProcessGraph | undefined>();
-  let graphIssue = $state('');
+  let view = $state<'flow' | 'steps'>('flow');
   const snapshot = $derived(JSON.stringify(d.form));
-  $effect(() => {
-    void snapshot;
-    const name = item?.name;
-    if (!name || view !== 'graph') return;
-    const ctl = new AbortController();
-    const timer = setTimeout(() => {
-      registry
-        .processGraph(fromForm(d.form).methodology, name, ctl.signal)
-        .then((r) => {
-          graph = r.graph;
-          graphIssue = r.issues?.length ? `The draft does not compile (${r.issues.length} issue(s), see the Issues console): the graph shows its last valid state.` : '';
-        })
-        .catch((e) => {
-          if (!ctl.signal.aborted) graphIssue = errorMessage(e);
-        });
-    }, 400);
-    return () => (clearTimeout(timer), ctl.abort());
-  });
 
-  // the plan the process's agent (goap, utility or hybrid) actually reaches from the conditions toggled in the
-  // graph view, overridden on top of an empty blackboard (ADR 0034; no live Change needed)
-  let overrides = $state<Record<string, boolean>>({});
+  // the plan the process's agent reaches on an empty blackboard (ADR 0034; no live Change needed): the steps it
+  // chooses are marked on the flow
   let plan = $state<PlanPreview | undefined>();
-  let planIssue = $state('');
   $effect(() => {
     void snapshot;
     const name = item?.name;
-    const ov = overrides;
-    if (!name || view !== 'graph') return;
+    if (!name || view !== 'flow') return;
     const ctl = new AbortController();
     const timer = setTimeout(() => {
       registry
-        .previewPlan(fromForm(d.form).methodology, name, name, ov, ctl.signal)
-        .then((r) => {
-          plan = r.preview;
-          planIssue = r.issues?.length ? r.issues.map((i) => i.message).join('; ') : '';
-        })
-        .catch((e) => {
-          if (!ctl.signal.aborted) planIssue = errorMessage(e);
-        });
+        .previewPlan(fromForm(d.form).methodology, name, name, {}, ctl.signal)
+        .then((r) => (plan = r.preview))
+        .catch(() => {});
     }, 300);
     return () => (clearTimeout(timer), ctl.abort());
   });
-  function setOverride(name: string, value: boolean | undefined) {
-    if (value === undefined) {
-      const { [name]: _, ...rest } = overrides;
-      overrides = rest;
-    } else {
-      overrides = { ...overrides, [name]: value };
+  // a step of the graph, by its server path "<process>/<step>/<sub-step>"
+  function openStepAt(path: string) {
+    if (!item) return;
+    let list = item.steps;
+    let found;
+    for (const name of path.split('/').slice(1)) {
+      found = list.find((x) => x.name === name);
+      if (!found) return;
+      list = found.steps;
     }
-  }
-  // plans toward an agent/goal that is not the process itself (a method's actor): where a hybrid or utility
-  // planner, if configured, actually runs (ADR 0034: the process's own agent is always goap)
-  function previewAgent(agent: string, goal: string) {
-    return registry.previewPlan(fromForm(d.form).methodology, agent, goal, overrides);
-  }
-  let overridesFor = '';
-  $effect(() => {
-    if (item?.name !== overridesFor) {
-      overridesFor = item?.name ?? '';
-      overrides = {};
-    }
-  });
-  function openProcess(name: string) {
-    const o = d.form.processes.find((x) => x.name === name);
-    if (o) openItem(d, 'processes', o);
+    if (found) openStep(d, found, item, true);
   }
 
-  const agentsUsed = $derived([...new Set(all.filter((x) => x.step.method === 'agent' && x.step.agent).map((x) => x.step.agent))]);
 </script>
 
 <div class="editor-page" bind:this={root}>
@@ -160,17 +118,12 @@
 
     </fieldset>
       <div class="row switch" role="tablist" aria-label="View">
-        <button type="button" role="tab" class="small" class:primary={view === 'graph'} aria-selected={view === 'graph'} onclick={() => (view = 'graph')}>Graph</button>
+        <button type="button" role="tab" class="small" class:primary={view === 'flow'} aria-selected={view === 'flow'} onclick={() => (view = 'flow')}>Flow</button>
         <button type="button" role="tab" class="small" class:primary={view === 'steps'} aria-selected={view === 'steps'} onclick={() => (view = 'steps')}>Steps</button>
       </div>
-      {#if view === 'graph'}
+      {#if view === 'flow'}
         <section class="card">
-          {#if graphIssue}<p class="hint">{graphIssue}</p>{/if}
-          {#if graph}
-            <ProcessGraphView {graph} onprocess={openProcess} {plan} {planIssue} {overrides} {setOverride} {previewAgent} />
-          {:else if !graphIssue}
-            <p class="empty">Building the graph…</p>
-          {/if}
+          <DraftFlow draft={d} root={item.name} {plan} onstep={openStepAt} onmethod={(n) => { const me = d.form.methods.find((x) => x.name === n); if (me) openItem(d, 'methods', me); }} />
         </section>
       {:else}
       <fieldset class="plain" disabled={d.readonly}>
@@ -197,13 +150,6 @@
       {Object.entries(byMethod)
         .map(([m, n]) => `${n} ${m}`)
         .join(' · ') || 'No step yet.'}
-      {#if agentsUsed.length}
-        · agents:
-        {#each agentsUsed as a, i (a)}
-          {@const ag = d.form.agents.find((x) => x.name === a)}
-          {i ? ', ' : ''}{#if ag}<button type="button" class="link" onclick={() => openItem(d, 'agents', ag)}>{a}</button>{:else}{a}{/if}
-        {/each}
-      {/if}
       {#if nests.length}
         · nests: {nests.join(', ')}
       {/if}

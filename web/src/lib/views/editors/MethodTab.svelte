@@ -11,7 +11,8 @@
   import { provideActions, useReveal } from '../../shell/workbench.svelte';
   import { emptyStep, walkSteps } from '../../methodologyForm';
   import StepEditor from './StepEditor.svelte';
-  import { draftOf, draftActions, removeItemAction, syncTabUid, openItem } from './methodologyTabs';
+  import DraftFlow from '../../components/DraftFlow.svelte';
+  import { draftOf, draftActions, removeItemAction, syncTabUid, openItem, openStep } from './methodologyTabs';
 
   let { tab }: { tab: Tab } = $props();
 
@@ -46,11 +47,29 @@
         )
       : [],
   );
+
+  function openStepAt(path: string) {
+    if (!item) return;
+    let list = item.steps;
+    let found;
+    for (const n of path.split('/').slice(1)) {
+      found = list.find((x) => x.name === n);
+      if (!found) return;
+      list = found.steps;
+    }
+    if (found) openStep(d, found, item, true);
+  }
 </script>
 
 <div class="editor-page" bind:this={root}>
   {#if item}
     <DraftHeader draft={d} icon="book" kind="Method" title={item.name || '(unnamed)'} dirty={d.itemDirty('methods', item.uid)} />
+    {#if (item.steps.length || item.agent) && item.name}
+      <section class="card">
+        <h3>{item.agent ? `Actions operated by ${item.agent}` : "Flow of the method's steps"}</h3>
+        <DraftFlow draft={d} root={item.name} onstep={openStepAt} />
+      </section>
+    {/if}
     <fieldset class="plain" disabled={d.readonly}>
       <section class="card">
         <div class="grid">
@@ -81,8 +100,8 @@
       </section>
 
       <section class="card">
-        <h3>Actor</h3>
-        <p class="hint">A method is a reference, not an actor: it names the agent that carries the step out, even for a single action.</p>
+        <h3>Agent</h3>
+        <p class="hint">The method says how and with what; the agent executes. With steps below, the agent performs the activities that compose the method and has access to them and to the tools their actions declare. Without steps, it reaches the goal with its own actions.</p>
         <div class="grid">
           <div class="field">
             <label for="me-agent">Agent</label>
@@ -93,6 +112,7 @@
             </select>
             {#if agent}<button type="button" class="link" onclick={() => openItem(d, 'agents', agent)}>open the agent</button>{/if}
           </div>
+          {#if !item.steps.length}
           <div class="field">
             <label for="me-goal">Goal <span class="opt">(default: the agent's only goal)</span></label>
             <select id="me-goal" bind:value={item.goal} class:bad={d.bad(`${p}.goal`)} data-path="{p}.goal">
@@ -101,15 +121,16 @@
               {#each goalNames as g (g)}<option value={g}>{g}</option>{/each}
             </select>
           </div>
+          {/if}
         </div>
       </section>
 
       <section class="card" data-path="{p}.steps">
         <h3>Steps <span class="hint">{walkSteps(item.steps).length}</span></h3>
         <p class="hint">
-          Instead of naming an agent, a method may compose its own steps and sub-steps, like a process: they are
-          sequenced by their conditions, and an agent of the method's own name carries them out. A method names an agent
-          or composes steps, not both.
+          A method is an activity made of activities: its steps and sub-steps, down to actions, sequenced by their
+          conditions like a process's. The agent above performs them; without one, an agent of the method's own name
+          does.
         </p>
         {#each item.steps as step, i (step.key)}
           <StepEditor bind:step={item.steps[i]} siblings={item.steps} index={i} path="{p}.steps[{i}]" draft={d} />

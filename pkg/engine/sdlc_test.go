@@ -341,7 +341,7 @@ func TestSDLCProcess(t *testing.T) {
 			t.Fatalf("design method: %q", s.Specialization)
 		}
 		architect, err := e.Store.Get(ctx, s.Children[0])
-		if err != nil || architect.Agent != "architect" || architect.Goal != "design" || architect.ChangeID != p.ChangeID || architect.Status != engine.StatusCompleted ||
+		if err != nil || architect.Agent != "architect" || architect.Goal != "solution_design" || architect.ChangeID != p.ChangeID || architect.Status != engine.StatusCompleted ||
 			architect.Step == nil || architect.Step.Method != "solution_design" {
 			t.Fatalf("design step: %+v %v", architect, err)
 		}

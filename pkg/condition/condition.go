@@ -143,6 +143,15 @@ func (s *Set) Names() []string {
 }
 
 // Has reports whether a condition is defined.
+// Exprs maps every condition of the set to its expression.
+func (s *Set) Exprs() map[string]string {
+	out := make(map[string]string, len(s.progs))
+	for _, p := range s.progs {
+		out[p.name] = p.expr
+	}
+	return out
+}
+
 func (s *Set) Has(name string) bool {
 	for _, p := range s.progs {
 		if p.name == name {
