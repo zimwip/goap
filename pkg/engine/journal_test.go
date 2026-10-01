@@ -4,7 +4,9 @@ import (
 	"context"
 	"testing"
 
+	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/methodology"
 )
 
 func TestJournalRecordsTicksAndActions(t *testing.T) {
@@ -111,5 +113,51 @@ func TestJournalStepsChainBlackboardStates(t *testing.T) {
 	}
 	if !sawReads {
 		t.Fatal("no step recorded the node versions it read")
+	}
+}
+
+// An action generated for a process step journals its Activity Run against that step's path (architecture plan
+// "Activity concept": ExecutionRecord.ActivityRef), not just its own action name.
+func TestJournalRecordsActivityRef(t *testing.T) {
+	ctx := context.Background()
+	e, g, base := setup(t)
+	m, err := methodology.Parse([]byte(stagedYAML))
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := m.Compile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.Methodologies.(StaticMethodologies)["staged"] = c
+	p, err := e.Start(ctx, StartRequest{Methodology: "staged", Goal: "delivery", Intent: "deliver the note", ProjectID: testProject, BaselineID: base})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p, err = e.Run(ctx, p.ID); err != nil {
+		t.Fatal(err)
+	}
+	if p.Status != StatusWaiting || p.Pending.Action != "delivery/prepare/note" {
+		t.Fatalf("expected the note step, got %s %+v", p.Status, p.Pending)
+	}
+	writer := authz.With(ctx, authz.Principal{Subject: "w", Roles: []string{"writer@ORG-DEFAULT"}})
+	if _, err := e.Submit(writer, p.ID, []ItemInput{{Kind: "artifact", Type: "note"}}); err != nil {
+		t.Fatal(err)
+	}
+	recs, err := g.Journal(ctx, domain.ExecutionFilter{ChangeID: p.ChangeID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var found bool
+	for _, r := range recs {
+		if r.Kind == domain.ExecAction && r.Action == "delivery/prepare/note" {
+			found = true
+			if r.ActivityRef != "delivery/prepare/note" {
+				t.Fatalf("activityRef = %q, want the step path", r.ActivityRef)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("no action record for the note step")
 	}
 }

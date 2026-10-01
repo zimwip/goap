@@ -48,10 +48,14 @@ type Change struct {
 	ProjectID string `json:"projectId,omitempty"`
 	// Administrative marks a change of a methodology that manages organisation/project/policy/
 	// adapter data, the admin surface itself (ADR 0039): exempt from the project selector gate.
-	Administrative bool         `json:"administrative,omitempty"`
-	Goal           string       `json:"goal,omitempty"`
-	Status         ChangeStatus `json:"status"`
-	BaselineID     BaselineID   `json:"baselineId"`
+	Administrative bool `json:"administrative,omitempty"`
+	// ActivityRef scopes the change to one Activity (a methodology@Process/Step/Method/MethodStep node key,
+	// architecture plan "Activity concept"): the activity whose goal condition the change must satisfy to apply.
+	// Empty: no activity-relative gating beyond a node type's own lifecycle.
+	ActivityRef string       `json:"activityRef,omitempty"`
+	Goal        string       `json:"goal,omitempty"`
+	Status      ChangeStatus `json:"status"`
+	BaselineID  BaselineID   `json:"baselineId"`
 	// Branch the change is applied to (default main).
 	Branch           string         `json:"branch,omitempty"`
 	ResultBaselineID BaselineID     `json:"resultBaselineId,omitempty"`

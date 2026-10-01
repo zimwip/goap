@@ -551,7 +551,7 @@ func (e *Engine) Submit(ctx context.Context, id string, items []ItemInput) (*Pro
 	p.Pending = nil
 	p.Status = StatusRunning
 	e.queue(ctx, p, "input", map[string]any{"step": i, "action": waitedOn})
-	r := actionRecord(p, i, methodology.KindHuman, rec)
+	r := actionRecord(p, i, methodology.KindHuman, actionStep(m, waitedOn), rec)
 	r.Actor, r.StartedAt = authz.From(ctx).Subject, submitted
 	r.Data = map[string]any{"submitted": len(ids)}
 	e.journal(ctx, p, r)
@@ -787,12 +787,12 @@ func (e *Engine) execute(ctx context.Context, p *Process, m *methodology.Compile
 	if err != nil {
 		step := &p.Steps[i]
 		step.Error, step.EndedAt = err.Error(), e.clock()
-		e.journal(ctx, p, actionRecord(p, i, action.Kind, id))
+		e.journal(ctx, p, actionRecord(p, i, action.Kind, action.Step, id))
 		return e.recordFailure(p, action.Name)
 	}
 	p.Steps[i].Specialization = spec
 	err = e.executeStep(ctx, p, m, bb, impl, i)
-	e.journal(ctx, p, actionRecord(p, i, impl.Kind, id))
+	e.journal(ctx, p, actionRecord(p, i, impl.Kind, action.Step, id))
 	return err
 }
 

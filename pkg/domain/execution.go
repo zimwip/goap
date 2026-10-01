@@ -44,6 +44,11 @@ type ExecutionRecord struct {
 	Status string `json:"status,omitempty"`
 	Step   int    `json:"step"`
 	Action string `json:"action,omitempty"`
+	// ActivityRef is the Activity (methodology@Process/Step/Method/MethodStep node key) this record's action
+	// executes - the Activity Run this record is (architecture plan "Activity concept"), resolved from the
+	// compiled step's Action.Step at run-start. Empty for records of an action with no step (not generated from
+	// a process/method), or before this is wired up by a caller.
+	ActivityRef string `json:"activityRef,omitempty"`
 	// ActionKind is the kind of the executed action; Specialization is the
 	// specialized action actually run for an abstract one.
 	ActionKind     string          `json:"actionKind,omitempty"`
