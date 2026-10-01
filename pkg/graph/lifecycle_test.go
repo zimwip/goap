@@ -107,6 +107,59 @@ func (w lcWorld) accept(t *testing.T, c domain.Change) {
 	}
 }
 
+// A change scoped to an Activity (architecture plan "Activity concept") is gated by its own goal condition
+// (Graph.ActivityGoalsMet), not the node-type lifecycle's Editable floor: the activity's call on content/state
+// maturity replaces the blanket "not editable" check, rather than adding to it.
+func TestActivityGoalsGateReplacesEditableFloor(t *testing.T) {
+	forEachRepo(t, testActivityGoalsGateReplacesEditableFloor)
+}
+
+func testActivityGoalsGateReplacesEditableFloor(t *testing.T, repo Repo) {
+	ctx := context.Background()
+	w := newLifecycleWorld(t, repo)
+	c, err := w.g.CreateChange(ctx, NewChange{Title: "edit REQ-2", BaselineID: w.base.ID, ActivityRef: "deliver/draft-requirement"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := w.declare(t, c, w.req2)
+	for _, step := range []NodeWrite{{State: "draft"}, {Properties: map[string]any{"title": "two"}}} {
+		if err := w.write(c, id, step); err != nil {
+			t.Fatal(err)
+		}
+	}
+	w.accept(t, c)
+
+	// no hook registered: the Editable floor still applies, exactly as for a change with no ActivityRef
+	if _, err := w.g.Apply(ctx, c.ID, ""); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "editable state") {
+		t.Fatalf("no hook: editable floor must still apply: %v", err)
+	}
+
+	var gotRef string
+	var gotImpacts []domain.ChangeImpact
+	met := false
+	w.g.ActivityGoalsMet = func(_ context.Context, activityRef string, impacts []domain.ChangeImpact) (bool, error) {
+		gotRef, gotImpacts = activityRef, impacts
+		return met, nil
+	}
+
+	// the hook says no: refused, by the activity's own message, not the editable one
+	if _, err := w.g.Apply(ctx, c.ID, ""); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "does not satisfy the goal") {
+		t.Fatalf("hook unmet: %v", err)
+	}
+	if gotRef != "deliver/draft-requirement" || len(gotImpacts) != 1 || gotImpacts[0].ID != id {
+		t.Fatalf("hook arguments: ref=%q impacts=%+v", gotRef, gotImpacts)
+	}
+
+	// the hook says yes: applies even though REQ-2 is left in the editable "draft" state
+	met = true
+	if _, err := w.g.Apply(ctx, c.ID, ""); err != nil {
+		t.Fatalf("hook met: the activity goal replaces the editable floor: %v", err)
+	}
+	if n, err := stateOf(t, w.g, w.req2.ID); err != nil || n.State != "draft" {
+		t.Fatalf("REQ-2 must land in draft: %+v %v", n, err)
+	}
+}
+
 func stateOf(t *testing.T, g *Graph, id domain.NodeID) (domain.Node, error) {
 	t.Helper()
 	var n domain.Node

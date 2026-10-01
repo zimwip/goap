@@ -319,9 +319,9 @@ func (t *pgTx) Change(ctx context.Context, id domain.ChangeID) (domain.Change, e
 	var c domain.Change
 	var result *string
 	var data []byte
-	err := t.tx.QueryRow(ctx, `SELECT id::text, title, intent, methodology, goal, status, baseline_id::text, result_baseline_id::text, data, created_at, branch, namespace, COALESCE(parent_id::text, ''), owner_org, project_id, administrative
+	err := t.tx.QueryRow(ctx, `SELECT id::text, title, intent, methodology, goal, status, baseline_id::text, result_baseline_id::text, data, created_at, branch, namespace, COALESCE(parent_id::text, ''), owner_org, project_id, administrative, activity_ref
 		FROM change WHERE id = $1`, string(id)).
-		Scan((*string)(&c.ID), &c.Title, &c.Intent, &c.Methodology, &c.Goal, (*string)(&c.Status), (*string)(&c.BaselineID), &result, &data, &c.CreatedAt, &c.Branch, &c.Namespace, (*string)(&c.ParentID), &c.OwnerOrg, &c.ProjectID, &c.Administrative)
+		Scan((*string)(&c.ID), &c.Title, &c.Intent, &c.Methodology, &c.Goal, (*string)(&c.Status), (*string)(&c.BaselineID), &result, &data, &c.CreatedAt, &c.Branch, &c.Namespace, (*string)(&c.ParentID), &c.OwnerOrg, &c.ProjectID, &c.Administrative, &c.ActivityRef)
 	if err != nil {
 		return c, mapErr(err, "change "+string(id))
 	}
@@ -427,12 +427,12 @@ func (t *pgTx) PutBaseline(ctx context.Context, b domain.Baseline) error {
 }
 
 func (t *pgTx) PutChange(ctx context.Context, c domain.Change) error {
-	_, err := t.tx.Exec(ctx, `INSERT INTO change (id, title, intent, methodology, goal, status, baseline_id, result_baseline_id, data, created_at, branch, namespace, parent_id, owner_org, project_id, administrative)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+	_, err := t.tx.Exec(ctx, `INSERT INTO change (id, title, intent, methodology, goal, status, baseline_id, result_baseline_id, data, created_at, branch, namespace, parent_id, owner_org, project_id, administrative, activity_ref)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
 		ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, intent = EXCLUDED.intent, goal = EXCLUDED.goal, status = EXCLUDED.status,
 		  result_baseline_id = EXCLUDED.result_baseline_id, data = EXCLUDED.data, baseline_id = EXCLUDED.baseline_id, branch = EXCLUDED.branch`,
 		string(c.ID), c.Title, c.Intent, c.Methodology, c.Goal, string(c.Status), string(c.BaselineID), nullUUID(string(c.ResultBaselineID)), jsonb(c.Data), c.CreatedAt,
-		domain.BranchOf(c.Branch), domain.NamespaceOf(c.Namespace), nullUUID(string(c.ParentID)), c.OwnerOrg, c.ProjectID, c.Administrative)
+		domain.BranchOf(c.Branch), domain.NamespaceOf(c.Namespace), nullUUID(string(c.ParentID)), c.OwnerOrg, c.ProjectID, c.Administrative, c.ActivityRef)
 	return mapErr(err, "change")
 }
 

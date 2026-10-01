@@ -129,8 +129,17 @@ func (a *applier) checkChangeImpacts() error {
 			moves = append(moves, moved{node: n, t: *last})
 		}
 	}
-	if len(editable) > 0 {
+	if len(editable) > 0 && !a.activityGated() {
 		return invalidf("the change leaves nodes in an editable state, move them out of it before applying: %s", joinSorted(editable))
+	}
+	if a.activityGated() {
+		met, err := a.g.ActivityGoalsMet(a.ctx, a.change.ActivityRef, a.change.Nodes)
+		if err != nil {
+			return err
+		}
+		if !met {
+			return invalidf("the change does not satisfy the goal of its activity %s", a.change.ActivityRef)
+		}
 	}
 	for i, m := range moves {
 		children, err := a.checkTransition(m.node, m.t)
@@ -145,6 +154,12 @@ func (a *applier) checkChangeImpacts() error {
 		}
 	}
 	return nil
+}
+
+// activityGated reports whether landing this change is gated by its Activity's own goal condition
+// (Graph.ActivityGoalsMet) instead of the node-type lifecycle's Editable floor.
+func (a *applier) activityGated() bool {
+	return a.change.ActivityRef != "" && a.g.ActivityGoalsMet != nil
 }
 
 func joinSorted(s []string) string {

@@ -44,6 +44,14 @@ type Graph struct {
 	// Validators are the NodeValidator plugins checked once per Apply (ADR 0048), keyed by the node types they
 	// declare interest in via Types(). Unset: no plugin validators run (tests, tools).
 	Validators []NodeValidator
+	// ActivityGoalsMet, when set, is asked at Apply time for a change whose ActivityRef names a Step or
+	// MethodStep (architecture plan "Activity concept"): true once the activity's own goal condition holds for
+	// the change's impacts, given its compiled methodology (which pkg/graph has no access to - resolving it is
+	// the caller's job, e.g. the registry + methodology packages, wired from internal/graphsvc). It replaces the
+	// node-type lifecycle's Editable floor as the landing gate for that change, maturity of content and state
+	// being the activity's call, not a fixed per-type flag; unset, or a change with no ActivityRef, falls back to
+	// the Editable floor unchanged.
+	ActivityGoalsMet func(ctx context.Context, activityRef string, impacts []domain.ChangeImpact) (bool, error)
 }
 
 // New returns a Graph backed by repo.
@@ -369,7 +377,10 @@ type NewChange struct {
 	// data, the admin surface itself (ADR 0039): exempt from the project selector gate. A sub-change
 	// inherits it from its parent.
 	Administrative bool
-	Data           map[string]any
+	// ActivityRef scopes the change to one Activity (architecture plan "Activity concept"): "Request -> Create
+	// Change -> Define scope -> Execute". Empty: no activity-relative gating beyond a node type's own lifecycle.
+	ActivityRef string
+	Data        map[string]any
 }
 
 // CreateChange opens a change on a reference baseline. A sub-change
@@ -381,7 +392,7 @@ func (g *Graph) CreateChange(ctx context.Context, in NewChange) (domain.Change, 
 		c = domain.Change{
 			ID: domain.ChangeID(g.newID()), Title: in.Title, Intent: in.Intent, Methodology: in.Methodology, Namespace: domain.NamespaceOf(in.Namespace),
 			Status: domain.ChangeDraft, BaselineID: in.BaselineID, Branch: domain.BranchOf(in.Branch), Data: in.Data, CreatedAt: g.now(),
-			ParentID: in.ParentID, OwnerOrg: in.OwnerOrg, ProjectID: in.ProjectID, Administrative: in.Administrative,
+			ParentID: in.ParentID, OwnerOrg: in.OwnerOrg, ProjectID: in.ProjectID, Administrative: in.Administrative, ActivityRef: in.ActivityRef,
 		}
 		if err := g.prepareSubChange(ctx, tx, &c, &in); err != nil {
 			return err
