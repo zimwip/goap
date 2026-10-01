@@ -320,3 +320,34 @@ func testChangeImpactsMerge(t *testing.T, repo Repo) {
 		t.Fatalf("a merge version has two parents: %+v", head.Parents)
 	}
 }
+
+// ImpactsOf scopes a change's impacts to one execution (Activity Run, architecture plan "Activity concept"): the
+// context graph (Pre) and modified graph (Post) of exactly what that run touched, not the whole change.
+func TestImpactsOf(t *testing.T) { forEachRepo(t, testImpactsOf) }
+
+func testImpactsOf(t *testing.T, repo Repo) {
+	ctx := context.Background()
+	f := newFixture(t, repo)
+	g := f.g
+	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{Title: "PSP v2", BaselineID: f.base.ID}))
+	pre, needRef := f.req.Ref(), f.need.Ref()
+
+	added := must[[]domain.ChangeImpact](t)(g.AddNodes(ctx, c.ID, []domain.ChangeImpact{
+		{Intent: domain.IntentModified, Pre: &pre, Rationale: "touched by run A", Execution: "run-a"},
+		{Intent: domain.IntentModified, Pre: &needRef, Rationale: "touched by run B", Execution: "run-b"},
+	}))
+	must[domain.ChangeImpact](t)(g.WriteNode(ctx, c.ID, added[0].ID, NodeWrite{Execution: "run-a", Properties: map[string]any{"title": "A"}}))
+	must[domain.ChangeImpact](t)(g.WriteNode(ctx, c.ID, added[1].ID, NodeWrite{Execution: "run-b", Properties: map[string]any{"title": "B"}}))
+
+	a := must[[]domain.ChangeImpact](t)(g.ImpactsOf(ctx, c.ID, "run-a"))
+	if len(a) != 1 || a[0].Key != "REQ-1" || a[0].Post == nil {
+		t.Fatalf("run-a impacts: %+v", a)
+	}
+	b := must[[]domain.ChangeImpact](t)(g.ImpactsOf(ctx, c.ID, "run-b"))
+	if len(b) != 1 || b[0].Key != "NEED-1" || b[0].Post == nil {
+		t.Fatalf("run-b impacts: %+v", b)
+	}
+	if none := must[[]domain.ChangeImpact](t)(g.ImpactsOf(ctx, c.ID, "run-c")); len(none) != 0 {
+		t.Fatalf("unknown execution: %+v", none)
+	}
+}
