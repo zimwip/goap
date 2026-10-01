@@ -99,7 +99,7 @@ func (c *Compiled) ProcessGraph(name string) (ProcessGraph, bool) {
 	for _, me := range c.Methodology.Methods {
 		if capabilities[me.For] {
 			g.Methods = append(g.Methods, GraphMeth{Method: me, AgentGoal: c.MethodGoal(me.Name)})
-			agents[me.Agent] = true
+			agents[me.ActorAgent()] = true
 		}
 	}
 	names := slices.Sorted(maps.Keys(agents))

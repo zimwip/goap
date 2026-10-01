@@ -46,7 +46,8 @@ func ToPB(r Record) *registryv1.Methodology {
 	}
 	for _, me := range m.Methods {
 		out.Methods = append(out.Methods, &registryv1.Method{Name: me.Name, For: me.For, When: me.When, Priority: int32(me.Priority), Description: me.Description,
-			Guidance: me.Guidance, Checklist: me.Checklist, Deliverables: me.Deliverables, References: refsToPB(me.References), Agent: me.Agent, Goal: me.Goal, Roles: respToPB(me.Roles)})
+			Guidance: me.Guidance, Checklist: me.Checklist, Deliverables: me.Deliverables, References: refsToPB(me.References), Agent: me.Agent, Goal: me.Goal, Roles: respToPB(me.Roles),
+			Steps: stepsToPB(me.Steps)})
 	}
 	for _, p := range m.Processes {
 		out.Processes = append(out.Processes, &registryv1.Process{Name: p.Name, Description: p.Description, Examples: p.Examples, Steps: stepsToPB(p.Steps), References: refsToPB(p.References)})
@@ -182,7 +183,8 @@ func FromPB(p *registryv1.Methodology) methodology.Methodology {
 	}
 	for _, me := range p.Methods {
 		m.Methods = append(m.Methods, methodology.Method{Name: me.Name, For: me.For, When: me.When, Priority: int(me.Priority), Description: me.Description,
-			Guidance: me.Guidance, Checklist: nilIfNone(me.Checklist), Deliverables: nilIfNone(me.Deliverables), References: refsFromPB(me.References), Agent: me.Agent, Goal: me.Goal, Roles: respFromPB(me.Roles)})
+			Guidance: me.Guidance, Checklist: nilIfNone(me.Checklist), Deliverables: nilIfNone(me.Deliverables), References: refsFromPB(me.References), Agent: me.Agent, Goal: me.Goal, Roles: respFromPB(me.Roles),
+			Steps: stepsFromPB(me.Steps)})
 	}
 	for _, p := range p.Processes {
 		m.Processes = append(m.Processes, methodology.Process{Name: p.Name, Description: p.Description, Examples: nilIfNone(p.Examples), Steps: stepsFromPB(p.Steps), References: refsFromPB(p.References)})
@@ -352,7 +354,7 @@ func ProcessGraphToPB(g methodology.ProcessGraph) *registryv1.ProcessGraph {
 	for _, me := range g.Methods {
 		out.Methods = append(out.Methods, &registryv1.Method{Name: me.Name, For: me.For, When: me.When, Priority: int32(me.Priority), Description: me.Description,
 			Guidance: me.Guidance, Checklist: me.Checklist, Deliverables: me.Deliverables, References: refsToPB(me.References), Agent: me.Agent, Goal: me.Goal,
-			Roles: respToPB(me.Roles)})
+			Roles: respToPB(me.Roles), Steps: stepsToPB(me.Steps)})
 		out.MethodGoals[me.Name] = me.AgentGoal
 	}
 	for _, a := range g.Agents {

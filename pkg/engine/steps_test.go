@@ -205,6 +205,86 @@ func progressStates(steps []StepProgress) map[string]string {
 	return out
 }
 
+// A capability provided by a method that composes its own steps (architecture plan "Activity concept"): the method
+// is run as a sub-agent of its own name, exactly like a nested process, and completing its own steps completes the
+// outer step that named the capability.
+const methodStepsYAML = `
+name: inspected
+version: 1.0.0
+namespace: alm
+conditions:
+  - {name: noted, expr: 'artifacts.exists(a, a.type == "note")'}
+  - {name: checked, expr: 'artifacts.exists(a, a.type == "check")'}
+actions:
+  - {name: write_note, kind: human, effects: {noted: true}}
+  - {name: check, kind: human, pre: {noted: true}, effects: {checked: true}}
+methods:
+  - name: thorough_check
+    for: verification
+    steps:
+      - {name: note, action: write_note}
+      - {name: verify, action: check}
+processes:
+  - name: delivery
+    steps:
+      - {name: verify, method: verification}
+`
+
+func TestMethodComposedOfStepsRunsAsASubAgent(t *testing.T) {
+	ctx := context.Background()
+	e, _, _ := setup(t)
+	m, err := methodology.Parse([]byte(methodStepsYAML))
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := m.Compile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.Methodologies.(StaticMethodologies)["inspected"] = c
+	p, err := e.Start(ctx, StartRequest{Methodology: "inspected", Goal: "delivery", Intent: "inspect it", ProjectID: testProject})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, _ = e.Run(ctx, p.ID)
+	if p.Status != StatusWaiting || p.Pending.Kind != TaskAgent || p.Pending.Action != "delivery/verify" {
+		t.Fatalf("expected the method-capability step, got %s %+v %s", p.Status, p.Pending, p.Error)
+	}
+	sub, err := e.Store.Get(ctx, p.Pending.ChildProcessID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// the method composing its own steps runs as a sub-agent of its own name, towards a goal of its own name
+	if sub.Agent != "thorough_check" || sub.Goal != "thorough_check" {
+		t.Fatalf("sub-agent of a steps-composed method: %+v", sub)
+	}
+	if sub.Pending == nil || sub.Pending.Action != "thorough_check/note" {
+		t.Fatalf("the method's own first step: %+v", sub.Pending)
+	}
+	if _, err := e.Submit(ctx, sub.ID, []ItemInput{{Kind: "artifact", Type: "note"}}); err != nil {
+		t.Fatal(err)
+	}
+	e.schedule(sub.ID)
+	e.Drain()
+	sub, _ = e.Store.Get(ctx, sub.ID)
+	if sub.Pending == nil || sub.Pending.Action != "thorough_check/verify" {
+		t.Fatalf("the method's own second step: %+v %s", sub.Pending, sub.Status)
+	}
+	if _, err := e.Submit(ctx, sub.ID, []ItemInput{{Kind: "artifact", Type: "check"}}); err != nil {
+		t.Fatal(err)
+	}
+	e.schedule(sub.ID)
+	e.Drain()
+	sub, _ = e.Store.Get(ctx, sub.ID)
+	if sub.Status != StatusCompleted {
+		t.Fatalf("method sub-agent: %s %+v %s", sub.Status, sub.Pending, sub.Error)
+	}
+	p, _ = e.Store.Get(ctx, p.ID)
+	if p.Status != StatusCompleted {
+		t.Fatalf("outer process: %s %+v %s", p.Status, p.Pending, p.Error)
+	}
+}
+
 func findStep(steps []StepProgress, path string) StepProgress {
 	for _, s := range steps {
 		if s.Path == path {

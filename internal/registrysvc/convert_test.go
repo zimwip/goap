@@ -32,9 +32,12 @@ func TestProcessesRoundTripThroughPB(t *testing.T) {
 			{Name: "cap", Capability: "design", Roles: &methodology.Responsibilities{Responsible: "dev", Consulted: []string{"arch"}}},
 		}}}}
 	out := FromPB(ToPB(Record{Methodology: in}))
-	in.Methods = []methodology.Method{{Name: "m", For: "design", When: "true", Priority: 3, Guidance: "g", Checklist: []string{"c"},
-		Deliverables: []string{"D"}, References: []methodology.Reference{{Ref: "doc:X"}}, Agent: "a", Goal: "g",
-		Roles: &methodology.Responsibilities{Accountable: "lead", Informed: []string{"po"}}}}
+	in.Methods = []methodology.Method{
+		{Name: "m", For: "design", When: "true", Priority: 3, Guidance: "g", Checklist: []string{"c"},
+			Deliverables: []string{"D"}, References: []methodology.Reference{{Ref: "doc:X"}}, Agent: "a", Goal: "g",
+			Roles: &methodology.Responsibilities{Accountable: "lead", Informed: []string{"po"}}},
+		{Name: "inspect", For: "verification", Steps: []methodology.Step{{Name: "note", Action: "write_note"}, {Name: "verify", Action: "check"}}},
+	}
 	in.Roles = []methodology.Role{{Name: "dev", Description: "d"}, {Name: "lead"}}
 	in.AppliesTo = []string{"sdlc"}
 	in.On = []methodology.Subscription{{Event: "step.completed", Filter: `event.step.process == "x"`}}

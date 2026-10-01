@@ -720,8 +720,17 @@ func (m *Methodology) compile() (*Compiled, Issues) {
 	}
 	roles := m.compileRoles(add)
 	m.checkElementRoles(add, roles)
-	meths := m.compileMethods(add, agents, roles)
+	meths, methGen := m.compileMethods(add, actions, known, agents, roles)
+	// a method composing its own steps is run by an agent of its own name, merged in before processes compile so
+	// a process cannot reuse that name either (same collision rule as between two processes).
+	for _, ag := range methGen.agents {
+		agents[ag.Name] = ag
+	}
 	procs := m.compileProcesses(add, actions, known, agents, meths, roles)
+	procs.conditions = append(procs.conditions, methGen.conditions...)
+	procs.actions = append(procs.actions, methGen.actions...)
+	procs.agents = append(procs.agents, methGen.agents...)
+	procs.goals = append(procs.goals, methGen.goals...)
 	defs = append(defs, procs.conditions...)
 	for _, a := range procs.actions {
 		actions[a.Name] = a
