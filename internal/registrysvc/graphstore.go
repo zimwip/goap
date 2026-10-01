@@ -205,8 +205,11 @@ func patch(have, want map[string]any) map[string]any {
 }
 
 // versionEdits reconciles the nodes of a version with a definition: it creates or updates the header, creates, updates
-// and, for the elements that left the definition, marks removed the element nodes, and ties new elements to the header.
-func versionEdits(hkey, hType string, header map[string]any, els []defEl, old *domain.Node, oldChildren map[string]domain.Node) []graph.NodeEdit {
+// and, for the elements that left the definition, marks removed the element nodes, and ties new elements to the
+// header. subActivity names, by an element's own relative key ("<kind>/<name>"), the relative keys of the
+// sub-activities (steps) it composes (architecture plan "Activity concept"): each gets a sub_activity link to them,
+// in addition to the header's defines link to every element.
+func versionEdits(hkey, hType string, header map[string]any, els []defEl, old *domain.Node, oldChildren map[string]domain.Node, subActivity map[string][]string) []graph.NodeEdit {
 	var head graph.NodeEdit
 	if old != nil {
 		ref := old.Ref()
@@ -217,21 +220,22 @@ func versionEdits(hkey, hType string, header map[string]any, els []defEl, old *d
 	var edits []graph.NodeEdit
 	want := map[string]bool{}
 	for _, e := range els {
-		k := hkey + "/" + e.kind + "/" + e.name
+		rel := e.kind + "/" + e.name
+		k := hkey + "/" + rel
 		want[k] = true
-		nodeType := ""
-		for _, dk := range defKinds {
-			if dk.kind == e.kind {
-				nodeType = dk.nodeType
-			}
+		var links []graph.LinkEdit
+		for _, child := range subActivity[rel] {
+			links = append(links, graph.LinkEdit{Type: linkSubActivity, ToKey: hkey + "/" + child})
 		}
 		if n, ok := oldChildren[k]; ok {
-			if p := patch(n.Properties, e.props); p != nil {
-				edits = append(edits, update(n, p))
+			p := patch(n.Properties, e.props)
+			if p != nil || len(links) > 0 {
+				ref := n.Ref()
+				edits = append(edits, graph.NodeEdit{Pre: &ref, Props: p, Links: links})
 			}
 			continue
 		}
-		edits = append(edits, graph.NodeEdit{Key: k, Type: nodeType, Props: e.props})
+		edits = append(edits, graph.NodeEdit{Key: k, Type: nodeTypeOf(e.kind), Props: e.props, Links: links})
 		head.Links = append(head.Links, graph.LinkEdit{Type: linkDefines, ToKey: k})
 	}
 	for _, k := range slices.Sorted(maps.Keys(oldChildren)) {
@@ -321,6 +325,8 @@ func (s *GraphStore) Save(ctx context.Context, r Record) error {
 		if err != nil {
 			return nil, err
 		}
+		stepEls, subActivity := stepChildren(els)
+		els = append(els, stepEls...)
 		props := headerProps(header, r.Status, created, r.UpdatedAt, r.PublishedAt, r.UpdatedBy)
 		var oldNode *domain.Node
 		var oldChildren map[string]domain.Node
@@ -328,7 +334,7 @@ func (s *GraphStore) Save(ctx context.Context, r Record) error {
 			n := old.node
 			oldNode, oldChildren = &n, old.children
 		}
-		return versionEdits(MethodologyVersionKey(m.Name, m.Version), TypeMethodologyVersion, props, els, oldNode, oldChildren), nil
+		return versionEdits(MethodologyVersionKey(m.Name, m.Version), TypeMethodologyVersion, props, els, oldNode, oldChildren, subActivity), nil
 	})
 }
 

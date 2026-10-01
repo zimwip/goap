@@ -24,6 +24,13 @@ const (
 	kindProcess   = "process"
 	kindMethod    = "method"
 	kindRole      = "role"
+	// kindStep and kindMethodStep are the steps of a process/method, materialized as their own nodes (one per
+	// step and sub-step, architecture plan "Activity concept"): unlike the other kinds, they fill no top-level
+	// collection field of their own (field ""), since they are authored inline within their owning process/method
+	// element's own JSON (steps.go builds them from there) and ignored on decode (nothing round-trips through
+	// them back into the Methodology struct) - they exist purely to give each step a real, versioned graph identity.
+	kindStep       = "step"
+	kindMethodStep = "methodStep"
 )
 
 // defKinds lists the element kinds with the JSON field of the collection they belong to.
@@ -35,7 +42,22 @@ var defKinds = []struct{ kind, field, nodeType string }{
 	{kindProcess, "processes", "methodology@Process"},
 	{kindMethod, "methods", "methodology@Method"},
 	{kindRole, "roles", "methodology@Role"},
+	{kindStep, "", "methodology@Step"},
+	{kindMethodStep, "", "methodology@MethodStep"},
 }
+
+// nodeTypeOf returns the graph node type of an element kind ("" when unknown).
+func nodeTypeOf(kind string) string {
+	for _, dk := range defKinds {
+		if dk.kind == kind {
+			return dk.nodeType
+		}
+	}
+	return ""
+}
+
+// linkSubActivity ties an Activity (a process, method or step) to the sub-activities (steps) it is composed from.
+const linkSubActivity = "methodology@sub_activity"
 
 // defEl is an element of a definition.
 type defEl struct {
