@@ -44,7 +44,9 @@ nodeTypes:
   # of the roles declared by the project's applicable methodologies. This is how the engine resolves "what
   # can this user do in this project": walk the user's org chain and the project's chain, union the roles of
   # the Assignments found, and check the RACI role a step requires against that set.
-  - {name: Assignment, editor: assignment, description: "Roles an organisational unit or user locally holds on a project", properties: [roles, description]}
+  # assigns_project is optional: an Assignment naming none grants one of the built-in platform roles (ADR
+  # 0046, e.g. "reader") to the org unit everywhere, independent of any project's methodologies.
+  - {name: Assignment, editor: assignment, description: "Roles an organisational unit or user locally holds on a project, or platform-wide when it names no project", properties: [roles, description]}
 linkTypes:
   # child -> parent: outgoing links belong to the source version, so reorganising a unit only versions that unit
   - {name: part_of, from: OrgUnit, to: OrgUnit}

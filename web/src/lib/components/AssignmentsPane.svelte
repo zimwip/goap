@@ -10,9 +10,12 @@
   import { confirmDialog } from '../shell/confirmState.svelte';
   import { openTab } from '../shell/tabs.svelte';
   import { ORG_UNIT_TYPE, USER_TYPE, PROJECT_UNIT_TYPE, ASSIGNMENT_TYPE, ASSIGNS_ORG, ASSIGNS_PROJECT } from '../orgTypes';
-  import { projectRoles, applicableMethodologies, type ProjectRole } from '../projectRoles';
+  import { projectRoles, applicableMethodologies, PLATFORM_ROLES, platformAssignmentKey, type ProjectRole } from '../projectRoles';
 
   const NS = 'organisation';
+  // sentinel project selection meaning "platform-wide, no project" (ADR 0046): a platform role (e.g. reader)
+  // holds everywhere, independent of a project's methodologies, so no assigns_project link is written.
+  const PLATFORM = '__platform__';
 
   let {
     head,
@@ -68,12 +71,14 @@
   let fOrg = $state(fixedOrg ?? '');
   let fProject = $state(fixedProject ?? '');
   let fRoles = $state<string[]>([]);
-  // the roles the chosen project needs (ADR 0043): an assignment grants some of them
+  // the roles the chosen project needs (ADR 0043): an assignment grants some of them. PLATFORM: no project,
+  // the roles offered are the built-in platform roles instead (ADR 0046).
   const project = $derived(fixedProject ?? fProject);
+  const isPlatform = $derived(project === PLATFORM);
   let available = $state<ProjectRole[]>([]);
   $effect(() => {
     const p = project;
-    if (!p) {
+    if (!p || p === PLATFORM) {
       available = [];
       return;
     }
@@ -85,8 +90,10 @@
       cancelled = true;
     };
   });
-  /** roles of the assignment no applicable methodology declares (any more) */
-  const stray = $derived(fRoles.filter((r) => !available.some((a) => a.name === r)));
+  /** the roles offered by the current selection: the project's, or the platform's when none is picked */
+  const offered = $derived(isPlatform ? PLATFORM_ROLES : available);
+  /** roles of the assignment the current selection no longer declares */
+  const stray = $derived(fRoles.filter((r) => !offered.some((a) => a.name === r)));
 
   function toggleRole(name: string, on: boolean) {
     fRoles = on ? [...fRoles, name] : fRoles.filter((r) => r !== name);
@@ -109,7 +116,7 @@
   function startEdit(r: Row) {
     editing = r;
     fOrg = r.org;
-    fProject = r.project;
+    fProject = r.project || PLATFORM;
     fRoles = [...r.roles];
     fDescription = r.description;
     error = '';
@@ -120,12 +127,13 @@
     const org = fixedOrg ?? fOrg;
     const project = fixedProject ?? fProject;
     if (!org || !project) {
-      error = 'Pick an organisation unit and a project.';
+      error = 'Pick an organisation unit, and a project (or platform-wide).';
       return;
     }
+    const platform = project === PLATFORM;
     const orgNode = orgNodes.find((n) => n.key === org);
-    const projectNode = projectNodes.find((n) => n.key === project);
-    if (!orgNode || !projectNode) {
+    const projectNode = platform ? undefined : projectNodes.find((n) => n.key === project);
+    if (!orgNode || (!platform && !projectNode)) {
       error = 'Unknown organisation unit or project.';
       return;
     }
@@ -137,18 +145,15 @@
     saving = true;
     error = '';
     try {
-      const key = `ASG:${org}/${project}`;
+      const key = platform ? platformAssignmentKey(org) : `ASG:${org}/${project}`;
       const description = fDescription.trim();
       const existing = editing?.node ?? findNode(head, NS, ASSIGNMENT_TYPE, key);
       const props: Struct = { roles: roles.length ? roles : null, description: description || null };
-      const edit = existing
-        ? updateNodeItem(existing, props)
-        : createNodeItem(key, ASSIGNMENT_TYPE, { roles, ...(description ? { description } : {}) }, [
-            { type: ASSIGNS_ORG, to: refOf(orgNode) },
-            { type: ASSIGNS_PROJECT, to: refOf(projectNode) },
-          ]);
-      await applyOnMain(NS, `Assignment ${org} / ${project}`, `${existing ? 'Update' : 'Create'} the assignment of ${org} on ${project}`, head.baselineId, [edit]);
-      notify(`Assignment saved: ${org} on ${project}.`, 'ok');
+      const links = platform ? [{ type: ASSIGNS_ORG, to: refOf(orgNode) }] : [{ type: ASSIGNS_ORG, to: refOf(orgNode) }, { type: ASSIGNS_PROJECT, to: refOf(projectNode!) }];
+      const edit = existing ? updateNodeItem(existing, props) : createNodeItem(key, ASSIGNMENT_TYPE, { roles, ...(description ? { description } : {}) }, links);
+      const target = platform ? 'the platform' : project;
+      await applyOnMain(NS, `Assignment ${org} / ${target}`, `${existing ? 'Update' : 'Create'} the assignment of ${org} on ${target}`, head.baselineId, [edit]);
+      notify(`Assignment saved: ${org} on ${target}.`, 'ok');
       adding = false;
       onChanged();
     } catch (e) {
@@ -199,7 +204,13 @@
             >
           {/if}
           {#if !fixedProject}
-            <td><button type="button" class="link mono" onclick={() => openTab({ kind: 'project', params: { key: r.project } })}>{label(r.project, projectNodes)}</button></td>
+            <td>
+              {#if r.project}
+                <button type="button" class="link mono" onclick={() => openTab({ kind: 'project', params: { key: r.project } })}>{label(r.project, projectNodes)}</button>
+              {:else}
+                <span class="muted">Platform-wide</span>
+              {/if}
+            </td>
           {/if}
           <td>{r.roles.join(', ') || '—'}</td>
           <td class="acts">
@@ -237,6 +248,7 @@
           <label for="asg-proj">Project</label>
           <select id="asg-proj" bind:value={fProject} disabled={!!editing}>
             <option value="">Choose…</option>
+            <option value={PLATFORM}>— Platform-wide (no project) —</option>
             {#each projectNodes as n (n.id)}<option value={n.key}>{nodeTitle(n) || n.key}</option>{/each}
           </select>
         </div>
@@ -244,11 +256,11 @@
       <fieldset class="field roles">
         <legend>Roles</legend>
         {#if !project}
-          <span class="muted">Pick a project first.</span>
-        {:else if !available.length && !stray.length}
-          <span class="muted">{applicableMethodologies(head, project).length ? 'The methodologies of this project declare no role.' : 'This project names no methodology: choose its applicable methodologies on its page first.'}</span>
+          <span class="muted">Pick a project, or platform-wide, first.</span>
+        {:else if !offered.length && !stray.length}
+          <span class="muted">{applicableMethodologies(head, project).length ? 'The methodologies of this project declare no role.' : 'This project names no methodology: choose its applicable methodologies on its page first, or assign a platform role instead.'}</span>
         {/if}
-        {#each available as r (r.name)}
+        {#each offered as r (r.name)}
           <label class="check" title={`${r.description}${r.description ? ' — ' : ''}${r.methodologies.join(', ')}`}>
             <input type="checkbox" checked={fRoles.includes(r.name)} onchange={(e) => toggleRole(r.name, e.currentTarget.checked)} />
             {r.name}

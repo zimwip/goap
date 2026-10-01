@@ -57,6 +57,9 @@ func (p Policy) params() []any { return []any{p.Rule, p.Resource, p.Action, p.Ef
 // triggers, organisation, policies, adapters) is administered by administrators.
 var DefaultPolicies = []Policy{
 	{Rule: `hasRole(r.sub, "admin")`, Resource: "*", Action: "*", Effect: "allow"},
+	// a platform-wide reader (ADR 0046, granted by an Assignment naming no project) reads everything, past
+	// the organization/project scoping below
+	{Rule: `hasRole(r.sub, "reader")`, Resource: "*", Action: "read", Effect: "allow"},
 	// read access within the organization of the resource (multi-tenant isolation), or on a project one works on
 	{Rule: `!isAnonymous(r.sub) && (r.obj.Org == "" || r.obj.Org == r.sub.Org || onProject(r.sub))`, Resource: "*", Action: "read", Effect: "allow"},
 	// processes, data objects, lifecycle transitions (ADR 0014) and tools (ADR 0019) of a project: its members
