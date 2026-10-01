@@ -27,8 +27,9 @@ import (
 type Handler struct {
 	Graph  *graph.Graph
 	Events engine.Publisher
-	// Authz gates object creation (CreateObject), resource "object". Nil grants everything. Ordinary
-	// change impacts are not gated by it.
+	// Authz gates object creation (CreateObject, resource "object") and direct-write baseline creation
+	// (CreateBaseline, resource "baseline", always refused for the organisation namespace). Nil grants
+	// everything. Ordinary change impacts are not gated by it.
 	Authz authz.Authorizer
 	// Floor gates changes to User and Policy nodes (resource "policy", action "write"). It must not depend
 	// on the policies themselves, so that no policy can lock the administrators out; nil falls back to Authz.
@@ -124,6 +125,17 @@ func (h *Handler) CreateLink(ctx context.Context, r *connect.Request[graphv1.Cre
 }
 
 func (h *Handler) CreateBaseline(ctx context.Context, r *connect.Request[graphv1.CreateBaselineRequest]) (*connect.Response[graphv1.CreateBaselineResponse], error) {
+	ctx = h.Identity.Context(ctx, r.Header())
+	ns := domain.NamespaceOf(r.Msg.Namespace)
+	if ns == mcp.NamespaceOrganisation {
+		return nil, connect.NewError(connect.CodeFailedPrecondition,
+			fmt.Errorf("namespace %s is access control: its branch head only advances through an applied change", ns))
+	}
+	who := authz.From(ctx)
+	if err := authz.Check(ctx, h.Authz, authz.Request{Subject: who, Action: "create",
+		Resource: authz.Resource{Type: "baseline", Namespace: ns, Org: who.Org, Owner: who.Subject, ProjectID: who.Project}}); err != nil {
+		return nil, rpcerr.ToConnect(err)
+	}
 	var b domain.Baseline
 	var err error
 	if r.Msg.AllLatest {

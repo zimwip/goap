@@ -3,6 +3,7 @@
   // Organisation tool's OrgUnit hierarchy (child --project_part_of--> parent). Projects are edited through
   // changes like any node. Right-clicking a project offers "New assignment" (ADR 0039: Assignment is
   // reachable from Organisation, Project or User, via an action or a context menu).
+  import { tick } from 'svelte';
   import Icon from '../../shell/Icon.svelte';
   import TreeRow from '../TreeRow.svelte';
   import { toggle, isOpen } from './expanded.svelte';
@@ -11,7 +12,7 @@
   import { openContextMenu } from '../../shell/contextMenuState.svelte';
   import { notify } from '../../shell/workbench.svelte';
   import { graph, errorMessage, nodeTitle, type GraphNode, type Link } from '../../api';
-  import { PROJECT_UNIT_TYPE, PROJECT_PART_OF } from '../../orgTypes';
+  import { PROJECT_UNIT_TYPE, PROJECT_PART_OF, DEFAULT_PROJECT } from '../../orgTypes';
 
   const NS = 'organisation';
 
@@ -71,6 +72,22 @@
     return nodeTitle(n) || n.key || '';
   }
 
+  /** a node's own id and every id under it, to keep "Move to…" from creating a cycle. */
+  function subtreeOf(n: GraphNode): Set<string> {
+    const out = new Set<string>([n.id ?? '']);
+    const stack = [n.id ?? ''];
+    while (stack.length) {
+      const id = stack.pop()!;
+      for (const k of children.get(id) ?? []) {
+        if (!out.has(k.id ?? '')) {
+          out.add(k.id ?? '');
+          stack.push(k.id ?? '');
+        }
+      }
+    }
+    return out;
+  }
+
   function open(n: GraphNode, pin = false, openAssignment = false) {
     openTab({ kind: 'project', params: { key: n.key ?? '', ...(openAssignment ? { pane: 'assignments', newAssignment: '1' } : {}) } }, { pin });
   }
@@ -118,6 +135,66 @@
       saving = false;
     }
   }
+
+  async function createChild(n: GraphNode) {
+    adding = true;
+    moving = undefined;
+    parent = n.id ?? '';
+    await tick();
+    document.getElementById('proj-new-name')?.focus();
+  }
+
+  let moving = $state<GraphNode>();
+  let moveTarget = $state('');
+  let movingBusy = $state(false);
+
+  /** projects `n` can move under: not itself, and not one of its own sub-projects (would create a cycle). */
+  const moveCandidates = $derived.by(() => {
+    if (!moving) return [];
+    const excluded = subtreeOf(moving);
+    return nodes.filter((n) => !excluded.has(n.id ?? '')).sort((a, b) => (a.key ?? '').localeCompare(b.key ?? ''));
+  });
+
+  function startMove(n: GraphNode) {
+    moving = n;
+    moveTarget = '';
+    adding = false;
+  }
+
+  async function move() {
+    if (!moving || !moveTarget) return;
+    const target = nodes.find((n) => n.id === moveTarget);
+    const latest = baselines.items[baselines.items.length - 1];
+    if (!target || !latest?.id) return;
+    movingBusy = true;
+    error = '';
+    try {
+      const current = links.find((l) => l.type === PROJECT_PART_OF && l.from?.id === moving!.id && l.to?.id !== moving!.id);
+      await graph.commitEdits({
+        title: `Move ${moving.key}`,
+        intent: `Move ${moving.key} under ${target.key}`,
+        baselineId: latest.id,
+        namespace: NS,
+        edits: [
+          {
+            pre: { id: moving.id, version: moving.version },
+            rationale: `Move ${moving.key} under ${target.key}`,
+            ...(current?.id ? { removeLinks: [current.id] } : {}),
+            links: [{ type: PROJECT_PART_OF, to: { id: target.id, version: target.version } }],
+          },
+        ],
+      });
+      notify(`${moving.key} moved under ${target.key}.`, 'ok');
+      moving = undefined;
+      moveTarget = '';
+      await refreshBaselines(NS);
+      await load();
+    } catch (e) {
+      error = errorMessage(e);
+    } finally {
+      movingBusy = false;
+    }
+  }
 </script>
 
 {#snippet branch(n: GraphNode, depth: number)}
@@ -135,6 +212,8 @@
     oncontextmenu={(e) =>
       openContextMenu(e, [
         { label: 'Open', icon: 'diff', run: () => open(n, true) },
+        { label: 'New sub-project…', icon: 'plus', run: () => createChild(n) },
+        ...(n.key !== DEFAULT_PROJECT ? [{ label: 'Move to…', icon: 'folder' as const, run: () => startMove(n) }] : []),
         { label: 'New assignment', icon: 'plus', run: () => open(n, true, true) },
       ])}
   />
@@ -159,7 +238,7 @@
         void create();
       }}
     >
-      <input placeholder="Name" bind:value={name} required />
+      <input id="proj-new-name" placeholder="Name" bind:value={name} required />
       <select bind:value={kind} aria-label="Kind">
         {#each ['program', 'project', 'subproject'] as k (k)}<option value={k}>{k}</option>{/each}
       </select>
@@ -169,6 +248,19 @@
       </select>
       <button type="submit" class="small" disabled={saving || !name.trim()}>Create</button>
     </form>
+  {/if}
+  {#if moving}
+    <div class="form move">
+      <span class="hint">Move <code>{moving.key}</code> to…</span>
+      <select bind:value={moveTarget} disabled={movingBusy} aria-label="New parent project">
+        <option value="">Pick a project…</option>
+        {#each moveCandidates as o (o.id)}<option value={o.id}>{label(o)}</option>{/each}
+      </select>
+      <div class="row">
+        <button type="button" class="small primary" disabled={!moveTarget || movingBusy} onclick={move}>Move</button>
+        <button type="button" class="small" disabled={movingBusy} onclick={() => (moving = undefined)}>Cancel</button>
+      </div>
+    </div>
   {/if}
   {#if error}<div class="alert small">{error}</div>{/if}
   <div role="tree" aria-label="Projects">
@@ -202,5 +294,11 @@
   .alert.small {
     margin: 0.3rem 0.5rem;
     font-size: 0.88em;
+  }
+  .form.move {
+    background: var(--panel-alt, #8881);
+    border-radius: 4px;
+    margin: 0 0.5rem 0.5rem;
+    padding: 0.4rem 0.5rem;
   }
 </style>

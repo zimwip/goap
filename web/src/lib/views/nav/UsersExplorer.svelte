@@ -10,11 +10,12 @@
   import { openContextMenu } from '../../shell/contextMenuState.svelte';
   import { notify } from '../../shell/workbench.svelte';
   import { graph, errorMessage, nodeTitle, type GraphNode } from '../../api';
-  import { USER_TYPE } from '../../orgTypes';
+  import { ORG_UNIT_TYPE, USER_TYPE, MEMBER_OF, newUserUnit } from '../../orgTypes';
 
   const NS = 'organisation';
 
   let nodes = $state<GraphNode[]>([]);
+  let units = $state<GraphNode[]>([]);
   let loading = $state(false);
   let error = $state('');
   let adding = $state(false);
@@ -28,9 +29,11 @@
       const latest = baselines.items[baselines.items.length - 1];
       if (!latest?.id) {
         nodes = [];
+        units = [];
       } else {
         const r = await graph.getBaselineGraph(latest.id);
         nodes = (r.nodes ?? []).filter((n) => n.type === USER_TYPE).sort((a, b) => (a.key ?? '').localeCompare(b.key ?? ''));
+        units = (r.nodes ?? []).filter((n) => n.type === ORG_UNIT_TYPE);
       }
       error = '';
     } catch (e) {
@@ -60,12 +63,14 @@
     error = '';
     try {
       const key = `USR:${s}`;
+      const unit = units.find((n) => n.key === newUserUnit(units));
+      if (!unit?.id) throw new Error('no organisation unit to put the user in');
       await graph.commitEdits({
         title: `User ${s}`,
         intent: `Pre-provision the user ${s}`,
         baselineId: latest.id,
         namespace: NS,
-        edits: [{ key, type: USER_TYPE, props: { subject: s }, rationale: `Pre-provision the user ${s}` }],
+        edits: [{ key, type: USER_TYPE, props: { subject: s }, links: [{ type: MEMBER_OF, to: { id: unit.id, version: unit.version } }], rationale: `Pre-provision the user ${s}` }],
       });
       notify(`User ${s} created.`, 'ok');
       subject = '';

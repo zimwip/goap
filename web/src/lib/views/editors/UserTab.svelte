@@ -10,6 +10,7 @@
   import { errorMessage, logout } from '../../api';
   import { headGraph, findNode, applyOnMain, updateNodeItem, currentLink, moveNodeItem, refOf, type HeadGraph } from '../../graphEdit';
   import { notify, provideActions } from '../../shell/workbench.svelte';
+  import { openTab } from '../../shell/tabs.svelte';
   import { USER_TYPE, ORG_UNIT_TYPE, MEMBER_OF } from '../../orgTypes';
   import { session, me, hasAnyRole } from '../../stores/session.svelte';
   import { confirmDialog } from '../../shell/confirmState.svelte';
@@ -159,10 +160,10 @@
                 <dt>Subject</dt><dd><code>{user.props?.['subject'] ?? ''}</code></dd>
                 {#if user.props?.['email']}<dt>Email</dt><dd>{user.props['email']}</dd>{/if}
                 {#if user.props?.['locale']}<dt>Locale</dt><dd>{user.props['locale']}</dd>{/if}
-                <dt>Organisation</dt>
+                <dt>Member of</dt>
                 <dd>
                   {#if !moving}
-                    <code>{org?.props?.['name'] ?? org?.key ?? 'none'}</code>
+                    {#if org}<button type="button" class="link mono" onclick={() => openTab({ kind: 'unit', params: { key: org.key ?? '' } })}>{String(org.props?.['name'] ?? org.key)}</button>{:else}<span class="muted">none</span>{/if}
                     <button type="button" class="small ghost" onclick={startMove}>Move to…</button>
                   {:else}
                     <select bind:value={fOrg} disabled={movingBusy}>
