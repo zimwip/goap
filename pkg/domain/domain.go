@@ -189,7 +189,12 @@ type Branch struct {
 	ForkBaseline BaselineID `json:"forkBaseline"`
 	Head         BaselineID `json:"head,omitempty"`   // latest baseline of the branch
 	Origin       string     `json:"origin,omitempty"` // change / option that opened it
-	Status       string     `json:"status"`
-	CreatedAt    time.Time  `json:"createdAt"`
-	Description  string     `json:"description,omitempty"`
+	// Intent says why the branch exists relative to its parent (derive/revise/refine, same vocabulary as an
+	// Option's, architecture plan "exploration branches"): derive, a new independent line of work (a sub-change
+	// of a sub-activity, the common case); revise, a correction of what the parent already has; refine, a
+	// sub-branch narrowing an already-open sibling's work. "" on a branch opened before this existed.
+	Intent      OptionIntent `json:"intent,omitempty"`
+	Status      string       `json:"status"`
+	CreatedAt   time.Time    `json:"createdAt"`
+	Description string       `json:"description,omitempty"`
 }

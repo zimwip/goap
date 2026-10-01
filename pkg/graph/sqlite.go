@@ -151,12 +151,12 @@ func (t *sqliteTx) Versions(ctx context.Context, id domain.NodeID) ([]domain.Nod
 // there, or joined (ADR 0032).
 const sqliteOnBranch = `(v.branch = ? OR EXISTS (SELECT 1 FROM node_branch j WHERE j.node_id = v.node_id AND j.version = v.version AND j.branch = ?))`
 
-const sqliteBranchCols = `namespace, name, parent, coalesce(fork_baseline, ''), coalesce(head_baseline, ''), origin, status, created_at, description`
+const sqliteBranchCols = `namespace, name, parent, coalesce(fork_baseline, ''), coalesce(head_baseline, ''), origin, status, created_at, description, intent`
 
 func sqliteScanBranch(row scanner) (domain.Branch, error) {
 	var b domain.Branch
 	var created string
-	err := row.Scan(&b.Namespace, &b.Name, &b.Parent, (*string)(&b.ForkBaseline), (*string)(&b.Head), &b.Origin, &b.Status, &created, &b.Description)
+	err := row.Scan(&b.Namespace, &b.Name, &b.Parent, (*string)(&b.ForkBaseline), (*string)(&b.Head), &b.Origin, &b.Status, &created, &b.Description, (*string)(&b.Intent))
 	b.CreatedAt = tsParse(created)
 	return b, err
 }
@@ -185,9 +185,9 @@ func (t *sqliteTx) Branches(ctx context.Context, namespace string) ([]domain.Bra
 
 func (t *sqliteTx) PutBranch(ctx context.Context, b domain.Branch) error {
 	namespace := domain.NamespaceOf(b.Namespace)
-	_, err := t.tx.ExecContext(ctx, `INSERT INTO branch (namespace, name, parent, fork_baseline, head_baseline, origin, status, created_at, description) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+	_, err := t.tx.ExecContext(ctx, `INSERT INTO branch (namespace, name, parent, fork_baseline, head_baseline, origin, status, created_at, description, intent) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT (namespace, name) DO UPDATE SET status = excluded.status, head_baseline = excluded.head_baseline, description = excluded.description`,
-		namespace, b.Name, b.Parent, nullUUID(string(b.ForkBaseline)), nullUUID(string(b.Head)), b.Origin, b.Status, tsText(b.CreatedAt), b.Description)
+		namespace, b.Name, b.Parent, nullUUID(string(b.ForkBaseline)), nullUUID(string(b.Head)), b.Origin, b.Status, tsText(b.CreatedAt), b.Description, string(b.Intent))
 	return sqliteErr(err, "branch "+b.Name)
 }
 

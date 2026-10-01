@@ -256,7 +256,7 @@ func (g *Graph) ensureOwnBranch(ctx context.Context, tx Tx, c domain.Change) (do
 		return c, parent, err
 	}
 	own := domain.Branch{Name: changeBranchName(c.ID), Namespace: c.Namespace, Parent: parent.Name, ForkBaseline: fork.ID, Head: fork.ID,
-		Origin: domain.ChangeBranchOrigin(c.ID), Status: domain.BranchOpen, CreatedAt: g.now()}
+		Origin: domain.ChangeBranchOrigin(c.ID), Intent: domain.IntentDerive, Status: domain.BranchOpen, CreatedAt: g.now()}
 	if err := tx.PutBranch(ctx, own); err != nil {
 		return c, own, err
 	}
