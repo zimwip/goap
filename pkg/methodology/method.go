@@ -34,20 +34,21 @@ type Method struct {
 	// Roles involved when the method is used (replacing those of the step, the method being more precise).
 	Roles *Responsibilities `yaml:"roles,omitempty" json:"roles,omitempty"`
 
-	// Agent is the actor: an agent of the methodology; Goal the goal it reaches (default: its only goal). Exactly
-	// one of Agent or Steps is set.
+	// Agent is the actor: an agent of the methodology that carries the method out. Alone, it reaches Goal (default: its
+	// only goal) with its own actions. With Steps, it performs the activities that compose the method, which it has
+	// access to (and the tools their actions declare): the method says how and with what, the agent executes.
 	Agent string `yaml:"agent,omitempty" json:"agent,omitempty"`
 	Goal  string `yaml:"goal,omitempty" json:"goal,omitempty"`
 	// Steps composes the method from its own steps and sub-steps, done by actions, agents or nested processes -
 	// the same shape and compilation as a Process's (not a capability dispatch: a method step may not itself name
 	// a capability, to avoid methods resolving each other circularly while methods are still being compiled).
-	// Compiling it generates an agent and a goal of the method's own name, exactly like a Process. Mutually
-	// exclusive with Agent/Goal.
+	// Compiling it generates a goal of the method's own name, and an agent of that name unless Agent names the actor,
+	// which is then given those steps' actions and that goal. Goal applies to an agent alone.
 	Steps []Step `yaml:"steps,omitempty" json:"steps,omitempty"`
 }
 
-// ActorAgent is the agent that carries out the method: the one it names, or - composing its own Steps - the agent
-// generated for it, of its own name.
+// ActorAgent is the agent that carries out the method: the one it names, or - composing its own Steps without
+// naming one - the agent generated for it, of its own name.
 func (m Method) ActorAgent() string {
 	if m.Agent != "" {
 		return m.Agent
@@ -73,7 +74,7 @@ type compiledMethods struct {
 // would need every method already compiled to resolve - methods are not compiled yet while this runs.
 func (m *Methodology) compileMethods(add func(path, format string, args ...any), actions map[string]Action, known map[string]bool, agents map[string]Agent, roles map[string]bool) (out compiledMethods, gen compiledProcesses) {
 	out = compiledMethods{goals: map[string]Goal{}}
-	gen = compiledProcesses{criteria: map[string]stepCriteria{}}
+	gen = compiledProcesses{criteria: map[string]stepCriteria{}, extend: map[string]agentExt{}}
 	w := &stepWalker{m: m, add: add, actions: actions, known: known, agents: agents, methods: compiledMethods{}, roles: roles, root: &gen, done: map[string]*processCriteria{}}
 	seen := map[string]bool{}
 	for i, me := range m.Methods {
@@ -111,11 +112,21 @@ func (m *Methodology) compileMethods(add func(path, format string, args ...any),
 			}
 		}
 		switch {
-		case hasAgent && hasSteps:
-			add(path, "a method names its actor (agent) or composes its own steps, not both")
 		case !hasAgent && !hasSteps:
 			add(path+".agent", "a method names its actor: an agent of the methodology, or declares its own steps")
 		case hasSteps:
+			if me.Goal != "" {
+				add(path+".goal", "goal applies to a method naming an agent alone: the goal of a method composing steps is generated")
+			}
+			var actor *Agent
+			if hasAgent {
+				ag, ok := agents[me.Agent]
+				if !ok || ag.process != "" {
+					add(path+".agent", "a method names its actor: an agent of the methodology (unknown %q)", me.Agent)
+					continue
+				}
+				actor = &ag
+			}
 			sub := *w
 			sub.out = &compiledProcesses{}
 			done := sub.walk(me.Steps, path+".steps", me.Name, nil)
@@ -130,8 +141,15 @@ func (m *Methodology) compileMethods(add func(path, format string, args ...any),
 			}
 			goal := Goal{Name: me.Name, Description: me.Description, Pre: done}
 			gen.goals = append(gen.goals, goal)
-			gen.agents = append(gen.agents, Agent{Name: me.Name, Description: me.Description, Planner: PlannerGOAP,
-				Actions: own, Goals: []string{me.Name}, process: me.Name})
+			if actor != nil {
+				// the named agent performs the method: it gets the activities that compose it and their goal
+				x := gen.extend[actor.Name]
+				x.actions, x.goals = append(x.actions, own...), append(x.goals, me.Name)
+				gen.extend[actor.Name] = x
+			} else {
+				gen.agents = append(gen.agents, Agent{Name: me.Name, Description: me.Description, Planner: PlannerGOAP,
+					Actions: own, Goals: []string{me.Name}, process: me.Name})
+			}
 			out.goals[me.Name] = goal
 		default: // hasAgent
 			ag, ok := agents[me.Agent]

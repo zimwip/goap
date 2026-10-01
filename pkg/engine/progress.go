@@ -110,11 +110,6 @@ func stepProgress(p *Process, s methodology.StepInfo) StepProgress {
 		if sp.Target == "" {
 			sp.Target = strings.Join(s.Actions, " | ")
 		}
-	case methodology.MethodAgent:
-		sp.Target = s.Agent
-		if s.Goal != "" {
-			sp.Target += " → " + s.Goal
-		}
 	case methodology.MethodProcess:
 		sp.Target = s.Process
 	case methodology.MethodCapability:

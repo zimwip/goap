@@ -1,6 +1,7 @@
 package methodology
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -58,8 +59,10 @@ processes:
 // silently wrong).
 func TestMethodStepsValidation(t *testing.T) {
 	cases := map[string]struct{ yaml, want string }{
-		"both agent and steps": {`
-methods: [{name: m, for: f, agent: worker, steps: [{name: s, action: do_a}]}]`, "not both"},
+		"goal with steps": {`
+methods: [{name: m, for: f, agent: worker, goal: all, steps: [{name: s, action: do_a}]}]`, "goal applies"},
+		"unknown agent with steps": {`
+methods: [{name: m, for: f, agent: nobody, steps: [{name: s, action: do_a}]}]`, "unknown"},
 		"neither agent nor steps": {`
 methods: [{name: m, for: f}]`, "names its actor"},
 		"name collides with an agent": {`
@@ -83,5 +86,40 @@ methods:
 				t.Fatalf("want %q in %v", tc.want, issues)
 			}
 		})
+	}
+}
+
+// The agent performs the method: it gets the activities that compose it and the goal they reach, and is the actor.
+func TestAgentPerformsAMethodComposingSteps(t *testing.T) {
+	c, issues := compileProcess(t, `
+methods:
+  - name: assemble
+    for: assembling
+    agent: worker
+    steps:
+      - {name: first, action: do_a}
+      - {name: second, action: do_b}
+processes:
+  - name: flow
+    steps:
+      - {name: finish, method: assembling}
+`)
+	if len(issues) > 0 {
+		t.Fatal(issues)
+	}
+	me, _ := c.MethodByName("assemble")
+	if me.ActorAgent() != "worker" || c.MethodGoal("assemble") != "assemble" {
+		t.Fatalf("actor %s goal %s", me.ActorAgent(), c.MethodGoal("assemble"))
+	}
+	w, _ := c.Agent("worker")
+	if !slices.Contains(w.Goals, "assemble") || !slices.Contains(w.Actions, "assemble/first") || !slices.Contains(w.Actions, "do_c") {
+		t.Fatalf("worker: %+v", w)
+	}
+	if _, ok := c.Agent("assemble"); ok {
+		t.Fatal("no agent is generated when the method names its actor")
+	}
+	ls, _ := c.CheckLevels("assemble")
+	if len(ls) != 1 || ls[0].Agent != "worker" || ls[0].Goal != "assemble" || len(ls[0].Steps) != 2 {
+		t.Fatalf("levels: %+v", ls)
 	}
 }

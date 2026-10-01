@@ -95,6 +95,24 @@ func (h *Handler) GetProcessGraph(ctx context.Context, r *connect.Request[regist
 	return connect.NewResponse(&registryv1.GetProcessGraphResponse{Graph: ProcessGraphToPB(g)}), nil
 }
 
+// CheckLevels checks the coherence of a process or method, level by level, as edited.
+func (h *Handler) CheckLevels(ctx context.Context, r *connect.Request[registryv1.CheckLevelsRequest]) (*connect.Response[registryv1.CheckLevelsResponse], error) {
+	m := FromPB(r.Msg.Methodology)
+	c, err := m.Compile()
+	if err != nil {
+		var issues methodology.Issues
+		if !errors.As(err, &issues) {
+			issues = methodology.Issues{{Message: err.Error()}}
+		}
+		return connect.NewResponse(&registryv1.CheckLevelsResponse{Issues: IssuesToPB(issues)}), nil
+	}
+	ls, ok := c.CheckLevels(r.Msg.Root)
+	if !ok {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("no process or method with steps %q in %s", r.Msg.Root, m.Name))
+	}
+	return connect.NewResponse(&registryv1.CheckLevelsResponse{Levels: LevelsToPB(ls), Conditions: c.Conditions.Exprs()}), nil
+}
+
 // PreviewPlan plans toward a goal with the planner its agent is actually configured with, from an empty
 // blackboard whose evaluated conditions the request's overrides patch on top (ADR 0034; no live Change needed).
 func (h *Handler) PreviewPlan(ctx context.Context, r *connect.Request[registryv1.PreviewPlanRequest]) (*connect.Response[registryv1.PreviewPlanResponse], error) {

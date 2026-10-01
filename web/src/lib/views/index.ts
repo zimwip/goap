@@ -7,7 +7,7 @@ import { peekDomainDraft, domainDrafts } from '../stores/domains.svelte';
 import { processes, live } from '../stores/live.svelte';
 import { changes } from '../stores/catalog.svelte';
 import NodeTab from './editors/NodeTab.svelte';
-import { draftGroup, KIND_SECTION, SECTION_ICON } from './editors/methodologyTabs';
+import { draftGroup, findStep, KIND_SECTION, SECTION_ICON } from './editors/methodologyTabs';
 import { activeDraft } from './bottom/activeDraft';
 import { domainGroup } from './editors/domainTabs';
 import './nodeEditors';
@@ -43,6 +43,7 @@ import { walkSteps } from '../methodologyForm';
 import GoalTab from './editors/GoalTab.svelte';
 import ProcessTab from './editors/ProcessTab.svelte';
 import MethodTab from './editors/MethodTab.svelte';
+import StepTab from './editors/StepTab.svelte';
 import GraphExplorerTab from './editors/GraphExplorerTab.svelte';
 import RunTab from './editors/RunTab.svelte';
 import ChangeTab from './editors/ChangeTab.svelte';
@@ -332,6 +333,30 @@ for (const kind of ['agent', 'action', 'condition', 'goal', 'process', 'method']
     },
   });
 }
+
+const stepOf = (t: Tab) => {
+  const d = peekDraft(draftGroup(t));
+  const loc = d && findStep(d, t.params.skey ?? '');
+  return d && loc ? { d, loc } : undefined;
+};
+
+registerView({
+  id: 'step',
+  zone: 'editor',
+  title: 'Step',
+  icon: 'node',
+  component: StepTab,
+  key: (p) => `${p.m}@${p.v}/step:${p.skey}`,
+  tabTitle: (t) => stepOf(t)?.loc.step.name || t.params.name || '(unnamed)',
+  tooltip: (t) => `Step ${t.params.name || ''} — ${t.params.m} v${t.params.v}`,
+  dirty: (t) => {
+    const x = stepOf(t);
+    return x ? x.d.itemDirty(x.loc.section, x.loc.owner.uid) : false;
+  },
+  groupDirty,
+  group: draftGroup,
+  discard: discardGroup,
+});
 
 registerView({
   id: 'run',

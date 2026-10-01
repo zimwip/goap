@@ -735,7 +735,19 @@ func (m *Methodology) compile() (*Compiled, Issues) {
 	for _, ag := range methGen.agents {
 		agents[ag.Name] = ag
 	}
+	// an agent performing a method has access to the activities that compose it (an agent open to every action already has)
+	for name, x := range methGen.extend {
+		ag := agents[name]
+		if len(ag.Actions) > 0 {
+			ag.Actions = append(slices.Clone(ag.Actions), x.actions...)
+		}
+		if len(ag.Goals) > 0 {
+			ag.Goals = append(slices.Clone(ag.Goals), x.goals...)
+		}
+		agents[name] = ag
+	}
 	procs := m.compileProcesses(add, actions, known, agents, meths, roles)
+	maps.Copy(procs.criteria, methGen.criteria)
 	procs.conditions = append(procs.conditions, methGen.conditions...)
 	procs.actions = append(procs.actions, methGen.actions...)
 	procs.agents = append(procs.agents, methGen.agents...)

@@ -180,15 +180,18 @@ export interface GoalForm extends Identified {
 }
 
 /** How a step is done (ADR 0034). */
-export type StepMethod = 'manual' | 'steps' | 'action' | 'actions' | 'agent' | 'process' | 'capability';
+export type StepMethod = 'manual' | 'steps' | 'action' | 'actions' | 'process' | 'capability';
+/**
+ * What a step is made of: everything is an activity, composed of sub-activities (steps, then actions, which are not broken
+ * down further) and specialized into variants (methods). An agent is not a way to do a step: it is the actor of a method.
+ */
 export const STEP_METHODS: { id: StepMethod; label: string }[] = [
-  { id: 'manual', label: 'By hand (described only)' },
-  { id: 'steps', label: 'Sub-steps' },
-  { id: 'action', label: 'An action' },
+  { id: 'steps', label: 'Sub-activities (steps)' },
+  { id: 'action', label: 'An action (not broken down)' },
   { id: 'actions', label: 'Alternative actions (the planner chooses)' },
-  { id: 'agent', label: 'An agent (plans towards a goal)' },
+  { id: 'capability', label: 'Variants: methods that specialize it (chosen by context)' },
   { id: 'process', label: 'A nested process' },
-  { id: 'capability', label: 'A method (chosen by context)' },
+  { id: 'manual', label: 'By hand (a person, described only)' },
 ];
 
 export interface StepForm {
@@ -200,8 +203,6 @@ export interface StepForm {
   method: StepMethod;
   action: string;
   actions: string[];
-  agent: string;
-  goal: string;
   /** "<process>" or "<methodology>/<process>" */
   process: string;
   /** the capability provided by methods */
@@ -385,8 +386,6 @@ export const emptyStep = (name = ''): StepForm => ({
   method: 'manual',
   action: '',
   actions: [],
-  agent: '',
-  goal: '',
   process: '',
   capability: '',
   pre: [],
@@ -748,7 +747,6 @@ function stepMethod(s: ProcessStep): StepMethod {
   if (s.steps?.length) return 'steps';
   if (s.action) return 'action';
   if (s.actions?.length) return 'actions';
-  if (s.agent) return 'agent';
   if (s.process) return 'process';
   if (s.method) return 'capability';
   return 'manual';
@@ -763,8 +761,6 @@ function stepToForm(s: ProcessStep): StepForm {
     method: stepMethod(s),
     action: s.action ?? '',
     actions: [...(s.actions ?? [])],
-    agent: s.agent ?? '',
-    goal: s.goal ?? '',
     process: s.process ?? '',
     capability: s.method ?? '',
     pre: rows(s.pre),
@@ -839,10 +835,6 @@ export function stepFromForm(s: StepForm): ProcessStep {
       break;
     case 'actions':
       put(o, 'actions', s.actions.filter(Boolean));
-      break;
-    case 'agent':
-      put(o, 'agent', s.agent.trim());
-      put(o, 'goal', s.goal.trim());
       break;
     case 'process':
       put(o, 'process', s.process.trim());
@@ -1139,10 +1131,8 @@ export function renameReferences(f: MethodologyForm, section: Section, from: str
       ag.goals = ag.goals.map((x) => (x === from ? to : x));
       for (const t of ag.triggers) if (t.goal === from) t.goal = to;
     }
-    for (const s of steps) if (s.goal === from) s.goal = to;
-    for (const x of f.methods) if (x.goal === from) x.goal = to;
+        for (const x of f.methods) if (x.goal === from) x.goal = to;
   } else if (section === 'agents') {
-    for (const s of steps) if (s.agent === from) s.agent = to;
     for (const x of f.methods) if (x.agent === from) x.agent = to;
   } else if (section === 'processes') {
     const self = f.name.trim();

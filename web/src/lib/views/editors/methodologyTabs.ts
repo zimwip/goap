@@ -17,6 +17,7 @@ import {
   emptyMethod,
   emptyStep,
   type Section,
+  type StepForm,
   type SectionItem,
 } from '../../methodologyForm';
 import { typeName, type TypeCatalog } from '../../stores/types.svelte';
@@ -120,11 +121,60 @@ export function addElement(d: Draft, c: Collection): void {
   openItem(d, c, d.form[c][d.form[c].length - 1], true);
 }
 
-/** Adds a step to a process or a method (a part of it, by composition) and opens it on the step. */
-export function addStep(d: Draft, c: Section, it: { steps: import('../../methodologyForm').StepForm[] }): void {
-  it.steps.push(emptyStep(`step_${it.steps.length + 1}`));
-  const t = openTab(itemSpec(d, c, it as SectionItem), { pin: true });
-  requestReveal(t.id, `steps[${it.steps.length - 1}]`);
+/** Adds a step to a process or a method (a part of it, by composition) and opens it in its own editor. */
+export function addStep(d: Draft, c: Section, it: { steps: StepForm[] }): void {
+  const step = emptyStep(`step_${it.steps.length + 1}`);
+  it.steps.push(step);
+  openStep(d, step, it as unknown as SectionItem, true);
+}
+
+/** Where a step sits: its process or method, the list it belongs to and its issue path in the owner. */
+export interface StepLocation {
+  section: 'processes' | 'methods';
+  owner: SectionItem & { steps: StepForm[] };
+  step: StepForm;
+  siblings: StepForm[];
+  /** issue path inside the owner, "steps[1].steps[0]" */
+  at: string;
+  /** server path: "<owner>/<step>/<sub-step>" */
+  path: string;
+}
+
+/** Finds a step of the draft by its local key. */
+export function findStep(d: Draft, key: string): StepLocation | undefined {
+  for (const section of ['processes', 'methods'] as const) {
+    for (const owner of d.form[section] as (SectionItem & { steps: StepForm[] })[]) {
+      const hit = (list: StepForm[], at: string, prefix: string): StepLocation | undefined => {
+        for (let i = 0; i < list.length; i++) {
+          const here = `${at}[${i}]`;
+          const path = `${prefix}/${list[i].name}`;
+          if (list[i].key === key) return { section, owner, step: list[i], siblings: list, at: here, path };
+          const sub = hit(list[i].steps, `${here}.steps`, path);
+          if (sub) return sub;
+        }
+        return undefined;
+      };
+      const found = hit(owner.steps, 'steps', owner.name);
+      if (found) return found;
+    }
+  }
+  return undefined;
+}
+
+export function stepSpec(d: Draft, step: StepForm, owner: SectionItem): TabSpec {
+  return { kind: 'step', params: { m: d.name, v: d.version, skey: step.key, uid: owner.uid, name: step.name } };
+}
+
+export function openStep(d: Draft, step: StepForm, owner: SectionItem, pin = false): void {
+  openTab(stepSpec(d, step, owner), { pin });
+}
+
+/** Adds a step under a step (turning it into a step done by sub-steps) and opens it. */
+export function addSubStep(d: Draft, owner: SectionItem, step: StepForm): void {
+  step.method = 'steps';
+  const sub = emptyStep(`step_${step.steps.length + 1}`);
+  step.steps.push(sub);
+  openStep(d, sub, owner, true);
 }
 
 export function methodologySpec(name: string, version: string): TabSpec {
@@ -244,7 +294,7 @@ export function draftActions(d: Draft, extra: ToolbarAction[] = []): ToolbarActi
       run: async () => {
         const r = await d.remove();
         if (r === 'deleted') {
-          closeWhere((t) => ['methodology', 'agent', 'action', 'condition', 'goal'].includes(t.kind) && draftGroup(t) === d.key);
+          closeWhere((t) => ['methodology', 'agent', 'action', 'condition', 'goal', 'process', 'method', 'step'].includes(t.kind) && draftGroup(t) === d.key);
           notify(`${d.label} deleted.`, 'ok');
         } else if (r === 'archived') notify(`${d.label} archived.`, 'ok');
         else if (d.error) notify(d.error, 'error');
@@ -270,7 +320,7 @@ export function revealIssue(d: Draft, path: string): void {
 }
 
 export function isDraftTab(tab: Tab | undefined): boolean {
-  return !!tab && !!editorView(tab.kind) && ['methodology', 'agent', 'action', 'condition', 'goal', 'process', 'method'].includes(tab.kind);
+  return !!tab && !!editorView(tab.kind) && ['methodology', 'agent', 'action', 'condition', 'goal', 'process', 'method', 'step'].includes(tab.kind);
 }
 
 /** "Delete <element>" action of element tabs. */

@@ -48,6 +48,9 @@ const (
 	// RegistryServiceGetProcessGraphProcedure is the fully-qualified name of the RegistryService's
 	// GetProcessGraph RPC.
 	RegistryServiceGetProcessGraphProcedure = "/goap.registry.v1.RegistryService/GetProcessGraph"
+	// RegistryServiceCheckLevelsProcedure is the fully-qualified name of the RegistryService's
+	// CheckLevels RPC.
+	RegistryServiceCheckLevelsProcedure = "/goap.registry.v1.RegistryService/CheckLevels"
 	// RegistryServicePreviewPlanProcedure is the fully-qualified name of the RegistryService's
 	// PreviewPlan RPC.
 	RegistryServicePreviewPlanProcedure = "/goap.registry.v1.RegistryService/PreviewPlan"
@@ -114,6 +117,10 @@ type RegistryServiceClient interface {
 	ValidateMethodology(context.Context, *connect.Request[v1.ValidateMethodologyRequest]) (*connect.Response[v1.ValidateMethodologyResponse], error)
 	// A process of a methodology (as edited, saved or not) as a graph: steps, the edges its conditions draw, methods (ADR 0036 §4).
 	GetProcessGraph(context.Context, *connect.Request[v1.GetProcessGraphRequest]) (*connect.Response[v1.GetProcessGraphResponse], error)
+	// Level-by-level coherence of a process, or of a method composing its own steps (as edited): for the root and each
+	// step with sub-steps, whether the entry conditions and exit criteria of the direct steps chain the parent's
+	// inputs to its outputs.
+	CheckLevels(context.Context, *connect.Request[v1.CheckLevelsRequest]) (*connect.Response[v1.CheckLevelsResponse], error)
 	// Plans toward a goal with the planner its agent is actually configured with (goap, utility or hybrid), from a
 	// world state the given condition overrides patch on top of an empty blackboard: no live Change is needed. For a
 	// process, name it as both agent and goal; for an agent a step names directly (or a capability's chosen method),
@@ -187,6 +194,12 @@ func NewRegistryServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			httpClient,
 			baseURL+RegistryServiceGetProcessGraphProcedure,
 			connect.WithSchema(registryServiceMethods.ByName("GetProcessGraph")),
+			connect.WithClientOptions(opts...),
+		),
+		checkLevels: connect.NewClient[v1.CheckLevelsRequest, v1.CheckLevelsResponse](
+			httpClient,
+			baseURL+RegistryServiceCheckLevelsProcedure,
+			connect.WithSchema(registryServiceMethods.ByName("CheckLevels")),
 			connect.WithClientOptions(opts...),
 		),
 		previewPlan: connect.NewClient[v1.PreviewPlanRequest, v1.PreviewPlanResponse](
@@ -307,6 +320,7 @@ type registryServiceClient struct {
 	saveMethodology     *connect.Client[v1.SaveMethodologyRequest, v1.SaveMethodologyResponse]
 	validateMethodology *connect.Client[v1.ValidateMethodologyRequest, v1.ValidateMethodologyResponse]
 	getProcessGraph     *connect.Client[v1.GetProcessGraphRequest, v1.GetProcessGraphResponse]
+	checkLevels         *connect.Client[v1.CheckLevelsRequest, v1.CheckLevelsResponse]
 	previewPlan         *connect.Client[v1.PreviewPlanRequest, v1.PreviewPlanResponse]
 	publishMethodology  *connect.Client[v1.PublishMethodologyRequest, v1.PublishMethodologyResponse]
 	createVersion       *connect.Client[v1.CreateVersionRequest, v1.CreateVersionResponse]
@@ -350,6 +364,11 @@ func (c *registryServiceClient) ValidateMethodology(ctx context.Context, req *co
 // GetProcessGraph calls goap.registry.v1.RegistryService.GetProcessGraph.
 func (c *registryServiceClient) GetProcessGraph(ctx context.Context, req *connect.Request[v1.GetProcessGraphRequest]) (*connect.Response[v1.GetProcessGraphResponse], error) {
 	return c.getProcessGraph.CallUnary(ctx, req)
+}
+
+// CheckLevels calls goap.registry.v1.RegistryService.CheckLevels.
+func (c *registryServiceClient) CheckLevels(ctx context.Context, req *connect.Request[v1.CheckLevelsRequest]) (*connect.Response[v1.CheckLevelsResponse], error) {
+	return c.checkLevels.CallUnary(ctx, req)
 }
 
 // PreviewPlan calls goap.registry.v1.RegistryService.PreviewPlan.
@@ -452,6 +471,10 @@ type RegistryServiceHandler interface {
 	ValidateMethodology(context.Context, *connect.Request[v1.ValidateMethodologyRequest]) (*connect.Response[v1.ValidateMethodologyResponse], error)
 	// A process of a methodology (as edited, saved or not) as a graph: steps, the edges its conditions draw, methods (ADR 0036 §4).
 	GetProcessGraph(context.Context, *connect.Request[v1.GetProcessGraphRequest]) (*connect.Response[v1.GetProcessGraphResponse], error)
+	// Level-by-level coherence of a process, or of a method composing its own steps (as edited): for the root and each
+	// step with sub-steps, whether the entry conditions and exit criteria of the direct steps chain the parent's
+	// inputs to its outputs.
+	CheckLevels(context.Context, *connect.Request[v1.CheckLevelsRequest]) (*connect.Response[v1.CheckLevelsResponse], error)
 	// Plans toward a goal with the planner its agent is actually configured with (goap, utility or hybrid), from a
 	// world state the given condition overrides patch on top of an empty blackboard: no live Change is needed. For a
 	// process, name it as both agent and goal; for an agent a step names directly (or a capability's chosen method),
@@ -521,6 +544,12 @@ func NewRegistryServiceHandler(svc RegistryServiceHandler, opts ...connect.Handl
 		RegistryServiceGetProcessGraphProcedure,
 		svc.GetProcessGraph,
 		connect.WithSchema(registryServiceMethods.ByName("GetProcessGraph")),
+		connect.WithHandlerOptions(opts...),
+	)
+	registryServiceCheckLevelsHandler := connect.NewUnaryHandler(
+		RegistryServiceCheckLevelsProcedure,
+		svc.CheckLevels,
+		connect.WithSchema(registryServiceMethods.ByName("CheckLevels")),
 		connect.WithHandlerOptions(opts...),
 	)
 	registryServicePreviewPlanHandler := connect.NewUnaryHandler(
@@ -643,6 +672,8 @@ func NewRegistryServiceHandler(svc RegistryServiceHandler, opts ...connect.Handl
 			registryServiceValidateMethodologyHandler.ServeHTTP(w, r)
 		case RegistryServiceGetProcessGraphProcedure:
 			registryServiceGetProcessGraphHandler.ServeHTTP(w, r)
+		case RegistryServiceCheckLevelsProcedure:
+			registryServiceCheckLevelsHandler.ServeHTTP(w, r)
 		case RegistryServicePreviewPlanProcedure:
 			registryServicePreviewPlanHandler.ServeHTTP(w, r)
 		case RegistryServicePublishMethodologyProcedure:
@@ -706,6 +737,10 @@ func (UnimplementedRegistryServiceHandler) ValidateMethodology(context.Context, 
 
 func (UnimplementedRegistryServiceHandler) GetProcessGraph(context.Context, *connect.Request[v1.GetProcessGraphRequest]) (*connect.Response[v1.GetProcessGraphResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.registry.v1.RegistryService.GetProcessGraph is not implemented"))
+}
+
+func (UnimplementedRegistryServiceHandler) CheckLevels(context.Context, *connect.Request[v1.CheckLevelsRequest]) (*connect.Response[v1.CheckLevelsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.registry.v1.RegistryService.CheckLevels is not implemented"))
 }
 
 func (UnimplementedRegistryServiceHandler) PreviewPlan(context.Context, *connect.Request[v1.PreviewPlanRequest]) (*connect.Response[v1.PreviewPlanResponse], error) {

@@ -1109,11 +1109,36 @@ are the documentary references of how a capability is carried out in a context (
 references, deliverables) and each names the **agent** that acts; `process.step` runs the agent of the applicable
 method with the highest priority, with the method's guidance in its step context.
 The methodology editor draws a process as a graph (`GetProcessGraph` on the registry, from the draft as edited): the
-steps that run something, laid out in layers by the edges their conditions draw (a step whose exit criteria meet
-another's entry, implied edges left out), phases as colours, the methods of a capability under its step; selecting a
-method focuses on its context, guidance, references, roles, agent and the agent's actions. The **graph explorer**
+steps that run something, laid out in layers from left to right by the edges their conditions draw (a step whose exit
+criteria meet another's entry, implied edges left out), phases as colours. The **graph explorer**
 (command "Explore the graph") lays out the head of main of every namespace with a force simulation (d3-force), to
 navigate the organisation as it is (units, users, adapters, what they own) and the data of the domains.
+**Everything is an activity.** Process, Step, Method, MethodStep and Action share one shape (inputs, goals, outputs) and are composed with the
+`sub_activity` link; the `specializes` link defines **variants** (the methods that specialize a step's capability, one chosen by context), which
+cuts the traceability by adding variability, so each variant has a graph of its own. An **action** is the smallest activity, not broken down further:
+it has no flow, it is a node (a step is made of sub-steps, an action, alternative actions, variants, a nested process, or is done by hand).
+An **agent** is not a way to do a step: it is the actor. The method says how and with what (the activities that compose it, down to actions, and
+the tools their actions declare); the agent it names performs them, has access to them (the compiler gives it the actions of the method's steps
+and the method's goal) and executes them in the order that reaches the goal. A method with no steps reaches the goal with the agent's own actions
+(the flow then shows those actions, operated by the agent). A step cannot name an agent: it names a capability, and the method that specializes it names the agent.
+The flow shows **one level at a time** (the system of interest is a parent and its direct steps, from `CheckLevels`: each level carries
+its steps, their entry and exit and the links their conditions draw). A step with sub-steps is a node; zooming into it (double-click, or
+the breadcrumb to come back) changes the system of interest. A step not resolved inside (one of its own levels, or one below, is broken)
+is flagged `incomplete` in the level above (gap `inner`), which is then broken too: the process cannot run through it until it is reworked.
+The process tab shows it as a **Flow** (`ProcessFlowView`, the only graph view, xyflow + dagre, as in the gems project): a node per step with its entry conditions
+and exit criteria as ports, links between the criterion and the condition it meets, a "Prerequisites" node for what nothing establishes;
+clicking a condition traces it (the links carrying it are drawn on, the rest is dimmed), right-clicking a step opens it.
+A method composing its own steps has the same view and graph (`GetProcessGraph` accepts its name) and the same level check, apart from the
+process: a step naming a capability is a boundary node that only lists the methods specializing it (each opens its own graph), because
+a specialization adds variability and cuts the traceability.
+The editor also checks a process, or a method composing its own steps, **level by level** (`CheckLevels` on the registry,
+`Compiled.CheckLevels`, from the draft as edited): for the root and each step with sub-steps, the entry conditions and exit
+criteria of the direct steps must chain the parent's inputs to its outputs. A step that cannot be entered whatever the order
+of its siblings (a missing input, a cycle) or an output no step reaches breaks the level; what a process or method needs and
+none of its steps establishes is only reported (a prerequisite). The scheduler still orders the steps from the actual state;
+the check only proves that an order exists. It is not listed as text: the flow draws it like gems draws a missing variable (an "Unresolved inputs"
+node linked in orange to the entry conditions a step can never get, a ⚠ on the port, an "Unreached outputs" node for the outputs no step reaches). A step opens in its own editor tab (`StepTab`), where its inputs and outputs
+are conditions of the methodology, created on the spot as static (a document of a type exists) or dynamic (a CEL expression).
 `GetProcessProgress` computes where a run stands in its process (each step done, skipped,
 active, waiting for someone, ready, to do with what it still needs, or blocked), shown on the run and the change.
 

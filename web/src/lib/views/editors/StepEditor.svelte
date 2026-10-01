@@ -1,14 +1,14 @@
 <script lang="ts">
   // One step of a process and, recursively, its sub-steps (ADR 0034): its name, how it is done (by hand, sub-steps,
-  // an action, alternative actions, an agent, a nested process), its entry conditions and exit criteria.
+  // an action, alternative actions, variants (methods), a nested process), its entry conditions and exit criteria.
   import { untrack } from 'svelte';
   import StepEditor from './StepEditor.svelte';
-  import CondRows from '../../components/CondRows.svelte';
+  import StepIO from './StepIO.svelte';
   import RowTools from '../../components/RowTools.svelte';
   import PickList from './PickList.svelte';
   import ReferencesEditor from './ReferencesEditor.svelte';
   import ResponsibilitiesEditor from './ResponsibilitiesEditor.svelte';
-  import { STEP_METHODS, emptyStep, moveItem, stepConditionNames, type StepForm } from '../../methodologyForm';
+  import { STEP_METHODS, emptyStep, moveItem, type StepForm } from '../../methodologyForm';
   import type { Draft } from '../../stores/drafts.svelte';
 
   let {
@@ -33,14 +33,9 @@
   let open = $state(untrack(() => depth === 0));
   const f = $derived(d.form);
   const actionNames = $derived(f.actions.filter((a) => a.name && !a.specializes.trim()).map((a) => a.name));
-  const agentNames = $derived(f.agents.map((a) => a.name).filter(Boolean));
-  const agent = $derived(f.agents.find((a) => a.name === step.agent));
-  const goalNames = $derived((agent && agent.goals.length ? agent.goals : f.goals.map((g) => g.name)).filter(Boolean));
   const processNames = $derived(f.processes.map((p) => p.name).filter(Boolean));
   const capabilities = $derived([...new Set(f.methods.map((m) => m.for.trim()).filter(Boolean))]);
   const providers = $derived(f.methods.filter((m) => m.for.trim() && m.for === step.capability));
-  // the declared conditions and the conditions of the steps done once they have run
-  const conditions = $derived([...d.conditionOptions, ...stepConditionNames(f)]);
   const listId = $derived(`procs-${step.key}`);
 
   function summary(s: StepForm): string {
@@ -51,8 +46,6 @@
         return s.action ? `action ${s.action}` : 'action ?';
       case 'actions':
         return s.actions.length ? `one of ${s.actions.join(', ')}` : 'actions ?';
-      case 'agent':
-        return s.agent ? `agent ${s.agent}${s.goal ? ` → ${s.goal}` : ''}` : 'agent ?';
       case 'process':
         return s.process ? `process ${s.process}` : 'process ?';
       case 'capability':
@@ -94,7 +87,7 @@
           <input id="{step.key}-desc" type="text" bind:value={step.description} data-path="{path}.description" placeholder="What the step achieves" />
         </div>
         <div class="field">
-          <label for="{step.key}-method">Done by</label>
+          <label for="{step.key}-method">Made of</label>
           <select id="{step.key}-method" bind:value={step.method} data-path="{path}.method">
             {#each STEP_METHODS as m (m.id)}<option value={m.id}>{m.label}</option>{/each}
           </select>
@@ -125,25 +118,6 @@
           bad={d.bad}
           readonly={d.readonly}
         />
-      {:else if step.method === 'agent'}
-        <div class="grid2">
-          <div class="field">
-            <label for="{step.key}-agent">Agent</label>
-            <select id="{step.key}-agent" bind:value={step.agent} class:bad={d.bad(`${path}.agent`)} data-path="{path}.agent">
-              <option value="">— agent —</option>
-              {#if step.agent && !agentNames.includes(step.agent)}<option value={step.agent}>{step.agent} (unknown)</option>{/if}
-              {#each agentNames as a (a)}<option value={a}>{a}</option>{/each}
-            </select>
-          </div>
-          <div class="field">
-            <label for="{step.key}-goal">Goal <span class="opt">(default: the agent's only goal)</span></label>
-            <select id="{step.key}-goal" bind:value={step.goal} class:bad={d.bad(`${path}.goal`)} data-path="{path}.goal">
-              <option value="">— default —</option>
-              {#if step.goal && !goalNames.includes(step.goal)}<option value={step.goal}>{step.goal} (unknown)</option>{/if}
-              {#each goalNames as g (g)}<option value={g}>{g}</option>{/each}
-            </select>
-          </div>
-        </div>
       {:else if step.method === 'process'}
         <div class="field">
           <label for="{step.key}-proc">Process <span class="opt">(of this methodology, or &lt;methodology&gt;/&lt;process&gt;)</span></label>
@@ -200,18 +174,8 @@
         </div>
       </details>
       <details class="more" open={step.pre.length > 0 || step.done.length > 0 || step.references.length > 0}>
-        <summary>Entry conditions, exit criteria, reference documents</summary>
-        <div class="grid2">
-          <CondRows
-            bind:rows={step.pre}
-            options={conditions}
-            path="{path}.pre"
-            label="Entry conditions (with those of what it runs; they sequence the steps)"
-            bad={d.bad}
-            readonly={d.readonly}
-          />
-          <CondRows bind:rows={step.done} options={conditions} path="{path}.done" label="Done when (default: from how it is done)" bad={d.bad} readonly={d.readonly} />
-        </div>
+        <summary>Inputs, outputs, reference documents</summary>
+        <StepIO {step} {path} draft={d} />
         <ReferencesEditor bind:refs={step.references} path="{path}.references" bad={d.bad} readonly={d.readonly} />
       </details>
 
