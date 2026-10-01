@@ -8,7 +8,18 @@ import { editorView } from '../../shell/registry';
 import { tabId } from '../../shell/tabs.svelte';
 import { getDraft, type Draft } from '../../stores/drafts.svelte';
 import { confirmDialog } from '../../shell/confirmState.svelte';
-import type { Section, SectionItem } from '../../methodologyForm';
+import {
+  emptyAgent,
+  emptyAction,
+  emptyCondition,
+  emptyGoal,
+  emptyProcess,
+  emptyMethod,
+  emptyStep,
+  type Section,
+  type SectionItem,
+} from '../../methodologyForm';
+import { typeName, type TypeCatalog } from '../../stores/types.svelte';
 
 export const SECTION_KIND: Record<Section, string> = {
   agents: 'agent',
@@ -77,6 +88,44 @@ export const COLLECTION_TYPE: Record<Collection, string> = Object.fromEntries(Ob
 
 /** The panes before the type catalogue is loaded. */
 export const DEFAULT_COLLECTIONS: Collection[] = ['processes', 'methods', 'agents', 'actions', 'conditions', 'goals', 'roles'];
+
+/** The panes of a methodology version: the element types the domain says it is composed of (`defines`). */
+export function sectionsFor(cat: TypeCatalog): Collection[] {
+  const cols = cat.sectionsOf(VERSION_TYPE).map((t) => TYPE_COLLECTION[typeName(t)]).filter((c): c is Collection => !!c);
+  return cols.length ? cols : DEFAULT_COLLECTIONS;
+}
+
+export const COLLECTION_LABEL = (c: Collection): string => (c === 'roles' ? 'Roles' : SECTION_LABEL[c]);
+export const COLLECTION_ICON = (c: Collection): IconName => (c === 'roles' ? 'user' : SECTION_ICON[c]);
+/** "agent", "role"...: what one element of the collection is called. */
+export const collectionNoun = (c: Collection): string => COLLECTION_TYPE[c].toLowerCase();
+
+/** Does an element of the collection have steps (a composite of the domain)? */
+export function hasSteps(cat: TypeCatalog, c: Collection, it: unknown): it is { steps: import('../../methodologyForm').StepForm[] } {
+  return c !== 'roles' && !!it && typeof it === 'object' && 'steps' in it && cat.isComposite(`${VERSION_TYPE.split('@')[0]}@${COLLECTION_TYPE[c]}`);
+}
+
+const FACTORIES = { agents: emptyAgent, actions: emptyAction, conditions: emptyCondition, goals: emptyGoal, processes: emptyProcess, methods: emptyMethod };
+
+/** Adds an element to the draft and opens it (a role: on the Roles pane of the methodology tab). */
+export function addElement(d: Draft, c: Collection): void {
+  if (c === 'roles') {
+    d.form.roles.push({ name: '', description: '' });
+    const t = openTab(methodologySpec(d.name, d.version), { pin: true });
+    t.params.pane = 'roles';
+    requestReveal(t.id, `roles[${d.form.roles.length - 1}]`);
+    return;
+  }
+  (d.form[c] as SectionItem[]).push(FACTORIES[c]());
+  openItem(d, c, d.form[c][d.form[c].length - 1], true);
+}
+
+/** Adds a step to a process or a method (a part of it, by composition) and opens it on the step. */
+export function addStep(d: Draft, c: Section, it: { steps: import('../../methodologyForm').StepForm[] }): void {
+  it.steps.push(emptyStep(`step_${it.steps.length + 1}`));
+  const t = openTab(itemSpec(d, c, it as SectionItem), { pin: true });
+  requestReveal(t.id, `steps[${it.steps.length - 1}]`);
+}
 
 export function methodologySpec(name: string, version: string): TabSpec {
   return { kind: 'methodology', params: { name, version } };

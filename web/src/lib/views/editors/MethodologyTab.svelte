@@ -15,12 +15,6 @@
   import { openDomain } from './domainTabs';
   import { formatDate, TRIGGER_EVENTS } from '../../api';
   import {
-    emptyAgent,
-    emptyAction,
-    emptyCondition,
-    emptyGoal,
-    emptyProcess,
-    emptyMethod,
     walkSteps,
     type Section,
     type SectionItem,
@@ -31,12 +25,11 @@
     methodologySpec,
     openItem,
     itemSpec,
-    SECTION_ICON,
-    SECTION_LABEL,
-    TYPE_COLLECTION,
-    COLLECTION_TYPE,
-    DEFAULT_COLLECTIONS,
-    VERSION_TYPE,
+    COLLECTION_ICON,
+    COLLECTION_LABEL,
+    addElement,
+    hasSteps,
+    sectionsFor,
     type Collection,
   } from './methodologyTabs';
 
@@ -94,12 +87,9 @@
   // The panes come from the domain: the element types the methodology version is composed of (its `defines`
   // composition link), each bound to the collection of the draft that holds its elements. The catalogue not
   // loaded yet, the default list stands in.
-  const SECTIONS = $derived.by<Collection[]>(() => {
-    const cols = cat.sectionsOf(VERSION_TYPE).map((t) => TYPE_COLLECTION[typeName(t)]).filter((c): c is Collection => !!c);
-    return cols.length ? cols : DEFAULT_COLLECTIONS;
-  });
-  const label = (c: Collection): string => (c === 'roles' ? 'Roles' : SECTION_LABEL[c]);
-  const icon = (c: Collection) => (c === 'roles' ? ('user' as const) : SECTION_ICON[c]);
+  const SECTIONS = $derived(sectionsFor(cat));
+  const label = COLLECTION_LABEL;
+  const icon = COLLECTION_ICON;
 
   let pane = $state(untrack(() => tab.params.pane) || 'overview');
   $effect(() => {
@@ -123,19 +113,12 @@
 
   /** The parts of an element, as the domain composes them: the steps a process or a method is made of. */
   function parts(s: Collection, it: SectionItem) {
-    return s !== 'roles' && 'steps' in it && cat.isComposite(`${VERSION_TYPE.split('@')[0]}@${COLLECTION_TYPE[s]}`) ? walkSteps(it.steps) : [];
+    return hasSteps(cat, s, it) ? walkSteps(it.steps) : [];
   }
 
   function openPart(s: Section, it: SectionItem, at: string) {
     const t = openTab(itemSpec(d, s, it));
     requestReveal(t.id, at);
-  }
-
-  function add(section: Section) {
-    const factories = { agents: emptyAgent, actions: emptyAction, conditions: emptyCondition, goals: emptyGoal, processes: emptyProcess, methods: emptyMethod };
-    (d.form[section] as SectionItem[]).push(factories[section]());
-    const list = d.form[section];
-    openItem(d, section, list[list.length - 1], true);
   }
 
   function summary(section: Section, it: SectionItem): string {
@@ -354,7 +337,7 @@
                   <Icon name={icon(s)} size={16} />
                   <h3 class="grow">{label(s)} <span class="hint">{f[s].length}</span></h3>
                   {#if !d.readonly}
-                    <button type="button" class="small primary" onclick={() => add(s)}>+ Add</button>
+                    <button type="button" class="small primary" onclick={() => addElement(d, s)}>+ Add</button>
                   {/if}
                 </div>
                 <p class="hint">Click an element to open it; double-click to keep its tab open.</p>
