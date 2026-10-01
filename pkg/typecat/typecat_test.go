@@ -226,3 +226,16 @@ func TestActivitySpecializesIsTransitive(t *testing.T) {
 		t.Fatal("a Role is not an Activity: specializes must still reject it")
 	}
 }
+
+func TestComposeFlag(t *testing.T) {
+	c := Builtin()
+	for _, ref := range []string{"methodology@defines", "methodology@sub_activity"} {
+		l, ok := c.LinkType(ref)
+		if !ok || !l.Compose {
+			t.Fatalf("%s: compose = %v (known %v), want true", ref, ok && l.Compose, ok)
+		}
+	}
+	if l, ok := c.LinkType("methodology@specializes"); !ok || l.Compose {
+		t.Fatalf("specializes: compose = %v, want false", l != nil && l.Compose)
+	}
+}

@@ -281,7 +281,7 @@
         <section class="card" id="d-links">
           <h3 data-path="linkTypes">Link types</h3>
           {#each f.linkTypes as l, i}
-            <div class="item" class:has-issues={d.count(`linkTypes[${i}]`) > 0} data-path="linkTypes[{i}]">
+            <div class="item lt" class:has-issues={d.count(`linkTypes[${i}]`) > 0} data-path="linkTypes[{i}]">
               <input type="text" class="mono" aria-label="Link type name" bind:value={l.name} class:bad={d.bad(`linkTypes[${i}].name`)} data-path="linkTypes[{i}].name" placeholder="verifies" />
               <select aria-label="From" bind:value={l.from} class:bad={d.bad(`linkTypes[${i}].from`)} data-path="linkTypes[{i}].from">
                 <option value="">— from —</option>
@@ -293,6 +293,7 @@
                 {#if l.to && !d.typeOptions.includes(l.to)}<option value={l.to}>{l.to} (unknown)</option>{/if}
                 {#each d.typeOptions as t (t)}<option value={t}>{t}</option>{/each}
               </select>
+              <label class="inline" title="A composition link: its target is a part of its source, shown as a child by the editors"><input type="checkbox" bind:checked={l.compose} data-path="linkTypes[{i}].compose" /> compose</label>
               {#if !d.readonly}
                 <RowTools index={i} count={f.linkTypes.length} label="the link type" onmove={(delta) => moveItem(f.linkTypes, i, delta)} onremove={() => f.linkTypes.splice(i, 1)} />
               {/if}
@@ -364,6 +365,9 @@
     align-items: center;
     margin-bottom: 0.3rem;
     border-radius: var(--radius-sm);
+  }
+  .item.lt {
+    grid-template-columns: minmax(120px, 1fr) minmax(140px, 1.5fr) minmax(140px, 1.3fr) auto auto;
   }
   .item.nt {
     grid-template-columns: minmax(120px, 1fr) minmax(110px, 0.9fr) minmax(140px, 1.5fr) minmax(140px, 1.3fr) auto;

@@ -68,6 +68,8 @@ export interface LinkTypeForm {
   name: string;
   from: string;
   to: string;
+  /** composition link: the target is a part of the source (shown as its child by the editors) */
+  compose: boolean;
 }
 
 /**
@@ -315,7 +317,7 @@ export const PRODUCE_OPS = ['create_node', 'update_node'] as const;
 // --- constructors --------------------------------------------------------------
 
 export const emptyNodeType = (): NodeTypeForm => ({ name: '', description: '', properties: '', extends: '', lifecycle: '', document: '', changeControlled: true, validators: [], editor: '', search: [] });
-export const emptyLinkType = (): LinkTypeForm => ({ name: '', from: '', to: '' });
+export const emptyLinkType = (): LinkTypeForm => ({ name: '', from: '', to: '', compose: false });
 let uidSeq = 0;
 /** New local id (elements created in the UI). */
 export function newUid(): string {
@@ -646,7 +648,7 @@ export function defaultLifecycle(name = ''): LifecycleForm {
 }
 
 export function linkTypeToForm(l: LinkType): LinkTypeForm {
-  return { name: l.name ?? '', from: l.from ?? '', to: l.to ?? '' };
+  return { name: l.name ?? '', from: l.from ?? '', to: l.to ?? '', compose: l.compose === true };
 }
 
 export function nodeTypeFromForm(n: NodeTypeForm): NodeType {
@@ -677,6 +679,7 @@ export function linkTypeFromForm(l: LinkTypeForm): LinkType {
   put(o, 'name', l.name.trim());
   put(o, 'from', l.from);
   put(o, 'to', l.to);
+  if (l.compose) o.compose = true;
   return o;
 }
 

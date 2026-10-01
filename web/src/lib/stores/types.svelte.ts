@@ -75,6 +75,46 @@ export class TypeCatalog {
     return !link.to || this.typesOf(to).includes(link.to);
   }
 
+  /** The composition links (flagged `compose` in their domain): the target is a part of the source. */
+  composeLinks(): LinkTypeInfo[] {
+    return this.links.filter((l) => l.ref && l.compose);
+  }
+
+  /** The type and its subtypes (a link's `to` accepts them all). */
+  withSubtypes(ref: string): string[] {
+    return [ref, ...[...this.types.values()].filter((t) => t.ancestors?.includes(ref)).map((t) => t.ref ?? '')].filter(Boolean);
+  }
+
+  /**
+   * The node types a node of the type is composed of: the targets of the composition links its type (or an
+   * ancestor) can start, with their subtypes; a link with no `to` composes the types of its source's namespace.
+   */
+  partsOf(ref: string | undefined): string[] {
+    const from = this.typesOf(ref);
+    const out = new Set<string>();
+    for (const l of this.composeLinks()) {
+      if (l.from && !from.includes(l.from)) continue;
+      const targets = l.to ? this.withSubtypes(l.to) : this.names(splitType(ref).namespace);
+      for (const t of targets) if (t !== ref) out.add(t);
+    }
+    return [...out].sort();
+  }
+
+  /** Does a node of the type have parts? */
+  isComposite(ref: string | undefined): boolean {
+    return this.partsOf(ref).length > 0;
+  }
+
+  /**
+   * The element types a root (a methodology version) is composed of, as its editor lists them: those naming an
+   * editor, an abstract base (one a listed type extends) left out, sorted by name.
+   */
+  sectionsOf(root: string): string[] {
+    const parts = this.partsOf(root).filter((t) => this.editor(t));
+    const bases = new Set(parts.flatMap((t) => this.type(t)?.ancestors ?? []));
+    return parts.filter((t) => !bases.has(t)).sort();
+  }
+
   /** Namespaces of the published and built-in domains (the targets a methodology can name). */
   namespaces(): string[] {
     const ns = new Set(Object.keys(this.domains));

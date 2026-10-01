@@ -482,6 +482,11 @@ A node type may name the **editor** of its nodes in the IDE (`editor: agent`, in
 which reads the editor from the type catalogue the IDE loads from the registry (`ListTypes`) and falls back to the default node editor; the editors a type can name
 are registered in `web/src/lib/views/nodeEditors.ts` (`agent`, `action`, `methodology`, `domain`, `unit`, `mcp`, ...).
 
+A link type may be flagged **`compose: true`** (`methodology.LinkType.Compose`, `typecat.LinkType.Compose`, `LinkTypeInfo.compose`): its target is a part of its source, a piece of display metadata
+the editors read from the domain rather than knowing links by name. The methodology editor lists as panes the element types the version composes
+(`TypeCatalog.sectionsOf`, through `defines`), and shows under a process or a method the steps composed through `sub_activity` (`TypeCatalog.partsOf`); a new type composed by
+`defines` and bound to a draft collection (`TYPE_COLLECTION`, `methodologyTabs.ts`) gets its pane without editor code. The `role` and `step` node editors open the version's Roles pane and the owning process or method.
+
 ### 2.11 Agent triggers
 
 Outside the intent loop, an agent can be executed **automatically** by triggers

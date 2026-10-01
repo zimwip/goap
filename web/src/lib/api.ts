@@ -217,6 +217,8 @@ export interface LinkTypeInfo {
   ref?: string;
   from?: string;
   to?: string;
+  /** composition link: the target is a part of the source, shown as its child */
+  compose?: boolean;
 }
 
 export interface NodeType {
@@ -301,6 +303,8 @@ export interface LinkType {
   name?: string;
   from?: string;
   to?: string;
+  /** composition link: the target is a part of the source, shown as its child */
+  compose?: boolean;
 }
 
 export interface Condition {

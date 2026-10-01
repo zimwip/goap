@@ -56,6 +56,33 @@ for (const [kind, title] of [
   });
 }
 
+// roles: listed in the Roles pane of the methodology version
+registerNodeEditor({
+  name: 'role',
+  title: 'Role editor',
+  open: (n) => {
+    const o = element(n) ? methodologyOf(n) : undefined;
+    return o ? { kind: 'methodology', params: { name: o.name, version: o.version, pane: 'roles' } } : undefined;
+  },
+});
+
+// steps and method steps (keyed "<header key>/<step|methodStep>/<process>/<step>/..."): parts of their process or
+// method (a composition link of the domain), opened on the owner
+registerNodeEditor({
+  name: 'step',
+  title: 'Step editor',
+  open: async (n) => {
+    const o = methodologyOf(n);
+    const m = /\/(methodStep|step)\/([^/]+)/.exec(n.key);
+    if (!o || !m) return undefined;
+    const d = getDraft(o.name, o.version);
+    await d.ensureLoaded();
+    const section = m[1] === 'step' ? 'processes' : 'methods';
+    const i = d.indexOf(section, '', m[2]);
+    return i >= 0 ? itemSpec(d, section, d.items(section)[i]) : undefined;
+  },
+});
+
 // organisation: a unit's page shows the unit and its adapters (keyed "ADP:<unit>/<mcp>")
 registerNodeEditor({
   name: 'unit',

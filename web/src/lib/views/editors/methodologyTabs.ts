@@ -56,6 +56,28 @@ export const SECTION_SINGULAR: Record<Section, string> = {
   methods: 'the method',
 };
 
+/** The type the methodology version is composed of its elements from (its `defines` composition link). */
+export const VERSION_TYPE = 'methodology@MethodologyVersion';
+
+/** What an editor pane lists: a collection of the draft. */
+export type Collection = Section | 'roles';
+
+/** The node types of the methodology domain, bound to the collection of the draft that holds their elements. */
+export const TYPE_COLLECTION: Record<string, Collection> = {
+  Agent: 'agents',
+  Action: 'actions',
+  Condition: 'conditions',
+  Goal: 'goals',
+  Process: 'processes',
+  Method: 'methods',
+  Role: 'roles',
+};
+
+export const COLLECTION_TYPE: Record<Collection, string> = Object.fromEntries(Object.entries(TYPE_COLLECTION).map(([t, c]) => [c, t])) as Record<Collection, string>;
+
+/** The panes before the type catalogue is loaded. */
+export const DEFAULT_COLLECTIONS: Collection[] = ['processes', 'methods', 'agents', 'actions', 'conditions', 'goals', 'roles'];
+
 export function methodologySpec(name: string, version: string): TabSpec {
   return { kind: 'methodology', params: { name, version } };
 }

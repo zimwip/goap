@@ -825,10 +825,12 @@ func (x *DocumentSpec) GetContains() []string {
 }
 
 type LinkType struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	From          string                 `protobuf:"bytes,2,opt,name=from,proto3" json:"from,omitempty"`
-	To            string                 `protobuf:"bytes,3,opt,name=to,proto3" json:"to,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	From  string                 `protobuf:"bytes,2,opt,name=from,proto3" json:"from,omitempty"`
+	To    string                 `protobuf:"bytes,3,opt,name=to,proto3" json:"to,omitempty"`
+	// composition link: the target is a part of the source, shown as its child
+	Compose       bool `protobuf:"varint,4,opt,name=compose,proto3" json:"compose,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -882,6 +884,13 @@ func (x *LinkType) GetTo() string {
 		return x.To
 	}
 	return ""
+}
+
+func (x *LinkType) GetCompose() bool {
+	if x != nil {
+		return x.Compose
+	}
+	return false
 }
 
 type Condition struct {
@@ -5284,6 +5293,7 @@ type LinkTypeInfo struct {
 	Ref           string                 `protobuf:"bytes,1,opt,name=ref,proto3" json:"ref,omitempty"`
 	From          string                 `protobuf:"bytes,2,opt,name=from,proto3" json:"from,omitempty"`
 	To            string                 `protobuf:"bytes,3,opt,name=to,proto3" json:"to,omitempty"`
+	Compose       bool                   `protobuf:"varint,4,opt,name=compose,proto3" json:"compose,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -5337,6 +5347,13 @@ func (x *LinkTypeInfo) GetTo() string {
 		return x.To
 	}
 	return ""
+}
+
+func (x *LinkTypeInfo) GetCompose() bool {
+	if x != nil {
+		return x.Compose
+	}
+	return false
 }
 
 type GetProcessGraphRequest struct {
@@ -6278,11 +6295,12 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\aactions\x18\n" +
 	" \x03(\tR\aactions\"*\n" +
 	"\fDocumentSpec\x12\x1a\n" +
-	"\bcontains\x18\x01 \x03(\tR\bcontains\"B\n" +
+	"\bcontains\x18\x01 \x03(\tR\bcontains\"\\\n" +
 	"\bLinkType\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
 	"\x04from\x18\x02 \x01(\tR\x04from\x12\x0e\n" +
-	"\x02to\x18\x03 \x01(\tR\x02to\"U\n" +
+	"\x02to\x18\x03 \x01(\tR\x02to\x12\x18\n" +
+	"\acompose\x18\x04 \x01(\bR\acompose\"U\n" +
 	"\tCondition\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x12\n" +
@@ -6649,11 +6667,12 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\tlifecycle\x18\x05 \x01(\v2\x1b.goap.registry.v1.LifecycleR\tlifecycle\x12+\n" +
 	"\x11change_controlled\x18\x06 \x01(\bR\x10changeControlled\x12\x16\n" +
 	"\x06editor\x18\a \x01(\tR\x06editor\x12\x1a\n" +
-	"\bcontains\x18\b \x03(\tR\bcontains\"D\n" +
+	"\bcontains\x18\b \x03(\tR\bcontains\"^\n" +
 	"\fLinkTypeInfo\x12\x10\n" +
 	"\x03ref\x18\x01 \x01(\tR\x03ref\x12\x12\n" +
 	"\x04from\x18\x02 \x01(\tR\x04from\x12\x0e\n" +
-	"\x02to\x18\x03 \x01(\tR\x02to\"s\n" +
+	"\x02to\x18\x03 \x01(\tR\x02to\x12\x18\n" +
+	"\acompose\x18\x04 \x01(\bR\acompose\"s\n" +
 	"\x16GetProcessGraphRequest\x12?\n" +
 	"\vmethodology\x18\x01 \x01(\v2\x1d.goap.registry.v1.MethodologyR\vmethodology\x12\x18\n" +
 	"\aprocess\x18\x02 \x01(\tR\aprocess\"\x80\x01\n" +

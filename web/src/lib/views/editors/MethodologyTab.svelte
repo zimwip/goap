@@ -10,6 +10,8 @@
   import { replaceTab } from '../../shell/tabs.svelte';
   import { drafts, getDraft } from '../../stores/drafts.svelte';
   import { typeCatalog, loadTypes, typeName } from '../../stores/types.svelte';
+  import { requestReveal } from '../../shell/workbench.svelte';
+  import { openTab } from '../../shell/tabs.svelte';
   import { openDomain } from './domainTabs';
   import { formatDate, TRIGGER_EVENTS } from '../../api';
   import {
@@ -28,8 +30,14 @@
     draftActions,
     methodologySpec,
     openItem,
+    itemSpec,
     SECTION_ICON,
     SECTION_LABEL,
+    TYPE_COLLECTION,
+    COLLECTION_TYPE,
+    DEFAULT_COLLECTIONS,
+    VERSION_TYPE,
+    type Collection,
   } from './methodologyTabs';
 
   let { tab }: { tab: Tab } = $props();
@@ -83,7 +91,15 @@
   const ns = $derived(f.namespace.trim());
   const namespaces = $derived(cat.namespaces());
 
-  const SECTIONS: Section[] = ['processes', 'methods', 'agents', 'actions', 'conditions', 'goals'];
+  // The panes come from the domain: the element types the methodology version is composed of (its `defines`
+  // composition link), each bound to the collection of the draft that holds its elements. The catalogue not
+  // loaded yet, the default list stands in.
+  const SECTIONS = $derived.by<Collection[]>(() => {
+    const cols = cat.sectionsOf(VERSION_TYPE).map((t) => TYPE_COLLECTION[typeName(t)]).filter((c): c is Collection => !!c);
+    return cols.length ? cols : DEFAULT_COLLECTIONS;
+  });
+  const label = (c: Collection): string => (c === 'roles' ? 'Roles' : SECTION_LABEL[c]);
+  const icon = (c: Collection) => (c === 'roles' ? ('user' as const) : SECTION_ICON[c]);
 
   let pane = $state(untrack(() => tab.params.pane) || 'overview');
   $effect(() => {
@@ -93,7 +109,7 @@
   const panes = $derived<Pane[]>([
     { id: 'overview', label: 'Overview' },
     { id: 'types', label: 'Types', badge: ns || '—' },
-    ...SECTIONS.map((s) => ({ id: s, label: SECTION_LABEL[s], badge: f[s].length })),
+    ...SECTIONS.map((s) => ({ id: s, label: label(s), badge: f[s].length })),
   ]);
 
   // a reveal request (problems console, issue path…) opens the pane that holds the field
@@ -104,6 +120,16 @@
     const section = SECTIONS.find((s) => path.startsWith(s));
     pane = section ?? (path.startsWith('namespace') ? 'types' : 'overview');
   });
+
+  /** The parts of an element, as the domain composes them: the steps a process or a method is made of. */
+  function parts(s: Collection, it: SectionItem) {
+    return s !== 'roles' && 'steps' in it && cat.isComposite(`${VERSION_TYPE.split('@')[0]}@${COLLECTION_TYPE[s]}`) ? walkSteps(it.steps) : [];
+  }
+
+  function openPart(s: Section, it: SectionItem, at: string) {
+    const t = openTab(itemSpec(d, s, it));
+    requestReveal(t.id, at);
+  }
 
   function add(section: Section) {
     const factories = { agents: emptyAgent, actions: emptyAction, conditions: emptyCondition, goals: emptyGoal, processes: emptyProcess, methods: emptyMethod };
@@ -258,28 +284,6 @@
             {/if}
           </fieldset>
         </section>
-        <section class="card" data-path="roles">
-          <div class="row head">
-            <h3 class="grow">Roles <span class="hint">{f.roles.length}</span></h3>
-            {#if !d.readonly}<button type="button" class="small" onclick={() => f.roles.push({ name: '', description: '' })}>+ Role</button>{/if}
-          </div>
-          <p class="hint">
-            The roles the processes and methods assign (responsible, accountable, consulted, informed). The methodology
-            names roles, never people: the organisation assigns them to users per unit (<code>developer@TEAM-PAY</code>), and a
-            role held in a unit holds in the units below it.
-          </p>
-          <fieldset class="plain" disabled={d.readonly}>
-            {#each f.roles as r, i (i)}
-              <div class="role-row" class:bad={d.bad(`roles[${i}]`)}>
-                <input type="text" class="mono" aria-label="Role name" placeholder="developer" bind:value={r.name} data-path="roles[{i}].name" />
-                <input type="text" aria-label="Role description" placeholder="What the role does" bind:value={r.description} />
-                {#if !d.readonly}<button type="button" class="small icon" aria-label="Remove the role" onclick={() => f.roles.splice(i, 1)}>✕</button>{/if}
-              </div>
-            {:else}
-              <p class="empty">No role declared.</p>
-            {/each}
-          </fieldset>
-        </section>
       {/if}
             {:else if active === 'types'}
         <section class="card" id="m-types">
@@ -320,12 +324,35 @@
             </ul>
           {/if}
         </section>
-            {:else if SECTIONS.includes(active as Section)}
+            {:else if active === 'roles' && SECTIONS.includes('roles')}
+        <section class="card" data-path="roles">
+                <div class="row head">
+                  <h3 class="grow">Roles <span class="hint">{f.roles.length}</span></h3>
+                  {#if !d.readonly}<button type="button" class="small" onclick={() => f.roles.push({ name: '', description: '' })}>+ Role</button>{/if}
+                </div>
+                <p class="hint">
+                  The roles the processes and methods assign (responsible, accountable, consulted, informed). The methodology
+                  names roles, never people: the organisation assigns them to users per unit (<code>developer@TEAM-PAY</code>), and a
+                  role held in a unit holds in the units below it.
+                </p>
+                <fieldset class="plain" disabled={d.readonly}>
+                  {#each f.roles as r, i (i)}
+                    <div class="role-row" class:bad={d.bad(`roles[${i}]`)}>
+                      <input type="text" class="mono" aria-label="Role name" placeholder="developer" bind:value={r.name} data-path="roles[{i}].name" />
+                      <input type="text" aria-label="Role description" placeholder="What the role does" bind:value={r.description} />
+                      {#if !d.readonly}<button type="button" class="small icon" aria-label="Remove the role" onclick={() => f.roles.splice(i, 1)}>✕</button>{/if}
+                    </div>
+                  {:else}
+                    <p class="empty">No role declared.</p>
+                  {/each}
+                </fieldset>
+              </section>
+            {:else if SECTIONS.includes(active as Collection) && active !== 'roles'}
               {@const s = active as Section}
               <section class="card" data-path={s}>
                 <div class="row head">
-                  <Icon name={SECTION_ICON[s]} size={16} />
-                  <h3 class="grow">{SECTION_LABEL[s]} <span class="hint">{f[s].length}</span></h3>
+                  <Icon name={icon(s)} size={16} />
+                  <h3 class="grow">{label(s)} <span class="hint">{f[s].length}</span></h3>
                   {#if !d.readonly}
                     <button type="button" class="small primary" onclick={() => add(s)}>+ Add</button>
                   {/if}
@@ -339,6 +366,12 @@
                       <span class="hint ell">{summary(s, it)}</span>
                       {#if n}<span class="count bad" title="Issues">{n}</span>{/if}
                     </li>
+                    {#each parts(s, it) as p (p.path)}
+                      <li class="part" style:padding-left="{1.2 + 1.1 * (p.path.split('/').length - 1)}rem" data-path="{s}[{i}].{p.at}">
+                        <button type="button" class="link" onclick={() => openPart(s, it, p.at)}>{p.step.name || '(unnamed)'}</button>
+                        <span class="hint ell">{p.step.description}</span>
+                      </li>
+                    {/each}
                   {:else}
                     <li class="empty">{s === 'agents' ? 'No agent: the default agent runs every action.' : s === 'processes' ? 'No process: describe the steps that reach the objective of a change, each done by an action, an agent, a nested process or a person.' : 'None yet.'}</li>
                   {/each}
@@ -377,6 +410,9 @@
   }
   .items li.has-issues {
     box-shadow: inset 3px 0 0 var(--danger);
+  }
+  .part {
+    font-size: 0.92em;
   }
   .count.bad {
     color: var(--danger);

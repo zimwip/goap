@@ -1,5 +1,5 @@
 name: methodology
-version: 1.4.0
+version: 1.5.0
 description: >
   Built-in meta-domain (ADR 0012 §4, ADR 0023): the definition of a methodology version, one node per element, in the
   "methodology" namespace. Its types are in every type catalogue, before anything is loaded from the registry.
@@ -31,12 +31,14 @@ nodeTypes:
   # an MCP tool the self-observation asks the platform for (ADR 0011): not part of a definition
   - {name: ToolRequest, description: "MCP tool requested by the self-observation of a methodology", properties: [name, description, motivation, span]}
 linkTypes:
+  # compose: true flags a composition link (the target is a part of the source): editors and browsers read it
+  # to show the targets as the children of the source, instead of knowing the link by name.
   # a version -> its elements
-  - {name: defines, from: MethodologyVersion}
+  - {name: defines, from: MethodologyVersion, compose: true}
   # a specialization -> the more generic Activity it specializes (ADR 0009 §5 for an abstract action, ADR 0035 §1
   # for a method providing a capability; architecture plan "Activity concept"): the mechanism is the same at every
   # layer, going from generic to specialized - Action extends Activity, so this already covers it transitively.
   # properties: when (CEL guard, "" = always), priority (the applicable one with the highest wins).
   - {name: specializes, from: Activity, to: Activity, properties: [when, priority]}
   # an Activity -> the sub-activities (Step/MethodStep, or a nested Process/Method) it is composed from
-  - {name: sub_activity, from: Activity, to: Activity}
+  - {name: sub_activity, from: Activity, to: Activity, compose: true}

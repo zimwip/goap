@@ -220,7 +220,7 @@ func nodeTypesToPB(ns []methodology.NodeType) []*registryv1.NodeType {
 func linkTypesToPB(ls []methodology.LinkType) []*registryv1.LinkType {
 	var out []*registryv1.LinkType
 	for _, l := range ls {
-		out = append(out, &registryv1.LinkType{Name: l.Name, From: l.From, To: l.To})
+		out = append(out, &registryv1.LinkType{Name: l.Name, From: l.From, To: l.To, Compose: l.Compose})
 	}
 	return out
 }
@@ -252,7 +252,7 @@ func DomainFromPB(p *registryv1.Domain) methodology.Domain {
 		d.NodeTypes = append(d.NodeTypes, nodeTypeFromPB(n))
 	}
 	for _, l := range p.LinkTypes {
-		d.LinkTypes = append(d.LinkTypes, methodology.LinkType{Name: l.Name, From: l.From, To: l.To})
+		d.LinkTypes = append(d.LinkTypes, methodology.LinkType{Name: l.Name, From: l.From, To: l.To, Compose: l.Compose})
 	}
 	d.Lifecycles = lifecyclesFromPB(p.Lifecycles)
 	d.Algorithms, d.Instances = algorithmsFromPB(p.Algorithms), instancesFromPB(p.AlgorithmInstances)
