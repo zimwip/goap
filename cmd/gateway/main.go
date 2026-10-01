@@ -4,6 +4,7 @@ package main
 import (
 	"context"
 	"strings"
+	"time"
 
 	"connectrpc.com/connect"
 
@@ -32,6 +33,32 @@ func (c credentialsClient) Verify(ctx context.Context, subject, password string)
 		return false, err
 	}
 	return r.Msg.GetOk(), nil
+}
+
+func (c credentialsClient) StartSession(ctx context.Context, subject string, maxAge time.Duration) (string, error) {
+	r, err := c.rpc.StartSession(ctx, connect.NewRequest(&credentialsv1.StartSessionRequest{Subject: subject, MaxAgeSeconds: int64(maxAge / time.Second)}))
+	if err != nil {
+		return "", err
+	}
+	return r.Msg.GetId(), nil
+}
+
+func (c credentialsClient) SessionActive(ctx context.Context, id, subject string) (bool, error) {
+	r, err := c.rpc.CheckSession(ctx, connect.NewRequest(&credentialsv1.CheckSessionRequest{Id: id, Subject: subject}))
+	if err != nil {
+		return false, err
+	}
+	return r.Msg.GetActive(), nil
+}
+
+func (c credentialsClient) EndSession(ctx context.Context, id string) error {
+	_, err := c.rpc.EndSession(ctx, connect.NewRequest(&credentialsv1.EndSessionRequest{Id: id}))
+	return err
+}
+
+func (c credentialsClient) EndSessions(ctx context.Context, subject string) error {
+	_, err := c.rpc.EndSessions(ctx, connect.NewRequest(&credentialsv1.EndSessionsRequest{Subject: subject}))
+	return err
 }
 
 func main() {

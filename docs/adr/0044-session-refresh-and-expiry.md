@@ -32,4 +32,4 @@ raw HTTP messages and no hint of why the user was back on it.
 ## Consequences
 
 - An idle session survives `GOAP_TOKEN_TTL`; an active one, `GOAP_SESSION_MAX`.
-- Tokens are still stateless: signing out clears the client's token only (no server-side revocation, ADR 0040).
+- Signing out ends the session server side since ADR 0045.

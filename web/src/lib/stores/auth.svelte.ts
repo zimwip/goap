@@ -80,7 +80,13 @@ function refreshNow(): Promise<void> {
   refreshing ??= refreshToken()
     .catch((e) => {
       if (e instanceof RpcError && e.status === 401) {
-        endSession(/session expired/.test(e.message) ? 'Your session reached its maximum duration. Sign in again.' : 'Your session expired. Sign in again.');
+        endSession(
+          /session expired/.test(e.message)
+            ? 'Your session reached its maximum duration. Sign in again.'
+            : /ended/.test(e.message)
+              ? 'Your session was ended (signed out on another device, or the password changed). Sign in again.'
+              : 'Your session expired. Sign in again.',
+        );
       } else {
         // gateway unreachable or failing: try again in a minute, while the token is still valid
         clearTimeout(timer);
@@ -119,7 +125,13 @@ function keepSession(): void {
     check();
   });
   onUnauthorized((message) => {
-    endSession(/expired/.test(message) ? 'Your session expired. Sign in again.' : 'Your session is no longer valid. Sign in again.');
+    endSession(
+      /expired/.test(message)
+        ? 'Your session expired. Sign in again.'
+        : /ended/.test(message)
+          ? 'Your session was ended (signed out on another device, or the password changed). Sign in again.'
+          : 'Your session is no longer valid. Sign in again.',
+    );
   });
   // a tab coming back (laptop woken up, tab switched to) looks at its token at once
   document.addEventListener('visibilitychange', () => {

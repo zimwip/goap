@@ -2,8 +2,11 @@ package credsvc
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"time"
 
 	"golang.org/x/crypto/bcrypt"
 )
@@ -65,7 +68,11 @@ func (s *Service) SetPassword(ctx context.Context, subject, password string) err
 	if err != nil {
 		return err
 	}
-	return s.Store.Set(ctx, subject, string(hash))
+	if err := s.Store.Set(ctx, subject, string(hash)); err != nil {
+		return err
+	}
+	// a new password ends every session signed in with the old one (ADR 0045)
+	return s.EndSessions(ctx, subject)
 }
 
 // Exists reports whether a subject already has a local credential.
@@ -74,4 +81,55 @@ func (s *Service) Exists(ctx context.Context, subject string) (bool, error) {
 		return false, nil
 	}
 	return s.Store.Exists(ctx, subject)
+}
+
+// StartSession opens a sign-in session of a subject (ADR 0045), valid maxAge, and returns its id: every token issued
+// from this sign-in carries it, and stops being accepted once the session ends.
+func (s *Service) StartSession(ctx context.Context, subject string, maxAge time.Duration) (string, error) {
+	if subject == "" || maxAge <= 0 {
+		return "", fmt.Errorf("%w: subject and session duration required", ErrInvalid)
+	}
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	now := time.Now()
+	sess := Session{ID: hex.EncodeToString(b), Subject: subject, Created: now, Expires: now.Add(maxAge)}
+	// sessions expired for a day are forgotten as new ones open
+	if err := s.Store.CreateSession(ctx, sess, now.Add(-24*time.Hour)); err != nil {
+		return "", err
+	}
+	return sess.ID, nil
+}
+
+// SessionActive reports whether a session of subject still accepts its tokens: it exists, belongs to subject, was
+// not ended and has not expired.
+func (s *Service) SessionActive(ctx context.Context, id, subject string) (bool, error) {
+	if id == "" {
+		return false, nil
+	}
+	sess, err := s.Store.Session(ctx, id)
+	if errors.Is(err, ErrNotFound) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return sess.Subject == subject && sess.Active(time.Now()), nil
+}
+
+// EndSession ends a session (signing out): its tokens are refused from now on.
+func (s *Service) EndSession(ctx context.Context, id string) error {
+	if id == "" {
+		return nil
+	}
+	return s.Store.RevokeSession(ctx, id, time.Now())
+}
+
+// EndSessions ends every session of a subject (signing out everywhere, a new password).
+func (s *Service) EndSessions(ctx context.Context, subject string) error {
+	if subject == "" {
+		return nil
+	}
+	return s.Store.RevokeSessions(ctx, subject, time.Now())
 }

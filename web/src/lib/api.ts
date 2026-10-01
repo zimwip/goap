@@ -1675,11 +1675,18 @@ export const register = (subject: string, password: string): Promise<void> => au
 /** Signs in with a local account (POST /auth/login). */
 export const login = (subject: string, password: string): Promise<void> => authToken('/auth/login', subject, password);
 
-/** Signs out (POST /auth/logout: nothing to revoke server-side today, HS256 is stateless) and clears the local token. */
-export async function logout(): Promise<void> {
+/**
+ * Signs out (POST /auth/logout, ADR 0045): the gateway ends the session of the token, so its tokens are refused
+ * from now on — every session of the user with `everywhere` (all their devices) — and the local token is cleared.
+ */
+export async function logout(everywhere = false): Promise<void> {
   const token = getToken();
   try {
-    await fetch(`${BASE}/auth/logout`, { method: 'POST', headers: token ? { Authorization: `Bearer ${token}` } : {} });
+    await fetch(`${BASE}/auth/logout`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: JSON.stringify({ everywhere }),
+    });
   } finally {
     setToken(null);
   }
