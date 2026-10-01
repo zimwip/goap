@@ -238,6 +238,46 @@ func TestPlatformAssignmentGrantsRoleEverywhere(t *testing.T) {
 	}
 }
 
+// Administration is itself a platform role now (ADR 0047): a unit granted "admin" through a platform
+// Assignment reaches the floor (Authorizer.Floor, which calls Enrich alone, never the fuller Authorize) the
+// same way a User.Admin flag does — a deny policy can never lock it out (ADR 0020, 0043).
+func TestPlatformAssignmentGrantsAdminPastTheFloor(t *testing.T) {
+	ctx := context.Background()
+	g, a := setup(t)
+	if _, err := graphsvc.SeedDefaults(ctx, g); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := graphsvc.SeedAccess(ctx, g); err != nil {
+		t.Fatal(err)
+	}
+	if err := graphsvc.SeedPolicy(ctx, g, authz.Policy{Rule: `hasRole(r.sub, "admin")`, Resource: "*", Action: "*", Effect: "deny"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := graphsvc.SeedUnit(ctx, g, "team-a", "Team A", "team", ""); err != nil {
+		t.Fatal(err)
+	}
+	team, err := g.NodeByKey(ctx, mcp.NamespaceOrganisation, "team-a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	head, err := g.BranchHead(ctx, mcp.NamespaceOrganisation, domain.MainBranch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	teamRef := team.Ref()
+	edits := []graph.NodeEdit{
+		{Key: access.PlatformAssignmentKey("team-a"), Type: access.NodeTypeAssignment, Props: access.Assignment{Roles: []string{access.RoleAdmin}}.Props(), Rationale: "t",
+			Links: []graph.LinkEdit{{Type: access.LinkAssignsOrg, To: &teamRef}}},
+	}
+	if _, err := g.Commit(ctx, graph.Commit{Namespace: mcp.NamespaceOrganisation, Title: "admin assignment", Baseline: head.ID, By: "test", BaselineName: "admin assignment", Edits: edits}); err != nil {
+		t.Fatal(err)
+	}
+	dev := authz.Principal{Subject: "dev", Org: "team-a"}
+	if !can(t, a, dev, "policy", "write") || !can(t, a.Floor(), dev, "policy", "write") {
+		t.Fatal("the platform admin assignment must pass the floor, deny policy notwithstanding")
+	}
+}
+
 func TestProjectChainAndRoles(t *testing.T) {
 	proj := func(id, key string) domain.Node {
 		return domain.Node{ID: domain.NodeID(id), Key: key, Type: access.NodeTypeProjectUnit, Namespace: "organisation"}

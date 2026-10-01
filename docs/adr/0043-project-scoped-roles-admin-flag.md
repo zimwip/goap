@@ -1,6 +1,7 @@
 # ADR 0043 — Roles are held on projects; administration is a flag of the user
 
-**Status**: accepted, implemented · **Date**: 2026-10 ·
+**Status**: accepted, implemented (administration is no longer a flag — it became a platform role, ADR 0047) ·
+**Date**: 2026-10 ·
 Builds on ADR 0020 (access control), ADR 0035 §2 (roles of a methodology), ADR 0039 (project, Assignment,
 `methodology@Role`), ADR 0040 / 0042 (user bootstrap, sign-in).
 

@@ -57,10 +57,12 @@ func (r Role) Props() map[string]any {
 	return m
 }
 
-// BuiltinRoles are the platform roles shipped with the platform (ADR 0046). Administration (RoleAdmin) is
-// not among them: it stays the User.Admin flag of ADR 0043, never migrated into this mechanism.
+// BuiltinRoles are the platform roles shipped with the platform (ADR 0046, 0047). Administration ("admin",
+// access.RoleAdmin) is one of them: granted by a platform Assignment, checked by the compiled-in floor
+// policy (authz.FloorPolicies) ahead of every stored policy, so it can never be denied by one (ADR 0043).
 func BuiltinRoles() []Role {
 	return []Role{
+		{Name: "admin", Description: "Administers the platform: organisation, projects, methodologies, domains, policies, adapters, and everything else."},
 		{Name: "reader", Description: "Reads everything on the platform, past the usual organisation/project scoping."},
 	}
 }

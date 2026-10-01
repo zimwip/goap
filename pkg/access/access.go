@@ -43,22 +43,25 @@ func IsWaitingUnit(props map[string]any) bool {
 	return v
 }
 
-// User is a person or a service account. It holds no role of its own (ADR 0043): administration is a flag,
-// every other role is held on a project, granted by an Assignment.
+// User is a person or a service account. It holds no role of its own held *on it* (ADR 0043): every role,
+// administration included, is granted by an Assignment — a project-scoped one, or, for a platform role, one
+// naming no project (ADR 0046, 0047).
 type User struct {
 	Subject     string `json:"subject"`
 	DisplayName string `json:"displayName,omitempty"`
 	Email       string `json:"email,omitempty"`
 	Locale      string `json:"locale,omitempty"`
-	// Admin makes the user an administrator of the platform: the principal gets RoleAdmin, which the floor
-	// policy lets do everything (ADR 0020).
+	// Admin is read for a node written before ADR 0047: it still makes an administrator (UserFromProps),
+	// but new code grants RoleAdmin through a platform Assignment instead, like any other platform role; it
+	// is no longer written by graphsvc.createUser (the first-admin bootstrap, ADR 0040) or the web.
 	Admin bool `json:"admin,omitempty"`
 	// Unit is the organisational unit the user belongs to (the member_of link).
 	Unit string `json:"-"`
 }
 
-// RoleAdmin is the role the principal of an administrator carries (User.Admin), the one the floor policy
-// checks. It is not a methodology role and no Assignment grants it.
+// RoleAdmin is the platform role (ADR 0046) of an administrator: granted by a platform Assignment (or, for a
+// node written before ADR 0047, the legacy User.Admin flag), it is the one role the compiled-in floor policy
+// checks (authz.FloorPolicies), ahead of every stored policy, so it can never be denied by one.
 const RoleAdmin = "admin"
 
 // RoleReader is a built-in platform role (ADR 0046): granted by an Assignment naming no project (`assigns_org`
@@ -67,9 +70,18 @@ const RoleAdmin = "admin"
 // project reads that project's own Assignments itself (ProjectRoles); the grant itself is project-independent.
 const RoleReader = "reader"
 
-// PlatformRoles are the built-in roles an Assignment can grant platform-wide (no assigns_project link).
-// Unlike methodology roles, this is a fixed set, not read from the graph.
-var PlatformRoles = []string{RoleReader}
+// PlatformRoles are the built-in roles an Assignment can grant platform-wide (no assigns_project link),
+// mcp.BuiltinRoles by name. Unlike methodology roles, this is a fixed set, not read from the graph for
+// enforcement (authz.DefaultPolicies names them directly); the platform@Role nodes SeedBuiltins keeps in
+// sync only document them for the IDE.
+var PlatformRoles = func() []string {
+	roles := mcp.BuiltinRoles()
+	out := make([]string, len(roles))
+	for i, r := range roles {
+		out[i] = r.Name
+	}
+	return out
+}()
 
 // UserKey is the key of the node of a user.
 func UserKey(subject string) string { return "USR:" + subject }
@@ -106,8 +118,8 @@ func UserFromProps(props map[string]any) (User, error) {
 		return u, errors.New("user without subject")
 	}
 	u.Admin, _ = props["admin"].(bool)
-	// a node written before ADR 0043 lists its roles: "admin" among them still makes an administrator, the
-	// others (held on projects now) are ignored
+	// a node written before ADR 0043 lists its roles instead of an admin flag: "admin" among them still makes
+	// an administrator too, the others (held on projects now) are ignored
 	switch r := props["roles"].(type) {
 	case []any:
 		u.Admin = u.Admin || slices.Contains(r, any(RoleAdmin))
@@ -326,20 +338,34 @@ func (s *Snapshot) Users() []User {
 	return out
 }
 
-// Enrich completes a principal with what the graph knows of its subject: an administrator gets RoleAdmin
-// (User.Admin), and the unit it belongs to is its organisation when the token names none. Its other roles are
-// held on projects: the Authorizer adds those of the resource's project (ADR 0043).
+// Enrich completes a principal with what the graph knows of its subject: it gets the platform-wide roles
+// (ADR 0046) granted to it or to a unit it belongs to — administration (RoleAdmin) included, now one of them
+// (ADR 0047) — plus RoleAdmin again for a User.Admin flag written before that ADR; the unit it belongs to is
+// its organisation when the token names none. This is resource-independent, so Floor() (which calls Enrich
+// alone, never the fuller Authorize) sees a platform-granted admin too: no stored policy can lock one out.
+// Platform roles are resolved from the principal's org chain, not its User node, so they reach a principal
+// with no User node of its own (a trigger's service identity, a token naming only an org) the same way
+// ProjectRoles already does. Its project-scoped roles are held on projects: the Authorizer adds those of the
+// resource's project (ADR 0043).
 func (s *Snapshot) Enrich(p authz.Principal) authz.Principal {
-	u, ok := s.users[p.Subject]
-	if !ok || p.Anonymous() {
+	if p.Anonymous() {
 		return p
 	}
-	if u.Admin && !slices.Contains(p.Roles, RoleAdmin) {
-		p.Roles = append(slices.Clone(p.Roles), RoleAdmin)
+	if u, ok := s.users[p.Subject]; ok {
+		if p.Org == "" {
+			p.Org = u.Unit
+		}
+		if u.Admin && !slices.Contains(p.Roles, RoleAdmin) {
+			p.Roles = append(slices.Clone(p.Roles), RoleAdmin)
+		}
 	}
-	if p.Org == "" {
-		p.Org = u.Unit
+	roles := slices.Clone(p.Roles)
+	for _, r := range s.PlatformRoles(s.SubjectChain(p)) {
+		if !slices.Contains(roles, r) {
+			roles = append(roles, r)
+		}
 	}
+	p.Roles = roles
 	return p
 }
 
@@ -450,22 +476,16 @@ func (a *Authorizer) Authorize(ctx context.Context, req authz.Request) (bool, er
 	}
 	c, snap := a.enforcer(ctx)
 	if snap != nil {
+		// Enrich already merges the subject's platform-wide roles (ADR 0046, 0047); only the roles held on
+		// the resource's project remain to add here (ADR 0043).
 		req.Subject = snap.Enrich(req.Subject)
 		if req.Resource.Org != "" && len(req.Resource.OrgChain) == 0 {
 			req.Resource.OrgChain = snap.Chain(req.Resource.Org)
 		}
-		// the roles the subject holds on the resource's project (the root project when it names none), granted
-		// by Assignments to the subject itself or to a unit it belongs to (ADR 0043), plus the platform-wide
-		// roles held regardless of project (ADR 0046)
 		projectChain := snap.ProjectChain(domain.ProjectOf(req.Resource.ProjectID))
 		subjectChain := snap.SubjectChain(req.Subject)
 		roles := slices.Clone(req.Subject.Roles)
 		for _, r := range snap.ProjectRoles(subjectChain, projectChain) {
-			if !slices.Contains(roles, r) {
-				roles = append(roles, r)
-			}
-		}
-		for _, r := range snap.PlatformRoles(subjectChain) {
 			if !slices.Contains(roles, r) {
 				roles = append(roles, r)
 			}

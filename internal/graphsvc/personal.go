@@ -57,12 +57,13 @@ func (h *Handler) resolveOwner(ctx context.Context, owner string) (string, error
 // one node, not two competing for the same key.
 //
 // A new user is linked member_of the unit new users join (NewUserUnit: the waiting unit an administrator
-// flagged, else the default organisation, ADR 0042), and granted the admin role when it is the very
-// first User node the namespace has ever held (ADR 0040): a fresh deployment otherwise has no path to a
-// first administrator at all. Creations are serialized within a process; a benign race between two
-// processes' simultaneous first connections can grant admin to more than one subject; it never grants it to
-// none, which is what the floor policy (ADR 0020) relies on. The node and its member_of are committed
-// together, as a change of their own on main (createUser, ADR 0042).
+// flagged, else the default organisation, ADR 0042), and granted the admin role, through a platform
+// Assignment (ADR 0046, 0047), when it is the very first User node the namespace has ever held (ADR 0040): a
+// fresh deployment otherwise has no path to a first administrator at all. Creations are serialized within a
+// process; a benign race between two processes' simultaneous first connections can grant admin to more than
+// one subject; it never grants it to none, which is what the floor policy (ADR 0020) relies on. The User
+// node, its member_of, and the first user's admin Assignment are committed together, as one change on main
+// (createUser, ADR 0042).
 //
 // The default org is resolved *before* the node is created: SeedDefaults can still be seeding at startup (it
 // waits on the registry to publish the type catalogue), and a caller seen in that window must not leave a
@@ -116,10 +117,22 @@ func createUser(ctx context.Context, g *graph.Graph, subject string) error {
 	if err != nil {
 		return err
 	}
-	u := access.User{Subject: subject, Admin: len(existing) == 0}
-	user := linkTo(createNode(access.UserKey(subject), access.NodeTypeUser, u.Props()), access.LinkMemberOf, org.Ref())
+	u := access.User{Subject: subject}
+	key := access.UserKey(subject)
+	user := linkTo(createNode(key, access.NodeTypeUser, u.Props()), access.LinkMemberOf, org.Ref())
 	user.Rationale = "First sign-in of " + subject
-	return applyOn(ctx, g, mcp.NamespaceOrganisation, "User "+subject, []graph.NodeEdit{user})
+	edits := []graph.NodeEdit{user}
+	if len(existing) == 0 {
+		// the first user: grant admin through a platform Assignment created in the same commit (ToKey
+		// resolves to the User node above), rather than the legacy User.Admin flag (ADR 0047)
+		asg := access.Assignment{Roles: []string{access.RoleAdmin}, Description: "First user becomes administrator"}
+		edits = append(edits, graph.NodeEdit{
+			Key: access.PlatformAssignmentKey(key), Type: access.NodeTypeAssignment, Props: asg.Props(),
+			Rationale: "First user becomes administrator",
+			Links:     []graph.LinkEdit{{Type: access.LinkAssignsOrg, ToKey: key}},
+		})
+	}
+	return applyOn(ctx, g, mcp.NamespaceOrganisation, "User "+subject, edits)
 }
 
 // NewUserUnit returns the organisational unit new users join (ADR 0042): the waiting unit, an OrgUnit an
