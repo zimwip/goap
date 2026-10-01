@@ -17,6 +17,7 @@ import (
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/graph"
+	"github.com/zimwip/goap/pkg/mcp"
 	"github.com/zimwip/goap/pkg/methodology"
 	"github.com/zimwip/goap/pkg/typecat"
 )
@@ -249,5 +250,13 @@ func TestCommitEditsGatesAccessNodes(t *testing.T) {
 	}
 	if n, err := g.NodeByKey(ctx, "", "K-admin"); err != nil || n.ChangeID != domain.ChangeID(out.ChangeId) || n.Comment != "why" {
 		t.Fatalf("committed node: %+v %v", n, err)
+	}
+	// regression: organisation/project structure and Assignment must be gated too (a platform Assignment
+	// grants the "admin" platform role, ADR 0046/0047 — an ungated Assignment write is privilege escalation
+	// to full administrator, not just a stray node)
+	for _, typ := range []string{access.NodeTypeAssignment, access.NodeTypeProjectUnit, mcp.NodeTypeOrgUnit, mcp.NodeTypeAdapter} {
+		if _, err := commit("contributor", typ); connect.CodeOf(err) != connect.CodePermissionDenied {
+			t.Fatalf("a contributor must not commit a %s node: %v", typ, err)
+		}
 	}
 }
