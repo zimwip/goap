@@ -71,26 +71,36 @@
   let fOrg = $state(fixedOrg ?? '');
   let fProject = $state(fixedProject ?? '');
   let fRoles = $state<string[]>([]);
-  // the roles the chosen project needs (ADR 0043): an assignment grants some of them. PLATFORM: no project,
-  // the roles offered are the built-in platform roles instead (ADR 0046).
+  // the roles the chosen project needs (ADR 0043): an assignment grants some of them. PLATFORM: no project
+  // chosen, or a real project (even a fixed one, ADR 0047) that needs none of its own (no applicable
+  // methodology, or none declaring a role) — either way the roles offered fall back to the built-in platform
+  // ones (ADR 0046): a methodology-less project is otherwise unreachable through an Assignment.
   const project = $derived(fixedProject ?? fProject);
-  const isPlatform = $derived(project === PLATFORM);
+  const isPlatformChoice = $derived(project === PLATFORM);
   let available = $state<ProjectRole[]>([]);
+  let rolesLoaded = $state(false);
   $effect(() => {
     const p = project;
+    rolesLoaded = false;
     if (!p || p === PLATFORM) {
       available = [];
       return;
     }
     let cancelled = false;
     void projectRoles(head, p).then((r) => {
-      if (!cancelled) available = r;
+      if (!cancelled) {
+        available = r;
+        rolesLoaded = true;
+      }
     });
     return () => {
       cancelled = true;
     };
   });
-  /** the roles offered by the current selection: the project's, or the platform's when none is picked */
+  /** a real project (fixed or chosen) with no role of its own: the roles offered fall back to the platform's */
+  const platformFallback = $derived(!!project && project !== PLATFORM && rolesLoaded && available.length === 0);
+  const isPlatform = $derived(isPlatformChoice || platformFallback);
+  /** the roles offered by the current selection: the project's, or the platform's when it offers none */
   const offered = $derived(isPlatform ? PLATFORM_ROLES : available);
   /** roles of the assignment the current selection no longer declares */
   const stray = $derived(fRoles.filter((r) => !offered.some((a) => a.name === r)));
@@ -130,7 +140,9 @@
       error = 'Pick an organisation unit, and a project (or platform-wide).';
       return;
     }
-    const platform = project === PLATFORM;
+    // platform-wide either way: explicitly chosen, or this real project falls back to a platform role because
+    // it needs none of its own (ADR 0047)
+    const platform = isPlatform;
     const orgNode = orgNodes.find((n) => n.key === org);
     const projectNode = platform ? undefined : projectNodes.find((n) => n.key === project);
     if (!orgNode || (!platform && !projectNode)) {
@@ -257,8 +269,14 @@
         <legend>Roles</legend>
         {#if !project}
           <span class="muted">Pick a project, or platform-wide, first.</span>
-        {:else if !offered.length && !stray.length}
-          <span class="muted">{applicableMethodologies(head, project).length ? 'The methodologies of this project declare no role.' : 'This project names no methodology: choose its applicable methodologies on its page first, or assign a platform role instead.'}</span>
+        {:else if platformFallback}
+          <span class="muted"
+            >{applicableMethodologies(head, project).length
+              ? 'The methodologies of this project declare no role: pick a platform role instead. It holds everywhere, not just on this project.'
+              : 'This project names no methodology, so it has no role of its own: pick a platform role instead. It holds everywhere, not just on this project — choose the project’s applicable methodologies on its page if you meant a role scoped to it.'}</span
+          >
+        {:else if !offered.length && !stray.length && !rolesLoaded}
+          <span class="muted">Loading…</span>
         {/if}
         {#each offered as r (r.name)}
           <label class="check" title={`${r.description}${r.description ? ' — ' : ''}${r.methodologies.join(', ')}`}>

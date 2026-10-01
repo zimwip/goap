@@ -39,13 +39,18 @@ administration itself into a general mechanism.
   Assignments itself (the existing `onProject`/`ProjectRoles` machinery), the same way any other rule can narrow
   what a role is allowed to do.
 - **The one shipped policy**: `hasRole(r.sub, "reader")` allows `read` on everything, ahead of (and wider than)
-  the existing org/project-scoped read rule. Administration is not migrated into this mechanism: `User.Admin`
-  stays the floor flag it was under ADR 0043.
+  the existing org/project-scoped read rule. (Administration was later migrated into this same mechanism, ADR
+  0047 — not part of this ADR as first written.)
 - **The web**: `AssignmentsPane.svelte`'s project selector gains a "platform-wide (no project)" choice; picking
   it offers the built-in platform roles (`web/src/lib/projectRoles.ts`'s `PLATFORM_ROLES`, mirroring
   `access.PlatformRoles`) instead of a project's methodology roles, and saves an Assignment with no
   `assigns_project` link. A project with no applicable methodology now shows that choice as the way to grant
-  someone access to it, instead of a dead end.
+  someone access to it, instead of a dead end. The pane falls back to the same platform-role picker whenever
+  the chosen (or, since the project selector is hidden there, the *fixed*) project offers no role of its own —
+  not only when "platform-wide" is explicitly picked — so creating an Assignment from a methodology-less
+  project's own tab (`ProjectTab.svelte`, which opens the pane with `fixedProject` set and no project selector
+  at all) is not the dead end it still was at first: the granted role holds everywhere, not just on that
+  project, which the pane says so inline.
 
 ## Consequences
 

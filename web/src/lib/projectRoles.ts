@@ -78,11 +78,15 @@ export async function rolesOf(names: string[]): Promise<ProjectRole[]> {
 export const projectRoles = (head: HeadGraph, key: string): Promise<ProjectRole[]> => rolesOf(applicableMethodologies(head, key));
 
 /**
- * Built-in platform roles (ADR 0046, mirrors pkg/access.PlatformRoles): granted by an Assignment naming no
+ * Built-in platform roles (ADR 0046/0047, mirrors pkg/mcp.BuiltinRoles): granted by an Assignment naming no
  * project (assigns_org only), held everywhere, independent of any project's methodologies. Fixed, not read
- * from the graph.
+ * from the graph. Administration (ADR 0047) is one of them now: it can be granted here, the same way any
+ * other platform role is, to a unit or a user.
  */
-export const PLATFORM_ROLES: ProjectRole[] = [{ name: 'reader', description: 'Reads everything on the platform, past the usual organisation/project scoping.', methodologies: [] }];
+export const PLATFORM_ROLES: ProjectRole[] = [
+  { name: 'admin', description: 'Administers the platform: organisation, projects, methodologies, domains, policies, adapters, and everything else.', methodologies: [] },
+  { name: 'reader', description: 'Reads everything on the platform, past the usual organisation/project scoping.', methodologies: [] },
+];
 
 /** The key of the Assignment node granting an org unit a platform-wide role (mirrors access.PlatformAssignmentKey). */
 export const platformAssignmentKey = (org: string): string => `ASG:${org}/PLATFORM`;
