@@ -19,6 +19,9 @@
     /** the step runs once per element (or group) of this CEL list, in parallel streams (ADR 0050) */
     foreach?: string;
     groupBy?: string;
+    /** rules this step breaks (compilation issues), and how many are in the steps below it */
+    issues?: string[];
+    issuesInside?: number;
     /** that level, or one below it, is not resolved: this level cannot run through the step */
     broken?: boolean;
     onzoom?: () => void;
@@ -59,6 +62,7 @@
   class:pre={data.kind === 'state' || data.kind === 'inputs'}
   class:out={data.kind === 'outputs'}
   class:broken={data.broken}
+  class:ruled={!!data.issues?.length}
   class:red={!!data.bad?.length}
   class:gap={data.kind === 'unresolved' || data.kind === 'unreached'}
   class:planned={data.planned}
@@ -75,6 +79,12 @@
     <div class="zoom">
       <button type="button" class="chip" title="Open the method: its steps are drawn in a graph of their own" onclick={(e) => (e.stopPropagation(), data.onvariant?.(data.name))}>open method</button>
       <span class="hint">{data.target}</span>
+    </div>
+  {/if}
+  {#if data.issues?.length || data.issuesInside}
+    <div class="zoom">
+      {#if data.issues?.length}<span class="incomplete" title={data.issues.join('\n')}>⚠ {data.issues[0]}{data.issues.length > 1 ? ` (+${data.issues.length - 1})` : ''}</span>
+      {:else}<span class="incomplete" title="Rules are broken in the steps below">⚠ {data.issuesInside} inside</span>{/if}
     </div>
   {/if}
   {#if data.foreach}
@@ -224,6 +234,9 @@
     font-size: 10px;
     font-weight: 700;
     color: var(--warn);
+  }
+  .node.ruled {
+    outline: 2px solid var(--danger, #e45756);
   }
   .node.broken {
     border-color: var(--warn);

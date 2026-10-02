@@ -370,6 +370,9 @@ type Compiled struct {
 type Issue struct {
 	Path    string `json:"path"`
 	Message string `json:"message"`
+	// Activity is the flow path of the process, method or step the issue is about ("<process>/<step>/<sub-step>"),
+	// empty when it belongs to no activity: the flow draws the issue on that node.
+	Activity string `json:"activity,omitempty"`
 }
 
 func (i Issue) String() string {
@@ -420,7 +423,15 @@ func (m *Methodology) Compile() (*Compiled, error) {
 	return c, nil
 }
 
-func (m *Methodology) compile() (*Compiled, Issues) {
+// CompileLenient compiles what can be compiled: it reports every issue like Compile does, but returns the
+// methodology built without the elements that have one (never nil unless nothing at all can be built), so that what
+// still stands can be drawn and the issues shown where they are (the flow of a draft being edited). A Compiled that
+// comes with issues is for reading, not for running.
+func (m *Methodology) CompileLenient() (*Compiled, Issues) { return m.compileWith(true) }
+
+func (m *Methodology) compile() (*Compiled, Issues) { return m.compileWith(false) }
+
+func (m *Methodology) compileWith(lenient bool) (*Compiled, Issues) {
 	m.MigrateLegacyMethods()
 	var issues Issues
 	add := func(path, format string, args ...any) {
@@ -765,8 +776,13 @@ func (m *Methodology) compile() (*Compiled, Issues) {
 		agents[ag.Name] = ag
 	}
 	if len(issues) > 0 {
+		for i := range issues {
+			issues[i].Activity = m.ActivityOf(issues[i].Path)
+		}
 		sort.SliceStable(issues, func(i, j int) bool { return issues[i].Path < issues[j].Path })
-		return nil, issues
+		if !lenient {
+			return nil, issues
+		}
 	}
 	set, err := condition.Compile(defs)
 	if err != nil {
@@ -785,7 +801,7 @@ func (m *Methodology) compile() (*Compiled, Issues) {
 		return nil, Issues{{Message: err.Error()}}
 	}
 	return &Compiled{Methodology: m, Conditions: set, actions: actions, utilities: uset, agents: agents, whens: wset, processes: procs,
-		methods: meths, methodGuards: mset}, nil
+		methods: meths, methodGuards: mset}, issues
 }
 
 // Action returns an action by name.

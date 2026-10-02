@@ -740,6 +740,8 @@ export interface MethodologySummary {
 export interface Issue {
   path?: string;
   message?: string;
+  /** flow path of the process, method or step the issue is about ("<process>/<step>/<sub-step>"); empty: none */
+  activity?: string;
 }
 
 // --- access -----------------------------------------------------------------

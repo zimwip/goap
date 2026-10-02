@@ -204,7 +204,7 @@ func nilIfNone(s []string) []string {
 func IssuesToPB(is methodology.Issues) []*registryv1.Issue {
 	out := make([]*registryv1.Issue, len(is))
 	for i, x := range is {
-		out[i] = &registryv1.Issue{Path: x.Path, Message: x.Message}
+		out[i] = &registryv1.Issue{Path: x.Path, Message: x.Message, Activity: x.Activity}
 	}
 	return out
 }

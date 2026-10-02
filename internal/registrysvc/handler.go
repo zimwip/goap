@@ -77,40 +77,51 @@ func (h *Handler) ValidateMethodology(ctx context.Context, r *connect.Request[re
 	return connect.NewResponse(&registryv1.ValidateMethodologyResponse{Issues: IssuesToPB(h.Service.validate(ctx, &m))}), nil
 }
 
-// GetProcessGraph builds the graph of a process of a methodology as edited (ADR 0036 §4).
+// lenient compiles a methodology as edited for reading (the flow, its checks): what compiles is built, the issues come
+// with it, each tied to the process, method or step it is about. Nil when nothing could be built.
+func lenient(m *methodology.Methodology) (c *methodology.Compiled, issues methodology.Issues) {
+	defer func() {
+		if r := recover(); r != nil { // a draft broken in a way the compiler did not foresee still gets its issues told
+			c, issues = nil, append(issues, methodology.Issue{Message: fmt.Sprintf("the methodology cannot be read: %v", r)})
+		}
+	}()
+	return m.CompileLenient()
+}
+
+// GetProcessGraph builds the graph of a process of a methodology as edited (ADR 0036 §4), with the issues of the
+// methodology: a draft that does not compile still has its graph drawn as far as it stands.
 func (h *Handler) GetProcessGraph(ctx context.Context, r *connect.Request[registryv1.GetProcessGraphRequest]) (*connect.Response[registryv1.GetProcessGraphResponse], error) {
 	m := FromPB(r.Msg.Methodology)
-	c, err := m.Compile()
-	if err != nil {
-		var issues methodology.Issues
-		if !errors.As(err, &issues) {
-			issues = methodology.Issues{{Message: err.Error()}}
-		}
+	c, issues := lenient(&m)
+	if c == nil {
 		return connect.NewResponse(&registryv1.GetProcessGraphResponse{Issues: IssuesToPB(issues)}), nil
 	}
 	g, ok := c.ProcessGraph(r.Msg.Process)
 	if !ok {
+		if len(issues) > 0 {
+			return connect.NewResponse(&registryv1.GetProcessGraphResponse{Issues: IssuesToPB(issues)}), nil
+		}
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("no process %q in %s", r.Msg.Process, m.Name))
 	}
-	return connect.NewResponse(&registryv1.GetProcessGraphResponse{Graph: ProcessGraphToPB(g)}), nil
+	return connect.NewResponse(&registryv1.GetProcessGraphResponse{Graph: ProcessGraphToPB(g), Issues: IssuesToPB(issues)}), nil
 }
 
-// CheckLevels checks the coherence of a process or method, level by level, as edited.
+// CheckLevels checks the coherence of a process or method, level by level, as edited, with the issues of the
+// methodology.
 func (h *Handler) CheckLevels(ctx context.Context, r *connect.Request[registryv1.CheckLevelsRequest]) (*connect.Response[registryv1.CheckLevelsResponse], error) {
 	m := FromPB(r.Msg.Methodology)
-	c, err := m.Compile()
-	if err != nil {
-		var issues methodology.Issues
-		if !errors.As(err, &issues) {
-			issues = methodology.Issues{{Message: err.Error()}}
-		}
+	c, issues := lenient(&m)
+	if c == nil {
 		return connect.NewResponse(&registryv1.CheckLevelsResponse{Issues: IssuesToPB(issues)}), nil
 	}
 	ls, ok := c.CheckLevels(r.Msg.Root)
 	if !ok {
+		if len(issues) > 0 {
+			return connect.NewResponse(&registryv1.CheckLevelsResponse{Issues: IssuesToPB(issues)}), nil
+		}
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("no process or method with steps %q in %s", r.Msg.Root, m.Name))
 	}
-	return connect.NewResponse(&registryv1.CheckLevelsResponse{Levels: LevelsToPB(ls), Conditions: c.Conditions.Exprs()}), nil
+	return connect.NewResponse(&registryv1.CheckLevelsResponse{Levels: LevelsToPB(ls), Conditions: c.Conditions.Exprs(), Issues: IssuesToPB(issues)}), nil
 }
 
 // PreviewPlan plans toward a goal with the planner its agent is actually configured with, from an empty

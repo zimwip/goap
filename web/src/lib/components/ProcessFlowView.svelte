@@ -13,7 +13,7 @@
   import '@xyflow/svelte/dist/style.css';
   import StepNode, { type StepNodeData } from './StepNode.svelte';
   import { layered, nodeHeight, NODE_W } from '../flowLayout';
-  import type { LevelCheck, PlanPreview, ProcessGraph } from '../api';
+  import type { Issue, LevelCheck, PlanPreview, ProcessGraph } from '../api';
 
   let {
     graph,
@@ -25,6 +25,7 @@
     focus = '',
     at = '',
     only = '',
+    issues = [],
   }: {
     graph: ProcessGraph;
     plan?: PlanPreview;
@@ -42,6 +43,8 @@
     at?: string;
     /** show this one step alone (its path), with what it takes and gives, instead of its whole level */
     only?: string;
+    /** the rules the draft breaks (compilation issues): drawn on the step each is about, listed in the panel */
+    issues?: Issue[];
   } = $props();
 
   const STATE = '__state';
@@ -98,6 +101,12 @@
   );
   const phases = $derived((levels.find((l) => l.path === rootPath)?.steps ?? []).map((n) => n.name ?? ''));
   const phaseColour = (p: string) => PALETTE[Math.max(0, phases.indexOf(p.split('/')[1] ?? '')) % PALETTE.length];
+  // the issues of this flow (about its process or method, or one of their steps), and those about nothing in it
+  const mine = $derived(issues.filter((i) => i.activity && (i.activity === rootPath || i.activity.startsWith(`${rootPath}/`))));
+  const elsewhere = $derived(issues.filter((i) => !i.activity || !(i.activity === rootPath || i.activity.startsWith(`${rootPath}/`))));
+  let rulesOpen = $state(true);
+  const issuesOf = (p: string) => mine.filter((i) => i.activity === p).map((i) => i.message ?? '');
+  const issuesInside = (p: string) => mine.filter((i) => i.activity?.startsWith(`${p}/`)).length;
   const planned = $derived((plan?.actions ?? []).map((a) => a.step ?? ''));
 
   function build() {
@@ -163,6 +172,8 @@
         broken: !!n.broken,
         subSteps: n.subSteps ?? 0,
         foreach: n.foreach,
+        issues: issuesOf(p),
+        issuesInside: issuesInside(p),
         groupBy: n.groupBy,
         onzoom: () => (path = p),
         ontrace: trace,
@@ -225,7 +236,7 @@
 
   function place(ns: Node[], es: Edge[]) {
     const pos = layered(
-      ns.map((n) => ({ id: n.id, h: nodeHeight(Math.max((n.data as StepNodeData).inputs.length, (n.data as StepNodeData).outputs.length) + ((n.data as StepNodeData).composite ? 1 : 0) + ((n.data as StepNodeData).foreach ? 1 : 0)), w: NODE_W })),
+      ns.map((n) => ({ id: n.id, h: nodeHeight(Math.max((n.data as StepNodeData).inputs.length, (n.data as StepNodeData).outputs.length) + ((n.data as StepNodeData).composite ? 1 : 0) + ((n.data as StepNodeData).foreach ? 1 : 0) + ((n.data as StepNodeData).issues?.length || (n.data as StepNodeData).issuesInside ? 1 : 0)), w: NODE_W })),
       es,
     );
     for (const n of ns) n.position = moved.get(n.id) ?? pos.get(n.id) ?? { x: 0, y: 0 };
@@ -299,6 +310,29 @@
       {/if}
     </svg>
   </button>
+  {#if mine.length || elsewhere.length}
+    <aside class="rules" class:open={rulesOpen} aria-label="Rules broken">
+      <button type="button" class="head" onclick={() => (rulesOpen = !rulesOpen)} aria-expanded={rulesOpen}>
+        ⚠ {mine.length + elsewhere.length} rule{mine.length + elsewhere.length === 1 ? '' : 's'} broken <span class="hint">{rulesOpen ? 'hide' : 'show'}</span>
+      </button>
+      {#if rulesOpen}
+        <ul>
+          {#each mine as i, k (k)}
+            <li>
+              {#if i.activity && i.activity.includes('/')}
+                <button type="button" class="link" onclick={() => onstep?.(i.activity ?? '')} title="Open the step to fix it"><code>{i.activity}</code></button>
+              {:else}<code>{i.activity}</code>{/if}
+              {i.message}
+            </li>
+          {/each}
+          {#each elsewhere as i, k (k)}
+            <li class="far"><code>{i.path}</code> {i.message}</li>
+          {/each}
+        </ul>
+        <p class="hint">What stands is drawn; the steps that break a rule are marked. The Issues console lists them all.</p>
+      {/if}
+    </aside>
+  {/if}
   <div class="overlay">
     {#if solo}<button type="button" class="small" onclick={() => (solo = '')} title="Show the whole level this step belongs to">Show its level</button>{/if}
     <nav class="crumbs" aria-label="Level">
@@ -323,6 +357,42 @@
 </div>
 
 <style>
+  .rules {
+    position: absolute;
+    left: 10px;
+    bottom: 10px;
+    z-index: 6;
+    max-width: min(560px, calc(100% - 180px));
+    max-height: 45%;
+    overflow: auto;
+    background: var(--surface);
+    border: 1px solid var(--danger, #e45756);
+    border-radius: var(--radius);
+    font-size: 12px;
+  }
+  .rules .head {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    width: 100%;
+    padding: 4px 8px;
+    background: none;
+    border: 0;
+    color: var(--danger, #e45756);
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .rules ul {
+    margin: 0;
+    padding: 0 8px 4px 22px;
+  }
+  .rules li.far {
+    opacity: 0.75;
+  }
+  .rules .hint {
+    margin: 0;
+    padding: 0 8px 6px;
+  }
   .canvas {
     position: relative;
     height: min(70vh, 640px);
