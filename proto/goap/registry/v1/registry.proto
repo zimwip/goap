@@ -450,6 +450,8 @@ message MethodologySummary {
 message Issue {
   string path = 1;
   string message = 2;
+  // flow path of the process, method or step the issue is about ("<process>/<step>/<sub-step>"); empty: none
+  string activity = 3;
 }
 
 message ListMethodologiesRequest {

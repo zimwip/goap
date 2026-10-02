@@ -2759,9 +2759,11 @@ func (x *MethodologySummary) GetNamespace() string {
 
 // A validation issue. `path` locates the field, e.g. "conditions[2].expr".
 type Issue struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Path          string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
-	Message       string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Path    string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
+	Message string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	// flow path of the process, method or step the issue is about ("<process>/<step>/<sub-step>"); empty: none
+	Activity      string `protobuf:"bytes,3,opt,name=activity,proto3" json:"activity,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2806,6 +2808,13 @@ func (x *Issue) GetPath() string {
 func (x *Issue) GetMessage() string {
 	if x != nil {
 		return x.Message
+	}
+	return ""
+}
+
+func (x *Issue) GetActivity() string {
+	if x != nil {
+		return x.Activity
 	}
 	return ""
 }
@@ -7048,10 +7057,11 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\n" +
 	"updated_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12=\n" +
 	"\fpublished_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\vpublishedAt\x12\x1c\n" +
-	"\tnamespace\x18\t \x01(\tR\tnamespace\"5\n" +
+	"\tnamespace\x18\t \x01(\tR\tnamespace\"Q\n" +
 	"\x05Issue\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage\"=\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\x12\x1a\n" +
+	"\bactivity\x18\x03 \x01(\tR\bactivity\"=\n" +
 	"\x18ListMethodologiesRequest\x12!\n" +
 	"\fall_versions\x18\x01 \x01(\bR\vallVersions\"g\n" +
 	"\x19ListMethodologiesResponse\x12J\n" +

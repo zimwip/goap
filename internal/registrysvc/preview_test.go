@@ -73,3 +73,26 @@ func TestPreviewPlanHandlerLivePlanner(t *testing.T) {
 		t.Fatalf("%+v", resp.Msg)
 	}
 }
+
+// A draft that breaks a rule still gets its graph and levels, with the issues tied to the step they are about.
+func TestGraphAndLevelsOfADraftWithBrokenRules(t *testing.T) {
+	m := methodology.Methodology{Name: "m", Version: "1", Namespace: "alm",
+		Conditions: []methodology.Condition{{Name: "done", Expr: "false"}},
+		Processes: []methodology.Process{{Name: "flow", Steps: []methodology.Step{
+			{Name: "fine", Action: "work"}, {Name: "broken", Action: "nope"},
+		}}},
+		Actions: []methodology.Action{{Name: "work", Kind: methodology.KindHuman, Instructions: "do it", Effects: map[string]bool{"done": true}}},
+	}
+	h := &Handler{}
+	g, err := h.GetProcessGraph(context.Background(), connect.NewRequest(&registryv1.GetProcessGraphRequest{Methodology: ToPB(Record{Methodology: m}), Process: "flow"}))
+	if err != nil || g.Msg.Graph == nil || len(g.Msg.Graph.Steps) == 0 {
+		t.Fatalf("graph %+v %v", g, err)
+	}
+	if len(g.Msg.Issues) == 0 || g.Msg.Issues[0].Activity != "flow/broken" {
+		t.Fatalf("issues %+v", g.Msg.Issues)
+	}
+	l, err := h.CheckLevels(context.Background(), connect.NewRequest(&registryv1.CheckLevelsRequest{Methodology: ToPB(Record{Methodology: m}), Root: "flow"}))
+	if err != nil || len(l.Msg.Levels) == 0 || len(l.Msg.Issues) == 0 {
+		t.Fatalf("levels %+v %v", l, err)
+	}
+}
