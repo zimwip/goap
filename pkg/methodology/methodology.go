@@ -345,6 +345,7 @@ func Parse(data []byte) (*Methodology, error) {
 	if err := dec.Decode(&m); err != nil {
 		return nil, fmt.Errorf("parse methodology: %w", err)
 	}
+	m.MigrateLegacyMethods()
 	return &m, nil
 }
 
@@ -420,6 +421,7 @@ func (m *Methodology) Compile() (*Compiled, error) {
 }
 
 func (m *Methodology) compile() (*Compiled, Issues) {
+	m.MigrateLegacyMethods()
 	var issues Issues
 	add := func(path, format string, args ...any) {
 		issues = append(issues, Issue{Path: path, Message: fmt.Sprintf(format, args...)})
