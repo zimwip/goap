@@ -105,6 +105,7 @@
   const mine = $derived(issues.filter((i) => i.activity && (i.activity === rootPath || i.activity.startsWith(`${rootPath}/`))));
   const elsewhere = $derived(issues.filter((i) => !i.activity || !(i.activity === rootPath || i.activity.startsWith(`${rootPath}/`))));
   let rulesOpen = $state(true);
+  let legendOpen = $state(false);
   const issuesOf = (p: string) => mine.filter((i) => i.activity === p).map((i) => i.message ?? '');
   const issuesInside = (p: string) => mine.filter((i) => i.activity?.startsWith(`${p}/`)).length;
   const planned = $derived((plan?.actions ?? []).map((a) => a.step ?? ''));
@@ -301,6 +302,30 @@
     <Controls showLock={false} />
     <MiniMap pannable zoomable height={90} width={140} />
   </SvelteFlow>
+  <div class="tools">
+  <aside class="key" aria-label="Legend">
+    <button type="button" class="kh" onclick={() => (legendOpen = !legendOpen)} aria-expanded={legendOpen} aria-label="Legend" title="Legend: what the shapes and colours mean">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 11v6M12 7.5v.5" /></svg>
+    </button>
+    {#if legendOpen}
+      <ul>
+        <li><i class="sw step"></i>step: entry conditions left, exit criteria right</li>
+        <li><i class="sw planned"></i>step the plan runs</li>
+        <li><i class="sw state"></i>change state: dynamic conditions read from the change</li>
+        <li><i class="sw inputs"></i>inputs given by the parent</li>
+        <li><i class="sw outputs"></i>outputs the level makes true</li>
+        <li><i class="sw gap"></i>⚠ unresolved input / unreached output</li>
+        <li><i class="sw red"></i>= input that is also an output</li>
+        <li><i class="sw ruled"></i>step that breaks a rule</li>
+        <li><i class="sw broken"></i>incomplete: not resolved inside</li>
+        <li><i class="ln"></i>link: exit criterion → entry condition</li>
+        <li><i class="ln ext"></i>from state or inputs</li>
+        <li><i class="ln miss"></i>missing</li>
+        <li><i class="ln up"></i>traced condition</li>
+        <li><b>⤢ n</b> zoom into sub-steps · <b>∀</b> one stream per element</li>
+      </ul>
+    {/if}
+  </aside>
   <button type="button" class="fs" onclick={toggleFull} aria-pressed={full} aria-label={full ? 'Exit full screen' : 'Full screen'} title={full ? 'Exit full screen (Esc)' : 'Full screen'}>
     <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
       {#if full}
@@ -310,6 +335,7 @@
       {/if}
     </svg>
   </button>
+  </div>
   {#if mine.length || elsewhere.length}
     <aside class="rules" class:open={rulesOpen} aria-label="Rules broken">
       <button type="button" class="head" onclick={() => (rulesOpen = !rulesOpen)} aria-expanded={rulesOpen}>
@@ -350,7 +376,7 @@
         <b class="mono">{traced}</b> <i class="l up"></i>carries it
         <button type="button" class="ghost small" onclick={() => (traced = '')}>clear</button>
       {:else}
-        click a condition to trace it · right-click a step to open it · double-click a step with sub-steps to zoom into it · green block: what the level makes true · blue block: dynamic conditions read from the state of the change · orange: unresolved · red: an input that is also an output
+        click a condition to trace it · right-click a step to open it · double-click to zoom into sub-steps · see the legend (top right)
       {/if}
     </span>
   </div>
@@ -393,16 +419,87 @@
     margin: 0;
     padding: 0 8px 6px;
   }
+  .tools {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 6;
+    display: flex;
+    gap: 6px;
+    align-items: flex-start;
+  }
+  .key {
+    position: relative;
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .key .kh {
+    display: grid;
+    place-items: center;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text);
+    cursor: pointer;
+  }
+  .key .kh:hover,
+  .key .kh[aria-expanded='true'] {
+    background: var(--hover);
+  }
+  .key ul {
+    position: absolute;
+    top: 36px;
+    right: 0;
+    z-index: 7;
+    width: max-content;
+    max-width: 280px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    margin: 0;
+    padding: 6px 8px;
+    list-style: none;
+    display: grid;
+    gap: 3px;
+  }
+  .key li {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+  .sw {
+    flex: none;
+    width: 16px;
+    height: 10px;
+    border-radius: 3px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+  }
+  .sw.planned { border-color: var(--ok); }
+  .sw.state { background: var(--info-soft); border: 1px dashed var(--info); }
+  .sw.inputs { background: var(--info-soft); border: 1px dashed var(--info); }
+  .sw.outputs { background: var(--ok-soft); border: 1px dashed var(--ok); }
+  .sw.gap { background: var(--warn-soft); border: 1px dashed var(--warn); }
+  .sw.red { border-color: var(--danger, #e45756); background: var(--danger-soft); }
+  .sw.ruled { border: 0; outline: 2px solid var(--danger, #e45756); }
+  .sw.broken { background: var(--warn-soft); border: 1px dashed var(--warn); }
+  .ln {
+    flex: none;
+    width: 16px;
+    border-top: 2px solid var(--muted);
+  }
+  .ln.ext { border-top: 2px dotted var(--muted); }
+  .ln.miss { border-top: 2px dashed var(--warn); }
+  .ln.up { border-top: 3px solid var(--info); }
   .canvas {
     position: relative;
     height: min(70vh, 640px);
     min-height: 320px;
   }
   .fs {
-    position: absolute;
-    top: 10px;
-    right: 10px;
-    z-index: 6;
     display: grid;
     place-items: center;
     width: 30px;
@@ -438,7 +535,7 @@
     top: 10px;
     left: 10px;
     /* leave the full screen icon (top right) uncovered: the legend wraps instead of running under it */
-    right: 52px;
+    right: 88px;
     z-index: 5;
     display: flex;
     flex-wrap: wrap;
