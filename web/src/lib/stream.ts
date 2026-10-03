@@ -6,7 +6,7 @@
 // end-of-stream envelope, whose JSON may contain
 // `{"error": {"code", "message"}}`.
 
-import { BASE, RpcError, getToken, reportUnauthorized, ENGINE_SERVICE, type WatchEvent } from './api';
+import { BASE, RpcError, getToken, onTokenChange, reportUnauthorized, ENGINE_SERVICE, type WatchEvent } from './api';
 
 const FLAG_COMPRESSED = 0x01;
 const FLAG_END_STREAM = 0x02;
@@ -102,7 +102,11 @@ export async function serverStream<TReq extends object, TRes>(
           } catch {
             // unreadable end-of-stream: treated as normal
           }
-          if (end.error) throw new RpcError(end.error.code ?? 'unknown', end.error.message ?? '', res.status);
+          if (end.error) {
+            // an end-of-stream refusal travels in a 200 response: the same end of session as a 401
+            if (end.error.code === 'unauthenticated') reportUnauthorized(token, 401, end.error.message ?? '');
+            throw new RpcError(end.error.code ?? 'unknown', end.error.message ?? '', res.status);
+          }
           return;
         }
         onMessage(JSON.parse(text) as TRes);
@@ -170,10 +174,18 @@ export function watchEvents(opts: WatchOptions): () => void {
       const slow = failure && ['unauthenticated', 'permission_denied', 'unimplemented'].includes(failure.code);
       const wait = slow ? MAX_DELAY : delay;
       delay = Math.min(delay * 2, MAX_DELAY);
+      // a new token (a refresh, a sign-in) is worth trying at once rather than after the wait
+      let off = () => {};
       await new Promise<void>((resolve) => {
+        off = onTokenChange(() => {
+          delay = MIN_DELAY;
+          resolve();
+        });
         timer = setTimeout(resolve, wait + Math.random() * 250);
         ctrl.signal.addEventListener('abort', () => resolve(), { once: true });
       });
+      off();
+      clearTimeout(timer);
     }
     status('stopped');
   }

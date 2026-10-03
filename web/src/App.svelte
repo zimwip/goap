@@ -48,8 +48,17 @@
 
 {#if !authState.loaded}
   <!-- deciding whether to show sign-in: avoids a Shell flash for a "local" deployment with no token -->
+  {#if authState.unreachable}<p class="wait" role="status">The platform cannot be reached. Retrying…</p>{/if}
 {:else if needsSignin}
   <Signin />
 {:else}
   <Shell welcome={Welcome} />
 {/if}
+
+<style>
+  .wait {
+    padding: 2rem;
+    text-align: center;
+    color: var(--muted, gray);
+  }
+</style>

@@ -3,46 +3,57 @@
 // selection; a pinned tab (double click, icon, or first edit) is never
 // replaced.
 import { editorView } from './registry';
-import { loadRaw, save } from './storage';
+import { currentRoute, navigate, onRoute } from './router';
 import type { Tab, TabSpec } from './types';
 import { confirmDialog } from './confirmState.svelte';
-
-const KEY = 'goap.ide.tabs';
 
 interface TabsState {
   tabs: Tab[];
   active: string;
 }
 
-function restore(): TabsState {
-  const raw = loadRaw(KEY) as Partial<TabsState> | undefined;
-  const tabs = Array.isArray(raw?.tabs)
-    ? raw.tabs.filter(
-        (t): t is Tab =>
-          !!t && typeof t.id === 'string' && typeof t.kind === 'string' && typeof t.params === 'object' && !!t.params,
-      )
-    : [];
-  const active = typeof raw?.active === 'string' && tabs.some((t) => t.id === raw.active) ? raw.active : (tabs[0]?.id ?? '');
-  return { tabs, active };
-}
-
-export const tabsState: TabsState = $state(restore());
+/** Tabs live in memory only; the address says which one is shown (shell/router.ts). */
+export const tabsState: TabsState = $state({ tabs: [], active: '' });
 
 /** Activation history (to return to the previous tab on close). */
 const history: string[] = [];
+
+let routing = $state(false);
+/** the tab the address currently names */
+let shownId = '';
 
 $effect.root(() => {
   // A preview tab with unsaved changes becomes pinned.
   $effect(() => {
     for (const t of tabsState.tabs) if (!t.pinned && isDirty(t)) t.pinned = true;
   });
+  // The address follows the active tab (a new history entry per tab visited; home when none is shown).
   $effect(() => {
-    save(KEY, {
-      tabs: tabsState.tabs.map((t) => ({ id: t.id, kind: t.kind, params: { ...t.params }, pinned: t.pinned })),
-      active: tabsState.active,
-    });
+    const t = findTab(tabsState.active);
+    if (!routing) return; // until the page's own address has been shown, it must not be overwritten
+    // another tab is a history entry; a tab's own params moving (the pane it shows) only update its entry
+    navigate(t ? { kind: t.kind, params: { ...t.params } } : undefined, t?.id === shownId);
+    shownId = t?.id ?? '';
   });
 });
+
+/** Shows what the address designates: back / forward, a followed link, or the page just loaded. */
+function showRoute(spec?: TabSpec): void {
+  if (!spec) tabsState.active = '';
+  else if (!editorView(spec.kind)) navigate(undefined, true); // a link to a kind this version does not know
+  else if (tabId(spec) !== tabsState.active) openTab(spec);
+}
+
+/** Starts following the address, beginning with the one the page was opened on (once the views are registered). */
+export function startRouting(): () => void {
+  showRoute(currentRoute());
+  routing = true;
+  const stop = onRoute(showRoute);
+  return () => {
+    routing = false;
+    stop();
+  };
+}
 
 export function tabId(spec: TabSpec): string {
   const v = editorView(spec.kind);

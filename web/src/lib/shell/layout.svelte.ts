@@ -1,5 +1,5 @@
-// Layout state: active tools, panel sizes and collapse, theme. Persisted
-// in localStorage.
+// Layout state: active tools, panel sizes and collapse, theme. Sizes, collapse and theme persist in
+// localStorage; which tool is active does not (a new page opens on the default ones).
 import { load, save } from './storage';
 
 const KEY = 'goap.ide.layout';
@@ -32,7 +32,18 @@ const DEFAULTS: LayoutState = {
   theme: 'auto',
 };
 
-export const layout: LayoutState = $state(load(KEY, DEFAULTS));
+/** What the browser keeps: how the workbench looks, not where the user was. */
+const kept = (l: LayoutState) => ({
+  leftOpen: l.leftOpen,
+  leftWidth: l.leftWidth,
+  rightOpen: l.rightOpen,
+  rightWidth: l.rightWidth,
+  bottomOpen: l.bottomOpen,
+  bottomHeight: l.bottomHeight,
+  theme: l.theme,
+});
+
+export const layout: LayoutState = $state({ ...DEFAULTS, ...kept(load(KEY, DEFAULTS)) });
 
 export const LIMITS = {
   side: { min: 180, max: 640 },
@@ -41,7 +52,7 @@ export const LIMITS = {
 
 $effect.root(() => {
   $effect(() => {
-    save(KEY, { ...layout });
+    save(KEY, kept(layout));
   });
   $effect(() => {
     const t = layout.theme;

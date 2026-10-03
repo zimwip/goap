@@ -36,6 +36,8 @@
   import { confirmDialog } from '../../shell/confirmState.svelte';
   import { declaredProperties, isReopen, lifecycleResolver, lifecycleRows, loadPosts, writeNodeInChange, type LifecycleRow, type PostVersions } from '../../lifecycle';
 
+  import NotFound from '../../shell/NotFound.svelte';
+
   let { tab }: { tab: Tab } = $props();
 
   const id = $derived(tab.params.id ?? '');
@@ -310,7 +312,7 @@
   {#if loading && !stored}
     <p class="empty">Loading…</p>
   {:else if !stored}
-    <p class="empty">Node not found.</p>
+    <NotFound {tab} what="Node" />
   {:else}
     <EditorPanes {panes} bind:active={pane} label="Node sections">
       {#snippet toolbar()}

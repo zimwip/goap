@@ -3,6 +3,7 @@
   import {
     graph,
     errorMessage,
+    isNotFound,
     formatDate,
     shortId,
     type Baseline,
@@ -49,6 +50,8 @@
   import MergeResolver from '../../components/MergeResolver.svelte';
   import { MAIN_SCOPE, candidatesByOption, scopeColor, scopeName, scopeWritable } from '../../changeScope';
 
+  import NotFound from '../../shell/NotFound.svelte';
+
   let { tab }: { tab: Tab } = $props();
 
   let change = $state<Change | undefined>();
@@ -84,6 +87,7 @@
   });
   let loading = $state(false);
   let error = $state('');
+  let missing = $state(false);
   /** the flow the editor looks at: the main flow or one option (ADR 0032 §6); local to the editor, it does not
    * move the active option. The impacts and items panes show the change as that flow sees it. */
   let scope = $state(untrack(() => tab.params.scope) || '');
@@ -151,7 +155,10 @@
       if (!scope || (scope !== MAIN_SCOPE && !opts.some((o) => o.id === scope))) scope = opts.find((o) => o.active)?.id ?? MAIN_SCOPE;
       await loadScope(id, scope, signal);
     } catch (e) {
-      if (!signal?.aborted) error = errorMessage(e);
+      if (!signal?.aborted) {
+        missing = isNotFound(e);
+        error = errorMessage(e);
+      }
     } finally {
       if (!signal?.aborted) loading = false;
     }
@@ -542,7 +549,7 @@
 {/snippet}
 
 <div class="editor-page">
-{#if error}<div class="alert">{error}</div>{/if}
+{#if missing}<NotFound {tab} what="Change" />{:else if error}<div class="alert">{error}</div>{/if}
 
 {#if loading && !change}
   <p class="empty">Loading…</p>

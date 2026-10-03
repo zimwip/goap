@@ -8,7 +8,6 @@
   import { domains, refreshDomains, getDomainDraft, peekDomainDraft, domainKey, type DomainDraft } from '../../stores/domains.svelte';
   import { tabsState, tabId, closeWhere } from '../../shell/tabs.svelte';
   import { select, notify } from '../../shell/workbench.svelte';
-  import { loadRaw, save } from '../../shell/storage';
   import { compareVersions, type DomainSummary } from '../../api';
   import { ALGORITHM_USAGES, emptyAlgorithm, emptyInstance, freeName } from '../../algorithmForm';
   import type { AlgorithmUsage } from '../../dsl';
@@ -16,8 +15,7 @@
   import { confirmDialog } from '../../shell/confirmState.svelte';
   import { openContextMenu } from '../../shell/contextMenuState.svelte';
 
-  const SEL_KEY = 'goap.ide.algorithms.domain';
-  let selected = $state(String(loadRaw(SEL_KEY) ?? ''));
+  let selected = $state('');
   let filter = $state('');
 
   $effect(() => {
@@ -35,7 +33,6 @@
     const pick = versions.find((v) => v.status === 'draft') ?? versions[0];
     if (pick) selected = vkey(pick);
   });
-  $effect(() => save(SEL_KEY, selected));
 
   const current = $derived(versions.find((v) => vkey(v) === selected));
   // the draft is created in an effect (creating it mutates state)

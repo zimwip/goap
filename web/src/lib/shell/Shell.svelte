@@ -2,7 +2,7 @@
   // IDE shell: header, toolbar, activity bars, resizable panels,
   // editor area, and console. Content comes from the view
   // registry.
-  import type { Component } from 'svelte';
+  import { onMount, type Component } from 'svelte';
   import Header from './Header.svelte';
   import Toolbar from './Toolbar.svelte';
   import ActivityBar from './ActivityBar.svelte';
@@ -24,13 +24,16 @@
   import { openSearch } from './searchOverlay.svelte.ts';
   import StatusBar from './StatusBar.svelte';
   import { layout, LIMITS, toggleConsole } from './layout.svelte';
-  import { activeTab, closeTab } from './tabs.svelte';
+  import { activeTab, closeTab, startRouting } from './tabs.svelte';
   import { runTabAction, focusRequests } from './workbench.svelte';
   import { session } from '../stores/session.svelte';
   import { isPending } from '../stores/pending.svelte';
   import { loadSettingsState } from '../stores/settings.svelte';
 
   let { welcome }: { welcome: Component } = $props();
+
+  // the address says which tab is shown: follow it from the moment the views are registered
+  onMount(startRouting);
 
   // the preferences are graph data of the signed-in user: read them once the identity is known (and again when it changes)
   $effect(() => {

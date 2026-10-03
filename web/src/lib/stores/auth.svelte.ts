@@ -2,12 +2,28 @@
 // platform's own sign-in, it also keeps the session: the token is refreshed before it expires, and a token that
 // expired or is refused ends the session with a notice the sign-in page shows.
 import { authConfig, getToken, setToken, onTokenChange, onUnauthorized, refreshToken, tokenClaims, RpcError } from '../api';
+import { forgetSessionState } from '../shell/storage';
+
+const NOTICE_KEY = 'goap.notice';
+
+/** Reads (and forgets) the reason the previous page left the session: it survives the reload ending it. */
+function takeNotice(): string {
+  try {
+    const n = localStorage.getItem(NOTICE_KEY) ?? '';
+    localStorage.removeItem(NOTICE_KEY);
+    return n;
+  } catch {
+    return '';
+  }
+}
 
 export const authState = $state({
   mode: '',
   loaded: false,
+  /** the gateway could not be reached to tell the sign-in mode: retrying */
+  unreachable: false,
   /** why the user is back on the sign-in page ('' when they signed out themselves or never signed in) */
-  notice: '',
+  notice: takeNotice(),
 });
 
 /**
@@ -17,15 +33,28 @@ export const authState = $state({
  */
 export const signsInLocally = (mode: string): boolean => mode === 'local';
 
+/**
+ * Asks the gateway which sign-in it wants, retrying while it is unreachable (a restart, a reset database): the
+ * app waits rather than assuming no sign-in, which would leave a stale token unchecked until a manual reload.
+ */
 export async function loadAuthConfig(): Promise<void> {
-  try {
-    authState.mode = (await authConfig()).authMode || 'none';
-  } catch {
-    authState.mode = 'none'; // the gateway is unreachable or has no /api/auth/config (older deploy): behave as before
-  } finally {
-    authState.loaded = true;
+  keepSession();
+  for (let delay = 1000; ; delay = Math.min(delay * 2, 10_000)) {
+    try {
+      authState.mode = (await authConfig()).authMode || 'none';
+      break;
+    } catch (e) {
+      if (e instanceof RpcError && e.status === 404) {
+        authState.mode = 'none'; // an older gateway without /api/auth/config: no sign-in
+        break;
+      }
+      authState.unreachable = true;
+      await new Promise((r) => setTimeout(r, delay));
+    }
   }
-  if (signsInLocally(authState.mode)) keepSession();
+  authState.unreachable = false;
+  authState.loaded = true;
+  check();
 }
 
 // --- the last subject that signed in, to fill the sign-in form ------------------------------------------
@@ -54,8 +83,31 @@ export function rememberSubject(subject: string): void {
 export function endSession(notice: string): void {
   const sub = tokenClaims(getToken())?.sub;
   if (sub) rememberSubject(sub);
-  authState.notice = notice;
+  try {
+    if (notice) localStorage.setItem(NOTICE_KEY, notice);
+  } catch {
+    // storage unavailable: the sign-in page shows no reason
+  }
   setToken(null);
+}
+
+/**
+ * Signing in or out starts the page afresh: every store holds the previous user's data (or none yet), and the
+ * simplest way to be sure none leaks is to drop what the browser kept for them and reload on the home page.
+ * A token merely replaced (refresh, project switch) is not a new session.
+ */
+function restartOnSessionChange(): void {
+  let signedIn = !!getToken();
+  onTokenChange(() => {
+    const now = !!getToken();
+    if (now === signedIn) return;
+    signedIn = now;
+    const sub = tokenClaims(getToken())?.sub;
+    if (sub) rememberSubject(sub);
+    forgetSessionState();
+    history.replaceState(null, '', '/');
+    location.reload();
+  });
 }
 
 /** Seconds since the epoch. */
@@ -102,7 +154,7 @@ function check(): void {
   clearTimeout(timer);
   const token = getToken();
   const c = tokenClaims(token);
-  if (!token || !c?.exp) return; // no session, or a token the web cannot read (left to the gateway)
+  if (!token || !c?.exp || !signsInLocally(authState.mode)) return; // no session, a token the web cannot read or one issued elsewhere (left to the gateway)
   if (c.exp <= now() + 5) {
     endSession('Your session expired. Sign in again.');
     return;
@@ -116,14 +168,15 @@ function check(): void {
   timer = setTimeout(check, Math.min((at - now()) * 1000, 600_000));
 }
 
-/** Starts keeping the session of the platform's own sign-in (idempotent). */
+/**
+ * Starts keeping the session (idempotent), whatever the sign-in mode: a token the gateway refuses ends the
+ * session; the refresh of a token is the platform's own sign-in only (its tokens are the ones it can renew).
+ */
 function keepSession(): void {
   if (started) return;
   started = true;
-  onTokenChange(() => {
-    if (getToken()) authState.notice = '';
-    check();
-  });
+  restartOnSessionChange();
+  onTokenChange(check);
   onUnauthorized((message) => {
     endSession(
       /expired/.test(message)
@@ -142,5 +195,4 @@ function keepSession(): void {
   window.addEventListener('storage', (e) => {
     if (e.key === 'goap.token') setToken(e.newValue);
   });
-  check();
 }

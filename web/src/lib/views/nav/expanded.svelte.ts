@@ -1,18 +1,5 @@
-// "Expanded" state of the explorer trees, persisted.
-import { loadRaw, save } from '../../shell/storage';
-
-const KEY = 'goap.ide.expanded';
-
-const initial = loadRaw(KEY);
-export const expanded: Record<string, boolean> = $state(
-  initial && typeof initial === 'object' ? (initial as Record<string, boolean>) : {},
-);
-
-$effect.root(() => {
-  $effect(() => {
-    save(KEY, { ...expanded });
-  });
-});
+// "Expanded" state of the explorer trees (for the life of the page).
+export const expanded: Record<string, boolean> = $state({});
 
 export function toggle(key: string, def = false): void {
   expanded[key] = !(expanded[key] ?? def);

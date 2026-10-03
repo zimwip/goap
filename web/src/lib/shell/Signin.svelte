@@ -4,7 +4,7 @@
   // /auth/login (internal/credsvc), the same JWT the hs256/dev-token flow already produces. It tells why the
   // user is here when their session ended (expired, refused) and remembers the last subject that signed in.
   import { register, login, RpcError } from '../api';
-  import { authState, lastSubject, rememberSubject } from '../stores/auth.svelte';
+  import { authState, lastSubject } from '../stores/auth.svelte';
 
   const MIN_PASSWORD = 8; // credsvc.MinPasswordLen
 
@@ -51,8 +51,7 @@
     error = '';
     try {
       await (mode === 'login' ? login(who, password) : register(who, password));
-      rememberSubject(who);
-      // a successful call sets the token; the app re-renders the shell once session picks it up
+      // a successful call sets the token, which restarts the page signed in (stores/auth.svelte.ts)
     } catch (err) {
       error = explain(err);
       password = '';
