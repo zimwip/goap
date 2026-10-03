@@ -14,6 +14,7 @@ import { domainDrafts, domainKey, domains, refreshDomains } from '../stores/doma
 import { loadTypes } from '../stores/types.svelte';
 import { tools, refreshTools } from '../stores/tools.svelte';
 import { refreshProjects } from '../stores/project.svelte';
+import { modelChoices, refreshModelChoices } from '../stores/modelChoices.svelte';
 
 /** Starts the reducers; returns the stop function. */
 export function startReducers(): () => void {
@@ -55,7 +56,11 @@ export function startReducers(): () => void {
     // the organisation and platform namespaces hold the projects, adapters and MCPs: what lists them follows
     $effect(() => {
       if (!stamp(keyOf.namespace('platform'))) return;
-      untrack(() => tools.loaded && void refreshTools());
+      untrack(() => {
+        if (tools.loaded) void refreshTools();
+        // aliases and providers are nodes of the platform namespace
+        if (modelChoices.loaded) void refreshModelChoices();
+      });
     });
     $effect(() => {
       if (!stamp(keyOf.namespace('organisation'))) return;

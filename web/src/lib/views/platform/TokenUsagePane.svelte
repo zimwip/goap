@@ -7,8 +7,9 @@
   import { openTab } from '../../shell/tabs.svelte';
   import { openSettings } from '../../shell/settingsState.svelte';
   import { closeUsage } from '../../shell/usageState.svelte';
-  import { engine, models, errorMessage, formatDate, type CatalogModel, type Process } from '../../api';
-  import { hasAnyRole } from '../../stores/session.svelte';
+  import { models, errorMessage, formatDate, type CatalogModel } from '../../api';
+  import { hasAnyRole, me } from '../../stores/session.svelte';
+  import { live, processes as known, refreshProcesses } from '../../stores/live.svelte';
   import { prefs } from '../../stores/preferences.svelte';
   import { computeStats, type Dim, type Slice } from '../../tokenStats';
 
@@ -19,7 +20,6 @@
     ['all', 'All history', 0],
   ];
 
-  let processes = $state<Process[]>([]);
   let loading = $state(true);
   let error = $state('');
   let range = $state(prefs.values.usagePeriod);
@@ -35,9 +35,8 @@
   async function load() {
     loading = true;
     try {
-      processes = (await engine.listProcesses({ mine: !platform })).processes ?? [];
-      loadedAt = Date.now();
-      error = '';
+      await refreshProcesses();
+      error = live.processesError;
       // global quotas are administered (and readable) by platform admins only
       if (platform) {
         try {
@@ -57,6 +56,13 @@
   $effect(() => {
     void platform;
     void load();
+  });
+
+  // The processes are the store the platform event stream keeps: the figures follow the runs as they go.
+  const processes = $derived([...known.values()].filter((p) => platform || p.initiator?.subject === me()));
+  $effect(() => {
+    void live.events.length;
+    loadedAt = Date.now();
   });
 
   const since = $derived.by(() => {
