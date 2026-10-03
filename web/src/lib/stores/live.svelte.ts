@@ -6,12 +6,12 @@ import {
   engine,
   errorMessage,
   int,
-  onTokenChange,
   type LogLine,
   type Process,
   type WatchEvent,
 } from '../api';
-import { watchEvents, type StreamStatus } from '../stream';
+import type { StreamStatus } from '../stream';
+import { onKind, onResync, startEvents, stream, toWatchEvent } from '../flux/events.svelte';
 
 export interface EventRow {
   seq: number;
@@ -210,30 +210,26 @@ export function clearTokens(): void {
   tokenKeys.clear();
 }
 
-let stop: (() => void) | undefined;
-
-/** Starts (or restarts) the global stream; relaunched on every token change. */
+/**
+ * Starts the platform event stream and follows its process events (ADR 0053). The process list is read again when
+ * the stream cannot vouch for what was missed (a gap, a new session): nothing polls.
+ */
 export function startLive(): () => void {
-  const start = () => {
-    stop?.();
-    stop = watchEvents({
-      onEvent: (e) => ingestEvent(e),
-      onStatus: (s, err) => {
-        live.status = s;
-        if (s === 'open') live.error = '';
-        else if (err) live.error = errorMessage(err);
-      },
+  const stopEvents = startEvents();
+  const offProcess = onKind('process', (e) => ingestEvent(toWatchEvent(e)));
+  const offResync = onResync(() => void refreshProcesses());
+  const stopStatus = $effect.root(() => {
+    $effect(() => {
+      live.status = stream.status;
+      live.error = stream.error;
     });
-  };
-  start();
-  const off = onTokenChange(() => {
-    start();
-    void refreshProcesses();
   });
+  void refreshProcesses();
   return () => {
-    off();
-    stop?.();
-    stop = undefined;
+    offProcess();
+    offResync();
+    stopStatus();
+    stopEvents();
   };
 }
 

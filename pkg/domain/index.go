@@ -8,6 +8,10 @@ const (
 	SubjectNodeWritten = "goap.node.%s.%s.%s.written"
 	// SubjectBaselineAdvanced is "goap.baseline.<branch>.advanced".
 	SubjectBaselineAdvanced = "goap.baseline.%s.advanced"
+	// SubjectChangeTouched is "goap.changed.<id>": the header, the impacts or the log of a change were written (a
+	// domain.ChangeEvent of type "change.updated", the header only when it was the header). Not under goap.change.>,
+	// which the trigger manager follows for the lifecycle of changes.
+	SubjectChangeTouched = "goap.changed.%s"
 )
 
 // SearchProperty declares how the node index uses a property of a node type.

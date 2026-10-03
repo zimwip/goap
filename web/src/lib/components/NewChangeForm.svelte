@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { stamp, keyOf } from '../flux/signals.svelte';
   // Creating a change by hand (ADR 0024): what it is for (title, intent), what it acts on (namespace, the branch it
   // lands on, the baseline it starts from) and how it is held (its own branch, a parent change). No methodology is
   // needed: the change is then operated from the IDE alone. A namespace without a baseline is started here first.
@@ -49,6 +50,7 @@
   }
   $effect(() => {
     void loadNamespace(namespace);
+    void stamp(keyOf.baselines); // a baseline created meanwhile is a base for the change
   });
 
   /** the change starts from the head of the branch it lands on, unless another baseline is picked */

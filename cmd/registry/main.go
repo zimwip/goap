@@ -2,6 +2,7 @@
 package main
 
 import (
+	"connectrpc.com/connect"
 	"context"
 	"fmt"
 	"time"
@@ -9,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/stdlib"
 
 	"github.com/zimwip/goap/gen/goap/registry/v1/registryv1connect"
+	"github.com/zimwip/goap/internal/eventsvc"
 	"github.com/zimwip/goap/internal/graphsvc"
 	"github.com/zimwip/goap/internal/mcpsvc"
 	"github.com/zimwip/goap/internal/platform"
@@ -70,7 +72,7 @@ func main() {
 			}
 		}()
 	}
-	srv.Mount(registryv1connect.NewRegistryServiceHandler(&registrysvc.Handler{Service: svc}, telemetry.HandlerOptions()...))
+	srv.Mount(registryv1connect.NewRegistryServiceHandler(&registrysvc.Handler{Service: svc}, append(telemetry.HandlerOptions(), connect.WithInterceptors(eventsvc.CommandInterceptor()))...))
 	if err := srv.Run(); err != nil {
 		platform.Fatal(log, "server", err)
 	}

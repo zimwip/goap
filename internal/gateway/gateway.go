@@ -218,7 +218,7 @@ func Mount(e *echo.Echo, cfg Config) error {
 	if len(cfg.AllowOrigins) > 0 {
 		e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
 			AllowOrigins:  cfg.AllowOrigins,
-			AllowHeaders:  []string{"Authorization", "Content-Type", "Connect-Protocol-Version", "Connect-Timeout-Ms", "X-User-Agent"},
+			AllowHeaders:  []string{"Authorization", "Content-Type", "Connect-Protocol-Version", "Connect-Timeout-Ms", "X-User-Agent", "X-Goap-Command"},
 			ExposeHeaders: []string{"Grpc-Status", "Grpc-Message"},
 			AllowMethods:  []string{http.MethodGet, http.MethodPost, http.MethodOptions},
 		}))

@@ -3,6 +3,7 @@
   // It names the methodologies that apply (inherited by its sub-projects), which identifies the roles the
   // project needs (ADR 0043); its Assignments pane is the meeting point with organisation: which org units or
   // users hold which of those roles here.
+  import { stamp, keyOf } from '../../flux/signals.svelte';
   import type { Tab } from '../../shell/types';
   import Icon from '../../shell/Icon.svelte';
   import EditorPanes, { type Pane } from '../../components/EditorPanes.svelte';
@@ -73,6 +74,7 @@
 
   $effect(() => {
     void key;
+    void stamp(keyOf.namespace(NS));
     void load();
   });
 

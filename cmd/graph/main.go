@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/zimwip/goap/gen/goap/graph/v1/graphv1connect"
+	"github.com/zimwip/goap/internal/eventsvc"
 	"github.com/zimwip/goap/internal/graphsvc"
 	"github.com/zimwip/goap/internal/modelgw"
 	"github.com/zimwip/goap/internal/platform"
@@ -142,7 +143,7 @@ func main() {
 	g.Authorizer = graphsvc.TransitionAuthorizer(authorizer)
 	g.Validators = []graph.NodeValidator{access.AdminFloorValidator{}}
 	graphHandler := &graphsvc.Handler{Graph: g, Events: events, Authz: authorizer, Floor: authorizer.Floor()}
-	srv.Mount(graphv1connect.NewGraphServiceHandler(graphHandler, append(telemetry.HandlerOptions(), connect.WithInterceptors(graphHandler.PersonalScope(), graphHandler.EnsureCaller()))...))
+	srv.Mount(graphv1connect.NewGraphServiceHandler(graphHandler, append(telemetry.HandlerOptions(), connect.WithInterceptors(eventsvc.CommandInterceptor(), graphHandler.PersonalScope(), graphHandler.EnsureCaller()))...))
 	if err := srv.Run(); err != nil {
 		platform.Fatal(log, "server", err)
 	}

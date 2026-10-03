@@ -53,6 +53,7 @@
 
   $effect(() => {
     void reload;
+    void baselineTool.reload; // a baseline created by anyone may open a namespace
     graph
       .listNamespaces()
       .then((r) => {

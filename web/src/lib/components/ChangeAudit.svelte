@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { stamp, keyOf } from '../flux/signals.svelte';
   // Audit of a change: its log (ADR 0030: facts, journal records with the scheduling, impact events, in one order),
   // drawn as a flow of events: flow branches fork from the main flow, run side by side (alternatives to compare), and
   // are merged back or dropped. The sources, the flow and the action run are filtered by the server on the columns of
@@ -89,6 +90,7 @@
   $effect(() => {
     const q = query;
     void change;
+    if (q.changeId) void stamp(keyOf.change(q.changeId)); // the log grew, by anyone
     if (!q.changeId) return;
     const ctrl = new AbortController();
     loading = true;

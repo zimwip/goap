@@ -32,8 +32,9 @@
     type Process,
     type ProcessLogEntry,
   } from '../../api';
-  import { watchEvents, type StreamStatus } from '../../stream';
-  import { processes, ingestProcess, ingestEvent, childrenOf, refreshProcesses } from '../../stores/live.svelte';
+  import type { StreamStatus } from '../../stream';
+  import { watchProcess } from '../../flux/events.svelte';
+  import { processes, ingestProcess, childrenOf, refreshProcesses } from '../../stores/live.svelte';
   import { changes, refreshChanges } from '../../stores/catalog.svelte';
   import { viewBaseline } from '../../stores/baselineTool.svelte';
   import { chainOf, inChain, restartedStepNumber } from '../../flowChain';
@@ -168,15 +169,14 @@
     const pid = id;
     const ctrl = new AbortController();
     void refresh(ctrl.signal);
-    const stop = watchEvents({
-      processId: pid,
-      onEvent: (e) => {
+    // the shared stream already records the event (processes, logs): this only keeps the run's own log tail
+    const stop = watchProcess(
+      pid,
+      (e) => {
         if (e.log && (e.log.processId ?? pid) === pid) liveLogs = [...liveLogs, e.log].slice(-500);
-        // The global stream already records the event: just update the data.
-        ingestEvent(e, false);
       },
-      onStatus: (s) => (stream = s),
-    });
+      (s) => (stream = s),
+    );
     return () => {
       ctrl.abort();
       stop();

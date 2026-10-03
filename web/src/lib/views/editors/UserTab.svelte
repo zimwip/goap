@@ -3,6 +3,7 @@
   // is seen (internal/graphsvc.EnsureUser), not only by an administrator's hand. User extends OrgUnit (the
   // smallest organisational unit is a person), so it is assignable to a project the same way a team is
   // (ADR 0039): its Assignments pane is the meeting point with project.
+  import { stamp, keyOf } from '../../flux/signals.svelte';
   import type { Tab, ToolbarAction } from '../../shell/types';
   import Icon from '../../shell/Icon.svelte';
   import EditorPanes, { type Pane } from '../../components/EditorPanes.svelte';
@@ -45,6 +46,7 @@
 
   $effect(() => {
     void key;
+    void stamp(keyOf.namespace(NS));
     void load();
   });
 

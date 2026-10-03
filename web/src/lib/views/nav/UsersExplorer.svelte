@@ -3,6 +3,7 @@
   // automatically the first time they are seen (no administrator has to create them by hand, see
   // internal/graphsvc.EnsureUser); this list is where they show up, and where one can be pre-provisioned
   // (given roles before they ever sign in) or right-clicked for "New assignment" (ADR 0039).
+  import { stamp, keyOf } from '../../flux/signals.svelte';
   import Icon from '../../shell/Icon.svelte';
   import TreeRow from '../TreeRow.svelte';
   import { baselines, refreshBaselines } from '../../stores/catalog.svelte';
@@ -44,6 +45,7 @@
   }
 
   $effect(() => {
+    void stamp(keyOf.namespace(NS));
     void load();
   });
 
@@ -75,7 +77,6 @@
       notify(`User ${s} created.`, 'ok');
       subject = '';
       adding = false;
-      await refreshBaselines(NS);
       await load();
     } catch (e) {
       error = errorMessage(e);

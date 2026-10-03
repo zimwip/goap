@@ -1,5 +1,6 @@
 <script lang="ts">
   // "Access" tool: overview of ABAC policies; editing happens in the "Policies" tab.
+  import { stamp, keyOf } from '../../flux/signals.svelte';
   import Icon from '../../shell/Icon.svelte';
   import TreeRow from '../TreeRow.svelte';
   import StatusBadge from '../../components/StatusBadge.svelte';
@@ -26,6 +27,7 @@
   }
 
   $effect(() => {
+    void stamp(keyOf.namespace(NS_ORGANISATION));
     void load();
   });
 

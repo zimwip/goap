@@ -5,22 +5,13 @@
   import Icon from './Icon.svelte';
   import Popover from './Popover.svelte';
   import { openTab } from './tabs.svelte';
-  import { myActiveRuns, myRunsState, refreshMyRuns } from '../stores/status.svelte';
-  import { shortId, onTokenChange } from '../api';
+  import { myActiveRuns, myRunsState } from '../stores/status.svelte';
+  import { shortId } from '../api';
   import StatusBadge from '../components/StatusBadge.svelte';
 
   let runsOpen = $state(false);
   let now = $state(Date.now());
 
-  $effect(() => {
-    void refreshMyRuns();
-    const t = setInterval(() => void refreshMyRuns(), 60_000);
-    const off = onTokenChange(() => void refreshMyRuns());
-    return () => {
-      clearInterval(t);
-      off();
-    };
-  });
   // Elapsed-time clock (only while the list is open).
   $effect(() => {
     if (!runsOpen) return;

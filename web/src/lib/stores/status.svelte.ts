@@ -1,8 +1,6 @@
-// Platform status (GET /api/status, every 15 s) and "my runs" in progress
-// (ListProcesses mine + stream).
-import { SvelteSet } from 'svelte/reactivity';
-import { engine, errorMessage, platformStatus, RpcError, type PlatformStatus, type Process } from '../api';
-import { processes, ingestProcess, onLiveEvent } from './live.svelte';
+// Platform status (GET /api/status, every 15 s) and "my runs" in progress (from the process store).
+import { errorMessage, platformStatus, RpcError, type PlatformStatus, type Process } from '../api';
+import { live, processes } from './live.svelte';
 import { me } from './session.svelte';
 
 export const health = $state({
@@ -38,39 +36,22 @@ export function startHealth(): () => void {
 
 export const ACTIVE = ['running', 'waiting', 'clarifying'];
 
-/** Ids returned by ListProcesses { mine, rootsOnly }. */
-const mineIds = new SvelteSet<string>();
-export const myRunsState = $state({ loading: false, error: '' });
+/** Loading state of the process list the platform event stream keeps (see `stores/live.svelte`). */
+export const myRunsState = {
+  get loading() {
+    return live.processesLoading;
+  },
+  get error() {
+    return live.processesError;
+  },
+};
 
-export async function refreshMyRuns(): Promise<void> {
-  myRunsState.loading = true;
-  try {
-    const list = (await engine.listProcesses({ mine: true, rootsOnly: true, statuses: ACTIVE })).processes ?? [];
-    mineIds.clear();
-    for (const p of list) {
-      ingestProcess(p);
-      if (p.id) mineIds.add(p.id);
-    }
-    myRunsState.error = '';
-  } catch (e) {
-    myRunsState.error = errorMessage(e);
-  } finally {
-    myRunsState.loading = false;
-  }
-}
-
-// Root processes started by the user and seen on the stream.
-onLiveEvent((e) => {
-  const p = e.process;
-  if (e.type === 'started' && p?.id && !p.parentId && (!me() || p.initiator?.subject === me())) mineIds.add(p.id);
-});
-
-/** My active runs, most recent first. */
+/** My active root runs, most recent first: derived from the known processes, which the stream keeps current. */
 export function myActiveRuns(): Process[] {
+  const subject = me();
   const out: Process[] = [];
-  for (const id of mineIds) {
-    const p = processes.get(id);
-    if (p && ACTIVE.includes(p.status ?? '')) out.push(p);
+  for (const p of processes.values()) {
+    if (!p.parentId && ACTIVE.includes(p.status ?? '') && (!subject || p.initiator?.subject === subject)) out.push(p);
   }
   return out.sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''));
 }

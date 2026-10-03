@@ -2,6 +2,7 @@
   // Access tab: the ABAC policies (Policy nodes, evaluated by Casbin) and the users (User nodes: profile and
   // administrator flag; their roles are held on projects, ADR 0043) of the organisation namespace, changed through
   // changes applied on main.
+  import { stamp, keyOf } from '../../flux/signals.svelte';
   import { errorMessage, type GraphNode, type Policy } from '../../api';
   import { headGraph, applyOnMain, createNodeItem, deleteNodeItem, currentLink, refOf, type HeadGraph } from '../../graphEdit';
   import { ORG_UNIT_TYPE, MEMBER_OF, newUserUnit } from '../../orgTypes';
@@ -40,6 +41,7 @@
   }
 
   $effect(() => {
+    void stamp(keyOf.namespace(NS_ORGANISATION));
     load();
   });
 

@@ -1,8 +1,8 @@
-SERVICES := graph registry engine modelgw preferences credentials indexer gateway mcp connector-localfs goap-dev goap-runner
+SERVICES := graph registry engine modelgw preferences credentials indexer events gateway mcp connector-localfs goap-dev goap-runner
 COMPOSE  := docker compose -f deploy/compose/docker-compose.yml
 export PATH := $(PATH):$(shell go env GOPATH)/bin
 
-.PHONY: all build test test-pg lint generate tools up down logs dev devlocal devlocal-backend devlocal-web devlocal-reset web runner-image
+.PHONY: all build test web-test test-pg lint generate tools up down logs dev devlocal devlocal-backend devlocal-web devlocal-reset web runner-image
 
 all: generate build test
 
@@ -22,6 +22,9 @@ build:
 
 test:
 	go test ./...
+
+web-test: ## unit tests of the web (needs npm install in web/)
+	cd web && npm test
 
 test-pg: ## tests against PostgreSQL (graph)
 	GOAP_TEST_PG_DSN=$${GOAP_TEST_PG_DSN:-postgres://goap:goap@localhost:5432/goap?sslmode=disable} go test ./pkg/graph/... ./internal/...

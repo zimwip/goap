@@ -42,8 +42,16 @@ export function refreshMethodologies(): Promise<void> {
   return fill(methodologies, async () => (await registry.listMethodologies(true)).methodologies ?? []);
 }
 
+let baselinesFor = '';
+
+/** The namespace the `baselines` catalog currently holds. */
+export function baselinesNamespace(): string {
+  return baselinesFor;
+}
+
 /** Baselines are namespace-scoped: this replaces the store's contents with that namespace's baselines. */
 export function refreshBaselines(namespace: string): Promise<void> {
+  baselinesFor = namespace;
   return fill(baselines, async () => (await graph.listBaselines(namespace)).baselines ?? []);
 }
 

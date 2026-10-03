@@ -3,41 +3,27 @@
   // have a change yet — the only click-path into a process that never attaches to one.
   import Icon from '../../shell/Icon.svelte';
   import StatusBadge from '../../components/StatusBadge.svelte';
-  import { engine, errorMessage, formatDate, shortId, type Process, type ProcessStatus } from '../../api';
+  import { formatDate, shortId, type Process, type ProcessStatus } from '../../api';
   import { openTab } from '../../shell/tabs.svelte';
-  import { ingestProcess, onLiveEvent } from '../../stores/live.svelte';
+  import { live, processes, refreshProcesses } from '../../stores/live.svelte';
+  import { session } from '../../stores/session.svelte';
 
-  let items = $state<Process[]>([]);
-  let loading = $state(false);
-  let error = $state('');
   let filter = $state('');
   let status = $state<ProcessStatus | ''>('');
 
   const STATUSES: (ProcessStatus | '')[] = ['', 'clarifying', 'running', 'waiting', 'completed', 'stuck', 'failed', 'superseded'];
 
-  async function load() {
-    loading = true;
-    try {
-      const ps = (await engine.listProcesses({ mine: true, statuses: status ? [status] : undefined })).processes ?? [];
-      for (const p of ps) ingestProcess(p);
-      items = [...ps].sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''));
-      error = '';
-    } catch (e) {
-      error = errorMessage(e);
-    } finally {
-      loading = false;
-    }
-  }
+  // The caller's own processes, from the store the platform's event stream keeps (no polling, no refetch per event).
+  const items = $derived(
+    [...processes.values()]
+      .filter((p) => p.initiator?.subject === session.principal?.subject && (!status || p.status === status))
+      .sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? '')),
+  );
+  const loading = $derived(live.processesLoading);
+  const error = $derived(live.processesError);
 
   $effect(() => {
-    void status;
-    void load();
-    const t = setInterval(() => void load(), 15_000);
-    const off = onLiveEvent(() => void load());
-    return () => {
-      clearInterval(t);
-      off();
-    };
+    if (!live.processesLoaded) void refreshProcesses();
   });
 
   const q = $derived(filter.trim().toLowerCase());
@@ -58,7 +44,7 @@
         <option value={s}>{s || 'all statuses'}</option>
       {/each}
     </select>
-    <button type="button" class="ghost small" title="Refresh" aria-label="Refresh" disabled={loading} onclick={load}
+    <button type="button" class="ghost small" title="Refresh" aria-label="Refresh" disabled={loading} onclick={refreshProcesses}
       ><Icon name="refresh" size={14} /></button
     >
   </div>

@@ -15,7 +15,6 @@ import {
   type SectionItem,
 } from '../methodologyForm';
 import { loadTypes, typeCatalog } from './types.svelte';
-import { refreshMethodologies } from './catalog.svelte';
 import { confirmDialog } from '../shell/confirmState.svelte';
 
 export interface NormIssue extends Issue {
@@ -52,6 +51,10 @@ export class Draft {
   localIssues = $state<Issue[]>([]);
   /** form JSON at the last validation */
   validatedAt = $state('');
+  /** somebody else saved, published or removed this version while it is open with unsaved changes */
+  remote = $state<{ actor: string; type: string } | undefined>();
+  /** end of our own last operation: events of the next seconds are likely its echo (no command id on a bus relay) */
+  private ownAt = 0;
 
   readonly key: string;
   private loaded: Promise<void> | undefined;
@@ -100,6 +103,7 @@ export class Draft {
   private apply(m: Methodology) {
     this.form = toForm(m);
     this.snapshot = JSON.stringify(this.form);
+    this.remote = undefined;
     this.status = m.status || 'draft';
     this.meta = { createdAt: m.createdAt, updatedAt: m.updatedAt, publishedAt: m.publishedAt, updatedBy: m.updatedBy };
     void loadTypes();
@@ -128,6 +132,23 @@ export class Draft {
     } finally {
       this.loading = false;
     }
+  }
+
+  /** The platform stream says this version changed (by someone else): follow it, or warn if it would cost edits. */
+  externalChange(actor: string, type: string): void {
+    if (this.isNew || this.busy || Date.now() - this.ownAt < 3000) return;
+    if (this.dirty) this.remote = { actor, type };
+    else void this.reload();
+  }
+
+  /** Takes what the other writer saved, dropping the unsaved changes. */
+  acceptRemote(): Promise<void> {
+    return this.reload();
+  }
+
+  /** Keeps the unsaved changes (saving them overwrites what the other writer saved). */
+  keepMine(): void {
+    this.remote = undefined;
   }
 
   /** Discards changes (back to the last saved state). */
@@ -198,6 +219,7 @@ export class Draft {
       return undefined;
     } finally {
       this.busy = '';
+      this.ownAt = Date.now();
     }
   }
 
@@ -254,7 +276,6 @@ export class Draft {
     };
     this.issues = res.issues ?? [];
     this.validatedAt = at;
-    void refreshMethodologies();
     if (!this.isNew) await this.validate(true);
     return saved;
   }
@@ -266,7 +287,6 @@ export class Draft {
     if (!res) return false;
     this.status = res.methodology?.status || 'published';
     if (res.methodology?.publishedAt) this.meta = { ...this.meta, publishedAt: res.methodology.publishedAt };
-    void refreshMethodologies();
     return true;
   }
 
@@ -281,7 +301,6 @@ export class Draft {
     if (!v) return undefined;
     const res = await this.run('version', () => registry.createVersion(this.name, this.version, v));
     if (!res) return undefined;
-    void refreshMethodologies();
     return res.methodology?.version ?? v;
   }
 
@@ -312,7 +331,6 @@ export class Draft {
       return true;
     });
     if (!ok) return undefined;
-    void refreshMethodologies();
     if (draft) {
       drafts.delete(this.key);
       return 'deleted';

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { stamp, keyOf } from '../flux/signals.svelte';
   import StepGuide from './StepGuide.svelte';
   import {
     engine,
@@ -86,6 +87,7 @@
   $effect(() => {
     void step;
     if (!changeId) return;
+    void stamp(keyOf.change(changeId));
     const ctrl = new AbortController();
     const id = changeId;
     loadError = '';

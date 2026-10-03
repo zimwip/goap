@@ -768,6 +768,13 @@ methodologies' code ([ADR 0007](adr/0007-sandbox-executor.md)).
 | `docker` | container per process: read-only rootfs, `cap-drop ALL`, `no-new-privileges`, non-root user, CPU / memory / PID limits, internal network with no Internet, optional runtime (gVisor `runsc`); Docker API via a restricted proxy |
 | `kubernetes` | pod per process: `restricted` Pod Security, no service account token, seccomp `RuntimeDefault`, optional RuntimeClass (gVisor, Kata), NetworkPolicy limiting flows to the engine (`deploy/k8s/sandbox.yaml`) |
 
+### 3.6b Events and presence for the web
+
+One Connect stream, `EventService/Watch` ([ADR 0053](adr/0053-one-event-stream-and-presence.md)), carries every
+platform fact (processes, changes, nodes, baselines, registry) as a thin ordered event with resume by `(epoch, seq)`;
+the web reduces them into invalidation signals and never refetches after a write. `Heartbeat` / `Leave` and the
+`presence.*` events say who looks at which tab. `cmd/events` follows `goap.>` on NATS (presence is relayed between replicas on `presence.>`); `goap-dev` feeds the hub in process.
+
 ### 3.7 Observability (OpenTelemetry)
 
 `internal/telemetry` component ([ADR 0008](adr/0008-opentelemetry-observability.md)), enabled by the

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { stamp, keyOf } from '../flux/signals.svelte';
   // Decision points of a change (ADR 0009 §4): the questions the change must settle, usually which option. The
   // decider rules them (decided, or undecidable with the questions that block them); open questions are answered
   // here or investigated by an agent; a ruling an agent made below the threshold is ratified here. A ruling made
@@ -40,6 +41,7 @@
 
   $effect(() => {
     if (!changeId) return;
+    void stamp(keyOf.change(changeId));
     const ctrl = new AbortController();
     load(ctrl.signal);
     return () => ctrl.abort();

@@ -7,8 +7,9 @@
   import ApprovalPanel from '../../components/ApprovalPanel.svelte';
   import UnblockPanel from '../../components/UnblockPanel.svelte';
   import { engine, graph, errorMessage, int, formatInt, type Change, type LogLine, type Process } from '../../api';
-  import { watchEvents, type StreamStatus } from '../../stream';
-  import { processes, ingestProcess, ingestEvent } from '../../stores/live.svelte';
+  import type { StreamStatus } from '../../stream';
+  import { watchProcess } from '../../flux/events.svelte';
+  import { processes, ingestProcess } from '../../stores/live.svelte';
   import { loadMethodology, agentLabel, actionLabel, goalLabel } from '../../stores/assistant.svelte';
   import { openTab } from '../../shell/tabs.svelte';
   import { renderMarkdown } from '../../markdown';
@@ -50,15 +51,13 @@
   $effect(() => {
     if (!live) return;
     const pid = processId;
-    const stop = watchEvents({
-      processId: pid,
-      onEvent: (e) => {
+    return watchProcess(
+      pid,
+      (e) => {
         if (e.log && (e.log.processId ?? pid) === pid) liveLogs = [...liveLogs, e.log].slice(-200);
-        ingestEvent(e, false);
       },
-      onStatus: (s) => (stream = s),
-    });
-    return stop;
+      (s) => (stream = s),
+    );
   });
 
   const status = $derived(p?.status ?? '');

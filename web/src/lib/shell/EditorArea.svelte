@@ -1,6 +1,7 @@
 <script lang="ts">
   // Editor area: tabs and the active tab's editor.
   import TabBar from './TabBar.svelte';
+  import Presence from '../components/Presence.svelte';
   import { editorView, panelView } from './registry';
   import { layout } from './layout.svelte';
   import { tabsState, activeTab, pinTab, isDirty } from './tabs.svelte';
@@ -36,6 +37,7 @@
       {@const O = override}
       <O />
     {:else if tab && view}
+      <div class="here"><Presence tabId={tab.id} max={5} /></div>
       {#key tab.id}
         {@const C = view.component}
         <C {tab} />
@@ -65,5 +67,13 @@
   }
   .pad {
     padding: 1rem;
+  }
+  /* who else looks at this tab: floats over the editor's top-right corner */
+  .here {
+    position: absolute;
+    top: 0.45rem;
+    right: 0.7rem;
+    z-index: 2;
+    pointer-events: none;
   }
 </style>

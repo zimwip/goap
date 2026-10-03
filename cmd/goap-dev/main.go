@@ -22,6 +22,7 @@ import (
 	"strings"
 
 	"github.com/zimwip/goap/gen/goap/engine/v1/enginev1connect"
+	"github.com/zimwip/goap/gen/goap/events/v1/eventsv1connect"
 	"github.com/zimwip/goap/gen/goap/graph/v1/graphv1connect"
 	"github.com/zimwip/goap/gen/goap/index/v1/indexv1connect"
 	"github.com/zimwip/goap/gen/goap/mcp/v1/mcpv1connect"
@@ -34,6 +35,7 @@ import (
 	"github.com/zimwip/goap/internal/connectors/localfs"
 	"github.com/zimwip/goap/internal/credsvc"
 	"github.com/zimwip/goap/internal/enginesvc"
+	"github.com/zimwip/goap/internal/eventsvc"
 	"github.com/zimwip/goap/internal/gateway"
 	"github.com/zimwip/goap/internal/graphsvc"
 	"github.com/zimwip/goap/internal/identity"
@@ -103,8 +105,11 @@ func main() {
 	// a change scoped to an Activity is gated by its own goal condition at Apply, not the node-type lifecycle's
 	// Editable floor (architecture plan "Activity concept")
 	g.ActivityGoalsMet = reg.ActivityGoalsMet
+	// the one event stream of the web (ADR 0053): every publication of the platform also feeds it
+	bus := eventsvc.NewHub()
+	go bus.Run(ctx)
 	// publications reload the triggers and the type catalogue
-	reg.Events = registryEvents{
+	reg.Events = engine.Publishers{bus, registryEvents{
 		methodology: func(ctx context.Context, name, version string) {
 			if triggers != nil {
 				triggers.Handle(ctx, engine.TriggerEvent{Type: "methodology.published", Methodology: name, Version: version})
@@ -117,7 +122,7 @@ func main() {
 			}
 			log.Info("domain published: type catalogue reloaded", "domain", name, "version", version)
 		},
-	}
+	}}
 	system := authz.With(ctx, authz.Principal{Subject: "system:registry", Roles: []string{"admin"}})
 	if _, err := reg.SeedDomains(system, platform.Env("GOAP_DOMAINS_DIR", "domains")); err != nil {
 		platform.Fatal(log, "domains", err)
@@ -164,7 +169,7 @@ func main() {
 	indexer := indexersvc.New(st.index, gw, authorizer, log)
 	indexSink := indexersvc.NewSink(ctx, indexer)
 	indexer.Republish = func(ctx context.Context) (int, error) { return g.Republish(ctx, indexSink) }
-	g.Observe(indexSink)
+	g.Observe(engine.Publishers{indexSink, bus})
 	go func() {
 		if n, err := indexer.Republish(ctx); err != nil {
 			log.Error("index: initial publication", "err", err)
@@ -221,7 +226,7 @@ func main() {
 		Tools:     mcpsvc.HubPort{Service: hub},
 		Intent:    intent.Resolver{Ranker: intent.Lexical{}},
 		Store:     st.processes,
-		Events:    broker,
+		Events:    engine.Publishers{broker, bus},
 		Authz:     authorizer,
 		LLM:       models,
 		Sandboxes: sandboxes,
@@ -284,9 +289,9 @@ func main() {
 		srv.Mount(path, h)
 	}
 
-	graphHandler := &graphsvc.Handler{Graph: g, Events: engine.Publishers{changePublisher(onChange), indexSink}, Authz: authorizer, Floor: authorizer.Floor(), Identity: ident}
-	mount(graphv1connect.NewGraphServiceHandler(graphHandler, append(telemetry.HandlerOptions(), connect.WithInterceptors(graphHandler.PersonalScope(), graphHandler.EnsureCaller()))...))
-	mount(registryv1connect.NewRegistryServiceHandler(&registrysvc.Handler{Service: reg, Identity: ident}, telemetry.HandlerOptions()...))
+	graphHandler := &graphsvc.Handler{Graph: g, Events: engine.Publishers{changePublisher(onChange), indexSink, bus}, Authz: authorizer, Floor: authorizer.Floor(), Identity: ident}
+	mount(graphv1connect.NewGraphServiceHandler(graphHandler, append(telemetry.HandlerOptions(), connect.WithInterceptors(eventsvc.CommandInterceptor(), graphHandler.PersonalScope(), graphHandler.EnsureCaller()))...))
+	mount(registryv1connect.NewRegistryServiceHandler(&registrysvc.Handler{Service: reg, Identity: ident}, append(telemetry.HandlerOptions(), connect.WithInterceptors(eventsvc.CommandInterceptor()))...))
 	if authMW != nil {
 		srv.Echo.GET("/api/whoami", identity.WhoAmI(identity.Extractor{}, directory.Enrich), authMW)
 	} else {
@@ -297,6 +302,15 @@ func main() {
 	mount(preferencesv1connect.NewPreferencesServiceHandler(&prefssvc.Handler{Service: &prefssvc.Service{Store: st.prefs}, Identity: ident}, telemetry.HandlerOptions()...))
 	mount(indexv1connect.NewIndexServiceHandler(&indexersvc.Handler{Service: indexer, Identity: ident, Authz: authorizer}, telemetry.HandlerOptions()...))
 	mount(enginev1connect.NewEngineServiceHandler(engineHandler, telemetry.HandlerOptions()...))
+	bus.Authz = authorizer
+	bus.Lookup = func(ctx context.Context, id string) (engine.Process, bool) {
+		p, err := e.Store.Get(ctx, id)
+		if err != nil || p == nil {
+			return engine.Process{}, false
+		}
+		return *p, true
+	}
+	mount(eventsv1connect.NewEventServiceHandler(&eventsvc.Handler{Hub: bus, Identity: ident}, telemetry.HandlerOptions()...))
 	// single process: the platform is up when this answers (the gateway serves it otherwise)
 	srv.Echo.GET("/api/status", func(c *echo.Context) error {
 		return c.JSON(http.StatusOK, map[string]any{"status": "ok", "time": time.Now().UTC(),

@@ -8,6 +8,7 @@
   // ADR 0028), with or without an adapter of its own: restrictions add up along the chain, so a unit
   // narrows what it inherits (the built-in MCPs every unit gets from the default organisation) and never
   // widens it.
+  import { stamp, keyOf } from '../../flux/signals.svelte';
   import type { Tab } from '../../shell/types';
   import Icon from '../../shell/Icon.svelte';
   import EditorPanes, { type Pane } from '../../components/EditorPanes.svelte';
@@ -87,6 +88,7 @@
 
   $effect(() => {
     void key;
+    void stamp(keyOf.namespace(NS));
     void load();
   });
 

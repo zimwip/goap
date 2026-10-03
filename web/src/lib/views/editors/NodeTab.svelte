@@ -31,6 +31,7 @@
   import { loadTypes, typeCatalog } from '../../stores/types.svelte';
   import { provideActions, notify } from '../../shell/workbench.svelte';
   import { changes, refreshChanges } from '../../stores/catalog.svelte';
+  import { stamp, keyOf } from '../../flux/signals.svelte';
   import { loadGraph, loadHead, type GraphIndex } from '../../graphIndex';
   import { namespaceOf } from '../../namespace';
   import { confirmDialog } from '../../shell/confirmState.svelte';
@@ -122,6 +123,7 @@
 
   $effect(() => {
     void id;
+    void stamp(keyOf.node(id)); // a new version of the node, by anyone
     centerId = id;
     const ctrl = new AbortController();
     void loadNode(ctrl.signal);
@@ -130,6 +132,7 @@
 
   $effect(() => {
     void workId;
+    void stamp(keyOf.change(workId)); // its impacts or log moved, by anyone
     void loadWork();
   });
 
@@ -180,7 +183,6 @@
     if (!c?.id) throw new Error('The change could not be created.');
     workId = c.id;
     await loadWork();
-    void refreshChanges();
     notify(`Change “${c.title}” created.`, 'ok');
     return c.id;
   }
@@ -220,6 +222,7 @@
   $effect(() => {
     const ref = shownRef;
     void reload;
+    void stamp(keyOf.node(id));
     if (!ref?.id) return;
     const ctrl = new AbortController();
     graph
@@ -230,6 +233,7 @@
   });
   $effect(() => {
     void reload;
+    void stamp(keyOf.changes);
     if (!id) return;
     const ctrl = new AbortController();
     graph

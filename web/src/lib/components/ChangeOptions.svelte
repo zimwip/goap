@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { stamp, keyOf } from '../flux/signals.svelte';
   // Comparing and deciding the options of a change (ADR 0009 §3, ADR 0032 §6): they are compared on the nodes they
   // changed, evaluated, then one is selected (its versions join the change branch) and the others are rejected.
   // Opening an option, looking at it and working on it (the active option) is the scope bar's.
@@ -37,6 +38,7 @@
   $effect(() => {
     void level;
     if (!changeId) return;
+    void stamp(keyOf.change(changeId));
     const ctrl = new AbortController();
     load(ctrl.signal);
     return () => ctrl.abort();
