@@ -3,20 +3,10 @@
 // (api.switchProject) so every call from here on carries it — best effort: a deployment with no token
 // (AuthMode "none", e.g. goap-dev with GOAP_AUTH_MODE=none) has nothing to reissue, so the selection stays local-display only there.
 import { headGraph } from '../graphEdit';
-import { errorMessage, nodeTitle, switchProject as reissueToken, type GraphNode } from '../api';
+import { errorMessage, getToken, nodeTitle, switchProject as reissueToken, type GraphNode } from '../api';
 import { PROJECT_UNIT_TYPE } from '../orgTypes';
 import { notify } from '../shell/workbench.svelte';
 import { refreshIdentity, session } from './session.svelte';
-
-const STORAGE_KEY = 'goap.project';
-
-function storedProject(): string {
-  try {
-    return localStorage.getItem(STORAGE_KEY) ?? '';
-  } catch {
-    return '';
-  }
-}
 
 export interface ProjectOption {
   key: string;
@@ -25,7 +15,7 @@ export interface ProjectOption {
 
 export const project = $state({
   /** the selected project's key ('': the root project) */
-  current: storedProject(),
+  current: '',
   options: [] as ProjectOption[],
   loading: false,
   error: '',
@@ -47,31 +37,29 @@ export async function refreshProjects(): Promise<void> {
   }
 }
 
-/** Switches the active project: persisted locally, and (best effort) reissued into the token. */
+/**
+ * Switches the active project by reissuing the token, which carries it (the claim is the only copy: nothing
+ * is kept in the browser). Without a token (auth mode "none") there is nothing to reissue and the selection
+ * only changes the display; any other failure is the caller's to see (a refused token ends the session).
+ */
 export async function selectProject(key: string): Promise<void> {
-  project.current = key;
-  try {
-    localStorage.setItem(STORAGE_KEY, key);
-  } catch {
-    // storage unavailable: the selection still applies for this session
+  if (!getToken()) {
+    project.current = key;
+    notify('Project selection is local to this browser only: no token to carry it to the server.', 'info');
+    return;
   }
   try {
     await reissueToken(key);
     await refreshIdentity();
-  } catch {
-    // no active token to reissue (auth mode "none"): the selection stays local-display only
-    notify('Project selection is local to this browser only: no token to carry it to the server.', 'info');
+  } catch (e) {
+    notify(errorMessage(e), 'error');
   }
 }
 
-// once the identity is known, adopt its project claim if the local selection disagrees (a token reissued
-// elsewhere, or the first load) — never overrides an explicit local pick with an empty claim.
-let lastSeenSubject = '';
+// the project is the identity's claim ('' for the root project): follows every token the identity comes from
 $effect.root(() => {
   $effect(() => {
     const p = session.principal;
-    if (!p || p.subject === lastSeenSubject) return;
-    lastSeenSubject = p.subject ?? '';
-    if (p.project) project.current = p.project;
+    if (p) project.current = p.project ?? '';
   });
 });

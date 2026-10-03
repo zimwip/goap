@@ -8,16 +8,22 @@ export const session = $state({
   hasToken: !!getToken(),
 });
 
+let latest = 0;
+
 export async function refreshIdentity(): Promise<void> {
+  const call = ++latest;
   session.hasToken = !!getToken();
-  try {
-    session.principal = await whoAmI();
-    session.error = '';
-  } catch {
-    session.principal = undefined;
-    session.error = 'unknown identity';
-  } finally {
+  const done = (principal: Principal | undefined, error: string) => {
+    if (call !== latest) return; // a newer token's answer is on its way (or arrived): this one is stale
+    session.principal = principal;
+    session.error = error;
     session.loaded = true;
+  };
+  if (!session.hasToken) return done(undefined, '');
+  try {
+    done(await whoAmI(), '');
+  } catch (e) {
+    done(undefined, e instanceof Error ? e.message : 'unknown identity');
   }
 }
 

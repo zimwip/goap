@@ -136,6 +136,9 @@ export async function rpc<TReq extends object, TRes>(
   return (data ?? {}) as TRes;
 }
 
+/** Is this the answer for an object that does not exist (any more)? */
+export const isNotFound = (e: unknown): boolean => e instanceof RpcError && e.code === 'not_found';
+
 /** Human-readable error message for the UI. */
 export function errorMessage(e: unknown): string {
   if (e instanceof RpcError) {
@@ -1721,7 +1724,11 @@ export async function switchProject(project: string): Promise<void> {
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: JSON.stringify({ project }),
   });
-  if (!res.ok) throw new RpcError(res.status === 401 ? 'unauthenticated' : 'failed', await errorText(res), res.status);
+  if (!res.ok) {
+    const message = await errorText(res);
+    reportUnauthorized(token, res.status, message);
+    throw new RpcError(res.status === 401 ? 'unauthenticated' : 'failed', message, res.status);
+  }
   const data = (await res.json()) as { token?: string };
   if (!data.token) throw new RpcError('failed', 'no token returned', res.status);
   setToken(data.token);
@@ -1752,7 +1759,11 @@ export async function refreshToken(): Promise<void> {
   } catch (e) {
     throw new RpcError('unavailable', `Gateway unreachable: ${String(e)}`, 0);
   }
-  if (!res.ok) throw new RpcError(res.status === 401 ? 'unauthenticated' : 'failed', await errorText(res), res.status);
+  if (!res.ok) {
+    const message = await errorText(res);
+    reportUnauthorized(token, res.status, message);
+    throw new RpcError(res.status === 401 ? 'unauthenticated' : 'failed', message, res.status);
+  }
   const data = (await res.json()) as { token?: string };
   if (!data.token) throw new RpcError('failed', 'no token returned', res.status);
   // a sign-out or another refresh meanwhile wins
@@ -2124,6 +2135,7 @@ export async function platformStatus(signal?: AbortSignal): Promise<PlatformStat
   } catch {
     data = undefined;
   }
+  reportUnauthorized(token, res.status, '');
   // 503 with a status body: platform unavailable, but a usable response.
   if (data?.status) return data;
   throw new RpcError(res.status === 404 ? 'unimplemented' : 'unknown', text || res.statusText, res.status);

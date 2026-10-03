@@ -22,6 +22,7 @@
     engine,
     graph,
     errorMessage,
+    isNotFound,
     formatDate,
     formatInt,
     shortId,
@@ -39,8 +40,11 @@
   import { namespaceOf } from '../../namespace';
   import { loadMethodology, published } from '../../stores/assistant.svelte';
 
+  import NotFound from '../../shell/NotFound.svelte';
+
   let { tab }: { tab: Tab } = $props();
 
+  let missing = $state(false);
   const id = $derived(tab.params.id ?? '');
   const process = $derived<Process | undefined>(processes.get(id));
 
@@ -150,7 +154,10 @@
       processLog = (await engine.getProcessLog(id, signal)).entries ?? [];
       error = '';
     } catch (e) {
-      if (!signal?.aborted) error = errorMessage(e);
+      if (!signal?.aborted) {
+        missing = isNotFound(e);
+        error = errorMessage(e);
+      }
     } finally {
       loading = false;
     }
@@ -243,7 +250,7 @@
 </script>
 
 <div class="editor-page wide">
-  {#if error}<div class="alert">{error}</div>{/if}
+  {#if missing}<NotFound {tab} what="Run" />{:else if error}<div class="alert">{error}</div>{/if}
   {#if !process}
     {#if !error}<p class="empty">Loading…</p>{/if}
   {:else}
