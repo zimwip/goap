@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { stamp, keyOf } from '../../flux/signals.svelte';
   // "Triggers" tool: status of published agents' triggers
   // (ListTriggers) and manual firing (FireTrigger).
   import Icon from '../../shell/Icon.svelte';
@@ -29,14 +30,13 @@
 
   $effect(() => {
     void load();
+    void stamp(keyOf.methodologies); // a published version reloads the triggers
     if (!methodologies.loaded) void refreshMethodologies();
-    const t = setInterval(() => void load(), 30_000);
     // A process launched by a trigger updates the counters.
     const off = onLiveEvent((e) => {
       if (e.type === 'started' && e.process?.trigger) void load();
     });
     return () => {
-      clearInterval(t);
       off();
     };
   });

@@ -3,6 +3,7 @@
   // Organisation tool's OrgUnit hierarchy (child --project_part_of--> parent). Projects are edited through
   // changes like any node. Right-clicking a project offers "New assignment" (ADR 0039: Assignment is
   // reachable from Organisation, Project or User, via an action or a context menu).
+  import { stamp, keyOf } from '../../flux/signals.svelte';
   import { tick } from 'svelte';
   import Icon from '../../shell/Icon.svelte';
   import TreeRow from '../TreeRow.svelte';
@@ -48,6 +49,7 @@
   }
 
   $effect(() => {
+    void stamp(keyOf.namespace(NS));
     void load();
   });
 
@@ -127,7 +129,6 @@
       name = '';
       parent = '';
       adding = false;
-      await refreshBaselines(NS);
       await load();
     } catch (e) {
       error = errorMessage(e);
@@ -187,7 +188,6 @@
       notify(`${moving.key} moved under ${target.key}.`, 'ok');
       moving = undefined;
       moveTarget = '';
-      await refreshBaselines(NS);
       await load();
     } catch (e) {
       error = errorMessage(e);

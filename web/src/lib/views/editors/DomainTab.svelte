@@ -148,7 +148,15 @@
       <StatusBadge status={d.status} />
       {#if d.dirty}<span class="dirty" title="Unsaved changes">● modified</span>{/if}
     </div>
-    {#if d.error}<div class="alert">{d.error}</div>{/if}
+    {#if d.remote}
+  <div class="alert" role="alert">
+    {d.remote.actor || 'Someone'} {d.remote.type.endsWith('deleted') ? 'removed' : d.remote.type.endsWith('published') ? 'published' : 'saved'} this version
+    while you were editing.
+    <button type="button" class="small" onclick={() => d.acceptRemote()}>Take theirs</button>
+    <button type="button" class="ghost small" onclick={() => d.keepMine()}>Keep mine</button>
+  </div>
+{/if}
+{#if d.error}<div class="alert">{d.error}</div>{/if}
     {#if d.readonly}
       <div class="alert info">
         {d.builtin

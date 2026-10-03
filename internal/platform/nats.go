@@ -53,8 +53,25 @@ func (e *Events) Publish(ctx context.Context, subject string, v any) error {
 	msg := nats.NewMsg(subject)
 	msg.Data = data
 	otel.GetTextMapPropagator().Inject(ctx, propagation.HeaderCarrier(msg.Header))
+	if st := StampOf(ctx); st.Command != "" {
+		msg.Header.Set(HeaderActor, st.Actor)
+		msg.Header.Set(HeaderCommand, st.Command)
+	}
 	_, err = e.js.PublishMsg(ctx, msg)
 	return err
+}
+
+// PublishCore publishes without persistence (core NATS, at most once): for ephemeral facts such as presence,
+// on subjects outside the GOAP stream (goap.>).
+func (e *Events) PublishCore(subject string, v any) error {
+	if e == nil {
+		return nil
+	}
+	data, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	return e.nc.Publish(subject, data)
 }
 
 // Ready checks the connection.
@@ -81,6 +98,18 @@ func (e *Events) Subscribe(subject string, fn func(data []byte)) error {
 		return nil
 	}
 	_, err := e.nc.Subscribe(subject, func(m *nats.Msg) { fn(m.Data) })
+	return err
+}
+
+// SubscribeSubject is Subscribe for a wildcard subject: fn also gets the subject of each message and the stamp
+// (who, which command) its publisher put on it.
+func (e *Events) SubscribeSubject(subject string, fn func(subject string, data []byte, stamp Stamp)) error {
+	if e == nil {
+		return nil
+	}
+	_, err := e.nc.Subscribe(subject, func(m *nats.Msg) {
+		fn(m.Subject, m.Data, Stamp{Actor: m.Header.Get(HeaderActor), Command: m.Header.Get(HeaderCommand)})
+	})
 	return err
 }
 

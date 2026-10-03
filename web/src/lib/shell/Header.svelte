@@ -25,6 +25,7 @@
   import { formatTime } from '../api';
   import Popover from './Popover.svelte';
   import ProjectSelector from './ProjectSelector.svelte';
+  import OnlineUsers from './OnlineUsers.svelte';
 
   $effect(() => startHealth());
 
@@ -292,6 +293,8 @@
       <span class="led" aria-hidden="true"></span>
       <span class="sl">{live.status === 'retrying' ? 'reconnecting' : live.status === 'stopped' ? 'offline' : 'live'}</span>
     </button>
+
+    <OnlineUsers />
 
     <div class="item-wrap">
       <button

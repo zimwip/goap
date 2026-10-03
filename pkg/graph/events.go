@@ -33,6 +33,50 @@ type observedTx struct {
 	Tx
 	nodes     []domain.Node
 	baselines []domain.Baseline
+	// changes written in the transaction, in order: the header when it was written, else just the id
+	changes []domain.ChangeID
+	headers map[domain.ChangeID]domain.Change
+}
+
+func (t *observedTx) touch(id domain.ChangeID) {
+	if id == "" {
+		return
+	}
+	for _, c := range t.changes {
+		if c == id {
+			return
+		}
+	}
+	t.changes = append(t.changes, id)
+}
+
+func (t *observedTx) PutChange(ctx context.Context, c domain.Change) error {
+	if err := t.Tx.PutChange(ctx, c); err != nil {
+		return err
+	}
+	if t.headers == nil {
+		t.headers = map[domain.ChangeID]domain.Change{}
+	}
+	c.Items, c.Nodes = nil, nil
+	t.headers[c.ID] = c
+	t.touch(c.ID)
+	return nil
+}
+
+func (t *observedTx) PutChangeImpact(ctx context.Context, change domain.ChangeID, cn domain.ChangeImpact) error {
+	if err := t.Tx.PutChangeImpact(ctx, change, cn); err != nil {
+		return err
+	}
+	t.touch(change)
+	return nil
+}
+
+func (t *observedTx) AppendLog(ctx context.Context, e domain.LogEntry) (domain.LogEntry, error) {
+	e, err := t.Tx.AppendLog(ctx, e)
+	if err == nil {
+		t.touch(e.Change)
+	}
+	return e, err
 }
 
 func (t *observedTx) PutNode(ctx context.Context, n domain.Node) error {
@@ -79,6 +123,11 @@ func (r *observedRepo) InTx(ctx context.Context, fn func(tx Tx) error) error {
 // eventsOf builds the events of what a transaction wrote, inside the transaction (it reads the node types).
 func (g *Graph) eventsOf(ctx context.Context, tx Tx, ot *observedTx) ([]published, error) {
 	var out []published
+	for _, id := range ot.changes {
+		c := ot.headers[id]
+		c.ID = id
+		out = append(out, published{fmt.Sprintf(domain.SubjectChangeTouched, id), domain.ChangeEvent{Type: "change.updated", Change: c}})
+	}
 	if len(ot.nodes) > 0 {
 		// typesAt ignores its baseline argument (the type catalogue is process-global, not
 		// namespace-scoped graph data): no baseline lookup is needed to build it.

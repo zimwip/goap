@@ -81,6 +81,10 @@ export class DomainDraft {
   validatedAt = $state('');
   /** methodology versions referencing this version */
   usage = $state<DomainUser[]>([]);
+  /** somebody else saved, published or removed this version while it is open with unsaved changes */
+  remote = $state<{ actor: string; type: string } | undefined>();
+  /** end of our own last operation: events of the next seconds are likely its echo */
+  private ownAt = 0;
 
   private loaded: Promise<void> | undefined;
 
@@ -121,9 +125,25 @@ export class DomainDraft {
     this.form = toDomainForm(d);
     void loadTypes();
     this.snapshot = JSON.stringify(this.form);
+    this.remote = undefined;
     this.status = d.status || 'draft';
     this.builtin = !!d.builtin;
     this.meta = { createdAt: d.createdAt, updatedAt: d.updatedAt, publishedAt: d.publishedAt, updatedBy: d.updatedBy };
+  }
+
+  /** The platform stream says this version changed (by someone else): follow it, or warn if it would cost edits. */
+  externalChange(actor: string, type: string): void {
+    if (this.isNew || this.busy || Date.now() - this.ownAt < 3000) return;
+    if (this.dirty) this.remote = { actor, type };
+    else void this.reload();
+  }
+
+  acceptRemote(): Promise<void> {
+    return this.reload();
+  }
+
+  keepMine(): void {
+    this.remote = undefined;
   }
 
   ensureLoaded(): Promise<void> {
@@ -173,6 +193,7 @@ export class DomainDraft {
       return undefined;
     } finally {
       this.busy = '';
+      this.ownAt = Date.now();
     }
   }
 
@@ -213,7 +234,6 @@ export class DomainDraft {
     this.meta = { createdAt: saved.createdAt, updatedAt: saved.updatedAt, publishedAt: saved.publishedAt, updatedBy: saved.updatedBy };
     this.issues = res.issues ?? [];
     this.validatedAt = at;
-    void refreshDomains();
     return saved;
   }
 
@@ -224,7 +244,6 @@ export class DomainDraft {
     if (!res) return false;
     this.status = res.domain?.status || 'published';
     if (res.domain?.publishedAt) this.meta = { ...this.meta, publishedAt: res.domain.publishedAt };
-    void refreshDomains();
     void loadTypes(true);
     return true;
   }
@@ -239,7 +258,6 @@ export class DomainDraft {
     if (!v) return undefined;
     const res = await this.run('version', () => registry.createDomainVersion(this.name, this.version, v));
     if (!res) return undefined;
-    void refreshDomains();
     return res.domain?.version ?? v;
   }
 
@@ -267,7 +285,6 @@ export class DomainDraft {
       return true;
     });
     if (!ok) return undefined;
-    void refreshDomains();
     if (!draft) void loadTypes(true);
     if (draft) {
       domainDrafts.delete(this.key);

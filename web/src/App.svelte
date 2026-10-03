@@ -6,7 +6,9 @@
   import Shell from './lib/shell/Shell.svelte';
   import Signin from './lib/shell/Signin.svelte';
   import Welcome from './lib/views/Welcome.svelte';
-  import { startLive, refreshProcesses } from './lib/stores/live.svelte';
+  import { startLive } from './lib/stores/live.svelte';
+  import { startReducers } from './lib/flux/reducers.svelte';
+  import { startPresence } from './lib/flux/presence.svelte';
   import { anyDirty } from './lib/stores/drafts.svelte';
   import { activeDraft } from './lib/views/bottom/activeDraft';
   import { authState, loadAuthConfig } from './lib/stores/auth.svelte';
@@ -20,9 +22,14 @@
 
   $effect(() => {
     if (needsSignin) return;
-    const stop = startLive();
-    void refreshProcesses();
-    return stop;
+    const stopLive = startLive();
+    const stopReducers = startReducers();
+    const stopPresence = startPresence();
+    return () => {
+      stopPresence();
+      stopReducers();
+      stopLive();
+    };
   });
 
   // Automatic validation of the active draft, 800 ms after the last change.

@@ -467,6 +467,9 @@ func (h *Handler) FireTrigger(ctx context.Context, r *connect.Request[enginev1.F
 	return connect.NewResponse(&enginev1.FireTriggerResponse{Process: ProcessToPB(p)}), nil
 }
 
+// LogToPB converts a log line of a process.
+func LogToPB(l engine.LogLine) *enginev1.LogLine { return logToPB(l) }
+
 func logToPB(l engine.LogLine) *enginev1.LogLine {
 	return &enginev1.LogLine{Time: pbconv.Time(l.Time), Level: l.Level, Message: l.Message, ProcessId: l.ProcessID, Action: l.Action, Step: int32(l.Step)}
 }

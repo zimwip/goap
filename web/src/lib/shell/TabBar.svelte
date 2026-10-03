@@ -1,6 +1,7 @@
 <script lang="ts">
   // Tab bar for the editor area.
   import Icon from './Icon.svelte';
+  import Presence from '../components/Presence.svelte';
   import { editorView } from './registry';
   import { tabsState, activate, closeTab, togglePin, pinTab, moveTab, isDirty } from './tabs.svelte';
 
@@ -124,6 +125,7 @@
     >
       {#if v}<span class="ticon"><Icon name={v.tabIcon?.(tab) ?? v.icon} size={14} /></span>{/if}
       <span class="label">{title}</span>
+      <Presence tabId={tab.id} max={2} />
       {#if tab.pinned}
         <button
           type="button"

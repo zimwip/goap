@@ -135,17 +135,26 @@ export interface WatchOptions {
 const MIN_DELAY = 1000;
 const MAX_DELAY = 30_000;
 
+export interface StreamSpec<TReq extends object, TRes> {
+  service: string;
+  method: string;
+  /** the request of each connection (a resumed stream names where it stopped) */
+  body: () => TReq;
+  onMessage: (msg: TRes) => void;
+  onStatus?: (status: StreamStatus, error?: RpcError) => void;
+}
+
 /**
- * Subscribes to `EngineService.WatchEvents` and reconnects with an
- * exponential delay when the stream ends or fails. Returns the stop function.
+ * Follows a server-streaming RPC and reconnects with an exponential delay when
+ * the stream ends or fails. Returns the stop function.
  */
-export function watchEvents(opts: WatchOptions): () => void {
+export function watchStream<TReq extends object, TRes>(spec: StreamSpec<TReq, TRes>): () => void {
   const ctrl = new AbortController();
   let delay = MIN_DELAY;
   let timer: ReturnType<typeof setTimeout> | undefined;
 
   const status = (s: StreamStatus, e?: RpcError) => {
-    if (!ctrl.signal.aborted || s === 'stopped') opts.onStatus?.(s, e);
+    if (!ctrl.signal.aborted || s === 'stopped') spec.onStatus?.(s, e);
   };
 
   async function loop() {
@@ -154,12 +163,12 @@ export function watchEvents(opts: WatchOptions): () => void {
       let failure: RpcError | undefined;
       try {
         await serverStream(
-          ENGINE_SERVICE,
-          'WatchEvents',
-          opts.processId ? { processId: opts.processId } : {},
-          (msg: WatchEvent) => {
+          spec.service,
+          spec.method,
+          spec.body(),
+          (msg: TRes) => {
             delay = MIN_DELAY; // a message was received: the connection is healthy
-            opts.onEvent(msg);
+            spec.onMessage(msg);
           },
           ctrl.signal,
           () => status('open'),
@@ -195,4 +204,15 @@ export function watchEvents(opts: WatchOptions): () => void {
     clearTimeout(timer);
     ctrl.abort();
   };
+}
+
+/** Subscribes to `EngineService.WatchEvents` (the process events alone; the web follows `flux/events.svelte.ts`). */
+export function watchEvents(opts: WatchOptions): () => void {
+  return watchStream<{ processId?: string }, WatchEvent>({
+    service: ENGINE_SERVICE,
+    method: 'WatchEvents',
+    body: () => (opts.processId ? { processId: opts.processId } : {}),
+    onMessage: opts.onEvent,
+    onStatus: opts.onStatus,
+  });
 }

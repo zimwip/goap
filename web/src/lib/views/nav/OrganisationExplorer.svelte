@@ -1,6 +1,7 @@
 <script lang="ts">
   // "Organisation" tool: the OrgUnit hierarchy of the `organisation` namespace
   // (child --part_of--> parent). Units are edited through changes like any node.
+  import { stamp, keyOf } from '../../flux/signals.svelte';
   import { tick } from 'svelte';
   import Icon from '../../shell/Icon.svelte';
   import TreeRow from '../TreeRow.svelte';
@@ -50,6 +51,7 @@
   }
 
   $effect(() => {
+    void stamp(keyOf.namespace(NS));
     void load();
   });
 
@@ -136,7 +138,6 @@
       parent = '';
       waiting = false;
       adding = false;
-      await refreshBaselines(NS);
       await load();
     } catch (e) {
       error = errorMessage(e);
@@ -196,7 +197,6 @@
       notify(`${moving.key} moved under ${target.key}.`, 'ok');
       moving = undefined;
       moveTarget = '';
-      await refreshBaselines(NS);
       await load();
     } catch (e) {
       error = errorMessage(e);

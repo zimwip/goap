@@ -45,6 +45,14 @@
     </ul>
   </div>
 {/if}
+{#if draft.remote}
+  <div class="alert" role="alert">
+    {draft.remote.actor || 'Someone'} {draft.remote.type.endsWith('deleted') ? 'removed' : draft.remote.type.endsWith('published') ? 'published' : 'saved'} this version
+    while you were editing.
+    <button type="button" class="small" onclick={() => draft.acceptRemote()}>Take theirs</button>
+    <button type="button" class="ghost small" onclick={() => draft.keepMine()}>Keep mine</button>
+  </div>
+{/if}
 {#if draft.error}<div class="alert">{draft.error}</div>{/if}
 {#if draft.readonly && !draft.loading}
   <div class="alert info">

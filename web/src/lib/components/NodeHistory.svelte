@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { stamp, keyOf } from '../flux/signals.svelte';
   // History of a node: every version with its state, the properties that
   // changed, the change that produced it (ADR 0014).
   import { graph, errorMessage, formatDate, shortId, type GraphNode } from '../api';
@@ -36,6 +37,7 @@
 
   $effect(() => {
     void reloadKey;
+    void stamp(keyOf.node(id));
     const ctrl = new AbortController();
     void load(ctrl.signal);
     return () => ctrl.abort();

@@ -1,0 +1,79 @@
+syntax = "proto3";
+
+package goap.events.v1;
+
+import "google/protobuf/timestamp.proto";
+import "goap/engine/v1/engine.proto";
+
+// EventService is the one stream the web follows (ADR 0053): every fact the platform publishes (processes, changes,
+// nodes, baselines, registry) as a thin, ordered event, plus who is looking at what (presence). Clients keep their
+// state from it, refetching what an event says changed, so a write made by anyone shows up for everyone.
+service EventService {
+  // Live events of everything the caller may read. after_seq resumes a stream cut short (same epoch); when the
+  // history cannot cover the gap, or the epoch changed (restart, another replica), the first event is a "resync":
+  // the client treats everything it holds as stale. A "heartbeat" event is sent while nothing happens.
+  rpc Watch(WatchRequest) returns (stream Event);
+  // Says where a tab of the caller is looking (kind + id of a node, change, methodology...), every few seconds.
+  // Presence expires on its own after a short while without heartbeat.
+  rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
+  // A tab closes: its presence goes at once.
+  rpc Leave(LeaveRequest) returns (LeaveResponse);
+}
+
+message WatchRequest {
+  // epoch and last seq the client saw (empty / 0: a first connection, a snapshot of the presence is sent)
+  string epoch = 1;
+  uint64 after_seq = 2;
+}
+
+message Event {
+  // epoch of the stream the seq belongs to; seq is ordered within it
+  string epoch = 1;
+  uint64 seq = 2;
+  // process.started | process.step ... | change.created | change.applied ... | node.written | baseline.advanced |
+  // methodology.published ... | domain.published ... | presence.snapshot | presence.joined | presence.moved |
+  // presence.left | resync | heartbeat
+  string type = 3;
+  // what changed: process, change, node, baseline, methodology, domain, presence
+  string kind = 4;
+  string id = 5;
+  string namespace = 6;
+  string branch = 7;
+  string project = 8;
+  string change_id = 9;
+  int64 version = 10;
+  // who caused it, and the client-generated id of the command that did (X-Goap-Command), when known
+  string actor = 11;
+  string command_id = 12;
+  google.protobuf.Timestamp time = 13;
+  // version label of a methodology or domain ("1.2.0")
+  string label = 14;
+  // process events carry the process / log line, as WatchEvents does
+  goap.engine.v1.Process process = 20;
+  goap.engine.v1.LogLine log = 21;
+  // presence: the whole picture (snapshot) or the one tab concerned
+  repeated Presence presence = 30;
+}
+
+message Presence {
+  string tab_id = 1;
+  string subject = 2;
+  // what the tab looks at
+  string kind = 3;
+  string id = 4;
+  google.protobuf.Timestamp since = 5;
+}
+
+message HeartbeatRequest {
+  string tab_id = 1;
+  string kind = 2;
+  string id = 3;
+}
+
+message HeartbeatResponse {}
+
+message LeaveRequest {
+  string tab_id = 1;
+}
+
+message LeaveResponse {}

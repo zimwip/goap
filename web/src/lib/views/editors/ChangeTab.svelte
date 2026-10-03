@@ -30,7 +30,7 @@
   import { openTab } from '../../shell/tabs.svelte';
   import { openNode } from '../../nodeEditors';
   import { provideActions, notify } from '../../shell/workbench.svelte';
-  import { refreshChanges, refreshBaselines } from '../../stores/catalog.svelte';
+  import { stamp, keyOf } from '../../flux/signals.svelte';
   import { viewBaseline } from '../../stores/baselineTool.svelte';
   import { namespaceOf } from '../../namespace';
   import { processes } from '../../stores/live.svelte';
@@ -206,6 +206,17 @@
     if (!id) return;
     const ctrl = new AbortController();
     load(id, ctrl.signal);
+    return () => ctrl.abort();
+  });
+
+  // what the platform stream says touched this change (by anyone: another user, an agent, a process): read it again
+  $effect(() => {
+    const id = selected;
+    if (!id || !stamp(keyOf.change(id))) return;
+    const ctrl = new AbortController();
+    untrack(() => {
+      if (change?.id === id) void load(id, ctrl.signal);
+    });
     return () => ctrl.abort();
   });
 
@@ -400,7 +411,6 @@
     try {
       const made = (await graph.splitChange(change.id)).changes ?? [];
       await load(change.id);
-      void refreshChanges();
       notify(made.length ? `${made.length} sub-change(s) created.` : 'No new sub-change: every owning unit already has one.', 'ok');
     } catch (e) {
       error = errorMessage(e);
@@ -423,8 +433,6 @@
     if (!change?.id) return false;
     await graph.mergeChange(change.id, resolutions);
     await load(change.id);
-    void refreshChanges();
-    void refreshBaselines(namespaceOf(change?.namespace));
     notify('Change merged.', 'ok');
     return true;
   }
@@ -443,7 +451,6 @@
       await graph.updateChange(change.id, patch);
       defining = false;
       await load(change.id);
-      void refreshChanges();
       notify(done, 'ok');
     } catch (e) {
       error = errorMessage(e);
@@ -469,8 +476,6 @@
     try {
       applied = (await graph.applyChange(change.id, baselineName.trim())).baseline;
       await load(change.id);
-      void refreshChanges();
-      void refreshBaselines(namespaceOf(change?.namespace));
       notify(`Baseline ${applied?.name || shortId(applied?.id)} created.`, 'ok');
     } catch (e) {
       error = errorMessage(e);

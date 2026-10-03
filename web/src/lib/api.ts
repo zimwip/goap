@@ -6,6 +6,8 @@
 // Transport
 // ---------------------------------------------------------------------------
 
+import { COMMAND_HEADER, newCommandId } from './flux/commands';
+
 const TOKEN_KEY = 'goap.token';
 
 /** Base for RPC URLs: relative by default (the Vite server proxies `/goap.*`). */
@@ -101,7 +103,7 @@ export async function rpc<TReq extends object, TRes>(
   body: TReq,
   signal?: AbortSignal,
 ): Promise<TRes> {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  const headers: Record<string, string> = { 'Content-Type': 'application/json', [COMMAND_HEADER]: newCommandId() };
   const token = getToken();
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
