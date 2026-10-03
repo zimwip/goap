@@ -3,7 +3,6 @@
   import { objectDialog, closeObjectDialog } from './objectDialogState.svelte';
   import { notify } from './workbench.svelte';
   import { graph, errorMessage, type Struct } from '../api';
-  import { refreshBaselines } from '../stores/catalog.svelte';
 
   let key = $state('');
   let values = $state<Record<string, string>>({});
@@ -34,7 +33,6 @@
       await graph.createObject(objectDialog.methodology, objectDialog.nodeType, key.trim(), props);
       notify(`${objectDialog.nodeType} ${key.trim()} created.`, 'ok');
       closeObjectDialog();
-      void refreshBaselines(objectDialog.nodeType.split('@')[0]);
     } catch (err) {
       error = errorMessage(err);
     } finally {

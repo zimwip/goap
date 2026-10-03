@@ -4,6 +4,7 @@
 </script>
 
 <script lang="ts">
+  import { stamp, keyOf } from '../../flux/signals.svelte';
   // "Tester" tool: sends an intent (StartProcess) and displays the
   // identification result (candidates, clarification question).
   import Icon from '../../shell/Icon.svelte';
@@ -34,6 +35,7 @@
   let textarea = $state<HTMLTextAreaElement>();
 
   $effect(() => {
+    void stamp(keyOf.namespace(NS_ORGANISATION)); // units created or removed by anyone
     void headGraph(NS_ORGANISATION)
       .then((h) => (units = h.nodes.filter((n) => n.type === ORG_UNIT_TYPE).map((n) => n.key ?? '').sort()))
       .catch(() => (units = []));

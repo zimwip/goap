@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { stamp, keyOf } from '../flux/signals.svelte';
   // Merging a branch into another by hand (ADR 0032 §2): what the merge does node by node, and a resolution for each
   // node changed on both sides. A node changed on one side only joins the target as is (no version written); a
   // resolved conflict writes one merge version (two parents) with the properties chosen here, or keeps the target.
@@ -36,7 +37,11 @@
     }
   }
   $effect(() => {
-    if (namespace && from && into) void load();
+    if (!(namespace && from && into)) return;
+    // either branch moved (a baseline landed on it): the plan and its conflicts are not the same any more
+    void stamp(keyOf.branch(from));
+    void stamp(keyOf.branch(into));
+    void load();
   });
 
   const conflicting = $derived((plan?.candidates ?? []).filter((c) => c.conflicts?.length));

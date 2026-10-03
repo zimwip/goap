@@ -4,14 +4,10 @@
   import { mergeDialog, closeMergeDialog } from './mergeDialogState.svelte';
   import { graph, shortId, type Resolution } from '../api';
   import { notify } from './workbench.svelte';
-  import { refreshBaselines } from '../stores/catalog.svelte';
-  import { refreshBranches } from '../stores/baselineTool.svelte';
   import MergeResolver from '../components/MergeResolver.svelte';
 
   async function merge(resolutions: Record<string, Resolution>): Promise<boolean> {
     const r = await graph.mergeBranch({ namespace: mergeDialog.namespace, from: mergeDialog.from, into: mergeDialog.into, resolutions });
-    void refreshBaselines(mergeDialog.namespace);
-    refreshBranches();
     notify(`${mergeDialog.from} merged into ${mergeDialog.into}: baseline ${r.baseline?.name || shortId(r.baseline?.id)}.`, 'ok');
     closeMergeDialog();
     return true;

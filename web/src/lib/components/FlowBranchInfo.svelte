@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
+  import { stamp, keyOf } from '../flux/signals.svelte';
   // The graph branch of a flow: chip, competition, and a review of what it changes.
   import { errorMessage, graph, type Flow, type MergePlan } from '../api';
   import { MAIN_BRANCH } from '../namespace';
@@ -22,6 +24,12 @@
       loading = false;
     }
   }
+  // once opened, the review follows its branches
+  $effect(() => {
+    void stamp(keyOf.branch(branch));
+    void stamp(keyOf.branch(changeBranch || MAIN_BRANCH));
+    if (opened) untrack(() => void review());
+  });
   function toggle() {
     opened = !opened;
     if (opened && !plan && !loading) void review();
