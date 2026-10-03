@@ -48,7 +48,7 @@
 
 <div class="editor-page" bind:this={root}>
   {#if item}
-    <DraftHeader draft={d} icon="zap" kind="Action" title={item.name || '(unnamed)'} dirty={d.itemDirty('actions', item.uid)} />
+    <DraftHeader draft={d} path={`actions[${index}]`} icon="zap" kind="Action" title={item.name || '(unnamed)'} dirty={d.itemDirty('actions', item.uid)} />
     <fieldset class="plain" disabled={d.readonly}>
       <section class="card">
         <ActionEditor

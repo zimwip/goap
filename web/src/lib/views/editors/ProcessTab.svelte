@@ -81,7 +81,7 @@
 
 <div class="editor-page" bind:this={root}>
   {#if item}
-    <DraftHeader draft={d} icon="list" kind="Process" title={item.name || '(unnamed)'} dirty={d.itemDirty('processes', item.uid)} />
+    <DraftHeader draft={d} path={`processes[${index}]`} icon="list" kind="Process" title={item.name || '(unnamed)'} dirty={d.itemDirty('processes', item.uid)} />
     <fieldset class="plain" disabled={d.readonly}>
       <section class="card">
         <div class="grid">

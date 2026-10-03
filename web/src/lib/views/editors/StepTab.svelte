@@ -79,7 +79,7 @@
 
 <div class="editor-page" bind:this={rootEl}>
   {#if loc}
-    <DraftHeader draft={d} icon="node" kind={loc.section === 'methods' ? 'Method step' : 'Step'} title={loc.step.name || '(unnamed)'} dirty={d.itemDirty(loc.section, loc.owner.uid)} />
+    <DraftHeader draft={d} path={p} icon="node" kind={loc.section === 'methods' ? 'Method step' : 'Step'} title={loc.step.name || '(unnamed)'} dirty={d.itemDirty(loc.section, loc.owner.uid)} />
     <p class="hint">
       In <button type="button" class="link" onclick={() => openItem(d, loc.section, loc.owner)}>{loc.owner.name || '(unnamed)'}</button>
       {#if parentPath !== loc.owner.name}· under <code>{parentPath}</code>{/if}

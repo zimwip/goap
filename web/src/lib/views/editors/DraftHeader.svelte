@@ -12,7 +12,12 @@
     kind,
     title,
     dirty,
-  }: { draft: Draft; icon: IconName; kind: string; title: string; dirty: boolean } = $props();
+    path = '',
+  }: { draft: Draft; icon: IconName; kind: string; title: string; dirty: boolean; path?: string } = $props();
+
+  // the rules this element breaks (compilation and validation issues), with where each is
+  const ruled = $derived(path ? draft.issuesAt(path) : []);
+  const where = (p: string | undefined) => (p ?? '').replace(path, '').replace(/^\./, '');
 </script>
 
 <div class="crumbs">
@@ -30,6 +35,16 @@
   <StatusBadge status={draft.status} />
   {#if dirty}<span class="dirty" title="Unsaved changes">● modified</span>{/if}
 </div>
+{#if ruled.length}
+  <div class="alert broken" role="alert">
+    <strong>{ruled.length} rule{ruled.length === 1 ? '' : 's'} broken</strong>
+    <ul>
+      {#each ruled as i, k (k)}
+        <li>{#if where(i.norm)}<code>{where(i.norm)}</code> {/if}{i.message}</li>
+      {/each}
+    </ul>
+  </div>
+{/if}
 {#if draft.error}<div class="alert">{draft.error}</div>{/if}
 {#if draft.readonly && !draft.loading}
   <div class="alert info">
@@ -40,6 +55,13 @@
 {/if}
 
 <style>
+  .broken ul {
+    margin: 0.25rem 0 0;
+    padding-left: 1.2rem;
+  }
+  .broken li {
+    margin: 0.1rem 0;
+  }
   .crumbs {
     display: flex;
     gap: 0.4rem;

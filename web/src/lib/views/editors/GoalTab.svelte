@@ -32,7 +32,7 @@
 
 <div class="editor-page" bind:this={root}>
   {#if item}
-    <DraftHeader draft={d} icon="target" kind="Goal" title={item.name || '(unnamed)'} dirty={d.itemDirty('goals', item.uid)} />
+    <DraftHeader draft={d} path={`goals[${index}]`} icon="target" kind="Goal" title={item.name || '(unnamed)'} dirty={d.itemDirty('goals', item.uid)} />
     <fieldset class="plain" disabled={d.readonly}>
       <section class="card">
         <div class="grid">
