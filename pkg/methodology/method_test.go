@@ -22,7 +22,7 @@ methods:
 processes:
   - name: flow
     steps:
-      - {name: finish, method: assembling, pre: {a: true}}
+      - {name: finish, method: assembling, pre: {c: true}}
 `)
 	if len(issues) > 0 {
 		t.Fatal(issues)

@@ -43,7 +43,7 @@ actions:
     kind: script
     language: javascript
     description: Retain the repository's requirements as the scope of the campaign
-    pre: {has_scope: false}
+    
     effects: {has_scope: true}
     code: |
       function run(ctx) {
@@ -57,7 +57,7 @@ actions:
     kind: script
     language: go
     description: Create one test case per requirement in scope
-    pre: {has_scope: true, tests_designed: false}
+    pre: {has_scope: true}
     effects: {tests_designed: true}
     code: |
       package action
@@ -87,7 +87,7 @@ actions:
     kind: script
     language: javascript
     description: Write the campaign summary with the LLM
-    pre: {tests_designed: true, summarized: false}
+    pre: {tests_designed: true}
     effects: {summarized: true}
     code: |
       const tests = ctx.changeImpacts().filter(n => n.intent === "created");
@@ -102,7 +102,7 @@ actions:
     kind: script
     language: javascript
     description: Automatically accept the test cases (small campaigns)
-    pre: {tests_designed: true, reviewed: false}
+    pre: {tests_designed: true}
     effects: {reviewed: true}
     utility: 'has(vars.review) && vars.review == "human" ? 0.1 : 0.9'
     code: |
@@ -114,7 +114,7 @@ actions:
     kind: human
     description: Human review of the test cases
     roles: [test_reviewer]
-    pre: {tests_designed: true, reviewed: false}
+    pre: {tests_designed: true}
     effects: {reviewed: true}
     utility: "0.5"
     instructions: Accept or reject each proposed test case (a comment is required).
@@ -123,7 +123,7 @@ actions:
     kind: script
     language: javascript
     description: Have the specialized agents design then review the campaign
-    pre: {reviewed: false}
+    
     effects: {tests_designed: true, summarized: true, reviewed: true}
     code: |
       const design = ctx.runAgent("test-designer", "design the test cases");
@@ -135,7 +135,7 @@ actions:
   - name: wait_ready
     kind: human
     description: Wait for a human to let the pinger proceed
-    pre: {pinger_ready: false}
+    
     effects: {pinger_ready: true}
     instructions: Submit an artifact of type "go".
 
@@ -143,7 +143,7 @@ actions:
     kind: script
     language: javascript
     description: Signal progress to the parent process, then wait to finish
-    pre: {pinger_ready: true, pinger_pinged: false}
+    pre: {pinger_ready: true}
     effects: {pinger_pinged: true}
     code: |
       ctx.signal("progress", { note: "halfway" }, ctx.parentID());
@@ -152,7 +152,7 @@ actions:
   - name: wait_wrap
     kind: human
     description: Wait for a human to let the pinger finish
-    pre: {pinger_pinged: true, pinger_wrapped: false}
+    pre: {pinger_pinged: true}
     effects: {pinger_wrapped: true}
     instructions: Submit an artifact of type "wrapped".
 
@@ -160,7 +160,7 @@ actions:
     kind: script
     language: javascript
     description: Start the pinger and wake early on its progress signal
-    pre: {ping_done: false}
+    
     effects: {ping_done: true}
     code: |
       ctx.wakeOn("progress");

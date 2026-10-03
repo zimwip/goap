@@ -92,7 +92,7 @@ actions:
       List the open changes of the requesting unit and compare them to the request: continue a
       clear match, else clarify this new change (title, intent, scope) with the requester,
       looping (a note per round) until it is well-defined enough to start.
-    pre: {formulated: false}
+    
     effects: {formulated: true}
     cost: 1
     model: default
@@ -123,7 +123,7 @@ actions:
   - name: identify_scope
     kind: llm
     description: Identify the ALM elements directly impacted by the intent
-    pre: {scoped: false}
+    
     effects: {scoped: true}
     cost: 2
     model: default
@@ -141,7 +141,7 @@ actions:
   - name: select_scope
     kind: human
     description: Manually designate the elements directly impacted (fallback)
-    pre: {scoped: false}
+    
     effects: {scoped: true}
     cost: 8
     instructions: Indicate the elements of the ALM repository directly concerned by the change, and why (impacted change impacts).
@@ -152,7 +152,7 @@ actions:
     description: >
       Propagate impacts along the ALM links: need → requirements → functions →
       components → artifacts, applications → solutions, interfaces, flows, data, tests
-    pre: {scoped: true, propagated: false}
+    pre: {scoped: true}
     effects: {propagated: true}
     cost: 1
     params:
@@ -165,7 +165,7 @@ actions:
   - name: specify_requirements
     kind: llm
     description: Revise the impacted requirements and create the new requirements
-    pre: {propagated: true, requirements_specified: false}
+    pre: {propagated: true}
     effects: {requirements_specified: true}
     cost: 3
     model: default
@@ -185,7 +185,7 @@ actions:
   - name: write_requirements
     kind: human
     description: Write the requirements (fallback)
-    pre: {propagated: true, requirements_specified: false}
+    pre: {propagated: true}
     effects: {requirements_specified: true}
     cost: 8
     nodeTypes: [alm@Requirement, alm@FunctionalRequirement, alm@NonFunctionalRequirement, alm@SecurityRequirement]
@@ -197,7 +197,7 @@ actions:
     kind: script
     language: javascript
     description: Link each untraced new requirement to the needs in scope (systematic rule)
-    pre: {requirements_specified: true, requirements_traced: false}
+    pre: {requirements_specified: true}
     effects: {requirements_traced: true}
     cost: 1
     code: |
@@ -226,7 +226,7 @@ actions:
   - name: trace_manually
     kind: human
     description: Manually trace requirements to needs (fallback)
-    pre: {requirements_specified: true, requirements_traced: false}
+    pre: {requirements_specified: true}
     effects: {requirements_traced: true}
     cost: 6
     nodeTypes: [alm@Need, alm@Requirement, alm@FunctionalRequirement, alm@NonFunctionalRequirement, alm@SecurityRequirement]
@@ -236,7 +236,7 @@ actions:
     kind: script
     language: javascript
     description: One test case per created or revised requirement (level based on requirement type)
-    pre: {requirements_specified: true, tests_planned: false}
+    pre: {requirements_specified: true}
     effects: {tests_planned: true}
     cost: 1
     code: |
@@ -264,7 +264,7 @@ actions:
     kind: script
     language: javascript
     description: Allocate each new requirement to a function (impacted function, otherwise a new function)
-    pre: {requirements_traced: true, functions_allocated: false}
+    pre: {requirements_traced: true}
     effects: {functions_allocated: true}
     cost: 1
     code: |
@@ -291,7 +291,7 @@ actions:
   - name: design_solution
     kind: llm
     description: Design the evolution of components, interfaces, flows and data
-    pre: {requirements_specified: true, requirements_traced: true, functions_allocated: true, design_done: false}
+    pre: {requirements_specified: true, requirements_traced: true, functions_allocated: true}
     effects: {design_done: true}
     cost: 3
     model: reasoning
@@ -315,7 +315,7 @@ actions:
   - name: write_design
     kind: human
     description: Describe the design (fallback)
-    pre: {requirements_specified: true, requirements_traced: true, functions_allocated: true, design_done: false}
+    pre: {requirements_specified: true, requirements_traced: true, functions_allocated: true}
     effects: {design_done: true}
     cost: 8
     utility: 'has(vars.design) && vars.design == "manual" ? 2.0 : 0.3'
@@ -328,7 +328,7 @@ actions:
     kind: script
     language: javascript
     description: Check the consistency of the design (mandatory links of created elements)
-    pre: {design_done: true, design_checked: false}
+    pre: {design_done: true}
     effects: {design_checked: true}
     cost: 1
     code: |
@@ -357,7 +357,7 @@ actions:
       Build the impacted or created components. Abstract action: each
       execution builds the components of one technology (specialization), until
       all of them have their artifact.
-    pre: {propagated: true, design_checked: true, build_complete: false}
+    pre: {propagated: true, design_checked: true}
     effects: {build_complete: true}
     cost: 2
     incremental: true
@@ -465,7 +465,7 @@ actions:
     description: >
       Build one release per application that deploys a new artifact (next minor version,
       contains / releases links) and freeze the environment chain (promotes_to order)
-    pre: {requirements_specified: true, build_complete: true, release_planned: false}
+    pre: {requirements_specified: true, build_complete: true}
     effects: {release_planned: true}
     cost: 1
     code: |
@@ -512,7 +512,7 @@ actions:
   - name: write_release_note
     kind: llm
     description: Write the release note
-    pre: {requirements_specified: true, tests_planned: true, design_checked: true, build_complete: true, release_planned: true, release_noted: false}
+    pre: {requirements_specified: true, tests_planned: true, design_checked: true, build_complete: true, release_planned: true}
     effects: {release_noted: true}
     cost: 1
     model: fast
@@ -532,7 +532,7 @@ actions:
     kind: script
     language: javascript
     description: Assemble the release note from the change (deterministic fallback)
-    pre: {requirements_specified: true, tests_planned: true, design_checked: true, build_complete: true, release_planned: true, release_noted: false}
+    pre: {requirements_specified: true, tests_planned: true, design_checked: true, build_complete: true, release_planned: true}
     effects: {release_noted: true}
     cost: 3
     code: |
@@ -556,7 +556,7 @@ actions:
   - name: review
     kind: human
     description: Review of the change (requirements, design, artifacts, tests)
-    pre: {release_noted: true, reviewed: false}
+    pre: {release_noted: true}
     effects: {reviewed: true}
     cost: 2
     instructions: Accept or reject each change impact (impacts, requirements, design, artifacts, tests, releases) based on the release note and the design check; a comment is required.
@@ -568,7 +568,7 @@ actions:
       Deploy the releases to the next environment in the chain. Each execution is a wave
       (one environment); the specialization depends on the stage: automatic in dev / test, staging
       checks in staging, change window and release manager approval in production.
-    pre: {reviewed: true, rolled_out: false}
+    pre: {reviewed: true}
     effects: {rolled_out: true}
     cost: 2
     incremental: true
@@ -630,7 +630,7 @@ actions:
     kind: builtin
     builtin: graph.apply
     description: Apply the change to the ALM repository (new baseline, including releases and deployments)
-    pre: {reviewed: true, rolled_out: true, applied: false}
+    pre: {reviewed: true, rolled_out: true}
     effects: {applied: true}
     cost: 1
     permission: change:apply

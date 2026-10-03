@@ -28,7 +28,7 @@ actions:
   - name: identify_impacts
     kind: llm
     description: Identify the elements directly impacted by the change intent
-    pre: {has_impacts: false}
+    
     effects: {has_impacts: true}
     cost: 2
     model: default
@@ -45,7 +45,7 @@ actions:
   - name: select_impacts
     kind: human
     description: Manual selection of impacted elements (fallback if automatic analysis is not possible)
-    pre: {has_impacts: false}
+    
     effects: {has_impacts: true}
     cost: 8
     instructions: Indicate the elements of the repository directly impacted by the change, and why.
@@ -54,7 +54,7 @@ actions:
     kind: builtin
     builtin: graph.propagate
     description: Propagate impacts to linked elements (tests, components, derived requirements)
-    pre: {has_impacts: true, propagated: false}
+    pre: {has_impacts: true}
     effects: {propagated: true}
     cost: 1
     params:
@@ -104,7 +104,7 @@ actions:
   - name: write_report
     kind: llm
     description: Write the impact report
-    pre: {propagated: true, reported: false}
+    pre: {propagated: true}
     effects: {reported: true}
     cost: 1
     model: fast
@@ -127,7 +127,7 @@ actions:
     kind: builtin
     builtin: graph.apply
     description: Apply the validated change to the repository (creates the resulting baseline)
-    pre: {reviewed: true, applied: false}
+    pre: {reviewed: true}
     effects: {applied: true}
     cost: 1
     # without this permission, the initiator must obtain an approver's approval

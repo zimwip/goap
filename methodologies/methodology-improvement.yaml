@@ -49,14 +49,14 @@ actions:
       Analyze the observed run: execution journal of the change (and its
       sub-agents), OpenTelemetry spans of its trace; per-action statistics and
       findings.
-    pre: {analyzed: false}
+    
     effects: {analyzed: true}
     cost: 1
 
   - name: propose_improvements
     kind: abstract
     description: Propose improvements to the methodology from the findings (change impacts on its elements)
-    pre: {analyzed: true, proposed: false}
+    pre: {analyzed: true}
     effects: {proposed: true}
     cost: 1
 
@@ -102,7 +102,7 @@ actions:
       Accept or reject each improvement (a comment is required). Accepted
       improvements will be integrated into a new draft version of the methodology,
       to be published from the editor.
-    pre: {proposed: true, reviewed: false}
+    pre: {proposed: true}
     effects: {reviewed: true}
     cost: 1
 
@@ -110,7 +110,7 @@ actions:
     kind: builtin
     builtin: methodology.draft
     description: Create the new draft version of the methodology with the accepted proposals
-    pre: {reviewed: true, drafted: false}
+    pre: {reviewed: true}
     effects: {drafted: true, settled: true}
     permission: methodology:write
     cost: 1

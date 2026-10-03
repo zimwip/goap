@@ -616,6 +616,9 @@ func (m *Methodology) compileWith(lenient bool) (*Compiled, Issues) {
 				add(fmt.Sprintf("actions[%d].effects.%s", i, k), "unknown condition %q", k)
 			}
 		}
+		for _, k := range overlap(a.Pre, a.Effects) {
+			add(fmt.Sprintf("actions[%d].pre.%s", i, k), "%s", inputAndOutput(k, "the action "+a.Name))
+		}
 	}
 	goals := map[string]bool{}
 	for i, g := range m.Goals {
@@ -1029,4 +1032,22 @@ func (n *NodeType) SetMeta(raw []byte) {
 		return
 	}
 	n.Lifecycle, n.Document, n.ChangeControlled, n.Validators, n.Search = m.Lifecycle, m.Document, m.ChangeControlled, m.Validators, m.Search
+}
+
+// overlap lists the conditions that are both an input (entry, pre) and an output (exit, effect) of an activity, with
+// whatever values: an activity takes a condition to do something about it, so it cannot also be what it makes true
+// (a guard "pre x: false, effect x: true" says the same thing as the goal and is refused, ADR 0051).
+func overlap(entry, exit map[string]bool) []string {
+	var out []string
+	for k := range exit {
+		if _, ok := entry[k]; ok {
+			out = append(out, k)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+func inputAndOutput(k, of string) string {
+	return fmt.Sprintf("condition %s is both an input and an output of %s: an activity does not take what it makes true (drop it from the entry; what is already true is not planned again)", k, of)
 }

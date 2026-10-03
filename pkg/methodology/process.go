@@ -337,8 +337,25 @@ func (w *stepWalker) walk(steps []Step, path, prefix string, inherited map[strin
 			need = map[string]bool{}
 		}
 		w.merge(sp+".pre", need, s.Pre)
+		first := len(w.out.actions)
 		d := w.step(s, sp, prefix+"/"+s.Name, need)
 		w.root.criteria[prefix+"/"+s.Name] = stepCriteria{entry: need, done: d}
+		reported := map[string]bool{}
+		for _, k := range overlap(need, d) {
+			reported[k] = true
+			w.add(sp+".done."+k, "%s", inputAndOutput(k, "the step "+prefix+"/"+s.Name))
+		}
+		for _, a := range w.out.actions[first:] {
+			if a.Step != prefix+"/"+s.Name || a.Implements == "" {
+				continue
+			}
+			for _, k := range overlap(a.Pre, a.Effects) {
+				if !reported[k] {
+					reported[k] = true
+					w.add(sp+".pre."+k, "%s", inputAndOutput(k, "the step "+prefix+"/"+s.Name+" (through its action "+a.Implements+")"))
+				}
+			}
+		}
 		w.merge(sp+".done", all, d)
 	}
 	return all

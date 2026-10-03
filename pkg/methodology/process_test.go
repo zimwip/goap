@@ -14,6 +14,7 @@ conditions:
   - {name: a, expr: 'artifacts.exists(x, x.type == "a")'}
   - {name: b, expr: 'artifacts.exists(x, x.type == "b")'}
   - {name: c, expr: 'artifacts.exists(x, x.type == "c")'}
+  - {name: d, expr: 'artifacts.exists(x, x.type == "d")'}
 actions:
   - {name: do_a, kind: human, effects: {a: true}}
   - {name: do_b, kind: human, pre: {a: true}, effects: {b: true}}
@@ -42,7 +43,7 @@ processes:
     references: [{title: Guide, ref: "document-repository:flow.md"}]
     steps:
       - name: phase
-        pre: {c: false}
+        pre: {d: true}
         steps:
           - {name: first, action: do_a}
           - {name: other, actions: [do_c, do_a], pre: {"step:flow/manual": true}}
@@ -68,11 +69,11 @@ processes:
 	}
 	// no implicit order: a step needs what the phase needs, its own entry conditions and its action's preconditions
 	first, _ := c.Action("flow/phase/first")
-	if len(first.Pre) != 1 || first.Pre["c"] {
+	if len(first.Pre) != 1 || !first.Pre["d"] {
 		t.Fatalf("the first step only inherits the phase's entry: %+v", first.Pre)
 	}
 	second, _ := c.Action("flow/phase/second")
-	if second.Implements != "do_b" || !second.Pre["a"] || second.Pre["c"] || len(second.Pre) != 2 || second.Declared() != "do_b" {
+	if second.Implements != "do_b" || !second.Pre["a"] || !second.Pre["d"] || len(second.Pre) != 2 || second.Declared() != "do_b" {
 		t.Fatalf("an action step keeps its action's preconditions, not the steps before it: %+v", second)
 	}
 	other, _ := c.Action("flow/phase/other:do_a")
@@ -347,4 +348,55 @@ func TestProcessGraphDrawsTheConditions(t *testing.T) {
 	if architect == nil || len(architect.Actions) == 0 {
 		t.Fatalf("the agents of the methods, with their actions: %+v", g.Agents)
 	}
+}
+
+// A condition cannot be both an input and an output of an action or a step, whatever its values: a guard
+// "pre x: false, effect x: true" is refused, and the issue is tied to the step the action does.
+func TestAnInputIsNeverAlsoAnOutput(t *testing.T) {
+	cases := map[string]struct{ yaml, path, activity string }{
+		"action guard": {`
+`, "actions[3].pre.d", ""},
+		"step through its action": {`
+processes:
+  - name: flow
+    steps:
+      - {name: allocate, action: guarded}
+`, "processes[0].steps[0].pre.d", "flow/allocate"},
+		"step entry and exit": {`
+processes:
+  - name: flow
+    steps:
+      - {name: first, action: do_a, pre: {a: false}}
+`, "processes[0].steps[0].done.a", "flow/first"},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			m, err := Parse([]byte(strings.Replace(processBase, "goals:", "  - {name: guarded, kind: human, pre: {d: false}, effects: {d: true}}\ngoals:", 1) + tc.yaml))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, issues := m.compile(); !hasIssue(issues, tc.path, "both an input and an output") {
+				t.Fatalf("want an issue at %s: %v", tc.path, issues)
+			}
+			if tc.activity != "" {
+				_, issues := m.CompileLenient()
+				found := false
+				for _, is := range issues {
+					found = found || is.Activity == tc.activity
+				}
+				if !found {
+					t.Fatalf("no issue tied to %s: %v", tc.activity, issues)
+				}
+			}
+		})
+	}
+}
+
+func hasIssue(issues Issues, path, msg string) bool {
+	for _, is := range issues {
+		if is.Path == path && strings.Contains(is.Message, msg) {
+			return true
+		}
+	}
+	return false
 }

@@ -23,7 +23,7 @@ actions:
     kind: script
     language: javascript
     description: Open a decision point on the open options of the change
-    pre: {options_open: true, decision_opened: false}
+    pre: {options_open: true}
     effects: {decision_opened: true}
     cost: 1
     code: |
@@ -62,7 +62,7 @@ actions:
     description: >
       Answer the open questions of the decision points, one sub-agent per question: the points they blocked are
       ready to be ruled again
-    pre: {open_questions: true}
+    
     effects: {open_questions: false, no_open_questions: true, decision_ready: true}
     cost: 3
 
@@ -70,7 +70,7 @@ actions:
     kind: script
     language: javascript
     description: Analyse the fees of the payment providers
-    pre: {fees_known: false}
+    
     effects: {fees_known: true}
     cost: 1
     code: |
