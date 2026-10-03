@@ -328,11 +328,11 @@ func checkLevel(parent StepInfo, kind string) LevelCheck {
 	lc.Edges = conditionEdges(nodes)
 	// an output that is the input does nothing: the parent's, then each direct step's
 	if same := unchanged(parent.Entry, parent.Exit); len(same) > 0 && kind != LevelProcess && kind != LevelMethod {
-		lc.Gaps = append(lc.Gaps, LevelGap{Kind: GapNoop, Missing: same, Message: "inputs that are also outputs: nothing is done about them"})
+		lc.Gaps = append(lc.Gaps, LevelGap{Kind: GapNoop, Missing: same, Message: "inputs that are also outputs: an activity does not take what it makes true"})
 	}
 	for _, s := range parent.Steps {
 		if same := unchanged(s.Entry, s.Exit); len(same) > 0 {
-			lc.Gaps = append(lc.Gaps, LevelGap{Step: s.Name, Kind: GapNoop, Missing: same, Message: "inputs that are also outputs: nothing is done about them"})
+			lc.Gaps = append(lc.Gaps, LevelGap{Step: s.Name, Kind: GapNoop, Missing: same, Message: "inputs that are also outputs: an activity does not take what it makes true"})
 		}
 	}
 	if kind == LevelProcess || kind == LevelMethod {
@@ -438,15 +438,6 @@ func sortedKeys(m map[string]bool) []string {
 	return slices.Sorted(maps.Keys(m))
 }
 
-// unchanged lists the conditions an activity takes as input and gives back as output with the same value: it changes
-// nothing about them.
-func unchanged(entry, exit map[string]bool) []string {
-	var out []string
-	for k, v := range exit {
-		if w, ok := entry[k]; ok && w == v {
-			out = append(out, k)
-		}
-	}
-	sort.Strings(out)
-	return out
-}
+// unchanged lists the conditions an activity takes as input and also gives as output, with whatever values: it cannot
+// be both (the compiler refuses it, the flow draws it red).
+func unchanged(entry, exit map[string]bool) []string { return overlap(entry, exit) }

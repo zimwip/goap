@@ -31,7 +31,7 @@ actions:
   - name: identify_risks
     kind: llm
     description: Identify and assess the risks of the change
-    pre: {risks_reviewed: false}
+    
     effects: {risks_reviewed: true}
     cost: 1
     model: default
@@ -50,7 +50,7 @@ actions:
   - name: review_risks
     kind: human
     description: Review the risks of the change by hand
-    pre: {risks_reviewed: false}
+    
     effects: {risks_reviewed: true}
     cost: 6
     instructions: >

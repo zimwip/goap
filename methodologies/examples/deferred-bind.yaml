@@ -20,7 +20,7 @@ actions:
     kind: script
     language: javascript
     description: Bind the process to a change (stands in for goap-scheduler/attach)
-    pre: {change_bound: false}
+    
     effects: {change_bound: true}
     code: |
       function run(ctx) {
