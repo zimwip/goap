@@ -142,6 +142,11 @@ export class Draft {
   bad = (path: string, exact = false): boolean =>
     this.allIssues.some((i) => (exact ? i.norm === path : under(i.norm, path)));
 
+  /** The issues of the element at `path` and of what it holds, with their messages. */
+  issuesAt(path: string): NormIssue[] {
+    return this.allIssues.filter((i) => under(i.norm, path));
+  }
+
   count(path: string): number {
     return this.allIssues.filter((i) => under(i.norm, path)).length;
   }

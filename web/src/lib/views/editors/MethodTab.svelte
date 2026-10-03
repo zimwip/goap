@@ -71,7 +71,7 @@
 
 <div class="editor-page" bind:this={root}>
   {#if item}
-    <DraftHeader draft={d} icon="book" kind="Method" title={item.name || '(unnamed)'} dirty={d.itemDirty('methods', item.uid)} />
+    <DraftHeader draft={d} path={`methods[${index}]`} icon="book" kind="Method" title={item.name || '(unnamed)'} dirty={d.itemDirty('methods', item.uid)} />
     {#if (item.steps.length || item.actions.length) && item.name}
       <section class="card">
         <h3>{item.steps.length ? "Flow of the method's steps" : 'Actions of the method'}</h3>
