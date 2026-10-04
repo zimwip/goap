@@ -195,15 +195,43 @@ func (s *Service) Import(ctx context.Context, yamlSrc []byte, publish bool) (Rec
 	if err != nil {
 		return Record{}, nil, fmt.Errorf("%w: %v", ErrInvalid, err)
 	}
-	r, issues, err := s.Save(ctx, *m)
-	if err != nil || !publish {
-		return r, issues, err
+	if !publish {
+		return s.Save(ctx, *m)
 	}
-	if len(issues) > 0 {
+	return s.importPublished(ctx, *m)
+}
+
+// importPublished stores a methodology version as published in one change (Save then Publish would be two). A
+// definition with issues cannot be published: it is kept as a draft, and the issues returned with the error.
+func (s *Service) importPublished(ctx context.Context, m methodology.Methodology) (Record, methodology.Issues, error) {
+	if m.Name == "" || m.Version == "" {
+		return Record{}, nil, fmt.Errorf("name and version are required: %w", ErrInvalid)
+	}
+	if err := s.authorize(ctx, "write", &m); err != nil {
+		return Record{}, nil, err
+	}
+	if err := s.authorize(ctx, "publish", &m); err != nil {
+		return Record{}, nil, err
+	}
+	if issues := s.validate(ctx, &m); len(issues) > 0 {
+		r, _, err := s.Save(ctx, m)
+		if err != nil {
+			return r, issues, err
+		}
 		return r, issues, fmt.Errorf("%w: cannot publish: %v", ErrInvalid, issues)
 	}
-	r, err = s.Publish(ctx, m.Name, m.Version)
-	return r, nil, err
+	now := s.clock()
+	r := Record{Methodology: m, Status: StatusPublished, CreatedAt: now, UpdatedAt: now, PublishedAt: now, UpdatedBy: authz.From(ctx).Subject}
+	if err := s.Store.Save(ctx, r); err != nil {
+		return Record{}, nil, err
+	}
+	saved, err := s.Store.Get(ctx, m.Name, m.Version)
+	if err != nil {
+		return Record{}, nil, err
+	}
+	s.ensureAliasStubs(ctx, &saved.Methodology)
+	s.publish(ctx, "published", saved)
+	return saved, nil, nil
 }
 
 // Export renders a version as YAML.

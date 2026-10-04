@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/graph"
@@ -37,12 +38,16 @@ func (s *Service) ensureAliasStubs(ctx context.Context, m *methodology.Methodolo
 	if err != nil || len(missing) == 0 {
 		return
 	}
+	var stubs []string
 	for _, alias := range missing {
 		pending, err := hasPendingStub(ctx, g, alias)
 		if err != nil || pending {
 			continue
 		}
-		_ = createAliasStub(ctx, g, alias, m.Name)
+		stubs = append(stubs, alias)
+	}
+	if len(stubs) > 0 {
+		_ = createAliasStubs(ctx, g, stubs, m.Name)
 	}
 }
 
@@ -121,11 +126,11 @@ func hasPendingStub(ctx context.Context, g StoreGraph, alias string) (bool, erro
 	return false, nil
 }
 
-// createAliasStub opens a new, separate platform-namespace change proposing a stub
-// platform@LlmAlias node (name only, no target) as a pending change impact. It never calls
-// Graph.Commit (which auto-accepts) nor ReviewNode/Apply: the change stays open and visible
-// in the review queue until an administrator reviews it.
-func createAliasStub(ctx context.Context, g StoreGraph, alias, methodologyName string) error {
+// createAliasStubs opens one platform-namespace change proposing a stub platform@LlmAlias node (name only, no
+// target) per alias a methodology needs, as pending change impacts: the administrator reviews them together. It never
+// calls Graph.Commit (which auto-accepts) nor ReviewNode/Apply: the change stays open and visible in the review queue
+// until an administrator reviews it.
+func createAliasStubs(ctx context.Context, g StoreGraph, aliases []string, methodologyName string) error {
 	head, err := g.BranchHead(ctx, llmcfg.NamespacePlatform, domain.MainBranch)
 	if errors.Is(err, graph.ErrNotFound) {
 		if head, err = g.CreateBaseline(ctx, llmcfg.NamespacePlatform, "Repository", nil); err != nil {
@@ -136,27 +141,36 @@ func createAliasStub(ctx context.Context, g StoreGraph, alias, methodologyName s
 	}
 	c, err := g.CreateChange(ctx, graph.NewChange{
 		Namespace:  llmcfg.NamespacePlatform,
-		Title:      fmt.Sprintf("Alias %s (needed by %s)", alias, methodologyName),
-		Intent:     "configure the model alias referenced by a methodology",
+		Title:      fmt.Sprintf("Aliases needed by %s (%s)", methodologyName, strings.Join(aliases, ", ")),
+		Intent:     "configure the model aliases referenced by a methodology",
 		BaselineID: head.ID,
 		OwnBranch:  true,
 	})
 	if err != nil {
 		return err
 	}
-	added, err := g.AddNodes(ctx, c.ID, []domain.ChangeImpact{{
-		Intent:     domain.IntentCreated,
-		Key:        llmcfg.AliasKey(alias),
-		Type:       llmcfg.NodeTypeAlias,
-		Rationale:  fmt.Sprintf("referenced by methodology %s but not configured yet", methodologyName),
-		ProducedBy: "methodology-load",
-	}})
+	impacts := make([]domain.ChangeImpact, 0, len(aliases))
+	for _, alias := range aliases {
+		impacts = append(impacts, domain.ChangeImpact{
+			Intent:     domain.IntentCreated,
+			Key:        llmcfg.AliasKey(alias),
+			Type:       llmcfg.NodeTypeAlias,
+			Rationale:  fmt.Sprintf("referenced by methodology %s but not configured yet", methodologyName),
+			ProducedBy: "methodology-load",
+		})
+	}
+	added, err := g.AddNodes(ctx, c.ID, impacts)
 	if err != nil {
 		return err
 	}
-	if len(added) == 0 {
-		return fmt.Errorf("no change impact created for alias %q", alias)
+	if len(added) != len(aliases) {
+		return fmt.Errorf("%d change impacts created for %d aliases", len(added), len(aliases))
 	}
-	_, err = g.WriteNode(ctx, c.ID, added[0].ID, graph.NodeWrite{Properties: map[string]any{"alias": alias}})
-	return err // Review stays domain.ReviewProposed (AddNodes default); the change stays open
+	for i, alias := range aliases {
+		// Review stays domain.ReviewProposed (AddNodes default); the change stays open
+		if _, err := g.WriteNode(ctx, c.ID, added[i].ID, graph.NodeWrite{Properties: map[string]any{"alias": alias}}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
