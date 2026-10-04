@@ -1,10 +1,12 @@
 name: organisation
-version: 1.9.0
+version: 1.10.0
 description: >
   Organisation structure, managed in its own namespace ("organisation"): a hierarchy of organisational units,
   mirrored by a hierarchy of projects (ADR 0039). Every node version, whatever its namespace, is owned by a unit and
   every node was created in a project (ADR 0054: the graph records both on the version, not as links); changes are
   split into sub-changes along unit boundaries.
+enums:
+  - {name: effect, description: What a policy rule does when it matches, values: [{value: allow, label: Allow}, {value: deny, label: Deny}]}
 nodeTypes:
   # `editor` names the editor of the user interface for the nodes of a type (the adapters of a unit are edited on its page).
   # `waiting: true` flags the waiting unit (ADR 0042): a unit an administrator creates at their discretion for
@@ -13,8 +15,15 @@ nodeTypes:
   # ORG-DEFAULT.
   # `structure` (ADR 0054) tags the type building the organisation hierarchy: every node version is owned by a unit
   # and every change is held by one; the graph bootstraps the root (ORG-DEFAULT, rootless) and checks every write.
-  - {name: OrgUnit, editor: unit, description: "Organisational unit (company, direction, department, team)", properties: [name, kind, description, waiting],
-     structure: {kind: organisation, parent: part_of, root: ORG-DEFAULT}}
+  - name: OrgUnit
+    description: "Organisational unit (company, direction, department, team)"
+    editor: unit
+    structure: {kind: organisation, parent: part_of, root: ORG-DEFAULT}
+    attributes:
+      - {name: name, label: Name, description: "Name of the unit", type: string, section: Identity, order: 1, asName: true}
+      - {name: kind, label: Kind, description: "Company, direction, department, team…", type: string, section: Identity, order: 2}
+      - {name: description, label: Description, description: "What the unit is responsible for", type: string, widget: textarea, section: Identity, order: 3}
+      - {name: waiting, label: "Waiting unit", description: "New users join this unit until an administrator moves them (one at most)", type: boolean, section: Onboarding, order: 4}
   # an organisational unit's instance of an adapter definition (an AdapterDef node of the platform namespace):
   # the one place where unit, MCP and connector meet. mcp = the MCP implemented, adapter = the name of the
   # AdapterDef, params = its parameter values (secrets as references: env:<VAR> or <vault path>#<field>).
@@ -22,7 +31,18 @@ nodeTypes:
   # disabled / tools (allow-list) / deny / readOnly restrict the MCP for the unit and its sub-units (ADR 0028): the
   # restrictions of the chain add up, so a unit narrows what it inherits and never widens it. An instance without
   # adapter only restricts (the implementation is inherited): this is how a unit limits the built-in MCPs.
-  - {name: Adapter, editor: unit, description: "Instance, by an organisational unit, of an adapter definition, or a restriction of an MCP", properties: [mcp, adapter, params, description, disabled, tools, deny, readOnly]}
+  - name: Adapter
+    description: "Instance, by an organisational unit, of an adapter definition, or a restriction of an MCP"
+    editor: unit
+    attributes:
+      - {name: mcp, label: MCP, description: "MCP the adapter implements or restricts", type: string, section: Identity, order: 1, asName: true}
+      - {name: adapter, label: "Adapter definition", description: "AdapterDef implementing the MCP; empty: the instance only restricts", type: string, section: Identity, order: 2}
+      - {name: description, label: Description, description: "Why the unit has this adapter", type: string, widget: textarea, section: Identity, order: 3}
+      - {name: params, label: Parameters, description: "Values of the parameters of the definition (secrets as references)", type: json, widget: textarea, section: Configuration, order: 4}
+      - {name: disabled, label: Disabled, description: "The MCP is not available to the unit and its sub-units", type: boolean, section: Restriction, order: 5}
+      - {name: tools, label: "Allowed tools", description: "Allow-list of tools; empty: all", type: json, widget: textarea, section: Restriction, order: 6}
+      - {name: deny, label: "Denied tools", description: "Tools the unit may not use", type: json, widget: textarea, section: Restriction, order: 7}
+      - {name: readOnly, label: "Read only", description: "Only the read tools are available", type: boolean, section: Restriction, order: 8}
   # who may do what is graph data too. A User is a person or service account: `admin: true` is legacy
   # back-compat (ADR 0047) — new code grants administration through a platform Assignment instead; it holds
   # no other role of its own — roles are held on projects, granted by Assignments. The unit it is `member_of`
@@ -34,11 +54,28 @@ nodeTypes:
   # The user lifecycle (ADR 0048) tracks whether the account is usable, not a review workflow: proposed is a
   # transient bootstrap state (a sign-in immediately activates it in the same change), active and deactivated
   # are both ordinary long-lived statuses a User rests in indefinitely — hence restInEditable below.
-  - {name: User, extends: OrgUnit, editor: access, description: "Person or service account, with its profile and roles", properties: [subject, displayName, email, locale, admin], lifecycle: user}
+  - name: User
+    description: "Person or service account, with its profile and roles"
+    extends: OrgUnit
+    editor: access
+    lifecycle: user
+    attributes:
+      - {name: subject, label: Subject, description: "Identity of the user in the sign-in system", type: string, section: Identity, order: 1}
+      - {name: displayName, label: "Display name", description: "Name shown for the user", type: string, section: Identity, order: 2, asName: true}
+      - {name: email, label: Email, description: "Address of the user", type: string, section: Identity, order: 3, validators: [email-format]}
+      - {name: locale, label: Locale, description: "Language of the interface (en, fr…)", type: string, section: Preferences, order: 4}
+      - {name: admin, label: "Administrator (legacy)", description: "Back-compat flag: administration is granted by a platform Assignment", type: boolean, section: Access, order: 5}
   # one ABAC rule (Casbin): effect allow|deny for a resource type and action, when the rule expression over
   # r.sub / r.obj / r.act holds. Changes to Policy and User nodes need the "policy:write" permission, checked
   # against the compiled-in floor (administrators) only, so that no policy can lock them out.
-  - {name: Policy, editor: access, description: "ABAC rule", properties: [rule, resource, action, effect]}
+  - name: Policy
+    description: "ABAC rule"
+    editor: access
+    attributes:
+      - {name: rule, label: Rule, description: "Expression over the subject, object and action", type: string, widget: textarea, section: Identity, order: 1}
+      - {name: resource, label: Resource, description: "Type of resource the rule is about", type: string, section: Identity, order: 2}
+      - {name: action, label: Action, description: "Action the rule is about", type: string, section: Identity, order: 3}
+      - {name: effect, label: Effect, description: "allow or deny", type: enum, enum: effect, section: Identity, order: 4}
   # what the organisation works on, mirroring OrgUnit's hierarchy (ADR 0039): a project identifies the
   # methodologies that apply to it (it inherits their declared roles, ADR 0035 §2), and is composed of
   # sub-projects through `project_part_of`. The root project (PROJ-ROOT, bootstrapped with ORG-DEFAULT) links
@@ -48,8 +85,17 @@ nodeTypes:
   # flagged, the root project). Selecting a project before non-administrative work (this namespace's own data:
   # units, projects, assignments, policies, adapters are administrative) is a UX-level gate (the project
   # selector), not enforced by the graph itself.
-  - {name: ProjectUnit, editor: project, description: "Project or sub-project", properties: [name, description, kind, status, methodologies, default],
-     structure: {kind: project, parent: project_part_of, root: PROJ-ROOT, selfParent: true}}
+  - name: ProjectUnit
+    description: "Project or sub-project"
+    editor: project
+    structure: {kind: project, parent: project_part_of, root: PROJ-ROOT, selfParent: true}
+    attributes:
+      - {name: name, label: Name, description: "Name of the project", type: string, section: Identity, order: 1, asName: true}
+      - {name: description, label: Description, description: "What the project is about", type: string, widget: textarea, section: Identity, order: 2}
+      - {name: kind, label: Kind, description: "Kind of project", type: string, section: Identity, order: 3}
+      - {name: status, label: Status, description: "Where the project stands", type: string, section: Identity, order: 4}
+      - {name: methodologies, label: Methodologies, description: "Methodologies that apply to the project (they give it their roles)", type: json, widget: textarea, section: Methodology, order: 5}
+      - {name: default, label: "Default project", description: "A change naming no project acts in this one (one at most)", type: boolean, section: Methodology, order: 6}
   # the meeting point of organisation and project (ADR 0039, same shape as Adapter): an organisational unit
   # (or a user, through subtyping) is assigned to a project with the roles it locally holds there — a subset
   # of the roles declared by the project's applicable methodologies. This is how the engine resolves "what
@@ -57,13 +103,19 @@ nodeTypes:
   # the Assignments found, and check the RACI role a step requires against that set.
   # assigns_project is optional: an Assignment naming none grants one of the built-in platform roles (ADR
   # 0046, e.g. "reader") to the org unit everywhere, independent of any project's methodologies.
-  - {name: Assignment, editor: assignment, description: "Roles an organisational unit or user locally holds on a project, or platform-wide when it names no project", properties: [roles, description]}
+  - name: Assignment
+    description: "Roles an organisational unit or user locally holds on a project, or platform-wide when it names no project"
+    editor: assignment
+    attributes:
+      - {name: roles, label: Roles, description: "Roles the unit or user holds on the project (platform roles when no project)", type: json, widget: textarea, section: Identity, order: 1}
+      - {name: description, label: Description, description: "Why the assignment exists", type: string, widget: textarea, section: Identity, order: 2}
 lifecycles:
   # ADR 0048: active and deactivated are both ordinary resting statuses (restInEditable), not a review draft —
   # a User's profile stays freely editable while active, the way it always has; only a deactivated account is
   # frozen (not editable) until an admin reactivates it. proposed exists only to carry a brand-new account
   # from creation to its first activation within the same bootstrap change (ADR 0040/0042).
   - name: user
+    description: Whether a user account is usable (not a review workflow)
     initial: proposed
     restInEditable: true
     states:
@@ -71,19 +123,51 @@ lifecycles:
       - {name: active, editable: true, description: "Usable account"}
       - {name: deactivated, description: "Suspended by an admin; read-only until reactivated"}
     transitions:
-      - {name: activate, from: proposed, to: active}
-      - {name: deactivate, from: active, to: deactivated, permission: "user:deactivate"}
-      - {name: reactivate, from: deactivated, to: active, permission: "user:reactivate"}
+      - {name: activate, description: Activate a new account (a sign-in does it in the same change), from: proposed, to: active}
+      - {name: deactivate, description: Suspend the account; it is read-only until reactivated, from: active, to: deactivated, permission: "user:deactivate"}
+      - {name: reactivate, description: Give a suspended account back, from: deactivated, to: active, permission: "user:reactivate"}
 linkTypes:
   # child -> parent: outgoing links belong to the source version, so reorganising a unit only versions that unit
-  - {name: part_of, from: OrgUnit, to: OrgUnit}
+  - name: part_of
+    description: "A unit belongs to its parent unit"
+    from: OrgUnit
+    to: OrgUnit
   # user -> the unit it belongs to
-  - {name: member_of, from: User, to: OrgUnit}
+  - name: member_of
+    description: "A user belongs to a unit"
+    from: User
+    to: OrgUnit
   # child -> parent, mirrors OrgUnit's part_of; the root project points to itself. A distinct name (not
   # part_of): the catalogue merges same-named link types declared for several end pairs into "any pair
   # accepted" (pkg/typecat), which would erase part_of's OrgUnit-only constraint.
-  - {name: project_part_of, from: ProjectUnit, to: ProjectUnit}
+  - name: project_part_of
+    description: "A project belongs to its parent project (the root project points to itself)"
+    from: ProjectUnit
+    to: ProjectUnit
   # Assignment -> the org unit (or user) it grants roles to
-  - {name: assigns_org, from: Assignment, to: OrgUnit}
+  - name: assigns_org
+    description: "The unit or user an assignment grants roles to"
+    from: Assignment
+    to: OrgUnit
   # Assignment -> the project the roles apply to
-  - {name: assigns_project, from: Assignment, to: ProjectUnit}
+  - name: assigns_project
+    description: "The project an assignment grants roles on; none: platform-wide"
+    from: Assignment
+    to: ProjectUnit
+# Algorithms (ADR 0018): the format check of the email of a user.
+algorithms:
+  - name: regex-match
+    description: The value must match a regular expression (an absent value is accepted)
+    type: property_validator
+    language: javascript
+    params:
+      - {name: pattern, type: regex, required: true, description: Regular expression the value must match}
+      - {name: message, type: string, description: Message shown when the value does not match}
+    code: |
+      const v = ctx.value();
+      if (v === undefined || v === null || v === "") return;
+      if (!new RegExp(ctx.param("pattern")).test(String(v))) {
+        ctx.fail(ctx.param("message") || (ctx.property() + " must match " + ctx.param("pattern")));
+      }
+algorithmInstances:
+  - {name: email-format, description: The value looks like an email address, algorithm: regex-match, values: {pattern: '^[^@\s]+@[^@\s]+$', message: "must be an email address"}}

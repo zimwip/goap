@@ -220,7 +220,7 @@ func nodeTypesToPB(ns []methodology.NodeType) []*registryv1.NodeType {
 func linkTypesToPB(ls []methodology.LinkType) []*registryv1.LinkType {
 	var out []*registryv1.LinkType
 	for _, l := range ls {
-		out = append(out, &registryv1.LinkType{Name: l.Name, From: l.From, To: l.To, Compose: l.Compose})
+		out = append(out, &registryv1.LinkType{Name: l.Name, Description: l.Description, From: l.From, To: l.To, Compose: l.Compose, Attributes: attributesToPB(l.Attributes)})
 	}
 	return out
 }
@@ -252,16 +252,17 @@ func DomainFromPB(p *registryv1.Domain) methodology.Domain {
 		d.NodeTypes = append(d.NodeTypes, nodeTypeFromPB(n))
 	}
 	for _, l := range p.LinkTypes {
-		d.LinkTypes = append(d.LinkTypes, methodology.LinkType{Name: l.Name, From: l.From, To: l.To, Compose: l.Compose})
+		d.LinkTypes = append(d.LinkTypes, methodology.LinkType{Name: l.Name, Description: l.Description, From: l.From, To: l.To, Compose: l.Compose, Attributes: attributesFromPB(l.Attributes)})
 	}
+	d.Enums = enumsFromPB(p.Enums)
 	d.Lifecycles = lifecyclesFromPB(p.Lifecycles)
 	d.Algorithms, d.Instances = algorithmsFromPB(p.Algorithms), instancesFromPB(p.AlgorithmInstances)
 	return d
 }
 
 func nodeTypeToPB(n methodology.NodeType) *registryv1.NodeType {
-	out := &registryv1.NodeType{Name: n.Name, Description: n.Description, Properties: n.Properties, Extends: n.Extends,
-		Lifecycle: n.Lifecycle, ChangeControlled: n.ChangeControlled, Validators: validatorsToPB(n.Validators), Search: searchToPB(n.Search), Editor: n.Editor}
+	out := &registryv1.NodeType{Name: n.Name, Description: n.Description, Attributes: attributesToPB(n.Attributes), Extends: n.Extends,
+		Lifecycle: n.Lifecycle, ChangeControlled: n.ChangeControlled, Validators: n.Validators, Search: searchToPB(n.Search), Editor: n.Editor}
 	if d := n.Document; d != nil {
 		out.Document = &registryv1.DocumentSpec{Contains: d.Contains}
 	}
@@ -272,8 +273,8 @@ func nodeTypeToPB(n methodology.NodeType) *registryv1.NodeType {
 }
 
 func nodeTypeFromPB(n *registryv1.NodeType) methodology.NodeType {
-	out := methodology.NodeType{Name: n.Name, Description: n.Description, Properties: nilIfNone(n.Properties), Extends: n.Extends,
-		Lifecycle: n.Lifecycle, ChangeControlled: n.ChangeControlled, Validators: validatorsFromPB(n.Validators), Search: searchFromPB(n.Search), Editor: n.Editor}
+	out := methodology.NodeType{Name: n.Name, Description: n.Description, Attributes: attributesFromPB(n.Attributes), Extends: n.Extends,
+		Lifecycle: n.Lifecycle, ChangeControlled: n.ChangeControlled, Validators: nilIfNone(n.Validators), Search: searchFromPB(n.Search), Editor: n.Editor}
 	if d := n.Document; d != nil {
 		out.Document = &domain.DocumentSpec{Contains: nilIfNone(d.Contains)}
 	}
@@ -286,12 +287,12 @@ func nodeTypeFromPB(n *registryv1.NodeType) methodology.NodeType {
 func lifecyclesToPB(ls []domain.Lifecycle) []*registryv1.Lifecycle {
 	var out []*registryv1.Lifecycle
 	for _, l := range ls {
-		pl := &registryv1.Lifecycle{Name: l.Name, Initial: l.Initial}
+		pl := &registryv1.Lifecycle{Name: l.Name, Description: l.Description, Initial: l.Initial, RestInEditable: l.RestInEditable}
 		for _, s := range l.States {
 			pl.States = append(pl.States, &registryv1.LifecycleState{Name: s.Name, Description: s.Description, Editable: s.Editable, Final: s.Final})
 		}
 		for _, t := range l.Transitions {
-			pt := &registryv1.LifecycleTransition{Name: t.Name, From: t.From, To: t.To, Permission: t.Permission, Guard: t.Guard,
+			pt := &registryv1.LifecycleTransition{Name: t.Name, Description: t.Description, From: t.From, To: t.To, Permission: t.Permission, Guard: t.Guard,
 				RequiresAttributes: t.Requires.Attributes, RequiresOutgoingLinks: t.Requires.OutgoingLinks, Guards: t.Guards, Actions: t.Actions}
 			if t.Children != nil {
 				pt.ChildrenStates = t.Children.States
@@ -306,12 +307,12 @@ func lifecyclesToPB(ls []domain.Lifecycle) []*registryv1.Lifecycle {
 func lifecyclesFromPB(ls []*registryv1.Lifecycle) []domain.Lifecycle {
 	var out []domain.Lifecycle
 	for _, l := range ls {
-		dl := domain.Lifecycle{Name: l.Name, Initial: l.Initial}
+		dl := domain.Lifecycle{Name: l.Name, Description: l.Description, Initial: l.Initial, RestInEditable: l.RestInEditable}
 		for _, s := range l.States {
 			dl.States = append(dl.States, domain.LifecycleState{Name: s.Name, Description: s.Description, Editable: s.Editable, Final: s.Final})
 		}
 		for _, t := range l.Transitions {
-			dt := domain.Transition{Name: t.Name, From: t.From, To: t.To, Permission: t.Permission, Guard: t.Guard,
+			dt := domain.Transition{Name: t.Name, Description: t.Description, From: t.From, To: t.To, Permission: t.Permission, Guard: t.Guard,
 				Requires: domain.TransitionRequires{Attributes: nilIfNone(t.RequiresAttributes), OutgoingLinks: nilIfNone(t.RequiresOutgoingLinks)},
 				Guards:   nilIfNone(t.Guards), Actions: nilIfNone(t.Actions)}
 			if len(t.ChildrenStates) > 0 {

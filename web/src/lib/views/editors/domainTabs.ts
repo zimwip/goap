@@ -13,9 +13,24 @@ export function openDomain(name: string, version: string, pin = false): Tab {
   return openTab(domainSpec(name, version), { pin });
 }
 
-/** Opens the domain and highlights the field at `path` (e.g. "nodeTypes[2]"). */
+/**
+ * Opens the editor of what `path` designates ("nodeTypes[2]", "lifecycles[0].states[1]"…) and highlights it:
+ * a node type, link type or lifecycle has its own tab, anything else is a field of the domain tab.
+ */
 export function revealDomainPath(name: string, version: string, path: string, pin = false): void {
-  const tab = openDomain(name, version, pin);
+  const m = /^(nodeTypes|linkTypes|lifecycles|enums)\[(\d+)\]/.exec(path);
+  const d = m ? getDomainDraft(name, version) : undefined;
+  const i = m ? Number(m[2]) : -1;
+  const tab =
+    m && d && i < d.form[m[1] as 'nodeTypes' | 'linkTypes' | 'lifecycles' | 'enums'].length
+      ? m[1] === 'nodeTypes'
+        ? openNodeType(d, i, pin)
+        : m[1] === 'linkTypes'
+          ? openLinkType(d, i, pin)
+          : m[1] === 'enums'
+            ? openEnum(d, i, pin)
+            : openLifecycle(d, i, pin)
+      : openDomain(name, version, pin);
   requestReveal(tab.id, path);
 }
 
@@ -154,3 +169,52 @@ export function algorithmToolbar(d: DomainDraft, remove: { label: string; run: (
   if (!d.readonly) acts.push({ id: 'remove', label: remove.label, icon: 'trash', danger: true, run: remove.run });
   return acts;
 }
+
+// --- node types, link types, lifecycles: one tab each --------------------------------------
+
+export function nodeTypeSpec(name: string, version: string, uid: string, nt = ''): TabSpec {
+  return { kind: 'nodetype', params: { name, version, uid, nt } };
+}
+
+export function linkTypeSpec(name: string, version: string, uid: string, lt = ''): TabSpec {
+  return { kind: 'linktype', params: { name, version, uid, lt } };
+}
+
+export function lifecycleSpec(name: string, version: string, uid: string, lc = ''): TabSpec {
+  return { kind: 'lifecycle', params: { name, version, uid, lc } };
+}
+
+export function enumSpec(name: string, version: string, uid: string, en = ''): TabSpec {
+  return { kind: 'enum', params: { name, version, uid, en } };
+}
+
+export function openEnum(d: DomainDraft, index: number, pin = true): Tab {
+  const e = d.form.enums[index];
+  return openTab(enumSpec(d.name, d.version, e.uid, e.name), { pin });
+}
+
+export function openNodeType(d: DomainDraft, index: number, pin = true): Tab {
+  const n = d.form.nodeTypes[index];
+  return openTab(nodeTypeSpec(d.name, d.version, n.uid, n.name), { pin });
+}
+
+export function openLinkType(d: DomainDraft, index: number, pin = true): Tab {
+  const l = d.form.linkTypes[index];
+  return openTab(linkTypeSpec(d.name, d.version, l.uid, l.name), { pin });
+}
+
+export function openLifecycle(d: DomainDraft, index: number, pin = true): Tab {
+  const l = d.form.lifecycles[index];
+  return openTab(lifecycleSpec(d.name, d.version, l.uid, l.name), { pin });
+}
+
+/** Index of the item a tab shows: by local id, else by name (after a reload). */
+function indexIn<T extends { uid: string; name: string }>(list: T[], tab: Tab, nameParam: string): number {
+  const i = list.findIndex((x) => x.uid === tab.params.uid);
+  return i >= 0 ? i : list.findIndex((x) => x.name === tab.params[nameParam]);
+}
+
+export const nodeTypeIndex = (d: DomainDraft, tab: Tab) => indexIn(d.form.nodeTypes, tab, 'nt');
+export const linkTypeIndex = (d: DomainDraft, tab: Tab) => indexIn(d.form.linkTypes, tab, 'lt');
+export const lifecycleIndex = (d: DomainDraft, tab: Tab) => indexIn(d.form.lifecycles, tab, 'lc');
+export const enumIndex = (d: DomainDraft, tab: Tab) => indexIn(d.form.enums, tab, 'en');

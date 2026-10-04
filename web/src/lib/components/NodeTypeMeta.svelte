@@ -1,5 +1,5 @@
 <script lang="ts">
-  // What a node type says beyond its properties: its lifecycle (by name), the
+  // What a node type says beyond its attributes: its lifecycle (by name), the
   // node types it embeds when it is a document, whether it is change controlled,
   // and the editor the user interface opens its nodes with.
   import { moveItem, type NodeTypeForm } from '../methodologyForm';
@@ -11,8 +11,8 @@
     lifecycles,
     typeNames,
     inherited,
-    properties = [],
     validatorInstances = [],
+    onopenLifecycle,
     bad = () => false,
     readonly = false,
     path,
@@ -22,10 +22,10 @@
     typeNames: string[];
     /** ancestor whose lifecycle applies when the type names none */
     inherited?: { type: string; lifecycle: string };
-    /** properties of the type, own and inherited: what validators can be plugged on */
-    properties?: string[];
-    /** names of the property_validator instances of the domain */
+    /** names of the node_validator instances of the domain */
     validatorInstances?: string[];
+    /** opens the editor of a lifecycle, by name */
+    onopenLifecycle?: (name: string) => void;
     /** does an issue exist at this path? */
     bad?: (path: string) => boolean;
     readonly?: boolean;
@@ -35,11 +35,11 @@
 
 <details class="meta" open={!!n.lifecycle || !!n.document || !n.changeControlled || n.validators.length > 0 || !!n.editor}>
   <summary>
-    Lifecycle, documents, validators &amp; editor
+    Lifecycle, documents, node validators &amp; editor
     {#if n.lifecycle}<span class="tag">lifecycle: {n.lifecycle}</span>{:else if inherited}<span class="tag muted">inherits {inherited.lifecycle} from {inherited.type}</span>{/if}
     {#if n.document}<span class="tag">document</span>{/if}
     {#if !n.changeControlled}<span class="tag muted">direct writes</span>{/if}
-    {#if n.validators.length}<span class="tag">{n.validators.length} validator{n.validators.length > 1 ? 's' : ''}</span>{/if}
+    {#if n.validators.length}<span class="tag">{n.validators.length} node validator{n.validators.length > 1 ? 's' : ''}</span>{/if}
     {#if n.editor}<span class="tag">editor: {n.editor}</span>{/if}
   </summary>
   <div class="body" data-path="{path}.lifecycle">
@@ -50,6 +50,10 @@
         {#if n.lifecycle && !lifecycles.includes(n.lifecycle)}<option value={n.lifecycle}>{n.lifecycle} (unknown)</option>{/if}
         {#each lifecycles as l (l)}<option value={l}>{l}</option>{/each}
       </select>
+      {#if (n.lifecycle || inherited) && onopenLifecycle}
+        {@const target = n.lifecycle || inherited?.lifecycle || ''}
+        <button type="button" class="small link" title="Open the lifecycle {target}" onclick={() => onopenLifecycle(target)}>Open {target} ↗</button>
+      {/if}
       <label class="check" title="Off: the nodes are written directly, outside changes (no lifecycle)"><input type="checkbox" bind:checked={n.changeControlled} disabled={readonly || !!n.lifecycle} /> modified through changes only</label>
     </div>
     <div class="field">
@@ -63,17 +67,12 @@
       <datalist id="{path}-editors">{#each nodeEditorNames() as e (e)}<option value={e}></option>{/each}</datalist>
     </div>
     <div class="validators" data-path="{path}.validators">
-      <span class="label">Property validators <span class="hint">(algorithms run in this order on create / update, after those of the supertypes)</span></span>
+      <span class="label">Node validators <span class="hint">(algorithms checking the node as a whole, run in this order on create / update, after the attribute validators and those of the supertypes)</span></span>
       {#each n.validators as v, k}
         <div class="vrow" data-path="{path}.validators[{k}]">
-          <select aria-label="Property" bind:value={v.property} class:bad={bad(`${path}.validators[${k}].property`)} disabled={readonly}>
-            <option value="">— property —</option>
-            {#if v.property && !properties.includes(v.property)}<option value={v.property}>{v.property} (unknown)</option>{/if}
-            {#each properties as p (p)}<option value={p}>{p}</option>{/each}
-          </select>
-          <select aria-label="Validator instance" bind:value={v.instance} class:bad={bad(`${path}.validators[${k}].instance`)} data-path="{path}.validators[{k}].instance" disabled={readonly}>
+          <select aria-label="Node validator instance" bind:value={n.validators[k]} class:bad={bad(`${path}.validators[${k}]`)} disabled={readonly}>
             <option value="">— validator —</option>
-            {#if v.instance && !validatorInstances.includes(v.instance)}<option value={v.instance}>{v.instance} (unknown)</option>{/if}
+            {#if v && !validatorInstances.includes(v)}<option value={v}>{v} (unknown)</option>{/if}
             {#each validatorInstances as i (i)}<option value={i}>{i}</option>{/each}
           </select>
           {#if !readonly}
@@ -82,7 +81,7 @@
         </div>
       {/each}
       {#if !readonly}
-        <button type="button" class="small" disabled={!validatorInstances.length} title={validatorInstances.length ? '' : 'Create a property_validator instance in the Algorithms section first'} onclick={() => n.validators.push({ property: properties[0] ?? '', instance: '' })}>+ Validator</button>
+        <button type="button" class="small" disabled={!validatorInstances.length} title={validatorInstances.length ? '' : 'Create a node_validator instance first (Algorithms)'} onclick={() => n.validators.push('')}>+ Node validator</button>
       {/if}
     </div>
   </div>

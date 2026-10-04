@@ -161,11 +161,16 @@ export function sampleInput(type: string): string {
 /** Where an instance is plugged in a domain form. */
 export function plugsOf(
   instance: string,
-  nodeTypes: { name: string; validators: { property: string; instance: string }[] }[],
+  nodeTypes: { name: string; validators: string[]; attributes: { name: string; validators: string[] }[] }[],
+  linkTypes: { name: string; attributes: { name: string; validators: string[] }[] }[],
   lifecycles: { name: string; transitions: { name: string; from: string; to: string; guards: string[]; actions: string[] }[] }[],
 ): string[] {
   const out: string[] = [];
-  for (const n of nodeTypes) for (const v of n.validators) if (v.instance === instance) out.push(`${n.name || '(unnamed)'}.${v.property} · validator`);
+  for (const n of nodeTypes) {
+    for (const a of n.attributes) if (a.validators.includes(instance)) out.push(`${n.name || '(unnamed)'}.${a.name || '(unnamed)'} · attribute validator`);
+    if (n.validators.includes(instance)) out.push(`${n.name || '(unnamed)'} · node validator`);
+  }
+  for (const l of linkTypes) for (const a of l.attributes) if (a.validators.includes(instance)) out.push(`${l.name || '(unnamed)'}.${a.name || '(unnamed)'} · attribute validator`);
   for (const l of lifecycles)
     for (const t of l.transitions) {
       if (t.guards.includes(instance)) out.push(`${l.name} › ${t.name} (${t.from} → ${t.to}) · guard`);

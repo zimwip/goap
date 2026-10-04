@@ -2,6 +2,7 @@ package methodology
 
 import (
 	"fmt"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -14,6 +15,8 @@ import (
 type Schema struct {
 	NodeTypes []NodeType `yaml:"nodeTypes" json:"nodeTypes"`
 	LinkTypes []LinkType `yaml:"linkTypes" json:"linkTypes"`
+	// Enums are the closed lists of values that enum attributes refer to.
+	Enums []Enum `yaml:"enums,omitempty" json:"enums,omitempty"`
 	// Lifecycles are the state machines node types refer to by name.
 	Lifecycles []domain.Lifecycle `yaml:"lifecycles,omitempty" json:"lifecycles,omitempty"`
 	// Algorithms are the scripts of the domain (ADR 0018) and Instances their
@@ -35,6 +38,11 @@ func (s Schema) HasAlgorithms() bool {
 	for _, n := range s.NodeTypes {
 		if len(n.Validators) > 0 {
 			return true
+		}
+		for _, a := range n.Attributes {
+			if len(a.Validators) > 0 {
+				return true
+			}
 		}
 	}
 	for _, l := range s.Lifecycles {
@@ -86,6 +94,7 @@ func (s Schema) check(prefix string, add func(path, format string, args ...any))
 	}
 	s.checkLifecycles(prefix, nodeTypes, add)
 	s.checkAlgorithms(prefix, add)
+	s.checkAttributes(prefix, add)
 	linkTypes = map[string]bool{}
 	for i, l := range s.LinkTypes {
 		path := fmt.Sprintf(prefix+"linkTypes[%d]", i)
@@ -267,3 +276,75 @@ func (s Schema) documentOf(name string) *domain.DocumentSpec {
 	}
 	return nil
 }
+
+// checkAttributes validates the enums of the domain and the attributes of its node and link types.
+func (s Schema) checkAttributes(prefix string, add func(path, format string, args ...any)) {
+	enums := map[string]bool{}
+	for i, e := range s.Enums {
+		path := fmt.Sprintf(prefix+"enums[%d]", i)
+		switch {
+		case e.Name == "":
+			add(path+".name", "name required")
+		case enums[e.Name]:
+			add(path+".name", "duplicate enum %s", e.Name)
+		}
+		enums[e.Name] = true
+		if len(e.Values) == 0 {
+			add(path+".values", "an enum has at least one value")
+		}
+		seen := map[string]bool{}
+		for j, v := range e.Values {
+			switch {
+			case v.Value == "":
+				add(fmt.Sprintf(path+".values[%d].value", j), "value required")
+			case seen[v.Value]:
+				add(fmt.Sprintf(path+".values[%d].value", j), "duplicate value %s", v.Value)
+			}
+			seen[v.Value] = true
+		}
+	}
+	check := func(path string, as []Attribute, node bool) {
+		names := map[string]bool{}
+		asName := 0
+		for i, a := range as {
+			p := fmt.Sprintf(path+".attributes[%d]", i)
+			switch {
+			case a.Name == "":
+				add(p+".name", "name required")
+			case !attributeNameRE.MatchString(a.Name):
+				add(p+".name", "name must be letters, digits and '_' and start with a letter")
+			case names[a.Name]:
+				add(p+".name", "duplicate attribute %s", a.Name)
+			}
+			names[a.Name] = true
+			if a.Type != "" && !slices.Contains(AttributeTypes, a.Type) {
+				add(p+".type", "unknown type %q (%s)", a.Type, strings.Join(AttributeTypes, ", "))
+			}
+			if a.Widget != "" && !slices.Contains(AttributeWidgets, a.Widget) {
+				add(p+".widget", "unknown widget %q (%s)", a.Widget, strings.Join(AttributeWidgets, ", "))
+			}
+			switch {
+			case a.Type == AttrEnum && a.Enum == "":
+				add(p+".enum", "an enum attribute names its enum")
+			case a.Enum != "" && a.Type != AttrEnum:
+				add(p+".enum", "only an enum attribute names an enum")
+			case a.Enum != "" && !enums[a.Enum]:
+				add(p+".enum", "unknown enum %s", a.Enum)
+			}
+			if a.AsName {
+				asName++
+			}
+		}
+		if node && asName > 1 {
+			add(path+".attributes", "at most one attribute is the name of the node")
+		}
+	}
+	for i, n := range s.NodeTypes {
+		check(fmt.Sprintf(prefix+"nodeTypes[%d]", i), n.Attributes, true)
+	}
+	for i, l := range s.LinkTypes {
+		check(fmt.Sprintf(prefix+"linkTypes[%d]", i), l.Attributes, false)
+	}
+}
+
+var attributeNameRE = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_]*$`)

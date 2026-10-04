@@ -35,7 +35,8 @@
   import { loadGraph, loadHead, type GraphIndex } from '../../graphIndex';
   import { namespaceOf } from '../../namespace';
   import { confirmDialog } from '../../shell/confirmState.svelte';
-  import { declaredProperties, isReopen, lifecycleResolver, lifecycleRows, loadPosts, writeNodeInChange, type LifecycleRow, type PostVersions } from '../../lifecycle';
+  import { orderedAttributes, shownValue } from '../../attributes';
+import { declaredProperties, isReopen, lifecycleResolver, lifecycleRows, loadPosts, writeNodeInChange, type LifecycleRow, type PostVersions } from '../../lifecycle';
 
   import NotFound from '../../shell/NotFound.svelte';
 
@@ -163,7 +164,10 @@
   const reopens = $derived((row?.transitions ?? []).filter((t) => row && isReopen(row, t)));
 
   const openChanges = $derived(changes.items.filter((c) => (c.status === 'draft' || c.status === 'active') && (!stored?.namespace || c.namespace === stored.namespace)));
-  const propertyNames = $derived([...new Set([...declared, ...Object.keys(nodeProps)])]);
+  const attrViews = $derived(orderedAttributes(typeCatalog.cat.attributes(typeName)));
+  const nodeRules = $derived(typeCatalog.cat.type(typeName)?.nodeValidators ?? []);
+  const attrOf = (k: string) => attrViews.find((a) => a.name === k);
+  const propertyNames = $derived([...new Set([...attrViews.map((a) => a.name), ...declared, ...Object.keys(nodeProps)])]);
   const text = (v: unknown): string => (v === undefined || v === null ? '' : typeof v === 'string' ? v : JSON.stringify(v));
 
   const panes = $derived<Pane[]>([
@@ -353,22 +357,23 @@
               {/if}
             </div>
             {#if editing}
-              <NodePropertyForm props={nodeProps} {declared} {typeName} busy={busy === 'edit'} onsave={saveProps} oncancel={() => (editing = false)} />
+              <NodePropertyForm props={nodeProps} attributes={typeCatalog.cat.attributes(typeName)} {declared} {typeName} busy={busy === 'edit'} onsave={saveProps} oncancel={() => (editing = false)} />
             {:else if propertyNames.length}
               <table class="props">
                 <tbody>
                   {#each propertyNames as k (k)}
                     {@const changed = text(nodeProps[k]) !== text(storedProps[k])}
                     <tr class:changed>
-                      <th>{k}{#if !declared.includes(k)}<span class="hint" title={`Not declared by ${typeName}`}> *</span>{/if}</th>
+                      <th title={attrOf(k)?.tooltip}>{attrOf(k)?.label ?? k}{#if attrOf(k)?.validators.length}<span class="hint" title={`Checked by ${attrOf(k)?.validators.join(', ')}`}> ✓</span>{/if}{#if !declared.includes(k)}<span class="hint" title={`Not declared by ${typeName}`}> *</span>{/if}</th>
                       <td>
-                        {#if text(nodeProps[k])}{text(nodeProps[k])}{:else}<span class="hint">—</span>{/if}
+                        {#if text(nodeProps[k])}{shownValue(attrOf(k), nodeProps[k])}{:else}<span class="hint">—</span>{/if}
                         {#if changed}<span class="hint pending" title="Proposed in the working change"> (was {text(storedProps[k]) || 'empty'})</span>{/if}
                       </td>
                     </tr>
                   {/each}
                 </tbody>
               </table>
+              {#if nodeRules.length}<p class="hint">Checked as a whole by {nodeRules.join(', ')}. ✓ marks a property with its own validators (hover to see them).</p>{:else if attrViews.some((a) => a.validators.length)}<p class="hint">✓ marks a property checked by validators (hover to see them).</p>{/if}
             {:else}
               <p class="empty">No property.</p>
             {/if}

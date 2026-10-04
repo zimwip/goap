@@ -1,7 +1,7 @@
 // The type catalogue in force (ADR 0012): the resolved node and link types of the published domains and of the
 // built-in domains, served by the registry. A type is referenced as "<namespace>@<name>". Loaded once, reloaded
 // after a domain is published from the IDE.
-import { registry, type LinkTypeInfo, type Lifecycle, type TypeInfo } from '../api';
+import { registry, type AttributeInfo, type LinkTypeInfo, type Lifecycle, type TypeInfo } from '../api';
 
 export const TYPE_SEP = '@';
 
@@ -35,9 +35,14 @@ export class TypeCatalog {
     return this.type(ref)?.lifecycle ?? undefined;
   }
 
-  /** Properties declared by a type, its ancestors' first. */
+  /** Attributes of a type, its ancestors' first. */
+  attributes(ref: string | undefined): AttributeInfo[] {
+    return this.type(ref)?.attributes ?? [];
+  }
+
+  /** Names of the properties declared by a type, its ancestors' first. */
   properties(ref: string | undefined): string[] {
-    return this.type(ref)?.properties ?? [];
+    return this.attributes(ref).map((a) => a.attribute?.name ?? '').filter(Boolean);
   }
 
   /** The IDE editor its nodes open in ('' : the default node editor). */

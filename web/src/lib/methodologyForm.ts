@@ -5,7 +5,7 @@
 // lists become text, JSON params become text. `toForm` / `fromForm` convert
 // between this model and the proto message.
 
-import type { Action, Agent, Issue, Lifecycle, LifecycleState, LifecycleTransition, LinkType, DocumentReference, Methodology, MethodologyMethod, MethodologyProcess, MethodologyRole, Responsibilities, NodeType, ProcessStep, SearchProperty, Struct, Trigger } from './api';
+import type { Action, Agent, Attribute, Enum, Issue, Lifecycle, LifecycleState, LifecycleTransition, LinkType, DocumentReference, Methodology, MethodologyMethod, MethodologyProcess, MethodologyRole, Responsibilities, NodeType, ProcessStep, SearchProperty, Struct, Trigger } from './api';
 
 export interface CondRow {
   cond: string;
@@ -21,6 +21,7 @@ export interface LifecycleStateForm {
 
 export interface LifecycleTransitionForm {
   name: string;
+  description: string;
   from: string;
   to: string;
   permission: string;
@@ -37,17 +38,58 @@ export interface LifecycleTransitionForm {
 }
 
 export interface LifecycleForm {
+  /** local id, never sent: the tab survives renames */
+  uid: string;
   name: string;
+  description: string;
+  /** nodes may rest in an editable state */
+  restInEditable: boolean;
   initial: string;
   states: LifecycleStateForm[];
   transitions: LifecycleTransitionForm[];
 }
 
-export interface NodeTypeForm {
+export interface AttributeForm {
+  /** local id, never sent: the editor keeps its place across renames */
+  uid: string;
+  /** code: the key of the value */
+  name: string;
+  label: string;
+  description: string;
+  /** "" : untyped */
+  type: string;
+  /** "" : the usual one of the type */
+  widget: string;
+  enum: string;
+  default: string;
+  section: string;
+  order: number;
+  tooltip: string;
+  asName: boolean;
+  /** property_validator instances, in call order */
+  validators: string[];
+}
+
+export interface EnumValueForm {
+  value: string;
+  label: string;
+}
+
+export interface EnumForm {
+  /** local id, never sent: the tab survives renames */
+  uid: string;
   name: string;
   description: string;
-  /** comma-separated properties */
-  properties: string;
+  values: EnumValueForm[];
+}
+
+export interface NodeTypeForm {
+  /** local id, never sent: the tab survives renames */
+  uid: string;
+  name: string;
+  description: string;
+  /** what the nodes carry, each with its validators */
+  attributes: AttributeForm[];
   /** parent type (subtyping) */
   extends: string;
   /** name of the domain lifecycle of the nodes ("" : none, or inherited from the parent) */
@@ -56,8 +98,8 @@ export interface NodeTypeForm {
   document: string;
   /** false: direct writes, outside changes */
   changeControlled: boolean;
-  /** property validator instances, in call order */
-  validators: { property: string; instance: string }[];
+  /** node_validator instances, in call order */
+  validators: string[];
   /** editor the UI opens the nodes with ("" : inherited, or the default node editor) */
   editor: string;
   /** node index declarations (kept as they are: not edited by the form) */
@@ -65,9 +107,14 @@ export interface NodeTypeForm {
 }
 
 export interface LinkTypeForm {
+  /** local id, never sent: the tab survives renames */
+  uid: string;
   name: string;
+  description: string;
   from: string;
   to: string;
+  /** what a link of this type carries */
+  attributes: AttributeForm[];
   /** composition link: the target is a part of the source (shown as its child by the editors) */
   compose: boolean;
 }
@@ -328,8 +375,8 @@ export const PRODUCE_OPS = ['create_node', 'update_node'] as const;
 
 // --- constructors --------------------------------------------------------------
 
-export const emptyNodeType = (): NodeTypeForm => ({ name: '', description: '', properties: '', extends: '', lifecycle: '', document: '', changeControlled: true, validators: [], editor: '', search: [] });
-export const emptyLinkType = (): LinkTypeForm => ({ name: '', from: '', to: '', compose: false });
+export const emptyNodeType = (): NodeTypeForm => ({ uid: newUid(), name: '', description: '', attributes: [], extends: '', lifecycle: '', document: '', changeControlled: true, validators: [], editor: '', search: [] });
+export const emptyLinkType = (): LinkTypeForm => ({ uid: newUid(), name: '', description: '', from: '', to: '', attributes: [], compose: false });
 let uidSeq = 0;
 /** New local id (elements created in the UI). */
 export function newUid(): string {
@@ -583,14 +630,15 @@ function triggerFromForm(t: TriggerForm): Trigger {
 
 export function nodeTypeToForm(n: NodeType): NodeTypeForm {
   return {
+    uid: newUid(),
     name: n.name ?? '',
     description: n.description ?? '',
-    properties: (n.properties ?? []).join(', '),
+    attributes: (n.attributes ?? []).map(attributeToForm),
     extends: n.extends ?? '',
     lifecycle: n.lifecycle ?? '',
     document: (n.document?.contains ?? []).join(', '),
     changeControlled: n.changeControlled !== false,
-    validators: (n.validators ?? []).map((v) => ({ property: v.property ?? '', instance: v.instance ?? '' })),
+    validators: [...(n.validators ?? [])],
     editor: n.editor ?? '',
     search: (n.search ?? []).map((s) => ({ ...s })),
   };
@@ -604,11 +652,15 @@ const csv = (v: string): string[] =>
 
 export function lifecycleToForm(l: Lifecycle): LifecycleForm {
   return {
+    uid: newUid(),
     name: l.name ?? '',
+    description: l.description ?? '',
+    restInEditable: l.restInEditable === true,
     initial: l.initial ?? '',
     states: (l.states ?? []).map((s) => ({ name: s.name ?? '', description: s.description ?? '', editable: !!s.editable, final: !!s.final })),
     transitions: (l.transitions ?? []).map((t) => ({
       name: t.name ?? '',
+      description: t.description ?? '',
       from: t.from ?? '',
       to: t.to ?? '',
       permission: t.permission ?? '',
@@ -624,6 +676,8 @@ export function lifecycleToForm(l: Lifecycle): LifecycleForm {
 
 export function lifecycleFromForm(l: LifecycleForm): Lifecycle {
   const o: Lifecycle = { name: l.name.trim(), initial: l.initial.trim() };
+  put(o, 'description', l.description.trim());
+  if (l.restInEditable) o.restInEditable = true;
   o.states = l.states.map((s) => {
     const st: LifecycleState = { name: s.name.trim() };
     put(st, 'description', s.description.trim());
@@ -633,6 +687,7 @@ export function lifecycleFromForm(l: LifecycleForm): Lifecycle {
   });
   o.transitions = l.transitions.map((t) => {
     const tr: LifecycleTransition = { name: t.name.trim(), from: t.from.trim(), to: t.to.trim() };
+    put(tr, 'description', t.description.trim());
     put(tr, 'permission', t.permission.trim());
     put(tr, 'guard', t.guard.trim());
     put(tr, 'requiresAttributes', csv(t.requiresAttributes));
@@ -648,7 +703,10 @@ export function lifecycleFromForm(l: LifecycleForm): Lifecycle {
 /** A lifecycle to start from: work happens in `draft`, persisted versions rest in `approved`. */
 export function defaultLifecycle(name = ''): LifecycleForm {
   return {
+    uid: newUid(),
     name,
+    description: '',
+    restInEditable: false,
     initial: 'proposed',
     states: [
       { name: 'proposed', description: '', editable: false, final: false },
@@ -656,15 +714,66 @@ export function defaultLifecycle(name = ''): LifecycleForm {
       { name: 'approved', description: '', editable: false, final: false },
     ],
     transitions: [
-      { name: 'start', from: 'proposed', to: 'draft', permission: '', guard: '', requiresAttributes: '', requiresLinks: '', children: '', guards: [], actions: [] },
-      { name: 'approve', from: 'draft', to: 'approved', permission: '', guard: '', requiresAttributes: '', requiresLinks: '', children: '', guards: [], actions: [] },
-      { name: 'reopen', from: 'approved', to: 'draft', permission: '', guard: '', requiresAttributes: '', requiresLinks: '', children: '', guards: [], actions: [] },
+      { name: 'start', description: '', from: 'proposed', to: 'draft', permission: '', guard: '', requiresAttributes: '', requiresLinks: '', children: '', guards: [], actions: [] },
+      { name: 'approve', description: '', from: 'draft', to: 'approved', permission: '', guard: '', requiresAttributes: '', requiresLinks: '', children: '', guards: [], actions: [] },
+      { name: 'reopen', description: '', from: 'approved', to: 'draft', permission: '', guard: '', requiresAttributes: '', requiresLinks: '', children: '', guards: [], actions: [] },
     ],
   };
 }
 
+export const emptyAttribute = (name = ''): AttributeForm => ({ uid: newUid(), name, label: '', description: '', type: '', widget: '', enum: '', default: '', section: '', order: 0, tooltip: '', asName: false, validators: [] });
+
+export function attributeToForm(a: Attribute): AttributeForm {
+  return {
+    uid: newUid(),
+    name: a.name ?? '',
+    label: a.label ?? '',
+    description: a.description ?? '',
+    type: a.type ?? '',
+    widget: a.widget ?? '',
+    enum: a.enum ?? '',
+    default: a.defaultValue ?? '',
+    section: a.section ?? '',
+    order: a.order ?? 0,
+    tooltip: a.tooltip ?? '',
+    asName: a.asName === true,
+    validators: [...(a.validators ?? [])],
+  };
+}
+
+export function attributeFromForm(a: AttributeForm): Attribute {
+  const o: Attribute = {};
+  put(o, 'name', a.name.trim());
+  put(o, 'label', a.label.trim());
+  put(o, 'description', a.description.trim());
+  put(o, 'type', a.type);
+  put(o, 'widget', a.widget);
+  put(o, 'enum', a.type === 'enum' ? a.enum : '');
+  put(o, 'defaultValue', a.default);
+  put(o, 'section', a.section.trim());
+  if (a.order) o.order = a.order;
+  put(o, 'tooltip', a.tooltip.trim());
+  if (a.asName) o.asName = true;
+  put(o, 'validators', a.validators.map((v) => v.trim()).filter(Boolean));
+  return o;
+}
+
+export const emptyEnum = (name = ''): EnumForm => ({ uid: newUid(), name, description: '', values: [{ value: '', label: '' }] });
+
+export function enumToForm(e: Enum): EnumForm {
+  return { uid: newUid(), name: e.name ?? '', description: e.description ?? '', values: (e.values ?? []).map((v) => ({ value: v.value ?? '', label: v.label ?? '' })) };
+}
+
+export function enumFromForm(e: EnumForm): Enum {
+  const o: Enum = {};
+  put(o, 'name', e.name.trim());
+  put(o, 'description', e.description.trim());
+  o.values = e.values.map((v) => (v.label.trim() ? { value: v.value.trim(), label: v.label.trim() } : { value: v.value.trim() }));
+  return o;
+}
+
 export function linkTypeToForm(l: LinkType): LinkTypeForm {
-  return { name: l.name ?? '', from: l.from ?? '', to: l.to ?? '', compose: l.compose === true };
+  return { uid: newUid(), name: l.name ?? '', description: l.description ?? '', from: l.from ?? '', to: l.to ?? '', attributes: (l.attributes ?? []).map(attributeToForm), compose: l.compose === true };
 }
 
 export function nodeTypeFromForm(n: NodeTypeForm): NodeType {
@@ -672,19 +781,12 @@ export function nodeTypeFromForm(n: NodeTypeForm): NodeType {
   put(o, 'name', n.name.trim());
   put(o, 'description', n.description.trim());
   put(o, 'extends', n.extends.trim());
-  put(
-    o,
-    'properties',
-    n.properties
-      .split(',')
-      .map((p) => p.trim())
-      .filter(Boolean),
-  );
+  if (n.attributes.length) o.attributes = n.attributes.map(attributeFromForm);
   put(o, 'lifecycle', n.lifecycle.trim());
   const contains = csv(n.document);
   if (contains.length) o.document = { contains };
   if (!n.changeControlled) o.changeControlled = false;
-  if (n.validators.length) o.validators = n.validators.map((v) => ({ property: v.property.trim(), instance: v.instance.trim() }));
+  put(o, 'validators', n.validators.map((v) => v.trim()).filter(Boolean));
   if (n.search.length) o.search = n.search.map((s) => ({ ...s }));
   put(o, 'editor', n.editor.trim());
   return o;
@@ -693,8 +795,10 @@ export function nodeTypeFromForm(n: NodeTypeForm): NodeType {
 export function linkTypeFromForm(l: LinkTypeForm): LinkType {
   const o: LinkType = {};
   put(o, 'name', l.name.trim());
+  put(o, 'description', l.description.trim());
   put(o, 'from', l.from);
   put(o, 'to', l.to);
+  if (l.attributes.length) o.attributes = l.attributes.map(attributeFromForm);
   if (l.compose) o.compose = true;
   return o;
 }

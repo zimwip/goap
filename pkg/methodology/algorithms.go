@@ -8,7 +8,7 @@ import (
 	"github.com/zimwip/goap/pkg/dsl"
 )
 
-// propertiesOf lists the properties of a node type, its own and the inherited ones.
+// propertiesOf lists the attributes of a node type, its own and the inherited ones.
 func (s Schema) propertiesOf(name string) map[string]bool {
 	byName := map[string]NodeType{}
 	for _, n := range s.NodeTypes {
@@ -17,8 +17,8 @@ func (s Schema) propertiesOf(name string) map[string]bool {
 	out := map[string]bool{}
 	for seen := map[string]bool{}; name != "" && !seen[name]; name = byName[name].Extends {
 		seen[name] = true
-		for _, p := range byName[name].Properties {
-			out[p] = true
+		for _, a := range byName[name].Attributes {
+			out[a.Name] = true
 		}
 	}
 	return out
@@ -86,15 +86,20 @@ func (s Schema) checkAlgorithms(prefix string, add func(path, format string, arg
 	}
 	props := map[string]map[string]bool{}
 	for i, n := range s.NodeTypes {
+		for j, a := range n.Attributes {
+			for k, v := range a.Validators {
+				plug(fmt.Sprintf(prefix+"nodeTypes[%d].attributes[%d].validators[%d]", i, j, k), v, algo.UsagePropertyValidator)
+			}
+		}
 		for j, v := range n.Validators {
-			path := fmt.Sprintf(prefix+"nodeTypes[%d].validators[%d]", i, j)
-			if props[n.Name] == nil {
-				props[n.Name] = s.propertiesOf(n.Name)
+			plug(fmt.Sprintf(prefix+"nodeTypes[%d].validators[%d]", i, j), v, algo.UsageNodeValidator)
+		}
+	}
+	for i, l := range s.LinkTypes {
+		for j, a := range l.Attributes {
+			for k, v := range a.Validators {
+				plug(fmt.Sprintf(prefix+"linkTypes[%d].attributes[%d].validators[%d]", i, j, k), v, algo.UsagePropertyValidator)
 			}
-			if !props[n.Name][v.Property] {
-				add(path+".property", "unknown property %q of %s", v.Property, n.Name)
-			}
-			plug(path+".instance", v.Instance, algo.UsagePropertyValidator)
 		}
 	}
 	for i, n := range s.NodeTypes {
@@ -121,9 +126,10 @@ func (s Schema) checkAlgorithms(prefix string, add func(path, format string, arg
 	}
 }
 
-// BoundValidators returns the property validators of a node type resolved with
-// their algorithm, in call order: the ones declared by the supertypes first.
-// Instances that do not resolve are left out (Validate reports them).
+// BoundValidators returns the validators of a node type resolved with their algorithm, in call order:
+// the supertypes' first, and for each type the validators of its attributes (in declaration order, bound
+// to the attribute) then its node validators. Instances that do not resolve are left out (Validate reports
+// them).
 func (s Schema) BoundValidators(name string) []algo.Bound {
 	byName := map[string]NodeType{}
 	for _, n := range s.NodeTypes {
@@ -136,15 +142,9 @@ func (s Schema) BoundValidators(name string) []algo.Bound {
 			chain = append([]NodeType{n}, chain...)
 		}
 	}
-	set := s.algorithms()
 	var out []algo.Bound
 	for _, n := range chain {
-		for _, v := range n.Validators {
-			if b, err := set.Bind(v.Instance, algo.UsagePropertyValidator); err == nil {
-				b.Property = v.Property
-				out = append(out, b)
-			}
-		}
+		out = append(out, s.OwnBoundValidators(n)...)
 	}
 	return out
 }
@@ -153,9 +153,16 @@ func (s Schema) BoundValidators(name string) []algo.Bound {
 func (s Schema) OwnBoundValidators(t NodeType) []algo.Bound {
 	set := s.algorithms()
 	var out []algo.Bound
+	for _, a := range t.Attributes {
+		for _, v := range a.Validators {
+			if b, err := set.Bind(v, algo.UsagePropertyValidator); err == nil {
+				b.Property = a.Name
+				out = append(out, b)
+			}
+		}
+	}
 	for _, v := range t.Validators {
-		if b, err := set.Bind(v.Instance, algo.UsagePropertyValidator); err == nil {
-			b.Property = v.Property
+		if b, err := set.Bind(v, algo.UsageNodeValidator); err == nil {
 			out = append(out, b)
 		}
 	}

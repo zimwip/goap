@@ -11,6 +11,7 @@ import (
 	"github.com/zimwip/goap/gen/goap/registry/v1/registryv1connect"
 	"github.com/zimwip/goap/internal/identity"
 	"github.com/zimwip/goap/internal/pbconv"
+	"github.com/zimwip/goap/pkg/algo"
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/engine"
@@ -297,7 +298,7 @@ func (h *Handler) ListTypes(ctx context.Context, _ *connect.Request[registryv1.L
 	}
 	out := &registryv1.ListTypesResponse{Domains: cat.Domains()}
 	for _, t := range cat.Types() {
-		ti := &registryv1.TypeInfo{Ref: t.Ref.String(), Description: t.Description, Properties: t.Properties, ChangeControlled: t.ChangeControlled, Editor: t.Editor}
+		ti := &registryv1.TypeInfo{Ref: t.Ref.String(), Description: t.Description, Attributes: attributeInfosToPB(t.Attributes), ChangeControlled: t.ChangeControlled, Editor: t.Editor}
 		for _, a := range t.Ancestors {
 			ti.Ancestors = append(ti.Ancestors, a.String())
 		}
@@ -307,10 +308,15 @@ func (h *Handler) ListTypes(ctx context.Context, _ *connect.Request[registryv1.L
 		if t.Document != nil {
 			ti.Contains = t.Document.Contains
 		}
+		for _, v := range t.Validators {
+			if v.Type == algo.UsageNodeValidator {
+				ti.NodeValidators = append(ti.NodeValidators, v.Instance)
+			}
+		}
 		out.Types = append(out.Types, ti)
 	}
 	for _, l := range cat.LinkTypes() {
-		li := &registryv1.LinkTypeInfo{Ref: l.Ref.String(), Compose: l.Compose}
+		li := &registryv1.LinkTypeInfo{Ref: l.Ref.String(), Compose: l.Compose, Attributes: attributeInfosToPB(l.Attributes)}
 		if !l.From.IsZero() {
 			li.From = l.From.String()
 		}

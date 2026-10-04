@@ -58,8 +58,9 @@ service RegistryService {
 message NodeType {
   string name = 1;
   string description = 2;
-  repeated string properties = 3;
-  // parent type (subtyping): inherits its properties and link types
+  // attributes of the nodes: what the user interface displays and edits, with their validators
+  repeated Attribute attributes = 3;
+  // parent type (subtyping): inherits its attributes and link types
   string extends = 4;
   // name of the lifecycle of the nodes of the type (ADR 0014, one of the
   // domain's lifecycles); inherited through extends
@@ -68,8 +69,8 @@ message NodeType {
   DocumentSpec document = 6;
   // absent: change controlled (the default)
   optional bool change_controlled = 7;
-  // property validator instances (ADR 0018), in call order
-  repeated PropertyValidator validators = 8;
+  // node_validator instances (ADR 0018) checking a node as a whole, in call order
+  repeated string validators = 8;
   // properties the node index keeps (ADR 0026)
   repeated SearchProperty search = 9;
   // editor the user interface opens the nodes of the type with (inherited through extends; empty: the default node editor)
@@ -98,10 +99,49 @@ message SearchProperty {
   bool facet = 3;
 }
 
-// PropertyValidator plugs an algorithm instance of type property_validator on a property.
-message PropertyValidator {
-  string property = 1;
-  string instance = 2;
+// Attribute defines a property of a node type or a link type: its code and what the user interface needs to display
+// and edit it.
+message Attribute {
+  // code: the key of the value in the properties
+  string name = 1;
+  string label = 2;
+  string description = 3;
+  // string | number | boolean | date | enum | json (empty: string)
+  string type = 4;
+  // text | textarea | dropdown | checkbox | date (empty: the usual one of the type)
+  string widget = 5;
+  // enum of the domain an enum attribute takes its values from
+  string enum = 6;
+  string default_value = 7;
+  string section = 8;
+  int32 order = 9;
+  string tooltip = 10;
+  // the attribute is the display name of the node
+  bool as_name = 11;
+  // property_validator instances (ADR 0018), in call order
+  repeated string validators = 12;
+}
+
+// EnumValue is one value of an enum; the label defaults to the value.
+message EnumValue {
+  string value = 1;
+  string label = 2;
+}
+
+// Enum is a closed list of values of a domain that enum attributes refer to.
+message Enum {
+  string name = 1;
+  string description = 2;
+  repeated EnumValue values = 3;
+}
+
+// AttributeInfo is a resolved attribute of a node type or link type.
+message AttributeInfo {
+  Attribute attribute = 1;
+  // the type that declares it when it is inherited; empty: the type's own
+  string from = 2;
+  // values of the enum of an enum attribute
+  repeated EnumValue values = 3;
 }
 
 // AlgorithmParam declares a typed parameter of an algorithm.
@@ -141,6 +181,9 @@ message AlgorithmInstance {
 
 message Lifecycle {
   string name = 4;
+  string description = 5;
+  // nodes may rest in an editable state (ADR 0048)
+  bool rest_in_editable = 6;
   string initial = 1;
   repeated LifecycleState states = 2;
   repeated LifecycleTransition transitions = 3;
@@ -170,6 +213,7 @@ message LifecycleTransition {
   repeated string guards = 9;
   // transition_action instances, run in order once the transition is accepted
   repeated string actions = 10;
+  string description = 11;
 }
 
 message DocumentSpec {
@@ -182,6 +226,9 @@ message LinkType {
   string to = 3;
   // composition link: the target is a part of the source, shown as its child
   bool compose = 4;
+  // what a link of the type carries
+  repeated Attribute attributes = 5;
+  string description = 6;
 }
 
 message Condition {
@@ -563,6 +610,7 @@ message Domain {
   repeated NodeType node_types = 5;
   repeated LinkType link_types = 6;
   repeated Lifecycle lifecycles = 11;
+  repeated Enum enums = 16;
   repeated Algorithm algorithms = 12;
   repeated AlgorithmInstance algorithm_instances = 13;
   google.protobuf.Timestamp created_at = 7;
@@ -722,8 +770,8 @@ message ListTypesResponse {
 message TypeInfo {
   string ref = 1;
   string description = 2;
-  // declared properties, the inherited ones first
-  repeated string properties = 3;
+  // resolved attributes, the inherited ones first
+  repeated AttributeInfo attributes = 3;
   // supertypes, nearest first
   repeated string ancestors = 4;
   // own or inherited; absent: the nodes have no state
@@ -733,6 +781,8 @@ message TypeInfo {
   string editor = 7;
   // qualified types the nodes embed through "contains" links (own or inherited)
   repeated string contains = 8;
+  // node_validator instances checking a node of the type as a whole, in call order (own and inherited)
+  repeated string node_validators = 9;
 }
 
 // LinkTypeInfo is the resolved model of a link type; an empty end accepts any node type.
@@ -741,6 +791,7 @@ message LinkTypeInfo {
   string from = 2;
   string to = 3;
   bool compose = 4;
+  repeated AttributeInfo attributes = 5;
 }
 
 message GetProcessGraphRequest {

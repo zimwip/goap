@@ -30,11 +30,10 @@ algorithmInstances:
 nodeTypes:
   - name: Req
     lifecycle: req
-    properties: [title]
-    validators: [{property: title, instance: title-required}]
+    attributes: [{name: title, validators: [title-required]}]
     search: [{property: title, text: true}]
   - {name: SubReq, extends: Req}
-  - {name: Test, properties: [title]}
+  - {name: Test, attributes: [title]}
 linkTypes:
   - {name: verifies, from: Test, to: Req}
 `))
@@ -162,6 +161,8 @@ func (ts testTypes) Search(typ string) []domain.SearchProperty {
 	}
 	return out
 }
+
+func (ts testTypes) AttributeChecks(string) []domain.AttributeCheck { return nil }
 
 func (ts testTypes) CheckNode(_, typ string) error {
 	if _, ok := ts[typ]; !ok {

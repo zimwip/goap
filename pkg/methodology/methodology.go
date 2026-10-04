@@ -5,7 +5,6 @@ package methodology
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"maps"
 	"regexp"
@@ -143,10 +142,13 @@ type Trigger struct {
 
 // NodeType is a domain node type.
 type NodeType struct {
-	Name        string   `yaml:"name" json:"name"`
-	Description string   `yaml:"description,omitempty" json:"description,omitempty"`
-	Properties  []string `yaml:"properties,omitempty" json:"properties,omitempty"`
-	// Extends makes the type a subtype: it inherits the properties and link
+	Name        string `yaml:"name" json:"name"`
+	Description string `yaml:"description,omitempty" json:"description,omitempty"`
+	// Attributes define the properties the nodes of the type carry: their code, label, type, widget,
+	// validators... The user interface renders and edits a node from them. Subtypes inherit them
+	// and may override one by name.
+	Attributes []Attribute `yaml:"attributes,omitempty" json:"attributes,omitempty"`
+	// Extends makes the type a subtype: it inherits the attributes and link
 	// types of its parent, and conditions on the parent apply to it
 	// (x.types contains every supertype, ADR 0009 §6).
 	Extends string `yaml:"extends,omitempty" json:"extends,omitempty"`
@@ -160,10 +162,10 @@ type NodeType struct {
 	// ChangeControlled: nodes are only modified through a change (default
 	// true). False: direct writes, and no lifecycle.
 	ChangeControlled *bool `yaml:"changeControlled,omitempty" json:"changeControlled,omitempty"`
-	// Validators plug property validator instances (ADR 0018) on the properties
-	// of the type (its own or inherited). They run in this order when a node of
-	// the type is created or modified, the validators of the supertypes first.
-	Validators []PropertyValidator `yaml:"validators,omitempty" json:"validators,omitempty"`
+	// Validators plug node validator instances (ADR 0018) on the type: rules on the node as a whole
+	// (across attributes). They run in this order when a node of the type is created or modified,
+	// after the validators of its attributes, the supertypes' first.
+	Validators []string `yaml:"validators,omitempty" json:"validators,omitempty"`
 	// Search declares which properties the node index keeps (ADR 0026): text
 	// goes into the full-text and embedding document, facet makes the value
 	// filterable and countable. Inherited through extends.
@@ -198,10 +200,112 @@ type SearchProperty struct {
 	Facet    bool   `yaml:"facet,omitempty" json:"facet,omitempty"`
 }
 
-// PropertyValidator plugs an algorithm instance of type property_validator on a property.
-type PropertyValidator struct {
-	Property string `yaml:"property" json:"property"`
-	Instance string `yaml:"instance" json:"instance"`
+// Attribute types.
+const (
+	AttrString  = "string"
+	AttrNumber  = "number"
+	AttrBoolean = "boolean"
+	AttrDate    = "date"
+	AttrEnum    = "enum"
+	AttrJSON    = "json"
+)
+
+// AttributeTypes lists the attribute types.
+var AttributeTypes = []string{AttrString, AttrNumber, AttrBoolean, AttrDate, AttrEnum, AttrJSON}
+
+// Attribute widgets: how the user interface lets a value be edited.
+const (
+	WidgetText     = "text"
+	WidgetTextarea = "textarea"
+	WidgetDropdown = "dropdown"
+	WidgetCheckbox = "checkbox"
+	WidgetDate     = "date"
+)
+
+// AttributeWidgets lists the widgets.
+var AttributeWidgets = []string{WidgetText, WidgetTextarea, WidgetDropdown, WidgetCheckbox, WidgetDate}
+
+// Attribute defines a property of a node type or a link type: the code that keys the value, and what the user
+// interface needs to display and edit it. Its validators are the property validator instances (ADR 0018)
+// that check the value when a node is created or modified.
+type Attribute struct {
+	// Name is the code: the key of the value in the node's properties.
+	Name        string `yaml:"name" json:"name"`
+	Label       string `yaml:"label,omitempty" json:"label,omitempty"`
+	Description string `yaml:"description,omitempty" json:"description,omitempty"`
+	// Type of the value (AttributeTypes); empty: untyped (any value is accepted, the editor shows a text field).
+	Type string `yaml:"type,omitempty" json:"type,omitempty"`
+	// Widget edits the value (AttributeWidgets); empty: the usual one of the type.
+	Widget string `yaml:"widget,omitempty" json:"widget,omitempty"`
+	// Enum names the enum of the domain whose values an enum attribute takes.
+	Enum    string `yaml:"enum,omitempty" json:"enum,omitempty"`
+	Default string `yaml:"default,omitempty" json:"default,omitempty"`
+	// Section groups the attributes in the editor; Order sorts them within the type.
+	Section string `yaml:"section,omitempty" json:"section,omitempty"`
+	Order   int    `yaml:"order,omitempty" json:"order,omitempty"`
+	Tooltip string `yaml:"tooltip,omitempty" json:"tooltip,omitempty"`
+	// AsName makes the attribute the display name of the node.
+	AsName bool `yaml:"asName,omitempty" json:"asName,omitempty"`
+	// Validators are the property_validator instances plugged on the attribute, in call order.
+	Validators []string `yaml:"validators,omitempty" json:"validators,omitempty"`
+}
+
+// UnmarshalYAML accepts either a plain name or a full object.
+func (a *Attribute) UnmarshalYAML(v *yaml.Node) error {
+	if v.Kind == yaml.ScalarNode {
+		a.Name = v.Value
+		return nil
+	}
+	type plain Attribute
+	return v.Decode((*plain)(a))
+}
+
+// DefaultWidget is the widget used when an attribute names none.
+func (a Attribute) DefaultWidget() string {
+	if a.Widget != "" {
+		return a.Widget
+	}
+	switch a.Type {
+	case AttrEnum:
+		return WidgetDropdown
+	case AttrBoolean:
+		return WidgetCheckbox
+	case AttrDate:
+		return WidgetDate
+	}
+	return WidgetText
+}
+
+// EnumValue is one value of an enum.
+type EnumValue struct {
+	Value string `yaml:"value" json:"value"`
+	Label string `yaml:"label,omitempty" json:"label,omitempty"`
+}
+
+// UnmarshalYAML accepts either a plain value or a full object.
+func (e *EnumValue) UnmarshalYAML(v *yaml.Node) error {
+	if v.Kind == yaml.ScalarNode {
+		e.Value = v.Value
+		return nil
+	}
+	type plain EnumValue
+	return v.Decode((*plain)(e))
+}
+
+// Enum is a closed list of values of the domain that enum attributes refer to; the values keep their order.
+type Enum struct {
+	Name        string      `yaml:"name" json:"name"`
+	Description string      `yaml:"description,omitempty" json:"description,omitempty"`
+	Values      []EnumValue `yaml:"values,omitempty" json:"values,omitempty"`
+}
+
+// AttributeNames lists the names of attributes.
+func AttributeNames(as []Attribute) []string {
+	out := make([]string, 0, len(as))
+	for _, a := range as {
+		out = append(out, a.Name)
+	}
+	return out
 }
 
 // IsChangeControlled tells whether the nodes of the type are modified through changes only.
@@ -219,14 +323,15 @@ func (n *NodeType) UnmarshalYAML(v *yaml.Node) error {
 
 // LinkType is a domain link type.
 type LinkType struct {
-	Name string `yaml:"name" json:"name"`
-	From string `yaml:"from,omitempty" json:"from,omitempty"`
-	To   string `yaml:"to,omitempty" json:"to,omitempty"`
-	// Properties names what a link of this type carries (its own property names, documentary only: unlike a node
-	// type's, not yet enforced or validated by the type catalogue - pkg/typecat.CheckLink only checks the
+	Name        string `yaml:"name" json:"name"`
+	Description string `yaml:"description,omitempty" json:"description,omitempty"`
+	From        string `yaml:"from,omitempty" json:"from,omitempty"`
+	To          string `yaml:"to,omitempty" json:"to,omitempty"`
+	// Attributes define what a link of this type carries. The user interface edits a link from them; their
+	// validators are checked by the domain but not yet run on commit (pkg/typecat.CheckLink only checks the
 	// endpoints' types). "specializes" declares when/priority this way: the generic Activity-specialization
 	// condition (architecture plan "Activity concept") a link of that type would carry once one is created.
-	Properties []string `yaml:"properties,omitempty" json:"properties,omitempty"`
+	Attributes []Attribute `yaml:"attributes,omitempty" json:"attributes,omitempty"`
 	// Compose flags a composition link: the target is a part of the source (an aggregate), so a browser or
 	// editor shows the targets as the children of the source. It is the semantics the editors read from the
 	// domain instead of knowing the link by name ("defines", "sub_activity").
@@ -1023,31 +1128,6 @@ func (m *Methodology) YAML() ([]byte, error) {
 		return nil, err
 	}
 	return b.Bytes(), enc.Close()
-}
-
-// nodeTypeMeta is the part of a node type stored as a JSON document by the
-// structured (PostgreSQL) registry store.
-type nodeTypeMeta struct {
-	Lifecycle        string               `json:"lifecycle,omitempty"`
-	Document         *domain.DocumentSpec `json:"document,omitempty"`
-	ChangeControlled *bool                `json:"changeControlled,omitempty"`
-	Validators       []PropertyValidator  `json:"validators,omitempty"`
-	Search           []SearchProperty     `json:"search,omitempty"`
-}
-
-// MetaJSON serializes the lifecycle, document and change-control declarations.
-func (n NodeType) MetaJSON() []byte {
-	b, _ := json.Marshal(nodeTypeMeta{Lifecycle: n.Lifecycle, Document: n.Document, ChangeControlled: n.ChangeControlled, Validators: n.Validators, Search: n.Search})
-	return b
-}
-
-// SetMeta restores what MetaJSON stored.
-func (n *NodeType) SetMeta(raw []byte) {
-	var m nodeTypeMeta
-	if len(raw) == 0 || json.Unmarshal(raw, &m) != nil {
-		return
-	}
-	n.Lifecycle, n.Document, n.ChangeControlled, n.Validators, n.Search = m.Lifecycle, m.Document, m.ChangeControlled, m.Validators, m.Search
 }
 
 // overlap lists the conditions that are both an input (entry, pre) and an output (exit, effect) of an activity, with

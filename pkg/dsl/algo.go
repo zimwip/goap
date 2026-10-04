@@ -113,6 +113,24 @@ func (v *ValidatorCtx) Log(msg string)   { v.c.Log(msg) }
 func (v *ValidatorCtx) Warn(msg string)  { v.c.Warn(msg) }
 func (v *ValidatorCtx) logf(l, m string) { v.c.logf(l, m) }
 
+// NodeValidatorCtx is the context of a node validator: it checks a node as a whole.
+type NodeValidatorCtx struct {
+	c  *common
+	in AlgorithmInput
+}
+
+// Param returns a parameter value of the instance.
+func (v *NodeValidatorCtx) Param(name string) any { return v.c.Param(name) }
+
+// Node is the node being validated, as it will be once the change is applied.
+func (v *NodeValidatorCtx) Node() Node { return v.in.Node }
+
+// Fail rejects the node with a message.
+func (v *NodeValidatorCtx) Fail(msg string)  { v.c.Fail(msg) }
+func (v *NodeValidatorCtx) Log(msg string)   { v.c.Log(msg) }
+func (v *NodeValidatorCtx) Warn(msg string)  { v.c.Warn(msg) }
+func (v *NodeValidatorCtx) logf(l, m string) { v.c.logf(l, m) }
+
 // GuardCtx is the context of a transition guard.
 type GuardCtx struct {
 	c  *common
@@ -214,6 +232,17 @@ func RunAlgorithm(ctx context.Context, b algo.Bound, in AlgorithmInput) (Outcome
 			run, ok := entry.(func(*ValidatorCtx) error)
 			if !ok {
 				return nil, fmt.Errorf("go script: Run must have signature func(*dsl.ValidatorCtx) error, got %T", entry)
+			}
+			return func() error { return run(x) }, nil
+		}
+		out = func() Outcome { return Outcome{Failures: c.failures, Logs: c.logs} }
+	case algo.UsageNodeValidator:
+		x := &NodeValidatorCtx{c: c, in: in}
+		obj, jsObj = x, x
+		bind = func(entry any) (func() error, error) {
+			run, ok := entry.(func(*NodeValidatorCtx) error)
+			if !ok {
+				return nil, fmt.Errorf("go script: Run must have signature func(*dsl.NodeValidatorCtx) error, got %T", entry)
 			}
 			return func() error { return run(x) }, nil
 		}

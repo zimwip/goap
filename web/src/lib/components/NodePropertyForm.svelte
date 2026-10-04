@@ -1,9 +1,12 @@
 <script lang="ts">
   import { untrack } from 'svelte';
-  // Edition of the properties of a node: the ones its type declares, the ones it
-  // has, and new ones. Only the changed values are returned.
+  import { orderedAttributes, parseValue as parseAttr, valueText, type AttributeView } from '../attributes';
+  import type { AttributeInfo } from '../api';
+  // Edition of the properties of a node: the attributes its type defines (laid out by section, edited with
+  // their widget), the other properties it has, and new ones. Only the changed values are returned.
   let {
     props,
+    attributes = [],
     declared,
     typeName,
     busy = false,
@@ -11,6 +14,8 @@
     oncancel,
   }: {
     props: Record<string, unknown>;
+    /** the attributes of the type of the node */
+    attributes?: AttributeInfo[];
     declared: string[];
     typeName: string;
     busy?: boolean;
@@ -18,16 +23,29 @@
     oncancel: () => void;
   } = $props();
 
-  const text = (v: unknown): string => (v === undefined || v === null ? '' : typeof v === 'string' ? v : JSON.stringify(v));
+  const text = valueText;
+  const attrs = $derived(orderedAttributes(attributes));
+  const attrOf = (k: string): AttributeView | undefined => attrs.find((a) => a.name === k);
+  const sections = $derived([...new Set(attrs.map((a) => a.section))]);
   // the form is created each time it is opened: it starts from the values of that moment
-  const start = untrack(() => Object.fromEntries([...new Set([...declared, ...Object.keys(props)])].map((k) => [k, text(props[k])])));
+  const start = untrack(() =>
+    Object.fromEntries(
+      [...new Set([...declared, ...Object.keys(props)])].map((k) => {
+        const a = orderedAttributes(attributes).find((x) => x.name === k);
+        return [k, props[k] === undefined && a ? a.default : text(props[k])];
+      }),
+    ),
+  );
   let draft = $state<Record<string, string>>(start);
+  const others = $derived(Object.keys(draft).filter((k) => !attrOf(k)));
   let newKey = $state('');
   let newValue = $state('');
   let error = $state('');
 
   /** A value typed in the form: text, unless the property already holds a non-text value. */
   function parse(key: string, value: string): unknown {
+    const a = attrOf(key);
+    if (a && a.type) return parseAttr(a, value);
     const cur = props[key];
     if (cur !== undefined && cur !== null && typeof cur !== 'string') {
       try {
@@ -60,7 +78,31 @@
 </script>
 
 <form class="form" onsubmit={submit}>
-  {#each Object.keys(draft) as k (k)}
+  {#each sections as sec (sec)}
+    {#if sec && attrs.some((a) => a.section === sec)}<h4 class="section">{sec}</h4>{/if}
+    {#each attrs.filter((a) => a.section === sec) as a (a.name)}
+      <div class="field">
+        <label for="np-{a.name}" title={a.tooltip}>{a.label}{#if a.label !== a.name} <span class="hint mono">{a.name}</span>{/if}</label>
+        {#if a.widget === 'checkbox'}
+          <input id="np-{a.name}" type="checkbox" checked={draft[a.name] === 'true'} onchange={(e) => (draft[a.name] = e.currentTarget.checked ? 'true' : 'false')} />
+        {:else if a.widget === 'dropdown'}
+          <select id="np-{a.name}" bind:value={draft[a.name]}>
+            <option value="">—</option>
+            {#if draft[a.name] && !a.values.some((v) => v.value === draft[a.name])}<option value={draft[a.name]}>{draft[a.name]} (not in {a.enum || 'the list'})</option>{/if}
+            {#each a.values as v (v.value)}<option value={v.value}>{v.label}</option>{/each}
+          </select>
+        {:else if a.widget === 'date'}
+          <input id="np-{a.name}" type="date" bind:value={draft[a.name]} />
+        {:else if a.widget === 'textarea' || draft[a.name].length > 80 || draft[a.name].includes('\n')}
+          <textarea id="np-{a.name}" rows="4" bind:value={draft[a.name]}></textarea>
+        {:else}
+          <input id="np-{a.name}" type={a.type === 'number' ? 'number' : 'text'} step={a.type === 'number' ? 'any' : undefined} bind:value={draft[a.name]} />
+        {/if}
+        {#if a.validators.length}<span class="hint">Checked by {a.validators.join(', ')}</span>{/if}
+      </div>
+    {/each}
+  {/each}
+  {#each others as k (k)}
     <div class="field">
       <label for="np-{k}">{k}{#if !declared.includes(k)} <span class="hint">(not declared by {typeName})</span>{/if}</label>
       {#if draft[k].length > 80 || draft[k].includes('\n')}
@@ -87,6 +129,13 @@
     display: grid;
     gap: 0.5rem;
     max-width: 52rem;
+  }
+  .section {
+    margin: 0.6rem 0 0;
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted);
   }
   .newprop {
     display: grid;

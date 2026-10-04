@@ -1,41 +1,131 @@
 name: alm
-version: 1.0.0
+version: 1.1.0
 description: >
   Application lifecycle management domain: needs, requirements, functions, components, builds, releases and deployments. Shared by the delivery methodologies (impact-analysis, test-design, sdlc).
+enums:
+  - {name: priority, description: Priority of a requirement, values: [{value: low, label: Low}, {value: medium, label: Medium}, {value: high, label: High}]}
+  - {name: classification, description: Sensitivity of a data object, values: [{value: public, label: Public}, {value: internal, label: Internal}, {value: confidential, label: Confidential}, {value: personal, label: Personal data}]}
+  - {name: test-level, description: Level a test case verifies at, values: [{value: unit, label: Unit}, {value: integration, label: Integration}, {value: system, label: System}, {value: acceptance, label: Acceptance}]}
+  - {name: flow-mode, description: How the data of a flow is exchanged, values: [{value: synchronous, label: Synchronous}, {value: asynchronous, label: Asynchronous}, {value: batch, label: Batch}]}
+  - {name: stage, description: Stage of an environment on the way to production, values: [{value: dev, label: Development}, {value: test, label: Integration test}, {value: staging, label: Staging}, {value: prod, label: Production}]}
 nodeTypes:
-  - {name: Need, description: Business need expressed by a stakeholder, properties: [title, description, stakeholder], search: [{property: title, text: true}, {property: description, text: true}, {property: stakeholder, facet: true}]}
+  - name: Need
+    description: Business need expressed by a stakeholder
+    attributes:
+      - {name: title, label: Title, description: Short statement of the need, type: string, section: Identity, order: 1, asName: true, validators: [title-max-200]}
+      - {name: description, label: Description, description: The need in the stakeholder's words, type: string, widget: textarea, section: Identity, order: 2, validators: [description-max-2000]}
+      - {name: stakeholder, label: Stakeholder, description: Who expressed the need, type: string, section: Origin, order: 3}
+    search: [{property: title, text: true}, {property: description, text: true}, {property: stakeholder, facet: true}]
   - name: Requirement
     description: Requirement satisfying a need
-    properties: [title, description, priority, status, approvedAt]
+    attributes:
+      - {name: title, label: Title, description: Short statement of the requirement, type: string, section: Identity, order: 1, asName: true, validators: [title-max-200]}
+      - {name: description, label: Description, description: The requirement in full, type: string, widget: textarea, section: Identity, order: 2, validators: [description-max-2000]}
+      - {name: priority, label: Priority, description: How urgent the requirement is, type: enum, enum: priority, section: Classification, order: 3}
+      - {name: status, label: Status, description: Free-form progress note (the lifecycle state is the formal status), type: string, section: Classification, order: 4}
+      - {name: approvedAt, label: Approved on, description: Date of the approval, stamped by the approve transition, type: date, section: Classification, order: 5}
     lifecycle: requirement
     search: [{property: title, text: true}, {property: description, text: true}, {property: priority, facet: true}, {property: status, facet: true}]
-    validators:
-      - {property: title, instance: title-max-200}
-  - {name: FunctionalRequirement, extends: Requirement, description: Functional requirement}
-  - {name: NonFunctionalRequirement, extends: Requirement, description: Non-functional requirement (performance, availability…), properties: [category], search: [{property: category, facet: true}]}
-  - {name: SecurityRequirement, extends: NonFunctionalRequirement, description: Security requirement}
-  - {name: Function, description: Function (capability) realizing requirements, properties: [title, description], search: [{property: title, text: true}, {property: description, text: true}]}
-  - {name: Component, description: Software component implementing functions, properties: [title, technology, version, repository], search: [{property: title, text: true}, {property: technology, facet: true}, {property: version, facet: true}]}
-  - {name: BuildArtifact, description: Artifact produced by the build of a component, properties: [name, format, version, technology, coordinates, toolchain, checks]}
-  - {name: Application, description: Deployable application composed of components, properties: [title, version], search: [{property: title, text: true}, {property: version, facet: true}]}
-  - {name: Solution, description: Solution grouping applications serving needs, properties: [title], search: [{property: title, text: true}]}
-  - {name: Data, description: Data object, properties: [title, classification]}
-  - {name: Interface, description: Interface (API, file, event) exposed by an application, properties: [title, protocol, version], search: [{property: title, text: true}, {property: protocol, facet: true}]}
-  - {name: Flow, description: Data flow between applications through an interface, properties: [title, mode, frequency]}
-  - {name: TestCase, description: Test case verifying a requirement, properties: [title, level, steps], search: [{property: title, text: true}, {property: steps, text: true}, {property: level, facet: true}]}
+  - name: FunctionalRequirement
+    description: "Functional requirement"
+    extends: Requirement
+  - name: NonFunctionalRequirement
+    extends: Requirement
+    description: Non-functional requirement (performance, availability…)
+    attributes:
+      - {name: category, label: Category, description: Quality attribute concerned (performance, availability, security…), type: string, section: Classification, order: 6}
+    search: [{property: category, facet: true}]
+  - name: SecurityRequirement
+    description: "Security requirement"
+    extends: NonFunctionalRequirement
+  - name: Function
+    description: Function (capability) realizing requirements
+    attributes:
+      - {name: title, label: Title, description: Name of the function, type: string, section: Identity, order: 1, asName: true, validators: [title-max-200]}
+      - {name: description, label: Description, description: What the function does, type: string, widget: textarea, section: Identity, order: 2, validators: [description-max-2000]}
+    search: [{property: title, text: true}, {property: description, text: true}]
+  - name: Component
+    description: Software component implementing functions
+    attributes:
+      - {name: title, label: Name, description: Name of the component, type: string, section: Identity, order: 1, asName: true, validators: [title-max-200]}
+      - {name: technology, label: Technology, description: Main technology the component is built with (java, go, c, shell…), type: string, section: Build, order: 2}
+      - {name: version, label: Version, description: Current version, dotted (1.4.2), type: string, section: Build, order: 3, validators: [dotted-version]}
+      - {name: repository, label: Repository, description: URL of the source repository, type: string, section: Build, order: 4, validators: [url-format]}
+    search: [{property: title, text: true}, {property: technology, facet: true}, {property: version, facet: true}]
+  - name: BuildArtifact
+    description: Artifact produced by the build of a component
+    attributes:
+      - {name: name, label: Name, description: Name of the artifact, type: string, section: Identity, order: 1, asName: true, validators: [title-max-200]}
+      - {name: format, label: Format, description: Packaging format (jar, tar.gz, elf…), type: string, section: Identity, order: 2}
+      - {name: version, label: Version, description: Version of the artifact, dotted, type: string, section: Identity, order: 3, validators: [dotted-version]}
+      - {name: technology, label: Technology, description: Technology the artifact was built with, type: string, section: Build, order: 4}
+      - {name: coordinates, label: Coordinates, description: Address of the artifact in its repository (group:name:version), type: string, section: Build, order: 5}
+      - {name: toolchain, label: Toolchain, description: Build tools and their versions, type: string, section: Build, order: 6}
+      - {name: checks, label: Checks, description: Results of the checks run on the artifact (structured), type: json, widget: textarea, section: Build, order: 7}
+  - name: Application
+    description: Deployable application composed of components
+    attributes:
+      - {name: title, label: Name, description: Name of the application, type: string, section: Identity, order: 1, asName: true, validators: [title-max-200]}
+      - {name: version, label: Version, description: Current version of the application, dotted, type: string, section: Identity, order: 2, validators: [dotted-version]}
+    search: [{property: title, text: true}, {property: version, facet: true}]
+  - name: Solution
+    description: Solution grouping applications serving needs
+    attributes:
+      - {name: title, label: Name, description: Name of the solution, type: string, section: Identity, order: 1, asName: true, validators: [title-max-200]}
+    search: [{property: title, text: true}]
+  - name: Data
+    description: Data object
+    attributes:
+      - {name: title, label: Name, description: Name of the data object, type: string, section: Identity, order: 1, asName: true, validators: [title-max-200]}
+      - {name: classification, label: Classification, description: Sensitivity of the data, type: enum, enum: classification, section: Governance, order: 2}
+  - name: Interface
+    description: Interface (API, file, event) exposed by an application
+    attributes:
+      - {name: title, label: Name, description: Name of the interface, type: string, section: Identity, order: 1, asName: true, validators: [title-max-200]}
+      - {name: protocol, label: Protocol, description: Protocol carried (REST, Kafka, SFTP…), type: string, section: Technical, order: 2}
+      - {name: version, label: Version, description: Version of the contract (v1, v2…), type: string, section: Technical, order: 3}
+    search: [{property: title, text: true}, {property: protocol, facet: true}]
+  - name: Flow
+    description: Data flow between applications through an interface
+    attributes:
+      - {name: title, label: Name, description: Name of the flow, type: string, section: Identity, order: 1, asName: true, validators: [title-max-200]}
+      - {name: mode, label: Mode, description: How the data is exchanged, type: enum, enum: flow-mode, section: Exchange, order: 2}
+      - {name: frequency, label: Frequency, description: How often data flows (real time, daily…), type: string, section: Exchange, order: 3}
+  - name: TestCase
+    description: Test case verifying a requirement
+    attributes:
+      - {name: title, label: Title, description: Name of the test case, type: string, section: Identity, order: 1, asName: true, validators: [title-max-200]}
+      - {name: level, label: Level, description: Level the test verifies at, type: enum, enum: test-level, section: Identity, order: 2}
+      - {name: steps, label: Steps, description: Steps to run and the expected result, type: string, widget: textarea, section: Procedure, order: 3, validators: [description-max-2000]}
+    search: [{property: title, text: true}, {property: steps, text: true}, {property: level, facet: true}]
   - name: Release
     description: Deliverable version of an application (a set of artifacts)
-    properties: [title, version, status, notes]
+    attributes:
+      - {name: title, label: Title, description: Name of the release, type: string, section: Identity, order: 1, asName: true, validators: [title-max-200]}
+      - {name: version, label: Version, description: Version number of the release, dotted, type: string, section: Identity, order: 2, validators: [dotted-version]}
+      - {name: status, label: Status, description: Free-form delivery status (the lifecycle state is the formal one), type: string, section: Delivery, order: 3}
+      - {name: notes, label: Release notes, description: What the release contains, type: string, widget: textarea, section: Delivery, order: 4, validators: [description-max-2000]}
     lifecycle: release
     search: [{property: title, text: true}, {property: notes, text: true}, {property: version, facet: true}]
-    validators:
-      - {property: version, instance: dotted-version}
-  - {name: Environment, description: Execution environment (dev, test, staging, production), properties: [name, stage, order, url]}
-  - {name: Deployment, description: Deployment of a release to an environment, properties: [status, stage, date, checks]}
+  - name: Environment
+    description: Execution environment (dev, test, staging, production)
+    attributes:
+      - {name: name, label: Name, description: Name of the environment, type: string, section: Identity, order: 1, asName: true, validators: [title-max-200]}
+      - {name: stage, label: Stage, description: Stage on the way to production, type: enum, enum: stage, section: Identity, order: 2}
+      - {name: order, label: Order, description: Position in the promotion path (1 = first), type: number, section: Identity, order: 3}
+      - {name: url, label: URL, description: Address of the environment, type: string, section: Access, order: 4, validators: [url-format]}
+  - name: Deployment
+    description: Deployment of a release to an environment
+    attributes:
+      - {name: status, label: Status, description: Outcome of the deployment (succeeded, failed…), type: string, section: Outcome, order: 1}
+      - {name: stage, label: Stage, description: Stage of the target environment, type: enum, enum: stage, section: Outcome, order: 2}
+      - {name: date, label: Deployed on, description: Date of the deployment, type: date, section: Outcome, order: 3}
+      - {name: checks, label: Checks, description: Results of the post-deployment checks (structured), type: json, widget: textarea, section: Outcome, order: 4}
 lifecycles:
   # Work happens in the editable states, which a node only holds through a change:
   # a persisted version is never editable.
   - name: requirement
+    description: How a requirement is written, reviewed, approved and retired
     initial: proposed
     states:
       - {name: proposed, description: "Raised, not worked on yet"}
@@ -44,44 +134,46 @@ lifecycles:
       - {name: approved, description: Reviewed and accepted}
       - {name: obsolete, final: true, description: No longer applicable}
     transitions:
-      - {name: start, from: proposed, to: draft}
-      - {name: submit, from: draft, to: in_review, requires: {attributes: [title]}}
-      - {name: approve, from: in_review, to: approved, permission: "requirement:approve", actions: [stamp-approved-at]}
-      - {name: reject, from: in_review, to: draft}
-      - {name: reopen, from: approved, to: draft}
-      - {name: retire, from: approved, to: obsolete}
+      - {name: start, description: Take a proposed requirement up to work on it in a change, from: proposed, to: draft}
+      - {name: submit, description: Send the written requirement to review (it must have a title), from: draft, to: in_review, requires: {attributes: [title]}}
+      - {name: approve, description: Accept the reviewed requirement; stamps the approval date, from: in_review, to: approved, permission: "requirement:approve", actions: [stamp-approved-at]}
+      - {name: reject, description: Send the requirement back to be reworked, from: in_review, to: draft}
+      - {name: reopen, description: Rework an approved requirement in a change, from: approved, to: draft}
+      - {name: retire, description: Take the requirement out of use for good, from: approved, to: obsolete}
   - name: release
+    description: How a release is prepared, frozen and withdrawn
     initial: candidate
     states:
       - {name: candidate, description: "Planned, contents may still change"}
       - {name: draft, editable: true, description: Contents being reworked in a change}
       - {name: released, description: Frozen deliverable}
-      - {name: withdrawn, final: true}
+      - {name: withdrawn, final: true, description: Taken out of service}
     transitions:
-      - {name: rework, from: candidate, to: draft}
-      - {name: ready, from: draft, to: candidate}
-      - {name: release, from: candidate, to: released}
-      - {name: reopen, from: released, to: draft}
-      - {name: withdraw, from: released, to: withdrawn}
+      - {name: rework, description: Reopen a planned release to change its contents, from: candidate, to: draft}
+      - {name: ready, description: Put the reworked release back to candidate, from: draft, to: candidate}
+      - {name: release, description: Freeze the release as the deliverable, from: candidate, to: released}
+      - {name: reopen, description: Rework a released version in a change, from: released, to: draft}
+      - {name: withdraw, description: Take the released version out of service, from: released, to: withdrawn}
   # Generic process maturity of a version (ADR 0015): reference it with `lifecycle: maturity`.
   # A version is worked on in a change (draft), proposed, accepted and finally released;
   # only a released version is frozen for good and can be the "pre" of an impact.
   - name: maturity
+    description: Generic process maturity of a version, from proposal to release
     initial: proposed
     states:
       - {name: proposed, description: "Put forward, awaiting a decision"}
       - {name: draft, editable: true, description: "Being written or reworked in a change"}
       - {name: accepted, description: "Decision taken, not delivered yet"}
       - {name: released, description: "Delivered and frozen"}
-      - {name: withdrawn, final: true}
+      - {name: withdrawn, final: true, description: Taken out of service}
     transitions:
-      - {name: start, from: proposed, to: draft}
-      - {name: propose, from: draft, to: proposed}
-      - {name: accept, from: proposed, to: accepted}
-      - {name: release, from: accepted, to: released}
-      - {name: rework, from: accepted, to: draft}
-      - {name: reopen, from: released, to: draft}
-      - {name: withdraw, from: released, to: withdrawn}
+      - {name: start, description: Take a proposal up to work on it in a change, from: proposed, to: draft}
+      - {name: propose, description: Put the written version forward for a decision, from: draft, to: proposed}
+      - {name: accept, description: Record the decision to deliver the version, from: proposed, to: accepted}
+      - {name: release, description: Deliver and freeze the accepted version, from: accepted, to: released}
+      - {name: rework, description: Reopen an accepted version before it is delivered, from: accepted, to: draft}
+      - {name: reopen, description: Rework a released version in a change, from: released, to: draft}
+      - {name: withdraw, description: Take the released version out of service, from: released, to: withdrawn}
 # Algorithms (ADR 0018): scripts of a fixed type with declared parameters, and their
 # instances (parameter values), which the node types and transitions above plug.
 algorithms:
@@ -153,28 +245,102 @@ algorithmInstances:
   - {name: title-max-200, algorithm: max-length, values: {max: 200}}
   - {name: dotted-version, algorithm: regex-match, values: {pattern: '^[0-9]+(\.[0-9]+)*$', message: "version must look like 1.2 or 1.2.3"}}
   - {name: stamp-approved-at, algorithm: stamp-date, values: {property: approvedAt}}
+  - {name: description-max-2000, description: A long text is at most 2000 characters, algorithm: max-length, values: {max: 2000}}
+  - {name: url-format, description: The value is an http(s) address, algorithm: regex-match, values: {pattern: '^https?://\S+$', message: "must be an http(s) URL"}}
 linkTypes:
-  - {name: satisfies, from: Requirement, to: Need}
-  - {name: refines, from: Requirement, to: Requirement}
-  - {name: realizes, from: Function, to: Requirement}
-  - {name: implements, from: Component, to: Function}
-  - {name: depends_on, from: Component, to: Component}
-  - {name: accesses, from: Component, to: Data}
-  - {name: built_from, from: BuildArtifact, to: Component}
-  - {name: composed_of, from: Application, to: Component}
-  - {name: deploys, from: Application, to: BuildArtifact}
-  - {name: includes, from: Solution, to: Application}
-  - {name: addresses, from: Solution, to: Need}
-  - {name: owned_by, from: Data, to: Application}
-  - {name: exposed_by, from: Interface, to: Application}
-  - {name: exchanges, from: Interface, to: Data}
-  - {name: source, from: Flow, to: Application}
-  - {name: target, from: Flow, to: Application}
-  - {name: through, from: Flow, to: Interface}
-  - {name: carries, from: Flow, to: Data}
-  - {name: verifies, from: TestCase, to: Requirement}
-  - {name: contains, from: Release, to: BuildArtifact}
-  - {name: releases, from: Release, to: Application}
-  - {name: promotes_to, from: Environment, to: Environment}
-  - {name: of_release, from: Deployment, to: Release}
-  - {name: in_environment, from: Deployment, to: Environment}
+  - name: satisfies
+    description: "A requirement satisfies a need"
+    from: Requirement
+    to: Need
+  - name: refines
+    description: "A requirement refines a more general requirement"
+    from: Requirement
+    to: Requirement
+  - name: realizes
+    description: "A function realizes a requirement"
+    from: Function
+    to: Requirement
+  - name: implements
+    description: "A component implements a function"
+    from: Component
+    to: Function
+  - name: depends_on
+    description: "A component depends on another component"
+    from: Component
+    to: Component
+  - name: accesses
+    description: "A component reads or writes a data object"
+    from: Component
+    to: Data
+  - name: built_from
+    description: "A build artifact is built from a component"
+    from: BuildArtifact
+    to: Component
+  - name: composed_of
+    description: "An application is composed of components"
+    from: Application
+    to: Component
+  - name: deploys
+    description: "An application deploys a build artifact"
+    from: Application
+    to: BuildArtifact
+  - name: includes
+    description: "A solution includes an application"
+    from: Solution
+    to: Application
+  - name: addresses
+    description: "A solution addresses a need"
+    from: Solution
+    to: Need
+  - name: owned_by
+    description: "A data object is owned by an application"
+    from: Data
+    to: Application
+  - name: exposed_by
+    description: "An interface is exposed by an application"
+    from: Interface
+    to: Application
+  - name: exchanges
+    description: "An interface exchanges a data object"
+    from: Interface
+    to: Data
+  - name: source
+    description: "The application a flow starts from"
+    from: Flow
+    to: Application
+  - name: target
+    description: "The application a flow ends at"
+    from: Flow
+    to: Application
+  - name: through
+    description: "The interface a flow goes through"
+    from: Flow
+    to: Interface
+  - name: carries
+    description: "The data object a flow carries"
+    from: Flow
+    to: Data
+  - name: verifies
+    description: "A test case verifies a requirement"
+    from: TestCase
+    to: Requirement
+  - name: contains
+    description: "A release contains a build artifact"
+    from: Release
+    to: BuildArtifact
+  - name: releases
+    description: "A release is a version of an application"
+    from: Release
+    to: Application
+  - name: promotes_to
+    description: "The next environment a release is promoted to"
+    from: Environment
+    to: Environment
+  - name: of_release
+    description: "The release a deployment deploys"
+    from: Deployment
+    to: Release
+  - name: in_environment
+    description: "The environment a deployment runs in"
+    from: Deployment
+    to: Environment

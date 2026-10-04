@@ -10,7 +10,7 @@
     name: string;
     extends?: string;
     description?: string;
-    properties?: string;
+    attributes: { name: string }[];
   }
   interface LinkIn {
     name: string;
@@ -69,7 +69,7 @@
         x: 0,
         y: 0,
         description: t.description ?? '',
-        props: (t.properties ?? '').split(',').map((p) => p.trim()).filter(Boolean),
+        props: t.attributes.map((a) => a.name.trim()).filter(Boolean),
         parent: (t.extends ?? '').trim(),
       });
     });

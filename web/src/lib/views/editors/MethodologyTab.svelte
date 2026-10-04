@@ -291,7 +291,7 @@
               {#each d.nodeTypeNames as t (t)}
                 {@const info = cat.type(t)}
                 <li>
-                  <code>{typeName(t)}</code>{#if info?.ancestors?.length}<span class="hint">{` extends ${info.ancestors.map(typeName).join(' › ')}`}</span>{/if}{#if info?.properties?.length}<span class="hint">{` · ${info.properties.join(', ')}`}</span>{/if}
+                  <code>{typeName(t)}</code>{#if info?.ancestors?.length}<span class="hint">{` extends ${info.ancestors.map(typeName).join(' › ')}`}</span>{/if}{#if info?.attributes?.length}<span class="hint">{` · ${info.attributes.map((a) => a.attribute?.name).join(', ')}`}</span>{/if}
                 </li>
               {:else}
                 <li class="empty">{typeCatalog.loaded ? 'No node types in this namespace.' : 'Loading…'}</li>

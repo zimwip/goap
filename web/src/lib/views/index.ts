@@ -14,7 +14,6 @@ import './nodeEditors';
 
 import MethodologyExplorer from './nav/MethodologyExplorer.svelte';
 import DomainExplorer from './nav/DomainExplorer.svelte';
-import AlgorithmExplorer from './nav/AlgorithmExplorer.svelte';
 import BaselineExplorer from './nav/BaselineExplorer.svelte';
 import BaselineWorkspace from './nav/BaselineWorkspace.svelte';
 import ChangesExplorer from './nav/ChangesExplorer.svelte';
@@ -34,6 +33,10 @@ import AssistantTab from './assistant/AssistantTab.svelte';
 import MethodologyTab from './editors/MethodologyTab.svelte';
 import DomainTab from './editors/DomainTab.svelte';
 import AlgorithmTab from './editors/AlgorithmTab.svelte';
+import NodeTypeTab from './editors/NodeTypeTab.svelte';
+import LinkTypeTab from './editors/LinkTypeTab.svelte';
+import LifecycleTab from './editors/LifecycleTab.svelte';
+import EnumTab from './editors/EnumTab.svelte';
 import AdapterTab from './editors/AdapterTab.svelte';
 import InstanceTab from './editors/InstanceTab.svelte';
 import AgentTab from './editors/AgentTab.svelte';
@@ -64,7 +67,6 @@ import DslHelpPanel from './right/DslHelpPanel.svelte';
 registerView({ id: 'assistant', zone: 'left', title: 'Assistant', icon: 'chat', component: AssistantPanel, order: 0 });
 registerView({ id: 'methodologies', zone: 'left', title: 'Methodologies', icon: 'book', component: MethodologyExplorer, order: 1 });
 registerView({ id: 'domains', zone: 'left', title: 'Domains', icon: 'graph', component: DomainExplorer, order: 1.5 });
-registerView({ id: 'algorithms', zone: 'left', title: 'Algorithms', icon: 'code', component: AlgorithmExplorer, order: 1.6 });
 registerView({ id: 'processes', zone: 'left', title: 'My processes', icon: 'runs', component: ProcessesExplorer, order: 2.2 });
 registerView({ id: 'triggers', zone: 'left', title: 'Triggers', icon: 'clock', component: TriggersExplorer, order: 2.5 });
 registerView({ id: 'baselines', zone: 'left', title: 'Baseline', icon: 'database', component: BaselineExplorer, editorArea: BaselineWorkspace, order: 3 });
@@ -199,6 +201,8 @@ registerView({
         ['Description', d.form.description],
         ['Node types', String(d.form.nodeTypes.length)],
         ['Link types', String(d.form.linkTypes.length)],
+        ['Enums', String(d.form.enums.length)],
+        ['Lifecycles', String(d.form.lifecycles.length)],
         ['Algorithms', `${d.form.algorithms.length} (${d.form.instances.length} instances)`],
         ['Used by', String(d.usage.length)],
         ['Issues', d.issues === null ? 'not validated' : String(d.allIssues.length)],
@@ -208,6 +212,89 @@ registerView({
     };
   },
 });
+
+// node types, link types and lifecycles: one tab each, on the draft of their domain
+const domainPartProps = (kind: 'nodetype' | 'linktype' | 'lifecycle' | 'enum') => (t: Tab) => {
+  const d = peekDomainDraft(domainGroup(t));
+  if (!d || d.isNew) return undefined;
+  if (kind === 'nodetype') {
+    const n = d.form.nodeTypes.find((x) => x.uid === t.params.uid);
+    if (!n) return undefined;
+    return {
+      title: n.name || '(unnamed)',
+      subtitle: 'Node type',
+      rows: [
+        ['Domain', d.label],
+        ['Extends', n.extends],
+        ['Lifecycle', n.lifecycle],
+        ['Attributes', n.attributes.map((a) => a.name).join(', ')],
+        ['Description', n.description],
+      ] as [string, string][],
+    };
+  }
+  if (kind === 'linktype') {
+    const l = d.form.linkTypes.find((x) => x.uid === t.params.uid);
+    if (!l) return undefined;
+    return {
+      title: l.name || '(unnamed)',
+      subtitle: 'Link type',
+      rows: [
+        ['Domain', d.label],
+        ['From', l.from],
+        ['To', l.to],
+        ['Composition', l.compose ? 'yes' : 'no'],
+      ] as [string, string][],
+    };
+  }
+  if (kind === 'enum') {
+    const e = d.form.enums.find((x) => x.uid === t.params.uid);
+    if (!e) return undefined;
+    return {
+      title: e.name || '(unnamed)',
+      subtitle: 'Enum',
+      rows: [
+        ['Domain', d.label],
+        ['Values', e.values.map((v) => v.value).join(', ')],
+        ['Description', e.description],
+      ] as [string, string][],
+    };
+  }
+  const l = d.form.lifecycles.find((x) => x.uid === t.params.uid);
+  if (!l) return undefined;
+  return {
+    title: l.name || '(unnamed)',
+    subtitle: 'Lifecycle',
+    rows: [
+      ['Domain', d.label],
+      ['Initial state', l.initial],
+      ['States', l.states.map((s) => s.name).join(', ')],
+      ['Transitions', l.transitions.map((x) => x.name).join(', ')],
+    ] as [string, string][],
+  };
+};
+
+for (const v of [
+  { id: 'nodetype', title: 'Node type', icon: 'node', component: NodeTypeTab, param: 'nt', short: 'nt' },
+  { id: 'linktype', title: 'Link type', icon: 'trace', component: LinkTypeTab, param: 'lt', short: 'lt' },
+  { id: 'lifecycle', title: 'Lifecycle', icon: 'runs', component: LifecycleTab, param: 'lc', short: 'lc' },
+  { id: 'enum', title: 'Enum', icon: 'tag', component: EnumTab, param: 'en', short: 'en' },
+] as const) {
+  registerView({
+    id: v.id,
+    zone: 'editor',
+    title: v.title,
+    icon: v.icon,
+    component: v.component,
+    key: (p) => `${p.name}@${p.version}/${v.short}:${p.uid}`,
+    tabTitle: (t) => t.params[v.param] || '(unnamed)',
+    tooltip: (t) => `${v.title} ${t.params[v.param] || ''} — ${t.params.name} v${t.params.version}`,
+    dirty: domainGroupDirty,
+    groupDirty: domainGroupDirty,
+    group: domainGroup,
+    discard: discardDomain,
+    properties: domainPartProps(v.id),
+  });
+}
 
 const algorithmProps = (kind: 'algorithm' | 'instance') => (t: Tab) => {
   const d = peekDomainDraft(domainGroup(t));

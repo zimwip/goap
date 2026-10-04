@@ -22,8 +22,9 @@ import (
 type Type struct {
 	Ref         domain.TypeRef
 	Description string
-	// Properties are the declared properties, the inherited ones first.
-	Properties []string
+	// Attributes are the attributes of the nodes, the inherited ones first; a subtype redefining one by name
+	// replaces it in place.
+	Attributes []Attribute
 	// Ancestors are the supertypes, nearest first.
 	Ancestors []domain.TypeRef
 	// Lifecycle is the lifecycle of the nodes (own or inherited), its algorithm guards and actions resolved; nil: the
@@ -34,12 +35,41 @@ type Type struct {
 	Document *domain.DocumentSpec
 	// ChangeControlled: the nodes are modified through changes only (default true).
 	ChangeControlled bool
-	// Validators are the property validators in call order, the supertypes' first.
+	// Validators are the attribute validators and node validators in call order, the supertypes' first (each
+	// type: its attributes' validators, then its own node validators).
 	Validators []algo.Bound
 	// Search are the index declarations, the subtype overriding by property.
 	Search []domain.SearchProperty
 	// Editor is the IDE editor of the nodes (own or inherited); empty: the default node editor.
 	Editor string
+}
+
+// Attribute is a resolved attribute of a node type.
+type Attribute struct {
+	methodology.Attribute
+	// From is the type that declares it when it is inherited; empty for the type's own.
+	From string
+	// Values are the values of the enum of an enum attribute.
+	Values []methodology.EnumValue
+}
+
+// PropertyNames lists the names of the attributes.
+func (x *Type) PropertyNames() []string {
+	out := make([]string, 0, len(x.Attributes))
+	for _, a := range x.Attributes {
+		out = append(out, a.Name)
+	}
+	return out
+}
+
+// Attribute returns the attribute of the given name.
+func (x *Type) Attribute(name string) (Attribute, bool) {
+	for _, a := range x.Attributes {
+		if a.Name == name {
+			return a, true
+		}
+	}
+	return Attribute{}, false
 }
 
 // Is reports whether the type is t or one of its subtypes.
@@ -53,6 +83,8 @@ type LinkType struct {
 	From, To domain.TypeRef
 	// Compose: the target is a part of the source (methodology.LinkType.Compose).
 	Compose bool
+	// Attributes are what a link of the type carries.
+	Attributes []Attribute
 }
 
 // Catalog is the set of the types in force.
@@ -121,6 +153,15 @@ func New(ds ...*methodology.Domain) (*Catalog, error) {
 		for _, l := range d.LinkTypes {
 			ref := domain.TypeRef{Namespace: d.Name, Name: l.Name}
 			lt := &LinkType{Ref: ref, Compose: l.Compose}
+			for _, a := range l.Attributes {
+				ra := Attribute{Attribute: a}
+				for _, e := range d.Enums {
+					if a.Enum != "" && e.Name == a.Enum {
+						ra.Values = e.Values
+					}
+				}
+				lt.Attributes = append(lt.Attributes, ra)
+			}
 			var err error
 			if l.From != "" {
 				if lt.From, err = domain.QualifyIn(d.Name, l.From); err != nil {
@@ -134,7 +175,7 @@ func New(ds ...*methodology.Domain) (*Catalog, error) {
 			}
 			if _, dup := c.links[ref]; dup {
 				// a link type declared for several pairs of ends: it accepts any pair
-				c.links[ref] = &LinkType{Ref: ref, Compose: l.Compose || c.links[ref].Compose}
+				c.links[ref] = &LinkType{Ref: ref, Compose: l.Compose || c.links[ref].Compose, Attributes: c.links[ref].Attributes}
 				continue
 			}
 			c.links[ref] = lt
@@ -236,7 +277,7 @@ func resolve(ref domain.TypeRef, decl map[domain.TypeRef]declared) (*Type, error
 	}
 	own := decl[ref]
 	t := &Type{Ref: ref, Description: own.t.Description, Ancestors: slices.Clone(chain[1:]), ChangeControlled: true}
-	seenProp := map[string]bool{}
+	attrAt := map[string]int{}
 	searchAt := map[string]int{}
 	lifecycleSet, controlSet := false, false
 	// nearest first for what the nearest declaration decides
@@ -271,11 +312,24 @@ func resolve(ref domain.TypeRef, decl map[domain.TypeRef]declared) (*Type, error
 	// ancestors first for what accumulates
 	for _, cur := range slices.Backward(chain) {
 		dc := decl[cur]
-		for _, p := range dc.t.Properties {
-			if !seenProp[p] {
-				seenProp[p] = true
-				t.Properties = append(t.Properties, p)
+		for _, a := range dc.t.Attributes {
+			ra := Attribute{Attribute: a}
+			if cur != ref {
+				ra.From = cur.String()
 			}
+			if a.Enum != "" {
+				for _, e := range dc.d.Enums {
+					if e.Name == a.Enum {
+						ra.Values = e.Values
+					}
+				}
+			}
+			if i, ok := attrAt[a.Name]; ok {
+				t.Attributes[i] = ra
+				continue
+			}
+			attrAt[a.Name] = len(t.Attributes)
+			t.Attributes = append(t.Attributes, ra)
 		}
 		t.Validators = append(t.Validators, dc.d.OwnBoundValidators(dc.t)...)
 		for _, sp := range dc.t.Search {
@@ -328,6 +382,23 @@ func (c *Catalog) Validators(typ string) []algo.Bound {
 		return t.Validators
 	}
 	return nil
+}
+
+// AttributeChecks are what the graph checks of the properties of the nodes of a type (graph.TypeCatalog).
+func (c *Catalog) AttributeChecks(typ string) []domain.AttributeCheck {
+	t, ok := c.Type(typ)
+	if !ok {
+		return nil
+	}
+	out := make([]domain.AttributeCheck, 0, len(t.Attributes))
+	for _, a := range t.Attributes {
+		ac := domain.AttributeCheck{Name: a.Name, Type: a.Type, Enum: a.Enum}
+		for _, v := range a.Values {
+			ac.Values = append(ac.Values, v.Value)
+		}
+		out = append(out, ac)
+	}
+	return out
 }
 
 // Search are the index declarations of a type.

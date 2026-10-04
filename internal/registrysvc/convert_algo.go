@@ -12,6 +12,7 @@ import (
 	"github.com/zimwip/goap/pkg/algo"
 	"github.com/zimwip/goap/pkg/dsl"
 	"github.com/zimwip/goap/pkg/methodology"
+	"github.com/zimwip/goap/pkg/typecat"
 )
 
 func algorithmsToPB(as []algo.Algorithm) []*registryv1.Algorithm {
@@ -62,18 +63,56 @@ func instancesFromPB(is []*registryv1.AlgorithmInstance) []algo.Instance {
 	return out
 }
 
-func validatorsToPB(vs []methodology.PropertyValidator) []*registryv1.PropertyValidator {
-	var out []*registryv1.PropertyValidator
-	for _, v := range vs {
-		out = append(out, &registryv1.PropertyValidator{Property: v.Property, Instance: v.Instance})
+func attributesToPB(as []methodology.Attribute) []*registryv1.Attribute {
+	var out []*registryv1.Attribute
+	for _, a := range as {
+		out = append(out, &registryv1.Attribute{Name: a.Name, Label: a.Label, Description: a.Description, Type: a.Type, Widget: a.Widget,
+			Enum: a.Enum, DefaultValue: a.Default, Section: a.Section, Order: int32(a.Order), Tooltip: a.Tooltip, AsName: a.AsName, Validators: a.Validators})
 	}
 	return out
 }
 
-func validatorsFromPB(vs []*registryv1.PropertyValidator) []methodology.PropertyValidator {
-	var out []methodology.PropertyValidator
+func attributesFromPB(as []*registryv1.Attribute) []methodology.Attribute {
+	var out []methodology.Attribute
+	for _, a := range as {
+		out = append(out, methodology.Attribute{Name: a.Name, Label: a.Label, Description: a.Description, Type: a.Type, Widget: a.Widget,
+			Enum: a.Enum, Default: a.DefaultValue, Section: a.Section, Order: int(a.Order), Tooltip: a.Tooltip, AsName: a.AsName, Validators: nilIfNone(a.Validators)})
+	}
+	return out
+}
+
+func attributeInfosToPB(as []typecat.Attribute) []*registryv1.AttributeInfo {
+	var out []*registryv1.AttributeInfo
+	for _, a := range as {
+		out = append(out, &registryv1.AttributeInfo{Attribute: attributesToPB([]methodology.Attribute{a.Attribute})[0], From: a.From, Values: enumValuesToPB(a.Values)})
+	}
+	return out
+}
+
+func enumValuesToPB(vs []methodology.EnumValue) []*registryv1.EnumValue {
+	var out []*registryv1.EnumValue
 	for _, v := range vs {
-		out = append(out, methodology.PropertyValidator{Property: v.Property, Instance: v.Instance})
+		out = append(out, &registryv1.EnumValue{Value: v.Value, Label: v.Label})
+	}
+	return out
+}
+
+func enumsToPB(es []methodology.Enum) []*registryv1.Enum {
+	var out []*registryv1.Enum
+	for _, e := range es {
+		out = append(out, &registryv1.Enum{Name: e.Name, Description: e.Description, Values: enumValuesToPB(e.Values)})
+	}
+	return out
+}
+
+func enumsFromPB(es []*registryv1.Enum) []methodology.Enum {
+	var out []methodology.Enum
+	for _, e := range es {
+		me := methodology.Enum{Name: e.Name, Description: e.Description}
+		for _, v := range e.Values {
+			me.Values = append(me.Values, methodology.EnumValue{Value: v.Value, Label: v.Label})
+		}
+		out = append(out, me)
 	}
 	return out
 }
