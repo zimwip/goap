@@ -62,12 +62,6 @@ func TestLifecycleParsesAndInherits(t *testing.T) {
 	if err != nil || d2.LifecycleOf("Requirement") == nil || d2.NodeTypes[2].Document == nil || len(d2.Lifecycles) != 2 {
 		t.Fatalf("round trip: %v %+v", err, d2)
 	}
-	// JSON meta round trip (structured store)
-	var n NodeType
-	n.SetMeta(d.NodeTypes[2].MetaJSON())
-	if n.Lifecycle != "spec" || n.Document == nil {
-		t.Fatalf("meta round trip: %+v", n)
-	}
 }
 
 func TestLifecycleValidation(t *testing.T) {

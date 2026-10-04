@@ -2,16 +2,20 @@ package graph
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"maps"
+	"slices"
+	"strconv"
+	"time"
 
 	"github.com/zimwip/goap/pkg/algo"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/dsl"
 )
 
-// This file runs the algorithms plugged in the domain (ADR 0018): the property
-// validators of a node type, and the guards and actions of lifecycle
+// This file runs the algorithms plugged in the domain (ADR 0018): the attribute
+// and node validators of a node type, and the guards and actions of lifecycle
 // transitions. Like the lifecycle they come from the type catalogue in force,
 // resolved (instance parameters and script).
 
@@ -31,9 +35,17 @@ func dslNode(n domain.Node, props map[string]any) dsl.Node {
 	return dsl.Node{ID: string(n.ID), Version: int(n.Version), Key: n.Key, Type: n.Type, State: n.State, Props: props}
 }
 
-// validateProps runs the property validators of the node's type on the
-// properties it will have. The first rejection is returned as ErrInvalid.
+// validateProps checks the properties a node will have: the type and enum membership of the values of its
+// attributes, then the validators of its type (attribute validators and node validators). The first rejection
+// is returned as ErrInvalid.
 func (g *Graph) validateProps(ctx context.Context, ix *typeIndex, n domain.Node, props map[string]any) error {
+	if ix != nil && ix.cat != nil {
+		for _, a := range ix.cat.AttributeChecks(n.Type) {
+			if err := checkAttributeValue(a, props[a.Name]); err != nil {
+				return invalidf("%s (%s): property %q is invalid: %v", n.Key, n.Type, a.Name, err)
+			}
+		}
+	}
 	vs := ix.validatorsOf(n.Type)
 	if len(vs) == 0 {
 		return nil
@@ -41,11 +53,67 @@ func (g *Graph) validateProps(ctx context.Context, ix *typeIndex, n domain.Node,
 	view := dslNode(n, props)
 	for _, v := range vs {
 		out, err := dsl.RunAlgorithm(ctx, v, dsl.AlgorithmInput{Node: view, Property: v.Property, Value: props[v.Property]})
+		if v.Type == algo.UsageNodeValidator {
+			if err != nil {
+				return invalidf("%s (%s): node validator %s: %v", n.Key, n.Type, v.Instance, err)
+			}
+			if !out.OK() {
+				return invalidf("%s (%s) is invalid: %s (validator %s)", n.Key, n.Type, out.Failures[0], v.Instance)
+			}
+			continue
+		}
 		if err != nil {
 			return invalidf("%s (%s): property %q: %v", n.Key, n.Type, v.Property, err)
 		}
 		if !out.OK() {
 			return invalidf("%s (%s): property %q is invalid: %s (validator %s)", n.Key, n.Type, v.Property, out.Failures[0], v.Instance)
+		}
+	}
+	return nil
+}
+
+// checkAttributeValue checks a value against the type of its attribute. A missing or empty value is accepted
+// (requiring one is the job of a validator), and so is any value of an attribute that names no type.
+func checkAttributeValue(a domain.AttributeCheck, v any) error {
+	if v == nil || v == "" {
+		return nil
+	}
+	switch a.Type {
+	case attrNumber:
+		switch x := v.(type) {
+		case float64, float32, int, int32, int64, uint, uint32, uint64, json.Number:
+			return nil
+		case string:
+			if _, err := strconv.ParseFloat(x, 64); err == nil {
+				return nil
+			}
+		}
+		return fmt.Errorf("a number is expected, got %v", v)
+	case attrBoolean:
+		if _, ok := v.(bool); !ok {
+			return fmt.Errorf("a boolean is expected, got %v", v)
+		}
+	case attrDate:
+		s, ok := v.(string)
+		if ok {
+			for _, layout := range []string{"2006-01-02", time.RFC3339, "2006-01-02T15:04:05"} {
+				if _, err := time.Parse(layout, s); err == nil {
+					return nil
+				}
+			}
+		}
+		return fmt.Errorf("a date (YYYY-MM-DD or RFC 3339) is expected, got %v", v)
+	case attrEnum:
+		s, ok := v.(string)
+		if ok {
+			if slices.Contains(a.Values, s) {
+				return nil
+			}
+		}
+		return fmt.Errorf("%v is not a value of the enum %s", v, a.Enum)
+	case attrString:
+		if _, ok := v.(string); !ok {
+			return fmt.Errorf("a string is expected, got %v", v)
 		}
 	}
 	return nil
@@ -119,3 +187,12 @@ func (a *applier) runActions(n domain.Node, t domain.Transition, children []doma
 	}
 	return a.tx.SetNodeProps(a.ctx, n.Ref(), props)
 }
+
+// attribute types the graph checks (pkg/methodology.AttributeTypes; the graph cannot import it).
+const (
+	attrString  = "string"
+	attrNumber  = "number"
+	attrBoolean = "boolean"
+	attrDate    = "date"
+	attrEnum    = "enum"
+)

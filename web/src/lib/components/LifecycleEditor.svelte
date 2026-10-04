@@ -2,6 +2,7 @@
   // One lifecycle of a domain (ADR 0014): states (editable / final) and transitions.
   import { moveItem, type LifecycleForm } from '../methodologyForm';
   import RowTools from './RowTools.svelte';
+  import LifecyclePreview from './LifecyclePreview.svelte';
 
   let {
     lc = $bindable(),
@@ -30,11 +31,13 @@
     lc.states.push({ name: '', description: '', editable: false, final: false });
   }
   function addTransition() {
-    lc.transitions.push({ name: '', from: states[0] ?? '', to: states[1] ?? '', permission: '', guard: '', requiresAttributes: '', requiresLinks: '', children: '', guards: [], actions: [] });
+    lc.transitions.push({ name: '', description: '', from: states[0] ?? '', to: states[1] ?? '', permission: '', guard: '', requiresAttributes: '', requiresLinks: '', children: '', guards: [], actions: [] });
   }
 </script>
 
 <div class="lc" data-path={path}>
+  <LifecyclePreview {lc} />
+
   <div class="field">
     <label for="{path}-initial">Initial state <span class="hint">(state of the nodes a change creates)</span></label>
     <select id="{path}-initial" bind:value={lc.initial} disabled={readonly}>
@@ -45,7 +48,7 @@
 
   <h5>States</h5>
   {#each lc.states as s, i}
-    <div class="srow">
+    <div class="srow" data-path="{path}.states[{i}]">
       <input type="text" class="mono" aria-label="State name" bind:value={s.name} placeholder="draft" disabled={readonly} />
       <input type="text" aria-label="Description" bind:value={s.description} placeholder="Description" disabled={readonly} />
       <label class="check" title="A working state: only held through a change, never persisted"><input type="checkbox" bind:checked={s.editable} disabled={readonly} /> editable</label>
@@ -57,9 +60,10 @@
 
   <h5>Transitions</h5>
   {#each lc.transitions as t, i}
-    <div class="trow">
+    <div class="trow" data-path="{path}.transitions[{i}]">
       <div class="line">
         <input type="text" class="mono" aria-label="Transition name" bind:value={t.name} placeholder="approve" disabled={readonly} />
+        <input type="text" aria-label="Transition description" bind:value={t.description} placeholder="Description" disabled={readonly} />
         <select aria-label="From" bind:value={t.from} disabled={readonly}>
           <option value="">— from —</option>
           {#each states as s (s)}<option value={s}>{s}</option>{/each}

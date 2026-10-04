@@ -111,7 +111,8 @@ is the call order. Action code is not an algorithm: it stays in the action decla
 
 | Type | Plugged in | Result |
 |---|---|---|
-| `property_validator` | `nodeTypes[].validators: [{property, instance}]` | accepts / rejects a property value, when a node is created or modified |
+| `property_validator` | `nodeTypes[].attributes[].validators: [instance]` (also on link type attributes) | accepts / rejects the value of an attribute, when a node is created or modified |
+| `node_validator` | `nodeTypes[].validators: [instance]` | accepts / rejects a node as a whole (rules across attributes), after the attribute validators |
 | `transition_guard` | `lifecycles[].transitions[].guards: [instance]` | allows / refuses the transition, when the change is applied |
 | `transition_action` | `lifecycles[].transitions[].actions: [instance]` | changes properties of the node that moved, once the transition is accepted |
 

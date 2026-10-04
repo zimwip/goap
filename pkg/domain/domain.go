@@ -206,3 +206,12 @@ type Branch struct {
 	CreatedAt   time.Time    `json:"createdAt"`
 	Description string       `json:"description,omitempty"`
 }
+
+// AttributeCheck is what the graph needs of an attribute of a node type to judge the value of a property: its
+// type (empty: unchecked) and, for an enum, the allowed values.
+type AttributeCheck struct {
+	Name   string
+	Type   string
+	Enum   string
+	Values []string
+}

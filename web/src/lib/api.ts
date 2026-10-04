@@ -177,6 +177,7 @@ export interface LifecycleState {
 
 export interface LifecycleTransition {
   name?: string;
+  description?: string;
   from?: string;
   to?: string;
   /** "type:action" the actor must hold (default node:transition) */
@@ -196,6 +197,9 @@ export interface LifecycleTransition {
 export interface Lifecycle {
   /** identifies the lifecycle in its domain; node types name it */
   name?: string;
+  description?: string;
+  /** nodes may rest in an editable state (ADR 0048) */
+  restInEditable?: boolean;
   initial?: string;
   states?: LifecycleState[];
   transitions?: LifecycleTransition[];
@@ -205,8 +209,8 @@ export interface Lifecycle {
 export interface TypeInfo {
   ref?: string;
   description?: string;
-  /** declared properties, the inherited ones first */
-  properties?: string[];
+  /** resolved attributes, the inherited ones first */
+  attributes?: AttributeInfo[];
   /** supertypes, nearest first */
   ancestors?: string[];
   lifecycle?: Lifecycle;
@@ -215,6 +219,8 @@ export interface TypeInfo {
   editor?: string;
   /** qualified types the nodes embed through "contains" links */
   contains?: string[];
+  /** node_validator instances checking a node as a whole, in call order (own and inherited) */
+  nodeValidators?: string[];
 }
 
 /** Resolved model of a link type; an empty end accepts any node type. */
@@ -224,13 +230,61 @@ export interface LinkTypeInfo {
   to?: string;
   /** composition link: the target is a part of the source, shown as its child */
   compose?: boolean;
+  attributes?: AttributeInfo[];
+}
+
+export type AttributeType = 'string' | 'number' | 'boolean' | 'date' | 'enum' | 'json';
+export type AttributeWidget = 'text' | 'textarea' | 'dropdown' | 'checkbox' | 'date';
+
+/** Defines a property of a node type or link type: its code and what the UI needs to display and edit it. */
+export interface Attribute {
+  /** code: the key of the value in the properties */
+  name?: string;
+  label?: string;
+  description?: string;
+  /** absent: untyped */
+  type?: AttributeType | string;
+  /** absent: the usual one of the type */
+  widget?: AttributeWidget | string;
+  /** enum of the domain an enum attribute takes its values from */
+  enum?: string;
+  defaultValue?: string;
+  section?: string;
+  order?: number;
+  tooltip?: string;
+  /** the attribute is the display name of the node */
+  asName?: boolean;
+  /** property_validator instances (ADR 0018), in call order */
+  validators?: string[];
+}
+
+export interface EnumValue {
+  value?: string;
+  label?: string;
+}
+
+/** A closed list of values of a domain that enum attributes refer to. */
+export interface Enum {
+  name?: string;
+  description?: string;
+  values?: EnumValue[];
+}
+
+/** A resolved attribute of a node type or link type of the catalogue. */
+export interface AttributeInfo {
+  attribute?: Attribute;
+  /** the type that declares it when inherited */
+  from?: string;
+  /** values of the enum of an enum attribute */
+  values?: EnumValue[];
 }
 
 export interface NodeType {
   name?: string;
   description?: string;
-  properties?: string[];
-  /** parent type: the subtype inherits its properties and link types */
+  /** what the nodes carry, with the validators of each (inherited by subtypes) */
+  attributes?: Attribute[];
+  /** parent type: the subtype inherits its attributes and link types */
   extends?: string;
   /** name of the domain lifecycle of the nodes (inherited through extends) */
   lifecycle?: string;
@@ -238,8 +292,8 @@ export interface NodeType {
   document?: { contains?: string[] };
   /** absent: change controlled */
   changeControlled?: boolean;
-  /** property validator instances (ADR 0018), in call order */
-  validators?: PropertyValidator[];
+  /** node_validator instances (ADR 0018) checking a node as a whole, in call order */
+  validators?: string[];
   /** properties the node index keeps (ADR 0026) */
   search?: SearchProperty[];
   /** editor the UI opens the nodes with (inherited through extends; absent: the default node editor) */
@@ -253,14 +307,8 @@ export interface SearchProperty {
   facet?: boolean;
 }
 
-/** Plugs an algorithm instance of type property_validator on a property. */
-export interface PropertyValidator {
-  property?: string;
-  instance?: string;
-}
-
 /** Fixed algorithm types: the extension points of the platform. */
-export type AlgorithmType = 'property_validator' | 'transition_guard' | 'transition_action' | 'adapter';
+export type AlgorithmType = 'property_validator' | 'node_validator' | 'transition_guard' | 'transition_action' | 'adapter';
 export type AlgorithmParamType = 'string' | 'number' | 'boolean' | 'regex' | 'enum' | 'strings' | 'json' | 'secret';
 
 export interface AlgorithmParam {
@@ -306,8 +354,11 @@ export interface RunAlgorithmResponse {
 
 export interface LinkType {
   name?: string;
+  description?: string;
   from?: string;
   to?: string;
+  /** what a link of this type carries */
+  attributes?: Attribute[];
   /** composition link: the target is a part of the source, shown as its child */
   compose?: boolean;
 }
@@ -686,6 +737,7 @@ export interface Domain {
   status?: MethodologyStatus | string;
   nodeTypes?: NodeType[];
   linkTypes?: LinkType[];
+  enums?: Enum[];
   lifecycles?: Lifecycle[];
   algorithms?: Algorithm[];
   algorithmInstances?: AlgorithmInstance[];

@@ -88,8 +88,8 @@ func TestRepositoryDomains(t *testing.T) {
 	if len(sec.Validators) == 0 || sec.Validators[0].Property != "title" {
 		t.Fatalf("the validators are inherited: %+v", sec.Validators)
 	}
-	if sec.Properties[0] != "title" || !slices.Contains(sec.Properties, "category") {
-		t.Fatalf("the properties, inherited first: %v", sec.Properties)
+	if names := sec.PropertyNames(); names[0] != "title" || !slices.Contains(names, "category") {
+		t.Fatalf("the attributes, inherited first: %v", sec.PropertyNames())
 	}
 	var facets []string
 	for _, s := range sec.Search {
@@ -141,13 +141,13 @@ version: 1.0.0
 lifecycles:
   - {name: simple, initial: open, states: [{name: open, editable: true}, {name: done}], transitions: [{name: close, from: open, to: done}]}
 nodeTypes:
-  - {name: Item, lifecycle: simple, editor: item, properties: [title]}
+  - {name: Item, lifecycle: simple, editor: item, attributes: [title]}
 `)
 	ext := parse(t, `
 name: ext
 version: 2.0.0
 nodeTypes:
-  - {name: Ticket, extends: base@Item, properties: [severity]}
+  - {name: Ticket, extends: base@Item, attributes: [severity]}
   - {name: Folder, document: {contains: [Ticket, base@Item]}}
 linkTypes:
   - {name: blocks, from: Ticket, to: base@Item}
@@ -157,7 +157,7 @@ linkTypes:
 		t.Fatal(err)
 	}
 	tk, _ := c.Type("ext@Ticket")
-	if tk.Lifecycle == nil || tk.Lifecycle.Name != "simple" || tk.Editor != "item" || !slices.Equal(tk.Properties, []string{"title", "severity"}) {
+	if tk.Lifecycle == nil || tk.Lifecycle.Name != "simple" || tk.Editor != "item" || !slices.Equal(tk.PropertyNames(), []string{"title", "severity"}) {
 		t.Fatalf("a type extends a type of another domain: %+v", tk)
 	}
 	if f, _ := c.Type("ext@Folder"); f.Document == nil || !slices.Equal(f.Document.Contains, []string{"ext@Ticket", "base@Item"}) {

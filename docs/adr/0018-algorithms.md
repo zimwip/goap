@@ -19,6 +19,7 @@ could run when a transition was taken. Making the domain customizable meant chan
    |---|---|---|---|
    | `action` | `Ctx` (blackboard, domain, LLM, agents, tools) | `Run(ctx *dsl.Ctx) error` | writes to the change |
    | `property_validator` | `ValidatorCtx` | `Run(ctx *dsl.ValidatorCtx) error` | accepts or rejects one property value |
+   | `node_validator` | `NodeValidatorCtx` | `Run(ctx *dsl.NodeValidatorCtx) error` | accepts or rejects a node as a whole (ADR 0055) |
    | `transition_guard` | `GuardCtx` | `Run(ctx *dsl.GuardCtx) error` | allows or refuses a lifecycle transition |
    | `transition_action` | `TransitionCtx` | `Run(ctx *dsl.TransitionCtx) error` | sets / removes properties of the node that moved |
 
@@ -54,7 +55,7 @@ could run when a transition was taken. Making the domain customizable meant chan
    `NodeType.validators`, `LifecycleTransition.guards/actions`, `Domain.algorithms/algorithm_instances`), stored
    with the domain version in the registry's database (ADR 0023).
    **Only domains** carry algorithms, a methodology never does.
-7. **IDE**: an *Algorithms* section manages the algorithms and instances of a domain draft (editor,
+7. **IDE**: the *Domains* explorer lists, under each domain version, an *Algorithms* group (beside node types and link types, by usage, instances underneath) that manages the algorithms and instances of a domain draft (editor,
    parameter table, instance value forms, *try it* through `RegistryService.RunAlgorithm`, which
    runs an algorithm on a sample input without storing anything); the domain editor plugs instances.
 

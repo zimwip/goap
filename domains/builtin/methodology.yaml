@@ -1,44 +1,193 @@
 name: methodology
-version: 1.5.0
+version: 1.6.0
 description: >
   Built-in meta-domain (ADR 0012 §4, ADR 0023): the definition of a methodology version, one node per element, in the
   "methodology" namespace. Its types are in every type catalogue, before anything is loaded from the registry.
+enums:
+  - {name: planner, description: How an agent plans its actions, values: [{value: goap, label: GOAP}, {value: utility, label: Utility}, {value: hybrid, label: Hybrid}]}
+  - {name: action-kind, description: How an action is carried out, values: [{value: llm, label: LLM}, {value: tool, label: Tool}, {value: human, label: Human}, {value: builtin, label: Built-in}, {value: script, label: Script}, {value: abstract, label: Abstract}]}
 nodeTypes:
-  - {name: MethodologyVersion, editor: methodology, description: "A version of a methodology: its scalar fields, status and timestamps", properties: [name, version, description, namespace, status, createdAt, updatedAt, publishedAt, updatedBy]}
-  - {name: Agent, editor: agent, description: "Agent of a methodology version, with its triggers", properties: [name, description, planner, model, actions, goals, triggers, roles, position, removed]}
+  - name: MethodologyVersion
+    description: "A version of a methodology: its scalar fields, status and timestamps"
+    editor: methodology
+    attributes:
+      - {name: name, label: Name, description: "Name of the methodology", type: string, section: Identity, order: 1, asName: true}
+      - {name: version, label: Version, description: "Version of the methodology", type: string, section: Identity, order: 2}
+      - {name: description, label: Description, description: "What the methodology is for", type: string, widget: textarea, section: Identity, order: 3}
+      - {name: namespace, label: "Domain namespace", description: "Namespace of the domain the methodology works on", type: string, section: Definition, order: 4}
+      - {name: status, label: Status, description: "draft, published or archived", type: string, section: Definition, order: 5}
+      - {name: createdAt, label: "Created at", description: "When the version was created", type: string, section: History, order: 6}
+      - {name: updatedAt, label: "Updated at", description: "When the version was last modified", type: string, section: History, order: 7}
+      - {name: publishedAt, label: "Published at", description: "When the version was published", type: string, section: History, order: 8}
+      - {name: updatedBy, label: "Updated by", description: "Who last modified the version", type: string, section: History, order: 9}
+  - name: Agent
+    description: "Agent of a methodology version, with its triggers"
+    editor: agent
+    attributes:
+      - {name: name, label: Name, description: "Name of the element in its methodology version", type: string, section: Identity, order: 1, asName: true}
+      - {name: description, label: Description, description: "What the element is for", type: string, widget: textarea, section: Identity, order: 2}
+      - {name: planner, label: Planner, description: "How the agent plans its actions", type: enum, enum: planner, section: Planning, order: 3}
+      - {name: model, label: Model, description: "Model alias of the agent (llm actions)", type: string, section: Planning, order: 4}
+      - {name: actions, label: Actions, description: "Names of the actions the agent can run", type: json, widget: textarea, section: Planning, order: 5}
+      - {name: goals, label: Goals, description: "Names of the goals the agent pursues", type: json, widget: textarea, section: Planning, order: 6}
+      - {name: triggers, label: Triggers, description: "Events and schedules that start the agent", type: json, widget: textarea, section: Planning, order: 7}
+      - {name: roles, label: Roles, description: "Roles allowed to run the agent", type: json, widget: textarea, section: Access, order: 8}
+      - {name: position, label: Position, description: "Position of the element in its collection of the definition", type: number, section: Definition, order: 90}
+      - {name: removed, label: Removed, description: "The element was removed from the definition (kept for the history)", type: boolean, section: Definition, order: 91}
   # Action is an Activity too (architecture plan "Activity concept"): the smallest one, not broken down further.
-  - {name: Action, extends: Activity, editor: action, description: "Action of a methodology version", properties: [name, kind, description, roles, position, removed]}
-  - {name: Condition, editor: condition, description: "Condition of a methodology version", properties: [name, description, expr, position, removed]}
-  - {name: Goal, editor: goal, description: "Goal of a methodology version", properties: [name, description, pre, position, removed]}
+  - name: Action
+    description: "Action of a methodology version"
+    extends: Activity
+    editor: action
+    attributes:
+      - {name: name, label: Name, description: "Name of the element in its methodology version", type: string, section: Identity, order: 1, asName: true}
+      - {name: description, label: Description, description: "What the element is for", type: string, widget: textarea, section: Identity, order: 2}
+      - {name: kind, label: Kind, description: "How the action is carried out", type: enum, enum: action-kind, section: Execution, order: 3}
+      - {name: roles, label: Roles, description: "Roles allowed to run the action", type: json, widget: textarea, section: Access, order: 4}
+      - {name: position, label: Position, description: "Position of the element in its collection of the definition", type: number, section: Definition, order: 90}
+      - {name: removed, label: Removed, description: "The element was removed from the definition (kept for the history)", type: boolean, section: Definition, order: 91}
+  - name: Condition
+    description: "Condition of a methodology version"
+    editor: condition
+    attributes:
+      - {name: name, label: Name, description: "Name of the element in its methodology version", type: string, section: Identity, order: 1, asName: true}
+      - {name: description, label: Description, description: "What the element is for", type: string, widget: textarea, section: Identity, order: 2}
+      - {name: expr, label: Expression, description: "CEL predicate over the blackboard", type: string, widget: textarea, section: Definition, order: 3}
+      - {name: position, label: Position, description: "Position of the element in its collection of the definition", type: number, section: Definition, order: 90}
+      - {name: removed, label: Removed, description: "The element was removed from the definition (kept for the history)", type: boolean, section: Definition, order: 91}
+  - name: Goal
+    description: "Goal of a methodology version"
+    editor: goal
+    attributes:
+      - {name: name, label: Name, description: "Name of the element in its methodology version", type: string, section: Identity, order: 1, asName: true}
+      - {name: description, label: Description, description: "What the element is for", type: string, widget: textarea, section: Identity, order: 2}
+      - {name: pre, label: Conditions, description: "Conditions the goal requires, with their expected value", type: json, widget: textarea, section: Definition, order: 3}
+      - {name: position, label: Position, description: "Position of the element in its collection of the definition", type: number, section: Definition, order: 90}
+      - {name: removed, label: Removed, description: "The element was removed from the definition (kept for the history)", type: boolean, section: Definition, order: 91}
   # ADR 0035 §2: a role processes and methods assign RACI style; ADR 0039: what Assignment (organisation namespace)
   # grants a unit or user on a project is named from a project's applicable methodologies' roles.
-  - {name: Role, editor: role, description: "Role of a methodology version: assigned RACI style by its processes and methods, allowed to run its agents and actions, held on a project through an Assignment", properties: [name, description, position, removed]}
+  - name: Role
+    description: "Role of a methodology version: assigned RACI style by its processes and methods, allowed to run its agents and actions, held on a project through an Assignment"
+    editor: role
+    attributes:
+      - {name: name, label: Name, description: "Name of the element in its methodology version", type: string, section: Identity, order: 1, asName: true}
+      - {name: description, label: Description, description: "What the element is for (assigned RACI style by processes and methods)", type: string, widget: textarea, section: Identity, order: 2}
+      - {name: position, label: Position, description: "Position of the element in its collection of the definition", type: number, section: Definition, order: 90}
+      - {name: removed, label: Removed, description: "The element was removed from the definition (kept for the history)", type: boolean, section: Definition, order: 91}
   # Activity (architecture plan "Activity concept, Activity Runs, Change scoping"): the common shape of
   # Process/Step/Method/MethodStep. Takes input, names its goals, produces output; breaks down into
   # sub-activities (sub_activity link) that feed it. A Change scopes to one Activity node (ActivityRef);
   # an Activity Run (pkg/domain.ExecutionRecord) is one execution instance of one, against one Change.
-  - {name: Activity, editor: activity, description: "Common shape of Process/Step/Method/MethodStep: input, goals and output conditions, composed from sub-activities", properties: [name, description, input, goals, output, position, removed]}
+  - name: Activity
+    description: "Common shape of Process/Step/Method/MethodStep: input, goals and output conditions, composed from sub-activities"
+    editor: activity
+    attributes:
+      - {name: name, label: Name, description: "Name of the element in its methodology version", type: string, section: Identity, order: 1, asName: true}
+      - {name: description, label: Description, description: "What the element is for", type: string, widget: textarea, section: Identity, order: 2}
+      - {name: input, label: Input, description: "Conditions the activity takes", type: json, widget: textarea, section: Definition, order: 3}
+      - {name: goals, label: Goals, description: "Goals the activity names", type: json, widget: textarea, section: Definition, order: 4}
+      - {name: output, label: Output, description: "Conditions the activity produces", type: json, widget: textarea, section: Definition, order: 5}
+      - {name: position, label: Position, description: "Position of the element in its collection of the definition", type: number, section: Definition, order: 90}
+      - {name: removed, label: Removed, description: "The element was removed from the definition (kept for the history)", type: boolean, section: Definition, order: 91}
   # ADR 0034: the steps and sub-steps that reach an objective, each done by an action, an agent, a nested process or a person
   # ADR 0035 §1, ADR 0050: how a step capability is carried out in a context, with which actions; the scheduler creates the agent applying it
-  - {name: Method, extends: Activity, editor: method, description: "Method of a methodology version: the reference of how a capability is carried out in a context", properties: [for, when, priority, guidance, checklist, deliverables, references, roles, actions, done, planner, model, mcps, steps]}
-  - {name: Process, extends: Activity, editor: process, description: "Process of a methodology version: its steps and sub-steps", properties: [examples, references, steps]}
+  - name: Method
+    description: "Method of a methodology version: the reference of how a capability is carried out in a context"
+    extends: Activity
+    editor: method
+    attributes:
+      - {name: for, label: Capability, description: "Capability the method carries out", type: string, section: Identity, order: 1}
+      - {name: when, label: "Applies when", description: "CEL guard of the method; empty: always", type: string, section: Selection, order: 2}
+      - {name: priority, label: Priority, description: "The applicable method with the highest priority wins", type: number, section: Selection, order: 3}
+      - {name: guidance, label: Guidance, description: "How to carry the capability out", type: string, widget: textarea, section: Guidance, order: 4}
+      - {name: checklist, label: Checklist, description: "Points to check", type: json, widget: textarea, section: Guidance, order: 5}
+      - {name: deliverables, label: Deliverables, description: "What the method produces", type: json, widget: textarea, section: Guidance, order: 6}
+      - {name: references, label: References, description: "Reference documents", type: json, widget: textarea, section: Guidance, order: 7}
+      - {name: roles, label: Responsibilities, description: "RACI assignment of roles", type: json, widget: textarea, section: Access, order: 8}
+      - {name: actions, label: Actions, description: "Pool of actions the steps inherit", type: json, widget: textarea, section: Execution, order: 9}
+      - {name: done, label: "Done when", description: "Conditions that complete the method", type: json, widget: textarea, section: Execution, order: 10}
+      - {name: planner, label: Planner, description: "How the generated agent plans", type: enum, enum: planner, section: Execution, order: 11}
+      - {name: model, label: Model, description: "Model alias of the generated agent", type: string, section: Execution, order: 12}
+      - {name: mcps, label: MCPs, description: "MCPs the generated agent may use", type: json, widget: textarea, section: Execution, order: 13}
+      - {name: steps, label: Steps, description: "Steps of the method", type: json, widget: textarea, section: Execution, order: 14}
+  - name: Process
+    description: "Process of a methodology version: its steps and sub-steps"
+    extends: Activity
+    editor: process
+    attributes:
+      - {name: examples, label: Examples, description: "Examples of the process at work", type: json, widget: textarea, section: Identity, order: 1}
+      - {name: references, label: References, description: "Reference documents", type: json, widget: textarea, section: Guidance, order: 2}
+      - {name: steps, label: Steps, description: "Steps and sub-steps that reach the objective", type: json, widget: textarea, section: Execution, order: 3}
   # Step and MethodStep (architecture plan point 2): one step of a Process/Method, materialized as its own
   # node (not just compiled in-memory) so it can be an Activity in its own right - its own input/goals/output,
   # its own ActivityRuns. Still authored inline in the owning Process/Method's YAML for ergonomics; the
   # registry additionally materializes one node per step at save time, linked by sub_activity.
-  - {name: Step, extends: Activity, editor: step, description: "Step of a Process: its own input/goals/output, done by an action, an agent, a nested process or a person", properties: [instructions, guidance, checklist, deliverables, references, roles, action, actions, agent, process, method, foreach, groupBy]}
-  - {name: MethodStep, extends: Activity, editor: step, description: "Step of a Method: its own input/goals/output, done by an action, an agent, a nested process or a person", properties: [instructions, guidance, checklist, deliverables, references, roles, action, actions, agent, process, method, foreach, groupBy]}
+  - name: Step
+    description: "Step of a Process: its own input/goals/output, done by an action, an agent, a nested process or a person"
+    extends: Activity
+    editor: step
+    attributes:
+      - {name: instructions, label: Instructions, description: "What to do in the step", type: string, widget: textarea, section: Identity, order: 1}
+      - {name: guidance, label: Guidance, description: "How to do it", type: string, widget: textarea, section: Guidance, order: 2}
+      - {name: checklist, label: Checklist, description: "Points to check", type: json, widget: textarea, section: Guidance, order: 3}
+      - {name: deliverables, label: Deliverables, description: "What the step produces", type: json, widget: textarea, section: Guidance, order: 4}
+      - {name: references, label: References, description: "Reference documents", type: json, widget: textarea, section: Guidance, order: 5}
+      - {name: roles, label: Responsibilities, description: "RACI assignment of roles", type: json, widget: textarea, section: Access, order: 6}
+      - {name: action, label: Action, description: "Action that does the step", type: string, section: Execution, order: 7}
+      - {name: actions, label: "Alternative actions", description: "Actions among which the planner picks", type: json, widget: textarea, section: Execution, order: 8}
+      - {name: agent, label: Agent, description: "Agent that does the step", type: string, section: Execution, order: 9}
+      - {name: process, label: Process, description: "Nested process that does the step", type: string, section: Execution, order: 10}
+      - {name: method, label: Method, description: "Capability whose applicable method does the step", type: string, section: Execution, order: 11}
+      - {name: foreach, label: "For each", description: "CEL list: the step runs once per element, in parallel", type: string, section: Execution, order: 12}
+      - {name: groupBy, label: "Group by", description: "CEL key: one run per group instead of per element", type: string, section: Execution, order: 13}
+  - name: MethodStep
+    description: "Step of a Method: its own input/goals/output, done by an action, an agent, a nested process or a person"
+    extends: Activity
+    editor: step
+    attributes:
+      - {name: instructions, label: Instructions, description: "What to do in the step", type: string, widget: textarea, section: Identity, order: 1}
+      - {name: guidance, label: Guidance, description: "How to do it", type: string, widget: textarea, section: Guidance, order: 2}
+      - {name: checklist, label: Checklist, description: "Points to check", type: json, widget: textarea, section: Guidance, order: 3}
+      - {name: deliverables, label: Deliverables, description: "What the step produces", type: json, widget: textarea, section: Guidance, order: 4}
+      - {name: references, label: References, description: "Reference documents", type: json, widget: textarea, section: Guidance, order: 5}
+      - {name: roles, label: Responsibilities, description: "RACI assignment of roles", type: json, widget: textarea, section: Access, order: 6}
+      - {name: action, label: Action, description: "Action that does the step", type: string, section: Execution, order: 7}
+      - {name: actions, label: "Alternative actions", description: "Actions among which the planner picks", type: json, widget: textarea, section: Execution, order: 8}
+      - {name: agent, label: Agent, description: "Agent that does the step", type: string, section: Execution, order: 9}
+      - {name: process, label: Process, description: "Nested process that does the step", type: string, section: Execution, order: 10}
+      - {name: method, label: Method, description: "Capability whose applicable method does the step", type: string, section: Execution, order: 11}
+      - {name: foreach, label: "For each", description: "CEL list: the step runs once per element, in parallel", type: string, section: Execution, order: 12}
+      - {name: groupBy, label: "Group by", description: "CEL key: one run per group instead of per element", type: string, section: Execution, order: 13}
   # an MCP tool the self-observation asks the platform for (ADR 0011): not part of a definition
-  - {name: ToolRequest, description: "MCP tool requested by the self-observation of a methodology", properties: [name, description, motivation, span]}
+  - name: ToolRequest
+    description: "MCP tool requested by the self-observation of a methodology"
+    attributes:
+      - {name: name, label: Tool, description: "Name of the requested tool", type: string, section: Identity, order: 1, asName: true}
+      - {name: description, label: Description, description: "What the tool should do", type: string, widget: textarea, section: Identity, order: 2}
+      - {name: motivation, label: Motivation, description: "Why the observed runs needed it", type: string, widget: textarea, section: Identity, order: 3}
+      - {name: span, label: Span, description: "Where in the runs the need appeared", type: string, section: Identity, order: 4}
 linkTypes:
   # compose: true flags a composition link (the target is a part of the source): editors and browsers read it
   # to show the targets as the children of the source, instead of knowing the link by name.
   # a version -> its elements
-  - {name: defines, from: MethodologyVersion, compose: true}
+  - name: defines
+    description: "A methodology version defines its elements"
+    from: MethodologyVersion
+    compose: true
   # a specialization -> the more generic Activity it specializes (ADR 0009 §5 for an abstract action, ADR 0035 §1
   # for a method providing a capability; architecture plan "Activity concept"): the mechanism is the same at every
   # layer, going from generic to specialized - Action extends Activity, so this already covers it transitively.
   # properties: when (CEL guard, "" = always), priority (the applicable one with the highest wins).
-  - {name: specializes, from: Activity, to: Activity, properties: [when, priority]}
+  - name: specializes
+    description: "A specialization of a more generic activity (the one with the highest priority whose condition holds applies)"
+    from: Activity
+    to: Activity
+    attributes:
+      - {name: when, label: "Applies when", description: "CEL guard; empty: always", type: string, section: Selection, order: 1}
+      - {name: priority, label: Priority, description: "The applicable one with the highest priority wins", type: number, section: Selection, order: 2}
   # an Activity -> the sub-activities (Step/MethodStep, or a nested Process/Method) it is composed from
-  - {name: sub_activity, from: Activity, to: Activity, compose: true}
+  - name: sub_activity
+    description: "An activity is composed of sub-activities"
+    from: Activity
+    to: Activity
+    compose: true

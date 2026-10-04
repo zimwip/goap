@@ -23,6 +23,9 @@ const (
 	UsageAction Usage = "action"
 	// UsagePropertyValidator checks the value of a property of a node.
 	UsagePropertyValidator Usage = "property_validator"
+	// UsageNodeValidator checks a node as a whole (rules across several attributes), once the
+	// attribute validators accepted.
+	UsageNodeValidator Usage = "node_validator"
 	// UsageTransitionGuard decides whether a lifecycle transition is allowed.
 	UsageTransitionGuard Usage = "transition_guard"
 	// UsageTransitionAction runs when a lifecycle transition is taken and may
@@ -38,7 +41,7 @@ const (
 
 // Usages lists every usage.
 func Usages() []Usage {
-	return []Usage{UsageAction, UsagePropertyValidator, UsageTransitionGuard, UsageTransitionAction, UsageAdapter}
+	return []Usage{UsageAction, UsagePropertyValidator, UsageNodeValidator, UsageTransitionGuard, UsageTransitionAction, UsageAdapter}
 }
 
 // Pluggable tells whether algorithms of this type can be declared and plugged.
@@ -120,7 +123,7 @@ type Bound struct {
 	Language  string         `json:"language"`
 	Code      string         `json:"code"`
 	Params    map[string]any `json:"params,omitempty"`
-	// Property is the property a validator applies to.
+	// Property is the attribute a property validator applies to.
 	Property string `json:"property,omitempty"`
 }
 

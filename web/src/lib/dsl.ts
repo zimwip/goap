@@ -96,7 +96,7 @@ func Run(ctx *dsl.Ctx) error {
 // `ctx`: a JavaScript algorithm is the BODY of a function of ctx (it may `return`), a Go
 // algorithm declares `func Run(ctx *dsl.<Ctx>) error`. They are pure: no blackboard, LLM or tool calls.
 
-export type AlgorithmUsage = 'property_validator' | 'transition_guard' | 'transition_action' | 'adapter';
+export type AlgorithmUsage = 'property_validator' | 'node_validator' | 'transition_guard' | 'transition_action' | 'adapter';
 
 export interface AlgorithmUsageInfo {
   usage: AlgorithmUsage;
@@ -145,6 +145,15 @@ export const ALGORITHM_USAGES: AlgorithmUsageInfo[] = [
       ...logFns,
     ],
     sample: { property: 'title', value: 'Card payment', node: { key: 'REQ-1', type: 'Requirement', state: 'draft', props: { title: 'Card payment' } } },
+  },
+  {
+    usage: 'node_validator',
+    title: 'Node validator',
+    goCtx: 'NodeValidatorCtx',
+    description: 'Checks a node as a whole (rules across several attributes) when a node of the type is created or modified, after the attribute validators.',
+    contract: 'Rejects with ctx.fail(msg), a throw (Go: a returned error), or by returning false / a message (JavaScript).',
+    functions: [paramFn, nodeFn, failFn, ...metaFns, ...logFns],
+    sample: { node: { key: 'REQ-1', type: 'Requirement', state: 'draft', props: { title: 'Card payment', start: '2026-01-01', end: '2026-02-01' } } },
   },
   {
     usage: 'transition_guard',
@@ -230,6 +239,28 @@ func Run(ctx *dsl.ValidatorCtx) error {
 \t\tctx.Fail(ctx.Property() + " must not be blank")
 \t}
 \treturn nil
+}
+`,
+  },
+  node_validator: {
+    javascript: `// Body of a function of ctx. Reject with ctx.fail(message) or by returning a message.
+const p = ctx.node().props;
+if (p.start && p.end && p.end < p.start) {
+  ctx.fail("end must not be before start");
+}
+`,
+    go: `package validator
+
+import "github.com/zimwip/goap/pkg/dsl"
+
+func Run(ctx *dsl.NodeValidatorCtx) error {
+	p := ctx.Node().Props
+	start, _ := p["start"].(string)
+	end, _ := p["end"].(string)
+	if start != "" && end != "" && end < start {
+		ctx.Fail("end must not be before start")
+	}
+	return nil
 }
 `,
   },

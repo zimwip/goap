@@ -1,22 +1,67 @@
 name: platform
-version: 2.2.0
+version: 2.3.0
 description: >
   The platform configuration, in its own namespace ("platform"): the MCPs (the generic usage of a tool by an LLM), the
   adapter definitions (AdapterDef: code mapping an MCP onto a connector; an organisation implements an MCP with an Adapter
   of the organisation domain, an instance of an AdapterDef) and the model gateway configuration (ADR 0021).
+enums:
+  - {name: mcp-scope, description: Where a methodology may use an MCP, values: [{value: both, label: Actions and agents}, {value: action, label: Actions only}, {value: agent, label: Agents only}]}
 nodeTypes:
   # `editor` names the editor of the user interface for the nodes of a type (the default node editor when empty or unknown).
   # the MCPs (MCP:<name>) and the adapter definitions (ADD:<name>, ADR 0019)
   # scope: where a methodology may use the MCP, action | agent | both (default; ADR 0028)
-  - {name: MCP, editor: mcp, description: "Generic usage of a tool by an LLM: its tool signatures and scope", properties: [name, description, scope, tools]}
-  - {name: AdapterDef, editor: adapter, description: "Code implementing the tools of an MCP with the operations of a connector", properties: [name, description, mcp, connector, language, code, params]}
-  - {name: LlmProvider, description: "LLM provider: a kind (preset) on a wire protocol", properties: [name, kind, protocol, baseURL, enabled, apiKeyRef]}
-  - {name: LlmModel, description: "Model offered on the platform, with its global quota and the roles that may call it", properties: [provider, model, displayName, enabled, quotaTokens, quotaPeriod, roles]}
-  - {name: LlmAlias, description: "Name (default, fast, ...) of a model, as provider/model", properties: [alias, target]}
+  - name: MCP
+    description: "Generic usage of a tool by an LLM: its tool signatures and scope"
+    editor: mcp
+    attributes:
+      - {name: name, label: Name, description: "Name of the MCP", type: string, section: Identity, order: 1, asName: true}
+      - {name: description, label: Description, description: "What the tool set is for", type: string, widget: textarea, section: Identity, order: 2}
+      - {name: scope, label: Scope, description: "Where a methodology may use it: actions, agents or both", type: enum, enum: mcp-scope, section: Identity, order: 3}
+      - {name: tools, label: Tools, description: "Signatures of the tools", type: json, widget: textarea, section: Tools, order: 4}
+  - name: AdapterDef
+    description: "Code implementing the tools of an MCP with the operations of a connector"
+    editor: adapter
+    attributes:
+      - {name: name, label: Name, description: "Name of the definition", type: string, section: Identity, order: 1, asName: true}
+      - {name: description, label: Description, description: "What the adapter does", type: string, widget: textarea, section: Identity, order: 2}
+      - {name: mcp, label: MCP, description: "MCP whose tools the code implements", type: string, section: Binding, order: 3}
+      - {name: connector, label: Connector, description: "Connector whose operations the code calls", type: string, section: Binding, order: 4}
+      - {name: language, label: Language, description: "javascript or go", type: string, section: Code, order: 5}
+      - {name: code, label: Code, description: "Mapping of the MCP tools onto the connector operations", type: string, widget: textarea, section: Code, order: 6}
+      - {name: params, label: Parameters, description: "Parameters the units give values to", type: json, widget: textarea, section: Code, order: 7}
+  - name: LlmProvider
+    description: "LLM provider: a kind (preset) on a wire protocol"
+    attributes:
+      - {name: name, label: Name, description: "Name of the provider", type: string, section: Identity, order: 1, asName: true}
+      - {name: kind, label: Kind, description: "Preset of the provider", type: string, section: Identity, order: 2}
+      - {name: protocol, label: Protocol, description: "Wire protocol", type: string, section: Connection, order: 3}
+      - {name: baseURL, label: "Base URL", description: "Address of the API", type: string, section: Connection, order: 4}
+      - {name: enabled, label: Enabled, description: "The provider is usable", type: boolean, section: Connection, order: 5}
+      - {name: apiKeyRef, label: "API key", description: "Reference to the secret holding the key", type: string, section: Connection, order: 6}
+  - name: LlmModel
+    description: "Model offered on the platform, with its global quota and the roles that may call it"
+    attributes:
+      - {name: provider, label: Provider, description: "Provider offering the model", type: string, section: Identity, order: 1}
+      - {name: model, label: Model, description: "Name of the model at the provider", type: string, section: Identity, order: 2}
+      - {name: displayName, label: "Display name", description: "Name shown to users", type: string, section: Identity, order: 3, asName: true}
+      - {name: enabled, label: Enabled, description: "The model is offered", type: boolean, section: Identity, order: 4}
+      - {name: quotaTokens, label: "Token quota", description: "Global quota of tokens per period", type: number, section: Quota, order: 5}
+      - {name: quotaPeriod, label: "Quota period", description: "Period the quota applies to", type: string, section: Quota, order: 6}
+      - {name: roles, label: Roles, description: "Roles allowed to call the model", type: json, widget: textarea, section: Access, order: 7}
+  - name: LlmAlias
+    description: "Name (default, fast, ...) of a model, as provider/model"
+    attributes:
+      - {name: alias, label: Alias, description: "Name callers use (default, fast…)", type: string, section: Identity, order: 1, asName: true}
+      - {name: target, label: Target, description: "The model, as provider/model", type: string, section: Identity, order: 2}
   # a built-in, platform-wide role (ADR 0046): granted by an organisation@Assignment naming no project
   # (assigns_org only), it holds everywhere, independent of any project's applicable methodologies — unlike
   # methodology@Role, which only exists where a project names the methodology declaring it. A fixed catalog
   # kept in sync with the code (pkg/mcp.BuiltinRoles) by SeedBuiltins, documenting the role; not consulted to
   # decide what it may do (authz.DefaultPolicies) or to validate an Assignment's roles (not checked server-side).
   # Administration (User.Admin) is not one of these: it stays the ADR 0043 flag.
-  - {name: Role, editor: role, description: "Built-in platform-wide role, granted by an Assignment naming no project", properties: [name, description]}
+  - name: Role
+    description: "Built-in platform-wide role, granted by an Assignment naming no project"
+    editor: role
+    attributes:
+      - {name: name, label: Name, description: "Name of the role", type: string, section: Identity, order: 1, asName: true}
+      - {name: description, label: Description, description: "What the role allows", type: string, widget: textarea, section: Identity, order: 2}

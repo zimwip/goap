@@ -19,9 +19,10 @@ import (
 // workflow's checkout state.
 type Lifecycle struct {
 	// Name identifies the lifecycle in its domain; node types refer to it.
-	Name    string           `yaml:"name" json:"name"`
-	Initial string           `yaml:"initial" json:"initial"`
-	States  []LifecycleState `yaml:"states" json:"states"`
+	Name        string           `yaml:"name" json:"name"`
+	Description string           `yaml:"description,omitempty" json:"description,omitempty"`
+	Initial     string           `yaml:"initial" json:"initial"`
+	States      []LifecycleState `yaml:"states" json:"states"`
 	// RestInEditable allows a change to apply with a node of this lifecycle left in an editable state (ADR
 	// 0048): the type's editable states are ordinary statuses a node may rest in indefinitely, not a draft a
 	// change must move the node out of before landing. Default false preserves ADR 0014's original invariant
@@ -42,9 +43,10 @@ type LifecycleState struct {
 
 // Transition moves a node from one state to another.
 type Transition struct {
-	Name string `yaml:"name" json:"name"`
-	From string `yaml:"from" json:"from"`
-	To   string `yaml:"to" json:"to"`
+	Name        string `yaml:"name" json:"name"`
+	Description string `yaml:"description,omitempty" json:"description,omitempty"`
+	From        string `yaml:"from" json:"from"`
+	To          string `yaml:"to" json:"to"`
 	// Permission ("type:action") the actor must hold; empty: node:transition.
 	Permission string `yaml:"permission,omitempty" json:"permission,omitempty"`
 	// Guard is a CEL predicate over the node (node.props, node.state) and its
@@ -257,7 +259,7 @@ func (l *Lifecycle) Clone() *Lifecycle {
 	if l == nil {
 		return nil
 	}
-	c := &Lifecycle{Name: l.Name, Initial: l.Initial, States: slices.Clone(l.States), RestInEditable: l.RestInEditable, Transitions: slices.Clone(l.Transitions)}
+	c := &Lifecycle{Name: l.Name, Description: l.Description, Initial: l.Initial, States: slices.Clone(l.States), RestInEditable: l.RestInEditable, Transitions: slices.Clone(l.Transitions)}
 	for i, t := range c.Transitions {
 		c.Transitions[i].Guards, c.Transitions[i].Actions = slices.Clone(t.Guards), slices.Clone(t.Actions)
 		c.Transitions[i].GuardAlgos, c.Transitions[i].ActionAlgos = slices.Clone(t.GuardAlgos), slices.Clone(t.ActionAlgos)

@@ -20,7 +20,7 @@ import (
 
 func almDomain(version string) methodology.Domain {
 	return methodology.Domain{Name: "alm", Version: version, Schema: methodology.Schema{
-		NodeTypes: []methodology.NodeType{{Name: "Requirement"}, {Name: "TestCase", Properties: []string{"title"}}},
+		NodeTypes: []methodology.NodeType{{Name: "Requirement"}, {Name: "TestCase", Attributes: []methodology.Attribute{{Name: "title"}}}},
 		LinkTypes: []methodology.LinkType{{Name: "verifies", From: "TestCase", To: "Requirement"}},
 	}}
 }
@@ -49,7 +49,7 @@ func TestDomainLifecycle(t *testing.T) {
 				t.Fatalf("save: %+v %v %v", rec, issues, err)
 			}
 			got, err := s.GetDomain(ctx, "alm", "1")
-			if err != nil || len(got.Domain.NodeTypes) != 2 || got.Domain.NodeTypes[1].Properties[0] != "title" || got.Domain.LinkTypes[0].To != "Requirement" {
+			if err != nil || len(got.Domain.NodeTypes) != 2 || got.Domain.NodeTypes[1].Attributes[0].Name != "title" || got.Domain.LinkTypes[0].To != "Requirement" {
 				t.Fatalf("get: %+v %v", got, err)
 			}
 			if _, err := s.GetDomain(ctx, "alm", ""); !errors.Is(err, ErrNotFound) {
@@ -282,7 +282,7 @@ func TestDomainAlgorithms(t *testing.T) {
 	if got, want := back.Instances[2].Values["pattern"], d.Instances[2].Values["pattern"]; got != want {
 		t.Fatalf("instance values: %v != %v", got, want)
 	}
-	if back.NodeTypes[1].Validators[0].Instance != d.NodeTypes[1].Validators[0].Instance {
+	if back.NodeTypes[1].Attributes[0].Validators[0] != d.NodeTypes[1].Attributes[0].Validators[0] {
 		t.Fatalf("validators lost: %+v", back.NodeTypes[1])
 	}
 	for name, mk := range stores(t) {

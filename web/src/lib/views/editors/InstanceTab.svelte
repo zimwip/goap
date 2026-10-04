@@ -19,7 +19,7 @@
   const index = $derived(instanceIndex(d, tab));
   const inst = $derived(index >= 0 ? d.form.instances[index] : undefined);
   const algorithm = $derived(inst ? d.form.algorithms.find((x) => x.name === inst.algorithm) : undefined);
-  const plugs = $derived(inst && inst.name ? plugsOf(inst.name, d.form.nodeTypes, d.form.lifecycles) : []);
+  const plugs = $derived(inst && inst.name ? plugsOf(inst.name, d.form.nodeTypes, d.form.linkTypes, d.form.lifecycles) : []);
   let root = $state<HTMLElement>();
 
   $effect(() => {
@@ -36,7 +36,12 @@
     prev = cur;
     if (!cur.uid || before.uid !== cur.uid || !before.name || !cur.name || before.name === cur.name) return;
     untrack(() => {
-      for (const n of d.form.nodeTypes) for (const v of n.validators) if (v.instance === before.name) v.instance = cur.name;
+      const rename = (l: string[]) => l.map((x) => (x === before.name ? cur.name : x));
+      for (const n of d.form.nodeTypes) {
+        n.validators = rename(n.validators);
+        for (const a of n.attributes) a.validators = rename(a.validators);
+      }
+      for (const l of d.form.linkTypes) for (const a of l.attributes) a.validators = rename(a.validators);
       for (const l of d.form.lifecycles)
         for (const t of l.transitions) {
           t.guards = t.guards.map((g) => (g === before.name ? cur.name : g));
@@ -141,7 +146,7 @@
       {#if plugs.length}
         <ul class="plain-list">{#each plugs as p}<li>{p}</li>{/each}</ul>
       {:else}
-        <p class="empty">Not plugged yet: plug it on a node type (validators) or a lifecycle transition (guards, actions) in the domain editor.</p>
+        <p class="empty">Not plugged yet: plug it on an attribute or node type (validators) or a lifecycle transition (guards, actions).</p>
       {/if}
     </section>
 
