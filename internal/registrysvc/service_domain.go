@@ -236,24 +236,8 @@ func (s *Service) PublishDomain(ctx context.Context, name, version string) (Doma
 	if r.Status != StatusDraft {
 		return DomainRecord{}, fmt.Errorf("domain %s@%s: %w", name, version, ErrImmutable)
 	}
-	if issues := s.validateDomain(ctx, &r.Domain); len(issues) > 0 {
-		return DomainRecord{}, fmt.Errorf("%w: %v", ErrInvalid, issues)
-	}
-	cat, err := s.Types(ctx, &r.Domain)
-	if err != nil {
-		return DomainRecord{}, fmt.Errorf("%w: %v", ErrInvalid, err)
-	}
-	users, err := s.methodologiesUsing(ctx, name)
-	if err != nil {
+	if err := s.checkPublishable(ctx, &r.Domain); err != nil {
 		return DomainRecord{}, err
-	}
-	for _, u := range users {
-		if u.Status != StatusPublished {
-			continue
-		}
-		if issues := u.Methodology.Resolve(cat).Validate(); len(issues) > 0 {
-			return DomainRecord{}, fmt.Errorf("%w: methodology %s@%s would break: %v", ErrInvalid, u.Methodology.Name, u.Methodology.Version, issues)
-		}
 	}
 	if err := ds.SetDomainStatus(ctx, name, version, StatusPublished, s.clock()); err != nil {
 		return DomainRecord{}, err
@@ -263,6 +247,30 @@ func (s *Service) PublishDomain(ctx context.Context, name, version string) (Doma
 		s.publishDomainEvent(ctx, "published", r)
 	}
 	return r, err
+}
+
+// checkPublishable refuses a domain with issues, or one that would break a published methodology using it.
+func (s *Service) checkPublishable(ctx context.Context, d *methodology.Domain) error {
+	if issues := s.validateDomain(ctx, d); len(issues) > 0 {
+		return fmt.Errorf("%w: %v", ErrInvalid, issues)
+	}
+	cat, err := s.Types(ctx, d)
+	if err != nil {
+		return fmt.Errorf("%w: %v", ErrInvalid, err)
+	}
+	users, err := s.methodologiesUsing(ctx, d.Name)
+	if err != nil {
+		return err
+	}
+	for _, u := range users {
+		if u.Status != StatusPublished {
+			continue
+		}
+		if issues := u.Methodology.Resolve(cat).Validate(); len(issues) > 0 {
+			return fmt.Errorf("%w: methodology %s@%s would break: %v", ErrInvalid, u.Methodology.Name, u.Methodology.Version, issues)
+		}
+	}
+	return nil
 }
 
 // CreateDomainVersion copies a version into a new draft.
@@ -339,15 +347,53 @@ func (s *Service) ImportDomain(ctx context.Context, yamlSrc []byte, publish bool
 	if err != nil {
 		return DomainRecord{}, nil, fmt.Errorf("%w: %v", ErrInvalid, err)
 	}
-	r, issues, err := s.SaveDomain(ctx, *d)
-	if err != nil || !publish {
-		return r, issues, err
+	if !publish {
+		return s.SaveDomain(ctx, *d)
 	}
-	if len(issues) > 0 {
+	return s.importPublishedDomain(ctx, *d)
+}
+
+// importPublishedDomain stores a domain version as published in one write, with one event (SaveDomain then
+// PublishDomain would be two). A domain with issues cannot be published: it is kept as a draft, and the issues
+// returned with the error.
+func (s *Service) importPublishedDomain(ctx context.Context, d methodology.Domain) (DomainRecord, methodology.Issues, error) {
+	if d.Name == "" || d.Version == "" {
+		return DomainRecord{}, nil, fmt.Errorf("name and version are required: %w", ErrInvalid)
+	}
+	if err := errBuiltin(d.Name); err != nil {
+		return DomainRecord{}, nil, err
+	}
+	ds, err := s.domains()
+	if err != nil {
+		return DomainRecord{}, nil, err
+	}
+	if err := s.authorizeDomain(ctx, "write", &d); err != nil {
+		return DomainRecord{}, nil, err
+	}
+	if err := s.authorizeDomain(ctx, "publish", &d); err != nil {
+		return DomainRecord{}, nil, err
+	}
+	if issues := s.validateDomain(ctx, &d); len(issues) > 0 {
+		r, _, err := s.SaveDomain(ctx, d)
+		if err != nil {
+			return r, issues, err
+		}
 		return r, issues, fmt.Errorf("%w: cannot publish: %v", ErrInvalid, issues)
 	}
-	r, err = s.PublishDomain(ctx, d.Name, d.Version)
-	return r, nil, err
+	if err := s.checkPublishable(ctx, &d); err != nil {
+		return DomainRecord{}, nil, err
+	}
+	now := s.clock()
+	r := DomainRecord{Domain: d, Status: StatusPublished, CreatedAt: now, UpdatedAt: now, PublishedAt: now, UpdatedBy: authz.From(ctx).Subject}
+	if err := ds.SaveDomain(ctx, r); err != nil {
+		return DomainRecord{}, nil, err
+	}
+	saved, err := ds.GetDomain(ctx, d.Name, d.Version)
+	if err != nil {
+		return DomainRecord{}, nil, err
+	}
+	s.publishDomainEvent(ctx, "published", saved)
+	return saved, nil, nil
 }
 
 // ExportDomain renders a version as YAML.
