@@ -16,6 +16,8 @@ import (
 type Graph interface {
 	BranchHead(ctx context.Context, namespace, name string) (domain.Baseline, error)
 	BaselineGraph(ctx context.Context, id domain.BaselineID) ([]domain.Node, []domain.Link, error)
+	// Structures names the organisation (ADR 0054): the snapshot never names its types itself.
+	Structures(ctx context.Context) (domain.Structures, error)
 }
 
 // Baselines identifies the two namespace heads a Snapshot was built from.
@@ -32,6 +34,7 @@ type Snapshot struct {
 	// Problems lists the nodes that could not be read (malformed adapter, adapter without unit, ...).
 	Problems []string
 
+	org      domain.Structure                  // the organisation structure (ADR 0054)
 	parent   map[string]string                 // unit -> parent unit
 	units    map[string]bool                   // unit keys
 	mcps     map[string]mcp.Def                // by name
@@ -55,16 +58,18 @@ func (e Effective) Allowed() mcp.Def { return e.Restriction.Apply(e.MCP) }
 // Usable reports whether the unit can call at least one tool of the MCP.
 func (e Effective) Usable() bool { return len(e.Allowed().Tools) > 0 }
 
-// BuildSnapshot reads the objects of the combined organisation and platform baseline graphs.
-func BuildSnapshot(baselines Baselines, nodes []domain.Node, links []domain.Link) *Snapshot {
-	s := &Snapshot{Baselines: baselines, parent: map[string]string{}, units: map[string]bool{}, mcps: map[string]mcp.Def{}, defs: map[string]mcp.AdapterDef{}, adapters: map[string]map[string]mcp.Adapter{}}
+// BuildSnapshot reads the objects of the combined organisation and platform baseline graphs; the units are the nodes
+// of the organisation structure of st, their hierarchy its parent links (ADR 0054).
+func BuildSnapshot(st domain.Structures, baselines Baselines, nodes []domain.Node, links []domain.Link) *Snapshot {
+	org := domain.StructureOrganisation
+	s := &Snapshot{Baselines: baselines, org: st.Organisation, parent: map[string]string{}, units: map[string]bool{}, mcps: map[string]mcp.Def{}, defs: map[string]mcp.AdapterDef{}, adapters: map[string]map[string]mcp.Adapter{}}
 	byID := map[domain.NodeID]domain.Node{}
 	for _, n := range nodes {
 		byID[n.ID] = n
 	}
 	for _, n := range nodes {
 		switch {
-		case n.Namespace == mcp.NamespaceOrganisation && n.Type == mcp.NodeTypeOrgUnit:
+		case n.Namespace == st.Organisation.Namespace && st.In(org, n.Type):
 			s.units[n.Key] = true
 		case n.Namespace == mcp.NamespacePlatform && n.Type == mcp.NodeTypeMCP:
 			d, err := mcp.DefFromProps(n.Properties)
@@ -91,7 +96,7 @@ func BuildSnapshot(baselines Baselines, nodes []domain.Node, links []domain.Link
 	for _, l := range links {
 		from, to := byID[l.From.ID], byID[l.To.ID]
 		switch {
-		case l.Type == mcp.LinkPartOf && from.Type == mcp.NodeTypeOrgUnit && to.Type == mcp.NodeTypeOrgUnit:
+		case l.Type == st.Organisation.Parent && st.In(org, from.Type) && st.In(org, to.Type) && from.Key != to.Key:
 			s.parent[from.Key] = to.Key
 		}
 	}
@@ -101,7 +106,7 @@ func BuildSnapshot(baselines Baselines, nodes []domain.Node, links []domain.Link
 			continue
 		}
 		unit, ok := byID[n.Owner]
-		if !ok {
+		if !ok || !st.In(org, unit.Type) {
 			s.Problems = append(s.Problems, fmt.Sprintf("%s: its owner %s is not a unit of the organisation", n.Key, n.Owner))
 			continue
 		}
@@ -125,15 +130,17 @@ func BuildSnapshot(baselines Baselines, nodes []domain.Node, links []domain.Link
 // Chain returns the unit, its ancestors (part_of, nearest first) and, last, the default
 // organisation, which every unit inherits from.
 func (s *Snapshot) Chain(unit string) []string {
-	unit = domain.OrgOf(unit)
+	if unit == "" {
+		unit = s.org.Root
+	}
 	var out []string
 	seen := map[string]bool{}
 	for cur := unit; cur != "" && !seen[cur]; cur = s.parent[cur] {
 		seen[cur] = true
 		out = append(out, cur)
 	}
-	if !seen[domain.DefaultOrg] {
-		out = append(out, domain.DefaultOrg)
+	if !seen[s.org.Root] {
+		out = append(out, s.org.Root)
 	}
 	return out
 }
@@ -226,11 +233,31 @@ type Directory struct {
 
 	mu  sync.Mutex
 	cur *Snapshot
+	// st are the structures of the graph, asked once (ADR 0054: tagged by a frozen built-in domain)
+	st *domain.Structures
+}
+
+// structures asks the graph for its structures, once it answers.
+func (d *Directory) structures(ctx context.Context) (domain.Structures, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.st == nil {
+		st, err := d.Graph.Structures(ctx)
+		if err != nil {
+			return st, err
+		}
+		d.st = &st
+	}
+	return *d.st, nil
 }
 
 // Snapshot returns the current snapshot. A graph without any baseline yields an empty one.
 func (d *Directory) Snapshot(ctx context.Context) (*Snapshot, error) {
-	orgHead, err := d.Graph.BranchHead(ctx, mcp.NamespaceOrganisation, domain.MainBranch)
+	st, err := d.structures(ctx)
+	if err != nil {
+		return nil, err
+	}
+	orgHead, err := d.Graph.BranchHead(ctx, st.Organisation.Namespace, domain.MainBranch)
 	if err != nil && !errors.Is(err, graph.ErrNotFound) {
 		return nil, err
 	}
@@ -260,6 +287,6 @@ func (d *Directory) Snapshot(ctx context.Context) (*Snapshot, error) {
 		}
 		nodes, links = append(nodes, n...), append(links, l...)
 	}
-	d.cur = BuildSnapshot(baselines, nodes, links)
+	d.cur = BuildSnapshot(st, baselines, nodes, links)
 	return d.cur, nil
 }

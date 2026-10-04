@@ -304,6 +304,15 @@ func (c *Client) Journal(ctx context.Context, f domain.ExecutionFilter) ([]domai
 	return pbconv.ExecutionsFromPB(r.Msg.Records), nil
 }
 
+// Structures returns the structures of the graph (ADR 0054).
+func (c *Client) Structures(ctx context.Context) (domain.Structures, error) {
+	r, err := c.rpc.GetStructures(ctx, connect.NewRequest(&graphv1.GetStructuresRequest{}))
+	if err != nil {
+		return domain.Structures{}, rpcerr.FromConnect(err)
+	}
+	return pbconv.StructuresFromPB(r.Msg), nil
+}
+
 func (c *Client) BranchHead(ctx context.Context, namespace, name string) (domain.Baseline, error) {
 	r, err := c.rpc.GetBranch(ctx, connect.NewRequest(&graphv1.GetBranchRequest{Namespace: namespace, Name: name}))
 	if err != nil {

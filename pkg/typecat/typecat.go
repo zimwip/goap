@@ -163,7 +163,28 @@ func New(ds ...*methodology.Domain) (*Catalog, error) {
 			return nil, fmt.Errorf("structure %s: parent link type %s: %w", kind, st.Parent, ErrUnknown)
 		}
 	}
+	// the organisation and the projects meet in one namespace (an Assignment links a unit and a project, ADR 0039):
+	// the services reading them read one head
+	if o, p := c.structures[domain.StructureOrganisation], c.structures[domain.StructureProject]; o.Namespace != p.Namespace {
+		return nil, fmt.Errorf("the organisation (%s) and the projects (%s) must live in one namespace: %w", o.Type, p.Type, ErrInvalid)
+	}
 	return c, nil
+}
+
+// Structures returns both structures with the types belonging to each (the tagged type and its subtypes), sorted.
+func (c *Catalog) Structures() domain.Structures {
+	out := domain.Structures{Organisation: c.structures[domain.StructureOrganisation], Project: c.structures[domain.StructureProject]}
+	for ref := range c.types {
+		if c.IsA(ref.String(), out.Organisation.Type) {
+			out.OrganisationTypes = append(out.OrganisationTypes, ref.String())
+		}
+		if c.IsA(ref.String(), out.Project.Type) {
+			out.ProjectTypes = append(out.ProjectTypes, ref.String())
+		}
+	}
+	slices.Sort(out.OrganisationTypes)
+	slices.Sort(out.ProjectTypes)
+	return out
 }
 
 func mustRef(s string) domain.TypeRef {

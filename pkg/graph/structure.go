@@ -26,6 +26,17 @@ func (g *Graph) Structure(kind string) domain.Structure {
 	return domain.BuiltinStructures[kind]
 }
 
+// Structures returns both structures in force with the types belonging to each (ADR 0054): what the services reading
+// the organisation learn from the graph service (GetStructures) instead of naming the types themselves.
+func (g *Graph) Structures(context.Context) (domain.Structures, error) {
+	if g.Types != nil {
+		if c := g.catalog(); c != nil {
+			return c.Structures(), nil
+		}
+	}
+	return domain.BuiltinStructureSet(), nil
+}
+
 // isA reports whether the node type typ is base or a subtype of it (an untyped graph knows no subtyping).
 func (g *Graph) isA(typ, base string) bool {
 	if typ == base {

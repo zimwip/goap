@@ -2,8 +2,12 @@ package graphsvc_test
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
+	"reflect"
 	"testing"
 
+	"github.com/zimwip/goap/gen/goap/graph/v1/graphv1connect"
 	"github.com/zimwip/goap/internal/graphsvc"
 	"github.com/zimwip/goap/pkg/access"
 	"github.com/zimwip/goap/pkg/domain"
@@ -183,5 +187,23 @@ func TestRootProjectSeeded(t *testing.T) {
 	}
 	if again, err := graphsvc.SeedDefaults(ctx, g); err != nil || again {
 		t.Fatalf("seeding twice must not touch the root project again: %v %v", again, err)
+	}
+}
+
+// The services reading the organisation learn its structures from the graph service (ADR 0054): the client returns
+// what the graph's catalogue tags, a User being a unit.
+func TestStructuresThroughTheService(t *testing.T) {
+	g := typedGraph(t)
+	path, handler := graphv1connect.NewGraphServiceHandler(&graphsvc.Handler{Graph: g})
+	mux := http.NewServeMux()
+	mux.Handle(path, handler)
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	got, err := graphsvc.NewClient(srv.Client(), srv.URL).Structures(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(got, domain.BuiltinStructureSet()) {
+		t.Fatalf("structures = %+v", got)
 	}
 }

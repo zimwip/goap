@@ -90,9 +90,13 @@ outside it, stays with the parent), an `organisation@Adapter` belongs to the uni
 
 - Rule 1 holds by construction at two levels (the guard, the schema); rules 2 and 3 hold in the guard and the schema
   alike; no caller-level exemption remains (test fixtures write through a change too).
-- The organisation and project types are named once in Go (`pkg/domain`: `TypeOrgUnit`, `TypeProjectUnit`,
-  `LinkPartOf`, `LinkProjectPartOf`); the graph reads the structures from its catalogue, `pkg/access` and `pkg/mcp`
-  read the organisation through those constants.
+- No service names the organisation or the projects itself: the graph reads the structures from its catalogue, and
+  the services reading them (`pkg/access`, `internal/mcpsvc`) ask the graph service (`GetStructures`: both structures
+  with the types belonging to each, a `User` being a unit, `domain.Structures`) and build their snapshots from the
+  answer: units and projects are the nodes of those types, their hierarchies the parent links named, the roots the
+  keys named. The catalogue requires both structures to live in one namespace (the Assignment links a unit and a
+  project), so these services read one head. The built-in names stay in `pkg/domain` (`TypeOrgUnit`, ...) for the
+  untyped graph and for the seeds writing organisation data.
 - An existing database must be recreated (`make devlocal-reset` for the local mode): the new schema file cannot be
   applied over the old one, and fails loudly if tried.
 - Every change has a real project, so a role check on a change always has a project chain; "select a project before

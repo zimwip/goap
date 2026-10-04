@@ -262,6 +262,11 @@ func (h *Handler) GetNodeNeighbourhood(ctx context.Context, r *connect.Request[g
 	return connect.NewResponse(out), nil
 }
 
+func (h *Handler) GetStructures(ctx context.Context, _ *connect.Request[graphv1.GetStructuresRequest]) (*connect.Response[graphv1.GetStructuresResponse], error) {
+	st, err := h.Graph.Structures(ctx)
+	return res(pbconv.StructuresToPB(st), err)
+}
+
 func (h *Handler) ListNamespaces(ctx context.Context, _ *connect.Request[graphv1.ListNamespacesRequest]) (*connect.Response[graphv1.ListNamespacesResponse], error) {
 	ns, err := h.Graph.Namespaces(ctx)
 	return res(&graphv1.ListNamespacesResponse{Namespaces: ns}, err)
