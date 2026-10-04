@@ -252,7 +252,7 @@ func (g *Graph) adoptNodes(ctx context.Context, tx Tx, c domain.Change, f domain
 	if join {
 		for _, id := range order {
 			d := *plans[id].desired
-			if err := tx.JoinBranch(ctx, d.Ref(), changeBranch); err != nil {
+			if err := tx.JoinBranch(ctx, d.Ref(), changeBranch, c.ID); err != nil {
 				return err
 			}
 			newRefs[id] = d

@@ -92,6 +92,11 @@ func main() {
 			platform.Fatal(log, "subscribe", err)
 		}
 	}
+	// the roots of the organisation and of the projects, before any change (ADR 0054): the structures are tagged by the
+	// built-in organisation domain, known before the catalogue loads the others
+	if err := g.Bootstrap(ctx); err != nil {
+		platform.Fatal(log, "bootstrap", err)
+	}
 	// the built-in domains (organisation, platform) are always there; the demo seed needs alm
 	var need []string
 	demo := platform.Env("GOAP_GRAPH_SEED", "") == "demo"
@@ -99,25 +104,20 @@ func main() {
 		need = append(need, "alm")
 	}
 	go loadTypes(ctx, log, types, need, func() {
-		if demo {
-			seeded, err := graphsvc.SeedDemo(ctx, g)
-			if err != nil {
-				log.Error("seed", "err", err)
-			}
-			log.Info("demo seed", "loaded", seeded)
-		}
 		if _, err := graphsvc.SeedAccess(ctx, g); err != nil {
 			log.Error("seed access", "err", err)
 		}
 		if seeded, err := graphsvc.SeedDefaults(ctx, g); err != nil {
 			log.Error("seed defaults", "err", err)
 		} else if seeded {
-			log.Info("default organisation created")
+			log.Info("default MCPs created")
 		}
-		if linked, err := graphsvc.LinkOrphanUnits(ctx, g); err != nil {
-			log.Error("link orphan units", "err", err)
-		} else if linked {
-			log.Info("orphan units joined the default organisation")
+		if demo {
+			seeded, err := graphsvc.SeedDemo(ctx, g)
+			if err != nil {
+				log.Error("seed", "err", err)
+			}
+			log.Info("demo seed", "loaded", seeded)
 		}
 		// the built-in MCPs (ADR 0028) follow the platform; the default organisation lends them to every unit
 		if seeded, err := graphsvc.SeedBuiltins(ctx, g); err != nil {

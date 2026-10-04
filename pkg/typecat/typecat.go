@@ -60,6 +60,8 @@ type Catalog struct {
 	types   map[domain.TypeRef]*Type
 	links   map[domain.TypeRef]*LinkType
 	domains map[string]string // namespace -> version
+	// structures are the hierarchies tagged by the domains (ADR 0054), by kind.
+	structures map[string]domain.Structure
 }
 
 // ErrUnknown marks a reference the catalogue does not resolve.
@@ -89,7 +91,7 @@ func Builtin() *Catalog {
 func New(ds ...*methodology.Domain) (*Catalog, error) {
 	all := append(slices.Clone(Builtins()), ds...)
 	nb := len(Builtins())
-	c := &Catalog{types: map[domain.TypeRef]*Type{}, links: map[domain.TypeRef]*LinkType{}, domains: map[string]string{}}
+	c := &Catalog{types: map[domain.TypeRef]*Type{}, links: map[domain.TypeRef]*LinkType{}, domains: map[string]string{}, structures: map[string]domain.Structure{}}
 	decl := map[domain.TypeRef]declared{}
 	for i, d := range all {
 		if d == nil {
@@ -105,6 +107,16 @@ func New(ds ...*methodology.Domain) (*Catalog, error) {
 		for _, n := range d.NodeTypes {
 			ref := domain.TypeRef{Namespace: d.Name, Name: n.Name}
 			decl[ref] = declared{d: d, t: n}
+			if tag := n.Structure; tag != nil {
+				if prev, dup := c.structures[tag.Kind]; dup {
+					return nil, fmt.Errorf("type %s: structure %s is already tagged by %s (one type per structure): %w", ref, tag.Kind, prev.Type, ErrInvalid)
+				}
+				parent, err := domain.QualifyIn(d.Name, tag.Parent)
+				if err != nil {
+					return nil, fmt.Errorf("type %s: structure parent: %w", ref, err)
+				}
+				c.structures[tag.Kind] = domain.Structure{Kind: tag.Kind, Type: ref.String(), Namespace: d.Name, Parent: parent.String(), Root: tag.Root, SelfParent: tag.SelfParent}
+			}
 		}
 		for _, l := range d.LinkTypes {
 			ref := domain.TypeRef{Namespace: d.Name, Name: l.Name}
@@ -142,7 +154,37 @@ func New(ds ...*methodology.Domain) (*Catalog, error) {
 			}
 		}
 	}
+	for _, kind := range domain.StructureKinds {
+		st, ok := c.structures[kind]
+		if !ok {
+			return nil, fmt.Errorf("no node type is tagged structure %s (ADR 0054): %w", kind, ErrInvalid)
+		}
+		if _, ok := c.links[mustRef(st.Parent)]; !ok {
+			return nil, fmt.Errorf("structure %s: parent link type %s: %w", kind, st.Parent, ErrUnknown)
+		}
+	}
 	return c, nil
+}
+
+func mustRef(s string) domain.TypeRef {
+	r, _ := domain.ParseTypeRef(s)
+	return r
+}
+
+// Structure returns the hierarchy tagged kind (domain.StructureOrganisation, domain.StructureProject, ADR 0054).
+func (c *Catalog) Structure(kind string) (domain.Structure, bool) {
+	s, ok := c.structures[kind]
+	return s, ok
+}
+
+// IsA reports whether the node type typ is base or one of its subtypes (false when typ is unknown).
+func (c *Catalog) IsA(typ, base string) bool {
+	t, ok := c.Type(typ)
+	if !ok {
+		return false
+	}
+	b, err := domain.ParseTypeRef(base)
+	return err == nil && t.Is(b)
 }
 
 type declared struct {

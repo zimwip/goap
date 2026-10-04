@@ -146,6 +146,9 @@ message Node {
   string execution = 16;
   // the branches the version joined besides the one it was written on (ADR 0032; filled by ListNodeVersions)
   repeated string joined = 17;
+  // the organisational unit responsible for the version and the project the node was created in (node ids, ADR 0054)
+  string owner = 18;
+  string project = 19;
 }
 
 message Link {
@@ -865,6 +868,9 @@ message NodeEdit {
   string rationale = 6;
   repeated LinkEdit links = 7;
   repeated string remove_links = 8;
+  // key of the organisational unit the node is transferred to (ADR 0054); empty: unchanged, or the unit holding the
+  // commit for a created node
+  string owner = 9;
 }
 
 message CommitEditsRequest {
@@ -876,6 +882,10 @@ message CommitEditsRequest {
   string baseline_id = 6;
   string baseline_name = 7;
   repeated NodeEdit edits = 8;
+  // the unit holding the commit (empty: the root unit; "@me": the caller's personal unit) and the project it acts in (empty: the
+  // caller's active project, else the default project), ADR 0054
+  string owner_org = 9;
+  string project_id = 10;
 }
 
 message CommitEditsResponse {
@@ -912,6 +922,8 @@ message WriteChangeImpactRequest {
   // flow branch to write on (empty: the main flow) and the action run that writes (ADR 0025)
   string flow = 8;
   string execution = 9;
+  // key of the organisational unit the node is transferred to (ADR 0054); empty: unchanged
+  string owner = 10;
 }
 
 message WriteChangeImpactResponse {

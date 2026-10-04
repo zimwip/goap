@@ -67,7 +67,7 @@ func sqliteErr(err error, what string) error {
 	return err
 }
 
-const sqliteNodeCols = `n.id, v.version, n.namespace, n.key, n.type, v.props, v.deleted, v.change_id, v.created_at, v.branch, v.parents, v.reason, v.state, v.change_impact, v.comment, v.execution`
+const sqliteNodeCols = `n.id, v.version, n.namespace, n.key, n.type, v.props, v.deleted, v.change_id, v.created_at, v.branch, v.parents, v.reason, v.state, v.change_impact, v.comment, v.execution, v.owner_id, n.project_id`
 
 type scanner interface{ Scan(dest ...any) error }
 
@@ -75,8 +75,9 @@ func sqliteScanNode(row scanner) (domain.Node, error) {
 	var n domain.Node
 	var id, p, created, parents string
 	var change, cnode sql.NullString
+	var owner, project string
 	var version int
-	if err := row.Scan(&id, &version, &n.Namespace, &n.Key, &n.Type, &p, &n.Deleted, &change, &created, &n.Branch, &parents, &n.Reason, &n.State, &cnode, &n.Comment, &n.Execution); err != nil {
+	if err := row.Scan(&id, &version, &n.Namespace, &n.Key, &n.Type, &p, &n.Deleted, &change, &created, &n.Branch, &parents, &n.Reason, &n.State, &cnode, &n.Comment, &n.Execution, &owner, &project); err != nil {
 		return n, err
 	}
 	_ = json.Unmarshal([]byte(parents), &n.Parents)
@@ -85,6 +86,7 @@ func sqliteScanNode(row scanner) (domain.Node, error) {
 	}
 	n.ID, n.Version, n.Properties, n.ChangeID = domain.NodeID(id), domain.Version(version), props([]byte(p)), domain.ChangeID(change.String)
 	n.ChangeImpact = domain.ChangeImpactID(cnode.String)
+	n.Owner, n.Project = domain.NodeID(owner), domain.NodeID(project)
 	n.CreatedAt = tsParse(created)
 	return n, nil
 }
@@ -361,7 +363,7 @@ func (t *sqliteTx) Changes(ctx context.Context) ([]domain.Change, error) {
 
 func (t *sqliteTx) PutNode(ctx context.Context, n domain.Node) error {
 	if n.Version == 1 {
-		if _, err := t.tx.ExecContext(ctx, `INSERT INTO node (id, namespace, key, type, latest) VALUES (?, ?, ?, ?, 1)`, string(n.ID), domain.NamespaceOf(n.Namespace), n.Key, n.Type); err != nil {
+		if _, err := t.tx.ExecContext(ctx, `INSERT INTO node (id, namespace, key, type, latest, project_id) VALUES (?, ?, ?, ?, 1, ?)`, string(n.ID), domain.NamespaceOf(n.Namespace), n.Key, n.Type, nullUUID(string(n.Project))); err != nil {
 			return sqliteErr(err, "node "+n.Key)
 		}
 	} else {
@@ -378,10 +380,10 @@ func (t *sqliteTx) PutNode(ctx context.Context, n domain.Node) error {
 		parents = []domain.Version{}
 	}
 	pj, _ := json.Marshal(parents)
-	_, err := t.tx.ExecContext(ctx, `INSERT INTO node_version (node_id, version, props, deleted, change_id, created_at, branch, parents, reason, state, change_impact, comment, execution)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+	_, err := t.tx.ExecContext(ctx, `INSERT INTO node_version (node_id, version, props, deleted, change_id, created_at, branch, parents, reason, state, change_impact, comment, execution, owner_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		string(n.ID), int(n.Version), string(jsonb(n.Properties)), n.Deleted, nullUUID(string(n.ChangeID)), tsText(n.CreatedAt),
-		domain.BranchOf(n.Branch), string(pj), n.Reason, n.State, nullUUID(string(n.ChangeImpact)), n.Comment, n.Execution)
+		domain.BranchOf(n.Branch), string(pj), n.Reason, n.State, nullUUID(string(n.ChangeImpact)), n.Comment, n.Execution, nullUUID(string(n.Owner)))
 	return sqliteErr(err, "node "+n.Ref().String())
 }
 
@@ -598,9 +600,9 @@ func (t *sqliteTx) SetNodeOrigin(ctx context.Context, ref domain.NodeRef, change
 	return nil
 }
 
-func (t *sqliteTx) JoinBranch(ctx context.Context, ref domain.NodeRef, branch string) error {
-	_, err := t.tx.ExecContext(ctx, `INSERT INTO node_branch (node_id, version, branch) SELECT node_id, version, ? FROM node_version
-		WHERE node_id = ? AND version = ? AND branch <> ? ON CONFLICT DO NOTHING`, domain.BranchOf(branch), string(ref.ID), int(ref.Version), domain.BranchOf(branch))
+func (t *sqliteTx) JoinBranch(ctx context.Context, ref domain.NodeRef, branch string, change domain.ChangeID) error {
+	_, err := t.tx.ExecContext(ctx, `INSERT INTO node_branch (node_id, version, branch, change_id) SELECT node_id, version, ?, ? FROM node_version
+		WHERE node_id = ? AND version = ? AND branch <> ? ON CONFLICT DO NOTHING`, domain.BranchOf(branch), nullUUID(string(change)), string(ref.ID), int(ref.Version), domain.BranchOf(branch))
 	return sqliteErr(err, "node "+ref.String())
 }
 
@@ -676,7 +678,7 @@ func (t *sqliteTx) DeleteChange(ctx context.Context, id domain.ChangeID, namespa
 	const mine = `(SELECT node_id, version FROM node_version WHERE change_id = ?1)`
 	for _, q := range []string{
 		`DELETE FROM link WHERE change_id = ?1 OR (from_id, from_version) IN ` + mine,
-		`DELETE FROM node_branch WHERE (node_id, version) IN ` + mine,
+		`DELETE FROM node_branch WHERE change_id = ?1 OR (node_id, version) IN ` + mine,
 		`DELETE FROM node_version WHERE change_id = ?1`,
 		`DELETE FROM change_impact WHERE change_id = ?1`,
 		`DELETE FROM change_log WHERE change_id = ?1`,

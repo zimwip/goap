@@ -93,21 +93,31 @@ func BuildSnapshot(baselines Baselines, nodes []domain.Node, links []domain.Link
 		switch {
 		case l.Type == mcp.LinkPartOf && from.Type == mcp.NodeTypeOrgUnit && to.Type == mcp.NodeTypeOrgUnit:
 			s.parent[from.Key] = to.Key
-		case l.Type == mcp.LinkOwner && from.Namespace == mcp.NamespaceOrganisation && from.Type == mcp.NodeTypeAdapter && to.Type == mcp.NodeTypeOrgUnit:
-			a, err := mcp.AdapterFromProps(to.Key, from.Properties)
-			if err != nil {
-				s.Problems = append(s.Problems, fmt.Sprintf("%s: %v", from.Key, err))
-				continue
-			}
-			if s.adapters[to.Key] == nil {
-				s.adapters[to.Key] = map[string]mcp.Adapter{}
-			}
-			if _, dup := s.adapters[to.Key][a.MCP]; dup {
-				s.Problems = append(s.Problems, fmt.Sprintf("%s: unit %s has several adapters for %s", from.Key, to.Key, a.MCP))
-				continue
-			}
-			s.adapters[to.Key][a.MCP] = a
 		}
+	}
+	// an adapter instance is the unit's that owns it (ADR 0054: the owner of the version)
+	for _, n := range nodes {
+		if n.Deleted || n.Namespace != mcp.NamespaceOrganisation || n.Type != mcp.NodeTypeAdapter {
+			continue
+		}
+		unit, ok := byID[n.Owner]
+		if !ok {
+			s.Problems = append(s.Problems, fmt.Sprintf("%s: its owner %s is not a unit of the organisation", n.Key, n.Owner))
+			continue
+		}
+		a, err := mcp.AdapterFromProps(unit.Key, n.Properties)
+		if err != nil {
+			s.Problems = append(s.Problems, fmt.Sprintf("%s: %v", n.Key, err))
+			continue
+		}
+		if s.adapters[unit.Key] == nil {
+			s.adapters[unit.Key] = map[string]mcp.Adapter{}
+		}
+		if _, dup := s.adapters[unit.Key][a.MCP]; dup {
+			s.Problems = append(s.Problems, fmt.Sprintf("%s: unit %s has several adapters for %s", n.Key, unit.Key, a.MCP))
+			continue
+		}
+		s.adapters[unit.Key][a.MCP] = a
 	}
 	return s
 }

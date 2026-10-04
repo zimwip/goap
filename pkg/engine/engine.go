@@ -455,12 +455,8 @@ func (e *Engine) resolveChange(ctx context.Context, p *Process, m *methodology.C
 	p.Title = title
 	intent := firstNonEmpty(req.Intent, firstUserTurn(p))
 	ownerOrg := firstNonEmpty(req.OwnerOrg, p.Org)
+	// a change always acts in a project (ADR 0054): the graph resolves one naming none to the default project
 	projectID := firstNonEmpty(req.ProjectID, p.Project)
-	// a trigger acts automatically, with no one at the keyboard to pick a project (system-initiated, like
-	// its OwnerOrg defaulting silently above): only a person starting a process is asked for one.
-	if projectID == "" && !m.Administrative && p.Trigger == "" {
-		return "", fmt.Errorf("methodology %s: %w", m.Name, ErrNoProject)
-	}
 	var data map[string]any
 	if p.Trigger != "" {
 		data = map[string]any{"trigger": p.Trigger}
@@ -484,6 +480,10 @@ func (e *Engine) resolveChange(ctx context.Context, p *Process, m *methodology.C
 		Namespace: ns, OwnBranch: p.OwnBranch, BaselineID: baseline, Data: data})
 	if err != nil {
 		return "", err
+	}
+	// the run works where its change does: the roles it checks are held on that project (ADR 0043)
+	if p.Project == "" {
+		p.Project = c.ProjectID
 	}
 	return c.ID, nil
 }
@@ -1161,10 +1161,6 @@ func (e *Engine) checkAgentRoles(ctx context.Context, p *Process) error {
 
 // ErrInvalidState is returned when an operation does not match the process state.
 var ErrInvalidState = errors.New("invalid process state")
-
-// ErrNoProject is returned when a non-administrative methodology is started with no project selected
-// (ADR 0039): "the user must select the project context they are working on before any action".
-var ErrNoProject = errors.New("no project selected")
 
 // Approve decides a pending approval with the permissions of the principal of
 // ctx. On approval the action runs immediately (call Run afterwards to

@@ -428,8 +428,17 @@ func (h *Handler) CommitEdits(ctx context.Context, r *connect.Request[graphv1.Co
 	if by == "" {
 		by = "graphsvc"
 	}
+	owner, err := h.resolveOwner(ctx, r.Msg.OwnerOrg)
+	if err != nil {
+		return nil, err
+	}
+	projectID := r.Msg.ProjectId
+	if projectID == "" {
+		projectID = authz.From(ctx).Project
+	}
 	out, err := h.Graph.Commit(ctx, graph.Commit{Namespace: r.Msg.Namespace, Title: r.Msg.Title, Intent: r.Msg.Intent, Methodology: r.Msg.Methodology,
-		Data: pbconv.Map(r.Msg.Data), Baseline: domain.BaselineID(r.Msg.BaselineId), By: by, BaselineName: r.Msg.BaselineName, Edits: edits})
+		Data: pbconv.Map(r.Msg.Data), Baseline: domain.BaselineID(r.Msg.BaselineId), By: by, BaselineName: r.Msg.BaselineName, Edits: edits,
+		OwnerOrg: owner, ProjectID: projectID})
 	if err == nil {
 		if c, cerr := h.Graph.Change(ctx, out.Change); cerr == nil {
 			c.Items, c.Nodes = nil, nil
@@ -454,7 +463,7 @@ func (h *Handler) WriteChangeImpact(ctx context.Context, r *connect.Request[grap
 	if err := h.gateAccess(ctx, typ); err != nil {
 		return nil, err
 	}
-	w := graph.NodeWrite{Properties: pbconv.Map(r.Msg.Props), State: r.Msg.State, Retire: r.Msg.Retire, Flow: r.Msg.Flow, Execution: r.Msg.Execution}
+	w := graph.NodeWrite{Properties: pbconv.Map(r.Msg.Props), State: r.Msg.State, Retire: r.Msg.Retire, Flow: r.Msg.Flow, Execution: r.Msg.Execution, Owner: r.Msg.Owner}
 	for _, l := range r.Msg.AddLinks {
 		w.AddLinks = append(w.AddLinks, graph.LinkWrite{Type: l.Type, To: pbconv.RefFromPB(l.To), Properties: pbconv.Map(l.Props)})
 	}

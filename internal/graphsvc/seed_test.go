@@ -53,18 +53,8 @@ func TestSeedsFollowTheDomains(t *testing.T) {
 	if err != nil || app.Type != "alm@Application" {
 		t.Fatalf("app = %+v, %v", app, err)
 	}
-	v, err := g.View(ctx, app.Ref())
-	if err != nil {
-		t.Fatal(err)
-	}
-	owned := false
-	for _, l := range v.Out {
-		if l.Type == mcp.LinkOwner && l.To.ID == unit.ID {
-			owned = true
-		}
-	}
-	if !owned {
-		t.Fatalf("APP-1 must be owned by ORG-CHECKOUT across namespaces: %+v", v.Out)
+	if app.Owner != unit.ID {
+		t.Fatalf("APP-1 must be owned by ORG-CHECKOUT across namespaces: %+v", app)
 	}
 	uv, _ := g.View(ctx, unit.Ref())
 	if len(uv.Out) != 1 || uv.Out[0].Type != mcp.LinkPartOf {
@@ -72,52 +62,19 @@ func TestSeedsFollowTheDomains(t *testing.T) {
 	}
 }
 
-// SeedDemo creates ORG-ACME before the default organisation exists, through the raw write path that
-// bypasses checkRequiredParent (ADR 0040): without LinkOrphanUnits it stays a second root beside
-// ORG-DEFAULT, which is why the navigation tree would show it ahead of the default organisation.
-func TestLinkOrphanUnits(t *testing.T) {
+// The demo seed runs after the bootstrap (ADR 0054): its organisation hangs under the root unit from the start, and
+// every one of its writes is an applied change held by a unit and acting in a project.
+func TestSeedDemoHangsUnderTheRoot(t *testing.T) {
 	ctx := context.Background()
 	g := typedGraph(t)
 	if _, err := graphsvc.SeedDemo(ctx, g); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := graphsvc.SeedDefaults(ctx, g); err != nil {
-		t.Fatal(err)
-	}
-	acme, err := g.NodeByKey(ctx, "organisation", "ORG-ACME")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if v, _ := g.View(ctx, acme.Ref()); len(v.Out) != 0 {
-		t.Fatalf("ORG-ACME should still be rootless before LinkOrphanUnits: %+v", v.Out)
-	}
-	before, err := g.BranchHead(ctx, "organisation", domain.MainBranch)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if linked, err := graphsvc.LinkOrphanUnits(ctx, g); err != nil || !linked {
-		t.Fatalf("first link = %v, %v", linked, err)
-	}
-	// the repair must land as an applied change, chained from the real head it ran against (not a
-	// disconnected baseline with no change, which would discontinue the organisation branch history).
-	after, err := g.BranchHead(ctx, "organisation", domain.MainBranch)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if after.ParentID != before.ID {
-		t.Fatalf("head parent = %q, want previous head %q", after.ParentID, before.ID)
-	}
-	if after.ChangeID == "" {
-		t.Fatal("head has no ChangeID")
-	}
-	if c, err := g.Change(ctx, after.ChangeID); err != nil || c.Status != domain.ChangeApplied {
-		t.Fatalf("change = %+v, %v, want status %q", c, err, domain.ChangeApplied)
-	}
 	def, err := g.NodeByKey(ctx, "organisation", domain.DefaultOrg)
 	if err != nil {
 		t.Fatal(err)
 	}
-	acme, err = g.NodeByKey(ctx, "organisation", "ORG-ACME")
+	acme, err := g.NodeByKey(ctx, "organisation", "ORG-ACME")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -128,8 +85,17 @@ func TestLinkOrphanUnits(t *testing.T) {
 	if len(v.Out) != 1 || v.Out[0].Type != mcp.LinkPartOf || v.Out[0].To.ID != def.ID {
 		t.Fatalf("ORG-ACME must be part_of ORG-DEFAULT: %+v", v.Out)
 	}
-	if again, err := graphsvc.LinkOrphanUnits(ctx, g); err != nil || again {
-		t.Fatalf("second link = %v, %v", again, err)
+	if acme.Owner != def.ID || acme.ChangeID == "" || acme.Project == "" {
+		t.Fatalf("ORG-ACME is owned by the root unit, written by a change, created in a project: %+v", acme)
+	}
+	cs, err := g.Changes(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range cs {
+		if c.OwnerOrg == "" || c.ProjectID == "" {
+			t.Fatalf("change %s %q names no unit or no project", c.ID, c.Title)
+		}
 	}
 }
 

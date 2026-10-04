@@ -792,6 +792,9 @@ export interface GraphNode {
   execution?: string;
   /** the branches the version joined besides the one it was written on (ADR 0032; filled by listNodeVersions) */
   joined?: string[];
+  /** id of the organisational unit owning the version, and of the project the node was created in (ADR 0054) */
+  owner?: string;
+  project?: string;
 }
 
 export interface Link {
@@ -984,6 +987,8 @@ export interface NodeEdit {
   rationale?: string;
   links?: { type: string; to?: NodeRef; toKey?: string; props?: Struct }[];
   removeLinks?: string[];
+  /** key of the organisational unit the node goes to (ADR 0054); unset: unchanged, or the unit holding the commit */
+  owner?: string;
 }
 
 export interface ChangeImpact {

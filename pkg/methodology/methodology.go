@@ -173,6 +173,22 @@ type NodeType struct {
 	// node editor when it has no editor of that name. Inherited through
 	// extends; empty: the default node editor.
 	Editor string `yaml:"editor,omitempty" json:"editor,omitempty"`
+	// Structure tags the type as the one building a hierarchy every node version is placed in (ADR 0054):
+	// the organisational units owning node versions and changes, or the projects nodes are created in. The graph
+	// bootstraps its root and checks every write against it. One type per kind across the domains in force.
+	Structure *StructureTag `yaml:"structure,omitempty" json:"structure,omitempty"`
+}
+
+// StructureTag tags a node type as a structure of the graph (ADR 0054, domain.Structure).
+type StructureTag struct {
+	// Kind is domain.StructureOrganisation or domain.StructureProject.
+	Kind string `yaml:"kind" json:"kind"`
+	// Parent is the link type (of the same domain) from a child to its parent, from and to the type.
+	Parent string `yaml:"parent" json:"parent"`
+	// Root is the key of the root node the bootstrap creates.
+	Root string `yaml:"root" json:"root"`
+	// SelfParent: the root links to itself through Parent (a project root) rather than being rootless.
+	SelfParent bool `yaml:"selfParent,omitempty" json:"selfParent,omitempty"`
 }
 
 // SearchProperty declares how the node index uses a property of a node type.

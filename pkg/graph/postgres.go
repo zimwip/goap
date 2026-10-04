@@ -80,16 +80,17 @@ func str(s *string) string {
 	return *s
 }
 
-const nodeCols = `n.id::text, v.version, n.namespace, n.key, n.type, v.props, v.deleted, v.change_id::text, v.created_at, v.branch, v.parents, v.reason, v.state, v.change_impact::text, v.comment, v.execution`
+const nodeCols = `n.id::text, v.version, n.namespace, n.key, n.type, v.props, v.deleted, v.change_id::text, v.created_at, v.branch, v.parents, v.reason, v.state, v.change_impact::text, v.comment, v.execution, v.owner_id::text, n.project_id::text`
 
 func scanNode(row pgx.Row) (domain.Node, error) {
 	var n domain.Node
 	var id string
 	var change, cnode *string
+	var owner, project string
 	var p []byte
 	var version int
 	var parents []int32
-	if err := row.Scan(&id, &version, &n.Namespace, &n.Key, &n.Type, &p, &n.Deleted, &change, &n.CreatedAt, &n.Branch, &parents, &n.Reason, &n.State, &cnode, &n.Comment, &n.Execution); err != nil {
+	if err := row.Scan(&id, &version, &n.Namespace, &n.Key, &n.Type, &p, &n.Deleted, &change, &n.CreatedAt, &n.Branch, &parents, &n.Reason, &n.State, &cnode, &n.Comment, &n.Execution, &owner, &project); err != nil {
 		return n, err
 	}
 	for _, pv := range parents {
@@ -97,6 +98,7 @@ func scanNode(row pgx.Row) (domain.Node, error) {
 	}
 	n.ID, n.Version, n.Properties, n.ChangeID = domain.NodeID(id), domain.Version(version), props(p), domain.ChangeID(str(change))
 	n.ChangeImpact = domain.ChangeImpactID(str(cnode))
+	n.Owner, n.Project = domain.NodeID(owner), domain.NodeID(project)
 	return n, nil
 }
 
@@ -359,7 +361,7 @@ func (t *pgTx) Changes(ctx context.Context) ([]domain.Change, error) {
 
 func (t *pgTx) PutNode(ctx context.Context, n domain.Node) error {
 	if n.Version == 1 {
-		if _, err := t.tx.Exec(ctx, `INSERT INTO node (id, namespace, key, type, latest) VALUES ($1, $2, $3, $4, 1)`, string(n.ID), domain.NamespaceOf(n.Namespace), n.Key, n.Type); err != nil {
+		if _, err := t.tx.Exec(ctx, `INSERT INTO node (id, namespace, key, type, latest, project_id) VALUES ($1, $2, $3, $4, 1, $5)`, string(n.ID), domain.NamespaceOf(n.Namespace), n.Key, n.Type, nullUUID(string(n.Project))); err != nil {
 			return mapErr(err, "node "+n.Key)
 		}
 	} else {
@@ -375,9 +377,9 @@ func (t *pgTx) PutNode(ctx context.Context, n domain.Node) error {
 	for i, pv := range n.Parents {
 		parents[i] = int32(pv)
 	}
-	_, err := t.tx.Exec(ctx, `INSERT INTO node_version (node_id, version, props, deleted, change_id, created_at, branch, parents, reason, state, change_impact, comment, execution)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
-		string(n.ID), int(n.Version), jsonb(n.Properties), n.Deleted, nullUUID(string(n.ChangeID)), n.CreatedAt, domain.BranchOf(n.Branch), parents, n.Reason, n.State, nullUUID(string(n.ChangeImpact)), n.Comment, n.Execution)
+	_, err := t.tx.Exec(ctx, `INSERT INTO node_version (node_id, version, props, deleted, change_id, created_at, branch, parents, reason, state, change_impact, comment, execution, owner_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
+		string(n.ID), int(n.Version), jsonb(n.Properties), n.Deleted, nullUUID(string(n.ChangeID)), n.CreatedAt, domain.BranchOf(n.Branch), parents, n.Reason, n.State, nullUUID(string(n.ChangeImpact)), n.Comment, n.Execution, nullUUID(string(n.Owner)))
 	return mapErr(err, "node "+n.Ref().String())
 }
 
@@ -569,9 +571,9 @@ func (t *pgTx) SetNodeOrigin(ctx context.Context, ref domain.NodeRef, change dom
 	return nil
 }
 
-func (t *pgTx) JoinBranch(ctx context.Context, ref domain.NodeRef, branch string) error {
-	_, err := t.tx.Exec(ctx, `INSERT INTO node_branch (node_id, version, branch) SELECT node_id, version, $3 FROM node_version
-		WHERE node_id = $1 AND version = $2 AND branch <> $3 ON CONFLICT DO NOTHING`, string(ref.ID), int(ref.Version), domain.BranchOf(branch))
+func (t *pgTx) JoinBranch(ctx context.Context, ref domain.NodeRef, branch string, change domain.ChangeID) error {
+	_, err := t.tx.Exec(ctx, `INSERT INTO node_branch (node_id, version, branch, change_id) SELECT node_id, version, $3, $4 FROM node_version
+		WHERE node_id = $1 AND version = $2 AND branch <> $3 ON CONFLICT DO NOTHING`, string(ref.ID), int(ref.Version), domain.BranchOf(branch), nullUUID(string(change)))
 	return mapErr(err, "node "+ref.String())
 }
 
@@ -637,7 +639,7 @@ func (t *pgTx) DeleteChange(ctx context.Context, id domain.ChangeID, namespace, 
 	const mine = `(SELECT node_id, version FROM node_version WHERE change_id = $1)`
 	for _, q := range []string{
 		`DELETE FROM link WHERE change_id = $1 OR (from_id, from_version) IN ` + mine,
-		`DELETE FROM node_branch WHERE (node_id, version) IN ` + mine,
+		`DELETE FROM node_branch WHERE change_id = $1 OR (node_id, version) IN ` + mine,
 		`DELETE FROM node_version WHERE change_id = $1`,
 		`DELETE FROM change_impact WHERE change_id = $1`,
 		`DELETE FROM change_log WHERE change_id = $1`,

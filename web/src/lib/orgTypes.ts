@@ -4,7 +4,6 @@ export const ORG_UNIT_TYPE = 'organisation@OrgUnit';
 export const ADAPTER_TYPE = 'organisation@Adapter';
 export const PART_OF = 'organisation@part_of';
 export const MEMBER_OF = 'organisation@member_of';
-export const OWNER = 'organisation@owner';
 export const MCP_TYPE = 'platform@MCP';
 
 // Users, projects and assignments (ADR 0039, 0020): User extends OrgUnit (the smallest organisational
@@ -34,5 +33,19 @@ export function newUserUnit(units: { key?: string; props?: Record<string, unknow
       .filter((n) => n.props?.[WAITING_UNIT_PROP] === true)
       .map((n) => n.key ?? '')
       .sort()[0] || DEFAULT_ORG
+  );
+}
+
+// The ProjectUnit property flagging the default project (ADR 0054; mirrors domain.PropDefaultProject): the project a
+// change that names none acts in. An administrator moves it; with none flagged, the root project is the default.
+export const DEFAULT_PROJECT_PROP = 'default';
+
+/** The key of the default project: the flagged project (smallest key if several carry the flag), else PROJ-ROOT. */
+export function defaultProject(projects: { key?: string; props?: Record<string, unknown> }[]): string {
+  return (
+    projects
+      .filter((n) => n.props?.[DEFAULT_PROJECT_PROP] === true)
+      .map((n) => n.key ?? '')
+      .sort()[0] || DEFAULT_PROJECT
   );
 }

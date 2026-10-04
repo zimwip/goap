@@ -51,7 +51,7 @@ of a versioned knowledge graph, whose other axis, the **domain axis**, describes
 | Concept | Description |
 |---|---|
 | **Node** | Typed content element. Its type is a qualified reference `<namespace>@<NodeType>` (`alm@Requirement`, [ADR 0012](adr/0012-node-types.md)). Stable identity `NodeID` + readable `Key` (`REQ-12`). |
-| **Version** | Each modification creates a new immutable version `NodeID@vN`. A version can be a *tombstone* (deletion). |
+| **Version** | Each modification creates a new immutable version `NodeID@vN`. A version can be a *tombstone* (deletion). It is written by a change, owned by an organisational unit, and its node was created in a project ([ADR 0054](adr/0054-structures-bootstrap-and-the-graph-guard.md)). |
 | **Link** | Typed relationship **from version to version**: `REQ-12@v3 ─satisfies→ NEED-4@v2`. A link does not automatically "follow" new versions: if `NEED-4` moves to v3, the link becomes **suspect** — this is the model's native impact signal. |
 | **Baseline** | Coherent set `{NodeID → Version}`, scoped to one namespace (every node in it belongs to that namespace): a "commit" of the graph. A baseline's links are those whose two endpoints are both in the baseline. Every modification starts from a reference baseline of its own namespace and produces a resulting baseline of that same namespace. It is stored as the entries that differ from its parent, whole every 50 baselines along a chain (a checkpoint, [ADR 0032](adr/0032-branches-as-pointers-baselines-as-deltas.md)). |
 
@@ -677,17 +677,22 @@ an interface, replaceable with the PostgreSQL implementation without changing th
 `graph` model (simplified):
 
 ```sql
-node(id uuid, key text, type text, latest int)
-node_version(node_id, version, props jsonb, deleted bool, change_id, created_at)  -- PK (node_id, version)
-link(id uuid, type, from_id, from_version, to_id, to_version, props jsonb, change_id)
-node_branch(node_id, version, branch)  -- the branches a version joined besides the one it was written on (ADR 0032)
+node(id uuid, namespace, key text, type text, latest int, project_id → node)  -- the project it was created in
+node_version(node_id, version, props jsonb, deleted bool, change_id → change, owner_id → node, created_at)  -- PK (node_id, version)
+link(id uuid, type, from_id, from_version, to_id, to_version, props jsonb, change_id → change)
+node_branch(node_id, version, branch, change_id → change)  -- the branches a version joined besides the one it was written on (ADR 0032)
 baseline(id uuid, name, namespace, branch, parent_id, change_id, created_at, depth)  -- depth 0: a checkpoint
 baseline_entry(baseline_id, node_id, version, removed)  -- whole at a checkpoint, else the difference with the parent
 branch(namespace, name, parent, fork_baseline, head_baseline, origin, status, created_at)  -- PK (namespace, name)
-change(id uuid, title, intent, status, baseline_id, goal, methodology, result_baseline_id, data jsonb)
+change(id uuid, title, intent, status, baseline_id, goal, methodology, result_baseline_id, data jsonb,
+       owner_org, project_id)  -- never empty (ADR 0054)
 change_item(id uuid, change_id, kind, type, status, target_id, target_version, payload jsonb,
             produced_by, derived_from uuid[], created_at)
 ```
+
+Every `change_id`, `owner_id` and `project_id` above is `NOT NULL` with a foreign key (deferred where the bootstrap
+needs it), and `pkg/graph` enforces the same rules in Go whatever the storage (its guard, ADR 0054): the constraints
+are a second line, a storage without any keeps the rules.
 
 > Why PostgreSQL and not a graph database? The required traversals (neighborhood, impact propagation
 > at bounded depth) are expressed as recursive CTEs; version-to-version versioning and baselines are
@@ -820,7 +825,8 @@ Adapter    the code that makes the two work together: it implements the tools th
            operations the connector exposes. An `AdapterDef` node of the `platform` namespace (usage
            `adapter`, changed through a change), for one MCP and one connector, with typed parameters. Each
            organisational unit holds an INSTANCE (an `Adapter` node of the `organisation` namespace, owned by
-           the unit through `owner`): the name of the definition and the parameter values. Where everything converges.
+           the unit: the owner of its version, ADR 0054): the name of the definition and the parameter values.
+           Where everything converges.
 ```
 
 The adapter code is the body of `function (ctx)`: `ctx.tool()` is the MCP tool called, `ctx.args()` its
@@ -867,8 +873,8 @@ under the parameter name, and that the code can never read. Runs are bounded (30
   missing or of another MCP, missing or unknown parameter: error; unregistered connector, secret the connector needs: warnings);
   `AdapterTemplate` generates the code skeleton.
 - **Editing.** MCPs, adapter definitions and adapter instances are nodes, created, changed and removed through changes like any
-  node. The first start creates `ORG-DEFAULT`, `document-repository` and the `localfs-document-repository` adapter
-  definition (`graphsvc.SeedDefaults`).
+  node. The first start bootstraps `ORG-DEFAULT` and `PROJ-ROOT` (`Graph.Bootstrap`, ADR 0054), then creates
+  `document-repository` and the `localfs-document-repository` adapter definition (`graphsvc.SeedDefaults`).
 - **Scope** ([ADR 0028](adr/0028-builtin-mcps-and-connectors.md)). An MCP says where a methodology may use it:
   `action` (declared by actions), `agent` (declared by agents only, reached by their llm actions: orchestration such as
   `goap-scheduler`), or `both` (default). An action never gets an agent-scoped MCP (not planned, not callable), an
@@ -892,7 +898,7 @@ under the parameter name, and that the code can never read. Runs are bounded (30
 Organisation says who may act; Project says what the organisation is working on. `organisation@ProjectUnit`
 mirrors `OrgUnit`'s hierarchy (`project_part_of`, child → parent) in the same `organisation` namespace, and
 names the methodologies that apply to it, so it inherits their declared roles (ADR 0035 §2) without
-redeclaring them. The root project `PROJ-ROOT` (`domain.DefaultProject`) is seeded self-linked
+redeclaring them. The root project `PROJ-ROOT` (`domain.DefaultProject`) is bootstrapped self-linked
 (`project_part_of` to itself) rather than rootless like `ORG-DEFAULT`; every chain walk already guards
 against revisiting a node, so the self-link terminates safely.
 
@@ -902,14 +908,12 @@ unit locally holds there. `organisation@User` is a subtype of `OrgUnit` (`extend
 `assigns_org` the same way a unit or a team does, without folding `User` into the `part_of` unit tree
 (`member_of` still names a user's home unit).
 
-A change belongs to a project (`domain.Change.ProjectID`; empty resolves to `PROJ-ROOT`, the way an empty
-`OwnerOrg` resolves to `ORG-DEFAULT`), checked for existence at `CreateChange` when given; a sub-change
-inherits its parent's project when unset and must stay within it when set (mirroring the `OwnerOrg` rules
-of ADR 0016). `CreateChange` itself only defaults, never requires, a project: the "select a project before
-any action" rule is enforced one layer up, at `Engine.Start`, for any process that is neither
-`Methodology.Administrative` nor trigger-started (no one at the keyboard to ask) — most direct graph
-callers (seeding, admin tooling, tests) are administrative by nature and would otherwise all need a project
-they have no use for.
+A change acts in a project (`domain.Change.ProjectID`), resolved and stored by `CreateChange` (ADR 0054): a
+sub-change inherits its parent's project when unset and must stay within it when set (mirroring the `OwnerOrg`
+rules of ADR 0016); a change naming none acts in the **default project**, the `ProjectUnit` flagged `default`
+(the root project when none is; an administrator moves the flag from the Project tab). The nodes a change creates
+are created in its project. Picking a project before acting is the web's project selector; the engine no longer
+refuses a process without one.
 
 **Role resolution.** `pkg/access.Snapshot` resolves `ProjectChain` (mirrors `Chain`) and `ProjectRoles`
 (unions the `roles` of every `Assignment` whose org is in a subject's org chain and whose project is in the
@@ -938,10 +942,29 @@ offers "New assignment", opening the entity's tab with that pane pre-opened.
 **Not implemented**: OrgUnit-side action restriction on a project (mirroring `mcp.Restriction`'s shape,
 ADR 0028) — an Assignment grants roles but cannot yet narrow which actions a unit may run locally.
 
+### 3.9b2 Structures, bootstrap and the guard of the graph ([ADR 0054](adr/0054-structures-bootstrap-and-the-graph-guard.md))
+
+The registry, the graph service and the engine keep their responsibilities apart: the registry says which node types
+build the **organisation** and the **projects** (a `structure` tag on a node type: kind, parent link type, root key;
+one type per kind across the domains in force, the built-in organisation domain tags `OrgUnit` and `ProjectUnit`); the
+graph service creates their roots and enforces, for every write, that it is made by a change, owned by a unit and
+created in a project; the engine only executes, through changes.
+
+- **Bootstrap** (`Graph.Bootstrap`): `ORG-DEFAULT` and `PROJ-ROOT` in one transaction, by one applied change held by
+  the root unit and acting in the root project; the services run it at start, before any seed; `CreateChange` runs it
+  too. Idempotent.
+- **Guard** (`pkg/graph/guard.go`, wrapped around every repository transaction by `graph.New`): a node version, link,
+  branch membership or node origin names an existing change; a version has an owner unit and its node a project, nodes
+  of their structures (stamped from the version it follows, else from its change; the project never changes, the owner
+  moves through `NodeWrite.Owner`); a change names its unit and its project. Checked at the end of the transaction,
+  like deferred foreign keys.
+- **Ownership** is the owner of the version: `SplitByOwner` and the adapters of a unit read it (there is no `owner`
+  link).
+
 ### 3.9c User bootstrap, mandatory parenting, local auth ([ADR 0040](adr/0040-user-bootstrap-org-membership-local-auth.md))
 
-`EnsureUser` resolves `ORG-DEFAULT` *before* creating anything: `SeedDefaults` can still be seeding at
-startup (it waits on the registry to publish the type catalogue), and creating the `User` node first would
+`EnsureUser` resolves `ORG-DEFAULT` *before* creating anything (the services now bootstrap the graph before serving,
+ADR 0054, so the root exists; the check stays as a guard): creating the `User` node first would
 leave a permanently broken one on that race (no `member_of`, no admin) — worse, one that makes every later
 subject see the namespace as "already has a `User`" and never get the first-admin bootstrap either. Once the
 org is confirmed, it links the new `User` `member_of` it and grants `Roles: ["admin"]` when it is the first

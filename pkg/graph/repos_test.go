@@ -50,7 +50,23 @@ func seedNode(ctx context.Context, g *Graph, in NewNode) (domain.Node, error) {
 	if n.Key == "" {
 		n.Key = string(n.ID)
 	}
-	err := g.repo.InTx(ctx, func(tx Tx) error { return tx.PutNode(ctx, n) })
+	// even a fixture writes inside a change (ADR 0054): one opened on the current head, left open
+	head, err := g.BranchHead(ctx, n.Namespace, domain.MainBranch)
+	if errors.Is(err, ErrNotFound) {
+		head, err = g.CreateBaseline(ctx, n.Namespace, "B0", nil)
+	}
+	if err != nil {
+		return n, err
+	}
+	c, err := g.CreateChange(ctx, NewChange{Namespace: n.Namespace, Title: "seed " + n.Key, BaselineID: head.ID})
+	if err != nil {
+		return n, err
+	}
+	n.ChangeID = c.ID
+	err = g.repo.InTx(ctx, func(tx Tx) error { return tx.PutNode(ctx, n) })
+	if err == nil {
+		n, err = g.Node(ctx, n.Ref())
+	}
 	return n, err
 }
 

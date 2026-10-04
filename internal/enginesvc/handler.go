@@ -89,7 +89,7 @@ func toConnect(err error) error {
 		return connect.NewError(connect.CodeNotFound, err)
 	case errors.Is(err, authz.ErrForbidden):
 		return connect.NewError(connect.CodePermissionDenied, err)
-	case errors.Is(err, engine.ErrInvalidState), errors.Is(err, engine.ErrNoProject):
+	case errors.Is(err, engine.ErrInvalidState):
 		return connect.NewError(connect.CodeFailedPrecondition, err)
 	}
 	return rpcerr.ToConnect(err)

@@ -80,8 +80,9 @@ type Tx interface {
 	SetNodeOrigin(ctx context.Context, ref domain.NodeRef, change domain.ChangeID, cn domain.ChangeImpactID, comment string) error
 
 	// JoinBranch makes a node version part of a branch it was not written on (a merge that lands it as is,
-	// ADR 0032): the version is not copied and keeps the branch it was written on.
-	JoinBranch(ctx context.Context, ref domain.NodeRef, branch string) error
+	// ADR 0032): the version is not copied and keeps the branch it was written on. change is the change whose merge
+	// makes it join (ADR 0054: no membership without a change).
+	JoinBranch(ctx context.Context, ref domain.NodeRef, branch string, change domain.ChangeID) error
 
 	// DeleteChange removes a change that landed nothing (ADR 0037): its log, impacts, node versions and links, the
 	// nodes it alone created, and its branch when it has one of its own (empty: none). It refuses (ErrConflict) when
