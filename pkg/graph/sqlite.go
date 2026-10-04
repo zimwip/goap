@@ -267,13 +267,16 @@ func (t *sqliteTx) Baseline(ctx context.Context, id domain.BaselineID) (domain.B
 	var b domain.Baseline
 	var parent, mergedFrom, change sql.NullString
 	var created string
-	err := t.tx.QueryRowContext(ctx, `SELECT id, name, parent_id, merged_from, change_id, created_at, branch, namespace FROM baseline WHERE id = ?`, string(id)).
-		Scan((*string)(&b.ID), &b.Name, &parent, &mergedFrom, &change, &created, &b.Branch, &b.Namespace)
+	err := t.tx.QueryRowContext(ctx, `SELECT id, name, parent_id, merged_from, change_id, created_at, branch, namespace, gap, kind FROM baseline WHERE id = ?`, string(id)).
+		Scan((*string)(&b.ID), &b.Name, &parent, &mergedFrom, &change, &created, &b.Branch, &b.Namespace, &b.Gap, &b.Kind)
 	if err != nil {
 		return b, sqliteErr(err, "baseline "+string(id))
 	}
 	b.ParentID, b.MergedFrom, b.ChangeID, b.CreatedAt = domain.BaselineID(parent.String), domain.BaselineID(mergedFrom.String), domain.ChangeID(change.String), tsParse(created)
 	b.Nodes = map[domain.NodeID]domain.Version{}
+	if b.Gap > 0 {
+		return b, nil // only the header is stored
+	}
 	rows, err := t.tx.QueryContext(ctx, baselineEntriesSQL("?")+` SELECT node_id, version FROM eff WHERE rn = 1 AND NOT removed`, string(id))
 	if err != nil {
 		return b, err
@@ -325,15 +328,15 @@ func (t *sqliteTx) Baselines(ctx context.Context, namespace string) ([]domain.Ba
 
 func (t *sqliteTx) Change(ctx context.Context, id domain.ChangeID) (domain.Change, error) {
 	var c domain.Change
-	var result sql.NullString
+	var start, result sql.NullString
 	var data, created string
 	err := t.tx.QueryRowContext(ctx, `SELECT id, title, intent, methodology, goal, status, baseline_id, result_baseline_id, data, created_at, branch, namespace, COALESCE(parent_id, ''), owner_org, project_id, administrative, activity_ref
 		FROM change WHERE id = ?`, string(id)).
-		Scan((*string)(&c.ID), &c.Title, &c.Intent, &c.Methodology, &c.Goal, (*string)(&c.Status), (*string)(&c.BaselineID), &result, &data, &created, &c.Branch, &c.Namespace, (*string)(&c.ParentID), &c.OwnerOrg, &c.ProjectID, &c.Administrative, &c.ActivityRef)
+		Scan((*string)(&c.ID), &c.Title, &c.Intent, &c.Methodology, &c.Goal, (*string)(&c.Status), &start, &result, &data, &created, &c.Branch, &c.Namespace, (*string)(&c.ParentID), &c.OwnerOrg, &c.ProjectID, &c.Administrative, &c.ActivityRef)
 	if err != nil {
 		return c, sqliteErr(err, "change "+string(id))
 	}
-	c.ResultBaselineID, c.Data, c.CreatedAt = domain.BaselineID(result.String), props([]byte(data)), tsParse(created)
+	c.BaselineID, c.ResultBaselineID, c.Data, c.CreatedAt = domain.BaselineID(start.String), domain.BaselineID(result.String), props([]byte(data)), tsParse(created)
 	facts, err := t.Log(ctx, factsFilter(id))
 	if err != nil {
 		return c, err
@@ -408,19 +411,26 @@ func (t *sqliteTx) PutLink(ctx context.Context, l domain.Link) error {
 func (t *sqliteTx) PutBaseline(ctx context.Context, b domain.Baseline) error {
 	var parent *domain.Baseline
 	parentDepth := 0
-	if b.ParentID != "" {
-		if err := t.tx.QueryRowContext(ctx, `SELECT depth FROM baseline WHERE id = ?`, string(b.ParentID)).Scan(&parentDepth); err != nil {
+	if b.ParentID != "" && b.Gap == 0 {
+		var parentGap int
+		if err := t.tx.QueryRowContext(ctx, `SELECT depth, gap FROM baseline WHERE id = ?`, string(b.ParentID)).Scan(&parentDepth, &parentGap); err != nil {
 			return sqliteErr(err, "baseline "+string(b.ParentID))
 		}
-		p, err := t.Baseline(ctx, b.ParentID)
-		if err != nil {
-			return err
+		// a delta is only stored over a parent whose entries are stored: else the baseline is stored whole
+		if parentGap == 0 {
+			p, err := t.Baseline(ctx, b.ParentID)
+			if err != nil {
+				return err
+			}
+			parent = &p
 		}
-		parent = &p
 	}
 	depth, entries := storedEntries(parent, parentDepth, b.Nodes)
-	_, err := t.tx.ExecContext(ctx, `INSERT INTO baseline (id, name, parent_id, merged_from, change_id, created_at, branch, namespace, depth) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		string(b.ID), b.Name, nullUUID(string(b.ParentID)), nullUUID(string(b.MergedFrom)), nullUUID(string(b.ChangeID)), tsText(b.CreatedAt), domain.BranchOf(b.Branch), domain.NamespaceOf(b.Namespace), depth)
+	if b.Gap > 0 {
+		depth, entries = 0, nil
+	}
+	_, err := t.tx.ExecContext(ctx, `INSERT INTO baseline (id, name, parent_id, merged_from, change_id, created_at, branch, namespace, depth, gap, kind) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		string(b.ID), b.Name, nullUUID(string(b.ParentID)), nullUUID(string(b.MergedFrom)), nullUUID(string(b.ChangeID)), tsText(b.CreatedAt), domain.BranchOf(b.Branch), domain.NamespaceOf(b.Namespace), depth, b.Gap, kindOf(b))
 	if err != nil {
 		return sqliteErr(err, "baseline")
 	}
@@ -437,12 +447,53 @@ func (t *sqliteTx) PutBaseline(ctx context.Context, b domain.Baseline) error {
 	return nil
 }
 
+func (t *sqliteTx) BranchJoins(ctx context.Context, namespace, branch string, change domain.ChangeID) ([]domain.NodeRef, error) {
+	rows, err := t.tx.QueryContext(ctx, `SELECT j.node_id, j.version FROM node_branch j JOIN node n ON n.id = j.node_id WHERE n.namespace = ?1 AND j.branch = ?2 AND j.change_id = ?3`,
+		domain.NamespaceOf(namespace), domain.BranchOf(branch), string(change))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []domain.NodeRef
+	for rows.Next() {
+		var id string
+		var v int
+		if err := rows.Scan(&id, &v); err != nil {
+			return nil, err
+		}
+		out = append(out, domain.NodeRef{ID: domain.NodeID(id), Version: domain.Version(v)})
+	}
+	return out, rows.Err()
+}
+
+func (t *sqliteTx) MaterializeBaseline(ctx context.Context, id domain.BaselineID, nodes map[domain.NodeID]domain.Version) error {
+	if _, err := t.tx.ExecContext(ctx, `DELETE FROM baseline_entry WHERE baseline_id = ?`, string(id)); err != nil {
+		return err
+	}
+	if res, err := t.tx.ExecContext(ctx, `UPDATE baseline SET depth = 0, gap = 0 WHERE id = ?`, string(id)); err != nil {
+		return sqliteErr(err, "baseline "+string(id))
+	} else if k, _ := res.RowsAffected(); k != 1 {
+		return fmt.Errorf("baseline %s: %w", id, ErrNotFound)
+	}
+	stmt, err := t.tx.PrepareContext(ctx, `INSERT INTO baseline_entry (baseline_id, node_id, version, removed) VALUES (?, ?, ?, ?)`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+	for nid, v := range nodes {
+		if _, err := stmt.ExecContext(ctx, string(id), string(nid), int(v), false); err != nil {
+			return sqliteErr(err, "baseline entries")
+		}
+	}
+	return nil
+}
+
 func (t *sqliteTx) PutChange(ctx context.Context, c domain.Change) error {
 	_, err := t.tx.ExecContext(ctx, `INSERT INTO change (id, title, intent, methodology, goal, status, baseline_id, result_baseline_id, data, created_at, branch, namespace, parent_id, owner_org, project_id, administrative, activity_ref)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT (id) DO UPDATE SET title = excluded.title, intent = excluded.intent, goal = excluded.goal, status = excluded.status,
 		  result_baseline_id = excluded.result_baseline_id, data = excluded.data, baseline_id = excluded.baseline_id, branch = excluded.branch`,
-		string(c.ID), c.Title, c.Intent, c.Methodology, c.Goal, string(c.Status), string(c.BaselineID), nullUUID(string(c.ResultBaselineID)),
+		string(c.ID), c.Title, c.Intent, c.Methodology, c.Goal, string(c.Status), nullUUID(string(c.BaselineID)), nullUUID(string(c.ResultBaselineID)),
 		string(jsonb(c.Data)), tsText(c.CreatedAt), domain.BranchOf(c.Branch), domain.NamespaceOf(c.Namespace), nullUUID(string(c.ParentID)), c.OwnerOrg, c.ProjectID, c.Administrative, c.ActivityRef)
 	return sqliteErr(err, "change")
 }
@@ -607,7 +658,7 @@ func (t *sqliteTx) JoinBranch(ctx context.Context, ref domain.NodeRef, branch st
 }
 
 func (t *sqliteTx) baselineHeaders(ctx context.Context) ([]baselineHeader, error) {
-	rows, err := t.tx.QueryContext(ctx, `SELECT id, coalesce(parent_id, ''), depth FROM baseline ORDER BY created_at, rowid`)
+	rows, err := t.tx.QueryContext(ctx, `SELECT id, coalesce(parent_id, ''), depth FROM baseline WHERE gap = 0 ORDER BY created_at, rowid`)
 	if err != nil {
 		return nil, err
 	}
@@ -641,6 +692,53 @@ func (t *sqliteTx) rewriteBaseline(ctx context.Context, id domain.BaselineID, de
 		}
 	}
 	return nil
+}
+
+func (t *sqliteTx) PutTag(ctx context.Context, tag domain.Tag) error {
+	_, err := t.tx.ExecContext(ctx, `INSERT INTO tag (id, name, namespace, change_id, baseline_id, by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT (id) DO UPDATE SET name = excluded.name, baseline_id = excluded.baseline_id`,
+		string(tag.ID), tag.Name, domain.NamespaceOf(tag.Namespace), string(tag.ChangeID), nullUUID(string(tag.BaselineID)), tag.By, tsText(tag.CreatedAt))
+	return sqliteErr(err, "tag "+tag.Name)
+}
+
+func (t *sqliteTx) DeleteTag(ctx context.Context, id domain.TagID) error {
+	res, err := t.tx.ExecContext(ctx, `DELETE FROM tag WHERE id = ?`, string(id))
+	if err != nil {
+		return sqliteErr(err, "tag "+string(id))
+	}
+	if k, _ := res.RowsAffected(); k != 1 {
+		return fmt.Errorf("tag %s: %w", id, ErrNotFound)
+	}
+	return nil
+}
+
+func (t *sqliteTx) Tags(ctx context.Context, f domain.TagFilter) ([]domain.Tag, error) {
+	q, args := `SELECT id, name, namespace, change_id, COALESCE(baseline_id, ''), by, created_at FROM tag WHERE 1 = 1`, []any{}
+	if f.Namespace != "" {
+		q, args = q+` AND namespace = ?`, append(args, domain.NamespaceOf(f.Namespace))
+	}
+	if f.Name != "" {
+		q, args = q+` AND name = ?`, append(args, f.Name)
+	}
+	if f.Change != "" {
+		q, args = q+` AND change_id = ?`, append(args, string(f.Change))
+	}
+	rows, err := t.tx.QueryContext(ctx, q+` ORDER BY created_at, rowid`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []domain.Tag
+	for rows.Next() {
+		var tag domain.Tag
+		var created string
+		if err := rows.Scan((*string)(&tag.ID), &tag.Name, &tag.Namespace, (*string)(&tag.ChangeID), (*string)(&tag.BaselineID), &tag.By, &created); err != nil {
+			return nil, err
+		}
+		tag.CreatedAt = tsParse(created)
+		out = append(out, tag)
+	}
+	return out, rows.Err()
 }
 
 func (t *sqliteTx) DeleteChange(ctx context.Context, id domain.ChangeID, namespace, branch string) error {
@@ -682,6 +780,7 @@ func (t *sqliteTx) DeleteChange(ctx context.Context, id domain.ChangeID, namespa
 		`DELETE FROM node_version WHERE change_id = ?1`,
 		`DELETE FROM change_impact WHERE change_id = ?1`,
 		`DELETE FROM change_log WHERE change_id = ?1`,
+		`DELETE FROM tag WHERE change_id = ?1`,
 	} {
 		if _, err := t.tx.ExecContext(ctx, q, string(id)); err != nil {
 			return sqliteErr(err, "change "+string(id))

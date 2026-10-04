@@ -29,8 +29,20 @@ func ownBranch(ctx context.Context, tx Tx, c domain.Change) (domain.Branch, bool
 	return b, b.Origin == domain.ChangeBranchOrigin(c.ID), nil
 }
 
-// integrate merges the branch of a change into its parent branch and marks the
-// change applied. Unresolved conflicts leave the change merge_pending.
+// integrateTx integrates a committed change into the branch it was forked from (its own branch is the one to merge).
+func (g *Graph) integrateTx(ctx context.Context, tx Tx, c domain.Change, resolutions map[domain.NodeID]Resolution) (domain.Change, error) {
+	own, ok, err := ownBranch(ctx, tx, c)
+	if err != nil {
+		return c, err
+	}
+	if !ok {
+		return c, fmt.Errorf("change %s has no branch of its own: %w", c.ID, ErrInvalid)
+	}
+	return g.integrate(ctx, tx, c, own, resolutions)
+}
+
+// integrate merges the branch of a change into its parent branch and marks the change applied. Unresolved conflicts
+// leave the change committed: its integration waits for IntegrateChange.
 func (g *Graph) integrate(ctx context.Context, tx Tx, c domain.Change, own domain.Branch, resolutions map[domain.NodeID]Resolution) (domain.Change, error) {
 	if ff, err := g.fastForward(ctx, tx, c, own); err != nil || ff {
 		if err != nil {
@@ -45,8 +57,7 @@ func (g *Graph) integrate(ctx context.Context, tx Tx, c domain.Change, own domai
 	}
 	for _, cand := range plan.Conflicting() {
 		if _, ok := resolutions[cand.Node]; !ok {
-			c.Status = domain.ChangeMergePending
-			return c, tx.PutChange(ctx, c)
+			return c, nil
 		}
 	}
 	res, err := g.mergeBranchTx(ctx, tx, MergeRequest{From: own.Name, Into: own.Parent, Title: "merge " + c.Title,
@@ -62,15 +73,15 @@ func (g *Graph) integrate(ctx context.Context, tx Tx, c domain.Change, own domai
 	return c, tx.PutChange(ctx, c)
 }
 
-// MergeChange completes a merge_pending change: its branch is merged into the
-// branch it was forked from, with the given resolutions of the conflicts.
-func (g *Graph) MergeChange(ctx context.Context, id domain.ChangeID, resolutions map[domain.NodeID]Resolution) (c domain.Change, err error) {
+// IntegrateChange completes the integration of a committed change that waited for a resolution: its branch is
+// merged into the branch it was forked from, with the given resolutions of the conflicts.
+func (g *Graph) IntegrateChange(ctx context.Context, id domain.ChangeID, resolutions map[domain.NodeID]Resolution) (c domain.Change, err error) {
 	err = g.repo.InTx(ctx, func(tx Tx) error {
 		if c, err = tx.Change(ctx, id); err != nil {
 			return err
 		}
-		if c.Status != domain.ChangeMergePending {
-			return fmt.Errorf("change %s is %s, not merge_pending: %w", id, c.Status, ErrConflict)
+		if c.Status != domain.ChangeCommitted {
+			return fmt.Errorf("change %s is %s, not committed: %w", id, c.Status, ErrConflict)
 		}
 		own, ok, err := ownBranch(ctx, tx, c)
 		if err != nil {
@@ -219,7 +230,7 @@ func (g *Graph) fastForward(ctx context.Context, tx Tx, c domain.Change, own dom
 	}
 	// a fast-forward, not a merge (own.Parent did not move since the fork): name it after the change, not "merge …"
 	res := domain.Baseline{ID: domain.BaselineID(g.newID()), Name: c.Title, Namespace: c.Namespace, Branch: domain.BranchOf(own.Parent), ParentID: into.ID, ChangeID: c.ID,
-		Nodes: from.Nodes, CreatedAt: g.now()}
+		Kind: domain.BaselineFastForward, Nodes: from.Nodes, CreatedAt: g.now()}
 	if err := tx.PutBaseline(ctx, res); err != nil {
 		return false, err
 	}

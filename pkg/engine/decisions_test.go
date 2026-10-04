@@ -25,8 +25,8 @@ func TestDecisionLoopEndToEnd(t *testing.T) {
 		t.Fatal(err)
 	}
 	g := graph.New(graph.NewMemory())
-	req, _ := g.CreateNode(ctx, graph.NewNode{Namespace: "alm", Key: "REQ-1", Type: "alm@Requirement", Properties: map[string]any{"title": "Pay online"}})
-	b, err := g.CreateBaseline(ctx, "alm", "B1", []domain.NodeRef{req.Ref()})
+	_, _ = g.CreateNode(ctx, graph.NewNode{Namespace: "alm", Key: "REQ-1", Type: "alm@Requirement", Properties: map[string]any{"title": "Pay online"}})
+	b, err := g.BranchHead(ctx, "alm", domain.MainBranch)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -91,8 +91,8 @@ func TestDecisionLoopEndToEnd(t *testing.T) {
 func TestDecisionRatificationIsHuman(t *testing.T) {
 	ctx := context.Background()
 	g := graph.New(graph.NewMemory())
-	req, _ := g.CreateNode(ctx, graph.NewNode{Namespace: "alm", Key: "REQ-1", Type: "alm@Requirement"})
-	b, _ := g.CreateBaseline(ctx, "alm", "B1", []domain.NodeRef{req.Ref()})
+	_, _ = g.CreateNode(ctx, graph.NewNode{Namespace: "alm", Key: "REQ-1", Type: "alm@Requirement"})
+	b, _ := g.BranchHead(ctx, "alm", domain.MainBranch)
 	c, err := g.CreateChange(ctx, graph.NewChange{Title: "x", Namespace: "alm", BaselineID: b.ID})
 	if err != nil {
 		t.Fatal(err)

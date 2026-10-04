@@ -124,30 +124,38 @@ func (h *Handler) CreateLink(ctx context.Context, r *connect.Request[graphv1.Cre
 	return res(&graphv1.CreateLinkResponse{Link: pbconv.LinkToPB(l)}, err)
 }
 
-func (h *Handler) CreateBaseline(ctx context.Context, r *connect.Request[graphv1.CreateBaselineRequest]) (*connect.Response[graphv1.CreateBaselineResponse], error) {
+func (h *Handler) TagChange(ctx context.Context, r *connect.Request[graphv1.TagChangeRequest]) (*connect.Response[graphv1.TagChangeResponse], error) {
 	ctx = h.Identity.Context(ctx, r.Header())
-	ns := domain.NamespaceOf(r.Msg.Namespace)
-	if ns == mcp.NamespaceOrganisation {
-		return nil, connect.NewError(connect.CodeFailedPrecondition,
-			fmt.Errorf("namespace %s is access control: its branch head only advances through an applied change", ns))
+	c, err := h.Graph.Change(ctx, domain.ChangeID(r.Msg.ChangeId))
+	if err != nil {
+		return nil, rpcerr.ToConnect(err)
 	}
 	who := authz.From(ctx)
 	if err := authz.Check(ctx, h.Authz, authz.Request{Subject: who, Action: "create",
-		Resource: authz.Resource{Type: "baseline", Namespace: ns, Org: who.Org, Owner: who.Subject, ProjectID: who.Project}}); err != nil {
+		Resource: authz.Resource{Type: "tag", Namespace: c.Namespace, Org: who.Org, Owner: who.Subject, ProjectID: c.ProjectID}}); err != nil {
 		return nil, rpcerr.ToConnect(err)
 	}
-	var b domain.Baseline
-	var err error
-	if r.Msg.AllLatest {
-		b, err = h.Graph.CreateBaselineFromLatest(ctx, r.Msg.Namespace, r.Msg.Name)
-	} else {
-		refs := make([]domain.NodeRef, len(r.Msg.Nodes))
-		for i, n := range r.Msg.Nodes {
-			refs[i] = pbconv.RefFromPB(n)
-		}
-		b, err = h.Graph.CreateBaseline(ctx, r.Msg.Namespace, r.Msg.Name, refs)
+	t, err := h.Graph.TagChange(ctx, c.ID, r.Msg.Name, who.Subject)
+	return res(&graphv1.TagChangeResponse{Tag: pbconv.TagToPB(t)}, err)
+}
+
+func (h *Handler) ListTags(ctx context.Context, r *connect.Request[graphv1.ListTagsRequest]) (*connect.Response[graphv1.ListTagsResponse], error) {
+	ts, err := h.Graph.Tags(ctx, domain.TagFilter{Namespace: r.Msg.Namespace, Name: r.Msg.Name, Change: domain.ChangeID(r.Msg.ChangeId)})
+	out := &graphv1.ListTagsResponse{}
+	for _, t := range ts {
+		out.Tags = append(out.Tags, pbconv.TagToPB(t))
 	}
-	return res(&graphv1.CreateBaselineResponse{Baseline: pbconv.BaselineToPB(b)}, err)
+	return res(out, err)
+}
+
+func (h *Handler) DeleteTag(ctx context.Context, r *connect.Request[graphv1.DeleteTagRequest]) (*connect.Response[graphv1.DeleteTagResponse], error) {
+	ctx = h.Identity.Context(ctx, r.Header())
+	who := authz.From(ctx)
+	if err := authz.Check(ctx, h.Authz, authz.Request{Subject: who, Action: "delete",
+		Resource: authz.Resource{Type: "tag", Org: who.Org, Owner: who.Subject, ProjectID: who.Project}}); err != nil {
+		return nil, rpcerr.ToConnect(err)
+	}
+	return res(&graphv1.DeleteTagResponse{}, h.Graph.DeleteTag(ctx, domain.TagID(r.Msg.Id)))
 }
 
 func (h *Handler) ListBaselines(ctx context.Context, r *connect.Request[graphv1.ListBaselinesRequest]) (*connect.Response[graphv1.ListBaselinesResponse], error) {
@@ -598,7 +606,7 @@ func (h *Handler) MergeChange(ctx context.Context, r *connect.Request[graphv1.Me
 	for id, rs := range r.Msg.Resolutions {
 		resolutions[domain.NodeID(id)] = graph.Resolution{Props: pbconv.Map(rs.GetProps()), Skip: rs.GetSkip()}
 	}
-	c, err := h.Graph.MergeChange(ctx, domain.ChangeID(r.Msg.ChangeId), resolutions)
+	c, err := h.Graph.IntegrateChange(ctx, domain.ChangeID(r.Msg.ChangeId), resolutions)
 	if err == nil {
 		c.Items = nil
 		h.publish(ctx, "goap.change."+string(c.ID)+".applied", domain.ChangeEvent{Type: "change.applied", Change: c})

@@ -64,7 +64,7 @@ func TestSpecializationChosenAtExecution(t *testing.T) {
 	if _, err := g.CreateNode(ctx, graph.NewNode{Namespace: "organisation", Key: testProject, Type: "organisation@ProjectUnit"}); err != nil {
 		t.Fatal(err)
 	}
-	b, _ := g.CreateBaseline(ctx, "alm", "B0", nil)
+	b, _ := g.BranchHead(ctx, "alm", domain.MainBranch)
 	e := &Engine{Graph: g, Methodologies: StaticMethodologies{"demo": demo, "golang": golang},
 		Executors: map[string]Executor{methodology.KindBuiltin: BuiltinExecutor{"build.java": builtin("java"), "build.any": builtin("any"), "build.go": builtin("go")}},
 		Intent:    intent.Resolver{Ranker: intent.Lexical{}}, Store: NewMemoryStore()}
@@ -103,7 +103,7 @@ goals: [{name: g, pre: {done: true}}]
 	if _, err := g.CreateNode(ctx, graph.NewNode{Namespace: "organisation", Key: testProject, Type: "organisation@ProjectUnit"}); err != nil {
 		t.Fatal(err)
 	}
-	b, _ := g.CreateBaseline(ctx, "", "B0", nil)
+	b, _ := g.BranchHead(ctx, "", domain.MainBranch)
 	e := &Engine{Graph: g, Methodologies: StaticMethodologies{"abs": compile(t, src)}, Executors: map[string]Executor{},
 		Intent: intent.Resolver{Ranker: intent.Lexical{}}, Store: NewMemoryStore(), MaxFailures: 1}
 	p, _ := e.Start(ctx, StartRequest{Methodology: "abs", Goal: "g", BaselineID: b.ID, Intent: "x", ProjectID: testProject})

@@ -101,3 +101,5 @@ outside it, stays with the parent), an `organisation@Adapter` belongs to the uni
   applied over the old one, and fails loudly if tried.
 - Every change has a real project, so a role check on a change always has a project chain; "select a project before
   acting" remains a choice of the web (the project selector), no longer a refusal of the engine.
+- Baselines follow the same rule: see ADR 0056 (a baseline is the state a change leaves; the empty state before the
+  first change is the empty baseline id, which nothing stores).

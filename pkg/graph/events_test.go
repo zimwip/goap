@@ -39,7 +39,7 @@ func TestObserveNodeAndBaselineEvents(t *testing.T) {
 				"SubItem": {Extends: "Item", Search: []domain.SearchProperty{{Property: "notes", Text: true}}},
 			}
 		}
-		if _, err := g.CreateBaseline(ctx, "", "B1", nil); err != nil {
+		if _, err := g.BranchHead(ctx, "", domain.MainBranch); err != nil {
 			t.Fatal(err)
 		}
 		sink := &recSink{}
@@ -73,17 +73,15 @@ func TestObserveNodeAndBaselineEvents(t *testing.T) {
 		if ev.Facets["title"] != "hello" || ev.Facets["prio"] != "high" || len(ev.Facets) != 2 {
 			t.Fatalf("facets = %v", ev.Facets)
 		}
-		sink.subj, sink.vals = nil, nil
-		if _, err := g.CreateBaseline(ctx, "", "B2", []domain.NodeRef{n.Ref()}); err != nil {
-			t.Fatal(err)
+		// the creation advanced the head of main: a BaselineEvent among the events
+		advanced := 0
+		for i, v := range sink.vals {
+			if _, ok := v.(domain.BaselineEvent); ok && sink.subj[i] == "goap.baseline.main.advanced" {
+				advanced++
+			}
 		}
-		if len(sink.vals) != 1 || sink.subj[0] != "goap.baseline.main.advanced" {
-			t.Fatalf("baseline event: %v %v", sink.subj, sink.vals)
-		}
-		// B2 chains onto the real head (CreateBaseline now always does, so a direct write can never
-		// silently orphan branch history): n's version is unchanged from the head, so nothing is newly Set.
-		if be := sink.vals[0].(domain.BaselineEvent); len(be.Set) != 0 {
-			t.Fatalf("set = %v", be.Set)
+		if advanced == 0 {
+			t.Fatalf("no baseline event: %v", sink.subj)
 		}
 	})
 }

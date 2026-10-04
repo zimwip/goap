@@ -65,10 +65,7 @@ func newAlgoWorld(t *testing.T, repo Repo) algoWorld {
 	if _, err := w.g.Link(ctx, testChange(t, w.g, ""), domain.LinkContains, w.doc.Ref(), w.req.Ref(), nil); err != nil {
 		t.Fatal(err)
 	}
-	var err error
-	if w.base, err = w.g.CreateBaseline(ctx, "", "B", []domain.NodeRef{w.req.Ref(), w.doc.Ref()}); err != nil {
-		t.Fatal(err)
-	}
+	w.base = pinBaseline(t, w.g, "", w.req.Ref(), w.doc.Ref())
 	return w
 }
 

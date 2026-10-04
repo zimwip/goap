@@ -385,7 +385,7 @@ func (e *Engine) latestBaseline(ctx context.Context, namespace string) (domain.B
 		return "", err
 	}
 	if len(bs) == 0 {
-		return "", fmt.Errorf("no baseline in namespace %s: %w", domain.NamespaceOf(namespace), ErrInvalidState)
+		return "", nil // no change landed yet: the empty state, which a change then starts from (ADR 0056)
 	}
 	latest := bs[0]
 	for _, b := range bs[1:] {

@@ -103,7 +103,7 @@ actions:
       {{ range .Artifacts }}{{ if .Data.text }}- {{ .Data.text }}
       {{ end }}{{ end }}
 
-      1. Call goap-change/list (status draft, active or merge_pending; filter by namespace "alm" and,
+      1. Call goap-change/list (status draft, active or committed; filter by namespace "alm" and,
          if known, the requester's unit) to see the open changes.
       2. If one of them clearly is the same piece of work as the request, hand it off: call
          goap-scheduler/attach with change=<its id> (binds this same process to it directly, in

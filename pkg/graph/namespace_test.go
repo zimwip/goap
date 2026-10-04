@@ -36,11 +36,7 @@ func testNamespaces(t *testing.T, repo Repo) {
 		t.Fatalf("NodeByKey(default) = %v, %v", n.ID, err)
 	}
 
-	// a baseline snapshots exactly one namespace: mixing is refused
-	if _, err := g.CreateBaseline(ctx, domain.DefaultNamespace, "mixed", []domain.NodeRef{sdlc.Ref(), org.Ref()}); !errors.Is(err, ErrInvalid) {
-		t.Fatalf("mixed-namespace baseline: %v", err)
-	}
-	base, err := g.CreateBaseline(ctx, domain.DefaultNamespace, "B", []domain.NodeRef{sdlc.Ref()})
+	base, err := g.BranchHead(ctx, domain.DefaultNamespace, domain.MainBranch)
 	if err != nil {
 		t.Fatal(err)
 	}

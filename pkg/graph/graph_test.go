@@ -38,7 +38,7 @@ func newFixture(t *testing.T, repo Repo) fixture {
 	must(err)
 	_, err = g.Link(ctx, c0, "verifies", f.test.Ref(), f.req.Ref(), nil)
 	must(err)
-	f.base, err = g.CreateBaseline(ctx, "", "B1", []domain.NodeRef{f.need.Ref(), f.req.Ref(), f.test.Ref()})
+	f.base, err = g.BranchHead(ctx, "", domain.MainBranch)
 	must(err)
 	return f
 }
@@ -203,8 +203,8 @@ func testApplyRejectedAndConflicts(t *testing.T, repo Repo) {
 	if _, err := g.Apply(ctx, c3.ID, ""); err != nil {
 		t.Fatal(err)
 	}
-	if c3b, _ := g.Change(ctx, c3.ID); c3b.Status != domain.ChangeMergePending {
-		t.Fatalf("expected merge_pending, got %s", c3b.Status)
+	if c3b, _ := g.Change(ctx, c3.ID); c3b.Status != domain.ChangeCommitted {
+		t.Fatalf("expected committed, got %s", c3b.Status)
 	}
 }
 

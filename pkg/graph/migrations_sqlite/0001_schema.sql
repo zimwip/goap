@@ -12,12 +12,19 @@ CREATE TABLE baseline (
     id          text PRIMARY KEY,
     name        text        NOT NULL,
     parent_id   text REFERENCES baseline(id),
-    -- the change that produced the baseline; NULL for the empty initial baseline of a namespace
-    change_id   text,
+    -- the change that produced the baseline (ADR 0056: a baseline is the state a change leaves; the state before
+    -- the first change of a namespace is the empty one, it has no row)
+    change_id   text        NOT NULL REFERENCES change(id) DEFERRABLE INITIALLY DEFERRED,
     created_at  text        NOT NULL,
     branch      text        NOT NULL DEFAULT 'main',
     namespace   text        NOT NULL DEFAULT 'default',
     depth       integer     NOT NULL DEFAULT 0,
+    -- 0: the state is materialised (baseline_entry rows hold it, as a delta from the parent, or whole at a checkpoint);
+    -- n > 0: only this header is stored, the state is computed from the baseline n steps back and what the changes in
+    -- between did (ADR 0056)
+    gap         integer     NOT NULL DEFAULT 0,
+    -- commit | integration | snapshot: how the state follows from the change (ADR 0056)
+    kind        text        NOT NULL DEFAULT 'snapshot',
     merged_from text REFERENCES baseline(id)
 );
 CREATE INDEX baseline_namespace ON baseline (namespace, created_at);
@@ -45,7 +52,9 @@ CREATE TABLE change (
     methodology        text        NOT NULL DEFAULT '',
     goal               text        NOT NULL DEFAULT '',
     status             text        NOT NULL,
-    baseline_id        text        NOT NULL REFERENCES baseline(id),
+    -- the state the change starts from: the baseline of the change before it; NULL for the empty state (the first
+    -- change of a namespace)
+    baseline_id        text REFERENCES baseline(id),
     result_baseline_id text REFERENCES baseline(id),
     data               text        NOT NULL DEFAULT '{}',
     created_at         text        NOT NULL,
@@ -178,3 +187,17 @@ CREATE INDEX change_log_type ON change_log (change_id, type, seq);
 CREATE INDEX change_log_flow ON change_log (change_id, flow, seq);
 CREATE INDEX change_log_process ON change_log (process_id, seq);
 CREATE INDEX change_log_execution ON change_log (execution);
+
+-- A tag names the state a change leaves (ADR 0056). Not unique: a name may label several changes. baseline_id is the
+-- materialised snapshot of that state, when one is kept.
+CREATE TABLE tag (
+    id          text PRIMARY KEY,
+    name        text NOT NULL CHECK (name <> ''),
+    namespace   text NOT NULL,
+    change_id   text NOT NULL REFERENCES change(id) DEFERRABLE INITIALLY DEFERRED,
+    baseline_id text REFERENCES baseline(id),
+    by          text NOT NULL DEFAULT '',
+    created_at  text NOT NULL
+);
+CREATE INDEX tag_name ON tag (namespace, name);
+CREATE INDEX tag_change ON tag (change_id);

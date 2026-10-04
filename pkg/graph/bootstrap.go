@@ -68,13 +68,8 @@ func (g *Graph) bootstrap(ctx context.Context, tx Tx) error {
 			continue
 		}
 		namespaces = append(namespaces, st.Namespace)
+		// the state the change starts from: the head of main, the empty state when no change landed yet (ADR 0056)
 		base, err := branchHead(ctx, tx, st.Namespace, domain.MainBranch)
-		if errors.Is(err, ErrNotFound) {
-			base = domain.Baseline{ID: domain.BaselineID(g.newID()), Name: "Initial baseline", Namespace: st.Namespace, Nodes: map[domain.NodeID]domain.Version{}, CreatedAt: now}
-			if err = tx.PutBaseline(ctx, base); err == nil {
-				err = g.advanceBranch(ctx, tx, st.Namespace, domain.MainBranch, base.ID)
-			}
-		}
 		if err != nil {
 			return err
 		}
@@ -110,7 +105,7 @@ func (g *Graph) bootstrap(ctx context.Context, tx Tx) error {
 			}
 		}
 		res := domain.Baseline{ID: domain.BaselineID(g.newID()), Name: "Bootstrap", Namespace: ns, Branch: domain.MainBranch, ParentID: base.ID,
-			ChangeID: c.ID, Nodes: nodes, CreatedAt: now}
+			ChangeID: c.ID, Kind: domain.BaselineSnapshot, Nodes: nodes, CreatedAt: now}
 		if err := tx.PutBaseline(ctx, res); err != nil {
 			return err
 		}

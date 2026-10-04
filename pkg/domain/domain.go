@@ -169,10 +169,61 @@ type Baseline struct {
 	// MergedFrom is the head baseline of the branch merged in, when this baseline is the result of a merge
 	// (ADR 0032): a baseline has at most one such second parent, ParentID being the first (the target branch's
 	// previous head).
-	MergedFrom BaselineID         `json:"mergedFrom,omitempty"`
-	ChangeID   ChangeID           `json:"changeId,omitempty"`
-	Nodes      map[NodeID]Version `json:"nodes"`
-	CreatedAt  time.Time          `json:"createdAt"`
+	MergedFrom BaselineID `json:"mergedFrom,omitempty"`
+	ChangeID   ChangeID   `json:"changeId,omitempty"`
+	// Kind says how the state of the baseline follows from the change that produced it (ADR 0056): BaselineCommit,
+	// BaselineMerge, BaselineFastForward or BaselineSnapshot.
+	Kind string `json:"kind,omitempty"`
+	// Gap is how far the baseline is from a snapshot of its state (ADR 0056): 0, the state is materialised (its
+	// entries are stored); n > 0, only its header is stored and the state is computed from the baseline n steps back
+	// and what the changes in between did (see Kind). The graph hides it: a baseline it returns always holds its nodes.
+	Gap       int                `json:"gap,omitempty"`
+	Nodes     map[NodeID]Version `json:"nodes"`
+	CreatedAt time.Time          `json:"createdAt"`
+}
+
+// Kinds of baseline.
+const (
+	// BaselineCommit is the state a change leaves on its own branch when it is committed.
+	BaselineCommit = "commit"
+	// BaselineMerge is the state of a branch after a 3-way merge into it.
+	BaselineMerge = "merge"
+	// BaselineFastForward is the state of a branch after a change was fast-forwarded into it.
+	BaselineFastForward = "fast-forward"
+	// BaselineSnapshot is a state nothing derives (the bootstrap, a fixture): always stored.
+	BaselineSnapshot = "snapshot"
+)
+
+// DerivedKind tells whether the state of a baseline of this kind follows from what its change did: a commit and a merge
+// from the `landed` events naming the baseline in the log of its change, a fast-forward from the versions its change
+// joined to the branch (ADR 0056).
+func DerivedKind(kind string) bool {
+	return kind == BaselineCommit || kind == BaselineMerge || kind == BaselineFastForward
+}
+
+// TagID identifies a tag.
+type TagID string
+
+// Tag is a name given to the state a change leaves (ADR 0056): it labels the change that produced the state, and
+// the materialised baseline of that change when one is kept, never a baseline of its own. Tags are not unique: one
+// name may label several changes (a "release" per product line), and a change may carry several names.
+type Tag struct {
+	ID        TagID  `json:"id"`
+	Name      string `json:"name"`
+	Namespace string `json:"namespace"`
+	// ChangeID is the change whose resulting state is named.
+	ChangeID ChangeID `json:"changeId"`
+	// BaselineID is the materialised snapshot of that state, empty while it is only computed.
+	BaselineID BaselineID `json:"baselineId,omitempty"`
+	By         string     `json:"by,omitempty"`
+	CreatedAt  time.Time  `json:"createdAt"`
+}
+
+// TagFilter selects tags; an empty field matches every value.
+type TagFilter struct {
+	Namespace string
+	Name      string
+	Change    ChangeID
 }
 
 // Contains reports whether the exact node version is part of the baseline.

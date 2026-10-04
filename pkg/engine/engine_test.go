@@ -65,12 +65,12 @@ func setup(t *testing.T) (*Engine, *graph.Graph, domain.BaselineID) {
 	req, _ := g.CreateNode(ctx, graph.NewNode{Namespace: "alm", Key: "REQ-1", Type: "alm@Requirement", Properties: map[string]any{"title": "Use PSP v1"}})
 	tst, _ := g.CreateNode(ctx, graph.NewNode{Namespace: "alm", Key: "TST-1", Type: "alm@TestCase"})
 	cmp, _ := g.CreateNode(ctx, graph.NewNode{Namespace: "alm", Key: "CMP-1", Type: "alm@Component"})
-	b0, _ := g.CreateBaseline(ctx, "alm", "B0", nil)
+	b0, _ := g.BranchHead(ctx, "alm", domain.MainBranch)
 	c0, _ := g.CreateChange(ctx, graph.NewChange{Namespace: "alm", Title: "link", BaselineID: b0.ID})
 	_, _ = g.Link(ctx, c0.ID, "alm@satisfies", req.Ref(), need.Ref(), nil)
 	_, _ = g.Link(ctx, c0.ID, "alm@verifies", tst.Ref(), req.Ref(), nil)
 	_, _ = g.Link(ctx, c0.ID, "alm@implements", cmp.Ref(), req.Ref(), nil)
-	b, err := g.CreateBaseline(ctx, "alm", "B1", []domain.NodeRef{need.Ref(), req.Ref(), tst.Ref(), cmp.Ref()})
+	b, err := g.BranchHead(ctx, "alm", domain.MainBranch)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -18,7 +18,7 @@ func changeOpen(ctx context.Context, tx Tx, id domain.ChangeID) (domain.Change, 
 		return c, err
 	}
 	switch c.Status {
-	case domain.ChangeApplied, domain.ChangeAbandoned, domain.ChangeMergePending:
+	case domain.ChangeApplied, domain.ChangeAbandoned, domain.ChangeCommitted:
 		return c, fmt.Errorf("change %s is %s: %w", id, c.Status, ErrConflict)
 	}
 	return c, nil

@@ -63,8 +63,14 @@ type Graph struct {
 	// no ActivityRef, falls back to the Editable floor unchanged.
 	ActivityGoalsMet func(ctx context.Context, activityRef string, bb domain.Blackboard) (bool, error)
 
+	// MaterializeEvery is how many baselines of a chain pass between two that are materialised (their state stored,
+	// ADR 0056); the others are computed from the log. 0: DefaultMaterializeEvery.
+	MaterializeEvery int
+
 	// booted is set once the roots of the structures are known to exist (Bootstrap).
 	booted atomic.Bool
+	// states caches the states computed for baselines kept as a header only.
+	states stateCache
 }
 
 // New returns a Graph backed by repo. Every transaction goes through the guard of the graph (guardRepo, ADR 0054),
@@ -241,59 +247,6 @@ func view(ctx context.Context, tx Tx, ref domain.NodeRef) (domain.NodeView, erro
 	return domain.NodeView{Node: n, Latest: latest.Version, Out: out, In: in}, nil
 }
 
-// CreateBaseline snapshots the given node versions (Version 0 = latest), all
-// of which must belong to namespace. Deleted versions are skipped.
-func (g *Graph) CreateBaseline(ctx context.Context, namespace, name string, nodes []domain.NodeRef) (domain.Baseline, error) {
-	namespace = domain.NamespaceOf(namespace)
-	b := domain.Baseline{ID: domain.BaselineID(g.newID()), Name: name, Namespace: namespace, Nodes: map[domain.NodeID]domain.Version{}, CreatedAt: g.now()}
-	err := g.repo.InTx(ctx, func(tx Tx) error {
-		for _, r := range nodes {
-			n, err := tx.Node(ctx, r)
-			if err != nil {
-				return err
-			}
-			if n.Deleted {
-				continue
-			}
-			if n.Namespace != namespace {
-				return fmt.Errorf("node %s is of namespace %s, baseline %s is of namespace %s: %w", n.Key, n.Namespace, name, namespace, ErrInvalid)
-			}
-			b.Nodes[n.ID] = n.Version
-		}
-		// Chains onto the branch's real head when one already exists, so a direct write can never silently
-		// sever a namespace's history; only a branch with no head yet (ErrNotFound) stays parentless.
-		branch := domain.BranchOf(b.Branch)
-		if head, err := branchHead(ctx, tx, namespace, branch); err == nil {
-			b.ParentID = head.ID
-		} else if !errors.Is(err, ErrNotFound) {
-			return err
-		}
-		if err := tx.PutBaseline(ctx, b); err != nil {
-			return err
-		}
-		// Persists the branch row from the baseline's first version on, main included: nothing but an applied
-		// change advances it otherwise, so a namespace started this way would leave main implicit until then.
-		return g.advanceBranch(ctx, tx, namespace, branch, b.ID)
-	})
-	return b, err
-}
-
-// CreateBaselineFromLatest snapshots the latest version of every live node of namespace.
-func (g *Graph) CreateBaselineFromLatest(ctx context.Context, namespace, name string) (domain.Baseline, error) {
-	var refs []domain.NodeRef
-	err := g.repo.InTx(ctx, func(tx Tx) error {
-		nodes, err := tx.LatestNodes(ctx, namespace, domain.MainBranch)
-		for _, n := range nodes {
-			refs = append(refs, n.Ref())
-		}
-		return err
-	})
-	if err != nil {
-		return domain.Baseline{}, err
-	}
-	return g.CreateBaseline(ctx, namespace, name, refs)
-}
-
 // Baseline returns a baseline.
 func (g *Graph) Baseline(ctx context.Context, id domain.BaselineID) (b domain.Baseline, err error) {
 	err = g.repo.InTx(ctx, func(tx Tx) error { b, err = tx.Baseline(ctx, id); return err })
@@ -428,11 +381,20 @@ func (g *Graph) CreateChange(ctx context.Context, in NewChange) (domain.Change, 
 		if err := g.scopeChange(ctx, tx, &c); err != nil {
 			return err
 		}
+		// a change naming no starting state starts from the head of its branch: the state the last change left, or
+		// the empty state while the namespace has none (ADR 0056)
+		if c.BaselineID == "" {
+			head, err := branchHead(ctx, tx, c.Namespace, c.Branch)
+			if err != nil {
+				return err
+			}
+			c.BaselineID = head.ID
+		}
 		fork, err := tx.Baseline(ctx, c.BaselineID)
 		if err != nil {
 			return err
 		}
-		if fork.Namespace != c.Namespace {
+		if fork.ID != "" && fork.Namespace != c.Namespace {
 			return fmt.Errorf("change acts on namespace %s but its reference baseline %s is of namespace %s: %w",
 				c.Namespace, c.BaselineID, fork.Namespace, ErrInvalid)
 		}
@@ -484,7 +446,7 @@ func (g *Graph) Changes(ctx context.Context) (cs []domain.Change, err error) {
 type ChangesFilter struct {
 	Namespace string
 	OwnerOrg  string
-	// Status: draft, active, merge_pending, applied, abandoned (empty: every status).
+	// Status: draft, active, committed, applied, abandoned (empty: every status).
 	Status []domain.ChangeStatus
 }
 
@@ -583,7 +545,7 @@ func (g *Graph) AddItems(ctx context.Context, id domain.ChangeID, items []domain
 		if err != nil {
 			return err
 		}
-		if c.Status == domain.ChangeApplied || c.Status == domain.ChangeAbandoned || c.Status == domain.ChangeMergePending {
+		if c.Status == domain.ChangeApplied || c.Status == domain.ChangeAbandoned || c.Status == domain.ChangeCommitted {
 			return fmt.Errorf("change %s is %s: %w", id, c.Status, ErrConflict)
 		}
 		known := map[domain.ItemID]bool{}
@@ -712,15 +674,15 @@ func neighbor(ctx context.Context, tx Tx, into map[domain.NodeRef]domain.Node, r
 	return nil
 }
 
-// validStatusMove is the change status machine: draft → active → applied
-// (applying is done by Apply) or abandoned; applied and abandoned are final.
+// validStatusMove is the change status machine: draft → active → committed → applied (committing and integrating are
+// done by CommitChange, IntegrateChange and Apply) or abandoned; applied and abandoned are final.
 func validStatusMove(from, to domain.ChangeStatus) bool {
 	switch from {
 	case domain.ChangeDraft:
 		return to == domain.ChangeActive || to == domain.ChangeAbandoned
 	case domain.ChangeActive:
 		return to == domain.ChangeDraft || to == domain.ChangeAbandoned
-	case domain.ChangeMergePending:
+	case domain.ChangeCommitted:
 		return to == domain.ChangeAbandoned
 	}
 	return false

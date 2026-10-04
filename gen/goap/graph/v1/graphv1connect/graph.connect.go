@@ -44,12 +44,15 @@ const (
 	GraphServiceGetNodeProcedure = "/goap.graph.v1.GraphService/GetNode"
 	// GraphServiceCreateLinkProcedure is the fully-qualified name of the GraphService's CreateLink RPC.
 	GraphServiceCreateLinkProcedure = "/goap.graph.v1.GraphService/CreateLink"
-	// GraphServiceCreateBaselineProcedure is the fully-qualified name of the GraphService's
-	// CreateBaseline RPC.
-	GraphServiceCreateBaselineProcedure = "/goap.graph.v1.GraphService/CreateBaseline"
 	// GraphServiceListBaselinesProcedure is the fully-qualified name of the GraphService's
 	// ListBaselines RPC.
 	GraphServiceListBaselinesProcedure = "/goap.graph.v1.GraphService/ListBaselines"
+	// GraphServiceTagChangeProcedure is the fully-qualified name of the GraphService's TagChange RPC.
+	GraphServiceTagChangeProcedure = "/goap.graph.v1.GraphService/TagChange"
+	// GraphServiceListTagsProcedure is the fully-qualified name of the GraphService's ListTags RPC.
+	GraphServiceListTagsProcedure = "/goap.graph.v1.GraphService/ListTags"
+	// GraphServiceDeleteTagProcedure is the fully-qualified name of the GraphService's DeleteTag RPC.
+	GraphServiceDeleteTagProcedure = "/goap.graph.v1.GraphService/DeleteTag"
 	// GraphServiceGetBaselineGraphProcedure is the fully-qualified name of the GraphService's
 	// GetBaselineGraph RPC.
 	GraphServiceGetBaselineGraphProcedure = "/goap.graph.v1.GraphService/GetBaselineGraph"
@@ -225,8 +228,11 @@ type GraphServiceClient interface {
 	UpdateNode(context.Context, *connect.Request[v1.UpdateNodeRequest]) (*connect.Response[v1.UpdateNodeResponse], error)
 	GetNode(context.Context, *connect.Request[v1.GetNodeRequest]) (*connect.Response[v1.GetNodeResponse], error)
 	CreateLink(context.Context, *connect.Request[v1.CreateLinkRequest]) (*connect.Response[v1.CreateLinkResponse], error)
-	CreateBaseline(context.Context, *connect.Request[v1.CreateBaselineRequest]) (*connect.Response[v1.CreateBaselineResponse], error)
 	ListBaselines(context.Context, *connect.Request[v1.ListBaselinesRequest]) (*connect.Response[v1.ListBaselinesResponse], error)
+	// Tags (ADR 0056) name the state an applied change leaves; not unique, a name may label several changes.
+	TagChange(context.Context, *connect.Request[v1.TagChangeRequest]) (*connect.Response[v1.TagChangeResponse], error)
+	ListTags(context.Context, *connect.Request[v1.ListTagsRequest]) (*connect.Response[v1.ListTagsResponse], error)
+	DeleteTag(context.Context, *connect.Request[v1.DeleteTagRequest]) (*connect.Response[v1.DeleteTagResponse], error)
 	GetBaselineGraph(context.Context, *connect.Request[v1.GetBaselineGraphRequest]) (*connect.Response[v1.GetBaselineGraphResponse], error)
 	// Browsing a large baseline: a page of its nodes (by type, filtered) and the neighbourhood of one node.
 	ListBaselineNodes(context.Context, *connect.Request[v1.ListBaselineNodesRequest]) (*connect.Response[v1.ListBaselineNodesResponse], error)
@@ -272,7 +278,7 @@ type GraphServiceClient interface {
 	MergeBranch(context.Context, *connect.Request[v1.MergeBranchRequest]) (*connect.Response[v1.MergeBranchResponse], error)
 	// What going from a baseline to another changes, node by node (same namespace).
 	DiffBaselines(context.Context, *connect.Request[v1.DiffBaselinesRequest]) (*connect.Response[v1.DiffBaselinesResponse], error)
-	// Completes a merge_pending change: merges its branch into the branch it forked from.
+	// Integrates a committed change that waits for a resolution: merges its branch into the branch it forked from (ADR 0056).
 	MergeChange(context.Context, *connect.Request[v1.MergeChangeRequest]) (*connect.Response[v1.MergeChangeResponse], error)
 	// Nodes the change shares with other open changes (a merge will be needed).
 	GetSharedNodes(context.Context, *connect.Request[v1.GetSharedNodesRequest]) (*connect.Response[v1.GetSharedNodesResponse], error)
@@ -356,16 +362,28 @@ func NewGraphServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(graphServiceMethods.ByName("CreateLink")),
 			connect.WithClientOptions(opts...),
 		),
-		createBaseline: connect.NewClient[v1.CreateBaselineRequest, v1.CreateBaselineResponse](
-			httpClient,
-			baseURL+GraphServiceCreateBaselineProcedure,
-			connect.WithSchema(graphServiceMethods.ByName("CreateBaseline")),
-			connect.WithClientOptions(opts...),
-		),
 		listBaselines: connect.NewClient[v1.ListBaselinesRequest, v1.ListBaselinesResponse](
 			httpClient,
 			baseURL+GraphServiceListBaselinesProcedure,
 			connect.WithSchema(graphServiceMethods.ByName("ListBaselines")),
+			connect.WithClientOptions(opts...),
+		),
+		tagChange: connect.NewClient[v1.TagChangeRequest, v1.TagChangeResponse](
+			httpClient,
+			baseURL+GraphServiceTagChangeProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("TagChange")),
+			connect.WithClientOptions(opts...),
+		),
+		listTags: connect.NewClient[v1.ListTagsRequest, v1.ListTagsResponse](
+			httpClient,
+			baseURL+GraphServiceListTagsProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("ListTags")),
+			connect.WithClientOptions(opts...),
+		),
+		deleteTag: connect.NewClient[v1.DeleteTagRequest, v1.DeleteTagResponse](
+			httpClient,
+			baseURL+GraphServiceDeleteTagProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("DeleteTag")),
 			connect.WithClientOptions(opts...),
 		),
 		getBaselineGraph: connect.NewClient[v1.GetBaselineGraphRequest, v1.GetBaselineGraphResponse](
@@ -720,8 +738,10 @@ type graphServiceClient struct {
 	updateNode           *connect.Client[v1.UpdateNodeRequest, v1.UpdateNodeResponse]
 	getNode              *connect.Client[v1.GetNodeRequest, v1.GetNodeResponse]
 	createLink           *connect.Client[v1.CreateLinkRequest, v1.CreateLinkResponse]
-	createBaseline       *connect.Client[v1.CreateBaselineRequest, v1.CreateBaselineResponse]
 	listBaselines        *connect.Client[v1.ListBaselinesRequest, v1.ListBaselinesResponse]
+	tagChange            *connect.Client[v1.TagChangeRequest, v1.TagChangeResponse]
+	listTags             *connect.Client[v1.ListTagsRequest, v1.ListTagsResponse]
+	deleteTag            *connect.Client[v1.DeleteTagRequest, v1.DeleteTagResponse]
 	getBaselineGraph     *connect.Client[v1.GetBaselineGraphRequest, v1.GetBaselineGraphResponse]
 	listBaselineNodes    *connect.Client[v1.ListBaselineNodesRequest, v1.ListBaselineNodesResponse]
 	listBaselineLinks    *connect.Client[v1.ListBaselineLinksRequest, v1.ListBaselineLinksResponse]
@@ -806,14 +826,24 @@ func (c *graphServiceClient) CreateLink(ctx context.Context, req *connect.Reques
 	return c.createLink.CallUnary(ctx, req)
 }
 
-// CreateBaseline calls goap.graph.v1.GraphService.CreateBaseline.
-func (c *graphServiceClient) CreateBaseline(ctx context.Context, req *connect.Request[v1.CreateBaselineRequest]) (*connect.Response[v1.CreateBaselineResponse], error) {
-	return c.createBaseline.CallUnary(ctx, req)
-}
-
 // ListBaselines calls goap.graph.v1.GraphService.ListBaselines.
 func (c *graphServiceClient) ListBaselines(ctx context.Context, req *connect.Request[v1.ListBaselinesRequest]) (*connect.Response[v1.ListBaselinesResponse], error) {
 	return c.listBaselines.CallUnary(ctx, req)
+}
+
+// TagChange calls goap.graph.v1.GraphService.TagChange.
+func (c *graphServiceClient) TagChange(ctx context.Context, req *connect.Request[v1.TagChangeRequest]) (*connect.Response[v1.TagChangeResponse], error) {
+	return c.tagChange.CallUnary(ctx, req)
+}
+
+// ListTags calls goap.graph.v1.GraphService.ListTags.
+func (c *graphServiceClient) ListTags(ctx context.Context, req *connect.Request[v1.ListTagsRequest]) (*connect.Response[v1.ListTagsResponse], error) {
+	return c.listTags.CallUnary(ctx, req)
+}
+
+// DeleteTag calls goap.graph.v1.GraphService.DeleteTag.
+func (c *graphServiceClient) DeleteTag(ctx context.Context, req *connect.Request[v1.DeleteTagRequest]) (*connect.Response[v1.DeleteTagResponse], error) {
+	return c.deleteTag.CallUnary(ctx, req)
 }
 
 // GetBaselineGraph calls goap.graph.v1.GraphService.GetBaselineGraph.
@@ -1111,8 +1141,11 @@ type GraphServiceHandler interface {
 	UpdateNode(context.Context, *connect.Request[v1.UpdateNodeRequest]) (*connect.Response[v1.UpdateNodeResponse], error)
 	GetNode(context.Context, *connect.Request[v1.GetNodeRequest]) (*connect.Response[v1.GetNodeResponse], error)
 	CreateLink(context.Context, *connect.Request[v1.CreateLinkRequest]) (*connect.Response[v1.CreateLinkResponse], error)
-	CreateBaseline(context.Context, *connect.Request[v1.CreateBaselineRequest]) (*connect.Response[v1.CreateBaselineResponse], error)
 	ListBaselines(context.Context, *connect.Request[v1.ListBaselinesRequest]) (*connect.Response[v1.ListBaselinesResponse], error)
+	// Tags (ADR 0056) name the state an applied change leaves; not unique, a name may label several changes.
+	TagChange(context.Context, *connect.Request[v1.TagChangeRequest]) (*connect.Response[v1.TagChangeResponse], error)
+	ListTags(context.Context, *connect.Request[v1.ListTagsRequest]) (*connect.Response[v1.ListTagsResponse], error)
+	DeleteTag(context.Context, *connect.Request[v1.DeleteTagRequest]) (*connect.Response[v1.DeleteTagResponse], error)
 	GetBaselineGraph(context.Context, *connect.Request[v1.GetBaselineGraphRequest]) (*connect.Response[v1.GetBaselineGraphResponse], error)
 	// Browsing a large baseline: a page of its nodes (by type, filtered) and the neighbourhood of one node.
 	ListBaselineNodes(context.Context, *connect.Request[v1.ListBaselineNodesRequest]) (*connect.Response[v1.ListBaselineNodesResponse], error)
@@ -1158,7 +1191,7 @@ type GraphServiceHandler interface {
 	MergeBranch(context.Context, *connect.Request[v1.MergeBranchRequest]) (*connect.Response[v1.MergeBranchResponse], error)
 	// What going from a baseline to another changes, node by node (same namespace).
 	DiffBaselines(context.Context, *connect.Request[v1.DiffBaselinesRequest]) (*connect.Response[v1.DiffBaselinesResponse], error)
-	// Completes a merge_pending change: merges its branch into the branch it forked from.
+	// Integrates a committed change that waits for a resolution: merges its branch into the branch it forked from (ADR 0056).
 	MergeChange(context.Context, *connect.Request[v1.MergeChangeRequest]) (*connect.Response[v1.MergeChangeResponse], error)
 	// Nodes the change shares with other open changes (a merge will be needed).
 	GetSharedNodes(context.Context, *connect.Request[v1.GetSharedNodesRequest]) (*connect.Response[v1.GetSharedNodesResponse], error)
@@ -1238,16 +1271,28 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(graphServiceMethods.ByName("CreateLink")),
 		connect.WithHandlerOptions(opts...),
 	)
-	graphServiceCreateBaselineHandler := connect.NewUnaryHandler(
-		GraphServiceCreateBaselineProcedure,
-		svc.CreateBaseline,
-		connect.WithSchema(graphServiceMethods.ByName("CreateBaseline")),
-		connect.WithHandlerOptions(opts...),
-	)
 	graphServiceListBaselinesHandler := connect.NewUnaryHandler(
 		GraphServiceListBaselinesProcedure,
 		svc.ListBaselines,
 		connect.WithSchema(graphServiceMethods.ByName("ListBaselines")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceTagChangeHandler := connect.NewUnaryHandler(
+		GraphServiceTagChangeProcedure,
+		svc.TagChange,
+		connect.WithSchema(graphServiceMethods.ByName("TagChange")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceListTagsHandler := connect.NewUnaryHandler(
+		GraphServiceListTagsProcedure,
+		svc.ListTags,
+		connect.WithSchema(graphServiceMethods.ByName("ListTags")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceDeleteTagHandler := connect.NewUnaryHandler(
+		GraphServiceDeleteTagProcedure,
+		svc.DeleteTag,
+		connect.WithSchema(graphServiceMethods.ByName("DeleteTag")),
 		connect.WithHandlerOptions(opts...),
 	)
 	graphServiceGetBaselineGraphHandler := connect.NewUnaryHandler(
@@ -1604,10 +1649,14 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 			graphServiceGetNodeHandler.ServeHTTP(w, r)
 		case GraphServiceCreateLinkProcedure:
 			graphServiceCreateLinkHandler.ServeHTTP(w, r)
-		case GraphServiceCreateBaselineProcedure:
-			graphServiceCreateBaselineHandler.ServeHTTP(w, r)
 		case GraphServiceListBaselinesProcedure:
 			graphServiceListBaselinesHandler.ServeHTTP(w, r)
+		case GraphServiceTagChangeProcedure:
+			graphServiceTagChangeHandler.ServeHTTP(w, r)
+		case GraphServiceListTagsProcedure:
+			graphServiceListTagsHandler.ServeHTTP(w, r)
+		case GraphServiceDeleteTagProcedure:
+			graphServiceDeleteTagHandler.ServeHTTP(w, r)
 		case GraphServiceGetBaselineGraphProcedure:
 			graphServiceGetBaselineGraphHandler.ServeHTTP(w, r)
 		case GraphServiceListBaselineNodesProcedure:
@@ -1751,12 +1800,20 @@ func (UnimplementedGraphServiceHandler) CreateLink(context.Context, *connect.Req
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.CreateLink is not implemented"))
 }
 
-func (UnimplementedGraphServiceHandler) CreateBaseline(context.Context, *connect.Request[v1.CreateBaselineRequest]) (*connect.Response[v1.CreateBaselineResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.CreateBaseline is not implemented"))
-}
-
 func (UnimplementedGraphServiceHandler) ListBaselines(context.Context, *connect.Request[v1.ListBaselinesRequest]) (*connect.Response[v1.ListBaselinesResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.ListBaselines is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) TagChange(context.Context, *connect.Request[v1.TagChangeRequest]) (*connect.Response[v1.TagChangeResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.TagChange is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) ListTags(context.Context, *connect.Request[v1.ListTagsRequest]) (*connect.Response[v1.ListTagsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.ListTags is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) DeleteTag(context.Context, *connect.Request[v1.DeleteTagRequest]) (*connect.Response[v1.DeleteTagResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.DeleteTag is not implemented"))
 }
 
 func (UnimplementedGraphServiceHandler) GetBaselineGraph(context.Context, *connect.Request[v1.GetBaselineGraphRequest]) (*connect.Response[v1.GetBaselineGraphResponse], error) {

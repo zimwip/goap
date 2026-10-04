@@ -29,7 +29,7 @@ func TestOptionsThroughTheService(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	base, err := g.CreateBaseline(ctx, "", "B1", []domain.NodeRef{req1.Ref()})
+	base, err := g.BranchHead(ctx, "", domain.MainBranch)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -87,8 +87,8 @@ func TestDecisionsThroughTheService(t *testing.T) {
 	defer srv.Close()
 	cl := graphsvc.NewClient(srv.Client(), srv.URL)
 
-	req1, _ := g.CreateNode(ctx, graph.NewNode{Key: "REQ-1", Type: "Requirement"})
-	base, _ := g.CreateBaseline(ctx, "", "B1", []domain.NodeRef{req1.Ref()})
+	_, _ = g.CreateNode(ctx, graph.NewNode{Key: "REQ-1", Type: "Requirement"})
+	base, _ := g.BranchHead(ctx, "", domain.MainBranch)
 	c, err := g.CreateChange(ctx, graph.NewChange{Title: "t", BaselineID: base.ID, OwnBranch: true})
 	if err != nil {
 		t.Fatal(err)

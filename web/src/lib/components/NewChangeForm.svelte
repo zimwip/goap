@@ -2,7 +2,8 @@
   import { stamp, keyOf } from '../flux/signals.svelte';
   // Creating a change by hand (ADR 0024): what it is for (title, intent), what it acts on (namespace, the branch it
   // lands on, the baseline it starts from) and how it is held (its own branch, a parent change). No methodology is
-  // needed: the change is then operated from the IDE alone. A namespace without a baseline is started here first.
+  // needed: the change is then operated from the IDE alone. A namespace no change landed in has no baseline: its first
+  // change starts from the empty state (ADR 0056).
   import { graph, errorMessage, shortId, type Baseline, type Branch } from '../api';
   import { changes, refreshChanges } from '../stores/catalog.svelte';
   import { loadTypes, typeCatalog } from '../stores/types.svelte';
@@ -65,19 +66,6 @@
 
   const parents = $derived(changes.items.filter((c) => c.namespace === namespace && (c.status === 'draft' || c.status === 'active') && c.branch?.startsWith('change-')));
 
-  async function start() {
-    busy = true;
-    try {
-      const b = (await graph.createBaseline(namespace, `start ${namespace}`)).baseline;
-      await loadNamespace(namespace);
-      if (b?.id) baselineId = b.id;
-    } catch (e) {
-      error = errorMessage(e);
-    } finally {
-      busy = false;
-    }
-  }
-
   async function create(e: SubmitEvent) {
     e.preventDefault();
     busy = true;
@@ -88,7 +76,7 @@
           title: title.trim(),
           intent: intent.trim() || title.trim(),
           namespace,
-          baselineId: parentId ? undefined : baselineId,
+          baselineId: parentId ? undefined : baselineId || undefined,
           branch: parentId ? undefined : branch,
           ownBranch: parentId ? undefined : ownBranch,
           parentId: parentId || undefined,
@@ -131,15 +119,14 @@
       </select>
     {:else}
       <div class="start">
-        <span class="hint">{namespace} has no baseline yet.</span>
-        <button type="button" class="small" disabled={busy || !namespace} onclick={start}>Start {namespace}</button>
+        <span class="hint">{namespace} has no baseline yet: the change starts from the empty state.</span>
       </div>
     {/if}
     <label class="check"><input type="checkbox" bind:checked={ownBranch} /> own branch (options, sub-changes, merge when applied)</label>
   {/if}
   {#if error}<div class="alert small">{error}</div>{/if}
   <div class="row">
-    <button type="submit" class="primary small" disabled={busy || !title.trim() || !namespace || (!parentId && !baselineId)}>Create the change</button>
+    <button type="submit" class="primary small" disabled={busy || !title.trim() || !namespace}>Create the change</button>
     {#if oncancel}<button type="button" class="small" onclick={oncancel}>Cancel</button>{/if}
   </div>
 </form>

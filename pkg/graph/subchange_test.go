@@ -62,7 +62,7 @@ func newOrgWorld(t *testing.T, repo Repo) orgWorld {
 		all = append(all, n.Ref())
 	}
 	var err error
-	if w.base, err = g.CreateBaseline(ctx, domain.DefaultNamespace, "B", all); err != nil {
+	if w.base, err = g.BranchHead(ctx, domain.DefaultNamespace, domain.MainBranch); err != nil {
 		t.Fatal(err)
 	}
 	return w
@@ -300,7 +300,7 @@ func testProjectSubChangeRules(t *testing.T, repo Repo) {
 	if _, err := g.Link(ctx, c0, LinkProjectPartOf, b.Ref(), root.Ref(), nil); err != nil {
 		t.Fatal(err)
 	}
-	base, err := g.CreateBaseline(ctx, domain.DefaultNamespace, "B", nil)
+	base, err := g.BranchHead(ctx, domain.DefaultNamespace, domain.MainBranch)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -390,7 +390,7 @@ func testSubChangeActivityCascade(t *testing.T, repo Repo) {
 }
 
 // Two sibling sub-changes, each on its own branch forked from the same parent branch, touching the same node:
-// whichever applies (merges into the parent branch) first wins; the other goes merge_pending and needs a
+// whichever applies (merges into the parent branch) first wins; the other waits committed and needs a
 // resolution, exactly the precedence the parent/parallel-sub-activity design relies on.
 func TestSubChangeMergePrecedence(t *testing.T) { forEachRepo(t, testSubChangeMergePrecedence) }
 
@@ -439,16 +439,16 @@ func testSubChangeMergePrecedence(t *testing.T, repo Repo) {
 		t.Fatalf("parent branch after A: %+v, %v", head, err)
 	}
 
-	// B, forked from the same base as A, now conflicts: merge_pending, not a silent clobber
+	// B, forked from the same base as A, now conflicts: committed (integration waits), not a silent clobber
 	if _, err := g.Apply(ctx, b.ID, ""); err != nil {
 		t.Fatalf("sub B apply: %v", err)
 	}
-	if got, _ := g.Change(ctx, b.ID); got.Status != domain.ChangeMergePending {
-		t.Fatalf("sub B must be merge_pending after A landed first, got %s", got.Status)
+	if got, _ := g.Change(ctx, b.ID); got.Status != domain.ChangeCommitted {
+		t.Fatalf("sub B must be committed after A landed first, got %s", got.Status)
 	}
 
 	// B's author adapts: resolve and complete the merge
-	if _, err := g.MergeChange(ctx, b.ID, map[domain.NodeID]Resolution{w.cmp3.ID: {Props: map[string]any{"title": "from A and B"}}}); err != nil {
+	if _, err := g.IntegrateChange(ctx, b.ID, map[domain.NodeID]Resolution{w.cmp3.ID: {Props: map[string]any{"title": "from A and B"}}}); err != nil {
 		t.Fatal(err)
 	}
 	if head, err := g.NodeByKeyOn(ctx, domain.DefaultNamespace, parent.Branch, "CMP-3"); err != nil || head.Properties["title"] != "from A and B" {

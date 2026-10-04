@@ -56,7 +56,19 @@ type Tx interface {
 	// the same transaction (transition actions, ADR 0018).
 	SetNodeProps(ctx context.Context, ref domain.NodeRef, props map[string]any) error
 	PutLink(ctx context.Context, l domain.Link) error
+	// PutBaseline stores a baseline: its entries when b.Gap is 0, else only its header (ADR 0056); a Baseline read
+	// back with a Gap holds no nodes, the graph computes them.
 	PutBaseline(ctx context.Context, b domain.Baseline) error
+	// BranchJoins lists the node versions a change joined to a branch (ADR 0032: a fast-forward), of the nodes of a
+	// namespace.
+	BranchJoins(ctx context.Context, namespace, branch string, change domain.ChangeID) ([]domain.NodeRef, error)
+	// MaterializeBaseline stores the state of a baseline stored with a Gap: whole, its Gap becomes 0.
+	MaterializeBaseline(ctx context.Context, id domain.BaselineID, nodes map[domain.NodeID]domain.Version) error
+	// PutTag stores a tag (ADR 0056); DeleteTag removes it (ErrNotFound when absent); Tags lists the tags matching
+	// f, oldest first.
+	PutTag(ctx context.Context, t domain.Tag) error
+	DeleteTag(ctx context.Context, id domain.TagID) error
+	Tags(ctx context.Context, f domain.TagFilter) ([]domain.Tag, error)
 	// PutChange inserts or updates the change header (items are ignored).
 	PutChange(ctx context.Context, c domain.Change) error
 	// AppendLog appends an entry to the log of its change (ADR 0030: facts, journal records and impact events in

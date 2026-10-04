@@ -102,8 +102,7 @@ func sdlcSetup(t *testing.T) (*engine.Engine, *graph.Graph, domain.BaselineID) {
 		t.Fatal(err)
 	}
 	// the latest baseline, not bs[0] (ADR 0049: SeedDemo imports the organisation and the alm data as a change each,
-	// so "alm"'s baselines now include the namespace's initial empty bootstrap
-	// one ahead of the fully-seeded one BranchHead resolves to).
+	// so the head is the one the last of them left).
 	head, err := g.BranchHead(ctx, "alm", domain.MainBranch)
 	if err != nil {
 		t.Fatal(err)

@@ -404,7 +404,7 @@ func TestChangeOpensInTheNamespaceOfTheMethodology(t *testing.T) {
 	e, g, base := setup(t)
 	e.Methodologies.(StaticMethodologies)["impact-analysis"].Namespace = "platform"
 	// a change's reference baseline must be of its own (here the methodology's target) namespace
-	platformBase, err := g.CreateBaseline(ctx, "platform", "platform-base", nil)
+	platformBase, err := g.BranchHead(ctx, "platform", domain.MainBranch)
 	if err != nil {
 		t.Fatal(err)
 	}

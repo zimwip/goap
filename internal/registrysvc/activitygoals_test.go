@@ -33,7 +33,7 @@ func TestActivityGoalsMetGatesApply(t *testing.T) {
 	}
 	activityRef := MethodologyVersionKey(m.Name, m.Version) + "/process/ship"
 
-	base, err := g.CreateBaseline(ctx, domain.DefaultNamespace, "B", nil)
+	base, err := g.BranchHead(ctx, domain.DefaultNamespace, domain.MainBranch)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,7 +73,7 @@ func TestActivityGoalsMetRefusesAnUnresolvableRef(t *testing.T) {
 	reg := &Service{Store: store}
 	g.ActivityGoalsMet = reg.ActivityGoalsMet
 
-	base, err := g.CreateBaseline(ctx, domain.DefaultNamespace, "B", nil)
+	base, err := g.BranchHead(ctx, domain.DefaultNamespace, domain.MainBranch)
 	if err != nil {
 		t.Fatal(err)
 	}

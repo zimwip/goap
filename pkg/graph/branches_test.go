@@ -242,16 +242,14 @@ func TestBranchNamesAreScopedToTheirNamespace(t *testing.T) {
 func testBranchNamesAreScopedToTheirNamespace(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	g := New(repo)
-	def, err := g.CreateNode(ctx, NewNode{Key: "N-1", Type: "Thing"})
-	if err != nil {
+	if _, err := g.CreateNode(ctx, NewNode{Key: "N-1", Type: "Thing"}); err != nil {
 		t.Fatal(err)
 	}
-	org, err := g.CreateNode(ctx, NewNode{Namespace: "organisation", Key: "N-1", Type: "OrgUnit"})
-	if err != nil {
+	if _, err := g.CreateNode(ctx, NewNode{Namespace: "organisation", Key: "N-1", Type: "OrgUnit"}); err != nil {
 		t.Fatal(err)
 	}
-	defBase := must[domain.Baseline](t)(g.CreateBaseline(ctx, "", "B", []domain.NodeRef{def.Ref()}))
-	orgBase := must[domain.Baseline](t)(g.CreateBaseline(ctx, "organisation", "B", []domain.NodeRef{org.Ref()}))
+	defBase := must[domain.Baseline](t)(g.BranchHead(ctx, "", domain.MainBranch))
+	orgBase := must[domain.Baseline](t)(g.BranchHead(ctx, "organisation", domain.MainBranch))
 	// two namespaces can each have their own branch of the same name
 	defBranch := must[domain.Branch](t)(g.CreateBranch(ctx, NewBranch{Name: "feature-x", From: defBase.ID}))
 	orgBranch := must[domain.Branch](t)(g.CreateBranch(ctx, NewBranch{Namespace: "organisation", Name: "feature-x", From: orgBase.ID}))
@@ -266,11 +264,10 @@ func testBranchNamesAreScopedToTheirNamespace(t *testing.T, repo Repo) {
 	}
 }
 
-func TestCreateBaselineFromLatestScopesToOneNamespace(t *testing.T) {
-	forEachRepo(t, testCreateBaselineFromLatestScopesToOneNamespace)
-}
+// The head of a namespace holds the nodes of that namespace only.
+func TestHeadIsScopedToOneNamespace(t *testing.T) { forEachRepo(t, testHeadIsScopedToOneNamespace) }
 
-func testCreateBaselineFromLatestScopesToOneNamespace(t *testing.T, repo Repo) {
+func testHeadIsScopedToOneNamespace(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	g := New(repo)
 	def, err := g.CreateNode(ctx, NewNode{Key: "N-1", Type: "Thing"})
@@ -281,105 +278,52 @@ func testCreateBaselineFromLatestScopesToOneNamespace(t *testing.T, repo Repo) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	snap := must[domain.Baseline](t)(g.CreateBaselineFromLatest(ctx, "organisation", "snap"))
+	snap := must[domain.Baseline](t)(g.BranchHead(ctx, "organisation", domain.MainBranch))
 	if snap.Namespace != "organisation" {
-		t.Fatalf("snapshot namespace = %q", snap.Namespace)
+		t.Fatalf("head namespace = %q", snap.Namespace)
 	}
 	if _, ok := snap.Nodes[org.ID]; !ok {
-		t.Fatalf("snapshot must contain the organisation node: %+v", snap.Nodes)
+		t.Fatalf("head must contain the organisation node: %+v", snap.Nodes)
 	}
 	if _, ok := snap.Nodes[def.ID]; ok {
-		t.Fatalf("snapshot must not contain the default-namespace node: %+v", snap.Nodes)
+		t.Fatalf("head must not contain the default-namespace node: %+v", snap.Nodes)
 	}
 }
 
-// A direct-write baseline (CreateBaseline/CreateBaselineFromLatest) must chain onto the branch's real head
-// when one exists, so it can never silently sever/orphan real history; only a branch truly starting now (no
-// head yet) stays parentless.
-func TestCreateBaselineChainsOntoTheRealHead(t *testing.T) {
-	forEachRepo(t, testCreateBaselineChainsOntoTheRealHead)
+// A namespace no change landed in has the empty state for head (empty id); its first change starts from it and leaves
+// the first baseline, which has no parent but a change (ADR 0056).
+func TestFirstChangeStartsFromTheEmptyState(t *testing.T) {
+	forEachRepo(t, testFirstChangeStartsFromTheEmptyState)
 }
 
-func testCreateBaselineChainsOntoTheRealHead(t *testing.T, repo Repo) {
+func testFirstChangeStartsFromTheEmptyState(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	g := New(repo)
-	n, err := g.CreateNode(ctx, NewNode{Namespace: "organisation", Key: "N-1", Type: "OrgUnit"})
+	head := must[domain.Baseline](t)(g.BranchHead(ctx, "nothing-here-yet", domain.MainBranch))
+	if head.ID != "" || len(head.Nodes) != 0 {
+		t.Fatalf("the head of a namespace without history is the empty state: %+v", head)
+	}
+	if bs := must[[]domain.Baseline](t)(g.Baselines(ctx, "nothing-here-yet")); len(bs) != 0 {
+		t.Fatalf("nothing stores the empty state: %+v", bs)
+	}
+	res, err := g.Commit(ctx, Commit{Namespace: "nothing-here-yet", Title: "First", Edits: []NodeEdit{{Key: "N-1", Type: "Thing"}}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	head, err := g.BranchHead(ctx, "organisation", domain.MainBranch)
-	if err != nil {
-		t.Fatal(err)
+	c := must[domain.Change](t)(g.Change(ctx, res.Change))
+	if c.BaselineID != "" || c.ResultBaselineID != res.Baseline.ID {
+		t.Fatalf("the first change starts from the empty state: %+v", c)
 	}
-	b, err := g.CreateBaseline(ctx, "organisation", "repair", []domain.NodeRef{n.Ref()})
-	if err != nil {
-		t.Fatal(err)
+	if b := res.Baseline; b.ParentID != "" || b.ChangeID != c.ID || len(b.Nodes) != 1 {
+		t.Fatalf("the first baseline has no parent and its change: %+v", b)
 	}
-	if b.ParentID != head.ID {
-		t.Fatalf("parent = %q, want real prior head %q", b.ParentID, head.ID)
+	if after := must[domain.Baseline](t)(g.BranchHead(ctx, "nothing-here-yet", domain.MainBranch)); after.ID != res.Baseline.ID {
+		t.Fatalf("head = %s, want %s", after.ID, res.Baseline.ID)
 	}
-
-	// a namespace with no head yet is the one legitimate case that stays parentless
-	empty, err := g.CreateBaseline(ctx, "nothing-here-yet", "initial", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if empty.ParentID != "" {
-		t.Fatalf("initial baseline of a fresh namespace must stay parentless, got %q", empty.ParentID)
-	}
-}
-
-// A merge without conflict writes no version (ADR 0032): what changed on one side only joins the target as is.
-func TestMergeWithoutConflictJoinsVersions(t *testing.T) {
-	forEachRepo(t, testMergeWithoutConflictJoinsVersions)
-}
-
-func testMergeWithoutConflictJoinsVersions(t *testing.T, repo Repo) {
-	ctx := context.Background()
-	f := newFixture(t, repo)
-	g := f.g
-	// main moves on REQ-1, then a change that started before lands NEED-1 and a new node: a merge, not a fast-forward
-	commitOn(t, g, "", f.base.ID, setEdit(f.req.Ref(), map[string]any{"prio": "high"}))
-	res, err := g.Commit(ctx, Commit{Title: "late", Baseline: f.base.ID, By: "test", Edits: []NodeEdit{
-		setEdit(f.need.Ref(), map[string]any{"title": "Pay online, twice"}),
-		{Key: "DES-2", Type: "Design"},
-	}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	vs := must[[]domain.Node](t)(g.Versions(ctx, f.need.ID))
-	if len(vs) != 2 || vs[1].Reason == domain.ReasonMerge || !slices.Contains(vs[1].Joined, domain.MainBranch) {
-		t.Fatalf("NEED-1 must join main as the version the change wrote: %+v", vs)
-	}
-	if n := must[domain.Node](t)(g.Node(ctx, domain.NodeRef{ID: f.need.ID})); n.Version != 2 || n.Properties["title"] != "Pay online, twice" {
-		t.Fatalf("latest on main: %+v", n)
-	}
-	head := must[domain.Baseline](t)(g.BranchHead(ctx, "", ""))
-	if head.ID != res.Baseline.ID || head.Nodes[f.need.ID] != 2 || head.Nodes[f.req.ID] != 2 {
-		t.Fatalf("head: %+v, result %+v", head, res.Baseline)
-	}
-	des := must[domain.Node](t)(g.NodeByKey(ctx, "", "DES-2"))
-	if des.Version != 1 || head.Nodes[des.ID] != 1 {
-		t.Fatalf("DES-2 must land as is: %+v", des)
-	}
-	// the change impacts of the change landed as the versions they wrote, in the result baseline
-	impacts := must[[]domain.ChangeImpact](t)(g.ListChangeImpacts(ctx, res.Change))
-	for _, cn := range impacts {
-		if cn.Landed == nil || cn.Post == nil || *cn.Landed != *cn.Post {
-			t.Fatalf("landed: %+v", cn)
+	// every baseline of the organisation, the bootstrap's included, is the result of a change
+	for _, b := range must[[]domain.Baseline](t)(g.Baselines(ctx, NamespaceOrganisation)) {
+		if b.ChangeID == "" {
+			t.Fatalf("baseline %s (%s) has no change", b.ID, b.Name)
 		}
-	}
-	events := must[[]domain.ImpactEvent](t)(g.ChangeEvents(ctx, res.Change))
-	landed := 0
-	for _, e := range events {
-		if e.Op == domain.ImpactLanded {
-			landed++
-			if e.Baseline != res.Baseline.ID {
-				t.Fatalf("landed event baseline %s, want %s", e.Baseline, res.Baseline.ID)
-			}
-		}
-	}
-	if landed != len(impacts) {
-		t.Fatalf("%d landed events for %d impacts", landed, len(impacts))
 	}
 }

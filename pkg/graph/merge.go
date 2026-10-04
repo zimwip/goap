@@ -195,7 +195,7 @@ func (g *Graph) CreateBranch(ctx context.Context, in NewBranch) (b domain.Branch
 		if err != nil {
 			return err
 		}
-		if fork.Namespace != namespace {
+		if fork.ID != "" && fork.Namespace != namespace {
 			return fmt.Errorf("baseline %s is of namespace %s, not %s: %w", in.From, fork.Namespace, namespace, ErrInvalid)
 		}
 		b = domain.Branch{Name: in.Name, Namespace: namespace, Parent: domain.BranchOf(fork.Branch), ForkBaseline: fork.ID, Head: fork.ID,
@@ -247,7 +247,8 @@ func (g *Graph) SetBranchDescription(ctx context.Context, namespace, name, descr
 	})
 }
 
-// BranchHead returns the latest baseline of a branch of a namespace.
+// BranchHead returns the latest baseline of a branch of a namespace; the head of main before any change landed is the
+// empty state (empty id, no nodes).
 func (g *Graph) BranchHead(ctx context.Context, namespace, name string) (b domain.Baseline, err error) {
 	err = g.repo.InTx(ctx, func(tx Tx) error { b, err = branchHead(ctx, tx, namespace, name); return err })
 	return
@@ -282,7 +283,7 @@ func branchHead(ctx context.Context, tx Tx, namespace, name string) (domain.Base
 	if err != nil && (!errors.Is(err, ErrNotFound) || name != domain.MainBranch) {
 		return domain.Baseline{}, err
 	}
-	// main without applied changes: its latest baseline
+	// main without applied changes: its latest baseline, if any change left one
 	bs, err := tx.Baselines(ctx, namespace)
 	if err != nil {
 		return domain.Baseline{}, err
@@ -292,7 +293,8 @@ func branchHead(ctx context.Context, tx Tx, namespace, name string) (domain.Base
 			return bs[i], nil
 		}
 	}
-	return domain.Baseline{}, fmt.Errorf("branch %s has no baseline: %w", name, ErrNotFound)
+	// no change has landed in the namespace yet: its state is the empty one (ADR 0056), the empty baseline id
+	return domain.Baseline{Namespace: namespace, Branch: name, Nodes: map[domain.NodeID]domain.Version{}}, nil
 }
 
 // ---- Branch merge ------------------------------------------------------------
@@ -688,7 +690,7 @@ func (g *Graph) mergeBranchTx(ctx context.Context, tx Tx, in MergeRequest) (res 
 			}
 		}
 	}
-	res.Baseline = domain.Baseline{ID: res.Baseline.ID, Name: title, Namespace: namespace, Branch: plan.Into, ParentID: base.ID, MergedFrom: fb.Head, ChangeID: c.ID, Nodes: target, CreatedAt: g.now()}
+	res.Baseline = domain.Baseline{ID: res.Baseline.ID, Name: title, Namespace: namespace, Branch: plan.Into, ParentID: base.ID, MergedFrom: fb.Head, ChangeID: c.ID, Kind: domain.BaselineMerge, Nodes: target, CreatedAt: g.now()}
 	if err := tx.PutBaseline(ctx, res.Baseline); err != nil {
 		return res, err
 	}

@@ -43,7 +43,7 @@ func testBrowseBaseline(t *testing.T, repo Repo) {
 	if _, err := g.Link(ctx, c0, "depends", req0.Ref(), refs[1], nil); err != nil {
 		t.Fatal(err)
 	}
-	b, err := g.CreateBaselineFromLatest(ctx, domain.DefaultNamespace, "B")
+	b, err := g.BranchHead(ctx, domain.DefaultNamespace, domain.MainBranch)
 	if err != nil {
 		t.Fatal(err)
 	}

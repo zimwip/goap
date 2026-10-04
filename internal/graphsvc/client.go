@@ -321,16 +321,32 @@ func (c *Client) BranchHead(ctx context.Context, namespace, name string) (domain
 	return pbconv.BaselineFromPB(r.Msg.Head), nil
 }
 
-func (c *Client) CreateBaseline(ctx context.Context, namespace, name string, nodes []domain.NodeRef) (domain.Baseline, error) {
-	req := &graphv1.CreateBaselineRequest{Namespace: namespace, Name: name}
-	for _, n := range nodes {
-		req.Nodes = append(req.Nodes, pbconv.RefToPB(n))
-	}
-	r, err := c.rpc.CreateBaseline(ctx, connect.NewRequest(req))
+// TagChange names the state an applied change leaves (ADR 0056).
+func (c *Client) TagChange(ctx context.Context, id domain.ChangeID, name string) (domain.Tag, error) {
+	r, err := c.rpc.TagChange(ctx, connect.NewRequest(&graphv1.TagChangeRequest{ChangeId: string(id), Name: name}))
 	if err != nil {
-		return domain.Baseline{}, rpcerr.FromConnect(err)
+		return domain.Tag{}, rpcerr.FromConnect(err)
 	}
-	return pbconv.BaselineFromPB(r.Msg.Baseline), nil
+	return pbconv.TagFromPB(r.Msg.Tag), nil
+}
+
+// Tags lists the tags matching f.
+func (c *Client) Tags(ctx context.Context, f domain.TagFilter) ([]domain.Tag, error) {
+	r, err := c.rpc.ListTags(ctx, connect.NewRequest(&graphv1.ListTagsRequest{Namespace: f.Namespace, Name: f.Name, ChangeId: string(f.Change)}))
+	if err != nil {
+		return nil, rpcerr.FromConnect(err)
+	}
+	out := make([]domain.Tag, len(r.Msg.Tags))
+	for i, t := range r.Msg.Tags {
+		out[i] = pbconv.TagFromPB(t)
+	}
+	return out, nil
+}
+
+// DeleteTag removes a tag.
+func (c *Client) DeleteTag(ctx context.Context, id domain.TagID) error {
+	_, err := c.rpc.DeleteTag(ctx, connect.NewRequest(&graphv1.DeleteTagRequest{Id: string(id)}))
+	return rpcerr.FromConnect(err)
 }
 
 // OpenFlow implements engine.GraphPort.

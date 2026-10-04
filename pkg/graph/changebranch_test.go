@@ -71,8 +71,8 @@ func testChangeBranch(t *testing.T, repo Repo) {
 		t.Fatal(err)
 	}
 	bc, _ := g.Change(ctx, b.ID)
-	if bc.Status != domain.ChangeMergePending {
-		t.Fatalf("B = %s, want merge_pending", bc.Status)
+	if bc.Status != domain.ChangeCommitted {
+		t.Fatalf("B = %s, want committed", bc.Status)
 	}
 	if n, _ := g.Node(ctx, domain.NodeRef{ID: f.req.ID}); n.Properties["title"] != "A title" {
 		t.Fatalf("pending change leaked on main: %v", n.Properties)
@@ -84,10 +84,10 @@ func testChangeBranch(t *testing.T, repo Repo) {
 	if n, err := g.NodeByKeyOn(ctx, "", "main", "REQ-1"); err != nil || n.Properties["title"] != "A title" {
 		t.Fatalf("NodeByKeyOn(main) = %v, %v", n.Properties, err)
 	}
-	if _, err := g.MergeChange(ctx, b.ID, nil); !errors.Is(err, ErrConflict) {
+	if _, err := g.IntegrateChange(ctx, b.ID, nil); !errors.Is(err, ErrConflict) {
 		t.Fatalf("merge without resolution: %v", err)
 	}
-	bc, err = g.MergeChange(ctx, b.ID, map[domain.NodeID]Resolution{f.req.ID: {Props: map[string]any{"title": "merged", "owner": "x"}}})
+	bc, err = g.IntegrateChange(ctx, b.ID, map[domain.NodeID]Resolution{f.req.ID: {Props: map[string]any{"title": "merged", "owner": "x"}}})
 	if err != nil {
 		t.Fatal(err)
 	}

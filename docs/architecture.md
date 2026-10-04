@@ -53,7 +53,7 @@ of a versioned knowledge graph, whose other axis, the **domain axis**, describes
 | **Node** | Typed content element. Its type is a qualified reference `<namespace>@<NodeType>` (`alm@Requirement`, [ADR 0012](adr/0012-node-types.md)). Stable identity `NodeID` + readable `Key` (`REQ-12`). |
 | **Version** | Each modification creates a new immutable version `NodeID@vN`. A version can be a *tombstone* (deletion). It is written by a change, owned by an organisational unit, and its node was created in a project ([ADR 0054](adr/0054-structures-bootstrap-and-the-graph-guard.md)). |
 | **Link** | Typed relationship **from version to version**: `REQ-12@v3 ─satisfies→ NEED-4@v2`. A link does not automatically "follow" new versions: if `NEED-4` moves to v3, the link becomes **suspect** — this is the model's native impact signal. |
-| **Baseline** | Coherent set `{NodeID → Version}`, scoped to one namespace (every node in it belongs to that namespace): a "commit" of the graph. A baseline's links are those whose two endpoints are both in the baseline. Every modification starts from a reference baseline of its own namespace and produces a resulting baseline of that same namespace. It is stored as the entries that differ from its parent, whole every 50 baselines along a chain (a checkpoint, [ADR 0032](adr/0032-branches-as-pointers-baselines-as-deltas.md)). |
+| **Baseline** | Coherent set `{NodeID → Version}`, scoped to one namespace (every node in it belongs to that namespace): a "commit" of the graph. A baseline's links are those whose two endpoints are both in the baseline. Every modification starts from a reference baseline of its own namespace (the empty state before the first change) and produces a resulting baseline of that same namespace: a baseline is the state a change leaves, and a name given to it is a tag on that change ([ADR 0056](adr/0056-baselines-are-states-of-changes-names-are-tags.md)). It is stored as the entries that differ from its parent, whole every 50 baselines along a chain (a checkpoint, [ADR 0032](adr/0032-branches-as-pointers-baselines-as-deltas.md)), and only every 16th baseline of a chain stores its entries at all: the state after a change is computed from what the change did, its `landed` events or the versions it joined to the branch ([ADR 0056](adr/0056-baselines-are-states-of-changes-names-are-tags.md)). |
 
 **Namespaces** ([ADR 0015](adr/0015-namespaces.md)): every node lives in a namespace, and a namespace is the content of
 one domain ([ADR 0013](adr/0013-domains.md)): `alm` (delivery), `organisation`, `platform` (MCPs, adapter definitions,
@@ -121,7 +121,7 @@ REQ-1  v1(main) ── v3(main, revise) ───────────── 
   target, nothing is copied.
 - **Views of a change** (`ChangeView`): the head of the change branch with the change impacts of a flow counted at a
   level — `written` (proposed or accepted, not rejected: what the change or an option would look like),
-  `accepted` (what would land), `landed` (its result baseline). Only `landed` is stored.
+  `accepted` (what would land), `landed` (its result baseline: on its own branch when applied, then on the branch it is merged into; the last one counts). Only `landed` is stored.
 - **Options** ([ADR 0009](adr/0009-branches-options-decisions.md) §3, ADR 0032 §6): an option is a flow opened as a
   hypothesis (`OpenOption`); several are explored at once, each writing its own versions of the same nodes. The
   **active option** is the one the change works on: every call that names no flow goes to it
@@ -172,7 +172,8 @@ makes for the person.
 
 | Step | Where in the IDE | Graph calls |
 |---|---|---|
-| Start an empty namespace | Baseline explorer: *Start {namespace}* (a namespace a domain declares, without a baseline) | `CreateBaseline` (empty, on `main`) |
+| Start an empty namespace | nothing to do: the first change of a namespace starts from the empty state, and leaves its first baseline ([ADR 0056](adr/0056-baselines-are-states-of-changes-names-are-tags.md)) | `CreateChange` |
+| Name a state | a tag on the change that left it (not unique) | `TagChange`, `ListTags`, `DeleteTag` |
 | Create a change | Changes explorer **+**: title, intent, namespace, the branch it lands on, the baseline it starts from, own branch, or a parent change (a sub-change) | `CreateChange` |
 | Edit or abandon it | Change → Overview: *Edit* (title, intent), *Abandon* (its sub-changes too, its branch closed) | `UpdateChange` |
 | Declare impacts | Change → Impacts: create a node, or pick one with the reason it is impacted | `AddChangeImpacts` |
@@ -182,7 +183,7 @@ makes for the person.
 | Options, decisions | Scope bar, Compare, Decisions panes (a ruling made there is a person's) | `OpenOption` … `SelectOption`, `OpenDecision` … `RuleDecision` |
 | Adopt or discard a flow | Change → Overview (a flow no run works on is adopted straight on the graph) | `AdoptFlow`, `DiscardFlow` |
 | Apply | Change → Overview: *Apply* | `ApplyChange` |
-| Resolve a merge | A `merge_pending` change shows each node changed on both sides: keep the target, or merge taking a side per conflicting property | `PlanMerge`, `MergeChange` |
+| Resolve a merge | A `committed` change (its integration waits) shows each node changed on both sides: keep the target, or merge taking a side per conflicting property | `PlanMerge`, `MergeChange` (`IntegrateChange`) |
 | Branches | Baseline explorer → Branches: open one from a baseline, merge it into another (same resolver), abandon or reopen it | `ListBranches`, `CreateBranch`, `MergeBranch`, `SetBranchStatus` |
 | Compare baselines | Baseline tab → *Compare*: the nodes added, removed or changed from another baseline (its parent by default), with the properties that differ | `DiffBaselines` |
 | A node's history | Node editor → History: the changes that acted on it, its versions and the branches each joined | `ListNodeChanges`, `ListNodeVersions` |

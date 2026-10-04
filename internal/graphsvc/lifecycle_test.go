@@ -110,7 +110,7 @@ nodeTypes:
 		t.Fatal(err)
 	}
 	note, _ := g.CreateNode(ctx, graph.NewNode{Namespace: "docs", Key: "N-1", Type: "docs@Note"})
-	base, err := g.CreateBaseline(ctx, "docs", "B", []domain.NodeRef{req.Ref(), note.Ref()})
+	base, err := g.BranchHead(ctx, "docs", domain.MainBranch)
 	if err != nil {
 		t.Fatal(err)
 	}

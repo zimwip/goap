@@ -53,9 +53,8 @@ type GraphPort interface {
 	// Record / Journal write and read the execution journal of changes (ADR 0011).
 	Record(ctx context.Context, recs []domain.ExecutionRecord) error
 	Journal(ctx context.Context, f domain.ExecutionFilter) ([]domain.ExecutionRecord, error)
-	// BranchHead / CreateBaseline give the head of a branch and make a baseline.
+	// BranchHead gives the head of a branch: the state the last change left, the empty state (empty id) before any.
 	BranchHead(ctx context.Context, namespace, name string) (domain.Baseline, error)
-	CreateBaseline(ctx context.Context, namespace, name string, nodes []domain.NodeRef) (domain.Baseline, error)
 	// ListChanges lists the changes matching a filter (goap-change.list): which open change a request
 	// continues, else a new one is proposed.
 	ListChanges(ctx context.Context, f graph.ChangesFilter) ([]domain.Change, error)

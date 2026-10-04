@@ -2,7 +2,6 @@ package engine_test
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	"github.com/zimwip/goap/internal/graphsvc"
@@ -44,11 +43,6 @@ func TestStartWithoutBaseline(t *testing.T) {
 		Types:         func() methodology.TypeSet { return cat },
 	}
 	req := engine.StartRequest{Methodology: "sdlc", Agent: "delivery", Goal: "deliver", Intent: "Allow payment in 3 installments", ProjectID: testProject}
-
-	// no baseline in the methodology's namespace yet
-	if _, err := e.Start(ctx, req); !errors.Is(err, engine.ErrInvalidState) {
-		t.Fatalf("start without any baseline: %v", err)
-	}
 
 	if _, err := graphsvc.SeedDemo(ctx, g); err != nil {
 		t.Fatal(err)

@@ -46,7 +46,7 @@ linkTypes:
 	}
 	g := New(NewMemory())
 	g.Types = func() TypeCatalog { return cat }
-	b, err := g.CreateBaseline(context.Background(), "docs", "B0", nil)
+	b, err := g.BranchHead(context.Background(), "docs", domain.MainBranch)
 	if err != nil {
 		t.Fatal(err)
 	}
