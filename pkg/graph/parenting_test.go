@@ -25,7 +25,7 @@ func testCommitRequiresAParent(t *testing.T, repo Repo) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	base, err := g.CreateBaselineFromLatest(ctx, ns, "b0")
+	base, err := g.BranchHead(ctx, ns, domain.MainBranch)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -94,7 +94,7 @@ func testCommitRejectsASecondMembership(t *testing.T, repo Repo) {
 	if _, err := g.Link(ctx, testChange(t, g, ns), LinkMemberOf, user.Ref(), orgA.Ref(), nil); err != nil {
 		t.Fatal(err)
 	}
-	base, err := g.CreateBaselineFromLatest(ctx, ns, "b0")
+	base, err := g.BranchHead(ctx, ns, domain.MainBranch)
 	if err != nil {
 		t.Fatal(err)
 	}

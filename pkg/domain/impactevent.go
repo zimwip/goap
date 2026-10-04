@@ -23,7 +23,9 @@ const (
 	ImpactDiscarded ImpactOp = "discarded"
 	// ImpactAdopted is change level: Flow is adopted, Stale are the runs it replaces (ADR 0025 §5).
 	ImpactAdopted ImpactOp = "adopted"
-	// ImpactLanded records the version on the target branch once the change is applied (Landed).
+	// ImpactLanded records the version a change applied (Landed) in the baseline it produced (Baseline): on its own
+	// branch when it is committed, and again on the branch it is integrated into. The last one is the version on the
+	// target branch. A merge change records the same for the versions it writes.
 	ImpactLanded ImpactOp = "landed"
 	// ImpactRebased moves the pre version of a planned change impact to a newer head, to re-check (Pre).
 	ImpactRebased ImpactOp = "rebased"
@@ -47,7 +49,7 @@ type ImpactEvent struct {
 	Post   *NodeRef      `json:"post,omitempty"`  // written
 	Pre    *NodeRef      `json:"pre,omitempty"`   // rebased
 	Landed *NodeRef      `json:"landed,omitempty"`
-	// Baseline is, on landed, the baseline of the target branch the version landed in (ADR 0032).
+	// Baseline is, on landed, the baseline of the branch the version landed in (ADR 0032).
 	Baseline BaselineID `json:"baseline,omitempty"`
 	Review   *Review    `json:"review,omitempty"` // reviewed, discarded
 	Stale    []string   `json:"stale,omitempty"`  // adopted: the stale executions

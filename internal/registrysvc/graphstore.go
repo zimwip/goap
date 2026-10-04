@@ -24,7 +24,6 @@ const TypeMethodologyVersion = "methodology@MethodologyVersion"
 type StoreGraph interface {
 	BranchHead(ctx context.Context, namespace, name string) (domain.Baseline, error)
 	BaselineGraph(ctx context.Context, id domain.BaselineID) ([]domain.Node, []domain.Link, error)
-	CreateBaseline(ctx context.Context, namespace, name string, nodes []domain.NodeRef) (domain.Baseline, error)
 	// Commit runs a change of node edits (ADR 0024).
 	Commit(ctx context.Context, in graph.Commit) (graph.CommitResult, error)
 	// CreateChange, AddNodes and WriteNode let a producer open a change on a namespace of its own
@@ -273,11 +272,7 @@ func (s *GraphStore) commit(ctx context.Context, ns, title string, build func(*d
 			return err
 		}
 		head, err := s.Graph.BranchHead(ctx, ns, domain.MainBranch)
-		if errors.Is(err, graph.ErrNotFound) {
-			if head, err = s.Graph.CreateBaseline(ctx, ns, "Repository", nil); err != nil {
-				return err
-			}
-		} else if err != nil {
+		if err != nil {
 			return err
 		}
 		_, err = s.Graph.Commit(ctx, graph.Commit{Namespace: ns, Title: title, Intent: title, Baseline: head.ID, By: "registrysvc", BaselineName: title, Edits: edits})

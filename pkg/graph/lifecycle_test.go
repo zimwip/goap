@@ -57,11 +57,7 @@ func newLifecycleWorldG(t *testing.T, repo Repo, approveGuard string) lcWorld {
 		}
 	}
 	// Link bumps nothing: the spec still is version 1 with its links
-	var err error
-	w.base, err = w.g.CreateBaseline(ctx, "", "B1", []domain.NodeRef{w.req1.Ref(), w.req2.Ref(), w.spec.Ref()})
-	if err != nil {
-		t.Fatal(err)
-	}
+	w.base = pinBaseline(t, w.g, "", w.req1.Ref(), w.req2.Ref(), w.spec.Ref())
 	return w
 }
 
@@ -303,7 +299,7 @@ func testLifecycleParallelChangesConflict(t *testing.T, repo Repo) {
 	if _, err := w.g.Apply(ctx, cs[1].ID, ""); err != nil {
 		t.Fatal(err)
 	}
-	if got, _ := w.g.Change(ctx, cs[1].ID); got.Status != domain.ChangeMergePending {
+	if got, _ := w.g.Change(ctx, cs[1].ID); got.Status != domain.ChangeCommitted {
 		t.Fatalf("the second change must wait for a merge: %s", got.Status)
 	}
 }

@@ -17,8 +17,11 @@ service GraphService {
   rpc UpdateNode(UpdateNodeRequest) returns (UpdateNodeResponse);
   rpc GetNode(GetNodeRequest) returns (GetNodeResponse);
   rpc CreateLink(CreateLinkRequest) returns (CreateLinkResponse);
-  rpc CreateBaseline(CreateBaselineRequest) returns (CreateBaselineResponse);
   rpc ListBaselines(ListBaselinesRequest) returns (ListBaselinesResponse);
+  // Tags (ADR 0056) name the state an applied change leaves; not unique, a name may label several changes.
+  rpc TagChange(TagChangeRequest) returns (TagChangeResponse);
+  rpc ListTags(ListTagsRequest) returns (ListTagsResponse);
+  rpc DeleteTag(DeleteTagRequest) returns (DeleteTagResponse);
   rpc GetBaselineGraph(GetBaselineGraphRequest) returns (GetBaselineGraphResponse);
   // Browsing a large baseline: a page of its nodes (by type, filtered) and the neighbourhood of one node.
   rpc ListBaselineNodes(ListBaselineNodesRequest) returns (ListBaselineNodesResponse);
@@ -66,7 +69,7 @@ service GraphService {
   rpc MergeBranch(MergeBranchRequest) returns (MergeBranchResponse);
   // What going from a baseline to another changes, node by node (same namespace).
   rpc DiffBaselines(DiffBaselinesRequest) returns (DiffBaselinesResponse);
-  // Completes a merge_pending change: merges its branch into the branch it forked from.
+  // Integrates a committed change that waits for a resolution: merges its branch into the branch it forked from (ADR 0056).
   rpc MergeChange(MergeChangeRequest) returns (MergeChangeResponse);
   // Nodes the change shares with other open changes (a merge will be needed).
   rpc GetSharedNodes(GetSharedNodesRequest) returns (GetSharedNodesResponse);
@@ -345,18 +348,42 @@ message CreateLinkResponse {
   Link link = 1;
 }
 
-message CreateBaselineRequest {
-  string name = 1;
-  repeated NodeRef nodes = 2;
-  // snapshot the latest version of every node
-  bool all_latest = 3;
-  // namespace the baseline snapshots (every node given, or the latest ones, must belong to it)
-  string namespace = 4;
+message Tag {
+  string id = 1;
+  string name = 2;
+  string namespace = 3;
+  string change_id = 4;
+  // the materialised snapshot of the state, empty while it is only computed
+  string baseline_id = 5;
+  string by = 6;
+  google.protobuf.Timestamp created_at = 7;
 }
 
-message CreateBaselineResponse {
-  Baseline baseline = 1;
+message TagChangeRequest {
+  string change_id = 1;
+  string name = 2;
 }
+
+message TagChangeResponse {
+  Tag tag = 1;
+}
+
+// every field empty matches every tag
+message ListTagsRequest {
+  string namespace = 1;
+  string name = 2;
+  string change_id = 3;
+}
+
+message ListTagsResponse {
+  repeated Tag tags = 1;
+}
+
+message DeleteTagRequest {
+  string id = 1;
+}
+
+message DeleteTagResponse {}
 
 message ListBaselinesRequest {
   string namespace = 1;
@@ -578,7 +605,7 @@ message GetChangeResponse {
 message ListChangesRequest {
   // namespace the change acts on (empty: every namespace)
   string namespace = 1;
-  // draft | active | merge_pending | applied | abandoned (empty: every status)
+  // draft | active | committed | applied | abandoned (empty: every status)
   repeated string status = 2;
   // key of the responsible OrgUnit (empty: every unit)
   string owner_org = 3;

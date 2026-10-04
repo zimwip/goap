@@ -132,11 +132,7 @@ func hasPendingStub(ctx context.Context, g StoreGraph, alias string) (bool, erro
 // until an administrator reviews it.
 func createAliasStubs(ctx context.Context, g StoreGraph, aliases []string, methodologyName string) error {
 	head, err := g.BranchHead(ctx, llmcfg.NamespacePlatform, domain.MainBranch)
-	if errors.Is(err, graph.ErrNotFound) {
-		if head, err = g.CreateBaseline(ctx, llmcfg.NamespacePlatform, "Repository", nil); err != nil {
-			return err
-		}
-	} else if err != nil {
+	if err != nil {
 		return err
 	}
 	c, err := g.CreateChange(ctx, graph.NewChange{

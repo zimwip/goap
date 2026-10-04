@@ -251,7 +251,7 @@ func (g *Graph) republishNamespace(ctx context.Context, namespace string, sink E
 			}
 			ot.nodes = append(ot.nodes, vs...)
 		}
-		if head, err := branchHead(ctx, tx, namespace, domain.MainBranch); err == nil {
+		if head, err := branchHead(ctx, tx, namespace, domain.MainBranch); err == nil && head.ID != "" {
 			head.ParentID = ""
 			ot.baselines = append(ot.baselines, head)
 		}

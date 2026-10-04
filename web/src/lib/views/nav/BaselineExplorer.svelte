@@ -29,27 +29,11 @@
   let loading = $state(false);
   let error = $state('');
   let reload = $state(0);
-  let starting = $state(false);
   let showClosed = $state(!!loadRaw(CLOSED_KEY));
 
   void loadCatalog();
   /** namespaces holding nodes, plus the ones a domain declares (a namespace without a baseline can be started) */
   const choices = $derived([...new Set([...namespaces, ...typeCatalog.cat.namespaces().filter((n) => !META_NAMESPACES.has(n))])].sort());
-
-  /** Starts a namespace: an empty baseline on main, that changes then fill. */
-  async function startNamespace() {
-    starting = true;
-    error = '';
-    try {
-      await graph.createBaseline(baselineTool.namespace, `start ${baselineTool.namespace}`);
-      void refreshBaselines(baselineTool.namespace);
-      reload++;
-    } catch (e) {
-      error = errorMessage(e);
-    } finally {
-      starting = false;
-    }
-  }
 
   $effect(() => {
     void reload;
@@ -191,8 +175,7 @@
   {#if error}<div class="alert small">{error}</div>{/if}
   {#if !loading && !error && baselineTool.namespace && !branches.length}
     <div class="empty pad">
-      No baselines in {baselineTool.namespace}.
-      <button type="button" class="small" disabled={starting} onclick={startNamespace} title="An empty baseline on main: changes then create its nodes">Start {baselineTool.namespace}</button>
+      No baselines in {baselineTool.namespace} yet: the first change that lands creates one.
     </div>
   {/if}
   {#if !baselineTool.namespace && !error}<p class="empty pad">The graph holds no nodes yet.</p>{/if}

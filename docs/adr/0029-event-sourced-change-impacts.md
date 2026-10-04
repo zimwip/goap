@@ -35,7 +35,7 @@ nothing updates or deletes an event.
 | `reviewed` | the review (status, comment, by, flow, execution) | `ReviewNodeOn`, the split, a merge |
 | `discarded` | the rejection of a candidate whose flow was discarded | `DiscardFlow` |
 | `adopted` | change level: the flow and its stale executions | `AdoptFlow` |
-| `landed` | the version on the target branch | `land` (apply) |
+| `landed` | the version the change applied, in the baseline it names: on the change's own branch when applied, then again on the parent branch when merged (the last one is the version on the target) | `commitOnBranch` (commit), `land` (integration) |
 | `rebased` | the new `pre` of a planned change impact, to re-check | `land`, for the other open changes |
 
 Every event carries its **caller**: `by` (the principal, or the component: `graph.merge`, `graph.split_by_owner`),

@@ -198,7 +198,7 @@ func testDefaultProject(t *testing.T, repo Repo) {
 	if p := must[string](t)(g.DefaultProject(ctx)); p != "PROJ-B" {
 		t.Fatalf("default project = %s", p)
 	}
-	base := must[domain.Baseline](t)(g.CreateBaseline(ctx, domain.DefaultNamespace, "b", nil))
+	base := must[domain.Baseline](t)(g.BranchHead(ctx, domain.DefaultNamespace, domain.MainBranch))
 	if c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{Title: "x", BaselineID: base.ID})); c.ProjectID != "PROJ-B" {
 		t.Fatalf("a change naming no project acts in the default one: %s", c.ProjectID)
 	}
@@ -249,4 +249,36 @@ func testStorageRequiresAChange(t *testing.T, repo Repo) {
 		string(org.ID), g.newID()); err == nil {
 		t.Error("a version of a missing change: accepted by the database")
 	}
+}
+
+// Every baseline is the result of a change (ADR 0056); what precedes the first change of a namespace is the empty
+// state, which nothing stores.
+func TestGuardBaselineNeedsAChange(t *testing.T) {
+	forEachRepo(t, func(t *testing.T, repo Repo) {
+		ctx := context.Background()
+		g := New(repo)
+		if err := g.Bootstrap(ctx); err != nil {
+			t.Fatal(err)
+		}
+		org := must[domain.Node](t)(g.NodeByKey(ctx, NamespaceOrganisation, domain.DefaultOrg))
+		put := func(b domain.Baseline) error {
+			b.ID, b.Namespace, b.Branch, b.CreatedAt = domain.BaselineID(g.newID()), "scratch", domain.MainBranch, g.now()
+			return g.repo.InTx(ctx, func(tx Tx) error { return tx.PutBaseline(ctx, b) })
+		}
+		for name, b := range map[string]domain.Baseline{
+			"empty":       {Name: "e"},
+			"with nodes":  {Name: "n", Nodes: map[domain.NodeID]domain.Version{org.ID: 1}},
+			"with parent": {Name: "p", ParentID: must[domain.Baseline](t)(g.BranchHead(ctx, NamespaceOrganisation, domain.MainBranch)).ID},
+		} {
+			if err := put(b); !errors.Is(err, ErrInvalid) {
+				t.Fatalf("%s, no change: err = %v, want ErrInvalid", name, err)
+			}
+		}
+		if err := put(domain.Baseline{Name: "after the bootstrap", ChangeID: org.ChangeID}); err != nil {
+			t.Fatalf("a baseline a change produced: %v", err)
+		}
+		if err := put(domain.Baseline{Name: "ghost", ChangeID: domain.ChangeID(g.newID())}); !errors.Is(err, ErrInvalid) {
+			t.Fatalf("a baseline of a change that does not exist: %v", err)
+		}
+	})
 }

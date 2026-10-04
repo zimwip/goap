@@ -266,7 +266,7 @@
   const others = $derived(items.filter((i) => !['decision', 'artifact'].includes(i.kind ?? '')));
 
   // applied, or applied on its own branch and waiting for its merge: nothing to apply any more
-  const isApplied = $derived(change?.status === 'applied' || change?.status === 'merge_pending');
+  const isApplied = $derived(change?.status === 'applied' || change?.status === 'committed');
   const closed = $derived(change?.status === 'applied' || change?.status === 'abandoned');
   void loadTypes();
   const lcRows = $derived(lifecycleRows(typeCatalog.cat, nodes, attached, view?.nodes ?? [], posts, extraNodes, true));
@@ -422,7 +422,7 @@
   $effect(() => {
     const ch = change;
     mergeInto = '';
-    if (ch?.status !== 'merge_pending' || !ch.branch) return;
+    if (ch?.status !== 'committed' || !ch.branch) return;
     graph
       .getBranch(namespaceOf(ch.namespace), ch.branch)
       .then((r) => (mergeInto = r.branch?.parent || 'main'))
@@ -624,9 +624,9 @@
           <ProcessProgress processId={p.id ?? ''} onopen={(id) => openTab({ kind: 'run', params: { id } })} />
         {/each}
 
-        {#if ch.status === 'merge_pending'}
+        {#if ch.status === 'committed'}
           <div class="alert warn" style="margin: 0.75rem 0">
-            <p>Applied on its own branch; the merge into {mergeInto || 'the parent branch'} is pending: resolve the nodes changed on both sides.</p>
+            <p>Committed on its own branch; the integration into {mergeInto || 'the parent branch'} waits: resolve the nodes changed on both sides.</p>
             {#if mergeInto}
               <MergeResolver namespace={namespaceOf(ch.namespace)} from={ch.branch ?? ''} into={mergeInto} onmerge={merge} />
             {/if}

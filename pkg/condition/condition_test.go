@@ -14,12 +14,12 @@ func blackboard(t *testing.T, withTest bool) domain.Blackboard {
 	g := graph.New(graph.NewMemory())
 	need, _ := g.CreateNode(ctx, graph.NewNode{Key: "NEED-1", Type: "Need"})
 	req, _ := g.CreateNode(ctx, graph.NewNode{Key: "REQ-1", Type: "Requirement"})
-	b0, _ := g.CreateBaseline(ctx, "", "B0", nil)
+	b0, _ := g.BranchHead(ctx, "", domain.MainBranch)
 	c0, _ := g.CreateChange(ctx, graph.NewChange{Title: "link", BaselineID: b0.ID})
 	if _, err := g.Link(ctx, c0.ID, "satisfies", req.Ref(), need.Ref(), nil); err != nil {
 		t.Fatal(err)
 	}
-	b, _ := g.CreateBaseline(ctx, "", "B1", []domain.NodeRef{need.Ref(), req.Ref()})
+	b, _ := g.BranchHead(ctx, "", domain.MainBranch)
 	c, _ := g.CreateChange(ctx, graph.NewChange{Title: "c", BaselineID: b.ID})
 	ref := req.Ref()
 	if _, err := g.AddNodes(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &ref, Rationale: "impacted"}}); err != nil {

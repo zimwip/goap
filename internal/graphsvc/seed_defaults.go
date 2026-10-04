@@ -62,9 +62,8 @@ ctx.fail("unknown tool " + ctx.tool());
 	}
 }
 
-// applyOn commits node edits on main as one change of a namespace, so that the head of main
-// moves (baselines made outside a change do not once main has a head). Commit itself gives the
-// namespace an empty initial baseline when it has none (ADR 0049).
+// applyOn commits node edits on main as one change of a namespace, so that the head of main moves: the first change
+// of a namespace starts from the empty state (ADR 0056).
 func applyOn(ctx context.Context, g *graph.Graph, namespace, title string, edits []graph.NodeEdit) error {
 	_, err := g.Commit(ctx, graph.Commit{Namespace: namespace, Title: title, Intent: title, By: "graphsvc.seed", BaselineName: title, Edits: edits})
 	return err

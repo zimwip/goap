@@ -952,6 +952,18 @@ export interface Baseline {
   namespace?: string;
 }
 
+/** A name given to the state an applied change leaves (ADR 0056); not unique. */
+export interface Tag {
+  id?: string;
+  name?: string;
+  namespace?: string;
+  changeId?: string;
+  /** the materialised snapshot of the state, empty while it is only computed */
+  baselineId?: string;
+  by?: string;
+  createdAt?: string;
+}
+
 export interface Branch {
   name?: string;
   namespace?: string;
@@ -1008,7 +1020,7 @@ export interface Change {
   intent?: string;
   methodology?: string;
   goal?: string;
-  status?: 'draft' | 'active' | 'merge_pending' | 'applied' | 'abandoned' | string;
+  status?: 'draft' | 'active' | 'committed' | 'applied' | 'abandoned' | string;
   baselineId?: string;
   resultBaselineId?: string;
   data?: Struct;
@@ -1938,9 +1950,13 @@ export const graph = {
   /** Merges a branch into another; a node changed on both sides needs a resolution (by node id). */
   mergeBranch: (req: { namespace: string; from: string; into: string; title?: string; resolutions?: Record<string, Resolution> }) =>
     rpc<typeof req, { change?: Change; baseline?: Baseline; plan?: MergePlan }>(GRAPH, 'MergeBranch', req),
-  /** A baseline of the given node versions (none: an empty baseline, the start of a namespace). */
-  createBaseline: (namespace: string, name: string, nodes: NodeRef[] = []) =>
-    rpc<{ namespace: string; name: string; nodes: NodeRef[] }, { baseline?: Baseline }>(GRAPH, 'CreateBaseline', { namespace, name, nodes }),
+  /** Names the state an applied change leaves (ADR 0056); tags are not unique. */
+  tagChange: (changeId: string, name: string) =>
+    rpc<{ changeId: string; name: string }, { tag?: Tag }>(GRAPH, 'TagChange', { changeId, name }),
+  /** The tags matching the filter (all empty: every tag). */
+  listTags: (filter: { namespace?: string; name?: string; changeId?: string } = {}) =>
+    rpc<typeof filter, { tags?: Tag[] }>(GRAPH, 'ListTags', filter),
+  deleteTag: (id: string) => rpc<{ id: string }, Record<string, never>>(GRAPH, 'DeleteTag', { id }),
   /** What going from a baseline to another changes, node by node. */
   diffBaselines: (from: string, to: string, signal?: AbortSignal) =>
     rpc<{ from: string; to: string }, { nodes?: BaselineDiff[] }>(GRAPH, 'DiffBaselines', { from, to }, signal),
@@ -1968,7 +1984,7 @@ export const graph = {
     rpc<{ changeId: string }, { changes?: Change[] }>(GRAPH, 'SplitChange', { changeId }),
   listSubChanges: (changeId: string, signal?: AbortSignal) =>
     rpc<{ changeId: string }, { changes?: Change[] }>(GRAPH, 'ListSubChanges', { changeId }, signal),
-  /** Completes a merge_pending change; resolutions are by node id. */
+  /** Integrates a committed change that waits for a resolution; resolutions are by node id. */
   mergeChange: (changeId: string, resolutions: Record<string, Resolution> = {}) =>
     rpc<
       { changeId: string; resolutions: Record<string, Resolution> },

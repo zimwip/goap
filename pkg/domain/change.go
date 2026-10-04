@@ -18,10 +18,13 @@ type ChangeStatus string
 const (
 	ChangeDraft  ChangeStatus = "draft"
 	ChangeActive ChangeStatus = "active"
-	// ChangeMergePending: applied on its own branch, waiting for a merge into the target branch.
-	ChangeMergePending ChangeStatus = "merge_pending"
-	ChangeApplied      ChangeStatus = "applied"
-	ChangeAbandoned    ChangeStatus = "abandoned"
+	// ChangeCommitted: validated, and the state it leaves is recorded on its own branch; it is not integrated into the
+	// branch it was forked from yet (a conflict of the merge waits for a resolution, ADR 0056). No impact can be
+	// added to it any more.
+	ChangeCommitted ChangeStatus = "committed"
+	// ChangeApplied: committed and integrated into the branch it was forked from.
+	ChangeApplied   ChangeStatus = "applied"
+	ChangeAbandoned ChangeStatus = "abandoned"
 )
 
 // Change describes a modification of the domain graph. It starts from a

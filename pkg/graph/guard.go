@@ -16,7 +16,9 @@ import (
 //   - every node version is owned by an organisational unit and every node was created in a project, nodes of the
 //     structures in force; a version that names neither gets them from the version it follows, else from the change
 //     that writes it (the unit holding it, the project it acts in); the project of a node never changes;
-//   - every change names the unit holding it and the project it acts in, nodes of the structures in force.
+//   - every change names the unit holding it and the project it acts in, nodes of the structures in force;
+//   - every baseline is the result of a change (ADR 0056); what precedes the first change of a namespace is the empty
+//     state, the empty baseline id, which nothing stores.
 //
 // What names a change, a unit or a project is checked when the transaction ends, before it commits (as a deferred
 // foreign key): the bootstrap writes the root unit and the root project, each referencing the other and itself, in
@@ -145,6 +147,13 @@ func (t *guardTx) PutNode(ctx context.Context, n domain.Node) error {
 	return t.Tx.PutNode(ctx, n)
 }
 
+func (t *guardTx) PutTag(ctx context.Context, tag domain.Tag) error {
+	if err := t.needChange(tag.ChangeID, "tag "+tag.Name); err != nil {
+		return err
+	}
+	return t.Tx.PutTag(ctx, tag)
+}
+
 func (t *guardTx) PutLink(ctx context.Context, l domain.Link) error {
 	if err := t.needChange(l.ChangeID, "link "+l.Type); err != nil {
 		return err
@@ -184,6 +193,17 @@ func (t *guardTx) PutChange(ctx context.Context, c domain.Change) error {
 }
 
 func (t *guardTx) DeleteChange(ctx context.Context, id domain.ChangeID, namespace, branch string) error {
+	// the store checks that no baseline holds what the change wrote from the entries: every baseline of the namespace
+	// must have its own (a baseline kept as a header only is materialised first)
+	bs, err := t.Tx.Baselines(ctx, namespace)
+	if err != nil {
+		return err
+	}
+	for _, b := range bs {
+		if err := t.materialize(ctx, b.ID); err != nil {
+			return err
+		}
+	}
 	if err := t.Tx.DeleteChange(ctx, id, namespace, branch); err != nil {
 		return err
 	}

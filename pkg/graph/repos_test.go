@@ -19,16 +19,15 @@ import (
 	"github.com/zimwip/goap/pkg/domain"
 )
 
-// testChange opens a change on the current head of a namespace's main branch (an empty baseline if none
+// testChange opens a change on the current head of a namespace's main branch (the empty state if none
 // exists yet), for a test that needs a domain.ChangeID to attribute a raw g.Link call to (ADR 0049) without
-// disturbing whatever real content is already on main: CreateBaseline always advances the branch, even to an
-// empty one, so blindly calling it mid-test would silently reset main out from under earlier commits.
+// disturbing whatever real content is already on main.
 func testChange(t *testing.T, g *Graph, namespace string) domain.ChangeID {
 	t.Helper()
 	ctx := context.Background()
 	head, err := g.BranchHead(ctx, namespace, domain.MainBranch)
 	if errors.Is(err, ErrNotFound) {
-		head, err = g.CreateBaseline(ctx, namespace, "B0", nil)
+		head, err = g.BranchHead(ctx, namespace, domain.MainBranch)
 	}
 	if err != nil {
 		t.Fatal(err)
@@ -53,7 +52,7 @@ func seedNode(ctx context.Context, g *Graph, in NewNode) (domain.Node, error) {
 	// even a fixture writes inside a change (ADR 0054): one opened on the current head, left open
 	head, err := g.BranchHead(ctx, n.Namespace, domain.MainBranch)
 	if errors.Is(err, ErrNotFound) {
-		head, err = g.CreateBaseline(ctx, n.Namespace, "B0", nil)
+		head, err = g.BranchHead(ctx, n.Namespace, domain.MainBranch)
 	}
 	if err != nil {
 		return n, err
@@ -78,6 +77,7 @@ func forEachRepo(t *testing.T, f func(t *testing.T, repo Repo)) {
 		f(t, repo)
 		checkImpactLogs(t, repo)
 		checkLandings(t, repo)
+		checkStates(t, repo)
 	})
 	t.Run("sqlite", func(t *testing.T) {
 		ctx := context.Background()
@@ -93,6 +93,7 @@ func forEachRepo(t *testing.T, f func(t *testing.T, repo Repo)) {
 		f(t, repo)
 		checkImpactLogs(t, repo)
 		checkLandings(t, repo)
+		checkStates(t, repo)
 	})
 	dsn := os.Getenv("GOAP_TEST_PG_DSN")
 	if dsn == "" {
@@ -127,6 +128,7 @@ func forEachRepo(t *testing.T, f func(t *testing.T, repo Repo)) {
 		f(t, repo)
 		checkImpactLogs(t, repo)
 		checkLandings(t, repo)
+		checkStates(t, repo)
 	})
 }
 
@@ -182,4 +184,59 @@ func checkImpactLogs(t *testing.T, repo Repo) {
 	if err != nil {
 		t.Fatal(err)
 	}
+}
+
+// pinBaseline makes the head of main hold exactly the given versions on top of what it holds: the fixtures that
+// arrange a world with seedNode (versions written outside the merge of a change) need them part of the state a
+// change starts from. It is written through an applied change like any other state (ADR 0056); production code has
+// no such operation, a state is only ever what a change left.
+func pinBaseline(t *testing.T, g *Graph, namespace string, refs ...domain.NodeRef) domain.Baseline {
+	t.Helper()
+	ctx := context.Background()
+	if err := g.Bootstrap(ctx); err != nil {
+		t.Fatal(err)
+	}
+	namespace = domain.NamespaceOf(namespace)
+	var out domain.Baseline
+	err := g.repo.InTx(ctx, func(tx Tx) error {
+		head, err := branchHead(ctx, tx, namespace, domain.MainBranch)
+		if err != nil {
+			return err
+		}
+		nodes := map[domain.NodeID]domain.Version{}
+		for id, v := range head.Nodes {
+			nodes[id] = v
+		}
+		for _, r := range refs {
+			n, err := tx.Node(ctx, r)
+			if err != nil {
+				return err
+			}
+			if n.Namespace != namespace {
+				return fmt.Errorf("node %s is of namespace %s, not %s: %w", n.Key, n.Namespace, namespace, ErrInvalid)
+			}
+			if !n.Deleted {
+				nodes[n.ID] = n.Version
+			}
+		}
+		org, proj := g.Structure(domain.StructureOrganisation), g.Structure(domain.StructureProject)
+		c := domain.Change{ID: domain.ChangeID(g.newID()), Title: "Pin", Namespace: namespace, Status: domain.ChangeApplied, Intent: "Pin node versions for a fixture",
+			BaselineID: head.ID, Branch: domain.MainBranch, OwnerOrg: org.Root, ProjectID: proj.Root, Administrative: true, CreatedAt: g.now()}
+		if err := tx.PutChange(ctx, c); err != nil {
+			return err
+		}
+		out = domain.Baseline{ID: domain.BaselineID(g.newID()), Name: "Pin", Namespace: namespace, Branch: domain.MainBranch, ParentID: head.ID, ChangeID: c.ID, Nodes: nodes, CreatedAt: g.now()}
+		if err := tx.PutBaseline(ctx, out); err != nil {
+			return err
+		}
+		if err := g.advanceBranch(ctx, tx, namespace, domain.MainBranch, out.ID); err != nil {
+			return err
+		}
+		c.ResultBaselineID = out.ID
+		return tx.PutChange(ctx, c)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return out
 }

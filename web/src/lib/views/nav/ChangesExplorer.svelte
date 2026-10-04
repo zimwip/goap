@@ -73,7 +73,7 @@
 
   const STATUSES = [
     { id: 'active', label: 'Active' },
-    { id: 'merge_pending', label: 'Merge pending' },
+    { id: 'committed', label: 'Committed' },
     { id: 'draft', label: 'Drafts' },
     { id: 'applied', label: 'Applied' },
     { id: 'abandoned', label: 'Abandoned' },

@@ -94,23 +94,6 @@ func (g *Graph) commitEdits(ctx context.Context, in Commit, parenting bool) (res
 			}
 		}
 	}
-	if in.Baseline == "" {
-		// a namespace Commit touches for the first time has no baseline yet to reference (ADR 0049: every
-		// write, even the first one of a namespace, goes through a change) — give it an empty one, exactly
-		// what a caller doing this by hand (graphsvc.applyOn) already did.
-		branch := in.Branch
-		if branch == "" {
-			branch = domain.MainBranch
-		}
-		head, err := g.BranchHead(ctx, in.Namespace, branch)
-		if errors.Is(err, ErrNotFound) {
-			head, err = g.CreateBaseline(ctx, in.Namespace, "Initial baseline", nil)
-		}
-		if err != nil {
-			return res, err
-		}
-		in.Baseline = head.ID
-	}
 	c, err := g.CreateChange(ctx, NewChange{Namespace: in.Namespace, Title: in.Title, Intent: in.Intent, Methodology: in.Methodology,
 		BaselineID: in.Baseline, Branch: in.Branch, Data: in.Data, OwnBranch: true, OwnerOrg: in.OwnerOrg, ProjectID: in.ProjectID, Administrative: in.Administrative})
 	if err != nil {
@@ -207,7 +190,7 @@ func (g *Graph) commitEdits(ctx context.Context, in Commit, parenting bool) (res
 	}
 	if done, err := g.Change(ctx, c.ID); err != nil {
 		return res, err
-	} else if done.Status == domain.ChangeMergePending {
+	} else if done.Status == domain.ChangeCommitted {
 		return res, fmt.Errorf("commit %q conflicts with a concurrent change: %w", in.Title, ErrConflict)
 	}
 	return res, nil
@@ -326,7 +309,7 @@ func (g *Graph) CreateObject(ctx context.Context, methodology, namespace, typ, k
 		return domain.Node{}, domain.Baseline{}, err
 	}
 	out, err := g.Commit(ctx, Commit{Namespace: namespace, Title: "Create " + key, Intent: "Create " + typ + " " + key,
-		Baseline: head.ID, Methodology: methodology, By: "graph.create_object", BaselineName: domain.MainBranch,
+		Baseline: head.ID, Methodology: methodology, By: "graph.create_object",
 		Edits: []NodeEdit{{Key: key, Type: typ, Props: props, Rationale: "Create " + typ + " " + key}}})
 	if err != nil {
 		return domain.Node{}, domain.Baseline{}, err

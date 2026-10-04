@@ -9,10 +9,21 @@ import (
 	"github.com/zimwip/goap/pkg/domain"
 )
 
-// Apply lands a change: the versions its accepted change impacts wrote on its branch
-// (ADR 0024) are checked (properties, lifecycle, transitions) and merged into the
-// branch it was forked from, giving the resulting baseline. A change without a branch
-// of its own of accepted change impacts applies as an empty baseline.
+// A change is applied in two steps (ADR 0056), two concepts that Apply runs one after the other:
+//
+//   - CommitChange validates it: every rule of a change (reviews, properties, lifecycle and transitions, validators,
+//     the activity goals) is checked against the versions its accepted change impacts wrote, and the state it leaves
+//     is recorded on its own branch (its commit baseline, one `landed` event per impact). That depends on the change
+//     alone. The change is then `committed`.
+//   - IntegrateChange integrates a committed change into the branch it was forked from (fast-forward or 3-way
+//     merge, a baseline on that branch, `landed` again on it), and the change is `applied`. Conflicts without a
+//     resolution leave it committed: the integration waits.
+//
+// Apply is both, in one transaction. The branch of a change is its workspace: a change without one gets it when it is
+// committed (a change that wrote a node has it already).
+
+// Apply commits a change and integrates it into the branch it was forked from; it returns the baseline the change
+// left on the target branch, or its commit baseline when the integration waits for a resolution.
 func (g *Graph) Apply(ctx context.Context, id domain.ChangeID, baselineName string) (domain.Baseline, error) {
 	var result domain.Baseline
 	authorized, activityMet, err := g.authorizeMoves(ctx, id)
@@ -20,43 +31,73 @@ func (g *Graph) Apply(ctx context.Context, id domain.ChangeID, baselineName stri
 		return result, err
 	}
 	err = g.repo.InTx(ctx, func(tx Tx) (err error) {
-		if c, err := tx.Change(ctx, id); err != nil {
-			return err
-		} else if of := openFlows(c); len(of) > 0 {
-			return fmt.Errorf("change %s has an open flow (%s): adopt or discard it first: %w", id, of[0].ID, ErrConflict)
-		} else if pd := pendingDecisions(c, g.now()); len(pd) > 0 {
-			return fmt.Errorf("change %s has a pending decision point (%q): decide it first: %w", id, pd[0].Question, ErrConflict)
-		}
-		if open, err := openSubChanges(ctx, tx, id); err != nil {
-			return err
-		} else if len(open) > 0 {
-			return fmt.Errorf("change %s has %d open sub-change(s), apply or abandon them first: %w", id, len(open), ErrConflict)
-		}
-		if result, err = g.applyTx(ctx, tx, id, baselineName, authorized, activityMet); err != nil {
+		if result, err = g.commitTx(ctx, tx, id, baselineName, authorized, activityMet); err != nil {
 			return err
 		}
 		c, err := tx.Change(ctx, id)
 		if err != nil {
 			return err
 		}
-		// A change with its own branch is merged into the branch it was forked
-		// from once applied; conflicts leave it merge_pending (see MergeChange).
-		own, ok, err := ownBranch(ctx, tx, c)
-		if err != nil || !ok {
-			return err
-		}
-		c, err = g.integrate(ctx, tx, c, own, nil)
-		if err != nil {
+		if c, err = g.integrateTx(ctx, tx, c, nil); err != nil {
 			return err
 		}
 		if c.Status == domain.ChangeApplied {
 			if result, err = tx.Baseline(ctx, c.ResultBaselineID); err != nil {
 				return err
 			}
+			// a name other than the title the change already carries is a tag on the state it leaves (ADR 0056)
+			if baselineName != "" && baselineName != c.Title {
+				_, err = g.tagTx(ctx, tx, c, baselineName, "")
+			}
 		}
-		return nil
+		return err
 	})
 	return result, err
+}
+
+// CommitChange validates a change and records the state it leaves on its own branch: the change is committed, not
+// integrated; IntegrateChange does that. It returns the commit baseline.
+func (g *Graph) CommitChange(ctx context.Context, id domain.ChangeID, baselineName string) (domain.Baseline, error) {
+	var result domain.Baseline
+	authorized, activityMet, err := g.authorizeMoves(ctx, id)
+	if err != nil {
+		return result, err
+	}
+	err = g.repo.InTx(ctx, func(tx Tx) (err error) {
+		result, err = g.commitTx(ctx, tx, id, baselineName, authorized, activityMet)
+		return err
+	})
+	return result, err
+}
+
+// commitTx validates a change and records its commit baseline on its own branch.
+func (g *Graph) commitTx(ctx context.Context, tx Tx, id domain.ChangeID, baselineName string, authorized map[string]bool, activityMet *bool) (domain.Baseline, error) {
+	c, err := tx.Change(ctx, id)
+	if err != nil {
+		return domain.Baseline{}, err
+	}
+	if of := openFlows(c); len(of) > 0 {
+		return domain.Baseline{}, fmt.Errorf("change %s has an open flow (%s): adopt or discard it first: %w", id, of[0].ID, ErrConflict)
+	} else if pd := pendingDecisions(c, g.now()); len(pd) > 0 {
+		return domain.Baseline{}, fmt.Errorf("change %s has a pending decision point (%q): decide it first: %w", id, pd[0].Question, ErrConflict)
+	}
+	if open, err := openSubChanges(ctx, tx, id); err != nil {
+		return domain.Baseline{}, err
+	} else if len(open) > 0 {
+		return domain.Baseline{}, fmt.Errorf("change %s has %d open sub-change(s), apply or abandon them first: %w", id, len(open), ErrConflict)
+	}
+	if c.Status == domain.ChangeApplied || c.Status == domain.ChangeAbandoned || c.Status == domain.ChangeCommitted {
+		return domain.Baseline{}, fmt.Errorf("change %s is %s: %w", id, c.Status, ErrConflict)
+	}
+	// the change is its branch: one that wrote nothing has none yet
+	if _, own, err := ownBranch(ctx, tx, c); err != nil {
+		return domain.Baseline{}, err
+	} else if !own {
+		if _, _, err := g.ensureOwnBranch(ctx, tx, c); err != nil {
+			return domain.Baseline{}, err
+		}
+	}
+	return g.commitOnBranch(ctx, tx, id, baselineName, authorized, activityMet)
 }
 
 // errCollected rolls back the pass that only collects the transitions to authorize.
@@ -129,7 +170,7 @@ func (g *Graph) newApplier(ctx context.Context, tx Tx, id domain.ChangeID) (*app
 	if err != nil {
 		return nil, "", err
 	}
-	if c.Status == domain.ChangeApplied || c.Status == domain.ChangeAbandoned || c.Status == domain.ChangeMergePending {
+	if c.Status == domain.ChangeApplied || c.Status == domain.ChangeAbandoned || c.Status == domain.ChangeCommitted {
 		return nil, "", fmt.Errorf("change %s is %s: %w", id, c.Status, ErrConflict)
 	}
 	base, err := tx.Baseline(ctx, c.BaselineID)
@@ -155,8 +196,9 @@ func (g *Graph) newApplier(ctx context.Context, tx Tx, id domain.ChangeID) (*app
 	return &applier{g: g, tx: tx, ctx: ctx, change: c, ix: ix, branch: domain.BranchOf(c.Branch), target: target}, parentBaseline, nil
 }
 
-// applyTx applies a change; authorized are the transitions authorizeMoves let through (nil: no authorizer).
-func (g *Graph) applyTx(ctx context.Context, tx Tx, id domain.ChangeID, baselineName string, authorized map[string]bool, activityMet *bool) (domain.Baseline, error) {
+// commitOnBranch validates a change on its own branch and records its commit baseline there; authorized are the
+// transitions authorizeMoves let through (nil: no authorizer).
+func (g *Graph) commitOnBranch(ctx context.Context, tx Tx, id domain.ChangeID, baselineName string, authorized map[string]bool, activityMet *bool) (domain.Baseline, error) {
 	a, parentBaseline, err := g.newApplier(ctx, tx, id)
 	if err != nil {
 		return domain.Baseline{}, err
@@ -176,14 +218,22 @@ func (g *Graph) applyTx(ctx context.Context, tx Tx, id domain.ChangeID, baseline
 	if baselineName == "" {
 		baselineName = c.Title
 	}
-	result := domain.Baseline{ID: domain.BaselineID(g.newID()), Name: baselineName, Namespace: c.Namespace, Branch: a.branch, ParentID: parentBaseline, ChangeID: c.ID, Nodes: a.target, CreatedAt: g.now()}
+	result := domain.Baseline{ID: domain.BaselineID(g.newID()), Name: baselineName, Namespace: c.Namespace, Branch: a.branch, ParentID: parentBaseline, ChangeID: c.ID, Kind: domain.BaselineCommit, Nodes: a.target, CreatedAt: g.now()}
 	if err := tx.PutBaseline(ctx, result); err != nil {
 		return domain.Baseline{}, err
 	}
 	if err := g.advanceBranch(ctx, tx, c.Namespace, a.branch, result.ID); err != nil {
 		return domain.Baseline{}, err
 	}
-	c.Status = domain.ChangeApplied
+	// each version the change applied has landed on its own branch; it lands again on the branch it is integrated into
+	// (integrate, land)
+	for _, cp := range a.cposts {
+		ref := cp.post.Ref()
+		if err := g.emit(ctx, tx, domain.ImpactEvent{Change: c.ID, Impact: cp.cn.ID, Op: domain.ImpactLanded, Landed: &ref, Baseline: result.ID}); err != nil {
+			return domain.Baseline{}, err
+		}
+	}
+	c.Status = domain.ChangeCommitted
 	c.ResultBaselineID = result.ID
 	return result, tx.PutChange(ctx, c)
 }

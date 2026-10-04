@@ -274,13 +274,16 @@ func (t *pgTx) InLinks(ctx context.Context, ref domain.NodeRef) ([]domain.Link, 
 func (t *pgTx) Baseline(ctx context.Context, id domain.BaselineID) (domain.Baseline, error) {
 	var b domain.Baseline
 	var parent, mergedFrom, change *string
-	err := t.tx.QueryRow(ctx, `SELECT id::text, name, parent_id::text, merged_from::text, change_id::text, created_at, branch, namespace FROM baseline WHERE id = $1`, string(id)).
-		Scan((*string)(&b.ID), &b.Name, &parent, &mergedFrom, &change, &b.CreatedAt, &b.Branch, &b.Namespace)
+	err := t.tx.QueryRow(ctx, `SELECT id::text, name, parent_id::text, merged_from::text, change_id::text, created_at, branch, namespace, gap, kind FROM baseline WHERE id = $1`, string(id)).
+		Scan((*string)(&b.ID), &b.Name, &parent, &mergedFrom, &change, &b.CreatedAt, &b.Branch, &b.Namespace, &b.Gap, &b.Kind)
 	if err != nil {
 		return b, mapErr(err, "baseline "+string(id))
 	}
 	b.ParentID, b.MergedFrom, b.ChangeID = domain.BaselineID(str(parent)), domain.BaselineID(str(mergedFrom)), domain.ChangeID(str(change))
 	b.Nodes = map[domain.NodeID]domain.Version{}
+	if b.Gap > 0 {
+		return b, nil // only the header is stored
+	}
 	rows, err := t.tx.Query(ctx, baselineEntriesSQL("$1")+` SELECT node_id::text, version FROM eff WHERE rn = 1 AND NOT removed`, string(id))
 	if err != nil {
 		return b, err
@@ -321,7 +324,7 @@ func (t *pgTx) Change(ctx context.Context, id domain.ChangeID) (domain.Change, e
 	var c domain.Change
 	var result *string
 	var data []byte
-	err := t.tx.QueryRow(ctx, `SELECT id::text, title, intent, methodology, goal, status, baseline_id::text, result_baseline_id::text, data, created_at, branch, namespace, COALESCE(parent_id::text, ''), owner_org, project_id, administrative, activity_ref
+	err := t.tx.QueryRow(ctx, `SELECT id::text, title, intent, methodology, goal, status, COALESCE(baseline_id::text, ''), result_baseline_id::text, data, created_at, branch, namespace, COALESCE(parent_id::text, ''), owner_org, project_id, administrative, activity_ref
 		FROM change WHERE id = $1`, string(id)).
 		Scan((*string)(&c.ID), &c.Title, &c.Intent, &c.Methodology, &c.Goal, (*string)(&c.Status), (*string)(&c.BaselineID), &result, &data, &c.CreatedAt, &c.Branch, &c.Namespace, (*string)(&c.ParentID), &c.OwnerOrg, &c.ProjectID, &c.Administrative, &c.ActivityRef)
 	if err != nil {
@@ -404,19 +407,26 @@ func (t *pgTx) PutLink(ctx context.Context, l domain.Link) error {
 func (t *pgTx) PutBaseline(ctx context.Context, b domain.Baseline) error {
 	var parent *domain.Baseline
 	parentDepth := 0
-	if b.ParentID != "" {
-		if err := t.tx.QueryRow(ctx, `SELECT depth FROM baseline WHERE id = $1`, string(b.ParentID)).Scan(&parentDepth); err != nil {
+	if b.ParentID != "" && b.Gap == 0 {
+		var parentGap int
+		if err := t.tx.QueryRow(ctx, `SELECT depth, gap FROM baseline WHERE id = $1`, string(b.ParentID)).Scan(&parentDepth, &parentGap); err != nil {
 			return mapErr(err, "baseline "+string(b.ParentID))
 		}
-		p, err := t.Baseline(ctx, b.ParentID)
-		if err != nil {
-			return err
+		// a delta is only stored over a parent whose entries are stored: else the baseline is stored whole
+		if parentGap == 0 {
+			p, err := t.Baseline(ctx, b.ParentID)
+			if err != nil {
+				return err
+			}
+			parent = &p
 		}
-		parent = &p
 	}
 	depth, entries := storedEntries(parent, parentDepth, b.Nodes)
-	_, err := t.tx.Exec(ctx, `INSERT INTO baseline (id, name, parent_id, merged_from, change_id, created_at, branch, namespace, depth) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-		string(b.ID), b.Name, nullUUID(string(b.ParentID)), nullUUID(string(b.MergedFrom)), nullUUID(string(b.ChangeID)), b.CreatedAt, domain.BranchOf(b.Branch), domain.NamespaceOf(b.Namespace), depth)
+	if b.Gap > 0 {
+		depth, entries = 0, nil
+	}
+	_, err := t.tx.Exec(ctx, `INSERT INTO baseline (id, name, parent_id, merged_from, change_id, created_at, branch, namespace, depth, gap, kind) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+		string(b.ID), b.Name, nullUUID(string(b.ParentID)), nullUUID(string(b.MergedFrom)), nullUUID(string(b.ChangeID)), b.CreatedAt, domain.BranchOf(b.Branch), domain.NamespaceOf(b.Namespace), depth, b.Gap, kindOf(b))
 	if err != nil {
 		return mapErr(err, "baseline")
 	}
@@ -428,12 +438,43 @@ func (t *pgTx) PutBaseline(ctx context.Context, b domain.Baseline) error {
 	return mapErr(err, "baseline entries")
 }
 
+func (t *pgTx) BranchJoins(ctx context.Context, namespace, branch string, change domain.ChangeID) ([]domain.NodeRef, error) {
+	rows, err := t.tx.Query(ctx, `SELECT j.node_id::text, j.version FROM node_branch j JOIN node n ON n.id = j.node_id WHERE n.namespace = $1 AND j.branch = $2 AND j.change_id = $3`,
+		domain.NamespaceOf(namespace), domain.BranchOf(branch), string(change))
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (domain.NodeRef, error) {
+		var id string
+		var v int
+		err := r.Scan(&id, &v)
+		return domain.NodeRef{ID: domain.NodeID(id), Version: domain.Version(v)}, err
+	})
+}
+
+func (t *pgTx) MaterializeBaseline(ctx context.Context, id domain.BaselineID, nodes map[domain.NodeID]domain.Version) error {
+	if _, err := t.tx.Exec(ctx, `DELETE FROM baseline_entry WHERE baseline_id = $1`, string(id)); err != nil {
+		return mapErr(err, "baseline "+string(id))
+	}
+	if res, err := t.tx.Exec(ctx, `UPDATE baseline SET depth = 0, gap = 0 WHERE id = $1`, string(id)); err != nil {
+		return mapErr(err, "baseline "+string(id))
+	} else if res.RowsAffected() != 1 {
+		return fmt.Errorf("baseline %s: %w", id, ErrNotFound)
+	}
+	rows := make([][]any, 0, len(nodes))
+	for nid, v := range nodes {
+		rows = append(rows, []any{string(id), string(nid), int(v), false})
+	}
+	_, err := t.tx.CopyFrom(ctx, pgx.Identifier{"baseline_entry"}, []string{"baseline_id", "node_id", "version", "removed"}, pgx.CopyFromRows(rows))
+	return mapErr(err, "baseline entries")
+}
+
 func (t *pgTx) PutChange(ctx context.Context, c domain.Change) error {
 	_, err := t.tx.Exec(ctx, `INSERT INTO change (id, title, intent, methodology, goal, status, baseline_id, result_baseline_id, data, created_at, branch, namespace, parent_id, owner_org, project_id, administrative, activity_ref)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
 		ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, intent = EXCLUDED.intent, goal = EXCLUDED.goal, status = EXCLUDED.status,
 		  result_baseline_id = EXCLUDED.result_baseline_id, data = EXCLUDED.data, baseline_id = EXCLUDED.baseline_id, branch = EXCLUDED.branch`,
-		string(c.ID), c.Title, c.Intent, c.Methodology, c.Goal, string(c.Status), string(c.BaselineID), nullUUID(string(c.ResultBaselineID)), jsonb(c.Data), c.CreatedAt,
+		string(c.ID), c.Title, c.Intent, c.Methodology, c.Goal, string(c.Status), nullUUID(string(c.BaselineID)), nullUUID(string(c.ResultBaselineID)), jsonb(c.Data), c.CreatedAt,
 		domain.BranchOf(c.Branch), domain.NamespaceOf(c.Namespace), nullUUID(string(c.ParentID)), c.OwnerOrg, c.ProjectID, c.Administrative, c.ActivityRef)
 	return mapErr(err, "change")
 }
@@ -578,7 +619,7 @@ func (t *pgTx) JoinBranch(ctx context.Context, ref domain.NodeRef, branch string
 }
 
 func (t *pgTx) baselineHeaders(ctx context.Context) ([]baselineHeader, error) {
-	rows, err := t.tx.Query(ctx, `SELECT id::text, coalesce(parent_id::text, ''), depth FROM baseline ORDER BY created_at, id`)
+	rows, err := t.tx.Query(ctx, `SELECT id::text, coalesce(parent_id::text, ''), depth FROM baseline WHERE gap = 0 ORDER BY created_at, id`)
 	if err != nil {
 		return nil, err
 	}
@@ -602,6 +643,55 @@ func (t *pgTx) rewriteBaseline(ctx context.Context, id domain.BaselineID, depth 
 	}
 	_, err := t.tx.CopyFrom(ctx, pgx.Identifier{"baseline_entry"}, []string{"baseline_id", "node_id", "version", "removed"}, pgx.CopyFromRows(rows))
 	return mapErr(err, "baseline entries")
+}
+
+func (t *pgTx) PutTag(ctx context.Context, tag domain.Tag) error {
+	_, err := t.tx.Exec(ctx, `INSERT INTO tag (id, name, namespace, change_id, baseline_id, by, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7)
+		ON CONFLICT (id) DO UPDATE SET name = excluded.name, baseline_id = excluded.baseline_id`,
+		string(tag.ID), tag.Name, domain.NamespaceOf(tag.Namespace), string(tag.ChangeID), nullUUID(string(tag.BaselineID)), tag.By, tag.CreatedAt)
+	return mapErr(err, "tag "+tag.Name)
+}
+
+func (t *pgTx) DeleteTag(ctx context.Context, id domain.TagID) error {
+	res, err := t.tx.Exec(ctx, `DELETE FROM tag WHERE id = $1`, string(id))
+	if err != nil {
+		return mapErr(err, "tag "+string(id))
+	}
+	if res.RowsAffected() != 1 {
+		return fmt.Errorf("tag %s: %w", id, ErrNotFound)
+	}
+	return nil
+}
+
+func (t *pgTx) Tags(ctx context.Context, f domain.TagFilter) ([]domain.Tag, error) {
+	q, args := `SELECT id::text, name, namespace, change_id::text, COALESCE(baseline_id::text, ''), by, created_at FROM tag WHERE true`, []any{}
+	add := func(cond string, v any) {
+		args = append(args, v)
+		q += fmt.Sprintf(" AND "+cond, len(args))
+	}
+	if f.Namespace != "" {
+		add("namespace = $%d", domain.NamespaceOf(f.Namespace))
+	}
+	if f.Name != "" {
+		add("name = $%d", f.Name)
+	}
+	if f.Change != "" {
+		add("change_id = $%d", string(f.Change))
+	}
+	rows, err := t.tx.Query(ctx, q+` ORDER BY created_at, id`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []domain.Tag
+	for rows.Next() {
+		var tag domain.Tag
+		if err := rows.Scan((*string)(&tag.ID), &tag.Name, &tag.Namespace, (*string)(&tag.ChangeID), (*string)(&tag.BaselineID), &tag.By, &tag.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, tag)
+	}
+	return out, rows.Err()
 }
 
 func (t *pgTx) DeleteChange(ctx context.Context, id domain.ChangeID, namespace, branch string) error {
@@ -643,6 +733,7 @@ func (t *pgTx) DeleteChange(ctx context.Context, id domain.ChangeID, namespace, 
 		`DELETE FROM node_version WHERE change_id = $1`,
 		`DELETE FROM change_impact WHERE change_id = $1`,
 		`DELETE FROM change_log WHERE change_id = $1`,
+		`DELETE FROM tag WHERE change_id = $1`,
 	} {
 		if _, err := t.tx.Exec(ctx, q, string(id)); err != nil {
 			return mapErr(err, "change "+string(id))

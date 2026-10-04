@@ -305,10 +305,10 @@ func testChangeImpactsMerge(t *testing.T, repo Repo) {
 	if _, err := g.Apply(ctx, b.ID, ""); err != nil {
 		t.Fatal(err)
 	}
-	if ch, _ := g.Change(ctx, b.ID); ch.Status != domain.ChangeMergePending {
-		t.Fatalf("conflicting change must be merge_pending, is %s", ch.Status)
+	if ch, _ := g.Change(ctx, b.ID); ch.Status != domain.ChangeCommitted {
+		t.Fatalf("conflicting change must be committed, is %s", ch.Status)
 	}
-	if _, err := g.MergeChange(ctx, b.ID, map[domain.NodeID]Resolution{f.req.ID: {Props: map[string]any{"title": "A+B", "owner": "carol"}}}); err != nil {
+	if _, err := g.IntegrateChange(ctx, b.ID, map[domain.NodeID]Resolution{f.req.ID: {Props: map[string]any{"title": "A+B", "owner": "carol"}}}); err != nil {
 		t.Fatal(err)
 	}
 	head, _ = g.Node(ctx, domain.NodeRef{ID: f.req.ID})

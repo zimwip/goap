@@ -108,7 +108,7 @@ func (g *Graph) prepareSubChange(ctx context.Context, tx Tx, c *domain.Change, i
 		return err
 	}
 	switch parent.Status {
-	case domain.ChangeApplied, domain.ChangeAbandoned, domain.ChangeMergePending:
+	case domain.ChangeApplied, domain.ChangeAbandoned, domain.ChangeCommitted:
 		return fmt.Errorf("parent change %s is %s: %w", parent.ID, parent.Status, ErrConflict)
 	}
 	own, ok, err := ownBranch(ctx, tx, parent)

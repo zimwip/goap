@@ -44,7 +44,7 @@ func TestCreateObjectIsRoleGated(t *testing.T) {
 	}
 	g := graph.New(graph.NewMemory())
 	g.Types = func() graph.TypeCatalog { return cat }
-	if _, err := g.CreateBaseline(context.Background(), "alm", "B0", nil); err != nil {
+	if _, err := g.BranchHead(context.Background(), "alm", domain.MainBranch); err != nil {
 		t.Fatal(err)
 	}
 	authorizer, err := authz.NewCasbin(nil)
@@ -103,7 +103,7 @@ func TestAccessNodesAreGatedByTheFloor(t *testing.T) {
 	}
 	// the overall authorizer lets methodologists do everything on policies, the floor only administrators
 	h := &graphsvc.Handler{Graph: g, Authz: authorizer, Floor: floor}
-	base, err := g.CreateBaseline(ctx, "", "Repository", nil)
+	base, err := g.BranchHead(ctx, "", domain.MainBranch)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -150,7 +150,7 @@ func TestChangeImpactRPCs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	base, err := g.CreateBaseline(ctx, "", "B1", []domain.NodeRef{req1.Ref()})
+	base, err := g.BranchHead(ctx, "", domain.MainBranch)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -222,7 +222,7 @@ func TestCommitEditsGatesAccessNodes(t *testing.T) {
 		t.Fatal(err)
 	}
 	h := &graphsvc.Handler{Graph: g, Authz: authorizer}
-	base, err := g.CreateBaseline(ctx, "", "Repository", nil)
+	base, err := g.BranchHead(ctx, "", domain.MainBranch)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -258,52 +258,5 @@ func TestCommitEditsGatesAccessNodes(t *testing.T) {
 		if _, err := commit("contributor", typ); connect.CodeOf(err) != connect.CodePermissionDenied {
 			t.Fatalf("a contributor must not commit a %s node: %v", typ, err)
 		}
-	}
-}
-
-func createBaseline(h *graphsvc.Handler, roles, namespace string) error {
-	req := connect.NewRequest(&graphv1.CreateBaselineRequest{Namespace: namespace, Name: "B", AllLatest: true})
-	if roles != "-" {
-		req.Header().Set(identity.HeaderSubject, "u")
-		req.Header().Set(identity.HeaderOrg, "acme")
-		req.Header().Set(identity.HeaderRoles, roles)
-	}
-	_, err := h.CreateBaseline(context.Background(), req)
-	return err
-}
-
-// CreateBaseline is a direct-write endpoint (no Change): organisation is access control, so its branch head
-// must only ever advance through an applied change, never this RPC, regardless of role; every other namespace
-// still requires admin (DefaultPolicies has no non-admin rule for resource "baseline").
-func TestCreateBaselineIsGated(t *testing.T) {
-	ctx := context.Background()
-	g := graph.New(graph.NewMemory())
-	authorizer, err := authz.NewCasbin(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	h := &graphsvc.Handler{Graph: g, Authz: authorizer}
-
-	orgHead, err := g.CreateBaseline(ctx, mcp.NamespaceOrganisation, "B0", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if err := createBaseline(h, "admin", mcp.NamespaceOrganisation); connect.CodeOf(err) != connect.CodeFailedPrecondition {
-		t.Errorf("admin against organisation: %v, want CodeFailedPrecondition", err)
-	}
-	if err := createBaseline(h, "", "alm"); connect.CodeOf(err) != connect.CodePermissionDenied {
-		t.Errorf("no role against alm: %v, want CodePermissionDenied", err)
-	}
-	if err := createBaseline(h, "admin", "alm"); err != nil {
-		t.Errorf("admin against alm: %v", err)
-	}
-
-	head, err := g.BranchHead(ctx, mcp.NamespaceOrganisation, domain.MainBranch)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if head.ID != orgHead.ID {
-		t.Fatalf("organisation head changed: got %s, want untouched %s", head.ID, orgHead.ID)
 	}
 }

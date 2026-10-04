@@ -31,6 +31,8 @@ type memState struct {
 	nodes map[domain.ChangeID][]domain.ChangeImpact
 	// log holds the entries of every change's log, in their order (ADR 0030)
 	log []domain.LogEntry
+	// tags name the state a change leaves (ADR 0056), in creation order
+	tags []domain.Tag
 }
 
 // NewMemory returns an empty in-memory repository.
@@ -56,6 +58,7 @@ func (s memState) clone() memState {
 		branches:  maps.Clone(s.branches),
 		joins:     maps.Clone(s.joins),
 		log:       slices.Clone(s.log),
+		tags:      slices.Clone(s.tags),
 		nodes:     make(map[domain.ChangeID][]domain.ChangeImpact, len(s.nodes)),
 	}
 	for k, v := range s.nodes {
@@ -354,7 +357,34 @@ func (t *memTx) PutBaseline(_ context.Context, b domain.Baseline) error {
 		}
 	}
 	b.Nodes = maps.Clone(b.Nodes)
+	if b.Gap > 0 {
+		b.Nodes = map[domain.NodeID]domain.Version{} // only the header is kept: the graph computes the state
+	}
 	t.st.baselines[b.ID] = b
+	return nil
+}
+
+func (t *memTx) BranchJoins(_ context.Context, namespace, branch string, change domain.ChangeID) ([]domain.NodeRef, error) {
+	namespace, branch = domain.NamespaceOf(namespace), domain.BranchOf(branch)
+	var out []domain.NodeRef
+	for k, c := range t.st.joins {
+		if c != change || k.branch != branch {
+			continue
+		}
+		if vs := t.st.versions[k.ref.ID]; len(vs) > 0 && domain.NamespaceOf(vs[0].Namespace) == namespace {
+			out = append(out, k.ref)
+		}
+	}
+	return out, nil
+}
+
+func (t *memTx) MaterializeBaseline(_ context.Context, id domain.BaselineID, nodes map[domain.NodeID]domain.Version) error {
+	b, ok := t.st.baselines[id]
+	if !ok {
+		return fmt.Errorf("baseline %s: %w", id, ErrNotFound)
+	}
+	b.Nodes, b.Gap = maps.Clone(nodes), 0
+	t.st.baselines[id] = b
 	return nil
 }
 
@@ -472,6 +502,45 @@ func (t *memTx) JoinBranch(_ context.Context, ref domain.NodeRef, branch string,
 	return nil
 }
 
+func (t *memTx) PutTag(_ context.Context, tag domain.Tag) error {
+	if _, ok := t.st.changes[tag.ChangeID]; !ok {
+		return fmt.Errorf("tag %q: change %s: %w", tag.Name, tag.ChangeID, ErrNotFound)
+	}
+	if tag.BaselineID != "" {
+		if _, ok := t.st.baselines[tag.BaselineID]; !ok {
+			return fmt.Errorf("tag %q: baseline %s: %w", tag.Name, tag.BaselineID, ErrNotFound)
+		}
+	}
+	for i, old := range t.st.tags {
+		if old.ID == tag.ID {
+			t.st.tags[i] = tag
+			return nil
+		}
+	}
+	t.st.tags = append(t.st.tags, tag)
+	return nil
+}
+
+func (t *memTx) DeleteTag(_ context.Context, id domain.TagID) error {
+	for i, old := range t.st.tags {
+		if old.ID == id {
+			t.st.tags = slices.Delete(t.st.tags, i, i+1)
+			return nil
+		}
+	}
+	return fmt.Errorf("tag %s: %w", id, ErrNotFound)
+}
+
+func (t *memTx) Tags(_ context.Context, f domain.TagFilter) ([]domain.Tag, error) {
+	var out []domain.Tag
+	for _, tag := range t.st.tags {
+		if (f.Namespace == "" || tag.Namespace == domain.NamespaceOf(f.Namespace)) && (f.Name == "" || tag.Name == f.Name) && (f.Change == "" || tag.ChangeID == f.Change) {
+			out = append(out, tag)
+		}
+	}
+	return out, nil
+}
+
 func (t *memTx) DeleteChange(_ context.Context, id domain.ChangeID, namespace, branch string) error {
 	used := fmt.Errorf("change %s: what it wrote is used by the graph: %w", id, ErrConflict)
 	for _, b := range t.st.baselines {
@@ -540,6 +609,7 @@ func (t *memTx) DeleteChange(_ context.Context, id domain.ChangeID, namespace, b
 	}
 	t.st.log = slices.DeleteFunc(t.st.log, func(e domain.LogEntry) bool { return e.Change == id })
 	delete(t.st.nodes, id)
+	t.st.tags = slices.DeleteFunc(t.st.tags, func(tag domain.Tag) bool { return tag.ChangeID == id })
 	if branch != "" {
 		delete(t.st.branches, branchKey(namespace, branch))
 	}

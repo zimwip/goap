@@ -42,7 +42,7 @@ func TestPersonalChange(t *testing.T) {
 	}
 	call := func(subject string, r connect.AnyRequest) { as(subject)(r) }
 
-	base, err := g.CreateBaseline(ctx, "platform", "B0", nil)
+	base, err := g.BranchHead(ctx, "platform", domain.MainBranch)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -91,7 +91,7 @@ func BuiltinDefs() []Def {
 			{Name: "list", ReadOnly: true, Description: "List changes, the latest first: find the open change a request continues before opening a new one.",
 				InputSchema: schemaObj(map[string]any{"namespace": str("only the changes of this namespace"),
 					"unit":   str("only the changes held by this unit"),
-					"status": str("draft, active, merge_pending, applied or abandoned (default: every status)"), "limit": argLimit})},
+					"status": str("draft, active, committed, applied or abandoned (default: every status)"), "limit": argLimit})},
 			{Name: "reformulate", Description: "Revise the title/intent of a change: the previous definition is superseded, not erased, so the change keeps its full history.",
 				InputSchema: schemaObj(map[string]any{"change": argChange, "title": str("new title (default: unchanged)"),
 					"intent": str("new intent"), "rationale": str("why the definition changes")}, "intent", "rationale")},
