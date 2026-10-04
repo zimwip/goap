@@ -37,7 +37,8 @@ type NodeEdit struct {
 }
 
 // LinkEdit is an outgoing link added by an edit: to an existing version (To) or
-// to a node created by another edit of the commit (ToKey).
+// to a node created by another edit of the commit (ToKey). Nodes created by the commit may link each other in
+// any direction, cycles included: a link to a node not written yet is added, in the same change, once it is.
 type LinkEdit struct {
 	Type  string
 	To    *domain.NodeRef
@@ -146,6 +147,17 @@ func (g *Graph) commitEdits(ctx context.Context, in Commit, parenting bool) (res
 		return res, err
 	}
 	written := map[string]domain.NodeRef{} // key of a created node → its version
+	type late struct {
+		from string
+		l    LinkEdit
+	}
+	var later []late // links to a node of the commit not written yet (a cycle): added once every node is
+	created := map[string]bool{}
+	for _, e := range in.Edits {
+		if e.Pre == nil {
+			created[e.Key] = true
+		}
+	}
 	for _, i := range order {
 		e := in.Edits[i]
 		w := NodeWrite{Properties: e.Props, State: e.State, RemoveLinks: e.RemoveLinks, Retire: e.Retire, Owner: e.Owner}
@@ -154,7 +166,11 @@ func (g *Graph) commitEdits(ctx context.Context, in Commit, parenting bool) (res
 			if l.ToKey != "" {
 				ref, ok := written[l.ToKey]
 				if !ok {
-					return res, fmt.Errorf("link of %s to %q: no such node created by this commit: %w", nodeName(e), l.ToKey, ErrInvalid)
+					if !created[l.ToKey] {
+						return res, fmt.Errorf("link of %s to %q: no such node created by this commit: %w", nodeName(e), l.ToKey, ErrInvalid)
+					}
+					later = append(later, late{e.Key, l})
+					continue
 				}
 				to = &ref
 			}
@@ -174,6 +190,11 @@ func (g *Graph) commitEdits(ctx context.Context, in Commit, parenting bool) (res
 		}
 		if e.Pre == nil {
 			written[e.Key] = *cn.Post
+		}
+	}
+	for _, x := range later {
+		if _, err := g.Link(ctx, c.ID, x.l.Type, written[x.from], written[x.l.ToKey], x.l.Props); err != nil {
+			return res, fmt.Errorf("link %s from %s to %s: %w", x.l.Type, x.from, x.l.ToKey, err)
 		}
 	}
 	for i := range in.Edits {
@@ -203,7 +224,7 @@ func nodeName(e NodeEdit) string {
 // the node that links to it: an edit comes after the created node it links to by
 // key, after the modified node it links to, and (for a modified node) after the
 // modified nodes its current version links to. Cycles among modified nodes keep
-// the given order; a cycle among created nodes cannot be written.
+// the given order; a cycle among created nodes is written in the given order, the links that close it added after the nodes.
 func (g *Graph) commitOrder(ctx context.Context, edits []NodeEdit) ([]int, error) {
 	byKey := map[string]int{}
 	byNode := map[domain.NodeID]int{}
@@ -218,8 +239,7 @@ func (g *Graph) commitOrder(ctx context.Context, edits []NodeEdit) ([]int, error
 		}
 	}
 	type dep struct {
-		on     int
-		strict bool // a link by key: the target must exist first
+		on int
 	}
 	deps := make([][]dep, len(edits))
 	err := g.repo.InTx(ctx, func(tx Tx) error {
@@ -227,11 +247,11 @@ func (g *Graph) commitOrder(ctx context.Context, edits []NodeEdit) ([]int, error
 			for _, l := range e.Links {
 				if l.ToKey != "" {
 					if j, ok := byKey[l.ToKey]; ok {
-						deps[i] = append(deps[i], dep{j, true})
+						deps[i] = append(deps[i], dep{j})
 					}
 				} else if l.To != nil {
 					if j, ok := byNode[l.To.ID]; ok && j != i {
-						deps[i] = append(deps[i], dep{j, false})
+						deps[i] = append(deps[i], dep{j})
 					}
 				}
 			}
@@ -244,7 +264,7 @@ func (g *Graph) commitOrder(ctx context.Context, edits []NodeEdit) ([]int, error
 			}
 			for _, l := range out {
 				if j, ok := byNode[l.To.ID]; ok && j != i {
-					deps[i] = append(deps[i], dep{j, false})
+					deps[i] = append(deps[i], dep{j})
 				}
 			}
 		}
@@ -261,13 +281,10 @@ func (g *Graph) commitOrder(ctx context.Context, edits []NodeEdit) ([]int, error
 		case 2:
 			return nil
 		case 1:
-			return nil // a cycle: keep going, the strict ones are checked below
+			return nil // a cycle: keep the given order, the link that closes it is added after the nodes
 		}
 		state[i] = 1
 		for _, d := range deps[i] {
-			if state[d.on] == 1 && d.strict {
-				return fmt.Errorf("the links of %s form a cycle between created nodes: %w", nodeName(edits[i]), ErrInvalid)
-			}
 			if err := visit(d.on); err != nil {
 				return err
 			}

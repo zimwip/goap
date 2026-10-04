@@ -101,8 +101,8 @@ func sdlcSetup(t *testing.T) (*engine.Engine, *graph.Graph, domain.BaselineID) {
 	if _, err := g.CreateNode(ctx, graph.NewNode{Namespace: "organisation", Key: testProject, Type: "organisation@ProjectUnit", Properties: map[string]any{"name": "Test"}}); err != nil {
 		t.Fatal(err)
 	}
-	// the latest baseline, not bs[0] (ADR 0049: every write of SeedDemo's loop is a change of its own, each
-	// advancing its own baseline, so "alm"'s baselines now include the namespace's initial empty bootstrap
+	// the latest baseline, not bs[0] (ADR 0049: SeedDemo imports the organisation and the alm data as a change each,
+	// so "alm"'s baselines now include the namespace's initial empty bootstrap
 	// one ahead of the fully-seeded one BranchHead resolves to).
 	head, err := g.BranchHead(ctx, "alm", domain.MainBranch)
 	if err != nil {

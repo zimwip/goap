@@ -3,9 +3,11 @@ package graphsvc
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/graph"
+	"github.com/zimwip/goap/pkg/mcp"
 )
 
 // alm is the namespace of the delivery domain (domains/alm.yaml).
@@ -24,15 +26,28 @@ func SeedDemo(ctx context.Context, g *graph.Graph) (bool, error) {
 	} else if !errors.Is(err, graph.ErrNotFound) {
 		return false, err
 	}
-	// the organisation first, under the root unit of the bootstrap (ADR 0054): the nodes below are owned by its units
+	// the organisation first, under the root unit of the bootstrap (ADR 0054): the nodes below are owned by its units.
+	// All the units are one change; a unit links to its parent, created by the same change (ToKey) or the root.
+	root, err := g.NodeByKey(ctx, mcp.NamespaceOrganisation, domain.OrgOf(""))
+	if err != nil {
+		return false, err
+	}
+	var units []graph.NodeEdit
 	for _, u := range [][4]string{
 		{"ORG-ACME", "Acme", "company", ""}, {"ORG-DIGITAL", "Direction Digitale", "direction", "ORG-ACME"},
 		{"ORG-CHECKOUT", "Team Checkout", "team", "ORG-DIGITAL"}, {"ORG-CRM", "Team CRM", "team", "ORG-DIGITAL"},
 		{"ORG-FINANCE", "Team Finance", "team", "ORG-DIGITAL"}, {"ORG-SECURITY", "Team Security", "team", "ORG-DIGITAL"},
 	} {
-		if err := SeedUnit(ctx, g, u[0], u[1], u[2], u[3]); err != nil {
-			return false, err
+		e := createNode(u[0], mcp.NodeTypeOrgUnit, map[string]any{"name": u[1], "kind": u[2]})
+		if u[3] == "" {
+			e = linkTo(e, mcp.LinkPartOf, root.Ref())
+		} else {
+			e.Links = append(e.Links, graph.LinkEdit{Type: mcp.LinkPartOf, ToKey: u[3]})
 		}
+		units = append(units, e)
+	}
+	if err := applyOn(ctx, g, mcp.NamespaceOrganisation, "Import demo organisation", units); err != nil {
+		return false, err
 	}
 	// ownership: a node of one namespace is owned by a unit of the organisation (the owner of its versions)
 	owners := map[string]string{"CMP-1": "ORG-CHECKOUT", "CMP-2": "ORG-CRM", "CMP-3": "ORG-FINANCE", "CMP-4": "ORG-SECURITY",
@@ -80,15 +95,6 @@ func SeedDemo(ctx context.Context, g *graph.Graph) (bool, error) {
 		{Namespace: alm, Key: "REL-APP-1-5.2", Type: alm + "@Release", Properties: map[string]any{"title": "Checkout 5.2", "version": "5.2", "status": "deployed"}},
 		{Namespace: alm, Key: "DEP-REL-APP-1-5.2-ENV-PRD", Type: alm + "@Deployment", Properties: map[string]any{"status": "succeeded", "stage": "prod"}},
 	}
-	refs := map[string]domain.NodeRef{}
-	for _, n := range nodes {
-		n.Owner = owners[n.Key]
-		created, err := g.CreateNode(ctx, n)
-		if err != nil {
-			return false, err
-		}
-		refs[n.Key] = created.Ref()
-	}
 	links := [][3]string{
 		{"REQ-1", "satisfies", "NEED-1"}, {"REQ-2", "satisfies", "NEED-2"}, {"REQ-3", "satisfies", "NEED-1"},
 		{"TST-1", "verifies", "REQ-1"}, {"TST-2", "verifies", "REQ-2"}, {"TST-3", "verifies", "REQ-3"},
@@ -113,28 +119,26 @@ func SeedDemo(ctx context.Context, g *graph.Graph) (bool, error) {
 		{"REL-APP-1-5.2", "releases", "APP-1"}, {"REL-APP-1-5.2", "contains", "ART-1"}, {"REL-APP-1-5.2", "contains", "ART-4"},
 		{"DEP-REL-APP-1-5.2-ENV-PRD", "of_release", "REL-APP-1-5.2"}, {"DEP-REL-APP-1-5.2-ENV-PRD", "in_environment", "ENV-PRD"},
 	}
-	// the links are added attributed to one change of their own (ADR 0049) without versioning either endpoint, so
-	// they are not a Commit's NodeEdit.Links either.
-	head, err := g.BranchHead(ctx, alm, domain.MainBranch)
-	if err != nil {
-		return false, err
+	// the nodes and their links are one change (a link belongs to the version of its source, created here)
+	edits := make([]graph.NodeEdit, 0, len(nodes))
+	for _, n := range nodes {
+		e := createNode(n.Key, n.Type, n.Properties)
+		e.Owner = owners[n.Key]
+		edits = append(edits, e)
 	}
-	c, err := g.CreateChange(ctx, graph.NewChange{Namespace: alm, Title: "Demo seed links", Intent: "Seed demo data", BaselineID: head.ID, Administrative: true})
-	if err != nil {
-		return false, err
+	// the nodes of a change link each other, cycles included (an application is composed of components that
+	// access data it owns): the links are part of the version of their source
+	at := make(map[string]int, len(nodes))
+	for i, n := range nodes {
+		at[n.Key] = i
 	}
-	abandoned := domain.ChangeAbandoned
 	for _, l := range links {
-		if _, err := g.Link(ctx, c.ID, alm+"@"+l[1], refs[l[0]], refs[l[2]], nil); err != nil {
-			if _, aerr := g.UpdateChange(ctx, c.ID, graph.ChangePatch{Status: &abandoned}); aerr != nil {
-				err = errors.Join(err, aerr)
-			}
-			return false, err
+		i, ok := at[l[0]]
+		if !ok {
+			return false, fmt.Errorf("demo link from unknown node %s", l[0])
 		}
+		edits[i].Links = append(edits[i].Links, graph.LinkEdit{Type: alm + "@" + l[1], ToKey: l[2]})
 	}
-	if _, err := g.UpdateChange(ctx, c.ID, graph.ChangePatch{Status: &abandoned}); err != nil {
-		return false, err
-	}
-	_, err = g.CreateBaselineFromLatest(ctx, alm, "Initial baseline")
+	_, err = g.Commit(ctx, graph.Commit{Namespace: alm, Title: "Import demo data", Intent: "Seed demo data", By: "graphsvc.seed", BaselineName: "Initial baseline", Edits: edits})
 	return err == nil, err
 }
