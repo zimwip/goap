@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/zimwip/goap/gen/goap/graph/v1/graphv1connect"
@@ -205,5 +206,34 @@ func TestStructuresThroughTheService(t *testing.T) {
 	}
 	if !reflect.DeepEqual(got, domain.BuiltinStructureSet()) {
 		t.Fatalf("structures = %+v", got)
+	}
+}
+
+// The demo import is one change per namespace (the organisation, the alm data with its links), not one per node.
+func TestSeedDemoIsOneChangePerNamespace(t *testing.T) {
+	ctx := context.Background()
+	g := typedGraph(t)
+	if _, err := graphsvc.SeedDemo(ctx, g); err != nil {
+		t.Fatal(err)
+	}
+	cs, err := g.Changes(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var imports []string
+	for _, c := range cs {
+		if strings.HasPrefix(c.Title, "Import ") {
+			imports = append(imports, c.Title)
+		}
+	}
+	if len(imports) != 2 {
+		t.Fatalf("the demo import is 2 changes, got %v", imports)
+	}
+	cmp, err := g.NodeByKey(ctx, "alm", "CMP-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out, err := g.OutLinksOf(ctx, cmp.Ref()); err != nil || len(out) == 0 {
+		t.Fatalf("the links come with the import: %v %v", out, err)
 	}
 }

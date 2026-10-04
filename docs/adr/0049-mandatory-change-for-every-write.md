@@ -58,7 +58,14 @@ endpoint (versioning the source would turn its own outgoing links into suspect l
 `pkg/graph.SuspectLinks` — independently wrong, not just inconvenient, the reason `LinkOrphanUnits` exists at
 all). Silently picking an implicit change for it would defeat the point of asking "which change is this link
 part of" at all, so the break is deliberate and visible: every caller must now say which open change a link
-belongs to. `internal/graphsvc/handler.go`'s `CreateLink` RPC gained a `change_id` field
+belongs to.
+
+The standalone `Link` call is the only one that stays outside `Commit`/`Apply`. Nodes a `Commit` *creates* are
+inside the change, so they link each other freely (`NodeEdit.Links` with `ToKey`, a link belonging to the version
+of its source), **cycles included**: a link to a node of the commit not written yet is added, in the same change,
+once it is (`commitEdits`, through `Link`, which versions neither endpoint). Only a link to a key the commit does
+not create is refused. A whole import (the demo seed: units, then the alm nodes with their cyclic links) is
+therefore one change per namespace, not one change per node. `internal/graphsvc/handler.go`'s `CreateLink` RPC gained a `change_id` field
 (`proto/goap/graph/v1/graph.proto`, regenerated via `make generate`) — the one user-facing API change in this
 ADR.
 
