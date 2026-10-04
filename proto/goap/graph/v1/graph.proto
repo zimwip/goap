@@ -35,6 +35,8 @@ service GraphService {
   rpc ListChangeEvents(ListChangeEventsRequest) returns (ListChangeEventsResponse);
   // The log of a change (ADR 0030): its facts, journal records and impact events in one order, filtered on columns.
   rpc ListChangeLog(ListChangeLogRequest) returns (ListChangeLogResponse);
+  // The whole log of a change as W3C PROV-O provenance, in JSON-LD (ADR 0057).
+  rpc ExportChangeProvenance(ExportChangeProvenanceRequest) returns (ExportChangeProvenanceResponse);
 
   // Change axis
   rpc CreateChange(CreateChangeRequest) returns (CreateChangeResponse);
@@ -529,6 +531,17 @@ message ListChangeLogResponse {
   repeated LogEntry entries = 1;
   // entries of each type matching the request without its types
   map<string, int32> counts = 2;
+}
+
+message ExportChangeProvenanceRequest {
+  string change_id = 1;
+}
+
+message ExportChangeProvenanceResponse {
+  // the JSON-LD document
+  string document = 1;
+  string filename = 2;
+  string media_type = 3;
 }
 
 message ListChangeEventsRequest {
