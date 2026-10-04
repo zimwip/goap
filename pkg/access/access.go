@@ -144,6 +144,8 @@ func PolicyFromProps(props map[string]any) (authz.Policy, error) {
 type Graph interface {
 	BranchHead(ctx context.Context, namespace, name string) (domain.Baseline, error)
 	BaselineGraph(ctx context.Context, id domain.BaselineID) ([]domain.Node, []domain.Link, error)
+	// Structures names the organisation and the projects (ADR 0054): the snapshot never names their types itself.
+	Structures(ctx context.Context) (domain.Structures, error)
 }
 
 // Snapshot is the users and policies as of one baseline.
@@ -153,7 +155,9 @@ type Snapshot struct {
 	Problems []string
 	Policies []authz.Policy
 
-	users map[string]User
+	// structures are the organisation and the projects the snapshot was read with (ADR 0054)
+	structures domain.Structures
+	users      map[string]User
 	// parents maps a unit to the unit it is part of (organisation@part_of)
 	parents map[string]string
 	// projectParents maps a project to the project it is part of (organisation@project_part_of, ADR 0039)
@@ -169,15 +173,17 @@ type assignment struct {
 	Roles        []string
 }
 
-// BuildSnapshot reads the users and policies of a baseline graph.
-func BuildSnapshot(id domain.BaselineID, nodes []domain.Node, links []domain.Link) *Snapshot {
-	s := &Snapshot{Baseline: id, users: map[string]User{}, parents: map[string]string{}, projectParents: map[string]string{}}
+// BuildSnapshot reads the users and policies of a baseline graph of the namespace of the structures st: the units and
+// projects are the nodes of their types (and subtypes), their hierarchies the parent links st names (ADR 0054).
+func BuildSnapshot(st domain.Structures, id domain.BaselineID, nodes []domain.Node, links []domain.Link) *Snapshot {
+	s := &Snapshot{Baseline: id, structures: st, users: map[string]User{}, parents: map[string]string{}, projectParents: map[string]string{}}
+	org, proj := domain.StructureOrganisation, domain.StructureProject
 	byID := map[domain.NodeID]domain.Node{}
 	assignBuild := map[domain.NodeID]*assignment{}
 	for _, n := range nodes {
 		byID[n.ID] = n
-		// nodes is scoped to the organisation namespace by the Directory's cache (Namespace:
-		// mcp.NamespaceOrganisation); this switch does not need to filter it again.
+		// nodes is scoped to the namespace of the structures by the Directory's cache; this switch does not need to
+		// filter it again.
 		switch n.Type {
 		case NodeTypeUser:
 			u, err := UserFromProps(n.Properties)
@@ -204,16 +210,16 @@ func BuildSnapshot(id domain.BaselineID, nodes []domain.Node, links []domain.Lin
 	}
 	for _, l := range links {
 		from, to := byID[l.From.ID], byID[l.To.ID]
-		if l.Type == LinkPartOf && from.Type == mcp.NodeTypeOrgUnit && to.Type == mcp.NodeTypeOrgUnit {
+		if l.Type == st.Organisation.Parent && st.In(org, from.Type) && st.In(org, to.Type) && from.Key != to.Key {
 			s.parents[from.Key] = to.Key
 		}
-		if l.Type == LinkMemberOf && from.Type == NodeTypeUser && to.Type == mcp.NodeTypeOrgUnit {
+		if l.Type == LinkMemberOf && from.Type == NodeTypeUser && st.In(org, to.Type) {
 			if u, ok := s.users[str(from.Properties, "subject")]; ok {
 				u.Unit = to.Key
 				s.users[u.Subject] = u
 			}
 		}
-		if l.Type == LinkProjectPartOf && from.Type == NodeTypeProjectUnit && to.Type == NodeTypeProjectUnit && from.Key != to.Key {
+		if l.Type == st.Project.Parent && st.In(proj, from.Type) && st.In(proj, to.Type) && from.Key != to.Key {
 			s.projectParents[from.Key] = to.Key
 		}
 		if l.Type == LinkAssignsOrg && from.Type == NodeTypeAssignment {
@@ -249,8 +255,8 @@ func (s *Snapshot) Chain(unit string) []string {
 		out = append(out, p)
 		u = p
 	}
-	if !slices.Contains(out, domain.DefaultOrg) {
-		out = append(out, domain.DefaultOrg)
+	if root := s.structures.Organisation.Root; !slices.Contains(out, root) {
+		out = append(out, root)
 	}
 	return out
 }
@@ -269,8 +275,8 @@ func (s *Snapshot) ProjectChain(project string) []string {
 		out = append(out, up)
 		p = up
 	}
-	if !slices.Contains(out, domain.DefaultProject) {
-		out = append(out, domain.DefaultProject)
+	if root := s.structures.Project.Root; !slices.Contains(out, root) {
+		out = append(out, root)
 	}
 	return out
 }
@@ -282,7 +288,10 @@ func (s *Snapshot) SubjectChain(p authz.Principal) []string {
 	if u, ok := s.users[p.Subject]; ok && u.Unit != "" {
 		unit = u.Unit
 	}
-	return append([]string{UserKey(p.Subject)}, s.Chain(domain.OrgOf(unit))...)
+	if unit == "" {
+		unit = s.structures.Organisation.Root
+	}
+	return append([]string{UserKey(p.Subject)}, s.Chain(unit)...)
 }
 
 // ProjectRoles returns the roles granted, by an Assignment node, to any unit of orgChain on any project of
@@ -375,29 +384,49 @@ type Directory struct {
 	Graph Graph
 	TTL   time.Duration
 
-	once  sync.Once
-	cache graphsnap.Cache[*Snapshot]
+	mu    sync.Mutex
+	cache *graphsnap.Cache[*Snapshot]
 }
 
 // Snapshot returns the current snapshot. A graph without any baseline yields an empty one; when the graph
 // cannot be read the last snapshot (nil if none) is returned with the error.
 func (d *Directory) Snapshot(ctx context.Context) (*Snapshot, error) {
-	s, _, err := d.snapshots().Get(ctx)
+	c, err := d.snapshots(ctx)
+	if err != nil {
+		return nil, err
+	}
+	s, _, err := c.Get(ctx)
 	return s, err
 }
 
 // Refresh reads the head now, past the TTL: after a write the next calls must see (a user just declared at
 // sign-in, ADR 0042).
 func (d *Directory) Refresh(ctx context.Context) error {
-	_, _, err := d.snapshots().Fresh(ctx)
+	c, err := d.snapshots(ctx)
+	if err != nil {
+		return err
+	}
+	_, _, err = c.Fresh(ctx)
 	return err
 }
 
-func (d *Directory) snapshots() *graphsnap.Cache[*Snapshot] {
-	d.once.Do(func() {
-		d.cache = graphsnap.Cache[*Snapshot]{Graph: d.Graph, Namespace: mcp.NamespaceOrganisation, TTL: d.TTL, Build: BuildSnapshot}
-	})
-	return &d.cache
+// snapshots returns the cache of the head of the namespace of the structures, asking the graph for them first (ADR
+// 0054; asked again until the graph answers). The structures are tagged by a frozen built-in domain: they do not
+// change while the service runs.
+func (d *Directory) snapshots(ctx context.Context) (*graphsnap.Cache[*Snapshot], error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.cache == nil {
+		st, err := d.Graph.Structures(ctx)
+		if err != nil {
+			return nil, err
+		}
+		d.cache = &graphsnap.Cache[*Snapshot]{Graph: d.Graph, Namespace: st.Organisation.Namespace, TTL: d.TTL,
+			Build: func(id domain.BaselineID, nodes []domain.Node, links []domain.Link) *Snapshot {
+				return BuildSnapshot(st, id, nodes, links)
+			}}
+	}
+	return d.cache, nil
 }
 
 // Enrich completes a principal from the current snapshot; when the graph cannot be read the
@@ -482,7 +511,11 @@ func (a *Authorizer) Authorize(ctx context.Context, req authz.Request) (bool, er
 		if req.Resource.Org != "" && len(req.Resource.OrgChain) == 0 {
 			req.Resource.OrgChain = snap.Chain(req.Resource.Org)
 		}
-		projectChain := snap.ProjectChain(domain.ProjectOf(req.Resource.ProjectID))
+		project := req.Resource.ProjectID
+		if project == "" {
+			project = snap.structures.Project.Root
+		}
+		projectChain := snap.ProjectChain(project)
 		subjectChain := snap.SubjectChain(req.Subject)
 		roles := slices.Clone(req.Subject.Roles)
 		for _, r := range snap.ProjectRoles(subjectChain, projectChain) {

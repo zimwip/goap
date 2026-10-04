@@ -960,6 +960,9 @@ created in a project; the engine only executes, through changes.
   like deferred foreign keys.
 - **Ownership** is the owner of the version: `SplitByOwner` and the adapters of a unit read it (there is no `owner`
   link).
+- **Readers ask the graph.** `pkg/access` and `internal/mcpsvc` never name the organisation or project types: they ask
+  the graph service for its structures (`GetStructures`, `domain.Structures`: each structure with its type and
+  subtypes) and read units, projects, parents and roots from the answer.
 
 ### 3.9c User bootstrap, mandatory parenting, local auth ([ADR 0040](adr/0040-user-bootstrap-org-membership-local-auth.md))
 

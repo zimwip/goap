@@ -364,3 +364,20 @@ func ImpactEventToPB(e domain.ImpactEvent) *graphv1.ImpactEvent {
 	}
 	return out
 }
+
+// StructuresToPB converts the structures of the graph (ADR 0054).
+func StructuresToPB(s domain.Structures) *graphv1.GetStructuresResponse {
+	one := func(st domain.Structure, types []string) *graphv1.Structure {
+		return &graphv1.Structure{Kind: st.Kind, Type: st.Type, Namespace: st.Namespace, Parent: st.Parent, Root: st.Root, SelfParent: st.SelfParent, Types: types}
+	}
+	return &graphv1.GetStructuresResponse{Organisation: one(s.Organisation, s.OrganisationTypes), Project: one(s.Project, s.ProjectTypes)}
+}
+
+// StructuresFromPB converts the structures of the graph (ADR 0054).
+func StructuresFromPB(r *graphv1.GetStructuresResponse) domain.Structures {
+	one := func(st *graphv1.Structure) domain.Structure {
+		return domain.Structure{Kind: st.GetKind(), Type: st.GetType(), Namespace: st.GetNamespace(), Parent: st.GetParent(), Root: st.GetRoot(), SelfParent: st.GetSelfParent()}
+	}
+	return domain.Structures{Organisation: one(r.GetOrganisation()), Project: one(r.GetProject()),
+		OrganisationTypes: r.GetOrganisation().GetTypes(), ProjectTypes: r.GetProject().GetTypes()}
+}

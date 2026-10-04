@@ -3,6 +3,7 @@ package typecat
 import (
 	"errors"
 	"os"
+	"reflect"
 	"slices"
 	"testing"
 
@@ -254,6 +255,10 @@ func TestStructures(t *testing.T) {
 	}
 	if !c.IsA("organisation@User", org.Type) || c.IsA(proj.Type, org.Type) || c.IsA("organisation@Nope", org.Type) {
 		t.Fatal("IsA")
+	}
+	// what the graph service tells the services reading the organisation (GetStructures): a User is a unit
+	if got := c.Structures(); !reflect.DeepEqual(got, domain.BuiltinStructureSet()) {
+		t.Fatalf("structures = %+v", got)
 	}
 	other := parse(t, `
 name: hr

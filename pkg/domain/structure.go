@@ -1,5 +1,7 @@
 package domain
 
+import "slices"
+
 // Structures (ADR 0054): the two hierarchies every node version is placed in. A node version is owned by an
 // organisational unit (WHO is responsible for it) and its node was created in a project (WHERE the work happens).
 // Both hierarchies are node types a domain tags (`structure:` on a node type, pkg/methodology), so the graph knows
@@ -51,4 +53,36 @@ const (
 var BuiltinStructures = map[string]Structure{
 	StructureOrganisation: {Kind: StructureOrganisation, Type: TypeOrgUnit, Namespace: NamespaceOrganisation, Parent: LinkPartOf, Root: DefaultOrg},
 	StructureProject:      {Kind: StructureProject, Type: TypeProjectUnit, Namespace: NamespaceOrganisation, Parent: LinkProjectPartOf, Root: DefaultProject, SelfParent: true},
+}
+
+// Structures are the two hierarchies in force with the node types belonging to each (the tagged type and its
+// subtypes): what the services reading the organisation (pkg/access, internal/mcpsvc) learn from the graph service
+// (GetStructures), so that they never name the types themselves.
+type Structures struct {
+	Organisation, Project Structure
+	// OrganisationTypes and ProjectTypes are the tagged type of each structure and its subtypes.
+	OrganisationTypes, ProjectTypes []string
+}
+
+// Of returns the structure of a kind.
+func (s Structures) Of(kind string) Structure {
+	if kind == StructureProject {
+		return s.Project
+	}
+	return s.Organisation
+}
+
+// In reports whether a node type belongs to the structure of a kind (its tagged type or a subtype).
+func (s Structures) In(kind, typ string) bool {
+	types := s.OrganisationTypes
+	if kind == StructureProject {
+		types = s.ProjectTypes
+	}
+	return slices.Contains(types, typ)
+}
+
+// BuiltinStructureSet is the structures of the built-in organisation domain, with its subtypes (a User is a unit).
+func BuiltinStructureSet() Structures {
+	return Structures{Organisation: BuiltinStructures[StructureOrganisation], Project: BuiltinStructures[StructureProject],
+		OrganisationTypes: []string{TypeOrgUnit, NamespaceOrganisation + TypeSep + "User"}, ProjectTypes: []string{TypeProjectUnit}}
 }

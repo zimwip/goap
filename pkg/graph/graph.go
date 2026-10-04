@@ -28,6 +28,8 @@ type TypeCatalog interface {
 	// subtype of base.
 	Structure(kind string) (domain.Structure, bool)
 	IsA(typ, base string) bool
+	// Structures is both structures with the types belonging to each.
+	Structures() domain.Structures
 }
 
 // Graph exposes the domain and change axes.

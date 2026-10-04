@@ -184,3 +184,5 @@ func (ts testTypes) IsA(typ, base string) bool {
 	}
 	return false
 }
+
+func (ts testTypes) Structures() domain.Structures { return domain.BuiltinStructureSet() }

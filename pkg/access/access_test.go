@@ -136,7 +136,7 @@ func TestRolesHeldInAUnitHoldBelowIt(t *testing.T) {
 	partOf := func(from, to string) domain.Link {
 		return domain.Link{Type: access.LinkPartOf, From: domain.NodeRef{ID: domain.NodeID(from)}, To: domain.NodeRef{ID: domain.NodeID(to)}}
 	}
-	s := access.BuildSnapshot("b", nodes, []domain.Link{partOf("3", "2"), partOf("2", "1")})
+	s := access.BuildSnapshot(domain.BuiltinStructureSet(), "b", nodes, []domain.Link{partOf("3", "2"), partOf("2", "1")})
 	if got := s.Chain("TEAM-PAY"); !slices.Equal(got, []string{"TEAM-PAY", "DEP-IT", "ORG-DEFAULT"}) {
 		t.Fatalf("chain %v", got)
 	}
@@ -316,7 +316,7 @@ func TestProjectChainAndRoles(t *testing.T) {
 		lnk(access.LinkAssignsOrg, "5", "4"),
 		lnk(access.LinkAssignsProject, "5", "2"),
 	}
-	s := access.BuildSnapshot("b", nodes, links)
+	s := access.BuildSnapshot(domain.BuiltinStructureSet(), "b", nodes, links)
 	if got := s.ProjectChain("PROJ-A1"); !slices.Equal(got, []string{"PROJ-A1", "PROJ-A", "PROJ-ROOT"}) {
 		t.Fatalf("project chain %v", got)
 	}
@@ -434,5 +434,37 @@ func TestLegacyDefaultPoliciesAreUpgraded(t *testing.T) {
 	}
 	if !can(t, a, authz.Principal{Subject: "eve", Roles: []string{"developer"}}, "action", "run") {
 		t.Fatal("the current defaults are missing")
+	}
+}
+
+// The snapshot reads the organisation and the projects the graph names (ADR 0054), never types of its own: with
+// structures tagged by another domain, its units, parent links and roots are theirs.
+func TestSnapshotFollowsTheStructures(t *testing.T) {
+	st := domain.Structures{
+		Organisation:      domain.Structure{Kind: domain.StructureOrganisation, Type: "hr@Team", Namespace: "hr", Parent: "hr@within", Root: "HR-ROOT"},
+		Project:           domain.Structure{Kind: domain.StructureProject, Type: "hr@Programme", Namespace: "hr", Parent: "hr@inside", Root: "PRG-ROOT", SelfParent: true},
+		OrganisationTypes: []string{"hr@Team"}, ProjectTypes: []string{"hr@Programme"},
+	}
+	n := func(id, key, typ string) domain.Node {
+		return domain.Node{ID: domain.NodeID(id), Key: key, Type: typ, Namespace: "hr"}
+	}
+	l := func(typ, from, to string) domain.Link {
+		return domain.Link{Type: typ, From: domain.NodeRef{ID: domain.NodeID(from)}, To: domain.NodeRef{ID: domain.NodeID(to)}}
+	}
+	nodes := []domain.Node{n("1", "HR-ROOT", "hr@Team"), n("2", "PAY", "hr@Team"), n("3", "PRG-ROOT", "hr@Programme"), n("4", "PRG-A", "hr@Programme"),
+		n("5", "OLD", "organisation@OrgUnit")}
+	links := []domain.Link{l("hr@within", "2", "1"), l("hr@inside", "4", "3"), l("hr@inside", "3", "3"), l(access.LinkPartOf, "5", "1")}
+	s := access.BuildSnapshot(st, "b", nodes, links)
+	if got := s.Chain("PAY"); !slices.Equal(got, []string{"PAY", "HR-ROOT"}) {
+		t.Fatalf("chain %v", got)
+	}
+	if got := s.Chain("OLD"); !slices.Equal(got, []string{"OLD", "HR-ROOT"}) {
+		t.Fatalf("a link the structures do not name is no hierarchy: %v", got)
+	}
+	if got := s.ProjectChain("PRG-A"); !slices.Equal(got, []string{"PRG-A", "PRG-ROOT"}) {
+		t.Fatalf("project chain %v", got)
+	}
+	if got := s.SubjectChain(authz.Principal{Subject: "x"}); !slices.Equal(got, []string{access.UserKey("x"), "HR-ROOT"}) {
+		t.Fatalf("a subject of no unit is under the root unit: %v", got)
 	}
 }

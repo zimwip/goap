@@ -26,6 +26,8 @@ service GraphService {
   rpc GetNodeNeighbourhood(GetNodeNeighbourhoodRequest) returns (GetNodeNeighbourhoodResponse);
   // The namespaces holding at least one node.
   rpc ListNamespaces(ListNamespacesRequest) returns (ListNamespacesResponse);
+  // The structures of the graph (ADR 0054): the organisation and the projects, with the node types belonging to each.
+  rpc GetStructures(GetStructuresRequest) returns (GetStructuresResponse);
   // The impact log of a change (ADR 0029): every operation on its change impacts, with its caller.
   rpc ListChangeEvents(ListChangeEventsRequest) returns (ListChangeEventsResponse);
   // The log of a change (ADR 0030): its facts, journal records and impact events in one order, filtered on columns.
@@ -514,6 +516,25 @@ message ListNamespacesRequest {}
 
 message ListNamespacesResponse {
   repeated string namespaces = 1;
+}
+
+message GetStructuresRequest {}
+
+// A hierarchy every node version is placed in (domain.Structure).
+message Structure {
+  string kind = 1;
+  string type = 2;
+  string namespace = 3;
+  string parent = 4;
+  string root = 5;
+  bool self_parent = 6;
+  // the tagged type and its subtypes
+  repeated string types = 7;
+}
+
+message GetStructuresResponse {
+  Structure organisation = 1;
+  Structure project = 2;
 }
 
 message CreateChangeRequest {
