@@ -9,7 +9,7 @@ import (
 )
 
 // A created OrgUnit/ProjectUnit/User must name exactly one parent/membership link, except the two roots
-// (ADR 0040). Checked before anything is written (checkRequiredParent).
+// (ADR 0040, created by the bootstrap, ADR 0054). Checked before anything is written (checkRequiredParent).
 func TestCommitRequiresAParent(t *testing.T) { forEachRepo(t, testCommitRequiresAParent) }
 
 func testCommitRequiresAParent(t *testing.T, repo Repo) {
@@ -17,7 +17,11 @@ func testCommitRequiresAParent(t *testing.T, repo Repo) {
 	g := New(repo)
 	const ns = "organisation"
 
-	org, err := g.CreateNode(ctx, NewNode{Namespace: ns, Key: domain.DefaultOrg, Type: NodeTypeOrgUnit, Properties: map[string]any{"name": "Default"}})
+	// the root unit is the bootstrap's (ADR 0054)
+	if err := g.Bootstrap(ctx); err != nil {
+		t.Fatal(err)
+	}
+	org, err := g.NodeByKey(ctx, ns, domain.DefaultOrg)
 	if err != nil {
 		t.Fatal(err)
 	}

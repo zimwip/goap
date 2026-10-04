@@ -80,26 +80,20 @@ func linkTo(e graph.NodeEdit, typ string, to domain.NodeRef) graph.NodeEdit {
 	return e
 }
 
-// SeedDefaults makes sure, at every start, that the default organisation (the root of every
-// unit's adapter resolution), the root project, the document-repository MCP and its localfs adapter
-// definition exist. It is idempotent: once the default organisation exists nothing is touched, so that
-// edited or deleted MCPs stay so.
+// SeedDefaults makes sure, at every start, that the graph is bootstrapped (ADR 0054: the root unit ORG-DEFAULT,
+// the root of every unit's adapter resolution, and the root project PROJ-ROOT, both created by graph.Bootstrap) and
+// that the document-repository MCP and its localfs adapter definition exist. It is idempotent: once the MCP exists
+// (edited or deleted since) nothing is touched, so that edited or deleted MCPs stay so.
 func SeedDefaults(ctx context.Context, g *graph.Graph) (bool, error) {
-	if _, err := g.NodeByKey(ctx, mcp.NamespaceOrganisation, domain.DefaultOrg); err == nil {
+	if err := g.Bootstrap(ctx); err != nil {
+		return false, err
+	}
+	d := documentRepository()
+	if _, err := g.NodeByKey(ctx, mcp.NamespacePlatform, mcp.MCPKey(d.Name)); err == nil {
 		return false, nil
 	} else if !errors.Is(err, graph.ErrNotFound) {
 		return false, err
 	}
-	if err := applyOn(ctx, g, mcp.NamespaceOrganisation, "Default organisation", []graph.NodeEdit{
-		createNode(domain.DefaultOrg, mcp.NodeTypeOrgUnit, map[string]any{"name": "Default organisation", "kind": "company",
-			"description": "Holds the changes that name no unit, and the adapters every unit inherits."}),
-	}); err != nil {
-		return false, err
-	}
-	if err := seedRootProject(ctx, g); err != nil {
-		return false, err
-	}
-	d := documentRepository()
 	a := localFSAdapterDef()
 	err := applyOn(ctx, g, mcp.NamespacePlatform, "MCP "+d.Name, []graph.NodeEdit{
 		createNode(mcp.MCPKey(d.Name), mcp.NodeTypeMCP, d.Props()),
@@ -108,100 +102,8 @@ func SeedDefaults(ctx context.Context, g *graph.Graph) (bool, error) {
 	return err == nil, err
 }
 
-// seedRootProject creates the root project (ADR 0039), linked project_part_of to itself: every project not
-// folded into another one resolves to it, the same way ORG-DEFAULT is the root of adapter resolution. A
-// self-link cannot be made in the same commit as the node it targets (the commit orderer refuses a cycle
-// among created nodes), so this writes the node, then a second edit adding the link to its own new version.
-func seedRootProject(ctx context.Context, g *graph.Graph) error {
-	if _, err := g.NodeByKey(ctx, mcp.NamespaceOrganisation, domain.DefaultProject); err == nil {
-		return nil
-	} else if !errors.Is(err, graph.ErrNotFound) {
-		return err
-	}
-	if err := applyOn(ctx, g, mcp.NamespaceOrganisation, "Root project", []graph.NodeEdit{
-		createNode(domain.DefaultProject, access.NodeTypeProjectUnit, access.ProjectUnit{
-			Name: "Root project", Status: "active", Description: "Every project not folded into another one resolves to it.",
-		}.Props()),
-	}); err != nil {
-		return err
-	}
-	root, err := g.NodeByKey(ctx, mcp.NamespaceOrganisation, domain.DefaultProject)
-	if err != nil {
-		return err
-	}
-	return applyOn(ctx, g, mcp.NamespaceOrganisation, "Root project is its own parent", []graph.NodeEdit{
-		linkTo(graph.NodeEdit{Pre: ptr(root.Ref()), Rationale: "Root project is its own parent"}, access.LinkProjectPartOf, root.Ref()),
-	})
-}
-
 func ptr[T any](v T) *T { return &v }
 
-// LinkOrphanUnits links any OrgUnit other than the default organisation that has no part_of link to it
-// (ADR 0040 exempts only domain.DefaultOrg from needing one): the demo seed (SeedDemo) creates ORG-ACME
-// as a company of its own, through the raw write path that bypasses checkRequiredParent, before the
-// default organisation even exists. Idempotent: a unit that already has a part_of link (from here or from
-// an administrator's own move) is left alone, so the default organisation stays the single root of the
-// navigation tree without undoing a deliberate reorganisation.
-//
-// The link is added the same raw way SeedDemo adds its own (g.Link, no new node version, attributed to a
-// change of its own, ADR 0049): going through Commit instead would give the unit a new version, which would
-// turn its own children's part_of links into suspect links (they would still point at its old version,
-// pkg/graph.SuspectLinks) — invisible to a plain BaselineGraph read and so to the navigation tree, orphaning a
-// whole subtree instead of fixing one unit. The change carries no change impact (nothing it does is a node
-// version): it is applied once every orphan found is linked, landing through the normal Apply machinery so
-// the resulting baseline carries a real ParentID (the previous head) and ChangeID like any other applied
-// change (a change that declares no change impacts applies as an empty baseline, pkg/graph.Apply).
-func LinkOrphanUnits(ctx context.Context, g *graph.Graph) (bool, error) {
-	head, err := g.BranchHead(ctx, mcp.NamespaceOrganisation, domain.MainBranch)
-	if errors.Is(err, graph.ErrNotFound) {
-		return false, nil
-	} else if err != nil {
-		return false, err
-	}
-	nodes, links, err := g.BaselineGraph(ctx, head.ID)
-	if err != nil {
-		return false, err
-	}
-	parented := map[domain.NodeID]bool{}
-	for _, l := range links {
-		if l.Type == mcp.LinkPartOf {
-			parented[l.From.ID] = true
-		}
-	}
-	var orphans []domain.Node
-	for _, n := range nodes {
-		if !n.Deleted && n.Type == mcp.NodeTypeOrgUnit && n.Key != domain.DefaultOrg && !parented[n.ID] {
-			orphans = append(orphans, n)
-		}
-	}
-	if len(orphans) == 0 {
-		return false, nil
-	}
-	def, err := g.NodeByKey(ctx, mcp.NamespaceOrganisation, domain.DefaultOrg)
-	if err != nil {
-		return false, err
-	}
-	c, err := g.CreateChange(ctx, graph.NewChange{Namespace: mcp.NamespaceOrganisation, Title: "Orphan units join the default organisation",
-		Intent: "Structural repair (ADR 0040)", BaselineID: head.ID, Administrative: true})
-	if err != nil {
-		return false, err
-	}
-	for _, n := range orphans {
-		if _, err := g.Link(ctx, c.ID, mcp.LinkPartOf, n.Ref(), def.Ref(), nil); err != nil {
-			abandoned := domain.ChangeAbandoned
-			if _, aerr := g.UpdateChange(ctx, c.ID, graph.ChangePatch{Status: &abandoned}); aerr != nil {
-				err = errors.Join(err, aerr)
-			}
-			return false, err
-		}
-	}
-	if _, err := g.Apply(ctx, c.ID, "Orphan units join the default organisation"); err != nil {
-		return false, err
-	}
-	return true, nil
-}
-
-// SeedUnit creates an organisational unit, under parent when it is not empty.
 // SeedUnit creates an OrgUnit, part_of parent (domain.DefaultOrg when parent is empty: every unit but the
 // root itself needs one, ADR 0040).
 func SeedUnit(ctx context.Context, g *graph.Graph, key, name, kind, parent string) error {
@@ -220,15 +122,15 @@ func LocalFSAdapter(unit, root string) mcp.Adapter {
 	return mcp.Adapter{Unit: unit, MCP: "document-repository", Adapter: LocalFSAdapterName, Params: map[string]any{"root": root}}
 }
 
-// SeedAdapter creates the Adapter node of a unit, owned by it.
+// SeedAdapter creates the Adapter node of a unit, owned by it (ADR 0054: the owner of its versions).
 func SeedAdapter(ctx context.Context, g *graph.Graph, a mcp.Adapter) error {
-	unit, err := g.NodeByKey(ctx, mcp.NamespaceOrganisation, a.Unit)
-	if err != nil {
-		return err
-	}
-	return applyOn(ctx, g, mcp.NamespaceOrganisation, "Adapter "+a.MCP+" of "+a.Unit, []graph.NodeEdit{
-		linkTo(createNode(mcp.AdapterKey(a.Unit, a.MCP), mcp.NodeTypeAdapter, a.Props()), mcp.LinkOwner, unit.Ref()),
-	})
+	return applyOn(ctx, g, mcp.NamespaceOrganisation, "Adapter "+a.MCP+" of "+a.Unit, []graph.NodeEdit{ownedBy(createNode(mcp.AdapterKey(a.Unit, a.MCP), mcp.NodeTypeAdapter, a.Props()), a.Unit)})
+}
+
+// ownedBy makes the unit with key unit the owner of a node an edit creates or modifies (ADR 0054).
+func ownedBy(e graph.NodeEdit, unit string) graph.NodeEdit {
+	e.Owner = unit
+	return e
 }
 
 // SeedAdapterDef creates the AdapterDef node of an adapter definition in the platform namespace.
@@ -408,10 +310,6 @@ func SeedBuiltins(ctx context.Context, g *graph.Graph) (bool, error) {
 	if len(fresh) == 0 {
 		return len(edits) > 0, nil
 	}
-	org, err := g.NodeByKey(ctx, mcp.NamespaceOrganisation, domain.DefaultOrg)
-	if err != nil {
-		return false, err
-	}
 	var instances []graph.NodeEdit
 	for _, name := range fresh {
 		a := mcp.BuiltinAdapter(domain.DefaultOrg, name)
@@ -420,7 +318,7 @@ func SeedBuiltins(ctx context.Context, g *graph.Graph) (bool, error) {
 		} else if !errors.Is(err, graph.ErrNotFound) {
 			return false, err
 		}
-		instances = append(instances, linkTo(createNode(mcp.AdapterKey(a.Unit, a.MCP), mcp.NodeTypeAdapter, a.Props()), mcp.LinkOwner, org.Ref()))
+		instances = append(instances, ownedBy(createNode(mcp.AdapterKey(a.Unit, a.MCP), mcp.NodeTypeAdapter, a.Props()), a.Unit))
 	}
 	if len(instances) > 0 {
 		if err := applyOn(ctx, g, mcp.NamespaceOrganisation, "Built-in adapters of the default organisation", instances); err != nil {

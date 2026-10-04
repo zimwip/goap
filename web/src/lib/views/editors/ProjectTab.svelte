@@ -12,7 +12,9 @@
   import { headGraph, findNode, applyOnMain, updateNodeItem, type HeadGraph } from '../../graphEdit';
   import { openTab } from '../../shell/tabs.svelte';
   import { notify, provideActions } from '../../shell/workbench.svelte';
-  import { PROJECT_UNIT_TYPE, PROJECT_PART_OF } from '../../orgTypes';
+  import { PROJECT_UNIT_TYPE, PROJECT_PART_OF, DEFAULT_PROJECT_PROP, defaultProject } from '../../orgTypes';
+  import { hasAnyRole } from '../../stores/session.svelte';
+  import { confirmDialog } from '../../shell/confirmState.svelte';
   import { methodologies, refreshMethodologies } from '../../stores/catalog.svelte';
   import { applicableMethodologies, projectRoles, holders, type ProjectRole } from '../../projectRoles';
 
@@ -88,6 +90,38 @@
     { id: 'assignments', label: 'Assignments' },
   ]);
 
+  // The default project (ADR 0054): the project a change naming none acts in, flagged by an administrator. Making
+  // this project the default moves the flag in one change (set here, cleared on every project carrying it).
+  const projects = $derived((head?.nodes ?? []).filter((n) => n.type === PROJECT_UNIT_TYPE));
+  const defaultKey = $derived(defaultProject(projects));
+  const isAdmin = $derived(hasAnyRole('admin'));
+  let defaultBusy = $state(false);
+
+  async function makeDefault() {
+    if (!project || !head || defaultKey === key) return;
+    const ok = await confirmDialog({
+      title: 'Default project',
+      message: `Changes that name no project will act in ${key} (instead of ${defaultKey}).`,
+      confirmLabel: 'Make default project',
+    });
+    if (!ok) return;
+    defaultBusy = true;
+    error = '';
+    try {
+      const flagged = projects.filter((n) => n.id !== project.id && n.props?.[DEFAULT_PROJECT_PROP] === true);
+      await applyOnMain(NS, `Default project ${key}`, `Changes that name no project act in ${key}`, head.baselineId, [
+        updateNodeItem(project, { [DEFAULT_PROJECT_PROP]: true }),
+        ...flagged.map((n) => updateNodeItem(n, { [DEFAULT_PROJECT_PROP]: null })),
+      ]);
+      notify(`Changes that name no project now act in ${key}.`, 'ok');
+      await load();
+    } catch (e) {
+      error = errorMessage(e);
+    } finally {
+      defaultBusy = false;
+    }
+  }
+
   // ---- overview edit form ---------------------------------------------------------
 
   let editing = $state(false);
@@ -148,6 +182,15 @@
                   {#if parentKey}
                     <button type="button" class="link mono" onclick={() => openTab({ kind: 'project', params: { key: parentKey } })}>{parentKey}</button>
                   {:else}<span class="muted">none (root)</span>{/if}
+                </dd>
+                <dt>Default project</dt>
+                <dd>
+                  {#if defaultKey === key}
+                    <span class="badge">default: changes that name no project act in it</span>
+                  {:else}
+                    <span class="muted">the default is <button type="button" class="link mono" onclick={() => openTab({ kind: 'project', params: { key: defaultKey } })}>{defaultKey}</button></span>
+                    {#if isAdmin}<button type="button" class="small ghost" disabled={defaultBusy} onclick={makeDefault}>Make default project</button>{/if}
+                  {/if}
                 </dd>
                 {#if childKeys.length}
                   <dt>Sub-projects</dt>

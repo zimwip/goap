@@ -160,6 +160,9 @@ func rewriterOf(tx Tx) (baselineRewriter, bool) {
 	if ot, ok := tx.(*observedTx); ok {
 		tx = ot.Tx
 	}
+	if gt, ok := tx.(*guardTx); ok { // rewriting a baseline's storage writes no node, link or change
+		tx = gt.Tx
+	}
 	rw, ok := tx.(baselineRewriter)
 	return rw, ok
 }

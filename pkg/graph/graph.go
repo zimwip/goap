@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -23,6 +24,10 @@ type TypeCatalog interface {
 	// CheckNode is the existence rule of a node of namespace ns, CheckLink of a link between two node types.
 	CheckNode(ns, typ string) error
 	CheckLink(typ, from, to string) error
+	// Structure is the hierarchy a domain tags (ADR 0054: the organisation, the project); IsA reports a type or a
+	// subtype of base.
+	Structure(kind string) (domain.Structure, bool)
+	IsA(typ, base string) bool
 }
 
 // Graph exposes the domain and change axes.
@@ -53,11 +58,17 @@ type Graph struct {
 	// maturity of content and state being the activity's call, not a fixed per-type flag; unset, or a change with
 	// no ActivityRef, falls back to the Editable floor unchanged.
 	ActivityGoalsMet func(ctx context.Context, activityRef string, bb domain.Blackboard) (bool, error)
+
+	// booted is set once the roots of the structures are known to exist (Bootstrap).
+	booted atomic.Bool
 }
 
-// New returns a Graph backed by repo.
+// New returns a Graph backed by repo. Every transaction goes through the guard of the graph (guardRepo, ADR 0054),
+// whatever the storage.
 func New(repo Repo) *Graph {
-	return &Graph{repo: repo, now: func() time.Time { return time.Now().UTC() }, newID: func() string { return uuid.NewString() }}
+	g := &Graph{now: func() time.Time { return time.Now().UTC() }, newID: func() string { return uuid.NewString() }}
+	g.repo = &guardRepo{Repo: repo, g: g}
+	return g
 }
 
 // ---- Domain axis --------------------------------------------------------
@@ -71,6 +82,8 @@ type NewNode struct {
 	Properties map[string]any
 	// State is the lifecycle state of the first version (import; changes use create_node).
 	State string
+	// Owner is the key of the organisational unit owning the node (ADR 0054); empty: the root unit.
+	Owner string
 }
 
 // CreateNode creates version 1 of a node as a change of its own (ADR 0049): every write is change-shaped, even
@@ -89,7 +102,7 @@ func (g *Graph) CreateNode(ctx context.Context, in NewNode) (domain.Node, error)
 		key = g.newID()
 	}
 	if _, err := g.commitEdits(ctx, Commit{Namespace: ns, Title: "Import " + in.Type + " " + key, Intent: "Import " + in.Type + " " + key,
-		By: "graph.import", Edits: []NodeEdit{{Key: key, Type: in.Type, Props: in.Properties, State: in.State, Rationale: "Import " + key}}}, false); err != nil {
+		By: "graph.import", Edits: []NodeEdit{{Key: key, Type: in.Type, Props: in.Properties, State: in.State, Owner: in.Owner, Rationale: "Import " + key}}}, false); err != nil {
 		return domain.Node{}, err
 	}
 	return g.NodeByKey(ctx, ns, key)
@@ -391,6 +404,9 @@ type NewChange struct {
 // (ParentID) belongs to the namespace of its parent, forks its own branch from
 // the branch of the parent (which must have one) and is merged into it.
 func (g *Graph) CreateChange(ctx context.Context, in NewChange) (domain.Change, error) {
+	if err := g.Bootstrap(ctx); err != nil {
+		return domain.Change{}, fmt.Errorf("bootstrap: %w", err)
+	}
 	var c domain.Change
 	err := g.repo.InTx(ctx, func(tx Tx) error {
 		c = domain.Change{
@@ -401,20 +417,12 @@ func (g *Graph) CreateChange(ctx context.Context, in NewChange) (domain.Change, 
 		if err := g.prepareSubChange(ctx, tx, &c, &in); err != nil {
 			return err
 		}
-		if in.OwnerOrg != "" {
-			if err := checkOwnerOrg(ctx, tx, in.OwnerOrg); err != nil {
-				return err
-			}
-		}
-		// a change belongs to a project (ADR 0039: empty resolves to the root project, domain.ProjectOf,
-		// the same way an empty OwnerOrg resolves to the default organisation). A sub-change may have
-		// inherited one from its parent above (prepareSubChange). Requiring every caller to name one
-		// (rather than defaulting) is a UX-level gate (the project selector, ADR 0039), not a graph-level
-		// one: most callers (tests, tools, methodologies not yet updated) still have no project to give.
-		if c.ProjectID != "" {
-			if err := checkProject(ctx, tx, c.ProjectID); err != nil {
-				return err
-			}
+		// a change is held by a unit and acts in a project (ADR 0054), both resolved here and never left empty: a
+		// sub-change inherits its parent's (prepareSubChange), a change naming none is held by the root unit and acts
+		// in the default project. Requiring a caller to pick a project is a UX-level gate (the project selector, ADR
+		// 0039); that the change has a real one is the graph's.
+		if err := g.scopeChange(ctx, tx, &c); err != nil {
+			return err
 		}
 		fork, err := tx.Baseline(ctx, c.BaselineID)
 		if err != nil {

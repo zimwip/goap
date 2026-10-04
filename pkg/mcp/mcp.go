@@ -17,19 +17,19 @@ import (
 	"strings"
 
 	"github.com/zimwip/goap/pkg/algo"
+	"github.com/zimwip/goap/pkg/domain"
 )
 
 // Types and namespaces of the graph objects.
 const (
 	NamespacePlatform     = "platform"
-	NamespaceOrganisation = "organisation"
+	NamespaceOrganisation = domain.NamespaceOrganisation
 	NodeTypeMCP           = "platform@MCP"
 	NodeTypeAdapter       = "organisation@Adapter"
 	NodeTypeAdapterDef    = "platform@AdapterDef"
-	NodeTypeOrgUnit       = "organisation@OrgUnit"
+	NodeTypeOrgUnit       = domain.TypeOrgUnit
 	NodeTypeRole          = "platform@Role"
-	LinkOwner             = "organisation@owner"
-	LinkPartOf            = "organisation@part_of"
+	LinkPartOf            = domain.LinkPartOf
 )
 
 // MCPKey is the key of the node of an MCP.

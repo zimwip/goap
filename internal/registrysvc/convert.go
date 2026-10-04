@@ -265,6 +265,9 @@ func nodeTypeToPB(n methodology.NodeType) *registryv1.NodeType {
 	if d := n.Document; d != nil {
 		out.Document = &registryv1.DocumentSpec{Contains: d.Contains}
 	}
+	if t := n.Structure; t != nil {
+		out.Structure = &registryv1.StructureTag{Kind: t.Kind, Parent: t.Parent, Root: t.Root, SelfParent: t.SelfParent}
+	}
 	return out
 }
 
@@ -273,6 +276,9 @@ func nodeTypeFromPB(n *registryv1.NodeType) methodology.NodeType {
 		Lifecycle: n.Lifecycle, ChangeControlled: n.ChangeControlled, Validators: validatorsFromPB(n.Validators), Search: searchFromPB(n.Search), Editor: n.Editor}
 	if d := n.Document; d != nil {
 		out.Document = &domain.DocumentSpec{Contains: nilIfNone(d.Contains)}
+	}
+	if t := n.Structure; t != nil {
+		out.Structure = &methodology.StructureTag{Kind: t.Kind, Parent: t.Parent, Root: t.Root, SelfParent: t.SelfParent}
 	}
 	return out
 }

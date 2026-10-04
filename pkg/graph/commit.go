@@ -27,6 +27,9 @@ type NodeEdit struct {
 	State string
 	// Retire deletes the node (see NodeWrite.Retire).
 	Retire bool
+	// Owner transfers the node to another organisational unit (see NodeWrite.Owner); empty: unchanged, or the unit
+	// holding the commit for a created node.
+	Owner string
 	// Rationale says why; the title of the commit when empty.
 	Rationale   string
 	Links       []LinkEdit
@@ -53,6 +56,10 @@ type Commit struct {
 	By           string
 	BaselineName string
 	Edits        []NodeEdit
+	// OwnerOrg is the unit holding the commit and ProjectID the project it acts in (ADR 0054); empty: the root unit,
+	// the default project. Administrative marks a commit of organisation/project/policy/adapter data (ADR 0039).
+	OwnerOrg, ProjectID string
+	Administrative      bool
 }
 
 // CommitResult is the outcome of a Commit.
@@ -81,7 +88,7 @@ func (g *Graph) commitEdits(ctx context.Context, in Commit, parenting bool) (res
 	}
 	if parenting {
 		for _, e := range in.Edits {
-			if err := checkRequiredParent(e); err != nil {
+			if err := g.checkRequiredParent(e); err != nil {
 				return res, err
 			}
 		}
@@ -104,7 +111,7 @@ func (g *Graph) commitEdits(ctx context.Context, in Commit, parenting bool) (res
 		in.Baseline = head.ID
 	}
 	c, err := g.CreateChange(ctx, NewChange{Namespace: in.Namespace, Title: in.Title, Intent: in.Intent, Methodology: in.Methodology,
-		BaselineID: in.Baseline, Branch: in.Branch, Data: in.Data, OwnBranch: true})
+		BaselineID: in.Baseline, Branch: in.Branch, Data: in.Data, OwnBranch: true, OwnerOrg: in.OwnerOrg, ProjectID: in.ProjectID, Administrative: in.Administrative})
 	if err != nil {
 		return res, err
 	}
@@ -141,7 +148,7 @@ func (g *Graph) commitEdits(ctx context.Context, in Commit, parenting bool) (res
 	written := map[string]domain.NodeRef{} // key of a created node → its version
 	for _, i := range order {
 		e := in.Edits[i]
-		w := NodeWrite{Properties: e.Props, State: e.State, RemoveLinks: e.RemoveLinks, Retire: e.Retire}
+		w := NodeWrite{Properties: e.Props, State: e.State, RemoveLinks: e.RemoveLinks, Retire: e.Retire, Owner: e.Owner}
 		for _, l := range e.Links {
 			to := l.To
 			if l.ToKey != "" {

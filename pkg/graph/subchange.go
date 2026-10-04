@@ -2,23 +2,17 @@ package graph
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"slices"
 
 	"github.com/zimwip/goap/pkg/domain"
 )
 
-// Organisation namespace conventions (the built-in organisation domain, domains/builtin/organisation.yaml).
+// Organisation domain conventions (the built-in organisation domain, domains/builtin/organisation.yaml) that are not
+// a structure (ADR 0054: the organisation and project hierarchies are what the type catalogue tags, Graph.Structure).
 const (
-	NamespaceOrganisation = "organisation"
-	LinkPartOf            = "organisation@part_of"         // OrgUnit -> parent OrgUnit
-	LinkOwner             = "organisation@owner"           // any node -> OrgUnit
-	LinkProjectPartOf     = "organisation@project_part_of" // ProjectUnit -> parent ProjectUnit (ADR 0039)
-	LinkMemberOf          = "organisation@member_of"       // User -> its OrgUnit (ADR 0040)
-	NodeTypeOrgUnit       = "organisation@OrgUnit"
-	NodeTypeProjectUnit   = "organisation@ProjectUnit"
-	NodeTypeUser          = "organisation@User"
+	LinkMemberOf = "organisation@member_of" // User -> its OrgUnit (ADR 0040)
+	NodeTypeUser = "organisation@User"
 )
 
 // Methodology namespace conventions (the built-in methodology meta-domain, domains/builtin/methodology.yaml;
@@ -28,39 +22,33 @@ const (
 	LinkSubActivity      = "methodology@sub_activity" // Activity -> the sub-activities it is composed from
 )
 
-// checkRequiredParent enforces that a created OrgUnit/ProjectUnit/User names exactly one parent/membership
-// link of the expected type (ADR 0040): OrgUnit needs one part_of, ProjectUnit one project_part_of, User one
-// member_of — except the two roots (domain.DefaultOrg, domain.DefaultProject), seeded once, rootless or
-// self-linked in a later edit (SeedDefaults/seedRootProject), never through this generic commit path. Only
-// creation is checked here: an edit that modifies an existing node's membership (the move action) is
-// responsible for its own atomicity (removing the old link and adding the new one in the same edit).
-// parentLinkRule returns the link type an OrgUnit/ProjectUnit/User must have exactly one of, and a
-// description for error messages; ok is false for any other type, or for the two roots that are exempt
-// (domain.DefaultOrg, domain.DefaultProject).
-func parentLinkRule(typ, key string) (linkType, of string, ok bool) {
-	switch typ {
-	case NodeTypeOrgUnit:
-		if key == domain.DefaultOrg {
-			return "", "", false
+// checkRequiredParent enforces that a created node of a structure (ADR 0054: an OrgUnit, a ProjectUnit) names exactly
+// one parent link of the structure, and a User exactly one member_of link (ADR 0040) — except the roots of the
+// structures, created by the bootstrap. Only creation is checked here: an edit that modifies an existing node's
+// membership (the move action) is responsible for its own atomicity (removing the old link and adding the new one in
+// the same edit).
+// parentLinkRule returns the link type a node must have exactly one of, and a description for error messages; ok is
+// false for any other type, or for the roots.
+func (g *Graph) parentLinkRule(typ, key string) (linkType, of string, ok bool) {
+	for _, kind := range domain.StructureKinds {
+		if st := g.Structure(kind); typ == st.Type {
+			if key == st.Root {
+				return "", "", false
+			}
+			return st.Parent, fmt.Sprintf("a parent %s (%s)", st.Type, st.Parent), true
 		}
-		return LinkPartOf, "a parent OrgUnit (part_of)", true
-	case NodeTypeProjectUnit:
-		if key == domain.DefaultProject {
-			return "", "", false
-		}
-		return LinkProjectPartOf, "a parent ProjectUnit (project_part_of)", true
-	case NodeTypeUser:
-		return LinkMemberOf, "exactly one organisation (member_of)", true
-	default:
-		return "", "", false
 	}
+	if typ == NodeTypeUser {
+		return LinkMemberOf, "exactly one organisation (member_of)", true
+	}
+	return "", "", false
 }
 
-func checkRequiredParent(e NodeEdit) error {
+func (g *Graph) checkRequiredParent(e NodeEdit) error {
 	if e.Pre != nil {
 		return nil
 	}
-	linkType, of, ok := parentLinkRule(e.Type, e.Key)
+	linkType, of, ok := g.parentLinkRule(e.Type, e.Key)
 	if !ok {
 		return nil
 	}
@@ -87,7 +75,7 @@ func (g *Graph) checkParentInvariant(ctx context.Context, ref domain.NodeRef) er
 	if err != nil {
 		return err
 	}
-	linkType, of, ok := parentLinkRule(n.Type, n.Key)
+	linkType, of, ok := g.parentLinkRule(n.Type, n.Key)
 	if !ok {
 		return nil
 	}
@@ -146,8 +134,10 @@ func (g *Graph) prepareSubChange(ctx context.Context, tx Tx, c *domain.Change, i
 	if c.Methodology == "" {
 		c.Methodology = parent.Methodology
 	}
-	if parent.OwnerOrg != "" && c.OwnerOrg != "" && c.OwnerOrg != parent.OwnerOrg {
-		ok, err := orgWithin(ctx, tx, c.OwnerOrg, parent.OwnerOrg)
+	if c.OwnerOrg == "" {
+		c.OwnerOrg = parent.OwnerOrg
+	} else if c.OwnerOrg != parent.OwnerOrg {
+		ok, err := g.within(ctx, tx, domain.StructureOrganisation, c.OwnerOrg, parent.OwnerOrg)
 		if err != nil {
 			return err
 		}
@@ -173,8 +163,8 @@ func (g *Graph) prepareSubChange(ctx context.Context, tx Tx, c *domain.Change, i
 	}
 	if c.ProjectID == "" {
 		c.ProjectID = parent.ProjectID
-	} else if parent.ProjectID != "" && c.ProjectID != parent.ProjectID {
-		ok, err := projectWithin(ctx, tx, c.ProjectID, parent.ProjectID)
+	} else if c.ProjectID != parent.ProjectID {
+		ok, err := g.within(ctx, tx, domain.StructureProject, c.ProjectID, parent.ProjectID)
 		if err != nil {
 			return err
 		}
@@ -183,118 +173,6 @@ func (g *Graph) prepareSubChange(ctx context.Context, tx Tx, c *domain.Change, i
 		}
 	}
 	return nil
-}
-
-// checkOwnerOrg verifies that key designates an OrgUnit of the organisation namespace.
-func checkOwnerOrg(ctx context.Context, tx Tx, key string) error {
-	id, err := tx.NodeIDByKey(ctx, NamespaceOrganisation, key)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return fmt.Errorf("owner org %q is not a node of namespace %s: %w", key, NamespaceOrganisation, ErrInvalid)
-		}
-		return err
-	}
-	n, err := tx.LatestOn(ctx, id, domain.MainBranch)
-	if err != nil {
-		return err
-	}
-	if n.Deleted {
-		return fmt.Errorf("owner org %q is deleted: %w", key, ErrInvalid)
-	}
-	return nil
-}
-
-// checkProject verifies that key designates a ProjectUnit of the organisation namespace (ADR 0039).
-func checkProject(ctx context.Context, tx Tx, key string) error {
-	id, err := tx.NodeIDByKey(ctx, NamespaceOrganisation, key)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return fmt.Errorf("project %q is not a node of namespace %s: %w", key, NamespaceOrganisation, ErrInvalid)
-		}
-		return err
-	}
-	n, err := tx.LatestOn(ctx, id, domain.MainBranch)
-	if err != nil {
-		return err
-	}
-	if n.Deleted {
-		return fmt.Errorf("project %q is deleted: %w", key, ErrInvalid)
-	}
-	return nil
-}
-
-// projectWithin reports whether the project with key `project` is `ancestor` or below it, following the
-// project_part_of links (child -> parent) of the latest version on main (mirrors orgWithin).
-func projectWithin(ctx context.Context, tx Tx, project, ancestor string) (bool, error) {
-	seen := map[string]bool{}
-	for cur := project; cur != "" && !seen[cur]; {
-		if cur == ancestor {
-			return true, nil
-		}
-		seen[cur] = true
-		id, err := tx.NodeIDByKey(ctx, NamespaceOrganisation, cur)
-		if err != nil {
-			return false, err
-		}
-		n, err := tx.LatestOn(ctx, id, domain.MainBranch)
-		if err != nil {
-			return false, err
-		}
-		links, err := tx.OutLinks(ctx, n.Ref())
-		if err != nil {
-			return false, err
-		}
-		cur = ""
-		for _, l := range links {
-			if l.Type != LinkProjectPartOf {
-				continue
-			}
-			p, err := tx.Node(ctx, l.To)
-			if err != nil {
-				return false, err
-			}
-			cur = p.Key
-			break
-		}
-	}
-	return false, nil
-}
-
-// orgWithin reports whether the unit with key `unit` is `ancestor` or below it,
-// following the part_of links (child -> parent) of the latest version on main.
-func orgWithin(ctx context.Context, tx Tx, unit, ancestor string) (bool, error) {
-	seen := map[string]bool{}
-	for cur := unit; cur != "" && !seen[cur]; {
-		if cur == ancestor {
-			return true, nil
-		}
-		seen[cur] = true
-		id, err := tx.NodeIDByKey(ctx, NamespaceOrganisation, cur)
-		if err != nil {
-			return false, err
-		}
-		n, err := tx.LatestOn(ctx, id, domain.MainBranch)
-		if err != nil {
-			return false, err
-		}
-		links, err := tx.OutLinks(ctx, n.Ref())
-		if err != nil {
-			return false, err
-		}
-		cur = ""
-		for _, l := range links {
-			if l.Type != LinkPartOf {
-				continue
-			}
-			p, err := tx.Node(ctx, l.To)
-			if err != nil {
-				return false, err
-			}
-			cur = p.Key
-			break
-		}
-	}
-	return false, nil
 }
 
 // activityWithin reports whether the Activity with key `ref` is `ancestor` or a descendant of it, following
@@ -393,12 +271,10 @@ func (g *Graph) abandonSubChanges(ctx context.Context, tx Tx, id domain.ChangeID
 	return nil
 }
 
-// SplitByOwner splits a change along organisational boundaries: one
-// sub-change per unit owning nodes the change has an impact on (`owner` link
-// of the pre version of a modified change impact, ADR 0024). The sub-change gets a
-// copy of the change impacts of its nodes, derived from the parent's. Units that
-// already have an open sub-change are left as they are. Impacts on unowned nodes
-// stay with the parent.
+// SplitByOwner splits a change along organisational boundaries: one sub-change per unit owning nodes the change has
+// an impact on (the owner of the pre version of a modified change impact, ADR 0024, 0054). The sub-change gets a copy
+// of the change impacts of its nodes, derived from the parent's. Units that already have an open sub-change are left
+// as they are. Impacts on nodes the unit holding the change owns, or a unit outside it, stay with the parent.
 func (g *Graph) SplitByOwner(ctx context.Context, id domain.ChangeID) (created []domain.Change, err error) {
 	err = g.repo.InTx(ctx, func(tx Tx) error {
 		parent, err := tx.Change(ctx, id)
@@ -430,31 +306,30 @@ func (g *Graph) SplitByOwner(ctx context.Context, id domain.ChangeID) (created [
 			if cn.Pre == nil || cn.Intent != domain.IntentModified || cn.Review == domain.ReviewRejected || cn.Superseded {
 				continue
 			}
-			links, err := tx.OutLinks(ctx, *cn.Pre)
+			pre, err := tx.Node(ctx, *cn.Pre)
 			if err != nil {
 				return err
 			}
-			for _, l := range links {
-				if l.Type != LinkOwner {
-					continue
-				}
-				unit, err := tx.Node(ctx, l.To)
-				if err != nil {
-					return err
-				}
-				if domain.NamespaceOf(unit.Namespace) != NamespaceOrganisation {
-					continue
-				}
-				gr := byOrg[unit.Key]
-				if gr == nil {
-					name, _ := unit.Properties["name"].(string)
-					gr = &group{org: unit.Key, name: firstNonEmpty(name, unit.Key)}
-					byOrg[unit.Key] = gr
-					groups = append(groups, gr)
-				}
-				gr.nodes = append(gr.nodes, cn)
-				break
+			unit, err := tx.Node(ctx, domain.NodeRef{ID: pre.Owner})
+			if err != nil {
+				return err
 			}
+			if unit.Key == parent.OwnerOrg {
+				continue // the unit holding the change owns it
+			}
+			if below, err := g.within(ctx, tx, domain.StructureOrganisation, unit.Key, parent.OwnerOrg); err != nil {
+				return err
+			} else if !below {
+				continue // owned outside the unit holding the change: nothing to delegate to
+			}
+			gr := byOrg[unit.Key]
+			if gr == nil {
+				name, _ := unit.Properties["name"].(string)
+				gr = &group{org: unit.Key, name: firstNonEmpty(name, unit.Key)}
+				byOrg[unit.Key] = gr
+				groups = append(groups, gr)
+			}
+			gr.nodes = append(gr.nodes, cn)
 		}
 		for _, gr := range groups {
 			if have[gr.org] {
@@ -466,7 +341,7 @@ func (g *Graph) SplitByOwner(ctx context.Context, id domain.ChangeID) (created [
 			if err := g.prepareSubChange(ctx, tx, &sub, &in); err != nil {
 				return err
 			}
-			if err := checkOwnerOrg(ctx, tx, gr.org); err != nil {
+			if err := g.scopeChange(ctx, tx, &sub); err != nil {
 				return err
 			}
 			fork, err := tx.Baseline(ctx, sub.BaselineID)

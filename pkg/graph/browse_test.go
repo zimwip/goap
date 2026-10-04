@@ -3,6 +3,7 @@ package graph
 import (
 	"context"
 	"fmt"
+	"slices"
 	"testing"
 
 	"github.com/zimwip/goap/pkg/domain"
@@ -94,8 +95,9 @@ func testBrowseBaseline(t *testing.T, repo Repo) {
 		t.Fatal("unknown node: no error")
 	}
 
+	// the namespace of the test, and the one of the roots of the organisation and the projects (ADR 0054)
 	ns, err := g.Namespaces(ctx)
-	if err != nil || len(ns) != 1 || ns[0] != domain.DefaultNamespace {
+	if err != nil || !slices.Equal(ns, []string{domain.DefaultNamespace, "organisation"}) {
 		t.Fatalf("namespaces = %v, %v", ns, err)
 	}
 }

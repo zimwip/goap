@@ -130,6 +130,10 @@ func main() {
 	if err := types.Reload(ctx); err != nil {
 		platform.Fatal(log, "type catalogue", err)
 	}
+	// the roots of the organisation and of the projects, before any change (ADR 0054)
+	if err := g.Bootstrap(ctx); err != nil {
+		platform.Fatal(log, "bootstrap", err)
+	}
 	// the gateway configuration (providers, models, aliases) must exist before methodologies are seeded below:
 	// publishing a methodology stubs any alias it references that the platform namespace doesn't have yet
 	// (registrysvc.ensureAliasStubs), and that stub would otherwise collide with the alias this seeds.
@@ -143,17 +147,14 @@ func main() {
 	if _, err := reg.Seed(system, platform.Env("GOAP_METHODOLOGIES_DIR", "methodologies")); err != nil {
 		platform.Fatal(log, "methodologies", err)
 	}
-	if _, err := graphsvc.SeedDemo(ctx, g); err != nil {
-		platform.Fatal(log, "seed", err)
-	}
 	if _, err := graphsvc.SeedAccess(ctx, g); err != nil {
 		platform.Fatal(log, "seed access", err)
 	}
 	if _, err := graphsvc.SeedDefaults(ctx, g); err != nil {
 		platform.Fatal(log, "seed defaults", err)
 	}
-	if _, err := graphsvc.LinkOrphanUnits(ctx, g); err != nil {
-		platform.Fatal(log, "link orphan units", err)
+	if _, err := graphsvc.SeedDemo(ctx, g); err != nil {
+		platform.Fatal(log, "seed", err)
 	}
 	if _, err := graphsvc.SeedBuiltins(ctx, g); err != nil {
 		platform.Fatal(log, "seed built-in MCPs", err)

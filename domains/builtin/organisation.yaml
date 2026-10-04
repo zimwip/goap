@@ -1,20 +1,24 @@
 name: organisation
-version: 1.8.0
+version: 1.9.0
 description: >
   Organisation structure, managed in its own namespace ("organisation"): a hierarchy of organisational units,
-  mirrored by a hierarchy of projects (ADR 0039). Nodes of other namespaces reference a unit as their owner
-  through the cross-namespace `owner` link; changes are split into sub-changes along unit boundaries.
+  mirrored by a hierarchy of projects (ADR 0039). Every node version, whatever its namespace, is owned by a unit and
+  every node was created in a project (ADR 0054: the graph records both on the version, not as links); changes are
+  split into sub-changes along unit boundaries.
 nodeTypes:
   # `editor` names the editor of the user interface for the nodes of a type (the adapters of a unit are edited on its page).
   # `waiting: true` flags the waiting unit (ADR 0042): a unit an administrator creates at their discretion for
   # users signing in for the first time, linked member_of it until an administrator moves them. One unit
   # carries it at most (setting it clears the previous one in the same change); with none, new users join
   # ORG-DEFAULT.
-  - {name: OrgUnit, editor: unit, description: "Organisational unit (company, direction, department, team)", properties: [name, kind, description, waiting]}
+  # `structure` (ADR 0054) tags the type building the organisation hierarchy: every node version is owned by a unit
+  # and every change is held by one; the graph bootstraps the root (ORG-DEFAULT, rootless) and checks every write.
+  - {name: OrgUnit, editor: unit, description: "Organisational unit (company, direction, department, team)", properties: [name, kind, description, waiting],
+     structure: {kind: organisation, parent: part_of, root: ORG-DEFAULT}}
   # an organisational unit's instance of an adapter definition (an AdapterDef node of the platform namespace):
   # the one place where unit, MCP and connector meet. mcp = the MCP implemented, adapter = the name of the
   # AdapterDef, params = its parameter values (secrets as references: env:<VAR> or <vault path>#<field>).
-  # Linked to its unit by `owner`; a unit inherits the adapters of its ancestors (nearest wins).
+  # Owned by its unit (the owner of its versions, ADR 0054); a unit inherits the adapters of its ancestors (nearest wins).
   # disabled / tools (allow-list) / deny / readOnly restrict the MCP for the unit and its sub-units (ADR 0028): the
   # restrictions of the chain add up, so a unit narrows what it inherits and never widens it. An instance without
   # adapter only restricts (the implementation is inherited): this is how a unit limits the built-in MCPs.
@@ -37,12 +41,15 @@ nodeTypes:
   - {name: Policy, editor: access, description: "ABAC rule", properties: [rule, resource, action, effect]}
   # what the organisation works on, mirroring OrgUnit's hierarchy (ADR 0039): a project identifies the
   # methodologies that apply to it (it inherits their declared roles, ADR 0035 §2), and is composed of
-  # sub-projects through `project_part_of`. The root project (PROJ-ROOT, seeded like ORG-DEFAULT) links
-  # `project_part_of` to itself: every project not folded into another one resolves to it (an empty
-  # Change.ProjectID resolves to it too). Selecting a project before non-administrative work (this
-  # namespace's own data: units, projects, assignments, policies, adapters are administrative) is a
-  # UX-level gate (the project selector), not enforced by the graph itself.
-  - {name: ProjectUnit, editor: project, description: "Project or sub-project", properties: [name, description, kind, status, methodologies]}
+  # sub-projects through `project_part_of`. The root project (PROJ-ROOT, bootstrapped with ORG-DEFAULT) links
+  # `project_part_of` to itself: every project not folded into another one resolves to it. `structure` (ADR 0054)
+  # tags the type building the project hierarchy: every node is created in a project and every change acts in one.
+  # `default: true` flags the default project, the one a change naming none acts in (one at most; with none
+  # flagged, the root project). Selecting a project before non-administrative work (this namespace's own data:
+  # units, projects, assignments, policies, adapters are administrative) is a UX-level gate (the project
+  # selector), not enforced by the graph itself.
+  - {name: ProjectUnit, editor: project, description: "Project or sub-project", properties: [name, description, kind, status, methodologies, default],
+     structure: {kind: project, parent: project_part_of, root: PROJ-ROOT, selfParent: true}}
   # the meeting point of organisation and project (ADR 0039, same shape as Adapter): an organisational unit
   # (or a user, through subtyping) is assigned to a project with the roles it locally holds there — a subset
   # of the roles declared by the project's applicable methodologies. This is how the engine resolves "what
@@ -70,8 +77,6 @@ lifecycles:
 linkTypes:
   # child -> parent: outgoing links belong to the source version, so reorganising a unit only versions that unit
   - {name: part_of, from: OrgUnit, to: OrgUnit}
-  # any node, whatever its namespace -> the unit that owns it
-  - {name: owner, to: OrgUnit}
   # user -> the unit it belongs to
   - {name: member_of, from: User, to: OrgUnit}
   # child -> parent, mirrors OrgUnit's part_of; the root project points to itself. A distinct name (not

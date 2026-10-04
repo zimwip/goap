@@ -50,7 +50,7 @@ func (g *Graph) integrate(ctx context.Context, tx Tx, c domain.Change, own domai
 		}
 	}
 	res, err := g.mergeBranchTx(ctx, tx, MergeRequest{From: own.Name, Into: own.Parent, Title: "merge " + c.Title,
-		Namespace: c.Namespace, Resolutions: resolutions})
+		Namespace: c.Namespace, Resolutions: resolutions, OwnerOrg: c.OwnerOrg, ProjectID: c.ProjectID})
 	if err != nil {
 		return c, err
 	}
@@ -213,7 +213,7 @@ func (g *Graph) fastForward(ctx context.Context, tx Tx, c domain.Change, own dom
 		}
 	}
 	for _, r := range moves {
-		if err := tx.JoinBranch(ctx, r, target); err != nil {
+		if err := tx.JoinBranch(ctx, r, target, c.ID); err != nil {
 			return false, err
 		}
 	}

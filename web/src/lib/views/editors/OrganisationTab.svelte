@@ -21,7 +21,7 @@
   import { headGraph, findNode, applyOnMain, createNodeItem, updateNodeItem, deleteNodeItem, moveNodeItem, currentLink, refOf, type HeadGraph } from '../../graphEdit';
   import { openTab } from '../../shell/tabs.svelte';
   import { notify, provideActions } from '../../shell/workbench.svelte';
-  import { ADAPTER_TYPE, ORG_UNIT_TYPE, USER_TYPE, OWNER, PART_OF, MEMBER_OF, DEFAULT_ORG, WAITING_UNIT_PROP, newUserUnit } from '../../orgTypes';
+  import { ADAPTER_TYPE, ORG_UNIT_TYPE, USER_TYPE, PART_OF, MEMBER_OF, DEFAULT_ORG, WAITING_UNIT_PROP, newUserUnit } from '../../orgTypes';
   import { hasAnyRole } from '../../stores/session.svelte';
   import { confirmDialog } from '../../shell/confirmState.svelte';
 
@@ -59,13 +59,11 @@
   );
   /** users not already a member of this unit, to add */
   const otherUsers = $derived((head?.nodes ?? []).filter((n) => n.type === USER_TYPE && !members.some((m) => m.id === n.id)));
-  /** the Adapter nodes owned by this unit, by MCP name */
+  /** the Adapter nodes owned by this unit (the owner of their version, ADR 0054), by MCP name */
   const ownNodes = $derived.by(() => {
     const m = new Map<string, string>();
-    for (const l of head?.links ?? []) {
-      if (l.type !== OWNER || l.to?.id !== unit?.id) continue;
-      const a = nodeById.get(l.from?.id ?? '');
-      if (a?.type === ADAPTER_TYPE && a.namespace === NS) m.set(String(a.props?.['mcp'] ?? ''), a.key ?? '');
+    for (const a of head?.nodes ?? []) {
+      if (a.type === ADAPTER_TYPE && a.namespace === NS && unit && a.owner === unit.id) m.set(String(a.props?.['mcp'] ?? ''), a.key ?? '');
     }
     return m;
   });
@@ -283,9 +281,7 @@
       const akey = `ADP:${key}/${a.mcp}`;
       const existing = findNode(h, NS, ADAPTER_TYPE, akey);
       const props: Struct = { mcp: a.mcp ?? '', adapter: a.adapter ?? '', params: a.params ?? {} };
-      const u = findNode(h, NS, ORG_UNIT_TYPE, key);
-      if (!u) throw new Error(`unit ${key} not found`);
-      await applyOnMain(NS, `Adapter ${a.mcp} of ${key}`, `${existing ? 'Update' : 'Create'} the adapter of ${a.mcp} for ${key}`, h.baselineId, existing ? [updateNodeItem(existing, props)] : [createNodeItem(akey, ADAPTER_TYPE, props, [{ type: OWNER, to: refOf(u) }])]);
+      await applyOnMain(NS, `Adapter ${a.mcp} of ${key}`, `${existing ? 'Update' : 'Create'} the adapter of ${a.mcp} for ${key}`, h.baselineId, existing ? [updateNodeItem(existing, props)] : [{ ...createNodeItem(akey, ADAPTER_TYPE, props), owner: key }]);
       notify(`Adapter ${a.mcp} saved for ${key}.`, 'ok');
       editing = false;
       await load();
@@ -355,8 +351,6 @@
       const restricts = rDisabled || rReadOnly || rDeny.length > 0 || rAllow.length > 0;
       const h = await headGraph(NS);
       const existing = ownNode(h, m);
-      const u = findNode(h, NS, ORG_UNIT_TYPE, key);
-      if (!u) throw new Error(`unit ${key} not found`);
       // a null value clears a property of the node
       const props: Struct = {
         mcp: m,
@@ -373,7 +367,7 @@
       } else if (existing) {
         await applyOnMain(NS, title, `Restrict ${m} for ${key}`, h.baselineId, [updateNodeItem(existing, props)]);
       } else if (restricts) {
-        await applyOnMain(NS, title, `Restrict ${m} for ${key}`, h.baselineId, [createNodeItem(`ADP:${key}/${m}`, ADAPTER_TYPE, props, [{ type: OWNER, to: refOf(u) }])]);
+        await applyOnMain(NS, title, `Restrict ${m} for ${key}`, h.baselineId, [{ ...createNodeItem(`ADP:${key}/${m}`, ADAPTER_TYPE, props), owner: key }]);
       }
       notify(`Restrictions of ${m} saved for ${key}.`, 'ok');
       restricting = undefined;

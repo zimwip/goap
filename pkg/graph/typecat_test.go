@@ -171,3 +171,16 @@ func (ts testTypes) CheckNode(_, typ string) error {
 }
 
 func (ts testTypes) CheckLink(string, string, string) error { return nil }
+
+// Structure resolves none: the graph falls back to the built-in structures (domain.BuiltinStructures).
+func (ts testTypes) Structure(string) (domain.Structure, bool) { return domain.Structure{}, false }
+
+func (ts testTypes) IsA(typ, base string) bool {
+	for seen := map[string]bool{}; typ != "" && !seen[typ]; typ = ts[typ].Extends {
+		if typ == base {
+			return true
+		}
+		seen[typ] = true
+	}
+	return false
+}

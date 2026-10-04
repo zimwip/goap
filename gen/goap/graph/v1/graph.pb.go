@@ -181,7 +181,10 @@ type Node struct {
 	// action run that wrote this version (what a relaunch marks stale, ADR 0025)
 	Execution string `protobuf:"bytes,16,opt,name=execution,proto3" json:"execution,omitempty"`
 	// the branches the version joined besides the one it was written on (ADR 0032; filled by ListNodeVersions)
-	Joined        []string `protobuf:"bytes,17,rep,name=joined,proto3" json:"joined,omitempty"`
+	Joined []string `protobuf:"bytes,17,rep,name=joined,proto3" json:"joined,omitempty"`
+	// the organisational unit responsible for the version and the project the node was created in (node ids, ADR 0054)
+	Owner         string `protobuf:"bytes,18,opt,name=owner,proto3" json:"owner,omitempty"`
+	Project       string `protobuf:"bytes,19,opt,name=project,proto3" json:"project,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -333,6 +336,20 @@ func (x *Node) GetJoined() []string {
 		return x.Joined
 	}
 	return nil
+}
+
+func (x *Node) GetOwner() string {
+	if x != nil {
+		return x.Owner
+	}
+	return ""
+}
+
+func (x *Node) GetProject() string {
+	if x != nil {
+		return x.Project
+	}
+	return ""
 }
 
 type Link struct {
@@ -6348,10 +6365,13 @@ type NodeEdit struct {
 	// merged over the current properties (null clears one)
 	Props *structpb.Struct `protobuf:"bytes,4,opt,name=props,proto3" json:"props,omitempty"`
 	// delete the node (the new version is a tombstone)
-	Retire        bool        `protobuf:"varint,5,opt,name=retire,proto3" json:"retire,omitempty"`
-	Rationale     string      `protobuf:"bytes,6,opt,name=rationale,proto3" json:"rationale,omitempty"`
-	Links         []*LinkEdit `protobuf:"bytes,7,rep,name=links,proto3" json:"links,omitempty"`
-	RemoveLinks   []string    `protobuf:"bytes,8,rep,name=remove_links,json=removeLinks,proto3" json:"remove_links,omitempty"`
+	Retire      bool        `protobuf:"varint,5,opt,name=retire,proto3" json:"retire,omitempty"`
+	Rationale   string      `protobuf:"bytes,6,opt,name=rationale,proto3" json:"rationale,omitempty"`
+	Links       []*LinkEdit `protobuf:"bytes,7,rep,name=links,proto3" json:"links,omitempty"`
+	RemoveLinks []string    `protobuf:"bytes,8,rep,name=remove_links,json=removeLinks,proto3" json:"remove_links,omitempty"`
+	// key of the organisational unit the node is transferred to (ADR 0054); empty: unchanged, or the unit holding the
+	// commit for a created node
+	Owner         string `protobuf:"bytes,9,opt,name=owner,proto3" json:"owner,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -6442,16 +6462,27 @@ func (x *NodeEdit) GetRemoveLinks() []string {
 	return nil
 }
 
+func (x *NodeEdit) GetOwner() string {
+	if x != nil {
+		return x.Owner
+	}
+	return ""
+}
+
 type CommitEditsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Namespace     string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
-	Title         string                 `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`
-	Intent        string                 `protobuf:"bytes,3,opt,name=intent,proto3" json:"intent,omitempty"`
-	Methodology   string                 `protobuf:"bytes,4,opt,name=methodology,proto3" json:"methodology,omitempty"`
-	Data          *structpb.Struct       `protobuf:"bytes,5,opt,name=data,proto3" json:"data,omitempty"`
-	BaselineId    string                 `protobuf:"bytes,6,opt,name=baseline_id,json=baselineId,proto3" json:"baseline_id,omitempty"`
-	BaselineName  string                 `protobuf:"bytes,7,opt,name=baseline_name,json=baselineName,proto3" json:"baseline_name,omitempty"`
-	Edits         []*NodeEdit            `protobuf:"bytes,8,rep,name=edits,proto3" json:"edits,omitempty"`
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	Namespace    string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	Title        string                 `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`
+	Intent       string                 `protobuf:"bytes,3,opt,name=intent,proto3" json:"intent,omitempty"`
+	Methodology  string                 `protobuf:"bytes,4,opt,name=methodology,proto3" json:"methodology,omitempty"`
+	Data         *structpb.Struct       `protobuf:"bytes,5,opt,name=data,proto3" json:"data,omitempty"`
+	BaselineId   string                 `protobuf:"bytes,6,opt,name=baseline_id,json=baselineId,proto3" json:"baseline_id,omitempty"`
+	BaselineName string                 `protobuf:"bytes,7,opt,name=baseline_name,json=baselineName,proto3" json:"baseline_name,omitempty"`
+	Edits        []*NodeEdit            `protobuf:"bytes,8,rep,name=edits,proto3" json:"edits,omitempty"`
+	// the unit holding the commit (empty: the root unit; "@me": the caller's personal unit) and the project it acts in (empty: the
+	// caller's active project, else the default project), ADR 0054
+	OwnerOrg      string `protobuf:"bytes,9,opt,name=owner_org,json=ownerOrg,proto3" json:"owner_org,omitempty"`
+	ProjectId     string `protobuf:"bytes,10,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -6540,6 +6571,20 @@ func (x *CommitEditsRequest) GetEdits() []*NodeEdit {
 		return x.Edits
 	}
 	return nil
+}
+
+func (x *CommitEditsRequest) GetOwnerOrg() string {
+	if x != nil {
+		return x.OwnerOrg
+	}
+	return ""
+}
+
+func (x *CommitEditsRequest) GetProjectId() string {
+	if x != nil {
+		return x.ProjectId
+	}
+	return ""
 }
 
 type CommitEditsResponse struct {
@@ -6763,8 +6808,10 @@ type WriteChangeImpactRequest struct {
 	// delete the node (the new version is a tombstone)
 	Retire bool `protobuf:"varint,7,opt,name=retire,proto3" json:"retire,omitempty"`
 	// flow branch to write on (empty: the main flow) and the action run that writes (ADR 0025)
-	Flow          string `protobuf:"bytes,8,opt,name=flow,proto3" json:"flow,omitempty"`
-	Execution     string `protobuf:"bytes,9,opt,name=execution,proto3" json:"execution,omitempty"`
+	Flow      string `protobuf:"bytes,8,opt,name=flow,proto3" json:"flow,omitempty"`
+	Execution string `protobuf:"bytes,9,opt,name=execution,proto3" json:"execution,omitempty"`
+	// key of the organisational unit the node is transferred to (ADR 0054); empty: unchanged
+	Owner         string `protobuf:"bytes,10,opt,name=owner,proto3" json:"owner,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -6858,6 +6905,13 @@ func (x *WriteChangeImpactRequest) GetFlow() string {
 func (x *WriteChangeImpactRequest) GetExecution() string {
 	if x != nil {
 		return x.Execution
+	}
+	return ""
+}
+
+func (x *WriteChangeImpactRequest) GetOwner() string {
+	if x != nil {
+		return x.Owner
 	}
 	return ""
 }
@@ -10879,7 +10933,7 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\bversions\x18\x01 \x01(\x05R\bversions\"3\n" +
 	"\aNodeRef\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
-	"\aversion\x18\x02 \x01(\x05R\aversion\"\xea\x03\n" +
+	"\aversion\x18\x02 \x01(\x05R\aversion\"\x9a\x04\n" +
 	"\x04Node\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\x05R\aversion\x12\x10\n" +
@@ -10899,7 +10953,9 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\rchange_impact\x18\x0e \x01(\tR\fchangeImpact\x12\x18\n" +
 	"\acomment\x18\x0f \x01(\tR\acomment\x12\x1c\n" +
 	"\texecution\x18\x10 \x01(\tR\texecution\x12\x16\n" +
-	"\x06joined\x18\x11 \x03(\tR\x06joined\"\xca\x01\n" +
+	"\x06joined\x18\x11 \x03(\tR\x06joined\x12\x14\n" +
+	"\x05owner\x18\x12 \x01(\tR\x05owner\x12\x18\n" +
+	"\aproject\x18\x13 \x01(\tR\aproject\"\xca\x01\n" +
 	"\x04Link\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04type\x18\x02 \x01(\tR\x04type\x12*\n" +
@@ -11411,7 +11467,7 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12&\n" +
 	"\x02to\x18\x02 \x01(\v2\x16.goap.graph.v1.NodeRefR\x02to\x12\x15\n" +
 	"\x06to_key\x18\x03 \x01(\tR\x05toKey\x12-\n" +
-	"\x05props\x18\x04 \x01(\v2\x17.google.protobuf.StructR\x05props\"\x91\x02\n" +
+	"\x05props\x18\x04 \x01(\v2\x17.google.protobuf.StructR\x05props\"\xa7\x02\n" +
 	"\bNodeEdit\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x12\n" +
 	"\x04type\x18\x02 \x01(\tR\x04type\x12(\n" +
@@ -11420,7 +11476,8 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\x06retire\x18\x05 \x01(\bR\x06retire\x12\x1c\n" +
 	"\trationale\x18\x06 \x01(\tR\trationale\x12-\n" +
 	"\x05links\x18\a \x03(\v2\x17.goap.graph.v1.LinkEditR\x05links\x12!\n" +
-	"\fremove_links\x18\b \x03(\tR\vremoveLinks\"\xa4\x02\n" +
+	"\fremove_links\x18\b \x03(\tR\vremoveLinks\x12\x14\n" +
+	"\x05owner\x18\t \x01(\tR\x05owner\"\xe0\x02\n" +
 	"\x12CommitEditsRequest\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x14\n" +
 	"\x05title\x18\x02 \x01(\tR\x05title\x12\x16\n" +
@@ -11430,7 +11487,11 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\vbaseline_id\x18\x06 \x01(\tR\n" +
 	"baselineId\x12#\n" +
 	"\rbaseline_name\x18\a \x01(\tR\fbaselineName\x12-\n" +
-	"\x05edits\x18\b \x03(\v2\x17.goap.graph.v1.NodeEditR\x05edits\"g\n" +
+	"\x05edits\x18\b \x03(\v2\x17.goap.graph.v1.NodeEditR\x05edits\x12\x1b\n" +
+	"\towner_org\x18\t \x01(\tR\bownerOrg\x12\x1d\n" +
+	"\n" +
+	"project_id\x18\n" +
+	" \x01(\tR\tprojectId\"g\n" +
 	"\x13CommitEditsResponse\x12\x1b\n" +
 	"\tchange_id\x18\x01 \x01(\tR\bchangeId\x123\n" +
 	"\bbaseline\x18\x02 \x01(\v2\x17.goap.graph.v1.BaselineR\bbaseline\"i\n" +
@@ -11442,7 +11503,7 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\rNodeLinkWrite\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12&\n" +
 	"\x02to\x18\x02 \x01(\v2\x16.goap.graph.v1.NodeRefR\x02to\x12-\n" +
-	"\x05props\x18\x03 \x01(\v2\x17.google.protobuf.StructR\x05props\"\xce\x02\n" +
+	"\x05props\x18\x03 \x01(\v2\x17.google.protobuf.StructR\x05props\"\xe4\x02\n" +
 	"\x18WriteChangeImpactRequest\x12\x1b\n" +
 	"\tchange_id\x18\x01 \x01(\tR\bchangeId\x12(\n" +
 	"\x10change_impact_id\x18\x02 \x01(\tR\x0echangeImpactId\x12-\n" +
@@ -11452,7 +11513,9 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\fremove_links\x18\x06 \x03(\tR\vremoveLinks\x12\x16\n" +
 	"\x06retire\x18\a \x01(\bR\x06retire\x12\x12\n" +
 	"\x04flow\x18\b \x01(\tR\x04flow\x12\x1c\n" +
-	"\texecution\x18\t \x01(\tR\texecution\"L\n" +
+	"\texecution\x18\t \x01(\tR\texecution\x12\x14\n" +
+	"\x05owner\x18\n" +
+	" \x01(\tR\x05owner\"L\n" +
 	"\x19WriteChangeImpactResponse\x12/\n" +
 	"\x04node\x18\x01 \x01(\v2\x1b.goap.graph.v1.ChangeImpactR\x04node\"\xc6\x01\n" +
 	"\x19ReviewChangeImpactRequest\x12\x1b\n" +

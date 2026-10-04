@@ -462,6 +462,9 @@ type MergeRequest struct {
 	// Namespace of the merge change (default: domain.DefaultNamespace).
 	Namespace   string
 	Resolutions map[domain.NodeID]Resolution
+	// OwnerOrg is the unit holding the merge change and ProjectID the project it acts in (ADR 0054); empty: the root
+	// unit, the default project.
+	OwnerOrg, ProjectID string
 }
 
 // MergeResult is the merge change and the resulting baseline of the target branch.
@@ -475,6 +478,9 @@ type MergeResult struct {
 // node per merged node is created, the merge versions are written on Into, and
 // From is marked merged. Conflicts without a resolution fail with ErrConflict.
 func (g *Graph) MergeBranch(ctx context.Context, in MergeRequest) (res MergeResult, err error) {
+	if err := g.Bootstrap(ctx); err != nil {
+		return res, err
+	}
 	err = g.repo.InTx(ctx, func(tx Tx) error {
 		res, err = g.mergeBranchTx(ctx, tx, in)
 		return err
@@ -500,7 +506,10 @@ func (g *Graph) mergeBranchTx(ctx context.Context, tx Tx, in MergeRequest) (res 
 	// version records the origin; the merge versions are written here, not proposed
 	c := domain.Change{ID: domain.ChangeID(g.newID()), Title: title, Intent: title, Status: domain.ChangeActive,
 		Namespace: domain.NamespaceOf(in.Namespace), BaselineID: plan.IntoHead, Branch: plan.Into, CreatedAt: g.now(),
-		Data: map[string]any{"merge": map[string]any{"from": in.From, "into": plan.Into}}}
+		Data: map[string]any{"merge": map[string]any{"from": in.From, "into": plan.Into}}, OwnerOrg: in.OwnerOrg, ProjectID: in.ProjectID}
+	if err := g.scopeChange(ctx, tx, &c); err != nil {
+		return res, err
+	}
 	if err := tx.PutChange(ctx, c); err != nil {
 		return res, err
 	}
@@ -604,7 +613,7 @@ func (g *Graph) mergeBranchTx(ctx context.Context, tx Tx, in MergeRequest) (res 
 		}
 		if m.join {
 			n = *m.from
-			if err := tx.JoinBranch(ctx, n.Ref(), plan.Into); err != nil {
+			if err := tx.JoinBranch(ctx, n.Ref(), plan.Into, c.ID); err != nil {
 				return res, err
 			}
 		} else {

@@ -2,6 +2,7 @@ package methodology
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/zimwip/goap/pkg/algo"
@@ -101,7 +102,47 @@ func (s Schema) check(prefix string, add func(path, format string, args ...any))
 			add(path+".to", "unknown node type %s", l.To)
 		}
 	}
+	s.checkStructures(prefix, add)
 	return nodeTypes, linkTypes
+}
+
+// checkStructures validates the structure tags (ADR 0054): a known kind, once per schema, a root key, and a parent
+// link type of the schema itself going from and to the tagged type.
+func (s Schema) checkStructures(prefix string, add func(path, format string, args ...any)) {
+	kinds := map[string]bool{}
+	for i, n := range s.NodeTypes {
+		t := n.Structure
+		if t == nil {
+			continue
+		}
+		path := fmt.Sprintf(prefix+"nodeTypes[%d].structure", i)
+		if !slices.Contains(domain.StructureKinds, t.Kind) {
+			add(path+".kind", "unknown structure kind %q (one of %s)", t.Kind, strings.Join(domain.StructureKinds, ", "))
+		} else if kinds[t.Kind] {
+			add(path+".kind", "structure %s tagged twice", t.Kind)
+		}
+		kinds[t.Kind] = true
+		if t.Root == "" {
+			add(path+".root", "the key of the root node is required")
+		}
+		if n.Lifecycle != "" {
+			add(path, "a structure type has no lifecycle: its root is created by the bootstrap")
+		}
+		var parent *LinkType
+		for j := range s.LinkTypes {
+			if s.LinkTypes[j].Name == t.Parent {
+				parent = &s.LinkTypes[j]
+			}
+		}
+		switch {
+		case t.Parent == "":
+			add(path+".parent", "the parent link type is required")
+		case parent == nil:
+			add(path+".parent", "unknown link type %s (a link type of this domain)", t.Parent)
+		case parent.From != n.Name || parent.To != n.Name:
+			add(path+".parent", "link type %s must go from %s to %s", t.Parent, n.Name, n.Name)
+		}
+	}
 }
 
 // foreign reports a qualified reference ("base@Item"): a type of another domain, which the type catalogue resolves

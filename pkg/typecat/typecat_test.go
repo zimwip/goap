@@ -125,8 +125,8 @@ func TestRepositoryDomains(t *testing.T) {
 	if err := c.CheckLink("alm@verifies", "alm@Need", "alm@Requirement"); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("wrong source: %v", err)
 	}
-	if err := c.CheckLink("organisation@owner", "alm@Component", "organisation@OrgUnit"); err != nil {
-		t.Fatalf("a link across domains: %v", err)
+	if err := c.CheckLink("organisation@member_of", "organisation@User", "organisation@OrgUnit"); err != nil {
+		t.Fatalf("a link to a supertype: %v", err)
 	}
 	if err := c.CheckLink("alm@nope", "alm@Need", "alm@Need"); !errors.Is(err, ErrUnknown) {
 		t.Fatalf("unknown link type: %v", err)
@@ -237,5 +237,59 @@ func TestComposeFlag(t *testing.T) {
 	}
 	if l, ok := c.LinkType("methodology@specializes"); !ok || l.Compose {
 		t.Fatalf("specializes: compose = %v, want false", l != nil && l.Compose)
+	}
+}
+
+// The structures (ADR 0054) are the types the domains tag: the built-in organisation domain tags the organisation and
+// the project, users are units through subtyping, and no other domain may tag a structure again.
+func TestStructures(t *testing.T) {
+	c := Builtin()
+	org, ok := c.Structure(domain.StructureOrganisation)
+	if !ok || org != domain.BuiltinStructures[domain.StructureOrganisation] {
+		t.Fatalf("organisation = %+v %v", org, ok)
+	}
+	proj, ok := c.Structure(domain.StructureProject)
+	if !ok || proj != domain.BuiltinStructures[domain.StructureProject] {
+		t.Fatalf("project = %+v %v", proj, ok)
+	}
+	if !c.IsA("organisation@User", org.Type) || c.IsA(proj.Type, org.Type) || c.IsA("organisation@Nope", org.Type) {
+		t.Fatal("IsA")
+	}
+	other := parse(t, `
+name: hr
+version: 1.0.0
+nodeTypes:
+  - {name: Team, structure: {kind: organisation, parent: within, root: HR-ROOT}}
+linkTypes:
+  - {name: within, from: Team, to: Team}
+`)
+	if issues := other.Validate(); len(issues) > 0 {
+		t.Fatalf("the domain itself is valid: %v", issues)
+	}
+	if _, err := New(other); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("a second organisation structure: %v", err)
+	}
+}
+
+// A structure tag names a known kind, a root and a parent link type of its domain from and to the tagged type.
+func TestStructureTagIssues(t *testing.T) {
+	d := parse(t, `
+name: hr
+version: 1.0.0
+nodeTypes:
+  - {name: Team, structure: {kind: department, parent: nope}}
+  - {name: Site, structure: {kind: project, parent: near, root: S-1}}
+  - {name: Other}
+linkTypes:
+  - {name: near, from: Site, to: Other}
+`)
+	var paths []string
+	for _, is := range d.Validate() {
+		paths = append(paths, is.Path)
+	}
+	for _, want := range []string{"nodeTypes[0].structure.kind", "nodeTypes[0].structure.root", "nodeTypes[0].structure.parent", "nodeTypes[1].structure.parent"} {
+		if !slices.Contains(paths, want) {
+			t.Errorf("no issue on %s: %v", want, paths)
+		}
 	}
 }

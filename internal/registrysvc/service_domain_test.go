@@ -13,6 +13,7 @@ import (
 	registryv1 "github.com/zimwip/goap/gen/goap/registry/v1"
 	"github.com/zimwip/goap/pkg/algo"
 	"github.com/zimwip/goap/pkg/authz"
+	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/methodology"
 )
@@ -382,5 +383,29 @@ func TestListTypes(t *testing.T) {
 	}
 	if !found {
 		t.Fatal("link types are listed with their ends")
+	}
+}
+
+// The registry tags the structures of the graph through its domains (ADR 0054): the built-in organisation domain tags
+// the organisation and the project; a domain tagging one of them again is reported and never published.
+func TestDomainStructures(t *testing.T) {
+	enf, _ := authz.NewCasbin(nil)
+	s := &Service{Store: NewMemoryStore(), Authz: enf}
+	ctx := as("admin")
+	cat, err := s.Types(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, kind := range domain.StructureKinds {
+		if st, ok := cat.Structure(kind); !ok || st != domain.BuiltinStructures[kind] {
+			t.Fatalf("structure %s = %+v %v", kind, st, ok)
+		}
+	}
+	src := "name: hr\nversion: \"1\"\nnodeTypes:\n  - {name: Team, structure: {kind: project, parent: within, root: HR-ROOT}}\nlinkTypes:\n  - {name: within, from: Team, to: Team}\n"
+	if _, issues, err := s.ImportDomain(ctx, []byte(src), false); err != nil || !strings.Contains(issues.Error(), "structure project is already tagged") {
+		t.Fatalf("a second project structure is reported: %v %v", issues, err)
+	}
+	if _, err := s.PublishDomain(ctx, "hr", "1"); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("and never published: %v", err)
 	}
 }

@@ -37,20 +37,25 @@ func newOrgWorld(t *testing.T, repo Repo) orgWorld {
 			t.Fatal(err)
 		}
 	}
-	w.acme = mk("organisation", "ORG-ACME", "OrgUnit", map[string]any{"name": "Acme"})
-	w.digital = mk("organisation", "ORG-DIGITAL", "OrgUnit", map[string]any{"name": "Digital"})
-	w.team1 = mk("organisation", "ORG-T1", "OrgUnit", map[string]any{"name": "Team 1"})
-	w.t2 = mk("organisation", "ORG-T2", "OrgUnit", map[string]any{"name": "Team 2"})
+	w.acme = mk("organisation", "ORG-ACME", NodeTypeOrgUnit, map[string]any{"name": "Acme"})
+	w.digital = mk("organisation", "ORG-DIGITAL", NodeTypeOrgUnit, map[string]any{"name": "Digital"})
+	w.team1 = mk("organisation", "ORG-T1", NodeTypeOrgUnit, map[string]any{"name": "Team 1"})
+	w.t2 = mk("organisation", "ORG-T2", NodeTypeOrgUnit, map[string]any{"name": "Team 2"})
 	link(LinkPartOf, w.digital, w.acme)
 	link(LinkPartOf, w.team1, w.digital)
 	link(LinkPartOf, w.t2, w.digital)
-	w.cmp1 = mk("", "CMP-1", "Component", map[string]any{"title": "one"})
-	w.cmp2 = mk("", "CMP-2", "Component", map[string]any{"title": "two"})
-	w.cmp3 = mk("", "CMP-3", "Component", map[string]any{"title": "three"})
-	link(LinkOwner, w.cmp1, w.team1)
-	link(LinkOwner, w.cmp2, w.t2)
+	owned := func(key, owner, title string) domain.Node {
+		n, err := g.CreateNode(ctx, NewNode{Key: key, Type: "Component", Properties: map[string]any{"title": title}, Owner: owner})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	w.cmp1 = owned("CMP-1", "ORG-T1", "one")
+	w.cmp2 = owned("CMP-2", "ORG-T2", "two")
+	w.cmp3 = owned("CMP-3", "", "three") // owned by the root unit, outside ORG-DIGITAL
 	// the change acts on the default namespace: only its own nodes belong in its baseline.
-	// Organisation units are resolved independently of it (checkOwnerOrg / orgWithin read the
+	// Organisation units are resolved independently of it (Graph.structureNode / within read the
 	// organisation namespace's own head, ADR 0016).
 	all := []domain.NodeRef{}
 	for _, n := range []domain.Node{w.cmp1, w.cmp2, w.cmp3} {
@@ -210,41 +215,45 @@ func testSubChangeRules(t *testing.T, repo Repo) {
 	}
 }
 
-// A root project links project_part_of to itself (ADR 0039, mirroring how ORG-DEFAULT is the organisation
-// chain's root, but by a self-link rather than by omission, per the domain design). checkProject and
-// projectWithin must handle it without looping forever.
+// A root project links project_part_of to itself (ADR 0039, 0054: the bootstrap writes the self-link). The checks and
+// the walk up the projects must handle it without looping forever.
 func TestProjectSelfLinkTerminates(t *testing.T) {
 	ctx := context.Background()
 	g := New(NewMemory())
-	mk := func(key string, props map[string]any) domain.Node {
-		n, err := g.CreateNode(ctx, NewNode{Namespace: "organisation", Key: key, Type: "ProjectUnit", Properties: props})
-		if err != nil {
-			t.Fatal(err)
-		}
-		return n
+	if err := g.Bootstrap(ctx); err != nil {
+		t.Fatal(err)
 	}
-	root := mk("PROJ-ROOT", map[string]any{"name": "Root project"})
+	root, err := g.NodeByKey(ctx, "organisation", domain.DefaultProject)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if links, err := g.OutLinksOf(ctx, root.Ref()); err != nil || len(links) != 1 || links[0].To != root.Ref() || links[0].Type != LinkProjectPartOf {
+		t.Fatalf("the root project links to itself: %+v %v", links, err)
+	}
+	sub, err := g.CreateNode(ctx, NewNode{Namespace: "organisation", Key: "PROJ-SUB", Type: NodeTypeProjectUnit, Properties: map[string]any{"name": "Sub project"}})
+	if err != nil {
+		t.Fatal(err)
+	}
 	c0 := testChange(t, g, "organisation")
-	if _, err := g.Link(ctx, c0, LinkProjectPartOf, root.Ref(), root.Ref(), nil); err != nil {
-		t.Fatalf("a project can link project_part_of to itself: %v", err)
-	}
-	sub := mk("PROJ-SUB", map[string]any{"name": "Sub project"})
 	if _, err := g.Link(ctx, c0, LinkProjectPartOf, sub.Ref(), root.Ref(), nil); err != nil {
 		t.Fatal(err)
+	}
+	within := func(tx Tx, key, ancestor string) (bool, error) {
+		return g.within(ctx, tx, domain.StructureProject, key, ancestor)
 	}
 	done := make(chan error, 1)
 	go func() {
 		done <- g.repo.InTx(ctx, func(tx Tx) error {
-			if err := checkProject(ctx, tx, "PROJ-ROOT"); err != nil {
+			if _, err := g.structureNode(ctx, tx, domain.StructureProject, "PROJ-ROOT"); err != nil {
 				return fmt.Errorf("root project must check out: %w", err)
 			}
-			if ok, err := projectWithin(ctx, tx, "PROJ-ROOT", "PROJ-ROOT"); err != nil || !ok {
+			if ok, err := within(tx, "PROJ-ROOT", "PROJ-ROOT"); err != nil || !ok {
 				return fmt.Errorf("the root project is within itself: %v %v", ok, err)
 			}
-			if ok, err := projectWithin(ctx, tx, "PROJ-SUB", "PROJ-ROOT"); err != nil || !ok {
+			if ok, err := within(tx, "PROJ-SUB", "PROJ-ROOT"); err != nil || !ok {
 				return fmt.Errorf("the sub project is within the root project: %v %v", ok, err)
 			}
-			if ok, err := projectWithin(ctx, tx, "PROJ-ROOT", "PROJ-SUB"); err != nil || ok {
+			if ok, err := within(tx, "PROJ-ROOT", "PROJ-SUB"); err != nil || ok {
 				return fmt.Errorf("the root project is not within the sub project: %v %v", ok, err)
 			}
 			return nil
@@ -268,15 +277,15 @@ func testProjectSubChangeRules(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	g := New(repo)
 	mk := func(key string, props map[string]any) domain.Node {
-		n, err := g.CreateNode(ctx, NewNode{Namespace: "organisation", Key: key, Type: "ProjectUnit", Properties: props})
+		n, err := g.CreateNode(ctx, NewNode{Namespace: "organisation", Key: key, Type: NodeTypeProjectUnit, Properties: props})
 		if err != nil {
 			t.Fatal(err)
 		}
 		return n
 	}
-	root := mk("PROJ-ROOT", map[string]any{"name": "Root"})
 	c0 := testChange(t, g, "organisation")
-	if _, err := g.Link(ctx, c0, LinkProjectPartOf, root.Ref(), root.Ref(), nil); err != nil {
+	root, err := g.NodeByKey(ctx, "organisation", domain.DefaultProject)
+	if err != nil {
 		t.Fatal(err)
 	}
 	a := mk("PROJ-A", map[string]any{"name": "A"})
@@ -299,9 +308,16 @@ func testProjectSubChangeRules(t *testing.T, repo Repo) {
 	if _, err := g.CreateChange(ctx, NewChange{Title: "x", BaselineID: base.ID, ProjectID: "PROJ-NOPE"}); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("unknown project: %v", err)
 	}
-	// administrative: no project needed, and none is checked
-	if _, err := g.CreateChange(ctx, NewChange{Title: "x", BaselineID: base.ID, Administrative: true}); err != nil {
-		t.Fatalf("administrative without a project: %v", err)
+	// none named: the default project (ADR 0054)
+	if c, err := g.CreateChange(ctx, NewChange{Title: "x", BaselineID: base.ID, Administrative: true}); err != nil || c.ProjectID != domain.DefaultProject || c.OwnerOrg != domain.DefaultOrg {
+		t.Fatalf("a change naming no project acts in the default one, held by the root unit: %+v %v", c, err)
+	}
+	// a node of the organisation that is not a project is refused
+	if _, err := g.CreateChange(ctx, NewChange{Title: "x", BaselineID: base.ID, ProjectID: domain.DefaultOrg}); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("a unit as the project: %v", err)
+	}
+	if _, err := g.CreateChange(ctx, NewChange{Title: "x", BaselineID: base.ID, OwnerOrg: "PROJ-A"}); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("a project as the owner unit: %v", err)
 	}
 	parent, err := g.CreateChange(ctx, NewChange{Title: "p", BaselineID: base.ID, OwnBranch: true, ProjectID: "PROJ-A"})
 	if err != nil {

@@ -84,7 +84,7 @@ func (c *Client) AddNodes(ctx context.Context, id domain.ChangeID, nodes []domai
 
 // WriteNode implements engine.GraphPort.
 func (c *Client) WriteNode(ctx context.Context, id domain.ChangeID, node domain.ChangeImpactID, w graph.NodeWrite) (domain.ChangeImpact, error) {
-	req := &graphv1.WriteChangeImpactRequest{ChangeId: string(id), ChangeImpactId: string(node), Props: pbconv.Struct(w.Properties), State: w.State, Retire: w.Retire, Flow: w.Flow, Execution: w.Execution}
+	req := &graphv1.WriteChangeImpactRequest{ChangeId: string(id), ChangeImpactId: string(node), Props: pbconv.Struct(w.Properties), State: w.State, Retire: w.Retire, Flow: w.Flow, Execution: w.Execution, Owner: w.Owner}
 	for _, l := range w.AddLinks {
 		req.AddLinks = append(req.AddLinks, &graphv1.NodeLinkWrite{Type: l.Type, To: pbconv.RefToPB(l.To), Props: pbconv.Struct(l.Properties)})
 	}
@@ -141,7 +141,8 @@ func (c *Client) ListChanges(ctx context.Context, f graph.ChangesFilter) ([]doma
 // Commit runs a change of node edits in the graph service (see graph.Commit).
 func (c *Client) Commit(ctx context.Context, in graph.Commit) (graph.CommitResult, error) {
 	r, err := c.rpc.CommitEdits(ctx, connect.NewRequest(&graphv1.CommitEditsRequest{Namespace: in.Namespace, Title: in.Title, Intent: in.Intent,
-		Methodology: in.Methodology, Data: pbconv.Struct(in.Data), BaselineId: string(in.Baseline), BaselineName: in.BaselineName, Edits: pbconv.EditsToPB(in.Edits)}))
+		Methodology: in.Methodology, Data: pbconv.Struct(in.Data), BaselineId: string(in.Baseline), BaselineName: in.BaselineName, Edits: pbconv.EditsToPB(in.Edits),
+		OwnerOrg: in.OwnerOrg, ProjectId: in.ProjectID}))
 	if err != nil {
 		return graph.CommitResult{}, rpcerr.FromConnect(err)
 	}

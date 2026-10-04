@@ -1,14 +1,18 @@
 package access
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/zimwip/goap/pkg/domain"
+)
 
 // Types and links of the project graph objects (ADR 0039): a project mirrors OrgUnit's hierarchy, and
 // Assignment is the meeting point of organisation and project (same shape as mcp.Adapter, the meeting point
 // of organisation, MCP and connector): the roles an org unit or user locally holds on a project.
 const (
-	NodeTypeProjectUnit = "organisation@ProjectUnit"
+	NodeTypeProjectUnit = domain.TypeProjectUnit
 	NodeTypeAssignment  = "organisation@Assignment"
-	LinkProjectPartOf   = "organisation@project_part_of"
+	LinkProjectPartOf   = domain.LinkProjectPartOf
 	LinkAssignsOrg      = "organisation@assigns_org"
 	LinkAssignsProject  = "organisation@assigns_project"
 )

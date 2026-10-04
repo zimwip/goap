@@ -295,6 +295,9 @@ type NodeWrite struct {
 	Flow, Execution string
 	// Retire deletes the node: the new version is a tombstone with no outgoing link.
 	Retire bool
+	// Owner transfers the node to another organisational unit (its key, ADR 0054): the new version is owned by it.
+	// Empty: the owner of the version it follows, or the unit holding the change for a created node.
+	Owner string
 }
 
 // LinkWrite is an outgoing link added by a NodeWrite.
@@ -437,10 +440,17 @@ func (g *Graph) WriteNode(ctx context.Context, id domain.ChangeID, node domain.C
 		if lc == nil && w.State != "" {
 			return invalidf("node type %s has no lifecycle: state %q", typ, w.State)
 		}
-		if w.Retire && (base == nil || len(w.Properties) > 0 || len(w.AddLinks) > 0 || len(w.RemoveLinks) > 0 || w.State != "") {
+		if w.Retire && (base == nil || len(w.Properties) > 0 || len(w.AddLinks) > 0 || len(w.RemoveLinks) > 0 || w.State != "" || w.Owner != "") {
 			return invalidf("a node is retired on its own, from an existing version")
 		}
-		edits := len(w.Properties) > 0 || len(w.AddLinks) > 0 || len(w.RemoveLinks) > 0
+		if w.Owner != "" {
+			unit, err := g.structureNode(ctx, tx, domain.StructureOrganisation, w.Owner)
+			if err != nil {
+				return err
+			}
+			n.Owner = unit.ID
+		}
+		edits := len(w.Properties) > 0 || len(w.AddLinks) > 0 || len(w.RemoveLinks) > 0 || w.Owner != ""
 		// a node the change creates is its working copy: the editable rule is about the versions it starts from
 		if edits && base != nil && cn.Intent != domain.IntentCreated && lc != nil && base.State != "" && !lc.Editable(base.State) {
 			return invalidf("cannot edit %s (%s): it is %s, not editable; reopen it first with a State write", base.Key, typ, base.State)

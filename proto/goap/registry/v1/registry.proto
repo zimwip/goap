@@ -74,6 +74,20 @@ message NodeType {
   repeated SearchProperty search = 9;
   // editor the user interface opens the nodes of the type with (inherited through extends; empty: the default node editor)
   string editor = 10;
+  // tags the type as a structure of the graph (ADR 0054): the organisation or the project hierarchy
+  StructureTag structure = 11;
+}
+
+// StructureTag tags a node type as the one building a hierarchy every node version is placed in (ADR 0054).
+message StructureTag {
+  // "organisation" or "project"
+  string kind = 1;
+  // link type (of the same domain) from a child to its parent
+  string parent = 2;
+  // key of the root node the bootstrap creates
+  string root = 3;
+  // the root links to itself through parent (a project root)
+  bool self_parent = 4;
 }
 
 // SearchProperty declares how the node index uses a property: text (full text

@@ -26,7 +26,7 @@ const (
 	NodeTypeUser   = "organisation@User"
 	NodeTypePolicy = "organisation@Policy"
 	LinkMemberOf   = "organisation@member_of"
-	LinkPartOf     = "organisation@part_of"
+	LinkPartOf     = domain.LinkPartOf
 
 	// ResourcePolicy is the ABAC resource that guards changes to User and Policy nodes.
 	ResourcePolicy = "policy"

@@ -25,8 +25,9 @@ type memState struct {
 	baselines map[domain.BaselineID]domain.Baseline
 	changes   map[domain.ChangeID]domain.Change
 	branches  map[string]domain.Branch
-	// joins are the branches a version is part of besides the one it was written on (ADR 0032)
-	joins map[joinKey]bool
+	// joins are the branches a version is part of besides the one it was written on (ADR 0032), with the change
+	// whose merge made it join
+	joins map[joinKey]domain.ChangeID
 	nodes map[domain.ChangeID][]domain.ChangeImpact
 	// log holds the entries of every change's log, in their order (ADR 0030)
 	log []domain.LogEntry
@@ -40,7 +41,7 @@ func NewMemory() *Memory {
 		baselines: map[domain.BaselineID]domain.Baseline{},
 		changes:   map[domain.ChangeID]domain.Change{},
 		branches:  map[string]domain.Branch{},
-		joins:     map[joinKey]bool{},
+		joins:     map[joinKey]domain.ChangeID{},
 		nodes:     map[domain.ChangeID][]domain.ChangeImpact{},
 	}}
 }
@@ -91,7 +92,7 @@ type joinKey struct {
 // on reports whether a version is part of a branch: written there, or joined.
 func (t *memTx) on(n domain.Node, branch string) bool {
 	branch = domain.BranchOf(branch)
-	return domain.BranchOf(n.Branch) == branch || t.st.joins[joinKey{n.Ref(), branch}]
+	return domain.BranchOf(n.Branch) == branch || t.st.joins[joinKey{n.Ref(), branch}] != ""
 }
 
 func (t *memTx) Node(_ context.Context, ref domain.NodeRef) (domain.Node, error) {
@@ -316,6 +317,9 @@ func (t *memTx) PutNode(_ context.Context, n domain.Node) error {
 			t.st.keys[nsKey(n.Namespace, n.Key)] = n.ID
 		}
 	}
+	if n.Version > 1 {
+		n.Project = vs[0].Project // the project is the node's, set by its first version
+	}
 	t.st.versions[n.ID] = append(vs, n)
 	return nil
 }
@@ -455,13 +459,15 @@ func (t *memTx) SetNodeOrigin(_ context.Context, ref domain.NodeRef, change doma
 	return nil
 }
 
-func (t *memTx) JoinBranch(_ context.Context, ref domain.NodeRef, branch string) error {
+func (t *memTx) JoinBranch(_ context.Context, ref domain.NodeRef, branch string, change domain.ChangeID) error {
 	vs := t.st.versions[ref.ID]
 	if ref.Version < 1 || int(ref.Version) > len(vs) {
 		return fmt.Errorf("node %s: %w", ref, ErrNotFound)
 	}
 	if branch = domain.BranchOf(branch); domain.BranchOf(vs[ref.Version-1].Branch) != branch {
-		t.st.joins[joinKey{ref, branch}] = true
+		if _, ok := t.st.joins[joinKey{ref, branch}]; !ok {
+			t.st.joins[joinKey{ref, branch}] = change
+		}
 	}
 	return nil
 }
@@ -527,8 +533,8 @@ func (t *memTx) DeleteChange(_ context.Context, id domain.ChangeID, namespace, b
 			t.st.versions[nid] = t.st.versions[nid][:i]
 		}
 	}
-	for k := range t.st.joins {
-		if removed(k.ref) {
+	for k, c := range t.st.joins {
+		if removed(k.ref) || c == id {
 			delete(t.st.joins, k)
 		}
 	}

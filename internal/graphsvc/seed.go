@@ -6,7 +6,6 @@ import (
 
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/graph"
-	"github.com/zimwip/goap/pkg/mcp"
 )
 
 // alm is the namespace of the delivery domain (domains/alm.yaml).
@@ -14,13 +13,30 @@ const alm = "alm"
 
 // SeedDemo loads a small ALM repository (namespace alm) once: needs, requirements and tests
 // (methodologies/examples/impact-analysis.yaml), and the functions, components, build artifacts, applications,
-// solution, data, interfaces and flows of methodologies/sdlc.yaml, with a small organisation owning them.
+// solution, data, interfaces and flows of methodologies/sdlc.yaml, with a small organisation owning them. The graph is
+// bootstrapped first (a seed is an ordinary change, ADR 0054).
 func SeedDemo(ctx context.Context, g *graph.Graph) (bool, error) {
+	if err := g.Bootstrap(ctx); err != nil {
+		return false, err
+	}
 	if _, err := g.NodeByKey(ctx, alm, "NEED-1"); err == nil {
 		return false, nil
 	} else if !errors.Is(err, graph.ErrNotFound) {
 		return false, err
 	}
+	// the organisation first, under the root unit of the bootstrap (ADR 0054): the nodes below are owned by its units
+	for _, u := range [][4]string{
+		{"ORG-ACME", "Acme", "company", ""}, {"ORG-DIGITAL", "Direction Digitale", "direction", "ORG-ACME"},
+		{"ORG-CHECKOUT", "Team Checkout", "team", "ORG-DIGITAL"}, {"ORG-CRM", "Team CRM", "team", "ORG-DIGITAL"},
+		{"ORG-FINANCE", "Team Finance", "team", "ORG-DIGITAL"}, {"ORG-SECURITY", "Team Security", "team", "ORG-DIGITAL"},
+	} {
+		if err := SeedUnit(ctx, g, u[0], u[1], u[2], u[3]); err != nil {
+			return false, err
+		}
+	}
+	// ownership: a node of one namespace is owned by a unit of the organisation (the owner of its versions)
+	owners := map[string]string{"CMP-1": "ORG-CHECKOUT", "CMP-2": "ORG-CRM", "CMP-3": "ORG-FINANCE", "CMP-4": "ORG-SECURITY",
+		"APP-1": "ORG-CHECKOUT", "APP-2": "ORG-CRM", "APP-3": "ORG-FINANCE", "SOL-1": "ORG-DIGITAL"}
 	nodes := []graph.NewNode{
 		{Namespace: alm, Key: "NEED-1", Type: alm + "@Need", Properties: map[string]any{"title": "Pay for orders online"}},
 		{Namespace: alm, Key: "NEED-2", Type: alm + "@Need", Properties: map[string]any{"title": "Be refunded quickly"}},
@@ -64,20 +80,9 @@ func SeedDemo(ctx context.Context, g *graph.Graph) (bool, error) {
 		{Namespace: alm, Key: "REL-APP-1-5.2", Type: alm + "@Release", Properties: map[string]any{"title": "Checkout 5.2", "version": "5.2", "status": "deployed"}},
 		{Namespace: alm, Key: "DEP-REL-APP-1-5.2-ENV-PRD", Type: alm + "@Deployment", Properties: map[string]any{"status": "succeeded", "stage": "prod"}},
 	}
-	// organisation namespace: the units that own the nodes above
-	orgUnit := func(key, name, kind string) graph.NewNode {
-		return graph.NewNode{Namespace: mcp.NamespaceOrganisation, Key: key, Type: mcp.NodeTypeOrgUnit, Properties: map[string]any{"name": name, "kind": kind}}
-	}
-	nodes = append(nodes,
-		orgUnit("ORG-ACME", "Acme", "company"),
-		orgUnit("ORG-DIGITAL", "Direction Digitale", "direction"),
-		orgUnit("ORG-CHECKOUT", "Team Checkout", "team"),
-		orgUnit("ORG-CRM", "Team CRM", "team"),
-		orgUnit("ORG-FINANCE", "Team Finance", "team"),
-		orgUnit("ORG-SECURITY", "Team Security", "team"),
-	)
 	refs := map[string]domain.NodeRef{}
 	for _, n := range nodes {
+		n.Owner = owners[n.Key]
 		created, err := g.CreateNode(ctx, n)
 		if err != nil {
 			return false, err
@@ -107,18 +112,9 @@ func SeedDemo(ctx context.Context, g *graph.Graph) (bool, error) {
 		{"ENV-DEV", "promotes_to", "ENV-TEST"}, {"ENV-TEST", "promotes_to", "ENV-STG"}, {"ENV-STG", "promotes_to", "ENV-PRD"},
 		{"REL-APP-1-5.2", "releases", "APP-1"}, {"REL-APP-1-5.2", "contains", "ART-1"}, {"REL-APP-1-5.2", "contains", "ART-4"},
 		{"DEP-REL-APP-1-5.2-ENV-PRD", "of_release", "REL-APP-1-5.2"}, {"DEP-REL-APP-1-5.2-ENV-PRD", "in_environment", "ENV-PRD"},
-		// organisation hierarchy (child part_of parent)
-		{"ORG-DIGITAL", "part_of", "ORG-ACME"},
-		{"ORG-CHECKOUT", "part_of", "ORG-DIGITAL"}, {"ORG-CRM", "part_of", "ORG-DIGITAL"},
-		{"ORG-FINANCE", "part_of", "ORG-DIGITAL"}, {"ORG-SECURITY", "part_of", "ORG-DIGITAL"},
-		// ownership: a node of one namespace references a unit of another
-		{"CMP-1", "owner", "ORG-CHECKOUT"}, {"CMP-2", "owner", "ORG-CRM"}, {"CMP-3", "owner", "ORG-FINANCE"}, {"CMP-4", "owner", "ORG-SECURITY"},
-		{"APP-1", "owner", "ORG-CHECKOUT"}, {"APP-2", "owner", "ORG-CRM"}, {"APP-3", "owner", "ORG-FINANCE"},
-		{"SOL-1", "owner", "ORG-DIGITAL"},
 	}
-	// the links are added attributed to one change of their own (ADR 0049), the same no-new-version way
-	// LinkOrphanUnits does: a seed link crosses namespaces (alm ↔ organisation ownership) and does not version
-	// either endpoint, so it is not a Commit's NodeEdit.Links either.
+	// the links are added attributed to one change of their own (ADR 0049) without versioning either endpoint, so
+	// they are not a Commit's NodeEdit.Links either.
 	head, err := g.BranchHead(ctx, alm, domain.MainBranch)
 	if err != nil {
 		return false, err
@@ -129,11 +125,7 @@ func SeedDemo(ctx context.Context, g *graph.Graph) (bool, error) {
 	}
 	abandoned := domain.ChangeAbandoned
 	for _, l := range links {
-		typ := alm + "@" + l[1]
-		if l[1] == "part_of" || l[1] == "owner" {
-			typ = mcp.NamespaceOrganisation + "@" + l[1]
-		}
-		if _, err := g.Link(ctx, c.ID, typ, refs[l[0]], refs[l[2]], nil); err != nil {
+		if _, err := g.Link(ctx, c.ID, alm+"@"+l[1], refs[l[0]], refs[l[2]], nil); err != nil {
 			if _, aerr := g.UpdateChange(ctx, c.ID, graph.ChangePatch{Status: &abandoned}); aerr != nil {
 				err = errors.Join(err, aerr)
 			}
@@ -143,9 +135,6 @@ func SeedDemo(ctx context.Context, g *graph.Graph) (bool, error) {
 	if _, err := g.UpdateChange(ctx, c.ID, graph.ChangePatch{Status: &abandoned}); err != nil {
 		return false, err
 	}
-	if _, err := g.CreateBaselineFromLatest(ctx, alm, "Initial baseline"); err != nil {
-		return false, err
-	}
-	_, err = g.CreateBaselineFromLatest(ctx, mcp.NamespaceOrganisation, "Initial baseline")
+	_, err = g.CreateBaselineFromLatest(ctx, alm, "Initial baseline")
 	return err == nil, err
 }
