@@ -1930,6 +1930,14 @@ export const graph = {
   /** The log of a change (ADR 0030), filtered on its columns; counts: entries per type without the types filter. */
   listChangeLog: (req: ChangeLogQuery, signal?: AbortSignal) =>
     rpc<ChangeLogQuery, { entries?: LogEntry[]; counts?: Record<string, number> }>(GRAPH, 'ListChangeLog', req, signal),
+  /** The whole log of a change as W3C PROV-O provenance, a JSON-LD document (ADR 0057). */
+  exportChangeProvenance: (changeId: string, signal?: AbortSignal) =>
+    rpc<{ changeId: string }, { document?: string; filename?: string; mediaType?: string }>(
+      GRAPH,
+      'ExportChangeProvenance',
+      { changeId },
+      signal,
+    ),
   /** The namespaces holding at least one node. */
   listNamespaces: (signal?: AbortSignal) => rpc<Empty, { namespaces?: string[] }>(GRAPH, 'ListNamespaces', {}, signal),
   listChanges: (signal?: AbortSignal) =>

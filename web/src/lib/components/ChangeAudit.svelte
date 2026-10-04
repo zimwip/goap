@@ -3,8 +3,8 @@
   // Audit of a change: its log (ADR 0030: facts, journal records with the scheduling, impact events, in one order),
   // drawn as a flow of events: flow branches fork from the main flow, run side by side (alternatives to compare), and
   // are merged back or dropped. The sources, the flow and the action run are filtered by the server on the columns of
-  // the log; the text on the entries shown. Each entry expands to its full record; the trail exports as CSV, and the
-  // entries shown as JSON.
+  // the log; the text on the entries shown. Each entry expands to its full record; the trail exports as CSV, the
+  // entries shown as JSON, and the whole log as W3C PROV-O provenance (JSON-LD, ADR 0057).
   import {
     graph,
     decodeLogEntry,
@@ -232,6 +232,22 @@
       JSON.stringify({ change: change.id, query, entries: log.map((l) => ({ ...l, payload: JSON.parse(l.payload ?? '{}') })) }, null, 2),
     );
 
+  // the whole log, whatever the filters, as PROV-O provenance built by the server
+  let exportingProv = $state(false);
+  async function exportPROV() {
+    const id = change.id;
+    if (!id) return;
+    exportingProv = true;
+    try {
+      const res = await graph.exportChangeProvenance(id);
+      download(res.filename || `change-${id}.prov.jsonld`, res.mediaType || 'application/ld+json', res.document ?? '');
+    } catch (e) {
+      error = errorMessage(e);
+    } finally {
+      exportingProv = false;
+    }
+  }
+
   const json = (x: unknown) => JSON.stringify(x, null, 2);
 </script>
 
@@ -246,6 +262,8 @@
     <span class="grow"></span>
     <button type="button" class="small" onclick={exportCSV} disabled={!shown.length} title="The entries shown, as CSV">Export CSV</button>
     <button type="button" class="small" onclick={exportJSON} title="The log entries shown (sources, flow, action run), with their payload">Export JSON</button>
+    <button type="button" class="small" onclick={exportPROV} disabled={exportingProv}
+      title="The whole log of the change as W3C PROV-O provenance (JSON-LD): activities, entities, agents">Export PROV-O</button>
   </div>
 
   <div class="filters">

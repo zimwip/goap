@@ -3,6 +3,7 @@ package graphsvc
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -20,6 +21,7 @@ import (
 	"github.com/zimwip/goap/pkg/engine"
 	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/mcp"
+	"github.com/zimwip/goap/pkg/prov"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
@@ -208,6 +210,29 @@ func (h *Handler) ListChangeLog(ctx context.Context, r *connect.Request[graphv1.
 			Execution: e.Execution, Subject: e.Subject, By: e.By, At: pbconv.Time(e.At), Payload: string(e.Payload)})
 	}
 	return connect.NewResponse(out), nil
+}
+
+// ExportChangeProvenance is the whole log of a change as PROV-O provenance (ADR 0057).
+func (h *Handler) ExportChangeProvenance(ctx context.Context, r *connect.Request[graphv1.ExportChangeProvenanceRequest]) (*connect.Response[graphv1.ExportChangeProvenanceResponse], error) {
+	id := domain.ChangeID(r.Msg.ChangeId)
+	c, err := h.Graph.Change(ctx, id)
+	if err != nil {
+		return nil, rpcerr.ToConnect(err)
+	}
+	entries, _, err := h.Graph.ChangeLog(ctx, domain.LogFilter{Change: id})
+	if err != nil {
+		return nil, rpcerr.ToConnect(err)
+	}
+	doc, err := prov.Export(c, entries)
+	if err != nil {
+		return nil, rpcerr.ToConnect(err)
+	}
+	raw, err := json.MarshalIndent(doc, "", "  ")
+	if err != nil {
+		return nil, rpcerr.ToConnect(err)
+	}
+	return connect.NewResponse(&graphv1.ExportChangeProvenanceResponse{Document: string(raw),
+		Filename: "change-" + string(c.ID) + ".prov.jsonld", MediaType: prov.MediaType}), nil
 }
 
 func (h *Handler) ListChangeEvents(ctx context.Context, r *connect.Request[graphv1.ListChangeEventsRequest]) (*connect.Response[graphv1.ListChangeEventsResponse], error) {

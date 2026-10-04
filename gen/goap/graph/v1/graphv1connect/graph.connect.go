@@ -77,6 +77,9 @@ const (
 	// GraphServiceListChangeLogProcedure is the fully-qualified name of the GraphService's
 	// ListChangeLog RPC.
 	GraphServiceListChangeLogProcedure = "/goap.graph.v1.GraphService/ListChangeLog"
+	// GraphServiceExportChangeProvenanceProcedure is the fully-qualified name of the GraphService's
+	// ExportChangeProvenance RPC.
+	GraphServiceExportChangeProvenanceProcedure = "/goap.graph.v1.GraphService/ExportChangeProvenance"
 	// GraphServiceCreateChangeProcedure is the fully-qualified name of the GraphService's CreateChange
 	// RPC.
 	GraphServiceCreateChangeProcedure = "/goap.graph.v1.GraphService/CreateChange"
@@ -246,6 +249,8 @@ type GraphServiceClient interface {
 	ListChangeEvents(context.Context, *connect.Request[v1.ListChangeEventsRequest]) (*connect.Response[v1.ListChangeEventsResponse], error)
 	// The log of a change (ADR 0030): its facts, journal records and impact events in one order, filtered on columns.
 	ListChangeLog(context.Context, *connect.Request[v1.ListChangeLogRequest]) (*connect.Response[v1.ListChangeLogResponse], error)
+	// The whole log of a change as W3C PROV-O provenance, in JSON-LD (ADR 0057).
+	ExportChangeProvenance(context.Context, *connect.Request[v1.ExportChangeProvenanceRequest]) (*connect.Response[v1.ExportChangeProvenanceResponse], error)
 	// Change axis
 	CreateChange(context.Context, *connect.Request[v1.CreateChangeRequest]) (*connect.Response[v1.CreateChangeResponse], error)
 	GetChange(context.Context, *connect.Request[v1.GetChangeRequest]) (*connect.Response[v1.GetChangeResponse], error)
@@ -432,6 +437,12 @@ func NewGraphServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			httpClient,
 			baseURL+GraphServiceListChangeLogProcedure,
 			connect.WithSchema(graphServiceMethods.ByName("ListChangeLog")),
+			connect.WithClientOptions(opts...),
+		),
+		exportChangeProvenance: connect.NewClient[v1.ExportChangeProvenanceRequest, v1.ExportChangeProvenanceResponse](
+			httpClient,
+			baseURL+GraphServiceExportChangeProvenanceProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("ExportChangeProvenance")),
 			connect.WithClientOptions(opts...),
 		),
 		createChange: connect.NewClient[v1.CreateChangeRequest, v1.CreateChangeResponse](
@@ -733,72 +744,73 @@ func NewGraphServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 
 // graphServiceClient implements GraphServiceClient.
 type graphServiceClient struct {
-	createNode           *connect.Client[v1.CreateNodeRequest, v1.CreateNodeResponse]
-	createObject         *connect.Client[v1.CreateObjectRequest, v1.CreateObjectResponse]
-	updateNode           *connect.Client[v1.UpdateNodeRequest, v1.UpdateNodeResponse]
-	getNode              *connect.Client[v1.GetNodeRequest, v1.GetNodeResponse]
-	createLink           *connect.Client[v1.CreateLinkRequest, v1.CreateLinkResponse]
-	listBaselines        *connect.Client[v1.ListBaselinesRequest, v1.ListBaselinesResponse]
-	tagChange            *connect.Client[v1.TagChangeRequest, v1.TagChangeResponse]
-	listTags             *connect.Client[v1.ListTagsRequest, v1.ListTagsResponse]
-	deleteTag            *connect.Client[v1.DeleteTagRequest, v1.DeleteTagResponse]
-	getBaselineGraph     *connect.Client[v1.GetBaselineGraphRequest, v1.GetBaselineGraphResponse]
-	listBaselineNodes    *connect.Client[v1.ListBaselineNodesRequest, v1.ListBaselineNodesResponse]
-	listBaselineLinks    *connect.Client[v1.ListBaselineLinksRequest, v1.ListBaselineLinksResponse]
-	getNodeNeighbourhood *connect.Client[v1.GetNodeNeighbourhoodRequest, v1.GetNodeNeighbourhoodResponse]
-	listNamespaces       *connect.Client[v1.ListNamespacesRequest, v1.ListNamespacesResponse]
-	getStructures        *connect.Client[v1.GetStructuresRequest, v1.GetStructuresResponse]
-	listChangeEvents     *connect.Client[v1.ListChangeEventsRequest, v1.ListChangeEventsResponse]
-	listChangeLog        *connect.Client[v1.ListChangeLogRequest, v1.ListChangeLogResponse]
-	createChange         *connect.Client[v1.CreateChangeRequest, v1.CreateChangeResponse]
-	getChange            *connect.Client[v1.GetChangeRequest, v1.GetChangeResponse]
-	listChanges          *connect.Client[v1.ListChangesRequest, v1.ListChangesResponse]
-	getChangeImpacts     *connect.Client[v1.GetChangeImpactsRequest, v1.GetChangeImpactsResponse]
-	listNodeChanges      *connect.Client[v1.ListNodeChangesRequest, v1.ListNodeChangesResponse]
-	updateChange         *connect.Client[v1.UpdateChangeRequest, v1.UpdateChangeResponse]
-	addItems             *connect.Client[v1.AddItemsRequest, v1.AddItemsResponse]
-	addChangeImpacts     *connect.Client[v1.AddChangeImpactsRequest, v1.AddChangeImpactsResponse]
-	writeChangeImpact    *connect.Client[v1.WriteChangeImpactRequest, v1.WriteChangeImpactResponse]
-	reviewChangeImpact   *connect.Client[v1.ReviewChangeImpactRequest, v1.ReviewChangeImpactResponse]
-	commitEdits          *connect.Client[v1.CommitEditsRequest, v1.CommitEditsResponse]
-	getBlackboard        *connect.Client[v1.GetBlackboardRequest, v1.GetBlackboardResponse]
-	applyChange          *connect.Client[v1.ApplyChangeRequest, v1.ApplyChangeResponse]
-	deleteChange         *connect.Client[v1.DeleteChangeRequest, v1.DeleteChangeResponse]
-	createBranch         *connect.Client[v1.CreateBranchRequest, v1.CreateBranchResponse]
-	listBranches         *connect.Client[v1.ListBranchesRequest, v1.ListBranchesResponse]
-	getBranch            *connect.Client[v1.GetBranchRequest, v1.GetBranchResponse]
-	setBranchStatus      *connect.Client[v1.SetBranchStatusRequest, v1.SetBranchStatusResponse]
-	setBranchDescription *connect.Client[v1.SetBranchDescriptionRequest, v1.SetBranchDescriptionResponse]
-	listNodeVersions     *connect.Client[v1.ListNodeVersionsRequest, v1.ListNodeVersionsResponse]
-	planMerge            *connect.Client[v1.PlanMergeRequest, v1.PlanMergeResponse]
-	mergeBranch          *connect.Client[v1.MergeBranchRequest, v1.MergeBranchResponse]
-	diffBaselines        *connect.Client[v1.DiffBaselinesRequest, v1.DiffBaselinesResponse]
-	mergeChange          *connect.Client[v1.MergeChangeRequest, v1.MergeChangeResponse]
-	getSharedNodes       *connect.Client[v1.GetSharedNodesRequest, v1.GetSharedNodesResponse]
-	splitChange          *connect.Client[v1.SplitChangeRequest, v1.SplitChangeResponse]
-	listSubChanges       *connect.Client[v1.ListSubChangesRequest, v1.ListSubChangesResponse]
-	openFlow             *connect.Client[v1.OpenFlowRequest, v1.OpenFlowResponse]
-	adoptFlow            *connect.Client[v1.AdoptFlowRequest, v1.AdoptFlowResponse]
-	discardFlow          *connect.Client[v1.DiscardFlowRequest, v1.DiscardFlowResponse]
-	listFlows            *connect.Client[v1.ListFlowsRequest, v1.ListFlowsResponse]
-	validateBoard        *connect.Client[v1.ValidateBoardRequest, v1.ValidateBoardResponse]
-	openOption           *connect.Client[v1.OpenOptionRequest, v1.OpenOptionResponse]
-	activateOption       *connect.Client[v1.ActivateOptionRequest, v1.ActivateOptionResponse]
-	evaluateOption       *connect.Client[v1.EvaluateOptionRequest, v1.EvaluateOptionResponse]
-	selectOption         *connect.Client[v1.SelectOptionRequest, v1.SelectOptionResponse]
-	rejectOption         *connect.Client[v1.RejectOptionRequest, v1.RejectOptionResponse]
-	listOptions          *connect.Client[v1.ListOptionsRequest, v1.ListOptionsResponse]
-	compareOptions       *connect.Client[v1.CompareOptionsRequest, v1.CompareOptionsResponse]
-	getChangeView        *connect.Client[v1.GetChangeViewRequest, v1.GetChangeViewResponse]
-	openDecision         *connect.Client[v1.OpenDecisionRequest, v1.OpenDecisionResponse]
-	ruleDecision         *connect.Client[v1.RuleDecisionRequest, v1.RuleDecisionResponse]
-	answerQuestion       *connect.Client[v1.AnswerQuestionRequest, v1.AnswerQuestionResponse]
-	ratifyDecision       *connect.Client[v1.RatifyDecisionRequest, v1.RatifyDecisionResponse]
-	listDecisionPoints   *connect.Client[v1.ListDecisionPointsRequest, v1.ListDecisionPointsResponse]
-	getChangeGraph       *connect.Client[v1.GetChangeGraphRequest, v1.GetChangeGraphResponse]
-	recordExecutions     *connect.Client[v1.RecordExecutionsRequest, v1.RecordExecutionsResponse]
-	listExecutions       *connect.Client[v1.ListExecutionsRequest, v1.ListExecutionsResponse]
-	republishIndex       *connect.Client[v1.RepublishIndexRequest, v1.RepublishIndexResponse]
+	createNode             *connect.Client[v1.CreateNodeRequest, v1.CreateNodeResponse]
+	createObject           *connect.Client[v1.CreateObjectRequest, v1.CreateObjectResponse]
+	updateNode             *connect.Client[v1.UpdateNodeRequest, v1.UpdateNodeResponse]
+	getNode                *connect.Client[v1.GetNodeRequest, v1.GetNodeResponse]
+	createLink             *connect.Client[v1.CreateLinkRequest, v1.CreateLinkResponse]
+	listBaselines          *connect.Client[v1.ListBaselinesRequest, v1.ListBaselinesResponse]
+	tagChange              *connect.Client[v1.TagChangeRequest, v1.TagChangeResponse]
+	listTags               *connect.Client[v1.ListTagsRequest, v1.ListTagsResponse]
+	deleteTag              *connect.Client[v1.DeleteTagRequest, v1.DeleteTagResponse]
+	getBaselineGraph       *connect.Client[v1.GetBaselineGraphRequest, v1.GetBaselineGraphResponse]
+	listBaselineNodes      *connect.Client[v1.ListBaselineNodesRequest, v1.ListBaselineNodesResponse]
+	listBaselineLinks      *connect.Client[v1.ListBaselineLinksRequest, v1.ListBaselineLinksResponse]
+	getNodeNeighbourhood   *connect.Client[v1.GetNodeNeighbourhoodRequest, v1.GetNodeNeighbourhoodResponse]
+	listNamespaces         *connect.Client[v1.ListNamespacesRequest, v1.ListNamespacesResponse]
+	getStructures          *connect.Client[v1.GetStructuresRequest, v1.GetStructuresResponse]
+	listChangeEvents       *connect.Client[v1.ListChangeEventsRequest, v1.ListChangeEventsResponse]
+	listChangeLog          *connect.Client[v1.ListChangeLogRequest, v1.ListChangeLogResponse]
+	exportChangeProvenance *connect.Client[v1.ExportChangeProvenanceRequest, v1.ExportChangeProvenanceResponse]
+	createChange           *connect.Client[v1.CreateChangeRequest, v1.CreateChangeResponse]
+	getChange              *connect.Client[v1.GetChangeRequest, v1.GetChangeResponse]
+	listChanges            *connect.Client[v1.ListChangesRequest, v1.ListChangesResponse]
+	getChangeImpacts       *connect.Client[v1.GetChangeImpactsRequest, v1.GetChangeImpactsResponse]
+	listNodeChanges        *connect.Client[v1.ListNodeChangesRequest, v1.ListNodeChangesResponse]
+	updateChange           *connect.Client[v1.UpdateChangeRequest, v1.UpdateChangeResponse]
+	addItems               *connect.Client[v1.AddItemsRequest, v1.AddItemsResponse]
+	addChangeImpacts       *connect.Client[v1.AddChangeImpactsRequest, v1.AddChangeImpactsResponse]
+	writeChangeImpact      *connect.Client[v1.WriteChangeImpactRequest, v1.WriteChangeImpactResponse]
+	reviewChangeImpact     *connect.Client[v1.ReviewChangeImpactRequest, v1.ReviewChangeImpactResponse]
+	commitEdits            *connect.Client[v1.CommitEditsRequest, v1.CommitEditsResponse]
+	getBlackboard          *connect.Client[v1.GetBlackboardRequest, v1.GetBlackboardResponse]
+	applyChange            *connect.Client[v1.ApplyChangeRequest, v1.ApplyChangeResponse]
+	deleteChange           *connect.Client[v1.DeleteChangeRequest, v1.DeleteChangeResponse]
+	createBranch           *connect.Client[v1.CreateBranchRequest, v1.CreateBranchResponse]
+	listBranches           *connect.Client[v1.ListBranchesRequest, v1.ListBranchesResponse]
+	getBranch              *connect.Client[v1.GetBranchRequest, v1.GetBranchResponse]
+	setBranchStatus        *connect.Client[v1.SetBranchStatusRequest, v1.SetBranchStatusResponse]
+	setBranchDescription   *connect.Client[v1.SetBranchDescriptionRequest, v1.SetBranchDescriptionResponse]
+	listNodeVersions       *connect.Client[v1.ListNodeVersionsRequest, v1.ListNodeVersionsResponse]
+	planMerge              *connect.Client[v1.PlanMergeRequest, v1.PlanMergeResponse]
+	mergeBranch            *connect.Client[v1.MergeBranchRequest, v1.MergeBranchResponse]
+	diffBaselines          *connect.Client[v1.DiffBaselinesRequest, v1.DiffBaselinesResponse]
+	mergeChange            *connect.Client[v1.MergeChangeRequest, v1.MergeChangeResponse]
+	getSharedNodes         *connect.Client[v1.GetSharedNodesRequest, v1.GetSharedNodesResponse]
+	splitChange            *connect.Client[v1.SplitChangeRequest, v1.SplitChangeResponse]
+	listSubChanges         *connect.Client[v1.ListSubChangesRequest, v1.ListSubChangesResponse]
+	openFlow               *connect.Client[v1.OpenFlowRequest, v1.OpenFlowResponse]
+	adoptFlow              *connect.Client[v1.AdoptFlowRequest, v1.AdoptFlowResponse]
+	discardFlow            *connect.Client[v1.DiscardFlowRequest, v1.DiscardFlowResponse]
+	listFlows              *connect.Client[v1.ListFlowsRequest, v1.ListFlowsResponse]
+	validateBoard          *connect.Client[v1.ValidateBoardRequest, v1.ValidateBoardResponse]
+	openOption             *connect.Client[v1.OpenOptionRequest, v1.OpenOptionResponse]
+	activateOption         *connect.Client[v1.ActivateOptionRequest, v1.ActivateOptionResponse]
+	evaluateOption         *connect.Client[v1.EvaluateOptionRequest, v1.EvaluateOptionResponse]
+	selectOption           *connect.Client[v1.SelectOptionRequest, v1.SelectOptionResponse]
+	rejectOption           *connect.Client[v1.RejectOptionRequest, v1.RejectOptionResponse]
+	listOptions            *connect.Client[v1.ListOptionsRequest, v1.ListOptionsResponse]
+	compareOptions         *connect.Client[v1.CompareOptionsRequest, v1.CompareOptionsResponse]
+	getChangeView          *connect.Client[v1.GetChangeViewRequest, v1.GetChangeViewResponse]
+	openDecision           *connect.Client[v1.OpenDecisionRequest, v1.OpenDecisionResponse]
+	ruleDecision           *connect.Client[v1.RuleDecisionRequest, v1.RuleDecisionResponse]
+	answerQuestion         *connect.Client[v1.AnswerQuestionRequest, v1.AnswerQuestionResponse]
+	ratifyDecision         *connect.Client[v1.RatifyDecisionRequest, v1.RatifyDecisionResponse]
+	listDecisionPoints     *connect.Client[v1.ListDecisionPointsRequest, v1.ListDecisionPointsResponse]
+	getChangeGraph         *connect.Client[v1.GetChangeGraphRequest, v1.GetChangeGraphResponse]
+	recordExecutions       *connect.Client[v1.RecordExecutionsRequest, v1.RecordExecutionsResponse]
+	listExecutions         *connect.Client[v1.ListExecutionsRequest, v1.ListExecutionsResponse]
+	republishIndex         *connect.Client[v1.RepublishIndexRequest, v1.RepublishIndexResponse]
 }
 
 // CreateNode calls goap.graph.v1.GraphService.CreateNode.
@@ -884,6 +896,11 @@ func (c *graphServiceClient) ListChangeEvents(ctx context.Context, req *connect.
 // ListChangeLog calls goap.graph.v1.GraphService.ListChangeLog.
 func (c *graphServiceClient) ListChangeLog(ctx context.Context, req *connect.Request[v1.ListChangeLogRequest]) (*connect.Response[v1.ListChangeLogResponse], error) {
 	return c.listChangeLog.CallUnary(ctx, req)
+}
+
+// ExportChangeProvenance calls goap.graph.v1.GraphService.ExportChangeProvenance.
+func (c *graphServiceClient) ExportChangeProvenance(ctx context.Context, req *connect.Request[v1.ExportChangeProvenanceRequest]) (*connect.Response[v1.ExportChangeProvenanceResponse], error) {
+	return c.exportChangeProvenance.CallUnary(ctx, req)
 }
 
 // CreateChange calls goap.graph.v1.GraphService.CreateChange.
@@ -1159,6 +1176,8 @@ type GraphServiceHandler interface {
 	ListChangeEvents(context.Context, *connect.Request[v1.ListChangeEventsRequest]) (*connect.Response[v1.ListChangeEventsResponse], error)
 	// The log of a change (ADR 0030): its facts, journal records and impact events in one order, filtered on columns.
 	ListChangeLog(context.Context, *connect.Request[v1.ListChangeLogRequest]) (*connect.Response[v1.ListChangeLogResponse], error)
+	// The whole log of a change as W3C PROV-O provenance, in JSON-LD (ADR 0057).
+	ExportChangeProvenance(context.Context, *connect.Request[v1.ExportChangeProvenanceRequest]) (*connect.Response[v1.ExportChangeProvenanceResponse], error)
 	// Change axis
 	CreateChange(context.Context, *connect.Request[v1.CreateChangeRequest]) (*connect.Response[v1.CreateChangeResponse], error)
 	GetChange(context.Context, *connect.Request[v1.GetChangeRequest]) (*connect.Response[v1.GetChangeResponse], error)
@@ -1341,6 +1360,12 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 		GraphServiceListChangeLogProcedure,
 		svc.ListChangeLog,
 		connect.WithSchema(graphServiceMethods.ByName("ListChangeLog")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceExportChangeProvenanceHandler := connect.NewUnaryHandler(
+		GraphServiceExportChangeProvenanceProcedure,
+		svc.ExportChangeProvenance,
+		connect.WithSchema(graphServiceMethods.ByName("ExportChangeProvenance")),
 		connect.WithHandlerOptions(opts...),
 	)
 	graphServiceCreateChangeHandler := connect.NewUnaryHandler(
@@ -1673,6 +1698,8 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 			graphServiceListChangeEventsHandler.ServeHTTP(w, r)
 		case GraphServiceListChangeLogProcedure:
 			graphServiceListChangeLogHandler.ServeHTTP(w, r)
+		case GraphServiceExportChangeProvenanceProcedure:
+			graphServiceExportChangeProvenanceHandler.ServeHTTP(w, r)
 		case GraphServiceCreateChangeProcedure:
 			graphServiceCreateChangeHandler.ServeHTTP(w, r)
 		case GraphServiceGetChangeProcedure:
@@ -1846,6 +1873,10 @@ func (UnimplementedGraphServiceHandler) ListChangeEvents(context.Context, *conne
 
 func (UnimplementedGraphServiceHandler) ListChangeLog(context.Context, *connect.Request[v1.ListChangeLogRequest]) (*connect.Response[v1.ListChangeLogResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.ListChangeLog is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) ExportChangeProvenance(context.Context, *connect.Request[v1.ExportChangeProvenanceRequest]) (*connect.Response[v1.ExportChangeProvenanceResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.ExportChangeProvenance is not implemented"))
 }
 
 func (UnimplementedGraphServiceHandler) CreateChange(context.Context, *connect.Request[v1.CreateChangeRequest]) (*connect.Response[v1.CreateChangeResponse], error) {
