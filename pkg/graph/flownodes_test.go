@@ -36,7 +36,7 @@ func newFlowWorld(t *testing.T, repo Repo) flowWorld {
 		}
 		return cn
 	}
-	added, err := g.AddNodes(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &pre, Rationale: "PSP v2 changes the API", Execution: "e1"}})
+	added, err := g.ProposeImpact(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &pre, Rationale: "PSP v2 changes the API", Execution: "e1"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,7 +44,7 @@ func newFlowWorld(t *testing.T, repo Repo) flowWorld {
 	if req, err = g.acceptOn(ctx, c.ID, "", "e1", req.ID, "bot", "first look"); err != nil {
 		t.Fatal(err)
 	}
-	added, err = g.AddNodes(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentCreated, Key: "TST-2", Type: "TestCase", Rationale: "cover it", Execution: "e2"}})
+	added, err = g.proposeOrCreate(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentCreated, Key: "TST-2", Type: "TestCase", Rationale: "cover it", Execution: "e2"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -87,11 +87,11 @@ func testFlowChangeImpactsView(t *testing.T, repo Repo) {
 	}
 
 	// the flow declares REQ-1 again, writes and reviews it on its own branch
-	added, err := g.AddNodes(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &pre, Rationale: "PSP v2, second look", Flow: w.flow, Execution: "e3"}})
+	added, err := g.ProposeImpact(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &pre, Rationale: "PSP v2, second look", Flow: w.flow, Execution: "e3"}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := g.AddNodes(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &pre, Rationale: "twice", Flow: w.flow, Execution: "e3"}}); !errors.Is(err, ErrConflict) {
+	if _, err := g.ProposeImpact(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &pre, Rationale: "twice", Flow: w.flow, Execution: "e3"}}); !errors.Is(err, ErrConflict) {
 		t.Fatalf("a node appears once per flow, got %v", err)
 	}
 	if _, err := g.edit(ctx, c.ID, added[0].ID, edit{Flow: w.flow, Execution: "e3", Properties: map[string]any{"title": "B"}}); err != nil {
@@ -129,7 +129,7 @@ func testFlowChangeImpactsAdopt(t *testing.T, repo Repo) {
 	w := newFlowWorld(t, repo)
 	g, c := w.g, w.change
 	pre := w.f.req.Ref()
-	added, err := g.AddNodes(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &pre, Rationale: "second look", Flow: w.flow, Execution: "e3"}})
+	added, err := g.ProposeImpact(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &pre, Rationale: "second look", Flow: w.flow, Execution: "e3"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -189,7 +189,7 @@ func testFlowChangeImpactsDiscard(t *testing.T, repo Repo) {
 	w := newFlowWorld(t, repo)
 	g, c := w.g, w.change
 	pre := w.f.req.Ref()
-	added, _ := g.AddNodes(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &pre, Rationale: "second look", Flow: w.flow, Execution: "e3"}})
+	added, _ := g.ProposeImpact(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &pre, Rationale: "second look", Flow: w.flow, Execution: "e3"}})
 	if _, err := g.edit(ctx, c.ID, added[0].ID, edit{Flow: w.flow, Execution: "e3", Properties: map[string]any{"title": "B"}}); err != nil {
 		t.Fatal(err)
 	}
@@ -232,7 +232,7 @@ func testFlowChangeImpactsConflict(t *testing.T, repo Repo) {
 	w := newFlowWorld(t, repo)
 	g, c := w.g, w.change
 	pre := w.f.req.Ref()
-	added, _ := g.AddNodes(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &pre, Rationale: "second look", Flow: w.flow, Execution: "e3"}})
+	added, _ := g.ProposeImpact(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &pre, Rationale: "second look", Flow: w.flow, Execution: "e3"}})
 	if _, err := g.edit(ctx, c.ID, added[0].ID, edit{Flow: w.flow, Execution: "e3", Properties: map[string]any{"title": "B"}}); err != nil {
 		t.Fatal(err)
 	}

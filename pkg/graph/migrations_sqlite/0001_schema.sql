@@ -97,6 +97,8 @@ CREATE TABLE node_version (
     execution     text        NOT NULL DEFAULT '',
     -- the working version of a change (ADR 0076): edited in place until its check-in
     checked_out   integer     NOT NULL DEFAULT 0,
+    -- the nodes this one derives from (ADR 0077): [{"id", "version"}], set on the first version of a merge or split successor
+    origins       text        NOT NULL DEFAULT '[]',
     PRIMARY KEY (node_id, version)
 );
 CREATE INDEX node_version_branch ON node_version (node_id, branch, version DESC);
@@ -174,7 +176,7 @@ CREATE TABLE change_log (
     seq        INTEGER PRIMARY KEY AUTOINCREMENT,
     id         text        NOT NULL UNIQUE,
     change_id  text        NOT NULL REFERENCES change(id),
-    -- <stream>.<kind>: fact.artifact, journal.schedule, impact.written...
+    -- <stream>.<kind>: fact.artifact, journal.schedule, impact.transitioned...
     type       text        NOT NULL,
     flow       text        NOT NULL DEFAULT '',
     process_id text        NOT NULL DEFAULT '',

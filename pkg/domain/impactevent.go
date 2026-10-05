@@ -13,11 +13,19 @@ import (
 type ImpactOp string
 
 const (
-	// ImpactDeclared adds a change impact (Impact: as declared).
-	ImpactDeclared ImpactOp = "declared"
-	// ImpactWritten records the version written for a change impact (Post), on Flow: the working version a checkout
-	// writes, the version of a transition, a merge or an adoption (ADR 0076).
-	ImpactWritten ImpactOp = "written"
+	// ImpactProposed adds a change impact to the change (State: as proposed). It proposes the modification of an
+	// existing node only: a new node is created, never proposed (ADR 0077).
+	ImpactProposed ImpactOp = "proposed"
+	// ImpactCreated is the creation of a node: one event adds the change impact (State, intent created) and records
+	// the first version of the node, written checked out (Post), on Flow. No proposed event precedes it and no
+	// checkout follows (ADR 0076, 0077).
+	ImpactCreated ImpactOp = "created"
+	// ImpactCheckedOut records the working version a checkout writes for the change impact of an existing node (Post),
+	// on Flow (ADR 0076).
+	ImpactCheckedOut ImpactOp = "checkedOut"
+	// ImpactTransitioned records a version written for a change impact (Post), on Flow, by a transition, a merge or an
+	// adoption (ADR 0076, 0077).
+	ImpactTransitioned ImpactOp = "transitioned"
 	// ImpactUpdated records an edit of the working version in place (Patch): properties, owner, links (ADR 0076).
 	ImpactUpdated ImpactOp = "updated"
 	// ImpactCheckedIn records the check-in of the working version (Post): it is frozen (ADR 0076).
@@ -25,9 +33,9 @@ const (
 	// ImpactCancelled records a checkout cancelled on Flow: the working version is dropped and Post is the version the
 	// impact goes back to (nil: none; a creation cancelled before its first check-in removes the change impact).
 	ImpactCancelled ImpactOp = "cancelled"
-	// ImpactRemoved takes a change impact out of the change, explicitly (its working version, if any, is dropped): the
+	// ImpactWithdrawn takes a change impact out of the change, explicitly (its working version, if any, is dropped): the
 	// impact leaves the list (ADR 0076 §5b).
-	ImpactRemoved ImpactOp = "removed"
+	ImpactWithdrawn ImpactOp = "withdrawn"
 	// ImpactReviewed records a review (Review).
 	ImpactReviewed ImpactOp = "reviewed"
 	// ImpactDiscarded rejects a candidate whose flow was discarded (Review).
@@ -41,6 +49,11 @@ const (
 	// ImpactRebased moves the pre version of a planned change impact to a newer head, to re-check (Pre).
 	ImpactRebased ImpactOp = "rebased"
 )
+
+// WritesPost reports whether the operation sets the post version of a change impact: a version written or checked out.
+func (o ImpactOp) WritesPost() bool {
+	return o == ImpactTransitioned || o == ImpactCheckedOut || o == ImpactCreated
+}
 
 // ImpactEvent is one operation on the change impacts of a change.
 type ImpactEvent struct {
@@ -56,14 +69,17 @@ type ImpactEvent struct {
 	By        string    `json:"by,omitempty"`
 	At        time.Time `json:"at"`
 
-	State  *ChangeImpact `json:"state,omitempty"` // declared
+	State  *ChangeImpact `json:"state,omitempty"` // proposed, created
 	Post   *NodeRef      `json:"post,omitempty"`  // written
 	Pre    *NodeRef      `json:"pre,omitempty"`   // rebased
 	Landed *NodeRef      `json:"landed,omitempty"`
 	// Baseline is, on landed, the baseline of the branch the version landed in (ADR 0032).
 	Baseline BaselineID `json:"baseline,omitempty"`
-	Review   *Review    `json:"review,omitempty"` // reviewed, discarded
-	Stale    []string   `json:"stale,omitempty"`  // adopted: the stale executions
+	// Branch is, on landed, the branch the version landed on: the change's own branch at commit, the branch it is
+	// integrated into after (the main flow's: BranchOf).
+	Branch string   `json:"branch,omitempty"`
+	Review *Review  `json:"review,omitempty"` // reviewed, discarded
+	Stale  []string `json:"stale,omitempty"`  // adopted: the stale executions
 	// Patch is what an updated event changed in place: {"props": {...}, "owner": unit, "addLink" / "updateLink" /
 	// "removeLink": {...}}.
 	Patch map[string]any `json:"patch,omitempty"`
@@ -78,9 +94,11 @@ func (e ImpactEvent) Validate() error {
 		return nil
 	}
 	switch e.Op {
-	case ImpactDeclared:
+	case ImpactProposed:
 		return need(e.State != nil && e.State.ID == e.Impact, "the change impact")
-	case ImpactWritten:
+	case ImpactCreated:
+		return need(e.State != nil && e.State.ID == e.Impact && e.Post != nil, "the change impact and its first version")
+	case ImpactTransitioned, ImpactCheckedOut:
 		return need(e.Impact != "" && e.Post != nil, "a change impact and a post version")
 	case ImpactReviewed, ImpactDiscarded:
 		return need(e.Impact != "" && e.Review != nil, "a change impact and a review")
@@ -94,7 +112,7 @@ func (e ImpactEvent) Validate() error {
 		return need(e.Impact != "" && e.Post != nil && len(e.Patch) > 0, "a change impact, its working version and a patch")
 	case ImpactCheckedIn:
 		return need(e.Impact != "" && e.Post != nil, "a change impact and its working version")
-	case ImpactCancelled, ImpactRemoved:
+	case ImpactCancelled, ImpactWithdrawn:
 		return need(e.Impact != "", "a change impact")
 	}
 	return fmt.Errorf("unknown event operation %q", e.Op)
@@ -113,8 +131,12 @@ func FoldImpacts(events []ImpactEvent) []ChangeImpact {
 func ApplyImpactEvent(impacts []ChangeImpact, e ImpactEvent) []ChangeImpact {
 	out := slices.Clone(impacts)
 	at := slices.IndexFunc(out, func(c ChangeImpact) bool { return c.ID == e.Impact })
-	if e.Op == ImpactDeclared {
+	if e.Op == ImpactProposed || e.Op == ImpactCreated {
 		cn := cloneImpact(*e.State)
+		if e.Op == ImpactCreated {
+			p := *e.Post
+			cn.Post = &p
+		}
 		if at >= 0 {
 			out[at] = cn
 		} else {
@@ -131,12 +153,12 @@ func ApplyImpactEvent(impacts []ChangeImpact, e ImpactEvent) []ChangeImpact {
 	if at < 0 {
 		return out
 	}
-	if e.Op == ImpactRemoved {
+	if e.Op == ImpactWithdrawn {
 		return slices.Delete(out, at, at+1)
 	}
 	cn := cloneImpact(out[at])
 	switch e.Op {
-	case ImpactWritten:
+	case ImpactTransitioned, ImpactCheckedOut:
 		// the stored post is the main flow's, or the one of the flow that declared the change impact
 		if e.Flow == "" || e.Flow == cn.Flow {
 			p := *e.Post
@@ -251,7 +273,7 @@ func ImpactsSeenBy(impacts []ChangeImpact, events []ImpactEvent, chain []string,
 func flowPost(events []ImpactEvent, id ChangeImpactID, chain []string, stale func(string) bool) *NodeRef {
 	last := map[string]*NodeRef{} // by flow
 	for _, e := range events {
-		if (e.Op != ImpactWritten && e.Op != ImpactCancelled) || e.Impact != id {
+		if (!e.Op.WritesPost() && e.Op != ImpactCancelled) || e.Impact != id {
 			continue
 		}
 		switch {

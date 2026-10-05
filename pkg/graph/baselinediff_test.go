@@ -16,7 +16,7 @@ func testDiffBaselines(t *testing.T, repo Repo) {
 	g := f.g
 	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{Title: "PSP v2", BaselineID: f.base.ID, OwnBranch: true}))
 	req := f.req.Ref()
-	added := must[[]domain.ChangeImpact](t)(g.AddNodes(ctx, c.ID, []domain.ChangeImpact{
+	added := must[[]domain.ChangeImpact](t)(g.proposeOrCreate(ctx, c.ID, []domain.ChangeImpact{
 		{Intent: domain.IntentModified, Pre: &req, Rationale: "new PSP"},
 		{Intent: domain.IntentModified, Pre: new(f.test.Ref()), Rationale: "obsolete"},
 		{Intent: domain.IntentCreated, Key: "REQ-9", Type: f.req.Type, Rationale: "new"},

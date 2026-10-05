@@ -19,8 +19,8 @@ import (
 //   - every change names the unit holding it and the project it acts in, nodes of the structures in force;
 //   - every baseline is the result of a change (ADR 0056); what precedes the first change of a namespace is the empty
 //     state, the empty baseline id, which nothing stores;
-//   - a version is immutable once written: only a working version (ADR 0076: checked out by CreateNode or
-//     CheckoutNode, until its check-in) or a version written in the same transaction gets its properties set, its
+//   - a version is immutable once written: only a working version (ADR 0076: checked out by ImpactNodeCreate or
+//     ImpactNodeCheckout, until its check-in) or a version written in the same transaction gets its properties set, its
 //     owner moved or its outgoing links added, edited or removed, and
 //     only a working version is checked in or dropped (a checkout cancelled; a creation cancelled before its first
 //     check-in removes the node, the one deletion of the graph).

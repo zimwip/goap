@@ -116,7 +116,7 @@ type landingDecision struct{ decided, ok bool }
 // askLandingGate asks LandingGate about the change before the transaction that applies it: the gate may read the graph
 // itself, which a transaction held by the apply would block (the stores are not reentrant). A pass that is rolled back
 // builds the blackboard it decides against. The lifecycle transitions are authorized when they are taken
-// (TransitionNode, ADR 0076), not here.
+// (ImpactNodeTransition, ADR 0076), not here.
 func (g *Graph) askLandingGate(ctx context.Context, id domain.ChangeID) (landing *landingDecision, err error) {
 	if g.LandingGate == nil {
 		return nil, nil
@@ -223,7 +223,7 @@ func (g *Graph) commitOnBranch(ctx context.Context, tx Tx, id domain.ChangeID, b
 	// (integrate, land)
 	for _, cp := range a.cposts {
 		ref := cp.post.Ref()
-		if err := g.emit(ctx, tx, domain.ImpactEvent{Change: c.ID, Impact: cp.cn.ID, Op: domain.ImpactLanded, Landed: &ref, Baseline: result.ID}); err != nil {
+		if err := g.emit(ctx, tx, domain.ImpactEvent{Change: c.ID, Impact: cp.cn.ID, Op: domain.ImpactLanded, Landed: &ref, Baseline: result.ID, Branch: domain.BranchOf(a.branch)}); err != nil {
 			return domain.Baseline{}, err
 		}
 	}
@@ -271,6 +271,6 @@ type applier struct {
 	// landing is the answer of LandingGate, asked by askLandingGate's rolled-back pass before this transaction (the
 	// hook may itself read the graph).
 	landing *landingDecision
-	// impact is the change impact of the node a transition moves (TransitionNode): its guard sees it (ADR 0076).
+	// impact is the change impact of the node a transition moves (ImpactNodeTransition): its guard sees it (ADR 0076).
 	impact *domain.ChangeImpact
 }

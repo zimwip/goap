@@ -53,7 +53,7 @@ func testApplyUpdateCreatesSuspectLinks(t *testing.T, repo Repo) {
 		t.Fatal(err)
 	}
 	reqRef := f.req.Ref()
-	cns, err := g.AddNodes(ctx, c.ID, []domain.ChangeImpact{
+	cns, err := g.proposeOrCreate(ctx, c.ID, []domain.ChangeImpact{
 		{Intent: domain.IntentModified, Pre: &reqRef, Rationale: "PSP v2"},
 		{Intent: domain.IntentCreated, Key: "TST-2", Type: "TestCase", Rationale: "cover REQ-1"},
 	})
@@ -133,7 +133,7 @@ func testApplyRemoveLinkBumpsSource(t *testing.T, repo Repo) {
 	v, _ := g.View(ctx, f.test.Ref())
 	c, _ := g.CreateChange(ctx, NewChange{Title: "drop test", BaselineID: f.base.ID})
 	pre := f.test.Ref()
-	ns, err := g.AddNodes(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &pre, Rationale: "the test no longer verifies"}})
+	ns, err := g.ProposeImpact(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &pre, Rationale: "the test no longer verifies"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -169,7 +169,7 @@ func testApplyRejectedAndConflicts(t *testing.T, repo Repo) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		ns, err := g.AddNodes(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &reqRef, Rationale: title}})
+		ns, err := g.ProposeImpact(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &reqRef, Rationale: title}})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -180,7 +180,7 @@ func testApplyRejectedAndConflicts(t *testing.T, repo Repo) {
 		if !accept {
 			status = domain.ReviewRejected
 		}
-		if _, err := g.ReviewNode(ctx, c.ID, ns[0].ID, status, "u", "decided"); err != nil {
+		if _, err := g.ImpactNodeReview(ctx, c.ID, ns[0].ID, status, "u", "decided"); err != nil {
 			t.Fatal(err)
 		}
 		if accept {
@@ -216,7 +216,7 @@ func testAddItemsValidation(t *testing.T, repo Repo) {
 	f := newFixture(t, repo)
 	c, _ := f.g.CreateChange(ctx, NewChange{Title: "c", BaselineID: f.base.ID})
 	bad := domain.NodeRef{ID: f.req.ID, Version: 9}
-	if _, err := f.g.AddNodes(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &bad, Rationale: "x"}}); !errors.Is(err, ErrConflict) {
+	if _, err := f.g.ProposeImpact(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &bad, Rationale: "x"}}); !errors.Is(err, ErrConflict) {
 		t.Fatalf("expected a conflict (the version is not in the baseline), got %v", err)
 	}
 	if _, err := f.g.AddItems(ctx, c.ID, []domain.ChangeItem{{Kind: "impact"}}); !errors.Is(err, ErrInvalid) {

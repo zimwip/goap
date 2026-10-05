@@ -29,7 +29,7 @@ func testOptions(t *testing.T, repo Repo) {
 	// with A active, a call that names no flow works on A
 	write := func(title string) domain.ChangeImpact {
 		t.Helper()
-		added := must[[]domain.ChangeImpact](t)(g.AddNodes(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &pre, Rationale: title}}))
+		added := must[[]domain.ChangeImpact](t)(g.ProposeImpact(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &pre, Rationale: title}}))
 		return must[domain.ChangeImpact](t)(g.edit(ctx, c.ID, added[0].ID, edit{Properties: map[string]any{"title": title}}))
 	}
 	ia := write("Use Stripe")

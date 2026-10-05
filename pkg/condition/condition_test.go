@@ -21,11 +21,11 @@ func blackboard(t *testing.T, withTest bool) domain.Blackboard {
 	b, _ := g.BranchHead(ctx, "", domain.MainBranch)
 	c, _ := g.CreateChange(ctx, graph.NewChange{Title: "c", BaselineID: b.ID})
 	ref := req.Ref()
-	if _, err := g.AddNodes(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &ref, Rationale: "impacted"}}); err != nil {
+	if _, err := g.ProposeImpact(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &ref, Rationale: "impacted"}}); err != nil {
 		t.Fatal(err)
 	}
 	if withTest {
-		if _, err := g.CreateNode(ctx, c.ID, graph.NodeCreate{Key: "TST-9", Type: "TestCase", Rationale: "cover REQ-1", Properties: map[string]any{"title": "t"},
+		if _, err := g.ImpactNodeCreate(ctx, c.ID, graph.NodeCreate{Key: "TST-9", Type: "TestCase", Rationale: "cover REQ-1", Properties: map[string]any{"title": "t"},
 			Links: []graph.LinkWrite{{Type: "verifies", To: ref}}}); err != nil {
 			t.Fatal(err)
 		}

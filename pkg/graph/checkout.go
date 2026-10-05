@@ -5,20 +5,21 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"slices"
 
 	"github.com/zimwip/goap/pkg/domain"
 )
 
 // This file is how a change edits nodes (ADR 0076). Every write names the change; a node is edited through a working
-// version, the version a CreateNode or a CheckoutNode writes on the branch of the change (of the flow), checked out:
+// version, the version a ImpactNodeCreate or a ImpactNodeCheckout writes on the branch of the change (of the flow), checked out:
 //
-//   - UpdateNode and the link operations edit the working version in place, writing no version;
-//   - an accepted review authorizes CheckinNode, which freezes it; changing it again is a new CheckoutNode;
-//   - a lifecycle transition is a version of its own, from a checked-in version (TransitionNode): checkout, the move
+//   - ImpactNodeUpdate and the link operations edit the working version in place, writing no version;
+//   - an accepted review authorizes ImpactNodeCheckin, which freezes it; changing it again is a new ImpactNodeCheckout;
+//   - a lifecycle transition is a version of its own, from a checked-in version (ImpactNodeTransition): checkout, the move
 //     and check-in in one operation, authorized and guarded when it is taken;
-//   - CancelCheckout drops the working version; a creation cancelled before its first check-in removes the node.
+//   - ImpactNodeCancel drops the working version; a creation cancelled before its first check-in removes the node.
 
-// NodeCreate is a node CreateNode creates.
+// NodeCreate is a node ImpactNodeCreate creates.
 type NodeCreate struct {
 	Key, Type  string
 	Properties map[string]any
@@ -34,18 +35,20 @@ type NodeCreate struct {
 	DerivedFrom     []domain.ItemID
 }
 
-// NodeCheckout names the node CheckoutNode or TransitionNode works on: a change impact, or a node (then the impact the
+// NodeCheckout names the node ImpactNodeCheckout or ImpactNodeTransition works on: a change impact, or a node (then the impact the
 // flow sees on it, declared when the change holds none).
 type NodeCheckout struct {
 	Impact domain.ChangeImpactID
 	Node   domain.NodeID
+	// Key names the node by its key, when neither Impact nor Node is given.
+	Key string
 	// Rationale says why, when the call declares the impact.
 	Rationale       string
 	Flow, Execution string
 	ProducedBy      string
 }
 
-// NodeTransition moves a node along its lifecycle (TransitionNode): To is the state it goes to.
+// NodeTransition moves a node along its lifecycle (ImpactNodeTransition): To is the state it goes to.
 type NodeTransition struct {
 	NodeCheckout
 	To string
@@ -53,6 +56,9 @@ type NodeTransition struct {
 
 // NodeUpdate edits a working version in place.
 type NodeUpdate struct {
+	// Node and Key name the node when ImpactNodeUpdate is given no change impact (see resolve).
+	Node domain.NodeID
+	Key  string
 	// Properties are merged over the ones of the working version.
 	Properties map[string]any
 	// Owner transfers the node to another organisational unit (its key, ADR 0054).
@@ -148,44 +154,106 @@ func (w *work) selectImpact(id domain.ChangeImpactID) error {
 	return nil
 }
 
-// resolve finds the change impact a checkout or a transition names, declaring it (intent modified, from the version of
-// the reference baseline) when the change holds none on the node.
-func (g *Graph) resolve(ctx context.Context, tx Tx, id domain.ChangeID, in NodeCheckout) (*work, error) {
-	w, err := g.workOn(ctx, tx, id, in.Flow)
+// target names what an operation works on: a change impact, or a node (by id, or by key and type), which the
+// resolver turns into a change impact (see resolve).
+type target struct {
+	Impact domain.ChangeImpactID
+	Node   domain.NodeID
+	Key    string
+	Type   string
+	// create: the operation creates the node, so the key must be new.
+	create          bool
+	Rationale       string
+	Flow, Execution string
+	ProducedBy      string
+	DerivedFrom     []domain.ItemID
+}
+
+func (in NodeCheckout) target() target {
+	return target{Impact: in.Impact, Node: in.Node, Key: in.Key, Rationale: in.Rationale, Flow: in.Flow, Execution: in.Execution, ProducedBy: in.ProducedBy}
+}
+
+// resolve is the one entry of every operation on a node of a change (ADR 0077, "Resolution"): it finds the change
+// impact the operation names, declaring it in the same transaction when the change holds none, and selects it.
+//
+//   - an impact id is taken as it is;
+//   - a node (id, or key) the flow already sees in the change reuses its impact, never doubling it;
+//   - else a node of the reference baseline gets an impact of intent modified, its pre the baseline version;
+//   - else, for a creation, the key is new: the impact is checked but not recorded, the created event of its first
+//     version carries it (ADR 0077); for any other operation the node is in neither the baseline nor the change:
+//     ErrNotFound.
+//
+// A creation whose key the baseline or the change already holds is an ErrConflict.
+func (g *Graph) resolve(ctx context.Context, tx Tx, id domain.ChangeID, t target) (*work, error) {
+	w, err := g.workOn(ctx, tx, id, t.Flow)
 	if err != nil {
 		return nil, err
 	}
-	impact := in.Impact
-	if impact == "" {
-		if in.Node == "" {
-			return nil, invalidf("name a change impact or a node")
-		}
-		for _, cn := range w.seen {
-			if nodeOf(cn) == in.Node {
-				impact = cn.ID
-			}
+	if t.Impact != "" {
+		return w, g.impact(ctx, tx, w, t.Impact)
+	}
+	if t.Node == "" && t.Key == "" {
+		return nil, invalidf("name a change impact or a node")
+	}
+	if t.create && (t.Key == "" || t.Type == "") {
+		return nil, invalidf("a node needs a key and a type")
+	}
+	var found *domain.ChangeImpact
+	for i, cn := range w.seen {
+		if (t.Node != "" && nodeOf(cn) == t.Node) || (t.Node == "" && cn.Key == t.Key && (t.Type == "" || cn.Type == t.Type)) {
+			found = &w.seen[i]
 		}
 	}
-	if impact == "" {
-		b, err := tx.Baseline(ctx, w.c.BaselineID)
-		if err != nil {
-			return nil, err
+	if found != nil {
+		if t.create {
+			return nil, fmt.Errorf("cannot create %s (%s): the change already holds it as change impact %s (%s): %w", t.Key, t.Type, found.ID, found.Intent, ErrConflict)
 		}
-		v, ok := b.Nodes[in.Node]
-		if !ok {
-			return nil, fmt.Errorf("node %s is not in the reference baseline of change %s: %w", in.Node, id, ErrNotFound)
-		}
-		decl, err := g.declareTx(ctx, tx, id, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &domain.NodeRef{ID: in.Node, Version: v},
-			Rationale: in.Rationale, Flow: in.Flow, Execution: in.Execution, ProducedBy: in.ProducedBy}})
-		if err != nil {
-			return nil, err
-		}
-		impact = decl[0].ID
-		if w, err = g.workOn(ctx, tx, id, in.Flow); err != nil {
+		return w, g.impact(ctx, tx, w, found.ID)
+	}
+	b, err := tx.Baseline(ctx, w.c.BaselineID)
+	if err != nil {
+		return nil, err
+	}
+	nid := t.Node
+	if nid == "" {
+		if got, err := tx.NodeIDByKey(ctx, w.ns, t.Key); err == nil {
+			nid = got
+		} else if !errors.Is(err, ErrNotFound) {
 			return nil, err
 		}
 	}
-	return w, g.impact(ctx, tx, w, impact)
+	v, inBase := b.Nodes[nid]
+	inBase = inBase && nid != ""
+	var decl domain.ChangeImpact
+	switch {
+	case t.create && inBase:
+		return nil, fmt.Errorf("cannot create %s (%s): the reference baseline of change %s already holds it: %w", t.Key, t.Type, id, ErrConflict)
+	case t.create:
+		decl = domain.ChangeImpact{Intent: domain.IntentCreated, Key: t.Key, Type: t.Type, DerivedFrom: t.DerivedFrom}
+	case inBase:
+		decl = domain.ChangeImpact{Intent: domain.IntentModified, Pre: &domain.NodeRef{ID: nid, Version: v}}
+	default:
+		name := string(t.Node)
+		if name == "" {
+			name = t.Key
+		}
+		return nil, fmt.Errorf("node %s is in neither the reference baseline nor the change %s: %w", name, id, ErrNotFound)
+	}
+	decl.Rationale, decl.Flow, decl.Execution, decl.ProducedBy = t.Rationale, t.Flow, t.Execution, t.ProducedBy
+	out, err := g.declareTx(ctx, tx, id, []domain.ChangeImpact{decl}, !t.create)
+	if err != nil {
+		return nil, err
+	}
+	if w, err = g.workOn(ctx, tx, id, t.Flow); err != nil {
+		return nil, err
+	}
+	if t.create {
+		// not recorded yet: the created event of the first version adds it (createTx)
+		w.cn, w.vcn = out[0], out[0]
+		w.seen = append(w.seen, out[0])
+		return w, nil
+	}
+	return w, g.impact(ctx, tx, w, out[0].ID)
 }
 
 // head is the version the flow sees for the impact (on the main flow, the latest of its node on the change branch);
@@ -273,12 +341,17 @@ func (g *Graph) newVersion(ctx context.Context, tx Tx, w *work, base *domain.Nod
 }
 
 // putVersion stores a new version of the impact's node with the outgoing links of the version it follows (retargeted
-// to the versions the flow sees for the nodes of the change), and records it as the impact's post.
-func (g *Graph) putVersion(ctx context.Context, tx Tx, w *work, n domain.Node, base *domain.Node) (domain.NodeRef, error) {
+// to the versions the flow sees for the nodes of the change), and records it as the impact's post (event op).
+func (g *Graph) putVersion(ctx context.Context, tx Tx, w *work, n domain.Node, base *domain.Node, op domain.ImpactOp, patch map[string]any) (domain.NodeRef, error) {
 	if err := tx.PutNode(ctx, n); err != nil {
 		return domain.NodeRef{}, err
 	}
 	ref := n.Ref()
+	ev := domain.ImpactEvent{Change: w.c.ID, Impact: w.cn.ID, Op: op, Flow: w.flow, Execution: n.Execution, Post: &ref, Patch: patch}
+	if op == domain.ImpactCreated {
+		st := w.cn // the creation adds its impact (ADR 0077)
+		ev.State = &st
+	}
 	if base != nil {
 		out, err := tx.OutLinks(ctx, base.Ref())
 		if err != nil {
@@ -295,7 +368,7 @@ func (g *Graph) putVersion(ctx context.Context, tx Tx, w *work, n domain.Node, b
 			return ref, err
 		}
 	}
-	return ref, g.emit(ctx, tx, domain.ImpactEvent{Change: w.c.ID, Impact: w.cn.ID, Op: domain.ImpactWritten, Flow: w.flow, Execution: n.Execution, Post: &ref})
+	return ref, g.emit(ctx, tx, ev)
 }
 
 // followVersion moves to the new version of a node the links the working versions of the change hold to the version it
@@ -356,103 +429,72 @@ func (g *Graph) putLink(ctx context.Context, tx Tx, w *work, from domain.Node, l
 	return link, tx.PutLink(ctx, link)
 }
 
-// CreateNode creates a node in a change: it declares the change impact (intent created) and writes the first version
-// of the node, checked out (ADR 0076).
-func (g *Graph) CreateNode(ctx context.Context, id domain.ChangeID, in NodeCreate) (cn domain.ChangeImpact, err error) {
+// ImpactNodeCreate creates a node in a change: one `created` event adds the change impact (intent created) and the
+// first version of the node, checked out (ADR 0076, 0077). There is no proposal of a new node.
+func (g *Graph) ImpactNodeCreate(ctx context.Context, id domain.ChangeID, in NodeCreate) (cn domain.ChangeImpact, err error) {
 	if in.Key == "" || in.Type == "" {
 		return cn, invalidf("a node needs a key and a type")
 	}
 	err = g.repo.InTx(ctx, func(tx Tx) error {
-		decl, err := g.declareTx(ctx, tx, id, []domain.ChangeImpact{{Intent: domain.IntentCreated, Key: in.Key, Type: in.Type, Rationale: in.Rationale,
-			Flow: in.Flow, Execution: in.Execution, ProducedBy: in.ProducedBy, DerivedFrom: in.DerivedFrom}})
-		if err != nil {
-			return err
-		}
-		w, err := g.workOn(ctx, tx, id, in.Flow)
-		if err != nil {
-			return err
-		}
-		if err := g.impact(ctx, tx, w, decl[0].ID); err != nil {
-			return err
-		}
-		n, err := g.newVersion(ctx, tx, w, nil, in.Execution)
-		if err != nil {
-			return err
-		}
-		n.CheckedOut, n.Properties = true, maps.Clone(in.Properties)
-		if err := w.ix.checkAttributes(n, n.Properties); err != nil {
-			return err
-		}
-		if in.Owner != "" {
-			unit, err := g.structureNode(ctx, tx, domain.StructureOrganisation, in.Owner)
-			if err != nil {
-				return err
-			}
-			n.Owner = unit.ID
-		}
-		ref, err := g.putVersion(ctx, tx, w, n, nil)
-		if err != nil {
-			return err
-		}
-		for _, l := range in.Links {
-			if _, err := g.putLink(ctx, tx, w, n, l); err != nil {
-				return err
-			}
-		}
-		cn = w.seenAs(&ref)
-		return nil
+		var err error
+		cn, err = g.createTx(ctx, tx, id, in, nil)
+		return err
 	})
 	return
 }
 
-// CheckoutNode puts a node in edit mode in a change: it writes the next version of the node, a copy of the version
-// the change sees (properties, state, owner and outgoing links), checked out; for a creation declared before
-// (AddNodes), the first version of the node. The node must be in an editable state of
+// createTx is ImpactNodeCreate inside a transaction. origins are the nodes the new node derives from (a merge or a
+// split, ADR 0077): recorded on its first version and in the patch of the created event.
+func (g *Graph) createTx(ctx context.Context, tx Tx, id domain.ChangeID, in NodeCreate, origins []domain.NodeRef) (domain.ChangeImpact, error) {
+	w, err := g.resolve(ctx, tx, id, target{Key: in.Key, Type: in.Type, create: true, Rationale: in.Rationale, Flow: in.Flow,
+		Execution: in.Execution, ProducedBy: in.ProducedBy, DerivedFrom: in.DerivedFrom})
+	if err != nil {
+		return domain.ChangeImpact{}, err
+	}
+	n, err := g.newVersion(ctx, tx, w, nil, in.Execution)
+	if err != nil {
+		return domain.ChangeImpact{}, err
+	}
+	n.CheckedOut, n.Properties, n.Origins = true, maps.Clone(in.Properties), slices.Clone(origins)
+	if err := w.ix.checkAttributes(n, n.Properties); err != nil {
+		return domain.ChangeImpact{}, err
+	}
+	if in.Owner != "" {
+		unit, err := g.structureNode(ctx, tx, domain.StructureOrganisation, in.Owner)
+		if err != nil {
+			return domain.ChangeImpact{}, err
+		}
+		n.Owner = unit.ID
+	}
+	var patch map[string]any
+	if len(origins) > 0 {
+		patch = map[string]any{"origins": originsPatch(ctx, tx, origins)}
+	}
+	ref, err := g.putVersion(ctx, tx, w, n, nil, domain.ImpactCreated, patch)
+	if err != nil {
+		return domain.ChangeImpact{}, err
+	}
+	for _, l := range in.Links {
+		if _, err := g.putLink(ctx, tx, w, n, l); err != nil {
+			return domain.ChangeImpact{}, err
+		}
+	}
+	return w.seenAs(&ref), nil
+}
+
+// ImpactNodeCheckout puts a node in edit mode in a change: it writes the next version of the node, a copy of the version
+// the change sees (properties, state, owner and outgoing links), checked out. The node must be in an editable state of
 // its lifecycle (a transition reopens it), and not checked out already on the flow. A checkout after a check-in sends
 // the review of the impact back to proposed: what is changed is reviewed again.
-func (g *Graph) CheckoutNode(ctx context.Context, id domain.ChangeID, in NodeCheckout) (cn domain.ChangeImpact, err error) {
+func (g *Graph) ImpactNodeCheckout(ctx context.Context, id domain.ChangeID, in NodeCheckout) (cn domain.ChangeImpact, err error) {
 	err = g.repo.InTx(ctx, func(tx Tx) error {
-		w, err := g.resolve(ctx, tx, id, in)
+		w, err := g.resolve(ctx, tx, id, in.target())
 		if err != nil {
 			return err
 		}
-		if w.vcn.Review == domain.ReviewRejected {
-			return fmt.Errorf("change impact %s is rejected: %w", w.cn.ID, ErrConflict)
-		}
-		base, err := w.base(ctx, tx)
+		ref, err := g.checkoutTx(ctx, tx, w, in.Execution)
 		if err != nil {
 			return err
-		}
-		switch {
-		case base == nil && w.cn.Intent != domain.IntentCreated:
-			return invalidf("change impact %s has no version to check out", w.cn.ID)
-		case base == nil:
-			// a creation declared before (AddNodes): its first version
-			if err := w.ix.checkNode(w.ns, w.cn.Type); err != nil {
-				return err
-			}
-		case base.CheckedOut:
-			return fmt.Errorf("change impact %s (%s) is already checked out: %w", w.cn.ID, w.cn.Key, ErrConflict)
-		default:
-			if lc := w.ix.lifecycleOf(base.Type); lc != nil && base.State != "" && !lc.Editable(base.State) {
-				return invalidf("cannot check out %s (%s): it is %s, not editable; reopen it first with a transition", base.Key, base.Type, base.State)
-			}
-		}
-		n, err := g.newVersion(ctx, tx, w, base, in.Execution)
-		if err != nil {
-			return err
-		}
-		n.CheckedOut = true
-		ref, err := g.putVersion(ctx, tx, w, n, base)
-		if err != nil {
-			return err
-		}
-		if w.vcn.Review != domain.ReviewProposed {
-			r := domain.Review{Status: domain.ReviewProposed, By: g.caller(ctx), At: g.now(), Comment: "checked out again", Flow: w.flow, Execution: in.Execution}
-			if err := g.emit(ctx, tx, domain.ImpactEvent{Change: id, Impact: w.cn.ID, Op: domain.ImpactReviewed, Flow: w.flow, Execution: in.Execution, By: r.By, Review: &r}); err != nil {
-				return err
-			}
-			w.vcn.Review = domain.ReviewProposed
 		}
 		cn = w.seenAs(&ref)
 		return nil
@@ -460,20 +502,57 @@ func (g *Graph) CheckoutNode(ctx context.Context, id domain.ChangeID, in NodeChe
 	return
 }
 
-// UpdateNode edits the working version of a change impact in place: its properties (merged and validated) and its
+// checkoutTx is the checkout of the impact w selects, inside a transaction (see ImpactNodeCheckout).
+func (g *Graph) checkoutTx(ctx context.Context, tx Tx, w *work, execution string) (domain.NodeRef, error) {
+	id := w.c.ID
+	if w.vcn.Review == domain.ReviewRejected {
+		return domain.NodeRef{}, fmt.Errorf("change impact %s is rejected: %w", w.cn.ID, ErrConflict)
+	}
+	base, err := w.base(ctx, tx)
+	if err != nil {
+		return domain.NodeRef{}, err
+	}
+	switch {
+	case base == nil:
+		return domain.NodeRef{}, invalidf("change impact %s has no version to check out", w.cn.ID)
+	case base.CheckedOut:
+		return domain.NodeRef{}, fmt.Errorf("change impact %s (%s) is already checked out: %w", w.cn.ID, w.cn.Key, ErrConflict)
+	default:
+		if lc := w.ix.lifecycleOf(base.Type); lc != nil && base.State != "" && !lc.Editable(base.State) {
+			return domain.NodeRef{}, invalidf("cannot check out %s (%s): it is %s, not editable; reopen it first with a transition", base.Key, base.Type, base.State)
+		}
+	}
+	n, err := g.newVersion(ctx, tx, w, base, execution)
+	if err != nil {
+		return domain.NodeRef{}, err
+	}
+	n.CheckedOut = true
+	ref, err := g.putVersion(ctx, tx, w, n, base, domain.ImpactCheckedOut, nil)
+	if err != nil {
+		return ref, err
+	}
+	if w.vcn.Review != domain.ReviewProposed {
+		r := domain.Review{Status: domain.ReviewProposed, By: g.caller(ctx), At: g.now(), Comment: "checked out again", Flow: w.flow, Execution: execution}
+		if err := g.emit(ctx, tx, domain.ImpactEvent{Change: id, Impact: w.cn.ID, Op: domain.ImpactReviewed, Flow: w.flow, Execution: execution, By: r.By, Review: &r}); err != nil {
+			return ref, err
+		}
+		w.vcn.Review = domain.ReviewProposed
+	}
+	return ref, nil
+}
+
+// ImpactNodeUpdate edits the working version of a change impact in place: its properties (merged and validated) and its
 // owner. No version is written; the edit is an updated event of the impact log.
-func (g *Graph) UpdateNode(ctx context.Context, id domain.ChangeID, impact domain.ChangeImpactID, in NodeUpdate) (cn domain.ChangeImpact, err error) {
+func (g *Graph) ImpactNodeUpdate(ctx context.Context, id domain.ChangeID, impact domain.ChangeImpactID, in NodeUpdate) (cn domain.ChangeImpact, err error) {
 	if len(in.Properties) == 0 && in.Owner == "" {
 		return cn, invalidf("nothing to update")
 	}
 	err = g.repo.InTx(ctx, func(tx Tx) error {
-		w, err := g.workOn(ctx, tx, id, in.Flow)
+		w, err := g.resolve(ctx, tx, id, target{Impact: impact, Node: in.Node, Key: in.Key, Flow: in.Flow, Execution: in.Execution})
 		if err != nil {
 			return err
 		}
-		if err := g.impact(ctx, tx, w, impact); err != nil {
-			return err
-		}
+		impact = w.cn.ID
 		n, err := w.working(ctx, tx)
 		if err != nil {
 			return err
@@ -510,8 +589,8 @@ func (g *Graph) UpdateNode(ctx context.Context, id domain.ChangeID, impact domai
 	return
 }
 
-// CreateLink adds an outgoing link to the working version of a change impact, in place.
-func (g *Graph) CreateLink(ctx context.Context, id domain.ChangeID, impact domain.ChangeImpactID, l LinkWrite, flow, execution string) (link domain.Link, err error) {
+// ImpactLinkCreate adds an outgoing link to the working version of a change impact, in place.
+func (g *Graph) ImpactLinkCreate(ctx context.Context, id domain.ChangeID, impact domain.ChangeImpactID, l LinkWrite, flow, execution string) (link domain.Link, err error) {
 	err = g.repo.InTx(ctx, func(tx Tx) error {
 		w, err := g.workOn(ctx, tx, id, flow)
 		if err != nil {
@@ -532,6 +611,19 @@ func (g *Graph) CreateLink(ctx context.Context, id domain.ChangeID, impact domai
 			Patch: map[string]any{"addLink": map[string]any{"id": string(link.ID), "type": link.Type, "to": link.To.String()}}})
 	})
 	return
+}
+
+// emitAddLink and emitRemoveLink record the in-place edit of the links of a working version.
+func (g *Graph) emitAddLink(ctx context.Context, tx Tx, w *work, n domain.Node, link domain.Link, execution string) error {
+	ref := n.Ref()
+	return g.emit(ctx, tx, domain.ImpactEvent{Change: w.c.ID, Impact: w.cn.ID, Op: domain.ImpactUpdated, Flow: w.flow, Execution: execution, Post: &ref,
+		Patch: map[string]any{"addLink": map[string]any{"id": string(link.ID), "type": link.Type, "to": link.To.String()}}})
+}
+
+func (g *Graph) emitRemoveLink(ctx context.Context, tx Tx, w *work, n domain.Node, l domain.Link, execution string) error {
+	ref := n.Ref()
+	return g.emit(ctx, tx, domain.ImpactEvent{Change: w.c.ID, Impact: w.cn.ID, Op: domain.ImpactUpdated, Flow: w.flow, Execution: execution, Post: &ref,
+		Patch: map[string]any{"removeLink": map[string]any{"id": string(l.ID), "type": l.Type, "to": l.To.String()}}})
 }
 
 // linkWork finds the change impact whose working version is the source of a link.
@@ -563,8 +655,8 @@ func (g *Graph) linkWork(ctx context.Context, tx Tx, id domain.ChangeID, link do
 	return nil, l, domain.Node{}, fmt.Errorf("link %s is not a link of a working version of change %s: %w", link, id, ErrConflict)
 }
 
-// UpdateLink replaces the properties of an outgoing link of a working version, in place.
-func (g *Graph) UpdateLink(ctx context.Context, id domain.ChangeID, link domain.LinkID, props map[string]any, flow, execution string) (l domain.Link, err error) {
+// ImpactLinkUpdate replaces the properties of an outgoing link of a working version, in place.
+func (g *Graph) ImpactLinkUpdate(ctx context.Context, id domain.ChangeID, link domain.LinkID, props map[string]any, flow, execution string) (l domain.Link, err error) {
 	err = g.repo.InTx(ctx, func(tx Tx) error {
 		w, cur, n, err := g.linkWork(ctx, tx, id, link, flow)
 		if err != nil {
@@ -585,9 +677,9 @@ func (g *Graph) UpdateLink(ctx context.Context, id domain.ChangeID, link domain.
 	return
 }
 
-// DeleteLink removes an outgoing link of a working version, in place: removing a child is a modification of its
+// ImpactLinkDelete removes an outgoing link of a working version, in place: removing a child is a modification of its
 // parent (ADR 0024 §4).
-func (g *Graph) DeleteLink(ctx context.Context, id domain.ChangeID, link domain.LinkID, flow, execution string) error {
+func (g *Graph) ImpactLinkDelete(ctx context.Context, id domain.ChangeID, link domain.LinkID, flow, execution string) error {
 	return g.repo.InTx(ctx, func(tx Tx) error {
 		w, l, n, err := g.linkWork(ctx, tx, id, link, flow)
 		if err != nil {
@@ -602,9 +694,9 @@ func (g *Graph) DeleteLink(ctx context.Context, id domain.ChangeID, link domain.
 	})
 }
 
-// CheckinNode freezes the working version of a change impact: an accepted review on the flow authorizes it. It changes
+// ImpactNodeCheckin freezes the working version of a change impact: an accepted review on the flow authorizes it. It changes
 // no content, so an impact frozen by the lifecycle of the change (ADR 0058) is checked in all the same.
-func (g *Graph) CheckinNode(ctx context.Context, id domain.ChangeID, impact domain.ChangeImpactID, flow, execution string) (cn domain.ChangeImpact, err error) {
+func (g *Graph) ImpactNodeCheckin(ctx context.Context, id domain.ChangeID, impact domain.ChangeImpactID, flow, execution string) (cn domain.ChangeImpact, err error) {
 	err = g.repo.InTx(ctx, func(tx Tx) error {
 		w, err := g.workOn(ctx, tx, id, flow)
 		if err != nil {
@@ -623,6 +715,9 @@ func (g *Graph) CheckinNode(ctx context.Context, id domain.ChangeID, impact doma
 		if w.vcn.Review != domain.ReviewAccepted {
 			return fmt.Errorf("change impact %s (%s) is %s: an accepted review authorizes its check-in: %w", impact, w.cn.Key, w.vcn.Review, ErrConflict)
 		}
+		if err := g.checkOrigins(ctx, tx, id, w.seen, w.vcn); err != nil {
+			return err
+		}
 		if err := g.checkFrozen(ctx, tx, w.ix, *h); err != nil {
 			return err
 		}
@@ -636,10 +731,10 @@ func (g *Graph) CheckinNode(ctx context.Context, id domain.ChangeID, impact doma
 	return
 }
 
-// CancelCheckout drops the working version of a change impact: the impact goes back to the version it had before (on
+// ImpactNodeCancel drops the working version of a change impact: the impact goes back to the version it had before (on
 // the flow), or to none. A creation cancelled before its first check-in leaves no version: the node and the change
 // impact are removed. The working version must be the latest of its node (another change did not write one since).
-func (g *Graph) CancelCheckout(ctx context.Context, id domain.ChangeID, impact domain.ChangeImpactID, flow, execution string) (cn domain.ChangeImpact, err error) {
+func (g *Graph) ImpactNodeCancel(ctx context.Context, id domain.ChangeID, impact domain.ChangeImpactID, flow, execution string) (cn domain.ChangeImpact, err error) {
 	err = g.repo.InTx(ctx, func(tx Tx) error {
 		w, err := g.workOn(ctx, tx, id, flow)
 		if err != nil {
@@ -678,11 +773,11 @@ func (g *Graph) CancelCheckout(ctx context.Context, id domain.ChangeID, impact d
 	return
 }
 
-// TransitionNode moves a node along its lifecycle in a change (ADR 0076): from its checked-in version (refused while
+// ImpactNodeTransition moves a node along its lifecycle in a change (ADR 0076): from its checked-in version (refused while
 // it is checked out on the flow), it writes the next version, identical but for the state, checked in at once. The
 // transition is authorized before the transaction (Graph.Authorizer reads the access graph), then its requirements,
 // its guard (which sees the impact of the node: a transition may require a review) and its actions run.
-func (g *Graph) TransitionNode(ctx context.Context, id domain.ChangeID, in NodeTransition) (cn domain.ChangeImpact, err error) {
+func (g *Graph) ImpactNodeTransition(ctx context.Context, id domain.ChangeID, in NodeTransition) (cn domain.ChangeImpact, err error) {
 	if in.To == "" {
 		return cn, invalidf("a transition names the state it goes to")
 	}
@@ -719,7 +814,7 @@ func (g *Graph) TransitionNode(ctx context.Context, id domain.ChangeID, in NodeT
 			return err
 		}
 		n.State = t.To
-		ref, err := g.putVersion(ctx, tx, w, n, &b)
+		ref, err := g.putVersion(ctx, tx, w, n, &b, domain.ImpactTransitioned, nil)
 		if err != nil {
 			return err
 		}
@@ -744,7 +839,7 @@ func (g *Graph) TransitionNode(ctx context.Context, id domain.ChangeID, in NodeT
 // transitionOf resolves what a transition starts from: the change impact (declared when the change holds none on the
 // node), its checked-in version with the state it leaves, and the transition of the lifecycle.
 func (g *Graph) transitionOf(ctx context.Context, tx Tx, id domain.ChangeID, in NodeTransition) (*work, domain.Node, domain.Transition, error) {
-	w, err := g.resolve(ctx, tx, id, in.NodeCheckout)
+	w, err := g.resolve(ctx, tx, id, in.target())
 	if err != nil {
 		return nil, domain.Node{}, domain.Transition{}, err
 	}
@@ -806,12 +901,12 @@ func (g *Graph) viewTarget(ctx context.Context, tx Tx, w *work) (map[domain.Node
 	return target, nil
 }
 
-// RemoveChangeImpact takes a change impact out of the change, explicitly (ADR 0076 §5b): its working version, if any,
+// WithdrawImpact takes a change impact out of the change, explicitly (ADR 0076 §5b): its working version, if any,
 // is dropped (a creation never checked in leaves no node behind) and the impact leaves the list. A rejected impact
 // keeps its working version until then, to be reworked once reopened. Refused when the change checked a version of
 // the impact in (frozen: reject the impact to leave it out of the landing), for an impact declared on another flow,
 // one derived from items (their proposals decide it) and one another impact realizes a removal through (Via).
-func (g *Graph) RemoveChangeImpact(ctx context.Context, id domain.ChangeID, impact domain.ChangeImpactID, flow, execution string) error {
+func (g *Graph) WithdrawImpact(ctx context.Context, id domain.ChangeID, impact domain.ChangeImpactID, flow, execution string) error {
 	return g.repo.InTx(ctx, func(tx Tx) error {
 		w, err := g.workOn(ctx, tx, id, flow)
 		if err != nil {
@@ -847,7 +942,7 @@ func (g *Graph) RemoveChangeImpact(ctx context.Context, id domain.ChangeID, impa
 			}
 		}
 		// the event first: the impact leaves the projection before its working version goes
-		if err := g.emit(ctx, tx, domain.ImpactEvent{Change: id, Impact: impact, Op: domain.ImpactRemoved, Flow: w.flow, Execution: execution}); err != nil {
+		if err := g.emit(ctx, tx, domain.ImpactEvent{Change: id, Impact: impact, Op: domain.ImpactWithdrawn, Flow: w.flow, Execution: execution}); err != nil {
 			return err
 		}
 		if h != nil && h.CheckedOut {

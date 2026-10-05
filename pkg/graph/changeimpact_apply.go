@@ -39,6 +39,9 @@ func (a *applier) prepareChangeImpacts() error {
 			}
 			return invalidf("change impact %s (%s) is accepted but its node is not written: write it or reject it", cn.Key, cn.ID)
 		}
+		if err := a.g.checkOrigins(a.ctx, a.tx, a.change.ID, a.mainImpacts(), cn); err != nil {
+			return err
+		}
 		post, err := a.tx.LatestOn(a.ctx, cn.Post.ID, a.branch)
 		if err != nil {
 			return err
@@ -64,10 +67,15 @@ func (a *applier) prepareChangeImpacts() error {
 	return nil
 }
 
+// mainImpacts are the impacts of the main flow that count at landing.
+func (a *applier) mainImpacts() []domain.ChangeImpact {
+	return slices.DeleteFunc(slices.Clone(a.change.Nodes), func(cn domain.ChangeImpact) bool { return cn.Flow != "" || cn.Superseded })
+}
+
 // checkChangeImpacts validates the versions produced by the change impacts once the target graph is known: property
 // validators, the states the nodes are left in and the transitions they went through, then what they leave (the landing
 // gate, else no node left in an editable state). A transition was authorized, guarded and acted when it was taken
-// (TransitionNode, ADR 0076): the walk only checks that each state change on the branch is a move of the lifecycle.
+// (ImpactNodeTransition, ADR 0076): the walk only checks that each state change on the branch is a move of the lifecycle.
 func (a *applier) checkChangeImpacts() error {
 	editable, err := a.walkChangeImpacts()
 	if err != nil {
@@ -211,7 +219,7 @@ func (g *Graph) land(ctx context.Context, tx Tx, c domain.Change, own domain.Bra
 		if err := tx.SetNodeOrigin(ctx, ref, c.ID, cn.ID, comment); err != nil {
 			return err
 		}
-		if err := g.emit(ctx, tx, domain.ImpactEvent{Change: c.ID, Impact: cn.ID, Op: domain.ImpactLanded, Landed: &ref, Baseline: result}); err != nil {
+		if err := g.emit(ctx, tx, domain.ImpactEvent{Change: c.ID, Impact: cn.ID, Op: domain.ImpactLanded, Landed: &ref, Baseline: result, Branch: domain.BranchOf(own.Parent)}); err != nil {
 			return err
 		}
 		others, err := tx.NodeChangeImpacts(ctx, ref.ID)

@@ -16,7 +16,7 @@ func testChangeViewLevels(t *testing.T, repo Repo) {
 	g := f.g
 	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{Title: "PSP v2", BaselineID: f.base.ID, OwnBranch: true}))
 	req, need := f.req.Ref(), f.need.Ref()
-	added := must[[]domain.ChangeImpact](t)(g.AddNodes(ctx, c.ID, []domain.ChangeImpact{
+	added := must[[]domain.ChangeImpact](t)(g.ProposeImpact(ctx, c.ID, []domain.ChangeImpact{
 		{Intent: domain.IntentModified, Pre: &req, Rationale: "new PSP"},
 		{Intent: domain.IntentModified, Pre: &need, Rationale: "reword"},
 		{Intent: domain.IntentModified, Pre: new(f.test.Ref()), Rationale: "obsolete"},
@@ -48,7 +48,7 @@ func testChangeViewLevels(t *testing.T, repo Repo) {
 		t.Fatalf("landed view before apply: %s", l.ID)
 	}
 	// a rejected version leaves the written view
-	must[domain.ChangeImpact](t)(g.ReviewNode(ctx, c.ID, needW.ID, domain.ReviewRejected, "u", "no"))
+	must[domain.ChangeImpact](t)(g.ImpactNodeReview(ctx, c.ID, needW.ID, domain.ReviewRejected, "u", "no"))
 	if w := view(ViewWritten); !w.Contains(need) {
 		t.Fatalf("written view after the rejection: %v", w.Nodes)
 	}
@@ -70,7 +70,7 @@ func testChangeViewOfAFlow(t *testing.T, repo Repo) {
 	w := newFlowWorld(t, repo)
 	g, c := w.g, w.change
 	pre := w.f.req.Ref()
-	added := must[[]domain.ChangeImpact](t)(g.AddNodes(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &pre, Rationale: "second look", Flow: w.flow, Execution: "e3"}}))
+	added := must[[]domain.ChangeImpact](t)(g.ProposeImpact(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &pre, Rationale: "second look", Flow: w.flow, Execution: "e3"}}))
 	must[domain.ChangeImpact](t)(g.edit(ctx, c.ID, added[0].ID, edit{Flow: w.flow, Execution: "e3", Properties: map[string]any{"title": "B"}}))
 	flowView := must[domain.Baseline](t)(g.ChangeView(ctx, c.ID, w.flow, ViewWritten))
 	mainView := must[domain.Baseline](t)(g.ChangeView(ctx, c.ID, "", ViewWritten))

@@ -46,24 +46,29 @@ service GraphService {
   rpc AddItems(AddItemsRequest) returns (AddItemsResponse);
   // Change impacts (ADR 0024): declare the nodes a change acts on, write the version each produces on the
   // change branch, and accept or reject them (a comment is mandatory).
-  rpc AddChangeImpacts(AddChangeImpactsRequest) returns (AddChangeImpactsResponse);
-  // Node edits (ADR 0076): every write names a change. CreateNode and CheckoutNode write the working version of the
-  // node in the change, checked out; UpdateNode and the link operations edit it in place; an accepted review
-  // authorizes CheckinNode, which freezes it; TransitionNode moves a checked-in node along its lifecycle (a version of
-  // its own); CancelCheckout drops the working version (a creation cancelled before its first check-in removes the node).
-  rpc CreateNode(CreateNodeRequest) returns (CreateNodeResponse);
-  rpc CheckoutNode(CheckoutNodeRequest) returns (CheckoutNodeResponse);
-  rpc UpdateNode(UpdateNodeRequest) returns (UpdateNodeResponse);
-  rpc CreateLink(CreateLinkRequest) returns (CreateLinkResponse);
-  rpc UpdateLink(UpdateLinkRequest) returns (UpdateLinkResponse);
-  rpc DeleteLink(DeleteLinkRequest) returns (DeleteLinkResponse);
-  rpc CheckinNode(CheckinNodeRequest) returns (CheckinNodeResponse);
-  rpc TransitionNode(TransitionNodeRequest) returns (TransitionNodeResponse);
-  rpc CancelCheckout(CancelCheckoutRequest) returns (CancelCheckoutResponse);
+  rpc ProposeImpact(ProposeImpactRequest) returns (ProposeImpactResponse);
+  // Node edits (ADR 0076): every write names a change. ImpactNodeCreate and ImpactNodeCheckout write the working version of the
+  // node in the change, checked out; ImpactNodeUpdate and the link operations edit it in place; an accepted review
+  // authorizes ImpactNodeCheckin, which freezes it; ImpactNodeTransition moves a checked-in node along its lifecycle (a version of
+  // its own); ImpactNodeCancel drops the working version (a creation cancelled before its first check-in removes the node).
+  rpc ImpactNodeCreate(ImpactNodeCreateRequest) returns (ImpactNodeCreateResponse);
+  rpc ImpactNodeCheckout(ImpactNodeCheckoutRequest) returns (ImpactNodeCheckoutResponse);
+  rpc ImpactNodeUpdate(ImpactNodeUpdateRequest) returns (ImpactNodeUpdateResponse);
+  rpc ImpactLinkCreate(ImpactLinkCreateRequest) returns (ImpactLinkCreateResponse);
+  rpc ImpactLinkUpdate(ImpactLinkUpdateRequest) returns (ImpactLinkUpdateResponse);
+  rpc ImpactLinkDelete(ImpactLinkDeleteRequest) returns (ImpactLinkDeleteResponse);
+  rpc ImpactNodeCheckin(ImpactNodeCheckinRequest) returns (ImpactNodeCheckinResponse);
+  rpc ImpactNodeTransition(ImpactNodeTransitionRequest) returns (ImpactNodeTransitionResponse);
+  rpc ImpactNodeCancel(ImpactNodeCancelRequest) returns (ImpactNodeCancelResponse);
+  // Merge nodes into a new one, split one into new ones, seen from the parent side (ADR 0077): the parents lose the
+  // links to the sources and gain the links to the successors, the sources stay untouched with the impact of their
+  // parent as via.
+  rpc ImpactNodeMerge(ImpactNodeMergeRequest) returns (ImpactNodeRestructureResponse);
+  rpc ImpactNodeSplit(ImpactNodeSplitRequest) returns (ImpactNodeRestructureResponse);
   // Take a change impact out of the change, explicitly: its working version is dropped (refused once a version of it
   // is checked in: reject it instead).
-  rpc RemoveChangeImpact(RemoveChangeImpactRequest) returns (RemoveChangeImpactResponse);
-  rpc ReviewChangeImpact(ReviewChangeImpactRequest) returns (ReviewChangeImpactResponse);
+  rpc WithdrawImpact(WithdrawImpactRequest) returns (WithdrawImpactResponse);
+  rpc ImpactNodeReview(ImpactNodeReviewRequest) returns (ImpactNodeReviewResponse);
   rpc ReopenChangeImpacts(ReopenChangeImpactsRequest) returns (ReopenChangeImpactsResponse);
   // Producers: a whole change of node edits (change impacts, versions, reviews, apply) in one call.
   rpc CommitEdits(CommitEditsRequest) returns (CommitEditsResponse);
@@ -82,6 +87,9 @@ service GraphService {
   rpc SetBranchStatus(SetBranchStatusRequest) returns (SetBranchStatusResponse);
   rpc SetBranchDescription(SetBranchDescriptionRequest) returns (SetBranchDescriptionResponse);
   rpc ListNodeVersions(ListNodeVersionsRequest) returns (ListNodeVersionsResponse);
+  // The first versions of the nodes that derive from a node: the successors of the merges and splits that replaced it
+  // (ADR 0077). Node.origins answers the other way.
+  rpc DerivedNodes(DerivedNodesRequest) returns (DerivedNodesResponse);
   rpc PlanMerge(PlanMergeRequest) returns (PlanMergeResponse);
   rpc MergeBranch(MergeBranchRequest) returns (MergeBranchResponse);
   // What going from a baseline to another changes, node by node (same namespace).
@@ -174,6 +182,8 @@ message Node {
   string project = 19;
   // a working version, edited in place by its change until it is checked in (ADR 0076)
   bool checked_out = 20;
+  // the nodes this one derives from (ADR 0077, merge and split): set on the first version of a successor
+  repeated NodeRef origins = 21;
 }
 
 message Link {
@@ -287,7 +297,7 @@ message ChangeImpact {
   string rationale = 5;
   // released version of the reference baseline (empty for a created node)
   NodeRef pre = 6;
-  // version written on the change branch (empty while only planned)
+  // version written on the change branch (empty while the impact of an existing node is only proposed)
   NodeRef post = 7;
   // version on the target branch once applied
   NodeRef landed = 8;
@@ -445,16 +455,17 @@ message ImpactEvent {
   int32 seq = 3;
   // empty for a change-level event (adopted)
   string impact_id = 4;
-  // declared | written | reviewed | discarded | adopted | landed | rebased
+  // proposed (an existing node) | created (a new node: its impact and first version) | checkedOut | transitioned | updated |
+  // checkedIn | cancelled | withdrawn | reviewed | discarded | adopted | landed | rebased
   string op = 5;
   // the caller: the flow branch ("" = the main flow), the journal record of the action run, the principal or component
   string flow = 6;
   string execution = 7;
   string by = 8;
   google.protobuf.Timestamp at = 9;
-  // declared
+  // proposed, created
   ChangeImpact state = 10;
-  // written
+  // created, checkedOut, transitioned, updated, checkedIn
   NodeRef post = 11;
   // rebased
   NodeRef pre = 12;
@@ -471,7 +482,7 @@ message LogEntry {
   int64 seq = 1;
   string id = 2;
   string change_id = 3;
-  // <stream>.<kind>: fact.artifact, journal.schedule, impact.written...
+  // <stream>.<kind>: fact.artifact, journal.schedule, impact.transitioned...
   string type = 4;
   // flow branch ("" = the main flow)
   string flow = 5;
@@ -954,12 +965,12 @@ message CommitEditsResponse {
   Baseline baseline = 2;
 }
 
-message AddChangeImpactsRequest {
+message ProposeImpactRequest {
   string change_id = 1;
   repeated ChangeImpact nodes = 2;
 }
 
-message AddChangeImpactsResponse {
+message ProposeImpactResponse {
   repeated ChangeImpact nodes = 1;
 }
 
@@ -969,10 +980,10 @@ message NodeLinkWrite {
   google.protobuf.Struct props = 3;
 }
 
-// The node a CheckoutNode or a TransitionNode works on: a change impact of the change, or a node (then the impact the
+// The node a ImpactNodeCheckout or a ImpactNodeTransition works on: a change impact of the change, or a node (then the impact the
 // flow sees on it, declared when the change holds none). flow is the flow the call works on (empty: the active option,
 // "main": the main flow) and execution the action run that makes it (ADR 0025).
-message CreateNodeRequest {
+message ImpactNodeCreateRequest {
   string change_id = 1;
   string key = 2;
   string type = 3;
@@ -985,11 +996,72 @@ message CreateNodeRequest {
   string execution = 9;
 }
 
-message CreateNodeResponse {
+// A node a merge or a split creates (the fields of ImpactNodeCreateRequest but the change and the flow).
+message NodeCreateSpec {
+  string key = 1;
+  string type = 2;
+  google.protobuf.Struct props = 3;
+  string owner = 4;
+  string rationale = 5;
+  repeated NodeLinkWrite links = 6;
+}
+
+// A node a merge or a split works on: a change impact of the change, a node id or a key.
+message NodeName {
+  string change_impact_id = 1;
+  string node_id = 2;
+  string key = 3;
+}
+
+message ImpactNodeMergeRequest {
+  string change_id = 1;
+  repeated NodeName sources = 2;
+  NodeCreateSpec into = 3;
+  // why, on the impacts the merge declares; empty: the rationale of into
+  string rationale = 4;
+  string flow = 5;
+  string execution = 6;
+}
+
+message ImpactNodeSplitRequest {
+  string change_id = 1;
+  NodeName source = 2;
+  repeated NodeCreateSpec into = 3;
+  string rationale = 4;
+  string flow = 5;
+  string execution = 6;
+}
+
+// A link of another node to a split source that the split leaves as it is (ADR 0003: suspect).
+message SuspectLink {
+  NodeRef from = 1;
+  string from_key = 2;
+  string type = 3;
+  NodeRef to = 4;
+  string to_key = 5;
+}
+
+message ImpactNodeRestructureResponse {
+  repeated ChangeImpact successors = 1;
+  repeated ChangeImpact sources = 2;
+  repeated ChangeImpact parents = 3;
+  repeated SuspectLink suspect = 4;
+}
+
+message DerivedNodesRequest {
+  // version 0: any version of the node
+  NodeRef ref = 1;
+}
+
+message DerivedNodesResponse {
+  repeated Node nodes = 1;
+}
+
+message ImpactNodeCreateResponse {
   ChangeImpact node = 1;
 }
 
-message CheckoutNodeRequest {
+message ImpactNodeCheckoutRequest {
   string change_id = 1;
   string change_impact_id = 2;
   string node_id = 3;
@@ -999,11 +1071,11 @@ message CheckoutNodeRequest {
   string execution = 6;
 }
 
-message CheckoutNodeResponse {
+message ImpactNodeCheckoutResponse {
   ChangeImpact node = 1;
 }
 
-message UpdateNodeRequest {
+message ImpactNodeUpdateRequest {
   string change_id = 1;
   string change_impact_id = 2;
   // merged over the properties of the working version
@@ -1014,11 +1086,11 @@ message UpdateNodeRequest {
   string execution = 6;
 }
 
-message UpdateNodeResponse {
+message ImpactNodeUpdateResponse {
   ChangeImpact node = 1;
 }
 
-message CreateLinkRequest {
+message ImpactLinkCreateRequest {
   string change_id = 1;
   // the change impact whose working version the link leaves from
   string change_impact_id = 2;
@@ -1029,11 +1101,11 @@ message CreateLinkRequest {
   string execution = 7;
 }
 
-message CreateLinkResponse {
+message ImpactLinkCreateResponse {
   Link link = 1;
 }
 
-message UpdateLinkRequest {
+message ImpactLinkUpdateRequest {
   string change_id = 1;
   string link_id = 2;
   google.protobuf.Struct props = 3;
@@ -1041,31 +1113,31 @@ message UpdateLinkRequest {
   string execution = 5;
 }
 
-message UpdateLinkResponse {
+message ImpactLinkUpdateResponse {
   Link link = 1;
 }
 
-message DeleteLinkRequest {
+message ImpactLinkDeleteRequest {
   string change_id = 1;
   string link_id = 2;
   string flow = 3;
   string execution = 4;
 }
 
-message DeleteLinkResponse {}
+message ImpactLinkDeleteResponse {}
 
-message CheckinNodeRequest {
+message ImpactNodeCheckinRequest {
   string change_id = 1;
   string change_impact_id = 2;
   string flow = 3;
   string execution = 4;
 }
 
-message CheckinNodeResponse {
+message ImpactNodeCheckinResponse {
   ChangeImpact node = 1;
 }
 
-message TransitionNodeRequest {
+message ImpactNodeTransitionRequest {
   string change_id = 1;
   string change_impact_id = 2;
   string node_id = 3;
@@ -1076,32 +1148,32 @@ message TransitionNodeRequest {
   string execution = 7;
 }
 
-message TransitionNodeResponse {
+message ImpactNodeTransitionResponse {
   ChangeImpact node = 1;
 }
 
-message CancelCheckoutRequest {
+message ImpactNodeCancelRequest {
   string change_id = 1;
   string change_impact_id = 2;
   string flow = 3;
   string execution = 4;
 }
 
-message CancelCheckoutResponse {
+message ImpactNodeCancelResponse {
   // the change impact as the cancellation leaves it (empty when a creation was cancelled: the impact is gone)
   ChangeImpact node = 1;
 }
 
-message RemoveChangeImpactRequest {
+message WithdrawImpactRequest {
   string change_id = 1;
   string change_impact_id = 2;
   string flow = 3;
   string execution = 4;
 }
 
-message RemoveChangeImpactResponse {}
+message WithdrawImpactResponse {}
 
-message ReviewChangeImpactRequest {
+message ImpactNodeReviewRequest {
   string change_id = 1;
   string change_impact_id = 2;
   bool accept = 3;
@@ -1111,7 +1183,7 @@ message ReviewChangeImpactRequest {
   string execution = 6;
 }
 
-message ReviewChangeImpactResponse {
+message ImpactNodeReviewResponse {
   ChangeImpact node = 1;
 }
 

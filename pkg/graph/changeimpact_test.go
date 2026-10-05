@@ -22,7 +22,7 @@ func testChangeImpacts(t *testing.T, repo Repo) {
 	pre, needRef := f.req.Ref(), f.need.Ref()
 
 	// an impact: pre + intent + rationale, no post yet
-	got, err := g.AddNodes(ctx, c.ID, []domain.ChangeImpact{
+	got, err := g.proposeOrCreate(ctx, c.ID, []domain.ChangeImpact{
 		{Intent: domain.IntentModified, Pre: &pre, Rationale: "PSP v2 changes the payment API"},
 		{Intent: domain.IntentCreated, Key: "TST-2", Type: "TestCase", Rationale: "cover the new API"},
 	})
@@ -32,10 +32,10 @@ func testChangeImpacts(t *testing.T, repo Repo) {
 	if got[0].Key != "REQ-1" || got[0].Type != "Requirement" || got[0].Review != domain.ReviewProposed || !got[0].Planned() {
 		t.Fatalf("key / type come from the pre node, review starts proposed: %+v", got[0])
 	}
-	if _, err := g.AddNodes(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &pre, Rationale: "again"}}); !errors.Is(err, ErrConflict) {
+	if _, err := g.ProposeImpact(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &pre, Rationale: "again"}}); !errors.Is(err, ErrConflict) {
 		t.Fatalf("a node appears once per change, got %v", err)
 	}
-	if _, err := g.AddNodes(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &needRef}}); !errors.Is(err, ErrInvalid) {
+	if _, err := g.ProposeImpact(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &needRef}}); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("a rationale is required, got %v", err)
 	}
 	if ch, _ := g.Change(ctx, c.ID); ch.Status != domain.ChangeActive || len(ch.Nodes) != 2 {
@@ -49,19 +49,19 @@ func testChangeImpacts(t *testing.T, repo Repo) {
 	if _, err := g.accept(ctx, c.ID, got[0].ID, "alice", "impact confirmed with the PSP team"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := g.ReviewNode(ctx, c.ID, got[0].ID, domain.ReviewRejected, "bob", "no"); !errors.Is(err, ErrConflict) {
+	if _, err := g.ImpactNodeReview(ctx, c.ID, got[0].ID, domain.ReviewRejected, "bob", "no"); !errors.Is(err, ErrConflict) {
 		t.Fatalf("a reviewed node cannot be reviewed again, got %v", err)
 	}
 
 	// a checkout realizes the impact: a working version written by the change, and the review starts over (ADR 0076)
-	cn, err := g.CheckoutNode(ctx, c.ID, NodeCheckout{Impact: got[0].ID})
+	cn, err := g.ImpactNodeCheckout(ctx, c.ID, NodeCheckout{Impact: got[0].ID})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if cn.Post == nil || cn.Planned() || cn.Review != domain.ReviewProposed {
 		t.Fatalf("post not set, or the review not back to proposed: %+v", cn)
 	}
-	if _, err := g.CheckoutNode(ctx, c.ID, NodeCheckout{Impact: got[0].ID}); !errors.Is(err, ErrConflict) {
+	if _, err := g.ImpactNodeCheckout(ctx, c.ID, NodeCheckout{Impact: got[0].ID}); !errors.Is(err, ErrConflict) {
 		t.Fatalf("a node is checked out once, got %v", err)
 	}
 	n, err := g.Node(ctx, *cn.Post)
@@ -71,13 +71,13 @@ func testChangeImpacts(t *testing.T, repo Repo) {
 	if !n.CheckedOut || n.ChangeImpact != got[0].ID || n.ChangeID != c.ID || len(n.Parents) != 1 || n.Parents[0] != pre.Version {
 		t.Fatalf("the working version: %+v", n)
 	}
-	if _, err := g.CheckinNode(ctx, c.ID, got[0].ID, "", ""); !errors.Is(err, ErrConflict) {
+	if _, err := g.ImpactNodeCheckin(ctx, c.ID, got[0].ID, "", ""); !errors.Is(err, ErrConflict) {
 		t.Fatalf("a check-in needs an accepted review, got %v", err)
 	}
-	if _, err := g.ReviewNode(ctx, c.ID, got[0].ID, domain.ReviewAccepted, "alice", "impact confirmed with the PSP team"); err != nil {
+	if _, err := g.ImpactNodeReview(ctx, c.ID, got[0].ID, domain.ReviewAccepted, "alice", "impact confirmed with the PSP team"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := g.CheckinNode(ctx, c.ID, got[0].ID, "", ""); err != nil {
+	if _, err := g.ImpactNodeCheckin(ctx, c.ID, got[0].ID, "", ""); err != nil {
 		t.Fatal(err)
 	}
 	if n, err = g.Node(ctx, *cn.Post); err != nil {
@@ -91,7 +91,7 @@ func testChangeImpacts(t *testing.T, repo Repo) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(list) != 2 || list[0].Review != domain.ReviewAccepted || len(list[0].Reviews) != 3 || list[0].Reviews[0].By != "alice" || list[1].Key != "TST-2" || !list[1].Planned() {
+	if len(list) != 2 || list[0].Review != domain.ReviewAccepted || len(list[0].Reviews) != 3 || list[0].Reviews[0].By != "alice" || list[1].Key != "TST-2" || list[1].Planned() {
 		t.Fatalf("unexpected list: %+v", list)
 	}
 	if list[0].Pre == nil || *list[0].Pre != pre {
@@ -114,14 +114,14 @@ func testApplyChangeImpacts(t *testing.T, repo Repo) {
 		t.Fatal(err)
 	}
 	pre := f.req.Ref()
-	nodes, err := g.AddNodes(ctx, c1.ID, []domain.ChangeImpact{
+	nodes, err := g.proposeOrCreate(ctx, c1.ID, []domain.ChangeImpact{
 		{Intent: domain.IntentModified, Pre: &pre, Rationale: "PSP v2 changes the API"},
 		{Intent: domain.IntentCreated, Key: "TST-2", Type: "TestCase", Rationale: "cover the new API"},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	other, err := g.AddNodes(ctx, c2.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &pre, Rationale: "impact of PSP v3"}})
+	other, err := g.ProposeImpact(ctx, c2.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &pre, Rationale: "impact of PSP v3"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -198,7 +198,7 @@ func testChangeImpactsLifecycle(t *testing.T, repo Repo) {
 		t.Fatal(err)
 	}
 	pre1, pre2 := w.req1.Ref(), w.req2.Ref()
-	nodes, err := g.AddNodes(ctx, c.ID, []domain.ChangeImpact{
+	nodes, err := g.proposeOrCreate(ctx, c.ID, []domain.ChangeImpact{
 		{Intent: domain.IntentModified, Pre: &pre1, Rationale: "reword"},
 		{Intent: domain.IntentModified, Pre: &pre2, Rationale: "approve without title"},
 	})
@@ -272,7 +272,7 @@ func testChangeImpactsMerge(t *testing.T, repo Repo) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		ns, err := g.AddNodes(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &pre, Rationale: title}})
+		ns, err := g.ProposeImpact(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &pre, Rationale: title}})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -337,7 +337,7 @@ func testImpactsOf(t *testing.T, repo Repo) {
 	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{Title: "PSP v2", BaselineID: f.base.ID}))
 	pre, needRef := f.req.Ref(), f.need.Ref()
 
-	added := must[[]domain.ChangeImpact](t)(g.AddNodes(ctx, c.ID, []domain.ChangeImpact{
+	added := must[[]domain.ChangeImpact](t)(g.proposeOrCreate(ctx, c.ID, []domain.ChangeImpact{
 		{Intent: domain.IntentModified, Pre: &pre, Rationale: "touched by run A", Execution: "run-a"},
 		{Intent: domain.IntentModified, Pre: &needRef, Rationale: "touched by run B", Execution: "run-b"},
 	}))
@@ -378,7 +378,7 @@ func testReviewPolicy(t *testing.T, repo Repo) {
 		t.Fatal(err)
 	}
 	pre := f.req.Ref()
-	got, err := g.AddNodes(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &pre, Rationale: "r", ProducedBy: "bob"}})
+	got, err := g.ProposeImpact(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &pre, Rationale: "r", ProducedBy: "bob"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -411,7 +411,7 @@ func TestNilReviewPolicyReviewsAsBefore(t *testing.T) {
 			t.Fatal(err)
 		}
 		pre := f.req.Ref()
-		got, err := f.g.AddNodes(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &pre, Rationale: "r", ProducedBy: "bob"}})
+		got, err := f.g.ProposeImpact(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &pre, Rationale: "r", ProducedBy: "bob"}})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -436,7 +436,7 @@ func testReopenImpacts(t *testing.T, repo Repo) {
 		t.Fatal(err)
 	}
 	pre := f.req.Ref()
-	got, err := g.AddNodes(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &pre, Rationale: "r", ProducedBy: "bob"}})
+	got, err := g.ProposeImpact(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &pre, Rationale: "r", ProducedBy: "bob"}})
 	if err != nil {
 		t.Fatal(err)
 	}

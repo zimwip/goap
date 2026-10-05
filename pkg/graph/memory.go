@@ -6,6 +6,7 @@ import (
 	"maps"
 	"slices"
 	"sort"
+	"strings"
 	"sync"
 
 	"github.com/zimwip/goap/pkg/domain"
@@ -137,6 +138,27 @@ func (t *memTx) Versions(_ context.Context, id domain.NodeID) ([]domain.Node, er
 		slices.Sort(vs[i].Joined)
 	}
 	return vs, nil
+}
+
+func (t *memTx) DerivedNodes(_ context.Context, ref domain.NodeRef) ([]domain.Node, error) {
+	var out []domain.Node
+	for _, vs := range t.st.versions {
+		for _, v := range vs {
+			for _, o := range v.Origins {
+				if o.ID == ref.ID && (ref.Version == 0 || o.Version == ref.Version) {
+					out = append(out, v)
+					break
+				}
+			}
+		}
+	}
+	slices.SortFunc(out, func(a, b domain.Node) int {
+		if c := strings.Compare(a.Key, b.Key); c != 0 {
+			return c
+		}
+		return int(a.Version) - int(b.Version)
+	})
+	return out, nil
 }
 
 func (t *memTx) Branch(_ context.Context, namespace, name string) (domain.Branch, error) {

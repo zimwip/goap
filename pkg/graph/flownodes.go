@@ -337,7 +337,7 @@ func (g *Graph) adoptChangeImpacts(ctx context.Context, tx Tx, c domain.Change, 
 		if sameRef(cn.Post, &ref) {
 			continue
 		}
-		if err := g.emit(ctx, tx, domain.ImpactEvent{Change: c.ID, Impact: cn.ID, Op: domain.ImpactWritten, Execution: n.Execution, By: by, Post: &ref}); err != nil {
+		if err := g.emit(ctx, tx, domain.ImpactEvent{Change: c.ID, Impact: cn.ID, Op: domain.ImpactTransitioned, Execution: n.Execution, By: by, Post: &ref}); err != nil {
 			return err
 		}
 	}

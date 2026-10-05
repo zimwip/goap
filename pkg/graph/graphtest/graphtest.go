@@ -38,7 +38,7 @@ func Import(ctx context.Context, g *graph.Graph, in Node) (domain.Node, error) {
 	if err != nil {
 		return domain.Node{}, err
 	}
-	cn, err := g.CreateNode(ctx, c.ID, graph.NodeCreate{Key: in.Key, Type: in.Type, Properties: in.Properties, Owner: in.Owner, Rationale: "Import " + in.Key, Links: in.Links})
+	cn, err := g.ImpactNodeCreate(ctx, c.ID, graph.NodeCreate{Key: in.Key, Type: in.Type, Properties: in.Properties, Owner: in.Owner, Rationale: "Import " + in.Key, Links: in.Links})
 	if err != nil {
 		return domain.Node{}, err
 	}
@@ -51,7 +51,7 @@ func Import(ctx context.Context, g *graph.Graph, in Node) (domain.Node, error) {
 			return domain.Node{}, err
 		}
 		if n.State != in.State {
-			if _, err := g.TransitionNode(ctx, c.ID, graph.NodeTransition{NodeCheckout: graph.NodeCheckout{Impact: cn.ID}, To: in.State}); err != nil {
+			if _, err := g.ImpactNodeTransition(ctx, c.ID, graph.NodeTransition{NodeCheckout: graph.NodeCheckout{Impact: cn.ID}, To: in.State}); err != nil {
 				return domain.Node{}, err
 			}
 		}
@@ -73,17 +73,17 @@ func Edit(ctx context.Context, g *graph.Graph, node domain.NodeID, props map[str
 	if err != nil {
 		return cur, err
 	}
-	cn, err := g.CheckoutNode(ctx, c.ID, graph.NodeCheckout{Node: node, Rationale: "Edit " + cur.Key})
+	cn, err := g.ImpactNodeCheckout(ctx, c.ID, graph.NodeCheckout{Node: node, Rationale: "Edit " + cur.Key})
 	if err != nil {
 		return cur, err
 	}
 	if len(props) > 0 {
-		if _, err := g.UpdateNode(ctx, c.ID, cn.ID, graph.NodeUpdate{Properties: props}); err != nil {
+		if _, err := g.ImpactNodeUpdate(ctx, c.ID, cn.ID, graph.NodeUpdate{Properties: props}); err != nil {
 			return cur, err
 		}
 	}
 	for _, l := range links {
-		if _, err := g.CreateLink(ctx, c.ID, cn.ID, l, "", ""); err != nil {
+		if _, err := g.ImpactLinkCreate(ctx, c.ID, cn.ID, l, "", ""); err != nil {
 			return cur, err
 		}
 	}
@@ -112,7 +112,7 @@ func AcceptAndCheckin(ctx context.Context, g *graph.Graph, change domain.ChangeI
 			continue
 		}
 		if cn.Review == domain.ReviewProposed {
-			if cn, err = g.ReviewNodeOn(ctx, change, domain.MainFlow, "", impact, domain.ReviewAccepted, "tester", "ok"); err != nil {
+			if cn, err = g.ImpactNodeReviewOn(ctx, change, domain.MainFlow, "", impact, domain.ReviewAccepted, "tester", "ok"); err != nil {
 				return err
 			}
 		}
@@ -123,7 +123,7 @@ func AcceptAndCheckin(ctx context.Context, g *graph.Graph, change domain.ChangeI
 		if err != nil || !n.CheckedOut {
 			return err
 		}
-		_, err = g.CheckinNode(ctx, change, impact, domain.MainFlow, "")
+		_, err = g.ImpactNodeCheckin(ctx, change, impact, domain.MainFlow, "")
 		return err
 	}
 	return nil

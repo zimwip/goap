@@ -50,12 +50,12 @@ func testNamespaces(t *testing.T, repo Repo) {
 	orgRef, sdlcRef := org.Ref(), sdlc.Ref()
 	// a node of another namespace can never be in the change's own (now namespace-scoped)
 	// reference baseline, so modifying it is refused even before the namespace itself is checked
-	_, err = g.AddNodes(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &orgRef, Rationale: "x"}})
+	_, err = g.ProposeImpact(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &orgRef, Rationale: "x"}})
 	if !errors.Is(err, ErrConflict) {
 		t.Fatalf("update across namespaces: %v", err)
 	}
 	// a link to a node of another namespace is allowed, and created nodes belong to the change namespace
-	ns, err := g.AddNodes(ctx, c.ID, []domain.ChangeImpact{
+	ns, err := g.proposeOrCreate(ctx, c.ID, []domain.ChangeImpact{
 		{Intent: domain.IntentCreated, Key: "Y", Type: "T", Rationale: "new"},
 		{Intent: domain.IntentModified, Pre: &sdlcRef, Rationale: "owned by the unit"},
 	})

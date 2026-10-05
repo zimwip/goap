@@ -19,7 +19,7 @@ import (
 //     has the required attributes and links, its guard holds, and for a
 //     document its children are in an allowed state) when it is taken: a
 //     transition is a version of its own, from a checked-in version
-//     (TransitionNode, ADR 0076).
+//     (ImpactNodeTransition, ADR 0076).
 
 // TransitionAuthorizer decides whether the caller may take a transition on a
 // node. Nil allows every transition. n.State is the state it leaves.

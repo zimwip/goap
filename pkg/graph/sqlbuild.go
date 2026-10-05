@@ -1,6 +1,7 @@
 package graph
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -94,7 +95,7 @@ func su(name string) sqlCol { return sqlCol{name: name, uuid: true} }
 func (d dialect) nodeCols() string {
 	return d.cols(su("n.id"), sc("v.version"), sc("n.namespace"), sc("n.key"), sc("n.type"), sc("v.props"), sc("v.deleted"), su("v.change_id"),
 		sc("v.created_at"), sc("v.branch"), sc("v.parents"), sc("v.reason"), sc("v.state"), su("v.change_impact"), sc("v.comment"),
-		sc("v.execution"), su("v.owner_id"), su("n.project_id"), sc("v.checked_out"))
+		sc("v.execution"), su("v.owner_id"), su("n.project_id"), sc("v.checked_out"), sc("v.origins"))
 }
 
 const nodeFrom = ` FROM node n JOIN node_version v ON v.node_id = n.id`
@@ -119,6 +120,20 @@ func (d dialect) sqlLatestOn(id domain.NodeID, branch string) (string, []any) {
 // sqlVersions reads every version of a node, oldest first.
 func (d dialect) sqlVersions(id domain.NodeID) (string, []any) {
 	return `SELECT ` + d.nodeCols() + nodeFrom + ` WHERE n.id = ` + d.ph(1) + ` ORDER BY v.version`, []any{string(id)}
+}
+
+// sqlDerivedNodes reads the versions naming a node among their origins (ADR 0077); ref.Version 0 matches any version.
+func (d dialect) sqlDerivedNodes(ref domain.NodeRef) (string, []any) {
+	o := struct {
+		ID      domain.NodeID  `json:"id"`
+		Version domain.Version `json:"version,omitempty"`
+	}{ref.ID, ref.Version}
+	b, _ := json.Marshal([]any{o})
+	if d.pg {
+		return `SELECT ` + d.nodeCols() + nodeFrom + ` WHERE v.origins @> ` + d.ph(1) + `::jsonb ORDER BY n.key, v.version`, []any{string(b)}
+	}
+	return `SELECT ` + d.nodeCols() + nodeFrom + ` WHERE EXISTS (SELECT 1 FROM json_each(v.origins) o WHERE json_extract(o.value, '$.id') = ` + d.ph(1) +
+		` AND (` + d.ph(2) + ` = 0 OR json_extract(o.value, '$.version') = ` + d.ph(2) + `)) ORDER BY n.key, v.version`, []any{string(ref.ID), int(ref.Version)}
 }
 
 // sqlVersionBranches reads the branches the versions of a node joined.
@@ -378,7 +393,7 @@ func (d dialect) sqlDeleteChange() string { return `DELETE FROM change WHERE id 
 
 // The columns of the inserts both repositories run, in the order of their arguments.
 var (
-	nodeVersionColumns = []string{"node_id", "version", "props", "deleted", "change_id", "created_at", "branch", "parents", "reason", "state", "change_impact", "comment", "execution", "owner_id", "checked_out"}
+	nodeVersionColumns = []string{"node_id", "version", "props", "deleted", "change_id", "created_at", "branch", "parents", "reason", "state", "change_impact", "comment", "execution", "owner_id", "checked_out", "origins"}
 	linkColumns        = []string{"id", "type", "from_id", "from_version", "to_id", "to_version", "props", "change_id"}
 	baselineColumns    = []string{"id", "name", "parent_id", "merged_from", "change_id", "created_at", "branch", "namespace", "depth", "gap", "kind"}
 	changeLogColumns   = []string{"id", "change_id", "type", "flow", "process_id", "execution", "subject", "by_whom", "at", "payload"}

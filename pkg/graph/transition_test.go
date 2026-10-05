@@ -72,7 +72,7 @@ func testChangeLifecycle(t *testing.T, repo Repo) {
 		t.Fatal(err)
 	}
 	create := func(key string) domain.ChangeImpactID {
-		ns, err := g.AddNodes(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentCreated, Key: key, Type: "Note", Rationale: "new"}})
+		ns, err := g.proposeOrCreate(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentCreated, Key: key, Type: "Note", Rationale: "new"}})
 		if err != nil {
 			t.Fatal(err)
 		}

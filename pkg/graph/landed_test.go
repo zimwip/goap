@@ -53,7 +53,7 @@ func testLanded(t *testing.T, repo Repo) {
 	head := must[domain.Baseline](t)(g.BranchHead(ctx, "", domain.MainBranch))
 	parent := must[domain.Change](t)(g.CreateChange(ctx, NewChange{Title: "parent", BaselineID: head.ID, OwnBranch: true}))
 	sub := must[domain.Change](t)(g.CreateChange(ctx, NewChange{Title: "sub", ParentID: parent.ID}))
-	added := must[[]domain.ChangeImpact](t)(g.AddNodes(ctx, sub.ID, []domain.ChangeImpact{{Intent: domain.IntentCreated, Key: "L-2", Type: "Design", Rationale: "sub"}}))
+	added := must[[]domain.ChangeImpact](t)(g.proposeOrCreate(ctx, sub.ID, []domain.ChangeImpact{{Intent: domain.IntentCreated, Key: "L-2", Type: "Design", Rationale: "sub"}}))
 	if _, err := g.edit(ctx, sub.ID, added[0].ID, edit{Properties: map[string]any{"title": "t"}}); err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +89,7 @@ func testCommitThenIntegrate(t *testing.T, repo Repo) {
 	g := f.g
 	head := must[domain.Baseline](t)(g.BranchHead(ctx, "", domain.MainBranch))
 	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{Title: "split", BaselineID: head.ID}))
-	added := must[[]domain.ChangeImpact](t)(g.AddNodes(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentCreated, Key: "S-1", Type: "Design", Rationale: "split"}}))
+	added := must[[]domain.ChangeImpact](t)(g.proposeOrCreate(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentCreated, Key: "S-1", Type: "Design", Rationale: "split"}}))
 	if _, err := g.edit(ctx, c.ID, added[0].ID, edit{Properties: map[string]any{"title": "t"}}); err != nil {
 		t.Fatal(err)
 	}
@@ -115,7 +115,7 @@ func testCommitThenIntegrate(t *testing.T, repo Repo) {
 	if _, err := g.Apply(ctx, c.ID, ""); !errors.Is(err, ErrConflict) {
 		t.Fatalf("applying a committed change: %v", err)
 	}
-	if _, err := g.AddNodes(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentCreated, Key: "S-2", Type: "Design", Rationale: "late"}}); !errors.Is(err, ErrConflict) {
+	if _, err := g.proposeOrCreate(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentCreated, Key: "S-2", Type: "Design", Rationale: "late"}}); !errors.Is(err, ErrConflict) {
 		t.Fatalf("a committed change takes no more impact: %v", err)
 	}
 	// integrated: applied, a fast-forward onto main

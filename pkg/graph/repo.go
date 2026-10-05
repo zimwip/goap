@@ -33,6 +33,9 @@ type Tx interface {
 	LatestOn(ctx context.Context, id domain.NodeID, branch string) (domain.Node, error)
 	// Versions returns every version of a node, all branches, by version, with the branches each one joined.
 	Versions(ctx context.Context, id domain.NodeID) ([]domain.Node, error)
+	// DerivedNodes returns the versions that name ref among their origins (ADR 0077): the first versions of the
+	// successors of a merge or split; Version 0 matches any version of the node.
+	DerivedNodes(ctx context.Context, ref domain.NodeRef) ([]domain.Node, error)
 	Branch(ctx context.Context, namespace, name string) (domain.Branch, error)
 	Branches(ctx context.Context, namespace string) ([]domain.Branch, error)
 	PutBranch(ctx context.Context, b domain.Branch) error

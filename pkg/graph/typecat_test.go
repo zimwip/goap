@@ -194,6 +194,7 @@ func (ts testTypes) Requires(string) []domain.RequiredLink { return nil }
 
 // AdminOnly resolves none: the graph falls back to the built-in ones (the built-in domains).
 func (ts testTypes) AdminOnly(string) bool { return false }
+func (ts testTypes) Composes(string) bool  { return false }
 
 // A node type flagged `adminOnly:` in a domain is restricted, and its subtypes with it, without any code naming it
 // (ADR 0068); a type the domain does not flag is not.

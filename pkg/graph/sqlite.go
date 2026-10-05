@@ -71,13 +71,14 @@ type scanner interface{ Scan(dest ...any) error }
 
 func sqliteScanNode(row scanner) (domain.Node, error) {
 	var n domain.Node
-	var id, p, created, parents string
+	var id, p, created, parents, origins string
 	var change, cnode sql.NullString
 	var owner, project string
 	var version int
-	if err := row.Scan(&id, &version, &n.Namespace, &n.Key, &n.Type, &p, &n.Deleted, &change, &created, &n.Branch, &parents, &n.Reason, &n.State, &cnode, &n.Comment, &n.Execution, &owner, &project, &n.CheckedOut); err != nil {
+	if err := row.Scan(&id, &version, &n.Namespace, &n.Key, &n.Type, &p, &n.Deleted, &change, &created, &n.Branch, &parents, &n.Reason, &n.State, &cnode, &n.Comment, &n.Execution, &owner, &project, &n.CheckedOut, &origins); err != nil {
 		return n, err
 	}
+	n.Origins = originsOf([]byte(origins))
 	_ = json.Unmarshal([]byte(parents), &n.Parents)
 	if len(n.Parents) == 0 {
 		n.Parents = nil
@@ -119,6 +120,11 @@ func (t *sqliteTx) LatestOn(ctx context.Context, id domain.NodeID, branch string
 	q, args := dialectSQLite.sqlLatestOn(id, branch)
 	n, err := sqliteScanNode(t.tx.QueryRowContext(ctx, q, args...))
 	return n, sqliteErr(err, "node "+string(id)+" on "+domain.BranchOf(branch))
+}
+
+func (t *sqliteTx) DerivedNodes(ctx context.Context, ref domain.NodeRef) ([]domain.Node, error) {
+	q, args := dialectSQLite.sqlDerivedNodes(ref)
+	return t.nodes(ctx, q, args...)
 }
 
 func (t *sqliteTx) Versions(ctx context.Context, id domain.NodeID) ([]domain.Node, error) {
@@ -388,7 +394,7 @@ func (t *sqliteTx) PutNode(ctx context.Context, n domain.Node) error {
 	pj, _ := json.Marshal(parents)
 	_, err := t.tx.ExecContext(ctx, dialectSQLite.sqlInsert("node_version", nodeVersionColumns, ""),
 		string(n.ID), int(n.Version), string(jsonb(n.Properties)), n.Deleted, nullUUID(string(n.ChangeID)), tsText(n.CreatedAt),
-		domain.BranchOf(n.Branch), string(pj), n.Reason, n.State, nullUUID(string(n.ChangeImpact)), n.Comment, n.Execution, nullUUID(string(n.Owner)), n.CheckedOut)
+		domain.BranchOf(n.Branch), string(pj), n.Reason, n.State, nullUUID(string(n.ChangeImpact)), n.Comment, n.Execution, nullUUID(string(n.Owner)), n.CheckedOut, string(originsJSON(n.Origins)))
 	return sqliteErr(err, "node "+n.Ref().String())
 }
 

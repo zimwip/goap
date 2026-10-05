@@ -23,7 +23,7 @@ type NodeEdit struct {
 	// Props are merged over the current properties (a nil value clears one).
 	Props map[string]any
 	// State moves the node to a lifecycle state, after its other edits, checked in: a transition of its own
-	// (TransitionNode, ADR 0076); before them when the node rests in a state that is not editable and State is
+	// (ImpactNodeTransition, ADR 0076); before them when the node rests in a state that is not editable and State is
 	// (a retired entry restored).
 	State string
 	// Owner transfers the node to another organisational unit (its key, ADR 0054); empty: unchanged, or the unit
@@ -70,9 +70,9 @@ type CommitResult struct {
 }
 
 // Commit runs the edits as one change, through the operations every change uses (ADR 0076): it opens the change on a
-// branch of its own; a created node is a CreateNode, a modified one a CheckoutNode with its UpdateNode and link edits;
+// branch of its own; a created node is a ImpactNodeCreate, a modified one a ImpactNodeCheckout with its ImpactNodeUpdate and link edits;
 // each impact is accepted (the rationale is the comment) and checked in, then the state edits are transitions
-// (TransitionNode), and the change is applied. When the branch cannot be merged without conflict (another change moved
+// (ImpactNodeTransition), and the change is applied. When the branch cannot be merged without conflict (another change moved
 // a node meanwhile) the change is abandoned and ErrConflict returned: the producer reads again and rebuilds its edits.
 // A created node of a structure or a User must name its required parent (checkRequiredParent, ADR 0040).
 func (g *Graph) Commit(ctx context.Context, in Commit) (res CommitResult, err error) {
@@ -99,7 +99,7 @@ func (g *Graph) Commit(ctx context.Context, in Commit) (res CommitResult, err er
 		for i, e := range in.Edits {
 			if e.Pre == nil && i < len(impacts) && impacts[i] != "" {
 				if out, _ := g.isCheckedOut(ctx, c.ID, impacts[i]); out {
-					if _, cerr := g.CancelCheckout(ctx, c.ID, impacts[i], "", ""); cerr != nil {
+					if _, cerr := g.ImpactNodeCancel(ctx, c.ID, impacts[i], "", ""); cerr != nil {
 						err = errors.Join(err, cerr)
 					}
 				}
@@ -175,7 +175,7 @@ func (g *Graph) Commit(ctx context.Context, in Commit) (res CommitResult, err er
 		}
 		if e.Pre != nil {
 			// the impact names the version the edit starts from: a stale one conflicts (it is not in the reference baseline)
-			added, err := g.AddNodes(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: e.Pre, Rationale: why(e), ProducedBy: in.By}})
+			added, err := g.ProposeImpact(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: e.Pre, Rationale: why(e), ProducedBy: in.By}})
 			if err != nil {
 				return res, fmt.Errorf("%s: %w", nodeName(e), err)
 			}
@@ -183,7 +183,7 @@ func (g *Graph) Commit(ctx context.Context, in Commit) (res CommitResult, err er
 		}
 		switch {
 		case e.Pre == nil:
-			cn, err := g.CreateNode(ctx, c.ID, NodeCreate{Key: e.Key, Type: e.Type, Properties: e.Props, Owner: e.Owner, Rationale: why(e), Links: links, ProducedBy: in.By})
+			cn, err := g.ImpactNodeCreate(ctx, c.ID, NodeCreate{Key: e.Key, Type: e.Type, Properties: e.Props, Owner: e.Owner, Rationale: why(e), Links: links, ProducedBy: in.By})
 			if err != nil {
 				return res, fmt.Errorf("%s: %w", nodeName(e), err)
 			}
@@ -193,22 +193,22 @@ func (g *Graph) Commit(ctx context.Context, in Commit) (res CommitResult, err er
 			if reopen, err := g.reopens(ctx, *e.Pre, e.State); err != nil {
 				return res, err
 			} else if reopen {
-				if _, err := g.TransitionNode(ctx, c.ID, NodeTransition{NodeCheckout: NodeCheckout{Impact: impacts[i], Rationale: why(e), ProducedBy: in.By}, To: e.State}); err != nil {
+				if _, err := g.ImpactNodeTransition(ctx, c.ID, NodeTransition{NodeCheckout: NodeCheckout{Impact: impacts[i], Rationale: why(e), ProducedBy: in.By}, To: e.State}); err != nil {
 					return res, fmt.Errorf("%s: %w", nodeName(e), err)
 				}
 			}
-			cn, err := g.CheckoutNode(ctx, c.ID, NodeCheckout{Impact: impacts[i]})
+			cn, err := g.ImpactNodeCheckout(ctx, c.ID, NodeCheckout{Impact: impacts[i]})
 			if err != nil {
 				return res, fmt.Errorf("%s: %w", nodeName(e), err)
 			}
 			posts[i] = cn.Post
 			if len(e.Props) > 0 || e.Owner != "" {
-				if _, err := g.UpdateNode(ctx, c.ID, cn.ID, NodeUpdate{Properties: e.Props, Owner: e.Owner}); err != nil {
+				if _, err := g.ImpactNodeUpdate(ctx, c.ID, cn.ID, NodeUpdate{Properties: e.Props, Owner: e.Owner}); err != nil {
 					return res, fmt.Errorf("%s: %w", nodeName(e), err)
 				}
 			}
 			for _, l := range links {
-				if _, err := g.CreateLink(ctx, c.ID, cn.ID, l, "", ""); err != nil {
+				if _, err := g.ImpactLinkCreate(ctx, c.ID, cn.ID, l, "", ""); err != nil {
 					return res, fmt.Errorf("%s: %w", nodeName(e), err)
 				}
 			}
@@ -221,7 +221,7 @@ func (g *Graph) Commit(ctx context.Context, in Commit) (res CommitResult, err er
 	}
 	for _, x := range later {
 		to := posts[written[x.l.ToKey]]
-		if _, err := g.CreateLink(ctx, c.ID, impacts[x.from], LinkWrite{Type: x.l.Type, To: *to, Properties: x.l.Props}, "", ""); err != nil {
+		if _, err := g.ImpactLinkCreate(ctx, c.ID, impacts[x.from], LinkWrite{Type: x.l.Type, To: *to, Properties: x.l.Props}, "", ""); err != nil {
 			return res, fmt.Errorf("link %s from %s to %s: %w", x.l.Type, nodeName(in.Edits[x.from]), x.l.ToKey, err)
 		}
 	}
@@ -231,11 +231,11 @@ func (g *Graph) Commit(ctx context.Context, in Commit) (res CommitResult, err er
 		if impacts[i] == "" {
 			return nil
 		}
-		if _, err := g.ReviewNode(ctx, c.ID, impacts[i], domain.ReviewAccepted, in.By, why(e)); err != nil {
+		if _, err := g.ImpactNodeReview(ctx, c.ID, impacts[i], domain.ReviewAccepted, in.By, why(e)); err != nil {
 			return err
 		}
 		if posts[i] != nil {
-			if _, err := g.CheckinNode(ctx, c.ID, impacts[i], "", ""); err != nil {
+			if _, err := g.ImpactNodeCheckin(ctx, c.ID, impacts[i], "", ""); err != nil {
 				return fmt.Errorf("%s: %w", nodeName(e), err)
 			}
 		}
@@ -261,7 +261,7 @@ func (g *Graph) Commit(ctx context.Context, in Commit) (res CommitResult, err er
 		if cur == e.State {
 			return nil
 		}
-		if _, err := g.TransitionNode(ctx, c.ID, NodeTransition{NodeCheckout: NodeCheckout{Impact: impacts[i], Node: node, Rationale: why(e), ProducedBy: in.By}, To: e.State}); err != nil {
+		if _, err := g.ImpactNodeTransition(ctx, c.ID, NodeTransition{NodeCheckout: NodeCheckout{Impact: impacts[i], Node: node, Rationale: why(e), ProducedBy: in.By}, To: e.State}); err != nil {
 			return fmt.Errorf("%s: %w", nodeName(e), err)
 		}
 		return nil
@@ -325,7 +325,7 @@ func (g *Graph) deleteCopiedLink(ctx context.Context, id domain.ChangeID, pre, w
 	if target == "" {
 		return invalidf("link %s is not an outgoing link of %s", link, pre)
 	}
-	return g.DeleteLink(ctx, id, target, "", "")
+	return g.ImpactLinkDelete(ctx, id, target, "", "")
 }
 
 // linksTo reports whether a version already has an outgoing link of the type to the node.

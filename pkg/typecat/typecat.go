@@ -474,6 +474,12 @@ func (c *Catalog) AdminOnly(typ string) bool {
 	return ok && t.AdminOnly
 }
 
+// Composes reports a composition link type (`compose: true`): its target is a part of its source (ADR 0077).
+func (c *Catalog) Composes(typ string) bool {
+	l, ok := c.LinkType(typ)
+	return ok && l.Compose
+}
+
 // HasNodeType reports a known qualified node type (def.TypeSet).
 func (c *Catalog) HasNodeType(ref string) bool { _, ok := c.Type(ref); return ok }
 

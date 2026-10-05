@@ -38,6 +38,9 @@ type TypeCatalog interface {
 	Requires(typ string) []domain.RequiredLink
 	// AdminOnly reports a node type written by platform administrators only (`adminOnly:` on a node type, ADR 0068).
 	AdminOnly(typ string) bool
+	// Composes reports a composition link type (`compose: true`): its target is a part of its source, so its source is
+	// the parent of its target (ADR 0077, merge and split work from the parent side).
+	Composes(linkType string) bool
 }
 
 // Graph exposes the domain and change axes.
@@ -81,7 +84,7 @@ type Graph struct {
 	// keeps the mechanism (open, rule, answer, ratify); pkg/decision is the policy the services plug.
 	DecisionPolicy domain.DecisionPolicy
 
-	// ReviewPolicy is the rule of who may review a change impact (ADR 0075): ReviewNodeOn asks it before it writes and an
+	// ReviewPolicy is the rule of who may review a change impact (ADR 0075): ImpactNodeReviewOn asks it before it writes and an
 	// error refuses the review. Unset: anyone allowed to review may. pkg/verify is the policy the services plug.
 	ReviewPolicy domain.ReviewPolicy
 
@@ -506,7 +509,7 @@ func (g *Graph) UpdateChange(ctx context.Context, id domain.ChangeID, p ChangePa
 }
 
 // AddItems appends facts to the blackboard of a change (artifacts, decisions): the nodes
-// a change acts on are its change impacts (AddNodes, ADR 0024). Item ids are assigned when empty.
+// a change acts on are its change impacts (ProposeImpact, ADR 0024). Item ids are assigned when empty.
 func (g *Graph) AddItems(ctx context.Context, id domain.ChangeID, items []domain.ChangeItem) ([]domain.ChangeItem, error) {
 	if err := g.authorizeItems(ctx, id, items); err != nil {
 		return nil, err
