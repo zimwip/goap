@@ -67,7 +67,7 @@ func testCommitRequiresAParent(t *testing.T, repo Repo) {
 
 // A modify edit that adds a second member_of without removing the first is rejected after the write, not
 // silently accepted — the safety net for a client that built its edit without knowing about the existing
-// link, e.g. from a baseline snapshot that predates it (checked when the version is checked in, checkRequiredLinks, ADR 0040: EnsureUser writes
+// link, e.g. from a baseline snapshot that predates it (checked when the version is accepted, checkRequiredLinks, ADR 0040: EnsureUser writes
 // member_of by import, which does not itself advance any baseline).
 func TestCommitRejectsASecondMembership(t *testing.T) {
 	forEachRepo(t, testCommitRejectsASecondMembership)

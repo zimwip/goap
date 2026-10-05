@@ -284,7 +284,7 @@ func TestGuardBaselineNeedsAChange(t *testing.T) {
 }
 
 // Only a working version (ADR 0076) is edited in place: its owner moved, its outgoing links edited or removed, then
-// checked in; once checked in, the guard refuses every in-place edit and a second check-in, whatever the storage.
+// frozen; once frozen, the guard refuses every in-place edit and a second freeze, whatever the storage.
 func TestGuardEditsWorkingVersionsOnly(t *testing.T) {
 	forEachRepo(t, testGuardEditsWorkingVersionsOnly)
 }
@@ -317,6 +317,9 @@ func testGuardEditsWorkingVersionsOnly(t *testing.T, repo Repo) {
 		if err := tx.SetNodeOwner(ctx, work.Ref(), org.ID); err != nil {
 			return err
 		}
+		if err := tx.SetNodeState(ctx, work.Ref(), "draft"); err != nil {
+			return err
+		}
 		return tx.SetLinkProps(ctx, link.ID, map[string]any{"why": "draft"})
 	}); err != nil {
 		t.Fatal(err)
@@ -325,26 +328,27 @@ func testGuardEditsWorkingVersionsOnly(t *testing.T, repo Repo) {
 	if err := write(func(tx Tx) (err error) { l, err = tx.Link(ctx, link.ID); return err }); err != nil || l.Properties["why"] != "draft" {
 		t.Fatalf("link properties: %+v", l)
 	}
-	if err := write(func(tx Tx) error { return tx.CheckinVersion(ctx, work.Ref()) }); err != nil {
+	if err := write(func(tx Tx) error { return tx.FreezeVersion(ctx, work.Ref()) }); err != nil {
 		t.Fatal(err)
 	}
 	if n := must[domain.Node](t)(g.Node(ctx, work.Ref())); n.CheckedOut || n.Owner != org.ID {
-		t.Fatalf("checked in, owned by the root unit: %+v", n)
+		t.Fatalf("frozen, owned by the root unit: %+v", n)
 	}
 	for name, fn := range map[string]func(tx Tx) error{
-		"an owner moved":    func(tx Tx) error { return tx.SetNodeOwner(ctx, work.Ref(), org.ID) },
-		"a link edited":     func(tx Tx) error { return tx.SetLinkProps(ctx, link.ID, map[string]any{"why": "late"}) },
-		"a link removed":    func(tx Tx) error { return tx.DeleteLink(ctx, link.ID) },
-		"a second check-in": func(tx Tx) error { return tx.CheckinVersion(ctx, work.Ref()) },
+		"an owner moved":  func(tx Tx) error { return tx.SetNodeOwner(ctx, work.Ref(), org.ID) },
+		"a state set":     func(tx Tx) error { return tx.SetNodeState(ctx, work.Ref(), "late") },
+		"a link edited":   func(tx Tx) error { return tx.SetLinkProps(ctx, link.ID, map[string]any{"why": "late"}) },
+		"a link removed":  func(tx Tx) error { return tx.DeleteLink(ctx, link.ID) },
+		"a second freeze": func(tx Tx) error { return tx.FreezeVersion(ctx, work.Ref()) },
 	} {
 		if err := write(fn); err == nil || (!errors.Is(err, ErrConflict) && !errors.Is(err, ErrNotFound)) {
-			t.Errorf("%s on a checked-in version: %v", name, err)
+			t.Errorf("%s on a frozen version: %v", name, err)
 		}
 	}
 }
 
-// A checkout is cancelled by dropping its working version (ADR 0076): a created node cancelled before its first
-// check-in is removed with its key, a modified one goes back to its checked-in version; a checked-in version, or one
+// A checkout is cancelled by dropping its working version (ADR 0076): a created node cancelled before it is
+// accepted is removed with its key, a modified one goes back to its checked-in version; a frozen version, or one
 // another version links to, is never dropped.
 func TestGuardDropsWorkingVersionsOnly(t *testing.T) {
 	forEachRepo(t, testGuardDropsWorkingVersionsOnly)
@@ -378,7 +382,7 @@ func testGuardDropsWorkingVersionsOnly(t *testing.T, repo Repo) {
 		if err := tx.PutLink(ctx, domain.Link{ID: domain.LinkID(g.newID()), Type: "refines", From: created.Ref(), To: kept.Ref(), ChangeID: boot.ID}); err != nil {
 			return err
 		}
-		if err := tx.CheckinVersion(ctx, kept.Ref()); err != nil {
+		if err := tx.FreezeVersion(ctx, kept.Ref()); err != nil {
 			return err
 		}
 		return tx.PutNode(ctx, next)
@@ -387,7 +391,7 @@ func testGuardDropsWorkingVersionsOnly(t *testing.T, repo Repo) {
 	}
 	// the checked-in N-2 v1 is never dropped
 	for name, fn := range map[string]func(tx Tx) error{
-		"a checked-in version":       func(tx Tx) error { return tx.DropWorkingVersion(ctx, kept.Ref()) },
+		"a frozen version":           func(tx Tx) error { return tx.DropWorkingVersion(ctx, kept.Ref()) },
 		"a version that is not last": func(tx Tx) error { return tx.DropWorkingVersion(ctx, domain.NodeRef{ID: kept.ID, Version: 1}) },
 	} {
 		if err := write(fn); !errors.Is(err, ErrConflict) {

@@ -64,7 +64,7 @@ func (ix *typeIndex) checkLinkAttributes(typ string, props map[string]any) error
 	return nil
 }
 
-// validateProps checks the properties a version is frozen with (ImpactNodeCheckin) and lands with (Apply): the type and
+// validateProps checks the properties a version is frozen with (an accepted review) and lands with (Apply): the type and
 // enum membership of the values of its attributes, then the validators of its type (attribute validators and node
 // validators). The first rejection is returned as ErrInvalid.
 func (g *Graph) validateProps(ctx context.Context, ix *typeIndex, n domain.Node, props map[string]any) error {

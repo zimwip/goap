@@ -373,7 +373,7 @@ func TestChangeOptionTools(t *testing.T) {
 		t.Fatalf("undecidable = %v", ruled)
 	}
 	p.call(t, ctx, "ORG-CHECKOUT", "goap-change/answer", map[string]any{"question": q["id"], "answer": "2 EUR"})
-	// the edit of the option is reviewed and checked in: a flow is adopted with its versions checked in (ADR 0076)
+	// the edit of the option is reviewed: accepting freezes its version, and a flow is adopted with its versions frozen (ADR 0076, 0077)
 	c, err := p.g.Change(ctx, domain.ChangeID(id))
 	if err != nil {
 		t.Fatal(err)
@@ -381,9 +381,6 @@ func TestChangeOptionTools(t *testing.T) {
 	for _, cn := range c.Nodes {
 		if cn.Key == "REQ-2" && cn.Flow == a["id"] {
 			if _, err := p.g.ImpactNodeReviewOn(ctx, c.ID, cn.Flow, "", cn.ID, domain.ReviewAccepted, "reviewer", "agreed"); err != nil {
-				t.Fatal(err)
-			}
-			if _, err := p.g.ImpactNodeCheckin(ctx, c.ID, cn.ID, cn.Flow, ""); err != nil {
 				t.Fatal(err)
 			}
 		}

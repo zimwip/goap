@@ -204,15 +204,6 @@ func (c *Client) ImpactLinkDelete(ctx context.Context, id domain.ChangeID, link 
 	return rpcerr.FromConnect(err)
 }
 
-// ImpactNodeCheckin implements engine.GraphPort.
-func (c *Client) ImpactNodeCheckin(ctx context.Context, id domain.ChangeID, impact domain.ChangeImpactID, flow, execution string) (domain.ChangeImpact, error) {
-	r, err := c.rpc.ImpactNodeCheckin(ctx, connect.NewRequest(&graphv1.ImpactNodeCheckinRequest{ChangeId: string(id), ChangeImpactId: string(impact), Flow: flow, Execution: execution}))
-	if err != nil {
-		return domain.ChangeImpact{}, rpcerr.FromConnect(err)
-	}
-	return pbconv.ChangeImpactFromPB(r.Msg.Node), nil
-}
-
 // ImpactNodeTransition implements engine.GraphPort.
 func (c *Client) ImpactNodeTransition(ctx context.Context, id domain.ChangeID, in graph.NodeTransition) (domain.ChangeImpact, error) {
 	r, err := c.rpc.ImpactNodeTransition(ctx, connect.NewRequest(&graphv1.ImpactNodeTransitionRequest{ChangeId: string(id), ChangeImpactId: string(in.Impact), NodeId: string(in.Node),

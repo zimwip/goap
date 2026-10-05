@@ -218,7 +218,7 @@ type LinkType struct {
 	From        string `yaml:"from,omitempty" json:"from,omitempty"`
 	To          string `yaml:"to,omitempty" json:"to,omitempty"`
 	// Attributes define what a link of this type carries. The user interface edits a link from them; the graph checks
-	// the type and enum of the values on every link edit, at check-in and at landing (ADR 0076); their validators are
+	// the type and enum of the values on every link edit, when the version is frozen (accepted) and at landing (ADR 0076, 0077); their validators are
 	// checked by the domain but not yet run. "specializes" declares when/priority this way: the generic Activity-specialization
 	// condition (architecture plan "Activity concept") a link of that type would carry once one is created.
 	Attributes []Attribute `yaml:"attributes,omitempty" json:"attributes,omitempty"`

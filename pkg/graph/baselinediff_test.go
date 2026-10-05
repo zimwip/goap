@@ -23,7 +23,7 @@ func testDiffBaselines(t *testing.T, repo Repo) {
 	}))
 	for i, w := range []edit{{Properties: map[string]any{"title": "Use PSP v2"}}, {Properties: map[string]any{"title": "Obsolete"}}, {Properties: map[string]any{"title": "New"}}} {
 		must[domain.ChangeImpact](t)(g.edit(ctx, c.ID, added[i].ID, w))
-		if err := g.acceptAndCheckin(ctx, c.ID, added[i].ID, ""); err != nil {
+		if err := g.acceptImpact(ctx, c.ID, added[i].ID, ""); err != nil {
 			t.Fatal(err)
 		}
 	}

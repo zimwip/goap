@@ -23,7 +23,7 @@ type newNode struct {
 	Links []LinkWrite
 }
 
-// importNode lands a node on main through a change of its own: ImpactNodeCreate, accepted, checked in, moved to its State,
+// importNode lands a node on main through a change of its own: ImpactNodeCreate, moved to its State, accepted,
 // applied. It names no required parent: fixtures add structure links afterwards (importLink).
 func importNode(ctx context.Context, g *Graph, in newNode) (domain.Node, error) {
 	ns := domain.NamespaceOf(in.Namespace)
@@ -42,9 +42,6 @@ func importNode(ctx context.Context, g *Graph, in newNode) (domain.Node, error) 
 	if err != nil {
 		return domain.Node{}, err
 	}
-	if err := g.acceptAndCheckin(ctx, c.ID, cn.ID, ""); err != nil {
-		return domain.Node{}, err
-	}
 	if in.State != "" {
 		n, err := g.Node(ctx, *cn.Post)
 		if err != nil {
@@ -56,6 +53,9 @@ func importNode(ctx context.Context, g *Graph, in newNode) (domain.Node, error) 
 			}
 		}
 	}
+	if err := g.acceptImpact(ctx, c.ID, cn.ID, ""); err != nil {
+		return domain.Node{}, err
+	}
 	if _, err := g.Apply(ctx, c.ID, ""); err != nil {
 		return domain.Node{}, err
 	}
@@ -63,7 +63,7 @@ func importNode(ctx context.Context, g *Graph, in newNode) (domain.Node, error) 
 }
 
 // importLink adds an outgoing link to the latest version of a node on main through a change of its own: the node is
-// checked out, linked, accepted, checked in and the change applied. The source gets a new version (outgoing links
+// checked out, linked, accepted and the change applied. The source gets a new version (outgoing links
 // belong to the source version, ADR 0003); the link of that version is returned.
 func importLink(ctx context.Context, g *Graph, typ string, from, to domain.NodeRef, props map[string]any) (domain.Link, error) {
 	src, err := g.Node(ctx, domain.NodeRef{ID: from.ID})
@@ -87,7 +87,7 @@ func importLink(ctx context.Context, g *Graph, typ string, from, to domain.NodeR
 	if err != nil {
 		return l, err
 	}
-	if err := g.acceptAndCheckin(ctx, c.ID, cn.ID, ""); err != nil {
+	if err := g.acceptImpact(ctx, c.ID, cn.ID, ""); err != nil {
 		return l, err
 	}
 	if _, err := g.Apply(ctx, c.ID, ""); err != nil {
@@ -97,7 +97,7 @@ func importLink(ctx context.Context, g *Graph, typ string, from, to domain.NodeR
 }
 
 // importProps sets properties of the latest version of a node on main through a change of its own (checkout, update,
-// accepted, checked in, applied) and returns the new version.
+// accepted, applied) and returns the new version.
 func importProps(ctx context.Context, g *Graph, ref domain.NodeRef, props map[string]any) (domain.Node, error) {
 	src, err := g.Node(ctx, domain.NodeRef{ID: ref.ID})
 	if err != nil {
@@ -119,7 +119,7 @@ func importProps(ctx context.Context, g *Graph, ref domain.NodeRef, props map[st
 	if _, err := g.ImpactNodeUpdate(ctx, c.ID, cn.ID, NodeUpdate{Properties: props}); err != nil {
 		return src, err
 	}
-	if err := g.acceptAndCheckin(ctx, c.ID, cn.ID, ""); err != nil {
+	if err := g.acceptImpact(ctx, c.ID, cn.ID, ""); err != nil {
 		return src, err
 	}
 	if _, err := g.Apply(ctx, c.ID, ""); err != nil {
@@ -128,8 +128,8 @@ func importProps(ctx context.Context, g *Graph, ref domain.NodeRef, props map[st
 	return g.Node(ctx, *cn.Post)
 }
 
-// acceptAndCheckin accepts a change impact on a flow when it is proposed and checks its working version in.
-func (g *Graph) acceptAndCheckin(ctx context.Context, id domain.ChangeID, impact domain.ChangeImpactID, flow string) error {
+// acceptImpact accepts a change impact on a flow when it is proposed: accepting freezes its working version.
+func (g *Graph) acceptImpact(ctx context.Context, id domain.ChangeID, impact domain.ChangeImpactID, flow string) error {
 	seen, err := g.seenImpact(ctx, id, impact, flow)
 	if err != nil {
 		return err
@@ -139,20 +139,10 @@ func (g *Graph) acceptAndCheckin(ctx context.Context, id domain.ChangeID, impact
 			return err
 		}
 	}
-	return g.checkinIfOut(ctx, id, impact, flow)
+	return nil
 }
 
-// checkinIfOut checks the working version of a change impact in, when it has one.
-func (g *Graph) checkinIfOut(ctx context.Context, id domain.ChangeID, impact domain.ChangeImpactID, flow string) error {
-	out, err := g.checkedOut(ctx, id, impact, flow)
-	if err != nil || !out {
-		return err
-	}
-	_, err = g.ImpactNodeCheckin(ctx, id, impact, flow, "")
-	return err
-}
-
-// checkedOut reports whether a change impact has a working version on a flow.
+// checkedOut reports whether a change impact has a working version of its own on a flow.
 func (g *Graph) checkedOut(ctx context.Context, id domain.ChangeID, impact domain.ChangeImpactID, flow string) (out bool, err error) {
 	err = g.repo.InTx(ctx, func(tx Tx) error {
 		w, err := g.workOn(ctx, tx, id, flow)
@@ -163,7 +153,7 @@ func (g *Graph) checkedOut(ctx context.Context, id domain.ChangeID, impact domai
 			return err
 		}
 		h, err := w.head(ctx, tx)
-		out = h != nil && h.CheckedOut
+		out = h != nil && IsWorking(w.c, flow, *h)
 		return err
 	})
 	return
@@ -183,8 +173,7 @@ func (g *Graph) seenImpact(ctx context.Context, id domain.ChangeID, impact domai
 }
 
 // edit is an edit of a change impact in a test: its properties, owner and links are edited on its working version
-// (checked out when it is not); a State is a transition, from a checked-in version (the edit before it is accepted and
-// checked in).
+// (checked out when it is not); a State is a transition (in place on a working version).
 type edit struct {
 	Properties      map[string]any
 	State           string
@@ -223,13 +212,6 @@ func (g *Graph) edit(ctx context.Context, id domain.ChangeID, impact domain.Chan
 		}
 	}
 	if e.State != "" {
-		if out, err := g.checkedOut(ctx, id, impact, e.Flow); err != nil {
-			return domain.ChangeImpact{}, err
-		} else if out {
-			if err := g.acceptAndCheckin(ctx, id, impact, e.Flow); err != nil {
-				return domain.ChangeImpact{}, err
-			}
-		}
 		if _, err := g.ImpactNodeTransition(ctx, id, NodeTransition{NodeCheckout: NodeCheckout{Impact: impact, Flow: e.Flow, Execution: e.Execution}, To: e.State}); err != nil {
 			return domain.ChangeImpact{}, err
 		}
@@ -273,8 +255,8 @@ func (g *Graph) removeLinkOf(ctx context.Context, id domain.ChangeID, impact dom
 	return g.ImpactLinkDelete(ctx, id, copied, flow, execution)
 }
 
-// acceptAllAndCheckin accepts every proposed change impact of the main flow of a change and checks them in.
-func (g *Graph) acceptAllAndCheckin(ctx context.Context, id domain.ChangeID) error {
+// acceptAll accepts every proposed change impact of the main flow of a change (freezing their working versions).
+func (g *Graph) acceptAll(ctx context.Context, id domain.ChangeID) error {
 	c, err := g.Change(ctx, id)
 	if err != nil {
 		return err
@@ -283,26 +265,22 @@ func (g *Graph) acceptAllAndCheckin(ctx context.Context, id domain.ChangeID) err
 		if cn.Flow != "" || cn.Superseded || cn.Review == domain.ReviewRejected {
 			continue
 		}
-		if err := g.acceptAndCheckin(ctx, id, cn.ID, domain.MainFlow); err != nil {
+		if err := g.acceptImpact(ctx, id, cn.ID, domain.MainFlow); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-// accept accepts a change impact and checks its working version in: what a test applies next lands it.
+// accept accepts a change impact (freezing its working version): what a test applies next lands it.
 func (g *Graph) accept(ctx context.Context, id domain.ChangeID, impact domain.ChangeImpactID, by, comment string) (domain.ChangeImpact, error) {
 	return g.acceptOn(ctx, id, "", "", impact, by, comment)
 }
 
-// acceptOn accepts a change impact on a flow and checks its working version in there.
+// acceptOn accepts a change impact on a flow, freezing its working version there.
 func (g *Graph) acceptOn(ctx context.Context, id domain.ChangeID, flow, execution string, impact domain.ChangeImpactID, by, comment string) (domain.ChangeImpact, error) {
-	cn, err := g.ImpactNodeReviewOn(ctx, id, flow, execution, impact, domain.ReviewAccepted, by, comment)
-	if err != nil {
-		return cn, err
-	}
-	if err := g.checkinIfOut(ctx, id, impact, flow); err != nil {
-		return cn, err
+	if _, err := g.ImpactNodeReviewOn(ctx, id, flow, execution, impact, domain.ReviewAccepted, by, comment); err != nil {
+		return domain.ChangeImpact{}, err
 	}
 	return g.seenImpact(ctx, id, impact, flow)
 }

@@ -18,8 +18,8 @@ import (
 //   - every transition is checked (it exists, the actor may take it, the node
 //     has the required attributes and links, its guard holds, and for a
 //     document its children are in an allowed state) when it is taken: a
-//     transition is a version of its own, from a checked-in version
-//     (ImpactNodeTransition, ADR 0076).
+//     transition is taken in place on a working version, else it writes a version of its own from a frozen one
+//     (ImpactNodeTransition, ADR 0076, 0077).
 
 // TransitionAuthorizer decides whether the caller may take a transition on a
 // node. Nil allows every transition. n.State is the state it leaves.

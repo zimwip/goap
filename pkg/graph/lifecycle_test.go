@@ -89,7 +89,7 @@ func (w lcWorld) write(c domain.Change, id domain.ChangeImpactID, nw edit) error
 // accept accepts the change impacts of a change and checks them in.
 func (w lcWorld) accept(t *testing.T, c domain.Change) {
 	t.Helper()
-	if err := w.g.acceptAllAndCheckin(context.Background(), c.ID); err != nil {
+	if err := w.g.acceptAll(context.Background(), c.ID); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -486,7 +486,7 @@ func testLifecycleGuardRequiresAReview(t *testing.T, repo Repo) {
 		t.Fatal(err)
 	}
 	if n, _ := w.g.Node(ctx, *cn.Post); n.State != "approved" || n.CheckedOut {
-		t.Fatalf("the transition is a version of its own, checked in: %+v", n)
+		t.Fatalf("the transition is a version of its own, frozen: %+v", n)
 	}
 	if _, err := w.g.Apply(ctx, c.ID, ""); err != nil {
 		t.Fatal(err)

@@ -180,9 +180,9 @@ export const graph = {
   proposeImpact: (changeId: string, nodes: ChangeImpact[]) =>
     rpc<{ changeId: string; nodes: ChangeImpact[] }, { nodes?: ChangeImpact[] }>(GRAPH, 'ProposeImpact', { changeId, nodes }),
   // The node operations of a change (ADR 0076): a node is created or checked out in a change (a working version),
-  // edited in place (properties, owner, outgoing links), checked in once its review is accepted (frozen), moved along
-  // its lifecycle from a checked-in version (a version of its own). flow: the flow or option written on ('main' names
-  // the main flow, '' is the active option).
+  // edited in place (properties, owner, outgoing links) until the change lands and freezes it (no explicit check-in,
+  // ADR 0077), moved along its lifecycle (in place on a working version, else a version of its own). flow: the flow or
+  // option written on ('main' names the main flow, '' is the active option).
   /** Creates a node in a change: the impact (intent created) and its first version, checked out. */
   impactNodeCreate: (changeId: string, n: { key: string; type: string; props?: Struct; owner?: string; rationale: string; links?: LinkWrite[] }, flow = '') =>
     rpc<typeof n & { changeId: string; flow: string }, { node?: ChangeImpact }>(GRAPH, 'ImpactNodeCreate', { changeId, ...n, flow }),
@@ -194,10 +194,10 @@ export const graph = {
     rpc<typeof s & { changeId: string; flow: string }, Restructured>(GRAPH, 'ImpactNodeSplit', { changeId, ...s, flow }),
   /** The first versions of the nodes that derive from a node (ADR 0077); version 0 (or none): any version. */
   derivedNodes: (ref: NodeRef, signal?: AbortSignal) => rpc<{ ref: NodeRef }, { nodes?: GraphNode[] }>(GRAPH, 'DerivedNodes', { ref }, signal),
-  /** Checks out a node (by its impact, or by the node: the impact is declared) for editing: a new working version. */
+  /** Checks out a node (by its impact, or by the node: the impact is declared) for editing: a new working version; refused while the impact already holds one (update it). */
   impactNodeCheckout: (changeId: string, target: { changeImpactId?: string; nodeId?: string }, rationale = '', flow = '') =>
     rpc<{ changeId: string; changeImpactId?: string; nodeId?: string; rationale: string; flow: string }, { node?: ChangeImpact }>(GRAPH, 'ImpactNodeCheckout', { changeId, ...target, rationale, flow }),
-  /** Merges properties into (and transfers the owner of) a checked-out working version, in place. */
+  /** Merges properties into (and transfers the owner of) a checked-out working version, in place; an accepted review goes back to proposed. */
   impactNodeUpdate: (changeId: string, changeImpactId: string, u: { props?: Struct; owner?: string }, flow = '') =>
     rpc<{ changeId: string; changeImpactId: string; props?: Struct; owner?: string; flow: string }, { node?: ChangeImpact }>(GRAPH, 'ImpactNodeUpdate', { changeId, changeImpactId, ...u, flow }),
   /** Adds an outgoing link to a checked-out working version, in place. */
@@ -215,10 +215,7 @@ export const graph = {
   /** Removes an outgoing link of a checked-out working version (removing a child is a modification of its parent). */
   impactLinkDelete: (changeId: string, linkId: string, flow = '') =>
     rpc<{ changeId: string; linkId: string; flow: string }, Empty>(GRAPH, 'ImpactLinkDelete', { changeId, linkId, flow }),
-  /** Freezes the working version of an impact: its accepted review authorizes it. */
-  impactNodeCheckin: (changeId: string, changeImpactId: string, flow = '') =>
-    rpc<{ changeId: string; changeImpactId: string; flow: string }, { node?: ChangeImpact }>(GRAPH, 'ImpactNodeCheckin', { changeId, changeImpactId, flow }),
-  /** Moves a checked-in node along its lifecycle (by its impact, or by the node: the impact is declared). */
+  /** Moves a node along its lifecycle (by its impact, or by the node: the impact is declared): in place on its working version, else a version of its own. */
   impactNodeTransition: (changeId: string, target: { changeImpactId?: string; nodeId?: string }, state: string, rationale = '', flow = '') =>
     rpc<{ changeId: string; changeImpactId?: string; nodeId?: string; state: string; rationale: string; flow: string }, { node?: ChangeImpact }>(GRAPH, 'ImpactNodeTransition', {
       changeId,
@@ -227,10 +224,10 @@ export const graph = {
       rationale,
       flow,
     }),
-  /** Drops the working version of an impact (a creation never checked in leaves no node). */
+  /** Drops the working version of an impact (a creation never accepted leaves no node). */
   impactNodeCancel: (changeId: string, changeImpactId: string, flow = '') =>
     rpc<{ changeId: string; changeImpactId: string; flow: string }, { node?: ChangeImpact }>(GRAPH, 'ImpactNodeCancel', { changeId, changeImpactId, flow }),
-  /** Takes an impact out of the change (its working version is dropped); refused once a version of it is checked in. */
+  /** Takes an impact out of the change (its working version is dropped); refused once a version of it is frozen. */
   withdrawImpact: (changeId: string, changeImpactId: string, flow = '') =>
     rpc<{ changeId: string; changeImpactId: string; flow: string }, Empty>(GRAPH, 'WithdrawImpact', { changeId, changeImpactId, flow }),
   /** Sends accepted or rejected impacts back to proposed (a rejected one is reworked); the comment is mandatory. */

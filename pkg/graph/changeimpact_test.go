@@ -71,20 +71,17 @@ func testChangeImpacts(t *testing.T, repo Repo) {
 	if !n.CheckedOut || n.ChangeImpact != got[0].ID || n.ChangeID != c.ID || len(n.Parents) != 1 || n.Parents[0] != pre.Version {
 		t.Fatalf("the working version: %+v", n)
 	}
-	if _, err := g.ImpactNodeCheckin(ctx, c.ID, got[0].ID, "", ""); !errors.Is(err, ErrConflict) {
-		t.Fatalf("a check-in needs an accepted review, got %v", err)
+	if _, err := g.Apply(ctx, c.ID, ""); !errors.Is(err, ErrConflict) {
+		t.Fatalf("landing needs an accepted review, got %v", err)
 	}
 	if _, err := g.ImpactNodeReview(ctx, c.ID, got[0].ID, domain.ReviewAccepted, "alice", "impact confirmed with the PSP team"); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := g.ImpactNodeCheckin(ctx, c.ID, got[0].ID, "", ""); err != nil {
 		t.Fatal(err)
 	}
 	if n, err = g.Node(ctx, *cn.Post); err != nil {
 		t.Fatal(err)
 	}
-	if n.CheckedOut || n.Comment != "impact confirmed with the PSP team" {
-		t.Fatalf("the checked-in version records its acceptance: %+v", n)
+	if !n.CheckedOut || n.Comment != "impact confirmed with the PSP team" {
+		t.Fatalf("the working version records its acceptance and stays a working version until the change lands: %+v", n)
 	}
 
 	list, err := g.ListChangeImpacts(ctx, c.ID)
@@ -246,6 +243,7 @@ func testChangeImpactsLifecycle(t *testing.T, repo Repo) {
 	if _, err := g.edit(ctx, c.ID, nodes[1].ID, edit{State: "approved"}); err != nil {
 		t.Fatal(err)
 	}
+	review(nodes[1].ID) // the checkout sent the review back to proposed
 	if _, err := g.Apply(ctx, c.ID, ""); err != nil {
 		t.Fatal(err)
 	}
@@ -283,7 +281,7 @@ func testChangeImpactsMerge(t *testing.T, repo Repo) {
 		if _, err := g.edit(ctx, c.ID, ns[0].ID, edit{Properties: props}); err != nil {
 			t.Fatal(err)
 		}
-		if err := g.acceptAndCheckin(ctx, c.ID, ns[0].ID, ""); err != nil {
+		if err := g.acceptImpact(ctx, c.ID, ns[0].ID, ""); err != nil {
 			t.Fatal(err)
 		}
 		return c

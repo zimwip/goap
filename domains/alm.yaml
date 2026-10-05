@@ -137,7 +137,7 @@ lifecycles:
       - {name: propose, description: Raise the requirement without working on it further yet, from: draft, to: proposed}
       - {name: start, description: Take a proposed requirement up to work on it in a change, from: proposed, to: draft}
       # the review is the change's (ADR 0076): the requirement is approved once the review of its impact is accepted
-      # and its version checked in; a refused review sends it back to be reworked in the change
+      # and its version frozen; a refused review sends it back to be reworked in the change
       - {name: approve, description: Approve the requirement once the change accepted its review; stamps the approval date, from: draft, to: approved, permission: "requirement:approve", guard: 'impact.review == "accepted"', requires: {attributes: [title]}, actions: [stamp-approved-at]}
       - {name: reopen, description: Rework an approved requirement in a change, from: approved, to: draft}
       - {name: retire, description: Take the requirement out of use for good, from: approved, to: obsolete}

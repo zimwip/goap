@@ -56,7 +56,7 @@ the point (with the platform's policy: `decider`, `threshold`, `maxRounds`, `rou
 | `ctx.impactNodeMerge(sources, type, key, rationale)` | merge the nodes `sources` (keys or `#nN`) into a new node, from the side of their parents: each parent loses the links to the sources and gains one to the new node, the sources stay as they are, their impacts carry the parent's impact as `via` ([ADR 0077](adr/0077-impact-node-operations.md)) → `"#nN"` of the new node (checked out) |
 | `ctx.impactNodeSplit(source, [{type, key, rationale, props}])` | split a node into new ones, from the side of its parents → the `#nN` of each new node, in order |
 | `ctx.writeNode(node, {props, state, links, removeLinks, retire})` | write the next version of the node of a change impact on the change branch (`node`: key or `#nN`; `links`: `[{type, to}]`, `to` a node key or a `#nN` already written; `props` merged; `state` a lifecycle state) |
-| `ctx.impactNodeReview(node, accept, comment)` | accept or reject a change impact; the comment is mandatory |
+| `ctx.impactNodeReview(node, accept, comment)` | accept or reject a change impact; the comment is mandatory; an acceptance freezes the working version of the impact, after the checks of a frozen version ([ADR 0077](adr/0077-impact-node-operations.md)) |
 | `ctx.impactNodeReviewWithReserve(node, derogation, comment)` | accept a change impact with a reserve ([ADR 0075](adr/0075-verification-derogation-criticality.md)): `derogation` is the key of an open derogation in force; the operation is a review with `NodeOp.Reserve` set; the graph's review policy still applies (the reviewer is not the producer) |
 | `ctx.openDecision(question, {options, criteria, decider, threshold, maxRounds, maxDuration})` | open a decision point (`options`: names or ids, none = the open options; every other key is a policy value, handed to the graph's decision policy) → `"#dN"` |
 | `ctx.decide(point, option, confidence, justification)` | rule a point decided (`point`: id, `#dN` or `""` for the only pending one; `option`: name or id; `confidence` 0 to 1): below the point's threshold (the platform's policy) the ruling waits for a person |
@@ -115,7 +115,7 @@ is the call order. Action code is not an algorithm: it stays in the action decla
 
 | Type | Plugged in | Result |
 |---|---|---|
-| `property_validator` | `nodeTypes[].attributes[].validators: [instance]` | accepts / rejects the value of an attribute, when the version is checked in and when the change lands (a working version may be incomplete; the type and enum of a value are checked on every edit, ADR 0076) |
+| `property_validator` | `nodeTypes[].attributes[].validators: [instance]` | accepts / rejects the value of an attribute, when the version is frozen (its accepted review) and when the change lands (a working version may be incomplete; the type and enum of a value are checked on every edit, ADR 0076) |
 | `node_validator` | `nodeTypes[].validators: [instance]` | accepts / rejects a node as a whole (rules across attributes), after the attribute validators, at the same moments |
 | `transition_guard` | `lifecycles[].transitions[].guards: [instance]` | allows / refuses the transition, when it is taken (`ImpactNodeTransition`, ADR 0076) |
 | `transition_action` | `lifecycles[].transitions[].actions: [instance]` | changes properties of the node that moved, when the transition is taken |

@@ -95,7 +95,7 @@ CREATE TABLE node_version (
     change_impact text,
     comment       text        NOT NULL DEFAULT '',
     execution     text        NOT NULL DEFAULT '',
-    -- the working version of a change (ADR 0076): edited in place until its check-in
+    -- the working version of a change (ADR 0076): edited in place until an accepted review freezes it (ADR 0077)
     checked_out   integer     NOT NULL DEFAULT 0,
     -- the nodes this one derives from (ADR 0077): [{"id", "version"}], set on the first version of a merge or split successor
     origins       text        NOT NULL DEFAULT '[]',

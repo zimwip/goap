@@ -26,7 +26,7 @@
   import ChangeLifecycle from '../../components/ChangeLifecycle.svelte';
 import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
   import EditorPanes, { type Pane } from '../../components/EditorPanes.svelte';
-  import { lifecycleRows, reopenable, nodeTypeNames, lifecycleResolver, loadPosts, writeNodeInChange, removeFromChange, checkinAccepted, type PostVersions, type LifecycleRow } from '../../lifecycle';
+  import { lifecycleRows, reopenable, nodeTypeNames, lifecycleResolver, loadPosts, writeNodeInChange, removeFromChange, type PostVersions, type LifecycleRow } from '../../lifecycle';
   import { loadTypes, typeCatalog } from '../../stores/types.svelte';
   import { openTab } from '../../shell/tabs.svelte';
   import { openNode } from '../../nodeEditors';
@@ -367,7 +367,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
   }
 
   /** Takes a node out of the change: its working version is dropped (a node the change creates goes away); refused
-   * once a version of it is checked in (reject it instead, ADR 0076). */
+   * once a version of it is frozen (reject it instead, ADR 0076, 0077). */
   async function removeNode(row: LifecycleRow): Promise<boolean> {
     if (!change?.id || !row.impact?.id) return false;
     moving = `${row.node.id}:remove`;
@@ -463,8 +463,6 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
     applying = true;
     error = '';
     try {
-      // the accepted working versions are checked in first: their acceptance authorizes it (ADR 0076)
-      await checkinAccepted(change.id);
       applied = (await graph.applyChange(change.id, baselineName.trim())).baseline;
       await load(change.id);
       notify(`Baseline ${applied?.name || shortId(applied?.id)} created.`, 'ok');

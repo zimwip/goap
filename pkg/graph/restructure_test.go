@@ -172,10 +172,10 @@ func testMergeFromTheParent(t *testing.T, repo Repo) {
 		t.Fatalf("accepting C with B proposed: %v", err)
 	}
 	must[domain.ChangeImpact](t)(g.ImpactNodeReview(ctx, c.ID, impactOf(t, res.Sources, "B").ID, domain.ReviewAccepted, "tester", "ok"))
-	if err := g.acceptAndCheckin(ctx, c.ID, res.Successors[0].ID, ""); err != nil {
+	if err := g.acceptImpact(ctx, c.ID, res.Successors[0].ID, ""); err != nil {
 		t.Fatal(err)
 	}
-	if err := g.acceptAndCheckin(ctx, c.ID, parent.ID, ""); err != nil {
+	if err := g.acceptImpact(ctx, c.ID, parent.ID, ""); err != nil {
 		t.Fatal(err)
 	}
 	base := must[domain.Baseline](t)(g.Apply(ctx, c.ID, ""))
@@ -398,10 +398,10 @@ func testOriginsGateAtLanding(t *testing.T, repo Repo) {
 	for _, s := range res.Sources {
 		must[domain.ChangeImpact](t)(g.ImpactNodeReview(ctx, c.ID, s.ID, domain.ReviewAccepted, "tester", "ok"))
 	}
-	if err := g.acceptAndCheckin(ctx, c.ID, res.Successors[0].ID, ""); err != nil {
+	if err := g.acceptImpact(ctx, c.ID, res.Successors[0].ID, ""); err != nil {
 		t.Fatal(err)
 	}
-	if err := g.acceptAndCheckin(ctx, c.ID, res.Parents[0].ID, ""); err != nil {
+	if err := g.acceptImpact(ctx, c.ID, res.Parents[0].ID, ""); err != nil {
 		t.Fatal(err)
 	}
 	// an origin goes back to proposed: the successor no longer lands

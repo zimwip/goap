@@ -183,11 +183,6 @@ func testApplyRejectedAndConflicts(t *testing.T, repo Repo) {
 		if _, err := g.ImpactNodeReview(ctx, c.ID, ns[0].ID, status, "u", "decided"); err != nil {
 			t.Fatal(err)
 		}
-		if accept {
-			if err := g.checkinIfOut(ctx, c.ID, ns[0].ID, ""); err != nil {
-				t.Fatal(err)
-			}
-		}
 		return c
 	}
 	c1, c2 := change("c1", 1, false), change("c2", 1, true)

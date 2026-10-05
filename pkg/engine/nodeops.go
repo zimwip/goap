@@ -85,8 +85,8 @@ func ChangeImpactsFromBlackboard(bb domain.Blackboard) []dsl.ChangeImpact {
 
 // applyNodeOps applies the change impact operations a script buffered, in order:
 // a declaration adds a change impact, a write edits its working version (checked
-// out on the first write, ADR 0076), a review accepts or rejects it, a check-in
-// freezes it, a transition moves it along its lifecycle, a cancel drops the
+// out on the first write, ADR 0076), a review accepts or rejects it (the working
+// version stays one until the change lands, ADR 0077), a transition moves it along its lifecycle, a cancel drops the
 // working version. References ("#nN")
 // name the change impacts declared earlier by the same script; a key names a
 // change impact the process sees. On a flow branch the process sees the change
@@ -122,7 +122,7 @@ func (e *Engine) applyNodeOps(ctx context.Context, p *Process, ops []dsl.NodeOp,
 		byKey[cn.Key] = cn.ID
 		if cn.Post != nil {
 			posts[cn.ID] = *cn.Post
-			out[cn.ID] = bb.Nodes[*cn.Post].CheckedOut
+			out[cn.ID] = graph.IsWorking(bb.Change, p.Flow, bb.Nodes[*cn.Post].Node)
 		}
 	}
 	local := map[string]domain.ChangeImpactID{}
@@ -367,15 +367,6 @@ func (e *Engine) applyNodeOps(ctx context.Context, p *Process, ops []dsl.NodeOp,
 			if err := produce(id); err != nil {
 				return declared, fail(err)
 			}
-		case "checkin":
-			id, err := resolve(op.Node)
-			if err != nil {
-				return declared, fail(err)
-			}
-			if _, err := e.Graph.ImpactNodeCheckin(ctx, p.ChangeID, id, p.Flow, execution); err != nil {
-				return declared, fail(err)
-			}
-			out[id] = false
 		case "transition":
 			id, err := resolve(op.Node)
 			if err != nil {

@@ -273,10 +273,8 @@ func TestChangeImpactRPCs(t *testing.T) {
 			t.Fatalf("event %s: by %q, impact %s", e.Op, e.By, e.ImpactId)
 		}
 	}
-	ci := connect.NewRequest(&graphv1.ImpactNodeCheckinRequest{ChangeId: string(c.ID), ChangeImpactId: cn.Id})
-	as("contributor", ci)
-	if _, err := h.ImpactNodeCheckin(ctx, ci); err != nil {
-		t.Fatalf("check-in: %v", err)
+	if n, err := g.Node(ctx, domain.NodeRef{ID: req1.ID, Version: 2}); err != nil || !n.CheckedOut {
+		t.Fatalf("the accepted review leaves a working version until the change lands: %+v %v", n, err)
 	}
 	log, err = h.ListChangeEvents(ctx, connect.NewRequest(&graphv1.ListChangeEventsRequest{ChangeId: string(c.ID)}))
 	if err != nil {
@@ -286,7 +284,7 @@ func TestChangeImpactRPCs(t *testing.T) {
 	for _, e := range log.Msg.Events {
 		ops = append(ops, e.Op)
 	}
-	if strings.Join(ops, ",") != "proposed,checkedOut,updated,reviewed,checkedIn" {
+	if strings.Join(ops, ",") != "proposed,checkedOut,updated,reviewed" {
 		t.Fatalf("impact log = %v", ops)
 	}
 }

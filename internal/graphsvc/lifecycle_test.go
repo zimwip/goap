@@ -157,14 +157,10 @@ nodeTypes:
 	if _, err := h.ImpactNodeReview(ctx, rv); err != nil {
 		t.Fatal(err)
 	}
-	ci := connect.NewRequest(&graphv1.ImpactNodeCheckinRequest{ChangeId: string(c.ID), ChangeImpactId: cnID})
-	withRoles(ci.Header(), "contributor")
-	if _, err := h.ImpactNodeCheckin(ctx, ci); err != nil {
-		t.Fatal(err)
-	}
 	if err := move("contributor", "released"); connect.CodeOf(err) != connect.CodePermissionDenied {
 		t.Fatalf("a contributor lacks requirement:release: %v", err)
 	}
+	// the release is taken in place on the working version: one version for the checkout, the edit and the move
 	if err := move("admin", "released"); err != nil {
 		t.Fatalf("admin may release: %v", err)
 	}
@@ -173,7 +169,7 @@ nodeTypes:
 	if _, err := h.ApplyChange(ctx, r); err != nil {
 		t.Fatal(err)
 	}
-	if n, err := g.NodeByKey(ctx, "docs", "REQ-1"); err != nil || n.State != "released" || n.Version != 4 || n.Properties["title"] != "b" {
+	if n, err := g.NodeByKey(ctx, "docs", "REQ-1"); err != nil || n.State != "released" || n.Version != 3 || n.Properties["title"] != "b" {
 		t.Fatalf("REQ-1: %+v %v", n, err)
 	}
 }

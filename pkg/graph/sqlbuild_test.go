@@ -204,8 +204,10 @@ func TestSQLBuildersGolden(t *testing.T) {
 	checkSQL(t, "sqlite SetNodeProps", lite, lite.sqlSetNodeProps(), `UPDATE node_version SET props = ? WHERE node_id = ? AND version = ?`)
 	checkSQL(t, "pg SetNodeOwner", pg, pg.sqlSetNodeOwner(), `UPDATE node_version SET owner_id = $3 WHERE node_id = $1 AND version = $2`)
 	checkSQL(t, "sqlite SetNodeOwner", lite, lite.sqlSetNodeOwner(), `UPDATE node_version SET owner_id = ? WHERE node_id = ? AND version = ?`)
-	checkSQL(t, "pg Checkin", pg, pg.sqlCheckin(), `UPDATE node_version SET checked_out = $3 WHERE node_id = $1 AND version = $2 AND checked_out`)
-	checkSQL(t, "sqlite Checkin", lite, lite.sqlCheckin(), `UPDATE node_version SET checked_out = ? WHERE node_id = ? AND version = ? AND checked_out`)
+	checkSQL(t, "pg SetNodeState", pg, pg.sqlSetNodeState(), `UPDATE node_version SET state = $3 WHERE node_id = $1 AND version = $2`)
+	checkSQL(t, "sqlite SetNodeState", lite, lite.sqlSetNodeState(), `UPDATE node_version SET state = ? WHERE node_id = ? AND version = ?`)
+	checkSQL(t, "pg Freeze", pg, pg.sqlFreeze(), `UPDATE node_version SET checked_out = $3 WHERE node_id = $1 AND version = $2 AND checked_out`)
+	checkSQL(t, "sqlite Freeze", lite, lite.sqlFreeze(), `UPDATE node_version SET checked_out = ? WHERE node_id = ? AND version = ? AND checked_out`)
 	for i, want := range []string{`DELETE FROM link WHERE from_id = $1 AND from_version = $2`, `DELETE FROM node_version WHERE node_id = $1 AND version = $2 AND checked_out`} {
 		checkSQL(t, "pg DropWorkingVersion", pg, pg.dropWorkingVersion()[i], want)
 	}

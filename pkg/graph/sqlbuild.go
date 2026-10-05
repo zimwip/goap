@@ -298,8 +298,13 @@ func (d dialect) sqlSetNodeOwner() string {
 	return `UPDATE node_version SET owner_id = ` + d.ph(3) + ` WHERE node_id = ` + d.ph(1) + ` AND version = ` + d.ph(2)
 }
 
-// sqlCheckin freezes a working version (ADR 0076): arguments node, version, false.
-func (d dialect) sqlCheckin() string {
+// sqlSetNodeState moves a working version to a state: arguments node, version, state.
+func (d dialect) sqlSetNodeState() string {
+	return `UPDATE node_version SET state = ` + d.ph(3) + ` WHERE node_id = ` + d.ph(1) + ` AND version = ` + d.ph(2)
+}
+
+// sqlFreeze freezes a working version (ADR 0077): arguments node, version, false.
+func (d dialect) sqlFreeze() string {
 	return `UPDATE node_version SET checked_out = ` + d.ph(3) + ` WHERE node_id = ` + d.ph(1) + ` AND version = ` + d.ph(2) + ` AND checked_out`
 }
 

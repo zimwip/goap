@@ -414,7 +414,7 @@ func originsPatch(ctx context.Context, tx Tx, origins []domain.NodeRef) []any {
 }
 
 // checkOrigins is the review gate of a successor (ADR 0077): a node created by the change with origins is accepted,
-// checked in and landed only when the change impact of every origin is accepted, the way what a node derives from is
+// frozen (accepted) and landed only when the change impact of every origin is accepted, the way what a node derives from is
 // settled before it. impacts are the ones the flow sees.
 func (g *Graph) checkOrigins(ctx context.Context, tx Tx, change domain.ChangeID, impacts []domain.ChangeImpact, cn domain.ChangeImpact) error {
 	if cn.Intent != domain.IntentCreated || cn.Post == nil {

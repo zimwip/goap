@@ -658,16 +658,6 @@ func (h *Handler) ImpactLinkDelete(ctx context.Context, r *connect.Request[graph
 	return res(&graphv1.ImpactLinkDeleteResponse{}, h.Graph.ImpactLinkDelete(ctx, domain.ChangeID(m.ChangeId), domain.LinkID(m.LinkId), m.Flow, m.Execution))
 }
 
-func (h *Handler) ImpactNodeCheckin(ctx context.Context, r *connect.Request[graphv1.ImpactNodeCheckinRequest]) (*connect.Response[graphv1.ImpactNodeCheckinResponse], error) {
-	ctx = h.Identity.Context(ctx, r.Header())
-	m := r.Msg
-	if err := h.gateImpact(ctx, m.ChangeId, m.ChangeImpactId, ""); err != nil {
-		return nil, err
-	}
-	cn, err := h.Graph.ImpactNodeCheckin(ctx, domain.ChangeID(m.ChangeId), domain.ChangeImpactID(m.ChangeImpactId), m.Flow, m.Execution)
-	return res(&graphv1.ImpactNodeCheckinResponse{Node: pbconv.ChangeImpactToPB(cn)}, err)
-}
-
 func (h *Handler) ImpactNodeTransition(ctx context.Context, r *connect.Request[graphv1.ImpactNodeTransitionRequest]) (*connect.Response[graphv1.ImpactNodeTransitionResponse], error) {
 	ctx = h.Identity.Context(ctx, r.Header()) // the transition is authorized for the caller
 	m := r.Msg

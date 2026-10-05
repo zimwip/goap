@@ -22,7 +22,7 @@ type NodeEdit struct {
 	Pre *domain.NodeRef
 	// Props are merged over the current properties (a nil value clears one).
 	Props map[string]any
-	// State moves the node to a lifecycle state, after its other edits, checked in: a transition of its own
+	// State moves the node to a lifecycle state, after its other edits: in place on its working version, else a version of its own
 	// (ImpactNodeTransition, ADR 0076); before them when the node rests in a state that is not editable and State is
 	// (a retired entry restored).
 	State string
@@ -71,8 +71,8 @@ type CommitResult struct {
 
 // Commit runs the edits as one change, through the operations every change uses (ADR 0076): it opens the change on a
 // branch of its own; a created node is a ImpactNodeCreate, a modified one a ImpactNodeCheckout with its ImpactNodeUpdate and link edits;
-// each impact is accepted (the rationale is the comment) and checked in, then the state edits are transitions
-// (ImpactNodeTransition), and the change is applied. When the branch cannot be merged without conflict (another change moved
+// each impact is accepted (the rationale is the comment; it freezes the working version), the state edits are
+// transitions (ImpactNodeTransition: in place on a working version, before its accept), and the change is applied. When the branch cannot be merged without conflict (another change moved
 // a node meanwhile) the change is abandoned and ErrConflict returned: the producer reads again and rebuilds its edits.
 // A created node of a structure or a User must name its required parent (checkRequiredParent, ADR 0040).
 func (g *Graph) Commit(ctx context.Context, in Commit) (res CommitResult, err error) {
@@ -95,7 +95,7 @@ func (g *Graph) Commit(ctx context.Context, in Commit) (res CommitResult, err er
 		if err == nil {
 			return
 		}
-		// a creation that was not checked in leaves no node behind: its key stays free (ADR 0076 §5b)
+		// a creation that was not accepted leaves no node behind: its key stays free (ADR 0076 §5b)
 		for i, e := range in.Edits {
 			if e.Pre == nil && i < len(impacts) && impacts[i] != "" {
 				if out, _ := g.isCheckedOut(ctx, c.ID, impacts[i]); out {
@@ -225,19 +225,15 @@ func (g *Graph) Commit(ctx context.Context, in Commit) (res CommitResult, err er
 			return res, fmt.Errorf("link %s from %s to %s: %w", x.l.Type, nodeName(in.Edits[x.from]), x.l.ToKey, err)
 		}
 	}
-	// The nodes moved to a state are checked in and moved first: a transition is a version of its own, and the links
-	// the working versions of the change hold to a node follow its new versions until they are checked in (ADR 0076).
+	// Accepting an impact freezes its working version (ADR 0077). A node with a working version is moved to its state
+	// first, in place, then accepted: one version. A node with none (a state-only edit) is accepted first, then moved:
+	// a version of its own.
 	freeze := func(i int, e NodeEdit) error {
 		if impacts[i] == "" {
 			return nil
 		}
 		if _, err := g.ImpactNodeReview(ctx, c.ID, impacts[i], domain.ReviewAccepted, in.By, why(e)); err != nil {
-			return err
-		}
-		if posts[i] != nil {
-			if _, err := g.ImpactNodeCheckin(ctx, c.ID, impacts[i], "", ""); err != nil {
-				return fmt.Errorf("%s: %w", nodeName(e), err)
-			}
+			return fmt.Errorf("%s: %w", nodeName(e), err)
 		}
 		return nil
 	}
@@ -268,6 +264,15 @@ func (g *Graph) Commit(ctx context.Context, in Commit) (res CommitResult, err er
 	}
 	for i, e := range in.Edits {
 		if e.State == "" {
+			continue
+		}
+		if posts[i] != nil {
+			if err := move(i, e); err != nil {
+				return res, err
+			}
+			if err := freeze(i, e); err != nil {
+				return res, err
+			}
 			continue
 		}
 		if err := freeze(i, e); err != nil {

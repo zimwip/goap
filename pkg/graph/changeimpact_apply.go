@@ -18,7 +18,8 @@ type cpost struct {
 
 // prepareChangeImpacts puts the versions produced by the accepted change impacts
 // into the target graph. Every change impact must have been reviewed; a rejected
-// one is left out, an accepted one must have been realized.
+// one is left out, an accepted one must have been realized; the working version of an accepted one is frozen
+// here (ADR 0077).
 func (a *applier) prepareChangeImpacts() error {
 	for _, cn := range a.change.Nodes {
 		if len(cn.Items) > 0 {
@@ -46,8 +47,21 @@ func (a *applier) prepareChangeImpacts() error {
 		if err != nil {
 			return err
 		}
+		// landing freezes the accepted working version (ADR 0077), and the ones of the change it supersedes (a flow
+		// version a parent flow's working version was derived from); the frozen-state checks follow (checkChangeImpacts)
 		if post.CheckedOut {
-			return fmt.Errorf("change impact %s (%s) is checked out: check it in, or cancel the checkout, before the change is applied: %w", cn.Key, cn.ID, ErrConflict)
+			vs, err := a.tx.Versions(a.ctx, post.ID)
+			if err != nil {
+				return err
+			}
+			for _, v := range vs {
+				if v.CheckedOut && (v.ChangeID == a.change.ID || v.Ref() == post.Ref()) {
+					if err := a.tx.FreezeVersion(a.ctx, v.Ref()); err != nil {
+						return err
+					}
+				}
+			}
+			post.CheckedOut = false
 		}
 		cp := cpost{cn: cn, post: post}
 		if cn.Pre != nil {
@@ -110,7 +124,9 @@ func (a *applier) walkChangeImpacts() (editable []string, err error) {
 }
 
 // walkTransitions replays the versions of a node written on the change branch: each state change must be a
-// transition of the lifecycle.
+// transition of the lifecycle. A version whose state was set in place (ADR 0077: transitioned events with a state
+// patch, each checked when it was taken) is followed through those moves: they must chain from the state the version
+// started in to the state it carries.
 func (a *applier) walkTransitions(cp cpost, lc *domain.Lifecycle) error {
 	n := cp.post
 	prev, from := lc.Initial, 0
@@ -124,8 +140,31 @@ func (a *applier) walkTransitions(cp cpost, lc *domain.Lifecycle) error {
 	if err != nil {
 		return err
 	}
+	moved := map[domain.ChangeID]map[domain.NodeRef][]stateMove{} // by the change that wrote the version: a sub-change merged in too
 	for _, v := range vs {
-		if !v.On(a.branch) || int(v.Version) <= from || v.State == prev {
+		if !v.On(a.branch) || int(v.Version) <= from {
+			continue
+		}
+		if _, ok := moved[v.ChangeID]; !ok {
+			if moved[v.ChangeID], err = a.inPlaceMoves(v.ChangeID); err != nil {
+				return err
+			}
+		}
+		if ms := moved[v.ChangeID][v.Ref()]; len(ms) > 0 {
+			at := prev
+			for _, m := range ms {
+				if m.from != at {
+					return invalidf("%s (%s) was moved from %s while it was in %s", n.Key, n.Type, m.from, at)
+				}
+				at = m.to
+			}
+			if at != v.State && !(v.State == "" && at == lc.Initial) {
+				return invalidf("%s (%s) is in %s, the moves recorded for it end in %s", n.Key, n.Type, v.State, at)
+			}
+			prev = v.State
+			continue
+		}
+		if v.State == prev {
 			continue
 		}
 		if _, ok := lc.Move(prev, v.State); !ok {
@@ -134,6 +173,29 @@ func (a *applier) walkTransitions(cp cpost, lc *domain.Lifecycle) error {
 		prev = v.State
 	}
 	return nil
+}
+
+// stateMove is a transition taken in place on a working version.
+type stateMove struct{ from, to string }
+
+// inPlaceMoves reads, from the impact log of a change, the transitions taken in place on its working versions, by
+// version, in order (ADR 0077).
+func (a *applier) inPlaceMoves(change domain.ChangeID) (map[domain.NodeRef][]stateMove, error) {
+	events, err := impactEvents(a.ctx, a.tx, change)
+	if err != nil {
+		return nil, err
+	}
+	out := map[domain.NodeRef][]stateMove{}
+	for _, e := range events {
+		st, ok := e.Patch["state"].(map[string]any)
+		if e.Op != domain.ImpactTransitioned || !ok || e.Post == nil {
+			continue
+		}
+		from, _ := st["from"].(string)
+		to, _ := st["to"].(string)
+		out[*e.Post] = append(out[*e.Post], stateMove{from, to})
+	}
+	return out, nil
 }
 
 // settleChangeImpacts decides what the walk found: the landing gate, else the editable states left.

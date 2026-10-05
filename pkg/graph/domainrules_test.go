@@ -41,7 +41,7 @@ func testWithdrawImpact(t *testing.T, repo Repo) {
 		t.Fatalf("the impact leaves the change: %+v", got.Nodes)
 	}
 
-	// a creation removed before its first check-in leaves no node
+	// a creation removed before it is accepted leaves no node
 	created := must[domain.ChangeImpact](t)(g.ImpactNodeCreate(ctx, c.ID, NodeCreate{Key: "REQ-NEW", Type: "Requirement", Rationale: "new"}))
 	if err := g.WithdrawImpact(ctx, c.ID, created.ID, "", ""); err != nil {
 		t.Fatal(err)
@@ -50,13 +50,13 @@ func testWithdrawImpact(t *testing.T, repo Repo) {
 		t.Fatalf("the created node is gone: %v", err)
 	}
 
-	// a checked-in version is frozen: the impact is rejected, not removed
+	// an accepted impact keeps its working version until the change lands: it is withdrawn like any other
 	cn = must[domain.ChangeImpact](t)(g.ImpactNodeCheckout(ctx, c.ID, NodeCheckout{Node: f.test.ID, Rationale: "v2"}))
-	if err := g.acceptAndCheckin(ctx, c.ID, cn.ID, ""); err != nil {
+	if err := g.acceptImpact(ctx, c.ID, cn.ID, ""); err != nil {
 		t.Fatal(err)
 	}
-	if err := g.WithdrawImpact(ctx, c.ID, cn.ID, "", ""); !errors.Is(err, ErrConflict) {
-		t.Fatalf("an impact with a checked-in version is not removed: %v", err)
+	if err := g.WithdrawImpact(ctx, c.ID, cn.ID, "", ""); err != nil {
+		t.Fatalf("an accepted working version is dropped with its impact: %v", err)
 	}
 	if _, err := g.Apply(ctx, c.ID, ""); err != nil {
 		t.Fatal(err)
@@ -65,9 +65,9 @@ func testWithdrawImpact(t *testing.T, repo Repo) {
 
 // The links a type requires (the parent of a unit, ADR 0054) are checked when the version is frozen and when it lands,
 // whatever operations built it; a working version may be on its way there.
-func TestRequiredLinksAtCheckin(t *testing.T) { forEachRepo(t, testRequiredLinksAtCheckin) }
+func TestRequiredLinksAtAccept(t *testing.T) { forEachRepo(t, testRequiredLinksAtAccept) }
 
-func testRequiredLinksAtCheckin(t *testing.T, repo Repo) {
+func testRequiredLinksAtAccept(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	g := New(repo)
 	if err := g.Bootstrap(ctx); err != nil {
@@ -77,14 +77,14 @@ func testRequiredLinksAtCheckin(t *testing.T, repo Repo) {
 	head := must[domain.Baseline](t)(g.BranchHead(ctx, "organisation", domain.MainBranch))
 	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{Namespace: "organisation", Title: "unit", BaselineID: head.ID}))
 	cn := must[domain.ChangeImpact](t)(g.ImpactNodeCreate(ctx, c.ID, NodeCreate{Key: "ORG-X", Type: NodeTypeOrgUnit, Properties: map[string]any{"name": "X"}, Rationale: "new unit"}))
-	must[domain.ChangeImpact](t)(g.ImpactNodeReview(ctx, c.ID, cn.ID, domain.ReviewAccepted, "bob", "ok"))
-	if _, err := g.ImpactNodeCheckin(ctx, c.ID, cn.ID, "", ""); !errors.Is(err, ErrInvalid) {
-		t.Fatalf("a unit without a parent is not checked in: %v", err)
+	if _, err := g.ImpactNodeReview(ctx, c.ID, cn.ID, domain.ReviewAccepted, "bob", "ok"); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("a unit without a parent is not accepted: %v", err)
 	}
-	// an accepted version is not edited: reopened, the parent is added and the version reviewed again
-	must[[]domain.ChangeImpactID](t)(g.ReopenImpacts(ctx, c.ID, []domain.ChangeImpactID{cn.ID}, "add the parent"))
+	if v := must[domain.Node](t)(g.Node(ctx, *cn.Post)); !v.CheckedOut {
+		t.Fatalf("a refused accept leaves a working version: %+v", v)
+	}
 	must[domain.Link](t)(g.ImpactLinkCreate(ctx, c.ID, cn.ID, LinkWrite{Type: LinkPartOf, To: root.Ref()}, "", ""))
-	if err := g.acceptAndCheckin(ctx, c.ID, cn.ID, ""); err != nil {
+	if err := g.acceptImpact(ctx, c.ID, cn.ID, ""); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := g.Apply(ctx, c.ID, ""); err != nil {

@@ -414,8 +414,12 @@ func (t *sqliteTx) SetNodeOwner(ctx context.Context, ref domain.NodeRef, owner d
 	return t.exec1(ctx, "node "+ref.String(), dialectSQLite.sqlSetNodeOwner(), string(ref.ID), int(ref.Version), nullUUID(string(owner)))
 }
 
-func (t *sqliteTx) CheckinVersion(ctx context.Context, ref domain.NodeRef) error {
-	return t.exec1(ctx, "checked-out version "+ref.String(), dialectSQLite.sqlCheckin(), string(ref.ID), int(ref.Version), false)
+func (t *sqliteTx) SetNodeState(ctx context.Context, ref domain.NodeRef, state string) error {
+	return t.exec1(ctx, "node "+ref.String(), dialectSQLite.sqlSetNodeState(), string(ref.ID), int(ref.Version), state)
+}
+
+func (t *sqliteTx) FreezeVersion(ctx context.Context, ref domain.NodeRef) error {
+	return t.exec1(ctx, "checked-out version "+ref.String(), dialectSQLite.sqlFreeze(), string(ref.ID), int(ref.Version), false)
 }
 
 func (t *sqliteTx) DropWorkingVersion(ctx context.Context, ref domain.NodeRef) error {
