@@ -93,6 +93,7 @@ func main() {
 		platform.Fatal(log, "authorizer", err)
 	}
 	g.Authorizer = graphsvc.TransitionAuthorizer(authorizer)
+	g.ChangeAuthorizer = graphsvc.ChangeTransitionAuthorizer(authorizer)
 	g.Validators = []graph.NodeValidator{access.AdminFloorValidator{}}
 	var triggers *engine.TriggerManager
 	// methodologies and domains are nodes of the graph: the registry needs no database
@@ -105,6 +106,8 @@ func main() {
 	// a change scoped to an Activity is gated by its own goal condition at Apply, not the node-type lifecycle's
 	// Editable floor (architecture plan "Activity concept")
 	g.ActivityGoalsMet = reg.ActivityGoalsMet
+	// a change follows the lifecycle its methodology names, its gates read the conditions of the methodology (ADR 0058)
+	g.Lifecycles = reg
 	// the one event stream of the web (ADR 0053): every publication of the platform also feeds it
 	bus := eventsvc.NewHub()
 	go bus.Run(ctx)

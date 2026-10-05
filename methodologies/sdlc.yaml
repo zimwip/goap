@@ -31,7 +31,8 @@ conditions:
     description: Requirements are created or revised
     expr: changeImpacts.exists(n, n.hasPost && "alm@Requirement" in n.types)
   # NB: the "each …" conditions are true on an empty set; the actions that
-  # depend on them also require requirements_specified to anchor the cycle.
+  # depend on them also require requirements_specified to anchor the cycle
+  # (functions_allocated anchors itself: it is false until a requirement is created or revised).
   - name: requirements_traced
     description: Each new requirement satisfies a need (or refines another one)
     expr: >
@@ -46,6 +47,7 @@ conditions:
   - name: functions_allocated
     description: Each new requirement is realized by a function
     expr: >
+      changeImpacts.exists(n, n.hasPost && "alm@Requirement" in n.types) &&
       changeImpacts.filter(r, r.intent == "created" && "alm@Requirement" in r.types && r.hasPost).all(r,
         changeImpacts.exists(f, f.hasPost && f.post.out.exists(l, l.type == "alm@realizes" && l.to.id == r.post.id)))
   - name: design_done
@@ -264,7 +266,7 @@ actions:
     kind: script
     language: javascript
     description: Allocate each new requirement to a function (impacted function, otherwise a new function)
-    pre: {requirements_traced: true}
+    pre: {requirements_specified: true, requirements_traced: true}
     effects: {functions_allocated: true}
     cost: 1
     code: |

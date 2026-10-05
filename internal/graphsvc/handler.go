@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
+	"strings"
 	"time"
 
 	"connectrpc.com/connect"
@@ -197,19 +199,47 @@ func (h *Handler) ListChangeLog(ctx context.Context, r *connect.Request[graphv1.
 		}
 		f.Flows = append(f.Flows, fl)
 	}
+	ctx = h.Identity.Context(ctx, r.Header())
 	entries, counts, err := h.Graph.ChangeLog(ctx, f)
 	if err != nil {
 		return nil, rpcerr.ToConnect(err)
 	}
+	// the prompts of the model calls (stream model) are read with their own permission, prompt:inspect on the project of
+	// the change: asking for them without it is refused, a log read without types leaves them out
+	hide := false
+	if f.MatchType(domain.LogModel + ".call") {
+		c, err := h.Graph.Change(ctx, f.Change)
+		if err != nil {
+			return nil, rpcerr.ToConnect(err)
+		}
+		if err := h.checkPrompts(ctx, c); err != nil {
+			if slices.ContainsFunc(f.Types, func(t string) bool { return strings.HasPrefix(t, domain.LogModel+".") }) {
+				return nil, rpcerr.ToConnect(err)
+			}
+			hide = true
+		}
+	}
 	out := &graphv1.ListChangeLogResponse{Counts: map[string]int32{}}
 	for t, n := range counts {
+		if hide && strings.HasPrefix(t, domain.LogModel+".") {
+			continue
+		}
 		out.Counts[t] = int32(n)
 	}
 	for _, e := range entries {
+		if hide && e.Stream() == domain.LogModel {
+			continue
+		}
 		out.Entries = append(out.Entries, &graphv1.LogEntry{Seq: e.Seq, Id: e.ID, ChangeId: string(e.Change), Type: e.Type, Flow: e.Flow, ProcessId: e.Process,
 			Execution: e.Execution, Subject: e.Subject, By: e.By, At: pbconv.Time(e.At), Payload: string(e.Payload)})
 	}
 	return connect.NewResponse(out), nil
+}
+
+// checkPrompts is nil when the caller may read the prompts of the model calls of the change.
+func (h *Handler) checkPrompts(ctx context.Context, c domain.Change) error {
+	return authz.Check(ctx, h.Authz, authz.Request{Subject: authz.From(ctx), Action: "inspect",
+		Resource: authz.Resource{Type: "prompt", ID: string(c.ID), Name: c.Title, Org: c.OwnerOrg, ProjectID: c.ProjectID}})
 }
 
 // ExportChangeProvenance is the whole log of a change as PROV-O provenance (ADR 0057).
@@ -222,6 +252,9 @@ func (h *Handler) ExportChangeProvenance(ctx context.Context, r *connect.Request
 	entries, _, err := h.Graph.ChangeLog(ctx, domain.LogFilter{Change: id})
 	if err != nil {
 		return nil, rpcerr.ToConnect(err)
+	}
+	if h.checkPrompts(ctx, c) != nil { // the export carries the prompts only for whoever may read them
+		entries = slices.DeleteFunc(entries, func(e domain.LogEntry) bool { return e.Stream() == domain.LogModel })
 	}
 	doc, err := prov.Export(c, entries)
 	if err != nil {
@@ -553,6 +586,16 @@ func (h *Handler) ApplyChange(ctx context.Context, r *connect.Request[graphv1.Ap
 		}
 	}
 	return res(&graphv1.ApplyChangeResponse{Baseline: pbconv.BaselineToPB(b)}, err)
+}
+
+func (h *Handler) TransitionChange(ctx context.Context, r *connect.Request[graphv1.TransitionChangeRequest]) (*connect.Response[graphv1.TransitionChangeResponse], error) {
+	ctx = h.Identity.Context(ctx, r.Header()) // the transition is authorized for the caller
+	c, err := h.Graph.TransitionChange(ctx, domain.ChangeID(r.Msg.ChangeId), graph.TransitionRequest{Transition: r.Msg.Transition, Decision: r.Msg.Decision, By: authz.From(ctx).Subject})
+	if err != nil {
+		return nil, rpcerr.ToConnect(err)
+	}
+	c.Items = nil
+	return connect.NewResponse(&graphv1.TransitionChangeResponse{Change: pbconv.ChangeToPB(c)}), nil
 }
 
 func (h *Handler) CreateBranch(ctx context.Context, r *connect.Request[graphv1.CreateBranchRequest]) (*connect.Response[graphv1.CreateBranchResponse], error) {

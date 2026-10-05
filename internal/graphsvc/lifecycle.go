@@ -29,3 +29,23 @@ func TransitionAuthorizer(a authz.Authorizer) graph.TransitionAuthorizer {
 			Resource: authz.Resource{Type: typ, ID: string(n.ID), Name: n.Key, Org: who.Org, ProjectID: who.Project}})
 	}
 }
+
+// ChangeTransitionAuthorizer authorizes the transitions of the lifecycle of a change for the caller (ADR 0058): the
+// permission a transition declares, by default change:transition, checked on the project of the change.
+func ChangeTransitionAuthorizer(a authz.Authorizer) graph.ChangeTransitionAuthorizer {
+	return func(ctx context.Context, c domain.Change, t domain.Transition) error {
+		who := authz.From(ctx)
+		if a == nil || who.Anonymous() {
+			return nil
+		}
+		typ, action := "change", "transition"
+		if t.Permission != "" {
+			var err error
+			if typ, action, err = authz.ParsePermission(t.Permission); err != nil {
+				return err
+			}
+		}
+		return authz.Check(ctx, a, authz.Request{Subject: who, Action: action,
+			Resource: authz.Resource{Type: typ, ID: string(c.ID), Name: c.Title, Org: c.OwnerOrg, ProjectID: c.ProjectID}})
+	}
+}

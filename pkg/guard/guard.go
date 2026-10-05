@@ -12,6 +12,10 @@ import (
 // Guard is a compiled lifecycle transition guard: a boolean CEL expression
 // over the node being moved (`node`: key, type, state, props), the nodes a
 // document contains (`children`, same shape) and the change (`change`).
+//
+// The guard of a transition of the lifecycle of a change (ADR 0058) is the same language: it sees `change` and, as
+// the conditions of a methodology do, the decision points of the change (`decisionPoints`) and the world state
+// (`world`: condition name to bool); `node` and `children` are empty then.
 type Guard struct {
 	prog cel.Program
 }
@@ -21,6 +25,10 @@ func guardEnv() (*cel.Env, error) {
 		cel.Variable("node", cel.MapType(cel.StringType, cel.DynType)),
 		cel.Variable("children", cel.ListType(cel.DynType)),
 		cel.Variable("change", cel.MapType(cel.StringType, cel.DynType)),
+		cel.Variable("decisionPoints", cel.ListType(cel.DynType)),
+		cel.Variable("actions", cel.ListType(cel.DynType)),
+		cel.Variable("risks", cel.ListType(cel.DynType)),
+		cel.Variable("world", cel.MapType(cel.StringType, cel.DynType)),
 		ext.Strings(), ext.Lists(), ext.Sets())
 }
 
@@ -49,13 +57,40 @@ func Compile(expr string) (*Guard, error) {
 
 // Check evaluates the guard. An evaluation error is an error, not a false.
 func (g *Guard) Check(node map[string]any, children []any, change map[string]any) (bool, error) {
+	return g.eval(node, children, change, Facts{}, nil)
+}
+
+// Facts are what the guard of a change transition reads of the blackboard besides the change.
+type Facts struct {
+	DecisionPoints, Actions, Risks []any
+}
+
+// CheckChange evaluates the guard of a transition of the lifecycle of a change (ADR 0058).
+func (g *Guard) CheckChange(change map[string]any, f Facts, world map[string]bool) (bool, error) {
+	w := make(map[string]any, len(world))
+	for k, v := range world {
+		w[k] = v
+	}
+	return g.eval(map[string]any{}, nil, change, f, w)
+}
+
+func (g *Guard) eval(node map[string]any, children []any, change map[string]any, f Facts, world map[string]any) (bool, error) {
 	if g == nil || g.prog == nil {
 		return true, nil
 	}
 	if children == nil {
 		children = []any{}
 	}
-	v, _, err := g.prog.Eval(map[string]any{"node": node, "children": children, "change": change})
+	list := func(l []any) []any {
+		if l == nil {
+			return []any{}
+		}
+		return l
+	}
+	if world == nil {
+		world = map[string]any{}
+	}
+	v, _, err := g.prog.Eval(map[string]any{"node": node, "children": children, "change": change, "decisionPoints": list(f.DecisionPoints), "actions": list(f.Actions), "risks": list(f.Risks), "world": world})
 	if err != nil {
 		return false, err
 	}

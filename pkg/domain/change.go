@@ -55,10 +55,15 @@ type Change struct {
 	// ActivityRef scopes the change to one Activity (a methodology@Process/Step/Method/MethodStep node key,
 	// architecture plan "Activity concept"): the activity whose goal condition the change must satisfy to apply.
 	// Empty: no activity-relative gating beyond a node type's own lifecycle.
-	ActivityRef string       `json:"activityRef,omitempty"`
-	Goal        string       `json:"goal,omitempty"`
-	Status      ChangeStatus `json:"status"`
-	BaselineID  BaselineID   `json:"baselineId"`
+	ActivityRef string `json:"activityRef,omitempty"`
+	// Lifecycle names the lifecycle the change follows (ADR 0058), set by CreateChange from its methodology, and State
+	// is the state it is in; both are empty when the methodology names no lifecycle. State is moved only by
+	// TransitionChange, which journals it as a KindTransition item.
+	Lifecycle  string       `json:"lifecycle,omitempty"`
+	State      string       `json:"state,omitempty"`
+	Goal       string       `json:"goal,omitempty"`
+	Status     ChangeStatus `json:"status"`
+	BaselineID BaselineID   `json:"baselineId"`
 	// Branch the change is applied to (default main).
 	Branch           string         `json:"branch,omitempty"`
 	ResultBaselineID BaselineID     `json:"resultBaselineId,omitempty"`
@@ -95,6 +100,9 @@ const (
 	// KindSignal is a named notification other agents or a live parent may react
 	// to (Type is the signal's name, Target addresses a process, "" = broadcast).
 	KindSignal ItemKind = "signal"
+	// KindTransition records a move of the lifecycle of the change (ADR 0058): Data holds transition, from, to and,
+	// when a decision point gated it, decision. Written only by TransitionChange.
+	KindTransition ItemKind = "transition"
 )
 
 // ItemStatus is the review state of an item.
@@ -169,6 +177,10 @@ func (it ChangeItem) Validate() error {
 	case KindSignal:
 		if it.Type == "" {
 			return fmt.Errorf("signal item requires type")
+		}
+	case KindTransition:
+		if s, _ := it.Data["to"].(string); s == "" {
+			return fmt.Errorf("transition item requires data.to")
 		}
 	default:
 		return fmt.Errorf("unknown item kind %q", it.Kind)

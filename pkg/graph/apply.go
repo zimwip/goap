@@ -26,6 +26,9 @@ import (
 // left on the target branch, or its commit baseline when the integration waits for a resolution.
 func (g *Graph) Apply(ctx context.Context, id domain.ChangeID, baselineName string) (domain.Baseline, error) {
 	var result domain.Baseline
+	if err := g.checkFinalState(ctx, id); err != nil {
+		return result, err
+	}
 	authorized, activityMet, err := g.authorizeMoves(ctx, id)
 	if err != nil {
 		return result, err
@@ -59,6 +62,9 @@ func (g *Graph) Apply(ctx context.Context, id domain.ChangeID, baselineName stri
 // integrated; IntegrateChange does that. It returns the commit baseline.
 func (g *Graph) CommitChange(ctx context.Context, id domain.ChangeID, baselineName string) (domain.Baseline, error) {
 	var result domain.Baseline
+	if err := g.checkFinalState(ctx, id); err != nil {
+		return result, err
+	}
 	authorized, activityMet, err := g.authorizeMoves(ctx, id)
 	if err != nil {
 		return result, err

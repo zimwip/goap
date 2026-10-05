@@ -22,7 +22,7 @@ func ExecutionToPB(r domain.ExecutionRecord) *graphv1.ExecutionRecord {
 	}
 	for _, c := range r.ModelCalls {
 		out.ModelCalls = append(out.ModelCalls, &graphv1.ModelCall{Provider: c.Provider, Model: c.Model, InputTokens: c.InputTokens,
-			OutputTokens: c.OutputTokens, DurationMs: c.DurationMs, Error: c.Error})
+			OutputTokens: c.OutputTokens, DurationMs: c.DurationMs, Error: c.Error, Exchange: exchangeToPB(c.Exchange)})
 	}
 	for _, c := range r.ToolCalls {
 		out.ToolCalls = append(out.ToolCalls, &graphv1.ToolUse{Name: c.Name, DurationMs: c.DurationMs, Error: c.Error})
@@ -47,7 +47,7 @@ func ExecutionFromPB(r *graphv1.ExecutionRecord) domain.ExecutionRecord {
 	}
 	for _, c := range r.ModelCalls {
 		out.ModelCalls = append(out.ModelCalls, domain.ModelCall{Provider: c.Provider, Model: c.Model, InputTokens: c.InputTokens,
-			OutputTokens: c.OutputTokens, DurationMs: c.DurationMs, Error: c.Error})
+			OutputTokens: c.OutputTokens, DurationMs: c.DurationMs, Error: c.Error, Exchange: exchangeFromPB(c.Exchange)})
 	}
 	for _, c := range r.ToolCalls {
 		out.ToolCalls = append(out.ToolCalls, domain.ToolUse{Name: c.Name, DurationMs: c.DurationMs, Error: c.Error})
@@ -67,6 +67,28 @@ func ExecutionsFromPB(rs []*graphv1.ExecutionRecord) []domain.ExecutionRecord {
 	out := make([]domain.ExecutionRecord, len(rs))
 	for i, r := range rs {
 		out[i] = ExecutionFromPB(r)
+	}
+	return out
+}
+
+func exchangeToPB(x *domain.ModelExchange) *graphv1.ModelExchange {
+	if x == nil {
+		return nil
+	}
+	out := &graphv1.ModelExchange{System: x.System, Response: x.Response}
+	for _, m := range x.Messages {
+		out.Messages = append(out.Messages, &graphv1.ModelMessage{Role: m.Role, Content: m.Content})
+	}
+	return out
+}
+
+func exchangeFromPB(x *graphv1.ModelExchange) *domain.ModelExchange {
+	if x == nil {
+		return nil
+	}
+	out := &domain.ModelExchange{System: x.System, Response: x.Response}
+	for _, m := range x.Messages {
+		out.Messages = append(out.Messages, domain.ModelMessage{Role: m.Role, Content: m.Content})
 	}
 	return out
 }

@@ -149,16 +149,31 @@ func (g *Graph) commitEdits(ctx context.Context, in Commit, parenting bool) (res
 			if l.ToKey != "" {
 				ref, ok := written[l.ToKey]
 				if !ok {
-					if !created[l.ToKey] {
-						return res, fmt.Errorf("link of %s to %q: no such node created by this commit: %w", nodeName(e), l.ToKey, ErrInvalid)
+					if created[l.ToKey] {
+						later = append(later, late{e.Key, l})
+						continue
 					}
-					later = append(later, late{e.Key, l})
-					continue
+					// not a node of this commit: a node the graph already holds, whose version stays
+					n, err := g.NodeByKeyOn(ctx, in.Namespace, in.Branch, l.ToKey)
+					if errors.Is(err, ErrNotFound) {
+						return res, fmt.Errorf("link of %s to %q: no such node, neither stored nor created by this commit: %w", nodeName(e), l.ToKey, ErrInvalid)
+					} else if err != nil {
+						return res, err
+					}
+					ref = n.Ref()
 				}
 				to = &ref
 			}
 			if to == nil {
 				return res, fmt.Errorf("link of %s needs a target: %w", nodeName(e), ErrInvalid)
+			}
+			if e.Pre != nil {
+				// a link is part of its source version: the one the version already carries is not added again
+				if has, err := g.linksTo(ctx, *e.Pre, l.Type, to.ID); err != nil {
+					return res, err
+				} else if has {
+					continue
+				}
 			}
 			w.AddLinks = append(w.AddLinks, LinkWrite{Type: l.Type, To: *to, Properties: l.Props})
 		}
@@ -194,6 +209,18 @@ func (g *Graph) commitEdits(ctx context.Context, in Commit, parenting bool) (res
 		return res, fmt.Errorf("commit %q conflicts with a concurrent change: %w", in.Title, ErrConflict)
 	}
 	return res, nil
+}
+
+// linksTo reports whether a version already has an outgoing link of the type to the node.
+func (g *Graph) linksTo(ctx context.Context, from domain.NodeRef, typ string, to domain.NodeID) (has bool, err error) {
+	err = g.repo.InTx(ctx, func(tx Tx) error {
+		out, err := tx.OutLinks(ctx, from)
+		for _, l := range out {
+			has = has || l.Type == typ && l.To.ID == to
+		}
+		return err
+	})
+	return
 }
 
 func nodeName(e NodeEdit) string {

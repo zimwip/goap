@@ -17,6 +17,8 @@
   import PickerModal from './PickerModal.svelte';
   import MergeDialog from './MergeDialog.svelte';
   import ConfirmDialog from './ConfirmDialog.svelte';
+  import ConditionExplainDialog from './ConditionExplainDialog.svelte';
+  import ModelExchangeDialog from './ModelExchangeDialog.svelte';
   import SettingsDialog from './SettingsDialog.svelte';
   import UsageDialog from './UsageDialog.svelte';
   import PlatformStatusModal from './PlatformStatusModal.svelte';
@@ -149,6 +151,8 @@
 <PickerModal />
 <MergeDialog />
 <ConfirmDialog />
+<ConditionExplainDialog />
+<ModelExchangeDialog />
 <SettingsDialog />
 <UsageDialog />
 <PlatformStatusModal />

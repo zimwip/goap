@@ -461,7 +461,7 @@
     <div class="two">
       <section class="card">
         <h3>World state</h3>
-        <WorldState world={process.world} unknown={process.unknown} conditions={definition?.conditions} actions={definition?.actions} />
+        <WorldState processId={process.id} world={process.world} unknown={process.unknown} conditions={definition?.conditions} actions={definition?.actions} />
       </section>
       <section class="card">
         <h3>Steps <span class="hint">{process.steps?.length ?? 0}</span></h3>

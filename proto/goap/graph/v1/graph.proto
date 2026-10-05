@@ -57,6 +57,9 @@ service GraphService {
   rpc CommitEdits(CommitEditsRequest) returns (CommitEditsResponse);
   rpc GetBlackboard(GetBlackboardRequest) returns (GetBlackboardResponse);
   rpc ApplyChange(ApplyChangeRequest) returns (ApplyChangeResponse);
+  // Move the state of a change along a transition of its lifecycle (ADR 0058): its guard (a decided decision point,
+  // the expected world state) must hold, and it is journaled.
+  rpc TransitionChange(TransitionChangeRequest) returns (TransitionChangeResponse);
   // Remove a change that landed nothing, with its log (ADR 0037). Refused once anything of it is applied or used.
   rpc DeleteChange(DeleteChangeRequest) returns (DeleteChangeResponse);
 
@@ -245,6 +248,9 @@ message Change {
   // exempts the change from naming a project: a change managing organisation/project/policy/adapter
   // data, the admin surface itself (ADR 0039)
   bool administrative = 19;
+  // the lifecycle the change follows (named by its methodology) and its state (ADR 0058); empty: none
+  string lifecycle = 20;
+  string state = 21;
 }
 
 message Review {
@@ -675,6 +681,18 @@ message ApplyChangeRequest {
   string baseline_name = 2;
 }
 
+message TransitionChangeRequest {
+  string change_id = 1;
+  // name of the transition out of the current state
+  string transition = 2;
+  // the decision point that gates it, seen by the guard as change.decision; a point gates one transition only
+  string decision = 3;
+}
+
+message TransitionChangeResponse {
+  Change change = 1;
+}
+
 message DeleteChangeRequest {
   string change_id = 1;
 }
@@ -836,6 +854,20 @@ message ModelCall {
   int64 output_tokens = 4;
   int64 duration_ms = 5;
   string error = 6;
+  // what was sent and answered: written to the log of the change as an entry of its own (model.call), never read back
+  // with the record
+  ModelExchange exchange = 7;
+}
+
+message ModelExchange {
+  string system = 1;
+  repeated ModelMessage messages = 2;
+  string response = 3;
+}
+
+message ModelMessage {
+  string role = 1;
+  string content = 2;
 }
 
 message ToolUse {

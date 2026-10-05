@@ -63,6 +63,14 @@ type Graph struct {
 	// no ActivityRef, falls back to the Editable floor unchanged.
 	ActivityGoalsMet func(ctx context.Context, activityRef string, bb domain.Blackboard) (bool, error)
 
+	// Lifecycles resolves the lifecycle of the changes of a methodology and the world state their guards read (ADR
+	// 0058). Unset: no change follows a lifecycle (tests, tools).
+	Lifecycles ChangeLifecycles
+
+	// ChangeAuthorizer, when set, is asked before every transition of the lifecycle of a change (ADR 0058), like
+	// Authorizer is for the nodes.
+	ChangeAuthorizer ChangeTransitionAuthorizer
+
 	// MaterializeEvery is how many baselines of a chain pass between two that are materialised (their state stored,
 	// ADR 0056); the others are computed from the log. 0: DefaultMaterializeEvery.
 	MaterializeEvery int
@@ -364,6 +372,18 @@ func (g *Graph) CreateChange(ctx context.Context, in NewChange) (domain.Change, 
 	if err := g.Bootstrap(ctx); err != nil {
 		return domain.Change{}, fmt.Errorf("bootstrap: %w", err)
 	}
+	// a change whose methodology names a lifecycle starts in its initial state (ADR 0058); the registry is asked
+	// before the transaction, it reads the graph
+	var lifecycle, initial string
+	if g.Lifecycles != nil && in.Methodology != "" {
+		lc, err := g.Lifecycles.Lifecycle(ctx, in.Methodology)
+		if err != nil {
+			return domain.Change{}, err
+		}
+		if lc != nil {
+			lifecycle, initial = lc.Name, lc.Initial
+		}
+	}
 	var c domain.Change
 	err := g.repo.InTx(ctx, func(tx Tx) error {
 		c = domain.Change{
@@ -371,6 +391,7 @@ func (g *Graph) CreateChange(ctx context.Context, in NewChange) (domain.Change, 
 			Status: domain.ChangeDraft, BaselineID: in.BaselineID, Branch: domain.BranchOf(in.Branch), Data: in.Data, CreatedAt: g.now(),
 			ParentID: in.ParentID, OwnerOrg: in.OwnerOrg, ProjectID: in.ProjectID, Administrative: in.Administrative, ActivityRef: in.ActivityRef,
 		}
+		c.Lifecycle, c.State = lifecycle, initial
 		if err := g.prepareSubChange(ctx, tx, &c, &in); err != nil {
 			return err
 		}
@@ -565,6 +586,9 @@ func (g *Graph) AddItems(ctx context.Context, id domain.ChangeID, items []domain
 		for _, it := range items {
 			if it.Kind == domain.KindFlow {
 				return fmt.Errorf("flow events are recorded by OpenFlow, AdoptFlow and DiscardFlow: %w", ErrInvalid)
+			}
+			if it.Kind == domain.KindTransition {
+				return fmt.Errorf("transitions are recorded by TransitionChange: %w", ErrInvalid)
 			}
 			if it.Kind == domain.KindDecisionPoint {
 				return fmt.Errorf("decision points are recorded by OpenDecision, RuleDecision, AnswerQuestion and RatifyDecision: %w", ErrInvalid)

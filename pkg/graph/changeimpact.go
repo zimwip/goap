@@ -354,6 +354,11 @@ func (g *Graph) WriteNode(ctx context.Context, id domain.ChangeID, node domain.C
 		if vcn.Review == domain.ReviewRejected {
 			return fmt.Errorf("change impact %s is rejected: %w", node, ErrConflict)
 		}
+		if frozen, in, err := g.frozen(ctx, tx, c, node); err != nil {
+			return err
+		} else if frozen {
+			return fmt.Errorf("change impact %s was written in state %s, which the change has left (now %s): go back to it first: %w", node, in, c.State, ErrConflict)
+		}
 		ix, err := g.typesAt(ctx, tx, c.BaselineID)
 		if err != nil {
 			return err

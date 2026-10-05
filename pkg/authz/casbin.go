@@ -67,6 +67,11 @@ var DefaultPolicies = []Policy{
 	{Rule: `onProject(r.sub)`, Resource: "object", Action: "create", Effect: "allow"},
 	{Rule: `onProject(r.sub)`, Resource: "node", Action: "transition", Effect: "allow"},
 	{Rule: `onProject(r.sub)`, Resource: "tool", Action: "call", Effect: "allow"},
+	// the lifecycle of a change (ADR 0058): its gates are decisions and conditions, the move itself is a member's
+	{Rule: `onProject(r.sub)`, Resource: "change", Action: "transition", Effect: "allow"},
+	// the prompts and answers of the model calls of a change (its log, stream model) may hold anything the project works
+	// on: its members inspect them (a graph holding stored policies grants it to administrators until a rule is added)
+	{Rule: `onProject(r.sub)`, Resource: "prompt", Action: "inspect", Effect: "allow"},
 	// four-eyes principle: a member of the project applies its changes, never their own
 	{Rule: `onProject(r.sub) && r.sub.Subject != r.obj.Owner`, Resource: "change", Action: "apply", Effect: "allow"},
 	// production deployments: a release manager of the project, never on its own change

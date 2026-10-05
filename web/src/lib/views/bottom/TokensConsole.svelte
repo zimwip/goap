@@ -1,11 +1,12 @@
 <script lang="ts">
   // "Tokens" console: one LLM call per line, with totals.
   import Icon from '../../shell/Icon.svelte';
-  import { live, clearTokens, processes } from '../../stores/live.svelte';
+  import { live, clearTokens, processes, type TokenRow } from '../../stores/live.svelte';
   import { openTab } from '../../shell/tabs.svelte';
   import { openUsage } from '../../shell/usageState.svelte';
   import { formatDuration, formatTime, shortId } from '../../api';
   import { rowClick } from '../../actions';
+  import { openModelExchange } from '../../shell/modelExchangeState.svelte';
 
   let processId = $state('');
   let model = $state('');
@@ -39,6 +40,20 @@
     return p?.title || shortId(pid);
   }
 </script>
+
+{#snippet prompt(r: TokenRow, value: string)}
+  {#if r.changeId}
+    <button
+      type="button"
+      class="link num"
+      title="Show the prompt and the answer"
+      onclick={(e) => {
+        e.stopPropagation();
+        openModelExchange({ changeId: r.changeId, processId: r.processId, step: r.step, call: r.call, label: `${r.action} #${r.step + 1} · ${r.model}` });
+      }}>{value}</button
+    >
+  {:else}{value}{/if}
+{/snippet}
 
 <div class="console-tools">
   <select aria-label="Process" bind:value={processId} data-no-pin>
@@ -82,8 +97,8 @@
             <td>{r.agent}</td>
             <td>{r.action} #{r.step + 1}</td>
             <td title={r.provider}>{r.model}</td>
-            <td class="num">{n(r.input)}</td>
-            <td class="num">{n(r.output)}</td>
+            <td class="num">{@render prompt(r, n(r.input))}</td>
+            <td class="num">{@render prompt(r, n(r.output))}</td>
             <td class="num">{formatDuration(r.durationMs)}</td>
             <td class="err">{r.error}</td>
           </tr>

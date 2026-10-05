@@ -14,6 +14,7 @@ import (
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/goap"
 	"github.com/zimwip/goap/pkg/intent"
+	"github.com/zimwip/goap/pkg/llm"
 )
 
 // Status is the lifecycle state of a process.
@@ -62,6 +63,8 @@ type Process struct {
 	ParentID string `json:"parentId,omitempty"`
 	// Trigger ("<methodology>/<agent>/<trigger>") started the process.
 	Trigger string `json:"trigger,omitempty"`
+	// Cause is the process whose event fired the trigger (the parent of the trigger in the navigation).
+	Cause string `json:"cause,omitempty"`
 	// Children maps sub-agent calls ("action#index:agent") to their process,
 	// so that a retried action finds the sub-agent it started.
 	Children   map[string]string `json:"children,omitempty"`
@@ -194,6 +197,18 @@ type LLMCall struct {
 	OutputTokens int64  `json:"outputTokens"`
 	DurationMs   int64  `json:"durationMs"`
 	Error        string `json:"error,omitempty"`
+	// Exchange is what was sent and answered. It travels from the call to the journal (which writes it to the log of the
+	// change, ADR 0030) and is not part of the process state.
+	Exchange *domain.ModelExchange `json:"-"`
+}
+
+// exchangeOf is the request and the answer of a call.
+func exchangeOf(req llm.Request, resp llm.Response) *domain.ModelExchange {
+	x := &domain.ModelExchange{System: req.System, Response: resp.Text}
+	for _, m := range req.Messages {
+		x.Messages = append(x.Messages, domain.ModelMessage{Role: m.Role, Content: m.Content})
+	}
+	return x
 }
 
 // ToolCall records one tool call.
@@ -372,4 +387,12 @@ type Queued struct {
 	By     string         `json:"by,omitempty"`
 	At     time.Time      `json:"at"`
 	Cause  map[string]any `json:"cause,omitempty"`
+}
+
+// dropExchanges forgets the prompts of the calls of the step once the journal holds them: the process keeps the
+// counts, not the text.
+func (s *Step) dropExchanges() {
+	for i := range s.LLMCalls {
+		s.LLMCalls[i].Exchange = nil
+	}
 }

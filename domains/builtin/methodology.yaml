@@ -15,6 +15,7 @@ nodeTypes:
       - {name: version, label: Version, description: "Version of the methodology", type: string, section: Identity, order: 2}
       - {name: description, label: Description, description: "What the methodology is for", type: string, widget: textarea, section: Identity, order: 3}
       - {name: namespace, label: "Domain namespace", description: "Namespace of the domain the methodology works on", type: string, section: Definition, order: 4}
+      - {name: lifecycle, label: Lifecycle, description: "Lifecycle of the domain the changes of the methodology follow (ADR 0058); empty: none", type: string, section: Definition, order: 4}
       - {name: status, label: Status, description: "draft, published or archived", type: string, section: Definition, order: 5}
       - {name: createdAt, label: "Created at", description: "When the version was created", type: string, section: History, order: 6}
       - {name: updatedAt, label: "Updated at", description: "When the version was last modified", type: string, section: History, order: 7}

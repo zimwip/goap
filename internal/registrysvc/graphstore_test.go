@@ -312,3 +312,31 @@ func TestGraphStoreMaterializesMethodSteps(t *testing.T) {
 		t.Fatalf("methods must round-trip unaffected: %+v, %v", got.Methodology.Methods, err)
 	}
 }
+
+// Saving a methodology again, with a change to one element, is one change that only touches what changed: the links
+// to the steps it already holds are not written again (they are not nodes of the commit).
+func TestGraphStoreResaveWithStepsChangesOnlyWhatChanged(t *testing.T) {
+	ctx := context.Background()
+	s := NewGraphStore(graph.New(graph.NewMemory()))
+	now := time.Date(2026, 9, 26, 10, 0, 0, 0, time.UTC)
+	m, err := methodology.LoadFile("../../methodologies/sdlc.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Save(ctx, Record{Methodology: *m, Status: StatusDraft, CreatedAt: now, UpdatedAt: now}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Save(ctx, Record{Methodology: *m, Status: StatusDraft, CreatedAt: now, UpdatedAt: now}); err != nil {
+		t.Fatalf("saving it again unchanged: %v", err)
+	}
+	changed := *m
+	changed.Conditions = append([]methodology.Condition(nil), m.Conditions...)
+	for i := range changed.Conditions {
+		if changed.Conditions[i].Name == "functions_allocated" {
+			changed.Conditions[i].Expr += " && true"
+		}
+	}
+	if err := s.Save(ctx, Record{Methodology: changed, Status: StatusDraft, CreatedAt: now, UpdatedAt: now.Add(time.Minute)}); err != nil {
+		t.Fatalf("saving it with a changed condition: %v", err)
+	}
+}

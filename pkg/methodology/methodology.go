@@ -32,10 +32,14 @@ type Methodology struct {
 	// Administrative exempts the changes of the methodology from naming a project (ADR 0039): set on
 	// methodologies that manage organisation/project/policy/adapter data (the admin surface itself), not on
 	// methodologies that do the enterprise's actual work, which must run in the context of a project.
-	Administrative bool        `yaml:"administrative,omitempty" json:"administrative,omitempty"`
-	Conditions     []Condition `yaml:"conditions" json:"conditions"`
-	Actions        []Action    `yaml:"actions" json:"actions"`
-	Goals          []Goal      `yaml:"goals" json:"goals"`
+	Administrative bool `yaml:"administrative,omitempty" json:"administrative,omitempty"`
+	// Lifecycle names the lifecycle of the domain the changes of the methodology follow (ADR 0058); none: they have no
+	// state. A step is tied to a state through its pre: "state:<name>" is a generated condition, true while the change
+	// is in that state, and the exit criteria of the steps (their done) are what a gate of the lifecycle asks for.
+	Lifecycle  string      `yaml:"lifecycle,omitempty" json:"lifecycle,omitempty"`
+	Conditions []Condition `yaml:"conditions" json:"conditions"`
+	Actions    []Action    `yaml:"actions" json:"actions"`
+	Goals      []Goal      `yaml:"goals" json:"goals"`
 	// Agents run the methodology; without agents an implicit "default" agent
 	// has every action and goal and the goap planner.
 	Agents []Agent `yaml:"agents,omitempty" json:"agents,omitempty"`

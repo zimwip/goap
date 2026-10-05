@@ -24,6 +24,7 @@
   import { makeContext } from '../../items';
   import StatusBadge from '../../components/StatusBadge.svelte';
   import ChangeLifecycle from '../../components/ChangeLifecycle.svelte';
+import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
   import EditorPanes, { type Pane } from '../../components/EditorPanes.svelte';
   import { lifecycleRows, reopenable, nodeTypeNames, lifecycleResolver, loadPosts, writeNodeInChange, type PostVersions, type LifecycleRow } from '../../lifecycle';
   import { loadTypes, typeCatalog } from '../../stores/types.svelte';
@@ -563,6 +564,7 @@
 {#if change}
   {@const ch = change}
   <ScopeBar changeId={ch.id ?? ''} {options} bind:scope {candidates} {mainImpacts} {closed} onchange={() => load(selected)} oncompare={() => (pane = 'compare')} />
+  {#if ch.lifecycle}<ChangeLifecycleView lifecycle={ch.lifecycle} current={ch.state ?? ''} namespace={ch.namespace ?? ''} />{/if}
   <EditorPanes {panes} bind:active={pane} label="Change sections">
     {#snippet children(active)}
       {#if active === 'overview'}

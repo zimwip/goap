@@ -3,6 +3,7 @@ package graph
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	"github.com/zimwip/goap/pkg/domain"
 )
@@ -21,8 +22,25 @@ func (g *Graph) Record(ctx context.Context, recs []domain.ExecutionRecord) error
 			if r.StartedAt.IsZero() {
 				r.StartedAt = g.now()
 			}
+			// the prompts go to the log as entries of their own, the record keeps the summary of the calls
+			calls := r.ModelCalls
+			r.ModelCalls = slices.Clone(calls)
+			for i := range r.ModelCalls {
+				r.ModelCalls[i].Exchange = nil
+			}
 			if err := putExecution(ctx, tx, r); err != nil {
 				return err
+			}
+			for i, c := range calls {
+				if c.Exchange == nil {
+					continue
+				}
+				ex := *c.Exchange
+				ex.Step, ex.Call = r.Step, i
+				ex.Cap()
+				if err := putModelExchange(ctx, tx, r, ex); err != nil {
+					return err
+				}
 			}
 		}
 		return nil

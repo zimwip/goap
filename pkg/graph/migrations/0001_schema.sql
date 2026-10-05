@@ -62,7 +62,9 @@ CREATE TABLE change (
     owner_org          text        NOT NULL CHECK (owner_org <> ''),
     project_id         text        NOT NULL CHECK (project_id <> ''),
     administrative     boolean     NOT NULL DEFAULT false,
-    activity_ref       text        NOT NULL DEFAULT ''
+    activity_ref       text        NOT NULL DEFAULT '',
+    lifecycle          text        NOT NULL DEFAULT '',
+    state              text        NOT NULL DEFAULT ''
 );
 CREATE INDEX change_parent ON change (parent_id);
 -- a baseline is written by a change that references it in turn (its result), the check waits for the commit

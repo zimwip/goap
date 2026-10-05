@@ -1,6 +1,9 @@
 package domain
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 // Execution record kinds: the journal of the agent processes working on a
 // change (ADR 0011). Every tick of the observe / plan / act loop, every action
@@ -95,6 +98,45 @@ type ModelCall struct {
 	OutputTokens int64  `json:"outputTokens"`
 	DurationMs   int64  `json:"durationMs"`
 	Error        string `json:"error,omitempty"`
+	// Exchange is what was sent and answered. It is not part of the journal record: Graph.Record writes it as an
+	// entry of the log (LogModel) next to the record and strips it, so reading a record never carries the prompts.
+	Exchange *ModelExchange `json:"exchange,omitempty"`
+}
+
+// MaxExchangeText caps each text of a ModelExchange (bytes); a longer one is cut and the exchange flagged Truncated.
+const MaxExchangeText = 256 << 10
+
+// ModelExchange is the request and the answer of one LLM call: the payload of a LogModel entry.
+type ModelExchange struct {
+	// Step is the step of the process the action run is, Call the position of the call in the ModelCalls of its record.
+	Step     int            `json:"step"`
+	Call     int            `json:"call"`
+	System   string         `json:"system,omitempty"`
+	Messages []ModelMessage `json:"messages,omitempty"`
+	Response string         `json:"response,omitempty"`
+	// Truncated says a text was cut to MaxExchangeText.
+	Truncated bool `json:"truncated,omitempty"`
+}
+
+// ModelMessage is a turn of the conversation sent to the model.
+type ModelMessage struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}
+
+// Cap cuts the texts of the exchange to MaxExchangeText.
+func (x *ModelExchange) Cap() {
+	cut := func(s string) string {
+		if len(s) <= MaxExchangeText {
+			return s
+		}
+		x.Truncated = true
+		return strings.ToValidUTF8(s[:MaxExchangeText], "")
+	}
+	x.System, x.Response = cut(x.System), cut(x.Response)
+	for i := range x.Messages {
+		x.Messages[i].Content = cut(x.Messages[i].Content)
+	}
 }
 
 // ToolUse is one tool call of an action.
