@@ -502,6 +502,48 @@ func TestChangeToolsKeepTheAccessGate(t *testing.T) {
 	}
 }
 
+// Every access type (access.IsAccessType) stays behind the gate through write, edit, link and retire: a project
+// member could otherwise write an organisation@Assignment granting admin through the in-process connector.
+func TestChangeToolsGateEveryAccessType(t *testing.T) {
+	p := newPlatform(t)
+	ctx := context.Background()
+	if err := graphsvc.SeedAdapter(ctx, p.g, mcp.Adapter{Unit: "ORG-CRM", MCP: mcp.BuiltinChange}); err != nil {
+		t.Fatal(err)
+	}
+	asgKey := access.PlatformAssignmentKey("ORG-CHECKOUT")
+	_, err := p.g.Commit(ctx, graph.Commit{Namespace: mcp.NamespaceOrganisation, Title: "Assignment", Intent: "Assignment", By: "test", Edits: []graph.NodeEdit{{
+		Key: asgKey, Type: access.NodeTypeAssignment, Props: access.Assignment{Roles: []string{access.RoleReader}}.Props(), Rationale: "seed",
+		Links: []graph.LinkEdit{{Type: access.LinkAssignsOrg, ToKey: "ORG-CHECKOUT"}}}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	existing := map[string]string{asgKey: access.NodeTypeAssignment, "ORG-CHECKOUT": mcp.NodeTypeOrgUnit, domain.DefaultProject: access.NodeTypeProjectUnit, mcp.AdapterKey("ORG-CRM", mcp.BuiltinChange): mcp.NodeTypeAdapter}
+	denied := func(err error) bool { return err != nil && strings.Contains(err.Error(), "may not write policy") }
+	alice := as("alice", "ORG-CHECKOUT", "contributor")
+	open := func() any {
+		return p.call(t, alice, "ORG-CHECKOUT", "goap-change/create", map[string]any{"title": "Access", "intent": "grant", "namespace": "organisation"})["change"].(map[string]any)["id"]
+	}
+	for key, typ := range existing {
+		for op, args := range map[string]map[string]any{
+			"write":  {"key": key + "-new", "type": typ, "properties": map[string]any{}, "rationale": "x"},
+			"edit":   {"key": key, "properties": map[string]any{"description": "x"}, "rationale": "x"},
+			"link":   {"from": key, "type": access.LinkAssignsOrg, "to": "ORG-DEFAULT"},
+			"retire": {"key": key, "rationale": "x"},
+		} {
+			args["change"] = open()
+			if _, err := p.hub.Call(alice, "ORG-CHECKOUT", "goap-change/"+op, args); !denied(err) {
+				t.Errorf("%s of %s by a contributor: %v", op, typ, err)
+			}
+		}
+	}
+	// an administrator passes the gate (the write itself may still fail on other grounds)
+	root := as("root", "ORG-CHECKOUT", "admin")
+	ch := p.call(t, root, "ORG-CHECKOUT", "goap-change/create", map[string]any{"title": "Access", "intent": "grant", "namespace": "organisation"})["change"].(map[string]any)["id"]
+	if _, err := p.hub.Call(root, "ORG-CHECKOUT", "goap-change/edit", map[string]any{"change": ch, "key": asgKey, "properties": map[string]any{"description": "x"}, "rationale": "x"}); denied(err) {
+		t.Fatalf("administrator denied: %v", err)
+	}
+}
+
 // A unit restricts a built-in MCP for itself and its sub-units: goap-change read-only for the CRM team.
 func TestUnitRestrictsABuiltin(t *testing.T) {
 	p := newPlatform(t)

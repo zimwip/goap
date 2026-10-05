@@ -108,3 +108,67 @@ func TestAdminFloorAllowsHandoffInOneCommit(t *testing.T) {
 		t.Fatalf("alice should be deactivated: %+v %v", n, err)
 	}
 }
+
+// The floor counts the administrators the way Snapshot.Enrich grants the role: the legacy User.Admin flag, and a
+// platform Assignment held by a unit the user belongs to, are administrators as much as a User's own Assignment.
+func TestAdminFloorCountsWhatEnrichGrants(t *testing.T) {
+	deactivateAlice := func(t *testing.T, g *graph.Graph) error {
+		t.Helper()
+		ctx := context.Background()
+		alice, err := g.NodeByKey(ctx, mcp.NamespaceOrganisation, access.UserKey("alice"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		head, err := g.BranchHead(ctx, mcp.NamespaceOrganisation, domain.MainBranch)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ref := alice.Ref()
+		_, err = g.Commit(ctx, graph.Commit{Namespace: mcp.NamespaceOrganisation, Title: "deactivate alice", Baseline: head.ID,
+			Edits: []graph.NodeEdit{{Pre: &ref, State: "deactivated", Rationale: "test"}}})
+		return err
+	}
+	setup := func(t *testing.T, edits ...graph.NodeEdit) *graph.Graph {
+		t.Helper()
+		ctx := context.Background()
+		g := floorGraph(t)
+		if _, err := graphsvc.SeedDefaults(ctx, g); err != nil {
+			t.Fatal(err)
+		}
+		if err := graphsvc.EnsureUser(ctx, g, "alice"); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := g.Commit(ctx, graph.Commit{Namespace: mcp.NamespaceOrganisation, Title: "bob", Intent: "bob", By: "test", Edits: edits}); err != nil {
+			t.Fatal(err)
+		}
+		return g
+	}
+	bob := func(props map[string]any, unit string) graph.NodeEdit {
+		return graph.NodeEdit{Key: access.UserKey("bob"), Type: access.NodeTypeUser, Props: props, State: "active", Rationale: "test",
+			Links: []graph.LinkEdit{{Type: access.LinkMemberOf, ToKey: unit}}}
+	}
+
+	// bob is an administrator by the legacy flag only: alice may go
+	g := setup(t, bob(access.User{Subject: "bob", Admin: true}.Props(), domain.DefaultOrg))
+	if err := deactivateAlice(t, g); err != nil {
+		t.Fatalf("a flag-only administrator must count: %v", err)
+	}
+
+	// bob is an administrator through the Assignment of the unit he belongs to
+	asg := access.Assignment{Roles: []string{access.RoleAdmin}}
+	g = setup(t,
+		graph.NodeEdit{Key: "ORG-OPS", Type: mcp.NodeTypeOrgUnit, Props: map[string]any{"name": "Ops"}, Rationale: "test",
+			Links: []graph.LinkEdit{{Type: mcp.LinkPartOf, ToKey: domain.DefaultOrg}}},
+		bob(access.User{Subject: "bob"}.Props(), "ORG-OPS"),
+		graph.NodeEdit{Key: access.PlatformAssignmentKey("ORG-OPS"), Type: access.NodeTypeAssignment, Props: asg.Props(), Rationale: "test",
+			Links: []graph.LinkEdit{{Type: access.LinkAssignsOrg, ToKey: "ORG-OPS"}}})
+	if err := deactivateAlice(t, g); err != nil {
+		t.Fatalf("a unit-held administrator must count: %v", err)
+	}
+
+	// a plain second user is no administrator: alice stays
+	g = setup(t, bob(access.User{Subject: "bob"}.Props(), domain.DefaultOrg))
+	if err := deactivateAlice(t, g); !errors.Is(err, graph.ErrInvalid) {
+		t.Fatalf("a plain user must not count: %v", err)
+	}
+}

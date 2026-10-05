@@ -122,8 +122,11 @@ func validateRecord(it ChangeItem) error {
 			return fmt.Errorf("risk status must be one of %s", strings.Join(RiskStatuses, ", "))
 		}
 		for _, k := range []string{"probability", "impact"} {
-			if v := dataInt(d, k); v < 0 || v > 5 {
-				return fmt.Errorf("risk %s must be between 1 and 5", k)
+			// absent: a version of the risk that does not restate it (ADR 0036); given, it is 1 to 5
+			if raw, ok := d[k]; ok && raw != nil {
+				if v := dataInt(d, k); v < 1 || v > 5 {
+					return fmt.Errorf("risk %s must be between 1 and 5", k)
+				}
 			}
 		}
 	case KindAction:

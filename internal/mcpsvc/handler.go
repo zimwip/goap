@@ -4,7 +4,9 @@ import (
 	"context"
 	"crypto/subtle"
 	"errors"
+	"fmt"
 	"net/http"
+	"slices"
 
 	"connectrpc.com/connect"
 
@@ -22,7 +24,9 @@ type Handler struct {
 	Service  *Service
 	Authz    authz.Authorizer
 	Identity identity.Extractor
-	// ConnectorToken, when set, must accompany RegisterConnector (header ConnectorTokenHeader).
+	// ConnectorToken must accompany RegisterConnector (header ConnectorTokenHeader); with none configured no
+	// connector can register: an unauthenticated service could otherwise announce itself as the implementation
+	// of any MCP and receive the arguments and secrets of its calls.
 	ConnectorToken string
 }
 
@@ -59,7 +63,10 @@ func (h *Handler) check(ctx context.Context, hdr http.Header, action string, res
 }
 
 func (h *Handler) RegisterConnector(ctx context.Context, r *connect.Request[mcpv1.RegisterConnectorRequest]) (*connect.Response[mcpv1.RegisterConnectorResponse], error) {
-	if h.ConnectorToken != "" && subtle.ConstantTimeCompare([]byte(r.Header().Get(ConnectorTokenHeader)), []byte(h.ConnectorToken)) != 1 {
+	if h.ConnectorToken == "" {
+		return nil, connect.NewError(connect.CodePermissionDenied, errors.New("connector registration is closed: no connector token is configured (GOAP_CONNECTOR_TOKEN)"))
+	}
+	if subtle.ConstantTimeCompare([]byte(r.Header().Get(ConnectorTokenHeader)), []byte(h.ConnectorToken)) != 1 {
 		return nil, connect.NewError(connect.CodePermissionDenied, errors.New("invalid connector token"))
 	}
 	lease, err := h.Service.RegisterConnector(ctx, r.Msg.Info, r.Msg.Endpoint)
@@ -114,6 +121,30 @@ func (h *Handler) callerResource(ctx context.Context, hdr http.Header, typ, name
 	return authz.Resource{Type: typ, Name: name, Org: who.Org, ProjectID: who.Project}
 }
 
+// unitOf resolves the unit a request acts for against its caller: the caller's own unit when the request names
+// none, else the requested one must be the caller's unit or below it (the caller's unit is in its chain), so that
+// a member of one unit cannot use the adapters, and the secrets they hold, of another. Administrators and
+// platform services (system: subjects) may name any unit.
+func (h *Handler) unitOf(ctx context.Context, hdr http.Header, requested string) (string, error) {
+	who := authz.From(h.Identity.Context(ctx, hdr))
+	if who.System() || slices.Contains(who.Roles, "admin") {
+		return requested, nil
+	}
+	if requested == "" {
+		return who.Org, nil
+	}
+	if who.Org != "" {
+		snap, err := h.Service.Directory.Snapshot(ctx)
+		if err != nil {
+			return "", rpcErr(err)
+		}
+		if slices.Contains(snap.Chain(requested), who.Org) {
+			return requested, nil
+		}
+	}
+	return "", connect.NewError(connect.CodePermissionDenied, fmt.Errorf("unit %s is not within the unit of the caller: %w", requested, authz.ErrForbidden))
+}
+
 func (h *Handler) ListMcps(ctx context.Context, r *connect.Request[mcpv1.ListMcpsRequest]) (*connect.Response[mcpv1.ListMcpsResponse], error) {
 	if _, err := h.check(ctx, r.Header(), "read", h.callerResource(ctx, r.Header(), "mcp", "")); err != nil {
 		return nil, err
@@ -133,7 +164,11 @@ func (h *Handler) ListEffective(ctx context.Context, r *connect.Request[mcpv1.Li
 	if _, err := h.check(ctx, r.Header(), "read", h.callerResource(ctx, r.Header(), "adapter", unit(r.Msg.Unit))); err != nil {
 		return nil, err
 	}
-	chain, eff, err := h.Service.Effective(ctx, r.Msg.Unit)
+	org, err := h.unitOf(ctx, r.Header(), r.Msg.Unit)
+	if err != nil {
+		return nil, err
+	}
+	chain, eff, err := h.Service.Effective(ctx, org)
 	if err != nil {
 		return nil, rpcErr(err)
 	}
@@ -180,7 +215,11 @@ func (h *Handler) ListTools(ctx context.Context, r *connect.Request[mcpv1.ListTo
 	if _, err := h.check(ctx, r.Header(), "read", h.callerResource(ctx, r.Header(), "tool", "")); err != nil {
 		return nil, err
 	}
-	tools, mcps, err := h.Service.Tools(ctx, r.Msg.Unit)
+	org, err := h.unitOf(ctx, r.Header(), r.Msg.Unit)
+	if err != nil {
+		return nil, err
+	}
+	tools, mcps, err := h.Service.Tools(ctx, org)
 	if err != nil {
 		return nil, rpcErr(err)
 	}
@@ -196,8 +235,12 @@ func (h *Handler) CallTool(ctx context.Context, r *connect.Request[mcpv1.CallToo
 	if err != nil {
 		return nil, err
 	}
+	org, err := h.unitOf(ctx, r.Header(), r.Msg.Unit)
+	if err != nil {
+		return nil, err
+	}
 	ctx = mcp.WithCall(ctx, mcp.CallContext{Change: r.Msg.ChangeId, Process: r.Msg.ProcessId})
-	res, err := h.Service.Call(ctx, r.Msg.Unit, r.Msg.Name, pbconv.Map(r.Msg.Arguments))
+	res, err := h.Service.Call(ctx, org, r.Msg.Name, pbconv.Map(r.Msg.Arguments))
 	var te *ToolError
 	if errors.As(err, &te) {
 		return connect.NewResponse(&mcpv1.CallToolResponse{IsError: true, Error: te.Msg}), nil

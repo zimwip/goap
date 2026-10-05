@@ -72,7 +72,9 @@ func (h *Handler) resolveOwner(ctx context.Context, owner string) (string, error
 // either. Failing here (graph.ErrNotFound: the org doesn't exist yet) leaves nothing created, so the next
 // call for this subject starts clean.
 func EnsureUser(ctx context.Context, g *graph.Graph, subject string) error {
-	if subject == "" {
+	// a platform service (system:registry, system:trigger:<key>, ...) is no person: it never becomes a User,
+	// so it can never take the first-administrator grant below
+	if subject == "" || (authz.Principal{Subject: subject}).System() {
 		return nil
 	}
 	key := access.UserKey(subject)
@@ -138,9 +140,9 @@ func createUser(ctx context.Context, g *graph.Graph, subject string) error {
 	// the activating transition (and, for the first user, the admin grant) is internal bookkeeping of the
 	// sign-in flow, not an action the caller is themselves authorized for: a brand-new subject holds no role
 	// or project yet, so running this under their own identity would make TransitionAuthorizer deny its own
-	// activation for every single new user. An anonymous context is trusted as an internal service (ADR 0048,
-	// internal/graphsvc/lifecycle.go's TransitionAuthorizer).
-	return applyOn(authz.With(ctx, authz.Principal{}), g, mcp.NamespaceOrganisation, "User "+subject, edits)
+	// activation for every single new user. It runs as the system principal (ADR 0048, lifecycle.go's
+	// TransitionAuthorizer).
+	return applyOn(System(ctx), g, mcp.NamespaceOrganisation, "User "+subject, edits)
 }
 
 // NewUserUnit returns the organisational unit new users join (ADR 0042): the waiting unit, an OrgUnit an
@@ -165,6 +167,28 @@ func NewUserUnit(ctx context.Context, g *graph.Graph) (domain.Node, error) {
 	return g.NodeByKey(ctx, mcp.NamespaceOrganisation, domain.DefaultOrg)
 }
 
+// SystemPrincipal is the identity of the graph service acting by itself (seeds, the bookkeeping of a sign-in):
+// a named service, never an anonymous caller, which the transition authorizers refuse.
+var SystemPrincipal = authz.Principal{Subject: authz.SystemPrefix + "graph", Roles: []string{access.RoleAdmin}}
+
+// System returns ctx acting as the graph service itself.
+func System(ctx context.Context) context.Context { return authz.With(ctx, SystemPrincipal) }
+
+// Identify is the interceptor that identifies the caller of every RPC: it applies the identity of the request
+// to the context the handler receives (not only in the methods that call Identity.Context themselves) and
+// refuses an anonymous request, so no call reaches the graph without a principal. First of the chain.
+func (h *Handler) Identify() connect.Interceptor {
+	return connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
+		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
+			who := h.Identity.Context(ctx, req.Header())
+			if authz.From(who).Anonymous() {
+				return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("the caller is not identified"))
+			}
+			return next(who, req)
+		}
+	})
+}
+
 // EnsureCaller is the interceptor that calls EnsureUser for every authenticated caller (ADR 0039),
 // deduplicated per process: a subject already seen is not checked again, so this costs one NodeByKey (and,
 // the first time only, one write) per subject per process lifetime, not per call.
@@ -180,7 +204,7 @@ func (h *Handler) EnsureCaller() connect.Interceptor {
 					}
 				}
 			}
-			return next(ctx, req)
+			return next(who, req)
 		}
 	})
 }
@@ -190,15 +214,15 @@ func (h *Handler) EnsureCaller() connect.Interceptor {
 func (h *Handler) PersonalScope() connect.Interceptor {
 	return connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
 		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
+			who := h.Identity.Context(ctx, req.Header())
 			if msg, ok := req.Any().(proto.Message); ok {
 				if id := changeIDIn(req.Spec().Procedure, msg); id != "" {
-					who := h.Identity.Context(ctx, req.Header())
 					if c, err := h.Graph.Change(who, id); err == nil && c.Personal() && !c.PersonalTo(subjectOf(who)) {
 						return nil, denyPersonal(id)
 					}
 				}
 			}
-			return next(ctx, req)
+			return next(who, req)
 		}
 	})
 }

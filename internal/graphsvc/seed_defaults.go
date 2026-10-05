@@ -65,6 +65,9 @@ ctx.fail("unknown tool " + ctx.tool());
 // applyOn commits node edits on main as one change of a namespace, so that the head of main moves: the first change
 // of a namespace starts from the empty state (ADR 0056).
 func applyOn(ctx context.Context, g *graph.Graph, namespace, title string, edits []graph.NodeEdit) error {
+	if authz.From(ctx).Anonymous() { // a seed acts as the graph service itself
+		ctx = System(ctx)
+	}
 	_, err := g.Commit(ctx, graph.Commit{Namespace: namespace, Title: title, Intent: title, By: "graphsvc.seed", BaselineName: title, Edits: edits})
 	return err
 }

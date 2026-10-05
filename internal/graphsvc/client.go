@@ -29,8 +29,25 @@ var _ engine.GraphPort = (*Client)(nil)
 // NewClient returns a client for the graph service at baseURL.
 // The requests carry the principal of their context: the engine acts for the initiator of a process, which the graph
 // records on the events of the change impacts (ADR 0029).
+//
+// A request whose context carries no principal (a directory refreshing its snapshot in the background) goes as the
+// service client, a named principal with no role: the graph refuses anonymous requests (Handler.Identify).
 func NewClient(hc *http.Client, baseURL string, opts ...connect.ClientOption) *Client {
-	return &Client{rpc: graphv1connect.NewGraphServiceClient(hc, baseURL, append([]connect.ClientOption{identity.Forward()}, opts...)...)}
+	return &Client{rpc: graphv1connect.NewGraphServiceClient(hc, baseURL, append([]connect.ClientOption{identity.Forward(), serviceIdentity()}, opts...)...)}
+}
+
+// ClientPrincipal is the identity of a graph client acting for no one in particular.
+var ClientPrincipal = authz.Principal{Subject: authz.SystemPrefix + "client"}
+
+func serviceIdentity() connect.ClientOption {
+	return connect.WithInterceptors(connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
+		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
+			if req.Spec().IsClient && req.Header().Get(identity.HeaderSubject) == "" {
+				identity.SetHeaders(ClientPrincipal, req.Header())
+			}
+			return next(ctx, req)
+		}
+	}))
 }
 
 // DeclareUser makes sure the User node of a subject exists (ADR 0042: a user is declared the moment they sign

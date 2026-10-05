@@ -70,6 +70,10 @@ type Config struct {
 	// new users join), so a user exists from the moment they sign in rather than from their first call.
 	// A failure refuses the sign-in. Nil skips it (the node is then created on the first call, EnsureCaller).
 	OnSignIn func(ctx context.Context, subject string) error
+	// ProjectAccess tells whether a caller may work on a project, asked before a token is reissued for it (project
+	// switch, ADR 0039). Nil refuses every project (only clearing it is allowed), unless dev tokens are on (which let
+	// anyone mint any token anyway).
+	ProjectAccess func(ctx context.Context, p authz.Principal, project string) (bool, error)
 	// AllowOrigins for CORS.
 	AllowOrigins []string
 	// Enrich completes the authenticated principal with what the graph knows of its subject (roles and unit
@@ -247,7 +251,7 @@ func Mount(e *echo.Echo, cfg Config) error {
 
 func authenticator(cfg Config) (echo.MiddlewareFunc, error) {
 	switch cfg.AuthMode {
-	case "", "none":
+	case "none": // explicit only: an unset mode is a configuration error, never an open gateway
 		return func(next echo.HandlerFunc) echo.HandlerFunc {
 			return func(c *echo.Context) error {
 				setPrincipal(c, cfg, authz.Principal{Subject: "dev", Org: "dev", Roles: []string{"admin"}})
@@ -563,11 +567,28 @@ func switchProject(cfg Config) echo.HandlerFunc {
 		if err != nil {
 			return unauthorized(err)
 		}
+		// an ended session cannot reissue a token (afresh, like a refresh)
+		if err := checkSession(c.Request().Context(), cfg, claims, true); err != nil {
+			return err
+		}
 		var in struct {
 			Project string `json:"project"`
 		}
 		if err := c.Bind(&in); err != nil {
 			return echo.NewHTTPError(http.StatusBadRequest, "project required")
+		}
+		if in.Project != "" {
+			ok := cfg.DevTokens
+			if cfg.ProjectAccess != nil {
+				var err error
+				ok, err = cfg.ProjectAccess(c.Request().Context(), authz.Principal{Subject: claims.Subject, Org: claims.Org, Project: claims.Project, Roles: claims.Roles}, in.Project)
+				if err != nil {
+					return echo.NewHTTPError(http.StatusServiceUnavailable, "cannot check the project: "+err.Error())
+				}
+			}
+			if !ok {
+				return echo.NewHTTPError(http.StatusForbidden, "no access to project "+in.Project)
+			}
 		}
 		s := sessionOf(claims)
 		s.project = in.Project

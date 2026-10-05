@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"errors"
 
 	"github.com/jackc/pgx/v5/stdlib"
 
@@ -24,7 +25,12 @@ func main() {
 		store = credsvc.SQLStore{DB: stdlib.OpenDBFromPool(pool), Dollar: true}
 		srv.Readiness(pool.Ping)
 	}
-	srv.Mount(credentialsv1connect.NewCredentialsServiceHandler(&credsvc.Handler{Service: &credsvc.Service{Store: store}}, telemetry.HandlerOptions()...))
+	// the gateway is the only caller: it presents a shared service credential; without one nobody may call
+	token, err := platform.NewSecrets().Get(ctx, "goap/credentials#service_token", "GOAP_CREDENTIALS_TOKEN")
+	if err != nil || token == "" {
+		platform.Fatal(log, "credentials service token (GOAP_CREDENTIALS_TOKEN)", errors.Join(err, errors.New("not set")))
+	}
+	srv.Mount(credentialsv1connect.NewCredentialsServiceHandler(&credsvc.Handler{Service: &credsvc.Service{Store: store}, Token: token}, telemetry.HandlerOptions()...))
 	if err := srv.Run(); err != nil {
 		platform.Fatal(log, "server", err)
 	}

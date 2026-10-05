@@ -105,6 +105,7 @@ services:
     environment:
       <<: *env
       GOAP_DB_DSN: postgres://credentials:credentials@postgres:5432/goap?sslmode=disable
+      GOAP_CREDENTIALS_TOKEN: ${GOAP_CREDENTIALS_TOKEN:-dev-credentials-token}
     ports: ["8088:8080"]
 
   indexer:
@@ -227,6 +228,7 @@ services:
       GOAP_INDEXER_URL: http://indexer:8080
       GOAP_MCP_URL: http://mcp:8080
       GOAP_CREDENTIALS_URL: http://credentials:8080
+      GOAP_CREDENTIALS_TOKEN: ${GOAP_CREDENTIALS_TOKEN:-dev-credentials-token}
       GOAP_EVENTS_URL: http://events:8080
     ports: ["${GOAP_GATEWAY_PORT:-8080}:8080"]
 

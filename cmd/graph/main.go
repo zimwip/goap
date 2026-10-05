@@ -97,6 +97,16 @@ func main() {
 	if err := g.Bootstrap(ctx); err != nil {
 		platform.Fatal(log, "bootstrap", err)
 	}
+	// the hooks of the graph are set before the seeds start (they run in the background, and write through them)
+	authorizer, err := access.NewAuthorizer(&access.Directory{Graph: g})
+	if err != nil {
+		platform.Fatal(log, "authorizer", err)
+	}
+	g.Authorizer = graphsvc.TransitionAuthorizer(authorizer)
+	g.ChangeAuthorizer = graphsvc.ChangeTransitionAuthorizer(authorizer)
+	g.Validators = []graph.NodeValidator{access.AdminFloorValidator{}}
+	// ActivityGoalsMet and Lifecycles (ADR 0058) need the registry service itself (its methodology store): only
+	// goap-dev, which holds it in process, wires them; the registry client has no RPC for them
 	// the built-in domains (organisation, platform) are always there; the demo seed needs alm
 	var need []string
 	demo := platform.Env("GOAP_GRAPH_SEED", "") == "demo"
@@ -136,15 +146,8 @@ func main() {
 			log.Info("model gateway configuration created", "providers", len(provs), "models", len(models), "aliases", len(aliases))
 		}
 	})
-	authorizer, err := access.NewAuthorizer(&access.Directory{Graph: g})
-	if err != nil {
-		platform.Fatal(log, "authorizer", err)
-	}
-	g.Authorizer = graphsvc.TransitionAuthorizer(authorizer)
-	g.ChangeAuthorizer = graphsvc.ChangeTransitionAuthorizer(authorizer)
-	g.Validators = []graph.NodeValidator{access.AdminFloorValidator{}}
 	graphHandler := &graphsvc.Handler{Graph: g, Events: events, Authz: authorizer, Floor: authorizer.Floor()}
-	srv.Mount(graphv1connect.NewGraphServiceHandler(graphHandler, append(telemetry.HandlerOptions(), connect.WithInterceptors(eventsvc.CommandInterceptor(), graphHandler.PersonalScope(), graphHandler.EnsureCaller()))...))
+	srv.Mount(graphv1connect.NewGraphServiceHandler(graphHandler, append(telemetry.HandlerOptions(), connect.WithInterceptors(graphHandler.Identify(), eventsvc.CommandInterceptor(), graphHandler.PersonalScope(), graphHandler.EnsureCaller()))...))
 	if err := srv.Run(); err != nil {
 		platform.Fatal(log, "server", err)
 	}

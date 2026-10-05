@@ -10,12 +10,13 @@ import (
 
 // TransitionAuthorizer authorizes the lifecycle transitions of a change for
 // the caller (ADR 0014). A transition declares the permission it needs
-// ("type:action"); by default it is node:transition. Callers without identity
-// are trusted internal services.
+// ("type:action"); by default it is node:transition. A nil authorizer grants
+// everything; an anonymous caller is refused by it, internal services act as
+// a named system principal (SystemPrincipal).
 func TransitionAuthorizer(a authz.Authorizer) graph.TransitionAuthorizer {
 	return func(ctx context.Context, n domain.Node, t domain.Transition) error {
 		who := authz.From(ctx)
-		if a == nil || who.Anonymous() {
+		if a == nil {
 			return nil
 		}
 		typ, action := "node", "transition"
@@ -35,7 +36,7 @@ func TransitionAuthorizer(a authz.Authorizer) graph.TransitionAuthorizer {
 func ChangeTransitionAuthorizer(a authz.Authorizer) graph.ChangeTransitionAuthorizer {
 	return func(ctx context.Context, c domain.Change, t domain.Transition) error {
 		who := authz.From(ctx)
-		if a == nil || who.Anonymous() {
+		if a == nil {
 			return nil
 		}
 		typ, action := "change", "transition"

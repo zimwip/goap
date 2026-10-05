@@ -91,7 +91,11 @@ func openStores(ctx context.Context, log *slog.Logger) (stores, error) {
 // configured (GOAP_JWT_SECRET, Vault): generated once and kept next to the local database (dir/jwt_secret),
 // so a restart does not sign everyone out; in memory (dir empty) the accounts do not survive a restart
 // either, so a fresh secret per process is right.
-func localJWTSecret(dir string) (string, error) {
+func localJWTSecret(dir string) (string, error) { return localSecret(dir, "jwt_secret") }
+
+// localSecret is a random secret kept in the file name of dir (generated once; a fresh one per process when dir
+// is empty).
+func localSecret(dir, name string) (string, error) {
 	gen := func() (string, error) {
 		b := make([]byte, 32)
 		if _, err := rand.Read(b); err != nil {
@@ -102,7 +106,7 @@ func localJWTSecret(dir string) (string, error) {
 	if dir == "" {
 		return gen()
 	}
-	path := filepath.Join(dir, "jwt_secret")
+	path := filepath.Join(dir, name)
 	if b, err := os.ReadFile(path); err == nil && len(strings.TrimSpace(string(b))) >= 32 {
 		return strings.TrimSpace(string(b)), nil
 	} else if err != nil && !errors.Is(err, fs.ErrNotExist) {
