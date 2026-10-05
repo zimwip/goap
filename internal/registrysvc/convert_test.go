@@ -40,9 +40,10 @@ func TestProcessesRoundTripThroughPB(t *testing.T) {
 	}
 	in.Roles = []methodology.Role{{Name: "dev", Description: "d"}, {Name: "lead"}}
 	in.AppliesTo = []string{"sdlc"}
+	in.Imports = []string{"risks"}
 	in.On = []methodology.Subscription{{Event: "step.completed", Filter: `event.step.process == "x"`}}
 	out = FromPB(ToPB(Record{Methodology: in}))
-	if !reflect.DeepEqual(out.Methods, in.Methods) || !reflect.DeepEqual(out.Roles, in.Roles) || !reflect.DeepEqual(out.AppliesTo, in.AppliesTo) || !reflect.DeepEqual(out.On, in.On) {
+	if !reflect.DeepEqual(out.Methods, in.Methods) || !reflect.DeepEqual(out.Roles, in.Roles) || !reflect.DeepEqual(out.AppliesTo, in.AppliesTo) || !reflect.DeepEqual(out.Imports, in.Imports) || !reflect.DeepEqual(out.On, in.On) {
 		t.Fatalf("methods changed through PB:\n%+v\n%+v", in.Methods, out.Methods)
 	}
 	if !reflect.DeepEqual(out.Processes, in.Processes) {

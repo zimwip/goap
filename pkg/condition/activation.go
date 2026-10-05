@@ -1,6 +1,8 @@
 package condition
 
 import (
+	"sync"
+
 	"github.com/zimwip/goap/pkg/domain"
 )
 
@@ -24,7 +26,12 @@ func Activation(bb domain.Blackboard) map[string]any {
 	if vars == nil {
 		vars = map[string]any{}
 	}
-	points, questions := decisions(bb)
+	// the variables of the decision and risk concepts are computed when an expression reads them (lazy bindings of
+	// CEL), so a methodology that reads none of them pays nothing
+	opts := lazy(func() []any { return h.options() })
+	rsk := lazy(func() []any { return risks(&c) })
+	act := lazy(func() []any { return actionItems(&c) })
+	dec := lazy(func() decisionView { return decisions(bb) })
 	return map[string]any{
 		"change": map[string]any{
 			"id": string(c.ID), "title": c.Title, "intent": c.Intent, "status": string(c.Status),
@@ -36,14 +43,34 @@ func Activation(bb domain.Blackboard) map[string]any {
 		"artifacts":      orEmptyList(byKind[domain.KindArtifact]),
 		"merges":         orEmptyList(byKind[domain.KindMerge]),
 		"vars":           vars,
-		"options":        h.options(),
+		"options":        func() any { return opts() },
 		"activeOption":   bb.ActiveOption,
-		"decisionPoints": points,
-		"questions":      questions,
-		"risks":          risks(&c),
-		"actions":        actionItems(&c),
+		"decisionPoints": func() any { return dec().points },
+		"questions":      func() any { return dec().questions },
+		"risks":          func() any { return rsk() },
+		"actions":        func() any { return act() },
 	}
 }
+
+// Resolve returns the value of an activation entry, computing a lazy one.
+func Resolve(v any) any {
+	if f, ok := v.(func() any); ok {
+		return f()
+	}
+	return v
+}
+
+// lazy memoizes a computation; CEL calls a `func() any` binding when the variable is read.
+func lazy[T any](f func() T) func() T {
+	var once sync.Once
+	var v T
+	return func() T {
+		once.Do(func() { v = f() })
+		return v
+	}
+}
+
+type decisionView struct{ points, questions []any }
 
 // risks is the risk register of the change (ADR 0036 §1).
 func risks(c *domain.Change) []any {
@@ -87,8 +114,8 @@ func (h hydrator) options() []any {
 }
 
 // decisions are the decision points of the change and all their questions (ADR 0009 §4).
-func decisions(bb domain.Blackboard) (points, questions []any) {
-	points, questions = []any{}, []any{}
+func decisions(bb domain.Blackboard) decisionView {
+	points, questions := []any{}, []any{}
 	for _, d := range bb.DecisionPoints {
 		qs := make([]any, 0, len(d.Questions))
 		for _, q := range d.Questions {
@@ -112,7 +139,7 @@ func decisions(bb domain.Blackboard) (points, questions []any) {
 			"decider": d.Decider, "threshold": d.Threshold, "rounds": int64(d.Rounds), "maxRounds": int64(d.MaxRounds), "escalation": d.Escalation,
 			"openQuestions": int64(d.OpenQuestions()), "questions": qs, "ruling": ruling, "option": d.Option, "decidedBy": d.DecidedBy})
 	}
-	return points, questions
+	return decisionView{points, questions}
 }
 
 type hydrator struct{ bb domain.Blackboard }

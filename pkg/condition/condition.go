@@ -63,29 +63,6 @@ func NewEnv() (*cel.Env, error) {
 	)
 }
 
-// Platform conditions (ADR 0009 §4): every methodology knows them without declaring them (a condition it declares
-// under the same name replaces the platform one).
-var Platform = []Definition{
-	{Name: "open_questions", Expr: `questions.exists(q, q.status == "open")`},
-	{Name: "no_open_questions", Expr: `!questions.exists(q, q.status == "open")`},
-	// a decision point waits for a ruling it can take now: open, or escalated to a person
-	{Name: "decision_ready", Expr: `decisionPoints.exists(d, d.status == "open" || d.status == "escalated")`},
-	{Name: "decision_pending", Expr: `decisionPoints.exists(d, d.status != "decided")`},
-	{Name: "no_decision_pending", Expr: `!decisionPoints.exists(d, d.status != "decided")`},
-	{Name: "ratification_pending", Expr: `decisionPoints.exists(d, d.status == "ratifying")`},
-	{Name: "decision_escalated", Expr: `decisionPoints.exists(d, d.escalation != "")`},
-	{Name: "options_open", Expr: `options.exists(o, o.status == "exploring" || o.status == "evaluated")`},
-	// every open option is evaluated (and there is one)
-	{Name: "options_evaluated", Expr: `options.exists(o, o.status == "evaluated") && !options.exists(o, o.status == "exploring")`},
-	{Name: "option_selected", Expr: `options.exists(o, o.status == "selected")`},
-	// risks and actions (ADR 0036 §1): a live risk is open or being mitigated; a high one (score >= 9) needs an action
-	{Name: "open_risks", Expr: `risks.exists(r, r.live)`},
-	{Name: "unmitigated_risks", Expr: `risks.exists(r, r.live && r.score >= 9 && !actions.exists(a, a.for == r.key && a.status != "cancelled"))`},
-	{Name: "risks_under_control", Expr: `!risks.exists(r, r.live && r.score >= 9 && !actions.exists(a, a.for == r.key && a.status != "cancelled"))`},
-	{Name: "open_actions", Expr: `actions.exists(a, a.status == "open")`},
-	{Name: "no_open_actions", Expr: `!actions.exists(a, a.status == "open")`},
-}
-
 // Compile compiles definitions. Every expression must return a bool.
 func Compile(defs []Definition) (*Set, error) {
 	env, err := NewEnv()

@@ -16,6 +16,11 @@ const riskyYAML = `
 name: risky
 version: 1.0.0
 appliesTo: [staged]
+imports: [risks]
+on:
+  - {event: process.attached}
+  - {event: step.completed}
+  - {event: change.item_added, filter: 'event.items.exists(i, i.kind == "risk" || i.kind == "action")'}
 conditions:
   - {name: risks_identified, expr: 'artifacts.exists(a, a.type == "risk_review")'}
 actions:
@@ -119,6 +124,7 @@ const choreoYAML = `
 name: choreo
 version: 1.0.0
 namespace: alm
+imports: [risks]
 conditions:
   - {name: noted, expr: 'artifacts.exists(a, a.type == "note")'}
 actions:
@@ -134,6 +140,7 @@ const watchYAML = `
 name: watch
 version: 1.0.0
 appliesTo: [choreo]
+imports: [risks]
 on:
   - {event: process.attached}
   - {event: step.completed, filter: 'event.step.process == "flow"'}

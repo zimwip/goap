@@ -12,6 +12,9 @@ description: >
 
 namespace: alm
 
+# risks_under_control, the release train gate, is a condition of the `risks` library
+imports: [risks]
+
 conditions:
   # A change impact is a node the change acts on (ADR 0024): declared as impacted (modified) or created,
   # written when its new version exists, reviewed when it has received a decision.

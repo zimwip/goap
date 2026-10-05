@@ -36,9 +36,6 @@ var (
 	ActionStatuses = []string{ActionOpen, ActionDone, ActionCancelled}
 )
 
-// HighRisk is the score from which an open risk needs a mitigation action (probability × impact, 1–25).
-const HighRisk = 9
-
 // Risk is the current version of a risk of the change.
 type Risk struct {
 	Key         string   `json:"key"`

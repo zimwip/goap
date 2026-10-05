@@ -720,6 +720,8 @@ export interface Methodology {
   roles?: MethodologyRole[];
   /** transverse: its processes run alongside the changes of these methodologies (ADR 0036 §3) */
   appliesTo?: string[];
+  /** the built-in condition libraries it imports (ADR 0064): decisions, risks */
+  imports?: string[];
   /** the events of those changes it reacts to */
   on?: { event?: string; filter?: string }[];
   createdAt?: string;

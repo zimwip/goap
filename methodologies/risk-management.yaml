@@ -9,6 +9,9 @@ description: >
 # no namespace of its own: a transverse methodology acts in the namespace of the change
 appliesTo: [sdlc]
 
+# the conditions of the risk register (risks_under_control...) are the `risks` library
+imports: [risks]
+
 # the events of those changes it reacts to: each one runs the review again, with the event in vars.event (those that
 # arrive while it works wait their turn)
 on:
