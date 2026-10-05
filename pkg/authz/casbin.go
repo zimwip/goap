@@ -66,6 +66,9 @@ var DefaultPolicies = []Policy{
 	{Rule: `onProject(r.sub)`, Resource: "process", Action: "*", Effect: "allow"},
 	{Rule: `onProject(r.sub)`, Resource: "object", Action: "create", Effect: "allow"},
 	{Rule: `onProject(r.sub)`, Resource: "node", Action: "transition", Effect: "allow"},
+	// approving a requirement (alm): the control is the accepted review of the change, which its guard requires (ADR
+	// 0076); the transition itself is a member's
+	{Rule: `onProject(r.sub)`, Resource: "requirement", Action: "approve", Effect: "allow"},
 	{Rule: `onProject(r.sub)`, Resource: "tool", Action: "call", Effect: "allow"},
 	// the lifecycle of a change (ADR 0058): its gates are decisions and conditions, the move itself is a member's
 	{Rule: `onProject(r.sub)`, Resource: "change", Action: "transition", Effect: "allow"},

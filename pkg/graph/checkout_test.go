@@ -165,3 +165,32 @@ func testAdoptFlowNeedsCheckin(t *testing.T, repo Repo) {
 	must[domain.ChangeImpact](t)(g.acceptOn(ctx, c.ID, opt.ID, "", cn.ID, "u", "ok"))
 	must[domain.Flow](t)(g.AdoptFlow(ctx, c.ID, opt.ID, "u"))
 }
+
+// A link a working version of the change holds to a node of the change follows the new version the change writes of
+// it (ADR 0076 §4); the link of a frozen version stays where it is, suspect (ADR 0003).
+func TestWorkingLinksFollowNewVersions(t *testing.T) {
+	forEachRepo(t, testWorkingLinksFollowNewVersions)
+}
+
+func testWorkingLinksFollowNewVersions(t *testing.T, repo Repo) {
+	ctx := context.Background()
+	f := newFixture(t, repo)
+	g := f.g
+	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{Title: "follow", BaselineID: f.base.ID}))
+	req := must[domain.ChangeImpact](t)(g.CheckoutNode(ctx, c.ID, NodeCheckout{Node: f.req.ID, Rationale: "edit"}))
+	tst := must[domain.ChangeImpact](t)(g.CreateNode(ctx, c.ID, NodeCreate{Key: "TST-9", Type: "TestCase", Rationale: "cover",
+		Links: []LinkWrite{{Type: "verifies", To: *req.Post}}}))
+	must[domain.ChangeImpact](t)(g.accept(ctx, c.ID, req.ID, "bob", "ok"))
+	again := must[domain.ChangeImpact](t)(g.CheckoutNode(ctx, c.ID, NodeCheckout{Impact: req.ID}))
+	out := must[[]domain.Link](t)(g.OutLinksOf(ctx, *tst.Post))
+	if len(out) != 1 || out[0].To != *again.Post {
+		t.Fatalf("the link of the working version follows REQ-1 to %s: %+v", again.Post, out)
+	}
+	// the test version is frozen: a later version of REQ-1 leaves its link where it is
+	must[domain.ChangeImpact](t)(g.accept(ctx, c.ID, tst.ID, "bob", "ok"))
+	must[domain.ChangeImpact](t)(g.accept(ctx, c.ID, req.ID, "bob", "ok"))
+	third := must[domain.ChangeImpact](t)(g.CheckoutNode(ctx, c.ID, NodeCheckout{Impact: req.ID}))
+	if out := must[[]domain.Link](t)(g.OutLinksOf(ctx, *tst.Post)); len(out) != 1 || out[0].To != *again.Post || *third.Post == *again.Post {
+		t.Fatalf("a frozen link stays: %+v", out)
+	}
+}

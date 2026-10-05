@@ -34,15 +34,13 @@ func sdlcModel(t *testing.T) llm.Client {
 			out = `{"items":[{"kind":"changeImpact","changeImpact":{"op":"declare","intent":"modified","key":"NEED-1","rationale":"new payment method"}},
 			{"kind":"changeImpact","changeImpact":{"op":"declare","intent":"modified","key":"REQ-1","rationale":"the PSP must handle split payments"}}]}`
 		case strings.Contains(p, "Revise the impacted requirements"):
-			// REQ-1 starts proposed (not editable): reopen it to draft, edit, then submit it for review, the
-			// way the system prompt's lifecycle instructions ask of any compliant agent (llmSystem, ADR 0048).
-			// REQ-10 is created directly into draft (its first write, not a revision) then submitted too.
-			out = `{"items":[{"kind":"changeImpact","changeImpact":{"op":"write","node":"REQ-1","state":"draft"}},
+			// REQ-1 starts proposed (not editable): a transition moves it to draft, then it is written, the way the
+			// system prompt's lifecycle instructions ask of any compliant agent (llmSystem, ADR 0076). REQ-10 is
+			// created. The review accepts both, approve_requirements approves them.
+			out = `{"items":[{"kind":"changeImpact","changeImpact":{"op":"transition","node":"REQ-1","state":"draft"}},
 			{"kind":"changeImpact","changeImpact":{"op":"write","node":"REQ-1","props":{"title":"Card payment (in full or in 3 installments) goes through the Acme PSP (API v2)"}}},
-			{"kind":"changeImpact","changeImpact":{"op":"write","node":"REQ-1","state":"in_review"}},
 			{"kind":"changeImpact","changeImpact":{"op":"declare","ref":"#r1","intent":"created","type":"FunctionalRequirement","key":"REQ-10","rationale":"pay in installments"}},
-			{"kind":"changeImpact","changeImpact":{"op":"write","node":"#r1","props":{"title":"Pay in 3 installments with no fees","priority":"high"},"links":[{"type":"satisfies","to":"NEED-1"}],"state":"draft"}},
-			{"kind":"changeImpact","changeImpact":{"op":"write","node":"#r1","state":"in_review"}}]}`
+			{"kind":"changeImpact","changeImpact":{"op":"write","node":"#r1","props":{"title":"Pay in 3 installments with no fees","priority":"high"},"links":[{"type":"satisfies","to":"NEED-1"}]}}]}`
 		case strings.Contains(p, "Design the evolution"):
 			out = `{"items":[{"kind":"changeImpact","changeImpact":{"op":"declare","ref":"#c1","intent":"created","type":"Component","key":"CMP-10","rationale":"a dedicated engine"}},
 			{"kind":"changeImpact","changeImpact":{"op":"write","node":"#c1","props":{"title":"installments-engine","technology":"java","version":"0.0.0"},"links":[{"type":"implements","to":"FCT-1"}]}},

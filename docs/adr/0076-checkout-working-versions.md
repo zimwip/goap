@@ -1,6 +1,6 @@
 # ADR 0076 — Checkout, working versions and check-in: every node write is a change operation
 
-**Status**: proposed · **Date**: 2026-10 · Refines ADR 0024 (change impacts), 0029 (event-sourced impacts), 0003
+**Status**: accepted, implemented in the graph, its service and the engine (the web follows) · **Date**: 2026-10 · Refines ADR 0024 (change impacts), 0029 (event-sourced impacts), 0003
 (version-to-version links), 0049 / 0054 (no write outside a change). Supersedes `CreateObject`, the direct
 `CreateNode` / `UpdateNode` / `CreateLink` RPCs and `WriteChangeImpact`.
 
@@ -85,7 +85,25 @@ the composite of those primitives for producers that do it all in one call (seed
 `CreateLink`, `UpdateLink` (properties) and `DeleteLink` apply only to an outgoing link of a checked-out version of the
 change; they change that version's links **without writing a new version**. The rule of ADR 0003 stays: the outgoing
 links belong to the source version, and they are frozen with it at check-in. A link to a node checked out in the same
-change targets its working version, whose number does not move until the next checkout.
+change targets its working version; when the change writes a new version of that node (a checkout, a transition), the
+links the working versions of the change hold to the previous one follow it. The links of a frozen version stay where
+they are: they become suspect.
+
+### 4c. What has no parent is retired by its lifecycle
+
+A node that no parent holds (an entry of the model gateway configuration: provider, model, alias) is taken out of force
+by a transition, never deleted: the platform domain gives `LlmProvider`, `LlmModel` and `LlmAlias` the lifecycle
+`config` (`active`, editable at rest, `retired`; transitions `retire` and `restore`), and the gateway leaves a retired
+entry out (`llmcfg.StateRetired`). An adapter instance is switched off by its `disabled` restriction.
+
+### 4d. A domain lifecycle does not repeat the review of the change
+
+The review is the change's: a lifecycle state "under review" would come after the review that authorizes the check-in.
+The `requirement` lifecycle of the ALM domain loses `in_review`, `submit` and `reject`: `approve` goes from `draft` to
+`approved`, its guard requires the accepted review of the impact (`impact.review == "accepted"`); a refused review
+sends the requirement back to be reworked in the change. The default policies grant `requirement:approve` to the
+members of the project: the control is the review. The SDLC methodology approves the accepted requirements after its
+review (`approve_requirements`, before `apply_change`).
 
 ### 5. Review and check-in
 
@@ -96,7 +114,8 @@ change targets its working version, whose number does not move until the next ch
 - To modify a checked-in node again, the change makes a **new `CheckoutNode`**: it writes the next version (parent:
   the checked-in one), and the impact's review goes back to `proposed`. A rejected impact keeps today's rule: it is
   not written until it is reopened (`ReopenChangeImpacts`).
-- `CommitChange` (so `Apply`) requires every version of the change to be checked in, in place of today's "accepted
+- `CommitChange` (so `Apply`) requires every version of the change to be checked in (the engine's `graph.apply`
+  builtin checks in the accepted working versions first: their acceptance authorizes it), in place of today's "accepted
   impacts await their review" check; `AdoptFlow` refuses a flow that still has a checked-out version, `DiscardFlow`
   drops them.
 

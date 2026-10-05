@@ -24,6 +24,9 @@ const (
 	NodeTypeProvider  = "platform@LlmProvider"
 	NodeTypeModel     = "platform@LlmModel"
 	NodeTypeAlias     = "platform@LlmAlias"
+	// StateRetired is the state of an entry taken out of the configuration (lifecycle config of the platform domain,
+	// ADR 0076: a node is never deleted): the snapshot leaves it out.
+	StateRetired = "retired"
 )
 
 // Quota periods.
@@ -201,6 +204,9 @@ func BuildSnapshot(id domain.BaselineID, nodes []domain.Node, _ []domain.Link) *
 	for _, n := range nodes {
 		// nodes is scoped to the platform namespace by the Directory's cache
 		// (Namespace: NamespacePlatform); no need to filter it again here.
+		if n.State == StateRetired {
+			continue
+		}
 		var err error
 		switch n.Type {
 		case NodeTypeProvider:
