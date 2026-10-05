@@ -118,6 +118,8 @@ func Defs() []mcp.Def {
 				InputSchema: schemaObj(map[string]any{"change": argChange, "key": str("key of the node")}, "key")},
 			{Name: "cancel", Description: "Cancel the checkout of a node of the change: its working version is dropped; a node the change created and never checked in goes away.",
 				InputSchema: schemaObj(map[string]any{"change": argChange, "key": str("key of the node")}, "key")},
+			{Name: "remove", Description: "Take a node out of the change: its working version is dropped and it leaves the list of change impacts; refused once a version of it is checked in (reject it instead).",
+				InputSchema: schemaObj(map[string]any{"change": argChange, "key": str("key of the node")}, "key")},
 			{Name: "note", Description: "Add a note (an artifact item) to the blackboard of the change.",
 				InputSchema: schemaObj(map[string]any{"change": argChange, "type": str("kind of note (default note)"), "text": str("content"),
 					"data": object("structured content")}, "text")},

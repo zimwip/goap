@@ -253,10 +253,11 @@ func (g *Graph) ReviewNodeOn(ctx context.Context, id domain.ChangeID, flow, exec
 	return
 }
 
-// ReopenImpacts sends accepted change impacts of the main flow back to proposed (a review event, as when a change goes
-// back to a state, ADR 0058): what was accepted must be reviewed again. A use case calls it when the ground of an
-// acceptance falls (ADR 0075: a derogation expired); the graph reads no clock and names no reason. An impact that is
-// not accepted is left as it is; the comment is mandatory.
+// ReopenImpacts sends decided change impacts of the main flow back to proposed (a review event, as when a change goes
+// back to a state, ADR 0058): what was accepted must be reviewed again, what was rejected is reworked (its working
+// version was kept, ADR 0076 §5b). A use case calls it when the ground of an acceptance falls (ADR 0075: a derogation
+// expired); the graph reads no clock and names no reason. A proposed impact is left as it is; the comment is
+// mandatory.
 func (g *Graph) ReopenImpacts(ctx context.Context, id domain.ChangeID, impacts []domain.ChangeImpactID, comment string) (reopened []domain.ChangeImpactID, err error) {
 	comment = strings.TrimSpace(comment)
 	if comment == "" {
@@ -274,7 +275,7 @@ func (g *Graph) ReopenImpacts(ctx context.Context, id domain.ChangeID, impacts [
 				return err
 			}
 			cn := c.Nodes[i]
-			if cn.Review != domain.ReviewAccepted {
+			if cn.Review != domain.ReviewAccepted && cn.Review != domain.ReviewRejected {
 				continue
 			}
 			r := domain.Review{Status: domain.ReviewProposed, By: g.caller(ctx), At: g.now(), Comment: comment}

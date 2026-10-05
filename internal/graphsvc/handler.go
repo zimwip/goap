@@ -619,6 +619,16 @@ func (h *Handler) CancelCheckout(ctx context.Context, r *connect.Request[graphv1
 	return res(&graphv1.CancelCheckoutResponse{Node: pbconv.ChangeImpactToPB(cn)}, err)
 }
 
+func (h *Handler) RemoveChangeImpact(ctx context.Context, r *connect.Request[graphv1.RemoveChangeImpactRequest]) (*connect.Response[graphv1.RemoveChangeImpactResponse], error) {
+	ctx = h.Identity.Context(ctx, r.Header())
+	m := r.Msg
+	if err := h.gateImpact(ctx, m.ChangeId, m.ChangeImpactId, ""); err != nil {
+		return nil, err
+	}
+	err := h.Graph.RemoveChangeImpact(ctx, domain.ChangeID(m.ChangeId), domain.ChangeImpactID(m.ChangeImpactId), m.Flow, m.Execution)
+	return res(&graphv1.RemoveChangeImpactResponse{}, err)
+}
+
 func (h *Handler) ReviewChangeImpact(ctx context.Context, r *connect.Request[graphv1.ReviewChangeImpactRequest]) (*connect.Response[graphv1.ReviewChangeImpactResponse], error) {
 	ctx = h.Identity.Context(ctx, r.Header())
 	status := domain.ReviewRejected

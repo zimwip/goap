@@ -43,7 +43,7 @@ func (g *Graph) emit(ctx context.Context, tx Tx, events ...domain.ImpactEvent) e
 			return err
 		}
 		next := domain.ApplyImpactEvent(cur, e)
-		// a change impact the event removes (a creation cancelled before its first check-in, ADR 0076)
+		// a change impact the event removes (a creation cancelled before its first check-in, an impact removed, ADR 0076)
 		for _, cn := range cur {
 			if !slices.ContainsFunc(next, func(n domain.ChangeImpact) bool { return n.ID == cn.ID }) {
 				if err := tx.DeleteChangeImpact(ctx, e.Change, cn.ID); err != nil {

@@ -49,7 +49,7 @@ func TestStartWithoutBaseline(t *testing.T) {
 	if _, err := devseed.Demo(ctx, g); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := graphtest.Import(ctx, g, graphtest.Node{Namespace: "organisation", Key: testProject, Type: "organisation@ProjectUnit", Properties: map[string]any{"name": "Test"}}); err != nil {
+	if _, err := graphtest.Project(ctx, g, testProject, "Test"); err != nil {
 		t.Fatal(err)
 	}
 	bs, err := g.Baselines(ctx, cm.Namespace)

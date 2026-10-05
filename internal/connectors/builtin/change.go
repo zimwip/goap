@@ -42,6 +42,7 @@ var changeOps = []op{
 	{"unlink", "Remove a link from a node of the change (removing a child is a modification of its parent): {node}", schema(map[string]string{"change": "string", "from": "string", "type": "string", "to": "string", "rationale": "string"}, "from", "type", "to")},
 	{"checkin", "Check in the working version of a node of the change, once its review is accepted: {node}", schema(map[string]string{"change": "string", "key": "string"}, "key")},
 	{"cancel", "Cancel the checkout of a node of the change (a node created by the change and never checked in goes away): {node}", schema(map[string]string{"change": "string", "key": "string"}, "key")},
+	{"remove", "Take a node out of the change (its working version is dropped; refused once checked in): {removed}", schema(map[string]string{"change": "string", "key": "string"}, "key")},
 	{"note", "Add an artifact item to the blackboard: {item}", schema(map[string]string{"change": "string", "type": "string", "text": "string", "data": "object"}, "text")},
 	{"signal", "Emit a named notification other agents or a live parent may react to: {item}", schema(map[string]string{"change": "string", "type": "string", "data": "object", "target": "string"}, "type")},
 	{"validate", "Check the consistency of the change: {issues}", schema(map[string]string{"change": "string"})},
@@ -235,6 +236,15 @@ func (c Change) Invoke(ctx context.Context, op string, raw, _ map[string]any, _ 
 			return nil, err
 		}
 		return nodeResult(out)
+	case "remove":
+		imp, ok := w.impact(a.str("key"))
+		if !ok {
+			return nil, fmt.Errorf("%s is not in the change", a.str("key"))
+		}
+		if err := c.p.Graph.RemoveChangeImpact(ctx, id, imp.ID, "", ""); err != nil {
+			return nil, err
+		}
+		return map[string]any{"removed": imp.Key}, nil
 	case "unlink":
 		typ, to := a.str("type"), a.str("to")
 		if typ == "" || to == "" {

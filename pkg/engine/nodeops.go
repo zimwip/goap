@@ -296,6 +296,21 @@ func (e *Engine) applyNodeOps(ctx context.Context, p *Process, ops []dsl.NodeOp,
 			} else {
 				delete(posts, id)
 			}
+		case "remove":
+			id, err := resolve(op.Node)
+			if err != nil {
+				return declared, fail(err)
+			}
+			if err := e.Graph.RemoveChangeImpact(ctx, p.ChangeID, id, p.Flow, execution); err != nil {
+				return declared, fail(err)
+			}
+			delete(out, id)
+			delete(posts, id)
+			for k, v := range byKey {
+				if v == id {
+					delete(byKey, k)
+				}
+			}
 		case "review":
 			id, err := resolve(op.Node)
 			if err != nil {

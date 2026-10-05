@@ -126,13 +126,15 @@ lifecycles:
   # a persisted version is never editable.
   - name: requirement
     description: How a requirement is written, approved once reviewed in its change, and retired
-    initial: proposed
+    # a node is created in its initial state, checked out and filled in its first version: it is born editable
+    initial: draft
     states:
       - {name: proposed, description: "Raised, not worked on yet"}
       - {name: draft, editable: true, description: "Being written or reworked in a change"}
       - {name: approved, description: Reviewed and accepted}
       - {name: obsolete, final: true, description: No longer applicable}
     transitions:
+      - {name: propose, description: Raise the requirement without working on it further yet, from: draft, to: proposed}
       - {name: start, description: Take a proposed requirement up to work on it in a change, from: proposed, to: draft}
       # the review is the change's (ADR 0076): the requirement is approved once the review of its impact is accepted
       # and its version checked in; a refused review sends it back to be reworked in the change
@@ -141,7 +143,7 @@ lifecycles:
       - {name: retire, description: Take the requirement out of use for good, from: approved, to: obsolete}
   - name: release
     description: How a release is prepared, frozen and withdrawn
-    initial: candidate
+    initial: draft
     states:
       - {name: candidate, description: "Planned, contents may still change"}
       - {name: draft, editable: true, description: Contents being reworked in a change}
@@ -158,7 +160,7 @@ lifecycles:
   # only a released version is frozen for good and can be the "pre" of an impact.
   - name: maturity
     description: Generic process maturity of a version, from proposal to release
-    initial: proposed
+    initial: draft
     states:
       - {name: proposed, description: "Put forward, awaiting a decision"}
       - {name: draft, editable: true, description: "Being written or reworked in a change"}

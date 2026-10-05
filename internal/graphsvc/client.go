@@ -185,6 +185,12 @@ func (c *Client) CancelCheckout(ctx context.Context, id domain.ChangeID, impact 
 	return pbconv.ChangeImpactFromPB(r.Msg.Node), nil
 }
 
+// RemoveChangeImpact implements engine.GraphPort.
+func (c *Client) RemoveChangeImpact(ctx context.Context, id domain.ChangeID, impact domain.ChangeImpactID, flow, execution string) error {
+	_, err := c.rpc.RemoveChangeImpact(ctx, connect.NewRequest(&graphv1.RemoveChangeImpactRequest{ChangeId: string(id), ChangeImpactId: string(impact), Flow: flow, Execution: execution}))
+	return rpcerr.FromConnect(err)
+}
+
 // ReviewNodeOn implements engine.GraphPort (the reviewer is the principal of the request).
 func (c *Client) ReviewNodeOn(ctx context.Context, id domain.ChangeID, flow, execution string, node domain.ChangeImpactID, status domain.NodeReview, _, comment string) (domain.ChangeImpact, error) {
 	r, err := c.rpc.ReviewChangeImpact(ctx, connect.NewRequest(&graphv1.ReviewChangeImpactRequest{ChangeId: string(id), ChangeImpactId: string(node),

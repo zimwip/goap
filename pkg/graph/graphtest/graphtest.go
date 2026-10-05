@@ -128,3 +128,26 @@ func AcceptAndCheckin(ctx context.Context, g *graph.Graph, change domain.ChangeI
 	}
 	return nil
 }
+
+// Project lands a project under the root project of the graph (ADR 0039: a project is created with its parent).
+func Project(ctx context.Context, g *graph.Graph, key, name string) (domain.Node, error) {
+	return under(ctx, g, domain.StructureProject, key, name)
+}
+
+// Unit lands a unit of the organisation under its root unit (ADR 0054: a unit is created with its parent).
+func Unit(ctx context.Context, g *graph.Graph, key, name string) (domain.Node, error) {
+	return under(ctx, g, domain.StructureOrganisation, key, name)
+}
+
+func under(ctx context.Context, g *graph.Graph, kind, key, name string) (domain.Node, error) {
+	if err := g.Bootstrap(ctx); err != nil {
+		return domain.Node{}, err
+	}
+	st := g.Structure(kind)
+	root, err := g.NodeByKey(ctx, st.Namespace, st.Root)
+	if err != nil {
+		return domain.Node{}, err
+	}
+	return Import(ctx, g, Node{Namespace: st.Namespace, Key: key, Type: st.Type, Properties: map[string]any{"name": name},
+		Links: []graph.LinkWrite{{Type: st.Parent, To: root.Ref()}}})
+}

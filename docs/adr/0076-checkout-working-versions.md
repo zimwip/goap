@@ -55,6 +55,12 @@ the composite of those primitives for producers that do it all in one call (seed
 - **`UpdateNode(change, impact, props)`** applies only to a checked-out version of the change; it merges the
   properties into it (the semantics of `NodeWrite.Properties` today) and writes **no new version**. Refused on a node
   that is not checked out in the change, or checked in.
+- A working version is a draft: every edit checks the **type and enum** of the values against the attributes of the
+  node type (and of the link type for a link's properties), nothing more. What makes a version valid — the property
+  and node validators of its type, the links its type requires (`requires:`, the parent of a node of a structure) and
+  the attributes of its links — is checked when it is **frozen** (`CheckinNode`) and again when it **lands** (`Apply`),
+  whatever operations built it. `CommitEdits` keeps its early check of the required parent of a creation, and cancels
+  the creations it leaves checked out when it fails (their keys stay free).
 - `UpdateNode` never changes the lifecycle state (§4b).
 - **There is no retire.** A node is not removed by a change (ADR 0024 §4): removing a child is a modification of its
   **parent**, which is checked out and loses the link to the child (`DeleteLink`, §4). An impact analysis that says
@@ -96,7 +102,12 @@ by a transition, never deleted: the platform domain gives `LlmProvider`, `LlmMod
 `config` (`active`, editable at rest, `retired`; transitions `retire` and `restore`), and the gateway leaves a retired
 entry out (`llmcfg.StateRetired`). An adapter instance is switched off by its `disabled` restriction.
 
-### 4d. A domain lifecycle does not repeat the review of the change
+### 4d. A domain lifecycle does not repeat the review of the change; its initial state is editable
+
+A node is created checked out in the initial state of its lifecycle and filled in its first version: the initial
+state of a lifecycle must be **editable** (`domain.Lifecycle.Problems` refuses one that is not). A node that rests in
+a state no one works in (`proposed`, `candidate`) is moved there by a transition. The ALM lifecycles start in `draft`
+(`requirement` gains `propose`, `draft` → `proposed`; `release` and `maturity` already lead out of `draft`).
 
 The review is the change's: a lifecycle state "under review" would come after the review that authorizes the check-in.
 The `requirement` lifecycle of the ALM domain loses `in_review`, `submit` and `reject`: `approve` goes from `draft` to
@@ -112,8 +123,12 @@ review (`approve_requirements`, before `apply_change`).
 - **`CheckinNode(change, impact)`** freezes the working version: refused unless the impact's review is `accepted`
   on that flow. After it, `UpdateNode` and the link operations are refused on that version.
 - To modify a checked-in node again, the change makes a **new `CheckoutNode`**: it writes the next version (parent:
-  the checked-in one), and the impact's review goes back to `proposed`. A rejected impact keeps today's rule: it is
-  not written until it is reopened (`ReopenChangeImpacts`).
+  the checked-in one), and the impact's review goes back to `proposed`.
+- A **rejected** impact keeps its working version, to be reworked: it is not edited until it is reopened
+  (`ReopenChangeImpacts` sends an accepted or a rejected impact back to `proposed`), and it is left out of the landing
+  as long as it stays rejected. Taking it out of the change is the explicit `RemoveChangeImpact` (§5b).
+- A transition is a version frozen at once, outside the check-in: whether it needs a review is the design of its
+  guard (`impact.review == "accepted"` for the transitions that do, §4b); the review of the impact acts the result.
 - `CommitChange` (so `Apply`) requires every version of the change to be checked in (the engine's `graph.apply`
   builtin checks in the accepted working versions first: their acceptance authorizes it), in place of today's "accepted
   impacts await their review" check; `AdoptFlow` refuses a flow that still has a checked-out version, `DiscardFlow`
@@ -129,13 +144,17 @@ review (`approve_requirements`, before `apply_change`).
   parent, §3).
 - Refused on a checked-in version, and on a working version another version links to (a link of another working
   version of the change is removed first).
+- **`RemoveChangeImpact(change, impact)`** takes an impact out of the change, explicitly: its working version, if
+  any, is dropped as above and the impact leaves the list (`removed` event). Refused once the change checked a
+  version of it in (that version is frozen: the impact is rejected to leave it out of the landing), for an impact
+  declared on another flow, derived from items, or realizing another impact's removal (`Via`).
 
 ### 6. Events
 
-The impact log (ADR 0029) records `declared`, `checkedOut` (the working version, `Post`, replaces `written`),
-`updated` (the property and link edits made in place, with the patch, for the audit trail and PROV-O), `checkedIn`,
-`transitioned` (the version a `TransitionNode` wrote, with the transition), `cancelled` (a checkout dropped),
-`reviewed`, `discarded`, `adopted`, `landed`, `rebased`. The node index (ADR 0026) is fed at check-in: a
+The impact log (ADR 0029) records `declared`, `written` (a version the change wrote: the working version of a
+checkout, the version of a transition, of a merge or an adoption), `updated` (the property and link edits made in
+place, with the patch, for the audit trail and PROV-O), `checkedIn`, `cancelled` (a checkout dropped), `removed` (an
+impact taken out of the change), `reviewed`, `discarded`, `adopted`, `landed`, `rebased`. The node index (ADR 0026) is fed at check-in: a
 `NodeEvent` is published for a frozen version, never for each in-place edit.
 
 ### 7. API
@@ -149,6 +168,7 @@ The impact log (ADR 0029) records `declared`, `checkedOut` (the working version,
 | — | `CheckinNode(change, impact)` |
 | — | `TransitionNode(change, node, transition)` |
 | — | `CancelCheckout(change, impact)` |
+| — | `RemoveChangeImpact(change, impact)` |
 
 `gateAccess` (the `adminOnly` types, ADR 0068) applies to `CreateNode` and `CheckoutNode`; every later operation on the
 impact inherits the check.

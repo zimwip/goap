@@ -22,6 +22,8 @@ type TypeCatalog interface {
 	Validators(typ string) []algo.Bound
 	// Attributes are the attributes of a node type, to check the values of its nodes.
 	AttributeChecks(typ string) []domain.AttributeCheck
+	// LinkAttributeChecks are the attributes of a link type, to check the properties of its links.
+	LinkAttributeChecks(typ string) []domain.AttributeCheck
 	Search(typ string) []domain.SearchProperty
 	// CheckNode is the existence rule of a node of namespace ns, CheckLink of a link between two node types.
 	CheckNode(ns, typ string) error

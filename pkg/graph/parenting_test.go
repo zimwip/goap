@@ -67,7 +67,7 @@ func testCommitRequiresAParent(t *testing.T, repo Repo) {
 
 // A modify edit that adds a second member_of without removing the first is rejected after the write, not
 // silently accepted — the safety net for a client that built its edit without knowing about the existing
-// link, e.g. from a baseline snapshot that predates it (checkParentInvariant, ADR 0040: EnsureUser writes
+// link, e.g. from a baseline snapshot that predates it (checked when the version is checked in, checkRequiredLinks, ADR 0040: EnsureUser writes
 // member_of by import, which does not itself advance any baseline).
 func TestCommitRejectsASecondMembership(t *testing.T) {
 	forEachRepo(t, testCommitRejectsASecondMembership)
@@ -78,11 +78,19 @@ func testCommitRejectsASecondMembership(t *testing.T, repo Repo) {
 	g := New(repo)
 	const ns = "organisation"
 
-	orgA, err := importNode(ctx, g, newNode{Namespace: ns, Key: "ORG-A", Type: NodeTypeOrgUnit, Properties: map[string]any{"name": "A"}})
+	if err := g.Bootstrap(ctx); err != nil {
+		t.Fatal(err)
+	}
+	root, err := g.NodeByKey(ctx, ns, rootOrg(g))
 	if err != nil {
 		t.Fatal(err)
 	}
-	orgB, err := importNode(ctx, g, newNode{Namespace: ns, Key: "ORG-B", Type: NodeTypeOrgUnit, Properties: map[string]any{"name": "B"}})
+	under := []LinkWrite{{Type: LinkPartOf, To: root.Ref()}}
+	orgA, err := importNode(ctx, g, newNode{Namespace: ns, Key: "ORG-A", Type: NodeTypeOrgUnit, Properties: map[string]any{"name": "A"}, Links: under})
+	if err != nil {
+		t.Fatal(err)
+	}
+	orgB, err := importNode(ctx, g, newNode{Namespace: ns, Key: "ORG-B", Type: NodeTypeOrgUnit, Properties: map[string]any{"name": "B"}, Links: under})
 	if err != nil {
 		t.Fatal(err)
 	}

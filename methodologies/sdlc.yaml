@@ -576,7 +576,8 @@ actions:
     language: javascript
     description: >
       Approve the requirements the review accepted: check in their working version (the acceptance authorizes it), then
-      move them to approved (a new requirement starts first); the approval guard reads the accepted review (ADR 0076)
+      move them to approved; the approval guard reads the accepted review (ADR 0076). The releases planned in the
+      change, created in draft, are put forward as candidates the same way
     pre: {reviewed: true}
     effects: {requirements_approved: true}
     cost: 1
@@ -594,7 +595,14 @@ actions:
             approved++;
           }
         }
-        ctx.addArtifact("requirements_approval", { approved: approved });
+        let candidates = 0;
+        for (const n of ctx.changeImpacts()) {
+          if (n.type !== "alm@Release" || n.review !== "accepted" || !n.post || n.post.state !== "draft") continue;
+          if (n.checkedOut) ctx.checkinNode(n.key);
+          ctx.transitionNode(n.key, "candidate");
+          candidates++;
+        }
+        ctx.addArtifact("requirements_approval", { approved: approved, candidates: candidates });
         return approved + " requirement(s) approved";
       }
 

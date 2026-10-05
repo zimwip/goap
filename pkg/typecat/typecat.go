@@ -428,8 +428,21 @@ func (c *Catalog) AttributeChecks(typ string) []domain.AttributeCheck {
 	if !ok {
 		return nil
 	}
-	out := make([]domain.AttributeCheck, 0, len(t.Attributes))
-	for _, a := range t.Attributes {
+	return attributeChecks(t.Attributes)
+}
+
+// LinkAttributeChecks are what the graph checks of the properties of the links of a type (graph.TypeCatalog).
+func (c *Catalog) LinkAttributeChecks(typ string) []domain.AttributeCheck {
+	l, ok := c.LinkType(typ)
+	if !ok {
+		return nil
+	}
+	return attributeChecks(l.Attributes)
+}
+
+func attributeChecks(as []Attribute) []domain.AttributeCheck {
+	out := make([]domain.AttributeCheck, 0, len(as))
+	for _, a := range as {
 		ac := domain.AttributeCheck{Name: a.Name, Type: a.Type, Enum: a.Enum}
 		for _, v := range a.Values {
 			ac.Values = append(ac.Values, v.Value)

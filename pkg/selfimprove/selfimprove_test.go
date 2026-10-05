@@ -103,7 +103,7 @@ func setup(t *testing.T) (*engine.Engine, *graph.Graph, domain.BaselineID) {
 	}
 	g := graph.New(graph.NewMemory())
 	// a project every test starts its (non-administrative) processes in (ADR 0039)
-	if _, err := graphtest.Import(ctx, g, graphtest.Node{Namespace: "organisation", Key: testProject, Type: "organisation@ProjectUnit", Properties: map[string]any{"name": "Test"}}); err != nil {
+	if _, err := graphtest.Project(ctx, g, testProject, "Test"); err != nil {
 		t.Fatal(err)
 	}
 	// the alm namespace the example methodologies act on (ADR 0013)

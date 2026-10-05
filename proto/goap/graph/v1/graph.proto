@@ -60,6 +60,9 @@ service GraphService {
   rpc CheckinNode(CheckinNodeRequest) returns (CheckinNodeResponse);
   rpc TransitionNode(TransitionNodeRequest) returns (TransitionNodeResponse);
   rpc CancelCheckout(CancelCheckoutRequest) returns (CancelCheckoutResponse);
+  // Take a change impact out of the change, explicitly: its working version is dropped (refused once a version of it
+  // is checked in: reject it instead).
+  rpc RemoveChangeImpact(RemoveChangeImpactRequest) returns (RemoveChangeImpactResponse);
   rpc ReviewChangeImpact(ReviewChangeImpactRequest) returns (ReviewChangeImpactResponse);
   rpc ReopenChangeImpacts(ReopenChangeImpactsRequest) returns (ReopenChangeImpactsResponse);
   // Producers: a whole change of node edits (change impacts, versions, reviews, apply) in one call.
@@ -1083,6 +1086,15 @@ message CancelCheckoutResponse {
   // the change impact as the cancellation leaves it (empty when a creation was cancelled: the impact is gone)
   ChangeImpact node = 1;
 }
+
+message RemoveChangeImpactRequest {
+  string change_id = 1;
+  string change_impact_id = 2;
+  string flow = 3;
+  string execution = 4;
+}
+
+message RemoveChangeImpactResponse {}
 
 message ReviewChangeImpactRequest {
   string change_id = 1;

@@ -217,6 +217,9 @@ func (l *Lifecycle) Issues() []string {
 	}
 	if !names[l.Initial] {
 		out = append(out, fmt.Sprintf("initial state %q is not a state", l.Initial))
+	} else if s, _ := l.State(l.Initial); !s.Editable {
+		// a node is created checked out and filled in its first version (ADR 0076): it is born editable
+		out = append(out, fmt.Sprintf("initial state %q is not editable (a created node is written in its initial state)", l.Initial))
 	}
 	if editable == 0 {
 		out = append(out, "at least one editable state required (nodes are modified in an editable state)")

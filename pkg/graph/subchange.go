@@ -54,22 +54,16 @@ func (g *Graph) checkRequiredParent(e NodeEdit) error {
 	return nil
 }
 
-// checkParentInvariant re-verifies, after a write lands a node version, that a node still has the links its type
-// requires (the parent of a node of a structure, the membership of a User). Unlike checkRequiredParent (creation
-// only, checked against the edit's own declared links before anything is written), this reads the node's
-// actual links back from the version just written: a client that built its edit from a stale read (e.g. a
-// baseline snapshot older than an import write outside of any change, see EnsureUser/ADR 0040) would
-// otherwise silently leave the node with zero or two links instead of failing loudly.
-func (g *Graph) checkParentInvariant(ctx context.Context, ref domain.NodeRef) error {
-	n, err := g.Node(ctx, ref)
-	if err != nil {
-		return err
-	}
+// checkRequiredLinks checks that a version carries the links its type requires (the parent of a node of a structure,
+// the membership of a User): read back from the version itself, so a client that built its edits from a stale read
+// (a link it did not know of) fails instead of leaving the node with zero or two of them. Checked when the version is
+// frozen (CheckinNode) and when it lands (Apply), never on a working version, which may be on its way there.
+func (g *Graph) checkRequiredLinks(ctx context.Context, tx Tx, n domain.Node) error {
 	reqs := g.requirementsOf(n.Type, n.Key)
-	if len(reqs) == 0 {
+	if len(reqs) == 0 || n.Deleted {
 		return nil
 	}
-	links, err := g.OutLinksOf(ctx, ref)
+	links, err := tx.OutLinks(ctx, n.Ref())
 	if err != nil {
 		return err
 	}
@@ -82,6 +76,27 @@ func (g *Graph) checkParentInvariant(ctx context.Context, ref domain.NodeRef) er
 		}
 		if count != r.count {
 			return fmt.Errorf("%s needs %s, got %d: %w", n.Key, r.of, count, ErrInvalid)
+		}
+	}
+	return nil
+}
+
+// checkFrozen is what a version must satisfy to be frozen or to land (ADR 0076): its properties (attributes and
+// validators of its type), the links its type requires and the attributes of its links.
+func (g *Graph) checkFrozen(ctx context.Context, tx Tx, ix *typeIndex, n domain.Node) error {
+	if err := g.validateProps(ctx, ix, n, n.Properties); err != nil {
+		return err
+	}
+	if err := g.checkRequiredLinks(ctx, tx, n); err != nil {
+		return err
+	}
+	links, err := tx.OutLinks(ctx, n.Ref())
+	if err != nil {
+		return err
+	}
+	for _, l := range links {
+		if err := ix.checkLinkAttributes(l.Type, l.Properties); err != nil {
+			return fmt.Errorf("%s: %w", n.Key, err)
 		}
 	}
 	return nil
