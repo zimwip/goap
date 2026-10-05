@@ -48,6 +48,8 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
   import ChangeCriticality from '../../components/ChangeCriticality.svelte';
   import ChangeVerification from '../../components/ChangeVerification.svelte';
   import ChangeDerogations from '../../components/ChangeDerogations.svelte';
+  import ReviewPanel from '../../components/ReviewPanel.svelte';
+  import { foldReviews } from '../../reviews';
   import { riskRegister, liveRisk } from '../../risks';
   import { verifications, derogationRegister, openDerogation } from '../../verification';
   import { confirmDialog } from '../../shell/confirmState.svelte';
@@ -295,6 +297,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
   const panes = $derived<Pane[]>([
     { id: 'overview', label: 'Overview', badge: stuckNotLandable ? '!' : undefined },
     { id: 'impacts', label: `${scopeLabel} ▸ Impacts`, badge: awaiting.length ? `${awaiting.length} to review` : view?.nodes?.length || undefined },
+    { id: 'reviews', label: `${scopeLabel} ▸ Reviews`, badge: foldReviews(change?.items ?? []).filter((r) => r.status === 'open' && (r.flow ?? '') === (scope === MAIN_SCOPE ? '' : scope)).length || undefined },
     { id: 'items', label: `${scopeLabel} ▸ Items`, badge: items.length || undefined },
     { id: 'compare', label: 'Compare', badge: options.filter((f) => f.status === 'open').length || undefined },
     { id: 'decisions', label: 'Decisions', badge: pendingDecisions || undefined },
@@ -709,6 +712,10 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
         <h3>Decision points</h3>
         <ChangeDecisions changeId={ch.id ?? ''} {closed} onchange={() => load(selected)} />
       </section>
+      {:else if active === 'reviews'}
+        <div class="scoped" style="--scope: {scopeTint}">
+          <ReviewPanel change={ch} nodes={(view?.nodes ?? []).filter((n) => !n.superseded)} scope={scope || MAIN_SCOPE} closed={!writable} onopenimpact={() => (pane = 'impacts')} />
+        </div>
       {:else if active === 'risks'}
         <ChangeRisks change={ch} {closed} onchange={() => load(selected)} />
       {:else if active === 'verification'}

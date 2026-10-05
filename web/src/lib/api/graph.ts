@@ -1,9 +1,29 @@
 import { rpc } from './transport';
 import type { Empty, Struct } from './types/common';
 import type { BaselineDiff, BoardIssue, DecisionPoint, Flow, LinkWrite, MergePlan, NodeCreateSpec, NodeName, OptionComparison, Resolution, Restructured } from './types/engine';
-import type { Baseline, BaselineLinksQuery, BaselineNodesQuery, Branch, Change, ChangeImpact, ChangeItem, ChangeLogQuery, ExecutionRecord, GraphNode, ImpactEvent, Link, LogEntry, NodeEdit, NodeRef, SharedNode, Tag, TypeCount } from './types/graph';
+import type { Baseline, BaselineLinksQuery, BaselineNodesQuery, Branch, Change, ChangeImpact, ChangeItem, ChangeLogQuery, ExecutionRecord, GraphNode, ImpactEvent, Link, LogEntry, NodeEdit, NodeRef, ReviewEdit, ReviewRecord, SharedNode, Tag, TypeCount } from './types/graph';
 
 const GRAPH = 'goap.graph.v1.GraphService';
+
+/** The wire form of the edit of an open review: a field is written only when the edit names it (proto3 has no
+ * unset: set_comment / set_outcome say which ones). */
+export function reviewUpdateRequest(changeId: string, key: string, e: ReviewEdit) {
+  return {
+    changeId,
+    key,
+    setComment: e.comment !== undefined,
+    comment: e.comment ?? '',
+    add: e.add ?? [],
+    remove: e.remove ?? [],
+    entries: (e.entries ?? []).map((x) => ({
+      changeImpactId: x.changeImpactId,
+      setComment: x.comment !== undefined,
+      comment: x.comment ?? '',
+      setOutcome: x.outcome !== undefined,
+      outcome: x.outcome ?? '',
+    })),
+  };
+}
 
 export const graph = {
   /** namespace is required: baselines are scoped to one namespace each. */
@@ -249,6 +269,16 @@ export const graph = {
   /** flow: the flow or option the review is made on ('main' names the main flow; '' is the active option). */
   impactNodeReview: (changeId: string, changeImpactId: string, accept: boolean, comment: string, flow = '') =>
     rpc<{ changeId: string; changeImpactId: string; accept: boolean; comment: string; flow: string }, { node?: ChangeImpact }>(GRAPH, 'ImpactNodeReview', { changeId, changeImpactId, accept, comment, flow }),
+  /** The review object (ADR 0080): open one (flow: 'main' names the main flow; '' is the active option). */
+  reviewOpen: (changeId: string, comment = '', flow = '') =>
+    rpc<{ changeId: string; flow: string; comment: string }, { review?: ReviewRecord }>(GRAPH, 'ReviewOpen', { changeId, flow, comment }),
+  /** Change an open review: its author or an administrator only. Every field is optional. */
+  reviewUpdate: (changeId: string, key: string, edit: ReviewEdit) =>
+    rpc<ReturnType<typeof reviewUpdateRequest>, { review?: ReviewRecord }>(GRAPH, 'ReviewUpdate', reviewUpdateRequest(changeId, key, edit)),
+  /** Submit an open review: every entry reviewed in one transaction, all or none. */
+  reviewSubmit: (changeId: string, key: string) => rpc<{ changeId: string; key: string }, { review?: ReviewRecord }>(GRAPH, 'ReviewSubmit', { changeId, key }),
+  /** Discard a review that was never submitted. */
+  reviewDiscard: (changeId: string, key: string) => rpc<{ changeId: string; key: string }, { review?: ReviewRecord }>(GRAPH, 'ReviewDiscard', { changeId, key }),
   /** The change as a flow or an option sees it: its change impacts (with the post versions of that flow) and items. */
   getBlackboard: (changeId: string, flow: string, signal?: AbortSignal) =>
     rpc<{ changeId: string; flow: string }, { change?: Change; options?: Flow[]; activeOption?: string; decisionPoints?: DecisionPoint[] }>(GRAPH, 'GetBlackboard', { changeId, flow }, signal),

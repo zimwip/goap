@@ -18,3 +18,22 @@ type ReviewRequest struct {
 type ReviewPolicy interface {
 	Review(ReviewRequest) error
 }
+
+// ImpactVerdict is one verdict of a ReviewBatch: the review of one change impact.
+type ImpactVerdict struct {
+	Impact  ChangeImpactID
+	Status  NodeReview // accepted or rejected
+	Comment string     // mandatory, as for a review on its own
+}
+
+// ReviewBatch is a set of reviews applied together (ADR 0080): all of them or none. ID is opaque to the graph, it only
+// stamps it on every review the batch writes (Review.ReviewID); Item, when set, is a fact written in the same
+// transaction once every verdict stood (the use case's record of the submission). Every verdict is made on Flow by By.
+type ReviewBatch struct {
+	ID        string
+	Flow      string
+	Execution string
+	By        string
+	Verdicts  []ImpactVerdict
+	Item      *ChangeItem
+}

@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/domain/def"
@@ -467,4 +468,52 @@ func testMergeProvenance(t *testing.T, repo Repo) {
 		}
 	}
 	t.Fatalf("C is not in the export")
+}
+
+// A Gate reads the graph (the access snapshot does): it must not run inside the transaction of the restructuring, the
+// stores are not reentrant. It is asked outside, once per type, and its refusal wins.
+func TestRestructureGateReadsTheGraph(t *testing.T) { forEachRepo(t, testRestructureGateReadsTheGraph) }
+
+func testRestructureGateReadsTheGraph(t *testing.T, repo Repo) {
+	d := newDocs(t, repo)
+	ctx, g := d.ctx, d.g
+	f, a, b := d.node(t, "F", "Folder"), d.node(t, "A", "Item"), d.node(t, "B", "Item")
+	d.link(t, "contains", f, a)
+	d.link(t, "contains", f, b)
+	asked := map[string]int{}
+	gate := func(typ string) error {
+		asked[typ]++
+		_, err := g.NodesOfType(ctx, "docs", "Item") // a read of the graph, as the access snapshot does
+		return err
+	}
+	done := make(chan error, 1)
+	c := d.change(t)
+	go func() {
+		_, err := g.ImpactNodeMerge(ctx, c.ID, MergeInput{Sources: []NodeName{{Key: "A"}, {Key: "B"}},
+			Into: NodeCreate{Key: "C", Type: "docs@Item", Rationale: "merge"}, Gate: gate})
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("deadlock: the gate ran inside the transaction")
+	}
+	for _, typ := range []string{"docs@Item", "docs@Folder"} {
+		if asked[typ] == 0 {
+			t.Errorf("the gate was not asked about %s: %v", typ, asked)
+		}
+	}
+	// a refusal of the gate wins and leaves nothing behind
+	refused := errors.New("not for you")
+	c2 := d.change(t)
+	if _, err := g.ImpactNodeSplit(ctx, c2.ID, SplitInput{Source: NodeName{Key: "A"}, Into: []NodeCreate{{Key: "S1", Type: "docs@Item", Rationale: "s"}, {Key: "S2", Type: "docs@Item", Rationale: "s"}},
+		Gate: func(string) error { return refused }}); !errors.Is(err, refused) {
+		t.Fatalf("the gate refuses: %v", err)
+	}
+	if refs, _ := g.ChangeImpacts(ctx, c2.ID); len(refs) != 0 {
+		t.Fatalf("a refused split leaves nothing: %v", refs)
+	}
 }

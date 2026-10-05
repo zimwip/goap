@@ -67,6 +67,11 @@ var changeOps = []op{
 	{"derogations", "The derogations of the change (rule, target, reason, signatory, expires, status): {derogations}", schema(map[string]string{"change": "string"})},
 	{"derogation", "Sign a derogation, or update / close one by its key (needs derogation:sign; the signatory is the caller); expires is a date or RFC 3339, status open|closed: {derogation}",
 		schema(map[string]string{"change": "string", "key": "string", "rule": "string", "target": "string", "reason": "string", "expires": "string", "status": "string"})},
+	{"reviews", "The reviews of the change (comment, status open|submitted|discarded, entries: impact, comment, outcome accept|reject) and the impacts that await review: {reviews, awaiting}", schema(map[string]string{"change": "string", "flow": "string"})},
+	{"review_open", "Open a review: a global comment and, optionally, the impacts (ids or node keys) it takes: {review}", schema(map[string]string{"change": "string", "flow": "string", "comment": "string", "impacts": "array"})},
+	{"review_update", "Change an open review (its author or an administrator): the comment, impacts to add / remove, entries [{impact, comment, outcome accept|reject}]: {review}", schema(map[string]string{"change": "string", "review": "string", "comment": "string", "add": "array", "remove": "array", "entries": "array"}, "review")},
+	{"review_submit", "Submit an open review: every entry is reviewed with its comment and the global one, all or none; a refusal names the entry and leaves the review open: {review}", schema(map[string]string{"change": "string", "review": "string"}, "review")},
+	{"review_discard", "Discard an open review that was never submitted: {review}", schema(map[string]string{"change": "string", "review": "string"}, "review")},
 	{"action", "Create an action, or update one by its key; status open|done|cancelled, for: the risk key or decision point it answers: {action}",
 		schema(map[string]string{"change": "string", "key": "string", "title": "string", "status": "string", "owner": "string", "due": "string", "for": "string",
 			"result": "string"})},
@@ -143,6 +148,10 @@ func (c Change) Invoke(ctx context.Context, op string, raw, _ map[string]any, _ 
 		return result(map[string]any{"risks": risk.Risks(bb.Change), "actions": risk.Actions(bb.Change)})
 	case "risk", "action":
 		return c.record(ctx, bb, op, a)
+	case "reviews":
+		return c.reviews(ctx, id, a)
+	case "review_open", "review_update", "review_submit", "review_discard":
+		return c.review(ctx, bb, op, a)
 	case "derogations":
 		return result(map[string]any{"derogations": risk.Derogations(bb.Change)})
 	case "derogation":

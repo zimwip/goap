@@ -9,6 +9,7 @@ import (
 
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/graph"
+	"github.com/zimwip/goap/pkg/review"
 )
 
 // ErrNotFound is a generic not-found sentinel for services without their own.
@@ -25,11 +26,11 @@ func ToConnect(err error) error {
 		return err
 	case errors.Is(err, authz.ErrForbidden):
 		return connect.NewError(connect.CodePermissionDenied, err)
-	case errors.Is(err, graph.ErrNotFound), errors.Is(err, ErrNotFound):
+	case errors.Is(err, graph.ErrNotFound), errors.Is(err, ErrNotFound), errors.Is(err, review.ErrNotFound):
 		return connect.NewError(connect.CodeNotFound, err)
-	case errors.Is(err, graph.ErrConflict):
+	case errors.Is(err, graph.ErrConflict), errors.Is(err, review.ErrConflict):
 		return connect.NewError(connect.CodeFailedPrecondition, err)
-	case errors.Is(err, graph.ErrInvalid):
+	case errors.Is(err, graph.ErrInvalid), errors.Is(err, review.ErrInvalid):
 		return connect.NewError(connect.CodeInvalidArgument, err)
 	case errors.Is(err, context.Canceled):
 		return connect.NewError(connect.CodeCanceled, err)

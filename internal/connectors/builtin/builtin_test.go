@@ -602,7 +602,7 @@ func TestUnitRestrictsABuiltin(t *testing.T) {
 			change = append(change, name)
 		}
 	}
-	if !slices.Equal(change, []string{"read", "list", "validate", "options", "compare", "decisions", "brief", "trace", "risks", "derogations"}) || slices.Contains(mcps, mcpbuiltin.Admin) {
+	if !slices.Equal(change, []string{"read", "list", "validate", "options", "compare", "decisions", "brief", "trace", "risks", "derogations", "reviews"}) || slices.Contains(mcps, mcpbuiltin.Admin) {
 		t.Fatalf("ORG-CRM: goap-change tools %v, mcps %v", change, mcps)
 	}
 	ctx := as("carol", "ORG-CRM", "contributor")
@@ -620,7 +620,7 @@ func TestUnitRestrictsABuiltin(t *testing.T) {
 	out := p.call(t, as("root", "ORG-ACME", "admin"), "ORG-ACME", "goap-admin/mcps", map[string]any{"unit": "ORG-CRM"})
 	for _, m := range out["mcps"].([]any) {
 		m := m.(map[string]any)
-		if m["mcp"] == mcpbuiltin.Change && (len(m["tools"].([]any)) != 10 || m["restrictedBy"].([]any)[0] != "ORG-CRM" || m["definedIn"] != access.DefaultOrg) {
+		if m["mcp"] == mcpbuiltin.Change && (len(m["tools"].([]any)) != 11 || m["restrictedBy"].([]any)[0] != "ORG-CRM" || m["definedIn"] != access.DefaultOrg) {
 			t.Fatalf("goap-change for ORG-CRM = %v", m)
 		}
 	}
@@ -684,4 +684,59 @@ func TestAdminTools(t *testing.T) {
 	}
 	p.call(t, ctx, "", "goap-admin/methodologies", nil)
 	p.call(t, ctx, "", "goap-admin/users", map[string]any{"unit": "ORG-CHECKOUT"})
+}
+
+// The review object through goap-change (ADR 0080): a reviewer builds a review up, submits it, and the impacts are
+// reviewed together; only the author (or an administrator) changes it; a submitted review is final.
+func TestChangeReviewTools(t *testing.T) {
+	p := newPlatform(t)
+	ctx := as("alice", "ORG-CHECKOUT", "contributor")
+	id := p.call(t, ctx, "ORG-CHECKOUT", "goap-change/create", map[string]any{"title": "Reviews", "intent": "Review together",
+		"namespace": "alm", "methodology": "sdlc"})["change"].(map[string]any)["id"].(string)
+	ctx = mcp.WithCall(ctx, mcp.CallContext{Change: id})
+	for _, k := range []string{"REQ-8", "REQ-9"} {
+		p.call(t, ctx, "ORG-CHECKOUT", "goap-change/write", map[string]any{"key": k, "type": "alm@Requirement", "properties": map[string]any{"title": k}, "rationale": "new"})
+	}
+	list := p.call(t, ctx, "ORG-CHECKOUT", "goap-change/reviews", nil)
+	if len(list["awaiting"].([]any)) != 2 || len(list["reviews"].([]any)) != 0 {
+		t.Fatalf("reviews = %v", list)
+	}
+	rv := p.call(t, ctx, "ORG-CHECKOUT", "goap-change/review_open", map[string]any{"comment": "global", "impacts": []any{"REQ-8"}})["review"].(map[string]any)
+	key := rv["key"].(string)
+	if rv["status"] != "open" || rv["by"] != "alice" || len(rv["entries"].([]any)) != 1 {
+		t.Fatalf("open = %v", rv)
+	}
+	if _, err := p.hub.Call(ctx, "ORG-CHECKOUT", "goap-change/review_open", map[string]any{"impacts": []any{"REQ-8"}}); err == nil {
+		t.Fatal("an impact in two open reviews")
+	}
+	p.call(t, ctx, "ORG-CHECKOUT", "goap-change/review_update", map[string]any{"review": key, "add": []any{"REQ-9"}, "entries": []any{
+		map[string]any{"impact": "REQ-8", "outcome": "accept", "comment": "good"}, map[string]any{"impact": "REQ-9", "outcome": "reject"}}})
+	if aw := p.call(t, ctx, "ORG-CHECKOUT", "goap-change/reviews", nil)["awaiting"].([]any); len(aw) != 0 {
+		t.Fatalf("both impacts are in the review: %v", aw)
+	}
+	mctx := mcp.WithCall(as("mallory", "ORG-CHECKOUT", "contributor"), mcp.CallContext{Change: id})
+	if _, err := p.hub.Call(mctx, "ORG-CHECKOUT", "goap-change/review_submit", map[string]any{"review": key}); err == nil || !strings.Contains(err.Error(), authz.ErrForbidden.Error()) {
+		t.Fatalf("someone else submits: %v", err)
+	}
+	out := p.call(t, ctx, "ORG-CHECKOUT", "goap-change/review_submit", map[string]any{"review": key})["review"].(map[string]any)
+	if out["status"] != "submitted" {
+		t.Fatalf("submit = %v", out)
+	}
+	bb, err := p.g.Blackboard(context.Background(), domain.ChangeID(id))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, n := range bb.Change.Nodes {
+		want := map[string]domain.NodeReview{"REQ-8": domain.ReviewAccepted, "REQ-9": domain.ReviewRejected}[n.Key]
+		if n.Review != want || n.Reviews[0].ReviewID != key || n.Reviews[0].By != "alice" {
+			t.Fatalf("%s = %+v", n.Key, n)
+		}
+	}
+	if _, err := p.hub.Call(ctx, "ORG-CHECKOUT", "goap-change/review_update", map[string]any{"review": key, "comment": "late"}); err == nil {
+		t.Fatal("a submitted review is final")
+	}
+	d := p.call(t, ctx, "ORG-CHECKOUT", "goap-change/review_open", map[string]any{})["review"].(map[string]any)
+	if got := p.call(t, ctx, "ORG-CHECKOUT", "goap-change/review_discard", map[string]any{"review": d["key"]})["review"].(map[string]any); got["status"] != "discarded" {
+		t.Fatalf("discard = %v", got)
+	}
 }

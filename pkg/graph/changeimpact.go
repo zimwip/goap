@@ -2,6 +2,7 @@ package graph
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -201,68 +202,178 @@ func (g *Graph) ImpactNodeReview(ctx context.Context, id domain.ChangeID, node d
 // ImpactNodeReviewOn reviews a change impact as a flow sees it (ADR 0025): on a flow the review is a
 // candidate until the flow is adopted, and execution is the action run that made it.
 func (g *Graph) ImpactNodeReviewOn(ctx context.Context, id domain.ChangeID, flow, execution string, node domain.ChangeImpactID, status domain.NodeReview, by, comment string) (cn domain.ChangeImpact, err error) {
-	if status != domain.ReviewAccepted && status != domain.ReviewRejected {
-		return cn, fmt.Errorf("a change impact is reviewed as accepted or rejected, not %q: %w", status, ErrInvalid)
+	if err := checkVerdict(status, comment); err != nil {
+		return cn, err
 	}
-	comment = strings.TrimSpace(comment)
-	if comment == "" {
-		return cn, fmt.Errorf("a review needs a comment: %w", ErrInvalid)
-	}
-	err = g.repo.InTx(ctx, func(tx Tx) error {
-		c, err := changeOpen(ctx, tx, id)
-		if err != nil {
-			return err
-		}
-		flow := c.ResolveFlow(flow)
-		if flow != "" {
-			if _, ok := c.Flow(flow); !ok {
-				return fmt.Errorf("flow %s: %w", flow, ErrNotFound)
-			}
-			if c.FlowStatusOf(flow) != domain.FlowOpen {
-				return fmt.Errorf("flow %s is not open: %w", flow, ErrConflict)
-			}
-		}
-		i, err := findChangeImpact(c, node)
-		if err != nil {
-			return err
-		}
-		cn = c.Nodes[i]
-		seen, err := g.newFlowNodes(tx, c, flow).find(ctx, node)
-		if err != nil {
-			return err
-		}
-		if seen.Review != domain.ReviewProposed {
-			return fmt.Errorf("change impact %s is already %s: %w", node, seen.Review, ErrConflict)
-		}
-		if g.ReviewPolicy != nil {
-			entries, err := tx.Log(ctx, factsFilter(id))
-			if err != nil {
-				return err
-			}
-			facts, err := itemsOf(entries)
-			if err != nil {
-				return err
-			}
-			if err := g.ReviewPolicy.Review(domain.ReviewRequest{Impact: seen, Reviewer: by, Status: status, Items: facts}); err != nil {
-				return fmt.Errorf("review of %s refused: %v: %w", node, err, ErrInvalid)
-			}
-		}
-		// an accepted review is gated by what a version must satisfy (ADR 0079): validators, required links, link
-		// attributes, the origins gate, checked on the draft; a refusal leaves the review proposed. Nothing is
-		// written: the version is written when the change lands
-		if status == domain.ReviewAccepted && seen.Post != nil {
-			if err := g.checkAccepted(ctx, tx, id, flow, node); err != nil {
-				return err
-			}
-		}
-		r := domain.Review{Status: status, By: by, Comment: comment, At: g.now(), Flow: flow, Execution: execution}
-		if flow == "" {
-			cn.Review = status
-		}
-		cn.Reviews = append(cn.Reviews, r)
-		return g.emit(ctx, tx, domain.ImpactEvent{Change: id, Impact: cn.ID, Op: domain.ImpactReviewed, Flow: flow, Execution: execution, By: by, Review: &r})
+	err = g.repo.InTx(ctx, func(tx Tx) (err error) {
+		cn, err = g.reviewTx(ctx, tx, id, flow, execution, node, status, by, strings.TrimSpace(comment), "")
+		return err
 	})
 	return
+}
+
+func checkVerdict(status domain.NodeReview, comment string) error {
+	if status != domain.ReviewAccepted && status != domain.ReviewRejected {
+		return fmt.Errorf("a change impact is reviewed as accepted or rejected, not %q: %w", status, ErrInvalid)
+	}
+	if strings.TrimSpace(comment) == "" {
+		return fmt.Errorf("a review needs a comment: %w", ErrInvalid)
+	}
+	return nil
+}
+
+// errOriginsPending is the refusal of an acceptance whose origins are not accepted yet (checkOrigins): a batch of
+// reviews retries it once the others stood.
+var errOriginsPending = errors.New("settle the origins first")
+
+// reviewTx is one review inside a transaction: the policy, the acceptance gate, the reviewed event. Nothing is
+// written when it refuses. reviewID, when set, is stamped on the review (ADR 0080).
+func (g *Graph) reviewTx(ctx context.Context, tx Tx, id domain.ChangeID, flow, execution string, node domain.ChangeImpactID, status domain.NodeReview, by, comment, reviewID string) (cn domain.ChangeImpact, err error) {
+	c, err := changeOpen(ctx, tx, id)
+	if err != nil {
+		return cn, err
+	}
+	flow = c.ResolveFlow(flow)
+	if flow != "" {
+		if _, ok := c.Flow(flow); !ok {
+			return cn, fmt.Errorf("flow %s: %w", flow, ErrNotFound)
+		}
+		if c.FlowStatusOf(flow) != domain.FlowOpen {
+			return cn, fmt.Errorf("flow %s is not open: %w", flow, ErrConflict)
+		}
+	}
+	i, err := findChangeImpact(c, node)
+	if err != nil {
+		return cn, err
+	}
+	cn = c.Nodes[i]
+	seen, err := g.newFlowNodes(tx, c, flow).find(ctx, node)
+	if err != nil {
+		return cn, err
+	}
+	if seen.Review != domain.ReviewProposed {
+		return cn, fmt.Errorf("change impact %s is already %s: %w", node, seen.Review, ErrConflict)
+	}
+	if g.ReviewPolicy != nil {
+		entries, err := tx.Log(ctx, factsFilter(id))
+		if err != nil {
+			return cn, err
+		}
+		facts, err := itemsOf(entries)
+		if err != nil {
+			return cn, err
+		}
+		if err := g.ReviewPolicy.Review(domain.ReviewRequest{Impact: seen, Reviewer: by, Status: status, Items: facts}); err != nil {
+			return cn, fmt.Errorf("review of %s refused: %v: %w", node, err, ErrInvalid)
+		}
+	}
+	// an accepted review is gated by what a version must satisfy (ADR 0079): validators, required links, link
+	// attributes, the origins gate, checked on the draft; a refusal leaves the review proposed. Nothing is
+	// written: the version is written when the change lands
+	if status == domain.ReviewAccepted && seen.Post != nil {
+		if err := g.checkAccepted(ctx, tx, id, flow, node); err != nil {
+			return cn, err
+		}
+	}
+	r := domain.Review{Status: status, By: by, Comment: comment, At: g.now(), Flow: flow, Execution: execution, ReviewID: reviewID}
+	if flow == "" {
+		cn.Review = status
+	}
+	cn.Reviews = append(cn.Reviews, r)
+	return cn, g.emit(ctx, tx, domain.ImpactEvent{Change: id, Impact: cn.ID, Op: domain.ImpactReviewed, Flow: flow, Execution: execution, By: by, Review: &r})
+}
+
+// ImpactNodeReviewBatch applies a set of reviews in one transaction (ADR 0080): every verdict is made as
+// ImpactNodeReviewOn would make it, and either all of them stand or none does. A refusal (the review policy, the gate of
+// an acceptance, an impact no longer proposed) names the verdict and writes nothing. Every review carries the batch's
+// ID; the batch's Item, when set, is written after the verdicts, in the same transaction. A verdict accepting a node
+// whose origins are accepted by the same batch stands: the origins are settled first.
+func (g *Graph) ImpactNodeReviewBatch(ctx context.Context, id domain.ChangeID, b domain.ReviewBatch) (out []domain.ChangeImpact, err error) {
+	if len(b.Verdicts) == 0 {
+		return nil, fmt.Errorf("a review batch needs at least one verdict: %w", ErrInvalid)
+	}
+	seenImpact := map[domain.ChangeImpactID]bool{}
+	for n, v := range b.Verdicts {
+		if err := checkVerdict(v.Status, v.Comment); err != nil {
+			return nil, fmt.Errorf("verdict %d (%s): %w", n+1, v.Impact, err)
+		}
+		if seenImpact[v.Impact] {
+			return nil, fmt.Errorf("verdict %d: change impact %s is reviewed twice in the batch: %w", n+1, v.Impact, ErrInvalid)
+		}
+		seenImpact[v.Impact] = true
+	}
+	var item *domain.ChangeItem
+	if b.Item != nil {
+		it := *b.Item
+		switch it.Kind {
+		case domain.KindFlow, domain.KindTransition, domain.KindDecisionPoint:
+			return nil, fmt.Errorf("a %s item is recorded by its own operation, not by a review batch: %w", it.Kind, ErrInvalid)
+		}
+		if it.ID == "" {
+			it.ID = domain.ItemID(g.newID())
+		}
+		if it.Status == "" {
+			it.Status = domain.ItemProposed
+		}
+		it.CreatedAt = g.now()
+		if err := it.Validate(); err != nil {
+			return nil, fmt.Errorf("item %s: %v: %w", it.ID, err, ErrInvalid)
+		}
+		if err := g.authorizeItems(ctx, id, []domain.ChangeItem{it}); err != nil {
+			return nil, err
+		}
+		item = &it
+	}
+	err = g.repo.InTx(ctx, func(tx Tx) error {
+		out = make([]domain.ChangeImpact, len(b.Verdicts))
+		pending := make([]int, len(b.Verdicts))
+		for i := range pending {
+			pending[i] = i
+		}
+		label := func(i int) string {
+			v := b.Verdicts[i]
+			if c, err := tx.Change(ctx, id); err == nil {
+				if k, err := findChangeImpact(c, v.Impact); err == nil {
+					return fmt.Sprintf("verdict %d (%s)", i+1, c.Nodes[k].Key)
+				}
+			}
+			return fmt.Sprintf("verdict %d (%s)", i+1, v.Impact)
+		}
+		for len(pending) > 0 {
+			var next []int
+			var lastErr error
+			for _, i := range pending {
+				v := b.Verdicts[i]
+				cn, err := g.reviewTx(ctx, tx, id, b.Flow, b.Execution, v.Impact, v.Status, b.By, strings.TrimSpace(v.Comment), b.ID)
+				switch {
+				case err == nil:
+					out[i] = cn
+				case errors.Is(err, errOriginsPending):
+					next, lastErr = append(next, i), fmt.Errorf("%s: %w", label(i), err)
+				default:
+					return fmt.Errorf("%s: %w", label(i), err)
+				}
+			}
+			if len(next) == len(pending) {
+				return lastErr // no progress: the origins are not settled by this batch
+			}
+			pending = next
+		}
+		if item != nil {
+			c, err := tx.Change(ctx, id)
+			if err != nil {
+				return err
+			}
+			it := *item
+			it.Flow = c.ResolveFlow(b.Flow) // the verdicts were made on this flow (ADR 0032 §6)
+			return putItem(ctx, tx, id, it)
+		}
+		return nil
+	})
+	if err != nil {
+		out = nil
+	}
+	return out, err
 }
 
 // ReopenImpacts sends decided change impacts of the main flow back to proposed (a review event, as when a change goes

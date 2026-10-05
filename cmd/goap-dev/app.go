@@ -9,6 +9,7 @@ import (
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/engine"
+	"github.com/zimwip/goap/pkg/review"
 	"github.com/zimwip/goap/pkg/risk"
 	"github.com/zimwip/goap/pkg/verify"
 )
@@ -43,6 +44,7 @@ func newApp(parent context.Context, cfg config, log *slog.Logger) (*app, error) 
 	// the facts of the risk register are items of a change (ADR 0065)
 	risk.Register()
 	verify.Register()
+	review.Register()
 	ctx, cancel := context.WithCancel(parent)
 	dev := cfg.Dev
 	e := &env{ctx: ctx, cfg: cfg, log: log, secrets: platform.NewSecrets(), dev: &dev, triggers: &triggerRef{}}

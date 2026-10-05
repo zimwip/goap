@@ -2,6 +2,7 @@ package graph
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"sort"
@@ -80,10 +81,14 @@ func (g *Graph) ImpactNodeMerge(ctx context.Context, id domain.ChangeID, in Merg
 	}
 	into := in.Into
 	into.Flow, into.Execution = in.Flow, in.Execution
-	err = g.repo.InTx(ctx, func(tx Tx) error {
-		var err error
-		out, err = g.restructure(ctx, tx, id, in.Sources, []NodeCreate{into}, true, in.Rationale, in.Flow, in.Execution, in.Gate)
-		return err
+	err = g.gated(ctx, in.Gate, func(gate func(string) error, collected func() error) error {
+		return g.repo.InTx(ctx, func(tx Tx) error {
+			var err error
+			if out, err = g.restructure(ctx, tx, id, in.Sources, []NodeCreate{into}, true, in.Rationale, in.Flow, in.Execution, gate); err != nil {
+				return err
+			}
+			return collected()
+		})
 	})
 	return
 }
@@ -98,12 +103,55 @@ func (g *Graph) ImpactNodeSplit(ctx context.Context, id domain.ChangeID, in Spli
 	for i := range into {
 		into[i].Flow, into[i].Execution = in.Flow, in.Execution
 	}
-	err = g.repo.InTx(ctx, func(tx Tx) error {
-		var err error
-		out, err = g.restructure(ctx, tx, id, []NodeName{in.Source}, into, false, in.Rationale, in.Flow, in.Execution, in.Gate)
-		return err
+	err = g.gated(ctx, in.Gate, func(gate func(string) error, collected func() error) error {
+		return g.repo.InTx(ctx, func(tx Tx) error {
+			var err error
+			if out, err = g.restructure(ctx, tx, id, []NodeName{in.Source}, into, false, in.Rationale, in.Flow, in.Execution, gate); err != nil {
+				return err
+			}
+			return collected()
+		})
 	})
 	return
+}
+
+// gated runs a restructuring whose Gate may read the graph (the access snapshot does), which its own transaction would
+// block: the stores are not reentrant. Like askLandingGate it asks outside any transaction: a pass runs the
+// transaction with a gate that only collects the node types it is asked about; its collected() returns errCollected
+// at the end of the transaction while some were not answered yet, which rolls the pass back. The real gate answers
+// them here and the pass runs again; the pass that commits is one that was asked nothing new.
+func (g *Graph) gated(ctx context.Context, gate func(string) error, run func(gate func(string) error, collected func() error) error) error {
+	if gate == nil {
+		return run(func(string) error { return nil }, func() error { return nil })
+	}
+	allowed := map[string]bool{}
+	for {
+		var missing []string
+		err := run(func(typ string) error {
+			if !allowed[typ] && !slices.Contains(missing, typ) {
+				missing = append(missing, typ)
+			}
+			return nil
+		}, func() error {
+			if len(missing) > 0 {
+				return errCollected
+			}
+			return nil
+		})
+		if len(missing) == 0 {
+			return err
+		}
+		// the gate answers first: its refusal wins over whatever the pass found
+		for _, typ := range missing {
+			if gerr := gate(typ); gerr != nil {
+				return gerr
+			}
+			allowed[typ] = true
+		}
+		if err != nil && !errors.Is(err, errCollected) {
+			return err
+		}
+	}
 }
 
 // restructured is a node whose links move: its current state (the draft the flow holds of it, else its stored version)
@@ -454,7 +502,7 @@ func (g *Graph) checkOrigins(impacts []domain.ChangeImpact, cn domain.ChangeImpa
 		}
 	}
 	if len(pending) > 0 {
-		return fmt.Errorf("%s derives from nodes whose change impacts are not accepted: %s: %w", cn.Key, strings.Join(pending, ", "), ErrConflict)
+		return fmt.Errorf("%s derives from nodes whose change impacts are not accepted: %s: %w: %w", cn.Key, strings.Join(pending, ", "), ErrConflict, errOriginsPending)
 	}
 	return nil
 }

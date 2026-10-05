@@ -17,6 +17,7 @@ import (
 
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/journal"
+	"github.com/zimwip/goap/pkg/review"
 	"github.com/zimwip/goap/pkg/risk"
 	"github.com/zimwip/goap/pkg/verify"
 )
@@ -368,8 +369,45 @@ func (b *builder) fact(c domain.Change, e domain.LogEntry, it domain.ChangeItem)
 	if it.Kind == risk.KindDerogation {
 		b.derogation(n, it)
 	}
+	if it.Kind == review.KindReview {
+		b.review(c, n, it)
+	}
 	if len(it.Data) > 0 {
 		n["data"] = it.Data
+	}
+}
+
+func reviewObjectIRI(key string) string { return iri("review-object", key) }
+
+// review maps a version of a review object (ADR 0080): the entity records the version, and the review itself is an
+// activity of its author that groups the reviewed events of its entries (goap:partOf, set by the event), started when
+// opened and ended when submitted.
+func (b *builder) review(c domain.Change, n map[string]any, it domain.ChangeItem) {
+	rs := review.Reviews([]domain.ChangeItem{it})
+	if len(rs) == 0 {
+		return
+	}
+	r := rs[0]
+	add(n, "@type", "goap:ReviewRecord")
+	set(n, "label", "review "+r.Key+" "+r.Status)
+	act := b.node(reviewObjectIRI(r.Key), "prov:Activity", "goap:ReviewObject")
+	set(act, "label", "review "+r.Key)
+	set(act, "goap:reviewKey", r.Key)
+	set(act, "goap:status", r.Status) // the last version wins
+	set(act, "rdfs:comment", r.Comment)
+	add(act, "goap:partOf", ref(changeIRI(c.ID)))
+	if _, ok := act["prov:startedAtTime"]; !ok {
+		setTime(act, "prov:startedAtTime", it.CreatedAt)
+	}
+	if !r.SubmittedAt.IsZero() {
+		setTime(act, "prov:endedAtTime", r.SubmittedAt)
+	}
+	if p := b.principal(r.By); p != "" {
+		add(act, "prov:wasAssociatedWith", ref(p))
+	}
+	add(n, "goap:reviewOf", ref(reviewObjectIRI(r.Key)))
+	for _, e := range r.Entries {
+		add(act, "goap:about", ref(impactIRI(domain.ChangeImpactID(e.Impact))))
 	}
 }
 
@@ -526,6 +564,11 @@ func (b *builder) impact(c domain.Change, e domain.LogEntry, ev domain.ImpactEve
 		setTime(rv, "prov:endedAtTime", ev.At)
 		add(rv, "goap:partOf", ref(changeIRI(c.ID)))
 		add(rv, "goap:about", ref(imp))
+		if ev.Review != nil && ev.Review.ReviewID != "" {
+			// reviewed in a review object (ADR 0080): the object groups the events it submitted
+			add(rv, "goap:partOf", ref(reviewObjectIRI(ev.Review.ReviewID)))
+			b.node(reviewObjectIRI(ev.Review.ReviewID), "prov:Activity", "goap:ReviewObject")
+		}
 		if actor != "" {
 			add(rv, "prov:wasAssociatedWith", ref(actor))
 		}

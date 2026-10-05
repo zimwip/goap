@@ -25,6 +25,7 @@ import (
 	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/journal"
 	"github.com/zimwip/goap/pkg/prov"
+	"github.com/zimwip/goap/pkg/review"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
@@ -704,6 +705,71 @@ func (h *Handler) ImpactNodeReview(ctx context.Context, r *connect.Request[graph
 	}
 	cn, err := h.Graph.ImpactNodeReviewOn(ctx, domain.ChangeID(r.Msg.ChangeId), r.Msg.Flow, r.Msg.Execution, domain.ChangeImpactID(r.Msg.ChangeImpactId), status, authz.From(ctx).Subject, r.Msg.Comment)
 	return res(&graphv1.ImpactNodeReviewResponse{Node: pbconv.ChangeImpactToPB(cn)}, err)
+}
+
+// ImpactNodeReviewBatch applies reviews together (ADR 0080), the reviewer being the principal of the request.
+func (h *Handler) ImpactNodeReviewBatch(ctx context.Context, r *connect.Request[graphv1.ImpactNodeReviewBatchRequest]) (*connect.Response[graphv1.ImpactNodeReviewBatchResponse], error) {
+	ctx = h.Identity.Context(ctx, r.Header())
+	m := r.Msg
+	b := domain.ReviewBatch{ID: m.ReviewId, Flow: m.Flow, Execution: m.Execution, By: authz.From(ctx).Subject}
+	for _, v := range m.Verdicts {
+		status := domain.ReviewRejected
+		if v.Accept {
+			status = domain.ReviewAccepted
+		}
+		b.Verdicts = append(b.Verdicts, domain.ImpactVerdict{Impact: domain.ChangeImpactID(v.ChangeImpactId), Status: status, Comment: v.Comment})
+	}
+	if m.Item != nil {
+		it := pbconv.ItemFromPB(m.Item)
+		b.Item = &it
+	}
+	out, err := h.Graph.ImpactNodeReviewBatch(ctx, domain.ChangeID(m.ChangeId), b)
+	resp := &graphv1.ImpactNodeReviewBatchResponse{}
+	for _, cn := range out {
+		resp.Nodes = append(resp.Nodes, pbconv.ChangeImpactToPB(cn))
+	}
+	return res(resp, err)
+}
+
+// reviews is the use case of the review object (ADR 0080) over the graph.
+func (h *Handler) reviews() review.Service { return review.Service{Port: h.Graph} }
+
+// reviewer is the actor of a review call: the principal of the request, an administrator acting on the reviews of others.
+func (h *Handler) reviewer(ctx context.Context) review.Actor {
+	a := review.ActorOf(ctx)
+	if !a.Admin {
+		gate := h.Floor
+		if gate == nil {
+			gate = h.Authz
+		}
+		who := authz.From(ctx)
+		a.Admin = authz.Check(ctx, gate, authz.Request{Subject: who, Action: "write", Resource: authz.Resource{Type: access.ResourcePolicy, Org: who.Org}}) == nil
+	}
+	return a
+}
+
+func (h *Handler) ReviewOpen(ctx context.Context, r *connect.Request[graphv1.ReviewOpenRequest]) (*connect.Response[graphv1.ReviewResponse], error) {
+	ctx = h.Identity.Context(ctx, r.Header())
+	rv, err := h.reviews().Open(ctx, domain.ChangeID(r.Msg.ChangeId), r.Msg.Flow, r.Msg.Comment, h.reviewer(ctx))
+	return res(&graphv1.ReviewResponse{Review: pbconv.ReviewToPB(rv)}, err)
+}
+
+func (h *Handler) ReviewUpdate(ctx context.Context, r *connect.Request[graphv1.ReviewUpdateRequest]) (*connect.Response[graphv1.ReviewResponse], error) {
+	ctx = h.Identity.Context(ctx, r.Header())
+	rv, err := h.reviews().Update(ctx, domain.ChangeID(r.Msg.ChangeId), r.Msg.Key, pbconv.ReviewEditFromPB(r.Msg), h.reviewer(ctx))
+	return res(&graphv1.ReviewResponse{Review: pbconv.ReviewToPB(rv)}, err)
+}
+
+func (h *Handler) ReviewSubmit(ctx context.Context, r *connect.Request[graphv1.ReviewSubmitRequest]) (*connect.Response[graphv1.ReviewResponse], error) {
+	ctx = h.Identity.Context(ctx, r.Header())
+	rv, err := h.reviews().Submit(ctx, domain.ChangeID(r.Msg.ChangeId), r.Msg.Key, h.reviewer(ctx))
+	return res(&graphv1.ReviewResponse{Review: pbconv.ReviewToPB(rv)}, err)
+}
+
+func (h *Handler) ReviewDiscard(ctx context.Context, r *connect.Request[graphv1.ReviewDiscardRequest]) (*connect.Response[graphv1.ReviewResponse], error) {
+	ctx = h.Identity.Context(ctx, r.Header())
+	rv, err := h.reviews().Discard(ctx, domain.ChangeID(r.Msg.ChangeId), r.Msg.Key, h.reviewer(ctx))
+	return res(&graphv1.ReviewResponse{Review: pbconv.ReviewToPB(rv)}, err)
 }
 
 func (h *Handler) ReopenChangeImpacts(ctx context.Context, r *connect.Request[graphv1.ReopenChangeImpactsRequest]) (*connect.Response[graphv1.ReopenChangeImpactsResponse], error) {

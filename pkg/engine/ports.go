@@ -14,6 +14,8 @@ import (
 type GraphPort interface {
 	CreateChange(ctx context.Context, in graph.NewChange) (domain.Change, error)
 	UpdateChange(ctx context.Context, id domain.ChangeID, p graph.ChangePatch) (domain.Change, error)
+	// Change is the change as stored, its items of every flow included (the blackboard is a view of one flow).
+	Change(ctx context.Context, id domain.ChangeID) (domain.Change, error)
 	AddItems(ctx context.Context, id domain.ChangeID, items []domain.ChangeItem) ([]domain.ChangeItem, error)
 	// Change impacts (ADR 0024, 0076, 0079): declare the nodes a change acts on, check them out, edit their draft,
 	// review and move them.
@@ -30,6 +32,8 @@ type GraphPort interface {
 	ImpactNodeMerge(ctx context.Context, id domain.ChangeID, in graph.MergeInput) (graph.Restructured, error)
 	ImpactNodeSplit(ctx context.Context, id domain.ChangeID, in graph.SplitInput) (graph.Restructured, error)
 	ImpactNodeReviewOn(ctx context.Context, id domain.ChangeID, flow, execution string, node domain.ChangeImpactID, status domain.NodeReview, by, comment string) (domain.ChangeImpact, error)
+	// ImpactNodeReviewBatch applies reviews together, all or none (ADR 0080: the submission of a review).
+	ImpactNodeReviewBatch(ctx context.Context, id domain.ChangeID, b domain.ReviewBatch) ([]domain.ChangeImpact, error)
 	// ReopenImpacts sends decided impacts back to proposed (ADR 0075: a derogation expired).
 	ReopenImpacts(ctx context.Context, id domain.ChangeID, impacts []domain.ChangeImpactID, comment string) ([]domain.ChangeImpactID, error)
 	Blackboard(ctx context.Context, id domain.ChangeID) (domain.Blackboard, error)

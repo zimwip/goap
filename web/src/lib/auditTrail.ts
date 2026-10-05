@@ -4,6 +4,7 @@
 // ADR 0017). Each entry says when, who, on which flow and through which action run. A change is a flow of events:
 // flow branches fork from it (a relaunch, alternatives to compare), and are merged back (adopted) or dropped
 // (discarded); the entries carry these marks so the trail can be drawn as branches.
+import { foldReviews, tally } from './reviews';
 import { decodeLogEntry, int, isDraft, shortId, type Change, type ChangeItem, type ExecutionRecord, type ImpactEvent, type JsonValue, type LogEntry, type NodeRef } from './api';
 
 export type AuditSource = 'change' | 'process' | 'schedule' | 'plan' | 'action' | 'approval' | 'impact' | 'fact' | 'flow';
@@ -28,7 +29,7 @@ export const SOURCE_TYPES: Record<Exclude<AuditSource, 'change'>, string[]> = {
   action: ['journal.action'],
   approval: ['journal.approval'],
   impact: ['impact.'],
-  fact: ['fact.artifact', 'fact.decision', 'fact.merge'],
+  fact: ['fact.artifact', 'fact.decision', 'fact.merge', 'fact.review'],
   flow: ['fact.flow'],
 };
 
@@ -70,6 +71,8 @@ export interface AuditEntry {
   record?: ExecutionRecord;
   event?: ImpactEvent;
   item?: ChangeItem;
+  /** the review object (ADR 0080) the entry belongs to: the reviewed events it submitted and the versions of its record */
+  reviewId?: string;
 }
 
 /** A version, or 'draft' for a draft reference (no version while a change works on a node, ADR 0079). */
@@ -195,7 +198,7 @@ function fromEvent(e: ImpactEvent, keys: Map<string, string>, parents: Map<strin
       break;
     case 'reviewed':
     case 'discarded':
-      summary = `${e.review?.status ?? ''}${e.review?.comment ? ` — ${e.review.comment}` : ''}`;
+      summary = `${e.review?.status ?? ''}${e.review?.reviewId ? ` in review ${e.review.reviewId}` : ''}${e.review?.comment ? ` — ${e.review.comment}` : ''}`;
       break;
     case 'adopted':
       summary = `flow ${shortId(e.flow)} adopted${e.stale?.length ? `, replaces ${e.stale.length} run${e.stale.length > 1 ? 's' : ''}` : ''}`;
@@ -221,6 +224,7 @@ function fromEvent(e: ImpactEvent, keys: Map<string, string>, parents: Map<strin
     processId: '',
     tone: e.op === 'discarded' || e.op === 'rebased' || e.review?.status === 'rejected' ? 'warn' : e.op === 'landed' ? 'ok' : 'neutral',
     event: e,
+    reviewId: e.review?.reviewId || undefined,
   };
 }
 
@@ -262,6 +266,22 @@ function fromItem(it: ChangeItem, parents: Map<string, string>): Entry {
       summary: it.decision.comment ?? '',
       tone: it.decision.accept ? 'ok' : 'warn',
     };
+  }
+  if (it.kind === 'review') {
+    // a version of a review object (ADR 0080): opened, edited, then submitted or discarded
+    const r = foldReviews([it])[0];
+    if (r) {
+      const t = tally(r);
+      return {
+        ...base,
+        source: 'fact',
+        label: `review ${r.status}`,
+        subject: r.key,
+        summary: [r.comment, `${r.entries?.length ?? 0} impact(s)`, r.status === 'open' ? '' : `${t.accept} accepted, ${t.reject} rejected`].filter(Boolean).join(' · '),
+        tone: r.status === 'discarded' ? 'warn' : r.status === 'submitted' ? 'ok' : 'neutral',
+        reviewId: r.key,
+      };
+    }
   }
   const title = str(it.data?.['title']) || str(it.data?.['summary']) || str(it.data?.['name']);
   return { ...base, source: 'fact', label: it.kind ?? 'fact', subject: it.type ?? '', summary: [title, it.status].filter(Boolean).join(' · '), tone: 'neutral' };
@@ -308,6 +328,19 @@ export function buildTrail(change: Change, log: LogEntry[], parents: Map<string,
       e = fromEvent(ev, keys, parents);
     } else e = fromItem(decodeLogEntry<ChangeItem>(l), parents);
     out.push({ ...e, seq: int(l.seq) });
+  }
+  return out;
+}
+
+/** The entries of each review object (ADR 0080), by review id: the versions of its record and the reviewed events it
+ * submitted, in the order of the trail. */
+export function reviewGroups(entries: AuditEntry[]): Map<string, AuditEntry[]> {
+  const out = new Map<string, AuditEntry[]>();
+  for (const e of entries) {
+    if (!e.reviewId) continue;
+    const list = out.get(e.reviewId);
+    if (list) list.push(e);
+    else out.set(e.reviewId, [e]);
   }
   return out;
 }
