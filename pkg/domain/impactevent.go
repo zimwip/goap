@@ -24,19 +24,19 @@ const (
 	// on Flow (ADR 0076).
 	ImpactCheckedOut ImpactOp = "checkedOut"
 	// ImpactTransitioned records a version written for a change impact (Post), on Flow, by a transition, a merge or an
-	// adoption (ADR 0076, 0077).
+	// adoption (ADR 0076, 0077); or, with Patch {"state": {"from", "to"}}, a transition of the working version taken
+	// in place: no version is written, Post is the working version (ADR 0077, "No explicit check-in").
 	ImpactTransitioned ImpactOp = "transitioned"
 	// ImpactUpdated records an edit of the working version in place (Patch): properties, owner, links (ADR 0076).
 	ImpactUpdated ImpactOp = "updated"
-	// ImpactCheckedIn records the check-in of the working version (Post): it is frozen (ADR 0076).
-	ImpactCheckedIn ImpactOp = "checkedIn"
 	// ImpactCancelled records a checkout cancelled on Flow: the working version is dropped and Post is the version the
-	// impact goes back to (nil: none; a creation cancelled before its first check-in removes the change impact).
+	// impact goes back to (nil: none; a creation cancelled before it is accepted removes the change impact).
 	ImpactCancelled ImpactOp = "cancelled"
 	// ImpactWithdrawn takes a change impact out of the change, explicitly (its working version, if any, is dropped): the
 	// impact leaves the list (ADR 0076 §5b).
 	ImpactWithdrawn ImpactOp = "withdrawn"
 	// ImpactReviewed records a review (Review).
+	// An accepted review freezes the working version of the impact (ADR 0077): no event of its own.
 	ImpactReviewed ImpactOp = "reviewed"
 	// ImpactDiscarded rejects a candidate whose flow was discarded (Review).
 	ImpactDiscarded ImpactOp = "discarded"
@@ -53,6 +53,17 @@ const (
 // WritesPost reports whether the operation sets the post version of a change impact: a version written or checked out.
 func (o ImpactOp) WritesPost() bool {
 	return o == ImpactTransitioned || o == ImpactCheckedOut || o == ImpactCreated
+}
+
+// WritesVersion reports whether the event writes a version of the impact's node: a creation, a checkout, a transition
+// from a frozen version, a merge or an adoption; not a transition taken in place on the working version (Patch
+// "state"), which edits the version it finds (ADR 0077).
+func (e ImpactEvent) WritesVersion() bool {
+	if !e.Op.WritesPost() {
+		return false
+	}
+	_, inPlace := e.Patch["state"]
+	return !(e.Op == ImpactTransitioned && inPlace)
 }
 
 // ImpactEvent is one operation on the change impacts of a change.
@@ -81,7 +92,7 @@ type ImpactEvent struct {
 	Review *Review  `json:"review,omitempty"` // reviewed, discarded
 	Stale  []string `json:"stale,omitempty"`  // adopted: the stale executions
 	// Patch is what an updated event changed in place: {"props": {...}, "owner": unit, "addLink" / "updateLink" /
-	// "removeLink": {...}}.
+	// "removeLink": {...}}; a transitioned event taken in place: {"state": {"from", "to"}}.
 	Patch map[string]any `json:"patch,omitempty"`
 }
 
@@ -110,8 +121,6 @@ func (e ImpactEvent) Validate() error {
 		return need(e.Impact != "" && e.Pre != nil, "a change impact and a pre version")
 	case ImpactUpdated:
 		return need(e.Impact != "" && e.Post != nil && len(e.Patch) > 0, "a change impact, its working version and a patch")
-	case ImpactCheckedIn:
-		return need(e.Impact != "" && e.Post != nil, "a change impact and its working version")
 	case ImpactCancelled, ImpactWithdrawn:
 		return need(e.Impact != "", "a change impact")
 	}
@@ -183,7 +192,7 @@ func ApplyImpactEvent(impacts []ChangeImpact, e ImpactEvent) []ChangeImpact {
 			break // the stored post is the main flow's (see written)
 		}
 		if e.Post == nil && cn.Intent == IntentCreated {
-			return slices.Delete(out, at, at+1) // a creation cancelled before its first check-in: nothing is left
+			return slices.Delete(out, at, at+1) // a creation cancelled before it is accepted: nothing is left
 		}
 		cn.Post = nil
 		if e.Post != nil {

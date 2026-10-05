@@ -57,7 +57,7 @@ func (g *Graph) checkRequiredParent(e NodeEdit) error {
 // checkRequiredLinks checks that a version carries the links its type requires (the parent of a node of a structure,
 // the membership of a User): read back from the version itself, so a client that built its edits from a stale read
 // (a link it did not know of) fails instead of leaving the node with zero or two of them. Checked when the version is
-// frozen (ImpactNodeCheckin) and when it lands (Apply), never on a working version, which may be on its way there.
+// frozen (an accepted review, ADR 0077) and when it lands (Apply), never on a working version, which may be on its way there.
 func (g *Graph) checkRequiredLinks(ctx context.Context, tx Tx, n domain.Node) error {
 	reqs := g.requirementsOf(n.Type, n.Key)
 	if len(reqs) == 0 || n.Deleted {

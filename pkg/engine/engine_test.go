@@ -98,10 +98,6 @@ func reviewAll(t *testing.T, g *graph.Graph, id domain.ChangeID) []ItemInput {
 	for _, n := range c.Nodes {
 		if n.Review == domain.ReviewProposed && len(n.Items) == 0 {
 			out = append(out, ItemInput{Kind: "changeImpact", ChangeImpact: &dsl.NodeOp{Op: "review", Node: n.Key, Accept: true, Comment: "reviewed"}})
-			if n.Post != nil {
-				// the acceptance authorizes the check-in of the working version (ADR 0076)
-				out = append(out, ItemInput{Kind: "changeImpact", ChangeImpact: &dsl.NodeOp{Op: "checkin", Node: n.Key}})
-			}
 		}
 	}
 	if len(out) == 0 {

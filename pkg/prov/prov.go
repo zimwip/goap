@@ -481,6 +481,9 @@ func (b *builder) impact(c domain.Change, e domain.LogEntry, ev domain.ImpactEve
 	case domain.ImpactProposed:
 		propose()
 	case domain.ImpactTransitioned, domain.ImpactCheckedOut, domain.ImpactCreated:
+		if !ev.WritesVersion() {
+			return // a transition taken in place on the working version writes none (ADR 0077): only its entry
+		}
 		if ev.Op == domain.ImpactCreated {
 			propose()
 			state = b.impacts[ev.Impact]

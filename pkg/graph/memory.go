@@ -375,7 +375,16 @@ func (t *memTx) SetNodeOwner(_ context.Context, ref domain.NodeRef, owner domain
 	return nil
 }
 
-func (t *memTx) CheckinVersion(_ context.Context, ref domain.NodeRef) error {
+func (t *memTx) SetNodeState(_ context.Context, ref domain.NodeRef, state string) error {
+	n, err := t.version(ref)
+	if err != nil {
+		return err
+	}
+	n.State = state
+	return nil
+}
+
+func (t *memTx) FreezeVersion(_ context.Context, ref domain.NodeRef) error {
 	n, err := t.version(ref)
 	if err != nil || !n.CheckedOut {
 		return fmt.Errorf("checked-out version %s: %w", ref, ErrNotFound)

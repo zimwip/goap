@@ -253,7 +253,7 @@ import { declaredProperties, isReopen, lifecycleResolver, lifecycleRows, loadPos
   const saveProps = (patch: Record<string, unknown>) => propose('edit', { props: patch }, `Edit ${stored?.key}`);
 
   /** Takes the node out of the working change: its working version is dropped; refused once a version of it is
-   * checked in (reject it instead). A node is never deleted (ADR 0076). */
+   * frozen (reject it instead). A node is never deleted (ADR 0076). */
   async function removeFromWork() {
     const imp = row?.impact;
     if (!imp?.id || !workId) return;
@@ -346,7 +346,7 @@ import { declaredProperties, isReopen, lifecycleResolver, lifecycleRows, loadPos
                   <button type="button" class="small" disabled={busy !== ''} title={`${t.name}: ${t.from} → ${t.to}`} onclick={() => transition(t)}>Reopen → {t.to}</button>
                 {/each}
                 {#if inChange && row?.impact?.id && !row.impact.superseded}
-                  <button type="button" class="small danger" disabled={busy !== ''} title="Take the node out of the working change (refused once a version of it is checked in: reject it instead)" onclick={removeFromWork}>Remove from change</button>
+                  <button type="button" class="small danger" disabled={busy !== ''} title="Take the node out of the working change (refused once a version of it is frozen: reject it instead)" onclick={removeFromWork}>Remove from change</button>
                 {/if}
               {/if}
             </div>

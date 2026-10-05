@@ -13,8 +13,8 @@ type EventSink interface {
 	Publish(ctx context.Context, subject string, v any) error
 }
 
-// Observe makes the graph publish a NodeEvent for every node version frozen (written checked in, or checked in: a
-// working version is edited in place until its check-in, ADR 0076) and a BaselineEvent
+// Observe makes the graph publish a NodeEvent for every node version frozen (written frozen, or frozen by an accepted
+// review: a working version is edited in place until then, ADR 0076, 0077) and a BaselineEvent
 // for every baseline created, once the transaction that wrote them has committed. It sees every
 // write path. Publishing is best effort: the index rebuilds from the graph (Reindex) when an
 // event is lost.
@@ -91,8 +91,8 @@ func (t *observedTx) PutNode(ctx context.Context, n domain.Node) error {
 	return nil
 }
 
-func (t *observedTx) CheckinVersion(ctx context.Context, ref domain.NodeRef) error {
-	if err := t.Tx.CheckinVersion(ctx, ref); err != nil {
+func (t *observedTx) FreezeVersion(ctx context.Context, ref domain.NodeRef) error {
+	if err := t.Tx.FreezeVersion(ctx, ref); err != nil {
 		return err
 	}
 	t.nodes = append(t.nodes, ref)

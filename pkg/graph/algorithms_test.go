@@ -103,7 +103,7 @@ func (w algoWorld) modify(t *testing.T, c domain.Change, n domain.Node, writes .
 
 func (w algoWorld) acceptAll(t *testing.T, c domain.Change) {
 	t.Helper()
-	if err := w.g.acceptAllAndCheckin(context.Background(), c.ID); err != nil {
+	if err := w.g.acceptAll(context.Background(), c.ID); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -114,7 +114,7 @@ func testPropertyValidators(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	w := newAlgoWorld(t, repo)
 
-	// a working version may be incomplete: the validators judge it when it is checked in (also through the inherited
+	// a working version may be incomplete: the validators judge it when it is accepted (also through the inherited
 	// validator of a subtype)
 	for i, try := range []func(c domain.Change) error{
 		func(c domain.Change) error { return w.create(c, "R4", "Req", map[string]any{"code": "nope"}) },

@@ -64,30 +64,28 @@ function editsBetween(posts: PostVersions, id: string, from: number, post: Graph
   return n;
 }
 
-/** Is the post version of a change impact a working version (checked out, ADR 0076)? */
+/** The working version of a change impact (checked out, ADR 0076): a version written by the change stays one until the
+ * change lands and freezes it (ADR 0077). */
 async function workingPost(cn: ChangeImpact): Promise<GraphNode | undefined> {
   if (!cn.post?.id) return undefined;
   const n = (await graph.getNode({ id: cn.post.id, version: cn.post.version })).view?.node;
   return n?.checkedOut ? n : undefined;
 }
 
-/** Accepts a change impact (the UI is its own reviewer) and checks its working version in; a version the check-in
- * refuses (a validator, a required link) is sent back to proposed, to be completed. */
-async function acceptAndCheckin(changeId: string, cn: ChangeImpact, rationale: string, flow: string): Promise<ChangeImpact> {
-  if (cn.review !== 'accepted') cn = (await graph.impactNodeReview(changeId, cn.id!, true, rationale, flow)).node ?? cn;
-  if (!(await workingPost(cn))) return cn;
-  try {
-    return (await graph.impactNodeCheckin(changeId, cn.id!, flow)).node ?? cn;
-  } catch (e) {
-    if (!flow || flow === 'main') await graph.reopenChangeImpacts(changeId, [cn.id!], 'the check-in was refused');
-    throw e;
-  }
+/** Accepts a change impact (the UI is its own reviewer), unless it still is: the graph gates the acceptance with the
+ * checks of a frozen version (validators, required links), and an edit after an acceptance sends the review back to
+ * proposed, so the review is read as it stands. A refused acceptance throws and leaves the impact proposed. */
+async function accept(changeId: string, cn: ChangeImpact, rationale: string, flow: string): Promise<ChangeImpact> {
+  const cur = (await graph.getBlackboard(changeId, flow)).change?.nodes?.find((n) => n.id === cn.id) ?? cn;
+  if (cur.review === 'accepted') return cur;
+  return (await graph.impactNodeReview(changeId, cn.id!, true, rationale, flow)).node ?? cur;
 }
 
-/** Writes a node of the change (ADR 0076): created or checked out (once per write: a working version), its
- * properties and links edited in place, accepted (the UI is its own reviewer) and checked in; a state is then a
- * transition of its own. A node is never deleted: a node the change created is taken out of it (removeFromChange),
- * one no parent holds is retired by its lifecycle. */
+/** Writes a node of the change (ADR 0076, 0077): created, or checked out when it holds no working version, its
+ * properties and links edited in place, accepted (the UI is its own reviewer); a state is then a transition (in place
+ * on the working version, else a version of its own). The working version is frozen when the change lands. A node is
+ * never deleted: a node the change created is taken out of it (removeFromChange), one no parent holds is retired by
+ * its lifecycle. */
 export async function writeNodeInChange(
   changeId: string,
   cns: ChangeImpact[],
@@ -103,15 +101,10 @@ export async function writeNodeInChange(
   if (!cn && !target.pre) {
     cn = (await graph.impactNodeCreate(changeId, { key: target.key ?? '', type: target.type ?? '', props: w.props as never, rationale, links: w.addLinks }, flow)).node;
     if (!cn?.id) throw new Error('The node could not be created.');
-    cn = await acceptAndCheckin(changeId, cn, rationale, flow);
+    cn = await accept(changeId, cn, rationale, flow);
   } else if (edits) {
-    let work = cn ? await workingPost(cn) : undefined;
-    if (cn && work && cn.review === 'accepted') {
-      // an accepted version is checked in, then checked out again to be changed
-      cn = (await graph.impactNodeCheckin(changeId, cn.id!, flow)).node ?? cn;
-      work = undefined;
-    }
-    if (!work) {
+    // an impact that holds a working version is updated, never checked out again (an accepted one goes back to proposed)
+    if (!(cn && (await workingPost(cn)))) {
       cn = (await graph.impactNodeCheckout(changeId, cn?.id ? { changeImpactId: cn.id } : { nodeId: target.pre?.id }, rationale, flow)).node;
       if (!cn?.id || !cn.post) throw new Error('The node could not be checked out.');
     }
@@ -128,9 +121,9 @@ export async function writeNodeInChange(
         if (copy?.id) await graph.impactLinkDelete(changeId, copy.id, flow);
       }
     }
-    cn = await acceptAndCheckin(changeId, cn!, rationale, flow);
+    cn = await accept(changeId, cn!, rationale, flow);
   } else if (cn && (await workingPost(cn))) {
-    cn = await acceptAndCheckin(changeId, cn, rationale, flow);
+    cn = await accept(changeId, cn, rationale, flow);
   }
   if (w.state) {
     const moved = (await graph.impactNodeTransition(changeId, cn?.id ? { changeImpactId: cn.id } : { nodeId: target.pre?.id }, w.state, rationale, flow)).node;
@@ -139,19 +132,10 @@ export async function writeNodeInChange(
   }
 }
 
-/** Takes a node the change works on out of it: its working version is dropped (a node the change created and never
- * checked in goes away); refused once a version of it is checked in (reject it instead). */
+/** Takes a node the change works on out of it: its working version is dropped (a node the change created goes away);
+ * refused once a version of it is frozen (reject it instead). */
 export async function removeFromChange(changeId: string, cn: ChangeImpact, flow = ''): Promise<void> {
   if (cn.id) await graph.withdrawImpact(changeId, cn.id, flow);
-}
-
-/** Checks in the accepted working versions of a change: their acceptance authorizes it, and a change is applied
- * with every version checked in (ADR 0076). */
-export async function checkinAccepted(changeId: string): Promise<void> {
-  const c = (await graph.getChange(changeId)).change;
-  for (const cn of c?.nodes ?? []) {
-    if (cn.review === 'accepted' && !cn.flow && !cn.superseded && (await workingPost(cn))) await graph.impactNodeCheckin(changeId, cn.id!, 'main');
-  }
 }
 
 /** Qualified node types a change of the namespace can create (all of them without a namespace). */

@@ -172,7 +172,7 @@ export function stageRetire(ns: string, type: string, key: string): Promise<void
           return;
         }
         if (!s.retire) {
-          // the edits staged on the node go with it: the transition starts from its checked-in version
+          // the edits staged on the node go with it: the retirement starts from the version the node has
           if (await checkedOut(c, s)) await graph.impactNodeCancel(c.changeId, s.impactId);
           s.props = {};
           await graph.impactNodeTransition(c.changeId, { changeImpactId: s.impactId }, RETIRED, `Retire ${key}`);
@@ -233,9 +233,8 @@ export function savePending(): Promise<boolean> {
             await graph.withdrawImpact(c.changeId, s.impactId);
             continue;
           }
+          // the acceptance gates the working version (validators, required links); applying the change freezes it (ADR 0077)
           await graph.impactNodeReview(c.changeId, s.impactId, true, 'Saved by its owner');
-          // the acceptance authorizes the check-in of the working version (ADR 0076)
-          if (await checkedOut(c, s)) await graph.impactNodeCheckin(c.changeId, s.impactId);
         }
         await graph.applyChange(c.changeId, '');
         delete pending.byNs[ns];

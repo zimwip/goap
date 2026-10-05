@@ -435,8 +435,12 @@ func (t *pgTx) SetNodeOwner(ctx context.Context, ref domain.NodeRef, owner domai
 	return t.exec1(ctx, "node "+ref.String(), dialectPG.sqlSetNodeOwner(), string(ref.ID), int(ref.Version), nullUUID(string(owner)))
 }
 
-func (t *pgTx) CheckinVersion(ctx context.Context, ref domain.NodeRef) error {
-	return t.exec1(ctx, "checked-out version "+ref.String(), dialectPG.sqlCheckin(), string(ref.ID), int(ref.Version), false)
+func (t *pgTx) SetNodeState(ctx context.Context, ref domain.NodeRef, state string) error {
+	return t.exec1(ctx, "node "+ref.String(), dialectPG.sqlSetNodeState(), string(ref.ID), int(ref.Version), state)
+}
+
+func (t *pgTx) FreezeVersion(ctx context.Context, ref domain.NodeRef) error {
+	return t.exec1(ctx, "checked-out version "+ref.String(), dialectPG.sqlFreeze(), string(ref.ID), int(ref.Version), false)
 }
 
 func (t *pgTx) DropWorkingVersion(ctx context.Context, ref domain.NodeRef) error {

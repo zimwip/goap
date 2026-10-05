@@ -81,7 +81,7 @@ conditions:
       recorded accepted, after the review)
     expr: size(changeImpacts) > 0 && changeImpacts.all(n, n.review != "proposed")
   - name: requirements_approved
-    description: The requirements the review accepted are checked in and approved (ADR 0076)
+    description: The requirements the review accepted are approved (ADR 0076, 0077)
     expr: artifacts.exists(a, a.type == "requirements_approval")
   - name: rolled_out
     description: Each release is deployed to every environment in the chain (or there is nothing to deploy)
@@ -575,8 +575,8 @@ actions:
     kind: script
     language: javascript
     description: >
-      Approve the requirements the review accepted: check in their working version (the acceptance authorizes it), then
-      move them to approved; the approval guard reads the accepted review (ADR 0076). The releases planned in the
+      Approve the requirements the review accepted: move them to approved, in place on their working version (it is
+      frozen when the change lands); the approval guard reads the accepted review (ADR 0076, 0077). The releases planned in the
       change, created in draft, are put forward as candidates the same way
     pre: {reviewed: true}
     effects: {requirements_approved: true}
@@ -587,7 +587,6 @@ actions:
         let approved = 0;
         for (const n of ctx.changeImpacts()) {
           if (!types.includes(n.type) || n.review !== "accepted" || !n.post) continue;
-          if (n.checkedOut) ctx.impactNodeCheckin(n.key);
           const state = n.post.state;
           if (state === "proposed") ctx.impactNodeTransition(n.key, "draft");
           if (state === "proposed" || state === "draft") {
@@ -598,7 +597,6 @@ actions:
         let candidates = 0;
         for (const n of ctx.changeImpacts()) {
           if (n.type !== "alm@Release" || n.review !== "accepted" || !n.post || n.post.state !== "draft") continue;
-          if (n.checkedOut) ctx.impactNodeCheckin(n.key);
           ctx.impactNodeTransition(n.key, "candidate");
           candidates++;
         }

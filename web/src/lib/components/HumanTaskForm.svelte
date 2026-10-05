@@ -143,7 +143,7 @@
   }
 
   /** Takes a node out of the change: its working version is dropped (a node the change creates goes away); refused
-   * once a version of it is checked in (reject it instead, ADR 0076). */
+   * once a version of it is frozen (reject it instead, ADR 0076, 0077). */
   async function removeNode(row: LifecycleRow): Promise<boolean> {
     if (!changeId || !row.impact?.id) return false;
     moving = `${row.node.id}:remove`;

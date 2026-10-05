@@ -191,8 +191,8 @@ func (g *Graph) ImpactsOf(ctx context.Context, id domain.ChangeID, execution str
 	return out, nil
 }
 
-// ImpactNodeReview accepts or rejects a proposed change impact. The comment is
-// mandatory: it is kept in the review history and, once the node is realized,
+// ImpactNodeReview accepts or rejects a proposed change impact; accepting checks its working version, if any, as a
+// frozen one would be (ADR 0077) and freezes nothing: landing does. The comment is mandatory: it is kept in the review history and, once the node is realized,
 // on the version itself, so the origin of a version can be read from the node.
 func (g *Graph) ImpactNodeReview(ctx context.Context, id domain.ChangeID, node domain.ChangeImpactID, status domain.NodeReview, by, comment string) (domain.ChangeImpact, error) {
 	return g.ImpactNodeReviewOn(ctx, id, "", "", node, status, by, comment)
@@ -254,6 +254,14 @@ func (g *Graph) ImpactNodeReviewOn(ctx context.Context, id domain.ChangeID, flow
 			}
 			if err := g.ReviewPolicy.Review(domain.ReviewRequest{Impact: seen, Reviewer: by, Status: status, Items: facts}); err != nil {
 				return fmt.Errorf("review of %s refused: %v: %w", node, err, ErrInvalid)
+			}
+		}
+		// an accepted review is gated by what a frozen version must satisfy (ADR 0077): validators, required links, link
+		// attributes, the origins gate; a refusal leaves the review proposed. Nothing is frozen: the version stays a
+		// working version until the change lands
+		if status == domain.ReviewAccepted && seen.Post != nil {
+			if err := g.checkAccepted(ctx, tx, id, flow, node); err != nil {
+				return err
 			}
 		}
 		r := domain.Review{Status: status, By: by, Comment: comment, At: g.now(), Flow: flow, Execution: execution}

@@ -16,6 +16,17 @@ import (
 
 func flowBranchName(flow string) string { return "flow-" + shortID(flow) }
 
+// IsWorking reports whether a version is the working version of the flow of a change (ADR 0077): checked out, and written
+// on the branch the flow writes on (flow "": the active option, else the main flow). A working version of a parent flow
+// is not: the flow checks the node out to write its own. Callers use it to decide between a checkout and an update.
+func IsWorking(c domain.Change, flow string, n domain.Node) bool {
+	branch := domain.BranchOf(c.Branch)
+	if f := c.ResolveFlow(flow); f != "" {
+		branch = flowBranchName(f)
+	}
+	return n.CheckedOut && domain.BranchOf(n.Branch) == branch
+}
+
 // flowChain lists the flows from f up to the main flow (excluded), innermost first.
 func flowChain(c domain.Change, flow string) []domain.Flow {
 	var out []domain.Flow
@@ -211,8 +222,8 @@ func (g *Graph) adoptNodes(ctx context.Context, tx Tx, c domain.Change, f domain
 			continue
 		}
 		wrote = wrote || flowVer != nil
-		if flowVer != nil && flowVer.CheckedOut {
-			return fmt.Errorf("node %s is checked out on flow %s: check it in, or cancel the checkout, before the flow is adopted (ADR 0076): %w", flowVer.Key, f.ID, ErrConflict)
+		if flowVer != nil && flowVer.CheckedOut && !acceptedOnFlow(c, id, f.ID) {
+			return fmt.Errorf("node %s is a working version on flow %s that the flow did not accept: accept it, or cancel the checkout, before the flow is adopted (ADR 0076, 0077): %w", flowVer.Key, f.ID, ErrConflict)
 		}
 		if flowVer != nil {
 			// the flow was forked from a version of the node: it is a conflict when someone else moved on since
@@ -381,4 +392,21 @@ func (g *Graph) discardNodes(ctx context.Context, tx Tx, c domain.Change, f doma
 		}
 	}
 	return nil
+}
+
+// acceptedOnFlow reports whether the last review of a node of the change made on a flow accepts it (ADR 0077: a working version
+// stays one until the change lands, so adopting a flow asks its acceptance).
+func acceptedOnFlow(c domain.Change, node domain.NodeID, flow string) bool {
+	accepted := false
+	for _, cn := range c.Nodes {
+		if nodeOf(cn) != node {
+			continue
+		}
+		for _, r := range cn.Reviews {
+			if r.Flow == flow && !r.Superseded {
+				accepted = r.Status == domain.ReviewAccepted
+			}
+		}
+	}
+	return accepted
 }

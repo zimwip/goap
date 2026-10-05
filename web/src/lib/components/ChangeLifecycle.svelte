@@ -278,7 +278,7 @@
                     type="button"
                     class="small danger"
                     disabled={busy !== ''}
-                    title={r.created ? 'Discard this new node' : 'Take the node out of the change (refused once a version of it is checked in: reject it instead)'}
+                    title={r.created ? 'Discard this new node' : 'Take the node out of the change (refused once a version of it is frozen: reject it instead)'}
                     onclick={() => remove(r)}
                   >
                     {r.created ? 'Discard' : 'Remove from change'}

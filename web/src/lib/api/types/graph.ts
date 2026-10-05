@@ -36,7 +36,7 @@ export interface GraphNode {
   /** id of the organisational unit owning the version, and of the project the node was created in (ADR 0054) */
   owner?: string;
   project?: string;
-  /** a working version, edited in place by its change until it is checked in (ADR 0076) */
+  /** a working version, edited in place by its change until the change lands and freezes it (ADR 0076, 0077) */
   checkedOut?: boolean;
   /** the nodes this one derives from (ADR 0077): set on the first version of the successor of a merge or a split */
   origins?: NodeRef[];
@@ -100,7 +100,7 @@ export interface ImpactEvent {
   /** empty for a change-level event (adopted) */
   impactId?: string;
   /** proposed: the impact of an existing node; created: a new node, its impact and first version in one event; checkedOut: an existing node's next version */
-  op?: 'proposed' | 'created' | 'checkedOut' | 'transitioned' | 'updated' | 'checkedIn' | 'reviewed' | 'discarded' | 'cancelled' | 'withdrawn' | 'adopted' | 'landed' | 'rebased' | string;
+  op?: 'proposed' | 'created' | 'checkedOut' | 'transitioned' | 'updated' | 'reviewed' | 'discarded' | 'cancelled' | 'withdrawn' | 'adopted' | 'landed' | 'rebased' | string;
   /** the caller: flow branch ('' = main flow), journal record of the action run, principal or component */
   flow?: string;
   execution?: string;

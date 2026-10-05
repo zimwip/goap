@@ -9,10 +9,10 @@ import (
 )
 
 // A node is edited through its working version (ADR 0076): ImpactNodeUpdate and the link operations change it in place, no
-// version is written; an accepted review authorizes the check-in, which freezes it; changing it again is a new checkout.
-func TestCheckoutEditCheckin(t *testing.T) { forEachRepo(t, testCheckoutEditCheckin) }
+// version is written; an accepted review freezes it (no explicit check-in, ADR 0077); changing it again is a new checkout.
+func TestCheckoutEditAccept(t *testing.T) { forEachRepo(t, testCheckoutEditAccept) }
 
-func testCheckoutEditCheckin(t *testing.T, repo Repo) {
+func testCheckoutEditAccept(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	f := newFixture(t, repo)
 	g := f.g
@@ -55,51 +55,43 @@ func testCheckoutEditCheckin(t *testing.T, repo Repo) {
 	if out := must[[]domain.Link](t)(g.OutLinksOf(ctx, work)); len(out) != 1 {
 		t.Fatalf("a link removed in place: %+v", out)
 	}
-	// a transition starts from a checked-in version; the check-in needs an accepted review
-	if _, err := g.ImpactNodeTransition(ctx, c.ID, NodeTransition{NodeCheckout: NodeCheckout{Impact: cn.ID}, To: "x"}); !errors.Is(err, ErrConflict) {
-		t.Fatalf("a transition of a checked-out node: %v", err)
-	}
 	if _, err := g.Apply(ctx, c.ID, ""); !errors.Is(err, ErrConflict) {
 		t.Fatalf("a change with a review pending is not applied: %v", err)
 	}
-	if _, err := g.ImpactNodeCheckin(ctx, c.ID, cn.ID, "", ""); !errors.Is(err, ErrConflict) {
-		t.Fatalf("a check-in before the review: %v", err)
-	}
 	must[domain.ChangeImpact](t)(g.ImpactNodeReview(ctx, c.ID, cn.ID, domain.ReviewAccepted, "bob", "fine"))
-	if _, err := g.ImpactNodeUpdate(ctx, c.ID, cn.ID, NodeUpdate{Properties: map[string]any{"title": "late"}}); !errors.Is(err, ErrConflict) {
-		t.Fatalf("an accepted version is checked in, not edited: %v", err)
+	if n := must[domain.Node](t)(g.Node(ctx, work)); !n.CheckedOut || n.Comment != "fine" {
+		t.Fatalf("accepted, still a working version until the change lands: %+v", n)
 	}
-	if _, err := g.Apply(ctx, c.ID, ""); !errors.Is(err, ErrConflict) {
-		t.Fatalf("a checked-out version is not applied: %v", err)
+	// a checkout of a working version is refused: the caller updates it, which sends the review back to proposed
+	if _, err := g.ImpactNodeCheckout(ctx, c.ID, NodeCheckout{Impact: cn.ID}); !errors.Is(err, ErrConflict) {
+		t.Fatalf("already checked out: %v", err)
 	}
-	must[domain.ChangeImpact](t)(g.ImpactNodeCheckin(ctx, c.ID, cn.ID, "", ""))
-	if n := must[domain.Node](t)(g.Node(ctx, work)); n.CheckedOut || n.Comment != "fine" {
-		t.Fatalf("checked in: %+v", n)
+	again := must[domain.ChangeImpact](t)(g.ImpactNodeUpdate(ctx, c.ID, cn.ID, NodeUpdate{Properties: map[string]any{"title": "Use PSP v3"}}))
+	if again.Post == nil || *again.Post != work || again.Review != domain.ReviewProposed {
+		t.Fatalf("an edit after the accept is in place, and the review is back to proposed: %+v", again)
 	}
-	// the guard keeps a checked-in version as it is
+	must[domain.ChangeImpact](t)(g.accept(ctx, c.ID, cn.ID, "bob", "fine again"))
+	if vs := must[[]domain.Node](t)(g.Versions(ctx, f.req.ID)); len(vs) != int(work.Version) {
+		t.Fatalf("one version for the whole edit: %d versions", len(vs))
+	}
+	res := must[domain.Baseline](t)(g.Apply(ctx, c.ID, ""))
+	landed := must[domain.Node](t)(g.Node(ctx, domain.NodeRef{ID: f.req.ID, Version: res.Nodes[f.req.ID]}))
+	if landed.Properties["title"] != "Use PSP v3" || landed.CheckedOut || landed.Version != work.Version {
+		t.Fatalf("landing freezes the working version: %+v", landed)
+	}
+	// the guard keeps a frozen version as it is
 	if err := g.repo.InTx(ctx, func(tx Tx) error {
 		return tx.PutLink(ctx, domain.Link{ID: domain.LinkID(g.newID()), Type: "x", From: work, To: work, ChangeID: c.ID})
 	}); !errors.Is(err, ErrConflict) {
-		t.Fatalf("a link added to a checked-in version: %v", err)
+		t.Fatalf("a link added to a frozen version: %v", err)
 	}
 	if err := g.repo.InTx(ctx, func(tx Tx) error { return tx.SetNodeProps(ctx, work, map[string]any{"x": 1}) }); !errors.Is(err, ErrConflict) {
-		t.Fatalf("properties set on a checked-in version: %v", err)
-	}
-	// changing it again is a new checkout, reviewed again
-	again := must[domain.ChangeImpact](t)(g.ImpactNodeCheckout(ctx, c.ID, NodeCheckout{Impact: cn.ID}))
-	if again.Post.Version != work.Version+1 || again.Review != domain.ReviewProposed {
-		t.Fatalf("a new checkout: %+v", again)
-	}
-	must[domain.ChangeImpact](t)(g.ImpactNodeUpdate(ctx, c.ID, cn.ID, NodeUpdate{Properties: map[string]any{"title": "Use PSP v3"}}))
-	must[domain.ChangeImpact](t)(g.accept(ctx, c.ID, cn.ID, "bob", "fine again"))
-	res := must[domain.Baseline](t)(g.Apply(ctx, c.ID, ""))
-	if landed := must[domain.Node](t)(g.Node(ctx, domain.NodeRef{ID: f.req.ID, Version: res.Nodes[f.req.ID]})); landed.Properties["title"] != "Use PSP v3" {
-		t.Fatalf("landed: %+v", landed)
+		t.Fatalf("properties set on a frozen version: %v", err)
 	}
 }
 
 // Cancelling a checkout drops the working version (ADR 0076): a modified node goes back to the version the change saw,
-// a creation cancelled before its first check-in removes the node and its impact, the one deletion of the graph.
+// a creation cancelled before it is accepted removes the node and its impact, the one deletion of the graph.
 func TestImpactNodeCancel(t *testing.T) { forEachRepo(t, testImpactNodeCancel) }
 
 func testImpactNodeCancel(t *testing.T, repo Repo) {
@@ -136,22 +128,21 @@ func testImpactNodeCancel(t *testing.T, repo Repo) {
 	if len(impacts) != 1 || impacts[0].ID != mod.ID {
 		t.Fatalf("nor its impact: %+v", impacts)
 	}
-	// checked out again, then checked in: a later checkout cancelled goes back to the checked-in version
+	// checked out again, accepted: cancelling still drops the working version, back to the impact without version
 	again := must[domain.ChangeImpact](t)(g.ImpactNodeCheckout(ctx, c.ID, NodeCheckout{Impact: mod.ID}))
 	must[domain.ChangeImpact](t)(g.accept(ctx, c.ID, mod.ID, "bob", "ok"))
-	must[domain.ChangeImpact](t)(g.ImpactNodeCheckout(ctx, c.ID, NodeCheckout{Impact: mod.ID}))
-	if back := must[domain.ChangeImpact](t)(g.ImpactNodeCancel(ctx, c.ID, mod.ID, "", "")); back.Post == nil || *back.Post != *again.Post {
-		t.Fatalf("back to the checked-in version: %+v", back)
+	if back := must[domain.ChangeImpact](t)(g.ImpactNodeCancel(ctx, c.ID, mod.ID, "", "")); back.Post != nil {
+		t.Fatalf("back to the impact without version: %+v", back)
 	}
-	if seen := must[domain.ChangeImpact](t)(g.seenImpact(ctx, c.ID, mod.ID, "")); seen.Post == nil || *seen.Post != *again.Post {
-		t.Fatalf("the impact log replays the cancellation: %+v", seen)
+	if _, err := g.Node(ctx, *again.Post); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("the accepted working version is dropped: %v", err)
 	}
 }
 
-// A flow is adopted with its versions checked in (ADR 0076).
-func TestAdoptFlowNeedsCheckin(t *testing.T) { forEachRepo(t, testAdoptFlowNeedsCheckin) }
+// A flow is adopted with its versions frozen, accepted (ADR 0076, 0077).
+func TestAdoptFlowNeedsAccept(t *testing.T) { forEachRepo(t, testAdoptFlowNeedsAccept) }
 
-func testAdoptFlowNeedsCheckin(t *testing.T, repo Repo) {
+func testAdoptFlowNeedsAccept(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	f := newFixture(t, repo)
 	g := f.g
@@ -174,24 +165,18 @@ func TestWorkingLinksFollowNewVersions(t *testing.T) {
 
 func testWorkingLinksFollowNewVersions(t *testing.T, repo Repo) {
 	ctx := context.Background()
-	f := newFixture(t, repo)
-	g := f.g
-	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{Title: "follow", BaselineID: f.base.ID}))
-	req := must[domain.ChangeImpact](t)(g.ImpactNodeCheckout(ctx, c.ID, NodeCheckout{Node: f.req.ID, Rationale: "edit"}))
-	tst := must[domain.ChangeImpact](t)(g.ImpactNodeCreate(ctx, c.ID, NodeCreate{Key: "TST-9", Type: "TestCase", Rationale: "cover",
-		Links: []LinkWrite{{Type: "verifies", To: *req.Post}}}))
-	must[domain.ChangeImpact](t)(g.accept(ctx, c.ID, req.ID, "bob", "ok"))
-	again := must[domain.ChangeImpact](t)(g.ImpactNodeCheckout(ctx, c.ID, NodeCheckout{Impact: req.ID}))
-	out := must[[]domain.Link](t)(g.OutLinksOf(ctx, *tst.Post))
-	if len(out) != 1 || out[0].To != *again.Post {
-		t.Fatalf("the link of the working version follows REQ-1 to %s: %+v", again.Post, out)
-	}
-	// the test version is frozen: a later version of REQ-1 leaves its link where it is
-	must[domain.ChangeImpact](t)(g.accept(ctx, c.ID, tst.ID, "bob", "ok"))
-	must[domain.ChangeImpact](t)(g.accept(ctx, c.ID, req.ID, "bob", "ok"))
-	third := must[domain.ChangeImpact](t)(g.ImpactNodeCheckout(ctx, c.ID, NodeCheckout{Impact: req.ID}))
-	if out := must[[]domain.Link](t)(g.OutLinksOf(ctx, *tst.Post)); len(out) != 1 || out[0].To != *again.Post || *third.Post == *again.Post {
-		t.Fatalf("a frozen link stays: %+v", out)
+	w := newLifecycleWorld(t, repo)
+	g := w.g
+	c := w.change(t, "follow")
+	req2 := w.declare(t, c, w.req2)
+	// a new Note links the baseline version of REQ-2; a transition of REQ-2 (a frozen version of its own) is a new
+	// version the working link follows
+	note := must[domain.ChangeImpact](t)(g.ImpactNodeCreate(ctx, c.ID, NodeCreate{Key: "NOTE-1", Type: "Note", Rationale: "cover",
+		Links: []LinkWrite{{Type: "refines", To: w.req2.Ref()}}}))
+	moved := must[domain.ChangeImpact](t)(g.edit(ctx, c.ID, req2, edit{State: "draft"}))
+	out := must[[]domain.Link](t)(g.OutLinksOf(ctx, *note.Post))
+	if len(out) != 1 || out[0].To != *moved.Post {
+		t.Fatalf("the link of the working version follows REQ-2 to %s: %+v", moved.Post, out)
 	}
 }
 

@@ -1,5 +1,5 @@
 // Package graphtest lands the fixtures of tests through the operations every change uses (ADR 0076): a node is created
-// in a change of its own, accepted, checked in, moved to its state and applied.
+// in a change of its own, moved to its state in place, accepted (frozen) and applied.
 package graphtest
 
 import (
@@ -42,9 +42,6 @@ func Import(ctx context.Context, g *graph.Graph, in Node) (domain.Node, error) {
 	if err != nil {
 		return domain.Node{}, err
 	}
-	if err := AcceptAndCheckin(ctx, g, c.ID, cn.ID); err != nil {
-		return domain.Node{}, err
-	}
 	if in.State != "" {
 		n, err := g.Node(ctx, *cn.Post)
 		if err != nil {
@@ -56,6 +53,9 @@ func Import(ctx context.Context, g *graph.Graph, in Node) (domain.Node, error) {
 			}
 		}
 	}
+	if err := Accept(ctx, g, c.ID, cn.ID); err != nil {
+		return domain.Node{}, err
+	}
 	if _, err := g.Apply(ctx, c.ID, ""); err != nil {
 		return domain.Node{}, err
 	}
@@ -63,7 +63,7 @@ func Import(ctx context.Context, g *graph.Graph, in Node) (domain.Node, error) {
 }
 
 // Edit lands an edit of the latest version of a node on main through a change of its own: checked out, its
-// properties merged, the links added, accepted, checked in, applied. It returns the new version.
+// properties merged, the links added, accepted, applied. It returns the new version.
 func Edit(ctx context.Context, g *graph.Graph, node domain.NodeID, props map[string]any, links ...graph.LinkWrite) (domain.Node, error) {
 	cur, err := g.Node(ctx, domain.NodeRef{ID: node})
 	if err != nil {
@@ -87,7 +87,7 @@ func Edit(ctx context.Context, g *graph.Graph, node domain.NodeID, props map[str
 			return cur, err
 		}
 	}
-	if err := AcceptAndCheckin(ctx, g, c.ID, cn.ID); err != nil {
+	if err := Accept(ctx, g, c.ID, cn.ID); err != nil {
 		return cur, err
 	}
 	if _, err := g.Apply(ctx, c.ID, ""); err != nil {
@@ -101,30 +101,17 @@ func Link(ctx context.Context, g *graph.Graph, typ string, from, to domain.NodeR
 	return Edit(ctx, g, from.ID, nil, graph.LinkWrite{Type: typ, To: to})
 }
 
-// AcceptAndCheckin accepts a change impact of the main flow when it is proposed, and checks its working version in.
-func AcceptAndCheckin(ctx context.Context, g *graph.Graph, change domain.ChangeID, impact domain.ChangeImpactID) error {
+// Accept accepts a change impact of the main flow when it is proposed: accepting freezes its working version (ADR 0077).
+func Accept(ctx context.Context, g *graph.Graph, change domain.ChangeID, impact domain.ChangeImpactID) error {
 	impacts, err := g.ListChangeImpacts(ctx, change)
 	if err != nil {
 		return err
 	}
 	for _, cn := range impacts {
-		if cn.ID != impact {
-			continue
-		}
-		if cn.Review == domain.ReviewProposed {
-			if cn, err = g.ImpactNodeReviewOn(ctx, change, domain.MainFlow, "", impact, domain.ReviewAccepted, "tester", "ok"); err != nil {
-				return err
-			}
-		}
-		if cn.Post == nil {
-			return nil
-		}
-		n, err := g.Node(ctx, *cn.Post)
-		if err != nil || !n.CheckedOut {
+		if cn.ID == impact && cn.Review == domain.ReviewProposed {
+			_, err = g.ImpactNodeReviewOn(ctx, change, domain.MainFlow, "", impact, domain.ReviewAccepted, "tester", "ok")
 			return err
 		}
-		_, err = g.ImpactNodeCheckin(ctx, change, impact, domain.MainFlow, "")
-		return err
 	}
 	return nil
 }

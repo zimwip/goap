@@ -119,7 +119,7 @@ type Node struct {
 	// relaunch of a step marks stale (ADR 0025).
 	Execution string `json:"execution,omitempty"`
 	// CheckedOut marks the working version of a change (ADR 0076): written by ImpactNodeCreate or ImpactNodeCheckout, edited in
-	// place until its check-in; every other version is immutable.
+	// place until an accepted review freezes it (ADR 0077); every other version is immutable.
 	CheckedOut bool `json:"checkedOut,omitempty"`
 	// Origins are the nodes the node derives from (ADR 0077, "Merge and split"): set on the first version of the
 	// successor of a merge or a split, pure lineage across nodes, never structural (Parents are the versions of one

@@ -20,10 +20,10 @@ import (
 //   - every baseline is the result of a change (ADR 0056); what precedes the first change of a namespace is the empty
 //     state, the empty baseline id, which nothing stores;
 //   - a version is immutable once written: only a working version (ADR 0076: checked out by ImpactNodeCreate or
-//     ImpactNodeCheckout, until its check-in) or a version written in the same transaction gets its properties set, its
+//     ImpactNodeCheckout, until an accepted review freezes it, ADR 0077) or a version written in the same transaction gets its properties set, its
 //     owner moved or its outgoing links added, edited or removed, and
-//     only a working version is checked in or dropped (a checkout cancelled; a creation cancelled before its first
-//     check-in removes the node, the one deletion of the graph).
+//     only a working version is frozen or dropped (a checkout cancelled; a creation cancelled before it is accepted
+//     removes the node, the one deletion of the graph).
 //
 // What names a change, a unit or a project is checked when the transaction ends, before it commits (as a deferred
 // foreign key): the bootstrap writes the root unit and the root project, each referencing the other and itself, in
@@ -68,7 +68,7 @@ func (t *guardTx) editable(ctx context.Context, ref domain.NodeRef, what string)
 		return err
 	}
 	if !n.CheckedOut {
-		return fmt.Errorf("%s: version %s %s is checked in, check the node out first (ADR 0076): %w", what, n.Key, ref, ErrConflict)
+		return fmt.Errorf("%s: version %s %s is frozen, check the node out first (ADR 0076, 0077): %w", what, n.Key, ref, ErrConflict)
 	}
 	return nil
 }
@@ -78,6 +78,13 @@ func (t *guardTx) SetNodeProps(ctx context.Context, ref domain.NodeRef, props ma
 		return err
 	}
 	return t.Tx.SetNodeProps(ctx, ref, props)
+}
+
+func (t *guardTx) SetNodeState(ctx context.Context, ref domain.NodeRef, state string) error {
+	if err := t.editable(ctx, ref, "state"); err != nil {
+		return err
+	}
+	return t.Tx.SetNodeState(ctx, ref, state)
 }
 
 func (t *guardTx) SetNodeOwner(ctx context.Context, ref domain.NodeRef, owner domain.NodeID) error {

@@ -183,14 +183,14 @@ function fromEvent(e: ImpactEvent, keys: Map<string, string>, parents: Map<strin
     case 'checkedOut':
       summary = `working version ${v(e.post)}`;
       break;
-    case 'transitioned':
-      summary = `version ${v(e.post)}`;
+    case 'transitioned': {
+      // a transition taken in place on the working version carries the state patch and writes no version (ADR 0077)
+      const st = (e.patch as { state?: { from?: string; to?: string } } | undefined)?.state;
+      summary = st ? `${v(e.post)} moved from ${st.from || '?'} to ${st.to || '?'}` : `version ${v(e.post)}`;
       break;
+    }
     case 'updated':
       summary = `${v(e.post)} edited: ${Object.keys(e.patch ?? {}).join(', ')}`;
-      break;
-    case 'checkedIn':
-      summary = `${v(e.post)} checked in`;
       break;
     case 'reviewed':
     case 'discarded':

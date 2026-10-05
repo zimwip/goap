@@ -305,3 +305,37 @@ func TestEnsureUserJoinsWaitingUnit(t *testing.T) {
 		t.Fatalf("dave joined %s, want %s", got, access.DefaultOrg)
 	}
 }
+
+// A new user is created and activated in one change: the activation is a transition in place of its working version
+// (ADR 0077), so the User has one version, active, and its log reads created, transitioned, reviewed, landed.
+func TestEnsureUserIsOneVersion(t *testing.T) {
+	ctx := context.Background()
+	g := typedGraph(t)
+	if err := g.Bootstrap(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := graphsvc.EnsureUser(ctx, g, "dora"); err != nil {
+		t.Fatal(err)
+	}
+	n, err := g.NodeByKey(ctx, access.NamespaceOrganisation, access.UserKey("dora"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	vs, err := g.Versions(ctx, n.ID)
+	if err != nil || len(vs) != 1 || vs[0].Version != 1 || vs[0].State != "active" || vs[0].CheckedOut {
+		t.Fatalf("one frozen version, active: %+v %v", vs, err)
+	}
+	evs, err := g.ChangeEvents(ctx, n.ChangeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ops []domain.ImpactOp
+	for _, e := range evs {
+		if e.Impact == n.ChangeImpact {
+			ops = append(ops, e.Op)
+		}
+	}
+	if len(ops) < 4 || ops[0] != domain.ImpactCreated || ops[1] != domain.ImpactTransitioned || ops[2] != domain.ImpactReviewed || ops[3] != domain.ImpactLanded {
+		t.Fatalf("log of the user: %v", ops)
+	}
+}

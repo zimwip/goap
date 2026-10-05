@@ -143,7 +143,6 @@ func Run(ctx *dsl.Ctx) error {
 	r := ctx.ImpactNodeCreate("TestCase", "TST-1", "cover")
 	ctx.WriteNode(r, map[string]any{"links": []any{map[string]any{"type": "verifies", "to": "REQ-1"}}})
 	ctx.ImpactNodeReview(r, true, "ok")
-	ctx.ImpactNodeCheckin(r)
 	ctx.ImpactNodeTransition(r, "approved")
 	ctx.ImpactNodeCancel("REQ-1")
 	return nil
@@ -152,9 +151,9 @@ func Run(ctx *dsl.Ctx) error {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(res.Nodes) != 7 || res.Nodes[0].Op != "write" || res.Nodes[0].Props["title"] != "x" ||
+	if len(res.Nodes) != 6 || res.Nodes[0].Op != "write" || res.Nodes[0].Props["title"] != "x" ||
 		res.Nodes[2].Links[0].To != "REQ-1" || res.Nodes[3].Comment != "ok" || !res.Nodes[3].Accept ||
-		res.Nodes[4].Op != "checkin" || res.Nodes[5].Op != "transition" || res.Nodes[5].State != "approved" || res.Nodes[6].Op != "cancel" {
+		res.Nodes[4].Op != "transition" || res.Nodes[4].State != "approved" || res.Nodes[5].Op != "cancel" {
 		t.Fatalf("unexpected operations %+v", res.Nodes)
 	}
 }

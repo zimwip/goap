@@ -3,7 +3,6 @@
 // (stores/pending.svelte.ts) that the user saves or discards. An API key is never stored, only its reference.
 import { graph, type CatalogModel, type LlmProvider, type ModelAlias, type Struct } from './api';
 import { headGraph } from './graphEdit';
-import { checkinAccepted } from './lifecycle';
 import { ns, isUserKey } from './stores/session.svelte';
 import { pending, stageRetire, stageUpsert, stagedOfType } from './stores/pending.svelte';
 
@@ -168,13 +167,12 @@ export async function listAliasProposals(): Promise<AliasProposal[]> {
 
 /** Accepts a proposed alias pointing to `target` and applies the change that proposed it. */
 export async function acceptAliasProposal(p: AliasProposal, target: string): Promise<void> {
-  // the target is set on the working version of the proposal (checked out again when it was checked in, ADR 0076)
+  // the target is set on the working version of the proposal (ADR 0076, 0077)
   const imp = (await graph.getBlackboard(p.changeId, '')).change?.nodes?.find((n) => n.id === p.impactId);
   const work = imp?.post ? (await graph.getNode(imp.post)).view?.node : undefined;
   if (!work?.checkedOut) await graph.impactNodeCheckout(p.changeId, { changeImpactId: p.impactId }, `Accept the alias ${p.alias}`);
   await graph.impactNodeUpdate(p.changeId, p.impactId, { props: { alias: p.alias, target } });
   await graph.impactNodeReview(p.changeId, p.impactId, true, `Accepted with target ${target}`);
-  await checkinAccepted(p.changeId);
   await graph.applyChange(p.changeId, '');
 }
 

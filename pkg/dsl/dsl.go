@@ -79,7 +79,7 @@ type ChangeImpact struct {
 // applies them in order after the script ends.
 type NodeOp struct {
 	// Op is declare (ImpactNode: the impact of an existing node; ImpactNodeCreate: held until the node is created by its first operation), write (WriteNode: the working version, checked out on the first write,
-	// edited in place), review (ImpactNodeReview), checkin (ImpactNodeCheckin), transition (ImpactNodeTransition), cancel
+	// edited in place), review (ImpactNodeReview: an acceptance freezes the working version), transition (ImpactNodeTransition), cancel
 	// (ImpactNodeCancel), remove (WithdrawImpact) (ADR 0076), merge (ImpactNodeMerge) or split (ImpactNodeSplit, ADR 0077).
 	Op string `json:"op"`
 	// Ref names a declared change impact ("#nN") for the next operations of the script.
@@ -410,25 +410,20 @@ func (c *Ctx) ImpactNodeReviewWithReserve(node, derogation, comment string) {
 	c.nodeOps = append(c.nodeOps, NodeOp{Op: "review", Node: node, Accept: true, Reserve: derogation, Comment: comment, ProducedBy: c.job.Action})
 }
 
-// ImpactNodeCheckin freezes the working version of a change impact: its accepted review authorizes it (ADR 0076).
-func (c *Ctx) ImpactNodeCheckin(node string) {
-	c.nodeOps = append(c.nodeOps, NodeOp{Op: "checkin", Node: node, ProducedBy: c.job.Action})
-}
-
-// ImpactNodeTransition moves the node of a change impact to a lifecycle state: a version of its own, from a checked-in
-// version, authorized and guarded when it is taken (ADR 0076).
+// ImpactNodeTransition moves the node of a change impact to a lifecycle state: in place on its working version, else a
+// version of its own from a frozen one; authorized and guarded when it is taken (ADR 0076, 0077).
 func (c *Ctx) ImpactNodeTransition(node, state string) {
 	c.nodeOps = append(c.nodeOps, NodeOp{Op: "transition", Node: node, State: state, ProducedBy: c.job.Action})
 }
 
-// ImpactNodeCancel drops the working version of a change impact; a creation cancelled before its first check-in removes
+// ImpactNodeCancel drops the working version of a change impact; a creation cancelled before it is accepted removes
 // the node (ADR 0076).
 func (c *Ctx) ImpactNodeCancel(node string) {
 	c.nodeOps = append(c.nodeOps, NodeOp{Op: "cancel", Node: node, ProducedBy: c.job.Action})
 }
 
-// WithdrawImpact takes a change impact out of the change: its working version is dropped (a creation never checked in
-// leaves no node); refused once a version of it is checked in (ADR 0076).
+// WithdrawImpact takes a change impact out of the change: its working version is dropped (a creation never accepted
+// leaves no node); refused once its accepted review froze a version of it (ADR 0076, 0077).
 func (c *Ctx) WithdrawImpact(node string) {
 	c.nodeOps = append(c.nodeOps, NodeOp{Op: "remove", Node: node, ProducedBy: c.job.Action})
 }
