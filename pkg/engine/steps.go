@@ -52,7 +52,7 @@ func RunStep(ctx context.Context, ac ActionContext) (ActionResult, error) {
 	if ac.Blackboard.Change.Intent != "" {
 		intent += "\n\n(change: " + ac.Blackboard.Change.Intent + ")"
 	}
-	res, err := h.e.runChildStep(authz.With(ctx, h.e.actor(ac.Process)), h, ac.Action.Name+"#step", methodologyName, agent, goal, intent, false, sc)
+	res, err := h.e.runChildStep(h.e.as(ctx, ac.Process), h, ac.Action.Name+"#step", methodologyName, agent, goal, intent, sc)
 	if errors.Is(err, dsl.ErrSuspended) {
 		return ActionResult{Suspended: true, Child: h.waitingOn, Method: method, Output: fmt.Sprintf("step %s: %s/%s at work", step, methodologyName, agent)}, nil
 	}
@@ -203,7 +203,7 @@ func (s *StepContext) section() string {
 // accountable role), in the unit holding the change (ADR 0035 §2). A step that assigns no such role leaves the
 // decision to the process's own permissions (true).
 func (e *Engine) stepAllowed(ctx context.Context, p *Process, who authz.Principal, sc *StepContext, act string) (bool, error) {
-	if e.Authz == nil || sc == nil || sc.Roles == nil {
+	if sc == nil || sc.Roles == nil {
 		return true, nil
 	}
 	role := sc.Roles.Responsible
@@ -213,8 +213,7 @@ func (e *Engine) stepAllowed(ctx context.Context, p *Process, who authz.Principa
 	if role == "" {
 		return true, nil
 	}
-	return e.Authz.Authorize(ctx, authz.Request{Subject: who, Action: act, Resource: authz.Resource{Type: "step", ID: p.ID, Name: sc.Path,
-		Org: e.orgOf(p), ProjectID: e.projectOf(p), Owner: p.Initiator.Subject, Role: sc.Roles.Responsible, Accountable: sc.Roles.Accountable}})
+	return e.scope().MayStep(ctx, e.ref(p), who, StepRef{Path: sc.Path, Responsible: sc.Roles.Responsible, Accountable: sc.Roles.Accountable}, act)
 }
 
 // briefSection is the compact brief of the change an LLM action works on (ADR 0036 §2): the most information in the

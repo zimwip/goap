@@ -119,7 +119,7 @@ func sdlcSetup(t *testing.T) (*engine.Engine, *graph.Graph, domain.BaselineID) {
 		},
 		Intent: intent.Resolver{Ranker: intent.Lexical{}},
 		Store:  engine.NewMemoryStore(),
-		Authz:  authorizer,
+		Scope:  engine.AuthzScope{Authz: authorizer},
 		Types:  func() def.TypeSet { return cat },
 	}
 	return e, g, head.ID

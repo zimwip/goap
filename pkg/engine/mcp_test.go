@@ -125,7 +125,7 @@ func mcpEngine(t *testing.T, hub ToolPort, client llm.Client) (*Engine, domain.B
 	if client != nil {
 		e.Executors[methodology.KindLLM] = LLMExecutor{Client: client}
 	}
-	e.Tools = hub
+	e.Scope = AuthzScope{Authz: e.Scope.(AuthzScope).Authz, Hub: hub}
 	return e, base
 }
 
@@ -181,7 +181,7 @@ func TestToolActionOnlyWhereTheOrganizationBindsTheMCP(t *testing.T) {
 	}
 
 	// without any hub nothing is bound
-	e.Tools = nil
+	e.Scope = AuthzScope{Authz: e.Scope.(AuthzScope).Authz}
 	p = runDocs(t, e, base, "acme")
 	if p.Status != StatusWaiting || p.Steps[0].Action != "write_doc" {
 		t.Fatalf("no hub: %s steps=%+v", p.Status, p.Steps)

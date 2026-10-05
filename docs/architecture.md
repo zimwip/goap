@@ -403,8 +403,10 @@ another the same person holds different roles, and so may do different things. T
 human tasks (`step:perform`, checked on submit), the accountable role may approve its gates (`step:approve`), never on
 its own change; an action its initiator holds none of the roles of waits for someone who does (`action:run` approval;
 a human action is submitted by one of them), and an agent is started only by someone holding one of its roles. The
-engine acts as its initiator on the process's project (`Engine.actor`), so tool calls and model use resolve the same
-roles. Nodes carry no project (a node is shared by the changes of several projects): object access is the work of
+engine acts as its initiator on the process's project (`ProcessRef.Actor`), so tool calls and model use resolve the same
+roles. The engine reaches who and where through one port, `engine.Scope` ([ADR 0063](adr/0063-engine-scope-port.md)):
+`ProcessRef` (process id, initiator, organisation, project) in, plain answers out (`As`, `Tools`, `CallTool`,
+`Allowed`, `MayRun`, `MayStep`); `AuthzScope` implements it with `authz.Authorizer` and the MCP hub. Nodes carry no project (a node is shared by the changes of several projects): object access is the work of
 processes, changes and tools of a project, not of a node's own project.
 
 - There is no IAM service: who may do what is **graph data** ([ADR 0020](adr/0020-access-control.md)). A rule is a

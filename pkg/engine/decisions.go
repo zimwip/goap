@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/dsl"
 	"github.com/zimwip/goap/pkg/graph"
@@ -170,7 +169,7 @@ func Investigate(ctx context.Context, ac ActionContext) (ActionResult, error) {
 				continue
 			}
 			intent := fmt.Sprintf("%s\n\n(to decide: %s)", q.Text, d.Question)
-			res, err := h.e.runInvestigation(authz.With(ctx, h.e.actor(ac.Process)), h, ac.Action.Name+"#"+q.ID, methodologyName, agent, intent)
+			res, err := h.e.runInvestigation(h.e.as(ctx, ac.Process), h, ac.Action.Name+"#"+q.ID, methodologyName, agent, intent)
 			if errors.Is(err, dsl.ErrSuspended) {
 				return ActionResult{Suspended: true, Child: h.waitingOn, Output: fmt.Sprintf("investigating %q", q.Text)}, nil
 			}
@@ -199,5 +198,5 @@ func (e *Engine) runInvestigation(ctx context.Context, h *Host, key, methodology
 	if _, started := parent.Children[key]; !started && methodologyName == "" && agent != "" {
 		methodologyName = parent.Methodology // an agent is named in a methodology
 	}
-	return e.runChildIn(ctx, h, key, methodologyName, agent, intent, methodologyName == "")
+	return e.runChildStep(ctx, h, key, methodologyName, agent, "", intent, nil)
 }

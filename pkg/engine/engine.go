@@ -36,13 +36,11 @@ type Engine struct {
 	Store         Store
 	Events        Publisher
 	Planner       goap.Planner
-	// Authz decides action permissions (nil: every permission is granted).
-	Authz authz.Authorizer
+	// Scope is who and where: the organisation and project a process works in, what its principals may do there
+	// and the MCPs it binds (ADR 0063). Unset: an AuthzScope granting everything and binding no MCP.
+	Scope Scope
 	// LLM serves DSL model calls (the model gateway).
 	LLM llm.Client
-	// Tools serves tool calls and decides which actions can be scheduled (the MCP hub).
-	// Without it no action needing an MCP is available.
-	Tools ToolPort
 	// Sandboxes isolates script actions (one sandbox per process run).
 	Sandboxes Sandboxes
 	// Tracer instruments processes and actions (nil: no tracing).
@@ -576,7 +574,7 @@ func (e *Engine) Run(ctx context.Context, id string) (*Process, error) {
 	// a run scheduled in the background acts for the principal who started the process: what it writes is
 	// recorded under that name (ADR 0029)
 	if authz.From(ctx).Anonymous() {
-		ctx = authz.With(ctx, e.actor(p))
+		ctx = e.as(ctx, p)
 	}
 	ctx, end := e.tracer().StartProcess(ctx, p)
 	defer func() { end(p) }()
@@ -586,11 +584,7 @@ func (e *Engine) Run(ctx context.Context, id string) (*Process, error) {
 	// journal an attach record before it ever reaches here); an eager bind always has
 	// one by now (bindChange runs inside Start, before Run's first call), so this is
 	// the common case, kept at its original position, before the schedule record.
-	if !p.Started && p.ChangeID != "" {
-		e.journal(ctx, p, domain.ExecutionRecord{Kind: domain.ExecProcessStarted, StartedAt: p.CreatedAt,
-			Data: map[string]any{"intent": firstUserTurn(p), "trigger": p.Trigger, "title": p.Title}})
-		p.Started = true
-	}
+	e.journalStarted(ctx, p)
 	if q := p.Queued; q != nil && p.Status == StatusRunning {
 		// why this run happens: what made the process runnable, by whom, and how long it waited
 		data := map[string]any{"reason": q.Reason}
@@ -612,11 +606,7 @@ func (e *Engine) Run(ctx context.Context, id string) (*Process, error) {
 		}
 		// fallback for a deferred process that only attaches mid-loop, after the
 		// check above already ran once with ChangeID still empty.
-		if !p.Started && p.ChangeID != "" {
-			e.journal(ctx, p, domain.ExecutionRecord{Kind: domain.ExecProcessStarted, StartedAt: p.CreatedAt,
-				Data: map[string]any{"intent": firstUserTurn(p), "trigger": p.Trigger, "title": p.Title}})
-			p.Started = true
-		}
+		e.journalStarted(ctx, p)
 		if err := e.cycle(ctx, p, m); err != nil {
 			e.fail(p, err)
 		}
@@ -625,6 +615,16 @@ func (e *Engine) Run(ctx context.Context, id string) (*Process, error) {
 		}
 	}
 	return p, nil
+}
+
+// journalStarted writes process.started the first time a process has a change to journal to.
+func (e *Engine) journalStarted(ctx context.Context, p *Process) {
+	if p.Started || p.ChangeID == "" {
+		return
+	}
+	e.journal(ctx, p, domain.ExecutionRecord{Kind: domain.ExecProcessStarted, StartedAt: p.CreatedAt,
+		Data: map[string]any{"intent": firstUserTurn(p), "trigger": p.Trigger, "title": p.Title}})
+	p.Started = true
 }
 
 func eventOf(p *Process) string {
@@ -640,146 +640,6 @@ func (e *Engine) fail(p *Process, err error) {
 	p.Status = StatusFailed
 	p.Error = err.Error()
 	e.log().Error("process failed", "process", p.ID, "err", err)
-}
-
-// cycle runs one observe / plan / act iteration.
-func (e *Engine) cycle(ctx context.Context, p *Process, m *methodology.Compiled) error {
-	// observe
-	bb, err := e.observe(ctx, p, m)
-	if err != nil {
-		return err
-	}
-	goal, ok := m.Goal(p.Goal)
-	if !ok {
-		return fmt.Errorf("unknown goal %q", p.Goal)
-	}
-	// the blackboard must be consistent before any action is asked, and before the goal is declared reached
-	if blocked, err := e.checkBoard(ctx, p, bb); err != nil {
-		return err
-	} else if blocked {
-		return nil
-	}
-	if p.World.Satisfies(goal.Pre) {
-		p.Plan = nil
-		if p.Flow != "" && p.Status == StatusRunning {
-			// the relaunched flow reached the goal: a human confirms before it replaces the previous run
-			p.Status = StatusWaiting
-			desc := "The relaunched flow reached the goal. Adopt it to replace the outputs of the previous run, or discard it."
-			// what the flow wrote is on its graph branch, to be reviewed against the change branch before deciding
-			p.Pending = &HumanTask{Kind: TaskFlow, Action: "adopt_flow", Step: len(p.Steps), Description: desc}
-			e.journal(ctx, p, domain.ExecutionRecord{Kind: domain.ExecTick, Step: len(p.Steps), Before: maps.Clone(p.World),
-				Data: map[string]any{"goalSatisfied": true, "flow": p.Flow, "awaitingDecision": true}})
-			return nil
-		}
-		p.Status = StatusCompleted
-		e.journal(ctx, p, domain.ExecutionRecord{Kind: domain.ExecTick, Step: len(p.Steps), Before: maps.Clone(p.World),
-			Data: map[string]any{"goalSatisfied": true}})
-		return nil
-	}
-	// plan with the agent's admissible actions and planner
-	ag, ok := m.Agent(p.Agent)
-	if !ok {
-		return fmt.Errorf("unknown agent %q", p.Agent)
-	}
-	// an action is available only where the organization binds the MCPs it uses; the
-	// hub is asked only when the methodology has such actions
-	var bound map[string]bool
-	if m.UsesMCPs() {
-		if bound, err = e.boundMCPs(ctx, p); err != nil {
-			return err
-		}
-	}
-	var actions []goap.Action
-	for _, a := range m.AgentActions(ag) {
-		if !p.Disabled[a.Name] && e.schedulable(m, a.Name, bound) {
-			actions = append(actions, a)
-		}
-	}
-	tickStart := e.clock()
-	plan, planCalls, err := e.plan(ctx, m, ag, p.World, actions, goal.PlanningGoal(), m.Utilities(bb))
-	if errors.Is(err, goap.ErrNoPlan) {
-		p.Plan = nil
-		if awaited := e.awaited(p.World, m.AgentActions(ag), actions, goal.PlanningGoal()); len(awaited) > 0 {
-			// what is missing is established outside the process: it waits for it, and is tried again when the change moves
-			p.Status = StatusWaiting
-			p.Pending = &HumanTask{Kind: TaskCondition, Step: len(p.Steps), Conditions: awaited,
-				Description: "Waiting for " + strings.Join(awaited, ", ") + ": conditions this agent's actions do not establish"}
-			e.journal(ctx, p, tickRecordWithCalls(domain.ExecutionRecord{Kind: domain.ExecTick, Step: len(p.Steps), Before: maps.Clone(p.World),
-				StartedAt: tickStart, EndedAt: e.clock(), Data: map[string]any{"awaiting": slices.Clone(awaited)}}, planCalls))
-			return nil
-		}
-		p.Status = StatusStuck
-		p.Error = fmt.Sprintf("no plan reaches goal %s from the current state", goal.Name)
-		// a person can always unblock it: what would, if they declare it established
-		p.Pending = &HumanTask{Kind: TaskUnblock, Step: len(p.Steps), Conditions: e.unblocking(p.World, actions, goal.PlanningGoal()),
-			Description: "Stuck: " + p.Error + ". Declare conditions established, retry the actions it gave up on, or abandon it."}
-		e.journal(ctx, p, tickRecordWithCalls(domain.ExecutionRecord{Kind: domain.ExecTick, Step: len(p.Steps), Before: maps.Clone(p.World), Error: p.Error,
-			StartedAt: tickStart, EndedAt: e.clock()}, planCalls))
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	prev := p.Plan
-	p.Plan = make([]string, len(plan.Actions))
-	for i, a := range plan.Actions {
-		p.Plan[i] = a.Name
-	}
-	tick := tickRecordWithCalls(domain.ExecutionRecord{Kind: domain.ExecTick, Step: len(p.Steps), Before: maps.Clone(p.World), Plan: slices.Clone(p.Plan),
-		BoardBefore: len(bb.Change.Items), BoardAfter: len(bb.Change.Items), Action: p.Plan[0], StartedAt: tickStart, EndedAt: e.clock(),
-		Data: map[string]any{"replanned": replanned(prev, p.Plan), "candidates": len(actions)}}, planCalls)
-	if len(p.Unknown) > 0 {
-		tick.Data["unknown"] = maps.Clone(p.Unknown)
-	}
-	e.journal(ctx, p, tick)
-	// act
-	action, _ := m.Action(plan.Actions[0].Name)
-	step := Step{Index: len(p.Steps), Action: action.Name, Plan: p.Plan, Before: maps.Clone(p.World), StartedAt: e.clock(),
-		Reads: bb.Change.ReferencedNodes(), BoardBefore: len(bb.Change.Items), LastItem: lastItem(bb.Change)}
-	for _, c := range planCalls {
-		step.LLMCalls = append(step.LLMCalls, c)
-		step.Usage.LLMCalls++
-		step.Usage.InputTokens += c.InputTokens
-		step.Usage.OutputTokens += c.OutputTokens
-	}
-	// the permission is the one of the implementation that will run (a
-	// specialization may require more, e.g. a production deployment)
-	permission := action.Permission
-	if impl, spec, err := e.specialize(ctx, p, m, action, bb); err == nil && spec != "" {
-		permission = impl.Permission
-		step.Specialization = spec
-	}
-	// the roles allowed to run the action (ADR 0043): a human action waits for a person holding one (Submit),
-	// any other waits for one to approve it when the initiator holds none
-	if roles := e.runRoles(m, p, action); len(roles) > 0 && action.Kind != methodology.KindHuman {
-		ok, err := e.mayRun(ctx, p, p.Initiator, "action", action.Name, roles)
-		if err != nil {
-			return err
-		}
-		if !ok {
-			p.Steps = append(p.Steps, step)
-			p.Status = StatusWaiting
-			p.Pending = &HumanTask{Kind: TaskApproval, Permission: PermissionRunAction, Roles: roles, Action: action.Name,
-				Description: action.Description, Instructions: action.Instructions, Step: step.Index, Context: stepContext(m, p, action)}
-			return nil
-		}
-	}
-	if permission != "" {
-		ok, err := e.allowed(ctx, p, p.Initiator, permission)
-		if err != nil {
-			return err
-		}
-		if !ok {
-			// the initiator may not run this action: wait for an authorized approver
-			p.Steps = append(p.Steps, step)
-			p.Status = StatusWaiting
-			p.Pending = &HumanTask{Kind: TaskApproval, Permission: permission, Action: action.Name,
-				Description: action.Description, Instructions: action.Instructions, Step: step.Index, Context: stepContext(m, p, action)}
-			return nil
-		}
-	}
-	p.Steps = append(p.Steps, step)
-	return e.execute(ctx, p, m, bb, action, len(p.Steps)-1)
 }
 
 // execute runs an action for the step at index i, records its outcome and
@@ -802,30 +662,15 @@ func (e *Engine) execute(ctx context.Context, p *Process, m *methodology.Compile
 	return err
 }
 
-// orgOf is the organisation holding the change of a process (an OrgUnit key).
-func (e *Engine) orgOf(p *Process) string { return domain.OrgOf(p.Org) }
-
-func (e *Engine) projectOf(p *Process) string { return domain.ProjectOf(p.Project) }
-
-// actor is who a process acts as: its initiator, on the project of the process (ADR 0043: what the initiator may
-// do there depends on the roles they hold on that project), whatever project their token had active.
-func (e *Engine) actor(p *Process) authz.Principal {
-	a := p.Initiator
-	a.Project = e.projectOf(p)
-	return a
-}
-
 // boundMCPs returns the MCPs the organization of the process binds for actions and the tools they may
 // call ("<mcp>/<tool>", once its restrictions and the scope of its MCP are applied, ADR 0028). Without a
 // hub nothing is bound.
 func (e *Engine) boundMCPs(ctx context.Context, p *Process) (map[string]bool, error) {
 	bound := map[string]bool{}
-	if e.Tools == nil {
-		return bound, nil
-	}
-	tools, names, err := e.Tools.Tools(authz.With(ctx, e.actor(p)), e.orgOf(p))
+	ref := e.ref(p)
+	tools, names, err := e.scope().Tools(ctx, ref)
 	if err != nil {
-		return nil, fmt.Errorf("MCPs of organization %s: %w", e.orgOf(p), err)
+		return nil, fmt.Errorf("MCPs of organization %s: %w", ref.Org, err)
 	}
 	// an MCP of scope agent is not the business of an action (ADR 0028): an action declaring it, or a tool
 	// action on it, is never scheduled; the agent level reaches it through agents[].mcps
@@ -1019,27 +864,14 @@ func (e *Engine) forgetChildren(p *Process, action string) {
 
 // runChild runs (or resumes) a sub-agent for a host call, in the methodology of the parent.
 func (e *Engine) runChild(ctx context.Context, h *Host, key, agentName, intentText string) (dsl.AgentResult, error) {
-	return e.runChildIn(ctx, h, key, h.process.Methodology, agentName, intentText, false)
+	return e.runChildStep(ctx, h, key, h.process.Methodology, agentName, "", intentText, nil)
 }
 
-// runChildIn runs (or resumes) a sub-agent for a host call in a methodology, or, with anyMethodology, in the one
-// identification picks among every published methodology.
-func (e *Engine) runChildIn(ctx context.Context, h *Host, key, methodologyName, agentName, intentText string, anyMethodology bool) (dsl.AgentResult, error) {
-	return e.runChildGoal(ctx, h, key, methodologyName, agentName, "", intentText, anyMethodology)
-}
-
-// runChildGoal is runChildIn with the goal of the sub-agent fixed (no identification), as a step of a process runs
-// its agent or nested process (ADR 0034).
-func (e *Engine) runChildGoal(ctx context.Context, h *Host, key, methodologyName, agentName, goal, intentText string, anyMethodology bool) (dsl.AgentResult, error) {
-	return e.runChildStep(ctx, h, key, methodologyName, agentName, goal, intentText, anyMethodology, nil)
-}
-
-// runChildStep is runChildGoal for a sub-agent carrying out a step of a process: it gets the step's context.
-func (e *Engine) runChildStep(ctx context.Context, h *Host, key, methodologyName, agentName, goal, intentText string, anyMethodology bool, step *StepContext) (dsl.AgentResult, error) {
+// runChildStep runs (or resumes) a sub-agent on the change of h.process, in a methodology (empty: identification
+// picks among every published one) with the goal fixed (empty: identification picks it), as a step of a process
+// runs its agent or nested process (ADR 0034): a step carries its context (ADR 0050).
+func (e *Engine) runChildStep(ctx context.Context, h *Host, key, methodologyName, agentName, goal, intentText string, step *StepContext) (dsl.AgentResult, error) {
 	parent := h.process
-	if anyMethodology {
-		methodologyName = ""
-	}
 	var child *Process
 	if id, ok := parent.Children[key]; ok {
 		c, err := e.Store.Get(ctx, id)
@@ -1102,21 +934,9 @@ func (e *Engine) resumeParent(parentID, childID string) {
 	}
 }
 
+// allowed reports whether who holds a permission "<type>:<action>" on the process.
 func (e *Engine) allowed(ctx context.Context, p *Process, who authz.Principal, permission string) (bool, error) {
-	if e.Authz == nil {
-		return true, nil
-	}
-	typ, act, err := authz.ParsePermission(permission)
-	if err != nil {
-		return false, err
-	}
-	res := authz.Resource{Type: typ, Org: p.Initiator.Org, Owner: p.Initiator.Subject, Name: p.Methodology, ProjectID: e.projectOf(p)}
-	if typ == "change" {
-		res.ID = string(p.ChangeID)
-	} else {
-		res.ID = p.ID
-	}
-	return e.Authz.Authorize(ctx, authz.Request{Subject: who, Action: act, Resource: res})
+	return e.scope().Allowed(ctx, e.ref(p), who, permission)
 }
 
 // PermissionRunAction is the permission of an approval an action waits for when its initiator holds none of the
@@ -1138,11 +958,7 @@ func (e *Engine) runRoles(m *methodology.Compiled, p *Process, a methodology.Act
 // mayRun reports whether who holds, on the project of the process, one of the roles allowed to run an agent or
 // an action (resource agent or action, act run).
 func (e *Engine) mayRun(ctx context.Context, p *Process, who authz.Principal, typ, name string, roles []string) (bool, error) {
-	if e.Authz == nil {
-		return true, nil
-	}
-	return e.Authz.Authorize(ctx, authz.Request{Subject: who, Action: "run", Resource: authz.Resource{Type: typ, ID: p.ID, Name: name,
-		Org: e.orgOf(p), ProjectID: e.projectOf(p), Owner: p.Initiator.Subject, Roles: roles}})
+	return e.scope().MayRun(ctx, e.ref(p), who, typ, name, roles)
 }
 
 // checkAgentRoles refuses to start an agent its initiator may not run: it declares roles and they hold none of
@@ -1160,7 +976,7 @@ func (e *Engine) checkAgentRoles(ctx context.Context, p *Process) error {
 		return err
 	} else if !ok {
 		return fmt.Errorf("%q holds none of the roles %s on project %s to run %s: %w", p.Initiator.Subject, strings.Join(ag.Roles, ", "),
-			e.projectOf(p), ag.Name, authz.ErrForbidden)
+			e.ref(p).Project, ag.Name, authz.ErrForbidden)
 	}
 	return nil
 }
