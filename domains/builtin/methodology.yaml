@@ -77,8 +77,8 @@ nodeTypes:
       - {name: removed, label: Removed, description: "The element was removed from the definition (kept for the history)", type: boolean, section: Definition, order: 91}
   # Activity (architecture plan "Activity concept, Activity Runs, Change scoping"): the common shape of
   # Process/Step/Method/MethodStep. Takes input, names its goals, produces output; breaks down into
-  # sub-activities (sub_activity link) that feed it. A Change scopes to one Activity node (ActivityRef);
-  # an Activity Run (pkg/domain.ExecutionRecord) is one execution instance of one, against one Change.
+  # sub-activities (sub_activity link) that feed it. A Change scopes to one Activity node (Change.Data["activityRef"], ADR 0066);
+  # an Activity Run (pkg/journal.Record) is one execution instance of one, against one Change.
   - name: Activity
     description: "Common shape of Process/Step/Method/MethodStep: input, goals and output conditions, composed from sub-activities"
     editor: activity

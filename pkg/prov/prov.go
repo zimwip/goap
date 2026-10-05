@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/journal"
 )
 
 // Vocab is the namespace of the GOAP terms of the export; instances are named under urn:goap:.
@@ -48,8 +49,8 @@ func Export(c domain.Change, entries []domain.LogEntry) (Document, error) {
 	for _, e := range entries {
 		var err error
 		switch e.Stream() {
-		case domain.LogJournal:
-			var r domain.ExecutionRecord
+		case journal.StreamJournal:
+			var r journal.Record
 			if err = json.Unmarshal(e.Payload, &r); err == nil {
 				b.execution(c, e, r)
 			}
@@ -58,8 +59,8 @@ func Export(c domain.Change, entries []domain.LogEntry) (Document, error) {
 			if err = json.Unmarshal(e.Payload, &it); err == nil {
 				b.fact(c, e, it)
 			}
-		case domain.LogModel:
-			var ex domain.ModelExchange
+		case journal.StreamModel:
+			var ex journal.ModelExchange
 			if err = json.Unmarshal(e.Payload, &ex); err == nil {
 				b.exchange(c, e, ex)
 			}
@@ -204,7 +205,9 @@ func (b *builder) change(c domain.Change) {
 	set(n, "goap:status", string(c.Status))
 	set(n, "goap:project", c.ProjectID)
 	set(n, "goap:goal", c.Goal)
-	set(n, "goap:activity", c.ActivityRef)
+	if len(c.Data) > 0 {
+		n["goap:data"] = c.Data
+	}
 	set(n, "goap:branch", c.Branch)
 	setTime(n, "prov:startedAtTime", c.CreatedAt)
 	if c.ParentID != "" {
@@ -231,7 +234,7 @@ func (b *builder) change(c domain.Change) {
 }
 
 // execution is a journal record: an action run (or a scheduling or planning record) of the change.
-func (b *builder) execution(c domain.Change, e domain.LogEntry, r domain.ExecutionRecord) {
+func (b *builder) execution(c domain.Change, e domain.LogEntry, r journal.Record) {
 	n := b.node(runIRI(r.ID), "prov:Activity", "goap:Execution")
 	entry(n, e)
 	label := r.Kind
@@ -307,7 +310,7 @@ func (b *builder) execution(c domain.Change, e domain.LogEntry, r domain.Executi
 }
 
 // exchange is the request and the answer of an LLM call: an entity the action run generated, with the texts.
-func (b *builder) exchange(c domain.Change, e domain.LogEntry, ex domain.ModelExchange) {
+func (b *builder) exchange(c domain.Change, e domain.LogEntry, ex journal.ModelExchange) {
 	n := b.node(iri("exchange", e.ID), "prov:Entity", "goap:ModelExchange")
 	entry(n, e)
 	set(n, "label", "model call "+e.Subject)

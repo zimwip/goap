@@ -47,7 +47,7 @@ type DecisionPoint struct {
 // OptionsFromBlackboard builds the snapshot of the options given to scripts.
 func OptionsFromBlackboard(bb domain.Blackboard) []Option {
 	out := []Option{}
-	for _, o := range bb.Options {
+	for _, o := range domain.OptionsOf(bb) {
 		v := Option{ID: o.ID, Status: o.OptionStatus(), Active: o.Active, Evaluation: o.Evaluation}
 		if o.Option != nil {
 			v.Name, v.Hypothesis = o.Option.Name, o.Option.Hypothesis
@@ -60,7 +60,7 @@ func OptionsFromBlackboard(bb domain.Blackboard) []Option {
 // DecisionPointsFromBlackboard builds the snapshot of the decision points given to scripts.
 func DecisionPointsFromBlackboard(bb domain.Blackboard) []DecisionPoint {
 	out := []DecisionPoint{}
-	for _, d := range bb.DecisionPoints {
+	for _, d := range domain.DecisionPointsOf(bb) {
 		v := DecisionPoint{ID: d.ID, Question: d.Question, Options: append([]string{}, d.Options...), Criteria: append([]string{}, d.Criteria...),
 			Decider: d.Decider, Status: d.Status, Rounds: d.Rounds, MaxRounds: d.MaxRounds, Option: d.Option, Questions: []Question{}}
 		for _, q := range d.Questions {

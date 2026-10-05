@@ -10,6 +10,7 @@ import (
 
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/journal"
 )
 
 // issuesKey identifies a set of blackboard issues: a human who chose to ignore
@@ -53,7 +54,7 @@ func (e *Engine) checkBoard(ctx context.Context, p *Process, bb domain.Blackboar
 	}
 	p.Status, p.Plan = StatusWaiting, nil
 	p.Pending = &HumanTask{Kind: TaskBoard, Action: "validate_board", Step: len(p.Steps), Description: desc, Issues: errs, Proposal: prop}
-	e.journal(ctx, p, domain.ExecutionRecord{Kind: domain.ExecTick, Step: len(p.Steps),
+	e.journal(ctx, p, journal.Record{Kind: journal.KindTick, Step: len(p.Steps),
 		Data: map[string]any{"boardInvalid": len(errs), "issues": errs, "proposal": prop}})
 	return true, nil
 }
@@ -156,7 +157,7 @@ func (e *Engine) ResolveBoard(ctx context.Context, id string, relaunch bool, com
 		p.Dismissed[issuesKey(pend.Issues)] = true
 		p.Pending, p.Status = nil, StatusRunning
 		e.queue(ctx, p, "board-ignored", map[string]any{"issues": len(pend.Issues)})
-		e.journal(ctx, p, domain.ExecutionRecord{Kind: domain.ExecApproval, Step: pend.Step, Action: "validate_board", Actor: by,
+		e.journal(ctx, p, journal.Record{Kind: journal.KindApproval, Step: pend.Step, Action: "validate_board", Actor: by,
 			Data: map[string]any{"decision": "ignored", "comment": comment, "issues": len(pend.Issues)}})
 		return p, nil, e.save(ctx, p, "step")
 	}
@@ -175,7 +176,7 @@ func (e *Engine) ResolveBoard(ctx context.Context, id string, relaunch bool, com
 	}
 	p.Pending = &HumanTask{Kind: TaskRelaunched, Action: "validate_board", Step: pend.Step, Issues: pend.Issues, FlowID: np.Flow,
 		Description: fmt.Sprintf("Relaunched from step %d (%s) as process %s: waiting for the decision on flow %s.", prop.Step, prop.Action, np.ID, np.Flow)}
-	e.journal(ctx, p, domain.ExecutionRecord{Kind: domain.ExecApproval, Step: pend.Step, Action: "validate_board", Actor: by,
+	e.journal(ctx, p, journal.Record{Kind: journal.KindApproval, Step: pend.Step, Action: "validate_board", Actor: by,
 		Data: map[string]any{"decision": "relaunched", "comment": comment, "process": prop.Process, "fromStep": prop.Step, "flow": np.Flow}})
 	return p, np, e.save(ctx, p, "step")
 }

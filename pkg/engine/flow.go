@@ -13,6 +13,7 @@ import (
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/graph"
+	"github.com/zimwip/goap/pkg/journal"
 )
 
 // The blackboard of a change is an append-only log (domain/flow.go). Relaunching
@@ -102,7 +103,7 @@ func (e *Engine) relaunchedItems(ctx context.Context, old *Process, step int) ([
 			execs[s.Execution] = true
 		}
 	}
-	recs, err := e.Graph.Journal(ctx, domain.ExecutionFilter{ChangeID: old.ChangeID})
+	recs, err := journal.Read(ctx, e.Graph, journal.Filter{ChangeID: old.ChangeID})
 	if err != nil {
 		return nil, nil, err
 	}
@@ -117,7 +118,7 @@ func (e *Engine) relaunchedItems(ctx context.Context, old *Process, step int) ([
 		}
 	}
 	for _, r := range recs {
-		if r.ProcessID != old.ID && desc[r.ProcessID] && r.Kind == domain.ExecAction {
+		if r.ProcessID != old.ID && desc[r.ProcessID] && r.Kind == journal.KindAction {
 			execs[r.ID] = true
 		}
 	}
@@ -177,7 +178,7 @@ func (e *Engine) DecideFlow(ctx context.Context, id string, adopt bool, comment 
 	}
 	p.Pending = nil
 	e.resumeWaiting(ctx, p, !adopt)
-	e.journal(ctx, p, domain.ExecutionRecord{Kind: domain.ExecApproval, Step: len(p.Steps), Action: "flow", Actor: by,
+	e.journal(ctx, p, journal.Record{Kind: journal.KindApproval, Step: len(p.Steps), Action: "flow", Actor: by,
 		Data: map[string]any{"flow": p.Flow, "decision": decision, "comment": comment, "relaunchOf": p.RelaunchOf, "fromStep": p.FromStep}})
 	return p, e.save(ctx, p, eventOf(p))
 }

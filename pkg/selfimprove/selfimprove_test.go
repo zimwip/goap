@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/zimwip/goap/pkg/engine"
 	"github.com/zimwip/goap/pkg/intent"
+	"github.com/zimwip/goap/pkg/journal"
 	"github.com/zimwip/goap/pkg/llm"
 	"strings"
 	"testing"
@@ -242,8 +243,8 @@ func TestSelfObservationProposesAndDrafts(t *testing.T) {
 		t.Fatalf("draft must be valid: %v", is)
 	}
 	// the observer itself is journaled on its change
-	recs, _ := g.Journal(ctx, domain.ExecutionFilter{ChangeID: op.ChangeID})
-	if len(recs) == 0 || recs[len(recs)-1].Kind != domain.ExecProcessEnded {
+	recs, _ := journal.Read(ctx, g, journal.Filter{ChangeID: op.ChangeID})
+	if len(recs) == 0 || recs[len(recs)-1].Kind != journal.KindProcessEnded {
 		t.Fatalf("observer journal: %+v", recs)
 	}
 }

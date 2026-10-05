@@ -8,7 +8,7 @@ import (
 
 // The variables of the decision and risk concepts are computed when an expression reads them (ADR 0064).
 func TestActivationIsLazy(t *testing.T) {
-	bb := domain.Blackboard{DecisionPoints: []domain.DecisionPoint{{ID: "p", Status: domain.PointBlocked}}}
+	bb := domain.Blackboard{Facets: map[string]any{domain.FacetDecisionPoints: []domain.DecisionPoint{{ID: "p", Status: domain.PointBlocked}}}}
 	act := Activation(bb)
 	for _, name := range []string{"options", "decisionPoints", "questions", "risks", "actions"} {
 		if _, ok := act[name].(func() any); !ok {

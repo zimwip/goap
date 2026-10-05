@@ -112,7 +112,8 @@ func main() {
 	g.Types = func() graph.TypeCatalog { return types.Get() }
 	// a change scoped to an Activity is gated by its own goal condition at Apply, not the node-type lifecycle's
 	// Editable floor (architecture plan "Activity concept")
-	g.ActivityGoalsMet = reg.ActivityGoalsMet
+	g.LandingGate = reg.LandingGate
+	g.SubChangeValidator = reg.SubChangeValidator
 	// a change follows the lifecycle its methodology names, its gates read the conditions of the methodology (ADR 0058)
 	g.Lifecycles = reg
 	// the one event stream of the web (ADR 0053): every publication of the platform also feeds it

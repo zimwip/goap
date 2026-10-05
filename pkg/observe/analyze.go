@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/journal"
 )
 
 // Finding kinds.
@@ -161,7 +162,7 @@ func outputKey(it domain.ChangeItem) string {
 
 // Analyze computes the cost report of a run from its journal records, the
 // items and change impacts of the observed change and the spans of its trace (optional).
-func Analyze(recs []domain.ExecutionRecord, items map[domain.ItemID]domain.ChangeItem, nodes map[domain.ChangeImpactID]domain.ChangeImpact, spans []Span, th Thresholds) Report {
+func Analyze(recs []journal.Record, items map[domain.ItemID]domain.ChangeItem, nodes map[domain.ChangeImpactID]domain.ChangeImpact, spans []Span, th Thresholds) Report {
 	th = th.withDefaults()
 	var r Report
 	stats := map[string]*ActionStats{}
@@ -170,23 +171,23 @@ func Analyze(recs []domain.ExecutionRecord, items map[domain.ItemID]domain.Chang
 	var order []string
 	for _, rec := range recs {
 		procs[rec.ProcessID] = true
-		if r.Process == "" || rec.ParentProcessID == "" && rec.Kind == domain.ExecProcessStarted {
+		if r.Process == "" || rec.ParentProcessID == "" && rec.Kind == journal.KindProcessStarted {
 			r.Process, r.Change, r.Methodology, r.Version, r.Agent = rec.ProcessID, string(rec.ChangeID), rec.Methodology, rec.MethodologyVersion, rec.Agent
 		}
 		if r.TraceID == "" && rec.ParentProcessID == "" {
 			r.TraceID = rec.TraceID
 		}
 		switch rec.Kind {
-		case domain.ExecTick:
+		case journal.KindTick:
 			r.Ticks++
 			if rep, _ := rec.Data["replanned"].(bool); rep {
 				r.Replans++
 			}
-		case domain.ExecProcessEnded:
+		case journal.KindProcessEnded:
 			if rec.ParentProcessID == "" {
 				r.Status, r.DurationMs = rec.Status, rec.DurationMs
 			}
-		case domain.ExecAction:
+		case journal.KindAction:
 			key := rec.Agent + "/" + rec.Action
 			s, ok := stats[key]
 			if !ok {

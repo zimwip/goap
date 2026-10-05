@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/graph"
+	"github.com/zimwip/goap/pkg/journal"
 )
 
 // The default (eager) path is unchanged for every existing methodology: a
@@ -21,13 +21,13 @@ func TestEagerBindJournalsAttach(t *testing.T) {
 	if p.ChangeID == "" || p.Status != StatusRunning {
 		t.Fatalf("eager bind: process = %+v", p)
 	}
-	recs, err := g.Journal(ctx, domain.ExecutionFilter{ChangeID: p.ChangeID, ProcessIDs: []string{p.ID}})
+	recs, err := journal.Read(ctx, g, journal.Filter{ChangeID: p.ChangeID, ProcessIDs: []string{p.ID}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	var attaches []domain.ExecutionRecord
+	var attaches []journal.Record
 	for _, r := range recs {
-		if r.Kind == domain.ExecAttach {
+		if r.Kind == journal.KindAttach {
 			attaches = append(attaches, r)
 		}
 	}
@@ -85,13 +85,13 @@ func TestDeferredBindStartsUnbound(t *testing.T) {
 		t.Fatalf("AttachChange should have bound a change: %+v", p)
 	}
 
-	recs, err := e.Graph.Journal(ctx, domain.ExecutionFilter{ChangeID: p.ChangeID, ProcessIDs: []string{p.ID}})
+	recs, err := journal.Read(ctx, e.Graph, journal.Filter{ChangeID: p.ChangeID, ProcessIDs: []string{p.ID}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	var attaches []domain.ExecutionRecord
+	var attaches []journal.Record
 	for _, r := range recs {
-		if r.Kind == domain.ExecAttach {
+		if r.Kind == journal.KindAttach {
 			attaches = append(attaches, r)
 		}
 	}
@@ -132,11 +132,11 @@ func TestAttachChangeReusesExistingChange(t *testing.T) {
 	if p.ChangeID != existing.ID {
 		t.Fatalf("expected the process to be bound to the existing change %s, got %s", existing.ID, p.ChangeID)
 	}
-	recs, err := e.Graph.Journal(ctx, domain.ExecutionFilter{ChangeID: existing.ID, ProcessIDs: []string{p.ID}})
+	recs, err := journal.Read(ctx, e.Graph, journal.Filter{ChangeID: existing.ID, ProcessIDs: []string{p.ID}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(recs) != 1 || recs[0].Kind != domain.ExecAttach || recs[0].Data["reused"] != true {
+	if len(recs) != 1 || recs[0].Kind != journal.KindAttach || recs[0].Data["reused"] != true {
 		t.Fatalf("expected one reused attach record, got %+v", recs)
 	}
 }

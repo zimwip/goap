@@ -7,6 +7,7 @@ import (
 
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/journal"
 	"github.com/zimwip/goap/pkg/methodology"
 )
 
@@ -22,12 +23,12 @@ func TestJournalRecordsTicksAndActions(t *testing.T) {
 	if p, err = e.Run(ctx, p.ID); err != nil || p.Status != StatusCompleted {
 		t.Fatalf("run: %v %+v", err, p)
 	}
-	recs, err := g.Journal(ctx, domain.ExecutionFilter{ChangeID: p.ChangeID})
+	recs, err := journal.Read(ctx, g, journal.Filter{ChangeID: p.ChangeID})
 	if err != nil {
 		t.Fatal(err)
 	}
 	var kinds []string
-	byID := map[string]domain.ExecutionRecord{}
+	byID := map[string]journal.Record{}
 	for i, r := range recs {
 		kinds = append(kinds, r.Kind)
 		byID[r.ID] = r
@@ -56,11 +57,11 @@ func TestJournalRecordsTicksAndActions(t *testing.T) {
 	}
 	// the prompt of the call is an entry of the log of the change, linked to the action run; the record and the
 	// process keep the counts only
-	entries, _, err := g.ChangeLog(ctx, domain.LogFilter{Change: p.ChangeID, Types: []string{domain.LogModel + ".call"}, Execution: act.ID})
+	entries, _, err := g.ChangeLog(ctx, domain.LogFilter{Change: p.ChangeID, Types: []string{journal.StreamModel + ".call"}, Execution: act.ID})
 	if err != nil || len(entries) != 1 || entries[0].Subject != "0" || entries[0].Process != p.ID {
 		t.Fatalf("model entries: %+v %v", entries, err)
 	}
-	var ex domain.ModelExchange
+	var ex journal.ModelExchange
 	if err := json.Unmarshal(entries[0].Payload, &ex); err != nil || ex.System == "" || len(ex.Messages) == 0 || ex.Response == "" {
 		t.Fatalf("exchange: %+v %v", ex, err)
 	}
@@ -109,13 +110,13 @@ func TestJournalStepsChainBlackboardStates(t *testing.T) {
 	if p, err = e.Run(ctx, p.ID); err != nil || p.Status != StatusCompleted {
 		t.Fatalf("run: %v %+v", err, p)
 	}
-	recs, err := g.Journal(ctx, domain.ExecutionFilter{ChangeID: p.ChangeID})
+	recs, err := journal.Read(ctx, g, journal.Filter{ChangeID: p.ChangeID})
 	if err != nil {
 		t.Fatal(err)
 	}
-	var acts []domain.ExecutionRecord
+	var acts []journal.Record
 	for _, r := range recs {
-		if r.Kind == domain.ExecAction {
+		if r.Kind == journal.KindAction {
 			acts = append(acts, r)
 		}
 	}
@@ -165,13 +166,13 @@ func TestJournalRecordsActivityRef(t *testing.T) {
 	if _, err := e.Submit(writer, p.ID, []ItemInput{{Kind: "artifact", Type: "note"}}); err != nil {
 		t.Fatal(err)
 	}
-	recs, err := g.Journal(ctx, domain.ExecutionFilter{ChangeID: p.ChangeID})
+	recs, err := journal.Read(ctx, g, journal.Filter{ChangeID: p.ChangeID})
 	if err != nil {
 		t.Fatal(err)
 	}
 	var found bool
 	for _, r := range recs {
-		if r.Kind == domain.ExecAction && r.Action == "delivery/prepare/note" {
+		if r.Kind == journal.KindAction && r.Action == "delivery/prepare/note" {
 			found = true
 			if r.ActivityRef != "delivery/prepare/note" {
 				t.Fatalf("activityRef = %q, want the step path", r.ActivityRef)

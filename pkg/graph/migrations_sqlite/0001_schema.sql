@@ -63,7 +63,6 @@ CREATE TABLE change (
     parent_id          text REFERENCES change(id),
     owner_org          text        NOT NULL CHECK (owner_org <> ''),
     project_id         text        NOT NULL CHECK (project_id <> ''),
-    activity_ref       text        NOT NULL DEFAULT '',
     lifecycle          text        NOT NULL DEFAULT '',
     state              text        NOT NULL DEFAULT ''
 );

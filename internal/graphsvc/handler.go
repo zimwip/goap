@@ -23,6 +23,7 @@ import (
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/engine"
 	"github.com/zimwip/goap/pkg/graph"
+	"github.com/zimwip/goap/pkg/journal"
 	"github.com/zimwip/goap/pkg/prov"
 	"google.golang.org/protobuf/types/known/structpb"
 )
@@ -207,13 +208,16 @@ func (h *Handler) ListChangeLog(ctx context.Context, r *connect.Request[graphv1.
 	// the prompts of the model calls (stream model) are read with their own permission, prompt:inspect on the project of
 	// the change: asking for them without it is refused, a log read without types leaves them out
 	hide := false
-	if f.MatchType(domain.LogModel + ".call") {
+	if f.MatchType(journal.StreamModel + ".call") {
+		if f.Change == "" { // a log read by processes only names its types
+			return nil, rpcerr.ToConnect(fmt.Errorf("a log read without a change names its types: %w", graph.ErrInvalid))
+		}
 		c, err := h.Graph.Change(ctx, f.Change)
 		if err != nil {
 			return nil, rpcerr.ToConnect(err)
 		}
 		if err := h.checkPrompts(ctx, c); err != nil {
-			if slices.ContainsFunc(f.Types, func(t string) bool { return strings.HasPrefix(t, domain.LogModel+".") }) {
+			if slices.ContainsFunc(f.Types, func(t string) bool { return strings.HasPrefix(t, journal.StreamModel+".") }) {
 				return nil, rpcerr.ToConnect(err)
 			}
 			hide = true
@@ -221,17 +225,16 @@ func (h *Handler) ListChangeLog(ctx context.Context, r *connect.Request[graphv1.
 	}
 	out := &graphv1.ListChangeLogResponse{Counts: map[string]int32{}}
 	for t, n := range counts {
-		if hide && strings.HasPrefix(t, domain.LogModel+".") {
+		if hide && strings.HasPrefix(t, journal.StreamModel+".") {
 			continue
 		}
 		out.Counts[t] = int32(n)
 	}
 	for _, e := range entries {
-		if hide && e.Stream() == domain.LogModel {
+		if hide && e.Stream() == journal.StreamModel {
 			continue
 		}
-		out.Entries = append(out.Entries, &graphv1.LogEntry{Seq: e.Seq, Id: e.ID, ChangeId: string(e.Change), Type: e.Type, Flow: e.Flow, ProcessId: e.Process,
-			Execution: e.Execution, Subject: e.Subject, By: e.By, At: pbconv.Time(e.At), Payload: string(e.Payload)})
+		out.Entries = append(out.Entries, pbconv.LogEntryToPB(e))
 	}
 	return connect.NewResponse(out), nil
 }
@@ -254,7 +257,7 @@ func (h *Handler) ExportChangeProvenance(ctx context.Context, r *connect.Request
 		return nil, rpcerr.ToConnect(err)
 	}
 	if h.checkPrompts(ctx, c) != nil { // the export carries the prompts only for whoever may read them
-		entries = slices.DeleteFunc(entries, func(e domain.LogEntry) bool { return e.Stream() == domain.LogModel })
+		entries = slices.DeleteFunc(entries, func(e domain.LogEntry) bool { return e.Stream() == journal.StreamModel })
 	}
 	doc, err := prov.Export(c, entries)
 	if err != nil {
@@ -543,11 +546,11 @@ func (h *Handler) GetBlackboard(ctx context.Context, r *connect.Request[graphv1.
 	if err != nil {
 		return nil, rpcerr.ToConnect(err)
 	}
-	out := &graphv1.GetBlackboardResponse{Change: pbconv.ChangeToPB(bb.Change), ActiveOption: bb.ActiveOption, At: pbconv.Time(bb.At)}
-	for _, f := range bb.Options {
+	out := &graphv1.GetBlackboardResponse{Change: pbconv.ChangeToPB(bb.Change), ActiveOption: domain.ActiveOptionOf(bb), At: pbconv.Time(bb.At)}
+	for _, f := range domain.OptionsOf(bb) {
 		out.Options = append(out.Options, pbconv.FlowToPB(f))
 	}
-	for _, d := range bb.DecisionPoints {
+	for _, d := range domain.DecisionPointsOf(bb) {
 		out.DecisionPoints = append(out.DecisionPoints, pbconv.DecisionPointToPB(d))
 	}
 	for _, v := range bb.Nodes {
@@ -752,13 +755,26 @@ func (h *Handler) ValidateBoard(ctx context.Context, r *connect.Request[graphv1.
 	return res(out, err)
 }
 
-func (h *Handler) RecordExecutions(ctx context.Context, r *connect.Request[graphv1.RecordExecutionsRequest]) (*connect.Response[graphv1.RecordExecutionsResponse], error) {
-	return res(&graphv1.RecordExecutionsResponse{}, h.Graph.Record(ctx, pbconv.ExecutionsFromPB(r.Msg.Records)))
+// AppendLog appends the entries of a use case (the execution journal, ADR 0011) to the logs of their changes; the
+// graph refuses the streams it writes itself.
+func (h *Handler) AppendLog(ctx context.Context, r *connect.Request[graphv1.AppendLogRequest]) (*connect.Response[graphv1.AppendLogResponse], error) {
+	return res(&graphv1.AppendLogResponse{}, h.Graph.AppendLog(ctx, pbconv.LogEntriesFromPB(r.Msg.Entries)))
 }
 
+// ListExecutions reads the execution journal of a change and / or of processes as records.
 func (h *Handler) ListExecutions(ctx context.Context, r *connect.Request[graphv1.ListExecutionsRequest]) (*connect.Response[graphv1.ListExecutionsResponse], error) {
-	rs, err := h.Graph.Journal(ctx, domain.ExecutionFilter{ChangeID: domain.ChangeID(r.Msg.ChangeId), ProcessIDs: r.Msg.ProcessIds})
-	return res(&graphv1.ListExecutionsResponse{Records: pbconv.ExecutionsToPB(rs)}, err)
+	rs, err := journal.Read(ctx, h.Graph, journal.Filter{ChangeID: domain.ChangeID(r.Msg.ChangeId), ProcessIDs: r.Msg.ProcessIds})
+	if errors.Is(err, journal.ErrInvalid) {
+		err = errors.Join(graph.ErrInvalid, err)
+	}
+	if err != nil {
+		return nil, rpcerr.ToConnect(err)
+	}
+	out := &graphv1.ListExecutionsResponse{}
+	for _, rec := range rs {
+		out.Records = append(out.Records, pbconv.ExecutionToPB(rec))
+	}
+	return connect.NewResponse(out), nil
 }
 
 // RepublishIndex publishes again the node and baseline events so that an index can be rebuilt (ADR 0026).

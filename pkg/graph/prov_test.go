@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/journal"
 	"github.com/zimwip/goap/pkg/prov"
 )
 
@@ -22,10 +23,10 @@ func testProvenanceExport(t *testing.T, repo Repo) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	run := domain.ExecutionRecord{ID: "e1", ChangeID: c.ID, ProcessID: "p1", Kind: domain.ExecAction, Methodology: "sdlc",
+	run := journal.Record{ID: "e1", ChangeID: c.ID, ProcessID: "p1", Kind: journal.KindAction, Methodology: "sdlc",
 		MethodologyVersion: "1.0.0", Agent: "analyst", Action: "update_requirement", StartedAt: g.now(),
-		ModelCalls: []domain.ModelCall{{Provider: "anthropic", Model: "m"}}, ToolCalls: []domain.ToolUse{{Name: "goap-graph/search"}}}
-	if err := g.Record(ctx, []domain.ExecutionRecord{run}); err != nil {
+		ModelCalls: []journal.ModelCall{{Provider: "anthropic", Model: "m"}}, ToolCalls: []journal.ToolUse{{Name: "goap-graph/search"}}}
+	if err := journal.Append(ctx, g, []journal.Record{run}); err != nil {
 		t.Fatal(err)
 	}
 	items, err := g.AddItems(ctx, c.ID, []domain.ChangeItem{{Kind: domain.KindArtifact, Type: "analysis", Status: domain.ItemProposed,

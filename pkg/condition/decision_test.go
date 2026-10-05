@@ -18,15 +18,15 @@ func TestOptionsAndDecisionsInConditions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	bb := domain.Blackboard{
-		Options: []domain.Flow{
+	bb := domain.Blackboard{Facets: map[string]any{
+		domain.FacetOptions: []domain.Flow{
 			{ID: "a", Status: domain.FlowOpen, Option: &domain.OptionSpec{Name: "stripe"}, Evaluated: true},
 			{ID: "b", Status: domain.FlowOpen, Option: &domain.OptionSpec{Name: "adyen"}, Evaluated: true, Active: true},
 		},
-		ActiveOption: "b",
-		DecisionPoints: []domain.DecisionPoint{{ID: "p", Question: "which?", Status: domain.PointBlocked, Rounds: 1, MaxRounds: 3,
+		domain.FacetActiveOption: "b",
+		domain.FacetDecisionPoints: []domain.DecisionPoint{{ID: "p", Question: "which?", Status: domain.PointBlocked, Rounds: 1, MaxRounds: 3,
 			Questions: []domain.Question{{ID: "p:1", Point: "p", Text: "What are the fees?", Status: domain.QuestionOpen}}}},
-	}
+	}}
 	st := s.Evaluate(bb)
 	if len(st.Errors) > 0 {
 		t.Fatal(st.Errors)

@@ -7,6 +7,7 @@ import (
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/intent"
+	"github.com/zimwip/goap/pkg/journal"
 	"github.com/zimwip/goap/pkg/methodology"
 )
 
@@ -79,10 +80,10 @@ func TestSpecializationChosenAtExecution(t *testing.T) {
 		if s := p.Steps[0]; s.Action != "build" || s.Specialization != want {
 			t.Fatalf("%s: step %+v", lang, s)
 		}
-		recs, _ := g.Journal(ctx, domain.ExecutionFilter{ProcessIDs: []string{p.ID}})
+		recs, _ := journal.Read(ctx, g, journal.Filter{ProcessIDs: []string{p.ID}})
 		var found bool
 		for _, r := range recs {
-			found = found || (r.Kind == domain.ExecAction && r.Specialization == want && r.ActionKind == "builtin")
+			found = found || (r.Kind == journal.KindAction && r.Specialization == want && r.ActionKind == "builtin")
 		}
 		if !found {
 			t.Fatalf("%s: specialization not journaled: %+v", lang, recs)

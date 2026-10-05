@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/journal"
 	"github.com/zimwip/goap/pkg/llm"
 )
 
@@ -104,11 +105,11 @@ func TestRelaunchStepAdoptFlow(t *testing.T) {
 		t.Fatalf("after the run: %s %+v", np.Status, np.Pending)
 	}
 	// the journal of the relaunched run is on the flow, and starts with why it was scheduled
-	recs, err := e.Graph.Journal(ctx, domain.ExecutionFilter{ChangeID: old.ChangeID, ProcessIDs: []string{np.ID}})
+	recs, err := journal.Read(ctx, e.Graph, journal.Filter{ChangeID: old.ChangeID, ProcessIDs: []string{np.ID}})
 	if err != nil || len(recs) < 2 {
 		t.Fatalf("journal of the relaunched run: %d records, %v", len(recs), err)
 	}
-	if sch := recs[1]; sch.Kind != domain.ExecSchedule || sch.Data["reason"] != "relaunched" || sch.Data["flow"] != np.Flow || sch.Data["process"] != old.ID {
+	if sch := recs[1]; sch.Kind != journal.KindSchedule || sch.Data["reason"] != "relaunched" || sch.Data["flow"] != np.Flow || sch.Data["process"] != old.ID {
 		t.Fatalf("schedule record of the relaunched run: %+v", recs[1])
 	}
 	for _, r := range recs {
@@ -185,10 +186,10 @@ func TestRelaunchStepAdoptFlow(t *testing.T) {
 		}
 	}
 	// the journal records the decision
-	recs, _ = e.Graph.Journal(ctx, domain.ExecutionFilter{ChangeID: old.ChangeID})
+	recs, _ = journal.Read(ctx, e.Graph, journal.Filter{ChangeID: old.ChangeID})
 	found := false
 	for _, r := range recs {
-		found = found || (r.Kind == domain.ExecApproval && r.Action == "flow" && r.Data["decision"] == "adopted")
+		found = found || (r.Kind == journal.KindApproval && r.Action == "flow" && r.Data["decision"] == "adopted")
 	}
 	if !found {
 		t.Fatal("flow decision not journaled")

@@ -7,8 +7,8 @@ import (
 	"testing"
 
 	"github.com/zimwip/goap/pkg/authz"
-	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/goap"
+	"github.com/zimwip/goap/pkg/journal"
 	"github.com/zimwip/goap/pkg/methodology"
 	"github.com/zimwip/goap/pkg/risk"
 )
@@ -74,8 +74,8 @@ func TestAPersonCanAlwaysUnblockAStuckRun(t *testing.T) {
 	if p, err = e.Unblock(ctx, p.ID, UnblockRequest{Decision: UnblockAbandon, Reason: "postponed to the next release"}); err != nil || p.Status != StatusFailed {
 		t.Fatalf("abandon: %v %s", err, p.Status)
 	}
-	recs, _ := g.Journal(ctx, domain.ExecutionFilter{ProcessIDs: []string{p.ID}})
-	if n := len(slices.DeleteFunc(recs, func(r domain.ExecutionRecord) bool { return r.Kind != domain.ExecUnblock })); n != 2 {
+	recs, _ := journal.Read(ctx, g, journal.Filter{ProcessIDs: []string{p.ID}})
+	if n := len(slices.DeleteFunc(recs, func(r journal.Record) bool { return r.Kind != journal.KindUnblock })); n != 2 {
 		t.Fatalf("each decision is journaled: %d", n)
 	}
 }

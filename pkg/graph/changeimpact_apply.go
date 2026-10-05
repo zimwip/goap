@@ -129,21 +129,24 @@ func (a *applier) checkChangeImpacts() error {
 			moves = append(moves, moved{node: n, t: *last})
 		}
 	}
-	if len(editable) > 0 && !a.activityGated() {
-		return invalidf("the change leaves nodes in an editable state, move them out of it before applying: %s", joinSorted(editable))
+	// LandingGate may itself need to read the graph, which this transaction would block (the stores are not
+	// reentrant): authorizeMoves asks it in its own rolled-back pass before this transaction opens, and passes the
+	// answer in as a.landing (same reason and pattern as authorized, just above). a.collect != nil means this call IS
+	// that earlier pass: nothing to check yet, just leave the blackboard (landingBlackboard) for the caller to
+	// evaluate outside it.
+	if a.collect != nil {
+		return nil
 	}
-	// ActivityGoalsMet may itself need to read the graph (e.g. the methodology namespace), which this transaction
-	// would block (the stores are not reentrant): authorizeMoves evaluates it in its own rolled-back pass before
-	// this transaction opens, and passes the result in as a.activityMet (same reason and pattern as authorized,
-	// just above). a.collect != nil means this call IS that earlier pass: nothing to check yet, just leave the
-	// blackboard for the caller (activityGated()/activityBlackboard() below) to build and evaluate outside it.
-	if a.activityGated() && a.collect == nil {
-		if a.activityMet == nil {
-			return fmt.Errorf("change %s: activity %s was not evaluated before this transaction: %w", a.change.ID, a.change.ActivityRef, ErrInvalid)
+	if a.g.LandingGate != nil && a.landing == nil {
+		return fmt.Errorf("change %s: the landing gate was not asked before this transaction: %w", a.change.ID, ErrInvalid)
+	}
+	switch {
+	case a.landing != nil && a.landing.decided:
+		if !a.landing.ok {
+			return invalidf("the change does not satisfy the goal of its landing gate")
 		}
-		if !*a.activityMet {
-			return invalidf("the change does not satisfy the goal of its activity %s", a.change.ActivityRef)
-		}
+	case len(editable) > 0:
+		return invalidf("the change leaves nodes in an editable state, move them out of it before applying: %s", joinSorted(editable))
 	}
 	for i, m := range moves {
 		children, err := a.checkTransition(m.node, m.t)
@@ -160,17 +163,10 @@ func (a *applier) checkChangeImpacts() error {
 	return nil
 }
 
-// activityGated reports whether landing this change is gated by its Activity's own goal condition
-// (Graph.ActivityGoalsMet) instead of the node-type lifecycle's Editable floor.
-func (a *applier) activityGated() bool {
-	return a.change.ActivityRef != "" && a.g.ActivityGoalsMet != nil
-}
-
-// activityBlackboard builds the blackboard ActivityGoalsMet evaluates the activity's own goal condition
-// against: the change with its impacts (for the changeImpacts condition variable), hydrated with the pre/post
-// node content this Apply already resolved (ADR 0024) - not a fresh read, since this change's own pending
-// writes are not yet visible outside this transaction.
-func (a *applier) activityBlackboard() domain.Blackboard {
+// landingBlackboard builds the blackboard LandingGate decides against: the change with its impacts (for the
+// changeImpacts condition variable), hydrated with the pre/post node content this Apply already resolved (ADR
+// 0024) - not a fresh read, since this change's own pending writes are not yet visible outside this transaction.
+func (a *applier) landingBlackboard() domain.Blackboard {
 	bb := domain.Blackboard{Change: a.change, Nodes: map[domain.NodeRef]domain.NodeView{}}
 	add := func(n *domain.Node) {
 		if n == nil {

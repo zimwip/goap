@@ -104,7 +104,7 @@ func (w lcWorld) accept(t *testing.T, c domain.Change) {
 }
 
 // A change scoped to an Activity (architecture plan "Activity concept") is gated by its own goal condition
-// (Graph.ActivityGoalsMet), not the node-type lifecycle's Editable floor: the activity's call on content/state
+// (Graph.LandingGate), not the node-type lifecycle's Editable floor: the activity's call on content/state
 // maturity replaces the blanket "not editable" check, rather than adding to it.
 func TestActivityGoalsGateReplacesEditableFloor(t *testing.T) {
 	forEachRepo(t, testActivityGoalsGateReplacesEditableFloor)
@@ -113,7 +113,7 @@ func TestActivityGoalsGateReplacesEditableFloor(t *testing.T) {
 func testActivityGoalsGateReplacesEditableFloor(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	w := newLifecycleWorld(t, repo)
-	c, err := w.g.CreateChange(ctx, NewChange{Title: "edit REQ-2", BaselineID: w.base.ID, ActivityRef: "deliver/draft-requirement"})
+	c, err := w.g.CreateChange(ctx, NewChange{Title: "edit REQ-2", BaselineID: w.base.ID, Data: map[string]any{"scope": "deliver/draft-requirement"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -125,7 +125,7 @@ func testActivityGoalsGateReplacesEditableFloor(t *testing.T, repo Repo) {
 	}
 	w.accept(t, c)
 
-	// no hook registered: the Editable floor still applies, exactly as for a change with no ActivityRef
+	// no hook registered: the Editable floor still applies, exactly as for a change the gate does not decide
 	if _, err := w.g.Apply(ctx, c.ID, ""); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "editable state") {
 		t.Fatalf("no hook: editable floor must still apply: %v", err)
 	}
@@ -133,9 +133,13 @@ func testActivityGoalsGateReplacesEditableFloor(t *testing.T, repo Repo) {
 	var gotRef string
 	var gotBB domain.Blackboard
 	met := false
-	w.g.ActivityGoalsMet = func(_ context.Context, activityRef string, bb domain.Blackboard) (bool, error) {
-		gotRef, gotBB = activityRef, bb
-		return met, nil
+	w.g.LandingGate = func(_ context.Context, c domain.Change, bb domain.Blackboard) (bool, bool, error) {
+		ref, _ := c.Data["scope"].(string)
+		if ref == "" {
+			return false, false, nil
+		}
+		gotRef, gotBB = ref, bb
+		return true, met, nil
 	}
 
 	// the hook says no: refused, by the activity's own message, not the editable one

@@ -45,7 +45,7 @@ func Activation(bb domain.Blackboard) map[string]any {
 		"merges":         orEmptyList(byKind[domain.KindMerge]),
 		"vars":           vars,
 		"options":        func() any { return opts() },
-		"activeOption":   bb.ActiveOption,
+		"activeOption":   domain.ActiveOptionOf(bb),
 		"decisionPoints": func() any { return dec().points },
 		"questions":      func() any { return dec().questions },
 		"risks":          func() any { return rsk() },
@@ -102,8 +102,8 @@ func actionItems(c *domain.Change) []any {
 
 // options are the options of the change (ADR 0032 §6).
 func (h hydrator) options() []any {
-	out := make([]any, 0, len(h.bb.Options))
-	for _, o := range h.bb.Options {
+	out := make([]any, 0, len(domain.OptionsOf(h.bb)))
+	for _, o := range domain.OptionsOf(h.bb) {
 		name, hyp := "", ""
 		if o.Option != nil {
 			name, hyp = o.Option.Name, o.Option.Hypothesis
@@ -117,7 +117,7 @@ func (h hydrator) options() []any {
 // decisions are the decision points of the change and all their questions (ADR 0009 §4).
 func decisions(bb domain.Blackboard) decisionView {
 	points, questions := []any{}, []any{}
-	for _, d := range bb.DecisionPoints {
+	for _, d := range domain.DecisionPointsOf(bb) {
 		qs := make([]any, 0, len(d.Questions))
 		for _, q := range d.Questions {
 			m := map[string]any{"id": q.ID, "point": q.Point, "text": q.Text, "status": q.Status, "answer": q.Answer, "answeredBy": q.AnsweredBy}

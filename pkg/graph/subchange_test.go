@@ -339,53 +339,47 @@ func testProjectSubChangeRules(t *testing.T, repo Repo) {
 	}
 }
 
-// A sub-change's Activity, when it names one, must be the parent's own or a descendant of it reached by
-// sub_activity links (architecture plan "Activity concept" cascade); unset is fine (no inheritance, since a
-// sub-change is usually scoped to a more specific sub-activity, not the parent's own). The branch it gets
-// defaults to Intent derive.
-func TestSubChangeActivityCascade(t *testing.T) { forEachRepo(t, testSubChangeActivityCascade) }
+// CreateChange asks Graph.SubChangeValidator about a sub-change, with its parent as stored and the change about to
+// be (the graph knows no use case: what the validator reads from Change.Data is its own business); the branch the
+// sub-change gets defaults to Intent derive.
+func TestSubChangeValidatorHook(t *testing.T) { forEachRepo(t, testSubChangeValidatorHook) }
 
-func testSubChangeActivityCascade(t *testing.T, repo Repo) {
+func testSubChangeValidatorHook(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	w := newOrgWorld(t, repo)
 	g := w.g
-	mk := func(key string) domain.Node {
-		n, err := g.CreateNode(ctx, NewNode{Namespace: NamespaceMethodology, Key: key, Type: "methodology@Process"})
-		if err != nil {
-			t.Fatal(err)
+	var gotParent, gotChild domain.Change
+	g.SubChangeValidator = func(_ context.Context, parent, child domain.Change) error {
+		gotParent, gotChild = parent, child
+		if child.Data["scope"] == "outside" {
+			return fmt.Errorf("scope is not part of its parent's: %w", ErrInvalid)
 		}
-		return n
+		return nil
 	}
-	act := mk("ACT-PARENT")
-	sub := mk("ACT-CHILD")
-	other := mk("ACT-OTHER")
-	c0 := testChange(t, g, NamespaceMethodology)
-	if _, err := g.Link(ctx, c0, LinkSubActivity, act.Ref(), sub.Ref(), nil); err != nil {
-		t.Fatal(err)
-	}
-
-	parent, err := g.CreateChange(ctx, NewChange{Title: "p", BaselineID: w.base.ID, OwnBranch: true, ActivityRef: "ACT-PARENT"})
+	parent, err := g.CreateChange(ctx, NewChange{Title: "p", BaselineID: w.base.ID, OwnBranch: true, Data: map[string]any{"scope": "parent"}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	// a descendant activity is accepted, and the sub-change's branch defaults to Intent derive
-	within, err := g.CreateChange(ctx, NewChange{Title: "within", ParentID: parent.ID, ActivityRef: "ACT-CHILD"})
+	within, err := g.CreateChange(ctx, NewChange{Title: "within", ParentID: parent.ID, Data: map[string]any{"scope": "child"}})
 	if err != nil {
-		t.Fatalf("activity within the parent's: %v", err)
+		t.Fatalf("accepted by the validator: %v", err)
 	}
-	if within.ActivityRef != "ACT-CHILD" {
-		t.Fatalf("activityRef = %q", within.ActivityRef)
+	if gotParent.ID != parent.ID || gotParent.Data["scope"] != "parent" || gotChild.Data["scope"] != "child" || gotChild.ParentID != parent.ID {
+		t.Fatalf("validator arguments: parent=%+v child=%+v", gotParent, gotChild)
+	}
+	if within.Data["scope"] != "child" {
+		t.Fatalf("data = %v", within.Data)
 	}
 	if b, err := g.Branch(ctx, within.Namespace, within.Branch); err != nil || b.Intent != domain.IntentDerive {
 		t.Fatalf("branch intent defaults to derive: %+v, %v", b, err)
 	}
-	// an unrelated activity is refused
-	if _, err := g.CreateChange(ctx, NewChange{Title: "outside", ParentID: parent.ID, ActivityRef: other.Key}); !errors.Is(err, ErrInvalid) {
-		t.Fatalf("activity outside the parent's: %v", err)
+	if _, err := g.CreateChange(ctx, NewChange{Title: "outside", ParentID: parent.ID, Data: map[string]any{"scope": "outside"}}); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("refused by the validator: %v", err)
 	}
-	// unset: not inherited, no error
-	if noAct, err := g.CreateChange(ctx, NewChange{Title: "unscoped", ParentID: parent.ID}); err != nil || noAct.ActivityRef != "" {
-		t.Fatalf("activity ref not inherited: %+v, %v", noAct, err)
+	// a change with no parent is not asked
+	gotChild = domain.Change{}
+	if _, err := g.CreateChange(ctx, NewChange{Title: "root", BaselineID: w.base.ID, Data: map[string]any{"scope": "outside"}}); err != nil || gotChild.Title != "" {
+		t.Fatalf("a change with no parent is not validated: %v, %+v", err, gotChild)
 	}
 }
 

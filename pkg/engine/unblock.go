@@ -10,8 +10,8 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/zimwip/goap/pkg/authz"
-	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/goap"
+	"github.com/zimwip/goap/pkg/journal"
 	"github.com/zimwip/goap/pkg/risk"
 )
 
@@ -82,16 +82,16 @@ func (e *Engine) Unblock(ctx context.Context, id string, req UnblockRequest) (*P
 			return nil, err
 		}
 		data["conditions"] = slices.Clone(req.Conditions)
-		e.journal(ctx, p, domain.ExecutionRecord{ID: rec, Kind: domain.ExecUnblock, Step: len(p.Steps), Actor: who.Subject, Data: data})
+		e.journal(ctx, p, journal.Record{ID: rec, Kind: journal.KindUnblock, Step: len(p.Steps), Actor: who.Subject, Data: data})
 	case UnblockRetry:
 		data["disabled"] = slices.Sorted(maps.Keys(p.Disabled))
 		p.Disabled = map[string]bool{}
-		e.journal(ctx, p, domain.ExecutionRecord{Kind: domain.ExecUnblock, Step: len(p.Steps), Actor: who.Subject, Data: data})
+		e.journal(ctx, p, journal.Record{Kind: journal.KindUnblock, Step: len(p.Steps), Actor: who.Subject, Data: data})
 	case UnblockAbandon:
 		if reason == "" {
 			return nil, fmt.Errorf("abandoning a run gives its reason: %w", ErrInvalidState)
 		}
-		e.journal(ctx, p, domain.ExecutionRecord{Kind: domain.ExecUnblock, Step: len(p.Steps), Actor: who.Subject, Data: data})
+		e.journal(ctx, p, journal.Record{Kind: journal.KindUnblock, Step: len(p.Steps), Actor: who.Subject, Data: data})
 		p.Pending, p.Plan = nil, nil
 		p.Status, p.Error = StatusFailed, fmt.Sprintf("abandoned by %s: %s", who.Subject, reason)
 		return p, e.save(ctx, p, string(StatusFailed))

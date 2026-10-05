@@ -29,12 +29,12 @@ func (g *Graph) Apply(ctx context.Context, id domain.ChangeID, baselineName stri
 	if err := g.checkFinalState(ctx, id); err != nil {
 		return result, err
 	}
-	authorized, activityMet, err := g.authorizeMoves(ctx, id)
+	authorized, landing, err := g.authorizeMoves(ctx, id)
 	if err != nil {
 		return result, err
 	}
 	err = g.repo.InTx(ctx, func(tx Tx) (err error) {
-		if result, err = g.commitTx(ctx, tx, id, baselineName, authorized, activityMet); err != nil {
+		if result, err = g.commitTx(ctx, tx, id, baselineName, authorized, landing); err != nil {
 			return err
 		}
 		c, err := tx.Change(ctx, id)
@@ -65,19 +65,19 @@ func (g *Graph) CommitChange(ctx context.Context, id domain.ChangeID, baselineNa
 	if err := g.checkFinalState(ctx, id); err != nil {
 		return result, err
 	}
-	authorized, activityMet, err := g.authorizeMoves(ctx, id)
+	authorized, landing, err := g.authorizeMoves(ctx, id)
 	if err != nil {
 		return result, err
 	}
 	err = g.repo.InTx(ctx, func(tx Tx) (err error) {
-		result, err = g.commitTx(ctx, tx, id, baselineName, authorized, activityMet)
+		result, err = g.commitTx(ctx, tx, id, baselineName, authorized, landing)
 		return err
 	})
 	return result, err
 }
 
 // commitTx validates a change and records its commit baseline on its own branch.
-func (g *Graph) commitTx(ctx context.Context, tx Tx, id domain.ChangeID, baselineName string, authorized map[string]bool, activityMet *bool) (domain.Baseline, error) {
+func (g *Graph) commitTx(ctx context.Context, tx Tx, id domain.ChangeID, baselineName string, authorized map[string]bool, landing *landingDecision) (domain.Baseline, error) {
 	c, err := tx.Change(ctx, id)
 	if err != nil {
 		return domain.Baseline{}, err
@@ -103,25 +103,28 @@ func (g *Graph) commitTx(ctx context.Context, tx Tx, id domain.ChangeID, baselin
 			return domain.Baseline{}, err
 		}
 	}
-	return g.commitOnBranch(ctx, tx, id, baselineName, authorized, activityMet)
+	return g.commitOnBranch(ctx, tx, id, baselineName, authorized, landing)
 }
 
 // errCollected rolls back the pass that only collects the transitions to authorize.
 var errCollected = errors.New("transitions collected")
 
-// authorizeMoves asks the authorizer about every lifecycle transition the change makes, and ActivityGoalsMet
-// about the change's own activity (if any), before the transaction that applies it: both may need to read the
-// graph themselves (the access graph; the methodology namespace), which a transaction held by the apply would
-// block (the stores are not reentrant). A pass that is rolled back collects what they need; the apply then
-// checks it makes good on what was authorized / evaluated.
-func (g *Graph) authorizeMoves(ctx context.Context, id domain.ChangeID) (authorized map[string]bool, activityMet *bool, err error) {
-	if g.Authorizer == nil && g.ActivityGoalsMet == nil {
+// landingDecision is what Graph.LandingGate answered about a change.
+type landingDecision struct{ decided, ok bool }
+
+// authorizeMoves asks the authorizer about every lifecycle transition the change makes, and LandingGate about the
+// change itself, before the transaction that applies it: both may need to read the graph themselves (the access
+// graph; whatever the gate consults), which a transaction held by the apply would block (the stores are not
+// reentrant). A pass that is rolled back collects what they need; the apply then checks it makes good on what was
+// authorized / decided.
+func (g *Graph) authorizeMoves(ctx context.Context, id domain.ChangeID) (authorized map[string]bool, landing *landingDecision, err error) {
+	if g.Authorizer == nil && g.LandingGate == nil {
 		return nil, nil, nil
 	}
 	var moves []pendingMove
-	var activityRef string
+	var change domain.Change
 	var bb domain.Blackboard
-	var haveActivity bool
+	var haveBB bool
 	// An error other than errCollected is met again by the apply in its own transaction, after the transitions
 	// collected before it: those are authorized all the same.
 	_ = g.repo.InTx(ctx, func(tx Tx) error {
@@ -136,8 +139,8 @@ func (g *Graph) authorizeMoves(ctx context.Context, id domain.ChangeID) (authori
 		if err := a.checkChangeImpacts(); err != nil {
 			return err
 		}
-		if a.activityGated() {
-			activityRef, bb, haveActivity = a.change.ActivityRef, a.activityBlackboard(), true
+		if g.LandingGate != nil {
+			change, bb, haveBB = a.change, a.landingBlackboard(), true
 		}
 		return errCollected
 	})
@@ -150,14 +153,14 @@ func (g *Graph) authorizeMoves(ctx context.Context, id domain.ChangeID) (authori
 		}
 		authorized[m.key()] = true
 	}
-	if haveActivity {
-		met, err := g.ActivityGoalsMet(ctx, activityRef, bb)
+	if haveBB {
+		decided, ok, err := g.LandingGate(ctx, change, bb)
 		if err != nil {
 			return nil, nil, err
 		}
-		activityMet = &met
+		landing = &landingDecision{decided: decided, ok: ok}
 	}
-	return authorized, activityMet, nil
+	return authorized, landing, nil
 }
 
 // pendingMove is a lifecycle transition a change makes, from the state of node.
@@ -204,13 +207,13 @@ func (g *Graph) newApplier(ctx context.Context, tx Tx, id domain.ChangeID) (*app
 
 // commitOnBranch validates a change on its own branch and records its commit baseline there; authorized are the
 // transitions authorizeMoves let through (nil: no authorizer).
-func (g *Graph) commitOnBranch(ctx context.Context, tx Tx, id domain.ChangeID, baselineName string, authorized map[string]bool, activityMet *bool) (domain.Baseline, error) {
+func (g *Graph) commitOnBranch(ctx context.Context, tx Tx, id domain.ChangeID, baselineName string, authorized map[string]bool, landing *landingDecision) (domain.Baseline, error) {
 	a, parentBaseline, err := g.newApplier(ctx, tx, id)
 	if err != nil {
 		return domain.Baseline{}, err
 	}
 	a.authorized = authorized
-	a.activityMet = activityMet
+	a.landing = landing
 	c := a.change
 	if err := a.prepareChangeImpacts(); err != nil {
 		return domain.Baseline{}, err
@@ -281,8 +284,8 @@ type applier struct {
 	// collect gathers the transitions to authorize (the pass of authorizeMoves); authorized are the ones let through
 	collect    *[]pendingMove
 	authorized map[string]bool
-	// activityMet is the result of ActivityGoalsMet, evaluated by authorizeMoves's rolled-back pass before this
-	// transaction (same reason as authorized: the hook may itself read the graph); nil in that earlier pass
-	// itself, where checkChangeImpacts only builds the blackboard for the caller to evaluate outside it.
-	activityMet *bool
+	// landing is the answer of LandingGate, asked by authorizeMoves's rolled-back pass before this transaction
+	// (same reason as authorized: the hook may itself read the graph); nil in that earlier pass itself, where
+	// checkChangeImpacts only leaves the blackboard for the caller to evaluate outside it.
+	landing *landingDecision
 }

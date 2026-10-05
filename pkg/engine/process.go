@@ -14,6 +14,7 @@ import (
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/goap"
 	"github.com/zimwip/goap/pkg/intent"
+	"github.com/zimwip/goap/pkg/journal"
 	"github.com/zimwip/goap/pkg/llm"
 )
 
@@ -199,14 +200,14 @@ type LLMCall struct {
 	Error        string `json:"error,omitempty"`
 	// Exchange is what was sent and answered. It travels from the call to the journal (which writes it to the log of the
 	// change, ADR 0030) and is not part of the process state.
-	Exchange *domain.ModelExchange `json:"-"`
+	Exchange *journal.ModelExchange `json:"-"`
 }
 
 // exchangeOf is the request and the answer of a call.
-func exchangeOf(req llm.Request, resp llm.Response) *domain.ModelExchange {
-	x := &domain.ModelExchange{System: req.System, Response: resp.Text}
+func exchangeOf(req llm.Request, resp llm.Response) *journal.ModelExchange {
+	x := &journal.ModelExchange{System: req.System, Response: resp.Text}
 	for _, m := range req.Messages {
-		x.Messages = append(x.Messages, domain.ModelMessage{Role: m.Role, Content: m.Content})
+		x.Messages = append(x.Messages, journal.ModelMessage{Role: m.Role, Content: m.Content})
 	}
 	return x
 }

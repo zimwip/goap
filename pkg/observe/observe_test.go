@@ -6,11 +6,12 @@ import (
 	"testing"
 
 	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/journal"
 	"github.com/zimwip/goap/pkg/methodology"
 )
 
-func rec(kind, action, actionKind string, mut func(*domain.ExecutionRecord)) domain.ExecutionRecord {
-	r := domain.ExecutionRecord{ID: action + kind, ProcessID: "p", Methodology: "m", MethodologyVersion: "1.0.0", Agent: "ag", Kind: kind, Action: action, ActionKind: actionKind}
+func rec(kind, action, actionKind string, mut func(*journal.Record)) journal.Record {
+	r := journal.Record{ID: action + kind, ProcessID: "p", Methodology: "m", MethodologyVersion: "1.0.0", Agent: "ag", Kind: kind, Action: action, ActionKind: actionKind}
 	if mut != nil {
 		mut(&r)
 	}
@@ -20,18 +21,18 @@ func rec(kind, action, actionKind string, mut func(*domain.ExecutionRecord)) dom
 func TestAnalyzeFindings(t *testing.T) {
 	no, yes := false, true
 	nodes := map[domain.ChangeImpactID]domain.ChangeImpact{"n1": {Intent: domain.IntentModified}, "n2": {Intent: domain.IntentModified}}
-	recs := []domain.ExecutionRecord{
-		rec(domain.ExecProcessStarted, "", "", nil),
-		rec(domain.ExecTick, "", "", func(r *domain.ExecutionRecord) { r.Data = map[string]any{"replanned": false} }),
-		rec(domain.ExecAction, "classify", "llm", func(r *domain.ExecutionRecord) {
-			r.ModelCalls = []domain.ModelCall{{InputTokens: 900, OutputTokens: 100}}
+	recs := []journal.Record{
+		rec(journal.KindProcessStarted, "", "", nil),
+		rec(journal.KindTick, "", "", func(r *journal.Record) { r.Data = map[string]any{"replanned": false} }),
+		rec(journal.KindAction, "classify", "llm", func(r *journal.Record) {
+			r.ModelCalls = []journal.ModelCall{{InputTokens: 900, OutputTokens: 100}}
 			r.InputTokens, r.OutputTokens, r.Nodes, r.EffectsMet = 900, 100, []domain.ChangeImpactID{"n1", "n2"}, &yes
 		}),
 	}
 	for i := 0; i < 3; i++ {
-		recs = append(recs, rec(domain.ExecAction, "check", "human", func(r *domain.ExecutionRecord) { r.EffectsMet = &no; r.DurationMs = 40_000 }))
+		recs = append(recs, rec(journal.KindAction, "check", "human", func(r *journal.Record) { r.EffectsMet = &no; r.DurationMs = 40_000 }))
 	}
-	recs = append(recs, rec(domain.ExecProcessEnded, "", "", func(r *domain.ExecutionRecord) { r.Status = "stuck" }))
+	recs = append(recs, rec(journal.KindProcessEnded, "", "", func(r *journal.Record) { r.Status = "stuck" }))
 	spans := []Span{{Name: "execute_tool crm/search", DurationMs: 12_000, Attributes: map[string]string{"gen_ai.tool.name": "crm/search"}}}
 	r := Analyze(recs, nil, nodes, spans, Thresholds{})
 	kinds := map[string]string{}

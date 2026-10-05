@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/zimwip/goap/pkg/domain"
 )
@@ -370,4 +371,28 @@ func (g *Graph) ChangeGraph(ctx context.Context, id domain.ChangeID, flow string
 		return err
 	})
 	return
+}
+
+// BlackboardFacet computes a facet of the blackboard of a change (domain.Blackboard.Facets) from the change as stored,
+// replayed at now.
+type BlackboardFacet func(c domain.Change, now time.Time) any
+
+// builtinFacets are the facets the graph itself gives, the options and the decision points being its own mechanisms
+// (ADR 0009, 0032): what a view of a flow does not carry.
+var builtinFacets = map[string]BlackboardFacet{
+	domain.FacetOptions:        func(c domain.Change, _ time.Time) any { return c.Options() },
+	domain.FacetActiveOption:   func(c domain.Change, _ time.Time) any { return c.ActiveOption() },
+	domain.FacetDecisionPoints: func(c domain.Change, now time.Time) any { return c.DecisionPointsAt(now) },
+}
+
+// facets are the facets of the blackboard of a change: the built-in ones, then Graph.Facets (which may replace them).
+func (g *Graph) facets(c domain.Change, now time.Time) map[string]any {
+	out := make(map[string]any, len(builtinFacets)+len(g.Facets))
+	for name, f := range builtinFacets {
+		out[name] = f(c, now)
+	}
+	for name, f := range g.Facets {
+		out[name] = f(c, now)
+	}
+	return out
 }
