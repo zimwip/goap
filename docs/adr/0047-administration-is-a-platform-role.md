@@ -35,23 +35,20 @@ by removing a node the way every other grant is, and didn't show up next to "rea
   which falls back to `authz.Principal.Org` when the subject has none — a service identity or a token naming
   only an org now gets its platform (and, through the existing project path, project) roles the same way a
   person with a `User` node does.
-- **`User.Admin` stays, read-only, for what was already written.** `UserFromProps` and `Enrich` still honor
-  `admin: true` (and, from before ADR 0043, `roles: [admin, ...]`) as a legacy way of being an administrator —
-  the same back-compat ADR 0043 already gave the pre-ADR-0043 shape. Nothing new writes it.
+- **`User.Admin` is removed** (it was first kept read-only for what was already written; the project is greenfield,
+  so no back-compat is kept): `UserFromProps` and `Enrich` no longer read `admin: true` or the pre-ADR-0043
+  `roles: [admin, ...]`, and `organisation@User` has no `admin` attribute. Administration is a platform Assignment.
 - **The first-admin bootstrap grants a platform Assignment, not the flag** (ADR 0040, `graphsvc.createUser`):
   the `User` node and its `assigns_org`-only Assignment (`access.PlatformAssignmentKey`, roles `["admin"]`) are
   committed together, the Assignment's link resolved by `ToKey` to the `User` node created in the same commit —
   there is no chicken-and-egg problem to solve (`createUser` already writes through an ordinary internal commit,
   not a privileged raw path, so creating a second node alongside the first costs nothing extra).
-- **Not done**: the web's User tab / Access screen still edit the legacy flag, not an Assignment; migrating it
-  to grant "admin" the same way `AssignmentsPane.svelte` grants "reader" is left for later.
+- The web's User tab shows "Administrator" from the user's own platform Assignment and edits no flag; "admin" is
+  granted in the Assignments pane the same way "reader" is.
 
 ## Consequences
 
 - Administration can now be granted to a unit, revoked by deleting a node (the Assignment) instead of flipping
   a property, and shown in the same place every other role is — at the cost of one more kind of node an
   administrator-granting change touches.
-- A graph that has never been touched since before this ADR keeps working unchanged: `User.Admin` is still
-  read, still makes someone an administrator, still reaches the floor (through `Enrich`).
-- `Snapshot.Enrich` now does strictly more work per call (a `PlatformRoles` scan in addition to the `User.Admin`
-  check) — bounded by the number of platform Assignments in a snapshot, not expected to matter.
+- `Snapshot.Enrich` now does a `PlatformRoles` scan per call — bounded by the number of platform Assignments in a snapshot, not expected to matter.

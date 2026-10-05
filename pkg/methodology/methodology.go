@@ -6,6 +6,7 @@ package methodology
 import (
 	"bytes"
 	"fmt"
+	"github.com/zimwip/goap/pkg/events"
 	"maps"
 	"regexp"
 	"slices"
@@ -123,7 +124,7 @@ const (
 )
 
 // TriggerEvents lists the events a trigger can react to.
-var TriggerEvents = []string{"change.created", "change.applied", "change.item_added", "change.signal", "process.completed", "process.failed", "process.stuck", "process.attached", "step.completed", "methodology.published"}
+var TriggerEvents = events.All
 
 // Trigger starts an agent automatically on an event or a schedule.
 type Trigger struct {
@@ -470,7 +471,6 @@ func Parse(data []byte) (*Methodology, error) {
 	if err := dec.Decode(&m); err != nil {
 		return nil, fmt.Errorf("parse methodology: %w", err)
 	}
-	m.MigrateLegacyMethods()
 	return &m, nil
 }
 
@@ -557,7 +557,6 @@ func (m *Methodology) CompileLenient() (*Compiled, Issues) { return m.compileWit
 func (m *Methodology) compile() (*Compiled, Issues) { return m.compileWith(false) }
 
 func (m *Methodology) compileWith(lenient bool) (*Compiled, Issues) {
-	m.MigrateLegacyMethods()
 	var issues Issues
 	add := func(path, format string, args ...any) {
 		issues = append(issues, Issue{Path: path, Message: fmt.Sprintf(format, args...)})

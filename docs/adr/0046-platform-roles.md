@@ -9,9 +9,9 @@ ADR 0043 made every non-administrator role a methodology's, held on a project: a
 user some of the roles its project's applicable methodologies declare. This left a gap: a project that names no
 methodology declares no role, so no Assignment can be created for it — the web's role picker is empty and
 `save()` refuses an Assignment with no roles. There was no way to grant someone a role that holds regardless of
-which methodologies a project applies, short of making them a full administrator (`User.Admin`).
+which methodologies a project applies, short of making them a full administrator.
 
-Administration itself already works this way informally: it is not a methodology role, it is a flag the floor
+Administration itself already works this way informally: it is not a methodology role, it is a role the floor
 policy checks everywhere. ADR 0043's own text calls a trigger's roles "platform roles" by analogy. What was
 missing was a second, lesser one — a reader, say — granted the same way administration is, without promoting
 administration itself into a general mechanism.
@@ -24,8 +24,8 @@ administration itself into a general mechanism.
   the same way it does for the built-in MCPs (ADR 0028) — unlike `methodology@Role`, there is no registry version
   for it, it ships with the platform. The node documents the role for the IDE; it is not consulted to decide what
   the role may do (that is `authz.DefaultPolicies`) or to validate an Assignment's roles (not checked
-  server-side, same gap as methodology roles, ADR 0043). Administration stays `access.RoleAdmin` / `User.Admin`,
-  not one of these.
+  server-side, same gap as methodology roles, ADR 0043). Administration is `access.RoleAdmin` (made a platform role by ADR 0047, which
+  removed the `User.Admin` flag).
 - **An Assignment naming no project grants one.** The `organisation@Assignment` node type is unchanged; its
   `assigns_project` link is simply optional. An Assignment with `assigns_org` and no `assigns_project` grants
   the platform role(s) in its `roles` to that org unit (or user) everywhere — independent of any project's

@@ -146,26 +146,3 @@ methods:
 		t.Fatalf("order %v, want %v", names, want)
 	}
 }
-
-// A method written before ADR 0050 names its agent and goal: the agent's actions, planner and the goal's conditions
-// become the method's own.
-func TestLegacyMethodNamingAnAgentIsMigrated(t *testing.T) {
-	c, issues := compileProcess(t, `
-methods:
-  - {name: by_worker, for: working, agent: worker}
-processes:
-  - name: flow
-    steps:
-      - {name: work, method: working}
-`)
-	if len(issues) > 0 {
-		t.Fatal(issues)
-	}
-	me, ok := c.MethodByName("by_worker")
-	if !ok || me.Agent != "" || me.Goal != "" || !slices.Equal(me.Actions, []string{"do_c"}) || !me.Done["c"] {
-		t.Fatalf("method: %+v, %v", me, ok)
-	}
-	if ag, ok := c.Agent("by_worker"); !ok || !slices.Contains(ag.Actions, "do_c") {
-		t.Fatalf("agent: %+v, %v", ag, ok)
-	}
-}

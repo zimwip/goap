@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"maps"
-	"slices"
 
 	"github.com/zimwip/goap/pkg/access"
 	"github.com/zimwip/goap/pkg/algo"
@@ -144,7 +143,7 @@ func SeedAdapterDef(ctx context.Context, g *graph.Graph, d mcp.AdapterDef) error
 // idempotent: once the floor policy exists nothing is touched, so that edited or deleted policies stay so.
 func SeedAccess(ctx context.Context, g *graph.Graph) (bool, error) {
 	if _, err := g.NodeByKey(ctx, mcp.NamespaceOrganisation, access.PolicyKey(authz.FloorPolicies[0])); err == nil {
-		return upgradeLegacyPolicies(ctx, g)
+		return false, nil
 	} else if !errors.Is(err, graph.ErrNotFound) {
 		return false, err
 	}
@@ -153,42 +152,6 @@ func SeedAccess(ctx context.Context, g *graph.Graph) (bool, error) {
 		items[i] = createNode(access.PolicyKey(p), access.NodeTypePolicy, access.PolicyProps(p))
 	}
 	return true, applyOn(ctx, g, mcp.NamespaceOrganisation, "Default policies", items)
-}
-
-// upgradeLegacyPolicies replaces the default policies of before ADR 0043 (users held roles of their own) with
-// the current ones, when the graph still holds them as they were seeded: each legacy rule left untouched is
-// retired, and the current defaults it lacks are created, in one change. A legacy rule an administrator edited
-// (another key) or deleted stays as it is, and so does every rule they added.
-func upgradeLegacyPolicies(ctx context.Context, g *graph.Graph) (bool, error) {
-	var edits []graph.NodeEdit
-	for _, p := range authz.LegacyDefaultPolicies {
-		if slices.Contains(authz.DefaultPolicies, p) {
-			continue
-		}
-		n, err := g.NodeByKey(ctx, mcp.NamespaceOrganisation, access.PolicyKey(p))
-		if errors.Is(err, graph.ErrNotFound) {
-			continue
-		}
-		if err != nil {
-			return false, err
-		}
-		if n.Deleted {
-			continue
-		}
-		ref := n.Ref()
-		edits = append(edits, graph.NodeEdit{Pre: &ref, Retire: true, Rationale: "Users hold roles on projects now (ADR 0043)"})
-	}
-	if len(edits) == 0 {
-		return false, nil
-	}
-	for _, p := range authz.DefaultPolicies {
-		if _, err := g.NodeByKey(ctx, mcp.NamespaceOrganisation, access.PolicyKey(p)); errors.Is(err, graph.ErrNotFound) {
-			edits = append(edits, createNode(access.PolicyKey(p), access.NodeTypePolicy, access.PolicyProps(p)))
-		} else if err != nil {
-			return false, err
-		}
-	}
-	return true, applyOn(ctx, g, mcp.NamespaceOrganisation, "Project-scoped default policies", edits)
 }
 
 // SeedUser creates the User node of a subject, member of a unit (NewUserUnit when u.Unit is empty:

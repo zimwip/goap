@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/zimwip/goap/pkg/events"
 	"slices"
 	"strings"
 	"time"
@@ -356,7 +357,7 @@ func (h *Handler) CreateChange(ctx context.Context, r *connect.Request[graphv1.C
 	c, err := h.Graph.CreateChange(ctx, graph.NewChange{ParentID: domain.ChangeID(r.Msg.ParentId), OwnerOrg: owner, OwnBranch: r.Msg.OwnBranch, Namespace: r.Msg.Namespace, Title: r.Msg.Title, Intent: r.Msg.Intent, Methodology: r.Msg.Methodology,
 		BaselineID: domain.BaselineID(r.Msg.BaselineId), Branch: r.Msg.Branch, Data: pbconv.Map(r.Msg.Data), ProjectID: projectID, Administrative: r.Msg.Administrative})
 	if err == nil {
-		h.publish(ctx, "goap.change."+string(c.ID)+".created", domain.ChangeEvent{Type: "change.created", Change: c})
+		h.publish(ctx, events.ChangeSubject(string(c.ID), events.ChangeCreated), domain.ChangeEvent{Type: events.ChangeCreated, Change: c})
 	}
 	return res(&graphv1.CreateChangeResponse{Change: pbconv.ChangeToPB(c)}, err)
 }
@@ -422,7 +423,7 @@ func (h *Handler) AddItems(ctx context.Context, r *connect.Request[graphv1.AddIt
 	if err == nil {
 		if c, cerr := h.Graph.Change(ctx, domain.ChangeID(r.Msg.ChangeId)); cerr == nil {
 			c.Items = nil
-			h.publish(ctx, "goap.change."+r.Msg.ChangeId+".item_added", domain.ChangeEvent{Type: "change.item_added", Change: c, Items: items})
+			h.publish(ctx, events.ChangeSubject(r.Msg.ChangeId, events.ChangeItemAdded), domain.ChangeEvent{Type: events.ChangeItemAdded, Change: c, Items: items})
 		}
 	}
 	return res(&graphv1.AddItemsResponse{Items: pbconv.ItemsToPB(items)}, err)
@@ -495,7 +496,7 @@ func (h *Handler) CommitEdits(ctx context.Context, r *connect.Request[graphv1.Co
 	if err == nil {
 		if c, cerr := h.Graph.Change(ctx, out.Change); cerr == nil {
 			c.Items, c.Nodes = nil, nil
-			h.publish(ctx, "goap.change."+string(out.Change)+".applied", domain.ChangeEvent{Type: "change.applied", Change: c, Baseline: &out.Baseline})
+			h.publish(ctx, events.ChangeSubject(string(out.Change), events.ChangeApplied), domain.ChangeEvent{Type: events.ChangeApplied, Change: c, Baseline: &out.Baseline})
 		}
 	}
 	return res(&graphv1.CommitEditsResponse{ChangeId: string(out.Change), Baseline: pbconv.BaselineToPB(out.Baseline)}, err)
@@ -564,7 +565,7 @@ func (h *Handler) ApplyChange(ctx context.Context, r *connect.Request[graphv1.Ap
 	if err == nil {
 		if c, cerr := h.Graph.Change(ctx, domain.ChangeID(r.Msg.ChangeId)); cerr == nil {
 			c.Items = nil
-			h.publish(ctx, "goap.change."+r.Msg.ChangeId+".applied", domain.ChangeEvent{Type: "change.applied", Change: c, Baseline: &b})
+			h.publish(ctx, events.ChangeSubject(r.Msg.ChangeId, events.ChangeApplied), domain.ChangeEvent{Type: events.ChangeApplied, Change: c, Baseline: &b})
 		}
 	}
 	return res(&graphv1.ApplyChangeResponse{Baseline: pbconv.BaselineToPB(b)}, err)
@@ -630,7 +631,7 @@ func (h *Handler) MergeBranch(ctx context.Context, r *connect.Request[graphv1.Me
 	if err == nil {
 		c := out.Change
 		c.Items = nil
-		h.publish(ctx, "goap.change."+string(c.ID)+".applied", domain.ChangeEvent{Type: "change.applied", Change: c, Baseline: &out.Baseline})
+		h.publish(ctx, events.ChangeSubject(string(c.ID), events.ChangeApplied), domain.ChangeEvent{Type: events.ChangeApplied, Change: c, Baseline: &out.Baseline})
 	}
 	return res(&graphv1.MergeBranchResponse{Change: pbconv.ChangeToPB(out.Change), Baseline: pbconv.BaselineToPB(out.Baseline), Plan: pbconv.MergePlanToPB(out.Plan)}, err)
 }
@@ -659,7 +660,7 @@ func (h *Handler) MergeChange(ctx context.Context, r *connect.Request[graphv1.Me
 	c, err := h.Graph.IntegrateChange(ctx, domain.ChangeID(r.Msg.ChangeId), resolutions)
 	if err == nil {
 		c.Items = nil
-		h.publish(ctx, "goap.change."+string(c.ID)+".applied", domain.ChangeEvent{Type: "change.applied", Change: c})
+		h.publish(ctx, events.ChangeSubject(string(c.ID), events.ChangeApplied), domain.ChangeEvent{Type: events.ChangeApplied, Change: c})
 	}
 	return res(&graphv1.MergeChangeResponse{Change: pbconv.ChangeToPB(c)}, err)
 }
@@ -681,7 +682,7 @@ func (h *Handler) SplitChange(ctx context.Context, r *connect.Request[graphv1.Sp
 	cs, err := h.Graph.SplitByOwner(ctx, domain.ChangeID(r.Msg.ChangeId))
 	out := &graphv1.SplitChangeResponse{}
 	for _, c := range cs {
-		h.publish(ctx, "goap.change."+string(c.ID)+".created", domain.ChangeEvent{Type: "change.created", Change: c})
+		h.publish(ctx, events.ChangeSubject(string(c.ID), events.ChangeCreated), domain.ChangeEvent{Type: events.ChangeCreated, Change: c})
 		out.Changes = append(out.Changes, pbconv.ChangeToPB(c))
 	}
 	return res(out, err)

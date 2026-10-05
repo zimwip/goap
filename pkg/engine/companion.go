@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"fmt"
+	"github.com/zimwip/goap/pkg/events"
 	"maps"
 	"slices"
 	"strings"
@@ -48,12 +49,12 @@ func (e *Engine) Accompany(ctx context.Context, ev TriggerEvent) {
 	}
 	// what someone else did may be what a process waits for
 	switch ev.Type {
-	case "step.completed", "process.completed", "change.item_added":
+	case events.StepCompleted, events.ProcessCompleted, events.ChangeItemAdded:
 		e.retryBlocked(ctx, changeID, from)
 	}
 	if companion {
 		// a companion's own events do not wake companions; when it completes, it takes the next event of its inbox
-		if ev.Type == "process.completed" {
+		if ev.Type == events.ProcessCompleted {
 			if err := e.nextInInbox(ctx, ev.Process.ID); err != nil {
 				e.log().Warn("companion inbox", "process", ev.Process.ID, "err", err)
 			}
@@ -75,7 +76,7 @@ func (e *Engine) Accompany(ctx context.Context, ev TriggerEvent) {
 		if !slices.Contains(m.AppliesTo, of) || !subscribed(m, ev, act) {
 			continue
 		}
-		if ev.Type == "change.item_added" && !slices.ContainsFunc(ev.Items, func(it domain.ChangeItem) bool { return !ownItem(m, it) }) {
+		if ev.Type == events.ChangeItemAdded && !slices.ContainsFunc(ev.Items, func(it domain.ChangeItem) bool { return !ownItem(m, it) }) {
 			continue // its own productions do not wake it
 		}
 		event := maps.Clone(act)
@@ -233,9 +234,9 @@ func (e *Engine) stepCompleted(ctx context.Context, p *Process, a methodology.Ac
 	}
 	process, _, _ := strings.Cut(a.Step, "/")
 	name := a.Step[strings.LastIndex(a.Step, "/")+1:]
-	ev := ProcessEvent{Event: "step_completed", Process: p, Time: e.clock(),
+	ev := ProcessEvent{Event: events.BrokerStepCompleted, Process: p, Time: e.clock(),
 		Step: &StepEvent{Path: a.Step, Process: process, Name: name, Action: a.Name, Method: st.Specialization}}
-	if err := e.Events.Publish(ctx, fmt.Sprintf("goap.process.%s.step_completed", p.ID), ev); err != nil {
+	if err := e.Events.Publish(ctx, fmt.Sprintf("goap.process.%s.%s", p.ID, events.BrokerStepCompleted), ev); err != nil {
 		e.log().Warn("publish failed", "err", err)
 	}
 }

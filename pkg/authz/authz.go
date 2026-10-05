@@ -1,7 +1,7 @@
 // Package authz carries the identity of callers and decides access with
-// attribute-based rules (ABAC) evaluated by Casbin. Policies are stored and
-// administered by the IAM service; this package holds the model, the
-// enforcer and the request types shared by every service.
+// attribute-based rules (ABAC) evaluated by Casbin. Policies are Policy nodes of the
+// graph (ADR 0020, read by pkg/access); this package holds the model, the enforcer
+// and the request types shared by every service.
 package authz
 
 import (

@@ -1,6 +1,6 @@
 <script lang="ts">
-  // Access tab: the ABAC policies (Policy nodes, evaluated by Casbin) and the users (User nodes: profile and
-  // administrator flag; their roles are held on projects, ADR 0043) of the organisation namespace, changed through
+  // Access tab: the ABAC policies (Policy nodes, evaluated by Casbin) and the users (User nodes: profile; their roles are
+  // granted by Assignments, ADR 0043, 0047) of the organisation namespace, changed through
   // changes applied on main.
   import { stamp, keyOf } from '../../flux/signals.svelte';
   import { errorMessage, type GraphNode, type Policy } from '../../api';
@@ -75,7 +75,6 @@
   let uSubject = $state('');
   let uName = $state('');
   let uEmail = $state('');
-  let uAdmin = $state(false);
   let uAdding = $state(false);
   let uError = $state('');
 
@@ -86,7 +85,7 @@
     uAdding = true;
     uError = '';
     try {
-      const u: User = { subject, displayName: uName.trim(), email: uEmail.trim(), locale: '', admin: uAdmin };
+      const u: User = { subject, displayName: uName.trim(), email: uEmail.trim(), locale: '' };
       // a user is a member of exactly one unit (ADR 0040): the one new users join (the waiting unit, ADR 0042)
       const units = (head?.nodes ?? []).filter((n) => n.type === ORG_UNIT_TYPE);
       const unit = units.find((n) => n.key === newUserUnit(units));
@@ -95,7 +94,6 @@
         createNodeItem(userKey(subject), USER_TYPE, userProps(u), [{ type: MEMBER_OF, to: refOf(unit) }]),
       ]);
       uSubject = uName = uEmail = '';
-      uAdmin = false;
       await load();
     } catch (err) {
       uError = errorMessage(err);
@@ -237,15 +235,16 @@
 <section class="card">
   <h3>Users</h3>
   <p class="hint">
-    A user holds no role of their own: an administrator administers the platform, every other role is held on a project
-    (assignments, ADR 0043) and is what <code>hasRole</code> sees for a resource of that project. The unit a user is a
+    A user holds no role of their own: every role, administration included, is granted by an assignment, a platform one
+    for <code>admin</code>, a project-scoped one for the others (ADR 0043, 0047); the latter is what <code>hasRole</code>
+    sees for a resource of that project. The unit a user is a
     member of (link <code>member_of</code>, edited in the organisation) is their organisation when the token names none.
   </p>
   {#if users.length}
     <div class="scroll">
       <table>
         <thead>
-          <tr><th>Subject</th><th>Name</th><th>Email</th><th>Organisation</th><th>Administrator</th><th><span class="sr-only">Open</span></th></tr>
+          <tr><th>Subject</th><th>Name</th><th>Email</th><th>Organisation</th><th><span class="sr-only">Open</span></th></tr>
         </thead>
         <tbody>
           {#each users as { node, user } (node.id)}
@@ -255,7 +254,6 @@
               <td>{user.displayName}</td>
               <td>{user.email}</td>
               <td>{#if unit}<code>{String(unit.props?.['name'] ?? unit.key)}</code>{:else}<span class="muted">none</span>{/if}</td>
-              <td>{user.admin ? 'yes' : ''}</td>
               <td class="actions">
                 <button class="small" onclick={() => openUser(node)}>Open</button>
                 <button class="small danger" onclick={() => removeUser(node, user)}>Delete</button>
@@ -273,7 +271,6 @@
       <div class="field"><label for="usr-sub">Subject</label><input id="usr-sub" type="text" class="mono" bind:value={uSubject} /></div>
       <div class="field"><label for="usr-name">Name</label><input id="usr-name" type="text" bind:value={uName} /></div>
       <div class="field"><label for="usr-mail">Email</label><input id="usr-mail" type="text" bind:value={uEmail} /></div>
-      <label class="check"><input type="checkbox" bind:checked={uAdmin} /> Administrator</label>
     </div>
     {#if uError}<div class="alert">{uError}</div>{/if}
     <button class="primary" type="submit" disabled={!uSubject.trim() || uAdding}>{uAdding ? 'Adding…' : 'Add user'}</button>

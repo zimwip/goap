@@ -100,7 +100,7 @@ func TestAdministratorsAreNeverLockedOut(t *testing.T) {
 	}
 }
 
-func TestAdminFlagAndUnitOfTheUserNode(t *testing.T) {
+func TestAdminAssignmentAndUnitOfTheUserNode(t *testing.T) {
 	ctx := context.Background()
 	g, a := setup(t)
 	if _, err := graphsvc.SeedDefaults(ctx, g); err != nil {
@@ -112,12 +112,27 @@ func TestAdminFlagAndUnitOfTheUserNode(t *testing.T) {
 	if err := graphsvc.SeedUnit(ctx, g, "team-a", "Team A", "team", ""); err != nil {
 		t.Fatal(err)
 	}
-	if err := graphsvc.SeedUser(ctx, g, access.User{Subject: "alice", Admin: true, Unit: "team-a"}); err != nil {
+	if err := graphsvc.SeedUser(ctx, g, access.User{Subject: "alice", Unit: "team-a"}); err != nil {
+		t.Fatal(err)
+	}
+	alice0, err := g.NodeByKey(ctx, mcp.NamespaceOrganisation, access.UserKey("alice"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	head, err := g.BranchHead(ctx, mcp.NamespaceOrganisation, domain.MainBranch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	aliceRef := alice0.Ref()
+	if _, err := g.Commit(ctx, graph.Commit{Namespace: mcp.NamespaceOrganisation, Title: "alice administers", Baseline: head.ID, By: "test", Edits: []graph.NodeEdit{
+		{Key: access.PlatformAssignmentKey(access.UserKey("alice")), Type: access.NodeTypeAssignment, Props: access.Assignment{Roles: []string{access.RoleAdmin}}.Props(), Rationale: "t",
+			Links: []graph.LinkEdit{{Type: access.LinkAssignsOrg, To: &aliceRef}}},
+	}}); err != nil {
 		t.Fatal(err)
 	}
 	alice := authz.Principal{Subject: "alice"}
 	if !can(t, a, alice, "policy", "write") || !can(t, a.Floor(), alice, "policy", "write") {
-		t.Fatal("the admin flag of the User node was not granted")
+		t.Fatal("the platform admin assignment of the User node was not granted")
 	}
 	dir := &access.Directory{Graph: g, TTL: 1}
 	if p := dir.Enrich(ctx, alice); p.Org != "team-a" || !slices.Equal(p.Roles, []string{access.RoleAdmin}) {
@@ -253,7 +268,7 @@ func TestPlatformAssignmentGrantsRoleEverywhere(t *testing.T) {
 
 // Administration is itself a platform role now (ADR 0047): a unit granted "admin" through a platform
 // Assignment reaches the floor (Authorizer.Floor, which calls Enrich alone, never the fuller Authorize) the
-// same way a User.Admin flag does — a deny policy can never lock it out (ADR 0020, 0043).
+// same way a user's own Assignment does — a deny policy can never lock it out (ADR 0020, 0043).
 func TestPlatformAssignmentGrantsAdminPastTheFloor(t *testing.T) {
 	ctx := context.Background()
 	g, a := setup(t)
@@ -406,34 +421,6 @@ func TestRolesDependOnTheProject(t *testing.T) {
 	ok, err := a.Authorize(ctx, authz.Request{Subject: mallory, Action: "run", Resource: authz.Resource{Type: "action", Org: "team-a", ProjectID: "PROJ-A", Roles: []string{"tester"}}})
 	if err != nil || ok {
 		t.Fatalf("mallory got team-a's role: %v %v", ok, err)
-	}
-}
-
-// A graph seeded with the default policies of before ADR 0043 gets the current ones: the legacy rules left as
-// seeded are retired, the current defaults created, once.
-func TestLegacyDefaultPoliciesAreUpgraded(t *testing.T) {
-	ctx := context.Background()
-	g, a := setup(t)
-	for _, p := range authz.LegacyDefaultPolicies {
-		if err := graphsvc.SeedPolicy(ctx, g, p); err != nil {
-			t.Fatal(err)
-		}
-	}
-	methodologist := authz.Principal{Subject: "mia", Org: "o", Roles: []string{"methodologist"}}
-	if !can(t, a, methodologist, "methodology", "write") {
-		t.Fatal("the legacy policies must apply before the upgrade")
-	}
-	if upgraded, err := graphsvc.SeedAccess(ctx, g); err != nil || !upgraded {
-		t.Fatalf("upgrade: %v %v", upgraded, err)
-	}
-	if upgraded, err := graphsvc.SeedAccess(ctx, g); err != nil || upgraded {
-		t.Fatalf("the upgrade must happen once: %v %v", upgraded, err)
-	}
-	if can(t, a, methodologist, "methodology", "write") {
-		t.Fatal("a legacy global role still administers methodologies")
-	}
-	if !can(t, a, authz.Principal{Subject: "eve", Roles: []string{"developer"}}, "action", "run") {
-		t.Fatal("the current defaults are missing")
 	}
 }
 

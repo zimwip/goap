@@ -11,6 +11,7 @@ package main
 
 import (
 	"connectrpc.com/connect"
+	"github.com/zimwip/goap/pkg/events"
 
 	"context"
 	"maps"
@@ -116,7 +117,7 @@ func main() {
 	reg.Events = engine.Publishers{bus, registryEvents{
 		methodology: func(ctx context.Context, name, version string) {
 			if triggers != nil {
-				triggers.Handle(ctx, engine.TriggerEvent{Type: "methodology.published", Methodology: name, Version: version})
+				triggers.Handle(ctx, engine.TriggerEvent{Type: events.MethodologyPublished, Methodology: name, Version: version})
 			}
 		},
 		domain: func(ctx context.Context, name, version string) {

@@ -76,6 +76,8 @@ Only the **responsible** role gets an executing agent instance. The **accountabl
 - `registry.v1.Method` drops `agent`/`goal` (field numbers reserved), gains `actions`, `done`, `planner`, `model`,
   `mcps`. The methodology editor's method tab has an actions pick list, the exit criteria, the planner and MCPs
   instead of an agent selector.
+- The legacy form is removed, not migrated: a method naming an `agent:` / `goal:` is refused when parsed (`MigrateLegacyMethods`
+  is gone).
 - A declared agent can still be named by a step (`agent:`) or run by a trigger; only methods stopped naming one.
 
 ## Phasing

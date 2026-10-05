@@ -145,8 +145,5 @@ func decodeInto(header map[string]any, els []map[string]any, kinds []string, out
 	if err := json.Unmarshal(b, out); err != nil {
 		return fmt.Errorf("definition: %w", err)
 	}
-	if m, ok := out.(*methodology.Methodology); ok {
-		m.MigrateLegacyMethods() // stored before ADR 0050: methods named their agent
-	}
 	return nil
 }

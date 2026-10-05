@@ -2,6 +2,7 @@ package methodology
 
 import (
 	"fmt"
+	"github.com/zimwip/goap/pkg/events"
 	"maps"
 	"slices"
 	"strings"
@@ -33,10 +34,6 @@ type Method struct {
 	// Roles involved when the method is used (replacing those of the step, the method being more precise).
 	Roles *Responsibilities `yaml:"roles,omitempty" json:"roles,omitempty"`
 
-	// Agent and Goal are legacy (before ADR 0050): a method named the agent that carried it out and the goal it reached.
-	// They are read only to migrate what was stored or written so (MigrateLegacyMethods) and never written again.
-	Agent string `yaml:"agent,omitempty" json:"agent,omitempty"`
-	Goal  string `yaml:"goal,omitempty" json:"goal,omitempty"`
 	// Steps composes the method from its own steps and sub-steps, done by actions, agents or nested processes -
 	// the same shape and compilation as a Process's (not a capability dispatch: a method step may not itself name
 	// a capability, to avoid methods resolving each other circularly while methods are still being compiled).
@@ -326,9 +323,9 @@ type Subscription struct {
 
 // DefaultSubscriptions are the events a transverse methodology without `on` reacts to.
 var DefaultSubscriptions = []Subscription{
-	{Event: "process.attached"},
-	{Event: "step.completed"},
-	{Event: "change.item_added", Filter: `event.items.exists(i, i.kind == "risk" || i.kind == "action")`},
+	{Event: events.ProcessAttached},
+	{Event: events.StepCompleted},
+	{Event: events.ChangeItemAdded, Filter: `event.items.exists(i, i.kind == "risk" || i.kind == "action")`},
 }
 
 // Subscriptions returns the events the methodology reacts to (its own, or the default ones).
@@ -337,49 +334,4 @@ func (m *Methodology) Subscriptions() []Subscription {
 		return m.On
 	}
 	return DefaultSubscriptions
-}
-
-// MigrateLegacyMethods rewrites the methods that still name an agent (before ADR 0050) the way a method says it now:
-// the actions of that agent become the actions of the method, its planner, model and MCPs those of the method, and
-// the goal it reached (or its only goal) the exit criteria of a method without steps. The agent itself stays (it can
-// be run or named by a step). Idempotent; a method naming an unknown agent is left as it is, and reported at compile.
-func (m *Methodology) MigrateLegacyMethods() {
-	for i := range m.Methods {
-		me := &m.Methods[i]
-		if me.Agent == "" {
-			continue
-		}
-		ai := slices.IndexFunc(m.Agents, func(a Agent) bool { return a.Name == me.Agent })
-		if ai < 0 {
-			continue
-		}
-		ag := m.Agents[ai]
-		if len(me.Actions) == 0 {
-			me.Actions = slices.Clone(ag.Actions)
-			if len(me.Actions) == 0 {
-				for _, a := range m.Actions {
-					me.Actions = append(me.Actions, a.Name)
-				}
-			}
-		}
-		if len(me.Steps) == 0 && len(me.Done) == 0 {
-			goal := me.Goal
-			if goal == "" && len(ag.Goals) == 1 {
-				goal = ag.Goals[0]
-			}
-			if gi := slices.IndexFunc(m.Goals, func(g Goal) bool { return g.Name == goal }); gi >= 0 {
-				me.Done = maps.Clone(m.Goals[gi].Pre)
-			}
-		}
-		if me.Planner == "" && ag.Planner != PlannerGOAP {
-			me.Planner = ag.Planner
-		}
-		if me.Model == "" {
-			me.Model = ag.Model
-		}
-		if len(me.MCPs) == 0 {
-			me.MCPs = slices.Clone(ag.MCPs)
-		}
-		me.Agent, me.Goal = "", ""
-	}
 }

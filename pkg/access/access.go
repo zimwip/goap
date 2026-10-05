@@ -51,16 +51,11 @@ type User struct {
 	DisplayName string `json:"displayName,omitempty"`
 	Email       string `json:"email,omitempty"`
 	Locale      string `json:"locale,omitempty"`
-	// Admin is read for a node written before ADR 0047: it still makes an administrator (UserFromProps),
-	// but new code grants RoleAdmin through a platform Assignment instead, like any other platform role; it
-	// is no longer written by graphsvc.createUser (the first-admin bootstrap, ADR 0040) or the web.
-	Admin bool `json:"admin,omitempty"`
 	// Unit is the organisational unit the user belongs to (the member_of link).
 	Unit string `json:"-"`
 }
 
-// RoleAdmin is the platform role (ADR 0046) of an administrator: granted by a platform Assignment (or, for a
-// node written before ADR 0047, the legacy User.Admin flag), it is the one role the compiled-in floor policy
+// RoleAdmin is the platform role (ADR 0046) of an administrator: granted by a platform Assignment, it is the one role the compiled-in floor policy
 // checks (authz.FloorPolicies), ahead of every stored policy, so it can never be denied by one.
 const RoleAdmin = "admin"
 
@@ -100,9 +95,6 @@ func (u User) Props() map[string]any {
 			m[k] = v
 		}
 	}
-	if u.Admin {
-		m["admin"] = true
-	}
 	return m
 }
 
@@ -116,15 +108,6 @@ func UserFromProps(props map[string]any) (User, error) {
 	u := User{Subject: str(props, "subject"), DisplayName: str(props, "displayName"), Email: str(props, "email"), Locale: str(props, "locale")}
 	if u.Subject == "" {
 		return u, errors.New("user without subject")
-	}
-	u.Admin, _ = props["admin"].(bool)
-	// a node written before ADR 0043 lists its roles instead of an admin flag: "admin" among them still makes
-	// an administrator too, the others (held on projects now) are ignored
-	switch r := props["roles"].(type) {
-	case []any:
-		u.Admin = u.Admin || slices.Contains(r, any(RoleAdmin))
-	case []string:
-		u.Admin = u.Admin || slices.Contains(r, RoleAdmin)
 	}
 	return u, nil
 }
@@ -348,8 +331,8 @@ func (s *Snapshot) Users() []User {
 }
 
 // Enrich completes a principal with what the graph knows of its subject: it gets the platform-wide roles
-// (ADR 0046) granted to it or to a unit it belongs to — administration (RoleAdmin) included, now one of them
-// (ADR 0047) — plus RoleAdmin again for a User.Admin flag written before that ADR; the unit it belongs to is
+// (ADR 0046) granted to it or to a unit it belongs to — administration (RoleAdmin) included, one of them
+// (ADR 0047); the unit it belongs to is
 // its organisation when the token names none. This is resource-independent, so Floor() (which calls Enrich
 // alone, never the fuller Authorize) sees a platform-granted admin too: no stored policy can lock one out.
 // Platform roles are resolved from the principal's org chain, not its User node, so they reach a principal
@@ -363,9 +346,6 @@ func (s *Snapshot) Enrich(p authz.Principal) authz.Principal {
 	if u, ok := s.users[p.Subject]; ok {
 		if p.Org == "" {
 			p.Org = u.Unit
-		}
-		if u.Admin && !slices.Contains(p.Roles, RoleAdmin) {
-			p.Roles = append(slices.Clone(p.Roles), RoleAdmin)
 		}
 	}
 	roles := slices.Clone(p.Roles)
