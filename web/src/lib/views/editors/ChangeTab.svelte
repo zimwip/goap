@@ -45,7 +45,11 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
   import ChangeOptions from '../../components/ChangeOptions.svelte';
   import ChangeDecisions from '../../components/ChangeDecisions.svelte';
   import ChangeRisks from '../../components/ChangeRisks.svelte';
+  import ChangeCriticality from '../../components/ChangeCriticality.svelte';
+  import ChangeVerification from '../../components/ChangeVerification.svelte';
+  import ChangeDerogations from '../../components/ChangeDerogations.svelte';
   import { riskRegister, liveRisk } from '../../risks';
+  import { verifications, derogationRegister, openDerogation } from '../../verification';
   import { confirmDialog } from '../../shell/confirmState.svelte';
   import ScopeBar from '../../components/ScopeBar.svelte';
   import MergeResolver from '../../components/MergeResolver.svelte';
@@ -293,6 +297,8 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
     { id: 'compare', label: 'Compare', badge: options.filter((f) => f.status === 'open').length || undefined },
     { id: 'decisions', label: 'Decisions', badge: pendingDecisions || undefined },
     { id: 'risks', label: 'Risks & actions', badge: riskRegister(change?.items ?? []).filter(liveRisk).length || undefined },
+    { id: 'verification', label: 'Verification', badge: verifications(change?.items ?? []).filter((v) => v.open).length || undefined },
+    { id: 'derogations', label: 'Derogations', badge: derogationRegister(change?.items ?? []).filter(openDerogation).length || undefined },
     { id: 'changes', label: 'Changes', badge: subs.length + ancestors.length || undefined },
     { id: 'audit', label: 'Audit' },
   ]);
@@ -573,6 +579,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
           <Icon name="diff" size={18} />
           <h2>{ch.title || 'Untitled'}</h2>
           <StatusBadge status={ch.status} />
+          <ChangeCriticality change={ch} {closed} onchange={() => load(selected)} />
           <span class="grow"></span>
           {#if !closed && !defining}
             <button type="button" class="small" onclick={startDefine}>Edit</button>
@@ -697,6 +704,10 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
       </section>
       {:else if active === 'risks'}
         <ChangeRisks change={ch} {closed} onchange={() => load(selected)} />
+      {:else if active === 'verification'}
+        <ChangeVerification change={ch} />
+      {:else if active === 'derogations'}
+        <ChangeDerogations change={ch} {closed} onchange={() => load(selected)} />
       {:else if active === 'impacts'}
       <div class="scoped" style="--scope: {scopeTint}">
       {@render scopeHead('Change impacts', lcRows.length)}

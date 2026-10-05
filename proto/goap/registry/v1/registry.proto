@@ -226,6 +226,16 @@ message LifecycleTransition {
   // transition_action instances, run in order once the transition is accepted
   repeated string actions = 10;
   string description = 11;
+  // criteria of the gate (ADR 0075 §3): a veto not met blocks, an objective not met needs a derogation
+  repeated Criterion vetos = 12;
+  repeated Criterion objectives = 13;
+}
+
+// A named CEL predicate of a gate.
+message Criterion {
+  string name = 1;
+  string expr = 2;
+  string description = 3;
 }
 
 message DocumentSpec {
@@ -300,6 +310,16 @@ message Action {
   bool incremental = 21;
   // MCPs the action uses (llm and script actions); a tool action is "<mcp>/<tool>"
   repeated string mcps = 22;
+  // how the effect is verified (ADR 0075)
+  Verify verify = 23;
+}
+
+// The verification an action declares (ADR 0075): the kind of verifier its effect needs.
+message Verify {
+  // tool | human | model
+  string oracle = 1;
+  // the verifier differs from the producer; unset is true
+  optional bool independent = 2;
 }
 
 // An agent (Embabel terminology): a planner and the set of admissible actions
@@ -389,6 +409,8 @@ message Methodology {
   string lifecycle = 23;
   // the condition libraries it imports (ADR 0064): decisions, risks
   repeated string imports = 24;
+  // default criticality of the changes of the methodology: C1, C2 or C3 (ADR 0075 §3); empty: C2
+  string criticality = 25;
 }
 
 // An event a transverse methodology reacts to, with a CEL filter over event ({type, change, process, step, items}).

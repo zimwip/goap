@@ -6,9 +6,13 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/dsl"
 	"github.com/zimwip/goap/pkg/graph"
+	"github.com/zimwip/goap/pkg/methodology"
+	"github.com/zimwip/goap/pkg/risk"
+	"github.com/zimwip/goap/pkg/verify"
 )
 
 // impactWriteRetries bounds the retry of a single change-impact write on
@@ -156,6 +160,36 @@ func (e *Engine) applyNodeOps(ctx context.Context, p *Process, ops []dsl.NodeOp,
 		return bb.Change.Namespace + domain.TypeSep + t
 	}
 	var declared []domain.ChangeImpactID
+	// the verification of what the action produces (ADR 0075): its produced entries are written as the effects appear,
+	// before any review of the same script, so the review policy sees them
+	vf := verifyOf(ctx)
+	var model string
+	if vf != nil {
+		model = vf.model
+	}
+	verified := map[domain.ChangeImpactID]bool{} // the effects with a verification entry, written before or by this call
+	for _, sub := range verify.Subjects(bb.Change.Items) {
+		verified[domain.ChangeImpactID(sub.Impact)] = true
+	}
+	record := func(state string, impact domain.ChangeImpactID, extra map[string]any) error {
+		data := map[string]any{verify.KeyState: state, verify.KeyAction: producedBy, verify.KeyImpact: string(impact)}
+		for k, v := range extra {
+			data[k] = v
+		}
+		return e.recordVerification(ctx, p, execution, producedBy, data)
+	}
+	produce := func(id domain.ChangeImpactID) error {
+		if vf == nil || verified[id] {
+			return nil
+		}
+		verified[id] = true
+		d := map[string]any{verify.KeyState: verify.Produced, verify.KeyAction: vf.action, verify.KeyImpacts: []string{string(id)},
+			verify.KeyOracle: vf.verify.Oracle, verify.KeyIndependent: vf.verify.IsIndependent()}
+		if model != "" {
+			d[verify.KeyModel] = model
+		}
+		return e.recordVerification(ctx, p, execution, producedBy, d)
+	}
 	for i, op := range ops {
 		fail := func(err error) error { return fmt.Errorf("change impact operation %d (%s): %w", i, op.Op, err) }
 		switch op.Op {
@@ -176,6 +210,9 @@ func (e *Engine) applyNodeOps(ctx context.Context, p *Process, ops []dsl.NodeOp,
 			}
 			local[op.Ref], byKey[added[0].Key] = added[0].ID, added[0].ID
 			declared = append(declared, added[0].ID)
+			if err := produce(added[0].ID); err != nil {
+				return declared, fail(err)
+			}
 		case "write":
 			id, err := resolve(op.Node)
 			if err != nil {
@@ -201,6 +238,9 @@ func (e *Engine) applyNodeOps(ctx context.Context, p *Process, ops []dsl.NodeOp,
 			if cn.Post != nil {
 				posts[id] = *cn.Post
 			}
+			if err := produce(id); err != nil {
+				return declared, fail(err)
+			}
 		case "review":
 			id, err := resolve(op.Node)
 			if err != nil {
@@ -210,14 +250,87 @@ func (e *Engine) applyNodeOps(ctx context.Context, p *Process, ops []dsl.NodeOp,
 			if op.Accept {
 				status = domain.ReviewAccepted
 			}
+			// an acceptance with a reserve stands on a derogation in force that covers the effect (ADR 0075 §2): without
+			// one it is refused, before anything is written
+			var derogation string
+			if op.Reserve != "" {
+				if !op.Accept {
+					return declared, fail(fmt.Errorf("only an acceptance may carry a reserve"))
+				}
+				cur, err := e.Graph.BlackboardIn(ctx, p.ChangeID, p.Flow)
+				if err != nil {
+					return declared, fail(err)
+				}
+				d, ok := risk.Covering(cur.Change, e.clock(), string(id), op.Node, producedBy)
+				if !ok || d.Key != op.Reserve {
+					return declared, fail(fmt.Errorf("no derogation %s in force covers %s: it is open, unexpired and targets the effect or its action", op.Reserve, op.Node))
+				}
+				derogation = d.Key
+			}
 			if _, err := retryOnConflict(func() (domain.ChangeImpact, error) {
 				return e.Graph.ReviewNodeOn(ctx, p.ChangeID, p.Flow, execution, id, status, producedBy, op.Comment)
 			}); err != nil {
 				return declared, fail(err)
+			}
+			if verified[id] {
+				final, extra := verify.Accepted, map[string]any{verify.KeyBy: producedBy}
+				if status == domain.ReviewRejected {
+					final = verify.Rejected
+				}
+				if derogation != "" {
+					final, extra[verify.KeyDerogation] = verify.AcceptedWithReserve, derogation
+				}
+				if err := record(verify.Verified, id, map[string]any{verify.KeyBy: producedBy}); err != nil {
+					return declared, fail(err)
+				}
+				if err := record(final, id, extra); err != nil {
+					return declared, fail(err)
+				}
 			}
 		default:
 			return declared, fail(fmt.Errorf("unknown operation"))
 		}
 	}
 	return declared, nil
+}
+
+// verifying is what the engine knows of the verification of the action it runs (ADR 0075).
+type verifying struct {
+	action string
+	model  string
+	verify *methodology.Verify
+}
+
+type verifyKey struct{}
+
+// withVerify marks the context of an action that declares a verification.
+func withVerify(ctx context.Context, a methodology.Action) context.Context {
+	if a.Verify == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, verifyKey{}, &verifying{action: a.Name, model: modelAlias(a), verify: a.Verify})
+}
+
+func verifyOf(ctx context.Context) *verifying {
+	v, _ := ctx.Value(verifyKey{}).(*verifying)
+	return v
+}
+
+// modelAlias is the model alias of an llm action, the producer a model oracle must differ from (ADR 0021).
+func modelAlias(a methodology.Action) string {
+	if a.Kind == methodology.KindLLM {
+		return a.Model
+	}
+	return ""
+}
+
+// recordVerification writes a verification entry of the change log (fact.verification, ADR 0030) for an action run.
+func (e *Engine) recordVerification(ctx context.Context, p *Process, execution, by string, data map[string]any) error {
+	it := domain.ChangeItem{ID: domain.ItemID(uuid.NewString()), Kind: verify.KindVerification, Type: data[verify.KeyState].(string),
+		Data: data, ProducedBy: by, Execution: execution, Flow: p.Flow}
+	if err := it.Validate(); err != nil {
+		return err
+	}
+	_, err := e.Graph.AddItems(ctx, p.ChangeID, []domain.ChangeItem{it})
+	return err
 }

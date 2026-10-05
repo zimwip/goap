@@ -7,7 +7,7 @@ import {
 
 const fixture: Session = {
   subject: 'ann',
-  can: { administer: true, approve: true },
+  can: { administer: true, approve: true, lowerCriticality: true },
   structures: [
     { kind: 'organisation', type: 'organisation@OrgUnit', namespace: 'organisation', parent: 'organisation@part_of', root: 'ORG-DEFAULT', types: ['organisation@OrgUnit', 'organisation@User'] },
     { kind: 'project', type: 'organisation@ProjectUnit', namespace: 'organisation', parent: 'organisation@project_part_of', root: 'PROJ-ROOT', selfParent: true, default: 'default' },

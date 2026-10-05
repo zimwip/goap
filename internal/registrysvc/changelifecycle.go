@@ -49,3 +49,13 @@ func (s *Service) Guard(ctx context.Context, bb domain.Blackboard, expr, transit
 	}
 	return condition.CheckGuard(expr, bb, c.Conditions.Evaluate(bb).State, transition, decision)
 }
+
+// Gate implements pkg/graph.ChangeLifecycles: the vetos and objectives of a transition (ADR 0075 §3), in the same
+// environment as its guard.
+func (s *Service) Gate(ctx context.Context, bb domain.Blackboard, t domain.Transition, decision string) (domain.GateResult, error) {
+	c, err := s.Methodology(ctx, bb.Change.Methodology)
+	if err != nil {
+		return domain.GateResult{}, err
+	}
+	return condition.CheckGate(t, bb, c.Conditions.Evaluate(bb).State, decision)
+}

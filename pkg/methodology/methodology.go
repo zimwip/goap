@@ -34,10 +34,14 @@ type Methodology struct {
 	// Lifecycle names the lifecycle of the domain the changes of the methodology follow (ADR 0058); none: they have no
 	// state. A step is tied to a state through its pre: "state:<name>" is a generated condition, true while the change
 	// is in that state, and the exit criteria of the steps (their done) are what a gate of the lifecycle asks for.
-	Lifecycle  string      `yaml:"lifecycle,omitempty" json:"lifecycle,omitempty"`
-	Conditions []Condition `yaml:"conditions" json:"conditions"`
-	Actions    []Action    `yaml:"actions" json:"actions"`
-	Goals      []Goal      `yaml:"goals" json:"goals"`
+	Lifecycle string `yaml:"lifecycle,omitempty" json:"lifecycle,omitempty"`
+	// Criticality is the default criticality of the changes of the methodology (ADR 0075 §3): C1, C2 or C3, empty for
+	// the platform default (C2). The requester may raise it; lowering it asks the permission change:lower-criticality.
+	// What each level requires is the policy of the organisation, not of the methodology.
+	Criticality string      `yaml:"criticality,omitempty" json:"criticality,omitempty"`
+	Conditions  []Condition `yaml:"conditions" json:"conditions"`
+	Actions     []Action    `yaml:"actions" json:"actions"`
+	Goals       []Goal      `yaml:"goals" json:"goals"`
 	// Agents run the methodology; without agents an implicit "default" agent
 	// has every action and goal and the goap planner.
 	Agents []Agent `yaml:"agents,omitempty" json:"agents,omitempty"`
@@ -173,6 +177,9 @@ type Action struct {
 	Effects     map[string]bool        `yaml:"effects,omitempty" json:"effects,omitempty"`
 	Cost        float64                `yaml:"cost,omitempty" json:"cost,omitempty"`
 	Expects     *condition.Expectation `yaml:"expects,omitempty" json:"expects,omitempty"`
+	// Verify says how the effect of the action is verified (ADR 0075): the kind of verifier it needs and whether it
+	// must differ from the producer. The methodology names no person and no model.
+	Verify *Verify `yaml:"verify,omitempty" json:"verify,omitempty"`
 	// Permission required from the process initiator to run the action
 	// automatically; otherwise the process waits for an authorized approver.
 	Permission string `yaml:"permission,omitempty" json:"permission,omitempty"`
@@ -221,6 +228,24 @@ type Action struct {
 	Step       string `yaml:"-" json:"-"`
 	Implements string `yaml:"-" json:"-"`
 }
+
+// Oracles: the kinds of verifier of an action's effect (ADR 0075).
+const (
+	OracleTool  = "tool"
+	OracleHuman = "human"
+	OracleModel = "model"
+)
+
+// Verify is the verification an action declares (ADR 0075).
+type Verify struct {
+	// Oracle is the kind of verifier the effect needs: tool, human or model.
+	Oracle string `yaml:"oracle" json:"oracle"`
+	// Independent says the verifier is not the producer; nil (unset) is true.
+	Independent *bool `yaml:"independent,omitempty" json:"independent,omitempty"`
+}
+
+// IsIndependent reports whether the verifier must differ from the producer (the default when verify is set).
+func (v *Verify) IsIndependent() bool { return v != nil && (v.Independent == nil || *v.Independent) }
 
 // Declared returns the name of the declared action behind a planned one: the action a step runs, or the action itself.
 func (a Action) Declared() string {

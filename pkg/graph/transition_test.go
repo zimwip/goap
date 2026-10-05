@@ -3,7 +3,11 @@ package graph
 import (
 	"context"
 	"errors"
+	"fmt"
+	"github.com/zimwip/goap/pkg/risk"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/zimwip/goap/pkg/condition"
 	"github.com/zimwip/goap/pkg/decision"
@@ -17,6 +21,10 @@ type lifecycles struct {
 }
 
 func (l *lifecycles) Lifecycle(context.Context, string) (*domain.Lifecycle, error) { return &l.lc, nil }
+func (l *lifecycles) Gate(_ context.Context, bb domain.Blackboard, t domain.Transition, decision string) (domain.GateResult, error) {
+	return condition.CheckGate(t, bb, l.world, decision)
+}
+
 func (l *lifecycles) Guard(_ context.Context, bb domain.Blackboard, expr, transition, decision string) (bool, error) {
 	return condition.CheckGuard(expr, bb, l.world, transition, decision)
 }
@@ -149,5 +157,76 @@ func testChangeLifecycle(t *testing.T, repo Repo) {
 	w.accept(t, c)
 	if _, err := g.Apply(ctx, c.ID, ""); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// A gate splits its criteria in vetos (one unmet blocks) and objectives (an unmet one blocks too unless a derogation in
+// force names it, then the transition goes with reserve and says so, ADR 0075 §3).
+func TestGateVetosAndObjectives(t *testing.T) { forEachRepo(t, testGateVetosAndObjectives) }
+
+func testGateVetosAndObjectives(t *testing.T, repo Repo) {
+	risk.Register()
+	ctx := context.Background()
+	w := newLifecycleWorld(t, repo)
+	lcs := &lifecycles{world: map[string]bool{"blocked": true, "docs": false}, lc: domain.Lifecycle{Name: "maturity", Initial: "proposed",
+		States: []domain.LifecycleState{{Name: "proposed", Editable: true}, {Name: "done", Final: true}},
+		Transitions: []domain.Transition{{Name: "ship", From: "proposed", To: "done",
+			Vetos:      []domain.Criterion{{Name: "no_blocker", Expr: `!world["blocked"]`}},
+			Objectives: []domain.Criterion{{Name: "docs", Expr: `world["docs"]`}}}}}}
+	w.g.Lifecycles = lcs
+	g := w.g
+	c, err := g.CreateChange(ctx, NewChange{Title: "gate", Methodology: "m", BaselineID: w.base.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ship := func() error {
+		_, err := g.TransitionChange(ctx, c.ID, TransitionRequest{Transition: "ship", By: "u"})
+		return err
+	}
+	if err := ship(); !errors.Is(err, ErrConflict) || !strings.Contains(err.Error(), "no_blocker") {
+		t.Fatalf("a veto not met blocks: %v", err)
+	}
+	lcs.world["blocked"] = false
+	if err := ship(); !errors.Is(err, ErrConflict) || !strings.Contains(err.Error(), "docs") {
+		t.Fatalf("an objective not met blocks: %v", err)
+	}
+	drg := func(rule string) domain.ChangeItem {
+		return domain.ChangeItem{Kind: risk.KindDerogation, Data: map[string]any{"key": "DRG-1", "rule": rule, "target": string(c.ID), "reason": "deadline", "signatory": "alice",
+			"expires": time.Now().Add(time.Hour).UTC().Format(time.RFC3339)}}
+	}
+	if _, err := g.AddItems(ctx, c.ID, []domain.ChangeItem{drg("something else")}); err != nil {
+		t.Fatal(err)
+	}
+	if err := ship(); !errors.Is(err, ErrConflict) {
+		t.Fatalf("a derogation of another rule covers nothing: %v", err)
+	}
+	// a veto is never compensated
+	lcs.world["blocked"] = true
+	if _, err := g.AddItems(ctx, c.ID, []domain.ChangeItem{drg("docs")}); err != nil {
+		t.Fatal(err)
+	}
+	if err := ship(); !errors.Is(err, ErrConflict) {
+		t.Fatalf("a derogation does not waive a veto: %v", err)
+	}
+	lcs.world["blocked"] = false
+	if err := ship(); err != nil {
+		t.Fatalf("covered objective: %v", err)
+	}
+	got, _ := g.Change(ctx, c.ID)
+	moves := got.ItemsOfKind(domain.KindTransition)
+	if got.State != "done" || len(moves) != 1 {
+		t.Fatalf("state %q, moves %d", got.State, len(moves))
+	}
+	if r := fmt.Sprint(moves[0].Data["reserve"]); r != "map[docs:DRG-1]" || fmt.Sprint(moves[0].Data["unmet"]) != "[docs]" {
+		t.Fatalf("the move says what it goes with reserve of: %v", moves[0].Data)
+	}
+}
+
+// Without vetos or objectives nothing is asked of the lifecycle, and a met objective needs no derogation.
+func TestGateObjectiveMet(t *testing.T) {
+	bb := domain.Blackboard{}
+	res, err := condition.CheckGate(domain.Transition{Name: "t", Objectives: []domain.Criterion{{Name: "docs", Expr: `world["docs"]`}}}, bb, map[string]bool{"docs": true}, "")
+	if err != nil || !res.Passed() || res.WithReserve() {
+		t.Fatalf("%+v %v", res, err)
 	}
 }

@@ -12,14 +12,24 @@ const (
 	LibraryDecisions = "decisions"
 	// LibraryRisks: the risk register and the actions of the change (ADR 0036 §1).
 	LibraryRisks = "risks"
+	// LibraryVerification: the verification of the effects of the action runs (ADR 0075).
+	LibraryVerification = "verification"
+	// LibraryDerogations: the derogations of the change, waivers with a rule, a signatory and an expiry (ADR 0075 §2).
+	// A library of its own, not part of `risks`: a methodology that signs none imports none (ADR 0064).
+	LibraryDerogations = "derogations"
 )
+
+// DerogationDebtLimit is the number of open derogations from which the debt is too high (`derogation_debt`): the
+// parameter of the conditions of the `derogations` library, like HighRisk for the risks. A gate guard or a decision
+// point reads it.
+const DerogationDebtLimit = 3
 
 // HighRisk is the score (probability × impact, 1–25) from which a live risk needs a mitigation action: the parameter
 // of the conditions of the `risks` library.
 const HighRisk = 9
 
 // LibraryNames lists the built-in libraries, in a stable order.
-var LibraryNames = []string{LibraryDecisions, LibraryRisks}
+var LibraryNames = []string{LibraryDecisions, LibraryRisks, LibraryVerification, LibraryDerogations}
 
 var unmitigated = fmt.Sprintf(`risks.exists(r, r.live && r.score >= %d && !actions.exists(a, a.for == r.key && a.status != "cancelled"))`, HighRisk)
 
@@ -45,6 +55,17 @@ var libraries = map[string][]Definition{
 		{Name: "risks_under_control", Expr: "!" + unmitigated},
 		{Name: "open_actions", Expr: `actions.exists(a, a.status == "open")`},
 		{Name: "no_open_actions", Expr: `!actions.exists(a, a.status == "open")`},
+	},
+	LibraryVerification: {
+		// an effect produced or verified, with no verdict yet; rejected effects are not open: they await a new run
+		{Name: "unverified_effects", Expr: `verifications.exists(v, v.open)`},
+		{Name: "all_verified", Expr: `!verifications.exists(v, v.open)`},
+		{Name: "reserves_open", Expr: `verifications.exists(v, v.state == "accepted_with_reserve")`},
+	},
+	LibraryDerogations: {
+		// a change cannot land on a derogation that ran out; the debt is the count of the open ones
+		{Name: "no_expired_derogation", Expr: `!derogations.exists(d, d.expired)`},
+		{Name: "derogation_debt", Expr: fmt.Sprintf(`derogations.filter(d, d.open).size() >= %d`, DerogationDebtLimit)},
 	},
 }
 

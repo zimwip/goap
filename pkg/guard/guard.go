@@ -28,6 +28,9 @@ func guardEnv() (*cel.Env, error) {
 		cel.Variable("decisionPoints", cel.ListType(cel.DynType)),
 		cel.Variable("actions", cel.ListType(cel.DynType)),
 		cel.Variable("risks", cel.ListType(cel.DynType)),
+		cel.Variable("verifications", cel.ListType(cel.DynType)),
+		cel.Variable("derogations", cel.ListType(cel.DynType)),
+		cel.Variable("criticalityPolicy", cel.MapType(cel.StringType, cel.DynType)),
 		cel.Variable("world", cel.MapType(cel.StringType, cel.DynType)),
 		ext.Strings(), ext.Lists(), ext.Sets())
 }
@@ -63,6 +66,10 @@ func (g *Guard) Check(node map[string]any, children []any, change map[string]any
 // Facts are what the guard of a change transition reads of the blackboard besides the change.
 type Facts struct {
 	DecisionPoints, Actions, Risks []any
+	// Verifications and Derogations are the verification states and the derogations of the change (ADR 0075),
+	// CriticalityPolicy what the organisation requires of its criticality.
+	Verifications, Derogations []any
+	CriticalityPolicy          map[string]any
 }
 
 // CheckChange evaluates the guard of a transition of the lifecycle of a change (ADR 0058).
@@ -90,7 +97,12 @@ func (g *Guard) eval(node map[string]any, children []any, change map[string]any,
 	if world == nil {
 		world = map[string]any{}
 	}
-	v, _, err := g.prog.Eval(map[string]any{"node": node, "children": children, "change": change, "decisionPoints": list(f.DecisionPoints), "actions": list(f.Actions), "risks": list(f.Risks), "world": world})
+	policy := f.CriticalityPolicy
+	if policy == nil {
+		policy = map[string]any{}
+	}
+	v, _, err := g.prog.Eval(map[string]any{"node": node, "children": children, "change": change, "decisionPoints": list(f.DecisionPoints), "actions": list(f.Actions), "risks": list(f.Risks),
+		"verifications": list(f.Verifications), "derogations": list(f.Derogations), "criticalityPolicy": policy, "world": world})
 	if err != nil {
 		return false, err
 	}

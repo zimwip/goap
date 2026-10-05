@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/zimwip/goap/pkg/domain"
 )
@@ -22,6 +23,9 @@ type ChangeLifecycles interface {
 	// Guard evaluates the guard of a transition for the change on bb (condition.CheckGuard, the world state being the
 	// one of the conditions of the methodology of the change).
 	Guard(ctx context.Context, bb domain.Blackboard, expr, transition, decision string) (bool, error)
+	// Gate evaluates the vetos and the objectives of a transition in the same environment (condition.CheckGate, ADR
+	// 0075 §3); a transition that declares none is not asked.
+	Gate(ctx context.Context, bb domain.Blackboard, t domain.Transition, decision string) (domain.GateResult, error)
 }
 
 // ChangeTransitionAuthorizer decides whether the caller may take a transition of the lifecycle of a change. Nil allows
@@ -102,7 +106,8 @@ func (g *Graph) TransitionChange(ctx context.Context, id domain.ChangeID, in Tra
 			return c, fmt.Errorf("decision point %s of change %s: %w", in.Decision, id, ErrNotFound)
 		}
 	}
-	if err := g.checkGate(ctx, bb, t, in.Decision, consumed); err != nil {
+	gate, err := g.checkGate(ctx, bb, t, in.Decision, consumed)
+	if err != nil {
 		return c, err
 	}
 	err = g.repo.InTx(ctx, func(tx Tx) error {
@@ -117,6 +122,10 @@ func (g *Graph) TransitionChange(ctx context.Context, id domain.ChangeID, in Tra
 		data := map[string]any{"transition": t.Name, "from": t.From, "to": t.To}
 		if in.Decision != "" {
 			data["decision"] = in.Decision
+		}
+		if gate.WithReserve() {
+			// go with reserve (ADR 0075 §3): which objectives were not met and the derogation that covered each
+			data["unmet"], data["reserve"] = gate.Unmet, gate.Reserve
 		}
 		it := domain.ChangeItem{ID: domain.ItemID(g.newID()), Kind: domain.KindTransition, Type: "transition." + t.Name, Status: domain.ItemAccepted,
 			ProducedBy: firstNonEmpty(in.By, g.caller(ctx), "graph.transition"), Data: data, CreatedAt: g.now()}
@@ -154,10 +163,12 @@ func slicesContainsMove(moves []domain.StateMove, to string) bool {
 }
 
 // checkGate evaluates the guard of a transition: the CEL guard of the lifecycle over the change, its decision points
-// (the ones that already gated a transition left out) and its world state.
-func (g *Graph) checkGate(ctx context.Context, bb domain.Blackboard, t domain.Transition, decision string, consumed map[string]bool) error {
-	if t.Guard == "" {
-		return nil
+// (the ones that already gated a transition left out) and its world state, then its vetos and objectives (ADR 0075 §3).
+// The result says which objectives the transition goes with reserve of.
+func (g *Graph) checkGate(ctx context.Context, bb domain.Blackboard, t domain.Transition, decision string, consumed map[string]bool) (domain.GateResult, error) {
+	var res domain.GateResult
+	if t.Guard == "" && len(t.Vetos) == 0 && len(t.Objectives) == 0 {
+		return res, nil
 	}
 	var kept []domain.DecisionPoint
 	for _, d := range domain.DecisionPointsOf(bb) {
@@ -166,14 +177,29 @@ func (g *Graph) checkGate(ctx context.Context, bb domain.Blackboard, t domain.Tr
 		}
 	}
 	bb = bb.WithFacet(domain.FacetDecisionPoints, kept)
-	ok, err := g.Lifecycles.Guard(ctx, bb, t.Guard, t.Name, decision)
+	if t.Guard != "" {
+		ok, err := g.Lifecycles.Guard(ctx, bb, t.Guard, t.Name, decision)
+		if err != nil {
+			return res, invalidf("guard of %s on change %s: %v", t.Name, bb.Change.ID, err)
+		}
+		if !ok {
+			return res, fmt.Errorf("change %s cannot take %s: gate not satisfied (%s): %w", bb.Change.ID, t.Name, t.Guard, ErrConflict)
+		}
+	}
+	if len(t.Vetos) == 0 && len(t.Objectives) == 0 {
+		return res, nil
+	}
+	res, err := g.Lifecycles.Gate(ctx, bb, t, decision)
 	if err != nil {
-		return invalidf("guard of %s on change %s: %v", t.Name, bb.Change.ID, err)
+		return res, invalidf("criteria of %s on change %s: %v", t.Name, bb.Change.ID, err)
 	}
-	if !ok {
-		return fmt.Errorf("change %s cannot take %s: gate not satisfied (%s): %w", bb.Change.ID, t.Name, t.Guard, ErrConflict)
+	if len(res.Vetoed) > 0 {
+		return res, fmt.Errorf("change %s cannot take %s: vetoed by %s: %w", bb.Change.ID, t.Name, strings.Join(res.Vetoed, ", "), ErrConflict)
 	}
-	return nil
+	if u := res.Uncovered(); len(u) > 0 {
+		return res, fmt.Errorf("change %s cannot take %s: objectives not met and not covered by a derogation: %s: %w", bb.Change.ID, t.Name, strings.Join(u, ", "), ErrConflict)
+	}
+	return res, nil
 }
 
 // phases is the state each change impact was last written in, by replaying the journal of the transitions against

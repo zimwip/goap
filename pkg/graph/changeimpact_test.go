@@ -351,3 +351,182 @@ func testImpactsOf(t *testing.T, repo Repo) {
 		t.Fatalf("unknown execution: %+v", none)
 	}
 }
+
+type refuseReviewer string
+
+func (r refuseReviewer) Review(q domain.ReviewRequest) error {
+	if q.Reviewer == string(r) {
+		return errors.New("no")
+	}
+	return nil
+}
+
+// A ReviewPolicy refuses a review before anything is written; unset, anyone reviews (ADR 0075).
+func TestReviewPolicy(t *testing.T) { forEachRepo(t, testReviewPolicy) }
+
+func testReviewPolicy(t *testing.T, repo Repo) {
+	ctx := context.Background()
+	f := newFixture(t, repo)
+	g := f.g
+	c, err := g.CreateChange(ctx, NewChange{Title: "t", BaselineID: f.base.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	pre := f.req.Ref()
+	got, err := g.AddNodes(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &pre, Rationale: "r", ProducedBy: "bob"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	log := func() int {
+		entries, _, err := g.ChangeLog(ctx, domain.LogFilter{Change: c.ID})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return len(entries)
+	}
+	before := log()
+	g.ReviewPolicy = refuseReviewer("bob")
+	if _, err := g.ReviewNode(ctx, c.ID, got[0].ID, domain.ReviewAccepted, "bob", "mine"); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "refused") {
+		t.Fatalf("the policy refuses: %v", err)
+	}
+	if ch, _ := g.Change(ctx, c.ID); ch.Nodes[0].Review != domain.ReviewProposed || len(ch.Nodes[0].Reviews) != 0 || log() != before {
+		t.Fatalf("a refusal writes nothing: %+v", ch.Nodes[0])
+	}
+	if _, err := g.ReviewNode(ctx, c.ID, got[0].ID, domain.ReviewAccepted, "alice", "ok"); err != nil {
+		t.Fatalf("another reviewer: %v", err)
+	}
+}
+
+func TestNilReviewPolicyReviewsAsBefore(t *testing.T) {
+	forEachRepo(t, func(t *testing.T, repo Repo) {
+		ctx := context.Background()
+		f := newFixture(t, repo)
+		c, err := f.g.CreateChange(ctx, NewChange{Title: "t", BaselineID: f.base.ID})
+		if err != nil {
+			t.Fatal(err)
+		}
+		pre := f.req.Ref()
+		got, err := f.g.AddNodes(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &pre, Rationale: "r", ProducedBy: "bob"}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if f.g.ReviewPolicy != nil {
+			t.Fatal("unset by default")
+		}
+		if _, err := f.g.ReviewNode(ctx, c.ID, got[0].ID, domain.ReviewAccepted, "bob", "mine"); err != nil {
+			t.Fatalf("anyone reviews: %v", err)
+		}
+	})
+}
+
+// ReopenImpacts sends accepted impacts back to proposed, as a review event; the others are left alone (ADR 0075).
+func TestReopenImpacts(t *testing.T) { forEachRepo(t, testReopenImpacts) }
+
+func testReopenImpacts(t *testing.T, repo Repo) {
+	ctx := context.Background()
+	f := newFixture(t, repo)
+	g := f.g
+	c, err := g.CreateChange(ctx, NewChange{Title: "t", BaselineID: f.base.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	pre := f.req.Ref()
+	got, err := g.AddNodes(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &pre, Rationale: "r", ProducedBy: "bob"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := got[0].ID
+	if done, err := g.ReopenImpacts(ctx, c.ID, []domain.ChangeImpactID{id}, "why"); err != nil || len(done) != 0 {
+		t.Fatalf("a proposed impact is left alone: %v %v", done, err)
+	}
+	if _, err := g.ReopenImpacts(ctx, c.ID, []domain.ChangeImpactID{id}, " "); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("a comment is mandatory: %v", err)
+	}
+	if _, err := g.ReviewNode(ctx, c.ID, id, domain.ReviewAccepted, "alice", "ok"); err != nil {
+		t.Fatal(err)
+	}
+	done, err := g.ReopenImpacts(ctx, c.ID, []domain.ChangeImpactID{id}, "derogation expired")
+	if err != nil || len(done) != 1 {
+		t.Fatalf("reopen: %v %v", done, err)
+	}
+	ch, _ := g.Change(ctx, c.ID)
+	if ch.Nodes[0].Review != domain.ReviewProposed || len(ch.Nodes[0].Reviews) != 2 {
+		t.Fatalf("back to proposed, history kept: %+v", ch.Nodes[0])
+	}
+	if _, err := g.ReviewNode(ctx, c.ID, id, domain.ReviewAccepted, "carol", "again"); err != nil {
+		t.Fatalf("reviewed again: %v", err)
+	}
+	if _, err := g.ReopenImpacts(ctx, c.ID, []domain.ChangeImpactID{"nope"}, "why"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("unknown impact: %v", err)
+	}
+}
+
+// ItemAuthorizer is asked about the items of a kind that asks a permission of its writer, and only those (ADR 0075).
+func TestItemAuthorizer(t *testing.T) {
+	const kind domain.ItemKind = "test-signed"
+	domain.RegisterItemKind(kind, nil)
+	domain.RequireItemPermission(kind, domain.ItemPermission{Permission: "thing:sign", SubjectField: "who"})
+	forEachRepo(t, func(t *testing.T, repo Repo) {
+		ctx := context.Background()
+		f := newFixture(t, repo)
+		g := f.g
+		c, err := g.CreateChange(ctx, NewChange{Title: "t", BaselineID: f.base.ID})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var asked []string
+		g.ItemAuthorizer = func(_ context.Context, ch domain.Change, it domain.ChangeItem, p domain.ItemPermission) error {
+			asked = append(asked, p.Permission+"/"+p.SubjectField)
+			if ch.ID != c.ID {
+				t.Errorf("change %s", ch.ID)
+			}
+			if it.Data["who"] == "mallory" {
+				return errors.New("refused")
+			}
+			return nil
+		}
+		if _, err := g.AddItems(ctx, c.ID, []domain.ChangeItem{{Kind: domain.KindArtifact, Type: "note", Data: map[string]any{"text": "x"}}}); err != nil || len(asked) != 0 {
+			t.Fatalf("an ordinary item asks nothing: %v %v", asked, err)
+		}
+		if _, err := g.AddItems(ctx, c.ID, []domain.ChangeItem{{Kind: kind, Data: map[string]any{"who": "mallory"}}}); err == nil || err.Error() != "refused" {
+			t.Fatalf("refused: %v", err)
+		}
+		if ch, _ := g.Change(ctx, c.ID); len(ch.ItemsOfKind(kind)) != 0 {
+			t.Fatal("a refused item is not stored")
+		}
+		if _, err := g.AddItems(ctx, c.ID, []domain.ChangeItem{{Kind: kind, Data: map[string]any{"who": "alice"}}}); err != nil || len(asked) != 2 || asked[1] != "thing:sign/who" {
+			t.Fatalf("authorized: %v %v", asked, err)
+		}
+	})
+}
+
+// ItemPolicy is asked about every item AddItems stores, and an error refuses the write (ADR 0075 §3).
+func TestItemPolicy(t *testing.T) {
+	forEachRepo(t, func(t *testing.T, repo Repo) {
+		ctx := context.Background()
+		f := newFixture(t, repo)
+		g := f.g
+		c, err := g.CreateChange(ctx, NewChange{Title: "t", BaselineID: f.base.ID, Data: map[string]any{"level": "high"}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		g.ItemPolicy = func(_ context.Context, ch domain.Change, it domain.ChangeItem) error {
+			if ch.Data["level"] == "high" && it.Data["text"] == "no" {
+				return errors.New("not on a high change")
+			}
+			return nil
+		}
+		item := func(text string) domain.ChangeItem {
+			return domain.ChangeItem{Kind: domain.KindArtifact, Type: "note", Data: map[string]any{"text": text}}
+		}
+		if _, err := g.AddItems(ctx, c.ID, []domain.ChangeItem{item("yes")}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := g.AddItems(ctx, c.ID, []domain.ChangeItem{item("no")}); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "not on a high change") {
+			t.Fatalf("refused: %v", err)
+		}
+		if ch, _ := g.Change(ctx, c.ID); len(ch.Items) != 1 {
+			t.Fatalf("a refused item is not stored: %d", len(ch.Items))
+		}
+	})
+}

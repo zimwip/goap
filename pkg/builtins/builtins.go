@@ -10,6 +10,8 @@ const (
 	GraphPropagate      = "graph.propagate"      // follow links backwards from the impacted nodes
 	GraphApply          = "graph.apply"          // apply the change
 	DecisionInvestigate = "decision.investigate" // open options on a decision point
+	// DerogationExpire closes the derogations that ran out and sends what they covered back to review (ADR 0075 §2).
+	DerogationExpire = "derogation.expire"
 	// ProcessStep is the builtin of the actions generated for the steps done by an agent or a nested process.
 	ProcessStep = "process.step"
 	// Builtins of the self-observation methodology (ADR 0011).
@@ -20,7 +22,7 @@ const (
 
 // All lists the known builtin names.
 func All() []string {
-	return []string{GraphPropagate, GraphApply, DecisionInvestigate, ProcessStep, ObserveAnalyze, ObservePropose, MethodologyDraft}
+	return []string{GraphPropagate, GraphApply, DecisionInvestigate, DerogationExpire, ProcessStep, ObserveAnalyze, ObservePropose, MethodologyDraft}
 }
 
 // Known is the static set of the builtin names; it implements methodology.BuiltinSet.

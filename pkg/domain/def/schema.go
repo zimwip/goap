@@ -233,6 +233,27 @@ func (s Schema) checkLifecycles(prefix string, nodeTypes map[string]bool, add fu
 			if _, err := guard.Compile(t.Guard); err != nil {
 				add(fmt.Sprintf(path+".transitions[%d].guard", j), "%v", err)
 			}
+			for _, list := range []struct {
+				name string
+				cs   []domain.Criterion
+			}{{"vetos", t.Vetos}, {"objectives", t.Objectives}} {
+				seen := map[string]bool{}
+				for k, c := range list.cs {
+					cp := fmt.Sprintf(path+".transitions[%d].%s[%d]", j, list.name, k)
+					switch {
+					case c.Name == "":
+						add(cp+".name", "a criterion needs a name")
+					case seen[c.Name]:
+						add(cp+".name", "duplicate criterion %s", c.Name)
+					}
+					seen[c.Name] = true
+					if c.Expr == "" {
+						add(cp+".expr", "a criterion needs an expression")
+					} else if _, err := guard.Compile(c.Expr); err != nil {
+						add(cp+".expr", "%v", err)
+					}
+				}
+			}
 		}
 	}
 	for i, n := range s.NodeTypes {

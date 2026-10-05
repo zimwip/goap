@@ -19,11 +19,14 @@ import (
 	"github.com/zimwip/goap/internal/registrysvc"
 	"github.com/zimwip/goap/internal/telemetry"
 	"github.com/zimwip/goap/pkg/access"
+	"github.com/zimwip/goap/pkg/criticality"
 	"github.com/zimwip/goap/pkg/decision"
+	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/domain/def"
 	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/risk"
 	"github.com/zimwip/goap/pkg/typecat"
+	"github.com/zimwip/goap/pkg/verify"
 )
 
 // loadTypes loads the type catalogue until it holds the domains the seeds write to (the registry may start after
@@ -53,6 +56,7 @@ func main() {
 	ctx := context.Background()
 	// the facts of the risk register are items of a change (ADR 0065)
 	risk.Register()
+	verify.Register()
 	log := platform.Logger("graph")
 	defer telemetry.Setup(context.Background(), log, "graph")(context.Background())
 	var repo graph.Repo = graph.NewMemory()
@@ -70,6 +74,7 @@ func main() {
 	// the principal behind each event of the impact logs (ADR 0029)
 	g.Caller = graphsvc.Caller
 	g.DecisionPolicy = decision.Policy{} // confidence, rounds and deadline settle the decision points (ADR 0067)
+	g.ReviewPolicy = verify.Policy{}     // a verifier is not the producer (ADR 0075)
 	g.Observe(events)                    // node and baseline events feed the node index (ADR 0026)
 	// baselines written whole before they were stored as deltas are compacted, once, in the background (ADR 0032)
 	go func() {
@@ -104,12 +109,16 @@ func main() {
 		platform.Fatal(log, "bootstrap", err)
 	}
 	// the hooks of the graph are set before the seeds start (they run in the background, and write through them)
-	authorizer, err := access.NewAuthorizer(&access.Directory{Graph: g})
+	directory := &access.Directory{Graph: g}
+	authorizer, err := access.NewAuthorizer(directory)
 	if err != nil {
 		platform.Fatal(log, "authorizer", err)
 	}
 	g.Authorizer = graphsvc.TransitionAuthorizer(authorizer)
 	g.ChangeAuthorizer = graphsvc.ChangeTransitionAuthorizer(authorizer)
+	g.ItemAuthorizer = graphsvc.ItemAuthorizer(authorizer, directory.CriticalityResolver())
+	g.ItemPolicy = criticality.ItemPolicy(directory.CriticalityResolver()) // the oracle and the lifetime a level accepts (ADR 0075 §3)
+	g.Facets = map[string]graph.BlackboardFacet{domain.FacetCriticalityPolicy: directory.CriticalityFacet()}
 	g.Validators = []graph.NodeValidator{access.AdminFloorValidator{}}
 	// LandingGate, SubChangeValidator and Lifecycles (ADR 0058) need the registry service itself (its methodology store): only
 	// goap-dev, which holds it in process, wires them; the registry client has no RPC for them

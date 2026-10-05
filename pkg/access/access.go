@@ -29,8 +29,11 @@ const (
 	NodeTypeOrgUnit       = "organisation@OrgUnit"
 	NodeTypeUser          = "organisation@User"
 	NodeTypePolicy        = "organisation@Policy"
-	LinkMemberOf          = "organisation@member_of"
-	LinkPartOf            = "organisation@part_of"
+	// NodeTypeCriticalityPolicy is what a criticality level requires of the changes of the unit that owns the node
+	// (ADR 0075 §3, criticality.go).
+	NodeTypeCriticalityPolicy = "organisation@CriticalityPolicy"
+	LinkMemberOf              = "organisation@member_of"
+	LinkPartOf                = "organisation@part_of"
 
 	// DefaultOrg is the key of the root unit the built-in organisation domain tags (`structure.root`): created by
 	// the bootstrap of the graph, it holds the changes that name no unit and is the root of the resolution of the
@@ -143,6 +146,8 @@ type Snapshot struct {
 	units, projects *domain.Hierarchy
 	// assignments are the Assignment nodes (ADR 0039), resolved from their assigns_org/assigns_project links
 	assignments []assignment
+	// criticality are the policies of the criticality levels, by the unit that owns them and the level
+	criticality map[string]map[criticalityLevel]criticalityPolicy
 }
 
 // assignment is a resolved Assignment node: the roles an org unit holds on a project, or, when Project is
@@ -158,6 +163,7 @@ func BuildSnapshot(st domain.Structures, id domain.BaselineID, nodes []domain.No
 	s := &Snapshot{Baseline: id, structures: st, users: map[string]User{}, units: st.Hierarchy(domain.StructureOrganisation, nodes, links), projects: st.Hierarchy(domain.StructureProject, nodes, links)}
 	org := domain.StructureOrganisation
 	byID := map[domain.NodeID]domain.Node{}
+	var crit []domain.Node
 	assignBuild := map[domain.NodeID]*assignment{}
 	for _, n := range nodes {
 		byID[n.ID] = n
@@ -178,6 +184,8 @@ func BuildSnapshot(st domain.Structures, id domain.BaselineID, nodes []domain.No
 				continue
 			}
 			s.Policies = append(s.Policies, p)
+		case NodeTypeCriticalityPolicy:
+			crit = append(crit, n)
 		case NodeTypeAssignment:
 			a, err := AssignmentFromProps(n.Properties)
 			if err != nil {
@@ -212,6 +220,7 @@ func BuildSnapshot(st domain.Structures, id domain.BaselineID, nodes []domain.No
 			s.assignments = append(s.assignments, *a)
 		}
 	}
+	s.readCriticality(crit, byID)
 	sort.Slice(s.Policies, func(i, j int) bool { return PolicyKey(s.Policies[i]) < PolicyKey(s.Policies[j]) })
 	return s
 }

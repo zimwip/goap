@@ -33,6 +33,9 @@ type Capabilities struct {
 	// project above), so an approval of someone else's run may be theirs to give. The engine decides, run by run
 	// (step:approve, action:run), so this only says whether to tell them of the approvals waiting.
 	Approve bool `json:"approve"`
+	// LowerCriticality: the caller may lower the criticality of a change of their active project (change:lower-criticality,
+	// ADR 0075 §3); raising it asks nothing more than writing the change.
+	LowerCriticality bool `json:"lowerCriticality"`
 }
 
 // Names are the namespaces, node types, link types, key schemes and properties of the built-in domains the clients
@@ -124,6 +127,10 @@ func (a *Authorizer) Session(ctx context.Context, p authz.Principal) (Session, e
 		project = s.Structures.Project().Root
 	}
 	s.Can.Approve = snap.MayAccessProject(p, project)
+	s.Can.LowerCriticality, err = a.Authorize(ctx, authz.Request{Subject: p, Action: "lower-criticality", Resource: authz.Resource{Type: "change", ProjectID: p.Project}})
+	if err != nil {
+		return Session{}, err
+	}
 	return s, nil
 }
 

@@ -93,8 +93,10 @@ type NodeOp struct {
 	RemoveLinks []string       `json:"removeLinks,omitempty"`
 	Retire      bool           `json:"retire,omitempty"`
 	Accept      bool           `json:"accept,omitempty"`
-	Comment     string         `json:"comment,omitempty"`
-	ProducedBy  string         `json:"producedBy,omitempty"`
+	// Reserve is the key of the derogation an acceptance stands on (accepted with reserve, ADR 0075 §2).
+	Reserve    string `json:"reserve,omitempty"`
+	Comment    string `json:"comment,omitempty"`
+	ProducedBy string `json:"producedBy,omitempty"`
 }
 
 // NodeOpLink is an outgoing link added by a write: To is a node key or "#nN".
@@ -349,6 +351,12 @@ func asList(v any) []any {
 // ReviewNode accepts or rejects a change impact; the comment is mandatory.
 func (c *Ctx) ReviewNode(node string, accept bool, comment string) {
 	c.nodeOps = append(c.nodeOps, NodeOp{Op: "review", Node: node, Accept: accept, Comment: comment, ProducedBy: c.job.Action})
+}
+
+// ReviewNodeWithReserve accepts a change impact with a reserve: the derogation (its key) must be open, unexpired and
+// target the impact or its action, else the engine refuses the review (ADR 0075).
+func (c *Ctx) ReviewNodeWithReserve(node, derogation, comment string) {
+	c.nodeOps = append(c.nodeOps, NodeOp{Op: "review", Node: node, Accept: true, Reserve: derogation, Comment: comment, ProducedBy: c.job.Action})
 }
 
 // AddArtifact records free data (report…).

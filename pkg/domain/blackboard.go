@@ -42,6 +42,9 @@ const (
 	FacetOptions        = "options"        // []Flow: the options of the change (ADR 0032 §6)
 	FacetActiveOption   = "activeOption"   // string: the option the change works on
 	FacetDecisionPoints = "decisionPoints" // []DecisionPoint: replayed at Blackboard.At (ADR 0009 §4)
+	// FacetCriticalityPolicy is what the organisation of the change requires of its criticality (ADR 0075 §3), set by a
+	// provider of Graph.Facets that reads the organisation; opaque to the graph. Absent: the compiled-in table.
+	FacetCriticalityPolicy = "criticalityPolicy"
 )
 
 // Facet is the facet of the blackboard with a name, as the type the caller expects (the zero value when absent or of

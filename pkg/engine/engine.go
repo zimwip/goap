@@ -469,6 +469,11 @@ func (e *Engine) resolveChange(ctx context.Context, p *Process, m *methodology.C
 	if m.Administrative {
 		data[domain.DataAdministrative] = true
 	}
+	// the default criticality of the methodology (ADR 0075 §3): the requester raises it on the change header, lowering it
+	// there asks change:lower-criticality
+	if m.Criticality != "" {
+		data[domain.DataCriticality] = m.Criticality
+	}
 	if len(data) == 0 {
 		data = nil
 	}
@@ -846,6 +851,7 @@ func (e *Engine) executeStep(ctx context.Context, p *Process, m *methodology.Com
 		p.Pending = &HumanTask{Kind: TaskInput, Action: action.Name, Description: action.Description, Instructions: action.Instructions, NodeTypes: action.NodeTypes, Step: i, Context: sc}
 		return nil
 	}
+	ctx = withVerify(ctx, action)
 	ids, nodes, points, err := e.addItems(ctx, p, res.Items, action.Name, step.Execution, false, action.Name)
 	if err == nil {
 		var more []domain.ChangeImpactID

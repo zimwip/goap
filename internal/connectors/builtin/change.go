@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"reflect"
 	"slices"
+	"time"
 
 	connectorv1 "github.com/zimwip/goap/gen/goap/connector/v1"
 	"github.com/zimwip/goap/internal/connectorkit"
@@ -58,6 +59,9 @@ var changeOps = []op{
 	{"risk", "Raise a risk, or update one by its key (a new version keeps what it does not restate); probability and impact 1-5, status open|mitigating|accepted|occurred|closed: {risk}",
 		schema(map[string]string{"change": "string", "key": "string", "title": "string", "description": "string", "probability": "integer", "impact": "integer",
 			"status": "string", "owner": "string", "actions": "array", "rationale": "string"})},
+	{"derogations", "The derogations of the change (rule, target, reason, signatory, expires, status): {derogations}", schema(map[string]string{"change": "string"})},
+	{"derogation", "Sign a derogation, or update / close one by its key (needs derogation:sign; the signatory is the caller); expires is a date or RFC 3339, status open|closed: {derogation}",
+		schema(map[string]string{"change": "string", "key": "string", "rule": "string", "target": "string", "reason": "string", "expires": "string", "status": "string"})},
 	{"action", "Create an action, or update one by its key; status open|done|cancelled, for: the risk key or decision point it answers: {action}",
 		schema(map[string]string{"change": "string", "key": "string", "title": "string", "status": "string", "owner": "string", "due": "string", "for": "string",
 			"result": "string"})},
@@ -134,6 +138,10 @@ func (c Change) Invoke(ctx context.Context, op string, raw, _ map[string]any, _ 
 		return result(map[string]any{"risks": risk.Risks(bb.Change), "actions": risk.Actions(bb.Change)})
 	case "risk", "action":
 		return c.record(ctx, bb, op, a)
+	case "derogations":
+		return result(map[string]any{"derogations": risk.Derogations(bb.Change)})
+	case "derogation":
+		return c.derogate(ctx, bb, a)
 	case "note":
 		text, err := a.required("text")
 		if err != nil {
@@ -696,4 +704,38 @@ func (c Change) record(ctx context.Context, bb domain.Blackboard, op string, a a
 		return nil, err
 	}
 	return result(map[string]any{op: items[0]})
+}
+
+// derogate signs a derogation of the change, or writes the next version of one (ADR 0075 §2): the signatory is the
+// caller, the graph checks derogation:sign (Graph.ItemAuthorizer); a version restates what the previous one said.
+func (c Change) derogate(ctx context.Context, bb domain.Blackboard, a args) (map[string]any, error) {
+	key := a.str("key")
+	n := 0
+	for _, d := range risk.Derogations(bb.Change) {
+		var i int
+		if _, err := fmt.Sscanf(d.Key, "DRG-%d", &i); err == nil && i > n {
+			n = i
+		}
+	}
+	data := map[string]any{}
+	if key == "" {
+		key = fmt.Sprintf("DRG-%d", n+1)
+	} else {
+		for _, d := range risk.Derogations(bb.Change) {
+			if d.Key == key {
+				data = map[string]any{"rule": d.Rule, "target": d.Target, "reason": d.Reason, "expires": d.Expires.Format(time.RFC3339), "status": d.Status}
+			}
+		}
+	}
+	data["key"], data["signatory"] = key, authz.From(ctx).Subject
+	for _, f := range []string{"rule", "target", "reason", "expires", "status"} {
+		if v := a.str(f); v != "" {
+			data[f] = v
+		}
+	}
+	items, err := c.p.Graph.AddItems(ctx, bb.Change.ID, []domain.ChangeItem{{Kind: risk.KindDerogation, Type: "derogation", Status: domain.ItemProposed, Data: data, ProducedBy: producer(ctx)}})
+	if err != nil {
+		return nil, err
+	}
+	return result(map[string]any{"derogation": items[0]})
 }

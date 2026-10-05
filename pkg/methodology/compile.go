@@ -121,6 +121,7 @@ func (s *compileState) checkHeader() {
 	if m.Namespace != "" && !def.NameRE.MatchString(m.Namespace) {
 		s.add("namespace", "namespace must be lowercase letters, digits, '-' or '_' and start with a letter")
 	}
+	s.checkCriticality()
 	m.lintTypeRefs(s.add)
 }
 
@@ -196,6 +197,7 @@ func (s *compileState) compileActions() {
 			}
 		}
 		s.checkInvocation(path, a)
+		s.checkVerify(path, a)
 		a = s.compileExpects(path, a)
 		if len(a.Effects) == 0 && !a.IsSpecialization() {
 			s.add(path+".effects", "no effect: the action can never be planned")
@@ -254,6 +256,25 @@ func (s *compileState) checkImplementation(path string, a Action) {
 		s.add(path+".builtin", "builtin action requires a builtin")
 	case a.Kind == KindBuiltin && s.m.Builtins != nil && a.Builtin != builtins.ProcessStep && !s.m.Builtins.HasBuiltin(a.Builtin):
 		s.add(path+".builtin", "unknown builtin %q", a.Builtin)
+	}
+}
+
+// checkCriticality checks the default criticality of the methodology (ADR 0075 §3): C1, C2 or C3, or none.
+func (s *compileState) checkCriticality() {
+	if c := s.m.Criticality; c != "" && !slices.Contains([]string{"C1", "C2", "C3"}, c) {
+		s.add("criticality", "unknown criticality %q: C1, C2 or C3", c)
+	}
+}
+
+// checkVerify checks the verification an action declares (ADR 0075): a known kind of oracle.
+func (s *compileState) checkVerify(path string, a Action) {
+	if a.Verify == nil {
+		return
+	}
+	switch a.Verify.Oracle {
+	case OracleTool, OracleHuman, OracleModel:
+	default:
+		s.add(path+".verify.oracle", "unknown oracle %q: tool, human or model", a.Verify.Oracle)
 	}
 }
 

@@ -11,7 +11,8 @@ import (
 // The built-in domains flag these types, no more, no less (ADR 0068).
 func TestBuiltinAdminOnly(t *testing.T) {
 	flagged := map[string]bool{"organisation@OrgUnit": true, "organisation@User": true, "organisation@ProjectUnit": true,
-		"organisation@Adapter": true, "platform@AdapterDef": true, "organisation@Policy": true, "organisation@Assignment": true}
+		"organisation@Adapter": true, "platform@AdapterDef": true, "organisation@Policy": true, "organisation@Assignment": true,
+		"organisation@CriticalityPolicy": true}
 	c := Builtin()
 	for _, d := range Builtins() {
 		for _, n := range d.NodeTypes {

@@ -55,6 +55,7 @@ service GraphService {
   rpc AddChangeImpacts(AddChangeImpactsRequest) returns (AddChangeImpactsResponse);
   rpc WriteChangeImpact(WriteChangeImpactRequest) returns (WriteChangeImpactResponse);
   rpc ReviewChangeImpact(ReviewChangeImpactRequest) returns (ReviewChangeImpactResponse);
+  rpc ReopenChangeImpacts(ReopenChangeImpactsRequest) returns (ReopenChangeImpactsResponse);
   // Producers: a whole change of node edits (change impacts, versions, reviews, apply) in one call.
   rpc CommitEdits(CommitEditsRequest) returns (CommitEditsResponse);
   rpc GetBlackboard(GetBlackboardRequest) returns (GetBlackboardResponse);
@@ -1035,6 +1036,17 @@ message ReviewChangeImpactRequest {
 
 message ReviewChangeImpactResponse {
   ChangeImpact node = 1;
+}
+
+// ReopenChangeImpactsRequest sends accepted impacts of the main flow back to proposed (ADR 0075).
+message ReopenChangeImpactsRequest {
+  string change_id = 1;
+  repeated string change_impact_ids = 2;
+  string comment = 3;
+}
+
+message ReopenChangeImpactsResponse {
+  repeated string reopened = 1;
 }
 
 message GetChangeImpactsRequest {

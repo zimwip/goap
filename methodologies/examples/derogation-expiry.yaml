@@ -1,0 +1,43 @@
+name: derogation-expiry
+version: 1.0.0
+description: >
+  Closes the derogations that ran out and sends what they covered back to review (ADR 0075 §2). A schedule trigger
+  runs the builtin derogation.expire hourly: the clock is the trigger's, never the graph's, and the closing version
+  and the return to proposed are written as an ordinary Change operation by the platform.
+
+namespace: alm
+
+# the derogations are swept across the live changes (the builtin sets vars.swept): the process needs no change of its own
+conditions:
+  - name: derogations_swept
+    description: The expired derogations were closed
+    expr: has(vars.swept) && vars.swept == true
+
+actions:
+  - name: expire_derogations
+    kind: builtin
+    builtin: derogation.expire
+    description: Close the open derogations that ran out and reopen the review of the effects they covered
+    effects: {derogations_swept: true}
+    cost: 1
+
+agents:
+  - name: derogation-keeper
+    description: Applies the expiry of the derogations
+    planner: goap
+    actions: [expire_derogations]
+    goals: [expired_derogations_closed]
+    triggers:
+      - name: hourly
+        description: Sweep the derogations every hour
+        type: schedule
+        schedule: "0 * * * *"
+        goal: expired_derogations_closed
+        roles: [admin]
+        enabled: true
+
+goals:
+  - name: expired_derogations_closed
+    description: No open derogation has run out
+    pre: {derogations_swept: true}
+    value: 1

@@ -124,6 +124,23 @@ func (c *Client) ReviewNodeOn(ctx context.Context, id domain.ChangeID, flow, exe
 	return pbconv.ChangeImpactFromPB(r.Msg.Node), nil
 }
 
+// ReopenImpacts implements engine.GraphPort.
+func (c *Client) ReopenImpacts(ctx context.Context, id domain.ChangeID, impacts []domain.ChangeImpactID, comment string) ([]domain.ChangeImpactID, error) {
+	req := &graphv1.ReopenChangeImpactsRequest{ChangeId: string(id), Comment: comment}
+	for _, i := range impacts {
+		req.ChangeImpactIds = append(req.ChangeImpactIds, string(i))
+	}
+	r, err := c.rpc.ReopenChangeImpacts(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, rpcerr.FromConnect(err)
+	}
+	out := make([]domain.ChangeImpactID, len(r.Msg.Reopened))
+	for i, s := range r.Msg.Reopened {
+		out[i] = domain.ChangeImpactID(s)
+	}
+	return out, nil
+}
+
 // Changes lists every change known to the graph service.
 func (c *Client) Changes(ctx context.Context) ([]domain.Change, error) {
 	r, err := c.rpc.ListChanges(ctx, connect.NewRequest(&graphv1.ListChangesRequest{}))

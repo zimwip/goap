@@ -1,5 +1,5 @@
 name: organisation
-version: 1.11.0
+version: 1.12.0
 description: >
   Organisation structure, managed in its own namespace ("organisation"): a hierarchy of organisational units,
   mirrored by a hierarchy of projects (ADR 0039). Every node version, whatever its namespace, is owned by a unit and
@@ -7,6 +7,7 @@ description: >
   split into sub-changes along unit boundaries.
 enums:
   - {name: effect, description: What a policy rule does when it matches, values: [{value: allow, label: Allow}, {value: deny, label: Deny}]}
+  - {name: criticality-level, description: "Criticality of a change (ADR 0075): C1 low, C2 current, C3 critical", values: [{value: C1, label: C1}, {value: C2, label: C2}, {value: C3, label: C3}]}
 nodeTypes:
   # `editor` names the editor of the user interface for the nodes of a type (the adapters of a unit are edited on its page).
   # `waiting: true` flags the waiting unit (ADR 0042): a unit an administrator creates at their discretion for
@@ -88,6 +89,21 @@ nodeTypes:
       - {name: resource, label: Resource, description: "Type of resource the rule is about", type: string, section: Identity, order: 2}
       - {name: action, label: Action, description: "Action the rule is about", type: string, section: Identity, order: 3}
       - {name: effect, label: Effect, description: "allow or deny", type: enum, enum: effect, section: Identity, order: 4}
+  # what a criticality level requires of the changes (ADR 0075 §3), owned by the unit that sets it: a unit inherits the
+  # policy of its ancestors and the nearest unit holding one for a level wins (the whole policy, not field by field);
+  # a level no unit holds takes the compiled-in table (pkg/criticality). oracles: the kinds of oracle (tool, human,
+  # model) accepted to verify an effect (empty: any); sampling: a human review may be sampled; signatoryRole: the role
+  # whoever signs a derogation holds on the project (empty: any signatory); maxDerogationHours: the longest a derogation
+  # may last (0: unbounded).
+  - name: CriticalityPolicy
+    description: "What a criticality level requires of the changes of a unit"
+    adminOnly: true
+    attributes:
+      - {name: level, label: Level, description: "Criticality level the policy is about", type: enum, enum: criticality-level, section: Identity, order: 1, asName: true}
+      - {name: oracles, label: "Accepted oracles", description: "Kinds of oracle accepted to verify an effect (tool, human, model); empty: any", type: json, widget: textarea, section: Verification, order: 2}
+      - {name: sampling, label: "Sampling allowed", description: "A human review may be sampled", type: boolean, section: Verification, order: 3}
+      - {name: signatoryRole, label: "Signatory role", description: "Role of whoever signs a derogation, held on the project; empty: any signatory", type: string, section: Derogation, order: 4}
+      - {name: maxDerogationHours, label: "Maximum derogation (hours)", description: "The longest a derogation may last; 0: unbounded", type: number, section: Derogation, order: 5}
   # what the organisation works on, mirroring OrgUnit's hierarchy (ADR 0039): a project identifies the
   # methodologies that apply to it (it inherits their declared roles, ADR 0035 §2), and is composed of
   # sub-projects through `project_part_of`. The root project (PROJ-ROOT, bootstrapped with ORG-DEFAULT) links

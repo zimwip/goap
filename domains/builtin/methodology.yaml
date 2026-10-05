@@ -16,6 +16,7 @@ nodeTypes:
       - {name: description, label: Description, description: "What the methodology is for", type: string, widget: textarea, section: Identity, order: 3}
       - {name: namespace, label: "Domain namespace", description: "Namespace of the domain the methodology works on", type: string, section: Definition, order: 4}
       - {name: lifecycle, label: Lifecycle, description: "Lifecycle of the domain the changes of the methodology follow (ADR 0058); empty: none", type: string, section: Definition, order: 4}
+      - {name: criticality, label: Criticality, description: "Default criticality of the changes of the methodology (C1, C2 or C3, ADR 0075); empty: C2", type: string, section: Definition, order: 4}
       - {name: status, label: Status, description: "draft, published or archived", type: string, section: Definition, order: 5}
       - {name: createdAt, label: "Created at", description: "When the version was created", type: string, section: History, order: 6}
       - {name: updatedAt, label: "Updated at", description: "When the version was last modified", type: string, section: History, order: 7}
@@ -45,6 +46,7 @@ nodeTypes:
       - {name: description, label: Description, description: "What the element is for", type: string, widget: textarea, section: Identity, order: 2}
       - {name: kind, label: Kind, description: "How the action is carried out", type: enum, enum: action-kind, section: Execution, order: 3}
       - {name: roles, label: Roles, description: "Roles allowed to run the action", type: json, widget: textarea, section: Access, order: 4}
+      - {name: verify, label: Verification, description: "How the effect is verified: the oracle (tool, human, model) and whether the verifier differs from the producer", type: json, widget: textarea, section: Execution, order: 5}
       - {name: position, label: Position, description: "Position of the element in its collection of the definition", type: number, section: Definition, order: 90}
       - {name: removed, label: Removed, description: "The element was removed from the definition (kept for the history)", type: boolean, section: Definition, order: 91}
   - name: Condition

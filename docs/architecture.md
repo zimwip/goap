@@ -229,13 +229,15 @@ Variables exposed to the expression:
 | `decisionPoints`, `questions` | the decision points ([ADR 0009](adr/0009-branches-options-decisions.md) §4), `{id, question, status (open / blocked / ratifying / escalated / decided), options, criteria, decider, threshold, rounds, maxRounds, escalation, openQuestions, questions, ruling, option, decidedBy}`, and all their questions `{id, point, text, status (open / answered), answer, answeredBy}` |
 
 | `risks`, `actions` | the risk register and the actions of the change ([ADR 0036](adr/0036-risks-actions-brief-transverse-methodologies.md)): `{key, title, description, probability, impact, score, status, live, owner, actions, step, versions}` and `{key, title, status, owner, due, for, result, versions}`, the last version of each key |
+| `verifications`, `derogations` | the verification state of the effects of the action runs and the derogations of the change ([ADR 0075](adr/0075-verification-derogation-criticality.md)): `{execution, action, impact, oracle, independent, state, producer, by, open}` and `{key, rule, target, reason, signatory, expires, status, open, expired, versions}` |
+| `change.criticality`, `criticalityPolicy` | the criticality level of the change and what the organisation requires of it: `{oracles, sampling, signatoryRole, maxDerogationHours}` (not `policy`, taken by decision points) |
 
 **Condition libraries** ([ADR 0064](adr/0064-condition-libraries.md)): a methodology gets no condition it did not
-declare, except those of the libraries it imports (`imports: [decisions, risks]`, `condition.Library`). `decisions`:
+declare, except those of the libraries it imports (`imports: [decisions, risks, verification, derogations]`, `condition.Library`). `decisions`:
 `open_questions`, `no_open_questions`, `decision_ready` (a point can be ruled now), `decision_pending`,
 `no_decision_pending`, `ratification_pending`, `decision_escalated`, `options_open`, `options_evaluated`,
 `option_selected`. `risks`: `open_risks`, `unmitigated_risks` (a live risk of score ≥ `condition.HighRisk`, 9, without
-an action), `risks_under_control`, `open_actions`, `no_open_actions`. A condition the methodology declares under the
+an action), `risks_under_control`, `open_actions`, `no_open_actions`. `verification`: `unverified_effects`, `all_verified`, `reserves_open`. `derogations`: `no_expired_derogation`, `derogation_debt` (`condition.DerogationDebtLimit`, 3 open). A condition the methodology declares under the
 same name replaces the library one. The variables of the decision and risk concepts (`options`, `decisionPoints`,
 `questions`, `risks`, `actions`) are always in the environment, and computed only when an expression reads them.
 
@@ -359,6 +361,37 @@ that landed nothing can be purged with its log (`DeleteChange`).
 The settings of the platform edited in the web dialog are staged this way: each edit is an impact of the personal
 change, **Save** applies it, **Discard** (or leaving the dialog and accepting to lose the edits) purges it. Personal
 preferences are not graph data ([ADR 0038](adr/0038-user-preferences-service.md)).
+
+### 2.7b Verification, derogations and criticality ([ADR 0075](adr/0075-verification-derogation-criticality.md))
+
+A result produced is not a result accepted. Three small mechanisms, each placed in the concept that answers its question:
+
+| Question | Concept | What |
+|---|---|---|
+| WHO | Organisation | `organisation@CriticalityPolicy` (one per level, `adminOnly`, nearest unit wins, whole policy): accepted oracle kinds, sampling, derogation signatory role and maximum lifetime; the permissions `derogation:sign`, `derogation:sign-role`, `change:lower-criticality` |
+| WHY | Change | `criticality` (`C1` / `C2` / `C3`) in `Change.Data` (`domain.DataCriticality`; raising is free, lowering needs `change:lower-criticality`); `verification` and `derogation` items |
+| HOW | Methodology | `verify: {oracle: tool\|human\|model, independent}` on an action; `Methodology.Criticality` (default level); `vetos` / `objectives` on a lifecycle transition; the libraries `verification` and `derogations` |
+| WHAT | Domain | nothing: the domains stay unaware |
+| WITH WHAT | Adapter / model alias | the alias of a `model` oracle must differ from the producer's |
+
+- **Verification** (`pkg/verify`). When an action with `verify` ends, the engine writes a `produced` item of kind
+  `verification` (oracle, `independent`, producer alias, impact ids); the states `produced`, `verified`, `accepted`,
+  `accepted_with_reserve`, `rejected` are items of the change log (`fact.verification`), folded by `verify.Subjects`.
+  `Graph.ReviewPolicy` (a `domain.ReviewPolicy`) is asked by every review of an impact and `verify.Policy` refuses a
+  verifier equal to the producer. The graph keeps the mechanism, `pkg/verify` the rule, as for decisions.
+- **Derogations** (`pkg/risk`). An item of kind `derogation` (key, rule, target, reason, signatory, `expires`; no
+  expiry, no derogation), versioned like a risk; `derogation:sign` (and `derogation:sign-role` for the role the policy
+  of the level asks) is checked through `Graph.ItemAuthorizer`; `accepted_with_reserve` needs one in force
+  (`ReviewNodeWithReserve`). The builtin `derogation.expire` (`methodologies/examples/derogation-expiry.yaml`) closes
+  the expired ones and sends what they covered back to `proposed` (`Graph.ReopenImpacts`).
+- **Criticality** (`pkg/criticality`). The policy of a level is resolved along the unit chain (`pkg/access`), else the
+  compiled-in `Defaults()`; `Graph.ItemPolicy` applies it to the items written (oracle kinds). CEL reads
+  `change.criticality` and `criticalityPolicy`.
+- **Gates**. A transition may list `vetos` (one unmet blocks) and `objectives` (an unmet one needs a derogation in force
+  naming it); `condition.CheckGate` evaluates them, the reserve is recorded on the transition item as `unmet` / `reserve`.
+
+`pkg/graph` and `pkg/domain` import none of these packages (`pkg/layering`); `cmd/graph` and `cmd/goap-dev` plug the
+seams explicitly. Open points (web editors of the policies, sampling enforcement...) are in the ADR's "Not done".
 
 ### 2.8 ABAC access control (Casbin)
 

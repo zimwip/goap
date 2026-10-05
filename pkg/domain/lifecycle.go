@@ -52,6 +52,12 @@ type Transition struct {
 	// Guard is a CEL predicate over the node (node.props, node.state) and its
 	// contained children (children), evaluated when the change is applied.
 	Guard string `yaml:"guard,omitempty" json:"guard,omitempty"`
+	// Vetos and Objectives split the criteria of a gate of the lifecycle of a change (ADR 0075 §3, ADR 0058), evaluated
+	// in the environment of Guard: a veto not met blocks the transition, whatever else holds; an objective not met
+	// blocks it too unless a derogation in force names it (its rule is the name of the objective), when the transition
+	// goes with reserve. They are two lists of the guard, not another kind of gate.
+	Vetos      []Criterion `yaml:"vetos,omitempty" json:"vetos,omitempty"`
+	Objectives []Criterion `yaml:"objectives,omitempty" json:"objectives,omitempty"`
 	// Guards are algorithm instances of type transition_guard (ADR 0018), run
 	// in order after the CEL guard; all must accept.
 	Guards []string `yaml:"guards,omitempty" json:"guards,omitempty"`
@@ -68,6 +74,41 @@ type Transition struct {
 	// states for the transition to be accepted. Validation only, no cascade.
 	Children *ChildrenRule `yaml:"children,omitempty" json:"children,omitempty"`
 }
+
+// Criterion is one criterion of a gate (ADR 0075 §3): a named CEL predicate over the same variables as a guard.
+type Criterion struct {
+	Name        string `yaml:"name" json:"name"`
+	Expr        string `yaml:"expr" json:"expr"`
+	Description string `yaml:"description,omitempty" json:"description,omitempty"`
+}
+
+// GateResult is what the criteria of a gate came to for a change.
+type GateResult struct {
+	// Vetoed are the vetos not met: any blocks the transition.
+	Vetoed []string `json:"vetoed,omitempty"`
+	// Unmet are the objectives not met, covered or not.
+	Unmet []string `json:"unmet,omitempty"`
+	// Reserve are the keys of the records (derogations in force) that cover the unmet objectives, by objective name:
+	// the transition goes with reserve.
+	Reserve map[string]string `json:"reserve,omitempty"`
+}
+
+// Uncovered are the objectives not met that nothing covers.
+func (r GateResult) Uncovered() []string {
+	var out []string
+	for _, n := range r.Unmet {
+		if _, ok := r.Reserve[n]; !ok {
+			out = append(out, n)
+		}
+	}
+	return out
+}
+
+// Passed reports whether the transition may go: no veto is unmet and every unmet objective is covered.
+func (r GateResult) Passed() bool { return len(r.Vetoed) == 0 && len(r.Uncovered()) == 0 }
+
+// WithReserve reports whether the transition goes although objectives are unmet.
+func (r GateResult) WithReserve() bool { return len(r.Vetoed) == 0 && len(r.Unmet) > 0 && r.Passed() }
 
 // TransitionRequires lists what the node must have to take a transition.
 type TransitionRequires struct {
