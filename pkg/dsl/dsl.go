@@ -63,10 +63,12 @@ type ChangeImpact struct {
 	Rationale string `json:"rationale"`
 	Review    string `json:"review"`
 	// Planned is set while the change impact has no post version yet.
-	Planned bool  `json:"planned"`
-	Pre     *Node `json:"pre"`
-	Post    *Node `json:"post"`
-	Landed  *Node `json:"landed"`
+	Planned bool `json:"planned"`
+	// CheckedOut is set while the post version is the working version of the change: editable, not frozen (ADR 0076).
+	CheckedOut bool  `json:"checkedOut"`
+	Pre        *Node `json:"pre"`
+	Post       *Node `json:"post"`
+	Landed     *Node `json:"landed"`
 	// Links are the outgoing links of the version written (post): from this node to the linked ones.
 	Links []Link `json:"links"`
 	// Items are the items the change impact is derived from (none when written directly).

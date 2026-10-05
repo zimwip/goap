@@ -290,7 +290,41 @@ func (g *Graph) putVersion(ctx context.Context, tx Tx, w *work, n domain.Node, b
 			}
 		}
 	}
+	if base != nil {
+		if err := g.followVersion(ctx, tx, w, base.Ref(), ref); err != nil {
+			return ref, err
+		}
+	}
 	return ref, g.emit(ctx, tx, domain.ImpactEvent{Change: w.c.ID, Impact: w.cn.ID, Op: domain.ImpactWritten, Flow: w.flow, Execution: n.Execution, Post: &ref})
+}
+
+// followVersion moves to the new version of a node the links the working versions of the change hold to the version it
+// follows: a link to a node of the change targets the version the change sees (ADR 0076 §4). The links of a frozen
+// version stay as they are: they become suspect (ADR 0003).
+func (g *Graph) followVersion(ctx context.Context, tx Tx, w *work, from, to domain.NodeRef) error {
+	in, err := tx.InLinks(ctx, from)
+	if err != nil {
+		return err
+	}
+	for _, l := range in {
+		if l.From.ID == to.ID {
+			continue
+		}
+		src, err := tx.Node(ctx, l.From)
+		if err != nil {
+			return err
+		}
+		if !src.CheckedOut || src.ChangeID != w.c.ID || domain.BranchOf(src.Branch) != w.branch {
+			continue
+		}
+		if err := tx.DeleteLink(ctx, l.ID); err != nil {
+			return err
+		}
+		if err := tx.PutLink(ctx, domain.Link{ID: domain.LinkID(g.newID()), Type: l.Type, From: l.From, To: to, Properties: l.Properties, ChangeID: w.c.ID}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // seenAs returns the change impact as the operation leaves it, with its post.

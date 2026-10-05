@@ -80,6 +80,9 @@ conditions:
       All the change impacts have received a decision (the deployments are
       recorded accepted, after the review)
     expr: size(changeImpacts) > 0 && changeImpacts.all(n, n.review != "proposed")
+  - name: requirements_approved
+    description: The requirements the review accepted are checked in and approved (ADR 0076)
+    expr: artifacts.exists(a, a.type == "requirements_approval")
   - name: rolled_out
     description: Each release is deployed to every environment in the chain (or there is nothing to deploy)
     expr: >
@@ -181,8 +184,10 @@ actions:
       {{ end }}
       Revise the impacted requirements and create new requirements (types:
       FunctionalRequirement, NonFunctionalRequirement, SecurityRequirement), each one
-      linked to the need it satisfies. A revised requirement is an impacted change impact that you write;
-      a new requirement is declared then written with its link:
+      linked to the need it satisfies. A revised requirement is an impacted change impact: move it to draft
+      first (a transition: start from proposed, reopen from approved), then write it; a new requirement is
+      declared then written with its link. The review of the change approves them afterwards:
+      {"kind":"changeImpact","changeImpact":{"op":"transition","node":"<impacted key>","state":"draft"}}
       {"kind":"changeImpact","changeImpact":{"op":"write","node":"<impacted key>","props":{...}}}
       {"kind":"changeImpact","changeImpact":{"op":"declare","ref":"#r1","intent":"created","type":"alm@FunctionalRequirement","key":"REQ-...","rationale":"why"}}
       {"kind":"changeImpact","changeImpact":{"op":"write","node":"#r1","props":{"title":"...","priority":"high"},"links":[{"type":"alm@satisfies","to":"<need key>"}]}}
@@ -566,6 +571,33 @@ actions:
     cost: 2
     instructions: Accept or reject each change impact (impacts, requirements, design, artifacts, tests, releases) based on the release note and the design check; a comment is required.
 
+  - name: approve_requirements
+    kind: script
+    language: javascript
+    description: >
+      Approve the requirements the review accepted: check in their working version (the acceptance authorizes it), then
+      move them to approved (a new requirement starts first); the approval guard reads the accepted review (ADR 0076)
+    pre: {reviewed: true}
+    effects: {requirements_approved: true}
+    cost: 1
+    code: |
+      function run(ctx) {
+        const types = ["alm@Requirement", "alm@FunctionalRequirement", "alm@NonFunctionalRequirement", "alm@SecurityRequirement"];
+        let approved = 0;
+        for (const n of ctx.changeImpacts()) {
+          if (!types.includes(n.type) || n.review !== "accepted" || !n.post) continue;
+          if (n.checkedOut) ctx.checkinNode(n.key);
+          const state = n.post.state;
+          if (state === "proposed") ctx.transitionNode(n.key, "draft");
+          if (state === "proposed" || state === "draft") {
+            ctx.transitionNode(n.key, "approved");
+            approved++;
+          }
+        }
+        ctx.addArtifact("requirements_approval", { approved: approved });
+        return approved + " requirement(s) approved";
+      }
+
   # ======================= deployment (abstract, incremental, specialized by environment stage)
   - name: deploy
     kind: abstract
@@ -635,7 +667,7 @@ actions:
     kind: builtin
     builtin: graph.apply
     description: Apply the change to the ALM repository (new baseline, including releases and deployments)
-    pre: {reviewed: true, rolled_out: true}
+    pre: {reviewed: true, requirements_approved: true, rolled_out: true}
     effects: {applied: true}
     cost: 1
     permission: change:apply
@@ -838,6 +870,7 @@ processes:
       - {name: plan, action: plan_release}
       - {name: release_note, actions: [write_release_note, assemble_release_note]}
       - {name: review, action: review, roles: {responsible: tech_lead, accountable: service_owner}}
+      - {name: approval, description: Approve the requirements the review accepted, action: approve_requirements}
       - name: rollout
         description: Deploy each release wave by wave, from dev to production
         action: deploy

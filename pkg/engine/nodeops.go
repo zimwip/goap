@@ -67,6 +67,9 @@ func ChangeImpactsFromBlackboard(bb domain.Blackboard) []dsl.ChangeImpact {
 		x := dsl.ChangeImpact{ID: string(cn.ID), Key: cn.Key, Type: cn.Type, Intent: string(cn.Intent), Rationale: cn.Rationale, Review: string(cn.Review),
 			Planned: cn.Post == nil, Pre: view(cn.Pre), Post: view(cn.Post), Landed: view(cn.Landed), Items: []string{}, Links: []dsl.Link{}}
 		if cn.Post != nil {
+			x.CheckedOut = bb.Nodes[*cn.Post].CheckedOut
+		}
+		if cn.Post != nil {
 			for _, l := range bb.Nodes[*cn.Post].Out {
 				x.Links = append(x.Links, dsl.Link{ID: string(l.ID), Type: l.Type, From: dsl.LinkEnd{ID: string(cn.Post.ID), Version: int(cn.Post.Version), Key: cn.Key, Type: cn.Type}, To: end(l.To)})
 			}

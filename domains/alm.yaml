@@ -1,5 +1,5 @@
 name: alm
-version: 1.1.0
+version: 1.2.0
 description: >
   Application lifecycle management domain: needs, requirements, functions, components, builds, releases and deployments. Shared by the delivery methodologies (impact-analysis, test-design, sdlc).
 enums:
@@ -125,19 +125,18 @@ lifecycles:
   # Work happens in the editable states, which a node only holds through a change:
   # a persisted version is never editable.
   - name: requirement
-    description: How a requirement is written, reviewed, approved and retired
+    description: How a requirement is written, approved once reviewed in its change, and retired
     initial: proposed
     states:
       - {name: proposed, description: "Raised, not worked on yet"}
       - {name: draft, editable: true, description: "Being written or reworked in a change"}
-      - {name: in_review, description: Submitted for review}
       - {name: approved, description: Reviewed and accepted}
       - {name: obsolete, final: true, description: No longer applicable}
     transitions:
       - {name: start, description: Take a proposed requirement up to work on it in a change, from: proposed, to: draft}
-      - {name: submit, description: Send the written requirement to review (it must have a title), from: draft, to: in_review, requires: {attributes: [title]}}
-      - {name: approve, description: Accept the reviewed requirement; stamps the approval date, from: in_review, to: approved, permission: "requirement:approve", actions: [stamp-approved-at]}
-      - {name: reject, description: Send the requirement back to be reworked, from: in_review, to: draft}
+      # the review is the change's (ADR 0076): the requirement is approved once the review of its impact is accepted
+      # and its version checked in; a refused review sends it back to be reworked in the change
+      - {name: approve, description: Approve the requirement once the change accepted its review; stamps the approval date, from: draft, to: approved, permission: "requirement:approve", guard: 'impact.review == "accepted"', requires: {attributes: [title]}, actions: [stamp-approved-at]}
       - {name: reopen, description: Rework an approved requirement in a change, from: approved, to: draft}
       - {name: retire, description: Take the requirement out of use for good, from: approved, to: obsolete}
   - name: release

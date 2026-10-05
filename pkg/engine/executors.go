@@ -75,14 +75,17 @@ Answer ONLY with a JSON object {"items":[...]} where each item is one of:
 The nodes the change acts on are change impacts: items of kind "changeImpact", applied in order:
 {"kind":"changeImpact","changeImpact":{"op":"declare","ref":"#n1","intent":"modified","key":"<node key>","rationale":"why the node is impacted"}}
 {"kind":"changeImpact","changeImpact":{"op":"declare","ref":"#n2","intent":"created","type":"<node type>","key":"<new key>","rationale":"why"}}
-{"kind":"changeImpact","changeImpact":{"op":"write","node":"<node key or #n1>","props":{...},"state":"<lifecycle state>","links":[{"type":"...","to":"<node key or a #nN already written>"}]}}
+{"kind":"changeImpact","changeImpact":{"op":"write","node":"<node key or #n1>","props":{...},"links":[{"type":"...","to":"<node key or a #nN already written>"}]}}
 {"kind":"changeImpact","changeImpact":{"op":"review","node":"<node key>","accept":true,"comment":"why"}}
+{"kind":"changeImpact","changeImpact":{"op":"checkin","node":"<node key>"}}
+{"kind":"changeImpact","changeImpact":{"op":"transition","node":"<node key>","state":"<lifecycle state>"}}
+{"kind":"changeImpact","changeImpact":{"op":"cancel","node":"<node key>"}}
 Decision points of the change (a question to settle, usually which option) are items of kind "decisionPoint":
 {"kind":"decisionPoint","decisionPoint":{"op":"open","ref":"#d1","question":"...","options":["<option name>"],"criteria":["..."]}}
 {"kind":"decisionPoint","decisionPoint":{"op":"rule","point":"<point id or #d1>","outcome":"decided","option":"<option name>","confidence":0.8,"justification":"why"}}
 {"kind":"decisionPoint","decisionPoint":{"op":"rule","point":"<point id>","outcome":"undecidable","justification":"why it cannot be decided","questions":["what must be known first"]}}
 {"kind":"decisionPoint","decisionPoint":{"op":"answer","questionId":"<question id>","answer":"..."}}
-A node whose type has a lifecycle can only be modified in an editable state: reopen it with a write that sets "state" first, and finish with a write to a non-editable state.
+A write edits the working version of the node: the first write checks it out, the next ones edit it in place. An accepted review authorizes its check-in, which freezes it; a lifecycle state is a transition of its own, from a checked-in version. A node whose type has a lifecycle is only written in an editable state: move it there first with a transition, and leave it with a transition once its review is accepted and it is checked in. A node is never deleted: removing a child is a write of its parent without the link.
 Reference nodes by their key. Reference items and change impacts created in the same answer by "#<ref>".`
 
 // PromptData is exposed to prompt templates.

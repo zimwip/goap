@@ -17,6 +17,7 @@ import (
 	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/llm"
 	"github.com/zimwip/goap/pkg/llmcfg"
+	"github.com/zimwip/goap/pkg/typecat"
 )
 
 func stores(t *testing.T) map[string]Store {
@@ -36,6 +37,8 @@ func stores(t *testing.T) map[string]Store {
 // newService returns a service reading its configuration from a fresh graph, which the caller edits with change.
 func newService(store Store) (*Service, *graph.Graph) {
 	g := graph.New(graph.NewMemory())
+	// the built-in domains: the configuration entries follow the lifecycle config of the platform domain (ADR 0076)
+	g.Types = func() graph.TypeCatalog { return typecat.Builtin() }
 	return NewService(&llmcfg.Directory{Graph: g, TTL: 1}, store, (&platform.Secrets{}).Resolve, nil), g
 }
 
@@ -69,14 +72,15 @@ func updateNode(t *testing.T, g *graph.Graph, key string, props map[string]any) 
 	return graph.NodeEdit{Pre: &pre, Props: props}
 }
 
-func deleteNode(t *testing.T, g *graph.Graph, key string) graph.NodeEdit {
+// retireNode takes an entry out of the configuration: a transition, a node is never deleted (ADR 0076).
+func retireNode(t *testing.T, g *graph.Graph, key string) graph.NodeEdit {
 	t.Helper()
 	n, err := g.NodeByKey(context.Background(), llmcfg.NamespacePlatform, key)
 	if err != nil {
 		t.Fatal(err)
 	}
 	pre := n.Ref()
-	return graph.NodeEdit{Pre: &pre, Retire: true}
+	return graph.NodeEdit{Pre: &pre, State: llmcfg.StateRetired, Rationale: "retired"}
 }
 
 func TestServicePolicy(t *testing.T) {
@@ -124,7 +128,7 @@ func TestServicePolicy(t *testing.T) {
 			if _, err := svc.Complete(meth, req); !errors.Is(err, ErrModelDisabled) {
 				t.Fatalf("disabled: %v", err)
 			}
-			change(t, g, deleteNode(t, g, llmcfg.ProviderKey("fake")))
+			change(t, g, retireNode(t, g, llmcfg.ProviderKey("fake")))
 			if _, err := svc.Complete(meth, req); !errors.Is(err, ErrInvalid) {
 				t.Fatalf("the alias must go with its provider: %v", err)
 			}
@@ -260,7 +264,7 @@ func TestDefaultConfigIsSeededOnce(t *testing.T) {
 	if cat, _, _ := svc.Catalog(ctx); len(cat) != 2 || !cat[0].Enabled || !cat[1].Enabled { // echo and the embedding model
 		t.Fatalf("alias targets must be in the catalog: %+v", cat)
 	}
-	change(t, g, deleteNode(t, g, llmcfg.AliasKey("default")))
+	change(t, g, retireNode(t, g, llmcfg.AliasKey("default")))
 	if seeded, err := graphsvc.SeedModels(ctx, g, provs, models, aliases); err != nil || seeded {
 		t.Fatalf("an administered graph must not be re-seeded: %v %v", seeded, err)
 	}

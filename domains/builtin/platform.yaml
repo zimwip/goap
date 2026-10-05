@@ -1,5 +1,5 @@
 name: platform
-version: 2.3.0
+version: 2.4.0
 description: >
   The platform configuration, in its own namespace ("platform"): the MCPs (the generic usage of a tool by an LLM), the
   adapter definitions (AdapterDef: code mapping an MCP onto a connector; an organisation implements an MCP with an Adapter
@@ -30,8 +30,10 @@ nodeTypes:
       - {name: language, label: Language, description: "javascript or go", type: string, section: Code, order: 5}
       - {name: code, label: Code, description: "Mapping of the MCP tools onto the connector operations", type: string, widget: textarea, section: Code, order: 6}
       - {name: params, label: Parameters, description: "Parameters the units give values to", type: json, widget: textarea, section: Code, order: 7}
+  # the model gateway configuration is taken out of force by a transition, never deleted (ADR 0076): lifecycle config
   - name: LlmProvider
     description: "LLM provider: a kind (preset) on a wire protocol"
+    lifecycle: config
     attributes:
       - {name: name, label: Name, description: "Name of the provider", type: string, section: Identity, order: 1, asName: true}
       - {name: kind, label: Kind, description: "Preset of the provider", type: string, section: Identity, order: 2}
@@ -41,6 +43,7 @@ nodeTypes:
       - {name: apiKeyRef, label: "API key", description: "Reference to the secret holding the key", type: string, section: Connection, order: 6}
   - name: LlmModel
     description: "Model offered on the platform, with its global quota and the roles that may call it"
+    lifecycle: config
     attributes:
       - {name: provider, label: Provider, description: "Provider offering the model", type: string, section: Identity, order: 1}
       - {name: model, label: Model, description: "Name of the model at the provider", type: string, section: Identity, order: 2}
@@ -51,6 +54,7 @@ nodeTypes:
       - {name: roles, label: Roles, description: "Roles allowed to call the model", type: json, widget: textarea, section: Access, order: 7}
   - name: LlmAlias
     description: "Name (default, fast, ...) of a model, as provider/model"
+    lifecycle: config
     attributes:
       - {name: alias, label: Alias, description: "Name callers use (default, fast…)", type: string, section: Identity, order: 1, asName: true}
       - {name: target, label: Target, description: "The model, as provider/model", type: string, section: Identity, order: 2}
@@ -66,3 +70,16 @@ nodeTypes:
     attributes:
       - {name: name, label: Name, description: "Name of the role", type: string, section: Identity, order: 1, asName: true}
       - {name: description, label: Description, description: "What the role allows", type: string, widget: textarea, section: Identity, order: 2}
+lifecycles:
+  # An entry of the model gateway configuration is never deleted (ADR 0076): it is retired, and the gateway leaves it
+  # out; an active entry stays editable at rest (restInEditable), the way configuration always was.
+  - name: config
+    description: Whether an entry of the model gateway configuration is in force
+    initial: active
+    restInEditable: true
+    states:
+      - {name: active, editable: true, description: "In force"}
+      - {name: retired, description: "Taken out of the configuration; read-only until restored"}
+    transitions:
+      - {name: retire, description: Take the entry out of the configuration, from: active, to: retired}
+      - {name: restore, description: Put a retired entry back in force, from: retired, to: active}
