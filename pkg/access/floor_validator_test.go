@@ -38,7 +38,7 @@ func floorGraph(t *testing.T) *graph.Graph {
 func TestAdminFloorRejectsRemovingLastAdmin(t *testing.T) {
 	ctx := context.Background()
 	g := floorGraph(t)
-	if _, err := graphsvc.SeedDefaults(ctx, g); err != nil {
+	if err := g.Bootstrap(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if err := graphsvc.EnsureUser(ctx, g, "alice"); err != nil {
@@ -72,7 +72,7 @@ func TestAdminFloorRejectsRemovingLastAdmin(t *testing.T) {
 func TestAdminFloorAllowsHandoffInOneCommit(t *testing.T) {
 	ctx := context.Background()
 	g := floorGraph(t)
-	if _, err := graphsvc.SeedDefaults(ctx, g); err != nil {
+	if err := g.Bootstrap(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if err := graphsvc.EnsureUser(ctx, g, "alice"); err != nil {
@@ -131,7 +131,7 @@ func TestAdminFloorCountsWhatEnrichGrants(t *testing.T) {
 		t.Helper()
 		ctx := context.Background()
 		g := floorGraph(t)
-		if _, err := graphsvc.SeedDefaults(ctx, g); err != nil {
+		if err := g.Bootstrap(ctx); err != nil {
 			t.Fatal(err)
 		}
 		if err := graphsvc.EnsureUser(ctx, g, "alice"); err != nil {

@@ -38,6 +38,7 @@ import (
 	"github.com/zimwip/goap/internal/connectors/builtin"
 	"github.com/zimwip/goap/internal/connectors/localfs"
 	"github.com/zimwip/goap/internal/credsvc"
+	"github.com/zimwip/goap/internal/devseed"
 	"github.com/zimwip/goap/internal/enginesvc"
 	"github.com/zimwip/goap/internal/eventsvc"
 	"github.com/zimwip/goap/internal/gateway"
@@ -136,41 +137,39 @@ func main() {
 			log.Info("domain published: type catalogue reloaded", "domain", name, "version", version)
 		},
 	}}
-	system := authz.With(ctx, authz.Principal{Subject: "system:registry", Roles: []string{"admin"}})
+	system := authz.With(ctx, authz.System("registry", access.RoleAdmin))
 	if _, err := reg.SeedDomains(system, platform.Env("GOAP_DOMAINS_DIR", "domains")); err != nil {
 		platform.Fatal(log, "domains", err)
 	}
 	if err := types.Reload(ctx); err != nil {
 		platform.Fatal(log, "type catalogue", err)
 	}
-	// the roots of the organisation and of the projects, before any change (ADR 0054)
-	if err := g.Bootstrap(ctx); err != nil {
-		platform.Fatal(log, "bootstrap", err)
+	// the one platform bootstrap (graphsvc.Boot, ADR 0071) with the development data of this composition: the ALM demo,
+	// the document-repository MCP and, with GOAP_DEV_FS_ROOT, a directory as the default organisation's repository.
+	// The gateway configuration is seeded before the methodologies below: publishing a methodology stubs any alias it
+	// references that the platform namespace doesn't have yet (registrysvc.ensureAliasStubs), and that stub would
+	// otherwise collide with the alias Boot seeds.
+	bootModels, err := modelgw.BootConfig(ctx, platform.Env("GOAP_MODELS_CONFIG", ""), secrets)
+	if err != nil {
+		platform.Fatal(log, "models config", err)
 	}
-	// the gateway configuration (providers, models, aliases) must exist before methodologies are seeded below:
-	// publishing a methodology stubs any alias it references that the platform namespace doesn't have yet
-	// (registrysvc.ensureAliasStubs), and that stub would otherwise collide with the alias this seeds.
-	if cfg, err := modelgw.InitialConfig(ctx, platform.Env("GOAP_MODELS_CONFIG", ""), secrets); err != nil {
-		platform.Fatal(log, "models config", err)
-	} else if provs, models, aliases, err := cfg.Objects(); err != nil {
-		platform.Fatal(log, "models config", err)
-	} else if _, err := graphsvc.SeedModels(ctx, g, provs, models, aliases); err != nil {
-		platform.Fatal(log, "seed models", err)
+	if _, err := graphsvc.Boot(ctx, g, graphsvc.Options{Models: bootModels, RequireHooks: true, Log: log,
+		Dev: func(ctx context.Context, g *graph.Graph) error {
+			if _, err := devseed.Demo(ctx, g); err != nil {
+				return err
+			}
+			if _, err := devseed.DocumentRepository(ctx, g); err != nil {
+				return err
+			}
+			if root := os.Getenv("GOAP_DEV_FS_ROOT"); root != "" {
+				return devseed.LocalFS(ctx, g, root)
+			}
+			return nil
+		}}); err != nil {
+		platform.Fatal(log, "boot", err)
 	}
 	if _, err := reg.Seed(system, platform.Env("GOAP_METHODOLOGIES_DIR", "methodologies")); err != nil {
 		platform.Fatal(log, "methodologies", err)
-	}
-	if _, err := graphsvc.SeedAccess(ctx, g); err != nil {
-		platform.Fatal(log, "seed access", err)
-	}
-	if _, err := graphsvc.SeedDefaults(ctx, g); err != nil {
-		platform.Fatal(log, "seed defaults", err)
-	}
-	if _, err := graphsvc.SeedDemo(ctx, g); err != nil {
-		platform.Fatal(log, "seed", err)
-	}
-	if _, err := graphsvc.SeedBuiltins(ctx, g); err != nil {
-		platform.Fatal(log, "seed built-in MCPs", err)
 	}
 	gw := modelgw.NewService(&llmcfg.Directory{Graph: g}, st.models, secrets.Resolve, log)
 	gw.Router.Instrument = telemetry.NewGenAI().Instrument
@@ -224,16 +223,6 @@ func main() {
 		Invoker:   mcpsvc.InprocInvoker{Connectors: connectors, Remote: &mcpsvc.ConnectInvoker{Token: connectorToken}},
 		Secrets:   mcpsvc.ResolveSecret(secrets),
 		Lease:     platform.EnvDuration("GOAP_CONNECTOR_LEASE", mcpsvc.DefaultLease),
-	}
-	if root := os.Getenv("GOAP_DEV_FS_ROOT"); root != "" {
-		// demo: the default organisation implements document-repository with a directory
-		if snap, err := hub.Directory.Snapshot(ctx); err != nil {
-			platform.Fatal(log, "mcp", err)
-		} else if _, _, ok := snap.Resolve(g.Structure(domain.StructureOrganisation).Root, "document-repository"); !ok {
-			if err := graphsvc.SeedAdapter(ctx, g, graphsvc.LocalFSAdapter(g.Structure(domain.StructureOrganisation).Root, root)); err != nil {
-				platform.Fatal(log, "mcp adapter", err)
-			}
-		}
 	}
 	builtins := engine.DefaultBuiltins()
 	e := &engine.Engine{

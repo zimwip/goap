@@ -31,7 +31,7 @@ func TestUserDeactivateReactivateRequireAdmin(t *testing.T) {
 	}
 	g.Authorizer = graphsvc.TransitionAuthorizer(authorizer)
 
-	if _, err := graphsvc.SeedDefaults(ctx, g); err != nil {
+	if err := g.Bootstrap(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if err := graphsvc.EnsureUser(ctx, g, "carol"); err != nil {

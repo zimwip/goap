@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
-	"strings"
 	"testing"
 
 	"github.com/zimwip/goap/gen/goap/graph/v1/graphv1connect"
@@ -36,82 +35,12 @@ func typedGraph(t *testing.T) *graph.Graph {
 	return g
 }
 
-// The seeds only write nodes and links the domains of the repository declare.
-func TestSeedsFollowTheDomains(t *testing.T) {
-	ctx := context.Background()
-	g := typedGraph(t)
-	if _, err := graphsvc.SeedDemo(ctx, g); err != nil {
-		t.Fatal(err)
-	}
-	if again, err := graphsvc.SeedDemo(ctx, g); err != nil || again {
-		t.Fatalf("the demo is seeded once: %v %v", again, err)
-	}
-	if _, err := graphsvc.SeedAccess(ctx, g); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := graphsvc.SeedDefaults(ctx, g); err != nil {
-		t.Fatal(err)
-	}
-	unit, err := g.NodeByKey(ctx, "organisation", "ORG-CHECKOUT")
-	if err != nil || unit.Type != access.NodeTypeOrgUnit {
-		t.Fatalf("unit = %+v, %v", unit, err)
-	}
-	app, err := g.NodeByKey(ctx, "alm", "APP-1")
-	if err != nil || app.Type != "alm@Application" {
-		t.Fatalf("app = %+v, %v", app, err)
-	}
-	if app.Owner != unit.ID {
-		t.Fatalf("APP-1 must be owned by ORG-CHECKOUT across namespaces: %+v", app)
-	}
-	uv, _ := g.View(ctx, unit.Ref())
-	if len(uv.Out) != 1 || uv.Out[0].Type != access.LinkPartOf {
-		t.Fatalf("unit hierarchy: %+v", uv.Out)
-	}
-}
-
-// The demo seed runs after the bootstrap (ADR 0054): its organisation hangs under the root unit from the start, and
-// every one of its writes is an applied change held by a unit and acting in a project.
-func TestSeedDemoHangsUnderTheRoot(t *testing.T) {
-	ctx := context.Background()
-	g := typedGraph(t)
-	if _, err := graphsvc.SeedDemo(ctx, g); err != nil {
-		t.Fatal(err)
-	}
-	def, err := g.NodeByKey(ctx, "organisation", access.DefaultOrg)
-	if err != nil {
-		t.Fatal(err)
-	}
-	acme, err := g.NodeByKey(ctx, "organisation", "ORG-ACME")
-	if err != nil {
-		t.Fatal(err)
-	}
-	v, err := g.View(ctx, acme.Ref())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(v.Out) != 1 || v.Out[0].Type != access.LinkPartOf || v.Out[0].To.ID != def.ID {
-		t.Fatalf("ORG-ACME must be part_of ORG-DEFAULT: %+v", v.Out)
-	}
-	if acme.Owner != def.ID || acme.ChangeID == "" || acme.Project == "" {
-		t.Fatalf("ORG-ACME is owned by the root unit, written by a change, created in a project: %+v", acme)
-	}
-	cs, err := g.Changes(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, c := range cs {
-		if c.OwnerOrg == "" || c.ProjectID == "" {
-			t.Fatalf("change %s %q names no unit or no project", c.ID, c.Title)
-		}
-	}
-}
-
 // The built-in MCPs follow the code at every start; the instances of the default organisation are
 // seeded once, so that removing one sticks (ADR 0028).
 func TestSeedBuiltins(t *testing.T) {
 	ctx := context.Background()
 	g := typedGraph(t)
-	if _, err := graphsvc.SeedDefaults(ctx, g); err != nil {
+	if err := g.Bootstrap(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if seeded, err := graphsvc.SeedBuiltins(ctx, g); err != nil || !seeded {
@@ -174,7 +103,7 @@ func TestSeedBuiltins(t *testing.T) {
 func TestRootProjectSeeded(t *testing.T) {
 	ctx := context.Background()
 	g := typedGraph(t)
-	if _, err := graphsvc.SeedDefaults(ctx, g); err != nil {
+	if err := g.Bootstrap(ctx); err != nil {
 		t.Fatal(err)
 	}
 	root, err := g.NodeByKey(ctx, access.NamespaceOrganisation, access.DefaultProject)
@@ -188,8 +117,12 @@ func TestRootProjectSeeded(t *testing.T) {
 	if len(v.Out) != 1 || v.Out[0].Type != access.LinkProjectPartOf || v.Out[0].To.ID != root.ID {
 		t.Fatalf("the root project must link project_part_of to itself: %+v", v.Out)
 	}
-	if again, err := graphsvc.SeedDefaults(ctx, g); err != nil || again {
-		t.Fatalf("seeding twice must not touch the root project again: %v %v", again, err)
+	before, _ := g.Changes(ctx)
+	if err := g.Bootstrap(ctx); err != nil {
+		t.Fatalf("bootstrapping twice must not fail: %v", err)
+	}
+	if after, _ := g.Changes(ctx); len(after) != len(before) {
+		t.Fatalf("bootstrapping twice must not write again: %d -> %d changes", len(before), len(after))
 	}
 }
 
@@ -208,34 +141,5 @@ func TestStructuresThroughTheService(t *testing.T) {
 	}
 	if !reflect.DeepEqual(got, typecat.Builtin().Structures()) {
 		t.Fatalf("structures = %+v", got)
-	}
-}
-
-// The demo import is one change per namespace (the organisation, the alm data with its links), not one per node.
-func TestSeedDemoIsOneChangePerNamespace(t *testing.T) {
-	ctx := context.Background()
-	g := typedGraph(t)
-	if _, err := graphsvc.SeedDemo(ctx, g); err != nil {
-		t.Fatal(err)
-	}
-	cs, err := g.Changes(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var imports []string
-	for _, c := range cs {
-		if strings.HasPrefix(c.Title, "Import ") {
-			imports = append(imports, c.Title)
-		}
-	}
-	if len(imports) != 2 {
-		t.Fatalf("the demo import is 2 changes, got %v", imports)
-	}
-	cmp, err := g.NodeByKey(ctx, "alm", "CMP-1")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if out, err := g.OutLinksOf(ctx, cmp.Ref()); err != nil || len(out) == 0 {
-		t.Fatalf("the links come with the import: %v %v", out, err)
 	}
 }

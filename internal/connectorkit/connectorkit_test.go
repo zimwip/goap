@@ -14,6 +14,7 @@ import (
 	"github.com/zimwip/goap/gen/goap/mcp/v1/mcpv1connect"
 	"github.com/zimwip/goap/internal/connectorkit"
 	"github.com/zimwip/goap/internal/connectors/localfs"
+	"github.com/zimwip/goap/internal/devseed"
 	"github.com/zimwip/goap/internal/graphsvc"
 	"github.com/zimwip/goap/internal/identity"
 	"github.com/zimwip/goap/internal/mcpsvc"
@@ -31,10 +32,13 @@ func TestAutoRegistrationAndCall(t *testing.T) {
 
 	dir := t.TempDir()
 	g := graph.New(graph.NewMemory())
-	if _, err := graphsvc.SeedDefaults(ctx, g); err != nil {
+	if err := g.Bootstrap(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if err := graphsvc.SeedAdapter(ctx, g, graphsvc.LocalFSAdapter(access.DefaultOrg, dir)); err != nil {
+	if _, err := devseed.DocumentRepository(ctx, g); err != nil {
+		t.Fatal(err)
+	}
+	if err := graphsvc.SeedAdapter(ctx, g, devseed.LocalFSAdapter(access.DefaultOrg, dir)); err != nil {
 		t.Fatal(err)
 	}
 	hub := &mcpsvc.Service{Store: mcpsvc.NewMemoryStore(), Directory: &mcpsvc.Directory{Graph: g},

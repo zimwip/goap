@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/zimwip/goap/gen/goap/graph/v1/graphv1connect"
+	"github.com/zimwip/goap/internal/devseed"
 	"github.com/zimwip/goap/internal/eventsvc"
 	"github.com/zimwip/goap/internal/graphsvc"
 	"github.com/zimwip/goap/internal/modelgw"
@@ -97,8 +98,8 @@ func main() {
 			platform.Fatal(log, "subscribe", err)
 		}
 	}
-	// the roots of the organisation and of the projects, before any change (ADR 0054): the structures are tagged by the
-	// built-in organisation domain, known before the catalogue loads the others
+	// the roots of the organisation and of the projects, before serving (ADR 0054): the structures are tagged by the
+	// built-in organisation domain, known before the catalogue loads the others (graphsvc.Boot repeats it, a no-op)
 	if err := g.Bootstrap(ctx); err != nil {
 		platform.Fatal(log, "bootstrap", err)
 	}
@@ -118,37 +119,29 @@ func main() {
 	if demo {
 		need = append(need, "alm")
 	}
-	go loadTypes(ctx, log, types, need, func() {
-		if _, err := graphsvc.SeedAccess(ctx, g); err != nil {
-			log.Error("seed access", "err", err)
-		}
-		if seeded, err := graphsvc.SeedDefaults(ctx, g); err != nil {
-			log.Error("seed defaults", "err", err)
-		} else if seeded {
-			log.Info("default MCPs created")
-		}
-		if demo {
-			seeded, err := graphsvc.SeedDemo(ctx, g)
-			if err != nil {
-				log.Error("seed", "err", err)
-			}
+	opts := graphsvc.Options{RequireHooks: true, Log: log}
+	if demo {
+		opts.Dev = func(ctx context.Context, g *graph.Graph) error {
+			seeded, err := devseed.Demo(ctx, g)
 			log.Info("demo seed", "loaded", seeded)
+			if err != nil {
+				return err
+			}
+			_, err = devseed.DocumentRepository(ctx, g)
+			return err
 		}
-		// the built-in MCPs (ADR 0028) follow the platform; the default organisation lends them to every unit
-		if seeded, err := graphsvc.SeedBuiltins(ctx, g); err != nil {
-			log.Error("seed built-in MCPs", "err", err)
-		} else if seeded {
-			log.Info("built-in MCPs updated")
-		}
+	}
+	go loadTypes(ctx, log, types, need, func() {
 		// the model gateway configuration (providers, models, aliases) is graph data: seeded when the graph has none
-		if cfg, err := modelgw.InitialConfig(ctx, platform.Env("GOAP_MODELS_CONFIG", ""), platform.NewSecrets()); err != nil {
+		var err error
+		if opts.Models, err = modelgw.BootConfig(ctx, platform.Env("GOAP_MODELS_CONFIG", ""), platform.NewSecrets()); err != nil {
 			log.Error("models config", "err", err)
-		} else if provs, models, aliases, err := cfg.Objects(); err != nil {
-			log.Error("models config", "err", err)
-		} else if seeded, err := graphsvc.SeedModels(ctx, g, provs, models, aliases); err != nil {
-			log.Error("seed models", "err", err)
-		} else if seeded {
-			log.Info("model gateway configuration created", "providers", len(provs), "models", len(models), "aliases", len(aliases))
+		}
+		// the same bootstrap as every composition (ADR 0071), once the type catalogue holds the domains the seeds write to
+		if r, err := graphsvc.Boot(ctx, g, opts); err != nil {
+			log.Error("boot", "err", err)
+		} else {
+			log.Info("platform bootstrapped", "access", r.Access, "builtins", r.Builtins, "models", r.Models)
 		}
 	})
 	graphHandler := &graphsvc.Handler{Graph: g, Events: events, Authz: authorizer, Floor: authorizer.Floor()}

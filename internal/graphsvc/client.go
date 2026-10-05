@@ -36,7 +36,7 @@ func NewClient(hc *http.Client, baseURL string, opts ...connect.ClientOption) *C
 }
 
 // ClientPrincipal is the identity of a graph client acting for no one in particular.
-var ClientPrincipal = authz.Principal{Subject: authz.SystemPrefix + "client"}
+var ClientPrincipal = authz.System("client")
 
 func serviceIdentity() connect.ClientOption {
 	return connect.WithInterceptors(connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {

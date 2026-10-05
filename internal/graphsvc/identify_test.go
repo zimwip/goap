@@ -63,7 +63,7 @@ func TestAnonymousCallsAreRefused(t *testing.T) {
 func TestServiceSubjectsDoNotTakeTheFirstAdminGrant(t *testing.T) {
 	ctx := context.Background()
 	g := typedGraph(t)
-	if _, err := graphsvc.SeedDefaults(ctx, g); err != nil {
+	if err := g.Bootstrap(ctx); err != nil {
 		t.Fatal(err)
 	}
 	h := &graphsvc.Handler{Graph: g}

@@ -1,10 +1,14 @@
-package graphsvc
+// Package devseed holds the data of the development and demo compositions: the ALM demo repository and the local file
+// system document repository. It is separate from the platform bootstrap (graphsvc.Boot), which every composition runs;
+// a production composition never calls it unless asked (GOAP_GRAPH_SEED=demo), the dev composition (goap-dev) does.
+package devseed
 
 import (
 	"context"
 	"errors"
 	"fmt"
 
+	"github.com/zimwip/goap/internal/graphsvc"
 	"github.com/zimwip/goap/pkg/access"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/graph"
@@ -13,11 +17,11 @@ import (
 // alm is the namespace of the delivery domain (domains/alm.yaml).
 const alm = "alm"
 
-// SeedDemo loads a small ALM repository (namespace alm) once: needs, requirements and tests
+// Demo loads a small ALM repository (namespace alm) once: needs, requirements and tests
 // (methodologies/examples/impact-analysis.yaml), and the functions, components, build artifacts, applications,
 // solution, data, interfaces and flows of methodologies/sdlc.yaml, with a small organisation owning them. The graph is
 // bootstrapped first (a seed is an ordinary change, ADR 0054).
-func SeedDemo(ctx context.Context, g *graph.Graph) (bool, error) {
+func Demo(ctx context.Context, g *graph.Graph) (bool, error) {
 	if err := g.Bootstrap(ctx); err != nil {
 		return false, err
 	}
@@ -38,15 +42,15 @@ func SeedDemo(ctx context.Context, g *graph.Graph) (bool, error) {
 		{"ORG-CHECKOUT", "Team Checkout", "team", "ORG-DIGITAL"}, {"ORG-CRM", "Team CRM", "team", "ORG-DIGITAL"},
 		{"ORG-FINANCE", "Team Finance", "team", "ORG-DIGITAL"}, {"ORG-SECURITY", "Team Security", "team", "ORG-DIGITAL"},
 	} {
-		e := createNode(u[0], access.NodeTypeOrgUnit, map[string]any{"name": u[1], "kind": u[2]})
+		e := graphsvc.SeedNode(u[0], access.NodeTypeOrgUnit, map[string]any{"name": u[1], "kind": u[2]})
 		if u[3] == "" {
-			e = linkTo(e, access.LinkPartOf, root.Ref())
+			e = linkPartOf(e, root.Ref())
 		} else {
 			e.Links = append(e.Links, graph.LinkEdit{Type: access.LinkPartOf, ToKey: u[3]})
 		}
 		units = append(units, e)
 	}
-	if err := applyOn(ctx, g, access.NamespaceOrganisation, "Import demo organisation", units); err != nil {
+	if err := graphsvc.SeedChange(ctx, g, access.NamespaceOrganisation, "Import demo organisation", units); err != nil {
 		return false, err
 	}
 	// ownership: a node of one namespace is owned by a unit of the organisation (the owner of its versions)
@@ -122,7 +126,7 @@ func SeedDemo(ctx context.Context, g *graph.Graph) (bool, error) {
 	// the nodes and their links are one change (a link belongs to the version of its source, created here)
 	edits := make([]graph.NodeEdit, 0, len(nodes))
 	for _, n := range nodes {
-		e := createNode(n.Key, n.Type, n.Properties)
+		e := graphsvc.SeedNode(n.Key, n.Type, n.Properties)
 		e.Owner = owners[n.Key]
 		edits = append(edits, e)
 	}
@@ -139,6 +143,11 @@ func SeedDemo(ctx context.Context, g *graph.Graph) (bool, error) {
 		}
 		edits[i].Links = append(edits[i].Links, graph.LinkEdit{Type: alm + "@" + l[1], ToKey: l[2]})
 	}
-	_, err = g.Commit(ctx, graph.Commit{Namespace: alm, Title: "Import demo data", Intent: "Seed demo data", By: "graphsvc.seed", BaselineName: "Initial baseline", Edits: edits})
+	_, err = g.Commit(ctx, graph.Commit{Namespace: alm, Title: "Import demo data", Intent: "Seed demo data", By: "devseed", BaselineName: "Initial baseline", Edits: edits})
 	return err == nil, err
+}
+
+func linkPartOf(e graph.NodeEdit, to domain.NodeRef) graph.NodeEdit {
+	e.Links = append(e.Links, graph.LinkEdit{Type: access.LinkPartOf, To: &to})
+	return e
 }

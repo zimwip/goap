@@ -19,7 +19,7 @@ import (
 func TestSessionOfAdminMemberAndReader(t *testing.T) {
 	ctx := context.Background()
 	g, a := setup(t)
-	if _, err := graphsvc.SeedDefaults(ctx, g); err != nil {
+	if err := g.Bootstrap(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if err := graphsvc.SeedUnit(ctx, g, "team-a", "Team A", "team", ""); err != nil {

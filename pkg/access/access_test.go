@@ -102,7 +102,7 @@ func TestAdministratorsAreNeverLockedOut(t *testing.T) {
 func TestAdminAssignmentAndUnitOfTheUserNode(t *testing.T) {
 	ctx := context.Background()
 	g, a := setup(t)
-	if _, err := graphsvc.SeedDefaults(ctx, g); err != nil {
+	if err := g.Bootstrap(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := graphsvc.SeedAccess(ctx, g); err != nil {
@@ -166,7 +166,7 @@ func TestRolesHeldInAUnitHoldBelowIt(t *testing.T) {
 func TestAssignmentGrantsRoleOnAProject(t *testing.T) {
 	ctx := context.Background()
 	g, a := setup(t)
-	if _, err := graphsvc.SeedDefaults(ctx, g); err != nil {
+	if err := g.Bootstrap(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if err := graphsvc.SeedUnit(ctx, g, "team-a", "Team A", "team", ""); err != nil {
@@ -224,7 +224,7 @@ func TestAssignmentGrantsRoleOnAProject(t *testing.T) {
 func TestPlatformAssignmentGrantsRoleEverywhere(t *testing.T) {
 	ctx := context.Background()
 	g, a := setup(t)
-	if _, err := graphsvc.SeedDefaults(ctx, g); err != nil {
+	if err := g.Bootstrap(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if err := graphsvc.SeedUnit(ctx, g, "team-a", "Team A", "team", ""); err != nil {
@@ -271,7 +271,7 @@ func TestPlatformAssignmentGrantsRoleEverywhere(t *testing.T) {
 func TestPlatformAssignmentGrantsAdminPastTheFloor(t *testing.T) {
 	ctx := context.Background()
 	g, a := setup(t)
-	if _, err := graphsvc.SeedDefaults(ctx, g); err != nil {
+	if err := g.Bootstrap(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := graphsvc.SeedAccess(ctx, g); err != nil {
@@ -355,7 +355,7 @@ func TestProjectChainAndRoles(t *testing.T) {
 func TestRolesDependOnTheProject(t *testing.T) {
 	ctx := context.Background()
 	g, a := setup(t)
-	if _, err := graphsvc.SeedDefaults(ctx, g); err != nil {
+	if err := g.Bootstrap(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if err := graphsvc.SeedUnit(ctx, g, "team-a", "Team A", "team", ""); err != nil {

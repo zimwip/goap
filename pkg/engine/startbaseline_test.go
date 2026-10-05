@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/zimwip/goap/internal/graphsvc"
+	"github.com/zimwip/goap/internal/devseed"
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain/def"
 	"github.com/zimwip/goap/pkg/engine"
@@ -45,7 +45,7 @@ func TestStartWithoutBaseline(t *testing.T) {
 	}
 	req := engine.StartRequest{Methodology: "sdlc", Agent: "delivery", Goal: "deliver", Intent: "Allow payment in 3 installments", ProjectID: testProject}
 
-	if _, err := graphsvc.SeedDemo(ctx, g); err != nil {
+	if _, err := devseed.Demo(ctx, g); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := g.CreateNode(ctx, graph.NewNode{Namespace: "organisation", Key: testProject, Type: "organisation@ProjectUnit", Properties: map[string]any{"name": "Test"}}); err != nil {

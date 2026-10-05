@@ -12,6 +12,7 @@ import (
 
 	enginev1 "github.com/zimwip/goap/gen/goap/engine/v1"
 	"github.com/zimwip/goap/internal/connectors/builtin"
+	"github.com/zimwip/goap/internal/devseed"
 	"github.com/zimwip/goap/internal/graphsvc"
 	"github.com/zimwip/goap/internal/identity"
 	"github.com/zimwip/goap/internal/mcpsvc"
@@ -89,7 +90,7 @@ func newPlatform(t *testing.T) platform {
 	}
 	g := graph.New(graph.NewMemory())
 	g.Types = func() graph.TypeCatalog { return cat }
-	for _, seed := range []func(context.Context, *graph.Graph) (bool, error){graphsvc.SeedDemo, graphsvc.SeedAccess, graphsvc.SeedDefaults, graphsvc.SeedBuiltins} {
+	for _, seed := range []func(context.Context, *graph.Graph) (bool, error){devseed.Demo, graphsvc.SeedAccess, devseed.DocumentRepository, graphsvc.SeedBuiltins} {
 		if _, err := seed(ctx, g); err != nil {
 			t.Fatal(err)
 		}
