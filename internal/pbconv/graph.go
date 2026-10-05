@@ -85,7 +85,23 @@ func NodeToPB(n domain.Node) *graphv1.Node {
 		Deleted: n.Deleted, ChangeId: string(n.ChangeID), CreatedAt: Time(n.CreatedAt),
 		Branch: domain.BranchOf(n.Branch), Parents: versionsToPB(n.Parents), Reason: n.Reason, State: n.State,
 		ChangeImpact: string(n.ChangeImpact), Comment: n.Comment, Execution: n.Execution, Joined: n.Joined,
-		Owner: string(n.Owner), Project: string(n.Project), CheckedOut: n.CheckedOut}
+		Owner: string(n.Owner), Project: string(n.Project), CheckedOut: n.CheckedOut, Origins: refsToPB(n.Origins)}
+}
+
+func refsToPB(rs []domain.NodeRef) []*graphv1.NodeRef {
+	var out []*graphv1.NodeRef
+	for _, r := range rs {
+		out = append(out, RefToPB(r))
+	}
+	return out
+}
+
+func refsFromPB(rs []*graphv1.NodeRef) []domain.NodeRef {
+	var out []domain.NodeRef
+	for _, r := range rs {
+		out = append(out, RefFromPB(r))
+	}
+	return out
 }
 
 func versionsToPB(vs []domain.Version) []int32 {
@@ -104,7 +120,7 @@ func NodeFromPB(n *graphv1.Node) domain.Node {
 		Deleted: n.Deleted, ChangeID: domain.ChangeID(n.ChangeId), CreatedAt: FromTime(n.CreatedAt),
 		Branch: n.Branch, Parents: versionsFromPB(n.Parents), Reason: n.Reason, State: n.State,
 		ChangeImpact: domain.ChangeImpactID(n.ChangeImpact), Comment: n.Comment, Execution: n.Execution, Joined: n.Joined,
-		Owner: domain.NodeID(n.Owner), Project: domain.NodeID(n.Project), CheckedOut: n.CheckedOut}
+		Owner: domain.NodeID(n.Owner), Project: domain.NodeID(n.Project), CheckedOut: n.CheckedOut, Origins: refsFromPB(n.Origins)}
 }
 
 func versionsFromPB(vs []int32) []domain.Version {
@@ -397,6 +413,23 @@ func StructuresFromPB(r *graphv1.GetStructuresResponse) domain.Structures {
 			x.Bootstrap = b.AsMap()
 		}
 		out = append(out, x)
+	}
+	return out
+}
+
+// RestructuredToPB and RestructuredFromPB carry the result of a merge or a split (ADR 0077).
+func RestructuredToPB(r graph.Restructured) *graphv1.ImpactNodeRestructureResponse {
+	out := &graphv1.ImpactNodeRestructureResponse{Successors: ChangeImpactsToPB(r.Successors), Sources: ChangeImpactsToPB(r.Sources), Parents: ChangeImpactsToPB(r.Parents)}
+	for _, s := range r.Suspect {
+		out.Suspect = append(out.Suspect, &graphv1.SuspectLink{From: RefToPB(s.From), FromKey: s.FromKey, Type: s.Type, To: RefToPB(s.To), ToKey: s.ToKey})
+	}
+	return out
+}
+
+func RestructuredFromPB(r *graphv1.ImpactNodeRestructureResponse) graph.Restructured {
+	out := graph.Restructured{Successors: ChangeImpactsFromPB(r.GetSuccessors()), Sources: ChangeImpactsFromPB(r.GetSources()), Parents: ChangeImpactsFromPB(r.GetParents())}
+	for _, s := range r.GetSuspect() {
+		out.Suspect = append(out.Suspect, graph.SuspectLink{From: RefFromPB(s.From), FromKey: s.FromKey, Type: s.Type, To: RefFromPB(s.To), ToKey: s.ToKey})
 	}
 	return out
 }

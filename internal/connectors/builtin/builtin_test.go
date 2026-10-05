@@ -380,10 +380,10 @@ func TestChangeOptionTools(t *testing.T) {
 	}
 	for _, cn := range c.Nodes {
 		if cn.Key == "REQ-2" && cn.Flow == a["id"] {
-			if _, err := p.g.ReviewNodeOn(ctx, c.ID, cn.Flow, "", cn.ID, domain.ReviewAccepted, "reviewer", "agreed"); err != nil {
+			if _, err := p.g.ImpactNodeReviewOn(ctx, c.ID, cn.Flow, "", cn.ID, domain.ReviewAccepted, "reviewer", "agreed"); err != nil {
 				t.Fatal(err)
 			}
-			if _, err := p.g.CheckinNode(ctx, c.ID, cn.ID, cn.Flow, ""); err != nil {
+			if _, err := p.g.ImpactNodeCheckin(ctx, c.ID, cn.ID, cn.Flow, ""); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -564,6 +564,9 @@ func TestChangeToolsGateEveryAccessType(t *testing.T) {
 			"edit":   {"key": key, "properties": map[string]any{"description": "x"}, "rationale": "x"},
 			"link":   {"from": key, "type": access.LinkAssignsOrg, "to": "ORG-DEFAULT"},
 			"unlink": {"from": key, "type": access.LinkAssignsOrg, "to": "ORG-DEFAULT"},
+			"merge":  {"sources": []any{key, "ORG-DEFAULT"}, "key": key + "-m", "type": typ, "rationale": "x"},
+			"split": {"source": key, "into": []any{map[string]any{"key": key + "-s1", "type": typ, "rationale": "x"},
+				map[string]any{"key": key + "-s2", "type": typ, "rationale": "x"}}},
 		} {
 			args["change"] = open()
 			if _, err := p.hub.Call(alice, "ORG-CHECKOUT", "goap-change/"+op, args); !denied(err) {

@@ -2,12 +2,16 @@ package engine
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/domain/def"
 	"github.com/zimwip/goap/pkg/dsl"
 	"github.com/zimwip/goap/pkg/graph"
+	"github.com/zimwip/goap/pkg/graph/graphtest"
+	"github.com/zimwip/goap/pkg/typecat"
 )
 
 // A script declares, writes and reviews change impacts; the engine applies the operations.
@@ -21,11 +25,11 @@ func TestScriptChangeImpacts(t *testing.T) {
 	p := &Process{ChangeID: c.ID}
 	job := dsl.Job{Language: "javascript", Action: "plan", Code: `
 const req = ctx.impactNode("REQ-1", "PSP v2 changes the payment API");
-const tst = ctx.createNode("TestCase", "TST-2", "cover the new API");
+const tst = ctx.impactNodeCreate("TestCase", "TST-2", "cover the new API");
 ctx.writeNode(req, { props: { title: "Use PSP v2" } });
 ctx.writeNode(tst, { props: { title: "PSP v2 test" }, links: [{ type: "verifies", to: req }] });
-ctx.reviewNode(req, true, "confirmed with the PSP team");
-ctx.checkinNode(req);
+ctx.impactNodeReview(req, true, "confirmed with the PSP team");
+ctx.impactNodeCheckin(req);
 `}
 	res, err := dsl.Run(ctx, job, nopHost{})
 	if err != nil {
@@ -51,6 +55,20 @@ ctx.checkinNode(req);
 	if tst.Key != "TST-2" || tst.Post == nil || tst.Review != domain.ReviewProposed {
 		t.Fatalf("TST-2 change impact: %+v", tst)
 	}
+	// a created node has no proposal: declared then written in one script, it is one created event, then the edit
+	evs, err := g.ChangeEvents(ctx, c.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var tstOps []domain.ImpactOp
+	for _, ev := range evs {
+		if ev.Impact == tst.ID {
+			tstOps = append(tstOps, ev.Op)
+		}
+	}
+	if len(tstOps) < 2 || tstOps[0] != domain.ImpactCreated || tstOps[1] != domain.ImpactUpdated || slices.Contains(tstOps, domain.ImpactProposed) {
+		t.Fatalf("TST-2 log: %v", tstOps)
+	}
 	// a second script reads the change impacts and accepts the other one
 	bb, err := g.Blackboard(ctx, c.ID)
 	if err != nil {
@@ -61,7 +79,7 @@ ctx.checkinNode(req);
 		t.Fatalf("snapshot: %+v", snap)
 	}
 	job2 := dsl.Job{Language: "javascript", Action: "check", Nodes: snap, Code: `
-for (const n of ctx.changeImpacts()) if (n.review === "proposed") { ctx.reviewNode(n.key, true, "needed"); ctx.checkinNode(n.key); }
+for (const n of ctx.changeImpacts()) if (n.review === "proposed") { ctx.impactNodeReview(n.key, true, "needed"); ctx.impactNodeCheckin(n.key); }
 `}
 	res2, err := dsl.Run(ctx, job2, nopHost{})
 	if err != nil || len(res2.Nodes) != 2 {
@@ -128,7 +146,7 @@ func TestScriptChangeImpactsOnAFlow(t *testing.T) {
 	if len(ChangeImpactsFromBlackboard(bb)) != 0 {
 		t.Fatalf("a relaunched step starts without its stale change impacts: %+v", ChangeImpactsFromBlackboard(bb))
 	}
-	run(onFlow, "plan", "run-2", `const r = ctx.impactNode("REQ-1", "second idea"); ctx.writeNode(r, { props: { title: "B" } }); ctx.reviewNode(r, true, "better"); ctx.checkinNode(r);`)
+	run(onFlow, "plan", "run-2", `const r = ctx.impactNode("REQ-1", "second idea"); ctx.writeNode(r, { props: { title: "B" } }); ctx.impactNodeReview(r, true, "better"); ctx.impactNodeCheckin(r);`)
 	bb, _ = g.BlackboardIn(ctx, c.ID, flow.ID)
 	if snap := ChangeImpactsFromBlackboard(bb); len(snap) != 1 || snap[0].Rationale != "second idea" || snap[0].Review != "accepted" || snap[0].Post == nil {
 		t.Fatalf("flow snapshot: %+v", snap)
@@ -158,4 +176,125 @@ func (nopHost) Node(context.Context, string) (dsl.Node, error)                { 
 func (nopHost) Nodes(context.Context, string) ([]dsl.Node, error)             { return nil, nil }
 func (nopHost) Links(context.Context, string, string, string) ([]dsl.Link, error) {
 	return nil, nil
+}
+
+// A script merges and splits nodes from the side of their parents (ADR 0077).
+func TestScriptMergeAndSplit(t *testing.T) {
+	ctx := context.Background()
+	d, err := def.ParseDomain([]byte(`
+name: docs
+version: 1.0.0
+nodeTypes: [{name: Folder}, {name: Item}]
+linkTypes: [{name: contains, from: Folder, to: Item, compose: true}]
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cat, err := typecat.New(d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	g := graph.New(graph.NewMemory())
+	g.Types = func() graph.TypeCatalog { return cat }
+	var items []domain.Node
+	for _, k := range []string{"A", "B", "S"} {
+		n, err := graphtest.Import(ctx, g, graphtest.Node{Namespace: "docs", Key: k, Type: "docs@Item"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		items = append(items, n)
+	}
+	var links []graph.LinkWrite
+	for _, n := range items {
+		links = append(links, graph.LinkWrite{Type: "docs@contains", To: n.Ref()})
+	}
+	if _, err := graphtest.Import(ctx, g, graphtest.Node{Namespace: "docs", Key: "F", Type: "docs@Folder", Links: links}); err != nil {
+		t.Fatal(err)
+	}
+	head, err := g.BranchHead(ctx, "docs", domain.MainBranch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := g.CreateChange(ctx, graph.NewChange{Namespace: "docs", Title: "restructure", BaselineID: head.ID, OwnBranch: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := dsl.Run(ctx, dsl.Job{Language: "javascript", Action: "restructure", Code: `
+const m = ctx.impactNodeMerge(["A", "B"], "Item", "AB", "A and B say one thing");
+ctx.writeNode(m, { props: { title: "AB" } });
+const parts = ctx.impactNodeSplit("S", [{type: "Item", key: "S1", rationale: "first half"}, {type: "Item", key: "S2", rationale: "second half"}]);
+ctx.writeNode(parts[1], { props: { title: "second" } });
+`}, nopHost{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := &Engine{Graph: g}
+	if _, err := e.applyNodeOps(ctx, &Process{ChangeID: c.ID}, res.Nodes, "restructure", "x1"); err != nil {
+		t.Fatal(err)
+	}
+	list, err := g.ListChangeImpacts(ctx, c.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	byKey := map[string]domain.ChangeImpact{}
+	for _, cn := range list {
+		byKey[cn.Key] = cn
+	}
+	for _, k := range []string{"A", "B", "S"} {
+		if byKey[k].Via == "" || byKey[k].Via != byKey["F"].ID {
+			t.Errorf("%s is realized through F: via %q", k, byKey[k].Via)
+		}
+	}
+	for _, k := range []string{"AB", "S1", "S2"} {
+		n, err := g.Node(ctx, *byKey[k].Post)
+		if err != nil || len(n.Origins) == 0 {
+			t.Errorf("%s: origins %v, %v", k, n.Origins, err)
+		}
+	}
+	if n, _ := g.Node(ctx, *byKey["AB"].Post); n.Properties["title"] != "AB" {
+		t.Errorf("AB was written: %v", n.Properties)
+	}
+	links2, err := g.OutLinksOf(ctx, *byKey["F"].Post)
+	if err != nil || len(links2) != 3 {
+		t.Errorf("F links AB, S1, S2: %d, %v", len(links2), err)
+	}
+}
+
+// A creation declared by a script and never written is created bare when the script ends; written, it is created with
+// its properties in one event (ADR 0077).
+func TestScriptDeclaredCreation(t *testing.T) {
+	ctx := context.Background()
+	e, g, base := setup(t)
+	c, err := g.CreateChange(ctx, graph.NewChange{Namespace: "alm", Title: "late", BaselineID: base, OwnBranch: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ops := []dsl.NodeOp{
+		{Op: "declare", Ref: "#a", Intent: string(domain.IntentCreated), Key: "TST-3", Type: "TestCase", Rationale: "bare"},
+		{Op: "declare", Ref: "#b", Intent: string(domain.IntentCreated), Key: "TST-4", Type: "TestCase", Rationale: "written"},
+		{Op: "write", Node: "#b", Props: map[string]any{"title": "four"}},
+	}
+	if _, err := e.applyNodeOps(ctx, &Process{ChangeID: c.ID}, ops, "plan", "exec-2"); err != nil {
+		t.Fatal(err)
+	}
+	ch, _ := g.Change(ctx, c.ID)
+	if len(ch.Nodes) != 2 {
+		t.Fatalf("change impacts: %+v", ch.Nodes)
+	}
+	for _, cn := range ch.Nodes {
+		if cn.Intent != domain.IntentCreated || cn.Post == nil {
+			t.Fatalf("a creation has its first version: %+v", cn)
+		}
+	}
+	evs, _ := g.ChangeEvents(ctx, c.ID)
+	for _, ev := range evs {
+		if ev.Op == domain.ImpactProposed || ev.Op == domain.ImpactCheckedOut {
+			t.Fatalf("a creation logs no %s event", ev.Op)
+		}
+	}
+	i := slices.IndexFunc(ch.Nodes, func(cn domain.ChangeImpact) bool { return cn.Key == "TST-4" })
+	n, err := g.Node(ctx, *ch.Nodes[i].Post)
+	if err != nil || n.Properties["title"] != "four" {
+		t.Fatalf("the properties of the write: %+v %v", n, err)
+	}
 }

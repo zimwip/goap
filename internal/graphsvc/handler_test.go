@@ -33,13 +33,13 @@ func createObject(h *graphsvc.Handler, roles, typ, key string) (*graphv1.ChangeI
 	if err != nil {
 		return nil, err
 	}
-	req := connect.NewRequest(&graphv1.CreateNodeRequest{ChangeId: string(c.ID), Type: typ, Key: key, Rationale: "new"})
+	req := connect.NewRequest(&graphv1.ImpactNodeCreateRequest{ChangeId: string(c.ID), Type: typ, Key: key, Rationale: "new"})
 	if roles != "-" {
 		req.Header().Set(identity.HeaderSubject, "u")
 		req.Header().Set(identity.HeaderOrg, "acme")
 		req.Header().Set(identity.HeaderRoles, roles)
 	}
-	out, err := h.CreateNode(ctx, req)
+	out, err := h.ImpactNodeCreate(ctx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -47,7 +47,7 @@ func createObject(h *graphsvc.Handler, roles, typ, key string) (*graphv1.ChangeI
 }
 
 // Creating a node in a change asks object:create on the project of the change (ADR 0076: no write outside a change).
-func TestCreateNodeIsRoleGated(t *testing.T) {
+func TestImpactNodeCreateIsRoleGated(t *testing.T) {
 	ds, err := def.LoadDomains("../../domains")
 	if err != nil {
 		t.Fatal(err)
@@ -117,12 +117,11 @@ func TestAccessNodesAreGatedByTheFloor(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		req := connect.NewRequest(&graphv1.AddChangeImpactsRequest{ChangeId: string(c.ID),
-			Nodes: []*graphv1.ChangeImpact{{Intent: "created", Key: "USR:x", Type: access.NodeTypeUser, Rationale: "why"}}})
+		req := connect.NewRequest(&graphv1.ImpactNodeCreateRequest{ChangeId: string(c.ID), Key: "USR:x", Type: access.NodeTypeUser, Rationale: "why"})
 		req.Header().Set(identity.HeaderSubject, "u")
 		req.Header().Set(identity.HeaderOrg, "acme")
 		req.Header().Set(identity.HeaderRoles, roles)
-		_, err = h.AddChangeImpacts(ctx, req)
+		_, err = h.ImpactNodeCreate(ctx, req)
 		return err
 	}
 	if err := add("methodologist"); connect.CodeOf(err) != connect.CodePermissionDenied {
@@ -140,11 +139,11 @@ func TestAccessNodesAreGatedByTheFloor(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	req := connect.NewRequest(&graphv1.CreateNodeRequest{ChangeId: string(c.ID), Key: "POL:x", Type: access.NodeTypePolicy, Rationale: "why"})
+	req := connect.NewRequest(&graphv1.ImpactNodeCreateRequest{ChangeId: string(c.ID), Key: "POL:x", Type: access.NodeTypePolicy, Rationale: "why"})
 	req.Header().Set(identity.HeaderSubject, "u")
 	req.Header().Set(identity.HeaderOrg, "acme")
 	req.Header().Set(identity.HeaderRoles, "methodologist")
-	if _, err := h.CreateNode(ctx, req); connect.CodeOf(err) != connect.CodePermissionDenied {
+	if _, err := h.ImpactNodeCreate(ctx, req); connect.CodeOf(err) != connect.CodePermissionDenied {
 		t.Errorf("a Policy node created by a methodologist: %v", err)
 	}
 }
@@ -183,11 +182,11 @@ func TestAdminOnlyTypeOfADomainIsGated(t *testing.T) {
 		t.Fatal(err)
 	}
 	for roles, want := range map[string]connect.Code{"contributor": connect.CodePermissionDenied, "admin": 0} {
-		req := connect.NewRequest(&graphv1.CreateNodeRequest{ChangeId: string(c.ID), Key: "S-" + roles, Type: "vault@Secret", Rationale: "why"})
+		req := connect.NewRequest(&graphv1.ImpactNodeCreateRequest{ChangeId: string(c.ID), Key: "S-" + roles, Type: "vault@Secret", Rationale: "why"})
 		req.Header().Set(identity.HeaderSubject, "u")
 		req.Header().Set(identity.HeaderOrg, "acme")
 		req.Header().Set(identity.HeaderRoles, roles)
-		if _, err := h.CreateNode(ctx, req); (err == nil) != (want == 0) || err != nil && connect.CodeOf(err) != want {
+		if _, err := h.ImpactNodeCreate(ctx, req); (err == nil) != (want == 0) || err != nil && connect.CodeOf(err) != want {
 			t.Errorf("%s creating a flagged type: %v", roles, err)
 		}
 	}
@@ -224,10 +223,10 @@ func TestChangeImpactRPCs(t *testing.T) {
 		r.Header().Set(identity.HeaderRoles, roles)
 	}
 	add := func(roles string, pre domain.NodeRef) (*graphv1.ChangeImpact, error) {
-		req := connect.NewRequest(&graphv1.AddChangeImpactsRequest{ChangeId: string(c.ID),
+		req := connect.NewRequest(&graphv1.ProposeImpactRequest{ChangeId: string(c.ID),
 			Nodes: []*graphv1.ChangeImpact{{Intent: "modified", Pre: pbconv.RefToPB(pre), Rationale: "why"}}})
 		as(roles, req)
-		out, err := h.AddChangeImpacts(ctx, req)
+		out, err := h.ProposeImpact(ctx, req)
 		if err != nil {
 			return nil, err
 		}
@@ -238,24 +237,24 @@ func TestChangeImpactRPCs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	co := connect.NewRequest(&graphv1.CheckoutNodeRequest{ChangeId: string(c.ID), ChangeImpactId: cn.Id})
+	co := connect.NewRequest(&graphv1.ImpactNodeCheckoutRequest{ChangeId: string(c.ID), ChangeImpactId: cn.Id})
 	as("contributor", co)
-	if out, err := h.CheckoutNode(ctx, co); err != nil || out.Msg.Node.Post == nil || out.Msg.Node.Post.Version != 2 {
+	if out, err := h.ImpactNodeCheckout(ctx, co); err != nil || out.Msg.Node.Post == nil || out.Msg.Node.Post.Version != 2 {
 		t.Fatalf("checkout: %v %v", out, err)
 	}
 	props, _ := structpb.NewStruct(map[string]any{"title": "two"})
-	up := connect.NewRequest(&graphv1.UpdateNodeRequest{ChangeId: string(c.ID), ChangeImpactId: cn.Id, Props: props})
+	up := connect.NewRequest(&graphv1.ImpactNodeUpdateRequest{ChangeId: string(c.ID), ChangeImpactId: cn.Id, Props: props})
 	as("contributor", up)
-	if out, err := h.UpdateNode(ctx, up); err != nil || out.Msg.Node.Post == nil || out.Msg.Node.Post.Version != 2 {
+	if out, err := h.ImpactNodeUpdate(ctx, up); err != nil || out.Msg.Node.Post == nil || out.Msg.Node.Post.Version != 2 {
 		t.Fatalf("update in place: %v %v", out, err)
 	}
-	rv := connect.NewRequest(&graphv1.ReviewChangeImpactRequest{ChangeId: string(c.ID), ChangeImpactId: cn.Id, Accept: true})
+	rv := connect.NewRequest(&graphv1.ImpactNodeReviewRequest{ChangeId: string(c.ID), ChangeImpactId: cn.Id, Accept: true})
 	as("contributor", rv)
-	if _, err := h.ReviewChangeImpact(ctx, rv); connect.CodeOf(err) != connect.CodeInvalidArgument {
+	if _, err := h.ImpactNodeReview(ctx, rv); connect.CodeOf(err) != connect.CodeInvalidArgument {
 		t.Fatalf("a review without comment must be refused: %v", err)
 	}
 	rv.Msg.Comment = "checked"
-	if out, err := h.ReviewChangeImpact(ctx, rv); err != nil || out.Msg.Node.Review != "accepted" || out.Msg.Node.Reviews[0].By != "u" {
+	if out, err := h.ImpactNodeReview(ctx, rv); err != nil || out.Msg.Node.Review != "accepted" || out.Msg.Node.Reviews[0].By != "u" {
 		t.Fatalf("review: %v %v", out, err)
 	}
 	get, err := h.GetChange(ctx, connect.NewRequest(&graphv1.GetChangeRequest{Id: string(c.ID)}))
@@ -274,9 +273,9 @@ func TestChangeImpactRPCs(t *testing.T) {
 			t.Fatalf("event %s: by %q, impact %s", e.Op, e.By, e.ImpactId)
 		}
 	}
-	ci := connect.NewRequest(&graphv1.CheckinNodeRequest{ChangeId: string(c.ID), ChangeImpactId: cn.Id})
+	ci := connect.NewRequest(&graphv1.ImpactNodeCheckinRequest{ChangeId: string(c.ID), ChangeImpactId: cn.Id})
 	as("contributor", ci)
-	if _, err := h.CheckinNode(ctx, ci); err != nil {
+	if _, err := h.ImpactNodeCheckin(ctx, ci); err != nil {
 		t.Fatalf("check-in: %v", err)
 	}
 	log, err = h.ListChangeEvents(ctx, connect.NewRequest(&graphv1.ListChangeEventsRequest{ChangeId: string(c.ID)}))
@@ -287,7 +286,7 @@ func TestChangeImpactRPCs(t *testing.T) {
 	for _, e := range log.Msg.Events {
 		ops = append(ops, e.Op)
 	}
-	if strings.Join(ops, ",") != "declared,written,updated,reviewed,checkedIn" {
+	if strings.Join(ops, ",") != "proposed,checkedOut,updated,reviewed,checkedIn" {
 		t.Fatalf("impact log = %v", ops)
 	}
 }
@@ -337,4 +336,84 @@ func TestCommitEditsGatesAccessNodes(t *testing.T) {
 			t.Fatalf("a contributor must not commit a %s node: %v", typ, err)
 		}
 	}
+}
+
+// A merge modifies the parents it discovers: the gate of the access nodes stands in front of them too (ADR 0077).
+func TestMergeIsGatedOnTheParents(t *testing.T) {
+	ctx := context.Background()
+	d, err := def.ParseDomain([]byte(`
+name: vault
+version: 1.0.0
+nodeTypes:
+  - {name: Safe, adminOnly: true, changeControlled: false}
+  - {name: Entry, changeControlled: false}
+linkTypes:
+  - {name: holds, from: Safe, to: Entry, compose: true}
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cat, err := typecat.New(d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	g := graph.New(graph.NewMemory())
+	g.Types = func() graph.TypeCatalog { return cat }
+	var links []graph.LinkWrite
+	for _, k := range []string{"E1", "E2"} {
+		n, err := graphtest.Import(ctx, g, graphtest.Node{Namespace: "vault", Key: k, Type: "vault@Entry"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		links = append(links, graph.LinkWrite{Type: "vault@holds", To: n.Ref()})
+	}
+	if _, err := graphtest.Import(ctx, g, graphtest.Node{Namespace: "vault", Key: "S", Type: "vault@Safe", Links: links}); err != nil {
+		t.Fatal(err)
+	}
+	floor, err := authz.NewCasbinWith(authz.FloorPolicies)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := &graphsvc.Handler{Graph: g, Floor: floor}
+	base, err := g.BranchHead(ctx, "vault", domain.MainBranch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for roles, want := range map[string]connect.Code{"contributor": connect.CodePermissionDenied, "admin": 0} {
+		c, err := g.CreateChange(ctx, graph.NewChange{Namespace: "vault", Title: "merge " + roles, BaselineID: base.ID, OwnBranch: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		req := connect.NewRequest(&graphv1.ImpactNodeMergeRequest{ChangeId: string(c.ID), Sources: []*graphv1.NodeName{{Key: "E1"}, {Key: "E2"}},
+			Into: &graphv1.NodeCreateSpec{Key: "E-" + roles, Type: "vault@Entry", Rationale: "one entry"}})
+		req.Header().Set(identity.HeaderSubject, "u")
+		req.Header().Set(identity.HeaderOrg, "acme")
+		req.Header().Set(identity.HeaderRoles, roles)
+		out, err := h.ImpactNodeMerge(ctx, req)
+		if (err == nil) != (want == 0) || err != nil && connect.CodeOf(err) != want {
+			t.Fatalf("%s merging the entries of a safe: %v", roles, err)
+		}
+		if err == nil && (len(out.Msg.Parents) != 1 || out.Msg.Parents[0].Key != "S" || len(out.Msg.Successors) != 1 || len(out.Msg.Sources) != 2) {
+			t.Errorf("result: %+v", out.Msg)
+		}
+		if err != nil {
+			if got, _ := g.ListChangeImpacts(ctx, c.ID); len(got) != 0 {
+				t.Errorf("a refused merge left %d impacts", len(got))
+			}
+		}
+	}
+	// what derives from E1
+	r, err := h.DerivedNodes(ctx, connect.NewRequest(&graphv1.DerivedNodesRequest{Ref: &graphv1.NodeRef{Id: string(must(t, g, "E1").ID)}}))
+	if err != nil || len(r.Msg.Nodes) != 1 || len(r.Msg.Nodes[0].Origins) != 2 {
+		t.Errorf("DerivedNodes: %v, %v", r, err)
+	}
+}
+
+func must(t *testing.T, g *graph.Graph, key string) domain.Node {
+	t.Helper()
+	n, err := g.NodeByKey(context.Background(), "vault", key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return n
 }

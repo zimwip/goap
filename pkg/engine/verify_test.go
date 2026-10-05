@@ -33,7 +33,7 @@ func TestIndependentVerification(t *testing.T) {
 		return err
 	}
 	vctx := withVerify(ctx, methodology.Action{Name: "write", Kind: methodology.KindHuman, Verify: &methodology.Verify{Oracle: methodology.OracleHuman}})
-	err = run(vctx, "write", "e1", `const r = ctx.impactNode("REQ-1", "why"); ctx.writeNode(r, { props: { title: "A" } }); ctx.reviewNode(r, true, "mine");`)
+	err = run(vctx, "write", "e1", `const r = ctx.impactNode("REQ-1", "why"); ctx.writeNode(r, { props: { title: "A" } }); ctx.impactNodeReview(r, true, "mine");`)
 	if err == nil || !strings.Contains(err.Error(), "may not verify") {
 		t.Fatalf("the producer reviews its own effect: %v", err)
 	}
@@ -45,7 +45,7 @@ func TestIndependentVerification(t *testing.T) {
 	if s := verify.Subjects(bb.Change.Items); len(s) != 1 || s[0].State != verify.Produced || !s[0].Independent || s[0].Oracle != "human" || s[0].Producer != "write" {
 		t.Fatalf("produced: %+v", s)
 	}
-	if err := run(ctx, "check", "e2", `ctx.reviewNode("REQ-1", true, "checked");`); err != nil {
+	if err := run(ctx, "check", "e2", `ctx.impactNodeReview("REQ-1", true, "checked");`); err != nil {
 		t.Fatalf("another action verifies: %v", err)
 	}
 	bb, _ = g.Blackboard(ctx, c.ID)
@@ -58,7 +58,7 @@ func TestIndependentVerification(t *testing.T) {
 	}
 
 	// an action with no verification is not constrained
-	if err := run(ctx, "plain", "e3", `const r = ctx.createNode("TestCase", "TST-9", "why"); ctx.writeNode(r, { props: { title: "T" } }); ctx.reviewNode(r, true, "mine");`); err != nil {
+	if err := run(ctx, "plain", "e3", `const r = ctx.impactNodeCreate("TestCase", "TST-9", "why"); ctx.writeNode(r, { props: { title: "T" } }); ctx.impactNodeReview(r, true, "mine");`); err != nil {
 		t.Fatalf("no verify declared: %v", err)
 	}
 }

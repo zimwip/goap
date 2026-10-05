@@ -43,11 +43,11 @@ func TestOptionsThroughTheService(t *testing.T) {
 		t.Fatalf("open: %+v %v", a, err)
 	}
 	pre := req1.Ref()
-	added, err := g.CheckoutNode(ctx, c.ID, graph.NodeCheckout{Node: pre.ID, Rationale: "why"})
+	added, err := g.ImpactNodeCheckout(ctx, c.ID, graph.NodeCheckout{Node: pre.ID, Rationale: "why"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := g.UpdateNode(ctx, c.ID, added.ID, graph.NodeUpdate{Properties: map[string]any{"title": "two"}}); err != nil {
+	if _, err := g.ImpactNodeUpdate(ctx, c.ID, added.ID, graph.NodeUpdate{Properties: map[string]any{"title": "two"}}); err != nil {
 		t.Fatal(err)
 	}
 	nodes, _, err := cl.ChangeGraph(ctx, c.ID, "")

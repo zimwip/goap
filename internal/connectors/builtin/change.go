@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"reflect"
 	"slices"
+	"strings"
 	"time"
 
 	connectorv1 "github.com/zimwip/goap/gen/goap/connector/v1"
@@ -40,6 +41,8 @@ var changeOps = []op{
 	{"edit", "Modify the properties of a node in the change (its working version, checked out on the first edit), or move it to a lifecycle state (a transition, from a checked-in version): {node}", schema(map[string]string{"change": "string", "key": "string", "properties": "object", "expect": "object", "state": "string", "rationale": "string"}, "key", "rationale")},
 	{"link", "Add a link from a node of the change: {node}", schema(map[string]string{"change": "string", "from": "string", "type": "string", "to": "string", "rationale": "string"}, "from", "type", "to")},
 	{"unlink", "Remove a link from a node of the change (removing a child is a modification of its parent): {node}", schema(map[string]string{"change": "string", "from": "string", "type": "string", "to": "string", "rationale": "string"}, "from", "type", "to")},
+	{"merge", "Merge nodes into a new one, seen from their parents (the sources stay as they are): {successors, sources, parents, suspect}", schema(map[string]string{"change": "string", "sources": "array", "key": "string", "type": "string", "properties": "object", "rationale": "string"}, "sources", "key", "type", "rationale")},
+	{"split", "Split a node into new ones, seen from its parents (the node stays as it is): {successors, sources, parents, suspect}", schema(map[string]string{"change": "string", "source": "string", "into": "array"}, "source", "into")},
 	{"checkin", "Check in the working version of a node of the change, once its review is accepted: {node}", schema(map[string]string{"change": "string", "key": "string"}, "key")},
 	{"cancel", "Cancel the checkout of a node of the change (a node created by the change and never checked in goes away): {node}", schema(map[string]string{"change": "string", "key": "string"}, "key")},
 	{"remove", "Take a node out of the change (its working version is dropped; refused once checked in): {removed}", schema(map[string]string{"change": "string", "key": "string"}, "key")},
@@ -192,7 +195,7 @@ func (c Change) Invoke(ctx context.Context, op string, raw, _ map[string]any, _ 
 		} else if ok {
 			return nil, fmt.Errorf("%s exists in the baseline of the change: edit it", key)
 		}
-		out, err := c.p.Graph.CreateNode(ctx, id, graph.NodeCreate{Key: key, Type: typ, Properties: a.object("properties"), Rationale: a.str("rationale"), ProducedBy: producer(ctx)})
+		out, err := c.p.Graph.ImpactNodeCreate(ctx, id, graph.NodeCreate{Key: key, Type: typ, Properties: a.object("properties"), Rationale: a.str("rationale"), ProducedBy: producer(ctx)})
 		if err != nil {
 			return nil, err
 		}
@@ -215,7 +218,7 @@ func (c Change) Invoke(ctx context.Context, op string, raw, _ map[string]any, _ 
 			}
 			return w.edit(imp, props, nil)
 		}
-		out, err := w.c.p.Graph.TransitionNode(ctx, id, graph.NodeTransition{NodeCheckout: graph.NodeCheckout{Impact: imp.ID}, To: state})
+		out, err := w.c.p.Graph.ImpactNodeTransition(ctx, id, graph.NodeTransition{NodeCheckout: graph.NodeCheckout{Impact: imp.ID}, To: state})
 		if err != nil {
 			return nil, err
 		}
@@ -228,9 +231,9 @@ func (c Change) Invoke(ctx context.Context, op string, raw, _ map[string]any, _ 
 		var out domain.ChangeImpact
 		var err error
 		if op == "checkin" {
-			out, err = c.p.Graph.CheckinNode(ctx, id, imp.ID, "", "")
+			out, err = c.p.Graph.ImpactNodeCheckin(ctx, id, imp.ID, "", "")
 		} else {
-			out, err = c.p.Graph.CancelCheckout(ctx, id, imp.ID, "", "")
+			out, err = c.p.Graph.ImpactNodeCancel(ctx, id, imp.ID, "", "")
 		}
 		if err != nil {
 			return nil, err
@@ -241,10 +244,12 @@ func (c Change) Invoke(ctx context.Context, op string, raw, _ map[string]any, _ 
 		if !ok {
 			return nil, fmt.Errorf("%s is not in the change", a.str("key"))
 		}
-		if err := c.p.Graph.RemoveChangeImpact(ctx, id, imp.ID, "", ""); err != nil {
+		if err := c.p.Graph.WithdrawImpact(ctx, id, imp.ID, "", ""); err != nil {
 			return nil, err
 		}
 		return map[string]any{"removed": imp.Key}, nil
+	case "merge", "split":
+		return c.restructure(ctx, w, op, a)
 	case "unlink":
 		typ, to := a.str("type"), a.str("to")
 		if typ == "" || to == "" {
@@ -277,7 +282,7 @@ func (c Change) Invoke(ctx context.Context, op string, raw, _ map[string]any, _ 
 		}
 		for _, l := range bb.Nodes[*imp.Post].Out {
 			if l.Type == typ && l.To.ID == target.ID {
-				if err := w.c.p.Graph.DeleteLink(ctx, id, l.ID, "", ""); err != nil {
+				if err := w.c.p.Graph.ImpactLinkDelete(ctx, id, l.ID, "", ""); err != nil {
 					return nil, err
 				}
 				return nodeResult(imp)
@@ -621,7 +626,7 @@ func (w *working) declare(imp domain.ChangeImpact) (domain.ChangeImpact, error) 
 		return imp, fmt.Errorf("%s: a rationale is required", imp.Key)
 	}
 	imp.Review, imp.ProducedBy = domain.ReviewProposed, producer(w.ctx)
-	out, err := w.c.p.Graph.AddNodes(w.ctx, w.bb.Change.ID, []domain.ChangeImpact{imp})
+	out, err := w.c.p.Graph.ProposeImpact(w.ctx, w.bb.Change.ID, []domain.ChangeImpact{imp})
 	if err != nil {
 		return imp, err
 	}
@@ -713,7 +718,7 @@ func (w *working) checkout(imp domain.ChangeImpact) (domain.ChangeImpact, error)
 			return imp, nil
 		}
 	}
-	return w.c.p.Graph.CheckoutNode(w.ctx, w.bb.Change.ID, graph.NodeCheckout{Impact: imp.ID})
+	return w.c.p.Graph.ImpactNodeCheckout(w.ctx, w.bb.Change.ID, graph.NodeCheckout{Impact: imp.ID})
 }
 
 // edit edits the working version of a change impact in place: its properties and outgoing links.
@@ -723,16 +728,72 @@ func (w *working) edit(imp domain.ChangeImpact, props map[string]any, links []gr
 		return nil, err
 	}
 	if len(props) > 0 {
-		if imp, err = w.c.p.Graph.UpdateNode(w.ctx, w.bb.Change.ID, imp.ID, graph.NodeUpdate{Properties: props}); err != nil {
+		if imp, err = w.c.p.Graph.ImpactNodeUpdate(w.ctx, w.bb.Change.ID, imp.ID, graph.NodeUpdate{Properties: props}); err != nil {
 			return nil, err
 		}
 	}
 	for _, l := range links {
-		if _, err := w.c.p.Graph.CreateLink(w.ctx, w.bb.Change.ID, imp.ID, l, "", ""); err != nil {
+		if _, err := w.c.p.Graph.ImpactLinkCreate(w.ctx, w.bb.Change.ID, imp.ID, l, "", ""); err != nil {
 			return nil, err
 		}
 	}
 	return nodeResult(imp)
+}
+
+// restructure merges or splits nodes from the side of their parents (ADR 0077): the sources are named by key, the
+// graph finds their parents; the gate of the access nodes stands in front of every node the call modifies.
+func (c Change) restructure(ctx context.Context, w *working, op string, a args) (map[string]any, error) {
+	id, who := w.bb.Change.ID, w.who
+	gate := func(typ string) error { return c.gate(ctx, who, typ) }
+	create := func(m map[string]any) graph.NodeCreate {
+		s := args(m)
+		props, _ := m["properties"].(map[string]any)
+		return graph.NodeCreate{Key: s.str("key"), Type: s.str("type"), Properties: props, Rationale: s.str("rationale"), ProducedBy: producer(ctx)}
+	}
+	var out graph.Restructured
+	var err error
+	switch op {
+	case "merge":
+		var sources []graph.NodeName
+		for _, x := range asStrings(a["sources"]) {
+			sources = append(sources, graph.NodeName{Key: x})
+		}
+		out, err = c.p.Graph.ImpactNodeMerge(ctx, id, graph.MergeInput{Sources: sources, Gate: gate,
+			Into: create(map[string]any{"key": a.str("key"), "type": a.str("type"), "properties": a.object("properties"), "rationale": a.str("rationale")})})
+	default:
+		var into []graph.NodeCreate
+		raw, _ := a["into"].([]any)
+		for _, x := range raw {
+			if m, ok := x.(map[string]any); ok {
+				into = append(into, create(m))
+			}
+		}
+		out, err = c.p.Graph.ImpactNodeSplit(ctx, id, graph.SplitInput{Source: graph.NodeName{Key: a.str("source")}, Into: into, Gate: gate,
+			Rationale: a.str("rationale")})
+	}
+	if err != nil {
+		return nil, err
+	}
+	summary := func(list []domain.ChangeImpact) []map[string]any {
+		var rows []map[string]any
+		for _, cn := range list {
+			rows = append(rows, map[string]any{"key": cn.Key, "type": cn.Type, "intent": cn.Intent, "review": cn.Review, "post": cn.Post, "via": cn.Via})
+		}
+		return rows
+	}
+	return result(map[string]any{"successors": summary(out.Successors), "sources": summary(out.Sources), "parents": summary(out.Parents), "suspect": out.Suspect})
+}
+
+func asStrings(v any) []string {
+	var out []string
+	if l, ok := v.([]any); ok {
+		for _, x := range l {
+			if s, ok := x.(string); ok {
+				out = append(out, strings.TrimSpace(s))
+			}
+		}
+	}
+	return out
 }
 
 func nodeResult(out domain.ChangeImpact) (map[string]any, error) {

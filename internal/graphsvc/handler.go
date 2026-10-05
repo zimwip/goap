@@ -406,7 +406,7 @@ func (h *Handler) gateAccess(ctx context.Context, typ string) error {
 	return nil
 }
 
-func (h *Handler) AddChangeImpacts(ctx context.Context, r *connect.Request[graphv1.AddChangeImpactsRequest]) (*connect.Response[graphv1.AddChangeImpactsResponse], error) {
+func (h *Handler) ProposeImpact(ctx context.Context, r *connect.Request[graphv1.ProposeImpactRequest]) (*connect.Response[graphv1.ProposeImpactResponse], error) {
 	ctx = h.Identity.Context(ctx, r.Header())
 	nodes := pbconv.ChangeImpactsFromPB(r.Msg.Nodes)
 	for _, cn := range nodes {
@@ -420,8 +420,8 @@ func (h *Handler) AddChangeImpacts(ctx context.Context, r *connect.Request[graph
 			return nil, err
 		}
 	}
-	out, err := h.Graph.AddNodes(ctx, domain.ChangeID(r.Msg.ChangeId), nodes)
-	return res(&graphv1.AddChangeImpactsResponse{Nodes: pbconv.ChangeImpactsToPB(out)}, err)
+	out, err := h.Graph.ProposeImpact(ctx, domain.ChangeID(r.Msg.ChangeId), nodes)
+	return res(&graphv1.ProposeImpactResponse{Nodes: pbconv.ChangeImpactsToPB(out)}, err)
 }
 
 func (h *Handler) CommitEdits(ctx context.Context, r *connect.Request[graphv1.CommitEditsRequest]) (*connect.Response[graphv1.CommitEditsResponse], error) {
@@ -514,9 +514,9 @@ func linkWrites(ls []*graphv1.NodeLinkWrite) []graph.LinkWrite {
 	return out
 }
 
-// CreateNode creates a node in a change: ABAC object:create on the project of the change, and the gate of the access
+// ImpactNodeCreate creates a node in a change: ABAC object:create on the project of the change, and the gate of the access
 // nodes for an adminOnly type.
-func (h *Handler) CreateNode(ctx context.Context, r *connect.Request[graphv1.CreateNodeRequest]) (*connect.Response[graphv1.CreateNodeResponse], error) {
+func (h *Handler) ImpactNodeCreate(ctx context.Context, r *connect.Request[graphv1.ImpactNodeCreateRequest]) (*connect.Response[graphv1.ImpactNodeCreateResponse], error) {
 	ctx = h.Identity.Context(ctx, r.Header())
 	m := r.Msg
 	c, err := h.Graph.Change(ctx, domain.ChangeID(m.ChangeId))
@@ -531,112 +531,182 @@ func (h *Handler) CreateNode(ctx context.Context, r *connect.Request[graphv1.Cre
 	if err := h.gateAccess(ctx, m.Type); err != nil {
 		return nil, err
 	}
-	cn, err := h.Graph.CreateNode(ctx, c.ID, graph.NodeCreate{Key: m.Key, Type: m.Type, Properties: pbconv.Map(m.Props), Owner: m.Owner, Rationale: m.Rationale,
+	cn, err := h.Graph.ImpactNodeCreate(ctx, c.ID, graph.NodeCreate{Key: m.Key, Type: m.Type, Properties: pbconv.Map(m.Props), Owner: m.Owner, Rationale: m.Rationale,
 		Links: linkWrites(m.Links), Flow: m.Flow, Execution: m.Execution, ProducedBy: who.Subject})
-	return res(&graphv1.CreateNodeResponse{Node: pbconv.ChangeImpactToPB(cn)}, err)
+	return res(&graphv1.ImpactNodeCreateResponse{Node: pbconv.ChangeImpactToPB(cn)}, err)
 }
 
-func (h *Handler) CheckoutNode(ctx context.Context, r *connect.Request[graphv1.CheckoutNodeRequest]) (*connect.Response[graphv1.CheckoutNodeResponse], error) {
+// gateFunc is the gate of the access nodes as a function of a node type, for the operations that modify nodes they
+// discover themselves (graph.MergeInput.Gate): it needs no transaction of the graph.
+func (h *Handler) gateFunc(ctx context.Context) func(string) error {
+	return func(typ string) error { return h.gateAccess(ctx, typ) }
+}
+
+func nameOf(n *graphv1.NodeName) graph.NodeName {
+	return graph.NodeName{Impact: domain.ChangeImpactID(n.GetChangeImpactId()), Node: domain.NodeID(n.GetNodeId()), Key: n.GetKey()}
+}
+
+func createSpec(s *graphv1.NodeCreateSpec, flow, execution, by string) graph.NodeCreate {
+	return graph.NodeCreate{Key: s.GetKey(), Type: s.GetType(), Properties: pbconv.Map(s.GetProps()), Owner: s.GetOwner(), Rationale: s.GetRationale(),
+		Links: linkWrites(s.GetLinks()), Flow: flow, Execution: execution, ProducedBy: by}
+}
+
+// checkCreate is the ABAC check of the creation of a node of a type in a change.
+func (h *Handler) checkCreate(ctx context.Context, c domain.Change, typ string) error {
+	who := authz.From(ctx)
+	if err := authz.Check(ctx, h.Authz, authz.Request{Subject: who, Action: "create",
+		Resource: authz.Resource{Type: "object", Name: typ, Namespace: c.Namespace, Org: c.OwnerOrg, Owner: who.Subject, ProjectID: c.ProjectID}}); err != nil {
+		return rpcerr.ToConnect(err)
+	}
+	return h.gateAccess(ctx, typ)
+}
+
+// ImpactNodeMerge merges nodes into a new one (ADR 0077): the creation of the new node is authorized like
+// ImpactNodeCreate, and the gate of the access nodes stands in front of every node the merge modifies.
+func (h *Handler) ImpactNodeMerge(ctx context.Context, r *connect.Request[graphv1.ImpactNodeMergeRequest]) (*connect.Response[graphv1.ImpactNodeRestructureResponse], error) {
+	ctx = h.Identity.Context(ctx, r.Header())
+	m := r.Msg
+	c, err := h.Graph.Change(ctx, domain.ChangeID(m.ChangeId))
+	if err != nil {
+		return nil, rpcerr.ToConnect(err)
+	}
+	if err := h.checkCreate(ctx, c, m.GetInto().GetType()); err != nil {
+		return nil, err
+	}
+	in := graph.MergeInput{Into: createSpec(m.Into, m.Flow, m.Execution, authz.From(ctx).Subject), Rationale: m.Rationale, Flow: m.Flow, Execution: m.Execution, Gate: h.gateFunc(ctx)}
+	for _, s := range m.Sources {
+		in.Sources = append(in.Sources, nameOf(s))
+	}
+	out, err := h.Graph.ImpactNodeMerge(ctx, c.ID, in)
+	return res(pbconv.RestructuredToPB(out), err)
+}
+
+// ImpactNodeSplit splits a node into new ones (ADR 0077), authorized like ImpactNodeMerge.
+func (h *Handler) ImpactNodeSplit(ctx context.Context, r *connect.Request[graphv1.ImpactNodeSplitRequest]) (*connect.Response[graphv1.ImpactNodeRestructureResponse], error) {
+	ctx = h.Identity.Context(ctx, r.Header())
+	m := r.Msg
+	c, err := h.Graph.Change(ctx, domain.ChangeID(m.ChangeId))
+	if err != nil {
+		return nil, rpcerr.ToConnect(err)
+	}
+	in := graph.SplitInput{Source: nameOf(m.Source), Rationale: m.Rationale, Flow: m.Flow, Execution: m.Execution, Gate: h.gateFunc(ctx)}
+	for _, s := range m.Into {
+		if err := h.checkCreate(ctx, c, s.GetType()); err != nil {
+			return nil, err
+		}
+		in.Into = append(in.Into, createSpec(s, m.Flow, m.Execution, authz.From(ctx).Subject))
+	}
+	out, err := h.Graph.ImpactNodeSplit(ctx, c.ID, in)
+	return res(pbconv.RestructuredToPB(out), err)
+}
+
+// DerivedNodes answers which nodes derive from a node (ADR 0077).
+func (h *Handler) DerivedNodes(ctx context.Context, r *connect.Request[graphv1.DerivedNodesRequest]) (*connect.Response[graphv1.DerivedNodesResponse], error) {
+	ns, err := h.Graph.DerivedNodes(ctx, pbconv.RefFromPB(r.Msg.Ref))
+	return res(&graphv1.DerivedNodesResponse{Nodes: pbconv.NodesToPB(ns)}, err)
+}
+
+func (h *Handler) ImpactNodeCheckout(ctx context.Context, r *connect.Request[graphv1.ImpactNodeCheckoutRequest]) (*connect.Response[graphv1.ImpactNodeCheckoutResponse], error) {
 	ctx = h.Identity.Context(ctx, r.Header())
 	m := r.Msg
 	if err := h.gateImpact(ctx, m.ChangeId, m.ChangeImpactId, m.NodeId); err != nil {
 		return nil, err
 	}
-	cn, err := h.Graph.CheckoutNode(ctx, domain.ChangeID(m.ChangeId), graph.NodeCheckout{Impact: domain.ChangeImpactID(m.ChangeImpactId), Node: domain.NodeID(m.NodeId),
+	cn, err := h.Graph.ImpactNodeCheckout(ctx, domain.ChangeID(m.ChangeId), graph.NodeCheckout{Impact: domain.ChangeImpactID(m.ChangeImpactId), Node: domain.NodeID(m.NodeId),
 		Rationale: m.Rationale, Flow: m.Flow, Execution: m.Execution, ProducedBy: authz.From(ctx).Subject})
-	return res(&graphv1.CheckoutNodeResponse{Node: pbconv.ChangeImpactToPB(cn)}, err)
+	return res(&graphv1.ImpactNodeCheckoutResponse{Node: pbconv.ChangeImpactToPB(cn)}, err)
 }
 
-func (h *Handler) UpdateNode(ctx context.Context, r *connect.Request[graphv1.UpdateNodeRequest]) (*connect.Response[graphv1.UpdateNodeResponse], error) {
+func (h *Handler) ImpactNodeUpdate(ctx context.Context, r *connect.Request[graphv1.ImpactNodeUpdateRequest]) (*connect.Response[graphv1.ImpactNodeUpdateResponse], error) {
 	ctx = h.Identity.Context(ctx, r.Header())
 	m := r.Msg
 	if err := h.gateImpact(ctx, m.ChangeId, m.ChangeImpactId, ""); err != nil {
 		return nil, err
 	}
-	cn, err := h.Graph.UpdateNode(ctx, domain.ChangeID(m.ChangeId), domain.ChangeImpactID(m.ChangeImpactId),
+	cn, err := h.Graph.ImpactNodeUpdate(ctx, domain.ChangeID(m.ChangeId), domain.ChangeImpactID(m.ChangeImpactId),
 		graph.NodeUpdate{Properties: pbconv.Map(m.Props), Owner: m.Owner, Flow: m.Flow, Execution: m.Execution})
-	return res(&graphv1.UpdateNodeResponse{Node: pbconv.ChangeImpactToPB(cn)}, err)
+	return res(&graphv1.ImpactNodeUpdateResponse{Node: pbconv.ChangeImpactToPB(cn)}, err)
 }
 
-func (h *Handler) CreateLink(ctx context.Context, r *connect.Request[graphv1.CreateLinkRequest]) (*connect.Response[graphv1.CreateLinkResponse], error) {
+func (h *Handler) ImpactLinkCreate(ctx context.Context, r *connect.Request[graphv1.ImpactLinkCreateRequest]) (*connect.Response[graphv1.ImpactLinkCreateResponse], error) {
 	ctx = h.Identity.Context(ctx, r.Header())
 	m := r.Msg
 	if err := h.gateImpact(ctx, m.ChangeId, m.ChangeImpactId, ""); err != nil {
 		return nil, err
 	}
-	l, err := h.Graph.CreateLink(ctx, domain.ChangeID(m.ChangeId), domain.ChangeImpactID(m.ChangeImpactId),
+	l, err := h.Graph.ImpactLinkCreate(ctx, domain.ChangeID(m.ChangeId), domain.ChangeImpactID(m.ChangeImpactId),
 		graph.LinkWrite{Type: m.Type, To: pbconv.RefFromPB(m.To), Properties: pbconv.Map(m.Props)}, m.Flow, m.Execution)
-	return res(&graphv1.CreateLinkResponse{Link: pbconv.LinkToPB(l)}, err)
+	return res(&graphv1.ImpactLinkCreateResponse{Link: pbconv.LinkToPB(l)}, err)
 }
 
-func (h *Handler) UpdateLink(ctx context.Context, r *connect.Request[graphv1.UpdateLinkRequest]) (*connect.Response[graphv1.UpdateLinkResponse], error) {
+func (h *Handler) ImpactLinkUpdate(ctx context.Context, r *connect.Request[graphv1.ImpactLinkUpdateRequest]) (*connect.Response[graphv1.ImpactLinkUpdateResponse], error) {
 	ctx = h.Identity.Context(ctx, r.Header())
 	m := r.Msg
 	if err := h.gateLink(ctx, m.LinkId); err != nil {
 		return nil, err
 	}
-	l, err := h.Graph.UpdateLink(ctx, domain.ChangeID(m.ChangeId), domain.LinkID(m.LinkId), pbconv.Map(m.Props), m.Flow, m.Execution)
-	return res(&graphv1.UpdateLinkResponse{Link: pbconv.LinkToPB(l)}, err)
+	l, err := h.Graph.ImpactLinkUpdate(ctx, domain.ChangeID(m.ChangeId), domain.LinkID(m.LinkId), pbconv.Map(m.Props), m.Flow, m.Execution)
+	return res(&graphv1.ImpactLinkUpdateResponse{Link: pbconv.LinkToPB(l)}, err)
 }
 
-func (h *Handler) DeleteLink(ctx context.Context, r *connect.Request[graphv1.DeleteLinkRequest]) (*connect.Response[graphv1.DeleteLinkResponse], error) {
+func (h *Handler) ImpactLinkDelete(ctx context.Context, r *connect.Request[graphv1.ImpactLinkDeleteRequest]) (*connect.Response[graphv1.ImpactLinkDeleteResponse], error) {
 	ctx = h.Identity.Context(ctx, r.Header())
 	m := r.Msg
 	if err := h.gateLink(ctx, m.LinkId); err != nil {
 		return nil, err
 	}
-	return res(&graphv1.DeleteLinkResponse{}, h.Graph.DeleteLink(ctx, domain.ChangeID(m.ChangeId), domain.LinkID(m.LinkId), m.Flow, m.Execution))
+	return res(&graphv1.ImpactLinkDeleteResponse{}, h.Graph.ImpactLinkDelete(ctx, domain.ChangeID(m.ChangeId), domain.LinkID(m.LinkId), m.Flow, m.Execution))
 }
 
-func (h *Handler) CheckinNode(ctx context.Context, r *connect.Request[graphv1.CheckinNodeRequest]) (*connect.Response[graphv1.CheckinNodeResponse], error) {
+func (h *Handler) ImpactNodeCheckin(ctx context.Context, r *connect.Request[graphv1.ImpactNodeCheckinRequest]) (*connect.Response[graphv1.ImpactNodeCheckinResponse], error) {
 	ctx = h.Identity.Context(ctx, r.Header())
 	m := r.Msg
 	if err := h.gateImpact(ctx, m.ChangeId, m.ChangeImpactId, ""); err != nil {
 		return nil, err
 	}
-	cn, err := h.Graph.CheckinNode(ctx, domain.ChangeID(m.ChangeId), domain.ChangeImpactID(m.ChangeImpactId), m.Flow, m.Execution)
-	return res(&graphv1.CheckinNodeResponse{Node: pbconv.ChangeImpactToPB(cn)}, err)
+	cn, err := h.Graph.ImpactNodeCheckin(ctx, domain.ChangeID(m.ChangeId), domain.ChangeImpactID(m.ChangeImpactId), m.Flow, m.Execution)
+	return res(&graphv1.ImpactNodeCheckinResponse{Node: pbconv.ChangeImpactToPB(cn)}, err)
 }
 
-func (h *Handler) TransitionNode(ctx context.Context, r *connect.Request[graphv1.TransitionNodeRequest]) (*connect.Response[graphv1.TransitionNodeResponse], error) {
+func (h *Handler) ImpactNodeTransition(ctx context.Context, r *connect.Request[graphv1.ImpactNodeTransitionRequest]) (*connect.Response[graphv1.ImpactNodeTransitionResponse], error) {
 	ctx = h.Identity.Context(ctx, r.Header()) // the transition is authorized for the caller
 	m := r.Msg
 	if err := h.gateImpact(ctx, m.ChangeId, m.ChangeImpactId, m.NodeId); err != nil {
 		return nil, err
 	}
-	cn, err := h.Graph.TransitionNode(ctx, domain.ChangeID(m.ChangeId), graph.NodeTransition{NodeCheckout: graph.NodeCheckout{Impact: domain.ChangeImpactID(m.ChangeImpactId),
+	cn, err := h.Graph.ImpactNodeTransition(ctx, domain.ChangeID(m.ChangeId), graph.NodeTransition{NodeCheckout: graph.NodeCheckout{Impact: domain.ChangeImpactID(m.ChangeImpactId),
 		Node: domain.NodeID(m.NodeId), Rationale: m.Rationale, Flow: m.Flow, Execution: m.Execution, ProducedBy: authz.From(ctx).Subject}, To: m.State})
-	return res(&graphv1.TransitionNodeResponse{Node: pbconv.ChangeImpactToPB(cn)}, err)
+	return res(&graphv1.ImpactNodeTransitionResponse{Node: pbconv.ChangeImpactToPB(cn)}, err)
 }
 
-func (h *Handler) CancelCheckout(ctx context.Context, r *connect.Request[graphv1.CancelCheckoutRequest]) (*connect.Response[graphv1.CancelCheckoutResponse], error) {
+func (h *Handler) ImpactNodeCancel(ctx context.Context, r *connect.Request[graphv1.ImpactNodeCancelRequest]) (*connect.Response[graphv1.ImpactNodeCancelResponse], error) {
 	ctx = h.Identity.Context(ctx, r.Header())
 	m := r.Msg
 	if err := h.gateImpact(ctx, m.ChangeId, m.ChangeImpactId, ""); err != nil {
 		return nil, err
 	}
-	cn, err := h.Graph.CancelCheckout(ctx, domain.ChangeID(m.ChangeId), domain.ChangeImpactID(m.ChangeImpactId), m.Flow, m.Execution)
-	return res(&graphv1.CancelCheckoutResponse{Node: pbconv.ChangeImpactToPB(cn)}, err)
+	cn, err := h.Graph.ImpactNodeCancel(ctx, domain.ChangeID(m.ChangeId), domain.ChangeImpactID(m.ChangeImpactId), m.Flow, m.Execution)
+	return res(&graphv1.ImpactNodeCancelResponse{Node: pbconv.ChangeImpactToPB(cn)}, err)
 }
 
-func (h *Handler) RemoveChangeImpact(ctx context.Context, r *connect.Request[graphv1.RemoveChangeImpactRequest]) (*connect.Response[graphv1.RemoveChangeImpactResponse], error) {
+func (h *Handler) WithdrawImpact(ctx context.Context, r *connect.Request[graphv1.WithdrawImpactRequest]) (*connect.Response[graphv1.WithdrawImpactResponse], error) {
 	ctx = h.Identity.Context(ctx, r.Header())
 	m := r.Msg
 	if err := h.gateImpact(ctx, m.ChangeId, m.ChangeImpactId, ""); err != nil {
 		return nil, err
 	}
-	err := h.Graph.RemoveChangeImpact(ctx, domain.ChangeID(m.ChangeId), domain.ChangeImpactID(m.ChangeImpactId), m.Flow, m.Execution)
-	return res(&graphv1.RemoveChangeImpactResponse{}, err)
+	err := h.Graph.WithdrawImpact(ctx, domain.ChangeID(m.ChangeId), domain.ChangeImpactID(m.ChangeImpactId), m.Flow, m.Execution)
+	return res(&graphv1.WithdrawImpactResponse{}, err)
 }
 
-func (h *Handler) ReviewChangeImpact(ctx context.Context, r *connect.Request[graphv1.ReviewChangeImpactRequest]) (*connect.Response[graphv1.ReviewChangeImpactResponse], error) {
+func (h *Handler) ImpactNodeReview(ctx context.Context, r *connect.Request[graphv1.ImpactNodeReviewRequest]) (*connect.Response[graphv1.ImpactNodeReviewResponse], error) {
 	ctx = h.Identity.Context(ctx, r.Header())
 	status := domain.ReviewRejected
 	if r.Msg.Accept {
 		status = domain.ReviewAccepted
 	}
-	cn, err := h.Graph.ReviewNodeOn(ctx, domain.ChangeID(r.Msg.ChangeId), r.Msg.Flow, r.Msg.Execution, domain.ChangeImpactID(r.Msg.ChangeImpactId), status, authz.From(ctx).Subject, r.Msg.Comment)
-	return res(&graphv1.ReviewChangeImpactResponse{Node: pbconv.ChangeImpactToPB(cn)}, err)
+	cn, err := h.Graph.ImpactNodeReviewOn(ctx, domain.ChangeID(r.Msg.ChangeId), r.Msg.Flow, r.Msg.Execution, domain.ChangeImpactID(r.Msg.ChangeImpactId), status, authz.From(ctx).Subject, r.Msg.Comment)
+	return res(&graphv1.ImpactNodeReviewResponse{Node: pbconv.ChangeImpactToPB(cn)}, err)
 }
 
 func (h *Handler) ReopenChangeImpacts(ctx context.Context, r *connect.Request[graphv1.ReopenChangeImpactsRequest]) (*connect.Response[graphv1.ReopenChangeImpactsResponse], error) {

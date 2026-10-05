@@ -262,7 +262,7 @@ actions:
           const level = r.type === "alm@SecurityRequirement" ? "security"
             : r.type === "alm@NonFunctionalRequirement" ? "performance" : "acceptance";
           const title = (r.post.props && r.post.props.title) || r.key;
-          const t = ctx.createNode("alm@TestCase", "TST-" + r.key, "verifies " + r.key);
+          const t = ctx.impactNodeCreate("alm@TestCase", "TST-" + r.key, "verifies " + r.key);
           ctx.writeNode(t, { props: { title: "Verify: " + title, level: level }, links: [{ type: "alm@verifies", to: r.key }] });
           n++;
         }
@@ -288,7 +288,7 @@ actions:
           if (r.intent !== "created" || !r.post || !r.type.endsWith("Requirement") || realized.has(r.key)) continue;
           let fn = functions[0];
           if (!fn) {
-            fn = ctx.createNode("alm@Function", "FCT-" + r.key, "realizes " + r.key);
+            fn = ctx.impactNodeCreate("alm@Function", "FCT-" + r.key, "realizes " + r.key);
             ctx.writeNode(fn, { props: { title: "Function: " + ((r.post.props && r.post.props.title) || r.key) }, links: [{ type: "alm@realizes", to: r.key }] });
           } else {
             ctx.writeNode(fn, { links: [{ type: "alm@realizes", to: r.key }] });
@@ -419,7 +419,7 @@ actions:
           const name = String(c.props.title || c.key);
           const v = bump(c.props.version);
           const key = "ART-" + c.key + "-" + v;
-          const art = ctx.createNode("alm@BuildArtifact", key, "build artifact of " + c.key);
+          const art = ctx.impactNodeCreate("alm@BuildArtifact", key, "build artifact of " + c.key);
           ctx.writeNode(art, { props: { name: name, format: r.format, version: v, technology: c.props.technology || "",
             coordinates: r.coordinates(name, v), toolchain: r.toolchain, checks: r.checks }, links: [{ type: "alm@built_from", to: c.key }] });
           if (c.existing) {
@@ -503,7 +503,7 @@ actions:
           const node = ctx.node(app);
           const v = bumpMinor(node.props.version);
           const key = "REL-" + app + "-" + v;
-          const r = ctx.createNode("alm@Release", key, "release " + v + " of " + app);
+          const r = ctx.impactNodeCreate("alm@Release", key, "release " + v + " of " + app);
           ctx.writeNode(r, {
             props: { title: (node.props.title || app) + " " + v, version: v, status: "candidate" },
             links: [{ type: "alm@releases", to: app }].concat(arts.map(a => ({ type: "alm@contains", to: a }))),
@@ -587,19 +587,19 @@ actions:
         let approved = 0;
         for (const n of ctx.changeImpacts()) {
           if (!types.includes(n.type) || n.review !== "accepted" || !n.post) continue;
-          if (n.checkedOut) ctx.checkinNode(n.key);
+          if (n.checkedOut) ctx.impactNodeCheckin(n.key);
           const state = n.post.state;
-          if (state === "proposed") ctx.transitionNode(n.key, "draft");
+          if (state === "proposed") ctx.impactNodeTransition(n.key, "draft");
           if (state === "proposed" || state === "draft") {
-            ctx.transitionNode(n.key, "approved");
+            ctx.impactNodeTransition(n.key, "approved");
             approved++;
           }
         }
         let candidates = 0;
         for (const n of ctx.changeImpacts()) {
           if (n.type !== "alm@Release" || n.review !== "accepted" || !n.post || n.post.state !== "draft") continue;
-          if (n.checkedOut) ctx.checkinNode(n.key);
-          ctx.transitionNode(n.key, "candidate");
+          if (n.checkedOut) ctx.impactNodeCheckin(n.key);
+          ctx.impactNodeTransition(n.key, "candidate");
           candidates++;
         }
         ctx.addArtifact("requirements_approval", { approved: approved, candidates: candidates });
@@ -635,11 +635,11 @@ actions:
         const campaign = {};
         for (const t of tests) campaign[t.post.props.level || "acceptance"] = (campaign[t.post.props.level || "acceptance"] || 0) + 1;
         for (const r of plan.data.releases) {
-          const d = ctx.createNode("alm@Deployment", "DEP-" + r + "-" + env.key, "deployment of " + r + " to " + env.name);
+          const d = ctx.impactNodeCreate("alm@Deployment", "DEP-" + r + "-" + env.key, "deployment of " + r + " to " + env.name);
           ctx.writeNode(d, { props: { status: "succeeded", stage: env.stage, checks: checks },
             links: [{ type: "alm@of_release", to: r }, { type: "alm@in_environment", to: env.key }] });
           // a deployment is recorded once done: no review to wait for
-          ctx.reviewNode(d, true, "deployment recorded");
+          ctx.impactNodeReview(d, true, "deployment recorded");
         }
         ctx.addArtifact("deployment_wave", { environment: env.key, name: env.name, stage: env.stage, releases: plan.data.releases,
           checks: checks, tests: campaign });

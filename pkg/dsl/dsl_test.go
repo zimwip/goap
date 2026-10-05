@@ -41,7 +41,7 @@ function run(ctx) {
   let n = 0;
   for (const c of ctx.changeImpacts()) {
     if (c.type !== "Requirement") continue;
-    const t = ctx.createNode("TestCase", "TST-" + c.key, "verifies " + c.key);
+    const t = ctx.impactNodeCreate("TestCase", "TST-" + c.key, "verifies " + c.key);
     ctx.writeNode(t, { props: { title: "Verify " + c.pre.props.title }, links: [{ type: "verifies", to: c.key }] });
     n++;
   }
@@ -82,7 +82,7 @@ func Run(ctx *dsl.Ctx) error {
 		if n.Type != "Requirement" {
 			continue
 		}
-		t := ctx.CreateNode("TestCase", "TST-"+strings.ToLower(n.Key), "verifies")
+		t := ctx.ImpactNodeCreate("TestCase", "TST-"+strings.ToLower(n.Key), "verifies")
 		ctx.WriteNode(t, map[string]any{"props": map[string]any{"title": "x"}})
 	}
 	n, err := ctx.Node("REQ-1")
@@ -140,12 +140,12 @@ func Run(ctx *dsl.Ctx) error {
 			ctx.WriteNode(n.Key, map[string]any{"props": map[string]any{"title": "x"}})
 		}
 	}
-	r := ctx.CreateNode("TestCase", "TST-1", "cover")
+	r := ctx.ImpactNodeCreate("TestCase", "TST-1", "cover")
 	ctx.WriteNode(r, map[string]any{"links": []any{map[string]any{"type": "verifies", "to": "REQ-1"}}})
-	ctx.ReviewNode(r, true, "ok")
-	ctx.CheckinNode(r)
-	ctx.TransitionNode(r, "approved")
-	ctx.CancelCheckout("REQ-1")
+	ctx.ImpactNodeReview(r, true, "ok")
+	ctx.ImpactNodeCheckin(r)
+	ctx.ImpactNodeTransition(r, "approved")
+	ctx.ImpactNodeCancel("REQ-1")
 	return nil
 }
 `}, &fakeHost{})
