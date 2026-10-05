@@ -1015,6 +1015,15 @@ function, later. `GET /api/auth/config` (unauthenticated) tells the web which si
 "Log out" toolbar action shows only on a caller's own profile and hides itself once a real SSO `AuthMode`
 (OIDC/OAuth, not yet implemented) exists — a forward seam only.
 
+**Single sources of truth** ([ADR 0068](adr/0068-server-side-single-sources-of-truth.md)). A node type of a domain
+flagged `adminOnly: true` (inherited by subtypes) is written by platform administrators only: `Graph.AdminOnlyType` is
+the one question the graph handler and `goap-change` ask (the connector through `engine.GraphPort`, the RPC
+`IsAdminOnlyType` for a remote graph). The walk up the organisation or the projects is one resolver,
+`domain.Hierarchy`, built from the structures and used by the access snapshot, the hub's adapter resolution and the
+`goap-admin` listings. Authentication modes are `gateway.Mode` strategies (`none`, `hs256`, `local`; registered by
+name, `Sessions()` says whether sessions are checked server-side); `/api/auth/config` answers `{authMode, signsIn}`.
+The preferences service keeps an opaque JSON object per user (size-limited): the web store owns the keys.
+
 **Sign-in by default, users declared at sign-in, the waiting unit** ([ADR 0042](adr/0042-local-sign-in-by-default-and-waiting-unit.md)).
 `"local"` is the default `AuthMode` (`gateway.DefaultAuthMode`) of the gateway, `goap-dev` and the compose
 file, unless an external identity provider issues the tokens (`hs256` today); `"none"` must be asked for.

@@ -8,6 +8,19 @@ import (
 	"github.com/zimwip/goap/pkg/domain"
 )
 
+// The built-in domains flag the types domain.BuiltinAdminOnly lists (the untyped graph's fallback), no more, no less.
+func TestBuiltinAdminOnly(t *testing.T) {
+	c := Builtin()
+	for _, d := range Builtins() {
+		for _, n := range d.NodeTypes {
+			typ := d.Name + "@" + n.Name
+			if got := c.AdminOnly(typ); got != domain.BuiltinAdminOnly[typ] {
+				t.Errorf("%s: catalogue %v, domain.BuiltinAdminOnly %v", typ, got, domain.BuiltinAdminOnly[typ])
+			}
+		}
+	}
+}
+
 // A node type declares the links its nodes must carry (ADR 0065): the built-in organisation domain requires one
 // member_of of a User, a subtype inherits and may redefine them, and a bad declaration is an issue.
 func TestRequires(t *testing.T) {

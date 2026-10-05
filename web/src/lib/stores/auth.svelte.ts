@@ -19,19 +19,14 @@ function takeNotice(): string {
 
 export const authState = $state({
   mode: '',
+  /** the platform signs its users in itself (the mode keeps sessions server-side, ADR 0068): sign-in page, sign-out */
+  signsIn: false,
   loaded: false,
   /** the gateway could not be reached to tell the sign-in mode: retrying */
   unreachable: false,
   /** why the user is back on the sign-in page ('' when they signed out themselves or never signed in) */
   notice: takeNotice(),
 });
-
-/**
- * Whether a mode is the platform's own sign-in (ADR 0040, 0042: "local", the default unless an external
- * identity provider is in place): the sign-in page, and signing out from the profile menu. An SSO mode
- * signs in and out through its provider instead.
- */
-export const signsInLocally = (mode: string): boolean => mode === 'local';
 
 /**
  * Asks the gateway which sign-in it wants, retrying while it is unreachable (a restart, a reset database): the
@@ -41,11 +36,14 @@ export async function loadAuthConfig(): Promise<void> {
   keepSession();
   for (let delay = 1000; ; delay = Math.min(delay * 2, 10_000)) {
     try {
-      authState.mode = (await authConfig()).authMode || 'none';
+      const cfg = await authConfig();
+      authState.mode = cfg.authMode || 'none';
+      authState.signsIn = !!cfg.signsIn; // the gateway says whether it signs users in itself (ADR 0040, 0042, 0068)
       break;
     } catch (e) {
       if (e instanceof RpcError && e.status === 404) {
-        authState.mode = 'none'; // an older gateway without /api/auth/config: no sign-in
+        authState.mode = 'none';
+        authState.signsIn = false; // an older gateway without /api/auth/config: no sign-in
         break;
       }
       authState.unreachable = true;
@@ -154,7 +152,7 @@ function check(): void {
   clearTimeout(timer);
   const token = getToken();
   const c = tokenClaims(token);
-  if (!token || !c?.exp || !signsInLocally(authState.mode)) return; // no session, a token the web cannot read or one issued elsewhere (left to the gateway)
+  if (!token || !c?.exp || !authState.signsIn) return; // no session, a token the web cannot read or one issued elsewhere (left to the gateway)
   if (c.exp <= now() + 5) {
     endSession('Your session expired. Sign in again.');
     return;

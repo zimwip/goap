@@ -79,6 +79,8 @@ message NodeType {
   StructureTag structure = 11;
   // links a node of the type must carry (ADR 0065)
   repeated RequiredLink requires = 12;
+  // nodes of the type are written by platform administrators only (ADR 0068)
+  bool admin_only = 13;
 }
 
 // RequiredLink: a node of the type has exactly count outgoing links of the link type (ADR 0065).

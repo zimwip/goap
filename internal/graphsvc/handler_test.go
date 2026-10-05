@@ -132,6 +132,33 @@ func TestAccessNodesAreGatedByTheFloor(t *testing.T) {
 	}
 }
 
+// A type a domain flags `adminOnly` is gated by the handler with no code naming it (ADR 0068): direct writes are
+// refused, a change impact needs the floor, and the RPC the connectors of a distributed deployment ask answers.
+func TestAdminOnlyTypeOfADomainIsGated(t *testing.T) {
+	ctx := context.Background()
+	d, err := def.ParseDomain([]byte("name: vault\nversion: 1.0.0\nnodeTypes:\n  - {name: Secret, adminOnly: true, changeControlled: false}\n  - {name: Note, changeControlled: false}\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cat, err := typecat.New(d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	g := graph.New(graph.NewMemory())
+	g.Types = func() graph.TypeCatalog { return cat }
+	h := &graphsvc.Handler{Graph: g}
+	for typ, want := range map[string]bool{"vault@Secret": true, "vault@Note": false} {
+		r, err := h.IsAdminOnlyType(ctx, connect.NewRequest(&graphv1.IsAdminOnlyTypeRequest{Type: typ}))
+		if err != nil || r.Msg.AdminOnly != want {
+			t.Errorf("IsAdminOnlyType(%s) = %v, %v; want %v", typ, r, err, want)
+		}
+	}
+	req := connect.NewRequest(&graphv1.CreateNodeRequest{Namespace: "vault", Key: "S1", Type: "vault@Secret"})
+	if _, err := h.CreateNode(ctx, req); connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		t.Errorf("direct write of a flagged type: %v", err)
+	}
+}
+
 func TestChangeImpactRPCs(t *testing.T) {
 	ctx := context.Background()
 	g := graph.New(graph.NewMemory())

@@ -93,14 +93,18 @@ func main() {
 	if origins := platform.Env("GOAP_CORS_ORIGINS", ""); origins != "" {
 		cfg.AllowOrigins = strings.Split(origins, ",")
 	}
-	if cfg.AuthMode == "hs256" || cfg.AuthMode == "local" {
+	mode, err := gateway.LookupMode(cfg.AuthMode)
+	if err != nil {
+		platform.Fatal(log, "auth mode", err)
+	}
+	if mode.VerifiesTokens() {
 		secret, err := secrets.Get(ctx, "goap/gateway#jwt_secret", "GOAP_JWT_SECRET")
 		if err != nil {
 			platform.Fatal(log, "jwt secret", err)
 		}
 		cfg.JWTSecret = []byte(secret)
 	}
-	if cfg.AuthMode == "local" {
+	if mode.Sessions() {
 		// the credentials service answers the gateway only, which presents its shared service credential
 		credToken, err := secrets.Get(ctx, "goap/credentials#service_token", "GOAP_CREDENTIALS_TOKEN")
 		if err != nil || credToken == "" {

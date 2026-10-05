@@ -275,9 +275,14 @@ func main() {
 	// per-route (not e.Use), so the built IDE's static assets and /api/status/health stay reachable with no
 	// token.
 	var authMW echo.MiddlewareFunc
-	if authMode := platform.Env("GOAP_AUTH_MODE", gateway.DefaultAuthMode); authMode != "none" && authMode != "" {
+	authMode := platform.Env("GOAP_AUTH_MODE", gateway.DefaultAuthMode)
+	mode, err := gateway.LookupMode(authMode)
+	if err != nil {
+		platform.Fatal(log, "auth mode", err)
+	}
+	if !mode.Open() {
 		secret, err := secrets.Get(ctx, "goap/gateway#jwt_secret", "GOAP_JWT_SECRET")
-		if err == nil && secret == "" && authMode == "local" {
+		if err == nil && secret == "" && mode.Sessions() {
 			secret, err = localJWTSecret(st.dir)
 		}
 		if err != nil {

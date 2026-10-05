@@ -8,7 +8,7 @@
   import { editorView } from './registry';
   import { focusRequests } from './workbench.svelte';
   import { getToken, setToken, shortId, logout } from '../api';
-  import { authState, signsInLocally } from '../stores/auth.svelte';
+  import { authState } from '../stores/auth.svelte';
   import { notify } from './workbench.svelte';
   import { openSearch } from './searchOverlay.svelte.ts';
   import { session, refreshIdentity } from '../stores/session.svelte';
@@ -203,7 +203,7 @@
 
   // Local sign-in (ADR 0042): the menu offers the profile and signing out; a pasted token is only for a
   // deployment whose tokens are issued elsewhere (hs256), and "none" needs neither.
-  const local = $derived(signsInLocally(authState.mode));
+  const local = $derived(authState.signsIn);
 
   function openProfile() {
     menuOpen = false;

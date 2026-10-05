@@ -15,7 +15,7 @@
   import { USER_TYPE, ORG_UNIT_TYPE, MEMBER_OF, ASSIGNMENT_TYPE } from '../../orgTypes';
   import { platformAssignmentKey } from '../../projectRoles';
   import { session, me } from '../../stores/session.svelte';
-    import { authState, signsInLocally } from '../../stores/auth.svelte';
+    import { authState } from '../../stores/auth.svelte';
 
   let { tab }: { tab: Tab } = $props();
 
@@ -59,7 +59,7 @@
   });
   // Logout (ADR 0040, 0042): stateless HS256 has nothing to revoke server-side, so this is a client-side
   // sign-out; offered with the platform's own sign-in only (an SSO mode signs out through its provider).
-  const canLogout = $derived(isSelf && session.hasToken && signsInLocally(authState.mode));
+  const canLogout = $derived(isSelf && session.hasToken && authState.signsIn);
 
   async function doLogout() {
     await logout();

@@ -124,10 +124,9 @@ type Snapshot struct {
 	// structures are the organisation and the projects the snapshot was read with (ADR 0054)
 	structures domain.Structures
 	users      map[string]User
-	// parents maps a unit to the unit it is part of (organisation@part_of)
-	parents map[string]string
-	// projectParents maps a project to the project it is part of (organisation@project_part_of, ADR 0039)
-	projectParents map[string]string
+	// units and projects are the hierarchies of the organisation (part_of) and of the projects (project_part_of,
+	// ADR 0039), resolved by domain.Hierarchy
+	units, projects *domain.Hierarchy
 	// assignments are the Assignment nodes (ADR 0039), resolved from their assigns_org/assigns_project links
 	assignments []assignment
 }
@@ -142,8 +141,8 @@ type assignment struct {
 // BuildSnapshot reads the users and policies of a baseline graph of the namespace of the structures st: the units and
 // projects are the nodes of their types (and subtypes), their hierarchies the parent links st names (ADR 0054).
 func BuildSnapshot(st domain.Structures, id domain.BaselineID, nodes []domain.Node, links []domain.Link) *Snapshot {
-	s := &Snapshot{Baseline: id, structures: st, users: map[string]User{}, parents: map[string]string{}, projectParents: map[string]string{}}
-	org, proj := domain.StructureOrganisation, domain.StructureProject
+	s := &Snapshot{Baseline: id, structures: st, users: map[string]User{}, units: st.Hierarchy(domain.StructureOrganisation, nodes, links), projects: st.Hierarchy(domain.StructureProject, nodes, links)}
+	org := domain.StructureOrganisation
 	byID := map[domain.NodeID]domain.Node{}
 	assignBuild := map[domain.NodeID]*assignment{}
 	for _, n := range nodes {
@@ -176,17 +175,11 @@ func BuildSnapshot(st domain.Structures, id domain.BaselineID, nodes []domain.No
 	}
 	for _, l := range links {
 		from, to := byID[l.From.ID], byID[l.To.ID]
-		if l.Type == st.Organisation.Parent && st.In(org, from.Type) && st.In(org, to.Type) && from.Key != to.Key {
-			s.parents[from.Key] = to.Key
-		}
 		if l.Type == LinkMemberOf && from.Type == NodeTypeUser && st.In(org, to.Type) {
 			if u, ok := s.users[str(from.Properties, "subject")]; ok {
 				u.Unit = to.Key
 				s.users[u.Subject] = u
 			}
-		}
-		if l.Type == st.Project.Parent && st.In(proj, from.Type) && st.In(proj, to.Type) && from.Key != to.Key {
-			s.projectParents[from.Key] = to.Key
 		}
 		if l.Type == LinkAssignsOrg && from.Type == NodeTypeAssignment {
 			if a, ok := assignBuild[l.From.ID]; ok {
@@ -212,19 +205,7 @@ func BuildSnapshot(st domain.Structures, id domain.BaselineID, nodes []domain.No
 // Chain returns a unit followed by its ancestors (part_of), nearest first, ending with the default unit: where a role
 // held in a unit holds (design rule 3, ADR 0035 §2).
 func (s *Snapshot) Chain(unit string) []string {
-	out := []string{unit}
-	for u := unit; ; {
-		p, ok := s.parents[u]
-		if !ok || slices.Contains(out, p) {
-			break
-		}
-		out = append(out, p)
-		u = p
-	}
-	if root := s.structures.Organisation.Root; !slices.Contains(out, root) {
-		out = append(out, root)
-	}
-	return out
+	return s.units.Chain(unit)
 }
 
 // ProjectChain returns a project followed by its ancestors (project_part_of), nearest first, ending with
@@ -232,19 +213,7 @@ func (s *Snapshot) Chain(unit string) []string {
 // self-link is never recorded as a parent (BuildSnapshot), so it terminates the walk the same way
 // ORG-DEFAULT's absent part_of link terminates Chain.
 func (s *Snapshot) ProjectChain(project string) []string {
-	out := []string{project}
-	for p := project; ; {
-		up, ok := s.projectParents[p]
-		if !ok || slices.Contains(out, up) {
-			break
-		}
-		out = append(out, up)
-		p = up
-	}
-	if root := s.structures.Project.Root; !slices.Contains(out, root) {
-		out = append(out, root)
-	}
-	return out
+	return s.projects.Chain(project)
 }
 
 // SubjectChain is what an Assignment can name to grant a subject roles (ADR 0039, 0043): the subject's own

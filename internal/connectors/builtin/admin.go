@@ -135,9 +135,15 @@ func (c Admin) Invoke(ctx context.Context, op string, raw, _ map[string]any, _ m
 	return nil, unknown(op)
 }
 
-// organisation lists the units or the users of the head of the organisation namespace.
+// organisation lists the units or the users of the head of the organisation namespace: the units are the nodes of the
+// organisation structure the graph names (ADR 0054), their hierarchy and the root every unit hangs from are read
+// through domain.Hierarchy, the one resolver.
 func (c Admin) organisation(ctx context.Context, op, unit string) (map[string]any, error) {
-	head, err := c.p.Graph.BranchHead(ctx, domain.NamespaceOrganisation, domain.MainBranch)
+	st, err := c.p.Graph.Structures(ctx)
+	if err != nil {
+		return nil, err
+	}
+	head, err := c.p.Graph.BranchHead(ctx, st.Organisation.Namespace, domain.MainBranch)
 	if err != nil {
 		return nil, err
 	}
@@ -145,18 +151,15 @@ func (c Admin) organisation(ctx context.Context, op, unit string) (map[string]an
 	if err != nil {
 		return nil, err
 	}
+	units := st.Hierarchy(domain.StructureOrganisation, nodes, links)
 	byRef := map[domain.NodeRef]domain.Node{}
 	for _, n := range nodes {
 		byRef[n.Ref()] = n
 	}
-	parent, member := map[string]string{}, map[string]string{}
+	member := map[string]string{}
 	for _, l := range links {
-		from, to := byRef[l.From], byRef[l.To]
-		switch {
-		case l.Type == domain.LinkPartOf && from.Type == domain.TypeOrgUnit:
-			parent[from.Key] = to.Key
-		case l.Type == access.LinkMemberOf && from.Type == access.NodeTypeUser:
-			member[from.Key] = to.Key
+		if from := byRef[l.From]; l.Type == access.LinkMemberOf && from.Type == access.NodeTypeUser {
+			member[from.Key] = byRef[l.To].Key
 		}
 	}
 	list := []map[string]any{}
@@ -165,12 +168,12 @@ func (c Admin) organisation(ctx context.Context, op, unit string) (map[string]an
 			continue
 		}
 		switch {
-		case op == "units" && n.Type == domain.TypeOrgUnit:
+		case op == "units" && n.Type == st.Organisation.Type:
 			u := map[string]any{"key": n.Key, "name": n.Properties["name"], "kind": n.Properties["kind"]}
-			if p := parent[n.Key]; p != "" {
+			if p := units.Parent(n.Key); p != "" {
 				u["parent"] = p
-			} else if n.Key != domain.DefaultOrg {
-				u["parent"] = domain.DefaultOrg // the implicit root of every unit
+			} else if n.Key != units.Root() {
+				u["parent"] = units.Root() // the implicit root of every unit
 			}
 			list = append(list, u)
 		case op == "users" && n.Type == access.NodeTypeUser:

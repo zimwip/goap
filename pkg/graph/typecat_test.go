@@ -190,3 +190,33 @@ func (ts testTypes) Structures() domain.Structures { return domain.BuiltinStruct
 
 // Requires resolves none: the graph falls back to the built-in ones (domain.BuiltinRequires).
 func (ts testTypes) Requires(string) []domain.RequiredLink { return nil }
+
+// AdminOnly resolves none: the graph falls back to the built-in ones (domain.BuiltinAdminOnly).
+func (ts testTypes) AdminOnly(string) bool { return false }
+
+// A node type flagged `adminOnly:` in a domain is restricted, and its subtypes with it, without any code naming it
+// (ADR 0068); a type the domain does not flag is not.
+func TestAdminOnlyFollowsTheDomain(t *testing.T) {
+	d, err := def.ParseDomain([]byte(`
+name: vault
+version: 1.0.0
+nodeTypes:
+  - {name: Secret, adminOnly: true}
+  - {name: SubSecret, extends: Secret}
+  - {name: Note}
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cat, err := typecat.New(d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	g := New(NewMemory())
+	g.Types = func() TypeCatalog { return cat }
+	for typ, want := range map[string]bool{"vault@Secret": true, "vault@SubSecret": true, "vault@Note": false, domain.TypeUser: true} {
+		if got, err := g.AdminOnlyType(context.Background(), typ); err != nil || got != want {
+			t.Errorf("AdminOnlyType(%s) = %v, %v; want %v", typ, got, err, want)
+		}
+	}
+}

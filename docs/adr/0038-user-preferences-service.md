@@ -18,9 +18,10 @@ The graph describes the enterprise; the enterprise does not care that a user pre
   in process by `goap-dev`.
 - **A caller only reaches their own document**: the subject is the one of the request identity, there is no way to
   name another. `GetPreferences`, `SetPreferences` (merge, a null value clears a key), `ResetPreferences`.
-- **The service knows the preferences it serves** (`prefssvc.Schema`: `theme`, `voiceEnabled`, `voiceModel`,
-  `voiceLanguage`, `usagePeriod`, `usageScope`): an unknown key or value is refused, so the document stays something
-  the interface understands. A new preference is added there.
+- **The service keeps an opaque document** (ADR 0068 replaced the `prefssvc.Schema` of this ADR): any key and value
+  of JSON, size-limited; the interface (`preferences.svelte.ts`) validates and defaults the keys it knows
+  (`theme`, `voiceEnabled`, `voiceModel`, `voiceLanguage`, `usagePeriod`, `usageScope`), a new preference touches no
+  backend code.
 - **No change, no Save.** The interface applies a preference at once and writes it to the service in the order it was
   made; the last values are also kept in the browser, so the interface starts the way the user left it, and the
   service is the reference read at start. The theme selector is back in the header user menu as a shortcut.

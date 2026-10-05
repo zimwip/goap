@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -61,10 +62,17 @@ func TestService(t *testing.T) {
 			if p, _ := s.Get(ctx, "bob"); len(p) != 0 {
 				t.Fatalf("bob sees %v", p)
 			}
-			// what the interface does not understand is refused, and changes nothing
-			for _, bad := range []prefssvc.Prefs{{"theme": "neon"}, {"nope": 1}, {"voiceEnabled": "yes"}} {
+			// the document is opaque: any key and value of JSON is kept, the interface judges them
+			if p, err := s.Set(ctx, "alice", prefssvc.Prefs{"anything": map[string]any{"nested": []any{1, "x"}}, "theme": "neon"}); err != nil || p["theme"] != "neon" {
+				t.Fatalf("opaque write = %v, %v", p, err)
+			}
+			if _, err := s.Set(ctx, "alice", prefssvc.Prefs{"theme": "dark", "anything": nil}); err != nil {
+				t.Fatal(err)
+			}
+			// what is not JSON, or too large, is refused and changes nothing
+			for _, bad := range []prefssvc.Prefs{{"f": func() {}}, {"big": strings.Repeat("x", prefssvc.MaxDocumentBytes)}} {
 				if _, err := s.Set(ctx, "alice", bad); !errors.Is(err, prefssvc.ErrInvalid) {
-					t.Fatalf("%v: %v", bad, err)
+					t.Fatalf("%.40v: %v", bad, err)
 				}
 			}
 			if p, _ := s.Get(ctx, "alice"); p["theme"] != "dark" {
@@ -117,7 +125,7 @@ func TestHandlerIsPerCaller(t *testing.T) {
 	if _, err := cl.GetPreferences(ctx, get); connect.CodeOf(err) != connect.CodeUnauthenticated {
 		t.Fatalf("anonymous: %v", err)
 	}
-	bad, _ := structpb.NewStruct(map[string]any{"theme": "neon"})
+	bad, _ := structpb.NewStruct(map[string]any{"big": strings.Repeat("x", prefssvc.MaxDocumentBytes)})
 	set = connect.NewRequest(&preferencesv1.SetPreferencesRequest{Values: bad})
 	as("alice", set)
 	if _, err := cl.SetPreferences(ctx, set); connect.CodeOf(err) != connect.CodeInvalidArgument {

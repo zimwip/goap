@@ -20,6 +20,7 @@ nodeTypes:
       - {name: tools, label: Tools, description: "Signatures of the tools", type: json, widget: textarea, section: Tools, order: 4}
   - name: AdapterDef
     description: "Code implementing the tools of an MCP with the operations of a connector"
+    adminOnly: true
     editor: adapter
     attributes:
       - {name: name, label: Name, description: "Name of the definition", type: string, section: Identity, order: 1, asName: true}

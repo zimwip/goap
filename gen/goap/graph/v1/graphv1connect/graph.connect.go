@@ -71,6 +71,9 @@ const (
 	// GraphServiceGetStructuresProcedure is the fully-qualified name of the GraphService's
 	// GetStructures RPC.
 	GraphServiceGetStructuresProcedure = "/goap.graph.v1.GraphService/GetStructures"
+	// GraphServiceIsAdminOnlyTypeProcedure is the fully-qualified name of the GraphService's
+	// IsAdminOnlyType RPC.
+	GraphServiceIsAdminOnlyTypeProcedure = "/goap.graph.v1.GraphService/IsAdminOnlyType"
 	// GraphServiceListChangeEventsProcedure is the fully-qualified name of the GraphService's
 	// ListChangeEvents RPC.
 	GraphServiceListChangeEventsProcedure = "/goap.graph.v1.GraphService/ListChangeEvents"
@@ -247,6 +250,8 @@ type GraphServiceClient interface {
 	ListNamespaces(context.Context, *connect.Request[v1.ListNamespacesRequest]) (*connect.Response[v1.ListNamespacesResponse], error)
 	// The structures of the graph (ADR 0054): the organisation and the projects, with the node types belonging to each.
 	GetStructures(context.Context, *connect.Request[v1.GetStructuresRequest]) (*connect.Response[v1.GetStructuresResponse], error)
+	// Whether a node type is written by platform administrators only (`adminOnly:` on the node type, ADR 0068).
+	IsAdminOnlyType(context.Context, *connect.Request[v1.IsAdminOnlyTypeRequest]) (*connect.Response[v1.IsAdminOnlyTypeResponse], error)
 	// The impact log of a change (ADR 0029): every operation on its change impacts, with its caller.
 	ListChangeEvents(context.Context, *connect.Request[v1.ListChangeEventsRequest]) (*connect.Response[v1.ListChangeEventsResponse], error)
 	// The log of a change (ADR 0030): its facts, journal records and impact events in one order, filtered on columns.
@@ -431,6 +436,12 @@ func NewGraphServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			httpClient,
 			baseURL+GraphServiceGetStructuresProcedure,
 			connect.WithSchema(graphServiceMethods.ByName("GetStructures")),
+			connect.WithClientOptions(opts...),
+		),
+		isAdminOnlyType: connect.NewClient[v1.IsAdminOnlyTypeRequest, v1.IsAdminOnlyTypeResponse](
+			httpClient,
+			baseURL+GraphServiceIsAdminOnlyTypeProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("IsAdminOnlyType")),
 			connect.WithClientOptions(opts...),
 		),
 		listChangeEvents: connect.NewClient[v1.ListChangeEventsRequest, v1.ListChangeEventsResponse](
@@ -771,6 +782,7 @@ type graphServiceClient struct {
 	getNodeNeighbourhood   *connect.Client[v1.GetNodeNeighbourhoodRequest, v1.GetNodeNeighbourhoodResponse]
 	listNamespaces         *connect.Client[v1.ListNamespacesRequest, v1.ListNamespacesResponse]
 	getStructures          *connect.Client[v1.GetStructuresRequest, v1.GetStructuresResponse]
+	isAdminOnlyType        *connect.Client[v1.IsAdminOnlyTypeRequest, v1.IsAdminOnlyTypeResponse]
 	listChangeEvents       *connect.Client[v1.ListChangeEventsRequest, v1.ListChangeEventsResponse]
 	listChangeLog          *connect.Client[v1.ListChangeLogRequest, v1.ListChangeLogResponse]
 	exportChangeProvenance *connect.Client[v1.ExportChangeProvenanceRequest, v1.ExportChangeProvenanceResponse]
@@ -899,6 +911,11 @@ func (c *graphServiceClient) ListNamespaces(ctx context.Context, req *connect.Re
 // GetStructures calls goap.graph.v1.GraphService.GetStructures.
 func (c *graphServiceClient) GetStructures(ctx context.Context, req *connect.Request[v1.GetStructuresRequest]) (*connect.Response[v1.GetStructuresResponse], error) {
 	return c.getStructures.CallUnary(ctx, req)
+}
+
+// IsAdminOnlyType calls goap.graph.v1.GraphService.IsAdminOnlyType.
+func (c *graphServiceClient) IsAdminOnlyType(ctx context.Context, req *connect.Request[v1.IsAdminOnlyTypeRequest]) (*connect.Response[v1.IsAdminOnlyTypeResponse], error) {
+	return c.isAdminOnlyType.CallUnary(ctx, req)
 }
 
 // ListChangeEvents calls goap.graph.v1.GraphService.ListChangeEvents.
@@ -1190,6 +1207,8 @@ type GraphServiceHandler interface {
 	ListNamespaces(context.Context, *connect.Request[v1.ListNamespacesRequest]) (*connect.Response[v1.ListNamespacesResponse], error)
 	// The structures of the graph (ADR 0054): the organisation and the projects, with the node types belonging to each.
 	GetStructures(context.Context, *connect.Request[v1.GetStructuresRequest]) (*connect.Response[v1.GetStructuresResponse], error)
+	// Whether a node type is written by platform administrators only (`adminOnly:` on the node type, ADR 0068).
+	IsAdminOnlyType(context.Context, *connect.Request[v1.IsAdminOnlyTypeRequest]) (*connect.Response[v1.IsAdminOnlyTypeResponse], error)
 	// The impact log of a change (ADR 0029): every operation on its change impacts, with its caller.
 	ListChangeEvents(context.Context, *connect.Request[v1.ListChangeEventsRequest]) (*connect.Response[v1.ListChangeEventsResponse], error)
 	// The log of a change (ADR 0030): its facts, journal records and impact events in one order, filtered on columns.
@@ -1370,6 +1389,12 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 		GraphServiceGetStructuresProcedure,
 		svc.GetStructures,
 		connect.WithSchema(graphServiceMethods.ByName("GetStructures")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceIsAdminOnlyTypeHandler := connect.NewUnaryHandler(
+		GraphServiceIsAdminOnlyTypeProcedure,
+		svc.IsAdminOnlyType,
+		connect.WithSchema(graphServiceMethods.ByName("IsAdminOnlyType")),
 		connect.WithHandlerOptions(opts...),
 	)
 	graphServiceListChangeEventsHandler := connect.NewUnaryHandler(
@@ -1722,6 +1747,8 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 			graphServiceListNamespacesHandler.ServeHTTP(w, r)
 		case GraphServiceGetStructuresProcedure:
 			graphServiceGetStructuresHandler.ServeHTTP(w, r)
+		case GraphServiceIsAdminOnlyTypeProcedure:
+			graphServiceIsAdminOnlyTypeHandler.ServeHTTP(w, r)
 		case GraphServiceListChangeEventsProcedure:
 			graphServiceListChangeEventsHandler.ServeHTTP(w, r)
 		case GraphServiceListChangeLogProcedure:
@@ -1895,6 +1922,10 @@ func (UnimplementedGraphServiceHandler) ListNamespaces(context.Context, *connect
 
 func (UnimplementedGraphServiceHandler) GetStructures(context.Context, *connect.Request[v1.GetStructuresRequest]) (*connect.Response[v1.GetStructuresResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.GetStructures is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) IsAdminOnlyType(context.Context, *connect.Request[v1.IsAdminOnlyTypeRequest]) (*connect.Response[v1.IsAdminOnlyTypeResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.IsAdminOnlyType is not implemented"))
 }
 
 func (UnimplementedGraphServiceHandler) ListChangeEvents(context.Context, *connect.Request[v1.ListChangeEventsRequest]) (*connect.Response[v1.ListChangeEventsResponse], error) {

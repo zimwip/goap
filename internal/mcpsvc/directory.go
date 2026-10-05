@@ -35,8 +35,7 @@ type Snapshot struct {
 	// Problems lists the nodes that could not be read (malformed adapter, adapter without unit, ...).
 	Problems []string
 
-	org      domain.Structure                       // the organisation structure (ADR 0054)
-	parent   map[string]string                      // unit -> parent unit
+	org      *domain.Hierarchy                      // the unit hierarchy of the organisation structure (ADR 0054)
 	units    map[string]bool                        // unit keys
 	mcps     map[string]mcp.Def                     // by name
 	defs     map[string]adapter.Def                 // adapter definitions by name
@@ -63,7 +62,7 @@ func (e Effective) Usable() bool { return len(e.Allowed().Tools) > 0 }
 // of the organisation structure of st, their hierarchy its parent links (ADR 0054).
 func BuildSnapshot(st domain.Structures, baselines Baselines, nodes []domain.Node, links []domain.Link) *Snapshot {
 	org := domain.StructureOrganisation
-	s := &Snapshot{Baselines: baselines, org: st.Organisation, parent: map[string]string{}, units: map[string]bool{}, mcps: map[string]mcp.Def{}, defs: map[string]adapter.Def{}, adapters: map[string]map[string]adapter.Instance{}}
+	s := &Snapshot{Baselines: baselines, org: st.Hierarchy(org, nodes, links), units: map[string]bool{}, mcps: map[string]mcp.Def{}, defs: map[string]adapter.Def{}, adapters: map[string]map[string]adapter.Instance{}}
 	byID := map[domain.NodeID]domain.Node{}
 	for _, n := range nodes {
 		byID[n.ID] = n
@@ -92,13 +91,6 @@ func BuildSnapshot(st domain.Structures, baselines Baselines, nodes []domain.Nod
 				continue
 			}
 			s.defs[d.Name] = d
-		}
-	}
-	for _, l := range links {
-		from, to := byID[l.From.ID], byID[l.To.ID]
-		switch {
-		case l.Type == st.Organisation.Parent && st.In(org, from.Type) && st.In(org, to.Type) && from.Key != to.Key:
-			s.parent[from.Key] = to.Key
 		}
 	}
 	// an adapter instance is the unit's that owns it (ADR 0054: the owner of the version)
@@ -131,19 +123,7 @@ func BuildSnapshot(st domain.Structures, baselines Baselines, nodes []domain.Nod
 // Chain returns the unit, its ancestors (part_of, nearest first) and, last, the default
 // organisation, which every unit inherits from.
 func (s *Snapshot) Chain(unit string) []string {
-	if unit == "" {
-		unit = s.org.Root
-	}
-	var out []string
-	seen := map[string]bool{}
-	for cur := unit; cur != "" && !seen[cur]; cur = s.parent[cur] {
-		seen[cur] = true
-		out = append(out, cur)
-	}
-	if !seen[s.org.Root] {
-		out = append(out, s.org.Root)
-	}
-	return out
+	return s.org.Chain(unit)
 }
 
 // Def returns an MCP definition.

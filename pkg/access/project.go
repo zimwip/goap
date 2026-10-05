@@ -17,21 +17,6 @@ const (
 	LinkAssignsProject  = "organisation@assigns_project"
 )
 
-// IsAccessType reports whether a node type governs access itself — who may do what (User, Policy), the
-// organisation and project structure (OrgUnit, ProjectUnit), who holds what role or platform role where
-// (Assignment, ADR 0043/0046/0047), and what an organisational unit may reach (Adapter, AdapterDef, ADR 0028).
-// None of these are domain data a project's own members write through the ordinary change/object/node rules
-// (authz.DefaultPolicies): administered by administrators only. Every write path (the graph handler, the
-// goap-change connector) gates them through this one predicate.
-func IsAccessType(typ string) bool {
-	switch typ {
-	case NodeTypeUser, NodeTypePolicy, NodeTypeProjectUnit, NodeTypeAssignment, domain.TypeOrgUnit, domain.TypeAdapter, domain.TypeAdapterDef:
-		return true
-	default:
-		return false
-	}
-}
-
 // ProjectUnit is a project or sub-project.
 type ProjectUnit struct {
 	Name          string

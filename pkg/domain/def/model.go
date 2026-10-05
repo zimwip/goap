@@ -60,6 +60,10 @@ type NodeType struct {
 	// of each type, checked when the node is created and after each write. A subtype inherits them, redefining one
 	// by link.
 	Requires []domain.RequiredLink `yaml:"requires,omitempty" json:"requires,omitempty"`
+	// AdminOnly marks the nodes of the type as written by platform administrators only (ADR 0068): the ones that
+	// govern access itself (who may do what, the organisation and project structure, what a unit may reach), not
+	// domain data the ordinary change / object / node rules let a project's members write. A subtype inherits it.
+	AdminOnly bool `yaml:"adminOnly,omitempty" json:"adminOnly,omitempty"`
 }
 
 // StructureTag tags a node type as a structure of the graph (ADR 0054, domain.Structure).

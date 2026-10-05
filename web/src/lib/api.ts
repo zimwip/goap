@@ -1894,11 +1894,12 @@ export async function refreshToken(): Promise<void> {
   if (getToken() === token) setToken(data.token);
 }
 
-/** Which sign-in UI to show (GET /api/auth/config, unauthenticated — ADR 0040): 'none', 'hs256' or 'local'. */
-export async function authConfig(signal?: AbortSignal): Promise<{ authMode: string }> {
+/** Which sign-in UI to show (GET /api/auth/config, unauthenticated — ADR 0040): the mode's name ('none', 'hs256', 'local') and
+ *  whether the platform signs its users in itself (`signsIn`, the mode keeps sessions). */
+export async function authConfig(signal?: AbortSignal): Promise<{ authMode: string; signsIn?: boolean }> {
   const res = await fetch(`${BASE}/api/auth/config`, { signal });
   if (!res.ok) throw new RpcError('failed', res.statusText, res.status);
-  return (await res.json()) as { authMode: string };
+  return (await res.json()) as { authMode: string; signsIn?: boolean };
 }
 
 async function authToken(path: string, subject: string, password: string): Promise<void> {

@@ -15,8 +15,11 @@ nodeTypes:
   # ORG-DEFAULT.
   # `structure` (ADR 0054) tags the type building the organisation hierarchy: every node version is owned by a unit
   # and every change is held by one; the graph bootstraps the root (ORG-DEFAULT, rootless) and checks every write.
+  # `adminOnly: true` (ADR 0068) says only platform administrators write the nodes of a type (inherited by its
+  # subtypes): the types that govern access itself (units, projects, users, assignments, policies, adapters).
   - name: OrgUnit
     description: "Organisational unit (company, direction, department, team)"
+    adminOnly: true
     editor: unit
     structure: {kind: organisation, parent: part_of, root: ORG-DEFAULT}
     attributes:
@@ -33,6 +36,7 @@ nodeTypes:
   # adapter only restricts (the implementation is inherited): this is how a unit limits the built-in MCPs.
   - name: Adapter
     description: "Instance, by an organisational unit, of an adapter definition, or a restriction of an MCP"
+    adminOnly: true
     editor: unit
     attributes:
       - {name: mcp, label: MCP, description: "MCP the adapter implements or restricts", type: string, section: Identity, order: 1, asName: true}
@@ -70,6 +74,7 @@ nodeTypes:
   # against the compiled-in floor (administrators) only, so that no policy can lock them out.
   - name: Policy
     description: "ABAC rule"
+    adminOnly: true
     editor: access
     attributes:
       - {name: rule, label: Rule, description: "Expression over the subject, object and action", type: string, widget: textarea, section: Identity, order: 1}
@@ -87,6 +92,7 @@ nodeTypes:
   # selector), not enforced by the graph itself.
   - name: ProjectUnit
     description: "Project or sub-project"
+    adminOnly: true
     editor: project
     structure: {kind: project, parent: project_part_of, root: PROJ-ROOT, selfParent: true}
     attributes:
@@ -105,6 +111,7 @@ nodeTypes:
   # 0046, e.g. "reader") to the org unit everywhere, independent of any project's methodologies.
   - name: Assignment
     description: "Roles an organisational unit or user locally holds on a project, or platform-wide when it names no project"
+    adminOnly: true
     editor: assignment
     attributes:
       - {name: roles, label: Roles, description: "Roles the unit or user holds on the project (platform roles when no project)", type: json, widget: textarea, section: Identity, order: 1}
