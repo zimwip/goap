@@ -1,6 +1,6 @@
 # ADR 0076 — Checkout, working versions and check-in: every node write is a change operation
 
-**Status**: accepted, implemented (graph, service, engine, web) · **Date**: 2026-10 · Refines ADR 0024 (change impacts), 0029 (event-sourced impacts), 0003
+**Status**: accepted, implemented (graph, service, engine, web) · **Date**: 2026-10 · §4d (editable initial state) superseded by ADR 0078 · Refines ADR 0024 (change impacts), 0029 (event-sourced impacts), 0003
 (version-to-version links), 0049 / 0054 (no write outside a change). Supersedes `CreateObject`, the direct
 `ImpactNodeCreate` / `ImpactNodeUpdate` / `ImpactLinkCreate` RPCs and `WriteChangeImpact`.
 

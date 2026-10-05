@@ -46,10 +46,10 @@ func newAlgoWorld(t *testing.T, repo Repo) algoWorld {
 	guard := algo.Bound{Instance: "children-approved", Algorithm: "children-in-state", Type: algo.UsageTransitionGuard, Language: "javascript",
 		Code: noEmptyChildGuardJS, Params: map[string]any{"state": "approved"}}
 	reqLC := domain.Lifecycle{Initial: "draft",
-		States:      []domain.LifecycleState{{Name: "draft", Editable: true}, {Name: "approved"}},
+		States:      []domain.LifecycleState{{Name: "draft", NotLandable: true}, {Name: "approved"}},
 		Transitions: []domain.Transition{{Name: "approve", From: "draft", To: "approved", ActionAlgos: []algo.Bound{stamp}}, {Name: "reopen", From: "approved", To: "draft"}}}
 	docLC := domain.Lifecycle{Initial: "draft",
-		States:      []domain.LifecycleState{{Name: "draft", Editable: true}, {Name: "released"}},
+		States:      []domain.LifecycleState{{Name: "draft", NotLandable: true}, {Name: "released"}},
 		Transitions: []domain.Transition{{Name: "release", From: "draft", To: "released", GuardAlgos: []algo.Bound{guard}}}}
 	mk := func(key, typ string, props map[string]any, state string, links ...LinkWrite) domain.Node {
 		n, err := seedNode(ctx, w.g, newNode{Key: key, Type: typ, Properties: props, State: state, Links: links})

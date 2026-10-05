@@ -23,8 +23,7 @@ type NodeEdit struct {
 	// Props are merged over the current properties (a nil value clears one).
 	Props map[string]any
 	// State moves the node to a lifecycle state, after its other edits, checked in: a transition of its own
-	// (ImpactNodeTransition, ADR 0076); before them when the node rests in a state that is not editable and State is
-	// (a retired entry restored).
+	// (ImpactNodeTransition, ADR 0076): a retired entry is edited and restored in the same change.
 	State string
 	// Owner transfers the node to another organisational unit (its key, ADR 0054); empty: unchanged, or the unit
 	// holding the commit for a created node.
@@ -189,14 +188,6 @@ func (g *Graph) Commit(ctx context.Context, in Commit) (res CommitResult, err er
 			}
 			impacts[i], posts[i], written[e.Key] = cn.ID, cn.Post, i
 		case len(e.Props) > 0 || e.Owner != "" || len(links) > 0 || len(e.RemoveLinks) > 0:
-			// a node at rest out of the editable states (a retired entry restored) is moved first, then edited
-			if reopen, err := g.reopens(ctx, *e.Pre, e.State); err != nil {
-				return res, err
-			} else if reopen {
-				if _, err := g.ImpactNodeTransition(ctx, c.ID, NodeTransition{NodeCheckout: NodeCheckout{Impact: impacts[i], Rationale: why(e), ProducedBy: in.By}, To: e.State}); err != nil {
-					return res, fmt.Errorf("%s: %w", nodeName(e), err)
-				}
-			}
 			cn, err := g.ImpactNodeCheckout(ctx, c.ID, NodeCheckout{Impact: impacts[i]})
 			if err != nil {
 				return res, fmt.Errorf("%s: %w", nodeName(e), err)
@@ -426,20 +417,6 @@ func (g *Graph) commitOrder(ctx context.Context, edits []NodeEdit) ([]int, error
 		}
 	}
 	return order, nil
-}
-
-// reopens tells whether an edit moving a node to state must take the transition before its other edits: the node
-// rests in a state that is not editable and state is.
-func (g *Graph) reopens(ctx context.Context, pre domain.NodeRef, state string) (bool, error) {
-	if state == "" || g.Types == nil {
-		return false, nil
-	}
-	n, err := g.Node(ctx, pre)
-	if err != nil {
-		return false, err
-	}
-	lc := g.catalog().Lifecycle(n.Type)
-	return lc != nil && n.State != "" && !lc.Editable(n.State) && lc.Editable(state), nil
 }
 
 // isCheckedOut reports a change impact whose version on the main flow of the change is a working version.

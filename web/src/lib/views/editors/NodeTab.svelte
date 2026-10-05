@@ -36,7 +36,7 @@
   import { namespaceOf } from '../../namespace';
   import { confirmDialog } from '../../shell/confirmState.svelte';
   import { orderedAttributes, shownValue } from '../../attributes';
-import { declaredProperties, isReopen, lifecycleResolver, lifecycleRows, loadPosts, writeNodeInChange, removeFromChange, type LifecycleRow, type PostVersions } from '../../lifecycle';
+import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeNodeInChange, removeFromChange, type LifecycleRow, type PostVersions } from '../../lifecycle';
 
   import NotFound from '../../shell/NotFound.svelte';
 
@@ -159,8 +159,8 @@ import { declaredProperties, isReopen, lifecycleResolver, lifecycleRows, loadPos
   const nodeProps = $derived((row?.props ?? stored?.props ?? {}) as Record<string, unknown>);
   const storedProps = $derived((stored?.props ?? {}) as Record<string, unknown>);
   const nodeState = $derived(row?.effective ?? stored?.state ?? '');
-  const editable = $derived(row ? row.editable : true);
-  const reopens = $derived((row?.transitions ?? []).filter((t) => row && isReopen(row, t)));
+  // edits are allowed in any state (ADR 0078): a state flagged notLandable only keeps the change from landing
+  const notLandable = $derived(!!row && !!row.lifecycle && !row.landable);
 
   const openChanges = $derived(changes.items.filter((c) => (c.status === 'draft' || c.status === 'active') && (!stored?.namespace || c.namespace === stored.namespace)));
   const attrViews = $derived(orderedAttributes(typeCatalog.cat.attributes(typeName)));
@@ -305,7 +305,7 @@ import { declaredProperties, isReopen, lifecycleResolver, lifecycleRows, loadPos
     <Icon name="node" size={18} />
     <h2>{stored?.key || tab.params.key || shortId(id)}</h2>
     {#if typeName}<span class="hint">{typeName}</span>{/if}
-    {#if nodeState}<span class="state" class:editable={!!lifecycle && !editable}>{nodeState}</span>{/if}
+    {#if nodeState}<span class="state" class:notLandable title={notLandable ? 'Not landable: a change cannot land with the node in this state' : ''}>{nodeState}</span>{/if}
     {#if inChange && row?.impact?.post?.id}
       <span class="hint" title="the version the working change wrote; the released one is v{stored?.version ?? '—'}">v{row.impact.post.version} in the change</span>
     {:else if stored?.version}<span class="hint">v{stored.version}</span>{/if}
@@ -341,10 +341,7 @@ import { declaredProperties, isReopen, lifecycleResolver, lifecycleRows, loadPos
               <h3>Properties</h3>
               <span class="grow"></span>
               {#if !editing}
-                <button type="button" class="small primary" disabled={!editable || busy !== '' || stored.deleted} onclick={() => (editing = true)} title={editable ? 'Edit in the working change' : 'Reopen the node to edit it'}>Edit</button>
-                {#each reopens as t (t.name)}
-                  <button type="button" class="small" disabled={busy !== ''} title={`${t.name}: ${t.from} → ${t.to}`} onclick={() => transition(t)}>Reopen → {t.to}</button>
-                {/each}
+                <button type="button" class="small primary" disabled={busy !== '' || stored.deleted} onclick={() => (editing = true)} title="Edit in the working change">Edit</button>
                 {#if inChange && row?.impact?.id && !row.impact.superseded}
                   <button type="button" class="small danger" disabled={busy !== ''} title="Take the node out of the working change (refused once a version of it is checked in: reject it instead)" onclick={removeFromWork}>Remove from change</button>
                 {/if}
@@ -391,8 +388,8 @@ import { declaredProperties, isReopen, lifecycleResolver, lifecycleRows, loadPos
             node={stored}
             links={outLinks}
             index={work?.index ?? head}
-            readonly={!editable || !!stored.deleted}
-            why={stored.deleted ? 'The node is deleted.' : `${stored.key} is ${nodeState}, not an editable state: reopen it (Details) to change its links.`}
+            readonly={!!stored.deleted}
+            why="The node is deleted."
             busy={busy !== ''}
             onadd={addLink}
             onremove={removeLink}
@@ -470,7 +467,7 @@ import { declaredProperties, isReopen, lifecycleResolver, lifecycleRows, loadPos
     font-size: 0.85rem;
     font-family: var(--mono);
   }
-  .state.editable {
+  .state.notLandable {
     border-color: var(--warn);
     color: var(--warn);
   }

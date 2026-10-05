@@ -289,9 +289,9 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
     ...nodes.map((n) => n.key ?? ''),
     ...(view?.nodes ?? []).filter((n) => n.intent === 'created' && !n.superseded && n.review !== 'rejected').map((n) => n.key ?? ''),
   ]);
-  const stuckEditable = $derived(lcRows.some((r) => r.lifecycle && r.editable));
+  const stuckNotLandable = $derived(lcRows.some((r) => r.lifecycle && !r.landable));
   const panes = $derived<Pane[]>([
-    { id: 'overview', label: 'Overview', badge: stuckEditable ? '!' : undefined },
+    { id: 'overview', label: 'Overview', badge: stuckNotLandable ? '!' : undefined },
     { id: 'impacts', label: `${scopeLabel} ▸ Impacts`, badge: view?.nodes?.length || undefined },
     { id: 'items', label: `${scopeLabel} ▸ Items`, badge: items.length || undefined },
     { id: 'compare', label: 'Compare', badge: options.filter((f) => f.status === 'open').length || undefined },
@@ -518,8 +518,8 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
         label: applying ? 'Applying…' : 'Apply',
         icon: 'check',
         primary: true,
-        disabled: !change || isApplied || applying || !baselineName.trim() || stuckEditable,
-        title: stuckEditable ? 'Move the nodes out of their editable state first' : 'Create a new baseline from the change',
+        disabled: !change || isApplied || applying || !baselineName.trim() || stuckNotLandable,
+        title: stuckNotLandable ? 'Move the nodes to a landable state first' : 'Create a new baseline from the change',
         run: apply,
       },
     ],
@@ -666,7 +666,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
             <label for="bname">Name of the new baseline</label>
             <input id="bname" type="text" bind:value={baselineName} disabled={isApplied} />
           </div>
-          <button class="primary" onclick={apply} disabled={isApplied || applying || !baselineName.trim() || stuckEditable} title={stuckEditable ? 'Move the nodes out of their editable state first' : ''}>
+          <button class="primary" onclick={apply} disabled={isApplied || applying || !baselineName.trim() || stuckNotLandable} title={stuckNotLandable ? 'Move the nodes to a landable state first' : ''}>
             {applying ? 'Applying…' : 'Apply'}
           </button>
         </div>

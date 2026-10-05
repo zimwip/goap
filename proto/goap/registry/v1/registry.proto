@@ -194,8 +194,6 @@ message AlgorithmInstance {
 message Lifecycle {
   string name = 4;
   string description = 5;
-  // nodes may rest in an editable state (ADR 0048)
-  bool rest_in_editable = 6;
   string initial = 1;
   repeated LifecycleState states = 2;
   repeated LifecycleTransition transitions = 3;
@@ -204,8 +202,8 @@ message Lifecycle {
 message LifecycleState {
   string name = 1;
   string description = 2;
-  // editable states are working states held through a change
-  bool editable = 3;
+  // a node in a not landable state blocks the landing of its change (ADR 0078)
+  bool not_landable = 3;
   bool final = 4;
 }
 

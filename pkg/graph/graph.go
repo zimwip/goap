@@ -62,7 +62,7 @@ type Graph struct {
 	// LandingGate, when set, is asked at Apply / Commit time about every change, with the blackboard built from this
 	// Apply's own cposts (ADR 0024), not a fresh read, since it must see the change's own pending writes before they
 	// are visible outside this transaction. decided false: the gate has nothing to say about this change and the
-	// node-type lifecycle's Editable floor applies unchanged; decided true: ok says whether the change may land, and
+	// node-type lifecycle's landable-state floor applies unchanged; decided true: ok says whether the change may land, and
 	// the gate replaces that floor (a use case, e.g. the Activity a change is scoped to, judges the maturity of
 	// content and state instead of a fixed per-type flag). The graph knows no use case: what the gate reads from the
 	// change (Change.Data) and how it decides is the owner's (internal/registrysvc, wired from main). It may read the
@@ -670,7 +670,7 @@ func (g *Graph) BlackboardIn(ctx context.Context, id domain.ChangeID, flow strin
 				return err
 			}
 			if lc := ix.lifecycleOf(v.Type); lc != nil && v.State != "" {
-				v.Frozen = !lc.Editable(v.State)
+				v.NotLandable = !lc.Landable(v.State)
 			}
 			bb.Nodes[r] = v
 			for _, l := range v.Out {

@@ -20,10 +20,10 @@
   const index = $derived(new Map(states.map((s, i) => [s.name, i])));
   const cx = (i: number) => PAD + i * (BOX_W + H_GAP) + BOX_W / 2;
 
-  /** colour of a state: initial, final, editable (working) or a plain persisted one */
-  function tone(s: { name: string; editable: boolean; final: boolean }): string {
+  /** colour of a state: initial, final, not landable or a plain landable one */
+  function tone(s: { name: string; notLandable: boolean; final: boolean }): string {
     if (s.final) return 'var(--ok)';
-    if (s.editable) return 'var(--warn)';
+    if (s.notLandable) return 'var(--warn)';
     if (s.name === lc.initial) return 'var(--accent)';
     return 'var(--info)';
   }
@@ -139,7 +139,7 @@
       {#each states as s, i (i)}
         {@const c = tone(s)}
         {@const here = !!current && s.name === current}
-        {@const flags = [here ? 'CURRENT' : '', s.name === lc.initial ? 'INITIAL' : '', s.editable ? 'EDITABLE' : '', s.final ? 'FINAL' : ''].filter(Boolean).join(' · ')}
+        {@const flags = [here ? 'CURRENT' : '', s.name === lc.initial ? 'INITIAL' : '', s.notLandable ? 'NOT LANDABLE' : '', s.final ? 'FINAL' : ''].filter(Boolean).join(' · ')}
         <g>
           <title>{s.description || s.name}</title>
           <rect class="state" class:here x={cx(i) - BOX_W / 2} y={layout.rowY - BOX_H / 2} width={BOX_W} height={BOX_H} rx="6" style="--c: {c}" />

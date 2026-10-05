@@ -41,7 +41,7 @@ func testChange(t *testing.T, g *Graph, namespace string) domain.ChangeID {
 
 // seedNode writes a node version and its outgoing links directly, the way ImpactNodeCreate did before ADR 0049 made it go
 // through Commit:
-// test fixtures use it to arrange a world already sitting in a given lifecycle state (including an editable
+// test fixtures use it to arrange a world already sitting in a given lifecycle state (including one that cannot land,
 // one, or one not reachable from the lifecycle's initial state by a single transition) without walking every
 // transition to get there — something no real caller needs, since every production write is change-shaped.
 func seedNode(ctx context.Context, g *Graph, in newNode) (domain.Node, error) {

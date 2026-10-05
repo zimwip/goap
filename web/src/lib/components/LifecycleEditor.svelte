@@ -1,5 +1,5 @@
 <script lang="ts">
-  // One lifecycle of a domain (ADR 0014): states (editable / final) and transitions.
+  // One lifecycle of a domain (ADR 0014): states (not landable / final) and transitions.
   import { moveItem, type LifecycleForm } from '../methodologyForm';
   import RowTools from './RowTools.svelte';
   import LifecyclePreview from './LifecyclePreview.svelte';
@@ -28,7 +28,7 @@
   const states = $derived(lc.states.map((s) => s.name).filter(Boolean));
 
   function addState() {
-    lc.states.push({ name: '', description: '', editable: false, final: false });
+    lc.states.push({ name: '', description: '', notLandable: false, final: false });
   }
   function addTransition() {
     lc.transitions.push({ name: '', description: '', from: states[0] ?? '', to: states[1] ?? '', permission: '', guard: '', requiresAttributes: '', requiresLinks: '', children: '', guards: [], actions: [] });
@@ -51,7 +51,7 @@
     <div class="srow" data-path="{path}.states[{i}]">
       <input type="text" class="mono" aria-label="State name" bind:value={s.name} placeholder="draft" disabled={readonly} />
       <input type="text" aria-label="Description" bind:value={s.description} placeholder="Description" disabled={readonly} />
-      <label class="check" title="A working state: only held through a change, never persisted"><input type="checkbox" bind:checked={s.editable} disabled={readonly} /> editable</label>
+      <label class="check" title="A change cannot land while a node it holds rests in this state (a draft, a review to pass)"><input type="checkbox" bind:checked={s.notLandable} disabled={readonly} /> Not landable</label>
       <label class="check" title="No way out"><input type="checkbox" bind:checked={s.final} disabled={readonly} /> final</label>
       {#if !readonly}<button type="button" class="small ghost" aria-label="Remove the state" onclick={() => lc.states.splice(i, 1)}>×</button>{/if}
     </div>

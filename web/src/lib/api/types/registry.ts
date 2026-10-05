@@ -11,7 +11,8 @@ export interface LifecycleState {
   name?: string;
   description?: string;
   /** working state: only held through a change */
-  editable?: boolean;
+  /** a change cannot land while a node rests in this state (ADR 0078) */
+  notLandable?: boolean;
   final?: boolean;
 }
 
@@ -48,8 +49,6 @@ export interface Lifecycle {
   /** identifies the lifecycle in its domain; node types name it */
   name?: string;
   description?: string;
-  /** nodes may rest in an editable state (ADR 0048) */
-  restInEditable?: boolean;
   initial?: string;
   states?: LifecycleState[];
   transitions?: LifecycleTransition[];
