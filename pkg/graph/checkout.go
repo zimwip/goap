@@ -349,6 +349,9 @@ func (g *Graph) putLink(ctx context.Context, tx Tx, w *work, from domain.Node, l
 	if err := w.ix.checkLink(l.Type, from.Type, to.Type); err != nil {
 		return domain.Link{}, err
 	}
+	if err := w.ix.checkLinkAttributes(l.Type, l.Properties); err != nil {
+		return domain.Link{}, err
+	}
 	link := domain.Link{ID: domain.LinkID(g.newID()), Type: l.Type, From: from.Ref(), To: retarget(w.seen, l.To), Properties: l.Properties, ChangeID: w.c.ID}
 	return link, tx.PutLink(ctx, link)
 }
@@ -377,7 +380,7 @@ func (g *Graph) CreateNode(ctx context.Context, id domain.ChangeID, in NodeCreat
 			return err
 		}
 		n.CheckedOut, n.Properties = true, maps.Clone(in.Properties)
-		if err := g.validateProps(ctx, w.ix, n, n.Properties); err != nil {
+		if err := w.ix.checkAttributes(n, n.Properties); err != nil {
 			return err
 		}
 		if in.Owner != "" {
@@ -440,11 +443,6 @@ func (g *Graph) CheckoutNode(ctx context.Context, id domain.ChangeID, in NodeChe
 			return err
 		}
 		n.CheckedOut = true
-		if base == nil {
-			if err := g.validateProps(ctx, w.ix, n, n.Properties); err != nil {
-				return err
-			}
-		}
 		ref, err := g.putVersion(ctx, tx, w, n, base)
 		if err != nil {
 			return err
@@ -487,7 +485,7 @@ func (g *Graph) UpdateNode(ctx context.Context, id domain.ChangeID, impact domai
 				props = map[string]any{}
 			}
 			maps.Copy(props, in.Properties)
-			if err := g.validateProps(ctx, w.ix, n, props); err != nil {
+			if err := w.ix.checkAttributes(n, props); err != nil {
 				return err
 			}
 			if err := tx.SetNodeProps(ctx, n.Ref(), props); err != nil {
@@ -572,6 +570,9 @@ func (g *Graph) UpdateLink(ctx context.Context, id domain.ChangeID, link domain.
 		if err != nil {
 			return err
 		}
+		if err := w.ix.checkLinkAttributes(cur.Type, props); err != nil {
+			return err
+		}
 		if err := tx.SetLinkProps(ctx, link, props); err != nil {
 			return err
 		}
@@ -621,6 +622,9 @@ func (g *Graph) CheckinNode(ctx context.Context, id domain.ChangeID, impact doma
 		}
 		if w.vcn.Review != domain.ReviewAccepted {
 			return fmt.Errorf("change impact %s (%s) is %s: an accepted review authorizes its check-in: %w", impact, w.cn.Key, w.vcn.Review, ErrConflict)
+		}
+		if err := g.checkFrozen(ctx, tx, w.ix, *h); err != nil {
+			return err
 		}
 		if err := tx.CheckinVersion(ctx, h.Ref()); err != nil {
 			return err
@@ -800,4 +804,55 @@ func (g *Graph) viewTarget(ctx context.Context, tx Tx, w *work) (map[domain.Node
 		}
 	}
 	return target, nil
+}
+
+// RemoveChangeImpact takes a change impact out of the change, explicitly (ADR 0076 §5b): its working version, if any,
+// is dropped (a creation never checked in leaves no node behind) and the impact leaves the list. A rejected impact
+// keeps its working version until then, to be reworked once reopened. Refused when the change checked a version of
+// the impact in (frozen: reject the impact to leave it out of the landing), for an impact declared on another flow,
+// one derived from items (their proposals decide it) and one another impact realizes a removal through (Via).
+func (g *Graph) RemoveChangeImpact(ctx context.Context, id domain.ChangeID, impact domain.ChangeImpactID, flow, execution string) error {
+	return g.repo.InTx(ctx, func(tx Tx) error {
+		w, err := g.workOn(ctx, tx, id, flow)
+		if err != nil {
+			return err
+		}
+		if err := g.impact(ctx, tx, w, impact); err != nil {
+			return err
+		}
+		switch {
+		case w.cn.Flow != w.flow:
+			return fmt.Errorf("change impact %s was declared on another flow: %w", impact, ErrConflict)
+		case len(w.cn.Items) > 0:
+			return fmt.Errorf("change impact %s is derived from items: decide them instead: %w", impact, ErrConflict)
+		}
+		for _, o := range w.c.Nodes {
+			if o.Via == impact {
+				return fmt.Errorf("change impact %s realizes the removal of %s: %w", impact, o.Key, ErrConflict)
+			}
+		}
+		h, err := w.head(ctx, tx)
+		if err != nil {
+			return err
+		}
+		if h != nil {
+			vs, err := tx.Versions(ctx, h.ID)
+			if err != nil {
+				return err
+			}
+			for _, v := range vs {
+				if v.ChangeImpact == impact && !v.CheckedOut {
+					return fmt.Errorf("change impact %s (%s) has a checked-in version (v%d): reject it instead: %w", impact, w.cn.Key, v.Version, ErrConflict)
+				}
+			}
+		}
+		// the event first: the impact leaves the projection before its working version goes
+		if err := g.emit(ctx, tx, domain.ImpactEvent{Change: id, Impact: impact, Op: domain.ImpactRemoved, Flow: w.flow, Execution: execution}); err != nil {
+			return err
+		}
+		if h != nil && h.CheckedOut {
+			return tx.DropWorkingVersion(ctx, h.Ref())
+		}
+		return nil
+	})
 }

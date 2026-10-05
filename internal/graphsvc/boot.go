@@ -61,6 +61,8 @@ func Boot(ctx context.Context, g *graph.Graph, o Options) (Report, error) {
 		}
 		log.Warn("change lifecycle and activity gating are not available in this composition (no registry in process)")
 	}
+	// the seeds are the platform acting by itself: its transitions are authorized for it
+	ctx = System(ctx)
 	if err := g.Bootstrap(ctx); err != nil {
 		return r, fmt.Errorf("bootstrap: %w", err)
 	}

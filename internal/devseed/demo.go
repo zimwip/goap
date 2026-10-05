@@ -21,6 +21,9 @@ const alm = "alm"
 type demoNode struct {
 	Namespace, Key, Type string
 	Properties           map[string]any
+	// State is the state a node of a lifecycle lands in: a node is created in the initial, editable state, which no
+	// change leaves a node in.
+	State string
 }
 
 // Demo loads a small ALM repository (namespace alm) once: needs, requirements and tests
@@ -65,13 +68,13 @@ func Demo(ctx context.Context, g *graph.Graph) (bool, error) {
 	nodes := []demoNode{
 		{Namespace: alm, Key: "NEED-1", Type: alm + "@Need", Properties: map[string]any{"title": "Pay for orders online"}},
 		{Namespace: alm, Key: "NEED-2", Type: alm + "@Need", Properties: map[string]any{"title": "Be refunded quickly"}},
-		{Namespace: alm, Key: "REQ-1", Type: alm + "@Requirement", Properties: map[string]any{"title": "Card payment goes through the Acme PSP (API v1)", "priority": "high"}},
-		{Namespace: alm, Key: "REQ-2", Type: alm + "@Requirement", Properties: map[string]any{"title": "The refund is initiated within 24h via the PSP", "priority": "medium"}},
-		{Namespace: alm, Key: "REQ-3", Type: alm + "@Requirement", Properties: map[string]any{"title": "Receipts are sent by email", "priority": "low"}},
+		{Namespace: alm, Key: "REQ-1", Type: alm + "@Requirement", Properties: map[string]any{"title": "Card payment goes through the Acme PSP (API v1)", "priority": "high"}, State: "proposed"},
+		{Namespace: alm, Key: "REQ-2", Type: alm + "@Requirement", Properties: map[string]any{"title": "The refund is initiated within 24h via the PSP", "priority": "medium"}, State: "proposed"},
+		{Namespace: alm, Key: "REQ-3", Type: alm + "@Requirement", Properties: map[string]any{"title": "Receipts are sent by email", "priority": "low"}, State: "proposed"},
 		{Namespace: alm, Key: "TST-1", Type: alm + "@TestCase", Properties: map[string]any{"title": "Nominal card payment"}},
 		{Namespace: alm, Key: "TST-2", Type: alm + "@TestCase", Properties: map[string]any{"title": "Full refund"}},
 		{Namespace: alm, Key: "TST-3", Type: alm + "@TestCase", Properties: map[string]any{"title": "Receipt received"}},
-		{Namespace: alm, Key: "REQ-4", Type: alm + "@SecurityRequirement", Properties: map[string]any{"title": "Card data is never stored in the clear (PCI DSS)", "priority": "high"}},
+		{Namespace: alm, Key: "REQ-4", Type: alm + "@SecurityRequirement", Properties: map[string]any{"title": "Card data is never stored in the clear (PCI DSS)", "priority": "high"}, State: "proposed"},
 		{Namespace: alm, Key: "CMP-1", Type: alm + "@Component", Properties: map[string]any{"title": "payment-service", "technology": "java", "version": "1.4.2"}},
 		{Namespace: alm, Key: "CMP-2", Type: alm + "@Component", Properties: map[string]any{"title": "notification-service", "technology": "go", "version": "2.1.0"}},
 		{Namespace: alm, Key: "CMP-3", Type: alm + "@Component", Properties: map[string]any{"title": "settlement-batch", "technology": "shell", "version": "0.9.3"}},
@@ -102,7 +105,7 @@ func Demo(ctx context.Context, g *graph.Graph) (bool, error) {
 		{Namespace: alm, Key: "ENV-TEST", Type: alm + "@Environment", Properties: map[string]any{"name": "Integration", "stage": "test", "order": 2}},
 		{Namespace: alm, Key: "ENV-STG", Type: alm + "@Environment", Properties: map[string]any{"name": "Staging", "stage": "staging", "order": 3}},
 		{Namespace: alm, Key: "ENV-PRD", Type: alm + "@Environment", Properties: map[string]any{"name": "Production", "stage": "prod", "order": 4}},
-		{Namespace: alm, Key: "REL-APP-1-5.2", Type: alm + "@Release", Properties: map[string]any{"title": "Checkout 5.2", "version": "5.2", "status": "deployed"}},
+		{Namespace: alm, Key: "REL-APP-1-5.2", Type: alm + "@Release", Properties: map[string]any{"title": "Checkout 5.2", "version": "5.2", "status": "deployed"}, State: "candidate"},
 		{Namespace: alm, Key: "DEP-REL-APP-1-5.2-ENV-PRD", Type: alm + "@Deployment", Properties: map[string]any{"status": "succeeded", "stage": "prod"}},
 	}
 	links := [][3]string{
@@ -133,7 +136,7 @@ func Demo(ctx context.Context, g *graph.Graph) (bool, error) {
 	edits := make([]graph.NodeEdit, 0, len(nodes))
 	for _, n := range nodes {
 		e := graphsvc.SeedNode(n.Key, n.Type, n.Properties)
-		e.Owner = owners[n.Key]
+		e.Owner, e.State = owners[n.Key], n.State
 		edits = append(edits, e)
 	}
 	// the nodes of a change link each other, cycles included (an application is composed of components that

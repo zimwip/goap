@@ -89,9 +89,20 @@ func (g *Graph) Commit(ctx context.Context, in Commit) (res CommitResult, err er
 		return res, err
 	}
 	res.Change = c.ID
+	var impacts []domain.ChangeImpactID
 	defer func() {
 		if err == nil {
 			return
+		}
+		// a creation that was not checked in leaves no node behind: its key stays free (ADR 0076 §5b)
+		for i, e := range in.Edits {
+			if e.Pre == nil && i < len(impacts) && impacts[i] != "" {
+				if out, _ := g.isCheckedOut(ctx, c.ID, impacts[i]); out {
+					if _, cerr := g.CancelCheckout(ctx, c.ID, impacts[i], "", ""); cerr != nil {
+						err = errors.Join(err, cerr)
+					}
+				}
+			}
 		}
 		abandoned := domain.ChangeAbandoned
 		if _, aerr := g.UpdateChange(ctx, c.ID, ChangePatch{Status: &abandoned}); aerr != nil {
@@ -102,7 +113,7 @@ func (g *Graph) Commit(ctx context.Context, in Commit) (res CommitResult, err er
 	if err != nil {
 		return res, err
 	}
-	impacts := make([]domain.ChangeImpactID, len(in.Edits))
+	impacts = make([]domain.ChangeImpactID, len(in.Edits))
 	posts := make([]*domain.NodeRef, len(in.Edits)) // the working versions
 	written := map[string]int{}                     // key of a created node → its edit
 	type late struct {
@@ -205,55 +216,64 @@ func (g *Graph) Commit(ctx context.Context, in Commit) (res CommitResult, err er
 			return res, fmt.Errorf("link %s from %s to %s: %w", x.l.Type, nodeName(in.Edits[x.from]), x.l.ToKey, err)
 		}
 	}
-	for i, e := range in.Edits {
-		if posts[i] != nil {
-			if err := g.checkParentInvariant(ctx, *posts[i]); err != nil {
-				return res, fmt.Errorf("%s: %w", nodeName(e), err)
-			}
-		}
-	}
-	for i, e := range in.Edits {
+	// The nodes moved to a state are checked in and moved first: a transition is a version of its own, and the links
+	// the working versions of the change hold to a node follow its new versions until they are checked in (ADR 0076).
+	freeze := func(i int, e NodeEdit) error {
 		if impacts[i] == "" {
-			continue
+			return nil
 		}
 		if _, err := g.ReviewNode(ctx, c.ID, impacts[i], domain.ReviewAccepted, in.By, why(e)); err != nil {
-			return res, err
+			return err
 		}
 		if posts[i] != nil {
 			if _, err := g.CheckinNode(ctx, c.ID, impacts[i], "", ""); err != nil {
-				return res, err
+				return fmt.Errorf("%s: %w", nodeName(e), err)
 			}
 		}
+		return nil
 	}
-	for i, e := range in.Edits {
-		if e.State == "" {
-			continue
-		}
+	move := func(i int, e NodeEdit) error {
 		var node domain.NodeID
 		var cur string
+		ref := e.Pre
 		if posts[i] != nil {
-			n, err := g.Node(ctx, *posts[i])
-			if err != nil {
-				return res, err
-			}
-			node, cur = n.ID, n.State
-		} else {
-			n, err := g.Node(ctx, *e.Pre)
-			if err != nil {
-				return res, err
-			}
-			node, cur = n.ID, n.State
+			ref = posts[i]
 		}
+		n, err := g.Node(ctx, *ref)
+		if err != nil {
+			return err
+		}
+		node, cur = n.ID, n.State
 		if cur == "" && g.Types != nil {
 			if lc := g.catalog().Lifecycle(in.Edits[i].Type); lc != nil && e.Pre == nil {
 				cur = lc.Initial
 			}
 		}
 		if cur == e.State {
-			continue
+			return nil
 		}
 		if _, err := g.TransitionNode(ctx, c.ID, NodeTransition{NodeCheckout: NodeCheckout{Impact: impacts[i], Node: node, Rationale: why(e), ProducedBy: in.By}, To: e.State}); err != nil {
-			return res, fmt.Errorf("%s: %w", nodeName(e), err)
+			return fmt.Errorf("%s: %w", nodeName(e), err)
+		}
+		return nil
+	}
+	for i, e := range in.Edits {
+		if e.State == "" {
+			continue
+		}
+		if err := freeze(i, e); err != nil {
+			return res, err
+		}
+		if err := move(i, e); err != nil {
+			return res, err
+		}
+	}
+	for i, e := range in.Edits {
+		if e.State != "" {
+			continue
+		}
+		if err := freeze(i, e); err != nil {
+			return res, err
 		}
 	}
 	if res.Baseline, err = g.Apply(ctx, c.ID, in.BaselineName); err != nil {
@@ -397,4 +417,21 @@ func (g *Graph) commitOrder(ctx context.Context, edits []NodeEdit) ([]int, error
 		}
 	}
 	return order, nil
+}
+
+// isCheckedOut reports a change impact whose version on the main flow of the change is a working version.
+func (g *Graph) isCheckedOut(ctx context.Context, id domain.ChangeID, impact domain.ChangeImpactID) (out bool, err error) {
+	err = g.repo.InTx(ctx, func(tx Tx) error {
+		w, err := g.workOn(ctx, tx, id, domain.MainFlow)
+		if err != nil {
+			return err
+		}
+		if err := w.selectImpact(impact); err != nil {
+			return err
+		}
+		h, err := w.head(ctx, tx)
+		out = err == nil && h != nil && h.CheckedOut
+		return err
+	})
+	return
 }

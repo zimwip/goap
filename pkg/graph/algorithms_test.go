@@ -114,12 +114,13 @@ func testPropertyValidators(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	w := newAlgoWorld(t, repo)
 
-	// early feedback on create (also through the inherited validator of a subtype) and update
+	// a working version may be incomplete: the validators judge it when it is checked in (also through the inherited
+	// validator of a subtype)
 	for i, try := range []func(c domain.Change) error{
-		func(c domain.Change) error { return w.create(c, "R2", "Req", map[string]any{"code": "nope"}) },
-		func(c domain.Change) error { return w.create(c, "R3", "Sub", map[string]any{"code": "nope"}) },
+		func(c domain.Change) error { return w.create(c, "R4", "Req", map[string]any{"code": "nope"}) },
+		func(c domain.Change) error { return w.create(c, "R5", "Sub", map[string]any{"code": "nope"}) },
 		func(c domain.Change) error {
-			return w.modify(t, c, w.req, edit{Properties: map[string]any{"code": "nope"}})
+			return w.modify(t, c, w.req, edit{Properties: map[string]any{"code": "nope"}}, edit{State: "approved"})
 		},
 	} {
 		if err := try(w.change(t)); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "must match") {

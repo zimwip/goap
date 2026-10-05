@@ -84,7 +84,7 @@ func (a *applier) walkChangeImpacts() (editable []string, err error) {
 		if n.Deleted {
 			continue
 		}
-		if err := a.g.validateProps(a.ctx, a.ix, n, n.Properties); err != nil {
+		if err := a.g.checkFrozen(a.ctx, a.tx, a.ix, n); err != nil {
 			return nil, err
 		}
 		lc := a.ix.lifecycleOf(n.Type)

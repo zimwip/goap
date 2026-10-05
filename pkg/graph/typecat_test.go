@@ -162,7 +162,8 @@ func (ts testTypes) Search(typ string) []domain.SearchProperty {
 	return out
 }
 
-func (ts testTypes) AttributeChecks(string) []domain.AttributeCheck { return nil }
+func (ts testTypes) AttributeChecks(string) []domain.AttributeCheck     { return nil }
+func (ts testTypes) LinkAttributeChecks(string) []domain.AttributeCheck { return nil }
 
 func (ts testTypes) CheckNode(_, typ string) error {
 	if _, ok := ts[typ]; !ok {

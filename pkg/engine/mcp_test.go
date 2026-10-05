@@ -116,7 +116,7 @@ func mcpEngine(t *testing.T, hub ToolPort, client llm.Client) (*Engine, domain.B
 	e, g, base := setup(t)
 	// the organisations holding the changes
 	for _, u := range []string{"acme", "globex"} {
-		if _, err := graphtest.Import(context.Background(), g, graphtest.Node{Namespace: "organisation", Key: u, Type: "organisation@OrgUnit", Properties: map[string]any{"name": u}}); err != nil {
+		if _, err := graphtest.Unit(context.Background(), g, u, u); err != nil {
 			t.Fatal(err)
 		}
 	}

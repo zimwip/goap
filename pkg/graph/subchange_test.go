@@ -24,25 +24,26 @@ func newOrgWorld(t *testing.T, repo Repo) orgWorld {
 	ctx := context.Background()
 	g := New(repo)
 	w := orgWorld{g: g}
-	mk := func(ns, key, typ string, props map[string]any) domain.Node {
-		n, err := importNode(ctx, g, newNode{Namespace: ns, Key: key, Type: typ, Properties: props})
+	if err := g.Bootstrap(ctx); err != nil {
+		t.Fatal(err)
+	}
+	root, err := g.NodeByKey(ctx, "organisation", rootOrg(g))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// a unit is created with its parent (ADR 0054)
+	mk := func(key, name string, parent domain.Node) domain.Node {
+		n, err := importNode(ctx, g, newNode{Namespace: "organisation", Key: key, Type: NodeTypeOrgUnit, Properties: map[string]any{"name": name},
+			Links: []LinkWrite{{Type: LinkPartOf, To: parent.Ref()}}})
 		if err != nil {
 			t.Fatal(err)
 		}
 		return n
 	}
-	link := func(typ string, from, to domain.Node) {
-		if _, err := importLink(ctx, g, typ, from.Ref(), to.Ref(), nil); err != nil {
-			t.Fatal(err)
-		}
-	}
-	w.acme = mk("organisation", "ORG-ACME", NodeTypeOrgUnit, map[string]any{"name": "Acme"})
-	w.digital = mk("organisation", "ORG-DIGITAL", NodeTypeOrgUnit, map[string]any{"name": "Digital"})
-	w.team1 = mk("organisation", "ORG-T1", NodeTypeOrgUnit, map[string]any{"name": "Team 1"})
-	w.t2 = mk("organisation", "ORG-T2", NodeTypeOrgUnit, map[string]any{"name": "Team 2"})
-	link(LinkPartOf, w.digital, w.acme)
-	link(LinkPartOf, w.team1, w.digital)
-	link(LinkPartOf, w.t2, w.digital)
+	w.acme = mk("ORG-ACME", "Acme", root)
+	w.digital = mk("ORG-DIGITAL", "Digital", w.acme)
+	w.team1 = mk("ORG-T1", "Team 1", w.digital)
+	w.t2 = mk("ORG-T2", "Team 2", w.digital)
 	owned := func(key, owner, title string) domain.Node {
 		n, err := importNode(ctx, g, newNode{Key: key, Type: "Component", Properties: map[string]any{"title": title}, Owner: owner})
 		if err != nil {
@@ -60,7 +61,7 @@ func newOrgWorld(t *testing.T, repo Repo) orgWorld {
 	for _, n := range []domain.Node{w.cmp1, w.cmp2, w.cmp3} {
 		all = append(all, n.Ref())
 	}
-	var err error
+
 	if w.base, err = g.BranchHead(ctx, domain.DefaultNamespace, domain.MainBranch); err != nil {
 		t.Fatal(err)
 	}
@@ -229,11 +230,8 @@ func TestProjectSelfLinkTerminates(t *testing.T) {
 	if links, err := g.OutLinksOf(ctx, root.Ref()); err != nil || len(links) != 1 || links[0].To != root.Ref() || links[0].Type != LinkProjectPartOf {
 		t.Fatalf("the root project links to itself: %+v %v", links, err)
 	}
-	sub, err := importNode(ctx, g, newNode{Namespace: "organisation", Key: "PROJ-SUB", Type: NodeTypeProjectUnit, Properties: map[string]any{"name": "Sub project"}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := importLink(ctx, g, LinkProjectPartOf, sub.Ref(), root.Ref(), nil); err != nil {
+	if _, err := importNode(ctx, g, newNode{Namespace: "organisation", Key: "PROJ-SUB", Type: NodeTypeProjectUnit, Properties: map[string]any{"name": "Sub project"},
+		Links: []LinkWrite{{Type: LinkProjectPartOf, To: root.Ref()}}}); err != nil {
 		t.Fatal(err)
 	}
 	within := func(tx Tx, key, ancestor string) (bool, error) {
@@ -274,8 +272,9 @@ func TestProjectSubChangeRules(t *testing.T) { forEachRepo(t, testProjectSubChan
 func testProjectSubChangeRules(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	g := New(repo)
-	mk := func(key string, props map[string]any) domain.Node {
-		n, err := importNode(ctx, g, newNode{Namespace: "organisation", Key: key, Type: NodeTypeProjectUnit, Properties: props})
+	mk := func(key string, props map[string]any, parent domain.Node) domain.Node {
+		n, err := importNode(ctx, g, newNode{Namespace: "organisation", Key: key, Type: NodeTypeProjectUnit, Properties: props,
+			Links: []LinkWrite{{Type: LinkProjectPartOf, To: parent.Ref()}}})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -288,18 +287,9 @@ func testProjectSubChangeRules(t *testing.T, repo Repo) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	a := mk("PROJ-A", map[string]any{"name": "A"})
-	if _, err := importLink(ctx, g, LinkProjectPartOf, a.Ref(), root.Ref(), nil); err != nil {
-		t.Fatal(err)
-	}
-	a1 := mk("PROJ-A1", map[string]any{"name": "A1"})
-	if _, err := importLink(ctx, g, LinkProjectPartOf, a1.Ref(), a.Ref(), nil); err != nil {
-		t.Fatal(err)
-	}
-	b := mk("PROJ-B", map[string]any{"name": "B"})
-	if _, err := importLink(ctx, g, LinkProjectPartOf, b.Ref(), root.Ref(), nil); err != nil {
-		t.Fatal(err)
-	}
+	a := mk("PROJ-A", map[string]any{"name": "A"}, root)
+	mk("PROJ-A1", map[string]any{"name": "A1"}, a)
+	mk("PROJ-B", map[string]any{"name": "B"}, root)
 	base, err := g.BranchHead(ctx, domain.DefaultNamespace, domain.MainBranch)
 	if err != nil {
 		t.Fatal(err)

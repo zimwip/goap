@@ -113,10 +113,10 @@ is the call order. Action code is not an algorithm: it stays in the action decla
 
 | Type | Plugged in | Result |
 |---|---|---|
-| `property_validator` | `nodeTypes[].attributes[].validators: [instance]` (also on link type attributes) | accepts / rejects the value of an attribute, when a node is created or modified |
-| `node_validator` | `nodeTypes[].validators: [instance]` | accepts / rejects a node as a whole (rules across attributes), after the attribute validators |
-| `transition_guard` | `lifecycles[].transitions[].guards: [instance]` | allows / refuses the transition, when the change is applied |
-| `transition_action` | `lifecycles[].transitions[].actions: [instance]` | changes properties of the node that moved, once the transition is accepted |
+| `property_validator` | `nodeTypes[].attributes[].validators: [instance]` | accepts / rejects the value of an attribute, when the version is checked in and when the change lands (a working version may be incomplete; the type and enum of a value are checked on every edit, ADR 0076) |
+| `node_validator` | `nodeTypes[].validators: [instance]` | accepts / rejects a node as a whole (rules across attributes), after the attribute validators, at the same moments |
+| `transition_guard` | `lifecycles[].transitions[].guards: [instance]` | allows / refuses the transition, when it is taken (`TransitionNode`, ADR 0076) |
+| `transition_action` | `lifecycles[].transitions[].actions: [instance]` | changes properties of the node that moved, when the transition is taken |
 
 Parameter types: `string`, `number`, `boolean`, `regex`, `enum` (`values`), `strings` (list), `json`.
 The script reads its values with `ctx.param(name)`.
@@ -130,7 +130,7 @@ error, or (JavaScript) by returning `false` or a message string.
 |---|---|---|
 | `ctx.param(name)` | `Param(name)` | all |
 | `ctx.instance()` / `ctx.algorithm()` | `Instance()` / `Algorithm()` | all |
-| `ctx.fail(message)` | `Fail(message)` | all (in a transition action it aborts the application of the change) |
+| `ctx.fail(message)` | `Fail(message)` | all (in a transition action it aborts the transition) |
 | `ctx.log(msg)` / `ctx.warn(msg)` | `Log(msg)` / `Warn(msg)` | all |
 | `ctx.property()` / `ctx.value()` | `Property()` / `Value()` | validator (`value()` is `null` when absent) |
 | `ctx.node()` | `Node()` | all: `{id, version, key, type, state, props}`, as it will be after the change |

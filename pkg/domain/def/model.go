@@ -217,9 +217,9 @@ type LinkType struct {
 	Description string `yaml:"description,omitempty" json:"description,omitempty"`
 	From        string `yaml:"from,omitempty" json:"from,omitempty"`
 	To          string `yaml:"to,omitempty" json:"to,omitempty"`
-	// Attributes define what a link of this type carries. The user interface edits a link from them; their
-	// validators are checked by the domain but not yet run on commit (pkg/typecat.CheckLink only checks the
-	// endpoints' types). "specializes" declares when/priority this way: the generic Activity-specialization
+	// Attributes define what a link of this type carries. The user interface edits a link from them; the graph checks
+	// the type and enum of the values on every link edit, at check-in and at landing (ADR 0076); their validators are
+	// checked by the domain but not yet run. "specializes" declares when/priority this way: the generic Activity-specialization
 	// condition (architecture plan "Activity concept") a link of that type would carry once one is created.
 	Attributes []Attribute `yaml:"attributes,omitempty" json:"attributes,omitempty"`
 	// Compose flags a composition link: the target is a part of the source (an aggregate), so a browser or

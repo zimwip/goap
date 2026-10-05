@@ -118,6 +118,9 @@ const (
 	// GraphServiceCancelCheckoutProcedure is the fully-qualified name of the GraphService's
 	// CancelCheckout RPC.
 	GraphServiceCancelCheckoutProcedure = "/goap.graph.v1.GraphService/CancelCheckout"
+	// GraphServiceRemoveChangeImpactProcedure is the fully-qualified name of the GraphService's
+	// RemoveChangeImpact RPC.
+	GraphServiceRemoveChangeImpactProcedure = "/goap.graph.v1.GraphService/RemoveChangeImpact"
 	// GraphServiceReviewChangeImpactProcedure is the fully-qualified name of the GraphService's
 	// ReviewChangeImpact RPC.
 	GraphServiceReviewChangeImpactProcedure = "/goap.graph.v1.GraphService/ReviewChangeImpact"
@@ -291,6 +294,9 @@ type GraphServiceClient interface {
 	CheckinNode(context.Context, *connect.Request[v1.CheckinNodeRequest]) (*connect.Response[v1.CheckinNodeResponse], error)
 	TransitionNode(context.Context, *connect.Request[v1.TransitionNodeRequest]) (*connect.Response[v1.TransitionNodeResponse], error)
 	CancelCheckout(context.Context, *connect.Request[v1.CancelCheckoutRequest]) (*connect.Response[v1.CancelCheckoutResponse], error)
+	// Take a change impact out of the change, explicitly: its working version is dropped (refused once a version of it
+	// is checked in: reject it instead).
+	RemoveChangeImpact(context.Context, *connect.Request[v1.RemoveChangeImpactRequest]) (*connect.Response[v1.RemoveChangeImpactResponse], error)
 	ReviewChangeImpact(context.Context, *connect.Request[v1.ReviewChangeImpactRequest]) (*connect.Response[v1.ReviewChangeImpactResponse], error)
 	ReopenChangeImpacts(context.Context, *connect.Request[v1.ReopenChangeImpactsRequest]) (*connect.Response[v1.ReopenChangeImpactsResponse], error)
 	// Producers: a whole change of node edits (change impacts, versions, reviews, apply) in one call.
@@ -558,6 +564,12 @@ func NewGraphServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			httpClient,
 			baseURL+GraphServiceCancelCheckoutProcedure,
 			connect.WithSchema(graphServiceMethods.ByName("CancelCheckout")),
+			connect.WithClientOptions(opts...),
+		),
+		removeChangeImpact: connect.NewClient[v1.RemoveChangeImpactRequest, v1.RemoveChangeImpactResponse](
+			httpClient,
+			baseURL+GraphServiceRemoveChangeImpactProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("RemoveChangeImpact")),
 			connect.WithClientOptions(opts...),
 		),
 		reviewChangeImpact: connect.NewClient[v1.ReviewChangeImpactRequest, v1.ReviewChangeImpactResponse](
@@ -849,6 +861,7 @@ type graphServiceClient struct {
 	checkinNode            *connect.Client[v1.CheckinNodeRequest, v1.CheckinNodeResponse]
 	transitionNode         *connect.Client[v1.TransitionNodeRequest, v1.TransitionNodeResponse]
 	cancelCheckout         *connect.Client[v1.CancelCheckoutRequest, v1.CancelCheckoutResponse]
+	removeChangeImpact     *connect.Client[v1.RemoveChangeImpactRequest, v1.RemoveChangeImpactResponse]
 	reviewChangeImpact     *connect.Client[v1.ReviewChangeImpactRequest, v1.ReviewChangeImpactResponse]
 	reopenChangeImpacts    *connect.Client[v1.ReopenChangeImpactsRequest, v1.ReopenChangeImpactsResponse]
 	commitEdits            *connect.Client[v1.CommitEditsRequest, v1.CommitEditsResponse]
@@ -1051,6 +1064,11 @@ func (c *graphServiceClient) TransitionNode(ctx context.Context, req *connect.Re
 // CancelCheckout calls goap.graph.v1.GraphService.CancelCheckout.
 func (c *graphServiceClient) CancelCheckout(ctx context.Context, req *connect.Request[v1.CancelCheckoutRequest]) (*connect.Response[v1.CancelCheckoutResponse], error) {
 	return c.cancelCheckout.CallUnary(ctx, req)
+}
+
+// RemoveChangeImpact calls goap.graph.v1.GraphService.RemoveChangeImpact.
+func (c *graphServiceClient) RemoveChangeImpact(ctx context.Context, req *connect.Request[v1.RemoveChangeImpactRequest]) (*connect.Response[v1.RemoveChangeImpactResponse], error) {
+	return c.removeChangeImpact.CallUnary(ctx, req)
 }
 
 // ReviewChangeImpact calls goap.graph.v1.GraphService.ReviewChangeImpact.
@@ -1315,6 +1333,9 @@ type GraphServiceHandler interface {
 	CheckinNode(context.Context, *connect.Request[v1.CheckinNodeRequest]) (*connect.Response[v1.CheckinNodeResponse], error)
 	TransitionNode(context.Context, *connect.Request[v1.TransitionNodeRequest]) (*connect.Response[v1.TransitionNodeResponse], error)
 	CancelCheckout(context.Context, *connect.Request[v1.CancelCheckoutRequest]) (*connect.Response[v1.CancelCheckoutResponse], error)
+	// Take a change impact out of the change, explicitly: its working version is dropped (refused once a version of it
+	// is checked in: reject it instead).
+	RemoveChangeImpact(context.Context, *connect.Request[v1.RemoveChangeImpactRequest]) (*connect.Response[v1.RemoveChangeImpactResponse], error)
 	ReviewChangeImpact(context.Context, *connect.Request[v1.ReviewChangeImpactRequest]) (*connect.Response[v1.ReviewChangeImpactResponse], error)
 	ReopenChangeImpacts(context.Context, *connect.Request[v1.ReopenChangeImpactsRequest]) (*connect.Response[v1.ReopenChangeImpactsResponse], error)
 	// Producers: a whole change of node edits (change impacts, versions, reviews, apply) in one call.
@@ -1578,6 +1599,12 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 		GraphServiceCancelCheckoutProcedure,
 		svc.CancelCheckout,
 		connect.WithSchema(graphServiceMethods.ByName("CancelCheckout")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceRemoveChangeImpactHandler := connect.NewUnaryHandler(
+		GraphServiceRemoveChangeImpactProcedure,
+		svc.RemoveChangeImpact,
+		connect.WithSchema(graphServiceMethods.ByName("RemoveChangeImpact")),
 		connect.WithHandlerOptions(opts...),
 	)
 	graphServiceReviewChangeImpactHandler := connect.NewUnaryHandler(
@@ -1898,6 +1925,8 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 			graphServiceTransitionNodeHandler.ServeHTTP(w, r)
 		case GraphServiceCancelCheckoutProcedure:
 			graphServiceCancelCheckoutHandler.ServeHTTP(w, r)
+		case GraphServiceRemoveChangeImpactProcedure:
+			graphServiceRemoveChangeImpactHandler.ServeHTTP(w, r)
 		case GraphServiceReviewChangeImpactProcedure:
 			graphServiceReviewChangeImpactHandler.ServeHTTP(w, r)
 		case GraphServiceReopenChangeImpactsProcedure:
@@ -2117,6 +2146,10 @@ func (UnimplementedGraphServiceHandler) TransitionNode(context.Context, *connect
 
 func (UnimplementedGraphServiceHandler) CancelCheckout(context.Context, *connect.Request[v1.CancelCheckoutRequest]) (*connect.Response[v1.CancelCheckoutResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.CancelCheckout is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) RemoveChangeImpact(context.Context, *connect.Request[v1.RemoveChangeImpactRequest]) (*connect.Response[v1.RemoveChangeImpactResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.RemoveChangeImpact is not implemented"))
 }
 
 func (UnimplementedGraphServiceHandler) ReviewChangeImpact(context.Context, *connect.Request[v1.ReviewChangeImpactRequest]) (*connect.Response[v1.ReviewChangeImpactResponse], error) {

@@ -25,6 +25,9 @@ const (
 	// ImpactCancelled records a checkout cancelled on Flow: the working version is dropped and Post is the version the
 	// impact goes back to (nil: none; a creation cancelled before its first check-in removes the change impact).
 	ImpactCancelled ImpactOp = "cancelled"
+	// ImpactRemoved takes a change impact out of the change, explicitly (its working version, if any, is dropped): the
+	// impact leaves the list (ADR 0076 §5b).
+	ImpactRemoved ImpactOp = "removed"
 	// ImpactReviewed records a review (Review).
 	ImpactReviewed ImpactOp = "reviewed"
 	// ImpactDiscarded rejects a candidate whose flow was discarded (Review).
@@ -91,7 +94,7 @@ func (e ImpactEvent) Validate() error {
 		return need(e.Impact != "" && e.Post != nil && len(e.Patch) > 0, "a change impact, its working version and a patch")
 	case ImpactCheckedIn:
 		return need(e.Impact != "" && e.Post != nil, "a change impact and its working version")
-	case ImpactCancelled:
+	case ImpactCancelled, ImpactRemoved:
 		return need(e.Impact != "", "a change impact")
 	}
 	return fmt.Errorf("unknown event operation %q", e.Op)
@@ -127,6 +130,9 @@ func ApplyImpactEvent(impacts []ChangeImpact, e ImpactEvent) []ChangeImpact {
 	}
 	if at < 0 {
 		return out
+	}
+	if e.Op == ImpactRemoved {
+		return slices.Delete(out, at, at+1)
 	}
 	cn := cloneImpact(out[at])
 	switch e.Op {

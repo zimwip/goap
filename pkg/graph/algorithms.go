@@ -36,16 +36,40 @@ func dslNode(n domain.Node, props map[string]any) dsl.Node {
 	return dsl.Node{ID: string(n.ID), Version: int(n.Version), Key: n.Key, Type: n.Type, State: n.State, Props: props}
 }
 
-// validateProps checks the properties a node will have: the type and enum membership of the values of its
-// attributes, then the validators of its type (attribute validators and node validators). The first rejection
-// is returned as ErrInvalid.
-func (g *Graph) validateProps(ctx context.Context, ix *typeIndex, n domain.Node, props map[string]any) error {
-	if ix != nil && ix.cat != nil {
-		for _, a := range ix.cat.AttributeChecks(n.Type) {
-			if err := checkAttributeValue(a, props[a.Name]); err != nil {
-				return invalidf("%s (%s): property %q is invalid: %v", n.Key, n.Type, a.Name, err)
-			}
+// checkAttributes checks the type and enum membership of the values of the attributes of a node: what every edit of
+// a working version is held to (ADR 0076), a draft being otherwise free to be incomplete.
+func (ix *typeIndex) checkAttributes(n domain.Node, props map[string]any) error {
+	if ix == nil || ix.cat == nil {
+		return nil
+	}
+	for _, a := range ix.cat.AttributeChecks(n.Type) {
+		if err := checkAttributeValue(a, props[a.Name]); err != nil {
+			return invalidf("%s (%s): property %q is invalid: %v", n.Key, n.Type, a.Name, err)
 		}
+	}
+	return nil
+}
+
+// checkLinkAttributes checks the type and enum membership of the properties of a link against the attributes of its
+// link type.
+func (ix *typeIndex) checkLinkAttributes(typ string, props map[string]any) error {
+	if ix == nil || ix.cat == nil {
+		return nil
+	}
+	for _, a := range ix.cat.LinkAttributeChecks(typ) {
+		if err := checkAttributeValue(a, props[a.Name]); err != nil {
+			return invalidf("link %s: property %q is invalid: %v", typ, a.Name, err)
+		}
+	}
+	return nil
+}
+
+// validateProps checks the properties a version is frozen with (CheckinNode) and lands with (Apply): the type and
+// enum membership of the values of its attributes, then the validators of its type (attribute validators and node
+// validators). The first rejection is returned as ErrInvalid.
+func (g *Graph) validateProps(ctx context.Context, ix *typeIndex, n domain.Node, props map[string]any) error {
+	if err := ix.checkAttributes(n, props); err != nil {
+		return err
 	}
 	vs := ix.validatorsOf(n.Type)
 	if len(vs) == 0 {
