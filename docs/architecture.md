@@ -279,7 +279,7 @@ Executor types:
 | `llm` | Prompt (Go template) + blackboard context → Model Gateway, structured JSON output | ChangeItems |
 | `tool` | Call to a tool (`<mcp>/<tool>`) of the MCP hub, through the organization binding (§3.9) | Artifact `{tool, result}` |
 | `human` | Creates a task; the process moves to `waiting` until `SubmitHumanInput` | Submitted items |
-| `builtin` | Registered Go function: `graph.propagate` (impact propagation), `graph.apply` (change application) | ChangeItems / new baseline |
+| `builtin` | Registered Go function, checked by name when the methodology is compiled ([ADR 0062](adr/0062-builtins-registry.md)): `graph.propagate` (impact propagation), `graph.apply` (change application), `decision.investigate`, `process.step`; the self-observation ones (`observe.analyze`, `observe.propose`, `methodology.draft`) are registered by the composition roots | ChangeItems / new baseline |
 
 LLM/human outputs use a simplified input format (`engine.ItemInput`): nodes are
 designated by their **key** (`REQ-1`), items from the same batch by `#ref`, existing items by `@<id>`;
@@ -1241,6 +1241,8 @@ internal/identity/           caller identity (headers set by the gateway)
 pkg/domain/                  graph model (domain axis + change axis)
 pkg/graph/                   Store (memory, PostgreSQL, SQLite), apply, branches / merge / rebase, execution journal
 pkg/observe/                 run cost analysis (journal + traces) and improvement proposals
+pkg/builtins/                names of the builtin actions and the static list the compiler and the registry check (ADR 0062); a leaf package
+pkg/selfimprove/             the self-observation builtins (`observe.analyze`, `observe.propose`, `methodology.draft`), registered by `cmd/engine` and `cmd/goap-dev`; the engine imports no observer
 pkg/goap/                    A* planner
 pkg/condition/               CEL compilation/evaluation, `expects` compilation
 pkg/intent/                  intent loop (lexical Ranker, LLM Ranker)

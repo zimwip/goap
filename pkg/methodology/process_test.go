@@ -1,6 +1,7 @@
 package methodology
 
 import (
+	"github.com/zimwip/goap/pkg/builtins"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/domain/def"
 	"strings"
@@ -82,7 +83,7 @@ processes:
 		t.Fatalf("a step may wait for a later step; each alternative reaches the step's criteria: %+v", other)
 	}
 	agentic, _ := c.Action("flow/agentic")
-	if agentic.Builtin != BuiltinStep || agentic.Params["capability"] != "working" || len(agentic.Pre) != 1 || !agentic.Pre["b"] || !agentic.Effects["c"] {
+	if agentic.Builtin != builtins.ProcessStep || agentic.Params["capability"] != "working" || len(agentic.Pre) != 1 || !agentic.Pre["b"] || !agentic.Effects["c"] {
 		t.Fatalf("a capability step is entered by its own conditions and done by the goal of its method's agent: %+v", agentic)
 	}
 	manual, _ := c.Action("flow/manual")
@@ -264,7 +265,7 @@ processes:
 		t.Fatal(issues)
 	}
 	a, _ := c.Action("flow/finish")
-	if a.Builtin != BuiltinStep || a.Params["capability"] != "finishing" || !a.Effects["c"] || !a.Pre["a"] {
+	if a.Builtin != builtins.ProcessStep || a.Params["capability"] != "finishing" || !a.Effects["c"] || !a.Pre["a"] {
 		t.Fatalf("a method step runs the chosen method, done by what the methods' goals share: %+v", a)
 	}
 	var bb domain.Blackboard

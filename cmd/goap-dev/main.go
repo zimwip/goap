@@ -59,6 +59,7 @@ import (
 	"github.com/zimwip/goap/pkg/llm"
 	"github.com/zimwip/goap/pkg/llmcfg"
 	"github.com/zimwip/goap/pkg/methodology"
+	"github.com/zimwip/goap/pkg/selfimprove"
 	"github.com/zimwip/goap/pkg/typecat"
 )
 
@@ -251,7 +252,7 @@ func main() {
 		Types:     func() def.TypeSet { return types.Get() },
 	}
 	// self-observation (methodology-improvement): journal, traces, drafts
-	maps.Copy(builtins, e.SelfImprovementBuiltins(telemetry.SelfImprovementFromEnv(registrysvc.Drafts{Service: reg})))
+	selfimprove.Register(builtins, e, telemetry.SelfImprovementFromEnv(registrysvc.Drafts{Service: reg}))
 	triggers = &engine.TriggerManager{Engine: e, Log: log}
 	triggers.Start(ctx)
 	go triggers.WatchProcesses(ctx, broker)

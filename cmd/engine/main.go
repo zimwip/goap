@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	triggerevents "github.com/zimwip/goap/pkg/events"
-	"maps"
 	"os"
 	"sync/atomic"
 	"time"
@@ -28,6 +27,7 @@ import (
 	"github.com/zimwip/goap/pkg/intent"
 	"github.com/zimwip/goap/pkg/llm"
 	"github.com/zimwip/goap/pkg/methodology"
+	"github.com/zimwip/goap/pkg/selfimprove"
 	"github.com/zimwip/goap/pkg/typecat"
 )
 
@@ -109,7 +109,7 @@ func main() {
 		Types:     func() def.TypeSet { return types.Get() },
 	}
 	// self-observation (methodology-improvement): journal, traces, drafts
-	maps.Copy(builtins, e.SelfImprovementBuiltins(telemetry.SelfImprovementFromEnv(registry)))
+	selfimprove.Register(builtins, e, telemetry.SelfImprovementFromEnv(registry))
 	for _, subject := range []string{"goap.registry.domain.published", "goap.registry.domain.deleted"} {
 		if err := events.Subscribe(subject, func([]byte) {
 			if err := types.Reload(context.Background()); err != nil {

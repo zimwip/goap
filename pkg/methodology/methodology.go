@@ -16,6 +16,7 @@ import (
 	"github.com/robfig/cron/v3"
 	"gopkg.in/yaml.v3"
 
+	"github.com/zimwip/goap/pkg/builtins"
 	"github.com/zimwip/goap/pkg/condition"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/goap"
@@ -62,6 +63,8 @@ type Methodology struct {
 	// Types resolves the qualified type references of the methodology (the type catalogue, set by Resolve). Nil: the
 	// references are only checked for their form.
 	Types def.TypeSet `yaml:"-" json:"-"`
+	// Builtins resolves the builtin names of the actions (set by WithBuiltins, ADR 0062). Nil: they are not checked.
+	Builtins BuiltinSet `yaml:"-" json:"-"`
 }
 
 // Planners.
@@ -430,6 +433,8 @@ func (m *Methodology) compileWith(lenient bool) (*Compiled, def.Issues) {
 			}
 		case a.Kind == KindBuiltin && a.Builtin == "":
 			add(path+".builtin", "builtin action requires a builtin")
+		case a.Kind == KindBuiltin && m.Builtins != nil && a.Builtin != builtins.ProcessStep && !m.Builtins.HasBuiltin(a.Builtin):
+			add(path+".builtin", "unknown builtin %q", a.Builtin)
 		}
 		for _, name := range a.MCPs {
 			if !mcp.ValidName(name) {

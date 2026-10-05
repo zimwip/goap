@@ -9,6 +9,7 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/zimwip/goap/pkg/builtins"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/dsl"
 	"github.com/zimwip/goap/pkg/llm"
@@ -329,8 +330,22 @@ func (HumanExecutor) Execute(context.Context, ActionContext) (ActionResult, erro
 // BuiltinFunc is a Go implementation of an action.
 type BuiltinFunc func(ctx context.Context, ac ActionContext) (ActionResult, error)
 
-// BuiltinExecutor dispatches to registered Go functions.
+// BuiltinExecutor dispatches to registered Go functions. It is the engine's table of the builtin names (ADR 0062).
 type BuiltinExecutor map[string]BuiltinFunc
+
+// Register adds the implementation of a builtin; it panics on a name already registered.
+func (b BuiltinExecutor) Register(name string, f BuiltinFunc) {
+	if _, dup := b[name]; dup {
+		panic(fmt.Sprintf("engine: builtin %q registered twice", name))
+	}
+	b[name] = f
+}
+
+// HasBuiltin implements methodology.BuiltinSet.
+func (b BuiltinExecutor) HasBuiltin(name string) bool {
+	_, ok := b[name]
+	return ok
+}
 
 // Execute implements Executor.
 func (b BuiltinExecutor) Execute(ctx context.Context, ac ActionContext) (ActionResult, error) {
@@ -343,7 +358,12 @@ func (b BuiltinExecutor) Execute(ctx context.Context, ac ActionContext) (ActionR
 
 // DefaultBuiltins returns the builtin actions shipped with the engine.
 func DefaultBuiltins() BuiltinExecutor {
-	return BuiltinExecutor{"graph.propagate": Propagate, "graph.apply": ApplyChange, "decision.investigate": Investigate, methodology.BuiltinStep: RunStep}
+	b := BuiltinExecutor{}
+	b.Register(builtins.GraphPropagate, Propagate)
+	b.Register(builtins.GraphApply, ApplyChange)
+	b.Register(builtins.DecisionInvestigate, Investigate)
+	b.Register(builtins.ProcessStep, RunStep)
+	return b
 }
 
 // Propagate follows links backwards from impacted nodes (an impact on the

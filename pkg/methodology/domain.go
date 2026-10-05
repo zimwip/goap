@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"slices"
 
+	"github.com/zimwip/goap/pkg/builtins"
 	"github.com/zimwip/goap/pkg/domain"
 )
 
@@ -15,6 +16,17 @@ import (
 func (m *Methodology) Resolve(types def.TypeSet) *Methodology {
 	out := *m
 	out.Types = types
+	return &out
+}
+
+// BuiltinSet tells which builtin names exist (ADR 0062): the static list of pkg/builtins, or the registry of an engine.
+type BuiltinSet interface{ HasBuiltin(name string) bool }
+
+// WithBuiltins returns the methodology with the builtins in force, so that Validate and Compile refuse an action
+// naming an unknown one.
+func (m *Methodology) WithBuiltins(b BuiltinSet) *Methodology {
+	out := *m
+	out.Builtins = b
 	return &out
 }
 
@@ -83,7 +95,9 @@ func (m *Methodology) lintTypeRefs(add func(path, format string, args ...any)) {
 		if e := a.Expects; e != nil {
 			scan(path+".expects.where", e.Where)
 		}
-		if a.Kind == KindBuiltin {
+		// the type references in the params of a builtin: only graph.propagate has any today; a params schema per
+		// builtin is a future step (ADR 0062).
+		if a.Kind == KindBuiltin && a.Builtin == builtins.GraphPropagate {
 			if lts, ok := a.Params["linkTypes"].([]any); ok {
 				for _, lt := range lts {
 					if s, ok := lt.(string); ok {

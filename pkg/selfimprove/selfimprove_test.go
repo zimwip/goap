@@ -1,7 +1,10 @@
-package engine
+package selfimprove
 
 import (
 	"context"
+	"github.com/zimwip/goap/pkg/engine"
+	"github.com/zimwip/goap/pkg/intent"
+	"github.com/zimwip/goap/pkg/llm"
 	"strings"
 	"testing"
 
@@ -57,17 +60,100 @@ func storeDefinition(ctx context.Context, g *graph.Graph, base domain.BaselineID
 	return g.Commit(ctx, graph.Commit{Namespace: "methodology", Title: "Methodology " + m.Name, Baseline: base, By: "test", Edits: append(edits, head)})
 }
 
+const testProject = "PROJ-TEST"
+
+// scripted answers by prompt content, like a deterministic LLM. The matched
+// substrings come from the prompt templates in methodologies/examples/impact-analysis.yaml.
+func scripted(t *testing.T) llm.Client {
+	return llm.ClientFunc(func(_ context.Context, req llm.Request) (llm.Response, error) {
+		p := req.Messages[0].Content
+		var out string
+		switch {
+		case strings.Contains(p, "DIRECTLY impacted"):
+			if !strings.Contains(p, "REQ-1 (alm@Requirement)") {
+				t.Errorf("prompt misses baseline nodes:\n%s", p)
+			}
+			out = `Here: {"items":[{"kind":"changeImpact","changeImpact":{"op":"declare","intent":"modified","key":"REQ-1","rationale":"PSP API change"}}]}`
+		case strings.Contains(p, "new version"):
+			out = `{"items":[{"kind":"changeImpact","changeImpact":{"op":"write","node":"REQ-1","props":{"title":"Use PSP v2"}}}]}`
+		case strings.Contains(p, "test case"):
+			out = `{"items":[{"kind":"changeImpact","changeImpact":{"op":"declare","ref":"#t1","intent":"created","type":"TestCase","key":"TST-9","rationale":"cover REQ-1"}},
+			{"kind":"changeImpact","changeImpact":{"op":"write","node":"#t1","props":{"title":"PSP v2 test"},"links":[{"type":"verifies","to":"REQ-1"}]}}]}`
+		case strings.Contains(p, "report"):
+			out = `{"items":[{"kind":"artifact","type":"report","data":{"markdown":"# Impact"}}]}`
+		default:
+			t.Errorf("unexpected prompt %s", p)
+		}
+		return llm.Response{Text: out, Provider: "test", Model: req.Model}, nil
+	})
+}
+
+func setup(t *testing.T) (*engine.Engine, *graph.Graph, domain.BaselineID) {
+	t.Helper()
+	ctx := context.Background()
+	m, err := methodology.LoadFile("../../methodologies/examples/impact-analysis.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cm, err := m.Compile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	g := graph.New(graph.NewMemory())
+	// a project every test starts its (non-administrative) processes in (ADR 0039)
+	if _, err := g.CreateNode(ctx, graph.NewNode{Namespace: "organisation", Key: testProject, Type: "organisation@ProjectUnit", Properties: map[string]any{"name": "Test"}}); err != nil {
+		t.Fatal(err)
+	}
+	// the alm namespace the example methodologies act on (ADR 0013)
+	need, _ := g.CreateNode(ctx, graph.NewNode{Namespace: "alm", Key: "NEED-1", Type: "alm@Need", Properties: map[string]any{"title": "Pay online"}})
+	req, _ := g.CreateNode(ctx, graph.NewNode{Namespace: "alm", Key: "REQ-1", Type: "alm@Requirement", Properties: map[string]any{"title": "Use PSP v1"}})
+	tst, _ := g.CreateNode(ctx, graph.NewNode{Namespace: "alm", Key: "TST-1", Type: "alm@TestCase"})
+	cmp, _ := g.CreateNode(ctx, graph.NewNode{Namespace: "alm", Key: "CMP-1", Type: "alm@Component"})
+	b0, _ := g.BranchHead(ctx, "alm", domain.MainBranch)
+	c0, _ := g.CreateChange(ctx, graph.NewChange{Namespace: "alm", Title: "link", BaselineID: b0.ID})
+	_, _ = g.Link(ctx, c0.ID, "alm@satisfies", req.Ref(), need.Ref(), nil)
+	_, _ = g.Link(ctx, c0.ID, "alm@verifies", tst.Ref(), req.Ref(), nil)
+	_, _ = g.Link(ctx, c0.ID, "alm@implements", cmp.Ref(), req.Ref(), nil)
+	b, err := g.BranchHead(ctx, "alm", domain.MainBranch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := scripted(t)
+	e := &engine.Engine{
+		Graph:         g,
+		Methodologies: engine.StaticMethodologies{cm.Name: cm},
+		Executors: map[string]engine.Executor{
+			methodology.KindLLM:     engine.LLMExecutor{Client: client},
+			methodology.KindHuman:   engine.HumanExecutor{},
+			methodology.KindBuiltin: engine.DefaultBuiltins(),
+		},
+		Intent: intent.Resolver{Ranker: intent.Lexical{}},
+		Store:  engine.NewMemoryStore(),
+		Authz:  mustCasbin(t),
+	}
+	return e, g, b.ID
+}
+
+func mustCasbin(t *testing.T) authz.Authorizer {
+	t.Helper()
+	c, err := authz.NewCasbin(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return c
+}
+
 func TestSelfObservationProposesAndDrafts(t *testing.T) {
 	// drafting a methodology is administration (ADR 0043)
 	ctx := authz.With(context.Background(), authz.Principal{Subject: "mia", Org: "acme", Roles: []string{"admin"}})
 	e, g, base := setup(t)
 	// the observed run; the intent text deliberately echoes the
 	// "assess_impact" goal example in methodologies/examples/impact-analysis.yaml.
-	p, err := e.Start(ctx, StartRequest{Methodology: "impact-analysis", BaselineID: base, Intent: "The PSP changes its API, what does this break?", ProjectID: testProject})
+	p, err := e.Start(ctx, engine.StartRequest{Methodology: "impact-analysis", BaselineID: base, Intent: "The PSP changes its API, what does this break?", ProjectID: testProject})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p, err = e.Run(ctx, p.ID); err != nil || p.Status != StatusCompleted {
+	if p, err = e.Run(ctx, p.ID); err != nil || p.Status != engine.StatusCompleted {
 		t.Fatalf("observed run: %v %+v", err, p)
 	}
 	// the observer methodology, and the definition nodes of the observed one in the graph
@@ -80,7 +166,7 @@ func TestSelfObservationProposesAndDrafts(t *testing.T) {
 		t.Fatal(err)
 	}
 	impact, _ := e.Methodologies.Methodology(ctx, "impact-analysis")
-	e.Methodologies = StaticMethodologies{"impact-analysis": impact, obs.Name: obs}
+	e.Methodologies = engine.StaticMethodologies{"impact-analysis": impact, obs.Name: obs}
 	// the definition nodes live in the methodology namespace, not the observed run's (alm)
 	mbase, err := g.BranchHead(ctx, "methodology", domain.MainBranch)
 	if err != nil {
@@ -91,17 +177,15 @@ func TestSelfObservationProposesAndDrafts(t *testing.T) {
 		t.Fatalf("definition nodes: %v", err)
 	}
 	drafts := &memDrafts{defs: map[string]methodology.Methodology{"impact-analysis@1.2.0": *impact.Methodology}}
-	builtins := e.Executors[methodology.KindBuiltin].(BuiltinExecutor)
-	for k, v := range e.SelfImprovementBuiltins(SelfImprovement{Drafts: drafts, Thresholds: observe.Thresholds{LLMCalls: 1, MinSystematized: 1}}) {
-		builtins[k] = v
-	}
+	builtins := e.Executors[methodology.KindBuiltin].(engine.BuiltinExecutor)
+	Register(builtins, e, Config{Drafts: drafts, Thresholds: observe.Thresholds{LLMCalls: 1, MinSystematized: 1}})
 
-	op, err := e.Start(ctx, StartRequest{Methodology: obs.Name, Agent: "observer", Goal: "improve_methodology", BaselineID: res.Baseline.ID,
+	op, err := e.Start(ctx, engine.StartRequest{Methodology: obs.Name, Agent: "observer", Goal: "improve_methodology", BaselineID: res.Baseline.ID,
 		Intent: "observe", Vars: map[string]any{"event": map[string]any{"process": map[string]any{"id": p.ID}}}, ProjectID: testProject})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if op, err = e.Run(ctx, op.ID); err != nil || op.Status != StatusWaiting || op.Pending.Action != "review_improvements" {
+	if op, err = e.Run(ctx, op.ID); err != nil || op.Status != engine.StatusWaiting || op.Pending.Action != "review_improvements" {
 		t.Fatalf("observer must wait for the review: %v %+v", err, op)
 	}
 	if s := op.Steps[1]; s.Action != "propose_improvements" || s.Specialization != "propose_by_rules" {
@@ -109,7 +193,7 @@ func TestSelfObservationProposesAndDrafts(t *testing.T) {
 	}
 	c, _ := g.Change(ctx, op.ChangeID)
 	var report map[string]any
-	var decisions []ItemInput
+	var decisions []engine.ItemInput
 	var titles []string
 	for _, it := range c.Items {
 		if it.Type == "cost_report" {
@@ -122,7 +206,7 @@ func TestSelfObservationProposesAndDrafts(t *testing.T) {
 		if n.Post == nil || n.Review != domain.ReviewProposed {
 			t.Fatalf("an improvement is written and awaits its review: %+v", n)
 		}
-		decisions = append(decisions, ItemInput{Kind: "changeImpact", ChangeImpact: &dsl.NodeOp{Op: "review", Node: n.Key, Accept: true, Comment: "worth it"}})
+		decisions = append(decisions, engine.ItemInput{Kind: "changeImpact", ChangeImpact: &dsl.NodeOp{Op: "review", Node: n.Key, Accept: true, Comment: "worth it"}})
 	}
 	findings, _ := report["findings"].([]any)
 	if len(findings) < 2 || report["methodology"] != "impact-analysis" {
@@ -135,7 +219,7 @@ func TestSelfObservationProposesAndDrafts(t *testing.T) {
 	if op, err = e.Submit(ctx, op.ID, decisions); err != nil {
 		t.Fatal(err)
 	}
-	if op, err = e.Run(ctx, op.ID); err != nil || op.Status != StatusCompleted {
+	if op, err = e.Run(ctx, op.ID); err != nil || op.Status != engine.StatusCompleted {
 		t.Fatalf("observer end: %v %+v", err, op)
 	}
 	if len(drafts.saved) != 1 {

@@ -266,7 +266,7 @@ func (s *Service) checkPublishable(ctx context.Context, d *def.Domain) error {
 		if u.Status != StatusPublished {
 			continue
 		}
-		if issues := u.Methodology.Resolve(cat).Validate(); len(issues) > 0 {
+		if issues := resolve(u.Methodology, cat).Validate(); len(issues) > 0 {
 			return fmt.Errorf("%w: methodology %s@%s would break: %v", ErrInvalid, u.Methodology.Name, u.Methodology.Version, issues)
 		}
 	}
