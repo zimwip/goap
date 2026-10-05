@@ -19,7 +19,7 @@ const (
 )
 
 // All lists the events a trigger can react to (methodology.TriggerEvents); the web keeps one copy of it
-// (TRIGGER_EVENTS in web/src/lib/api.ts), checked against this list by a test.
+// (TRIGGER_EVENTS in web/src/lib/api/types/registry.ts), checked against this list by a test.
 var All = []string{
 	ChangeCreated, ChangeApplied, ChangeItemAdded, ChangeSignal,
 	ProcessCompleted, ProcessFailed, ProcessStuck, ProcessAttached,

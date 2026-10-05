@@ -159,7 +159,7 @@ Optional build variables:
 ## Protocol
 
 - Unary RPCs: Connect JSON (`POST /{package.Service}/{Method}`), without
-  code generation (`src/lib/api.ts`). `int64` values arrive as strings (proto3
+  code generation (`src/lib/api.ts`, re-exporting `src/lib/api/`). `int64` values arrive as strings (proto3
   JSON): `int()` converts them.
 - `EngineService.WatchEvents` server stream (`src/lib/stream.ts`): `fetch` +
   `ReadableStream`, `Content-Type: application/connect+json`, Connect envelopes
@@ -181,7 +181,7 @@ Optional build variables:
 - `src/lib/stores/`: methodology drafts, catalogs, live data
   (events, processes, logs, tokens), identity, notifications, platform
   status, assistant.
-- `src/lib/api.ts`, `src/lib/stream.ts`: Connect client (unary and stream).
+- `src/lib/api.ts` (the one import: it re-exports `src/lib/api/`), `src/lib/stream.ts`: Connect client (unary and stream).
 - `src/lib/methodologyForm.ts`: editing model of a methodology ↔ proto message.
 - `src/lib/codemirror.ts`, `src/lib/dsl.ts`: code editor and DSL completion.
 - `src/lib/help/dsl.md`: **copy** of `docs/dsl.md` embedded at build time (the

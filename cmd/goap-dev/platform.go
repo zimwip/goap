@@ -1,0 +1,73 @@
+package main
+
+import (
+	"context"
+	"path/filepath"
+
+	"github.com/zimwip/goap/internal/connectorkit"
+	"github.com/zimwip/goap/internal/connectors/localfs"
+	"github.com/zimwip/goap/internal/indexersvc"
+	"github.com/zimwip/goap/internal/mcpsvc"
+	"github.com/zimwip/goap/internal/modelgw"
+	"github.com/zimwip/goap/internal/platform"
+	"github.com/zimwip/goap/internal/telemetry"
+	"github.com/zimwip/goap/pkg/engine"
+	"github.com/zimwip/goap/pkg/llmcfg"
+)
+
+// platformPart is what the engine and the handlers reach out with: the model gateway, the node index and the MCP hub.
+type platformPart struct {
+	gw         *modelgw.Service
+	indexer    *indexersvc.Service
+	indexSink  *indexersvc.Sink
+	hub        *mcpsvc.Service
+	connectors map[string]connectorkit.Connector
+	connToken  string
+}
+
+// buildPlatform creates the model gateway, the node index following the graph and the MCP hub. The built-in
+// connectors join the hub's map once the engine exists (buildEngine).
+func buildPlatform(e *env, st stores, gp *graphPart, rp *registryPart) (*platformPart, error) {
+	g := gp.g
+	gw := modelgw.NewService(&llmcfg.Directory{Graph: g}, st.models, e.secrets.Resolve, e.log)
+	gw.Router.Instrument = telemetry.NewGenAI().Instrument
+	gw.Authz = gp.authorizer // the roles a model requires are held on the caller's project (ADR 0043)
+	if err := gw.Reload(e.ctx); err != nil {
+		return nil, wrap("models", err)
+	}
+	// the node index follows the graph in-process (ADR 0026); embeddings go through the gateway, semantic search
+	// needs an "embed" alias. The graph is published again at start: an index kept in SQLite catches up, a new one fills.
+	indexer := indexersvc.New(st.index, gw, gp.authorizer, e.log)
+	indexSink := indexersvc.NewSink(e.ctx, indexer)
+	indexer.Republish = func(ctx context.Context) (int, error) { return g.Republish(ctx, indexSink) }
+	g.Observe(engine.Publishers{indexSink, rp.bus})
+	go func() {
+		if n, err := indexer.Republish(e.ctx); err != nil {
+			e.log.Error("index: initial publication", "err", err)
+		} else {
+			e.log.Info("node index: graph published", "versions", n)
+		}
+	}()
+	// MCP hub in-process; the local file system connector and the built-in connectors (ADR 0028,
+	// added once the engine exists) run inside too, other connectors register over HTTP like in
+	// the distributed platform
+	connectors := map[string]connectorkit.Connector{"localfs": localfs.Connector{}}
+	// connectors register with a shared token (a service without one cannot register): generated like the JWT
+	// secret when none is configured, and shown so that a connector started by hand can use it
+	connectorToken := e.cfg.ConnectorToken
+	if connectorToken == "" {
+		var err error
+		if connectorToken, err = localSecret(st.dir, "connector_token"); err != nil {
+			return nil, wrap("connector token", err)
+		}
+		e.log.Info("connector token generated: start connectors with GOAP_CONNECTOR_TOKEN set to it", "file", filepath.Join(st.dir, "connector_token"))
+	}
+	hub := &mcpsvc.Service{
+		Store:     st.mcp,
+		Directory: &mcpsvc.Directory{Graph: g},
+		Invoker:   mcpsvc.InprocInvoker{Connectors: connectors, Remote: &mcpsvc.ConnectInvoker{Token: connectorToken}},
+		Secrets:   mcpsvc.ResolveSecret(e.secrets),
+		Lease:     platform.EnvDuration("GOAP_CONNECTOR_LEASE", mcpsvc.DefaultLease),
+	}
+	return &platformPart{gw: gw, indexer: indexer, indexSink: indexSink, hub: hub, connectors: connectors, connToken: connectorToken}, nil
+}

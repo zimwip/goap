@@ -14,13 +14,13 @@ import (
 func TestWebListsTheTriggerEvents(t *testing.T) {
 	want := slices.Sorted(slices.Values(events.All))
 
-	api, err := os.ReadFile("../../web/src/lib/api.ts")
+	api, err := os.ReadFile("../../web/src/lib/api/types/registry.ts")
 	if err != nil {
 		t.Fatal(err)
 	}
 	block := regexp.MustCompile(`(?s)TRIGGER_EVENTS = \[(.*?)\] as const`).FindSubmatch(api)
 	if block == nil {
-		t.Fatal("TRIGGER_EVENTS not found in web/src/lib/api.ts")
+		t.Fatal("TRIGGER_EVENTS not found in web/src/lib/api/types/registry.ts")
 	}
 	var got []string
 	for _, m := range regexp.MustCompile(`'([^']+)'`).FindAllSubmatch(block[1], -1) {

@@ -998,6 +998,15 @@ document-repository MCP and its localfs adapter definition, `LocalFS` a director
 before serving (a no-op for `Boot` afterwards). Platform services act as `authz.System(name, roles...)`
 (`system:registry`, `system:graph`, `system:trigger:<key>`).
 
+**`goap-dev` wiring ([ADR 0073](adr/0073-goap-dev-builders-and-web-api-modules.md))**: `newApp(ctx, cfg, log)` strings one builder
+per concern in this order, each returning a small struct: `openStores` (`local.go`), `buildGraph` (graph, background
+compaction, access hooks: `graph.go`), `buildRegistry` (registry, its hooks on the graph, domains, type catalogue,
+`graphsvc.Boot`, methodologies: `registry.go`), `buildPlatform` (model gateway, node index, MCP hub: `platform.go`),
+`buildEngine` (engine, builtins, triggers, built-in connectors: `engine.go`), `buildServer` (auth strategy, routes, event
+stream, status, IDE: `server.go`). The trigger manager needs the engine while the hooks it serves are wired before, so they
+hold a `triggerRef` that ignores events until `buildEngine` sets it. `run(ctx, cfg)` builds and serves until the context ends
+(`platform.Server.RunContext`); `cmd/goap-dev/app_test.go` builds the whole platform on a temporary SQLite database.
+
 ### 3.9c User bootstrap, mandatory parenting, local auth ([ADR 0040](adr/0040-user-bootstrap-org-membership-local-auth.md))
 
 `EnsureUser` resolves `ORG-DEFAULT` *before* creating anything (the services now bootstrap the graph before serving,
