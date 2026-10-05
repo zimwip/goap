@@ -84,7 +84,7 @@ func (g *Graph) commitTx(ctx context.Context, tx Tx, id domain.ChangeID, baselin
 	}
 	if of := openFlows(c); len(of) > 0 {
 		return domain.Baseline{}, fmt.Errorf("change %s has an open flow (%s): adopt or discard it first: %w", id, of[0].ID, ErrConflict)
-	} else if pd := pendingDecisions(c, g.now()); len(pd) > 0 {
+	} else if pd := pendingDecisions(c, g.now(), g.DecisionPolicy); len(pd) > 0 {
 		return domain.Baseline{}, fmt.Errorf("change %s has a pending decision point (%q): decide it first: %w", id, pd[0].Question, ErrConflict)
 	}
 	if open, err := openSubChanges(ctx, tx, id); err != nil {

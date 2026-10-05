@@ -2,6 +2,7 @@ package dsl
 
 import (
 	"fmt"
+	"maps"
 
 	"github.com/zimwip/goap/pkg/domain"
 )
@@ -34,11 +35,10 @@ type DecisionPoint struct {
 	Question string   `json:"question"`
 	Options  []string `json:"options"`
 	Criteria []string `json:"criteria"`
-	Decider  string   `json:"decider"`
+	// Policy holds the policy values of the point (who decides, thresholds, rounds: the keys of pkg/decision).
+	Policy map[string]any `json:"policy"`
 	// Status is open, blocked, ratifying, escalated or decided.
 	Status    string     `json:"status"`
-	Rounds    int        `json:"rounds"`
-	MaxRounds int        `json:"maxRounds"`
 	Questions []Question `json:"questions"`
 	// Option is the option decided (once decided).
 	Option string `json:"option"`
@@ -62,7 +62,10 @@ func DecisionPointsFromBlackboard(bb domain.Blackboard) []DecisionPoint {
 	out := []DecisionPoint{}
 	for _, d := range domain.DecisionPointsOf(bb) {
 		v := DecisionPoint{ID: d.ID, Question: d.Question, Options: append([]string{}, d.Options...), Criteria: append([]string{}, d.Criteria...),
-			Decider: d.Decider, Status: d.Status, Rounds: d.Rounds, MaxRounds: d.MaxRounds, Option: d.Option, Questions: []Question{}}
+			Policy: maps.Clone(d.Policy), Status: d.Status, Option: d.Option, Questions: []Question{}}
+		if v.Policy == nil {
+			v.Policy = map[string]any{}
+		}
 		for _, q := range d.Questions {
 			v.Questions = append(v.Questions, Question{ID: q.ID, Point: q.Point, Text: q.Text, Status: q.Status, Answer: q.Answer})
 		}
@@ -88,16 +91,24 @@ func (c *Ctx) DecisionPoints() []DecisionPoint {
 }
 
 // OpenDecision opens a decision point on a question; spec may hold options (names or ids; none: the open options),
-// criteria, decider (agent or human), threshold, maxRounds and maxDuration ("48h"). It returns a reference ("#dN")
-// for the rulings of the same script.
+// criteria; any other key is a policy value of the point (decider, threshold, maxRounds, maxDuration ("48h"): the
+// keys of pkg/decision, which the script does not interpret). It returns a reference ("#dN") for the rulings of the
+// same script.
 func (c *Ctx) OpenDecision(question string, spec map[string]any) string {
 	c.dseq++
 	ref := fmt.Sprintf("#d%d", c.dseq)
 	op := map[string]any{"op": domain.DecisionOpenOp, "ref": ref, "question": question}
-	for _, k := range []string{"options", "criteria", "decider", "threshold", "maxRounds", "maxDuration"} {
-		if v, ok := spec[k]; ok {
+	policy := map[string]any{}
+	for k, v := range spec {
+		switch k {
+		case "options", "criteria":
 			op[k] = v
+		default:
+			policy[k] = v
 		}
+	}
+	if len(policy) > 0 {
+		op["policy"] = policy
 	}
 	c.emit(map[string]any{"kind": "decisionPoint", "decisionPoint": op})
 	return ref

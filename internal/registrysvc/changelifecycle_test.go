@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/zimwip/goap/pkg/decision"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/domain/def"
 	"github.com/zimwip/goap/pkg/graph"
@@ -21,6 +22,7 @@ func TestChangeLifecycleGate(t *testing.T) {
 	store := graphWithDomains{NewGraphStore(g), NewMemoryStore()}
 	reg := &Service{Store: store}
 	g.Lifecycles = reg
+	g.DecisionPolicy = decision.Policy{}
 
 	d := def.Domain{Name: "alm", Version: "1", Schema: def.Schema{Lifecycles: []domain.Lifecycle{{
 		Name: "maturity", Initial: "proposed",
@@ -68,7 +70,7 @@ func TestChangeLifecycleGate(t *testing.T) {
 	if _, err := g.TransitionChange(ctx, ch.ID, graph.TransitionRequest{Transition: "analyse"}); err != nil {
 		t.Fatal(err)
 	}
-	pt, err := g.OpenDecision(ctx, ch.ID, graph.OpenDecisionRequest{Question: "analysis complete?", Decider: domain.DeciderHuman})
+	pt, err := g.OpenDecision(ctx, ch.ID, graph.OpenDecisionRequest{Question: "analysis complete?", Policy: map[string]any{decision.KeyDecider: decision.DeciderHuman}})
 	if err != nil {
 		t.Fatal(err)
 	}

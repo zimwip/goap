@@ -117,7 +117,7 @@ func TestScriptChangeImpactsOnAFlow(t *testing.T) {
 	main := &Process{ChangeID: c.ID}
 	run(main, "plan", "run-1", `const r = ctx.impactNode("REQ-1", "first idea"); ctx.writeNode(r, { props: { title: "A" } });`)
 
-	flow, err := g.OpenFlow(ctx, c.ID, graph.OpenFlowRequest{FromStep: 0, Execution: "run-1", Reason: "redo", StaleExecutions: []string{"run-1"}})
+	flow, err := g.OpenFlow(ctx, c.ID, graph.OpenFlowRequest{Origin: map[string]any{"step": 0, "execution": "run-1", "reason": "redo"}, StaleRuns: []string{"run-1"}})
 	if err != nil {
 		t.Fatal(err)
 	}

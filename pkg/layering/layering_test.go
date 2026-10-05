@@ -1,7 +1,8 @@
 // Package layering guards the dependency rules between the concepts of the platform (CLAUDE.md, design
 // rule 1; ADR 0061): an MCP knows no connector and no adapter, the algorithm library knows no MCP, a domain
-// knows no adapter, the graph and the domain model know no use case (the risk register), and the adapter is the
-// one place where MCP and organisation meet.
+// knows no adapter, the graph and the domain model know no use case (the risk register) nor the policy of the
+// engine and of the agents (the relaunch of a step, the guidance, the confidence an agent ruling needs: ADR 0067),
+// and the adapter is the one place where MCP and organisation meet.
 package layering
 
 import (
@@ -26,9 +27,10 @@ var forbidden = map[string][]string{
 	"pkg/engine":     {"pkg/adapter", "pkg/mcpbuiltin", "pkg/observe", "pkg/selfimprove"},
 	"pkg/builtins":   {"pkg/methodology", "pkg/engine", "pkg/domain"},
 	"pkg/adapter":    {"pkg/mcpbuiltin", "pkg/access"},
-	"pkg/domain":     {"pkg/risk", "pkg/methodology", "pkg/journal"},
+	"pkg/domain":     {"pkg/risk", "pkg/methodology", "pkg/journal", "pkg/decision"},
+	"pkg/decision":   {"pkg/graph", "pkg/engine", "pkg/methodology", "pkg/risk", "pkg/journal"},
 	"pkg/journal":    {"pkg/graph", "pkg/engine", "pkg/methodology"},
-	"pkg/graph":      {"pkg/risk", "pkg/methodology", "pkg/journal", "internal/registrysvc"},
+	"pkg/graph":      {"pkg/risk", "pkg/methodology", "pkg/journal", "pkg/decision", "internal/registrysvc"},
 }
 
 // The graph core names no concept of the methodology namespace (ADR 0066: the Activity a change is scoped to lives in
@@ -49,6 +51,32 @@ func TestGraphNamesNoMethodology(t *testing.T) {
 		for _, word := range []string{"methodology@", "NamespaceMethodology", "sub_activity", "ActivityRef"} {
 			if strings.Contains(string(b), word) {
 				t.Errorf("%s names %q", f, word)
+			}
+		}
+	}
+}
+
+// The graph core keeps the mechanism of flows and decision points; what the engine and the agents make of them is
+// theirs (ADR 0067): a flow stores an opaque origin and opaque stale run ids and opens with items it is given, a decision
+// point stores opaque policy values and asks a DecisionPolicy. The core names none of their vocabulary.
+func TestCoreNamesNoEnginePolicy(t *testing.T) {
+	for _, dir := range []string{"../graph", "../domain"} {
+		files, err := filepath.Glob(dir + "/*.go")
+		if err != nil || len(files) == 0 {
+			t.Fatalf("glob %s: %v, %d files", dir, err, len(files))
+		}
+		for _, f := range files {
+			if strings.HasSuffix(f, "_test.go") {
+				continue
+			}
+			b, err := os.ReadFile(f)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, word := range []string{`"guidance"`, "FromStep", "StaleExecutions", "Threshold", "MaxRounds", "DeciderAgent", "DeciderHuman"} {
+				if strings.Contains(string(b), word) {
+					t.Errorf("%s names %q", f, word)
+				}
 			}
 		}
 	}

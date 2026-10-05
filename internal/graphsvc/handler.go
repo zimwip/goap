@@ -9,7 +9,6 @@ import (
 	"github.com/zimwip/goap/pkg/events"
 	"slices"
 	"strings"
-	"time"
 
 	"connectrpc.com/connect"
 
@@ -704,7 +703,7 @@ func (h *Handler) ListSubChanges(ctx context.Context, r *connect.Request[graphv1
 func (h *Handler) OpenFlow(ctx context.Context, r *connect.Request[graphv1.OpenFlowRequest]) (*connect.Response[graphv1.OpenFlowResponse], error) {
 	m := r.Msg
 	f, err := h.Graph.OpenFlow(ctx, domain.ChangeID(m.ChangeId), graph.OpenFlowRequest{Parent: m.Parent, ForkAfter: domain.ItemID(m.ForkAfter),
-		Seeds: itemIDs(m.Seeds), FromStep: int(m.FromStep), Execution: m.Execution, Process: m.Process, Reason: m.Reason, Guidance: m.Guidance, By: m.By, StaleExecutions: m.StaleExecutions})
+		Seeds: itemIDs(m.Seeds), StaleRuns: m.StaleRuns, Origin: pbconv.Map(m.Origin), Items: pbconv.ItemsFromPB(m.Items)})
 	if err == nil {
 		h.publish(ctx, "goap.change."+m.ChangeId+".flow_opened", f)
 	}
@@ -885,19 +884,11 @@ func (h *Handler) GetChangeGraph(ctx context.Context, r *connect.Request[graphv1
 func (h *Handler) OpenDecision(ctx context.Context, r *connect.Request[graphv1.OpenDecisionRequest]) (*connect.Response[graphv1.OpenDecisionResponse], error) {
 	ctx = h.Identity.Context(ctx, r.Header())
 	m := r.Msg
-	in := graph.OpenDecisionRequest{Question: m.Question, Options: m.Options, Criteria: m.Criteria, Decider: m.Decider, Threshold: m.Threshold,
-		MaxRounds: int(m.MaxRounds), By: authz.From(ctx).Subject}
+	in := graph.OpenDecisionRequest{Question: m.Question, Options: m.Options, Criteria: m.Criteria, Policy: pbconv.Map(m.Policy), By: authz.From(ctx).Subject}
 	if m.AllOptions {
 		in.Options = nil
 	} else if in.Options == nil {
 		in.Options = []string{}
-	}
-	if m.MaxDuration != "" {
-		d, err := time.ParseDuration(m.MaxDuration)
-		if err != nil {
-			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("max duration: %w", err))
-		}
-		in.MaxDuration = d
 	}
 	d, err := h.Graph.OpenDecision(ctx, domain.ChangeID(m.ChangeId), in)
 	if err == nil {

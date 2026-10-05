@@ -5,10 +5,10 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	"github.com/zimwip/goap/gen/goap/graph/v1/graphv1connect"
 	"github.com/zimwip/goap/internal/graphsvc"
+	"github.com/zimwip/goap/pkg/decision"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/graph"
 )
@@ -80,6 +80,7 @@ func TestOptionsThroughTheService(t *testing.T) {
 func TestDecisionsThroughTheService(t *testing.T) {
 	ctx := context.Background()
 	g := graph.New(graph.NewMemory())
+	g.DecisionPolicy = decision.Policy{}
 	path, handler := graphv1connect.NewGraphServiceHandler(&graphsvc.Handler{Graph: g})
 	mux := http.NewServeMux()
 	mux.Handle(path, handler)
@@ -95,8 +96,8 @@ func TestDecisionsThroughTheService(t *testing.T) {
 	}
 	a, _ := g.OpenOption(ctx, c.ID, graph.OpenOptionRequest{Name: "a"})
 	g.OpenOption(ctx, c.ID, graph.OpenOptionRequest{Name: "b"}) //nolint:errcheck
-	d, err := cl.OpenDecision(ctx, c.ID, graph.OpenDecisionRequest{Question: "a or b?", Criteria: []string{"cost"}, MaxDuration: 48 * time.Hour})
-	if err != nil || len(d.Options) != 2 || d.Deadline.IsZero() || d.Criteria[0] != "cost" {
+	d, err := cl.OpenDecision(ctx, c.ID, graph.OpenDecisionRequest{Question: "a or b?", Criteria: []string{"cost"}, Policy: map[string]any{decision.KeyMaxDuration: "48h"}})
+	if err != nil || len(d.Options) != 2 || d.Policy[decision.KeyDeadline] == nil || d.Criteria[0] != "cost" {
 		t.Fatalf("open: %+v %v", d, err)
 	}
 	d, err = cl.RuleDecision(ctx, c.ID, graph.RuleRequest{Point: d.ID, Outcome: domain.OutcomeUndecidable, Justification: "?", Questions: []string{"cost of a?"}})

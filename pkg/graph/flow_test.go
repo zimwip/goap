@@ -33,12 +33,16 @@ func testFlowRelaunchAdopt(t *testing.T, repo Repo) {
 	if _, err := g.AddItems(ctx, c.ID, []domain.ChangeItem{upd("p1", f.req, "old"), upd("p2", f.need, "derived from p1", "p1"), upd("p3", f.test, "independent")}); err != nil {
 		t.Fatal(err)
 	}
-	fl, err := g.OpenFlow(ctx, c.ID, OpenFlowRequest{Seeds: []domain.ItemID{"p1"}, FromStep: 1, Reason: "the PSP answer changed"})
+	fl, err := g.OpenFlow(ctx, c.ID, OpenFlowRequest{Seeds: []domain.ItemID{"p1"}, Origin: map[string]any{"step": 1, "reason": "the PSP answer changed"}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(fl.Stale) != 2 || fl.Status != domain.FlowOpen {
 		t.Fatalf("flow = %+v", fl)
+	}
+	// the origin is stored and returned as is (the graph never reads it)
+	if full, _ := g.Change(ctx, c.ID); full.Flows()[0].Origin["reason"] != "the PSP answer changed" {
+		t.Fatalf("origin = %+v", full.Flows()[0].Origin)
 	}
 	for item, want := range map[string]domain.ItemStatus{"p1": domain.ItemStale, "p2": domain.ItemStale, "p3": domain.ItemProposed} {
 		if got := statusOf(t, g, c.ID, item); got != want {
@@ -161,11 +165,11 @@ func testParallelFlowsCompete(t *testing.T, repo Repo) {
 		t.Fatal(err)
 	}
 	// three alternatives open at the same time: two replace p1, one replaces p3
-	f1, err := g.OpenFlow(ctx, c.ID, OpenFlowRequest{Seeds: []domain.ItemID{"p1"}, Reason: "alternative 1"})
+	f1, err := g.OpenFlow(ctx, c.ID, OpenFlowRequest{Seeds: []domain.ItemID{"p1"}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	f2, err := g.OpenFlow(ctx, c.ID, OpenFlowRequest{Seeds: []domain.ItemID{"p1"}, Reason: "alternative 2"})
+	f2, err := g.OpenFlow(ctx, c.ID, OpenFlowRequest{Seeds: []domain.ItemID{"p1"}})
 	if err != nil {
 		t.Fatalf("a second open flow must be allowed: %v", err)
 	}
@@ -234,9 +238,13 @@ func testFlowGuidance(t *testing.T, repo Repo) {
 	if _, err := g.AddItems(ctx, c.ID, []domain.ChangeItem{upd("p1", f.req, "old")}); err != nil {
 		t.Fatal(err)
 	}
-	fl, err := g.OpenFlow(ctx, c.ID, OpenFlowRequest{Seeds: []domain.ItemID{"p1"}, Guidance: "keep PSP v1 compatibility", By: "alice"})
+	fl, err := g.OpenFlow(ctx, c.ID, OpenFlowRequest{Seeds: []domain.ItemID{"p1"}, Items: []domain.ChangeItem{{Kind: domain.KindArtifact, Type: "guidance", ProducedBy: "alice",
+		Data: map[string]any{"text": "keep PSP v1 compatibility"}}}})
 	if err != nil {
 		t.Fatal(err)
+	}
+	if _, err := g.OpenFlow(ctx, c.ID, OpenFlowRequest{Items: []domain.ChangeItem{{Kind: domain.KindFlow}}}); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("a flow item at the opening of a flow: %v", err)
 	}
 	has := func(flow string) bool {
 		bb, _ := g.BlackboardIn(ctx, c.ID, flow)

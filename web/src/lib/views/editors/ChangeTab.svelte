@@ -246,7 +246,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
     for (const it of change?.items ?? []) {
       const e = it.decisionEvent;
       if (it.kind !== 'decision_point' || !e || it.flow) continue;
-      if (e.op === 'open') threshold.set(it.id ?? '', e.threshold ?? 0);
+      if (e.op === 'open') threshold.set(it.id ?? '', e.policy?.threshold ?? 0);
       else if (e.op === 'rule' && e.outcome === 'decided' && (e.human || (e.confidence ?? 0) >= (threshold.get(e.point ?? '') ?? 1))) decided.add(e.point ?? '');
       else if (e.op === 'ratify' && e.accept) decided.add(e.point ?? '');
     }
@@ -659,9 +659,9 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
                 <StatusBadge status={flowBadge(f)} />
                 <code>{shortId(f.id)}</code>
                 from step {flowStepNumber(f, processes)}
-                {#if f.reason}<span class="muted">· {f.reason}</span>{/if}
+                {#if f.origin?.reason}<span class="muted">· {f.origin.reason}</span>{/if}
                 <span class="hint">· {f.stale?.length ?? 0} stale item(s)</span>
-                {#if f.process}<button type="button" class="link mono" onclick={() => openTab({ kind: 'run', params: { id: f.process ?? '' } })}>previous run</button>{/if}
+                {#if f.origin?.process}<button type="button" class="link mono" onclick={() => openTab({ kind: 'run', params: { id: f.origin?.process ?? '' } })}>previous run</button>{/if}
                 {#if fp}<button type="button" class="link mono" onclick={() => openTab({ kind: 'run', params: { id: fp.id ?? '' } })}>relaunched run</button>{/if}
                 <div class="flow-row"><FlowBranchInfo flow={f} namespace={namespaceOf(change?.namespace)} changeBranch={change?.branch ?? ''} /></div>
                 <div class="flow-row"><FlowActions flow={f} changeId={selected} ondecided={() => load(selected)} /></div>

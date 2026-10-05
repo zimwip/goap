@@ -75,8 +75,16 @@ func (e *Engine) relaunchLocked(ctx context.Context, id string, step int, reason
 	if who.Anonymous() {
 		who = old.Initiator
 	}
-	flow, err := e.Graph.OpenFlow(ctx, old.ChangeID, graph.OpenFlowRequest{Parent: old.Flow, ForkAfter: old.Steps[step].LastItem, Seeds: seeds, StaleExecutions: execs,
-		FromStep: step, Execution: old.Steps[step].Execution, Process: old.ID, Reason: reason, Guidance: guidance, By: who.Subject})
+	req := graph.OpenFlowRequest{Parent: old.Flow, ForkAfter: old.Steps[step].LastItem, Seeds: seeds, StaleRuns: execs,
+		Origin: map[string]any{"step": step, "execution": old.Steps[step].Execution, "process": old.ID, "reason": reason}}
+	if guidance != "" {
+		by := who.Subject
+		if by == "" {
+			by = "human"
+		}
+		req.Items = []domain.ChangeItem{{Kind: domain.KindArtifact, Type: GuidanceType, ProducedBy: by, Data: map[string]any{"text": guidance, "step": step}}}
+	}
+	flow, err := e.Graph.OpenFlow(ctx, old.ChangeID, req)
 	if err != nil {
 		return nil, err
 	}

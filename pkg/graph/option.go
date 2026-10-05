@@ -56,7 +56,7 @@ func (g *Graph) OpenOption(ctx context.Context, id domain.ChangeID, in OpenOptio
 			}
 		}
 		flow := g.newID()
-		if err := g.flowEvent(ctx, tx, id, domain.FlowEvent{Op: domain.FlowOpenOp, Flow: flow, Parent: in.Parent, Reason: in.Hypothesis, By: in.By,
+		if err := g.flowEvent(ctx, tx, id, domain.FlowEvent{Op: domain.FlowOpenOp, Flow: flow, Parent: in.Parent, By: in.By,
 			Option: &domain.OptionSpec{Name: name, Hypothesis: in.Hypothesis, Intent: in.Intent}}); err != nil {
 			return err
 		}
@@ -141,7 +141,7 @@ func (g *Graph) SelectOption(ctx context.Context, id domain.ChangeID, option, by
 		if err != nil {
 			return err
 		}
-		for _, d := range c.DecisionPointsAt(g.now()) {
+		for _, d := range c.DecisionPointsAt(g.now(), g.DecisionPolicy) {
 			if d.Pending() && slices.Contains(d.Options, option) {
 				if err := g.decisionEvent(ctx, tx, id, domain.DecisionEvent{Op: domain.DecisionRuleOp, Point: d.ID, Outcome: domain.OutcomeDecided,
 					Option: option, Confidence: 1, Justification: "option selected by hand", Human: true, By: by}); err != nil {
@@ -380,17 +380,17 @@ type BlackboardFacet func(c domain.Change, now time.Time) any
 // builtinFacets are the facets the graph itself gives, the options and the decision points being its own mechanisms
 // (ADR 0009, 0032): what a view of a flow does not carry.
 var builtinFacets = map[string]BlackboardFacet{
-	domain.FacetOptions:        func(c domain.Change, _ time.Time) any { return c.Options() },
-	domain.FacetActiveOption:   func(c domain.Change, _ time.Time) any { return c.ActiveOption() },
-	domain.FacetDecisionPoints: func(c domain.Change, now time.Time) any { return c.DecisionPointsAt(now) },
+	domain.FacetOptions:      func(c domain.Change, _ time.Time) any { return c.Options() },
+	domain.FacetActiveOption: func(c domain.Change, _ time.Time) any { return c.ActiveOption() },
 }
 
 // facets are the facets of the blackboard of a change: the built-in ones, then Graph.Facets (which may replace them).
 func (g *Graph) facets(c domain.Change, now time.Time) map[string]any {
-	out := make(map[string]any, len(builtinFacets)+len(g.Facets))
+	out := make(map[string]any, len(builtinFacets)+len(g.Facets)+1)
 	for name, f := range builtinFacets {
 		out[name] = f(c, now)
 	}
+	out[domain.FacetDecisionPoints] = c.DecisionPointsAt(now, g.DecisionPolicy)
 	for name, f := range g.Facets {
 		out[name] = f(c, now)
 	}

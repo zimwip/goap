@@ -2,6 +2,7 @@ package domain
 
 import (
 	"fmt"
+	"maps"
 	"slices"
 	"time"
 )
@@ -78,19 +79,19 @@ type FlowEvent struct {
 	Op   string `json:"op"` // open | adopt | discard
 	Flow string `json:"flow"`
 	// open: the branch this one is forked from ("" = the main flow), the last
-	// item of that line before the relaunched step, the step and the journal
-	// record it restarts, the process that relaunched it, why, and the items
-	// it invalidates (relaunched outputs and their dependents).
+	// item of that line before the fork, and the items it invalidates
+	// (the seeds and their dependents).
 	Parent    string   `json:"parent,omitempty"`
 	ForkAfter ItemID   `json:"forkAfter,omitempty"`
-	FromStep  int      `json:"fromStep,omitempty"`
-	Execution string   `json:"execution,omitempty"`
-	Process   string   `json:"process,omitempty"`
-	Reason    string   `json:"reason,omitempty"`
 	Stale     []ItemID `json:"stale,omitempty"`
-	// StaleExecutions are the action runs the relaunch invalidates: the change impacts, versions and
-	// reviews they produced are stale until the branch is adopted (ADR 0025).
-	StaleExecutions []string `json:"staleExecutions,omitempty"`
+	// StaleRuns are opaque producer ids (the Execution of the change impacts and node versions): what these
+	// produced is stale until the branch is adopted (ADR 0025). The graph only compares them, it never
+	// interprets them.
+	StaleRuns []string `json:"staleRuns,omitempty"`
+	// Origin is an opaque record of why and from where the flow was opened (for a relaunch: the step, the
+	// run, the process, the reason). Its owner is whoever opened the flow: the graph stores and returns it and
+	// never reads it (ADR 0067).
+	Origin map[string]any `json:"origin,omitempty"`
 	// By is the principal that adopted or discarded the branch.
 	By string `json:"by,omitempty"`
 	// Option makes the opened flow an option of the change (open only).
@@ -115,17 +116,14 @@ type Flow struct {
 	ID        string     `json:"id"`
 	Parent    string     `json:"parent,omitempty"`
 	ForkAfter ItemID     `json:"forkAfter,omitempty"`
-	FromStep  int        `json:"fromStep"`
-	Execution string     `json:"execution,omitempty"`
-	Process   string     `json:"process,omitempty"`
-	Reason    string     `json:"reason,omitempty"`
 	Status    FlowStatus `json:"status"`
 	Stale     []ItemID   `json:"stale,omitempty"`
-	// StaleExecutions: see FlowEvent.
-	StaleExecutions []string  `json:"staleExecutions,omitempty"`
-	OpenedAt        time.Time `json:"openedAt"`
-	DecidedAt       time.Time `json:"decidedAt,omitempty"`
-	DecidedBy       string    `json:"decidedBy,omitempty"`
+	// StaleRuns and Origin: see FlowEvent.
+	StaleRuns []string       `json:"staleRuns,omitempty"`
+	Origin    map[string]any `json:"origin,omitempty"`
+	OpenedAt  time.Time      `json:"openedAt"`
+	DecidedAt time.Time      `json:"decidedAt,omitempty"`
+	DecidedBy string         `json:"decidedBy,omitempty"`
 	// CompetesWith lists the flows adopted after this one was opened that replace
 	// the same items, or whose replaced items its candidates build on: an open flow
 	// that competes cannot be adopted any more, it is relaunched or discarded.
@@ -206,8 +204,8 @@ func (c *Change) flows() *flowIndex {
 			}
 			fx.byID[e.Flow] = len(fx.list)
 			openAt[e.Flow] = pos
-			f := Flow{ID: e.Flow, Parent: e.Parent, ForkAfter: e.ForkAfter, FromStep: e.FromStep, Execution: e.Execution,
-				Process: e.Process, Reason: e.Reason, Status: FlowOpen, Stale: slices.Clone(e.Stale), StaleExecutions: slices.Clone(e.StaleExecutions), OpenedAt: it.CreatedAt}
+			f := Flow{ID: e.Flow, Parent: e.Parent, ForkAfter: e.ForkAfter, Status: FlowOpen,
+				Stale: slices.Clone(e.Stale), StaleRuns: slices.Clone(e.StaleRuns), Origin: maps.Clone(e.Origin), OpenedAt: it.CreatedAt}
 			if e.Option != nil {
 				o := *e.Option
 				f.Option = &o
@@ -250,7 +248,7 @@ func (c *Change) flows() *flowIndex {
 				continue
 			}
 			compete := slices.ContainsFunc(f.Stale, func(id ItemID) bool { return slices.Contains(a.Stale, id) }) ||
-				slices.ContainsFunc(f.StaleExecutions, func(e string) bool { return slices.Contains(a.StaleExecutions, e) })
+				slices.ContainsFunc(f.StaleRuns, func(e string) bool { return slices.Contains(a.StaleRuns, e) })
 			for _, it := range c.Items {
 				if compete {
 					break

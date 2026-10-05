@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/zimwip/goap/pkg/condition"
+	"github.com/zimwip/goap/pkg/decision"
 	"github.com/zimwip/goap/pkg/domain"
 )
 
@@ -39,6 +40,7 @@ func testChangeLifecycle(t *testing.T, repo Repo) {
 			{Name: "finish", From: "implementing", To: "done"},
 		}}}
 	w.g.Lifecycles = lcs
+	w.g.DecisionPolicy = decision.Policy{}
 	g := w.g
 
 	c, err := g.CreateChange(ctx, NewChange{Title: "lifecycle", Methodology: "m", BaselineID: w.base.ID})
@@ -74,7 +76,7 @@ func testChangeLifecycle(t *testing.T, repo Repo) {
 	analysis := create("N-1")
 
 	decide := func(option string) string {
-		p, err := g.OpenDecision(ctx, c.ID, OpenDecisionRequest{Question: "gate?", Decider: domain.DeciderHuman})
+		p, err := g.OpenDecision(ctx, c.ID, OpenDecisionRequest{Question: "gate?", Policy: map[string]any{decision.KeyDecider: decision.DeciderHuman}})
 		if err != nil {
 			t.Fatal(err)
 		}

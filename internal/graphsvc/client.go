@@ -400,8 +400,7 @@ func (c *Client) DeleteTag(ctx context.Context, id domain.TagID) error {
 // OpenFlow implements engine.GraphPort.
 func (c *Client) OpenFlow(ctx context.Context, id domain.ChangeID, in graph.OpenFlowRequest) (domain.Flow, error) {
 	r, err := c.rpc.OpenFlow(ctx, connect.NewRequest(&graphv1.OpenFlowRequest{ChangeId: string(id), Parent: in.Parent, ForkAfter: string(in.ForkAfter),
-		Seeds: seedsToPB(in.Seeds), FromStep: int32(in.FromStep), Execution: in.Execution, Process: in.Process, Reason: in.Reason,
-		Guidance: in.Guidance, By: in.By, StaleExecutions: in.StaleExecutions}))
+		Seeds: seedsToPB(in.Seeds), StaleRuns: in.StaleRuns, Origin: pbconv.Struct(in.Origin), Items: pbconv.ItemsToPB(in.Items)}))
 	if err != nil {
 		return domain.Flow{}, rpcerr.FromConnect(err)
 	}
@@ -450,10 +449,7 @@ func (c *Client) ValidateBoard(ctx context.Context, id domain.ChangeID, flow str
 // OpenDecision implements engine.GraphPort (the principal comes from the request identity).
 func (c *Client) OpenDecision(ctx context.Context, id domain.ChangeID, in graph.OpenDecisionRequest) (domain.DecisionPoint, error) {
 	req := &graphv1.OpenDecisionRequest{ChangeId: string(id), Question: in.Question, Options: in.Options, AllOptions: in.Options == nil,
-		Criteria: in.Criteria, Decider: in.Decider, Threshold: in.Threshold, MaxRounds: int32(in.MaxRounds)}
-	if in.MaxDuration > 0 {
-		req.MaxDuration = in.MaxDuration.String()
-	}
+		Criteria: in.Criteria, Policy: pbconv.Struct(in.Policy)}
 	r, err := c.rpc.OpenDecision(ctx, connect.NewRequest(req))
 	if err != nil {
 		return domain.DecisionPoint{}, rpcerr.FromConnect(err)

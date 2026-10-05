@@ -11,6 +11,7 @@ package main
 
 import (
 	"connectrpc.com/connect"
+	"github.com/zimwip/goap/pkg/decision"
 	"github.com/zimwip/goap/pkg/events"
 	"github.com/zimwip/goap/pkg/risk"
 
@@ -85,7 +86,8 @@ func main() {
 	}
 	defer st.close()
 	g := graph.New(st.graph)
-	g.Caller = graphsvc.Caller // the principal behind each event of the impact logs (ADR 0029)
+	g.Caller = graphsvc.Caller           // the principal behind each event of the impact logs (ADR 0029)
+	g.DecisionPolicy = decision.Policy{} // confidence, rounds and deadline settle the decision points (ADR 0067)
 	// baselines written whole before they were stored as deltas are compacted, once, in the background (ADR 0032)
 	go func() {
 		if n, err := g.CompactBaselines(ctx); err != nil {

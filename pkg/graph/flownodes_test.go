@@ -49,7 +49,7 @@ func newFlowWorld(t *testing.T, repo Repo) flowWorld {
 		t.Fatal(err)
 	}
 	tst := must(g.WriteNode(ctx, c.ID, added[0].ID, NodeWrite{Properties: map[string]any{"title": "test"}, Execution: "e2"}))
-	fl, err := g.OpenFlow(ctx, c.ID, OpenFlowRequest{FromStep: 0, Execution: "e1", Reason: "redo", StaleExecutions: []string{"e1", "e2"}})
+	fl, err := g.OpenFlow(ctx, c.ID, OpenFlowRequest{Origin: map[string]any{"step": 0, "execution": "e1", "reason": "redo"}, StaleRuns: []string{"e1", "e2"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -257,7 +257,7 @@ func testParallelAndNestedFlowsOnChangeImpacts(t *testing.T, repo Repo) {
 	g, c := w.g, w.change
 	open := func(parent string, stale ...string) string {
 		t.Helper()
-		f, err := g.OpenFlow(ctx, c.ID, OpenFlowRequest{Parent: parent, FromStep: 1, Reason: "again", StaleExecutions: stale})
+		f, err := g.OpenFlow(ctx, c.ID, OpenFlowRequest{Parent: parent, Origin: map[string]any{"step": 1, "reason": "again"}, StaleRuns: stale})
 		if err != nil {
 			t.Fatal(err)
 		}

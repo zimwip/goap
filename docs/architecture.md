@@ -138,15 +138,19 @@ REQ-1  v1(main) ── v3(main, revise) ───────────── 
   version the change wrote in that scope (the node editor is bound to the change and the flow, its edits go there).
   Comparing, evaluating, selecting and rejecting are the Compare pane.
 - **Decision loops** ([ADR 0009](adr/0009-branches-options-decisions.md) §4): a **decision point** is a question the
-  change must settle, usually which option (`OpenDecision`). Its decider (an agent, or a person) rules it:
-  *decided* (an option, a confidence, a justification) or *undecidable* (why, and the questions to answer first).
+  change must settle, usually which option (`OpenDecision`). A ruling is *decided* (an option, a confidence, a
+  justification) or *undecidable* (why, and the questions to answer first).
   Open questions **block** the point; they are answered by hand or by `decision.investigate`, a builtin that runs one
   sub-agent per question, whose intent is the question (identification picks the agent in any methodology), and the
-  planner comes back to the decision. An agent ruling below the point's confidence threshold waits for a person's
-  **ratification**; after `maxRounds` rulings that did not settle it, or past its deadline, the point is
-  **escalated**: only a person rules it. A decided point selects its option; `Apply` refuses a change with a
-  pending decision. The points are facts of the main flow (`KindDecisionPoint`, replayed by
-  `Change.DecisionPointsAt`); actions work on them through items of kind `decisionPoint` (LLM, script, human task:
+  planner comes back to the decision. When a ruling settles the point and when only a person may rule it is a
+  **policy** ([ADR 0067](adr/0067-flow-origin-and-decision-policy.md)), not the graph's: the graph keeps the mechanism
+  (open, rule, answer, ratify, who ruled, the statuses) and the opaque policy values the opener gave
+  (`DecisionPoint.Policy`), and asks a `domain.DecisionPolicy` (`Graph.DecisionPolicy`; none: a ruling of anyone
+  settles the point). The platform's policy is `pkg/decision`: an agent ruling below the point's confidence threshold
+  waits for a person's **ratification**; after `maxRounds` rulings that did not settle it, or past its deadline, the
+  point is **escalated**: only a person rules it (values `decider`, `threshold`, `maxRounds`, `maxDuration`). A
+  decided point selects its option; `Apply` refuses a change with a pending decision. The points are facts of the main flow (`KindDecisionPoint`, replayed by
+  `Change.DecisionPointsAt(now, policy)`); actions work on them through items of kind `decisionPoint` (LLM, script, human task:
   a human task's ruling is a person's), scripts through `ctx.decisionPoints()` / `openDecision` / `decide` /
   `undecidable` / `answer`, agents through the `goap-change` tools `decisions` / `decision` / `rule` / `answer`,
   people through the Decisions pane of a change (`methodologies/examples/option-decision.yaml` runs the loop).
