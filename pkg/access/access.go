@@ -378,6 +378,19 @@ func (s *Snapshot) Enrich(p authz.Principal) authz.Principal {
 	return p
 }
 
+// MayAccessProject reports whether a principal may work on a project (ADR 0039): it holds a platform role
+// (administration included, ADR 0047), or a role an Assignment grants it on the project or one above it. Taking
+// the active project of a token is the only thing it gates: what the principal may then do there is the
+// policies' business.
+func (s *Snapshot) MayAccessProject(p authz.Principal, project string) bool {
+	p = s.Enrich(p)
+	if p.Anonymous() {
+		return false
+	}
+	chain := s.SubjectChain(p)
+	return len(s.PlatformRoles(chain)) > 0 || len(s.ProjectRoles(chain, s.ProjectChain(project))) > 0 || slices.Contains(p.Roles, RoleAdmin)
+}
+
 // Directory reads the snapshot of the head of the main branch (see graphsnap.Cache); TTL is how often the
 // head is looked at, one second by default.
 type Directory struct {
@@ -436,6 +449,15 @@ func (d *Directory) Enrich(ctx context.Context, p authz.Principal) authz.Princip
 		return s.Enrich(p)
 	}
 	return p
+}
+
+// MayAccessProject reports whether a principal may work on a project, from the current snapshot (Snapshot.MayAccessProject).
+func (d *Directory) MayAccessProject(ctx context.Context, p authz.Principal, project string) (bool, error) {
+	s, err := d.Snapshot(ctx)
+	if err != nil {
+		return false, err
+	}
+	return s.MayAccessProject(p, project), nil
 }
 
 // Authorizer decides access requests from the Policy nodes of the graph, for the principal

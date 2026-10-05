@@ -15,6 +15,7 @@ import (
 	"github.com/labstack/echo/v5"
 
 	"github.com/zimwip/goap/internal/credsvc"
+	"github.com/zimwip/goap/pkg/authz"
 )
 
 // fakeCredentials is an in-memory Credentials for local auth tests (ADR 0040): passwords in clear, sessions kept by
@@ -63,6 +64,9 @@ func (f *fakeCredentials) Register(_ context.Context, subject, password string) 
 func (f *fakeCredentials) Verify(_ context.Context, subject, password string) (bool, error) {
 	return f.passwords[subject] != "" && f.passwords[subject] == password, nil
 }
+
+// anyProject lets every caller work on every project.
+func anyProject(context.Context, authz.Principal, string) (bool, error) { return true, nil }
 
 func TestAuthAndRouting(t *testing.T) {
 	var gotSubject, gotRoles, gotProject string
@@ -180,7 +184,7 @@ func TestLocalAuth(t *testing.T) {
 		declared = append(declared, subject)
 		return nil
 	}
-	if err := Mount(e, Config{AuthMode: "local", JWTSecret: secret, Credentials: creds, OnSignIn: onSignIn,
+	if err := Mount(e, Config{AuthMode: "local", JWTSecret: secret, Credentials: creds, OnSignIn: onSignIn, ProjectAccess: anyProject,
 		Routes: []Route{{Prefix: "/goap.graph.v1.GraphService/", Upstream: upstream.URL}}}); err != nil {
 		t.Fatal(err)
 	}
@@ -296,7 +300,7 @@ func TestRefreshToken(t *testing.T) {
 	creds := &fakeCredentials{passwords: map[string]string{}}
 	newServer := func(ttl, maxSession time.Duration) *httptest.Server {
 		e := echo.New()
-		if err := Mount(e, Config{AuthMode: "local", JWTSecret: secret, Credentials: creds, TokenTTL: ttl, MaxSession: maxSession}); err != nil {
+		if err := Mount(e, Config{AuthMode: "local", JWTSecret: secret, Credentials: creds, TokenTTL: ttl, MaxSession: maxSession, ProjectAccess: anyProject}); err != nil {
 			t.Fatal(err)
 		}
 		return httptest.NewServer(e)
@@ -463,5 +467,84 @@ func TestLogoutRevokesTheSession(t *testing.T) {
 	}
 	if code, _ := call(known); code != http.StatusOK {
 		t.Fatalf("known session while credentials are down: %d", code)
+	}
+}
+
+// Switching project reissues a token, so it is checked like a request: an ended session cannot do it (ADR 0045),
+// and the caller must have access to the target project (ADR 0039); with no access check wired no project is
+// granted, and only clearing the project is allowed.
+func TestSwitchProjectChecksSessionAndAccess(t *testing.T) {
+	secret := []byte(strings.Repeat("s", 32))
+	creds := &fakeCredentials{passwords: map[string]string{"alice": "correct horse"}}
+	member := func(_ context.Context, p authz.Principal, project string) (bool, error) {
+		return p.Subject == "alice" && project == "PROJ-A", nil
+	}
+	setup := func(access func(context.Context, authz.Principal, string) (bool, error)) *httptest.Server {
+		e := echo.New()
+		if err := Mount(e, Config{AuthMode: "local", JWTSecret: secret, Credentials: creds, ProjectAccess: access}); err != nil {
+			t.Fatal(err)
+		}
+		return httptest.NewServer(e)
+	}
+	post := func(srv *httptest.Server, path, token, body string) (int, string) {
+		req, _ := http.NewRequest(http.MethodPost, srv.URL+path, strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		if token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		var raw json.RawMessage
+		_ = json.NewDecoder(resp.Body).Decode(&raw)
+		return resp.StatusCode, string(raw)
+	}
+	login := func(srv *httptest.Server) string {
+		code, body := post(srv, "/auth/login", "", `{"subject":"alice","password":"correct horse"}`)
+		var out issued
+		_ = json.Unmarshal([]byte(body), &out)
+		if code != http.StatusOK || out.Token == "" {
+			t.Fatalf("login: %d %s", code, body)
+		}
+		return out.Token
+	}
+
+	srv := setup(member)
+	defer srv.Close()
+	tok := login(srv)
+	if code, body := post(srv, "/auth/dev-token/project", tok, `{"project":"PROJ-A"}`); code != http.StatusOK {
+		t.Fatalf("a member's project: %d %s", code, body)
+	}
+	if code, _ := post(srv, "/auth/dev-token/project", tok, `{"project":"PROJ-B"}`); code != http.StatusForbidden {
+		t.Fatalf("a project the caller has no access to: %d", code)
+	}
+	if code, _ := post(srv, "/auth/dev-token/project", tok, `{"project":""}`); code != http.StatusOK {
+		t.Fatalf("clearing the project: %d", code)
+	}
+	// the session ends: the token no longer switches project
+	if code, _ := post(srv, "/auth/logout", tok, ""); code != http.StatusNoContent {
+		t.Fatalf("logout: %d", code)
+	}
+	if code, body := post(srv, "/auth/dev-token/project", tok, `{"project":"PROJ-A"}`); code != http.StatusUnauthorized || !strings.Contains(body, "session ended") {
+		t.Fatalf("switch with an ended session: %d %s", code, body)
+	}
+
+	// nothing wired: no project is granted
+	bare := setup(nil)
+	defer bare.Close()
+	if code, _ := post(bare, "/auth/dev-token/project", login(bare), `{"project":"PROJ-A"}`); code != http.StatusForbidden {
+		t.Fatalf("switch with no access check: %d", code)
+	}
+}
+
+// An unset auth mode is an error, not an open gateway: only an explicit "none" lets everybody in as the dev principal.
+func TestEmptyAuthModeIsRefused(t *testing.T) {
+	if _, err := Authenticator(Config{}); err == nil {
+		t.Fatal("an empty auth mode must be refused")
+	}
+	if _, err := Authenticator(Config{AuthMode: "none"}); err != nil {
+		t.Fatalf("explicit none: %v", err)
 	}
 }

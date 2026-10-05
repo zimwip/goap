@@ -25,6 +25,13 @@ type Principal struct {
 // Anonymous reports whether the principal is unauthenticated.
 func (p Principal) Anonymous() bool { return p.Subject == "" }
 
+// SystemPrefix starts the subject of a platform service acting by itself (system:registry, system:trigger:<key>,
+// system:graph): never a person, so never a user of the organisation.
+const SystemPrefix = "system:"
+
+// System reports whether the principal is a platform service rather than a person.
+func (p Principal) System() bool { return strings.HasPrefix(p.Subject, SystemPrefix) }
+
 // Resource is the object of an access request (r.obj.Type, r.obj.ID,
 // r.obj.Org, r.obj.Owner, r.obj.Name).
 type Resource struct {

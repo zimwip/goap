@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 
 	credentialsv1 "github.com/zimwip/goap/gen/goap/credentials/v1"
 	"github.com/zimwip/goap/gen/goap/credentials/v1/credentialsv1connect"
+	"github.com/zimwip/goap/internal/credsvc"
 	"github.com/zimwip/goap/internal/gateway"
 	"github.com/zimwip/goap/internal/graphsvc"
 	"github.com/zimwip/goap/internal/platform"
@@ -87,6 +89,7 @@ func main() {
 	graphClient := graphsvc.NewClient(platform.H2CClient(), platform.Env("GOAP_GRAPH_URL", "http://localhost:8081"), telemetry.ClientOptions()...)
 	directory := &access.Directory{Graph: graphClient}
 	cfg.Enrich = directory.Enrich
+	cfg.ProjectAccess = directory.MayAccessProject
 	if origins := platform.Env("GOAP_CORS_ORIGINS", ""); origins != "" {
 		cfg.AllowOrigins = strings.Split(origins, ",")
 	}
@@ -98,8 +101,13 @@ func main() {
 		cfg.JWTSecret = []byte(secret)
 	}
 	if cfg.AuthMode == "local" {
+		// the credentials service answers the gateway only, which presents its shared service credential
+		credToken, err := secrets.Get(ctx, "goap/credentials#service_token", "GOAP_CREDENTIALS_TOKEN")
+		if err != nil || credToken == "" {
+			platform.Fatal(log, "credentials service token (GOAP_CREDENTIALS_TOKEN)", errors.Join(err, errors.New("not set")))
+		}
 		cfg.Credentials = credentialsClient{rpc: credentialsv1connect.NewCredentialsServiceClient(platform.H2CClient(),
-			platform.Env("GOAP_CREDENTIALS_URL", "http://localhost:8088"), telemetry.ClientOptions()...)}
+			platform.Env("GOAP_CREDENTIALS_URL", "http://localhost:8088"), append(telemetry.ClientOptions(), credsvc.ClientToken(credToken))...)}
 		// the user exists in the graph from their first sign-in (ADR 0042), and their first calls see it
 		cfg.OnSignIn = func(ctx context.Context, subject string) error {
 			if err := graphClient.DeclareUser(ctx, subject); err != nil {

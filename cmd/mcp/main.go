@@ -36,7 +36,7 @@ func main() {
 	}
 	token := os.Getenv("GOAP_CONNECTOR_TOKEN")
 	if token == "" {
-		log.Warn("GOAP_CONNECTOR_TOKEN not set: any service can register as a connector")
+		log.Warn("GOAP_CONNECTOR_TOKEN not set: no connector can register, only the built-in ones are served")
 	}
 	hc := platform.H2CClient()
 	graphURL := platform.Env("GOAP_GRAPH_URL", "http://localhost:8081")

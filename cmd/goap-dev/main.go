@@ -16,6 +16,7 @@ import (
 	"maps"
 	"net/http"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/labstack/echo/v5"
@@ -198,7 +199,16 @@ func main() {
 	// added once the engine exists) run inside too, other connectors register over HTTP like in
 	// the distributed platform
 	connectors := map[string]connectorkit.Connector{"localfs": localfs.Connector{}}
+	// connectors register with a shared token (a service without one cannot register): generated like the JWT
+	// secret when none is configured, and shown so that a connector started by hand can use it
 	connectorToken := os.Getenv("GOAP_CONNECTOR_TOKEN")
+	if connectorToken == "" {
+		var err error
+		if connectorToken, err = localSecret(st.dir, "connector_token"); err != nil {
+			platform.Fatal(log, "connector token", err)
+		}
+		log.Info("connector token generated: start connectors with GOAP_CONNECTOR_TOKEN set to it", "file", filepath.Join(st.dir, "connector_token"))
+	}
 	hub := &mcpsvc.Service{
 		Store:     st.mcp,
 		Directory: &mcpsvc.Directory{Graph: g},
@@ -267,7 +277,7 @@ func main() {
 		}
 		authCfg := gateway.Config{AuthMode: authMode, JWTSecret: []byte(secret), DevTokens: platform.Env("GOAP_DEV_TOKENS", "") == "true",
 			TokenTTL: platform.EnvDuration("GOAP_TOKEN_TTL", gateway.DefaultTokenTTL), MaxSession: platform.EnvDuration("GOAP_SESSION_MAX", gateway.DefaultMaxSession),
-			Credentials: &credsvc.Service{Store: st.creds}, Enrich: directory.Enrich,
+			Credentials: &credsvc.Service{Store: st.creds}, Enrich: directory.Enrich, ProjectAccess: directory.MayAccessProject,
 			// the user exists in the graph from their first sign-in, member of the unit new users join (ADR 0042)
 			OnSignIn: func(ctx context.Context, subject string) error {
 				if err := graphsvc.EnsureUser(ctx, g, subject); err != nil {
@@ -294,7 +304,7 @@ func main() {
 	}
 
 	graphHandler := &graphsvc.Handler{Graph: g, Events: engine.Publishers{changePublisher(onChange), indexSink, bus}, Authz: authorizer, Floor: authorizer.Floor(), Identity: ident}
-	mount(graphv1connect.NewGraphServiceHandler(graphHandler, append(telemetry.HandlerOptions(), connect.WithInterceptors(eventsvc.CommandInterceptor(), graphHandler.PersonalScope(), graphHandler.EnsureCaller()))...))
+	mount(graphv1connect.NewGraphServiceHandler(graphHandler, append(telemetry.HandlerOptions(), connect.WithInterceptors(graphHandler.Identify(), eventsvc.CommandInterceptor(), graphHandler.PersonalScope(), graphHandler.EnsureCaller()))...))
 	mount(registryv1connect.NewRegistryServiceHandler(&registrysvc.Handler{Service: reg, Identity: ident}, append(telemetry.HandlerOptions(), connect.WithInterceptors(eventsvc.CommandInterceptor()))...))
 	if authMW != nil {
 		srv.Echo.GET("/api/whoami", identity.WhoAmI(identity.Extractor{}, directory.Enrich), authMW)
