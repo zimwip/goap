@@ -52,10 +52,18 @@ type Tx interface {
 	Changes(ctx context.Context) ([]domain.Change, error)
 
 	PutNode(ctx context.Context, n domain.Node) error
-	// SetNodeProps replaces the properties of a node version written earlier in
-	// the same transaction (transition actions, ADR 0018).
+	// SetNodeProps replaces the properties of a node version written earlier in the same transaction (transition
+	// actions, ADR 0018) or of a working version (ADR 0076).
 	SetNodeProps(ctx context.Context, ref domain.NodeRef, props map[string]any) error
+	// SetNodeOwner moves a version to another owner unit (an in-place edit of a working version, ADR 0076).
+	SetNodeOwner(ctx context.Context, ref domain.NodeRef, owner domain.NodeID) error
+	// CheckinVersion freezes a checked-out version (ADR 0076): ErrNotFound when it is not checked out.
+	CheckinVersion(ctx context.Context, ref domain.NodeRef) error
 	PutLink(ctx context.Context, l domain.Link) error
+	// Link reads one link; DeleteLink and SetLinkProps edit the links of a working version in place (ADR 0076).
+	Link(ctx context.Context, id domain.LinkID) (domain.Link, error)
+	DeleteLink(ctx context.Context, id domain.LinkID) error
+	SetLinkProps(ctx context.Context, id domain.LinkID, props map[string]any) error
 	// PutBaseline stores a baseline: its entries when b.Gap is 0, else only its header (ADR 0056); a Baseline read
 	// back with a Gap holds no nodes, the graph computes them.
 	PutBaseline(ctx context.Context, b domain.Baseline) error

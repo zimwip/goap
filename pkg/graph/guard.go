@@ -18,7 +18,10 @@ import (
 //     that writes it (the unit holding it, the project it acts in); the project of a node never changes;
 //   - every change names the unit holding it and the project it acts in, nodes of the structures in force;
 //   - every baseline is the result of a change (ADR 0056); what precedes the first change of a namespace is the empty
-//     state, the empty baseline id, which nothing stores.
+//     state, the empty baseline id, which nothing stores;
+//   - only a working version (ADR 0076: checked out by CreateNode or CheckoutNode, until its check-in) or a version
+//     written in the same transaction gets its owner moved or its outgoing links edited or removed in place, and
+//     only a working version is checked in.
 //
 // What names a change, a unit or a project is checked when the transaction ends, before it commits (as a deferred
 // foreign key): the bootstrap writes the root unit and the root project, each referencing the other and itself, in
@@ -49,6 +52,59 @@ type guardTx struct {
 	changes    map[domain.ChangeID]domain.Change
 	// headers caches the changes read to stamp versions
 	headers map[domain.ChangeID]domain.Change
+	// written are the versions the transaction wrote
+	written map[domain.NodeRef]bool
+}
+
+// editable refuses an edit of a version that is neither written in the transaction nor a working version (ADR 0076).
+func (t *guardTx) editable(ctx context.Context, ref domain.NodeRef, what string) error {
+	if t.written[ref] {
+		return nil
+	}
+	n, err := t.Tx.Node(ctx, ref)
+	if err != nil {
+		return err
+	}
+	if !n.CheckedOut {
+		return fmt.Errorf("%s: version %s %s is checked in, check the node out first (ADR 0076): %w", what, n.Key, ref, ErrConflict)
+	}
+	return nil
+}
+
+func (t *guardTx) SetNodeOwner(ctx context.Context, ref domain.NodeRef, owner domain.NodeID) error {
+	if err := t.editable(ctx, ref, "owner"); err != nil {
+		return err
+	}
+	if owner == "" {
+		return fmt.Errorf("node %s: a version is owned by a unit (ADR 0054): %w", ref, ErrInvalid)
+	}
+	if t.owners == nil {
+		t.owners, t.projects = map[domain.NodeID]string{}, map[domain.NodeID]string{}
+	}
+	t.owners[owner] = "node " + ref.String()
+	return t.Tx.SetNodeOwner(ctx, ref, owner)
+}
+
+func (t *guardTx) DeleteLink(ctx context.Context, id domain.LinkID) error {
+	l, err := t.Tx.Link(ctx, id)
+	if err != nil {
+		return err
+	}
+	if err := t.editable(ctx, l.From, "link "+l.Type); err != nil {
+		return err
+	}
+	return t.Tx.DeleteLink(ctx, id)
+}
+
+func (t *guardTx) SetLinkProps(ctx context.Context, id domain.LinkID, props map[string]any) error {
+	l, err := t.Tx.Link(ctx, id)
+	if err != nil {
+		return err
+	}
+	if err := t.editable(ctx, l.From, "link "+l.Type); err != nil {
+		return err
+	}
+	return t.Tx.SetLinkProps(ctx, id, props)
 }
 
 func (t *guardTx) needChange(id domain.ChangeID, what string) error {
@@ -144,7 +200,14 @@ func (t *guardTx) PutNode(ctx context.Context, n domain.Node) error {
 	}
 	t.owners[n.Owner] = what
 	t.projects[n.Project] = what
-	return t.Tx.PutNode(ctx, n)
+	if err := t.Tx.PutNode(ctx, n); err != nil {
+		return err
+	}
+	if t.written == nil {
+		t.written = map[domain.NodeRef]bool{}
+	}
+	t.written[n.Ref()] = true
+	return nil
 }
 
 func (t *guardTx) PutTag(ctx context.Context, tag domain.Tag) error {

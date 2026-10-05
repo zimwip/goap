@@ -94,7 +94,7 @@ func su(name string) sqlCol { return sqlCol{name: name, uuid: true} }
 func (d dialect) nodeCols() string {
 	return d.cols(su("n.id"), sc("v.version"), sc("n.namespace"), sc("n.key"), sc("n.type"), sc("v.props"), sc("v.deleted"), su("v.change_id"),
 		sc("v.created_at"), sc("v.branch"), sc("v.parents"), sc("v.reason"), sc("v.state"), su("v.change_impact"), sc("v.comment"),
-		sc("v.execution"), su("v.owner_id"), su("n.project_id"))
+		sc("v.execution"), su("v.owner_id"), su("n.project_id"), sc("v.checked_out"))
 }
 
 const nodeFrom = ` FROM node n JOIN node_version v ON v.node_id = n.id`
@@ -149,8 +149,12 @@ func (d dialect) sqlLinks(out bool, ref domain.NodeRef) (string, []any) {
 	if out {
 		end = "from"
 	}
-	return `SELECT ` + d.cols(su("id"), sc("type"), su("from_id"), sc("from_version"), su("to_id"), sc("to_version"), sc("props"), su("change_id")) +
-		` FROM link WHERE ` + end + `_id = ` + d.ph(1) + ` AND ` + end + `_version = ` + d.ph(2) + ` ORDER BY id`, []any{string(ref.ID), int(ref.Version)}
+	return `SELECT ` + d.linkCols() + ` FROM link WHERE ` + end + `_id = ` + d.ph(1) + ` AND ` + end + `_version = ` + d.ph(2) + ` ORDER BY id`, []any{string(ref.ID), int(ref.Version)}
+}
+
+// linkCols is the select list of a link.
+func (d dialect) linkCols() string {
+	return d.cols(su("id"), sc("type"), su("from_id"), sc("from_version"), su("to_id"), sc("to_version"), sc("props"), su("change_id"))
 }
 
 const branchColsText = `namespace, name, parent, %s, %s, origin, status, created_at, description, intent`
@@ -274,6 +278,29 @@ func (d dialect) sqlSetNodeProps() string {
 	return `UPDATE node_version SET props = ` + d.ph(3) + ` WHERE node_id = ` + d.ph(1) + ` AND version = ` + d.ph(2)
 }
 
+// sqlSetNodeOwner moves a version to another owner unit: arguments node, version, owner.
+func (d dialect) sqlSetNodeOwner() string {
+	return `UPDATE node_version SET owner_id = ` + d.ph(3) + ` WHERE node_id = ` + d.ph(1) + ` AND version = ` + d.ph(2)
+}
+
+// sqlCheckin freezes a working version (ADR 0076): arguments node, version, false.
+func (d dialect) sqlCheckin() string {
+	return `UPDATE node_version SET checked_out = ` + d.ph(3) + ` WHERE node_id = ` + d.ph(1) + ` AND version = ` + d.ph(2) + ` AND checked_out`
+}
+
+// sqlLinkByID reads one link.
+func (d dialect) sqlLinkByID(id domain.LinkID) (string, []any) {
+	return `SELECT ` + d.linkCols() + ` FROM link WHERE id = ` + d.ph(1), []any{string(id)}
+}
+
+// sqlDeleteLink deletes a link: argument the link.
+func (d dialect) sqlDeleteLink() string { return `DELETE FROM link WHERE id = ` + d.ph(1) }
+
+// sqlSetLinkProps replaces the properties of a link: arguments link, encoded properties.
+func (d dialect) sqlSetLinkProps() string {
+	return `UPDATE link SET props = ` + d.ph(2) + ` WHERE id = ` + d.ph(1)
+}
+
 // sqlSetNodeOrigin sets the origin of a version: arguments node, version, change, change impact, comment.
 func (d dialect) sqlSetNodeOrigin() string {
 	return `UPDATE node_version SET change_id = ` + d.ph(3) + `, change_impact = ` + d.ph(4) + `, comment = ` + d.ph(5) + ` WHERE node_id = ` + d.ph(1) + ` AND version = ` + d.ph(2)
@@ -336,7 +363,7 @@ func (d dialect) sqlDeleteChange() string { return `DELETE FROM change WHERE id 
 
 // The columns of the inserts both repositories run, in the order of their arguments.
 var (
-	nodeVersionColumns = []string{"node_id", "version", "props", "deleted", "change_id", "created_at", "branch", "parents", "reason", "state", "change_impact", "comment", "execution", "owner_id"}
+	nodeVersionColumns = []string{"node_id", "version", "props", "deleted", "change_id", "created_at", "branch", "parents", "reason", "state", "change_impact", "comment", "execution", "owner_id", "checked_out"}
 	linkColumns        = []string{"id", "type", "from_id", "from_version", "to_id", "to_version", "props", "change_id"}
 	baselineColumns    = []string{"id", "name", "parent_id", "merged_from", "change_id", "created_at", "branch", "namespace", "depth", "gap", "kind"}
 	changeLogColumns   = []string{"id", "change_id", "type", "flow", "process_id", "execution", "subject", "by_whom", "at", "payload"}

@@ -117,8 +117,11 @@ type Node struct {
 	Comment      string         `json:"comment,omitempty"`
 	// Execution is the journal execution (action run) that wrote this version: what a
 	// relaunch of a step marks stale (ADR 0025).
-	Execution string    `json:"execution,omitempty"`
-	CreatedAt time.Time `json:"createdAt"`
+	Execution string `json:"execution,omitempty"`
+	// CheckedOut marks the working version of a change (ADR 0076): written by CreateNode or CheckoutNode, edited in
+	// place until its check-in; every other version is immutable.
+	CheckedOut bool      `json:"checkedOut,omitempty"`
+	CreatedAt  time.Time `json:"createdAt"`
 }
 
 // Ref returns the exact reference of this node version.
