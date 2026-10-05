@@ -18,8 +18,8 @@ import (
 	"github.com/zimwip/goap/internal/registrysvc"
 	"github.com/zimwip/goap/internal/telemetry"
 	"github.com/zimwip/goap/pkg/access"
+	"github.com/zimwip/goap/pkg/domain/def"
 	"github.com/zimwip/goap/pkg/graph"
-	"github.com/zimwip/goap/pkg/methodology"
 	"github.com/zimwip/goap/pkg/typecat"
 )
 
@@ -75,8 +75,8 @@ func main() {
 	}()
 	// the graph judges nodes by the types of the published domains (ADR 0012): the registry is the reference, the
 	// graph holds a copy reloaded on its domain events; without a registry, the domain files are the source
-	var source typecat.Source = func(context.Context) ([]*methodology.Domain, error) {
-		return methodology.LoadDomains(platform.Env("GOAP_DOMAINS_DIR", "domains"))
+	var source typecat.Source = func(context.Context) ([]*def.Domain, error) {
+		return def.LoadDomains(platform.Env("GOAP_DOMAINS_DIR", "domains"))
 	}
 	if url := platform.Env("GOAP_REGISTRY_URL", ""); url != "" {
 		source = registrysvc.NewClient(platform.H2CClient(), url, telemetry.ClientOptions()...).Domains

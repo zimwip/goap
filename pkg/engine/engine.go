@@ -17,6 +17,7 @@ import (
 
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/domain/def"
 	"github.com/zimwip/goap/pkg/dsl"
 	"github.com/zimwip/goap/pkg/goap"
 	"github.com/zimwip/goap/pkg/graph"
@@ -56,7 +57,7 @@ type Engine struct {
 	MaxFailures int
 	// Types returns the type catalogue in force (ADR 0012 §2): the ancestors behind `x.types`. Unset, or nil, the
 	// methodology's own resolved types apply.
-	Types func() methodology.TypeSet
+	Types func() def.TypeSet
 
 	locks sync.Map // process id -> *sync.Mutex
 	now   func() time.Time

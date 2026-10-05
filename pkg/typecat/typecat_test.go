@@ -8,19 +8,19 @@ import (
 	"testing"
 
 	"github.com/zimwip/goap/pkg/domain"
-	"github.com/zimwip/goap/pkg/methodology"
+	"github.com/zimwip/goap/pkg/domain/def"
 )
 
-func parse(t *testing.T, src string) *methodology.Domain {
+func parse(t *testing.T, src string) *def.Domain {
 	t.Helper()
-	d, err := methodology.ParseDomain([]byte(src))
+	d, err := def.ParseDomain([]byte(src))
 	if err != nil {
 		t.Fatal(err)
 	}
 	return d
 }
 
-func fromFile(t *testing.T, name string) *methodology.Domain {
+func fromFile(t *testing.T, name string) *def.Domain {
 	t.Helper()
 	src, err := os.ReadFile("../../domains/" + name + ".yaml")
 	if err != nil {

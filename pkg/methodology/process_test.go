@@ -2,6 +2,7 @@ package methodology
 
 import (
 	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/domain/def"
 	"strings"
 	"testing"
 )
@@ -25,7 +26,7 @@ agents:
   - {name: worker, actions: [do_c], goals: [all]}
 `
 
-func compileProcess(t *testing.T, processes string) (*Compiled, Issues) {
+func compileProcess(t *testing.T, processes string) (*Compiled, def.Issues) {
 	t.Helper()
 	m, err := Parse([]byte(processBase + processes))
 	if err != nil {
@@ -392,7 +393,7 @@ processes:
 	}
 }
 
-func hasIssue(issues Issues, path, msg string) bool {
+func hasIssue(issues def.Issues, path, msg string) bool {
 	for _, is := range issues {
 		if is.Path == path && strings.Contains(is.Message, msg) {
 			return true

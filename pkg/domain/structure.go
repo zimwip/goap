@@ -4,7 +4,7 @@ import "slices"
 
 // Structures (ADR 0054): the two hierarchies every node version is placed in. A node version is owned by an
 // organisational unit (WHO is responsible for it) and its node was created in a project (WHERE the work happens).
-// Both hierarchies are node types a domain tags (`structure:` on a node type, pkg/methodology), so the graph knows
+// Both hierarchies are node types a domain tags (`structure:` on a node type, pkg/domain/def), so the graph knows
 // them from its type catalogue and never from hard-coded names; the built-in organisation domain tags OrgUnit and
 // ProjectUnit.
 const (

@@ -10,10 +10,10 @@ import (
 
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/domain/def"
 	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/index"
 	"github.com/zimwip/goap/pkg/llm"
-	"github.com/zimwip/goap/pkg/methodology"
 	"github.com/zimwip/goap/pkg/typecat"
 )
 
@@ -68,7 +68,7 @@ func TestGraphToSearch(t *testing.T) {
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	svc := New(index.NewMemory(), &bagEmbedder{}, denyType{typ: "docs@Secret"}, log)
 
-	d, err := methodology.ParseDomain([]byte(`
+	d, err := def.ParseDomain([]byte(`
 name: docs
 version: 1.0.0
 nodeTypes:

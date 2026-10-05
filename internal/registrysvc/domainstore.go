@@ -7,18 +7,18 @@ import (
 	"sync"
 	"time"
 
-	"github.com/zimwip/goap/pkg/methodology"
+	"github.com/zimwip/goap/pkg/domain/def"
 )
 
 // DomainRecord is a stored domain version.
 type DomainRecord struct {
-	Domain      methodology.Domain
+	Domain      def.Domain
 	Status      Status
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 	PublishedAt time.Time
 	UpdatedBy   string
-	// Builtin marks a domain shipped with the platform (methodology.BuiltinDomains): published, frozen, not stored.
+	// Builtin marks a domain shipped with the platform (def.BuiltinDomains): published, frozen, not stored.
 	Builtin bool
 }
 

@@ -11,6 +11,7 @@ import (
 
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/domain/def"
 	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/llm"
 	"github.com/zimwip/goap/pkg/mcp"
@@ -98,11 +99,11 @@ func parseDocs(t *testing.T, edit func(*methodology.Methodology)) *methodology.C
 	if edit != nil {
 		edit(m)
 	}
-	ds, err := methodology.LoadDomains("../../domains")
+	ds, err := def.LoadDomains("../../domains")
 	if err != nil {
 		t.Fatal(err)
 	}
-	m = m.Resolve(methodology.DomainTypes(ds...))
+	m = m.Resolve(def.DomainTypes(ds...))
 	cm, err := m.Compile()
 	if err != nil {
 		t.Fatal(err)

@@ -8,14 +8,14 @@ import (
 
 	"github.com/zimwip/goap/pkg/algo"
 	"github.com/zimwip/goap/pkg/domain"
-	"github.com/zimwip/goap/pkg/methodology"
+	"github.com/zimwip/goap/pkg/domain/def"
 	"github.com/zimwip/goap/pkg/typecat"
 )
 
 // catalogGraph is a graph judged by a type catalogue built from a domain (ADR 0012).
 func catalogGraph(t *testing.T) (*Graph, domain.Baseline) {
 	t.Helper()
-	d, err := methodology.ParseDomain([]byte(`
+	d, err := def.ParseDomain([]byte(`
 name: docs
 version: 1.0.0
 lifecycles:

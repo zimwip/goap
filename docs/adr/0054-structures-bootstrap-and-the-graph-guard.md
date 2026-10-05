@@ -28,7 +28,7 @@ goroutine after other seeds had written (hence `LinkOrphanUnits`), the project r
 
 ### Structures are tagged by the domains (registry)
 
-A node type may carry a `structure` tag (`methodology.NodeType.Structure`, proto `StructureTag`):
+A node type may carry a `structure` tag (`def.NodeType.Structure`, proto `StructureTag`):
 `{kind: organisation | project, parent: <link type of the domain, from and to the type>, root: <key>, selfParent}`.
 The schema check refuses an unknown kind, a tag twice in a domain, a missing root or a parent link that does not go
 from and to the type; the type catalogue (`pkg/typecat`) refuses a second domain tagging a kind already tagged and a

@@ -10,6 +10,7 @@ import (
 	registryv1 "github.com/zimwip/goap/gen/goap/registry/v1"
 	"github.com/zimwip/goap/internal/identity"
 	"github.com/zimwip/goap/pkg/authz"
+	"github.com/zimwip/goap/pkg/domain/def"
 	"github.com/zimwip/goap/pkg/engine"
 	"github.com/zimwip/goap/pkg/methodology"
 )
@@ -30,7 +31,7 @@ func (d Drafts) Definition(ctx context.Context, name, version string) (methodolo
 }
 
 // SaveDraft implements engine.MethodologyDrafts.
-func (d Drafts) SaveDraft(ctx context.Context, m methodology.Methodology) (methodology.Issues, error) {
+func (d Drafts) SaveDraft(ctx context.Context, m methodology.Methodology) (def.Issues, error) {
 	_, issues, err := d.Service.Save(ctx, m)
 	return issues, err
 }
@@ -60,14 +61,14 @@ func (c *Client) Definition(ctx context.Context, name, version string) (methodol
 }
 
 // SaveDraft implements engine.MethodologyDrafts.
-func (c *Client) SaveDraft(ctx context.Context, m methodology.Methodology) (methodology.Issues, error) {
+func (c *Client) SaveDraft(ctx context.Context, m methodology.Methodology) (def.Issues, error) {
 	r, err := c.rpc.SaveMethodology(ctx, withIdentity(ctx, connect.NewRequest(&registryv1.SaveMethodologyRequest{Methodology: ToPB(Record{Methodology: m, Status: StatusDraft})})))
 	if err != nil {
 		return nil, err
 	}
-	var out methodology.Issues
+	var out def.Issues
 	for _, i := range r.Msg.Issues {
-		out = append(out, methodology.Issue{Path: i.Path, Message: i.Message})
+		out = append(out, def.Issue{Path: i.Path, Message: i.Message})
 	}
 	return out, nil
 }

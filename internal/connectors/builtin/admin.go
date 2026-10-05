@@ -10,6 +10,7 @@ import (
 	"github.com/zimwip/goap/pkg/access"
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/domain/def"
 	"github.com/zimwip/goap/pkg/mcp"
 	"github.com/zimwip/goap/pkg/methodology"
 )
@@ -24,7 +25,7 @@ type Hub interface {
 // Registry lists the published domains and methodologies (the registry service, or its client).
 type Registry interface {
 	List(ctx context.Context) ([]*methodology.Compiled, error)
-	Domains(ctx context.Context) ([]*methodology.Domain, error)
+	Domains(ctx context.Context) ([]*def.Domain, error)
 }
 
 // Admin is the goap-admin connector: it describes the platform (who, with what, what, how). It

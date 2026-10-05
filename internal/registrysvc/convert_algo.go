@@ -10,8 +10,8 @@ import (
 	registryv1 "github.com/zimwip/goap/gen/goap/registry/v1"
 	"github.com/zimwip/goap/internal/pbconv"
 	"github.com/zimwip/goap/pkg/algo"
+	"github.com/zimwip/goap/pkg/domain/def"
 	"github.com/zimwip/goap/pkg/dsl"
-	"github.com/zimwip/goap/pkg/methodology"
 	"github.com/zimwip/goap/pkg/typecat"
 )
 
@@ -63,7 +63,7 @@ func instancesFromPB(is []*registryv1.AlgorithmInstance) []algo.Instance {
 	return out
 }
 
-func attributesToPB(as []methodology.Attribute) []*registryv1.Attribute {
+func attributesToPB(as []def.Attribute) []*registryv1.Attribute {
 	var out []*registryv1.Attribute
 	for _, a := range as {
 		out = append(out, &registryv1.Attribute{Name: a.Name, Label: a.Label, Description: a.Description, Type: a.Type, Widget: a.Widget,
@@ -72,10 +72,10 @@ func attributesToPB(as []methodology.Attribute) []*registryv1.Attribute {
 	return out
 }
 
-func attributesFromPB(as []*registryv1.Attribute) []methodology.Attribute {
-	var out []methodology.Attribute
+func attributesFromPB(as []*registryv1.Attribute) []def.Attribute {
+	var out []def.Attribute
 	for _, a := range as {
-		out = append(out, methodology.Attribute{Name: a.Name, Label: a.Label, Description: a.Description, Type: a.Type, Widget: a.Widget,
+		out = append(out, def.Attribute{Name: a.Name, Label: a.Label, Description: a.Description, Type: a.Type, Widget: a.Widget,
 			Enum: a.Enum, Default: a.DefaultValue, Section: a.Section, Order: int(a.Order), Tooltip: a.Tooltip, AsName: a.AsName, Validators: nilIfNone(a.Validators)})
 	}
 	return out
@@ -84,12 +84,12 @@ func attributesFromPB(as []*registryv1.Attribute) []methodology.Attribute {
 func attributeInfosToPB(as []typecat.Attribute) []*registryv1.AttributeInfo {
 	var out []*registryv1.AttributeInfo
 	for _, a := range as {
-		out = append(out, &registryv1.AttributeInfo{Attribute: attributesToPB([]methodology.Attribute{a.Attribute})[0], From: a.From, Values: enumValuesToPB(a.Values)})
+		out = append(out, &registryv1.AttributeInfo{Attribute: attributesToPB([]def.Attribute{a.Attribute})[0], From: a.From, Values: enumValuesToPB(a.Values)})
 	}
 	return out
 }
 
-func enumValuesToPB(vs []methodology.EnumValue) []*registryv1.EnumValue {
+func enumValuesToPB(vs []def.EnumValue) []*registryv1.EnumValue {
 	var out []*registryv1.EnumValue
 	for _, v := range vs {
 		out = append(out, &registryv1.EnumValue{Value: v.Value, Label: v.Label})
@@ -97,7 +97,7 @@ func enumValuesToPB(vs []methodology.EnumValue) []*registryv1.EnumValue {
 	return out
 }
 
-func enumsToPB(es []methodology.Enum) []*registryv1.Enum {
+func enumsToPB(es []def.Enum) []*registryv1.Enum {
 	var out []*registryv1.Enum
 	for _, e := range es {
 		out = append(out, &registryv1.Enum{Name: e.Name, Description: e.Description, Values: enumValuesToPB(e.Values)})
@@ -105,12 +105,12 @@ func enumsToPB(es []methodology.Enum) []*registryv1.Enum {
 	return out
 }
 
-func enumsFromPB(es []*registryv1.Enum) []methodology.Enum {
-	var out []methodology.Enum
+func enumsFromPB(es []*registryv1.Enum) []def.Enum {
+	var out []def.Enum
 	for _, e := range es {
-		me := methodology.Enum{Name: e.Name, Description: e.Description}
+		me := def.Enum{Name: e.Name, Description: e.Description}
 		for _, v := range e.Values {
-			me.Values = append(me.Values, methodology.EnumValue{Value: v.Value, Label: v.Label})
+			me.Values = append(me.Values, def.EnumValue{Value: v.Value, Label: v.Label})
 		}
 		out = append(out, me)
 	}
@@ -127,7 +127,7 @@ func normalizeJSON(v any) any {
 // RunAlgorithm tries an algorithm on a sample input (nothing is stored). It needs
 // the right to edit domains.
 func (s *Service) RunAlgorithm(ctx context.Context, a algo.Algorithm, values map[string]any, input map[string]any) (dsl.Outcome, error) {
-	if err := s.authorizeDomain(ctx, "write", &methodology.Domain{}); err != nil {
+	if err := s.authorizeDomain(ctx, "write", &def.Domain{}); err != nil {
 		return dsl.Outcome{}, err
 	}
 	if issues := a.Issues(); len(issues) > 0 {

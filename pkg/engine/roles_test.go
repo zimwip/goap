@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/zimwip/goap/pkg/authz"
+	"github.com/zimwip/goap/pkg/domain/def"
 	"github.com/zimwip/goap/pkg/methodology"
 )
 
@@ -70,7 +71,7 @@ agents: [{name: x, roles: [auditor], actions: [a]}]
 		t.Fatal(err)
 	}
 	_, err = m.Compile()
-	var issues methodology.Issues
+	var issues def.Issues
 	if !errors.As(err, &issues) {
 		t.Fatalf("expected issues, got %v", err)
 	}

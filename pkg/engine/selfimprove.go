@@ -11,6 +11,7 @@ import (
 
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/domain/def"
 	"github.com/zimwip/goap/pkg/dsl"
 	"github.com/zimwip/goap/pkg/methodology"
 	"github.com/zimwip/goap/pkg/observe"
@@ -33,7 +34,7 @@ type TraceSource interface {
 type MethodologyDrafts interface {
 	// Definition returns a version (empty: latest published); ok is false when it does not exist.
 	Definition(ctx context.Context, name, version string) (m methodology.Methodology, ok bool, err error)
-	SaveDraft(ctx context.Context, m methodology.Methodology) (methodology.Issues, error)
+	SaveDraft(ctx context.Context, m methodology.Methodology) (def.Issues, error)
 }
 
 // SelfImprovement configures the self-observation builtins.

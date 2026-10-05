@@ -21,7 +21,7 @@ nodeTypes:
 ```
 - `editor` is a name (`^[a-z][a-z0-9_-]*$`, checked by `Schema.check`); empty: the default node editor.
 - Inherited through `extends`: a subtype opens in the editor of its nearest ancestor that names one.
-- It is part of the type's model (ADR 0012 §2): `methodology.NodeType.Editor`, `registry.v1.NodeType.editor`, and
+- It is part of the type's model (ADR 0012 §2): `def.NodeType.Editor`, `registry.v1.NodeType.editor`, and
   resolved in the type catalogue (`typecat.Type.Editor`, `registry.v1.TypeInfo.editor`).
 - The domain does not know the IDE: the name is a contract. An unknown name falls back to the default editor.
 

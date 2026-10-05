@@ -18,6 +18,7 @@ import (
 	"github.com/zimwip/goap/pkg/access"
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/domain/def"
 	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/mcp"
 	"github.com/zimwip/goap/pkg/methodology"
@@ -56,12 +57,12 @@ func (f *fakeEngine) FireTrigger(_ context.Context, r *connect.Request[enginev1.
 	return connect.NewResponse(&enginev1.FireTriggerResponse{Process: &enginev1.Process{Id: "P3", Trigger: r.Msg.Methodology + "/" + r.Msg.Agent + "/" + r.Msg.Trigger}}), nil
 }
 
-type fakeRegistry struct{ domains []*methodology.Domain }
+type fakeRegistry struct{ domains []*def.Domain }
 
 func (fakeRegistry) List(context.Context) ([]*methodology.Compiled, error) {
 	return []*methodology.Compiled{{Methodology: &methodology.Methodology{Name: "impact-analysis", Namespace: "alm"}}}, nil
 }
-func (f fakeRegistry) Domains(context.Context) ([]*methodology.Domain, error) {
+func (f fakeRegistry) Domains(context.Context) ([]*def.Domain, error) {
 	return f.domains, nil
 }
 
@@ -76,7 +77,7 @@ type platform struct {
 func newPlatform(t *testing.T) platform {
 	t.Helper()
 	ctx := context.Background()
-	ds, err := methodology.LoadDomains("../../../domains")
+	ds, err := def.LoadDomains("../../../domains")
 	if err != nil {
 		t.Fatal(err)
 	}

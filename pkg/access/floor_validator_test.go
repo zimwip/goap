@@ -9,9 +9,9 @@ import (
 	"github.com/zimwip/goap/internal/graphsvc"
 	"github.com/zimwip/goap/pkg/access"
 	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/domain/def"
 	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/mcp"
-	"github.com/zimwip/goap/pkg/methodology"
 	"github.com/zimwip/goap/pkg/typecat"
 )
 
@@ -19,7 +19,7 @@ import (
 // the way cmd/goap-dev and cmd/graph wire it (ADR 0048).
 func floorGraph(t *testing.T) *graph.Graph {
 	t.Helper()
-	ds, err := methodology.LoadDomains("../../domains")
+	ds, err := def.LoadDomains("../../domains")
 	if err != nil {
 		t.Fatal(err)
 	}

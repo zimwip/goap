@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/domain/def"
 	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/methodology"
 )
@@ -20,7 +21,7 @@ func TestChangeLifecycleGate(t *testing.T) {
 	reg := &Service{Store: store}
 	g.Lifecycles = reg
 
-	d := methodology.Domain{Name: "alm", Version: "1", Schema: methodology.Schema{Lifecycles: []domain.Lifecycle{{
+	d := def.Domain{Name: "alm", Version: "1", Schema: def.Schema{Lifecycles: []domain.Lifecycle{{
 		Name: "maturity", Initial: "proposed",
 		States: []domain.LifecycleState{{Name: "proposed", Editable: true}, {Name: "analysing", Editable: true}, {Name: "implementing", Editable: true}, {Name: "done", Final: true}},
 		Transitions: []domain.Transition{

@@ -2,6 +2,7 @@ package methodology
 
 import (
 	"fmt"
+	"github.com/zimwip/goap/pkg/domain/def"
 	"github.com/zimwip/goap/pkg/events"
 	"maps"
 	"slices"
@@ -88,7 +89,7 @@ func (m *Methodology) compileMethods(add func(path, format string, args ...any),
 		path := fmt.Sprintf("methods[%d]", i)
 		hasSteps, hasActions := len(me.Steps) > 0, len(me.Actions) > 0
 		switch {
-		case !nameRE.MatchString(me.Name):
+		case !def.NameRE.MatchString(me.Name):
 			add(path+".name", "name required: lowercase letters, digits, '-' or '_', starting with a letter")
 			continue
 		case seen[me.Name]:
@@ -105,7 +106,7 @@ func (m *Methodology) compileMethods(add func(path, format string, args ...any),
 			continue
 		}
 		seen[me.Name] = true
-		if !nameRE.MatchString(me.For) {
+		if !def.NameRE.MatchString(me.For) {
 			add(path+".for", "for names the capability the method provides: lowercase letters, digits, '-' or '_'")
 		}
 		checkReferences(add, path+".references", me.References)
@@ -264,7 +265,7 @@ func (m *Methodology) compileRoles(add func(path, format string, args ...any)) m
 	for i, r := range m.Roles {
 		path := fmt.Sprintf("roles[%d].name", i)
 		switch {
-		case !nameRE.MatchString(r.Name):
+		case !def.NameRE.MatchString(r.Name):
 			add(path, "role name required: lowercase letters, digits, '-' or '_', starting with a letter")
 		case out[r.Name]:
 			add(path, "duplicate role %s", r.Name)
