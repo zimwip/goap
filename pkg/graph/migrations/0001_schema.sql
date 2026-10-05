@@ -21,7 +21,7 @@ CREATE TABLE baseline (
     -- n > 0: only this header is stored, the state is computed from the baseline n steps back and what the changes in
     -- between did (ADR 0056)
     gap         integer     NOT NULL DEFAULT 0,
-    -- commit | integration | snapshot: how the state follows from the change (ADR 0056)
+    -- commit | merge | fast-forward | snapshot: how the state follows from the change (ADR 0056)
     kind        text        NOT NULL DEFAULT 'snapshot',
     merged_from uuid REFERENCES baseline(id)
 );

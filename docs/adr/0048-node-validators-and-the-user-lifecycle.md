@@ -115,7 +115,7 @@ admin floor until some unrelated later commit happened to touch a `User` or `Ass
 `Assignment` — either can remove the last administrator (deactivating the `User`, or retiring/narrowing their
 platform Assignment). `Validate` loads every `User` and `Assignment` the change leaves live, finds `User`s
 linked `assigns_org` from a **platform** Assignment (`assigns_org`, no `assigns_project`, ADR 0046) carrying
-`RoleAdmin` (ADR 0047 — not the legacy `User.Admin` flag), and accepts if at least one such `User` is `active`.
+`RoleAdmin` (ADR 0047), and accepts if at least one such `User` is `active`.
 Wired onto `Graph.Validators` in `cmd/goap-dev` and `cmd/graph`, next to where `Graph.Authorizer` is wired.
 
 ## Consequences

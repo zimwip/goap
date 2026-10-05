@@ -191,8 +191,7 @@ func TestEnsureUserWaitsForDefaultOrg(t *testing.T) {
 	if err != nil {
 		t.Fatalf("alice's User node: %v", err)
 	}
-	// the first user is granted admin through a platform Assignment (ADR 0046, 0047), not the legacy
-	// User.Admin flag
+	// the first user is granted admin through a platform Assignment (ADR 0046, 0047)
 	asgNode, err := g.NodeByKey(ctx, mcp.NamespaceOrganisation, access.PlatformAssignmentKey("USR:alice"))
 	if err != nil {
 		t.Fatalf("alice's platform assignment: %v", err)
@@ -221,17 +220,6 @@ func TestEnsureUserWaitsForDefaultOrg(t *testing.T) {
 	// a second subject is not the first user: no admin role
 	if err := graphsvc.EnsureUser(ctx, g, "bob"); err != nil {
 		t.Fatal(err)
-	}
-	bobNode, err := g.NodeByKey(ctx, mcp.NamespaceOrganisation, "USR:bob")
-	if err != nil {
-		t.Fatal(err)
-	}
-	bob, err := access.UserFromProps(bobNode.Properties)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if bob.Admin {
-		t.Fatalf("second user must not be admin: %+v", bob)
 	}
 	if _, err := g.NodeByKey(ctx, mcp.NamespaceOrganisation, access.PlatformAssignmentKey("USR:bob")); !errors.Is(err, graph.ErrNotFound) {
 		t.Fatalf("a second user must get no platform assignment: %v", err)

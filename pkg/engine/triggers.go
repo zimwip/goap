@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/zimwip/goap/pkg/events"
 	"log/slog"
 	"sort"
 	"strings"
@@ -246,7 +247,7 @@ func (t *TriggerManager) States() []TriggerState {
 // Handle fires the event triggers matching ev, and runs the transverse processes alongside the changes it concerns.
 func (t *TriggerManager) Handle(ctx context.Context, ev TriggerEvent) {
 	t.Engine.Accompany(ctx, ev)
-	if ev.Type == "methodology.published" {
+	if ev.Type == events.MethodologyPublished {
 		if err := t.Reload(ctx); err != nil {
 			t.log().Warn("triggers reload", "err", err)
 		}

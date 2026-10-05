@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	triggerevents "github.com/zimwip/goap/pkg/events"
 	"maps"
 	"os"
 	"sync/atomic"
@@ -160,7 +161,7 @@ func main() {
 					if subject == "goap.registry.methodology.published" {
 						var m struct{ Name, Version string }
 						_ = json.Unmarshal(data, &m)
-						triggers.Handle(ctx, engine.TriggerEvent{Type: "methodology.published", Methodology: m.Name, Version: m.Version})
+						triggers.Handle(ctx, engine.TriggerEvent{Type: triggerevents.MethodologyPublished, Methodology: m.Name, Version: m.Version})
 						return nil
 					}
 					var ev domain.ChangeEvent

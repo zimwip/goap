@@ -129,7 +129,7 @@ func createUser(ctx context.Context, g *graph.Graph, subject string) error {
 	edits := []graph.NodeEdit{user}
 	if len(existing) == 0 {
 		// the first user: grant admin through a platform Assignment created in the same commit (ToKey
-		// resolves to the User node above), rather than the legacy User.Admin flag (ADR 0047)
+		// resolves to the User node above, ADR 0047)
 		asg := access.Assignment{Roles: []string{access.RoleAdmin}, Description: "First user becomes administrator"}
 		edits = append(edits, graph.NodeEdit{
 			Key: access.PlatformAssignmentKey(key), Type: access.NodeTypeAssignment, Props: asg.Props(),

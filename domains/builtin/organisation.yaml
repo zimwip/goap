@@ -43,9 +43,8 @@ nodeTypes:
       - {name: tools, label: "Allowed tools", description: "Allow-list of tools; empty: all", type: json, widget: textarea, section: Restriction, order: 6}
       - {name: deny, label: "Denied tools", description: "Tools the unit may not use", type: json, widget: textarea, section: Restriction, order: 7}
       - {name: readOnly, label: "Read only", description: "Only the read tools are available", type: boolean, section: Restriction, order: 8}
-  # who may do what is graph data too. A User is a person or service account: `admin: true` is legacy
-  # back-compat (ADR 0047) — new code grants administration through a platform Assignment instead; it holds
-  # no other role of its own — roles are held on projects, granted by Assignments. The unit it is `member_of`
+  # who may do what is graph data too. A User is a person or service account: it holds no role of its own
+  # (administration is a platform role, ADR 0047, granted by a platform Assignment) — roles are held on projects, granted by Assignments. The unit it is `member_of`
   # is its organisation when the token names none.
   # User extends OrgUnit (ADR 0039): the smallest organisational unit is a single person, so a User node
   # satisfies an OrgUnit-typed reference (Assignment's `assigns_org` link can target a unit, a team or a
@@ -64,7 +63,6 @@ nodeTypes:
       - {name: displayName, label: "Display name", description: "Name shown for the user", type: string, section: Identity, order: 2, asName: true}
       - {name: email, label: Email, description: "Address of the user", type: string, section: Identity, order: 3, validators: [email-format]}
       - {name: locale, label: Locale, description: "Language of the interface (en, fr…)", type: string, section: Preferences, order: 4}
-      - {name: admin, label: "Administrator (legacy)", description: "Back-compat flag: administration is granted by a platform Assignment", type: boolean, section: Access, order: 5}
   # one ABAC rule (Casbin): effect allow|deny for a resource type and action, when the rule expression over
   # r.sub / r.obj / r.act holds. Changes to Policy and User nodes need the "policy:write" permission, checked
   # against the compiled-in floor (administrators) only, so that no policy can lock them out.

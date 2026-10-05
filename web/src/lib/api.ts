@@ -535,8 +535,7 @@ export interface MethodologyProcess {
 }
 
 /**
- * Method (ADR 0035 §1): the documentary reference of how a step capability is carried out in a context, naming the
- * agent that acts.
+ * Method (ADR 0035 §1, ADR 0050): how a step capability is carried out in a context; not an actor, it names no agent.
  */
 export interface MethodologyMethod {
   name?: string;

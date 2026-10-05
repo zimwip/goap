@@ -86,16 +86,6 @@ var Platform = []Definition{
 	{Name: "no_open_actions", Expr: `!actions.exists(a, a.status == "open")`},
 }
 
-// IsPlatform reports whether a condition is a platform one.
-func IsPlatform(name string) bool {
-	for _, d := range Platform {
-		if d.Name == name {
-			return true
-		}
-	}
-	return false
-}
-
 // Compile compiles definitions. Every expression must return a bool.
 func Compile(defs []Definition) (*Set, error) {
 	env, err := NewEnv()

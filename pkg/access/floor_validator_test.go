@@ -109,8 +109,8 @@ func TestAdminFloorAllowsHandoffInOneCommit(t *testing.T) {
 	}
 }
 
-// The floor counts the administrators the way Snapshot.Enrich grants the role: the legacy User.Admin flag, and a
-// platform Assignment held by a unit the user belongs to, are administrators as much as a User's own Assignment.
+// The floor counts the administrators the way Snapshot.Enrich grants the role: a platform Assignment held by a
+// unit the user belongs to is an administrator as much as one held by the User itself.
 func TestAdminFloorCountsWhatEnrichGrants(t *testing.T) {
 	deactivateAlice := func(t *testing.T, g *graph.Graph) error {
 		t.Helper()
@@ -148,15 +148,9 @@ func TestAdminFloorCountsWhatEnrichGrants(t *testing.T) {
 			Links: []graph.LinkEdit{{Type: access.LinkMemberOf, ToKey: unit}}}
 	}
 
-	// bob is an administrator by the legacy flag only: alice may go
-	g := setup(t, bob(access.User{Subject: "bob", Admin: true}.Props(), domain.DefaultOrg))
-	if err := deactivateAlice(t, g); err != nil {
-		t.Fatalf("a flag-only administrator must count: %v", err)
-	}
-
 	// bob is an administrator through the Assignment of the unit he belongs to
 	asg := access.Assignment{Roles: []string{access.RoleAdmin}}
-	g = setup(t,
+	g := setup(t,
 		graph.NodeEdit{Key: "ORG-OPS", Type: mcp.NodeTypeOrgUnit, Props: map[string]any{"name": "Ops"}, Rationale: "test",
 			Links: []graph.LinkEdit{{Type: mcp.LinkPartOf, ToKey: domain.DefaultOrg}}},
 		bob(access.User{Subject: "bob"}.Props(), "ORG-OPS"),

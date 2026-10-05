@@ -58,7 +58,7 @@ nodeTypes:
   # methodology@Role, which only exists where a project names the methodology declaring it. A fixed catalog
   # kept in sync with the code (pkg/mcp.BuiltinRoles) by SeedBuiltins, documenting the role; not consulted to
   # decide what it may do (authz.DefaultPolicies) or to validate an Assignment's roles (not checked server-side).
-  # Administration (User.Admin) is not one of these: it stays the ADR 0043 flag.
+  # Administration (RoleAdmin) is one too (ADR 0047), granted the same way.
   - name: Role
     description: "Built-in platform-wide role, granted by an Assignment naming no project"
     editor: role

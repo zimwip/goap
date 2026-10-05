@@ -1,5 +1,5 @@
 // Who may do what is graph data of the organisation namespace: Policy nodes (ABAC rules) and User nodes
-// (profile and administrator flag; their roles are held on projects through Assignments, ADR 0043), changed
+// (profile; their roles, administration included, are granted through Assignments, ADR 0043, 0047), changed
 // through changes like any node.
 import type { GraphNode, Policy, Struct } from './api';
 
@@ -12,8 +12,6 @@ export interface User {
   displayName: string;
   email: string;
   locale: string;
-  /** administrator of the platform (ADR 0043); a node written before lists "admin" among its roles */
-  admin: boolean;
 }
 
 export const userKey = (subject: string) => `USR:${subject}`;
@@ -43,7 +41,6 @@ export function usersOf(nodes: GraphNode[]): { node: GraphNode; user: User }[] {
           displayName: String(p.displayName ?? ''),
           email: String(p.email ?? ''),
           locale: String(p.locale ?? ''),
-          admin: p.admin === true || (Array.isArray(p.roles) && (p.roles as unknown[]).includes('admin')),
         },
       };
     })
@@ -57,6 +54,5 @@ export function userProps(u: User): Struct {
     ...(u.displayName ? { displayName: u.displayName } : {}),
     ...(u.email ? { email: u.email } : {}),
     ...(u.locale ? { locale: u.locale } : {}),
-    ...(u.admin ? { admin: true } : {}),
   };
 }

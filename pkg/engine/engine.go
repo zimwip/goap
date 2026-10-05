@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/zimwip/goap/pkg/events"
 	"log/slog"
 	"maps"
 	"slices"
@@ -439,7 +440,7 @@ func (e *Engine) bindChange(ctx context.Context, p *Process, m *methodology.Comp
 	p.ChangeID = id
 	e.journal(ctx, p, domain.ExecutionRecord{Kind: domain.ExecAttach, Step: len(p.Steps),
 		Data: map[string]any{"changeId": string(id), "reused": req.ChangeID != ""}})
-	return e.save(ctx, p, "attached")
+	return e.save(ctx, p, events.BrokerAttached)
 }
 
 // resolveChange creates a new change for p, defaulting from req where given

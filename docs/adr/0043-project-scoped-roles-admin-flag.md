@@ -22,7 +22,7 @@ were merged only into the step checks (`step:perform` / `step:approve`). As a re
 
 ## Decision
 
-- **Administration is a flag of the user.** `organisation@User` gets `admin: true` (`access.User.Admin`) instead of
+- **Administration is a flag of the user** (superseded by ADR 0047: a platform role; the flag is gone). `organisation@User` gets `admin: true` (`access.User.Admin`) instead of
   `roles`; the principal of an administrator carries `admin` (`access.RoleAdmin`), which the floor policy lets do
   everything. The first user is created an administrator (ADR 0040). A node written before lists `admin` among its
   roles: still read as an administrator; its other roles are ignored.
@@ -47,9 +47,8 @@ were merged only into the step checks (`step:perform` / `step:approve`). As a re
   and apply changes (never one's own); a release is deployed by a `release_manager` of the project; steps keep
   `hasRoleIn`; agents, actions and restricted models use `mayRun` (one of `r.obj.Roles`, any role when it lists none).
   Methodologies, domains, triggers, the organisation, policies and adapters have no rule of their own: they are
-  administered by administrators. A graph still holding the previous defaults unchanged gets the new ones
-  (`graphsvc.SeedAccess` → `upgradeLegacyPolicies`: the legacy rules left as seeded are retired, the current ones
-  created, in one change); a rule an administrator edited, deleted or added stays as it is.
+  administered by administrators. The defaults before this ADR are not upgraded (no legacy rule set is kept: the
+  project is greenfield); `graphsvc.SeedAccess` seeds the current ones once.
 - **Token roles keep their meaning.** Roles a token carries (an external identity provider in `hs256` mode, the service
   identity of a trigger, the fixed dev principal) still count everywhere. A trigger's roles are not checked against the
   methodology's: they may be platform roles (the observer of `methodology-improvement` runs as `admin`, since drafting a

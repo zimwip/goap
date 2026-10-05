@@ -12,10 +12,10 @@
   import { headGraph, findNode, applyOnMain, updateNodeItem, currentLink, moveNodeItem, refOf, type HeadGraph } from '../../graphEdit';
   import { notify, provideActions } from '../../shell/workbench.svelte';
   import { openTab } from '../../shell/tabs.svelte';
-  import { USER_TYPE, ORG_UNIT_TYPE, MEMBER_OF } from '../../orgTypes';
-  import { session, me, hasAnyRole } from '../../stores/session.svelte';
-  import { confirmDialog } from '../../shell/confirmState.svelte';
-  import { authState, signsInLocally } from '../../stores/auth.svelte';
+  import { USER_TYPE, ORG_UNIT_TYPE, MEMBER_OF, ASSIGNMENT_TYPE } from '../../orgTypes';
+  import { platformAssignmentKey } from '../../projectRoles';
+  import { session, me } from '../../stores/session.svelte';
+    import { authState, signsInLocally } from '../../stores/auth.svelte';
 
   let { tab }: { tab: Tab } = $props();
 
@@ -51,9 +51,12 @@
   });
 
   const isSelf = $derived(!!user && user.props?.['subject'] === me());
-  // administration is a flag of the user (ADR 0043); a node written before it lists "admin" among its roles
-  const isAdmin = $derived(user?.props?.['admin'] === true || (Array.isArray(user?.props?.['roles']) && (user!.props!['roles'] as string[]).includes('admin')));
-  const canAdminister = $derived(hasAnyRole('admin'));
+  // administration is a platform role (ADR 0047), granted by the platform Assignment of the user (the one the
+  // first-admin bootstrap creates); one granted through a unit the user belongs to shows on that unit
+  const isAdmin = $derived.by(() => {
+    const roles = head?.nodes.find((n) => n.type === ASSIGNMENT_TYPE && n.key === platformAssignmentKey(key) && !n.deleted)?.props?.['roles'];
+    return Array.isArray(roles) && roles.includes('admin');
+  });
   // Logout (ADR 0040, 0042): stateless HS256 has nothing to revoke server-side, so this is a client-side
   // sign-out; offered with the platform's own sign-in only (an SSO mode signs out through its provider).
   const canLogout = $derived(isSelf && session.hasToken && signsInLocally(authState.mode));
@@ -81,7 +84,6 @@
   let fDisplayName = $state('');
   let fEmail = $state('');
   let fLocale = $state('');
-  let fAdmin = $state(false);
   let saving = $state(false);
 
   let moving = $state(false);
@@ -118,7 +120,6 @@
     fDisplayName = typeof user?.props?.['displayName'] === 'string' ? (user!.props!['displayName'] as string) : '';
     fEmail = typeof user?.props?.['email'] === 'string' ? (user!.props!['email'] as string) : '';
     fLocale = typeof user?.props?.['locale'] === 'string' ? (user!.props!['locale'] as string) : '';
-    fAdmin = isAdmin;
     editing = true;
   }
 
@@ -127,13 +128,8 @@
     saving = true;
     error = '';
     try {
-      if (isSelf && isAdmin && !fAdmin) {
-        const ok = await confirmDialog({ title: 'Administrator', message: 'You are removing your own administrator flag: you will lose access to the administration of the platform.', confirmLabel: 'Remove', danger: true });
-        if (!ok) return;
-      }
-      // the roles of a user are held on projects (ADR 0043): the legacy list of global roles goes away
       await applyOnMain(NS, `User ${key}`, `Update user ${key}`, head.baselineId, [
-        updateNodeItem(user, { displayName: fDisplayName.trim() || null, email: fEmail.trim() || null, locale: fLocale.trim() || null, admin: fAdmin || null, roles: null }),
+        updateNodeItem(user, { displayName: fDisplayName.trim() || null, email: fEmail.trim() || null, locale: fLocale.trim() || null }),
       ]);
       notify(`User ${key} updated.`, 'ok');
       editing = false;
@@ -181,7 +177,7 @@
                 <dd>{#if isAdmin}<span class="badge">yes</span>{:else}<span class="muted">no</span>{/if}</dd>
               </dl>
               <p class="hint">
-                A user holds no role of their own: an administrator administers the platform, and every other role is held on a project, granted by an assignment to the user or to one of their units (Assignments pane, ADR 0043). From one project to another, the same person can hold different roles.
+                A user holds no role of their own: an administrator holds the platform role admin, and every other role is held on a project, both granted by an assignment to the user or to one of their units (Assignments pane, ADR 0043, 0047). From one project to another, the same person can hold different roles.
               </p>
               <button type="button" class="small" onclick={startEdit}>Edit</button>
             {:else}
@@ -198,9 +194,6 @@
                   <label for="usr-locale">Locale</label>
                   <input id="usr-locale" bind:value={fLocale} />
                 </div>
-                {#if canAdminister}
-                  <label class="check"><input type="checkbox" bind:checked={fAdmin} /> Administrator</label>
-                {/if}
               </div>
               <div class="row">
                 <button type="button" class="small primary" disabled={saving} onclick={save}>Save</button>

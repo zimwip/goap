@@ -50,7 +50,7 @@ type Policy struct {
 func (p Policy) params() []any { return []any{p.Rule, p.Resource, p.Action, p.Effect} }
 
 // DefaultPolicies seeds an empty policy store (ADR 0043). A user holds no role of their own: an administrator
-// (the User's admin flag, RoleAdmin) may do everything; anyone else acts on a project with the roles their
+// (RoleAdmin, a platform role) may do everything; anyone else acts on a project with the roles their
 // Assignments grant there, which the authorizer merges into the principal for the resource's project. Holding
 // any role on the project (onProject) lets them work on it; what they write goes through the steps, agents and
 // actions their roles may run (step perform/approve, action run). The platform itself (methodologies, domains,
@@ -86,34 +86,6 @@ var DefaultPolicies = []Policy{
 	{Rule: `mayRun(r.sub, r.obj)`, Resource: "agent", Action: "run", Effect: "allow"},
 	// a model of the catalog restricted to some roles (ADR 0021): one of them, held on the caller's project
 	{Rule: `mayRun(r.sub, r.obj)`, Resource: "model", Action: "use", Effect: "allow"},
-}
-
-// LegacyDefaultPolicies are the default policies before ADR 0043, when users held roles of their own
-// (contributor, methodologist, approver...): a graph still holding them unchanged gets the current defaults
-// instead (graphsvc.SeedAccess).
-var LegacyDefaultPolicies = []Policy{
-	{Rule: `hasRole(r.sub, "admin")`, Resource: "*", Action: "*", Effect: "allow"},
-	// read access within the organization of the resource (multi-tenant isolation)
-	{Rule: `!isAnonymous(r.sub) && (r.obj.Org == "" || r.obj.Org == r.sub.Org)`, Resource: "*", Action: "read", Effect: "allow"},
-	{Rule: `hasAnyRole(r.sub, "contributor", "methodologist", "approver") && r.obj.Org == r.sub.Org`, Resource: "process", Action: "*", Effect: "allow"},
-	{Rule: `hasRole(r.sub, "methodologist") && r.obj.Org == r.sub.Org`, Resource: "methodology", Action: "*", Effect: "allow"},
-	// domains (node and link types, lifecycles, algorithms), edited independently of methodologies
-	{Rule: `hasRole(r.sub, "methodologist") && r.obj.Org == r.sub.Org`, Resource: "domain", Action: "*", Effect: "allow"},
-	// data objects created on the graph (typed by a node type): same roles as processes
-	{Rule: `hasAnyRole(r.sub, "contributor", "methodologist", "approver") && r.obj.Org == r.sub.Org`, Resource: "object", Action: "create", Effect: "allow"},
-	{Rule: `hasRole(r.sub, "methodologist") && r.obj.Org == r.sub.Org`, Resource: "trigger", Action: "fire", Effect: "allow"},
-	// lifecycle transitions of nodes (ADR 0014); a transition may require another permission
-	{Rule: `hasAnyRole(r.sub, "contributor", "methodologist", "approver") && r.obj.Org == r.sub.Org`, Resource: "node", Action: "transition", Effect: "allow"},
-	// tools of the MCPs bound by the organization of the change (ADR 0019)
-	{Rule: `hasAnyRole(r.sub, "contributor", "methodologist", "approver") && r.obj.Org == r.sub.Org`, Resource: "tool", Action: "call", Effect: "allow"},
-	// four-eyes principle: an approver applies changes of its organization, never its own
-	{Rule: `hasRole(r.sub, "approver") && r.sub.Org == r.obj.Org && r.sub.Subject != r.obj.Owner`, Resource: "change", Action: "apply", Effect: "allow"},
-	// production deployments: a release manager of the organization, never on its own change
-	{Rule: `hasRole(r.sub, "release_manager") && r.sub.Org == r.obj.Org && r.sub.Subject != r.obj.Owner`, Resource: "release", Action: "deploy", Effect: "allow"},
-	// steps of a process (ADR 0035 §2): whoever holds the responsible role in the unit holding the change (or above
-	// it) carries them out; whoever holds the accountable role approves them, never on its own change
-	{Rule: `hasRoleIn(r.sub, r.obj.Role, r.obj)`, Resource: "step", Action: "perform", Effect: "allow"},
-	{Rule: `hasRoleIn(r.sub, r.obj.Accountable, r.obj) && r.sub.Subject != r.obj.Owner`, Resource: "step", Action: "approve", Effect: "allow"},
 }
 
 // FloorPolicies are the rules that hold whatever the stored policies say, so that a faulty

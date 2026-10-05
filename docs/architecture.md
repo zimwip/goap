@@ -364,7 +364,7 @@ p, <rule on attributes>, <resource type | *>, <action | *>, <allow | deny>
 
 | Attribute | Content |
 |---|---|
-| `r.sub` | caller: `Subject`, `Org`, `Roles` — `admin` for an administrator (the `admin` flag of its `User` node), the roles its token carries, and the roles it holds on the resource's project (merged by the authorizer, ADR 0043) |
+| `r.sub` | caller: `Subject`, `Org`, `Roles` — `admin` for an administrator (a platform Assignment, ADR 0047), the roles its token carries, and the roles it holds on the resource's project (merged by the authorizer, ADR 0043) |
 | `r.obj` | resource: `Type`, `ID`, `Org`, `Owner`, `Name`, `ProjectID`, `Roles` (roles allowed to run an agent / action) |
 | `r.act` | action: `read`, `start`, `submit`, `write`, `publish`, `delete`, `apply`, `run`… |
 
@@ -394,8 +394,8 @@ administer them.
 a methodology declares its roles (`methodology@Role` nodes, ADR 0039); its processes and methods assign them RACI
 style (`roles: {responsible, accountable, consulted, informed}` on a step, inherited by its sub-steps, or on a method),
 its agents and actions name the roles allowed to run them (`roles: [...]`; an action without roles takes its agent's,
-none at all: any member of the project). It names roles, never people. A user holds no role of their own (only the
-`admin` flag): a project names the methodologies that apply to it (inherited by its sub-projects), which identifies the
+none at all: any member of the project). It names roles, never people. A user holds no role of their own (administration is a
+platform Assignment, ADR 0047): a project names the methodologies that apply to it (inherited by its sub-projects), which identifies the
 roles it needs, and an `Assignment` grants some of them to a unit or a user on the project. The authorizer resolves
 the roles of the subject — its own `User` node, then its unit and that unit's ancestors (`Snapshot.SubjectChain`) — on
 the resource's project and its ancestors (`ProjectChain`), and merges them into `r.sub.Roles`: from one project to
@@ -408,7 +408,7 @@ roles. Nodes carry no project (a node is shared by the changes of several projec
 processes, changes and tools of a project, not of a node's own project.
 
 - There is no IAM service: who may do what is **graph data** ([ADR 0020](adr/0020-access-control.md)). A rule is a
-  `Policy` node and a caller a `User` node (profile, `admin` flag, `member_of` a unit) of the `organisation` domain, changed
+  `Policy` node and a caller a `User` node (profile, `member_of` a unit) of the `organisation` domain, changed
   through changes like any node and edited in the frontend's "Access" screen. A rule is validated (compilation + trial
   evaluation) when read.
 - Every service builds its `authz.Authorizer` in process (`pkg/access`) from a snapshot of the head of the
