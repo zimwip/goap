@@ -55,12 +55,20 @@ the composite of those primitives for producers that do it all in one call (seed
 - **`UpdateNode(change, impact, props)`** applies only to a checked-out version of the change; it merges the
   properties into it (the semantics of `NodeWrite.Properties` today) and writes **no new version**. Refused on a node
   that is not checked out in the change, or checked in.
-- **A change of lifecycle state creates a new version.** `UpdateNode` with a `state` freezes the current working
-  version (it stays in the history, unreviewed) and writes the next version in the new state, which becomes the
-  working version: the node stays checked out. The transition is authorized at that call (`Graph.Authorizer`), before
-  the transaction. Retiring a node is the same: the new version is a tombstone, the last working version of the
-  impact.
+- `UpdateNode` never changes the lifecycle state (§4b). Retiring a node is an in-place edit too: the working version
+  becomes a tombstone with no outgoing link.
 - The owner transfer (`NodeWrite.Owner`) is an in-place edit of the working version.
+
+### 4b. A lifecycle transition is a version of its own, from a checked-in version
+
+- **`TransitionNode(change, node, transition)`** moves a node along its lifecycle. It applies only to a **checked-in**
+  version: refused while the node is checked out in the change on that flow (check it in first).
+- It is a checkout, the state change and a check-in in one operation: it writes the next version (`parents`: the
+  checked-in one), identical to it but for the state, and freezes it at once. This version records the transition
+  and nothing else. When the change holds no impact on the node yet, it declares one (`intent: modified`).
+- Its control is the transition's own: the permission it declares (`Graph.Authorizer`, by default `node:transition`,
+  asked before the transaction) and its guard. It needs no review of its own and leaves the impact's review as it is.
+- The typical sequence: `CheckoutNode` → `UpdateNode`… → review → `CheckinNode` → `TransitionNode`.
 
 ### 4. Links are edited in place on the working version
 
@@ -86,6 +94,7 @@ change targets its working version, whose number does not move until the next ch
 
 The impact log (ADR 0029) records `declared`, `checkedOut` (the working version, `Post`, replaces `written`),
 `updated` (the property and link edits made in place, with the patch, for the audit trail and PROV-O), `checkedIn`,
+`transitioned` (the version a `TransitionNode` wrote, with the transition),
 `reviewed`, `discarded`, `adopted`, `landed`, `rebased`. The node index (ADR 0026) is fed at check-in: a
 `NodeEvent` is published for a frozen version, never for each in-place edit.
 
@@ -96,8 +105,9 @@ The impact log (ADR 0029) records `declared`, `checkedOut` (the working version,
 | `CreateNode` without change, `CreateObject` | `CreateNode(change, …)` (ABAC `object:create` on the change's project, `gateAccess` for `adminOnly` types) |
 | `UpdateNode(ref, props)` | `CheckoutNode` then `UpdateNode(change, impact, props)` |
 | `CreateLink(change?, from, to)` | `CreateLink` / `UpdateLink` / `DeleteLink` on a checked-out source |
-| `WriteChangeImpact` | `UpdateNode` (props, state, retire, owner) and the link operations |
+| `WriteChangeImpact` | `UpdateNode` (props, retire, owner), the link operations and `TransitionNode` (state) |
 | — | `CheckinNode(change, impact)` |
+| — | `TransitionNode(change, node, transition)` |
 
 `gateAccess` (the `adminOnly` types, ADR 0068) applies to `CreateNode` and `CheckoutNode`; every later operation on the
 impact inherits the check.
@@ -106,11 +116,11 @@ impact inherits the check.
 
 - Rule 2 holds structurally: no RPC writes a node without naming a change, and no version exists without the change
   that checked it out.
-- The history of a node has one version per checkout and per state change, instead of one per edit; a reviewer reviews
+- The history of a node has one version per checkout and one per transition, instead of one per edit; a reviewer reviews
   the version that lands.
 - A version is no longer immutable from its creation but from its check-in: code that caches a version by its ref
   (the guard's replay, the index) must read checked-in versions only, or be told of in-place edits (`updated`).
-- `pkg/graph`: `NodeWrite` splits into the checkout, update, link and check-in operations; `Graph.CreateNode(NewNode)`,
+- `pkg/graph`: `NodeWrite` splits into the checkout, update, link, check-in and transition operations; `Graph.CreateNode(NewNode)`,
   `UpdateNode(ref)`, `Link`, `CreateObject` and the `graph.import` commit go; `Commit` is rebuilt on the primitives.
   Schema: `node_version.checked_out` in both dialects (`TestSchemasAligned`).
 - Callers to migrate: `internal/graphsvc` (handler, client), `pkg/dsl` / `pkg/engine` node operations, the
@@ -121,7 +131,7 @@ impact inherits the check.
 
 1. Domain and storage: the `checked_out` flag, the guard rule, in-place edits of a working version and of its links,
    the new impact operations.
-2. `pkg/graph`: `CreateNode`, `CheckoutNode`, `UpdateNode`, the link operations, `CheckinNode`; the check-in
+2. `pkg/graph`: `CreateNode`, `CheckoutNode`, `UpdateNode`, the link operations, `CheckinNode`, `TransitionNode`; the check-in
    precondition of `CommitChange`, `AdoptFlow`; removal of the direct writes; `Commit` on the primitives.
 3. Proto, handler, client, authorization.
 4. Engine, DSL, built-in MCP tools.
