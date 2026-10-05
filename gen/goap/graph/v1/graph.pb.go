@@ -185,8 +185,9 @@ type Node struct {
 	// the organisational unit responsible for the version and the project the node was created in (node ids, ADR 0054)
 	Owner   string `protobuf:"bytes,18,opt,name=owner,proto3" json:"owner,omitempty"`
 	Project string `protobuf:"bytes,19,opt,name=project,proto3" json:"project,omitempty"`
-	// a working version, edited in place by its change until an accepted review freezes it (ADR 0076, 0077)
-	CheckedOut bool `protobuf:"varint,20,opt,name=checked_out,json=checkedOut,proto3" json:"checked_out,omitempty"`
+	// the draft of a node in a change (ADR 0079): the node has no version while the change works, version is 0; the version
+	// is written when the change lands
+	Draft bool `protobuf:"varint,20,opt,name=draft,proto3" json:"draft,omitempty"`
 	// the nodes this one derives from (ADR 0077, merge and split): set on the first version of a successor
 	Origins       []*NodeRef `protobuf:"bytes,21,rep,name=origins,proto3" json:"origins,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -356,9 +357,9 @@ func (x *Node) GetProject() string {
 	return ""
 }
 
-func (x *Node) GetCheckedOut() bool {
+func (x *Node) GetDraft() bool {
 	if x != nil {
-		return x.CheckedOut
+		return x.Draft
 	}
 	return false
 }
@@ -1151,7 +1152,8 @@ type ChangeImpact struct {
 	Rationale string `protobuf:"bytes,5,opt,name=rationale,proto3" json:"rationale,omitempty"`
 	// released version of the reference baseline (empty for a created node)
 	Pre *NodeRef `protobuf:"bytes,6,opt,name=pre,proto3" json:"pre,omitempty"`
-	// version written on the change branch (empty while the impact of an existing node is only proposed)
+	// the draft of the node while the change works (a draft reference: the node, version 0, ADR 0079), the version written once
+	// the change is committed (empty while the impact of an existing node is only proposed)
 	Post *NodeRef `protobuf:"bytes,7,opt,name=post,proto3" json:"post,omitempty"`
 	// version on the target branch once applied
 	Landed *NodeRef `protobuf:"bytes,8,opt,name=landed,proto3" json:"landed,omitempty"`
@@ -1338,12 +1340,16 @@ func (x *ChangeImpact) GetSuperseded() bool {
 
 type GetNodeRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// version 0 = latest
+	// version 0 = latest (with change_id: the draft the change holds of the node, if any, ADR 0079)
 	Ref *NodeRef `protobuf:"bytes,1,opt,name=ref,proto3" json:"ref,omitempty"`
 	// alternative to ref: latest version of the node with this key
 	Key string `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
 	// namespace of key (required with a type catalogue)
-	Namespace     string `protobuf:"bytes,3,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	Namespace string `protobuf:"bytes,3,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	// read the node as this change sees it on a flow ("" = the main flow, else the active option): a node the change holds a
+	// draft of is read through the draft (a draft reference: version 0), others as the stored version (ADR 0079)
+	ChangeId      string `protobuf:"bytes,4,opt,name=change_id,json=changeId,proto3" json:"change_id,omitempty"`
+	Flow          string `protobuf:"bytes,5,opt,name=flow,proto3" json:"flow,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1395,6 +1401,20 @@ func (x *GetNodeRequest) GetKey() string {
 func (x *GetNodeRequest) GetNamespace() string {
 	if x != nil {
 		return x.Namespace
+	}
+	return ""
+}
+
+func (x *GetNodeRequest) GetChangeId() string {
+	if x != nil {
+		return x.ChangeId
+	}
+	return ""
+}
+
+func (x *GetNodeRequest) GetFlow() string {
+	if x != nil {
+		return x.Flow
 	}
 	return ""
 }
@@ -2505,7 +2525,7 @@ type ImpactEvent struct {
 	Seq      int32                  `protobuf:"varint,3,opt,name=seq,proto3" json:"seq,omitempty"`
 	// empty for a change-level event (adopted)
 	ImpactId string `protobuf:"bytes,4,opt,name=impact_id,json=impactId,proto3" json:"impact_id,omitempty"`
-	// proposed (an existing node) | created (a new node: its impact and first version) | checkedOut | transitioned | updated |
+	// proposed (an existing node) | created (a new node: its impact and its draft) | checkedOut | transitioned | updated |
 	// cancelled | withdrawn | reviewed | discarded | adopted | landed | rebased
 	Op string `protobuf:"bytes,5,opt,name=op,proto3" json:"op,omitempty"`
 	// the caller: the flow branch ("" = the main flow), the journal record of the action run, the principal or component
@@ -7946,7 +7966,7 @@ type ImpactNodeUpdateRequest struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	ChangeId       string                 `protobuf:"bytes,1,opt,name=change_id,json=changeId,proto3" json:"change_id,omitempty"`
 	ChangeImpactId string                 `protobuf:"bytes,2,opt,name=change_impact_id,json=changeImpactId,proto3" json:"change_impact_id,omitempty"`
-	// merged over the properties of the working version
+	// merged over the properties of the draft
 	Props *structpb.Struct `protobuf:"bytes,3,opt,name=props,proto3" json:"props,omitempty"`
 	// key of the organisational unit the node is transferred to (ADR 0054); empty: unchanged
 	Owner         string `protobuf:"bytes,4,opt,name=owner,proto3" json:"owner,omitempty"`
@@ -8075,7 +8095,7 @@ func (x *ImpactNodeUpdateResponse) GetNode() *ChangeImpact {
 type ImpactLinkCreateRequest struct {
 	state    protoimpl.MessageState `protogen:"open.v1"`
 	ChangeId string                 `protobuf:"bytes,1,opt,name=change_id,json=changeId,proto3" json:"change_id,omitempty"`
-	// the change impact whose working version the link leaves from
+	// the change impact whose draft the link leaves from
 	ChangeImpactId string           `protobuf:"bytes,2,opt,name=change_impact_id,json=changeImpactId,proto3" json:"change_impact_id,omitempty"`
 	Type           string           `protobuf:"bytes,3,opt,name=type,proto3" json:"type,omitempty"`
 	To             *NodeRef         `protobuf:"bytes,4,opt,name=to,proto3" json:"to,omitempty"`
@@ -12718,7 +12738,7 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\bversions\x18\x01 \x01(\x05R\bversions\"3\n" +
 	"\aNodeRef\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
-	"\aversion\x18\x02 \x01(\x05R\aversion\"\xed\x04\n" +
+	"\aversion\x18\x02 \x01(\x05R\aversion\"\xe2\x04\n" +
 	"\x04Node\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\x05R\aversion\x12\x10\n" +
@@ -12740,9 +12760,8 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\texecution\x18\x10 \x01(\tR\texecution\x12\x16\n" +
 	"\x06joined\x18\x11 \x03(\tR\x06joined\x12\x14\n" +
 	"\x05owner\x18\x12 \x01(\tR\x05owner\x12\x18\n" +
-	"\aproject\x18\x13 \x01(\tR\aproject\x12\x1f\n" +
-	"\vchecked_out\x18\x14 \x01(\bR\n" +
-	"checkedOut\x120\n" +
+	"\aproject\x18\x13 \x01(\tR\aproject\x12\x14\n" +
+	"\x05draft\x18\x14 \x01(\bR\x05draft\x120\n" +
 	"\aorigins\x18\x15 \x03(\v2\x16.goap.graph.v1.NodeRefR\aorigins\"\xca\x01\n" +
 	"\x04Link\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
@@ -12857,11 +12876,13 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\x04flow\x18\x12 \x01(\tR\x04flow\x12\x1e\n" +
 	"\n" +
 	"superseded\x18\x13 \x01(\bR\n" +
-	"superseded\"j\n" +
+	"superseded\"\x9b\x01\n" +
 	"\x0eGetNodeRequest\x12(\n" +
 	"\x03ref\x18\x01 \x01(\v2\x16.goap.graph.v1.NodeRefR\x03ref\x12\x10\n" +
 	"\x03key\x18\x02 \x01(\tR\x03key\x12\x1c\n" +
-	"\tnamespace\x18\x03 \x01(\tR\tnamespace\">\n" +
+	"\tnamespace\x18\x03 \x01(\tR\tnamespace\x12\x1b\n" +
+	"\tchange_id\x18\x04 \x01(\tR\bchangeId\x12\x12\n" +
+	"\x04flow\x18\x05 \x01(\tR\x04flow\">\n" +
 	"\x0fGetNodeResponse\x12+\n" +
 	"\x04view\x18\x01 \x01(\v2\x17.goap.graph.v1.NodeViewR\x04view\"\xd0\x01\n" +
 	"\x03Tag\x12\x0e\n" +

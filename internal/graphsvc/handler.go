@@ -59,6 +59,16 @@ func (h *Handler) publish(ctx context.Context, subject string, v any) {
 }
 
 func (h *Handler) GetNode(ctx context.Context, r *connect.Request[graphv1.GetNodeRequest]) (*connect.Response[graphv1.GetNodeResponse], error) {
+	if r.Msg.ChangeId != "" {
+		// as the change sees it (ADR 0079): the draft it holds of the node, else the stored version
+		change := domain.ChangeID(r.Msg.ChangeId)
+		if r.Msg.Key != "" {
+			v, err := h.Graph.ChangeNodeViewByKey(ctx, change, r.Msg.Flow, r.Msg.Namespace, r.Msg.Key)
+			return res(&graphv1.GetNodeResponse{View: pbconv.ViewToPB(v)}, err)
+		}
+		v, err := h.Graph.ChangeNodeView(ctx, change, r.Msg.Flow, pbconv.RefFromPB(r.Msg.Ref))
+		return res(&graphv1.GetNodeResponse{View: pbconv.ViewToPB(v)}, err)
+	}
 	ref := pbconv.RefFromPB(r.Msg.Ref)
 	if r.Msg.Key != "" {
 		n, err := h.Graph.NodeByKey(ctx, r.Msg.Namespace, r.Msg.Key)
@@ -493,17 +503,14 @@ func (h *Handler) gateImpact(ctx context.Context, change, impact, node string) e
 	return h.gateAccess(ctx, typ)
 }
 
-// gateLink applies the gate of the access nodes to an operation on a link: the type of its source.
-func (h *Handler) gateLink(ctx context.Context, link string) error {
-	l, err := h.Graph.LinkByID(ctx, domain.LinkID(link))
+// gateLink applies the gate of the access nodes to an operation on a link of a draft of the change: the type of its
+// source.
+func (h *Handler) gateLink(ctx context.Context, change, link string) error {
+	typ, err := h.Graph.LinkSourceType(ctx, domain.ChangeID(change), domain.LinkID(link))
 	if err != nil {
 		return rpcerr.ToConnect(err)
 	}
-	n, err := h.Graph.Node(ctx, l.From)
-	if err != nil {
-		return rpcerr.ToConnect(err)
-	}
-	return h.gateAccess(ctx, n.Type)
+	return h.gateAccess(ctx, typ)
 }
 
 func linkWrites(ls []*graphv1.NodeLinkWrite) []graph.LinkWrite {
@@ -642,7 +649,7 @@ func (h *Handler) ImpactLinkCreate(ctx context.Context, r *connect.Request[graph
 func (h *Handler) ImpactLinkUpdate(ctx context.Context, r *connect.Request[graphv1.ImpactLinkUpdateRequest]) (*connect.Response[graphv1.ImpactLinkUpdateResponse], error) {
 	ctx = h.Identity.Context(ctx, r.Header())
 	m := r.Msg
-	if err := h.gateLink(ctx, m.LinkId); err != nil {
+	if err := h.gateLink(ctx, m.ChangeId, m.LinkId); err != nil {
 		return nil, err
 	}
 	l, err := h.Graph.ImpactLinkUpdate(ctx, domain.ChangeID(m.ChangeId), domain.LinkID(m.LinkId), pbconv.Map(m.Props), m.Flow, m.Execution)
@@ -652,7 +659,7 @@ func (h *Handler) ImpactLinkUpdate(ctx context.Context, r *connect.Request[graph
 func (h *Handler) ImpactLinkDelete(ctx context.Context, r *connect.Request[graphv1.ImpactLinkDeleteRequest]) (*connect.Response[graphv1.ImpactLinkDeleteResponse], error) {
 	ctx = h.Identity.Context(ctx, r.Header())
 	m := r.Msg
-	if err := h.gateLink(ctx, m.LinkId); err != nil {
+	if err := h.gateLink(ctx, m.ChangeId, m.LinkId); err != nil {
 		return nil, err
 	}
 	return res(&graphv1.ImpactLinkDeleteResponse{}, h.Graph.ImpactLinkDelete(ctx, domain.ChangeID(m.ChangeId), domain.LinkID(m.LinkId), m.Flow, m.Execution))

@@ -81,6 +81,8 @@ message NodeType {
   repeated RequiredLink requires = 12;
   // nodes of the type are written by platform administrators only (ADR 0068)
   bool admin_only = 13;
+  // nodes of the type may carry properties that are no attribute of it (strict attributes, ADR 0079); inherited
+  bool additional_properties = 14;
 }
 
 // RequiredLink: a node of the type has exactly count outgoing links of the link type (ADR 0065).
@@ -819,6 +821,8 @@ message TypeInfo {
   repeated string contains = 8;
   // node_validator instances checking a node of the type as a whole, in call order (own and inherited)
   repeated string node_validators = 9;
+  // the nodes may carry properties that are no attribute of the type (own or inherited)
+  bool additional_properties = 10;
 }
 
 // LinkTypeInfo is the resolved model of a link type; an empty end accepts any node type.

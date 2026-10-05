@@ -487,8 +487,8 @@ func testLifecycleGuardRequiresAReview(t *testing.T, repo Repo) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if n, _ := w.g.Node(ctx, *cn.Post); n.State != "approved" || n.CheckedOut {
-		t.Fatalf("the transition is a version of its own, frozen: %+v", n)
+	if n, _ := w.g.ChangeNode(ctx, c.ID, "", *cn.Post); n.State != "approved" || !n.IsDraft() {
+		t.Fatalf("the transition moves the draft: %+v", n)
 	}
 	if _, err := w.g.Apply(ctx, c.ID, ""); err != nil {
 		t.Fatal(err)

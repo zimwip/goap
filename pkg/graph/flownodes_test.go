@@ -105,16 +105,19 @@ func testFlowChangeImpactsView(t *testing.T, repo Repo) {
 		t.Fatalf("flow view: %+v", fv)
 	}
 	// the main flow does not see the candidate, and its own post is untouched
-	if m := viewOf(t, g, c.ID, ""); len(m) != 2 || m["REQ-1"].Rationale != "PSP v2 changes the API" || m["REQ-1"].Post.Version != 2 {
+	if m := viewOf(t, g, c.ID, ""); len(m) != 2 || m["REQ-1"].Rationale != "PSP v2 changes the API" || !m["REQ-1"].Post.IsDraft() {
 		t.Fatalf("main view after the flow wrote: %+v", m)
 	}
 	if head, _ := g.Node(ctx, domain.NodeRef{ID: w.f.req.ID}); head.Properties["title"] != "Use PSP v1" {
 		t.Fatalf("nothing reached main: %+v", head)
 	}
-	// the flow's version lives on its branch, derived from the released version (the change branch one is stale)
-	post, err := g.Node(ctx, *fv["REQ-1"].Post)
-	if err != nil || post.Branch != flowBranchName(w.flow) || post.Parents[0] != 1 || post.Properties["title"] != "B" || post.Execution != "e3" {
-		t.Fatalf("flow version: %+v %v", post, err)
+	// the flow's draft is its own, checked out from the released version (the main flow's one is stale)
+	post, err := g.ChangeNode(ctx, c.ID, w.flow, *fv["REQ-1"].Post)
+	if err != nil || post.Branch != flowBranchName(w.flow) || !post.IsDraft() || post.Properties["title"] != "B" || post.Execution != "e3" {
+		t.Fatalf("flow draft: %+v %v", post, err)
+	}
+	if d := must[*domain.Draft](t)(g.draftOf(ctx, c.ID, w.flow, added[0].ID)); d == nil || d.Base == nil || *d.Base != pre {
+		t.Fatalf("checked out from the released version: %+v", d)
 	}
 	// a change with an open flow is not applied
 	if _, err := g.Apply(ctx, c.ID, ""); !errors.Is(err, ErrConflict) {
@@ -158,13 +161,17 @@ func testFlowChangeImpactsAdopt(t *testing.T, repo Repo) {
 	if adopted.Flow != "" || adopted.Superseded || adopted.Review != domain.ReviewAccepted || adopted.Post == nil {
 		t.Fatalf("the flow's change impact becomes the change's: %+v", adopted)
 	}
-	head, err := g.NodeByKeyOn(ctx, domain.DefaultNamespace, changeBranchName(c.ID), "REQ-1")
-	if err != nil || head.Ref() != *adopted.Post || head.Properties["title"] != "B" || head.Reason != domain.ReasonAdopt || head.Execution != "e3" {
-		t.Fatalf("the change branch must equal the flow: %+v %v (post %s)", head, err, adopted.Post)
+	// the main flow's draft is what the flow saw
+	head, err := g.ChangeNode(ctx, c.ID, "", *adopted.Post)
+	if err != nil || !head.IsDraft() || head.Properties["title"] != "B" || head.Execution != "e3" {
+		t.Fatalf("the main flow must see what the flow saw: %+v %v (post %s)", head, err, adopted.Post)
 	}
-	// TST-2 was created by steps that no longer exist: it is retired on the change branch
-	if n, err := g.NodeByKeyOn(ctx, domain.DefaultNamespace, changeBranchName(c.ID), "TST-2"); err != nil || !n.Deleted {
-		t.Fatalf("TST-2 must be retired: %+v %v", n, err)
+	if d := must[*domain.Draft](t)(g.draftOf(ctx, c.ID, "", added[0].ID)); d == nil || d.Flow != "" || d.Properties["title"] != "B" {
+		t.Fatalf("the flow's draft is the change's: %+v", d)
+	}
+	// TST-2 was created by steps that no longer exist: its draft goes with its impact
+	if d := must[*domain.Draft](t)(g.draftOf(ctx, c.ID, "", w.tst.ID)); d != nil {
+		t.Fatalf("TST-2 must go: %+v", d)
 	}
 	// the flow does not show any more, the main flow sees the adopted change impact only
 	if m := viewOf(t, g, c.ID, ""); len(m) != 1 || m["REQ-1"].ID != added[0].ID {
@@ -209,8 +216,8 @@ func testFlowChangeImpactsDiscard(t *testing.T, repo Repo) {
 			}
 		}
 	}
-	if b, err := g.Branch(ctx, "", flowBranchName(w.flow)); err != nil || b.Status != domain.BranchAbandoned {
-		t.Fatalf("the flow branch is abandoned: %+v %v", b, err)
+	if d := must[*domain.Draft](t)(g.draftOf(ctx, c.ID, "", added[0].ID)); d != nil {
+		t.Fatalf("nothing of the discarded flow is seen: %+v", d)
 	}
 	// the change goes on as before: REQ-1 at the version step 1 wrote
 	if _, err := g.acceptOn(ctx, c.ID, "", "e4", w.tst.ID, "bot", "needed"); err != nil {
@@ -269,7 +276,7 @@ func testParallelAndNestedFlowsOnChangeImpacts(t *testing.T, repo Repo) {
 		if v.Post == nil {
 			return nil
 		}
-		n, err := g.Node(ctx, *v.Post)
+		n, err := g.ChangeNode(ctx, c.ID, flow, *v.Post)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -300,9 +307,9 @@ func testParallelAndNestedFlowsOnChangeImpacts(t *testing.T, repo Repo) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	n, err := g.Node(ctx, *cn.Post)
-	if err != nil || n.Branch != flowBranchName(redo) || n.Parents[0] != w.req.Post.Version {
-		t.Fatalf("version of the nested flow: %+v %v", n, err)
+	n, err := g.ChangeNode(ctx, c.ID, redo, *cn.Post)
+	if err != nil || n.Branch != flowBranchName(redo) || !n.IsDraft() {
+		t.Fatalf("draft of the nested flow: %+v %v", n, err)
 	}
 	if title(redo) != "R" || title(f1) != "F1" || title("") != "A" {
 		t.Fatalf("after the nested flow wrote: redo %v, f1 %v, main %v", title(redo), title(f1), title(""))

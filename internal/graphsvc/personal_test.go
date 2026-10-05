@@ -306,8 +306,8 @@ func TestEnsureUserJoinsWaitingUnit(t *testing.T) {
 	}
 }
 
-// A new user is created and activated in one change: the activation is a transition in place of its working version
-// (ADR 0077), so the User has one version, active, and its log reads created, transitioned, reviewed, landed.
+// A new user is created and activated in one change: the activation is a transition of its draft (ADR 0079), so the
+// User has one version, active, written at landing, and its log reads created, transitioned, reviewed, landed.
 func TestEnsureUserIsOneVersion(t *testing.T) {
 	ctx := context.Background()
 	g := typedGraph(t)
@@ -322,8 +322,8 @@ func TestEnsureUserIsOneVersion(t *testing.T) {
 		t.Fatal(err)
 	}
 	vs, err := g.Versions(ctx, n.ID)
-	if err != nil || len(vs) != 1 || vs[0].Version != 1 || vs[0].State != "active" || vs[0].CheckedOut {
-		t.Fatalf("one frozen version, active: %+v %v", vs, err)
+	if err != nil || len(vs) != 1 || vs[0].Version != 1 || vs[0].State != "active" {
+		t.Fatalf("one version, active: %+v %v", vs, err)
 	}
 	evs, err := g.ChangeEvents(ctx, n.ChangeID)
 	if err != nil {

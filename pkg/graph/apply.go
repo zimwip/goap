@@ -271,6 +271,11 @@ type applier struct {
 	// landing is the answer of LandingGate, asked by askLandingGate's rolled-back pass before this transaction (the
 	// hook may itself read the graph).
 	landing *landingDecision
-	// impact is the change impact of the node a transition moves (ImpactNodeTransition): its guard sees it (ADR 0076).
+	// impact is the change impact of the node a transition moves (ImpactNodeTransition): its guard sees it (ADR 0076),
+	// draft the draft of the node in the state it goes to and drafts the drafts the flow sees (ADR 0079).
 	impact *domain.ChangeImpact
+	draft  *domain.Draft
+	drafts *draftReader
+	// events caches the impact log of the change for the walk of the transitions
+	events *[]domain.ImpactEvent
 }

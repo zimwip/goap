@@ -19,11 +19,9 @@ import (
 //   - every change names the unit holding it and the project it acts in, nodes of the structures in force;
 //   - every baseline is the result of a change (ADR 0056); what precedes the first change of a namespace is the empty
 //     state, the empty baseline id, which nothing stores;
-//   - a version is immutable once written: only a working version (ADR 0076: checked out by ImpactNodeCreate or
-//     ImpactNodeCheckout, until an accepted review freezes it, ADR 0077) or a version written in the same transaction gets its properties set, its
-//     owner moved or its outgoing links added, edited or removed, and
-//     only a working version is frozen or dropped (a checkout cancelled; a creation cancelled before it is accepted
-//     removes the node, the one deletion of the graph).
+//   - a version is immutable once written (ADR 0079): the working state of a node in a change is a draft, the version is
+//     written when the change lands, with its outgoing links, in the same transaction; no version is ever edited,
+//     frozen or dropped, and only a version written in the transaction gets links.
 //
 // What names a change, a unit or a project is checked when the transaction ends, before it commits (as a deferred
 // foreign key): the bootstrap writes the root unit and the root project, each referencing the other and itself, in
@@ -56,95 +54,20 @@ type guardTx struct {
 	headers map[domain.ChangeID]domain.Change
 	// written are the versions the transaction wrote
 	written map[domain.NodeRef]bool
+	// logged are the changes whose log the transaction appended to (the draft cache, ADR 0079, never publishes what a
+	// transaction that may roll back has seen of its own writes)
+	logged map[domain.ChangeID]bool
 }
 
-// editable refuses an edit of a version that is neither written in the transaction nor a working version (ADR 0076).
-func (t *guardTx) editable(ctx context.Context, ref domain.NodeRef, what string) error {
-	if t.written[ref] {
-		return nil
+func (t *guardTx) AppendLog(ctx context.Context, e domain.LogEntry) (domain.LogEntry, error) {
+	if t.logged == nil {
+		t.logged = map[domain.ChangeID]bool{}
 	}
-	n, err := t.Tx.Node(ctx, ref)
-	if err != nil {
-		return err
-	}
-	if !n.CheckedOut {
-		return fmt.Errorf("%s: version %s %s is frozen, check the node out first (ADR 0076, 0077): %w", what, n.Key, ref, ErrConflict)
-	}
-	return nil
+	t.logged[e.Change] = true
+	return t.Tx.AppendLog(ctx, e)
 }
 
-func (t *guardTx) SetNodeProps(ctx context.Context, ref domain.NodeRef, props map[string]any) error {
-	if err := t.editable(ctx, ref, "properties"); err != nil {
-		return err
-	}
-	return t.Tx.SetNodeProps(ctx, ref, props)
-}
-
-func (t *guardTx) SetNodeState(ctx context.Context, ref domain.NodeRef, state string) error {
-	if err := t.editable(ctx, ref, "state"); err != nil {
-		return err
-	}
-	return t.Tx.SetNodeState(ctx, ref, state)
-}
-
-func (t *guardTx) SetNodeOwner(ctx context.Context, ref domain.NodeRef, owner domain.NodeID) error {
-	if err := t.editable(ctx, ref, "owner"); err != nil {
-		return err
-	}
-	if owner == "" {
-		return fmt.Errorf("node %s: a version is owned by a unit (ADR 0054): %w", ref, ErrInvalid)
-	}
-	if t.owners == nil {
-		t.owners, t.projects = map[domain.NodeID]string{}, map[domain.NodeID]string{}
-	}
-	t.owners[owner] = "node " + ref.String()
-	return t.Tx.SetNodeOwner(ctx, ref, owner)
-}
-
-// DropWorkingVersion cancels a checkout: only the working version that is the latest of its node, which no other
-// version links to (the links of other working versions are removed first).
-func (t *guardTx) DropWorkingVersion(ctx context.Context, ref domain.NodeRef) error {
-	vs, err := t.Tx.Versions(ctx, ref.ID)
-	if err != nil {
-		return err
-	}
-	if len(vs) == 0 || vs[len(vs)-1].Ref() != ref || !vs[len(vs)-1].CheckedOut {
-		return fmt.Errorf("version %s is not the working version of its node (ADR 0076): %w", ref, ErrConflict)
-	}
-	in, err := t.Tx.InLinks(ctx, ref)
-	if err != nil {
-		return err
-	}
-	for _, l := range in {
-		if l.From != ref {
-			return fmt.Errorf("version %s is the target of link %s %s from %s: %w", ref, l.ID, l.Type, l.From, ErrConflict)
-		}
-	}
-	delete(t.written, ref)
-	return t.Tx.DropWorkingVersion(ctx, ref)
-}
-
-func (t *guardTx) DeleteLink(ctx context.Context, id domain.LinkID) error {
-	l, err := t.Tx.Link(ctx, id)
-	if err != nil {
-		return err
-	}
-	if err := t.editable(ctx, l.From, "link "+l.Type); err != nil {
-		return err
-	}
-	return t.Tx.DeleteLink(ctx, id)
-}
-
-func (t *guardTx) SetLinkProps(ctx context.Context, id domain.LinkID, props map[string]any) error {
-	l, err := t.Tx.Link(ctx, id)
-	if err != nil {
-		return err
-	}
-	if err := t.editable(ctx, l.From, "link "+l.Type); err != nil {
-		return err
-	}
-	return t.Tx.SetLinkProps(ctx, id, props)
-}
+func (t *guardTx) wroteLog(id domain.ChangeID) bool { return t.logged[id] }
 
 func (t *guardTx) needChange(id domain.ChangeID, what string) error {
 	if id == "" {
@@ -260,8 +183,8 @@ func (t *guardTx) PutLink(ctx context.Context, l domain.Link) error {
 	if err := t.needChange(l.ChangeID, "link "+l.Type); err != nil {
 		return err
 	}
-	if err := t.editable(ctx, l.From, "link "+l.Type); err != nil {
-		return err
+	if !t.written[l.From] {
+		return fmt.Errorf("link %s: version %s is not written by this transaction, a version never changes (ADR 0079): %w", l.Type, l.From, ErrConflict)
 	}
 	return t.Tx.PutLink(ctx, l)
 }

@@ -413,6 +413,11 @@ func (b *builder) version(r domain.NodeRef, typ, key string) string {
 	id := versionIRI(r)
 	n := b.node(id, "prov:Entity", "goap:NodeVersion")
 	set(n, "label", r.String())
+	if r.IsDraft() {
+		// the node has no version while the change works (ADR 0079): its draft, written as a version at landing
+		n = b.node(id, "prov:Entity", "goap:NodeDraft")
+		set(n, "label", key+" (draft)")
+	}
 	add(n, "prov:specializationOf", ref(nodeIRI(r.ID)))
 	node := b.node(nodeIRI(r.ID), "prov:Entity", "goap:Node")
 	set(node, "label", string(r.ID))
@@ -481,8 +486,8 @@ func (b *builder) impact(c domain.Change, e domain.LogEntry, ev domain.ImpactEve
 	case domain.ImpactProposed:
 		propose()
 	case domain.ImpactTransitioned, domain.ImpactCheckedOut, domain.ImpactCreated:
-		if !ev.WritesVersion() {
-			return // a transition taken in place on the working version writes none (ADR 0077): only its entry
+		if ev.Op == domain.ImpactTransitioned && ev.Draft == nil && ev.Post != nil && ev.Post.IsDraft() {
+			return // a transition taken on the draft writes no version (ADR 0079): only its entry
 		}
 		if ev.Op == domain.ImpactCreated {
 			propose()
@@ -538,7 +543,14 @@ func (b *builder) impact(c domain.Change, e domain.LogEntry, ev domain.ImpactEve
 		}
 		v := b.node(b.version(*ev.Landed, typ, key))
 		add(n, "goap:landed", ref(versionIRI(*ev.Landed)))
-		if state != nil && state.Post != nil && *state.Post != *ev.Landed {
+		if state != nil && state.Post != nil && state.Post.IsDraft() {
+			// the version is written from the draft when the change lands (ADR 0079)
+			add(v, "prov:wasDerivedFrom", ref(b.version(*state.Post, typ, key)))
+			add(v, "prov:wasGeneratedBy", ref(by(c, ev.Execution)))
+			setTime(v, "prov:generatedAtTime", ev.At)
+			p := *ev.Landed
+			state.Post = &p
+		} else if state != nil && state.Post != nil && *state.Post != *ev.Landed {
 			// a merge version of a node changed on both sides (ADR 0032)
 			add(v, "prov:wasDerivedFrom", ref(versionIRI(*state.Post)))
 			add(v, "prov:wasGeneratedBy", ref(by(c, ev.Execution)))

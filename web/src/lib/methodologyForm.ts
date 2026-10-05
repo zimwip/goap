@@ -96,6 +96,8 @@ export interface NodeTypeForm {
   document: string;
   /** false: direct writes, outside changes */
   changeControlled: boolean;
+  /** true: free-form type, its nodes may carry properties that are no attribute of it (strict attributes opt-out) */
+  additionalProperties: boolean;
   /** node_validator instances, in call order */
   validators: string[];
   /** editor the UI opens the nodes with ("" : inherited, or the default node editor) */
@@ -375,7 +377,7 @@ export const PRODUCE_OPS = ['create_node', 'update_node'] as const;
 
 // --- constructors --------------------------------------------------------------
 
-export const emptyNodeType = (): NodeTypeForm => ({ uid: newUid(), name: '', description: '', attributes: [], extends: '', lifecycle: '', document: '', changeControlled: true, validators: [], editor: '', search: [] });
+export const emptyNodeType = (): NodeTypeForm => ({ uid: newUid(), name: '', description: '', attributes: [], extends: '', lifecycle: '', document: '', changeControlled: true, additionalProperties: false, validators: [], editor: '', search: [] });
 export const emptyLinkType = (): LinkTypeForm => ({ uid: newUid(), name: '', description: '', from: '', to: '', attributes: [], compose: false });
 let uidSeq = 0;
 /** New local id (elements created in the UI). */
@@ -639,6 +641,7 @@ export function nodeTypeToForm(n: NodeType): NodeTypeForm {
     lifecycle: n.lifecycle ?? '',
     document: (n.document?.contains ?? []).join(', '),
     changeControlled: n.changeControlled !== false,
+    additionalProperties: n.additionalProperties === true,
     validators: [...(n.validators ?? [])],
     editor: n.editor ?? '',
     search: (n.search ?? []).map((s) => ({ ...s })),
@@ -784,6 +787,7 @@ export function nodeTypeFromForm(n: NodeTypeForm): NodeType {
   const contains = csv(n.document);
   if (contains.length) o.document = { contains };
   if (!n.changeControlled) o.changeControlled = false;
+  if (n.additionalProperties) o.additionalProperties = true;
   put(o, 'validators', n.validators.map((v) => v.trim()).filter(Boolean));
   if (n.search.length) o.search = n.search.map((s) => ({ ...s }));
   put(o, 'editor', n.editor.trim());

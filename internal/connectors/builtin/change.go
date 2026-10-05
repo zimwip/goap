@@ -38,13 +38,13 @@ var changeOps = []op{
 	{"reformulate", "Revise the title/intent of a change, superseding the previous definition (history kept): {change, item}",
 		schema(map[string]string{"change": "string", "title": "string", "intent": "string", "rationale": "string"}, "intent", "rationale")},
 	{"write", "Create a node in the change: {node}", schema(map[string]string{"change": "string", "key": "string", "type": "string", "properties": "object", "rationale": "string"}, "key", "type", "rationale")},
-	{"edit", "Modify the properties of a node in the change (its working version, checked out on the first edit), or move it to a lifecycle state (a transition: in place on the working version, else a version of its own): {node}", schema(map[string]string{"change": "string", "key": "string", "properties": "object", "expect": "object", "state": "string", "rationale": "string"}, "key", "rationale")},
+	{"edit", "Modify the properties of a node in the change (its draft, the node being checked out on the first edit), or move it to a lifecycle state (a transition of the draft, the node checked out first when it has none): {node}", schema(map[string]string{"change": "string", "key": "string", "properties": "object", "expect": "object", "state": "string", "rationale": "string"}, "key", "rationale")},
 	{"link", "Add a link from a node of the change: {node}", schema(map[string]string{"change": "string", "from": "string", "type": "string", "to": "string", "rationale": "string"}, "from", "type", "to")},
 	{"unlink", "Remove a link from a node of the change (removing a child is a modification of its parent): {node}", schema(map[string]string{"change": "string", "from": "string", "type": "string", "to": "string", "rationale": "string"}, "from", "type", "to")},
 	{"merge", "Merge nodes into a new one, seen from their parents (the sources stay as they are): {successors, sources, parents, suspect}", schema(map[string]string{"change": "string", "sources": "array", "key": "string", "type": "string", "properties": "object", "rationale": "string"}, "sources", "key", "type", "rationale")},
 	{"split", "Split a node into new ones, seen from its parents (the node stays as it is): {successors, sources, parents, suspect}", schema(map[string]string{"change": "string", "source": "string", "into": "array"}, "source", "into")},
-	{"cancel", "Cancel the checkout of a node of the change (a node created by the change and not accepted yet goes away): {node}", schema(map[string]string{"change": "string", "key": "string"}, "key")},
-	{"remove", "Take a node out of the change (its working version is dropped; refused once its accepted review froze it): {removed}", schema(map[string]string{"change": "string", "key": "string"}, "key")},
+	{"cancel", "Cancel the checkout of a node of the change: its draft is dropped (a node created by the change goes away): {node}", schema(map[string]string{"change": "string", "key": "string"}, "key")},
+	{"remove", "Take a node out of the change (its draft is dropped): {removed}", schema(map[string]string{"change": "string", "key": "string"}, "key")},
 	{"note", "Add an artifact item to the blackboard: {item}", schema(map[string]string{"change": "string", "type": "string", "text": "string", "data": "object"}, "text")},
 	{"signal", "Emit a named notification other agents or a live parent may react to: {item}", schema(map[string]string{"change": "string", "type": "string", "data": "object", "target": "string"}, "type")},
 	{"validate", "Check the consistency of the change: {issues}", schema(map[string]string{"change": "string"})},
@@ -704,17 +704,18 @@ func (w *working) ref(key string) (domain.NodeRef, error) {
 	return domain.NodeRef{}, fmt.Errorf("no node %s to link to in the change nor in its baseline", key)
 }
 
-// checkout returns the change impact with its working version, checked out when it has none (ADR 0076).
+// checkout returns the change impact with a draft of its own on the flow the call works on, the node checked out when
+// it has none (ADR 0076, 0079).
 func (w *working) checkout(imp domain.ChangeImpact) (domain.ChangeImpact, error) {
 	if imp.Post != nil {
-		if nv, ok := w.bb.Nodes[*imp.Post]; ok && graph.IsWorking(w.bb.Change, "", nv.Node) {
+		if nv, ok := w.bb.Nodes[*imp.Post]; ok && graph.IsWorking(w.bb.Change, domain.ActiveOptionOf(w.bb), nv.Node) {
 			return imp, nil
 		}
 	}
 	return w.c.p.Graph.ImpactNodeCheckout(w.ctx, w.bb.Change.ID, graph.NodeCheckout{Impact: imp.ID})
 }
 
-// edit edits the working version of a change impact in place: its properties and outgoing links.
+// edit edits the draft of a change impact: its properties and outgoing links.
 func (w *working) edit(imp domain.ChangeImpact, props map[string]any, links []graph.LinkWrite) (map[string]any, error) {
 	imp, err := w.checkout(imp)
 	if err != nil {

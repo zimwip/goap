@@ -239,14 +239,14 @@ func TestChangeImpactRPCs(t *testing.T) {
 	}
 	co := connect.NewRequest(&graphv1.ImpactNodeCheckoutRequest{ChangeId: string(c.ID), ChangeImpactId: cn.Id})
 	as("contributor", co)
-	if out, err := h.ImpactNodeCheckout(ctx, co); err != nil || out.Msg.Node.Post == nil || out.Msg.Node.Post.Version != 2 {
+	if out, err := h.ImpactNodeCheckout(ctx, co); err != nil || out.Msg.Node.Post == nil || out.Msg.Node.Post.Version != 0 {
 		t.Fatalf("checkout: %v %v", out, err)
 	}
 	props, _ := structpb.NewStruct(map[string]any{"title": "two"})
 	up := connect.NewRequest(&graphv1.ImpactNodeUpdateRequest{ChangeId: string(c.ID), ChangeImpactId: cn.Id, Props: props})
 	as("contributor", up)
-	if out, err := h.ImpactNodeUpdate(ctx, up); err != nil || out.Msg.Node.Post == nil || out.Msg.Node.Post.Version != 2 {
-		t.Fatalf("update in place: %v %v", out, err)
+	if out, err := h.ImpactNodeUpdate(ctx, up); err != nil || out.Msg.Node.Post == nil || out.Msg.Node.Post.Version != 0 {
+		t.Fatalf("update the draft: %v %v", out, err)
 	}
 	rv := connect.NewRequest(&graphv1.ImpactNodeReviewRequest{ChangeId: string(c.ID), ChangeImpactId: cn.Id, Accept: true})
 	as("contributor", rv)
@@ -273,8 +273,9 @@ func TestChangeImpactRPCs(t *testing.T) {
 			t.Fatalf("event %s: by %q, impact %s", e.Op, e.By, e.ImpactId)
 		}
 	}
-	if n, err := g.Node(ctx, domain.NodeRef{ID: req1.ID, Version: 2}); err != nil || !n.CheckedOut {
-		t.Fatalf("the accepted review leaves a working version until the change lands: %+v %v", n, err)
+	vs, verr := g.Versions(ctx, req1.ID)
+	if n, err := g.ChangeNode(ctx, c.ID, "", domain.NodeRef{ID: req1.ID}); err != nil || !n.IsDraft() || verr != nil || len(vs) != 1 {
+		t.Fatalf("the accepted review leaves a draft, no version, until the change lands: %+v %v %v", n, err, verr)
 	}
 	log, err = h.ListChangeEvents(ctx, connect.NewRequest(&graphv1.ListChangeEventsRequest{ChangeId: string(c.ID)}))
 	if err != nil {
@@ -400,9 +401,9 @@ linkTypes:
 			}
 		}
 	}
-	// what derives from E1
+	// nothing derives from E1 until the change lands: the successor is a draft (ADR 0079)
 	r, err := h.DerivedNodes(ctx, connect.NewRequest(&graphv1.DerivedNodesRequest{Ref: &graphv1.NodeRef{Id: string(must(t, g, "E1").ID)}}))
-	if err != nil || len(r.Msg.Nodes) != 1 || len(r.Msg.Nodes[0].Origins) != 2 {
+	if err != nil || len(r.Msg.Nodes) != 0 {
 		t.Errorf("DerivedNodes: %v, %v", r, err)
 	}
 }

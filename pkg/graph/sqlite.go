@@ -75,7 +75,7 @@ func sqliteScanNode(row scanner) (domain.Node, error) {
 	var change, cnode sql.NullString
 	var owner, project string
 	var version int
-	if err := row.Scan(&id, &version, &n.Namespace, &n.Key, &n.Type, &p, &n.Deleted, &change, &created, &n.Branch, &parents, &n.Reason, &n.State, &cnode, &n.Comment, &n.Execution, &owner, &project, &n.CheckedOut, &origins); err != nil {
+	if err := row.Scan(&id, &version, &n.Namespace, &n.Key, &n.Type, &p, &n.Deleted, &change, &created, &n.Branch, &parents, &n.Reason, &n.State, &cnode, &n.Comment, &n.Execution, &owner, &project, &origins); err != nil {
 		return n, err
 	}
 	n.Origins = originsOf([]byte(origins))
@@ -394,7 +394,7 @@ func (t *sqliteTx) PutNode(ctx context.Context, n domain.Node) error {
 	pj, _ := json.Marshal(parents)
 	_, err := t.tx.ExecContext(ctx, dialectSQLite.sqlInsert("node_version", nodeVersionColumns, ""),
 		string(n.ID), int(n.Version), string(jsonb(n.Properties)), n.Deleted, nullUUID(string(n.ChangeID)), tsText(n.CreatedAt),
-		domain.BranchOf(n.Branch), string(pj), n.Reason, n.State, nullUUID(string(n.ChangeImpact)), n.Comment, n.Execution, nullUUID(string(n.Owner)), n.CheckedOut, string(originsJSON(n.Origins)))
+		domain.BranchOf(n.Branch), string(pj), n.Reason, n.State, nullUUID(string(n.ChangeImpact)), n.Comment, n.Execution, nullUUID(string(n.Owner)), string(originsJSON(n.Origins)))
 	return sqliteErr(err, "node "+n.Ref().String())
 }
 
@@ -406,34 +406,6 @@ func (t *sqliteTx) exec1(ctx context.Context, what, q string, args ...any) error
 	}
 	if k, _ := res.RowsAffected(); k != 1 {
 		return fmt.Errorf("%s: %w", what, ErrNotFound)
-	}
-	return nil
-}
-
-func (t *sqliteTx) SetNodeOwner(ctx context.Context, ref domain.NodeRef, owner domain.NodeID) error {
-	return t.exec1(ctx, "node "+ref.String(), dialectSQLite.sqlSetNodeOwner(), string(ref.ID), int(ref.Version), nullUUID(string(owner)))
-}
-
-func (t *sqliteTx) SetNodeState(ctx context.Context, ref domain.NodeRef, state string) error {
-	return t.exec1(ctx, "node "+ref.String(), dialectSQLite.sqlSetNodeState(), string(ref.ID), int(ref.Version), state)
-}
-
-func (t *sqliteTx) FreezeVersion(ctx context.Context, ref domain.NodeRef) error {
-	return t.exec1(ctx, "checked-out version "+ref.String(), dialectSQLite.sqlFreeze(), string(ref.ID), int(ref.Version), false)
-}
-
-func (t *sqliteTx) DropWorkingVersion(ctx context.Context, ref domain.NodeRef) error {
-	q := dialectSQLite.dropWorkingVersion()
-	if _, err := t.tx.ExecContext(ctx, q[0], string(ref.ID), int(ref.Version)); err != nil {
-		return sqliteErr(err, "links of "+ref.String())
-	}
-	if err := t.exec1(ctx, "checked-out version "+ref.String(), q[1], string(ref.ID), int(ref.Version)); err != nil {
-		return err
-	}
-	for _, s := range []string{dialectSQLite.sqlDeleteOrphanNode(), dialectSQLite.sqlRefreshLatest()} {
-		if _, err := t.tx.ExecContext(ctx, s, string(ref.ID)); err != nil {
-			return sqliteErr(err, "node "+string(ref.ID))
-		}
 	}
 	return nil
 }
@@ -452,25 +424,6 @@ func (t *sqliteTx) Link(ctx context.Context, id domain.LinkID) (domain.Link, err
 		return domain.Link{}, fmt.Errorf("link %s: %w", id, ErrNotFound)
 	}
 	return ls[0], nil
-}
-
-func (t *sqliteTx) DeleteLink(ctx context.Context, id domain.LinkID) error {
-	return t.exec1(ctx, "link "+string(id), dialectSQLite.sqlDeleteLink(), string(id))
-}
-
-func (t *sqliteTx) SetLinkProps(ctx context.Context, id domain.LinkID, props map[string]any) error {
-	return t.exec1(ctx, "link "+string(id), dialectSQLite.sqlSetLinkProps(), string(id), string(jsonb(props)))
-}
-
-func (t *sqliteTx) SetNodeProps(ctx context.Context, ref domain.NodeRef, props map[string]any) error {
-	res, err := t.tx.ExecContext(ctx, dialectSQLite.sqlSetNodeProps(), string(ref.ID), int(ref.Version), string(jsonb(props)))
-	if err != nil {
-		return sqliteErr(err, "node "+ref.String())
-	}
-	if k, _ := res.RowsAffected(); k != 1 {
-		return fmt.Errorf("node %s: %w", ref, ErrNotFound)
-	}
-	return nil
 }
 
 func (t *sqliteTx) PutLink(ctx context.Context, l domain.Link) error {

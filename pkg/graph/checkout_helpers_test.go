@@ -2,8 +2,6 @@ package graph
 
 import (
 	"context"
-	"errors"
-	"fmt"
 
 	"github.com/zimwip/goap/pkg/domain"
 )
@@ -43,7 +41,7 @@ func importNode(ctx context.Context, g *Graph, in newNode) (domain.Node, error) 
 		return domain.Node{}, err
 	}
 	if in.State != "" {
-		n, err := g.Node(ctx, *cn.Post)
+		n, err := g.ChangeNode(ctx, c.ID, "", *cn.Post)
 		if err != nil {
 			return domain.Node{}, err
 		}
@@ -125,7 +123,7 @@ func importProps(ctx context.Context, g *Graph, ref domain.NodeRef, props map[st
 	if _, err := g.Apply(ctx, c.ID, ""); err != nil {
 		return src, err
 	}
-	return g.Node(ctx, *cn.Post)
+	return g.Node(ctx, domain.NodeRef{ID: ref.ID})
 }
 
 // acceptImpact accepts a change impact on a flow when it is proposed: accepting freezes its working version.
@@ -142,18 +140,15 @@ func (g *Graph) acceptImpact(ctx context.Context, id domain.ChangeID, impact dom
 	return nil
 }
 
-// checkedOut reports whether a change impact has a working version of its own on a flow.
+// checkedOut reports whether a change impact has a draft of its own on a flow.
 func (g *Graph) checkedOut(ctx context.Context, id domain.ChangeID, impact domain.ChangeImpactID, flow string) (out bool, err error) {
 	err = g.repo.InTx(ctx, func(tx Tx) error {
-		w, err := g.workOn(ctx, tx, id, flow)
+		c, err := tx.Change(ctx, id)
 		if err != nil {
 			return err
 		}
-		if err := w.selectImpact(impact); err != nil {
-			return err
-		}
-		h, err := w.head(ctx, tx)
-		out = h != nil && IsWorking(w.c, flow, *h)
+		rows, err := g.drafts(ctx, tx, id)
+		out = ownDraft(rows, impact, c.ResolveFlow(flow)) != nil
 		return err
 	})
 	return
@@ -219,40 +214,10 @@ func (g *Graph) edit(ctx context.Context, id domain.ChangeID, impact domain.Chan
 	return g.seenImpact(ctx, id, impact, e.Flow)
 }
 
-// removeLinkOf removes a link from the working version of a change impact: the link itself, or the copy the checkout
-// made of a link of the version it follows.
+// removeLinkOf removes a link from the draft of a change impact: the link itself, or the link of the version the draft
+// was checked out from, which the checkout copied.
 func (g *Graph) removeLinkOf(ctx context.Context, id domain.ChangeID, impact domain.ChangeImpactID, link domain.LinkID, flow, execution string) error {
-	err := g.ImpactLinkDelete(ctx, id, link, flow, execution)
-	if err == nil || !errors.Is(err, ErrConflict) {
-		return err
-	}
-	seen, serr := g.seenImpact(ctx, id, impact, flow)
-	if serr != nil {
-		return serr
-	}
-	if seen.Post == nil {
-		return err
-	}
-	var copied domain.LinkID
-	if terr := g.repo.InTx(ctx, func(tx Tx) error {
-		l, err := tx.Link(ctx, link)
-		if err != nil {
-			return err
-		}
-		out, err := tx.OutLinks(ctx, *seen.Post)
-		for _, c := range out {
-			if c.Type == l.Type && c.To.ID == l.To.ID {
-				copied = c.ID
-			}
-		}
-		return err
-	}); terr != nil {
-		return terr
-	}
-	if copied == "" {
-		return fmt.Errorf("link %s: no copy on %s: %w", link, seen.Post, err)
-	}
-	return g.ImpactLinkDelete(ctx, id, copied, flow, execution)
+	return g.ImpactLinkDelete(ctx, id, link, flow, execution)
 }
 
 // acceptAll accepts every proposed change impact of the main flow of a change (freezing their working versions).
@@ -305,4 +270,26 @@ func (g *Graph) proposeOrCreate(ctx context.Context, id domain.ChangeID, nodes [
 		out = append(out, added...)
 	}
 	return out, nil
+}
+
+// draftOf is the draft a flow sees for a change impact (nil: none).
+func (g *Graph) draftOf(ctx context.Context, id domain.ChangeID, flow string, impact domain.ChangeImpactID) (d *domain.Draft, err error) {
+	err = g.repo.InTx(ctx, func(tx Tx) error {
+		c, err := tx.Change(ctx, id)
+		if err != nil {
+			return err
+		}
+		d, err = g.seenDraft(ctx, tx, c, c.ResolveFlow(flow), impact)
+		return err
+	})
+	return
+}
+
+// versionCount is the number of stored versions of a node (0: the node has none: a node of a change that did not land).
+func (g *Graph) versionCount(ctx context.Context, node domain.NodeID) int {
+	vs, err := g.Versions(ctx, node)
+	if err != nil {
+		return 0
+	}
+	return len(vs)
 }

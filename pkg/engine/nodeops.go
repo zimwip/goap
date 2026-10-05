@@ -67,9 +67,7 @@ func ChangeImpactsFromBlackboard(bb domain.Blackboard) []dsl.ChangeImpact {
 	for _, cn := range bb.Change.Nodes {
 		x := dsl.ChangeImpact{ID: string(cn.ID), Key: cn.Key, Type: cn.Type, Intent: string(cn.Intent), Rationale: cn.Rationale, Review: string(cn.Review),
 			Planned: cn.Post == nil, Pre: view(cn.Pre), Post: view(cn.Post), Landed: view(cn.Landed), Items: []string{}, Links: []dsl.Link{}}
-		if cn.Post != nil {
-			x.CheckedOut = bb.Nodes[*cn.Post].CheckedOut
-		}
+		x.Drafted = cn.Drafted()
 		if cn.Post != nil {
 			for _, l := range bb.Nodes[*cn.Post].Out {
 				x.Links = append(x.Links, dsl.Link{ID: string(l.ID), Type: l.Type, From: dsl.LinkEnd{ID: string(cn.Post.ID), Version: int(cn.Post.Version), Key: cn.Key, Type: cn.Type}, To: end(l.To)})
@@ -84,10 +82,10 @@ func ChangeImpactsFromBlackboard(bb domain.Blackboard) []dsl.ChangeImpact {
 }
 
 // applyNodeOps applies the change impact operations a script buffered, in order:
-// a declaration adds a change impact, a write edits its working version (checked
-// out on the first write, ADR 0076), a review accepts or rejects it (the working
-// version stays one until the change lands, ADR 0077), a transition moves it along its lifecycle, a cancel drops the
-// working version. References ("#nN")
+// a declaration adds a change impact, a write edits its draft (the node is checked
+// out on the first write, ADR 0076), a review accepts or rejects it (an explicit operation: a write never
+// reviews; the draft stays one until the change lands, ADR 0079), a transition moves it along its lifecycle, a cancel
+// drops the draft. References ("#nN")
 // name the change impacts declared earlier by the same script; a key names a
 // change impact the process sees. On a flow branch the process sees the change
 // nodes of its flow, and what it declares and writes stays on the flow until it
@@ -114,7 +112,7 @@ func (e *Engine) applyNodeOps(ctx context.Context, p *Process, ops []dsl.NodeOp,
 	}
 	byKey := map[string]domain.ChangeImpactID{} // stored change impacts, then the ones this script declares
 	posts := map[domain.ChangeImpactID]domain.NodeRef{}
-	out := map[domain.ChangeImpactID]bool{} // the change impacts with a working version (ADR 0076)
+	out := map[domain.ChangeImpactID]bool{} // the change impacts with a draft of their own on the flow (ADR 0076, 0079)
 	for _, cn := range bb.Change.Nodes {
 		if len(cn.Items) > 0 {
 			continue // derived from items: decided through them
@@ -335,7 +333,7 @@ func (e *Engine) applyNodeOps(ctx context.Context, p *Process, ops []dsl.NodeOp,
 			if op.State != "" {
 				return declared, fail(fmt.Errorf("a lifecycle state is a transition of its own: use impactNodeTransition (ADR 0076)"))
 			}
-			// the first write checks the node out: its working version, edited in place by the next ones (ADR 0076)
+			// the first write checks the node out: its draft, edited by the next ones (ADR 0076, 0079)
 			if !out[id] {
 				cn, err := retryOnConflict(func() (domain.ChangeImpact, error) {
 					return e.Graph.ImpactNodeCheckout(ctx, p.ChangeID, graph.NodeCheckout{Impact: id, Flow: p.Flow, Execution: execution})
@@ -378,7 +376,7 @@ func (e *Engine) applyNodeOps(ctx context.Context, p *Process, ops []dsl.NodeOp,
 			if err != nil {
 				return declared, fail(err)
 			}
-			posts[id] = *cn.Post
+			posts[id], out[id] = *cn.Post, true // a transition checks the node out when it has no draft (ADR 0079)
 		case "cancel":
 			id, err := resolve(op.Node)
 			if err != nil {

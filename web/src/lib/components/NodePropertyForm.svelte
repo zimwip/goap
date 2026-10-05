@@ -9,6 +9,7 @@
     attributes = [],
     declared,
     typeName,
+    open = false,
     busy = false,
     onsave,
     oncancel,
@@ -18,6 +19,8 @@
     attributes?: AttributeInfo[];
     declared: string[];
     typeName: string;
+    /** the type is free-form (`additionalProperties`): properties that are no attribute may be added */
+    open?: boolean;
     busy?: boolean;
     onsave: (patch: Record<string, unknown>) => Promise<boolean> | boolean;
     oncancel: () => void;
@@ -30,7 +33,7 @@
   // the form is created each time it is opened: it starts from the values of that moment
   const start = untrack(() =>
     Object.fromEntries(
-      [...new Set([...declared, ...Object.keys(props)])].map((k) => {
+      [...new Set([...declared, ...(open ? Object.keys(props) : [])])].map((k) => {
         const a = orderedAttributes(attributes).find((x) => x.name === k);
         return [k, props[k] === undefined && a ? a.default : text(props[k])];
       }),
@@ -63,7 +66,7 @@
     const patch: Record<string, unknown> = {};
     try {
       for (const [k, v] of Object.entries(draft)) if (v !== text(props[k])) patch[k] = parse(k, v);
-      const nk = newKey.trim();
+      const nk = open ? newKey.trim() : '';
       if (nk) {
         if (nk in draft) throw new Error(`property “${nk}” is already in the form`);
         patch[nk] = newValue;
@@ -112,11 +115,13 @@
       {/if}
     </div>
   {/each}
-  <div class="newprop">
-    <input type="text" class="mono" placeholder="new property" aria-label="New property name" bind:value={newKey} />
-    <input type="text" placeholder="value" aria-label="New property value" bind:value={newValue} />
-  </div>
-  <p class="hint">Values are text; a property that already holds a number, boolean or list is edited as JSON. Only the changed properties are proposed.</p>
+  {#if open}
+    <div class="newprop">
+      <input type="text" class="mono" placeholder="new property" aria-label="New property name" bind:value={newKey} />
+      <input type="text" placeholder="value" aria-label="New property value" bind:value={newValue} />
+    </div>
+  {/if}
+  <p class="hint">Values are text; a property that already holds a number, boolean or list is edited as JSON. Only the changed properties are proposed.{#if !open} Only the attributes of {typeName} can be set.{/if}</p>
   {#if error}<div class="alert">{error}</div>{/if}
   <div class="row">
     <button type="submit" class="primary" disabled={busy}>{busy ? 'Proposing…' : 'Propose the changes'}</button>

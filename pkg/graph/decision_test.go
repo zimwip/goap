@@ -80,7 +80,7 @@ func testDecisionLoop(t *testing.T, repo Repo) {
 		t.Fatalf("options after the decision: %+v", opts)
 	}
 	res := must[domain.Baseline](t)(g.Apply(ctx, c.ID, ""))
-	if !res.Contains(va) {
+	if res.Nodes[va.ID] != 2 || must[domain.Node](t)(g.Node(ctx, domain.NodeRef{ID: va.ID})).Properties["title"] != "Use Stripe" {
 		t.Fatalf("the chosen option lands: %v", res.Nodes)
 	}
 }

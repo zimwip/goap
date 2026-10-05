@@ -6,6 +6,7 @@
     graph,
     errorMessage,
     nodeTitle,
+    isDraft,
     type ChangeImpact,
     type GraphNode,
     type ItemInput,
@@ -79,7 +80,7 @@
     // the baseline holds.
     nodes = namespace ? allNodes.filter((n) => n.namespace === namespace) : allNodes;
     attached = (await graph.getChangeImpacts(id, signal)).nodes ?? [];
-    posts = await loadPosts(changeImpacts);
+    posts = await loadPosts(changeImpacts, false, { changeId: id });
     const initNodes: Record<string, boolean> = {};
     for (const n of changeImpacts) if (isPending(n) && n.id) initNodes[n.id] = true;
     nodeDecisions = initNodes;
@@ -142,8 +143,8 @@
     return write('create', { key, type }, { props: {}, state: born }, `create ${key}`);
   }
 
-  /** Takes a node out of the change: its working version is dropped (a node the change creates goes away); refused
-   * once a version of it is frozen (reject it instead, ADR 0076, 0077). */
+  /** Takes a node out of the change: its draft is dropped (a node the change creates goes away); refused
+   * once its version has landed (reject it instead, ADR 0076, 0079). */
   async function removeNode(row: LifecycleRow): Promise<boolean> {
     if (!changeId || !row.impact?.id) return false;
     moving = `${row.node.id}:remove`;
@@ -285,7 +286,7 @@
                   <button type="button" class="small" class:on-reject={nodeDecisions[id] === false} aria-pressed={nodeDecisions[id] === false} onclick={() => (nodeDecisions[id] = false)}>Reject</button>
                 </div>
               </div>
-              {#if n.post?.id}<div class="hint">written as v{n.post.version}</div>{:else if n.intent === 'created'}<div class="hint">not written yet</div>{/if}
+              {#if n.post?.id}<div class="hint">{isDraft(n.post) ? 'draft: its version is written when the change lands' : `written as v${n.post.version}`}</div>{:else if n.intent === 'created'}<div class="hint">no draft yet</div>{/if}
             </li>
           {/each}
         </ul>
@@ -320,6 +321,7 @@
       onopennode={(r) => openNode(r.node, { pin: true, change: changeId })}
       onadd={(id) => (extraNodes = [...extraNodes, id])}
     />
+    <p class="hint">Edits are drafts awaiting a review: they are not accepted here (ADR 0079); a reviewer accepts them in the change.</p>
     <div class="row" style="margin-top: 0.75rem">
       <button class="primary" type="button" onclick={() => send([])} disabled={submitting}>
         {submitting ? 'Sending…' : 'Done'}

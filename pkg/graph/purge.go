@@ -39,6 +39,7 @@ func (g *Graph) PurgeChange(ctx context.Context, id domain.ChangeID) (domain.Cha
 			}
 			branch = own.Name
 		}
+		g.draftStates.drop(id)
 		return tx.DeleteChange(ctx, id, c.Namespace, branch)
 	})
 	return c, err

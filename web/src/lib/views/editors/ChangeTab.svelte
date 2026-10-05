@@ -26,7 +26,7 @@
   import ChangeLifecycle from '../../components/ChangeLifecycle.svelte';
 import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
   import EditorPanes, { type Pane } from '../../components/EditorPanes.svelte';
-  import { lifecycleRows, reopenable, nodeTypeNames, lifecycleResolver, loadPosts, writeNodeInChange, removeFromChange, type PostVersions, type LifecycleRow } from '../../lifecycle';
+  import { lifecycleRows, reopenable, nodeTypeNames, lifecycleResolver, loadPosts, awaitingReview, acceptAllProposed, writeNodeInChange, removeFromChange, type PostVersions, type LifecycleRow } from '../../lifecycle';
   import { loadTypes, typeCatalog } from '../../stores/types.svelte';
   import { openTab } from '../../shell/tabs.svelte';
   import { openNode } from '../../nodeEditors';
@@ -173,7 +173,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
   async function loadScope(id: string, sc: string, signal?: AbortSignal) {
     loadedScope = sc;
     const v = (await graph.getBlackboard(id, sc || MAIN_SCOPE, signal)).change;
-    const ps = await loadPosts(v?.nodes ?? [], true);
+    const ps = await loadPosts(v?.nodes ?? [], true, { changeId: id, flow: sc || MAIN_SCOPE });
     if (signal?.aborted || sc !== scope) return;
     view = v;
     posts = ps;
@@ -289,10 +289,12 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
     ...nodes.map((n) => n.key ?? ''),
     ...(view?.nodes ?? []).filter((n) => n.intent === 'created' && !n.superseded && n.review !== 'rejected').map((n) => n.key ?? ''),
   ]);
+  // the graph refuses to land a change with an impact awaiting its review (ADR 0079: edits never review)
+  const awaiting = $derived(awaitingReview(view?.nodes ?? [], true));
   const stuckNotLandable = $derived(lcRows.some((r) => r.lifecycle && !r.landable));
   const panes = $derived<Pane[]>([
     { id: 'overview', label: 'Overview', badge: stuckNotLandable ? '!' : undefined },
-    { id: 'impacts', label: `${scopeLabel} ▸ Impacts`, badge: view?.nodes?.length || undefined },
+    { id: 'impacts', label: `${scopeLabel} ▸ Impacts`, badge: awaiting.length ? `${awaiting.length} to review` : view?.nodes?.length || undefined },
     { id: 'items', label: `${scopeLabel} ▸ Items`, badge: items.length || undefined },
     { id: 'compare', label: 'Compare', badge: options.filter((f) => f.status === 'open').length || undefined },
     { id: 'decisions', label: 'Decisions', badge: pendingDecisions || undefined },
@@ -360,14 +362,31 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
     }
   }
 
+  /** Accepts every impact awaiting its review, on the scope: an explicit button, one review each with the given comment. */
+  async function acceptAll(comment: string): Promise<boolean> {
+    if (!change?.id) return false;
+    moving = 'review-all';
+    error = '';
+    try {
+      await acceptAllProposed(change.id, view?.nodes ?? [], comment, scope || MAIN_SCOPE, true);
+      await load(change.id);
+      return true;
+    } catch (e) {
+      error = errorMessage(e);
+      return false;
+    } finally {
+      moving = '';
+    }
+  }
+
   /** Creates a node: identity and type only. */
   async function createNode(key: string, type: string, state: string): Promise<boolean> {
     const born = lifecycleOf(type) && state && state !== lifecycleOf(type)?.initial ? state : undefined;
     return write('create', { key, type }, { props: {}, state: born }, `create ${key}`);
   }
 
-  /** Takes a node out of the change: its working version is dropped (a node the change creates goes away); refused
-   * once a version of it is frozen (reject it instead, ADR 0076, 0077). */
+  /** Takes a node out of the change: its draft is dropped (a node the change creates goes away); refused
+   * once its version has landed (reject it instead, ADR 0076, 0079). */
   async function removeNode(row: LifecycleRow): Promise<boolean> {
     if (!change?.id || !row.impact?.id) return false;
     moving = `${row.node.id}:remove`;
@@ -664,10 +683,16 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
             <label for="bname">Name of the new baseline</label>
             <input id="bname" type="text" bind:value={baselineName} disabled={isApplied} />
           </div>
-          <button class="primary" onclick={apply} disabled={isApplied || applying || !baselineName.trim() || stuckNotLandable} title={stuckNotLandable ? 'Move the nodes to a landable state first' : ''}>
+          <button class="primary" onclick={apply} disabled={isApplied || applying || !baselineName.trim() || stuckNotLandable || awaiting.length > 0} title={stuckNotLandable ? 'Move the nodes to a landable state first' : awaiting.length ? 'Review the impacts first' : ''}>
             {applying ? 'Applying…' : 'Apply'}
           </button>
         </div>
+        {#if awaiting.length}
+          <div class="alert" role="status" style="margin: 0.75rem 0 0">
+            Apply is blocked: {awaiting.length} change impact{awaiting.length > 1 ? 's' : ''} await{awaiting.length > 1 ? '' : 's'} their review ({awaiting.map((n) => n.key).join(', ')}).
+            <button type="button" class="link" onclick={() => (pane = 'impacts')}>Review them</button>
+          </div>
+        {/if}
         {#if applied}
           <div class="alert ok" style="margin: 0.75rem 0 0">
             Baseline <button type="button" class="link" onclick={() => openBaseline(applied?.id)}>{applied.name || applied.id}</button> created.
@@ -708,6 +733,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
         oncreate={createNode}
         onremove={removeNode}
         onreview={reviewRow}
+        onacceptall={acceptAll}
         onhistory={(r) => openNode(r.node, { pin: true, generic: true, pane: 'history' })}
         onopennode={(r) => openNode({ id: r.impact?.post?.id ?? r.node.id ?? '', key: r.node.key ?? '' }, { pin: true, change: ch.id ?? '', flow: scope || MAIN_SCOPE })}
         onadd={addImpact}

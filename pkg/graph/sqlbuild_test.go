@@ -33,8 +33,8 @@ func checkSQL(t *testing.T, name string, d dialect, got, want string) {
 }
 
 const (
-	goldPGNodeCols     = `n.id::text, v.version, n.namespace, n.key, n.type, v.props, v.deleted, v.change_id::text, v.created_at, v.branch, v.parents, v.reason, v.state, v.change_impact::text, v.comment, v.execution, v.owner_id::text, n.project_id::text, v.checked_out, v.origins`
-	goldSQLiteNodeCols = `n.id, v.version, n.namespace, n.key, n.type, v.props, v.deleted, v.change_id, v.created_at, v.branch, v.parents, v.reason, v.state, v.change_impact, v.comment, v.execution, v.owner_id, n.project_id, v.checked_out, v.origins`
+	goldPGNodeCols     = `n.id::text, v.version, n.namespace, n.key, n.type, v.props, v.deleted, v.change_id::text, v.created_at, v.branch, v.parents, v.reason, v.state, v.change_impact::text, v.comment, v.execution, v.owner_id::text, n.project_id::text, v.origins`
+	goldSQLiteNodeCols = `n.id, v.version, n.namespace, n.key, n.type, v.props, v.deleted, v.change_id, v.created_at, v.branch, v.parents, v.reason, v.state, v.change_impact, v.comment, v.execution, v.owner_id, n.project_id, v.origins`
 	goldPGOnBranch     = `(v.branch = $2 OR EXISTS (SELECT 1 FROM node_branch j WHERE j.node_id = v.node_id AND j.version = v.version AND j.branch = $2))`
 	goldSQLiteOnBranch = `(v.branch = ? OR EXISTS (SELECT 1 FROM node_branch j WHERE j.node_id = v.node_id AND j.version = v.version AND j.branch = ?))`
 	goldPGImpactCols   = `id::text, node_id::text, key, type, intent, rationale, pre_version, post_version, landed_version, review, reviews, COALESCE(via::text, ''), recheck, produced_by, derived_from, items, execution, created_at, flow, superseded`
@@ -200,26 +200,8 @@ func TestSQLBuildersGolden(t *testing.T) {
 	checkSQL(t, "pg DeleteTag", pg, q, `DELETE FROM tag WHERE id = $1`)
 	q, _ = lite.sqlDeleteTag("t1")
 	checkSQL(t, "sqlite DeleteTag", lite, q, `DELETE FROM tag WHERE id = ?`)
-	checkSQL(t, "pg SetNodeProps", pg, pg.sqlSetNodeProps(), `UPDATE node_version SET props = $3 WHERE node_id = $1 AND version = $2`)
-	checkSQL(t, "sqlite SetNodeProps", lite, lite.sqlSetNodeProps(), `UPDATE node_version SET props = ? WHERE node_id = ? AND version = ?`)
-	checkSQL(t, "pg SetNodeOwner", pg, pg.sqlSetNodeOwner(), `UPDATE node_version SET owner_id = $3 WHERE node_id = $1 AND version = $2`)
-	checkSQL(t, "sqlite SetNodeOwner", lite, lite.sqlSetNodeOwner(), `UPDATE node_version SET owner_id = ? WHERE node_id = ? AND version = ?`)
-	checkSQL(t, "pg SetNodeState", pg, pg.sqlSetNodeState(), `UPDATE node_version SET state = $3 WHERE node_id = $1 AND version = $2`)
-	checkSQL(t, "sqlite SetNodeState", lite, lite.sqlSetNodeState(), `UPDATE node_version SET state = ? WHERE node_id = ? AND version = ?`)
-	checkSQL(t, "pg Freeze", pg, pg.sqlFreeze(), `UPDATE node_version SET checked_out = $3 WHERE node_id = $1 AND version = $2 AND checked_out`)
-	checkSQL(t, "sqlite Freeze", lite, lite.sqlFreeze(), `UPDATE node_version SET checked_out = ? WHERE node_id = ? AND version = ? AND checked_out`)
-	for i, want := range []string{`DELETE FROM link WHERE from_id = $1 AND from_version = $2`, `DELETE FROM node_version WHERE node_id = $1 AND version = $2 AND checked_out`} {
-		checkSQL(t, "pg DropWorkingVersion", pg, pg.dropWorkingVersion()[i], want)
-	}
-	for i, want := range []string{`DELETE FROM link WHERE from_id = ? AND from_version = ?`, `DELETE FROM node_version WHERE node_id = ? AND version = ? AND checked_out`} {
-		checkSQL(t, "sqlite DropWorkingVersion", lite, lite.dropWorkingVersion()[i], want)
-	}
 	checkSQL(t, "pg DeleteChangeImpact", pg, pg.sqlDeleteChangeImpact(), `DELETE FROM change_impact WHERE change_id = $1 AND id = $2`)
 	checkSQL(t, "sqlite DeleteChangeImpact", lite, lite.sqlDeleteChangeImpact(), `DELETE FROM change_impact WHERE change_id = ? AND id = ?`)
-	checkSQL(t, "pg DeleteLink", pg, pg.sqlDeleteLink(), `DELETE FROM link WHERE id = $1`)
-	checkSQL(t, "sqlite DeleteLink", lite, lite.sqlDeleteLink(), `DELETE FROM link WHERE id = ?`)
-	checkSQL(t, "pg SetLinkProps", pg, pg.sqlSetLinkProps(), `UPDATE link SET props = $2 WHERE id = $1`)
-	checkSQL(t, "sqlite SetLinkProps", lite, lite.sqlSetLinkProps(), `UPDATE link SET props = ? WHERE id = ?`)
 	checkSQL(t, "pg SetNodeOrigin", pg, pg.sqlSetNodeOrigin(), `UPDATE node_version SET change_id = $3, change_impact = $4, comment = $5 WHERE node_id = $1 AND version = $2`)
 	checkSQL(t, "sqlite SetNodeOrigin", lite, lite.sqlSetNodeOrigin(), `UPDATE node_version SET change_id = ?, change_impact = ?, comment = ? WHERE node_id = ? AND version = ?`)
 	checkSQL(t, "pg JoinBranch", pg, pg.sqlJoinBranch(), `INSERT INTO node_branch (node_id, version, branch, change_id) SELECT node_id, version, $3, $4 FROM node_version
@@ -228,11 +210,11 @@ func TestSQLBuildersGolden(t *testing.T) {
 		WHERE node_id = ? AND version = ? AND branch <> ? ON CONFLICT DO NOTHING`)
 
 	// Inserts
-	nodeVersionCols := []string{"node_id", "version", "props", "deleted", "change_id", "created_at", "branch", "parents", "reason", "state", "change_impact", "comment", "execution", "owner_id", "checked_out"}
-	checkSQL(t, "pg insert node_version", pg, pg.sqlInsert("node_version", nodeVersionCols, ""), `INSERT INTO node_version (node_id, version, props, deleted, change_id, created_at, branch, parents, reason, state, change_impact, comment, execution, owner_id, checked_out)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`)
-	checkSQL(t, "sqlite insert node_version", lite, lite.sqlInsert("node_version", nodeVersionCols, ""), `INSERT INTO node_version (node_id, version, props, deleted, change_id, created_at, branch, parents, reason, state, change_impact, comment, execution, owner_id, checked_out)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	nodeVersionCols := []string{"node_id", "version", "props", "deleted", "change_id", "created_at", "branch", "parents", "reason", "state", "change_impact", "comment", "execution", "owner_id"}
+	checkSQL(t, "pg insert node_version", pg, pg.sqlInsert("node_version", nodeVersionCols, ""), `INSERT INTO node_version (node_id, version, props, deleted, change_id, created_at, branch, parents, reason, state, change_impact, comment, execution, owner_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`)
+	checkSQL(t, "sqlite insert node_version", lite, lite.sqlInsert("node_version", nodeVersionCols, ""), `INSERT INTO node_version (node_id, version, props, deleted, change_id, created_at, branch, parents, reason, state, change_impact, comment, execution, owner_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	linkCols := []string{"id", "type", "from_id", "from_version", "to_id", "to_version", "props", "change_id"}
 	checkSQL(t, "pg insert link", pg, pg.sqlInsert("link", linkCols, ""), `INSERT INTO link (id, type, from_id, from_version, to_id, to_version, props, change_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`)
 	checkSQL(t, "sqlite insert link", lite, lite.sqlInsert("link", linkCols, ""), `INSERT INTO link (id, type, from_id, from_version, to_id, to_version, props, change_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)

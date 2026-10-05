@@ -90,6 +90,8 @@ func Of(bb domain.Blackboard, step *Step) string {
 			switch {
 			case n.Landed != nil:
 				state = "landed"
+			case n.Drafted():
+				state = "drafted"
 			case n.Post != nil:
 				state = "written"
 			}
@@ -241,7 +243,9 @@ func Trace(c domain.Change, ref string) (string, error) {
 				line("from %s", describe(it))
 			}
 		}
-		if n.Post != nil {
+		if n.Drafted() {
+			line("drafted (no version until the change lands)")
+		} else if n.Post != nil {
 			line("written %s", n.Post)
 		}
 		for _, r := range n.Reviews {

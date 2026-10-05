@@ -64,12 +64,13 @@ type ChangeImpact struct {
 	Review    string `json:"review"`
 	// Planned is set while the change impact has no post version yet.
 	Planned bool `json:"planned"`
-	// CheckedOut is set while the post version is the working version of the change: still being edited, not frozen (ADR 0076).
-	CheckedOut bool  `json:"checkedOut"`
-	Pre        *Node `json:"pre"`
-	Post       *Node `json:"post"`
-	Landed     *Node `json:"landed"`
-	// Links are the outgoing links of the version written (post): from this node to the linked ones.
+	// Drafted is set while the change holds a draft of the node: post is then the draft (Version 0: the node has no
+	// version until the change lands, ADR 0079).
+	Drafted bool  `json:"drafted"`
+	Pre     *Node `json:"pre"`
+	Post    *Node `json:"post"`
+	Landed  *Node `json:"landed"`
+	// Links are the outgoing links of the draft (post): from this node to the linked ones.
 	Links []Link `json:"links"`
 	// Items are the items the change impact is derived from (none when written directly).
 	Items []string `json:"items"`
@@ -78,8 +79,8 @@ type ChangeImpact struct {
 // NodeOp is an operation on a change impact buffered by a script; the engine
 // applies them in order after the script ends.
 type NodeOp struct {
-	// Op is declare (ImpactNode: the impact of an existing node; ImpactNodeCreate: held until the node is created by its first operation), write (WriteNode: the working version, checked out on the first write,
-	// edited in place), review (ImpactNodeReview: an acceptance freezes the working version), transition (ImpactNodeTransition), cancel
+	// Op is declare (ImpactNode: the impact of an existing node; ImpactNodeCreate: held until the node is created by its first operation), write (WriteNode: the draft, the node checked out on the first write,
+	// then edited), review (ImpactNodeReview: an explicit operation, an acceptance runs the checks of a version on the draft), transition (ImpactNodeTransition), cancel
 	// (ImpactNodeCancel), remove (WithdrawImpact) (ADR 0076), merge (ImpactNodeMerge) or split (ImpactNodeSplit, ADR 0077).
 	Op string `json:"op"`
 	// Ref names a declared change impact ("#nN") for the next operations of the script.
@@ -324,7 +325,7 @@ func (c *Ctx) ImpactNodeCreate(nodeType, key, rationale string) string {
 
 // ImpactNodeMerge merges nodes (keys, or references of this script) into a new node of a type, seen from their
 // parents (ADR 0077): the parents lose the links to the sources and gain one to the new node, the sources stay as they
-// are. It returns the reference of the new node, checked out. Every source needs a parent (a link of a type flagged
+// are. It returns the reference of the new node, with its draft. Every source needs a parent (a link of a type flagged
 // compose to it).
 func (c *Ctx) ImpactNodeMerge(sources []string, nodeType, key, rationale string) string {
 	c.nseq++
@@ -356,8 +357,8 @@ func (c *Ctx) ImpactNodeSplit(source string, into []map[string]any) []string {
 	return refs
 }
 
-// WriteNode edits the working version of a declared node (ADR 0076): the first write checks the node out (a new
-// version on the change branch), the next ones edit it in place. node is a key of a change impact or the reference
+// WriteNode edits the draft of a declared node (ADR 0076, 0079): the first write checks the node out (a draft: no
+// version is written until the change lands), the next ones edit it. A write never reviews. node is a key of a change impact or the reference
 // returned by ImpactNode / ImpactNodeCreate; w may hold props (merged over the current ones), links ([{type, to}] with to a
 // node key or a reference of a node written earlier) and removeLinks (link ids). A lifecycle state is a transition
 // (ImpactNodeTransition); a node is removed by its parent losing the link to it.
@@ -410,20 +411,21 @@ func (c *Ctx) ImpactNodeReviewWithReserve(node, derogation, comment string) {
 	c.nodeOps = append(c.nodeOps, NodeOp{Op: "review", Node: node, Accept: true, Reserve: derogation, Comment: comment, ProducedBy: c.job.Action})
 }
 
-// ImpactNodeTransition moves the node of a change impact to a lifecycle state: in place on its working version, else a
-// version of its own from a frozen one; authorized and guarded when it is taken (ADR 0076, 0077).
+// ImpactNodeTransition moves the node of a change impact to a lifecycle state: the state of its draft, which a node with
+// none is checked out for first; authorized and guarded when it is taken, the guard seeing the change, the impact and
+// the draft (ADR 0076, 0079).
 func (c *Ctx) ImpactNodeTransition(node, state string) {
 	c.nodeOps = append(c.nodeOps, NodeOp{Op: "transition", Node: node, State: state, ProducedBy: c.job.Action})
 }
 
-// ImpactNodeCancel drops the working version of a change impact; a creation cancelled before it is accepted removes
-// the node (ADR 0076).
+// ImpactNodeCancel drops the draft of a change impact; a creation cancelled removes its impact, no node was written
+// (ADR 0076, 0079).
 func (c *Ctx) ImpactNodeCancel(node string) {
 	c.nodeOps = append(c.nodeOps, NodeOp{Op: "cancel", Node: node, ProducedBy: c.job.Action})
 }
 
-// WithdrawImpact takes a change impact out of the change: its working version is dropped (a creation never accepted
-// leaves no node); refused once its accepted review froze a version of it (ADR 0076, 0077).
+// WithdrawImpact takes a change impact out of the change: its draft is dropped (a creation leaves no node)
+// (ADR 0076, 0079).
 func (c *Ctx) WithdrawImpact(node string) {
 	c.nodeOps = append(c.nodeOps, NodeOp{Op: "remove", Node: node, ProducedBy: c.job.Action})
 }

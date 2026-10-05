@@ -146,7 +146,7 @@ func createAliasStubs(ctx context.Context, g StoreGraph, aliases []string, metho
 		return err
 	}
 	for _, alias := range aliases {
-		// a working version, checked out, its review proposed (ADR 0076): the change stays open
+		// a draft, its review proposed (ADR 0076, 0079): the change stays open
 		if _, err := g.ImpactNodeCreate(ctx, c.ID, graph.NodeCreate{Key: llmcfg.AliasKey(alias), Type: llmcfg.NodeTypeAlias, Properties: map[string]any{"alias": alias},
 			Rationale: fmt.Sprintf("referenced by methodology %s but not configured yet", methodologyName), ProducedBy: "methodology-load"}); err != nil {
 			return err

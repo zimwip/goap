@@ -1,7 +1,7 @@
 // The model gateway configuration is graph data (platform namespace): providers, catalog models and aliases are
 // nodes. The settings dialog does not apply its edits: it stages them as impacts of a personal change
 // (stores/pending.svelte.ts) that the user saves or discards. An API key is never stored, only its reference.
-import { graph, type CatalogModel, type LlmProvider, type ModelAlias, type Struct } from './api';
+import { graph, isDraft, type CatalogModel, type LlmProvider, type ModelAlias, type Struct } from './api';
 import { headGraph } from './graphEdit';
 import { ns, isUserKey } from './stores/session.svelte';
 import { pending, stageRetire, stageUpsert, stagedOfType } from './stores/pending.svelte';
@@ -157,7 +157,8 @@ export async function listAliasProposals(): Promise<AliasProposal[]> {
     const board = (await graph.getBlackboard(ch.id, '')).change;
     for (const imp of board?.nodes ?? []) {
       if (imp.type !== ALIAS_TYPE || imp.review !== 'proposed' || imp.superseded || !imp.id) continue;
-      const n = imp.post ? (await graph.getNode(imp.post)).view?.node : undefined;
+      // a draft is read through the change (no version, ADR 0079)
+      const n = imp.post ? (await graph.getNode(imp.post, undefined, isDraft(imp.post) ? { changeId: ch.id } : undefined)).view?.node : undefined;
       const props = (n?.props ?? {}) as Record<string, unknown>;
       out.push({ changeId: ch.id, impactId: imp.id, alias: str(props.alias) || (imp.key ?? '').replace(/^LLA:/, ''), target: str(props.target), reason: imp.rationale ?? ch.intent ?? '', by: imp.producedBy ?? '' });
     }
@@ -167,10 +168,10 @@ export async function listAliasProposals(): Promise<AliasProposal[]> {
 
 /** Accepts a proposed alias pointing to `target` and applies the change that proposed it. */
 export async function acceptAliasProposal(p: AliasProposal, target: string): Promise<void> {
-  // the target is set on the working version of the proposal (ADR 0076, 0077)
+  // The target is set on the draft of the proposal (ADR 0076, 0079). The review below is the explicit "Accept" button of
+  // the proposal (its reviewer chose a target and accepts), not a side effect of the edit.
   const imp = (await graph.getBlackboard(p.changeId, '')).change?.nodes?.find((n) => n.id === p.impactId);
-  const work = imp?.post ? (await graph.getNode(imp.post)).view?.node : undefined;
-  if (!work?.checkedOut) await graph.impactNodeCheckout(p.changeId, { changeImpactId: p.impactId }, `Accept the alias ${p.alias}`);
+  if (!isDraft(imp?.post)) await graph.impactNodeCheckout(p.changeId, { changeImpactId: p.impactId }, `Accept the alias ${p.alias}`);
   await graph.impactNodeUpdate(p.changeId, p.impactId, { props: { alias: p.alias, target } });
   await graph.impactNodeReview(p.changeId, p.impactId, true, `Accepted with target ${target}`);
   await graph.applyChange(p.changeId, '');

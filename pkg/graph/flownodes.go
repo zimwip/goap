@@ -2,29 +2,25 @@ package graph
 
 import (
 	"context"
-	"errors"
+	"encoding/json"
 	"fmt"
 	"slices"
 
 	"github.com/zimwip/goap/pkg/domain"
 )
 
-// This file is the part of the flow branches (ADR 0017) that concerns change
-// nodes (ADR 0025): a flow is a graph branch forked from the change branch; what
-// the relaunched steps wrote is stale; adopting the flow makes the change
-// branch equal to what the flow sees.
+// This file is the part of the flows (ADR 0017) that concerns change nodes (ADR 0025, 0079): a flow keeps its own drafts
+// of the nodes it checks out, forked from what it sees; what the relaunched steps wrote is stale; adopting the flow
+// installs its drafts on the main flow, and resets the drafts the stale runs wrote to what the others left.
 
 func flowBranchName(flow string) string { return "flow-" + shortID(flow) }
 
-// IsWorking reports whether a version is the working version of the flow of a change (ADR 0077): checked out, and written
-// on the branch the flow writes on (flow "": the active option, else the main flow). A working version of a parent flow
-// is not: the flow checks the node out to write its own. Callers use it to decide between a checkout and an update.
+// IsWorking reports whether a node as a call of the change reads it is the draft of the flow itself (ADR 0077, 0079):
+// a draft (no version), whose branch is the one the flow names (flow "": the active option, else the main flow). The
+// draft of a parent flow is not: the flow checks the node out to write its own. Callers use it to decide between a
+// checkout and an update.
 func IsWorking(c domain.Change, flow string, n domain.Node) bool {
-	branch := domain.BranchOf(c.Branch)
-	if f := c.ResolveFlow(flow); f != "" {
-		branch = flowBranchName(f)
-	}
-	return n.CheckedOut && domain.BranchOf(n.Branch) == branch
+	return n.IsDraft() && domain.BranchOf(n.Branch) == draftBranch(c, c.ResolveFlow(flow))
 }
 
 // flowChain lists the flows from f up to the main flow (excluded), innermost first.
@@ -61,11 +57,10 @@ type flowNodes struct {
 	chain  []domain.Flow
 	inFlow map[string]bool
 	stale  map[string]bool
-	branch string // the change branch
 }
 
 func (g *Graph) newFlowNodes(tx Tx, c domain.Change, flow string) *flowNodes {
-	v := &flowNodes{g: g, tx: tx, c: c, flow: flow, chain: flowChain(c, flow), inFlow: map[string]bool{}, branch: domain.BranchOf(c.Branch)}
+	v := &flowNodes{g: g, tx: tx, c: c, flow: flow, chain: flowChain(c, flow), inFlow: map[string]bool{}}
 	for _, f := range v.chain {
 		v.inFlow[f.ID] = true
 	}
@@ -87,20 +82,6 @@ func (v *flowNodes) visible(cn domain.ChangeImpact) bool {
 		return false
 	}
 	return true
-}
-
-// onChangeBranch is the latest version of a node on the change branch that no stale run wrote.
-func (v *flowNodes) onChangeBranch(ctx context.Context, node domain.NodeID) (*domain.Node, error) {
-	vs, err := v.tx.Versions(ctx, node)
-	if err != nil {
-		return nil, err
-	}
-	for _, n := range slices.Backward(vs) {
-		if n.On(v.branch) && !v.isStale(n.Execution) {
-			return &n, nil
-		}
-	}
-	return nil, nil
 }
 
 func nodeOf(cn domain.ChangeImpact) domain.NodeID {
@@ -144,193 +125,94 @@ func (v *flowNodes) find(ctx context.Context, id domain.ChangeImpactID) (domain.
 	return domain.ChangeImpact{}, fmt.Errorf("change impact %s is not on the flow %q of change %s: %w", id, v.flow, v.c.ID, ErrNotFound)
 }
 
-// ensureFlowBranch creates the graph branch of a flow on its first write.
-func (g *Graph) ensureFlowBranch(ctx context.Context, tx Tx, c domain.Change, own domain.Branch, flow string) (string, error) {
-	name := flowBranchName(flow)
-	if _, err := tx.Branch(ctx, c.Namespace, name); err == nil {
-		return name, nil
-	} else if !errors.Is(err, ErrNotFound) {
-		return "", err
-	}
-	f, _ := c.Flow(flow)
-	parent := own.Name
-	if f.Parent != "" {
-		parent = flowBranchName(f.Parent)
-		if _, err := tx.Branch(ctx, c.Namespace, parent); err != nil {
-			parent = own.Name // the parent flow wrote nothing: this one forks from the change branch
-		}
-	}
-	head, err := branchHead(ctx, tx, c.Namespace, own.Name)
-	if err != nil {
-		return "", err
-	}
-	return name, tx.PutBranch(ctx, domain.Branch{Name: name, Namespace: c.Namespace, Parent: parent, ForkBaseline: head.ID, Head: head.ID,
-		Origin: "flow:" + string(c.ID) + ":" + flow, Status: domain.BranchOpen, CreatedAt: g.now()})
-}
-
-// adoptNodes makes the change branch equal to the flow: for every node the stale runs or the
-// flow wrote, a new version copies what the flow sees (ADR 0025 §5). Change impacts of the flow
-// become the change's, the stale ones are superseded.
+// adoptNodes installs, on the main flow, what the adopted flow saw of the nodes (ADR 0025 §5, 0079). For each change
+// impact: when the flow holds a draft of the node it becomes the main flow's (a conflict when the main flow's moved on
+// since the flow checked the node out, by a run that is not stale); else when the main flow's draft was written in part
+// by stale runs, it is reset to what the other runs left, or dropped when they left nothing. The change impacts of the
+// flow become the change's, the stale ones are superseded (their drafts go with them).
 func (g *Graph) adoptNodes(ctx context.Context, tx Tx, c domain.Change, f domain.Flow, by string) error {
-	own, hasOwn, err := ownBranch(ctx, tx, c)
-	if err != nil {
-		return err
-	}
 	stale := map[string]bool{}
 	for _, e := range f.StaleRuns {
 		stale[e] = true
 	}
 	isStale := func(e string) bool { return e != "" && stale[e] }
-	if !hasOwn {
-		// nothing was written on a branch: only the change impacts move
-		return g.adoptChangeImpacts(ctx, tx, c, f, nil, by)
+	rows, err := g.drafts(ctx, tx, c.ID)
+	if err != nil {
+		return err
 	}
-	changeBranch, flowBranch := own.Name, flowBranchName(f.ID)
-	view := &flowNodes{g: g, tx: tx, c: c, flow: "", branch: changeBranch, stale: stale}
-	newRefs := map[domain.NodeID]domain.Node{}
-	type plan struct {
-		desired, head *domain.Node
+	events, err := impactEvents(ctx, tx, c.ID)
+	if err != nil {
+		return err
 	}
-	plans := map[domain.NodeID]plan{}
-	var order []domain.NodeID
-	wrote := false
-	seen := map[domain.NodeID]bool{}
+	var installs []domain.ImpactEvent
 	for _, cn := range c.Nodes {
-		id := nodeOf(cn)
-		if id == "" || seen[id] {
-			continue
-		}
-		seen[id] = true
-		vs, err := tx.Versions(ctx, id)
-		if err != nil {
-			return err
-		}
-		var head, flowVer *domain.Node
-		staleHead := false
-		for _, n := range vs {
-			switch {
-			case n.On(changeBranch):
-				n := n
-				head = &n
-				staleHead = staleHead || isStale(n.Execution)
-			case domain.BranchOf(n.Branch) == flowBranch:
-				n := n
-				flowVer = &n
+		fd, md := ownDraft(rows, cn.ID, f.ID), ownDraft(rows, cn.ID, "")
+		switch {
+		case fd != nil:
+			if !acceptedOnFlow(c, nodeOf(cn), f.ID) {
+				return fmt.Errorf("node %s is a draft on flow %s that the flow did not accept: accept it, or cancel the checkout, before the flow is adopted (ADR 0079): %w", fd.Key, f.ID, ErrConflict)
 			}
-		}
-		if flowVer == nil && !staleHead {
-			continue
-		}
-		wrote = wrote || flowVer != nil
-		if flowVer != nil && flowVer.CheckedOut && !acceptedOnFlow(c, id, f.ID) {
-			return fmt.Errorf("node %s is a working version on flow %s that the flow did not accept: accept it, or cancel the checkout, before the flow is adopted (ADR 0076, 0077): %w", flowVer.Key, f.ID, ErrConflict)
-		}
-		if flowVer != nil {
-			// the flow was forked from a version of the node: it is a conflict when someone else moved on since
-			var first *domain.Node
-			for _, n := range vs {
-				if domain.BranchOf(n.Branch) == flowBranch {
-					n := n
-					first = &n
-					break
+			// the flow was forked from the node as it was: it is a conflict when the main flow moved on since, by a run that is
+			// not stale
+			seq := 0
+			for _, e := range events {
+				if e.Impact != cn.ID {
+					continue
+				}
+				switch {
+				case e.Flow == f.ID && e.StartsDraft() && seq == 0:
+					seq = e.Seq
+				case seq > 0 && e.Flow == "" && e.Seq > seq && changesDraft(e) && !isStale(e.Execution):
+					return fmt.Errorf("node %s was changed on the main flow since the flow forked (checked out again in the meantime): %w", fd.Key, ErrConflict)
 				}
 			}
-			if first != nil && head != nil && len(first.Parents) > 0 && head.Version != first.Parents[0] && !isStale(head.Execution) {
-				return fmt.Errorf("node %s was changed on the change branch since the flow forked (v%d, the flow started from v%d): %w", head.Key, head.Version, first.Parents[0], ErrConflict)
-			}
-		}
-		desired := flowVer
-		if desired == nil {
-			if desired, err = view.onChangeBranch(ctx, id); err != nil {
-				return err
-			}
-		}
-		if desired != nil && head != nil && desired.Version == head.Version {
-			continue
-		}
-		if desired == nil && (head == nil || head.Deleted) {
-			continue
-		}
-		plans[id] = plan{desired, head}
-		order = append(order, id)
-	}
-	// A flow that invalidated nothing (an option) and wrote every node it changes, each derived from the head of the
-	// change branch, lands as is: its versions join the change branch, no copy (ADR 0032 §2). Otherwise its versions
-	// are copied as adopt versions (a reset to an older version needs a new one).
-	join := len(f.StaleRuns) == 0
-	for _, id := range order {
-		if p := plans[id]; p.desired == nil || domain.BranchOf(p.desired.Branch) != flowBranch {
-			join = false
-		}
-	}
-	if join {
-		for _, id := range order {
-			d := *plans[id].desired
-			if err := tx.JoinBranch(ctx, d.Ref(), changeBranch, c.ID); err != nil {
-				return err
-			}
-			newRefs[id] = d
-		}
-		order = nil
-	}
-	// 1. the versions
-	for _, id := range order {
-		p := plans[id]
-		var n domain.Node
-		switch {
-		case p.desired == nil: // created by runs that no longer exist: retire it
-			n = *p.head
-			n.Deleted = true
-			n.Parents = []domain.Version{p.head.Version}
-		default:
-			n = *p.desired
-			n.Parents = []domain.Version{p.desired.Version}
-			if p.head != nil {
-				n.Parents = []domain.Version{p.head.Version, p.desired.Version}
-			}
-		}
-		v, err := nextVersion(ctx, tx, id)
-		if err != nil {
-			return err
-		}
-		n.Version, n.Branch, n.Reason, n.ChangeID, n.CreatedAt = v, changeBranch, domain.ReasonAdopt, c.ID, g.now()
-		if err := tx.PutNode(ctx, n); err != nil {
-			return err
-		}
-		newRefs[id] = n
-	}
-	// 2. their links, retargeted to the new versions
-	for _, id := range order {
-		p := plans[id]
-		if p.desired == nil {
-			continue
-		}
-		out, err := tx.OutLinks(ctx, p.desired.Ref())
-		if err != nil {
-			return err
-		}
-		for _, l := range out {
-			to := l.To
-			if r, ok := newRefs[to.ID]; ok {
-				to = r.Ref()
-			}
-			if err := tx.PutLink(ctx, domain.Link{ID: domain.LinkID(g.newID()), Type: l.Type, From: newRefs[id].Ref(), To: to, Properties: l.Properties, ChangeID: c.ID}); err != nil {
-				return err
+			ref := fd.Ref()
+			inst := fd.Clone()
+			installs = append(installs, domain.ImpactEvent{Change: c.ID, Impact: cn.ID, Op: domain.ImpactTransitioned, Execution: fd.Execution, By: by, Post: &ref, Draft: &inst,
+				Patch: map[string]any{"adopted": f.ID}})
+		case md != nil && !(cn.Flow == "" && !cn.Superseded && isStale(cn.Execution)):
+			// the main flow's draft, without what the stale runs wrote
+			kept := domain.DraftSeenBy(events, cn.ID, nil, isStale)
+			switch {
+			case kept == nil:
+				installs = append(installs, domain.ImpactEvent{Change: c.ID, Impact: cn.ID, Op: domain.ImpactCancelled, By: by})
+			case !sameDraft(*kept, *md):
+				ref := kept.Ref()
+				installs = append(installs, domain.ImpactEvent{Change: c.ID, Impact: cn.ID, Op: domain.ImpactTransitioned, Execution: kept.Execution, By: by, Post: &ref, Draft: kept,
+					Patch: map[string]any{"adopted": f.ID}})
 			}
 		}
 	}
-	if b, err := tx.Branch(ctx, c.Namespace, flowBranch); err == nil && wrote {
-		b.Status = domain.BranchMerged
-		if err := tx.PutBranch(ctx, b); err != nil {
-			return err
-		}
+	return g.adoptChangeImpacts(ctx, tx, c, f, installs, by)
+}
+
+// changesDraft reports an event that changes what a flow holds of a node (not a review).
+func changesDraft(e domain.ImpactEvent) bool {
+	switch e.Op {
+	case domain.ImpactCreated, domain.ImpactCheckedOut, domain.ImpactUpdated, domain.ImpactTransitioned, domain.ImpactCancelled:
+		return true
 	}
-	return g.adoptChangeImpacts(ctx, tx, c, f, newRefs, by)
+	return false
+}
+
+// sameDraft reports drafts that hold the same: the flow, the run and the ids of the links are not what a draft holds.
+func sameDraft(a, b domain.Draft) bool {
+	norm := func(d domain.Draft) []byte {
+		d = d.Clone()
+		d.Flow, d.Execution = "", ""
+		for i := range d.Links {
+			d.Links[i].ID = ""
+		}
+		b, _ := json.Marshal(d)
+		return b
+	}
+	return string(norm(a)) == string(norm(b))
 }
 
 // adoptChangeImpacts moves the change impacts and reviews of an adopted flow to the main flow (ADR 0025 §5.3): one
-// adopted event, folded over every change impact, then the version each one now resolves to (ADR 0029).
-func (g *Graph) adoptChangeImpacts(ctx context.Context, tx Tx, c domain.Change, f domain.Flow, newRefs map[domain.NodeID]domain.Node, by string) error {
+// adopted event, folded over every change impact, then the drafts it installs on the main flow (ADR 0029, 0079). An
+// install for an impact the adoption supersedes is left out.
+func (g *Graph) adoptChangeImpacts(ctx context.Context, tx Tx, c domain.Change, f domain.Flow, installs []domain.ImpactEvent, by string) error {
 	if err := g.emit(ctx, tx, domain.ImpactEvent{Change: c.ID, Op: domain.ImpactAdopted, Flow: f.ID, Stale: f.StaleRuns, By: by}); err != nil {
 		return err
 	}
@@ -338,32 +220,20 @@ func (g *Graph) adoptChangeImpacts(ctx context.Context, tx Tx, c domain.Change, 
 	if err != nil {
 		return err
 	}
-	for _, cn := range impacts {
-		id := nodeOf(cn)
-		n, ok := newRefs[id]
-		if id == "" || !ok || cn.Superseded {
+	for _, e := range installs {
+		i := slices.IndexFunc(impacts, func(cn domain.ChangeImpact) bool { return cn.ID == e.Impact })
+		if i < 0 || impacts[i].Superseded {
 			continue
 		}
-		ref := n.Ref()
-		if sameRef(cn.Post, &ref) {
-			continue
-		}
-		if err := g.emit(ctx, tx, domain.ImpactEvent{Change: c.ID, Impact: cn.ID, Op: domain.ImpactTransitioned, Execution: n.Execution, By: by, Post: &ref}); err != nil {
+		if err := g.emit(ctx, tx, e); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func sameRef(a, b *domain.NodeRef) bool {
-	if a == nil || b == nil {
-		return a == b
-	}
-	return *a == *b
-}
-
-// discardNodes abandons the branches of a discarded flow and its descendants and rejects the
-// change impacts they declared.
+// discardNodes rejects the change impacts a discarded flow and its descendants declared. What they drafted stays in
+// the log, for the audit; nothing sees it any more.
 func (g *Graph) discardNodes(ctx context.Context, tx Tx, c domain.Change, f domain.Flow, by string) error {
 	gone := map[string]bool{f.ID: true}
 	for changed := true; changed; {
@@ -371,14 +241,6 @@ func (g *Graph) discardNodes(ctx context.Context, tx Tx, c domain.Change, f doma
 		for _, o := range c.Flows() {
 			if !gone[o.ID] && gone[o.Parent] {
 				gone[o.ID], changed = true, true
-			}
-		}
-	}
-	for id := range gone {
-		if b, err := tx.Branch(ctx, c.Namespace, flowBranchName(id)); err == nil && b.Status == domain.BranchOpen {
-			b.Status = domain.BranchAbandoned
-			if err := tx.PutBranch(ctx, b); err != nil {
-				return err
 			}
 		}
 	}
@@ -394,8 +256,8 @@ func (g *Graph) discardNodes(ctx context.Context, tx Tx, c domain.Change, f doma
 	return nil
 }
 
-// acceptedOnFlow reports whether the last review of a node of the change made on a flow accepts it (ADR 0077: a working version
-// stays one until the change lands, so adopting a flow asks its acceptance).
+// acceptedOnFlow reports whether the last review of a node of the change made on a flow accepts it (ADR 0079: a draft
+// is not written until the change lands, so adopting a flow asks its acceptance).
 func acceptedOnFlow(c domain.Change, node domain.NodeID, flow string) bool {
 	accepted := false
 	for _, cn := range c.Nodes {

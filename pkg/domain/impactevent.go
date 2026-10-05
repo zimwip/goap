@@ -16,54 +16,53 @@ const (
 	// ImpactProposed adds a change impact to the change (State: as proposed). It proposes the modification of an
 	// existing node only: a new node is created, never proposed (ADR 0077).
 	ImpactProposed ImpactOp = "proposed"
-	// ImpactCreated is the creation of a node: one event adds the change impact (State, intent created) and records
-	// the first version of the node, written checked out (Post), on Flow. No proposed event precedes it and no
-	// checkout follows (ADR 0076, 0077).
+	// ImpactCreated is the creation of a node: one event adds the change impact (State, intent created) and the draft of
+	// the node (Draft: its initial state; Post is the draft reference, ADR 0079), on Flow. No proposed event precedes
+	// it and no checkout follows (ADR 0076, 0077). The merge change (graph.merge) records the versions it writes itself
+	// the same way, with a version in Post and no Draft.
 	ImpactCreated ImpactOp = "created"
-	// ImpactCheckedOut records the working version a checkout writes for the change impact of an existing node (Post),
-	// on Flow (ADR 0076).
+	// ImpactCheckedOut records the draft a checkout makes for the change impact of an existing node (Draft: a copy of
+	// the version the flow sees, Post the draft reference), on Flow (ADR 0076, 0079).
 	ImpactCheckedOut ImpactOp = "checkedOut"
-	// ImpactTransitioned records a version written for a change impact (Post), on Flow, by a transition, a merge or an
-	// adoption (ADR 0076, 0077); or, with Patch {"state": {"from", "to"}}, a transition of the working version taken
-	// in place: no version is written, Post is the working version (ADR 0077, "No explicit check-in").
+	// ImpactTransitioned records a lifecycle transition taken on the draft (Patch {"state": {"from", "to"}}, with the
+	// properties its action algorithms set); or, carrying Draft, a draft installed on the flow by an adoption (Patch
+	// {"adopted": flow}), or a version a merge writes in the merge change (Post a version, no Draft). ADR 0079.
 	ImpactTransitioned ImpactOp = "transitioned"
-	// ImpactUpdated records an edit of the working version in place (Patch): properties, owner, links (ADR 0076).
+	// ImpactUpdated records an edit of the draft (Patch): properties, owner, links (ADR 0076, 0079).
 	ImpactUpdated ImpactOp = "updated"
-	// ImpactCancelled records a checkout cancelled on Flow: the working version is dropped and Post is the version the
-	// impact goes back to (nil: none; a creation cancelled before it is accepted removes the change impact).
+	// ImpactCancelled records a checkout cancelled on Flow: the draft is dropped and Post is the draft the flow falls
+	// back to (nil: none; a creation cancelled removes the change impact).
 	ImpactCancelled ImpactOp = "cancelled"
-	// ImpactWithdrawn takes a change impact out of the change, explicitly (its working version, if any, is dropped): the
+	// ImpactWithdrawn takes a change impact out of the change, explicitly (its draft, if any, is dropped): the
 	// impact leaves the list (ADR 0076 §5b).
 	ImpactWithdrawn ImpactOp = "withdrawn"
 	// ImpactReviewed records a review (Review).
-	// An accepted review freezes the working version of the impact (ADR 0077): no event of its own.
+	// An accepted review is a gate on the draft (ADR 0079): the checks of a version run, nothing is written.
 	ImpactReviewed ImpactOp = "reviewed"
 	// ImpactDiscarded rejects a candidate whose flow was discarded (Review).
 	ImpactDiscarded ImpactOp = "discarded"
 	// ImpactAdopted is change level: Flow is adopted, Stale are the runs it replaces (ADR 0025 §5).
 	ImpactAdopted ImpactOp = "adopted"
 	// ImpactLanded records the version a change applied (Landed) in the baseline it produced (Baseline): on its own
-	// branch when it is committed, and again on the branch it is integrated into. The last one is the version on the
-	// target branch. A merge change records the same for the versions it writes.
+	// branch when it is committed (the version is written from the draft then, which goes: Post becomes that version,
+	// ADR 0079), and again on the branch it is integrated into. The last one is the version on the target branch. A
+	// merge change records the same for the versions it writes.
 	ImpactLanded ImpactOp = "landed"
 	// ImpactRebased moves the pre version of a planned change impact to a newer head, to re-check (Pre).
 	ImpactRebased ImpactOp = "rebased"
 )
 
-// WritesPost reports whether the operation sets the post version of a change impact: a version written or checked out.
+// WritesPost reports whether the operation sets the post of a change impact: the draft of its node (or, in the merge
+// change, a version).
 func (o ImpactOp) WritesPost() bool {
 	return o == ImpactTransitioned || o == ImpactCheckedOut || o == ImpactCreated
 }
 
-// WritesVersion reports whether the event writes a version of the impact's node: a creation, a checkout, a transition
-// from a frozen version, a merge or an adoption; not a transition taken in place on the working version (Patch
-// "state"), which edits the version it finds (ADR 0077).
-func (e ImpactEvent) WritesVersion() bool {
-	if !e.Op.WritesPost() {
-		return false
-	}
-	_, inPlace := e.Patch["state"]
-	return !(e.Op == ImpactTransitioned && inPlace)
+// StartsDraft reports whether the event installs a draft for the impact on its flow: a creation, a checkout or an
+// adoption (a transition without Draft edits the one it finds, ADR 0079). A change goes through its lifecycle states
+// while it works: the state an impact was written in is the one of the event that started its draft (ADR 0058).
+func (e ImpactEvent) StartsDraft() bool {
+	return e.Draft != nil && e.Op.WritesPost()
 }
 
 // ImpactEvent is one operation on the change impacts of a change.
@@ -80,10 +79,14 @@ type ImpactEvent struct {
 	By        string    `json:"by,omitempty"`
 	At        time.Time `json:"at"`
 
-	State  *ChangeImpact `json:"state,omitempty"` // proposed, created
-	Post   *NodeRef      `json:"post,omitempty"`  // written
-	Pre    *NodeRef      `json:"pre,omitempty"`   // rebased
-	Landed *NodeRef      `json:"landed,omitempty"`
+	State *ChangeImpact `json:"state,omitempty"` // proposed, created
+	// Post is the draft reference of the node (Version 0) the event leaves the impact with, or a version (merge change).
+	Post *NodeRef `json:"post,omitempty"`
+	// Draft is, on created, checkedOut and an adopting transitioned, the draft the event installs for (impact, flow):
+	// its initial state, so the log alone rebuilds the drafts (ADR 0079).
+	Draft  *Draft   `json:"draft,omitempty"`
+	Pre    *NodeRef `json:"pre,omitempty"` // rebased
+	Landed *NodeRef `json:"landed,omitempty"`
 	// Baseline is, on landed, the baseline of the branch the version landed in (ADR 0032).
 	Baseline BaselineID `json:"baseline,omitempty"`
 	// Branch is, on landed, the branch the version landed on: the change's own branch at commit, the branch it is
@@ -91,8 +94,10 @@ type ImpactEvent struct {
 	Branch string   `json:"branch,omitempty"`
 	Review *Review  `json:"review,omitempty"` // reviewed, discarded
 	Stale  []string `json:"stale,omitempty"`  // adopted: the stale executions
-	// Patch is what an updated event changed in place: {"props": {...}, "owner": unit, "addLink" / "updateLink" /
-	// "removeLink": {...}}; a transitioned event taken in place: {"state": {"from", "to"}}.
+	// Patch is what an updated event changed on the draft: {"props": {...}, "unset": [...], "owner": unit key, "ownerId":
+	// unit node, "addLink": {id, type, to, toId, toVersion, props}, "updateLink": {id, props}, "removeLink": {id, type,
+	// to}}; a transitioned event: {"state": {"from", "to"}} and the "props" / "unset" its actions made. ApplyDraftEvent
+	// reads it.
 	Patch map[string]any `json:"patch,omitempty"`
 }
 
@@ -108,9 +113,15 @@ func (e ImpactEvent) Validate() error {
 	case ImpactProposed:
 		return need(e.State != nil && e.State.ID == e.Impact, "the change impact")
 	case ImpactCreated:
-		return need(e.State != nil && e.State.ID == e.Impact && e.Post != nil, "the change impact and its first version")
+		if err := need(e.State != nil && e.State.ID == e.Impact && e.Post != nil, "the change impact and its draft"); err != nil {
+			return err
+		}
+		return need(!e.Post.IsDraft() || e.Draft != nil, "the initial state of the draft")
 	case ImpactTransitioned, ImpactCheckedOut:
-		return need(e.Impact != "" && e.Post != nil, "a change impact and a post version")
+		if err := need(e.Impact != "" && e.Post != nil, "a change impact and a post"); err != nil {
+			return err
+		}
+		return need(e.Op == ImpactTransitioned || !e.Post.IsDraft() || e.Draft != nil, "the initial state of the draft")
 	case ImpactReviewed, ImpactDiscarded:
 		return need(e.Impact != "" && e.Review != nil, "a change impact and a review")
 	case ImpactAdopted:
@@ -120,7 +131,7 @@ func (e ImpactEvent) Validate() error {
 	case ImpactRebased:
 		return need(e.Impact != "" && e.Pre != nil, "a change impact and a pre version")
 	case ImpactUpdated:
-		return need(e.Impact != "" && e.Post != nil && len(e.Patch) > 0, "a change impact, its working version and a patch")
+		return need(e.Impact != "" && e.Post != nil && len(e.Patch) > 0, "a change impact, its draft and a patch")
 	case ImpactCancelled, ImpactWithdrawn:
 		return need(e.Impact != "", "a change impact")
 	}
@@ -184,6 +195,10 @@ func ApplyImpactEvent(impacts []ChangeImpact, e ImpactEvent) []ChangeImpact {
 	case ImpactLanded:
 		l := *e.Landed
 		cn.Landed = &l
+		if cn.Post == nil || cn.Post.IsDraft() {
+			p := l // the draft is written as this version (ADR 0079)
+			cn.Post = &p
+		}
 	case ImpactRebased:
 		p := *e.Pre
 		cn.Pre, cn.Recheck = &p, true

@@ -191,9 +191,9 @@ func (g *Graph) ImpactsOf(ctx context.Context, id domain.ChangeID, execution str
 	return out, nil
 }
 
-// ImpactNodeReview accepts or rejects a proposed change impact; accepting checks its working version, if any, as a
-// frozen one would be (ADR 0077) and freezes nothing: landing does. The comment is mandatory: it is kept in the review history and, once the node is realized,
-// on the version itself, so the origin of a version can be read from the node.
+// ImpactNodeReview accepts or rejects a proposed change impact; accepting checks its draft, if any, as the version
+// written from it will be (ADR 0079) and writes nothing: landing does. The comment is mandatory: it is kept in the review
+// history and, once the change lands, on the version itself, so the origin of a version can be read from the node.
 func (g *Graph) ImpactNodeReview(ctx context.Context, id domain.ChangeID, node domain.ChangeImpactID, status domain.NodeReview, by, comment string) (domain.ChangeImpact, error) {
 	return g.ImpactNodeReviewOn(ctx, id, "", "", node, status, by, comment)
 }
@@ -234,15 +234,6 @@ func (g *Graph) ImpactNodeReviewOn(ctx context.Context, id domain.ChangeID, flow
 		if seen.Review != domain.ReviewProposed {
 			return fmt.Errorf("change impact %s is already %s: %w", node, seen.Review, ErrConflict)
 		}
-		if status == domain.ReviewAccepted {
-			all, err := g.newFlowNodes(tx, c, flow).nodes(ctx)
-			if err != nil {
-				return err
-			}
-			if err := g.checkOrigins(ctx, tx, id, all, seen); err != nil {
-				return err
-			}
-		}
 		if g.ReviewPolicy != nil {
 			entries, err := tx.Log(ctx, factsFilter(id))
 			if err != nil {
@@ -256,9 +247,9 @@ func (g *Graph) ImpactNodeReviewOn(ctx context.Context, id domain.ChangeID, flow
 				return fmt.Errorf("review of %s refused: %v: %w", node, err, ErrInvalid)
 			}
 		}
-		// an accepted review is gated by what a frozen version must satisfy (ADR 0077): validators, required links, link
-		// attributes, the origins gate; a refusal leaves the review proposed. Nothing is frozen: the version stays a
-		// working version until the change lands
+		// an accepted review is gated by what a version must satisfy (ADR 0079): validators, required links, link
+		// attributes, the origins gate, checked on the draft; a refusal leaves the review proposed. Nothing is
+		// written: the version is written when the change lands
 		if status == domain.ReviewAccepted && seen.Post != nil {
 			if err := g.checkAccepted(ctx, tx, id, flow, node); err != nil {
 				return err
@@ -269,11 +260,6 @@ func (g *Graph) ImpactNodeReviewOn(ctx context.Context, id domain.ChangeID, flow
 			cn.Review = status
 		}
 		cn.Reviews = append(cn.Reviews, r)
-		if flow == "" && status == domain.ReviewAccepted && cn.Post != nil {
-			if err := tx.SetNodeOrigin(ctx, *cn.Post, id, cn.ID, comment); err != nil {
-				return err
-			}
-		}
 		return g.emit(ctx, tx, domain.ImpactEvent{Change: id, Impact: cn.ID, Op: domain.ImpactReviewed, Flow: flow, Execution: execution, By: by, Review: &r})
 	})
 	return
@@ -313,15 +299,4 @@ func (g *Graph) ReopenImpacts(ctx context.Context, id domain.ChangeID, impacts [
 		return nil
 	})
 	return
-}
-
-// retarget points a link to the post version of a node this change produced
-// when the link targets its pre version.
-func retarget(nodes []domain.ChangeImpact, to domain.NodeRef) domain.NodeRef {
-	for _, cn := range nodes {
-		if cn.Pre != nil && cn.Post != nil && *cn.Pre == to {
-			return *cn.Post
-		}
-	}
-	return to
 }

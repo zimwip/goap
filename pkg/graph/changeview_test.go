@@ -54,7 +54,7 @@ func testChangeViewLevels(t *testing.T, repo Repo) {
 	}
 	res := must[domain.Baseline](t)(g.Apply(ctx, c.ID, ""))
 	l := view(ViewLanded)
-	if l.ID != res.ID || !l.Contains(*reqW.Post) || !l.Contains(need) {
+	if l.ID != res.ID || l.Nodes[f.req.ID] != f.req.Version+1 || !l.Contains(need) {
 		t.Fatalf("landed view: %+v", l)
 	}
 	if _, err := g.ChangeView(ctx, c.ID, "", "someday"); err == nil {
@@ -74,12 +74,12 @@ func testChangeViewOfAFlow(t *testing.T, repo Repo) {
 	must[domain.ChangeImpact](t)(g.edit(ctx, c.ID, added[0].ID, edit{Flow: w.flow, Execution: "e3", Properties: map[string]any{"title": "B"}}))
 	flowView := must[domain.Baseline](t)(g.ChangeView(ctx, c.ID, w.flow, ViewWritten))
 	mainView := must[domain.Baseline](t)(g.ChangeView(ctx, c.ID, "", ViewWritten))
-	fv := must[domain.Node](t)(g.Node(ctx, domain.NodeRef{ID: pre.ID, Version: flowView.Nodes[pre.ID]}))
+	fv := must[domain.Node](t)(g.ChangeNode(ctx, c.ID, w.flow, domain.NodeRef{ID: pre.ID, Version: flowView.Nodes[pre.ID]}))
 	if fv.Properties["title"] != "B" || !mainView.Contains(*w.req.Post) {
 		t.Fatalf("flow view %v, main view %v", flowView.Nodes, mainView.Nodes)
 	}
 	// the flow relaunched the step that created TST-2: it does not see it; the main flow does
-	if tst := w.tst.Post.ID; !mainView.Contains(*w.tst.Post) || flowView.Nodes[tst] != 0 {
+	if _, seen := flowView.Nodes[w.tst.Post.ID]; seen || !mainView.Contains(*w.tst.Post) {
 		t.Fatalf("TST-2: flow %v, main %v", flowView.Nodes, mainView.Nodes)
 	}
 	// accepted: nothing of the flow is reviewed yet

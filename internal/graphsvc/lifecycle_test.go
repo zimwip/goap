@@ -94,7 +94,7 @@ lifecycles:
       - {name: reopen, from: released, to: draft}
       - {name: release, from: draft, to: released, permission: "requirement:release"}
 nodeTypes:
-  - {name: Req, lifecycle: req, properties: [title]}
+  - {name: Req, lifecycle: req, attributes: [title]}
   - {name: Note}
 `))
 	if err != nil {
@@ -142,10 +142,11 @@ nodeTypes:
 	if err := move("contributor", "draft"); err != nil {
 		t.Fatalf("a contributor may reopen: %v", err)
 	}
+	// the transition checked the node out: a second checkout is refused, the caller updates the draft
 	co := connect.NewRequest(&graphv1.ImpactNodeCheckoutRequest{ChangeId: string(c.ID), ChangeImpactId: cnID})
 	withRoles(co.Header(), "contributor")
-	if _, err := h.ImpactNodeCheckout(ctx, co); err != nil {
-		t.Fatal(err)
+	if _, err := h.ImpactNodeCheckout(ctx, co); connect.CodeOf(err) != connect.CodeFailedPrecondition && connect.CodeOf(err) != connect.CodeAborted && err == nil {
+		t.Fatalf("a node checked out by a transition is not checked out again: %v", err)
 	}
 	up := connect.NewRequest(&graphv1.ImpactNodeUpdateRequest{ChangeId: string(c.ID), ChangeImpactId: cnID, Props: pbconv.Struct(map[string]any{"title": "b"})})
 	withRoles(up.Header(), "contributor")
@@ -160,7 +161,7 @@ nodeTypes:
 	if err := move("contributor", "released"); connect.CodeOf(err) != connect.CodePermissionDenied {
 		t.Fatalf("a contributor lacks requirement:release: %v", err)
 	}
-	// the release is taken in place on the working version: one version for the checkout, the edit and the move
+	// the release is taken on the draft: one version for the checkout, the edit and the moves, written at landing
 	if err := move("admin", "released"); err != nil {
 		t.Fatalf("admin may release: %v", err)
 	}
@@ -169,7 +170,7 @@ nodeTypes:
 	if _, err := h.ApplyChange(ctx, r); err != nil {
 		t.Fatal(err)
 	}
-	if n, err := g.NodeByKey(ctx, "docs", "REQ-1"); err != nil || n.State != "released" || n.Version != 3 || n.Properties["title"] != "b" {
+	if n, err := g.NodeByKey(ctx, "docs", "REQ-1"); err != nil || n.State != "released" || n.Version != 2 || n.Properties["title"] != "b" {
 		t.Fatalf("REQ-1: %+v %v", n, err)
 	}
 }

@@ -4,7 +4,7 @@
 // ADR 0017). Each entry says when, who, on which flow and through which action run. A change is a flow of events:
 // flow branches fork from it (a relaunch, alternatives to compare), and are merged back (adopted) or dropped
 // (discarded); the entries carry these marks so the trail can be drawn as branches.
-import { decodeLogEntry, int, shortId, type Change, type ChangeItem, type ExecutionRecord, type ImpactEvent, type JsonValue, type LogEntry, type NodeRef } from './api';
+import { decodeLogEntry, int, isDraft, shortId, type Change, type ChangeItem, type ExecutionRecord, type ImpactEvent, type JsonValue, type LogEntry, type NodeRef } from './api';
 
 export type AuditSource = 'change' | 'process' | 'schedule' | 'plan' | 'action' | 'approval' | 'impact' | 'fact' | 'flow';
 
@@ -72,7 +72,8 @@ export interface AuditEntry {
   item?: ChangeItem;
 }
 
-const v = (r: NodeRef | undefined) => (r ? `v${r.version ?? 0}` : '');
+/** A version, or 'draft' for a draft reference (no version while a change works on a node, ADR 0079). */
+const v = (r: NodeRef | undefined) => (r ? (isDraft(r) ? 'draft' : `v${r.version}`) : '');
 const str = (x: JsonValue | undefined) => (typeof x === 'string' ? x : '');
 
 /** "agent · step N · action" of an action run. */
@@ -177,16 +178,16 @@ function fromEvent(e: ImpactEvent, keys: Map<string, string>, parents: Map<strin
       break;
     case 'created': {
       const from = originKeys(e);
-      summary = `${e.state?.rationale ? `${e.state.rationale}, ` : ''}first version ${v(e.post)}, checked out${from.length ? ` — ${from.length > 1 ? 'merged' : 'split'} from ${from.join(', ')}` : ''}`;
+      summary = `${e.state?.rationale ? `${e.state.rationale}, ` : ''}${v(e.post)} of the new node${from.length ? ` — ${from.length > 1 ? 'merged' : 'split'} from ${from.join(', ')}` : ''}`;
       break;
     }
     case 'checkedOut':
-      summary = `working version ${v(e.post)}`;
+      summary = `${v(e.post)} of the node, checked out from ${v(e.pre ?? e.state?.pre)}`;
       break;
     case 'transitioned': {
-      // a transition taken in place on the working version carries the state patch and writes no version (ADR 0077)
+      // a transition is always taken on the draft (a node with none is checked out first) and writes no version (ADR 0079)
       const st = (e.patch as { state?: { from?: string; to?: string } } | undefined)?.state;
-      summary = st ? `${v(e.post)} moved from ${st.from || '?'} to ${st.to || '?'}` : `version ${v(e.post)}`;
+      summary = st ? `${v(e.post)} moved from ${st.from || '?'} to ${st.to || '?'}` : `${v(e.post)} moved`;
       break;
     }
     case 'updated':
@@ -200,7 +201,7 @@ function fromEvent(e: ImpactEvent, keys: Map<string, string>, parents: Map<strin
       summary = `flow ${shortId(e.flow)} adopted${e.stale?.length ? `, replaces ${e.stale.length} run${e.stale.length > 1 ? 's' : ''}` : ''}`;
       break;
     case 'landed':
-      summary = `landed as ${v(e.landed)}${e.branch ? ` on branch ${e.branch}` : ''}`;
+      summary = `draft landed as ${v(e.landed)}${e.branch ? ` on branch ${e.branch}` : ''}`;
       break;
     case 'rebased':
       summary = `pre moved to ${v(e.pre)}, to re-check`;

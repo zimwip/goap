@@ -68,7 +68,7 @@ func testOptions(t *testing.T, repo Repo) {
 		t.Fatalf("comparison: %+v", cmp)
 	}
 	va, vb := cmp.Nodes[0].Options[a.ID], cmp.Nodes[0].Options[b.ID]
-	if va == nil || vb == nil || *va == *vb || cmp.Nodes[0].Props[a.ID]["title"] != "Use Stripe" || cmp.Nodes[0].Props[b.ID]["title"] != "Use Adyen" {
+	if va == nil || vb == nil || !va.IsDraft() || !vb.IsDraft() || cmp.Nodes[0].Props[a.ID]["title"] != "Use Stripe" || cmp.Nodes[0].Props[b.ID]["title"] != "Use Adyen" {
 		t.Fatalf("option versions: %+v", cmp.Nodes[0])
 	}
 	// nothing is accepted yet
@@ -90,24 +90,18 @@ func testOptions(t *testing.T, repo Repo) {
 	if len(opts) != 2 || opts[1].OptionStatus() != domain.OptionRejected {
 		t.Fatalf("options: %+v", opts)
 	}
-	// option A's version joined the change branch as is: no adopt copy
+	// option A's draft is the change's now: no version was written for the options
 	cur := must[domain.Change](t)(g.Change(ctx, c.ID))
 	if cur.ActiveOption() != "" {
 		t.Fatalf("no option is active after the decision: %q", cur.ActiveOption())
 	}
-	vs := must[[]domain.Node](t)(g.Versions(ctx, pre.ID))
-	for _, v := range vs {
-		if v.Reason == domain.ReasonAdopt {
-			t.Fatalf("an adopted option is not copied: %+v", vs)
-		}
+	if n := g.versionCount(ctx, pre.ID); n != int(pre.Version) {
+		t.Fatalf("no option wrote a version: %d", n)
 	}
 	res := must[domain.Baseline](t)(g.Apply(ctx, c.ID, ""))
-	if !res.Contains(*va) {
-		t.Fatalf("the selected option lands as its own version %s: %v", va, res.Nodes)
-	}
 	head := must[domain.Node](t)(g.Node(ctx, domain.NodeRef{ID: pre.ID}))
-	if head.Ref() != *va || head.Properties["title"] != "Use Stripe" {
-		t.Fatalf("main: %+v", head)
+	if res.Nodes[pre.ID] != head.Version || head.Version != pre.Version+1 || head.Properties["title"] != "Use Stripe" {
+		t.Fatalf("the selected option lands as one version: %v, main %+v", res.Nodes, head)
 	}
 }
 

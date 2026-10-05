@@ -49,9 +49,11 @@ type NodeType struct {
 	// links a node of the type must carry (ADR 0065)
 	Requires []*RequiredLink `protobuf:"bytes,12,rep,name=requires,proto3" json:"requires,omitempty"`
 	// nodes of the type are written by platform administrators only (ADR 0068)
-	AdminOnly     bool `protobuf:"varint,13,opt,name=admin_only,json=adminOnly,proto3" json:"admin_only,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	AdminOnly bool `protobuf:"varint,13,opt,name=admin_only,json=adminOnly,proto3" json:"admin_only,omitempty"`
+	// nodes of the type may carry properties that are no attribute of it (strict attributes, ADR 0079); inherited
+	AdditionalProperties bool `protobuf:"varint,14,opt,name=additional_properties,json=additionalProperties,proto3" json:"additional_properties,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *NodeType) Reset() {
@@ -171,6 +173,13 @@ func (x *NodeType) GetRequires() []*RequiredLink {
 func (x *NodeType) GetAdminOnly() bool {
 	if x != nil {
 		return x.AdminOnly
+	}
+	return false
+}
+
+func (x *NodeType) GetAdditionalProperties() bool {
+	if x != nil {
+		return x.AdditionalProperties
 	}
 	return false
 }
@@ -5847,8 +5856,10 @@ type TypeInfo struct {
 	Contains []string `protobuf:"bytes,8,rep,name=contains,proto3" json:"contains,omitempty"`
 	// node_validator instances checking a node of the type as a whole, in call order (own and inherited)
 	NodeValidators []string `protobuf:"bytes,9,rep,name=node_validators,json=nodeValidators,proto3" json:"node_validators,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// the nodes may carry properties that are no attribute of the type (own or inherited)
+	AdditionalProperties bool `protobuf:"varint,10,opt,name=additional_properties,json=additionalProperties,proto3" json:"additional_properties,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *TypeInfo) Reset() {
@@ -5942,6 +5953,13 @@ func (x *TypeInfo) GetNodeValidators() []string {
 		return x.NodeValidators
 	}
 	return nil
+}
+
+func (x *TypeInfo) GetAdditionalProperties() bool {
+	if x != nil {
+		return x.AdditionalProperties
+	}
+	return false
 }
 
 // LinkTypeInfo is the resolved model of a link type; an empty end accepts any node type.
@@ -7411,7 +7429,7 @@ var File_goap_registry_v1_registry_proto protoreflect.FileDescriptor
 
 const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\n" +
-	"\x1fgoap/registry/v1/registry.proto\x12\x10goap.registry.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xc4\x04\n" +
+	"\x1fgoap/registry/v1/registry.proto\x12\x10goap.registry.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xf9\x04\n" +
 	"\bNodeType\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12;\n" +
@@ -7431,7 +7449,8 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\tstructure\x18\v \x01(\v2\x1e.goap.registry.v1.StructureTagR\tstructure\x12:\n" +
 	"\brequires\x18\f \x03(\v2\x1e.goap.registry.v1.RequiredLinkR\brequires\x12\x1d\n" +
 	"\n" +
-	"admin_only\x18\r \x01(\bR\tadminOnlyB\x14\n" +
+	"admin_only\x18\r \x01(\bR\tadminOnly\x123\n" +
+	"\x15additional_properties\x18\x0e \x01(\bR\x14additionalPropertiesB\x14\n" +
 	"\x12_change_controlled\"8\n" +
 	"\fRequiredLink\x12\x12\n" +
 	"\x04link\x18\x01 \x01(\tR\x04link\x12\x14\n" +
@@ -7908,7 +7927,7 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\adomains\x18\x03 \x03(\v20.goap.registry.v1.ListTypesResponse.DomainsEntryR\adomains\x1a:\n" +
 	"\fDomainsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xe2\x02\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x97\x03\n" +
 	"\bTypeInfo\x12\x10\n" +
 	"\x03ref\x18\x01 \x01(\tR\x03ref\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12?\n" +
@@ -7920,7 +7939,9 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\x11change_controlled\x18\x06 \x01(\bR\x10changeControlled\x12\x16\n" +
 	"\x06editor\x18\a \x01(\tR\x06editor\x12\x1a\n" +
 	"\bcontains\x18\b \x03(\tR\bcontains\x12'\n" +
-	"\x0fnode_validators\x18\t \x03(\tR\x0enodeValidators\"\x9f\x01\n" +
+	"\x0fnode_validators\x18\t \x03(\tR\x0enodeValidators\x123\n" +
+	"\x15additional_properties\x18\n" +
+	" \x01(\bR\x14additionalProperties\"\x9f\x01\n" +
 	"\fLinkTypeInfo\x12\x10\n" +
 	"\x03ref\x18\x01 \x01(\tR\x03ref\x12\x12\n" +
 	"\x04from\x18\x02 \x01(\tR\x04from\x12\x0e\n" +

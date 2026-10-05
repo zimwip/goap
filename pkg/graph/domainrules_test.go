@@ -10,8 +10,8 @@ import (
 	"github.com/zimwip/goap/pkg/typecat"
 )
 
-// A rejected impact keeps its working version, to be reworked once reopened; taking it out of the change is an
-// explicit operation (ADR 0076 §5b), refused once the change checked a version of it in.
+// A rejected impact keeps its draft, to be reworked once reopened; taking it out of the change is an explicit
+// operation (ADR 0076 §5b).
 func TestWithdrawImpact(t *testing.T) { forEachRepo(t, testWithdrawImpact) }
 
 func testWithdrawImpact(t *testing.T, repo Repo) {
@@ -20,22 +20,21 @@ func testWithdrawImpact(t *testing.T, repo Repo) {
 	g := f.g
 	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{Title: "rework", BaselineID: f.base.ID}))
 
-	// a rejected checkout keeps its working version: reopened, it is edited again
+	// a rejected checkout keeps its draft: reopened, it is edited again
 	cn := must[domain.ChangeImpact](t)(g.ImpactNodeCheckout(ctx, c.ID, NodeCheckout{Node: f.req.ID, Rationale: "v2"}))
-	work := *cn.Post
 	must[domain.ChangeImpact](t)(g.ImpactNodeReview(ctx, c.ID, cn.ID, domain.ReviewRejected, "bob", "not like this"))
-	if n := must[domain.Node](t)(g.Node(ctx, work)); !n.CheckedOut {
-		t.Fatalf("a rejected impact keeps its working version: %+v", n)
+	if d := must[*domain.Draft](t)(g.draftOf(ctx, c.ID, "", cn.ID)); d == nil {
+		t.Fatalf("a rejected impact keeps its draft")
 	}
 	must[[]domain.ChangeImpactID](t)(g.ReopenImpacts(ctx, c.ID, []domain.ChangeImpactID{cn.ID}, "try again"))
 	must[domain.ChangeImpact](t)(g.ImpactNodeUpdate(ctx, c.ID, cn.ID, NodeUpdate{Properties: map[string]any{"title": "Use PSP v2"}}))
 
-	// removed: the working version goes, the node is back to its version, the impact leaves the change
+	// removed: the draft goes, the node is back to its version, the impact leaves the change
 	if err := g.WithdrawImpact(ctx, c.ID, cn.ID, "", ""); err != nil {
 		t.Fatal(err)
 	}
 	if latest := must[domain.Node](t)(g.Node(ctx, domain.NodeRef{ID: f.req.ID})); latest.Version != f.req.Version {
-		t.Fatalf("the working version is dropped: v%d", latest.Version)
+		t.Fatalf("the draft is dropped: v%d", latest.Version)
 	}
 	if got := must[domain.Change](t)(g.Change(ctx, c.ID)); len(got.Nodes) != 0 {
 		t.Fatalf("the impact leaves the change: %+v", got.Nodes)
@@ -50,21 +49,21 @@ func testWithdrawImpact(t *testing.T, repo Repo) {
 		t.Fatalf("the created node is gone: %v", err)
 	}
 
-	// an accepted impact keeps its working version until the change lands: it is withdrawn like any other
+	// an accepted impact keeps its draft until the change lands: it is withdrawn like any other
 	cn = must[domain.ChangeImpact](t)(g.ImpactNodeCheckout(ctx, c.ID, NodeCheckout{Node: f.test.ID, Rationale: "v2"}))
 	if err := g.acceptImpact(ctx, c.ID, cn.ID, ""); err != nil {
 		t.Fatal(err)
 	}
 	if err := g.WithdrawImpact(ctx, c.ID, cn.ID, "", ""); err != nil {
-		t.Fatalf("an accepted working version is dropped with its impact: %v", err)
+		t.Fatalf("an accepted draft is dropped with its impact: %v", err)
 	}
 	if _, err := g.Apply(ctx, c.ID, ""); err != nil {
 		t.Fatal(err)
 	}
 }
 
-// The links a type requires (the parent of a unit, ADR 0054) are checked when the version is frozen and when it lands,
-// whatever operations built it; a working version may be on its way there.
+// The links a type requires (the parent of a unit, ADR 0054) are checked when the draft is accepted and when the version
+// lands, whatever operations built it; a draft may be on its way there.
 func TestRequiredLinksAtAccept(t *testing.T) { forEachRepo(t, testRequiredLinksAtAccept) }
 
 func testRequiredLinksAtAccept(t *testing.T, repo Repo) {
@@ -80,8 +79,8 @@ func testRequiredLinksAtAccept(t *testing.T, repo Repo) {
 	if _, err := g.ImpactNodeReview(ctx, c.ID, cn.ID, domain.ReviewAccepted, "bob", "ok"); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("a unit without a parent is not accepted: %v", err)
 	}
-	if v := must[domain.Node](t)(g.Node(ctx, *cn.Post)); !v.CheckedOut {
-		t.Fatalf("a refused accept leaves a working version: %+v", v)
+	if d := must[*domain.Draft](t)(g.draftOf(ctx, c.ID, "", cn.ID)); d == nil {
+		t.Fatalf("a refused accept leaves the draft")
 	}
 	must[domain.Link](t)(g.ImpactLinkCreate(ctx, c.ID, cn.ID, LinkWrite{Type: LinkPartOf, To: root.Ref()}, "", ""))
 	if err := g.acceptImpact(ctx, c.ID, cn.ID, ""); err != nil {
