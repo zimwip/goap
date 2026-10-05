@@ -45,6 +45,8 @@ type Type struct {
 	// Requires are the links a node must carry (own and inherited, a subtype redefining one by link), the link types
 	// qualified.
 	Requires []domain.RequiredLink
+	// AdminOnly: the nodes are written by platform administrators only (own or inherited, ADR 0068).
+	AdminOnly bool
 }
 
 // Attribute is a resolved attribute of a node type.
@@ -311,6 +313,9 @@ func resolve(ref domain.TypeRef, decl map[domain.TypeRef]declared) (*Type, error
 		if t.Editor == "" {
 			t.Editor = dc.t.Editor
 		}
+		if dc.t.AdminOnly {
+			t.AdminOnly = true
+		}
 	}
 	// ancestors first for what accumulates
 	requireAt := map[string]int{}
@@ -432,6 +437,12 @@ func (c *Catalog) Requires(typ string) []domain.RequiredLink {
 		return t.Requires
 	}
 	return nil
+}
+
+// AdminOnly reports a node type whose nodes are written by platform administrators only (ADR 0068).
+func (c *Catalog) AdminOnly(typ string) bool {
+	t, ok := c.Type(typ)
+	return ok && t.AdminOnly
 }
 
 // HasNodeType reports a known qualified node type (def.TypeSet).

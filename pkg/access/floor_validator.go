@@ -15,7 +15,8 @@ import (
 // platform RoleAdmin as Snapshot.Enrich grants it (ADR 0047: an Assignment of the user or of a unit above it, ); "active" is the user lifecycle's active state (ADR 0048). Wired onto Graph.Validators (see cmd/goap-dev, cmd/graph).
 type AdminFloorValidator struct{}
 
-// Types runs this validator whenever a change touches a User or an Assignment: either can remove the last
+// Types runs this validator whenever a change touches a User or an Assignment (not derived from `adminOnly`: that
+// flag says who may write a type, this is the pair of types that decides who administers): either can remove the last
 // administrator (deactivating the User, or retiring/narrowing their platform Assignment).
 func (AdminFloorValidator) Types() []string {
 	return []string{NodeTypeUser, NodeTypeAssignment}

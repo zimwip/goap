@@ -1,7 +1,9 @@
 // The personal preferences of the signed-in user: theme, voice input, dashboard defaults. They are not graph data:
 // the user is declared in the graph, but what they like is kept by the preferences service (ADR 0038) and saved as
 // they change it, with no change to go through. The interface follows at once (and remembers the last values in the
-// browser, so it starts the way the user left it); the service is the reference, read at start.
+// browser, so it starts the way the user left it); the service is the reference, read at start. It keeps one opaque
+// JSON document per user (ADR 0068): the keys, their allowed values and their defaults are this module's alone
+// (`normalize`), so a new preference touches no backend code.
 import { preferencesApi, errorMessage, type Struct } from '../api';
 import { layout, type Theme } from '../shell/layout.svelte';
 import { voiceSettings, type VoiceLanguage, type VoiceModel } from '../voice/settings.svelte';

@@ -18,7 +18,7 @@
     void loadAuthConfig();
   });
 
-  const needsSignin = $derived(authState.loaded && authState.mode === 'local' && !session.hasToken);
+  const needsSignin = $derived(authState.loaded && authState.signsIn && !session.hasToken);
 
   $effect(() => {
     if (needsSignin) return;

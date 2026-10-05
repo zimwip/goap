@@ -80,6 +80,14 @@ var BuiltinRequires = map[string][]RequiredLink{
 	TypeUser: {{Link: LinkMemberOf, Count: 1}},
 }
 
+// BuiltinAdminOnly are the node types of the built-in domains that platform administrators alone write (ADR 0068),
+// what an untyped graph (tests, tools) uses; the type catalogue resolves the same ones from `adminOnly:`, and may
+// flag more types.
+var BuiltinAdminOnly = map[string]bool{
+	TypeOrgUnit: true, TypeUser: true, TypeProjectUnit: true, TypeAdapter: true, TypeAdapterDef: true,
+	"organisation@Policy": true, "organisation@Assignment": true,
+}
+
 // Structures are the two hierarchies in force with the node types belonging to each (the tagged type and its
 // subtypes): what the services reading the organisation (pkg/access, internal/mcpsvc) learn from the graph service
 // (GetStructures), so that they never name the types themselves.

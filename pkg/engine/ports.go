@@ -58,6 +58,10 @@ type GraphPort interface {
 	// ListChanges lists the changes matching a filter (goap-change.list): which open change a request
 	// continues, else a new one is proposed.
 	ListChanges(ctx context.Context, f graph.ChangesFilter) ([]domain.Change, error)
+	// Structures are the organisation and project hierarchies in force (ADR 0054); AdminOnlyType tells a node type
+	// platform administrators alone write (ADR 0068).
+	Structures(ctx context.Context) (domain.Structures, error)
+	AdminOnlyType(ctx context.Context, typ string) (bool, error)
 }
 
 // readGraph is the graph a process reads: the graph of its change on its flow (the active option when it runs on

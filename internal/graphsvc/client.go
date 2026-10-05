@@ -361,6 +361,16 @@ func (c *Client) Structures(ctx context.Context) (domain.Structures, error) {
 	return pbconv.StructuresFromPB(r.Msg), nil
 }
 
+// AdminOnlyType tells whether a node type is written by platform administrators only (ADR 0068); a graph that
+// cannot be reached answers true, so that nothing slips through the gate.
+func (c *Client) AdminOnlyType(ctx context.Context, typ string) (bool, error) {
+	r, err := c.rpc.IsAdminOnlyType(ctx, connect.NewRequest(&graphv1.IsAdminOnlyTypeRequest{Type: typ}))
+	if err != nil {
+		return true, rpcerr.FromConnect(err)
+	}
+	return r.Msg.AdminOnly, nil
+}
+
 func (c *Client) BranchHead(ctx context.Context, namespace, name string) (domain.Baseline, error) {
 	r, err := c.rpc.GetBranch(ctx, connect.NewRequest(&graphv1.GetBranchRequest{Namespace: namespace, Name: name}))
 	if err != nil {

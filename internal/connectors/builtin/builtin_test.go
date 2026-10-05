@@ -505,7 +505,7 @@ func TestChangeToolsKeepTheAccessGate(t *testing.T) {
 	}
 }
 
-// Every access type (access.IsAccessType) stays behind the gate through write, edit, link and retire: a project
+// Every adminOnly node type (ADR 0068) stays behind the gate through write, edit, link and retire: a project
 // member could otherwise write an organisation@Assignment granting admin through the in-process connector.
 func TestChangeToolsGateEveryAccessType(t *testing.T) {
 	p := newPlatform(t)

@@ -50,6 +50,18 @@ func (g *Graph) requires(typ string) []domain.RequiredLink {
 	return domain.BuiltinRequires[typ]
 }
 
+// AdminOnlyType reports a node type whose nodes only platform administrators write (ADR 0068): the type
+// catalogue's `adminOnly:` flag, plus the built-in ones for an untyped graph (domain.BuiltinAdminOnly). The one
+// question every write path asks.
+func (g *Graph) AdminOnlyType(_ context.Context, typ string) (bool, error) {
+	if g.Types != nil {
+		if c := g.catalog(); c != nil && c.AdminOnly(typ) {
+			return true, nil
+		}
+	}
+	return domain.BuiltinAdminOnly[typ], nil
+}
+
 // isA reports whether the node type typ is base or a subtype of it (an untyped graph knows no subtyping).
 func (g *Graph) isA(typ, base string) bool {
 	if typ == base {

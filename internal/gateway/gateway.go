@@ -40,11 +40,12 @@ type Route struct {
 // Config configures the gateway.
 type Config struct {
 	Routes []Route
-	// AuthMode is "none" (dev: every caller is "dev"), "hs256" (bearer tokens minted out of band, dev-token
-	// only) or "local" (ADR 0040: signup/login against Credentials, backed by internal/credsvc, for a
-	// deployment with no external identity provider). "local" verifies bearer tokens the same way "hs256"
-	// does: only how a token is first obtained differs. It is the default (DefaultAuthMode, ADR 0042): a
-	// deployment signs its users in itself unless an external identity provider issues their tokens.
+	// AuthMode names the authentication strategy (Mode, ADR 0068): "none" (dev: every caller is "dev"), "hs256"
+	// (bearer tokens minted out of band, dev-token only) or "local" (ADR 0040: signup/login against Credentials,
+	// backed by internal/credsvc, for a deployment with no external identity provider). "local" verifies bearer
+	// tokens the same way "hs256" does: only how a token is first obtained differs. It is the default
+	// (DefaultAuthMode, ADR 0042): a deployment signs its users in itself unless an external identity provider
+	// issues their tokens. An unset mode is refused.
 	AuthMode string
 	// JWTSecret signs and validates HS256 tokens.
 	JWTSecret []byte
@@ -62,8 +63,8 @@ type Config struct {
 	SessionCheckTTL time.Duration
 	// sessions caches the state of the sessions (Prepare): shared by the authenticator and the endpoints.
 	sessions *sessionCache
-	// Credentials backs the local AuthMode's register/login endpoints (ADR 0040). Required when
-	// AuthMode == "local".
+	// Credentials backs the register/login endpoints and the sessions of a mode that keeps them (Mode.Sessions,
+	// "local"; ADR 0040).
 	Credentials Credentials
 	// OnSignIn runs after a successful local register/login, before the token is signed (ADR 0042): it
 	// creates the subject's User node when the graph has none yet (graphsvc.EnsureUser, member of the unit
@@ -92,7 +93,7 @@ const (
 // the sessions, so a sign-out is refused at once by the authenticator of the same process (ADR 0045). Mount does
 // it itself.
 func Prepare(cfg Config) Config {
-	if cfg.sessions == nil && cfg.AuthMode == "local" && cfg.Credentials != nil {
+	if m, err := LookupMode(cfg.AuthMode); cfg.sessions == nil && err == nil && m.Sessions() && cfg.Credentials != nil {
 		ttl := cfg.SessionCheckTTL
 		if ttl <= 0 {
 			ttl = DefaultSessionCheckTTL
@@ -183,36 +184,25 @@ type Claims struct {
 }
 
 // MountAuthEndpoints registers the sign-in HTTP endpoints alone (no CORS, no proxying, no /api/whoami or
-// /api/status): the dev-token endpoints (hs256, DevTokens), local register/login/logout (AuthMode "local")
-// and /api/auth/config (always). Split out of Mount so a single-process deployment (cmd/goap-dev) can offer
+// /api/status): the endpoints of the Mode (dev-token for hs256 with DevTokens; register, login, logout, refresh for
+// local) and /api/auth/config (always). Split out of Mount so a single-process deployment (cmd/goap-dev) can offer
 // the same sign-in UI as the distributed gateway without also wanting a reverse proxy.
 func MountAuthEndpoints(e *echo.Echo, cfg Config) error {
 	cfg = Prepare(cfg)
-	// dev tokens only make sense with hs256; ignored otherwise
-	if cfg.DevTokens && cfg.AuthMode == "hs256" {
-		e.POST("/auth/dev-token", devToken(cfg))
-		e.POST("/auth/dev-token/project", switchProject(cfg))
+	mode, err := LookupMode(cfg.AuthMode)
+	if err != nil {
+		return err
 	}
-	if cfg.AuthMode == "local" {
-		if len(cfg.JWTSecret) < 32 {
-			return errors.New("local auth requires a JWT secret of at least 32 bytes")
-		}
-		if cfg.Credentials == nil {
-			return errors.New("local auth requires Credentials")
-		}
-		e.POST("/auth/register", register(cfg))
-		e.POST("/auth/login", login(cfg))
-		e.POST("/auth/logout", logout(cfg))
-		e.POST("/auth/refresh", refresh(cfg))
-		// switching project reissues the token (ADR 0039): a signed-in user needs it as much as a dev token
-		e.POST("/auth/dev-token/project", switchProject(cfg))
+	if err := mode.Validate(cfg); err != nil {
+		return err
 	}
+	mode.Routes(e, cfg)
 	e.GET("/api/auth/config", authConfig(cfg))
 	return nil
 }
 
 // Authenticator returns the middleware that turns a request's credentials (a bearer token, or nothing in
-// AuthMode "none") into the propagated identity headers (setPrincipal): exported so a single-process
+// mode that checks none) into the propagated identity headers (setPrincipal): exported so a single-process
 // deployment (cmd/goap-dev) can apply it globally instead of per-route.
 func Authenticator(cfg Config) (echo.MiddlewareFunc, error) { return authenticator(Prepare(cfg)) }
 
@@ -250,34 +240,23 @@ func Mount(e *echo.Echo, cfg Config) error {
 }
 
 func authenticator(cfg Config) (echo.MiddlewareFunc, error) {
-	switch cfg.AuthMode {
-	case "none": // explicit only: an unset mode is a configuration error, never an open gateway
-		return func(next echo.HandlerFunc) echo.HandlerFunc {
-			return func(c *echo.Context) error {
-				setPrincipal(c, cfg, authz.Principal{Subject: "dev", Org: "dev", Roles: []string{"admin"}})
-				return next(c)
-			}
-		}, nil
-	case "hs256", "local":
-		if len(cfg.JWTSecret) < 32 {
-			return nil, fmt.Errorf("%s auth requires a JWT secret of at least 32 bytes", cfg.AuthMode)
-		}
-		return func(next echo.HandlerFunc) echo.HandlerFunc {
-			return func(c *echo.Context) error {
-				claims, err := parseToken(cfg, c.Request().Header.Get("Authorization"))
-				if err != nil {
-					return unauthorized(err)
-				}
-				if err := checkSession(c.Request().Context(), cfg, claims, false); err != nil {
-					return err
-				}
-				c.Request().Header.Del("Authorization")
-				setPrincipal(c, cfg, authz.Principal{Subject: claims.Subject, Org: claims.Org, Project: claims.Project, Roles: claims.Roles})
-				return next(c)
-			}
-		}, nil
+	mode, err := LookupMode(cfg.AuthMode) // an unset mode is a configuration error, never an open gateway
+	if err != nil {
+		return nil, err
 	}
-	return nil, fmt.Errorf("unknown auth mode %q", cfg.AuthMode)
+	if err := mode.Validate(cfg); err != nil {
+		return nil, err
+	}
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c *echo.Context) error {
+			p, err := mode.Authenticate(c, cfg)
+			if err != nil {
+				return err
+			}
+			setPrincipal(c, cfg, p)
+			return next(c)
+		}
+	}, nil
 }
 
 // setPrincipal propagates the caller to the services, completed by its User node when there is one.
@@ -313,10 +292,10 @@ func unauthorized(err error) error {
 	return echo.NewHTTPError(http.StatusUnauthorized, "invalid token")
 }
 
-// checkSession refuses a token of the local AuthMode whose sign-in session ended or that belongs to none (ADR
+// checkSession refuses a token of a mode that keeps sessions (Mode.Sessions) whose sign-in session ended or that belongs to none (ADR
 // 0045): from the cache of the sessions, or asking Credentials when fresh is set (a refresh).
 func checkSession(ctx context.Context, cfg Config, claims *Claims, fresh bool) error {
-	if cfg.AuthMode != "local" || cfg.Credentials == nil {
+	if m, err := LookupMode(cfg.AuthMode); err != nil || !m.Sessions() || cfg.Credentials == nil {
 		return nil
 	}
 	if claims.Sid == "" {
@@ -439,7 +418,11 @@ func devToken(cfg Config) echo.HandlerFunc {
 // exists (ADR 0040 — the signin/signup screens, and the Logout action's own SSO seam, both read it).
 func authConfig(cfg Config) echo.HandlerFunc {
 	return func(c *echo.Context) error {
-		return c.JSON(http.StatusOK, map[string]string{"authMode": cfg.AuthMode})
+		m, err := LookupMode(cfg.AuthMode)
+		if err != nil {
+			return err
+		}
+		return c.JSON(http.StatusOK, map[string]any{"authMode": m.Name(), "signsIn": m.Sessions()})
 	}
 }
 

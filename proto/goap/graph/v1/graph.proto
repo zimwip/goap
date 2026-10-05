@@ -31,6 +31,8 @@ service GraphService {
   rpc ListNamespaces(ListNamespacesRequest) returns (ListNamespacesResponse);
   // The structures of the graph (ADR 0054): the organisation and the projects, with the node types belonging to each.
   rpc GetStructures(GetStructuresRequest) returns (GetStructuresResponse);
+  // Whether a node type is written by platform administrators only (`adminOnly:` on the node type, ADR 0068).
+  rpc IsAdminOnlyType(IsAdminOnlyTypeRequest) returns (IsAdminOnlyTypeResponse);
   // The impact log of a change (ADR 0029): every operation on its change impacts, with its caller.
   rpc ListChangeEvents(ListChangeEventsRequest) returns (ListChangeEventsResponse);
   // The log of a change (ADR 0030): its facts, journal records and impact events in one order, filtered on columns.
@@ -564,6 +566,15 @@ message ListNamespacesResponse {
 }
 
 message GetStructuresRequest {}
+
+message IsAdminOnlyTypeRequest {
+  // qualified node type
+  string type = 1;
+}
+
+message IsAdminOnlyTypeResponse {
+  bool admin_only = 1;
+}
 
 // A hierarchy every node version is placed in (domain.Structure).
 message Structure {

@@ -60,7 +60,9 @@ func (h *Handler) publish(ctx context.Context, subject string, v any) {
 // refuseDirectWrite rejects writes outside a change to nodes of a type that has
 // a lifecycle (ADR 0014): such nodes are modified through changes only.
 func (h *Handler) refuseDirectWrite(ctx context.Context, typ string) error {
-	if access.IsAccessType(typ) {
+	if adminOnly, err := h.Graph.AdminOnlyType(ctx, typ); err != nil {
+		return rpcerr.ToConnect(err)
+	} else if adminOnly {
 		return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("node type %s is access control: modify its nodes through a change", typ))
 	}
 	controlled, err := h.Graph.LifecycleControlled(ctx, typ)
@@ -330,6 +332,12 @@ func (h *Handler) GetNodeNeighbourhood(ctx context.Context, r *connect.Request[g
 	return connect.NewResponse(out), nil
 }
 
+// IsAdminOnlyType tells whether a node type is written by platform administrators only (ADR 0068).
+func (h *Handler) IsAdminOnlyType(ctx context.Context, r *connect.Request[graphv1.IsAdminOnlyTypeRequest]) (*connect.Response[graphv1.IsAdminOnlyTypeResponse], error) {
+	adminOnly, err := h.Graph.AdminOnlyType(ctx, r.Msg.Type)
+	return res(&graphv1.IsAdminOnlyTypeResponse{AdminOnly: adminOnly}, err)
+}
+
 func (h *Handler) GetStructures(ctx context.Context, _ *connect.Request[graphv1.GetStructuresRequest]) (*connect.Response[graphv1.GetStructuresResponse], error) {
 	st, err := h.Graph.Structures(ctx)
 	return res(pbconv.StructuresToPB(st), err)
@@ -431,12 +439,14 @@ func (h *Handler) AddItems(ctx context.Context, r *connect.Request[graphv1.AddIt
 	return res(&graphv1.AddItemsResponse{Items: pbconv.ItemsToPB(items)}, err)
 }
 
-// gateAccess applies to a change impact the gate of the access nodes (access.IsAccessType): they need the access
+// gateAccess applies to a change impact the gate of the access nodes (`adminOnly` node types, ADR 0068): they need the access
 // permission ("policy":"write"), checked against the floor (ADR 0020) — administrator-only, same as every
 // other organisation-namespace write (authz.DefaultPolicies has no rule for "node"/"object" write on it).
 func (h *Handler) gateAccess(ctx context.Context, typ string) error {
 	who := authz.From(ctx)
-	if access.IsAccessType(typ) {
+	if adminOnly, err := h.Graph.AdminOnlyType(ctx, typ); err != nil {
+		return rpcerr.ToConnect(err)
+	} else if adminOnly {
 		gate := h.Floor
 		if gate == nil {
 			gate = h.Authz

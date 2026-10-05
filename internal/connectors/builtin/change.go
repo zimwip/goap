@@ -446,10 +446,12 @@ func (c Change) list(ctx context.Context, a args) (map[string]any, error) {
 	return result(map[string]any{"changes": list, "truncated": truncated})
 }
 
-// gate applies the access gate of the platform to the access nodes (access.IsAccessType, ADR 0020): in
+// gate applies the access gate of the platform to the access nodes (`adminOnly` node types, ADR 0068 and 0020): in
 // process the connector writes through the graph directly, so the handler's gate does not stand in front of it.
 func (c Change) gate(ctx context.Context, who authz.Principal, typ string) error {
-	if !access.IsAccessType(typ) {
+	if adminOnly, err := c.p.Graph.AdminOnlyType(ctx, typ); err != nil {
+		return err
+	} else if !adminOnly {
 		return nil
 	}
 	gate := c.p.Floor

@@ -34,6 +34,8 @@ type TypeCatalog interface {
 	Structures() domain.Structures
 	// Requires are the links a node of a type must carry (`requires:` on a node type, ADR 0065).
 	Requires(typ string) []domain.RequiredLink
+	// AdminOnly reports a node type written by platform administrators only (`adminOnly:` on a node type, ADR 0068).
+	AdminOnly(typ string) bool
 }
 
 // Graph exposes the domain and change axes.

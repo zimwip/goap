@@ -53,7 +53,7 @@ every caller is a fixed dev principal. Three gaps remained to make users a real 
   change (set on this unit, cleared on every unit carrying it). Existing users stay where they are.
 - **Profile menu.** The header's user menu offers "My profile" (the user's own tab) and, with local sign-in,
   "Log out" (`POST /auth/logout`, then the sign-in page replaces the shell). The pasted-token box shows only
-  in `hs256` mode. The user tab's own "Log out" action follows the same rule (`signsInLocally`), so an SSO
+  in `hs256` mode. The user tab's own "Log out" action follows the same rule (`authState.signsIn`, ADR 0068; formerly `signsInLocally`), so an SSO
   mode signs out through its provider.
 - **Switching project reissues the token in local mode too** (`/auth/dev-token/project` mounted for
   `"local"`).

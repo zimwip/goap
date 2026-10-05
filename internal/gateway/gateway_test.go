@@ -195,10 +195,13 @@ func TestLocalAuth(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var authCfg struct{ AuthMode string }
+	var authCfg struct {
+		AuthMode string
+		SignsIn  bool
+	}
 	_ = json.NewDecoder(cfgResp.Body).Decode(&authCfg)
 	cfgResp.Body.Close()
-	if authCfg.AuthMode != "local" {
+	if authCfg.AuthMode != "local" || !authCfg.SignsIn {
 		t.Fatalf("auth config = %+v", authCfg)
 	}
 
@@ -536,6 +539,68 @@ func TestSwitchProjectChecksSessionAndAccess(t *testing.T) {
 	defer bare.Close()
 	if code, _ := post(bare, "/auth/dev-token/project", login(bare), `{"project":"PROJ-A"}`); code != http.StatusForbidden {
 		t.Fatalf("switch with no access check: %d", code)
+	}
+}
+
+// The three auth strategies state what they are (ADR 0068): the gateway, the commands and the web read these, never
+// the name; an unknown or unset name has no strategy.
+func TestAuthModesAreStrategies(t *testing.T) {
+	secret := []byte(strings.Repeat("k", 32))
+	for _, c := range []struct {
+		name                           string
+		open, verifiesTokens, sessions bool
+		routes                         []string // POST routes it adds, with the config below
+		missingSecret, missingCreds    bool     // refused without a secret / without Credentials
+	}{
+		{"none", true, false, false, nil, false, false},
+		{"hs256", false, true, false, []string{"/auth/dev-token", "/auth/dev-token/project"}, true, false},
+		{"local", false, true, true, []string{"/auth/register", "/auth/login", "/auth/logout", "/auth/refresh", "/auth/dev-token/project"}, true, true},
+	} {
+		m, err := LookupMode(c.name)
+		if err != nil || m.Name() != c.name || m.Open() != c.open || m.VerifiesTokens() != c.verifiesTokens || m.Sessions() != c.sessions {
+			t.Fatalf("%s: %v %+v", c.name, err, m)
+		}
+		cfg := Config{AuthMode: c.name, JWTSecret: secret, DevTokens: true, Credentials: &fakeCredentials{}}
+		if err := m.Validate(cfg); err != nil {
+			t.Errorf("%s: %v", c.name, err)
+		}
+		if err := m.Validate(Config{AuthMode: c.name, Credentials: cfg.Credentials}); (err != nil) != c.missingSecret {
+			t.Errorf("%s without a secret: %v", c.name, err)
+		}
+		if err := m.Validate(Config{AuthMode: c.name, JWTSecret: secret}); (err != nil) != c.missingCreds {
+			t.Errorf("%s without Credentials: %v", c.name, err)
+		}
+		e := echo.New()
+		m.Routes(e, cfg)
+		var got []string
+		for _, r := range e.Router().Routes() {
+			got = append(got, r.Path)
+		}
+		slices.Sort(got)
+		want := slices.Clone(c.routes)
+		slices.Sort(want)
+		if !slices.Equal(got, want) {
+			t.Errorf("%s routes %v, want %v", c.name, got, want)
+		}
+	}
+	for _, name := range []string{"", "oidc"} {
+		if _, err := LookupMode(name); err == nil {
+			t.Errorf("mode %q must be unknown", name)
+		}
+		if err := MountAuthEndpoints(echo.New(), Config{AuthMode: name}); err == nil {
+			t.Errorf("mounting mode %q must fail", name)
+		}
+	}
+	// hs256 mints dev tokens only when asked
+	e := echo.New()
+	bearerMode{}.Routes(e, Config{AuthMode: "hs256", JWTSecret: secret})
+	if len(e.Router().Routes()) != 0 {
+		t.Errorf("hs256 without DevTokens adds routes")
+	}
+	// none authenticates every caller as the dev administrator, local and hs256 refuse a missing token
+	p, err := noneMode{}.Authenticate(nil, Config{})
+	if err != nil || p.Subject != "dev" || !slices.Contains(p.Roles, "admin") {
+		t.Errorf("none: %+v %v", p, err)
 	}
 }
 

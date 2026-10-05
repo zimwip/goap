@@ -47,7 +47,9 @@ type NodeType struct {
 	// tags the type as a structure of the graph (ADR 0054): the organisation or the project hierarchy
 	Structure *StructureTag `protobuf:"bytes,11,opt,name=structure,proto3" json:"structure,omitempty"`
 	// links a node of the type must carry (ADR 0065)
-	Requires      []*RequiredLink `protobuf:"bytes,12,rep,name=requires,proto3" json:"requires,omitempty"`
+	Requires []*RequiredLink `protobuf:"bytes,12,rep,name=requires,proto3" json:"requires,omitempty"`
+	// nodes of the type are written by platform administrators only (ADR 0068)
+	AdminOnly     bool `protobuf:"varint,13,opt,name=admin_only,json=adminOnly,proto3" json:"admin_only,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -164,6 +166,13 @@ func (x *NodeType) GetRequires() []*RequiredLink {
 		return x.Requires
 	}
 	return nil
+}
+
+func (x *NodeType) GetAdminOnly() bool {
+	if x != nil {
+		return x.AdminOnly
+	}
+	return false
 }
 
 // RequiredLink: a node of the type has exactly count outgoing links of the link type (ADR 0065).
@@ -7260,7 +7269,7 @@ var File_goap_registry_v1_registry_proto protoreflect.FileDescriptor
 
 const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\n" +
-	"\x1fgoap/registry/v1/registry.proto\x12\x10goap.registry.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xa5\x04\n" +
+	"\x1fgoap/registry/v1/registry.proto\x12\x10goap.registry.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xc4\x04\n" +
 	"\bNodeType\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12;\n" +
@@ -7278,7 +7287,9 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\x06editor\x18\n" +
 	" \x01(\tR\x06editor\x12<\n" +
 	"\tstructure\x18\v \x01(\v2\x1e.goap.registry.v1.StructureTagR\tstructure\x12:\n" +
-	"\brequires\x18\f \x03(\v2\x1e.goap.registry.v1.RequiredLinkR\brequiresB\x14\n" +
+	"\brequires\x18\f \x03(\v2\x1e.goap.registry.v1.RequiredLinkR\brequires\x12\x1d\n" +
+	"\n" +
+	"admin_only\x18\r \x01(\bR\tadminOnlyB\x14\n" +
 	"\x12_change_controlled\"8\n" +
 	"\fRequiredLink\x12\x12\n" +
 	"\x04link\x18\x01 \x01(\tR\x04link\x12\x14\n" +
