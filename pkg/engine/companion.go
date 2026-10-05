@@ -135,7 +135,8 @@ func (e *Engine) accompany(ctx context.Context, m *methodology.Compiled, process
 	if bb.Change.Status == domain.ChangeApplied || bb.Change.Status == domain.ChangeAbandoned {
 		return nil
 	}
-	who := authz.Principal{Subject: "system:" + key, Org: "system"}
+	who := authz.System(key)
+	who.Org = "system"
 	p, err := e.Start(authz.With(ctx, who), StartRequest{Methodology: m.Name, Agent: process, Goal: process, ChangeID: changeID,
 		OwnerOrg: bb.Change.OwnerOrg, Trigger: key, Title: bb.Change.Title, Vars: map[string]any{"event": event},
 		Intent: fmt.Sprintf("%s alongside the change: %s", process, bb.Change.Intent)})

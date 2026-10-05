@@ -9,6 +9,7 @@ import (
 	"time"
 
 	connectorv1 "github.com/zimwip/goap/gen/goap/connector/v1"
+	"github.com/zimwip/goap/internal/devseed"
 	"github.com/zimwip/goap/internal/graphsvc"
 	"github.com/zimwip/goap/internal/mcpsvc"
 	"github.com/zimwip/goap/internal/pbconv"
@@ -49,10 +50,13 @@ func world(t *testing.T) *graph.Graph {
 	t.Helper()
 	ctx := context.Background()
 	g := graph.New(graph.NewMemory())
-	if seeded, err := graphsvc.SeedDefaults(ctx, g); err != nil || !seeded {
-		t.Fatalf("seed defaults = %v, %v", seeded, err)
+	if err := g.Bootstrap(ctx); err != nil {
+		t.Fatal(err)
 	}
-	if seeded, err := graphsvc.SeedDefaults(ctx, g); err != nil || seeded {
+	if seeded, err := devseed.DocumentRepository(ctx, g); err != nil || !seeded {
+		t.Fatalf("seed document repository = %v, %v", seeded, err)
+	}
+	if seeded, err := devseed.DocumentRepository(ctx, g); err != nil || seeded {
 		t.Fatalf("seeding twice = %v, %v", seeded, err)
 	}
 	for _, u := range [][2]string{{"ORG-A", access.DefaultOrg}, {"ORG-A1", "ORG-A"}, {"ORG-B", ""}} {
@@ -60,10 +64,10 @@ func world(t *testing.T) *graph.Graph {
 			t.Fatal(err)
 		}
 	}
-	if err := graphsvc.SeedAdapter(ctx, g, graphsvc.LocalFSAdapter(access.DefaultOrg, "/default")); err != nil {
+	if err := graphsvc.SeedAdapter(ctx, g, devseed.LocalFSAdapter(access.DefaultOrg, "/default")); err != nil {
 		t.Fatal(err)
 	}
-	if err := graphsvc.SeedAdapter(ctx, g, graphsvc.LocalFSAdapter("ORG-A", "/a")); err != nil {
+	if err := graphsvc.SeedAdapter(ctx, g, devseed.LocalFSAdapter("ORG-A", "/a")); err != nil {
 		t.Fatal(err)
 	}
 	return g
@@ -301,7 +305,7 @@ func TestSecretParametersReachTheConnectorButNotTheScript(t *testing.T) {
 func TestCheckAdapterAndTemplate(t *testing.T) {
 	ctx := context.Background()
 	svc := newHub(t, world(t), &fakeInvoker{})
-	ok := graphsvc.LocalFSAdapter("ORG-B", "/b")
+	ok := devseed.LocalFSAdapter("ORG-B", "/b")
 	if w, err := svc.CheckAdapter(ctx, ok); err != nil || len(w) != 1 || !strings.Contains(w[0], `secret "token"`) {
 		t.Fatalf("valid instance: %v, %v", w, err)
 	}
@@ -346,7 +350,7 @@ func TestSnapshotFollowsTheGraph(t *testing.T) {
 	if s2, _ := d.Snapshot(ctx); s2 != s1 {
 		t.Fatal("the snapshot of an unchanged head must be reused")
 	}
-	if err := graphsvc.SeedAdapter(ctx, g, graphsvc.LocalFSAdapter("ORG-B", "/b")); err != nil {
+	if err := graphsvc.SeedAdapter(ctx, g, devseed.LocalFSAdapter("ORG-B", "/b")); err != nil {
 		t.Fatal(err)
 	}
 	s3, _ := d.Snapshot(ctx)

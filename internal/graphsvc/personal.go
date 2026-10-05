@@ -64,7 +64,7 @@ func (h *Handler) resolveOwner(ctx context.Context, owner string) (string, error
 // node, its member_of, and the first user's admin Assignment are committed together, as one change on main
 // (createUser, ADR 0042).
 //
-// The default org is resolved *before* the node is created: SeedDefaults can still be seeding at startup (it
+// The default org is resolved *before* the node is created: the bootstrap (Boot) can still be running at startup (it
 // waits on the registry to publish the type catalogue), and a caller seen in that window must not leave a
 // permanently broken User behind — one with no member_of and no admin, since a node once created would make
 // every later subject see the namespace as "already has a User" and never get the first-admin bootstrap
@@ -120,7 +120,7 @@ func createUser(ctx context.Context, g *graph.Graph, subject string) error {
 	}
 	u := access.User{Subject: subject}
 	key := access.UserKey(subject)
-	user := linkTo(createNode(key, access.NodeTypeUser, u.Props()), access.LinkMemberOf, org.Ref())
+	user := linkTo(SeedNode(key, access.NodeTypeUser, u.Props()), access.LinkMemberOf, org.Ref())
 	user.Rationale = "First sign-in of " + subject
 	// activate it in the same commit (ADR 0048's user lifecycle starts a new account "proposed"): a sign-in
 	// lands it usable right away, with no separate admin step needed for every single new user.
@@ -141,7 +141,7 @@ func createUser(ctx context.Context, g *graph.Graph, subject string) error {
 	// or project yet, so running this under their own identity would make TransitionAuthorizer deny its own
 	// activation for every single new user. It runs as the system principal (ADR 0048, lifecycle.go's
 	// TransitionAuthorizer).
-	return applyOn(System(ctx), g, access.NamespaceOrganisation, "User "+subject, edits)
+	return SeedChange(System(ctx), g, access.NamespaceOrganisation, "User "+subject, edits)
 }
 
 // NewUserUnit returns the organisational unit new users join (ADR 0042): the waiting unit, an OrgUnit an
@@ -168,7 +168,7 @@ func NewUserUnit(ctx context.Context, g *graph.Graph) (domain.Node, error) {
 
 // SystemPrincipal is the identity of the graph service acting by itself (seeds, the bookkeeping of a sign-in):
 // a named service, never an anonymous caller, which the transition authorizers refuse.
-var SystemPrincipal = authz.Principal{Subject: authz.SystemPrefix + "graph", Roles: []string{access.RoleAdmin}}
+var SystemPrincipal = authz.System("graph", access.RoleAdmin)
 
 // System returns ctx acting as the graph service itself.
 func System(ctx context.Context) context.Context { return authz.With(ctx, SystemPrincipal) }

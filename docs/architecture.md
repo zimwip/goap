@@ -887,8 +887,9 @@ under the parameter name, and that the code can never read. Runs are bounded (30
   missing or of another MCP, missing or unknown parameter: error; unregistered connector, secret the connector needs: warnings);
   `AdapterTemplate` generates the code skeleton.
 - **Editing.** MCPs, adapter definitions and adapter instances are nodes, created, changed and removed through changes like any
-  node. The first start bootstraps `ORG-DEFAULT` and `PROJ-ROOT` (`Graph.Bootstrap`, ADR 0054), then creates
-  `document-repository` and the `localfs-document-repository` adapter definition (`graphsvc.SeedDefaults`).
+  node. The first start bootstraps `ORG-DEFAULT` and `PROJ-ROOT` and seeds the policies, the built-in MCPs and the models
+  (`graphsvc.Boot`, see "Startup sequence" below, ADR 0054, 0071). `document-repository` and the
+  `localfs-document-repository` adapter definition are development data (`devseed.DocumentRepository`), not a platform default.
 - **Scope** ([ADR 0028](adr/0028-builtin-mcps-and-connectors.md)). An MCP says where a methodology may use it:
   `action` (declared by actions), `agent` (declared by agents only, reached by their llm actions: orchestration such as
   `goap-scheduler`), or `both` (default). An action never gets an agent-scoped MCP (not planned, not callable), an
@@ -905,7 +906,7 @@ under the parameter name, and that the code can never read. Runs are bounded (30
   them with an instance of an adapter definition and its parameter values, and restricts them). A new organisation
   is a new unit.
 - `goap-dev` runs the hub, the built-in connectors and the localfs connector in-process (`GOAP_DEV_FS_ROOT` gives the default organisation
-  an adapter instance on a directory); connectors started separately register over HTTP.
+  an adapter instance on a directory, `devseed.LocalFS`); connectors started separately register over HTTP.
 
 ### 3.9b Project ([ADR 0039](adr/0039-project-organisation.md))
 
@@ -977,6 +978,25 @@ created in a project; the engine only executes, through changes.
 - **Readers ask the graph.** `pkg/access` and `internal/mcpsvc` never name the organisation or project types: they ask
   the graph service for its structures (`GetStructures`, `domain.Structures`: a list, each structure with its kind, type, parent, root, default flag and
   subtypes) and read units, projects, parents and roots from the answer.
+
+#### Startup sequence ([ADR 0071](adr/0071-one-platform-bootstrap.md))
+
+Every composition (`goap-dev`, `cmd/graph`) seeds the platform through one function, `graphsvc.Boot(ctx, g, Options)`:
+
+1. The caller sets every hook of the graph first (`Authorizer`, `ChangeAuthorizer`, `Validators`, `DecisionPolicy`, `Types`;
+   `LandingGate`, `SubChangeValidator`, `Lifecycles` where the registry runs in process: only `goap-dev`) and has a type
+   catalogue holding the domains (`goap-dev`: `SeedDomains`, then the catalogue reload; `cmd/graph`: it waits for the
+   catalogue). `Options.RequireHooks` makes `Boot` panic if the access hooks are missing; without the registry hooks `Boot`
+   logs one warning, "change lifecycle and activity gating are not available in this composition".
+2. `Boot`: `Graph.Bootstrap` (roots), `SeedAccess` (default policies), `SeedBuiltins` (built-in MCPs, adapter definitions,
+   platform roles), `SeedModels` (`Options.Models`), then `Options.Dev`. Each step is idempotent.
+3. The registry then seeds the methodologies (`goap-dev`; `cmd/registry` seeds them over RPC): they need the aliases of step 2.
+
+Development and demo data is not part of it (`internal/devseed`: `Demo` the ALM repository, `DocumentRepository` the
+document-repository MCP and its localfs adapter definition, `LocalFS` a directory as the default organisation's repository).
+`goap-dev` passes them as `Options.Dev`; `cmd/graph` only with `GOAP_GRAPH_SEED=demo`. `cmd/graph` still bootstraps the roots
+before serving (a no-op for `Boot` afterwards). Platform services act as `authz.System(name, roles...)`
+(`system:registry`, `system:graph`, `system:trigger:<key>`).
 
 ### 3.9c User bootstrap, mandatory parenting, local auth ([ADR 0040](adr/0040-user-bootstrap-org-membership-local-auth.md))
 
@@ -1210,7 +1230,7 @@ executions: an execution that produces items without reaching them is **progress
 
 ### 4.1 SDLC methodology on the ALM domain (`methodologies/sdlc.yaml`, version 0.5.1, on the shared `alm` domain of `domains/alm.yaml`)
 
-ALM domain (demo data: `internal/graphsvc/seed.go`):
+ALM domain (demo data: `internal/devseed/demo.go`):
 
 ```
 Need ◄─satisfies─ Requirement ◄─realizes─ Function ◄─implements─ Component ◄─built_from─ BuildArtifact

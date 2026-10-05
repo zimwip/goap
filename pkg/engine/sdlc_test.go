@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/zimwip/goap/internal/devseed"
 	"github.com/zimwip/goap/internal/graphsvc"
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
@@ -96,7 +97,7 @@ func sdlcSetup(t *testing.T) (*engine.Engine, *graph.Graph, domain.BaselineID) {
 	g := graph.New(graph.NewMemory())
 	g.Types = func() graph.TypeCatalog { return cat }
 	g.Caller = graphsvc.Caller
-	if _, err := graphsvc.SeedDemo(ctx, g); err != nil {
+	if _, err := devseed.Demo(ctx, g); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := g.CreateNode(ctx, graph.NewNode{Namespace: "organisation", Key: testProject, Type: "organisation@ProjectUnit", Properties: map[string]any{"name": "Test"}}); err != nil {

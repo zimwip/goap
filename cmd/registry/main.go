@@ -46,7 +46,7 @@ func main() {
 	if dir := platform.Env("GOAP_METHODOLOGIES_DIR", ""); dir != "" {
 		// bootstrap: import the YAML files of versions not stored yet, once the graph answers
 		go func() {
-			system := authz.With(ctx, authz.Principal{Subject: "system:registry", Roles: []string{"admin"}})
+			system := authz.With(ctx, authz.System("registry", access.RoleAdmin))
 			seed := &registrysvc.Service{Store: store, DomainStore: domains, Events: events}
 			for delay := time.Second; ; delay = min(2*delay, time.Minute) {
 				err := func() error {

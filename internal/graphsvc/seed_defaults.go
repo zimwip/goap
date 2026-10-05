@@ -8,7 +8,6 @@ import (
 
 	"github.com/zimwip/goap/pkg/access"
 	"github.com/zimwip/goap/pkg/adapter"
-	"github.com/zimwip/goap/pkg/algo"
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/graph"
@@ -17,55 +16,9 @@ import (
 	"github.com/zimwip/goap/pkg/mcpbuiltin"
 )
 
-// documentRepository is the generic MCP to manipulate documents.
-func documentRepository() mcp.Def {
-	obj := func(props map[string]any, required ...string) map[string]any {
-		s := map[string]any{"type": "object", "properties": props}
-		if len(required) > 0 {
-			r := make([]any, len(required))
-			for i, n := range required {
-				r[i] = n
-			}
-			s["required"] = r
-		}
-		return s
-	}
-	str := func(desc string) map[string]any { return map[string]any{"type": "string", "description": desc} }
-	return mcp.Def{Name: "document-repository", Description: "Documents organised in folders.", Tools: []mcp.Tool{
-		{Name: "list", Description: "List the documents and folders under a path.", InputSchema: obj(map[string]any{"path": str("folder path, empty for the root")})},
-		{Name: "read", Description: "Read the text of a document.", InputSchema: obj(map[string]any{"path": str("document path")}, "path")},
-		{Name: "write", Description: "Create or replace a document.", InputSchema: obj(map[string]any{"path": str("document path"), "content": str("text of the document")}, "path", "content")},
-	}}
-}
-
-// LocalFSAdapterName is the adapter definition of the document-repository MCP on the localfs connector.
-const LocalFSAdapterName = "localfs-document-repository"
-
-// localFSAdapterDef is the reference adapter: the document-repository MCP on the local file system connector.
-func localFSAdapterDef() adapter.Def {
-	return adapter.Def{
-		Name:        LocalFSAdapterName,
-		Description: "The document-repository MCP on the local file system connector (localfs)",
-		MCP:         "document-repository",
-		Connector:   "localfs",
-		Language:    algo.JavaScript,
-		Params:      []algo.Param{{Name: "root", Type: algo.ParamString, Required: true, Description: "Directory the unit exposes as its document repository"}},
-		Code: `switch (ctx.tool()) {
-  case "list":
-    return ctx.call("list_dir", { path: ctx.args().path || "" });
-  case "read":
-    return ctx.call("read_file", { path: ctx.args().path });
-  case "write":
-    return ctx.call("write_file", { path: ctx.args().path, content: ctx.args().content });
-}
-ctx.fail("unknown tool " + ctx.tool());
-`,
-	}
-}
-
-// applyOn commits node edits on main as one change of a namespace, so that the head of main moves: the first change
+// SeedChange commits node edits on main as one change of a namespace, so that the head of main moves: the first change
 // of a namespace starts from the empty state (ADR 0056).
-func applyOn(ctx context.Context, g *graph.Graph, namespace, title string, edits []graph.NodeEdit) error {
+func SeedChange(ctx context.Context, g *graph.Graph, namespace, title string, edits []graph.NodeEdit) error {
 	if authz.From(ctx).Anonymous() { // a seed acts as the graph service itself
 		ctx = System(ctx)
 	}
@@ -73,7 +26,7 @@ func applyOn(ctx context.Context, g *graph.Graph, namespace, title string, edits
 	return err
 }
 
-func createNode(key, typ string, props map[string]any) graph.NodeEdit {
+func SeedNode(key, typ string, props map[string]any) graph.NodeEdit {
 	return graph.NodeEdit{Key: key, Type: typ, Props: props, Rationale: "Seed " + key}
 }
 
@@ -83,34 +36,10 @@ func linkTo(e graph.NodeEdit, typ string, to domain.NodeRef) graph.NodeEdit {
 	return e
 }
 
-// SeedDefaults makes sure, at every start, that the graph is bootstrapped (ADR 0054: the root unit ORG-DEFAULT,
-// the root of every unit's adapter resolution, and the root project PROJ-ROOT, both created by graph.Bootstrap) and
-// that the document-repository MCP and its localfs adapter definition exist. It is idempotent: once the MCP exists
-// (edited or deleted since) nothing is touched, so that edited or deleted MCPs stay so.
-func SeedDefaults(ctx context.Context, g *graph.Graph) (bool, error) {
-	if err := g.Bootstrap(ctx); err != nil {
-		return false, err
-	}
-	d := documentRepository()
-	if _, err := g.NodeByKey(ctx, domain.NamespacePlatform, mcp.MCPKey(d.Name)); err == nil {
-		return false, nil
-	} else if !errors.Is(err, graph.ErrNotFound) {
-		return false, err
-	}
-	a := localFSAdapterDef()
-	err := applyOn(ctx, g, domain.NamespacePlatform, "MCP "+d.Name, []graph.NodeEdit{
-		createNode(mcp.MCPKey(d.Name), mcp.NodeTypeMCP, d.Props()),
-		createNode(adapter.DefKey(a.Name), domain.TypeAdapterDef, a.Props()),
-	})
-	return err == nil, err
-}
-
-func ptr[T any](v T) *T { return &v }
-
 // SeedUnit creates a unit of the organisation, a child of parent (the root unit when parent is empty: every unit but the
 // root itself needs one, ADR 0040).
 func SeedUnit(ctx context.Context, g *graph.Graph, key, name, kind, parent string) error {
-	unit := createNode(key, access.NodeTypeOrgUnit, map[string]any{"name": name, "kind": kind})
+	unit := SeedNode(key, access.NodeTypeOrgUnit, map[string]any{"name": name, "kind": kind})
 	if parent == "" {
 		parent = g.Structure(domain.StructureOrganisation).Root
 	}
@@ -119,18 +48,12 @@ func SeedUnit(ctx context.Context, g *graph.Graph, key, name, kind, parent strin
 		return err
 	}
 	unit = linkTo(unit, access.LinkPartOf, p.Ref())
-	return applyOn(ctx, g, access.NamespaceOrganisation, "Unit "+key, []graph.NodeEdit{unit})
-}
-
-// LocalFSAdapter is the instance of the localfs adapter of the platform library for a unit, exposing a
-// directory as its document repository (demos and tests).
-func LocalFSAdapter(unit, root string) adapter.Instance {
-	return adapter.Instance{Unit: unit, MCP: "document-repository", Adapter: LocalFSAdapterName, Params: map[string]any{"root": root}}
+	return SeedChange(ctx, g, access.NamespaceOrganisation, "Unit "+key, []graph.NodeEdit{unit})
 }
 
 // SeedAdapter creates the Adapter node of a unit, owned by it (ADR 0054: the owner of its versions).
 func SeedAdapter(ctx context.Context, g *graph.Graph, a adapter.Instance) error {
-	return applyOn(ctx, g, access.NamespaceOrganisation, "Adapter "+a.MCP+" of "+a.Unit, []graph.NodeEdit{ownedBy(createNode(adapter.Key(a.Unit, a.MCP), domain.TypeAdapter, a.Props()), a.Unit)})
+	return SeedChange(ctx, g, access.NamespaceOrganisation, "Adapter "+a.MCP+" of "+a.Unit, []graph.NodeEdit{ownedBy(SeedNode(adapter.Key(a.Unit, a.MCP), domain.TypeAdapter, a.Props()), a.Unit)})
 }
 
 // ownedBy makes the unit with key unit the owner of a node an edit creates or modifies (ADR 0054).
@@ -141,7 +64,7 @@ func ownedBy(e graph.NodeEdit, unit string) graph.NodeEdit {
 
 // SeedAdapterDef creates the AdapterDef node of an adapter definition in the platform namespace.
 func SeedAdapterDef(ctx context.Context, g *graph.Graph, d adapter.Def) error {
-	return applyOn(ctx, g, domain.NamespacePlatform, "Adapter "+d.Name, []graph.NodeEdit{createNode(adapter.DefKey(d.Name), domain.TypeAdapterDef, d.Props())})
+	return SeedChange(ctx, g, domain.NamespacePlatform, "Adapter "+d.Name, []graph.NodeEdit{SeedNode(adapter.DefKey(d.Name), domain.TypeAdapterDef, d.Props())})
 }
 
 // SeedAccess makes sure the default policies exist as Policy nodes of the organisation namespace. It is
@@ -154,15 +77,15 @@ func SeedAccess(ctx context.Context, g *graph.Graph) (bool, error) {
 	}
 	items := make([]graph.NodeEdit, len(authz.DefaultPolicies))
 	for i, p := range authz.DefaultPolicies {
-		items[i] = createNode(access.PolicyKey(p), access.NodeTypePolicy, access.PolicyProps(p))
+		items[i] = SeedNode(access.PolicyKey(p), access.NodeTypePolicy, access.PolicyProps(p))
 	}
-	return true, applyOn(ctx, g, access.NamespaceOrganisation, "Default policies", items)
+	return true, SeedChange(ctx, g, access.NamespaceOrganisation, "Default policies", items)
 }
 
 // SeedUser creates the User node of a subject, member of a unit (NewUserUnit when u.Unit is empty:
 // member_of is exactly one link, ADR 0040, never left unset).
 func SeedUser(ctx context.Context, g *graph.Graph, u access.User) error {
-	user := createNode(access.UserKey(u.Subject), access.NodeTypeUser, u.Props())
+	user := SeedNode(access.UserKey(u.Subject), access.NodeTypeUser, u.Props())
 	// land it active (ADR 0048's user lifecycle): a User seeded this way (tools, tests) must be usable right
 	// away, the same as one created by createUser's sign-in flow — left "proposed" it would silently never
 	// count toward the admin floor until some unrelated later commit happened to touch User/Assignment.
@@ -178,13 +101,13 @@ func SeedUser(ctx context.Context, g *graph.Graph, u access.User) error {
 		return err
 	}
 	user = linkTo(user, access.LinkMemberOf, unit.Ref())
-	return applyOn(ctx, g, access.NamespaceOrganisation, "User "+u.Subject, []graph.NodeEdit{user})
+	return SeedChange(ctx, g, access.NamespaceOrganisation, "User "+u.Subject, []graph.NodeEdit{user})
 }
 
 // SeedPolicy creates a Policy node.
 func SeedPolicy(ctx context.Context, g *graph.Graph, p authz.Policy) error {
-	return applyOn(ctx, g, access.NamespaceOrganisation, "Policy "+p.Resource+"/"+p.Action, []graph.NodeEdit{
-		createNode(access.PolicyKey(p), access.NodeTypePolicy, access.PolicyProps(p))})
+	return SeedChange(ctx, g, access.NamespaceOrganisation, "Policy "+p.Resource+"/"+p.Action, []graph.NodeEdit{
+		SeedNode(access.PolicyKey(p), access.NodeTypePolicy, access.PolicyProps(p))})
 }
 
 // SeedModels creates the model gateway configuration (providers, models, aliases; nodes of the platform namespace)
@@ -207,25 +130,25 @@ func SeedModels(ctx context.Context, g *graph.Graph, providers []llmcfg.Provider
 	}
 	var items []graph.NodeEdit
 	for _, p := range providers {
-		items = append(items, createNode(llmcfg.ProviderKey(p.Name), llmcfg.NodeTypeProvider, p.Props()))
+		items = append(items, SeedNode(llmcfg.ProviderKey(p.Name), llmcfg.NodeTypeProvider, p.Props()))
 	}
 	for _, m := range models {
-		items = append(items, createNode(m.Key(), llmcfg.NodeTypeModel, m.Props()))
+		items = append(items, SeedNode(m.Key(), llmcfg.NodeTypeModel, m.Props()))
 	}
 	for _, a := range aliases {
-		items = append(items, createNode(llmcfg.AliasKey(a.Alias), llmcfg.NodeTypeAlias, a.Props()))
+		items = append(items, SeedNode(llmcfg.AliasKey(a.Alias), llmcfg.NodeTypeAlias, a.Props()))
 	}
 	if len(items) == 0 {
 		return false, nil
 	}
-	return true, applyOn(ctx, g, llmcfg.NamespacePlatform, "Model gateway configuration", items)
+	return true, SeedChange(ctx, g, llmcfg.NamespacePlatform, "Model gateway configuration", items)
 }
 
 // SeedBuiltins makes sure, at every start, that the built-in MCPs and their adapter definitions exist
 // and match the code (ADR 0028): like the built-in domains they ship with the platform. The first
 // time a built-in MCP is seeded the default organisation gets an instance of its adapter, so that
 // every unit can use it; the instance is never recreated afterwards, so that a unit restricting or an
-// administrator removing it stays so. It reports whether it wrote anything; SeedDefaults runs first.
+// administrator removing it stays so. It reports whether it wrote anything; Graph.Bootstrap runs first (Boot).
 func SeedBuiltins(ctx context.Context, g *graph.Graph) (bool, error) {
 	head, err := g.BranchHead(ctx, domain.NamespacePlatform, domain.MainBranch)
 	if err != nil && !errors.Is(err, graph.ErrNotFound) {
@@ -249,7 +172,7 @@ func SeedBuiltins(ctx context.Context, g *graph.Graph) (bool, error) {
 		n, ok := current[key]
 		switch {
 		case !ok:
-			edits = append(edits, createNode(key, typ, props))
+			edits = append(edits, SeedNode(key, typ, props))
 		case !sameProps(n.Properties, props):
 			pre := n.Ref()
 			set := maps.Clone(props)
@@ -273,7 +196,7 @@ func SeedBuiltins(ctx context.Context, g *graph.Graph) (bool, error) {
 		sync(access.RoleKey(r.Name), access.NodeTypeRole, r.Props())
 	}
 	if len(edits) > 0 {
-		if err := applyOn(ctx, g, domain.NamespacePlatform, "Built-in MCPs", edits); err != nil {
+		if err := SeedChange(ctx, g, domain.NamespacePlatform, "Built-in MCPs", edits); err != nil {
 			return false, err
 		}
 	}
@@ -288,10 +211,10 @@ func SeedBuiltins(ctx context.Context, g *graph.Graph) (bool, error) {
 		} else if !errors.Is(err, graph.ErrNotFound) {
 			return false, err
 		}
-		instances = append(instances, ownedBy(createNode(adapter.Key(a.Unit, a.MCP), domain.TypeAdapter, a.Props()), a.Unit))
+		instances = append(instances, ownedBy(SeedNode(adapter.Key(a.Unit, a.MCP), domain.TypeAdapter, a.Props()), a.Unit))
 	}
 	if len(instances) > 0 {
-		if err := applyOn(ctx, g, access.NamespaceOrganisation, "Built-in adapters of the default organisation", instances); err != nil {
+		if err := SeedChange(ctx, g, access.NamespaceOrganisation, "Built-in adapters of the default organisation", instances); err != nil {
 			return false, err
 		}
 	}

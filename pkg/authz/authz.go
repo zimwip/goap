@@ -29,6 +29,12 @@ func (p Principal) Anonymous() bool { return p.Subject == "" }
 // system:graph): never a person, so never a user of the organisation.
 const SystemPrefix = "system:"
 
+// System is the identity of the platform service name acting by itself ("registry", "graph", "trigger:<key>"): the
+// one constructor of such principals, so that no caller spells the prefix by hand.
+func System(name string, roles ...string) Principal {
+	return Principal{Subject: SystemPrefix + name, Roles: roles}
+}
+
 // System reports whether the principal is a platform service rather than a person.
 func (p Principal) System() bool { return strings.HasPrefix(p.Subject, SystemPrefix) }
 

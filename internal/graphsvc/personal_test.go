@@ -26,7 +26,7 @@ import (
 func TestPersonalChange(t *testing.T) {
 	ctx := context.Background()
 	g := typedGraph(t)
-	if _, err := graphsvc.SeedDefaults(ctx, g); err != nil {
+	if err := g.Bootstrap(ctx); err != nil {
 		t.Fatal(err)
 	}
 	h := &graphsvc.Handler{Graph: g}
@@ -61,7 +61,7 @@ func TestPersonalChange(t *testing.T) {
 		}
 		return n
 	}
-	seeded := notUsers(before.Msg.Changes) // the changes SeedDefaults made, visible to everyone (not personal)
+	seeded := notUsers(before.Msg.Changes) // the changes the bootstrap made, visible to everyone (not personal)
 
 	req := connect.NewRequest(&graphv1.CreateChangeRequest{Title: "prefs", Namespace: "platform", BaselineId: string(base.ID), OwnBranch: true, OwnerOrg: graphsvc.OwnerMe})
 	call("alice", req)
@@ -127,7 +127,7 @@ func TestPersonalChange(t *testing.T) {
 func TestUserCreatedAutomatically(t *testing.T) {
 	ctx := context.Background()
 	g := typedGraph(t)
-	if _, err := graphsvc.SeedDefaults(ctx, g); err != nil {
+	if err := g.Bootstrap(ctx); err != nil {
 		t.Fatal(err)
 	}
 	h := &graphsvc.Handler{Graph: g}
@@ -167,24 +167,24 @@ func TestUserCreatedAutomatically(t *testing.T) {
 }
 
 // EnsureUser must not create a broken User (no member_of, no shot at the first-admin bootstrap) when the
-// default organisation does not exist yet — SeedDefaults can still be seeding at startup (ADR 0040). Failing
+// default organisation does not exist yet — the bootstrap can still be running at startup (ADR 0040). Failing
 // leaves nothing behind, so a later, correctly-timed call for the same subject still succeeds.
 func TestEnsureUserWaitsForDefaultOrg(t *testing.T) {
 	ctx := context.Background()
 	g := typedGraph(t)
 
 	if err := graphsvc.EnsureUser(ctx, g, "alice"); !errors.Is(err, graph.ErrNotFound) {
-		t.Fatalf("EnsureUser before SeedDefaults = %v, want ErrNotFound", err)
+		t.Fatalf("EnsureUser before the bootstrap = %v, want ErrNotFound", err)
 	}
 	if _, err := g.NodeByKey(ctx, access.NamespaceOrganisation, "USR:alice"); !errors.Is(err, graph.ErrNotFound) {
 		t.Fatalf("a failed EnsureUser must leave no node: %v", err)
 	}
 
-	if _, err := graphsvc.SeedDefaults(ctx, g); err != nil {
+	if err := g.Bootstrap(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if err := graphsvc.EnsureUser(ctx, g, "alice"); err != nil {
-		t.Fatalf("EnsureUser after SeedDefaults: %v", err)
+		t.Fatalf("EnsureUser after the bootstrap: %v", err)
 	}
 	n, err := g.NodeByKey(ctx, access.NamespaceOrganisation, "USR:alice")
 	if err != nil {
@@ -230,7 +230,7 @@ func TestEnsureUserWaitsForDefaultOrg(t *testing.T) {
 func TestEnsureUserJoinsWaitingUnit(t *testing.T) {
 	ctx := context.Background()
 	g := typedGraph(t)
-	if _, err := graphsvc.SeedDefaults(ctx, g); err != nil {
+	if err := g.Bootstrap(ctx); err != nil {
 		t.Fatal(err)
 	}
 	commit := func(edits ...graph.NodeEdit) {
