@@ -2,7 +2,8 @@
 // (graph nodes, read through the hub) and the adapter definitions (graph nodes).
 import { mcp, errorMessage, type Connector, type Mcp } from '../api';
 import { headGraph } from '../graphEdit';
-import { ADAPTER_DEF_TYPE, NS_PLATFORM, adapterDefFromNode, type AdapterDef } from '../adapterDef';
+import { ns } from './session.svelte';
+import { ADAPTER_DEF_TYPE, adapterDefFromNode, type AdapterDef } from '../adapterDef';
 
 /** Adapter definitions are graph nodes of the platform namespace (see adapterDef.ts). */
 export const tools = $state({
@@ -17,12 +18,12 @@ export const tools = $state({
 async function loadAdapterDefs(): Promise<AdapterDef[]> {
   let nodes;
   try {
-    nodes = (await headGraph(NS_PLATFORM)).nodes;
+    nodes = (await headGraph(ns.platform)).nodes;
   } catch {
     return []; // no baseline yet
   }
   return nodes
-    .filter((n) => n.namespace === NS_PLATFORM && n.type === ADAPTER_DEF_TYPE && !n.deleted)
+    .filter((n) => n.namespace === ns.platform && n.type === ADAPTER_DEF_TYPE && !n.deleted)
     .map(adapterDefFromNode)
     .sort((x, y) => x.name.localeCompare(y.name));
 }

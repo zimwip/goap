@@ -1,6 +1,7 @@
 // The reducers of the front (ADR 0053): what each event of the platform stream says changed, written as
 // invalidation signals (`signals.svelte.ts`), and the shared catalogs read again when theirs move. Views never
 // refetch after a write: the event comes back, whoever made the write, and everything showing it follows.
+import { ns } from '../stores/session.svelte';
 import { untrack } from 'svelte';
 import { onKind, onResync } from './events.svelte';
 import { stamp, touchAll, touchSoon } from './signals.svelte';
@@ -55,7 +56,7 @@ export function startReducers(): () => void {
     });
     // the organisation and platform namespaces hold the projects, adapters and MCPs: what lists them follows
     $effect(() => {
-      if (!stamp(keyOf.namespace('platform'))) return;
+      if (!stamp(keyOf.namespace(ns.platform))) return;
       untrack(() => {
         if (tools.loaded) void refreshTools();
         // aliases and providers are nodes of the platform namespace
@@ -63,7 +64,7 @@ export function startReducers(): () => void {
       });
     });
     $effect(() => {
-      if (!stamp(keyOf.namespace('organisation'))) return;
+      if (!stamp(keyOf.namespace(ns.organisation))) return;
       untrack(() => void refreshProjects());
     });
     $effect(() => {

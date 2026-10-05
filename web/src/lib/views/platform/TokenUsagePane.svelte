@@ -2,13 +2,13 @@
   // "Token usage" section of the settings modal: the caller's own consumption (overall, over
   // time, by model / agent / action, the runs that consume the most, the most expensive calls).
   // Platform administrators can switch to the consumption of the whole platform, with the quotas.
+  import { me, can } from '../../stores/session.svelte';
   import Icon from '../../shell/Icon.svelte';
   import StatusBadge from '../../components/StatusBadge.svelte';
   import { openTab } from '../../shell/tabs.svelte';
   import { openSettings } from '../../shell/settingsState.svelte';
   import { closeUsage } from '../../shell/usageState.svelte';
   import { models, errorMessage, formatDate, type CatalogModel } from '../../api';
-  import { hasAnyRole, me } from '../../stores/session.svelte';
   import { live, processes as known, refreshProcesses } from '../../stores/live.svelte';
   import { prefs } from '../../stores/preferences.svelte';
   import { computeStats, type Dim, type Slice } from '../../tokenStats';
@@ -27,7 +27,7 @@
   let loadedAt = $state(Date.now());
   let catalog = $state<CatalogModel[]>([]);
   let quotaError = $state('');
-  const isAdmin = $derived(hasAnyRole('admin'));
+  const isAdmin = $derived(can.administer);
   // only administrators may look beyond their own consumption
   let scope = $state<'mine' | 'platform'>(prefs.values.usageScope);
   const platform = $derived(isAdmin && scope === 'platform');

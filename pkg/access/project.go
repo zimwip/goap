@@ -19,6 +19,12 @@ const (
 	LinkAssignsProject  = "organisation@assigns_project"
 )
 
+// AssignmentPrefix starts the key of an Assignment node, PlatformScope stands for the project of a platform-wide one.
+const (
+	AssignmentPrefix = "ASG:"
+	PlatformScope    = "PLATFORM"
+)
+
 // ProjectUnit is a project or sub-project.
 type ProjectUnit struct {
 	Name          string
@@ -54,11 +60,11 @@ func ProjectFromProps(props map[string]any) (ProjectUnit, error) {
 }
 
 // AssignmentKey is the key of the Assignment node granting an org unit (or user) roles on a project.
-func AssignmentKey(org, project string) string { return "ASG:" + org + "/" + project }
+func AssignmentKey(org, project string) string { return AssignmentPrefix + org + "/" + project }
 
 // PlatformAssignmentKey is the key of the Assignment node granting an org unit (or user) a platform-wide
 // role (ADR 0046): no assigns_project link, so it never collides with a per-project AssignmentKey.
-func PlatformAssignmentKey(org string) string { return "ASG:" + org + "/PLATFORM" }
+func PlatformAssignmentKey(org string) string { return AssignmentKey(org, PlatformScope) }
 
 // Assignment grants an organisational unit (or, through subtyping, a user) the roles it locally
 // holds on a project — a subset of the roles declared by the project's applicable methodologies —

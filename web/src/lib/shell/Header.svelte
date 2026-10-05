@@ -11,7 +11,7 @@
   import { authState } from '../stores/auth.svelte';
   import { notify } from './workbench.svelte';
   import { openSearch } from './searchOverlay.svelte.ts';
-  import { session, refreshIdentity } from '../stores/session.svelte';
+  import { session, userKey } from '../stores/session.svelte';
   import { methodologies, baselines, changes } from '../stores/catalog.svelte';
   import { viewBaseline } from '../stores/baselineTool.svelte';
   import { live, processes } from '../stores/live.svelte';
@@ -181,10 +181,6 @@
   const principal = $derived(session.principal);
   const hasToken = $derived(session.hasToken);
 
-  $effect(() => {
-    if (!session.loaded) void refreshIdentity();
-  });
-
   function toggleMenu() {
     menuOpen = !menuOpen;
     tokenDraft = getToken() ?? '';
@@ -208,7 +204,7 @@
   function openProfile() {
     menuOpen = false;
     const subject = principal?.subject;
-    if (subject) openTab({ kind: 'user', params: { key: `USR:${subject}` } }, { pin: true });
+    if (subject) openTab({ kind: 'user', params: { key: userKey(subject) } }, { pin: true });
   }
 
   async function signOut(everywhere = false) {

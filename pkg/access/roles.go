@@ -12,8 +12,8 @@ func RoleKey(name string) string { return "ROLE:" + name }
 // for the IDE, it is not consulted to decide what a role may do (that stays in authz.DefaultPolicies) or
 // whether an Assignment's roles are valid (not checked server-side, same as methodology roles, ADR 0043).
 type Role struct {
-	Name        string
-	Description string
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
 }
 
 // Props returns the properties of the Role node.

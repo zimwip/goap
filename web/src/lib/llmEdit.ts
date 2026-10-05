@@ -3,9 +3,9 @@
 // (stores/pending.svelte.ts) that the user saves or discards. An API key is never stored, only its reference.
 import { graph, type CatalogModel, type LlmProvider, type ModelAlias, type Struct } from './api';
 import { headGraph } from './graphEdit';
+import { ns, isUserKey } from './stores/session.svelte';
 import { pending, stageRetire, stageUpsert, stagedOfType } from './stores/pending.svelte';
 
-export const NS_PLATFORM = 'platform';
 export const PROVIDER_TYPE = 'platform@LlmProvider';
 export const MODEL_TYPE = 'platform@LlmModel';
 export const ALIAS_TYPE = 'platform@LlmAlias';
@@ -38,24 +38,24 @@ const str = (v: unknown) => (typeof v === 'string' ? v : '');
 // --- staging ------------------------------------------------------------------------------------------------------
 
 /** Stages the creation or the update of a provider. */
-export const saveProvider = (p: LlmProvider) => stageUpsert(NS_PLATFORM, PROVIDER_TYPE, providerKey(p.name), providerProps(p));
+export const saveProvider = (p: LlmProvider) => stageUpsert(ns.platform, PROVIDER_TYPE, providerKey(p.name), providerProps(p));
 
 /** Adds or updates models of the catalog. */
 export async function saveModels(ms: CatalogModel[]): Promise<void> {
-  for (const m of ms) await stageUpsert(NS_PLATFORM, MODEL_TYPE, modelKey(m.provider, m.model), modelProps(m));
+  for (const m of ms) await stageUpsert(ns.platform, MODEL_TYPE, modelKey(m.provider, m.model), modelProps(m));
 }
 
 export const saveModel = (m: CatalogModel) => saveModels([m]);
 
 export const saveAlias = (a: ModelAlias) =>
-  stageUpsert(NS_PLATFORM, ALIAS_TYPE, aliasKey(a.alias), { alias: a.alias, target: `${a.provider}/${a.model}` });
+  stageUpsert(ns.platform, ALIAS_TYPE, aliasKey(a.alias), { alias: a.alias, target: `${a.provider}/${a.model}` });
 
 /** The nodes of the platform namespace as the user sees them: main with the pending edits laid over it. */
 async function effective(): Promise<{ key: string; type: string; props: Record<string, unknown> }[]> {
-  const h = await headGraph(NS_PLATFORM);
+  const h = await headGraph(ns.platform);
   const out = new Map<string, { key: string; type: string; props: Record<string, unknown> }>();
-  for (const n of h.nodes) if (n.namespace === NS_PLATFORM && !n.deleted && n.key && n.type) out.set(n.key, { key: n.key, type: n.type, props: (n.props ?? {}) as Record<string, unknown> });
-  for (const s of Object.values(pending.byNs[NS_PLATFORM]?.nodes ?? {})) {
+  for (const n of h.nodes) if (n.namespace === ns.platform && !n.deleted && n.key && n.type) out.set(n.key, { key: n.key, type: n.type, props: (n.props ?? {}) as Record<string, unknown> });
+  for (const s of Object.values(pending.byNs[ns.platform]?.nodes ?? {})) {
     if (s.retire) out.delete(s.key);
     else out.set(s.key, { key: s.key, type: s.type, props: { ...(out.get(s.key)?.props ?? {}), ...s.props } });
   }
@@ -66,20 +66,20 @@ async function effective(): Promise<{ key: string; type: string; props: Record<s
 export async function deleteModel(provider: string, model: string): Promise<void> {
   const target = `${provider}/${model}`;
   const nodes = await effective();
-  for (const a of nodes.filter((n) => n.type === ALIAS_TYPE && str(n.props.target) === target)) await stageRetire(NS_PLATFORM, ALIAS_TYPE, a.key);
-  if (nodes.some((n) => n.key === modelKey(provider, model))) await stageRetire(NS_PLATFORM, MODEL_TYPE, modelKey(provider, model));
+  for (const a of nodes.filter((n) => n.type === ALIAS_TYPE && str(n.props.target) === target)) await stageRetire(ns.platform, ALIAS_TYPE, a.key);
+  if (nodes.some((n) => n.key === modelKey(provider, model))) await stageRetire(ns.platform, MODEL_TYPE, modelKey(provider, model));
 }
 
 /** Stages the removal of a provider with its models and the aliases that point to them. */
 export async function deleteProvider(name: string): Promise<void> {
   const nodes = await effective();
-  for (const a of nodes.filter((n) => n.type === ALIAS_TYPE && str(n.props.target).startsWith(`${name}/`))) await stageRetire(NS_PLATFORM, ALIAS_TYPE, a.key);
-  for (const m of nodes.filter((n) => n.type === MODEL_TYPE && str(n.props.provider) === name)) await stageRetire(NS_PLATFORM, MODEL_TYPE, m.key);
-  if (nodes.some((n) => n.key === providerKey(name))) await stageRetire(NS_PLATFORM, PROVIDER_TYPE, providerKey(name));
+  for (const a of nodes.filter((n) => n.type === ALIAS_TYPE && str(n.props.target).startsWith(`${name}/`))) await stageRetire(ns.platform, ALIAS_TYPE, a.key);
+  for (const m of nodes.filter((n) => n.type === MODEL_TYPE && str(n.props.provider) === name)) await stageRetire(ns.platform, MODEL_TYPE, m.key);
+  if (nodes.some((n) => n.key === providerKey(name))) await stageRetire(ns.platform, PROVIDER_TYPE, providerKey(name));
 }
 
 export async function deleteAlias(alias: string): Promise<void> {
-  if ((await effective()).some((n) => n.key === aliasKey(alias))) await stageRetire(NS_PLATFORM, ALIAS_TYPE, aliasKey(alias));
+  if ((await effective()).some((n) => n.key === aliasKey(alias))) await stageRetire(ns.platform, ALIAS_TYPE, aliasKey(alias));
 }
 
 // --- overlay: what the dialog shows -----------------------------------------------------------------------------
@@ -90,7 +90,7 @@ export type Unsaved<T> = T & { pending?: boolean };
 function overlay<T extends object>(applied: T[], type: string, id: (t: T) => string, fromProps: (p: Record<string, unknown>, old?: T) => T | undefined): Unsaved<T>[] {
   const rows = new Map<string, Unsaved<T>>(applied.map((t) => [id(t), t]));
   const gone = new Set<string>();
-  for (const s of stagedOfType(NS_PLATFORM, type)) {
+  for (const s of stagedOfType(ns.platform, type)) {
     if (s.retire) {
       // the key of a node is derived from its properties: find the row it stands for
       for (const [k, t] of rows) if (rowKey(type, t) === s.key) gone.add(k);
@@ -151,7 +151,7 @@ export interface AliasProposal {
 /** The alias impacts other people (or the platform) proposed and left open: shown with Accept / Decline. */
 export async function listAliasProposals(): Promise<AliasProposal[]> {
   const out: AliasProposal[] = [];
-  const open = (await graph.listChanges()).changes?.filter((c) => c.namespace === NS_PLATFORM && (c.status === 'draft' || c.status === 'active') && !c.ownerOrg?.startsWith('USR:')) ?? [];
+  const open = (await graph.listChanges()).changes?.filter((c) => c.namespace === ns.platform && (c.status === 'draft' || c.status === 'active') && !isUserKey(c.ownerOrg)) ?? [];
   for (const ch of open) {
     if (!ch.id) continue;
     const board = (await graph.getBlackboard(ch.id, '')).change;

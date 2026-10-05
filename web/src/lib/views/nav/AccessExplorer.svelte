@@ -1,12 +1,13 @@
 <script lang="ts">
   // "Access" tool: overview of ABAC policies; editing happens in the "Policies" tab.
+  import { ns } from '../../stores/session.svelte';
   import { stamp, keyOf } from '../../flux/signals.svelte';
   import Icon from '../../shell/Icon.svelte';
   import TreeRow from '../TreeRow.svelte';
   import StatusBadge from '../../components/StatusBadge.svelte';
   import { errorMessage, type Policy } from '../../api';
   import { headGraph } from '../../graphEdit';
-  import { policiesOf, NS_ORGANISATION } from '../../access';
+  import { policiesOf } from '../../access';
   import { openTab } from '../../shell/tabs.svelte';
   import { select } from '../../shell/workbench.svelte';
 
@@ -17,7 +18,7 @@
   async function load() {
     loading = true;
     try {
-      policies = policiesOf((await headGraph(NS_ORGANISATION)).nodes).map((x) => x.policy);
+      policies = policiesOf((await headGraph(ns.organisation)).nodes).map((x) => x.policy);
       error = '';
     } catch (e) {
       error = errorMessage(e);
@@ -27,7 +28,7 @@
   }
 
   $effect(() => {
-    void stamp(keyOf.namespace(NS_ORGANISATION));
+    void stamp(keyOf.namespace(ns.organisation));
     void load();
   });
 

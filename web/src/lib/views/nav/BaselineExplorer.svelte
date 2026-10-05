@@ -2,6 +2,7 @@
   // Baseline explorer: namespace → branches, open ones first. Selecting a branch drives the Baseline tool's
   // workspace (BaselineWorkspace.svelte) directly, in the editor area. Branch management (open/merge/abandon/
   // describe) is a right-click on the row, not shown inline here or in the workspace.
+  import { isMeta } from '../../stores/session.svelte';
   import TreeRow from '../TreeRow.svelte';
   import StatusBadge from '../../components/StatusBadge.svelte';
   import { loadRaw, save } from '../../shell/storage';
@@ -19,7 +20,6 @@
 
   // Methodologies are nodes typed by the meta-domain methodology (ADR 0023), authored in their own editors and
   // explorer: not offered here by default.
-  const META_NAMESPACES = new Set(['methodology']);
   const CLOSED_KEY = 'goap.ide.baselines.showClosed';
 
   let namespaces = $state<string[]>([]);
@@ -33,7 +33,7 @@
 
   void loadCatalog();
   /** namespaces holding nodes, plus the ones a domain declares (a namespace without a baseline can be started) */
-  const choices = $derived([...new Set([...namespaces, ...typeCatalog.cat.namespaces().filter((n) => !META_NAMESPACES.has(n))])].sort());
+  const choices = $derived([...new Set([...namespaces, ...typeCatalog.cat.namespaces().filter((n) => !isMeta(n))])].sort());
 
   $effect(() => {
     void reload;
@@ -43,7 +43,7 @@
       .then((r) => {
         namespaces = r.namespaces ?? [];
         const ns = baselineTool.namespace;
-        if (!ns || !(namespaces.includes(ns) || typeCatalog.cat.namespaces().includes(ns))) selectNamespace(namespaces.find((n) => !META_NAMESPACES.has(n)) ?? namespaces[0] ?? '');
+        if (!ns || !(namespaces.includes(ns) || typeCatalog.cat.namespaces().includes(ns))) selectNamespace(namespaces.find((n) => !isMeta(n)) ?? namespaces[0] ?? '');
       })
       .catch((e) => (error = errorMessage(e)));
   });

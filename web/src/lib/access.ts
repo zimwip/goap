@@ -2,10 +2,7 @@
 // (profile; their roles, administration included, are granted through Assignments, ADR 0043, 0047), changed
 // through changes like any node.
 import type { GraphNode, Policy, Struct } from './api';
-
-export const NS_ORGANISATION = 'organisation';
-export const POLICY_TYPE = 'organisation@Policy';
-export const USER_TYPE = 'organisation@User';
+import { ns, policyPrefix, types } from './stores/session.svelte';
 
 export interface User {
   subject: string;
@@ -14,12 +11,13 @@ export interface User {
   locale: string;
 }
 
-export const userKey = (subject: string) => `USR:${subject}`;
-export const newPolicyKey = (p: Policy) => `POL:${p.resource}/${p.action}/${Math.random().toString(16).slice(2, 10)}`;
+// A policy created in the editor is keyed by its target and a random suffix: the key only identifies the node (the
+// server's own digest, access.PolicyKey, names the policies it seeds, and nothing derives a key from a rule).
+export const newPolicyKey = (p: Policy) => `${policyPrefix()}${p.resource}/${p.action}/${Math.random().toString(16).slice(2, 10)}`;
 
 export function policiesOf(nodes: GraphNode[]): { node: GraphNode; policy: Policy }[] {
   return nodes
-    .filter((n) => n.namespace === NS_ORGANISATION && n.type === POLICY_TYPE)
+    .filter((n) => n.namespace === ns.organisation && n.type === types.policy)
     .map((node) => {
       const p = (node.props ?? {}) as Record<string, unknown>;
       return { node, policy: { rule: String(p.rule ?? ''), resource: String(p.resource ?? ''), action: String(p.action ?? ''), effect: String(p.effect ?? '') } };
@@ -31,7 +29,7 @@ export const policyProps = (p: Policy): Struct => ({ rule: p.rule ?? '', resourc
 
 export function usersOf(nodes: GraphNode[]): { node: GraphNode; user: User }[] {
   return nodes
-    .filter((n) => n.namespace === NS_ORGANISATION && n.type === USER_TYPE)
+    .filter((n) => n.namespace === ns.organisation && n.type === types.user)
     .map((node) => {
       const p = (node.props ?? {}) as Record<string, unknown>;
       return {

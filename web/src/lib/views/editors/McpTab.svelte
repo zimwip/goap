@@ -1,6 +1,7 @@
 <script lang="ts">
   // MCP tab: a generic MCP definition (name, description, scope, tools with their JSON schemas), stored as a
   // node `MCP:<name>` of the platform namespace and edited through a change applied on main.
+  import { types as nodeTypes, ns } from '../../stores/session.svelte';
   import type { Tab } from '../../shell/types';
   import Icon from '../../shell/Icon.svelte';
   import { errorMessage, type Mcp, type McpScope, type Struct } from '../../api';
@@ -8,8 +9,6 @@
   import { tools, refreshTools } from '../../stores/tools.svelte';
   import { openTab, closeTab } from '../../shell/tabs.svelte';
   import { notify, provideActions } from '../../shell/workbench.svelte';
-  import { MCP_TYPE } from '../../orgTypes';
-  import { NS_PLATFORM } from '../../adapterDef';
   import { confirmDialog } from '../../shell/confirmState.svelte';
 
   let { tab }: { tab: Tab } = $props();
@@ -51,7 +50,6 @@
     }));
   });
 
-  const NS = 'platform';
   const keyOf = (n: string) => `MCP:${n}`;
 
   async function save() {
@@ -71,12 +69,12 @@
     }
     saving = true;
     try {
-      const h = await headGraph(NS_PLATFORM);
-      const existing = findNode(h, NS, MCP_TYPE, keyOf(out.name!));
+      const h = await headGraph(ns.platform);
+      const existing = findNode(h, ns.platform, nodeTypes.mcp, keyOf(out.name!));
       // a null value clears the property: both is the default scope
       const props: Struct = { name: out.name ?? '', description: out.description ?? '', scope: scope === 'both' ? null : scope, tools: (out.tools ?? []) as unknown as Struct[] };
-      const item = existing ? updateNodeItem(existing, props) : createNodeItem(keyOf(out.name!), MCP_TYPE, props);
-      await applyOnMain(NS, `MCP ${out.name}`, `${existing ? 'Update' : 'Create'} MCP ${out.name}`, h.baselineId, [item]);
+      const item = existing ? updateNodeItem(existing, props) : createNodeItem(keyOf(out.name!), nodeTypes.mcp, props);
+      await applyOnMain(ns.platform, `MCP ${out.name}`, `${existing ? 'Update' : 'Create'} MCP ${out.name}`, h.baselineId, [item]);
       await refreshTools();
       notify(`MCP ${out.name} saved`, 'ok');
       if (isNew) {
@@ -93,10 +91,10 @@
   async function remove() {
     if (!(await confirmDialog({ message: `Delete the MCP ${name}? Adapters that implement it stop working.`, danger: true }))) return;
     try {
-      const h = await headGraph(NS_PLATFORM);
-      const existing = findNode(h, NS, MCP_TYPE, keyOf(name));
+      const h = await headGraph(ns.platform);
+      const existing = findNode(h, ns.platform, nodeTypes.mcp, keyOf(name));
       if (!existing) throw new Error(`MCP ${name} is not on the graph`);
-      await applyOnMain(NS, `Delete MCP ${name}`, `Delete MCP ${name}`, h.baselineId, [deleteNodeItem(existing)]);
+      await applyOnMain(ns.platform, `Delete MCP ${name}`, `Delete MCP ${name}`, h.baselineId, [deleteNodeItem(existing)]);
       await refreshTools();
       closeTab(tab.id, { force: true });
     } catch (e) {

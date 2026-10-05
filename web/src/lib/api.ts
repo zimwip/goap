@@ -1234,6 +1234,48 @@ export interface Principal {
   project?: string;
   roles?: string[];
 }
+/** One structure of the organisation (ADR 0054): the hierarchy of the units or of the projects. */
+export interface Structure {
+  kind: string;
+  /** qualified node type of the hierarchy */
+  type: string;
+  namespace: string;
+  /** qualified link type from a child to its parent */
+  parent: string;
+  /** key of the root node */
+  root: string;
+  selfParent?: boolean;
+  /** property flagging the default member of the hierarchy ('': the root is) */
+  default?: string;
+  /** node types belonging to the structure (the tagged type and its subtypes) */
+  types?: string[];
+}
+
+/** A built-in platform role (an Assignment naming no project grants it platform-wide). */
+export interface PlatformRole {
+  name: string;
+  description?: string;
+}
+
+/**
+ * The caller as the platform sees it, with what is derived from them (GET /api/whoami, ADR 0070): the principal's
+ * fields, the structures and names the web builds nodes with, the platform roles, what the caller may attempt (hints:
+ * the server enforces every call).
+ */
+export interface Session extends Principal {
+  can: { administer: boolean; approve: boolean };
+  structures: Structure[];
+  names: {
+    namespaces: { organisation: string; platform: string; meta: string };
+    types: { orgUnit: string; projectUnit: string; user: string; assignment: string; adapter: string; policy: string; mcp: string };
+    links: { partOf: string; projectPartOf: string; memberOf: string; assignsOrg: string; assignsProject: string };
+    keys: { user: string; assignment: string; platformScope: string; policy: string };
+    roles: { admin: string };
+    props: { waiting: string };
+  };
+  platformRoles: PlatformRole[];
+}
+
 /** Inconsistency found in the content of a blackboard. */
 export interface BoardIssue {
   /** item where the problem shows */
@@ -1822,7 +1864,7 @@ export const registry = {
 };
 
 /** The caller as the platform sees it: token principal completed by its User node (GET /api/whoami). */
-export async function whoAmI(signal?: AbortSignal): Promise<Principal> {
+export async function whoAmI(signal?: AbortSignal): Promise<Session> {
   const headers: Record<string, string> = {};
   const token = getToken();
   if (token) headers['Authorization'] = `Bearer ${token}`;
@@ -1832,7 +1874,7 @@ export async function whoAmI(signal?: AbortSignal): Promise<Principal> {
     reportUnauthorized(token, res.status, message);
     throw new RpcError('unauthenticated', message, res.status);
   }
-  return (await res.json()) as Principal;
+  return (await res.json()) as Session;
 }
 
 /**

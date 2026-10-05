@@ -1,6 +1,7 @@
 <script lang="ts">
   // "Organisation" tool: the OrgUnit hierarchy of the `organisation` namespace
   // (child --part_of--> parent). Units are edited through changes like any node.
+  import { types as nodeTypes, links as linkTypes, ns, defaultOrg, waitingProp, can } from '../../stores/session.svelte';
   import { stamp, keyOf } from '../../flux/signals.svelte';
   import { tick } from 'svelte';
   import Icon from '../../shell/Icon.svelte';
@@ -11,10 +12,7 @@
   import { openContextMenu } from '../../shell/contextMenuState.svelte';
   import { notify } from '../../shell/workbench.svelte';
   import { graph, errorMessage, nodeTitle, type GraphNode, type Link } from '../../api';
-  import { ORG_UNIT_TYPE, PART_OF, WAITING_UNIT_PROP, DEFAULT_ORG } from '../../orgTypes';
-  import { hasAnyRole } from '../../stores/session.svelte';
 
-  const NS = 'organisation';
 
   let nodes = $state<GraphNode[]>([]);
   let links = $state<Link[]>([]);
@@ -31,15 +29,15 @@
   async function load() {
     loading = true;
     try {
-      await refreshBaselines(NS);
+      await refreshBaselines(ns.organisation);
       const latest = baselines.items[baselines.items.length - 1];
       if (!latest?.id) {
         nodes = [];
         links = [];
       } else {
         const r = await graph.getBaselineGraph(latest.id);
-        // the baseline is already scoped to NS (organisation), just filter by type
-        nodes = (r.nodes ?? []).filter((n) => n.type === ORG_UNIT_TYPE);
+        // the baseline is already scoped to ns.organisation (organisation), just filter by type
+        nodes = (r.nodes ?? []).filter((n) => n.type === nodeTypes.orgUnit);
         links = r.links ?? [];
       }
       error = '';
@@ -51,13 +49,13 @@
   }
 
   $effect(() => {
-    void stamp(keyOf.namespace(NS));
+    void stamp(keyOf.namespace(ns.organisation));
     void load();
   });
 
   const parentOf = $derived.by(() => {
     const m = new Map<string, string>();
-    for (const l of links) if (l.type === PART_OF && l.from?.id && l.to?.id) m.set(l.from.id, l.to.id);
+    for (const l of links) if (l.type === linkTypes.partOf && l.from?.id && l.to?.id) m.set(l.from.id, l.to.id);
     return m;
   });
   const children = $derived.by(() => {
@@ -116,20 +114,20 @@
         title: `Unit ${key}`,
         intent: `Create organisational unit ${name.trim()}`,
         baselineId: latest.id,
-        namespace: NS,
+        namespace: ns.organisation,
         edits: [
           {
             key,
-            type: ORG_UNIT_TYPE,
-            props: { name: name.trim(), kind, ...(waiting ? { [WAITING_UNIT_PROP]: true } : {}) },
+            type: nodeTypes.orgUnit,
+            props: { name: name.trim(), kind, ...(waiting ? { [waitingProp()]: true } : {}) },
             rationale: `Create organisational unit ${name.trim()}`,
-            ...(parentNode ? { links: [{ type: PART_OF, to: { id: parentNode.id, version: parentNode.version } }] } : {}),
+            ...(parentNode ? { links: [{ type: linkTypes.partOf, to: { id: parentNode.id, version: parentNode.version } }] } : {}),
           },
           // one waiting unit at a time: the flag moves to the new unit
           ...(waiting
             ? nodes
-                .filter((n) => n.props?.[WAITING_UNIT_PROP] === true)
-                .map((n) => ({ pre: { id: n.id, version: n.version }, props: { [WAITING_UNIT_PROP]: null }, rationale: `${key} is the waiting unit now` }))
+                .filter((n) => n.props?.[waitingProp()] === true)
+                .map((n) => ({ pre: { id: n.id, version: n.version }, props: { [waitingProp()]: null }, rationale: `${key} is the waiting unit now` }))
             : []),
         ],
       });
@@ -179,18 +177,18 @@
     movingBusy = true;
     error = '';
     try {
-      const current = links.find((l) => l.type === PART_OF && l.from?.id === moving!.id);
+      const current = links.find((l) => l.type === linkTypes.partOf && l.from?.id === moving!.id);
       await graph.commitEdits({
         title: `Move ${moving.key}`,
         intent: `Move ${moving.key} under ${target.key}`,
         baselineId: latest.id,
-        namespace: NS,
+        namespace: ns.organisation,
         edits: [
           {
             pre: { id: moving.id, version: moving.version },
             rationale: `Move ${moving.key} under ${target.key}`,
             ...(current?.id ? { removeLinks: [current.id] } : {}),
-            links: [{ type: PART_OF, to: { id: target.id, version: target.version } }],
+            links: [{ type: linkTypes.partOf, to: { id: target.id, version: target.version } }],
           },
         ],
       });
@@ -217,12 +215,12 @@
     ontoggle={() => toggle(`org:${n.id}`, true)}
     onselect={() => open(n)}
     onopen={() => open(n, true)}
-    badge={n.props?.[WAITING_UNIT_PROP] === true ? 'waiting' : typeof n.props?.['kind'] === 'string' ? (n.props['kind'] as string) : undefined}
+    badge={n.props?.[waitingProp()] === true ? 'waiting' : typeof n.props?.['kind'] === 'string' ? (n.props['kind'] as string) : undefined}
     oncontextmenu={(e) =>
       openContextMenu(e, [
         { label: 'Open', icon: 'user', run: () => open(n, true) },
         { label: 'New sub-unit…', icon: 'plus', run: () => createChild(n) },
-        ...(n.key !== DEFAULT_ORG ? [{ label: 'Move to…', icon: 'folder' as const, run: () => startMove(n) }] : []),
+        ...(n.key !== defaultOrg() ? [{ label: 'Move to…', icon: 'folder' as const, run: () => startMove(n) }] : []),
         { label: 'New assignment', icon: 'plus', run: () => open(n, true, true) },
       ])}
   />
@@ -255,7 +253,7 @@
         <option value="">No parent</option>
         {#each nodes as n (n.id)}<option value={n.id}>{label(n)}</option>{/each}
       </select>
-      {#if hasAnyRole('admin')}
+      {#if can.administer}
         <label class="check" title="Users signing in for the first time join this unit until an administrator moves them">
           <input type="checkbox" bind:checked={waiting} /> Waiting unit for new users
         </label>

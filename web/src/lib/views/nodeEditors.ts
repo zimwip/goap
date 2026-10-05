@@ -2,6 +2,7 @@
 // organisation and platform). Each one maps a graph node
 // onto the tab of the editor; a node it cannot show (an element removed from
 // its definition, an unknown version) opens in the default node editor.
+import { types as nodeTypes } from '../stores/session.svelte';
 import { registerNodeEditor } from '../shell/registry';
 import type { NodeHandle, NodeEditorTarget } from '../shell/types';
 import { getDraft } from '../stores/drafts.svelte';
@@ -101,7 +102,7 @@ registerNodeEditor({
 registerNodeEditor({
   name: 'access',
   title: 'Access editor',
-  open: (n): NodeEditorTarget => (n.type === 'organisation@User' ? { kind: 'user', params: { key: n.key } } : { kind: 'policies', params: {} }),
+  open: (n): NodeEditorTarget => (n.type === nodeTypes.user ? { kind: 'user', params: { key: n.key } } : { kind: 'policies', params: {} }),
 });
 
 registerNodeEditor({

@@ -23,7 +23,7 @@ through changes (CLAUDE.md, rule 4).
    through a graph client, falling back to the compiled-in defaults while the graph has no policy.
 4. The principal is completed with its `User` node: roles are added to those of the token, and the unit is the
    organisation when the token names none. The gateway propagates the completed principal; `GET /api/whoami` returns
-   it. Identity headers (`X-Goap-*`) are trustworthy only because services are reachable only through the gateway.
+   it with what the web derives from it (the session, ADR 0070). Identity headers (`X-Goap-*`) are trustworthy only because services are reachable only through the gateway.
 5. **Safety net**: a compiled-in **floor** (administrators may do everything) is evaluated before the stored policies
    and guards changes to `Policy` and `User` nodes (`policy:write`, `graphsvc.Handler.Floor`). Direct writes of these
    nodes are refused; they go through changes. With no policy in the graph (first start) or an unreadable graph, the

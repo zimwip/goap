@@ -424,7 +424,7 @@ processes, changes and tools of a project, not of a node's own project.
   `organisation` namespace's `main` (the graph service over its own graph, the others through a graph client),
   rebuilt when that head moves (looked at once per second).
   The roles of the `User` node of the subject are added to those of its token, and its unit is its organisation when the
-  token names none (the gateway does the same before propagating `X-Goap-*`; `GET /api/whoami` returns the result).
+  token names none (the gateway does the same before propagating `X-Goap-*`; `GET /api/whoami` returns the result, with the structures, names, platform roles and capability hints the web builds on: ADR 0070).
 - Lock-out protection: the administrator rule is a compiled-in **floor** checked before the policies, so no stored
   policy (not even a `deny`) can take administrators out. Changes to `Policy` and `User` nodes need `policy:write`
   checked against the floor alone (`graphsvc.Handler.Floor`); direct writes of these nodes are refused. While the graph has

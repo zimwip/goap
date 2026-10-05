@@ -3,6 +3,7 @@
   // It names the methodologies that apply (inherited by its sub-projects), which identifies the roles the
   // project needs (ADR 0043); its Assignments pane is the meeting point with organisation: which org units or
   // users hold which of those roles here.
+  import { types as nodeTypes, links as linkTypes, ns, defaultProjectProp, can, defaultProject, isUserKey } from '../../stores/session.svelte';
   import { stamp, keyOf } from '../../flux/signals.svelte';
   import type { Tab } from '../../shell/types';
   import Icon from '../../shell/Icon.svelte';
@@ -12,15 +13,12 @@
   import { headGraph, findNode, applyOnMain, updateNodeItem, type HeadGraph } from '../../graphEdit';
   import { openTab } from '../../shell/tabs.svelte';
   import { notify, provideActions } from '../../shell/workbench.svelte';
-  import { PROJECT_UNIT_TYPE, PROJECT_PART_OF, DEFAULT_PROJECT_PROP, defaultProject } from '../../orgTypes';
-  import { hasAnyRole } from '../../stores/session.svelte';
   import { confirmDialog } from '../../shell/confirmState.svelte';
   import { methodologies, refreshMethodologies } from '../../stores/catalog.svelte';
   import { applicableMethodologies, projectRoles, holders, type ProjectRole } from '../../projectRoles';
 
   let { tab }: { tab: Tab } = $props();
 
-  const NS = 'organisation';
   const key = $derived(tab.params.key ?? '');
 
   let head = $state<HeadGraph>();
@@ -28,15 +26,15 @@
   let error = $state('');
   let pane = $state(tab.params.pane === 'assignments' ? 'assignments' : 'overview');
 
-  const project = $derived(head ? findNode(head, NS, PROJECT_UNIT_TYPE, key) : undefined);
+  const project = $derived(head ? findNode(head, ns.organisation, nodeTypes.projectUnit, key) : undefined);
   const nodeById = $derived(new Map((head?.nodes ?? []).map((n) => [n.id ?? '', n])));
   const parentKey = $derived.by(() => {
-    const l = head?.links.find((x) => x.type === PROJECT_PART_OF && x.from?.id === project?.id && x.from?.id !== x.to?.id);
+    const l = head?.links.find((x) => x.type === linkTypes.projectPartOf && x.from?.id === project?.id && x.from?.id !== x.to?.id);
     return l?.to?.id ? (nodeById.get(l.to.id)?.key ?? '') : '';
   });
   const childKeys = $derived(
     (head?.links ?? [])
-      .filter((l) => l.type === PROJECT_PART_OF && l.to?.id === project?.id && l.from?.id !== l.to?.id)
+      .filter((l) => l.type === linkTypes.projectPartOf && l.to?.id === project?.id && l.from?.id !== l.to?.id)
       .map((l) => nodeById.get(l.from?.id ?? '')?.key ?? '')
       .filter(Boolean)
       .sort(),
@@ -65,7 +63,7 @@
     loading = true;
     try {
       if (!methodologies.items.length) void refreshMethodologies();
-      head = await headGraph(NS);
+      head = await headGraph(ns.organisation);
       error = '';
     } catch (e) {
       error = errorMessage(e);
@@ -76,7 +74,7 @@
 
   $effect(() => {
     void key;
-    void stamp(keyOf.namespace(NS));
+    void stamp(keyOf.namespace(ns.organisation));
     void load();
   });
 
@@ -92,9 +90,9 @@
 
   // The default project (ADR 0054): the project a change naming none acts in, flagged by an administrator. Making
   // this project the default moves the flag in one change (set here, cleared on every project carrying it).
-  const projects = $derived((head?.nodes ?? []).filter((n) => n.type === PROJECT_UNIT_TYPE));
+  const projects = $derived((head?.nodes ?? []).filter((n) => n.type === nodeTypes.projectUnit));
   const defaultKey = $derived(defaultProject(projects));
-  const isAdmin = $derived(hasAnyRole('admin'));
+  const isAdmin = $derived(can.administer);
   let defaultBusy = $state(false);
 
   async function makeDefault() {
@@ -108,10 +106,10 @@
     defaultBusy = true;
     error = '';
     try {
-      const flagged = projects.filter((n) => n.id !== project.id && n.props?.[DEFAULT_PROJECT_PROP] === true);
-      await applyOnMain(NS, `Default project ${key}`, `Changes that name no project act in ${key}`, head.baselineId, [
-        updateNodeItem(project, { [DEFAULT_PROJECT_PROP]: true }),
-        ...flagged.map((n) => updateNodeItem(n, { [DEFAULT_PROJECT_PROP]: null })),
+      const flagged = projects.filter((n) => n.id !== project.id && n.props?.[defaultProjectProp()] === true);
+      await applyOnMain(ns.organisation, `Default project ${key}`, `Changes that name no project act in ${key}`, head.baselineId, [
+        updateNodeItem(project, { [defaultProjectProp()]: true }),
+        ...flagged.map((n) => updateNodeItem(n, { [defaultProjectProp()]: null })),
       ]);
       notify(`Changes that name no project now act in ${key}.`, 'ok');
       await load();
@@ -147,7 +145,7 @@
     error = '';
     try {
       const methodologies = fMethodologies;
-      await applyOnMain(NS, `Project ${key}`, `Update project ${key}`, head.baselineId, [
+      await applyOnMain(ns.organisation, `Project ${key}`, `Update project ${key}`, head.baselineId, [
         updateNodeItem(project, { description: fDescription.trim() || null, status: fStatus.trim() || null, methodologies: methodologies.length ? methodologies : null }),
       ]);
       notify(`Project ${key} updated.`, 'ok');
@@ -249,7 +247,7 @@
                         <td>{r.methodologies.join(', ')}</td>
                         <td>
                           {#each held.get(r.name) ?? [] as who (who)}
-                            <button type="button" class="link mono" onclick={() => openTab({ kind: who.startsWith('USR:') ? 'user' : 'unit', params: { key: who } })}>{who}</button>{' '}
+                            <button type="button" class="link mono" onclick={() => openTab({ kind: isUserKey(who) ? 'user' : 'unit', params: { key: who } })}>{who}</button>{' '}
                           {:else}<span class="tag warn">unassigned</span>{/each}
                         </td>
                       </tr>

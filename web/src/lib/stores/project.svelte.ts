@@ -4,9 +4,8 @@
 // (AuthMode "none", e.g. goap-dev with GOAP_AUTH_MODE=none) has nothing to reissue, so the selection stays local-display only there.
 import { headGraph } from '../graphEdit';
 import { errorMessage, getToken, nodeTitle, switchProject as reissueToken, type GraphNode } from '../api';
-import { PROJECT_UNIT_TYPE } from '../orgTypes';
 import { notify } from '../shell/workbench.svelte';
-import { refreshIdentity, session } from './session.svelte';
+import { refreshIdentity, session, types as nodeTypes, ns } from './session.svelte';
 
 export interface ProjectOption {
   key: string;
@@ -24,9 +23,9 @@ export const project = $state({
 export async function refreshProjects(): Promise<void> {
   project.loading = true;
   try {
-    const h = await headGraph('organisation');
+    const h = await headGraph(ns.organisation);
     project.options = h.nodes
-      .filter((n): n is GraphNode & { key: string } => n.type === PROJECT_UNIT_TYPE && !!n.key)
+      .filter((n): n is GraphNode & { key: string } => n.type === nodeTypes.projectUnit && !!n.key)
       .map((n) => ({ key: n.key, label: nodeTitle(n) || n.key }))
       .sort((a, b) => a.label.localeCompare(b.label));
     project.error = '';

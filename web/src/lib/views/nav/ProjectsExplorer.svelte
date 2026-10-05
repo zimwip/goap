@@ -3,6 +3,7 @@
   // Organisation tool's OrgUnit hierarchy (child --project_part_of--> parent). Projects are edited through
   // changes like any node. Right-clicking a project offers "New assignment" (ADR 0039: Assignment is
   // reachable from Organisation, Project or User, via an action or a context menu).
+  import { types as nodeTypes, links as linkTypes, ns, rootProject } from '../../stores/session.svelte';
   import { stamp, keyOf } from '../../flux/signals.svelte';
   import { tick } from 'svelte';
   import Icon from '../../shell/Icon.svelte';
@@ -13,9 +14,7 @@
   import { openContextMenu } from '../../shell/contextMenuState.svelte';
   import { notify } from '../../shell/workbench.svelte';
   import { graph, errorMessage, nodeTitle, type GraphNode, type Link } from '../../api';
-  import { PROJECT_UNIT_TYPE, PROJECT_PART_OF, DEFAULT_PROJECT } from '../../orgTypes';
 
-  const NS = 'organisation';
 
   let nodes = $state<GraphNode[]>([]);
   let links = $state<Link[]>([]);
@@ -30,14 +29,14 @@
   async function load() {
     loading = true;
     try {
-      await refreshBaselines(NS);
+      await refreshBaselines(ns.organisation);
       const latest = baselines.items[baselines.items.length - 1];
       if (!latest?.id) {
         nodes = [];
         links = [];
       } else {
         const r = await graph.getBaselineGraph(latest.id);
-        nodes = (r.nodes ?? []).filter((n) => n.type === PROJECT_UNIT_TYPE);
+        nodes = (r.nodes ?? []).filter((n) => n.type === nodeTypes.projectUnit);
         links = r.links ?? [];
       }
       error = '';
@@ -49,13 +48,13 @@
   }
 
   $effect(() => {
-    void stamp(keyOf.namespace(NS));
+    void stamp(keyOf.namespace(ns.organisation));
     void load();
   });
 
   const parentOf = $derived.by(() => {
     const m = new Map<string, string>();
-    for (const l of links) if (l.type === PROJECT_PART_OF && l.from?.id && l.to?.id && l.from.id !== l.to.id) m.set(l.from.id, l.to.id);
+    for (const l of links) if (l.type === linkTypes.projectPartOf && l.from?.id && l.to?.id && l.from.id !== l.to.id) m.set(l.from.id, l.to.id);
     return m;
   });
   const children = $derived.by(() => {
@@ -114,14 +113,14 @@
         title: `Project ${key}`,
         intent: `Create project ${name.trim()}`,
         baselineId: latest.id,
-        namespace: NS,
+        namespace: ns.organisation,
         edits: [
           {
             key,
-            type: PROJECT_UNIT_TYPE,
+            type: nodeTypes.projectUnit,
             props: { name: name.trim(), kind, status: 'active' },
             rationale: `Create project ${name.trim()}`,
-            ...(parentNode ? { links: [{ type: PROJECT_PART_OF, to: { id: parentNode.id, version: parentNode.version } }] } : {}),
+            ...(parentNode ? { links: [{ type: linkTypes.projectPartOf, to: { id: parentNode.id, version: parentNode.version } }] } : {}),
           },
         ],
       });
@@ -170,18 +169,18 @@
     movingBusy = true;
     error = '';
     try {
-      const current = links.find((l) => l.type === PROJECT_PART_OF && l.from?.id === moving!.id && l.to?.id !== moving!.id);
+      const current = links.find((l) => l.type === linkTypes.projectPartOf && l.from?.id === moving!.id && l.to?.id !== moving!.id);
       await graph.commitEdits({
         title: `Move ${moving.key}`,
         intent: `Move ${moving.key} under ${target.key}`,
         baselineId: latest.id,
-        namespace: NS,
+        namespace: ns.organisation,
         edits: [
           {
             pre: { id: moving.id, version: moving.version },
             rationale: `Move ${moving.key} under ${target.key}`,
             ...(current?.id ? { removeLinks: [current.id] } : {}),
-            links: [{ type: PROJECT_PART_OF, to: { id: target.id, version: target.version } }],
+            links: [{ type: linkTypes.projectPartOf, to: { id: target.id, version: target.version } }],
           },
         ],
       });
@@ -213,7 +212,7 @@
       openContextMenu(e, [
         { label: 'Open', icon: 'diff', run: () => open(n, true) },
         { label: 'New sub-project…', icon: 'plus', run: () => createChild(n) },
-        ...(n.key !== DEFAULT_PROJECT ? [{ label: 'Move to…', icon: 'folder' as const, run: () => startMove(n) }] : []),
+        ...(n.key !== rootProject() ? [{ label: 'Move to…', icon: 'folder' as const, run: () => startMove(n) }] : []),
         { label: 'New assignment', icon: 'plus', run: () => open(n, true, true) },
       ])}
   />

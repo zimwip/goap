@@ -2,7 +2,7 @@
 // processes (all of them when anonymous): completion, failure, stuck,
 // pending input or approval, clarification, started by a trigger.
 import { onLiveEvent } from './live.svelte';
-import { me, hasAnyRole } from './session.svelte';
+import { me, can } from './session.svelte';
 import { notify } from '../shell/workbench.svelte';
 import { loadRaw, save } from '../shell/storage';
 import { shortId, type Process, type WatchEvent } from '../api';
@@ -82,7 +82,7 @@ export function noticeFromEvent(e: WatchEvent): void {
     push({ ...base, key: `${p.id}|trigger`, tone: 'info', title: 'Trigger', text: `"${p.trigger}" started ${label(p)}` });
   }
   const approval = p.status === 'waiting' && p.pending?.kind === 'approval';
-  if (!mine(p) && !(approval && hasAnyRole('approver', 'admin'))) return;
+  if (!mine(p) && !(approval && can.approve)) return;
   switch (e.type) {
     case 'completed':
       push({ ...base, key: `${p.id}|completed`, tone: 'ok', title: 'Run completed', text: label(p) });

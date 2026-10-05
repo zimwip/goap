@@ -2,8 +2,8 @@
   // Platform settings: one modal (Zed-style) with its own section nav, mounted
   // once at the shell root. Sections are ABAC-gated: "admin" ones only show for
   // a principal holding the admin role; everyone gets their own preferences.
+  import { can } from '../stores/session.svelte';
   import { settingsState, closeSettings } from './settingsState.svelte';
-  import { hasAnyRole } from '../stores/session.svelte';
   import { confirmState } from './confirmState.svelte';
   import { pending, pendingCount } from '../stores/pending.svelte';
   import { confirmLeaveSettings, saveSettings, discardSettings } from '../stores/settings.svelte';
@@ -27,7 +27,7 @@
     { id: 'catalog', label: 'Models & quotas', icon: 'database', admin: true },
   ];
 
-  const visible = $derived(SECTIONS.filter((s) => !s.admin || hasAnyRole('admin')));
+  const visible = $derived(SECTIONS.filter((s) => !s.admin || can.administer));
   const active = $derived(visible.find((s) => s.id === settingsState.section) ?? visible[0]);
 
   // Fall back to a section the principal can actually see (e.g. admin role revoked mid-session).

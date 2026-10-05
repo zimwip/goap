@@ -12,13 +12,18 @@
   import { anyDirty } from './lib/stores/drafts.svelte';
   import { activeDraft } from './lib/views/bottom/activeDraft';
   import { authState, loadAuthConfig } from './lib/stores/auth.svelte';
-  import { session } from './lib/stores/session.svelte';
+  import { session, refreshIdentity } from './lib/stores/session.svelte';
 
   $effect(() => {
     void loadAuthConfig();
   });
 
   const needsSignin = $derived(authState.loaded && authState.signsIn && !session.hasToken);
+
+  // the session (identity, structures, names, what the caller may attempt, ADR 0070) is read before the views that build on it
+  $effect(() => {
+    if (authState.loaded && !needsSignin && !session.loaded) void refreshIdentity();
+  });
 
   $effect(() => {
     if (needsSignin) return;
@@ -58,6 +63,8 @@
   {#if authState.unreachable}<p class="wait" role="status">The platform cannot be reached. Retrying…</p>{/if}
 {:else if needsSignin}
   <Signin />
+{:else if !session.loaded}
+  <p class="wait" role="status">Loading the session…</p>
 {:else}
   <Shell welcome={Welcome} />
 {/if}

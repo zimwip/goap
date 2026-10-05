@@ -2,11 +2,11 @@
   // Access tab: the ABAC policies (Policy nodes, evaluated by Casbin) and the users (User nodes: profile; their roles are
   // granted by Assignments, ADR 0043, 0047) of the organisation namespace, changed through
   // changes applied on main.
+  import { types as nodeTypes, links as linkTypes, ns, userKey, newUserUnit } from '../../stores/session.svelte';
   import { stamp, keyOf } from '../../flux/signals.svelte';
   import { errorMessage, type GraphNode, type Policy } from '../../api';
   import { headGraph, applyOnMain, createNodeItem, deleteNodeItem, currentLink, refOf, type HeadGraph } from '../../graphEdit';
-  import { ORG_UNIT_TYPE, MEMBER_OF, newUserUnit } from '../../orgTypes';
-  import { NS_ORGANISATION, POLICY_TYPE, USER_TYPE, newPolicyKey, policiesOf, policyProps, userKey, userProps, usersOf, type User } from '../../access';
+  import { newPolicyKey, policiesOf, policyProps, userProps, usersOf, type User } from '../../access';
   import type { Tab } from '../../shell/types';
   import Icon from '../../shell/Icon.svelte';
   import StatusBadge from '../../components/StatusBadge.svelte';
@@ -28,7 +28,7 @@
     loading = true;
     error = '';
     try {
-      const h = await headGraph(NS_ORGANISATION);
+      const h = await headGraph(ns.organisation);
       baselineId = h.baselineId;
       head = h;
       policies = policiesOf(h.nodes);
@@ -41,7 +41,7 @@
   }
 
   $effect(() => {
-    void stamp(keyOf.namespace(NS_ORGANISATION));
+    void stamp(keyOf.namespace(ns.organisation));
     load();
   });
 
@@ -50,7 +50,7 @@
     removing = i;
     error = '';
     try {
-      await applyOnMain(NS_ORGANISATION, `Delete policy ${p.resource}/${p.action}`, 'Delete an access policy', baselineId, [deleteNodeItem(n)]);
+      await applyOnMain(ns.organisation, `Delete policy ${p.resource}/${p.action}`, 'Delete an access policy', baselineId, [deleteNodeItem(n)]);
       await load();
     } catch (e) {
       error = errorMessage(e);
@@ -64,7 +64,7 @@
   /** the unit a user is a member of (link member_of), for the Organisation column */
   function orgOf(n: GraphNode): GraphNode | undefined {
     if (!head) return undefined;
-    const l = currentLink(head, n, MEMBER_OF);
+    const l = currentLink(head, n, linkTypes.memberOf);
     return l?.to?.id ? head.nodes.find((u) => u.id === l.to?.id) : undefined;
   }
 
@@ -87,11 +87,11 @@
     try {
       const u: User = { subject, displayName: uName.trim(), email: uEmail.trim(), locale: '' };
       // a user is a member of exactly one unit (ADR 0040): the one new users join (the waiting unit, ADR 0042)
-      const units = (head?.nodes ?? []).filter((n) => n.type === ORG_UNIT_TYPE);
+      const units = (head?.nodes ?? []).filter((n) => n.type === nodeTypes.orgUnit);
       const unit = units.find((n) => n.key === newUserUnit(units));
       if (!unit) throw new Error('no organisation unit to put the user in');
-      await applyOnMain(NS_ORGANISATION, `User ${subject}`, 'Add a user', baselineId, [
-        createNodeItem(userKey(subject), USER_TYPE, userProps(u), [{ type: MEMBER_OF, to: refOf(unit) }]),
+      await applyOnMain(ns.organisation, `User ${subject}`, 'Add a user', baselineId, [
+        createNodeItem(userKey(subject), nodeTypes.user, userProps(u), [{ type: linkTypes.memberOf, to: refOf(unit) }]),
       ]);
       uSubject = uName = uEmail = '';
       await load();
@@ -106,7 +106,7 @@
     if (!(await confirmDialog({ message: `Delete the user "${u.subject}"?`, danger: true }))) return;
     error = '';
     try {
-      await applyOnMain(NS_ORGANISATION, `Delete user ${u.subject}`, 'Delete a user', baselineId, [deleteNodeItem(n)]);
+      await applyOnMain(ns.organisation, `Delete user ${u.subject}`, 'Delete a user', baselineId, [deleteNodeItem(n)]);
       await load();
     } catch (e) {
       error = errorMessage(e);
@@ -131,8 +131,8 @@
     addError = '';
     try {
       const p: Policy = { rule: rule.trim(), resource: resource.trim(), action: action.trim(), effect: policyEffect };
-      await applyOnMain(NS_ORGANISATION, `Policy ${p.resource}/${p.action}`, 'Add an access policy', baselineId, [
-        createNodeItem(newPolicyKey(p), POLICY_TYPE, policyProps(p)),
+      await applyOnMain(ns.organisation, `Policy ${p.resource}/${p.action}`, 'Add an access policy', baselineId, [
+        createNodeItem(newPolicyKey(p), nodeTypes.policy, policyProps(p)),
       ]);
       rule = '';
       resource = '';

@@ -1,12 +1,12 @@
 <script lang="ts">
   // Node search overlay: hybrid full-text / semantic search over the nodes of the graph (node index, ADR 0026)
   // with facets. It covers the workbench while it is open and closes as soon as a node is chosen.
+  import { can } from '../stores/session.svelte';
   import { nodeIndex, errorMessage, type NodeHit, type NodeSearchRequest, type NodeSearchResult } from '../api';
   import Icon from './Icon.svelte';
   import { openNode } from '../nodeEditors';
   import { notify } from './workbench.svelte';
   import { searchOverlay, closeSearch } from './searchOverlay.svelte.ts';
-  import { hasAnyRole } from '../stores/session.svelte';
 
   const PAGE = 25;
   const BUILTIN = ['type', 'namespace', 'state', 'branch'] as const;
@@ -26,7 +26,7 @@
   let status = $state<{ semantic?: boolean; store?: string; nodesIndexed?: string; errors?: string } | null>(null);
   let reindexing = $state(false);
 
-  const admin = $derived(hasAnyRole('admin'));
+  const admin = $derived(can.administer);
 
   function request(): NodeSearchRequest {
     const req: NodeSearchRequest = { text: text.trim(), facets: [...BUILTIN, ...declared], limit: PAGE, offset: page * PAGE };

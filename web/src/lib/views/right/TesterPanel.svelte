@@ -4,6 +4,7 @@
 </script>
 
 <script lang="ts">
+  import { types as nodeTypes, ns } from '../../stores/session.svelte';
   import { stamp, keyOf } from '../../flux/signals.svelte';
   // "Tester" tool: sends an intent (StartProcess) and displays the
   // identification result (candidates, clarification question).
@@ -16,10 +17,8 @@
   import { openTab } from '../../shell/tabs.svelte';
   import { headGraph } from '../../graphEdit';
   import { focusRequests } from '../../shell/workbench.svelte';
-  import { ORG_UNIT_TYPE } from '../../orgTypes';
   import { namespaceOf } from '../../namespace';
 
-  const NS_ORGANISATION = 'organisation';
 
   let methodology = $state('');
   /** "methodology::agent" */
@@ -35,9 +34,9 @@
   let textarea = $state<HTMLTextAreaElement>();
 
   $effect(() => {
-    void stamp(keyOf.namespace(NS_ORGANISATION)); // units created or removed by anyone
-    void headGraph(NS_ORGANISATION)
-      .then((h) => (units = h.nodes.filter((n) => n.type === ORG_UNIT_TYPE).map((n) => n.key ?? '').sort()))
+    void stamp(keyOf.namespace(ns.organisation)); // units created or removed by anyone
+    void headGraph(ns.organisation)
+      .then((h) => (units = h.nodes.filter((n) => n.type === nodeTypes.orgUnit).map((n) => n.key ?? '').sort()))
       .catch(() => (units = []));
   });
 
