@@ -2,16 +2,21 @@ package domain
 
 import (
 	"fmt"
+	"maps"
 	"slices"
 	"time"
 )
 
-// Decision points (ADR 0009 §4): a question the change must answer, usually "which option", decided by an agent or
-// a human. The decider rules: decided (an option, with a confidence and a justification) or undecidable, with the
-// questions that block it. Open questions block the point; answering them (by hand, or by investigating them in a
-// sub-agent) reopens it, and the planner comes back to the decision: the loop emerges from the blackboard. An agent
-// ruling below the confidence threshold of the point waits for a human ratification. Safeguards: after MaxRounds
-// undecidable rulings, or past the deadline, the point is escalated: only a human may rule it.
+// Decision points (ADR 0009 §4): a question the change must answer, usually "which option". A ruling is decided (an
+// option, with a confidence and a justification) or undecidable, with the questions that block it. Open questions
+// block the point; answering them (by hand, or by investigating them in a sub-agent) reopens it, and the planner
+// comes back to the decision: the loop emerges from the blackboard. A decided ruling that does not settle the point
+// waits for a human ratification; a point may be reserved to a person (escalated, or by design).
+//
+// This is the mechanism: open, rule, answer, ratify, who ruled, the status machine. WHEN a ruling settles the point
+// and WHEN it is reserved to a person (a confidence threshold, a number of rounds, a deadline) is a policy, a
+// DecisionPolicy (ADR 0067): the graph holds the opaque policy values the opener gave (DecisionPoint.Policy) and asks
+// the policy. pkg/decision is the one the services plug.
 //
 // Like the flows, a decision point is a replay of events: KindDecisionPoint items of the main flow.
 
@@ -26,20 +31,18 @@ const (
 	DecisionRatifyOp = "ratify"
 )
 
-// Rulings and deciders.
+// Rulings.
 const (
 	OutcomeDecided     = "decided"
 	OutcomeUndecidable = "undecidable"
-	DeciderAgent       = "agent"
-	DeciderHuman       = "human"
 )
 
 // Decision point statuses.
 const (
 	PointOpen      = "open"      // waiting for a ruling
 	PointBlocked   = "blocked"   // open questions wait for their answer
-	PointRatifying = "ratifying" // an agent ruled below the threshold: a human ratifies
-	PointEscalated = "escalated" // too many rounds or past the deadline: a human rules
+	PointRatifying = "ratifying" // a decided ruling did not settle the point: a human ratifies
+	PointEscalated = "escalated" // the policy reserved the point to a person: a human rules
 	PointDecided   = "decided"
 )
 
@@ -55,20 +58,20 @@ type DecisionEvent struct {
 	// Point is the decision point: the id of the item that opened it (empty on open).
 	Point string `json:"point,omitempty"`
 	// open
-	Question  string    `json:"question,omitempty"`
-	Options   []string  `json:"options,omitempty"`
-	Criteria  []string  `json:"criteria,omitempty"`
-	Decider   string    `json:"decider,omitempty"`
-	Threshold float64   `json:"threshold,omitempty"`
-	MaxRounds int       `json:"maxRounds,omitempty"`
-	Deadline  time.Time `json:"deadline,omitempty"`
+	Question string   `json:"question,omitempty"`
+	Options  []string `json:"options,omitempty"`
+	Criteria []string `json:"criteria,omitempty"`
+	// Policy is the opaque policy values of the point, as the DecisionPolicy resolved them at the opening: the
+	// graph stores them and hands them back to the policy, never reads them.
+	Policy map[string]any `json:"policy,omitempty"`
 	// rule
 	Outcome       string   `json:"outcome,omitempty"`
 	Option        string   `json:"option,omitempty"`
 	Confidence    float64  `json:"confidence,omitempty"`
 	Justification string   `json:"justification,omitempty"`
 	Questions     []string `json:"questions,omitempty"`
-	// Human tells a ruling or a ratification comes from a person, not an agent.
+	// Human tells a ruling or a ratification comes from a person, not an agent. The confidence of a ruling is
+	// recorded as given, the policy reads it.
 	Human bool `json:"human,omitempty"`
 	// answer: the question and its answer; the process that investigated it, if any
 	QuestionID string `json:"questionId,omitempty"`
@@ -128,22 +131,21 @@ type Ruling struct {
 
 // DecisionPoint is a decision point, replayed from its events.
 type DecisionPoint struct {
-	ID        string    `json:"id"`
-	Question  string    `json:"question"`
-	Options   []string  `json:"options,omitempty"`
-	Criteria  []string  `json:"criteria,omitempty"`
-	Decider   string    `json:"decider"`
-	Threshold float64   `json:"threshold"`
-	MaxRounds int       `json:"maxRounds"`
-	Deadline  time.Time `json:"deadline,omitempty"`
-	OpenedAt  time.Time `json:"openedAt"`
-	OpenedBy  string    `json:"openedBy,omitempty"`
-	Status    string    `json:"status"`
-	// Rounds counts the rulings that did not settle the point: undecidable, or a ratification refused.
-	Rounds    int        `json:"rounds"`
-	Questions []Question `json:"questions,omitempty"`
-	Ruling    *Ruling    `json:"ruling,omitempty"`
-	// Escalation says why only a human may rule the point now ("" = not escalated).
+	ID       string   `json:"id"`
+	Question string   `json:"question"`
+	Options  []string `json:"options,omitempty"`
+	Criteria []string `json:"criteria,omitempty"`
+	// Policy is the policy values of the point (see DecisionEvent.Policy), updated by the policy as it folds the
+	// events (a count of rounds, say): a private copy, replayed with the point.
+	Policy    map[string]any `json:"policy,omitempty"`
+	OpenedAt  time.Time      `json:"openedAt"`
+	OpenedBy  string         `json:"openedBy,omitempty"`
+	Status    string         `json:"status"`
+	Questions []Question     `json:"questions,omitempty"`
+	Ruling    *Ruling        `json:"ruling,omitempty"`
+	// HumanOnly tells only a person may rule the point now: by design, or because it is escalated.
+	HumanOnly bool `json:"humanOnly,omitempty"`
+	// Escalation says why the policy reserved the point to a person ("" = not escalated).
 	Escalation string `json:"escalation,omitempty"`
 	// Option and DecidedAt / DecidedBy are set once decided.
 	Option    string    `json:"option,omitempty"`
@@ -165,15 +167,61 @@ func (d DecisionPoint) OpenQuestions() int {
 // Pending reports whether the point is not decided yet.
 func (d DecisionPoint) Pending() bool { return d.Status != PointDecided }
 
-// NeedsHuman reports whether only a person may rule the point: a human decider, or an escalated point.
-func (d DecisionPoint) NeedsHuman() bool { return d.Decider == DeciderHuman || d.Escalation != "" }
+// NeedsHuman reports whether only a person may rule the point: reserved to one by design, or escalated.
+func (d DecisionPoint) NeedsHuman() bool { return d.HumanOnly || d.Escalation != "" }
+
+// DecisionPolicy is the rule that says when a ruling settles a decision point and when only a person may rule it. It
+// is pure and deterministic: DecisionPointsAt replays the log with it, at any time, and must find the same points.
+// The graph core has no policy of its own beyond DefaultDecisionPolicy; pkg/decision is the confidence / rounds /
+// deadline policy of the platform (ADR 0067).
+type DecisionPolicy interface {
+	// Open resolves the policy values the opener gave: defaults, validation, values relative to now (a deadline).
+	// The result is stored on the opening event as DecisionPoint.Policy; an error refuses the opening.
+	Open(given map[string]any, now time.Time) (map[string]any, error)
+	// Fold takes an event of a point into account, after the core recorded it, and says whether it settles the
+	// point: a rule (decided or undecidable) or a ratify (accepted or refused). It may update p.Policy, which is a
+	// private copy.
+	Fold(p *DecisionPoint, ev DecisionEvent) (settled bool)
+	// Reserve says whether only a person may rule the point at now (humanOnly), and why when the point is escalated.
+	// It is asked of the points that are not decided.
+	Reserve(p DecisionPoint, now time.Time) (humanOnly bool, escalation string)
+}
+
+// DefaultDecisionPolicy is the policy of a graph that was given none: a decided ruling of anyone settles the point,
+// an accepted ratification settles it, nothing is ever reserved to a person.
+func DefaultDecisionPolicy() DecisionPolicy { return minimalPolicy{} }
+
+type minimalPolicy struct{}
+
+func (minimalPolicy) Open(given map[string]any, _ time.Time) (map[string]any, error) {
+	if len(given) > 0 {
+		return nil, fmt.Errorf("the graph has no decision policy: no policy values (%d given)", len(given))
+	}
+	return nil, nil
+}
+
+func (minimalPolicy) Fold(_ *DecisionPoint, ev DecisionEvent) bool {
+	switch ev.Op {
+	case DecisionRuleOp:
+		return ev.Outcome == OutcomeDecided
+	case DecisionRatifyOp:
+		return ev.Accept
+	}
+	return false
+}
+
+func (minimalPolicy) Reserve(DecisionPoint, time.Time) (bool, string) { return false, "" }
 
 // QuestionID names the i-th question raised by the ruling item rule.
 func QuestionID(rule ItemID, i int) string { return fmt.Sprintf("%s:%d", rule, i+1) }
 
-// DecisionPointsAt replays the decision points of the change, oldest first, at a moment (the deadlines are judged
-// against it). Only the events of the main flow count.
-func (c *Change) DecisionPointsAt(now time.Time) []DecisionPoint {
+// DecisionPointsAt replays the decision points of the change, oldest first, at a moment (the policy judges its
+// deadlines against it), under a policy (nil: DefaultDecisionPolicy). The policy is a parameter, not a registry: the
+// replay stays a pure function of the log, the moment and the policy. Only the events of the main flow count.
+func (c *Change) DecisionPointsAt(now time.Time, policy DecisionPolicy) []DecisionPoint {
+	if policy == nil {
+		policy = DefaultDecisionPolicy()
+	}
 	var out []DecisionPoint
 	at := map[string]int{}
 	for _, it := range c.Items {
@@ -183,10 +231,7 @@ func (c *Change) DecisionPointsAt(now time.Time) []DecisionPoint {
 		}
 		if e.Op == DecisionOpenOp {
 			d := DecisionPoint{ID: string(it.ID), Question: e.Question, Options: slices.Clone(e.Options), Criteria: slices.Clone(e.Criteria),
-				Decider: e.Decider, Threshold: e.Threshold, MaxRounds: e.MaxRounds, Deadline: e.Deadline, OpenedAt: it.CreatedAt, OpenedBy: e.By}
-			if d.Decider == "" {
-				d.Decider = DeciderAgent
-			}
+				Policy: maps.Clone(e.Policy), OpenedAt: it.CreatedAt, OpenedBy: e.By}
 			at[d.ID] = len(out)
 			out = append(out, d)
 			continue
@@ -203,24 +248,23 @@ func (c *Change) DecisionPointsAt(now time.Time) []DecisionPoint {
 		case DecisionRuleOp:
 			r := &Ruling{Outcome: e.Outcome, Option: e.Option, Confidence: e.Confidence, Justification: e.Justification, By: e.By, Human: e.Human, At: it.CreatedAt}
 			d.Ruling = r
+			settled := policy.Fold(d, *e)
 			switch {
 			case e.Outcome == OutcomeUndecidable:
-				d.Rounds++
 				for j, q := range e.Questions {
 					d.Questions = append(d.Questions, Question{ID: QuestionID(it.ID, j), Point: d.ID, Text: q, Status: QuestionOpen, AskedAt: it.CreatedAt})
 				}
-			case e.Human || e.Confidence >= d.Threshold:
+			case settled:
 				d.decide(r)
 			}
 		case DecisionRatifyOp:
 			if d.Ruling == nil || d.Ruling.Outcome != OutcomeDecided {
 				continue
 			}
-			if e.Accept {
+			if policy.Fold(d, *e) {
 				d.decide(&Ruling{Outcome: OutcomeDecided, Option: d.Ruling.Option, Confidence: d.Ruling.Confidence, Justification: d.Ruling.Justification,
 					By: e.By, Human: true, At: it.CreatedAt})
 			} else {
-				d.Rounds++
 				d.Ruling = nil
 			}
 		case DecisionAnswerOp:
@@ -232,7 +276,7 @@ func (c *Change) DecisionPointsAt(now time.Time) []DecisionPoint {
 		}
 	}
 	for i := range out {
-		out[i].settle(now)
+		out[i].settle(now, policy)
 	}
 	return out
 }
@@ -242,17 +286,13 @@ func (d *DecisionPoint) decide(r *Ruling) {
 }
 
 // settle derives the status of a replayed point.
-func (d *DecisionPoint) settle(now time.Time) {
+func (d *DecisionPoint) settle(now time.Time, policy DecisionPolicy) {
 	if !d.DecidedAt.IsZero() {
 		d.Status = PointDecided
 		return
 	}
-	switch {
-	case d.MaxRounds > 0 && d.Rounds >= d.MaxRounds:
-		d.Escalation = fmt.Sprintf("%d rounds without a decision", d.Rounds)
-	case !d.Deadline.IsZero() && now.After(d.Deadline):
-		d.Escalation = "past the deadline " + d.Deadline.UTC().Format(time.RFC3339)
-	}
+	d.HumanOnly, d.Escalation = policy.Reserve(*d, now)
+	d.HumanOnly = d.HumanOnly || d.Escalation != ""
 	switch {
 	case d.Ruling != nil && d.Ruling.Outcome == OutcomeDecided:
 		d.Status = PointRatifying
@@ -265,9 +305,9 @@ func (d *DecisionPoint) settle(now time.Time) {
 	}
 }
 
-// DecisionPoint returns a decision point replayed at now.
-func (c *Change) DecisionPoint(id string, now time.Time) (DecisionPoint, bool) {
-	for _, d := range c.DecisionPointsAt(now) {
+// DecisionPoint returns a decision point replayed at now under a policy (nil: DefaultDecisionPolicy).
+func (c *Change) DecisionPoint(id string, now time.Time, policy DecisionPolicy) (DecisionPoint, bool) {
+	for _, d := range c.DecisionPointsAt(now, policy) {
 		if d.ID == id {
 			return d, true
 		}

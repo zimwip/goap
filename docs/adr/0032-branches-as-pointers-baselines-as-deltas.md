@@ -119,6 +119,9 @@ children of v1.
 conditions on options are ADR 0009 §4 (implemented: a decided point selects its option, and selecting an option by
 hand settles the pending points that chose among the options).
 
+**Amended by ADR 0067**: a flow no longer carries `reason` (an option's hypothesis is `Option.Hypothesis`) nor the engine's
+relaunch fields (they are the opaque `Flow.Origin`); `StaleExecutions` is `StaleRuns`.
+
 ## Consequences
 - History is no longer rewritten by a merge; `reason = merge` marks only versions with two parents.
 - Fewer versions and links: a merge writes what is new, nothing else.

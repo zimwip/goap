@@ -6,13 +6,13 @@ import (
 	"fmt"
 	"reflect"
 	"slices"
-	"time"
 
 	connectorv1 "github.com/zimwip/goap/gen/goap/connector/v1"
 	"github.com/zimwip/goap/internal/connectorkit"
 	"github.com/zimwip/goap/pkg/access"
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/brief"
+	"github.com/zimwip/goap/pkg/decision"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/mcp"
@@ -295,7 +295,7 @@ func (c Change) options(ctx context.Context, who authz.Principal, id domain.Chan
 }
 
 // decisions works on the decision points of a change (ADR 0009 §4). A ruling made through a tool is an agent's:
-// below the threshold of its point it waits for a person's ratification, which is not a tool.
+// the policy of its point may leave to a person's ratification, which is not a tool.
 func (c Change) decisions(ctx context.Context, who authz.Principal, id domain.ChangeID, op string, a args) (map[string]any, error) {
 	strs := func(name string) []string {
 		var out []string
@@ -323,14 +323,17 @@ func (c Change) decisions(ctx context.Context, who authz.Principal, id domain.Ch
 		}
 		return result(map[string]any{"points": ps})
 	case "decision":
-		in := graph.OpenDecisionRequest{Question: a.str("question"), Criteria: strs("criteria"), Decider: a.str("decider"), Threshold: num("threshold"),
-			MaxRounds: int(num("maxRounds")), By: who.Subject}
+		in := graph.OpenDecisionRequest{Question: a.str("question"), Criteria: strs("criteria"), By: who.Subject}
 		if _, ok := a["options"]; ok {
 			in.Options = append([]string{}, strs("options")...)
 		}
-		if s := a.str("maxDuration"); s != "" {
-			if in.MaxDuration, err = time.ParseDuration(s); err != nil {
-				return nil, fmt.Errorf("maxDuration: %w", err)
+		// the policy values the tool names are handed over as they come, the graph's policy reads them
+		for _, k := range []string{decision.KeyDecider, decision.KeyThreshold, decision.KeyMaxRounds, decision.KeyMaxDuration} {
+			if v, ok := a[k]; ok && v != "" && v != 0.0 {
+				if in.Policy == nil {
+					in.Policy = map[string]any{}
+				}
+				in.Policy[k] = v
 			}
 		}
 		d, err = c.p.Graph.OpenDecision(ctx, id, in)

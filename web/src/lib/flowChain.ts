@@ -73,8 +73,8 @@ export function restartedStepNumber(p: Process, all: ProcessLookup): number {
 }
 
 /** same number for a flow: through the run relaunched on it, else through the run it relaunched from */
-export function flowStepNumber(f: { id?: string; process?: string; fromStep?: number }, all: ProcessLookup): number {
+export function flowStepNumber(f: { id?: string; origin?: { process?: string; step?: number } }, all: ProcessLookup): number {
   for (const p of all.values()) if (f.id && p.flow === f.id) return restartedStepNumber(p, all);
-  const parent = f.process ? all.get(f.process) : undefined;
-  return (parent ? offsetOf(parent, all) : 0) + (f.fromStep ?? 0) + 1;
+  const parent = f.origin?.process ? all.get(f.origin.process) : undefined;
+  return (parent ? offsetOf(parent, all) : 0) + (f.origin?.step ?? 0) + 1;
 }

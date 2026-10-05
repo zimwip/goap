@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/zimwip/goap/pkg/decision"
 	"github.com/zimwip/goap/pkg/domain"
 )
 
@@ -18,6 +19,7 @@ func testDecisionLoop(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	f := newFixture(t, repo)
 	g := f.g
+	g.DecisionPolicy = decision.Policy{}
 	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{Title: "PSP", BaselineID: f.base.ID, OwnBranch: true}))
 	pre := f.req.Ref()
 	write := func(option, title string) domain.NodeRef {
@@ -33,7 +35,7 @@ func testDecisionLoop(t *testing.T, repo Repo) {
 	write(b.ID, "Use Adyen")
 
 	d := must[domain.DecisionPoint](t)(g.OpenDecision(ctx, c.ID, OpenDecisionRequest{Question: "Which PSP?", Criteria: []string{"fees", "markets"}, By: "u"}))
-	if d.Status != domain.PointOpen || len(d.Options) != 2 || d.Threshold != DefaultDecisionThreshold || d.MaxRounds != DefaultDecisionRounds {
+	if d.Status != domain.PointOpen || len(d.Options) != 2 || decision.Threshold(d) != decision.DefaultThreshold || decision.MaxRounds(d) != decision.DefaultRounds {
 		t.Fatalf("opened: %+v", d)
 	}
 	if _, err := g.Apply(ctx, c.ID, ""); !errors.Is(err, ErrConflict) {
@@ -45,7 +47,7 @@ func testDecisionLoop(t *testing.T, repo Repo) {
 	// undecidable: the fees are unknown
 	d = must[domain.DecisionPoint](t)(g.RuleDecision(ctx, c.ID, RuleRequest{Point: d.ID, Outcome: domain.OutcomeUndecidable,
 		Justification: "the fees decide", Questions: []string{"What are the fees of Adyen?"}, By: "agent"}))
-	if d.Status != domain.PointBlocked || d.Rounds != 1 || len(d.Questions) != 1 {
+	if d.Status != domain.PointBlocked || decision.Rounds(d) != 1 || len(d.Questions) != 1 {
 		t.Fatalf("blocked: %+v", d)
 	}
 	if _, err := g.RuleDecision(ctx, c.ID, RuleRequest{Point: d.ID, Outcome: domain.OutcomeDecided, Option: a.ID, Confidence: 1, Justification: "x"}); !errors.Is(err, ErrConflict) {
@@ -90,10 +92,11 @@ func testDecisionEscalation(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	f := newFixture(t, repo)
 	g := f.g
+	g.DecisionPolicy = decision.Policy{}
 	now := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
 	g.now = func() time.Time { return now }
 	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{Title: "x", BaselineID: f.base.ID}))
-	d := must[domain.DecisionPoint](t)(g.OpenDecision(ctx, c.ID, OpenDecisionRequest{Question: "Go?", Options: []string{}, MaxRounds: 1, MaxDuration: time.Hour}))
+	d := must[domain.DecisionPoint](t)(g.OpenDecision(ctx, c.ID, OpenDecisionRequest{Question: "Go?", Options: []string{}, Policy: map[string]any{decision.KeyMaxRounds: 1, decision.KeyMaxDuration: "1h"}}))
 	d = must[domain.DecisionPoint](t)(g.RuleDecision(ctx, c.ID, RuleRequest{Point: d.ID, Outcome: domain.OutcomeUndecidable, Justification: "unknown", Questions: []string{"cost?"}}))
 	must[domain.DecisionPoint](t)(g.AnswerQuestion(ctx, c.ID, d.Questions[0].ID, "cheap", "", "u"))
 	d = must[[]domain.DecisionPoint](t)(g.DecisionPoints(ctx, c.ID))[0]
@@ -108,10 +111,40 @@ func testDecisionEscalation(t *testing.T, repo Repo) {
 		t.Fatalf("a person decides: %+v", d)
 	}
 	// the deadline
-	e := must[domain.DecisionPoint](t)(g.OpenDecision(ctx, c.ID, OpenDecisionRequest{Question: "When?", Options: []string{}, MaxDuration: time.Hour}))
+	e := must[domain.DecisionPoint](t)(g.OpenDecision(ctx, c.ID, OpenDecisionRequest{Question: "When?", Options: []string{}, Policy: map[string]any{decision.KeyMaxDuration: "1h"}}))
 	now = now.Add(2 * time.Hour)
 	if e = must[[]domain.DecisionPoint](t)(g.DecisionPoints(ctx, c.ID))[1]; e.Status != domain.PointEscalated {
 		t.Fatalf("past the deadline: %+v", e)
+	}
+}
+
+// A graph with no decision policy keeps the mechanism only: whoever rules a point decided settles it, nothing is
+// reserved to a person, and policy values are refused (ADR 0067).
+func TestDecisionWithoutPolicy(t *testing.T) { forEachRepo(t, testDecisionWithoutPolicy) }
+
+func testDecisionWithoutPolicy(t *testing.T, repo Repo) {
+	ctx := context.Background()
+	f := newFixture(t, repo)
+	g := f.g
+	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{Title: "x", BaselineID: f.base.ID}))
+	if _, err := g.OpenDecision(ctx, c.ID, OpenDecisionRequest{Question: "Go?", Options: []string{}, Policy: map[string]any{"threshold": 0.9}}); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("policy values without a policy: %v", err)
+	}
+	d := must[domain.DecisionPoint](t)(g.OpenDecision(ctx, c.ID, OpenDecisionRequest{Question: "Go?", Options: []string{}}))
+	if d.Status != domain.PointOpen || d.Policy != nil || d.NeedsHuman() {
+		t.Fatalf("opened: %+v", d)
+	}
+	d = must[domain.DecisionPoint](t)(g.RuleDecision(ctx, c.ID, RuleRequest{Point: d.ID, Outcome: domain.OutcomeUndecidable, Justification: "cost?", Questions: []string{"cost?"}}))
+	if d.Status != domain.PointBlocked {
+		t.Fatalf("blocked: %+v", d)
+	}
+	d = must[domain.DecisionPoint](t)(g.AnswerQuestion(ctx, c.ID, d.Questions[0].ID, "cheap", "", "u"))
+	d = must[domain.DecisionPoint](t)(g.RuleDecision(ctx, c.ID, RuleRequest{Point: d.ID, Outcome: domain.OutcomeDecided, Confidence: 0.01, Justification: "go", By: "agent"}))
+	if d.Status != domain.PointDecided || d.DecidedBy != "agent" {
+		t.Fatalf("an agent ruling settles the point: %+v", d)
+	}
+	if _, err := g.RatifyDecision(ctx, c.ID, d.ID, true, "ann", ""); !errors.Is(err, ErrConflict) {
+		t.Fatalf("nothing to ratify: %v", err)
 	}
 }
 

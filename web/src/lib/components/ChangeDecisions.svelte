@@ -75,8 +75,7 @@
         allOptions: onOptions,
         options: onOptions ? undefined : [],
         criteria: criteria.split(',').map((c) => c.trim()).filter(Boolean),
-        decider,
-        maxDuration: maxDuration.trim() || undefined,
+        policy: { decider, maxDuration: maxDuration.trim() || undefined },
       });
       question = '';
       criteria = '';
@@ -113,8 +112,8 @@
             <code class="muted">{shortId(d.id)}</code>
           </div>
           <p class="meta muted">
-            decider {d.decider} · threshold {d.threshold} · round {d.rounds}/{d.maxRounds}
-            {#if d.deadline}· deadline {formatDate(d.deadline)}{/if}
+            decider {d.policy?.decider ?? 'agent'} · threshold {d.policy?.threshold} · round {d.policy?.rounds ?? 0}/{d.policy?.maxRounds}
+            {#if d.policy?.deadline}· deadline {formatDate(d.policy.deadline)}{/if}
             {#if d.options?.length}· among {d.options.map(nameOf).join(', ')}{/if}
             {#if d.criteria?.length}· criteria {d.criteria.join(', ')}{/if}
           </p>

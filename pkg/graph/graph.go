@@ -72,6 +72,11 @@ type Graph struct {
 	// with the change as stored: it reads nothing else.
 	Facets map[string]BlackboardFacet
 
+	// DecisionPolicy is the rule of the decision points of the changes (ADR 0067): when a ruling settles a point, when
+	// only a person may rule it. Unset: domain.DefaultDecisionPolicy, a ruling of anyone settles the point. The graph
+	// keeps the mechanism (open, rule, answer, ratify); pkg/decision is the policy the services plug.
+	DecisionPolicy domain.DecisionPolicy
+
 	// Lifecycles resolves the lifecycle of the changes of a methodology and the world state their guards read (ADR
 	// 0058). Unset: no change follows a lifecycle (tests, tools).
 	Lifecycles ChangeLifecycles

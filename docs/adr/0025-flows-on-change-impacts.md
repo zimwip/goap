@@ -34,7 +34,7 @@ flow. Everything a flow writes lives on its branch; the main flow keeps what it 
   that ran; empty for versions not written by an action). Change impacts and reviews already carry `Execution`
   (ADR 0024); a review entry gets `Execution` and `Flow`.
 - `open` records the **stale executions**: the relaunched step's, the steps after it and the sub-agent runs started
-  from it (found through the journal, as ADR 0017 §3), in `FlowEvent.StaleExecutions`. The stale change impacts are the
+  from it (found through the journal, as ADR 0017 §3), in `FlowEvent.StaleExecutions` (renamed `StaleRuns`, opaque producer ids, by ADR 0067). The stale change impacts are the
   ones declared by those executions; the stale versions and reviews are the ones written by them. There is no closure
   over `derivedFrom`: a later step is stale as a whole.
 

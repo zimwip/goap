@@ -1,6 +1,7 @@
 package condition
 
 import (
+	"math"
 	"sync"
 
 	"github.com/zimwip/goap/pkg/domain"
@@ -137,10 +138,29 @@ func decisions(bb domain.Blackboard) decisionView {
 			criteria = append(criteria, c)
 		}
 		points = append(points, map[string]any{"id": d.ID, "question": d.Question, "status": d.Status, "options": options, "criteria": criteria,
-			"decider": d.Decider, "threshold": d.Threshold, "rounds": int64(d.Rounds), "maxRounds": int64(d.MaxRounds), "escalation": d.Escalation,
+			"policy": policyView(d.Policy), "humanOnly": d.HumanOnly, "escalation": d.Escalation,
 			"openQuestions": int64(d.OpenQuestions()), "questions": qs, "ruling": ruling, "option": d.Option, "decidedBy": d.DecidedBy})
 	}
 	return decisionView{points, questions}
+}
+
+// policyView is the policy values of a decision point as an expression sees them: always a map, the values the
+// policy keeps. The values travel as JSON, which has one number type: a whole number is an int in an expression, so
+// that `d.policy.maxRounds - d.policy.rounds` is the same arithmetic wherever the point was replayed.
+func policyView(p map[string]any) map[string]any {
+	out := make(map[string]any, len(p))
+	for k, v := range p {
+		switch n := v.(type) {
+		case float64:
+			if n == math.Trunc(n) && math.Abs(n) < 1<<53 {
+				v = int64(n)
+			}
+		case int:
+			v = int64(n)
+		}
+		out[k] = v
+	}
+	return out
 }
 
 type hydrator struct{ bb domain.Blackboard }

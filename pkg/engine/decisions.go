@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/dsl"
@@ -16,7 +15,7 @@ import (
 // Decision loops (ADR 0009 §4). An action works on the decision points of its change through items of kind
 // "decisionPoint" (LLM output, script result, human input): open a point, rule it (decided, or undecidable with the
 // questions that block it), answer a question, ratify a ruling. A ruling from a human task is a person's; from any
-// other action an agent's, which waits for a ratification below the threshold of the point. The builtin
+// other action an agent's, which the policy of the point may leave to a ratification. The builtin
 // decision.investigate answers an open question by running a sub-agent whose intent is the question.
 
 // DecisionOp is the operation of a "decisionPoint" item.
@@ -28,14 +27,12 @@ type DecisionOp struct {
 	// Point is the id of a point, or "#ref" of one opened in the batch; empty: the only pending point.
 	Point string `json:"point,omitempty"`
 	// open
-	Question  string   `json:"question,omitempty"`
-	Options   []string `json:"options,omitempty"` // option ids or names; none: the open options of the change
-	Criteria  []string `json:"criteria,omitempty"`
-	Decider   string   `json:"decider,omitempty"`
-	Threshold float64  `json:"threshold,omitempty"`
-	MaxRounds int      `json:"maxRounds,omitempty"`
-	// MaxDuration is a Go duration ("48h") after which the point is escalated.
-	MaxDuration string `json:"maxDuration,omitempty"`
+	Question string   `json:"question,omitempty"`
+	Options  []string `json:"options,omitempty"` // option ids or names; none: the open options of the change
+	Criteria []string `json:"criteria,omitempty"`
+	// Policy is the policy values of the point (decider, threshold, maxRounds, maxDuration: pkg/decision), which
+	// the engine passes on without reading them.
+	Policy map[string]any `json:"policy,omitempty"`
 	// rule
 	Outcome       string   `json:"outcome,omitempty"`
 	Option        string   `json:"option,omitempty"` // option id or name
@@ -90,17 +87,9 @@ func (e *Engine) applyDecisionOps(ctx context.Context, p *Process, ops []Decisio
 		}
 		switch op.Op {
 		case domain.DecisionOpenOp:
-			in := graph.OpenDecisionRequest{Question: op.Question, Criteria: op.Criteria, Decider: op.Decider, Threshold: op.Threshold,
-				MaxRounds: op.MaxRounds, By: by}
+			in := graph.OpenDecisionRequest{Question: op.Question, Criteria: op.Criteria, Policy: op.Policy, By: by}
 			for _, o := range op.Options {
 				in.Options = append(in.Options, option(o))
-			}
-			if op.MaxDuration != "" {
-				d, err := time.ParseDuration(op.MaxDuration)
-				if err != nil {
-					return fail(err)
-				}
-				in.MaxDuration = d
 			}
 			d, err := e.Graph.OpenDecision(ctx, p.ChangeID, in)
 			if err != nil {

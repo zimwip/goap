@@ -95,7 +95,7 @@ func (g *Graph) TransitionChange(ctx context.Context, id domain.ChangeID, in Tra
 			return c, fmt.Errorf("decision point %s already gated a transition: %w", in.Decision, ErrConflict)
 		}
 		found := false
-		for _, d := range c.DecisionPointsAt(g.now()) {
+		for _, d := range c.DecisionPointsAt(g.now(), g.DecisionPolicy) {
 			found = found || d.ID == in.Decision
 		}
 		if !found {

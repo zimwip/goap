@@ -81,3 +81,7 @@ The engine validates the blackboard the process reads at the start of every cycl
 - Permissions: the actions `relaunch` and `decide_flow` on the `process` resource (same roles as the
   other process actions).
 - Node versions proposed by an abandoned branch are only proposals until apply: no rollback needed.
+
+**Amended by ADR 0067**: the flow keeps no `fromStep` / `execution` / `process` / `reason` of its own: the engine
+records them in the opaque `Flow.Origin`, and the guidance of a relaunch is an item the engine gives to
+`OpenFlow` (`OpenFlowRequest.Items`), not a field of the graph.

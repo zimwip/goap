@@ -40,10 +40,11 @@ version is written, `links` are the outgoing links of the version written.
 its own ([ADR 0032](adr/0032-branches-as-pointers-baselines-as-deltas.md) §6); `status` is `exploring`, `evaluated`,
 `selected` or `rejected`, `active` marks the option the change works on.
 
-`DecisionPoint`: `{id, question, options, criteria, decider, status, rounds, maxRounds, questions, option}` — a question
+`DecisionPoint`: `{id, question, options, criteria, policy, status, questions, option}` — a question
 the change must settle ([ADR 0009](adr/0009-branches-options-decisions.md) §4); `status` is `open`, `blocked` (open
 questions), `ratifying` (an agent's ruling waits for a person), `escalated` (only a person rules it) or `decided`
-(`option` is the option chosen); `questions`: `[{id, point, text, status, answer}]`.
+(`option` is the option chosen); `questions`: `[{id, point, text, status, answer}]`; `policy`: the policy values of
+the point (with the platform's policy: `decider`, `threshold`, `maxRounds`, `rounds`, `deadline`).
 
 ## Writing (to the change)
 
@@ -54,8 +55,8 @@ questions), `ratifying` (an agent's ruling waits for a person), `escalated` (onl
 | `ctx.createNode(type, key, rationale)` | the change creates a node → `"#nN"` |
 | `ctx.writeNode(node, {props, state, links, removeLinks, retire})` | write the next version of the node of a change impact on the change branch (`node`: key or `#nN`; `links`: `[{type, to}]`, `to` a node key or a `#nN` already written; `props` merged; `state` a lifecycle state) |
 | `ctx.reviewNode(node, accept, comment)` | accept or reject a change impact; the comment is mandatory |
-| `ctx.openDecision(question, {options, criteria, decider, threshold, maxRounds, maxDuration})` | open a decision point (`options`: names or ids, none = the open options) → `"#dN"` |
-| `ctx.decide(point, option, confidence, justification)` | rule a point decided (`point`: id, `#dN` or `""` for the only pending one; `option`: name or id; `confidence` 0 to 1): below the point's threshold the ruling waits for a person |
+| `ctx.openDecision(question, {options, criteria, decider, threshold, maxRounds, maxDuration})` | open a decision point (`options`: names or ids, none = the open options; every other key is a policy value, handed to the graph's decision policy) → `"#dN"` |
+| `ctx.decide(point, option, confidence, justification)` | rule a point decided (`point`: id, `#dN` or `""` for the only pending one; `option`: name or id; `confidence` 0 to 1): below the point's threshold (the platform's policy) the ruling waits for a person |
 | `ctx.undecidable(point, justification, questions)` | rule a point undecidable: why, and the questions to answer first (they block it) |
 | `ctx.answer(questionId, answer)` | answer an open question of a decision point |
 

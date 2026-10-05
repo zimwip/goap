@@ -1007,7 +1007,7 @@ export interface ChangeItem {
   flow?: string;
   flowEvent?: FlowEvent;
   /** event of a decision point on kind 'decision_point' (ADR 0009 §4) */
-  decisionEvent?: { op?: string; point?: string; outcome?: string; confidence?: number; threshold?: number; human?: boolean; accept?: boolean };
+  decisionEvent?: { op?: string; point?: string; outcome?: string; confidence?: number; policy?: DecisionPolicy; human?: boolean; accept?: boolean };
   decision?: Decision;
   data?: Struct;
   producedBy?: string;
@@ -1428,17 +1428,25 @@ export interface Process {
   fromStep?: number;
 }
 
+/** What the engine records on the flow it opens for a relaunched step (the graph keeps it opaque). */
+export interface FlowOrigin {
+  step?: number;
+  execution?: string;
+  process?: string;
+  reason?: string;
+}
+
 /** Event of the action flow, carried by change items of kind "flow". */
 export interface FlowEvent {
   op?: 'open' | 'adopt' | 'discard' | string;
   flow?: string;
   parent?: string;
   forkAfter?: string;
-  fromStep?: number;
-  execution?: string;
-  process?: string;
-  reason?: string;
   stale?: string[];
+  /** opaque producer ids the flow invalidates */
+  staleRuns?: string[];
+  /** opaque record of the opener (a relaunch: step, execution, process, reason) */
+  origin?: FlowOrigin;
   by?: string;
   /** open: the flow is an option of the change; evaluate: the evaluation */
   option?: OptionSpec;
@@ -1456,11 +1464,9 @@ export interface Flow {
   id?: string;
   parent?: string;
   forkAfter?: string;
-  fromStep?: number;
-  execution?: string;
-  /** the process whose step was relaunched (replaced if the flow is adopted) */
-  process?: string;
-  reason?: string;
+  /** opaque record of the opener; a relaunch writes the restarted step, its run, the process (replaced if the flow is adopted) and why */
+  origin?: FlowOrigin;
+  staleRuns?: string[];
   status?: 'open' | 'adopted' | 'discarded' | string;
   /** items the relaunched step invalidated (stale while open, superseded once adopted) */
   stale?: string[];
@@ -1511,23 +1517,32 @@ export interface Ruling {
   at?: string;
 }
 
+/** The values of the confidence / rounds / deadline policy (pkg/decision): the graph keeps them opaque. */
+export interface DecisionPolicy {
+  decider?: 'agent' | 'human' | string;
+  threshold?: number;
+  maxRounds?: number;
+  rounds?: number;
+  /** RFC 3339 */
+  deadline?: string;
+}
+
 /** A decision point of a change: a question to settle, usually which option (ADR 0009 §4). */
 export interface DecisionPoint {
   id?: string;
   question?: string;
   options?: string[];
   criteria?: string[];
-  decider?: 'agent' | 'human' | string;
-  threshold?: number;
-  maxRounds?: number;
-  deadline?: string;
+  /** the policy values of the point, kept by the graph's decision policy (ADR 0067) */
+  policy?: DecisionPolicy;
   openedAt?: string;
   openedBy?: string;
   status?: 'open' | 'blocked' | 'ratifying' | 'escalated' | 'decided' | string;
-  rounds?: number;
   questions?: Question[];
   ruling?: Ruling;
-  /** why only a person may rule it now */
+  /** only a person may rule it now: by design, or escalated */
+  humanOnly?: boolean;
+  /** why the policy reserved it to a person */
   escalation?: string;
   option?: string;
   decidedAt?: string;
@@ -2069,7 +2084,7 @@ export const graph = {
   /** Decision points of a change (ADR 0009 §4). */
   listDecisionPoints: (changeId: string, signal?: AbortSignal) =>
     rpc<{ changeId: string }, { points?: DecisionPoint[] }>(GRAPH, 'ListDecisionPoints', { changeId }, signal),
-  openDecision: (req: { changeId: string; question: string; allOptions: boolean; options?: string[]; criteria?: string[]; decider?: string; threshold?: number; maxRounds?: number; maxDuration?: string }) =>
+  openDecision: (req: { changeId: string; question: string; allOptions: boolean; options?: string[]; criteria?: string[]; policy?: { decider?: string; threshold?: number; maxRounds?: number; maxDuration?: string } }) =>
     rpc<typeof req, { point?: DecisionPoint }>(GRAPH, 'OpenDecision', req),
   /** A ruling from the IDE is a person's: it needs no ratification. */
   ruleDecision: (req: { changeId: string; point: string; outcome: string; option?: string; confidence?: number; justification: string; questions?: string[] }) =>

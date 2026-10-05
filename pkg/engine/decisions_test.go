@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/zimwip/goap/pkg/decision"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/intent"
@@ -25,6 +26,7 @@ func TestDecisionLoopEndToEnd(t *testing.T) {
 		t.Fatal(err)
 	}
 	g := graph.New(graph.NewMemory())
+	g.DecisionPolicy = decision.Policy{}
 	_, _ = g.CreateNode(ctx, graph.NewNode{Namespace: "alm", Key: "REQ-1", Type: "alm@Requirement", Properties: map[string]any{"title": "Pay online"}})
 	b, err := g.BranchHead(ctx, "alm", domain.MainBranch)
 	if err != nil {
@@ -70,7 +72,7 @@ func TestDecisionLoopEndToEnd(t *testing.T) {
 		t.Fatalf("points: %+v %v", points, err)
 	}
 	d := points[0]
-	if d.Status != domain.PointDecided || d.Option != stripe.ID || d.Rounds != 1 || len(d.Questions) != 1 {
+	if d.Status != domain.PointDecided || d.Option != stripe.ID || decision.Rounds(d) != 1 || len(d.Questions) != 1 {
 		t.Fatalf("decision: %+v", d)
 	}
 	q := d.Questions[0]
@@ -91,6 +93,7 @@ func TestDecisionLoopEndToEnd(t *testing.T) {
 func TestDecisionRatificationIsHuman(t *testing.T) {
 	ctx := context.Background()
 	g := graph.New(graph.NewMemory())
+	g.DecisionPolicy = decision.Policy{}
 	_, _ = g.CreateNode(ctx, graph.NewNode{Namespace: "alm", Key: "REQ-1", Type: "alm@Requirement"})
 	b, _ := g.BranchHead(ctx, "alm", domain.MainBranch)
 	c, err := g.CreateChange(ctx, graph.NewChange{Title: "x", Namespace: "alm", BaselineID: b.ID})
@@ -100,7 +103,7 @@ func TestDecisionRatificationIsHuman(t *testing.T) {
 	e := &Engine{Graph: g}
 	p := &Process{ID: "p", ChangeID: c.ID}
 	pts, err := e.applyDecisionOps(ctx, p, []DecisionOp{
-		{Op: "open", Ref: "#d", Question: "Go?", Threshold: 0.8},
+		{Op: "open", Ref: "#d", Question: "Go?", Policy: map[string]any{"threshold": 0.8}},
 		{Op: "rule", Point: "#d", Outcome: domain.OutcomeDecided, Confidence: 0.5, Justification: "probably"},
 	}, false, "decider")
 	if err != nil || len(pts) != 1 {

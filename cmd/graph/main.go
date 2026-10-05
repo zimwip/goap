@@ -18,6 +18,7 @@ import (
 	"github.com/zimwip/goap/internal/registrysvc"
 	"github.com/zimwip/goap/internal/telemetry"
 	"github.com/zimwip/goap/pkg/access"
+	"github.com/zimwip/goap/pkg/decision"
 	"github.com/zimwip/goap/pkg/domain/def"
 	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/risk"
@@ -67,7 +68,8 @@ func main() {
 	g := graph.New(repo)
 	// the principal behind each event of the impact logs (ADR 0029)
 	g.Caller = graphsvc.Caller
-	g.Observe(events) // node and baseline events feed the node index (ADR 0026)
+	g.DecisionPolicy = decision.Policy{} // confidence, rounds and deadline settle the decision points (ADR 0067)
+	g.Observe(events)                    // node and baseline events feed the node index (ADR 0026)
 	// baselines written whole before they were stored as deltas are compacted, once, in the background (ADR 0032)
 	go func() {
 		if n, err := g.CompactBaselines(ctx); err != nil {

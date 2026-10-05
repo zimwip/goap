@@ -96,7 +96,7 @@ func testValidateBoardOutdatedAndFlowView(t *testing.T, repo Repo) {
 		t.Fatalf("outdated = %+v", by)
 	}
 	// relaunching the run that declared it marks it stale: the flow view no longer contains it, so it is clean
-	fl, err := g.OpenFlow(ctx, b.ID, OpenFlowRequest{StaleExecutions: []string{"e1"}})
+	fl, err := g.OpenFlow(ctx, b.ID, OpenFlowRequest{StaleRuns: []string{"e1"}})
 	if err != nil {
 		t.Fatal(err)
 	}

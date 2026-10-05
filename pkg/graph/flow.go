@@ -17,17 +17,15 @@ type OpenFlowRequest struct {
 	// Seeds are the items produced by the relaunched step and by what followed
 	// it; the items derived from them are invalidated too.
 	Seeds []domain.ItemID
-	// StaleExecutions are the action runs of the relaunched step and of what followed it: the change
-	// nodes, versions and reviews they produced are stale until the branch is adopted (ADR 0025).
-	StaleExecutions []string
-	FromStep        int
-	Execution       string
-	Process         string
-	Reason          string
-	// Guidance is a comment for the agent: recorded on the branch, it is part of the
-	// blackboard the relaunched steps read. By is who wrote it.
-	Guidance string
-	By       string
+	// StaleRuns are opaque producer ids (the Execution of change impacts and node versions) of the
+	// relaunched step and of what followed it: what they produced is stale until the branch is adopted
+	// (ADR 0025).
+	StaleRuns []string
+	// Origin is an opaque record the opener keeps on the flow (the graph stores and returns it, never reads it).
+	Origin map[string]any
+	// Items are written on the new flow at creation (a note for whoever works on it): the graph gives each
+	// the flow, an id, a time and, unset, the accepted status.
+	Items []domain.ChangeItem
 }
 
 // openFlowEvent appends a flow event to the log of a change.
@@ -76,12 +74,21 @@ func (g *Graph) OpenFlow(ctx context.Context, id domain.ChangeID, in OpenFlowReq
 		flow := g.newID()
 		stale := domain.StaleClosure(base.Items, in.Seeds)
 		if err := g.flowEvent(ctx, tx, id, domain.FlowEvent{Op: domain.FlowOpenOp, Flow: flow, Parent: in.Parent, ForkAfter: in.ForkAfter,
-			FromStep: in.FromStep, Execution: in.Execution, Process: in.Process, Reason: in.Reason, Stale: stale, StaleExecutions: in.StaleExecutions}); err != nil {
+			Stale: stale, StaleRuns: in.StaleRuns, Origin: in.Origin}); err != nil {
 			return err
 		}
-		if in.Guidance != "" {
-			if err := putItem(ctx, tx, id, domain.ChangeItem{ID: domain.ItemID(g.newID()), Kind: domain.KindArtifact, Type: "guidance", Status: domain.ItemAccepted,
-				Flow: flow, ProducedBy: firstNonEmpty(in.By, "human"), Data: map[string]any{"text": in.Guidance, "step": in.FromStep}, CreatedAt: g.now()}); err != nil {
+		for _, it := range in.Items {
+			if it.Kind == domain.KindFlow || it.Kind == domain.KindTransition || it.Kind == domain.KindDecisionPoint {
+				return fmt.Errorf("a %s item is recorded by its own operation, not at the opening of a flow: %w", it.Kind, ErrInvalid)
+			}
+			it.ID, it.Flow, it.CreatedAt = domain.ItemID(g.newID()), flow, g.now()
+			if it.Status == "" {
+				it.Status = domain.ItemAccepted
+			}
+			if err := it.Validate(); err != nil {
+				return fmt.Errorf("item %s: %v: %w", it.ID, err, ErrInvalid)
+			}
+			if err := putItem(ctx, tx, id, it); err != nil {
 				return err
 			}
 		}

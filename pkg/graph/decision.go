@@ -10,16 +10,11 @@ import (
 	"github.com/zimwip/goap/pkg/domain"
 )
 
-// Decision points of a change (ADR 0009 §4): opened on the question to settle, ruled by their decider (decided, or
-// undecidable with the questions that block it), the questions answered, an agent ruling below the threshold
-// ratified by a person. A decided point that names an option selects it (ADR 0032 §6). Every operation is a
-// KindDecisionPoint fact of the main flow; the state is its replay (domain.Change.DecisionPointsAt).
-
-// Defaults of a decision point.
-const (
-	DefaultDecisionThreshold = 0.7
-	DefaultDecisionRounds    = 3
-)
+// Decision points of a change (ADR 0009 §4): opened on the question to settle, ruled (decided, or undecidable with
+// the questions that block it), the questions answered, a ruling that did not settle the point ratified by a person.
+// A decided point that names an option selects it (ADR 0032 §6). Every operation is a KindDecisionPoint fact of the
+// main flow; the state is its replay (domain.Change.DecisionPointsAt). When a ruling settles a point and when only a
+// person may rule it is the policy of Graph.DecisionPolicy (ADR 0067), not the graph's.
 
 // OpenDecisionRequest opens a decision point.
 type OpenDecisionRequest struct {
@@ -27,15 +22,11 @@ type OpenDecisionRequest struct {
 	// Options are the options it chooses among; nil: the open options of the change, [] none (a free question).
 	Options  []string
 	Criteria []string
-	// Decider is agent (default) or human.
-	Decider string
-	// Threshold is the confidence under which an agent ruling waits for a human ratification (default 0.7).
-	Threshold float64
-	// MaxRounds is the number of rulings that may fail to settle the point before it is escalated (default 3).
-	MaxRounds int
-	// MaxDuration escalates the point once passed (0: no deadline).
-	MaxDuration time.Duration
-	By          string
+	// Policy is the policy values the opener gives (who decides, a confidence threshold, a number of rounds, a
+	// duration: the keys of pkg/decision). The graph hands them to Graph.DecisionPolicy, which resolves them, and
+	// stores the result on the point.
+	Policy map[string]any
+	By     string
 }
 
 // RuleRequest is a ruling of a decision point.
@@ -47,10 +38,17 @@ type RuleRequest struct {
 	Confidence    float64
 	Justification string
 	Questions     []string
-	// Human tells the ruling comes from a person: it needs no ratification, and it is the only one an escalated
-	// point or a point with a human decider accepts.
+	// Human tells the ruling comes from a person: the only one a point reserved to a person accepts.
 	Human bool
 	By    string
+}
+
+// decisionPolicy is the policy of the graph, the minimal one when none was given.
+func (g *Graph) decisionPolicy() domain.DecisionPolicy {
+	if g.DecisionPolicy == nil {
+		return domain.DefaultDecisionPolicy()
+	}
+	return g.DecisionPolicy
 }
 
 // decisionEvent appends a decision event to the log of a change, on the main flow.
@@ -74,21 +72,9 @@ func (g *Graph) OpenDecision(ctx context.Context, id domain.ChangeID, in OpenDec
 	if q == "" {
 		return d, fmt.Errorf("a decision point needs a question: %w", ErrInvalid)
 	}
-	switch in.Decider {
-	case "":
-		in.Decider = domain.DeciderAgent
-	case domain.DeciderAgent, domain.DeciderHuman:
-	default:
-		return d, fmt.Errorf("decider %q: agent or human: %w", in.Decider, ErrInvalid)
-	}
-	if in.Threshold == 0 {
-		in.Threshold = DefaultDecisionThreshold
-	}
-	if in.Threshold < 0 || in.Threshold > 1 {
-		return d, fmt.Errorf("a confidence threshold is between 0 and 1, not %v: %w", in.Threshold, ErrInvalid)
-	}
-	if in.MaxRounds == 0 {
-		in.MaxRounds = DefaultDecisionRounds
+	policy, err := g.decisionPolicy().Open(in.Policy, g.now())
+	if err != nil {
+		return d, fmt.Errorf("decision policy: %v: %w", err, ErrInvalid)
 	}
 	err = g.repo.InTx(ctx, func(tx Tx) error {
 		c, err := flowChange(ctx, tx, id)
@@ -109,11 +95,7 @@ func (g *Graph) OpenDecision(ctx context.Context, id domain.ChangeID, in OpenDec
 				return err
 			}
 		}
-		e := domain.DecisionEvent{Op: domain.DecisionOpenOp, Question: q, Options: options, Criteria: in.Criteria, Decider: in.Decider,
-			Threshold: in.Threshold, MaxRounds: in.MaxRounds, By: in.By}
-		if in.MaxDuration > 0 {
-			e.Deadline = g.now().Add(in.MaxDuration)
-		}
+		e := domain.DecisionEvent{Op: domain.DecisionOpenOp, Question: q, Options: options, Criteria: in.Criteria, Policy: policy, By: in.By}
 		pid, err := g.putDecisionEvent(ctx, tx, id, e)
 		if err != nil {
 			return err
@@ -130,9 +112,9 @@ func (g *Graph) OpenDecision(ctx context.Context, id domain.ChangeID, in OpenDec
 	return
 }
 
-// RuleDecision records a ruling. A decided ruling of a person, or of an agent at or above the threshold, decides the
-// point and selects its option; below the threshold it waits for a ratification. An undecidable ruling raises its
-// questions: the point is blocked until they are answered.
+// RuleDecision records a ruling. A decided ruling that the policy settles decides the point and selects its option;
+// otherwise it waits for a ratification. An undecidable ruling raises its questions: the point is blocked until they
+// are answered.
 func (g *Graph) RuleDecision(ctx context.Context, id domain.ChangeID, in RuleRequest) (d domain.DecisionPoint, err error) {
 	in.Justification = strings.TrimSpace(in.Justification)
 	err = g.repo.InTx(ctx, func(tx Tx) error {
@@ -140,7 +122,7 @@ func (g *Graph) RuleDecision(ctx context.Context, id domain.ChangeID, in RuleReq
 		if err != nil {
 			return err
 		}
-		cur, err := pendingPoint(c, in.Point, g.now())
+		cur, err := pendingPoint(c, in.Point, g.now(), g.DecisionPolicy)
 		if err != nil {
 			return err
 		}
@@ -148,7 +130,7 @@ func (g *Graph) RuleDecision(ctx context.Context, id domain.ChangeID, in RuleReq
 		case cur.Status == domain.PointBlocked:
 			return fmt.Errorf("decision point %s has %d open question(s): answer them first: %w", cur.ID, cur.OpenQuestions(), ErrConflict)
 		case cur.NeedsHuman() && !in.Human:
-			why := "its decider is a person"
+			why := "it is reserved to a person"
 			if cur.Escalation != "" {
 				why = "it is escalated (" + cur.Escalation + ")"
 			}
@@ -205,7 +187,7 @@ func (g *Graph) AnswerQuestion(ctx context.Context, id domain.ChangeID, question
 			return err
 		}
 		point := ""
-		for _, p := range c.DecisionPointsAt(g.now()) {
+		for _, p := range c.DecisionPointsAt(g.now(), g.DecisionPolicy) {
 			for _, q := range p.Questions {
 				if q.ID != question {
 					continue
@@ -229,15 +211,15 @@ func (g *Graph) AnswerQuestion(ctx context.Context, id domain.ChangeID, question
 	return
 }
 
-// RatifyDecision accepts or refuses the ruling an agent made below the threshold of the point (a person's act).
-// Accepted, it decides the point; refused, it counts as a round and the point is open again.
+// RatifyDecision accepts or refuses the ruling the policy did not settle (a person's act). Accepted, it decides the
+// point; refused, the point is open again (the policy may count it as a round).
 func (g *Graph) RatifyDecision(ctx context.Context, id domain.ChangeID, point string, accept bool, by, comment string) (d domain.DecisionPoint, err error) {
 	err = g.repo.InTx(ctx, func(tx Tx) error {
 		c, err := flowChange(ctx, tx, id)
 		if err != nil {
 			return err
 		}
-		cur, err := pendingPoint(c, point, g.now())
+		cur, err := pendingPoint(c, point, g.now(), g.DecisionPolicy)
 		if err != nil {
 			return err
 		}
@@ -264,7 +246,7 @@ func (g *Graph) DecisionPoints(ctx context.Context, id domain.ChangeID) (out []d
 		if err != nil {
 			return err
 		}
-		out = c.DecisionPointsAt(g.now())
+		out = c.DecisionPointsAt(g.now(), g.DecisionPolicy)
 		return nil
 	})
 	return
@@ -292,7 +274,7 @@ func (g *Graph) decisionOf(ctx context.Context, tx Tx, id domain.ChangeID, point
 	if err != nil {
 		return domain.DecisionPoint{}, err
 	}
-	d, ok := c.DecisionPoint(point, g.now())
+	d, ok := c.DecisionPoint(point, g.now(), g.DecisionPolicy)
 	if !ok {
 		return d, fmt.Errorf("decision point %s of change %s: %w", point, id, ErrNotFound)
 	}
@@ -317,10 +299,10 @@ func optionID(c domain.Change, s string) string {
 	return s
 }
 
-func pendingPoint(c domain.Change, point string, now time.Time) (domain.DecisionPoint, error) {
+func pendingPoint(c domain.Change, point string, now time.Time, policy domain.DecisionPolicy) (domain.DecisionPoint, error) {
 	if point == "" { // the only pending point
 		var pending []domain.DecisionPoint
-		for _, d := range c.DecisionPointsAt(now) {
+		for _, d := range c.DecisionPointsAt(now, policy) {
 			if d.Pending() {
 				pending = append(pending, d)
 			}
@@ -330,7 +312,7 @@ func pendingPoint(c domain.Change, point string, now time.Time) (domain.Decision
 		}
 		return pending[0], nil
 	}
-	d, ok := c.DecisionPoint(point, now)
+	d, ok := c.DecisionPoint(point, now, policy)
 	if !ok {
 		return d, fmt.Errorf("decision point %s of change %s: %w", point, c.ID, ErrNotFound)
 	}
@@ -341,6 +323,6 @@ func pendingPoint(c domain.Change, point string, now time.Time) (domain.Decision
 }
 
 // pendingDecisions are the decision points of c not decided yet.
-func pendingDecisions(c domain.Change, now time.Time) []domain.DecisionPoint {
-	return slices.DeleteFunc(c.DecisionPointsAt(now), func(d domain.DecisionPoint) bool { return !d.Pending() })
+func pendingDecisions(c domain.Change, now time.Time, policy domain.DecisionPolicy) []domain.DecisionPoint {
+	return slices.DeleteFunc(c.DecisionPointsAt(now, policy), func(d domain.DecisionPoint) bool { return !d.Pending() })
 }

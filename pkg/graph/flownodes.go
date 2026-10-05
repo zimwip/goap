@@ -34,7 +34,7 @@ func flowChain(c domain.Change, flow string) []domain.Flow {
 func staleOf(chain []domain.Flow) map[string]bool {
 	out := map[string]bool{}
 	for _, f := range chain {
-		for _, e := range f.StaleExecutions {
+		for _, e := range f.StaleRuns {
 			out[e] = true
 		}
 	}
@@ -166,7 +166,7 @@ func (g *Graph) adoptNodes(ctx context.Context, tx Tx, c domain.Change, f domain
 		return err
 	}
 	stale := map[string]bool{}
-	for _, e := range f.StaleExecutions {
+	for _, e := range f.StaleRuns {
 		stale[e] = true
 	}
 	isStale := func(e string) bool { return e != "" && stale[e] }
@@ -243,7 +243,7 @@ func (g *Graph) adoptNodes(ctx context.Context, tx Tx, c domain.Change, f domain
 	// A flow that invalidated nothing (an option) and wrote every node it changes, each derived from the head of the
 	// change branch, lands as is: its versions join the change branch, no copy (ADR 0032 §2). Otherwise its versions
 	// are copied as adopt versions (a reset to an older version needs a new one).
-	join := len(f.StaleExecutions) == 0
+	join := len(f.StaleRuns) == 0
 	for _, id := range order {
 		if p := plans[id]; p.desired == nil || domain.BranchOf(p.desired.Branch) != flowBranch {
 			join = false
@@ -317,7 +317,7 @@ func (g *Graph) adoptNodes(ctx context.Context, tx Tx, c domain.Change, f domain
 // adoptChangeImpacts moves the change impacts and reviews of an adopted flow to the main flow (ADR 0025 §5.3): one
 // adopted event, folded over every change impact, then the version each one now resolves to (ADR 0029).
 func (g *Graph) adoptChangeImpacts(ctx context.Context, tx Tx, c domain.Change, f domain.Flow, newRefs map[domain.NodeID]domain.Node, by string) error {
-	if err := g.emit(ctx, tx, domain.ImpactEvent{Change: c.ID, Op: domain.ImpactAdopted, Flow: f.ID, Stale: f.StaleExecutions, By: by}); err != nil {
+	if err := g.emit(ctx, tx, domain.ImpactEvent{Change: c.ID, Op: domain.ImpactAdopted, Flow: f.ID, Stale: f.StaleRuns, By: by}); err != nil {
 		return err
 	}
 	impacts, err := tx.ChangeImpacts(ctx, c.ID)

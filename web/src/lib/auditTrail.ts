@@ -212,9 +212,9 @@ function fromItem(it: ChangeItem, parents: Map<string, string>): Entry {
       label: labels[f.op ?? ''] ?? `flow ${f.op ?? ''}`,
       subject: shortId(id),
       summary: [
-        f.op === 'open' ? `from ${parent ? `flow ${shortId(parent)}` : 'the main flow'}${f.fromStep !== undefined ? `, step ${f.fromStep + 1}` : ''}` : '',
+        f.op === 'open' ? `from ${parent ? `flow ${shortId(parent)}` : 'the main flow'}${f.origin?.step !== undefined ? `, step ${f.origin.step + 1}` : ''}` : '',
         f.op === 'adopt' ? `merged into ${parent ? `flow ${shortId(parent)}` : 'the main flow'}` : '',
-        f.reason,
+        f.origin?.reason,
         f.stale?.length ? `${f.stale.length} stale item(s)` : '',
       ]
         .filter(Boolean)

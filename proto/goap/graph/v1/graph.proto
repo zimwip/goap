@@ -1086,18 +1086,18 @@ message FlowEvent {
   string flow = 2;
   string parent = 3;
   string fork_after = 4;
-  int32 from_step = 5;
-  string execution = 6;
-  string process = 7;
-  string reason = 8;
+  reserved 5, 6, 7, 8; // from_step, execution, process, reason (now in origin, ADR 0067)
   repeated string stale = 9;
   string by = 10;
   reserved 11, 12, 13, 14; // branch, items, merged, nodes (MaterializeFlow is gone: the flow branch is the preview)
-  // action runs invalidated by the relaunch (ADR 0025)
-  repeated string stale_executions = 15;
+  reserved 15; // stale_executions (now stale_runs)
   // open: the flow is an option of the change (ADR 0009 §3); evaluate: the evaluation
   Option option = 16;
   string comment = 17;
+  // opaque producer ids invalidated by the flow (ADR 0025)
+  repeated string stale_runs = 18;
+  // opaque record of the opener (the graph never reads it, ADR 0067)
+  google.protobuf.Struct origin = 19;
 }
 
 // Option is the hypothesis of a flow opened as an option.
@@ -1111,10 +1111,7 @@ message Flow {
   string id = 1;
   string parent = 2;
   string fork_after = 3;
-  int32 from_step = 4;
-  string execution = 5;
-  string process = 6;
-  string reason = 7;
+  reserved 4, 5, 6, 7; // from_step, execution, process, reason (now in origin, ADR 0067)
   // open | adopted | discarded
   string status = 8;
   // items the relaunched step invalidated (stale while open, superseded once adopted)
@@ -1125,14 +1122,17 @@ message Flow {
   reserved 13, 14, 15, 16; // branch, branches, materialized, merged
   // adopted flows that replace the same items: an open flow that competes cannot be adopted
   repeated string competes_with = 17;
-  // action runs invalidated by the relaunch (ADR 0025)
-  repeated string stale_executions = 18;
+  reserved 18; // stale_executions (now stale_runs)
   // set on an option: its hypothesis, its status (exploring | evaluated | selected | rejected), its last evaluation,
   // and whether the change works on it
   Option option = 19;
   string option_status = 20;
   string evaluation = 21;
   bool active = 22;
+  // opaque producer ids invalidated by the flow (ADR 0025)
+  repeated string stale_runs = 23;
+  // opaque record of the opener (the graph never reads it, ADR 0067)
+  google.protobuf.Struct origin = 24;
 }
 
 message OpenFlowRequest {
@@ -1140,15 +1140,13 @@ message OpenFlowRequest {
   string parent = 2;
   string fork_after = 3;
   repeated string seeds = 4;
-  int32 from_step = 5;
-  string execution = 6;
-  string process = 7;
-  string reason = 8;
-  // comment for the agent, recorded on the branch and read by the relaunched steps
-  string guidance = 9;
-  string by = 10;
-  // action runs the relaunch invalidates (ADR 0025)
-  repeated string stale_executions = 11;
+  reserved 5, 6, 7, 8, 9, 10, 11; // from_step, execution, process, reason, guidance, by, stale_executions
+  // opaque producer ids the flow invalidates (ADR 0025)
+  repeated string stale_runs = 12;
+  // opaque record of the opener, stored on the flow and never read by the graph (ADR 0067)
+  google.protobuf.Struct origin = 13;
+  // items written on the new flow at its creation
+  repeated ChangeItem items = 14;
 }
 
 message OpenFlowResponse {
@@ -1322,10 +1320,7 @@ message DecisionEvent {
   string question = 3;
   repeated string options = 4;
   repeated string criteria = 5;
-  string decider = 6;
-  double threshold = 7;
-  int32 max_rounds = 8;
-  google.protobuf.Timestamp deadline = 9;
+  reserved 6, 7, 8, 9; // decider, threshold, max_rounds, deadline (now in policy, ADR 0067)
   string outcome = 10;
   string option = 11;
   double confidence = 12;
@@ -1338,6 +1333,8 @@ message DecisionEvent {
   bool accept = 19;
   string comment = 20;
   string by = 21;
+  // opaque policy values of the point, resolved at its opening (open only)
+  google.protobuf.Struct policy = 22;
 }
 
 message Question {
@@ -1370,23 +1367,23 @@ message DecisionPoint {
   string question = 2;
   repeated string options = 3;
   repeated string criteria = 4;
-  // agent | human
-  string decider = 5;
-  double threshold = 6;
-  int32 max_rounds = 7;
-  google.protobuf.Timestamp deadline = 8;
+  reserved 5, 6, 7, 8; // decider, threshold, max_rounds, deadline (now in policy, ADR 0067)
   google.protobuf.Timestamp opened_at = 9;
   string opened_by = 10;
   // open | blocked | ratifying | escalated | decided
   string status = 11;
-  int32 rounds = 12;
+  reserved 12; // rounds (now in policy)
   repeated Question questions = 13;
   Ruling ruling = 14;
-  // why only a person may rule it now (empty: not escalated)
+  // why the policy reserved the point to a person (empty: not escalated)
   string escalation = 15;
   string option = 16;
   google.protobuf.Timestamp decided_at = 17;
   string decided_by = 18;
+  // opaque policy values of the point, kept by the policy (ADR 0067)
+  google.protobuf.Struct policy = 19;
+  // only a person may rule the point now: by design or escalated
+  bool human_only = 20;
 }
 
 message OpenDecisionRequest {
@@ -1396,12 +1393,10 @@ message OpenDecisionRequest {
   repeated string options = 3;
   bool all_options = 4;
   repeated string criteria = 5;
-  // agent (default) | human
-  string decider = 6;
-  double threshold = 7;
-  int32 max_rounds = 8;
-  // Go duration ("24h"); empty: no deadline
-  string max_duration = 9;
+  reserved 6, 7, 8, 9; // decider, threshold, max_rounds, max_duration (now in policy)
+  // the policy values the opener gives (who decides, a threshold, rounds, a duration): resolved by the graph's
+  // decision policy (ADR 0067)
+  google.protobuf.Struct policy = 10;
 }
 
 message OpenDecisionResponse {

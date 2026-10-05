@@ -164,7 +164,7 @@
         const f = p.flow ? flowById.get(p.flow) : undefined;
         const kind = runKind(p);
         const text = p.flow
-          ? `flow ${shortId(p.flow)} · from step ${restartedStepNumber(p, processes)}${f?.reason ? ` · ${f.reason}` : ''}${f?.competesWith?.length ? ' · competing' : ''}`
+          ? `flow ${shortId(p.flow)} · from step ${restartedStepNumber(p, processes)}${f?.origin?.reason ? ` · ${f.origin.reason}` : ''}${f?.competesWith?.length ? ' · competing' : ''}`
           : p.title || shortId(p.id);
         out.push({ x: PAD, y, text, cls: kind, id: p.id ?? '' });
         lane++;
