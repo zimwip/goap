@@ -425,11 +425,11 @@ export interface BaselineDiff {
   to?: GraphNode;
 }
 
-/** What a write of a change impact changes: properties, lifecycle state, links, or the node retired. */
+/** What the web writes of a node in a change (lifecycle.writeNodeInChange): properties and links edited on its working
+ * version, then a lifecycle state (a transition of its own, ADR 0076). */
 export interface ImpactWrite {
   props?: Struct;
   state?: string;
-  retire?: boolean;
   addLinks?: LinkWrite[];
   removeLinks?: string[];
 }

@@ -183,8 +183,10 @@ type Node struct {
 	// the branches the version joined besides the one it was written on (ADR 0032; filled by ListNodeVersions)
 	Joined []string `protobuf:"bytes,17,rep,name=joined,proto3" json:"joined,omitempty"`
 	// the organisational unit responsible for the version and the project the node was created in (node ids, ADR 0054)
-	Owner         string `protobuf:"bytes,18,opt,name=owner,proto3" json:"owner,omitempty"`
-	Project       string `protobuf:"bytes,19,opt,name=project,proto3" json:"project,omitempty"`
+	Owner   string `protobuf:"bytes,18,opt,name=owner,proto3" json:"owner,omitempty"`
+	Project string `protobuf:"bytes,19,opt,name=project,proto3" json:"project,omitempty"`
+	// a working version, edited in place by its change until it is checked in (ADR 0076)
+	CheckedOut    bool `protobuf:"varint,20,opt,name=checked_out,json=checkedOut,proto3" json:"checked_out,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -350,6 +352,13 @@ func (x *Node) GetProject() string {
 		return x.Project
 	}
 	return ""
+}
+
+func (x *Node) GetCheckedOut() bool {
+	if x != nil {
+		return x.CheckedOut
+	}
+	return false
 }
 
 type Link struct {
@@ -6662,7 +6671,10 @@ type NodeEdit struct {
 	RemoveLinks []string `protobuf:"bytes,7,rep,name=remove_links,json=removeLinks,proto3" json:"remove_links,omitempty"`
 	// key of the organisational unit the node is transferred to (ADR 0054); empty: unchanged, or the unit holding the
 	// commit for a created node
-	Owner         string `protobuf:"bytes,8,opt,name=owner,proto3" json:"owner,omitempty"`
+	Owner string `protobuf:"bytes,8,opt,name=owner,proto3" json:"owner,omitempty"`
+	// the lifecycle state the node is moved to (a transition of its own, ADR 0076): after the other edits, or before
+	// them when the node rests out of the editable states (a retired entry restored)
+	State         string `protobuf:"bytes,9,opt,name=state,proto3" json:"state,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -6749,6 +6761,13 @@ func (x *NodeEdit) GetRemoveLinks() []string {
 func (x *NodeEdit) GetOwner() string {
 	if x != nil {
 		return x.Owner
+	}
+	return ""
+}
+
+func (x *NodeEdit) GetState() string {
+	if x != nil {
+		return x.State
 	}
 	return ""
 }
@@ -8450,7 +8469,7 @@ func (x *ReviewChangeImpactResponse) GetNode() *ChangeImpact {
 	return nil
 }
 
-// ReopenChangeImpactsRequest sends accepted impacts of the main flow back to proposed (ADR 0075).
+// ReopenChangeImpactsRequest sends accepted or rejected impacts of the main flow back to proposed (ADR 0075, 0076).
 type ReopenChangeImpactsRequest struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	ChangeId        string                 `protobuf:"bytes,1,opt,name=change_id,json=changeId,proto3" json:"change_id,omitempty"`
@@ -12252,7 +12271,7 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\bversions\x18\x01 \x01(\x05R\bversions\"3\n" +
 	"\aNodeRef\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
-	"\aversion\x18\x02 \x01(\x05R\aversion\"\x9a\x04\n" +
+	"\aversion\x18\x02 \x01(\x05R\aversion\"\xbb\x04\n" +
 	"\x04Node\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\x05R\aversion\x12\x10\n" +
@@ -12274,7 +12293,9 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\texecution\x18\x10 \x01(\tR\texecution\x12\x16\n" +
 	"\x06joined\x18\x11 \x03(\tR\x06joined\x12\x14\n" +
 	"\x05owner\x18\x12 \x01(\tR\x05owner\x12\x18\n" +
-	"\aproject\x18\x13 \x01(\tR\aproject\"\xca\x01\n" +
+	"\aproject\x18\x13 \x01(\tR\aproject\x12\x1f\n" +
+	"\vchecked_out\x18\x14 \x01(\bR\n" +
+	"checkedOut\"\xca\x01\n" +
 	"\x04Link\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04type\x18\x02 \x01(\tR\x04type\x12*\n" +
@@ -12809,7 +12830,7 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12&\n" +
 	"\x02to\x18\x02 \x01(\v2\x16.goap.graph.v1.NodeRefR\x02to\x12\x15\n" +
 	"\x06to_key\x18\x03 \x01(\tR\x05toKey\x12-\n" +
-	"\x05props\x18\x04 \x01(\v2\x17.google.protobuf.StructR\x05props\"\x8f\x02\n" +
+	"\x05props\x18\x04 \x01(\v2\x17.google.protobuf.StructR\x05props\"\xa5\x02\n" +
 	"\bNodeEdit\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x12\n" +
 	"\x04type\x18\x02 \x01(\tR\x04type\x12(\n" +
@@ -12818,7 +12839,8 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\trationale\x18\x05 \x01(\tR\trationale\x12-\n" +
 	"\x05links\x18\x06 \x03(\v2\x17.goap.graph.v1.LinkEditR\x05links\x12!\n" +
 	"\fremove_links\x18\a \x03(\tR\vremoveLinks\x12\x14\n" +
-	"\x05owner\x18\b \x01(\tR\x05owner\"\xe0\x02\n" +
+	"\x05owner\x18\b \x01(\tR\x05owner\x12\x14\n" +
+	"\x05state\x18\t \x01(\tR\x05state\"\xe0\x02\n" +
 	"\x12CommitEditsRequest\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x14\n" +
 	"\x05title\x18\x02 \x01(\tR\x05title\x12\x16\n" +

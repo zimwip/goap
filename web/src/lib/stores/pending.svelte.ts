@@ -1,8 +1,10 @@
 // Pending edits of the settings dialog. Everything the dialog edits is graph data of the platform or the
 // organisation namespace, and every modification of the graph goes through a change: an edit opens, behind the
 // scenes, a personal change of the namespace of the node (ADR 0037: held by the personal unit of the user, nobody
-// else sees it) and is written as an impact of it. Nothing is applied until the user saves: Save accepts the
-// impacts and applies the changes, Discard removes them from the system. The dialog shows the graph with the
+// else sees it) and is written as an impact of it: the node is checked out and its working version edited in place,
+// a removal is the transition of its lifecycle that retires it (a node is never deleted, ADR 0076). Nothing is
+// applied until the user saves: Save accepts the impacts, checks them in and applies the changes, Discard removes
+// them from the system. The dialog shows the graph with the
 // pending nodes laid over it (see llmEdit.ts for the model gateway).
 import { graph, errorMessage, type NodeRef, type Struct } from '../api';
 import { MAIN_BRANCH } from '../namespace';
@@ -14,7 +16,7 @@ export interface Staged {
   type: string;
   /** the properties the user wants (upsert) */
   props: Struct;
-  /** the user removes the node */
+  /** the user retires the node (lifecycle state retired) */
   retire: boolean;
   /** the node does not exist on main yet */
   created: boolean;
@@ -65,11 +67,22 @@ async function mainHead(ns: string): Promise<string> {
   return id;
 }
 
-/** The node of main with this key, when it exists. */
-async function onMain(ns: string, baselineId: string, type: string, key: string): Promise<NodeRef | undefined> {
+/** The state a retired node rests in, and the one a restored node goes back to (lifecycle config, ADR 0076). */
+const RETIRED = 'retired';
+const ACTIVE = 'active';
+
+/** The node of main with this key, when it exists, and its lifecycle state. */
+async function onMain(ns: string, baselineId: string, type: string, key: string): Promise<{ ref: NodeRef; state: string } | undefined> {
   const { nodes } = await graph.listBaselineNodes({ baselineId, type, query: key, limit: 50 });
   const n = nodes?.find((x) => x.key === key && x.namespace === ns && !x.deleted);
-  return n ? { id: n.id, version: n.version } : undefined;
+  return n ? { ref: { id: n.id, version: n.version }, state: n.state ?? '' } : undefined;
+}
+
+/** Is the version the change holds for an impact a working version? */
+async function checkedOut(c: NsChange, s: Staged): Promise<boolean> {
+  const imp = (await graph.getBlackboard(c.changeId, '')).change?.nodes?.find((n) => n.id === s.impactId);
+  if (!imp?.post?.id) return false;
+  return !!(await graph.getNode(imp.post)).view?.node?.checkedOut;
 }
 
 async function ensure(ns: string, type: string, key: string): Promise<{ c: NsChange; s: Staged }> {
@@ -92,12 +105,12 @@ async function ensure(ns: string, type: string, key: string): Promise<{ c: NsCha
   if (!s) {
     const pre = await onMain(ns, baselineId, type, key);
     const impact = pre
-      ? { intent: 'modified', pre, rationale: `Change ${key}` }
+      ? { intent: 'modified', pre: pre.ref, rationale: `Change ${key}` }
       : { intent: 'created', key, type, rationale: `Create ${key}` };
     const { nodes } = await graph.addChangeImpacts(c.changeId, [impact]);
     const id = nodes?.[0]?.id;
     if (!id) throw new Error(`impact of ${key} not created`);
-    c.nodes[key] = { key, type, props: {}, retire: false, created: !pre, impactId: id, written: false };
+    c.nodes[key] = { key, type, props: {}, retire: pre?.state === RETIRED, created: !pre, impactId: id, written: false };
     s = c.nodes[key];
   }
   return { c, s };
@@ -108,9 +121,14 @@ export function stageUpsert(ns: string, type: string, key: string, props: Struct
   return sequential(async () => {
     try {
       const { c, s } = await ensure(ns, type, key);
-      await graph.writeChangeImpact(c.changeId, s.impactId, { props });
+      if (s.retire) {
+        // a retired node is restored first: a transition of its own, then it is edited
+        await graph.transitionNode(c.changeId, { changeImpactId: s.impactId }, ACTIVE, `Restore ${key}`);
+        s.retire = false;
+      }
+      if (!(await checkedOut(c, s))) await graph.checkoutNode(c.changeId, { changeImpactId: s.impactId }, `Change ${key}`);
+      await graph.updateNode(c.changeId, s.impactId, { props });
       s.props = { ...s.props, ...props };
-      s.retire = false;
       s.written = true;
       pending.error = '';
     } catch (e) {
@@ -127,7 +145,7 @@ export function stageRetire(ns: string, type: string, key: string): Promise<void
       const staged = pending.byNs[ns]?.nodes[key];
       if (staged?.created) {
         const changeId = pending.byNs[ns].changeId;
-        await graph.reviewChangeImpact(changeId, staged.impactId, false, 'Given up before it was saved');
+        await graph.removeChangeImpact(changeId, staged.impactId);
         delete pending.byNs[ns].nodes[key];
         // nothing left to save in this namespace: its change has no reason to stay
         if (!Object.keys(pending.byNs[ns].nodes).length) {
@@ -136,9 +154,14 @@ export function stageRetire(ns: string, type: string, key: string): Promise<void
         }
       } else {
         const { c, s } = await ensure(ns, type, key);
-        await graph.writeChangeImpact(c.changeId, s.impactId, { retire: true });
-        s.retire = true;
-        s.written = true;
+        if (!s.retire) {
+          // the edits staged on the node go with it: the transition starts from its checked-in version
+          if (await checkedOut(c, s)) await graph.cancelCheckout(c.changeId, s.impactId);
+          s.props = {};
+          await graph.transitionNode(c.changeId, { changeImpactId: s.impactId }, RETIRED, `Retire ${key}`);
+          s.retire = true;
+          s.written = true;
+        }
       }
       pending.error = '';
     } catch (e) {
@@ -169,7 +192,7 @@ export async function loadPending(): Promise<void> {
         const key = imp.key || n?.key;
         const type = imp.type || n?.type;
         if (!key || !type) continue;
-        entry.nodes[key] = { key, type, props: (imp.post ? n?.props : undefined) ?? {}, retire: !!(imp.post && n?.deleted), created: imp.intent === 'created', impactId: imp.id, written: !!imp.post };
+        entry.nodes[key] = { key, type, props: (imp.post ? n?.props : undefined) ?? {}, retire: n?.state === RETIRED, created: imp.intent === 'created', impactId: imp.id, written: !!imp.post };
       }
       byNs[ch.namespace] = entry;
     }
@@ -189,8 +212,13 @@ export function savePending(): Promise<boolean> {
     try {
       for (const [ns, c] of Object.entries(pending.byNs)) {
         for (const s of Object.values(c.nodes)) {
-          if (s.written) await graph.reviewChangeImpact(c.changeId, s.impactId, true, 'Saved by its owner');
-          else await graph.reviewChangeImpact(c.changeId, s.impactId, false, 'Nothing was written');
+          if (!s.written) {
+            await graph.removeChangeImpact(c.changeId, s.impactId);
+            continue;
+          }
+          await graph.reviewChangeImpact(c.changeId, s.impactId, true, 'Saved by its owner');
+          // the acceptance authorizes the check-in of the working version (ADR 0076)
+          if (await checkedOut(c, s)) await graph.checkinNode(c.changeId, s.impactId);
         }
         await graph.applyChange(c.changeId, '');
         delete pending.byNs[ns];

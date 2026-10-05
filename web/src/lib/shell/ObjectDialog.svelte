@@ -3,6 +3,7 @@
   import { objectDialog, closeObjectDialog } from './objectDialogState.svelte';
   import { notify } from './workbench.svelte';
   import { graph, errorMessage, type Struct } from '../api';
+  import { headGraph, createNodeItem } from '../graphEdit';
 
   let key = $state('');
   let values = $state<Record<string, string>>({});
@@ -30,7 +31,18 @@
     busy = true;
     error = '';
     try {
-      await graph.createObject(objectDialog.methodology, objectDialog.nodeType, key.trim(), props);
+      // every node is created in a change (ADR 0076): one of the namespace of its type, applied on main
+      const type = objectDialog.nodeType;
+      const namespace = type.includes('@') ? type.slice(0, type.indexOf('@')) : '';
+      const h = await headGraph(namespace);
+      await graph.commitEdits({
+        namespace,
+        title: `Create ${key.trim()}`,
+        intent: `Create the ${type} ${key.trim()}`,
+        baselineId: h.baselineId,
+        methodology: objectDialog.methodology,
+        edits: [createNodeItem(key.trim(), type, props)],
+      });
       notify(`${objectDialog.nodeType} ${key.trim()} created.`, 'ok');
       closeObjectDialog();
     } catch (err) {

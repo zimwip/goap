@@ -23,7 +23,6 @@
     keys,
     oncreate,
     onremove,
-    onundo,
     onhistory,
     onopennode,
     impacts = false,
@@ -47,10 +46,8 @@
     keys: string[];
     /** creates a node: identity and type only, the rest comes from Edit */
     oncreate: (key: string, type: string, state: string) => Promise<boolean> | boolean;
-    /** proposes the deletion of a node (or discards a node the change creates) */
+    /** takes a node out of the change (a node the change creates is discarded) */
     onremove: (row: LifecycleRow) => Promise<boolean> | boolean;
-    /** withdraws the deletion proposed for a node */
-    onundo: (row: LifecycleRow) => Promise<boolean> | boolean;
     /** opens the history of a stored node */
     onhistory: (row: LifecycleRow) => void;
     /** opens the node editor on a stored node */
@@ -78,8 +75,8 @@
 
   async function remove(r: LifecycleRow) {
     const what = r.created
-      ? `Discard the new node ${r.node.key}?`
-      : `Delete ${r.node.key} (${r.node.type}) when this change is applied? Links pointing to it become suspect.`;
+      ? `Discard the new node ${r.node.key}? It is taken out of the change.`
+      : `Take ${r.node.key} (${r.node.type}) out of this change? Its working version is dropped; a node is never deleted (ADR 0076).`;
     if (await confirmDialog({ message: what, danger: true })) void onremove(r);
   }
 
@@ -126,7 +123,7 @@
   const shown = $derived(
     candidates.filter((n) => !filter || `${n.key} ${n.type}`.toLowerCase().includes(filter.toLowerCase())).slice(0, 200),
   );
-  const leftEditable = $derived(rows.filter((r) => r.lifecycle && r.editable && !r.removal));
+  const leftEditable = $derived(rows.filter((r) => r.lifecycle && r.editable));
 
   const text = (v: unknown): string => (v === undefined || v === null ? '' : typeof v === 'string' ? v : JSON.stringify(v));
 
@@ -205,12 +202,11 @@
       <thead><tr><th>Node</th>{#if impacts}<th>Why</th><th>Versions</th>{/if}<th>State</th>{#if impacts}<th>Review</th>{/if}<th>Actions</th></tr></thead>
       <tbody>
         {#each rows as r (r.node.id)}
-          <tr class:removed={!!r.removal}>
+          <tr>
             <td>
               {#if !openable(r)}<code>{r.node.key}</code>{:else}<button type="button" class="link mono" title="Open the node in its editor, as this change has it" onclick={() => onopennode(r)}>{r.node.key}</button>{/if}
               <span class="hint">{r.node.type}{r.created ? '' : ` v${r.node.version ?? 0}`}</span>
               {#if r.created}<span class="tag ok" title="Created by this change; stored when it is applied">new</span>{/if}
-              {#if r.removal}<span class="tag danger" title="Deletion proposed in this change">deleted when applied</span>{/if}
               {#if r.edits}<span class="tag ok" title="Property edits proposed in this change">{r.edits} edit{r.edits > 1 ? 's' : ''}</span>{/if}
               {#if onOption && r.impact}
                 {#if r.impact.flow === scope}<span class="origin own" title="declared by this option: it lands only if the option is selected">this option</span>{:else}<span class="origin" title="declared on the main flow: every option sees it">main flow</span>{/if}
@@ -248,9 +244,6 @@
               {#if disabled}
                 <span class="hint">change closed</span>
               {:else}
-                {#if r.removal}
-                  <button type="button" class="small" disabled={busy !== ''} onclick={() => onundo(r)}>Undo delete</button>
-                {:else}
                 {#if !r.created}
                   <button type="button" class="small ghost" title="Versions and states of the node" onclick={() => onhistory(r)}>History</button>
                 {/if}
@@ -280,15 +273,16 @@
                     <span class="hint">{r.lifecycle.states?.find((s) => s.name === r.effective)?.final ? 'final state' : 'no transition from this state'}</span>
                   {/if}
                 {/each}
-                <button
-                  type="button"
-                  class="small danger"
-                  disabled={(!r.editable && !r.created) || busy !== ''}
-                  title={r.created ? 'Discard this new node' : r.editable ? 'Delete the node when the change is applied' : 'Reopen the node to delete it'}
-                  onclick={() => remove(r)}
-                >
-                  {r.created ? 'Discard' : 'Delete'}
-                </button>
+                {#if r.impact && !r.impact.superseded}
+                  <button
+                    type="button"
+                    class="small danger"
+                    disabled={busy !== ''}
+                    title={r.created ? 'Discard this new node' : 'Take the node out of the change (refused once a version of it is checked in: reject it instead)'}
+                    onclick={() => remove(r)}
+                  >
+                    {r.created ? 'Discard' : 'Remove from change'}
+                  </button>
                 {/if}
               {/if}
             </td>
@@ -419,13 +413,6 @@
   }
   .tag.ok {
     color: var(--ok);
-  }
-  .tag.danger {
-    color: var(--danger);
-  }
-  tr.removed code {
-    text-decoration: line-through;
-    opacity: 0.6;
   }
   .row {
     display: flex;

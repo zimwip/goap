@@ -1,5 +1,5 @@
 name: platform
-version: 2.4.0
+version: 2.5.0
 description: >
   The platform configuration, in its own namespace ("platform"): the MCPs (the generic usage of a tool by an LLM), the
   adapter definitions (AdapterDef: code mapping an MCP onto a connector; an organisation implements an MCP with an Adapter
@@ -12,6 +12,7 @@ nodeTypes:
   # scope: where a methodology may use the MCP, action | agent | both (default; ADR 0028)
   - name: MCP
     description: "Generic usage of a tool by an LLM: its tool signatures and scope"
+    lifecycle: config
     editor: mcp
     attributes:
       - {name: name, label: Name, description: "Name of the MCP", type: string, section: Identity, order: 1, asName: true}
@@ -21,6 +22,7 @@ nodeTypes:
   - name: AdapterDef
     description: "Code implementing the tools of an MCP with the operations of a connector"
     adminOnly: true
+    lifecycle: config
     editor: adapter
     attributes:
       - {name: name, label: Name, description: "Name of the definition", type: string, section: Identity, order: 1, asName: true}
@@ -71,10 +73,11 @@ nodeTypes:
       - {name: name, label: Name, description: "Name of the role", type: string, section: Identity, order: 1, asName: true}
       - {name: description, label: Description, description: "What the role allows", type: string, widget: textarea, section: Identity, order: 2}
 lifecycles:
-  # An entry of the model gateway configuration is never deleted (ADR 0076): it is retired, and the gateway leaves it
-  # out; an active entry stays editable at rest (restInEditable), the way configuration always was.
+  # An entry of the platform configuration (an MCP, an adapter definition, an entry of the model gateway) is never
+  # deleted (ADR 0076): it is retired, and its readers leave it out; an active entry stays editable at rest
+  # (restInEditable), the way configuration always was.
   - name: config
-    description: Whether an entry of the model gateway configuration is in force
+    description: Whether an entry of the platform configuration is in force
     initial: active
     restInEditable: true
     states:

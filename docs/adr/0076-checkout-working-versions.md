@@ -1,6 +1,6 @@
 # ADR 0076 — Checkout, working versions and check-in: every node write is a change operation
 
-**Status**: accepted, implemented in the graph, its service and the engine (the web follows) · **Date**: 2026-10 · Refines ADR 0024 (change impacts), 0029 (event-sourced impacts), 0003
+**Status**: accepted, implemented (graph, service, engine, web) · **Date**: 2026-10 · Refines ADR 0024 (change impacts), 0029 (event-sourced impacts), 0003
 (version-to-version links), 0049 / 0054 (no write outside a change). Supersedes `CreateObject`, the direct
 `CreateNode` / `UpdateNode` / `CreateLink` RPCs and `WriteChangeImpact`.
 
@@ -97,10 +97,13 @@ they are: they become suspect.
 
 ### 4c. What has no parent is retired by its lifecycle
 
-A node that no parent holds (an entry of the model gateway configuration: provider, model, alias) is taken out of force
-by a transition, never deleted: the platform domain gives `LlmProvider`, `LlmModel` and `LlmAlias` the lifecycle
-`config` (`active`, editable at rest, `retired`; transitions `retire` and `restore`), and the gateway leaves a retired
-entry out (`llmcfg.StateRetired`). An adapter instance is switched off by its `disabled` restriction.
+A node that no parent holds is taken out of force by a transition, never deleted: the lifecycle `config` (`active`,
+editable at rest, `retired`; transitions `retire` and `restore`) is given to the entries of the platform configuration
+(`MCP`, `AdapterDef`, `LlmProvider`, `LlmModel`, `LlmAlias`) and to the access and adapter entries of the organisation
+(`Adapter`, `Policy`, `CriticalityPolicy`, `Assignment`). Their readers leave a retired node out: the model gateway
+(`llmcfg.StateRetired`), the access and hub snapshots (`access.InForce`). A user is deactivated (lifecycle `user`).
+`CommitEdits` carries a `state` per edit: it retires a node, and restores a retired one before the other edits of the
+same edit (the transition first, then the checkout).
 
 ### 4d. A domain lifecycle does not repeat the review of the change; its initial state is editable
 

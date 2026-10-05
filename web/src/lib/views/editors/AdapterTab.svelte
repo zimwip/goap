@@ -12,7 +12,7 @@
   import { moveItem } from '../../methodologyForm';
   import { algorithmFromForm, algorithmToForm, emptyAlgorithm, emptyParam, ALGORITHM_LANGUAGES, PARAM_TYPES, SECRET_HINT, type AlgorithmForm } from '../../algorithmForm';
   import { mcp as hub, errorMessage } from '../../api';
-  import { headGraph, findNode, applyOnMain, createNodeItem, updateNodeItem, deleteNodeItem } from '../../graphEdit';
+  import { headGraph, findNode, applyOnMain, createNodeItem, updateNodeItem, retireNodeItem } from '../../graphEdit';
   import { ADAPTER_DEF_TYPE, adapterDefKey, adapterDefProps } from '../../adapterDef';
   import { tools, refreshTools } from '../../stores/tools.svelte';
   import { ns } from '../../stores/session.svelte';
@@ -132,12 +132,12 @@
   }
 
   async function remove() {
-    if (!(await confirmDialog({ message: `Delete the adapter ${a.name}? Units that instantiate it stop resolving their ${a.mcp} tools.`, danger: true }))) return;
+    if (!(await confirmDialog({ message: `Retire the adapter ${a.name}? Units that instantiate it stop resolving their ${a.mcp} tools; it can be restored by saving it again.`, danger: true }))) return;
     try {
       const h = await headGraph(ns.platform);
       const existing = findNode(h, ns.platform, ADAPTER_DEF_TYPE, adapterDefKey(a.name));
       if (!existing) throw new Error(`adapter ${a.name} is not on the graph`);
-      await applyOnMain(ns.platform, `Delete adapter ${a.name}`, `Delete adapter ${a.name}`, h.baselineId, [deleteNodeItem(existing)]);
+      await applyOnMain(ns.platform, `Retire adapter ${a.name}`, `Retire adapter ${a.name}`, h.baselineId, [retireNodeItem(existing)]);
       await refreshTools();
       closeTab(tab.id, { force: true });
     } catch (e) {

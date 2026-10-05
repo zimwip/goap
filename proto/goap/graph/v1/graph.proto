@@ -172,6 +172,8 @@ message Node {
   // the organisational unit responsible for the version and the project the node was created in (node ids, ADR 0054)
   string owner = 18;
   string project = 19;
+  // a working version, edited in place by its change until it is checked in (ADR 0076)
+  bool checked_out = 20;
 }
 
 message Link {
@@ -927,6 +929,9 @@ message NodeEdit {
   // key of the organisational unit the node is transferred to (ADR 0054); empty: unchanged, or the unit holding the
   // commit for a created node
   string owner = 8;
+  // the lifecycle state the node is moved to (a transition of its own, ADR 0076): after the other edits, or before
+  // them when the node rests out of the editable states (a retired entry restored)
+  string state = 9;
 }
 
 message CommitEditsRequest {
@@ -1110,7 +1115,7 @@ message ReviewChangeImpactResponse {
   ChangeImpact node = 1;
 }
 
-// ReopenChangeImpactsRequest sends accepted impacts of the main flow back to proposed (ADR 0075).
+// ReopenChangeImpactsRequest sends accepted or rejected impacts of the main flow back to proposed (ADR 0075, 0076).
 message ReopenChangeImpactsRequest {
   string change_id = 1;
   repeated string change_impact_ids = 2;

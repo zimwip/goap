@@ -35,12 +35,16 @@ export const DSL_FUNCTIONS: DslFunction[] = [
   { name: 'createNode', args: ['type', 'key', 'rationale'], returns: '"#nN"', doc: 'The change creates a node, and why.', group: 'write' },
   {
     name: 'writeNode',
-    args: ['node', '{props, state, links, removeLinks, retire}'],
+    args: ['node', '{props, links, removeLinks}'],
     returns: '',
-    doc: 'Write the next version of a change impact on the change branch (node: key or #nN; links: [{type, to}]).',
+    doc: 'Edit a node of the change: the first write checks it out (a working version), the next ones edit it in place (node: key or #nN; links: [{type, to}]). A state is a transition (transitionNode).',
     group: 'write',
   },
   { name: 'reviewNode', args: ['node', 'accept', 'comment'], returns: '', doc: 'Accept or reject a change impact; the comment is mandatory.', group: 'write' },
+  { name: 'checkinNode', args: ['node'], returns: '', doc: 'Freeze the working version of a node: its accepted review authorizes it.', group: 'write' },
+  { name: 'transitionNode', args: ['node', 'state'], returns: '', doc: 'Move a checked-in node along its lifecycle: a version of its own, authorized and guarded when it is taken.', group: 'write' },
+  { name: 'cancelCheckout', args: ['node'], returns: '', doc: 'Drop the working version of a node (a node the change created and never checked in goes away).', group: 'write' },
+  { name: 'removeImpact', args: ['node'], returns: '', doc: 'Take a node out of the change (its working version is dropped); refused once a version of it is checked in.', group: 'write' },
   { name: 'llm', args: ['prompt'], returns: 'string', doc: 'Text completion ("default" model).', group: 'call' },
   {
     name: 'complete',

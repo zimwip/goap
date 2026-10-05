@@ -36,6 +36,8 @@ export interface GraphNode {
   /** id of the organisational unit owning the version, and of the project the node was created in (ADR 0054) */
   owner?: string;
   project?: string;
+  /** a working version, edited in place by its change until it is checked in (ADR 0076) */
+  checkedOut?: boolean;
 }
 
 export interface Link {
@@ -243,13 +245,14 @@ export interface NodeReview {
 }
 
 /** The link from a change to a node (ADR 0024). */
-/** A node written by a commit: created (key, type), modified (pre) or deleted (retire). */
+/** A node written by a commit: created (key, type) or modified (pre); state moves it along its lifecycle (a node is
+ * never deleted: one no parent holds is retired by its lifecycle, ADR 0076). */
 export interface NodeEdit {
   key?: string;
   type?: string;
   pre?: NodeRef;
   props?: Struct;
-  retire?: boolean;
+  state?: string;
   rationale?: string;
   links?: { type: string; to?: NodeRef; toKey?: string; props?: Struct }[];
   removeLinks?: string[];

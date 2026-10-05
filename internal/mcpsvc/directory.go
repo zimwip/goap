@@ -7,6 +7,7 @@ import (
 	"sort"
 	"sync"
 
+	"github.com/zimwip/goap/pkg/access"
 	"github.com/zimwip/goap/pkg/adapter"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/graph"
@@ -61,6 +62,7 @@ func (e Effective) Usable() bool { return len(e.Allowed().Tools) > 0 }
 // BuildSnapshot reads the objects of the combined organisation and platform baseline graphs; the units are the nodes
 // of the organisation structure of st, their hierarchy its parent links (ADR 0054).
 func BuildSnapshot(st domain.Structures, baselines Baselines, nodes []domain.Node, links []domain.Link) *Snapshot {
+	nodes, links = access.InForce(nodes, links)
 	org := domain.StructureOrganisation
 	s := &Snapshot{Baselines: baselines, org: st.Hierarchy(org, nodes, links), units: map[string]bool{}, mcps: map[string]mcp.Def{}, defs: map[string]adapter.Def{}, adapters: map[string]map[string]adapter.Instance{}}
 	byID := map[domain.NodeID]domain.Node{}

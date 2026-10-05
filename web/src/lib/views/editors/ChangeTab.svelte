@@ -26,7 +26,7 @@
   import ChangeLifecycle from '../../components/ChangeLifecycle.svelte';
 import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
   import EditorPanes, { type Pane } from '../../components/EditorPanes.svelte';
-  import { lifecycleRows, reopenable, nodeTypeNames, lifecycleResolver, loadPosts, writeNodeInChange, type PostVersions, type LifecycleRow } from '../../lifecycle';
+  import { lifecycleRows, reopenable, nodeTypeNames, lifecycleResolver, loadPosts, writeNodeInChange, removeFromChange, checkinAccepted, type PostVersions, type LifecycleRow } from '../../lifecycle';
   import { loadTypes, typeCatalog } from '../../stores/types.svelte';
   import { openTab } from '../../shell/tabs.svelte';
   import { openNode } from '../../nodeEditors';
@@ -289,7 +289,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
     ...nodes.map((n) => n.key ?? ''),
     ...(view?.nodes ?? []).filter((n) => n.intent === 'created' && !n.superseded && n.review !== 'rejected').map((n) => n.key ?? ''),
   ]);
-  const stuckEditable = $derived(lcRows.some((r) => r.lifecycle && r.editable && !r.removal));
+  const stuckEditable = $derived(lcRows.some((r) => r.lifecycle && r.editable));
   const panes = $derived<Pane[]>([
     { id: 'overview', label: 'Overview', badge: stuckEditable ? '!' : undefined },
     { id: 'impacts', label: `${scopeLabel} ▸ Impacts`, badge: view?.nodes?.length || undefined },
@@ -304,7 +304,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
   ]);
 
   /** Writes a node in this change through its change impact (the server checks the state). */
-  async function write(label: string, target: { pre?: NodeRef; key?: string; type?: string }, w: { props?: Record<string, unknown>; state?: string; retire?: boolean }, rationale: string): Promise<boolean> {
+  async function write(label: string, target: { pre?: NodeRef; key?: string; type?: string }, w: { props?: Record<string, unknown>; state?: string }, rationale: string): Promise<boolean> {
     if (!change?.id) return false;
     moving = label;
     error = '';
@@ -366,33 +366,14 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
     return write('create', { key, type }, { props: {}, state: born }, `create ${key}`);
   }
 
-  /** Retires a node when the change is applied, or discards a node the change creates. */
+  /** Takes a node out of the change: its working version is dropped (a node the change creates goes away); refused
+   * once a version of it is checked in (reject it instead, ADR 0076). */
   async function removeNode(row: LifecycleRow): Promise<boolean> {
-    if (!change?.id) return false;
-    if (row.created?.id) {
-      moving = `${row.node.id}:delete`;
-      error = '';
-      try {
-        await graph.reviewChangeImpact(change.id, row.created.id, false, `discarded ${row.node.key}`, scope || MAIN_SCOPE);
-        await load(change.id);
-        return true;
-      } catch (e) {
-        error = errorMessage(e);
-        return false;
-      } finally {
-        moving = '';
-      }
-    }
-    return write(`${row.node.id}:delete`, { pre: { id: row.node.id, version: row.node.version } }, { retire: true }, `delete ${row.node.key}`);
-  }
-
-  /** Withdraws a deletion made by this change. */
-  async function undoDelete(row: LifecycleRow): Promise<boolean> {
-    if (!change?.id || !row.removal?.id) return false;
-    moving = `${row.node.id}:delete`;
+    if (!change?.id || !row.impact?.id) return false;
+    moving = `${row.node.id}:remove`;
     error = '';
     try {
-      await graph.reviewChangeImpact(change.id, row.removal.id, false, `keep ${row.node.key}`, scope || MAIN_SCOPE);
+      await removeFromChange(change.id, row.impact, scope || MAIN_SCOPE);
       await load(change.id);
       return true;
     } catch (e) {
@@ -402,6 +383,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
       moving = '';
     }
   }
+
 
   async function move(row: LifecycleRow, t: LifecycleTransition) {
     if (!row.node.id) return;
@@ -481,6 +463,8 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
     applying = true;
     error = '';
     try {
+      // the accepted working versions are checked in first: their acceptance authorizes it (ADR 0076)
+      await checkinAccepted(change.id);
       applied = (await graph.applyChange(change.id, baselineName.trim())).baseline;
       await load(change.id);
       notify(`Baseline ${applied?.name || shortId(applied?.id)} created.`, 'ok');
@@ -725,7 +709,6 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
         keys={takenKeys}
         oncreate={createNode}
         onremove={removeNode}
-        onundo={undoDelete}
         onreview={reviewRow}
         onhistory={(r) => openNode(r.node, { pin: true, generic: true, pane: 'history' })}
         onopennode={(r) => openNode({ id: r.impact?.post?.id ?? r.node.id ?? '', key: r.node.key ?? '' }, { pin: true, change: ch.id ?? '', flow: scope || MAIN_SCOPE })}

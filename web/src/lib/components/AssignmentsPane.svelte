@@ -6,7 +6,7 @@
   import { types as nodeTypes, links as linkTypes, ns, platformRoles, assignmentKey, isUserKey } from '../stores/session.svelte';
   import Icon from '../shell/Icon.svelte';
   import { errorMessage, nodeTitle, type Struct } from '../api';
-  import { findNode, applyOnMain, createNodeItem, updateNodeItem, deleteNodeItem, refOf, type HeadGraph } from '../graphEdit';
+  import { findNode, applyOnMain, createNodeItem, updateNodeItem, retireNodeItem, refOf, type HeadGraph } from '../graphEdit';
   import { notify } from '../shell/workbench.svelte';
   import { confirmDialog } from '../shell/confirmState.svelte';
   import { openTab } from '../shell/tabs.svelte';
@@ -210,7 +210,7 @@
   async function remove(r: Row) {
     if (!(await confirmDialog({ message: `Remove the assignment of ${r.org} on ${r.project}?`, danger: true }))) return;
     try {
-      await applyOnMain(ns.organisation, `Remove assignment`, `Remove the assignment of ${r.org} on ${r.project}`, head.baselineId, [deleteNodeItem(r.node)]);
+      await applyOnMain(ns.organisation, `Retire assignment`, `Retire the assignment of ${r.org} on ${r.project}`, head.baselineId, [retireNodeItem(r.node)]);
       notify('Assignment removed.', 'ok');
       onChanged();
     } catch (e) {
