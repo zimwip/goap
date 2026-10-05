@@ -912,7 +912,7 @@ under the parameter name, and that the code can never read. Runs are bounded (30
 Organisation says who may act; Project says what the organisation is working on. `organisation@ProjectUnit`
 mirrors `OrgUnit`'s hierarchy (`project_part_of`, child → parent) in the same `organisation` namespace, and
 names the methodologies that apply to it, so it inherits their declared roles (ADR 0035 §2) without
-redeclaring them. The root project `PROJ-ROOT` (`domain.DefaultProject`) is bootstrapped self-linked
+redeclaring them. The root project `PROJ-ROOT` (the `root` of the project structure tag, ADR 0069) is bootstrapped self-linked
 (`project_part_of` to itself) rather than rootless like `ORG-DEFAULT`; every chain walk already guards
 against revisiting a node, so the self-link terminates safely.
 
@@ -975,7 +975,7 @@ created in a project; the engine only executes, through changes.
 - **Ownership** is the owner of the version: `SplitByOwner` and the adapters of a unit read it (there is no `owner`
   link).
 - **Readers ask the graph.** `pkg/access` and `internal/mcpsvc` never name the organisation or project types: they ask
-  the graph service for its structures (`GetStructures`, `domain.Structures`: each structure with its type and
+  the graph service for its structures (`GetStructures`, `domain.Structures`: a list, each structure with its kind, type, parent, root, default flag and
   subtypes) and read units, projects, parents and roots from the answer.
 
 ### 3.9c User bootstrap, mandatory parenting, local auth ([ADR 0040](adr/0040-user-bootstrap-org-membership-local-auth.md))

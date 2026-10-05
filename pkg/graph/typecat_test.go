@@ -173,7 +173,7 @@ func (ts testTypes) CheckNode(_, typ string) error {
 
 func (ts testTypes) CheckLink(string, string, string) error { return nil }
 
-// Structure resolves none: the graph falls back to the built-in structures (domain.BuiltinStructures).
+// Structure resolves none: the graph falls back to the built-in structures (the built-in domains).
 func (ts testTypes) Structure(string) (domain.Structure, bool) { return domain.Structure{}, false }
 
 func (ts testTypes) IsA(typ, base string) bool {
@@ -186,12 +186,12 @@ func (ts testTypes) IsA(typ, base string) bool {
 	return false
 }
 
-func (ts testTypes) Structures() domain.Structures { return domain.BuiltinStructureSet() }
+func (ts testTypes) Structures() domain.Structures { return typecat.Builtin().Structures() }
 
-// Requires resolves none: the graph falls back to the built-in ones (domain.BuiltinRequires).
+// Requires resolves none: the graph falls back to the built-in ones (the built-in domains).
 func (ts testTypes) Requires(string) []domain.RequiredLink { return nil }
 
-// AdminOnly resolves none: the graph falls back to the built-in ones (domain.BuiltinAdminOnly).
+// AdminOnly resolves none: the graph falls back to the built-in ones (the built-in domains).
 func (ts testTypes) AdminOnly(string) bool { return false }
 
 // A node type flagged `adminOnly:` in a domain is restricted, and its subtypes with it, without any code naming it
@@ -214,7 +214,7 @@ nodeTypes:
 	}
 	g := New(NewMemory())
 	g.Types = func() TypeCatalog { return cat }
-	for typ, want := range map[string]bool{"vault@Secret": true, "vault@SubSecret": true, "vault@Note": false, domain.TypeUser: true} {
+	for typ, want := range map[string]bool{"vault@Secret": true, "vault@SubSecret": true, "vault@Note": false, NodeTypeUser: true} {
 		if got, err := g.AdminOnlyType(context.Background(), typ); err != nil || got != want {
 			t.Errorf("AdminOnlyType(%s) = %v, %v; want %v", typ, got, err, want)
 		}

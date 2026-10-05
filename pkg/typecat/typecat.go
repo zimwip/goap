@@ -9,8 +9,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"sort"
+	"sync"
 	"sync/atomic"
 
 	"github.com/zimwip/goap/pkg/algo"
@@ -114,13 +116,22 @@ func Builtins() []*def.Domain { return def.BuiltinDomains() }
 // the code.
 func IsBuiltin(ns string) bool { return def.IsBuiltinDomain(ns) }
 
-// Builtin is the catalogue of the built-in domains alone: what a service knows before it has loaded the domains.
+var (
+	builtinOnce sync.Once
+	builtinCat  *Catalog
+)
+
+// Builtin is the catalogue of the built-in domains alone: what a service knows before it has loaded the domains, and
+// what an untyped graph falls back to. A catalogue is immutable, so it is built once.
 func Builtin() *Catalog {
-	c, err := New()
-	if err != nil {
-		panic(err)
-	}
-	return c
+	builtinOnce.Do(func() {
+		c, err := New()
+		if err != nil {
+			panic(err)
+		}
+		builtinCat = c
+	})
+	return builtinCat
 }
 
 // New builds the catalogue of the given domains (one per namespace) and of the built-in domains. A bare reference inside
@@ -152,7 +163,8 @@ func New(ds ...*def.Domain) (*Catalog, error) {
 				if err != nil {
 					return nil, fmt.Errorf("type %s: structure parent: %w", ref, err)
 				}
-				c.structures[tag.Kind] = domain.Structure{Kind: tag.Kind, Type: ref.String(), Namespace: d.Name, Parent: parent.String(), Root: tag.Root, SelfParent: tag.SelfParent}
+				c.structures[tag.Kind] = domain.Structure{Kind: tag.Kind, Type: ref.String(), Namespace: d.Name, Parent: parent.String(), Root: tag.Root, SelfParent: tag.SelfParent,
+					Default: tag.Default, Bootstrap: maps.Clone(tag.Bootstrap)}
 			}
 		}
 		for _, l := range d.LinkTypes {
@@ -200,36 +212,40 @@ func New(ds ...*def.Domain) (*Catalog, error) {
 			}
 		}
 	}
-	for _, kind := range domain.StructureKinds {
-		st, ok := c.structures[kind]
-		if !ok {
-			return nil, fmt.Errorf("no node type is tagged structure %s (ADR 0054): %w", kind, ErrInvalid)
-		}
+	for _, kind := range c.structureKinds() {
+		st := c.structures[kind]
 		if _, ok := c.links[mustRef(st.Parent)]; !ok {
 			return nil, fmt.Errorf("structure %s: parent link type %s: %w", kind, st.Parent, ErrUnknown)
 		}
 	}
-	// the organisation and the projects meet in one namespace (an Assignment links a unit and a project, ADR 0039):
-	// the services reading them read one head
+	// A platform constraint, stated here where the consumers' needs are checked: the organisation and the projects
+	// meet in one namespace (an Assignment links a unit and a project, ADR 0039), and the services reading them
+	// (pkg/access, internal/mcpsvc) read one head. The built-in domain tags both, so they are always declared.
 	if o, p := c.structures[domain.StructureOrganisation], c.structures[domain.StructureProject]; o.Namespace != p.Namespace {
 		return nil, fmt.Errorf("the organisation (%s) and the projects (%s) must live in one namespace: %w", o.Type, p.Type, ErrInvalid)
 	}
 	return c, nil
 }
 
-// Structures returns both structures with the types belonging to each (the tagged type and its subtypes), sorted.
+// structureKinds lists the kinds the domains declare, sorted.
+func (c *Catalog) structureKinds() []string {
+	return slices.Sorted(maps.Keys(c.structures))
+}
+
+// Structures returns every structure the domains declare with the types belonging to each (the tagged type and its
+// subtypes), by kind, the types sorted.
 func (c *Catalog) Structures() domain.Structures {
-	out := domain.Structures{Organisation: c.structures[domain.StructureOrganisation], Project: c.structures[domain.StructureProject]}
-	for ref := range c.types {
-		if c.IsA(ref.String(), out.Organisation.Type) {
-			out.OrganisationTypes = append(out.OrganisationTypes, ref.String())
+	var out domain.Structures
+	for _, kind := range c.structureKinds() {
+		set := domain.StructureSet{Structure: c.structures[kind]}
+		for ref := range c.types {
+			if c.IsA(ref.String(), set.Type) {
+				set.Types = append(set.Types, ref.String())
+			}
 		}
-		if c.IsA(ref.String(), out.Project.Type) {
-			out.ProjectTypes = append(out.ProjectTypes, ref.String())
-		}
+		slices.Sort(set.Types)
+		out = append(out, set)
 	}
-	slices.Sort(out.OrganisationTypes)
-	slices.Sort(out.ProjectTypes)
 	return out
 }
 

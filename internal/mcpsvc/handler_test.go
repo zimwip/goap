@@ -11,8 +11,8 @@ import (
 	"github.com/zimwip/goap/internal/identity"
 	"github.com/zimwip/goap/internal/mcpsvc"
 	"github.com/zimwip/goap/internal/pbconv"
+	"github.com/zimwip/goap/pkg/access"
 	"github.com/zimwip/goap/pkg/authz"
-	"github.com/zimwip/goap/pkg/domain"
 )
 
 // A caller reaches the adapters of its own unit and of the units below it, never those of another unit: the
@@ -38,7 +38,7 @@ func TestCallToolStaysWithinTheCallersUnit(t *testing.T) {
 		t.Fatalf("no unit: %q %v", root, err)
 	}
 	inv.last = nil
-	for _, unit := range []string{"ORG-B", domain.DefaultOrg} { // a sibling tree, and the unit above
+	for _, unit := range []string{"ORG-B", access.DefaultOrg} { // a sibling tree, and the unit above
 		if _, err := call(a, unit); connect.CodeOf(err) != connect.CodePermissionDenied {
 			t.Fatalf("unit %s: %v", unit, err)
 		}

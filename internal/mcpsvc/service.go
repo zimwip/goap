@@ -11,7 +11,6 @@ import (
 	"github.com/zimwip/goap/internal/pbconv"
 	"github.com/zimwip/goap/pkg/adapter"
 	"github.com/zimwip/goap/pkg/algo"
-	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/dsl"
 	"github.com/zimwip/goap/pkg/mcp"
 )
@@ -254,15 +253,16 @@ func (s *Service) Call(ctx context.Context, org, name string, args map[string]an
 	if err := t.CheckArgs(args); err != nil {
 		return nil, err
 	}
+	org = snap.Unit(org)
 	a, _, ok := snap.Resolve(org, mcpName)
 	if !ok {
-		return nil, fmt.Errorf("mcp %s has no adapter for %s or its ancestors: %w", mcpName, domain.OrgOf(org), ErrNotBound)
+		return nil, fmt.Errorf("mcp %s has no adapter for %s or its ancestors: %w", mcpName, org, ErrNotBound)
 	}
 	if r := snap.Restriction(org, mcpName); !r.Allows(t) {
-		return nil, fmt.Errorf("tool %s is restricted for %s (by %s): %w", name, domain.OrgOf(org), strings.Join(r.By, ", "), ErrNotBound)
+		return nil, fmt.Errorf("tool %s is restricted for %s (by %s): %w", name, org, strings.Join(r.By, ", "), ErrNotBound)
 	}
 	// connectors of the platform itself read what the call runs for (ADR 0028)
-	ctx = mcp.WithCall(ctx, mcp.CallContext{Unit: domain.OrgOf(org)})
+	ctx = mcp.WithCall(ctx, mcp.CallContext{Unit: org})
 	alg, err := adapterDef(snap, a)
 	if errors.Is(err, ErrAdapterDef) {
 		return nil, fmt.Errorf("%v: %w", err, ErrUnavailable)

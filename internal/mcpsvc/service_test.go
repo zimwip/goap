@@ -14,9 +14,9 @@ import (
 	"github.com/zimwip/goap/internal/pbconv"
 	"github.com/zimwip/goap/internal/pgtest"
 	"github.com/zimwip/goap/internal/platform"
+	"github.com/zimwip/goap/pkg/access"
 	"github.com/zimwip/goap/pkg/adapter"
 	"github.com/zimwip/goap/pkg/algo"
-	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/mcp"
 
@@ -55,12 +55,12 @@ func world(t *testing.T) *graph.Graph {
 	if seeded, err := graphsvc.SeedDefaults(ctx, g); err != nil || seeded {
 		t.Fatalf("seeding twice = %v, %v", seeded, err)
 	}
-	for _, u := range [][2]string{{"ORG-A", domain.DefaultOrg}, {"ORG-A1", "ORG-A"}, {"ORG-B", ""}} {
+	for _, u := range [][2]string{{"ORG-A", access.DefaultOrg}, {"ORG-A1", "ORG-A"}, {"ORG-B", ""}} {
 		if err := graphsvc.SeedUnit(ctx, g, u[0], u[0], "team", u[1]); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if err := graphsvc.SeedAdapter(ctx, g, graphsvc.LocalFSAdapter(domain.DefaultOrg, "/default")); err != nil {
+	if err := graphsvc.SeedAdapter(ctx, g, graphsvc.LocalFSAdapter(access.DefaultOrg, "/default")); err != nil {
 		t.Fatal(err)
 	}
 	if err := graphsvc.SeedAdapter(ctx, g, graphsvc.LocalFSAdapter("ORG-A", "/a")); err != nil {
@@ -146,7 +146,7 @@ func TestNearestAdapterWins(t *testing.T) {
 		"ORG-B":           "/default", // no ancestor: the default organisation
 		"":                "/default", // a change naming no unit
 		"ORG-UNKNOWN":     "/default", // a unit the graph does not know
-		domain.DefaultOrg: "/default",
+		access.DefaultOrg: "/default",
 	} {
 		out, err := svc.Call(ctx, unit, "document-repository/read", args)
 		if err != nil || out["text"] != "hi" {
@@ -161,7 +161,7 @@ func TestNearestAdapterWins(t *testing.T) {
 	}
 
 	chain, eff, err := svc.Effective(ctx, "ORG-A1")
-	if err != nil || len(chain) != 3 || chain[0] != "ORG-A1" || chain[1] != "ORG-A" || chain[2] != domain.DefaultOrg {
+	if err != nil || len(chain) != 3 || chain[0] != "ORG-A1" || chain[1] != "ORG-A" || chain[2] != access.DefaultOrg {
 		t.Fatalf("chain = %v, %v", chain, err)
 	}
 	if len(eff) != 1 || eff[0].Adapter.Unit != "ORG-A" || !eff[0].Inherited || svc.ConnectorOf(ctx, eff[0].Adapter) != "localfs" {

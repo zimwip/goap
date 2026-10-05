@@ -474,7 +474,7 @@ func producer(ctx context.Context) string {
 
 func changeSummary(c domain.Change) map[string]any {
 	return map[string]any{"id": c.ID, "title": c.Title, "intent": c.Intent, "methodology": c.Methodology, "namespace": c.Namespace,
-		"unit": domain.OrgOf(c.OwnerOrg), "status": c.Status, "baselineId": c.BaselineID, "branch": c.Branch, "parentId": c.ParentID}
+		"unit": c.OwnerOrg, "status": c.Status, "baselineId": c.BaselineID, "branch": c.Branch, "parentId": c.ParentID}
 }
 
 // working is one call on the blackboard of a change.

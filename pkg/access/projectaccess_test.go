@@ -6,6 +6,7 @@ import (
 	"github.com/zimwip/goap/pkg/access"
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/typecat"
 )
 
 // A principal may take a project as its active one when it holds a platform role, or a role an Assignment grants
@@ -21,14 +22,14 @@ func TestMayAccessProject(t *testing.T) {
 	nodes := []domain.Node{
 		node("1", "PROJ-ROOT", access.NodeTypeProjectUnit, nil), node("2", "PROJ-A", access.NodeTypeProjectUnit, nil),
 		node("3", "PROJ-A1", access.NodeTypeProjectUnit, nil), node("4", "PROJ-B", access.NodeTypeProjectUnit, nil),
-		node("5", "DEP-ONE", domain.TypeOrgUnit, nil), node("6", "ASG:DEP-ONE/PROJ-A", access.NodeTypeAssignment, roles("developer")),
-		node("7", "DEP-TWO", domain.TypeOrgUnit, nil), node("8", "ASG:DEP-TWO/PLATFORM", access.NodeTypeAssignment, roles(access.RoleAdmin)),
+		node("5", "DEP-ONE", access.NodeTypeOrgUnit, nil), node("6", "ASG:DEP-ONE/PROJ-A", access.NodeTypeAssignment, roles("developer")),
+		node("7", "DEP-TWO", access.NodeTypeOrgUnit, nil), node("8", "ASG:DEP-TWO/PLATFORM", access.NodeTypeAssignment, roles(access.RoleAdmin)),
 	}
 	links := []domain.Link{
 		lnk(access.LinkProjectPartOf, "1", "1"), lnk(access.LinkProjectPartOf, "2", "1"), lnk(access.LinkProjectPartOf, "3", "2"), lnk(access.LinkProjectPartOf, "4", "1"),
 		lnk(access.LinkAssignsOrg, "6", "5"), lnk(access.LinkAssignsProject, "6", "2"), lnk(access.LinkAssignsOrg, "8", "7"),
 	}
-	s := access.BuildSnapshot(domain.BuiltinStructureSet(), "b", nodes, links)
+	s := access.BuildSnapshot(typecat.Builtin().Structures(), "b", nodes, links)
 	dev := authz.Principal{Subject: "dev", Org: "DEP-ONE"}
 	admin := authz.Principal{Subject: "ada", Org: "DEP-TWO"}
 	for _, c := range []struct {

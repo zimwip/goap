@@ -17,8 +17,8 @@ import (
 	"github.com/zimwip/goap/internal/graphsvc"
 	"github.com/zimwip/goap/internal/identity"
 	"github.com/zimwip/goap/internal/mcpsvc"
+	"github.com/zimwip/goap/pkg/access"
 	"github.com/zimwip/goap/pkg/authz"
-	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/graph"
 )
 
@@ -34,7 +34,7 @@ func TestAutoRegistrationAndCall(t *testing.T) {
 	if _, err := graphsvc.SeedDefaults(ctx, g); err != nil {
 		t.Fatal(err)
 	}
-	if err := graphsvc.SeedAdapter(ctx, g, graphsvc.LocalFSAdapter(domain.DefaultOrg, dir)); err != nil {
+	if err := graphsvc.SeedAdapter(ctx, g, graphsvc.LocalFSAdapter(access.DefaultOrg, dir)); err != nil {
 		t.Fatal(err)
 	}
 	hub := &mcpsvc.Service{Store: mcpsvc.NewMemoryStore(), Directory: &mcpsvc.Directory{Graph: g},

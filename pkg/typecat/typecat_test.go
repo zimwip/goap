@@ -246,18 +246,24 @@ func TestComposeFlag(t *testing.T) {
 func TestStructures(t *testing.T) {
 	c := Builtin()
 	org, ok := c.Structure(domain.StructureOrganisation)
-	if !ok || org != domain.BuiltinStructures[domain.StructureOrganisation] {
+	if !ok || org.Type != "organisation@OrgUnit" || org.Namespace != "organisation" || org.Parent != "organisation@part_of" ||
+		org.Root != "ORG-DEFAULT" || org.SelfParent || org.Default != "" || org.Bootstrap["name"] != "Default organisation" {
 		t.Fatalf("organisation = %+v %v", org, ok)
 	}
 	proj, ok := c.Structure(domain.StructureProject)
-	if !ok || proj != domain.BuiltinStructures[domain.StructureProject] {
+	if !ok || proj.Type != "organisation@ProjectUnit" || proj.Parent != "organisation@project_part_of" || proj.Root != "PROJ-ROOT" ||
+		!proj.SelfParent || proj.Default != "default" || proj.Bootstrap["default"] != true {
 		t.Fatalf("project = %+v %v", proj, ok)
 	}
 	if !c.IsA("organisation@User", org.Type) || c.IsA(proj.Type, org.Type) || c.IsA("organisation@Nope", org.Type) {
 		t.Fatal("IsA")
 	}
 	// what the graph service tells the services reading the organisation (GetStructures): a User is a unit
-	if got := c.Structures(); !reflect.DeepEqual(got, domain.BuiltinStructureSet()) {
+	want := domain.Structures{
+		{Structure: org, Types: []string{"organisation@OrgUnit", "organisation@User"}},
+		{Structure: proj, Types: []string{"organisation@ProjectUnit"}},
+	}
+	if got := c.Structures(); !reflect.DeepEqual(got, want) {
 		t.Fatalf("structures = %+v", got)
 	}
 	other := parse(t, `
@@ -276,13 +282,13 @@ linkTypes:
 	}
 }
 
-// A structure tag names a known kind, a root and a parent link type of its domain from and to the tagged type.
+// A structure tag names a kind, a root, a default property of its type and a parent link type of its domain from and to the tagged type.
 func TestStructureTagIssues(t *testing.T) {
 	d := parse(t, `
 name: hr
 version: 1.0.0
 nodeTypes:
-  - {name: Team, structure: {kind: department, parent: nope}}
+  - {name: Team, structure: {kind: "", parent: nope, default: nope}}
   - {name: Site, structure: {kind: project, parent: near, root: S-1}}
   - {name: Other}
 linkTypes:
@@ -292,7 +298,7 @@ linkTypes:
 	for _, is := range d.Validate() {
 		paths = append(paths, is.Path)
 	}
-	for _, want := range []string{"nodeTypes[0].structure.kind", "nodeTypes[0].structure.root", "nodeTypes[0].structure.parent", "nodeTypes[1].structure.parent"} {
+	for _, want := range []string{"nodeTypes[0].structure.kind", "nodeTypes[0].structure.default", "nodeTypes[0].structure.root", "nodeTypes[0].structure.parent", "nodeTypes[1].structure.parent"} {
 		if !slices.Contains(paths, want) {
 			t.Errorf("no issue on %s: %v", want, paths)
 		}

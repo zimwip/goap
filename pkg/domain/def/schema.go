@@ -116,7 +116,7 @@ func (s Schema) check(prefix string, add func(path, format string, args ...any))
 	return nodeTypes, linkTypes
 }
 
-// checkStructures validates the structure tags (ADR 0054): a known kind, once per schema, a root key, and a parent
+// checkStructures validates the structure tags (ADR 0054): a kind, once per schema, a root key, the property flagging the default member, and a parent
 // link type of the schema itself going from and to the tagged type.
 func (s Schema) checkStructures(prefix string, add func(path, format string, args ...any)) {
 	kinds := map[string]bool{}
@@ -126,14 +126,17 @@ func (s Schema) checkStructures(prefix string, add func(path, format string, arg
 			continue
 		}
 		path := fmt.Sprintf(prefix+"nodeTypes[%d].structure", i)
-		if !slices.Contains(domain.StructureKinds, t.Kind) {
-			add(path+".kind", "unknown structure kind %q (one of %s)", t.Kind, strings.Join(domain.StructureKinds, ", "))
+		if t.Kind == "" {
+			add(path+".kind", "the structure kind is required")
 		} else if kinds[t.Kind] {
 			add(path+".kind", "structure %s tagged twice", t.Kind)
 		}
 		kinds[t.Kind] = true
 		if t.Root == "" {
 			add(path+".root", "the key of the root node is required")
+		}
+		if t.Default != "" && !slices.ContainsFunc(n.Attributes, func(a Attribute) bool { return a.Name == t.Default }) {
+			add(path+".default", "unknown attribute %s of %s", t.Default, n.Name)
 		}
 		if n.Lifecycle != "" {
 			add(path, "a structure type has no lifecycle: its root is created by the bootstrap")

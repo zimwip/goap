@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/zimwip/goap/pkg/authz"
-	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/methodology"
 )
 
@@ -34,8 +33,8 @@ func scopeEngine(a authz.Authorizer) *Engine {
 
 func TestScopePlacementOfAProcess(t *testing.T) {
 	ref := scopeEngine(nil).ref(&Process{ID: "p", Initiator: authz.Principal{Subject: "alice", Project: "OTHER", Roles: []string{"dev"}}})
-	if ref.Org != domain.DefaultOrg || ref.Project != domain.DefaultProject {
-		t.Fatalf("an unplaced process sits in the default organisation and project: %+v", ref)
+	if ref.Org != "" || ref.Project != "" {
+		t.Fatalf("an unplaced process names no organisation and project (the services behind the scope resolve the roots): %+v", ref)
 	}
 	if a := scopeEngine(nil).ref(scopeProcess()).Actor(); a.Subject != "alice" || a.Project != "PROJ-X" || len(a.Roles) != 1 {
 		t.Fatalf("a process acts as its initiator on its project, whatever project their token had: %+v", a)

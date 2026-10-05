@@ -39,16 +39,16 @@ func TestUserDeactivateReactivateRequireAdmin(t *testing.T) {
 	}
 	move := func(principal authz.Principal, title, state string) error {
 		t.Helper()
-		head, err := g.BranchHead(ctx, domain.NamespaceOrganisation, domain.MainBranch)
+		head, err := g.BranchHead(ctx, access.NamespaceOrganisation, domain.MainBranch)
 		if err != nil {
 			t.Fatal(err)
 		}
-		carol, err := g.NodeByKey(ctx, domain.NamespaceOrganisation, access.UserKey("carol"))
+		carol, err := g.NodeByKey(ctx, access.NamespaceOrganisation, access.UserKey("carol"))
 		if err != nil {
 			t.Fatal(err)
 		}
 		ref := carol.Ref()
-		_, err = g.Commit(authz.With(ctx, principal), graph.Commit{Namespace: domain.NamespaceOrganisation, Title: title, Baseline: head.ID,
+		_, err = g.Commit(authz.With(ctx, principal), graph.Commit{Namespace: access.NamespaceOrganisation, Title: title, Baseline: head.ID,
 			Edits: []graph.NodeEdit{{Pre: &ref, State: state, Rationale: "test"}}})
 		return err
 	}
@@ -58,7 +58,7 @@ func TestUserDeactivateReactivateRequireAdmin(t *testing.T) {
 	if err := move(authz.Principal{Subject: "admin1", Roles: []string{"admin"}}, "deactivate carol", "deactivated"); err != nil {
 		t.Fatalf("an admin may deactivate a user: %v", err)
 	}
-	if n, err := g.NodeByKey(ctx, domain.NamespaceOrganisation, access.UserKey("carol")); err != nil || n.State != "deactivated" {
+	if n, err := g.NodeByKey(ctx, access.NamespaceOrganisation, access.UserKey("carol")); err != nil || n.State != "deactivated" {
 		t.Fatalf("carol should be deactivated: %+v %v", n, err)
 	}
 	if err := move(authz.Principal{Subject: "mallory"}, "reactivate carol", "active"); !errors.Is(err, authz.ErrForbidden) {
@@ -67,7 +67,7 @@ func TestUserDeactivateReactivateRequireAdmin(t *testing.T) {
 	if err := move(authz.Principal{Subject: "admin1", Roles: []string{"admin"}}, "reactivate carol", "active"); err != nil {
 		t.Fatalf("an admin may reactivate a user: %v", err)
 	}
-	if n, err := g.NodeByKey(ctx, domain.NamespaceOrganisation, access.UserKey("carol")); err != nil || n.State != "active" {
+	if n, err := g.NodeByKey(ctx, access.NamespaceOrganisation, access.UserKey("carol")); err != nil || n.State != "active" {
 		t.Fatalf("carol should be active again: %+v %v", n, err)
 	}
 }

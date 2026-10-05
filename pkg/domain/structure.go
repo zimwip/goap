@@ -5,21 +5,13 @@ import "slices"
 // Structures (ADR 0054): the two hierarchies every node version is placed in. A node version is owned by an
 // organisational unit (WHO is responsible for it) and its node was created in a project (WHERE the work happens).
 // Both hierarchies are node types a domain tags (`structure:` on a node type, pkg/domain/def), so the graph knows
-// them from its type catalogue and never from hard-coded names; the built-in organisation domain tags OrgUnit and
-// ProjectUnit.
+// them, their parent link and their root from its type catalogue (pkg/typecat) and never from hard-coded names.
 const (
-	// StructureOrganisation tags the node type of the organisational units: the owners of node versions and of
-	// changes.
+	// StructureOrganisation names the axis of the organisational units: the owners of node versions and of changes.
 	StructureOrganisation = "organisation"
-	// StructureProject tags the node type of the projects: where a node is created and a change acts.
+	// StructureProject names the axis of the projects: where a node is created and a change acts.
 	StructureProject = "project"
-	// PropDefaultProject flags the default project (a boolean property of a project node): the project a change that
-	// names none acts in. An administrator moves it; with none flagged the root project is the default.
-	PropDefaultProject = "default"
 )
-
-// StructureKinds lists the structure kinds, in bootstrap order.
-var StructureKinds = []string{StructureOrganisation, StructureProject}
 
 // Structure is a hierarchy the graph places every node version in: the node type that builds it (and its subtypes),
 // the link type from a child to its parent, and the key of its root, created by the bootstrap of the graph.
@@ -29,32 +21,24 @@ type Structure struct {
 	Type string `json:"type"`
 	// Namespace is the namespace of Type: where the nodes of the hierarchy live.
 	Namespace string `json:"namespace"`
-	// Parent is the qualified link type from a child to its parent. The root links to nothing (organisation) or to
-	// itself (project).
+	// Parent is the qualified link type from a child to its parent. The root links to nothing or to itself
+	// (SelfParent).
 	Parent string `json:"parent"`
 	// Root is the key of the root node, created by the bootstrap.
 	Root string `json:"root"`
-	// SelfParent: the root is its own parent (a project root, ADR 0039), rather than rootless.
+	// SelfParent: the root is its own parent, rather than rootless.
 	SelfParent bool `json:"selfParent,omitempty"`
+	// Default names the boolean property that flags the default member of the hierarchy (the one a change naming
+	// none resolves to; the smallest key when several are flagged, the root when none is); empty: the root is.
+	Default string `json:"default,omitempty"`
+	// Bootstrap are the initial properties of the root node.
+	Bootstrap map[string]any `json:"bootstrap,omitempty"`
 }
 
-// The structures of the built-in organisation domain (domains/builtin/organisation.yaml): the one place their names
-// are written in Go; the services reading the organisation (pkg/access, internal/mcpsvc) name them through these.
-const (
-	NamespaceOrganisation = "organisation"
-	TypeOrgUnit           = "organisation@OrgUnit"
-	TypeUser              = "organisation@User"
-	LinkMemberOf          = "organisation@member_of"
-	TypeProjectUnit       = "organisation@ProjectUnit"
-	LinkPartOf            = "organisation@part_of"
-	LinkProjectPartOf     = "organisation@project_part_of"
-)
-
-// BuiltinStructures are the structures of the built-in organisation domain: what an untyped graph (tests, tools)
-// uses; the type catalogue resolves the same ones, since no other domain may tag a structure again.
-var BuiltinStructures = map[string]Structure{
-	StructureOrganisation: {Kind: StructureOrganisation, Type: TypeOrgUnit, Namespace: NamespaceOrganisation, Parent: LinkPartOf, Root: DefaultOrg},
-	StructureProject:      {Kind: StructureProject, Type: TypeProjectUnit, Namespace: NamespaceOrganisation, Parent: LinkProjectPartOf, Root: DefaultProject, SelfParent: true},
+// StructureSet is a structure with the node types belonging to it (the tagged type and its subtypes, sorted).
+type StructureSet struct {
+	Structure
+	Types []string `json:"types,omitempty"`
 }
 
 // RequiredLink is a link a node of a type must carry (`requires:` on a node type, ADR 0065): exactly Count outgoing
@@ -74,48 +58,34 @@ func (r RequiredLink) Exactly() int {
 	return r.Count
 }
 
-// BuiltinRequires are the required links of the built-in organisation domain, by qualified node type: what an
-// untyped graph (tests, tools) uses, as BuiltinStructures; the type catalogue resolves the same ones.
-var BuiltinRequires = map[string][]RequiredLink{
-	TypeUser: {{Link: LinkMemberOf, Count: 1}},
-}
+// Structures are the structures in force, one per kind, with the node types belonging to each: what the services
+// reading the organisation (pkg/access, internal/mcpsvc) learn from the graph service (GetStructures), so that they
+// never name the types themselves.
+type Structures []StructureSet
 
-// BuiltinAdminOnly are the node types of the built-in domains that platform administrators alone write (ADR 0068),
-// what an untyped graph (tests, tools) uses; the type catalogue resolves the same ones from `adminOnly:`, and may
-// flag more types.
-var BuiltinAdminOnly = map[string]bool{
-	TypeOrgUnit: true, TypeUser: true, TypeProjectUnit: true, TypeAdapter: true, TypeAdapterDef: true,
-	"organisation@Policy": true, "organisation@Assignment": true,
-}
-
-// Structures are the two hierarchies in force with the node types belonging to each (the tagged type and its
-// subtypes): what the services reading the organisation (pkg/access, internal/mcpsvc) learn from the graph service
-// (GetStructures), so that they never name the types themselves.
-type Structures struct {
-	Organisation, Project Structure
-	// OrganisationTypes and ProjectTypes are the tagged type of each structure and its subtypes.
-	OrganisationTypes, ProjectTypes []string
-}
-
-// Of returns the structure of a kind.
+// Of returns the structure of a kind (zero when none is declared).
 func (s Structures) Of(kind string) Structure {
-	if kind == StructureProject {
-		return s.Project
+	for _, x := range s {
+		if x.Kind == kind {
+			return x.Structure
+		}
 	}
-	return s.Organisation
+	return Structure{}
+}
+
+// Organisation is the structure of the organisational units, Project the structure of the projects.
+func (s Structures) Organisation() Structure { return s.Of(StructureOrganisation) }
+func (s Structures) Project() Structure      { return s.Of(StructureProject) }
+
+// TypesOf returns the node types belonging to the structure of a kind.
+func (s Structures) TypesOf(kind string) []string {
+	for _, x := range s {
+		if x.Kind == kind {
+			return x.Types
+		}
+	}
+	return nil
 }
 
 // In reports whether a node type belongs to the structure of a kind (its tagged type or a subtype).
-func (s Structures) In(kind, typ string) bool {
-	types := s.OrganisationTypes
-	if kind == StructureProject {
-		types = s.ProjectTypes
-	}
-	return slices.Contains(types, typ)
-}
-
-// BuiltinStructureSet is the structures of the built-in organisation domain, with its subtypes (a User is a unit).
-func BuiltinStructureSet() Structures {
-	return Structures{Organisation: BuiltinStructures[StructureOrganisation], Project: BuiltinStructures[StructureProject],
-		OrganisationTypes: []string{TypeOrgUnit, TypeUser}, ProjectTypes: []string{TypeProjectUnit}}
-}
+func (s Structures) In(kind, typ string) bool { return slices.Contains(s.TypesOf(kind), typ) }

@@ -223,7 +223,7 @@ func TestProjectSelfLinkTerminates(t *testing.T) {
 	if err := g.Bootstrap(ctx); err != nil {
 		t.Fatal(err)
 	}
-	root, err := g.NodeByKey(ctx, "organisation", domain.DefaultProject)
+	root, err := g.NodeByKey(ctx, "organisation", rootProject(g))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -284,7 +284,7 @@ func testProjectSubChangeRules(t *testing.T, repo Repo) {
 		return n
 	}
 	c0 := testChange(t, g, "organisation")
-	root, err := g.NodeByKey(ctx, "organisation", domain.DefaultProject)
+	root, err := g.NodeByKey(ctx, "organisation", rootProject(g))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -309,11 +309,11 @@ func testProjectSubChangeRules(t *testing.T, repo Repo) {
 		t.Fatalf("unknown project: %v", err)
 	}
 	// none named: the default project (ADR 0054)
-	if c, err := g.CreateChange(ctx, NewChange{Title: "x", BaselineID: base.ID}); err != nil || c.ProjectID != domain.DefaultProject || c.OwnerOrg != domain.DefaultOrg {
+	if c, err := g.CreateChange(ctx, NewChange{Title: "x", BaselineID: base.ID}); err != nil || c.ProjectID != rootProject(g) || c.OwnerOrg != rootOrg(g) {
 		t.Fatalf("a change naming no project acts in the default one, held by the root unit: %+v %v", c, err)
 	}
 	// a node of the organisation that is not a project is refused
-	if _, err := g.CreateChange(ctx, NewChange{Title: "x", BaselineID: base.ID, ProjectID: domain.DefaultOrg}); !errors.Is(err, ErrInvalid) {
+	if _, err := g.CreateChange(ctx, NewChange{Title: "x", BaselineID: base.ID, ProjectID: rootOrg(g)}); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("a unit as the project: %v", err)
 	}
 	if _, err := g.CreateChange(ctx, NewChange{Title: "x", BaselineID: base.ID, OwnerOrg: "PROJ-A"}); !errors.Is(err, ErrInvalid) {

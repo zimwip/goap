@@ -52,7 +52,7 @@ type Change struct {
 	OwnerOrg string   `json:"ownerOrg,omitempty"`
 	// ProjectID is the key of the project (project structure, ADR 0039, 0054) the change acts in,
 	// resolved when the change is created (a sub-change inherits its parent's, else the default
-	// project, pkg/graph.DefaultProject) and never empty once stored: the nodes the change creates
+	// project, Graph.DefaultProject) and never empty once stored: the nodes the change creates
 	// are created in it.
 	ProjectID string `json:"projectId,omitempty"`
 	// Lifecycle names the lifecycle the change follows (ADR 0058), set by CreateChange from its methodology, and State

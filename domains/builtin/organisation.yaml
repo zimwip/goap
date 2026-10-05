@@ -1,5 +1,5 @@
 name: organisation
-version: 1.10.0
+version: 1.11.0
 description: >
   Organisation structure, managed in its own namespace ("organisation"): a hierarchy of organisational units,
   mirrored by a hierarchy of projects (ADR 0039). Every node version, whatever its namespace, is owned by a unit and
@@ -14,14 +14,21 @@ nodeTypes:
   # carries it at most (setting it clears the previous one in the same change); with none, new users join
   # ORG-DEFAULT.
   # `structure` (ADR 0054) tags the type building the organisation hierarchy: every node version is owned by a unit
-  # and every change is held by one; the graph bootstraps the root (ORG-DEFAULT, rootless) and checks every write.
+  # and every change is held by one; the graph bootstraps the root (ORG-DEFAULT, rootless, with the initial properties of `bootstrap`) and checks every write.
   # `adminOnly: true` (ADR 0068) says only platform administrators write the nodes of a type (inherited by its
   # subtypes): the types that govern access itself (units, projects, users, assignments, policies, adapters).
   - name: OrgUnit
     description: "Organisational unit (company, direction, department, team)"
     adminOnly: true
     editor: unit
-    structure: {kind: organisation, parent: part_of, root: ORG-DEFAULT}
+    structure:
+      kind: organisation
+      parent: part_of
+      root: ORG-DEFAULT
+      bootstrap:
+        name: Default organisation
+        kind: company
+        description: "The root of the organisation: holds the changes that name no unit, and the adapters every unit inherits."
     attributes:
       - {name: name, label: Name, description: "Name of the unit", type: string, section: Identity, order: 1, asName: true}
       - {name: kind, label: Kind, description: "Company, direction, department, team…", type: string, section: Identity, order: 2}
@@ -86,7 +93,7 @@ nodeTypes:
   # sub-projects through `project_part_of`. The root project (PROJ-ROOT, bootstrapped with ORG-DEFAULT) links
   # `project_part_of` to itself: every project not folded into another one resolves to it. `structure` (ADR 0054)
   # tags the type building the project hierarchy: every node is created in a project and every change acts in one.
-  # `default: true` flags the default project, the one a change naming none acts in (one at most; with none
+  # `structure.default` names the property (`default`) that flags the default project, the one a change naming none acts in (one at most; with none
   # flagged, the root project). Selecting a project before non-administrative work (this namespace's own data:
   # units, projects, assignments, policies, adapters are administrative) is a UX-level gate (the project
   # selector), not enforced by the graph itself.
@@ -94,7 +101,17 @@ nodeTypes:
     description: "Project or sub-project"
     adminOnly: true
     editor: project
-    structure: {kind: project, parent: project_part_of, root: PROJ-ROOT, selfParent: true}
+    structure:
+      kind: project
+      parent: project_part_of
+      root: PROJ-ROOT
+      selfParent: true
+      default: default
+      bootstrap:
+        name: Root project
+        status: active
+        default: true
+        description: "The root of the projects: every project not folded into another one resolves to it."
     attributes:
       - {name: name, label: Name, description: "Name of the project", type: string, section: Identity, order: 1, asName: true}
       - {name: description, label: Description, description: "What the project is about", type: string, widget: textarea, section: Identity, order: 2}

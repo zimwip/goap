@@ -16,7 +16,6 @@ import (
 	"github.com/zimwip/goap/internal/pbconv"
 	"github.com/zimwip/goap/pkg/adapter"
 	"github.com/zimwip/goap/pkg/authz"
-	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/mcp"
 	"github.com/zimwip/goap/pkg/mcpbuiltin"
 )
@@ -114,9 +113,6 @@ func adapterFromPB(a *mcpv1.Adapter) adapter.Instance {
 		Disabled: a.Disabled, Tools: a.Tools, Deny: a.Deny, ReadOnly: a.ReadOnly}
 }
 
-// unit is the requested unit, else the default organisation.
-func unit(u string) string { return domain.OrgOf(u) }
-
 // callerResource is the resource of a request made on behalf of the caller's own tenant.
 func (h *Handler) callerResource(ctx context.Context, hdr http.Header, typ, name string) authz.Resource {
 	who := authz.From(h.Identity.Context(ctx, hdr))
@@ -163,7 +159,7 @@ func (h *Handler) ListMcps(ctx context.Context, r *connect.Request[mcpv1.ListMcp
 }
 
 func (h *Handler) ListEffective(ctx context.Context, r *connect.Request[mcpv1.ListEffectiveRequest]) (*connect.Response[mcpv1.ListEffectiveResponse], error) {
-	if _, err := h.check(ctx, r.Header(), "read", h.callerResource(ctx, r.Header(), "adapter", unit(r.Msg.Unit))); err != nil {
+	if _, err := h.check(ctx, r.Header(), "read", h.callerResource(ctx, r.Header(), "adapter", r.Msg.Unit)); err != nil {
 		return nil, err
 	}
 	org, err := h.unitOf(ctx, r.Header(), r.Msg.Unit)

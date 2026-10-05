@@ -8,14 +8,16 @@ import (
 	"github.com/zimwip/goap/pkg/domain"
 )
 
-// The built-in domains flag the types domain.BuiltinAdminOnly lists (the untyped graph's fallback), no more, no less.
+// The built-in domains flag these types, no more, no less (ADR 0068).
 func TestBuiltinAdminOnly(t *testing.T) {
+	flagged := map[string]bool{"organisation@OrgUnit": true, "organisation@User": true, "organisation@ProjectUnit": true,
+		"organisation@Adapter": true, "platform@AdapterDef": true, "organisation@Policy": true, "organisation@Assignment": true}
 	c := Builtin()
 	for _, d := range Builtins() {
 		for _, n := range d.NodeTypes {
 			typ := d.Name + "@" + n.Name
-			if got := c.AdminOnly(typ); got != domain.BuiltinAdminOnly[typ] {
-				t.Errorf("%s: catalogue %v, domain.BuiltinAdminOnly %v", typ, got, domain.BuiltinAdminOnly[typ])
+			if got := c.AdminOnly(typ); got != flagged[typ] {
+				t.Errorf("%s: adminOnly %v, want %v", typ, got, flagged[typ])
 			}
 		}
 	}
@@ -25,11 +27,11 @@ func TestBuiltinAdminOnly(t *testing.T) {
 // member_of of a User, a subtype inherits and may redefine them, and a bad declaration is an issue.
 func TestRequires(t *testing.T) {
 	c := Builtin()
-	want := []domain.RequiredLink{{Link: domain.LinkMemberOf, Count: 1}}
-	if got := c.Requires(domain.TypeUser); !reflect.DeepEqual(got, want) || !reflect.DeepEqual(domain.BuiltinRequires[domain.TypeUser], want) {
+	want := []domain.RequiredLink{{Link: "organisation@member_of", Count: 1}}
+	if got := c.Requires("organisation@User"); !reflect.DeepEqual(got, want) {
 		t.Fatalf("User requires %+v", got)
 	}
-	if got := c.Requires(domain.TypeOrgUnit); len(got) != 0 {
+	if got := c.Requires("organisation@OrgUnit"); len(got) != 0 {
 		t.Fatalf("OrgUnit requires %+v", got)
 	}
 	d := parse(t, `

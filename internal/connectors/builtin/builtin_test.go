@@ -514,13 +514,13 @@ func TestChangeToolsGateEveryAccessType(t *testing.T) {
 		t.Fatal(err)
 	}
 	asgKey := access.PlatformAssignmentKey("ORG-CHECKOUT")
-	_, err := p.g.Commit(ctx, graph.Commit{Namespace: domain.NamespaceOrganisation, Title: "Assignment", Intent: "Assignment", By: "test", Edits: []graph.NodeEdit{{
+	_, err := p.g.Commit(ctx, graph.Commit{Namespace: access.NamespaceOrganisation, Title: "Assignment", Intent: "Assignment", By: "test", Edits: []graph.NodeEdit{{
 		Key: asgKey, Type: access.NodeTypeAssignment, Props: access.Assignment{Roles: []string{access.RoleReader}}.Props(), Rationale: "seed",
 		Links: []graph.LinkEdit{{Type: access.LinkAssignsOrg, ToKey: "ORG-CHECKOUT"}}}}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	existing := map[string]string{asgKey: access.NodeTypeAssignment, "ORG-CHECKOUT": domain.TypeOrgUnit, domain.DefaultProject: access.NodeTypeProjectUnit, adapter.Key("ORG-CRM", mcpbuiltin.Change): domain.TypeAdapter}
+	existing := map[string]string{asgKey: access.NodeTypeAssignment, "ORG-CHECKOUT": access.NodeTypeOrgUnit, access.DefaultProject: access.NodeTypeProjectUnit, adapter.Key("ORG-CRM", mcpbuiltin.Change): domain.TypeAdapter}
 	denied := func(err error) bool { return err != nil && strings.Contains(err.Error(), "may not write policy") }
 	alice := as("alice", "ORG-CHECKOUT", "contributor")
 	open := func() any {
@@ -584,7 +584,7 @@ func TestUnitRestrictsABuiltin(t *testing.T) {
 	out := p.call(t, as("root", "ORG-ACME", "admin"), "ORG-ACME", "goap-admin/mcps", map[string]any{"unit": "ORG-CRM"})
 	for _, m := range out["mcps"].([]any) {
 		m := m.(map[string]any)
-		if m["mcp"] == mcpbuiltin.Change && (len(m["tools"].([]any)) != 9 || m["restrictedBy"].([]any)[0] != "ORG-CRM" || m["definedIn"] != domain.DefaultOrg) {
+		if m["mcp"] == mcpbuiltin.Change && (len(m["tools"].([]any)) != 9 || m["restrictedBy"].([]any)[0] != "ORG-CRM" || m["definedIn"] != access.DefaultOrg) {
 			t.Fatalf("goap-change for ORG-CRM = %v", m)
 		}
 	}
@@ -631,7 +631,7 @@ func TestAdminTools(t *testing.T) {
 		u := u.(map[string]any)
 		parents[u["key"].(string)] = u["parent"]
 	}
-	if parents["ORG-CHECKOUT"] != "ORG-DIGITAL" || parents["ORG-ACME"] != domain.DefaultOrg || parents[domain.DefaultOrg] != nil {
+	if parents["ORG-CHECKOUT"] != "ORG-DIGITAL" || parents["ORG-ACME"] != access.DefaultOrg || parents[access.DefaultOrg] != nil {
 		t.Fatalf("units = %v", units)
 	}
 	mcps := p.call(t, ctx, "ORG-CHECKOUT", "goap-admin/mcps", nil)

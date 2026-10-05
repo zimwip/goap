@@ -44,7 +44,7 @@ func TestAdminFloorRejectsRemovingLastAdmin(t *testing.T) {
 	if err := graphsvc.EnsureUser(ctx, g, "alice"); err != nil {
 		t.Fatal(err)
 	}
-	alice, err := g.NodeByKey(ctx, domain.NamespaceOrganisation, access.UserKey("alice"))
+	alice, err := g.NodeByKey(ctx, access.NamespaceOrganisation, access.UserKey("alice"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,17 +52,17 @@ func TestAdminFloorRejectsRemovingLastAdmin(t *testing.T) {
 		t.Fatalf("alice should be active, got %q", alice.State)
 	}
 
-	head, err := g.BranchHead(ctx, domain.NamespaceOrganisation, domain.MainBranch)
+	head, err := g.BranchHead(ctx, access.NamespaceOrganisation, domain.MainBranch)
 	if err != nil {
 		t.Fatal(err)
 	}
 	ref := alice.Ref()
-	_, err = g.Commit(ctx, graph.Commit{Namespace: domain.NamespaceOrganisation, Title: "deactivate alice", Baseline: head.ID,
+	_, err = g.Commit(ctx, graph.Commit{Namespace: access.NamespaceOrganisation, Title: "deactivate alice", Baseline: head.ID,
 		Edits: []graph.NodeEdit{{Pre: &ref, State: "deactivated", Rationale: "test"}}})
 	if !errors.Is(err, graph.ErrInvalid) || !strings.Contains(err.Error(), "no active administrator") {
 		t.Fatalf("expected admin-floor rejection, got %v", err)
 	}
-	if n, err := g.NodeByKey(ctx, domain.NamespaceOrganisation, access.UserKey("alice")); err != nil || n.State != "active" {
+	if n, err := g.NodeByKey(ctx, access.NamespaceOrganisation, access.UserKey("alice")); err != nil || n.State != "active" {
 		t.Fatalf("alice must stay active: %+v %v", n, err)
 	}
 }
@@ -81,21 +81,21 @@ func TestAdminFloorAllowsHandoffInOneCommit(t *testing.T) {
 	if err := graphsvc.EnsureUser(ctx, g, "bob"); err != nil {
 		t.Fatal(err)
 	}
-	alice, err := g.NodeByKey(ctx, domain.NamespaceOrganisation, access.UserKey("alice"))
+	alice, err := g.NodeByKey(ctx, access.NamespaceOrganisation, access.UserKey("alice"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	bob, err := g.NodeByKey(ctx, domain.NamespaceOrganisation, access.UserKey("bob"))
+	bob, err := g.NodeByKey(ctx, access.NamespaceOrganisation, access.UserKey("bob"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	head, err := g.BranchHead(ctx, domain.NamespaceOrganisation, domain.MainBranch)
+	head, err := g.BranchHead(ctx, access.NamespaceOrganisation, domain.MainBranch)
 	if err != nil {
 		t.Fatal(err)
 	}
 	aliceRef, bobRef := alice.Ref(), bob.Ref()
 	asg := access.Assignment{Roles: []string{access.RoleAdmin}, Description: "bob becomes administrator"}
-	_, err = g.Commit(ctx, graph.Commit{Namespace: domain.NamespaceOrganisation, Title: "admin handoff", Baseline: head.ID, Edits: []graph.NodeEdit{
+	_, err = g.Commit(ctx, graph.Commit{Namespace: access.NamespaceOrganisation, Title: "admin handoff", Baseline: head.ID, Edits: []graph.NodeEdit{
 		{Key: access.PlatformAssignmentKey(access.UserKey("bob")), Type: access.NodeTypeAssignment, Props: asg.Props(),
 			Links: []graph.LinkEdit{{Type: access.LinkAssignsOrg, To: &bobRef}}, Rationale: "test"},
 		{Pre: &aliceRef, State: "deactivated", Rationale: "test"},
@@ -103,7 +103,7 @@ func TestAdminFloorAllowsHandoffInOneCommit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("handoff should succeed: %v", err)
 	}
-	if n, err := g.NodeByKey(ctx, domain.NamespaceOrganisation, access.UserKey("alice")); err != nil || n.State != "deactivated" {
+	if n, err := g.NodeByKey(ctx, access.NamespaceOrganisation, access.UserKey("alice")); err != nil || n.State != "deactivated" {
 		t.Fatalf("alice should be deactivated: %+v %v", n, err)
 	}
 }
@@ -114,16 +114,16 @@ func TestAdminFloorCountsWhatEnrichGrants(t *testing.T) {
 	deactivateAlice := func(t *testing.T, g *graph.Graph) error {
 		t.Helper()
 		ctx := context.Background()
-		alice, err := g.NodeByKey(ctx, domain.NamespaceOrganisation, access.UserKey("alice"))
+		alice, err := g.NodeByKey(ctx, access.NamespaceOrganisation, access.UserKey("alice"))
 		if err != nil {
 			t.Fatal(err)
 		}
-		head, err := g.BranchHead(ctx, domain.NamespaceOrganisation, domain.MainBranch)
+		head, err := g.BranchHead(ctx, access.NamespaceOrganisation, domain.MainBranch)
 		if err != nil {
 			t.Fatal(err)
 		}
 		ref := alice.Ref()
-		_, err = g.Commit(ctx, graph.Commit{Namespace: domain.NamespaceOrganisation, Title: "deactivate alice", Baseline: head.ID,
+		_, err = g.Commit(ctx, graph.Commit{Namespace: access.NamespaceOrganisation, Title: "deactivate alice", Baseline: head.ID,
 			Edits: []graph.NodeEdit{{Pre: &ref, State: "deactivated", Rationale: "test"}}})
 		return err
 	}
@@ -137,7 +137,7 @@ func TestAdminFloorCountsWhatEnrichGrants(t *testing.T) {
 		if err := graphsvc.EnsureUser(ctx, g, "alice"); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := g.Commit(ctx, graph.Commit{Namespace: domain.NamespaceOrganisation, Title: "bob", Intent: "bob", By: "test", Edits: edits}); err != nil {
+		if _, err := g.Commit(ctx, graph.Commit{Namespace: access.NamespaceOrganisation, Title: "bob", Intent: "bob", By: "test", Edits: edits}); err != nil {
 			t.Fatal(err)
 		}
 		return g
@@ -150,8 +150,8 @@ func TestAdminFloorCountsWhatEnrichGrants(t *testing.T) {
 	// bob is an administrator through the Assignment of the unit he belongs to
 	asg := access.Assignment{Roles: []string{access.RoleAdmin}}
 	g := setup(t,
-		graph.NodeEdit{Key: "ORG-OPS", Type: domain.TypeOrgUnit, Props: map[string]any{"name": "Ops"}, Rationale: "test",
-			Links: []graph.LinkEdit{{Type: domain.LinkPartOf, ToKey: domain.DefaultOrg}}},
+		graph.NodeEdit{Key: "ORG-OPS", Type: access.NodeTypeOrgUnit, Props: map[string]any{"name": "Ops"}, Rationale: "test",
+			Links: []graph.LinkEdit{{Type: access.LinkPartOf, ToKey: access.DefaultOrg}}},
 		bob(access.User{Subject: "bob"}.Props(), "ORG-OPS"),
 		graph.NodeEdit{Key: access.PlatformAssignmentKey("ORG-OPS"), Type: access.NodeTypeAssignment, Props: asg.Props(), Rationale: "test",
 			Links: []graph.LinkEdit{{Type: access.LinkAssignsOrg, ToKey: "ORG-OPS"}}})
@@ -160,7 +160,7 @@ func TestAdminFloorCountsWhatEnrichGrants(t *testing.T) {
 	}
 
 	// a plain second user is no administrator: alice stays
-	g = setup(t, bob(access.User{Subject: "bob"}.Props(), domain.DefaultOrg))
+	g = setup(t, bob(access.User{Subject: "bob"}.Props(), access.DefaultOrg))
 	if err := deactivateAlice(t, g); !errors.Is(err, graph.ErrInvalid) {
 		t.Fatalf("a plain user must not count: %v", err)
 	}

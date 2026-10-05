@@ -144,7 +144,7 @@ func TestUserCreatedAutomatically(t *testing.T) {
 	if _, err := cl.ListChanges(ctx, list); err != nil {
 		t.Fatal(err)
 	}
-	n, err := g.NodeByKey(ctx, domain.NamespaceOrganisation, "USR:bob")
+	n, err := g.NodeByKey(ctx, access.NamespaceOrganisation, "USR:bob")
 	if err != nil {
 		t.Fatalf("bob's User node: %v", err)
 	}
@@ -160,7 +160,7 @@ func TestUserCreatedAutomatically(t *testing.T) {
 	if _, err := cl.ListChanges(ctx, list2); err != nil {
 		t.Fatal(err)
 	}
-	again, err := g.NodeByKey(ctx, domain.NamespaceOrganisation, "USR:bob")
+	again, err := g.NodeByKey(ctx, access.NamespaceOrganisation, "USR:bob")
 	if err != nil || again.Version != n.Version {
 		t.Fatalf("a second call must not write again: %+v, %v", again, err)
 	}
@@ -176,7 +176,7 @@ func TestEnsureUserWaitsForDefaultOrg(t *testing.T) {
 	if err := graphsvc.EnsureUser(ctx, g, "alice"); !errors.Is(err, graph.ErrNotFound) {
 		t.Fatalf("EnsureUser before SeedDefaults = %v, want ErrNotFound", err)
 	}
-	if _, err := g.NodeByKey(ctx, domain.NamespaceOrganisation, "USR:alice"); !errors.Is(err, graph.ErrNotFound) {
+	if _, err := g.NodeByKey(ctx, access.NamespaceOrganisation, "USR:alice"); !errors.Is(err, graph.ErrNotFound) {
 		t.Fatalf("a failed EnsureUser must leave no node: %v", err)
 	}
 
@@ -186,12 +186,12 @@ func TestEnsureUserWaitsForDefaultOrg(t *testing.T) {
 	if err := graphsvc.EnsureUser(ctx, g, "alice"); err != nil {
 		t.Fatalf("EnsureUser after SeedDefaults: %v", err)
 	}
-	n, err := g.NodeByKey(ctx, domain.NamespaceOrganisation, "USR:alice")
+	n, err := g.NodeByKey(ctx, access.NamespaceOrganisation, "USR:alice")
 	if err != nil {
 		t.Fatalf("alice's User node: %v", err)
 	}
 	// the first user is granted admin through a platform Assignment (ADR 0046, 0047)
-	asgNode, err := g.NodeByKey(ctx, domain.NamespaceOrganisation, access.PlatformAssignmentKey("USR:alice"))
+	asgNode, err := g.NodeByKey(ctx, access.NamespaceOrganisation, access.PlatformAssignmentKey("USR:alice"))
 	if err != nil {
 		t.Fatalf("alice's platform assignment: %v", err)
 	}
@@ -220,7 +220,7 @@ func TestEnsureUserWaitsForDefaultOrg(t *testing.T) {
 	if err := graphsvc.EnsureUser(ctx, g, "bob"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := g.NodeByKey(ctx, domain.NamespaceOrganisation, access.PlatformAssignmentKey("USR:bob")); !errors.Is(err, graph.ErrNotFound) {
+	if _, err := g.NodeByKey(ctx, access.NamespaceOrganisation, access.PlatformAssignmentKey("USR:bob")); !errors.Is(err, graph.ErrNotFound) {
 		t.Fatalf("a second user must get no platform assignment: %v", err)
 	}
 }
@@ -235,11 +235,11 @@ func TestEnsureUserJoinsWaitingUnit(t *testing.T) {
 	}
 	commit := func(edits ...graph.NodeEdit) {
 		t.Helper()
-		head, err := g.BranchHead(ctx, domain.NamespaceOrganisation, domain.MainBranch)
+		head, err := g.BranchHead(ctx, access.NamespaceOrganisation, domain.MainBranch)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := g.Commit(ctx, graph.Commit{Namespace: domain.NamespaceOrganisation, Title: "t", Intent: "t", Baseline: head.ID, By: "test", Edits: edits}); err != nil {
+		if _, err := g.Commit(ctx, graph.Commit{Namespace: access.NamespaceOrganisation, Title: "t", Intent: "t", Baseline: head.ID, By: "test", Edits: edits}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -248,7 +248,7 @@ func TestEnsureUserJoinsWaitingUnit(t *testing.T) {
 		if err := graphsvc.EnsureUser(ctx, g, subject); err != nil {
 			t.Fatal(err)
 		}
-		n, err := g.NodeByKey(ctx, domain.NamespaceOrganisation, access.UserKey(subject))
+		n, err := g.NodeByKey(ctx, access.NamespaceOrganisation, access.UserKey(subject))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -269,39 +269,39 @@ func TestEnsureUserJoinsWaitingUnit(t *testing.T) {
 		return ""
 	}
 
-	root, err := g.NodeByKey(ctx, domain.NamespaceOrganisation, domain.DefaultOrg)
+	root, err := g.NodeByKey(ctx, access.NamespaceOrganisation, access.DefaultOrg)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if access.IsWaitingUnit(root.Properties) {
 		t.Fatalf("no unit is a waiting unit until an administrator says so: %+v", root.Properties)
 	}
-	if got := unitOf("alice"); got != domain.DefaultOrg {
-		t.Fatalf("alice joined %s, want %s", got, domain.DefaultOrg)
+	if got := unitOf("alice"); got != access.DefaultOrg {
+		t.Fatalf("alice joined %s, want %s", got, access.DefaultOrg)
 	}
 
 	// the administrator creates a waiting unit
 	rootRef := root.Ref()
 	flag := map[string]any{"name": "Waiting", access.PropWaitingUnit: true}
-	commit(graph.NodeEdit{Key: "WAIT-B", Type: domain.TypeOrgUnit, Props: flag, Links: []graph.LinkEdit{{Type: access.LinkPartOf, To: &rootRef}}})
+	commit(graph.NodeEdit{Key: "WAIT-B", Type: access.NodeTypeOrgUnit, Props: flag, Links: []graph.LinkEdit{{Type: access.LinkPartOf, To: &rootRef}}})
 	if got := unitOf("bob"); got != "WAIT-B" {
 		t.Fatalf("bob joined %s, want WAIT-B", got)
 	}
 	// a second one flagged: the smallest key wins
-	commit(graph.NodeEdit{Key: "WAIT-A", Type: domain.TypeOrgUnit, Props: flag, Links: []graph.LinkEdit{{Type: access.LinkPartOf, To: &rootRef}}})
+	commit(graph.NodeEdit{Key: "WAIT-A", Type: access.NodeTypeOrgUnit, Props: flag, Links: []graph.LinkEdit{{Type: access.LinkPartOf, To: &rootRef}}})
 	if got := unitOf("carol"); got != "WAIT-A" {
 		t.Fatalf("carol joined %s, want WAIT-A (smallest key of the flagged units)", got)
 	}
 	// flags cleared: back to ORG-DEFAULT
 	for _, k := range []string{"WAIT-A", "WAIT-B"} {
-		n, err := g.NodeByKey(ctx, domain.NamespaceOrganisation, k)
+		n, err := g.NodeByKey(ctx, access.NamespaceOrganisation, k)
 		if err != nil {
 			t.Fatal(err)
 		}
 		ref := n.Ref()
 		commit(graph.NodeEdit{Pre: &ref, Props: map[string]any{access.PropWaitingUnit: nil}})
 	}
-	if got := unitOf("dave"); got != domain.DefaultOrg {
-		t.Fatalf("dave joined %s, want %s", got, domain.DefaultOrg)
+	if got := unitOf("dave"); got != access.DefaultOrg {
+		t.Fatalf("dave joined %s, want %s", got, access.DefaultOrg)
 	}
 }

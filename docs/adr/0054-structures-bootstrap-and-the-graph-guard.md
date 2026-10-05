@@ -2,7 +2,7 @@
 
 **Status**: accepted, implemented · **Date**: 2026-10 ·
 Builds on ADR 0012/0013 (domains, type catalogue), ADR 0039 (project), ADR 0040 (mandatory parenting), ADR 0049
-(mandatory change). Supersedes ADR 0049's `LinkOrphanUnits` and the `organisation@owner` link, and ADR 0039's
+(mandatory change). Roots, default flag and bootstrap properties moved into the tag by ADR 0069. Supersedes ADR 0049's `LinkOrphanUnits` and the `organisation@owner` link, and ADR 0039's
 "empty project resolves to the root project" and its `Engine.Start` project gate.
 
 ## Context
@@ -35,7 +35,7 @@ from and to the type; the type catalogue (`pkg/typecat`) refuses a second domain
 catalogue without both, so the registry reports it when the domain is saved and never publishes it. The built-in
 organisation domain tags `OrgUnit` (`part_of`, root `ORG-DEFAULT`) and `ProjectUnit` (`project_part_of`, root
 `PROJ-ROOT`, self-parent). `TypeCatalog.Structure(kind)` and `IsA(typ, base)` give the graph what it needs; an
-untyped graph (tests, tools) uses `domain.BuiltinStructures`. A subtype belongs to its structure (`User extends
+untyped graph (tests, tools) uses the catalogue of the built-in domains (`typecat.Builtin()`, ADR 0069). A subtype belongs to its structure (`User extends
 OrgUnit` is a unit).
 
 ### The bootstrap (graph service)
@@ -66,7 +66,7 @@ lets the bootstrap write the two roots, each referencing the other and itself.
 
 `CreateChange` resolves a change's scope once and stores it (`scopeChange`): an unset owner is the parent change's,
 else the root unit; an unset project the parent change's, else the **default project**. The default project is the
-`ProjectUnit` flagged `default: true` (`domain.PropDefaultProject`; the smallest key if several, the root project if
+`ProjectUnit` flagged by the property its tag names (`structure.default`, ADR 0069; the smallest key if several, the root project if
 none); the bootstrap flags the root project, and an administrator moves the flag in one change (Project tab, "Make
 default project"). The engine no longer refuses a process without a project (`ErrNoProject` is gone): its change acts
 in the default project, and the run takes the change's project for its role checks.
@@ -91,7 +91,7 @@ outside it, stays with the parent), an `organisation@Adapter` belongs to the uni
 - Rule 1 holds by construction at two levels (the guard, the schema); rules 2 and 3 hold in the guard and the schema
   alike; no caller-level exemption remains (test fixtures write through a change too).
 - No service names the organisation or the projects itself: the graph reads the structures from its catalogue, and
-  the services reading them (`pkg/access`, `internal/mcpsvc`) ask the graph service (`GetStructures`: both structures
+  the services reading them (`pkg/access`, `internal/mcpsvc`) ask the graph service (`GetStructures`: every structure
   with the types belonging to each, a `User` being a unit, `domain.Structures`) and build their snapshots from the
   answer: units and projects are the nodes of those types, their hierarchies the parent links named, the roots the
   keys named. The catalogue requires both structures to live in one namespace (the Assignment links a unit and a

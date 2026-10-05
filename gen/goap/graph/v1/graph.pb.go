@@ -3791,7 +3791,11 @@ type Structure struct {
 	Root       string                 `protobuf:"bytes,5,opt,name=root,proto3" json:"root,omitempty"`
 	SelfParent bool                   `protobuf:"varint,6,opt,name=self_parent,json=selfParent,proto3" json:"self_parent,omitempty"`
 	// the tagged type and its subtypes
-	Types         []string `protobuf:"bytes,7,rep,name=types,proto3" json:"types,omitempty"`
+	Types []string `protobuf:"bytes,7,rep,name=types,proto3" json:"types,omitempty"`
+	// the property flagging the default member of the hierarchy
+	DefaultProperty string `protobuf:"bytes,8,opt,name=default_property,json=defaultProperty,proto3" json:"default_property,omitempty"`
+	// the initial properties of the root node
+	Bootstrap     *structpb.Struct `protobuf:"bytes,9,opt,name=bootstrap,proto3" json:"bootstrap,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3875,10 +3879,24 @@ func (x *Structure) GetTypes() []string {
 	return nil
 }
 
+func (x *Structure) GetDefaultProperty() string {
+	if x != nil {
+		return x.DefaultProperty
+	}
+	return ""
+}
+
+func (x *Structure) GetBootstrap() *structpb.Struct {
+	if x != nil {
+		return x.Bootstrap
+	}
+	return nil
+}
+
+// Every structure in force, one per kind.
 type GetStructuresResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Organisation  *Structure             `protobuf:"bytes,1,opt,name=organisation,proto3" json:"organisation,omitempty"`
-	Project       *Structure             `protobuf:"bytes,2,opt,name=project,proto3" json:"project,omitempty"`
+	Structures    []*Structure           `protobuf:"bytes,1,rep,name=structures,proto3" json:"structures,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3913,16 +3931,9 @@ func (*GetStructuresResponse) Descriptor() ([]byte, []int) {
 	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{54}
 }
 
-func (x *GetStructuresResponse) GetOrganisation() *Structure {
+func (x *GetStructuresResponse) GetStructures() []*Structure {
 	if x != nil {
-		return x.Organisation
-	}
-	return nil
-}
-
-func (x *GetStructuresResponse) GetProject() *Structure {
-	if x != nil {
-		return x.Project
+		return x.Structures
 	}
 	return nil
 }
@@ -11837,7 +11848,7 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\x04type\x18\x01 \x01(\tR\x04type\"8\n" +
 	"\x17IsAdminOnlyTypeResponse\x12\x1d\n" +
 	"\n" +
-	"admin_only\x18\x01 \x01(\bR\tadminOnly\"\xb4\x01\n" +
+	"admin_only\x18\x01 \x01(\bR\tadminOnly\"\x96\x02\n" +
 	"\tStructure\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x12\n" +
 	"\x04type\x18\x02 \x01(\tR\x04type\x12\x1c\n" +
@@ -11846,10 +11857,13 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\x04root\x18\x05 \x01(\tR\x04root\x12\x1f\n" +
 	"\vself_parent\x18\x06 \x01(\bR\n" +
 	"selfParent\x12\x14\n" +
-	"\x05types\x18\a \x03(\tR\x05types\"\x89\x01\n" +
-	"\x15GetStructuresResponse\x12<\n" +
-	"\forganisation\x18\x01 \x01(\v2\x18.goap.graph.v1.StructureR\forganisation\x122\n" +
-	"\aproject\x18\x02 \x01(\v2\x18.goap.graph.v1.StructureR\aproject\"\xe7\x02\n" +
+	"\x05types\x18\a \x03(\tR\x05types\x12)\n" +
+	"\x10default_property\x18\b \x01(\tR\x0fdefaultProperty\x125\n" +
+	"\tbootstrap\x18\t \x01(\v2\x17.google.protobuf.StructR\tbootstrap\"Q\n" +
+	"\x15GetStructuresResponse\x128\n" +
+	"\n" +
+	"structures\x18\x01 \x03(\v2\x18.goap.graph.v1.StructureR\n" +
+	"structures\"\xe7\x02\n" +
 	"\x13CreateChangeRequest\x12\x14\n" +
 	"\x05title\x18\x01 \x01(\tR\x05title\x12\x16\n" +
 	"\x06intent\x18\x02 \x01(\tR\x06intent\x12 \n" +
@@ -12806,8 +12820,8 @@ var file_goap_graph_v1_graph_proto_depIdxs = []int32{
 	41,  // 63: goap.graph.v1.ListChangeLogResponse.entries:type_name -> goap.graph.v1.LogEntry
 	175, // 64: goap.graph.v1.ListChangeLogResponse.counts:type_name -> goap.graph.v1.ListChangeLogResponse.CountsEntry
 	40,  // 65: goap.graph.v1.ListChangeEventsResponse.events:type_name -> goap.graph.v1.ImpactEvent
-	53,  // 66: goap.graph.v1.GetStructuresResponse.organisation:type_name -> goap.graph.v1.Structure
-	53,  // 67: goap.graph.v1.GetStructuresResponse.project:type_name -> goap.graph.v1.Structure
+	182, // 66: goap.graph.v1.Structure.bootstrap:type_name -> google.protobuf.Struct
+	53,  // 67: goap.graph.v1.GetStructuresResponse.structures:type_name -> goap.graph.v1.Structure
 	182, // 68: goap.graph.v1.CreateChangeRequest.data:type_name -> google.protobuf.Struct
 	9,   // 69: goap.graph.v1.CreateChangeResponse.change:type_name -> goap.graph.v1.Change
 	9,   // 70: goap.graph.v1.GetChangeResponse.change:type_name -> goap.graph.v1.Change

@@ -16,7 +16,6 @@ import (
 	"github.com/zimwip/goap/internal/identity"
 	"github.com/zimwip/goap/pkg/access"
 	"github.com/zimwip/goap/pkg/authz"
-	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/graph"
 )
 
@@ -83,11 +82,11 @@ func TestServiceSubjectsDoNotTakeTheFirstAdminGrant(t *testing.T) {
 	}
 	as("system:registry")
 	as("system:trigger:nightly")
-	if _, err := g.NodeByKey(ctx, domain.NamespaceOrganisation, access.UserKey("system:registry")); !errors.Is(err, graph.ErrNotFound) {
+	if _, err := g.NodeByKey(ctx, access.NamespaceOrganisation, access.UserKey("system:registry")); !errors.Is(err, graph.ErrNotFound) {
 		t.Fatalf("a service must not become a User: %v", err)
 	}
 	as("alice")
-	n, err := g.NodeByKey(ctx, domain.NamespaceOrganisation, access.PlatformAssignmentKey(access.UserKey("alice")))
+	n, err := g.NodeByKey(ctx, access.NamespaceOrganisation, access.PlatformAssignmentKey(access.UserKey("alice")))
 	if err != nil {
 		t.Fatalf("alice's platform assignment: %v", err)
 	}
