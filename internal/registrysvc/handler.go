@@ -16,7 +16,6 @@ import (
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/domain/def"
 	"github.com/zimwip/goap/pkg/engine"
-	"github.com/zimwip/goap/pkg/methodology"
 )
 
 // Handler implements registryv1connect.RegistryServiceHandler.
@@ -79,22 +78,11 @@ func (h *Handler) ValidateMethodology(ctx context.Context, r *connect.Request[re
 	return connect.NewResponse(&registryv1.ValidateMethodologyResponse{Issues: IssuesToPB(h.Service.validate(ctx, &m))}), nil
 }
 
-// lenient compiles a methodology as edited for reading (the flow, its checks): what compiles is built, the issues come
-// with it, each tied to the process, method or step it is about. Nil when nothing could be built.
-func lenient(m *methodology.Methodology) (c *methodology.Compiled, issues def.Issues) {
-	defer func() {
-		if r := recover(); r != nil { // a draft broken in a way the compiler did not foresee still gets its issues told
-			c, issues = nil, append(issues, def.Issue{Message: fmt.Sprintf("the methodology cannot be read: %v", r)})
-		}
-	}()
-	return m.CompileLenient()
-}
-
 // GetProcessGraph builds the graph of a process of a methodology as edited (ADR 0036 §4), with the issues of the
 // methodology: a draft that does not compile still has its graph drawn as far as it stands.
 func (h *Handler) GetProcessGraph(ctx context.Context, r *connect.Request[registryv1.GetProcessGraphRequest]) (*connect.Response[registryv1.GetProcessGraphResponse], error) {
 	m := FromPB(r.Msg.Methodology)
-	c, issues := lenient(&m)
+	c, issues := m.CompileLenient()
 	if c == nil {
 		return connect.NewResponse(&registryv1.GetProcessGraphResponse{Issues: IssuesToPB(issues)}), nil
 	}
@@ -112,7 +100,7 @@ func (h *Handler) GetProcessGraph(ctx context.Context, r *connect.Request[regist
 // methodology.
 func (h *Handler) CheckLevels(ctx context.Context, r *connect.Request[registryv1.CheckLevelsRequest]) (*connect.Response[registryv1.CheckLevelsResponse], error) {
 	m := FromPB(r.Msg.Methodology)
-	c, issues := lenient(&m)
+	c, issues := m.CompileLenient()
 	if c == nil {
 		return connect.NewResponse(&registryv1.CheckLevelsResponse{Issues: IssuesToPB(issues)}), nil
 	}
@@ -127,25 +115,25 @@ func (h *Handler) CheckLevels(ctx context.Context, r *connect.Request[registryv1
 }
 
 // PreviewPlan plans toward a goal with the planner its agent is actually configured with, from an empty
-// blackboard whose evaluated conditions the request's overrides patch on top (ADR 0034; no live Change needed).
+// blackboard whose evaluated conditions the request's overrides patch on top (ADR 0034; no live Change needed). Like
+// GetProcessGraph it plans over what stands of a draft and returns the issues of the methodology alongside the plan.
 func (h *Handler) PreviewPlan(ctx context.Context, r *connect.Request[registryv1.PreviewPlanRequest]) (*connect.Response[registryv1.PreviewPlanResponse], error) {
 	m := FromPB(r.Msg.Methodology)
-	c, err := m.Compile()
-	if err != nil {
-		var issues def.Issues
-		if !errors.As(err, &issues) {
-			issues = def.Issues{{Message: err.Error()}}
-		}
+	c, issues := m.CompileLenient()
+	if c == nil {
 		return connect.NewResponse(&registryv1.PreviewPlanResponse{Issues: IssuesToPB(issues)}), nil
 	}
 	p, err := engine.PreviewPlan(c, domain.Blackboard{}, r.Msg.Agent, r.Msg.Goal, r.Msg.Overrides)
 	if err != nil {
+		if len(issues) > 0 { // the agent or goal may be one the draft's issues dropped: tell the issues
+			return connect.NewResponse(&registryv1.PreviewPlanResponse{Issues: IssuesToPB(issues)}), nil
+		}
 		if errors.Is(err, engine.ErrLivePlanner) {
 			return connect.NewResponse(&registryv1.PreviewPlanResponse{Issues: IssuesToPB(def.Issues{{Message: err.Error()}})}), nil
 		}
 		return nil, connect.NewError(connect.CodeNotFound, err)
 	}
-	return connect.NewResponse(&registryv1.PreviewPlanResponse{Preview: PlanPreviewToPB(p)}), nil
+	return connect.NewResponse(&registryv1.PreviewPlanResponse{Preview: PlanPreviewToPB(p), Issues: IssuesToPB(issues)}), nil
 }
 
 func (h *Handler) PublishMethodology(ctx context.Context, r *connect.Request[registryv1.PublishMethodologyRequest]) (*connect.Response[registryv1.PublishMethodologyResponse], error) {

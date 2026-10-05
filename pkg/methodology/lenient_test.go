@@ -25,7 +25,7 @@ processes:
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, strict := m.compile(); len(strict) == 0 {
+	if _, strict := m.CompileWith(CompileOptions{}); len(strict) == 0 {
 		t.Fatal("the draft is broken")
 	}
 	c, issues := m.CompileLenient()

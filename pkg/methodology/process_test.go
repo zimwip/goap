@@ -33,7 +33,7 @@ func compileProcess(t *testing.T, processes string) (*Compiled, def.Issues) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return m.compile()
+	return m.CompileWith(CompileOptions{})
 }
 
 func TestProcessCompilesToStepActions(t *testing.T) {
@@ -377,7 +377,7 @@ processes:
 			if err != nil {
 				t.Fatal(err)
 			}
-			if _, issues := m.compile(); !hasIssue(issues, tc.path, "both an input and an output") {
+			if _, issues := m.CompileWith(CompileOptions{}); !hasIssue(issues, tc.path, "both an input and an output") {
 				t.Fatalf("want an issue at %s: %v", tc.path, issues)
 			}
 			if tc.activity != "" {

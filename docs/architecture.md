@@ -1094,7 +1094,11 @@ a change applied on main; editing an action versions that node only (`registrysv
 client). **Domains** are the definition of a graph (namespace, node types, link types, lifecycles, algorithms): each
 graph holds them in memory (the type catalogue) to keep its data coherent, and the registry keeps their versions in its
 database (`domain_version`, PostgreSQL or SQLite, `registrysvc.SQLDomainStore`). The registry validates, compiles,
-publishes and emits the `goap.registry.*` events.
+publishes and emits the `goap.registry.*` events. Compilation is one pipeline with a policy
+(`Methodology.CompileWith(CompileOptions{Lenient, Stored})`; `Compile`, `CompileLenient`, `Validate`, `ValidateStored` are
+its policies, [ADR 0072](adr/0072-one-compile-pipeline-split-apply-compile-cache.md)); the registry caches the compiled
+methodologies by (name, version, content hash, published domains in force), so the engine's per-event and per-action reads
+do not recompile.
 
 Lifecycle of a version: **draft** (editable, can be invalid: anomalies are returned
 with their path, e.g. `conditions[2].expr`) → **published** (validated, immutable, the only one executable by the
