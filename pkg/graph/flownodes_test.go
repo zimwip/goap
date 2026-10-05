@@ -40,15 +40,15 @@ func newFlowWorld(t *testing.T, repo Repo) flowWorld {
 	if err != nil {
 		t.Fatal(err)
 	}
-	req := must(g.WriteNode(ctx, c.ID, added[0].ID, NodeWrite{Properties: map[string]any{"title": "A"}, Execution: "e1"}))
-	if req, err = g.ReviewNodeOn(ctx, c.ID, "", "e1", req.ID, domain.ReviewAccepted, "bot", "first look"); err != nil {
+	req := must(g.edit(ctx, c.ID, added[0].ID, edit{Properties: map[string]any{"title": "A"}, Execution: "e1"}))
+	if req, err = g.acceptOn(ctx, c.ID, "", "e1", req.ID, "bot", "first look"); err != nil {
 		t.Fatal(err)
 	}
 	added, err = g.AddNodes(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentCreated, Key: "TST-2", Type: "TestCase", Rationale: "cover it", Execution: "e2"}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	tst := must(g.WriteNode(ctx, c.ID, added[0].ID, NodeWrite{Properties: map[string]any{"title": "test"}, Execution: "e2"}))
+	tst := must(g.edit(ctx, c.ID, added[0].ID, edit{Properties: map[string]any{"title": "test"}, Execution: "e2"}))
 	fl, err := g.OpenFlow(ctx, c.ID, OpenFlowRequest{Origin: map[string]any{"step": 0, "execution": "e1", "reason": "redo"}, StaleRuns: []string{"e1", "e2"}})
 	if err != nil {
 		t.Fatal(err)
@@ -94,10 +94,10 @@ func testFlowChangeImpactsView(t *testing.T, repo Repo) {
 	if _, err := g.AddNodes(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &pre, Rationale: "twice", Flow: w.flow, Execution: "e3"}}); !errors.Is(err, ErrConflict) {
 		t.Fatalf("a node appears once per flow, got %v", err)
 	}
-	if _, err := g.WriteNode(ctx, c.ID, added[0].ID, NodeWrite{Flow: w.flow, Execution: "e3", Properties: map[string]any{"title": "B"}}); err != nil {
+	if _, err := g.edit(ctx, c.ID, added[0].ID, edit{Flow: w.flow, Execution: "e3", Properties: map[string]any{"title": "B"}}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := g.ReviewNodeOn(ctx, c.ID, w.flow, "e3", added[0].ID, domain.ReviewAccepted, "bot", "second look is right"); err != nil {
+	if _, err := g.acceptOn(ctx, c.ID, w.flow, "e3", added[0].ID, "bot", "second look is right"); err != nil {
 		t.Fatal(err)
 	}
 	fv := viewOf(t, g, c.ID, w.flow)
@@ -133,10 +133,10 @@ func testFlowChangeImpactsAdopt(t *testing.T, repo Repo) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := g.WriteNode(ctx, c.ID, added[0].ID, NodeWrite{Flow: w.flow, Execution: "e3", Properties: map[string]any{"title": "B"}}); err != nil {
+	if _, err := g.edit(ctx, c.ID, added[0].ID, edit{Flow: w.flow, Execution: "e3", Properties: map[string]any{"title": "B"}}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := g.ReviewNodeOn(ctx, c.ID, w.flow, "e3", added[0].ID, domain.ReviewAccepted, "bot", "second look is right"); err != nil {
+	if _, err := g.acceptOn(ctx, c.ID, w.flow, "e3", added[0].ID, "bot", "second look is right"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := g.AdoptFlow(ctx, c.ID, w.flow, "alice"); err != nil {
@@ -190,7 +190,7 @@ func testFlowChangeImpactsDiscard(t *testing.T, repo Repo) {
 	g, c := w.g, w.change
 	pre := w.f.req.Ref()
 	added, _ := g.AddNodes(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &pre, Rationale: "second look", Flow: w.flow, Execution: "e3"}})
-	if _, err := g.WriteNode(ctx, c.ID, added[0].ID, NodeWrite{Flow: w.flow, Execution: "e3", Properties: map[string]any{"title": "B"}}); err != nil {
+	if _, err := g.edit(ctx, c.ID, added[0].ID, edit{Flow: w.flow, Execution: "e3", Properties: map[string]any{"title": "B"}}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := g.DiscardFlow(ctx, c.ID, w.flow, "alice"); err != nil {
@@ -213,7 +213,7 @@ func testFlowChangeImpactsDiscard(t *testing.T, repo Repo) {
 		t.Fatalf("the flow branch is abandoned: %+v %v", b, err)
 	}
 	// the change goes on as before: REQ-1 at the version step 1 wrote
-	if _, err := g.ReviewNodeOn(ctx, c.ID, "", "e4", w.tst.ID, domain.ReviewAccepted, "bot", "needed"); err != nil {
+	if _, err := g.acceptOn(ctx, c.ID, "", "e4", w.tst.ID, "bot", "needed"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := g.Apply(ctx, c.ID, ""); err != nil {
@@ -233,11 +233,11 @@ func testFlowChangeImpactsConflict(t *testing.T, repo Repo) {
 	g, c := w.g, w.change
 	pre := w.f.req.Ref()
 	added, _ := g.AddNodes(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &pre, Rationale: "second look", Flow: w.flow, Execution: "e3"}})
-	if _, err := g.WriteNode(ctx, c.ID, added[0].ID, NodeWrite{Flow: w.flow, Execution: "e3", Properties: map[string]any{"title": "B"}}); err != nil {
+	if _, err := g.edit(ctx, c.ID, added[0].ID, edit{Flow: w.flow, Execution: "e3", Properties: map[string]any{"title": "B"}}); err != nil {
 		t.Fatal(err)
 	}
 	// another run of the main flow (not stale) writes the same node meanwhile
-	if _, err := g.WriteNode(ctx, c.ID, w.req.ID, NodeWrite{Execution: "e9", Properties: map[string]any{"owner": "carol"}}); err != nil {
+	if _, err := g.edit(ctx, c.ID, w.req.ID, edit{Execution: "e9", Properties: map[string]any{"owner": "carol"}}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := g.AdoptFlow(ctx, c.ID, w.flow, "alice"); !errors.Is(err, ErrConflict) {
@@ -281,7 +281,7 @@ func testParallelAndNestedFlowsOnChangeImpacts(t *testing.T, repo Repo) {
 		t.Fatalf("parallel flows start from the main flow: %v %v", title(f1), title(f2))
 	}
 	// f1 rewrites REQ-1 (a change impact of the main flow): only f1 sees it
-	if _, err := g.WriteNode(ctx, c.ID, w.req.ID, NodeWrite{Flow: f1, Execution: "e4", Properties: map[string]any{"title": "F1"}}); err != nil {
+	if _, err := g.edit(ctx, c.ID, w.req.ID, edit{Flow: f1, Execution: "e4", Properties: map[string]any{"title": "F1"}}); err != nil {
 		t.Fatal(err)
 	}
 	if title(f1) != "F1" || title(f2) != "A" || title("") != "A" {
@@ -296,7 +296,7 @@ func testParallelAndNestedFlowsOnChangeImpacts(t *testing.T, repo Repo) {
 		t.Fatalf("a flow relaunching f1's step does not see what it wrote: %v", title(redo))
 	}
 	// it writes its own version, derived from the one it sees
-	cn, err := g.WriteNode(ctx, c.ID, w.req.ID, NodeWrite{Flow: redo, Execution: "e5", Properties: map[string]any{"title": "R"}})
+	cn, err := g.edit(ctx, c.ID, w.req.ID, edit{Flow: redo, Execution: "e5", Properties: map[string]any{"title": "R"}})
 	if err != nil {
 		t.Fatal(err)
 	}

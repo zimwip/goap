@@ -45,6 +45,13 @@ type TransitionInfo struct {
 	To   string `json:"to"`
 }
 
+// ImpactInfo is the impact of the moved node in the change (ADR 0076): a transition that requires a review checks it.
+type ImpactInfo struct {
+	Intent string `json:"intent"`
+	// Review is the review of the impact: proposed, accepted or rejected ("" when the change holds no impact on the node).
+	Review string `json:"review"`
+}
+
 // AlgorithmInput is what an algorithm is run on. Only the fields of its usage are read.
 type AlgorithmInput struct {
 	// Node is the node concerned (after the change for a validator; the moved node, in its new state, for a transition).
@@ -56,6 +63,8 @@ type AlgorithmInput struct {
 	Children   []Node
 	Change     ChangeInfo
 	Transition TransitionInfo
+	// Impact is the impact of the moved node in the change (transitions).
+	Impact ImpactInfo
 }
 
 // Outcome is the result of an algorithm.
@@ -151,6 +160,9 @@ func (g *GuardCtx) Change() ChangeInfo { return g.in.Change }
 
 // Transition is the transition being taken.
 func (g *GuardCtx) Transition() TransitionInfo { return g.in.Transition }
+
+// Impact is the impact of the node in the change (ADR 0076).
+func (g *GuardCtx) Impact() ImpactInfo { return g.in.Impact }
 
 // Fail refuses the transition with a message.
 func (g *GuardCtx) Fail(msg string)  { g.c.Fail(msg) }

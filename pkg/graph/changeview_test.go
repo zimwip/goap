@@ -21,11 +21,11 @@ func testChangeViewLevels(t *testing.T, repo Repo) {
 		{Intent: domain.IntentModified, Pre: &need, Rationale: "reword"},
 		{Intent: domain.IntentModified, Pre: new(f.test.Ref()), Rationale: "obsolete"},
 	}))
-	reqW := must[domain.ChangeImpact](t)(g.WriteNode(ctx, c.ID, added[0].ID, NodeWrite{Properties: map[string]any{"title": "Use PSP v2"}}))
-	needW := must[domain.ChangeImpact](t)(g.WriteNode(ctx, c.ID, added[1].ID, NodeWrite{Properties: map[string]any{"title": "Pay"}}))
-	must[domain.ChangeImpact](t)(g.WriteNode(ctx, c.ID, added[2].ID, NodeWrite{Retire: true}))
-	must[domain.ChangeImpact](t)(g.ReviewNode(ctx, c.ID, reqW.ID, domain.ReviewAccepted, "u", "ok"))
-	must[domain.ChangeImpact](t)(g.ReviewNode(ctx, c.ID, added[2].ID, domain.ReviewAccepted, "u", "ok"))
+	reqW := must[domain.ChangeImpact](t)(g.edit(ctx, c.ID, added[0].ID, edit{Properties: map[string]any{"title": "Use PSP v2"}}))
+	needW := must[domain.ChangeImpact](t)(g.edit(ctx, c.ID, added[1].ID, edit{Properties: map[string]any{"title": "Pay"}}))
+	testW := must[domain.ChangeImpact](t)(g.edit(ctx, c.ID, added[2].ID, edit{Properties: map[string]any{"title": "Obsolete"}}))
+	must[domain.ChangeImpact](t)(g.accept(ctx, c.ID, reqW.ID, "u", "ok"))
+	must[domain.ChangeImpact](t)(g.accept(ctx, c.ID, added[2].ID, "u", "ok"))
 
 	view := func(level string) domain.Baseline {
 		return must[domain.Baseline](t)(g.ChangeView(ctx, c.ID, "", level))
@@ -35,8 +35,8 @@ func testChangeViewLevels(t *testing.T, repo Repo) {
 	if !w.Contains(*reqW.Post) || !w.Contains(*needW.Post) {
 		t.Fatalf("written view: %v", w.Nodes)
 	}
-	if _, ok := w.Nodes[f.test.ID]; ok {
-		t.Fatalf("a retired node leaves the view: %v", w.Nodes)
+	if !w.Contains(*testW.Post) {
+		t.Fatalf("the written view holds every version written: %v", w.Nodes)
 	}
 	// accepted: NEED-1 awaits its review, it stays as released
 	a := view(ViewAccepted)
@@ -71,7 +71,7 @@ func testChangeViewOfAFlow(t *testing.T, repo Repo) {
 	g, c := w.g, w.change
 	pre := w.f.req.Ref()
 	added := must[[]domain.ChangeImpact](t)(g.AddNodes(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &pre, Rationale: "second look", Flow: w.flow, Execution: "e3"}}))
-	must[domain.ChangeImpact](t)(g.WriteNode(ctx, c.ID, added[0].ID, NodeWrite{Flow: w.flow, Execution: "e3", Properties: map[string]any{"title": "B"}}))
+	must[domain.ChangeImpact](t)(g.edit(ctx, c.ID, added[0].ID, edit{Flow: w.flow, Execution: "e3", Properties: map[string]any{"title": "B"}}))
 	flowView := must[domain.Baseline](t)(g.ChangeView(ctx, c.ID, w.flow, ViewWritten))
 	mainView := must[domain.Baseline](t)(g.ChangeView(ctx, c.ID, "", ViewWritten))
 	fv := must[domain.Node](t)(g.Node(ctx, domain.NodeRef{ID: pre.ID, Version: flowView.Nodes[pre.ID]}))

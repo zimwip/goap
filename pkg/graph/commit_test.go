@@ -3,6 +3,7 @@ package graph
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 
 	"github.com/zimwip/goap/pkg/domain"
@@ -99,16 +100,27 @@ func testCommit(t *testing.T, repo Repo) {
 		t.Fatalf("a link to a node nowhere must be invalid, got %v", err)
 	}
 
-	// retire the element; a stale edit conflicts and leaves no open change
+	// the element is removed from the document: a modification of its parent, which loses the link (ADR 0024 §4); the
+	// element keeps its versions. A stale edit conflicts and leaves no open change.
 	head, _ = g.BranchHead(ctx, "", domain.MainBranch)
-	el2Ref := el2.Ref()
-	if _, err := g.Commit(ctx, Commit{Title: "Retire", Baseline: head.ID, By: "registry", Edits: []NodeEdit{{Pre: &el2Ref, Retire: true}}}); err != nil {
+	doc3Ref := doc3.Ref()
+	var definesID domain.LinkID
+	if v, _ := g.View(ctx, doc3Ref); true {
+		for _, l := range v.Out {
+			if l.Type == "defines" {
+				definesID = l.ID
+			}
+		}
+	}
+	if _, err := g.Commit(ctx, Commit{Title: "Remove the element", Baseline: head.ID, By: "registry", Edits: []NodeEdit{{Pre: &doc3Ref, RemoveLinks: []domain.LinkID{definesID}}}}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := g.NodeByKey(ctx, domain.DefaultNamespace, "DOC-1/el"); err == nil {
-		if n, _ := g.NodeByKey(ctx, domain.DefaultNamespace, "DOC-1/el"); !n.Deleted {
-			t.Fatalf("the element must be retired: %+v", n)
-		}
+	doc4, _ := g.NodeByKey(ctx, domain.DefaultNamespace, "DOC-1")
+	if v, _ := g.View(ctx, doc4.Ref()); slices.ContainsFunc(v.Out, func(l domain.Link) bool { return l.Type == "defines" }) {
+		t.Fatalf("the document no longer defines the element: %+v", v.Out)
+	}
+	if n, err := g.NodeByKey(ctx, domain.DefaultNamespace, "DOC-1/el"); err != nil || n.Deleted {
+		t.Fatalf("the element keeps its versions: %+v %v", n, err)
 	}
 	if _, err := g.Commit(ctx, Commit{Title: "Stale", Baseline: head.ID, By: "registry",
 		Edits: []NodeEdit{{Pre: &docRef, Props: map[string]any{"status": "x"}}}}); !errors.Is(err, ErrConflict) && !errors.Is(err, ErrInvalid) {

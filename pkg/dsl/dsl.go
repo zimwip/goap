@@ -76,7 +76,9 @@ type ChangeImpact struct {
 // NodeOp is an operation on a change impact buffered by a script; the engine
 // applies them in order after the script ends.
 type NodeOp struct {
-	// Op is declare (ImpactNode, CreateNode), write (WriteNode) or review (ReviewNode).
+	// Op is declare (ImpactNode, CreateNode), write (WriteNode: the working version, checked out on the first write,
+	// edited in place), review (ReviewNode), checkin (CheckinNode), transition (TransitionNode) or cancel
+	// (CancelCheckout) (ADR 0076).
 	Op string `json:"op"`
 	// Ref names a declared change impact ("#nN") for the next operations of the script.
 	Ref    string `json:"ref,omitempty"`
@@ -86,13 +88,13 @@ type NodeOp struct {
 	// Rationale says why (declare); the comment of a review is in Comment.
 	Rationale string `json:"rationale,omitempty"`
 	// Node designates the change impact of a write or review: a node key or "#nN".
-	Node        string         `json:"node,omitempty"`
-	Props       map[string]any `json:"props,omitempty"`
-	State       string         `json:"state,omitempty"`
-	Links       []NodeOpLink   `json:"links,omitempty"`
-	RemoveLinks []string       `json:"removeLinks,omitempty"`
-	Retire      bool           `json:"retire,omitempty"`
-	Accept      bool           `json:"accept,omitempty"`
+	Node  string         `json:"node,omitempty"`
+	Props map[string]any `json:"props,omitempty"`
+	// State is the lifecycle state a transition moves the node to.
+	State       string       `json:"state,omitempty"`
+	Links       []NodeOpLink `json:"links,omitempty"`
+	RemoveLinks []string     `json:"removeLinks,omitempty"`
+	Accept      bool         `json:"accept,omitempty"`
 	// Reserve is the key of the derogation an acceptance stands on (accepted with reserve, ADR 0075 §2).
 	Reserve    string `json:"reserve,omitempty"`
 	Comment    string `json:"comment,omitempty"`
@@ -303,16 +305,14 @@ func (c *Ctx) CreateNode(nodeType, key, rationale string) string {
 	return ref
 }
 
-// WriteNode writes the next version of a declared node on the change branch.
-// node is a key of a change impact or the reference returned by ImpactNode /
-// CreateNode; w may hold props (merged over the current ones), state (a
-// lifecycle state), links ([{type, to}] with to a node key or a reference of a
-// node written earlier), removeLinks (link ids) and retire.
+// WriteNode edits the working version of a declared node (ADR 0076): the first write checks the node out (a new
+// version on the change branch), the next ones edit it in place. node is a key of a change impact or the reference
+// returned by ImpactNode / CreateNode; w may hold props (merged over the current ones), links ([{type, to}] with to a
+// node key or a reference of a node written earlier) and removeLinks (link ids). A lifecycle state is a transition
+// (TransitionNode); a node is removed by its parent losing the link to it.
 func (c *Ctx) WriteNode(node string, w map[string]any) {
 	op := NodeOp{Op: "write", Node: node, ProducedBy: c.job.Action}
 	op.Props, _ = w["props"].(map[string]any)
-	op.State, _ = w["state"].(string)
-	op.Retire, _ = w["retire"].(bool)
 	for _, x := range asList(w["links"]) {
 		if m, ok := x.(map[string]any); ok {
 			t, _ := m["type"].(string)
@@ -357,6 +357,23 @@ func (c *Ctx) ReviewNode(node string, accept bool, comment string) {
 // target the impact or its action, else the engine refuses the review (ADR 0075).
 func (c *Ctx) ReviewNodeWithReserve(node, derogation, comment string) {
 	c.nodeOps = append(c.nodeOps, NodeOp{Op: "review", Node: node, Accept: true, Reserve: derogation, Comment: comment, ProducedBy: c.job.Action})
+}
+
+// CheckinNode freezes the working version of a change impact: its accepted review authorizes it (ADR 0076).
+func (c *Ctx) CheckinNode(node string) {
+	c.nodeOps = append(c.nodeOps, NodeOp{Op: "checkin", Node: node, ProducedBy: c.job.Action})
+}
+
+// TransitionNode moves the node of a change impact to a lifecycle state: a version of its own, from a checked-in
+// version, authorized and guarded when it is taken (ADR 0076).
+func (c *Ctx) TransitionNode(node, state string) {
+	c.nodeOps = append(c.nodeOps, NodeOp{Op: "transition", Node: node, State: state, ProducedBy: c.job.Action})
+}
+
+// CancelCheckout drops the working version of a change impact; a creation cancelled before its first check-in removes
+// the node (ADR 0076).
+func (c *Ctx) CancelCheckout(node string) {
+	c.nodeOps = append(c.nodeOps, NodeOp{Op: "cancel", Node: node, ProducedBy: c.job.Action})
 }
 
 // AddArtifact records free data (report…).

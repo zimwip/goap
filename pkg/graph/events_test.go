@@ -27,7 +27,7 @@ func TestObserveNodeAndBaselineEvents(t *testing.T) {
 		ctx := context.Background()
 		g := New(repo)
 		mk := func(key, typ string, props map[string]any) domain.Node {
-			n, err := g.CreateNode(ctx, NewNode{Key: key, Type: typ, Properties: props})
+			n, err := importNode(ctx, g, newNode{Key: key, Type: typ, Properties: props})
 			if err != nil {
 				t.Fatal(err)
 			}

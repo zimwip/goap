@@ -211,6 +211,9 @@ func (g *Graph) adoptNodes(ctx context.Context, tx Tx, c domain.Change, f domain
 			continue
 		}
 		wrote = wrote || flowVer != nil
+		if flowVer != nil && flowVer.CheckedOut {
+			return fmt.Errorf("node %s is checked out on flow %s: check it in, or cancel the checkout, before the flow is adopted (ADR 0076): %w", flowVer.Key, f.ID, ErrConflict)
+		}
 		if flowVer != nil {
 			// the flow was forked from a version of the node: it is a conflict when someone else moved on since
 			var first *domain.Node

@@ -40,11 +40,11 @@ func testProvenanceExport(t *testing.T, repo Repo) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	written, err := g.WriteNode(ctx, c.ID, added[0].ID, NodeWrite{Properties: map[string]any{"title": "Use PSP v2"}, Execution: "e1"})
+	written, err := g.edit(ctx, c.ID, added[0].ID, edit{Properties: map[string]any{"title": "Use PSP v2"}, Execution: "e1"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := g.ReviewNode(ctx, c.ID, added[0].ID, domain.ReviewAccepted, "alice", "ok"); err != nil {
+	if _, err := g.accept(ctx, c.ID, added[0].ID, "alice", "ok"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := g.Apply(ctx, c.ID, ""); err != nil {

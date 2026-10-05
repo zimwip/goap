@@ -14,6 +14,7 @@ import (
 	"github.com/zimwip/goap/pkg/domain/def"
 	"github.com/zimwip/goap/pkg/dsl"
 	"github.com/zimwip/goap/pkg/graph"
+	"github.com/zimwip/goap/pkg/graph/graphtest"
 	"github.com/zimwip/goap/pkg/methodology"
 	"github.com/zimwip/goap/pkg/observe"
 )
@@ -102,19 +103,15 @@ func setup(t *testing.T) (*engine.Engine, *graph.Graph, domain.BaselineID) {
 	}
 	g := graph.New(graph.NewMemory())
 	// a project every test starts its (non-administrative) processes in (ADR 0039)
-	if _, err := g.CreateNode(ctx, graph.NewNode{Namespace: "organisation", Key: testProject, Type: "organisation@ProjectUnit", Properties: map[string]any{"name": "Test"}}); err != nil {
+	if _, err := graphtest.Import(ctx, g, graphtest.Node{Namespace: "organisation", Key: testProject, Type: "organisation@ProjectUnit", Properties: map[string]any{"name": "Test"}}); err != nil {
 		t.Fatal(err)
 	}
 	// the alm namespace the example methodologies act on (ADR 0013)
-	need, _ := g.CreateNode(ctx, graph.NewNode{Namespace: "alm", Key: "NEED-1", Type: "alm@Need", Properties: map[string]any{"title": "Pay online"}})
-	req, _ := g.CreateNode(ctx, graph.NewNode{Namespace: "alm", Key: "REQ-1", Type: "alm@Requirement", Properties: map[string]any{"title": "Use PSP v1"}})
-	tst, _ := g.CreateNode(ctx, graph.NewNode{Namespace: "alm", Key: "TST-1", Type: "alm@TestCase"})
-	cmp, _ := g.CreateNode(ctx, graph.NewNode{Namespace: "alm", Key: "CMP-1", Type: "alm@Component"})
-	b0, _ := g.BranchHead(ctx, "alm", domain.MainBranch)
-	c0, _ := g.CreateChange(ctx, graph.NewChange{Namespace: "alm", Title: "link", BaselineID: b0.ID})
-	_, _ = g.Link(ctx, c0.ID, "alm@satisfies", req.Ref(), need.Ref(), nil)
-	_, _ = g.Link(ctx, c0.ID, "alm@verifies", tst.Ref(), req.Ref(), nil)
-	_, _ = g.Link(ctx, c0.ID, "alm@implements", cmp.Ref(), req.Ref(), nil)
+	need, _ := graphtest.Import(ctx, g, graphtest.Node{Namespace: "alm", Key: "NEED-1", Type: "alm@Need", Properties: map[string]any{"title": "Pay online"}})
+	req, _ := graphtest.Import(ctx, g, graphtest.Node{Namespace: "alm", Key: "REQ-1", Type: "alm@Requirement", Properties: map[string]any{"title": "Use PSP v1"},
+		Links: []graph.LinkWrite{{Type: "alm@satisfies", To: need.Ref()}}})
+	_, _ = graphtest.Import(ctx, g, graphtest.Node{Namespace: "alm", Key: "TST-1", Type: "alm@TestCase", Links: []graph.LinkWrite{{Type: "alm@verifies", To: req.Ref()}}})
+	_, _ = graphtest.Import(ctx, g, graphtest.Node{Namespace: "alm", Key: "CMP-1", Type: "alm@Component", Links: []graph.LinkWrite{{Type: "alm@implements", To: req.Ref()}}})
 	b, err := g.BranchHead(ctx, "alm", domain.MainBranch)
 	if err != nil {
 		t.Fatal(err)

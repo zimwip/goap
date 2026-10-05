@@ -97,7 +97,7 @@ func testChangeLog(t *testing.T, repo Repo) {
 	if got := count(domain.LogFilter{Processes: []string{"p2"}}); len(got) != 1 || got[0].ID != onFlow.ID {
 		t.Fatalf("by process: %+v", got)
 	}
-	if got := count(domain.LogFilter{Execution: "e1"}); len(got) != 3 { // declared, written, reviewed by run e1
+	if got := count(domain.LogFilter{Execution: "e1"}); len(got) != 4 { // declared, written (checked out), updated, reviewed by run e1
 		t.Fatalf("by action run: %d", len(got))
 	}
 	if got := count(domain.LogFilter{AfterSeq: all[2].Seq, Limit: 2}); len(got) != 2 || got[0].Seq != all[3].Seq {

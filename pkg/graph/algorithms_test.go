@@ -51,8 +51,8 @@ func newAlgoWorld(t *testing.T, repo Repo) algoWorld {
 	docLC := domain.Lifecycle{Initial: "draft",
 		States:      []domain.LifecycleState{{Name: "draft", Editable: true}, {Name: "released"}},
 		Transitions: []domain.Transition{{Name: "release", From: "draft", To: "released", GuardAlgos: []algo.Bound{guard}}}}
-	mk := func(key, typ string, props map[string]any, state string) domain.Node {
-		n, err := seedNode(ctx, w.g, NewNode{Key: key, Type: typ, Properties: props, State: state})
+	mk := func(key, typ string, props map[string]any, state string, links ...LinkWrite) domain.Node {
+		n, err := seedNode(ctx, w.g, newNode{Key: key, Type: typ, Properties: props, State: state, Links: links})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -61,10 +61,7 @@ func newAlgoWorld(t *testing.T, repo Repo) algoWorld {
 	types := testTypes{"Req": {Lifecycle: &reqLC, Validators: []algo.Bound{regex}}, "Sub": {Extends: "Req"}, "Doc": {Lifecycle: &docLC}}
 	w.g.Types = func() TypeCatalog { return types }
 	w.req = mk("R1", "Req", map[string]any{"code": "REQ-1"}, "draft")
-	w.doc = mk("D1", "Doc", map[string]any{}, "draft")
-	if _, err := w.g.Link(ctx, testChange(t, w.g, ""), domain.LinkContains, w.doc.Ref(), w.req.Ref(), nil); err != nil {
-		t.Fatal(err)
-	}
+	w.doc = mk("D1", "Doc", map[string]any{}, "draft", LinkWrite{Type: domain.LinkContains, To: w.req.Ref()})
 	w.base = pinBaseline(t, w.g, "", w.req.Ref(), w.doc.Ref())
 	return w
 }
@@ -78,18 +75,18 @@ func (w algoWorld) change(t *testing.T) domain.Change {
 	return c
 }
 
-// declareCreate adds a change impact that creates a node, and writes it.
+// create creates a node in a change, then approves it.
 func (w algoWorld) create(c domain.Change, key, typ string, props map[string]any) error {
-	ns, err := w.g.AddNodes(context.Background(), c.ID, []domain.ChangeImpact{{Intent: domain.IntentCreated, Key: key, Type: typ, Rationale: "new " + key}})
+	cn, err := w.g.CreateNode(context.Background(), c.ID, NodeCreate{Key: key, Type: typ, Properties: props, Rationale: "new " + key})
 	if err != nil {
 		return err
 	}
-	_, err = w.g.WriteNode(context.Background(), c.ID, ns[0].ID, NodeWrite{Properties: props, State: "approved"})
+	_, err = w.g.edit(context.Background(), c.ID, cn.ID, edit{State: "approved"})
 	return err
 }
 
 // modify adds a change impact on an existing node and writes it.
-func (w algoWorld) modify(t *testing.T, c domain.Change, n domain.Node, writes ...NodeWrite) error {
+func (w algoWorld) modify(t *testing.T, c domain.Change, n domain.Node, writes ...edit) error {
 	t.Helper()
 	ref := n.Ref()
 	ns, err := w.g.AddNodes(context.Background(), c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &ref, Rationale: "modify " + n.Key}})
@@ -97,7 +94,7 @@ func (w algoWorld) modify(t *testing.T, c domain.Change, n domain.Node, writes .
 		t.Fatal(err)
 	}
 	for _, nw := range writes {
-		if _, err := w.g.WriteNode(context.Background(), c.ID, ns[0].ID, nw); err != nil {
+		if _, err := w.g.edit(context.Background(), c.ID, ns[0].ID, nw); err != nil {
 			return err
 		}
 	}
@@ -106,11 +103,8 @@ func (w algoWorld) modify(t *testing.T, c domain.Change, n domain.Node, writes .
 
 func (w algoWorld) acceptAll(t *testing.T, c domain.Change) {
 	t.Helper()
-	nodes, _ := w.g.ListChangeImpacts(context.Background(), c.ID)
-	for _, n := range nodes {
-		if _, err := w.g.ReviewNode(context.Background(), c.ID, n.ID, domain.ReviewAccepted, "u", "ok"); err != nil {
-			t.Fatal(err)
-		}
+	if err := w.g.acceptAllAndCheckin(context.Background(), c.ID); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -125,7 +119,7 @@ func testPropertyValidators(t *testing.T, repo Repo) {
 		func(c domain.Change) error { return w.create(c, "R2", "Req", map[string]any{"code": "nope"}) },
 		func(c domain.Change) error { return w.create(c, "R3", "Sub", map[string]any{"code": "nope"}) },
 		func(c domain.Change) error {
-			return w.modify(t, c, w.req, NodeWrite{Properties: map[string]any{"code": "nope"}})
+			return w.modify(t, c, w.req, edit{Properties: map[string]any{"code": "nope"}})
 		},
 	} {
 		if err := try(w.change(t)); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "must match") {
@@ -136,7 +130,7 @@ func testPropertyValidators(t *testing.T, repo Repo) {
 	if err := w.create(c, "R2", "Sub", map[string]any{"code": "REQ-2"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := w.modify(t, c, w.req, NodeWrite{Properties: map[string]any{"code": "REQ-9"}}, NodeWrite{State: "approved"}); err != nil {
+	if err := w.modify(t, c, w.req, edit{Properties: map[string]any{"code": "REQ-9"}}, edit{State: "approved"}); err != nil {
 		t.Fatal(err)
 	}
 	w.acceptAll(t, c)
@@ -155,22 +149,18 @@ func testTransitionGuardAndAction(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	w := newAlgoWorld(t, repo)
 
-	// the guard algorithm refuses releasing a document whose requirement is a draft
+	// the guard algorithm refuses releasing a document whose requirement is a draft, when the transition is taken
 	c := w.change(t)
-	if err := w.modify(t, c, w.doc, NodeWrite{State: "released"}); err != nil {
-		t.Fatal(err)
-	}
-	w.acceptAll(t, c)
-	if _, err := w.g.Apply(ctx, c.ID, "x"); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "R1 is draft") {
+	if err := w.modify(t, c, w.doc, edit{State: "released"}); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "R1 is draft") {
 		t.Fatalf("guard must refuse: %v", err)
 	}
 
 	// approving the requirement in the same change satisfies the guard; the action stamps it
 	c2 := w.change(t)
-	if err := w.modify(t, c2, w.req, NodeWrite{State: "approved"}); err != nil {
+	if err := w.modify(t, c2, w.req, edit{State: "approved"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := w.modify(t, c2, w.doc, NodeWrite{State: "released"}); err != nil {
+	if err := w.modify(t, c2, w.doc, edit{State: "released"}); err != nil {
 		t.Fatal(err)
 	}
 	w.acceptAll(t, c2)

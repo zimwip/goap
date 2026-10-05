@@ -33,17 +33,8 @@ const (
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// GraphServiceCreateNodeProcedure is the fully-qualified name of the GraphService's CreateNode RPC.
-	GraphServiceCreateNodeProcedure = "/goap.graph.v1.GraphService/CreateNode"
-	// GraphServiceCreateObjectProcedure is the fully-qualified name of the GraphService's CreateObject
-	// RPC.
-	GraphServiceCreateObjectProcedure = "/goap.graph.v1.GraphService/CreateObject"
-	// GraphServiceUpdateNodeProcedure is the fully-qualified name of the GraphService's UpdateNode RPC.
-	GraphServiceUpdateNodeProcedure = "/goap.graph.v1.GraphService/UpdateNode"
 	// GraphServiceGetNodeProcedure is the fully-qualified name of the GraphService's GetNode RPC.
 	GraphServiceGetNodeProcedure = "/goap.graph.v1.GraphService/GetNode"
-	// GraphServiceCreateLinkProcedure is the fully-qualified name of the GraphService's CreateLink RPC.
-	GraphServiceCreateLinkProcedure = "/goap.graph.v1.GraphService/CreateLink"
 	// GraphServiceListBaselinesProcedure is the fully-qualified name of the GraphService's
 	// ListBaselines RPC.
 	GraphServiceListBaselinesProcedure = "/goap.graph.v1.GraphService/ListBaselines"
@@ -105,9 +96,28 @@ const (
 	// GraphServiceAddChangeImpactsProcedure is the fully-qualified name of the GraphService's
 	// AddChangeImpacts RPC.
 	GraphServiceAddChangeImpactsProcedure = "/goap.graph.v1.GraphService/AddChangeImpacts"
-	// GraphServiceWriteChangeImpactProcedure is the fully-qualified name of the GraphService's
-	// WriteChangeImpact RPC.
-	GraphServiceWriteChangeImpactProcedure = "/goap.graph.v1.GraphService/WriteChangeImpact"
+	// GraphServiceCreateNodeProcedure is the fully-qualified name of the GraphService's CreateNode RPC.
+	GraphServiceCreateNodeProcedure = "/goap.graph.v1.GraphService/CreateNode"
+	// GraphServiceCheckoutNodeProcedure is the fully-qualified name of the GraphService's CheckoutNode
+	// RPC.
+	GraphServiceCheckoutNodeProcedure = "/goap.graph.v1.GraphService/CheckoutNode"
+	// GraphServiceUpdateNodeProcedure is the fully-qualified name of the GraphService's UpdateNode RPC.
+	GraphServiceUpdateNodeProcedure = "/goap.graph.v1.GraphService/UpdateNode"
+	// GraphServiceCreateLinkProcedure is the fully-qualified name of the GraphService's CreateLink RPC.
+	GraphServiceCreateLinkProcedure = "/goap.graph.v1.GraphService/CreateLink"
+	// GraphServiceUpdateLinkProcedure is the fully-qualified name of the GraphService's UpdateLink RPC.
+	GraphServiceUpdateLinkProcedure = "/goap.graph.v1.GraphService/UpdateLink"
+	// GraphServiceDeleteLinkProcedure is the fully-qualified name of the GraphService's DeleteLink RPC.
+	GraphServiceDeleteLinkProcedure = "/goap.graph.v1.GraphService/DeleteLink"
+	// GraphServiceCheckinNodeProcedure is the fully-qualified name of the GraphService's CheckinNode
+	// RPC.
+	GraphServiceCheckinNodeProcedure = "/goap.graph.v1.GraphService/CheckinNode"
+	// GraphServiceTransitionNodeProcedure is the fully-qualified name of the GraphService's
+	// TransitionNode RPC.
+	GraphServiceTransitionNodeProcedure = "/goap.graph.v1.GraphService/TransitionNode"
+	// GraphServiceCancelCheckoutProcedure is the fully-qualified name of the GraphService's
+	// CancelCheckout RPC.
+	GraphServiceCancelCheckoutProcedure = "/goap.graph.v1.GraphService/CancelCheckout"
 	// GraphServiceReviewChangeImpactProcedure is the fully-qualified name of the GraphService's
 	// ReviewChangeImpact RPC.
 	GraphServiceReviewChangeImpactProcedure = "/goap.graph.v1.GraphService/ReviewChangeImpact"
@@ -232,13 +242,7 @@ const (
 // GraphServiceClient is a client for the goap.graph.v1.GraphService service.
 type GraphServiceClient interface {
 	// Domain axis
-	CreateNode(context.Context, *connect.Request[v1.CreateNodeRequest]) (*connect.Response[v1.CreateNodeResponse], error)
-	// CreateObject creates a node of a qualified type (<namespace>@<type>, ADR 0012) through a change applied on
-	// main, in the namespace of its type; the type catalogue judges it.
-	CreateObject(context.Context, *connect.Request[v1.CreateObjectRequest]) (*connect.Response[v1.CreateObjectResponse], error)
-	UpdateNode(context.Context, *connect.Request[v1.UpdateNodeRequest]) (*connect.Response[v1.UpdateNodeResponse], error)
 	GetNode(context.Context, *connect.Request[v1.GetNodeRequest]) (*connect.Response[v1.GetNodeResponse], error)
-	CreateLink(context.Context, *connect.Request[v1.CreateLinkRequest]) (*connect.Response[v1.CreateLinkResponse], error)
 	ListBaselines(context.Context, *connect.Request[v1.ListBaselinesRequest]) (*connect.Response[v1.ListBaselinesResponse], error)
 	// Tags (ADR 0056) name the state an applied change leaves; not unique, a name may label several changes.
 	TagChange(context.Context, *connect.Request[v1.TagChangeRequest]) (*connect.Response[v1.TagChangeResponse], error)
@@ -274,7 +278,19 @@ type GraphServiceClient interface {
 	// Change impacts (ADR 0024): declare the nodes a change acts on, write the version each produces on the
 	// change branch, and accept or reject them (a comment is mandatory).
 	AddChangeImpacts(context.Context, *connect.Request[v1.AddChangeImpactsRequest]) (*connect.Response[v1.AddChangeImpactsResponse], error)
-	WriteChangeImpact(context.Context, *connect.Request[v1.WriteChangeImpactRequest]) (*connect.Response[v1.WriteChangeImpactResponse], error)
+	// Node edits (ADR 0076): every write names a change. CreateNode and CheckoutNode write the working version of the
+	// node in the change, checked out; UpdateNode and the link operations edit it in place; an accepted review
+	// authorizes CheckinNode, which freezes it; TransitionNode moves a checked-in node along its lifecycle (a version of
+	// its own); CancelCheckout drops the working version (a creation cancelled before its first check-in removes the node).
+	CreateNode(context.Context, *connect.Request[v1.CreateNodeRequest]) (*connect.Response[v1.CreateNodeResponse], error)
+	CheckoutNode(context.Context, *connect.Request[v1.CheckoutNodeRequest]) (*connect.Response[v1.CheckoutNodeResponse], error)
+	UpdateNode(context.Context, *connect.Request[v1.UpdateNodeRequest]) (*connect.Response[v1.UpdateNodeResponse], error)
+	CreateLink(context.Context, *connect.Request[v1.CreateLinkRequest]) (*connect.Response[v1.CreateLinkResponse], error)
+	UpdateLink(context.Context, *connect.Request[v1.UpdateLinkRequest]) (*connect.Response[v1.UpdateLinkResponse], error)
+	DeleteLink(context.Context, *connect.Request[v1.DeleteLinkRequest]) (*connect.Response[v1.DeleteLinkResponse], error)
+	CheckinNode(context.Context, *connect.Request[v1.CheckinNodeRequest]) (*connect.Response[v1.CheckinNodeResponse], error)
+	TransitionNode(context.Context, *connect.Request[v1.TransitionNodeRequest]) (*connect.Response[v1.TransitionNodeResponse], error)
+	CancelCheckout(context.Context, *connect.Request[v1.CancelCheckoutRequest]) (*connect.Response[v1.CancelCheckoutResponse], error)
 	ReviewChangeImpact(context.Context, *connect.Request[v1.ReviewChangeImpactRequest]) (*connect.Response[v1.ReviewChangeImpactResponse], error)
 	ReopenChangeImpacts(context.Context, *connect.Request[v1.ReopenChangeImpactsRequest]) (*connect.Response[v1.ReopenChangeImpactsResponse], error)
 	// Producers: a whole change of node edits (change impacts, versions, reviews, apply) in one call.
@@ -352,34 +368,10 @@ func NewGraphServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 	baseURL = strings.TrimRight(baseURL, "/")
 	graphServiceMethods := v1.File_goap_graph_v1_graph_proto.Services().ByName("GraphService").Methods()
 	return &graphServiceClient{
-		createNode: connect.NewClient[v1.CreateNodeRequest, v1.CreateNodeResponse](
-			httpClient,
-			baseURL+GraphServiceCreateNodeProcedure,
-			connect.WithSchema(graphServiceMethods.ByName("CreateNode")),
-			connect.WithClientOptions(opts...),
-		),
-		createObject: connect.NewClient[v1.CreateObjectRequest, v1.CreateObjectResponse](
-			httpClient,
-			baseURL+GraphServiceCreateObjectProcedure,
-			connect.WithSchema(graphServiceMethods.ByName("CreateObject")),
-			connect.WithClientOptions(opts...),
-		),
-		updateNode: connect.NewClient[v1.UpdateNodeRequest, v1.UpdateNodeResponse](
-			httpClient,
-			baseURL+GraphServiceUpdateNodeProcedure,
-			connect.WithSchema(graphServiceMethods.ByName("UpdateNode")),
-			connect.WithClientOptions(opts...),
-		),
 		getNode: connect.NewClient[v1.GetNodeRequest, v1.GetNodeResponse](
 			httpClient,
 			baseURL+GraphServiceGetNodeProcedure,
 			connect.WithSchema(graphServiceMethods.ByName("GetNode")),
-			connect.WithClientOptions(opts...),
-		),
-		createLink: connect.NewClient[v1.CreateLinkRequest, v1.CreateLinkResponse](
-			httpClient,
-			baseURL+GraphServiceCreateLinkProcedure,
-			connect.WithSchema(graphServiceMethods.ByName("CreateLink")),
 			connect.WithClientOptions(opts...),
 		),
 		listBaselines: connect.NewClient[v1.ListBaselinesRequest, v1.ListBaselinesResponse](
@@ -514,10 +506,58 @@ func NewGraphServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(graphServiceMethods.ByName("AddChangeImpacts")),
 			connect.WithClientOptions(opts...),
 		),
-		writeChangeImpact: connect.NewClient[v1.WriteChangeImpactRequest, v1.WriteChangeImpactResponse](
+		createNode: connect.NewClient[v1.CreateNodeRequest, v1.CreateNodeResponse](
 			httpClient,
-			baseURL+GraphServiceWriteChangeImpactProcedure,
-			connect.WithSchema(graphServiceMethods.ByName("WriteChangeImpact")),
+			baseURL+GraphServiceCreateNodeProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("CreateNode")),
+			connect.WithClientOptions(opts...),
+		),
+		checkoutNode: connect.NewClient[v1.CheckoutNodeRequest, v1.CheckoutNodeResponse](
+			httpClient,
+			baseURL+GraphServiceCheckoutNodeProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("CheckoutNode")),
+			connect.WithClientOptions(opts...),
+		),
+		updateNode: connect.NewClient[v1.UpdateNodeRequest, v1.UpdateNodeResponse](
+			httpClient,
+			baseURL+GraphServiceUpdateNodeProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("UpdateNode")),
+			connect.WithClientOptions(opts...),
+		),
+		createLink: connect.NewClient[v1.CreateLinkRequest, v1.CreateLinkResponse](
+			httpClient,
+			baseURL+GraphServiceCreateLinkProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("CreateLink")),
+			connect.WithClientOptions(opts...),
+		),
+		updateLink: connect.NewClient[v1.UpdateLinkRequest, v1.UpdateLinkResponse](
+			httpClient,
+			baseURL+GraphServiceUpdateLinkProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("UpdateLink")),
+			connect.WithClientOptions(opts...),
+		),
+		deleteLink: connect.NewClient[v1.DeleteLinkRequest, v1.DeleteLinkResponse](
+			httpClient,
+			baseURL+GraphServiceDeleteLinkProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("DeleteLink")),
+			connect.WithClientOptions(opts...),
+		),
+		checkinNode: connect.NewClient[v1.CheckinNodeRequest, v1.CheckinNodeResponse](
+			httpClient,
+			baseURL+GraphServiceCheckinNodeProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("CheckinNode")),
+			connect.WithClientOptions(opts...),
+		),
+		transitionNode: connect.NewClient[v1.TransitionNodeRequest, v1.TransitionNodeResponse](
+			httpClient,
+			baseURL+GraphServiceTransitionNodeProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("TransitionNode")),
+			connect.WithClientOptions(opts...),
+		),
+		cancelCheckout: connect.NewClient[v1.CancelCheckoutRequest, v1.CancelCheckoutResponse](
+			httpClient,
+			baseURL+GraphServiceCancelCheckoutProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("CancelCheckout")),
 			connect.WithClientOptions(opts...),
 		),
 		reviewChangeImpact: connect.NewClient[v1.ReviewChangeImpactRequest, v1.ReviewChangeImpactResponse](
@@ -777,11 +817,7 @@ func NewGraphServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 
 // graphServiceClient implements GraphServiceClient.
 type graphServiceClient struct {
-	createNode             *connect.Client[v1.CreateNodeRequest, v1.CreateNodeResponse]
-	createObject           *connect.Client[v1.CreateObjectRequest, v1.CreateObjectResponse]
-	updateNode             *connect.Client[v1.UpdateNodeRequest, v1.UpdateNodeResponse]
 	getNode                *connect.Client[v1.GetNodeRequest, v1.GetNodeResponse]
-	createLink             *connect.Client[v1.CreateLinkRequest, v1.CreateLinkResponse]
 	listBaselines          *connect.Client[v1.ListBaselinesRequest, v1.ListBaselinesResponse]
 	tagChange              *connect.Client[v1.TagChangeRequest, v1.TagChangeResponse]
 	listTags               *connect.Client[v1.ListTagsRequest, v1.ListTagsResponse]
@@ -804,7 +840,15 @@ type graphServiceClient struct {
 	updateChange           *connect.Client[v1.UpdateChangeRequest, v1.UpdateChangeResponse]
 	addItems               *connect.Client[v1.AddItemsRequest, v1.AddItemsResponse]
 	addChangeImpacts       *connect.Client[v1.AddChangeImpactsRequest, v1.AddChangeImpactsResponse]
-	writeChangeImpact      *connect.Client[v1.WriteChangeImpactRequest, v1.WriteChangeImpactResponse]
+	createNode             *connect.Client[v1.CreateNodeRequest, v1.CreateNodeResponse]
+	checkoutNode           *connect.Client[v1.CheckoutNodeRequest, v1.CheckoutNodeResponse]
+	updateNode             *connect.Client[v1.UpdateNodeRequest, v1.UpdateNodeResponse]
+	createLink             *connect.Client[v1.CreateLinkRequest, v1.CreateLinkResponse]
+	updateLink             *connect.Client[v1.UpdateLinkRequest, v1.UpdateLinkResponse]
+	deleteLink             *connect.Client[v1.DeleteLinkRequest, v1.DeleteLinkResponse]
+	checkinNode            *connect.Client[v1.CheckinNodeRequest, v1.CheckinNodeResponse]
+	transitionNode         *connect.Client[v1.TransitionNodeRequest, v1.TransitionNodeResponse]
+	cancelCheckout         *connect.Client[v1.CancelCheckoutRequest, v1.CancelCheckoutResponse]
 	reviewChangeImpact     *connect.Client[v1.ReviewChangeImpactRequest, v1.ReviewChangeImpactResponse]
 	reopenChangeImpacts    *connect.Client[v1.ReopenChangeImpactsRequest, v1.ReopenChangeImpactsResponse]
 	commitEdits            *connect.Client[v1.CommitEditsRequest, v1.CommitEditsResponse]
@@ -849,29 +893,9 @@ type graphServiceClient struct {
 	republishIndex         *connect.Client[v1.RepublishIndexRequest, v1.RepublishIndexResponse]
 }
 
-// CreateNode calls goap.graph.v1.GraphService.CreateNode.
-func (c *graphServiceClient) CreateNode(ctx context.Context, req *connect.Request[v1.CreateNodeRequest]) (*connect.Response[v1.CreateNodeResponse], error) {
-	return c.createNode.CallUnary(ctx, req)
-}
-
-// CreateObject calls goap.graph.v1.GraphService.CreateObject.
-func (c *graphServiceClient) CreateObject(ctx context.Context, req *connect.Request[v1.CreateObjectRequest]) (*connect.Response[v1.CreateObjectResponse], error) {
-	return c.createObject.CallUnary(ctx, req)
-}
-
-// UpdateNode calls goap.graph.v1.GraphService.UpdateNode.
-func (c *graphServiceClient) UpdateNode(ctx context.Context, req *connect.Request[v1.UpdateNodeRequest]) (*connect.Response[v1.UpdateNodeResponse], error) {
-	return c.updateNode.CallUnary(ctx, req)
-}
-
 // GetNode calls goap.graph.v1.GraphService.GetNode.
 func (c *graphServiceClient) GetNode(ctx context.Context, req *connect.Request[v1.GetNodeRequest]) (*connect.Response[v1.GetNodeResponse], error) {
 	return c.getNode.CallUnary(ctx, req)
-}
-
-// CreateLink calls goap.graph.v1.GraphService.CreateLink.
-func (c *graphServiceClient) CreateLink(ctx context.Context, req *connect.Request[v1.CreateLinkRequest]) (*connect.Response[v1.CreateLinkResponse], error) {
-	return c.createLink.CallUnary(ctx, req)
 }
 
 // ListBaselines calls goap.graph.v1.GraphService.ListBaselines.
@@ -984,9 +1008,49 @@ func (c *graphServiceClient) AddChangeImpacts(ctx context.Context, req *connect.
 	return c.addChangeImpacts.CallUnary(ctx, req)
 }
 
-// WriteChangeImpact calls goap.graph.v1.GraphService.WriteChangeImpact.
-func (c *graphServiceClient) WriteChangeImpact(ctx context.Context, req *connect.Request[v1.WriteChangeImpactRequest]) (*connect.Response[v1.WriteChangeImpactResponse], error) {
-	return c.writeChangeImpact.CallUnary(ctx, req)
+// CreateNode calls goap.graph.v1.GraphService.CreateNode.
+func (c *graphServiceClient) CreateNode(ctx context.Context, req *connect.Request[v1.CreateNodeRequest]) (*connect.Response[v1.CreateNodeResponse], error) {
+	return c.createNode.CallUnary(ctx, req)
+}
+
+// CheckoutNode calls goap.graph.v1.GraphService.CheckoutNode.
+func (c *graphServiceClient) CheckoutNode(ctx context.Context, req *connect.Request[v1.CheckoutNodeRequest]) (*connect.Response[v1.CheckoutNodeResponse], error) {
+	return c.checkoutNode.CallUnary(ctx, req)
+}
+
+// UpdateNode calls goap.graph.v1.GraphService.UpdateNode.
+func (c *graphServiceClient) UpdateNode(ctx context.Context, req *connect.Request[v1.UpdateNodeRequest]) (*connect.Response[v1.UpdateNodeResponse], error) {
+	return c.updateNode.CallUnary(ctx, req)
+}
+
+// CreateLink calls goap.graph.v1.GraphService.CreateLink.
+func (c *graphServiceClient) CreateLink(ctx context.Context, req *connect.Request[v1.CreateLinkRequest]) (*connect.Response[v1.CreateLinkResponse], error) {
+	return c.createLink.CallUnary(ctx, req)
+}
+
+// UpdateLink calls goap.graph.v1.GraphService.UpdateLink.
+func (c *graphServiceClient) UpdateLink(ctx context.Context, req *connect.Request[v1.UpdateLinkRequest]) (*connect.Response[v1.UpdateLinkResponse], error) {
+	return c.updateLink.CallUnary(ctx, req)
+}
+
+// DeleteLink calls goap.graph.v1.GraphService.DeleteLink.
+func (c *graphServiceClient) DeleteLink(ctx context.Context, req *connect.Request[v1.DeleteLinkRequest]) (*connect.Response[v1.DeleteLinkResponse], error) {
+	return c.deleteLink.CallUnary(ctx, req)
+}
+
+// CheckinNode calls goap.graph.v1.GraphService.CheckinNode.
+func (c *graphServiceClient) CheckinNode(ctx context.Context, req *connect.Request[v1.CheckinNodeRequest]) (*connect.Response[v1.CheckinNodeResponse], error) {
+	return c.checkinNode.CallUnary(ctx, req)
+}
+
+// TransitionNode calls goap.graph.v1.GraphService.TransitionNode.
+func (c *graphServiceClient) TransitionNode(ctx context.Context, req *connect.Request[v1.TransitionNodeRequest]) (*connect.Response[v1.TransitionNodeResponse], error) {
+	return c.transitionNode.CallUnary(ctx, req)
+}
+
+// CancelCheckout calls goap.graph.v1.GraphService.CancelCheckout.
+func (c *graphServiceClient) CancelCheckout(ctx context.Context, req *connect.Request[v1.CancelCheckoutRequest]) (*connect.Response[v1.CancelCheckoutResponse], error) {
+	return c.cancelCheckout.CallUnary(ctx, req)
 }
 
 // ReviewChangeImpact calls goap.graph.v1.GraphService.ReviewChangeImpact.
@@ -1202,13 +1266,7 @@ func (c *graphServiceClient) RepublishIndex(ctx context.Context, req *connect.Re
 // GraphServiceHandler is an implementation of the goap.graph.v1.GraphService service.
 type GraphServiceHandler interface {
 	// Domain axis
-	CreateNode(context.Context, *connect.Request[v1.CreateNodeRequest]) (*connect.Response[v1.CreateNodeResponse], error)
-	// CreateObject creates a node of a qualified type (<namespace>@<type>, ADR 0012) through a change applied on
-	// main, in the namespace of its type; the type catalogue judges it.
-	CreateObject(context.Context, *connect.Request[v1.CreateObjectRequest]) (*connect.Response[v1.CreateObjectResponse], error)
-	UpdateNode(context.Context, *connect.Request[v1.UpdateNodeRequest]) (*connect.Response[v1.UpdateNodeResponse], error)
 	GetNode(context.Context, *connect.Request[v1.GetNodeRequest]) (*connect.Response[v1.GetNodeResponse], error)
-	CreateLink(context.Context, *connect.Request[v1.CreateLinkRequest]) (*connect.Response[v1.CreateLinkResponse], error)
 	ListBaselines(context.Context, *connect.Request[v1.ListBaselinesRequest]) (*connect.Response[v1.ListBaselinesResponse], error)
 	// Tags (ADR 0056) name the state an applied change leaves; not unique, a name may label several changes.
 	TagChange(context.Context, *connect.Request[v1.TagChangeRequest]) (*connect.Response[v1.TagChangeResponse], error)
@@ -1244,7 +1302,19 @@ type GraphServiceHandler interface {
 	// Change impacts (ADR 0024): declare the nodes a change acts on, write the version each produces on the
 	// change branch, and accept or reject them (a comment is mandatory).
 	AddChangeImpacts(context.Context, *connect.Request[v1.AddChangeImpactsRequest]) (*connect.Response[v1.AddChangeImpactsResponse], error)
-	WriteChangeImpact(context.Context, *connect.Request[v1.WriteChangeImpactRequest]) (*connect.Response[v1.WriteChangeImpactResponse], error)
+	// Node edits (ADR 0076): every write names a change. CreateNode and CheckoutNode write the working version of the
+	// node in the change, checked out; UpdateNode and the link operations edit it in place; an accepted review
+	// authorizes CheckinNode, which freezes it; TransitionNode moves a checked-in node along its lifecycle (a version of
+	// its own); CancelCheckout drops the working version (a creation cancelled before its first check-in removes the node).
+	CreateNode(context.Context, *connect.Request[v1.CreateNodeRequest]) (*connect.Response[v1.CreateNodeResponse], error)
+	CheckoutNode(context.Context, *connect.Request[v1.CheckoutNodeRequest]) (*connect.Response[v1.CheckoutNodeResponse], error)
+	UpdateNode(context.Context, *connect.Request[v1.UpdateNodeRequest]) (*connect.Response[v1.UpdateNodeResponse], error)
+	CreateLink(context.Context, *connect.Request[v1.CreateLinkRequest]) (*connect.Response[v1.CreateLinkResponse], error)
+	UpdateLink(context.Context, *connect.Request[v1.UpdateLinkRequest]) (*connect.Response[v1.UpdateLinkResponse], error)
+	DeleteLink(context.Context, *connect.Request[v1.DeleteLinkRequest]) (*connect.Response[v1.DeleteLinkResponse], error)
+	CheckinNode(context.Context, *connect.Request[v1.CheckinNodeRequest]) (*connect.Response[v1.CheckinNodeResponse], error)
+	TransitionNode(context.Context, *connect.Request[v1.TransitionNodeRequest]) (*connect.Response[v1.TransitionNodeResponse], error)
+	CancelCheckout(context.Context, *connect.Request[v1.CancelCheckoutRequest]) (*connect.Response[v1.CancelCheckoutResponse], error)
 	ReviewChangeImpact(context.Context, *connect.Request[v1.ReviewChangeImpactRequest]) (*connect.Response[v1.ReviewChangeImpactResponse], error)
 	ReopenChangeImpacts(context.Context, *connect.Request[v1.ReopenChangeImpactsRequest]) (*connect.Response[v1.ReopenChangeImpactsResponse], error)
 	// Producers: a whole change of node edits (change impacts, versions, reviews, apply) in one call.
@@ -1318,34 +1388,10 @@ type GraphServiceHandler interface {
 // and JSON codecs. They also support gzip compression.
 func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
 	graphServiceMethods := v1.File_goap_graph_v1_graph_proto.Services().ByName("GraphService").Methods()
-	graphServiceCreateNodeHandler := connect.NewUnaryHandler(
-		GraphServiceCreateNodeProcedure,
-		svc.CreateNode,
-		connect.WithSchema(graphServiceMethods.ByName("CreateNode")),
-		connect.WithHandlerOptions(opts...),
-	)
-	graphServiceCreateObjectHandler := connect.NewUnaryHandler(
-		GraphServiceCreateObjectProcedure,
-		svc.CreateObject,
-		connect.WithSchema(graphServiceMethods.ByName("CreateObject")),
-		connect.WithHandlerOptions(opts...),
-	)
-	graphServiceUpdateNodeHandler := connect.NewUnaryHandler(
-		GraphServiceUpdateNodeProcedure,
-		svc.UpdateNode,
-		connect.WithSchema(graphServiceMethods.ByName("UpdateNode")),
-		connect.WithHandlerOptions(opts...),
-	)
 	graphServiceGetNodeHandler := connect.NewUnaryHandler(
 		GraphServiceGetNodeProcedure,
 		svc.GetNode,
 		connect.WithSchema(graphServiceMethods.ByName("GetNode")),
-		connect.WithHandlerOptions(opts...),
-	)
-	graphServiceCreateLinkHandler := connect.NewUnaryHandler(
-		GraphServiceCreateLinkProcedure,
-		svc.CreateLink,
-		connect.WithSchema(graphServiceMethods.ByName("CreateLink")),
 		connect.WithHandlerOptions(opts...),
 	)
 	graphServiceListBaselinesHandler := connect.NewUnaryHandler(
@@ -1480,10 +1526,58 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(graphServiceMethods.ByName("AddChangeImpacts")),
 		connect.WithHandlerOptions(opts...),
 	)
-	graphServiceWriteChangeImpactHandler := connect.NewUnaryHandler(
-		GraphServiceWriteChangeImpactProcedure,
-		svc.WriteChangeImpact,
-		connect.WithSchema(graphServiceMethods.ByName("WriteChangeImpact")),
+	graphServiceCreateNodeHandler := connect.NewUnaryHandler(
+		GraphServiceCreateNodeProcedure,
+		svc.CreateNode,
+		connect.WithSchema(graphServiceMethods.ByName("CreateNode")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceCheckoutNodeHandler := connect.NewUnaryHandler(
+		GraphServiceCheckoutNodeProcedure,
+		svc.CheckoutNode,
+		connect.WithSchema(graphServiceMethods.ByName("CheckoutNode")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceUpdateNodeHandler := connect.NewUnaryHandler(
+		GraphServiceUpdateNodeProcedure,
+		svc.UpdateNode,
+		connect.WithSchema(graphServiceMethods.ByName("UpdateNode")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceCreateLinkHandler := connect.NewUnaryHandler(
+		GraphServiceCreateLinkProcedure,
+		svc.CreateLink,
+		connect.WithSchema(graphServiceMethods.ByName("CreateLink")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceUpdateLinkHandler := connect.NewUnaryHandler(
+		GraphServiceUpdateLinkProcedure,
+		svc.UpdateLink,
+		connect.WithSchema(graphServiceMethods.ByName("UpdateLink")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceDeleteLinkHandler := connect.NewUnaryHandler(
+		GraphServiceDeleteLinkProcedure,
+		svc.DeleteLink,
+		connect.WithSchema(graphServiceMethods.ByName("DeleteLink")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceCheckinNodeHandler := connect.NewUnaryHandler(
+		GraphServiceCheckinNodeProcedure,
+		svc.CheckinNode,
+		connect.WithSchema(graphServiceMethods.ByName("CheckinNode")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceTransitionNodeHandler := connect.NewUnaryHandler(
+		GraphServiceTransitionNodeProcedure,
+		svc.TransitionNode,
+		connect.WithSchema(graphServiceMethods.ByName("TransitionNode")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceCancelCheckoutHandler := connect.NewUnaryHandler(
+		GraphServiceCancelCheckoutProcedure,
+		svc.CancelCheckout,
+		connect.WithSchema(graphServiceMethods.ByName("CancelCheckout")),
 		connect.WithHandlerOptions(opts...),
 	)
 	graphServiceReviewChangeImpactHandler := connect.NewUnaryHandler(
@@ -1740,16 +1834,8 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 	)
 	return "/goap.graph.v1.GraphService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case GraphServiceCreateNodeProcedure:
-			graphServiceCreateNodeHandler.ServeHTTP(w, r)
-		case GraphServiceCreateObjectProcedure:
-			graphServiceCreateObjectHandler.ServeHTTP(w, r)
-		case GraphServiceUpdateNodeProcedure:
-			graphServiceUpdateNodeHandler.ServeHTTP(w, r)
 		case GraphServiceGetNodeProcedure:
 			graphServiceGetNodeHandler.ServeHTTP(w, r)
-		case GraphServiceCreateLinkProcedure:
-			graphServiceCreateLinkHandler.ServeHTTP(w, r)
 		case GraphServiceListBaselinesProcedure:
 			graphServiceListBaselinesHandler.ServeHTTP(w, r)
 		case GraphServiceTagChangeProcedure:
@@ -1794,8 +1880,24 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 			graphServiceAddItemsHandler.ServeHTTP(w, r)
 		case GraphServiceAddChangeImpactsProcedure:
 			graphServiceAddChangeImpactsHandler.ServeHTTP(w, r)
-		case GraphServiceWriteChangeImpactProcedure:
-			graphServiceWriteChangeImpactHandler.ServeHTTP(w, r)
+		case GraphServiceCreateNodeProcedure:
+			graphServiceCreateNodeHandler.ServeHTTP(w, r)
+		case GraphServiceCheckoutNodeProcedure:
+			graphServiceCheckoutNodeHandler.ServeHTTP(w, r)
+		case GraphServiceUpdateNodeProcedure:
+			graphServiceUpdateNodeHandler.ServeHTTP(w, r)
+		case GraphServiceCreateLinkProcedure:
+			graphServiceCreateLinkHandler.ServeHTTP(w, r)
+		case GraphServiceUpdateLinkProcedure:
+			graphServiceUpdateLinkHandler.ServeHTTP(w, r)
+		case GraphServiceDeleteLinkProcedure:
+			graphServiceDeleteLinkHandler.ServeHTTP(w, r)
+		case GraphServiceCheckinNodeProcedure:
+			graphServiceCheckinNodeHandler.ServeHTTP(w, r)
+		case GraphServiceTransitionNodeProcedure:
+			graphServiceTransitionNodeHandler.ServeHTTP(w, r)
+		case GraphServiceCancelCheckoutProcedure:
+			graphServiceCancelCheckoutHandler.ServeHTTP(w, r)
 		case GraphServiceReviewChangeImpactProcedure:
 			graphServiceReviewChangeImpactHandler.ServeHTTP(w, r)
 		case GraphServiceReopenChangeImpactsProcedure:
@@ -1889,24 +1991,8 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 // UnimplementedGraphServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedGraphServiceHandler struct{}
 
-func (UnimplementedGraphServiceHandler) CreateNode(context.Context, *connect.Request[v1.CreateNodeRequest]) (*connect.Response[v1.CreateNodeResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.CreateNode is not implemented"))
-}
-
-func (UnimplementedGraphServiceHandler) CreateObject(context.Context, *connect.Request[v1.CreateObjectRequest]) (*connect.Response[v1.CreateObjectResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.CreateObject is not implemented"))
-}
-
-func (UnimplementedGraphServiceHandler) UpdateNode(context.Context, *connect.Request[v1.UpdateNodeRequest]) (*connect.Response[v1.UpdateNodeResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.UpdateNode is not implemented"))
-}
-
 func (UnimplementedGraphServiceHandler) GetNode(context.Context, *connect.Request[v1.GetNodeRequest]) (*connect.Response[v1.GetNodeResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.GetNode is not implemented"))
-}
-
-func (UnimplementedGraphServiceHandler) CreateLink(context.Context, *connect.Request[v1.CreateLinkRequest]) (*connect.Response[v1.CreateLinkResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.CreateLink is not implemented"))
 }
 
 func (UnimplementedGraphServiceHandler) ListBaselines(context.Context, *connect.Request[v1.ListBaselinesRequest]) (*connect.Response[v1.ListBaselinesResponse], error) {
@@ -1997,8 +2083,40 @@ func (UnimplementedGraphServiceHandler) AddChangeImpacts(context.Context, *conne
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.AddChangeImpacts is not implemented"))
 }
 
-func (UnimplementedGraphServiceHandler) WriteChangeImpact(context.Context, *connect.Request[v1.WriteChangeImpactRequest]) (*connect.Response[v1.WriteChangeImpactResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.WriteChangeImpact is not implemented"))
+func (UnimplementedGraphServiceHandler) CreateNode(context.Context, *connect.Request[v1.CreateNodeRequest]) (*connect.Response[v1.CreateNodeResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.CreateNode is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) CheckoutNode(context.Context, *connect.Request[v1.CheckoutNodeRequest]) (*connect.Response[v1.CheckoutNodeResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.CheckoutNode is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) UpdateNode(context.Context, *connect.Request[v1.UpdateNodeRequest]) (*connect.Response[v1.UpdateNodeResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.UpdateNode is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) CreateLink(context.Context, *connect.Request[v1.CreateLinkRequest]) (*connect.Response[v1.CreateLinkResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.CreateLink is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) UpdateLink(context.Context, *connect.Request[v1.UpdateLinkRequest]) (*connect.Response[v1.UpdateLinkResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.UpdateLink is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) DeleteLink(context.Context, *connect.Request[v1.DeleteLinkRequest]) (*connect.Response[v1.DeleteLinkResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.DeleteLink is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) CheckinNode(context.Context, *connect.Request[v1.CheckinNodeRequest]) (*connect.Response[v1.CheckinNodeResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.CheckinNode is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) TransitionNode(context.Context, *connect.Request[v1.TransitionNodeRequest]) (*connect.Response[v1.TransitionNodeResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.TransitionNode is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) CancelCheckout(context.Context, *connect.Request[v1.CancelCheckoutRequest]) (*connect.Response[v1.CancelCheckoutResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.CancelCheckout is not implemented"))
 }
 
 func (UnimplementedGraphServiceHandler) ReviewChangeImpact(context.Context, *connect.Request[v1.ReviewChangeImpactRequest]) (*connect.Response[v1.ReviewChangeImpactResponse], error) {

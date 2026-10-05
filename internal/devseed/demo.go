@@ -17,6 +17,12 @@ import (
 // alm is the namespace of the delivery domain (domains/alm.yaml).
 const alm = "alm"
 
+// demoNode is a node of the demo repository.
+type demoNode struct {
+	Namespace, Key, Type string
+	Properties           map[string]any
+}
+
 // Demo loads a small ALM repository (namespace alm) once: needs, requirements and tests
 // (methodologies/examples/impact-analysis.yaml), and the functions, components, build artifacts, applications,
 // solution, data, interfaces and flows of methodologies/sdlc.yaml, with a small organisation owning them. The graph is
@@ -56,7 +62,7 @@ func Demo(ctx context.Context, g *graph.Graph) (bool, error) {
 	// ownership: a node of one namespace is owned by a unit of the organisation (the owner of its versions)
 	owners := map[string]string{"CMP-1": "ORG-CHECKOUT", "CMP-2": "ORG-CRM", "CMP-3": "ORG-FINANCE", "CMP-4": "ORG-SECURITY",
 		"APP-1": "ORG-CHECKOUT", "APP-2": "ORG-CRM", "APP-3": "ORG-FINANCE", "SOL-1": "ORG-DIGITAL"}
-	nodes := []graph.NewNode{
+	nodes := []demoNode{
 		{Namespace: alm, Key: "NEED-1", Type: alm + "@Need", Properties: map[string]any{"title": "Pay for orders online"}},
 		{Namespace: alm, Key: "NEED-2", Type: alm + "@Need", Properties: map[string]any{"title": "Be refunded quickly"}},
 		{Namespace: alm, Key: "REQ-1", Type: alm + "@Requirement", Properties: map[string]any{"title": "Card payment goes through the Acme PSP (API v1)", "priority": "high"}},

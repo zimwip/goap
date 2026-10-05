@@ -6,6 +6,7 @@ import (
 
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/graph"
+	"github.com/zimwip/goap/pkg/graph/graphtest"
 	"github.com/zimwip/goap/pkg/intent"
 	"github.com/zimwip/goap/pkg/journal"
 	"github.com/zimwip/goap/pkg/methodology"
@@ -62,7 +63,7 @@ func TestSpecializationChosenAtExecution(t *testing.T) {
 		}
 	}
 	g := graph.New(graph.NewMemory())
-	if _, err := g.CreateNode(ctx, graph.NewNode{Namespace: "organisation", Key: testProject, Type: "organisation@ProjectUnit"}); err != nil {
+	if _, err := graphtest.Import(ctx, g, graphtest.Node{Namespace: "organisation", Key: testProject, Type: "organisation@ProjectUnit"}); err != nil {
 		t.Fatal(err)
 	}
 	b, _ := g.BranchHead(ctx, "alm", domain.MainBranch)
@@ -101,7 +102,7 @@ goals: [{name: g, pre: {done: true}}]
 `
 	ctx := context.Background()
 	g := graph.New(graph.NewMemory())
-	if _, err := g.CreateNode(ctx, graph.NewNode{Namespace: "organisation", Key: testProject, Type: "organisation@ProjectUnit"}); err != nil {
+	if _, err := graphtest.Import(ctx, g, graphtest.Node{Namespace: "organisation", Key: testProject, Type: "organisation@ProjectUnit"}); err != nil {
 		t.Fatal(err)
 	}
 	b, _ := g.BranchHead(ctx, "", domain.MainBranch)

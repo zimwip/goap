@@ -27,16 +27,12 @@ func newFixture(t *testing.T, repo Repo) fixture {
 			t.Fatal(e)
 		}
 	}
-	f.need, err = g.CreateNode(ctx, NewNode{Key: "NEED-1", Type: "Need", Properties: map[string]any{"title": "Pay online"}})
+	f.need, err = importNode(ctx, g, newNode{Key: "NEED-1", Type: "Need", Properties: map[string]any{"title": "Pay online"}})
 	must(err)
-	f.req, err = g.CreateNode(ctx, NewNode{Key: "REQ-1", Type: "Requirement", Properties: map[string]any{"title": "Use PSP v1"}})
+	f.req, err = importNode(ctx, g, newNode{Key: "REQ-1", Type: "Requirement", Properties: map[string]any{"title": "Use PSP v1"},
+		Links: []LinkWrite{{Type: "satisfies", To: f.need.Ref()}}})
 	must(err)
-	f.test, err = g.CreateNode(ctx, NewNode{Key: "TST-1", Type: "TestCase"})
-	must(err)
-	c0 := testChange(t, g, "")
-	_, err = g.Link(ctx, c0, "satisfies", f.req.Ref(), f.need.Ref(), nil)
-	must(err)
-	_, err = g.Link(ctx, c0, "verifies", f.test.Ref(), f.req.Ref(), nil)
+	f.test, err = importNode(ctx, g, newNode{Key: "TST-1", Type: "TestCase", Links: []LinkWrite{{Type: "verifies", To: f.req.Ref()}}})
 	must(err)
 	f.base, err = g.BranchHead(ctx, "", domain.MainBranch)
 	must(err)
@@ -64,14 +60,14 @@ func testApplyUpdateCreatesSuspectLinks(t *testing.T, repo Repo) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := g.WriteNode(ctx, c.ID, cns[0].ID, NodeWrite{Properties: map[string]any{"title": "Use PSP v2"}}); err != nil {
+	if _, err := g.edit(ctx, c.ID, cns[0].ID, edit{Properties: map[string]any{"title": "Use PSP v2"}}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := g.WriteNode(ctx, c.ID, cns[1].ID, NodeWrite{AddLinks: []LinkWrite{{Type: "verifies", To: reqRef}}}); err != nil {
+	if _, err := g.edit(ctx, c.ID, cns[1].ID, edit{AddLinks: []LinkWrite{{Type: "verifies", To: reqRef}}}); err != nil {
 		t.Fatal(err)
 	}
 	for _, n := range cns {
-		if _, err := g.ReviewNode(ctx, c.ID, n.ID, domain.ReviewAccepted, "u", "ok"); err != nil {
+		if _, err := g.accept(ctx, c.ID, n.ID, "u", "ok"); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -141,10 +137,10 @@ func testApplyRemoveLinkBumpsSource(t *testing.T, repo Repo) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := g.WriteNode(ctx, c.ID, ns[0].ID, NodeWrite{RemoveLinks: []domain.LinkID{v.Out[0].ID}}); err != nil {
+	if _, err := g.edit(ctx, c.ID, ns[0].ID, edit{RemoveLinks: []domain.LinkID{v.Out[0].ID}}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := g.ReviewNode(ctx, c.ID, ns[0].ID, domain.ReviewAccepted, "u", "ok"); err != nil {
+	if _, err := g.accept(ctx, c.ID, ns[0].ID, "u", "ok"); err != nil {
 		t.Fatal(err)
 	}
 	b2, err := g.Apply(ctx, c.ID, "B2")
@@ -177,7 +173,7 @@ func testApplyRejectedAndConflicts(t *testing.T, repo Repo) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := g.WriteNode(ctx, c.ID, ns[0].ID, NodeWrite{Properties: map[string]any{"x": value}}); err != nil {
+		if _, err := g.edit(ctx, c.ID, ns[0].ID, edit{Properties: map[string]any{"x": value}}); err != nil {
 			t.Fatal(err)
 		}
 		status := domain.ReviewAccepted
@@ -186,6 +182,11 @@ func testApplyRejectedAndConflicts(t *testing.T, repo Repo) {
 		}
 		if _, err := g.ReviewNode(ctx, c.ID, ns[0].ID, status, "u", "decided"); err != nil {
 			t.Fatal(err)
+		}
+		if accept {
+			if err := g.checkinIfOut(ctx, c.ID, ns[0].ID, ""); err != nil {
+				t.Fatal(err)
+			}
 		}
 		return c
 	}

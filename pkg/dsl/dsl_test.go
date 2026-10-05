@@ -137,20 +137,24 @@ import "github.com/zimwip/goap/pkg/dsl"
 func Run(ctx *dsl.Ctx) error {
 	for _, n := range ctx.ChangeImpacts() {
 		if n.Planned {
-			ctx.WriteNode(n.Key, map[string]any{"props": map[string]any{"title": "x"}, "state": "draft"})
+			ctx.WriteNode(n.Key, map[string]any{"props": map[string]any{"title": "x"}})
 		}
 	}
 	r := ctx.CreateNode("TestCase", "TST-1", "cover")
 	ctx.WriteNode(r, map[string]any{"links": []any{map[string]any{"type": "verifies", "to": "REQ-1"}}})
 	ctx.ReviewNode(r, true, "ok")
+	ctx.CheckinNode(r)
+	ctx.TransitionNode(r, "approved")
+	ctx.CancelCheckout("REQ-1")
 	return nil
 }
 `}, &fakeHost{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(res.Nodes) != 4 || res.Nodes[0].Op != "write" || res.Nodes[0].State != "draft" || res.Nodes[0].Props["title"] != "x" ||
-		res.Nodes[2].Links[0].To != "REQ-1" || res.Nodes[3].Comment != "ok" || !res.Nodes[3].Accept {
+	if len(res.Nodes) != 7 || res.Nodes[0].Op != "write" || res.Nodes[0].Props["title"] != "x" ||
+		res.Nodes[2].Links[0].To != "REQ-1" || res.Nodes[3].Comment != "ok" || !res.Nodes[3].Accept ||
+		res.Nodes[4].Op != "checkin" || res.Nodes[5].Op != "transition" || res.Nodes[5].State != "approved" || res.Nodes[6].Op != "cancel" {
 		t.Fatalf("unexpected operations %+v", res.Nodes)
 	}
 }

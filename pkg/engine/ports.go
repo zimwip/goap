@@ -15,10 +15,17 @@ type GraphPort interface {
 	CreateChange(ctx context.Context, in graph.NewChange) (domain.Change, error)
 	UpdateChange(ctx context.Context, id domain.ChangeID, p graph.ChangePatch) (domain.Change, error)
 	AddItems(ctx context.Context, id domain.ChangeID, items []domain.ChangeItem) ([]domain.ChangeItem, error)
-	// Change impacts (ADR 0024): declare the nodes a change acts on, write their versions on the
-	// change branch, review them.
+	// Change impacts (ADR 0024, 0076): declare the nodes a change acts on, check them out, edit their working version,
+	// review, check in and move them.
 	AddNodes(ctx context.Context, id domain.ChangeID, nodes []domain.ChangeImpact) ([]domain.ChangeImpact, error)
-	WriteNode(ctx context.Context, id domain.ChangeID, node domain.ChangeImpactID, w graph.NodeWrite) (domain.ChangeImpact, error)
+	CreateNode(ctx context.Context, id domain.ChangeID, in graph.NodeCreate) (domain.ChangeImpact, error)
+	CheckoutNode(ctx context.Context, id domain.ChangeID, in graph.NodeCheckout) (domain.ChangeImpact, error)
+	UpdateNode(ctx context.Context, id domain.ChangeID, impact domain.ChangeImpactID, in graph.NodeUpdate) (domain.ChangeImpact, error)
+	CreateLink(ctx context.Context, id domain.ChangeID, impact domain.ChangeImpactID, l graph.LinkWrite, flow, execution string) (domain.Link, error)
+	DeleteLink(ctx context.Context, id domain.ChangeID, link domain.LinkID, flow, execution string) error
+	CheckinNode(ctx context.Context, id domain.ChangeID, impact domain.ChangeImpactID, flow, execution string) (domain.ChangeImpact, error)
+	TransitionNode(ctx context.Context, id domain.ChangeID, in graph.NodeTransition) (domain.ChangeImpact, error)
+	CancelCheckout(ctx context.Context, id domain.ChangeID, impact domain.ChangeImpactID, flow, execution string) (domain.ChangeImpact, error)
 	ReviewNodeOn(ctx context.Context, id domain.ChangeID, flow, execution string, node domain.ChangeImpactID, status domain.NodeReview, by, comment string) (domain.ChangeImpact, error)
 	// ReopenImpacts sends accepted impacts back to proposed (ADR 0075: a derogation expired).
 	ReopenImpacts(ctx context.Context, id domain.ChangeID, impacts []domain.ChangeImpactID, comment string) ([]domain.ChangeImpactID, error)

@@ -13,7 +13,8 @@ type EventSink interface {
 	Publish(ctx context.Context, subject string, v any) error
 }
 
-// Observe makes the graph publish a NodeEvent for every node version written and a BaselineEvent
+// Observe makes the graph publish a NodeEvent for every node version frozen (written checked in, or checked in: a
+// working version is edited in place until its check-in, ADR 0076) and a BaselineEvent
 // for every baseline created, once the transaction that wrote them has committed. It sees every
 // write path. Publishing is best effort: the index rebuilds from the graph (Reindex) when an
 // event is lost.
@@ -31,7 +32,8 @@ type observedRepo struct {
 
 type observedTx struct {
 	Tx
-	nodes     []domain.Node
+	// nodes are the versions frozen by the transaction, read again when it ends (an action may set their properties)
+	nodes     []domain.NodeRef
 	baselines []domain.Baseline
 	// changes written in the transaction, in order: the header when it was written, else just the id
 	changes []domain.ChangeID
@@ -83,7 +85,17 @@ func (t *observedTx) PutNode(ctx context.Context, n domain.Node) error {
 	if err := t.Tx.PutNode(ctx, n); err != nil {
 		return err
 	}
-	t.nodes = append(t.nodes, n)
+	if !n.CheckedOut {
+		t.nodes = append(t.nodes, n.Ref())
+	}
+	return nil
+}
+
+func (t *observedTx) CheckinVersion(ctx context.Context, ref domain.NodeRef) error {
+	if err := t.Tx.CheckinVersion(ctx, ref); err != nil {
+		return err
+	}
+	t.nodes = append(t.nodes, ref)
 	return nil
 }
 
@@ -135,7 +147,11 @@ func (g *Graph) eventsOf(ctx context.Context, tx Tx, ot *observedTx) ([]publishe
 		if err != nil {
 			return nil, err
 		}
-		for _, n := range ot.nodes {
+		for _, ref := range ot.nodes {
+			n, err := tx.Node(ctx, ref)
+			if err != nil {
+				return nil, err
+			}
 			ev := domain.NodeEvent{ID: n.ID, Version: n.Version, Branch: domain.BranchOf(n.Branch), Namespace: domain.NamespaceOf(n.Namespace), Key: n.Key,
 				Type: n.Type, State: n.State, Deleted: n.Deleted, ChangeID: n.ChangeID, Time: n.CreatedAt}
 			ev.Text, ev.Facets = ix.searchable(n)
@@ -249,7 +265,11 @@ func (g *Graph) republishNamespace(ctx context.Context, namespace string, sink E
 			if err != nil {
 				return err
 			}
-			ot.nodes = append(ot.nodes, vs...)
+			for _, v := range vs {
+				if !v.CheckedOut {
+					ot.nodes = append(ot.nodes, v.Ref())
+				}
+			}
 		}
 		if head, err := branchHead(ctx, tx, namespace, domain.MainBranch); err == nil && head.ID != "" {
 			head.ParentID = ""

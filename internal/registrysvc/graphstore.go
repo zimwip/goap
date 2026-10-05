@@ -26,12 +26,11 @@ type StoreGraph interface {
 	BaselineGraph(ctx context.Context, id domain.BaselineID) ([]domain.Node, []domain.Link, error)
 	// Commit runs a change of node edits (ADR 0024).
 	Commit(ctx context.Context, in graph.Commit) (graph.CommitResult, error)
-	// CreateChange, AddNodes and WriteNode let a producer open a change on a namespace of its own
-	// and propose a pending (not auto-accepted) change impact on it (used for alias stubs, see
-	// aliasstubs.go); Changes lists every change, for the pending-stub dedup check.
+	// CreateChange and CreateNode let a producer open a change on a namespace of its own and propose a pending (not
+	// auto-accepted) created node in it (used for alias stubs, see aliasstubs.go); Changes lists every change, for
+	// the pending-stub dedup check.
 	CreateChange(ctx context.Context, in graph.NewChange) (domain.Change, error)
-	AddNodes(ctx context.Context, id domain.ChangeID, nodes []domain.ChangeImpact) ([]domain.ChangeImpact, error)
-	WriteNode(ctx context.Context, id domain.ChangeID, node domain.ChangeImpactID, w graph.NodeWrite) (domain.ChangeImpact, error)
+	CreateNode(ctx context.Context, id domain.ChangeID, in graph.NodeCreate) (domain.ChangeImpact, error)
 	Changes(ctx context.Context) ([]domain.Change, error)
 }
 

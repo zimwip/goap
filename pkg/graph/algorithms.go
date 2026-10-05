@@ -136,6 +136,9 @@ func childViews(children []domain.Node) []dsl.Node {
 func (a *applier) runGuards(n domain.Node, t domain.Transition, children []domain.Node) error {
 	in := dsl.AlgorithmInput{Node: dslNode(n, n.Properties), Children: childViews(children), Change: a.changeInfo(),
 		Transition: dsl.TransitionInfo{Name: t.Name, From: t.From, To: t.To}}
+	if a.impact != nil {
+		in.Impact = dsl.ImpactInfo{Intent: string(a.impact.Intent), Review: string(a.impact.Review)}
+	}
 	for _, g := range t.GuardAlgos {
 		out, err := dsl.RunAlgorithm(a.ctx, g, in)
 		if err != nil {

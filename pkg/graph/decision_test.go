@@ -25,8 +25,8 @@ func testDecisionLoop(t *testing.T, repo Repo) {
 	write := func(option, title string) domain.NodeRef {
 		t.Helper()
 		added := must[[]domain.ChangeImpact](t)(g.AddNodes(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &pre, Rationale: title, Flow: option}}))
-		cn := must[domain.ChangeImpact](t)(g.WriteNode(ctx, c.ID, added[0].ID, NodeWrite{Flow: option, Properties: map[string]any{"title": title}}))
-		must[domain.ChangeImpact](t)(g.ReviewNodeOn(ctx, c.ID, option, "", cn.ID, domain.ReviewAccepted, "u", "ok"))
+		cn := must[domain.ChangeImpact](t)(g.edit(ctx, c.ID, added[0].ID, edit{Flow: option, Properties: map[string]any{"title": title}}))
+		must[domain.ChangeImpact](t)(g.acceptOn(ctx, c.ID, option, "", cn.ID, "u", "ok"))
 		return *cn.Post
 	}
 	a := must[domain.Flow](t)(g.OpenOption(ctx, c.ID, OpenOptionRequest{Name: "stripe"}))

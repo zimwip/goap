@@ -332,7 +332,7 @@ func ChangeImpactsFromPB(cns []*graphv1.ChangeImpact) []domain.ChangeImpact {
 func EditsToPB(edits []graph.NodeEdit) []*graphv1.NodeEdit {
 	out := make([]*graphv1.NodeEdit, len(edits))
 	for i, e := range edits {
-		pe := &graphv1.NodeEdit{Key: e.Key, Type: e.Type, Pre: RefPtrToPB(e.Pre), Props: Struct(e.Props), Retire: e.Retire, Rationale: e.Rationale, Owner: e.Owner}
+		pe := &graphv1.NodeEdit{Key: e.Key, Type: e.Type, Pre: RefPtrToPB(e.Pre), Props: Struct(e.Props), Rationale: e.Rationale, Owner: e.Owner}
 		for _, l := range e.Links {
 			pe.Links = append(pe.Links, &graphv1.LinkEdit{Type: l.Type, To: RefPtrToPB(l.To), ToKey: l.ToKey, Props: Struct(l.Props)})
 		}
@@ -347,7 +347,7 @@ func EditsToPB(edits []graph.NodeEdit) []*graphv1.NodeEdit {
 func EditsFromPB(edits []*graphv1.NodeEdit) []graph.NodeEdit {
 	out := make([]graph.NodeEdit, len(edits))
 	for i, pe := range edits {
-		e := graph.NodeEdit{Key: pe.Key, Type: pe.Type, Pre: RefPtrFromPB(pe.Pre), Props: Map(pe.Props), Retire: pe.Retire, Rationale: pe.Rationale, Owner: pe.Owner}
+		e := graph.NodeEdit{Key: pe.Key, Type: pe.Type, Pre: RefPtrFromPB(pe.Pre), Props: Map(pe.Props), Rationale: pe.Rationale, Owner: pe.Owner}
 		for _, l := range pe.Links {
 			e.Links = append(e.Links, graph.LinkEdit{Type: l.Type, To: RefPtrFromPB(l.To), ToKey: l.ToKey, Props: Map(l.Props)})
 		}

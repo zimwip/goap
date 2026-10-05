@@ -43,6 +43,9 @@ func (a *applier) prepareChangeImpacts() error {
 		if err != nil {
 			return err
 		}
+		if post.CheckedOut {
+			return fmt.Errorf("change impact %s (%s) is checked out: check it in, or cancel the checkout, before the change is applied: %w", cn.Key, cn.ID, ErrConflict)
+		}
 		cp := cpost{cn: cn, post: post}
 		if cn.Pre != nil {
 			pre, err := a.tx.Node(a.ctx, *cn.Pre)
@@ -61,36 +64,28 @@ func (a *applier) prepareChangeImpacts() error {
 	return nil
 }
 
-// appliedMove is the last transition a change impact's node went through, to check and run once the walk is done.
-type appliedMove struct {
-	node     domain.Node
-	t        domain.Transition
-	children []domain.Node
-}
-
-// checkChangeImpacts validates the versions produced by the change impacts once the
-// target graph is known: property validators, the states the nodes are left in,
-// and the transitions they went through (permission, requirements, guards, then
-// actions), like checkProps and checkMoves do for proposals. It walks the impacts,
-// then settles what they leave (both passes of authorizeMoves run both steps).
+// checkChangeImpacts validates the versions produced by the change impacts once the target graph is known: property
+// validators, the states the nodes are left in and the transitions they went through, then what they leave (the landing
+// gate, else no node left in an editable state). A transition was authorized, guarded and acted when it was taken
+// (TransitionNode, ADR 0076): the walk only checks that each state change on the branch is a move of the lifecycle.
 func (a *applier) checkChangeImpacts() error {
-	moves, editable, err := a.walkChangeImpacts()
+	editable, err := a.walkChangeImpacts()
 	if err != nil {
 		return err
 	}
-	return a.settleChangeImpacts(moves, editable)
+	return a.settleChangeImpacts(editable)
 }
 
-// walkChangeImpacts validates the properties of each produced version and walks its transitions: it returns the last
-// move of each node and the nodes left in an editable state.
-func (a *applier) walkChangeImpacts() (moves []appliedMove, editable []string, err error) {
+// walkChangeImpacts validates the properties of each produced version and walks its transitions: it returns the nodes
+// left in an editable state.
+func (a *applier) walkChangeImpacts() (editable []string, err error) {
 	for _, cp := range a.cposts {
 		n := cp.post
 		if n.Deleted {
 			continue
 		}
 		if err := a.g.validateProps(a.ctx, a.ix, n, n.Properties); err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		lc := a.ix.lifecycleOf(n.Type)
 		if lc == nil || n.State == "" {
@@ -99,21 +94,16 @@ func (a *applier) walkChangeImpacts() (moves []appliedMove, editable []string, e
 		if lc.Editable(n.State) && !lc.RestInEditable {
 			editable = append(editable, fmt.Sprintf("%s (%s) in %s", n.Key, n.Type, n.State))
 		}
-		last, err := a.walkTransitions(cp, lc)
-		if err != nil {
-			return nil, nil, err
-		}
-		if last != nil {
-			moves = append(moves, appliedMove{node: n, t: *last})
+		if err := a.walkTransitions(cp, lc); err != nil {
+			return nil, err
 		}
 	}
-	return moves, editable, nil
+	return editable, nil
 }
 
 // walkTransitions replays the versions of a node written on the change branch: each state change must be a
-// transition of the lifecycle and is collected (first pass), compared with what was authorized (second pass) or
-// authorized on the spot (no two-pass apply). It returns the last transition, nil when the node did not move.
-func (a *applier) walkTransitions(cp cpost, lc *domain.Lifecycle) (*domain.Transition, error) {
+// transition of the lifecycle.
+func (a *applier) walkTransitions(cp cpost, lc *domain.Lifecycle) error {
 	n := cp.post
 	prev, from := lc.Initial, 0
 	if cp.pre != nil {
@@ -124,46 +114,27 @@ func (a *applier) walkTransitions(cp cpost, lc *domain.Lifecycle) (*domain.Trans
 	}
 	vs, err := a.tx.Versions(a.ctx, n.ID)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	var last *domain.Transition
 	for _, v := range vs {
 		if !v.On(a.branch) || int(v.Version) <= from || v.State == prev {
 			continue
 		}
-		t, ok := lc.Move(prev, v.State)
-		if !ok {
-			return nil, invalidf("%s (%s) cannot go from %s to %s", n.Key, n.Type, prev, v.State)
+		if _, ok := lc.Move(prev, v.State); !ok {
+			return invalidf("%s (%s) cannot go from %s to %s", n.Key, n.Type, prev, v.State)
 		}
-		if a.g.Authorizer != nil {
-			at := v
-			at.State = prev
-			m := pendingMove{node: at, t: t}
-			switch {
-			case a.collect != nil:
-				*a.collect = append(*a.collect, m)
-			case a.authorized != nil && !a.authorized[m.key()]:
-				return nil, fmt.Errorf("%s moved to %s while the change was applied: apply it again: %w", n.Key, v.State, ErrConflict)
-			case a.authorized == nil:
-				if err := a.g.Authorizer(a.ctx, at, t); err != nil {
-					return nil, err
-				}
-			}
-		}
-		last, prev = &t, v.State
+		prev = v.State
 	}
-	return last, nil
+	return nil
 }
 
-// settleChangeImpacts decides what the walk found: the landing gate or the editable states left, then the checks
-// and the actions of the moves.
-func (a *applier) settleChangeImpacts(moves []appliedMove, editable []string) error {
+// settleChangeImpacts decides what the walk found: the landing gate, else the editable states left.
+func (a *applier) settleChangeImpacts(editable []string) error {
 	// LandingGate may itself need to read the graph, which this transaction would block (the stores are not
-	// reentrant): authorizeMoves asks it in its own rolled-back pass before this transaction opens, and passes the
-	// answer in as a.landing (same reason and pattern as authorized). a.collect != nil means this call IS
-	// that earlier pass: nothing to check yet, just leave the blackboard (landingBlackboard) for the caller to
-	// evaluate outside it.
-	if a.collect != nil {
+	// reentrant): askLandingGate asks it in its own rolled-back pass before this transaction opens, and passes the
+	// answer in as a.landing. a.collect means this call IS that earlier pass: nothing to check yet, just leave the
+	// blackboard (landingBlackboard) for the caller to evaluate outside it.
+	if a.collect {
 		return nil
 	}
 	if a.g.LandingGate != nil && a.landing == nil {
@@ -176,18 +147,6 @@ func (a *applier) settleChangeImpacts(moves []appliedMove, editable []string) er
 		}
 	case len(editable) > 0:
 		return invalidf("the change leaves nodes in an editable state, move them out of it before applying: %s", joinSorted(editable))
-	}
-	for i, m := range moves {
-		children, err := a.checkTransition(m.node, m.t)
-		if err != nil {
-			return err
-		}
-		moves[i].children = children
-	}
-	for _, m := range moves {
-		if err := a.runActions(m.node, m.t, m.children); err != nil {
-			return err
-		}
 	}
 	return nil
 }

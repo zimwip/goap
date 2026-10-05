@@ -29,12 +29,12 @@ func (g *Graph) Apply(ctx context.Context, id domain.ChangeID, baselineName stri
 	if err := g.checkFinalState(ctx, id); err != nil {
 		return result, err
 	}
-	authorized, landing, err := g.authorizeMoves(ctx, id)
+	landing, err := g.askLandingGate(ctx, id)
 	if err != nil {
 		return result, err
 	}
 	err = g.repo.InTx(ctx, func(tx Tx) (err error) {
-		if result, err = g.commitTx(ctx, tx, id, baselineName, authorized, landing); err != nil {
+		if result, err = g.commitTx(ctx, tx, id, baselineName, landing); err != nil {
 			return err
 		}
 		c, err := tx.Change(ctx, id)
@@ -65,19 +65,19 @@ func (g *Graph) CommitChange(ctx context.Context, id domain.ChangeID, baselineNa
 	if err := g.checkFinalState(ctx, id); err != nil {
 		return result, err
 	}
-	authorized, landing, err := g.authorizeMoves(ctx, id)
+	landing, err := g.askLandingGate(ctx, id)
 	if err != nil {
 		return result, err
 	}
 	err = g.repo.InTx(ctx, func(tx Tx) (err error) {
-		result, err = g.commitTx(ctx, tx, id, baselineName, authorized, landing)
+		result, err = g.commitTx(ctx, tx, id, baselineName, landing)
 		return err
 	})
 	return result, err
 }
 
 // commitTx validates a change and records its commit baseline on its own branch.
-func (g *Graph) commitTx(ctx context.Context, tx Tx, id domain.ChangeID, baselineName string, authorized map[string]bool, landing *landingDecision) (domain.Baseline, error) {
+func (g *Graph) commitTx(ctx context.Context, tx Tx, id domain.ChangeID, baselineName string, landing *landingDecision) (domain.Baseline, error) {
 	c, err := tx.Change(ctx, id)
 	if err != nil {
 		return domain.Baseline{}, err
@@ -103,67 +103,54 @@ func (g *Graph) commitTx(ctx context.Context, tx Tx, id domain.ChangeID, baselin
 			return domain.Baseline{}, err
 		}
 	}
-	return g.commitOnBranch(ctx, tx, id, baselineName, authorized, landing)
+	return g.commitOnBranch(ctx, tx, id, baselineName, landing)
 }
 
-// errCollected rolls back the pass that only collects the transitions to authorize.
+// errCollected rolls back a pass that only reads what an authorization or a hook needs before the transaction that
+// writes (the stores are not reentrant).
 var errCollected = errors.New("transitions collected")
 
 // landingDecision is what Graph.LandingGate answered about a change.
 type landingDecision struct{ decided, ok bool }
 
-// authorizeMoves asks the authorizer about every lifecycle transition the change makes, and LandingGate about the
-// change itself, before the transaction that applies it: both may need to read the graph themselves (the access
-// graph; whatever the gate consults), which a transaction held by the apply would block (the stores are not
-// reentrant). A pass that is rolled back collects what they need; the apply then checks it makes good on what was
-// authorized / decided.
-func (g *Graph) authorizeMoves(ctx context.Context, id domain.ChangeID) (authorized map[string]bool, landing *landingDecision, err error) {
-	if g.Authorizer == nil && g.LandingGate == nil {
-		return nil, nil, nil
+// askLandingGate asks LandingGate about the change before the transaction that applies it: the gate may read the graph
+// itself, which a transaction held by the apply would block (the stores are not reentrant). A pass that is rolled back
+// builds the blackboard it decides against. The lifecycle transitions are authorized when they are taken
+// (TransitionNode, ADR 0076), not here.
+func (g *Graph) askLandingGate(ctx context.Context, id domain.ChangeID) (landing *landingDecision, err error) {
+	if g.LandingGate == nil {
+		return nil, nil
 	}
-	var moves []pendingMove
 	var change domain.Change
 	var bb domain.Blackboard
 	var haveBB bool
-	// An error other than errCollected is met again by the apply in its own transaction, after the transitions
-	// collected before it: those are authorized all the same.
+	// An error other than errCollected is met again by the apply in its own transaction.
 	_ = g.repo.InTx(ctx, func(tx Tx) error {
 		a, _, err := g.newApplier(ctx, tx, id)
 		if err != nil {
 			return err
 		}
-		a.collect = &moves
+		a.collect = true
 		if err := a.prepareChangeImpacts(); err != nil {
 			return err
 		}
 		if err := a.checkChangeImpacts(); err != nil {
 			return err
 		}
-		if g.LandingGate != nil {
-			change, bb, haveBB = a.change, a.landingBlackboard(), true
-		}
+		change, bb, haveBB = a.change, a.landingBlackboard(), true
 		return errCollected
 	})
-	authorized = map[string]bool{}
-	for _, m := range moves {
-		// moves is only ever populated when g.Authorizer is set (checkChangeImpacts collects transitions under
-		// the same guard it uses to call the authorizer directly).
-		if err := g.Authorizer(ctx, m.node, m.t); err != nil {
-			return nil, nil, err
-		}
-		authorized[m.key()] = true
+	if !haveBB {
+		return nil, nil
 	}
-	if haveBB {
-		decided, ok, err := g.LandingGate(ctx, change, bb)
-		if err != nil {
-			return nil, nil, err
-		}
-		landing = &landingDecision{decided: decided, ok: ok}
+	decided, ok, err := g.LandingGate(ctx, change, bb)
+	if err != nil {
+		return nil, err
 	}
-	return authorized, landing, nil
+	return &landingDecision{decided: decided, ok: ok}, nil
 }
 
-// pendingMove is a lifecycle transition a change makes, from the state of node.
+// pendingMove is a lifecycle transition, from the state of node.
 type pendingMove struct {
 	node domain.Node
 	t    domain.Transition
@@ -205,14 +192,12 @@ func (g *Graph) newApplier(ctx context.Context, tx Tx, id domain.ChangeID) (*app
 	return &applier{g: g, tx: tx, ctx: ctx, change: c, ix: ix, branch: domain.BranchOf(c.Branch), target: target}, parentBaseline, nil
 }
 
-// commitOnBranch validates a change on its own branch and records its commit baseline there; authorized are the
-// transitions authorizeMoves let through (nil: no authorizer).
-func (g *Graph) commitOnBranch(ctx context.Context, tx Tx, id domain.ChangeID, baselineName string, authorized map[string]bool, landing *landingDecision) (domain.Baseline, error) {
+// commitOnBranch validates a change on its own branch and records its commit baseline there.
+func (g *Graph) commitOnBranch(ctx context.Context, tx Tx, id domain.ChangeID, baselineName string, landing *landingDecision) (domain.Baseline, error) {
 	a, parentBaseline, err := g.newApplier(ctx, tx, id)
 	if err != nil {
 		return domain.Baseline{}, err
 	}
-	a.authorized = authorized
 	a.landing = landing
 	c := a.change
 	if err := a.prepareChangeImpacts(); err != nil {
@@ -281,11 +266,11 @@ type applier struct {
 	target map[domain.NodeID]domain.Version
 	// cposts are the versions produced by the accepted change impacts (ADR 0024).
 	cposts []cpost
-	// collect gathers the transitions to authorize (the pass of authorizeMoves); authorized are the ones let through
-	collect    *[]pendingMove
-	authorized map[string]bool
-	// landing is the answer of LandingGate, asked by authorizeMoves's rolled-back pass before this transaction
-	// (same reason as authorized: the hook may itself read the graph); nil in that earlier pass itself, where
-	// checkChangeImpacts only leaves the blackboard for the caller to evaluate outside it.
+	// collect marks the rolled-back pass of askLandingGate, which only builds the blackboard the gate decides against
+	collect bool
+	// landing is the answer of LandingGate, asked by askLandingGate's rolled-back pass before this transaction (the
+	// hook may itself read the graph).
 	landing *landingDecision
+	// impact is the change impact of the node a transition moves (TransitionNode): its guard sees it (ADR 0076).
+	impact *domain.ChangeImpact
 }

@@ -298,6 +298,11 @@ func (d dialect) dropWorkingVersion() []string {
 	}
 }
 
+// sqlDeleteChangeImpact removes a change impact from the projection: arguments change, change impact.
+func (d dialect) sqlDeleteChangeImpact() string {
+	return `DELETE FROM change_impact WHERE change_id = ` + d.ph(1) + ` AND id = ` + d.ph(2)
+}
+
 // sqlLinkByID reads one link.
 func (d dialect) sqlLinkByID(id domain.LinkID) (string, []any) {
 	return `SELECT ` + d.linkCols() + ` FROM link WHERE id = ` + d.ph(1), []any{string(id)}

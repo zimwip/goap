@@ -25,12 +25,13 @@ const tst = ctx.createNode("TestCase", "TST-2", "cover the new API");
 ctx.writeNode(req, { props: { title: "Use PSP v2" } });
 ctx.writeNode(tst, { props: { title: "PSP v2 test" }, links: [{ type: "verifies", to: req }] });
 ctx.reviewNode(req, true, "confirmed with the PSP team");
+ctx.checkinNode(req);
 `}
 	res, err := dsl.Run(ctx, job, nopHost{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(res.Nodes) != 5 || res.Nodes[0].Op != "declare" || res.Nodes[0].Ref != "#n1" || res.Nodes[3].Links[0].To != "#n1" {
+	if len(res.Nodes) != 6 || res.Nodes[0].Op != "declare" || res.Nodes[0].Ref != "#n1" || res.Nodes[3].Links[0].To != "#n1" {
 		t.Fatalf("unexpected operations: %+v", res.Nodes)
 	}
 	if _, err := e.applyNodeOps(ctx, p, res.Nodes, "plan", "exec-1"); err != nil {
@@ -60,10 +61,10 @@ ctx.reviewNode(req, true, "confirmed with the PSP team");
 		t.Fatalf("snapshot: %+v", snap)
 	}
 	job2 := dsl.Job{Language: "javascript", Action: "check", Nodes: snap, Code: `
-for (const n of ctx.changeImpacts()) if (n.review === "proposed") ctx.reviewNode(n.key, true, "needed");
+for (const n of ctx.changeImpacts()) if (n.review === "proposed") { ctx.reviewNode(n.key, true, "needed"); ctx.checkinNode(n.key); }
 `}
 	res2, err := dsl.Run(ctx, job2, nopHost{})
-	if err != nil || len(res2.Nodes) != 1 {
+	if err != nil || len(res2.Nodes) != 2 {
 		t.Fatalf("second script: %+v %v", res2, err)
 	}
 	if _, err := e.applyNodeOps(ctx, p, res2.Nodes, "check", ""); err != nil {
@@ -127,7 +128,7 @@ func TestScriptChangeImpactsOnAFlow(t *testing.T) {
 	if len(ChangeImpactsFromBlackboard(bb)) != 0 {
 		t.Fatalf("a relaunched step starts without its stale change impacts: %+v", ChangeImpactsFromBlackboard(bb))
 	}
-	run(onFlow, "plan", "run-2", `const r = ctx.impactNode("REQ-1", "second idea"); ctx.writeNode(r, { props: { title: "B" } }); ctx.reviewNode(r, true, "better");`)
+	run(onFlow, "plan", "run-2", `const r = ctx.impactNode("REQ-1", "second idea"); ctx.writeNode(r, { props: { title: "B" } }); ctx.reviewNode(r, true, "better"); ctx.checkinNode(r);`)
 	bb, _ = g.BlackboardIn(ctx, c.ID, flow.ID)
 	if snap := ChangeImpactsFromBlackboard(bb); len(snap) != 1 || snap[0].Rationale != "second idea" || snap[0].Review != "accepted" || snap[0].Post == nil {
 		t.Fatalf("flow snapshot: %+v", snap)

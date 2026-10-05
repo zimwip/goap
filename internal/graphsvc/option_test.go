@@ -11,6 +11,7 @@ import (
 	"github.com/zimwip/goap/pkg/decision"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/graph"
+	"github.com/zimwip/goap/pkg/graph/graphtest"
 )
 
 // The options of a change through the service (ADR 0032 §6): the client the engine and the built-in MCPs use in the
@@ -25,7 +26,7 @@ func TestOptionsThroughTheService(t *testing.T) {
 	defer srv.Close()
 	cl := graphsvc.NewClient(srv.Client(), srv.URL)
 
-	req1, err := g.CreateNode(ctx, graph.NewNode{Key: "REQ-1", Type: "Requirement", Properties: map[string]any{"title": "one"}})
+	req1, err := graphtest.Import(ctx, g, graphtest.Node{Key: "REQ-1", Type: "Requirement", Properties: map[string]any{"title": "one"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -42,11 +43,11 @@ func TestOptionsThroughTheService(t *testing.T) {
 		t.Fatalf("open: %+v %v", a, err)
 	}
 	pre := req1.Ref()
-	added, err := g.AddNodes(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &pre, Rationale: "why"}})
+	added, err := g.CheckoutNode(ctx, c.ID, graph.NodeCheckout{Node: pre.ID, Rationale: "why"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := g.WriteNode(ctx, c.ID, added[0].ID, graph.NodeWrite{Properties: map[string]any{"title": "two"}}); err != nil {
+	if _, err := g.UpdateNode(ctx, c.ID, added.ID, graph.NodeUpdate{Properties: map[string]any{"title": "two"}}); err != nil {
 		t.Fatal(err)
 	}
 	nodes, _, err := cl.ChangeGraph(ctx, c.ID, "")
@@ -88,7 +89,7 @@ func TestDecisionsThroughTheService(t *testing.T) {
 	defer srv.Close()
 	cl := graphsvc.NewClient(srv.Client(), srv.URL)
 
-	_, _ = g.CreateNode(ctx, graph.NewNode{Key: "REQ-1", Type: "Requirement"})
+	_, _ = graphtest.Import(ctx, g, graphtest.Node{Key: "REQ-1", Type: "Requirement"})
 	base, _ := g.BranchHead(ctx, "", domain.MainBranch)
 	c, err := g.CreateChange(ctx, graph.NewChange{Title: "t", BaselineID: base.ID, OwnBranch: true})
 	if err != nil {

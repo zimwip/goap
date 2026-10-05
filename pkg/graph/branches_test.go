@@ -242,10 +242,10 @@ func TestBranchNamesAreScopedToTheirNamespace(t *testing.T) {
 func testBranchNamesAreScopedToTheirNamespace(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	g := New(repo)
-	if _, err := g.CreateNode(ctx, NewNode{Key: "N-1", Type: "Thing"}); err != nil {
+	if _, err := importNode(ctx, g, newNode{Key: "N-1", Type: "Thing"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := g.CreateNode(ctx, NewNode{Namespace: "organisation", Key: "N-1", Type: "OrgUnit"}); err != nil {
+	if _, err := importNode(ctx, g, newNode{Namespace: "organisation", Key: "N-1", Type: "OrgUnit"}); err != nil {
 		t.Fatal(err)
 	}
 	defBase := must[domain.Baseline](t)(g.BranchHead(ctx, "", domain.MainBranch))
@@ -270,11 +270,11 @@ func TestHeadIsScopedToOneNamespace(t *testing.T) { forEachRepo(t, testHeadIsSco
 func testHeadIsScopedToOneNamespace(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	g := New(repo)
-	def, err := g.CreateNode(ctx, NewNode{Key: "N-1", Type: "Thing"})
+	def, err := importNode(ctx, g, newNode{Key: "N-1", Type: "Thing"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	org, err := g.CreateNode(ctx, NewNode{Namespace: "organisation", Key: "N-1", Type: "OrgUnit"})
+	org, err := importNode(ctx, g, newNode{Namespace: "organisation", Key: "N-1", Type: "OrgUnit"})
 	if err != nil {
 		t.Fatal(err)
 	}

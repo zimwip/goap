@@ -78,20 +78,18 @@ func testCommitRejectsASecondMembership(t *testing.T, repo Repo) {
 	g := New(repo)
 	const ns = "organisation"
 
-	orgA, err := g.CreateNode(ctx, NewNode{Namespace: ns, Key: "ORG-A", Type: NodeTypeOrgUnit, Properties: map[string]any{"name": "A"}})
+	orgA, err := importNode(ctx, g, newNode{Namespace: ns, Key: "ORG-A", Type: NodeTypeOrgUnit, Properties: map[string]any{"name": "A"}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	orgB, err := g.CreateNode(ctx, NewNode{Namespace: ns, Key: "ORG-B", Type: NodeTypeOrgUnit, Properties: map[string]any{"name": "B"}})
+	orgB, err := importNode(ctx, g, newNode{Namespace: ns, Key: "ORG-B", Type: NodeTypeOrgUnit, Properties: map[string]any{"name": "B"}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	user, err := g.CreateNode(ctx, NewNode{Namespace: ns, Key: "USR:alice", Type: NodeTypeUser, Properties: map[string]any{"subject": "alice"}})
+	// member_of ORG-A
+	user, err := importNode(ctx, g, newNode{Namespace: ns, Key: "USR:alice", Type: NodeTypeUser, Properties: map[string]any{"subject": "alice"},
+		Links: []LinkWrite{{Type: LinkMemberOf, To: orgA.Ref()}}})
 	if err != nil {
-		t.Fatal(err)
-	}
-	// member_of ORG-A, a raw link attributed to a change of its own (no new node version, ADR 0049)
-	if _, err := g.Link(ctx, testChange(t, g, ns), LinkMemberOf, user.Ref(), orgA.Ref(), nil); err != nil {
 		t.Fatal(err)
 	}
 	base, err := g.BranchHead(ctx, ns, domain.MainBranch)

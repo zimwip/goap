@@ -30,7 +30,7 @@ func testBaselineDeltas(t *testing.T, repo Repo) {
 		case 2:
 			edits = append(edits, NodeEdit{Pre: &domain.NodeRef{ID: f.req.ID, Version: head.Nodes[f.req.ID]}, Props: map[string]any{"step": i}})
 		case 4:
-			edits = append(edits, NodeEdit{Pre: &domain.NodeRef{ID: f.test.ID, Version: head.Nodes[f.test.ID]}, Retire: true})
+			edits = append(edits, NodeEdit{Pre: &domain.NodeRef{ID: f.test.ID, Version: head.Nodes[f.test.ID]}, Props: map[string]any{"obsolete": true}})
 		}
 		head = commitOn(t, g, "", head.ID, edits...)
 		written = append(written, head)
@@ -49,9 +49,6 @@ func testBaselineDeltas(t *testing.T, repo Repo) {
 				t.Fatalf("baseline %d: %s is not in it", i, n.Ref())
 			}
 		}
-	}
-	if _, ok := head.Nodes[f.test.ID]; ok {
-		t.Fatal("TST-1 was retired")
 	}
 	// what is stored: whole at a checkpoint, the difference with the parent otherwise
 	counts := storedEntryCounts(t, repo, written)

@@ -426,6 +426,10 @@ func (t *pgTx) DropWorkingVersion(ctx context.Context, ref domain.NodeRef) error
 	return nil
 }
 
+func (t *pgTx) DeleteChangeImpact(ctx context.Context, change domain.ChangeID, id domain.ChangeImpactID) error {
+	return t.exec1(ctx, "change impact "+string(id), dialectPG.sqlDeleteChangeImpact(), string(change), string(id))
+}
+
 func (t *pgTx) Link(ctx context.Context, id domain.LinkID) (domain.Link, error) {
 	q, args := dialectPG.sqlLinkByID(id)
 	ls, err := t.queryLinks(ctx, q, args...)

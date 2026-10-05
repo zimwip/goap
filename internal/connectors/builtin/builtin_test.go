@@ -373,6 +373,21 @@ func TestChangeOptionTools(t *testing.T) {
 		t.Fatalf("undecidable = %v", ruled)
 	}
 	p.call(t, ctx, "ORG-CHECKOUT", "goap-change/answer", map[string]any{"question": q["id"], "answer": "2 EUR"})
+	// the edit of the option is reviewed and checked in: a flow is adopted with its versions checked in (ADR 0076)
+	c, err := p.g.Change(ctx, domain.ChangeID(id))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, cn := range c.Nodes {
+		if cn.Key == "REQ-2" && cn.Flow == a["id"] {
+			if _, err := p.g.ReviewNodeOn(ctx, c.ID, cn.Flow, "", cn.ID, domain.ReviewAccepted, "reviewer", "agreed"); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := p.g.CheckinNode(ctx, c.ID, cn.ID, cn.Flow, ""); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
 	decided := p.call(t, ctx, "ORG-CHECKOUT", "goap-change/rule", map[string]any{"outcome": "decided", "option": "high", "confidence": 0.95,
 		"justification": "cheap enough"})["point"].(map[string]any)
 	if decided["status"] != "decided" || decided["option"] != a["id"] {
@@ -522,7 +537,7 @@ func TestChangeToolsKeepTheAccessGate(t *testing.T) {
 	}
 }
 
-// Every adminOnly node type (ADR 0068) stays behind the gate through write, edit, link and retire: a project
+// Every adminOnly node type (ADR 0068) stays behind the gate through write, edit, link and unlink: a project
 // member could otherwise write an organisation@Assignment granting admin through the in-process connector.
 func TestChangeToolsGateEveryAccessType(t *testing.T) {
 	p := newPlatform(t)
@@ -548,7 +563,7 @@ func TestChangeToolsGateEveryAccessType(t *testing.T) {
 			"write":  {"key": key + "-new", "type": typ, "properties": map[string]any{}, "rationale": "x"},
 			"edit":   {"key": key, "properties": map[string]any{"description": "x"}, "rationale": "x"},
 			"link":   {"from": key, "type": access.LinkAssignsOrg, "to": "ORG-DEFAULT"},
-			"retire": {"key": key, "rationale": "x"},
+			"unlink": {"from": key, "type": access.LinkAssignsOrg, "to": "ORG-DEFAULT"},
 		} {
 			args["change"] = open()
 			if _, err := p.hub.Call(alice, "ORG-CHECKOUT", "goap-change/"+op, args); !denied(err) {

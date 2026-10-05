@@ -145,26 +145,10 @@ func createAliasStubs(ctx context.Context, g StoreGraph, aliases []string, metho
 	if err != nil {
 		return err
 	}
-	impacts := make([]domain.ChangeImpact, 0, len(aliases))
 	for _, alias := range aliases {
-		impacts = append(impacts, domain.ChangeImpact{
-			Intent:     domain.IntentCreated,
-			Key:        llmcfg.AliasKey(alias),
-			Type:       llmcfg.NodeTypeAlias,
-			Rationale:  fmt.Sprintf("referenced by methodology %s but not configured yet", methodologyName),
-			ProducedBy: "methodology-load",
-		})
-	}
-	added, err := g.AddNodes(ctx, c.ID, impacts)
-	if err != nil {
-		return err
-	}
-	if len(added) != len(aliases) {
-		return fmt.Errorf("%d change impacts created for %d aliases", len(added), len(aliases))
-	}
-	for i, alias := range aliases {
-		// Review stays domain.ReviewProposed (AddNodes default); the change stays open
-		if _, err := g.WriteNode(ctx, c.ID, added[i].ID, graph.NodeWrite{Properties: map[string]any{"alias": alias}}); err != nil {
+		// a working version, checked out, its review proposed (ADR 0076): the change stays open
+		if _, err := g.CreateNode(ctx, c.ID, graph.NodeCreate{Key: llmcfg.AliasKey(alias), Type: llmcfg.NodeTypeAlias, Properties: map[string]any{"alias": alias},
+			Rationale: fmt.Sprintf("referenced by methodology %s but not configured yet", methodologyName), ProducedBy: "methodology-load"}); err != nil {
 			return err
 		}
 	}

@@ -437,9 +437,21 @@ func Propagate(ctx context.Context, ac ActionContext) (ActionResult, error) {
 // ApplyChange materializes the change into a new baseline (graph.apply). The
 // change is then "applied": conditions observe it through change.status and
 // change.resultBaseline. Param baselineName defaults to the change title.
+// Every working version whose review is accepted is checked in first: the
+// acceptance authorizes the check-in (ADR 0076); one still proposed keeps the
+// change from applying.
 func ApplyChange(ctx context.Context, ac ActionContext) (ActionResult, error) {
 	name, _ := ac.Action.Params["baselineName"].(string)
-	b, err := ac.Graph.Apply(ctx, ac.Blackboard.Change.ID, name)
+	c := ac.Blackboard.Change
+	for _, cn := range c.Nodes {
+		if cn.Post == nil || cn.Flow != "" || cn.Superseded || cn.Review != domain.ReviewAccepted || !ac.Blackboard.Nodes[*cn.Post].CheckedOut {
+			continue
+		}
+		if _, err := ac.Graph.CheckinNode(ctx, c.ID, cn.ID, domain.MainFlow, ""); err != nil {
+			return ActionResult{}, err
+		}
+	}
+	b, err := ac.Graph.Apply(ctx, c.ID, name)
 	if err != nil {
 		return ActionResult{}, err
 	}

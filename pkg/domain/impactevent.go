@@ -15,8 +15,16 @@ type ImpactOp string
 const (
 	// ImpactDeclared adds a change impact (Impact: as declared).
 	ImpactDeclared ImpactOp = "declared"
-	// ImpactWritten records the version written for a change impact (Post), on Flow.
+	// ImpactWritten records the version written for a change impact (Post), on Flow: the working version a checkout
+	// writes, the version of a transition, a merge or an adoption (ADR 0076).
 	ImpactWritten ImpactOp = "written"
+	// ImpactUpdated records an edit of the working version in place (Patch): properties, owner, links (ADR 0076).
+	ImpactUpdated ImpactOp = "updated"
+	// ImpactCheckedIn records the check-in of the working version (Post): it is frozen (ADR 0076).
+	ImpactCheckedIn ImpactOp = "checkedIn"
+	// ImpactCancelled records a checkout cancelled on Flow: the working version is dropped and Post is the version the
+	// impact goes back to (nil: none; a creation cancelled before its first check-in removes the change impact).
+	ImpactCancelled ImpactOp = "cancelled"
 	// ImpactReviewed records a review (Review).
 	ImpactReviewed ImpactOp = "reviewed"
 	// ImpactDiscarded rejects a candidate whose flow was discarded (Review).
@@ -53,6 +61,9 @@ type ImpactEvent struct {
 	Baseline BaselineID `json:"baseline,omitempty"`
 	Review   *Review    `json:"review,omitempty"` // reviewed, discarded
 	Stale    []string   `json:"stale,omitempty"`  // adopted: the stale executions
+	// Patch is what an updated event changed in place: {"props": {...}, "owner": unit, "addLink" / "updateLink" /
+	// "removeLink": {...}}.
+	Patch map[string]any `json:"patch,omitempty"`
 }
 
 // Validate checks that an event carries what its operation needs.
@@ -76,6 +87,12 @@ func (e ImpactEvent) Validate() error {
 		return need(e.Impact != "" && e.Landed != nil, "a change impact and a landed version")
 	case ImpactRebased:
 		return need(e.Impact != "" && e.Pre != nil, "a change impact and a pre version")
+	case ImpactUpdated:
+		return need(e.Impact != "" && e.Post != nil && len(e.Patch) > 0, "a change impact, its working version and a patch")
+	case ImpactCheckedIn:
+		return need(e.Impact != "" && e.Post != nil, "a change impact and its working version")
+	case ImpactCancelled:
+		return need(e.Impact != "", "a change impact")
 	}
 	return fmt.Errorf("unknown event operation %q", e.Op)
 }
@@ -133,6 +150,18 @@ func ApplyImpactEvent(impacts []ChangeImpact, e ImpactEvent) []ChangeImpact {
 	case ImpactRebased:
 		p := *e.Pre
 		cn.Pre, cn.Recheck = &p, true
+	case ImpactCancelled:
+		if e.Flow != "" && e.Flow != cn.Flow {
+			break // the stored post is the main flow's (see written)
+		}
+		if e.Post == nil && cn.Intent == IntentCreated {
+			return slices.Delete(out, at, at+1) // a creation cancelled before its first check-in: nothing is left
+		}
+		cn.Post = nil
+		if e.Post != nil {
+			p := *e.Post
+			cn.Post = &p
+		}
 	}
 	out[at] = cn
 	return out
@@ -216,7 +245,7 @@ func ImpactsSeenBy(impacts []ChangeImpact, events []ImpactEvent, chain []string,
 func flowPost(events []ImpactEvent, id ChangeImpactID, chain []string, stale func(string) bool) *NodeRef {
 	last := map[string]*NodeRef{} // by flow
 	for _, e := range events {
-		if e.Op != ImpactWritten || e.Impact != id {
+		if (e.Op != ImpactWritten && e.Op != ImpactCancelled) || e.Impact != id {
 			continue
 		}
 		switch {
@@ -225,6 +254,9 @@ func flowPost(events []ImpactEvent, id ChangeImpactID, chain []string, stale fun
 		case e.Flow != "" && slices.Contains(chain, e.Flow) && !stale(e.Execution):
 			// a flow inside a flow may relaunch a step of its parent flow: that step's writes are stale too
 			last[e.Flow] = e.Post
+		}
+		if e.Op == ImpactCancelled && e.Post == nil {
+			delete(last, e.Flow) // back to what the flow saw before its checkout
 		}
 	}
 	for _, f := range append(slices.Clone(chain), "") {

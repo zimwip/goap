@@ -16,6 +16,7 @@ import (
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/domain/def"
 	"github.com/zimwip/goap/pkg/graph"
+	"github.com/zimwip/goap/pkg/graph/graphtest"
 	"github.com/zimwip/goap/pkg/typecat"
 )
 
@@ -104,29 +105,14 @@ nodeTypes:
 		t.Fatal(err)
 	}
 	g.Types = func() graph.TypeCatalog { return cat }
-	req, err := g.CreateNode(ctx, graph.NewNode{Namespace: "docs", Key: "REQ-1", Type: "docs@Req", Properties: map[string]any{"title": "a"}, State: "released"})
+	req, err := graphtest.Import(ctx, g, graphtest.Node{Namespace: "docs", Key: "REQ-1", Type: "docs@Req", Properties: map[string]any{"title": "a"}, State: "released"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	note, _ := g.CreateNode(ctx, graph.NewNode{Namespace: "docs", Key: "N-1", Type: "docs@Note"})
 	base, err := g.BranchHead(ctx, "docs", domain.MainBranch)
 	if err != nil {
 		t.Fatal(err)
 	}
-	// the bypass is closed for lifecycle types, open for the others
-	if _, err := h.CreateNode(ctx, connect.NewRequest(&graphv1.CreateNodeRequest{Namespace: "docs", Key: "REQ-2", Type: "docs@Req"})); connect.CodeOf(err) != connect.CodeFailedPrecondition {
-		t.Errorf("CreateNode on a lifecycle type: %v", err)
-	}
-	if _, err := h.UpdateNode(ctx, connect.NewRequest(&graphv1.UpdateNodeRequest{Base: pbconv.RefToPB(req.Ref()), Props: pbconv.Struct(map[string]any{"title": "b"})})); connect.CodeOf(err) != connect.CodeFailedPrecondition {
-		t.Errorf("UpdateNode on a lifecycle type: %v", err)
-	}
-	if _, err := h.CreateLink(ctx, connect.NewRequest(&graphv1.CreateLinkRequest{Type: "x", From: pbconv.RefToPB(req.Ref()), To: pbconv.RefToPB(note.Ref())})); connect.CodeOf(err) != connect.CodeFailedPrecondition {
-		t.Errorf("CreateLink from a lifecycle node: %v", err)
-	}
-	if _, err := h.CreateNode(ctx, connect.NewRequest(&graphv1.CreateNodeRequest{Namespace: "docs", Key: "N-2", Type: "docs@Note"})); err != nil {
-		t.Errorf("a type without lifecycle stays writable: %v", err)
-	}
-
 	// reopen, edit, release: "release" needs requirement:release
 	c, err := g.CreateChange(ctx, graph.NewChange{Namespace: "docs", Title: "t", BaselineID: base.ID})
 	if err != nil {
@@ -146,32 +132,46 @@ nodeTypes:
 		t.Fatalf("anyone may propose the release: %v", err)
 	}
 	cnID := added.Msg.Nodes[0].Id
-	write := func(props map[string]any, state string) {
-		t.Helper()
-		wr := connect.NewRequest(&graphv1.WriteChangeImpactRequest{ChangeId: string(c.ID), ChangeImpactId: cnID, Props: pbconv.Struct(props), State: state})
-		withRoles(wr.Header(), "contributor")
-		if _, err := h.WriteChangeImpact(ctx, wr); err != nil {
-			t.Fatalf("a contributor may reopen, edit and propose the release: %v", err)
-		}
+	move := func(roles, state string) error {
+		r := connect.NewRequest(&graphv1.TransitionNodeRequest{ChangeId: string(c.ID), ChangeImpactId: cnID, State: state})
+		withRoles(r.Header(), roles)
+		_, err := h.TransitionNode(ctx, r)
+		return err
 	}
-	write(nil, "draft")
-	write(map[string]any{"title": "b"}, "")
-	write(nil, "released")
+	// a transition is authorized for whoever takes it, when it is taken (ADR 0076)
+	if err := move("contributor", "draft"); err != nil {
+		t.Fatalf("a contributor may reopen: %v", err)
+	}
+	co := connect.NewRequest(&graphv1.CheckoutNodeRequest{ChangeId: string(c.ID), ChangeImpactId: cnID})
+	withRoles(co.Header(), "contributor")
+	if _, err := h.CheckoutNode(ctx, co); err != nil {
+		t.Fatal(err)
+	}
+	up := connect.NewRequest(&graphv1.UpdateNodeRequest{ChangeId: string(c.ID), ChangeImpactId: cnID, Props: pbconv.Struct(map[string]any{"title": "b"})})
+	withRoles(up.Header(), "contributor")
+	if _, err := h.UpdateNode(ctx, up); err != nil {
+		t.Fatalf("a contributor may edit: %v", err)
+	}
 	rv := connect.NewRequest(&graphv1.ReviewChangeImpactRequest{ChangeId: string(c.ID), ChangeImpactId: cnID, Accept: true, Comment: "ok"})
 	withRoles(rv.Header(), "contributor")
 	if _, err := h.ReviewChangeImpact(ctx, rv); err != nil {
 		t.Fatal(err)
 	}
-	// the transition is authorized for whoever applies the change
-	r := connect.NewRequest(&graphv1.ApplyChangeRequest{ChangeId: string(c.ID)})
-	withRoles(r.Header(), "contributor")
-	if _, err := h.ApplyChange(ctx, r); connect.CodeOf(err) != connect.CodePermissionDenied {
+	ci := connect.NewRequest(&graphv1.CheckinNodeRequest{ChangeId: string(c.ID), ChangeImpactId: cnID})
+	withRoles(ci.Header(), "contributor")
+	if _, err := h.CheckinNode(ctx, ci); err != nil {
+		t.Fatal(err)
+	}
+	if err := move("contributor", "released"); connect.CodeOf(err) != connect.CodePermissionDenied {
 		t.Fatalf("a contributor lacks requirement:release: %v", err)
 	}
-	r = connect.NewRequest(&graphv1.ApplyChangeRequest{ChangeId: string(c.ID)})
-	withRoles(r.Header(), "admin")
-	if _, err := h.ApplyChange(ctx, r); err != nil {
+	if err := move("admin", "released"); err != nil {
 		t.Fatalf("admin may release: %v", err)
+	}
+	r := connect.NewRequest(&graphv1.ApplyChangeRequest{ChangeId: string(c.ID)})
+	withRoles(r.Header(), "contributor")
+	if _, err := h.ApplyChange(ctx, r); err != nil {
+		t.Fatal(err)
 	}
 	if n, err := g.NodeByKey(ctx, "docs", "REQ-1"); err != nil || n.State != "released" || n.Version != 4 || n.Properties["title"] != "b" {
 		t.Fatalf("REQ-1: %+v %v", n, err)
