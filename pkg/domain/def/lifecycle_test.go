@@ -111,3 +111,45 @@ func TestLifecycleValidation(t *testing.T) {
 		t.Error("duplicate lifecycle names must be rejected")
 	}
 }
+
+// The vetos and objectives of a gate compile like a guard; each needs a name (unique in its list) and an expression (ADR 0075 §3).
+func TestGateCriteriaIssues(t *testing.T) {
+	const src = `
+name: g
+version: 1.0.0
+lifecycles:
+  - name: maturity
+    initial: a
+    states: [{name: a, editable: true}, {name: b}]
+    transitions:
+      - name: go
+        from: a
+        to: b
+        vetos: [{name: safe, expr: 'world["safe"]'}, %s]
+        objectives: [{name: docs, expr: 'world["docs"]'}, %s]
+nodeTypes:
+  - {name: Note}
+`
+	issues := func(veto, objective string) []Issue {
+		d, err := ParseDomain([]byte(strings.Replace(strings.Replace(src, "%s", veto, 1), "%s", objective, 1)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return d.Validate()
+	}
+	if is := issues(`{name: other, expr: "true"}`, `{name: more, expr: "true"}`); len(is) > 0 {
+		t.Fatalf("valid: %v", is)
+	}
+	for name, tc := range map[string][2]string{
+		"unnamed veto":        {`{expr: "true"}`, `{name: more, expr: "true"}`},
+		"duplicate veto":      {`{name: safe, expr: "true"}`, `{name: more, expr: "true"}`},
+		"no expression":       {`{name: other}`, `{name: more, expr: "true"}`},
+		"bad objective":       {`{name: other, expr: "true"}`, `{name: more, expr: "1 +"}`},
+		"unknown variable":    {`{name: other, expr: "nope"}`, `{name: more, expr: "true"}`},
+		"objective duplicate": {`{name: other, expr: "true"}`, `{name: docs, expr: "true"}`},
+	} {
+		if is := issues(tc[0], tc[1]); len(is) != 1 {
+			t.Errorf("%s: issues %v", name, is)
+		}
+	}
+}

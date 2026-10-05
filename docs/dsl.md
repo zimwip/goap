@@ -55,6 +55,7 @@ the point (with the platform's policy: `decider`, `threshold`, `maxRounds`, `rou
 | `ctx.createNode(type, key, rationale)` | the change creates a node → `"#nN"` |
 | `ctx.writeNode(node, {props, state, links, removeLinks, retire})` | write the next version of the node of a change impact on the change branch (`node`: key or `#nN`; `links`: `[{type, to}]`, `to` a node key or a `#nN` already written; `props` merged; `state` a lifecycle state) |
 | `ctx.reviewNode(node, accept, comment)` | accept or reject a change impact; the comment is mandatory |
+| `ctx.reviewNodeWithReserve(node, derogation, comment)` | accept a change impact with a reserve ([ADR 0075](adr/0075-verification-derogation-criticality.md)): `derogation` is the key of an open derogation in force; the operation is a review with `NodeOp.Reserve` set; the graph's review policy still applies (the reviewer is not the producer) |
 | `ctx.openDecision(question, {options, criteria, decider, threshold, maxRounds, maxDuration})` | open a decision point (`options`: names or ids, none = the open options; every other key is a policy value, handed to the graph's decision policy) → `"#dN"` |
 | `ctx.decide(point, option, confidence, justification)` | rule a point decided (`point`: id, `#dN` or `""` for the only pending one; `option`: name or id; `confidence` 0 to 1): below the point's threshold (the platform's policy) the ruling waits for a person |
 | `ctx.undecidable(point, justification, questions)` | rule a point undecidable: why, and the questions to answer first (they block it) |

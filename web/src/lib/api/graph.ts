@@ -87,9 +87,12 @@ export const graph = {
   /** The changes that acted on a node (headers only). */
   listNodeChanges: (nodeId: string, signal?: AbortSignal) =>
     rpc<{ nodeId: string }, { changes?: Change[] }>(GRAPH, 'ListNodeChanges', { nodeId }, signal),
-  /** Edits a change: title, intent, goal; status 'abandoned' abandons it (its sub-changes and its branch too). */
-  updateChange: (id: string, patch: { title?: string; intent?: string; goal?: string; status?: string }) =>
-    rpc<{ id: string; title?: string; intent?: string; goal?: string; status?: string }, { change?: Change }>(GRAPH, 'UpdateChange', { id, ...patch }),
+  /**
+   * Edits a change: title, intent, goal; status 'abandoned' abandons it (its sub-changes and its branch too); data is merged
+   * into its free-form data (the criticality, ADR 0075 §3: raising it is free, lowering it asks a permission).
+   */
+  updateChange: (id: string, patch: { title?: string; intent?: string; goal?: string; status?: string; data?: Struct }) =>
+    rpc<{ id: string; title?: string; intent?: string; goal?: string; status?: string; data?: Struct }, { change?: Change }>(GRAPH, 'UpdateChange', { id, ...patch }),
   createChange: (req: {
     title: string;
     intent?: string;

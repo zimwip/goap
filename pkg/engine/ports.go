@@ -20,6 +20,8 @@ type GraphPort interface {
 	AddNodes(ctx context.Context, id domain.ChangeID, nodes []domain.ChangeImpact) ([]domain.ChangeImpact, error)
 	WriteNode(ctx context.Context, id domain.ChangeID, node domain.ChangeImpactID, w graph.NodeWrite) (domain.ChangeImpact, error)
 	ReviewNodeOn(ctx context.Context, id domain.ChangeID, flow, execution string, node domain.ChangeImpactID, status domain.NodeReview, by, comment string) (domain.ChangeImpact, error)
+	// ReopenImpacts sends accepted impacts back to proposed (ADR 0075: a derogation expired).
+	ReopenImpacts(ctx context.Context, id domain.ChangeID, impacts []domain.ChangeImpactID, comment string) ([]domain.ChangeImpactID, error)
 	Blackboard(ctx context.Context, id domain.ChangeID) (domain.Blackboard, error)
 	// BlackboardIn is the blackboard of a flow branch ("" = main); OpenFlow /
 	// AdoptFlow / DiscardFlow relaunch a step on a new branch and decide it.

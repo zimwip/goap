@@ -79,6 +79,21 @@ type Graph struct {
 	// keeps the mechanism (open, rule, answer, ratify); pkg/decision is the policy the services plug.
 	DecisionPolicy domain.DecisionPolicy
 
+	// ReviewPolicy is the rule of who may review a change impact (ADR 0075): ReviewNodeOn asks it before it writes and an
+	// error refuses the review. Unset: anyone allowed to review may. pkg/verify is the policy the services plug.
+	ReviewPolicy domain.ReviewPolicy
+
+	// ItemAuthorizer, when set, is asked before AddItems stores an item whose kind asks a permission of its writer
+	// (domain.RequireItemPermission, ADR 0075). It runs outside any transaction, with the change as stored. Unset: no
+	// item asks anything of its writer.
+	ItemAuthorizer ItemAuthorizer
+
+	// ItemPolicy, when set, is asked about every item AddItems is about to store, with the change as stored (ADR 0075 §3):
+	// a use-case rule of what may be written on a change (the oracle a verification names, the lifetime of a
+	// derogation). An error refuses the write. Unset: nothing is asked. The graph knows no kind: pkg/criticality is the
+	// policy the services plug.
+	ItemPolicy ItemPolicy
+
 	// Lifecycles resolves the lifecycle of the changes of a methodology and the world state their guards read (ADR
 	// 0058). Unset: no change follows a lifecycle (tests, tools).
 	Lifecycles ChangeLifecycles
@@ -581,6 +596,9 @@ func (g *Graph) UpdateChange(ctx context.Context, id domain.ChangeID, p ChangePa
 // AddItems appends facts to the blackboard of a change (artifacts, decisions): the nodes
 // a change acts on are its change impacts (AddNodes, ADR 0024). Item ids are assigned when empty.
 func (g *Graph) AddItems(ctx context.Context, id domain.ChangeID, items []domain.ChangeItem) ([]domain.ChangeItem, error) {
+	if err := g.authorizeItems(ctx, id, items); err != nil {
+		return nil, err
+	}
 	out := make([]domain.ChangeItem, 0, len(items))
 	err := g.repo.InTx(ctx, func(tx Tx) error {
 		c, err := tx.Change(ctx, id)
@@ -650,6 +668,55 @@ func (g *Graph) AddItems(ctx context.Context, id domain.ChangeID, items []domain
 		return nil
 	})
 	return out, err
+}
+
+// ItemAuthorizer judges the write of an item whose kind asks a permission of its writer: the permission it asks, the
+// change it is written on and the item. An error refuses it.
+type ItemAuthorizer func(ctx context.Context, c domain.Change, it domain.ChangeItem, p domain.ItemPermission) error
+
+// ItemPolicy judges any item about to be written on a change; an error refuses it.
+type ItemPolicy func(ctx context.Context, c domain.Change, it domain.ChangeItem) error
+
+// authorizeItems asks ItemAuthorizer about the items of kinds that ask a permission, and ItemPolicy about every item,
+// before any transaction.
+func (g *Graph) authorizeItems(ctx context.Context, id domain.ChangeID, items []domain.ChangeItem) error {
+	if g.ItemAuthorizer == nil && g.ItemPolicy == nil {
+		return nil
+	}
+	var c *domain.Change
+	change := func() (domain.Change, error) {
+		if c == nil {
+			got, err := g.Change(ctx, id)
+			if err != nil {
+				return got, err
+			}
+			c = &got
+		}
+		return *c, nil
+	}
+	for _, it := range items {
+		if g.ItemPolicy != nil {
+			ch, err := change()
+			if err != nil {
+				return err
+			}
+			if err := g.ItemPolicy(ctx, ch, it); err != nil {
+				return fmt.Errorf("%w: %w", err, ErrInvalid)
+			}
+		}
+		p, ok := domain.ItemPermissionOf(it.Kind)
+		if !ok || g.ItemAuthorizer == nil {
+			continue
+		}
+		ch, err := change()
+		if err != nil {
+			return err
+		}
+		if err := g.ItemAuthorizer(ctx, ch, it, p); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // Blackboard returns the change and a hydrated view of every node it

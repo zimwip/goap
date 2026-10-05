@@ -17,6 +17,8 @@ import (
 
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/journal"
+	"github.com/zimwip/goap/pkg/risk"
+	"github.com/zimwip/goap/pkg/verify"
 )
 
 // Vocab is the namespace of the GOAP terms of the export; instances are named under urn:goap:.
@@ -360,8 +362,49 @@ func (b *builder) fact(c domain.Change, e domain.LogEntry, it domain.ChangeItem)
 			add(n, "prov:wasInfluencedBy", ref(itemIRI(domain.ItemID(d))))
 		}
 	}
+	if it.Kind == verify.KindVerification {
+		b.verification(n, it)
+	}
+	if it.Kind == risk.KindDerogation {
+		b.derogation(n, it)
+	}
 	if len(it.Data) > 0 {
 		n["data"] = it.Data
+	}
+}
+
+// verification maps a state of the verification of an effect (ADR 0075): the entity is a Verification of the change
+// impacts it covers, attributed to the verifier once the effect is judged.
+func (b *builder) verification(n map[string]any, it domain.ChangeItem) {
+	add(n, "@type", "goap:Verification")
+	str := func(k string) string { s, _ := it.Data[k].(string); return s }
+	set(n, "goap:state", str(verify.KeyState))
+	set(n, "goap:oracle", str(verify.KeyOracle))
+	set(n, "label", "verification "+str(verify.KeyState))
+	for _, id := range append(verify.Impacts(it), str(verify.KeyImpact)) {
+		if id != "" {
+			add(n, "prov:wasDerivedFrom", ref(impactIRI(domain.ChangeImpactID(id))))
+		}
+	}
+	if by := str(verify.KeyBy); by != "" {
+		if p := b.principal(by); p != "" {
+			add(n, "prov:wasAttributedTo", ref(p))
+		}
+	}
+}
+
+// derogation maps a version of a derogation (ADR 0075 §2): an entity of the rule it waives, of its target and expiry,
+// attributed to the signatory who answers for it.
+func (b *builder) derogation(n map[string]any, it domain.ChangeItem) {
+	add(n, "@type", "goap:Derogation")
+	str := func(k string) string { s, _ := it.Data[k].(string); return s }
+	set(n, "goap:rule", str("rule"))
+	set(n, "goap:target", str("target"))
+	set(n, "goap:expires", str("expires"))
+	set(n, "goap:derogationStatus", str("status"))
+	set(n, "label", "derogation "+str("key"))
+	if p := b.principal(str("signatory")); p != "" {
+		add(n, "prov:wasAttributedTo", ref(p))
 	}
 }
 

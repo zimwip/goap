@@ -15,6 +15,13 @@ export interface LifecycleState {
   final?: boolean;
 }
 
+/** A named CEL predicate of a gate (ADR 0075 §3): a veto not met blocks, an objective not met needs a derogation. */
+export interface Criterion {
+  name?: string;
+  expr?: string;
+  description?: string;
+}
+
 export interface LifecycleTransition {
   name?: string;
   description?: string;
@@ -24,6 +31,9 @@ export interface LifecycleTransition {
   permission?: string;
   /** CEL over node, children and change */
   guard?: string;
+  /** criteria of a gate of a change lifecycle (ADR 0075 §3): one veto unmet blocks, an objective unmet is waived by a derogation named after it */
+  vetos?: Criterion[];
+  objectives?: Criterion[];
   requiresAttributes?: string[];
   requiresOutgoingLinks?: string[];
   /** documents: allowed states of the contained children */
@@ -227,6 +237,15 @@ export interface Expectation {
   link?: LinkSpec;
 }
 
+/** What kind of verifier an effect needs (ADR 0075 §1). */
+export type OracleKind = 'tool' | 'human' | 'model';
+
+/** How the effect of an action is verified: the oracle, and that the verifier is not the producer (default true). */
+export interface Verify {
+  oracle?: OracleKind | string;
+  independent?: boolean;
+}
+
 export type ActionKind = 'llm' | 'script' | 'tool' | 'human' | 'builtin' | 'abstract';
 export type ScriptLanguage = 'javascript' | 'go';
 export type PlannerKind = 'goap' | 'utility' | 'hybrid' | 'llm' | 'llm-scoring';
@@ -239,6 +258,8 @@ export interface Action {
   effects?: Record<string, boolean>;
   cost?: number;
   expects?: Expectation;
+  /** how the effect is verified (ADR 0075): the kind of oracle and the independence of the verifier */
+  verify?: Verify;
   /** "<resource>:<action>" required of the initiator, e.g. change:apply */
   permission?: string;
   /** roles allowed to run the action (ADR 0043), declared by the methodology; empty: those of the agent */
@@ -560,7 +581,9 @@ export interface Methodology {
   roles?: MethodologyRole[];
   /** transverse: its processes run alongside the changes of these methodologies (ADR 0036 §3) */
   appliesTo?: string[];
-  /** the built-in condition libraries it imports (ADR 0064): decisions, risks */
+  /** default criticality of its changes: C1, C2 or C3 (ADR 0075 §3); empty: C2 */
+  criticality?: string;
+  /** the built-in condition libraries it imports (ADR 0064): decisions, risks, verification, derogations */
   imports?: string[];
   /** the events of those changes it reacts to */
   on?: { event?: string; filter?: string }[];

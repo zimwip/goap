@@ -93,3 +93,17 @@ func TestBadPayload(t *testing.T) {
 		t.Fatal("a broken entry is reported")
 	}
 }
+
+// A derogation version is an entity attributed to its signatory (ADR 0075 §2).
+func TestDerogationMapping(t *testing.T) {
+	b := &builder{nodes: map[string]map[string]any{}}
+	n := map[string]any{}
+	b.derogation(n, domain.ChangeItem{Kind: "derogation", Data: map[string]any{"key": "DRG-1", "rule": "tests pass", "target": "REQ-1",
+		"expires": "2030-01-01T00:00:00Z", "status": "open", "signatory": "alice"}})
+	if n["goap:rule"] != "tests pass" || n["goap:target"] != "REQ-1" || n["goap:expires"] != "2030-01-01T00:00:00Z" || n["label"] != "derogation DRG-1" {
+		t.Fatalf("derogation: %v", n)
+	}
+	if got := refs(n["prov:wasAttributedTo"]); !got[principalIRI("alice")] {
+		t.Fatalf("attributed to the signatory: %v", n)
+	}
+}

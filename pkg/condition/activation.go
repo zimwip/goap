@@ -3,9 +3,12 @@ package condition
 import (
 	"math"
 	"sync"
+	"time"
 
+	"github.com/zimwip/goap/pkg/criticality"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/risk"
+	"github.com/zimwip/goap/pkg/verify"
 )
 
 // Activation converts a blackboard into the CEL variables of a condition.
@@ -33,11 +36,14 @@ func Activation(bb domain.Blackboard) map[string]any {
 	opts := lazy(func() []any { return h.options() })
 	rsk := lazy(func() []any { return risks(&c) })
 	act := lazy(func() []any { return actionItems(&c) })
+	vrf := lazy(func() []any { return verifications(&c) })
+	drg := lazy(func() []any { return derogations(&c, bb.At) })
+	pol := lazy(func() map[string]any { return criticalityPolicy(bb) })
 	dec := lazy(func() decisionView { return decisions(bb) })
 	return map[string]any{
 		"change": map[string]any{
 			"id": string(c.ID), "title": c.Title, "intent": c.Intent, "status": string(c.Status),
-			"lifecycle": c.Lifecycle, "state": c.State, "goal": c.Goal, "methodology": c.Methodology, "branch": domain.BranchOf(c.Branch), "baseline": string(c.BaselineID), "resultBaseline": string(c.ResultBaselineID), "data": orEmpty(c.Data),
+			"criticality": string(criticality.Of(c.Data)), "lifecycle": c.Lifecycle, "state": c.State, "goal": c.Goal, "methodology": c.Methodology, "branch": domain.BranchOf(c.Branch), "baseline": string(c.BaselineID), "resultBaseline": string(c.ResultBaselineID), "data": orEmpty(c.Data),
 		},
 		"items":          items,
 		"changeImpacts":  h.changeImpacts(),
@@ -51,6 +57,11 @@ func Activation(bb domain.Blackboard) map[string]any {
 		"questions":      func() any { return dec().questions },
 		"risks":          func() any { return rsk() },
 		"actions":        func() any { return act() },
+		"verifications":  func() any { return vrf() },
+		"derogations":    func() any { return drg() },
+		// criticalityPolicy is what the organisation requires of the criticality of the change: the facet its provider
+		// gave the blackboard, else the compiled-in table (ADR 0075 §3; `policy` is a field of the decision points)
+		"criticalityPolicy": func() any { return pol() },
 	}
 }
 
@@ -97,6 +108,46 @@ func actionItems(c *domain.Change) []any {
 	for _, a := range as {
 		out = append(out, map[string]any{"key": a.Key, "title": a.Title, "status": a.Status, "owner": a.Owner, "due": a.Due, "for": a.For,
 			"result": a.Result, "item": string(a.Item), "versions": int64(a.Versions)})
+	}
+	return out
+}
+
+// verifications are the effects of the action runs and their state of verification (ADR 0075).
+func verifications(c *domain.Change) []any {
+	var items []domain.ChangeItem
+	for _, it := range c.Items {
+		if it.Kind == verify.KindVerification && c.Active(it.ID) {
+			items = append(items, it)
+		}
+	}
+	out := []any{}
+	for _, s := range verify.Subjects(items) {
+		out = append(out, map[string]any{"execution": s.Execution, "action": s.Action, "impact": s.Impact, "oracle": s.Oracle,
+			"independent": s.Independent, "state": s.State, "producer": s.Producer, "by": s.By, "open": s.Open()})
+	}
+	return out
+}
+
+// criticalityPolicy is the policy of the level of the change: the one the blackboard carries (domain.FacetCriticalityPolicy,
+// a criticality.Policy filled by the provider that reads the organisation), else the compiled-in table.
+func criticalityPolicy(bb domain.Blackboard) map[string]any {
+	if p, ok := bb.Facets[domain.FacetCriticalityPolicy].(criticality.Policy); ok {
+		return p.Map()
+	}
+	return criticality.Defaults()[criticality.Of(bb.Change.Data)].Map()
+}
+
+// derogations are the derogations of the change (ADR 0075 §2); expired is read at the instant of the blackboard (the
+// clock when it has none).
+func derogations(c *domain.Change, at time.Time) []any {
+	if at.IsZero() {
+		at = time.Now()
+	}
+	out := []any{}
+	for _, d := range risk.Derogations(*c) {
+		out = append(out, map[string]any{"key": d.Key, "rule": d.Rule, "target": d.Target, "reason": d.Reason, "signatory": d.Signatory,
+			"expires": d.Expires.Format(time.RFC3339), "status": d.Status, "open": d.Open(), "expired": d.ExpiredAt(at),
+			"item": string(d.Item), "versions": int64(d.Versions)})
 	}
 	return out
 }

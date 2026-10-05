@@ -39,6 +39,13 @@ type Cache[T any] struct {
 // Get returns the current snapshot and the baseline it was built from.
 func (c *Cache[T]) Get(ctx context.Context) (T, domain.BaselineID, error) { return c.get(ctx, false) }
 
+// Peek returns the snapshot last built, with no look at the graph: false before the first Get.
+func (c *Cache[T]) Peek() (T, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.cur, c.have
+}
+
 // Fresh is Get without the TTL: the head is looked at now (before a write that builds on what it reads).
 func (c *Cache[T]) Fresh(ctx context.Context) (T, domain.BaselineID, error) { return c.get(ctx, true) }
 

@@ -9,6 +9,7 @@ import (
 	"github.com/zimwip/goap/pkg/access"
 	"github.com/zimwip/goap/pkg/adapter"
 	"github.com/zimwip/goap/pkg/authz"
+	"github.com/zimwip/goap/pkg/criticality"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/llmcfg"
@@ -54,6 +55,12 @@ func SeedUnit(ctx context.Context, g *graph.Graph, key, name, kind, parent strin
 // SeedAdapter creates the Adapter node of a unit, owned by it (ADR 0054: the owner of its versions).
 func SeedAdapter(ctx context.Context, g *graph.Graph, a adapter.Instance) error {
 	return SeedChange(ctx, g, access.NamespaceOrganisation, "Adapter "+a.MCP+" of "+a.Unit, []graph.NodeEdit{ownedBy(SeedNode(adapter.Key(a.Unit, a.MCP), domain.TypeAdapter, a.Props()), a.Unit)})
+}
+
+// SeedCriticalityPolicy creates what a criticality level requires of the changes of a unit (ADR 0075 §3), owned by it.
+func SeedCriticalityPolicy(ctx context.Context, g *graph.Graph, unit string, l criticality.Level, p criticality.Policy) error {
+	return SeedChange(ctx, g, access.NamespaceOrganisation, "Criticality policy "+string(l)+" of "+unit, []graph.NodeEdit{
+		ownedBy(SeedNode(access.CriticalityPolicyKey(unit, l), access.NodeTypeCriticalityPolicy, access.CriticalityProps(l, p)), unit)})
 }
 
 // ownedBy makes the unit with key unit the owner of a node an edit creates or modifies (ADR 0054).

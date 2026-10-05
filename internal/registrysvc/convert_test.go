@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/methodology"
 )
 
@@ -52,5 +53,19 @@ func TestProcessesRoundTripThroughPB(t *testing.T) {
 	s := SummaryToPB(Record{Methodology: in})
 	if len(s.Agents) != 1 || s.Agents[0].Name != "flow" || s.Agents[0].Planner != "process" {
 		t.Fatalf("a process is listed as the agent that runs it: %+v", s.Agents)
+	}
+}
+
+// The default criticality of a methodology and the vetos and objectives of a gate survive the PB round trip (ADR 0075 §3).
+func TestCriticalityAndGateCriteriaRoundTripThroughPB(t *testing.T) {
+	in := methodology.Methodology{Name: "m", Version: "1", Criticality: "C3"}
+	if out := FromPB(ToPB(Record{Methodology: in})); out.Criticality != "C3" {
+		t.Fatalf("criticality: %q", out.Criticality)
+	}
+	ls := []domain.Lifecycle{{Name: "l", Initial: "a", States: []domain.LifecycleState{{Name: "a"}, {Name: "b"}}, Transitions: []domain.Transition{{Name: "go", From: "a", To: "b",
+		Vetos:      []domain.Criterion{{Name: "safe", Expr: `world["safe"]`, Description: "no blocker"}},
+		Objectives: []domain.Criterion{{Name: "docs", Expr: `world["docs"]`}}}}}}
+	if back := lifecyclesFromPB(lifecyclesToPB(ls)); !reflect.DeepEqual(back, ls) {
+		t.Fatalf("lifecycle changed through PB:\n%+v\n%+v", ls, back)
 	}
 }

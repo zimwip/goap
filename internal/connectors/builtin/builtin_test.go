@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"connectrpc.com/connect"
 
@@ -290,6 +291,21 @@ func TestChangeTools(t *testing.T) {
 	if r["status"] != "mitigating" || r["title"] != "Finance rejects voucher refunds" || r["probability"] != 3.0 || r["versions"] != 2.0 {
 		t.Fatalf("a new version keeps what it does not restate: %v", r)
 	}
+	// derogations (ADR 0075 §2): signed by the caller, versioned by key, listed
+	dctx := authz.With(ctx, authz.Principal{Subject: "alice", Roles: []string{"admin"}})
+	exp := time.Now().Add(24 * time.Hour).UTC().Format(time.RFC3339)
+	if _, err := p.hub.Call(dctx, "ORG-CHECKOUT", "goap-change/derogation", map[string]any{"rule": "tests pass", "target": "REQ-9", "reason": "deadline"}); err == nil {
+		t.Fatal("a derogation without an expiry")
+	}
+	d1 := p.call(t, dctx, "ORG-CHECKOUT", "goap-change/derogation", map[string]any{"rule": "tests pass", "target": "REQ-9", "reason": "deadline", "expires": exp})
+	if d1["derogation"].(map[string]any)["data"].(map[string]any)["key"] != "DRG-1" {
+		t.Fatalf("derogation = %v", d1)
+	}
+	p.call(t, dctx, "ORG-CHECKOUT", "goap-change/derogation", map[string]any{"key": "DRG-1", "status": "closed"})
+	drg := p.call(t, dctx, "ORG-CHECKOUT", "goap-change/derogations", nil)["derogations"].([]any)
+	if len(drg) != 1 || drg[0].(map[string]any)["status"] != "closed" || drg[0].(map[string]any)["signatory"] != "alice" || drg[0].(map[string]any)["versions"] != 2.0 {
+		t.Fatalf("derogations = %v", drg)
+	}
 	brief := p.call(t, ctx, "ORG-CHECKOUT", "goap-change/brief", nil)["brief"].(string)
 	for _, want := range []string{"INTENT Customers may be refunded by voucher", "- REQ-9 Requirement created written", "- RSK-1 12=3x4 mitigating product_owner", "ACTIONS 1 open", "- ACT-1 business_analyst - RSK-1"} {
 		if !strings.Contains(brief, want) {
@@ -567,7 +583,7 @@ func TestUnitRestrictsABuiltin(t *testing.T) {
 			change = append(change, name)
 		}
 	}
-	if !slices.Equal(change, []string{"read", "list", "validate", "options", "compare", "decisions", "brief", "trace", "risks"}) || slices.Contains(mcps, mcpbuiltin.Admin) {
+	if !slices.Equal(change, []string{"read", "list", "validate", "options", "compare", "decisions", "brief", "trace", "risks", "derogations"}) || slices.Contains(mcps, mcpbuiltin.Admin) {
 		t.Fatalf("ORG-CRM: goap-change tools %v, mcps %v", change, mcps)
 	}
 	ctx := as("carol", "ORG-CRM", "contributor")
@@ -585,7 +601,7 @@ func TestUnitRestrictsABuiltin(t *testing.T) {
 	out := p.call(t, as("root", "ORG-ACME", "admin"), "ORG-ACME", "goap-admin/mcps", map[string]any{"unit": "ORG-CRM"})
 	for _, m := range out["mcps"].([]any) {
 		m := m.(map[string]any)
-		if m["mcp"] == mcpbuiltin.Change && (len(m["tools"].([]any)) != 9 || m["restrictedBy"].([]any)[0] != "ORG-CRM" || m["definedIn"] != access.DefaultOrg) {
+		if m["mcp"] == mcpbuiltin.Change && (len(m["tools"].([]any)) != 10 || m["restrictedBy"].([]any)[0] != "ORG-CRM" || m["definedIn"] != access.DefaultOrg) {
 			t.Fatalf("goap-change for ORG-CRM = %v", m)
 		}
 	}

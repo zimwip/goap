@@ -18,19 +18,21 @@ const mod = "github.com/zimwip/goap/"
 
 // forbidden lists, by package, the packages it must not depend on, directly or not.
 var forbidden = map[string][]string{
-	"pkg/mcp":        {"pkg/adapter", "pkg/mcpbuiltin", "pkg/access", "pkg/algo", "pkg/domain", "pkg/graph"},
-	"pkg/algo":       {"pkg/mcp", "pkg/adapter", "pkg/mcpbuiltin", "pkg/access"},
-	"pkg/dsl":        {"pkg/mcp", "pkg/adapter", "pkg/mcpbuiltin", "pkg/access"},
-	"pkg/domain/def": {"pkg/mcp", "pkg/adapter", "pkg/mcpbuiltin", "pkg/access"},
-	"pkg/access":     {"pkg/mcp", "pkg/adapter", "pkg/mcpbuiltin"},
-	"pkg/llmcfg":     {"pkg/mcp", "pkg/adapter", "pkg/mcpbuiltin"},
-	"pkg/engine":     {"pkg/adapter", "pkg/mcpbuiltin", "pkg/observe", "pkg/selfimprove"},
-	"pkg/builtins":   {"pkg/methodology", "pkg/engine", "pkg/domain"},
-	"pkg/adapter":    {"pkg/mcpbuiltin", "pkg/access"},
-	"pkg/domain":     {"pkg/risk", "pkg/methodology", "pkg/journal", "pkg/decision"},
-	"pkg/decision":   {"pkg/graph", "pkg/engine", "pkg/methodology", "pkg/risk", "pkg/journal"},
-	"pkg/journal":    {"pkg/graph", "pkg/engine", "pkg/methodology"},
-	"pkg/graph":      {"pkg/risk", "pkg/methodology", "pkg/journal", "pkg/decision", "internal/registrysvc"},
+	"pkg/mcp":         {"pkg/adapter", "pkg/mcpbuiltin", "pkg/access", "pkg/algo", "pkg/domain", "pkg/graph"},
+	"pkg/algo":        {"pkg/mcp", "pkg/adapter", "pkg/mcpbuiltin", "pkg/access"},
+	"pkg/dsl":         {"pkg/mcp", "pkg/adapter", "pkg/mcpbuiltin", "pkg/access"},
+	"pkg/domain/def":  {"pkg/mcp", "pkg/adapter", "pkg/mcpbuiltin", "pkg/access"},
+	"pkg/access":      {"pkg/mcp", "pkg/adapter", "pkg/mcpbuiltin"},
+	"pkg/llmcfg":      {"pkg/mcp", "pkg/adapter", "pkg/mcpbuiltin"},
+	"pkg/engine":      {"pkg/adapter", "pkg/mcpbuiltin", "pkg/observe", "pkg/selfimprove"},
+	"pkg/builtins":    {"pkg/methodology", "pkg/engine", "pkg/domain"},
+	"pkg/adapter":     {"pkg/mcpbuiltin", "pkg/access"},
+	"pkg/domain":      {"pkg/risk", "pkg/methodology", "pkg/journal", "pkg/decision", "pkg/verify", "pkg/criticality"},
+	"pkg/criticality": {"pkg/graph", "pkg/engine", "pkg/methodology", "pkg/journal", "pkg/decision", "pkg/condition", "pkg/access"},
+	"pkg/verify":      {"pkg/graph", "pkg/engine", "pkg/methodology", "pkg/risk", "pkg/journal", "pkg/decision", "pkg/condition"},
+	"pkg/decision":    {"pkg/graph", "pkg/engine", "pkg/methodology", "pkg/risk", "pkg/journal"},
+	"pkg/journal":     {"pkg/graph", "pkg/engine", "pkg/methodology"},
+	"pkg/graph":       {"pkg/risk", "pkg/methodology", "pkg/journal", "pkg/decision", "pkg/verify", "pkg/criticality", "internal/registrysvc"},
 }
 
 // The graph core names no concept of the methodology namespace (ADR 0066: the Activity a change is scoped to lives in

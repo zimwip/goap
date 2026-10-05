@@ -19,6 +19,7 @@ import (
 	"github.com/zimwip/goap/internal/rpcerr"
 	"github.com/zimwip/goap/pkg/access"
 	"github.com/zimwip/goap/pkg/authz"
+	"github.com/zimwip/goap/pkg/criticality"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/engine"
 	"github.com/zimwip/goap/pkg/graph"
@@ -364,6 +365,9 @@ func (h *Handler) CreateChange(ctx context.Context, r *connect.Request[graphv1.C
 	if projectID == "" {
 		projectID = authz.From(ctx).Project
 	}
+	if err := validCriticality(pbconv.Map(r.Msg.Data)); err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
 	c, err := h.Graph.CreateChange(ctx, graph.NewChange{ParentID: domain.ChangeID(r.Msg.ParentId), OwnerOrg: owner, OwnBranch: r.Msg.OwnBranch, Namespace: r.Msg.Namespace, Title: r.Msg.Title, Intent: r.Msg.Intent, Methodology: r.Msg.Methodology,
 		BaselineID: domain.BaselineID(r.Msg.BaselineId), Branch: r.Msg.Branch, Data: pbconv.Map(r.Msg.Data), ProjectID: projectID})
 	if err == nil {
@@ -417,7 +421,11 @@ func (h *Handler) ListNodeChanges(ctx context.Context, r *connect.Request[graphv
 }
 
 func (h *Handler) UpdateChange(ctx context.Context, r *connect.Request[graphv1.UpdateChangeRequest]) (*connect.Response[graphv1.UpdateChangeResponse], error) {
+	ctx = h.Identity.Context(ctx, r.Header())
 	p := graph.ChangePatch{Title: r.Msg.Title, Intent: r.Msg.Intent, Goal: r.Msg.Goal, Data: pbconv.Map(r.Msg.Data)}
+	if err := h.checkCriticality(ctx, domain.ChangeID(r.Msg.Id), p.Data); err != nil {
+		return nil, rpcerr.ToConnect(err)
+	}
 	if r.Msg.Status != nil {
 		st := domain.ChangeStatus(*r.Msg.Status)
 		p.Status = &st
@@ -548,6 +556,20 @@ func (h *Handler) ReviewChangeImpact(ctx context.Context, r *connect.Request[gra
 	}
 	cn, err := h.Graph.ReviewNodeOn(ctx, domain.ChangeID(r.Msg.ChangeId), r.Msg.Flow, r.Msg.Execution, domain.ChangeImpactID(r.Msg.ChangeImpactId), status, authz.From(ctx).Subject, r.Msg.Comment)
 	return res(&graphv1.ReviewChangeImpactResponse{Node: pbconv.ChangeImpactToPB(cn)}, err)
+}
+
+func (h *Handler) ReopenChangeImpacts(ctx context.Context, r *connect.Request[graphv1.ReopenChangeImpactsRequest]) (*connect.Response[graphv1.ReopenChangeImpactsResponse], error) {
+	ctx = h.Identity.Context(ctx, r.Header())
+	ids := make([]domain.ChangeImpactID, len(r.Msg.ChangeImpactIds))
+	for i, id := range r.Msg.ChangeImpactIds {
+		ids[i] = domain.ChangeImpactID(id)
+	}
+	done, err := h.Graph.ReopenImpacts(ctx, domain.ChangeID(r.Msg.ChangeId), ids, r.Msg.Comment)
+	out := &graphv1.ReopenChangeImpactsResponse{}
+	for _, id := range done {
+		out.Reopened = append(out.Reopened, string(id))
+	}
+	return res(out, err)
 }
 
 func (h *Handler) GetBlackboard(ctx context.Context, r *connect.Request[graphv1.GetBlackboardRequest]) (*connect.Response[graphv1.GetBlackboardResponse], error) {
@@ -945,4 +967,39 @@ func (h *Handler) ListDecisionPoints(ctx context.Context, r *connect.Request[gra
 		out.Points = append(out.Points, pbconv.DecisionPointToPB(d))
 	}
 	return res(out, err)
+}
+
+// validCriticality refuses a criticality of the data of a change that is not C1, C2 or C3 (ADR 0075 §3).
+func validCriticality(data map[string]any) error {
+	v, ok := data[domain.DataCriticality]
+	if !ok {
+		return nil
+	}
+	if s, _ := v.(string); !criticality.Valid(criticality.Level(s)) {
+		return fmt.Errorf("criticality %v: C1, C2 or C3", v)
+	}
+	return nil
+}
+
+// checkCriticality guards the criticality of the header of a change (ADR 0075 §3): the requester may raise it, lowering
+// it (below the level it holds, the default of its methodology included) asks the permission change:lower-criticality,
+// which administrators hold. A platform service acting by itself is not asked.
+func (h *Handler) checkCriticality(ctx context.Context, id domain.ChangeID, data map[string]any) error {
+	if err := validCriticality(data); err != nil {
+		return fmt.Errorf("%w: %w", err, graph.ErrInvalid)
+	}
+	v, ok := data[domain.DataCriticality]
+	if !ok {
+		return nil
+	}
+	c, err := h.Graph.Change(ctx, id)
+	if err != nil {
+		return err
+	}
+	to := criticality.Level(v.(string))
+	if !criticality.Lowers(criticality.Of(c.Data), to) || h.Authz == nil || authz.From(ctx).System() {
+		return nil
+	}
+	return authz.Check(ctx, h.Authz, authz.Request{Subject: authz.From(ctx), Action: "lower-criticality",
+		Resource: authz.Resource{Type: "change", ID: string(c.ID), Name: c.Title, Org: c.OwnerOrg, ProjectID: c.ProjectID}})
 }

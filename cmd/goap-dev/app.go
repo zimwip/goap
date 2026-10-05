@@ -10,6 +10,7 @@ import (
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/engine"
 	"github.com/zimwip/goap/pkg/risk"
+	"github.com/zimwip/goap/pkg/verify"
 )
 
 // defaultAuthMode is the sign-in mode when GOAP_AUTH_MODE is unset (gateway.DefaultAuthMode).
@@ -41,6 +42,7 @@ type env struct {
 func newApp(parent context.Context, cfg config, log *slog.Logger) (*app, error) {
 	// the facts of the risk register are items of a change (ADR 0065)
 	risk.Register()
+	verify.Register()
 	ctx, cancel := context.WithCancel(parent)
 	dev := cfg.Dev
 	e := &env{ctx: ctx, cfg: cfg, log: log, secrets: platform.NewSecrets(), dev: &dev, triggers: &triggerRef{}}

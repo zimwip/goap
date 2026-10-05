@@ -176,7 +176,8 @@ export const platformRoles = (): PlatformRole[] => session.principal?.platformRo
  * What the caller may attempt, to show or hide controls: hints, the server enforces every call.
  * administer: the controls only platform administrators use (organisation, projects, policies, adapters, the model
  * catalogue and quotas, the usage of the whole platform, the index). approve: they work on their active project, so
- * an approval of someone else's run may be theirs to give (the engine decides run by run).
+ * an approval of someone else's run may be theirs to give (the engine decides run by run). lowerCriticality: they may
+ * lower the criticality of a change of their project (ADR 0075 §3; raising it asks nothing more than writing the change).
  */
 export const can = {
   get administer() {
@@ -184,5 +185,8 @@ export const can = {
   },
   get approve() {
     return !!session.principal?.can.approve;
+  },
+  get lowerCriticality() {
+    return !!session.principal?.can.lowerCriticality;
   },
 };

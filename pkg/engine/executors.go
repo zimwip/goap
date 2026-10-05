@@ -362,6 +362,7 @@ func DefaultBuiltins() BuiltinExecutor {
 	b.Register(builtins.GraphPropagate, Propagate)
 	b.Register(builtins.GraphApply, ApplyChange)
 	b.Register(builtins.DecisionInvestigate, Investigate)
+	b.Register(builtins.DerogationExpire, expireAllDerogations)
 	b.Register(builtins.ProcessStep, RunStep)
 	return b
 }

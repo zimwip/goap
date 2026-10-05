@@ -91,7 +91,7 @@ export interface PlatformRole {
  * the server enforces every call).
  */
 export interface Session extends Principal {
-  can: { administer: boolean; approve: boolean };
+  can: { administer: boolean; approve: boolean; lowerCriticality: boolean };
   structures: Structure[];
   names: {
     namespaces: { organisation: string; platform: string; meta: string };

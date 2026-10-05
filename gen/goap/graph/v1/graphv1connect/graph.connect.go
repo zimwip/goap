@@ -111,6 +111,9 @@ const (
 	// GraphServiceReviewChangeImpactProcedure is the fully-qualified name of the GraphService's
 	// ReviewChangeImpact RPC.
 	GraphServiceReviewChangeImpactProcedure = "/goap.graph.v1.GraphService/ReviewChangeImpact"
+	// GraphServiceReopenChangeImpactsProcedure is the fully-qualified name of the GraphService's
+	// ReopenChangeImpacts RPC.
+	GraphServiceReopenChangeImpactsProcedure = "/goap.graph.v1.GraphService/ReopenChangeImpacts"
 	// GraphServiceCommitEditsProcedure is the fully-qualified name of the GraphService's CommitEdits
 	// RPC.
 	GraphServiceCommitEditsProcedure = "/goap.graph.v1.GraphService/CommitEdits"
@@ -273,6 +276,7 @@ type GraphServiceClient interface {
 	AddChangeImpacts(context.Context, *connect.Request[v1.AddChangeImpactsRequest]) (*connect.Response[v1.AddChangeImpactsResponse], error)
 	WriteChangeImpact(context.Context, *connect.Request[v1.WriteChangeImpactRequest]) (*connect.Response[v1.WriteChangeImpactResponse], error)
 	ReviewChangeImpact(context.Context, *connect.Request[v1.ReviewChangeImpactRequest]) (*connect.Response[v1.ReviewChangeImpactResponse], error)
+	ReopenChangeImpacts(context.Context, *connect.Request[v1.ReopenChangeImpactsRequest]) (*connect.Response[v1.ReopenChangeImpactsResponse], error)
 	// Producers: a whole change of node edits (change impacts, versions, reviews, apply) in one call.
 	CommitEdits(context.Context, *connect.Request[v1.CommitEditsRequest]) (*connect.Response[v1.CommitEditsResponse], error)
 	GetBlackboard(context.Context, *connect.Request[v1.GetBlackboardRequest]) (*connect.Response[v1.GetBlackboardResponse], error)
@@ -520,6 +524,12 @@ func NewGraphServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			httpClient,
 			baseURL+GraphServiceReviewChangeImpactProcedure,
 			connect.WithSchema(graphServiceMethods.ByName("ReviewChangeImpact")),
+			connect.WithClientOptions(opts...),
+		),
+		reopenChangeImpacts: connect.NewClient[v1.ReopenChangeImpactsRequest, v1.ReopenChangeImpactsResponse](
+			httpClient,
+			baseURL+GraphServiceReopenChangeImpactsProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("ReopenChangeImpacts")),
 			connect.WithClientOptions(opts...),
 		),
 		commitEdits: connect.NewClient[v1.CommitEditsRequest, v1.CommitEditsResponse](
@@ -796,6 +806,7 @@ type graphServiceClient struct {
 	addChangeImpacts       *connect.Client[v1.AddChangeImpactsRequest, v1.AddChangeImpactsResponse]
 	writeChangeImpact      *connect.Client[v1.WriteChangeImpactRequest, v1.WriteChangeImpactResponse]
 	reviewChangeImpact     *connect.Client[v1.ReviewChangeImpactRequest, v1.ReviewChangeImpactResponse]
+	reopenChangeImpacts    *connect.Client[v1.ReopenChangeImpactsRequest, v1.ReopenChangeImpactsResponse]
 	commitEdits            *connect.Client[v1.CommitEditsRequest, v1.CommitEditsResponse]
 	getBlackboard          *connect.Client[v1.GetBlackboardRequest, v1.GetBlackboardResponse]
 	applyChange            *connect.Client[v1.ApplyChangeRequest, v1.ApplyChangeResponse]
@@ -981,6 +992,11 @@ func (c *graphServiceClient) WriteChangeImpact(ctx context.Context, req *connect
 // ReviewChangeImpact calls goap.graph.v1.GraphService.ReviewChangeImpact.
 func (c *graphServiceClient) ReviewChangeImpact(ctx context.Context, req *connect.Request[v1.ReviewChangeImpactRequest]) (*connect.Response[v1.ReviewChangeImpactResponse], error) {
 	return c.reviewChangeImpact.CallUnary(ctx, req)
+}
+
+// ReopenChangeImpacts calls goap.graph.v1.GraphService.ReopenChangeImpacts.
+func (c *graphServiceClient) ReopenChangeImpacts(ctx context.Context, req *connect.Request[v1.ReopenChangeImpactsRequest]) (*connect.Response[v1.ReopenChangeImpactsResponse], error) {
+	return c.reopenChangeImpacts.CallUnary(ctx, req)
 }
 
 // CommitEdits calls goap.graph.v1.GraphService.CommitEdits.
@@ -1230,6 +1246,7 @@ type GraphServiceHandler interface {
 	AddChangeImpacts(context.Context, *connect.Request[v1.AddChangeImpactsRequest]) (*connect.Response[v1.AddChangeImpactsResponse], error)
 	WriteChangeImpact(context.Context, *connect.Request[v1.WriteChangeImpactRequest]) (*connect.Response[v1.WriteChangeImpactResponse], error)
 	ReviewChangeImpact(context.Context, *connect.Request[v1.ReviewChangeImpactRequest]) (*connect.Response[v1.ReviewChangeImpactResponse], error)
+	ReopenChangeImpacts(context.Context, *connect.Request[v1.ReopenChangeImpactsRequest]) (*connect.Response[v1.ReopenChangeImpactsResponse], error)
 	// Producers: a whole change of node edits (change impacts, versions, reviews, apply) in one call.
 	CommitEdits(context.Context, *connect.Request[v1.CommitEditsRequest]) (*connect.Response[v1.CommitEditsResponse], error)
 	GetBlackboard(context.Context, *connect.Request[v1.GetBlackboardRequest]) (*connect.Response[v1.GetBlackboardResponse], error)
@@ -1473,6 +1490,12 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 		GraphServiceReviewChangeImpactProcedure,
 		svc.ReviewChangeImpact,
 		connect.WithSchema(graphServiceMethods.ByName("ReviewChangeImpact")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceReopenChangeImpactsHandler := connect.NewUnaryHandler(
+		GraphServiceReopenChangeImpactsProcedure,
+		svc.ReopenChangeImpacts,
+		connect.WithSchema(graphServiceMethods.ByName("ReopenChangeImpacts")),
 		connect.WithHandlerOptions(opts...),
 	)
 	graphServiceCommitEditsHandler := connect.NewUnaryHandler(
@@ -1775,6 +1798,8 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 			graphServiceWriteChangeImpactHandler.ServeHTTP(w, r)
 		case GraphServiceReviewChangeImpactProcedure:
 			graphServiceReviewChangeImpactHandler.ServeHTTP(w, r)
+		case GraphServiceReopenChangeImpactsProcedure:
+			graphServiceReopenChangeImpactsHandler.ServeHTTP(w, r)
 		case GraphServiceCommitEditsProcedure:
 			graphServiceCommitEditsHandler.ServeHTTP(w, r)
 		case GraphServiceGetBlackboardProcedure:
@@ -1978,6 +2003,10 @@ func (UnimplementedGraphServiceHandler) WriteChangeImpact(context.Context, *conn
 
 func (UnimplementedGraphServiceHandler) ReviewChangeImpact(context.Context, *connect.Request[v1.ReviewChangeImpactRequest]) (*connect.Response[v1.ReviewChangeImpactResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.ReviewChangeImpact is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) ReopenChangeImpacts(context.Context, *connect.Request[v1.ReopenChangeImpactsRequest]) (*connect.Response[v1.ReopenChangeImpactsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.ReopenChangeImpacts is not implemented"))
 }
 
 func (UnimplementedGraphServiceHandler) CommitEdits(context.Context, *connect.Request[v1.CommitEditsRequest]) (*connect.Response[v1.CommitEditsResponse], error) {

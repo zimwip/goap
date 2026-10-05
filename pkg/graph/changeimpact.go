@@ -264,6 +264,19 @@ func (g *Graph) ReviewNodeOn(ctx context.Context, id domain.ChangeID, flow, exec
 		if seen.Review != domain.ReviewProposed {
 			return fmt.Errorf("change impact %s is already %s: %w", node, seen.Review, ErrConflict)
 		}
+		if g.ReviewPolicy != nil {
+			entries, err := tx.Log(ctx, factsFilter(id))
+			if err != nil {
+				return err
+			}
+			facts, err := itemsOf(entries)
+			if err != nil {
+				return err
+			}
+			if err := g.ReviewPolicy.Review(domain.ReviewRequest{Impact: seen, Reviewer: by, Status: status, Items: facts}); err != nil {
+				return fmt.Errorf("review of %s refused: %v: %w", node, err, ErrInvalid)
+			}
+		}
 		r := domain.Review{Status: status, By: by, Comment: comment, At: g.now(), Flow: flow, Execution: execution}
 		if flow == "" {
 			cn.Review = status
@@ -275,6 +288,41 @@ func (g *Graph) ReviewNodeOn(ctx context.Context, id domain.ChangeID, flow, exec
 			}
 		}
 		return g.emit(ctx, tx, domain.ImpactEvent{Change: id, Impact: cn.ID, Op: domain.ImpactReviewed, Flow: flow, Execution: execution, By: by, Review: &r})
+	})
+	return
+}
+
+// ReopenImpacts sends accepted change impacts of the main flow back to proposed (a review event, as when a change goes
+// back to a state, ADR 0058): what was accepted must be reviewed again. A use case calls it when the ground of an
+// acceptance falls (ADR 0075: a derogation expired); the graph reads no clock and names no reason. An impact that is
+// not accepted is left as it is; the comment is mandatory.
+func (g *Graph) ReopenImpacts(ctx context.Context, id domain.ChangeID, impacts []domain.ChangeImpactID, comment string) (reopened []domain.ChangeImpactID, err error) {
+	comment = strings.TrimSpace(comment)
+	if comment == "" {
+		return nil, fmt.Errorf("reopening a review needs a comment: %w", ErrInvalid)
+	}
+	err = g.repo.InTx(ctx, func(tx Tx) error {
+		reopened = nil
+		c, err := changeOpen(ctx, tx, id)
+		if err != nil {
+			return err
+		}
+		for _, imp := range impacts {
+			i, err := findChangeImpact(c, imp)
+			if err != nil {
+				return err
+			}
+			cn := c.Nodes[i]
+			if cn.Review != domain.ReviewAccepted {
+				continue
+			}
+			r := domain.Review{Status: domain.ReviewProposed, By: g.caller(ctx), At: g.now(), Comment: comment}
+			if err := g.emit(ctx, tx, domain.ImpactEvent{Change: id, Impact: cn.ID, Op: domain.ImpactReviewed, By: r.By, Review: &r}); err != nil {
+				return err
+			}
+			reopened = append(reopened, cn.ID)
+		}
+		return nil
 	})
 	return
 }

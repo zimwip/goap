@@ -13,7 +13,7 @@ import (
 // ToPB converts a stored record.
 func ToPB(r Record) *registryv1.Methodology {
 	m := r.Methodology
-	out := &registryv1.Methodology{Name: m.Name, Version: m.Version, Description: m.Description, Namespace: m.Namespace, AppliesTo: m.AppliesTo, Imports: m.Imports, On: subsToPB(m.On), Lifecycle: m.Lifecycle, Status: string(r.Status),
+	out := &registryv1.Methodology{Name: m.Name, Version: m.Version, Description: m.Description, Namespace: m.Namespace, AppliesTo: m.AppliesTo, Imports: m.Imports, On: subsToPB(m.On), Lifecycle: m.Lifecycle, Criticality: m.Criticality, Status: string(r.Status),
 		CreatedAt: pbconv.Time(r.CreatedAt), UpdatedAt: pbconv.Time(r.UpdatedAt), PublishedAt: pbconv.Time(r.PublishedAt), UpdatedBy: r.UpdatedBy}
 	for _, c := range m.Conditions {
 		out.Conditions = append(out.Conditions, &registryv1.Condition{Name: c.Name, Description: c.Description, Expr: c.Expr})
@@ -29,6 +29,9 @@ func ToPB(r Record) *registryv1.Methodology {
 				pe.Link = &registryv1.LinkSpec{Type: e.Link.Type, Direction: e.Link.Direction}
 			}
 			pa.Expects = pe
+		}
+		if v := a.Verify; v != nil {
+			pa.Verify = &registryv1.Verify{Oracle: v.Oracle, Independent: v.Independent}
 		}
 		out.Actions = append(out.Actions, pa)
 	}
@@ -147,7 +150,7 @@ func FromPB(p *registryv1.Methodology) methodology.Methodology {
 	if p == nil {
 		return methodology.Methodology{}
 	}
-	m := methodology.Methodology{Name: p.Name, Version: p.Version, Description: p.Description, Namespace: p.Namespace, AppliesTo: nilIfNone(p.AppliesTo), Imports: nilIfNone(p.Imports), On: subsFromPB(p.On), Lifecycle: p.Lifecycle}
+	m := methodology.Methodology{Name: p.Name, Version: p.Version, Description: p.Description, Namespace: p.Namespace, AppliesTo: nilIfNone(p.AppliesTo), Imports: nilIfNone(p.Imports), On: subsFromPB(p.On), Lifecycle: p.Lifecycle, Criticality: p.Criticality}
 	for _, c := range p.Conditions {
 		m.Conditions = append(m.Conditions, methodology.Condition{Name: c.Name, Description: c.Description, Expr: c.Expr})
 	}
@@ -165,6 +168,9 @@ func FromPB(p *registryv1.Methodology) methodology.Methodology {
 				me.Link = &condition.LinkSpec{Type: e.Link.Type, Direction: e.Link.Direction}
 			}
 			ma.Expects = me
+		}
+		if v := a.Verify; v != nil {
+			ma.Verify = &methodology.Verify{Oracle: v.Oracle, Independent: v.Independent}
 		}
 		m.Actions = append(m.Actions, ma)
 	}
@@ -301,12 +307,29 @@ func lifecyclesToPB(ls []domain.Lifecycle) []*registryv1.Lifecycle {
 		for _, t := range l.Transitions {
 			pt := &registryv1.LifecycleTransition{Name: t.Name, Description: t.Description, From: t.From, To: t.To, Permission: t.Permission, Guard: t.Guard,
 				RequiresAttributes: t.Requires.Attributes, RequiresOutgoingLinks: t.Requires.OutgoingLinks, Guards: t.Guards, Actions: t.Actions}
+			pt.Vetos, pt.Objectives = criteriaToPB(t.Vetos), criteriaToPB(t.Objectives)
 			if t.Children != nil {
 				pt.ChildrenStates = t.Children.States
 			}
 			pl.Transitions = append(pl.Transitions, pt)
 		}
 		out = append(out, pl)
+	}
+	return out
+}
+
+func criteriaToPB(cs []domain.Criterion) []*registryv1.Criterion {
+	var out []*registryv1.Criterion
+	for _, c := range cs {
+		out = append(out, &registryv1.Criterion{Name: c.Name, Expr: c.Expr, Description: c.Description})
+	}
+	return out
+}
+
+func criteriaFromPB(cs []*registryv1.Criterion) []domain.Criterion {
+	var out []domain.Criterion
+	for _, c := range cs {
+		out = append(out, domain.Criterion{Name: c.Name, Expr: c.Expr, Description: c.Description})
 	}
 	return out
 }
@@ -322,6 +345,7 @@ func lifecyclesFromPB(ls []*registryv1.Lifecycle) []domain.Lifecycle {
 			dt := domain.Transition{Name: t.Name, Description: t.Description, From: t.From, To: t.To, Permission: t.Permission, Guard: t.Guard,
 				Requires: domain.TransitionRequires{Attributes: nilIfNone(t.RequiresAttributes), OutgoingLinks: nilIfNone(t.RequiresOutgoingLinks)},
 				Guards:   nilIfNone(t.Guards), Actions: nilIfNone(t.Actions)}
+			dt.Vetos, dt.Objectives = criteriaFromPB(t.Vetos), criteriaFromPB(t.Objectives)
 			if len(t.ChildrenStates) > 0 {
 				dt.Children = &domain.ChildrenRule{States: t.ChildrenStates}
 			}

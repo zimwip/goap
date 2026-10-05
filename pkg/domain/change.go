@@ -33,6 +33,11 @@ const (
 // the project selector gate of the web. Only a name: the graph never reads it, and a sub-change does not inherit it.
 const DataAdministrative = "administrative"
 
+// DataCriticality is the key of Change.Data holding the criticality of the change (C1, C2 or C3, ADR 0075 §3): the
+// weight of its effect, from which the policy of the organisation says what verification and derogations it asks. Only
+// a name: the graph and the domain model never read it (pkg/criticality interprets it).
+const DataCriticality = "criticality"
+
 // Change describes a modification of the domain graph. It starts from a
 // reference baseline and accumulates items. It is the blackboard of a process.
 type Change struct {
@@ -195,6 +200,8 @@ var itemKinds registry
 type registry struct {
 	mu sync.RWMutex
 	m  map[ItemKind]func(ChangeItem) error
+	// perms are the permissions a kind of item asks of its writer (RequireItemPermission).
+	perms map[ItemKind]ItemPermission
 }
 
 func (r *registry) get(k ItemKind) func(ChangeItem) error {
@@ -217,6 +224,35 @@ func RegisterItemKind(kind ItemKind, validate func(ChangeItem) error) {
 		itemKinds.m = map[ItemKind]func(ChangeItem) error{}
 	}
 	itemKinds.m[kind] = validate
+}
+
+// ItemPermission is what writing an item of a kind asks of the writer (RequireItemPermission).
+type ItemPermission struct {
+	// Permission is "<resource>:<action>", checked by the authorizer of the services on the project of the change.
+	Permission string
+	// SubjectField, when set, is the data field naming the principal who answers for the item: it must be the writer's
+	// (a platform service acting by itself excepted), as someone signs for themselves.
+	SubjectField string
+}
+
+// RequireItemPermission makes the write of the items of a kind subject to a permission (ADR 0075): the graph asks its
+// ItemAuthorizer before it stores them and knows nothing of what the kind means. Registration is explicit and
+// idempotent, like RegisterItemKind.
+func RequireItemPermission(kind ItemKind, p ItemPermission) {
+	itemKinds.mu.Lock()
+	defer itemKinds.mu.Unlock()
+	if itemKinds.perms == nil {
+		itemKinds.perms = map[ItemKind]ItemPermission{}
+	}
+	itemKinds.perms[kind] = p
+}
+
+// ItemPermissionOf returns the permission the items of a kind ask of their writer, if any.
+func ItemPermissionOf(kind ItemKind) (ItemPermission, bool) {
+	itemKinds.mu.RLock()
+	defer itemKinds.mu.RUnlock()
+	p, ok := itemKinds.perms[kind]
+	return p, ok
 }
 
 // ItemsOfKind returns the items of the given kind.
