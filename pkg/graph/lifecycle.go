@@ -12,9 +12,9 @@ import (
 // This file implements the node lifecycle rules (ADR 0014). The lifecycle of
 // a node type comes from the type catalogue in force (ADR 0012 §2).
 //
-//   - a node is modified only in an editable state, and a persisted version is
-//     never editable: a change reopens a node (a transition into an editable
-//     state), modifies it, and must move it out again before it is applied;
+//   - a node is modified in any state while it is in a change, and a change
+//     lands only when each node it holds rests in a landable state (a state
+//     flagged notLandable blocks it, ADR 0078);
 //   - every transition is checked (it exists, the actor may take it, the node
 //     has the required attributes and links, its guard holds, and for a
 //     document its children are in an allowed state) when it is taken: a

@@ -84,8 +84,8 @@
     <fieldset class="plain" disabled={d.readonly}>
       <section class="card" data-path={path}>
         <p class="hint">
-          A lifecycle gives the nodes of a type a state. A node is modified only in an <em>editable</em> state, which it holds only
-          through a change: reopen it, edit it, and move it to a non-editable state before the change is applied. Node types name
+          A lifecycle gives the nodes of a type a state. A node is edited in any state while it is in a change; a state flagged
+          <em>not landable</em> keeps the change from landing until the node is moved to a landable state. Node types name
           their lifecycle; a subtype inherits it. Used by {users} type(s).
         </p>
         <div class="field">
@@ -96,7 +96,6 @@
           <label for="lc-desc">Description</label>
           <input id="lc-desc" type="text" bind:value={x.description} />
         </div>
-        <label class="inline" title="A node may stay in an editable state (a long-lived status) when a change is applied (ADR 0048)"><input type="checkbox" bind:checked={x.restInEditable} /> nodes may rest in an editable state</label>
         <LifecycleEditor bind:lc={f.lifecycles[index]} readonly={d.readonly} guardInstances={instancesOf('transition_guard')} actionInstances={instancesOf('transition_action')} bad={(p) => d.bad(p)} documents={usedByDocument} {path} />
       </section>
     </fieldset>

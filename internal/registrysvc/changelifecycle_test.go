@@ -26,7 +26,7 @@ func TestChangeLifecycleGate(t *testing.T) {
 
 	d := def.Domain{Name: "alm", Version: "1", Schema: def.Schema{Lifecycles: []domain.Lifecycle{{
 		Name: "maturity", Initial: "proposed",
-		States: []domain.LifecycleState{{Name: "proposed", Editable: true}, {Name: "analysing", Editable: true}, {Name: "implementing", Editable: true}, {Name: "done", Final: true}},
+		States: []domain.LifecycleState{{Name: "proposed"}, {Name: "analysing"}, {Name: "implementing"}, {Name: "done", Final: true}},
 		Transitions: []domain.Transition{
 			{Name: "analyse", From: "proposed", To: "analysing"},
 			{Name: "implement", From: "analysing", To: "implementing",

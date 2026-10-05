@@ -1,11 +1,11 @@
 <script lang="ts">
-  // Nodes a change works on: reopen a node for edition, move it through its
-  // lifecycle, edit its properties, and see which ones must still leave an
-  // editable state before the change can be applied (ADR 0014). With `impacts`,
+  // Nodes a change works on: edit them in any state, move them through their
+  // lifecycle, and see which ones must still reach a landable state before the
+  // change can be applied (ADR 0078). With `impacts`,
   // each row is also the change impact of its node (ADR 0024): why, the versions
   // it starts from and writes, its review — one list, no second table.
   import type { GraphNode, LifecycleTransition } from '../api';
-  import { birthStates, isReopen, type LifecycleRow } from '../lifecycle';
+  import { birthStates, type LifecycleRow } from '../lifecycle';
   import type { Lifecycle } from '../api';
   import StatusBadge from './StatusBadge.svelte';
   import { confirmDialog } from '../shell/confirmState.svelte';
@@ -123,7 +123,7 @@
   const shown = $derived(
     candidates.filter((n) => !filter || `${n.key} ${n.type}`.toLowerCase().includes(filter.toLowerCase())).slice(0, 200),
   );
-  const leftEditable = $derived(rows.filter((r) => r.lifecycle && r.editable));
+  const stuck = $derived(rows.filter((r) => r.lifecycle && !r.landable));
 
   const text = (v: unknown): string => (v === undefined || v === null ? '' : typeof v === 'string' ? v : JSON.stringify(v));
 
@@ -186,14 +186,14 @@
   <details class="rules">
     <summary class="hint">How nodes are edited</summary>
     <p class="hint">
-      A node is modified only in an editable state, which it holds only through a change: reopen it, edit it, then move it to a
-      non-editable state before applying. Nodes without a lifecycle can be edited directly.
+      A node is edited in any state while it is in a change. A state flagged not landable keeps the change from landing: move the
+      node to a landable state before applying.
     </p>
   </details>
-  {#if leftEditable.length}
+  {#if stuck.length}
     <div class="alert" role="status">
-      {leftEditable.map((r) => r.node.key).join(', ')} {leftEditable.length > 1 ? 'are' : 'is'} still in an editable state: move
-      {leftEditable.length > 1 ? 'them' : 'it'} out of it before applying the change.
+      {stuck.map((r) => `${r.node.key} (${r.effective})`).join(', ')} {stuck.length > 1 ? 'are' : 'is'} in a state that cannot land: move
+      {stuck.length > 1 ? 'them' : 'it'} to a landable state before applying the change.
     </div>
   {/if}
 
@@ -220,11 +220,11 @@
             {/if}
             <td>
               {#if r.lifecycle}
-                <span class="state" class:editable={r.editable}>{r.effective}</span>
+                <span class="state" class:notLandable={!r.landable}>{r.effective}</span>
                 {#if r.moves.length}
                   <span class="hint" title="Proposed in this change">from {r.base || 'no state'} → {r.moves.join(' → ')}</span>
                 {/if}
-                {#if r.editable}<span class="tag">{r.created ? 'born editable: choose another state' : 'editable'}</span>{/if}
+                {#if !r.landable}<span class="tag" title="A change cannot land with the node in this state">{r.created ? 'born not landable: choose another state' : 'not landable'}</span>{/if}
               {:else}
                 <span class="hint">no lifecycle</span>
               {/if}
@@ -250,23 +250,21 @@
                 <button
                   type="button"
                   class="small"
-                  disabled={(!r.editable && !r.created) || busy !== ''}
-                  title={r.editable || r.created ? 'Edit the properties' : 'Reopen the node to edit it'}
+                  disabled={busy !== ''}
+                  title="Edit the properties"
                   onclick={() => (editing === r.node.id ? (editing = '') : startEdit(r))}
                 >
                   Edit
                 </button>
                 {#each r.transitions as t (t.name)}
-                  {@const reopen = isReopen(r, t)}
                   <button
                     type="button"
                     class="small"
-                    class:primary={reopen}
                     disabled={busy !== ''}
                     title={`${t.name}: ${t.from} → ${t.to}${t.permission ? ` (needs ${t.permission})` : ''}`}
                     onclick={() => onmove(r, t)}
                   >
-                    {reopen ? `Reopen → ${t.to}` : `${t.name} → ${t.to}`}
+                    {t.name} → {t.to}
                   </button>
                 {:else}
                   {#if r.lifecycle}
@@ -402,7 +400,7 @@
     font-size: 0.85rem;
     font-family: var(--mono);
   }
-  .state.editable {
+  .state.notLandable {
     border-color: var(--warn);
     color: var(--warn);
   }

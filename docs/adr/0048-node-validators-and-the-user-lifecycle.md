@@ -1,6 +1,6 @@
 # ADR 0048 — NodeValidator plugins, the user lifecycle, and the administrator floor
 
-**Status**: accepted, implemented · **Date**: 2026-10 ·
+**Status**: accepted, implemented · **Date**: 2026-10 · `RestInEditable` superseded by ADR 0078 ·
 Builds on ADR 0018 (algorithms), ADR 0024 (change impacts), ADR 0029/0030 (impact log), ADR 0043/0046/0047
 (roles, platform roles, administration as a platform role).
 

@@ -129,8 +129,8 @@ linkTypes:
 	must[domain.Link](t)(g.ImpactLinkUpdate(ctx, c.ID, l.ID, map[string]any{"strength": "strong"}, "", ""))
 }
 
-// A node no parent holds is retired by its lifecycle, never deleted (ADR 0076 §4c); restoring it moves it back to an
-// editable state before the edits of the same commit.
+// A node no parent holds is retired by its lifecycle, never deleted (ADR 0076 §4c); restoring it is a state set in the same
+// commit as its edits (no move first, ADR 0078).
 func TestRetireAndRestoreByCommit(t *testing.T) { forEachRepo(t, testRetireAndRestoreByCommit) }
 
 func testRetireAndRestoreByCommit(t *testing.T, repo Repo) {

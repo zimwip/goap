@@ -595,7 +595,7 @@ func (g *Graph) mergeBranchTx(ctx context.Context, tx Tx, in MergeRequest) (res 
 	// 1. the merge versions, with the change impact that explains each: a node changed on one side only joins the
 	// target as is (ADR 0032), a node changed on both sides gets a merge version
 	res.Baseline.ID = domain.BaselineID(g.newID())
-	var editable []string
+	var stuck []string
 	for _, m := range todo {
 		n := *m.from
 		n.Reason, n.Parents = domain.ReasonMerge, []domain.Version{m.from.Version}
@@ -651,12 +651,12 @@ func (g *Graph) mergeBranchTx(ctx context.Context, tx Tx, in MergeRequest) (res 
 			continue
 		}
 		target[n.ID] = n.Version
-		if lc := ix.lifecycleOf(n.Type); lc != nil && n.State != "" && lc.Editable(n.State) {
-			editable = append(editable, fmt.Sprintf("%s (%s) in %s", n.Key, n.Type, n.State))
+		if lc := ix.lifecycleOf(n.Type); lc != nil && !lc.Landable(n.State) {
+			stuck = append(stuck, fmt.Sprintf("%s (%s) in %s", n.Key, n.Type, n.State))
 		}
 	}
-	if len(editable) > 0 {
-		return res, invalidf("the change leaves nodes in an editable state, move them out of it before applying: %s", strings.Join(editable, ", "))
+	if len(stuck) > 0 {
+		return res, invalidf("the change leaves nodes in a state that cannot land, move them to a landable state first: %s", strings.Join(stuck, ", "))
 	}
 	// 2. their links: a 3-way merge keyed by (type, target node), retargeted to the merged versions
 	newRef := map[domain.NodeID]domain.NodeRef{}

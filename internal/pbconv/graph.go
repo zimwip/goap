@@ -172,11 +172,11 @@ func LinksFromPB(ls []*graphv1.Link) []domain.Link {
 }
 
 func ViewToPB(v domain.NodeView) *graphv1.NodeView {
-	return &graphv1.NodeView{Node: NodeToPB(v.Node), Latest: int32(v.Latest), Out: LinksToPB(v.Out), In: LinksToPB(v.In), Frozen: v.Frozen}
+	return &graphv1.NodeView{Node: NodeToPB(v.Node), Latest: int32(v.Latest), Out: LinksToPB(v.Out), In: LinksToPB(v.In), NotLandable: v.NotLandable}
 }
 
 func ViewFromPB(v *graphv1.NodeView) domain.NodeView {
-	return domain.NodeView{Node: NodeFromPB(v.Node), Latest: domain.Version(v.Latest), Out: LinksFromPB(v.Out), In: LinksFromPB(v.In), Frozen: v.Frozen}
+	return domain.NodeView{Node: NodeFromPB(v.Node), Latest: domain.Version(v.Latest), Out: LinksFromPB(v.Out), In: LinksFromPB(v.In), NotLandable: v.NotLandable}
 }
 
 func BaselineToPB(b domain.Baseline) *graphv1.Baseline {

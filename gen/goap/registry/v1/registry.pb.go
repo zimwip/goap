@@ -926,16 +926,14 @@ func (x *AlgorithmInstance) GetValues() *structpb.Struct {
 }
 
 type Lifecycle struct {
-	state       protoimpl.MessageState `protogen:"open.v1"`
-	Name        string                 `protobuf:"bytes,4,opt,name=name,proto3" json:"name,omitempty"`
-	Description string                 `protobuf:"bytes,5,opt,name=description,proto3" json:"description,omitempty"`
-	// nodes may rest in an editable state (ADR 0048)
-	RestInEditable bool                   `protobuf:"varint,6,opt,name=rest_in_editable,json=restInEditable,proto3" json:"rest_in_editable,omitempty"`
-	Initial        string                 `protobuf:"bytes,1,opt,name=initial,proto3" json:"initial,omitempty"`
-	States         []*LifecycleState      `protobuf:"bytes,2,rep,name=states,proto3" json:"states,omitempty"`
-	Transitions    []*LifecycleTransition `protobuf:"bytes,3,rep,name=transitions,proto3" json:"transitions,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,4,opt,name=name,proto3" json:"name,omitempty"`
+	Description   string                 `protobuf:"bytes,5,opt,name=description,proto3" json:"description,omitempty"`
+	Initial       string                 `protobuf:"bytes,1,opt,name=initial,proto3" json:"initial,omitempty"`
+	States        []*LifecycleState      `protobuf:"bytes,2,rep,name=states,proto3" json:"states,omitempty"`
+	Transitions   []*LifecycleTransition `protobuf:"bytes,3,rep,name=transitions,proto3" json:"transitions,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Lifecycle) Reset() {
@@ -982,13 +980,6 @@ func (x *Lifecycle) GetDescription() string {
 	return ""
 }
 
-func (x *Lifecycle) GetRestInEditable() bool {
-	if x != nil {
-		return x.RestInEditable
-	}
-	return false
-}
-
 func (x *Lifecycle) GetInitial() string {
 	if x != nil {
 		return x.Initial
@@ -1014,8 +1005,8 @@ type LifecycleState struct {
 	state       protoimpl.MessageState `protogen:"open.v1"`
 	Name        string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	Description string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
-	// editable states are working states held through a change
-	Editable      bool `protobuf:"varint,3,opt,name=editable,proto3" json:"editable,omitempty"`
+	// a node in a not landable state blocks the landing of its change (ADR 0078)
+	NotLandable   bool `protobuf:"varint,3,opt,name=not_landable,json=notLandable,proto3" json:"not_landable,omitempty"`
 	Final         bool `protobuf:"varint,4,opt,name=final,proto3" json:"final,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1065,9 +1056,9 @@ func (x *LifecycleState) GetDescription() string {
 	return ""
 }
 
-func (x *LifecycleState) GetEditable() bool {
+func (x *LifecycleState) GetNotLandable() bool {
 	if x != nil {
-		return x.Editable
+		return x.NotLandable
 	}
 	return false
 }
@@ -7500,18 +7491,17 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x1c\n" +
 	"\talgorithm\x18\x03 \x01(\tR\talgorithm\x12/\n" +
-	"\x06values\x18\x04 \x01(\v2\x17.google.protobuf.StructR\x06values\"\x88\x02\n" +
+	"\x06values\x18\x04 \x01(\v2\x17.google.protobuf.StructR\x06values\"\xde\x01\n" +
 	"\tLifecycle\x12\x12\n" +
 	"\x04name\x18\x04 \x01(\tR\x04name\x12 \n" +
-	"\vdescription\x18\x05 \x01(\tR\vdescription\x12(\n" +
-	"\x10rest_in_editable\x18\x06 \x01(\bR\x0erestInEditable\x12\x18\n" +
+	"\vdescription\x18\x05 \x01(\tR\vdescription\x12\x18\n" +
 	"\ainitial\x18\x01 \x01(\tR\ainitial\x128\n" +
 	"\x06states\x18\x02 \x03(\v2 .goap.registry.v1.LifecycleStateR\x06states\x12G\n" +
-	"\vtransitions\x18\x03 \x03(\v2%.goap.registry.v1.LifecycleTransitionR\vtransitions\"x\n" +
+	"\vtransitions\x18\x03 \x03(\v2%.goap.registry.v1.LifecycleTransitionR\vtransitions\"\x7f\n" +
 	"\x0eLifecycleState\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
-	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x1a\n" +
-	"\beditable\x18\x03 \x01(\bR\beditable\x12\x14\n" +
+	"\vdescription\x18\x02 \x01(\tR\vdescription\x12!\n" +
+	"\fnot_landable\x18\x03 \x01(\bR\vnotLandable\x12\x14\n" +
 	"\x05final\x18\x04 \x01(\bR\x05final\"\xd9\x03\n" +
 	"\x13LifecycleTransition\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +

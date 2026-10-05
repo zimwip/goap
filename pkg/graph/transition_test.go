@@ -40,7 +40,7 @@ func testChangeLifecycle(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	w := newLifecycleWorld(t, repo)
 	lcs := &lifecycles{world: map[string]bool{"analysed": false}, lc: domain.Lifecycle{Name: "maturity", Initial: "proposed",
-		States: []domain.LifecycleState{{Name: "proposed", Editable: true}, {Name: "analysing", Editable: true}, {Name: "implementing", Editable: true}, {Name: "done", Final: true}},
+		States: []domain.LifecycleState{{Name: "proposed"}, {Name: "analysing"}, {Name: "implementing"}, {Name: "done", Final: true}},
 		Transitions: []domain.Transition{
 			{Name: "analyse", From: "proposed", To: "analysing"},
 			{Name: "implement", From: "analysing", To: "implementing", Guard: gateGo},
@@ -169,7 +169,7 @@ func testGateVetosAndObjectives(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	w := newLifecycleWorld(t, repo)
 	lcs := &lifecycles{world: map[string]bool{"blocked": true, "docs": false}, lc: domain.Lifecycle{Name: "maturity", Initial: "proposed",
-		States: []domain.LifecycleState{{Name: "proposed", Editable: true}, {Name: "done", Final: true}},
+		States: []domain.LifecycleState{{Name: "proposed"}, {Name: "done", Final: true}},
 		Transitions: []domain.Transition{{Name: "ship", From: "proposed", To: "done",
 			Vetos:      []domain.Criterion{{Name: "no_blocker", Expr: `!world["blocked"]`}},
 			Objectives: []domain.Criterion{{Name: "docs", Expr: `world["docs"]`}}}}}}

@@ -1,5 +1,5 @@
 <script lang="ts">
-  // A lifecycle as a flow: states as boxes (current one filled, editable ones
+  // A lifecycle as a flow: states as boxes (current one filled, not landable ones
   // dashed, final ones double-bordered), transitions as labelled arrows; the ones
   // available from the current state are highlighted and can be taken.
   import type { Lifecycle, LifecycleTransition } from '../api';
@@ -158,13 +158,13 @@
       {#each states as s (s.name)}
         {@const p = boxes.get(s.name ?? '')}
         {#if p}
-          <g class="state" class:current={s.name === current} class:editable={s.editable} class:final={s.final} transform={`translate(${p.x} ${p.y})`}>
+          <g class="state" class:current={s.name === current} class:notLandable={s.notLandable} class:final={s.final} transform={`translate(${p.x} ${p.y})`}>
             <rect x={-W / 2} y={-H / 2} width={W} height={H} rx="9" />
             {#if s.final}<rect x={-W / 2 + 4} y={-H / 2 + 4} width={W - 8} height={H - 8} rx="6" class="inner" />{/if}
-            <text y={s.editable || s.name === stored ? -1 : 4} text-anchor="middle" class="n">{s.name}</text>
-            {#if s.editable}<text y="12" text-anchor="middle" class="c">editable · working state</text>{:else if s.name === stored && stored !== current}<text y="12" text-anchor="middle" class="c">stored version</text>{/if}
+            <text y={s.notLandable || s.name === stored ? -1 : 4} text-anchor="middle" class="n">{s.name}</text>
+            {#if s.notLandable}<text y="12" text-anchor="middle" class="c">not landable</text>{:else if s.name === stored && stored !== current}<text y="12" text-anchor="middle" class="c">stored version</text>{/if}
             {#if s.name === lifecycle.initial}<circle cx={-W / 2 - 12} cy="0" r="4" class="init" />{/if}
-            <title>{s.name}{s.description ? ` — ${s.description}` : ''}{s.editable ? ' (editable)' : ''}{s.final ? ' (final)' : ''}</title>
+            <title>{s.name}{s.description ? ` — ${s.description}` : ''}{s.notLandable ? ' (not landable)' : ''}{s.final ? ' (final)' : ''}</title>
           </g>
         {/if}
       {/each}
@@ -173,7 +173,7 @@
 
   <div class="legend hint">
     <span><i class="sw cur"></i> current</span>
-    <span><i class="sw ed"></i> editable (working state: only held through a change)</span>
+    <span><i class="sw ed"></i> not landable (a change cannot land with a node in this state)</span>
     <span><i class="sw fin"></i> final</span>
     <span><i class="sw ini"></i> initial</span>
   </div>
@@ -185,7 +185,7 @@
       {#each transitions as t (`${t.name}|${t.from}|${t.to}`)}
         <tr class:avail={t.from === current}>
           <td><strong>{t.name}</strong></td>
-          <td><span class="pill">{t.from}</span> → <span class="pill">{t.to}</span>{#if stateOf(t.to ?? '')?.editable}<span class="hint"> reopens</span>{/if}</td>
+          <td><span class="pill">{t.from}</span> → <span class="pill">{t.to}</span>{#if stateOf(t.to ?? '')?.notLandable}<span class="hint"> not landable</span>{/if}</td>
           <td class="hint">
             {t.permission ? `permission ${t.permission}` : 'node:transition'}
             {#if t.requiresAttributes?.length}· attributes {t.requiresAttributes.join(', ')}{/if}
@@ -224,7 +224,7 @@
   .state .inner {
     fill: none;
   }
-  .state.editable rect {
+  .state.notLandable rect {
     stroke: var(--warn);
     stroke-dasharray: 5 3;
   }

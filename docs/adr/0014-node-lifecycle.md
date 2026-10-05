@@ -1,6 +1,6 @@
 # ADR 0014 — Node lifecycle, change attachment and documents
 
-**Status**: accepted, implemented · **Date**: 2026-09
+**Status**: accepted, implemented · **Date**: 2026-09 · §1 and §3 (the `editable` flag) superseded in part by ADR 0078
 
 ## Context
 
@@ -48,7 +48,7 @@ the intent without any rule. Compared with plm-core, aifact and ailm, the missin
    their new state), must be in one of the states.
 7. **Direct writes are closed** for lifecycle types: `CreateNode`, `UpdateNode` and `CreateLink`
    RPCs refuse them (`FailedPrecondition`); in-process seeds and imports keep the Go API.
-8. **Blackboard.** Node views carry `state` and `editable` in CEL (`node.state`, `node.editable`); the DSL writes a
+8. **Blackboard.** Node views carry `state` and `editable` (now `landable`) in CEL (`node.state`, `node.landable` (ADR 0078)); the DSL writes a
    state with `ctx.writeNode(node, {state})` (docs/dsl.md).
 
 ## Consequences

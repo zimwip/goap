@@ -17,7 +17,7 @@ type lcWorld struct {
 	reqLC, specLC    domain.Lifecycle
 }
 
-// Requirement: proposed → draft (editable) → approved → draft…; a Spec document
+// Requirement: proposed → draft (not landable) → approved → draft…; a Spec document
 // contains requirements and can only be released when they are all approved.
 func newLifecycleWorld(t *testing.T, repo Repo) lcWorld { return newLifecycleWorldG(t, repo, "") }
 
@@ -26,14 +26,14 @@ func newLifecycleWorldG(t *testing.T, repo Repo, approveGuard string) lcWorld {
 	ctx := context.Background()
 	w := lcWorld{g: New(repo)}
 	w.reqLC = domain.Lifecycle{Initial: "proposed",
-		States: []domain.LifecycleState{{Name: "proposed"}, {Name: "draft", Editable: true}, {Name: "approved"}},
+		States: []domain.LifecycleState{{Name: "proposed"}, {Name: "draft", NotLandable: true}, {Name: "approved"}},
 		Transitions: []domain.Transition{
 			{Name: "start", From: "proposed", To: "draft"},
 			{Name: "approve", From: "draft", To: "approved", Guard: approveGuard, Requires: domain.TransitionRequires{Attributes: []string{"title"}}},
 			{Name: "reopen", From: "approved", To: "draft"},
 		}}
 	w.specLC = domain.Lifecycle{Initial: "released",
-		States: []domain.LifecycleState{{Name: "draft", Editable: true}, {Name: "released"}},
+		States: []domain.LifecycleState{{Name: "draft", NotLandable: true}, {Name: "released"}},
 		Transitions: []domain.Transition{
 			{Name: "reopen", From: "released", To: "draft"},
 			{Name: "release", From: "draft", To: "released", Children: &domain.ChildrenRule{States: []string{"approved"}}},
@@ -95,13 +95,13 @@ func (w lcWorld) accept(t *testing.T, c domain.Change) {
 }
 
 // A change scoped to an Activity (architecture plan "Activity concept") is gated by its own goal condition
-// (Graph.LandingGate), not the node-type lifecycle's Editable floor: the activity's call on content/state
-// maturity replaces the blanket "not editable" check, rather than adding to it.
-func TestActivityGoalsGateReplacesEditableFloor(t *testing.T) {
-	forEachRepo(t, testActivityGoalsGateReplacesEditableFloor)
+// (Graph.LandingGate), not the node-type lifecycle's landable-state floor: the activity's call on content/state
+// maturity replaces the blanket "state cannot land" check, rather than adding to it.
+func TestActivityGoalsGateReplacesLandableFloor(t *testing.T) {
+	forEachRepo(t, testActivityGoalsGateReplacesLandableFloor)
 }
 
-func testActivityGoalsGateReplacesEditableFloor(t *testing.T, repo Repo) {
+func testActivityGoalsGateReplacesLandableFloor(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	w := newLifecycleWorld(t, repo)
 	c, err := w.g.CreateChange(ctx, NewChange{Title: "edit REQ-2", BaselineID: w.base.ID, Data: map[string]any{"scope": "deliver/draft-requirement"}})
@@ -116,9 +116,9 @@ func testActivityGoalsGateReplacesEditableFloor(t *testing.T, repo Repo) {
 	}
 	w.accept(t, c)
 
-	// no hook registered: the Editable floor still applies, exactly as for a change the gate does not decide
-	if _, err := w.g.Apply(ctx, c.ID, ""); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "editable state") {
-		t.Fatalf("no hook: editable floor must still apply: %v", err)
+	// no hook registered: the landable-state floor still applies, exactly as for a change the gate does not decide
+	if _, err := w.g.Apply(ctx, c.ID, ""); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "cannot land") {
+		t.Fatalf("no hook: landable floor must still apply: %v", err)
 	}
 
 	var gotRef string
@@ -133,7 +133,7 @@ func testActivityGoalsGateReplacesEditableFloor(t *testing.T, repo Repo) {
 		return true, met, nil
 	}
 
-	// the hook says no: refused, by the activity's own message, not the editable one
+	// the hook says no: refused, by the activity's own message, not the landable-state one
 	if _, err := w.g.Apply(ctx, c.ID, ""); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "does not satisfy the goal") {
 		t.Fatalf("hook unmet: %v", err)
 	}
@@ -149,10 +149,10 @@ func testActivityGoalsGateReplacesEditableFloor(t *testing.T, repo Repo) {
 		t.Fatalf("blackboard must see this change's own pending write: %+v, ok=%v", v, ok)
 	}
 
-	// the hook says yes: applies even though REQ-2 is left in the editable "draft" state
+	// the hook says yes: applies even though REQ-2 is left in the not landable "draft" state
 	met = true
 	if _, err := w.g.Apply(ctx, c.ID, ""); err != nil {
-		t.Fatalf("hook met: the activity goal replaces the editable floor: %v", err)
+		t.Fatalf("hook met: the activity goal replaces the landable floor: %v", err)
 	}
 	if n, err := stateOf(t, w.g, w.req2.ID); err != nil || n.State != "draft" {
 		t.Fatalf("REQ-2 must land in draft: %+v %v", n, err)
@@ -176,12 +176,9 @@ func testLifecycleReopenEditAndApprove(t *testing.T, repo Repo) {
 	c := w.change(t, "edit REQ-1")
 	id := w.declare(t, c, w.req1)
 
-	// an approved node is not editable
-	if err := w.write(c, id, edit{Properties: map[string]any{"title": "x"}}); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "not editable") {
-		t.Fatalf("editing an approved node must be refused: %v", err)
-	}
-	// reopen, edit, approve, all in the change
-	for _, step := range []edit{{State: "draft"}, {Properties: map[string]any{"title": "one v2"}}} {
+	// an approved node is edited in the change like any other: edits are allowed in any state (ADR 0078)
+	// edit, reopen, edit again, approve, all in the change
+	for _, step := range []edit{{Properties: map[string]any{"title": "x"}}, {State: "draft"}, {Properties: map[string]any{"title": "one v2"}}} {
 		if err := w.write(c, id, step); err != nil {
 			t.Fatal(err)
 		}
@@ -194,18 +191,23 @@ func testLifecycleReopenEditAndApprove(t *testing.T, repo Repo) {
 	if cs, _ := w.g.NodeChanges(ctx, w.req1.ID); len(cs) != 1 || cs[0].ID != c.ID {
 		t.Fatalf("node changes: %+v", cs)
 	}
-	// leaving the node in draft is refused at Apply
-	if _, err := w.g.Apply(ctx, c.ID, ""); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "editable state") {
-		t.Fatalf("apply must refuse an editable leftover: %v", err)
+	// leaving the node in draft (not landable) is refused at Apply, the node listed with its state
+	if _, err := w.g.Apply(ctx, c.ID, ""); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "move them to a landable state first") || !strings.Contains(err.Error(), "REQ-1 (Requirement) in draft") {
+		t.Fatalf("apply must refuse a node left in a state that cannot land, naming it: %v", err)
+	}
+	// the refusal leaves the change as it was: the node is still edited in its not landable state, then moved
+	if err := w.write(c, id, edit{Properties: map[string]any{"title": "one v3"}}); err != nil {
+		t.Fatalf("editing in a not landable state: %v", err)
 	}
 	if err := w.write(c, id, edit{State: "approved"}); err != nil {
 		t.Fatal(err)
 	}
+	w.accept(t, c) // the edit sent the review back to proposed (ADR 0077)
 	if _, err := w.g.Apply(ctx, c.ID, ""); err != nil {
 		t.Fatal(err)
 	}
 	n, err := stateOf(t, w.g, w.req1.ID)
-	if err != nil || n.State != "approved" || n.Properties["title"] != "one v2" || n.ChangeID != c.ID {
+	if err != nil || n.State != "approved" || n.Properties["title"] != "one v3" || n.ChangeID != c.ID {
 		t.Fatalf("REQ-1 after apply: %+v %v", n, err)
 	}
 	// persisted versions keep their state
@@ -312,7 +314,7 @@ func testLifecycleImpactNodeCreate(t *testing.T, repo Repo) {
 		t.Fatalf("no transition proposed → approved: %v", err)
 	}
 	c := w.change(t, "create")
-	// created in the (non-editable) initial state
+	// created in the (landable) initial state
 	if err := create(c, "REQ-9", ""); err != nil {
 		t.Fatal(err)
 	}
@@ -323,13 +325,13 @@ func testLifecycleImpactNodeCreate(t *testing.T, repo Repo) {
 	if n, err := w.g.NodeByKey(ctx, "", "REQ-9"); err != nil || n.State != "proposed" {
 		t.Fatalf("created node: %+v %v", n, err)
 	}
-	// created directly in an editable state: refused when applied
+	// created directly in a not landable state: refused when applied
 	c = w.change(t, "create draft")
 	if err := create(c, "REQ-10", "draft"); err != nil {
 		t.Fatal(err)
 	}
 	w.accept(t, c)
-	if _, err := w.g.Apply(ctx, c.ID, ""); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "editable state") {
+	if _, err := w.g.Apply(ctx, c.ID, ""); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "REQ-10 (Requirement) in draft") {
 		t.Fatalf("a created node in draft must be refused: %v", err)
 	}
 }
