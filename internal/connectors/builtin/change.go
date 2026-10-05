@@ -16,6 +16,7 @@ import (
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/mcp"
+	"github.com/zimwip/goap/pkg/mcpbuiltin"
 )
 
 // Change is the goap-change connector: it works on a change, the blackboard every modification of
@@ -63,7 +64,7 @@ var changeOps = []op{
 
 // Info implements connectorkit.Connector.
 func (Change) Info() *connectorv1.ConnectorInfo {
-	return info(mcp.BuiltinChange, "Changes of the platform, the blackboard of every modification, worked on for the caller (built in).", changeOps)
+	return info(mcpbuiltin.Change, "Changes of the platform, the blackboard of every modification, worked on for the caller (built in).", changeOps)
 }
 
 // changeID is the change a call names, else the change of the calling process.
@@ -355,7 +356,7 @@ func (c Change) create(ctx context.Context, who authz.Principal, a args) (map[st
 		return nil, fmt.Errorf("head of main of %s: %w", ns, err)
 	}
 	ch, err := c.p.Graph.CreateChange(ctx, graph.NewChange{Title: title, Intent: intent, Methodology: a.str("methodology"), Namespace: ns,
-		BaselineID: head.ID, OwnerOrg: a.unit(ctx, who), Data: map[string]any{"createdBy": who.Subject, "via": mcp.BuiltinChange}})
+		BaselineID: head.ID, OwnerOrg: a.unit(ctx, who), Data: map[string]any{"createdBy": who.Subject, "via": mcpbuiltin.Change}})
 	if err != nil {
 		return nil, err
 	}
@@ -462,7 +463,7 @@ func producer(ctx context.Context) string {
 	if p := mcp.CallFrom(ctx).Process; p != "" {
 		return p
 	}
-	return mcp.BuiltinChange
+	return mcpbuiltin.Change
 }
 
 func changeSummary(c domain.Change) map[string]any {

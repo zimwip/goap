@@ -19,7 +19,7 @@ by removing a node the way every other grant is, and didn't show up next to "rea
 
 ## Decision
 
-- **"admin" joins `pkg/mcp.BuiltinRoles()`.** It is granted the same way "reader" is: an `organisation@Assignment`
+- **"admin" joins `access.BuiltinRoles()`.** It is granted the same way "reader" is: an `organisation@Assignment`
   with `assigns_org` and no `assigns_project`, naming `access.RoleAdmin` ("admin") among its `roles`. It can be
   granted to a unit, not only a single `User` — ADR 0043's `assigns_org` already accepted either (`User` extends
   `OrgUnit`).

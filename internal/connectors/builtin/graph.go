@@ -12,7 +12,7 @@ import (
 	"github.com/zimwip/goap/internal/connectorkit"
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
-	"github.com/zimwip/goap/pkg/mcp"
+	"github.com/zimwip/goap/pkg/mcpbuiltin"
 )
 
 // Graph is the goap-graph connector: reads of the versioned graph, as of the head of the main branch
@@ -31,7 +31,7 @@ var graphOps = []op{
 
 // Info implements connectorkit.Connector.
 func (Graph) Info() *connectorv1.ConnectorInfo {
-	return info(mcp.BuiltinGraph, "The versioned graph of the platform, read for the caller (built in).", graphOps)
+	return info(mcpbuiltin.Graph, "The versioned graph of the platform, read for the caller (built in).", graphOps)
 }
 
 // view is the graph of a baseline as the caller may see it.

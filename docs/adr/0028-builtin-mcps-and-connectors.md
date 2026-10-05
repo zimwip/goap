@@ -15,7 +15,7 @@ unit may use them).
 ## Decision
 
 ### 1. Four built-in MCPs, split by concern
-The platform is exposed as four MCPs of the `platform` namespace (`pkg/mcp/builtin.go`), each with a connector
+The platform is exposed as four MCPs of the `platform` namespace (`pkg/mcpbuiltin/builtin.go`), each with a connector
 of the same name:
 
 | MCP | Tools | What it is for |
@@ -84,7 +84,7 @@ An `organisation@Adapter` node gains four properties (organisation domain 1.4.0)
 `deny`, `readOnly`. An instance may **only restrict** (no `adapter`): the implementation is then the one of the
 nearest ancestor. Resolution (`mcpsvc.Snapshot`):
 - the **implementation** is the nearest instance of the chain that names an adapter (unchanged);
-- the **restriction** is the sum of every instance of the chain (`mcp.Restriction`): disabled anywhere disables,
+- the **restriction** is the sum of every instance of the chain (`adapter.Restriction`): disabled anywhere disables,
   allow-lists intersect, deny-lists and read-only add up. A unit narrows what it inherits and passes it down to its
   sub-units; a sub-unit **cannot widen** it (rule 3: responsibility flows down).
 

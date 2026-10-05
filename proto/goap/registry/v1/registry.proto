@@ -160,15 +160,15 @@ message AlgorithmParam {
 message Algorithm {
   string name = 1;
   string description = 2;
-  // property_validator | transition_guard | transition_action | adapter
+  // property_validator | node_validator | transition_guard | transition_action
   string type = 3;
   // javascript | go
   string language = 4;
   string code = 5;
   repeated AlgorithmParam params = 6;
-  // adapters only: the MCP whose tools the code implements and the connector whose operations it calls
-  string mcp = 7;
-  string connector = 8;
+  // 7 and 8 were the MCP and connector of an adapter: adapters are not domain algorithms (ADR 0061)
+  reserved 7, 8;
+  reserved "mcp", "connector";
 }
 
 // AlgorithmInstance sets the parameter values of an algorithm; it is what gets plugged.

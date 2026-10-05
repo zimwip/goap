@@ -39,7 +39,7 @@ type Structure struct {
 }
 
 // The structures of the built-in organisation domain (domains/builtin/organisation.yaml): the one place their names
-// are written in Go; the services reading the organisation (pkg/access, pkg/mcp) name them through these.
+// are written in Go; the services reading the organisation (pkg/access, internal/mcpsvc) name them through these.
 const (
 	NamespaceOrganisation = "organisation"
 	TypeOrgUnit           = "organisation@OrgUnit"

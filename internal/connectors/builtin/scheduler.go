@@ -18,6 +18,7 @@ import (
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/mcp"
+	"github.com/zimwip/goap/pkg/mcpbuiltin"
 )
 
 // EngineAPI is the part of the engine service goap-scheduler calls. The engine service handler (one
@@ -49,7 +50,7 @@ var schedulerOps = []op{
 
 // Info implements connectorkit.Connector.
 func (Scheduler) Info() *connectorv1.ConnectorInfo {
-	return info(mcp.BuiltinScheduler, "Processes and triggers of the engine, run for the caller (built in).", schedulerOps)
+	return info(mcpbuiltin.Scheduler, "Processes and triggers of the engine, run for the caller (built in).", schedulerOps)
 }
 
 // request makes a request carrying the identity of the caller.

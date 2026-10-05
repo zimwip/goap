@@ -16,12 +16,11 @@ import (
 
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/graphsnap"
-	"github.com/zimwip/goap/pkg/mcp"
 )
 
 // Types and namespace of the graph objects.
 const (
-	NamespacePlatform = mcp.NamespacePlatform
+	NamespacePlatform = domain.NamespacePlatform
 	NodeTypeProvider  = "platform@LlmProvider"
 	NodeTypeModel     = "platform@LlmModel"
 	NodeTypeAlias     = "platform@LlmAlias"

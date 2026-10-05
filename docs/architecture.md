@@ -827,8 +827,8 @@ Connector  a service of its own wrapping a real API (connector-localfs, connecto
            itself with the hub and announces its configuration parameters, secrets and the operations it
            exposes (list_dir, read_file, ...). Knows no MCP, no adapter.
 Adapter    the code that makes the two work together: it implements the tools the MCP expects with the
-           operations the connector exposes. An `AdapterDef` node of the `platform` namespace (usage
-           `adapter`, changed through a change), for one MCP and one connector, with typed parameters. Each
+           operations the connector exposes. An `AdapterDef` node of the `platform` namespace (`pkg/adapter`,
+           changed through a change; not a domain algorithm), for one MCP and one connector, with typed parameters. Each
            organisational unit holds an INSTANCE (an `Adapter` node of the `organisation` namespace, owned by
            the unit: the owner of its version, ADR 0054): the name of the definition and the parameter values.
            Where everything converges.
@@ -944,7 +944,7 @@ fixed `GOAP_DEV_PROJECT` env var instead, like `GOAP_DEV_ORG`). Assignment has n
 parametrized by which side is fixed) offers a "+ Assignment" action, and each explorer's context menu
 offers "New assignment", opening the entity's tab with that pane pre-opened.
 
-**Not implemented**: OrgUnit-side action restriction on a project (mirroring `mcp.Restriction`'s shape,
+**Not implemented**: OrgUnit-side action restriction on a project (mirroring `adapter.Restriction`'s shape,
 ADR 0028) — an Assignment grants roles but cannot yet narrow which actions a unit may run locally.
 
 ### 3.9b2 Structures, bootstrap and the guard of the graph ([ADR 0054](adr/0054-structures-bootstrap-and-the-graph-guard.md))
@@ -1245,7 +1245,12 @@ pkg/goap/                    A* planner
 pkg/condition/               CEL compilation/evaluation, `expects` compilation
 pkg/intent/                  intent loop (lexical Ranker, LLM Ranker)
 pkg/engine/                  processes, agents and planners, action executors, DSL host, sub-agents, events
-pkg/dsl/                     script action DSL (ctx API, JavaScript and Go interpreters)
+pkg/dsl/                     script action DSL (ctx API, JavaScript and Go interpreters); the adapter script context too (`RunAdapter`)
+pkg/algo/                    generic algorithm model of the domains (usages, typed params, instances, binding); knows no MCP, connector or secret
+pkg/mcp/                     MCP definition (tools, scopes, call context); knows no connector, adapter or organisation
+pkg/adapter/                 the adapter, where organisation, MCP and connector meet: `Def`, `Instance`, `Restriction`, code template, secret params (ADR 0061)
+pkg/mcpbuiltin/              schemas of the built-in MCPs and their adapters (ADR 0028, 0061)
+pkg/layering/                test of the dependency rules between these packages
 internal/sandbox/            sandbox pool, provisioners (process, docker, kubernetes), RuntimeService, runner
 internal/telemetry/          OpenTelemetry: exporters, interceptors, process / action / LLM / tool spans
 pkg/domain/def/              domain definition model (ADR 0060): Domain, Schema, node / link types, attributes, enums, lifecycles, algorithms; built-in domains, validation, YAML import/export

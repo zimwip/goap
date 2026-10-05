@@ -8,10 +8,11 @@ import (
 	"github.com/zimwip/goap/internal/connectorkit"
 	"github.com/zimwip/goap/internal/mcpsvc"
 	"github.com/zimwip/goap/pkg/access"
+	"github.com/zimwip/goap/pkg/adapter"
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/domain/def"
-	"github.com/zimwip/goap/pkg/mcp"
+	"github.com/zimwip/goap/pkg/mcpbuiltin"
 	"github.com/zimwip/goap/pkg/methodology"
 )
 
@@ -19,7 +20,7 @@ import (
 type Hub interface {
 	Effective(ctx context.Context, unit string) (chain []string, out []mcpsvc.Effective, err error)
 	Connectors(ctx context.Context) ([]mcpsvc.ConnectorView, error)
-	ConnectorOf(ctx context.Context, a mcp.Adapter) string
+	ConnectorOf(ctx context.Context, a adapter.Instance) string
 }
 
 // Registry lists the published domains and methodologies (the registry service, or its client).
@@ -46,7 +47,7 @@ var adminOps = []op{
 
 // Info implements connectorkit.Connector.
 func (Admin) Info() *connectorv1.ConnectorInfo {
-	return info(mcp.BuiltinAdmin, "Description of the platform: organisation, users, MCPs, connectors, domains, methodologies (built in).", adminOps)
+	return info(mcpbuiltin.Admin, "Description of the platform: organisation, users, MCPs, connectors, domains, methodologies (built in).", adminOps)
 }
 
 // resource of each operation, read-authorized for the caller
@@ -82,7 +83,7 @@ func (c Admin) Invoke(ctx context.Context, op string, raw, _ map[string]any, _ m
 			for _, t := range e.Allowed().Tools {
 				tools = append(tools, t.Name)
 			}
-			list = append(list, map[string]any{"mcp": e.MCP.Name, "description": e.MCP.Description, "builtin": mcp.IsBuiltin(e.MCP.Name),
+			list = append(list, map[string]any{"mcp": e.MCP.Name, "description": e.MCP.Description, "builtin": mcpbuiltin.Is(e.MCP.Name),
 				"adapter": e.Adapter.Adapter, "definedIn": e.Adapter.Unit, "inherited": e.Inherited, "connector": c.p.Hub.ConnectorOf(ctx, e.Adapter),
 				"tools": tools, "restrictedBy": e.Restriction.By, "disabled": e.Restriction.Disabled})
 		}
@@ -99,7 +100,7 @@ func (c Admin) Invoke(ctx context.Context, op string, raw, _ map[string]any, _ m
 				ops = append(ops, o.Name)
 			}
 			list = append(list, map[string]any{"id": r.Info.GetId(), "version": r.Info.GetVersion(), "description": r.Info.GetDescription(),
-				"operations": ops, "live": r.Live, "lastSeen": r.LastSeen, "builtin": mcp.IsBuiltin(r.Info.GetId())})
+				"operations": ops, "live": r.Live, "lastSeen": r.LastSeen, "builtin": mcpbuiltin.Is(r.Info.GetId())})
 		}
 		return result(map[string]any{"connectors": list})
 	case "domains":
@@ -136,7 +137,7 @@ func (c Admin) Invoke(ctx context.Context, op string, raw, _ map[string]any, _ m
 
 // organisation lists the units or the users of the head of the organisation namespace.
 func (c Admin) organisation(ctx context.Context, op, unit string) (map[string]any, error) {
-	head, err := c.p.Graph.BranchHead(ctx, mcp.NamespaceOrganisation, domain.MainBranch)
+	head, err := c.p.Graph.BranchHead(ctx, domain.NamespaceOrganisation, domain.MainBranch)
 	if err != nil {
 		return nil, err
 	}
@@ -152,7 +153,7 @@ func (c Admin) organisation(ctx context.Context, op, unit string) (map[string]an
 	for _, l := range links {
 		from, to := byRef[l.From], byRef[l.To]
 		switch {
-		case l.Type == mcp.LinkPartOf && from.Type == mcp.NodeTypeOrgUnit:
+		case l.Type == domain.LinkPartOf && from.Type == domain.TypeOrgUnit:
 			parent[from.Key] = to.Key
 		case l.Type == access.LinkMemberOf && from.Type == access.NodeTypeUser:
 			member[from.Key] = to.Key
@@ -164,7 +165,7 @@ func (c Admin) organisation(ctx context.Context, op, unit string) (map[string]an
 			continue
 		}
 		switch {
-		case op == "units" && n.Type == mcp.NodeTypeOrgUnit:
+		case op == "units" && n.Type == domain.TypeOrgUnit:
 			u := map[string]any{"key": n.Key, "name": n.Properties["name"], "kind": n.Properties["kind"]}
 			if p := parent[n.Key]; p != "" {
 				u["parent"] = p

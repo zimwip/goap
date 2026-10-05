@@ -14,9 +14,11 @@ import (
 	"github.com/zimwip/goap/gen/goap/mcp/v1/mcpv1connect"
 	"github.com/zimwip/goap/internal/identity"
 	"github.com/zimwip/goap/internal/pbconv"
+	"github.com/zimwip/goap/pkg/adapter"
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/mcp"
+	"github.com/zimwip/goap/pkg/mcpbuiltin"
 )
 
 // Handler implements mcpv1connect.McpServiceHandler.
@@ -99,16 +101,16 @@ func defToPB(d mcp.Def) *mcpv1.Mcp {
 	return out
 }
 
-func adapterToPB(a mcp.Adapter) *mcpv1.Adapter {
+func adapterToPB(a adapter.Instance) *mcpv1.Adapter {
 	return &mcpv1.Adapter{Unit: a.Unit, Mcp: a.MCP, Adapter: a.Adapter, Params: pbconv.Struct(a.Params),
 		Disabled: a.Disabled, Tools: a.Tools, Deny: a.Deny, ReadOnly: a.ReadOnly}
 }
 
-func adapterFromPB(a *mcpv1.Adapter) mcp.Adapter {
+func adapterFromPB(a *mcpv1.Adapter) adapter.Instance {
 	if a == nil {
-		return mcp.Adapter{}
+		return adapter.Instance{}
 	}
-	return mcp.Adapter{Unit: a.Unit, MCP: a.Mcp, Adapter: a.Adapter, Params: pbconv.Map(a.Params),
+	return adapter.Instance{Unit: a.Unit, MCP: a.Mcp, Adapter: a.Adapter, Params: pbconv.Map(a.Params),
 		Disabled: a.Disabled, Tools: a.Tools, Deny: a.Deny, ReadOnly: a.ReadOnly}
 }
 
@@ -175,7 +177,7 @@ func (h *Handler) ListEffective(ctx context.Context, r *connect.Request[mcpv1.Li
 	out := &mcpv1.ListEffectiveResponse{Chain: chain}
 	for _, e := range eff {
 		em := &mcpv1.EffectiveMcp{Mcp: defToPB(e.MCP), Adapter: adapterToPB(e.Adapter), Inherited: e.Inherited,
-			Connector: h.Service.ConnectorOf(ctx, e.Adapter), RestrictedBy: e.Restriction.By, Disabled: e.Restriction.Disabled, Builtin: mcp.IsBuiltin(e.MCP.Name)}
+			Connector: h.Service.ConnectorOf(ctx, e.Adapter), RestrictedBy: e.Restriction.By, Disabled: e.Restriction.Disabled, Builtin: mcpbuiltin.Is(e.MCP.Name)}
 		for _, t := range e.Allowed().Tools {
 			em.AllowedTools = append(em.AllowedTools, t.Name)
 		}

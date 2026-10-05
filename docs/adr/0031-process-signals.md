@@ -40,7 +40,7 @@ payload-carrying fact that something else reacts to. `pkg/domain/change.go` gain
 `KindSignal ItemKind = "signal"` and `ChangeItem.Target string` (a process id the signal
 addresses; `""` = broadcast) — no storage migration, `ChangeItem` is already the JSON payload of
 a `change_log` row (ADR 0030). `Ctx.Signal(name, data, target)` (`pkg/dsl/dsl.go`) and a new
-`goap-change/signal` tool (`internal/connectors/builtin/change.go`, `pkg/mcp/builtin.go`) both
+`goap-change/signal` tool (`internal/connectors/builtin/change.go`, `pkg/mcpbuiltin/builtin.go`) both
 write it, mirroring the existing `AddArtifact`/`note` paths.
 
 On the read side, `"change.signal"` was added to `methodology.TriggerEvents`

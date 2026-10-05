@@ -1,8 +1,9 @@
-package mcp
+package adapter
 
 import (
-	"context"
 	"slices"
+
+	"github.com/zimwip/goap/pkg/mcp"
 )
 
 // Restriction is what the adapter instances of a unit's chain leave of an MCP (ADR 0028). Every
@@ -22,7 +23,7 @@ type Restriction struct {
 }
 
 // Add adds the restrictions of an instance of the chain.
-func (r *Restriction) Add(a Adapter) {
+func (r *Restriction) Add(a Instance) {
 	if !a.Restricts() {
 		return
 	}
@@ -44,7 +45,7 @@ func (r *Restriction) Add(a Adapter) {
 }
 
 // Allows reports whether a tool of the MCP is allowed.
-func (r Restriction) Allows(t Tool) bool {
+func (r Restriction) Allows(t mcp.Tool) bool {
 	switch {
 	case r.Disabled, r.ReadOnly && !t.ReadOnly, slices.Contains(r.Deny, t.Name):
 		return false
@@ -55,7 +56,7 @@ func (r Restriction) Allows(t Tool) bool {
 }
 
 // Apply returns the definition with only the allowed tools.
-func (r Restriction) Apply(d Def) Def {
+func (r Restriction) Apply(d mcp.Def) mcp.Def {
 	out := d
 	out.Tools = nil
 	for _, t := range d.Tools {
@@ -64,36 +65,4 @@ func (r Restriction) Apply(d Def) Def {
 		}
 	}
 	return out
-}
-
-// CallContext is what a tool call runs for: the unit holding the change, the change and the
-// process. Built-in connectors read it (the change a goap-change tool edits by default); the engine
-// sets Change and Process, the hub sets Unit.
-type CallContext struct {
-	Unit    string `json:"unit,omitempty"`
-	Change  string `json:"change,omitempty"`
-	Process string `json:"process,omitempty"`
-}
-
-type callKey struct{}
-
-// WithCall returns ctx carrying the call context; empty fields keep the ones ctx already carries.
-func WithCall(ctx context.Context, c CallContext) context.Context {
-	cur := CallFrom(ctx)
-	if c.Unit == "" {
-		c.Unit = cur.Unit
-	}
-	if c.Change == "" {
-		c.Change = cur.Change
-	}
-	if c.Process == "" {
-		c.Process = cur.Process
-	}
-	return context.WithValue(ctx, callKey{}, c)
-}
-
-// CallFrom returns the call context of ctx.
-func CallFrom(ctx context.Context) CallContext {
-	c, _ := ctx.Value(callKey{}).(CallContext)
-	return c
 }
