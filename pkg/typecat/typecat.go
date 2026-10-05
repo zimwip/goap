@@ -49,6 +49,9 @@ type Type struct {
 	Requires []domain.RequiredLink
 	// AdminOnly: the nodes are written by platform administrators only (own or inherited, ADR 0068).
 	AdminOnly bool
+	// AdditionalProperties: the nodes may carry properties that are no attribute of the type (own or inherited, strict
+	// attributes opt-out).
+	AdditionalProperties bool
 }
 
 // Attribute is a resolved attribute of a node type.
@@ -332,6 +335,9 @@ func resolve(ref domain.TypeRef, decl map[domain.TypeRef]declared) (*Type, error
 		if dc.t.AdminOnly {
 			t.AdminOnly = true
 		}
+		if dc.t.AdditionalProperties {
+			t.AdditionalProperties = true
+		}
 	}
 	// ancestors first for what accumulates
 	requireAt := map[string]int{}
@@ -429,6 +435,17 @@ func (c *Catalog) AttributeChecks(typ string) []domain.AttributeCheck {
 		return nil
 	}
 	return attributeChecks(t.Attributes)
+}
+
+// AttributeNames are the names of the attributes of a node type, ancestors included, and whether the type is open: a
+// node of an open type may carry other properties (`additionalProperties: true`, or a type the catalogue does not
+// know). A node of a closed type carries attributes only (graph.TypeCatalog).
+func (c *Catalog) AttributeNames(typ string) (names []string, open bool) {
+	t, ok := c.Type(typ)
+	if !ok {
+		return nil, true
+	}
+	return t.PropertyNames(), t.AdditionalProperties
 }
 
 // LinkAttributeChecks are what the graph checks of the properties of the links of a type (graph.TypeCatalog).

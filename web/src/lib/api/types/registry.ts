@@ -64,6 +64,8 @@ export interface TypeInfo {
   ancestors?: string[];
   lifecycle?: Lifecycle;
   changeControlled?: boolean;
+  /** the nodes may carry properties that are no attribute of the type (strict attributes opt-out) */
+  additionalProperties?: boolean;
   /** IDE editor of the nodes (ADR 0027) */
   editor?: string;
   /** qualified types the nodes embed through "contains" links */
@@ -141,6 +143,8 @@ export interface NodeType {
   document?: { contains?: string[] };
   /** absent: change controlled */
   changeControlled?: boolean;
+  /** the nodes may carry properties that are no attribute of the type (a free-form type, strict attributes opt-out) */
+  additionalProperties?: boolean;
   /** node_validator instances (ADR 0018) checking a node as a whole, in call order */
   validators?: string[];
   /** properties the node index keeps (ADR 0026) */

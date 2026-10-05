@@ -10,10 +10,12 @@ import (
 )
 
 // Guard is a compiled lifecycle transition guard: a boolean CEL expression
-// over the node being moved (`node`: key, type, state, props), the nodes a
-// document contains (`children`, same shape), the change (`change`) and the
+// over the node being moved (`node`: key, type, state, props; the state it goes to), the nodes a
+// document contains (`children`, same shape), the change (`change`), the
 // impact of the node in the change (`impact`: intent, review, reviews; ADR
-// 0076: a transition that requires a review checks it there).
+// 0076: a transition that requires a review checks it there) and the draft of the node (`draft`: key, type, state, props,
+// owner, links, base, new; ADR 0079: the node has no version while the change works, the draft is what the move
+// acts on, in the state it goes to).
 //
 // The guard of a transition of the lifecycle of a change (ADR 0058) is the same language: it sees `change` and, as
 // the conditions of a methodology do, the decision points of the change (`decisionPoints`) and the world state
@@ -28,6 +30,7 @@ func guardEnv() (*cel.Env, error) {
 		cel.Variable("children", cel.ListType(cel.DynType)),
 		cel.Variable("change", cel.MapType(cel.StringType, cel.DynType)),
 		cel.Variable("impact", cel.MapType(cel.StringType, cel.DynType)),
+		cel.Variable("draft", cel.MapType(cel.StringType, cel.DynType)),
 		cel.Variable("decisionPoints", cel.ListType(cel.DynType)),
 		cel.Variable("actions", cel.ListType(cel.DynType)),
 		cel.Variable("risks", cel.ListType(cel.DynType)),
@@ -61,10 +64,10 @@ func Compile(expr string) (*Guard, error) {
 	return &Guard{prog: p}, nil
 }
 
-// Check evaluates the guard of a node transition; impact is the impact of the node in the change (nil: none). An
-// evaluation error is an error, not a false.
-func (g *Guard) Check(node map[string]any, children []any, change, impact map[string]any) (bool, error) {
-	return g.eval(node, children, change, Facts{Impact: impact}, nil)
+// Check evaluates the guard of a node transition; impact is the impact of the node in the change (nil: none) and draft
+// its draft (nil: none). An evaluation error is an error, not a false.
+func (g *Guard) Check(node map[string]any, children []any, change, impact, draft map[string]any) (bool, error) {
+	return g.eval(node, children, change, Facts{Impact: impact, Draft: draft}, nil)
 }
 
 // Facts are what the guard of a change transition reads of the blackboard besides the change.
@@ -74,8 +77,8 @@ type Facts struct {
 	// CriticalityPolicy what the organisation requires of its criticality.
 	Verifications, Derogations []any
 	CriticalityPolicy          map[string]any
-	// Impact is the impact of the moved node in the change (node transitions).
-	Impact map[string]any
+	// Impact is the impact of the moved node in the change and Draft its draft (node transitions).
+	Impact, Draft map[string]any
 }
 
 // CheckChange evaluates the guard of a transition of the lifecycle of a change (ADR 0058).
@@ -107,11 +110,14 @@ func (g *Guard) eval(node map[string]any, children []any, change map[string]any,
 	if policy == nil {
 		policy = map[string]any{}
 	}
-	impact := f.Impact
+	impact, draft := f.Impact, f.Draft
 	if impact == nil {
 		impact = map[string]any{}
 	}
-	v, _, err := g.prog.Eval(map[string]any{"node": node, "children": children, "change": change, "impact": impact, "decisionPoints": list(f.DecisionPoints), "actions": list(f.Actions), "risks": list(f.Risks),
+	if draft == nil {
+		draft = map[string]any{}
+	}
+	v, _, err := g.prog.Eval(map[string]any{"node": node, "children": children, "change": change, "impact": impact, "draft": draft, "decisionPoints": list(f.DecisionPoints), "actions": list(f.Actions), "risks": list(f.Risks),
 		"verifications": list(f.Verifications), "derogations": list(f.Derogations), "criticalityPolicy": policy, "world": world})
 	if err != nil {
 		return false, err

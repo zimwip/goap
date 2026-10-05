@@ -1,5 +1,6 @@
-// Package graphtest lands the fixtures of tests through the operations every change uses (ADR 0076): a node is created
-// in a change of its own, moved to its state in place, accepted (frozen) and applied.
+// Package graphtest lands the fixtures of tests through the operations every change uses (ADR 0076, 0079): a node is
+// created in a change of its own, moved to its state on its draft, accepted (as the tester: a fixture is a bulk
+// system path, not an edit) and applied, which writes its version.
 package graphtest
 
 import (
@@ -43,7 +44,7 @@ func Import(ctx context.Context, g *graph.Graph, in Node) (domain.Node, error) {
 		return domain.Node{}, err
 	}
 	if in.State != "" {
-		n, err := g.Node(ctx, *cn.Post)
+		n, err := g.ChangeNode(ctx, c.ID, "", *cn.Post)
 		if err != nil {
 			return domain.Node{}, err
 		}
@@ -93,7 +94,7 @@ func Edit(ctx context.Context, g *graph.Graph, node domain.NodeID, props map[str
 	if _, err := g.Apply(ctx, c.ID, ""); err != nil {
 		return cur, err
 	}
-	return g.Node(ctx, *cn.Post)
+	return g.Node(ctx, domain.NodeRef{ID: node})
 }
 
 // Link lands an outgoing link of the latest version of a node on main (Edit): the source gets a new version.
@@ -101,7 +102,7 @@ func Link(ctx context.Context, g *graph.Graph, typ string, from, to domain.NodeR
 	return Edit(ctx, g, from.ID, nil, graph.LinkWrite{Type: typ, To: to})
 }
 
-// Accept accepts a change impact of the main flow when it is proposed: accepting freezes its working version (ADR 0077).
+// Accept accepts a change impact of the main flow when it is proposed: a fixture accepts its own drafts.
 func Accept(ctx context.Context, g *graph.Graph, change domain.ChangeID, impact domain.ChangeImpactID) error {
 	impacts, err := g.ListChangeImpacts(ctx, change)
 	if err != nil {

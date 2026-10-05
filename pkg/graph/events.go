@@ -13,8 +13,8 @@ type EventSink interface {
 	Publish(ctx context.Context, subject string, v any) error
 }
 
-// Observe makes the graph publish a NodeEvent for every node version frozen (written frozen, or frozen by an accepted
-// review: a working version is edited in place until then, ADR 0076, 0077) and a BaselineEvent
+// Observe makes the graph publish a NodeEvent for every node version written (at landing, ADR 0079: a node in a change
+// is a draft, no version) and a BaselineEvent
 // for every baseline created, once the transaction that wrote them has committed. It sees every
 // write path. Publishing is best effort: the index rebuilds from the graph (Reindex) when an
 // event is lost.
@@ -32,7 +32,7 @@ type observedRepo struct {
 
 type observedTx struct {
 	Tx
-	// nodes are the versions frozen by the transaction, read again when it ends (an action may set their properties)
+	// nodes are the versions written by the transaction
 	nodes     []domain.NodeRef
 	baselines []domain.Baseline
 	// changes written in the transaction, in order: the header when it was written, else just the id
@@ -51,6 +51,9 @@ func (t *observedTx) touch(id domain.ChangeID) {
 	}
 	t.changes = append(t.changes, id)
 }
+
+// wroteLog forwards the guard's record of the log entries the transaction appended.
+func (t *observedTx) wroteLog(id domain.ChangeID) bool { return wroteLog(t.Tx, id) }
 
 func (t *observedTx) PutChange(ctx context.Context, c domain.Change) error {
 	if err := t.Tx.PutChange(ctx, c); err != nil {
@@ -85,17 +88,7 @@ func (t *observedTx) PutNode(ctx context.Context, n domain.Node) error {
 	if err := t.Tx.PutNode(ctx, n); err != nil {
 		return err
 	}
-	if !n.CheckedOut {
-		t.nodes = append(t.nodes, n.Ref())
-	}
-	return nil
-}
-
-func (t *observedTx) FreezeVersion(ctx context.Context, ref domain.NodeRef) error {
-	if err := t.Tx.FreezeVersion(ctx, ref); err != nil {
-		return err
-	}
-	t.nodes = append(t.nodes, ref)
+	t.nodes = append(t.nodes, n.Ref())
 	return nil
 }
 
@@ -266,9 +259,7 @@ func (g *Graph) republishNamespace(ctx context.Context, namespace string, sink E
 				return err
 			}
 			for _, v := range vs {
-				if !v.CheckedOut {
-					ot.nodes = append(ot.nodes, v.Ref())
-				}
+				ot.nodes = append(ot.nodes, v.Ref())
 			}
 		}
 		if head, err := branchHead(ctx, tx, namespace, domain.MainBranch); err == nil && head.ID != "" {

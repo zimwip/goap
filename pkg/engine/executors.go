@@ -84,7 +84,7 @@ Decision points of the change (a question to settle, usually which option) are i
 {"kind":"decisionPoint","decisionPoint":{"op":"rule","point":"<point id or #d1>","outcome":"decided","option":"<option name>","confidence":0.8,"justification":"why"}}
 {"kind":"decisionPoint","decisionPoint":{"op":"rule","point":"<point id>","outcome":"undecidable","justification":"why it cannot be decided","questions":["what must be known first"]}}
 {"kind":"decisionPoint","decisionPoint":{"op":"answer","questionId":"<question id>","answer":"..."}}
-A write edits the working version of the node: the first write checks it out, the next ones edit it in place. A write after an accepted review edits it again and sends the review back to proposed. A lifecycle state is a transition: in place on the working version, else a version of its own. A node is written in any state of its lifecycle; a change lands only when its nodes rest in landable states (a state flagged notLandable blocks it): move a node to a landable state with a transition once its review is accepted. A node is never deleted: removing a child is a write of its parent without the link.
+A write edits the draft of the node: the first write checks it out, the next ones edit it (no version exists until the change lands). A write never reviews: a review is an operation of its own, and a write after an accepted review sends the review back to proposed. A lifecycle state is a transition of the draft. A node is written in any state of its lifecycle; a change lands only when its nodes rest in landable states (a state flagged notLandable blocks it): move a node to a landable state with a transition once its review is accepted. A node is never deleted: removing a child is a write of its parent without the link.
 Reference nodes by their key. Reference items and change impacts created in the same answer by "#<ref>".`
 
 // PromptData is exposed to prompt templates.
@@ -439,7 +439,7 @@ func Propagate(ctx context.Context, ac ActionContext) (ActionResult, error) {
 // ApplyChange materializes the change into a new baseline (graph.apply). The
 // change is then "applied": conditions observe it through change.status and
 // change.resultBaseline. Param baselineName defaults to the change title.
-// Every impact must be accepted: applying freezes the working versions (ADR 0077);
+// Every impact must be accepted: applying writes the versions from the drafts (ADR 0079);
 // one still proposed keeps the change from applying.
 func ApplyChange(ctx context.Context, ac ActionContext) (ActionResult, error) {
 	name, _ := ac.Action.Params["baselineName"].(string)

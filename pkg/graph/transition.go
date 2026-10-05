@@ -203,8 +203,8 @@ func (g *Graph) checkGate(ctx context.Context, bb domain.Blackboard, t domain.Tr
 }
 
 // phases is the state each change impact was last written in, by replaying the journal of the transitions against
-// the impact log: the state before the first move is the one the first move leaves. A version written (created,
-// checked out, moved from a frozen version) sets it; an in-place transition of a working version does not (ADR 0077).
+// the impact log: the state before the first move is the one the first move leaves. A draft started (created, checked
+// out, installed by an adoption) sets it; an edit or a transition of the draft does not (ADR 0079).
 func (g *Graph) phases(ctx context.Context, tx Tx, c domain.Change) (map[domain.ChangeImpactID]phase, error) {
 	moves := c.StateMoves()
 	if len(moves) == 0 {
@@ -235,7 +235,7 @@ func (g *Graph) phases(ctx context.Context, tx Tx, c domain.Change) (map[domain.
 			if err := json.Unmarshal(l.Payload, &ev); err != nil {
 				return nil, err
 			}
-			if ev.WritesVersion() && ev.Flow == "" {
+			if ev.StartsDraft() && ev.Flow == "" {
 				out[ev.Impact] = phase{State: state, Seq: l.Seq}
 			}
 		}

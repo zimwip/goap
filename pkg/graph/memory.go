@@ -349,69 +349,6 @@ func (t *memTx) PutNode(_ context.Context, n domain.Node) error {
 	return nil
 }
 
-func (t *memTx) SetNodeProps(_ context.Context, ref domain.NodeRef, props map[string]any) error {
-	vs := t.st.versions[ref.ID]
-	if ref.Version < 1 || int(ref.Version) > len(vs) {
-		return fmt.Errorf("node %s: %w", ref, ErrNotFound)
-	}
-	vs[ref.Version-1].Properties = props
-	return nil
-}
-
-func (t *memTx) version(ref domain.NodeRef) (*domain.Node, error) {
-	vs := t.st.versions[ref.ID]
-	if ref.Version < 1 || int(ref.Version) > len(vs) {
-		return nil, fmt.Errorf("node %s: %w", ref, ErrNotFound)
-	}
-	return &vs[ref.Version-1], nil
-}
-
-func (t *memTx) SetNodeOwner(_ context.Context, ref domain.NodeRef, owner domain.NodeID) error {
-	n, err := t.version(ref)
-	if err != nil {
-		return err
-	}
-	n.Owner = owner
-	return nil
-}
-
-func (t *memTx) SetNodeState(_ context.Context, ref domain.NodeRef, state string) error {
-	n, err := t.version(ref)
-	if err != nil {
-		return err
-	}
-	n.State = state
-	return nil
-}
-
-func (t *memTx) FreezeVersion(_ context.Context, ref domain.NodeRef) error {
-	n, err := t.version(ref)
-	if err != nil || !n.CheckedOut {
-		return fmt.Errorf("checked-out version %s: %w", ref, ErrNotFound)
-	}
-	n.CheckedOut = false
-	return nil
-}
-
-func (t *memTx) DropWorkingVersion(_ context.Context, ref domain.NodeRef) error {
-	vs := t.st.versions[ref.ID]
-	if int(ref.Version) != len(vs) || !vs[len(vs)-1].CheckedOut {
-		return fmt.Errorf("checked-out version %s: %w", ref, ErrNotFound)
-	}
-	t.st.links = slices.DeleteFunc(t.st.links, func(l domain.Link) bool { return l.From == ref })
-	if len(vs) == 1 {
-		for k, id := range t.st.keys {
-			if id == ref.ID {
-				delete(t.st.keys, k)
-			}
-		}
-		delete(t.st.versions, ref.ID)
-		return nil
-	}
-	t.st.versions[ref.ID] = vs[:len(vs)-1]
-	return nil
-}
-
 func (t *memTx) linkAt(id domain.LinkID) (int, error) {
 	for i, l := range t.st.links {
 		if l.ID == id {
@@ -427,24 +364,6 @@ func (t *memTx) Link(_ context.Context, id domain.LinkID) (domain.Link, error) {
 		return domain.Link{}, err
 	}
 	return t.st.links[i], nil
-}
-
-func (t *memTx) DeleteLink(_ context.Context, id domain.LinkID) error {
-	i, err := t.linkAt(id)
-	if err != nil {
-		return err
-	}
-	t.st.links = slices.Delete(t.st.links, i, i+1)
-	return nil
-}
-
-func (t *memTx) SetLinkProps(_ context.Context, id domain.LinkID, props map[string]any) error {
-	i, err := t.linkAt(id)
-	if err != nil {
-		return err
-	}
-	t.st.links[i].Properties = props
-	return nil
 }
 
 func (t *memTx) PutLink(_ context.Context, l domain.Link) error {

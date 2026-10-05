@@ -2,6 +2,7 @@ package graph
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 
@@ -16,11 +17,23 @@ type cpost struct {
 	post domain.Node
 }
 
-// prepareChangeImpacts puts the versions produced by the accepted change impacts
-// into the target graph. Every change impact must have been reviewed; a rejected
-// one is left out, an accepted one must have been realized; the working version of an accepted one is frozen
-// here (ADR 0077).
+// prepareChangeImpacts writes, from the drafts of the accepted change impacts, the versions the change produces (ADR
+// 0079): a node has no version until here. Every change impact must have been reviewed; a rejected one is left out, an
+// accepted one without a draft is a confirmation (a modified node: nothing to write) or an error (a created one). The
+// versions are written on the branch of the change with their outgoing links, the links to a node of the change
+// resolved to the version this landing writes for it; they are checked when written (checkChangeImpacts), the
+// transaction being rolled back when one fails.
 func (a *applier) prepareChangeImpacts() error {
+	rows, err := a.g.drafts(a.ctx, a.tx, a.change.ID)
+	if err != nil {
+		return err
+	}
+	type landing struct {
+		cn domain.ChangeImpact
+		d  domain.Draft
+	}
+	var todo []landing
+	impacts := a.mainImpacts()
 	for _, cn := range a.change.Nodes {
 		if len(cn.Items) > 0 {
 			continue // derived from items: their proposals are applied above
@@ -34,51 +47,98 @@ func (a *applier) prepareChangeImpacts() error {
 		case domain.ReviewProposed:
 			return fmt.Errorf("change impact %s (%s) awaits its review: %w", cn.Key, cn.ID, ErrConflict)
 		}
-		if cn.Post == nil {
+		d := ownDraft(rows, cn.ID, "")
+		if d == nil {
 			if cn.Intent == domain.IntentModified {
 				continue // an impact confirmed, with no new version to write
 			}
 			return invalidf("change impact %s (%s) is accepted but its node is not written: write it or reject it", cn.Key, cn.ID)
 		}
-		if err := a.g.checkOrigins(a.ctx, a.tx, a.change.ID, a.mainImpacts(), cn); err != nil {
+		if err := a.g.checkOrigins(impacts, cn, d); err != nil {
 			return err
 		}
-		post, err := a.tx.LatestOn(a.ctx, cn.Post.ID, a.branch)
+		todo = append(todo, landing{cn, *d})
+	}
+	// 1. the versions: the next version of each node, whatever the branch it was written on
+	written := map[domain.NodeID]domain.Version{}
+	from := map[domain.NodeID]domain.Version{} // the version each draft was checked out from
+	nodes := make([]domain.Node, len(todo))
+	for i, l := range todo {
+		n, err := a.writeVersion(l.cn, l.d)
 		if err != nil {
 			return err
 		}
-		// landing freezes the accepted working version (ADR 0077), and the ones of the change it supersedes (a flow
-		// version a parent flow's working version was derived from); the frozen-state checks follow (checkChangeImpacts)
-		if post.CheckedOut {
-			vs, err := a.tx.Versions(a.ctx, post.ID)
-			if err != nil {
+		nodes[i] = n
+		written[n.ID] = n.Version
+		if l.d.Base != nil {
+			from[n.ID] = l.d.Base.Version
+		}
+		if l.cn.Pre != nil {
+			from[n.ID] = l.cn.Pre.Version
+		}
+	}
+	// 2. their links, to the versions of the change
+	for i, l := range todo {
+		for _, dl := range l.d.Links {
+			to := dl.To
+			if v, ok := written[to.ID]; ok && (to.IsDraft() || to.Version == from[to.ID] || (l.d.Base != nil && to.Version == l.d.Base.Version && to.ID == l.d.Node)) {
+				to.Version = v
+			}
+			if to.IsDraft() {
+				return invalidf("%s links to the draft of node %s, which the change does not land", nodes[i].Key, to.ID)
+			}
+			if err := a.tx.PutLink(a.ctx, domain.Link{ID: dl.ID, Type: dl.Type, From: nodes[i].Ref(), To: to, Properties: dl.Properties, ChangeID: a.change.ID}); err != nil {
 				return err
 			}
-			for _, v := range vs {
-				if v.CheckedOut && (v.ChangeID == a.change.ID || v.Ref() == post.Ref()) {
-					if err := a.tx.FreezeVersion(a.ctx, v.Ref()); err != nil {
-						return err
-					}
-				}
-			}
-			post.CheckedOut = false
 		}
-		cp := cpost{cn: cn, post: post}
-		if cn.Pre != nil {
-			pre, err := a.tx.Node(a.ctx, *cn.Pre)
+	}
+	// 3. what the change leaves
+	for i, l := range todo {
+		cp := cpost{cn: l.cn, post: nodes[i]}
+		if l.cn.Pre != nil {
+			pre, err := a.tx.Node(a.ctx, *l.cn.Pre)
 			if err != nil {
 				return err
 			}
 			cp.pre = &pre
 		}
 		a.cposts = append(a.cposts, cp)
-		if post.Deleted {
-			delete(a.target, post.ID)
-		} else {
-			a.target[post.ID] = post.Version
-		}
+		a.target[nodes[i].ID] = nodes[i].Version
 	}
 	return nil
+}
+
+// writeVersion writes the version of a draft on the branch of the change: the next version number of the node, the
+// version the draft was checked out from as its parent, the origin of the change impact (its last review comment, else
+// its rationale). The node changing on the change branch since the draft was checked out is a conflict: a sub-change
+// merged a version of it meanwhile.
+func (a *applier) writeVersion(cn domain.ChangeImpact, d domain.Draft) (domain.Node, error) {
+	comment := cn.Rationale
+	if len(cn.Reviews) > 0 {
+		comment = cn.Reviews[len(cn.Reviews)-1].Comment
+	}
+	n := domain.Node{ID: d.Node, Branch: a.branch, Namespace: domain.NamespaceOf(a.change.Namespace), Key: d.Key, Type: d.Type, Properties: cloneMap(d.Properties),
+		State: d.State, ChangeID: a.change.ID, Owner: d.Owner, ChangeImpact: cn.ID, Comment: comment, Execution: d.Execution, Origins: slices.Clone(d.Origins), CreatedAt: a.g.now()}
+	if d.Base == nil {
+		n.Version, n.Reason = 1, domain.ReasonCreate
+		return n, a.tx.PutNode(a.ctx, n)
+	}
+	vs, err := a.tx.Versions(a.ctx, d.Node)
+	if err != nil {
+		return n, err
+	}
+	n.Version, n.Parents, n.Reason = domain.Version(len(vs)+1), []domain.Version{d.Base.Version}, domain.ReasonDerive
+	if on, err := onBranch(a.ctx, a.tx, *d.Base, a.branch); err != nil {
+		return n, err
+	} else if on {
+		n.Reason = domain.ReasonRevise
+	}
+	if latest, err := a.tx.LatestOn(a.ctx, d.Node, a.branch); err == nil && latest.Version != d.Base.Version {
+		return n, fmt.Errorf("%s changed on the branch of change %s since it was checked out (v%d, checked out from v%d): %w", d.Key, a.change.ID, latest.Version, d.Base.Version, ErrConflict)
+	} else if err != nil && !errors.Is(err, ErrNotFound) {
+		return n, err
+	}
+	return n, a.tx.PutNode(a.ctx, n)
 }
 
 // mainImpacts are the impacts of the main flow that count at landing.
@@ -106,7 +166,7 @@ func (a *applier) walkChangeImpacts() (stuck []string, err error) {
 		if n.Deleted {
 			continue
 		}
-		if err := a.g.checkFrozen(a.ctx, a.tx, a.ix, n); err != nil {
+		if err := a.g.checkWritten(a.ctx, a.tx, a.ix, n); err != nil {
 			return nil, err
 		}
 		lc := a.ix.lifecycleOf(n.Type)
@@ -123,79 +183,49 @@ func (a *applier) walkChangeImpacts() (stuck []string, err error) {
 	return stuck, nil
 }
 
-// walkTransitions replays the versions of a node written on the change branch: each state change must be a
-// transition of the lifecycle. A version whose state was set in place (ADR 0077: transitioned events with a state
-// patch, each checked when it was taken) is followed through those moves: they must chain from the state the version
-// started in to the state it carries.
+// walkTransitions replays the moves recorded in the log of the change for the draft a version was written from (ADR 0079,
+// the moves of ADR 0058 are all in the log): from the state the draft started in, each transitioned event of the main
+// flow must leave the state the draft was in and be a move of the lifecycle, and the chain must end in the state of the
+// version. Each move was authorized, guarded and acted when it was taken (ImpactNodeTransition).
 func (a *applier) walkTransitions(cp cpost, lc *domain.Lifecycle) error {
-	n := cp.post
-	prev, from := lc.Initial, 0
-	if cp.pre != nil {
-		prev, from = cp.pre.State, int(cp.pre.Version)
-		if prev == "" {
-			prev = lc.Initial
+	if a.events == nil {
+		evs, err := impactEvents(a.ctx, a.tx, a.change.ID)
+		if err != nil {
+			return err
+		}
+		a.events = &evs
+	}
+	norm := func(s string) string {
+		if s == "" {
+			return lc.Initial
+		}
+		return s
+	}
+	at, tracked := "", false
+	for _, e := range *a.events {
+		if e.Impact != cp.cn.ID || e.Flow != "" {
+			continue
+		}
+		switch {
+		case e.StartsDraft():
+			at, tracked = norm(e.Draft.State), true
+		case e.Op == domain.ImpactTransitioned && e.Patch["state"] != nil:
+			st, _ := e.Patch["state"].(map[string]any)
+			from, _ := st["from"].(string)
+			to, _ := st["to"].(string)
+			if tracked && norm(from) != at {
+				return invalidf("%s (%s) was moved from %s while it was in %s", cp.post.Key, cp.post.Type, from, at)
+			}
+			if _, ok := lc.Move(norm(from), to); !ok {
+				return invalidf("%s (%s) cannot go from %s to %s", cp.post.Key, cp.post.Type, from, to)
+			}
+			at, tracked = to, true
 		}
 	}
-	vs, err := a.tx.Versions(a.ctx, n.ID)
-	if err != nil {
-		return err
-	}
-	moved := map[domain.ChangeID]map[domain.NodeRef][]stateMove{} // by the change that wrote the version: a sub-change merged in too
-	for _, v := range vs {
-		if !v.On(a.branch) || int(v.Version) <= from {
-			continue
-		}
-		if _, ok := moved[v.ChangeID]; !ok {
-			if moved[v.ChangeID], err = a.inPlaceMoves(v.ChangeID); err != nil {
-				return err
-			}
-		}
-		if ms := moved[v.ChangeID][v.Ref()]; len(ms) > 0 {
-			at := prev
-			for _, m := range ms {
-				if m.from != at {
-					return invalidf("%s (%s) was moved from %s while it was in %s", n.Key, n.Type, m.from, at)
-				}
-				at = m.to
-			}
-			if at != v.State && !(v.State == "" && at == lc.Initial) {
-				return invalidf("%s (%s) is in %s, the moves recorded for it end in %s", n.Key, n.Type, v.State, at)
-			}
-			prev = v.State
-			continue
-		}
-		if v.State == prev {
-			continue
-		}
-		if _, ok := lc.Move(prev, v.State); !ok {
-			return invalidf("%s (%s) cannot go from %s to %s", n.Key, n.Type, prev, v.State)
-		}
-		prev = v.State
+	if tracked && norm(cp.post.State) != at {
+		return invalidf("%s (%s) is in %s, the moves recorded for it end in %s", cp.post.Key, cp.post.Type, cp.post.State, at)
 	}
 	return nil
-}
-
-// stateMove is a transition taken in place on a working version.
-type stateMove struct{ from, to string }
-
-// inPlaceMoves reads, from the impact log of a change, the transitions taken in place on its working versions, by
-// version, in order (ADR 0077).
-func (a *applier) inPlaceMoves(change domain.ChangeID) (map[domain.NodeRef][]stateMove, error) {
-	events, err := impactEvents(a.ctx, a.tx, change)
-	if err != nil {
-		return nil, err
-	}
-	out := map[domain.NodeRef][]stateMove{}
-	for _, e := range events {
-		st, ok := e.Patch["state"].(map[string]any)
-		if e.Op != domain.ImpactTransitioned || !ok || e.Post == nil {
-			continue
-		}
-		from, _ := st["from"].(string)
-		to, _ := st["to"].(string)
-		out[*e.Post] = append(out[*e.Post], stateMove{from, to})
-	}
-	return out, nil
 }
 
 // settleChangeImpacts decides what the walk found: the landing gate, else the states left that cannot land.
@@ -240,6 +270,8 @@ func (a *applier) landingBlackboard() domain.Blackboard {
 		add(cp.pre)
 		post := cp.post
 		add(&post)
+		// the change impact still holds the draft reference (ADR 0079): it reads the version written from the draft
+		bb.Nodes[domain.DraftRef(post.ID)] = bb.Nodes[post.Ref()]
 	}
 	return bb
 }

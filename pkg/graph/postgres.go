@@ -107,7 +107,7 @@ func scanNode(row pgx.Row) (domain.Node, error) {
 	var version int
 	var parents []int32
 	var origins []byte
-	if err := row.Scan(&id, &version, &n.Namespace, &n.Key, &n.Type, &p, &n.Deleted, &change, &n.CreatedAt, &n.Branch, &parents, &n.Reason, &n.State, &cnode, &n.Comment, &n.Execution, &owner, &project, &n.CheckedOut, &origins); err != nil {
+	if err := row.Scan(&id, &version, &n.Namespace, &n.Key, &n.Type, &p, &n.Deleted, &change, &n.CreatedAt, &n.Branch, &parents, &n.Reason, &n.State, &cnode, &n.Comment, &n.Execution, &owner, &project, &origins); err != nil {
 		return n, err
 	}
 	n.Origins = originsOf(origins)
@@ -415,7 +415,7 @@ func (t *pgTx) PutNode(ctx context.Context, n domain.Node) error {
 		parents[i] = int32(pv)
 	}
 	_, err := t.tx.Exec(ctx, dialectPG.sqlInsert("node_version", nodeVersionColumns, ""),
-		string(n.ID), int(n.Version), jsonb(n.Properties), n.Deleted, nullUUID(string(n.ChangeID)), n.CreatedAt, domain.BranchOf(n.Branch), parents, n.Reason, n.State, nullUUID(string(n.ChangeImpact)), n.Comment, n.Execution, nullUUID(string(n.Owner)), n.CheckedOut, originsJSON(n.Origins))
+		string(n.ID), int(n.Version), jsonb(n.Properties), n.Deleted, nullUUID(string(n.ChangeID)), n.CreatedAt, domain.BranchOf(n.Branch), parents, n.Reason, n.State, nullUUID(string(n.ChangeImpact)), n.Comment, n.Execution, nullUUID(string(n.Owner)), originsJSON(n.Origins))
 	return mapErr(err, "node "+n.Ref().String())
 }
 
@@ -427,34 +427,6 @@ func (t *pgTx) exec1(ctx context.Context, what, q string, args ...any) error {
 	}
 	if tag.RowsAffected() != 1 {
 		return fmt.Errorf("%s: %w", what, ErrNotFound)
-	}
-	return nil
-}
-
-func (t *pgTx) SetNodeOwner(ctx context.Context, ref domain.NodeRef, owner domain.NodeID) error {
-	return t.exec1(ctx, "node "+ref.String(), dialectPG.sqlSetNodeOwner(), string(ref.ID), int(ref.Version), nullUUID(string(owner)))
-}
-
-func (t *pgTx) SetNodeState(ctx context.Context, ref domain.NodeRef, state string) error {
-	return t.exec1(ctx, "node "+ref.String(), dialectPG.sqlSetNodeState(), string(ref.ID), int(ref.Version), state)
-}
-
-func (t *pgTx) FreezeVersion(ctx context.Context, ref domain.NodeRef) error {
-	return t.exec1(ctx, "checked-out version "+ref.String(), dialectPG.sqlFreeze(), string(ref.ID), int(ref.Version), false)
-}
-
-func (t *pgTx) DropWorkingVersion(ctx context.Context, ref domain.NodeRef) error {
-	q := dialectPG.dropWorkingVersion()
-	if _, err := t.tx.Exec(ctx, q[0], string(ref.ID), int(ref.Version)); err != nil {
-		return mapErr(err, "links of "+ref.String())
-	}
-	if err := t.exec1(ctx, "checked-out version "+ref.String(), q[1], string(ref.ID), int(ref.Version)); err != nil {
-		return err
-	}
-	for _, s := range []string{dialectPG.sqlDeleteOrphanNode(), dialectPG.sqlRefreshLatest()} {
-		if _, err := t.tx.Exec(ctx, s, string(ref.ID)); err != nil {
-			return mapErr(err, "node "+string(ref.ID))
-		}
 	}
 	return nil
 }
@@ -473,25 +445,6 @@ func (t *pgTx) Link(ctx context.Context, id domain.LinkID) (domain.Link, error) 
 		return domain.Link{}, fmt.Errorf("link %s: %w", id, ErrNotFound)
 	}
 	return ls[0], nil
-}
-
-func (t *pgTx) DeleteLink(ctx context.Context, id domain.LinkID) error {
-	return t.exec1(ctx, "link "+string(id), dialectPG.sqlDeleteLink(), string(id))
-}
-
-func (t *pgTx) SetLinkProps(ctx context.Context, id domain.LinkID, props map[string]any) error {
-	return t.exec1(ctx, "link "+string(id), dialectPG.sqlSetLinkProps(), string(id), jsonb(props))
-}
-
-func (t *pgTx) SetNodeProps(ctx context.Context, ref domain.NodeRef, props map[string]any) error {
-	tag, err := t.tx.Exec(ctx, dialectPG.sqlSetNodeProps(), string(ref.ID), int(ref.Version), jsonb(props))
-	if err != nil {
-		return mapErr(err, "node "+ref.String())
-	}
-	if tag.RowsAffected() != 1 {
-		return fmt.Errorf("node %s: %w", ref, ErrNotFound)
-	}
-	return nil
 }
 
 func (t *pgTx) PutLink(ctx context.Context, l domain.Link) error {

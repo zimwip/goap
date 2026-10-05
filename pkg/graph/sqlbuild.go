@@ -95,7 +95,7 @@ func su(name string) sqlCol { return sqlCol{name: name, uuid: true} }
 func (d dialect) nodeCols() string {
 	return d.cols(su("n.id"), sc("v.version"), sc("n.namespace"), sc("n.key"), sc("n.type"), sc("v.props"), sc("v.deleted"), su("v.change_id"),
 		sc("v.created_at"), sc("v.branch"), sc("v.parents"), sc("v.reason"), sc("v.state"), su("v.change_impact"), sc("v.comment"),
-		sc("v.execution"), su("v.owner_id"), su("n.project_id"), sc("v.checked_out"), sc("v.origins"))
+		sc("v.execution"), su("v.owner_id"), su("n.project_id"), sc("v.origins"))
 }
 
 const nodeFrom = ` FROM node n JOIN node_version v ON v.node_id = n.id`
@@ -288,36 +288,6 @@ func (d dialect) sqlDeleteTag(id domain.TagID) (string, []any) {
 	return `DELETE FROM tag WHERE id = ` + d.ph(1), []any{string(id)}
 }
 
-// sqlSetNodeProps replaces the properties of a version (the encoded value is the third argument).
-func (d dialect) sqlSetNodeProps() string {
-	return `UPDATE node_version SET props = ` + d.ph(3) + ` WHERE node_id = ` + d.ph(1) + ` AND version = ` + d.ph(2)
-}
-
-// sqlSetNodeOwner moves a version to another owner unit: arguments node, version, owner.
-func (d dialect) sqlSetNodeOwner() string {
-	return `UPDATE node_version SET owner_id = ` + d.ph(3) + ` WHERE node_id = ` + d.ph(1) + ` AND version = ` + d.ph(2)
-}
-
-// sqlSetNodeState moves a working version to a state: arguments node, version, state.
-func (d dialect) sqlSetNodeState() string {
-	return `UPDATE node_version SET state = ` + d.ph(3) + ` WHERE node_id = ` + d.ph(1) + ` AND version = ` + d.ph(2)
-}
-
-// sqlFreeze freezes a working version (ADR 0077): arguments node, version, false.
-func (d dialect) sqlFreeze() string {
-	return `UPDATE node_version SET checked_out = ` + d.ph(3) + ` WHERE node_id = ` + d.ph(1) + ` AND version = ` + d.ph(2) + ` AND checked_out`
-}
-
-// dropWorkingVersion removes a working version and its outgoing links (ADR 0076: a checkout cancelled): arguments
-// node, version. The version statement is the second; the node is then removed when it has no version left
-// (sqlDeleteOrphanNode), else its latest version refreshed (sqlRefreshLatest).
-func (d dialect) dropWorkingVersion() []string {
-	return []string{
-		`DELETE FROM link WHERE from_id = ` + d.ph(1) + ` AND from_version = ` + d.ph(2),
-		`DELETE FROM node_version WHERE node_id = ` + d.ph(1) + ` AND version = ` + d.ph(2) + ` AND checked_out`,
-	}
-}
-
 // sqlDeleteChangeImpact removes a change impact from the projection: arguments change, change impact.
 func (d dialect) sqlDeleteChangeImpact() string {
 	return `DELETE FROM change_impact WHERE change_id = ` + d.ph(1) + ` AND id = ` + d.ph(2)
@@ -326,14 +296,6 @@ func (d dialect) sqlDeleteChangeImpact() string {
 // sqlLinkByID reads one link.
 func (d dialect) sqlLinkByID(id domain.LinkID) (string, []any) {
 	return `SELECT ` + d.linkCols() + ` FROM link WHERE id = ` + d.ph(1), []any{string(id)}
-}
-
-// sqlDeleteLink deletes a link: argument the link.
-func (d dialect) sqlDeleteLink() string { return `DELETE FROM link WHERE id = ` + d.ph(1) }
-
-// sqlSetLinkProps replaces the properties of a link: arguments link, encoded properties.
-func (d dialect) sqlSetLinkProps() string {
-	return `UPDATE link SET props = ` + d.ph(2) + ` WHERE id = ` + d.ph(1)
 }
 
 // sqlSetNodeOrigin sets the origin of a version: arguments node, version, change, change impact, comment.
@@ -398,7 +360,7 @@ func (d dialect) sqlDeleteChange() string { return `DELETE FROM change WHERE id 
 
 // The columns of the inserts both repositories run, in the order of their arguments.
 var (
-	nodeVersionColumns = []string{"node_id", "version", "props", "deleted", "change_id", "created_at", "branch", "parents", "reason", "state", "change_impact", "comment", "execution", "owner_id", "checked_out", "origins"}
+	nodeVersionColumns = []string{"node_id", "version", "props", "deleted", "change_id", "created_at", "branch", "parents", "reason", "state", "change_impact", "comment", "execution", "owner_id", "origins"}
 	linkColumns        = []string{"id", "type", "from_id", "from_version", "to_id", "to_version", "props", "change_id"}
 	baselineColumns    = []string{"id", "name", "parent_id", "merged_from", "change_id", "created_at", "branch", "namespace", "depth", "gap", "kind"}
 	changeLogColumns   = []string{"id", "change_id", "type", "flow", "process_id", "execution", "subject", "by_whom", "at", "payload"}

@@ -183,7 +183,7 @@ func TestScriptMergeAndSplit(t *testing.T) {
 	d, err := def.ParseDomain([]byte(`
 name: docs
 version: 1.0.0
-nodeTypes: [{name: Folder}, {name: Item}]
+nodeTypes: [{name: Folder}, {name: Item, attributes: [title]}]
 linkTypes: [{name: contains, from: Folder, to: Item, compose: true}]
 `))
 	if err != nil {
@@ -245,17 +245,17 @@ ctx.writeNode(parts[1], { props: { title: "second" } });
 		}
 	}
 	for _, k := range []string{"AB", "S1", "S2"} {
-		n, err := g.Node(ctx, *byKey[k].Post)
+		n, err := g.ChangeNode(ctx, c.ID, "", *byKey[k].Post)
 		if err != nil || len(n.Origins) == 0 {
 			t.Errorf("%s: origins %v, %v", k, n.Origins, err)
 		}
 	}
-	if n, _ := g.Node(ctx, *byKey["AB"].Post); n.Properties["title"] != "AB" {
+	if n, _ := g.ChangeNode(ctx, c.ID, "", *byKey["AB"].Post); n.Properties["title"] != "AB" {
 		t.Errorf("AB was written: %v", n.Properties)
 	}
-	links2, err := g.OutLinksOf(ctx, *byKey["F"].Post)
-	if err != nil || len(links2) != 3 {
-		t.Errorf("F links AB, S1, S2: %d, %v", len(links2), err)
+	fv, err := g.ChangeNodeView(ctx, c.ID, "", *byKey["F"].Post)
+	if err != nil || len(fv.Out) != 3 {
+		t.Errorf("F links AB, S1, S2: %d, %v", len(fv.Out), err)
 	}
 }
 
@@ -281,18 +281,21 @@ func TestScriptDeclaredCreation(t *testing.T) {
 		t.Fatalf("change impacts: %+v", ch.Nodes)
 	}
 	for _, cn := range ch.Nodes {
-		if cn.Intent != domain.IntentCreated || cn.Post == nil {
-			t.Fatalf("a creation has its first version: %+v", cn)
+		if cn.Intent != domain.IntentCreated || cn.Post == nil || !cn.Post.IsDraft() {
+			t.Fatalf("a creation has its draft: %+v", cn)
+		}
+		if cn.Review != domain.ReviewProposed {
+			t.Fatalf("a write never reviews (ADR 0079): %+v", cn)
 		}
 	}
 	evs, _ := g.ChangeEvents(ctx, c.ID)
 	for _, ev := range evs {
-		if ev.Op == domain.ImpactProposed || ev.Op == domain.ImpactCheckedOut {
+		if ev.Op == domain.ImpactProposed || ev.Op == domain.ImpactCheckedOut || ev.Op == domain.ImpactReviewed {
 			t.Fatalf("a creation logs no %s event", ev.Op)
 		}
 	}
 	i := slices.IndexFunc(ch.Nodes, func(cn domain.ChangeImpact) bool { return cn.Key == "TST-4" })
-	n, err := g.Node(ctx, *ch.Nodes[i].Post)
+	n, err := g.ChangeNode(ctx, c.ID, "", *ch.Nodes[i].Post)
 	if err != nil || n.Properties["title"] != "four" {
 		t.Fatalf("the properties of the write: %+v %v", n, err)
 	}

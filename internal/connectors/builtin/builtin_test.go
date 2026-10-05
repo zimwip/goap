@@ -307,7 +307,7 @@ func TestChangeTools(t *testing.T) {
 		t.Fatalf("derogations = %v", drg)
 	}
 	brief := p.call(t, ctx, "ORG-CHECKOUT", "goap-change/brief", nil)["brief"].(string)
-	for _, want := range []string{"INTENT Customers may be refunded by voucher", "- REQ-9 Requirement created written", "- RSK-1 12=3x4 mitigating product_owner", "ACTIONS 1 open", "- ACT-1 business_analyst - RSK-1"} {
+	for _, want := range []string{"INTENT Customers may be refunded by voucher", "- REQ-9 Requirement created drafted", "- RSK-1 12=3x4 mitigating product_owner", "ACTIONS 1 open", "- ACT-1 business_analyst - RSK-1"} {
 		if !strings.Contains(brief, want) {
 			t.Fatalf("brief lacks %q:\n%s", want, brief)
 		}
@@ -373,12 +373,16 @@ func TestChangeOptionTools(t *testing.T) {
 		t.Fatalf("undecidable = %v", ruled)
 	}
 	p.call(t, ctx, "ORG-CHECKOUT", "goap-change/answer", map[string]any{"question": q["id"], "answer": "2 EUR"})
-	// the edit of the option is reviewed: accepting freezes its version, and a flow is adopted with its versions frozen (ADR 0076, 0077)
+	// the edits of the options reviewed nothing (ADR 0079: an edit never reviews); the reviewer accepts the draft of the option
+	// explicitly, and a flow is adopted with its drafts accepted
 	c, err := p.g.Change(ctx, domain.ChangeID(id))
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, cn := range c.Nodes {
+		if cn.Review != domain.ReviewProposed {
+			t.Fatalf("an edit through goap-change never reviews: %+v", cn)
+		}
 		if cn.Key == "REQ-2" && cn.Flow == a["id"] {
 			if _, err := p.g.ImpactNodeReviewOn(ctx, c.ID, cn.Flow, "", cn.ID, domain.ReviewAccepted, "reviewer", "agreed"); err != nil {
 				t.Fatal(err)

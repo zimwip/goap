@@ -124,9 +124,10 @@ func testProvenanceExport(t *testing.T, repo Repo) {
 
 	impact := node("urn:goap:impact:" + string(added[0].ID))
 	has(impact, "prov:wasDerivedFrom", "urn:goap:item:"+string(items[0].ID))
-	post := "urn:goap:node:" + string(written.Post.ID) + "@v" + jsonInt(written.Post.Version)
+	post := "urn:goap:node:" + string(written.Post.ID) + "@v" + jsonInt(written.Post.Version) // the draft (ADR 0079)
 	has(impact, "goap:post", post)
 	v := node(post)
+	has(v, "@type", "goap:NodeDraft")
 	has(v, "prov:wasGeneratedBy", "urn:goap:execution:e1")
 	has(v, "prov:wasRevisionOf", "urn:goap:node:"+string(pre.ID)+"@v1")
 	has(v, "prov:specializationOf", "urn:goap:node:"+string(pre.ID))
@@ -144,7 +145,9 @@ func testProvenanceExport(t *testing.T, repo Repo) {
 	}
 	result := node("urn:goap:baseline:" + string(c.ResultBaselineID))
 	has(result, "prov:wasGeneratedBy", "urn:goap:change:"+string(c.ID))
-	has(result, "prov:hadMember", post)
+	landed := "urn:goap:node:" + string(written.Post.ID) + "@v2"
+	has(result, "prov:hadMember", landed)
+	has(node(landed), "prov:wasDerivedFrom", post)
 
 	// every entry of the log is in the export, with its position
 	seqs := map[float64]bool{}

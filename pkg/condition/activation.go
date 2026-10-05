@@ -307,14 +307,14 @@ func (h hydrator) changeImpacts() []any {
 			"id": string(cn.ID), "key": cn.Key, "type": cn.Type, "types": h.bb.TypesOf(cn.Type),
 			"intent": string(cn.Intent), "rationale": cn.Rationale, "review": string(cn.Review), "reviews": reviews, "comment": comment,
 			"pre": ref(cn.Pre), "post": ref(cn.Post), "landed": ref(cn.Landed),
-			"planned": cn.Post == nil, "hasPost": cn.Post != nil, "recheck": cn.Recheck, "props": h.currentProps(cn),
+			"planned": cn.Post == nil, "hasPost": cn.Post != nil, "drafted": cn.Drafted(), "recheck": cn.Recheck, "props": h.currentProps(cn),
 			"via": string(cn.Via), "producedBy": cn.ProducedBy, "items": items,
 		})
 	}
 	return out
 }
 
-// currentProps are the properties of the node as the change has it: the version written, else the one it starts from.
+// currentProps are the properties of the node as the change has it: its draft (or the version written), else the one it starts from.
 func (h hydrator) currentProps(cn domain.ChangeImpact) map[string]any {
 	switch {
 	case cn.Post != nil:

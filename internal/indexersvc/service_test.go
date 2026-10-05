@@ -73,8 +73,8 @@ func TestGraphToSearch(t *testing.T) {
 name: docs
 version: 1.0.0
 nodeTypes:
-  - {name: Requirement, properties: [title, priority], search: [{property: title, text: true}, {property: priority, facet: true}]}
-  - {name: Secret, properties: [title], search: [{property: title, text: true}]}
+  - {name: Requirement, attributes: [title, priority], search: [{property: title, text: true}, {property: priority, facet: true}]}
+  - {name: Secret, attributes: [title], search: [{property: title, text: true}]}
 `))
 	if err != nil {
 		t.Fatal(err)

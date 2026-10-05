@@ -24,6 +24,10 @@ type TypeCatalog interface {
 	AttributeChecks(typ string) []domain.AttributeCheck
 	// LinkAttributeChecks are the attributes of a link type, to check the properties of its links.
 	LinkAttributeChecks(typ string) []domain.AttributeCheck
+	// AttributeNames are the names of the attributes of a node type, ancestors included, and whether the type is open
+	// (`additionalProperties: true`, or unknown to the catalogue): the properties of a node of a closed type are
+	// attributes only.
+	AttributeNames(typ string) (names []string, open bool)
 	Search(typ string) []domain.SearchProperty
 	// CheckNode is the existence rule of a node of namespace ns, CheckLink of a link between two node types.
 	CheckNode(ns, typ string) error
@@ -115,6 +119,11 @@ type Graph struct {
 	booted atomic.Bool
 	// states caches the states computed for baselines kept as a header only.
 	states stateCache
+
+	// DraftCacheSize is how many changes keep their folded drafts in memory (ADR 0079 §2). 0: DefaultDraftCacheSize.
+	DraftCacheSize int
+	// draftStates caches the drafts folded from the impact logs.
+	draftStates draftCache
 }
 
 // New returns a Graph backed by repo. Every transaction goes through the guard of the graph (guardRepo, ADR 0054),
@@ -656,6 +665,7 @@ func (g *Graph) BlackboardIn(ctx context.Context, id domain.ChangeID, flow strin
 		// what the view of a flow does not carry: the options and the decision points of the change (ADR 0009)
 		now := g.now()
 		facets := g.facets(c, now)
+		full := c // the drafts are read with the flows of the change, the view of a flow has none
 		c = c.View(flow)
 		c.Nodes = nodes
 		bb = domain.Blackboard{Change: c, Nodes: map[domain.NodeRef]domain.NodeView{}, Neighbors: map[domain.NodeRef]domain.Node{},
@@ -664,8 +674,13 @@ func (g *Graph) BlackboardIn(ctx context.Context, id domain.ChangeID, flow strin
 		if err != nil {
 			return err
 		}
+		reader, err := g.newDraftReader(ctx, tx, full, flow, nodes)
+		if err != nil {
+			return err
+		}
+		// a draft reference is hydrated from the draft the flow sees (ADR 0079), any other from the stored version
 		for _, r := range c.ReferencedNodes() {
-			v, err := view(ctx, tx, r)
+			v, err := viewIn(ctx, tx, reader, r)
 			if err != nil {
 				return err
 			}
@@ -674,12 +689,12 @@ func (g *Graph) BlackboardIn(ctx context.Context, id domain.ChangeID, flow strin
 			}
 			bb.Nodes[r] = v
 			for _, l := range v.Out {
-				if err := neighbor(ctx, tx, bb.Neighbors, l.To); err != nil {
+				if err := neighbor(ctx, tx, reader, bb.Neighbors, l.To); err != nil {
 					return err
 				}
 			}
 			for _, l := range v.In {
-				if err := neighbor(ctx, tx, bb.Neighbors, l.From); err != nil {
+				if err := neighbor(ctx, tx, reader, bb.Neighbors, l.From); err != nil {
 					return err
 				}
 			}
@@ -689,11 +704,11 @@ func (g *Graph) BlackboardIn(ctx context.Context, id domain.ChangeID, flow strin
 	return
 }
 
-func neighbor(ctx context.Context, tx Tx, into map[domain.NodeRef]domain.Node, r domain.NodeRef) error {
+func neighbor(ctx context.Context, tx Tx, reader *draftReader, into map[domain.NodeRef]domain.Node, r domain.NodeRef) error {
 	if _, ok := into[r]; ok {
 		return nil
 	}
-	n, err := tx.Node(ctx, r)
+	n, err := reader.node(ctx, tx, r)
 	if err != nil {
 		return err
 	}

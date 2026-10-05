@@ -54,18 +54,14 @@ func (g *Graph) checkRequiredParent(e NodeEdit) error {
 	return nil
 }
 
-// checkRequiredLinks checks that a version carries the links its type requires (the parent of a node of a structure,
-// the membership of a User): read back from the version itself, so a client that built its edits from a stale read
-// (a link it did not know of) fails instead of leaving the node with zero or two of them. Checked when the version is
-// frozen (an accepted review, ADR 0077) and when it lands (Apply), never on a working version, which may be on its way there.
-func (g *Graph) checkRequiredLinks(ctx context.Context, tx Tx, n domain.Node) error {
+// checkRequiredLinks checks that a version or a draft carries the links its type requires (the parent of a node of a
+// structure, the membership of a User): read back from the node itself, so a client that built its edits from a stale
+// read (a link it did not know of) fails instead of leaving the node with zero or two of them. Checked when a draft is
+// accepted (ADR 0079) and when the version lands (Apply), never while the draft is edited, which may be on its way there.
+func (g *Graph) checkRequiredLinks(n domain.Node, links []domain.Link) error {
 	reqs := g.requirementsOf(n.Type, n.Key)
 	if len(reqs) == 0 || n.Deleted {
 		return nil
-	}
-	links, err := tx.OutLinks(ctx, n.Ref())
-	if err != nil {
-		return err
 	}
 	for _, r := range reqs {
 		count := 0
@@ -81,17 +77,13 @@ func (g *Graph) checkRequiredLinks(ctx context.Context, tx Tx, n domain.Node) er
 	return nil
 }
 
-// checkFrozen is what a version must satisfy to be frozen or to land (ADR 0076): its properties (attributes and
-// validators of its type), the links its type requires and the attributes of its links.
-func (g *Graph) checkFrozen(ctx context.Context, tx Tx, ix *typeIndex, n domain.Node) error {
+// checkVersion is what a draft must satisfy to be accepted and the version written from it to land (ADR 0076, 0079): its
+// properties (attributes and validators of its type), the links its type requires and the attributes of its links.
+func (g *Graph) checkVersion(ctx context.Context, ix *typeIndex, n domain.Node, links []domain.Link) error {
 	if err := g.validateProps(ctx, ix, n, n.Properties); err != nil {
 		return err
 	}
-	if err := g.checkRequiredLinks(ctx, tx, n); err != nil {
-		return err
-	}
-	links, err := tx.OutLinks(ctx, n.Ref())
-	if err != nil {
+	if err := g.checkRequiredLinks(n, links); err != nil {
 		return err
 	}
 	for _, l := range links {
@@ -100,6 +92,20 @@ func (g *Graph) checkFrozen(ctx context.Context, tx Tx, ix *typeIndex, n domain.
 		}
 	}
 	return nil
+}
+
+// checkWritten checks a version a landing wrote, with its links.
+func (g *Graph) checkWritten(ctx context.Context, tx Tx, ix *typeIndex, n domain.Node) error {
+	links, err := tx.OutLinks(ctx, n.Ref())
+	if err != nil {
+		return err
+	}
+	return g.checkVersion(ctx, ix, n, links)
+}
+
+// checkDraft checks a draft as the version written from it will be.
+func (g *Graph) checkDraft(ctx context.Context, ix *typeIndex, c domain.Change, d domain.Draft) error {
+	return g.checkVersion(ctx, ix, draftNode(c, d), d.OutLinks())
 }
 
 // prepareSubChange applies the rules of a sub-change to c: its parent must be

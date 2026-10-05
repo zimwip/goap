@@ -18,8 +18,8 @@ import (
 //   - every transition is checked (it exists, the actor may take it, the node
 //     has the required attributes and links, its guard holds, and for a
 //     document its children are in an allowed state) when it is taken: a
-//     transition is taken in place on a working version, else it writes a version of its own from a frozen one
-//     (ImpactNodeTransition, ADR 0076, 0077).
+//     transition is taken on the draft of the node, which a node with none is checked out for first
+//     (ImpactNodeTransition, ADR 0076, 0079).
 
 // TransitionAuthorizer decides whether the caller may take a transition on a
 // node. Nil allows every transition. n.State is the state it leaves.
@@ -105,15 +105,55 @@ func impactView(cn *domain.ChangeImpact) map[string]any {
 	return map[string]any{"intent": string(cn.Intent), "review": string(cn.Review), "reviews": reviews}
 }
 
-func (a *applier) checkTransition(n domain.Node, t domain.Transition) ([]domain.Node, error) {
+// draftView is the draft of the node a transition moves, as a guard sees it (ADR 0079): the state it goes to, its
+// properties, its outgoing links, the version it was checked out from and whether it is a creation.
+func draftView(d *domain.Draft) map[string]any {
+	if d == nil {
+		return map[string]any{}
+	}
+	props := d.Properties
+	if props == nil {
+		props = map[string]any{}
+	}
+	links := make([]any, 0, len(d.Links))
+	for _, l := range d.Links {
+		links = append(links, map[string]any{"type": l.Type, "to": string(l.To.ID), "version": int(l.To.Version)})
+	}
+	base := 0
+	if d.Base != nil {
+		base = int(d.Base.Version)
+	}
+	return map[string]any{"key": d.Key, "type": d.Type, "state": d.State, "props": props, "owner": string(d.Owner), "links": links, "base": base, "new": d.Base == nil}
+}
+
+// childOf is the node a link of a draft to a part of it targets as the flow sees it: the draft of the child, else the
+// version of the view of the namespace (nil: the node is not in it).
+func (a *applier) childOf(l domain.Link) (*domain.Node, error) {
+	if a.drafts != nil {
+		if d, ok := a.drafts.draft(a.drafts.normalize(l.To)); ok {
+			n := draftNode(a.change, d)
+			return &n, nil
+		}
+	}
+	v, ok := a.target[l.To.ID]
+	if !ok {
+		return nil, nil
+	}
+	c, err := a.tx.Node(a.ctx, domain.NodeRef{ID: l.To.ID, Version: v})
+	if err != nil {
+		return nil, err
+	}
+	return &c, nil
+}
+
+// checkTransition checks a transition against the node as it stands (n, the state it leaves) and its outgoing links
+// (out): the attributes and links it requires, the states of the parts of a document, its guard (CEL: node, children,
+// change, impact, draft) and its guard algorithms. a.draft is the draft in the state the move goes to.
+func (a *applier) checkTransition(n domain.Node, out []domain.Link, t domain.Transition) ([]domain.Node, error) {
 	for _, k := range t.Requires.Attributes {
 		if v, ok := n.Properties[k]; !ok || v == nil || v == "" {
 			return nil, invalidf("%s (%s) cannot take %s: attribute %q is required", n.Key, n.Type, t.Name, k)
 		}
-	}
-	out, err := a.tx.OutLinks(a.ctx, n.Ref())
-	if err != nil {
-		return nil, err
 	}
 	for _, typ := range t.Requires.OutgoingLinks {
 		found := false
@@ -130,13 +170,12 @@ func (a *applier) checkTransition(n domain.Node, t domain.Transition) ([]domain.
 			if !domain.IsContains(l.Type) {
 				continue
 			}
-			v, ok := a.target[l.To.ID]
-			if !ok {
-				continue
-			}
-			c, err := a.tx.Node(a.ctx, domain.NodeRef{ID: l.To.ID, Version: v})
+			c, err := a.childOf(l)
 			if err != nil {
 				return nil, err
+			}
+			if c == nil {
+				continue
 			}
 			if t.Children != nil && !containsString(t.Children.States, c.State) {
 				got := c.State
@@ -145,7 +184,7 @@ func (a *applier) checkTransition(n domain.Node, t domain.Transition) ([]domain.
 				}
 				return nil, invalidf("%s (%s) cannot take %s: contained %s (%s) is in %s, expected %s", n.Key, n.Type, t.Name, c.Key, c.Type, got, strings.Join(t.Children.States, " or "))
 			}
-			children = append(children, c)
+			children = append(children, *c)
 		}
 	}
 	if t.Guard != "" {
@@ -158,7 +197,8 @@ func (a *applier) checkTransition(n domain.Node, t domain.Transition) ([]domain.
 			views = append(views, nodeView(c))
 		}
 		ok, err := gd.Check(nodeView(n), views, map[string]any{"id": string(a.change.ID), "title": a.change.Title,
-			"intent": a.change.Intent, "methodology": a.change.Methodology, "goal": a.change.Goal}, impactView(a.impact))
+			"intent": a.change.Intent, "methodology": a.change.Methodology, "goal": a.change.Goal, "state": a.change.State, "status": string(a.change.Status)},
+			impactView(a.impact), draftView(a.draft))
 		if err != nil {
 			return nil, invalidf("guard of %s on %s: %v", t.Name, n.Key, err)
 		}

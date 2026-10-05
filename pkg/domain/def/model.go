@@ -64,6 +64,10 @@ type NodeType struct {
 	// govern access itself (who may do what, the organisation and project structure, what a unit may reach), not
 	// domain data the ordinary change / object / node rules let a project's members write. A subtype inherits it.
 	AdminOnly bool `yaml:"adminOnly,omitempty" json:"adminOnly,omitempty"`
+	// AdditionalProperties opts the type out of strict attributes: its nodes may carry properties that are no attribute
+	// of it (a free-form type). By default a property that is not an attribute of the type, or of a supertype, is
+	// refused by the graph. A subtype inherits it.
+	AdditionalProperties bool `yaml:"additionalProperties,omitempty" json:"additionalProperties,omitempty"`
 }
 
 // StructureTag tags a node type as a structure of the graph (ADR 0054, domain.Structure).
@@ -218,7 +222,7 @@ type LinkType struct {
 	From        string `yaml:"from,omitempty" json:"from,omitempty"`
 	To          string `yaml:"to,omitempty" json:"to,omitempty"`
 	// Attributes define what a link of this type carries. The user interface edits a link from them; the graph checks
-	// the type and enum of the values on every link edit, when the version is frozen (accepted) and at landing (ADR 0076, 0077); their validators are
+	// the type and enum of the values on every link edit, when the draft is accepted and at landing (ADR 0076, 0079); their validators are
 	// checked by the domain but not yet run. "specializes" declares when/priority this way: the generic Activity-specialization
 	// condition (architecture plan "Activity concept") a link of that type would carry once one is created.
 	Attributes []Attribute `yaml:"attributes,omitempty" json:"attributes,omitempty"`

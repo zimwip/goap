@@ -54,26 +54,12 @@ type Tx interface {
 	Change(ctx context.Context, id domain.ChangeID) (domain.Change, error)
 	Changes(ctx context.Context) ([]domain.Change, error)
 
+	// PutNode writes a node version. A version is written once and never changes (ADR 0079): the working state of a
+	// node in a change is a draft, the version is written when the change lands.
 	PutNode(ctx context.Context, n domain.Node) error
-	// SetNodeProps replaces the properties of a node version written earlier in the same transaction (transition
-	// actions, ADR 0018) or of a working version (ADR 0076).
-	SetNodeProps(ctx context.Context, ref domain.NodeRef, props map[string]any) error
-	// SetNodeOwner moves a version to another owner unit (an in-place edit of a working version, ADR 0076).
-	SetNodeOwner(ctx context.Context, ref domain.NodeRef, owner domain.NodeID) error
-	// SetNodeState moves a working version to a lifecycle state in place (ADR 0077: a transition of a node checked out
-	// in the change writes no version).
-	SetNodeState(ctx context.Context, ref domain.NodeRef, state string) error
-	// DropWorkingVersion removes a working version, the latest of its node, with its outgoing links (ADR 0076: a
-	// checkout cancelled); a node left without version is removed (a creation cancelled before it is accepted).
-	DropWorkingVersion(ctx context.Context, ref domain.NodeRef) error
-	// FreezeVersion freezes a checked-out version (ADR 0077: an accepted review freezes it): ErrNotFound when it is not
-	// checked out.
-	FreezeVersion(ctx context.Context, ref domain.NodeRef) error
+	// PutLink writes a link of a version written in the same transaction; Link reads one.
 	PutLink(ctx context.Context, l domain.Link) error
-	// Link reads one link; DeleteLink and SetLinkProps edit the links of a working version in place (ADR 0076).
 	Link(ctx context.Context, id domain.LinkID) (domain.Link, error)
-	DeleteLink(ctx context.Context, id domain.LinkID) error
-	SetLinkProps(ctx context.Context, id domain.LinkID, props map[string]any) error
 	// PutBaseline stores a baseline: its entries when b.Gap is 0, else only its header (ADR 0056); a Baseline read
 	// back with a Gap holds no nodes, the graph computes them.
 	PutBaseline(ctx context.Context, b domain.Baseline) error
@@ -116,8 +102,8 @@ type Tx interface {
 	// makes it join (ADR 0054: no membership without a change).
 	JoinBranch(ctx context.Context, ref domain.NodeRef, branch string, change domain.ChangeID) error
 
-	// DeleteChange removes a change that landed nothing (ADR 0037): its log, impacts, node versions and links, the
-	// nodes it alone created, and its branch when it has one of its own (empty: none). It refuses (ErrConflict) when
+	// DeleteChange removes a change that landed nothing (ADR 0037): its log, impacts, node versions and links,
+	// the nodes it alone created, and its branch when it has one of its own (empty: none). It refuses (ErrConflict) when
 	// what the change wrote is used: a baseline holds one of its versions, a later version or a link of another
 	// change builds on one, or it produced a baseline.
 	DeleteChange(ctx context.Context, id domain.ChangeID, namespace, branch string) error

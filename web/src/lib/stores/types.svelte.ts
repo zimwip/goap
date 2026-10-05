@@ -45,6 +45,12 @@ export class TypeCatalog {
     return this.attributes(ref).map((a) => a.attribute?.name ?? '').filter(Boolean);
   }
 
+  /** Whether the nodes of a type may carry properties that are no attribute of it (`additionalProperties`); a type the catalogue does not know is open. */
+  open(ref: string | undefined): boolean {
+    const t = this.type(ref);
+    return !t || t.additionalProperties === true;
+  }
+
   /** The IDE editor its nodes open in ('' : the default node editor). */
   editor(ref: string | undefined): string {
     return this.type(ref)?.editor ?? '';

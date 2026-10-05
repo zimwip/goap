@@ -1,6 +1,6 @@
 # ADR 0077 — Naming of the change-driven node operations
 
-**Status**: accepted, implemented · **Date**: 2026-10 · Amends ADR 0076 (checkout, working versions, check-in), refines
+**Status**: accepted, implemented; the version-writing parts (a working version stays one until landing, in-place transitions, `Tx.SetNodeState`) are superseded by [ADR 0079](0079-drafts-and-versions-at-landing.md) (drafts, versions written at landing) · **Date**: 2026-10 · Amends ADR 0076 (checkout, working versions, check-in), refines
 ADR 0024 / 0029 (change impacts, their event log).
 
 ## Context

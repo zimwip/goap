@@ -10,7 +10,9 @@ import (
 )
 
 // The change impacts are event-sourced (ADR 0029): every operation appends an event to the change's log, and the
-// change_impact table is the projection of that log, updated in the same transaction. Nothing else writes it.
+// change_impact table is the projection of that log, updated in the same transaction. Nothing else writes it. The
+// drafts of the nodes the change works on (ADR 0079) are no projection: they are folded from the same log when read
+// (draftcache.go).
 
 func (g *Graph) caller(ctx context.Context) string {
 	if g.Caller == nil {

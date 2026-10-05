@@ -47,11 +47,12 @@ service GraphService {
   // Change impacts (ADR 0024): declare the nodes a change acts on, write the version each produces on the
   // change branch, and accept or reject them (a comment is mandatory).
   rpc ProposeImpact(ProposeImpactRequest) returns (ProposeImpactResponse);
-  // Node edits (ADR 0076): every write names a change. ImpactNodeCreate and ImpactNodeCheckout write the working version of the
-  // node in the change, checked out; ImpactNodeUpdate and the link operations edit it in place; an accepted review
-  // freezes it (ADR 0077: no explicit check-in); ImpactNodeTransition moves a node along its lifecycle (in place on a
-  // working version, else a version of its own); ImpactNodeCancel drops the working version (a creation cancelled before
-  // it is accepted removes the node).
+  // Node edits (ADR 0076, 0079): every write names a change, and a node has no version while the change works on it.
+  // ImpactNodeCreate and ImpactNodeCheckout give the node a draft (once per change and flow; the impact's post is the draft
+  // reference, version 0); ImpactNodeUpdate and the link operations edit it; an edit never reviews, an accepted review runs
+  // the checks of a version on the draft and writes nothing; ImpactNodeTransition moves a node along its lifecycle (the
+  // state of its draft, the node checked out first when it has none); ImpactNodeCancel drops the draft (a creation cancelled
+  // removes its impact). The versions are written when the change lands.
   rpc ImpactNodeCreate(ImpactNodeCreateRequest) returns (ImpactNodeCreateResponse);
   rpc ImpactNodeCheckout(ImpactNodeCheckoutRequest) returns (ImpactNodeCheckoutResponse);
   rpc ImpactNodeUpdate(ImpactNodeUpdateRequest) returns (ImpactNodeUpdateResponse);
@@ -65,8 +66,7 @@ service GraphService {
   // parent as via.
   rpc ImpactNodeMerge(ImpactNodeMergeRequest) returns (ImpactNodeRestructureResponse);
   rpc ImpactNodeSplit(ImpactNodeSplitRequest) returns (ImpactNodeRestructureResponse);
-  // Take a change impact out of the change, explicitly: its working version is dropped (refused once a version of it
-  // is frozen by its accepted review: reject it instead).
+  // Take a change impact out of the change, explicitly: its draft is dropped.
   rpc WithdrawImpact(WithdrawImpactRequest) returns (WithdrawImpactResponse);
   rpc ImpactNodeReview(ImpactNodeReviewRequest) returns (ImpactNodeReviewResponse);
   rpc ReopenChangeImpacts(ReopenChangeImpactsRequest) returns (ReopenChangeImpactsResponse);
@@ -180,8 +180,9 @@ message Node {
   // the organisational unit responsible for the version and the project the node was created in (node ids, ADR 0054)
   string owner = 18;
   string project = 19;
-  // a working version, edited in place by its change until an accepted review freezes it (ADR 0076, 0077)
-  bool checked_out = 20;
+  // the draft of a node in a change (ADR 0079): the node has no version while the change works, version is 0; the version
+  // is written when the change lands
+  bool draft = 20;
   // the nodes this one derives from (ADR 0077, merge and split): set on the first version of a successor
   repeated NodeRef origins = 21;
 }
@@ -297,7 +298,8 @@ message ChangeImpact {
   string rationale = 5;
   // released version of the reference baseline (empty for a created node)
   NodeRef pre = 6;
-  // version written on the change branch (empty while the impact of an existing node is only proposed)
+  // the draft of the node while the change works (a draft reference: the node, version 0, ADR 0079), the version written once
+  // the change is committed (empty while the impact of an existing node is only proposed)
   NodeRef post = 7;
   // version on the target branch once applied
   NodeRef landed = 8;
@@ -319,12 +321,16 @@ message ChangeImpact {
 
 
 message GetNodeRequest {
-  // version 0 = latest
+  // version 0 = latest (with change_id: the draft the change holds of the node, if any, ADR 0079)
   NodeRef ref = 1;
   // alternative to ref: latest version of the node with this key
   string key = 2;
   // namespace of key (required with a type catalogue)
   string namespace = 3;
+  // read the node as this change sees it on a flow ("" = the main flow, else the active option): a node the change holds a
+  // draft of is read through the draft (a draft reference: version 0), others as the stored version (ADR 0079)
+  string change_id = 4;
+  string flow = 5;
 }
 
 message GetNodeResponse {
@@ -455,7 +461,7 @@ message ImpactEvent {
   int32 seq = 3;
   // empty for a change-level event (adopted)
   string impact_id = 4;
-  // proposed (an existing node) | created (a new node: its impact and first version) | checkedOut | transitioned | updated |
+  // proposed (an existing node) | created (a new node: its impact and its draft) | checkedOut | transitioned | updated |
   // cancelled | withdrawn | reviewed | discarded | adopted | landed | rebased
   string op = 5;
   // the caller: the flow branch ("" = the main flow), the journal record of the action run, the principal or component
@@ -1078,7 +1084,7 @@ message ImpactNodeCheckoutResponse {
 message ImpactNodeUpdateRequest {
   string change_id = 1;
   string change_impact_id = 2;
-  // merged over the properties of the working version
+  // merged over the properties of the draft
   google.protobuf.Struct props = 3;
   // key of the organisational unit the node is transferred to (ADR 0054); empty: unchanged
   string owner = 4;
@@ -1092,7 +1098,7 @@ message ImpactNodeUpdateResponse {
 
 message ImpactLinkCreateRequest {
   string change_id = 1;
-  // the change impact whose working version the link leaves from
+  // the change impact whose draft the link leaves from
   string change_impact_id = 2;
   string type = 3;
   NodeRef to = 4;

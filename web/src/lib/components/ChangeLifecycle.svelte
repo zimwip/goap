@@ -4,7 +4,7 @@
   // change can be applied (ADR 0078). With `impacts`,
   // each row is also the change impact of its node (ADR 0024): why, the versions
   // it starts from and writes, its review — one list, no second table.
-  import type { GraphNode, LifecycleTransition } from '../api';
+  import { isDraft, type GraphNode, type LifecycleTransition } from '../api';
   import { birthStates, type LifecycleRow } from '../lifecycle';
   import type { Lifecycle } from '../api';
   import StatusBadge from './StatusBadge.svelte';
@@ -28,6 +28,7 @@
     impacts = false,
     scope = '',
     onreview,
+    onacceptall,
   }: {
     rows: LifecycleRow[];
     /** nodes the change could take on */
@@ -58,10 +59,13 @@
     scope?: string;
     /** accepts or rejects the change impact of a row; the comment is mandatory */
     onreview?: (row: LifecycleRow, accept: boolean, comment: string) => Promise<boolean> | boolean;
+    /** accepts every impact still awaiting its review: an explicit action, the comment is mandatory */
+    onacceptall?: (comment: string) => Promise<boolean> | boolean;
   } = $props();
 
   const onOption = $derived(impacts && !!scope && scope !== 'main');
-  const version = (r?: { id?: string; version?: number }) => (r?.id ? `v${r.version}` : '—');
+  // a draft reference has no version (ADR 0079): the node gets one when the change lands
+  const version = (r?: { id?: string; version?: number }) => (r?.id ? (isDraft(r) ? 'draft' : `v${r.version}`) : '—');
   let reviewing = $state('');
   let reviewComment = $state('');
   let rationale = $state('');
@@ -71,12 +75,19 @@
       reviewComment = '';
     }
   }
+  // Reviews are never automatic (ADR 0079): an edit leaves its impact proposed, and the graph refuses to land the change
+  // while one awaits its review.
+  const awaiting = $derived(impacts ? rows.filter((r) => r.impact && !r.impact.superseded && r.impact.post?.id && (r.impact.review === 'proposed' || !r.impact.review)) : []);
+  let allComment = $state('');
+  async function acceptAll() {
+    if (onacceptall && (await onacceptall(allComment.trim()))) allComment = '';
+  }
   const openable = (r: LifecycleRow) => !r.created || !!r.impact?.post?.id;
 
   async function remove(r: LifecycleRow) {
     const what = r.created
       ? `Discard the new node ${r.node.key}? It is taken out of the change.`
-      : `Take ${r.node.key} (${r.node.type}) out of this change? Its working version is dropped; a node is never deleted (ADR 0076).`;
+      : `Take ${r.node.key} (${r.node.type}) out of this change? Its draft is dropped; a node is never deleted (ADR 0076).`;
     if (await confirmDialog({ message: what, danger: true })) void onremove(r);
   }
 
@@ -129,7 +140,7 @@
 
   /** Property names of the form: declared ones first, then the ones the node has. */
   function fields(r: LifecycleRow): string[] {
-    return [...new Set([...r.declared, ...Object.keys(r.props)])];
+    return [...new Set([...r.declared, ...(r.open ? Object.keys(r.props) : [])])];
   }
 
   function startEdit(r: LifecycleRow) {
@@ -157,7 +168,7 @@
     const patch: Record<string, unknown> = {};
     try {
       for (const [k, v] of Object.entries(draft)) if (v !== text(r.props[k])) patch[k] = parse(r, k, v);
-      if (newKey.trim()) {
+      if (r.open && newKey.trim()) {
         if (newKey.trim() in draft) throw new Error(`property “${newKey.trim()}” is already in the form`);
         patch[newKey.trim()] = newValue;
       }
@@ -197,6 +208,19 @@
     </div>
   {/if}
 
+  {#if awaiting.length}
+    <div class="alert" role="status" id="awaiting-review">
+      <strong>Awaiting review: {awaiting.map((r) => r.node.key).join(', ')}.</strong>
+      The change cannot land while an impact awaits its review: accept or reject each one below (Review…), or accept them all.
+      {#if !disabled && onacceptall}
+        <div class="row">
+          <input type="text" class="grow" placeholder="Comment (mandatory)" aria-label="Comment for accepting all proposed impacts" bind:value={allComment} />
+          <button type="button" class="small primary" disabled={!allComment.trim() || busy !== ''} onclick={acceptAll}>Accept all proposed ({awaiting.length})</button>
+        </div>
+      {/if}
+    </div>
+  {/if}
+
   {#if rows.length}
     <table>
       <thead><tr><th>Node</th>{#if impacts}<th>Why</th><th>Versions</th>{/if}<th>State</th>{#if impacts}<th>Review</th>{/if}<th>Actions</th></tr></thead>
@@ -207,13 +231,13 @@
               {#if !openable(r)}<code>{r.node.key}</code>{:else}<button type="button" class="link mono" title="Open the node in its editor, as this change has it" onclick={() => onopennode(r)}>{r.node.key}</button>{/if}
               <span class="hint">{r.node.type}{r.created ? '' : ` v${r.node.version ?? 0}`}</span>
               {#if r.created}<span class="tag ok" title="Created by this change; stored when it is applied">new</span>{/if}
-              {#if r.edits}<span class="tag ok" title="Property edits proposed in this change">{r.edits} edit{r.edits > 1 ? 's' : ''}</span>{/if}
+              {#if r.draft && !r.created}<span class="tag ok" title="The change holds a draft of the node: it gets its next version when the change lands (ADR 0079)">draft</span>{/if}
               {#if onOption && r.impact}
                 {#if r.impact.flow === scope}<span class="origin own" title="declared by this option: it lands only if the option is selected">this option</span>{:else}<span class="origin" title="declared on the main flow: every option sees it">main flow</span>{/if}
               {/if}
             </td>
             {#if impacts}
-              <td class="why">{r.impact?.rationale ?? ''}{#if r.impact && !r.impact.post}<span class="hint planned" title="declared, no version written yet">planned</span>{/if}</td>
+              <td class="why">{r.impact?.rationale ?? ''}{#if r.impact && !r.impact.post}<span class="hint planned" title="declared, no draft yet">planned</span>{/if}</td>
               <td class="mono">
                 {#if r.impact}{version(r.impact.pre)} → {version(r.impact.post)}{#if r.impact.landed?.id}<span class="hint"> · landed {version(r.impact.landed)}</span>{/if}{:else}—{/if}
               </td>
@@ -276,7 +300,7 @@
                     type="button"
                     class="small danger"
                     disabled={busy !== ''}
-                    title={r.created ? 'Discard this new node' : 'Take the node out of the change (refused once a version of it is frozen: reject it instead)'}
+                    title={r.created ? 'Discard this new node' : 'Take the node out of the change (refused once its version has landed: reject it instead)'}
                     onclick={() => remove(r)}
                   >
                     {r.created ? 'Discard' : 'Remove from change'}
@@ -325,13 +349,15 @@
                       {/if}
                     </div>
                   {/each}
-                  <div class="newprop">
-                    <input type="text" class="mono" placeholder="new property" aria-label="New property name" bind:value={newKey} />
-                    <input type="text" placeholder="value" aria-label="New property value" bind:value={newValue} />
-                  </div>
+                  {#if r.open}
+                    <div class="newprop">
+                      <input type="text" class="mono" placeholder="new property" aria-label="New property name" bind:value={newKey} />
+                      <input type="text" placeholder="value" aria-label="New property value" bind:value={newValue} />
+                    </div>
+                  {/if}
                   <p class="hint">
                     Values are text; a property that already holds a number, boolean or list is edited as JSON. Only the changed
-                    properties are proposed.
+                    properties are proposed.{#if !r.open} Only the attributes of {r.node.type} can be set.{/if}
                   </p>
                   {#if formError}<div class="alert">{formError}</div>{/if}
                   <div class="row">

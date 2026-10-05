@@ -20,8 +20,8 @@ const (
 )
 
 // ChangeView returns the graph a change sees at a level, on one of its flows ("" = the main flow): the head of the
-// branch the change works on, with the post versions of the change impacts the level counts laid over it (a
-// retired node leaves it). Nothing is stored: the result is a baseline without an id, computed from the change
+// branch the change works on, with the posts of the change impacts the level counts laid over it: the version a
+// landed change wrote, or Version 0 for a node the change holds a draft of (ADR 0079; read it with ChangeNodeView). Nothing is stored: the result is a baseline without an id, computed from the change
 // impact projection (ADR 0029). At landed it is a stored baseline: the result of the change, or its start.
 func (g *Graph) ChangeView(ctx context.Context, id domain.ChangeID, flow, level string) (b domain.Baseline, err error) {
 	switch level {
@@ -77,6 +77,10 @@ func changeViewTx(ctx context.Context, g *Graph, tx Tx, c domain.Change, flow, l
 	}
 	for _, cn := range impacts {
 		if cn.Post == nil || cn.Review == domain.ReviewRejected || (level == ViewAccepted && cn.Review != domain.ReviewAccepted) {
+			continue
+		}
+		if cn.Post.IsDraft() {
+			nodes[cn.Post.ID] = 0 // the draft the flow holds (ADR 0079): Version 0
 			continue
 		}
 		n, err := tx.Node(ctx, *cn.Post)

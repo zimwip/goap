@@ -283,13 +283,13 @@ func TestGuardBaselineNeedsAChange(t *testing.T) {
 	})
 }
 
-// Only a working version (ADR 0076) is edited in place: its owner moved, its outgoing links edited or removed, then
-// frozen; once frozen, the guard refuses every in-place edit and a second freeze, whatever the storage.
-func TestGuardEditsWorkingVersionsOnly(t *testing.T) {
-	forEachRepo(t, testGuardEditsWorkingVersionsOnly)
+// A version is immutable once written (ADR 0079): the version and its outgoing links are written in one transaction, a
+// later one adds no link to it, whatever the storage. There is no operation that edits, freezes or drops a version.
+func TestGuardKeepsVersionsImmutable(t *testing.T) {
+	forEachRepo(t, testGuardKeepsVersionsImmutable)
 }
 
-func testGuardEditsWorkingVersionsOnly(t *testing.T, repo Repo) {
+func testGuardKeepsVersionsImmutable(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	g := New(repo)
 	if err := g.Bootstrap(ctx); err != nil {
@@ -298,133 +298,23 @@ func testGuardEditsWorkingVersionsOnly(t *testing.T, repo Repo) {
 	org := must[domain.Node](t)(g.NodeByKey(ctx, NamespaceOrganisation, rootOrg(g)))
 	boot := must[domain.Change](t)(g.Change(ctx, org.ChangeID))
 	write := func(fn func(tx Tx) error) error { return g.repo.InTx(ctx, fn) }
-	work := domain.Node{ID: domain.NodeID(g.newID()), Version: 1, Branch: domain.MainBranch, Reason: domain.ReasonCreate, Namespace: "notes",
-		Key: "N-1", Type: "Note", ChangeID: boot.ID, CreatedAt: g.now(), CheckedOut: true}
-	link := domain.Link{ID: domain.LinkID(g.newID()), Type: "refines", From: work.Ref(), To: work.Ref(), ChangeID: boot.ID}
+	node := domain.Node{ID: domain.NodeID(g.newID()), Version: 1, Branch: domain.MainBranch, Reason: domain.ReasonCreate, Namespace: "notes",
+		Key: "N-1", Type: "Note", ChangeID: boot.ID, CreatedAt: g.now()}
+	link := domain.Link{ID: domain.LinkID(g.newID()), Type: "refines", From: node.Ref(), To: node.Ref(), ChangeID: boot.ID}
 	if err := write(func(tx Tx) error {
-		if err := tx.PutNode(ctx, work); err != nil {
+		if err := tx.PutNode(ctx, node); err != nil {
 			return err
 		}
 		return tx.PutLink(ctx, link)
 	}); err != nil {
-		t.Fatal(err)
+		t.Fatalf("a version and its links are written together: %v", err)
 	}
-	if n := must[domain.Node](t)(g.Node(ctx, work.Ref())); !n.CheckedOut {
-		t.Fatalf("the working version is read back checked out: %+v", n)
-	}
-	// in a later transaction, the working version is edited in place
 	if err := write(func(tx Tx) error {
-		if err := tx.SetNodeOwner(ctx, work.Ref(), org.ID); err != nil {
-			return err
-		}
-		if err := tx.SetNodeState(ctx, work.Ref(), "draft"); err != nil {
-			return err
-		}
-		return tx.SetLinkProps(ctx, link.ID, map[string]any{"why": "draft"})
-	}); err != nil {
-		t.Fatal(err)
+		return tx.PutLink(ctx, domain.Link{ID: domain.LinkID(g.newID()), Type: "refines", From: node.Ref(), To: node.Ref(), ChangeID: boot.ID})
+	}); !errors.Is(err, ErrConflict) {
+		t.Fatalf("a link added to a version written earlier: %v", err)
 	}
-	var l domain.Link
-	if err := write(func(tx Tx) (err error) { l, err = tx.Link(ctx, link.ID); return err }); err != nil || l.Properties["why"] != "draft" {
-		t.Fatalf("link properties: %+v", l)
-	}
-	if err := write(func(tx Tx) error { return tx.FreezeVersion(ctx, work.Ref()) }); err != nil {
-		t.Fatal(err)
-	}
-	if n := must[domain.Node](t)(g.Node(ctx, work.Ref())); n.CheckedOut || n.Owner != org.ID {
-		t.Fatalf("frozen, owned by the root unit: %+v", n)
-	}
-	for name, fn := range map[string]func(tx Tx) error{
-		"an owner moved":  func(tx Tx) error { return tx.SetNodeOwner(ctx, work.Ref(), org.ID) },
-		"a state set":     func(tx Tx) error { return tx.SetNodeState(ctx, work.Ref(), "late") },
-		"a link edited":   func(tx Tx) error { return tx.SetLinkProps(ctx, link.ID, map[string]any{"why": "late"}) },
-		"a link removed":  func(tx Tx) error { return tx.DeleteLink(ctx, link.ID) },
-		"a second freeze": func(tx Tx) error { return tx.FreezeVersion(ctx, work.Ref()) },
-	} {
-		if err := write(fn); err == nil || (!errors.Is(err, ErrConflict) && !errors.Is(err, ErrNotFound)) {
-			t.Errorf("%s on a frozen version: %v", name, err)
-		}
-	}
-}
-
-// A checkout is cancelled by dropping its working version (ADR 0076): a created node cancelled before it is
-// accepted is removed with its key, a modified one goes back to its checked-in version; a frozen version, or one
-// another version links to, is never dropped.
-func TestGuardDropsWorkingVersionsOnly(t *testing.T) {
-	forEachRepo(t, testGuardDropsWorkingVersionsOnly)
-}
-
-func testGuardDropsWorkingVersionsOnly(t *testing.T, repo Repo) {
-	ctx := context.Background()
-	g := New(repo)
-	if err := g.Bootstrap(ctx); err != nil {
-		t.Fatal(err)
-	}
-	org := must[domain.Node](t)(g.NodeByKey(ctx, NamespaceOrganisation, rootOrg(g)))
-	boot := must[domain.Change](t)(g.Change(ctx, org.ChangeID))
-	write := func(fn func(tx Tx) error) error { return g.repo.InTx(ctx, fn) }
-	version := func(id domain.NodeID, v domain.Version, key string) domain.Node {
-		n := domain.Node{ID: id, Version: v, Branch: domain.MainBranch, Reason: domain.ReasonCreate, Namespace: "notes", Key: key, Type: "Note",
-			ChangeID: boot.ID, CreatedAt: g.now(), CheckedOut: true}
-		if v > 1 {
-			n.Reason, n.Parents = domain.ReasonRevise, []domain.Version{v - 1}
-		}
-		return n
-	}
-	created, kept := version(domain.NodeID(g.newID()), 1, "N-1"), version(domain.NodeID(g.newID()), 1, "N-2")
-	next := version(kept.ID, 2, "N-2")
-	if err := write(func(tx Tx) error {
-		for _, n := range []domain.Node{created, kept} {
-			if err := tx.PutNode(ctx, n); err != nil {
-				return err
-			}
-		}
-		if err := tx.PutLink(ctx, domain.Link{ID: domain.LinkID(g.newID()), Type: "refines", From: created.Ref(), To: kept.Ref(), ChangeID: boot.ID}); err != nil {
-			return err
-		}
-		if err := tx.FreezeVersion(ctx, kept.Ref()); err != nil {
-			return err
-		}
-		return tx.PutNode(ctx, next)
-	}); err != nil {
-		t.Fatal(err)
-	}
-	// the checked-in N-2 v1 is never dropped
-	for name, fn := range map[string]func(tx Tx) error{
-		"a frozen version":           func(tx Tx) error { return tx.DropWorkingVersion(ctx, kept.Ref()) },
-		"a version that is not last": func(tx Tx) error { return tx.DropWorkingVersion(ctx, domain.NodeRef{ID: kept.ID, Version: 1}) },
-	} {
-		if err := write(fn); !errors.Is(err, ErrConflict) {
-			t.Errorf("%s dropped: %v", name, err)
-		}
-	}
-	// N-1 links to N-2 v2: v2 is not dropped while the link stands; dropping N-1 removes it
-	if err := write(func(tx Tx) error {
-		return tx.PutLink(ctx, domain.Link{ID: domain.LinkID(g.newID()), Type: "refines", From: created.Ref(), To: next.Ref(), ChangeID: boot.ID})
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if err := write(func(tx Tx) error { return tx.DropWorkingVersion(ctx, next.Ref()) }); !errors.Is(err, ErrConflict) {
-		t.Fatalf("a version another version links to is dropped: %v", err)
-	}
-	// the creation of N-1 cancelled: the node, its key and its links go
-	if err := write(func(tx Tx) error { return tx.DropWorkingVersion(ctx, created.Ref()) }); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := g.NodeByKey(ctx, "notes", "N-1"); !errors.Is(err, ErrNotFound) {
-		t.Fatalf("a cancelled creation leaves no node: %v", err)
-	}
-	if links := must[[]domain.Link](t)(g.OutLinksOf(ctx, created.Ref())); len(links) != 0 {
-		t.Fatalf("nor its links: %+v", links)
-	}
-	if err := write(func(tx Tx) error { return tx.DropWorkingVersion(ctx, next.Ref()) }); err != nil {
-		t.Fatal(err)
-	}
-	if n := must[domain.Node](t)(g.NodeByKey(ctx, "notes", "N-2")); n.Version != 1 {
-		t.Fatalf("N-2 goes back to its checked-in version: %+v", n)
-	}
-	// its key is free again
-	if err := write(func(tx Tx) error { return tx.PutNode(ctx, version(domain.NodeID(g.newID()), 1, "N-1")) }); err != nil {
-		t.Fatal(err)
+	if out := must[[]domain.Link](t)(g.OutLinksOf(ctx, node.Ref())); len(out) != 1 {
+		t.Fatalf("the links of the version are unchanged: %+v", out)
 	}
 }

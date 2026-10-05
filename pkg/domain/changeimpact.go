@@ -52,7 +52,8 @@ type ChangeImpact struct {
 	Rationale string         `json:"rationale"`
 	// Pre is the released version of the reference baseline (nil when Intent is created).
 	Pre *NodeRef `json:"pre,omitempty"`
-	// Post is the version created by the change; nil while the change impact is only planned.
+	// Post is the draft of the node while the change works (a draft reference: the node, Version 0, ADR 0079), the
+	// version written once the change is committed; nil while the change impact is only planned.
 	Post *NodeRef `json:"post,omitempty"`
 	// Landed is the version on the target branch once the change is applied.
 	Landed  *NodeRef   `json:"landed,omitempty"`
@@ -75,8 +76,12 @@ type ChangeImpact struct {
 	CreatedAt  time.Time `json:"createdAt"`
 }
 
-// Planned reports whether the change impact has no post version yet.
+// Planned reports whether the change impact has no post yet: its node is not checked out, no draft exists.
 func (c ChangeImpact) Planned() bool { return c.Post == nil }
+
+// Drafted reports whether the node of the change impact has a draft: Post is then the draft reference (Version 0, ADR
+// 0079); once the change landed it is the version written.
+func (c ChangeImpact) Drafted() bool { return c.Post != nil && c.Post.IsDraft() }
 
 // Validate checks the shape of a change impact.
 func (c ChangeImpact) Validate() error {
@@ -95,7 +100,7 @@ func (c ChangeImpact) Validate() error {
 		if c.Pre == nil || c.Pre.Version == 0 {
 			return fmt.Errorf("change impact %s: a modified node needs its pre version", c.Key)
 		}
-		if c.Post != nil && (c.Post.ID != c.Pre.ID || c.Post.Version <= c.Pre.Version) {
+		if c.Post != nil && (c.Post.ID != c.Pre.ID || (!c.Post.IsDraft() && c.Post.Version <= c.Pre.Version)) {
 			return fmt.Errorf("change impact %s: post %s is not a successor of pre %s", c.Key, c.Post, c.Pre)
 		}
 	default:

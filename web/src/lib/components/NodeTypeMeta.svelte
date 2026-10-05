@@ -33,12 +33,13 @@
   } = $props();
 </script>
 
-<details class="meta" open={!!n.lifecycle || !!n.document || !n.changeControlled || n.validators.length > 0 || !!n.editor}>
+<details class="meta" open={!!n.lifecycle || !!n.document || !n.changeControlled || n.additionalProperties || n.validators.length > 0 || !!n.editor}>
   <summary>
     Lifecycle, documents, node validators &amp; editor
     {#if n.lifecycle}<span class="tag">lifecycle: {n.lifecycle}</span>{:else if inherited}<span class="tag muted">inherits {inherited.lifecycle} from {inherited.type}</span>{/if}
     {#if n.document}<span class="tag">document</span>{/if}
     {#if !n.changeControlled}<span class="tag muted">direct writes</span>{/if}
+    {#if n.additionalProperties}<span class="tag muted">free-form</span>{/if}
     {#if n.validators.length}<span class="tag">{n.validators.length} node validator{n.validators.length > 1 ? 's' : ''}</span>{/if}
     {#if n.editor}<span class="tag">editor: {n.editor}</span>{/if}
   </summary>
@@ -55,6 +56,7 @@
         <button type="button" class="small link" title="Open the lifecycle {target}" onclick={() => onopenLifecycle(target)}>Open {target} ↗</button>
       {/if}
       <label class="check" title="Off: the nodes are written directly, outside changes (no lifecycle)"><input type="checkbox" bind:checked={n.changeControlled} disabled={readonly || !!n.lifecycle} /> modified through changes only</label>
+      <label class="check" title="Off (the default): a node carries the attributes of its type, and of its supertypes, only. On: it may carry any other property too"><input type="checkbox" bind:checked={n.additionalProperties} disabled={readonly} /> free-form: accepts properties that are no attribute</label>
     </div>
     <div class="field">
       <label for="{path}-doc">Embedded node types <span class="hint">(a document: comma-separated, attached by outgoing “contains” links)</span></label>

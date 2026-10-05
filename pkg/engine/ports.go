@@ -15,8 +15,8 @@ type GraphPort interface {
 	CreateChange(ctx context.Context, in graph.NewChange) (domain.Change, error)
 	UpdateChange(ctx context.Context, id domain.ChangeID, p graph.ChangePatch) (domain.Change, error)
 	AddItems(ctx context.Context, id domain.ChangeID, items []domain.ChangeItem) ([]domain.ChangeItem, error)
-	// Change impacts (ADR 0024, 0076): declare the nodes a change acts on, check them out, edit their working version,
-	// review, check in and move them.
+	// Change impacts (ADR 0024, 0076, 0079): declare the nodes a change acts on, check them out, edit their draft,
+	// review and move them.
 	ProposeImpact(ctx context.Context, id domain.ChangeID, nodes []domain.ChangeImpact) ([]domain.ChangeImpact, error)
 	ImpactNodeCreate(ctx context.Context, id domain.ChangeID, in graph.NodeCreate) (domain.ChangeImpact, error)
 	ImpactNodeCheckout(ctx context.Context, id domain.ChangeID, in graph.NodeCheckout) (domain.ChangeImpact, error)

@@ -1,5 +1,5 @@
 name: methodology
-version: 1.6.0
+version: 1.7.0
 description: >
   Built-in meta-domain (ADR 0012 §4, ADR 0023): the definition of a methodology version, one node per element, in the
   "methodology" namespace. Its types are in every type catalogue, before anything is loaded from the registry.
@@ -17,6 +17,10 @@ nodeTypes:
       - {name: namespace, label: "Domain namespace", description: "Namespace of the domain the methodology works on", type: string, section: Definition, order: 4}
       - {name: lifecycle, label: Lifecycle, description: "Lifecycle of the domain the changes of the methodology follow (ADR 0058); empty: none", type: string, section: Definition, order: 4}
       - {name: criticality, label: Criticality, description: "Default criticality of the changes of the methodology (C1, C2 or C3, ADR 0075); empty: C2", type: string, section: Definition, order: 4}
+      - {name: administrative, label: Administrative, description: "The changes of the methodology name no project (it manages organisation, project, policy or adapter data)", type: boolean, section: Definition, order: 4}
+      - {name: appliesTo, label: "Applies to", description: "Methodologies whose changes it runs alongside (a transverse methodology, ADR 0036)", type: json, widget: textarea, section: Definition, order: 4}
+      - {name: imports, label: Imports, description: "Condition libraries the methodology uses without declaring their conditions", type: json, widget: textarea, section: Definition, order: 4}
+      - {name: on, label: "Reacts to", description: "Events of the changes a transverse methodology reacts to", type: json, widget: textarea, section: Definition, order: 4}
       - {name: status, label: Status, description: "draft, published or archived", type: string, section: Definition, order: 5}
       - {name: createdAt, label: "Created at", description: "When the version was created", type: string, section: History, order: 6}
       - {name: updatedAt, label: "Updated at", description: "When the version was last modified", type: string, section: History, order: 7}
@@ -34,6 +38,9 @@ nodeTypes:
       - {name: goals, label: Goals, description: "Names of the goals the agent pursues", type: json, widget: textarea, section: Planning, order: 6}
       - {name: triggers, label: Triggers, description: "Events and schedules that start the agent", type: json, widget: textarea, section: Planning, order: 7}
       - {name: roles, label: Roles, description: "Roles allowed to run the agent", type: json, widget: textarea, section: Access, order: 8}
+      - {name: examples, label: Examples, description: "Phrasings of the intents the agent answers", type: json, widget: textarea, section: Identity, order: 3}
+      - {name: mcps, label: MCPs, description: "MCPs whose tools its llm and script actions may use", type: json, widget: textarea, section: Planning, order: 8}
+      - {name: role, label: Role, description: "Role the agent acts as (the one responsible for the method it was generated for)", type: string, section: Access, order: 8}
       - {name: position, label: Position, description: "Position of the element in its collection of the definition", type: number, section: Definition, order: 90}
       - {name: removed, label: Removed, description: "The element was removed from the definition (kept for the history)", type: boolean, section: Definition, order: 91}
   # Action is an Activity too (architecture plan "Activity concept"): the smallest one, not broken down further.
@@ -47,6 +54,26 @@ nodeTypes:
       - {name: kind, label: Kind, description: "How the action is carried out", type: enum, enum: action-kind, section: Execution, order: 3}
       - {name: roles, label: Roles, description: "Roles allowed to run the action", type: json, widget: textarea, section: Access, order: 4}
       - {name: verify, label: Verification, description: "How the effect is verified: the oracle (tool, human, model) and whether the verifier differs from the producer", type: json, widget: textarea, section: Execution, order: 5}
+      - {name: pre, label: Preconditions, description: "Conditions required to run the action, with their expected value", type: json, widget: textarea, section: Planning, order: 6}
+      - {name: effects, label: Effects, description: "Conditions the action establishes, with their value", type: json, widget: textarea, section: Planning, order: 7}
+      - {name: cost, label: Cost, description: "Cost the planner minimizes (default 1)", type: number, section: Planning, order: 8}
+      - {name: utility, label: Utility, description: "CEL number used by the utility and hybrid planners (default 1)", type: string, section: Planning, order: 9}
+      - {name: expects, label: Expectation, description: "Expectation on the produced items, compiled to a condition", type: json, widget: textarea, section: Planning, order: 10}
+      - {name: incremental, label: Incremental, description: "Reaches its effects over several executions: an execution that produced items is progress", type: boolean, section: Planning, order: 11}
+      - {name: permission, label: Permission, description: "Permission required from the initiator to run the action automatically", type: string, section: Access, order: 12}
+      - {name: model, label: Model, description: "Model alias of an llm action", type: string, section: Execution, order: 13}
+      - {name: prompt, label: Prompt, description: "Prompt of an llm action", type: string, widget: textarea, section: Execution, order: 14}
+      - {name: tool, label: Tool, description: "mcp/tool of a tool action", type: string, section: Execution, order: 15}
+      - {name: mcps, label: MCPs, description: "MCPs an llm or script action uses", type: json, widget: textarea, section: Execution, order: 16}
+      - {name: builtin, label: Builtin, description: "Name of the builtin action", type: string, section: Execution, order: 17}
+      - {name: instructions, label: Instructions, description: "What a person does in a human action", type: string, widget: textarea, section: Execution, order: 18}
+      - {name: params, label: Parameters, description: "Parameters of the action", type: json, widget: textarea, section: Execution, order: 19}
+      - {name: nodeTypes, label: "Node types", description: "Qualified node types a human task may create or pick; empty: every type of the namespace", type: json, widget: textarea, section: Execution, order: 20}
+      - {name: language, label: Language, description: "Language of a script action (javascript or go)", type: string, section: Execution, order: 21}
+      - {name: code, label: Code, description: "Code of a script action", type: string, widget: textarea, section: Execution, order: 22}
+      - {name: specializes, label: Specializes, description: "Action this one specializes: action or methodology/action", type: string, section: Specialization, order: 23}
+      - {name: when, label: "Applies when", description: "CEL guard of a specialization; empty: always", type: string, section: Specialization, order: 24}
+      - {name: priority, label: Priority, description: "The applicable specialization with the highest priority wins", type: number, section: Specialization, order: 25}
       - {name: position, label: Position, description: "Position of the element in its collection of the definition", type: number, section: Definition, order: 90}
       - {name: removed, label: Removed, description: "The element was removed from the definition (kept for the history)", type: boolean, section: Definition, order: 91}
   - name: Condition
@@ -65,6 +92,8 @@ nodeTypes:
       - {name: name, label: Name, description: "Name of the element in its methodology version", type: string, section: Identity, order: 1, asName: true}
       - {name: description, label: Description, description: "What the element is for", type: string, widget: textarea, section: Identity, order: 2}
       - {name: pre, label: Conditions, description: "Conditions the goal requires, with their expected value", type: json, widget: textarea, section: Definition, order: 3}
+      - {name: examples, label: Examples, description: "Phrasings of the intents that reach the goal", type: json, widget: textarea, section: Identity, order: 3}
+      - {name: value, label: Value, description: "Value of the goal for the utility planners", type: number, section: Definition, order: 4}
       - {name: position, label: Position, description: "Position of the element in its collection of the definition", type: number, section: Definition, order: 90}
       - {name: removed, label: Removed, description: "The element was removed from the definition (kept for the history)", type: boolean, section: Definition, order: 91}
   # ADR 0035 §2: a role processes and methods assign RACI style; ADR 0039: what Assignment (organisation namespace)

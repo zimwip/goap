@@ -36,8 +36,8 @@ export interface GraphNode {
   /** id of the organisational unit owning the version, and of the project the node was created in (ADR 0054) */
   owner?: string;
   project?: string;
-  /** a working version, edited in place by its change until the change lands and freezes it (ADR 0076, 0077) */
-  checkedOut?: boolean;
+  /** this view is the draft a change holds of the node (version 0): the node has no version until the change lands (ADR 0079) */
+  draft?: boolean;
   /** the nodes this one derives from (ADR 0077): set on the first version of the successor of a merge or a split */
   origins?: NodeRef[];
 }
@@ -99,7 +99,7 @@ export interface ImpactEvent {
   seq?: number;
   /** empty for a change-level event (adopted) */
   impactId?: string;
-  /** proposed: the impact of an existing node; created: a new node, its impact and first version in one event; checkedOut: an existing node's next version */
+  /** proposed: the impact of an existing node; created: a new node, its impact and draft in one event; checkedOut: the draft of an existing node (ADR 0079) */
   op?: 'proposed' | 'created' | 'checkedOut' | 'transitioned' | 'updated' | 'reviewed' | 'discarded' | 'cancelled' | 'withdrawn' | 'adopted' | 'landed' | 'rebased' | string;
   /** the caller: flow branch ('' = main flow), journal record of the action run, principal or component */
   flow?: string;
@@ -275,7 +275,7 @@ export interface ChangeImpact {
   rationale?: string;
   /** released version the change starts from (none for a created node) */
   pre?: NodeRef;
-  /** version written on the change branch (none while the impact of an existing node is only proposed) */
+  /** the draft the change holds of the node: a draft reference `{id, version: 0}` (ADR 0079; see isDraft); none while the impact of an existing node is only proposed */
   post?: NodeRef;
   /** version on the target branch once applied */
   landed?: NodeRef;

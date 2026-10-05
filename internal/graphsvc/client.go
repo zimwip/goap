@@ -189,7 +189,7 @@ func (c *Client) ImpactLinkCreate(ctx context.Context, id domain.ChangeID, impac
 	return pbconv.LinkFromPB(r.Msg.Link), nil
 }
 
-// ImpactLinkUpdate replaces the properties of a link of a working version.
+// ImpactLinkUpdate replaces the properties of a link of a draft.
 func (c *Client) ImpactLinkUpdate(ctx context.Context, id domain.ChangeID, link domain.LinkID, props map[string]any, flow, execution string) (domain.Link, error) {
 	r, err := c.rpc.ImpactLinkUpdate(ctx, connect.NewRequest(&graphv1.ImpactLinkUpdateRequest{ChangeId: string(id), LinkId: string(link), Props: pbconv.Struct(props), Flow: flow, Execution: execution}))
 	if err != nil {

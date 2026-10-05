@@ -1,12 +1,12 @@
 // Pending edits of the settings dialog. Everything the dialog edits is graph data of the platform or the
 // organisation namespace, and every modification of the graph goes through a change: an edit opens, behind the
 // scenes, a personal change of the namespace of the node (ADR 0037: held by the personal unit of the user, nobody
-// else sees it) and is written as an impact of it: the node is checked out and its working version edited in place,
+// else sees it) and is written as an impact of it: the node is checked out and its draft edited in place (ADR 0079),
 // a removal is the transition of its lifecycle that retires it (a node is never deleted, ADR 0076). Nothing is
 // applied until the user saves: Save accepts the impacts, checks them in and applies the changes, Discard removes
 // them from the system. The dialog shows the graph with the
 // pending nodes laid over it (see llmEdit.ts for the model gateway).
-import { graph, errorMessage, type NodeRef, type Struct } from '../api';
+import { graph, errorMessage, isDraft, type GraphNode, type NodeRef, type Struct } from '../api';
 import { MAIN_BRANCH } from '../namespace';
 import { me, userKey } from './session.svelte';
 
@@ -78,11 +78,10 @@ async function onMain(ns: string, baselineId: string, type: string, key: string)
   return n ? { ref: { id: n.id, version: n.version }, state: n.state ?? '' } : undefined;
 }
 
-/** Is the version the change holds for an impact a working version? */
-async function checkedOut(c: NsChange, s: Staged): Promise<boolean> {
+/** Does the change hold a draft of the node of an impact (ADR 0079: its post is a draft reference)? */
+async function holdsDraft(c: NsChange, s: Staged): Promise<boolean> {
   const imp = (await graph.getBlackboard(c.changeId, '')).change?.nodes?.find((n) => n.id === s.impactId);
-  if (!imp?.post?.id) return false;
-  return !!(await graph.getNode(imp.post)).view?.node?.checkedOut;
+  return isDraft(imp?.post);
 }
 
 async function ensure(ns: string, type: string, key: string): Promise<{ c: NsChange; s: Staged }> {
@@ -134,7 +133,7 @@ export function stageUpsert(ns: string, type: string, key: string, props: Struct
         s.impactId = node.id;
         c.nodes[key] = s;
       } else {
-        if (!(await checkedOut(c, s))) await graph.impactNodeCheckout(c.changeId, { changeImpactId: s.impactId }, `Change ${key}`);
+        if (!(await holdsDraft(c, s))) await graph.impactNodeCheckout(c.changeId, { changeImpactId: s.impactId }, `Change ${key}`);
         await graph.impactNodeUpdate(c.changeId, s.impactId, { props });
       }
       s.props = { ...s.props, ...props };
@@ -173,7 +172,7 @@ export function stageRetire(ns: string, type: string, key: string): Promise<void
         }
         if (!s.retire) {
           // the edits staged on the node go with it: the retirement starts from the version the node has
-          if (await checkedOut(c, s)) await graph.impactNodeCancel(c.changeId, s.impactId);
+          if (await holdsDraft(c, s)) await graph.impactNodeCancel(c.changeId, s.impactId);
           s.props = {};
           await graph.impactNodeTransition(c.changeId, { changeImpactId: s.impactId }, RETIRED, `Retire ${key}`);
           s.retire = true;
@@ -205,7 +204,8 @@ export async function loadPending(): Promise<void> {
       for (const imp of board?.nodes ?? []) {
         if (imp.superseded || imp.review === 'rejected' || !imp.id) continue;
         const ref = imp.post ?? imp.pre;
-        const n = ref ? (await graph.getNode(ref)).view?.node : undefined;
+        // a draft is read through the change (it has no version, ADR 0079)
+        const n: GraphNode | undefined = ref ? (await graph.getNode(ref, undefined, isDraft(ref) ? { changeId: ch.id } : undefined)).view?.node : undefined;
         const key = imp.key || n?.key;
         const type = imp.type || n?.type;
         if (!key || !type) continue;
@@ -233,7 +233,9 @@ export function savePending(): Promise<boolean> {
             await graph.withdrawImpact(c.changeId, s.impactId);
             continue;
           }
-          // the acceptance gates the working version (validators, required links); applying the change freezes it (ADR 0077)
+          // Save is an explicit user action on a personal change (ADR 0037): the owner reviews their own staged edits here,
+          // it is not a side effect of editing (an edit never reviews, ADR 0079). The acceptance runs the validations on
+          // the draft (validators, required links); applying the change writes the versions.
           await graph.impactNodeReview(c.changeId, s.impactId, true, 'Saved by its owner');
         }
         await graph.applyChange(c.changeId, '');

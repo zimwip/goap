@@ -85,7 +85,7 @@ func NodeToPB(n domain.Node) *graphv1.Node {
 		Deleted: n.Deleted, ChangeId: string(n.ChangeID), CreatedAt: Time(n.CreatedAt),
 		Branch: domain.BranchOf(n.Branch), Parents: versionsToPB(n.Parents), Reason: n.Reason, State: n.State,
 		ChangeImpact: string(n.ChangeImpact), Comment: n.Comment, Execution: n.Execution, Joined: n.Joined,
-		Owner: string(n.Owner), Project: string(n.Project), CheckedOut: n.CheckedOut, Origins: refsToPB(n.Origins)}
+		Owner: string(n.Owner), Project: string(n.Project), Draft: n.IsDraft(), Origins: refsToPB(n.Origins)}
 }
 
 func refsToPB(rs []domain.NodeRef) []*graphv1.NodeRef {
@@ -120,7 +120,7 @@ func NodeFromPB(n *graphv1.Node) domain.Node {
 		Deleted: n.Deleted, ChangeID: domain.ChangeID(n.ChangeId), CreatedAt: FromTime(n.CreatedAt),
 		Branch: n.Branch, Parents: versionsFromPB(n.Parents), Reason: n.Reason, State: n.State,
 		ChangeImpact: domain.ChangeImpactID(n.ChangeImpact), Comment: n.Comment, Execution: n.Execution, Joined: n.Joined,
-		Owner: domain.NodeID(n.Owner), Project: domain.NodeID(n.Project), CheckedOut: n.CheckedOut, Origins: refsFromPB(n.Origins)}
+		Owner: domain.NodeID(n.Owner), Project: domain.NodeID(n.Project), Origins: refsFromPB(n.Origins)}
 }
 
 func versionsFromPB(vs []int32) []domain.Version {

@@ -75,6 +75,17 @@ func (d docs) outKeys(t *testing.T, key string) []string {
 	return out
 }
 
+// draftLinks are the keys the draft of a change impact links to (the change's view, ADR 0079).
+func (d docs) draftLinks(t *testing.T, c domain.Change, post domain.NodeRef) []string {
+	t.Helper()
+	var held []string
+	for _, l := range must[domain.NodeView](t)(d.g.ChangeNodeView(d.ctx, c.ID, "", post)).Out {
+		held = append(held, must[domain.Node](t)(d.g.ChangeNode(d.ctx, c.ID, "", l.To)).Key)
+	}
+	slices.Sort(held)
+	return held
+}
+
 func impactOf(t *testing.T, list []domain.ChangeImpact, key string) domain.ChangeImpact {
 	t.Helper()
 	for _, cn := range list {
@@ -115,36 +126,18 @@ func testMergeFromTheParent(t *testing.T, repo Repo) {
 		}
 	}
 
-	// lineage, on the first version of the successor
-	cn := must[domain.Node](t)(g.Node(ctx, *res.Successors[0].Post))
-	if cn.Version != 1 || !slices.Equal(cn.Origins, []domain.NodeRef{a1.Ref(), b1.Ref()}) {
-		t.Fatalf("origins of C: v%d %v", cn.Version, cn.Origins)
+	// lineage, on the draft of the successor: no version exists yet
+	cn := must[domain.Node](t)(g.ChangeNode(ctx, c.ID, "", *res.Successors[0].Post))
+	if !cn.IsDraft() || !slices.Equal(cn.Origins, []domain.NodeRef{a1.Ref(), b1.Ref()}) {
+		t.Fatalf("origins of C: %v %v", cn.Version, cn.Origins)
 	}
-	for _, o := range []domain.Node{a1, b1} {
-		got := must[[]domain.Node](t)(g.DerivedNodes(ctx, o.Ref()))
-		if len(got) != 1 || got[0].ID != cn.ID {
-			t.Errorf("DerivedNodes(%s) = %v", o.Key, got)
-		}
-		if got := must[[]domain.Node](t)(g.DerivedNodes(ctx, domain.NodeRef{ID: o.ID})); len(got) != 1 {
-			t.Errorf("DerivedNodes(%s, any version) = %v", o.Key, got)
-		}
-		if got := must[[]domain.Node](t)(g.DerivedNodes(ctx, domain.NodeRef{ID: o.ID, Version: o.Version + 5})); len(got) != 0 {
-			t.Errorf("DerivedNodes of another version = %v", got)
-		}
-	}
-	if got := must[[]domain.Node](t)(g.DerivedNodes(ctx, x.Ref())); len(got) != 0 {
-		t.Errorf("X derives nothing: %v", got)
+	if got := must[[]domain.Node](t)(g.DerivedNodes(ctx, a1.Ref())); len(got) != 0 {
+		t.Errorf("a draft derives nothing: %v", got)
 	}
 
-	// the working version of the parent: X and C, no A, no B
-	pf := must[domain.Node](t)(g.Node(ctx, *parent.Post))
-	var held []string
-	for _, l := range must[[]domain.Link](t)(g.OutLinksOf(ctx, pf.Ref())) {
-		held = append(held, must[domain.Node](t)(g.Node(ctx, l.To)).Key)
-	}
-	slices.Sort(held)
-	if !pf.CheckedOut || !slices.Equal(held, []string{"C", "X"}) {
-		t.Fatalf("parent: checked out %v, links %v", pf.CheckedOut, held)
+	// the draft of the parent: X and C, no A, no B
+	if held := d.draftLinks(t, c, *parent.Post); !slices.Equal(held, []string{"C", "X"}) {
+		t.Fatalf("parent: links %v", held)
 	}
 
 	// the events: created with its origins, the parent updated with the patches
@@ -179,6 +172,27 @@ func testMergeFromTheParent(t *testing.T, repo Repo) {
 		t.Fatal(err)
 	}
 	base := must[domain.Baseline](t)(g.Apply(ctx, c.ID, ""))
+
+	// the lineage, on the first version of the successor written at landing
+	landedC := must[domain.Node](t)(g.NodeByKey(ctx, "docs", "C"))
+	if landedC.Version != 1 || !slices.Equal(landedC.Origins, []domain.NodeRef{a1.Ref(), b1.Ref()}) {
+		t.Fatalf("origins of the landed C: v%d %v", landedC.Version, landedC.Origins)
+	}
+	for _, o := range []domain.Node{a1, b1} {
+		got := must[[]domain.Node](t)(g.DerivedNodes(ctx, o.Ref()))
+		if len(got) != 1 || got[0].ID != landedC.ID {
+			t.Errorf("DerivedNodes(%s) = %v", o.Key, got)
+		}
+		if got := must[[]domain.Node](t)(g.DerivedNodes(ctx, domain.NodeRef{ID: o.ID})); len(got) != 1 {
+			t.Errorf("DerivedNodes(%s, any version) = %v", o.Key, got)
+		}
+		if got := must[[]domain.Node](t)(g.DerivedNodes(ctx, domain.NodeRef{ID: o.ID, Version: o.Version + 5})); len(got) != 0 {
+			t.Errorf("DerivedNodes of another version = %v", got)
+		}
+	}
+	if got := must[[]domain.Node](t)(g.DerivedNodes(ctx, x.Ref())); len(got) != 0 {
+		t.Errorf("X derives nothing: %v", got)
+	}
 
 	// one baseline holds it all, and nothing disappeared
 	nodes, _ := must2(t)(g.BaselineGraph(ctx, base.ID))
@@ -229,9 +243,7 @@ func testMergeTwoParents(t *testing.T, repo Repo) {
 		t.Errorf("B is realized through F2 (%s), got %s", f2i.ID, got)
 	}
 	for _, p := range res.Parents {
-		pf := must[domain.Node](t)(g.Node(ctx, *p.Post))
-		ls := must[[]domain.Link](t)(g.OutLinksOf(ctx, pf.Ref()))
-		if len(ls) != 1 || must[domain.Node](t)(g.Node(ctx, ls[0].To)).Key != "C" {
+		if ls := d.draftLinks(t, c, *p.Post); !slices.Equal(ls, []string{"C"}) {
 			t.Errorf("%s links %v", p.Key, ls)
 		}
 	}
@@ -276,21 +288,23 @@ func testSplit(t *testing.T, repo Repo) {
 	if len(res.Suspect) != 1 || res.Suspect[0].FromKey != "N" || res.Suspect[0].ToKey != "A" || res.Suspect[0].Type != "docs@refs" {
 		t.Fatalf("suspect: %+v", res.Suspect)
 	}
-	pf := must[domain.Node](t)(g.Node(ctx, *res.Parents[0].Post))
-	var held []string
-	for _, l := range must[[]domain.Link](t)(g.OutLinksOf(ctx, pf.Ref())) {
-		held = append(held, must[domain.Node](t)(g.Node(ctx, l.To)).Key)
-	}
-	slices.Sort(held)
-	if !slices.Equal(held, []string{"C", "D"}) {
+	if held := d.draftLinks(t, c, *res.Parents[0].Post); !slices.Equal(held, []string{"C", "D"}) {
 		t.Fatalf("F links %v", held)
 	}
 	for _, s := range res.Successors {
-		got := must[domain.Node](t)(g.Node(ctx, *s.Post))
+		got := must[domain.Node](t)(g.ChangeNode(ctx, c.ID, "", *s.Post))
 		if !slices.Equal(got.Origins, []domain.NodeRef{a.Ref()}) {
 			t.Errorf("%s origins %v", s.Key, got.Origins)
 		}
 	}
+	for _, imp := range res.Sources {
+		must[domain.ChangeImpact](t)(g.ImpactNodeReview(ctx, c.ID, imp.ID, domain.ReviewAccepted, "tester", "ok"))
+	}
+	for _, s := range res.Successors {
+		must[domain.ChangeImpact](t)(g.accept(ctx, c.ID, s.ID, "tester", "ok"))
+	}
+	must[domain.ChangeImpact](t)(g.accept(ctx, c.ID, res.Parents[0].ID, "tester", "ok"))
+	must[domain.Baseline](t)(g.Apply(ctx, c.ID, ""))
 	if got := must[[]domain.Node](t)(g.DerivedNodes(ctx, a.Ref())); len(got) != 2 {
 		t.Errorf("A derives into C and D: %v", got)
 	}
@@ -318,10 +332,9 @@ func testMergeRetargetsOtherLinks(t *testing.T, repo Repo) {
 	if len(res.Parents) != 2 || len(res.Suspect) != 0 {
 		t.Fatalf("F and N are modified: %+v", res)
 	}
-	nf := must[domain.Node](t)(g.Node(ctx, *impactOf(t, res.Parents, "N").Post))
-	ls := must[[]domain.Link](t)(g.OutLinksOf(ctx, nf.Ref()))
-	if len(ls) != 1 || ls[0].Type != "docs@refs" || must[domain.Node](t)(g.Node(ctx, ls[0].To)).Key != "C" {
-		t.Fatalf("N links %v", ls)
+	nv := must[domain.NodeView](t)(g.ChangeNodeView(ctx, c.ID, "", *impactOf(t, res.Parents, "N").Post))
+	if len(nv.Out) != 1 || nv.Out[0].Type != "docs@refs" || must[domain.Node](t)(g.ChangeNode(ctx, c.ID, "", nv.Out[0].To)).Key != "C" {
+		t.Fatalf("N links %v", nv.Out)
 	}
 	// the sources are realized through their parent, not through N
 	if got := impactOf(t, res.Sources, "A").Via; got != impactOf(t, res.Parents, "F").ID {
@@ -384,7 +397,7 @@ func TestRestructureRefusesCreatedSources(t *testing.T) {
 	})
 }
 
-// The gate holds again at check-in and at landing, when an origin is rejected after the review of the successor.
+// The gate holds again at landing, when an origin goes back to proposed after the review of the successor.
 func TestOriginsGateAtLanding(t *testing.T) { forEachRepo(t, testOriginsGateAtLanding) }
 
 func testOriginsGateAtLanding(t *testing.T, repo Repo) {
@@ -433,7 +446,7 @@ func testMergeProvenance(t *testing.T, repo Repo) {
 		t.Fatal(err)
 	}
 	raw, _ := json.Marshal(doc)
-	post := "urn:goap:node:" + string(res.Successors[0].Post.ID) + "@v1"
+	post := "urn:goap:node:" + string(res.Successors[0].Post.ID) + "@v0" // the draft: the node has no version yet (ADR 0079)
 	for _, o := range []domain.Node{a, b} {
 		if !strings.Contains(string(raw), `"prov:wasDerivedFrom":`) || !strings.Contains(string(raw), "urn:goap:node:"+string(o.ID)+"@v1") {
 			t.Fatalf("no derivation of %s in %s", o.Key, raw)

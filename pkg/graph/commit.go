@@ -22,8 +22,8 @@ type NodeEdit struct {
 	Pre *domain.NodeRef
 	// Props are merged over the current properties (a nil value clears one).
 	Props map[string]any
-	// State moves the node to a lifecycle state, after its other edits: in place on its working version, else a version of
-	// its own (ImpactNodeTransition, ADR 0076): a retired entry is edited and restored in the same change.
+	// State moves the node to a lifecycle state, after its other edits: a transition of its draft, the node checked out
+	// first when it has none (ImpactNodeTransition, ADR 0076, 0079): a retired entry is edited and restored in the same change.
 	State string
 	// Owner transfers the node to another organisational unit (its key, ADR 0054); empty: unchanged, or the unit
 	// holding the commit for a created node.
@@ -70,8 +70,8 @@ type CommitResult struct {
 
 // Commit runs the edits as one change, through the operations every change uses (ADR 0076): it opens the change on a
 // branch of its own; a created node is a ImpactNodeCreate, a modified one a ImpactNodeCheckout with its ImpactNodeUpdate and link edits;
-// each impact is accepted (the rationale is the comment; it freezes the working version), the state edits are
-// transitions (ImpactNodeTransition: in place on a working version, before its accept), and the change is applied. When the branch cannot be merged without conflict (another change moved
+// each impact is accepted by the producer (the rationale is the comment: a bulk system path, not an edit), the state
+// edits are transitions (ImpactNodeTransition, on the draft, before its accept), and the change is applied. When the branch cannot be merged without conflict (another change moved
 // a node meanwhile) the change is abandoned and ErrConflict returned: the producer reads again and rebuilds its edits.
 // A created node of a structure or a User must name its required parent (checkRequiredParent, ADR 0040).
 func (g *Graph) Commit(ctx context.Context, in Commit) (res CommitResult, err error) {
@@ -89,21 +89,12 @@ func (g *Graph) Commit(ctx context.Context, in Commit) (res CommitResult, err er
 		return res, err
 	}
 	res.Change = c.ID
-	var impacts []domain.ChangeImpactID
+	impacts := []domain.ChangeImpactID{}
 	defer func() {
 		if err == nil {
 			return
 		}
-		// a creation that was not accepted leaves no node behind: its key stays free (ADR 0076 §5b)
-		for i, e := range in.Edits {
-			if e.Pre == nil && i < len(impacts) && impacts[i] != "" {
-				if out, _ := g.isCheckedOut(ctx, c.ID, impacts[i]); out {
-					if _, cerr := g.ImpactNodeCancel(ctx, c.ID, impacts[i], "", ""); cerr != nil {
-						err = errors.Join(err, cerr)
-					}
-				}
-			}
-		}
+		// a change that fails is abandoned: its drafts go with it, no node was written, no key is held (ADR 0079)
 		abandoned := domain.ChangeAbandoned
 		if _, aerr := g.UpdateChange(ctx, c.ID, ChangePatch{Status: &abandoned}); aerr != nil {
 			err = errors.Join(err, aerr)
@@ -114,7 +105,7 @@ func (g *Graph) Commit(ctx context.Context, in Commit) (res CommitResult, err er
 		return res, err
 	}
 	impacts = make([]domain.ChangeImpactID, len(in.Edits))
-	posts := make([]*domain.NodeRef, len(in.Edits)) // the working versions
+	posts := make([]*domain.NodeRef, len(in.Edits)) // the drafts
 	written := map[string]int{}                     // key of a created node → its edit
 	type late struct {
 		from int
@@ -204,7 +195,8 @@ func (g *Graph) Commit(ctx context.Context, in Commit) (res CommitResult, err er
 				}
 			}
 			for _, id := range e.RemoveLinks {
-				if err := g.deleteCopiedLink(ctx, c.ID, *e.Pre, *cn.Post, id); err != nil {
+				// the draft holds a copy of the link of the version it was checked out from: ImpactLinkDelete finds it
+				if err := g.ImpactLinkDelete(ctx, c.ID, id, "", ""); err != nil {
 					return res, fmt.Errorf("%s: %w", nodeName(e), err)
 				}
 			}
@@ -216,9 +208,10 @@ func (g *Graph) Commit(ctx context.Context, in Commit) (res CommitResult, err er
 			return res, fmt.Errorf("link %s from %s to %s: %w", x.l.Type, nodeName(in.Edits[x.from]), x.l.ToKey, err)
 		}
 	}
-	// Accepting an impact freezes its working version (ADR 0077). A node with a working version is moved to its state
-	// first, in place, then accepted: one version. A node with none (a state-only edit) is accepted first, then moved:
-	// a version of its own.
+	// A node with a draft is moved to its state first, then accepted. A node with none (a state-only edit) is accepted
+	// first (what the guard of a transition may ask), then moved: the move checks the node out (ADR 0079). Accepting is
+	// the review of a bulk producer acting as the system (seeds, EnsureUser, the settings dialog): a Commit is not a
+	// user edit, and reviews are otherwise always explicit (ADR 0079).
 	freeze := func(i int, e NodeEdit) error {
 		if impacts[i] == "" {
 			return nil
@@ -235,7 +228,7 @@ func (g *Graph) Commit(ctx context.Context, in Commit) (res CommitResult, err er
 		if posts[i] != nil {
 			ref = posts[i]
 		}
-		n, err := g.Node(ctx, *ref)
+		n, err := g.ChangeNode(ctx, c.ID, "", *ref)
 		if err != nil {
 			return err
 		}
@@ -290,38 +283,6 @@ func (g *Graph) Commit(ctx context.Context, in Commit) (res CommitResult, err er
 		return res, fmt.Errorf("commit %q conflicts with a concurrent change: %w", in.Title, ErrConflict)
 	}
 	return res, nil
-}
-
-// deleteCopiedLink removes from a working version the copy of an outgoing link of the version it follows: the
-// checkout copied the links (new ids), the edit names the one it read.
-func (g *Graph) deleteCopiedLink(ctx context.Context, id domain.ChangeID, pre, work domain.NodeRef, link domain.LinkID) error {
-	var target domain.LinkID
-	err := g.repo.InTx(ctx, func(tx Tx) error {
-		l, err := tx.Link(ctx, link)
-		if err != nil {
-			return err
-		}
-		if l.From != pre {
-			return invalidf("link %s is not an outgoing link of %s", link, pre)
-		}
-		out, err := tx.OutLinks(ctx, work)
-		if err != nil {
-			return err
-		}
-		for _, c := range out {
-			if c.Type == l.Type && c.To.ID == l.To.ID {
-				target = c.ID
-			}
-		}
-		return nil
-	})
-	if err != nil {
-		return err
-	}
-	if target == "" {
-		return invalidf("link %s is not an outgoing link of %s", link, pre)
-	}
-	return g.ImpactLinkDelete(ctx, id, target, "", "")
 }
 
 // linksTo reports whether a version already has an outgoing link of the type to the node.
@@ -422,21 +383,4 @@ func (g *Graph) commitOrder(ctx context.Context, edits []NodeEdit) ([]int, error
 		}
 	}
 	return order, nil
-}
-
-// isCheckedOut reports a change impact whose version on the main flow of the change is a working version.
-func (g *Graph) isCheckedOut(ctx context.Context, id domain.ChangeID, impact domain.ChangeImpactID) (out bool, err error) {
-	err = g.repo.InTx(ctx, func(tx Tx) error {
-		w, err := g.workOn(ctx, tx, id, domain.MainFlow)
-		if err != nil {
-			return err
-		}
-		if err := w.selectImpact(impact); err != nil {
-			return err
-		}
-		h, err := w.head(ctx, tx)
-		out = err == nil && h != nil && h.CheckedOut
-		return err
-	})
-	return
 }

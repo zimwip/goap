@@ -6,6 +6,7 @@
     graph,
     errorMessage,
     formatDate,
+    isDraft,
     shortId,
     type Change,
     type GraphNode,
@@ -58,6 +59,8 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
   let editing = $state(false);
   let reload = $state(0);
   let centerId = $state('');
+  /** the draft view of a node no version exists of yet (created by the working change, ADR 0079) */
+  let draftNode = $state<GraphNode | undefined>();
 
   interface Work {
     change: Change;
@@ -84,9 +87,17 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
     try {
       // the node's namespace is only known once its versions come back, so loadHead
       // (namespace-scoped) has to follow rather than run in parallel with it.
-      const v = await graph.listNodeVersions(id, signal);
-      versions = (v.versions ?? []).slice().sort((a, b) => (a.version ?? 0) - (b.version ?? 0));
-      const namespace = namespaceOf(versions.at(-1)?.namespace);
+      // a node the working change created has no version yet (ADR 0079): its draft, read through the change, stands in
+      draftNode = undefined;
+      let list: GraphNode[] = [];
+      try {
+        list = (await graph.listNodeVersions(id, signal)).versions ?? [];
+      } catch (e) {
+        if (!workId) throw e;
+      }
+      if (workId && !list.length) draftNode = (await graph.getNode({ id, version: 0 }, signal, { changeId: workId, flow: workFlow })).view?.node;
+      versions = list.slice().sort((a, b) => (a.version ?? 0) - (b.version ?? 0));
+      const namespace = namespaceOf(versions.at(-1)?.namespace ?? draftNode?.namespace);
       head = await loadHead(namespace, signal);
       if (!changes.loaded) void refreshChanges();
     } catch (e) {
@@ -109,13 +120,13 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
         if (!change?.baselineId) throw new Error('unknown change');
         const attached = (change.nodes ?? []).filter((n) => n.pre?.id && !n.superseded).map((n) => n.pre!);
         const flowName = workFlow === 'main' ? 'main flow' : (bb.options?.find((o) => o.id === workFlow)?.option?.name ?? shortId(workFlow));
-        work = { change, flowName, index: await loadGraph(change.baselineId), attached, posts: await loadPosts(change.nodes ?? [], true) };
+        work = { change, flowName, index: await loadGraph(change.baselineId), attached, posts: await loadPosts(change.nodes ?? [], true, { changeId: workId, flow: workFlow }) };
         return;
       }
       const change = (await graph.getChange(workId)).change;
       if (!change?.baselineId) throw new Error('unknown change');
       const [index, attached] = await Promise.all([loadGraph(change.baselineId), graph.getChangeImpacts(workId)]);
-      work = { change, flowName: '', index, attached: attached.nodes ?? [], posts: await loadPosts(change.nodes ?? []) };
+      work = { change, flowName: '', index, attached: attached.nodes ?? [], posts: await loadPosts(change.nodes ?? [], false, { changeId: workId }) };
     } catch (e) {
       error = errorMessage(e);
       work = undefined;
@@ -138,7 +149,7 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
   });
 
   // --- derived ----------------------------------------------------------------------
-  const stored = $derived(head?.nodes.get(id) ?? versions.at(-1));
+  const stored = $derived(head?.nodes.get(id) ?? versions.at(-1) ?? draftNode);
   const typeName = $derived(stored?.type ?? '');
   const headList = $derived(head?.list ?? []);
   void loadTypes();
@@ -216,7 +227,8 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
   }
 
   // --- links and changes of the node -------------------------------------------------
-  /** the version shown: the one the working change wrote, else the stored one */
+  /** what is shown: the draft the working change holds of the node (a draft reference, no version: read through the
+   * change, ADR 0079), else the stored version */
   const shownRef = $derived<NodeRef | undefined>(
     inChange && row?.impact?.post?.id ? row.impact.post : stored?.id ? { id: stored.id, version: stored.version } : undefined,
   );
@@ -229,7 +241,7 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
     if (!ref?.id) return;
     const ctrl = new AbortController();
     graph
-      .getNode({ id: ref.id, version: ref.version }, ctrl.signal)
+      .getNode({ id: ref.id, version: ref.version }, ctrl.signal, isDraft(ref) && workId ? { changeId: workId, flow: workFlow } : undefined)
       .then((r) => (outLinks = r.view?.out ?? []))
       .catch(() => (outLinks = []));
     return () => ctrl.abort();
@@ -252,12 +264,33 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
 
   const saveProps = (patch: Record<string, unknown>) => propose('edit', { props: patch }, `Edit ${stored?.key}`);
 
-  /** Takes the node out of the working change: its working version is dropped; refused once a version of it is
-   * frozen (reject it instead). A node is never deleted (ADR 0076). */
+  // The review is an explicit action (ADR 0079): an edit leaves the impact proposed.
+  let reviewing = $state(false);
+  let reviewComment = $state('');
+  const canReview = $derived(!!row?.impact?.id && !row.impact.superseded && !!row.impact.post?.id && (row.impact.review === 'proposed' || !row.impact.review));
+  async function reviewImpact(accept: boolean) {
+    if (!row?.impact?.id || !workId) return;
+    busy = 'review';
+    error = '';
+    try {
+      await graph.impactNodeReview(workId, row.impact.id, accept, reviewComment.trim(), workFlow);
+      reviewing = false;
+      reviewComment = '';
+      await Promise.all([loadWork(), loadNode()]);
+      reload++;
+    } catch (e) {
+      error = errorMessage(e);
+    } finally {
+      busy = '';
+    }
+  }
+
+  /** Takes the node out of the working change: its draft is dropped; refused once its version has landed (reject it
+   * instead). A node is never deleted (ADR 0076). */
   async function removeFromWork() {
     const imp = row?.impact;
     if (!imp?.id || !workId) return;
-    if (!(await confirmDialog({ message: `Take ${stored?.key ?? row?.node.key} out of the working change? Its working version is dropped.`, danger: true }))) return;
+    if (!(await confirmDialog({ message: `Take ${stored?.key ?? row?.node.key} out of the working change? Its draft is dropped.`, danger: true }))) return;
     busy = 'remove';
     error = '';
     try {
@@ -306,12 +339,31 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
     <h2>{stored?.key || tab.params.key || shortId(id)}</h2>
     {#if typeName}<span class="hint">{typeName}</span>{/if}
     {#if nodeState}<span class="state" class:notLandable title={notLandable ? 'Not landable: a change cannot land with the node in this state' : ''}>{nodeState}</span>{/if}
-    {#if inChange && row?.impact?.post?.id}
-      <span class="hint" title="the version the working change wrote; the released one is v{stored?.version ?? '—'}">v{row.impact.post.version} in the change</span>
+    {#if inChange && isDraft(row?.impact?.post)}
+      <span class="hint" title="the working change holds a draft of the node; its version is written when the change lands (ADR 0079). Released: v{stored?.version ?? '—'}">draft in the change</span>
     {:else if stored?.version}<span class="hint">v{stored.version}</span>{/if}
+    {#if inChange && row?.impact}
+      <StatusBadge status={row.impact.review} />
+      {#if canReview}
+        <button type="button" class="small primary" disabled={busy !== ''} title="The edit awaits its review: the change cannot land before it is reviewed" onclick={() => (reviewing = !reviewing)}>Review…</button>
+      {/if}
+    {/if}
     {#if stored?.deleted}<span class="tag bad">deleted</span>{/if}
   </div>
   {#if error}<div class="alert">{error}</div>{/if}
+  {#if inChange && canReview}
+    <div class="alert" role="status">
+      This node's impact awaits its review. An edit never reviews on its own: the change cannot land until someone accepts it.
+      {#if reviewing}
+        <div class="reviewrow">
+          <input type="text" class="grow" placeholder="Comment (mandatory)" aria-label="Review comment" bind:value={reviewComment} />
+          <button type="button" class="small primary" disabled={!reviewComment.trim() || busy !== ''} onclick={() => reviewImpact(true)}>Accept</button>
+          <button type="button" class="small danger" disabled={!reviewComment.trim() || busy !== ''} onclick={() => reviewImpact(false)}>Reject</button>
+          <button type="button" class="small" onclick={() => (reviewing = false)}>Cancel</button>
+        </div>
+      {/if}
+    </div>
+  {/if}
 
   {#if loading && !stored}
     <p class="empty">Loading…</p>
@@ -343,12 +395,12 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
               {#if !editing}
                 <button type="button" class="small primary" disabled={busy !== '' || stored.deleted} onclick={() => (editing = true)} title="Edit in the working change">Edit</button>
                 {#if inChange && row?.impact?.id && !row.impact.superseded}
-                  <button type="button" class="small danger" disabled={busy !== ''} title="Take the node out of the working change (refused once a version of it is frozen: reject it instead)" onclick={removeFromWork}>Remove from change</button>
+                  <button type="button" class="small danger" disabled={busy !== ''} title="Take the node out of the working change (refused once its version has landed: reject it instead)" onclick={removeFromWork}>Remove from change</button>
                 {/if}
               {/if}
             </div>
             {#if editing}
-              <NodePropertyForm props={nodeProps} attributes={typeCatalog.cat.attributes(typeName)} {declared} {typeName} busy={busy === 'edit'} onsave={saveProps} oncancel={() => (editing = false)} />
+              <NodePropertyForm props={nodeProps} attributes={typeCatalog.cat.attributes(typeName)} {declared} {typeName} open={typeCatalog.cat.open(typeName)} busy={busy === 'edit'} onsave={saveProps} oncancel={() => (editing = false)} />
             {:else if propertyNames.length}
               <table class="props">
                 <tbody>
@@ -377,7 +429,7 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
               <dt>Key</dt><dd><code>{stored.key}</code></dd>
               <dt>Type</dt><dd>{typeName}</dd>
               <dt>ID</dt><dd><code>{stored.id}</code></dd>
-              <dt>Version</dt><dd>v{stored.version}{#if stored.reason} <span class="hint">({stored.reason})</span>{/if}</dd>
+              <dt>Version</dt><dd>{stored.draft || !stored.version ? 'draft (no version yet)' : `v${stored.version}`}{#if stored.reason} <span class="hint">({stored.reason})</span>{/if}</dd>
               {#if stored.state}<dt>Stored state</dt><dd><span class="state">{stored.state}</span></dd>{/if}
               <dt>Created</dt><dd>{formatDate(stored.createdAt)}</dd>
               {#if stored.changeId}<dt>Change</dt><dd><button type="button" class="link" onclick={() => openTab({ kind: 'change', params: { id: stored.changeId ?? '' } }, { pin: true })}>{changes.items.find((c) => c.id === stored.changeId)?.title ?? shortId(stored.changeId)}</button></dd>{/if}
@@ -477,6 +529,17 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
     border-radius: 999px;
     padding: 0 0.45rem;
     font-size: 0.8rem;
+  }
+  .reviewrow {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-top: 0.5rem;
+  }
+  .reviewrow .grow {
+    flex: 1;
+    min-width: 14rem;
   }
   .wc {
     font-size: 0.85rem;

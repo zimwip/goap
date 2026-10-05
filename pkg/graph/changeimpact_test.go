@@ -64,12 +64,12 @@ func testChangeImpacts(t *testing.T, repo Repo) {
 	if _, err := g.ImpactNodeCheckout(ctx, c.ID, NodeCheckout{Impact: got[0].ID}); !errors.Is(err, ErrConflict) {
 		t.Fatalf("a node is checked out once, got %v", err)
 	}
-	n, err := g.Node(ctx, *cn.Post)
-	if err != nil {
-		t.Fatal(err)
+	d, err := g.draftOf(ctx, c.ID, "", got[0].ID)
+	if err != nil || d == nil || d.Impact != got[0].ID || d.Change != c.ID || d.Base == nil || *d.Base != pre || !cn.Post.IsDraft() || *cn.Post != d.Ref() {
+		t.Fatalf("the draft: %+v %v", d, err)
 	}
-	if !n.CheckedOut || n.ChangeImpact != got[0].ID || n.ChangeID != c.ID || len(n.Parents) != 1 || n.Parents[0] != pre.Version {
-		t.Fatalf("the working version: %+v", n)
+	if g.versionCount(ctx, f.req.ID) != 1 {
+		t.Fatalf("no version exists while the change works (ADR 0079)")
 	}
 	if _, err := g.Apply(ctx, c.ID, ""); !errors.Is(err, ErrConflict) {
 		t.Fatalf("landing needs an accepted review, got %v", err)
@@ -77,11 +77,8 @@ func testChangeImpacts(t *testing.T, repo Repo) {
 	if _, err := g.ImpactNodeReview(ctx, c.ID, got[0].ID, domain.ReviewAccepted, "alice", "impact confirmed with the PSP team"); err != nil {
 		t.Fatal(err)
 	}
-	if n, err = g.Node(ctx, *cn.Post); err != nil {
-		t.Fatal(err)
-	}
-	if !n.CheckedOut || n.Comment != "impact confirmed with the PSP team" {
-		t.Fatalf("the working version records its acceptance and stays a working version until the change lands: %+v", n)
+	if d, err = g.draftOf(ctx, c.ID, "", got[0].ID); err != nil || d == nil || g.versionCount(ctx, f.req.ID) != 1 {
+		t.Fatalf("accepting writes nothing, the draft stays until the change lands: %+v %v", d, err)
 	}
 
 	list, err := g.ListChangeImpacts(ctx, c.ID)
@@ -134,8 +131,8 @@ func testApplyChangeImpacts(t *testing.T, repo Repo) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if req2.Post.Version != 2 {
-		t.Fatalf("two edits of the working version, one version on the branch (ADR 0076), got %s", req2.Post)
+	if !req2.Post.IsDraft() || g.versionCount(ctx, f.req.ID) != 1 {
+		t.Fatalf("two edits of the draft, no version before the change lands (ADR 0079), got %s", req2.Post)
 	}
 	tst, err := g.edit(ctx, c1.ID, nodes[1].ID, edit{Properties: map[string]any{"title": "PSP v2 test"},
 		AddLinks: []LinkWrite{{Type: "verifies", To: *req2.Post}}})

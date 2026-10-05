@@ -2,7 +2,6 @@ package graph
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"slices"
 	"sort"
@@ -12,8 +11,8 @@ import (
 )
 
 // Merge and split of nodes, seen from the parent side (ADR 0077, "Merge and split"). A node never disappears and a
-// merge or a split retires nothing: merging A and B into C is a modification of the parent P of A and B, whose working
-// version loses the links to A and B and gains one to C; splitting A into C and D loses the link to A and gains the
+// merge or a split retires nothing: merging A and B into C is a modification of the parent P of A and B, whose draft
+// loses the links to A and B and gains one to C; splitting A into C and D loses the link to A and gains the
 // links to C and D. A and B stay in history, untouched; their change impacts carry Via, the impact of the parent that
 // realizes the move (ADR 0076 §3). The successors record their lineage (Node.Origins, on their first version).
 
@@ -107,7 +106,8 @@ func (g *Graph) ImpactNodeSplit(ctx context.Context, id domain.ChangeID, in Spli
 	return
 }
 
-// restructured is a node whose links move: its current version and the links it holds to the sources.
+// restructured is a node whose links move: its current state (the draft the flow holds of it, else its stored version)
+// and the links it holds to the sources.
 type restructured struct {
 	node    domain.Node
 	parent  bool // holds a composition link to a source
@@ -152,8 +152,10 @@ func (g *Graph) restructure(ctx context.Context, tx Tx, id domain.ChangeID, sour
 		if n == nil {
 			return out, invalidf("change impact %s has no version to merge or split", w.cn.ID)
 		}
-		if n.CheckedOut {
-			return out, fmt.Errorf("%s is checked out by change impact %s: check it in or cancel it first: %w", n.Key, w.cn.ID, ErrConflict)
+		if d, err := g.seenDraft(ctx, tx, w.c, w.flow, w.cn.ID); err != nil {
+			return out, err
+		} else if d != nil {
+			return out, fmt.Errorf("%s is checked out by change impact %s: cancel the checkout first: %w", n.Key, w.cn.ID, ErrConflict)
 		}
 		if domain.NamespaceOf(n.Namespace) != w.ns {
 			return out, invalidf("node %s is in namespace %s, the change acts on %s", n.Key, domain.NamespaceOf(n.Namespace), w.ns)
@@ -174,13 +176,32 @@ func (g *Graph) restructure(ctx context.Context, tx Tx, id domain.ChangeID, sour
 		srcImpacts = append(srcImpacts, w.cn.ID)
 	}
 
-	// 2. the nodes holding links to the sources, as the flow sees them
+	// 2. the nodes holding links to the sources, as the flow sees them: a node the flow holds a draft of through its draft,
+	// any other through the links of its stored version
 	b, err := tx.Baseline(ctx, w.c.BaselineID)
+	if err != nil {
+		return out, err
+	}
+	reader, err := g.newDraftReader(ctx, tx, w.c, w.flow, w.seen)
 	if err != nil {
 		return out, err
 	}
 	holders := map[domain.NodeID]*restructured{}
 	hasParent := map[domain.NodeID]bool{}
+	hold := func(n domain.Node, l domain.Link, srcID domain.NodeID) {
+		h := holders[n.ID]
+		if h == nil {
+			h = &restructured{node: n, compose: map[domain.LinkID]bool{}}
+			holders[n.ID] = h
+		}
+		if !slices.ContainsFunc(h.links, func(x domain.Link) bool { return x.ID == l.ID }) {
+			h.links = append(h.links, l)
+		}
+		if w.ix.composes(l.Type) {
+			h.parent, h.compose[l.ID] = true, true
+			hasParent[srcID] = true
+		}
+	}
 	for _, s := range srcs {
 		vs, err := tx.Versions(ctx, s.ID)
 		if err != nil {
@@ -192,6 +213,9 @@ func (g *Graph) restructure(ctx context.Context, tx Tx, id domain.ChangeID, sour
 				return out, err
 			}
 			for _, l := range in {
+				if _, drafted := reader.byNode[l.From.ID]; drafted {
+					continue // read through its draft below
+				}
 				cur, err := g.currentOf(ctx, tx, w, b, l.From.ID)
 				if err != nil {
 					return out, err
@@ -206,18 +230,22 @@ func (g *Graph) restructure(ctx context.Context, tx Tx, id domain.ChangeID, sour
 					}
 					continue
 				}
-				h := holders[cur.ID]
-				if h == nil {
-					h = &restructured{node: *cur, compose: map[domain.LinkID]bool{}}
-					holders[cur.ID] = h
+				hold(*cur, l, s.ID)
+			}
+		}
+		for _, d := range reader.sortedDrafts() {
+			for _, dl := range d.Links {
+				if dl.To.ID != s.ID {
+					continue
 				}
-				if !slices.ContainsFunc(h.links, func(x domain.Link) bool { return x.ID == l.ID }) {
-					h.links = append(h.links, l)
+				l := domain.Link{ID: dl.ID, Type: dl.Type, From: d.Ref(), To: reader.normalize(dl.To), Properties: dl.Properties, ChangeID: d.Change}
+				if srcSet[d.Node] {
+					if w.ix.composes(l.Type) {
+						return out, invalidf("%s is the parent of %s: merge or split nodes that are not parts of each other", d.Key, s.Key)
+					}
+					continue
 				}
-				if composes {
-					h.parent, h.compose[l.ID] = true, true
-					hasParent[s.ID] = true
-				}
+				hold(draftNode(w.c, d), l, s.ID)
 			}
 		}
 	}
@@ -246,13 +274,13 @@ func (g *Graph) restructure(ctx context.Context, tx Tx, id domain.ChangeID, sour
 		succ[i] = *cn.Post
 	}
 
-	// 4. the links move in the working versions of the holders
+	// 4. the links move in the drafts of the holders
 	via := map[domain.NodeID]domain.ChangeImpactID{}
 	var holderImpacts []domain.ChangeImpactID
 	for _, h := range order {
 		if !merge && !h.parent {
 			for _, l := range h.links {
-				to, _ := tx.Node(ctx, l.To)
+				to, _ := reader.node(ctx, tx, l.To)
 				out.Suspect = append(out.Suspect, SuspectLink{From: l.From, FromKey: h.node.Key, Type: l.Type, To: l.To, ToKey: to.Key})
 			}
 			continue
@@ -264,21 +292,19 @@ func (g *Graph) restructure(ctx context.Context, tx Tx, id domain.ChangeID, sour
 		if err != nil {
 			return out, err
 		}
-		if head, err := hw.head(ctx, tx); err != nil {
+		rows, err := g.drafts(ctx, tx, id)
+		if err != nil {
 			return out, err
-		} else if head == nil || !head.CheckedOut {
-			if _, err := g.checkoutTx(ctx, tx, hw, execution); err != nil {
+		}
+		if ownDraft(rows, hw.cn.ID, hw.flow) == nil {
+			if _, err := g.checkoutTx(ctx, tx, hw, execution, false); err != nil {
 				return out, err
 			}
 			if hw, err = g.resolve(ctx, tx, id, target{Node: h.node.ID, Flow: flow, Execution: execution}); err != nil {
 				return out, err
 			}
 		}
-		n, err := hw.working(ctx, tx)
-		if err != nil {
-			return out, err
-		}
-		cur, err := tx.OutLinks(ctx, n.Ref())
+		d, err := g.working(ctx, tx, hw)
 		if err != nil {
 			return out, err
 		}
@@ -287,14 +313,11 @@ func (g *Graph) restructure(ctx context.Context, tx Tx, id domain.ChangeID, sour
 			props map[string]any
 		}
 		var moves []moved
-		for _, l := range cur {
+		for _, l := range d.Links {
 			if !srcSet[l.To.ID] || (!merge && !w.ix.composes(l.Type)) {
 				continue
 			}
-			if err := tx.DeleteLink(ctx, l.ID); err != nil {
-				return out, err
-			}
-			if err := g.emitRemoveLink(ctx, tx, hw, n, l, execution); err != nil {
+			if err := g.emitRemoveLink(ctx, tx, hw, d, l, execution); err != nil {
 				return out, err
 			}
 			if w.ix.composes(l.Type) {
@@ -311,11 +334,11 @@ func (g *Graph) restructure(ctx context.Context, tx Tx, id domain.ChangeID, sour
 		}
 		for _, m := range moves {
 			for _, to := range succ {
-				link, err := g.putLink(ctx, tx, hw, n, LinkWrite{Type: m.typ, To: to, Properties: m.props})
+				dl, err := g.newDraftLink(ctx, tx, hw, d, LinkWrite{Type: m.typ, To: to, Properties: m.props})
 				if err != nil {
 					return out, err
 				}
-				if err := g.emitAddLink(ctx, tx, hw, n, link, execution); err != nil {
+				if err := g.emitAddLink(ctx, tx, hw, d, dl, execution); err != nil {
 					return out, err
 				}
 			}
@@ -369,8 +392,8 @@ func (g *Graph) restructure(ctx context.Context, tx Tx, id domain.ChangeID, sour
 	return out, nil
 }
 
-// currentOf is the version of a node the flow sees (nil: none): the head of its impact, else its pre version, else the
-// version of the reference baseline.
+// currentOf is the stored version of a node the flow starts from (nil: none): its pre version when the change holds an
+// impact on it, else the version of the reference baseline. The draft the flow holds of it is read through draftReader.
 func (g *Graph) currentOf(ctx context.Context, tx Tx, w *work, b domain.Baseline, nid domain.NodeID) (*domain.Node, error) {
 	for _, i := range w.seen {
 		if nodeOf(i) != nid {
@@ -413,24 +436,15 @@ func originsPatch(ctx context.Context, tx Tx, origins []domain.NodeRef) []any {
 	return out
 }
 
-// checkOrigins is the review gate of a successor (ADR 0077): a node created by the change with origins is accepted,
-// frozen (accepted) and landed only when the change impact of every origin is accepted, the way what a node derives from is
-// settled before it. impacts are the ones the flow sees.
-func (g *Graph) checkOrigins(ctx context.Context, tx Tx, change domain.ChangeID, impacts []domain.ChangeImpact, cn domain.ChangeImpact) error {
-	if cn.Intent != domain.IntentCreated || cn.Post == nil {
-		return nil
-	}
-	first, err := tx.Node(ctx, domain.NodeRef{ID: cn.Post.ID, Version: 1})
-	if errors.Is(err, ErrNotFound) {
-		return nil
-	} else if err != nil {
-		return err
-	}
-	if first.ChangeID != change || len(first.Origins) == 0 {
+// checkOrigins is the review gate of a successor (ADR 0077): a node created by the change with origins is accepted
+// and landed only when the change impact of every origin is accepted, the way what a node derives from is settled
+// before it. impacts are the ones the flow sees, d the draft of the successor.
+func (g *Graph) checkOrigins(impacts []domain.ChangeImpact, cn domain.ChangeImpact, d *domain.Draft) error {
+	if cn.Intent != domain.IntentCreated || d == nil || len(d.Origins) == 0 {
 		return nil
 	}
 	var pending []string
-	for _, o := range first.Origins {
+	for _, o := range d.Origins {
 		i := slices.IndexFunc(impacts, func(x domain.ChangeImpact) bool { return nodeOf(x) == o.ID })
 		switch {
 		case i < 0:

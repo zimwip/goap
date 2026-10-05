@@ -83,7 +83,8 @@ func BranchOf(b string) string {
 	return b
 }
 
-// Node is one immutable version of a domain node. Versions are numbered per
+// Node is one immutable version of a domain node (or, with Version 0, the draft of a node in a change, ADR 0079: see
+// Draft.AsNode). Versions are numbered per
 // node across all branches; Parents link a version to the one(s) it comes from.
 // A version is written on one branch (Branch, never changed) and may join other
 // branches when a merge lands it there as is (Joined, ADR 0032).
@@ -118,9 +119,6 @@ type Node struct {
 	// Execution is the journal execution (action run) that wrote this version: what a
 	// relaunch of a step marks stale (ADR 0025).
 	Execution string `json:"execution,omitempty"`
-	// CheckedOut marks the working version of a change (ADR 0076): written by ImpactNodeCreate or ImpactNodeCheckout, edited in
-	// place until an accepted review freezes it (ADR 0077); every other version is immutable.
-	CheckedOut bool `json:"checkedOut,omitempty"`
 	// Origins are the nodes the node derives from (ADR 0077, "Merge and split"): set on the first version of the
 	// successor of a merge or a split, pure lineage across nodes, never structural (Parents are the versions of one
 	// node).
@@ -130,6 +128,9 @@ type Node struct {
 
 // Ref returns the exact reference of this node version.
 func (n Node) Ref() NodeRef { return NodeRef{ID: n.ID, Version: n.Version} }
+
+// IsDraft reports the view of the draft of a node in a change (no version, ADR 0079).
+func (n Node) IsDraft() bool { return n.Version == 0 }
 
 // On reports whether the version is part of a branch: written there, or joined (Joined is filled by Versions).
 func (n Node) On(branch string) bool {

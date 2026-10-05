@@ -13,8 +13,8 @@ import (
 // Options of a change (ADR 0009 §3, ADR 0032 §6): an option is a flow branch opened as a hypothesis, forked from the
 // main flow (Intent derive/revise) or from another open option (Intent refine: a sub-branch isolating narrower work
 // within it). Several are explored at once; one of them may be active: the change works on it (every call that names
-// no flow goes to it, "main" names the main flow). Selecting an option adopts its flow (its versions join the change
-// branch) and rejects the other open ones; rejecting one discards its flow.
+// no flow goes to it, "main" names the main flow). Selecting an option adopts its flow (its drafts become the
+// main flow's, ADR 0079) and rejects the other open ones; rejecting one discards its flow.
 
 // OpenOptionRequest opens an option of a change.
 type OpenOptionRequest struct {
@@ -125,7 +125,7 @@ func (g *Graph) EvaluateOption(ctx context.Context, id domain.ChangeID, option, 
 	return
 }
 
-// SelectOption selects an open option: its flow is adopted (what it wrote joins the change branch, ADR 0032 §2) and
+// SelectOption selects an open option: its flow is adopted (its drafts become the main flow's, ADR 0079) and
 // the other open options are rejected.
 func (g *Graph) SelectOption(ctx context.Context, id domain.ChangeID, option, by string) (f domain.Flow, err error) {
 	err = g.repo.InTx(ctx, func(tx Tx) error {
@@ -228,7 +228,7 @@ func optionOf(ctx context.Context, tx Tx, id domain.ChangeID, option string) (do
 }
 
 // OptionNode is a node written by at least one option, with its version in the main flow and in each option (nil:
-// not in the graph of that side, absent or retired).
+// not in the graph of that side, absent or retired; Version 0: the draft that side holds, ADR 0079).
 type OptionNode struct {
 	Node    domain.NodeID              `json:"node"`
 	Key     string                     `json:"key"`
@@ -276,10 +276,30 @@ func (g *Graph) CompareOptions(ctx context.Context, id domain.ChangeID, level st
 			}
 			cmp.Options, views[o.ID] = append(cmp.Options, o), v
 		}
+		// the drafts each side holds (ADR 0079): a node both sides hold a draft of differs when the drafts do
+		readers := map[string]*draftReader{}
+		for _, side := range append([]string{domain.MainFlow}, flowIDsOf(cmp.Options)...) {
+			flow := side
+			if flow == domain.MainFlow {
+				flow = ""
+			}
+			seen, err := g.newFlowNodes(tx, c, flow).nodes(ctx)
+			if err != nil {
+				return err
+			}
+			if readers[side], err = g.newDraftReader(ctx, tx, c, flow, seen); err != nil {
+				return err
+			}
+		}
+		differs := func(side string, id domain.NodeID) bool {
+			a, aok := readers[side].byNode[id]
+			b, bok := readers[domain.MainFlow].byNode[id]
+			return aok && bok && !sameDraft(a, b)
+		}
 		changed := map[domain.NodeID]bool{}
-		for _, v := range views {
+		for oid, v := range views {
 			for id, ver := range v.Nodes {
-				if main.Nodes[id] != ver {
+				if main.Nodes[id] != ver || (ver == 0 && differs(oid, id)) {
 					changed[id] = true
 				}
 			}
@@ -306,7 +326,7 @@ func (g *Graph) CompareOptions(ctx context.Context, id domain.ChangeID, level st
 				if r == nil {
 					continue
 				}
-				n, err := tx.Node(ctx, *r)
+				n, err := readers[side].node(ctx, tx, *r)
 				if err != nil {
 					return err
 				}
@@ -344,22 +364,28 @@ func (g *Graph) ChangeGraph(ctx context.Context, id domain.ChangeID, flow string
 		if err != nil {
 			return err
 		}
+		seen, err := g.newFlowNodes(tx, c, flow).nodes(ctx)
+		if err != nil {
+			return err
+		}
+		reader, err := g.newDraftReader(ctx, tx, c, flow, seen)
+		if err != nil {
+			return err
+		}
 		base, err := tx.NodesIn(ctx, v.ParentID, "")
 		if err != nil {
 			return err
 		}
+		refs := map[domain.NodeRef]bool{}
 		for _, n := range base {
 			if v.Contains(n.Ref()) {
 				nodes = append(nodes, n)
+				refs[n.Ref()] = true
 			}
 		}
-		inBase := map[domain.NodeRef]bool{}
-		for _, n := range nodes {
-			inBase[n.Ref()] = true
-		}
 		for nid, ver := range v.Nodes {
-			if r := (domain.NodeRef{ID: nid, Version: ver}); !inBase[r] {
-				n, err := tx.Node(ctx, r)
+			if r := (domain.NodeRef{ID: nid, Version: ver}); !refs[r] {
+				n, err := reader.node(ctx, tx, r)
 				if err != nil {
 					return err
 				}
@@ -367,8 +393,18 @@ func (g *Graph) ChangeGraph(ctx context.Context, id domain.ChangeID, flow string
 			}
 		}
 		slices.SortFunc(nodes, func(a, b domain.Node) int { return strings.Compare(a.Key, b.Key) })
-		links, err = linksWithin(ctx, tx, v, nodes)
-		return err
+		for _, n := range nodes {
+			out, err := reader.outLinks(ctx, tx, n.Ref())
+			if err != nil {
+				return err
+			}
+			for _, l := range out {
+				if l.To.IsDraft() || v.Contains(l.To) {
+					links = append(links, l)
+				}
+			}
+		}
+		return nil
 	})
 	return
 }
@@ -393,6 +429,14 @@ func (g *Graph) facets(c domain.Change, now time.Time) map[string]any {
 	out[domain.FacetDecisionPoints] = c.DecisionPointsAt(now, g.DecisionPolicy)
 	for name, f := range g.Facets {
 		out[name] = f(c, now)
+	}
+	return out
+}
+
+func flowIDsOf(fs []domain.Flow) []string {
+	out := make([]string, len(fs))
+	for i, f := range fs {
+		out[i] = f.ID
 	}
 	return out
 }

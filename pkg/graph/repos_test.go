@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -143,8 +144,8 @@ func forEachRepo(t *testing.T, f func(t *testing.T, repo Repo)) {
 	})
 }
 
-// checkImpactLogs replays the impact log of every change and compares it with the change_impact projection
-// (ADR 0029): nothing may write the projection without an event.
+// checkImpactLogs replays the impact log of every change and compares it with the change_impact projection (ADR 0029),
+// and the drafts the graph reads (ADR 0079) with a from-scratch fold: nothing may write a projection without an event.
 func checkImpactLogs(t *testing.T, repo Repo) {
 	t.Helper()
 	if t.Failed() {
@@ -172,6 +173,7 @@ func checkImpactLogs(t *testing.T, repo Repo) {
 		b, _ := json.MarshalIndent(out, "", " ")
 		return string(b)
 	}
+	cold := New(repo) // an empty draft cache: the drafts are folded from the log
 	err := repo.InTx(context.Background(), func(tx Tx) error {
 		cs, err := tx.Changes(context.Background())
 		if err != nil {
@@ -188,6 +190,27 @@ func checkImpactLogs(t *testing.T, repo Repo) {
 			}
 			if got, want := norm(domain.FoldImpacts(events)), norm(stored); got != want {
 				t.Errorf("change %s: the replay of its %d events differs from the projection\nreplay: %s\nstored: %s", c.ID, len(events), got, want)
+			}
+			storedDrafts, err := cold.drafts(context.Background(), tx, c.ID)
+			if err != nil {
+				return err
+			}
+			replayed := domain.FoldDrafts(events)
+			slices.SortFunc(replayed, func(a, b domain.Draft) int {
+				if a.Impact != b.Impact {
+					return strings.Compare(string(a.Impact), string(b.Impact))
+				}
+				return strings.Compare(a.Flow, b.Flow)
+			})
+			dj := func(l []domain.Draft) string {
+				if len(l) == 0 {
+					return "[]"
+				}
+				b, _ := json.MarshalIndent(l, "", " ")
+				return string(b)
+			}
+			if got, want := dj(replayed), dj(storedDrafts); got != want {
+				t.Errorf("change %s: the folded drafts of its %d events differ from the from-scratch fold\nreplay: %s\nread: %s", c.ID, len(events), got, want)
 			}
 		}
 		return nil

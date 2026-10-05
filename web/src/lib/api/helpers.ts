@@ -1,5 +1,5 @@
 import type { Int64 } from './types/common';
-import type { ExecutionRecord, GraphNode, LogEntry } from './types/graph';
+import type { ExecutionRecord, GraphNode, LogEntry, NodeRef } from './types/graph';
 
 /** Decodes a log entry's payload (ADR 0030) as T: a fact, a journal record or an impact event. */
 export function decodeLogEntry<T>(l: LogEntry): T {
@@ -76,3 +76,12 @@ export function formatTime(iso: string | undefined): string {
 export function shortId(id: string | undefined): string {
   return id ? id.slice(0, 8) : '';
 }
+
+/** A reference to the draft a change holds of a node (ADR 0079): an id with no version. A node has no version while a
+ * change works on it; the version is written when the change lands. The web never needs a version for a draft. */
+export function isDraft(ref: NodeRef | undefined): ref is NodeRef & { id: string } {
+  return !!ref?.id && !ref.version;
+}
+
+/** The draft reference of a node. */
+export const draftRef = (id: string): NodeRef => ({ id, version: 0 });

@@ -292,11 +292,12 @@ type GraphServiceClient interface {
 	// Change impacts (ADR 0024): declare the nodes a change acts on, write the version each produces on the
 	// change branch, and accept or reject them (a comment is mandatory).
 	ProposeImpact(context.Context, *connect.Request[v1.ProposeImpactRequest]) (*connect.Response[v1.ProposeImpactResponse], error)
-	// Node edits (ADR 0076): every write names a change. ImpactNodeCreate and ImpactNodeCheckout write the working version of the
-	// node in the change, checked out; ImpactNodeUpdate and the link operations edit it in place; an accepted review
-	// freezes it (ADR 0077: no explicit check-in); ImpactNodeTransition moves a node along its lifecycle (in place on a
-	// working version, else a version of its own); ImpactNodeCancel drops the working version (a creation cancelled before
-	// it is accepted removes the node).
+	// Node edits (ADR 0076, 0079): every write names a change, and a node has no version while the change works on it.
+	// ImpactNodeCreate and ImpactNodeCheckout give the node a draft (once per change and flow; the impact's post is the draft
+	// reference, version 0); ImpactNodeUpdate and the link operations edit it; an edit never reviews, an accepted review runs
+	// the checks of a version on the draft and writes nothing; ImpactNodeTransition moves a node along its lifecycle (the
+	// state of its draft, the node checked out first when it has none); ImpactNodeCancel drops the draft (a creation cancelled
+	// removes its impact). The versions are written when the change lands.
 	ImpactNodeCreate(context.Context, *connect.Request[v1.ImpactNodeCreateRequest]) (*connect.Response[v1.ImpactNodeCreateResponse], error)
 	ImpactNodeCheckout(context.Context, *connect.Request[v1.ImpactNodeCheckoutRequest]) (*connect.Response[v1.ImpactNodeCheckoutResponse], error)
 	ImpactNodeUpdate(context.Context, *connect.Request[v1.ImpactNodeUpdateRequest]) (*connect.Response[v1.ImpactNodeUpdateResponse], error)
@@ -310,8 +311,7 @@ type GraphServiceClient interface {
 	// parent as via.
 	ImpactNodeMerge(context.Context, *connect.Request[v1.ImpactNodeMergeRequest]) (*connect.Response[v1.ImpactNodeRestructureResponse], error)
 	ImpactNodeSplit(context.Context, *connect.Request[v1.ImpactNodeSplitRequest]) (*connect.Response[v1.ImpactNodeRestructureResponse], error)
-	// Take a change impact out of the change, explicitly: its working version is dropped (refused once a version of it
-	// is frozen by its accepted review: reject it instead).
+	// Take a change impact out of the change, explicitly: its draft is dropped.
 	WithdrawImpact(context.Context, *connect.Request[v1.WithdrawImpactRequest]) (*connect.Response[v1.WithdrawImpactResponse], error)
 	ImpactNodeReview(context.Context, *connect.Request[v1.ImpactNodeReviewRequest]) (*connect.Response[v1.ImpactNodeReviewResponse], error)
 	ReopenChangeImpacts(context.Context, *connect.Request[v1.ReopenChangeImpactsRequest]) (*connect.Response[v1.ReopenChangeImpactsResponse], error)
@@ -1363,11 +1363,12 @@ type GraphServiceHandler interface {
 	// Change impacts (ADR 0024): declare the nodes a change acts on, write the version each produces on the
 	// change branch, and accept or reject them (a comment is mandatory).
 	ProposeImpact(context.Context, *connect.Request[v1.ProposeImpactRequest]) (*connect.Response[v1.ProposeImpactResponse], error)
-	// Node edits (ADR 0076): every write names a change. ImpactNodeCreate and ImpactNodeCheckout write the working version of the
-	// node in the change, checked out; ImpactNodeUpdate and the link operations edit it in place; an accepted review
-	// freezes it (ADR 0077: no explicit check-in); ImpactNodeTransition moves a node along its lifecycle (in place on a
-	// working version, else a version of its own); ImpactNodeCancel drops the working version (a creation cancelled before
-	// it is accepted removes the node).
+	// Node edits (ADR 0076, 0079): every write names a change, and a node has no version while the change works on it.
+	// ImpactNodeCreate and ImpactNodeCheckout give the node a draft (once per change and flow; the impact's post is the draft
+	// reference, version 0); ImpactNodeUpdate and the link operations edit it; an edit never reviews, an accepted review runs
+	// the checks of a version on the draft and writes nothing; ImpactNodeTransition moves a node along its lifecycle (the
+	// state of its draft, the node checked out first when it has none); ImpactNodeCancel drops the draft (a creation cancelled
+	// removes its impact). The versions are written when the change lands.
 	ImpactNodeCreate(context.Context, *connect.Request[v1.ImpactNodeCreateRequest]) (*connect.Response[v1.ImpactNodeCreateResponse], error)
 	ImpactNodeCheckout(context.Context, *connect.Request[v1.ImpactNodeCheckoutRequest]) (*connect.Response[v1.ImpactNodeCheckoutResponse], error)
 	ImpactNodeUpdate(context.Context, *connect.Request[v1.ImpactNodeUpdateRequest]) (*connect.Response[v1.ImpactNodeUpdateResponse], error)
@@ -1381,8 +1382,7 @@ type GraphServiceHandler interface {
 	// parent as via.
 	ImpactNodeMerge(context.Context, *connect.Request[v1.ImpactNodeMergeRequest]) (*connect.Response[v1.ImpactNodeRestructureResponse], error)
 	ImpactNodeSplit(context.Context, *connect.Request[v1.ImpactNodeSplitRequest]) (*connect.Response[v1.ImpactNodeRestructureResponse], error)
-	// Take a change impact out of the change, explicitly: its working version is dropped (refused once a version of it
-	// is frozen by its accepted review: reject it instead).
+	// Take a change impact out of the change, explicitly: its draft is dropped.
 	WithdrawImpact(context.Context, *connect.Request[v1.WithdrawImpactRequest]) (*connect.Response[v1.WithdrawImpactResponse], error)
 	ImpactNodeReview(context.Context, *connect.Request[v1.ImpactNodeReviewRequest]) (*connect.Response[v1.ImpactNodeReviewResponse], error)
 	ReopenChangeImpacts(context.Context, *connect.Request[v1.ReopenChangeImpactsRequest]) (*connect.Response[v1.ReopenChangeImpactsResponse], error)
