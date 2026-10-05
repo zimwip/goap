@@ -13,7 +13,7 @@ import (
 	"github.com/zimwip/goap/domains/builtin"
 	"github.com/zimwip/goap/internal/pgtest"
 	"github.com/zimwip/goap/internal/platform"
-	"github.com/zimwip/goap/pkg/methodology"
+	"github.com/zimwip/goap/pkg/domain/def"
 )
 
 // domainStores are the stores of the domain versions: in memory, the registry's database in local mode (SQLite) and,
@@ -41,14 +41,14 @@ func domainStores(t *testing.T) map[string]func(t *testing.T) DomainStore {
 
 // Every domain of the repository, the built-in ones included, round-trips through the stores.
 func TestDomainStoresRoundTripEveryDomain(t *testing.T) {
-	var ds []*methodology.Domain
+	var ds []*def.Domain
 	files, _ := filepath.Glob("../../domains/*.yaml")
 	for _, f := range files {
 		src, err := os.ReadFile(f)
 		if err != nil {
 			t.Fatal(err)
 		}
-		d, err := methodology.ParseDomain(src)
+		d, err := def.ParseDomain(src)
 		if err != nil {
 			t.Fatalf("%s: %v", f, err)
 		}
@@ -57,7 +57,7 @@ func TestDomainStoresRoundTripEveryDomain(t *testing.T) {
 	entries, _ := builtin.FS.ReadDir(".")
 	for _, e := range entries {
 		src, _ := builtin.FS.ReadFile(e.Name())
-		d, err := methodology.ParseDomain(src)
+		d, err := def.ParseDomain(src)
 		if err != nil {
 			t.Fatalf("%s: %v", e.Name(), err)
 		}

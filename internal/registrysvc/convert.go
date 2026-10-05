@@ -5,6 +5,7 @@ import (
 	"github.com/zimwip/goap/internal/pbconv"
 	"github.com/zimwip/goap/pkg/condition"
 	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/domain/def"
 	"github.com/zimwip/goap/pkg/engine"
 	"github.com/zimwip/goap/pkg/methodology"
 )
@@ -201,7 +202,7 @@ func nilIfNone(s []string) []string {
 }
 
 // IssuesToPB converts validation issues.
-func IssuesToPB(is methodology.Issues) []*registryv1.Issue {
+func IssuesToPB(is def.Issues) []*registryv1.Issue {
 	out := make([]*registryv1.Issue, len(is))
 	for i, x := range is {
 		out[i] = &registryv1.Issue{Path: x.Path, Message: x.Message, Activity: x.Activity}
@@ -209,7 +210,7 @@ func IssuesToPB(is methodology.Issues) []*registryv1.Issue {
 	return out
 }
 
-func nodeTypesToPB(ns []methodology.NodeType) []*registryv1.NodeType {
+func nodeTypesToPB(ns []def.NodeType) []*registryv1.NodeType {
 	var out []*registryv1.NodeType
 	for _, n := range ns {
 		out = append(out, nodeTypeToPB(n))
@@ -217,7 +218,7 @@ func nodeTypesToPB(ns []methodology.NodeType) []*registryv1.NodeType {
 	return out
 }
 
-func linkTypesToPB(ls []methodology.LinkType) []*registryv1.LinkType {
+func linkTypesToPB(ls []def.LinkType) []*registryv1.LinkType {
 	var out []*registryv1.LinkType
 	for _, l := range ls {
 		out = append(out, &registryv1.LinkType{Name: l.Name, Description: l.Description, From: l.From, To: l.To, Compose: l.Compose, Attributes: attributesToPB(l.Attributes)})
@@ -243,16 +244,16 @@ func DomainSummaryToPB(r DomainRecord) *registryv1.DomainSummary {
 }
 
 // DomainFromPB converts an edited domain (status and timestamps are ignored).
-func DomainFromPB(p *registryv1.Domain) methodology.Domain {
+func DomainFromPB(p *registryv1.Domain) def.Domain {
 	if p == nil {
-		return methodology.Domain{}
+		return def.Domain{}
 	}
-	d := methodology.Domain{Name: p.Name, Version: p.Version, Description: p.Description}
+	d := def.Domain{Name: p.Name, Version: p.Version, Description: p.Description}
 	for _, n := range p.NodeTypes {
 		d.NodeTypes = append(d.NodeTypes, nodeTypeFromPB(n))
 	}
 	for _, l := range p.LinkTypes {
-		d.LinkTypes = append(d.LinkTypes, methodology.LinkType{Name: l.Name, Description: l.Description, From: l.From, To: l.To, Compose: l.Compose, Attributes: attributesFromPB(l.Attributes)})
+		d.LinkTypes = append(d.LinkTypes, def.LinkType{Name: l.Name, Description: l.Description, From: l.From, To: l.To, Compose: l.Compose, Attributes: attributesFromPB(l.Attributes)})
 	}
 	d.Enums = enumsFromPB(p.Enums)
 	d.Lifecycles = lifecyclesFromPB(p.Lifecycles)
@@ -260,7 +261,7 @@ func DomainFromPB(p *registryv1.Domain) methodology.Domain {
 	return d
 }
 
-func nodeTypeToPB(n methodology.NodeType) *registryv1.NodeType {
+func nodeTypeToPB(n def.NodeType) *registryv1.NodeType {
 	out := &registryv1.NodeType{Name: n.Name, Description: n.Description, Attributes: attributesToPB(n.Attributes), Extends: n.Extends,
 		Lifecycle: n.Lifecycle, ChangeControlled: n.ChangeControlled, Validators: n.Validators, Search: searchToPB(n.Search), Editor: n.Editor}
 	if d := n.Document; d != nil {
@@ -272,14 +273,14 @@ func nodeTypeToPB(n methodology.NodeType) *registryv1.NodeType {
 	return out
 }
 
-func nodeTypeFromPB(n *registryv1.NodeType) methodology.NodeType {
-	out := methodology.NodeType{Name: n.Name, Description: n.Description, Attributes: attributesFromPB(n.Attributes), Extends: n.Extends,
+func nodeTypeFromPB(n *registryv1.NodeType) def.NodeType {
+	out := def.NodeType{Name: n.Name, Description: n.Description, Attributes: attributesFromPB(n.Attributes), Extends: n.Extends,
 		Lifecycle: n.Lifecycle, ChangeControlled: n.ChangeControlled, Validators: nilIfNone(n.Validators), Search: searchFromPB(n.Search), Editor: n.Editor}
 	if d := n.Document; d != nil {
 		out.Document = &domain.DocumentSpec{Contains: nilIfNone(d.Contains)}
 	}
 	if t := n.Structure; t != nil {
-		out.Structure = &methodology.StructureTag{Kind: t.Kind, Parent: t.Parent, Root: t.Root, SelfParent: t.SelfParent}
+		out.Structure = &def.StructureTag{Kind: t.Kind, Parent: t.Parent, Root: t.Root, SelfParent: t.SelfParent}
 	}
 	return out
 }
@@ -332,7 +333,7 @@ func nilIfEmpty[M ~map[K]V, K comparable, V any](m M) M {
 	return m
 }
 
-func searchToPB(in []methodology.SearchProperty) []*registryv1.SearchProperty {
+func searchToPB(in []def.SearchProperty) []*registryv1.SearchProperty {
 	var out []*registryv1.SearchProperty
 	for _, s := range in {
 		out = append(out, &registryv1.SearchProperty{Property: s.Property, Text: s.Text, Facet: s.Facet})
@@ -340,10 +341,10 @@ func searchToPB(in []methodology.SearchProperty) []*registryv1.SearchProperty {
 	return out
 }
 
-func searchFromPB(in []*registryv1.SearchProperty) []methodology.SearchProperty {
-	var out []methodology.SearchProperty
+func searchFromPB(in []*registryv1.SearchProperty) []def.SearchProperty {
+	var out []def.SearchProperty
 	for _, s := range in {
-		out = append(out, methodology.SearchProperty{Property: s.Property, Text: s.Text, Facet: s.Facet})
+		out = append(out, def.SearchProperty{Property: s.Property, Text: s.Text, Facet: s.Facet})
 	}
 	return out
 }

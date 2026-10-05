@@ -11,6 +11,7 @@ import (
 	"github.com/zimwip/goap/internal/graphsvc"
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/domain/def"
 	"github.com/zimwip/goap/pkg/dsl"
 	"github.com/zimwip/goap/pkg/engine"
 	"github.com/zimwip/goap/pkg/graph"
@@ -81,7 +82,7 @@ func sdlcSetup(t *testing.T) (*engine.Engine, *graph.Graph, domain.BaselineID) {
 		t.Fatal(err)
 	}
 	// the graph and the engine judge by the types of the repository's domains (ADR 0012)
-	ds, err := methodology.LoadDomains("../../domains")
+	ds, err := def.LoadDomains("../../domains")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -119,7 +120,7 @@ func sdlcSetup(t *testing.T) (*engine.Engine, *graph.Graph, domain.BaselineID) {
 		Intent: intent.Resolver{Ranker: intent.Lexical{}},
 		Store:  engine.NewMemoryStore(),
 		Authz:  authorizer,
-		Types:  func() methodology.TypeSet { return cat },
+		Types:  func() def.TypeSet { return cat },
 	}
 	return e, g, head.ID
 }

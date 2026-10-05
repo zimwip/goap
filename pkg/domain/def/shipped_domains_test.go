@@ -1,4 +1,4 @@
-package methodology
+package def
 
 import (
 	"os"
@@ -8,7 +8,7 @@ import (
 // The domains shipped with the code parse and validate (attributes, enums, algorithms and their plugs).
 func TestShippedDomainsValidate(t *testing.T) {
 	for _, f := range []string{"alm.yaml", "builtin/methodology.yaml", "builtin/organisation.yaml", "builtin/platform.yaml"} {
-		b, err := os.ReadFile("../../domains/" + f)
+		b, err := os.ReadFile("../../../domains/" + f)
 		if err != nil {
 			t.Fatal(err)
 		}

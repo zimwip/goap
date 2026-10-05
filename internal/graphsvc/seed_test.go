@@ -12,16 +12,16 @@ import (
 	"github.com/zimwip/goap/internal/graphsvc"
 	"github.com/zimwip/goap/pkg/access"
 	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/domain/def"
 	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/mcp"
-	"github.com/zimwip/goap/pkg/methodology"
 	"github.com/zimwip/goap/pkg/typecat"
 )
 
 // typedGraph is a graph judged by the domains of the repository (ADR 0012).
 func typedGraph(t *testing.T) *graph.Graph {
 	t.Helper()
-	ds, err := methodology.LoadDomains("../../domains")
+	ds, err := def.LoadDomains("../../domains")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,4 +1,4 @@
-package methodology
+package def
 
 import (
 	"fmt"

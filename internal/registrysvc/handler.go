@@ -14,6 +14,7 @@ import (
 	"github.com/zimwip/goap/pkg/algo"
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/domain/def"
 	"github.com/zimwip/goap/pkg/engine"
 	"github.com/zimwip/goap/pkg/methodology"
 )
@@ -80,10 +81,10 @@ func (h *Handler) ValidateMethodology(ctx context.Context, r *connect.Request[re
 
 // lenient compiles a methodology as edited for reading (the flow, its checks): what compiles is built, the issues come
 // with it, each tied to the process, method or step it is about. Nil when nothing could be built.
-func lenient(m *methodology.Methodology) (c *methodology.Compiled, issues methodology.Issues) {
+func lenient(m *methodology.Methodology) (c *methodology.Compiled, issues def.Issues) {
 	defer func() {
 		if r := recover(); r != nil { // a draft broken in a way the compiler did not foresee still gets its issues told
-			c, issues = nil, append(issues, methodology.Issue{Message: fmt.Sprintf("the methodology cannot be read: %v", r)})
+			c, issues = nil, append(issues, def.Issue{Message: fmt.Sprintf("the methodology cannot be read: %v", r)})
 		}
 	}()
 	return m.CompileLenient()
@@ -131,16 +132,16 @@ func (h *Handler) PreviewPlan(ctx context.Context, r *connect.Request[registryv1
 	m := FromPB(r.Msg.Methodology)
 	c, err := m.Compile()
 	if err != nil {
-		var issues methodology.Issues
+		var issues def.Issues
 		if !errors.As(err, &issues) {
-			issues = methodology.Issues{{Message: err.Error()}}
+			issues = def.Issues{{Message: err.Error()}}
 		}
 		return connect.NewResponse(&registryv1.PreviewPlanResponse{Issues: IssuesToPB(issues)}), nil
 	}
 	p, err := engine.PreviewPlan(c, domain.Blackboard{}, r.Msg.Agent, r.Msg.Goal, r.Msg.Overrides)
 	if err != nil {
 		if errors.Is(err, engine.ErrLivePlanner) {
-			return connect.NewResponse(&registryv1.PreviewPlanResponse{Issues: IssuesToPB(methodology.Issues{{Message: err.Error()}})}), nil
+			return connect.NewResponse(&registryv1.PreviewPlanResponse{Issues: IssuesToPB(def.Issues{{Message: err.Error()}})}), nil
 		}
 		return nil, connect.NewError(connect.CodeNotFound, err)
 	}

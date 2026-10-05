@@ -7,6 +7,7 @@ import (
 
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/domain/def"
 	"github.com/zimwip/goap/pkg/dsl"
 	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/methodology"
@@ -28,7 +29,7 @@ func (d *memDrafts) Definition(_ context.Context, name, version string) (methodo
 	return m, ok, nil
 }
 
-func (d *memDrafts) SaveDraft(ctx context.Context, m methodology.Methodology) (methodology.Issues, error) {
+func (d *memDrafts) SaveDraft(ctx context.Context, m methodology.Methodology) (def.Issues, error) {
 	d.saved = append(d.saved, m)
 	d.who = append(d.who, authz.From(ctx))
 	d.defs[m.Name+"@"+m.Version] = m

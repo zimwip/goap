@@ -15,7 +15,7 @@ import (
 
 	"github.com/zimwip/goap/pkg/algo"
 	"github.com/zimwip/goap/pkg/domain"
-	"github.com/zimwip/goap/pkg/methodology"
+	"github.com/zimwip/goap/pkg/domain/def"
 )
 
 // Type is the resolved model of a node type.
@@ -46,11 +46,11 @@ type Type struct {
 
 // Attribute is a resolved attribute of a node type.
 type Attribute struct {
-	methodology.Attribute
+	def.Attribute
 	// From is the type that declares it when it is inherited; empty for the type's own.
 	From string
 	// Values are the values of the enum of an enum attribute.
-	Values []methodology.EnumValue
+	Values []def.EnumValue
 }
 
 // PropertyNames lists the names of the attributes.
@@ -81,7 +81,7 @@ func (x *Type) Is(t domain.TypeRef) bool {
 type LinkType struct {
 	Ref      domain.TypeRef
 	From, To domain.TypeRef
-	// Compose: the target is a part of the source (methodology.LinkType.Compose).
+	// Compose: the target is a part of the source (def.LinkType.Compose).
 	Compose bool
 	// Attributes are what a link of the type carries.
 	Attributes []Attribute
@@ -103,11 +103,11 @@ var ErrUnknown = errors.New("unknown type")
 var ErrInvalid = errors.New("invalid")
 
 // Builtins returns the built-in domains (methodology, organisation, platform).
-func Builtins() []*methodology.Domain { return methodology.BuiltinDomains() }
+func Builtins() []*def.Domain { return def.BuiltinDomains() }
 
 // IsBuiltin reports the namespace of a built-in domain (methodology, organisation, platform): frozen, it changes with
 // the code.
-func IsBuiltin(ns string) bool { return methodology.IsBuiltinDomain(ns) }
+func IsBuiltin(ns string) bool { return def.IsBuiltinDomain(ns) }
 
 // Builtin is the catalogue of the built-in domains alone: what a service knows before it has loaded the domains.
 func Builtin() *Catalog {
@@ -120,7 +120,7 @@ func Builtin() *Catalog {
 
 // New builds the catalogue of the given domains (one per namespace) and of the built-in domains. A bare reference inside
 // a domain (extends, link ends, document) is a type of that domain.
-func New(ds ...*methodology.Domain) (*Catalog, error) {
+func New(ds ...*def.Domain) (*Catalog, error) {
 	all := append(slices.Clone(Builtins()), ds...)
 	nb := len(Builtins())
 	c := &Catalog{types: map[domain.TypeRef]*Type{}, links: map[domain.TypeRef]*LinkType{}, domains: map[string]string{}, structures: map[string]domain.Structure{}}
@@ -250,8 +250,8 @@ func (c *Catalog) IsA(typ, base string) bool {
 }
 
 type declared struct {
-	d *methodology.Domain
-	t methodology.NodeType
+	d *def.Domain
+	t def.NodeType
 }
 
 // resolve builds the model of a type along its extends chain.
@@ -409,10 +409,10 @@ func (c *Catalog) Search(typ string) []domain.SearchProperty {
 	return nil
 }
 
-// HasNodeType reports a known qualified node type (methodology.TypeSet).
+// HasNodeType reports a known qualified node type (def.TypeSet).
 func (c *Catalog) HasNodeType(ref string) bool { _, ok := c.Type(ref); return ok }
 
-// HasLinkType reports a known qualified link type (methodology.TypeSet).
+// HasLinkType reports a known qualified link type (def.TypeSet).
 func (c *Catalog) HasLinkType(ref string) bool { _, ok := c.LinkType(ref); return ok }
 
 // Types lists the node types, sorted by reference.
@@ -499,7 +499,7 @@ func (c *Catalog) CheckLink(typ, from, to string) error {
 }
 
 // Source returns the latest published version of every domain (the registry: registrysvc.Service or its client).
-type Source func(ctx context.Context) ([]*methodology.Domain, error)
+type Source func(ctx context.Context) ([]*def.Domain, error)
 
 // Live holds the catalogue in force of a service: the built-in domains until Reload succeeds, then the published
 // domains of its source, reloaded when the registry reports a domain event.

@@ -14,14 +14,15 @@ import (
 	"github.com/zimwip/goap/pkg/algo"
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/domain/def"
 	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/methodology"
 )
 
-func almDomain(version string) methodology.Domain {
-	return methodology.Domain{Name: "alm", Version: version, Schema: methodology.Schema{
-		NodeTypes: []methodology.NodeType{{Name: "Requirement"}, {Name: "TestCase", Attributes: []methodology.Attribute{{Name: "title"}}}},
-		LinkTypes: []methodology.LinkType{{Name: "verifies", From: "TestCase", To: "Requirement"}},
+func almDomain(version string) def.Domain {
+	return def.Domain{Name: "alm", Version: version, Schema: def.Schema{
+		NodeTypes: []def.NodeType{{Name: "Requirement"}, {Name: "TestCase", Attributes: []def.Attribute{{Name: "title"}}}},
+		LinkTypes: []def.LinkType{{Name: "verifies", From: "TestCase", To: "Requirement"}},
 	}}
 }
 
@@ -103,7 +104,7 @@ func TestDomainLifecycle(t *testing.T) {
 			}
 			// a compatible one becomes the version in force; the former one can then be archived
 			v3 := almDomain("3")
-			v3.NodeTypes = append(v3.NodeTypes, methodology.NodeType{Name: "Need"})
+			v3.NodeTypes = append(v3.NodeTypes, def.NodeType{Name: "Need"})
 			if _, _, err := s.SaveDomain(ctx, v3); err != nil {
 				t.Fatal(err)
 			}
@@ -157,7 +158,7 @@ func TestMethodologyNamespaceAndTypes(t *testing.T) {
 		t.Fatalf("a methodology names its target namespace: %v", issues)
 	}
 	for _, name := range []string{"methodology", "organisation", "platform"} {
-		if _, _, err := s.SaveDomain(ctx, methodology.Domain{Name: name, Version: "9", Schema: methodology.Schema{NodeTypes: []methodology.NodeType{{Name: "X"}}}}); !errors.Is(err, ErrImmutable) {
+		if _, _, err := s.SaveDomain(ctx, def.Domain{Name: name, Version: "9", Schema: def.Schema{NodeTypes: []def.NodeType{{Name: "X"}}}}); !errors.Is(err, ErrImmutable) {
 			t.Fatalf("the built-in domain %s is frozen: %v", name, err)
 		}
 		if _, err := s.CreateDomainVersion(ctx, name, "", "9"); !errors.Is(err, ErrImmutable) {
@@ -171,7 +172,7 @@ func TestMethodologyNamespaceAndTypes(t *testing.T) {
 		t.Fatalf("a built-in domain cannot be archived: %v", err)
 	}
 
-	if _, issues, _ := s.SaveDomain(ctx, methodology.Domain{Name: "ext", Version: "1", Schema: methodology.Schema{NodeTypes: []methodology.NodeType{{Name: "X", Extends: "alm@Nope"}}}}); len(issues) == 0 {
+	if _, issues, _ := s.SaveDomain(ctx, def.Domain{Name: "ext", Version: "1", Schema: def.Schema{NodeTypes: []def.NodeType{{Name: "X", Extends: "alm@Nope"}}}}); len(issues) == 0 {
 		t.Fatal("a reference to an unknown type of another domain is reported")
 	}
 }
@@ -225,7 +226,7 @@ nodeTypes:
 linkTypes:
   - {name: contains, from: Spec, to: Requirement}
 `
-	d, err := methodology.ParseDomain([]byte(yaml))
+	d, err := def.ParseDomain([]byte(yaml))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -252,7 +253,7 @@ linkTypes:
 			// a reference to a lifecycle the domain does not have is rejected
 			bad := *d
 			bad.Version = "1.0.1"
-			bad.NodeTypes = []methodology.NodeType{{Name: "Requirement", Lifecycle: "nope"}}
+			bad.NodeTypes = []def.NodeType{{Name: "Requirement", Lifecycle: "nope"}}
 			if _, issues, _ := s.SaveDomain(ctx, bad); len(issues) == 0 {
 				t.Fatal("unknown lifecycle must be an issue")
 			}
@@ -267,7 +268,7 @@ func TestDomainAlgorithms(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	d, err := methodology.ParseDomain(src)
+	d, err := def.ParseDomain(src)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -339,7 +340,7 @@ func TestDomainNodeTypeEditors(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	d, err := methodology.ParseDomain(src)
+	d, err := def.ParseDomain(src)
 	if err != nil {
 		t.Fatal(err)
 	}

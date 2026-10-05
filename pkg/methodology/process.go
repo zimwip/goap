@@ -2,6 +2,7 @@ package methodology
 
 import (
 	"fmt"
+	"github.com/zimwip/goap/pkg/domain/def"
 	"maps"
 	"slices"
 	"strings"
@@ -180,7 +181,7 @@ func (m *Methodology) compileProcesses(add func(path, format string, args ...any
 		case p.Name == "":
 			add(path+".name", "name required")
 			continue
-		case !nameRE.MatchString(p.Name):
+		case !def.NameRE.MatchString(p.Name):
 			add(path+".name", "name must be lowercase letters, digits, '-' or '_' and start with a letter")
 			continue
 		case names[p.Name]:
@@ -325,7 +326,7 @@ func (w *stepWalker) walk(steps []Step, path, prefix string, inherited map[strin
 	seen := map[string]bool{}
 	for i, s := range steps {
 		sp := fmt.Sprintf("%s[%d]", path, i)
-		if s.Name == "" || !nameRE.MatchString(s.Name) {
+		if s.Name == "" || !def.NameRE.MatchString(s.Name) {
 			w.add(sp+".name", "step name required: lowercase letters, digits, '-' or '_', starting with a letter")
 			continue
 		}
@@ -436,7 +437,7 @@ func (w *stepWalker) step(s Step, sp, path string, need map[string]bool) map[str
 	case MethodProcess:
 		other, proc := s.NestedProcess()
 		switch {
-		case !nameRE.MatchString(proc) || (other != "" && !nameRE.MatchString(other)):
+		case !def.NameRE.MatchString(proc) || (other != "" && !def.NameRE.MatchString(other)):
 			w.add(sp+".process", "process must be <process> or <methodology>/<process>")
 			return nil
 		case (other == "" || other == w.m.Name) && !slices.ContainsFunc(w.m.Processes, func(p Process) bool { return p.Name == proc }):

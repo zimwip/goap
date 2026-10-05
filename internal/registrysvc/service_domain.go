@@ -9,7 +9,7 @@ import (
 	"slices"
 
 	"github.com/zimwip/goap/pkg/authz"
-	"github.com/zimwip/goap/pkg/methodology"
+	"github.com/zimwip/goap/pkg/domain/def"
 	"github.com/zimwip/goap/pkg/typecat"
 )
 
@@ -29,12 +29,12 @@ func (s *Service) domains() (DomainStore, error) {
 
 // Types is the type catalogue in force (ADR 0012 §2): the latest published version of every domain and the built-in
 // domains. over replaces the published version of a domain (to check a candidate version).
-func (s *Service) Types(ctx context.Context, over ...*methodology.Domain) (*typecat.Catalog, error) {
+func (s *Service) Types(ctx context.Context, over ...*def.Domain) (*typecat.Catalog, error) {
 	ds, err := s.Domains(ctx)
 	if err != nil {
 		return nil, err
 	}
-	byName := map[string]*methodology.Domain{}
+	byName := map[string]*def.Domain{}
 	var order []string
 	for _, d := range append(ds, over...) {
 		if _, ok := byName[d.Name]; !ok {
@@ -42,14 +42,14 @@ func (s *Service) Types(ctx context.Context, over ...*methodology.Domain) (*type
 		}
 		byName[d.Name] = d
 	}
-	list := make([]*methodology.Domain, 0, len(order))
+	list := make([]*def.Domain, 0, len(order))
 	for _, n := range order {
 		list = append(list, byName[n])
 	}
 	return typecat.New(list...)
 }
 
-func (s *Service) authorizeDomain(ctx context.Context, action string, d *methodology.Domain) error {
+func (s *Service) authorizeDomain(ctx context.Context, action string, d *def.Domain) error {
 	return authz.Check(ctx, s.Authz, authz.Request{Subject: authz.From(ctx), Action: action,
 		Resource: authz.Resource{Type: "domain", ID: d.Name + "@" + d.Version, Name: d.Name, Org: authz.From(ctx).Org}})
 }
@@ -101,12 +101,12 @@ func (s *Service) GetDomain(ctx context.Context, name, version string) (DomainRe
 
 // Domains returns the latest published version of every stored domain (the source of the type catalogue, which
 // adds the built-in ones itself).
-func (s *Service) Domains(ctx context.Context) ([]*methodology.Domain, error) {
+func (s *Service) Domains(ctx context.Context) ([]*def.Domain, error) {
 	rs, err := s.DomainVersions(ctx, false)
 	if err != nil {
 		return nil, err
 	}
-	var out []*methodology.Domain
+	var out []*def.Domain
 	for _, r := range rs {
 		if r.Status == StatusPublished && !r.Builtin {
 			out = append(out, &r.Domain)
@@ -153,7 +153,7 @@ func (s *Service) DomainVersions(ctx context.Context, all bool) ([]DomainRecord,
 
 // SaveDomain creates or replaces a draft; invalid drafts are stored and
 // their issues returned.
-func (s *Service) SaveDomain(ctx context.Context, d methodology.Domain) (DomainRecord, methodology.Issues, error) {
+func (s *Service) SaveDomain(ctx context.Context, d def.Domain) (DomainRecord, def.Issues, error) {
 	if d.Name == "" || d.Version == "" {
 		return DomainRecord{}, nil, fmt.Errorf("name and version are required: %w", ErrInvalid)
 	}
@@ -181,14 +181,14 @@ func (s *Service) SaveDomain(ctx context.Context, d methodology.Domain) (DomainR
 }
 
 // validateDomain checks a domain and its references to the types of the other domains in force.
-func (s *Service) validateDomain(ctx context.Context, d *methodology.Domain) methodology.Issues {
+func (s *Service) validateDomain(ctx context.Context, d *def.Domain) def.Issues {
 	issues := d.Validate()
 	if typecat.IsBuiltin(d.Name) {
-		return append(issues, methodology.Issue{Path: "name", Message: d.Name + " is a domain built into the platform: it changes with the platform code"})
+		return append(issues, def.Issue{Path: "name", Message: d.Name + " is a domain built into the platform: it changes with the platform code"})
 	}
 	if len(issues) == 0 {
 		if _, err := s.Types(ctx, d); err != nil {
-			issues = append(issues, methodology.Issue{Path: "nodeTypes", Message: err.Error()})
+			issues = append(issues, def.Issue{Path: "nodeTypes", Message: err.Error()})
 		}
 	}
 	return issues
@@ -250,7 +250,7 @@ func (s *Service) PublishDomain(ctx context.Context, name, version string) (Doma
 }
 
 // checkPublishable refuses a domain with issues, or one that would break a published methodology using it.
-func (s *Service) checkPublishable(ctx context.Context, d *methodology.Domain) error {
+func (s *Service) checkPublishable(ctx context.Context, d *def.Domain) error {
 	if issues := s.validateDomain(ctx, d); len(issues) > 0 {
 		return fmt.Errorf("%w: %v", ErrInvalid, issues)
 	}
@@ -342,8 +342,8 @@ func (s *Service) DeleteDomain(ctx context.Context, name, version string) error 
 }
 
 // ImportDomain stores a YAML definition as a draft, and publishes it on request.
-func (s *Service) ImportDomain(ctx context.Context, yamlSrc []byte, publish bool) (DomainRecord, methodology.Issues, error) {
-	d, err := methodology.ParseDomain(yamlSrc)
+func (s *Service) ImportDomain(ctx context.Context, yamlSrc []byte, publish bool) (DomainRecord, def.Issues, error) {
+	d, err := def.ParseDomain(yamlSrc)
 	if err != nil {
 		return DomainRecord{}, nil, fmt.Errorf("%w: %v", ErrInvalid, err)
 	}
@@ -356,7 +356,7 @@ func (s *Service) ImportDomain(ctx context.Context, yamlSrc []byte, publish bool
 // importPublishedDomain stores a domain version as published in one write, with one event (SaveDomain then
 // PublishDomain would be two). A domain with issues cannot be published: it is kept as a draft, and the issues
 // returned with the error.
-func (s *Service) importPublishedDomain(ctx context.Context, d methodology.Domain) (DomainRecord, methodology.Issues, error) {
+func (s *Service) importPublishedDomain(ctx context.Context, d def.Domain) (DomainRecord, def.Issues, error) {
 	if d.Name == "" || d.Version == "" {
 		return DomainRecord{}, nil, fmt.Errorf("name and version are required: %w", ErrInvalid)
 	}
@@ -424,7 +424,7 @@ func (s *Service) SeedDomains(ctx context.Context, dir string) ([]string, error)
 		if err != nil {
 			return loaded, err
 		}
-		d, err := methodology.ParseDomain(src)
+		d, err := def.ParseDomain(src)
 		if err != nil {
 			return loaded, fmt.Errorf("%s: %w", f, err)
 		}

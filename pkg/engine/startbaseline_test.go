@@ -6,6 +6,7 @@ import (
 
 	"github.com/zimwip/goap/internal/graphsvc"
 	"github.com/zimwip/goap/pkg/authz"
+	"github.com/zimwip/goap/pkg/domain/def"
 	"github.com/zimwip/goap/pkg/engine"
 	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/intent"
@@ -25,7 +26,7 @@ func TestStartWithoutBaseline(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ds, err := methodology.LoadDomains("../../domains")
+	ds, err := def.LoadDomains("../../domains")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -40,7 +41,7 @@ func TestStartWithoutBaseline(t *testing.T) {
 		Methodologies: engine.StaticMethodologies{cm.Name: cm},
 		Intent:        intent.Resolver{Ranker: intent.Lexical{}},
 		Store:         engine.NewMemoryStore(),
-		Types:         func() methodology.TypeSet { return cat },
+		Types:         func() def.TypeSet { return cat },
 	}
 	req := engine.StartRequest{Methodology: "sdlc", Agent: "delivery", Goal: "deliver", Intent: "Allow payment in 3 installments", ProjectID: testProject}
 

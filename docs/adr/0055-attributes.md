@@ -14,7 +14,7 @@ order, tooltip, name flag) with its own validators, and enumerations next to the
 
 ## Decision
 
-1. **Attribute** (`methodology.Attribute`): `name` (the code), `label`, `description`, `type` (`string`,
+1. **Attribute** (`def.Attribute`): `name` (the code), `label`, `description`, `type` (`string`,
    `number`, `boolean`, `date`, `enum`, `json`; empty: untyped), `widget` (`text`, `textarea`, `dropdown`,
    `checkbox`, `date`; empty: the usual one of the type), `enum`, `default`, `section`, `order`, `tooltip`,
    `asName`, and `validators`: the `property_validator` instances plugged on it, in call order. YAML accepts

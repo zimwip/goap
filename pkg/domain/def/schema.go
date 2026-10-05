@@ -1,4 +1,4 @@
-package methodology
+package def
 
 import (
 	"fmt"
@@ -67,7 +67,7 @@ func (s Schema) check(prefix string, add func(path, format string, args ...any))
 			add(path+".name", "duplicate node type %s", n.Name)
 		}
 		nodeTypes[n.Name] = true
-		if n.Editor != "" && !nameRE.MatchString(n.Editor) {
+		if n.Editor != "" && !NameRE.MatchString(n.Editor) {
 			add(path+".editor", "invalid editor name %q (lowercase letters, digits, - and _)", n.Editor)
 		}
 	}

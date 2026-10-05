@@ -1,12 +1,13 @@
 package methodology
 
 import (
+	"github.com/zimwip/goap/pkg/domain/def"
 	"slices"
 	"testing"
 )
 
 func TestSubtyping(t *testing.T) {
-	d, err := ParseDomain([]byte(`
+	d, err := def.ParseDomain([]byte(`
 name: sec
 version: "1.0.0"
 nodeTypes:
@@ -28,7 +29,7 @@ goals: [{name: g, pre: {c: true}}]
 	if err != nil {
 		t.Fatal(err)
 	}
-	m = m.Resolve(DomainTypes(d))
+	m = m.Resolve(def.DomainTypes(d))
 	if is := m.Validate(); len(is) > 0 {
 		t.Fatal(is)
 	}

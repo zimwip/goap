@@ -11,6 +11,7 @@ import (
 
 	"github.com/zimwip/goap/pkg/algo"
 	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/domain/def"
 	"github.com/zimwip/goap/pkg/dsl"
 )
 
@@ -79,7 +80,7 @@ func checkAttributeValue(a domain.AttributeCheck, v any) error {
 		return nil
 	}
 	switch a.Type {
-	case attrNumber:
+	case def.AttrNumber:
 		switch x := v.(type) {
 		case float64, float32, int, int32, int64, uint, uint32, uint64, json.Number:
 			return nil
@@ -89,11 +90,11 @@ func checkAttributeValue(a domain.AttributeCheck, v any) error {
 			}
 		}
 		return fmt.Errorf("a number is expected, got %v", v)
-	case attrBoolean:
+	case def.AttrBoolean:
 		if _, ok := v.(bool); !ok {
 			return fmt.Errorf("a boolean is expected, got %v", v)
 		}
-	case attrDate:
+	case def.AttrDate:
 		s, ok := v.(string)
 		if ok {
 			for _, layout := range []string{"2006-01-02", time.RFC3339, "2006-01-02T15:04:05"} {
@@ -103,7 +104,7 @@ func checkAttributeValue(a domain.AttributeCheck, v any) error {
 			}
 		}
 		return fmt.Errorf("a date (YYYY-MM-DD or RFC 3339) is expected, got %v", v)
-	case attrEnum:
+	case def.AttrEnum:
 		s, ok := v.(string)
 		if ok {
 			if slices.Contains(a.Values, s) {
@@ -111,7 +112,7 @@ func checkAttributeValue(a domain.AttributeCheck, v any) error {
 			}
 		}
 		return fmt.Errorf("%v is not a value of the enum %s", v, a.Enum)
-	case attrString:
+	case def.AttrString:
 		if _, ok := v.(string); !ok {
 			return fmt.Errorf("a string is expected, got %v", v)
 		}
@@ -187,12 +188,3 @@ func (a *applier) runActions(n domain.Node, t domain.Transition, children []doma
 	}
 	return a.tx.SetNodeProps(a.ctx, n.Ref(), props)
 }
-
-// attribute types the graph checks (pkg/methodology.AttributeTypes; the graph cannot import it).
-const (
-	attrString  = "string"
-	attrNumber  = "number"
-	attrBoolean = "boolean"
-	attrDate    = "date"
-	attrEnum    = "enum"
-)

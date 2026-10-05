@@ -485,7 +485,7 @@ A node type may name the **editor** of its nodes in the IDE (`editor: agent`, in
 which reads the editor from the type catalogue the IDE loads from the registry (`ListTypes`) and falls back to the default node editor; the editors a type can name
 are registered in `web/src/lib/views/nodeEditors.ts` (`agent`, `action`, `methodology`, `domain`, `unit`, `mcp`, ...).
 
-A link type may be flagged **`compose: true`** (`methodology.LinkType.Compose`, `typecat.LinkType.Compose`, `LinkTypeInfo.compose`): its target is a part of its source, a piece of display metadata
+A link type may be flagged **`compose: true`** (`def.LinkType.Compose`, `typecat.LinkType.Compose`, `LinkTypeInfo.compose`): its target is a part of its source, a piece of display metadata
 the editors read from the domain rather than knowing links by name. The methodology editor lists as panes the element types the version composes
 (`TypeCatalog.sectionsOf`, through `defines`), and shows under a process or a method the steps composed through `sub_activity` (`TypeCatalog.partsOf`); a new type composed by
 `defines` and bound to a draft collection (`TYPE_COLLECTION`, `methodologyTabs.ts`) gets its pane without editor code. The `role` and `step` node editors open the version's Roles pane and the owning process or method.
@@ -1248,7 +1248,8 @@ pkg/engine/                  processes, agents and planners, action executors, D
 pkg/dsl/                     script action DSL (ctx API, JavaScript and Go interpreters)
 internal/sandbox/            sandbox pool, provisioners (process, docker, kubernetes), RuntimeService, runner
 internal/telemetry/          OpenTelemetry: exporters, interceptors, process / action / LLM / tool spans
-pkg/methodology/             methodology model, validation (localized anomalies), compilation, YAML import/export
+pkg/domain/def/              domain definition model (ADR 0060): Domain, Schema, node / link types, attributes, enums, lifecycles, algorithms; built-in domains, validation, YAML import/export
+pkg/methodology/             methodology model only (a methodology is a domain-typed definition): validation (localized anomalies), compilation, YAML import/export
 pkg/authz/                   ABAC: identity, requests, Casbin model and enforcer, default policies
 pkg/llm/                     completion and embedding contracts (implemented by internal/modelgw)
 pkg/index/                   node index: hybrid search, facets, stores (memory, SQLite FTS5, PostgreSQL pgvector)

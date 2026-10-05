@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/zimwip/goap/pkg/authz"
+	"github.com/zimwip/goap/pkg/domain/def"
 	"github.com/zimwip/goap/pkg/engine"
 	"github.com/zimwip/goap/pkg/methodology"
 )
@@ -87,7 +88,7 @@ func (s *Service) Versions(ctx context.Context, all bool) ([]Record, error) {
 
 // Save creates or replaces a draft; invalid drafts are stored and their
 // issues returned.
-func (s *Service) Save(ctx context.Context, m methodology.Methodology) (Record, methodology.Issues, error) {
+func (s *Service) Save(ctx context.Context, m methodology.Methodology) (Record, def.Issues, error) {
 	if m.Name == "" || m.Version == "" {
 		return Record{}, nil, fmt.Errorf("name and version are required: %w", ErrInvalid)
 	}
@@ -108,15 +109,15 @@ func (s *Service) Save(ctx context.Context, m methodology.Methodology) (Record, 
 }
 
 // validate checks a definition against the types in force (the published domains, ADR 0012).
-func (s *Service) validate(ctx context.Context, m *methodology.Methodology) methodology.Issues {
+func (s *Service) validate(ctx context.Context, m *methodology.Methodology) def.Issues {
 	cat, err := s.Types(ctx)
 	if err != nil {
-		return methodology.Issues{{Path: "namespace", Message: "the types in force cannot be read: " + err.Error()}}
+		return def.Issues{{Path: "namespace", Message: "the types in force cannot be read: " + err.Error()}}
 	}
 	issues := m.Resolve(cat).ValidateStored()
 	if m.Namespace != "" {
 		if _, ok := cat.Domains()[m.Namespace]; !ok {
-			issues = append(issues, methodology.Issue{Path: "namespace", Message: fmt.Sprintf("no published domain %s", m.Namespace)})
+			issues = append(issues, def.Issue{Path: "namespace", Message: fmt.Sprintf("no published domain %s", m.Namespace)})
 		}
 	}
 	return append(issues, s.scopeIssues(ctx, m)...)
@@ -190,7 +191,7 @@ func (s *Service) Delete(ctx context.Context, name, version string) error {
 }
 
 // Import stores a YAML definition as a draft, and publishes it on request.
-func (s *Service) Import(ctx context.Context, yamlSrc []byte, publish bool) (Record, methodology.Issues, error) {
+func (s *Service) Import(ctx context.Context, yamlSrc []byte, publish bool) (Record, def.Issues, error) {
 	m, err := methodology.Parse(yamlSrc)
 	if err != nil {
 		return Record{}, nil, fmt.Errorf("%w: %v", ErrInvalid, err)
@@ -203,7 +204,7 @@ func (s *Service) Import(ctx context.Context, yamlSrc []byte, publish bool) (Rec
 
 // importPublished stores a methodology version as published in one change (Save then Publish would be two). A
 // definition with issues cannot be published: it is kept as a draft, and the issues returned with the error.
-func (s *Service) importPublished(ctx context.Context, m methodology.Methodology) (Record, methodology.Issues, error) {
+func (s *Service) importPublished(ctx context.Context, m methodology.Methodology) (Record, def.Issues, error) {
 	if m.Name == "" || m.Version == "" {
 		return Record{}, nil, fmt.Errorf("name and version are required: %w", ErrInvalid)
 	}

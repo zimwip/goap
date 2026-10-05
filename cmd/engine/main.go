@@ -23,6 +23,7 @@ import (
 	"github.com/zimwip/goap/internal/telemetry"
 	"github.com/zimwip/goap/pkg/access"
 	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/domain/def"
 	"github.com/zimwip/goap/pkg/engine"
 	"github.com/zimwip/goap/pkg/intent"
 	"github.com/zimwip/goap/pkg/llm"
@@ -105,7 +106,7 @@ func main() {
 		Tracer:    telemetry.NewEngineTracer(),
 		Log:       log,
 		MaxSteps:  platform.EnvInt("GOAP_MAX_STEPS", 50),
-		Types:     func() methodology.TypeSet { return types.Get() },
+		Types:     func() def.TypeSet { return types.Get() },
 	}
 	// self-observation (methodology-improvement): journal, traces, drafts
 	maps.Copy(builtins, e.SelfImprovementBuiltins(telemetry.SelfImprovementFromEnv(registry)))

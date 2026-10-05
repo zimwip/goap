@@ -9,6 +9,7 @@ import (
 
 	registryv1 "github.com/zimwip/goap/gen/goap/registry/v1"
 	"github.com/zimwip/goap/gen/goap/registry/v1/registryv1connect"
+	"github.com/zimwip/goap/pkg/domain/def"
 	"github.com/zimwip/goap/pkg/engine"
 	"github.com/zimwip/goap/pkg/methodology"
 )
@@ -49,12 +50,12 @@ func (c *Client) List(ctx context.Context) ([]*methodology.Compiled, error) {
 }
 
 // Domains returns the latest published version of every domain (the source of a typecat.Live catalogue).
-func (c *Client) Domains(ctx context.Context) ([]*methodology.Domain, error) {
+func (c *Client) Domains(ctx context.Context) ([]*def.Domain, error) {
 	r, err := c.rpc.ListDomains(ctx, connect.NewRequest(&registryv1.ListDomainsRequest{}))
 	if err != nil {
 		return nil, err
 	}
-	var out []*methodology.Domain
+	var out []*def.Domain
 	for _, s := range r.Msg.Domains {
 		if s.Status != string(StatusPublished) || s.Builtin {
 			continue // the catalogue adds the built-in domains itself

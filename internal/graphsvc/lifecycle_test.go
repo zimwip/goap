@@ -14,9 +14,9 @@ import (
 	"github.com/zimwip/goap/pkg/access"
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/domain/def"
 	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/mcp"
-	"github.com/zimwip/goap/pkg/methodology"
 	"github.com/zimwip/goap/pkg/typecat"
 )
 
@@ -83,7 +83,7 @@ func TestLifecycleIsEnforcedByTheService(t *testing.T) {
 	g.Authorizer = graphsvc.TransitionAuthorizer(authorizer)
 	h := &graphsvc.Handler{Graph: g, Authz: authorizer}
 
-	d, err := methodology.ParseDomain([]byte(`
+	d, err := def.ParseDomain([]byte(`
 name: docs
 version: 1.0.0
 lifecycles:

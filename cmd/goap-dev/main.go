@@ -52,6 +52,7 @@ import (
 	"github.com/zimwip/goap/pkg/access"
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/domain/def"
 	"github.com/zimwip/goap/pkg/engine"
 	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/intent"
@@ -247,7 +248,7 @@ func main() {
 		Sandboxes: sandboxes,
 		Tracer:    telemetry.NewEngineTracer(),
 		Log:       log,
-		Types:     func() methodology.TypeSet { return types.Get() },
+		Types:     func() def.TypeSet { return types.Get() },
 	}
 	// self-observation (methodology-improvement): journal, traces, drafts
 	maps.Copy(builtins, e.SelfImprovementBuiltins(telemetry.SelfImprovementFromEnv(registrysvc.Drafts{Service: reg})))

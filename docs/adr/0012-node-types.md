@@ -61,7 +61,7 @@ Question answered (CLAUDE.md, rule 8): **WHAT** is being changed — how a node 
 
 ### 4. Built-in domains: shipped with the code, frozen
 - The domains the platform writes or reads before anything is loaded ship with the code (embedded YAML,
-  `domains/builtin/`, `methodology.BuiltinDomains`):
+  `domains/builtin/`, `def.BuiltinDomains`):
   - the **meta-domain** `methodology` (`MethodologyVersion`, `Agent`, `Action`, `Condition`, `Goal`, `ToolRequest`),
     which types the definition nodes of the methodologies (ADR 0023);
   - `organisation` (`OrgUnit`, `Adapter`, `User`, `Policy`), read by the sub-changes (ADR 0016), the adapters
