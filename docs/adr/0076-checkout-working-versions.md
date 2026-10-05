@@ -100,11 +100,22 @@ change targets its working version, whose number does not move until the next ch
   impacts await their review" check; `AdoptFlow` refuses a flow that still has a checked-out version, `DiscardFlow`
   drops them.
 
+### 5b. Cancelling a checkout: the one deletion
+
+- **`CancelCheckout(change, impact)`** drops the working version of an impact, with its outgoing links: the node
+  goes back to its last checked-in version, and the impact to the state it had before that checkout (declared, or
+  realized by its last checked-in version).
+- **A creation cancelled before its first check-in** leaves a node with no version: the node is removed, its key
+  freed, and the impact goes with it. It is the only deletion the graph knows (a removal is a modification of the
+  parent, §3).
+- Refused on a checked-in version, and on a working version another version links to (a link of another working
+  version of the change is removed first).
+
 ### 6. Events
 
 The impact log (ADR 0029) records `declared`, `checkedOut` (the working version, `Post`, replaces `written`),
 `updated` (the property and link edits made in place, with the patch, for the audit trail and PROV-O), `checkedIn`,
-`transitioned` (the version a `TransitionNode` wrote, with the transition),
+`transitioned` (the version a `TransitionNode` wrote, with the transition), `cancelled` (a checkout dropped),
 `reviewed`, `discarded`, `adopted`, `landed`, `rebased`. The node index (ADR 0026) is fed at check-in: a
 `NodeEvent` is published for a frozen version, never for each in-place edit.
 
@@ -118,6 +129,7 @@ The impact log (ADR 0029) records `declared`, `checkedOut` (the working version,
 | `WriteChangeImpact` | `UpdateNode` (props, owner), the link operations (a removal: the parent loses its link) and `TransitionNode` (state) |
 | — | `CheckinNode(change, impact)` |
 | — | `TransitionNode(change, node, transition)` |
+| — | `CancelCheckout(change, impact)` |
 
 `gateAccess` (the `adminOnly` types, ADR 0068) applies to `CreateNode` and `CheckoutNode`; every later operation on the
 impact inherits the check.
@@ -132,7 +144,8 @@ impact inherits the check.
   (the guard's replay, the index) must read checked-in versions only, or be told of in-place edits (`updated`).
 - `pkg/graph`: `NodeWrite` splits into the checkout, update, link, check-in and transition operations; `Graph.CreateNode(NewNode)`,
   `UpdateNode(ref)`, `Link`, `CreateObject` and the `graph.import` commit go; `Commit` is rebuilt on the primitives.
-  Schema: `node_version.checked_out` in both dialects (`TestSchemasAligned`).
+  Schema: `node_version.checked_out` in both dialects (`TestSchemasAligned`), in `0001_schema.sql`: the schema starts
+  from scratch, there is no migration of existing data.
 - Callers to migrate: `internal/graphsvc` (handler, client), `pkg/dsl` / `pkg/engine` node operations, the
   `goap-change` built-in MCP tools, the web (`ChangeTab`, `ObjectDialog`, `pending.svelte.ts`, `llmEdit.ts`,
   `lifecycle.ts`, `HumanTaskForm`), the seeds and the tests that create nodes directly.

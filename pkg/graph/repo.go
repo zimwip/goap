@@ -57,6 +57,9 @@ type Tx interface {
 	SetNodeProps(ctx context.Context, ref domain.NodeRef, props map[string]any) error
 	// SetNodeOwner moves a version to another owner unit (an in-place edit of a working version, ADR 0076).
 	SetNodeOwner(ctx context.Context, ref domain.NodeRef, owner domain.NodeID) error
+	// DropWorkingVersion removes a working version, the latest of its node, with its outgoing links (ADR 0076: a
+	// checkout cancelled); a node left without version is removed (a creation cancelled before its first check-in).
+	DropWorkingVersion(ctx context.Context, ref domain.NodeRef) error
 	// CheckinVersion freezes a checked-out version (ADR 0076): ErrNotFound when it is not checked out.
 	CheckinVersion(ctx context.Context, ref domain.NodeRef) error
 	PutLink(ctx context.Context, l domain.Link) error

@@ -198,6 +198,12 @@ func TestSQLBuildersGolden(t *testing.T) {
 	checkSQL(t, "sqlite SetNodeOwner", lite, lite.sqlSetNodeOwner(), `UPDATE node_version SET owner_id = ? WHERE node_id = ? AND version = ?`)
 	checkSQL(t, "pg Checkin", pg, pg.sqlCheckin(), `UPDATE node_version SET checked_out = $3 WHERE node_id = $1 AND version = $2 AND checked_out`)
 	checkSQL(t, "sqlite Checkin", lite, lite.sqlCheckin(), `UPDATE node_version SET checked_out = ? WHERE node_id = ? AND version = ? AND checked_out`)
+	for i, want := range []string{`DELETE FROM link WHERE from_id = $1 AND from_version = $2`, `DELETE FROM node_version WHERE node_id = $1 AND version = $2 AND checked_out`} {
+		checkSQL(t, "pg DropWorkingVersion", pg, pg.dropWorkingVersion()[i], want)
+	}
+	for i, want := range []string{`DELETE FROM link WHERE from_id = ? AND from_version = ?`, `DELETE FROM node_version WHERE node_id = ? AND version = ? AND checked_out`} {
+		checkSQL(t, "sqlite DropWorkingVersion", lite, lite.dropWorkingVersion()[i], want)
+	}
 	checkSQL(t, "pg DeleteLink", pg, pg.sqlDeleteLink(), `DELETE FROM link WHERE id = $1`)
 	checkSQL(t, "sqlite DeleteLink", lite, lite.sqlDeleteLink(), `DELETE FROM link WHERE id = ?`)
 	checkSQL(t, "pg SetLinkProps", pg, pg.sqlSetLinkProps(), `UPDATE link SET props = $2 WHERE id = $1`)

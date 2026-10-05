@@ -21,7 +21,8 @@ import (
 //     state, the empty baseline id, which nothing stores;
 //   - only a working version (ADR 0076: checked out by CreateNode or CheckoutNode, until its check-in) or a version
 //     written in the same transaction gets its owner moved or its outgoing links edited or removed in place, and
-//     only a working version is checked in.
+//     only a working version is checked in or dropped (a checkout cancelled; a creation cancelled before its first
+//     check-in removes the node, the one deletion of the graph).
 //
 // What names a change, a unit or a project is checked when the transaction ends, before it commits (as a deferred
 // foreign key): the bootstrap writes the root unit and the root project, each referencing the other and itself, in
@@ -83,6 +84,29 @@ func (t *guardTx) SetNodeOwner(ctx context.Context, ref domain.NodeRef, owner do
 	}
 	t.owners[owner] = "node " + ref.String()
 	return t.Tx.SetNodeOwner(ctx, ref, owner)
+}
+
+// DropWorkingVersion cancels a checkout: only the working version that is the latest of its node, which no other
+// version links to (the links of other working versions are removed first).
+func (t *guardTx) DropWorkingVersion(ctx context.Context, ref domain.NodeRef) error {
+	vs, err := t.Tx.Versions(ctx, ref.ID)
+	if err != nil {
+		return err
+	}
+	if len(vs) == 0 || vs[len(vs)-1].Ref() != ref || !vs[len(vs)-1].CheckedOut {
+		return fmt.Errorf("version %s is not the working version of its node (ADR 0076): %w", ref, ErrConflict)
+	}
+	in, err := t.Tx.InLinks(ctx, ref)
+	if err != nil {
+		return err
+	}
+	for _, l := range in {
+		if l.From != ref {
+			return fmt.Errorf("version %s is the target of link %s %s from %s: %w", ref, l.ID, l.Type, l.From, ErrConflict)
+		}
+	}
+	delete(t.written, ref)
+	return t.Tx.DropWorkingVersion(ctx, ref)
 }
 
 func (t *guardTx) DeleteLink(ctx context.Context, id domain.LinkID) error {

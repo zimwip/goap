@@ -410,6 +410,22 @@ func (t *pgTx) CheckinVersion(ctx context.Context, ref domain.NodeRef) error {
 	return t.exec1(ctx, "checked-out version "+ref.String(), dialectPG.sqlCheckin(), string(ref.ID), int(ref.Version), false)
 }
 
+func (t *pgTx) DropWorkingVersion(ctx context.Context, ref domain.NodeRef) error {
+	q := dialectPG.dropWorkingVersion()
+	if _, err := t.tx.Exec(ctx, q[0], string(ref.ID), int(ref.Version)); err != nil {
+		return mapErr(err, "links of "+ref.String())
+	}
+	if err := t.exec1(ctx, "checked-out version "+ref.String(), q[1], string(ref.ID), int(ref.Version)); err != nil {
+		return err
+	}
+	for _, s := range []string{dialectPG.sqlDeleteOrphanNode(), dialectPG.sqlRefreshLatest()} {
+		if _, err := t.tx.Exec(ctx, s, string(ref.ID)); err != nil {
+			return mapErr(err, "node "+string(ref.ID))
+		}
+	}
+	return nil
+}
+
 func (t *pgTx) Link(ctx context.Context, id domain.LinkID) (domain.Link, error) {
 	q, args := dialectPG.sqlLinkByID(id)
 	ls, err := t.queryLinks(ctx, q, args...)

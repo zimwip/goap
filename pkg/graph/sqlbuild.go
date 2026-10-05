@@ -288,6 +288,16 @@ func (d dialect) sqlCheckin() string {
 	return `UPDATE node_version SET checked_out = ` + d.ph(3) + ` WHERE node_id = ` + d.ph(1) + ` AND version = ` + d.ph(2) + ` AND checked_out`
 }
 
+// dropWorkingVersion removes a working version and its outgoing links (ADR 0076: a checkout cancelled): arguments
+// node, version. The version statement is the second; the node is then removed when it has no version left
+// (sqlDeleteOrphanNode), else its latest version refreshed (sqlRefreshLatest).
+func (d dialect) dropWorkingVersion() []string {
+	return []string{
+		`DELETE FROM link WHERE from_id = ` + d.ph(1) + ` AND from_version = ` + d.ph(2),
+		`DELETE FROM node_version WHERE node_id = ` + d.ph(1) + ` AND version = ` + d.ph(2) + ` AND checked_out`,
+	}
+}
+
 // sqlLinkByID reads one link.
 func (d dialect) sqlLinkByID(id domain.LinkID) (string, []any) {
 	return `SELECT ` + d.linkCols() + ` FROM link WHERE id = ` + d.ph(1), []any{string(id)}
