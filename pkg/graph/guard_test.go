@@ -342,3 +342,85 @@ func testGuardEditsWorkingVersionsOnly(t *testing.T, repo Repo) {
 		}
 	}
 }
+
+// A checkout is cancelled by dropping its working version (ADR 0076): a created node cancelled before its first
+// check-in is removed with its key, a modified one goes back to its checked-in version; a checked-in version, or one
+// another version links to, is never dropped.
+func TestGuardDropsWorkingVersionsOnly(t *testing.T) {
+	forEachRepo(t, testGuardDropsWorkingVersionsOnly)
+}
+
+func testGuardDropsWorkingVersionsOnly(t *testing.T, repo Repo) {
+	ctx := context.Background()
+	g := New(repo)
+	if err := g.Bootstrap(ctx); err != nil {
+		t.Fatal(err)
+	}
+	org := must[domain.Node](t)(g.NodeByKey(ctx, NamespaceOrganisation, rootOrg(g)))
+	boot := must[domain.Change](t)(g.Change(ctx, org.ChangeID))
+	write := func(fn func(tx Tx) error) error { return g.repo.InTx(ctx, fn) }
+	version := func(id domain.NodeID, v domain.Version, key string) domain.Node {
+		n := domain.Node{ID: id, Version: v, Branch: domain.MainBranch, Reason: domain.ReasonCreate, Namespace: "notes", Key: key, Type: "Note",
+			ChangeID: boot.ID, CreatedAt: g.now(), CheckedOut: true}
+		if v > 1 {
+			n.Reason, n.Parents = domain.ReasonRevise, []domain.Version{v - 1}
+		}
+		return n
+	}
+	created, kept := version(domain.NodeID(g.newID()), 1, "N-1"), version(domain.NodeID(g.newID()), 1, "N-2")
+	next := version(kept.ID, 2, "N-2")
+	if err := write(func(tx Tx) error {
+		for _, n := range []domain.Node{created, kept} {
+			if err := tx.PutNode(ctx, n); err != nil {
+				return err
+			}
+		}
+		if err := tx.PutLink(ctx, domain.Link{ID: domain.LinkID(g.newID()), Type: "refines", From: created.Ref(), To: kept.Ref(), ChangeID: boot.ID}); err != nil {
+			return err
+		}
+		if err := tx.CheckinVersion(ctx, kept.Ref()); err != nil {
+			return err
+		}
+		return tx.PutNode(ctx, next)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// the checked-in N-2 v1 is never dropped
+	for name, fn := range map[string]func(tx Tx) error{
+		"a checked-in version":       func(tx Tx) error { return tx.DropWorkingVersion(ctx, kept.Ref()) },
+		"a version that is not last": func(tx Tx) error { return tx.DropWorkingVersion(ctx, domain.NodeRef{ID: kept.ID, Version: 1}) },
+	} {
+		if err := write(fn); !errors.Is(err, ErrConflict) {
+			t.Errorf("%s dropped: %v", name, err)
+		}
+	}
+	// N-1 links to N-2 v2: v2 is not dropped while the link stands; dropping N-1 removes it
+	if err := write(func(tx Tx) error {
+		return tx.PutLink(ctx, domain.Link{ID: domain.LinkID(g.newID()), Type: "refines", From: created.Ref(), To: next.Ref(), ChangeID: boot.ID})
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := write(func(tx Tx) error { return tx.DropWorkingVersion(ctx, next.Ref()) }); !errors.Is(err, ErrConflict) {
+		t.Fatalf("a version another version links to is dropped: %v", err)
+	}
+	// the creation of N-1 cancelled: the node, its key and its links go
+	if err := write(func(tx Tx) error { return tx.DropWorkingVersion(ctx, created.Ref()) }); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := g.NodeByKey(ctx, "notes", "N-1"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("a cancelled creation leaves no node: %v", err)
+	}
+	if links := must[[]domain.Link](t)(g.OutLinksOf(ctx, created.Ref())); len(links) != 0 {
+		t.Fatalf("nor its links: %+v", links)
+	}
+	if err := write(func(tx Tx) error { return tx.DropWorkingVersion(ctx, next.Ref()) }); err != nil {
+		t.Fatal(err)
+	}
+	if n := must[domain.Node](t)(g.NodeByKey(ctx, "notes", "N-2")); n.Version != 1 {
+		t.Fatalf("N-2 goes back to its checked-in version: %+v", n)
+	}
+	// its key is free again
+	if err := write(func(tx Tx) error { return tx.PutNode(ctx, version(domain.NodeID(g.newID()), 1, "N-1")) }); err != nil {
+		t.Fatal(err)
+	}
+}

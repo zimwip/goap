@@ -95,6 +95,8 @@ CREATE TABLE node_version (
     change_impact text,
     comment       text        NOT NULL DEFAULT '',
     execution     text        NOT NULL DEFAULT '',
+    -- the working version of a change (ADR 0076): edited in place until its check-in
+    checked_out   integer     NOT NULL DEFAULT 0,
     PRIMARY KEY (node_id, version)
 );
 CREATE INDEX node_version_branch ON node_version (node_id, branch, version DESC);

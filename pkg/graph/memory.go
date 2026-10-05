@@ -362,6 +362,25 @@ func (t *memTx) CheckinVersion(_ context.Context, ref domain.NodeRef) error {
 	return nil
 }
 
+func (t *memTx) DropWorkingVersion(_ context.Context, ref domain.NodeRef) error {
+	vs := t.st.versions[ref.ID]
+	if int(ref.Version) != len(vs) || !vs[len(vs)-1].CheckedOut {
+		return fmt.Errorf("checked-out version %s: %w", ref, ErrNotFound)
+	}
+	t.st.links = slices.DeleteFunc(t.st.links, func(l domain.Link) bool { return l.From == ref })
+	if len(vs) == 1 {
+		for k, id := range t.st.keys {
+			if id == ref.ID {
+				delete(t.st.keys, k)
+			}
+		}
+		delete(t.st.versions, ref.ID)
+		return nil
+	}
+	t.st.versions[ref.ID] = vs[:len(vs)-1]
+	return nil
+}
+
 func (t *memTx) linkAt(id domain.LinkID) (int, error) {
 	for i, l := range t.st.links {
 		if l.ID == id {

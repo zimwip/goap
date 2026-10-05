@@ -412,6 +412,22 @@ func (t *sqliteTx) CheckinVersion(ctx context.Context, ref domain.NodeRef) error
 	return t.exec1(ctx, "checked-out version "+ref.String(), dialectSQLite.sqlCheckin(), string(ref.ID), int(ref.Version), false)
 }
 
+func (t *sqliteTx) DropWorkingVersion(ctx context.Context, ref domain.NodeRef) error {
+	q := dialectSQLite.dropWorkingVersion()
+	if _, err := t.tx.ExecContext(ctx, q[0], string(ref.ID), int(ref.Version)); err != nil {
+		return sqliteErr(err, "links of "+ref.String())
+	}
+	if err := t.exec1(ctx, "checked-out version "+ref.String(), q[1], string(ref.ID), int(ref.Version)); err != nil {
+		return err
+	}
+	for _, s := range []string{dialectSQLite.sqlDeleteOrphanNode(), dialectSQLite.sqlRefreshLatest()} {
+		if _, err := t.tx.ExecContext(ctx, s, string(ref.ID)); err != nil {
+			return sqliteErr(err, "node "+string(ref.ID))
+		}
+	}
+	return nil
+}
+
 func (t *sqliteTx) Link(ctx context.Context, id domain.LinkID) (domain.Link, error) {
 	q, args := dialectSQLite.sqlLinkByID(id)
 	ls, err := t.queryLinks(ctx, q, args...)
