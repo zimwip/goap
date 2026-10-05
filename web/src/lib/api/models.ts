@@ -1,0 +1,28 @@
+import { rpc } from './transport';
+import type { Empty, Struct } from './types/common';
+import type { AvailableModel, CatalogModel, DiscoveredModel, LlmProvider, ModelAlias, ProviderKind } from './types/models';
+
+const MODEL = 'goap.model.v1.ModelService';
+const PREFERENCES = 'goap.preferences.v1.PreferencesService';
+
+/** The personal preferences of the caller, kept outside the graph (ADR 0038): theme, voice input, dashboard defaults. */
+export const preferencesApi = {
+  get: (signal?: AbortSignal) => rpc<Empty, { values?: Struct }>(PREFERENCES, 'GetPreferences', {}, signal),
+  /** Merges values in: a null value clears a key. Answers the preferences after the merge. */
+  set: (values: Struct) => rpc<{ values: Struct }, { values?: Struct }>(PREFERENCES, 'SetPreferences', { values }),
+  reset: () => rpc<Empty, Empty>(PREFERENCES, 'ResetPreferences', {}),
+};
+
+export const models = {
+  /** Models (and aliases) the caller may use. */
+  listAvailable: (signal?: AbortSignal) =>
+    rpc<Empty, { models?: AvailableModel[]; aliases?: ModelAlias[] }>(MODEL, 'ListModels', {}, signal),
+  listProviderKinds: (signal?: AbortSignal) =>
+    rpc<Empty, { kinds?: ProviderKind[]; protocols?: { id: string; label?: string }[] }>(MODEL, 'ListProviderKinds', {}, signal),
+  listProviders: (signal?: AbortSignal) => rpc<Empty, { providers?: LlmProvider[] }>(MODEL, 'ListProviders', {}, signal),
+  /** Ask the provider for its models; `apiKey` empty resolves the key from the provider's reference. Read-only: the configuration is edited with `llmEdit`. */
+  discoverModels: (provider: Partial<LlmProvider>, apiKey = '') =>
+    rpc<object, { models?: DiscoveredModel[] }>(MODEL, 'DiscoverModels', { provider, apiKey }),
+  listCatalog: (signal?: AbortSignal) =>
+    rpc<Empty, { models?: CatalogModel[]; aliases?: ModelAlias[] }>(MODEL, 'ListCatalog', {}, signal),
+};

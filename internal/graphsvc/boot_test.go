@@ -3,6 +3,7 @@ package graphsvc_test
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -100,12 +101,23 @@ func TestBootRequiresHooks(t *testing.T) {
 
 // Both compositions boot through graphsvc.Boot: neither spells the platform seeds by hand.
 func TestCompositionsUseBoot(t *testing.T) {
-	for _, path := range []string{"../../cmd/goap-dev/main.go", "../../cmd/graph/main.go"} {
-		b, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatal(err)
+	for _, dir := range []string{"../../cmd/goap-dev", "../../cmd/graph"} {
+		// a composition may spread its wiring over several files of its package (cmd/goap-dev, ADR 0073)
+		files, err := filepath.Glob(filepath.Join(dir, "*.go"))
+		if err != nil || len(files) == 0 {
+			t.Fatalf("%s: no source (%v)", dir, err)
 		}
-		src := string(b)
+		path, src := dir, ""
+		for _, f := range files {
+			if strings.HasSuffix(f, "_test.go") {
+				continue
+			}
+			b, err := os.ReadFile(f)
+			if err != nil {
+				t.Fatal(err)
+			}
+			src += string(b)
+		}
 		if !strings.Contains(src, "graphsvc.Boot(") {
 			t.Errorf("%s does not call graphsvc.Boot", path)
 		}

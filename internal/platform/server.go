@@ -73,7 +73,10 @@ func (s *Server) httpServer() *http.Server {
 }
 
 // Run serves until SIGINT/SIGTERM, then shuts down gracefully.
-func (s *Server) Run() error {
+func (s *Server) Run() error { return s.RunContext(context.Background()) }
+
+// RunContext serves until ctx ends or SIGINT/SIGTERM, then shuts down gracefully.
+func (s *Server) RunContext(ctx context.Context) error {
 	srv := s.httpServer()
 	errc := make(chan error, 1)
 	go func() {
@@ -89,8 +92,9 @@ func (s *Server) Run() error {
 		}
 		return err
 	case <-stop:
+	case <-ctx.Done():
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 15*time.Second)
 	defer cancel()
 	s.log.Info("shutting down")
 	return srv.Shutdown(ctx)
