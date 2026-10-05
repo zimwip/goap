@@ -213,9 +213,8 @@ const (
 	// GraphServiceGetChangeGraphProcedure is the fully-qualified name of the GraphService's
 	// GetChangeGraph RPC.
 	GraphServiceGetChangeGraphProcedure = "/goap.graph.v1.GraphService/GetChangeGraph"
-	// GraphServiceRecordExecutionsProcedure is the fully-qualified name of the GraphService's
-	// RecordExecutions RPC.
-	GraphServiceRecordExecutionsProcedure = "/goap.graph.v1.GraphService/RecordExecutions"
+	// GraphServiceAppendLogProcedure is the fully-qualified name of the GraphService's AppendLog RPC.
+	GraphServiceAppendLogProcedure = "/goap.graph.v1.GraphService/AppendLog"
 	// GraphServiceListExecutionsProcedure is the fully-qualified name of the GraphService's
 	// ListExecutions RPC.
 	GraphServiceListExecutionsProcedure = "/goap.graph.v1.GraphService/ListExecutions"
@@ -324,8 +323,9 @@ type GraphServiceClient interface {
 	RatifyDecision(context.Context, *connect.Request[v1.RatifyDecisionRequest]) (*connect.Response[v1.RatifyDecisionResponse], error)
 	ListDecisionPoints(context.Context, *connect.Request[v1.ListDecisionPointsRequest]) (*connect.Response[v1.ListDecisionPointsResponse], error)
 	GetChangeGraph(context.Context, *connect.Request[v1.GetChangeGraphRequest]) (*connect.Response[v1.GetChangeGraphResponse], error)
-	// Execution journal (ADR 0011)
-	RecordExecutions(context.Context, *connect.Request[v1.RecordExecutionsRequest]) (*connect.Response[v1.RecordExecutionsResponse], error)
+	// The execution journal (ADR 0011, pkg/journal) is entries of the log of a change: appended with AppendLog, read as
+	// records with ListExecutions (or as entries with ListChangeLog)
+	AppendLog(context.Context, *connect.Request[v1.AppendLogRequest]) (*connect.Response[v1.AppendLogResponse], error)
 	ListExecutions(context.Context, *connect.Request[v1.ListExecutionsRequest]) (*connect.Response[v1.ListExecutionsResponse], error)
 	// Node index (ADR 0026): publishes again the event of every node version and the head of main, to
 	// rebuild an index. Requires `admin` on the `platform` resource.
@@ -733,10 +733,10 @@ func NewGraphServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(graphServiceMethods.ByName("GetChangeGraph")),
 			connect.WithClientOptions(opts...),
 		),
-		recordExecutions: connect.NewClient[v1.RecordExecutionsRequest, v1.RecordExecutionsResponse](
+		appendLog: connect.NewClient[v1.AppendLogRequest, v1.AppendLogResponse](
 			httpClient,
-			baseURL+GraphServiceRecordExecutionsProcedure,
-			connect.WithSchema(graphServiceMethods.ByName("RecordExecutions")),
+			baseURL+GraphServiceAppendLogProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("AppendLog")),
 			connect.WithClientOptions(opts...),
 		),
 		listExecutions: connect.NewClient[v1.ListExecutionsRequest, v1.ListExecutionsResponse](
@@ -821,7 +821,7 @@ type graphServiceClient struct {
 	ratifyDecision         *connect.Client[v1.RatifyDecisionRequest, v1.RatifyDecisionResponse]
 	listDecisionPoints     *connect.Client[v1.ListDecisionPointsRequest, v1.ListDecisionPointsResponse]
 	getChangeGraph         *connect.Client[v1.GetChangeGraphRequest, v1.GetChangeGraphResponse]
-	recordExecutions       *connect.Client[v1.RecordExecutionsRequest, v1.RecordExecutionsResponse]
+	appendLog              *connect.Client[v1.AppendLogRequest, v1.AppendLogResponse]
 	listExecutions         *connect.Client[v1.ListExecutionsRequest, v1.ListExecutionsResponse]
 	republishIndex         *connect.Client[v1.RepublishIndexRequest, v1.RepublishIndexResponse]
 }
@@ -1151,9 +1151,9 @@ func (c *graphServiceClient) GetChangeGraph(ctx context.Context, req *connect.Re
 	return c.getChangeGraph.CallUnary(ctx, req)
 }
 
-// RecordExecutions calls goap.graph.v1.GraphService.RecordExecutions.
-func (c *graphServiceClient) RecordExecutions(ctx context.Context, req *connect.Request[v1.RecordExecutionsRequest]) (*connect.Response[v1.RecordExecutionsResponse], error) {
-	return c.recordExecutions.CallUnary(ctx, req)
+// AppendLog calls goap.graph.v1.GraphService.AppendLog.
+func (c *graphServiceClient) AppendLog(ctx context.Context, req *connect.Request[v1.AppendLogRequest]) (*connect.Response[v1.AppendLogResponse], error) {
+	return c.appendLog.CallUnary(ctx, req)
 }
 
 // ListExecutions calls goap.graph.v1.GraphService.ListExecutions.
@@ -1266,8 +1266,9 @@ type GraphServiceHandler interface {
 	RatifyDecision(context.Context, *connect.Request[v1.RatifyDecisionRequest]) (*connect.Response[v1.RatifyDecisionResponse], error)
 	ListDecisionPoints(context.Context, *connect.Request[v1.ListDecisionPointsRequest]) (*connect.Response[v1.ListDecisionPointsResponse], error)
 	GetChangeGraph(context.Context, *connect.Request[v1.GetChangeGraphRequest]) (*connect.Response[v1.GetChangeGraphResponse], error)
-	// Execution journal (ADR 0011)
-	RecordExecutions(context.Context, *connect.Request[v1.RecordExecutionsRequest]) (*connect.Response[v1.RecordExecutionsResponse], error)
+	// The execution journal (ADR 0011, pkg/journal) is entries of the log of a change: appended with AppendLog, read as
+	// records with ListExecutions (or as entries with ListChangeLog)
+	AppendLog(context.Context, *connect.Request[v1.AppendLogRequest]) (*connect.Response[v1.AppendLogResponse], error)
 	ListExecutions(context.Context, *connect.Request[v1.ListExecutionsRequest]) (*connect.Response[v1.ListExecutionsResponse], error)
 	// Node index (ADR 0026): publishes again the event of every node version and the head of main, to
 	// rebuild an index. Requires `admin` on the `platform` resource.
@@ -1671,10 +1672,10 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(graphServiceMethods.ByName("GetChangeGraph")),
 		connect.WithHandlerOptions(opts...),
 	)
-	graphServiceRecordExecutionsHandler := connect.NewUnaryHandler(
-		GraphServiceRecordExecutionsProcedure,
-		svc.RecordExecutions,
-		connect.WithSchema(graphServiceMethods.ByName("RecordExecutions")),
+	graphServiceAppendLogHandler := connect.NewUnaryHandler(
+		GraphServiceAppendLogProcedure,
+		svc.AppendLog,
+		connect.WithSchema(graphServiceMethods.ByName("AppendLog")),
 		connect.WithHandlerOptions(opts...),
 	)
 	graphServiceListExecutionsHandler := connect.NewUnaryHandler(
@@ -1821,8 +1822,8 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 			graphServiceListDecisionPointsHandler.ServeHTTP(w, r)
 		case GraphServiceGetChangeGraphProcedure:
 			graphServiceGetChangeGraphHandler.ServeHTTP(w, r)
-		case GraphServiceRecordExecutionsProcedure:
-			graphServiceRecordExecutionsHandler.ServeHTTP(w, r)
+		case GraphServiceAppendLogProcedure:
+			graphServiceAppendLogHandler.ServeHTTP(w, r)
 		case GraphServiceListExecutionsProcedure:
 			graphServiceListExecutionsHandler.ServeHTTP(w, r)
 		case GraphServiceRepublishIndexProcedure:
@@ -2096,8 +2097,8 @@ func (UnimplementedGraphServiceHandler) GetChangeGraph(context.Context, *connect
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.GetChangeGraph is not implemented"))
 }
 
-func (UnimplementedGraphServiceHandler) RecordExecutions(context.Context, *connect.Request[v1.RecordExecutionsRequest]) (*connect.Response[v1.RecordExecutionsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.RecordExecutions is not implemented"))
+func (UnimplementedGraphServiceHandler) AppendLog(context.Context, *connect.Request[v1.AppendLogRequest]) (*connect.Response[v1.AppendLogResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.AppendLog is not implemented"))
 }
 
 func (UnimplementedGraphServiceHandler) ListExecutions(context.Context, *connect.Request[v1.ListExecutionsRequest]) (*connect.Response[v1.ListExecutionsResponse], error) {

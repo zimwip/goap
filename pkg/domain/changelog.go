@@ -3,7 +3,6 @@ package domain
 import (
 	"encoding/json"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -13,12 +12,11 @@ import (
 // its change impacts (ADR 0029) are entries of the same log; what an entry is, the flow it belongs to, the process and
 // the action run behind it are columns, so the log is filtered on them directly.
 
-// Streams of the log: the first part of an entry type.
+// Streams of the log the graph itself writes: the first part of an entry type. Any other stream is written by a use
+// case through Graph.AppendLog (the execution journal and the prompts of the model calls, pkg/journal).
 const (
-	LogFact    = "fact"    // fact.<item kind>: fact.artifact, fact.decision, fact.flow…
-	LogJournal = "journal" // journal.<record kind>: journal.schedule, journal.tick, journal.action…
-	LogImpact  = "impact"  // impact.<op>: impact.declared, impact.written…
-	LogModel   = "model"   // model.call: the request and the answer of one LLM call of an action run
+	LogFact   = "fact"   // fact.<item kind>: fact.artifact, fact.decision, fact.flow…
+	LogImpact = "impact" // impact.<op>: impact.declared, impact.written…
 )
 
 // LogEntry is one entry of a change's log. Payload is the whole fact, journal record or impact event (JSON).
@@ -42,7 +40,7 @@ type LogEntry struct {
 	Payload   json.RawMessage `json:"payload"`
 }
 
-// Stream is the stream of the entry: fact, journal or impact.
+// Stream is the stream of the entry: fact, impact, or one a use case writes.
 func (e LogEntry) Stream() string {
 	s, _, _ := strings.Cut(e.Type, ".")
 	return s
@@ -105,28 +103,9 @@ func FactEntry(change ChangeID, it ChangeItem) (LogEntry, error) {
 	return e, err
 }
 
-// JournalEntry is the log entry of a journal record: its own action run.
-func JournalEntry(r ExecutionRecord) (LogEntry, error) {
-	raw, err := json.Marshal(r)
-	by := r.Actor
-	if by == "" {
-		by = r.Agent
-	}
-	return LogEntry{ID: r.ID, Change: r.ChangeID, Type: LogJournal + "." + r.Kind, Flow: r.Flow, Process: r.ProcessID, Execution: r.ID,
-		Subject: r.Action, By: by, At: r.StartedAt, Payload: raw}, err
-}
-
 // ImpactEntry is the log entry of an impact event.
 func ImpactEntry(e ImpactEvent) (LogEntry, error) {
 	raw, err := json.Marshal(e)
 	return LogEntry{ID: e.ID, Change: e.Change, Type: LogImpact + "." + string(e.Op), Flow: e.Flow, Execution: e.Execution,
 		Subject: string(e.Impact), By: e.By, At: e.At, Payload: raw}, err
-}
-
-// ModelEntry is the log entry of the exchange of an LLM call. It belongs to the action run (journal record) that made
-// the call, whose process and flow it takes; the subject is the position of the call in the record's ModelCalls.
-func ModelEntry(r ExecutionRecord, ex ModelExchange) (LogEntry, error) {
-	raw, err := json.Marshal(ex)
-	return LogEntry{ID: r.ID + "/" + strconv.Itoa(ex.Call), Change: r.ChangeID, Type: LogModel + ".call", Flow: r.Flow, Process: r.ProcessID,
-		Execution: r.ID, Subject: strconv.Itoa(ex.Call), By: r.Agent, At: r.StartedAt, Payload: raw}, err
 }

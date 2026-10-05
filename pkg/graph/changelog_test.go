@@ -2,6 +2,7 @@ package graph
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"testing"
 
@@ -17,12 +18,34 @@ func testChangeLog(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	w := newFlowWorld(t, repo) // impact events of runs e1, e2 on the main flow, then a flow opened (a fact)
 	g, c := w.g, w.change
-	rec := func(kind, process, flow, action string) domain.ExecutionRecord {
-		return domain.ExecutionRecord{ID: uuid.NewString(), ChangeID: c.ID, ProcessID: process, Kind: kind, Flow: flow, Action: action, StartedAt: g.now()}
+	// the graph knows no use case: the entries of the execution journal (pkg/journal) are entries of a stream of its own
+	rec := func(kind, process, flow, action string) domain.LogEntry {
+		id := uuid.NewString()
+		return domain.LogEntry{ID: id, Change: c.ID, Type: "journal." + kind, Process: process, Flow: flow, Execution: id, Subject: action,
+			At: g.now(), Payload: []byte(`{}`)}
 	}
-	onFlow := rec(domain.ExecAction, "p2", w.flow, "identify_scope")
-	if err := g.Record(ctx, []domain.ExecutionRecord{rec(domain.ExecSchedule, "p1", "", ""), rec(domain.ExecAction, "p1", "", "identify_scope"), onFlow}); err != nil {
+	onFlow := rec("action", "p2", w.flow, "identify_scope")
+	if err := g.AppendLog(ctx, []domain.LogEntry{rec("schedule", "p1", "", ""), rec("action", "p1", "", "identify_scope"), onFlow}); err != nil {
 		t.Fatal(err)
+	}
+	// the streams of the graph itself are written through its own operations only, and a change must exist
+	if err := g.AppendLog(ctx, []domain.LogEntry{{Change: c.ID, Type: domain.LogFact + ".artifact", Payload: []byte(`{}`)}}); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("forged fact: %v", err)
+	}
+	if err := g.AppendLog(ctx, []domain.LogEntry{{Change: c.ID, Type: domain.LogImpact + ".written", Payload: []byte(`{}`)}}); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("forged impact event: %v", err)
+	}
+	if err := g.AppendLog(ctx, []domain.LogEntry{{Change: "unknown", Type: "journal.tick", Payload: []byte(`{}`)}}); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("unknown change: %v", err)
+	}
+	if err := g.AppendLog(ctx, []domain.LogEntry{{Change: c.ID, Type: "journal", Payload: []byte(`{}`)}}); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("no kind: %v", err)
+	}
+	if _, _, err := g.ChangeLog(ctx, domain.LogFilter{}); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("a log read needs a change or processes: %v", err)
+	}
+	if got, _, err := g.ChangeLog(ctx, domain.LogFilter{Processes: []string{"p2"}}); err != nil || len(got) != 1 {
+		t.Fatalf("by process alone: %v %v", got, err)
 	}
 	all, counts, err := g.ChangeLog(ctx, domain.LogFilter{Change: c.ID})
 	if err != nil {
@@ -35,7 +58,7 @@ func testChangeLog(t *testing.T, repo Repo) {
 			t.Fatalf("the log is not in one order: %d after %d", e.Seq, all[i-1].Seq)
 		}
 	}
-	if streams[domain.LogImpact] == 0 || streams[domain.LogFact] == 0 || streams[domain.LogJournal] != 3 {
+	if streams[domain.LogImpact] == 0 || streams[domain.LogFact] == 0 || streams["journal"] != 3 {
 		t.Fatalf("streams = %v", streams)
 	}
 	total := 0

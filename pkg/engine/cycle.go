@@ -11,6 +11,7 @@ import (
 
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/goap"
+	"github.com/zimwip/goap/pkg/journal"
 	"github.com/zimwip/goap/pkg/methodology"
 )
 
@@ -71,12 +72,12 @@ func (e *Engine) observeGoal(ctx context.Context, p *Process, m *methodology.Com
 		desc := "The relaunched flow reached the goal. Adopt it to replace the outputs of the previous run, or discard it."
 		// what the flow wrote is on its graph branch, to be reviewed against the change branch before deciding
 		p.Pending = &HumanTask{Kind: TaskFlow, Action: "adopt_flow", Step: len(p.Steps), Description: desc}
-		e.journal(ctx, p, domain.ExecutionRecord{Kind: domain.ExecTick, Step: len(p.Steps), Before: maps.Clone(p.World),
+		e.journal(ctx, p, journal.Record{Kind: journal.KindTick, Step: len(p.Steps), Before: maps.Clone(p.World),
 			Data: map[string]any{"goalSatisfied": true, "flow": p.Flow, "awaitingDecision": true}})
 		return bb, goal, true, nil
 	}
 	p.Status = StatusCompleted
-	e.journal(ctx, p, domain.ExecutionRecord{Kind: domain.ExecTick, Step: len(p.Steps), Before: maps.Clone(p.World),
+	e.journal(ctx, p, journal.Record{Kind: journal.KindTick, Step: len(p.Steps), Before: maps.Clone(p.World),
 		Data: map[string]any{"goalSatisfied": true}})
 	return bb, goal, true, nil
 }
@@ -131,7 +132,7 @@ func (e *Engine) planStep(ctx context.Context, p *Process, m *methodology.Compil
 	for i, a := range plan.Actions {
 		p.Plan[i] = a.Name
 	}
-	tick := tickRecordWithCalls(domain.ExecutionRecord{Kind: domain.ExecTick, Step: len(p.Steps), Before: maps.Clone(p.World), Plan: slices.Clone(p.Plan),
+	tick := tickRecordWithCalls(journal.Record{Kind: journal.KindTick, Step: len(p.Steps), Before: maps.Clone(p.World), Plan: slices.Clone(p.Plan),
 		BoardBefore: len(bb.Change.Items), BoardAfter: len(bb.Change.Items), Action: p.Plan[0], StartedAt: tickStart, EndedAt: e.clock(),
 		Data: map[string]any{"replanned": replanned(prev, p.Plan), "candidates": len(actions)}}, calls)
 	if len(p.Unknown) > 0 {
@@ -150,7 +151,7 @@ func (e *Engine) settleNoPlan(ctx context.Context, p *Process, m *methodology.Co
 		p.Status = StatusWaiting
 		p.Pending = &HumanTask{Kind: TaskCondition, Step: len(p.Steps), Conditions: awaited,
 			Description: "Waiting for " + strings.Join(awaited, ", ") + ": conditions this agent's actions do not establish"}
-		e.journal(ctx, p, tickRecordWithCalls(domain.ExecutionRecord{Kind: domain.ExecTick, Step: len(p.Steps), Before: maps.Clone(p.World),
+		e.journal(ctx, p, tickRecordWithCalls(journal.Record{Kind: journal.KindTick, Step: len(p.Steps), Before: maps.Clone(p.World),
 			StartedAt: tickStart, EndedAt: e.clock(), Data: map[string]any{"awaiting": slices.Clone(awaited)}}, calls))
 		return
 	}
@@ -159,7 +160,7 @@ func (e *Engine) settleNoPlan(ctx context.Context, p *Process, m *methodology.Co
 	// a person can always unblock it: what would, if they declare it established
 	p.Pending = &HumanTask{Kind: TaskUnblock, Step: len(p.Steps), Conditions: e.unblocking(p.World, actions, goal.PlanningGoal()),
 		Description: "Stuck: " + p.Error + ". Declare conditions established, retry the actions it gave up on, or abandon it."}
-	e.journal(ctx, p, tickRecordWithCalls(domain.ExecutionRecord{Kind: domain.ExecTick, Step: len(p.Steps), Before: maps.Clone(p.World), Error: p.Error,
+	e.journal(ctx, p, tickRecordWithCalls(journal.Record{Kind: journal.KindTick, Step: len(p.Steps), Before: maps.Clone(p.World), Error: p.Error,
 		StartedAt: tickStart, EndedAt: e.clock()}, calls))
 }
 

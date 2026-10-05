@@ -160,12 +160,12 @@ func (g *Graph) checkGate(ctx context.Context, bb domain.Blackboard, t domain.Tr
 		return nil
 	}
 	var kept []domain.DecisionPoint
-	for _, d := range bb.DecisionPoints {
+	for _, d := range domain.DecisionPointsOf(bb) {
 		if !consumed[d.ID] {
 			kept = append(kept, d)
 		}
 	}
-	bb.DecisionPoints = kept
+	bb = bb.WithFacet(domain.FacetDecisionPoints, kept)
 	ok, err := g.Lifecycles.Guard(ctx, bb, t.Guard, t.Name, decision)
 	if err != nil {
 		return invalidf("guard of %s on change %s: %v", t.Name, bb.Change.ID, err)

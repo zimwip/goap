@@ -50,9 +50,9 @@ type GraphPort interface {
 	DecisionPoints(ctx context.Context, id domain.ChangeID) ([]domain.DecisionPoint, error)
 	Apply(ctx context.Context, id domain.ChangeID, baselineName string) (domain.Baseline, error)
 	Baselines(ctx context.Context, namespace string) ([]domain.Baseline, error)
-	// Record / Journal write and read the execution journal of changes (ADR 0011).
-	Record(ctx context.Context, recs []domain.ExecutionRecord) error
-	Journal(ctx context.Context, f domain.ExecutionFilter) ([]domain.ExecutionRecord, error)
+	// AppendLog / ChangeLog are the log of the changes, where the execution journal lives (ADR 0011, pkg/journal).
+	AppendLog(ctx context.Context, entries []domain.LogEntry) error
+	ChangeLog(ctx context.Context, f domain.LogFilter) ([]domain.LogEntry, map[string]int, error)
 	// BranchHead gives the head of a branch: the state the last change left, the empty state (empty id) before any.
 	BranchHead(ctx context.Context, namespace, name string) (domain.Baseline, error)
 	// ListChanges lists the changes matching a filter (goap-change.list): which open change a request

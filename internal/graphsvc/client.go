@@ -175,14 +175,18 @@ func (c *Client) BlackboardIn(ctx context.Context, id domain.ChangeID, flow stri
 	if err != nil {
 		return domain.Blackboard{}, rpcerr.FromConnect(err)
 	}
-	bb := domain.Blackboard{Change: pbconv.ChangeFromPB(r.Msg.Change), Nodes: map[domain.NodeRef]domain.NodeView{}, Neighbors: map[domain.NodeRef]domain.Node{},
-		ActiveOption: r.Msg.ActiveOption, At: pbconv.FromTime(r.Msg.At)}
+	// the facets of the wire are the built-in ones: options, active option, decision points
+	var options []domain.Flow
 	for _, f := range r.Msg.Options {
-		bb.Options = append(bb.Options, pbconv.FlowFromPB(f))
+		options = append(options, pbconv.FlowFromPB(f))
 	}
+	var points []domain.DecisionPoint
 	for _, d := range r.Msg.DecisionPoints {
-		bb.DecisionPoints = append(bb.DecisionPoints, pbconv.DecisionPointFromPB(d))
+		points = append(points, pbconv.DecisionPointFromPB(d))
 	}
+	bb := domain.Blackboard{Change: pbconv.ChangeFromPB(r.Msg.Change), Nodes: map[domain.NodeRef]domain.NodeView{}, Neighbors: map[domain.NodeRef]domain.Node{},
+		Facets: map[string]any{domain.FacetOptions: options, domain.FacetActiveOption: r.Msg.ActiveOption, domain.FacetDecisionPoints: points},
+		At:     pbconv.FromTime(r.Msg.At)}
 	for _, v := range r.Msg.Nodes {
 		nv := pbconv.ViewFromPB(v)
 		bb.Nodes[nv.Ref()] = nv
@@ -316,17 +320,36 @@ func (c *Client) Baselines(ctx context.Context, namespace string) ([]domain.Base
 	return out, nil
 }
 
-func (c *Client) Record(ctx context.Context, recs []domain.ExecutionRecord) error {
-	_, err := c.rpc.RecordExecutions(ctx, connect.NewRequest(&graphv1.RecordExecutionsRequest{Records: pbconv.ExecutionsToPB(recs)}))
+// AppendLog appends entries to the logs of their changes (graph.Graph.AppendLog).
+func (c *Client) AppendLog(ctx context.Context, entries []domain.LogEntry) error {
+	req := &graphv1.AppendLogRequest{}
+	for _, e := range entries {
+		req.Entries = append(req.Entries, pbconv.LogEntryToPB(e))
+	}
+	_, err := c.rpc.AppendLog(ctx, connect.NewRequest(req))
 	return rpcerr.FromConnect(err)
 }
 
-func (c *Client) Journal(ctx context.Context, f domain.ExecutionFilter) ([]domain.ExecutionRecord, error) {
-	r, err := c.rpc.ListExecutions(ctx, connect.NewRequest(&graphv1.ListExecutionsRequest{ChangeId: string(f.ChangeID), ProcessIds: f.ProcessIDs}))
-	if err != nil {
-		return nil, rpcerr.FromConnect(err)
+// ChangeLog returns the entries of a change's log matching f, and the number of entries of each type matching f
+// without its types (graph.Graph.ChangeLog).
+func (c *Client) ChangeLog(ctx context.Context, f domain.LogFilter) ([]domain.LogEntry, map[string]int, error) {
+	req := &graphv1.ListChangeLogRequest{ChangeId: string(f.Change), Types: f.Types, ProcessIds: f.Processes, Execution: f.Execution,
+		AfterSeq: f.AfterSeq, Limit: int32(f.Limit)}
+	for _, fl := range f.Flows {
+		if fl == "" {
+			fl = "main"
+		}
+		req.Flows = append(req.Flows, fl)
 	}
-	return pbconv.ExecutionsFromPB(r.Msg.Records), nil
+	r, err := c.rpc.ListChangeLog(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, nil, rpcerr.FromConnect(err)
+	}
+	counts := map[string]int{}
+	for t, n := range r.Msg.Counts {
+		counts[t] = int(n)
+	}
+	return pbconv.LogEntriesFromPB(r.Msg.Entries), counts, nil
 }
 
 // Structures returns the structures of the graph (ADR 0054).

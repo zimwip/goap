@@ -8,13 +8,6 @@ import (
 	"github.com/zimwip/goap/pkg/domain"
 )
 
-// Methodology namespace conventions (the built-in methodology meta-domain, domains/builtin/methodology.yaml;
-// architecture plan "Activity concept").
-const (
-	NamespaceMethodology = "methodology"
-	LinkSubActivity      = "methodology@sub_activity" // Activity -> the sub-activities it is composed from
-)
-
 // requirement is a number of outgoing links of one type a node must have: what the parent of a structure (ADR 0054)
 // and the required links a node type declares (ADR 0065) come down to. of describes it in error messages.
 type requirement struct {
@@ -144,18 +137,6 @@ func (g *Graph) prepareSubChange(ctx context.Context, tx Tx, c *domain.Change, i
 			return fmt.Errorf("unit %s is not part of %s, the unit of the parent change: %w", c.OwnerOrg, parent.OwnerOrg, ErrInvalid)
 		}
 	}
-	// a sub-change's Activity, when it names one, must be the parent's or a descendant of it (architecture plan
-	// "Activity concept" cascade); unlike OwnerOrg/ProjectID, an unset ActivityRef is NOT inherited - a
-	// sub-change is typically scoped to a more specific sub-activity than its parent, not the same one.
-	if c.ActivityRef != "" && parent.ActivityRef != "" && c.ActivityRef != parent.ActivityRef {
-		ok, err := activityWithin(ctx, tx, c.ActivityRef, parent.ActivityRef)
-		if err != nil {
-			return err
-		}
-		if !ok {
-			return fmt.Errorf("activity %s is not part of %s, the activity of the parent change: %w", c.ActivityRef, parent.ActivityRef, ErrInvalid)
-		}
-	}
 	if c.ProjectID == "" {
 		c.ProjectID = parent.ProjectID
 	} else if c.ProjectID != parent.ProjectID {
@@ -168,45 +149,6 @@ func (g *Graph) prepareSubChange(ctx context.Context, tx Tx, c *domain.Change, i
 		}
 	}
 	return nil
-}
-
-// activityWithin reports whether the Activity with key `ref` is `ancestor` or a descendant of it, following
-// incoming sub_activity links (parent -> child, so a child is found by walking up from it) on the methodology
-// namespace's main branch (mirrors orgWithin/projectWithin, which walk a child's own outgoing parent link
-// instead, since organisation/project links point the other way).
-func activityWithin(ctx context.Context, tx Tx, ref, ancestor string) (bool, error) {
-	seen := map[string]bool{}
-	for cur := ref; cur != "" && !seen[cur]; {
-		if cur == ancestor {
-			return true, nil
-		}
-		seen[cur] = true
-		id, err := tx.NodeIDByKey(ctx, NamespaceMethodology, cur)
-		if err != nil {
-			return false, err
-		}
-		n, err := tx.LatestOn(ctx, id, domain.MainBranch)
-		if err != nil {
-			return false, err
-		}
-		links, err := tx.InLinks(ctx, n.Ref())
-		if err != nil {
-			return false, err
-		}
-		cur = ""
-		for _, l := range links {
-			if l.Type != LinkSubActivity {
-				continue
-			}
-			p, err := tx.Node(ctx, l.From)
-			if err != nil {
-				return false, err
-			}
-			cur = p.Key
-			break
-		}
-	}
-	return false, nil
 }
 
 // SubChanges lists the sub-changes of a change, oldest first.

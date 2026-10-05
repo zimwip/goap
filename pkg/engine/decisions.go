@@ -70,7 +70,7 @@ func (e *Engine) applyDecisionOps(ctx context.Context, p *Process, ops []Decisio
 		}
 	}
 	option := func(s string) string { // an option by id or by name
-		for _, o := range bb.Options {
+		for _, o := range domain.OptionsOf(bb) {
 			if o.ID == s || (o.Option != nil && strings.EqualFold(o.Option.Name, s)) {
 				return o.ID
 			}
@@ -163,7 +163,7 @@ func Investigate(ctx context.Context, ac ActionContext) (ActionResult, error) {
 		limit = int(v)
 	}
 	answered := 0
-	for _, d := range ac.Blackboard.DecisionPoints {
+	for _, d := range domain.DecisionPointsOf(ac.Blackboard) {
 		for _, q := range d.Questions {
 			if q.Status != domain.QuestionOpen || (limit >= 0 && answered >= limit) {
 				continue

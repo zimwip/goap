@@ -5,7 +5,9 @@
 package layering
 
 import (
+	"os"
 	"os/exec"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -24,8 +26,32 @@ var forbidden = map[string][]string{
 	"pkg/engine":     {"pkg/adapter", "pkg/mcpbuiltin", "pkg/observe", "pkg/selfimprove"},
 	"pkg/builtins":   {"pkg/methodology", "pkg/engine", "pkg/domain"},
 	"pkg/adapter":    {"pkg/mcpbuiltin", "pkg/access"},
-	"pkg/domain":     {"pkg/risk"},
-	"pkg/graph":      {"pkg/risk"},
+	"pkg/domain":     {"pkg/risk", "pkg/methodology", "pkg/journal"},
+	"pkg/journal":    {"pkg/graph", "pkg/engine", "pkg/methodology"},
+	"pkg/graph":      {"pkg/risk", "pkg/methodology", "pkg/journal", "internal/registrysvc"},
+}
+
+// The graph core names no concept of the methodology namespace (ADR 0066: the Activity a change is scoped to lives in
+// Change.Data, read by the registry through Graph.LandingGate and Graph.SubChangeValidator).
+func TestGraphNamesNoMethodology(t *testing.T) {
+	files, err := filepath.Glob("../graph/*.go")
+	if err != nil || len(files) == 0 {
+		t.Fatalf("glob: %v, %d files", err, len(files))
+	}
+	for _, f := range files {
+		if strings.HasSuffix(f, "_test.go") {
+			continue
+		}
+		b, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, word := range []string{"methodology@", "NamespaceMethodology", "sub_activity", "ActivityRef"} {
+			if strings.Contains(string(b), word) {
+				t.Errorf("%s names %q", f, word)
+			}
+		}
+	}
 }
 
 func TestLayering(t *testing.T) {

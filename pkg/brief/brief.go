@@ -68,8 +68,8 @@ func Of(bb domain.Blackboard, step *Step) string {
 		}
 		line("%s", s)
 	}
-	if bb.ActiveOption != "" {
-		line("OPTION %s", bb.ActiveOption)
+	if domain.ActiveOptionOf(bb) != "" {
+		line("OPTION %s", domain.ActiveOptionOf(bb))
 	}
 
 	// change impacts: the node, its type, what the change does, how far it went, the review
@@ -102,7 +102,7 @@ func Of(bb domain.Blackboard, step *Step) string {
 	}
 
 	// decision points and their open questions
-	for _, d := range bb.DecisionPoints {
+	for _, d := range domain.DecisionPointsOf(bb) {
 		if d.Status == "decided" {
 			line("DECIDED %s %q → %s", d.ID, short(d.Question, 70), d.Option)
 			continue

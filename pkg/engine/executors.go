@@ -142,7 +142,7 @@ func RenderPrompt(ctx context.Context, ac ActionContext) (string, error) {
 		return "", fmt.Errorf("prompt template: %w", err)
 	}
 	d := PromptData{Change: ac.Blackboard.Change, Goal: ac.Process.Goal, Action: ac.Action, Vars: ac.Process.Vars,
-		Options: ac.Blackboard.Options, ActiveOption: ac.Blackboard.ActiveOption, DecisionPoints: ac.Blackboard.DecisionPoints, Step: ac.Step}
+		Options: domain.OptionsOf(ac.Blackboard), ActiveOption: domain.ActiveOptionOf(ac.Blackboard), DecisionPoints: domain.DecisionPointsOf(ac.Blackboard), Step: ac.Step}
 	nodes, _, err := readGraph(ctx, ac.Graph, ac.Blackboard.Change.ID, ac.Process.Flow, ac.Blackboard.Change.BaselineID)
 	if err != nil {
 		return "", err

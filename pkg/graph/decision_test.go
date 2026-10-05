@@ -52,8 +52,9 @@ func testDecisionLoop(t *testing.T, repo Repo) {
 		t.Fatalf("a blocked point is not ruled: %v", err)
 	}
 	bb := must[domain.Blackboard](t)(g.Blackboard(ctx, c.ID))
-	if len(bb.DecisionPoints) != 1 || len(bb.Options) != 2 || bb.DecisionPoints[0].OpenQuestions() != 1 {
-		t.Fatalf("blackboard: %+v %+v", bb.DecisionPoints, bb.Options)
+	points, options := domain.DecisionPointsOf(bb), domain.OptionsOf(bb)
+	if len(points) != 1 || len(options) != 2 || points[0].OpenQuestions() != 1 {
+		t.Fatalf("blackboard: %+v %+v", points, options)
 	}
 	d = must[domain.DecisionPoint](t)(g.AnswerQuestion(ctx, c.ID, d.Questions[0].ID, "2.9% per transaction", "", "analyst"))
 	if d.Status != domain.PointOpen || d.Questions[0].Answer == "" {

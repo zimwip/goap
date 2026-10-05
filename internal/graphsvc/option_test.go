@@ -104,8 +104,8 @@ func TestDecisionsThroughTheService(t *testing.T) {
 		t.Fatalf("undecidable: %+v %v", d, err)
 	}
 	bb, err := cl.BlackboardIn(ctx, c.ID, "")
-	if err != nil || len(bb.DecisionPoints) != 1 || len(bb.Options) != 2 || bb.At.IsZero() {
-		t.Fatalf("blackboard: %+v %+v %v", bb.DecisionPoints, bb.Options, err)
+	if err != nil || len(domain.DecisionPointsOf(bb)) != 1 || len(domain.OptionsOf(bb)) != 2 || bb.At.IsZero() {
+		t.Fatalf("blackboard: %+v %+v %v", domain.DecisionPointsOf(bb), domain.OptionsOf(bb), err)
 	}
 	if _, err := cl.AnswerQuestion(ctx, c.ID, d.Questions[0].ID, "cheap", "", ""); err != nil {
 		t.Fatal(err)

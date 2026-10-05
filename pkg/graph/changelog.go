@@ -21,24 +21,6 @@ func putItem(ctx context.Context, tx Tx, change domain.ChangeID, it domain.Chang
 	return err
 }
 
-func putExecution(ctx context.Context, tx Tx, r domain.ExecutionRecord) error {
-	e, err := domain.JournalEntry(r)
-	if err != nil {
-		return err
-	}
-	_, err = tx.AppendLog(ctx, e)
-	return err
-}
-
-func putModelExchange(ctx context.Context, tx Tx, r domain.ExecutionRecord, ex domain.ModelExchange) error {
-	e, err := domain.ModelEntry(r, ex)
-	if err != nil {
-		return err
-	}
-	_, err = tx.AppendLog(ctx, e)
-	return err
-}
-
 func appendImpactEvent(ctx context.Context, tx Tx, ev domain.ImpactEvent) (domain.ImpactEvent, error) {
 	e, err := domain.ImpactEntry(ev)
 	if err != nil {
@@ -49,15 +31,6 @@ func appendImpactEvent(ctx context.Context, tx Tx, ev domain.ImpactEvent) (domai
 	}
 	ev.Seq = int(e.Seq)
 	return ev, nil
-}
-
-// executions are the journal records matching f, in the order of the log.
-func executions(ctx context.Context, tx Tx, f domain.ExecutionFilter) ([]domain.ExecutionRecord, error) {
-	entries, err := tx.Log(ctx, domain.LogFilter{Change: f.ChangeID, Types: []string{domain.LogJournal + "."}, Processes: f.ProcessIDs})
-	if err != nil {
-		return nil, err
-	}
-	return decodeLog[domain.ExecutionRecord](entries, nil)
 }
 
 // impactEvents is the impact log of a change (ADR 0029).
@@ -147,14 +120,17 @@ func logWhere(f domain.LogFilter, ph func(int) string) (string, []any) {
 }
 
 // ChangeLog returns the entries of a change's log matching f (ADR 0030), and the number of entries of each type
-// matching f without its types (what each type would add); f.Change is required.
+// matching f without its types (what each type would add); f.Change or f.Processes is required (a process names its
+// change).
 func (g *Graph) ChangeLog(ctx context.Context, f domain.LogFilter) (out []domain.LogEntry, counts map[string]int, err error) {
-	if f.Change == "" {
+	if f.Change == "" && len(f.Processes) == 0 {
 		return nil, nil, fmt.Errorf("the log of which change: %w", ErrInvalid)
 	}
 	err = g.repo.InTx(ctx, func(tx Tx) error {
-		if _, err := tx.Change(ctx, f.Change); err != nil {
-			return err
+		if f.Change != "" {
+			if _, err := tx.Change(ctx, f.Change); err != nil {
+				return err
+			}
 		}
 		if out, err = tx.Log(ctx, f); err != nil {
 			return err
@@ -165,4 +141,33 @@ func (g *Graph) ChangeLog(ctx context.Context, f domain.LogFilter) (out []domain
 		return err
 	})
 	return
+}
+
+// AppendLog appends entries to the logs of their changes, as one write (ids are assigned and the time set when empty).
+// The graph does not look into them: what an entry says is its stream's, a use case (the execution journal,
+// pkg/journal). The streams the graph writes itself (domain.LogFact, domain.LogImpact: items and change impacts have
+// their own operations, which check them) are refused, and so is an entry of an unknown change.
+func (g *Graph) AppendLog(ctx context.Context, entries []domain.LogEntry) error {
+	for _, e := range entries {
+		if e.Change == "" || !strings.Contains(e.Type, ".") {
+			return fmt.Errorf("a log entry needs a change and a type <stream>.<kind>: %w", ErrInvalid)
+		}
+		if s := e.Stream(); s == domain.LogFact || s == domain.LogImpact {
+			return fmt.Errorf("the %s stream of a log is written by the graph only: %w", s, ErrInvalid)
+		}
+	}
+	return g.repo.InTx(ctx, func(tx Tx) error {
+		for _, e := range entries {
+			if e.ID == "" {
+				e.ID = g.newID()
+			}
+			if e.At.IsZero() {
+				e.At = g.now()
+			}
+			if _, err := tx.AppendLog(ctx, e); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }

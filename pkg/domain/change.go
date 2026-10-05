@@ -55,10 +55,6 @@ type Change struct {
 	// project, pkg/graph.DefaultProject) and never empty once stored: the nodes the change creates
 	// are created in it.
 	ProjectID string `json:"projectId,omitempty"`
-	// ActivityRef scopes the change to one Activity (a methodology@Process/Step/Method/MethodStep node key,
-	// architecture plan "Activity concept"): the activity whose goal condition the change must satisfy to apply.
-	// Empty: no activity-relative gating beyond a node type's own lifecycle.
-	ActivityRef string `json:"activityRef,omitempty"`
 	// Lifecycle names the lifecycle the change follows (ADR 0058), set by CreateChange from its methodology, and State
 	// is the state it is in; both are empty when the methodology names no lifecycle. State is moved only by
 	// TransitionChange, which journals it as a KindTransition item.

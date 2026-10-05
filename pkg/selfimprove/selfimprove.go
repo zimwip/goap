@@ -19,6 +19,7 @@ import (
 	"github.com/zimwip/goap/pkg/domain/def"
 	"github.com/zimwip/goap/pkg/dsl"
 	"github.com/zimwip/goap/pkg/engine"
+	"github.com/zimwip/goap/pkg/journal"
 	"github.com/zimwip/goap/pkg/methodology"
 	"github.com/zimwip/goap/pkg/observe"
 )
@@ -92,7 +93,7 @@ func observeAnalyze(ctx context.Context, e *engine.Engine, ac engine.ActionConte
 			}
 		}
 	}
-	recs, err := e.Graph.Journal(ctx, domain.ExecutionFilter{ProcessIDs: ids})
+	recs, err := journal.Read(ctx, e.Graph, journal.Filter{ProcessIDs: ids})
 	if err != nil {
 		return engine.ActionResult{}, err
 	}

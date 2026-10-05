@@ -1,6 +1,9 @@
 package domain
 
-import "time"
+import (
+	"maps"
+	"time"
+)
 
 // NodeView is a node version hydrated with its neighbourhood in the domain
 // graph. It lets conditions navigate the reference graph without I/O.
@@ -25,12 +28,47 @@ type Blackboard struct {
 	// Supertypes maps node types to their ancestors (subtyping of the
 	// methodology schema), exposed to conditions as x.types.
 	Supertypes map[string][]string `json:"-"`
-	// Options are the options of the change and ActiveOption the one it works on (ADR 0032 §6): the view of a flow
-	// carries no flow event, so the graph gives them apart. DecisionPoints are replayed at At (ADR 0009 §4).
-	Options        []Flow          `json:"options,omitempty"`
-	ActiveOption   string          `json:"activeOption,omitempty"`
-	DecisionPoints []DecisionPoint `json:"decisionPoints,omitempty"`
-	At             time.Time       `json:"at,omitempty"`
+	// Facets are the use-case parts of the observation the graph gives apart from the change and its nodes, by name:
+	// what a view of a flow does not carry, replayed at At. The graph fills the built-in ones (options, active
+	// option, decision points: FacetOptions, FacetActiveOption, FacetDecisionPoints, ADR 0009, 0032) and the
+	// providers set on it (Graph.Facets); readers use the typed accessors (OptionsOf, ActiveOptionOf,
+	// DecisionPointsOf, Facet) rather than the map.
+	Facets map[string]any `json:"-"`
+	At     time.Time      `json:"at,omitempty"`
+}
+
+// Names of the built-in facets of a blackboard.
+const (
+	FacetOptions        = "options"        // []Flow: the options of the change (ADR 0032 §6)
+	FacetActiveOption   = "activeOption"   // string: the option the change works on
+	FacetDecisionPoints = "decisionPoints" // []DecisionPoint: replayed at Blackboard.At (ADR 0009 §4)
+)
+
+// Facet is the facet of the blackboard with a name, as the type the caller expects (the zero value when absent or of
+// another type).
+func Facet[T any](bb Blackboard, name string) T {
+	v, _ := bb.Facets[name].(T)
+	return v
+}
+
+// WithFacet is the blackboard with a facet set or replaced; the facets of the original are not changed.
+func (bb Blackboard) WithFacet(name string, v any) Blackboard {
+	f := make(map[string]any, len(bb.Facets)+1)
+	maps.Copy(f, bb.Facets)
+	f[name] = v
+	bb.Facets = f
+	return bb
+}
+
+// OptionsOf are the options of the change.
+func OptionsOf(bb Blackboard) []Flow { return Facet[[]Flow](bb, FacetOptions) }
+
+// ActiveOptionOf is the option the change works on ("" when none).
+func ActiveOptionOf(bb Blackboard) string { return Facet[string](bb, FacetActiveOption) }
+
+// DecisionPointsOf are the decision points of the change, replayed at bb.At.
+func DecisionPointsOf(bb Blackboard) []DecisionPoint {
+	return Facet[[]DecisionPoint](bb, FacetDecisionPoints)
 }
 
 // TypesOf returns a type followed by its supertypes.

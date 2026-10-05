@@ -108,7 +108,7 @@ func main() {
 	g.Authorizer = graphsvc.TransitionAuthorizer(authorizer)
 	g.ChangeAuthorizer = graphsvc.ChangeTransitionAuthorizer(authorizer)
 	g.Validators = []graph.NodeValidator{access.AdminFloorValidator{}}
-	// ActivityGoalsMet and Lifecycles (ADR 0058) need the registry service itself (its methodology store): only
+	// LandingGate, SubChangeValidator and Lifecycles (ADR 0058) need the registry service itself (its methodology store): only
 	// goap-dev, which holds it in process, wires them; the registry client has no RPC for them
 	// the built-in domains (organisation, platform) are always there; the demo seed needs alm
 	var need []string

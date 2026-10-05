@@ -330,9 +330,9 @@ func (t *sqliteTx) Change(ctx context.Context, id domain.ChangeID) (domain.Chang
 	var c domain.Change
 	var start, result sql.NullString
 	var data, created string
-	err := t.tx.QueryRowContext(ctx, `SELECT id, title, intent, methodology, goal, status, baseline_id, result_baseline_id, data, created_at, branch, namespace, COALESCE(parent_id, ''), owner_org, project_id, activity_ref, lifecycle, state
+	err := t.tx.QueryRowContext(ctx, `SELECT id, title, intent, methodology, goal, status, baseline_id, result_baseline_id, data, created_at, branch, namespace, COALESCE(parent_id, ''), owner_org, project_id, lifecycle, state
 		FROM change WHERE id = ?`, string(id)).
-		Scan((*string)(&c.ID), &c.Title, &c.Intent, &c.Methodology, &c.Goal, (*string)(&c.Status), &start, &result, &data, &created, &c.Branch, &c.Namespace, (*string)(&c.ParentID), &c.OwnerOrg, &c.ProjectID, &c.ActivityRef, &c.Lifecycle, &c.State)
+		Scan((*string)(&c.ID), &c.Title, &c.Intent, &c.Methodology, &c.Goal, (*string)(&c.Status), &start, &result, &data, &created, &c.Branch, &c.Namespace, (*string)(&c.ParentID), &c.OwnerOrg, &c.ProjectID, &c.Lifecycle, &c.State)
 	if err != nil {
 		return c, sqliteErr(err, "change "+string(id))
 	}
@@ -489,13 +489,13 @@ func (t *sqliteTx) MaterializeBaseline(ctx context.Context, id domain.BaselineID
 }
 
 func (t *sqliteTx) PutChange(ctx context.Context, c domain.Change) error {
-	_, err := t.tx.ExecContext(ctx, `INSERT INTO change (id, title, intent, methodology, goal, status, baseline_id, result_baseline_id, data, created_at, branch, namespace, parent_id, owner_org, project_id, activity_ref, lifecycle, state)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	_, err := t.tx.ExecContext(ctx, `INSERT INTO change (id, title, intent, methodology, goal, status, baseline_id, result_baseline_id, data, created_at, branch, namespace, parent_id, owner_org, project_id, lifecycle, state)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT (id) DO UPDATE SET title = excluded.title, intent = excluded.intent, goal = excluded.goal, status = excluded.status,
 		  result_baseline_id = excluded.result_baseline_id, data = excluded.data, baseline_id = excluded.baseline_id, branch = excluded.branch,
 		  lifecycle = excluded.lifecycle, state = excluded.state`,
 		string(c.ID), c.Title, c.Intent, c.Methodology, c.Goal, string(c.Status), nullUUID(string(c.BaselineID)), nullUUID(string(c.ResultBaselineID)),
-		string(jsonb(c.Data)), tsText(c.CreatedAt), domain.BranchOf(c.Branch), domain.NamespaceOf(c.Namespace), nullUUID(string(c.ParentID)), c.OwnerOrg, c.ProjectID, c.ActivityRef, c.Lifecycle, c.State)
+		string(jsonb(c.Data)), tsText(c.CreatedAt), domain.BranchOf(c.Branch), domain.NamespaceOf(c.Namespace), nullUUID(string(c.ParentID)), c.OwnerOrg, c.ProjectID, c.Lifecycle, c.State)
 	return sqliteErr(err, "change")
 }
 

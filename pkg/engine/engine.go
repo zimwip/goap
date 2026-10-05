@@ -22,6 +22,7 @@ import (
 	"github.com/zimwip/goap/pkg/goap"
 	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/intent"
+	"github.com/zimwip/goap/pkg/journal"
 	"github.com/zimwip/goap/pkg/llm"
 	"github.com/zimwip/goap/pkg/mcp"
 	"github.com/zimwip/goap/pkg/methodology"
@@ -438,7 +439,7 @@ func (e *Engine) bindChange(ctx context.Context, p *Process, m *methodology.Comp
 		return fmt.Errorf("attach %s: %w", id, err)
 	}
 	p.ChangeID = id
-	e.journal(ctx, p, domain.ExecutionRecord{Kind: domain.ExecAttach, Step: len(p.Steps),
+	e.journal(ctx, p, journal.Record{Kind: journal.KindAttach, Step: len(p.Steps),
 		Data: map[string]any{"changeId": string(id), "reused": req.ChangeID != ""}})
 	return e.save(ctx, p, events.BrokerAttached)
 }
@@ -597,7 +598,7 @@ func (e *Engine) Run(ctx context.Context, id string) (*Process, error) {
 		// why this run happens: what made the process runnable, by whom, and how long it waited
 		data := map[string]any{"reason": q.Reason}
 		maps.Copy(data, q.Cause)
-		e.journal(ctx, p, domain.ExecutionRecord{Kind: domain.ExecSchedule, Step: len(p.Steps), Actor: q.By, StartedAt: q.At, EndedAt: e.clock(), Data: data})
+		e.journal(ctx, p, journal.Record{Kind: journal.KindSchedule, Step: len(p.Steps), Actor: q.By, StartedAt: q.At, EndedAt: e.clock(), Data: data})
 		p.Queued = nil
 	}
 	maxSteps := e.MaxSteps
@@ -630,7 +631,7 @@ func (e *Engine) journalStarted(ctx context.Context, p *Process) {
 	if p.Started || p.ChangeID == "" {
 		return
 	}
-	e.journal(ctx, p, domain.ExecutionRecord{Kind: domain.ExecProcessStarted, StartedAt: p.CreatedAt,
+	e.journal(ctx, p, journal.Record{Kind: journal.KindProcessStarted, StartedAt: p.CreatedAt,
 		Data: map[string]any{"intent": firstUserTurn(p), "trigger": p.Trigger, "title": p.Title}})
 	p.Started = true
 }
@@ -1045,7 +1046,7 @@ func (e *Engine) Approve(ctx context.Context, id string, approve bool, comment s
 	p.Status = StatusRunning
 	p.Steps[i].ApprovedBy = approver.Subject
 	e.queue(ctx, p, map[bool]string{true: "approved", false: "rejected"}[approve], map[string]any{"step": i, "action": action.Name})
-	e.journal(ctx, p, domain.ExecutionRecord{Kind: domain.ExecApproval, Step: i, Action: action.Name, Actor: approver.Subject,
+	e.journal(ctx, p, journal.Record{Kind: journal.KindApproval, Step: i, Action: action.Name, Actor: approver.Subject,
 		Data: map[string]any{"approved": approve, "comment": comment, "permission": permission}})
 	if !approve {
 		p.Steps[i].Error = fmt.Sprintf("rejected by %s: %s", approver.Subject, comment)

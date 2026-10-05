@@ -19,7 +19,7 @@ func TestActivityGoalsMetGatesApply(t *testing.T) {
 	g := graph.New(graph.NewMemory())
 	store := graphWithDomains{NewGraphStore(g), NewMemoryStore()}
 	reg := &Service{Store: store}
-	g.ActivityGoalsMet = reg.ActivityGoalsMet
+	g.LandingGate = reg.LandingGate
 
 	m := methodology.Methodology{
 		Name: "shipping", Version: "1", Namespace: "alm",
@@ -37,7 +37,7 @@ func TestActivityGoalsMetGatesApply(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c, err := g.CreateChange(ctx, graph.NewChange{Title: "ship it", BaselineID: base.ID, ActivityRef: activityRef})
+	c, err := g.CreateChange(ctx, graph.NewChange{Title: "ship it", BaselineID: base.ID, Data: map[string]any{DataActivity: activityRef}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -71,13 +71,13 @@ func TestActivityGoalsMetRefusesAnUnresolvableRef(t *testing.T) {
 	g := graph.New(graph.NewMemory())
 	store := graphWithDomains{NewGraphStore(g), NewMemoryStore()}
 	reg := &Service{Store: store}
-	g.ActivityGoalsMet = reg.ActivityGoalsMet
+	g.LandingGate = reg.LandingGate
 
 	base, err := g.BranchHead(ctx, domain.DefaultNamespace, domain.MainBranch)
 	if err != nil {
 		t.Fatal(err)
 	}
-	c, err := g.CreateChange(ctx, graph.NewChange{Title: "x", BaselineID: base.ID, ActivityRef: "MV:no-such@1/process/p"})
+	c, err := g.CreateChange(ctx, graph.NewChange{Title: "x", BaselineID: base.ID, Data: map[string]any{DataActivity: "MV:no-such@1/process/p"}})
 	if err != nil {
 		t.Fatal(err)
 	}

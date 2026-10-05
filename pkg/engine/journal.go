@@ -7,7 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/journal"
 	"github.com/zimwip/goap/pkg/methodology"
 )
 
@@ -26,7 +26,7 @@ func (e *Engine) spanID(ctx context.Context) string {
 
 // journal appends records to the execution journal of the change of p (ADR
 // 0011). It is best effort: a journal failure is logged, never fails the process.
-func (e *Engine) journal(ctx context.Context, p *Process, recs ...domain.ExecutionRecord) {
+func (e *Engine) journal(ctx context.Context, p *Process, recs ...journal.Record) {
 	if p.ChangeID == "" || len(recs) == 0 {
 		return
 	}
@@ -52,7 +52,7 @@ func (e *Engine) journal(ctx context.Context, p *Process, recs ...domain.Executi
 			r.DurationMs = r.EndedAt.Sub(r.StartedAt).Milliseconds()
 		}
 	}
-	if err := e.Graph.Record(ctx, recs); err != nil {
+	if err := journal.Append(ctx, e.Graph, recs); err != nil {
 		e.log().Warn("journal write failed", "process", p.ID, "err", err)
 	}
 }
@@ -60,9 +60,9 @@ func (e *Engine) journal(ctx context.Context, p *Process, recs ...domain.Executi
 // tickRecordWithCalls attaches planning-time LLM calls (llm/llm-scoring planners) to a
 // tick record, so they are visible in the journal (ADR 0011) even on the paths (blocked
 // board, goal reached, stuck) that never reach a Step.
-func tickRecordWithCalls(r domain.ExecutionRecord, calls []LLMCall) domain.ExecutionRecord {
+func tickRecordWithCalls(r journal.Record, calls []LLMCall) journal.Record {
 	for _, c := range calls {
-		r.ModelCalls = append(r.ModelCalls, domain.ModelCall{Provider: c.Provider, Model: c.Model, InputTokens: c.InputTokens,
+		r.ModelCalls = append(r.ModelCalls, journal.ModelCall{Provider: c.Provider, Model: c.Model, InputTokens: c.InputTokens,
 			OutputTokens: c.OutputTokens, DurationMs: c.DurationMs, Error: c.Error})
 		r.InputTokens += c.InputTokens
 		r.OutputTokens += c.OutputTokens
@@ -79,9 +79,9 @@ func actionStep(m *methodology.Compiled, name string) string {
 
 // actionRecord describes the execution of step i: the Activity Run of activityRef (the methodology@Process/Step/
 // Method/MethodStep node key the planned action was generated for, "" when it was not generated from one).
-func actionRecord(p *Process, i int, kind, activityRef, id string) domain.ExecutionRecord {
+func actionRecord(p *Process, i int, kind, activityRef, id string) journal.Record {
 	s := p.Steps[i]
-	r := domain.ExecutionRecord{ID: id, Kind: domain.ExecAction, Step: i, Action: s.Action, ActionKind: kind, ActivityRef: activityRef, Specialization: s.Specialization,
+	r := journal.Record{ID: id, Kind: journal.KindAction, Step: i, Action: s.Action, ActionKind: kind, ActivityRef: activityRef, Specialization: s.Specialization,
 		Plan: s.Plan, Before: maps.Clone(s.Before), After: maps.Clone(s.After), Items: slices.Clone(s.Items), Nodes: slices.Clone(s.Nodes),
 		Reads: slices.Clone(s.Reads), BoardBefore: s.BoardBefore, BoardAfter: max(s.BoardAfter, s.BoardBefore), BoardLast: s.LastItem,
 		InputTokens: s.Usage.InputTokens, OutputTokens: s.Usage.OutputTokens, Actor: s.ApprovedBy, Output: truncate(s.Output, 2000),
@@ -91,11 +91,11 @@ func actionRecord(p *Process, i int, kind, activityRef, id string) domain.Execut
 		r.EffectsMet = &met
 	}
 	for _, c := range s.LLMCalls {
-		r.ModelCalls = append(r.ModelCalls, domain.ModelCall{Provider: c.Provider, Model: c.Model, InputTokens: c.InputTokens,
+		r.ModelCalls = append(r.ModelCalls, journal.ModelCall{Provider: c.Provider, Model: c.Model, InputTokens: c.InputTokens,
 			OutputTokens: c.OutputTokens, DurationMs: c.DurationMs, Error: c.Error, Exchange: c.Exchange})
 	}
 	for _, c := range s.ToolCalls {
-		r.ToolCalls = append(r.ToolCalls, domain.ToolUse{Name: c.Name, DurationMs: c.DurationMs, Error: c.Error})
+		r.ToolCalls = append(r.ToolCalls, journal.ToolUse{Name: c.Name, DurationMs: c.DurationMs, Error: c.Error})
 	}
 	if p.Pending != nil && p.Pending.Step == i {
 		r.Data = map[string]any{"waiting": p.Pending.Kind}
@@ -128,9 +128,9 @@ func replanned(prev, next []string) bool {
 }
 
 // endRecord summarizes a finished process.
-func endRecord(p *Process) domain.ExecutionRecord {
+func endRecord(p *Process) journal.Record {
 	disabled := slices.Sorted(maps.Keys(p.Disabled))
-	return domain.ExecutionRecord{Kind: domain.ExecProcessEnded, Error: p.Error, Step: len(p.Steps),
+	return journal.Record{Kind: journal.KindProcessEnded, Error: p.Error, Step: len(p.Steps),
 		InputTokens: p.Usage.InputTokens, OutputTokens: p.Usage.OutputTokens,
 		Data: map[string]any{"steps": len(p.Steps), "llmCalls": p.Usage.LLMCalls, "toolCalls": p.Usage.ToolCalls,
 			"disabled": disabled, "trigger": p.Trigger},

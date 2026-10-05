@@ -52,15 +52,25 @@ type Graph struct {
 	// Validators are the NodeValidator plugins checked once per Apply (ADR 0048), keyed by the node types they
 	// declare interest in via Types(). Unset: no plugin validators run (tests, tools).
 	Validators []NodeValidator
-	// ActivityGoalsMet, when set, is asked at Apply time for a change whose ActivityRef names a Process/Step/
-	// Method/MethodStep (architecture plan "Activity concept"): true once that activity's own goal condition
-	// holds against bb, given its compiled methodology (which pkg/graph has no access to - resolving it is the
-	// caller's job, e.g. internal/registrysvc, wired from main). bb is built from this Apply's own cposts (ADR
-	// 0024), not a fresh read, since it must see the change's own pending writes before they are visible outside
-	// this transaction. It replaces the node-type lifecycle's Editable floor as the landing gate for that change,
-	// maturity of content and state being the activity's call, not a fixed per-type flag; unset, or a change with
-	// no ActivityRef, falls back to the Editable floor unchanged.
-	ActivityGoalsMet func(ctx context.Context, activityRef string, bb domain.Blackboard) (bool, error)
+	// LandingGate, when set, is asked at Apply / Commit time about every change, with the blackboard built from this
+	// Apply's own cposts (ADR 0024), not a fresh read, since it must see the change's own pending writes before they
+	// are visible outside this transaction. decided false: the gate has nothing to say about this change and the
+	// node-type lifecycle's Editable floor applies unchanged; decided true: ok says whether the change may land, and
+	// the gate replaces that floor (a use case, e.g. the Activity a change is scoped to, judges the maturity of
+	// content and state instead of a fixed per-type flag). The graph knows no use case: what the gate reads from the
+	// change (Change.Data) and how it decides is the owner's (internal/registrysvc, wired from main). It may read the
+	// graph itself: it runs outside any transaction (authorizeMoves).
+	LandingGate func(ctx context.Context, c domain.Change, bb domain.Blackboard) (decided, ok bool, err error)
+	// SubChangeValidator, when set, is asked by CreateChange about a sub-change before it is stored, with its parent
+	// as stored and the change as it is about to be (Data, Methodology, ...): an error refuses it (wrap ErrInvalid).
+	// Like LandingGate it runs outside any transaction and may read the graph.
+	SubChangeValidator func(ctx context.Context, parent, child domain.Change) error
+
+	// Facets are the providers of the facets of a blackboard (domain.Blackboard.Facets) beyond the built-in ones (options,
+	// active option, decision points, builtinFacets), by name: a use case adds what its conditions and actions observe
+	// of a change without the graph knowing it. A provider is called inside the transaction that reads the blackboard,
+	// with the change as stored: it reads nothing else.
+	Facets map[string]BlackboardFacet
 
 	// Lifecycles resolves the lifecycle of the changes of a methodology and the world state their guards read (ADR
 	// 0058). Unset: no change follows a lifecycle (tests, tools).
@@ -354,10 +364,7 @@ type NewChange struct {
 	// project). A sub-change inherits it from its parent when unset, and must stay within the parent's
 	// project when set. Selecting one before acting is a UX-level gate (ADR 0039), not enforced here.
 	ProjectID string
-	// ActivityRef scopes the change to one Activity (architecture plan "Activity concept"): "Request -> Create
-	// Change -> Define scope -> Execute". Empty: no activity-relative gating beyond a node type's own lifecycle.
-	ActivityRef string
-	Data        map[string]any
+	Data      map[string]any
 }
 
 // CreateChange opens a change on a reference baseline. A sub-change
@@ -379,12 +386,24 @@ func (g *Graph) CreateChange(ctx context.Context, in NewChange) (domain.Change, 
 			lifecycle, initial = lc.Name, lc.Initial
 		}
 	}
+	// the validator of sub-changes is asked before the transaction too, it reads the graph
+	if g.SubChangeValidator != nil && in.ParentID != "" {
+		parent, err := g.Change(ctx, in.ParentID)
+		if err != nil {
+			return domain.Change{}, err
+		}
+		child := domain.Change{Title: in.Title, Intent: in.Intent, Methodology: in.Methodology, Namespace: domain.NamespaceOf(in.Namespace),
+			ParentID: in.ParentID, OwnerOrg: in.OwnerOrg, ProjectID: in.ProjectID, Data: in.Data}
+		if err := g.SubChangeValidator(ctx, parent, child); err != nil {
+			return domain.Change{}, err
+		}
+	}
 	var c domain.Change
 	err := g.repo.InTx(ctx, func(tx Tx) error {
 		c = domain.Change{
 			ID: domain.ChangeID(g.newID()), Title: in.Title, Intent: in.Intent, Methodology: in.Methodology, Namespace: domain.NamespaceOf(in.Namespace),
 			Status: domain.ChangeDraft, BaselineID: in.BaselineID, Branch: domain.BranchOf(in.Branch), Data: in.Data, CreatedAt: g.now(),
-			ParentID: in.ParentID, OwnerOrg: in.OwnerOrg, ProjectID: in.ProjectID, ActivityRef: in.ActivityRef,
+			ParentID: in.ParentID, OwnerOrg: in.OwnerOrg, ProjectID: in.ProjectID,
 		}
 		c.Lifecycle, c.State = lifecycle, initial
 		if err := g.prepareSubChange(ctx, tx, &c, &in); err != nil {
@@ -647,11 +666,11 @@ func (g *Graph) BlackboardIn(ctx context.Context, id domain.ChangeID, flow strin
 		}
 		// what the view of a flow does not carry: the options and the decision points of the change (ADR 0009)
 		now := g.now()
-		options, active, points := c.Options(), c.ActiveOption(), c.DecisionPointsAt(now)
+		facets := g.facets(c, now)
 		c = c.View(flow)
 		c.Nodes = nodes
 		bb = domain.Blackboard{Change: c, Nodes: map[domain.NodeRef]domain.NodeView{}, Neighbors: map[domain.NodeRef]domain.Node{},
-			Options: options, ActiveOption: active, DecisionPoints: points, At: now}
+			Facets: facets, At: now}
 		ix, err := g.typesAt(ctx, tx, c.BaselineID)
 		if err != nil {
 			return err
