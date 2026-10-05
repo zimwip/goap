@@ -55,8 +55,11 @@ the composite of those primitives for producers that do it all in one call (seed
 - **`UpdateNode(change, impact, props)`** applies only to a checked-out version of the change; it merges the
   properties into it (the semantics of `NodeWrite.Properties` today) and writes **no new version**. Refused on a node
   that is not checked out in the change, or checked in.
-- `UpdateNode` never changes the lifecycle state (§4b). Retiring a node is an in-place edit too: the working version
-  becomes a tombstone with no outgoing link.
+- `UpdateNode` never changes the lifecycle state (§4b).
+- **There is no retire.** A node is not removed by a change (ADR 0024 §4): removing a child is a modification of its
+  **parent**, which is checked out and loses the link to the child (`DeleteLink`, §4). An impact analysis that says
+  "X goes away" declares an impact on X (`AddChangeImpacts`) with `via` = the parent's impact; X is not checked out and
+  keeps its versions. The `retire` option of `WriteChangeImpact` goes with it.
 - The owner transfer (`NodeWrite.Owner`) is an in-place edit of the working version.
 
 ### 4b. A lifecycle transition is a version of its own, from a checked-in version
@@ -67,7 +70,14 @@ the composite of those primitives for producers that do it all in one call (seed
   checked-in one), identical to it but for the state, and freezes it at once. This version records the transition
   and nothing else. When the change holds no impact on the node yet, it declares one (`intent: modified`).
 - Its control is the transition's own: the permission it declares (`Graph.Authorizer`, by default `node:transition`,
-  asked before the transaction) and its guard. It needs no review of its own and leaves the impact's review as it is.
+  asked before the transaction) and its guard.
+- **A transition may require a review.** The review is carried by the change (the review of the node's impact, with
+  its history, ADR 0024) and checked by the transition's guard, which sees the change impacts of the change: a guard
+  such as "the impact of this node is accepted" refuses the transition until the review is there. Which transitions
+  require it is the domain's lifecycle, not the platform's.
+- Today a node guard sees the node, its children and the change header only (`pkg/graph/lifecycle.go`, `dsl.GuardCtx`).
+  It gains the impact of the node in the change: CEL `impact` (`{intent, review, reviews, pre, post}`) and
+  `GuardCtx.Impact()` for guard algorithms.
 - The typical sequence: `CheckoutNode` → `UpdateNode`… → review → `CheckinNode` → `TransitionNode`.
 
 ### 4. Links are edited in place on the working version
@@ -105,7 +115,7 @@ The impact log (ADR 0029) records `declared`, `checkedOut` (the working version,
 | `CreateNode` without change, `CreateObject` | `CreateNode(change, …)` (ABAC `object:create` on the change's project, `gateAccess` for `adminOnly` types) |
 | `UpdateNode(ref, props)` | `CheckoutNode` then `UpdateNode(change, impact, props)` |
 | `CreateLink(change?, from, to)` | `CreateLink` / `UpdateLink` / `DeleteLink` on a checked-out source |
-| `WriteChangeImpact` | `UpdateNode` (props, retire, owner), the link operations and `TransitionNode` (state) |
+| `WriteChangeImpact` | `UpdateNode` (props, owner), the link operations (a removal: the parent loses its link) and `TransitionNode` (state) |
 | — | `CheckinNode(change, impact)` |
 | — | `TransitionNode(change, node, transition)` |
 
@@ -131,7 +141,7 @@ impact inherits the check.
 
 1. Domain and storage: the `checked_out` flag, the guard rule, in-place edits of a working version and of its links,
    the new impact operations.
-2. `pkg/graph`: `CreateNode`, `CheckoutNode`, `UpdateNode`, the link operations, `CheckinNode`, `TransitionNode`; the check-in
+2. `pkg/graph`: `CreateNode`, `CheckoutNode`, `UpdateNode`, the link operations, `CheckinNode`, `TransitionNode` (its guard sees the impact); the check-in
    precondition of `CommitChange`, `AdoptFlow`; removal of the direct writes; `Commit` on the primitives.
 3. Proto, handler, client, authorization.
 4. Engine, DSL, built-in MCP tools.
