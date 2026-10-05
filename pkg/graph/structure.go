@@ -37,6 +37,19 @@ func (g *Graph) Structures(context.Context) (domain.Structures, error) {
 	return domain.BuiltinStructureSet(), nil
 }
 
+// requires returns the links a node of the type must carry (ADR 0065), in force: the type catalogue's, the built-in
+// ones for an untyped graph.
+func (g *Graph) requires(typ string) []domain.RequiredLink {
+	if g.Types != nil {
+		if c := g.catalog(); c != nil {
+			if rs := c.Requires(typ); rs != nil {
+				return rs
+			}
+		}
+	}
+	return domain.BuiltinRequires[typ]
+}
+
 // isA reports whether the node type typ is base or a subtype of it (an untyped graph knows no subtyping).
 func (g *Graph) isA(typ, base string) bool {
 	if typ == base {

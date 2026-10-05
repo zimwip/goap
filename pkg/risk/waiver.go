@@ -1,8 +1,10 @@
-package domain
+package risk
 
 import (
 	"fmt"
 	"strings"
+
+	"github.com/zimwip/goap/pkg/domain"
 )
 
 // KindWaiver is a person's decision to unblock a run (ADR 0036 §3): a process waiting for conditions established
@@ -11,9 +13,9 @@ import (
 // fact of the change like any other: who decided, why, for which run.
 //
 // Data: process (the run it applies to), conditions ("name" established true, "!name" established false), reason.
-const KindWaiver ItemKind = "waiver"
+const KindWaiver domain.ItemKind = "waiver"
 
-func validateWaiver(it ChangeItem) error {
+func validateWaiver(it domain.ChangeItem) error {
 	if s, _ := it.Data["process"].(string); s == "" {
 		return fmt.Errorf("waiver item requires data.process")
 	}
@@ -26,7 +28,7 @@ func validateWaiver(it ChangeItem) error {
 	return nil
 }
 
-func waivedConditions(it ChangeItem) []string {
+func waivedConditions(it domain.ChangeItem) []string {
 	var out []string
 	switch cs := it.Data["conditions"].(type) {
 	case []string:
@@ -42,7 +44,7 @@ func waivedConditions(it ChangeItem) []string {
 }
 
 // Waivers returns the conditions people declared established for a run, the latest waiver of a condition winning.
-func (c *Change) Waivers(process string) map[string]bool {
+func Waivers(c domain.Change, process string) map[string]bool {
 	var out map[string]bool
 	for _, it := range c.Items {
 		if it.Kind != KindWaiver || it.Data["process"] != process {

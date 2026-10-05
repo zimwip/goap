@@ -24,7 +24,7 @@ to navigate the whole graph (the organisation as it is).
 
 Two item kinds join the blackboard, `risk` and `action`. An item is a **version** of a record identified by its `key`
 (`RSK-1`, `ACT-1`): raising, assessing, mitigating or closing a risk adds a new version, and the current register is
-the last version of each key (`domain.Risks`, `domain.ActionItems`); the change log keeps every version, who wrote it
+the last version of each key (`risk.Risks`, `risk.Actions`, `pkg/risk`, ADR 0065); the change log keeps every version, who wrote it
 and in which run (ADR 0030).
 
 | Record | Fields |

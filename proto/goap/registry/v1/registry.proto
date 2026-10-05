@@ -77,6 +77,16 @@ message NodeType {
   string editor = 10;
   // tags the type as a structure of the graph (ADR 0054): the organisation or the project hierarchy
   StructureTag structure = 11;
+  // links a node of the type must carry (ADR 0065)
+  repeated RequiredLink requires = 12;
+}
+
+// RequiredLink: a node of the type has exactly count outgoing links of the link type (ADR 0065).
+message RequiredLink {
+  // link type of the same domain, or qualified
+  string link = 1;
+  // number of links; 0 means 1
+  int32 count = 2;
 }
 
 // StructureTag tags a node type as the one building a hierarchy every node version is placed in (ADR 0054).

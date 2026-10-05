@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"testing"
-
-	"github.com/zimwip/goap/pkg/domain"
 )
 
 func TestPurgeChange(t *testing.T) { forEachRepo(t, testPurgeChange) }
@@ -39,17 +37,5 @@ func testPurgeChange(t *testing.T, repo Repo) {
 	// an applied change landed in the graph: it stays
 	if _, err := g.PurgeChange(ctx, d.ID); !errors.Is(err, ErrConflict) {
 		t.Fatalf("purge of an applied change: %v", err)
-	}
-
-	// a business rule may keep a discarded change
-	e := setProp(t, g, f, f.base.ID, "E", map[string]any{"title": "E"})
-	keep := errors.New("kept by policy")
-	g.PurgePolicy = func(context.Context, domain.Change) error { return keep }
-	if _, err := g.PurgeChange(ctx, e.ID); !errors.Is(err, keep) {
-		t.Fatalf("purge against the policy: %v", err)
-	}
-	g.PurgePolicy = nil
-	if _, err := g.PurgeChange(ctx, e.ID); err != nil {
-		t.Fatalf("purge: %v", err)
 	}
 }

@@ -56,6 +56,10 @@ type NodeType struct {
 	// the organisational units owning node versions and changes, or the projects nodes are created in. The graph
 	// bootstraps its root and checks every write against it. One type per kind across the domains in force.
 	Structure *StructureTag `yaml:"structure,omitempty" json:"structure,omitempty"`
+	// Requires lists the links a node of the type must carry (ADR 0065): exactly `count` (default 1) outgoing links
+	// of each type, checked when the node is created and after each write. A subtype inherits them, redefining one
+	// by link.
+	Requires []domain.RequiredLink `yaml:"requires,omitempty" json:"requires,omitempty"`
 }
 
 // StructureTag tags a node type as a structure of the graph (ADR 0054, domain.Structure).

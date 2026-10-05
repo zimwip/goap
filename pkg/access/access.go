@@ -64,9 +64,6 @@ const RoleAdmin = "admin"
 // project reads that project's own Assignments itself (ProjectRoles); the grant itself is project-independent.
 const RoleReader = "reader"
 
-// UserKey is the key of the node of a user.
-func UserKey(subject string) string { return "USR:" + subject }
-
 // PolicyKey is the key of the node of a policy: its target plus a digest of the rule.
 func PolicyKey(p authz.Policy) string {
 	h := sha256.Sum256([]byte(p.Rule + "\x00" + p.Effect))

@@ -187,3 +187,6 @@ func (ts testTypes) IsA(typ, base string) bool {
 }
 
 func (ts testTypes) Structures() domain.Structures { return domain.BuiltinStructureSet() }
+
+// Requires resolves none: the graph falls back to the built-in ones (domain.BuiltinRequires).
+func (ts testTypes) Requires(string) []domain.RequiredLink { return nil }

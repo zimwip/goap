@@ -221,7 +221,7 @@ func pinBaseline(t *testing.T, g *Graph, namespace string, refs ...domain.NodeRe
 		}
 		org, proj := g.Structure(domain.StructureOrganisation), g.Structure(domain.StructureProject)
 		c := domain.Change{ID: domain.ChangeID(g.newID()), Title: "Pin", Namespace: namespace, Status: domain.ChangeApplied, Intent: "Pin node versions for a fixture",
-			BaselineID: head.ID, Branch: domain.MainBranch, OwnerOrg: org.Root, ProjectID: proj.Root, Administrative: true, CreatedAt: g.now()}
+			BaselineID: head.ID, Branch: domain.MainBranch, OwnerOrg: org.Root, ProjectID: proj.Root, CreatedAt: g.now()}
 		if err := tx.PutChange(ctx, c); err != nil {
 			return err
 		}

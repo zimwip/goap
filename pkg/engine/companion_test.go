@@ -8,6 +8,7 @@ import (
 
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/methodology"
+	rsk "github.com/zimwip/goap/pkg/risk"
 )
 
 // riskyYAML is a transverse methodology (ADR 0036 §3): it applies to staged, so its process runs alongside the
@@ -98,7 +99,7 @@ func TestTransverseProcessRunsAlongsideTheChange(t *testing.T) {
 		t.Fatalf("nothing to do: %s %d steps", risk.Status, len(risk.Steps))
 	}
 	// someone raises a new high risk: the companion wakes up and asks for its mitigation
-	items, err := e.Graph.AddItems(ctx, p.ChangeID, []domain.ChangeItem{{Kind: domain.KindRisk, Status: domain.ItemProposed, ProducedBy: "alice",
+	items, err := e.Graph.AddItems(ctx, p.ChangeID, []domain.ChangeItem{{Kind: rsk.KindRisk, Status: domain.ItemProposed, ProducedBy: "alice",
 		Data: map[string]any{"key": "RSK-2", "title": "the reviewer is away", "probability": 3.0, "impact": 5.0}}})
 	if err != nil {
 		t.Fatal(err)

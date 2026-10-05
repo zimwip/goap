@@ -30,8 +30,8 @@ applied or merge pending, has sub-changes, produced a baseline, its branch recei
 wrote (a baseline entry, a later version of a node, a link of another change). This is the one exception to the
 insert-only log of ADR 0030: what is removed was never part of the graph.
 
-`Graph.PurgePolicy` lets a **business rule keep discarded changes** (to reuse their information later): it is asked
-first and its error refuses the purge. The default, no policy, purges.
+The purge has no policy hook: nothing needed one, and a rule keeping discarded changes would be a new extension point
+added when a use case asks for it (it was `Graph.PurgePolicy`, removed unused, ADR 0065).
 
 ### 3. The settings dialog stages its edits
 

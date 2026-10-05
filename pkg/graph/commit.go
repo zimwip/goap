@@ -58,9 +58,8 @@ type Commit struct {
 	BaselineName string
 	Edits        []NodeEdit
 	// OwnerOrg is the unit holding the commit and ProjectID the project it acts in (ADR 0054); empty: the root unit,
-	// the default project. Administrative marks a commit of organisation/project/policy/adapter data (ADR 0039).
+	// the default project.
 	OwnerOrg, ProjectID string
-	Administrative      bool
 }
 
 // CommitResult is the outcome of a Commit.
@@ -95,7 +94,7 @@ func (g *Graph) commitEdits(ctx context.Context, in Commit, parenting bool) (res
 		}
 	}
 	c, err := g.CreateChange(ctx, NewChange{Namespace: in.Namespace, Title: in.Title, Intent: in.Intent, Methodology: in.Methodology,
-		BaselineID: in.Baseline, Branch: in.Branch, Data: in.Data, OwnBranch: true, OwnerOrg: in.OwnerOrg, ProjectID: in.ProjectID, Administrative: in.Administrative})
+		BaselineID: in.Baseline, Branch: in.Branch, Data: in.Data, OwnBranch: true, OwnerOrg: in.OwnerOrg, ProjectID: in.ProjectID})
 	if err != nil {
 		return res, err
 	}

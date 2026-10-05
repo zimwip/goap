@@ -43,6 +43,8 @@ type Structure struct {
 const (
 	NamespaceOrganisation = "organisation"
 	TypeOrgUnit           = "organisation@OrgUnit"
+	TypeUser              = "organisation@User"
+	LinkMemberOf          = "organisation@member_of"
 	TypeProjectUnit       = "organisation@ProjectUnit"
 	LinkPartOf            = "organisation@part_of"
 	LinkProjectPartOf     = "organisation@project_part_of"
@@ -53,6 +55,29 @@ const (
 var BuiltinStructures = map[string]Structure{
 	StructureOrganisation: {Kind: StructureOrganisation, Type: TypeOrgUnit, Namespace: NamespaceOrganisation, Parent: LinkPartOf, Root: DefaultOrg},
 	StructureProject:      {Kind: StructureProject, Type: TypeProjectUnit, Namespace: NamespaceOrganisation, Parent: LinkProjectPartOf, Root: DefaultProject, SelfParent: true},
+}
+
+// RequiredLink is a link a node of a type must carry (`requires:` on a node type, ADR 0065): exactly Count outgoing
+// links of type Link (the qualified link type once resolved by the type catalogue; a bare name of the domain in its
+// definition). It is checked when a node is created and after each write, as the parent of a structure is (ADR 0054).
+type RequiredLink struct {
+	Link string `yaml:"link" json:"link"`
+	// Count is the number of links of the type the node must have; 0 in a definition means 1.
+	Count int `yaml:"count,omitempty" json:"count,omitempty"`
+}
+
+// Exactly is the number of links required: Count, 1 when unset.
+func (r RequiredLink) Exactly() int {
+	if r.Count <= 0 {
+		return 1
+	}
+	return r.Count
+}
+
+// BuiltinRequires are the required links of the built-in organisation domain, by qualified node type: what an
+// untyped graph (tests, tools) uses, as BuiltinStructures; the type catalogue resolves the same ones.
+var BuiltinRequires = map[string][]RequiredLink{
+	TypeUser: {{Link: LinkMemberOf, Count: 1}},
 }
 
 // Structures are the two hierarchies in force with the node types belonging to each (the tagged type and its
@@ -84,5 +109,5 @@ func (s Structures) In(kind, typ string) bool {
 // BuiltinStructureSet is the structures of the built-in organisation domain, with its subtypes (a User is a unit).
 func BuiltinStructureSet() Structures {
 	return Structures{Organisation: BuiltinStructures[StructureOrganisation], Project: BuiltinStructures[StructureProject],
-		OrganisationTypes: []string{TypeOrgUnit, NamespaceOrganisation + TypeSep + "User"}, ProjectTypes: []string{TypeProjectUnit}}
+		OrganisationTypes: []string{TypeOrgUnit, TypeUser}, ProjectTypes: []string{TypeProjectUnit}}
 }

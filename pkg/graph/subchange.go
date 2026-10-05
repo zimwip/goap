@@ -8,13 +8,6 @@ import (
 	"github.com/zimwip/goap/pkg/domain"
 )
 
-// Organisation domain conventions (the built-in organisation domain, domains/builtin/organisation.yaml) that are not
-// a structure (ADR 0054: the organisation and project hierarchies are what the type catalogue tags, Graph.Structure).
-const (
-	LinkMemberOf = "organisation@member_of" // User -> its OrgUnit (ADR 0040)
-	NodeTypeUser = "organisation@User"
-)
-
 // Methodology namespace conventions (the built-in methodology meta-domain, domains/builtin/methodology.yaml;
 // architecture plan "Activity concept").
 const (
@@ -22,50 +15,54 @@ const (
 	LinkSubActivity      = "methodology@sub_activity" // Activity -> the sub-activities it is composed from
 )
 
-// checkRequiredParent enforces that a created node of a structure (ADR 0054: an OrgUnit, a ProjectUnit) names exactly
-// one parent link of the structure, and a User exactly one member_of link (ADR 0040) — except the roots of the
-// structures, created by the bootstrap. Only creation is checked here: an edit that modifies an existing node's
-// membership (the move action) is responsible for its own atomicity (removing the old link and adding the new one in
-// the same edit).
-// parentLinkRule returns the link type a node must have exactly one of, and a description for error messages; ok is
-// false for any other type, or for the roots.
-func (g *Graph) parentLinkRule(typ, key string) (linkType, of string, ok bool) {
-	for _, kind := range domain.StructureKinds {
-		if st := g.Structure(kind); typ == st.Type {
-			if key == st.Root {
-				return "", "", false
-			}
-			return st.Parent, fmt.Sprintf("a parent %s (%s)", st.Type, st.Parent), true
-		}
-	}
-	if typ == NodeTypeUser {
-		return LinkMemberOf, "exactly one organisation (member_of)", true
-	}
-	return "", "", false
+// requirement is a number of outgoing links of one type a node must have: what the parent of a structure (ADR 0054)
+// and the required links a node type declares (ADR 0065) come down to. of describes it in error messages.
+type requirement struct {
+	linkType string
+	count    int
+	of       string
 }
 
+// requirementsOf returns the links a node of type typ and key must carry: the parent of a node of a structure,
+// except the root of it, and the links its node type requires. Nil for any other node.
+func (g *Graph) requirementsOf(typ, key string) []requirement {
+	var out []requirement
+	for _, kind := range domain.StructureKinds {
+		if st := g.Structure(kind); typ == st.Type && key != st.Root {
+			out = append(out, requirement{st.Parent, 1, fmt.Sprintf("a parent %s (%s)", st.Type, st.Parent)})
+		}
+	}
+	for _, r := range g.requires(typ) {
+		out = append(out, requirement{r.Link, r.Exactly(), fmt.Sprintf("exactly %d %s", r.Exactly(), r.Link)})
+	}
+	return out
+}
+
+// checkRequiredParent enforces that a created node names the links its type requires: exactly one parent link for a
+// node of a structure (ADR 0054: an OrgUnit, a ProjectUnit), the links a node type declares through `requires`
+// (ADR 0065: a User needs one member_of, ADR 0040) — except the roots of the structures, created by the bootstrap.
+// Only creation is checked here: an edit that modifies an existing node's membership (the move action) is
+// responsible for its own atomicity (removing the old link and adding the new one in the same edit).
 func (g *Graph) checkRequiredParent(e NodeEdit) error {
 	if e.Pre != nil {
 		return nil
 	}
-	linkType, of, ok := g.parentLinkRule(e.Type, e.Key)
-	if !ok {
-		return nil
-	}
-	n := 0
-	for _, l := range e.Links {
-		if l.Type == linkType {
-			n++
+	for _, r := range g.requirementsOf(e.Type, e.Key) {
+		n := 0
+		for _, l := range e.Links {
+			if l.Type == r.linkType {
+				n++
+			}
 		}
-	}
-	if n != 1 {
-		return fmt.Errorf("%s needs %s, got %d: %w", nodeName(e), of, n, ErrInvalid)
+		if n != r.count {
+			return fmt.Errorf("%s needs %s, got %d: %w", nodeName(e), r.of, n, ErrInvalid)
+		}
 	}
 	return nil
 }
 
-// checkParentInvariant re-verifies, after a write lands a node version, that an OrgUnit/ProjectUnit/User
-// still has exactly one parent/membership link of its expected type. Unlike checkRequiredParent (creation
+// checkParentInvariant re-verifies, after a write lands a node version, that a node still has the links its type
+// requires (the parent of an OrgUnit/ProjectUnit, the membership of a User). Unlike checkRequiredParent (creation
 // only, checked against the edit's own declared links before anything is written), this reads the node's
 // actual links back from the version just written: a client that built its edit from a stale read (e.g. a
 // baseline snapshot older than an import write outside of any change, see EnsureUser/ADR 0040) would
@@ -75,22 +72,24 @@ func (g *Graph) checkParentInvariant(ctx context.Context, ref domain.NodeRef) er
 	if err != nil {
 		return err
 	}
-	linkType, of, ok := g.parentLinkRule(n.Type, n.Key)
-	if !ok {
+	reqs := g.requirementsOf(n.Type, n.Key)
+	if len(reqs) == 0 {
 		return nil
 	}
 	links, err := g.OutLinksOf(ctx, ref)
 	if err != nil {
 		return err
 	}
-	count := 0
-	for _, l := range links {
-		if l.Type == linkType {
-			count++
+	for _, r := range reqs {
+		count := 0
+		for _, l := range links {
+			if l.Type == r.linkType {
+				count++
+			}
 		}
-	}
-	if count != 1 {
-		return fmt.Errorf("%s needs %s, got %d: %w", n.Key, of, count, ErrInvalid)
+		if count != r.count {
+			return fmt.Errorf("%s needs %s, got %d: %w", n.Key, r.of, count, ErrInvalid)
+		}
 	}
 	return nil
 }
@@ -145,10 +144,6 @@ func (g *Graph) prepareSubChange(ctx context.Context, tx Tx, c *domain.Change, i
 			return fmt.Errorf("unit %s is not part of %s, the unit of the parent change: %w", c.OwnerOrg, parent.OwnerOrg, ErrInvalid)
 		}
 	}
-	if !in.Administrative {
-		in.Administrative = parent.Administrative
-	}
-	c.Administrative = in.Administrative
 	// a sub-change's Activity, when it names one, must be the parent's or a descendant of it (architecture plan
 	// "Activity concept" cascade); unlike OwnerOrg/ProjectID, an unset ActivityRef is NOT inherited - a
 	// sub-change is typically scoped to a more specific sub-activity than its parent, not the same one.

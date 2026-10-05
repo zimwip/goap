@@ -41,8 +41,8 @@ func (h *Handler) resolveOwner(ctx context.Context, owner string) (string, error
 		if me == "" {
 			return "", connect.NewError(connect.CodeUnauthenticated, errors.New("personal changes need an identified caller"))
 		}
-		return domain.PersonalUnit(me), rpcerr.ToConnect(EnsureUser(ctx, h.Graph, me))
-	case domain.IsPersonalUnit(owner) && domain.PersonalSubject(owner) != subjectOf(ctx):
+		return access.PersonalUnit(me), rpcerr.ToConnect(EnsureUser(ctx, h.Graph, me))
+	case access.IsPersonalUnit(owner) && access.PersonalSubject(owner) != subjectOf(ctx):
 		return "", connect.NewError(connect.CodePermissionDenied, fmt.Errorf("unit %s is personal to someone else", owner))
 	}
 	return owner, nil
@@ -216,7 +216,7 @@ func (h *Handler) PersonalScope() connect.Interceptor {
 			who := h.Identity.Context(ctx, req.Header())
 			if msg, ok := req.Any().(proto.Message); ok {
 				if id := changeIDIn(req.Spec().Procedure, msg); id != "" {
-					if c, err := h.Graph.Change(who, id); err == nil && c.Personal() && !c.PersonalTo(subjectOf(who)) {
+					if c, err := h.Graph.Change(who, id); err == nil && access.IsPersonal(c) && !access.IsPersonalTo(c, subjectOf(who)) {
 						return nil, denyPersonal(id)
 					}
 				}
@@ -242,7 +242,7 @@ func changeIDIn(procedure string, msg proto.Message) domain.ChangeID {
 
 // visibleTo reports whether the caller may see a change: every change but the personal ones of others.
 func visibleTo(ctx context.Context, c domain.Change) bool {
-	return !c.Personal() || c.PersonalTo(subjectOf(ctx))
+	return !access.IsPersonal(c) || access.IsPersonalTo(c, subjectOf(ctx))
 }
 
 func (h *Handler) DeleteChange(ctx context.Context, r *connect.Request[graphv1.DeleteChangeRequest]) (*connect.Response[graphv1.DeleteChangeResponse], error) {

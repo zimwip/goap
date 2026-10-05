@@ -4,6 +4,7 @@ import (
 	"sync"
 
 	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/risk"
 )
 
 // Activation converts a blackboard into the CEL variables of a condition.
@@ -74,7 +75,7 @@ type decisionView struct{ points, questions []any }
 
 // risks is the risk register of the change (ADR 0036 §1).
 func risks(c *domain.Change) []any {
-	rs := c.Risks()
+	rs := risk.Risks(*c)
 	out := make([]any, 0, len(rs))
 	for _, r := range rs {
 		acts := make([]any, len(r.Actions))
@@ -90,7 +91,7 @@ func risks(c *domain.Change) []any {
 
 // actionItems are the actions of the change (ADR 0036 §1).
 func actionItems(c *domain.Change) []any {
-	as := c.ActionItems()
+	as := risk.Actions(*c)
 	out := make([]any, 0, len(as))
 	for _, a := range as {
 		out = append(out, map[string]any{"key": a.Key, "title": a.Title, "status": a.Status, "owner": a.Owner, "due": a.Due, "for": a.For,

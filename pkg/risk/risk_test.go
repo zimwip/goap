@@ -1,16 +1,21 @@
-package domain
+package risk
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/zimwip/goap/pkg/domain"
+)
 
 // The probability and the impact of a risk are 1 to 5 when given (ADR 0036), and may be left out of a version that
 // does not restate them.
 func TestRiskScaleIsOneToFive(t *testing.T) {
-	risk := func(extra map[string]any) ChangeItem {
+	Register()
+	risk := func(extra map[string]any) domain.ChangeItem {
 		d := map[string]any{"key": "RSK-1", "title": "t"}
 		for k, v := range extra {
 			d[k] = v
 		}
-		return ChangeItem{Kind: KindRisk, Data: d}
+		return domain.ChangeItem{Kind: KindRisk, Data: d}
 	}
 	for name, c := range map[string]struct {
 		data map[string]any

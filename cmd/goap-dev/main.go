@@ -12,6 +12,7 @@ package main
 import (
 	"connectrpc.com/connect"
 	"github.com/zimwip/goap/pkg/events"
+	"github.com/zimwip/goap/pkg/risk"
 
 	"context"
 	"maps"
@@ -65,6 +66,8 @@ import (
 
 func main() {
 	ctx := context.Background()
+	// the facts of the risk register are items of a change (ADR 0065)
+	risk.Register()
 	log := platform.Logger("goap-dev")
 	defer telemetry.Setup(context.Background(), log, "goap-dev")(context.Background())
 	secrets := platform.NewSecrets()

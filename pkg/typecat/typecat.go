@@ -42,6 +42,9 @@ type Type struct {
 	Search []domain.SearchProperty
 	// Editor is the IDE editor of the nodes (own or inherited); empty: the default node editor.
 	Editor string
+	// Requires are the links a node must carry (own and inherited, a subtype redefining one by link), the link types
+	// qualified.
+	Requires []domain.RequiredLink
 }
 
 // Attribute is a resolved attribute of a node type.
@@ -310,8 +313,22 @@ func resolve(ref domain.TypeRef, decl map[domain.TypeRef]declared) (*Type, error
 		}
 	}
 	// ancestors first for what accumulates
+	requireAt := map[string]int{}
 	for _, cur := range slices.Backward(chain) {
 		dc := decl[cur]
+		for _, r := range dc.t.Requires {
+			link, err := domain.QualifyIn(cur.Namespace, r.Link)
+			if err != nil {
+				return nil, fmt.Errorf("type %s: requires: %w", cur, err)
+			}
+			rl := domain.RequiredLink{Link: link.String(), Count: r.Exactly()}
+			if i, ok := requireAt[rl.Link]; ok {
+				t.Requires[i] = rl
+				continue
+			}
+			requireAt[rl.Link] = len(t.Requires)
+			t.Requires = append(t.Requires, rl)
+		}
 		for _, a := range dc.t.Attributes {
 			ra := Attribute{Attribute: a}
 			if cur != ref {
@@ -405,6 +422,14 @@ func (c *Catalog) AttributeChecks(typ string) []domain.AttributeCheck {
 func (c *Catalog) Search(typ string) []domain.SearchProperty {
 	if t, ok := c.Type(typ); ok {
 		return t.Search
+	}
+	return nil
+}
+
+// Requires are the links a node of the type must carry (ADR 0065).
+func (c *Catalog) Requires(typ string) []domain.RequiredLink {
+	if t, ok := c.Type(typ); ok {
+		return t.Requires
 	}
 	return nil
 }

@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/risk"
 )
 
 // Step is the step of a process the reader carries out.
@@ -119,9 +120,9 @@ func Of(bb domain.Blackboard, step *Step) string {
 	}
 
 	// the risk register, the live and the highest first
-	risks := c.Risks()
+	risks := risk.Risks(c)
 	if len(risks) > 0 {
-		slices.SortStableFunc(risks, func(a, b domain.Risk) int {
+		slices.SortStableFunc(risks, func(a, b risk.Risk) int {
 			if a.Live() != b.Live() {
 				if a.Live() {
 					return -1
@@ -143,10 +144,10 @@ func Of(bb domain.Blackboard, step *Step) string {
 			line("%s", s)
 		}
 	}
-	var open []domain.ActionItem
+	var open []risk.ActionItem
 	done := 0
-	for _, a := range c.ActionItems() {
-		if a.Status == domain.ActionOpen {
+	for _, a := range risk.Actions(c) {
+		if a.Status == risk.ActionOpen {
 			open = append(open, a)
 		} else {
 			done++

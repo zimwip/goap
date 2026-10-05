@@ -1,17 +1,22 @@
-package domain
+// Package risk is the risk register of a change (ADR 0036 §1, ADR 0065): risks, actions and waivers are items of
+// the change whose kinds this package registers (Register), and the free functions Risks, Actions and Waivers fold
+// them. It is a use case: pkg/graph and pkg/domain know nothing of it.
+package risk
 
 import (
 	"fmt"
 	"slices"
 	"strings"
+
+	"github.com/zimwip/goap/pkg/domain"
 )
 
 // Risks and actions are facts of the change (ADR 0036 §1): an item of kind risk or action is a version of a record
 // identified by its key; the register is the last version of each key among the items in effect, and the change log
 // keeps every version with who wrote it.
 const (
-	KindRisk   ItemKind = "risk"
-	KindAction ItemKind = "action"
+	KindRisk   domain.ItemKind = "risk"
+	KindAction domain.ItemKind = "action"
 )
 
 // Risk statuses.
@@ -48,9 +53,9 @@ type Risk struct {
 	Actions     []string `json:"actions,omitempty"`
 	Step        string   `json:"step,omitempty"`
 	// Item is the item holding this version, By what produced it, Versions how many versions the key has.
-	Item     ItemID `json:"item"`
-	By       string `json:"by,omitempty"`
-	Versions int    `json:"versions"`
+	Item     domain.ItemID `json:"item"`
+	By       string        `json:"by,omitempty"`
+	Versions int           `json:"versions"`
 }
 
 // Score is probability × impact.
@@ -67,11 +72,11 @@ type ActionItem struct {
 	Owner  string `json:"owner,omitempty"`
 	Due    string `json:"due,omitempty"`
 	// For is the risk key or the decision point the action answers.
-	For      string `json:"for,omitempty"`
-	Result   string `json:"result,omitempty"`
-	Item     ItemID `json:"item"`
-	By       string `json:"by,omitempty"`
-	Versions int    `json:"versions"`
+	For      string        `json:"for,omitempty"`
+	Result   string        `json:"result,omitempty"`
+	Item     domain.ItemID `json:"item"`
+	By       string        `json:"by,omitempty"`
+	Versions int           `json:"versions"`
 }
 
 func dataString(d map[string]any, k string) string {
@@ -107,7 +112,7 @@ func dataStrings(d map[string]any, k string) []string {
 }
 
 // validateRecord checks the data of a risk or an action item.
-func validateRecord(it ChangeItem) error {
+func validateRecord(it domain.ChangeItem) error {
 	d := it.Data
 	if dataString(d, "key") == "" || dataString(d, "title") == "" {
 		return fmt.Errorf("%s item requires data.key and data.title", it.Kind)
@@ -135,10 +140,10 @@ func validateRecord(it ChangeItem) error {
 }
 
 // registerOf folds the items of a kind in effect into the last version of each key, in the order the keys appeared.
-func (c *Change) registerOf(kind ItemKind) (order []string, last map[string]ChangeItem, versions map[string]int) {
-	last, versions = map[string]ChangeItem{}, map[string]int{}
+func registerOf(c *domain.Change, kind domain.ItemKind) (order []string, last map[string]domain.ChangeItem, versions map[string]int) {
+	last, versions = map[string]domain.ChangeItem{}, map[string]int{}
 	for _, it := range c.Items {
-		if it.Kind != kind || !c.Active(it.ID) || it.Status == ItemRejected {
+		if it.Kind != kind || !c.Active(it.ID) || it.Status == domain.ItemRejected {
 			continue
 		}
 		key := dataString(it.Data, "key")
@@ -165,8 +170,8 @@ func (c *Change) registerOf(kind ItemKind) (order []string, last map[string]Chan
 }
 
 // Risks returns the risk register of the change: the current version of each risk, in the order they were raised.
-func (c *Change) Risks() []Risk {
-	order, last, versions := c.registerOf(KindRisk)
+func Risks(c domain.Change) []Risk {
+	order, last, versions := registerOf(&c, KindRisk)
 	out := make([]Risk, 0, len(order))
 	for _, key := range order {
 		it := last[key]
@@ -182,9 +187,9 @@ func (c *Change) Risks() []Risk {
 	return out
 }
 
-// ActionItems returns the actions of the change: the current version of each, in the order they were created.
-func (c *Change) ActionItems() []ActionItem {
-	order, last, versions := c.registerOf(KindAction)
+// Actions returns the actions of the change: the current version of each, in the order they were created.
+func Actions(c domain.Change) []ActionItem {
+	order, last, versions := registerOf(&c, KindAction)
 	out := make([]ActionItem, 0, len(order))
 	for _, key := range order {
 		it := last[key]

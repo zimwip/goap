@@ -270,7 +270,7 @@ func TestProjectSelfLinkTerminates(t *testing.T) {
 }
 
 // Project rules mirror the owner-org ones (ADR 0039): an unknown project is refused, a sub-change's
-// project must be within the parent's, and it is inherited when unset. Administrative changes are exempt.
+// project must be within the parent's, and it is inherited when unset.
 func TestProjectSubChangeRules(t *testing.T) { forEachRepo(t, testProjectSubChangeRules) }
 
 func testProjectSubChangeRules(t *testing.T, repo Repo) {
@@ -309,7 +309,7 @@ func testProjectSubChangeRules(t *testing.T, repo Repo) {
 		t.Fatalf("unknown project: %v", err)
 	}
 	// none named: the default project (ADR 0054)
-	if c, err := g.CreateChange(ctx, NewChange{Title: "x", BaselineID: base.ID, Administrative: true}); err != nil || c.ProjectID != domain.DefaultProject || c.OwnerOrg != domain.DefaultOrg {
+	if c, err := g.CreateChange(ctx, NewChange{Title: "x", BaselineID: base.ID}); err != nil || c.ProjectID != domain.DefaultProject || c.OwnerOrg != domain.DefaultOrg {
 		t.Fatalf("a change naming no project acts in the default one, held by the root unit: %+v %v", c, err)
 	}
 	// a node of the organisation that is not a project is refused

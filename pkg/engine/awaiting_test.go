@@ -10,6 +10,7 @@ import (
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/goap"
 	"github.com/zimwip/goap/pkg/methodology"
+	"github.com/zimwip/goap/pkg/risk"
 )
 
 func TestWaitingIsToldFromStuck(t *testing.T) {
@@ -117,7 +118,7 @@ func TestAPersonCanWaiveWhatARunWaitsFor(t *testing.T) {
 		t.Fatalf("resumes to its approval: %s %+v", p.Status, p.Pending)
 	}
 	bb, _ := e.Graph.Blackboard(ctx, p.ChangeID)
-	if w := bb.Change.ItemsOfKind(domain.KindWaiver); len(w) != 1 || w[0].Data["reason"] != "low-risk change" {
+	if w := bb.Change.ItemsOfKind(risk.KindWaiver); len(w) != 1 || w[0].Data["reason"] != "low-risk change" {
 		t.Fatalf("the waiver is a fact of the change: %+v", w)
 	}
 }

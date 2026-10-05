@@ -20,6 +20,7 @@ import (
 	"github.com/zimwip/goap/pkg/access"
 	"github.com/zimwip/goap/pkg/domain/def"
 	"github.com/zimwip/goap/pkg/graph"
+	"github.com/zimwip/goap/pkg/risk"
 	"github.com/zimwip/goap/pkg/typecat"
 )
 
@@ -48,6 +49,8 @@ func loadTypes(ctx context.Context, log *slog.Logger, types *typecat.Live, need 
 
 func main() {
 	ctx := context.Background()
+	// the facts of the risk register are items of a change (ADR 0065)
+	risk.Register()
 	log := platform.Logger("graph")
 	defer telemetry.Setup(context.Background(), log, "graph")(context.Background())
 	var repo graph.Repo = graph.NewMemory()

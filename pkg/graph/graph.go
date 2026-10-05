@@ -32,6 +32,8 @@ type TypeCatalog interface {
 	IsA(typ, base string) bool
 	// Structures is both structures with the types belonging to each.
 	Structures() domain.Structures
+	// Requires are the links a node of a type must carry (`requires:` on a node type, ADR 0065).
+	Requires(typ string) []domain.RequiredLink
 }
 
 // Graph exposes the domain and change axes.
@@ -47,9 +49,6 @@ type Graph struct {
 	// Caller names the principal behind an operation, recorded on the events of the change impacts (ADR 0029).
 	// Set by the services from the authenticated principal; unset, the events carry no caller.
 	Caller func(ctx context.Context) string
-	// PurgePolicy, when set, is asked before a change that landed nothing is removed (PurgeChange, ADR 0037): a
-	// business rule that must keep discarded changes (to reuse their information) refuses it with an error.
-	PurgePolicy func(ctx context.Context, c domain.Change) error
 	// Validators are the NodeValidator plugins checked once per Apply (ADR 0048), keyed by the node types they
 	// declare interest in via Types(). Unset: no plugin validators run (tests, tools).
 	Validators []NodeValidator
@@ -355,10 +354,6 @@ type NewChange struct {
 	// project). A sub-change inherits it from its parent when unset, and must stay within the parent's
 	// project when set. Selecting one before acting is a UX-level gate (ADR 0039), not enforced here.
 	ProjectID string
-	// Administrative marks a change of a methodology that manages organisation/project/policy/adapter
-	// data, the admin surface itself (ADR 0039): exempt from the project selector gate. A sub-change
-	// inherits it from its parent.
-	Administrative bool
 	// ActivityRef scopes the change to one Activity (architecture plan "Activity concept"): "Request -> Create
 	// Change -> Define scope -> Execute". Empty: no activity-relative gating beyond a node type's own lifecycle.
 	ActivityRef string
@@ -389,7 +384,7 @@ func (g *Graph) CreateChange(ctx context.Context, in NewChange) (domain.Change, 
 		c = domain.Change{
 			ID: domain.ChangeID(g.newID()), Title: in.Title, Intent: in.Intent, Methodology: in.Methodology, Namespace: domain.NamespaceOf(in.Namespace),
 			Status: domain.ChangeDraft, BaselineID: in.BaselineID, Branch: domain.BranchOf(in.Branch), Data: in.Data, CreatedAt: g.now(),
-			ParentID: in.ParentID, OwnerOrg: in.OwnerOrg, ProjectID: in.ProjectID, Administrative: in.Administrative, ActivityRef: in.ActivityRef,
+			ParentID: in.ParentID, OwnerOrg: in.OwnerOrg, ProjectID: in.ProjectID, ActivityRef: in.ActivityRef,
 		}
 		c.Lifecycle, c.State = lifecycle, initial
 		if err := g.prepareSubChange(ctx, tx, &c, &in); err != nil {
