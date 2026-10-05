@@ -1,7 +1,7 @@
 // Engine types (proto3 JSON).
 
 import type { Int64, Struct } from './common';
-import type { DecisionPolicy, FlowOrigin, GraphNode, ItemKind, NodeRef, OptionSpec } from './graph';
+import type { ChangeImpact, DecisionPolicy, FlowOrigin, GraphNode, ItemKind, NodeRef, OptionSpec } from './graph';
 import type { DocumentReference, PlannerKind, Responsibilities, TriggerType } from './registry';
 
 // --- engine -----------------------------------------------------------------
@@ -439,6 +439,43 @@ export interface LinkWrite {
   type: string;
   to: NodeRef;
   props?: Struct;
+}
+
+/** A node a merge or a split works on: a change impact, a node id or a key (ADR 0077). */
+export interface NodeName {
+  changeImpactId?: string;
+  nodeId?: string;
+  key?: string;
+}
+
+/** A node a merge or a split creates. */
+export interface NodeCreateSpec {
+  key: string;
+  type: string;
+  props?: Struct;
+  owner?: string;
+  rationale?: string;
+  links?: LinkWrite[];
+}
+
+/** A link of another node to a split source that the split leaves as it is (it becomes suspect, ADR 0003). */
+export interface SuspectLink {
+  from?: NodeRef;
+  fromKey?: string;
+  type?: string;
+  to?: NodeRef;
+  toKey?: string;
+}
+
+/** What a merge or a split did to the change (ADR 0077). */
+export interface Restructured {
+  /** the new nodes (created, checked out, with their origins) */
+  successors?: ChangeImpact[];
+  /** the merged or split nodes, `via` the impact of their parent */
+  sources?: ChangeImpact[];
+  /** the nodes whose links moved, each checked out */
+  parents?: ChangeImpact[];
+  suspect?: SuspectLink[];
 }
 
 export interface MergePlan {

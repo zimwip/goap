@@ -38,6 +38,8 @@ export interface GraphNode {
   project?: string;
   /** a working version, edited in place by its change until it is checked in (ADR 0076) */
   checkedOut?: boolean;
+  /** the nodes this one derives from (ADR 0077): set on the first version of the successor of a merge or a split */
+  origins?: NodeRef[];
 }
 
 export interface Link {
@@ -55,7 +57,7 @@ export interface LogEntry {
   seq?: Int64;
   id?: string;
   changeId?: string;
-  /** <stream>.<kind>: fact.artifact, journal.schedule, impact.written… */
+  /** <stream>.<kind>: fact.artifact, journal.schedule, impact.transitioned… */
   type?: string;
   /** flow branch ('' = the main flow) */
   flow?: string;
@@ -97,7 +99,8 @@ export interface ImpactEvent {
   seq?: number;
   /** empty for a change-level event (adopted) */
   impactId?: string;
-  op?: 'declared' | 'written' | 'reviewed' | 'discarded' | 'adopted' | 'landed' | 'rebased' | string;
+  /** proposed: the impact of an existing node; created: a new node, its impact and first version in one event; checkedOut: an existing node's next version */
+  op?: 'proposed' | 'created' | 'checkedOut' | 'transitioned' | 'updated' | 'checkedIn' | 'reviewed' | 'discarded' | 'cancelled' | 'withdrawn' | 'adopted' | 'landed' | 'rebased' | string;
   /** the caller: flow branch ('' = main flow), journal record of the action run, principal or component */
   flow?: string;
   execution?: string;
@@ -109,6 +112,10 @@ export interface ImpactEvent {
   landed?: NodeRef;
   review?: NodeReview;
   stale?: string[];
+  /** landed: the branch the version landed on (the change's own at commit, the target at integration) */
+  branch?: string;
+  /** updated: what changed in place ({props, owner, addLink, ...}); created: {origins: [{id, version, key}]} for the successor of a merge or a split (ADR 0077) */
+  patch?: Record<string, unknown>;
 }
 
 export interface BaselineNodesQuery {
@@ -268,7 +275,7 @@ export interface ChangeImpact {
   rationale?: string;
   /** released version the change starts from (none for a created node) */
   pre?: NodeRef;
-  /** version written on the change branch (none while only planned) */
+  /** version written on the change branch (none while the impact of an existing node is only proposed) */
   post?: NodeRef;
   /** version on the target branch once applied */
   landed?: NodeRef;

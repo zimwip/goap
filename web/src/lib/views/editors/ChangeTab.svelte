@@ -334,7 +334,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
     moving = `${id}:add`;
     error = '';
     try {
-      await graph.addChangeImpacts(change.id, [{ intent: 'modified', pre: { id: n.id, version: n.version }, rationale: rationale || `work on ${n.key}`, flow: scope || MAIN_SCOPE }]);
+      await graph.proposeImpact(change.id, [{ intent: 'modified', pre: { id: n.id, version: n.version }, rationale: rationale || `work on ${n.key}`, flow: scope || MAIN_SCOPE }]);
       await load(change.id);
     } catch (e) {
       error = errorMessage(e);
@@ -349,7 +349,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
     moving = `${row.node.id}:review`;
     error = '';
     try {
-      await graph.reviewChangeImpact(change.id, row.impact.id, accept, comment, scope || MAIN_SCOPE);
+      await graph.impactNodeReview(change.id, row.impact.id, accept, comment, scope || MAIN_SCOPE);
       await load(change.id);
       return true;
     } catch (e) {

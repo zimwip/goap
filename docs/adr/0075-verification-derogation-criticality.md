@@ -43,7 +43,7 @@ ABAC roles of the action (`roles`, ADR 0043) and, for `model`, an alias distinct
 
 **Enforcement (graph mechanism, engine policy).** The graph keeps the mechanism, as for decisions (ADR 0067): an
 optional hook `Graph.ReviewPolicy` (a `domain.ReviewPolicy`, nil: anyone with `node:review` may review) is called
-by `ReviewNodeOn` with a `domain.ReviewRequest` (the impact with its producer, execution and flow, the reviewer, the
+by `ImpactNodeReviewOn` with a `domain.ReviewRequest` (the impact with its producer, execution and flow, the reviewer, the
 verdict, the facts of the change) and may refuse. The platform plugs
 the rule `verifier ≠ producer` (principal, and model alias when both are models) from `pkg/verify`, wired explicitly
 by `cmd/graph` and `cmd/goap-dev`; `pkg/graph` and `pkg/domain` do not import it (`pkg/layering`).
@@ -67,7 +67,7 @@ of the main flow back to `proposed`; the expiry uses it.
 
 CEL: the variable `verifications` (`{execution, action, impact, oracle, independent, state, producer, by, open}`)
 and the conditions of the library `verification` (imported like `decisions` and `risks`, ADR 0064):
-`all_verified`, `unverified_effects`, `reserves_open`. The DSL gets `ctx.reviewNodeWithReserve(node, derogation,
+`all_verified`, `unverified_effects`, `reserves_open`. The DSL gets `ctx.impactNodeReviewWithReserve(node, derogation,
 comment)` (`NodeOp.Reserve`).
 
 ### 2. A derogation is a waiver with a rule, a signatory and an expiry

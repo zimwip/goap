@@ -104,13 +104,14 @@ async function ensure(ns: string, type: string, key: string): Promise<{ c: NsCha
   let s = c.nodes[key];
   if (!s) {
     const pre = await onMain(ns, baselineId, type, key);
-    const impact = pre
-      ? { intent: 'modified', pre: pre.ref, rationale: `Change ${key}` }
-      : { intent: 'created', key, type, rationale: `Create ${key}` };
-    const { nodes } = await graph.addChangeImpacts(c.changeId, [impact]);
+    if (!pre) {
+      // a new node has no proposal (ADR 0077): it is created, with its first properties, by stageUpsert
+      return { c, s: { key, type, props: {}, retire: false, created: true, impactId: '', written: false } };
+    }
+    const { nodes } = await graph.proposeImpact(c.changeId, [{ intent: 'modified', pre: pre.ref, rationale: `Change ${key}` }]);
     const id = nodes?.[0]?.id;
     if (!id) throw new Error(`impact of ${key} not created`);
-    c.nodes[key] = { key, type, props: {}, retire: pre?.state === RETIRED, created: !pre, impactId: id, written: false };
+    c.nodes[key] = { key, type, props: {}, retire: pre.state === RETIRED, created: false, impactId: id, written: false };
     s = c.nodes[key];
   }
   return { c, s };
@@ -123,11 +124,19 @@ export function stageUpsert(ns: string, type: string, key: string, props: Struct
       const { c, s } = await ensure(ns, type, key);
       if (s.retire) {
         // a retired node is restored first: a transition of its own, then it is edited
-        await graph.transitionNode(c.changeId, { changeImpactId: s.impactId }, ACTIVE, `Restore ${key}`);
+        await graph.impactNodeTransition(c.changeId, { changeImpactId: s.impactId }, ACTIVE, `Restore ${key}`);
         s.retire = false;
       }
-      if (!(await checkedOut(c, s))) await graph.checkoutNode(c.changeId, { changeImpactId: s.impactId }, `Change ${key}`);
-      await graph.updateNode(c.changeId, s.impactId, { props });
+      if (s.created && !s.impactId) {
+        // the creation is the impact and its first version, in one call
+        const { node } = await graph.impactNodeCreate(c.changeId, { key, type, props, rationale: `Create ${key}` });
+        if (!node?.id) throw new Error(`${key} not created`);
+        s.impactId = node.id;
+        c.nodes[key] = s;
+      } else {
+        if (!(await checkedOut(c, s))) await graph.impactNodeCheckout(c.changeId, { changeImpactId: s.impactId }, `Change ${key}`);
+        await graph.impactNodeUpdate(c.changeId, s.impactId, { props });
+      }
       s.props = { ...s.props, ...props };
       s.written = true;
       pending.error = '';
@@ -145,7 +154,7 @@ export function stageRetire(ns: string, type: string, key: string): Promise<void
       const staged = pending.byNs[ns]?.nodes[key];
       if (staged?.created) {
         const changeId = pending.byNs[ns].changeId;
-        await graph.removeChangeImpact(changeId, staged.impactId);
+        await graph.withdrawImpact(changeId, staged.impactId);
         delete pending.byNs[ns].nodes[key];
         // nothing left to save in this namespace: its change has no reason to stay
         if (!Object.keys(pending.byNs[ns].nodes).length) {
@@ -154,11 +163,19 @@ export function stageRetire(ns: string, type: string, key: string): Promise<void
         }
       } else {
         const { c, s } = await ensure(ns, type, key);
+        if (s.created) {
+          // a node that exists nowhere has nothing to retire
+          if (!Object.keys(c.nodes).length) {
+            await graph.deleteChange(c.changeId);
+            delete pending.byNs[ns];
+          }
+          return;
+        }
         if (!s.retire) {
           // the edits staged on the node go with it: the transition starts from its checked-in version
-          if (await checkedOut(c, s)) await graph.cancelCheckout(c.changeId, s.impactId);
+          if (await checkedOut(c, s)) await graph.impactNodeCancel(c.changeId, s.impactId);
           s.props = {};
-          await graph.transitionNode(c.changeId, { changeImpactId: s.impactId }, RETIRED, `Retire ${key}`);
+          await graph.impactNodeTransition(c.changeId, { changeImpactId: s.impactId }, RETIRED, `Retire ${key}`);
           s.retire = true;
           s.written = true;
         }
@@ -213,12 +230,12 @@ export function savePending(): Promise<boolean> {
       for (const [ns, c] of Object.entries(pending.byNs)) {
         for (const s of Object.values(c.nodes)) {
           if (!s.written) {
-            await graph.removeChangeImpact(c.changeId, s.impactId);
+            await graph.withdrawImpact(c.changeId, s.impactId);
             continue;
           }
-          await graph.reviewChangeImpact(c.changeId, s.impactId, true, 'Saved by its owner');
+          await graph.impactNodeReview(c.changeId, s.impactId, true, 'Saved by its owner');
           // the acceptance authorizes the check-in of the working version (ADR 0076)
-          if (await checkedOut(c, s)) await graph.checkinNode(c.changeId, s.impactId);
+          if (await checkedOut(c, s)) await graph.impactNodeCheckin(c.changeId, s.impactId);
         }
         await graph.applyChange(c.changeId, '');
         delete pending.byNs[ns];

@@ -171,15 +171,15 @@ export async function acceptAliasProposal(p: AliasProposal, target: string): Pro
   // the target is set on the working version of the proposal (checked out again when it was checked in, ADR 0076)
   const imp = (await graph.getBlackboard(p.changeId, '')).change?.nodes?.find((n) => n.id === p.impactId);
   const work = imp?.post ? (await graph.getNode(imp.post)).view?.node : undefined;
-  if (!work?.checkedOut) await graph.checkoutNode(p.changeId, { changeImpactId: p.impactId }, `Accept the alias ${p.alias}`);
-  await graph.updateNode(p.changeId, p.impactId, { props: { alias: p.alias, target } });
-  await graph.reviewChangeImpact(p.changeId, p.impactId, true, `Accepted with target ${target}`);
+  if (!work?.checkedOut) await graph.impactNodeCheckout(p.changeId, { changeImpactId: p.impactId }, `Accept the alias ${p.alias}`);
+  await graph.impactNodeUpdate(p.changeId, p.impactId, { props: { alias: p.alias, target } });
+  await graph.impactNodeReview(p.changeId, p.impactId, true, `Accepted with target ${target}`);
   await checkinAccepted(p.changeId);
   await graph.applyChange(p.changeId, '');
 }
 
 /** Declines a proposed alias: the change that proposed it is abandoned. */
 export async function declineAliasProposal(p: AliasProposal): Promise<void> {
-  await graph.reviewChangeImpact(p.changeId, p.impactId, false, 'Declined');
+  await graph.impactNodeReview(p.changeId, p.impactId, false, 'Declined');
   await graph.updateChange(p.changeId, { status: 'abandoned' });
 }
