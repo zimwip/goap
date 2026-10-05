@@ -88,7 +88,7 @@ func scanNode(row pgx.Row) (domain.Node, error) {
 	var p []byte
 	var version int
 	var parents []int32
-	if err := row.Scan(&id, &version, &n.Namespace, &n.Key, &n.Type, &p, &n.Deleted, &change, &n.CreatedAt, &n.Branch, &parents, &n.Reason, &n.State, &cnode, &n.Comment, &n.Execution, &owner, &project); err != nil {
+	if err := row.Scan(&id, &version, &n.Namespace, &n.Key, &n.Type, &p, &n.Deleted, &change, &n.CreatedAt, &n.Branch, &parents, &n.Reason, &n.State, &cnode, &n.Comment, &n.Execution, &owner, &project, &n.CheckedOut); err != nil {
 		return n, err
 	}
 	for _, pv := range parents {
@@ -239,6 +239,10 @@ func (t *pgTx) Namespaces(ctx context.Context) ([]string, error) {
 
 func (t *pgTx) links(ctx context.Context, leaving bool, ref domain.NodeRef) ([]domain.Link, error) {
 	q, args := dialectPG.sqlLinks(leaving, ref)
+	return t.queryLinks(ctx, q, args...)
+}
+
+func (t *pgTx) queryLinks(ctx context.Context, q string, args ...any) ([]domain.Link, error) {
 	rows, err := t.tx.Query(ctx, q, args...)
 	if err != nil {
 		return nil, mapErr(err, "links")
@@ -382,8 +386,48 @@ func (t *pgTx) PutNode(ctx context.Context, n domain.Node) error {
 		parents[i] = int32(pv)
 	}
 	_, err := t.tx.Exec(ctx, dialectPG.sqlInsert("node_version", nodeVersionColumns, ""),
-		string(n.ID), int(n.Version), jsonb(n.Properties), n.Deleted, nullUUID(string(n.ChangeID)), n.CreatedAt, domain.BranchOf(n.Branch), parents, n.Reason, n.State, nullUUID(string(n.ChangeImpact)), n.Comment, n.Execution, nullUUID(string(n.Owner)))
+		string(n.ID), int(n.Version), jsonb(n.Properties), n.Deleted, nullUUID(string(n.ChangeID)), n.CreatedAt, domain.BranchOf(n.Branch), parents, n.Reason, n.State, nullUUID(string(n.ChangeImpact)), n.Comment, n.Execution, nullUUID(string(n.Owner)), n.CheckedOut)
 	return mapErr(err, "node "+n.Ref().String())
+}
+
+// exec1 runs a statement that must touch exactly one row (ErrNotFound otherwise).
+func (t *pgTx) exec1(ctx context.Context, what, q string, args ...any) error {
+	tag, err := t.tx.Exec(ctx, q, args...)
+	if err != nil {
+		return mapErr(err, what)
+	}
+	if tag.RowsAffected() != 1 {
+		return fmt.Errorf("%s: %w", what, ErrNotFound)
+	}
+	return nil
+}
+
+func (t *pgTx) SetNodeOwner(ctx context.Context, ref domain.NodeRef, owner domain.NodeID) error {
+	return t.exec1(ctx, "node "+ref.String(), dialectPG.sqlSetNodeOwner(), string(ref.ID), int(ref.Version), nullUUID(string(owner)))
+}
+
+func (t *pgTx) CheckinVersion(ctx context.Context, ref domain.NodeRef) error {
+	return t.exec1(ctx, "checked-out version "+ref.String(), dialectPG.sqlCheckin(), string(ref.ID), int(ref.Version), false)
+}
+
+func (t *pgTx) Link(ctx context.Context, id domain.LinkID) (domain.Link, error) {
+	q, args := dialectPG.sqlLinkByID(id)
+	ls, err := t.queryLinks(ctx, q, args...)
+	if err != nil {
+		return domain.Link{}, err
+	}
+	if len(ls) == 0 {
+		return domain.Link{}, fmt.Errorf("link %s: %w", id, ErrNotFound)
+	}
+	return ls[0], nil
+}
+
+func (t *pgTx) DeleteLink(ctx context.Context, id domain.LinkID) error {
+	return t.exec1(ctx, "link "+string(id), dialectPG.sqlDeleteLink(), string(id))
+}
+
+func (t *pgTx) SetLinkProps(ctx context.Context, id domain.LinkID, props map[string]any) error {
+	return t.exec1(ctx, "link "+string(id), dialectPG.sqlSetLinkProps(), string(id), jsonb(props))
 }
 
 func (t *pgTx) SetNodeProps(ctx context.Context, ref domain.NodeRef, props map[string]any) error {

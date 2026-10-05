@@ -282,3 +282,63 @@ func TestGuardBaselineNeedsAChange(t *testing.T) {
 		}
 	})
 }
+
+// Only a working version (ADR 0076) is edited in place: its owner moved, its outgoing links edited or removed, then
+// checked in; once checked in, the guard refuses every in-place edit and a second check-in, whatever the storage.
+func TestGuardEditsWorkingVersionsOnly(t *testing.T) {
+	forEachRepo(t, testGuardEditsWorkingVersionsOnly)
+}
+
+func testGuardEditsWorkingVersionsOnly(t *testing.T, repo Repo) {
+	ctx := context.Background()
+	g := New(repo)
+	if err := g.Bootstrap(ctx); err != nil {
+		t.Fatal(err)
+	}
+	org := must[domain.Node](t)(g.NodeByKey(ctx, NamespaceOrganisation, rootOrg(g)))
+	boot := must[domain.Change](t)(g.Change(ctx, org.ChangeID))
+	write := func(fn func(tx Tx) error) error { return g.repo.InTx(ctx, fn) }
+	work := domain.Node{ID: domain.NodeID(g.newID()), Version: 1, Branch: domain.MainBranch, Reason: domain.ReasonCreate, Namespace: "notes",
+		Key: "N-1", Type: "Note", ChangeID: boot.ID, CreatedAt: g.now(), CheckedOut: true}
+	link := domain.Link{ID: domain.LinkID(g.newID()), Type: "refines", From: work.Ref(), To: work.Ref(), ChangeID: boot.ID}
+	if err := write(func(tx Tx) error {
+		if err := tx.PutNode(ctx, work); err != nil {
+			return err
+		}
+		return tx.PutLink(ctx, link)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if n := must[domain.Node](t)(g.Node(ctx, work.Ref())); !n.CheckedOut {
+		t.Fatalf("the working version is read back checked out: %+v", n)
+	}
+	// in a later transaction, the working version is edited in place
+	if err := write(func(tx Tx) error {
+		if err := tx.SetNodeOwner(ctx, work.Ref(), org.ID); err != nil {
+			return err
+		}
+		return tx.SetLinkProps(ctx, link.ID, map[string]any{"why": "draft"})
+	}); err != nil {
+		t.Fatal(err)
+	}
+	var l domain.Link
+	if err := write(func(tx Tx) (err error) { l, err = tx.Link(ctx, link.ID); return err }); err != nil || l.Properties["why"] != "draft" {
+		t.Fatalf("link properties: %+v", l)
+	}
+	if err := write(func(tx Tx) error { return tx.CheckinVersion(ctx, work.Ref()) }); err != nil {
+		t.Fatal(err)
+	}
+	if n := must[domain.Node](t)(g.Node(ctx, work.Ref())); n.CheckedOut || n.Owner != org.ID {
+		t.Fatalf("checked in, owned by the root unit: %+v", n)
+	}
+	for name, fn := range map[string]func(tx Tx) error{
+		"an owner moved":    func(tx Tx) error { return tx.SetNodeOwner(ctx, work.Ref(), org.ID) },
+		"a link edited":     func(tx Tx) error { return tx.SetLinkProps(ctx, link.ID, map[string]any{"why": "late"}) },
+		"a link removed":    func(tx Tx) error { return tx.DeleteLink(ctx, link.ID) },
+		"a second check-in": func(tx Tx) error { return tx.CheckinVersion(ctx, work.Ref()) },
+	} {
+		if err := write(fn); err == nil || (!errors.Is(err, ErrConflict) && !errors.Is(err, ErrNotFound)) {
+			t.Errorf("%s on a checked-in version: %v", name, err)
+		}
+	}
+}
