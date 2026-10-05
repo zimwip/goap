@@ -30,6 +30,8 @@ type Service struct {
 	// declares them; nil: not checked.
 	MCPScopes func(ctx context.Context) (map[string]string, error)
 	now       func() time.Time
+	// compiled caches the compiled methodologies (ADR 0072).
+	compiled compileCache
 }
 
 // ErrInvalid wraps validation issues.
@@ -48,6 +50,7 @@ func (s *Service) authorize(ctx context.Context, action string, m *methodology.M
 }
 
 func (s *Service) publish(ctx context.Context, event string, r Record) {
+	s.compiled.clear() // every write of a methodology version goes through here
 	if s.Events != nil {
 		_ = s.Events.Publish(ctx, "goap.registry.methodology."+event, map[string]string{"name": r.Methodology.Name, "version": r.Methodology.Version, "status": string(r.Status)})
 	}
@@ -295,19 +298,6 @@ func (s *Service) List(ctx context.Context) ([]*methodology.Compiled, error) {
 		out = append(out, c)
 	}
 	return out, nil
-}
-
-// Methodology implements engine.MethodologyPort for in-process use.
-func (s *Service) Methodology(ctx context.Context, name string) (*methodology.Compiled, error) {
-	r, err := s.Store.Get(ctx, name, "")
-	if err != nil {
-		return nil, engine.ErrUnknownMethodology{Name: name}
-	}
-	cat, err := s.Types(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return resolve(r.Methodology, cat).Compile()
 }
 
 // resolve gives a definition the types in force and the builtins of the platform, so that a typo in `builtin:` is

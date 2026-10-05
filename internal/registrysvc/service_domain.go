@@ -55,6 +55,7 @@ func (s *Service) authorizeDomain(ctx context.Context, action string, d *def.Dom
 }
 
 func (s *Service) publishDomainEvent(ctx context.Context, event string, r DomainRecord) {
+	s.compiled.clear() // every write of a domain version goes through here: the types in force may have changed
 	if s.Events != nil {
 		_ = s.Events.Publish(ctx, "goap.registry.domain."+event, map[string]string{"name": r.Domain.Name, "version": r.Domain.Version, "status": string(r.Status)})
 	}
