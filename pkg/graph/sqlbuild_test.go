@@ -204,6 +204,8 @@ func TestSQLBuildersGolden(t *testing.T) {
 	for i, want := range []string{`DELETE FROM link WHERE from_id = ? AND from_version = ?`, `DELETE FROM node_version WHERE node_id = ? AND version = ? AND checked_out`} {
 		checkSQL(t, "sqlite DropWorkingVersion", lite, lite.dropWorkingVersion()[i], want)
 	}
+	checkSQL(t, "pg DeleteChangeImpact", pg, pg.sqlDeleteChangeImpact(), `DELETE FROM change_impact WHERE change_id = $1 AND id = $2`)
+	checkSQL(t, "sqlite DeleteChangeImpact", lite, lite.sqlDeleteChangeImpact(), `DELETE FROM change_impact WHERE change_id = ? AND id = ?`)
 	checkSQL(t, "pg DeleteLink", pg, pg.sqlDeleteLink(), `DELETE FROM link WHERE id = $1`)
 	checkSQL(t, "sqlite DeleteLink", lite, lite.sqlDeleteLink(), `DELETE FROM link WHERE id = ?`)
 	checkSQL(t, "pg SetLinkProps", pg, pg.sqlSetLinkProps(), `UPDATE link SET props = $2 WHERE id = $1`)

@@ -167,6 +167,7 @@ var Symbols = interp.Exports{
 		"AdapterCtx":      reflect.ValueOf((*AdapterCtx)(nil)),
 		"ChangeInfo":      reflect.ValueOf((*ChangeInfo)(nil)),
 		"TransitionInfo":  reflect.ValueOf((*TransitionInfo)(nil)),
+		"ImpactInfo":      reflect.ValueOf((*ImpactInfo)(nil)),
 		"Node":            reflect.ValueOf((*Node)(nil)),
 		"Link":            reflect.ValueOf((*Link)(nil)),
 		"LinkEnd":         reflect.ValueOf((*LinkEnd)(nil)),

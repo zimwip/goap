@@ -428,6 +428,10 @@ func (t *sqliteTx) DropWorkingVersion(ctx context.Context, ref domain.NodeRef) e
 	return nil
 }
 
+func (t *sqliteTx) DeleteChangeImpact(ctx context.Context, change domain.ChangeID, id domain.ChangeImpactID) error {
+	return t.exec1(ctx, "change impact "+string(id), dialectSQLite.sqlDeleteChangeImpact(), string(change), string(id))
+}
+
 func (t *sqliteTx) Link(ctx context.Context, id domain.LinkID) (domain.Link, error) {
 	q, args := dialectSQLite.sqlLinkByID(id)
 	ls, err := t.queryLinks(ctx, q, args...)

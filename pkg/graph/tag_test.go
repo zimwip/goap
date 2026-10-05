@@ -93,7 +93,7 @@ func testVirtualBaselines(t *testing.T, repo Repo) {
 	for i := range 7 {
 		edits := []NodeEdit{{Key: fmt.Sprintf("DES-%d", i), Type: "Design"}}
 		if i == 4 {
-			edits = append(edits, NodeEdit{Pre: &domain.NodeRef{ID: f.test.ID, Version: head.Nodes[f.test.ID]}, Retire: true})
+			edits = append(edits, NodeEdit{Pre: &domain.NodeRef{ID: f.test.ID, Version: head.Nodes[f.test.ID]}, Props: map[string]any{"obsolete": true}})
 		}
 		head = commitOn(t, g, "", head.ID, edits...)
 		written = append(written, head)

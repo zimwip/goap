@@ -18,21 +18,36 @@ import (
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/domain/def"
 	"github.com/zimwip/goap/pkg/graph"
+	"github.com/zimwip/goap/pkg/graph/graphtest"
 	"github.com/zimwip/goap/pkg/typecat"
 )
 
-func createObject(h *graphsvc.Handler, roles, key string) error {
-	req := connect.NewRequest(&graphv1.CreateObjectRequest{Methodology: "test-design", NodeType: "alm@Need", Key: key})
+// createObject creates a node of a type in a change of its own, as a caller with roles ("-": anonymous).
+func createObject(h *graphsvc.Handler, roles, typ, key string) (*graphv1.ChangeImpact, error) {
+	ctx := context.Background()
+	head, err := h.Graph.BranchHead(ctx, "alm", domain.MainBranch)
+	if err != nil {
+		return nil, err
+	}
+	c, err := h.Graph.CreateChange(ctx, graph.NewChange{Namespace: "alm", Title: "create " + key, BaselineID: head.ID})
+	if err != nil {
+		return nil, err
+	}
+	req := connect.NewRequest(&graphv1.CreateNodeRequest{ChangeId: string(c.ID), Type: typ, Key: key, Rationale: "new"})
 	if roles != "-" {
 		req.Header().Set(identity.HeaderSubject, "u")
 		req.Header().Set(identity.HeaderOrg, "acme")
 		req.Header().Set(identity.HeaderRoles, roles)
 	}
-	_, err := h.CreateObject(context.Background(), req)
-	return err
+	out, err := h.CreateNode(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	return out.Msg.Node, nil
 }
 
-func TestCreateObjectIsRoleGated(t *testing.T) {
+// Creating a node in a change asks object:create on the project of the change (ADR 0076: no write outside a change).
+func TestCreateNodeIsRoleGated(t *testing.T) {
 	ds, err := def.LoadDomains("../../domains")
 	if err != nil {
 		t.Fatal(err)
@@ -62,31 +77,22 @@ func TestCreateObjectIsRoleGated(t *testing.T) {
 		{"another role on the project", "tester", "REQ-4", 0},
 		{"admin", "admin", "REQ-5", 0},
 	} {
-		err := createObject(h, tc.roles, tc.key)
+		cn, err := createObject(h, tc.roles, "alm@Need", tc.key)
 		if got := connect.CodeOf(err); err != nil && got != tc.want || err == nil && tc.want != 0 {
 			t.Errorf("%s: err=%v, want code %v", tc.name, err, tc.want)
 		}
+		if err == nil && (cn.Key != tc.key || cn.Type != "alm@Need" || cn.Post == nil) {
+			t.Errorf("%s: the node is created checked out in the change: %+v", tc.name, cn)
+		}
 	}
-	// a denied caller created nothing; the object lives in the namespace of its type
+	// a denied caller created nothing
 	if _, err := g.NodeByKey(context.Background(), "alm", "REQ-2"); err == nil {
 		t.Error("REQ-2 must not exist")
 	}
-	if n, err := g.NodeByKey(context.Background(), "alm", "REQ-3"); err != nil || n.Type != "alm@Need" {
-		t.Errorf("REQ-3 must exist: %+v %v", n, err)
-	}
 	// the type catalogue judges it
-	if err := createObjectOf(h, "alm@Nope", "X-1"); connect.CodeOf(err) != connect.CodeInvalidArgument {
+	if _, err := createObject(h, "admin", "alm@Nope", "X-1"); connect.CodeOf(err) != connect.CodeInvalidArgument {
 		t.Errorf("unknown type: %v", err)
 	}
-}
-
-func createObjectOf(h *graphsvc.Handler, typ, key string) error {
-	req := connect.NewRequest(&graphv1.CreateObjectRequest{NodeType: typ, Key: key})
-	req.Header().Set(identity.HeaderSubject, "u")
-	req.Header().Set(identity.HeaderOrg, "acme")
-	req.Header().Set(identity.HeaderRoles, "admin")
-	_, err := h.CreateObject(context.Background(), req)
-	return err
 }
 
 func TestAccessNodesAreGatedByTheFloor(t *testing.T) {
@@ -125,15 +131,26 @@ func TestAccessNodesAreGatedByTheFloor(t *testing.T) {
 	if err := add("admin"); err != nil {
 		t.Errorf("admin must: %v", err)
 	}
-	// direct writes of access nodes are refused: they go through changes
-	req := connect.NewRequest(&graphv1.CreateNodeRequest{Namespace: "organisation", Key: "POL:x", Type: access.NodeTypePolicy})
-	if _, err := h.CreateNode(ctx, req); connect.CodeOf(err) != connect.CodeFailedPrecondition {
-		t.Errorf("direct write of a Policy node: %v", err)
+	// creating an access node in a change: administrators only
+	orgBase, err := g.BranchHead(ctx, "organisation", domain.MainBranch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := g.CreateChange(ctx, graph.NewChange{Namespace: "organisation", Title: "policy", BaselineID: orgBase.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := connect.NewRequest(&graphv1.CreateNodeRequest{ChangeId: string(c.ID), Key: "POL:x", Type: access.NodeTypePolicy, Rationale: "why"})
+	req.Header().Set(identity.HeaderSubject, "u")
+	req.Header().Set(identity.HeaderOrg, "acme")
+	req.Header().Set(identity.HeaderRoles, "methodologist")
+	if _, err := h.CreateNode(ctx, req); connect.CodeOf(err) != connect.CodePermissionDenied {
+		t.Errorf("a Policy node created by a methodologist: %v", err)
 	}
 }
 
-// A type a domain flags `adminOnly` is gated by the handler with no code naming it (ADR 0068): direct writes are
-// refused, a change impact needs the floor, and the RPC the connectors of a distributed deployment ask answers.
+// A type a domain flags `adminOnly` is gated by the handler with no code naming it (ADR 0068): creating one needs the
+// floor, and the RPC the connectors of a distributed deployment ask answers.
 func TestAdminOnlyTypeOfADomainIsGated(t *testing.T) {
 	ctx := context.Background()
 	d, err := def.ParseDomain([]byte("name: vault\nversion: 1.0.0\nnodeTypes:\n  - {name: Secret, adminOnly: true, changeControlled: false}\n  - {name: Note, changeControlled: false}\n"))
@@ -146,16 +163,33 @@ func TestAdminOnlyTypeOfADomainIsGated(t *testing.T) {
 	}
 	g := graph.New(graph.NewMemory())
 	g.Types = func() graph.TypeCatalog { return cat }
-	h := &graphsvc.Handler{Graph: g}
+	floor, err := authz.NewCasbinWith(authz.FloorPolicies)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := &graphsvc.Handler{Graph: g, Floor: floor}
 	for typ, want := range map[string]bool{"vault@Secret": true, "vault@Note": false} {
 		r, err := h.IsAdminOnlyType(ctx, connect.NewRequest(&graphv1.IsAdminOnlyTypeRequest{Type: typ}))
 		if err != nil || r.Msg.AdminOnly != want {
 			t.Errorf("IsAdminOnlyType(%s) = %v, %v; want %v", typ, r, err, want)
 		}
 	}
-	req := connect.NewRequest(&graphv1.CreateNodeRequest{Namespace: "vault", Key: "S1", Type: "vault@Secret"})
-	if _, err := h.CreateNode(ctx, req); connect.CodeOf(err) != connect.CodeFailedPrecondition {
-		t.Errorf("direct write of a flagged type: %v", err)
+	base, err := g.BranchHead(ctx, "vault", domain.MainBranch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := g.CreateChange(ctx, graph.NewChange{Namespace: "vault", Title: "secret", BaselineID: base.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for roles, want := range map[string]connect.Code{"contributor": connect.CodePermissionDenied, "admin": 0} {
+		req := connect.NewRequest(&graphv1.CreateNodeRequest{ChangeId: string(c.ID), Key: "S-" + roles, Type: "vault@Secret", Rationale: "why"})
+		req.Header().Set(identity.HeaderSubject, "u")
+		req.Header().Set(identity.HeaderOrg, "acme")
+		req.Header().Set(identity.HeaderRoles, roles)
+		if _, err := h.CreateNode(ctx, req); (err == nil) != (want == 0) || err != nil && connect.CodeOf(err) != want {
+			t.Errorf("%s creating a flagged type: %v", roles, err)
+		}
 	}
 }
 
@@ -172,7 +206,7 @@ func TestChangeImpactRPCs(t *testing.T) {
 	}
 	h := &graphsvc.Handler{Graph: g, Authz: authorizer, Floor: floor}
 	g.Caller = graphsvc.Caller
-	req1, err := g.CreateNode(ctx, graph.NewNode{Key: "REQ-1", Type: "Requirement", Properties: map[string]any{"title": "one"}})
+	req1, err := graphtest.Import(ctx, g, graphtest.Node{Key: "REQ-1", Type: "Requirement", Properties: map[string]any{"title": "one"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -204,11 +238,16 @@ func TestChangeImpactRPCs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	co := connect.NewRequest(&graphv1.CheckoutNodeRequest{ChangeId: string(c.ID), ChangeImpactId: cn.Id})
+	as("contributor", co)
+	if out, err := h.CheckoutNode(ctx, co); err != nil || out.Msg.Node.Post == nil || out.Msg.Node.Post.Version != 2 {
+		t.Fatalf("checkout: %v %v", out, err)
+	}
 	props, _ := structpb.NewStruct(map[string]any{"title": "two"})
-	wr := connect.NewRequest(&graphv1.WriteChangeImpactRequest{ChangeId: string(c.ID), ChangeImpactId: cn.Id, Props: props})
-	as("contributor", wr)
-	if out, err := h.WriteChangeImpact(ctx, wr); err != nil || out.Msg.Node.Post == nil || out.Msg.Node.Post.Version != 2 {
-		t.Fatalf("write: %v %v", out, err)
+	up := connect.NewRequest(&graphv1.UpdateNodeRequest{ChangeId: string(c.ID), ChangeImpactId: cn.Id, Props: props})
+	as("contributor", up)
+	if out, err := h.UpdateNode(ctx, up); err != nil || out.Msg.Node.Post == nil || out.Msg.Node.Post.Version != 2 {
+		t.Fatalf("update in place: %v %v", out, err)
 	}
 	rv := connect.NewRequest(&graphv1.ReviewChangeImpactRequest{ChangeId: string(c.ID), ChangeImpactId: cn.Id, Accept: true})
 	as("contributor", rv)
@@ -235,7 +274,20 @@ func TestChangeImpactRPCs(t *testing.T) {
 			t.Fatalf("event %s: by %q, impact %s", e.Op, e.By, e.ImpactId)
 		}
 	}
-	if strings.Join(ops, ",") != "declared,written,reviewed" {
+	ci := connect.NewRequest(&graphv1.CheckinNodeRequest{ChangeId: string(c.ID), ChangeImpactId: cn.Id})
+	as("contributor", ci)
+	if _, err := h.CheckinNode(ctx, ci); err != nil {
+		t.Fatalf("check-in: %v", err)
+	}
+	log, err = h.ListChangeEvents(ctx, connect.NewRequest(&graphv1.ListChangeEventsRequest{ChangeId: string(c.ID)}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ops = ops[:0]
+	for _, e := range log.Msg.Events {
+		ops = append(ops, e.Op)
+	}
+	if strings.Join(ops, ",") != "declared,written,updated,reviewed,checkedIn" {
 		t.Fatalf("impact log = %v", ops)
 	}
 }

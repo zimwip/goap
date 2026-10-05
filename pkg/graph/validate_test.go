@@ -76,10 +76,10 @@ func testValidateBoardOutdatedAndFlowView(t *testing.T, repo Repo) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := g.WriteNode(ctx, a.ID, as[0].ID, NodeWrite{Properties: map[string]any{"title": "from a"}}); err != nil {
+	if _, err := g.edit(ctx, a.ID, as[0].ID, edit{Properties: map[string]any{"title": "from a"}}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := g.ReviewNode(ctx, a.ID, as[0].ID, domain.ReviewAccepted, "u", "ok"); err != nil {
+	if _, err := g.accept(ctx, a.ID, as[0].ID, "u", "ok"); err != nil {
 		t.Fatal(err)
 	}
 	bs, err := g.AddNodes(ctx, b.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &pre, Rationale: "from b", Execution: "e1"}})

@@ -14,7 +14,7 @@ func testNamespaces(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	g := New(repo)
 
-	sdlc, err := g.CreateNode(ctx, NewNode{Key: "X-1", Type: "Thing"})
+	sdlc, err := importNode(ctx, g, newNode{Key: "X-1", Type: "Thing"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -22,11 +22,11 @@ func testNamespaces(t *testing.T, repo Repo) {
 		t.Fatalf("default namespace = %q", sdlc.Namespace)
 	}
 	// the same key can live in another namespace
-	org, err := g.CreateNode(ctx, NewNode{Namespace: "organisation", Key: "X-1", Type: "OrgUnit"})
+	org, err := importNode(ctx, g, newNode{Namespace: "organisation", Key: "X-1", Type: "OrgUnit"})
 	if err != nil {
 		t.Fatalf("same key in another namespace: %v", err)
 	}
-	if _, err := g.CreateNode(ctx, NewNode{Key: "X-1", Type: "Thing"}); !errors.Is(err, ErrConflict) {
+	if _, err := importNode(ctx, g, newNode{Key: "X-1", Type: "Thing"}); !errors.Is(err, ErrConflict) {
 		t.Fatalf("duplicate key in one namespace: %v", err)
 	}
 	if n, err := g.NodeByKey(ctx, "organisation", "X-1"); err != nil || n.ID != org.ID {
@@ -64,12 +64,12 @@ func testNamespaces(t *testing.T, repo Repo) {
 	}
 	for _, w := range []struct {
 		n domain.ChangeImpact
-		w NodeWrite
-	}{{ns[0], NodeWrite{Properties: map[string]any{"a": 1}}}, {ns[1], NodeWrite{AddLinks: []LinkWrite{{Type: "owner", To: orgRef}}}}} {
-		if _, err := g.WriteNode(ctx, c.ID, w.n.ID, w.w); err != nil {
+		w edit
+	}{{ns[0], edit{Properties: map[string]any{"a": 1}}}, {ns[1], edit{AddLinks: []LinkWrite{{Type: "owner", To: orgRef}}}}} {
+		if _, err := g.edit(ctx, c.ID, w.n.ID, w.w); err != nil {
 			t.Fatalf("cross-namespace link: %v", err)
 		}
-		if _, err := g.ReviewNode(ctx, c.ID, w.n.ID, domain.ReviewAccepted, "u", "ok"); err != nil {
+		if _, err := g.accept(ctx, c.ID, w.n.ID, "u", "ok"); err != nil {
 			t.Fatal(err)
 		}
 	}

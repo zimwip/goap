@@ -12,7 +12,7 @@ import (
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/domain/def"
-	"github.com/zimwip/goap/pkg/graph"
+	"github.com/zimwip/goap/pkg/graph/graphtest"
 	"github.com/zimwip/goap/pkg/llm"
 	"github.com/zimwip/goap/pkg/mcp"
 	"github.com/zimwip/goap/pkg/methodology"
@@ -116,7 +116,7 @@ func mcpEngine(t *testing.T, hub ToolPort, client llm.Client) (*Engine, domain.B
 	e, g, base := setup(t)
 	// the organisations holding the changes
 	for _, u := range []string{"acme", "globex"} {
-		if _, err := g.CreateNode(context.Background(), graph.NewNode{Namespace: "organisation", Key: u, Type: "organisation@OrgUnit", Properties: map[string]any{"name": u}}); err != nil {
+		if _, err := graphtest.Import(context.Background(), g, graphtest.Node{Namespace: "organisation", Key: u, Type: "organisation@OrgUnit", Properties: map[string]any{"name": u}}); err != nil {
 			t.Fatal(err)
 		}
 	}

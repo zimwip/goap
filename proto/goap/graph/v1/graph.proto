@@ -10,13 +10,7 @@ import "google/protobuf/timestamp.proto";
 // (changes and their items, i.e. the blackboards of agent processes).
 service GraphService {
   // Domain axis
-  rpc CreateNode(CreateNodeRequest) returns (CreateNodeResponse);
-  // CreateObject creates a node of a qualified type (<namespace>@<type>, ADR 0012) through a change applied on
-  // main, in the namespace of its type; the type catalogue judges it.
-  rpc CreateObject(CreateObjectRequest) returns (CreateObjectResponse);
-  rpc UpdateNode(UpdateNodeRequest) returns (UpdateNodeResponse);
   rpc GetNode(GetNodeRequest) returns (GetNodeResponse);
-  rpc CreateLink(CreateLinkRequest) returns (CreateLinkResponse);
   rpc ListBaselines(ListBaselinesRequest) returns (ListBaselinesResponse);
   // Tags (ADR 0056) name the state an applied change leaves; not unique, a name may label several changes.
   rpc TagChange(TagChangeRequest) returns (TagChangeResponse);
@@ -53,7 +47,19 @@ service GraphService {
   // Change impacts (ADR 0024): declare the nodes a change acts on, write the version each produces on the
   // change branch, and accept or reject them (a comment is mandatory).
   rpc AddChangeImpacts(AddChangeImpactsRequest) returns (AddChangeImpactsResponse);
-  rpc WriteChangeImpact(WriteChangeImpactRequest) returns (WriteChangeImpactResponse);
+  // Node edits (ADR 0076): every write names a change. CreateNode and CheckoutNode write the working version of the
+  // node in the change, checked out; UpdateNode and the link operations edit it in place; an accepted review
+  // authorizes CheckinNode, which freezes it; TransitionNode moves a checked-in node along its lifecycle (a version of
+  // its own); CancelCheckout drops the working version (a creation cancelled before its first check-in removes the node).
+  rpc CreateNode(CreateNodeRequest) returns (CreateNodeResponse);
+  rpc CheckoutNode(CheckoutNodeRequest) returns (CheckoutNodeResponse);
+  rpc UpdateNode(UpdateNodeRequest) returns (UpdateNodeResponse);
+  rpc CreateLink(CreateLinkRequest) returns (CreateLinkResponse);
+  rpc UpdateLink(UpdateLinkRequest) returns (UpdateLinkResponse);
+  rpc DeleteLink(DeleteLinkRequest) returns (DeleteLinkResponse);
+  rpc CheckinNode(CheckinNodeRequest) returns (CheckinNodeResponse);
+  rpc TransitionNode(TransitionNodeRequest) returns (TransitionNodeResponse);
+  rpc CancelCheckout(CancelCheckoutRequest) returns (CancelCheckoutResponse);
   rpc ReviewChangeImpact(ReviewChangeImpactRequest) returns (ReviewChangeImpactResponse);
   rpc ReopenChangeImpacts(ReopenChangeImpactsRequest) returns (ReopenChangeImpactsResponse);
   // Producers: a whole change of node edits (change impacts, versions, reviews, apply) in one call.
@@ -296,39 +302,6 @@ message ChangeImpact {
   bool superseded = 19;
 }
 
-message CreateNodeRequest {
-  string key = 1;
-  string type = 2;
-  google.protobuf.Struct props = 3;
-  string namespace = 4;
-}
-
-message CreateNodeResponse {
-  Node node = 1;
-}
-
-message CreateObjectRequest {
-  string methodology = 1;
-  string node_type = 2;
-  string key = 3;
-  google.protobuf.Struct props = 4;
-  // namespace of the created object (default: the namespace of the type)
-  string namespace = 5;
-}
-
-message CreateObjectResponse {
-  Node node = 1;
-  Baseline baseline = 2;
-}
-
-message UpdateNodeRequest {
-  NodeRef base = 1;
-  google.protobuf.Struct props = 2;
-}
-
-message UpdateNodeResponse {
-  Node node = 1;
-}
 
 message GetNodeRequest {
   // version 0 = latest
@@ -343,19 +316,6 @@ message GetNodeResponse {
   NodeView view = 1;
 }
 
-message CreateLinkRequest {
-  string type = 1;
-  NodeRef from = 2;
-  NodeRef to = 3;
-  google.protobuf.Struct props = 4;
-  // change_id attributes the link to an open change (ADR 0049): every graph mutation, including a link that
-  // intentionally does not version either endpoint, happens in the frame of a change.
-  string change_id = 5;
-}
-
-message CreateLinkResponse {
-  Link link = 1;
-}
 
 message Tag {
   string id = 1;
@@ -957,14 +917,13 @@ message NodeEdit {
   NodeRef pre = 3;
   // merged over the current properties (null clears one)
   google.protobuf.Struct props = 4;
-  // delete the node (the new version is a tombstone)
-  bool retire = 5;
-  string rationale = 6;
-  repeated LinkEdit links = 7;
-  repeated string remove_links = 8;
+  string rationale = 5;
+  repeated LinkEdit links = 6;
+  // outgoing links of the pre version the new version leaves out (removing a child is a modification of its parent)
+  repeated string remove_links = 7;
   // key of the organisational unit the node is transferred to (ADR 0054); empty: unchanged, or the unit holding the
   // commit for a created node
-  string owner = 9;
+  string owner = 8;
 }
 
 message CommitEditsRequest {
@@ -1002,25 +961,126 @@ message NodeLinkWrite {
   google.protobuf.Struct props = 3;
 }
 
-message WriteChangeImpactRequest {
+// The node a CheckoutNode or a TransitionNode works on: a change impact of the change, or a node (then the impact the
+// flow sees on it, declared when the change holds none). flow is the flow the call works on (empty: the active option,
+// "main": the main flow) and execution the action run that makes it (ADR 0025).
+message CreateNodeRequest {
   string change_id = 1;
-  string change_impact_id = 2;
-  // merged over the properties of the current version
-  google.protobuf.Struct props = 3;
-  // lifecycle state to move the node to
-  string state = 4;
-  repeated NodeLinkWrite add_links = 5;
-  repeated string remove_links = 6;
-  // delete the node (the new version is a tombstone)
-  bool retire = 7;
-  // flow branch to write on (empty: the main flow) and the action run that writes (ADR 0025)
+  string key = 2;
+  string type = 3;
+  google.protobuf.Struct props = 4;
+  // key of the organisational unit owning the node (ADR 0054); empty: the unit holding the change
+  string owner = 5;
+  string rationale = 6;
+  repeated NodeLinkWrite links = 7;
   string flow = 8;
   string execution = 9;
-  // key of the organisational unit the node is transferred to (ADR 0054); empty: unchanged
-  string owner = 10;
 }
 
-message WriteChangeImpactResponse {
+message CreateNodeResponse {
+  ChangeImpact node = 1;
+}
+
+message CheckoutNodeRequest {
+  string change_id = 1;
+  string change_impact_id = 2;
+  string node_id = 3;
+  // why, when the call declares the impact
+  string rationale = 4;
+  string flow = 5;
+  string execution = 6;
+}
+
+message CheckoutNodeResponse {
+  ChangeImpact node = 1;
+}
+
+message UpdateNodeRequest {
+  string change_id = 1;
+  string change_impact_id = 2;
+  // merged over the properties of the working version
+  google.protobuf.Struct props = 3;
+  // key of the organisational unit the node is transferred to (ADR 0054); empty: unchanged
+  string owner = 4;
+  string flow = 5;
+  string execution = 6;
+}
+
+message UpdateNodeResponse {
+  ChangeImpact node = 1;
+}
+
+message CreateLinkRequest {
+  string change_id = 1;
+  // the change impact whose working version the link leaves from
+  string change_impact_id = 2;
+  string type = 3;
+  NodeRef to = 4;
+  google.protobuf.Struct props = 5;
+  string flow = 6;
+  string execution = 7;
+}
+
+message CreateLinkResponse {
+  Link link = 1;
+}
+
+message UpdateLinkRequest {
+  string change_id = 1;
+  string link_id = 2;
+  google.protobuf.Struct props = 3;
+  string flow = 4;
+  string execution = 5;
+}
+
+message UpdateLinkResponse {
+  Link link = 1;
+}
+
+message DeleteLinkRequest {
+  string change_id = 1;
+  string link_id = 2;
+  string flow = 3;
+  string execution = 4;
+}
+
+message DeleteLinkResponse {}
+
+message CheckinNodeRequest {
+  string change_id = 1;
+  string change_impact_id = 2;
+  string flow = 3;
+  string execution = 4;
+}
+
+message CheckinNodeResponse {
+  ChangeImpact node = 1;
+}
+
+message TransitionNodeRequest {
+  string change_id = 1;
+  string change_impact_id = 2;
+  string node_id = 3;
+  // the lifecycle state the node goes to
+  string state = 4;
+  string rationale = 5;
+  string flow = 6;
+  string execution = 7;
+}
+
+message TransitionNodeResponse {
+  ChangeImpact node = 1;
+}
+
+message CancelCheckoutRequest {
+  string change_id = 1;
+  string change_impact_id = 2;
+  string flow = 3;
+  string execution = 4;
+}
+
+message CancelCheckoutResponse {
+  // the change impact as the cancellation leaves it (empty when a creation was cancelled: the impact is gone)
   ChangeImpact node = 1;
 }
 

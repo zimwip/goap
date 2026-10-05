@@ -37,7 +37,7 @@ func TestAnonymousCallsAreRefused(t *testing.T) {
 	if !refused(err) {
 		t.Fatalf("CreateChange: %v", err)
 	}
-	_, err = cl.CreateNode(ctx, connect.NewRequest(&graphv1.CreateNodeRequest{Namespace: "organisation", Key: "X", Type: "organisation@OrgUnit"}))
+	_, err = cl.CreateNode(ctx, connect.NewRequest(&graphv1.CreateNodeRequest{ChangeId: "C1", Key: "X", Type: "organisation@OrgUnit"}))
 	if !refused(err) {
 		t.Fatalf("CreateNode: %v", err)
 	}

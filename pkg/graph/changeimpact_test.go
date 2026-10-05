@@ -43,49 +43,55 @@ func testChangeImpacts(t *testing.T, repo Repo) {
 	}
 
 	// accepting needs a comment
-	if _, err := g.ReviewNode(ctx, c.ID, got[0].ID, domain.ReviewAccepted, "alice", "  "); !errors.Is(err, ErrInvalid) {
+	if _, err := g.accept(ctx, c.ID, got[0].ID, "alice", "  "); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("a review needs a comment, got %v", err)
 	}
-	if _, err := g.ReviewNode(ctx, c.ID, got[0].ID, domain.ReviewAccepted, "alice", "impact confirmed with the PSP team"); err != nil {
+	if _, err := g.accept(ctx, c.ID, got[0].ID, "alice", "impact confirmed with the PSP team"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := g.ReviewNode(ctx, c.ID, got[0].ID, domain.ReviewRejected, "bob", "no"); !errors.Is(err, ErrConflict) {
 		t.Fatalf("a reviewed node cannot be reviewed again, got %v", err)
 	}
 
-	// realization: a version created by the change
-	if _, err := g.RealizeNode(ctx, c.ID, got[0].ID, pre); !errors.Is(err, ErrInvalid) {
-		t.Fatalf("the pre version is not a post version, got %v", err)
-	}
-	var post domain.Node
-	err = g.repo.InTx(ctx, func(tx Tx) error {
-		post = domain.Node{ID: f.req.ID, Version: 2, Branch: domain.MainBranch, Parents: []domain.Version{1}, Reason: domain.ReasonRevise,
-			Namespace: f.req.Namespace, Key: f.req.Key, Type: f.req.Type, Properties: map[string]any{"title": "Use PSP v2"}, ChangeID: c.ID, CreatedAt: g.now()}
-		return tx.PutNode(ctx, post)
-	})
+	// a checkout realizes the impact: a working version written by the change, and the review starts over (ADR 0076)
+	cn, err := g.CheckoutNode(ctx, c.ID, NodeCheckout{Impact: got[0].ID})
 	if err != nil {
 		t.Fatal(err)
 	}
-	cn, err := g.RealizeNode(ctx, c.ID, got[0].ID, post.Ref())
+	if cn.Post == nil || cn.Planned() || cn.Review != domain.ReviewProposed {
+		t.Fatalf("post not set, or the review not back to proposed: %+v", cn)
+	}
+	if _, err := g.CheckoutNode(ctx, c.ID, NodeCheckout{Impact: got[0].ID}); !errors.Is(err, ErrConflict) {
+		t.Fatalf("a node is checked out once, got %v", err)
+	}
+	n, err := g.Node(ctx, *cn.Post)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cn.Post == nil || *cn.Post != post.Ref() || cn.Planned() {
-		t.Fatalf("post not set: %+v", cn)
+	if !n.CheckedOut || n.ChangeImpact != got[0].ID || n.ChangeID != c.ID || len(n.Parents) != 1 || n.Parents[0] != pre.Version {
+		t.Fatalf("the working version: %+v", n)
 	}
-	n, err := g.Node(ctx, post.Ref())
-	if err != nil {
+	if _, err := g.CheckinNode(ctx, c.ID, got[0].ID, "", ""); !errors.Is(err, ErrConflict) {
+		t.Fatalf("a check-in needs an accepted review, got %v", err)
+	}
+	if _, err := g.ReviewNode(ctx, c.ID, got[0].ID, domain.ReviewAccepted, "alice", "impact confirmed with the PSP team"); err != nil {
 		t.Fatal(err)
 	}
-	if n.ChangeImpact != got[0].ID || n.Comment != "impact confirmed with the PSP team" || n.ChangeID != c.ID {
-		t.Fatalf("the version must record its origin: %+v", n)
+	if _, err := g.CheckinNode(ctx, c.ID, got[0].ID, "", ""); err != nil {
+		t.Fatal(err)
+	}
+	if n, err = g.Node(ctx, *cn.Post); err != nil {
+		t.Fatal(err)
+	}
+	if n.CheckedOut || n.Comment != "impact confirmed with the PSP team" {
+		t.Fatalf("the checked-in version records its acceptance: %+v", n)
 	}
 
 	list, err := g.ListChangeImpacts(ctx, c.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(list) != 2 || list[0].Review != domain.ReviewAccepted || len(list[0].Reviews) != 1 || list[0].Reviews[0].By != "alice" || list[1].Key != "TST-2" || !list[1].Planned() {
+	if len(list) != 2 || list[0].Review != domain.ReviewAccepted || len(list[0].Reviews) != 3 || list[0].Reviews[0].By != "alice" || list[1].Key != "TST-2" || !list[1].Planned() {
 		t.Fatalf("unexpected list: %+v", list)
 	}
 	if list[0].Pre == nil || *list[0].Pre != pre {
@@ -124,26 +130,26 @@ func testApplyChangeImpacts(t *testing.T, repo Repo) {
 	if _, err := g.Apply(ctx, c1.ID, ""); !errors.Is(err, ErrConflict) {
 		t.Fatalf("a change impact awaiting review blocks Apply, got %v", err)
 	}
-	if _, err := g.WriteNode(ctx, c1.ID, nodes[0].ID, NodeWrite{Properties: map[string]any{"title": "Use PSP v2"}}); err != nil {
+	if _, err := g.edit(ctx, c1.ID, nodes[0].ID, edit{Properties: map[string]any{"title": "Use PSP v2"}}); err != nil {
 		t.Fatal(err)
 	}
-	req2, err := g.WriteNode(ctx, c1.ID, nodes[0].ID, NodeWrite{Properties: map[string]any{"owner": "alice"}})
+	req2, err := g.edit(ctx, c1.ID, nodes[0].ID, edit{Properties: map[string]any{"owner": "alice"}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if req2.Post.Version != 3 {
-		t.Fatalf("two writes = two versions on the branch, got %s", req2.Post)
+	if req2.Post.Version != 2 {
+		t.Fatalf("two edits of the working version, one version on the branch (ADR 0076), got %s", req2.Post)
 	}
-	tst, err := g.WriteNode(ctx, c1.ID, nodes[1].ID, NodeWrite{Properties: map[string]any{"title": "PSP v2 test"},
+	tst, err := g.edit(ctx, c1.ID, nodes[1].ID, edit{Properties: map[string]any{"title": "PSP v2 test"},
 		AddLinks: []LinkWrite{{Type: "verifies", To: *req2.Post}}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	// accepted but planned: refused
-	if _, err := g.ReviewNode(ctx, c1.ID, nodes[0].ID, domain.ReviewAccepted, "alice", "as designed"); err != nil {
+	if _, err := g.accept(ctx, c1.ID, nodes[0].ID, "alice", "as designed"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := g.ReviewNode(ctx, c1.ID, nodes[1].ID, domain.ReviewAccepted, "alice", "needed"); err != nil {
+	if _, err := g.accept(ctx, c1.ID, nodes[1].ID, "alice", "needed"); err != nil {
 		t.Fatal(err)
 	}
 	b, err := g.Apply(ctx, c1.ID, "")
@@ -201,47 +207,43 @@ func testChangeImpactsLifecycle(t *testing.T, repo Repo) {
 	}
 	review := func(id domain.ChangeImpactID) {
 		t.Helper()
-		if _, err := g.ReviewNode(ctx, c.ID, id, domain.ReviewAccepted, "alice", "ok"); err != nil {
+		if _, err := g.accept(ctx, c.ID, id, "alice", "ok"); err != nil {
 			t.Fatal(err)
 		}
 	}
-	title := NodeWrite{Properties: map[string]any{"title": "one v2"}}
+	title := edit{Properties: map[string]any{"title": "one v2"}}
 
-	if _, err := g.WriteNode(ctx, c.ID, nodes[0].ID, title); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "not editable") {
+	if _, err := g.edit(ctx, c.ID, nodes[0].ID, title); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "not editable") {
 		t.Fatalf("editing an approved node must be refused: %v", err)
 	}
-	if _, err := g.WriteNode(ctx, c.ID, nodes[0].ID, NodeWrite{State: "released"}); !errors.Is(err, ErrInvalid) {
+	if _, err := g.edit(ctx, c.ID, nodes[0].ID, edit{State: "released"}); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("no such transition: %v", err)
 	}
-	for _, step := range []NodeWrite{{State: "draft"}, title} {
-		if _, err := g.WriteNode(ctx, c.ID, nodes[0].ID, step); err != nil {
+	for _, step := range []edit{{State: "draft"}, title} {
+		if _, err := g.edit(ctx, c.ID, nodes[0].ID, step); err != nil {
 			t.Fatal(err)
 		}
 	}
-	// req2 goes proposed → draft → approved without the title the approval requires
-	for _, st := range []string{"draft", "approved"} {
-		if _, err := g.WriteNode(ctx, c.ID, nodes[1].ID, NodeWrite{State: st}); err != nil {
-			t.Fatal(err)
-		}
+	// req2 goes proposed → draft, and cannot be approved without the title the approval requires: the transition is
+	// refused when it is taken (ADR 0076)
+	if _, err := g.edit(ctx, c.ID, nodes[1].ID, edit{State: "draft"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := g.edit(ctx, c.ID, nodes[1].ID, edit{State: "approved"}); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), `attribute "title"`) {
+		t.Fatalf("a transition that lacks its required attribute: %v", err)
 	}
 	review(nodes[0].ID)
 	review(nodes[1].ID)
 	if _, err := g.Apply(ctx, c.ID, ""); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "editable state") {
 		t.Fatalf("apply must refuse an editable leftover: %v", err)
 	}
-	if _, err := g.WriteNode(ctx, c.ID, nodes[0].ID, NodeWrite{State: "approved"}); err != nil {
+	if _, err := g.edit(ctx, c.ID, nodes[0].ID, edit{State: "approved"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := g.Apply(ctx, c.ID, ""); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), `attribute "title"`) {
-		t.Fatalf("apply must refuse a transition that lacks its required attribute: %v", err)
-	}
-	if _, err := g.WriteNode(ctx, c.ID, nodes[1].ID, NodeWrite{State: "draft"}); err != nil {
+	if _, err := g.edit(ctx, c.ID, nodes[1].ID, edit{Properties: map[string]any{"title": "two"}}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := g.WriteNode(ctx, c.ID, nodes[1].ID, NodeWrite{Properties: map[string]any{"title": "two"}}); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := g.WriteNode(ctx, c.ID, nodes[1].ID, NodeWrite{State: "approved"}); err != nil {
+	if _, err := g.edit(ctx, c.ID, nodes[1].ID, edit{State: "approved"}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := g.Apply(ctx, c.ID, ""); err != nil {
@@ -274,11 +276,14 @@ func testChangeImpactsMerge(t *testing.T, repo Repo) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := g.ReviewNode(ctx, c.ID, ns[0].ID, domain.ReviewAccepted, "alice", "ok"); err != nil {
+		if _, err := g.accept(ctx, c.ID, ns[0].ID, "alice", "ok"); err != nil {
 			t.Fatal(err)
 		}
-		// an impact accepted with nothing written is a confirmed impact: nothing to apply
-		if _, err := g.WriteNode(ctx, c.ID, ns[0].ID, NodeWrite{Properties: props}); err != nil {
+		// a checkout after the acceptance is reviewed again (ADR 0076)
+		if _, err := g.edit(ctx, c.ID, ns[0].ID, edit{Properties: props}); err != nil {
+			t.Fatal(err)
+		}
+		if err := g.acceptAndCheckin(ctx, c.ID, ns[0].ID, ""); err != nil {
 			t.Fatal(err)
 		}
 		return c
@@ -336,8 +341,8 @@ func testImpactsOf(t *testing.T, repo Repo) {
 		{Intent: domain.IntentModified, Pre: &pre, Rationale: "touched by run A", Execution: "run-a"},
 		{Intent: domain.IntentModified, Pre: &needRef, Rationale: "touched by run B", Execution: "run-b"},
 	}))
-	must[domain.ChangeImpact](t)(g.WriteNode(ctx, c.ID, added[0].ID, NodeWrite{Execution: "run-a", Properties: map[string]any{"title": "A"}}))
-	must[domain.ChangeImpact](t)(g.WriteNode(ctx, c.ID, added[1].ID, NodeWrite{Execution: "run-b", Properties: map[string]any{"title": "B"}}))
+	must[domain.ChangeImpact](t)(g.edit(ctx, c.ID, added[0].ID, edit{Execution: "run-a", Properties: map[string]any{"title": "A"}}))
+	must[domain.ChangeImpact](t)(g.edit(ctx, c.ID, added[1].ID, edit{Execution: "run-b", Properties: map[string]any{"title": "B"}}))
 
 	a := must[[]domain.ChangeImpact](t)(g.ImpactsOf(ctx, c.ID, "run-a"))
 	if len(a) != 1 || a[0].Key != "REQ-1" || a[0].Post == nil {
@@ -386,13 +391,13 @@ func testReviewPolicy(t *testing.T, repo Repo) {
 	}
 	before := log()
 	g.ReviewPolicy = refuseReviewer("bob")
-	if _, err := g.ReviewNode(ctx, c.ID, got[0].ID, domain.ReviewAccepted, "bob", "mine"); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "refused") {
+	if _, err := g.accept(ctx, c.ID, got[0].ID, "bob", "mine"); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "refused") {
 		t.Fatalf("the policy refuses: %v", err)
 	}
 	if ch, _ := g.Change(ctx, c.ID); ch.Nodes[0].Review != domain.ReviewProposed || len(ch.Nodes[0].Reviews) != 0 || log() != before {
 		t.Fatalf("a refusal writes nothing: %+v", ch.Nodes[0])
 	}
-	if _, err := g.ReviewNode(ctx, c.ID, got[0].ID, domain.ReviewAccepted, "alice", "ok"); err != nil {
+	if _, err := g.accept(ctx, c.ID, got[0].ID, "alice", "ok"); err != nil {
 		t.Fatalf("another reviewer: %v", err)
 	}
 }
@@ -413,7 +418,7 @@ func TestNilReviewPolicyReviewsAsBefore(t *testing.T) {
 		if f.g.ReviewPolicy != nil {
 			t.Fatal("unset by default")
 		}
-		if _, err := f.g.ReviewNode(ctx, c.ID, got[0].ID, domain.ReviewAccepted, "bob", "mine"); err != nil {
+		if _, err := f.g.accept(ctx, c.ID, got[0].ID, "bob", "mine"); err != nil {
 			t.Fatalf("anyone reviews: %v", err)
 		}
 	})
@@ -442,7 +447,7 @@ func testReopenImpacts(t *testing.T, repo Repo) {
 	if _, err := g.ReopenImpacts(ctx, c.ID, []domain.ChangeImpactID{id}, " "); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("a comment is mandatory: %v", err)
 	}
-	if _, err := g.ReviewNode(ctx, c.ID, id, domain.ReviewAccepted, "alice", "ok"); err != nil {
+	if _, err := g.accept(ctx, c.ID, id, "alice", "ok"); err != nil {
 		t.Fatal(err)
 	}
 	done, err := g.ReopenImpacts(ctx, c.ID, []domain.ChangeImpactID{id}, "derogation expired")
@@ -453,7 +458,7 @@ func testReopenImpacts(t *testing.T, repo Repo) {
 	if ch.Nodes[0].Review != domain.ReviewProposed || len(ch.Nodes[0].Reviews) != 2 {
 		t.Fatalf("back to proposed, history kept: %+v", ch.Nodes[0])
 	}
-	if _, err := g.ReviewNode(ctx, c.ID, id, domain.ReviewAccepted, "carol", "again"); err != nil {
+	if _, err := g.accept(ctx, c.ID, id, "carol", "again"); err != nil {
 		t.Fatalf("reviewed again: %v", err)
 	}
 	if _, err := g.ReopenImpacts(ctx, c.ID, []domain.ChangeImpactID{"nope"}, "why"); !errors.Is(err, ErrNotFound) {

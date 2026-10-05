@@ -25,15 +25,14 @@ func newOrgWorld(t *testing.T, repo Repo) orgWorld {
 	g := New(repo)
 	w := orgWorld{g: g}
 	mk := func(ns, key, typ string, props map[string]any) domain.Node {
-		n, err := g.CreateNode(ctx, NewNode{Namespace: ns, Key: key, Type: typ, Properties: props})
+		n, err := importNode(ctx, g, newNode{Namespace: ns, Key: key, Type: typ, Properties: props})
 		if err != nil {
 			t.Fatal(err)
 		}
 		return n
 	}
-	c0 := testChange(t, g, "")
 	link := func(typ string, from, to domain.Node) {
-		if _, err := g.Link(ctx, c0, typ, from.Ref(), to.Ref(), nil); err != nil {
+		if _, err := importLink(ctx, g, typ, from.Ref(), to.Ref(), nil); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -45,7 +44,7 @@ func newOrgWorld(t *testing.T, repo Repo) orgWorld {
 	link(LinkPartOf, w.team1, w.digital)
 	link(LinkPartOf, w.t2, w.digital)
 	owned := func(key, owner, title string) domain.Node {
-		n, err := g.CreateNode(ctx, NewNode{Key: key, Type: "Component", Properties: map[string]any{"title": title}, Owner: owner})
+		n, err := importNode(ctx, g, newNode{Key: key, Type: "Component", Properties: map[string]any{"title": title}, Owner: owner})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -124,10 +123,10 @@ func testSplitByOwnerAndMerge(t *testing.T, repo Repo) {
 			if cn.Key != n.Key {
 				continue
 			}
-			if _, err := g.WriteNode(ctx, c.ID, cn.ID, NodeWrite{Properties: map[string]any{"title": title}}); err != nil {
+			if _, err := g.edit(ctx, c.ID, cn.ID, edit{Properties: map[string]any{"title": title}}); err != nil {
 				t.Fatal(err)
 			}
-			if _, err := g.ReviewNode(ctx, c.ID, cn.ID, domain.ReviewAccepted, "u", "ok"); err != nil {
+			if _, err := g.accept(ctx, c.ID, cn.ID, "u", "ok"); err != nil {
 				t.Fatal(err)
 			}
 			return
@@ -230,12 +229,11 @@ func TestProjectSelfLinkTerminates(t *testing.T) {
 	if links, err := g.OutLinksOf(ctx, root.Ref()); err != nil || len(links) != 1 || links[0].To != root.Ref() || links[0].Type != LinkProjectPartOf {
 		t.Fatalf("the root project links to itself: %+v %v", links, err)
 	}
-	sub, err := g.CreateNode(ctx, NewNode{Namespace: "organisation", Key: "PROJ-SUB", Type: NodeTypeProjectUnit, Properties: map[string]any{"name": "Sub project"}})
+	sub, err := importNode(ctx, g, newNode{Namespace: "organisation", Key: "PROJ-SUB", Type: NodeTypeProjectUnit, Properties: map[string]any{"name": "Sub project"}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	c0 := testChange(t, g, "organisation")
-	if _, err := g.Link(ctx, c0, LinkProjectPartOf, sub.Ref(), root.Ref(), nil); err != nil {
+	if _, err := importLink(ctx, g, LinkProjectPartOf, sub.Ref(), root.Ref(), nil); err != nil {
 		t.Fatal(err)
 	}
 	within := func(tx Tx, key, ancestor string) (bool, error) {
@@ -277,27 +275,29 @@ func testProjectSubChangeRules(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	g := New(repo)
 	mk := func(key string, props map[string]any) domain.Node {
-		n, err := g.CreateNode(ctx, NewNode{Namespace: "organisation", Key: key, Type: NodeTypeProjectUnit, Properties: props})
+		n, err := importNode(ctx, g, newNode{Namespace: "organisation", Key: key, Type: NodeTypeProjectUnit, Properties: props})
 		if err != nil {
 			t.Fatal(err)
 		}
 		return n
 	}
-	c0 := testChange(t, g, "organisation")
+	if err := g.Bootstrap(ctx); err != nil {
+		t.Fatal(err)
+	}
 	root, err := g.NodeByKey(ctx, "organisation", rootProject(g))
 	if err != nil {
 		t.Fatal(err)
 	}
 	a := mk("PROJ-A", map[string]any{"name": "A"})
-	if _, err := g.Link(ctx, c0, LinkProjectPartOf, a.Ref(), root.Ref(), nil); err != nil {
+	if _, err := importLink(ctx, g, LinkProjectPartOf, a.Ref(), root.Ref(), nil); err != nil {
 		t.Fatal(err)
 	}
 	a1 := mk("PROJ-A1", map[string]any{"name": "A1"})
-	if _, err := g.Link(ctx, c0, LinkProjectPartOf, a1.Ref(), a.Ref(), nil); err != nil {
+	if _, err := importLink(ctx, g, LinkProjectPartOf, a1.Ref(), a.Ref(), nil); err != nil {
 		t.Fatal(err)
 	}
 	b := mk("PROJ-B", map[string]any{"name": "B"})
-	if _, err := g.Link(ctx, c0, LinkProjectPartOf, b.Ref(), root.Ref(), nil); err != nil {
+	if _, err := importLink(ctx, g, LinkProjectPartOf, b.Ref(), root.Ref(), nil); err != nil {
 		t.Fatal(err)
 	}
 	base, err := g.BranchHead(ctx, domain.DefaultNamespace, domain.MainBranch)
@@ -414,10 +414,10 @@ func testSubChangeMergePrecedence(t *testing.T, repo Repo) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := g.WriteNode(ctx, c.ID, added[0].ID, NodeWrite{Properties: map[string]any{"title": title}}); err != nil {
+		if _, err := g.edit(ctx, c.ID, added[0].ID, edit{Properties: map[string]any{"title": title}}); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := g.ReviewNode(ctx, c.ID, added[0].ID, domain.ReviewAccepted, "u", "ok"); err != nil {
+		if _, err := g.accept(ctx, c.ID, added[0].ID, "u", "ok"); err != nil {
 			t.Fatal(err)
 		}
 		return added[0].ID

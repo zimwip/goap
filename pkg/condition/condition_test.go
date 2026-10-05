@@ -6,17 +6,16 @@ import (
 
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/graph"
+	"github.com/zimwip/goap/pkg/graph/graphtest"
 )
 
 func blackboard(t *testing.T, withTest bool) domain.Blackboard {
 	t.Helper()
 	ctx := context.Background()
 	g := graph.New(graph.NewMemory())
-	need, _ := g.CreateNode(ctx, graph.NewNode{Key: "NEED-1", Type: "Need"})
-	req, _ := g.CreateNode(ctx, graph.NewNode{Key: "REQ-1", Type: "Requirement"})
-	b0, _ := g.BranchHead(ctx, "", domain.MainBranch)
-	c0, _ := g.CreateChange(ctx, graph.NewChange{Title: "link", BaselineID: b0.ID})
-	if _, err := g.Link(ctx, c0.ID, "satisfies", req.Ref(), need.Ref(), nil); err != nil {
+	need, _ := graphtest.Import(ctx, g, graphtest.Node{Key: "NEED-1", Type: "Need"})
+	req, err := graphtest.Import(ctx, g, graphtest.Node{Key: "REQ-1", Type: "Requirement", Links: []graph.LinkWrite{{Type: "satisfies", To: need.Ref()}}})
+	if err != nil {
 		t.Fatal(err)
 	}
 	b, _ := g.BranchHead(ctx, "", domain.MainBranch)
@@ -26,12 +25,8 @@ func blackboard(t *testing.T, withTest bool) domain.Blackboard {
 		t.Fatal(err)
 	}
 	if withTest {
-		added, err := g.AddNodes(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentCreated, Key: "TST-9", Type: "TestCase", Rationale: "cover REQ-1"}})
-		if err != nil {
-			t.Fatal(err)
-		}
-		if _, err := g.WriteNode(ctx, c.ID, added[0].ID, graph.NodeWrite{Properties: map[string]any{"title": "t"},
-			AddLinks: []graph.LinkWrite{{Type: "verifies", To: ref}}}); err != nil {
+		if _, err := g.CreateNode(ctx, c.ID, graph.NodeCreate{Key: "TST-9", Type: "TestCase", Rationale: "cover REQ-1", Properties: map[string]any{"title": "t"},
+			Links: []graph.LinkWrite{{Type: "verifies", To: ref}}}); err != nil {
 			t.Fatal(err)
 		}
 	}

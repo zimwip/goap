@@ -524,6 +524,16 @@ func (t *memTx) OpenChangeIDs(_ context.Context) ([]domain.ChangeID, error) {
 	return out, nil
 }
 
+func (t *memTx) DeleteChangeImpact(_ context.Context, change domain.ChangeID, id domain.ChangeImpactID) error {
+	list := t.st.nodes[change]
+	i := slices.IndexFunc(list, func(cn domain.ChangeImpact) bool { return cn.ID == id })
+	if i < 0 {
+		return fmt.Errorf("change impact %s: %w", id, ErrNotFound)
+	}
+	t.st.nodes[change] = slices.Delete(slices.Clone(list), i, i+1)
+	return nil
+}
+
 func (t *memTx) PutChangeImpact(_ context.Context, change domain.ChangeID, cn domain.ChangeImpact) error {
 	if _, ok := t.st.changes[change]; !ok {
 		return fmt.Errorf("change %s: %w", change, ErrNotFound)

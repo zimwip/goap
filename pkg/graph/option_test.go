@@ -30,7 +30,7 @@ func testOptions(t *testing.T, repo Repo) {
 	write := func(title string) domain.ChangeImpact {
 		t.Helper()
 		added := must[[]domain.ChangeImpact](t)(g.AddNodes(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &pre, Rationale: title}}))
-		return must[domain.ChangeImpact](t)(g.WriteNode(ctx, c.ID, added[0].ID, NodeWrite{Properties: map[string]any{"title": title}}))
+		return must[domain.ChangeImpact](t)(g.edit(ctx, c.ID, added[0].ID, edit{Properties: map[string]any{"title": title}}))
 	}
 	ia := write("Use Stripe")
 	if ia.Flow != a.ID {
@@ -81,7 +81,7 @@ func testOptions(t *testing.T, repo Repo) {
 	// the decision: A is evaluated, accepted on its own flow and selected
 	must[domain.Flow](t)(g.EvaluateOption(ctx, c.ID, a.ID, "u", "covers every market"))
 	must[string](t)(g.ActivateOption(ctx, c.ID, a.ID, "u"))
-	must[domain.ChangeImpact](t)(g.ReviewNode(ctx, c.ID, ia.ID, domain.ReviewAccepted, "u", "ok"))
+	must[domain.ChangeImpact](t)(g.accept(ctx, c.ID, ia.ID, "u", "ok"))
 	sel := must[domain.Flow](t)(g.SelectOption(ctx, c.ID, a.ID, "u"))
 	if sel.OptionStatus() != domain.OptionSelected || sel.Active {
 		t.Fatalf("selected: %+v", sel)

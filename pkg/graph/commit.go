@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/zimwip/goap/pkg/domain"
 )
@@ -23,16 +22,17 @@ type NodeEdit struct {
 	Pre *domain.NodeRef
 	// Props are merged over the current properties (a nil value clears one).
 	Props map[string]any
-	// State moves the node to a lifecycle state, after its other edits (see NodeWrite.State).
+	// State moves the node to a lifecycle state, after its other edits, checked in: a transition of its own
+	// (TransitionNode, ADR 0076).
 	State string
-	// Retire deletes the node (see NodeWrite.Retire).
-	Retire bool
-	// Owner transfers the node to another organisational unit (see NodeWrite.Owner); empty: unchanged, or the unit
+	// Owner transfers the node to another organisational unit (its key, ADR 0054); empty: unchanged, or the unit
 	// holding the commit for a created node.
 	Owner string
 	// Rationale says why; the title of the commit when empty.
-	Rationale   string
-	Links       []LinkEdit
+	Rationale string
+	Links     []LinkEdit
+	// RemoveLinks are outgoing links of the Pre version the new version leaves out (removing a child is a
+	// modification of its parent, ADR 0024 §4).
 	RemoveLinks []domain.LinkID
 }
 
@@ -68,29 +68,19 @@ type CommitResult struct {
 	Baseline domain.Baseline
 }
 
-// Commit runs the edits as one change: it opens the change on a branch of its
-// own, declares a change impact per edit, writes their versions, accepts them
-// (the rationale is the comment) and applies the change. When the branch
-// cannot be merged without conflict (another change moved a node meanwhile) the
-// change is abandoned and ErrConflict returned: the producer reads again and
-// rebuilds its edits. A created node of a structure or a User must name its required
-// parent (checkRequiredParent, ADR 0040) — the producer-level guarantee
-// CreateNode/UpdateNode do not make (commitEdits' parenting param), since they
-// stand in for the single-node writes the engine itself makes while landing an
-// ordinary change's own impacts (AddNodes/WriteNode), which never enforced it either.
-func (g *Graph) Commit(ctx context.Context, in Commit) (CommitResult, error) {
-	return g.commitEdits(ctx, in, true)
-}
-
-func (g *Graph) commitEdits(ctx context.Context, in Commit, parenting bool) (res CommitResult, err error) {
+// Commit runs the edits as one change, through the operations every change uses (ADR 0076): it opens the change on a
+// branch of its own; a created node is a CreateNode, a modified one a CheckoutNode with its UpdateNode and link edits;
+// each impact is accepted (the rationale is the comment) and checked in, then the state edits are transitions
+// (TransitionNode), and the change is applied. When the branch cannot be merged without conflict (another change moved
+// a node meanwhile) the change is abandoned and ErrConflict returned: the producer reads again and rebuilds its edits.
+// A created node of a structure or a User must name its required parent (checkRequiredParent, ADR 0040).
+func (g *Graph) Commit(ctx context.Context, in Commit) (res CommitResult, err error) {
 	if len(in.Edits) == 0 {
 		return res, fmt.Errorf("a commit needs at least one edit: %w", ErrInvalid)
 	}
-	if parenting {
-		for _, e := range in.Edits {
-			if err := g.checkRequiredParent(e); err != nil {
-				return res, err
-			}
+	for _, e := range in.Edits {
+		if err := g.checkRequiredParent(e); err != nil {
+			return res, err
 		}
 	}
 	c, err := g.CreateChange(ctx, NewChange{Namespace: in.Namespace, Title: in.Title, Intent: in.Intent, Methodology: in.Methodology,
@@ -108,29 +98,15 @@ func (g *Graph) commitEdits(ctx context.Context, in Commit, parenting bool) (res
 			err = errors.Join(err, aerr)
 		}
 	}()
-
-	nodes := make([]domain.ChangeImpact, len(in.Edits))
-	for i, e := range in.Edits {
-		why := e.Rationale
-		if why == "" {
-			why = in.Title
-		}
-		nodes[i] = domain.ChangeImpact{Intent: domain.IntentModified, Pre: e.Pre, Rationale: why, ProducedBy: in.By}
-		if e.Pre == nil {
-			nodes[i].Intent, nodes[i].Key, nodes[i].Type = domain.IntentCreated, e.Key, e.Type
-		}
-	}
-	added, err := g.AddNodes(ctx, c.ID, nodes)
-	if err != nil {
-		return res, err
-	}
 	order, err := g.commitOrder(ctx, in.Edits)
 	if err != nil {
 		return res, err
 	}
-	written := map[string]domain.NodeRef{} // key of a created node → its version
+	impacts := make([]domain.ChangeImpactID, len(in.Edits))
+	posts := make([]*domain.NodeRef, len(in.Edits)) // the working versions
+	written := map[string]int{}                     // key of a created node → its edit
 	type late struct {
-		from string
+		from int
 		l    LinkEdit
 	}
 	var later []late // links to a node of the commit not written yet (a cycle): added once every node is
@@ -140,18 +116,27 @@ func (g *Graph) commitEdits(ctx context.Context, in Commit, parenting bool) (res
 			created[e.Key] = true
 		}
 	}
+	why := func(e NodeEdit) string {
+		if e.Rationale != "" {
+			return e.Rationale
+		}
+		return in.Title
+	}
 	for _, i := range order {
 		e := in.Edits[i]
-		w := NodeWrite{Properties: e.Props, State: e.State, RemoveLinks: e.RemoveLinks, Retire: e.Retire, Owner: e.Owner}
+		var links []LinkWrite
 		for _, l := range e.Links {
 			to := l.To
 			if l.ToKey != "" {
-				ref, ok := written[l.ToKey]
-				if !ok {
-					if created[l.ToKey] {
-						later = append(later, late{e.Key, l})
-						continue
-					}
+				j, ok := written[l.ToKey]
+				var ref domain.NodeRef
+				switch {
+				case ok:
+					ref = *posts[j]
+				case created[l.ToKey]:
+					later = append(later, late{i, l})
+					continue
+				default:
 					// not a node of this commit: a node the graph already holds, whose version stays
 					n, err := g.NodeByKeyOn(ctx, in.Namespace, in.Branch, l.ToKey)
 					if errors.Is(err, ErrNotFound) {
@@ -174,29 +159,101 @@ func (g *Graph) commitEdits(ctx context.Context, in Commit, parenting bool) (res
 					continue
 				}
 			}
-			w.AddLinks = append(w.AddLinks, LinkWrite{Type: l.Type, To: *to, Properties: l.Props})
+			links = append(links, LinkWrite{Type: l.Type, To: *to, Properties: l.Props})
 		}
-		cn, err := g.WriteNode(ctx, c.ID, added[i].ID, w)
-		if err != nil {
-			return res, fmt.Errorf("%s: %w", nodeName(e), err)
-		}
-		if parenting && cn.Post != nil && !e.Retire {
-			if err := g.checkParentInvariant(ctx, *cn.Post); err != nil {
+		if e.Pre != nil {
+			// the impact names the version the edit starts from: a stale one conflicts (it is not in the reference baseline)
+			added, err := g.AddNodes(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: e.Pre, Rationale: why(e), ProducedBy: in.By}})
+			if err != nil {
 				return res, fmt.Errorf("%s: %w", nodeName(e), err)
 			}
+			impacts[i] = added[0].ID
 		}
-		if e.Pre == nil {
-			written[e.Key] = *cn.Post
+		switch {
+		case e.Pre == nil:
+			cn, err := g.CreateNode(ctx, c.ID, NodeCreate{Key: e.Key, Type: e.Type, Properties: e.Props, Owner: e.Owner, Rationale: why(e), Links: links, ProducedBy: in.By})
+			if err != nil {
+				return res, fmt.Errorf("%s: %w", nodeName(e), err)
+			}
+			impacts[i], posts[i], written[e.Key] = cn.ID, cn.Post, i
+		case len(e.Props) > 0 || e.Owner != "" || len(links) > 0 || len(e.RemoveLinks) > 0:
+			cn, err := g.CheckoutNode(ctx, c.ID, NodeCheckout{Impact: impacts[i]})
+			if err != nil {
+				return res, fmt.Errorf("%s: %w", nodeName(e), err)
+			}
+			posts[i] = cn.Post
+			if len(e.Props) > 0 || e.Owner != "" {
+				if _, err := g.UpdateNode(ctx, c.ID, cn.ID, NodeUpdate{Properties: e.Props, Owner: e.Owner}); err != nil {
+					return res, fmt.Errorf("%s: %w", nodeName(e), err)
+				}
+			}
+			for _, l := range links {
+				if _, err := g.CreateLink(ctx, c.ID, cn.ID, l, "", ""); err != nil {
+					return res, fmt.Errorf("%s: %w", nodeName(e), err)
+				}
+			}
+			for _, id := range e.RemoveLinks {
+				if err := g.deleteCopiedLink(ctx, c.ID, *e.Pre, *cn.Post, id); err != nil {
+					return res, fmt.Errorf("%s: %w", nodeName(e), err)
+				}
+			}
 		}
 	}
 	for _, x := range later {
-		if _, err := g.Link(ctx, c.ID, x.l.Type, written[x.from], written[x.l.ToKey], x.l.Props); err != nil {
-			return res, fmt.Errorf("link %s from %s to %s: %w", x.l.Type, x.from, x.l.ToKey, err)
+		to := posts[written[x.l.ToKey]]
+		if _, err := g.CreateLink(ctx, c.ID, impacts[x.from], LinkWrite{Type: x.l.Type, To: *to, Properties: x.l.Props}, "", ""); err != nil {
+			return res, fmt.Errorf("link %s from %s to %s: %w", x.l.Type, nodeName(in.Edits[x.from]), x.l.ToKey, err)
 		}
 	}
-	for i := range in.Edits {
-		if _, err := g.ReviewNode(ctx, c.ID, added[i].ID, domain.ReviewAccepted, in.By, nodes[i].Rationale); err != nil {
+	for i, e := range in.Edits {
+		if posts[i] != nil {
+			if err := g.checkParentInvariant(ctx, *posts[i]); err != nil {
+				return res, fmt.Errorf("%s: %w", nodeName(e), err)
+			}
+		}
+	}
+	for i, e := range in.Edits {
+		if impacts[i] == "" {
+			continue
+		}
+		if _, err := g.ReviewNode(ctx, c.ID, impacts[i], domain.ReviewAccepted, in.By, why(e)); err != nil {
 			return res, err
+		}
+		if posts[i] != nil {
+			if _, err := g.CheckinNode(ctx, c.ID, impacts[i], "", ""); err != nil {
+				return res, err
+			}
+		}
+	}
+	for i, e := range in.Edits {
+		if e.State == "" {
+			continue
+		}
+		var node domain.NodeID
+		var cur string
+		if posts[i] != nil {
+			n, err := g.Node(ctx, *posts[i])
+			if err != nil {
+				return res, err
+			}
+			node, cur = n.ID, n.State
+		} else {
+			n, err := g.Node(ctx, *e.Pre)
+			if err != nil {
+				return res, err
+			}
+			node, cur = n.ID, n.State
+		}
+		if cur == "" && g.Types != nil {
+			if lc := g.catalog().Lifecycle(in.Edits[i].Type); lc != nil && e.Pre == nil {
+				cur = lc.Initial
+			}
+		}
+		if cur == e.State {
+			continue
+		}
+		if _, err := g.TransitionNode(ctx, c.ID, NodeTransition{NodeCheckout: NodeCheckout{Impact: impacts[i], Node: node, Rationale: why(e), ProducedBy: in.By}, To: e.State}); err != nil {
+			return res, fmt.Errorf("%s: %w", nodeName(e), err)
 		}
 	}
 	if res.Baseline, err = g.Apply(ctx, c.ID, in.BaselineName); err != nil {
@@ -208,6 +265,38 @@ func (g *Graph) commitEdits(ctx context.Context, in Commit, parenting bool) (res
 		return res, fmt.Errorf("commit %q conflicts with a concurrent change: %w", in.Title, ErrConflict)
 	}
 	return res, nil
+}
+
+// deleteCopiedLink removes from a working version the copy of an outgoing link of the version it follows: the
+// checkout copied the links (new ids), the edit names the one it read.
+func (g *Graph) deleteCopiedLink(ctx context.Context, id domain.ChangeID, pre, work domain.NodeRef, link domain.LinkID) error {
+	var target domain.LinkID
+	err := g.repo.InTx(ctx, func(tx Tx) error {
+		l, err := tx.Link(ctx, link)
+		if err != nil {
+			return err
+		}
+		if l.From != pre {
+			return invalidf("link %s is not an outgoing link of %s", link, pre)
+		}
+		out, err := tx.OutLinks(ctx, work)
+		if err != nil {
+			return err
+		}
+		for _, c := range out {
+			if c.Type == l.Type && c.To.ID == l.To.ID {
+				target = c.ID
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	if target == "" {
+		return invalidf("link %s is not an outgoing link of %s", link, pre)
+	}
+	return g.DeleteLink(ctx, id, target, "", "")
 }
 
 // linksTo reports whether a version already has an outgoing link of the type to the node.
@@ -308,38 +397,4 @@ func (g *Graph) commitOrder(ctx context.Context, edits []NodeEdit) ([]int, error
 		}
 	}
 	return order, nil
-}
-
-// CreateObject creates a node of a qualified type (ADR 0012) through one change applied on main, in the namespace of
-// its type (namespace, when given, must be it). The type catalogue judges it like any node. It fails with ErrConflict
-// when the key is taken in the namespace and ErrInvalid without a key or with an unqualified type.
-func (g *Graph) CreateObject(ctx context.Context, methodology, namespace, typ, key string, props map[string]any) (domain.Node, domain.Baseline, error) {
-	key = strings.TrimSpace(key)
-	if key == "" {
-		return domain.Node{}, domain.Baseline{}, fmt.Errorf("object key is required: %w", ErrInvalid)
-	}
-	ref, err := domain.ParseTypeRef(typ)
-	if err != nil || !ref.Qualified() {
-		return domain.Node{}, domain.Baseline{}, fmt.Errorf("object type %q must be <namespace>@<type>: %w", typ, ErrInvalid)
-	}
-	if namespace == "" {
-		namespace = ref.Namespace
-	}
-	if _, err := g.NodeByKey(ctx, namespace, key); err == nil {
-		return domain.Node{}, domain.Baseline{}, fmt.Errorf("key %q is already used: %w", key, ErrConflict)
-	} else if !errors.Is(err, ErrNotFound) {
-		return domain.Node{}, domain.Baseline{}, err
-	}
-	head, err := g.BranchHead(ctx, namespace, domain.MainBranch)
-	if err != nil {
-		return domain.Node{}, domain.Baseline{}, err
-	}
-	out, err := g.Commit(ctx, Commit{Namespace: namespace, Title: "Create " + key, Intent: "Create " + typ + " " + key,
-		Baseline: head.ID, Methodology: methodology, By: "graph.create_object",
-		Edits: []NodeEdit{{Key: key, Type: typ, Props: props, Rationale: "Create " + typ + " " + key}}})
-	if err != nil {
-		return domain.Node{}, domain.Baseline{}, err
-	}
-	n, err := g.NodeByKey(ctx, namespace, key)
-	return n, out.Baseline, err
 }

@@ -39,11 +39,12 @@ func testChange(t *testing.T, g *Graph, namespace string) domain.ChangeID {
 	return c.ID
 }
 
-// seedNode writes a node version directly, the way CreateNode did before ADR 0049 made it go through Commit:
+// seedNode writes a node version and its outgoing links directly, the way CreateNode did before ADR 0049 made it go
+// through Commit:
 // test fixtures use it to arrange a world already sitting in a given lifecycle state (including an editable
 // one, or one not reachable from the lifecycle's initial state by a single transition) without walking every
 // transition to get there — something no real caller needs, since every production write is change-shaped.
-func seedNode(ctx context.Context, g *Graph, in NewNode) (domain.Node, error) {
+func seedNode(ctx context.Context, g *Graph, in newNode) (domain.Node, error) {
 	n := domain.Node{ID: domain.NodeID(g.newID()), Version: 1, Branch: domain.MainBranch, Reason: domain.ReasonCreate,
 		Namespace: domain.NamespaceOf(in.Namespace), Key: in.Key, Type: in.Type, Properties: in.Properties, CreatedAt: g.now(), State: in.State}
 	if n.Key == "" {
@@ -62,7 +63,17 @@ func seedNode(ctx context.Context, g *Graph, in NewNode) (domain.Node, error) {
 		return n, err
 	}
 	n.ChangeID = c.ID
-	err = g.repo.InTx(ctx, func(tx Tx) error { return tx.PutNode(ctx, n) })
+	err = g.repo.InTx(ctx, func(tx Tx) error {
+		if err := tx.PutNode(ctx, n); err != nil {
+			return err
+		}
+		for _, l := range in.Links {
+			if err := tx.PutLink(ctx, domain.Link{ID: domain.LinkID(g.newID()), Type: l.Type, From: n.Ref(), To: l.To, Properties: l.Properties, ChangeID: c.ID}); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 	if err == nil {
 		n, err = g.Node(ctx, n.Ref())
 	}

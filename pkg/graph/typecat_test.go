@@ -94,11 +94,11 @@ func TestCatalogJudgesTheNodes(t *testing.T) {
 		t.Fatalf("the source of verifies must be a Test: %v", err)
 	}
 	// direct writes too
-	if _, err := g.CreateNode(ctx, NewNode{Namespace: "docs", Key: "N", Type: "docs@Nope"}); !errors.Is(err, ErrInvalid) {
+	if _, err := importNode(ctx, g, newNode{Namespace: "docs", Key: "N", Type: "docs@Nope"}); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("direct write of an unknown type: %v", err)
 	}
 	// the built-in domains are always known
-	if _, err := g.CreateNode(ctx, NewNode{Namespace: "methodology", Key: "MV:m@1", Type: "methodology@MethodologyVersion"}); err != nil {
+	if _, err := importNode(ctx, g, newNode{Namespace: "methodology", Key: "MV:m@1", Type: "methodology@MethodologyVersion"}); err != nil {
 		t.Fatal(err)
 	}
 }

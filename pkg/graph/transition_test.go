@@ -76,7 +76,7 @@ func testChangeLifecycle(t *testing.T, repo Repo) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := w.write(c, ns[0].ID, NodeWrite{Properties: map[string]any{"title": key}}); err != nil {
+		if err := w.write(c, ns[0].ID, edit{Properties: map[string]any{"title": key}}); err != nil {
 			t.Fatal(err)
 		}
 		return ns[0].ID
@@ -109,7 +109,7 @@ func testChangeLifecycle(t *testing.T, repo Repo) {
 	}
 
 	// the analysis is frozen, what is new is not
-	if err := w.write(c, analysis, NodeWrite{Properties: map[string]any{"title": "late"}}); !errors.Is(err, ErrConflict) {
+	if err := w.write(c, analysis, edit{Properties: map[string]any{"title": "late"}}); !errors.Is(err, ErrConflict) {
 		t.Fatalf("an impact of a state the change left is frozen: %v", err)
 	}
 	impl := create("N-2")
@@ -128,10 +128,10 @@ func testChangeLifecycle(t *testing.T, repo Repo) {
 	if err := move("rework", decide("rework")); err != nil {
 		t.Fatal(err)
 	}
-	if err := w.write(c, analysis, NodeWrite{Properties: map[string]any{"title": "revised"}}); err != nil {
+	if err := w.write(c, analysis, edit{Properties: map[string]any{"title": "revised"}}); err != nil {
 		t.Fatalf("going back unfreezes the analysis: %v", err)
 	}
-	if err := w.write(c, impl, NodeWrite{Properties: map[string]any{"title": "stale"}}); !errors.Is(err, ErrConflict) {
+	if err := w.write(c, impl, edit{Properties: map[string]any{"title": "stale"}}); !errors.Is(err, ErrConflict) {
 		t.Fatalf("the implementation is frozen in turn: %v", err)
 	}
 	ns, err := g.ListChangeImpacts(ctx, c.ID)
@@ -142,8 +142,8 @@ func testChangeLifecycle(t *testing.T, repo Repo) {
 		if n.ID == impl && n.Review != domain.ReviewProposed {
 			t.Fatalf("what was written after the phase must be reviewed again: %s", n.Review)
 		}
-		if n.ID == analysis && n.Review != domain.ReviewAccepted {
-			t.Fatalf("the analysis keeps its review until rewritten: %s", n.Review)
+		if n.ID == analysis && n.Review != domain.ReviewProposed {
+			t.Fatalf("the analysis checked out again is reviewed again (ADR 0076): %s", n.Review)
 		}
 	}
 

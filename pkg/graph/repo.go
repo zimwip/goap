@@ -95,6 +95,8 @@ type Tx interface {
 	// PutChangeImpact inserts or updates a change impact of a change (ADR 0024). The table is the projection of the
 	// impact log (ADR 0029): only Graph.emit writes it.
 	PutChangeImpact(ctx context.Context, change domain.ChangeID, cn domain.ChangeImpact) error
+	// DeleteChangeImpact removes a change impact from the projection (an event removed it: ADR 0076).
+	DeleteChangeImpact(ctx context.Context, change domain.ChangeID, id domain.ChangeImpactID) error
 	// ChangeImpacts lists the change impacts of a change, in creation order.
 	ChangeImpacts(ctx context.Context, change domain.ChangeID) ([]domain.ChangeImpact, error)
 	// NodeChangeImpacts lists the changes holding a change impact on a node, oldest first.

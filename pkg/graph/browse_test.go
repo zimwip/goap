@@ -17,30 +17,32 @@ func testBrowseBaseline(t *testing.T, repo Repo) {
 
 	var refs []domain.NodeRef
 	for i := range 12 {
-		n, err := g.CreateNode(ctx, NewNode{Key: fmt.Sprintf("REQ-%02d", i), Type: "Req", Properties: map[string]any{"title": fmt.Sprintf("req %d", i)}})
+		n, err := importNode(ctx, g, newNode{Key: fmt.Sprintf("REQ-%02d", i), Type: "Req", Properties: map[string]any{"title": fmt.Sprintf("req %d", i)}})
 		if err != nil {
 			t.Fatal(err)
 		}
 		refs = append(refs, n.Ref())
 	}
-	test, err := g.CreateNode(ctx, NewNode{Key: "TEST-1", Type: "Test", Properties: map[string]any{"title": "login works"}})
+	test, err := importNode(ctx, g, newNode{Key: "TEST-1", Type: "Test", Properties: map[string]any{"title": "login works"}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := g.CreateNode(ctx, NewNode{Key: "TEST-2", Type: "Test"}); err != nil {
+	if _, err := importNode(ctx, g, newNode{Key: "TEST-2", Type: "Test"}); err != nil {
 		t.Fatal(err)
 	}
-	c0 := testChange(t, g, "")
-	verifies, err := g.Link(ctx, c0, "verifies", test.Ref(), refs[0], nil)
+	verifies, err := importLink(ctx, g, "verifies", test.Ref(), refs[0], nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	// req 0 changes after the link: the incoming link now targets an earlier version (suspect)
-	req0, err := g.UpdateNode(ctx, refs[0], map[string]any{"title": "req 0 bis"})
+	req0, err := importProps(ctx, g, refs[0], map[string]any{"title": "req 0 bis"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := g.Link(ctx, c0, "depends", req0.Ref(), refs[1], nil); err != nil {
+	if _, err := importLink(ctx, g, "depends", req0.Ref(), refs[1], nil); err != nil {
+		t.Fatal(err)
+	}
+	if req0, err = g.Node(ctx, domain.NodeRef{ID: req0.ID}); err != nil {
 		t.Fatal(err)
 	}
 	b, err := g.BranchHead(ctx, domain.DefaultNamespace, domain.MainBranch)

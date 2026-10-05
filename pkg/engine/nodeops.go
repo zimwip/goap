@@ -80,8 +80,10 @@ func ChangeImpactsFromBlackboard(bb domain.Blackboard) []dsl.ChangeImpact {
 }
 
 // applyNodeOps applies the change impact operations a script buffered, in order:
-// a declaration adds a change impact, a write creates the next version of its
-// node on the change branch, a review accepts or rejects it. References ("#nN")
+// a declaration adds a change impact, a write edits its working version (checked
+// out on the first write, ADR 0076), a review accepts or rejects it, a check-in
+// freezes it, a transition moves it along its lifecycle, a cancel drops the
+// working version. References ("#nN")
 // name the change impacts declared earlier by the same script; a key names a
 // change impact the process sees. On a flow branch the process sees the change
 // nodes of its flow, and what it declares and writes stays on the flow until it
@@ -108,6 +110,7 @@ func (e *Engine) applyNodeOps(ctx context.Context, p *Process, ops []dsl.NodeOp,
 	}
 	byKey := map[string]domain.ChangeImpactID{} // stored change impacts, then the ones this script declares
 	posts := map[domain.ChangeImpactID]domain.NodeRef{}
+	out := map[domain.ChangeImpactID]bool{} // the change impacts with a working version (ADR 0076)
 	for _, cn := range bb.Change.Nodes {
 		if len(cn.Items) > 0 {
 			continue // derived from items: decided through them
@@ -115,6 +118,7 @@ func (e *Engine) applyNodeOps(ctx context.Context, p *Process, ops []dsl.NodeOp,
 		byKey[cn.Key] = cn.ID
 		if cn.Post != nil {
 			posts[cn.ID] = *cn.Post
+			out[cn.ID] = bb.Nodes[*cn.Post].CheckedOut
 		}
 	}
 	local := map[string]domain.ChangeImpactID{}
@@ -218,28 +222,76 @@ func (e *Engine) applyNodeOps(ctx context.Context, p *Process, ops []dsl.NodeOp,
 			if err != nil {
 				return declared, fail(err)
 			}
-			w := graph.NodeWrite{Properties: op.Props, State: op.State, Retire: op.Retire, Flow: p.Flow, Execution: execution}
+			if op.State != "" {
+				return declared, fail(fmt.Errorf("a lifecycle state is a transition of its own: use transitionNode (ADR 0076)"))
+			}
+			// the first write checks the node out: its working version, edited in place by the next ones (ADR 0076)
+			if !out[id] {
+				cn, err := retryOnConflict(func() (domain.ChangeImpact, error) {
+					return e.Graph.CheckoutNode(ctx, p.ChangeID, graph.NodeCheckout{Impact: id, Flow: p.Flow, Execution: execution})
+				})
+				if err != nil {
+					return declared, fail(err)
+				}
+				posts[id], out[id] = *cn.Post, true
+			}
+			if len(op.Props) > 0 {
+				if _, err := e.Graph.UpdateNode(ctx, p.ChangeID, id, graph.NodeUpdate{Properties: op.Props, Flow: p.Flow, Execution: execution}); err != nil {
+					return declared, fail(err)
+				}
+			}
 			for _, l := range op.Links {
 				to, err := target(l.To)
 				if err != nil {
 					return declared, fail(err)
 				}
-				w.AddLinks = append(w.AddLinks, graph.LinkWrite{Type: qualify(l.Type), To: to})
+				if _, err := e.Graph.CreateLink(ctx, p.ChangeID, id, graph.LinkWrite{Type: qualify(l.Type), To: to}, p.Flow, execution); err != nil {
+					return declared, fail(err)
+				}
 			}
 			for _, l := range op.RemoveLinks {
-				w.RemoveLinks = append(w.RemoveLinks, domain.LinkID(l))
+				if err := e.Graph.DeleteLink(ctx, p.ChangeID, domain.LinkID(l), p.Flow, execution); err != nil {
+					return declared, fail(err)
+				}
+			}
+			if err := produce(id); err != nil {
+				return declared, fail(err)
+			}
+		case "checkin":
+			id, err := resolve(op.Node)
+			if err != nil {
+				return declared, fail(err)
+			}
+			if _, err := e.Graph.CheckinNode(ctx, p.ChangeID, id, p.Flow, execution); err != nil {
+				return declared, fail(err)
+			}
+			out[id] = false
+		case "transition":
+			id, err := resolve(op.Node)
+			if err != nil {
+				return declared, fail(err)
 			}
 			cn, err := retryOnConflict(func() (domain.ChangeImpact, error) {
-				return e.Graph.WriteNode(ctx, p.ChangeID, id, w)
+				return e.Graph.TransitionNode(ctx, p.ChangeID, graph.NodeTransition{NodeCheckout: graph.NodeCheckout{Impact: id, Flow: p.Flow, Execution: execution}, To: op.State})
 			})
 			if err != nil {
 				return declared, fail(err)
 			}
+			posts[id] = *cn.Post
+		case "cancel":
+			id, err := resolve(op.Node)
+			if err != nil {
+				return declared, fail(err)
+			}
+			cn, err := e.Graph.CancelCheckout(ctx, p.ChangeID, id, p.Flow, execution)
+			if err != nil {
+				return declared, fail(err)
+			}
+			out[id] = false
 			if cn.Post != nil {
 				posts[id] = *cn.Post
-			}
-			if err := produce(id); err != nil {
-				return declared, fail(err)
+			} else {
+				delete(posts, id)
 			}
 		case "review":
 			id, err := resolve(op.Node)

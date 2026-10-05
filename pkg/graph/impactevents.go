@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"slices"
 
 	"github.com/zimwip/goap/pkg/domain"
 )
@@ -42,6 +43,17 @@ func (g *Graph) emit(ctx context.Context, tx Tx, events ...domain.ImpactEvent) e
 			return err
 		}
 		next := domain.ApplyImpactEvent(cur, e)
+		// a change impact the event removes (a creation cancelled before its first check-in, ADR 0076)
+		for _, cn := range cur {
+			if !slices.ContainsFunc(next, func(n domain.ChangeImpact) bool { return n.ID == cn.ID }) {
+				if err := tx.DeleteChangeImpact(ctx, e.Change, cn.ID); err != nil {
+					return err
+				}
+			}
+		}
+		cur = slices.DeleteFunc(slices.Clone(cur), func(c domain.ChangeImpact) bool {
+			return !slices.ContainsFunc(next, func(n domain.ChangeImpact) bool { return n.ID == c.ID })
+		})
 		// the superseded ones first: a node has one live change impact per flow (index change_impact_live)
 		var changed []domain.ChangeImpact
 		for i, cn := range next {

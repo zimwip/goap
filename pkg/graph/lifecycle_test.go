@@ -39,7 +39,7 @@ func newLifecycleWorldG(t *testing.T, repo Repo, approveGuard string) lcWorld {
 			{Name: "release", From: "draft", To: "released", Children: &domain.ChildrenRule{States: []string{"approved"}}},
 		}}
 	mk := func(key, typ string, props map[string]any, state string) domain.Node {
-		n, err := seedNode(ctx, w.g, NewNode{Key: key, Type: typ, Properties: props, State: state})
+		n, err := seedNode(ctx, w.g, newNode{Key: key, Type: typ, Properties: props, State: state})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -49,14 +49,13 @@ func newLifecycleWorldG(t *testing.T, repo Repo, approveGuard string) lcWorld {
 	w.g.Types = func() TypeCatalog { return types }
 	w.req1 = mk("REQ-1", "Requirement", map[string]any{"title": "one"}, "approved")
 	w.req2 = mk("REQ-2", "Requirement", map[string]any{}, "proposed")
-	w.spec = mk("SPEC-1", "Spec", map[string]any{"title": "spec"}, "released")
-	c0 := testChange(t, w.g, "")
-	for _, to := range []domain.Node{w.req1, w.req2} {
-		if _, err := w.g.Link(ctx, c0, domain.LinkContains, w.spec.Ref(), to.Ref(), nil); err != nil {
-			t.Fatal(err)
-		}
+	spec, err := seedNode(ctx, w.g, newNode{Key: "SPEC-1", Type: "Spec", Properties: map[string]any{"title": "spec"}, State: "released",
+		Links: []LinkWrite{{Type: domain.LinkContains, To: w.req1.Ref()}, {Type: domain.LinkContains, To: w.req2.Ref()}}})
+	if err != nil {
+		t.Fatal(err)
 	}
-	// Link bumps nothing: the spec still is version 1 with its links
+	w.spec = spec
+	// the spec is version 1 with its links
 	w.base = pinBaseline(t, w.g, "", w.req1.Ref(), w.req2.Ref(), w.spec.Ref())
 	return w
 }
@@ -82,24 +81,16 @@ func (w lcWorld) declare(t *testing.T, c domain.Change, n domain.Node) domain.Ch
 }
 
 // write writes the next version of a change impact.
-func (w lcWorld) write(c domain.Change, id domain.ChangeImpactID, nw NodeWrite) error {
-	_, err := w.g.WriteNode(context.Background(), c.ID, id, nw)
+func (w lcWorld) write(c domain.Change, id domain.ChangeImpactID, nw edit) error {
+	_, err := w.g.edit(context.Background(), c.ID, id, nw)
 	return err
 }
 
-// accept accepts the change impacts of a change.
+// accept accepts the change impacts of a change and checks them in.
 func (w lcWorld) accept(t *testing.T, c domain.Change) {
 	t.Helper()
-	nodes, err := w.g.ListChangeImpacts(context.Background(), c.ID)
-	if err != nil {
+	if err := w.g.acceptAllAndCheckin(context.Background(), c.ID); err != nil {
 		t.Fatal(err)
-	}
-	for _, n := range nodes {
-		if n.Review == domain.ReviewProposed {
-			if _, err := w.g.ReviewNode(context.Background(), c.ID, n.ID, domain.ReviewAccepted, "u", "ok"); err != nil {
-				t.Fatal(err)
-			}
-		}
 	}
 }
 
@@ -118,7 +109,7 @@ func testActivityGoalsGateReplacesEditableFloor(t *testing.T, repo Repo) {
 		t.Fatal(err)
 	}
 	id := w.declare(t, c, w.req2)
-	for _, step := range []NodeWrite{{State: "draft"}, {Properties: map[string]any{"title": "two"}}} {
+	for _, step := range []edit{{State: "draft"}, {Properties: map[string]any{"title": "two"}}} {
 		if err := w.write(c, id, step); err != nil {
 			t.Fatal(err)
 		}
@@ -186,11 +177,11 @@ func testLifecycleReopenEditAndApprove(t *testing.T, repo Repo) {
 	id := w.declare(t, c, w.req1)
 
 	// an approved node is not editable
-	if err := w.write(c, id, NodeWrite{Properties: map[string]any{"title": "x"}}); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "not editable") {
+	if err := w.write(c, id, edit{Properties: map[string]any{"title": "x"}}); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "not editable") {
 		t.Fatalf("editing an approved node must be refused: %v", err)
 	}
 	// reopen, edit, approve, all in the change
-	for _, step := range []NodeWrite{{State: "draft"}, {Properties: map[string]any{"title": "one v2"}}} {
+	for _, step := range []edit{{State: "draft"}, {Properties: map[string]any{"title": "one v2"}}} {
 		if err := w.write(c, id, step); err != nil {
 			t.Fatal(err)
 		}
@@ -207,7 +198,7 @@ func testLifecycleReopenEditAndApprove(t *testing.T, repo Repo) {
 	if _, err := w.g.Apply(ctx, c.ID, ""); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "editable state") {
 		t.Fatalf("apply must refuse an editable leftover: %v", err)
 	}
-	if err := w.write(c, id, NodeWrite{State: "approved"}); err != nil {
+	if err := w.write(c, id, edit{State: "approved"}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := w.g.Apply(ctx, c.ID, ""); err != nil {
@@ -232,7 +223,7 @@ func testLifecycleTransitionRules(t *testing.T, repo Repo) {
 	// no such transition
 	c := w.change(t, "bad move")
 	id := w.declare(t, c, w.req1)
-	if err := w.write(c, id, NodeWrite{State: "proposed"}); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "cannot go from approved to proposed") {
+	if err := w.write(c, id, edit{State: "proposed"}); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "cannot go from approved to proposed") {
 		t.Fatalf("unknown transition: %v", err)
 	}
 	// a node type without lifecycle has no transitions
@@ -241,25 +232,22 @@ func testLifecycleTransitionRules(t *testing.T, repo Repo) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := w.write(c, notes[0].ID, NodeWrite{State: "x"}); err == nil {
+	if err := w.write(c, notes[0].ID, edit{State: "x"}); err == nil {
 		t.Fatal("a Note has no lifecycle: a state must be refused")
 	}
-	// required attribute: REQ-2 has no title
+	// required attribute: REQ-2 has no title, the transition is refused when it is taken (ADR 0076)
 	c = w.change(t, "approve without title")
 	id = w.declare(t, c, w.req2)
-	for _, st := range []string{"draft", "approved"} {
-		if err := w.write(c, id, NodeWrite{State: st}); err != nil {
-			t.Fatal(err)
-		}
+	if err := w.write(c, id, edit{State: "draft"}); err != nil {
+		t.Fatal(err)
 	}
-	w.accept(t, c)
-	if _, err := w.g.Apply(ctx, c.ID, ""); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), `attribute "title" is required`) {
+	if err := w.write(c, id, edit{State: "approved"}); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), `attribute "title" is required`) {
 		t.Fatalf("requires.attributes: %v", err)
 	}
 	// with the attribute set before the approval it goes through
 	c = w.change(t, "approve with title")
 	id = w.declare(t, c, w.req2)
-	for _, step := range []NodeWrite{{State: "draft"}, {Properties: map[string]any{"title": "two"}}, {State: "approved"}} {
+	for _, step := range []edit{{State: "draft"}, {Properties: map[string]any{"title": "two"}}, {State: "approved"}} {
 		if err := w.write(c, id, step); err != nil {
 			t.Fatal(err)
 		}
@@ -268,7 +256,7 @@ func testLifecycleTransitionRules(t *testing.T, repo Repo) {
 	if _, err := w.g.Apply(ctx, c.ID, ""); err != nil {
 		t.Fatal(err)
 	}
-	// the failed Apply landed nothing, and REQ-2 is approved now
+	// REQ-2 is approved now
 	if n, _ := stateOf(t, w.g, w.req2.ID); n.State != "approved" || n.Properties["title"] != "two" || n.ChangeID != c.ID {
 		t.Fatalf("REQ-2: %+v", n)
 	}
@@ -285,7 +273,7 @@ func testLifecycleParallelChangesConflict(t *testing.T, repo Repo) {
 	for _, title := range []string{"first", "second"} {
 		c := w.change(t, title)
 		id := w.declare(t, c, w.req1)
-		for _, step := range []NodeWrite{{State: "draft"}, {Properties: map[string]any{"title": title}}, {State: "approved"}} {
+		for _, step := range []edit{{State: "draft"}, {Properties: map[string]any{"title": title}}, {State: "approved"}} {
 			if err := w.write(c, id, step); err != nil {
 				t.Fatal(err)
 			}
@@ -318,7 +306,7 @@ func testLifecycleCreateNode(t *testing.T, repo Repo) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		return w.write(c, ns[0].ID, NodeWrite{Properties: map[string]any{"title": "nine"}, State: state})
+		return w.write(c, ns[0].ID, edit{Properties: map[string]any{"title": "nine"}, State: state})
 	}
 	if err := create(w.change(t, "create approved"), "REQ-8", "approved"); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("no transition proposed → approved: %v", err)
@@ -356,21 +344,21 @@ func testLifecycleDocumentValidatesChildren(t *testing.T, repo Repo) {
 	// reopen the spec and release it again while REQ-2 is only proposed
 	c := w.change(t, "release the spec")
 	spec := w.declare(t, c, w.spec)
-	for _, st := range []string{"draft", "released"} {
-		if err := w.write(c, spec, NodeWrite{State: st}); err != nil {
-			t.Fatal(err)
-		}
+	if err := w.write(c, spec, edit{State: "draft"}); err != nil {
+		t.Fatal(err)
 	}
-	w.accept(t, c)
-	if _, err := w.g.Apply(ctx, c.ID, ""); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "REQ-2") || !strings.Contains(err.Error(), "proposed") {
+	if err := w.write(c, spec, edit{State: "released"}); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "REQ-2") || !strings.Contains(err.Error(), "proposed") {
 		t.Fatalf("children validation: %v", err)
 	}
-	// a change that approves REQ-2 as well: children are judged on their projected states
+	// the change approves REQ-2 first: children are judged on the states the change gives them
 	req2 := w.declare(t, c, w.req2)
-	for _, step := range []NodeWrite{{State: "draft"}, {Properties: map[string]any{"title": "two"}}, {State: "approved"}} {
+	for _, step := range []edit{{State: "draft"}, {Properties: map[string]any{"title": "two"}}, {State: "approved"}} {
 		if err := w.write(c, req2, step); err != nil {
 			t.Fatal(err)
 		}
+	}
+	if err := w.write(c, spec, edit{State: "released"}); err != nil {
+		t.Fatal(err)
 	}
 	w.accept(t, c)
 	if _, err := w.g.Apply(ctx, c.ID, ""); err != nil {
@@ -395,17 +383,17 @@ func testLifecycleAuthorizerAndGuard(t *testing.T, repo Repo) {
 	}
 	c := w.change(t, "denied")
 	id := w.declare(t, c, w.req1)
-	if err := w.write(c, id, NodeWrite{State: "draft"}); err != nil {
-		t.Fatalf("permissions are checked when applying, not when writing: %v", err)
+	if err := w.write(c, id, edit{State: "draft"}); !errors.Is(err, deny) {
+		t.Fatalf("a transition is authorized when it is taken (ADR 0076): %v", err)
 	}
-	w.accept(t, c)
-	if _, err := w.g.Apply(ctx, c.ID, ""); !errors.Is(err, deny) {
-		t.Fatalf("authorizer: %v", err)
+	if n, _ := stateOf(t, w.g, w.req1.ID); n.State != "approved" {
+		t.Fatalf("a refused transition writes nothing: %+v", n)
 	}
+	_ = ctx
 }
 
 // The authorizer reads the graph (the access policies are graph data): it runs outside the transaction of the
-// apply, which would otherwise wait for itself.
+// transition, which would otherwise wait for itself.
 func TestLifecycleAuthorizerReadsTheGraph(t *testing.T) {
 	forEachRepo(t, testLifecycleAuthorizerReadsTheGraph)
 }
@@ -423,20 +411,17 @@ func testLifecycleAuthorizerReadsTheGraph(t *testing.T, repo Repo) {
 	}
 	c := w.change(t, "reads")
 	id := w.declare(t, c, w.req1)
-	if err := w.write(c, id, NodeWrite{State: "draft"}); err != nil {
-		t.Fatal(err)
-	}
-	w.accept(t, c)
 	done := make(chan error, 1)
-	go func() { _, err := w.g.Apply(ctx, c.ID, ""); done <- err }()
+	go func() { done <- w.write(c, id, edit{State: "draft"}) }()
 	select {
 	case err := <-done:
-		if err != nil && !errors.Is(err, ErrInvalid) {
-			t.Fatalf("apply: %v", err)
+		if err != nil {
+			t.Fatalf("transition: %v", err)
 		}
 	case <-time.After(10 * time.Second):
-		t.Fatal("apply waits for itself: the authorizer runs inside its transaction")
+		t.Fatal("the transition waits for itself: the authorizer runs inside its transaction")
 	}
+	_ = ctx
 	if len(asked) == 0 {
 		t.Fatal("the transition was not authorized")
 	}
@@ -454,19 +439,57 @@ func testLifecycleGuard(t *testing.T, repo Repo) {
 	}{{"nope", false}, {"ok!", true}} {
 		c := w.change(t, "guard "+tc.title)
 		id := w.declare(t, c, w.req1)
-		for _, step := range []NodeWrite{{State: "draft"}, {Properties: map[string]any{"title": tc.title}}, {State: "approved"}} {
+		for _, step := range []edit{{State: "draft"}, {Properties: map[string]any{"title": tc.title}}} {
 			if err := w.write(c, id, step); err != nil {
 				t.Fatal(err)
 			}
 		}
-		w.accept(t, c)
-		_, err := w.g.Apply(ctx, c.ID, "")
+		err := w.write(c, id, edit{State: "approved"})
 		if tc.ok && err != nil {
 			t.Fatal(err)
+		}
+		if tc.ok {
+			w.accept(t, c)
+			if _, err := w.g.Apply(ctx, c.ID, ""); err != nil {
+				t.Fatal(err)
+			}
 		}
 		if !tc.ok && (!errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "guard not satisfied")) {
 			t.Fatalf("guard: %v", err)
 		}
+	}
+}
+
+// A transition may require a review (ADR 0076): the review is the change's, its guard reads it from the impact of the
+// node.
+func TestLifecycleGuardRequiresAReview(t *testing.T) {
+	forEachRepo(t, testLifecycleGuardRequiresAReview)
+}
+
+func testLifecycleGuardRequiresAReview(t *testing.T, repo Repo) {
+	ctx := context.Background()
+	w := newLifecycleWorldG(t, repo, `impact.review == "accepted"`)
+	c := w.change(t, "approve after review")
+	id := w.declare(t, c, w.req1)
+	approve := NodeTransition{NodeCheckout: NodeCheckout{Impact: id}, To: "approved"}
+	if _, err := w.g.TransitionNode(ctx, c.ID, NodeTransition{NodeCheckout: NodeCheckout{Impact: id}, To: "draft"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w.g.TransitionNode(ctx, c.ID, approve); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "guard not satisfied") {
+		t.Fatalf("approving before the review: %v", err)
+	}
+	if _, err := w.g.ReviewNode(ctx, c.ID, id, domain.ReviewAccepted, "reviewer", "fine"); err != nil {
+		t.Fatal(err)
+	}
+	cn, err := w.g.TransitionNode(ctx, c.ID, approve)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n, _ := w.g.Node(ctx, *cn.Post); n.State != "approved" || n.CheckedOut {
+		t.Fatalf("the transition is a version of its own, checked in: %+v", n)
+	}
+	if _, err := w.g.Apply(ctx, c.ID, ""); err != nil {
+		t.Fatal(err)
 	}
 }
 

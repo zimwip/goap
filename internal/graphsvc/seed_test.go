@@ -66,13 +66,13 @@ func TestSeedBuiltins(t *testing.T) {
 	}
 	pre := n.Ref()
 	commit(domain.NamespacePlatform, graph.NodeEdit{Pre: &pre, Props: map[string]any{"description": "old", "tools": []any{}}, Rationale: "older"})
-	// an administrator removes the admin MCP from the default organisation
+	// an administrator disables the admin MCP for the default organisation (a node is never removed by a change, ADR 0076)
 	a, err := g.NodeByKey(ctx, access.NamespaceOrganisation, adapter.Key(access.DefaultOrg, mcpbuiltin.Admin))
 	if err != nil {
 		t.Fatal(err)
 	}
 	apre := a.Ref()
-	commit(access.NamespaceOrganisation, graph.NodeEdit{Pre: &apre, Retire: true, Rationale: "no admin tools"})
+	commit(access.NamespaceOrganisation, graph.NodeEdit{Pre: &apre, Props: map[string]any{"disabled": true}, Rationale: "no admin tools"})
 
 	if seeded, err := graphsvc.SeedBuiltins(ctx, g); err != nil || !seeded {
 		t.Fatalf("resync = %v, %v", seeded, err)
@@ -93,8 +93,8 @@ func TestSeedBuiltins(t *testing.T) {
 	orgHead, _ := g.BranchHead(ctx, access.NamespaceOrganisation, domain.MainBranch)
 	orgNodes, _, _ := g.BaselineGraph(ctx, orgHead.ID)
 	for _, n := range orgNodes {
-		if n.Key == adapter.Key(access.DefaultOrg, mcpbuiltin.Admin) && !n.Deleted {
-			t.Fatal("the removed instance was seeded again")
+		if n.Key == adapter.Key(access.DefaultOrg, mcpbuiltin.Admin) && n.Properties["disabled"] != true {
+			t.Fatalf("the disabled instance was seeded again: %+v", n.Properties)
 		}
 	}
 }

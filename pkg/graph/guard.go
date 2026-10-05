@@ -19,8 +19,9 @@ import (
 //   - every change names the unit holding it and the project it acts in, nodes of the structures in force;
 //   - every baseline is the result of a change (ADR 0056); what precedes the first change of a namespace is the empty
 //     state, the empty baseline id, which nothing stores;
-//   - only a working version (ADR 0076: checked out by CreateNode or CheckoutNode, until its check-in) or a version
-//     written in the same transaction gets its owner moved or its outgoing links edited or removed in place, and
+//   - a version is immutable once written: only a working version (ADR 0076: checked out by CreateNode or
+//     CheckoutNode, until its check-in) or a version written in the same transaction gets its properties set, its
+//     owner moved or its outgoing links added, edited or removed, and
 //     only a working version is checked in or dropped (a checkout cancelled; a creation cancelled before its first
 //     check-in removes the node, the one deletion of the graph).
 //
@@ -70,6 +71,13 @@ func (t *guardTx) editable(ctx context.Context, ref domain.NodeRef, what string)
 		return fmt.Errorf("%s: version %s %s is checked in, check the node out first (ADR 0076): %w", what, n.Key, ref, ErrConflict)
 	}
 	return nil
+}
+
+func (t *guardTx) SetNodeProps(ctx context.Context, ref domain.NodeRef, props map[string]any) error {
+	if err := t.editable(ctx, ref, "properties"); err != nil {
+		return err
+	}
+	return t.Tx.SetNodeProps(ctx, ref, props)
 }
 
 func (t *guardTx) SetNodeOwner(ctx context.Context, ref domain.NodeRef, owner domain.NodeID) error {
@@ -243,6 +251,9 @@ func (t *guardTx) PutTag(ctx context.Context, tag domain.Tag) error {
 
 func (t *guardTx) PutLink(ctx context.Context, l domain.Link) error {
 	if err := t.needChange(l.ChangeID, "link "+l.Type); err != nil {
+		return err
+	}
+	if err := t.editable(ctx, l.From, "link "+l.Type); err != nil {
 		return err
 	}
 	return t.Tx.PutLink(ctx, l)

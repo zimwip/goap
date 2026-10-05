@@ -37,9 +37,11 @@ var changeOps = []op{
 	{"reformulate", "Revise the title/intent of a change, superseding the previous definition (history kept): {change, item}",
 		schema(map[string]string{"change": "string", "title": "string", "intent": "string", "rationale": "string"}, "intent", "rationale")},
 	{"write", "Create a node in the change: {node}", schema(map[string]string{"change": "string", "key": "string", "type": "string", "properties": "object", "rationale": "string"}, "key", "type", "rationale")},
-	{"edit", "Modify the properties or the state of a node in the change: {node}", schema(map[string]string{"change": "string", "key": "string", "properties": "object", "expect": "object", "state": "string", "rationale": "string"}, "key", "rationale")},
+	{"edit", "Modify the properties of a node in the change (its working version, checked out on the first edit), or move it to a lifecycle state (a transition, from a checked-in version): {node}", schema(map[string]string{"change": "string", "key": "string", "properties": "object", "expect": "object", "state": "string", "rationale": "string"}, "key", "rationale")},
 	{"link", "Add a link from a node of the change: {node}", schema(map[string]string{"change": "string", "from": "string", "type": "string", "to": "string", "rationale": "string"}, "from", "type", "to")},
-	{"retire", "Retire a node in the change: {node}", schema(map[string]string{"change": "string", "key": "string", "rationale": "string"}, "key", "rationale")},
+	{"unlink", "Remove a link from a node of the change (removing a child is a modification of its parent): {node}", schema(map[string]string{"change": "string", "from": "string", "type": "string", "to": "string", "rationale": "string"}, "from", "type", "to")},
+	{"checkin", "Check in the working version of a node of the change, once its review is accepted: {node}", schema(map[string]string{"change": "string", "key": "string"}, "key")},
+	{"cancel", "Cancel the checkout of a node of the change (a node created by the change and never checked in goes away): {node}", schema(map[string]string{"change": "string", "key": "string"}, "key")},
 	{"note", "Add an artifact item to the blackboard: {item}", schema(map[string]string{"change": "string", "type": "string", "text": "string", "data": "object"}, "text")},
 	{"signal", "Emit a named notification other agents or a live parent may react to: {item}", schema(map[string]string{"change": "string", "type": "string", "data": "object", "target": "string"}, "type")},
 	{"validate", "Check the consistency of the change: {issues}", schema(map[string]string{"change": "string"})},
@@ -189,11 +191,11 @@ func (c Change) Invoke(ctx context.Context, op string, raw, _ map[string]any, _ 
 		} else if ok {
 			return nil, fmt.Errorf("%s exists in the baseline of the change: edit it", key)
 		}
-		imp, err := w.declare(domain.ChangeImpact{Key: key, Type: typ, Intent: domain.IntentCreated, Rationale: a.str("rationale")})
+		out, err := c.p.Graph.CreateNode(ctx, id, graph.NodeCreate{Key: key, Type: typ, Properties: a.object("properties"), Rationale: a.str("rationale"), ProducedBy: producer(ctx)})
 		if err != nil {
 			return nil, err
 		}
-		return w.write(imp, graph.NodeWrite{Properties: a.object("properties")})
+		return nodeResult(out)
 	case "edit":
 		imp, err := w.touch(a.str("key"), a.str("rationale"))
 		if err != nil {
@@ -202,16 +204,76 @@ func (c Change) Invoke(ctx context.Context, op string, raw, _ map[string]any, _ 
 		if err := w.expect(imp, a.object("expect")); err != nil {
 			return nil, err
 		}
-		return w.write(imp, graph.NodeWrite{Properties: a.object("properties"), State: a.str("state")})
-	case "retire":
-		imp, err := w.touch(a.str("key"), a.str("rationale"))
+		props, state := a.object("properties"), a.str("state")
+		if len(props) == 0 && state == "" {
+			return nil, errors.New(`edit "properties", or a "state" to move the node to`)
+		}
+		if len(props) > 0 {
+			if state != "" {
+				return nil, errors.New(`a state is a transition of its own, from a checked-in version: edit the properties, have them reviewed and check the node in, then move it`)
+			}
+			return w.edit(imp, props, nil)
+		}
+		out, err := w.c.p.Graph.TransitionNode(ctx, id, graph.NodeTransition{NodeCheckout: graph.NodeCheckout{Impact: imp.ID}, To: state})
 		if err != nil {
 			return nil, err
 		}
-		if imp.Intent == domain.IntentCreated {
-			return nil, fmt.Errorf("%s is created by the change: it cannot be retired, drop it from the change", imp.Key)
+		return nodeResult(out)
+	case "checkin", "cancel":
+		imp, ok := w.impact(a.str("key"))
+		if !ok {
+			return nil, fmt.Errorf("%s is not in the change", a.str("key"))
 		}
-		return w.write(imp, graph.NodeWrite{Retire: true})
+		var out domain.ChangeImpact
+		var err error
+		if op == "checkin" {
+			out, err = c.p.Graph.CheckinNode(ctx, id, imp.ID, "", "")
+		} else {
+			out, err = c.p.Graph.CancelCheckout(ctx, id, imp.ID, "", "")
+		}
+		if err != nil {
+			return nil, err
+		}
+		return nodeResult(out)
+	case "unlink":
+		typ, to := a.str("type"), a.str("to")
+		if typ == "" || to == "" {
+			return nil, errors.New(`arguments "type" and "to" are required`)
+		}
+		rationale := a.str("rationale")
+		if rationale == "" {
+			rationale = "unlink " + typ + " to " + to
+		}
+		imp, err := w.touch(a.str("from"), rationale)
+		if err != nil {
+			return nil, err
+		}
+		if imp, err = w.checkout(imp); err != nil {
+			return nil, err
+		}
+		target, ok, err := w.base(to)
+		if err != nil {
+			return nil, err
+		}
+		if t, found := w.impact(to); found && t.Post != nil {
+			target.ID, ok = t.Post.ID, true
+		}
+		if !ok {
+			return nil, fmt.Errorf("no node %s", to)
+		}
+		bb, err := w.c.p.Graph.BlackboardIn(ctx, id, "")
+		if err != nil {
+			return nil, err
+		}
+		for _, l := range bb.Nodes[*imp.Post].Out {
+			if l.Type == typ && l.To.ID == target.ID {
+				if err := w.c.p.Graph.DeleteLink(ctx, id, l.ID, "", ""); err != nil {
+					return nil, err
+				}
+				return nodeResult(imp)
+			}
+		}
+		return nil, fmt.Errorf("%s has no %s link to %s", imp.Key, typ, to)
 	case "link":
 		typ, to := a.str("type"), a.str("to")
 		if typ == "" || to == "" {
@@ -229,7 +291,7 @@ func (c Change) Invoke(ctx context.Context, op string, raw, _ map[string]any, _ 
 		if err != nil {
 			return nil, err
 		}
-		return w.write(imp, graph.NodeWrite{AddLinks: []graph.LinkWrite{{Type: typ, To: ref}}})
+		return w.edit(imp, nil, []graph.LinkWrite{{Type: typ, To: ref}})
 	}
 	return nil, unknown(op)
 }
@@ -634,11 +696,36 @@ func (w *working) ref(key string) (domain.NodeRef, error) {
 	return domain.NodeRef{}, fmt.Errorf("no node %s to link to in the change nor in its baseline", key)
 }
 
-func (w *working) write(imp domain.ChangeImpact, nw graph.NodeWrite) (map[string]any, error) {
-	out, err := w.c.p.Graph.WriteNode(w.ctx, w.bb.Change.ID, imp.ID, nw)
+// checkout returns the change impact with its working version, checked out when it has none (ADR 0076).
+func (w *working) checkout(imp domain.ChangeImpact) (domain.ChangeImpact, error) {
+	if imp.Post != nil {
+		if nv, ok := w.bb.Nodes[*imp.Post]; ok && nv.CheckedOut {
+			return imp, nil
+		}
+	}
+	return w.c.p.Graph.CheckoutNode(w.ctx, w.bb.Change.ID, graph.NodeCheckout{Impact: imp.ID})
+}
+
+// edit edits the working version of a change impact in place: its properties and outgoing links.
+func (w *working) edit(imp domain.ChangeImpact, props map[string]any, links []graph.LinkWrite) (map[string]any, error) {
+	imp, err := w.checkout(imp)
 	if err != nil {
 		return nil, err
 	}
+	if len(props) > 0 {
+		if imp, err = w.c.p.Graph.UpdateNode(w.ctx, w.bb.Change.ID, imp.ID, graph.NodeUpdate{Properties: props}); err != nil {
+			return nil, err
+		}
+	}
+	for _, l := range links {
+		if _, err := w.c.p.Graph.CreateLink(w.ctx, w.bb.Change.ID, imp.ID, l, "", ""); err != nil {
+			return nil, err
+		}
+	}
+	return nodeResult(imp)
+}
+
+func nodeResult(out domain.ChangeImpact) (map[string]any, error) {
 	return result(map[string]any{"node": map[string]any{"key": out.Key, "type": out.Type, "intent": out.Intent, "review": out.Review, "post": out.Post}})
 }
 

@@ -12,6 +12,7 @@ import (
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/domain/def"
 	"github.com/zimwip/goap/pkg/graph"
+	"github.com/zimwip/goap/pkg/graph/graphtest"
 	"github.com/zimwip/goap/pkg/index"
 	"github.com/zimwip/goap/pkg/llm"
 	"github.com/zimwip/goap/pkg/typecat"
@@ -85,7 +86,7 @@ nodeTypes:
 	g := graph.New(graph.NewMemory())
 	g.Types = func() graph.TypeCatalog { return cat }
 	mk := func(key, typ string, props map[string]any) domain.Node {
-		n, err := g.CreateNode(ctx, graph.NewNode{Namespace: "docs", Key: key, Type: typ, Properties: props})
+		n, err := graphtest.Import(ctx, g, graphtest.Node{Namespace: "docs", Key: key, Type: typ, Properties: props})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -115,7 +116,7 @@ nodeTypes:
 	waitFor(t, svc, ctx, q, 2)
 
 	// a new version on main moves the flag; the old version stays searchable off main
-	upd, err := g.UpdateNode(ctx, r1.Ref(), map[string]any{"title": "Users reset their passkey", "priority": "high"})
+	upd, err := graphtest.Edit(ctx, g, r1.ID, map[string]any{"title": "Users reset their passkey", "priority": "high"})
 	if err != nil {
 		t.Fatal(err)
 	}

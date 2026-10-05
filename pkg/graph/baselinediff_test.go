@@ -21,9 +21,11 @@ func testDiffBaselines(t *testing.T, repo Repo) {
 		{Intent: domain.IntentModified, Pre: new(f.test.Ref()), Rationale: "obsolete"},
 		{Intent: domain.IntentCreated, Key: "REQ-9", Type: f.req.Type, Rationale: "new"},
 	}))
-	for i, w := range []NodeWrite{{Properties: map[string]any{"title": "Use PSP v2"}}, {Retire: true}, {Properties: map[string]any{"title": "New"}}} {
-		must[domain.ChangeImpact](t)(g.WriteNode(ctx, c.ID, added[i].ID, w))
-		must[domain.ChangeImpact](t)(g.ReviewNode(ctx, c.ID, added[i].ID, domain.ReviewAccepted, "u", "ok"))
+	for i, w := range []edit{{Properties: map[string]any{"title": "Use PSP v2"}}, {Properties: map[string]any{"title": "Obsolete"}}, {Properties: map[string]any{"title": "New"}}} {
+		must[domain.ChangeImpact](t)(g.edit(ctx, c.ID, added[i].ID, w))
+		if err := g.acceptAndCheckin(ctx, c.ID, added[i].ID, ""); err != nil {
+			t.Fatal(err)
+		}
 	}
 	res := must[domain.Baseline](t)(g.Apply(ctx, c.ID, ""))
 	diff := must[[]BaselineDiff](t)(g.DiffBaselines(ctx, f.base.ID, res.ID))
@@ -31,13 +33,19 @@ func testDiffBaselines(t *testing.T, repo Repo) {
 	for _, d := range diff {
 		got[d.Key] = d.Kind
 	}
-	want := map[string]string{f.req.Key: DiffChanged, f.test.Key: DiffRemoved, "REQ-9": DiffAdded}
+	want := map[string]string{f.req.Key: DiffChanged, f.test.Key: DiffChanged, "REQ-9": DiffAdded}
 	if len(got) != len(want) {
 		t.Fatalf("diff: %v", got)
 	}
 	for k, v := range want {
 		if got[k] != v {
 			t.Fatalf("diff of %s: %q, want %q (%v)", k, got[k], v, got)
+		}
+	}
+	// backwards, the created node is removed (a node never leaves a namespace by a change: ADR 0076)
+	for _, d := range must[[]BaselineDiff](t)(g.DiffBaselines(ctx, res.ID, f.base.ID)) {
+		if d.Key == "REQ-9" && d.Kind != DiffRemoved {
+			t.Fatalf("diff back of REQ-9: %q", d.Kind)
 		}
 	}
 	if none := must[[]BaselineDiff](t)(g.DiffBaselines(ctx, res.ID, res.ID)); len(none) != 0 {

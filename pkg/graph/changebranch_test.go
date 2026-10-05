@@ -22,10 +22,10 @@ func setProp(t *testing.T, g *Graph, f fixture, base domain.BaselineID, title st
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := g.WriteNode(ctx, c.ID, ns[0].ID, NodeWrite{Properties: props}); err != nil {
+	if _, err := g.edit(ctx, c.ID, ns[0].ID, edit{Properties: props}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := g.ReviewNode(ctx, c.ID, ns[0].ID, domain.ReviewAccepted, "u", "ok"); err != nil {
+	if _, err := g.accept(ctx, c.ID, ns[0].ID, "u", "ok"); err != nil {
 		t.Fatal(err)
 	}
 	return c

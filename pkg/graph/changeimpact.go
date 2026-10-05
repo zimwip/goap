@@ -2,9 +2,7 @@ package graph
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"maps"
 	"slices"
 	"strings"
 
@@ -35,10 +33,20 @@ func findChangeImpact(c domain.Change, id domain.ChangeImpactID) (int, error) {
 
 // AddNodes adds change impacts to a change (ADR 0024): each names a node with an
 // intent and a rationale. A modified node gives its pre version, which must be
-// in the reference baseline; the post version is set later by RealizeNode.
-func (g *Graph) AddNodes(ctx context.Context, id domain.ChangeID, nodes []domain.ChangeImpact) ([]domain.ChangeImpact, error) {
+// in the reference baseline. The impact has no version until a CheckoutNode writes one (ADR 0076).
+func (g *Graph) AddNodes(ctx context.Context, id domain.ChangeID, nodes []domain.ChangeImpact) (out []domain.ChangeImpact, err error) {
+	err = g.repo.InTx(ctx, func(tx Tx) (err error) {
+		out, err = g.declareTx(ctx, tx, id, nodes)
+		return err
+	})
+	return out, err
+}
+
+// declareTx declares change impacts in a transaction (AddNodes, and the impact a CreateNode, a CheckoutNode or a
+// TransitionNode declares).
+func (g *Graph) declareTx(ctx context.Context, tx Tx, id domain.ChangeID, nodes []domain.ChangeImpact) ([]domain.ChangeImpact, error) {
 	out := make([]domain.ChangeImpact, 0, len(nodes))
-	err := g.repo.InTx(ctx, func(tx Tx) error {
+	err := func() error {
 		c, err := changeOpen(ctx, tx, id)
 		if err != nil {
 			return err
@@ -81,7 +89,7 @@ func (g *Graph) AddNodes(ctx context.Context, id domain.ChangeID, nodes []domain
 		}
 		for _, cn := range batch {
 			if cn.Post != nil || cn.Landed != nil || len(cn.Reviews) > 0 || cn.Recheck {
-				return fmt.Errorf("change impact %s: post, landed and reviews are set by RealizeNode, ReviewNode and Apply: %w", cn.ID, ErrInvalid)
+				return fmt.Errorf("change impact %s: post, landed and reviews are set by CreateNode / CheckoutNode, ReviewNode and Apply: %w", cn.ID, ErrInvalid)
 			}
 			if cn.Review == "" {
 				cn.Review = domain.ReviewProposed
@@ -141,7 +149,7 @@ func (g *Graph) AddNodes(ctx context.Context, id domain.ChangeID, nodes []domain
 			return tx.PutChange(ctx, c)
 		}
 		return nil
-	})
+	}()
 	return out, err
 }
 
@@ -172,53 +180,6 @@ func (g *Graph) ImpactsOf(ctx context.Context, id domain.ChangeID, execution str
 		}
 	}
 	return out, nil
-}
-
-// RealizeNode sets the post version of a change impact: a version created by the
-// change (its ChangeID) that succeeds the pre version, or the first version of
-// a created node. The version records the change impact and its comment.
-func (g *Graph) RealizeNode(ctx context.Context, id domain.ChangeID, node domain.ChangeImpactID, post domain.NodeRef) (cn domain.ChangeImpact, err error) {
-	err = g.repo.InTx(ctx, func(tx Tx) error {
-		c, err := changeOpen(ctx, tx, id)
-		if err != nil {
-			return err
-		}
-		i, err := findChangeImpact(c, node)
-		if err != nil {
-			return err
-		}
-		cn = c.Nodes[i]
-		if cn.Post != nil {
-			return fmt.Errorf("change impact %s is already realized as %s: %w", node, cn.Post, ErrConflict)
-		}
-		n, err := tx.Node(ctx, post)
-		if err != nil {
-			return err
-		}
-		switch {
-		case n.ChangeID != id:
-			return fmt.Errorf("version %s was not created by change %s: %w", n.Ref(), id, ErrInvalid)
-		case n.Key != cn.Key || n.Type != cn.Type:
-			return fmt.Errorf("version %s is %s %s, not %s %s: %w", n.Ref(), n.Type, n.Key, cn.Type, cn.Key, ErrInvalid)
-		case cn.Intent == domain.IntentModified && !slices.Contains(n.Parents, cn.Pre.Version):
-			return fmt.Errorf("version %s does not succeed %s: %w", n.Ref(), cn.Pre, ErrInvalid)
-		case cn.Intent == domain.IntentCreated && n.Reason != domain.ReasonCreate:
-			return fmt.Errorf("version %s is not the creation of the node: %w", n.Ref(), ErrInvalid)
-		}
-		cn.Post = &domain.NodeRef{ID: n.ID, Version: n.Version}
-		if err := cn.Validate(); err != nil {
-			return fmt.Errorf("change impact %s: %v: %w", node, err, ErrInvalid)
-		}
-		comment := cn.Rationale
-		if len(cn.Reviews) > 0 && cn.Review == domain.ReviewAccepted {
-			comment = cn.Reviews[len(cn.Reviews)-1].Comment
-		}
-		if err := tx.SetNodeOrigin(ctx, *cn.Post, id, cn.ID, comment); err != nil {
-			return err
-		}
-		return g.emit(ctx, tx, domain.ImpactEvent{Change: id, Impact: cn.ID, Op: domain.ImpactWritten, Post: cn.Post})
-	})
-	return
 }
 
 // ReviewNode accepts or rejects a proposed change impact. The comment is
@@ -323,274 +284,6 @@ func (g *Graph) ReopenImpacts(ctx context.Context, id domain.ChangeID, impacts [
 			reopened = append(reopened, cn.ID)
 		}
 		return nil
-	})
-	return
-}
-
-// NodeWrite is one edit of the version a change impact produces.
-type NodeWrite struct {
-	// Properties are merged over the ones of the current version.
-	Properties map[string]any
-	// State moves the node to a lifecycle state, after the other edits of the write.
-	State string
-	// AddLinks are outgoing links of the new version to exact node versions.
-	AddLinks []LinkWrite
-	// RemoveLinks are the outgoing links of the current version left out of the new one.
-	RemoveLinks []domain.LinkID
-	// Flow is the flow branch the write belongs to ("" = the main flow) and Execution the action
-	// run that writes (ADR 0025): the version is written on the branch of the flow, and what a
-	// relaunch marks stale is found through its execution.
-	Flow, Execution string
-	// Retire deletes the node: the new version is a tombstone with no outgoing link.
-	Retire bool
-	// Owner transfers the node to another organisational unit (its key, ADR 0054): the new version is owned by it.
-	// Empty: the owner of the version it follows, or the unit holding the change for a created node.
-	Owner string
-}
-
-// LinkWrite is an outgoing link added by a NodeWrite.
-type LinkWrite struct {
-	Type       string
-	To         domain.NodeRef
-	Properties map[string]any
-}
-
-// WriteNode creates the next version of a change impact's node on the branch of
-// the change and makes it the post version: a modified node derives from its
-// pre version, a created node starts at version 1. Outgoing links are carried
-// forward (re-targeted to the versions this change produced). A node is edited
-// only in an editable state; the transitions, their guards and actions are
-// checked when the change is applied (ADR 0014, ADR 0024).
-func (g *Graph) WriteNode(ctx context.Context, id domain.ChangeID, node domain.ChangeImpactID, w NodeWrite) (cn domain.ChangeImpact, err error) {
-	err = g.repo.InTx(ctx, func(tx Tx) error {
-		c, err := changeOpen(ctx, tx, id)
-		if err != nil {
-			return err
-		}
-		own, ok, err := ownBranch(ctx, tx, c)
-		if err != nil {
-			return err
-		} else if !ok {
-			if c, own, err = g.ensureOwnBranch(ctx, tx, c); err != nil {
-				return err
-			}
-		}
-		flow := c.ResolveFlow(w.Flow)
-		if flow != "" {
-			if _, ok := c.Flow(flow); !ok {
-				return fmt.Errorf("flow %s: %w", flow, ErrNotFound)
-			}
-			if c.FlowStatusOf(flow) != domain.FlowOpen {
-				return fmt.Errorf("flow %s is not open: %w", flow, ErrConflict)
-			}
-		}
-		i, err := findChangeImpact(c, node)
-		if err != nil {
-			return err
-		}
-		cn = c.Nodes[i]
-		fv := g.newFlowNodes(tx, c, flow)
-		seen, err := fv.nodes(ctx) // the change impacts as this flow sees them
-		if err != nil {
-			return err
-		}
-		vi := slices.IndexFunc(seen, func(x domain.ChangeImpact) bool { return x.ID == node })
-		if vi < 0 {
-			return fmt.Errorf("change impact %s is not on the flow %q of change %s: %w", node, flow, id, ErrNotFound)
-		}
-		vcn := seen[vi]
-		if vcn.Review == domain.ReviewRejected {
-			return fmt.Errorf("change impact %s is rejected: %w", node, ErrConflict)
-		}
-		if frozen, in, err := g.frozen(ctx, tx, c, node); err != nil {
-			return err
-		} else if frozen {
-			return fmt.Errorf("change impact %s was written in state %s, which the change has left (now %s): go back to it first: %w", node, in, c.State, ErrConflict)
-		}
-		ix, err := g.typesAt(ctx, tx, c.BaselineID)
-		if err != nil {
-			return err
-		}
-		branch := domain.BranchOf(c.Branch)
-		if flow != "" {
-			if branch, err = g.ensureFlowBranch(ctx, tx, c, own, flow); err != nil {
-				return err
-			}
-		}
-		ns := domain.NamespaceOf(c.Namespace)
-
-		var base *domain.Node
-		switch {
-		case flow != "":
-			if vcn.Post != nil { // the version the flow sees (ADR 0029 §3)
-				n, err := tx.Node(ctx, *vcn.Post)
-				if err != nil {
-					return err
-				}
-				base = &n
-			}
-			if base == nil && cn.Pre != nil {
-				n, err := tx.Node(ctx, *cn.Pre)
-				if err != nil {
-					return err
-				}
-				base = &n
-			}
-		case cn.Post != nil:
-			n, err := tx.LatestOn(ctx, cn.Post.ID, branch)
-			if err != nil {
-				return err
-			}
-			base = &n
-		case cn.Pre != nil:
-			n, err := tx.Node(ctx, *cn.Pre)
-			if err != nil {
-				return err
-			}
-			if latest, err := tx.LatestOn(ctx, n.ID, branch); err == nil {
-				n = latest
-			} else if !errors.Is(err, ErrNotFound) {
-				return err
-			}
-			base = &n
-		}
-		if base != nil && domain.NamespaceOf(base.Namespace) != ns {
-			return invalidf("node %s is in namespace %s, the change acts on %s", base.Key, domain.NamespaceOf(base.Namespace), ns)
-		}
-		typ := cn.Type
-		lc := ix.lifecycleOf(typ)
-
-		n := domain.Node{Branch: branch, Namespace: ns, Key: cn.Key, Type: typ, ChangeID: id, ChangeImpact: cn.ID, CreatedAt: g.now(), Comment: cn.Rationale, Execution: w.Execution}
-		if vcn.Review == domain.ReviewAccepted && len(cn.Reviews) > 0 {
-			n.Comment = cn.Reviews[len(cn.Reviews)-1].Comment
-		}
-		var cur string // state the edits and the transition start from
-		if base == nil {
-			if err := ix.checkNode(ns, typ); err != nil {
-				return err
-			}
-			n.ID, n.Version, n.Reason = domain.NodeID(g.newID()), 1, domain.ReasonCreate
-			if lc != nil {
-				cur = lc.Initial
-			}
-		} else {
-			v, err := nextVersion(ctx, tx, base.ID)
-			if err != nil {
-				return err
-			}
-			n.ID, n.Version, n.Parents, n.Properties = base.ID, v, []domain.Version{base.Version}, maps.Clone(base.Properties)
-			n.Reason = domain.ReasonRevise
-			if on, err := onBranch(ctx, tx, base.Ref(), branch); err != nil {
-				return err
-			} else if !on {
-				n.Reason = domain.ReasonDerive
-			}
-			cur = base.State
-			if lc != nil && cur == "" {
-				cur = lc.Initial
-			}
-		}
-		if lc == nil && w.State != "" {
-			return invalidf("node type %s has no lifecycle: state %q", typ, w.State)
-		}
-		if w.Retire && (base == nil || len(w.Properties) > 0 || len(w.AddLinks) > 0 || len(w.RemoveLinks) > 0 || w.State != "" || w.Owner != "") {
-			return invalidf("a node is retired on its own, from an existing version")
-		}
-		if w.Owner != "" {
-			unit, err := g.structureNode(ctx, tx, domain.StructureOrganisation, w.Owner)
-			if err != nil {
-				return err
-			}
-			n.Owner = unit.ID
-		}
-		edits := len(w.Properties) > 0 || len(w.AddLinks) > 0 || len(w.RemoveLinks) > 0 || w.Owner != ""
-		// a node the change creates is its working copy: the editable rule is about the versions it starts from
-		if edits && base != nil && cn.Intent != domain.IntentCreated && lc != nil && base.State != "" && !lc.Editable(base.State) {
-			return invalidf("cannot edit %s (%s): it is %s, not editable; reopen it first with a State write", base.Key, typ, base.State)
-		}
-		if n.Properties == nil && len(w.Properties) > 0 {
-			n.Properties = map[string]any{}
-		}
-		maps.Copy(n.Properties, w.Properties)
-		if edits || base == nil {
-			if err := g.validateProps(ctx, ix, n, n.Properties); err != nil {
-				return err
-			}
-		}
-		if base != nil {
-			n.State = base.State
-		} else if lc != nil {
-			n.State = lc.Initial
-		}
-		if w.State != "" {
-			if _, ok := lc.State(w.State); !ok {
-				return invalidf("%s has no state %q", typ, w.State)
-			}
-			if w.State != cur {
-				if _, ok := lc.Move(cur, w.State); !ok {
-					return invalidf("%s (%s) cannot go from %s to %s", cn.Key, typ, cur, w.State)
-				}
-			}
-			n.State = w.State
-		}
-
-		n.Deleted = w.Retire
-		if err := tx.PutNode(ctx, n); err != nil {
-			return err
-		}
-		ref := n.Ref()
-		if base != nil && !w.Retire {
-			out, err := tx.OutLinks(ctx, base.Ref())
-			if err != nil {
-				return err
-			}
-			drop := map[domain.LinkID]bool{}
-			for _, l := range w.RemoveLinks {
-				drop[l] = true
-			}
-			for _, l := range out {
-				if drop[l.ID] {
-					delete(drop, l.ID)
-					continue
-				}
-				if err := tx.PutLink(ctx, domain.Link{ID: domain.LinkID(g.newID()), Type: l.Type, From: ref, To: retarget(seen, l.To), Properties: l.Properties, ChangeID: id}); err != nil {
-					return err
-				}
-			}
-			if len(drop) > 0 {
-				return invalidf("links %v are not outgoing links of %s", slices.Collect(maps.Keys(drop)), base.Ref())
-			}
-		} else if len(w.RemoveLinks) > 0 {
-			return invalidf("a new node has no link to remove")
-		}
-		for _, l := range w.AddLinks {
-			if l.Type == "" || l.To.Version == 0 {
-				return invalidf("a link needs a type and an exact target version")
-			}
-			to, err := tx.Node(ctx, l.To)
-			if err != nil {
-				return err
-			}
-			if err := ix.checkLink(l.Type, typ, to.Type); err != nil {
-				return err
-			}
-			if err := tx.PutLink(ctx, domain.Link{ID: domain.LinkID(g.newID()), Type: l.Type, From: ref, To: retarget(seen, l.To), Properties: l.Properties, ChangeID: id}); err != nil {
-				return err
-			}
-		}
-		written := domain.ImpactEvent{Change: id, Impact: cn.ID, Op: domain.ImpactWritten, Flow: flow, Execution: w.Execution, Post: &ref}
-		if flow != "" && cn.Flow != flow {
-			// a change impact of the main flow (or of an ancestor) written on the flow: the stored post stays the
-			// main flow's, the flow's is in the log (ADR 0029)
-			cn = vcn
-			cn.Post = &ref
-			return g.emit(ctx, tx, written)
-		}
-		cn.Post = &ref
-		if err := cn.Validate(); err != nil {
-			return invalidf("change impact %s: %v", node, err)
-		}
-		return g.emit(ctx, tx, written)
 	})
 	return
 }

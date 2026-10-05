@@ -137,6 +137,7 @@ error, or (JavaScript) by returning `false` or a message string.
 | `ctx.children()` | `Children()` | guard, action: the nodes a document contains (`Node[]`) |
 | `ctx.change()` | `Change()` | guard, action: `{id, title, intent, methodology, goal}` |
 | `ctx.transition()` | `Transition()` | guard, action: `{name, from, to}` |
+| `ctx.impact()` | `Impact()` | guard: the impact of the node in the change, `{intent, review}` ([ADR 0076](adr/0076-checkout-working-versions.md): a transition that requires a review checks it) |
 | `ctx.setProp(name, value)` / `ctx.removeProp(name)` | `SetProp(name, value)` / `RemoveProp(name)` | action |
 
 ```js

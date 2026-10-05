@@ -8,6 +8,7 @@ import (
 	"github.com/zimwip/goap/pkg/decision"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/graph"
+	"github.com/zimwip/goap/pkg/graph/graphtest"
 	"github.com/zimwip/goap/pkg/intent"
 	"github.com/zimwip/goap/pkg/methodology"
 )
@@ -27,7 +28,7 @@ func TestDecisionLoopEndToEnd(t *testing.T) {
 	}
 	g := graph.New(graph.NewMemory())
 	g.DecisionPolicy = decision.Policy{}
-	_, _ = g.CreateNode(ctx, graph.NewNode{Namespace: "alm", Key: "REQ-1", Type: "alm@Requirement", Properties: map[string]any{"title": "Pay online"}})
+	_, _ = graphtest.Import(ctx, g, graphtest.Node{Namespace: "alm", Key: "REQ-1", Type: "alm@Requirement", Properties: map[string]any{"title": "Pay online"}})
 	b, err := g.BranchHead(ctx, "alm", domain.MainBranch)
 	if err != nil {
 		t.Fatal(err)
@@ -94,7 +95,7 @@ func TestDecisionRatificationIsHuman(t *testing.T) {
 	ctx := context.Background()
 	g := graph.New(graph.NewMemory())
 	g.DecisionPolicy = decision.Policy{}
-	_, _ = g.CreateNode(ctx, graph.NewNode{Namespace: "alm", Key: "REQ-1", Type: "alm@Requirement"})
+	_, _ = graphtest.Import(ctx, g, graphtest.Node{Namespace: "alm", Key: "REQ-1", Type: "alm@Requirement"})
 	b, _ := g.BranchHead(ctx, "alm", domain.MainBranch)
 	c, err := g.CreateChange(ctx, graph.NewChange{Title: "x", Namespace: "alm", BaselineID: b.ID})
 	if err != nil {

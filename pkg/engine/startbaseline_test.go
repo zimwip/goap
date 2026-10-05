@@ -9,6 +9,7 @@ import (
 	"github.com/zimwip/goap/pkg/domain/def"
 	"github.com/zimwip/goap/pkg/engine"
 	"github.com/zimwip/goap/pkg/graph"
+	"github.com/zimwip/goap/pkg/graph/graphtest"
 	"github.com/zimwip/goap/pkg/intent"
 	"github.com/zimwip/goap/pkg/methodology"
 	"github.com/zimwip/goap/pkg/typecat"
@@ -48,7 +49,7 @@ func TestStartWithoutBaseline(t *testing.T) {
 	if _, err := devseed.Demo(ctx, g); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := g.CreateNode(ctx, graph.NewNode{Namespace: "organisation", Key: testProject, Type: "organisation@ProjectUnit", Properties: map[string]any{"name": "Test"}}); err != nil {
+	if _, err := graphtest.Import(ctx, g, graphtest.Node{Namespace: "organisation", Key: testProject, Type: "organisation@ProjectUnit", Properties: map[string]any{"name": "Test"}}); err != nil {
 		t.Fatal(err)
 	}
 	bs, err := g.Baselines(ctx, cm.Namespace)

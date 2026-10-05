@@ -17,7 +17,9 @@ import (
 //     state), modifies it, and must move it out again before it is applied;
 //   - every transition is checked (it exists, the actor may take it, the node
 //     has the required attributes and links, its guard holds, and for a
-//     document its children are in an allowed state) when the change is applied.
+//     document its children are in an allowed state) when it is taken: a
+//     transition is a version of its own, from a checked-in version
+//     (TransitionNode, ADR 0076).
 
 // TransitionAuthorizer decides whether the caller may take a transition on a
 // node. Nil allows every transition. n.State is the state it leaves.
@@ -81,7 +83,7 @@ func invalidf(format string, args ...any) error {
 	return fmt.Errorf(format+": %w", append(args, ErrInvalid)...)
 }
 
-// ---- checks made when the change is applied ---------------------------------
+// ---- checks made when a transition is taken ---------------------------------
 
 func nodeView(n domain.Node) map[string]any {
 	props := n.Properties
@@ -89,6 +91,18 @@ func nodeView(n domain.Node) map[string]any {
 		props = map[string]any{}
 	}
 	return map[string]any{"key": n.Key, "type": n.Type, "state": n.State, "props": props}
+}
+
+// impactView is the impact of a node as a guard sees it (ADR 0076): intent, review and the review history.
+func impactView(cn *domain.ChangeImpact) map[string]any {
+	if cn == nil {
+		return map[string]any{}
+	}
+	reviews := make([]any, 0, len(cn.Reviews))
+	for _, r := range cn.Reviews {
+		reviews = append(reviews, map[string]any{"status": string(r.Status), "by": r.By, "comment": r.Comment})
+	}
+	return map[string]any{"intent": string(cn.Intent), "review": string(cn.Review), "reviews": reviews}
 }
 
 func (a *applier) checkTransition(n domain.Node, t domain.Transition) ([]domain.Node, error) {
@@ -144,7 +158,7 @@ func (a *applier) checkTransition(n domain.Node, t domain.Transition) ([]domain.
 			views = append(views, nodeView(c))
 		}
 		ok, err := gd.Check(nodeView(n), views, map[string]any{"id": string(a.change.ID), "title": a.change.Title,
-			"intent": a.change.Intent, "methodology": a.change.Methodology, "goal": a.change.Goal})
+			"intent": a.change.Intent, "methodology": a.change.Methodology, "goal": a.change.Goal}, impactView(a.impact))
 		if err != nil {
 			return nil, invalidf("guard of %s on %s: %v", t.Name, n.Key, err)
 		}

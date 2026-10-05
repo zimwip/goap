@@ -54,10 +54,10 @@ func testLanded(t *testing.T, repo Repo) {
 	parent := must[domain.Change](t)(g.CreateChange(ctx, NewChange{Title: "parent", BaselineID: head.ID, OwnBranch: true}))
 	sub := must[domain.Change](t)(g.CreateChange(ctx, NewChange{Title: "sub", ParentID: parent.ID}))
 	added := must[[]domain.ChangeImpact](t)(g.AddNodes(ctx, sub.ID, []domain.ChangeImpact{{Intent: domain.IntentCreated, Key: "L-2", Type: "Design", Rationale: "sub"}}))
-	if _, err := g.WriteNode(ctx, sub.ID, added[0].ID, NodeWrite{Properties: map[string]any{"title": "t"}}); err != nil {
+	if _, err := g.edit(ctx, sub.ID, added[0].ID, edit{Properties: map[string]any{"title": "t"}}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := g.ReviewNode(ctx, sub.ID, added[0].ID, domain.ReviewAccepted, "test", "ok"); err != nil {
+	if _, err := g.accept(ctx, sub.ID, added[0].ID, "test", "ok"); err != nil {
 		t.Fatal(err)
 	}
 	b, err := g.Apply(ctx, sub.ID, "")
@@ -90,10 +90,10 @@ func testCommitThenIntegrate(t *testing.T, repo Repo) {
 	head := must[domain.Baseline](t)(g.BranchHead(ctx, "", domain.MainBranch))
 	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{Title: "split", BaselineID: head.ID}))
 	added := must[[]domain.ChangeImpact](t)(g.AddNodes(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentCreated, Key: "S-1", Type: "Design", Rationale: "split"}}))
-	if _, err := g.WriteNode(ctx, c.ID, added[0].ID, NodeWrite{Properties: map[string]any{"title": "t"}}); err != nil {
+	if _, err := g.edit(ctx, c.ID, added[0].ID, edit{Properties: map[string]any{"title": "t"}}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := g.ReviewNode(ctx, c.ID, added[0].ID, domain.ReviewAccepted, "test", "ok"); err != nil {
+	if _, err := g.accept(ctx, c.ID, added[0].ID, "test", "ok"); err != nil {
 		t.Fatal(err)
 	}
 	// committed: its state is on its own branch, main did not move
