@@ -159,14 +159,38 @@ function fromRecord(r: ExecutionRecord): Entry {
   return { ...base, source: 'process', label: r.kind ?? '', subject: r.action ?? '', summary: '', tone: 'neutral' };
 }
 
+/** The keys of the nodes a created version derives from (ADR 0077): a merge needs several, a split names one. */
+function originKeys(e: ImpactEvent): string[] {
+  const list = e.patch?.['origins'];
+  if (!Array.isArray(list)) return [];
+  return list.map((o) => {
+    const x = o as { id?: string; key?: string };
+    return x.key || shortId(x.id);
+  });
+}
+
 function fromEvent(e: ImpactEvent, keys: Map<string, string>, parents: Map<string, string>): Entry {
   let summary = '';
   switch (e.op) {
-    case 'declared':
+    case 'proposed':
       summary = `${e.state?.intent ?? ''}${e.state?.pre ? ` from ${v(e.state.pre)}` : ''}${e.state?.rationale ? ` — ${e.state.rationale}` : ''}`;
       break;
-    case 'written':
+    case 'created': {
+      const from = originKeys(e);
+      summary = `${e.state?.rationale ? `${e.state.rationale}, ` : ''}first version ${v(e.post)}, checked out${from.length ? ` — ${from.length > 1 ? 'merged' : 'split'} from ${from.join(', ')}` : ''}`;
+      break;
+    }
+    case 'checkedOut':
+      summary = `working version ${v(e.post)}`;
+      break;
+    case 'transitioned':
       summary = `version ${v(e.post)}`;
+      break;
+    case 'updated':
+      summary = `${v(e.post)} edited: ${Object.keys(e.patch ?? {}).join(', ')}`;
+      break;
+    case 'checkedIn':
+      summary = `${v(e.post)} checked in`;
       break;
     case 'reviewed':
     case 'discarded':
@@ -176,7 +200,7 @@ function fromEvent(e: ImpactEvent, keys: Map<string, string>, parents: Map<strin
       summary = `flow ${shortId(e.flow)} adopted${e.stale?.length ? `, replaces ${e.stale.length} run${e.stale.length > 1 ? 's' : ''}` : ''}`;
       break;
     case 'landed':
-      summary = `landed as ${v(e.landed)}`;
+      summary = `landed as ${v(e.landed)}${e.branch ? ` on branch ${e.branch}` : ''}`;
       break;
     case 'rebased':
       summary = `pre moved to ${v(e.pre)}, to re-check`;

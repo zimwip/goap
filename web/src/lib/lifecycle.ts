@@ -74,10 +74,10 @@ async function workingPost(cn: ChangeImpact): Promise<GraphNode | undefined> {
 /** Accepts a change impact (the UI is its own reviewer) and checks its working version in; a version the check-in
  * refuses (a validator, a required link) is sent back to proposed, to be completed. */
 async function acceptAndCheckin(changeId: string, cn: ChangeImpact, rationale: string, flow: string): Promise<ChangeImpact> {
-  if (cn.review !== 'accepted') cn = (await graph.reviewChangeImpact(changeId, cn.id!, true, rationale, flow)).node ?? cn;
+  if (cn.review !== 'accepted') cn = (await graph.impactNodeReview(changeId, cn.id!, true, rationale, flow)).node ?? cn;
   if (!(await workingPost(cn))) return cn;
   try {
-    return (await graph.checkinNode(changeId, cn.id!, flow)).node ?? cn;
+    return (await graph.impactNodeCheckin(changeId, cn.id!, flow)).node ?? cn;
   } catch (e) {
     if (!flow || flow === 'main') await graph.reopenChangeImpacts(changeId, [cn.id!], 'the check-in was refused');
     throw e;
@@ -101,23 +101,23 @@ export async function writeNodeInChange(
   let cn = cns.find((c) => live(c, scoped) && (target.pre ? c.pre?.id === target.pre.id : c.key === target.key && c.intent === 'created'));
   const edits = !!(w.props && Object.keys(w.props).length) || !!w.addLinks?.length || !!w.removeLinks?.length;
   if (!cn && !target.pre) {
-    cn = (await graph.createNode(changeId, { key: target.key ?? '', type: target.type ?? '', props: w.props as never, rationale, links: w.addLinks }, flow)).node;
+    cn = (await graph.impactNodeCreate(changeId, { key: target.key ?? '', type: target.type ?? '', props: w.props as never, rationale, links: w.addLinks }, flow)).node;
     if (!cn?.id) throw new Error('The node could not be created.');
     cn = await acceptAndCheckin(changeId, cn, rationale, flow);
   } else if (edits) {
     let work = cn ? await workingPost(cn) : undefined;
     if (cn && work && cn.review === 'accepted') {
       // an accepted version is checked in, then checked out again to be changed
-      cn = (await graph.checkinNode(changeId, cn.id!, flow)).node ?? cn;
+      cn = (await graph.impactNodeCheckin(changeId, cn.id!, flow)).node ?? cn;
       work = undefined;
     }
     if (!work) {
-      cn = (await graph.checkoutNode(changeId, cn?.id ? { changeImpactId: cn.id } : { nodeId: target.pre?.id }, rationale, flow)).node;
+      cn = (await graph.impactNodeCheckout(changeId, cn?.id ? { changeImpactId: cn.id } : { nodeId: target.pre?.id }, rationale, flow)).node;
       if (!cn?.id || !cn.post) throw new Error('The node could not be checked out.');
     }
     const id = cn!.id!;
-    if (w.props && Object.keys(w.props).length) await graph.updateNode(changeId, id, { props: w.props as never }, flow);
-    for (const l of w.addLinks ?? []) await graph.createLink(changeId, id, l, flow);
+    if (w.props && Object.keys(w.props).length) await graph.impactNodeUpdate(changeId, id, { props: w.props as never }, flow);
+    for (const l of w.addLinks ?? []) await graph.impactLinkCreate(changeId, id, l, flow);
     if (w.removeLinks?.length) {
       // the ids name links of the version the caller read: the working version carries copies of them
       const out = (await graph.getNode({ id: cn!.post!.id, version: cn!.post!.version })).view?.out ?? [];
@@ -125,7 +125,7 @@ export async function writeNodeInChange(
       for (const lid of w.removeLinks) {
         const was = out.find((l) => l.id === lid) ?? read.find((l) => l.id === lid);
         const copy = out.find((l) => l.id === lid) ?? out.find((l) => was && l.type === was.type && l.to?.id === was.to?.id);
-        if (copy?.id) await graph.deleteLink(changeId, copy.id, flow);
+        if (copy?.id) await graph.impactLinkDelete(changeId, copy.id, flow);
       }
     }
     cn = await acceptAndCheckin(changeId, cn!, rationale, flow);
@@ -133,16 +133,16 @@ export async function writeNodeInChange(
     cn = await acceptAndCheckin(changeId, cn, rationale, flow);
   }
   if (w.state) {
-    const moved = (await graph.transitionNode(changeId, cn?.id ? { changeImpactId: cn.id } : { nodeId: target.pre?.id }, w.state, rationale, flow)).node;
+    const moved = (await graph.impactNodeTransition(changeId, cn?.id ? { changeImpactId: cn.id } : { nodeId: target.pre?.id }, w.state, rationale, flow)).node;
     // the UI is its own reviewer: the version of the transition is accepted with it
-    if (moved?.id && moved.review !== 'accepted') await graph.reviewChangeImpact(changeId, moved.id, true, rationale, flow);
+    if (moved?.id && moved.review !== 'accepted') await graph.impactNodeReview(changeId, moved.id, true, rationale, flow);
   }
 }
 
 /** Takes a node the change works on out of it: its working version is dropped (a node the change created and never
  * checked in goes away); refused once a version of it is checked in (reject it instead). */
 export async function removeFromChange(changeId: string, cn: ChangeImpact, flow = ''): Promise<void> {
-  if (cn.id) await graph.removeChangeImpact(changeId, cn.id, flow);
+  if (cn.id) await graph.withdrawImpact(changeId, cn.id, flow);
 }
 
 /** Checks in the accepted working versions of a change: their acceptance authorizes it, and a change is applied
@@ -150,7 +150,7 @@ export async function removeFromChange(changeId: string, cn: ChangeImpact, flow 
 export async function checkinAccepted(changeId: string): Promise<void> {
   const c = (await graph.getChange(changeId)).change;
   for (const cn of c?.nodes ?? []) {
-    if (cn.review === 'accepted' && !cn.flow && !cn.superseded && (await workingPost(cn))) await graph.checkinNode(changeId, cn.id!, 'main');
+    if (cn.review === 'accepted' && !cn.flow && !cn.superseded && (await workingPost(cn))) await graph.impactNodeCheckin(changeId, cn.id!, 'main');
   }
 }
 

@@ -34,7 +34,7 @@ writes designate change impacts declared within the same execution.
 
 `ChangeImpact`: `{id, key, type, intent, rationale, review, planned, pre, post, landed, links}` — the node the change reads, modifies
 or creates ([ADR 0024](adr/0024-change-impacts.md)); `pre` / `post` / `landed` are `Node`s or `null`, `planned` is set while no
-version is written, `links` are the outgoing links of the version written.
+version is written (only the impact of an existing node), `links` are the outgoing links of the version written.
 
 `Option`: `{id, name, hypothesis, status, active, evaluation}` — an option of the change, a hypothesis explored on a flow of
 its own ([ADR 0032](adr/0032-branches-as-pointers-baselines-as-deltas.md) §6); `status` is `exploring`, `evaluated`,
@@ -52,10 +52,12 @@ the point (with the platform's policy: `decider`, `threshold`, `maxRounds`, `rou
 |---|---|
 | `ctx.addArtifact(type, data)` | free-form data (report…) |
 | `ctx.impactNode(key, rationale)` | the change acts on a baseline node, and why → `"#nN"` (a change impact with no version yet) |
-| `ctx.createNode(type, key, rationale)` | the change creates a node → `"#nN"` |
+| `ctx.impactNodeCreate(type, key, rationale)` | the change creates a node → `"#nN"`; the node is created (one `created` event, with its properties) by the first `writeNode` of the reference, or bare when the script ends; any other operation on it creates it first |
+| `ctx.impactNodeMerge(sources, type, key, rationale)` | merge the nodes `sources` (keys or `#nN`) into a new node, from the side of their parents: each parent loses the links to the sources and gains one to the new node, the sources stay as they are, their impacts carry the parent's impact as `via` ([ADR 0077](adr/0077-impact-node-operations.md)) → `"#nN"` of the new node (checked out) |
+| `ctx.impactNodeSplit(source, [{type, key, rationale, props}])` | split a node into new ones, from the side of its parents → the `#nN` of each new node, in order |
 | `ctx.writeNode(node, {props, state, links, removeLinks, retire})` | write the next version of the node of a change impact on the change branch (`node`: key or `#nN`; `links`: `[{type, to}]`, `to` a node key or a `#nN` already written; `props` merged; `state` a lifecycle state) |
-| `ctx.reviewNode(node, accept, comment)` | accept or reject a change impact; the comment is mandatory |
-| `ctx.reviewNodeWithReserve(node, derogation, comment)` | accept a change impact with a reserve ([ADR 0075](adr/0075-verification-derogation-criticality.md)): `derogation` is the key of an open derogation in force; the operation is a review with `NodeOp.Reserve` set; the graph's review policy still applies (the reviewer is not the producer) |
+| `ctx.impactNodeReview(node, accept, comment)` | accept or reject a change impact; the comment is mandatory |
+| `ctx.impactNodeReviewWithReserve(node, derogation, comment)` | accept a change impact with a reserve ([ADR 0075](adr/0075-verification-derogation-criticality.md)): `derogation` is the key of an open derogation in force; the operation is a review with `NodeOp.Reserve` set; the graph's review policy still applies (the reviewer is not the producer) |
 | `ctx.openDecision(question, {options, criteria, decider, threshold, maxRounds, maxDuration})` | open a decision point (`options`: names or ids, none = the open options; every other key is a policy value, handed to the graph's decision policy) → `"#dN"` |
 | `ctx.decide(point, option, confidence, justification)` | rule a point decided (`point`: id, `#dN` or `""` for the only pending one; `option`: name or id; `confidence` 0 to 1): below the point's threshold (the platform's policy) the ruling waits for a person |
 | `ctx.undecidable(point, justification, questions)` | rule a point undecidable: why, and the questions to answer first (they block it) |
@@ -82,7 +84,7 @@ are not there, and what the script declares, writes and reviews stays on the flo
 // JavaScript: one test case per impacted requirement
 for (const n of ctx.changeImpacts()) {
   if (n.type !== "Requirement" || !n.pre) continue;
-  const t = ctx.createNode("TestCase", "TST-" + n.key, "verifies " + n.key);
+  const t = ctx.impactNodeCreate("TestCase", "TST-" + n.key, "verifies " + n.key);
   ctx.writeNode(t, { props: { title: "Verify " + n.pre.props.title }, links: [{ type: "verifies", to: n.key }] });
 }
 ```
@@ -98,7 +100,7 @@ func Run(ctx *dsl.Ctx) error {
 		if n.Type != "Requirement" || n.Pre == nil {
 			continue
 		}
-		t := ctx.CreateNode("TestCase", "TST-"+n.Key, "verifies "+n.Key)
+		t := ctx.ImpactNodeCreate("TestCase", "TST-"+n.Key, "verifies "+n.Key)
 		ctx.WriteNode(t, map[string]any{"props": map[string]any{"title": "Verify " + n.Key}})
 	}
 	return nil
@@ -115,7 +117,7 @@ is the call order. Action code is not an algorithm: it stays in the action decla
 |---|---|---|
 | `property_validator` | `nodeTypes[].attributes[].validators: [instance]` | accepts / rejects the value of an attribute, when the version is checked in and when the change lands (a working version may be incomplete; the type and enum of a value are checked on every edit, ADR 0076) |
 | `node_validator` | `nodeTypes[].validators: [instance]` | accepts / rejects a node as a whole (rules across attributes), after the attribute validators, at the same moments |
-| `transition_guard` | `lifecycles[].transitions[].guards: [instance]` | allows / refuses the transition, when it is taken (`TransitionNode`, ADR 0076) |
+| `transition_guard` | `lifecycles[].transitions[].guards: [instance]` | allows / refuses the transition, when it is taken (`ImpactNodeTransition`, ADR 0076) |
 | `transition_action` | `lifecycles[].transitions[].actions: [instance]` | changes properties of the node that moved, when the transition is taken |
 
 Parameter types: `string`, `number`, `boolean`, `regex`, `enum` (`values`), `strings` (list), `json`.
