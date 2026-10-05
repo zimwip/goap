@@ -1,6 +1,7 @@
 // Package layering guards the dependency rules between the concepts of the platform (CLAUDE.md, design
 // rule 1; ADR 0061): an MCP knows no connector and no adapter, the algorithm library knows no MCP, a domain
-// knows no adapter, and the adapter is the one place where MCP and organisation meet.
+// knows no adapter, the graph and the domain model know no use case (the risk register), and the adapter is the
+// one place where MCP and organisation meet.
 package layering
 
 import (
@@ -23,6 +24,8 @@ var forbidden = map[string][]string{
 	"pkg/engine":     {"pkg/adapter", "pkg/mcpbuiltin", "pkg/observe", "pkg/selfimprove"},
 	"pkg/builtins":   {"pkg/methodology", "pkg/engine", "pkg/domain"},
 	"pkg/adapter":    {"pkg/mcpbuiltin", "pkg/access"},
+	"pkg/domain":     {"pkg/risk"},
+	"pkg/graph":      {"pkg/risk"},
 }
 
 func TestLayering(t *testing.T) {

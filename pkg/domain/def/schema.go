@@ -112,6 +112,7 @@ func (s Schema) check(prefix string, add func(path, format string, args ...any))
 		}
 	}
 	s.checkStructures(prefix, add)
+	s.checkRequires(prefix, add)
 	return nodeTypes, linkTypes
 }
 
@@ -150,6 +151,29 @@ func (s Schema) checkStructures(prefix string, add func(path, format string, arg
 			add(path+".parent", "unknown link type %s (a link type of this domain)", t.Parent)
 		case parent.From != n.Name || parent.To != n.Name:
 			add(path+".parent", "link type %s must go from %s to %s", t.Parent, n.Name, n.Name)
+		}
+	}
+}
+
+// checkRequires validates the required links of the node types (ADR 0065): a link type of the schema or of another
+// domain, and a count that is not negative.
+func (s Schema) checkRequires(prefix string, add func(path, format string, args ...any)) {
+	for i, n := range s.NodeTypes {
+		seen := map[string]bool{}
+		for j, r := range n.Requires {
+			path := fmt.Sprintf(prefix+"nodeTypes[%d].requires[%d]", i, j)
+			switch {
+			case r.Link == "":
+				add(path+".link", "the link type is required")
+			case seen[r.Link]:
+				add(path+".link", "link type %s required twice", r.Link)
+			case !foreign(r.Link) && !slices.ContainsFunc(s.LinkTypes, func(l LinkType) bool { return l.Name == r.Link }):
+				add(path+".link", "unknown link type %s", r.Link)
+			}
+			seen[r.Link] = true
+			if r.Count < 0 {
+				add(path+".count", "the count must be positive")
+			}
 		}
 	}
 }

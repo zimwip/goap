@@ -11,9 +11,6 @@ import (
 // insert-only log of ADR 0030: what is removed was never part of the graph. A node version, once used, is never
 // removed, so a change is refused (ErrConflict) as soon as anything of it is applied or built upon: it is applied,
 // merged into, has sub-changes, or a baseline, a later version or a link of another change uses what it wrote.
-//
-// PurgePolicy lets a business rule keep a discarded change instead (to reuse its information later): it is asked
-// first, and its error refuses the purge.
 func (g *Graph) PurgeChange(ctx context.Context, id domain.ChangeID) (domain.Change, error) {
 	var c domain.Change
 	err := g.repo.InTx(ctx, func(tx Tx) (err error) {
@@ -30,11 +27,6 @@ func (g *Graph) PurgeChange(ctx context.Context, id domain.ChangeID) (domain.Cha
 			return err
 		} else if len(subs) > 0 {
 			return fmt.Errorf("change %s has sub-changes: %w", id, ErrConflict)
-		}
-		if g.PurgePolicy != nil {
-			if err := g.PurgePolicy(ctx, c); err != nil {
-				return err
-			}
 		}
 		branch := ""
 		own, isOwn, err := ownBranch(ctx, tx, c)

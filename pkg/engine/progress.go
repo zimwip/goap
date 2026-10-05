@@ -11,6 +11,7 @@ import (
 	"github.com/zimwip/goap/pkg/condition"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/methodology"
+	"github.com/zimwip/goap/pkg/risk"
 )
 
 // Step states of a process's progress (ADR 0035 §3).
@@ -281,6 +282,6 @@ func (e *Engine) ExplainCondition(ctx context.Context, id, name string) (ex cond
 	if !ok && name == "change_bound" {
 		ex, ok = condition.Explanation{Name: name, Value: p.ChangeID != ""}, true
 	}
-	_, waived = bb.Change.Waivers(p.ID)[name]
+	_, waived = risk.Waivers(bb.Change, p.ID)[name]
 	return ex, waived, ok, nil
 }

@@ -17,6 +17,7 @@ import (
 	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/mcp"
 	"github.com/zimwip/goap/pkg/mcpbuiltin"
+	"github.com/zimwip/goap/pkg/risk"
 )
 
 // Change is the goap-change connector: it works on a change, the blackboard every modification of
@@ -130,7 +131,7 @@ func (c Change) Invoke(ctx context.Context, op string, raw, _ map[string]any, _ 
 		}
 		return result(map[string]any{"trace": t})
 	case "risks":
-		return result(map[string]any{"risks": bb.Change.Risks(), "actions": bb.Change.ActionItems()})
+		return result(map[string]any{"risks": risk.Risks(bb.Change), "actions": risk.Actions(bb.Change)})
 	case "risk", "action":
 		return c.record(ctx, bb, op, a)
 	case "note":
@@ -631,9 +632,9 @@ func (w *working) write(imp domain.ChangeImpact, nw graph.NodeWrite) (map[string
 // record raises or updates a risk or an action of the change (ADR 0036 §1): a new version of the record of its key,
 // keeping what it does not restate. Without a key, a new record gets the next free one (RSK-n, ACT-n).
 func (c Change) record(ctx context.Context, bb domain.Blackboard, op string, a args) (map[string]any, error) {
-	kind, prefix, fields := domain.KindRisk, "RSK-", []string{"title", "description", "status", "owner"}
+	kind, prefix, fields := risk.KindRisk, "RSK-", []string{"title", "description", "status", "owner"}
 	if op == "action" {
-		kind, prefix, fields = domain.KindAction, "ACT-", []string{"title", "status", "owner", "due", "for", "result"}
+		kind, prefix, fields = risk.KindAction, "ACT-", []string{"title", "status", "owner", "due", "for", "result"}
 	}
 	key := a.str("key")
 	var existing bool
@@ -658,7 +659,7 @@ func (c Change) record(ctx context.Context, bb domain.Blackboard, op string, a a
 			data[f] = v
 		}
 	}
-	if kind == domain.KindRisk {
+	if kind == risk.KindRisk {
 		for _, f := range []string{"probability", "impact"} {
 			if v, ok := a[f].(float64); ok {
 				data[f] = v

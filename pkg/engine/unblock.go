@@ -12,6 +12,7 @@ import (
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/goap"
+	"github.com/zimwip/goap/pkg/risk"
 )
 
 // Unblock decisions (ADR 0036 §3): a run waiting for conditions established outside it, or stuck, is never left
@@ -76,7 +77,7 @@ func (e *Engine) Unblock(ctx context.Context, id string, req UnblockRequest) (*P
 			}
 		}
 		rec := uuid.NewString()
-		if _, err := e.addPlainItems(ctx, p, []ItemInput{{Kind: string(domain.KindWaiver),
+		if _, err := e.addPlainItems(ctx, p, []ItemInput{{Kind: string(risk.KindWaiver),
 			Data: map[string]any{"process": p.ID, "conditions": slices.Clone(req.Conditions), "reason": reason, "by": who.Subject}}}, "unblock", rec); err != nil {
 			return nil, err
 		}

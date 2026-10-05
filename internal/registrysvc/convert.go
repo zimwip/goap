@@ -270,6 +270,9 @@ func nodeTypeToPB(n def.NodeType) *registryv1.NodeType {
 	if t := n.Structure; t != nil {
 		out.Structure = &registryv1.StructureTag{Kind: t.Kind, Parent: t.Parent, Root: t.Root, SelfParent: t.SelfParent}
 	}
+	for _, r := range n.Requires {
+		out.Requires = append(out.Requires, &registryv1.RequiredLink{Link: r.Link, Count: int32(r.Count)})
+	}
 	return out
 }
 
@@ -281,6 +284,9 @@ func nodeTypeFromPB(n *registryv1.NodeType) def.NodeType {
 	}
 	if t := n.Structure; t != nil {
 		out.Structure = &def.StructureTag{Kind: t.Kind, Parent: t.Parent, Root: t.Root, SelfParent: t.SelfParent}
+	}
+	for _, r := range n.Requires {
+		out.Requires = append(out.Requires, domain.RequiredLink{Link: r.Link, Count: int(r.Count)})
 	}
 	return out
 }

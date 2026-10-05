@@ -58,6 +58,8 @@ nodeTypes:
     extends: OrgUnit
     editor: access
     lifecycle: user
+    # a user belongs to exactly one unit (ADR 0040, 0065): checked when it is created and after each write
+    requires: [{link: member_of, count: 1}]
     attributes:
       - {name: subject, label: Subject, description: "Identity of the user in the sign-in system", type: string, section: Identity, order: 1}
       - {name: displayName, label: "Display name", description: "Name shown for the user", type: string, section: Identity, order: 2, asName: true}

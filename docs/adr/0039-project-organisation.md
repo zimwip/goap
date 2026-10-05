@@ -45,7 +45,7 @@ different applicable roles depending on which project the work belongs to.
   it). This does **not** fold `User` into the `part_of` unit tree: `member_of` still names a user's home
   unit, unchanged.
 - **A user is created automatically, not by an administrator's hand.** The same key
-  (`access.UserKey`/`domain.PersonalUnit`, `USR:<subject>`) served two purposes before this ADR: the
+  (`access.UserKey`/`access.PersonalUnit`, `USR:<subject>`) served two purposes before this ADR: the
   `organisation@User` identity node (ADR 0020) and the personal unit that holds a subject's personal
   changes (ADR 0037, created lazily on first `@me`). Since `User` now extends `OrgUnit`, one node serves
   both — `internal/graphsvc.EnsureUser` creates it the first time a subject is seen, called both from
@@ -108,7 +108,7 @@ different applicable roles depending on which project the work belongs to.
 - `organisation` is now the namespace of two mirrored hierarchies plus their meeting point
   (`docs/architecture.md` §3.9b); `methodology` gained one more materialized element kind (Role).
 - Every existing caller of `CreateChange` (tests, tools, methodologies) keeps working unchanged:
-  `ProjectID` and `Administrative` are additive, defaulting exactly like `OwnerOrg`/`Namespace` do — the
+  `ProjectID` is additive, defaulting exactly like `OwnerOrg`/`Namespace` do (the administrative mark became a key of `Change.Data`, ADR 0065) — the
   stricter rule lives one layer up, at `Engine.Start`, where `methodologies/*.yaml` and their tests needed
   (and got) a project to seed and pass.
 - `USR:<subject>` keys are no longer ambiguous between "personal unit" and "User node": they are the same

@@ -9,6 +9,7 @@ import (
 	"github.com/zimwip/goap/pkg/domain/def"
 	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/methodology"
+	"github.com/zimwip/goap/pkg/risk"
 )
 
 // End-to-end (ADR 0058): a methodology names a lifecycle of its domain; its changes start in the initial state, and
@@ -79,7 +80,7 @@ func TestChangeLifecycleGate(t *testing.T) {
 		t.Fatalf("the expected world state is not reached: %v", err)
 	}
 	// the decision prevails over the world state once actions are taken to fill the gap
-	if _, err := g.AddItems(ctx, ch.ID, []domain.ChangeItem{{Kind: domain.KindAction, Status: domain.ItemAccepted,
+	if _, err := g.AddItems(ctx, ch.ID, []domain.ChangeItem{{Kind: risk.KindAction, Status: domain.ItemAccepted,
 		Data: map[string]any{"key": "ACT-1", "title": "finish the analysis", "for": pt.ID}}}); err != nil {
 		t.Fatal(err)
 	}

@@ -27,12 +27,15 @@ import (
 	"github.com/zimwip/goap/pkg/intent"
 	"github.com/zimwip/goap/pkg/llm"
 	"github.com/zimwip/goap/pkg/methodology"
+	"github.com/zimwip/goap/pkg/risk"
 	"github.com/zimwip/goap/pkg/selfimprove"
 	"github.com/zimwip/goap/pkg/typecat"
 )
 
 func main() {
 	ctx := context.Background()
+	// the facts of the risk register are items of a change (ADR 0065)
+	risk.Register()
 	log := platform.Logger("engine")
 	defer telemetry.Setup(ctx, log, "engine")(ctx)
 	hc := platform.H2CClient()

@@ -162,7 +162,7 @@ REQ-1  v1(main) ── v3(main, revise) ───────────── 
 | **Model exchange** | The request and the answer of one LLM call of an action, an entry `model.call` of the change log ([ADR 0059](adr/0059-prompts-in-the-change-log.md)): capped, read with `prompt:inspect`, shown by the Tokens console; the journal record keeps the token counts only. |
 | **Decision** | A choice about something that is not a node (human or agent); the acceptance of a node is the review of its change impact. |
 | **Artifact** | Free-form data produced by an action (summary, report, tool response). |
-| **Risk**, **Action** | Records of the change ([ADR 0036](adr/0036-risks-actions-brief-transverse-methodologies.md)): each item is a version of the risk or action of its `key` (`RSK-1`, `ACT-1`); the register is the last version of each. A risk has a probability, an impact, a status and an owner role; an action answers a risk or a decision. `goap-change` serves `risks`, `risk`, `action`, and `brief` (the change in one line per fact, also given to every LLM action on a change in its system prompt) and `trace` (where an item, a risk or a node comes from and what it led to). |
+| **Risk**, **Action** | Records of the change ([ADR 0036](adr/0036-risks-actions-brief-transverse-methodologies.md)): each item is a version of the risk or action of its `key` (`RSK-1`, `ACT-1`); the register is the last version of each. A risk has a probability, an impact, a status and an owner role; an action answers a risk or a decision. The register is a use case outside the core: `pkg/risk` registers the item kinds (`risk.Register()`, [ADR 0065](adr/0065-item-kinds-required-links-change-data.md)) and folds them (`risk.Risks`, `risk.Actions`, `risk.Waivers`). `goap-change` serves `risks`, `risk`, `action`, and `brief` (the change in one line per fact, also given to every LLM action on a change in its system prompt) and `trace` (where an item, a risk or a node comes from and what it led to). |
 
 Applying a Change (`ApplyChange`) lands the accepted change impacts' versions and creates a new baseline. The Change remains the explainable history of *why* the graph changed.
 
@@ -351,7 +351,7 @@ organization and the owner (= the initiator) as attributes. The default policy a
 
 **Personal changes** ([ADR 0037](adr/0037-personal-changes-and-preferences.md)). A change held by the personal unit of a
 person (`USR:<subject>`) is visible to and changeable by that person only, and is never split into sub-changes. A change
-that landed nothing can be purged with its log (`DeleteChange`), unless a business rule (`Graph.PurgePolicy`) keeps it.
+that landed nothing can be purged with its log (`DeleteChange`).
 The settings of the platform edited in the web dialog are staged this way: each edit is an impact of the personal
 change, **Save** applies it, **Discard** (or leaving the dialog and accepting to lose the edits) purges it. Personal
 preferences are not graph data ([ADR 0038](adr/0038-user-preferences-service.md)).
@@ -988,7 +988,7 @@ the ones incidentally folded in by some unrelated later change. A benign race be
 connections can only ever grant admin to more than one subject, never to none. `pkg/graph.Commit` (the
 single choke point behind `CommitEdits`, seeding and the registry) now refuses to create an
 `OrgUnit`/`ProjectUnit` with anything but exactly one `part_of`/`project_part_of` link, and a `User` with
-anything but exactly one `member_of` — except `ORG-DEFAULT`/`PROJ-ROOT` themselves (`checkRequiredParent`,
+anything but exactly one `member_of` (declared on the node type, `requires:`, ADR 0065) — except `ORG-DEFAULT`/`PROJ-ROOT` themselves (`checkRequiredParent`,
 `pkg/graph/subchange.go`, checked against the edit's own declared links before anything is written). A
 second check, `checkParentInvariant`, re-reads a *modified* node's actual live links right after the write
 lands: a client can build its edit from a `headGraph`-style baseline snapshot that predates an import-written

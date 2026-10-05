@@ -76,7 +76,7 @@ func (g *Graph) bootstrap(ctx context.Context, tx Tx) error {
 		bases[st.Namespace] = base
 		c := &domain.Change{ID: domain.ChangeID(g.newID()), Title: "Bootstrap", Namespace: st.Namespace, Status: domain.ChangeApplied,
 			Intent:     "Create the root organisational unit and the root project every change and node version is placed in (ADR 0054)",
-			BaselineID: base.ID, Branch: domain.MainBranch, OwnerOrg: org.Root, ProjectID: proj.Root, Administrative: true, CreatedAt: now}
+			BaselineID: base.ID, Branch: domain.MainBranch, OwnerOrg: org.Root, ProjectID: proj.Root, CreatedAt: now}
 		if err := tx.PutChange(ctx, *c); err != nil {
 			return err
 		}

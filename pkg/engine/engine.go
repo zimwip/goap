@@ -25,6 +25,7 @@ import (
 	"github.com/zimwip/goap/pkg/llm"
 	"github.com/zimwip/goap/pkg/mcp"
 	"github.com/zimwip/goap/pkg/methodology"
+	"github.com/zimwip/goap/pkg/risk"
 )
 
 // Engine runs processes.
@@ -459,9 +460,16 @@ func (e *Engine) resolveChange(ctx context.Context, p *Process, m *methodology.C
 	ownerOrg := firstNonEmpty(req.OwnerOrg, p.Org)
 	// a change always acts in a project (ADR 0054): the graph resolves one naming none to the default project
 	projectID := firstNonEmpty(req.ProjectID, p.Project)
-	var data map[string]any
+	// the change's free-form data carries the use-case marks of its methodology (domain.DataAdministrative)
+	data := map[string]any{}
 	if p.Trigger != "" {
-		data = map[string]any{"trigger": p.Trigger}
+		data["trigger"] = p.Trigger
+	}
+	if m.Administrative {
+		data[domain.DataAdministrative] = true
+	}
+	if len(data) == 0 {
+		data = nil
 	}
 	ns := firstNonEmpty(req.Namespace, p.Namespace, m.Namespace)
 	baseline := req.BaselineID
@@ -478,7 +486,7 @@ func (e *Engine) resolveChange(ctx context.Context, p *Process, m *methodology.C
 		baseline = b
 	}
 	p.BaselineID = baseline
-	c, err := e.Graph.CreateChange(ctx, graph.NewChange{Title: title, Intent: intent, Methodology: m.Name, OwnerOrg: ownerOrg, ProjectID: projectID, Administrative: m.Administrative,
+	c, err := e.Graph.CreateChange(ctx, graph.NewChange{Title: title, Intent: intent, Methodology: m.Name, OwnerOrg: ownerOrg, ProjectID: projectID,
 		Namespace: ns, OwnBranch: p.OwnBranch, BaselineID: baseline, Data: data})
 	if err != nil {
 		return "", err
@@ -1127,7 +1135,7 @@ func (e *Engine) observe(ctx context.Context, p *Process, m *methodology.Compile
 	res := m.Conditions.Evaluate(bb)
 	res.State["change_bound"] = p.ChangeID != ""
 	// what people declared established for this run (Engine.Unblock)
-	for k, v := range bb.Change.Waivers(p.ID) {
+	for k, v := range risk.Waivers(bb.Change, p.ID) {
 		res.State[k] = v
 		delete(res.Errors, k)
 	}

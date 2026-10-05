@@ -3,6 +3,7 @@ package domain
 import (
 	"fmt"
 	"slices"
+	"sync"
 	"time"
 )
 
@@ -27,6 +28,11 @@ const (
 	ChangeAbandoned ChangeStatus = "abandoned"
 )
 
+// DataAdministrative is the key of Change.Data (value true) the engine sets on a change of a methodology that
+// manages organisation/project/policy/adapter data, the admin surface itself (ADR 0039): such work is exempt from
+// the project selector gate of the web. Only a name: the graph never reads it, and a sub-change does not inherit it.
+const DataAdministrative = "administrative"
+
 // Change describes a modification of the domain graph. It starts from a
 // reference baseline and accumulates items. It is the blackboard of a process.
 type Change struct {
@@ -49,9 +55,6 @@ type Change struct {
 	// project, pkg/graph.DefaultProject) and never empty once stored: the nodes the change creates
 	// are created in it.
 	ProjectID string `json:"projectId,omitempty"`
-	// Administrative marks a change of a methodology that manages organisation/project/policy/
-	// adapter data, the admin surface itself (ADR 0039): exempt from the project selector gate.
-	Administrative bool `json:"administrative,omitempty"`
 	// ActivityRef scopes the change to one Activity (a methodology@Process/Step/Method/MethodStep node key,
 	// architecture plan "Activity concept"): the activity whose goal condition the change must satisfy to apply.
 	// Empty: no activity-relative gating beyond a node type's own lifecycle.
@@ -65,10 +68,12 @@ type Change struct {
 	Status     ChangeStatus `json:"status"`
 	BaselineID BaselineID   `json:"baselineId"`
 	// Branch the change is applied to (default main).
-	Branch           string         `json:"branch,omitempty"`
-	ResultBaselineID BaselineID     `json:"resultBaselineId,omitempty"`
-	Data             map[string]any `json:"data,omitempty"`
-	Items            []ChangeItem   `json:"items"`
+	Branch           string     `json:"branch,omitempty"`
+	ResultBaselineID BaselineID `json:"resultBaselineId,omitempty"`
+	// Data is the free-form data of the change: the marks the services give it (the graph reads none, see
+	// DataAdministrative, "trigger").
+	Data  map[string]any `json:"data,omitempty"`
+	Items []ChangeItem   `json:"items"`
 	// Nodes are the node versions the change reads, modifies or creates (ADR 0024).
 	Nodes     []ChangeImpact `json:"nodes,omitempty"`
 	CreatedAt time.Time      `json:"createdAt"`
@@ -170,10 +175,6 @@ func (it ChangeItem) Validate() error {
 			return fmt.Errorf("decision item requires decision.item")
 		}
 	case KindArtifact, KindMerge:
-	case KindRisk, KindAction:
-		return validateRecord(it)
-	case KindWaiver:
-		return validateWaiver(it)
 	case KindSignal:
 		if it.Type == "" {
 			return fmt.Errorf("signal item requires type")
@@ -183,9 +184,43 @@ func (it ChangeItem) Validate() error {
 			return fmt.Errorf("transition item requires data.to")
 		}
 	default:
-		return fmt.Errorf("unknown item kind %q", it.Kind)
+		validate := itemKinds.get(it.Kind)
+		if validate == nil {
+			return fmt.Errorf("unknown item kind %q", it.Kind)
+		}
+		return validate(it)
 	}
 	return nil
+}
+
+// itemKinds holds the kinds of item the use cases add to the built-in ones (RegisterItemKind).
+var itemKinds registry
+
+type registry struct {
+	mu sync.RWMutex
+	m  map[ItemKind]func(ChangeItem) error
+}
+
+func (r *registry) get(k ItemKind) func(ChangeItem) error {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.m[k]
+}
+
+// RegisterItemKind makes a kind of item known to ChangeItem.Validate: a use case adds the facts it writes to a
+// change (pkg/risk: risks, actions, waivers) without the core naming them. Registration is explicit, done by the
+// composition root (the cmd/* mains) or by a test, never by init; it is idempotent (the last validation of a kind
+// wins) and safe for concurrent use. A nil validate accepts every item of the kind.
+func RegisterItemKind(kind ItemKind, validate func(ChangeItem) error) {
+	if validate == nil {
+		validate = func(ChangeItem) error { return nil }
+	}
+	itemKinds.mu.Lock()
+	defer itemKinds.mu.Unlock()
+	if itemKinds.m == nil {
+		itemKinds.m = map[ItemKind]func(ChangeItem) error{}
+	}
+	itemKinds.m[kind] = validate
 }
 
 // ItemsOfKind returns the items of the given kind.

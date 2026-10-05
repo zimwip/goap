@@ -243,11 +243,8 @@ message Change {
   // the nodes the change reads, modifies or creates: stored, and derived from its items (ADR 0024)
   repeated ChangeImpact nodes = 17;
   // key of the ProjectUnit (organisation namespace) this change's nodes belong to (ADR 0039);
-  // required unless administrative
   string project_id = 18;
-  // exempts the change from naming a project: a change managing organisation/project/policy/adapter
-  // data, the admin surface itself (ADR 0039)
-  bool administrative = 19;
+  reserved 19;
   // the lifecycle the change follows (named by its methodology) and its state (ADR 0058); empty: none
   string lifecycle = 20;
   string state = 21;
@@ -602,11 +599,7 @@ message CreateChangeRequest {
   string owner_org = 10;
   reserved 11;
   // key of the ProjectUnit (organisation namespace) this change's nodes belong to (ADR 0039);
-  // required unless administrative
   string project_id = 12;
-  // exempts the change from naming a project: a change managing organisation/project/policy/adapter
-  // data, the admin surface itself (ADR 0039)
-  bool administrative = 13;
 }
 
 message CreateChangeResponse {

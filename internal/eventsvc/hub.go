@@ -16,6 +16,7 @@ import (
 	"github.com/zimwip/goap/internal/enginesvc"
 	"github.com/zimwip/goap/internal/pbconv"
 	"github.com/zimwip/goap/internal/platform"
+	"github.com/zimwip/goap/pkg/access"
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/engine"
@@ -226,8 +227,8 @@ func (h *Hub) accept(subject string, v any, actor, command string) {
 		ev.Type = changeType(m.Type, subject)
 		ev.Id, ev.Namespace, ev.Branch, ev.Project, ev.ChangeId = string(c.ID), c.Namespace, c.Branch, c.ProjectID, string(c.ID)
 		ev.Time = pbconv.Time(h.now())
-		if c.Personal() {
-			h.personal[string(c.ID)] = personalSubject(c)
+		if access.IsPersonal(c) {
+			h.personal[string(c.ID)] = access.PersonalSubjectOf(c)
 		}
 		r.personalTo = h.personal[string(c.ID)]
 		if ev.Type == "change.purged" {
@@ -247,9 +248,6 @@ func (h *Hub) accept(subject string, v any, actor, command string) {
 	}
 	h.emit(r)
 }
-
-// personalSubject is the subject a personal change belongs to (owner unit USR:<subject>).
-func personalSubject(c domain.Change) string { return domain.PersonalSubject(c.OwnerOrg) }
 
 func changeType(t, subject string) string {
 	if t != "" {

@@ -346,7 +346,7 @@ func (h *Handler) CreateChange(ctx context.Context, r *connect.Request[graphv1.C
 	}
 	if p := r.Msg.ParentId; p != "" {
 		// a personal change is never split, and nothing is split off a personal change
-		if parent, perr := h.Graph.Change(ctx, domain.ChangeID(p)); perr == nil && (parent.Personal() || domain.IsPersonalUnit(owner)) {
+		if parent, perr := h.Graph.Change(ctx, domain.ChangeID(p)); perr == nil && (access.IsPersonal(parent) || access.IsPersonalUnit(owner)) {
 			return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("a personal change has no sub-changes"))
 		}
 	}
@@ -355,7 +355,7 @@ func (h *Handler) CreateChange(ctx context.Context, r *connect.Request[graphv1.C
 		projectID = authz.From(ctx).Project
 	}
 	c, err := h.Graph.CreateChange(ctx, graph.NewChange{ParentID: domain.ChangeID(r.Msg.ParentId), OwnerOrg: owner, OwnBranch: r.Msg.OwnBranch, Namespace: r.Msg.Namespace, Title: r.Msg.Title, Intent: r.Msg.Intent, Methodology: r.Msg.Methodology,
-		BaselineID: domain.BaselineID(r.Msg.BaselineId), Branch: r.Msg.Branch, Data: pbconv.Map(r.Msg.Data), ProjectID: projectID, Administrative: r.Msg.Administrative})
+		BaselineID: domain.BaselineID(r.Msg.BaselineId), Branch: r.Msg.Branch, Data: pbconv.Map(r.Msg.Data), ProjectID: projectID})
 	if err == nil {
 		h.publish(ctx, events.ChangeSubject(string(c.ID), events.ChangeCreated), domain.ChangeEvent{Type: events.ChangeCreated, Change: c})
 	}
