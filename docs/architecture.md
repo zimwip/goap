@@ -700,9 +700,20 @@ baseline_entry(baseline_id, node_id, version, removed)  -- whole at a checkpoint
 branch(namespace, name, parent, fork_baseline, head_baseline, origin, status, created_at)  -- PK (namespace, name)
 change(id uuid, title, intent, status, baseline_id, goal, methodology, result_baseline_id, data jsonb,
        owner_org, project_id)  -- never empty (ADR 0054)
-change_item(id uuid, change_id, kind, type, status, target_id, target_version, payload jsonb,
-            produced_by, derived_from uuid[], created_at)
+change_impact(id uuid, seq, change_id, node_id, key, type, intent, rationale, pre_version, post_version, landed_version,
+              review, reviews jsonb, via, flow, superseded, ...)  -- the projection of the impact events (ADR 0029)
+change_log(seq, id, change_id, type, flow, process_id, execution, subject, by_whom, at, payload jsonb)  -- facts, journal records, impact events (ADR 0030)
+tag(id uuid, name, namespace, change_id, baseline_id, by, created_at)  -- names the state a change leaves (ADR 0056)
 ```
+
+**Two dialects, one model** ([ADR 0074](adr/0074-sql-dialect-builders-and-schema-guard.md)): the PostgreSQL repository
+(`pkg/graph/postgres.go`, pgx) and the SQLite one (`sqlite.go`, `database/sql`) keep their executors, row scanning and
+value encodings (uuid / text, jsonb / text, arrays, timestamps), and share the statements: `pkg/graph/sqlbuild.go`
+builds the text and arguments of the queries both run from one `dialect` value (placeholder, `::text` cast of a uuid,
+nullable test, order tie-break), `sqlbuild_test.go` holds the text each query had in each dialect, and
+`internal/sqlschematest` compares the two migration directories of a service (`TestSchemasAligned` in `pkg/graph`,
+`credsvc`, `mcpsvc`, `modelgw`, `prefssvc`, `registrysvc`; `pkg/index` differs by design: pgvector / FTS5). `make test-pg`
+runs every test against PostgreSQL (a throw-away `pgvector/pgvector:pg17` container unless `GOAP_TEST_PG_DSN` is set).
 
 Every `change_id`, `owner_id` and `project_id` above is `NOT NULL` with a foreign key (deferred where the bootstrap
 needs it), and `pkg/graph` enforces the same rules in Go whatever the storage (its guard, ADR 0054): the constraints
