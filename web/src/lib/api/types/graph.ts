@@ -249,6 +249,40 @@ export interface NodeReview {
   /** flow branch the review was made on, and whether an adopted flow replaced it */
   flow?: string;
   superseded?: boolean;
+  /** the review object (ADR 0080) the review was submitted in; empty for a review made on its own */
+  reviewId?: string;
+}
+
+/** An entry of a review object (ADR 0080): the review of one change impact. */
+export interface ReviewEntry {
+  changeImpactId: string;
+  comment?: string;
+  /** accept | reject; empty while undecided */
+  outcome?: 'accept' | 'reject' | '' | string;
+}
+
+/** A review object of a change (ADR 0080): a global comment and one entry per change impact, built up while open, then
+ * submitted (every impact reviewed at once) or discarded; both final. */
+export interface ReviewRecord {
+  key: string;
+  /** flow the entries are reviewed on (empty: the main flow) */
+  flow?: string;
+  comment?: string;
+  status: 'open' | 'submitted' | 'discarded' | string;
+  entries?: ReviewEntry[];
+  by?: string;
+  submittedAt?: string;
+  item?: string;
+  versions?: number;
+}
+
+/** A change to an open review: comment replaces the global one when set; remove then add change the impacts; entries
+ * set the comment / outcome of entries once the set changed. */
+export interface ReviewEdit {
+  comment?: string;
+  add?: string[];
+  remove?: string[];
+  entries?: { changeImpactId: string; comment?: string; outcome?: string }[];
 }
 
 /** The link from a change to a node (ADR 0024). */

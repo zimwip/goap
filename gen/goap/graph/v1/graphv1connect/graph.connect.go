@@ -132,6 +132,20 @@ const (
 	// GraphServiceImpactNodeReviewProcedure is the fully-qualified name of the GraphService's
 	// ImpactNodeReview RPC.
 	GraphServiceImpactNodeReviewProcedure = "/goap.graph.v1.GraphService/ImpactNodeReview"
+	// GraphServiceImpactNodeReviewBatchProcedure is the fully-qualified name of the GraphService's
+	// ImpactNodeReviewBatch RPC.
+	GraphServiceImpactNodeReviewBatchProcedure = "/goap.graph.v1.GraphService/ImpactNodeReviewBatch"
+	// GraphServiceReviewOpenProcedure is the fully-qualified name of the GraphService's ReviewOpen RPC.
+	GraphServiceReviewOpenProcedure = "/goap.graph.v1.GraphService/ReviewOpen"
+	// GraphServiceReviewUpdateProcedure is the fully-qualified name of the GraphService's ReviewUpdate
+	// RPC.
+	GraphServiceReviewUpdateProcedure = "/goap.graph.v1.GraphService/ReviewUpdate"
+	// GraphServiceReviewSubmitProcedure is the fully-qualified name of the GraphService's ReviewSubmit
+	// RPC.
+	GraphServiceReviewSubmitProcedure = "/goap.graph.v1.GraphService/ReviewSubmit"
+	// GraphServiceReviewDiscardProcedure is the fully-qualified name of the GraphService's
+	// ReviewDiscard RPC.
+	GraphServiceReviewDiscardProcedure = "/goap.graph.v1.GraphService/ReviewDiscard"
 	// GraphServiceReopenChangeImpactsProcedure is the fully-qualified name of the GraphService's
 	// ReopenChangeImpacts RPC.
 	GraphServiceReopenChangeImpactsProcedure = "/goap.graph.v1.GraphService/ReopenChangeImpacts"
@@ -314,6 +328,17 @@ type GraphServiceClient interface {
 	// Take a change impact out of the change, explicitly: its draft is dropped.
 	WithdrawImpact(context.Context, *connect.Request[v1.WithdrawImpactRequest]) (*connect.Response[v1.WithdrawImpactResponse], error)
 	ImpactNodeReview(context.Context, *connect.Request[v1.ImpactNodeReviewRequest]) (*connect.Response[v1.ImpactNodeReviewResponse], error)
+	// The review object (ADR 0080): a reviewer builds a review up (a global comment, one entry per change impact with its
+	// own comment and outcome), then submits it; the submission reviews every impact in one transaction, all or none. An
+	// open review is changed by its author or an administrator only; submitted and discarded reviews are final.
+	// The mechanism under it: reviews of several impacts applied in one transaction, all or none, each stamped with the
+	// review id, and an optional item written with them.
+	ImpactNodeReviewBatch(context.Context, *connect.Request[v1.ImpactNodeReviewBatchRequest]) (*connect.Response[v1.ImpactNodeReviewBatchResponse], error)
+	ReviewOpen(context.Context, *connect.Request[v1.ReviewOpenRequest]) (*connect.Response[v1.ReviewResponse], error)
+	ReviewUpdate(context.Context, *connect.Request[v1.ReviewUpdateRequest]) (*connect.Response[v1.ReviewResponse], error)
+	ReviewSubmit(context.Context, *connect.Request[v1.ReviewSubmitRequest]) (*connect.Response[v1.ReviewResponse], error)
+	// Drop a review that was never submitted (final).
+	ReviewDiscard(context.Context, *connect.Request[v1.ReviewDiscardRequest]) (*connect.Response[v1.ReviewResponse], error)
 	ReopenChangeImpacts(context.Context, *connect.Request[v1.ReopenChangeImpactsRequest]) (*connect.Response[v1.ReopenChangeImpactsResponse], error)
 	// Producers: a whole change of node edits (change impacts, versions, reviews, apply) in one call.
 	CommitEdits(context.Context, *connect.Request[v1.CommitEditsRequest]) (*connect.Response[v1.CommitEditsResponse], error)
@@ -601,6 +626,36 @@ func NewGraphServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			httpClient,
 			baseURL+GraphServiceImpactNodeReviewProcedure,
 			connect.WithSchema(graphServiceMethods.ByName("ImpactNodeReview")),
+			connect.WithClientOptions(opts...),
+		),
+		impactNodeReviewBatch: connect.NewClient[v1.ImpactNodeReviewBatchRequest, v1.ImpactNodeReviewBatchResponse](
+			httpClient,
+			baseURL+GraphServiceImpactNodeReviewBatchProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("ImpactNodeReviewBatch")),
+			connect.WithClientOptions(opts...),
+		),
+		reviewOpen: connect.NewClient[v1.ReviewOpenRequest, v1.ReviewResponse](
+			httpClient,
+			baseURL+GraphServiceReviewOpenProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("ReviewOpen")),
+			connect.WithClientOptions(opts...),
+		),
+		reviewUpdate: connect.NewClient[v1.ReviewUpdateRequest, v1.ReviewResponse](
+			httpClient,
+			baseURL+GraphServiceReviewUpdateProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("ReviewUpdate")),
+			connect.WithClientOptions(opts...),
+		),
+		reviewSubmit: connect.NewClient[v1.ReviewSubmitRequest, v1.ReviewResponse](
+			httpClient,
+			baseURL+GraphServiceReviewSubmitProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("ReviewSubmit")),
+			connect.WithClientOptions(opts...),
+		),
+		reviewDiscard: connect.NewClient[v1.ReviewDiscardRequest, v1.ReviewResponse](
+			httpClient,
+			baseURL+GraphServiceReviewDiscardProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("ReviewDiscard")),
 			connect.WithClientOptions(opts...),
 		),
 		reopenChangeImpacts: connect.NewClient[v1.ReopenChangeImpactsRequest, v1.ReopenChangeImpactsResponse](
@@ -895,6 +950,11 @@ type graphServiceClient struct {
 	impactNodeSplit        *connect.Client[v1.ImpactNodeSplitRequest, v1.ImpactNodeRestructureResponse]
 	withdrawImpact         *connect.Client[v1.WithdrawImpactRequest, v1.WithdrawImpactResponse]
 	impactNodeReview       *connect.Client[v1.ImpactNodeReviewRequest, v1.ImpactNodeReviewResponse]
+	impactNodeReviewBatch  *connect.Client[v1.ImpactNodeReviewBatchRequest, v1.ImpactNodeReviewBatchResponse]
+	reviewOpen             *connect.Client[v1.ReviewOpenRequest, v1.ReviewResponse]
+	reviewUpdate           *connect.Client[v1.ReviewUpdateRequest, v1.ReviewResponse]
+	reviewSubmit           *connect.Client[v1.ReviewSubmitRequest, v1.ReviewResponse]
+	reviewDiscard          *connect.Client[v1.ReviewDiscardRequest, v1.ReviewResponse]
 	reopenChangeImpacts    *connect.Client[v1.ReopenChangeImpactsRequest, v1.ReopenChangeImpactsResponse]
 	commitEdits            *connect.Client[v1.CommitEditsRequest, v1.CommitEditsResponse]
 	getBlackboard          *connect.Client[v1.GetBlackboardRequest, v1.GetBlackboardResponse]
@@ -1112,6 +1172,31 @@ func (c *graphServiceClient) WithdrawImpact(ctx context.Context, req *connect.Re
 // ImpactNodeReview calls goap.graph.v1.GraphService.ImpactNodeReview.
 func (c *graphServiceClient) ImpactNodeReview(ctx context.Context, req *connect.Request[v1.ImpactNodeReviewRequest]) (*connect.Response[v1.ImpactNodeReviewResponse], error) {
 	return c.impactNodeReview.CallUnary(ctx, req)
+}
+
+// ImpactNodeReviewBatch calls goap.graph.v1.GraphService.ImpactNodeReviewBatch.
+func (c *graphServiceClient) ImpactNodeReviewBatch(ctx context.Context, req *connect.Request[v1.ImpactNodeReviewBatchRequest]) (*connect.Response[v1.ImpactNodeReviewBatchResponse], error) {
+	return c.impactNodeReviewBatch.CallUnary(ctx, req)
+}
+
+// ReviewOpen calls goap.graph.v1.GraphService.ReviewOpen.
+func (c *graphServiceClient) ReviewOpen(ctx context.Context, req *connect.Request[v1.ReviewOpenRequest]) (*connect.Response[v1.ReviewResponse], error) {
+	return c.reviewOpen.CallUnary(ctx, req)
+}
+
+// ReviewUpdate calls goap.graph.v1.GraphService.ReviewUpdate.
+func (c *graphServiceClient) ReviewUpdate(ctx context.Context, req *connect.Request[v1.ReviewUpdateRequest]) (*connect.Response[v1.ReviewResponse], error) {
+	return c.reviewUpdate.CallUnary(ctx, req)
+}
+
+// ReviewSubmit calls goap.graph.v1.GraphService.ReviewSubmit.
+func (c *graphServiceClient) ReviewSubmit(ctx context.Context, req *connect.Request[v1.ReviewSubmitRequest]) (*connect.Response[v1.ReviewResponse], error) {
+	return c.reviewSubmit.CallUnary(ctx, req)
+}
+
+// ReviewDiscard calls goap.graph.v1.GraphService.ReviewDiscard.
+func (c *graphServiceClient) ReviewDiscard(ctx context.Context, req *connect.Request[v1.ReviewDiscardRequest]) (*connect.Response[v1.ReviewResponse], error) {
+	return c.reviewDiscard.CallUnary(ctx, req)
 }
 
 // ReopenChangeImpacts calls goap.graph.v1.GraphService.ReopenChangeImpacts.
@@ -1385,6 +1470,17 @@ type GraphServiceHandler interface {
 	// Take a change impact out of the change, explicitly: its draft is dropped.
 	WithdrawImpact(context.Context, *connect.Request[v1.WithdrawImpactRequest]) (*connect.Response[v1.WithdrawImpactResponse], error)
 	ImpactNodeReview(context.Context, *connect.Request[v1.ImpactNodeReviewRequest]) (*connect.Response[v1.ImpactNodeReviewResponse], error)
+	// The review object (ADR 0080): a reviewer builds a review up (a global comment, one entry per change impact with its
+	// own comment and outcome), then submits it; the submission reviews every impact in one transaction, all or none. An
+	// open review is changed by its author or an administrator only; submitted and discarded reviews are final.
+	// The mechanism under it: reviews of several impacts applied in one transaction, all or none, each stamped with the
+	// review id, and an optional item written with them.
+	ImpactNodeReviewBatch(context.Context, *connect.Request[v1.ImpactNodeReviewBatchRequest]) (*connect.Response[v1.ImpactNodeReviewBatchResponse], error)
+	ReviewOpen(context.Context, *connect.Request[v1.ReviewOpenRequest]) (*connect.Response[v1.ReviewResponse], error)
+	ReviewUpdate(context.Context, *connect.Request[v1.ReviewUpdateRequest]) (*connect.Response[v1.ReviewResponse], error)
+	ReviewSubmit(context.Context, *connect.Request[v1.ReviewSubmitRequest]) (*connect.Response[v1.ReviewResponse], error)
+	// Drop a review that was never submitted (final).
+	ReviewDiscard(context.Context, *connect.Request[v1.ReviewDiscardRequest]) (*connect.Response[v1.ReviewResponse], error)
 	ReopenChangeImpacts(context.Context, *connect.Request[v1.ReopenChangeImpactsRequest]) (*connect.Response[v1.ReopenChangeImpactsResponse], error)
 	// Producers: a whole change of node edits (change impacts, versions, reviews, apply) in one call.
 	CommitEdits(context.Context, *connect.Request[v1.CommitEditsRequest]) (*connect.Response[v1.CommitEditsResponse], error)
@@ -1668,6 +1764,36 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 		GraphServiceImpactNodeReviewProcedure,
 		svc.ImpactNodeReview,
 		connect.WithSchema(graphServiceMethods.ByName("ImpactNodeReview")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceImpactNodeReviewBatchHandler := connect.NewUnaryHandler(
+		GraphServiceImpactNodeReviewBatchProcedure,
+		svc.ImpactNodeReviewBatch,
+		connect.WithSchema(graphServiceMethods.ByName("ImpactNodeReviewBatch")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceReviewOpenHandler := connect.NewUnaryHandler(
+		GraphServiceReviewOpenProcedure,
+		svc.ReviewOpen,
+		connect.WithSchema(graphServiceMethods.ByName("ReviewOpen")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceReviewUpdateHandler := connect.NewUnaryHandler(
+		GraphServiceReviewUpdateProcedure,
+		svc.ReviewUpdate,
+		connect.WithSchema(graphServiceMethods.ByName("ReviewUpdate")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceReviewSubmitHandler := connect.NewUnaryHandler(
+		GraphServiceReviewSubmitProcedure,
+		svc.ReviewSubmit,
+		connect.WithSchema(graphServiceMethods.ByName("ReviewSubmit")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceReviewDiscardHandler := connect.NewUnaryHandler(
+		GraphServiceReviewDiscardProcedure,
+		svc.ReviewDiscard,
+		connect.WithSchema(graphServiceMethods.ByName("ReviewDiscard")),
 		connect.WithHandlerOptions(opts...),
 	)
 	graphServiceReopenChangeImpactsHandler := connect.NewUnaryHandler(
@@ -1994,6 +2120,16 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 			graphServiceWithdrawImpactHandler.ServeHTTP(w, r)
 		case GraphServiceImpactNodeReviewProcedure:
 			graphServiceImpactNodeReviewHandler.ServeHTTP(w, r)
+		case GraphServiceImpactNodeReviewBatchProcedure:
+			graphServiceImpactNodeReviewBatchHandler.ServeHTTP(w, r)
+		case GraphServiceReviewOpenProcedure:
+			graphServiceReviewOpenHandler.ServeHTTP(w, r)
+		case GraphServiceReviewUpdateProcedure:
+			graphServiceReviewUpdateHandler.ServeHTTP(w, r)
+		case GraphServiceReviewSubmitProcedure:
+			graphServiceReviewSubmitHandler.ServeHTTP(w, r)
+		case GraphServiceReviewDiscardProcedure:
+			graphServiceReviewDiscardHandler.ServeHTTP(w, r)
 		case GraphServiceReopenChangeImpactsProcedure:
 			graphServiceReopenChangeImpactsHandler.ServeHTTP(w, r)
 		case GraphServiceCommitEditsProcedure:
@@ -2225,6 +2361,26 @@ func (UnimplementedGraphServiceHandler) WithdrawImpact(context.Context, *connect
 
 func (UnimplementedGraphServiceHandler) ImpactNodeReview(context.Context, *connect.Request[v1.ImpactNodeReviewRequest]) (*connect.Response[v1.ImpactNodeReviewResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.ImpactNodeReview is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) ImpactNodeReviewBatch(context.Context, *connect.Request[v1.ImpactNodeReviewBatchRequest]) (*connect.Response[v1.ImpactNodeReviewBatchResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.ImpactNodeReviewBatch is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) ReviewOpen(context.Context, *connect.Request[v1.ReviewOpenRequest]) (*connect.Response[v1.ReviewResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.ReviewOpen is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) ReviewUpdate(context.Context, *connect.Request[v1.ReviewUpdateRequest]) (*connect.Response[v1.ReviewResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.ReviewUpdate is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) ReviewSubmit(context.Context, *connect.Request[v1.ReviewSubmitRequest]) (*connect.Response[v1.ReviewResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.ReviewSubmit is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) ReviewDiscard(context.Context, *connect.Request[v1.ReviewDiscardRequest]) (*connect.Response[v1.ReviewResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.ReviewDiscard is not implemented"))
 }
 
 func (UnimplementedGraphServiceHandler) ReopenChangeImpacts(context.Context, *connect.Request[v1.ReopenChangeImpactsRequest]) (*connect.Response[v1.ReopenChangeImpactsResponse], error) {

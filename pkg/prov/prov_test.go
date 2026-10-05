@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/review"
 )
 
 func entries(t *testing.T, evs ...domain.ImpactEvent) []domain.LogEntry {
@@ -105,5 +106,39 @@ func TestDerogationMapping(t *testing.T) {
 	}
 	if got := refs(n["prov:wasAttributedTo"]); !got[principalIRI("alice")] {
 		t.Fatalf("attributed to the signatory: %v", n)
+	}
+}
+
+// A review object is an activity grouping the reviewed events of its entries, with the record versions as entities
+// (ADR 0080).
+func TestReviewObjectMapping(t *testing.T) {
+	c := domain.Change{ID: "c1", Title: "t", CreatedAt: time.Unix(0, 0)}
+	sub := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	it := domain.ChangeItem{ID: "it1", Kind: review.KindReview, Status: domain.ItemProposed, ProducedBy: "alice", CreatedAt: sub, Data: map[string]any{
+		"key": "REV-1", "status": review.Submitted, "comment": "all good", "by": "alice", "submittedAt": sub.Format(time.RFC3339Nano),
+		"entries": []any{map[string]any{"impact": "i1", "outcome": "accept"}}}}
+	fe, err := domain.FactEntry("c1", it)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fe.Seq = 1
+	ev := entries(t, domain.ImpactEvent{ID: "e1", Change: "c1", Impact: "i1", Op: domain.ImpactReviewed, By: "alice",
+		Review: &domain.Review{Status: domain.ReviewAccepted, By: "alice", Comment: "fine", ReviewID: "REV-1"}})
+	ev[0].Seq = 2
+	doc, err := Export(c, append([]domain.LogEntry{fe}, ev...))
+	if err != nil {
+		t.Fatal(err)
+	}
+	act := find(t, doc, reviewObjectIRI("REV-1"))
+	if act["goap:status"] != review.Submitted || act["rdfs:comment"] != "all good" || act["prov:endedAtTime"] == nil || !refs(act["goap:about"])[impactIRI("i1")] ||
+		!refs(act["prov:wasAssociatedWith"])[principalIRI("alice")] {
+		t.Fatalf("activity: %v", act)
+	}
+	rv := find(t, doc, iri("review", "e1"))
+	if !refs(rv["goap:partOf"])[reviewObjectIRI("REV-1")] {
+		t.Fatalf("the reviewed event is part of the review object: %v", rv)
+	}
+	if rec := find(t, doc, itemIRI("it1")); !refs(rec["goap:reviewOf"])[reviewObjectIRI("REV-1")] {
+		t.Fatalf("record: %v", rec)
 	}
 }

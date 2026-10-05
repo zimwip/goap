@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildTrail } from './auditTrail';
+import { buildTrail, reviewGroups } from './auditTrail';
 import type { ImpactEvent, LogEntry } from './api';
 
 const entry = (seq: number, e: ImpactEvent): LogEntry => ({ seq: String(seq), type: `impact.${e.op}`, payload: JSON.stringify({ id: `e${seq}`, impactId: 'i1', ...e }) });
@@ -30,5 +30,47 @@ describe('buildTrail', () => {
 
   it('shows the version written at landing', () => {
     expect(trail[4].summary).toBe('draft landed as v3 on branch main');
+  });
+});
+
+// ADR 0080: the reviewed events of a submitted review carry its id, and the versions of its record are facts of the log.
+describe('review objects in the trail', () => {
+  const item = (seq: number, data: Record<string, unknown>): LogEntry => ({
+    seq: String(seq),
+    type: 'fact.review',
+    payload: JSON.stringify({ id: `it${seq}`, kind: 'review', status: 'proposed', producedBy: 'alice', createdAt: '2026-01-01T00:00:00Z', data }),
+  });
+  const reviewed = (seq: number, impactId: string, status: string, reviewId?: string): LogEntry => ({
+    seq: String(seq),
+    type: 'impact.reviewed',
+    payload: JSON.stringify({ id: `e${seq}`, impactId, op: 'reviewed', by: 'alice', review: { status, comment: 'c', reviewId } }),
+  });
+  const log = [
+    item(1, { key: 'REV-1', status: 'open', comment: 'global', entries: [] }),
+    reviewed(2, 'i1', 'proposed'),
+    reviewed(3, 'i1', 'accepted', 'REV-1'),
+    reviewed(4, 'i2', 'rejected', 'REV-1'),
+    item(5, { key: 'REV-1', status: 'submitted', comment: 'global', submittedAt: '2026-01-02T00:00:00Z', entries: [{ impact: 'i1', outcome: 'accept' }, { impact: 'i2', outcome: 'reject' }] }),
+  ];
+  const trail = buildTrail({ nodes: [{ id: 'i1', key: 'REQ-A' }, { id: 'i2', key: 'REQ-B' }] }, log, new Map(), false);
+
+  it('shows the versions of the record', () => {
+    expect(trail[0].label).toBe('review open');
+    expect(trail[0].subject).toBe('REV-1');
+    expect(trail[4].label).toBe('review submitted');
+    expect(trail[4].summary).toContain('1 accepted, 1 rejected');
+    expect(trail[4].tone).toBe('ok');
+  });
+
+  it('marks the reviews made in a review object', () => {
+    expect(trail[1].reviewId).toBeUndefined();
+    expect(trail[2].summary).toBe('accepted in review REV-1 — c');
+    expect(trail[3].tone).toBe('warn');
+  });
+
+  it('groups the entries of a review', () => {
+    const groups = reviewGroups(trail);
+    expect([...groups.keys()]).toEqual(['REV-1']);
+    expect(groups.get('REV-1')!.map((e) => e.seq)).toEqual([1, 3, 4, 5]);
   });
 });

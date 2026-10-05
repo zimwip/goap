@@ -166,6 +166,7 @@ REQ-1  v1(main) ── v3(main, revise) ───────────── 
 | **Model exchange** | The request and the answer of one LLM call of an action, an entry `model.call` of the change log ([ADR 0059](adr/0059-prompts-in-the-change-log.md)): capped, read with `prompt:inspect`, shown by the Tokens console; the journal record keeps the token counts only (`pkg/journal`, ADR 0066). |
 | **Decision** | A choice about something that is not a node (human or agent); the acceptance of a node is the review of its change impact. |
 | **Artifact** | Free-form data produced by an action (summary, report, tool response). |
+| **Review** (object) | A review the reviewer builds up and submits ([ADR 0080](adr/0080-review-object.md)): a change item of kind `review` (`pkg/review`, registered by the composition roots), each version the whole record of its `key` (`REV-…`): a global comment, a status `open` → `submitted` or `discarded` (both final) and one entry per change impact (own comment, outcome `accept` / `reject`). Submitting applies every entry as an ordinary review in one transaction (`ImpactNodeReviewBatch`: all or none), each `reviewed` event carrying the review id. |
 | **Risk**, **Action** | Records of the change ([ADR 0036](adr/0036-risks-actions-brief-transverse-methodologies.md)): each item is a version of the risk or action of its `key` (`RSK-1`, `ACT-1`); the register is the last version of each. A risk has a probability, an impact, a status and an owner role; an action answers a risk or a decision. The register is a use case outside the core: `pkg/risk` registers the item kinds (`risk.Register()`, [ADR 0065](adr/0065-item-kinds-required-links-change-data.md)) and folds them (`risk.Risks`, `risk.Actions`, `risk.Waivers`). `goap-change` serves `risks`, `risk`, `action`, and `brief` (the change in one line per fact, also given to every LLM action on a change in its system prompt) and `trace` (where an item, a risk or a node comes from and what it led to). |
 
 Applying a Change (`ApplyChange`) lands the accepted change impacts' versions and creates a new baseline. The Change remains the explainable history of *why* the graph changed.
@@ -186,7 +187,8 @@ makes for the person.
 | Create or edit a node | Node editor bound to the change and its scope: properties (a draft: the version is written when the change lands; the review stays a separate, explicit action), lifecycle moves, *Remove from change* | `ImpactNodeCreate`, `ImpactNodeCheckout`, `ImpactNodeUpdate`, `ImpactNodeTransition`, `WithdrawImpact` |
 | Edit its links | Node editor → Relations → *Links*: the outgoing links of the draft (add: a link type the node type allows and a target; remove) | `ImpactLinkCreate`, `ImpactLinkDelete` |
 | Retire an entry | An MCP, adapter, policy, assignment or model entry is never deleted: *Retire* moves it to `retired` (its readers leave it out), saving it again restores it | `CommitEdits` (`state`) |
-| Review | Change → Impacts: *Review…* (comment mandatory) | `ImpactNodeReview` |
+| Review | Change → Impacts: *Review…* (comment mandatory), a shortcut for one impact | `ImpactNodeReview` |
+| Review several impacts | Change → Reviews: *New review*, a global comment, a select box of the impacts awaiting review, a comment and an accept / reject per impact, *Submit review* (all or none) or *Discard* | `ReviewOpen`, `ReviewUpdate`, `ReviewSubmit`, `ReviewDiscard` (over `ImpactNodeReviewBatch`) |
 | Options, decisions | Scope bar, Compare, Decisions panes (a ruling made there is a person's) | `OpenOption` … `SelectOption`, `OpenDecision` … `RuleDecision` |
 | Adopt or discard a flow | Change → Overview (a flow no run works on is adopted straight on the graph) | `AdoptFlow`, `DiscardFlow` |
 | Apply | Change → Overview: *Apply* | `ApplyChange` |
@@ -909,7 +911,7 @@ under the parameter name, and that the code can never read. Runs are bounded (30
 - **Built-in MCPs** ([ADR 0028](adr/0028-builtin-mcps-and-connectors.md)): the platform as tools, split by concern —
   `goap-graph` (read / glob / grep / links / baselines), `goap-change` (create / read / write / edit / link / unlink / cancel / remove /
   note / validate on a change, options / option / activate / evaluate / compare for its options, decisions /
-  decision / rule / answer for its decision points; no apply, no selection, no ratification), `goap-scheduler` (start / list / get processes, triggers / fire; scope
+  decision / rule / answer for its decision points, reviews / review_open / review_update / review_submit / review_discard for its review objects (ADR 0080); no apply, no selection, no ratification), `goap-scheduler` (start / list / get processes, triggers / fire; scope
   `agent`) and
   `goap-admin` (units, users, MCPs, connectors, domains, methodologies). Their connectors
   (`internal/connectors/builtin`) run in the hub and act for the caller (per-type read authorization, the access gate

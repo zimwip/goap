@@ -69,6 +69,17 @@ service GraphService {
   // Take a change impact out of the change, explicitly: its draft is dropped.
   rpc WithdrawImpact(WithdrawImpactRequest) returns (WithdrawImpactResponse);
   rpc ImpactNodeReview(ImpactNodeReviewRequest) returns (ImpactNodeReviewResponse);
+  // The review object (ADR 0080): a reviewer builds a review up (a global comment, one entry per change impact with its
+  // own comment and outcome), then submits it; the submission reviews every impact in one transaction, all or none. An
+  // open review is changed by its author or an administrator only; submitted and discarded reviews are final.
+  // The mechanism under it: reviews of several impacts applied in one transaction, all or none, each stamped with the
+  // review id, and an optional item written with them.
+  rpc ImpactNodeReviewBatch(ImpactNodeReviewBatchRequest) returns (ImpactNodeReviewBatchResponse);
+  rpc ReviewOpen(ReviewOpenRequest) returns (ReviewResponse);
+  rpc ReviewUpdate(ReviewUpdateRequest) returns (ReviewResponse);
+  rpc ReviewSubmit(ReviewSubmitRequest) returns (ReviewResponse);
+  // Drop a review that was never submitted (final).
+  rpc ReviewDiscard(ReviewDiscardRequest) returns (ReviewResponse);
   rpc ReopenChangeImpacts(ReopenChangeImpactsRequest) returns (ReopenChangeImpactsResponse);
   // Producers: a whole change of node edits (change impacts, versions, reviews, apply) in one call.
   rpc CommitEdits(CommitEditsRequest) returns (CommitEditsResponse);
@@ -286,6 +297,8 @@ message Review {
   string flow = 5;
   string execution = 6;
   bool superseded = 7;
+  // the review object (ADR 0080) the review was submitted in; empty for a review made on its own
+  string review_id = 8;
 }
 
 // The link from a change to a node (ADR 0024).
@@ -1180,6 +1193,90 @@ message ImpactNodeReviewRequest {
 
 message ImpactNodeReviewResponse {
   ChangeImpact node = 1;
+}
+
+message ImpactVerdict {
+  string change_impact_id = 1;
+  bool accept = 2;
+  string comment = 3;
+}
+
+message ImpactNodeReviewBatchRequest {
+  string change_id = 1;
+  string review_id = 2;
+  string flow = 3;
+  string execution = 4;
+  repeated ImpactVerdict verdicts = 5;
+  // a fact written with the verdicts once they stood
+  ChangeItem item = 6;
+}
+
+message ImpactNodeReviewBatchResponse {
+  repeated ChangeImpact nodes = 1;
+}
+
+// The review object (ADR 0080). A review is an item of the change (kind review); every call answers its current version.
+message ReviewEntry {
+  string change_impact_id = 1;
+  string comment = 2;
+  // accept | reject | empty while undecided
+  string outcome = 3;
+}
+
+message ReviewRecord {
+  string key = 1;
+  // flow branch the entries are reviewed on (empty: the main flow)
+  string flow = 2;
+  // the global comment
+  string comment = 3;
+  // open | submitted | discarded
+  string status = 4;
+  repeated ReviewEntry entries = 5;
+  string by = 6;
+  google.protobuf.Timestamp submitted_at = 7;
+  string item = 8;
+  int32 versions = 9;
+}
+
+message ReviewOpenRequest {
+  string change_id = 1;
+  string flow = 2;
+  string comment = 3;
+}
+
+// A change to an open review: the comment replaces the global one when set; remove then add change the impacts; entries
+// set comment / outcome of entries once the set changed (set_comment / set_outcome say which fields to write).
+message ReviewEntryEdit {
+  string change_impact_id = 1;
+  bool set_comment = 2;
+  string comment = 3;
+  bool set_outcome = 4;
+  // accept | reject | empty to take the decision back
+  string outcome = 5;
+}
+
+message ReviewUpdateRequest {
+  string change_id = 1;
+  string key = 2;
+  bool set_comment = 3;
+  string comment = 4;
+  repeated string add = 5;
+  repeated string remove = 6;
+  repeated ReviewEntryEdit entries = 7;
+}
+
+message ReviewSubmitRequest {
+  string change_id = 1;
+  string key = 2;
+}
+
+message ReviewDiscardRequest {
+  string change_id = 1;
+  string key = 2;
+}
+
+message ReviewResponse {
+  ReviewRecord review = 1;
 }
 
 // ReopenChangeImpactsRequest sends accepted or rejected impacts of the main flow back to proposed (ADR 0075, 0076).

@@ -24,6 +24,7 @@ import (
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/domain/def"
 	"github.com/zimwip/goap/pkg/graph"
+	"github.com/zimwip/goap/pkg/review"
 	"github.com/zimwip/goap/pkg/risk"
 	"github.com/zimwip/goap/pkg/typecat"
 	"github.com/zimwip/goap/pkg/verify"
@@ -57,6 +58,7 @@ func main() {
 	// the facts of the risk register are items of a change (ADR 0065)
 	risk.Register()
 	verify.Register()
+	review.Register()
 	log := platform.Logger("graph")
 	defer telemetry.Setup(context.Background(), log, "graph")(context.Background())
 	var repo graph.Repo = graph.NewMemory()

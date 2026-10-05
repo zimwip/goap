@@ -295,7 +295,7 @@ func ChangeImpactToPB(cn domain.ChangeImpact) *graphv1.ChangeImpact {
 		Via: string(cn.Via), Recheck: cn.Recheck, ProducedBy: cn.ProducedBy, Execution: cn.Execution, CreatedAt: Time(cn.CreatedAt),
 		Flow: cn.Flow, Superseded: cn.Superseded}
 	for _, r := range cn.Reviews {
-		out.Reviews = append(out.Reviews, &graphv1.Review{Status: string(r.Status), By: r.By, Comment: r.Comment, At: Time(r.At), Flow: r.Flow, Execution: r.Execution, Superseded: r.Superseded})
+		out.Reviews = append(out.Reviews, &graphv1.Review{Status: string(r.Status), By: r.By, Comment: r.Comment, At: Time(r.At), Flow: r.Flow, Execution: r.Execution, Superseded: r.Superseded, ReviewId: r.ReviewID})
 	}
 	for _, id := range cn.DerivedFrom {
 		out.DerivedFrom = append(out.DerivedFrom, string(id))
@@ -315,7 +315,7 @@ func ChangeImpactFromPB(cn *graphv1.ChangeImpact) domain.ChangeImpact {
 		Via: domain.ChangeImpactID(cn.Via), Recheck: cn.Recheck, ProducedBy: cn.ProducedBy, Execution: cn.Execution, CreatedAt: FromTime(cn.CreatedAt),
 		Flow: cn.Flow, Superseded: cn.Superseded}
 	for _, r := range cn.Reviews {
-		out.Reviews = append(out.Reviews, domain.Review{Status: domain.NodeReview(r.Status), By: r.By, Comment: r.Comment, At: FromTime(r.At), Flow: r.Flow, Execution: r.Execution, Superseded: r.Superseded})
+		out.Reviews = append(out.Reviews, domain.Review{Status: domain.NodeReview(r.Status), By: r.By, Comment: r.Comment, At: FromTime(r.At), Flow: r.Flow, Execution: r.Execution, Superseded: r.Superseded, ReviewID: r.ReviewId})
 	}
 	for _, id := range cn.DerivedFrom {
 		out.DerivedFrom = append(out.DerivedFrom, domain.ItemID(id))
@@ -384,7 +384,7 @@ func ImpactEventToPB(e domain.ImpactEvent) *graphv1.ImpactEvent {
 		out.State = ChangeImpactToPB(*e.State)
 	}
 	if r := e.Review; r != nil {
-		out.Review = &graphv1.Review{Status: string(r.Status), By: r.By, Comment: r.Comment, At: Time(r.At), Flow: r.Flow, Execution: r.Execution, Superseded: r.Superseded}
+		out.Review = &graphv1.Review{Status: string(r.Status), By: r.By, Comment: r.Comment, At: Time(r.At), Flow: r.Flow, Execution: r.Execution, Superseded: r.Superseded, ReviewId: r.ReviewID}
 	}
 	return out
 }

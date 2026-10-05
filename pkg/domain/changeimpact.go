@@ -38,6 +38,9 @@ type Review struct {
 	Flow       string `json:"flow,omitempty"`
 	Execution  string `json:"execution,omitempty"`
 	Superseded bool   `json:"superseded,omitempty"`
+	// ReviewID names the review (an opaque id, ADR 0080) a batch of verdicts was submitted in: every review the batch
+	// wrote carries it, so the audit groups them. Empty for a review made on its own.
+	ReviewID string `json:"reviewId,omitempty"`
 }
 
 // ChangeImpact is the link from a change to a node: the node version the change

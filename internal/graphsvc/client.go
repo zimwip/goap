@@ -239,6 +239,26 @@ func (c *Client) ImpactNodeReviewOn(ctx context.Context, id domain.ChangeID, flo
 	return pbconv.ChangeImpactFromPB(r.Msg.Node), nil
 }
 
+// ImpactNodeReviewBatch implements engine.GraphPort (the reviewer is the principal of the request, ADR 0080).
+func (c *Client) ImpactNodeReviewBatch(ctx context.Context, id domain.ChangeID, b domain.ReviewBatch) ([]domain.ChangeImpact, error) {
+	req := &graphv1.ImpactNodeReviewBatchRequest{ChangeId: string(id), ReviewId: b.ID, Flow: b.Flow, Execution: b.Execution}
+	for _, v := range b.Verdicts {
+		req.Verdicts = append(req.Verdicts, &graphv1.ImpactVerdict{ChangeImpactId: string(v.Impact), Accept: v.Status == domain.ReviewAccepted, Comment: v.Comment})
+	}
+	if b.Item != nil {
+		req.Item = pbconv.ItemToPB(*b.Item)
+	}
+	r, err := c.rpc.ImpactNodeReviewBatch(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, rpcerr.FromConnect(err)
+	}
+	out := make([]domain.ChangeImpact, len(r.Msg.Nodes))
+	for i, n := range r.Msg.Nodes {
+		out[i] = pbconv.ChangeImpactFromPB(n)
+	}
+	return out, nil
+}
+
 // ReopenImpacts implements engine.GraphPort.
 func (c *Client) ReopenImpacts(ctx context.Context, id domain.ChangeID, impacts []domain.ChangeImpactID, comment string) ([]domain.ChangeImpactID, error) {
 	req := &graphv1.ReopenChangeImpactsRequest{ChangeId: string(id), Comment: comment}
@@ -267,6 +287,15 @@ func (c *Client) Changes(ctx context.Context) ([]domain.Change, error) {
 		out[i] = pbconv.ChangeFromPB(ch)
 	}
 	return out, nil
+}
+
+// Change implements engine.GraphPort.
+func (c *Client) Change(ctx context.Context, id domain.ChangeID) (domain.Change, error) {
+	r, err := c.rpc.GetChange(ctx, connect.NewRequest(&graphv1.GetChangeRequest{Id: string(id)}))
+	if err != nil {
+		return domain.Change{}, rpcerr.FromConnect(err)
+	}
+	return pbconv.ChangeFromPB(r.Msg.Change), nil
 }
 
 // ListChanges implements engine.GraphPort.
