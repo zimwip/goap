@@ -300,9 +300,9 @@ func nodeTypeFromPB(n *registryv1.NodeType) def.NodeType {
 func lifecyclesToPB(ls []domain.Lifecycle) []*registryv1.Lifecycle {
 	var out []*registryv1.Lifecycle
 	for _, l := range ls {
-		pl := &registryv1.Lifecycle{Name: l.Name, Description: l.Description, Initial: l.Initial, RestInEditable: l.RestInEditable}
+		pl := &registryv1.Lifecycle{Name: l.Name, Description: l.Description, Initial: l.Initial}
 		for _, s := range l.States {
-			pl.States = append(pl.States, &registryv1.LifecycleState{Name: s.Name, Description: s.Description, Editable: s.Editable, Final: s.Final})
+			pl.States = append(pl.States, &registryv1.LifecycleState{Name: s.Name, Description: s.Description, NotLandable: s.NotLandable, Final: s.Final})
 		}
 		for _, t := range l.Transitions {
 			pt := &registryv1.LifecycleTransition{Name: t.Name, Description: t.Description, From: t.From, To: t.To, Permission: t.Permission, Guard: t.Guard,
@@ -337,9 +337,9 @@ func criteriaFromPB(cs []*registryv1.Criterion) []domain.Criterion {
 func lifecyclesFromPB(ls []*registryv1.Lifecycle) []domain.Lifecycle {
 	var out []domain.Lifecycle
 	for _, l := range ls {
-		dl := domain.Lifecycle{Name: l.Name, Description: l.Description, Initial: l.Initial, RestInEditable: l.RestInEditable}
+		dl := domain.Lifecycle{Name: l.Name, Description: l.Description, Initial: l.Initial}
 		for _, s := range l.States {
-			dl.States = append(dl.States, domain.LifecycleState{Name: s.Name, Description: s.Description, Editable: s.Editable, Final: s.Final})
+			dl.States = append(dl.States, domain.LifecycleState{Name: s.Name, Description: s.Description, NotLandable: s.NotLandable, Final: s.Final})
 		}
 		for _, t := range l.Transitions {
 			dt := domain.Transition{Name: t.Name, Description: t.Description, From: t.From, To: t.To, Permission: t.Permission, Guard: t.Guard,

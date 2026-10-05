@@ -200,8 +200,8 @@ message NodeView {
   int32 latest = 2;
   repeated Link out = 3;
   repeated Link in = 4;
-  // the node has a lifecycle and its state is not editable
-  bool frozen = 5;
+  // the node has a lifecycle and its state is flagged notLandable (ADR 0078)
+  bool not_landable = 5;
 }
 
 message Baseline {
@@ -941,7 +941,7 @@ message NodeEdit {
   // commit for a created node
   string owner = 8;
   // the lifecycle state the node is moved to (a transition of its own, ADR 0076): after the other edits, or before
-  // them when the node rests out of the editable states (a retired entry restored)
+  // them (a retired entry restored)
   string state = 9;
 }
 

@@ -10,11 +10,11 @@ import (
 type NodeView struct {
 	Node
 	Latest Version `json:"latest"`
-	// Frozen: the node has a lifecycle and is in a state that is not editable
-	// (it must be reopened by a transition before it can be modified).
-	Frozen bool   `json:"frozen,omitempty"`
-	Out    []Link `json:"out,omitempty"`
-	In     []Link `json:"in,omitempty"`
+	// NotLandable: the node has a lifecycle and is in a state flagged notLandable (ADR 0078)
+	// (a change cannot land while a node rests there).
+	NotLandable bool   `json:"notLandable,omitempty"`
+	Out         []Link `json:"out,omitempty"`
+	In          []Link `json:"in,omitempty"`
 }
 
 // Blackboard is the state an agent process observes: the change (axis change)

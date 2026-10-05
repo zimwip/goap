@@ -21,7 +21,7 @@ version: 1.0.0
 lifecycles:
   - name: req
     initial: proposed
-    states: [{name: proposed}, {name: draft, editable: true}, {name: approved}]
+    states: [{name: proposed}, {name: draft, notLandable: true}, {name: approved}]
     transitions: [{name: start, from: proposed, to: draft}, {name: approve, from: draft, to: approved}]
 algorithms:
   - {name: not-blank, type: property_validator, language: javascript, code: 'return String(ctx.value() || "").trim() !== ""'}

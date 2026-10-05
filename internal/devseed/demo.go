@@ -21,8 +21,8 @@ const alm = "alm"
 type demoNode struct {
 	Namespace, Key, Type string
 	Properties           map[string]any
-	// State is the state a node of a lifecycle lands in: a node is created in the initial, editable state, which no
-	// change leaves a node in.
+	// State is the state a node of a lifecycle lands in: a node is created in the initial state, which no
+	// change leaves a node in if it is not landable.
 	State string
 }
 

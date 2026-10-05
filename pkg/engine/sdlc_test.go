@@ -34,7 +34,7 @@ func sdlcModel(t *testing.T) llm.Client {
 			out = `{"items":[{"kind":"changeImpact","changeImpact":{"op":"declare","intent":"modified","key":"NEED-1","rationale":"new payment method"}},
 			{"kind":"changeImpact","changeImpact":{"op":"declare","intent":"modified","key":"REQ-1","rationale":"the PSP must handle split payments"}}]}`
 		case strings.Contains(p, "Revise the impacted requirements"):
-			// REQ-1 starts proposed (not editable): a transition moves it to draft, then it is written, the way the
+			// REQ-1 starts proposed: a transition moves it to draft, then it is written, the way the
 			// system prompt's lifecycle instructions ask of any compliant agent (llmSystem, ADR 0076). REQ-10 is
 			// created. The review accepts both, approve_requirements approves them.
 			out = `{"items":[{"kind":"changeImpact","changeImpact":{"op":"transition","node":"REQ-1","state":"draft"}},

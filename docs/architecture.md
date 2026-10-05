@@ -1426,11 +1426,11 @@ through changes like any node (the screen writes them with `web/src/lib/llmEdit.
 ## Node lifecycle (ADR 0014)
 
 A domain is composed of **node types, link types and lifecycles**. A lifecycle is a named state machine
-(states with an `editable` flag, transitions with permission, CEL guard, required attributes/links and,
+(states, each landable unless flagged `notLandable`, transitions with permission, CEL guard, required attributes/links and,
 for documents, allowed child states) that node types name and subtypes inherit. The state is stored on
-each node version. A node is modified only in an editable state, which it holds only through a change:
-the change reopens it (writes a version in an editable state), edits it and moves it out of the editable states before
-it is applied. Changes are attached to the nodes they modify (several changes may be attached to one node;
+each node version. A node is edited in any state while it is in a change (ADR 0078); a state flagged
+`notLandable` (a draft) keeps the change from landing, so the change moves the node to a landable state before it is
+applied. Changes are attached to the nodes they modify (several changes may be attached to one node;
 conflicts appear at Apply). A document type embeds nodes through `contains` links and its transitions
 validate the states of its children in the result baseline. The rules live in `pkg/graph/lifecycle.go`
 (checked when a change impact writes a version and again by `Apply`); the type catalogue resolves the lifecycles
