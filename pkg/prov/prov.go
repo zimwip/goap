@@ -449,8 +449,9 @@ func (b *builder) impact(c domain.Change, e domain.LogEntry, ev domain.ImpactEve
 	if state != nil {
 		typ, key = state.Type, state.Key
 	}
-	switch ev.Op {
-	case domain.ImpactDeclared:
+	// a proposal adds the change impact (State); so does a creation, whose one event is also its first version
+	// (Post, below): ADR 0077
+	propose := func() {
 		if s := ev.State; s != nil {
 			cp := *s
 			b.impacts[ev.Impact] = &cp
@@ -475,7 +476,18 @@ func (b *builder) impact(c domain.Change, e domain.LogEntry, ev domain.ImpactEve
 		if actor != "" {
 			add(n, "prov:wasAttributedTo", ref(actor))
 		}
-	case domain.ImpactWritten:
+	}
+	switch ev.Op {
+	case domain.ImpactProposed:
+		propose()
+	case domain.ImpactTransitioned, domain.ImpactCheckedOut, domain.ImpactCreated:
+		if ev.Op == domain.ImpactCreated {
+			propose()
+			state = b.impacts[ev.Impact]
+			if state != nil {
+				typ, key = state.Type, state.Key
+			}
+		}
 		if ev.Post == nil {
 			return
 		}
@@ -487,6 +499,10 @@ func (b *builder) impact(c domain.Change, e domain.LogEntry, ev domain.ImpactEve
 		}
 		if state != nil && state.Pre != nil {
 			add(v, "prov:wasRevisionOf", ref(b.version(*state.Pre, typ, key)))
+		}
+		// a merge or a split derives its new node from the nodes it replaces (ADR 0077)
+		for _, o := range originsOf(ev.Patch) {
+			add(v, "prov:wasDerivedFrom", ref(b.version(o.ref, typ, o.key)))
 		}
 		add(n, "goap:post", ref(versionIRI(*ev.Post)))
 		if state != nil {
@@ -540,4 +556,35 @@ func (b *builder) impact(c domain.Change, e domain.LogEntry, ev domain.ImpactEve
 			}
 		}
 	}
+}
+
+type origin struct {
+	ref domain.NodeRef
+	key string
+}
+
+// originsOf reads the origins of a created event (ADR 0077): the patch is what the log stored, so its numbers and
+// lists come back from JSON.
+func originsOf(patch map[string]any) []origin {
+	var out []origin
+	list, _ := patch["origins"].([]any)
+	for _, x := range list {
+		m, ok := x.(map[string]any)
+		if !ok {
+			continue
+		}
+		id, _ := m["id"].(string)
+		var v int
+		switch n := m["version"].(type) {
+		case float64:
+			v = int(n)
+		case int:
+			v = n
+		}
+		key, _ := m["key"].(string)
+		if id != "" && v > 0 {
+			out = append(out, origin{domain.NodeRef{ID: domain.NodeID(id), Version: domain.Version(v)}, key})
+		}
+	}
+	return out
 }

@@ -77,7 +77,7 @@ func (w algoWorld) change(t *testing.T) domain.Change {
 
 // create creates a node in a change, then approves it.
 func (w algoWorld) create(c domain.Change, key, typ string, props map[string]any) error {
-	cn, err := w.g.CreateNode(context.Background(), c.ID, NodeCreate{Key: key, Type: typ, Properties: props, Rationale: "new " + key})
+	cn, err := w.g.ImpactNodeCreate(context.Background(), c.ID, NodeCreate{Key: key, Type: typ, Properties: props, Rationale: "new " + key})
 	if err != nil {
 		return err
 	}
@@ -89,7 +89,7 @@ func (w algoWorld) create(c domain.Change, key, typ string, props map[string]any
 func (w algoWorld) modify(t *testing.T, c domain.Change, n domain.Node, writes ...edit) error {
 	t.Helper()
 	ref := n.Ref()
-	ns, err := w.g.AddNodes(context.Background(), c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &ref, Rationale: "modify " + n.Key}})
+	ns, err := w.g.ProposeImpact(context.Background(), c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &ref, Rationale: "modify " + n.Key}})
 	if err != nil {
 		t.Fatal(err)
 	}

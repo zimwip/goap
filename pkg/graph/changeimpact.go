@@ -31,20 +31,27 @@ func findChangeImpact(c domain.Change, id domain.ChangeImpactID) (int, error) {
 	return -1, fmt.Errorf("change impact %s of change %s: %w", id, c.ID, ErrNotFound)
 }
 
-// AddNodes adds change impacts to a change (ADR 0024): each names a node with an
-// intent and a rationale. A modified node gives its pre version, which must be
-// in the reference baseline. The impact has no version until a CheckoutNode writes one (ADR 0076).
-func (g *Graph) AddNodes(ctx context.Context, id domain.ChangeID, nodes []domain.ChangeImpact) (out []domain.ChangeImpact, err error) {
+// ProposeImpact adds change impacts to a change (ADR 0024): each names an existing node (intent modified) and a
+// rationale; its pre version must be in the reference baseline. The impact has no version until a ImpactNodeCheckout
+// writes one (ADR 0076). A new node is not proposed: it is created by ImpactNodeCreate, which adds its impact and its
+// first version in one event (ADR 0077).
+func (g *Graph) ProposeImpact(ctx context.Context, id domain.ChangeID, nodes []domain.ChangeImpact) (out []domain.ChangeImpact, err error) {
+	for _, cn := range nodes {
+		if cn.Intent == domain.IntentCreated {
+			return nil, fmt.Errorf("change impact of %s: a new node is created with ImpactNodeCreate; ProposeImpact is for existing nodes: %w", cn.Key, ErrInvalid)
+		}
+	}
 	err = g.repo.InTx(ctx, func(tx Tx) (err error) {
-		out, err = g.declareTx(ctx, tx, id, nodes)
+		out, err = g.declareTx(ctx, tx, id, nodes, true)
 		return err
 	})
 	return out, err
 }
 
-// declareTx declares change impacts in a transaction (AddNodes, and the impact a CreateNode, a CheckoutNode or a
-// TransitionNode declares).
-func (g *Graph) declareTx(ctx context.Context, tx Tx, id domain.ChangeID, nodes []domain.ChangeImpact) ([]domain.ChangeImpact, error) {
+// declareTx declares change impacts in a transaction (ProposeImpact, and the impact an operation on an existing node
+// declares). With propose false it only checks and returns them: the caller records them itself (a creation, whose
+// created event carries the impact).
+func (g *Graph) declareTx(ctx context.Context, tx Tx, id domain.ChangeID, nodes []domain.ChangeImpact, propose bool) ([]domain.ChangeImpact, error) {
 	out := make([]domain.ChangeImpact, 0, len(nodes))
 	err := func() error {
 		c, err := changeOpen(ctx, tx, id)
@@ -89,13 +96,13 @@ func (g *Graph) declareTx(ctx context.Context, tx Tx, id domain.ChangeID, nodes 
 		}
 		for _, cn := range batch {
 			if cn.Post != nil || cn.Landed != nil || len(cn.Reviews) > 0 || cn.Recheck {
-				return fmt.Errorf("change impact %s: post, landed and reviews are set by CreateNode / CheckoutNode, ReviewNode and Apply: %w", cn.ID, ErrInvalid)
+				return fmt.Errorf("change impact %s: post, landed and reviews are set by ImpactNodeCreate / ImpactNodeCheckout, ImpactNodeReview and Apply: %w", cn.ID, ErrInvalid)
 			}
 			if cn.Review == "" {
 				cn.Review = domain.ReviewProposed
 			}
 			if cn.Review != domain.ReviewProposed {
-				return fmt.Errorf("change impact %s starts proposed, it is accepted or rejected by ReviewNode: %w", cn.ID, ErrInvalid)
+				return fmt.Errorf("change impact %s starts proposed, it is accepted or rejected by ImpactNodeReview: %w", cn.ID, ErrInvalid)
 			}
 			if cn.Flow != "" {
 				if _, ok := c.Flow(cn.Flow); !ok {
@@ -139,8 +146,10 @@ func (g *Graph) declareTx(ctx context.Context, tx Tx, id domain.ChangeID, nodes 
 				return fmt.Errorf("change impact %s: %v: %w", cn.ID, err, ErrInvalid)
 			}
 			cn := cn
-			if err := g.emit(ctx, tx, domain.ImpactEvent{Change: id, Impact: cn.ID, Op: domain.ImpactDeclared, Flow: cn.Flow, Execution: cn.Execution, State: &cn}); err != nil {
-				return err
+			if propose {
+				if err := g.emit(ctx, tx, domain.ImpactEvent{Change: id, Impact: cn.ID, Op: domain.ImpactProposed, Flow: cn.Flow, Execution: cn.Execution, State: &cn}); err != nil {
+					return err
+				}
 			}
 			out = append(out, cn)
 		}
@@ -182,16 +191,16 @@ func (g *Graph) ImpactsOf(ctx context.Context, id domain.ChangeID, execution str
 	return out, nil
 }
 
-// ReviewNode accepts or rejects a proposed change impact. The comment is
+// ImpactNodeReview accepts or rejects a proposed change impact. The comment is
 // mandatory: it is kept in the review history and, once the node is realized,
 // on the version itself, so the origin of a version can be read from the node.
-func (g *Graph) ReviewNode(ctx context.Context, id domain.ChangeID, node domain.ChangeImpactID, status domain.NodeReview, by, comment string) (domain.ChangeImpact, error) {
-	return g.ReviewNodeOn(ctx, id, "", "", node, status, by, comment)
+func (g *Graph) ImpactNodeReview(ctx context.Context, id domain.ChangeID, node domain.ChangeImpactID, status domain.NodeReview, by, comment string) (domain.ChangeImpact, error) {
+	return g.ImpactNodeReviewOn(ctx, id, "", "", node, status, by, comment)
 }
 
-// ReviewNodeOn reviews a change impact as a flow sees it (ADR 0025): on a flow the review is a
+// ImpactNodeReviewOn reviews a change impact as a flow sees it (ADR 0025): on a flow the review is a
 // candidate until the flow is adopted, and execution is the action run that made it.
-func (g *Graph) ReviewNodeOn(ctx context.Context, id domain.ChangeID, flow, execution string, node domain.ChangeImpactID, status domain.NodeReview, by, comment string) (cn domain.ChangeImpact, err error) {
+func (g *Graph) ImpactNodeReviewOn(ctx context.Context, id domain.ChangeID, flow, execution string, node domain.ChangeImpactID, status domain.NodeReview, by, comment string) (cn domain.ChangeImpact, err error) {
 	if status != domain.ReviewAccepted && status != domain.ReviewRejected {
 		return cn, fmt.Errorf("a change impact is reviewed as accepted or rejected, not %q: %w", status, ErrInvalid)
 	}
@@ -224,6 +233,15 @@ func (g *Graph) ReviewNodeOn(ctx context.Context, id domain.ChangeID, flow, exec
 		}
 		if seen.Review != domain.ReviewProposed {
 			return fmt.Errorf("change impact %s is already %s: %w", node, seen.Review, ErrConflict)
+		}
+		if status == domain.ReviewAccepted {
+			all, err := g.newFlowNodes(tx, c, flow).nodes(ctx)
+			if err != nil {
+				return err
+			}
+			if err := g.checkOrigins(ctx, tx, id, all, seen); err != nil {
+				return err
+			}
 		}
 		if g.ReviewPolicy != nil {
 			entries, err := tx.Log(ctx, factsFilter(id))

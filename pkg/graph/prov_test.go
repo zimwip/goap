@@ -35,7 +35,7 @@ func testProvenanceExport(t *testing.T, repo Repo) {
 		t.Fatal(err)
 	}
 	pre := f.req.Ref()
-	added, err := g.AddNodes(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &pre, Rationale: "PSP v2",
+	added, err := g.ProposeImpact(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &pre, Rationale: "PSP v2",
 		Execution: "e1", DerivedFrom: []domain.ItemID{items[0].ID}}})
 	if err != nil {
 		t.Fatal(err)

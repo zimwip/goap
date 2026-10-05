@@ -23,7 +23,7 @@ type newNode struct {
 	Links []LinkWrite
 }
 
-// importNode lands a node on main through a change of its own: CreateNode, accepted, checked in, moved to its State,
+// importNode lands a node on main through a change of its own: ImpactNodeCreate, accepted, checked in, moved to its State,
 // applied. It names no required parent: fixtures add structure links afterwards (importLink).
 func importNode(ctx context.Context, g *Graph, in newNode) (domain.Node, error) {
 	ns := domain.NamespaceOf(in.Namespace)
@@ -38,7 +38,7 @@ func importNode(ctx context.Context, g *Graph, in newNode) (domain.Node, error) 
 	if err != nil {
 		return domain.Node{}, err
 	}
-	cn, err := g.CreateNode(ctx, c.ID, NodeCreate{Key: in.Key, Type: in.Type, Properties: in.Properties, Owner: in.Owner, Rationale: "Import " + in.Key, Links: in.Links})
+	cn, err := g.ImpactNodeCreate(ctx, c.ID, NodeCreate{Key: in.Key, Type: in.Type, Properties: in.Properties, Owner: in.Owner, Rationale: "Import " + in.Key, Links: in.Links})
 	if err != nil {
 		return domain.Node{}, err
 	}
@@ -51,7 +51,7 @@ func importNode(ctx context.Context, g *Graph, in newNode) (domain.Node, error) 
 			return domain.Node{}, err
 		}
 		if n.State != in.State {
-			if _, err := g.TransitionNode(ctx, c.ID, NodeTransition{NodeCheckout: NodeCheckout{Impact: cn.ID}, To: in.State}); err != nil {
+			if _, err := g.ImpactNodeTransition(ctx, c.ID, NodeTransition{NodeCheckout: NodeCheckout{Impact: cn.ID}, To: in.State}); err != nil {
 				return domain.Node{}, err
 			}
 		}
@@ -79,11 +79,11 @@ func importLink(ctx context.Context, g *Graph, typ string, from, to domain.NodeR
 	if err != nil {
 		return domain.Link{}, err
 	}
-	cn, err := g.CheckoutNode(ctx, c.ID, NodeCheckout{Node: from.ID, Rationale: "Link " + src.Key})
+	cn, err := g.ImpactNodeCheckout(ctx, c.ID, NodeCheckout{Node: from.ID, Rationale: "Link " + src.Key})
 	if err != nil {
 		return domain.Link{}, err
 	}
-	l, err := g.CreateLink(ctx, c.ID, cn.ID, LinkWrite{Type: typ, To: to, Properties: props}, "", "")
+	l, err := g.ImpactLinkCreate(ctx, c.ID, cn.ID, LinkWrite{Type: typ, To: to, Properties: props}, "", "")
 	if err != nil {
 		return l, err
 	}
@@ -112,11 +112,11 @@ func importProps(ctx context.Context, g *Graph, ref domain.NodeRef, props map[st
 	if err != nil {
 		return src, err
 	}
-	cn, err := g.CheckoutNode(ctx, c.ID, NodeCheckout{Node: ref.ID, Rationale: "Edit " + src.Key})
+	cn, err := g.ImpactNodeCheckout(ctx, c.ID, NodeCheckout{Node: ref.ID, Rationale: "Edit " + src.Key})
 	if err != nil {
 		return src, err
 	}
-	if _, err := g.UpdateNode(ctx, c.ID, cn.ID, NodeUpdate{Properties: props}); err != nil {
+	if _, err := g.ImpactNodeUpdate(ctx, c.ID, cn.ID, NodeUpdate{Properties: props}); err != nil {
 		return src, err
 	}
 	if err := g.acceptAndCheckin(ctx, c.ID, cn.ID, ""); err != nil {
@@ -135,7 +135,7 @@ func (g *Graph) acceptAndCheckin(ctx context.Context, id domain.ChangeID, impact
 		return err
 	}
 	if seen.Review == domain.ReviewProposed {
-		if _, err := g.ReviewNodeOn(ctx, id, flow, "", impact, domain.ReviewAccepted, "tester", "ok"); err != nil {
+		if _, err := g.ImpactNodeReviewOn(ctx, id, flow, "", impact, domain.ReviewAccepted, "tester", "ok"); err != nil {
 			return err
 		}
 	}
@@ -148,7 +148,7 @@ func (g *Graph) checkinIfOut(ctx context.Context, id domain.ChangeID, impact dom
 	if err != nil || !out {
 		return err
 	}
-	_, err = g.CheckinNode(ctx, id, impact, flow, "")
+	_, err = g.ImpactNodeCheckin(ctx, id, impact, flow, "")
 	return err
 }
 
@@ -202,17 +202,17 @@ func (g *Graph) edit(ctx context.Context, id domain.ChangeID, impact domain.Chan
 			return domain.ChangeImpact{}, err
 		}
 		if !out {
-			if _, err := g.CheckoutNode(ctx, id, NodeCheckout{Impact: impact, Flow: e.Flow, Execution: e.Execution}); err != nil {
+			if _, err := g.ImpactNodeCheckout(ctx, id, NodeCheckout{Impact: impact, Flow: e.Flow, Execution: e.Execution}); err != nil {
 				return domain.ChangeImpact{}, err
 			}
 		}
 		if len(e.Properties) > 0 || e.Owner != "" {
-			if _, err := g.UpdateNode(ctx, id, impact, NodeUpdate{Properties: e.Properties, Owner: e.Owner, Flow: e.Flow, Execution: e.Execution}); err != nil {
+			if _, err := g.ImpactNodeUpdate(ctx, id, impact, NodeUpdate{Properties: e.Properties, Owner: e.Owner, Flow: e.Flow, Execution: e.Execution}); err != nil {
 				return domain.ChangeImpact{}, err
 			}
 		}
 		for _, l := range e.AddLinks {
-			if _, err := g.CreateLink(ctx, id, impact, l, e.Flow, e.Execution); err != nil {
+			if _, err := g.ImpactLinkCreate(ctx, id, impact, l, e.Flow, e.Execution); err != nil {
 				return domain.ChangeImpact{}, err
 			}
 		}
@@ -230,7 +230,7 @@ func (g *Graph) edit(ctx context.Context, id domain.ChangeID, impact domain.Chan
 				return domain.ChangeImpact{}, err
 			}
 		}
-		if _, err := g.TransitionNode(ctx, id, NodeTransition{NodeCheckout: NodeCheckout{Impact: impact, Flow: e.Flow, Execution: e.Execution}, To: e.State}); err != nil {
+		if _, err := g.ImpactNodeTransition(ctx, id, NodeTransition{NodeCheckout: NodeCheckout{Impact: impact, Flow: e.Flow, Execution: e.Execution}, To: e.State}); err != nil {
 			return domain.ChangeImpact{}, err
 		}
 	}
@@ -240,7 +240,7 @@ func (g *Graph) edit(ctx context.Context, id domain.ChangeID, impact domain.Chan
 // removeLinkOf removes a link from the working version of a change impact: the link itself, or the copy the checkout
 // made of a link of the version it follows.
 func (g *Graph) removeLinkOf(ctx context.Context, id domain.ChangeID, impact domain.ChangeImpactID, link domain.LinkID, flow, execution string) error {
-	err := g.DeleteLink(ctx, id, link, flow, execution)
+	err := g.ImpactLinkDelete(ctx, id, link, flow, execution)
 	if err == nil || !errors.Is(err, ErrConflict) {
 		return err
 	}
@@ -270,7 +270,7 @@ func (g *Graph) removeLinkOf(ctx context.Context, id domain.ChangeID, impact dom
 	if copied == "" {
 		return fmt.Errorf("link %s: no copy on %s: %w", link, seen.Post, err)
 	}
-	return g.DeleteLink(ctx, id, copied, flow, execution)
+	return g.ImpactLinkDelete(ctx, id, copied, flow, execution)
 }
 
 // acceptAllAndCheckin accepts every proposed change impact of the main flow of a change and checks them in.
@@ -297,7 +297,7 @@ func (g *Graph) accept(ctx context.Context, id domain.ChangeID, impact domain.Ch
 
 // acceptOn accepts a change impact on a flow and checks its working version in there.
 func (g *Graph) acceptOn(ctx context.Context, id domain.ChangeID, flow, execution string, impact domain.ChangeImpactID, by, comment string) (domain.ChangeImpact, error) {
-	cn, err := g.ReviewNodeOn(ctx, id, flow, execution, impact, domain.ReviewAccepted, by, comment)
+	cn, err := g.ImpactNodeReviewOn(ctx, id, flow, execution, impact, domain.ReviewAccepted, by, comment)
 	if err != nil {
 		return cn, err
 	}
@@ -305,4 +305,26 @@ func (g *Graph) acceptOn(ctx context.Context, id domain.ChangeID, flow, executio
 		return cn, err
 	}
 	return g.seenImpact(ctx, id, impact, flow)
+}
+
+// proposeOrCreate declares impacts in a test: a node of the baseline is proposed (ProposeImpact), a new node is created
+// (ImpactNodeCreate: it has no proposal, ADR 0077), in order. A created impact comes back with its working version.
+func (g *Graph) proposeOrCreate(ctx context.Context, id domain.ChangeID, nodes []domain.ChangeImpact) ([]domain.ChangeImpact, error) {
+	out := make([]domain.ChangeImpact, 0, len(nodes))
+	for _, cn := range nodes {
+		if cn.Intent == domain.IntentCreated {
+			made, err := g.ImpactNodeCreate(ctx, id, NodeCreate{Key: cn.Key, Type: cn.Type, Rationale: cn.Rationale, Flow: cn.Flow, Execution: cn.Execution, ProducedBy: cn.ProducedBy, DerivedFrom: cn.DerivedFrom})
+			if err != nil {
+				return out, err
+			}
+			out = append(out, made)
+			continue
+		}
+		added, err := g.ProposeImpact(ctx, id, []domain.ChangeImpact{cn})
+		if err != nil {
+			return out, err
+		}
+		out = append(out, added...)
+	}
+	return out, nil
 }

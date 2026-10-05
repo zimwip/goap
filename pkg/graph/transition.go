@@ -234,7 +234,7 @@ func (g *Graph) phases(ctx context.Context, tx Tx, c domain.Change) (map[domain.
 			if err := json.Unmarshal(l.Payload, &ev); err != nil {
 				return nil, err
 			}
-			if ev.Op == domain.ImpactWritten && ev.Flow == "" {
+			if ev.Op.WritesPost() && ev.Flow == "" {
 				out[ev.Impact] = phase{State: state, Seq: l.Seq}
 			}
 		}

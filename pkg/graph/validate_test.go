@@ -72,7 +72,7 @@ func testValidateBoardOutdatedAndFlowView(t *testing.T, repo Repo) {
 	a, _ := g.CreateChange(ctx, NewChange{Title: "a", BaselineID: f.base.ID})
 	b, _ := g.CreateChange(ctx, NewChange{Title: "b", BaselineID: f.base.ID})
 	pre := f.req.Ref()
-	as, err := g.AddNodes(ctx, a.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &pre, Rationale: "from a"}})
+	as, err := g.ProposeImpact(ctx, a.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &pre, Rationale: "from a"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -82,7 +82,7 @@ func testValidateBoardOutdatedAndFlowView(t *testing.T, repo Repo) {
 	if _, err := g.accept(ctx, a.ID, as[0].ID, "u", "ok"); err != nil {
 		t.Fatal(err)
 	}
-	bs, err := g.AddNodes(ctx, b.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &pre, Rationale: "from b", Execution: "e1"}})
+	bs, err := g.ProposeImpact(ctx, b.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &pre, Rationale: "from b", Execution: "e1"}})
 	if err != nil {
 		t.Fatal(err)
 	}

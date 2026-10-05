@@ -79,7 +79,7 @@ func testSplitByOwnerAndMerge(t *testing.T, repo Repo) {
 		t.Fatal(err)
 	}
 	r1, r2, r3 := w.cmp1.Ref(), w.cmp2.Ref(), w.cmp3.Ref()
-	pnodes, err := g.AddNodes(ctx, parent.ID, []domain.ChangeImpact{
+	pnodes, err := g.ProposeImpact(ctx, parent.ID, []domain.ChangeImpact{
 		{Intent: domain.IntentModified, Pre: &r1, Rationale: "upgrade one"},
 		{Intent: domain.IntentModified, Pre: &r2, Rationale: "upgrade two"},
 		{Intent: domain.IntentModified, Pre: &r3, Rationale: "upgrade three"},
@@ -400,7 +400,7 @@ func testSubChangeMergePrecedence(t *testing.T, repo Repo) {
 	pre := w.cmp3.Ref()
 	writeTitle := func(c domain.Change, title string) domain.ChangeImpactID {
 		t.Helper()
-		added, err := g.AddNodes(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &pre, Rationale: title}})
+		added, err := g.ProposeImpact(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &pre, Rationale: title}})
 		if err != nil {
 			t.Fatal(err)
 		}

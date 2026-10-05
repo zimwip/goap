@@ -57,6 +57,24 @@ func jsonb(m map[string]any) []byte {
 	return b
 }
 
+// originsJSON encodes the origins of a node version (both dialects store them as a JSON array).
+func originsJSON(o []domain.NodeRef) []byte {
+	if len(o) == 0 {
+		return []byte("[]")
+	}
+	b, _ := json.Marshal(o)
+	return b
+}
+
+func originsOf(b []byte) []domain.NodeRef {
+	var o []domain.NodeRef
+	_ = json.Unmarshal(b, &o)
+	if len(o) == 0 {
+		return nil
+	}
+	return o
+}
+
 func props(b []byte) map[string]any {
 	var m map[string]any
 	_ = json.Unmarshal(b, &m)
@@ -88,9 +106,11 @@ func scanNode(row pgx.Row) (domain.Node, error) {
 	var p []byte
 	var version int
 	var parents []int32
-	if err := row.Scan(&id, &version, &n.Namespace, &n.Key, &n.Type, &p, &n.Deleted, &change, &n.CreatedAt, &n.Branch, &parents, &n.Reason, &n.State, &cnode, &n.Comment, &n.Execution, &owner, &project, &n.CheckedOut); err != nil {
+	var origins []byte
+	if err := row.Scan(&id, &version, &n.Namespace, &n.Key, &n.Type, &p, &n.Deleted, &change, &n.CreatedAt, &n.Branch, &parents, &n.Reason, &n.State, &cnode, &n.Comment, &n.Execution, &owner, &project, &n.CheckedOut, &origins); err != nil {
 		return n, err
 	}
+	n.Origins = originsOf(origins)
 	for _, pv := range parents {
 		n.Parents = append(n.Parents, domain.Version(pv))
 	}
@@ -126,6 +146,15 @@ func (t *pgTx) LatestOn(ctx context.Context, id domain.NodeID, branch string) (d
 	q, args := dialectPG.sqlLatestOn(id, branch)
 	n, err := scanNode(t.tx.QueryRow(ctx, q, args...))
 	return n, mapErr(err, "node "+string(id)+" on "+domain.BranchOf(branch))
+}
+
+func (t *pgTx) DerivedNodes(ctx context.Context, ref domain.NodeRef) ([]domain.Node, error) {
+	q, args := dialectPG.sqlDerivedNodes(ref)
+	rows, err := t.tx.Query(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	return collectNodes(rows)
 }
 
 func (t *pgTx) Versions(ctx context.Context, id domain.NodeID) ([]domain.Node, error) {
@@ -386,7 +415,7 @@ func (t *pgTx) PutNode(ctx context.Context, n domain.Node) error {
 		parents[i] = int32(pv)
 	}
 	_, err := t.tx.Exec(ctx, dialectPG.sqlInsert("node_version", nodeVersionColumns, ""),
-		string(n.ID), int(n.Version), jsonb(n.Properties), n.Deleted, nullUUID(string(n.ChangeID)), n.CreatedAt, domain.BranchOf(n.Branch), parents, n.Reason, n.State, nullUUID(string(n.ChangeImpact)), n.Comment, n.Execution, nullUUID(string(n.Owner)), n.CheckedOut)
+		string(n.ID), int(n.Version), jsonb(n.Properties), n.Deleted, nullUUID(string(n.ChangeID)), n.CreatedAt, domain.BranchOf(n.Branch), parents, n.Reason, n.State, nullUUID(string(n.ChangeImpact)), n.Comment, n.Execution, nullUUID(string(n.Owner)), n.CheckedOut, originsJSON(n.Origins))
 	return mapErr(err, "node "+n.Ref().String())
 }
 

@@ -85,7 +85,7 @@ func testChangeLog(t *testing.T, repo Repo) {
 	if n := len(count(domain.LogFilter{Types: []string{"journal."}})); n != 3 {
 		t.Fatalf("journal stream: %d", n)
 	}
-	if got := count(domain.LogFilter{Types: []string{"journal.action", "impact.written"}}); len(got) != 4 {
+	if got := count(domain.LogFilter{Types: []string{"journal.action", "impact.checkedOut"}}); len(got) != 3 {
 		t.Fatalf("two types: %d entries", len(got))
 	}
 	if got := count(domain.LogFilter{Flows: []string{w.flow}}); len(got) != 2 || !slices.ContainsFunc(got, func(e domain.LogEntry) bool { return e.Type == "fact.flow" }) {
@@ -97,7 +97,7 @@ func testChangeLog(t *testing.T, repo Repo) {
 	if got := count(domain.LogFilter{Processes: []string{"p2"}}); len(got) != 1 || got[0].ID != onFlow.ID {
 		t.Fatalf("by process: %+v", got)
 	}
-	if got := count(domain.LogFilter{Execution: "e1"}); len(got) != 4 { // declared, written (checked out), updated, reviewed by run e1
+	if got := count(domain.LogFilter{Execution: "e1"}); len(got) != 4 { // proposed, checked out, updated, reviewed by run e1
 		t.Fatalf("by action run: %d", len(got))
 	}
 	if got := count(domain.LogFilter{AfterSeq: all[2].Seq, Limit: 2}); len(got) != 2 || got[0].Seq != all[3].Seq {

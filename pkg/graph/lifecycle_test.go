@@ -73,7 +73,7 @@ func (w lcWorld) change(t *testing.T, title string) domain.Change {
 func (w lcWorld) declare(t *testing.T, c domain.Change, n domain.Node) domain.ChangeImpactID {
 	t.Helper()
 	ref := n.Ref()
-	ns, err := w.g.AddNodes(context.Background(), c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &ref, Rationale: "test " + n.Key}})
+	ns, err := w.g.ProposeImpact(context.Background(), c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &ref, Rationale: "test " + n.Key}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -228,7 +228,7 @@ func testLifecycleTransitionRules(t *testing.T, repo Repo) {
 	}
 	// a node type without lifecycle has no transitions
 	c = w.change(t, "no lifecycle")
-	notes, err := w.g.AddNodes(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentCreated, Key: "NOTE-1", Type: "Note", Rationale: "a note"}})
+	notes, err := w.g.proposeOrCreate(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentCreated, Key: "NOTE-1", Type: "Note", Rationale: "a note"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -296,13 +296,13 @@ func testLifecycleParallelChangesConflict(t *testing.T, repo Repo) {
 	}
 }
 
-func TestLifecycleCreateNode(t *testing.T) { forEachRepo(t, testLifecycleCreateNode) }
+func TestLifecycleImpactNodeCreate(t *testing.T) { forEachRepo(t, testLifecycleImpactNodeCreate) }
 
-func testLifecycleCreateNode(t *testing.T, repo Repo) {
+func testLifecycleImpactNodeCreate(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	w := newLifecycleWorld(t, repo)
 	create := func(c domain.Change, key, state string) error {
-		ns, err := w.g.AddNodes(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentCreated, Key: key, Type: "Requirement", Rationale: "new"}})
+		ns, err := w.g.proposeOrCreate(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentCreated, Key: key, Type: "Requirement", Rationale: "new"}})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -472,16 +472,16 @@ func testLifecycleGuardRequiresAReview(t *testing.T, repo Repo) {
 	c := w.change(t, "approve after review")
 	id := w.declare(t, c, w.req1)
 	approve := NodeTransition{NodeCheckout: NodeCheckout{Impact: id}, To: "approved"}
-	if _, err := w.g.TransitionNode(ctx, c.ID, NodeTransition{NodeCheckout: NodeCheckout{Impact: id}, To: "draft"}); err != nil {
+	if _, err := w.g.ImpactNodeTransition(ctx, c.ID, NodeTransition{NodeCheckout: NodeCheckout{Impact: id}, To: "draft"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := w.g.TransitionNode(ctx, c.ID, approve); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "guard not satisfied") {
+	if _, err := w.g.ImpactNodeTransition(ctx, c.ID, approve); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "guard not satisfied") {
 		t.Fatalf("approving before the review: %v", err)
 	}
-	if _, err := w.g.ReviewNode(ctx, c.ID, id, domain.ReviewAccepted, "reviewer", "fine"); err != nil {
+	if _, err := w.g.ImpactNodeReview(ctx, c.ID, id, domain.ReviewAccepted, "reviewer", "fine"); err != nil {
 		t.Fatal(err)
 	}
-	cn, err := w.g.TransitionNode(ctx, c.ID, approve)
+	cn, err := w.g.ImpactNodeTransition(ctx, c.ID, approve)
 	if err != nil {
 		t.Fatal(err)
 	}

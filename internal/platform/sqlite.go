@@ -16,7 +16,8 @@ import (
 
 // OpenSQLite opens (and creates) a SQLite database file for the local
 // development mode. Writes are serialized on a single connection: SQLite has
-// one writer, and this avoids SQLITE_BUSY on concurrent transactions.
+// one writer, and this avoids SQLITE_BUSY on concurrent transactions; another process on the file waits for
+// the lock (busy_timeout) rather than failing.
 func OpenSQLite(ctx context.Context, path string) (*sql.DB, error) {
 	if dir := filepath.Dir(path); dir != "" {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -24,9 +25,12 @@ func OpenSQLite(ctx context.Context, path string) (*sql.DB, error) {
 		}
 	}
 	q := url.Values{}
-	for _, p := range []string{"foreign_keys(1)", "journal_mode(WAL)", "busy_timeout(5000)", "synchronous(NORMAL)"} {
+	for _, p := range []string{"foreign_keys(1)", "journal_mode(WAL)", "busy_timeout(30000)", "synchronous(NORMAL)"} {
 		q.Add("_pragma", p)
 	}
+	// a transaction takes the write lock when it begins: it waits for it (busy_timeout) instead of failing with
+	// SQLITE_BUSY when a read turns into a write.
+	q.Set("_txlock", "immediate")
 	db, err := sql.Open("sqlite", "file:"+filepath.ToSlash(path)+"?"+q.Encode())
 	if err != nil {
 		return nil, err

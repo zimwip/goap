@@ -57,7 +57,7 @@ func (g *Graph) checkRequiredParent(e NodeEdit) error {
 // checkRequiredLinks checks that a version carries the links its type requires (the parent of a node of a structure,
 // the membership of a User): read back from the version itself, so a client that built its edits from a stale read
 // (a link it did not know of) fails instead of leaving the node with zero or two of them. Checked when the version is
-// frozen (CheckinNode) and when it lands (Apply), never on a working version, which may be on its way there.
+// frozen (ImpactNodeCheckin) and when it lands (Apply), never on a working version, which may be on its way there.
 func (g *Graph) checkRequiredLinks(ctx context.Context, tx Tx, n domain.Node) error {
 	reqs := g.requirementsOf(n.Type, n.Key)
 	if len(reqs) == 0 || n.Deleted {
@@ -321,7 +321,7 @@ func (g *Graph) SplitByOwner(ctx context.Context, id domain.ChangeID) (created [
 				// DerivedFrom holds the id of the parent's change impact it is copied from
 				cp := domain.ChangeImpact{ID: domain.ChangeImpactID(g.newID()), Key: cn.Key, Type: cn.Type, Intent: domain.IntentModified, Rationale: cn.Rationale,
 					Pre: cn.Pre, Review: domain.ReviewProposed, ProducedBy: "graph.split_by_owner", DerivedFrom: []domain.ItemID{domain.ItemID(cn.ID)}, CreatedAt: g.now()}
-				if err := g.emit(ctx, tx, domain.ImpactEvent{Change: sub.ID, Impact: cp.ID, Op: domain.ImpactDeclared, By: cp.ProducedBy, State: &cp}); err != nil {
+				if err := g.emit(ctx, tx, domain.ImpactEvent{Change: sub.ID, Impact: cp.ID, Op: domain.ImpactProposed, By: cp.ProducedBy, State: &cp}); err != nil {
 					return err
 				}
 			}

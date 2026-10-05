@@ -33,8 +33,8 @@ func checkSQL(t *testing.T, name string, d dialect, got, want string) {
 }
 
 const (
-	goldPGNodeCols     = `n.id::text, v.version, n.namespace, n.key, n.type, v.props, v.deleted, v.change_id::text, v.created_at, v.branch, v.parents, v.reason, v.state, v.change_impact::text, v.comment, v.execution, v.owner_id::text, n.project_id::text, v.checked_out`
-	goldSQLiteNodeCols = `n.id, v.version, n.namespace, n.key, n.type, v.props, v.deleted, v.change_id, v.created_at, v.branch, v.parents, v.reason, v.state, v.change_impact, v.comment, v.execution, v.owner_id, n.project_id, v.checked_out`
+	goldPGNodeCols     = `n.id::text, v.version, n.namespace, n.key, n.type, v.props, v.deleted, v.change_id::text, v.created_at, v.branch, v.parents, v.reason, v.state, v.change_impact::text, v.comment, v.execution, v.owner_id::text, n.project_id::text, v.checked_out, v.origins`
+	goldSQLiteNodeCols = `n.id, v.version, n.namespace, n.key, n.type, v.props, v.deleted, v.change_id, v.created_at, v.branch, v.parents, v.reason, v.state, v.change_impact, v.comment, v.execution, v.owner_id, n.project_id, v.checked_out, v.origins`
 	goldPGOnBranch     = `(v.branch = $2 OR EXISTS (SELECT 1 FROM node_branch j WHERE j.node_id = v.node_id AND j.version = v.version AND j.branch = $2))`
 	goldSQLiteOnBranch = `(v.branch = ? OR EXISTS (SELECT 1 FROM node_branch j WHERE j.node_id = v.node_id AND j.version = v.version AND j.branch = ?))`
 	goldPGImpactCols   = `id::text, node_id::text, key, type, intent, rationale, pre_version, post_version, landed_version, review, reviews, COALESCE(via::text, ''), recheck, produced_by, derived_from, items, execution, created_at, flow, superseded`
@@ -73,6 +73,14 @@ func TestSQLBuildersGolden(t *testing.T) {
 	check("pg LatestOn", pg, q, a, `SELECT `+goldPGNodeCols+` FROM node n JOIN node_version v ON v.node_id = n.id WHERE n.id = $1 AND `+goldPGOnBranch+` ORDER BY v.version DESC LIMIT 1`, []any{"n1", "main"})
 	q, a = lite.sqlLatestOn("n1", "")
 	check("sqlite LatestOn", lite, q, a, `SELECT `+goldSQLiteNodeCols+` FROM node n JOIN node_version v ON v.node_id = n.id WHERE n.id = ? AND `+goldSQLiteOnBranch+` ORDER BY v.version DESC LIMIT 1`, []any{"n1", "main"})
+
+	// DerivedNodes (ADR 0077): the versions naming a node among their origins
+	q, a = pg.sqlDerivedNodes(ref)
+	check("pg DerivedNodes", pg, q, a, `SELECT `+goldPGNodeCols+` FROM node n JOIN node_version v ON v.node_id = n.id WHERE v.origins @> $1::jsonb ORDER BY n.key, v.version`, []any{`[{"id":"n1","version":3}]`})
+	q, a = pg.sqlDerivedNodes(domain.NodeRef{ID: "n1"})
+	check("pg DerivedNodes any version", pg, q, a, `SELECT `+goldPGNodeCols+` FROM node n JOIN node_version v ON v.node_id = n.id WHERE v.origins @> $1::jsonb ORDER BY n.key, v.version`, []any{`[{"id":"n1"}]`})
+	q, a = lite.sqlDerivedNodes(ref)
+	check("sqlite DerivedNodes", lite, q, a, `SELECT `+goldSQLiteNodeCols+` FROM node n JOIN node_version v ON v.node_id = n.id WHERE EXISTS (SELECT 1 FROM json_each(v.origins) o WHERE json_extract(o.value, '$.id') = ? AND (? = 0 OR json_extract(o.value, '$.version') = ?)) ORDER BY n.key, v.version`, []any{"n1", 3})
 
 	// Versions and joined branches
 	q, a = pg.sqlVersions("n1")

@@ -629,16 +629,21 @@ func (g *Graph) mergeBranchTx(ctx context.Context, tx Tx, in MergeRequest) (res 
 			}
 		}
 		m.next = n.Ref()
-		// the merge records its change impact as events: declared, accepted, written and landed at once
+		// the merge records its change impact as events, accepted and landed at once: a node the merge creates on the
+		// target is a created event (the impact and its version), one it modifies is proposed, then written
 		declared := cn
 		declared.Review = domain.ReviewProposed
 		review := domain.Review{Status: domain.ReviewAccepted, By: "graph.merge", Comment: why, At: g.now()}
-		if err := g.emit(ctx, tx,
-			domain.ImpactEvent{Change: c.ID, Impact: cn.ID, Op: domain.ImpactDeclared, By: "graph.merge", State: &declared},
-			domain.ImpactEvent{Change: c.ID, Impact: cn.ID, Op: domain.ImpactReviewed, By: "graph.merge", Review: &review},
-			domain.ImpactEvent{Change: c.ID, Impact: cn.ID, Op: domain.ImpactWritten, By: "graph.merge", Post: &m.next},
-			domain.ImpactEvent{Change: c.ID, Impact: cn.ID, Op: domain.ImpactLanded, By: "graph.merge", Landed: &m.next, Baseline: res.Baseline.ID},
-		); err != nil {
+		first := domain.ImpactEvent{Change: c.ID, Impact: cn.ID, Op: domain.ImpactProposed, By: "graph.merge", State: &declared}
+		var written []domain.ImpactEvent
+		if cn.Intent == domain.IntentCreated {
+			first.Op, first.Post = domain.ImpactCreated, &m.next
+		} else {
+			written = append(written, domain.ImpactEvent{Change: c.ID, Impact: cn.ID, Op: domain.ImpactTransitioned, By: "graph.merge", Post: &m.next})
+		}
+		events := append([]domain.ImpactEvent{first, {Change: c.ID, Impact: cn.ID, Op: domain.ImpactReviewed, By: "graph.merge", Review: &review}}, written...)
+		events = append(events, domain.ImpactEvent{Change: c.ID, Impact: cn.ID, Op: domain.ImpactLanded, By: "graph.merge", Landed: &m.next, Baseline: res.Baseline.ID, Branch: domain.BranchOf(plan.Into)})
+		if err := g.emit(ctx, tx, events...); err != nil {
 			return res, err
 		}
 		if n.Deleted {

@@ -56,10 +56,10 @@ func TestImpactEvents(t *testing.T) {
 	post := domain.NodeRef{ID: "n1", Version: 3}
 	merged := domain.NodeRef{ID: "n1", Version: 4}
 	doc, err := Export(c, entries(t,
-		domain.ImpactEvent{ID: "v1", Change: "c1", Impact: "i1", Op: domain.ImpactDeclared, By: "bob",
+		domain.ImpactEvent{ID: "v1", Change: "c1", Impact: "i1", Op: domain.ImpactProposed, By: "bob",
 			State: &domain.ChangeImpact{ID: "i1", Key: "REQ-1", Type: "alm@Requirement", Intent: domain.IntentModified, Pre: &pre}},
 		domain.ImpactEvent{ID: "v2", Change: "c1", Impact: "i1", Op: domain.ImpactRebased, Pre: &head},
-		domain.ImpactEvent{ID: "v3", Change: "c1", Impact: "i1", Op: domain.ImpactWritten, Post: &post, Execution: "e1"},
+		domain.ImpactEvent{ID: "v3", Change: "c1", Impact: "i1", Op: domain.ImpactTransitioned, Post: &post, Execution: "e1"},
 		domain.ImpactEvent{ID: "v4", Change: "c1", Op: domain.ImpactAdopted, Flow: "f1", Stale: []string{"e0"}, By: "bob"},
 		domain.ImpactEvent{ID: "v5", Change: "c1", Impact: "i1", Op: domain.ImpactLanded, Landed: &merged, Baseline: "b9"},
 	))

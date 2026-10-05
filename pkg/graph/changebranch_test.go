@@ -18,7 +18,7 @@ func setProp(t *testing.T, g *Graph, f fixture, base domain.BaselineID, title st
 		t.Fatal(err)
 	}
 	ref := f.req.Ref()
-	ns, err := g.AddNodes(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &ref, Rationale: title}})
+	ns, err := g.ProposeImpact(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &ref, Rationale: title}})
 	if err != nil {
 		t.Fatal(err)
 	}
