@@ -8,6 +8,7 @@
   // ADR 0028), with or without an adapter of its own: restrictions add up along the chain, so a unit
   // narrows what it inherits (the built-in MCPs every unit gets from the default organisation) and never
   // widens it.
+  import { types as nodeTypes, links as linkTypes, ns, defaultOrg, waitingProp, can, newUserUnit } from '../../stores/session.svelte';
   import { stamp, keyOf } from '../../flux/signals.svelte';
   import type { Tab } from '../../shell/types';
   import Icon from '../../shell/Icon.svelte';
@@ -21,13 +22,10 @@
   import { headGraph, findNode, applyOnMain, createNodeItem, updateNodeItem, deleteNodeItem, moveNodeItem, currentLink, refOf, type HeadGraph } from '../../graphEdit';
   import { openTab } from '../../shell/tabs.svelte';
   import { notify, provideActions } from '../../shell/workbench.svelte';
-  import { ADAPTER_TYPE, ORG_UNIT_TYPE, USER_TYPE, PART_OF, MEMBER_OF, DEFAULT_ORG, WAITING_UNIT_PROP, newUserUnit } from '../../orgTypes';
-  import { hasAnyRole } from '../../stores/session.svelte';
   import { confirmDialog } from '../../shell/confirmState.svelte';
 
   let { tab }: { tab: Tab } = $props();
 
-  const NS = 'organisation';
   const key = $derived(tab.params.key ?? '');
 
   let head = $state<HeadGraph>();
@@ -37,14 +35,14 @@
   let error = $state('');
   let pane = $state(tab.params.pane === 'assignments' ? 'assignments' : 'overview');
 
-  const unit = $derived(head ? findNode(head, NS, ORG_UNIT_TYPE, key) : undefined);
+  const unit = $derived(head ? findNode(head, ns.organisation, nodeTypes.orgUnit, key) : undefined);
   const nodeById = $derived(new Map((head?.nodes ?? []).map((n) => [n.id ?? '', n])));
-  const parentLink = $derived(head && unit ? currentLink(head, unit, PART_OF) : undefined);
+  const parentLink = $derived(head && unit ? currentLink(head, unit, linkTypes.partOf) : undefined);
   const parentKey = $derived(parentLink?.to?.id ? (nodeById.get(parentLink.to.id)?.key ?? '') : '');
-  const orgUnits = $derived((head?.nodes ?? []).filter((n) => n.type === ORG_UNIT_TYPE && n.key !== key));
+  const orgUnits = $derived((head?.nodes ?? []).filter((n) => n.type === nodeTypes.orgUnit && n.key !== key));
   const childKeys = $derived(
     (head?.links ?? [])
-      .filter((l) => l.type === PART_OF && l.to?.id === unit?.id)
+      .filter((l) => l.type === linkTypes.partOf && l.to?.id === unit?.id)
       .map((l) => nodeById.get(l.from?.id ?? '')?.key ?? '')
       .filter(Boolean)
       .sort(),
@@ -52,18 +50,18 @@
   /** the users whose member_of (ADR 0040) points at this unit */
   const members = $derived(
     (head?.links ?? [])
-      .filter((l) => l.type === MEMBER_OF && l.to?.id === unit?.id)
+      .filter((l) => l.type === linkTypes.memberOf && l.to?.id === unit?.id)
       .map((l) => nodeById.get(l.from?.id ?? ''))
       .filter((n): n is NonNullable<typeof n> => !!n)
       .sort((a, b) => (a.key ?? '').localeCompare(b.key ?? '')),
   );
   /** users not already a member of this unit, to add */
-  const otherUsers = $derived((head?.nodes ?? []).filter((n) => n.type === USER_TYPE && !members.some((m) => m.id === n.id)));
+  const otherUsers = $derived((head?.nodes ?? []).filter((n) => n.type === nodeTypes.user && !members.some((m) => m.id === n.id)));
   /** the Adapter nodes owned by this unit (the owner of their version, ADR 0054), by MCP name */
   const ownNodes = $derived.by(() => {
     const m = new Map<string, string>();
     for (const a of head?.nodes ?? []) {
-      if (a.type === ADAPTER_TYPE && a.namespace === NS && unit && a.owner === unit.id) m.set(String(a.props?.['mcp'] ?? ''), a.key ?? '');
+      if (a.type === nodeTypes.adapter && a.namespace === ns.organisation && unit && a.owner === unit.id) m.set(String(a.props?.['mcp'] ?? ''), a.key ?? '');
     }
     return m;
   });
@@ -72,7 +70,7 @@
     loading = true;
     try {
       if (!tools.loaded) await refreshTools();
-      const [h, e] = await Promise.all([headGraph(NS), mcp.listEffective(key)]);
+      const [h, e] = await Promise.all([headGraph(ns.organisation), mcp.listEffective(key)]);
       head = h;
       chain = e.chain ?? [];
       effective = e.mcps ?? [];
@@ -86,7 +84,7 @@
 
   $effect(() => {
     void key;
-    void stamp(keyOf.namespace(NS));
+    void stamp(keyOf.namespace(ns.organisation));
     void load();
   });
 
@@ -104,12 +102,12 @@
       moving = false;
       return;
     }
-    const target = head.nodes.find((n) => n.type === ORG_UNIT_TYPE && n.key === fParent);
+    const target = head.nodes.find((n) => n.type === nodeTypes.orgUnit && n.key === fParent);
     if (!target) return;
     movingBusy = true;
     error = '';
     try {
-      await applyOnMain(NS, `Move ${key}`, `Move ${key} under ${fParent}`, head.baselineId, [moveNodeItem(unit, PART_OF, parentLink, refOf(target))]);
+      await applyOnMain(ns.organisation, `Move ${key}`, `Move ${key} under ${fParent}`, head.baselineId, [moveNodeItem(unit, linkTypes.partOf, parentLink, refOf(target))]);
       notify(`${key} moved under ${fParent}.`, 'ok');
       moving = false;
       await load();
@@ -125,12 +123,12 @@
 
   async function addMember() {
     if (!unit || !head || !fMember) return;
-    const u = head.nodes.find((n) => n.type === USER_TYPE && n.key === fMember);
+    const u = head.nodes.find((n) => n.type === nodeTypes.user && n.key === fMember);
     if (!u) return;
     addingMember = true;
     error = '';
     try {
-      await applyOnMain(NS, `Move ${fMember}`, `Move ${fMember} to ${key}`, head.baselineId, [moveNodeItem(u, MEMBER_OF, currentLink(head, u, MEMBER_OF), refOf(unit))]);
+      await applyOnMain(ns.organisation, `Move ${fMember}`, `Move ${fMember} to ${key}`, head.baselineId, [moveNodeItem(u, linkTypes.memberOf, currentLink(head, u, linkTypes.memberOf), refOf(unit))]);
       notify(`${fMember} moved to ${key}.`, 'ok');
       fMember = '';
       await load();
@@ -144,10 +142,10 @@
   // The waiting unit (ADR 0042): a unit an administrator flags, at their discretion, for users signing in
   // for the first time; with none, they join ORG-DEFAULT. Making this unit the waiting unit moves the flag in
   // one change (set here, cleared on every unit carrying it); clearing it sends newcomers back to ORG-DEFAULT.
-  const flagged = $derived((head?.nodes ?? []).filter((n) => n.type === ORG_UNIT_TYPE && n.props?.[WAITING_UNIT_PROP] === true));
+  const flagged = $derived((head?.nodes ?? []).filter((n) => n.type === nodeTypes.orgUnit && n.props?.[waitingProp()] === true));
   const joinKey = $derived(newUserUnit(flagged));
   const isWaiting = $derived(flagged.some((n) => n.key === key));
-  const isAdmin = $derived(hasAnyRole('admin'));
+  const isAdmin = $derived(can.administer);
   let waitingBusy = $state(false);
 
   async function setWaiting(on: boolean) {
@@ -159,17 +157,17 @@
             message: `Users signing in for the first time will join ${key} (instead of ${joinKey}) until an administrator moves them. Existing users stay where they are.`,
             confirmLabel: 'Make waiting unit',
           }
-        : { title: 'Waiting unit', message: `New users will join ${DEFAULT_ORG} again instead of ${key}.`, confirmLabel: 'Clear' },
+        : { title: 'Waiting unit', message: `New users will join ${defaultOrg()} again instead of ${key}.`, confirmLabel: 'Clear' },
     );
     if (!ok) return;
     waitingBusy = true;
     error = '';
     try {
       const edits = on
-        ? [updateNodeItem(unit, { [WAITING_UNIT_PROP]: true }), ...flagged.filter((n) => n.id !== unit.id).map((n) => updateNodeItem(n, { [WAITING_UNIT_PROP]: null }))]
-        : flagged.map((n) => updateNodeItem(n, { [WAITING_UNIT_PROP]: null }));
-      await applyOnMain(NS, `Waiting unit ${on ? key : 'cleared'}`, on ? `New users wait in ${key}` : `New users join ${DEFAULT_ORG}`, head.baselineId, edits);
-      notify(on ? `New users now wait in ${key}.` : `New users now join ${DEFAULT_ORG}.`, 'ok');
+        ? [updateNodeItem(unit, { [waitingProp()]: true }), ...flagged.filter((n) => n.id !== unit.id).map((n) => updateNodeItem(n, { [waitingProp()]: null }))]
+        : flagged.map((n) => updateNodeItem(n, { [waitingProp()]: null }));
+      await applyOnMain(ns.organisation, `Waiting unit ${on ? key : 'cleared'}`, on ? `New users wait in ${key}` : `New users join ${defaultOrg()}`, head.baselineId, edits);
+      notify(on ? `New users now wait in ${key}.` : `New users now join ${defaultOrg()}.`, 'ok');
       await load();
     } catch (e) {
       error = errorMessage(e);
@@ -277,11 +275,11 @@
     try {
       // blocking problems (unknown MCP or algorithm, parameters that do not fit) come back as errors
       fWarnings = (await mcp.checkAdapter(a)).warnings ?? [];
-      const h = await headGraph(NS);
+      const h = await headGraph(ns.organisation);
       const akey = `ADP:${key}/${a.mcp}`;
-      const existing = findNode(h, NS, ADAPTER_TYPE, akey);
+      const existing = findNode(h, ns.organisation, nodeTypes.adapter, akey);
       const props: Struct = { mcp: a.mcp ?? '', adapter: a.adapter ?? '', params: a.params ?? {} };
-      await applyOnMain(NS, `Adapter ${a.mcp} of ${key}`, `${existing ? 'Update' : 'Create'} the adapter of ${a.mcp} for ${key}`, h.baselineId, existing ? [updateNodeItem(existing, props)] : [{ ...createNodeItem(akey, ADAPTER_TYPE, props), owner: key }]);
+      await applyOnMain(ns.organisation, `Adapter ${a.mcp} of ${key}`, `${existing ? 'Update' : 'Create'} the adapter of ${a.mcp} for ${key}`, h.baselineId, existing ? [updateNodeItem(existing, props)] : [{ ...createNodeItem(akey, nodeTypes.adapter, props), owner: key }]);
       notify(`Adapter ${a.mcp} saved for ${key}.`, 'ok');
       editing = false;
       await load();
@@ -295,10 +293,10 @@
   async function detach(m: string) {
     if (!(await confirmDialog({ message: `Detach ${m} from ${key}? The unit falls back on its ancestors' adapter, if any.`, danger: true }))) return;
     try {
-      const h = await headGraph(NS);
-      const existing = findNode(h, NS, ADAPTER_TYPE, `ADP:${key}/${m}`);
+      const h = await headGraph(ns.organisation);
+      const existing = findNode(h, ns.organisation, nodeTypes.adapter, `ADP:${key}/${m}`);
       if (!existing) throw new Error('adapter node not found');
-      await applyOnMain(NS, `Detach ${m} from ${key}`, `Delete the adapter of ${m} for ${key}`, h.baselineId, [deleteNodeItem(existing)]);
+      await applyOnMain(ns.organisation, `Detach ${m} from ${key}`, `Delete the adapter of ${m} for ${key}`, h.baselineId, [deleteNodeItem(existing)]);
       notify(`${m} detached from ${key}.`, 'ok');
       await load();
     } catch (e) {
@@ -322,7 +320,7 @@
 
   /** the unit's own Adapter node of an MCP, if any */
   function ownNode(h: HeadGraph, m: string) {
-    return findNode(h, NS, ADAPTER_TYPE, `ADP:${key}/${m}`);
+    return findNode(h, ns.organisation, nodeTypes.adapter, `ADP:${key}/${m}`);
   }
 
   function restrict(e: EffectiveMcp) {
@@ -349,7 +347,7 @@
     rError = '';
     try {
       const restricts = rDisabled || rReadOnly || rDeny.length > 0 || rAllow.length > 0;
-      const h = await headGraph(NS);
+      const h = await headGraph(ns.organisation);
       const existing = ownNode(h, m);
       // a null value clears a property of the node
       const props: Struct = {
@@ -363,11 +361,11 @@
       const title = `Restrictions of ${m} for ${key}`;
       if (existing && !restricts && !existing.props?.['adapter']) {
         // a restriction-only node with nothing left to restrict
-        await applyOnMain(NS, title, `Lift the restrictions of ${m} for ${key}`, h.baselineId, [deleteNodeItem(existing)]);
+        await applyOnMain(ns.organisation, title, `Lift the restrictions of ${m} for ${key}`, h.baselineId, [deleteNodeItem(existing)]);
       } else if (existing) {
-        await applyOnMain(NS, title, `Restrict ${m} for ${key}`, h.baselineId, [updateNodeItem(existing, props)]);
+        await applyOnMain(ns.organisation, title, `Restrict ${m} for ${key}`, h.baselineId, [updateNodeItem(existing, props)]);
       } else if (restricts) {
-        await applyOnMain(NS, title, `Restrict ${m} for ${key}`, h.baselineId, [{ ...createNodeItem(`ADP:${key}/${m}`, ADAPTER_TYPE, props), owner: key }]);
+        await applyOnMain(ns.organisation, title, `Restrict ${m} for ${key}`, h.baselineId, [{ ...createNodeItem(`ADP:${key}/${m}`, nodeTypes.adapter, props), owner: key }]);
       }
       notify(`Restrictions of ${m} saved for ${key}.`, 'ok');
       restricting = undefined;
@@ -400,7 +398,7 @@
                   {#if parentKey}
                     <button type="button" class="link mono" onclick={() => openTab({ kind: 'unit', params: { key: parentKey } })}>{parentKey}</button>
                   {:else}<span class="muted">none (root)</span>{/if}
-                  {#if key !== DEFAULT_ORG}
+                  {#if key !== defaultOrg()}
                     <button type="button" class="small ghost" onclick={startMove}>Move to…</button>
                   {/if}
                 {:else}

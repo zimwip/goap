@@ -75,10 +75,13 @@ const RoleAdmin = "admin"
 // project reads that project's own Assignments itself (ProjectRoles); the grant itself is project-independent.
 const RoleReader = "reader"
 
+// PolicyPrefix starts the key of a Policy node.
+const PolicyPrefix = "POL:"
+
 // PolicyKey is the key of the node of a policy: its target plus a digest of the rule.
 func PolicyKey(p authz.Policy) string {
 	h := sha256.Sum256([]byte(p.Rule + "\x00" + p.Effect))
-	return "POL:" + p.Resource + "/" + p.Action + "/" + hex.EncodeToString(h[:4])
+	return PolicyPrefix + p.Resource + "/" + p.Action + "/" + hex.EncodeToString(h[:4])
 }
 
 // Props returns the properties of the User node.

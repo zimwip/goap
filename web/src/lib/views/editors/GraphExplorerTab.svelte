@@ -3,6 +3,7 @@
   // platform, methodology, and the domains' data), with the links between them — laid out by a force simulation
   // (d3-force). Filter by namespace or text, start from the organisation (units, users, and what they own), select a
   // node to see its neighbourhood, focus on it, or open it in its editor.
+  import { isMeta, ns as nsNames, types as nodeTypes } from '../../stores/session.svelte';
   import { untrack } from 'svelte';
   import { forceSimulation, forceLink, forceManyBody, forceCenter, forceCollide, forceX, forceY, type SimulationNodeDatum, type SimulationLinkDatum } from 'd3-force';
   import type { Tab } from '../../shell/types';
@@ -51,7 +52,7 @@
       }
       all = { nodes: [...nodes.values()], links };
       namespaces = [...new Set(all.nodes.map((n) => n.namespace ?? ''))].sort();
-      shown = Object.fromEntries(namespaces.map((n) => [n, n !== 'methodology']));
+      shown = Object.fromEntries(namespaces.map((n) => [n, !isMeta(n)]));
     } catch (e) {
       error = errorMessage(e);
     } finally {
@@ -65,8 +66,8 @@
   function applyPreset(p: typeof preset) {
     preset = p;
     focusOn = null;
-    if (p === 'all') shown = Object.fromEntries(namespaces.map((n) => [n, n !== 'methodology']));
-    else shown = Object.fromEntries(namespaces.map((n) => [n, n === 'organisation' || (p === 'ownership' && n !== 'methodology' && n !== 'platform')]));
+    if (p === 'all') shown = Object.fromEntries(namespaces.map((n) => [n, !isMeta(n)]));
+    else shown = Object.fromEntries(namespaces.map((n) => [n, n === nsNames.organisation || (p === 'ownership' && !isMeta(n) && n !== nsNames.platform)]));
   }
 
   const labelOf = (n: GraphNode) => {
@@ -78,12 +79,12 @@
   const view = $derived.by(() => {
     const q = filter.trim().toLowerCase();
     // the organisation presets show its structure: units, users, adapters (not the access rules)
-    let nodes = all.nodes.filter((n) => shown[n.namespace ?? ''] && (preset === 'all' || n.type !== 'organisation@Policy'));
+    let nodes = all.nodes.filter((n) => shown[n.namespace ?? ''] && (preset === 'all' || n.type !== nodeTypes.policy));
     const ids = new Set(nodes.map((n) => n.id ?? ''));
     let links = all.links.filter((l) => ids.has(l.from?.id ?? '') && ids.has(l.to?.id ?? '') && l.from?.id !== l.to?.id);
     if (preset === 'ownership') {
       // the units and users, and the nodes linked to them (owner, member_of)
-      const org = new Set(nodes.filter((n) => n.namespace === 'organisation').map((n) => n.id ?? ''));
+      const org = new Set(nodes.filter((n) => n.namespace === nsNames.organisation).map((n) => n.id ?? ''));
       const keep = new Set(org);
       for (const l of links) {
         if (org.has(l.to?.id ?? '')) keep.add(l.from?.id ?? '');

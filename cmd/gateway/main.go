@@ -17,6 +17,7 @@ import (
 	"github.com/zimwip/goap/internal/platform"
 	"github.com/zimwip/goap/internal/telemetry"
 	"github.com/zimwip/goap/pkg/access"
+	"github.com/zimwip/goap/pkg/authz"
 )
 
 // credentialsClient adapts the credentials Connect client to gateway.Credentials.
@@ -89,6 +90,11 @@ func main() {
 	graphClient := graphsvc.NewClient(platform.H2CClient(), platform.Env("GOAP_GRAPH_URL", "http://localhost:8081"), telemetry.ClientOptions()...)
 	directory := &access.Directory{Graph: graphClient}
 	cfg.Enrich = directory.Enrich
+	authorizer, err := access.NewAuthorizer(directory)
+	if err != nil {
+		platform.Fatal(log, "authorizer", err)
+	}
+	cfg.Session = func(ctx context.Context, p authz.Principal) (any, error) { return authorizer.Session(ctx, p) }
 	cfg.ProjectAccess = directory.MayAccessProject
 	if origins := platform.Env("GOAP_CORS_ORIGINS", ""); origins != "" {
 		cfg.AllowOrigins = strings.Split(origins, ",")

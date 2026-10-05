@@ -319,10 +319,11 @@ func main() {
 	graphHandler := &graphsvc.Handler{Graph: g, Events: engine.Publishers{changePublisher(onChange), indexSink, bus}, Authz: authorizer, Floor: authorizer.Floor(), Identity: ident}
 	mount(graphv1connect.NewGraphServiceHandler(graphHandler, append(telemetry.HandlerOptions(), connect.WithInterceptors(graphHandler.Identify(), eventsvc.CommandInterceptor(), graphHandler.PersonalScope(), graphHandler.EnsureCaller()))...))
 	mount(registryv1connect.NewRegistryServiceHandler(&registrysvc.Handler{Service: reg, Identity: ident}, append(telemetry.HandlerOptions(), connect.WithInterceptors(eventsvc.CommandInterceptor()))...))
+	whoami := func(ctx context.Context, p authz.Principal) (any, error) { return authorizer.Session(ctx, p) }
 	if authMW != nil {
-		srv.Echo.GET("/api/whoami", identity.WhoAmI(identity.Extractor{}, directory.Enrich), authMW)
+		srv.Echo.GET("/api/whoami", identity.WhoAmI(identity.Extractor{}, whoami), authMW)
 	} else {
-		srv.Echo.GET("/api/whoami", identity.WhoAmI(ident, directory.Enrich))
+		srv.Echo.GET("/api/whoami", identity.WhoAmI(ident, whoami))
 	}
 	mount(mcpv1connect.NewMcpServiceHandler(&mcpsvc.Handler{Service: hub, Authz: authorizer, Identity: ident, ConnectorToken: connectorToken}, telemetry.HandlerOptions()...))
 	mount(modelv1connect.NewModelServiceHandler(&modelgw.Handler{Service: gw, Identity: ident, Authz: authorizer}, telemetry.HandlerOptions()...))

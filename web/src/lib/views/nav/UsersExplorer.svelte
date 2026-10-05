@@ -3,6 +3,7 @@
   // automatically the first time they are seen (no administrator has to create them by hand, see
   // internal/graphsvc.EnsureUser); this list is where they show up, and where one can be pre-provisioned
   // (given roles before they ever sign in) or right-clicked for "New assignment" (ADR 0039).
+  import { types as nodeTypes, links as linkTypes, ns, newUserUnit, userKey } from '../../stores/session.svelte';
   import { stamp, keyOf } from '../../flux/signals.svelte';
   import Icon from '../../shell/Icon.svelte';
   import TreeRow from '../TreeRow.svelte';
@@ -11,9 +12,7 @@
   import { openContextMenu } from '../../shell/contextMenuState.svelte';
   import { notify } from '../../shell/workbench.svelte';
   import { graph, errorMessage, nodeTitle, type GraphNode } from '../../api';
-  import { ORG_UNIT_TYPE, USER_TYPE, MEMBER_OF, newUserUnit } from '../../orgTypes';
 
-  const NS = 'organisation';
 
   let nodes = $state<GraphNode[]>([]);
   let units = $state<GraphNode[]>([]);
@@ -26,15 +25,15 @@
   async function load() {
     loading = true;
     try {
-      await refreshBaselines(NS);
+      await refreshBaselines(ns.organisation);
       const latest = baselines.items[baselines.items.length - 1];
       if (!latest?.id) {
         nodes = [];
         units = [];
       } else {
         const r = await graph.getBaselineGraph(latest.id);
-        nodes = (r.nodes ?? []).filter((n) => n.type === USER_TYPE).sort((a, b) => (a.key ?? '').localeCompare(b.key ?? ''));
-        units = (r.nodes ?? []).filter((n) => n.type === ORG_UNIT_TYPE);
+        nodes = (r.nodes ?? []).filter((n) => n.type === nodeTypes.user).sort((a, b) => (a.key ?? '').localeCompare(b.key ?? ''));
+        units = (r.nodes ?? []).filter((n) => n.type === nodeTypes.orgUnit);
       }
       error = '';
     } catch (e) {
@@ -45,7 +44,7 @@
   }
 
   $effect(() => {
-    void stamp(keyOf.namespace(NS));
+    void stamp(keyOf.namespace(ns.organisation));
     void load();
   });
 
@@ -64,15 +63,15 @@
     saving = true;
     error = '';
     try {
-      const key = `USR:${s}`;
+      const key = userKey(s);
       const unit = units.find((n) => n.key === newUserUnit(units));
       if (!unit?.id) throw new Error('no organisation unit to put the user in');
       await graph.commitEdits({
         title: `User ${s}`,
         intent: `Pre-provision the user ${s}`,
         baselineId: latest.id,
-        namespace: NS,
-        edits: [{ key, type: USER_TYPE, props: { subject: s }, links: [{ type: MEMBER_OF, to: { id: unit.id, version: unit.version } }], rationale: `Pre-provision the user ${s}` }],
+        namespace: ns.organisation,
+        edits: [{ key, type: nodeTypes.user, props: { subject: s }, links: [{ type: linkTypes.memberOf, to: { id: unit.id, version: unit.version } }], rationale: `Pre-provision the user ${s}` }],
       });
       notify(`User ${s} created.`, 'ok');
       subject = '';

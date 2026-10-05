@@ -2,15 +2,15 @@
   // "Preferences" section of the settings modal: identity, access token, theme, voice input and dashboard
   // defaults — everyone's own settings. They are saved as they change (the preferences service, ADR 0038): no
   // change, no Save button. The access token is kept in the browser: it is needed before any call.
+  import { session, refreshIdentity, can } from '../../stores/session.svelte';
   import { getToken, setToken } from '../../api';
-  import { session, refreshIdentity, hasAnyRole } from '../../stores/session.svelte';
   import { prefs, editPrefs, type Prefs } from '../../stores/preferences.svelte';
   import { voiceSupported } from '../../voice/recorder';
 
   const principal = $derived(session.principal);
   const hasToken = $derived(session.hasToken);
   const supported = voiceSupported();
-  const isAdmin = $derived(hasAnyRole('admin'));
+  const isAdmin = $derived(can.administer);
   const set = <K extends keyof Prefs>(k: K, v: Prefs[K]) => void editPrefs({ [k]: v } as Partial<Prefs>);
 
   let tokenDraft = $state(getToken() ?? '');

@@ -44,7 +44,7 @@ const statusDeleted Status = "deleted"
 
 // NamespaceMethodology is the namespace of the methodology versions and their elements. The registry API is what callers
 // use; the graph holds the content.
-const NamespaceMethodology = "methodology"
+const NamespaceMethodology = domain.NamespaceMethodology
 
 // MethodologyVersionKey is the key of the node of a methodology version.
 func MethodologyVersionKey(name, version string) string { return "MV:" + key(name, version) }

@@ -66,15 +66,20 @@ func (x Extractor) Context(ctx context.Context, h http.Header) context.Context {
 	return authz.With(ctx, p)
 }
 
-// WhoAmI serves the caller as the platform sees it: the principal of the request, completed by enrich
-// (its User node in the graph). Nil enrich returns the principal as it is.
-func WhoAmI(x Extractor, enrich func(context.Context, authz.Principal) authz.Principal) echo.HandlerFunc {
+// WhoAmI serves the caller as the platform sees it: what session makes of the principal of the request (the principal
+// completed by its User node, and what the client derives its UI from, access.Session). Nil session serves the
+// principal as it is; an error is a 503 (the organisation cannot be read yet).
+func WhoAmI(x Extractor, session func(context.Context, authz.Principal) (any, error)) echo.HandlerFunc {
 	return func(c *echo.Context) error {
 		ctx := x.Context(c.Request().Context(), c.Request().Header)
 		p := authz.From(ctx)
-		if enrich != nil {
-			p = enrich(ctx, p)
+		if session == nil {
+			return c.JSON(http.StatusOK, p)
 		}
-		return c.JSON(http.StatusOK, p)
+		s, err := session(ctx, p)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusServiceUnavailable, err.Error())
+		}
+		return c.JSON(http.StatusOK, s)
 	}
 }

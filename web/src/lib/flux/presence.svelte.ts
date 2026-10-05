@@ -4,7 +4,7 @@
 import { SvelteMap } from 'svelte/reactivity';
 import { BASE, getToken, rpc } from '../api';
 import { activeTab } from '../shell/tabs.svelte';
-import { me } from '../stores/session.svelte';
+import { me, subjectOfKey } from '../stores/session.svelte';
 import { EVENT_SERVICE, onPresence, stream, type Presence } from './events.svelte';
 
 /** One person looking at something. */
@@ -34,7 +34,7 @@ export function colorOf(subject: string): string {
 }
 
 export function initialsOf(subject: string): string {
-  const name = subject.replace(/^USR:/, '').split('@')[0];
+  const name = subjectOfKey(subject).split('@')[0];
   const parts = name.split(/[\s._-]+/).filter(Boolean);
   const letters = parts.length > 1 ? parts[0][0] + parts[1][0] : name.slice(0, 2);
   return letters.toUpperCase();

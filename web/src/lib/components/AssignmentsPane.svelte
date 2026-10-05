@@ -3,6 +3,7 @@
   // project, granting the roles a unit or user locally holds on a project. Reused, parametrized by which
   // side is fixed, from the Organisation, Project and User editors: the same shape everywhere, one
   // implementation. `fixedOrg` OR `fixedProject` is given by the host tab, never both.
+  import { types as nodeTypes, links as linkTypes, ns, platformRoles, assignmentKey, isUserKey } from '../stores/session.svelte';
   import Icon from '../shell/Icon.svelte';
   import { errorMessage, nodeTitle, type Struct } from '../api';
   import { findNode, applyOnMain, createNodeItem, updateNodeItem, deleteNodeItem, refOf, type HeadGraph } from '../graphEdit';
@@ -10,10 +11,8 @@
   import { confirmDialog } from '../shell/confirmState.svelte';
   import { openTab } from '../shell/tabs.svelte';
   import { openPicker } from '../shell/pickerState.svelte';
-  import { ORG_UNIT_TYPE, USER_TYPE, PROJECT_UNIT_TYPE, ASSIGNMENT_TYPE, ASSIGNS_ORG, ASSIGNS_PROJECT } from '../orgTypes';
-  import { projectRoles, applicableMethodologies, PLATFORM_ROLES, platformAssignmentKey, type ProjectRole } from '../projectRoles';
+  import { projectRoles, applicableMethodologies, type ProjectRole } from '../projectRoles';
 
-  const NS = 'organisation';
   // sentinel project selection meaning "platform-wide, no project" (ADR 0046): a platform role (e.g. reader)
   // holds everywhere, independent of a project's methodologies, so no assigns_project link is written.
   const PLATFORM = '__platform__';
@@ -33,8 +32,8 @@
   } = $props();
 
   const nodeById = $derived(new Map(head.nodes.map((n) => [n.id ?? '', n])));
-  const orgNodes = $derived(head.nodes.filter((n) => n.namespace === NS && (n.type === ORG_UNIT_TYPE || n.type === USER_TYPE)).sort((a, b) => (a.key ?? '').localeCompare(b.key ?? '')));
-  const projectNodes = $derived(head.nodes.filter((n) => n.namespace === NS && n.type === PROJECT_UNIT_TYPE).sort((a, b) => (a.key ?? '').localeCompare(b.key ?? '')));
+  const orgNodes = $derived(head.nodes.filter((n) => n.namespace === ns.organisation && (n.type === nodeTypes.orgUnit || n.type === nodeTypes.user)).sort((a, b) => (a.key ?? '').localeCompare(b.key ?? '')));
+  const projectNodes = $derived(head.nodes.filter((n) => n.namespace === ns.organisation && n.type === nodeTypes.projectUnit).sort((a, b) => (a.key ?? '').localeCompare(b.key ?? '')));
 
   function targetKey(a: import('../api').GraphNode, linkType: string): string {
     const l = head.links.find((x) => x.type === linkType && x.from?.id === a.id);
@@ -51,11 +50,11 @@
 
   const rows = $derived<Row[]>(
     head.nodes
-      .filter((n) => n.namespace === NS && n.type === ASSIGNMENT_TYPE)
+      .filter((n) => n.namespace === ns.organisation && n.type === nodeTypes.assignment)
       .map((n) => ({
         node: n,
-        org: targetKey(n, ASSIGNS_ORG),
-        project: targetKey(n, ASSIGNS_PROJECT),
+        org: targetKey(n, linkTypes.assignsOrg),
+        project: targetKey(n, linkTypes.assignsProject),
         roles: Array.isArray(n.props?.['roles']) ? (n.props!['roles'] as string[]) : [],
         description: typeof n.props?.['description'] === 'string' ? (n.props!['description'] as string) : '',
       }))
@@ -102,7 +101,7 @@
   const platformFallback = $derived(!!project && project !== PLATFORM && rolesLoaded && available.length === 0);
   const isPlatform = $derived(isPlatformChoice || platformFallback);
   /** the roles offered by the current selection: the project's, or the platform's when it offers none */
-  const offered = $derived(isPlatform ? PLATFORM_ROLES : available);
+  const offered = $derived(isPlatform ? platformRoles().map((r): ProjectRole => ({ name: r.name, description: r.description ?? '', methodologies: [] })) : available);
   /** roles of the assignment the current selection no longer declares */
   const stray = $derived(fRoles.filter((r) => !offered.some((a) => a.name === r)));
 
@@ -133,7 +132,7 @@
     openPicker({
       title: 'Organisation unit / user',
       placeholder: 'Search units and users…',
-      items: orgNodes.map((n) => ({ key: n.key ?? '', label: nodeTitle(n) || n.key || '', hint: n.type === USER_TYPE ? 'user' : undefined })),
+      items: orgNodes.map((n) => ({ key: n.key ?? '', label: nodeTitle(n) || n.key || '', hint: n.type === nodeTypes.user ? 'user' : undefined })),
       onchoose: (key) => (fOrg = key),
     });
   }
@@ -190,14 +189,14 @@
     saving = true;
     error = '';
     try {
-      const key = platform ? platformAssignmentKey(org) : `ASG:${org}/${project}`;
+      const key = assignmentKey(org, platform ? undefined : project);
       const description = fDescription.trim();
-      const existing = editing?.node ?? findNode(head, NS, ASSIGNMENT_TYPE, key);
+      const existing = editing?.node ?? findNode(head, ns.organisation, nodeTypes.assignment, key);
       const props: Struct = { roles: roles.length ? roles : null, description: description || null };
-      const links = platform ? [{ type: ASSIGNS_ORG, to: refOf(orgNode) }] : [{ type: ASSIGNS_ORG, to: refOf(orgNode) }, { type: ASSIGNS_PROJECT, to: refOf(projectNode!) }];
-      const edit = existing ? updateNodeItem(existing, props) : createNodeItem(key, ASSIGNMENT_TYPE, { roles, ...(description ? { description } : {}) }, links);
+      const links = platform ? [{ type: linkTypes.assignsOrg, to: refOf(orgNode) }] : [{ type: linkTypes.assignsOrg, to: refOf(orgNode) }, { type: linkTypes.assignsProject, to: refOf(projectNode!) }];
+      const edit = existing ? updateNodeItem(existing, props) : createNodeItem(key, nodeTypes.assignment, { roles, ...(description ? { description } : {}) }, links);
       const target = platform ? 'the platform' : project;
-      await applyOnMain(NS, `Assignment ${org} / ${target}`, `${existing ? 'Update' : 'Create'} the assignment of ${org} on ${target}`, head.baselineId, [edit]);
+      await applyOnMain(ns.organisation, `Assignment ${org} / ${target}`, `${existing ? 'Update' : 'Create'} the assignment of ${org} on ${target}`, head.baselineId, [edit]);
       notify(`Assignment saved: ${org} on ${target}.`, 'ok');
       adding = false;
       onChanged();
@@ -211,7 +210,7 @@
   async function remove(r: Row) {
     if (!(await confirmDialog({ message: `Remove the assignment of ${r.org} on ${r.project}?`, danger: true }))) return;
     try {
-      await applyOnMain(NS, `Remove assignment`, `Remove the assignment of ${r.org} on ${r.project}`, head.baselineId, [deleteNodeItem(r.node)]);
+      await applyOnMain(ns.organisation, `Remove assignment`, `Remove the assignment of ${r.org} on ${r.project}`, head.baselineId, [deleteNodeItem(r.node)]);
       notify('Assignment removed.', 'ok');
       onChanged();
     } catch (e) {
@@ -244,7 +243,7 @@
         <tr>
           {#if !fixedOrg}
             <td
-              ><button type="button" class="link mono" onclick={() => openTab({ kind: r.org.startsWith('USR:') ? 'user' : 'unit', params: { key: r.org } })}>{label(r.org, orgNodes)}</button
+              ><button type="button" class="link mono" onclick={() => openTab({ kind: isUserKey(r.org) ? 'user' : 'unit', params: { key: r.org } })}>{label(r.org, orgNodes)}</button
               ></td
             >
           {/if}

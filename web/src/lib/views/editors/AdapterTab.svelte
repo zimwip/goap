@@ -13,8 +13,9 @@
   import { algorithmFromForm, algorithmToForm, emptyAlgorithm, emptyParam, ALGORITHM_LANGUAGES, PARAM_TYPES, SECRET_HINT, type AlgorithmForm } from '../../algorithmForm';
   import { mcp as hub, errorMessage } from '../../api';
   import { headGraph, findNode, applyOnMain, createNodeItem, updateNodeItem, deleteNodeItem } from '../../graphEdit';
-  import { ADAPTER_DEF_TYPE, NS_PLATFORM, adapterDefKey, adapterDefProps } from '../../adapterDef';
+  import { ADAPTER_DEF_TYPE, adapterDefKey, adapterDefProps } from '../../adapterDef';
   import { tools, refreshTools } from '../../stores/tools.svelte';
+  import { ns } from '../../stores/session.svelte';
   import { ALGORITHM_TEMPLATES, algorithmUsage } from '../../dsl';
   import { confirmDialog } from '../../shell/confirmState.svelte';
 
@@ -110,13 +111,13 @@
     }
     saving = true;
     try {
-      const h = await headGraph(NS_PLATFORM);
+      const h = await headGraph(ns.platform);
       const key = adapterDefKey(def.name);
-      const existing = findNode(h, NS_PLATFORM, ADAPTER_DEF_TYPE, key);
+      const existing = findNode(h, ns.platform, ADAPTER_DEF_TYPE, key);
       if (isNew && existing) throw new Error(`an adapter named ${def.name} already exists`);
       const props = adapterDefProps({ name: def.name ?? '', description: def.description ?? '', mcp: def.mcp ?? '', connector: def.connector ?? '', language: def.language ?? 'javascript', code: def.code ?? '', params: def.params ?? [] });
       const item = existing ? updateNodeItem(existing, props) : createNodeItem(key, ADAPTER_DEF_TYPE, props);
-      await applyOnMain(NS_PLATFORM, `Adapter ${def.name}`, `${existing ? 'Update' : 'Create'} adapter ${def.name} (${def.mcp} on ${def.connector})`, h.baselineId, [item]);
+      await applyOnMain(ns.platform, `Adapter ${def.name}`, `${existing ? 'Update' : 'Create'} adapter ${def.name} (${def.mcp} on ${def.connector})`, h.baselineId, [item]);
       await refreshTools();
       notify(`Adapter ${def.name} saved`, 'ok');
       if (isNew) {
@@ -133,10 +134,10 @@
   async function remove() {
     if (!(await confirmDialog({ message: `Delete the adapter ${a.name}? Units that instantiate it stop resolving their ${a.mcp} tools.`, danger: true }))) return;
     try {
-      const h = await headGraph(NS_PLATFORM);
-      const existing = findNode(h, NS_PLATFORM, ADAPTER_DEF_TYPE, adapterDefKey(a.name));
+      const h = await headGraph(ns.platform);
+      const existing = findNode(h, ns.platform, ADAPTER_DEF_TYPE, adapterDefKey(a.name));
       if (!existing) throw new Error(`adapter ${a.name} is not on the graph`);
-      await applyOnMain(NS_PLATFORM, `Delete adapter ${a.name}`, `Delete adapter ${a.name}`, h.baselineId, [deleteNodeItem(existing)]);
+      await applyOnMain(ns.platform, `Delete adapter ${a.name}`, `Delete adapter ${a.name}`, h.baselineId, [deleteNodeItem(existing)]);
       await refreshTools();
       closeTab(tab.id, { force: true });
     } catch (e) {

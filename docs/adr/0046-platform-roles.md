@@ -42,8 +42,7 @@ administration itself into a general mechanism.
   the existing org/project-scoped read rule. (Administration was later migrated into this same mechanism, ADR
   0047 — not part of this ADR as first written.)
 - **The web**: `AssignmentsPane.svelte`'s project selector gains a "platform-wide (no project)" choice; picking
-  it offers the built-in platform roles (`web/src/lib/projectRoles.ts`'s `PLATFORM_ROLES`, mirroring
-  `access.PlatformRoles`) instead of a project's methodology roles, and saves an Assignment with no
+  it offers the built-in platform roles (the `platformRoles` of the session, `access.BuiltinRoles`, ADR 0070) instead of a project's methodology roles, and saves an Assignment with no
   `assigns_project` link. A project with no applicable methodology now shows that choice as the way to grant
   someone access to it, instead of a dead end. The pane falls back to the same platform-role picker whenever
   the chosen (or, since the project selector is hidden there, the *fixed*) project offers no role of its own —

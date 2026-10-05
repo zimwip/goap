@@ -38,11 +38,18 @@ const DefaultNamespace = "default"
 // configuration (built-in domain platform).
 const NamespacePlatform = "platform"
 
+// NamespaceMethodology is the namespace of the meta-domain (built-in domain methodology): the types of the definition
+// nodes of the methodologies (ADR 0023). Its nodes describe how work is done, not what is worked on, so the views of
+// the graph leave it out by default.
+const NamespaceMethodology = "methodology"
+
 // The node types of the adapter, the meeting point of organisation, MCP and connector (pkg/adapter, ADR 0019): the
 // definition is a node of the platform namespace, the instance a node of the organisation namespace held by a unit.
 const (
 	TypeAdapterDef = "platform@AdapterDef"
-	TypeAdapter    = "organisation@Adapter"
+	// TypeMCP is the type of the node of an MCP, a generic tool definition (pkg/mcp).
+	TypeMCP     = "platform@MCP"
+	TypeAdapter = "organisation@Adapter"
 )
 
 // NamespaceOf returns ns, defaulting to DefaultNamespace.

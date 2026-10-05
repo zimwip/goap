@@ -80,6 +80,9 @@ type Config struct {
 	// Enrich completes the authenticated principal with what the graph knows of its subject (roles and unit
 	// of its User node). Nil leaves the principal as the token gives it.
 	Enrich func(ctx context.Context, p authz.Principal) authz.Principal
+	// Session answers GET /api/whoami: the caller and what the client derives from it (access.Authorizer.Session).
+	// Nil answers the principal alone.
+	Session func(ctx context.Context, p authz.Principal) (any, error)
 }
 
 // DefaultTokenTTL and DefaultMaxSession are the lifetimes of a token and of a session when Config names none.
@@ -225,7 +228,7 @@ func Mount(e *echo.Echo, cfg Config) error {
 		return err
 	}
 	e.GET("/api/status", statusHandler(cfg.Routes))
-	e.GET("/api/whoami", identity.WhoAmI(identity.Extractor{}, nil), auth)
+	e.GET("/api/whoami", identity.WhoAmI(identity.Extractor{}, cfg.Session), auth)
 	for _, r := range cfg.Routes {
 		u, err := url.Parse(r.Upstream)
 		if err != nil {

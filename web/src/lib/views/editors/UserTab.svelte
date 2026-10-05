@@ -3,6 +3,7 @@
   // is seen (internal/graphsvc.EnsureUser), not only by an administrator's hand. User extends OrgUnit (the
   // smallest organisational unit is a person), so it is assignable to a project the same way a team is
   // (ADR 0039): its Assignments pane is the meeting point with project.
+  import { session, me, adminRole, types as nodeTypes, links as linkTypes, ns, assignmentKey } from '../../stores/session.svelte';
   import { stamp, keyOf } from '../../flux/signals.svelte';
   import type { Tab, ToolbarAction } from '../../shell/types';
   import Icon from '../../shell/Icon.svelte';
@@ -12,14 +13,10 @@
   import { headGraph, findNode, applyOnMain, updateNodeItem, currentLink, moveNodeItem, refOf, type HeadGraph } from '../../graphEdit';
   import { notify, provideActions } from '../../shell/workbench.svelte';
   import { openTab } from '../../shell/tabs.svelte';
-  import { USER_TYPE, ORG_UNIT_TYPE, MEMBER_OF, ASSIGNMENT_TYPE } from '../../orgTypes';
-  import { platformAssignmentKey } from '../../projectRoles';
-  import { session, me } from '../../stores/session.svelte';
     import { authState } from '../../stores/auth.svelte';
 
   let { tab }: { tab: Tab } = $props();
 
-  const NS = 'organisation';
   const key = $derived(tab.params.key ?? '');
 
   let head = $state<HeadGraph>();
@@ -27,15 +24,15 @@
   let error = $state('');
   let pane = $state(tab.params.pane === 'assignments' ? 'assignments' : 'overview');
 
-  const user = $derived(head ? findNode(head, NS, USER_TYPE, key) : undefined);
-  const orgLink = $derived(head && user ? currentLink(head, user, MEMBER_OF) : undefined);
+  const user = $derived(head ? findNode(head, ns.organisation, nodeTypes.user, key) : undefined);
+  const orgLink = $derived(head && user ? currentLink(head, user, linkTypes.memberOf) : undefined);
   const org = $derived(head && orgLink ? head.nodes.find((n) => n.id === orgLink.to?.id) : undefined);
-  const orgUnits = $derived(head ? head.nodes.filter((n) => n.type === ORG_UNIT_TYPE) : []);
+  const orgUnits = $derived(head ? head.nodes.filter((n) => n.type === nodeTypes.orgUnit) : []);
 
   async function load() {
     loading = true;
     try {
-      head = await headGraph(NS);
+      head = await headGraph(ns.organisation);
       error = '';
     } catch (e) {
       error = errorMessage(e);
@@ -46,7 +43,7 @@
 
   $effect(() => {
     void key;
-    void stamp(keyOf.namespace(NS));
+    void stamp(keyOf.namespace(ns.organisation));
     void load();
   });
 
@@ -54,8 +51,8 @@
   // administration is a platform role (ADR 0047), granted by the platform Assignment of the user (the one the
   // first-admin bootstrap creates); one granted through a unit the user belongs to shows on that unit
   const isAdmin = $derived.by(() => {
-    const roles = head?.nodes.find((n) => n.type === ASSIGNMENT_TYPE && n.key === platformAssignmentKey(key) && !n.deleted)?.props?.['roles'];
-    return Array.isArray(roles) && roles.includes('admin');
+    const roles = head?.nodes.find((n) => n.type === nodeTypes.assignment && n.key === assignmentKey(key) && !n.deleted)?.props?.['roles'];
+    return Array.isArray(roles) && roles.includes(adminRole());
   });
   // Logout (ADR 0040, 0042): stateless HS256 has nothing to revoke server-side, so this is a client-side
   // sign-out; offered with the platform's own sign-in only (an SSO mode signs out through its provider).
@@ -100,12 +97,12 @@
       moving = false;
       return;
     }
-    const target = head.nodes.find((n) => n.type === ORG_UNIT_TYPE && n.key === fOrg);
+    const target = head.nodes.find((n) => n.type === nodeTypes.orgUnit && n.key === fOrg);
     if (!target) return;
     movingBusy = true;
     error = '';
     try {
-      await applyOnMain(NS, `Move ${key}`, `Move ${key} to ${fOrg}`, head.baselineId, [moveNodeItem(user, MEMBER_OF, orgLink, refOf(target))]);
+      await applyOnMain(ns.organisation, `Move ${key}`, `Move ${key} to ${fOrg}`, head.baselineId, [moveNodeItem(user, linkTypes.memberOf, orgLink, refOf(target))]);
       notify(`${key} moved to ${fOrg}.`, 'ok');
       moving = false;
       await load();
@@ -128,7 +125,7 @@
     saving = true;
     error = '';
     try {
-      await applyOnMain(NS, `User ${key}`, `Update user ${key}`, head.baselineId, [
+      await applyOnMain(ns.organisation, `User ${key}`, `Update user ${key}`, head.baselineId, [
         updateNodeItem(user, { displayName: fDisplayName.trim() || null, email: fEmail.trim() || null, locale: fLocale.trim() || null }),
       ]);
       notify(`User ${key} updated.`, 'ok');

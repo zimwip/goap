@@ -1,5 +1,6 @@
 // Catalogs shared by the explorers, the tester and search: methodologies
 // (all versions), baselines, changes.
+import { isMeta } from './session.svelte';
 import {
   registry,
   graph,
@@ -57,7 +58,7 @@ export function refreshBaselines(namespace: string): Promise<void> {
 
 /** The baselines of every namespace holding nodes (newest first in each), the meta-domain methodology aside. */
 export async function baselinesByNamespace(signal?: AbortSignal): Promise<{ namespace: string; baselines: Baseline[] }[]> {
-  const nss = ((await graph.listNamespaces(signal)).namespaces ?? []).filter((ns) => ns !== 'methodology');
+  const nss = ((await graph.listNamespaces(signal)).namespaces ?? []).filter((n) => !isMeta(n));
   return Promise.all(
     nss.map(async (namespace) => ({ namespace, baselines: [...((await graph.listBaselines(namespace, signal)).baselines ?? [])].reverse() })),
   );

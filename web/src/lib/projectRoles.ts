@@ -3,9 +3,7 @@
 // on the project. Read from the head of the organisation namespace and the methodologies of the registry.
 import { registry, type Methodology } from './api';
 import type { HeadGraph } from './graphEdit';
-import { PROJECT_UNIT_TYPE, PROJECT_PART_OF, ASSIGNMENT_TYPE, ASSIGNS_ORG, ASSIGNS_PROJECT } from './orgTypes';
-
-const NS = 'organisation';
+import { ns, types, links } from './stores/session.svelte';
 
 export interface ProjectRole {
   name: string;
@@ -18,10 +16,10 @@ export interface ProjectRole {
 export function projectChain(head: HeadGraph, key: string): string[] {
   const byId = new Map(head.nodes.map((n) => [n.id ?? '', n]));
   const out: string[] = [];
-  let cur = head.nodes.find((n) => n.namespace === NS && n.type === PROJECT_UNIT_TYPE && n.key === key);
+  let cur = head.nodes.find((n) => n.namespace === ns.organisation && n.type === types.projectUnit && n.key === key);
   while (cur && !out.includes(cur.key ?? '')) {
     out.push(cur.key ?? '');
-    const up = head.links.find((l) => l.type === PROJECT_PART_OF && l.from?.id === cur!.id && l.to?.id !== cur!.id);
+    const up = head.links.find((l) => l.type === links.projectPartOf && l.from?.id === cur!.id && l.to?.id !== cur!.id);
     cur = up?.to?.id ? byId.get(up.to.id) : undefined;
   }
   return out;
@@ -31,7 +29,7 @@ export function projectChain(head: HeadGraph, key: string): string[] {
 export function applicableMethodologies(head: HeadGraph, key: string): string[] {
   const out: string[] = [];
   for (const k of projectChain(head, key)) {
-    const p = head.nodes.find((n) => n.namespace === NS && n.type === PROJECT_UNIT_TYPE && n.key === k);
+    const p = head.nodes.find((n) => n.namespace === ns.organisation && n.type === types.projectUnit && n.key === k);
     const list = p?.props?.['methodologies'];
     if (Array.isArray(list)) for (const m of list) if (typeof m === 'string' && !out.includes(m)) out.push(m);
   }
@@ -77,20 +75,6 @@ export async function rolesOf(names: string[]): Promise<ProjectRole[]> {
 /** The roles a project needs: those of its applicable methodologies. */
 export const projectRoles = (head: HeadGraph, key: string): Promise<ProjectRole[]> => rolesOf(applicableMethodologies(head, key));
 
-/**
- * Built-in platform roles (ADR 0046/0047, mirrors pkg/mcp.BuiltinRoles): granted by an Assignment naming no
- * project (assigns_org only), held everywhere, independent of any project's methodologies. Fixed, not read
- * from the graph. Administration (ADR 0047) is one of them now: it can be granted here, the same way any
- * other platform role is, to a unit or a user.
- */
-export const PLATFORM_ROLES: ProjectRole[] = [
-  { name: 'admin', description: 'Administers the platform: organisation, projects, methodologies, domains, policies, adapters, and everything else.', methodologies: [] },
-  { name: 'reader', description: 'Reads everything on the platform, past the usual organisation/project scoping.', methodologies: [] },
-];
-
-/** The key of the Assignment node granting an org unit a platform-wide role (mirrors access.PlatformAssignmentKey). */
-export const platformAssignmentKey = (org: string): string => `ASG:${org}/PLATFORM`;
-
 /** Who holds each role on a project (its Assignments, and those of its ancestors): role -> org unit / user keys. */
 export function holders(head: HeadGraph, key: string): Map<string, string[]> {
   const chain = projectChain(head, key);
@@ -101,8 +85,8 @@ export function holders(head: HeadGraph, key: string): Map<string, string[]> {
   };
   const out = new Map<string, string[]>();
   for (const a of head.nodes) {
-    if (a.namespace !== NS || a.type !== ASSIGNMENT_TYPE || !chain.includes(target(a, ASSIGNS_PROJECT))) continue;
-    const org = target(a, ASSIGNS_ORG);
+    if (a.namespace !== ns.organisation || a.type !== types.assignment || !chain.includes(target(a, links.assignsProject))) continue;
+    const org = target(a, links.assignsOrg);
     const roles = a.props?.['roles'];
     if (!org || !Array.isArray(roles)) continue;
     for (const r of roles) if (typeof r === 'string') out.set(r, [...(out.get(r) ?? []), org]);

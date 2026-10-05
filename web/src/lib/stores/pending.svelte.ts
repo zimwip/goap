@@ -6,7 +6,7 @@
 // pending nodes laid over it (see llmEdit.ts for the model gateway).
 import { graph, errorMessage, type NodeRef, type Struct } from '../api';
 import { MAIN_BRANCH } from '../namespace';
-import { me } from './session.svelte';
+import { me, userKey } from './session.svelte';
 
 /** One node touched by the user, not applied yet. */
 export interface Staged {
@@ -157,7 +157,7 @@ export async function loadPending(): Promise<void> {
   }
   try {
     const byNs: Record<string, NsChange> = {};
-    const mine = (await graph.listChanges()).changes?.filter((c) => c.ownerOrg === `USR:${subject}` && (c.status === 'draft' || c.status === 'active')) ?? [];
+    const mine = (await graph.listChanges()).changes?.filter((c) => c.ownerOrg === userKey(subject) && (c.status === 'draft' || c.status === 'active')) ?? [];
     for (const ch of mine) {
       if (!ch.id || !ch.namespace) continue;
       const entry: NsChange = { changeId: ch.id, nodes: {} };
