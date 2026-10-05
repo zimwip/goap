@@ -74,7 +74,7 @@ actions:
       			continue
       		}
       		title := fmt.Sprintf("Verify %s: %v", n.Key, n.Pre.Props["title"])
-      		t := ctx.CreateNode("alm@TestCase", "TC-"+n.Key, "verifies "+n.Key)
+      		t := ctx.ImpactNodeCreate("alm@TestCase", "TC-"+n.Key, "verifies "+n.Key)
       		ctx.WriteNode(t, map[string]any{
       			"props": map[string]any{"title": title},
       			"links": []any{map[string]any{"type": "alm@verifies", "to": n.Key}},
@@ -107,7 +107,7 @@ actions:
     utility: 'has(vars.review) && vars.review == "human" ? 0.1 : 0.9'
     code: |
       for (const n of ctx.changeImpacts()) {
-        if (n.intent === "created" && n.review === "proposed") ctx.reviewNode(n.key, true, "automatic review");
+        if (n.intent === "created" && n.review === "proposed") ctx.impactNodeReview(n.key, true, "automatic review");
       }
 
   - name: human_review

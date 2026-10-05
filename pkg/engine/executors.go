@@ -450,7 +450,7 @@ func ApplyChange(ctx context.Context, ac ActionContext) (ActionResult, error) {
 		if cn.Post == nil || cn.Flow != "" || cn.Superseded || cn.Review != domain.ReviewAccepted || !ac.Blackboard.Nodes[*cn.Post].CheckedOut {
 			continue
 		}
-		if _, err := ac.Graph.CheckinNode(ctx, c.ID, cn.ID, domain.MainFlow, ""); err != nil {
+		if _, err := ac.Graph.ImpactNodeCheckin(ctx, c.ID, cn.ID, domain.MainFlow, ""); err != nil {
 			return ActionResult{}, err
 		}
 	}

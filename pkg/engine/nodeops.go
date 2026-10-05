@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/google/uuid"
@@ -125,7 +126,22 @@ func (e *Engine) applyNodeOps(ctx context.Context, p *Process, ops []dsl.NodeOp,
 		}
 	}
 	local := map[string]domain.ChangeImpactID{}
+	var declared []domain.ChangeImpactID
+	// A node a script declares as created is not recorded by the graph yet: a new node has no proposal (ADR 0077), its
+	// creation is the one event of its impact and first version. It is held here, named by its reference and its key,
+	// and created by the first operation that needs it: a write creates it with the properties it carries, any other
+	// operation (and the end of the script) creates it bare.
+	type creation struct {
+		ref, key, typ, rationale string
+	}
+	pending := map[string]*creation{}
+	var pendingOrder []*creation
+	var create func(c *creation, props map[string]any) (domain.ChangeImpact, error)
 	resolve := func(s string) (domain.ChangeImpactID, error) {
+		if c := pending[s]; c != nil {
+			cn, err := create(c, nil)
+			return cn.ID, err
+		}
 		if strings.HasPrefix(s, "#") {
 			if id, ok := local[s]; ok {
 				return id, nil
@@ -135,7 +151,7 @@ func (e *Engine) applyNodeOps(ctx context.Context, p *Process, ops []dsl.NodeOp,
 		if id, ok := byKey[s]; ok {
 			return id, nil
 		}
-		return "", fmt.Errorf("no change impact for %q: declare it with impactNode or createNode", s)
+		return "", fmt.Errorf("no change impact for %q: declare it with impactNode or impactNodeCreate", s)
 	}
 	target := func(s string) (domain.NodeRef, error) { // a link target: a node written by the change, else the reference baseline
 		if strings.HasPrefix(s, "#") {
@@ -147,6 +163,11 @@ func (e *Engine) applyNodeOps(ctx context.Context, p *Process, ops []dsl.NodeOp,
 				return ref, nil
 			}
 			return domain.NodeRef{}, fmt.Errorf("%s is not written yet: write it before linking to it", s)
+		}
+		if pending[s] != nil { // a creation declared earlier: a link needs the node
+			if _, err := resolve(s); err != nil {
+				return domain.NodeRef{}, err
+			}
 		}
 		if id, ok := byKey[s]; ok {
 			if ref, ok := posts[id]; ok {
@@ -166,7 +187,6 @@ func (e *Engine) applyNodeOps(ctx context.Context, p *Process, ops []dsl.NodeOp,
 		}
 		return bb.Change.Namespace + domain.TypeSep + t
 	}
-	var declared []domain.ChangeImpactID
 	// the verification of what the action produces (ADR 0075): its produced entries are written as the effects appear,
 	// before any review of the same script, so the review policy sees them
 	vf := verifyOf(ctx)
@@ -197,10 +217,36 @@ func (e *Engine) applyNodeOps(ctx context.Context, p *Process, ops []dsl.NodeOp,
 		}
 		return e.recordVerification(ctx, p, execution, producedBy, d)
 	}
+	create = func(c *creation, props map[string]any) (domain.ChangeImpact, error) {
+		delete(pending, c.ref)
+		delete(pending, c.key)
+		cn, err := retryOnConflict(func() (domain.ChangeImpact, error) {
+			return e.Graph.ImpactNodeCreate(ctx, p.ChangeID, graph.NodeCreate{Key: c.key, Type: c.typ, Properties: props, Rationale: c.rationale,
+				Flow: p.Flow, Execution: execution, ProducedBy: producedBy})
+		})
+		if err != nil {
+			return cn, err
+		}
+		local[c.ref], byKey[cn.Key] = cn.ID, cn.ID
+		declared = append(declared, cn.ID)
+		if cn.Post != nil {
+			posts[cn.ID], out[cn.ID] = *cn.Post, true
+		}
+		return cn, produce(cn.ID)
+	}
 	for i, op := range ops {
 		fail := func(err error) error { return fmt.Errorf("change impact operation %d (%s): %w", i, op.Op, err) }
 		switch op.Op {
 		case "declare":
+			if domain.NodeIntent(op.Intent) == domain.IntentCreated {
+				c := &creation{ref: op.Ref, key: op.Key, typ: qualify(op.Type), rationale: op.Rationale}
+				pending[c.key] = c
+				if c.ref != "" {
+					pending[c.ref] = c
+				}
+				pendingOrder = append(pendingOrder, c)
+				continue
+			}
 			cn := domain.ChangeImpact{Intent: domain.NodeIntent(op.Intent), Key: op.Key, Type: qualify(op.Type), Rationale: op.Rationale, ProducedBy: producedBy, Execution: execution, Flow: p.Flow}
 			if cn.Intent == domain.IntentModified {
 				ref, ok := baseline[op.Key]
@@ -210,7 +256,7 @@ func (e *Engine) applyNodeOps(ctx context.Context, p *Process, ops []dsl.NodeOp,
 				cn.Pre = &ref
 			}
 			added, err := retryOnConflict(func() ([]domain.ChangeImpact, error) {
-				return e.Graph.AddNodes(ctx, p.ChangeID, []domain.ChangeImpact{cn})
+				return e.Graph.ProposeImpact(ctx, p.ChangeID, []domain.ChangeImpact{cn})
 			})
 			if err != nil {
 				return declared, fail(err)
@@ -220,26 +266,87 @@ func (e *Engine) applyNodeOps(ctx context.Context, p *Process, ops []dsl.NodeOp,
 			if err := produce(added[0].ID); err != nil {
 				return declared, fail(err)
 			}
+		case "merge", "split":
+			names := op.Sources
+			if op.Op == "split" {
+				names = []string{op.Node}
+			}
+			var srcs []graph.NodeName
+			for _, s := range names {
+				if id, err := resolve(s); err == nil {
+					srcs = append(srcs, graph.NodeName{Impact: id})
+				} else if strings.HasPrefix(s, "#") {
+					return declared, fail(err)
+				} else {
+					srcs = append(srcs, graph.NodeName{Key: s})
+				}
+			}
+			var into []graph.NodeCreate
+			for _, x := range op.Into {
+				into = append(into, graph.NodeCreate{Key: x.Key, Type: qualify(x.Type), Properties: x.Props, Rationale: x.Rationale, Flow: p.Flow, Execution: execution, ProducedBy: producedBy})
+			}
+			var res graph.Restructured
+			var err error
+			if op.Op == "merge" && len(into) == 1 {
+				res, err = e.Graph.ImpactNodeMerge(ctx, p.ChangeID, graph.MergeInput{Sources: srcs, Into: into[0], Rationale: op.Rationale, Flow: p.Flow, Execution: execution})
+			} else if op.Op == "split" && len(srcs) == 1 {
+				res, err = e.Graph.ImpactNodeSplit(ctx, p.ChangeID, graph.SplitInput{Source: srcs[0], Into: into, Rationale: op.Rationale, Flow: p.Flow, Execution: execution})
+			} else {
+				err = fmt.Errorf("malformed %s", op.Op)
+			}
+			if err != nil {
+				return declared, fail(err)
+			}
+			for i, cn := range res.Successors {
+				if i < len(op.Into) {
+					local[op.Into[i].Ref] = cn.ID
+				}
+			}
+			for _, cn := range slices.Concat(res.Successors, res.Sources, res.Parents) {
+				byKey[cn.Key] = cn.ID
+				declared = append(declared, cn.ID)
+				if cn.Post != nil {
+					posts[cn.ID] = *cn.Post
+				}
+			}
+			for _, cn := range slices.Concat(res.Successors, res.Parents) {
+				out[cn.ID] = true
+			}
+			for _, cn := range res.Successors {
+				if err := produce(cn.ID); err != nil {
+					return declared, fail(err)
+				}
+			}
 		case "write":
-			id, err := resolve(op.Node)
+			var id domain.ChangeImpactID
+			var err error
+			propsIn := false // the creation carried the properties
+			if c := pending[op.Node]; c != nil {
+				var cn domain.ChangeImpact
+				if cn, err = create(c, op.Props); err == nil {
+					id, propsIn = cn.ID, true
+				}
+			} else {
+				id, err = resolve(op.Node)
+			}
 			if err != nil {
 				return declared, fail(err)
 			}
 			if op.State != "" {
-				return declared, fail(fmt.Errorf("a lifecycle state is a transition of its own: use transitionNode (ADR 0076)"))
+				return declared, fail(fmt.Errorf("a lifecycle state is a transition of its own: use impactNodeTransition (ADR 0076)"))
 			}
 			// the first write checks the node out: its working version, edited in place by the next ones (ADR 0076)
 			if !out[id] {
 				cn, err := retryOnConflict(func() (domain.ChangeImpact, error) {
-					return e.Graph.CheckoutNode(ctx, p.ChangeID, graph.NodeCheckout{Impact: id, Flow: p.Flow, Execution: execution})
+					return e.Graph.ImpactNodeCheckout(ctx, p.ChangeID, graph.NodeCheckout{Impact: id, Flow: p.Flow, Execution: execution})
 				})
 				if err != nil {
 					return declared, fail(err)
 				}
 				posts[id], out[id] = *cn.Post, true
 			}
-			if len(op.Props) > 0 {
-				if _, err := e.Graph.UpdateNode(ctx, p.ChangeID, id, graph.NodeUpdate{Properties: op.Props, Flow: p.Flow, Execution: execution}); err != nil {
+			if len(op.Props) > 0 && !propsIn {
+				if _, err := e.Graph.ImpactNodeUpdate(ctx, p.ChangeID, id, graph.NodeUpdate{Properties: op.Props, Flow: p.Flow, Execution: execution}); err != nil {
 					return declared, fail(err)
 				}
 			}
@@ -248,12 +355,12 @@ func (e *Engine) applyNodeOps(ctx context.Context, p *Process, ops []dsl.NodeOp,
 				if err != nil {
 					return declared, fail(err)
 				}
-				if _, err := e.Graph.CreateLink(ctx, p.ChangeID, id, graph.LinkWrite{Type: qualify(l.Type), To: to}, p.Flow, execution); err != nil {
+				if _, err := e.Graph.ImpactLinkCreate(ctx, p.ChangeID, id, graph.LinkWrite{Type: qualify(l.Type), To: to}, p.Flow, execution); err != nil {
 					return declared, fail(err)
 				}
 			}
 			for _, l := range op.RemoveLinks {
-				if err := e.Graph.DeleteLink(ctx, p.ChangeID, domain.LinkID(l), p.Flow, execution); err != nil {
+				if err := e.Graph.ImpactLinkDelete(ctx, p.ChangeID, domain.LinkID(l), p.Flow, execution); err != nil {
 					return declared, fail(err)
 				}
 			}
@@ -265,7 +372,7 @@ func (e *Engine) applyNodeOps(ctx context.Context, p *Process, ops []dsl.NodeOp,
 			if err != nil {
 				return declared, fail(err)
 			}
-			if _, err := e.Graph.CheckinNode(ctx, p.ChangeID, id, p.Flow, execution); err != nil {
+			if _, err := e.Graph.ImpactNodeCheckin(ctx, p.ChangeID, id, p.Flow, execution); err != nil {
 				return declared, fail(err)
 			}
 			out[id] = false
@@ -275,7 +382,7 @@ func (e *Engine) applyNodeOps(ctx context.Context, p *Process, ops []dsl.NodeOp,
 				return declared, fail(err)
 			}
 			cn, err := retryOnConflict(func() (domain.ChangeImpact, error) {
-				return e.Graph.TransitionNode(ctx, p.ChangeID, graph.NodeTransition{NodeCheckout: graph.NodeCheckout{Impact: id, Flow: p.Flow, Execution: execution}, To: op.State})
+				return e.Graph.ImpactNodeTransition(ctx, p.ChangeID, graph.NodeTransition{NodeCheckout: graph.NodeCheckout{Impact: id, Flow: p.Flow, Execution: execution}, To: op.State})
 			})
 			if err != nil {
 				return declared, fail(err)
@@ -286,7 +393,7 @@ func (e *Engine) applyNodeOps(ctx context.Context, p *Process, ops []dsl.NodeOp,
 			if err != nil {
 				return declared, fail(err)
 			}
-			cn, err := e.Graph.CancelCheckout(ctx, p.ChangeID, id, p.Flow, execution)
+			cn, err := e.Graph.ImpactNodeCancel(ctx, p.ChangeID, id, p.Flow, execution)
 			if err != nil {
 				return declared, fail(err)
 			}
@@ -301,7 +408,7 @@ func (e *Engine) applyNodeOps(ctx context.Context, p *Process, ops []dsl.NodeOp,
 			if err != nil {
 				return declared, fail(err)
 			}
-			if err := e.Graph.RemoveChangeImpact(ctx, p.ChangeID, id, p.Flow, execution); err != nil {
+			if err := e.Graph.WithdrawImpact(ctx, p.ChangeID, id, p.Flow, execution); err != nil {
 				return declared, fail(err)
 			}
 			delete(out, id)
@@ -338,7 +445,7 @@ func (e *Engine) applyNodeOps(ctx context.Context, p *Process, ops []dsl.NodeOp,
 				derogation = d.Key
 			}
 			if _, err := retryOnConflict(func() (domain.ChangeImpact, error) {
-				return e.Graph.ReviewNodeOn(ctx, p.ChangeID, p.Flow, execution, id, status, producedBy, op.Comment)
+				return e.Graph.ImpactNodeReviewOn(ctx, p.ChangeID, p.Flow, execution, id, status, producedBy, op.Comment)
 			}); err != nil {
 				return declared, fail(err)
 			}
@@ -359,6 +466,13 @@ func (e *Engine) applyNodeOps(ctx context.Context, p *Process, ops []dsl.NodeOp,
 			}
 		default:
 			return declared, fail(fmt.Errorf("unknown operation"))
+		}
+	}
+	for _, c := range pendingOrder {
+		if pending[c.key] == c {
+			if _, err := create(c, nil); err != nil {
+				return declared, fmt.Errorf("change impact of %s: %w", c.key, err)
+			}
 		}
 	}
 	return declared, nil

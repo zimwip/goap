@@ -78,9 +78,9 @@ type ChangeImpact struct {
 // NodeOp is an operation on a change impact buffered by a script; the engine
 // applies them in order after the script ends.
 type NodeOp struct {
-	// Op is declare (ImpactNode, CreateNode), write (WriteNode: the working version, checked out on the first write,
-	// edited in place), review (ReviewNode), checkin (CheckinNode), transition (TransitionNode), cancel
-	// (CancelCheckout) or remove (RemoveImpact) (ADR 0076).
+	// Op is declare (ImpactNode: the impact of an existing node; ImpactNodeCreate: held until the node is created by its first operation), write (WriteNode: the working version, checked out on the first write,
+	// edited in place), review (ImpactNodeReview), checkin (ImpactNodeCheckin), transition (ImpactNodeTransition), cancel
+	// (ImpactNodeCancel), remove (WithdrawImpact) (ADR 0076), merge (ImpactNodeMerge) or split (ImpactNodeSplit, ADR 0077).
 	Op string `json:"op"`
 	// Ref names a declared change impact ("#nN") for the next operations of the script.
 	Ref    string `json:"ref,omitempty"`
@@ -101,6 +101,19 @@ type NodeOp struct {
 	Reserve    string `json:"reserve,omitempty"`
 	Comment    string `json:"comment,omitempty"`
 	ProducedBy string `json:"producedBy,omitempty"`
+	// Sources are the nodes a merge replaces (keys or "#nN"); a split names its source in Node. Into are the nodes
+	// they are replaced by (ADR 0077).
+	Sources []string   `json:"sources,omitempty"`
+	Into    []NodeInto `json:"into,omitempty"`
+}
+
+// NodeInto is a node a merge or a split creates; Ref names it for the next operations of the script.
+type NodeInto struct {
+	Ref       string         `json:"ref,omitempty"`
+	Key       string         `json:"key"`
+	Type      string         `json:"type"`
+	Rationale string         `json:"rationale,omitempty"`
+	Props     map[string]any `json:"props,omitempty"`
 }
 
 // NodeOpLink is an outgoing link added by a write: To is a node key or "#nN".
@@ -291,7 +304,7 @@ func (c *Ctx) emit(item map[string]any) string {
 
 // ImpactNode declares that the change acts on an existing node of the reference
 // baseline, and why: a change impact with no version written yet. It returns a
-// reference ("#nN") for WriteNode and ReviewNode of the same script.
+// reference ("#nN") for WriteNode and ImpactNodeReview of the same script.
 func (c *Ctx) ImpactNode(key, rationale string) string {
 	c.nseq++
 	ref := fmt.Sprintf("#n%d", c.nseq)
@@ -299,19 +312,55 @@ func (c *Ctx) ImpactNode(key, rationale string) string {
 	return ref
 }
 
-// CreateNode declares that the change creates a node of a type, and why.
-func (c *Ctx) CreateNode(nodeType, key, rationale string) string {
+// ImpactNodeCreate declares that the change creates a node of a type, and why. A new node has no proposal (ADR 0077):
+// the engine creates it (one created event: its impact and first version) at the first write that names the reference,
+// with the properties it carries, else bare when the script ends.
+func (c *Ctx) ImpactNodeCreate(nodeType, key, rationale string) string {
 	c.nseq++
 	ref := fmt.Sprintf("#n%d", c.nseq)
 	c.nodeOps = append(c.nodeOps, NodeOp{Op: "declare", Ref: ref, Intent: string(domain.IntentCreated), Key: key, Type: nodeType, Rationale: rationale, ProducedBy: c.job.Action})
 	return ref
 }
 
+// ImpactNodeMerge merges nodes (keys, or references of this script) into a new node of a type, seen from their
+// parents (ADR 0077): the parents lose the links to the sources and gain one to the new node, the sources stay as they
+// are. It returns the reference of the new node, checked out. Every source needs a parent (a link of a type flagged
+// compose to it).
+func (c *Ctx) ImpactNodeMerge(sources []string, nodeType, key, rationale string) string {
+	c.nseq++
+	ref := fmt.Sprintf("#n%d", c.nseq)
+	c.nodeOps = append(c.nodeOps, NodeOp{Op: "merge", Sources: sources, Into: []NodeInto{{Ref: ref, Key: key, Type: nodeType, Rationale: rationale}}, Rationale: rationale, ProducedBy: c.job.Action})
+	return ref
+}
+
+// ImpactNodeSplit splits a node (key, or reference) into new nodes, [{type, key, rationale, props}], seen from its
+// parents (ADR 0077). It returns their references in order.
+func (c *Ctx) ImpactNodeSplit(source string, into []map[string]any) []string {
+	op := NodeOp{Op: "split", Node: source, ProducedBy: c.job.Action}
+	var refs []string
+	for _, m := range into {
+		c.nseq++
+		ref := fmt.Sprintf("#n%d", c.nseq)
+		refs = append(refs, ref)
+		x := NodeInto{Ref: ref}
+		x.Key, _ = m["key"].(string)
+		x.Type, _ = m["type"].(string)
+		x.Rationale, _ = m["rationale"].(string)
+		x.Props, _ = m["props"].(map[string]any)
+		op.Into = append(op.Into, x)
+	}
+	if len(op.Into) > 0 {
+		op.Rationale = op.Into[0].Rationale
+	}
+	c.nodeOps = append(c.nodeOps, op)
+	return refs
+}
+
 // WriteNode edits the working version of a declared node (ADR 0076): the first write checks the node out (a new
 // version on the change branch), the next ones edit it in place. node is a key of a change impact or the reference
-// returned by ImpactNode / CreateNode; w may hold props (merged over the current ones), links ([{type, to}] with to a
+// returned by ImpactNode / ImpactNodeCreate; w may hold props (merged over the current ones), links ([{type, to}] with to a
 // node key or a reference of a node written earlier) and removeLinks (link ids). A lifecycle state is a transition
-// (TransitionNode); a node is removed by its parent losing the link to it.
+// (ImpactNodeTransition); a node is removed by its parent losing the link to it.
 func (c *Ctx) WriteNode(node string, w map[string]any) {
 	op := NodeOp{Op: "write", Node: node, ProducedBy: c.job.Action}
 	op.Props, _ = w["props"].(map[string]any)
@@ -350,37 +399,37 @@ func asList(v any) []any {
 	return nil
 }
 
-// ReviewNode accepts or rejects a change impact; the comment is mandatory.
-func (c *Ctx) ReviewNode(node string, accept bool, comment string) {
+// ImpactNodeReview accepts or rejects a change impact; the comment is mandatory.
+func (c *Ctx) ImpactNodeReview(node string, accept bool, comment string) {
 	c.nodeOps = append(c.nodeOps, NodeOp{Op: "review", Node: node, Accept: accept, Comment: comment, ProducedBy: c.job.Action})
 }
 
-// ReviewNodeWithReserve accepts a change impact with a reserve: the derogation (its key) must be open, unexpired and
+// ImpactNodeReviewWithReserve accepts a change impact with a reserve: the derogation (its key) must be open, unexpired and
 // target the impact or its action, else the engine refuses the review (ADR 0075).
-func (c *Ctx) ReviewNodeWithReserve(node, derogation, comment string) {
+func (c *Ctx) ImpactNodeReviewWithReserve(node, derogation, comment string) {
 	c.nodeOps = append(c.nodeOps, NodeOp{Op: "review", Node: node, Accept: true, Reserve: derogation, Comment: comment, ProducedBy: c.job.Action})
 }
 
-// CheckinNode freezes the working version of a change impact: its accepted review authorizes it (ADR 0076).
-func (c *Ctx) CheckinNode(node string) {
+// ImpactNodeCheckin freezes the working version of a change impact: its accepted review authorizes it (ADR 0076).
+func (c *Ctx) ImpactNodeCheckin(node string) {
 	c.nodeOps = append(c.nodeOps, NodeOp{Op: "checkin", Node: node, ProducedBy: c.job.Action})
 }
 
-// TransitionNode moves the node of a change impact to a lifecycle state: a version of its own, from a checked-in
+// ImpactNodeTransition moves the node of a change impact to a lifecycle state: a version of its own, from a checked-in
 // version, authorized and guarded when it is taken (ADR 0076).
-func (c *Ctx) TransitionNode(node, state string) {
+func (c *Ctx) ImpactNodeTransition(node, state string) {
 	c.nodeOps = append(c.nodeOps, NodeOp{Op: "transition", Node: node, State: state, ProducedBy: c.job.Action})
 }
 
-// CancelCheckout drops the working version of a change impact; a creation cancelled before its first check-in removes
+// ImpactNodeCancel drops the working version of a change impact; a creation cancelled before its first check-in removes
 // the node (ADR 0076).
-func (c *Ctx) CancelCheckout(node string) {
+func (c *Ctx) ImpactNodeCancel(node string) {
 	c.nodeOps = append(c.nodeOps, NodeOp{Op: "cancel", Node: node, ProducedBy: c.job.Action})
 }
 
-// RemoveImpact takes a change impact out of the change: its working version is dropped (a creation never checked in
+// WithdrawImpact takes a change impact out of the change: its working version is dropped (a creation never checked in
 // leaves no node); refused once a version of it is checked in (ADR 0076).
-func (c *Ctx) RemoveImpact(node string) {
+func (c *Ctx) WithdrawImpact(node string) {
 	c.nodeOps = append(c.nodeOps, NodeOp{Op: "remove", Node: node, ProducedBy: c.job.Action})
 }
 

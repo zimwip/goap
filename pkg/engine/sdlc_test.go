@@ -158,7 +158,7 @@ func TestSDLCDelivery(t *testing.T) {
 		t.Fatalf("impact log: %d events, %v", len(evs), err)
 	}
 	for _, e := range evs {
-		if (e.Op == domain.ImpactDeclared || e.Op == domain.ImpactWritten) && e.Execution == "" {
+		if (e.Op == domain.ImpactProposed || e.Op.WritesPost()) && e.Execution == "" {
 			t.Fatalf("event %d (%s of %s) has no action run", e.Seq, e.Op, e.Impact)
 		}
 		if e.By != "dev" {

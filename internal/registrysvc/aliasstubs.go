@@ -128,7 +128,7 @@ func hasPendingStub(ctx context.Context, g StoreGraph, alias string) (bool, erro
 
 // createAliasStubs opens one platform-namespace change proposing a stub platform@LlmAlias node (name only, no
 // target) per alias a methodology needs, as pending change impacts: the administrator reviews them together. It never
-// calls Graph.Commit (which auto-accepts) nor ReviewNode/Apply: the change stays open and visible in the review queue
+// calls Graph.Commit (which auto-accepts) nor ImpactNodeReview/Apply: the change stays open and visible in the review queue
 // until an administrator reviews it.
 func createAliasStubs(ctx context.Context, g StoreGraph, aliases []string, methodologyName string) error {
 	head, err := g.BranchHead(ctx, llmcfg.NamespacePlatform, domain.MainBranch)
@@ -147,7 +147,7 @@ func createAliasStubs(ctx context.Context, g StoreGraph, aliases []string, metho
 	}
 	for _, alias := range aliases {
 		// a working version, checked out, its review proposed (ADR 0076): the change stays open
-		if _, err := g.CreateNode(ctx, c.ID, graph.NodeCreate{Key: llmcfg.AliasKey(alias), Type: llmcfg.NodeTypeAlias, Properties: map[string]any{"alias": alias},
+		if _, err := g.ImpactNodeCreate(ctx, c.ID, graph.NodeCreate{Key: llmcfg.AliasKey(alias), Type: llmcfg.NodeTypeAlias, Properties: map[string]any{"alias": alias},
 			Rationale: fmt.Sprintf("referenced by methodology %s but not configured yet", methodologyName), ProducedBy: "methodology-load"}); err != nil {
 			return err
 		}

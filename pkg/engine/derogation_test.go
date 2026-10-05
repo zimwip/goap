@@ -41,7 +41,7 @@ func TestDerogationReserveAndExpiry(t *testing.T) {
 	}
 
 	// no derogation: refused, nothing written
-	err = run(ctx, "check", "e2", `ctx.reviewNodeWithReserve("REQ-1", "DRG-1", "good enough");`)
+	err = run(ctx, "check", "e2", `ctx.impactNodeReviewWithReserve("REQ-1", "DRG-1", "good enough");`)
 	if err == nil || !strings.Contains(err.Error(), "no derogation DRG-1") {
 		t.Fatalf("a reserve without a derogation: %v", err)
 	}
@@ -59,17 +59,17 @@ func TestDerogationReserveAndExpiry(t *testing.T) {
 	}
 	expires := time.Now().Add(time.Hour).UTC().Format(time.RFC3339)
 	sign("DRG-1", "REQ-9", expires)
-	if err := run(ctx, "check", "e2", `ctx.reviewNodeWithReserve("REQ-1", "DRG-1", "good enough");`); err == nil {
+	if err := run(ctx, "check", "e2", `ctx.impactNodeReviewWithReserve("REQ-1", "DRG-1", "good enough");`); err == nil {
 		t.Fatal("a derogation on another target covers nothing")
 	}
 	sign("DRG-1", "REQ-1", expires)
 	// once it ran out it covers nothing either
 	e.now = func() time.Time { return time.Now().Add(2 * time.Hour) }
-	if err := run(ctx, "check", "e2", `ctx.reviewNodeWithReserve("REQ-1", "DRG-1", "good enough");`); err == nil {
+	if err := run(ctx, "check", "e2", `ctx.impactNodeReviewWithReserve("REQ-1", "DRG-1", "good enough");`); err == nil {
 		t.Fatal("an expired derogation covers nothing")
 	}
 	e.now = nil
-	if err := run(ctx, "check", "e2", `ctx.reviewNodeWithReserve("REQ-1", "DRG-1", "good enough");`); err != nil {
+	if err := run(ctx, "check", "e2", `ctx.impactNodeReviewWithReserve("REQ-1", "DRG-1", "good enough");`); err != nil {
 		t.Fatalf("with a derogation in force: %v", err)
 	}
 	bb, _ := g.Blackboard(ctx, c.ID)
@@ -104,7 +104,7 @@ func TestDerogationReserveAndExpiry(t *testing.T) {
 		t.Fatalf("closed once: %v", keys)
 	}
 	// the producer still may not verify its own effect
-	if err := run(ctx, "write", "e3", `ctx.reviewNode("REQ-1", true, "mine");`); err == nil {
+	if err := run(ctx, "write", "e3", `ctx.impactNodeReview("REQ-1", true, "mine");`); err == nil {
 		t.Fatal("independence survives the expiry")
 	}
 }

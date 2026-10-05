@@ -124,42 +124,42 @@ nodeTypes:
 		hdr.Set(identity.HeaderOrg, "acme")
 		hdr.Set(identity.HeaderRoles, roles)
 	}
-	ar := connect.NewRequest(&graphv1.AddChangeImpactsRequest{ChangeId: string(c.ID),
+	ar := connect.NewRequest(&graphv1.ProposeImpactRequest{ChangeId: string(c.ID),
 		Nodes: []*graphv1.ChangeImpact{{Intent: "modified", Pre: pbconv.RefToPB(ref), Rationale: "release"}}})
 	withRoles(ar.Header(), "contributor")
-	added, err := h.AddChangeImpacts(ctx, ar)
+	added, err := h.ProposeImpact(ctx, ar)
 	if err != nil {
 		t.Fatalf("anyone may propose the release: %v", err)
 	}
 	cnID := added.Msg.Nodes[0].Id
 	move := func(roles, state string) error {
-		r := connect.NewRequest(&graphv1.TransitionNodeRequest{ChangeId: string(c.ID), ChangeImpactId: cnID, State: state})
+		r := connect.NewRequest(&graphv1.ImpactNodeTransitionRequest{ChangeId: string(c.ID), ChangeImpactId: cnID, State: state})
 		withRoles(r.Header(), roles)
-		_, err := h.TransitionNode(ctx, r)
+		_, err := h.ImpactNodeTransition(ctx, r)
 		return err
 	}
 	// a transition is authorized for whoever takes it, when it is taken (ADR 0076)
 	if err := move("contributor", "draft"); err != nil {
 		t.Fatalf("a contributor may reopen: %v", err)
 	}
-	co := connect.NewRequest(&graphv1.CheckoutNodeRequest{ChangeId: string(c.ID), ChangeImpactId: cnID})
+	co := connect.NewRequest(&graphv1.ImpactNodeCheckoutRequest{ChangeId: string(c.ID), ChangeImpactId: cnID})
 	withRoles(co.Header(), "contributor")
-	if _, err := h.CheckoutNode(ctx, co); err != nil {
+	if _, err := h.ImpactNodeCheckout(ctx, co); err != nil {
 		t.Fatal(err)
 	}
-	up := connect.NewRequest(&graphv1.UpdateNodeRequest{ChangeId: string(c.ID), ChangeImpactId: cnID, Props: pbconv.Struct(map[string]any{"title": "b"})})
+	up := connect.NewRequest(&graphv1.ImpactNodeUpdateRequest{ChangeId: string(c.ID), ChangeImpactId: cnID, Props: pbconv.Struct(map[string]any{"title": "b"})})
 	withRoles(up.Header(), "contributor")
-	if _, err := h.UpdateNode(ctx, up); err != nil {
+	if _, err := h.ImpactNodeUpdate(ctx, up); err != nil {
 		t.Fatalf("a contributor may edit: %v", err)
 	}
-	rv := connect.NewRequest(&graphv1.ReviewChangeImpactRequest{ChangeId: string(c.ID), ChangeImpactId: cnID, Accept: true, Comment: "ok"})
+	rv := connect.NewRequest(&graphv1.ImpactNodeReviewRequest{ChangeId: string(c.ID), ChangeImpactId: cnID, Accept: true, Comment: "ok"})
 	withRoles(rv.Header(), "contributor")
-	if _, err := h.ReviewChangeImpact(ctx, rv); err != nil {
+	if _, err := h.ImpactNodeReview(ctx, rv); err != nil {
 		t.Fatal(err)
 	}
-	ci := connect.NewRequest(&graphv1.CheckinNodeRequest{ChangeId: string(c.ID), ChangeImpactId: cnID})
+	ci := connect.NewRequest(&graphv1.ImpactNodeCheckinRequest{ChangeId: string(c.ID), ChangeImpactId: cnID})
 	withRoles(ci.Header(), "contributor")
-	if _, err := h.CheckinNode(ctx, ci); err != nil {
+	if _, err := h.ImpactNodeCheckin(ctx, ci); err != nil {
 		t.Fatal(err)
 	}
 	if err := move("contributor", "released"); connect.CodeOf(err) != connect.CodePermissionDenied {
