@@ -9,22 +9,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/dsl"
 	"github.com/zimwip/goap/pkg/llm"
 	"github.com/zimwip/goap/pkg/mcp"
 	"github.com/zimwip/goap/pkg/methodology"
 )
-
-// ToolPort is the MCP hub seen by the engine (ADR 0019). Tools are those of the MCPs
-// the organization of the change binds; the call runs with the principal of ctx.
-type ToolPort interface {
-	// CallTool calls "<mcp>/<tool>" for an organization.
-	CallTool(ctx context.Context, org, name string, args map[string]any) (any, error)
-	// Tools lists the tools available to an organization and the MCPs it binds.
-	Tools(ctx context.Context, org string) ([]mcp.ToolInfo, []string, error)
-}
 
 // Host implements dsl.Host for one action execution: every call leaving the
 // script goes through it, is attributed to the process / agent / action and
@@ -96,7 +86,7 @@ func (h *Host) permitted(t mcp.ToolInfo) bool {
 // unitTools lists, once per action run, the tools the unit holding the change can call.
 func (h *Host) unitTools(ctx context.Context) ([]mcp.ToolInfo, error) {
 	h.toolsOnce.Do(func() {
-		h.allTools, _, h.toolsErr = h.e.Tools.Tools(authz.With(ctx, h.e.actor(h.process)), h.e.orgOf(h.process))
+		h.allTools, _, h.toolsErr = h.e.scope().Tools(ctx, h.e.ref(h.process))
 	})
 	return h.allTools, h.toolsErr
 }
@@ -163,7 +153,7 @@ func (h *Host) Complete(ctx context.Context, r dsl.CompleteRequest) (dsl.Complet
 // Tools lists the tools the action may call: those of the MCPs it or its agent declares that the
 // organization of the change binds, within the scope of each MCP.
 func (h *Host) Tools(ctx context.Context) ([]mcp.ToolInfo, error) {
-	if h.e.Tools == nil || len(h.mcps) == 0 {
+	if !h.e.scope().HasTools() || len(h.mcps) == 0 {
 		return nil, nil
 	}
 	all, err := h.unitTools(ctx)
@@ -194,7 +184,7 @@ func (h *Host) checkScope(ctx context.Context, name string) error {
 		}
 		return nil
 	}
-	return fmt.Errorf("tool %s is not available to %s (unbound or restricted)", name, h.e.orgOf(h.process))
+	return fmt.Errorf("tool %s is not available to %s (unbound or restricted)", name, h.e.ref(h.process).Org)
 }
 
 // CallTool implements dsl.Host.
@@ -208,15 +198,13 @@ func (h *Host) CallTool(ctx context.Context, name string, args map[string]any) (
 		err = splitErr
 	case !slices.Contains(h.mcps, mcpName):
 		err = fmt.Errorf("tool %s: action %s does not declare the MCP %s", name, h.action, mcpName)
-	case h.e.Tools == nil:
+	case !h.e.scope().HasTools():
 		err = fmt.Errorf("tool %s: no MCP hub configured", name)
 	default:
 		err = h.checkScope(ctx, name)
 	}
 	if err == nil {
-		// the built-in connectors act on the change of the process by default (ADR 0028)
-		call := mcp.WithCall(authz.With(ctx, h.e.actor(h.process)), mcp.CallContext{Change: string(h.process.ChangeID), Process: h.process.ID})
-		out, err = h.e.Tools.CallTool(call, h.e.orgOf(h.process), name, args)
+		out, err = h.e.scope().CallTool(ctx, h.e.ref(h.process), name, args)
 	}
 	end(err)
 	call := ToolCall{Name: name, DurationMs: time.Since(start).Milliseconds()}
@@ -235,7 +223,7 @@ func (h *Host) RunAgent(ctx context.Context, name, intentText string) (dsl.Agent
 	key := fmt.Sprintf("%s#%d:%s", h.action, h.calls, name)
 	h.calls++
 	h.mu.Unlock()
-	return h.e.runChild(authz.With(ctx, h.e.actor(h.process)), h, key, name, intentText)
+	return h.e.runChild(h.e.as(ctx, h.process), h, key, name, intentText)
 }
 
 func (h *Host) graph(ctx context.Context) ([]domain.Node, []domain.Link, error) {

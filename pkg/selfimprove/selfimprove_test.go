@@ -129,7 +129,7 @@ func setup(t *testing.T) (*engine.Engine, *graph.Graph, domain.BaselineID) {
 		},
 		Intent: intent.Resolver{Ranker: intent.Lexical{}},
 		Store:  engine.NewMemoryStore(),
-		Authz:  mustCasbin(t),
+		Scope:  engine.AuthzScope{Authz: mustCasbin(t)},
 	}
 	return e, g, b.ID
 }

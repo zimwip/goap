@@ -96,11 +96,10 @@ func main() {
 			methodology.KindBuiltin: builtins,
 			methodology.KindTool:    engine.ToolExecutor{},
 		},
-		Tools:     mcpsvc.NewClient(hc, platform.Env("GOAP_MCP_URL", "http://localhost:8085"), copts...),
 		Intent:    intent.Resolver{Ranker: ranker},
 		Store:     engine.NewMemoryStore(), // PostgreSQL store: milestone M1
 		Events:    publisher,
-		Authz:     authorizer,
+		Scope:     engine.AuthzScope{Authz: authorizer, Hub: mcpsvc.NewClient(hc, platform.Env("GOAP_MCP_URL", "http://localhost:8085"), copts...)},
 		LLM:       models,
 		Sandboxes: sandboxes,
 		Tracer:    telemetry.NewEngineTracer(),

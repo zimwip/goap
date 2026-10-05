@@ -8,7 +8,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/condition"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/dsl"
@@ -74,7 +73,7 @@ func runForeach(ctx context.Context, ac ActionContext, expr string) (ActionResul
 		seen[id] = true
 		streams = append(streams, stream{key: key, id: id, item: item})
 	}
-	actor := authz.With(ctx, e.actor(ac.Process))
+	actor := e.as(ctx, ac.Process)
 	var waitFor string
 	var methods []string
 	var failed []string
@@ -120,7 +119,7 @@ func runForeach(ctx context.Context, ac ActionContext, expr string) (ActionResul
 		if ac.Blackboard.Change.Intent != "" {
 			intent += "\n\n(change: " + ac.Blackboard.Change.Intent + ")"
 		}
-		res, err := e.runChildStep(actor, h, st.key, methodologyName, me.ActorAgent(), me.AgentGoal, intent, false, sc)
+		res, err := e.runChildStep(actor, h, st.key, methodologyName, me.ActorAgent(), me.AgentGoal, intent, sc)
 		switch {
 		case errors.Is(err, dsl.ErrSuspended):
 			if waitFor == "" {

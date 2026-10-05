@@ -104,9 +104,6 @@ func (e *Engine) Unblock(ctx context.Context, id string, req UnblockRequest) (*P
 
 // mayUnblock reports whether who answers for the run p.
 func (e *Engine) mayUnblock(ctx context.Context, p *Process, who authz.Principal) (bool, error) {
-	if e.Authz == nil {
-		return true, nil
-	}
 	// the initiator of the run, or of a run above it (the owner of the work)
 	for q, depth := p, 0; q != nil && depth < 16; depth++ {
 		if who.Subject != "" && q.Initiator.Subject == who.Subject {
