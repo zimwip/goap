@@ -8,7 +8,6 @@ import (
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/graph"
-	"github.com/zimwip/goap/pkg/mcp"
 )
 
 // AdminFloorValidator refuses a change that would leave the graph with no active administrator (ADR 0020's
@@ -30,8 +29,8 @@ func (AdminFloorValidator) Types() []string {
 func (AdminFloorValidator) Validate(ctx context.Context, q graph.ValidatorQuery, impacted []graph.ValidatedNode) error {
 	var nodes []domain.Node
 	var links []domain.Link
-	for _, typ := range []string{NodeTypeUser, NodeTypeAssignment, mcp.NodeTypeOrgUnit} {
-		ns, err := q.NodesOfType(ctx, mcp.NamespaceOrganisation, typ)
+	for _, typ := range []string{NodeTypeUser, NodeTypeAssignment, domain.TypeOrgUnit} {
+		ns, err := q.NodesOfType(ctx, domain.NamespaceOrganisation, typ)
 		if err != nil {
 			return err
 		}

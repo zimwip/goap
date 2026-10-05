@@ -701,15 +701,12 @@ type Algorithm struct {
 	state       protoimpl.MessageState `protogen:"open.v1"`
 	Name        string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	Description string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
-	// property_validator | transition_guard | transition_action | adapter
+	// property_validator | node_validator | transition_guard | transition_action
 	Type string `protobuf:"bytes,3,opt,name=type,proto3" json:"type,omitempty"`
 	// javascript | go
-	Language string            `protobuf:"bytes,4,opt,name=language,proto3" json:"language,omitempty"`
-	Code     string            `protobuf:"bytes,5,opt,name=code,proto3" json:"code,omitempty"`
-	Params   []*AlgorithmParam `protobuf:"bytes,6,rep,name=params,proto3" json:"params,omitempty"`
-	// adapters only: the MCP whose tools the code implements and the connector whose operations it calls
-	Mcp           string `protobuf:"bytes,7,opt,name=mcp,proto3" json:"mcp,omitempty"`
-	Connector     string `protobuf:"bytes,8,opt,name=connector,proto3" json:"connector,omitempty"`
+	Language      string            `protobuf:"bytes,4,opt,name=language,proto3" json:"language,omitempty"`
+	Code          string            `protobuf:"bytes,5,opt,name=code,proto3" json:"code,omitempty"`
+	Params        []*AlgorithmParam `protobuf:"bytes,6,rep,name=params,proto3" json:"params,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -784,20 +781,6 @@ func (x *Algorithm) GetParams() []*AlgorithmParam {
 		return x.Params
 	}
 	return nil
-}
-
-func (x *Algorithm) GetMcp() string {
-	if x != nil {
-		return x.Mcp
-	}
-	return ""
-}
-
-func (x *Algorithm) GetConnector() string {
-	if x != nil {
-		return x.Connector
-	}
-	return ""
 }
 
 // AlgorithmInstance sets the parameter values of an algorithm; it is what gets plugged.
@@ -7266,16 +7249,14 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\vdescription\x18\x03 \x01(\tR\vdescription\x12\x1a\n" +
 	"\brequired\x18\x04 \x01(\bR\brequired\x12;\n" +
 	"\rdefault_value\x18\x05 \x01(\v2\x16.google.protobuf.ValueR\fdefaultValue\x12\x16\n" +
-	"\x06values\x18\x06 \x03(\tR\x06values\"\xef\x01\n" +
+	"\x06values\x18\x06 \x03(\tR\x06values\"\xdb\x01\n" +
 	"\tAlgorithm\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x12\n" +
 	"\x04type\x18\x03 \x01(\tR\x04type\x12\x1a\n" +
 	"\blanguage\x18\x04 \x01(\tR\blanguage\x12\x12\n" +
 	"\x04code\x18\x05 \x01(\tR\x04code\x128\n" +
-	"\x06params\x18\x06 \x03(\v2 .goap.registry.v1.AlgorithmParamR\x06params\x12\x10\n" +
-	"\x03mcp\x18\a \x01(\tR\x03mcp\x12\x1c\n" +
-	"\tconnector\x18\b \x01(\tR\tconnector\"\x98\x01\n" +
+	"\x06params\x18\x06 \x03(\v2 .goap.registry.v1.AlgorithmParamR\x06paramsJ\x04\b\a\x10\bJ\x04\b\b\x10\tR\x03mcpR\tconnector\"\x98\x01\n" +
 	"\x11AlgorithmInstance\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x1c\n" +

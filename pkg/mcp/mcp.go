@@ -1,11 +1,7 @@
-// Package mcp holds the model of the tool layer, with no infrastructure dependency (ADR 0019).
-//
-//	MCP        generic usage of a tool by an LLM: name + tool signatures (document-repository: list, read, write)
-//	Connector  a separately deployed service wrapping a real API, exposing its own operations (localfs: list_dir, read_file, ...)
-//	AdapterDef code that implements the tools an MCP expects with the operations a connector exposes: an
-//	           AdapterDef node of the platform namespace (changed through a change), usage `adapter` of pkg/algo
-//	Adapter    the instance of an AdapterDef by an organisational unit, with its parameter values (Adapter node
-//	           of the organisation namespace)
+// Package mcp holds the definition of an MCP, the generic usage of a tool by an LLM: a name and tool
+// signatures (document-repository: list, read, write), with no infrastructure dependency (ADR 0019).
+// It knows no connector, no adapter and no organisation: the adapter, where they meet, is pkg/adapter
+// (ADR 0061); the schemas of the built-in MCPs are in pkg/mcpbuiltin.
 package mcp
 
 import (
@@ -13,65 +9,14 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
-	"slices"
 	"strings"
-
-	"github.com/zimwip/goap/pkg/algo"
-	"github.com/zimwip/goap/pkg/domain"
 )
 
-// Types and namespaces of the graph objects.
-const (
-	NamespacePlatform     = "platform"
-	NamespaceOrganisation = domain.NamespaceOrganisation
-	NodeTypeMCP           = "platform@MCP"
-	NodeTypeAdapter       = "organisation@Adapter"
-	NodeTypeAdapterDef    = "platform@AdapterDef"
-	NodeTypeOrgUnit       = domain.TypeOrgUnit
-	NodeTypeRole          = "platform@Role"
-	LinkPartOf            = domain.LinkPartOf
-)
+// NodeTypeMCP is the type of the node of an MCP (namespace platform).
+const NodeTypeMCP = "platform@MCP"
 
 // MCPKey is the key of the node of an MCP.
 func MCPKey(name string) string { return "MCP:" + name }
-
-// RoleKey is the key of the node of a built-in platform role (ADR 0046).
-func RoleKey(name string) string { return "ROLE:" + name }
-
-// Role is a built-in platform-wide role: granted by an organisation@Assignment naming no project
-// (assigns_org only), it holds everywhere, independent of any project's methodologies (ADR 0046). The node
-// is a fixed catalog entry (like an MCP), kept in sync with the code by SeedBuiltins; it documents the role
-// for the IDE, it is not consulted to decide what a role may do (that stays in authz.DefaultPolicies) or
-// whether an Assignment's roles are valid (not checked server-side, same as methodology roles, ADR 0043).
-type Role struct {
-	Name        string
-	Description string
-}
-
-// Props returns the properties of the Role node.
-func (r Role) Props() map[string]any {
-	m := map[string]any{"name": r.Name}
-	if r.Description != "" {
-		m["description"] = r.Description
-	}
-	return m
-}
-
-// BuiltinRoles are the platform roles shipped with the platform (ADR 0046, 0047). Administration ("admin",
-// access.RoleAdmin) is one of them: granted by a platform Assignment, checked by the compiled-in floor
-// policy (authz.FloorPolicies) ahead of every stored policy, so it can never be denied by one (ADR 0043).
-func BuiltinRoles() []Role {
-	return []Role{
-		{Name: "admin", Description: "Administers the platform: organisation, projects, methodologies, domains, policies, adapters, and everything else."},
-		{Name: "reader", Description: "Reads everything on the platform, past the usual organisation/project scoping."},
-	}
-}
-
-// AdapterDefKey is the key of the node of an adapter definition.
-func AdapterDefKey(name string) string { return "ADD:" + name }
-
-// AdapterKey is the key of the Adapter node of an MCP in a unit.
-func AdapterKey(unit, mcp string) string { return "ADP:" + unit + "/" + mcp }
 
 // ErrInvalid marks a malformed definition.
 var ErrInvalid = errors.New("invalid")
@@ -120,44 +65,6 @@ func ForActions(scope string) bool { return ScopeOf(scope) != ScopeAgent }
 
 // ForAgents reports whether an MCP of this scope may be declared by agents.
 func ForAgents(scope string) bool { return ScopeOf(scope) != ScopeAction }
-
-// AdapterDef defines an adapter: code that implements the tools of one MCP with the operations of one
-// connector, and the parameters an instance sets. It is an AdapterDef node of the "platform" namespace.
-type AdapterDef struct {
-	Name        string `json:"name"`
-	Description string `json:"description,omitempty"`
-	// MCP is the name of the MCP whose tools the code implements; Connector the id of the connector it calls.
-	MCP       string       `json:"mcp"`
-	Connector string       `json:"connector"`
-	Language  string       `json:"language"`
-	Code      string       `json:"code"`
-	Params    []algo.Param `json:"params,omitempty"`
-}
-
-// Adapter is the instance of an AdapterDef with the parameter values of one organisational unit: the one
-// place where unit, MCP and connector meet. The connector and the code come from the definition; the
-// unit gives the values (root directory, account, secret references). It is an Adapter node of the
-// "organisation" namespace linked to its unit by `owner`.
-type Adapter struct {
-	// Unit is the key of the OrgUnit the adapter belongs to (from its `owner` link).
-	Unit string `json:"unit,omitempty"`
-	// MCP is the name of the MCP of the platform namespace (the definition implements the same).
-	MCP string `json:"mcp"`
-	// Adapter is the name of the AdapterDef.
-	Adapter string `json:"adapter"`
-	// Params are the parameter values (secrets as references).
-	Params map[string]any `json:"params,omitempty"`
-	// Restrictions of the MCP for the unit and its sub-units (ADR 0028). They add up along the unit
-	// chain: a unit can narrow what its ancestors allow, never widen it. An instance may only restrict
-	// (no Adapter): the implementation is then the one of the nearest ancestor.
-	//
-	// Disabled removes the MCP; Tools, when not empty, lists the only tools allowed; Deny lists
-	// tools refused; ReadOnly keeps only the tools marked read-only.
-	Disabled bool     `json:"disabled,omitempty"`
-	Tools    []string `json:"tools,omitempty"`
-	Deny     []string `json:"deny,omitempty"`
-	ReadOnly bool     `json:"readOnly,omitempty"`
-}
 
 // ToolInfo is a tool available to an organization, under its qualified name.
 type ToolInfo struct {
@@ -217,75 +124,6 @@ func (d Def) Tool(name string) (Tool, bool) {
 	return Tool{}, false
 }
 
-// Validate checks the instance against the MCP it says it implements: an instance names an adapter
-// definition unless it only restricts the MCP, and restricts only tools the MCP has.
-func (a Adapter) Validate(def Def) error {
-	if a.MCP != def.Name {
-		return fmt.Errorf("adapter of %s validated against %s: %w", a.MCP, def.Name, ErrInvalid)
-	}
-	if a.Adapter == "" && !a.Restricts() {
-		return fmt.Errorf("adapter %s: name an adapter definition or restrict the MCP: %w", a.MCP, ErrInvalid)
-	}
-	if a.Adapter != "" && !ValidName(a.Adapter) {
-		return fmt.Errorf("adapter %s: adapter must be the lowercase name of an adapter definition: %w", a.MCP, ErrInvalid)
-	}
-	for _, t := range append(slices.Clone(a.Tools), a.Deny...) {
-		if _, ok := def.Tool(t); !ok {
-			return fmt.Errorf("adapter %s: the MCP has no tool %q: %w", a.MCP, t, ErrInvalid)
-		}
-	}
-	return nil
-}
-
-// Implements reports whether the instance names an adapter definition (else it only restricts).
-func (a Adapter) Implements() bool { return a.Adapter != "" }
-
-// Restricts reports whether the instance restricts the MCP.
-func (a Adapter) Restricts() bool {
-	return a.Disabled || len(a.Tools) > 0 || len(a.Deny) > 0 || a.ReadOnly
-}
-
-// Algorithm is the definition as an algorithm of usage adapter.
-func (d AdapterDef) Algorithm() algo.Algorithm {
-	return algo.Algorithm{Name: d.Name, Description: d.Description, Type: algo.UsageAdapter, Language: d.Language, Code: d.Code,
-		Params: d.Params, MCP: d.MCP, Connector: d.Connector}
-}
-
-// Validate checks a definition (not its script: pkg/dsl compiles it).
-func (d AdapterDef) Validate() error {
-	if !ValidName(d.Name) {
-		return fmt.Errorf("adapter definition name %q must match %s: %w", d.Name, nameRE, ErrInvalid)
-	}
-	if issues := d.Algorithm().Issues(); len(issues) > 0 {
-		return fmt.Errorf("adapter definition %s: %s: %w", d.Name, issues[0], ErrInvalid)
-	}
-	return nil
-}
-
-// Props returns the properties of the AdapterDef node.
-func (d AdapterDef) Props() map[string]any {
-	var m map[string]any
-	_ = viaJSON(d, &m)
-	return m
-}
-
-// AdapterDefFromProps reads an adapter definition from the properties of its node.
-func AdapterDefFromProps(props map[string]any) (AdapterDef, error) {
-	var d AdapterDef
-	if err := viaJSON(props, &d); err != nil {
-		return d, fmt.Errorf("adapter definition node: %w: %w", err, ErrInvalid)
-	}
-	return d, nil
-}
-
-func viaJSON(from, to any) error {
-	b, err := json.Marshal(from)
-	if err != nil {
-		return err
-	}
-	return json.Unmarshal(b, to)
-}
-
 // Props returns the properties of the MCP node.
 func (d Def) Props() map[string]any {
 	var m map[string]any
@@ -302,24 +140,6 @@ func DefFromProps(props map[string]any) (Def, error) {
 	return d, nil
 }
 
-// Props returns the properties of the Adapter node (the unit is carried by its owner link).
-func (a Adapter) Props() map[string]any {
-	a.Unit = ""
-	var m map[string]any
-	_ = viaJSON(a, &m)
-	return m
-}
-
-// AdapterFromProps reads an adapter instance from the properties of its node and the unit that owns it.
-func AdapterFromProps(unit string, props map[string]any) (Adapter, error) {
-	var a Adapter
-	if err := viaJSON(props, &a); err != nil {
-		return a, fmt.Errorf("adapter node: %w: %w", err, ErrInvalid)
-	}
-	a.Unit = unit
-	return a, nil
-}
-
 // CheckArgs checks the arguments of a call against the tool's input schema: the required
 // properties must be present.
 func (t Tool) CheckArgs(args map[string]any) error {
@@ -332,4 +152,12 @@ func (t Tool) CheckArgs(args map[string]any) error {
 		}
 	}
 	return nil
+}
+
+func viaJSON(from, to any) error {
+	b, err := json.Marshal(from)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(b, to)
 }

@@ -108,13 +108,11 @@ func (a *AdapterCtx) Log(msg string)   { a.c.Log(msg) }
 func (a *AdapterCtx) Warn(msg string)  { a.c.Warn(msg) }
 func (a *AdapterCtx) logf(l, m string) { a.c.logf(l, m) }
 
-// RunAdapter runs a bound adapter. The error is a failure of the script itself (does not
+// RunAdapter runs a bound adapter (its Type is not used: the caller, pkg/adapter's Def, owns the usage).
+// The error is a failure of the script itself (does not
 // compile, throws, times out, a connector call failed and was not caught); a rejection by
 // the script is in Outcome.Failures. b.Params must hold the non-secret parameter values.
 func RunAdapter(ctx context.Context, b algo.Bound, in AdapterInput) (AdapterOutcome, error) {
-	if b.Type != algo.UsageAdapter {
-		return AdapterOutcome{}, fmt.Errorf("algorithm %s: type %q is not an adapter", b.Instance, b.Type)
-	}
 	ctx, cancel := context.WithTimeout(ctx, AdapterTimeout)
 	defer cancel()
 	c := &common{b: b}

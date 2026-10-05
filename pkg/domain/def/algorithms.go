@@ -30,10 +30,6 @@ func (s Schema) checkAlgorithms(prefix string, add func(path, format string, arg
 	algs := map[string]algo.Algorithm{}
 	for i, a := range s.Algorithms {
 		path := fmt.Sprintf(prefix+"algorithms[%d]", i)
-		if a.Type == algo.UsageAdapter {
-			add(path+".type", "adapters are not declared in a domain: they are AdapterDef nodes of the platform namespace, changed through a change (ADR 0019)")
-			continue
-		}
 		for _, msg := range a.Issues() {
 			add(path, "%s", msg)
 		}

@@ -28,6 +28,7 @@ import (
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/engine"
 	"github.com/zimwip/goap/pkg/mcp"
+	"github.com/zimwip/goap/pkg/mcpbuiltin"
 )
 
 // Version is the version the built-in connectors announce.
@@ -58,14 +59,14 @@ type Ports struct {
 func Connectors(p Ports) map[string]connectorkit.Connector {
 	out := map[string]connectorkit.Connector{}
 	if p.Graph != nil {
-		out[mcp.BuiltinGraph] = Graph{p}
-		out[mcp.BuiltinChange] = Change{p}
+		out[mcpbuiltin.Graph] = Graph{p}
+		out[mcpbuiltin.Change] = Change{p}
 	}
 	if p.Engine != nil {
-		out[mcp.BuiltinScheduler] = Scheduler{p}
+		out[mcpbuiltin.Scheduler] = Scheduler{p}
 	}
 	if p.Hub != nil && p.Registry != nil && p.Graph != nil {
-		out[mcp.BuiltinAdmin] = Admin{p}
+		out[mcpbuiltin.Admin] = Admin{p}
 	}
 	return out
 }

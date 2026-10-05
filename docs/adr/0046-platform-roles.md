@@ -19,7 +19,7 @@ administration itself into a general mechanism.
 ## Decision
 
 - **A platform role is a fixed, built-in catalog entry of the platform namespace** (`platform@Role`,
-  `pkg/mcp.BuiltinRoles`, today just "reader"; `access.RoleReader` names it for the ABAC rules, `access.
+  `access.BuiltinRoles`, today just "reader"; `access.RoleReader` names it for the ABAC rules, `access.
   PlatformRoles` lists the grantable names). `SeedBuiltins` keeps its node in sync with the code at every start,
   the same way it does for the built-in MCPs (ADR 0028) — unlike `methodology@Role`, there is no registry version
   for it, it ships with the platform. The node documents the role for the IDE; it is not consulted to decide what
@@ -56,7 +56,7 @@ administration itself into a general mechanism.
 
 - A project needing no methodology-specific role (a holding area, a project still being set up) is no longer a
   trap: a platform role reaches it like it reaches everything else.
-- Platform roles stay a short, built-in catalog curated in code (`pkg/mcp.BuiltinRoles`), not something a
+- Platform roles stay a short, built-in catalog curated in code (`access.BuiltinRoles`), not something a
   methodology or a project can extend — deliberately narrower than `methodology@Role`, to keep "what a role can
   do platform-wide" reviewable in one place rather than spread across methodologies.
 - A policy wanting a platform role scoped to particular projects writes that scoping itself (reads the project's

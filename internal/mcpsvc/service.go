@@ -9,6 +9,7 @@ import (
 
 	connectorv1 "github.com/zimwip/goap/gen/goap/connector/v1"
 	"github.com/zimwip/goap/internal/pbconv"
+	"github.com/zimwip/goap/pkg/adapter"
 	"github.com/zimwip/goap/pkg/algo"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/dsl"
@@ -87,23 +88,23 @@ func (s *Service) Connectors(ctx context.Context) ([]ConnectorView, error) {
 
 func (s *Service) live(r ConnectorReg) bool { return s.now().Sub(r.LastSeen) <= s.lease() }
 
-// adapterAlgorithm returns the definition an adapter instance refers to, as an algorithm, and checks
-// that it implements the MCP the instance says it does.
-func adapterAlgorithm(snap *Snapshot, a mcp.Adapter) (algo.Algorithm, error) {
+// adapterDef returns the definition an adapter instance refers to and checks that it implements the MCP
+// the instance says it does.
+func adapterDef(snap *Snapshot, a adapter.Instance) (adapter.Def, error) {
 	def, ok := snap.AdapterDef(a.Adapter)
 	if !ok {
-		return algo.Algorithm{}, fmt.Errorf("adapter of %s in %s: no adapter definition %q (declare it in the platform namespace): %w", a.MCP, a.Unit, a.Adapter, ErrAdapterDef)
+		return adapter.Def{}, fmt.Errorf("adapter of %s in %s: no adapter definition %q (declare it in the platform namespace): %w", a.MCP, a.Unit, a.Adapter, ErrAdapterDef)
 	}
 	if def.MCP != a.MCP {
-		return algo.Algorithm{}, fmt.Errorf("adapter definition %s implements the MCP %s, not %s: %w", def.Name, def.MCP, a.MCP, ErrAdapterDef)
+		return adapter.Def{}, fmt.Errorf("adapter definition %s implements the MCP %s, not %s: %w", def.Name, def.MCP, a.MCP, ErrAdapterDef)
 	}
-	return def.Algorithm(), nil
+	return def, nil
 }
 
 // CheckAdapter validates an adapter instance before it is saved: the MCP and the algorithm must
 // exist and match, and the parameter values must fit the algorithm (errors); what does not match the
 // connector currently registered is reported as warnings.
-func (s *Service) CheckAdapter(ctx context.Context, a mcp.Adapter) (warnings []string, err error) {
+func (s *Service) CheckAdapter(ctx context.Context, a adapter.Instance) (warnings []string, err error) {
 	snap, err := s.Directory.Snapshot(ctx)
 	if err != nil {
 		return nil, err
@@ -122,17 +123,16 @@ func (s *Service) CheckAdapter(ctx context.Context, a mcp.Adapter) (warnings []s
 		}
 		return warnings, nil
 	}
-	alg, err := adapterAlgorithm(snap, a)
+	alg, err := adapterDef(snap, a)
 	if errors.Is(err, ErrAdapterDef) {
 		return nil, fmt.Errorf("%v: %w", err, mcp.ErrInvalid)
 	} else if err != nil {
 		return nil, err
 	}
-	vals, issues := alg.Resolve(a.Params)
+	_, secrets, issues := alg.Resolve(a.Params)
 	if len(issues) > 0 {
 		return nil, fmt.Errorf("adapter %s: %s: %w", a.Adapter, issues[0], mcp.ErrInvalid)
 	}
-	_, secrets := alg.Split(vals)
 	for name, ref := range secrets {
 		if !strings.HasPrefix(ref, "env:") && !strings.Contains(ref, "#") {
 			warnings = append(warnings, fmt.Sprintf("secret %s: %q is neither env:<VAR> nor <vault path>#<field>", name, ref))
@@ -167,11 +167,11 @@ func (s *Service) Template(ctx context.Context, mcpName, connector string) (code
 	if err != nil {
 		return "", nil, err
 	}
-	var ops []mcp.Operation
+	var ops []adapter.Operation
 	for _, o := range reg.Info.Operations {
-		ops = append(ops, mcp.Operation{Name: o.Name, Description: o.Description, InputSchema: pbconv.Map(o.InputSchema)})
+		ops = append(ops, adapter.Operation{Name: o.Name, Description: o.Description, InputSchema: pbconv.Map(o.InputSchema)})
 	}
-	return mcp.AdapterTemplate(def, connector, ops), mcp.AdapterParams(pbconv.Map(reg.Info.ConfigSchema), reg.Info.SecretNames), nil
+	return adapter.Template(def, connector, ops), adapter.Params(pbconv.Map(reg.Info.ConfigSchema), reg.Info.SecretNames), nil
 }
 
 // Tool is a tool available to a unit.
@@ -198,12 +198,12 @@ func (s *Service) MCPs(ctx context.Context) ([]mcp.Def, error) {
 
 // ConnectorOf returns the id of the connector an adapter instance calls (from its definition), or ""
 // when it cannot be resolved.
-func (s *Service) ConnectorOf(ctx context.Context, a mcp.Adapter) string {
+func (s *Service) ConnectorOf(ctx context.Context, a adapter.Instance) string {
 	snap, err := s.Directory.Snapshot(ctx)
 	if err != nil {
 		return ""
 	}
-	if alg, err := adapterAlgorithm(snap, a); err == nil {
+	if alg, err := adapterDef(snap, a); err == nil {
 		return alg.Connector
 	}
 	return ""
@@ -263,17 +263,16 @@ func (s *Service) Call(ctx context.Context, org, name string, args map[string]an
 	}
 	// connectors of the platform itself read what the call runs for (ADR 0028)
 	ctx = mcp.WithCall(ctx, mcp.CallContext{Unit: domain.OrgOf(org)})
-	alg, err := adapterAlgorithm(snap, a)
+	alg, err := adapterDef(snap, a)
 	if errors.Is(err, ErrAdapterDef) {
 		return nil, fmt.Errorf("%v: %w", err, ErrUnavailable)
 	} else if err != nil {
 		return nil, err
 	}
-	vals, issues := alg.Resolve(a.Params)
+	config, secretRefs, issues := alg.Resolve(a.Params)
 	if len(issues) > 0 {
 		return nil, fmt.Errorf("adapter of %s in %s: %s: %w", mcpName, a.Unit, issues[0], mcp.ErrInvalid)
 	}
-	config, secretRefs := alg.Split(vals)
 	reg, err := s.Store.Connector(ctx, alg.Connector)
 	if errors.Is(err, ErrNotFound) {
 		return nil, fmt.Errorf("connector %s is not registered: %w", alg.Connector, ErrUnavailable)
@@ -304,7 +303,7 @@ func (s *Service) Call(ctx context.Context, org, name string, args map[string]an
 		}
 		return pbconv.Map(resp.Result), nil
 	}
-	bound := algo.Bound{Instance: mcp.AdapterKey(a.Unit, a.MCP), Algorithm: alg.Name, Type: algo.UsageAdapter, Language: alg.Language, Code: alg.Code, Params: config}
+	bound := algo.Bound{Instance: adapter.Key(a.Unit, a.MCP), Algorithm: alg.Name, Language: alg.Language, Code: alg.Code, Params: config}
 	out, err := dsl.RunAdapter(ctx, bound, dsl.AdapterInput{Tool: tool, Args: args, Operations: ops, Call: call})
 	switch {
 	case transport != nil:
@@ -322,7 +321,7 @@ func (s *Service) Call(ctx context.Context, org, name string, args map[string]an
 
 // resolveSecrets resolves the secret parameters of an adapter instance; only the secrets the
 // connector declares leave the hub.
-func (s *Service) resolveSecrets(ctx context.Context, a mcp.Adapter, refs map[string]string, info *connectorv1.ConnectorInfo) (map[string]string, error) {
+func (s *Service) resolveSecrets(ctx context.Context, a adapter.Instance, refs map[string]string, info *connectorv1.ConnectorInfo) (map[string]string, error) {
 	out := map[string]string{}
 	for _, name := range info.SecretNames {
 		ref, ok := refs[name]

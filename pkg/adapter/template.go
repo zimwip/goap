@@ -1,4 +1,4 @@
-package mcp
+package adapter
 
 import (
 	"fmt"
@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/zimwip/goap/pkg/algo"
+	"github.com/zimwip/goap/pkg/mcp"
 )
 
 // Operation is an operation a connector exposes.
@@ -49,12 +50,12 @@ func closestOperation(tool string, ops []Operation) (Operation, bool) {
 
 func jsString(s string) string { return fmt.Sprintf("%q", s) }
 
-// AdapterTemplate generates the skeleton of the JavaScript of an adapter from the definition of
+// Template generates the skeleton of the JavaScript of an adapter from the definition of
 // the MCP (one case per tool it expects) and the operations of the connector (the ones the code
 // can call): each tool is mapped onto the operation that looks closest, with the arguments the
 // tool receives, or left as a TODO. The author completes the mapping (renaming, reshaping the
 // arguments and the result, several calls).
-func AdapterTemplate(def Def, connector string, ops []Operation) string {
+func Template(def mcp.Def, connector string, ops []Operation) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "// Adapter of the MCP %s on the connector %s.\n", def.Name, connector)
 	b.WriteString("// ctx.tool() is the tool called and ctx.args() its arguments; ctx.param(name) reads a parameter of the\n")
@@ -89,10 +90,10 @@ func AdapterTemplate(def Def, connector string, ops []Operation) string {
 	return b.String()
 }
 
-// AdapterParams derives the parameters of an adapter from what the connector announces: one
+// Params derives the parameters of an adapter from what the connector announces: one
 // per property of its configuration schema (the connector receives them as its configuration,
 // under the same name) and one secret per secret name.
-func AdapterParams(configSchema map[string]any, secretNames []string) []algo.Param {
+func Params(configSchema map[string]any, secretNames []string) []algo.Param {
 	required := map[string]bool{}
 	if req, ok := configSchema["required"].([]any); ok {
 		for _, r := range req {
@@ -125,7 +126,7 @@ func AdapterParams(configSchema map[string]any, secretNames []string) []algo.Par
 		out = append(out, p)
 	}
 	for _, s := range secretNames {
-		out = append(out, algo.Param{Name: s, Type: algo.ParamSecret, Required: true, Description: "reference of the secret " + s + " (<vault path>#<field> or env:<VAR>)"})
+		out = append(out, algo.Param{Name: s, Type: ParamSecret, Required: true, Description: "reference of the secret " + s + " (<vault path>#<field> or env:<VAR>)"})
 	}
 	return out
 }

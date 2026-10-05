@@ -64,6 +64,13 @@ const DefaultNamespace = "default"
 // configuration (built-in domain platform).
 const NamespacePlatform = "platform"
 
+// The node types of the adapter, the meeting point of organisation, MCP and connector (pkg/adapter, ADR 0019): the
+// definition is a node of the platform namespace, the instance a node of the organisation namespace held by a unit.
+const (
+	TypeAdapterDef = "platform@AdapterDef"
+	TypeAdapter    = "organisation@Adapter"
+)
+
 // NamespaceOf returns ns, defaulting to DefaultNamespace.
 func NamespaceOf(ns string) string {
 	if ns == "" {

@@ -99,7 +99,7 @@ different applicable roles depending on which project the work belongs to.
 
 ## Known limitation
 
-- **OrgUnit-side action restriction** on a project (mirroring `mcp.Restriction`'s `disabled`/`tools`/
+- **OrgUnit-side action restriction** on a project (mirroring `adapter.Restriction`'s `disabled`/`tools`/
   `deny`/`readOnly` shape, ADR 0028) is not implemented: an `Assignment` grants roles but cannot yet narrow
   which actions a unit may run locally within a project.
 

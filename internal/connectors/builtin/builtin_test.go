@@ -16,11 +16,13 @@ import (
 	"github.com/zimwip/goap/internal/identity"
 	"github.com/zimwip/goap/internal/mcpsvc"
 	"github.com/zimwip/goap/pkg/access"
+	"github.com/zimwip/goap/pkg/adapter"
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/domain/def"
 	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/mcp"
+	"github.com/zimwip/goap/pkg/mcpbuiltin"
 	"github.com/zimwip/goap/pkg/methodology"
 	"github.com/zimwip/goap/pkg/typecat"
 )
@@ -131,7 +133,7 @@ func keys(list any) []string {
 // The operations of each built-in connector are the tools of the built-in MCP of the same name.
 func TestConnectorsImplementTheBuiltinMCPs(t *testing.T) {
 	cs := builtin.Connectors(builtin.Ports{Graph: &graph.Graph{}, Engine: &fakeEngine{}, Hub: &mcpsvc.Service{}, Registry: fakeRegistry{}})
-	for _, d := range mcp.BuiltinDefs() {
+	for _, d := range mcpbuiltin.Defs() {
 		c, ok := cs[d.Name]
 		if !ok || c.Info().Id != d.Name {
 			t.Fatalf("no connector %s", d.Name)
@@ -154,13 +156,13 @@ func TestEveryUnitGetsTheBuiltins(t *testing.T) {
 	p := newPlatform(t)
 	for _, unit := range []string{"ORG-CHECKOUT", "ORG-ACME", "", "ORG-UNKNOWN"} {
 		_, mcps, err := p.hub.Tools(context.Background(), unit)
-		if err != nil || !slices.Equal(mcps, []string{mcp.BuiltinAdmin, mcp.BuiltinChange, mcp.BuiltinGraph, mcp.BuiltinScheduler}) {
+		if err != nil || !slices.Equal(mcps, []string{mcpbuiltin.Admin, mcpbuiltin.Change, mcpbuiltin.Graph, mcpbuiltin.Scheduler}) {
 			t.Fatalf("%q: mcps %v, %v", unit, mcps, err)
 		}
 	}
 	tools, _, _ := p.hub.Tools(context.Background(), "ORG-CHECKOUT")
 	for _, tl := range tools {
-		if m, _, _ := mcp.SplitTool(tl.Name); (m == mcp.BuiltinScheduler) != (tl.Scope == mcp.ScopeAgent) {
+		if m, _, _ := mcp.SplitTool(tl.Name); (m == mcpbuiltin.Scheduler) != (tl.Scope == mcp.ScopeAgent) {
 			t.Fatalf("%s has scope %s", tl.Name, tl.Scope)
 		}
 	}
@@ -508,17 +510,17 @@ func TestChangeToolsKeepTheAccessGate(t *testing.T) {
 func TestChangeToolsGateEveryAccessType(t *testing.T) {
 	p := newPlatform(t)
 	ctx := context.Background()
-	if err := graphsvc.SeedAdapter(ctx, p.g, mcp.Adapter{Unit: "ORG-CRM", MCP: mcp.BuiltinChange}); err != nil {
+	if err := graphsvc.SeedAdapter(ctx, p.g, adapter.Instance{Unit: "ORG-CRM", MCP: mcpbuiltin.Change}); err != nil {
 		t.Fatal(err)
 	}
 	asgKey := access.PlatformAssignmentKey("ORG-CHECKOUT")
-	_, err := p.g.Commit(ctx, graph.Commit{Namespace: mcp.NamespaceOrganisation, Title: "Assignment", Intent: "Assignment", By: "test", Edits: []graph.NodeEdit{{
+	_, err := p.g.Commit(ctx, graph.Commit{Namespace: domain.NamespaceOrganisation, Title: "Assignment", Intent: "Assignment", By: "test", Edits: []graph.NodeEdit{{
 		Key: asgKey, Type: access.NodeTypeAssignment, Props: access.Assignment{Roles: []string{access.RoleReader}}.Props(), Rationale: "seed",
 		Links: []graph.LinkEdit{{Type: access.LinkAssignsOrg, ToKey: "ORG-CHECKOUT"}}}}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	existing := map[string]string{asgKey: access.NodeTypeAssignment, "ORG-CHECKOUT": mcp.NodeTypeOrgUnit, domain.DefaultProject: access.NodeTypeProjectUnit, mcp.AdapterKey("ORG-CRM", mcp.BuiltinChange): mcp.NodeTypeAdapter}
+	existing := map[string]string{asgKey: access.NodeTypeAssignment, "ORG-CHECKOUT": domain.TypeOrgUnit, domain.DefaultProject: access.NodeTypeProjectUnit, adapter.Key("ORG-CRM", mcpbuiltin.Change): domain.TypeAdapter}
 	denied := func(err error) bool { return err != nil && strings.Contains(err.Error(), "may not write policy") }
 	alice := as("alice", "ORG-CHECKOUT", "contributor")
 	open := func() any {
@@ -548,10 +550,10 @@ func TestChangeToolsGateEveryAccessType(t *testing.T) {
 // A unit restricts a built-in MCP for itself and its sub-units: goap-change read-only for the CRM team.
 func TestUnitRestrictsABuiltin(t *testing.T) {
 	p := newPlatform(t)
-	if err := graphsvc.SeedAdapter(context.Background(), p.g, mcp.Adapter{Unit: "ORG-CRM", MCP: mcp.BuiltinChange, ReadOnly: true}); err != nil {
+	if err := graphsvc.SeedAdapter(context.Background(), p.g, adapter.Instance{Unit: "ORG-CRM", MCP: mcpbuiltin.Change, ReadOnly: true}); err != nil {
 		t.Fatal(err)
 	}
-	if err := graphsvc.SeedAdapter(context.Background(), p.g, mcp.Adapter{Unit: "ORG-DIGITAL", MCP: mcp.BuiltinAdmin, Disabled: true}); err != nil {
+	if err := graphsvc.SeedAdapter(context.Background(), p.g, adapter.Instance{Unit: "ORG-DIGITAL", MCP: mcpbuiltin.Admin, Disabled: true}); err != nil {
 		t.Fatal(err)
 	}
 	tools, mcps, err := p.hub.Tools(context.Background(), "ORG-CRM")
@@ -560,11 +562,11 @@ func TestUnitRestrictsABuiltin(t *testing.T) {
 	}
 	var change []string
 	for _, tl := range tools {
-		if m, name, _ := mcp.SplitTool(tl.Name); m == mcp.BuiltinChange {
+		if m, name, _ := mcp.SplitTool(tl.Name); m == mcpbuiltin.Change {
 			change = append(change, name)
 		}
 	}
-	if !slices.Equal(change, []string{"read", "list", "validate", "options", "compare", "decisions", "brief", "trace", "risks"}) || slices.Contains(mcps, mcp.BuiltinAdmin) {
+	if !slices.Equal(change, []string{"read", "list", "validate", "options", "compare", "decisions", "brief", "trace", "risks"}) || slices.Contains(mcps, mcpbuiltin.Admin) {
 		t.Fatalf("ORG-CRM: goap-change tools %v, mcps %v", change, mcps)
 	}
 	ctx := as("carol", "ORG-CRM", "contributor")
@@ -572,7 +574,7 @@ func TestUnitRestrictsABuiltin(t *testing.T) {
 		t.Fatalf("restricted tool called: %v", err)
 	}
 	// siblings keep everything but the admin MCP their direction disabled; the company keeps all
-	if _, mcps, _ := p.hub.Tools(context.Background(), "ORG-CHECKOUT"); slices.Contains(mcps, mcp.BuiltinAdmin) || !slices.Contains(mcps, mcp.BuiltinChange) {
+	if _, mcps, _ := p.hub.Tools(context.Background(), "ORG-CHECKOUT"); slices.Contains(mcps, mcpbuiltin.Admin) || !slices.Contains(mcps, mcpbuiltin.Change) {
 		t.Fatalf("ORG-CHECKOUT: %v", mcps)
 	}
 	if _, mcps, _ := p.hub.Tools(context.Background(), "ORG-ACME"); len(mcps) != 4 {
@@ -582,7 +584,7 @@ func TestUnitRestrictsABuiltin(t *testing.T) {
 	out := p.call(t, as("root", "ORG-ACME", "admin"), "ORG-ACME", "goap-admin/mcps", map[string]any{"unit": "ORG-CRM"})
 	for _, m := range out["mcps"].([]any) {
 		m := m.(map[string]any)
-		if m["mcp"] == mcp.BuiltinChange && (len(m["tools"].([]any)) != 9 || m["restrictedBy"].([]any)[0] != "ORG-CRM" || m["definedIn"] != domain.DefaultOrg) {
+		if m["mcp"] == mcpbuiltin.Change && (len(m["tools"].([]any)) != 9 || m["restrictedBy"].([]any)[0] != "ORG-CRM" || m["definedIn"] != domain.DefaultOrg) {
 			t.Fatalf("goap-change for ORG-CRM = %v", m)
 		}
 	}

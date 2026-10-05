@@ -18,7 +18,6 @@ import (
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/graph"
-	"github.com/zimwip/goap/pkg/mcp"
 )
 
 // Personal changes (ADR 0037): a change held by the personal unit of a person (USR:<subject>) belongs to that
@@ -79,7 +78,7 @@ func EnsureUser(ctx context.Context, g *graph.Graph, subject string) error {
 	}
 	key := access.UserKey(subject)
 	exists := func() (bool, error) {
-		_, err := g.NodeByKey(ctx, mcp.NamespaceOrganisation, key)
+		_, err := g.NodeByKey(ctx, domain.NamespaceOrganisation, key)
 		if errors.Is(err, graph.ErrNotFound) {
 			return false, nil
 		}
@@ -115,7 +114,7 @@ func createUser(ctx context.Context, g *graph.Graph, subject string) error {
 	if err != nil {
 		return err
 	}
-	existing, err := g.NodesOfType(ctx, mcp.NamespaceOrganisation, access.NodeTypeUser)
+	existing, err := g.NodesOfType(ctx, domain.NamespaceOrganisation, access.NodeTypeUser)
 	if err != nil {
 		return err
 	}
@@ -142,7 +141,7 @@ func createUser(ctx context.Context, g *graph.Graph, subject string) error {
 	// or project yet, so running this under their own identity would make TransitionAuthorizer deny its own
 	// activation for every single new user. It runs as the system principal (ADR 0048, lifecycle.go's
 	// TransitionAuthorizer).
-	return applyOn(System(ctx), g, mcp.NamespaceOrganisation, "User "+subject, edits)
+	return applyOn(System(ctx), g, domain.NamespaceOrganisation, "User "+subject, edits)
 }
 
 // NewUserUnit returns the organisational unit new users join (ADR 0042): the waiting unit, an OrgUnit an
@@ -151,7 +150,7 @@ func createUser(ctx context.Context, g *graph.Graph, subject string) error {
 // smallest key wins, so the answer stays deterministic until someone clears the extra one. Read against live
 // state, like the rest of EnsureUser: a flag moved by a change is seen at once.
 func NewUserUnit(ctx context.Context, g *graph.Graph) (domain.Node, error) {
-	units, err := g.NodesOfType(ctx, mcp.NamespaceOrganisation, mcp.NodeTypeOrgUnit)
+	units, err := g.NodesOfType(ctx, domain.NamespaceOrganisation, domain.TypeOrgUnit)
 	if err != nil {
 		return domain.Node{}, err
 	}
@@ -164,7 +163,7 @@ func NewUserUnit(ctx context.Context, g *graph.Graph) (domain.Node, error) {
 	if found != nil {
 		return *found, nil
 	}
-	return g.NodeByKey(ctx, mcp.NamespaceOrganisation, domain.DefaultOrg)
+	return g.NodeByKey(ctx, domain.NamespaceOrganisation, domain.DefaultOrg)
 }
 
 // SystemPrincipal is the identity of the graph service acting by itself (seeds, the bookkeeping of a sign-in):

@@ -16,8 +16,8 @@ import (
 	"github.com/zimwip/goap/internal/identity"
 	"github.com/zimwip/goap/pkg/access"
 	"github.com/zimwip/goap/pkg/authz"
+	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/graph"
-	"github.com/zimwip/goap/pkg/mcp"
 )
 
 // Every RPC is identified: an anonymous request is refused before it reaches the graph, mutating or not, and the
@@ -83,11 +83,11 @@ func TestServiceSubjectsDoNotTakeTheFirstAdminGrant(t *testing.T) {
 	}
 	as("system:registry")
 	as("system:trigger:nightly")
-	if _, err := g.NodeByKey(ctx, mcp.NamespaceOrganisation, access.UserKey("system:registry")); !errors.Is(err, graph.ErrNotFound) {
+	if _, err := g.NodeByKey(ctx, domain.NamespaceOrganisation, access.UserKey("system:registry")); !errors.Is(err, graph.ErrNotFound) {
 		t.Fatalf("a service must not become a User: %v", err)
 	}
 	as("alice")
-	n, err := g.NodeByKey(ctx, mcp.NamespaceOrganisation, access.PlatformAssignmentKey(access.UserKey("alice")))
+	n, err := g.NodeByKey(ctx, domain.NamespaceOrganisation, access.PlatformAssignmentKey(access.UserKey("alice")))
 	if err != nil {
 		t.Fatalf("alice's platform assignment: %v", err)
 	}

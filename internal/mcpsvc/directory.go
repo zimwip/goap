@@ -7,6 +7,7 @@ import (
 	"sort"
 	"sync"
 
+	"github.com/zimwip/goap/pkg/adapter"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/mcp"
@@ -34,22 +35,22 @@ type Snapshot struct {
 	// Problems lists the nodes that could not be read (malformed adapter, adapter without unit, ...).
 	Problems []string
 
-	org      domain.Structure                  // the organisation structure (ADR 0054)
-	parent   map[string]string                 // unit -> parent unit
-	units    map[string]bool                   // unit keys
-	mcps     map[string]mcp.Def                // by name
-	defs     map[string]mcp.AdapterDef         // adapter definitions by name
-	adapters map[string]map[string]mcp.Adapter // unit -> mcp name -> adapter
+	org      domain.Structure                       // the organisation structure (ADR 0054)
+	parent   map[string]string                      // unit -> parent unit
+	units    map[string]bool                        // unit keys
+	mcps     map[string]mcp.Def                     // by name
+	defs     map[string]adapter.Def                 // adapter definitions by name
+	adapters map[string]map[string]adapter.Instance // unit -> mcp name -> adapter
 }
 
 // Effective is an MCP a unit can use with the adapter that implements it.
 type Effective struct {
 	MCP     mcp.Def
-	Adapter mcp.Adapter // Adapter.Unit is where it is defined
+	Adapter adapter.Instance // Adapter.Unit is where it is defined
 	// Inherited: defined by an ancestor unit.
 	Inherited bool
 	// Restriction is what the instances of the unit's chain restrict (ADR 0028).
-	Restriction mcp.Restriction
+	Restriction adapter.Restriction
 }
 
 // Allowed returns the MCP with only the tools the unit may call.
@@ -62,7 +63,7 @@ func (e Effective) Usable() bool { return len(e.Allowed().Tools) > 0 }
 // of the organisation structure of st, their hierarchy its parent links (ADR 0054).
 func BuildSnapshot(st domain.Structures, baselines Baselines, nodes []domain.Node, links []domain.Link) *Snapshot {
 	org := domain.StructureOrganisation
-	s := &Snapshot{Baselines: baselines, org: st.Organisation, parent: map[string]string{}, units: map[string]bool{}, mcps: map[string]mcp.Def{}, defs: map[string]mcp.AdapterDef{}, adapters: map[string]map[string]mcp.Adapter{}}
+	s := &Snapshot{Baselines: baselines, org: st.Organisation, parent: map[string]string{}, units: map[string]bool{}, mcps: map[string]mcp.Def{}, defs: map[string]adapter.Def{}, adapters: map[string]map[string]adapter.Instance{}}
 	byID := map[domain.NodeID]domain.Node{}
 	for _, n := range nodes {
 		byID[n.ID] = n
@@ -71,7 +72,7 @@ func BuildSnapshot(st domain.Structures, baselines Baselines, nodes []domain.Nod
 		switch {
 		case n.Namespace == st.Organisation.Namespace && st.In(org, n.Type):
 			s.units[n.Key] = true
-		case n.Namespace == mcp.NamespacePlatform && n.Type == mcp.NodeTypeMCP:
+		case n.Namespace == domain.NamespacePlatform && n.Type == mcp.NodeTypeMCP:
 			d, err := mcp.DefFromProps(n.Properties)
 			if err == nil {
 				err = d.Validate()
@@ -81,8 +82,8 @@ func BuildSnapshot(st domain.Structures, baselines Baselines, nodes []domain.Nod
 				continue
 			}
 			s.mcps[d.Name] = d
-		case n.Namespace == mcp.NamespacePlatform && n.Type == mcp.NodeTypeAdapterDef:
-			d, err := mcp.AdapterDefFromProps(n.Properties)
+		case n.Namespace == domain.NamespacePlatform && n.Type == domain.TypeAdapterDef:
+			d, err := adapter.DefFromProps(n.Properties)
 			if err == nil {
 				err = d.Validate()
 			}
@@ -102,7 +103,7 @@ func BuildSnapshot(st domain.Structures, baselines Baselines, nodes []domain.Nod
 	}
 	// an adapter instance is the unit's that owns it (ADR 0054: the owner of the version)
 	for _, n := range nodes {
-		if n.Deleted || n.Namespace != mcp.NamespaceOrganisation || n.Type != mcp.NodeTypeAdapter {
+		if n.Deleted || n.Namespace != domain.NamespaceOrganisation || n.Type != domain.TypeAdapter {
 			continue
 		}
 		unit, ok := byID[n.Owner]
@@ -110,13 +111,13 @@ func BuildSnapshot(st domain.Structures, baselines Baselines, nodes []domain.Nod
 			s.Problems = append(s.Problems, fmt.Sprintf("%s: its owner %s is not a unit of the organisation", n.Key, n.Owner))
 			continue
 		}
-		a, err := mcp.AdapterFromProps(unit.Key, n.Properties)
+		a, err := adapter.FromProps(unit.Key, n.Properties)
 		if err != nil {
 			s.Problems = append(s.Problems, fmt.Sprintf("%s: %v", n.Key, err))
 			continue
 		}
 		if s.adapters[unit.Key] == nil {
-			s.adapters[unit.Key] = map[string]mcp.Adapter{}
+			s.adapters[unit.Key] = map[string]adapter.Instance{}
 		}
 		if _, dup := s.adapters[unit.Key][a.MCP]; dup {
 			s.Problems = append(s.Problems, fmt.Sprintf("%s: unit %s has several adapters for %s", n.Key, unit.Key, a.MCP))
@@ -162,14 +163,14 @@ func (s *Snapshot) Defs() []mcp.Def {
 }
 
 // AdapterDef returns an adapter definition.
-func (s *Snapshot) AdapterDef(name string) (mcp.AdapterDef, bool) {
+func (s *Snapshot) AdapterDef(name string) (adapter.Def, bool) {
 	d, ok := s.defs[name]
 	return d, ok
 }
 
 // AdapterDefs lists the adapter definitions by name.
-func (s *Snapshot) AdapterDefs() []mcp.AdapterDef {
-	out := make([]mcp.AdapterDef, 0, len(s.defs))
+func (s *Snapshot) AdapterDefs() []adapter.Def {
+	out := make([]adapter.Def, 0, len(s.defs))
 	for _, d := range s.defs {
 		out = append(out, d)
 	}
@@ -179,19 +180,19 @@ func (s *Snapshot) AdapterDefs() []mcp.AdapterDef {
 
 // Resolve returns the adapter of an MCP for a unit: the one of the nearest unit of its chain that
 // names an adapter definition (instances that only restrict are skipped).
-func (s *Snapshot) Resolve(unit, mcpName string) (a mcp.Adapter, inherited bool, ok bool) {
+func (s *Snapshot) Resolve(unit, mcpName string) (a adapter.Instance, inherited bool, ok bool) {
 	for i, u := range s.Chain(unit) {
 		if a, ok := s.adapters[u][mcpName]; ok && a.Implements() {
 			return a, i > 0, true
 		}
 	}
-	return mcp.Adapter{}, false, false
+	return adapter.Instance{}, false, false
 }
 
 // Restriction returns what the instances of the unit's chain restrict of an MCP: they all add up,
 // so that a unit cannot widen what an ancestor restricted.
-func (s *Snapshot) Restriction(unit, mcpName string) mcp.Restriction {
-	var r mcp.Restriction
+func (s *Snapshot) Restriction(unit, mcpName string) adapter.Restriction {
+	var r adapter.Restriction
 	for _, u := range s.Chain(unit) {
 		if a, ok := s.adapters[u][mcpName]; ok {
 			r.Add(a)
@@ -261,7 +262,7 @@ func (d *Directory) Snapshot(ctx context.Context) (*Snapshot, error) {
 	if err != nil && !errors.Is(err, graph.ErrNotFound) {
 		return nil, err
 	}
-	platHead, err := d.Graph.BranchHead(ctx, mcp.NamespacePlatform, domain.MainBranch)
+	platHead, err := d.Graph.BranchHead(ctx, domain.NamespacePlatform, domain.MainBranch)
 	if err != nil && !errors.Is(err, graph.ErrNotFound) {
 		return nil, err
 	}

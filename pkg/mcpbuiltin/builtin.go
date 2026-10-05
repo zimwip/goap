@@ -1,29 +1,36 @@
-package mcp
+// Package mcpbuiltin holds the schemas of the built-in MCPs (ADR 0028, 0061): the platform itself as
+// tools. It builds MCP definitions (pkg/mcp) and the adapter side that gives them to every unit
+// (pkg/adapter); neither of them imports it.
+package mcpbuiltin
 
-import "github.com/zimwip/goap/pkg/algo"
+import (
+	"github.com/zimwip/goap/pkg/adapter"
+	"github.com/zimwip/goap/pkg/algo"
+	"github.com/zimwip/goap/pkg/mcp"
+)
 
 // The built-in MCPs (ADR 0028): the platform itself as tools, the way an agent harness ships its own
 // tools (read, search, edit, run a task). They are split by concern; each has a connector of the
 // same name served by the hub and a pass-through adapter definition, and the default organisation
 // holds an instance of each, so that every unit can use them until it restricts them.
 const (
-	// BuiltinGraph reads the versioned graph (read, glob, grep): read-only.
-	BuiltinGraph = "goap-graph"
-	// BuiltinChange works on a change, the blackboard of every modification (write, edit, link, note).
-	BuiltinChange = "goap-change"
-	// BuiltinScheduler starts and follows processes and fires triggers. Its scope is agent: only the
+	// Graph reads the versioned graph (read, glob, grep): read-only.
+	Graph = "goap-graph"
+	// Change works on a change, the blackboard of every modification (write, edit, link, note).
+	Change = "goap-change"
+	// Scheduler starts and follows processes and fires triggers. Its scope is agent: only the
 	// agent level (agents[].mcps, llm actions) may start other agents.
-	BuiltinScheduler = "goap-scheduler"
-	// BuiltinAdmin describes the platform: units, users, MCPs, connectors, domains, methodologies.
-	BuiltinAdmin = "goap-admin"
+	Scheduler = "goap-scheduler"
+	// Admin describes the platform: units, users, MCPs, connectors, domains, methodologies.
+	Admin = "goap-admin"
 )
 
-// BuiltinNames lists the built-in MCPs.
-var BuiltinNames = []string{BuiltinGraph, BuiltinChange, BuiltinScheduler, BuiltinAdmin}
+// Names lists the built-in MCPs.
+var Names = []string{Graph, Change, Scheduler, Admin}
 
-// IsBuiltin reports whether an MCP is built in.
-func IsBuiltin(name string) bool {
-	for _, n := range BuiltinNames {
+// Is reports whether an MCP is built in.
+func Is(name string) bool {
+	for _, n := range Names {
 		if n == name {
 			return true
 		}
@@ -63,10 +70,10 @@ var (
 	argRationale = str("why the change does this")
 )
 
-// BuiltinDefs returns the definitions of the built-in MCPs.
-func BuiltinDefs() []Def {
-	return []Def{
-		{Name: BuiltinGraph, Description: "Read the versioned graph: nodes, their links and baselines (built in, read-only).", Tools: []Tool{
+// Defs returns the definitions of the built-in MCPs.
+func Defs() []mcp.Def {
+	return []mcp.Def{
+		{Name: Graph, Description: "Read the versioned graph: nodes, their links and baselines (built in, read-only).", Tools: []mcp.Tool{
 			{Name: "read", ReadOnly: true, Description: "Read a node by key: type, version, properties and links.",
 				InputSchema: schemaObj(map[string]any{"namespace": argNamespace, "key": str("key of the node"), "baseline": argBaseline}, "namespace", "key")},
 			{Name: "glob", ReadOnly: true, Description: "List the nodes whose key matches a glob pattern (REQ-*), optionally of one type.",
@@ -82,7 +89,7 @@ func BuiltinDefs() []Def {
 			{Name: "baselines", ReadOnly: true, Description: "List the baselines of a namespace, the head of main first.",
 				InputSchema: schemaObj(map[string]any{"namespace": argNamespace, "limit": argLimit}, "namespace")},
 		}},
-		{Name: BuiltinChange, Description: "Work on a change, the blackboard every modification of the graph goes through (built in).", Tools: []Tool{
+		{Name: Change, Description: "Work on a change, the blackboard every modification of the graph goes through (built in).", Tools: []mcp.Tool{
 			{Name: "create", Description: "Open a change on the head of main of a namespace: its intent (why), unit (who) and methodology (how).",
 				InputSchema: schemaObj(map[string]any{"title": str("title"), "intent": str("why the change is made"), "namespace": argNamespace,
 					"methodology": str("methodology performing it"), "unit": str("unit holding the change (default: the unit of the calling change)")}, "title", "intent", "namespace")},
@@ -155,7 +162,7 @@ func BuiltinDefs() []Def {
 					"result": str("what was done")})},
 		}},
 		// orchestration: only the agent level may start other agents (scope agent)
-		{Name: BuiltinScheduler, Scope: ScopeAgent, Description: "Start and follow processes (agents running methodologies) and fire triggers (built in, agent level only).", Tools: []Tool{
+		{Name: Scheduler, Scope: mcp.ScopeAgent, Description: "Start and follow processes (agents running methodologies) and fire triggers (built in, agent level only).", Tools: []mcp.Tool{
 			{Name: "start", Description: "Start a process for an intent: an agent of a methodology on a new change or an existing one.",
 				InputSchema: schemaObj(map[string]any{"intent": str("what is wanted"), "methodology": str("methodology (default: identified from the intent)"),
 					"agent": str("agent of the methodology"), "goal": str("goal (skips the intent loop)"), "title": str("title of the change"),
@@ -177,7 +184,7 @@ func BuiltinDefs() []Def {
 			{Name: "fire", Description: "Fire a trigger now.",
 				InputSchema: schemaObj(map[string]any{"methodology": str("methodology"), "agent": str("agent"), "trigger": str("trigger")}, "methodology", "agent", "trigger")},
 		}},
-		{Name: BuiltinAdmin, Description: "Describe the platform: organisation, users, MCPs, connectors, domains and methodologies (built in, read-only).", Tools: []Tool{
+		{Name: Admin, Description: "Describe the platform: organisation, users, MCPs, connectors, domains and methodologies (built in, read-only).", Tools: []mcp.Tool{
 			{Name: "units", ReadOnly: true, Description: "List the organisational units with their parent.", InputSchema: schemaObj(map[string]any{})},
 			{Name: "users", ReadOnly: true, Description: "List the users with their roles and unit.",
 				InputSchema: schemaObj(map[string]any{"unit": str("only the members of this unit")})},
@@ -190,17 +197,19 @@ func BuiltinDefs() []Def {
 	}
 }
 
-// BuiltinAdapterDefs returns the adapter definitions of the built-in MCPs: each tool is the operation
+// AdapterDefs returns the adapter definitions of the built-in MCPs: each tool is the operation
 // of the same name of the built-in connector of the same name.
-func BuiltinAdapterDefs() []AdapterDef {
-	out := make([]AdapterDef, 0, len(BuiltinNames))
-	for _, n := range BuiltinNames {
-		out = append(out, AdapterDef{Name: n, Description: "The built-in " + n + " MCP on the built-in connector of the same name",
+func AdapterDefs() []adapter.Def {
+	out := make([]adapter.Def, 0, len(Names))
+	for _, n := range Names {
+		out = append(out, adapter.Def{Name: n, Description: "The built-in " + n + " MCP on the built-in connector of the same name",
 			MCP: n, Connector: n, Language: algo.JavaScript, Code: "return ctx.call(ctx.tool(), ctx.args());\n"})
 	}
 	return out
 }
 
-// BuiltinAdapter is the instance of a built-in adapter held by a unit (the default organisation holds
+// Adapter is the instance of a built-in adapter held by a unit (the default organisation holds
 // one of each).
-func BuiltinAdapter(unit, name string) Adapter { return Adapter{Unit: unit, MCP: name, Adapter: name} }
+func Adapter(unit, name string) adapter.Instance {
+	return adapter.Instance{Unit: unit, MCP: name, Adapter: name}
+}

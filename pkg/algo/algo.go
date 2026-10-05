@@ -31,17 +31,11 @@ const (
 	// UsageTransitionAction runs when a lifecycle transition is taken and may
 	// change properties of the node.
 	UsageTransitionAction Usage = "transition_action"
-	// UsageAdapter implements the tools of an MCP with the operations of a connector (ADR
-	// 0019): the code maps the expected functions onto the exposed ones. It is defined by an
-	// AdapterDef node of the platform namespace (changed through a change) and instantiated, with
-	// parameter values, by the organisational units. It is never declared in a domain nor plugged
-	// into a node type or a lifecycle.
-	UsageAdapter Usage = "adapter"
 )
 
 // Usages lists every usage.
 func Usages() []Usage {
-	return []Usage{UsageAction, UsagePropertyValidator, UsageNodeValidator, UsageTransitionGuard, UsageTransitionAction, UsageAdapter}
+	return []Usage{UsageAction, UsagePropertyValidator, UsageNodeValidator, UsageTransitionGuard, UsageTransitionAction}
 }
 
 // Pluggable tells whether algorithms of this type can be declared and plugged.
@@ -69,14 +63,11 @@ const (
 	ParamStrings = "strings"
 	// ParamJSON is any JSON value.
 	ParamJSON = "json"
-	// ParamSecret is a reference to a secret ("<vault path>#<field>" or "env:<VAR>"). The script
-	// never reads it: adapters hand the resolved secret to the connector under the parameter name.
-	ParamSecret = "secret"
 )
 
 // ParamTypes lists the parameter types.
 func ParamTypes() []string {
-	return []string{ParamString, ParamNumber, ParamBoolean, ParamRegex, ParamEnum, ParamStrings, ParamJSON, ParamSecret}
+	return []string{ParamString, ParamNumber, ParamBoolean, ParamRegex, ParamEnum, ParamStrings, ParamJSON}
 }
 
 // Param declares a parameter of an algorithm: a typed value the instance sets
@@ -99,10 +90,6 @@ type Algorithm struct {
 	Language    string  `yaml:"language" json:"language"`
 	Code        string  `yaml:"code" json:"code"`
 	Params      []Param `yaml:"params,omitempty" json:"params,omitempty"`
-	// MCP and Connector (adapters only): the name of the MCP whose tools the code implements and
-	// the id of the connector whose operations it calls.
-	MCP       string `yaml:"mcp,omitempty" json:"mcp,omitempty"`
-	Connector string `yaml:"connector,omitempty" json:"connector,omitempty"`
 }
 
 // Instance sets the parameter values of an algorithm. Instances are what the
@@ -138,29 +125,28 @@ var paramNameRE = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_]*$`)
 func (a Algorithm) Issues() []string {
 	var out []string
 	switch {
-	case a.Name == "":
-		out = append(out, "name required")
-	case !ValidName(a.Name):
-		out = append(out, "name must be lowercase letters, digits, '-' or '_' and start with a letter")
-	}
-	switch {
 	case !a.Type.Known():
 		out = append(out, fmt.Sprintf("unknown type %q", a.Type))
 	case !a.Type.Pluggable():
 		out = append(out, fmt.Sprintf("type %s has no algorithms: the code stays in the action declaration", a.Type))
 	}
+	return append(out, a.Declaration()...)
+}
+
+// Declaration checks what an algorithm declares besides its type: name, language, code and
+// parameters. Whoever owns a script usage of its own (the adapters, pkg/adapter) uses it for the
+// common part of its definition; its parameters of types this package does not know are listed in
+// extraParams (they are only checked for their name: the owner coerces their values).
+func (a Algorithm) Declaration(extraParams ...string) []string {
+	var out []string
+	switch {
+	case a.Name == "":
+		out = append(out, "name required")
+	case !ValidName(a.Name):
+		out = append(out, "name must be lowercase letters, digits, '-' or '_' and start with a letter")
+	}
 	if a.Language != JavaScript && a.Language != Go {
 		out = append(out, "language must be javascript or go")
-	}
-	if a.Type == UsageAdapter {
-		if !nameRE.MatchString(a.MCP) {
-			out = append(out, "an adapter names the MCP it implements (mcp)")
-		}
-		if !nameRE.MatchString(a.Connector) {
-			out = append(out, "an adapter names the connector it calls (connector)")
-		}
-	} else if a.MCP != "" || a.Connector != "" {
-		out = append(out, "mcp and connector apply to adapters only")
 	}
 	if a.Code == "" {
 		out = append(out, "code required")
@@ -177,12 +163,12 @@ func (a Algorithm) Issues() []string {
 			out = append(out, fmt.Sprintf("duplicate param %s", p.Name))
 		}
 		seen[p.Name] = true
+		if slices.Contains(extraParams, p.Type) {
+			continue
+		}
 		if !slices.Contains(ParamTypes(), p.Type) {
 			out = append(out, fmt.Sprintf("param %s: unknown type %q", p.Name, p.Type))
 			continue
-		}
-		if p.Type == ParamSecret && a.Type != UsageAdapter {
-			out = append(out, fmt.Sprintf("param %s: secrets are for adapters only", p.Name))
 		}
 		if p.Type == ParamEnum && len(p.Values) == 0 {
 			out = append(out, fmt.Sprintf("param %s: an enum needs values", p.Name))
@@ -204,12 +190,6 @@ func (p Param) Coerce(v any) (any, error) {
 		s, ok := v.(string)
 		if !ok {
 			return nil, fmt.Errorf("expected a string, got %T", v)
-		}
-		return s, nil
-	case ParamSecret:
-		s, ok := v.(string)
-		if !ok || s == "" {
-			return nil, fmt.Errorf("expected a secret reference, got %T", v)
 		}
 		return s, nil
 	case ParamRegex:
@@ -316,26 +296,6 @@ func (a Algorithm) Resolve(values map[string]any) (map[string]any, []string) {
 	}
 	slices.Sort(issues)
 	return out, issues
-}
-
-// Split separates the resolved values of an adapter into the configuration handed to the
-// connector (every parameter but the secrets) and the secret references, by parameter name.
-func (a Algorithm) Split(values map[string]any) (config map[string]any, secrets map[string]string) {
-	config, secrets = map[string]any{}, map[string]string{}
-	secret := map[string]bool{}
-	for _, p := range a.Params {
-		secret[p.Name] = p.Type == ParamSecret
-	}
-	for k, v := range values {
-		if secret[k] {
-			if s, ok := v.(string); ok {
-				secrets[k] = s
-			}
-			continue
-		}
-		config[k] = v
-	}
-	return config, secrets
 }
 
 // Set is the algorithms and instances of a domain.

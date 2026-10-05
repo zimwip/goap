@@ -16,7 +16,6 @@ import (
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/engine"
 	"github.com/zimwip/goap/pkg/graph"
-	"github.com/zimwip/goap/pkg/mcp"
 )
 
 // Client adapts the graph Connect client to engine.GraphPort.
@@ -56,7 +55,7 @@ func serviceIdentity() connect.ClientOption {
 // finding it proves it was created, and not finding it reports why it could not be.
 func (c *Client) DeclareUser(ctx context.Context, subject string) error {
 	ctx = authz.With(ctx, authz.Principal{Subject: subject})
-	_, err := c.rpc.GetNode(ctx, connect.NewRequest(&graphv1.GetNodeRequest{Namespace: mcp.NamespaceOrganisation, Key: access.UserKey(subject)}))
+	_, err := c.rpc.GetNode(ctx, connect.NewRequest(&graphv1.GetNodeRequest{Namespace: domain.NamespaceOrganisation, Key: access.UserKey(subject)}))
 	return rpcerr.FromConnect(err)
 }
 

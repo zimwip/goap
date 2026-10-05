@@ -29,7 +29,7 @@ func (r *recorder) call(_ context.Context, op string, args map[string]any) (map[
 }
 
 func adapter(lang, code string, params map[string]any) algo.Bound {
-	return algo.Bound{Instance: "test", Algorithm: "a", Type: algo.UsageAdapter, Language: lang, Code: code, Params: params}
+	return algo.Bound{Instance: "test", Algorithm: "a", Language: lang, Code: code, Params: params}
 }
 
 const jsAdapter = `
@@ -96,10 +96,6 @@ func TestAdapterCallLimits(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "connector calls") || len(rec.ops) > MaxAdapterCalls+2 {
 		t.Fatalf("call limit = %v (%d calls)", err, len(rec.ops))
 	}
-	// only adapters run here
-	if _, err := RunAdapter(ctx, algo.Bound{Type: algo.UsagePropertyValidator, Language: "javascript", Code: "1"}, in); err == nil {
-		t.Fatal("a validator ran as an adapter")
-	}
 }
 
 func TestGoAdapter(t *testing.T) {
@@ -124,43 +120,7 @@ func Run(ctx *dsl.AdapterCtx) error {
 	}
 }
 
-func TestSecretParamsAreNotReadableByTheScript(t *testing.T) {
-	a := algo.Algorithm{Name: "a", Type: algo.UsageAdapter, Language: algo.JavaScript, Code: "return 1", MCP: "docs", Connector: "fs",
-		Params: []algo.Param{{Name: "root", Type: algo.ParamString, Required: true}, {Name: "token", Type: algo.ParamSecret, Required: true}}}
-	if issues := a.Issues(); len(issues) != 0 {
-		t.Fatal(issues)
-	}
-	vals, issues := a.Resolve(map[string]any{"root": "/r", "token": "env:T"})
-	if len(issues) != 0 {
-		t.Fatal(issues)
-	}
-	config, secrets := a.Split(vals)
-	if config["root"] != "/r" || config["token"] != nil || secrets["token"] != "env:T" || len(secrets) != 1 {
-		t.Fatalf("split = %v %v", config, secrets)
-	}
-	// the hub binds only the configuration
-	out, err := RunAdapter(context.Background(), adapter("javascript", `return {seen: String(ctx.param("token"))}`, config), AdapterInput{})
-	if err != nil || out.Result["seen"] != "null" {
-		t.Fatalf("script sees the secret: %+v, %v", out, err)
-	}
-}
-
-func TestAdapterDeclarationIssues(t *testing.T) {
-	ok := algo.Algorithm{Name: "a", Type: algo.UsageAdapter, Language: algo.JavaScript, Code: "return 1", MCP: "docs", Connector: "fs"}
-	if issues := ok.Issues(); len(issues) != 0 {
-		t.Fatal(issues)
-	}
-	for name, bad := range map[string]algo.Algorithm{
-		"no mcp":         {Name: "a", Type: algo.UsageAdapter, Language: algo.JavaScript, Code: "1", Connector: "fs"},
-		"no connector":   {Name: "a", Type: algo.UsageAdapter, Language: algo.JavaScript, Code: "1", MCP: "docs"},
-		"mcp on a guard": {Name: "a", Type: algo.UsageTransitionGuard, Language: algo.JavaScript, Code: "1", MCP: "docs"},
-		"secret on a guard": {Name: "a", Type: algo.UsageTransitionGuard, Language: algo.JavaScript, Code: "1",
-			Params: []algo.Param{{Name: "t", Type: algo.ParamSecret}}},
-	} {
-		if issues := bad.Issues(); len(issues) == 0 {
-			t.Errorf("%s accepted", name)
-		}
-	}
+func TestAdapterCodeCompiles(t *testing.T) {
 	if err := CheckAlgorithmCode(algo.JavaScript, "return ctx.call('x', {})"); err != nil {
 		t.Fatal(err)
 	}

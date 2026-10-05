@@ -11,10 +11,12 @@ import (
 	"github.com/zimwip/goap/gen/goap/graph/v1/graphv1connect"
 	"github.com/zimwip/goap/internal/graphsvc"
 	"github.com/zimwip/goap/pkg/access"
+	"github.com/zimwip/goap/pkg/adapter"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/domain/def"
 	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/mcp"
+	"github.com/zimwip/goap/pkg/mcpbuiltin"
 	"github.com/zimwip/goap/pkg/typecat"
 )
 
@@ -51,7 +53,7 @@ func TestSeedsFollowTheDomains(t *testing.T) {
 		t.Fatal(err)
 	}
 	unit, err := g.NodeByKey(ctx, "organisation", "ORG-CHECKOUT")
-	if err != nil || unit.Type != mcp.NodeTypeOrgUnit {
+	if err != nil || unit.Type != domain.TypeOrgUnit {
 		t.Fatalf("unit = %+v, %v", unit, err)
 	}
 	app, err := g.NodeByKey(ctx, "alm", "APP-1")
@@ -62,7 +64,7 @@ func TestSeedsFollowTheDomains(t *testing.T) {
 		t.Fatalf("APP-1 must be owned by ORG-CHECKOUT across namespaces: %+v", app)
 	}
 	uv, _ := g.View(ctx, unit.Ref())
-	if len(uv.Out) != 1 || uv.Out[0].Type != mcp.LinkPartOf {
+	if len(uv.Out) != 1 || uv.Out[0].Type != domain.LinkPartOf {
 		t.Fatalf("unit hierarchy: %+v", uv.Out)
 	}
 }
@@ -87,7 +89,7 @@ func TestSeedDemoHangsUnderTheRoot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(v.Out) != 1 || v.Out[0].Type != mcp.LinkPartOf || v.Out[0].To.ID != def.ID {
+	if len(v.Out) != 1 || v.Out[0].Type != domain.LinkPartOf || v.Out[0].To.ID != def.ID {
 		t.Fatalf("ORG-ACME must be part_of ORG-DEFAULT: %+v", v.Out)
 	}
 	if acme.Owner != def.ID || acme.ChangeID == "" || acme.Project == "" {
@@ -129,40 +131,40 @@ func TestSeedBuiltins(t *testing.T) {
 		}
 	}
 	// an older platform: the MCP lacks a tool and says something else
-	n, err := g.NodeByKey(ctx, mcp.NamespacePlatform, mcp.MCPKey(mcp.BuiltinGraph))
+	n, err := g.NodeByKey(ctx, domain.NamespacePlatform, mcp.MCPKey(mcpbuiltin.Graph))
 	if err != nil {
 		t.Fatal(err)
 	}
 	pre := n.Ref()
-	commit(mcp.NamespacePlatform, graph.NodeEdit{Pre: &pre, Props: map[string]any{"description": "old", "tools": []any{}}, Rationale: "older"})
+	commit(domain.NamespacePlatform, graph.NodeEdit{Pre: &pre, Props: map[string]any{"description": "old", "tools": []any{}}, Rationale: "older"})
 	// an administrator removes the admin MCP from the default organisation
-	a, err := g.NodeByKey(ctx, mcp.NamespaceOrganisation, mcp.AdapterKey(domain.DefaultOrg, mcp.BuiltinAdmin))
+	a, err := g.NodeByKey(ctx, domain.NamespaceOrganisation, adapter.Key(domain.DefaultOrg, mcpbuiltin.Admin))
 	if err != nil {
 		t.Fatal(err)
 	}
 	apre := a.Ref()
-	commit(mcp.NamespaceOrganisation, graph.NodeEdit{Pre: &apre, Retire: true, Rationale: "no admin tools"})
+	commit(domain.NamespaceOrganisation, graph.NodeEdit{Pre: &apre, Retire: true, Rationale: "no admin tools"})
 
 	if seeded, err := graphsvc.SeedBuiltins(ctx, g); err != nil || !seeded {
 		t.Fatalf("resync = %v, %v", seeded, err)
 	}
-	head, _ := g.BranchHead(ctx, mcp.NamespacePlatform, domain.MainBranch)
+	head, _ := g.BranchHead(ctx, domain.NamespacePlatform, domain.MainBranch)
 	nodes, _, err := g.BaselineGraph(ctx, head.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, n := range nodes {
-		if n.Key == mcp.MCPKey(mcp.BuiltinGraph) {
+		if n.Key == mcp.MCPKey(mcpbuiltin.Graph) {
 			d, err := mcp.DefFromProps(n.Properties)
-			if err != nil || d.Description != mcp.BuiltinDefs()[0].Description || len(d.Tools) != len(mcp.BuiltinDefs()[0].Tools) {
+			if err != nil || d.Description != mcpbuiltin.Defs()[0].Description || len(d.Tools) != len(mcpbuiltin.Defs()[0].Tools) {
 				t.Fatalf("goap-graph not resynced: %+v %v", d, err)
 			}
 		}
 	}
-	orgHead, _ := g.BranchHead(ctx, mcp.NamespaceOrganisation, domain.MainBranch)
+	orgHead, _ := g.BranchHead(ctx, domain.NamespaceOrganisation, domain.MainBranch)
 	orgNodes, _, _ := g.BaselineGraph(ctx, orgHead.ID)
 	for _, n := range orgNodes {
-		if n.Key == mcp.AdapterKey(domain.DefaultOrg, mcp.BuiltinAdmin) && !n.Deleted {
+		if n.Key == adapter.Key(domain.DefaultOrg, mcpbuiltin.Admin) && !n.Deleted {
 			t.Fatal("the removed instance was seeded again")
 		}
 	}
@@ -175,7 +177,7 @@ func TestRootProjectSeeded(t *testing.T) {
 	if _, err := graphsvc.SeedDefaults(ctx, g); err != nil {
 		t.Fatal(err)
 	}
-	root, err := g.NodeByKey(ctx, mcp.NamespaceOrganisation, domain.DefaultProject)
+	root, err := g.NodeByKey(ctx, domain.NamespaceOrganisation, domain.DefaultProject)
 	if err != nil || root.Type != access.NodeTypeProjectUnit {
 		t.Fatalf("root project = %+v, %v", root, err)
 	}

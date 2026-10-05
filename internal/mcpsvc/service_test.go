@@ -14,6 +14,7 @@ import (
 	"github.com/zimwip/goap/internal/pbconv"
 	"github.com/zimwip/goap/internal/pgtest"
 	"github.com/zimwip/goap/internal/platform"
+	"github.com/zimwip/goap/pkg/adapter"
 	"github.com/zimwip/goap/pkg/algo"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/graph"
@@ -117,7 +118,7 @@ func testRegistry(t *testing.T, st mcpsvc.Store) {
 }
 
 // newHub makes a hub over g; extra adapter definitions are added to the graph first (as a change of the platform namespace).
-func newHub(t *testing.T, g *graph.Graph, inv mcpsvc.Invoker, extra ...mcp.AdapterDef) *mcpsvc.Service {
+func newHub(t *testing.T, g *graph.Graph, inv mcpsvc.Invoker, extra ...adapter.Def) *mcpsvc.Service {
 	t.Helper()
 	for _, d := range extra {
 		if err := graphsvc.SeedAdapterDef(context.Background(), g, d); err != nil {
@@ -181,7 +182,7 @@ func TestTheAdapterCodeMapsTheMCPOntoTheConnector(t *testing.T) {
 	ctx := context.Background()
 	g := world(t)
 	inv := &fakeInvoker{resp: &connectorv1.InvokeResponse{Result: pbconv.Struct(map[string]any{"text": "raw"})}}
-	custom := mcp.AdapterDef{Name: "shouting-docs", Language: algo.JavaScript, MCP: "document-repository", Connector: "localfs",
+	custom := adapter.Def{Name: "shouting-docs", Language: algo.JavaScript, MCP: "document-repository", Connector: "localfs",
 		Params: []algo.Param{{Name: "root", Type: algo.ParamString, Required: true}, {Name: "prefix", Type: algo.ParamString, Default: ">"}},
 		Code: `
 			if (ctx.tool() === "read") {
@@ -196,7 +197,7 @@ func TestTheAdapterCodeMapsTheMCPOntoTheConnector(t *testing.T) {
 			}
 			ctx.fail("write is not allowed here: " + ctx.tool());`}
 	svc := newHub(t, g, inv, custom)
-	b := mcp.Adapter{Unit: "ORG-B", MCP: "document-repository", Adapter: "shouting-docs", Params: map[string]any{"root": "/b"}}
+	b := adapter.Instance{Unit: "ORG-B", MCP: "document-repository", Adapter: "shouting-docs", Params: map[string]any{"root": "/b"}}
 	if err := graphsvc.SeedAdapter(ctx, g, b); err != nil {
 		t.Fatal(err)
 	}
@@ -257,7 +258,7 @@ func TestCallErrors(t *testing.T) {
 	}
 	// an adapter definition the graph does not have
 	gm := world(t)
-	if err := graphsvc.SeedAdapter(ctx, gm, mcp.Adapter{Unit: "ORG-B", MCP: "document-repository", Adapter: "gone"}); err != nil {
+	if err := graphsvc.SeedAdapter(ctx, gm, adapter.Instance{Unit: "ORG-B", MCP: "document-repository", Adapter: "gone"}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := newHub(t, gm, inv).Call(ctx, "ORG-B", "document-repository/read", args); !errors.Is(err, mcpsvc.ErrUnavailable) {
@@ -265,7 +266,7 @@ func TestCallErrors(t *testing.T) {
 	}
 	// parameter values that do not fit the algorithm
 	g := world(t)
-	if err := graphsvc.SeedAdapter(ctx, g, mcp.Adapter{Unit: "ORG-B", MCP: "document-repository", Adapter: "localfs-document-repository"}); err != nil {
+	if err := graphsvc.SeedAdapter(ctx, g, adapter.Instance{Unit: "ORG-B", MCP: "document-repository", Adapter: "localfs-document-repository"}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := newHub(t, g, inv).Call(ctx, "ORG-B", "document-repository/read", args); !errors.Is(err, mcp.ErrInvalid) {
@@ -276,10 +277,10 @@ func TestCallErrors(t *testing.T) {
 func TestSecretParametersReachTheConnectorButNotTheScript(t *testing.T) {
 	ctx := context.Background()
 	g := world(t)
-	secure := mcp.AdapterDef{Name: "secure-docs", Language: algo.JavaScript, MCP: "document-repository", Connector: "localfs",
-		Params: []algo.Param{{Name: "root", Type: algo.ParamString, Required: true}, {Name: "token", Type: algo.ParamSecret, Required: true}, {Name: "other", Type: algo.ParamSecret}},
+	secure := adapter.Def{Name: "secure-docs", Language: algo.JavaScript, MCP: "document-repository", Connector: "localfs",
+		Params: []algo.Param{{Name: "root", Type: algo.ParamString, Required: true}, {Name: "token", Type: adapter.ParamSecret, Required: true}, {Name: "other", Type: adapter.ParamSecret}},
 		Code:   `return { leaked: String(ctx.param("token")), out: ctx.call("read_file", { path: ctx.args().path }).text };`}
-	if err := graphsvc.SeedAdapter(ctx, g, mcp.Adapter{Unit: "ORG-B", MCP: "document-repository", Adapter: "secure-docs",
+	if err := graphsvc.SeedAdapter(ctx, g, adapter.Instance{Unit: "ORG-B", MCP: "document-repository", Adapter: "secure-docs",
 		Params: map[string]any{"root": "/b", "token": "env:TOK", "other": "env:X"}}); err != nil {
 		t.Fatal(err)
 	}
@@ -304,7 +305,7 @@ func TestCheckAdapterAndTemplate(t *testing.T) {
 	if w, err := svc.CheckAdapter(ctx, ok); err != nil || len(w) != 1 || !strings.Contains(w[0], `secret "token"`) {
 		t.Fatalf("valid instance: %v, %v", w, err)
 	}
-	for name, bad := range map[string]mcp.Adapter{
+	for name, bad := range map[string]adapter.Instance{
 		"unknown MCP":        {MCP: "nope", Adapter: "localfs-document-repository"},
 		"unknown definition": {MCP: "document-repository", Adapter: "nope"},
 		"missing parameter":  {MCP: "document-repository", Adapter: "localfs-document-repository"},
@@ -315,9 +316,9 @@ func TestCheckAdapterAndTemplate(t *testing.T) {
 		}
 	}
 	// a definition of another MCP is refused
-	other := mcp.AdapterDef{Name: "tickets", Language: algo.JavaScript, MCP: "ticketing", Connector: "jira", Code: "return 1"}
+	other := adapter.Def{Name: "tickets", Language: algo.JavaScript, MCP: "ticketing", Connector: "jira", Code: "return 1"}
 	svc = newHub(t, world(t), &fakeInvoker{}, other)
-	if _, err := svc.CheckAdapter(ctx, mcp.Adapter{MCP: "document-repository", Adapter: "tickets"}); !errors.Is(err, mcp.ErrInvalid) {
+	if _, err := svc.CheckAdapter(ctx, adapter.Instance{MCP: "document-repository", Adapter: "tickets"}); !errors.Is(err, mcp.ErrInvalid) {
 		t.Fatalf("definition of another MCP = %v", err)
 	}
 
@@ -326,7 +327,7 @@ func TestCheckAdapterAndTemplate(t *testing.T) {
 	if err != nil || !strings.Contains(code, `ctx.call("read_file", { path: ctx.args().path })`) || !strings.Contains(code, `case "write"`) {
 		t.Fatalf("template = %q, %v", code, err)
 	}
-	if len(params) != 1 || params[0].Name != "token" || params[0].Type != algo.ParamSecret {
+	if len(params) != 1 || params[0].Name != "token" || params[0].Type != adapter.ParamSecret {
 		t.Fatalf("params = %+v", params)
 	}
 	if _, _, err := svc.Template(ctx, "document-repository", "gdrive"); !errors.Is(err, mcpsvc.ErrNotFound) {
@@ -368,7 +369,7 @@ func TestUnitRestrictsAnInheritedMCP(t *testing.T) {
 	ctx := context.Background()
 	g := world(t)
 	// ORG-A1 keeps list and read of the adapter it inherits from ORG-A; ORG-B has document-repository disabled
-	for _, a := range []mcp.Adapter{
+	for _, a := range []adapter.Instance{
 		{Unit: "ORG-A1", MCP: "document-repository", Tools: []string{"list", "read"}},
 		{Unit: "ORG-B", MCP: "document-repository", Disabled: true},
 	} {
@@ -416,10 +417,10 @@ func TestUnitRestrictsAnInheritedMCP(t *testing.T) {
 	}
 
 	// a restriction-only instance checks against the MCP, not against an adapter definition
-	if _, err := svc.CheckAdapter(ctx, mcp.Adapter{Unit: "ORG-A1", MCP: "document-repository", Deny: []string{"write"}}); err != nil {
+	if _, err := svc.CheckAdapter(ctx, adapter.Instance{Unit: "ORG-A1", MCP: "document-repository", Deny: []string{"write"}}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.CheckAdapter(ctx, mcp.Adapter{Unit: "ORG-A1", MCP: "document-repository", Deny: []string{"delete"}}); !errors.Is(err, mcp.ErrInvalid) {
+	if _, err := svc.CheckAdapter(ctx, adapter.Instance{Unit: "ORG-A1", MCP: "document-repository", Deny: []string{"delete"}}); !errors.Is(err, mcp.ErrInvalid) {
 		t.Fatalf("unknown tool restricted: %v", err)
 	}
 }

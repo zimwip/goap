@@ -11,7 +11,6 @@ import (
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/domain/def"
 	"github.com/zimwip/goap/pkg/graph"
-	"github.com/zimwip/goap/pkg/mcp"
 	"github.com/zimwip/goap/pkg/typecat"
 )
 
@@ -115,16 +114,16 @@ func TestAdminAssignmentAndUnitOfTheUserNode(t *testing.T) {
 	if err := graphsvc.SeedUser(ctx, g, access.User{Subject: "alice", Unit: "team-a"}); err != nil {
 		t.Fatal(err)
 	}
-	alice0, err := g.NodeByKey(ctx, mcp.NamespaceOrganisation, access.UserKey("alice"))
+	alice0, err := g.NodeByKey(ctx, domain.NamespaceOrganisation, access.UserKey("alice"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	head, err := g.BranchHead(ctx, mcp.NamespaceOrganisation, domain.MainBranch)
+	head, err := g.BranchHead(ctx, domain.NamespaceOrganisation, domain.MainBranch)
 	if err != nil {
 		t.Fatal(err)
 	}
 	aliceRef := alice0.Ref()
-	if _, err := g.Commit(ctx, graph.Commit{Namespace: mcp.NamespaceOrganisation, Title: "alice administers", Baseline: head.ID, By: "test", Edits: []graph.NodeEdit{
+	if _, err := g.Commit(ctx, graph.Commit{Namespace: domain.NamespaceOrganisation, Title: "alice administers", Baseline: head.ID, By: "test", Edits: []graph.NodeEdit{
 		{Key: access.PlatformAssignmentKey(access.UserKey("alice")), Type: access.NodeTypeAssignment, Props: access.Assignment{Roles: []string{access.RoleAdmin}}.Props(), Rationale: "t",
 			Links: []graph.LinkEdit{{Type: access.LinkAssignsOrg, To: &aliceRef}}},
 	}}); err != nil {
@@ -145,7 +144,7 @@ func TestAdminAssignmentAndUnitOfTheUserNode(t *testing.T) {
 
 func TestRolesHeldInAUnitHoldBelowIt(t *testing.T) {
 	unit := func(id, key string) domain.Node {
-		return domain.Node{ID: domain.NodeID(id), Key: key, Type: mcp.NodeTypeOrgUnit, Namespace: "organisation"}
+		return domain.Node{ID: domain.NodeID(id), Key: key, Type: domain.TypeOrgUnit, Namespace: "organisation"}
 	}
 	nodes := []domain.Node{unit("1", "ORG-DEFAULT"), unit("2", "DEP-IT"), unit("3", "TEAM-PAY")}
 	partOf := func(from, to string) domain.Link {
@@ -173,15 +172,15 @@ func TestAssignmentGrantsRoleOnAProject(t *testing.T) {
 	if err := graphsvc.SeedUnit(ctx, g, "team-a", "Team A", "team", ""); err != nil {
 		t.Fatal(err)
 	}
-	team, err := g.NodeByKey(ctx, mcp.NamespaceOrganisation, "team-a")
+	team, err := g.NodeByKey(ctx, domain.NamespaceOrganisation, "team-a")
 	if err != nil {
 		t.Fatal(err)
 	}
-	head, err := g.BranchHead(ctx, mcp.NamespaceOrganisation, domain.MainBranch)
+	head, err := g.BranchHead(ctx, domain.NamespaceOrganisation, domain.MainBranch)
 	if err != nil {
 		t.Fatal(err)
 	}
-	root, err := g.NodeByKey(ctx, mcp.NamespaceOrganisation, domain.DefaultProject)
+	root, err := g.NodeByKey(ctx, domain.NamespaceOrganisation, domain.DefaultProject)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -195,7 +194,7 @@ func TestAssignmentGrantsRoleOnAProject(t *testing.T) {
 		{Key: "ASG:team-a/PROJ-X", Type: access.NodeTypeAssignment, Props: access.Assignment{Roles: []string{"developer"}}.Props(), Rationale: "t",
 			Links: []graph.LinkEdit{{Type: access.LinkAssignsOrg, To: &teamRef}, {Type: access.LinkAssignsProject, ToKey: "PROJ-X"}}},
 	}
-	if _, err := g.Commit(ctx, graph.Commit{Namespace: mcp.NamespaceOrganisation, Title: "assignment", Baseline: head.ID, By: "test", BaselineName: "assignment", Edits: edits}); err != nil {
+	if _, err := g.Commit(ctx, graph.Commit{Namespace: domain.NamespaceOrganisation, Title: "assignment", Baseline: head.ID, By: "test", BaselineName: "assignment", Edits: edits}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -234,11 +233,11 @@ func TestPlatformAssignmentGrantsRoleEverywhere(t *testing.T) {
 	if err := graphsvc.SeedUnit(ctx, g, "other-org", "Other", "org", ""); err != nil {
 		t.Fatal(err)
 	}
-	team, err := g.NodeByKey(ctx, mcp.NamespaceOrganisation, "team-a")
+	team, err := g.NodeByKey(ctx, domain.NamespaceOrganisation, "team-a")
 	if err != nil {
 		t.Fatal(err)
 	}
-	head, err := g.BranchHead(ctx, mcp.NamespaceOrganisation, domain.MainBranch)
+	head, err := g.BranchHead(ctx, domain.NamespaceOrganisation, domain.MainBranch)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -247,7 +246,7 @@ func TestPlatformAssignmentGrantsRoleEverywhere(t *testing.T) {
 		{Key: access.PlatformAssignmentKey("team-a"), Type: access.NodeTypeAssignment, Props: access.Assignment{Roles: []string{access.RoleReader}}.Props(), Rationale: "t",
 			Links: []graph.LinkEdit{{Type: access.LinkAssignsOrg, To: &teamRef}}},
 	}
-	if _, err := g.Commit(ctx, graph.Commit{Namespace: mcp.NamespaceOrganisation, Title: "platform assignment", Baseline: head.ID, By: "test", BaselineName: "platform assignment", Edits: edits}); err != nil {
+	if _, err := g.Commit(ctx, graph.Commit{Namespace: domain.NamespaceOrganisation, Title: "platform assignment", Baseline: head.ID, By: "test", BaselineName: "platform assignment", Edits: edits}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -284,11 +283,11 @@ func TestPlatformAssignmentGrantsAdminPastTheFloor(t *testing.T) {
 	if err := graphsvc.SeedUnit(ctx, g, "team-a", "Team A", "team", ""); err != nil {
 		t.Fatal(err)
 	}
-	team, err := g.NodeByKey(ctx, mcp.NamespaceOrganisation, "team-a")
+	team, err := g.NodeByKey(ctx, domain.NamespaceOrganisation, "team-a")
 	if err != nil {
 		t.Fatal(err)
 	}
-	head, err := g.BranchHead(ctx, mcp.NamespaceOrganisation, domain.MainBranch)
+	head, err := g.BranchHead(ctx, domain.NamespaceOrganisation, domain.MainBranch)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -297,7 +296,7 @@ func TestPlatformAssignmentGrantsAdminPastTheFloor(t *testing.T) {
 		{Key: access.PlatformAssignmentKey("team-a"), Type: access.NodeTypeAssignment, Props: access.Assignment{Roles: []string{access.RoleAdmin}}.Props(), Rationale: "t",
 			Links: []graph.LinkEdit{{Type: access.LinkAssignsOrg, To: &teamRef}}},
 	}
-	if _, err := g.Commit(ctx, graph.Commit{Namespace: mcp.NamespaceOrganisation, Title: "admin assignment", Baseline: head.ID, By: "test", BaselineName: "admin assignment", Edits: edits}); err != nil {
+	if _, err := g.Commit(ctx, graph.Commit{Namespace: domain.NamespaceOrganisation, Title: "admin assignment", Baseline: head.ID, By: "test", BaselineName: "admin assignment", Edits: edits}); err != nil {
 		t.Fatal(err)
 	}
 	dev := authz.Principal{Subject: "dev", Org: "team-a"}
@@ -311,7 +310,7 @@ func TestProjectChainAndRoles(t *testing.T) {
 		return domain.Node{ID: domain.NodeID(id), Key: key, Type: access.NodeTypeProjectUnit, Namespace: "organisation"}
 	}
 	unit := func(id, key string) domain.Node {
-		return domain.Node{ID: domain.NodeID(id), Key: key, Type: mcp.NodeTypeOrgUnit, Namespace: "organisation"}
+		return domain.Node{ID: domain.NodeID(id), Key: key, Type: domain.TypeOrgUnit, Namespace: "organisation"}
 	}
 	asg := func(id, key string) domain.Node {
 		return domain.Node{ID: domain.NodeID(id), Key: key, Type: access.NodeTypeAssignment, Namespace: "organisation",
@@ -366,14 +365,14 @@ func TestRolesDependOnTheProject(t *testing.T) {
 		t.Fatal(err)
 	}
 	ref := func(key string) *domain.NodeRef {
-		n, err := g.NodeByKey(ctx, mcp.NamespaceOrganisation, key)
+		n, err := g.NodeByKey(ctx, domain.NamespaceOrganisation, key)
 		if err != nil {
 			t.Fatal(err)
 		}
 		r := n.Ref()
 		return &r
 	}
-	head, err := g.BranchHead(ctx, mcp.NamespaceOrganisation, domain.MainBranch)
+	head, err := g.BranchHead(ctx, domain.NamespaceOrganisation, domain.MainBranch)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -388,7 +387,7 @@ func TestRolesDependOnTheProject(t *testing.T) {
 	}
 	edits := []graph.NodeEdit{project("PROJ-A"), project("PROJ-B"), project("PROJ-C"),
 		assign("USR:eve", "PROJ-A", "developer"), assign("team-a", "PROJ-A", "tester"), assign("USR:eve", "PROJ-B", "tech_lead")}
-	if _, err := g.Commit(ctx, graph.Commit{Namespace: mcp.NamespaceOrganisation, Title: "assignments", Baseline: head.ID, By: "test", Edits: edits}); err != nil {
+	if _, err := g.Commit(ctx, graph.Commit{Namespace: domain.NamespaceOrganisation, Title: "assignments", Baseline: head.ID, By: "test", Edits: edits}); err != nil {
 		t.Fatal(err)
 	}
 	eve := authz.Principal{Subject: "eve"}

@@ -18,7 +18,6 @@ import (
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/graphsnap"
-	"github.com/zimwip/goap/pkg/mcp"
 )
 
 // Types and links of the graph objects.
@@ -64,19 +63,6 @@ const RoleAdmin = "admin"
 // which only exists where a project names the methodology declaring it. A policy that wants it scoped to a
 // project reads that project's own Assignments itself (ProjectRoles); the grant itself is project-independent.
 const RoleReader = "reader"
-
-// PlatformRoles are the built-in roles an Assignment can grant platform-wide (no assigns_project link),
-// mcp.BuiltinRoles by name. Unlike methodology roles, this is a fixed set, not read from the graph for
-// enforcement (authz.DefaultPolicies names them directly); the platform@Role nodes SeedBuiltins keeps in
-// sync only document them for the IDE.
-var PlatformRoles = func() []string {
-	roles := mcp.BuiltinRoles()
-	out := make([]string, len(roles))
-	for i, r := range roles {
-		out[i] = r.Name
-	}
-	return out
-}()
 
 // UserKey is the key of the node of a user.
 func UserKey(subject string) string { return "USR:" + subject }

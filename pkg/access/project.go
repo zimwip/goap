@@ -4,11 +4,10 @@ import (
 	"fmt"
 
 	"github.com/zimwip/goap/pkg/domain"
-	"github.com/zimwip/goap/pkg/mcp"
 )
 
 // Types and links of the project graph objects (ADR 0039): a project mirrors OrgUnit's hierarchy, and
-// Assignment is the meeting point of organisation and project (same shape as mcp.Adapter, the meeting point
+// Assignment is the meeting point of organisation and project (same shape as adapter.Instance, the meeting point
 // of organisation, MCP and connector): the roles an org unit or user locally holds on a project.
 const (
 	NodeTypeProjectUnit = domain.TypeProjectUnit
@@ -26,7 +25,7 @@ const (
 // goap-change connector) gates them through this one predicate.
 func IsAccessType(typ string) bool {
 	switch typ {
-	case NodeTypeUser, NodeTypePolicy, NodeTypeProjectUnit, NodeTypeAssignment, mcp.NodeTypeOrgUnit, mcp.NodeTypeAdapter, mcp.NodeTypeAdapterDef:
+	case NodeTypeUser, NodeTypePolicy, NodeTypeProjectUnit, NodeTypeAssignment, domain.TypeOrgUnit, domain.TypeAdapter, domain.TypeAdapterDef:
 		return true
 	default:
 		return false
