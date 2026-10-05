@@ -75,6 +75,30 @@ func testCommit(t *testing.T, repo Repo) {
 		t.Fatalf("edits lost: %v %v", doc2.Properties, el2.Properties)
 	}
 
+	// a link by key may target a node the graph already holds; one the version already carries is not added again
+	head, _ = g.BranchHead(ctx, "", domain.MainBranch)
+	doc2Ref := doc2.Ref()
+	if _, err := g.Commit(ctx, Commit{Title: "Link stored", Baseline: head.ID, By: "registry",
+		Edits: []NodeEdit{
+			{Key: "DOC-2", Type: "Doc", Links: []LinkEdit{{Type: "defines", ToKey: "DOC-1/el"}}},
+			{Pre: &doc2Ref, Links: []LinkEdit{{Type: "defines", ToKey: "DOC-1/el"}}},
+		}}); err != nil {
+		t.Fatalf("a link to a stored node: %v", err)
+	}
+	other, _ := g.NodeByKey(ctx, domain.DefaultNamespace, "DOC-2")
+	if v, _ := g.View(ctx, other.Ref()); len(v.Out) != 1 || v.Out[0].To.ID != el2.ID {
+		t.Fatalf("DOC-2 must define the stored element: %+v", v.Out)
+	}
+	doc3, _ := g.NodeByKey(ctx, domain.DefaultNamespace, "DOC-1")
+	if v, _ := g.View(ctx, doc3.Ref()); len(v.Out) != len(v2.Out) {
+		t.Fatalf("the link DOC-1 carries must not be added twice: %d links, had %d", len(v.Out), len(v2.Out))
+	}
+	head, _ = g.BranchHead(ctx, "", domain.MainBranch)
+	if _, err := g.Commit(ctx, Commit{Title: "Link nowhere", Baseline: head.ID, By: "registry",
+		Edits: []NodeEdit{{Key: "DOC-3", Type: "Doc", Links: []LinkEdit{{Type: "defines", ToKey: "NOPE"}}}}}); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("a link to a node nowhere must be invalid, got %v", err)
+	}
+
 	// retire the element; a stale edit conflicts and leaves no open change
 	head, _ = g.BranchHead(ctx, "", domain.MainBranch)
 	el2Ref := el2.Ref()

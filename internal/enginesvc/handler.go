@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"sort"
@@ -17,6 +18,7 @@ import (
 	"github.com/zimwip/goap/internal/pbconv"
 	"github.com/zimwip/goap/internal/rpcerr"
 	"github.com/zimwip/goap/pkg/authz"
+	"github.com/zimwip/goap/pkg/condition"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/engine"
 	"github.com/zimwip/goap/pkg/methodology"
@@ -294,6 +296,41 @@ func (h *Handler) GetProcessProgress(ctx context.Context, r *connect.Request[eng
 		Steps: stepProgressToPB(pr.Steps), Done: int32(pr.Done), Total: int32(pr.Total)}}), nil
 }
 
+// ExplainCondition serves how a condition of a run's world state got its value (formula, parts, inputs).
+func (h *Handler) ExplainCondition(ctx context.Context, r *connect.Request[enginev1.ExplainConditionRequest]) (*connect.Response[enginev1.ExplainConditionResponse], error) {
+	ctx = h.principal(ctx, r.Header())
+	p, err := h.Engine.Store.Get(ctx, r.Msg.ProcessId)
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	if err := h.authorize(ctx, "read", "", p); err != nil {
+		return nil, toConnect(err)
+	}
+	ex, waived, ok, err := h.Engine.ExplainCondition(ctx, p.ID, r.Msg.Condition)
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	if !ok {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("condition %q is not defined by the methodology", r.Msg.Condition))
+	}
+	out := &enginev1.ExplainConditionResponse{Condition: ex.Name, Expr: ex.Expr, Value: ex.Value, Error: ex.Error, Waived: waived,
+		Inputs: ex.Inputs}
+	if ex.Expr == "" {
+		out.Note = "Set by the engine: true once the run is bound to a change."
+	} else {
+		out.Root = termToPB(ex.Root)
+	}
+	return connect.NewResponse(out), nil
+}
+
+func termToPB(t condition.Term) *enginev1.ConditionTerm {
+	out := &enginev1.ConditionTerm{Text: t.Text, Value: t.Value, Skipped: t.Skipped, Error: t.Error}
+	for _, k := range t.Terms {
+		out.Terms = append(out.Terms, termToPB(k))
+	}
+	return out
+}
+
 func stepProgressToPB(steps []engine.StepProgress) []*enginev1.StepProgress {
 	out := make([]*enginev1.StepProgress, 0, len(steps))
 	for _, s := range steps {
@@ -486,7 +523,7 @@ func ProcessToPB(p *engine.Process) *enginev1.Process {
 		CreatedAt: pbconv.Time(p.CreatedAt), UpdatedAt: pbconv.Time(p.UpdatedAt),
 		Initiator: &enginev1.Principal{Subject: p.Initiator.Subject, Org: p.Initiator.Org, Roles: p.Initiator.Roles},
 		Agent:     p.Agent, Planner: p.Planner, ParentId: p.ParentID, Usage: usageToPB(p.Usage),
-		BaselineId: string(p.BaselineID), Title: p.Title, TraceId: p.TraceID, Trigger: p.Trigger, Flow: p.Flow, RelaunchOf: p.RelaunchOf, FromStep: int32(p.FromStep),
+		BaselineId: string(p.BaselineID), Title: p.Title, TraceId: p.TraceID, Trigger: p.Trigger, Cause: p.Cause, Flow: p.Flow, RelaunchOf: p.RelaunchOf, FromStep: int32(p.FromStep),
 	}
 	for _, t := range p.Intent.Turns {
 		out.Turns = append(out.Turns, &enginev1.Turn{Role: t.Role, Text: t.Text})

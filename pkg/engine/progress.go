@@ -8,6 +8,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/zimwip/goap/pkg/condition"
+	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/methodology"
 )
 
@@ -251,4 +253,34 @@ func (e *Engine) addLanes(ctx context.Context, p *Process, steps []StepProgress)
 		}
 	}
 	return nil
+}
+
+// ExplainCondition shows how a condition of the run's world state got its value against the change of the run:
+// the formula, the value of each part of it and of the blackboard variables it reads.
+// An engine's own condition (change_bound) has no formula: its Expr is empty. ok is false for an unknown name.
+func (e *Engine) ExplainCondition(ctx context.Context, id, name string) (ex condition.Explanation, waived, ok bool, err error) {
+	p, err := e.Store.Get(ctx, id)
+	if err != nil {
+		return ex, false, false, err
+	}
+	m, err := e.Methodologies.Methodology(ctx, p.Methodology)
+	if err != nil {
+		return ex, false, false, err
+	}
+	var bb domain.Blackboard
+	if p.ChangeID == "" {
+		bb = domain.Blackboard{Vars: p.Vars}
+	} else {
+		if bb, err = e.Graph.BlackboardIn(ctx, p.ChangeID, p.Flow); err != nil {
+			return ex, false, false, err
+		}
+		bb.Vars = p.Vars
+	}
+	bb.Supertypes = e.supertypesOf(m)
+	ex, ok = m.Conditions.Explain(name, bb)
+	if !ok && name == "change_bound" {
+		ex, ok = condition.Explanation{Name: name, Value: p.ChangeID != ""}, true
+	}
+	_, waived = bb.Change.Waivers(p.ID)[name]
+	return ex, waived, ok, nil
 }

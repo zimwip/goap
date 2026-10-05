@@ -5,13 +5,17 @@
   import type { Action, Condition } from '../api';
   import { loadRaw, save } from '../shell/storage';
   import { sourceOf, variablesOf } from '../conditionSources';
+  import { openConditionExplain } from '../shell/conditionExplainState.svelte';
 
   let {
+    processId = '',
     world = {},
     unknown = {},
     conditions = [],
     actions = [],
   }: {
+    /** the run: a dynamic condition opens its solver (formula and values against the run's change) */
+    processId?: string;
     world?: Record<string, boolean>;
     unknown?: Record<string, string>;
     /** definitions of the methodology (expression, description): the source indicator */
@@ -51,7 +55,7 @@
     <button type="button" class="small" class:primary={!all} aria-pressed={!all} onclick={() => (all = false)}>True <span class="n">{holding.length}</span></button>
     <button type="button" class="small" class:primary={all} aria-pressed={all} onclick={() => (all = true)}>All <span class="n">{names.length}</span></button>
     {#if conditions.length}
-      <span class="legend"><span class="src dynamic">dynamic</span> inferred from the impacts and the change · <span class="src set">set</span> by an action</span>
+      <span class="legend"><span class="src dynamic">dynamic</span> inferred from the impacts and the change (click for its solver) · <span class="src set">set</span> by an action</span>
     {/if}
   </div>
   {#if shown.length}
@@ -61,7 +65,14 @@
         {#each shown as name (name)}
           {@const err = unknown[name]}
           {@const src = sourceOf(defs.get(name)?.expr)}
-          <tr title={tip(name)}>
+          {@const explain = src === 'dynamic' && processId !== ''}
+          <tr
+            title={tip(name)}
+            class:explain
+            tabindex={explain ? 0 : undefined}
+            onclick={explain ? () => openConditionExplain(processId, name) : undefined}
+            onkeydown={explain ? (e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), openConditionExplain(processId, name)) : undefined}
+          >
             <td><code>{name}</code></td>
             <td>
               {#if err !== undefined}
@@ -111,6 +122,12 @@
   }
   tbody tr {
     cursor: help;
+  }
+  tbody tr.explain {
+    cursor: pointer;
+  }
+  tbody tr.explain:hover {
+    background: var(--neutral-soft);
   }
   .v {
     display: inline-block;

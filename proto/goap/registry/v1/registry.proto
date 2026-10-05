@@ -373,6 +373,8 @@ message Methodology {
   repeated string applies_to = 21;
   // the events of those changes it reacts to (default: a process attached, a step completed, a risk or an action added)
   repeated Subscription on = 22;
+  // the lifecycle of the domain its changes follow (ADR 0058); empty: none
+  string lifecycle = 23;
 }
 
 // An event a transverse methodology reacts to, with a CEL filter over event ({type, change, process, step, items}).

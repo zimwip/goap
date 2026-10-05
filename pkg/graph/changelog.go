@@ -30,6 +30,15 @@ func putExecution(ctx context.Context, tx Tx, r domain.ExecutionRecord) error {
 	return err
 }
 
+func putModelExchange(ctx context.Context, tx Tx, r domain.ExecutionRecord, ex domain.ModelExchange) error {
+	e, err := domain.ModelEntry(r, ex)
+	if err != nil {
+		return err
+	}
+	_, err = tx.AppendLog(ctx, e)
+	return err
+}
+
 func appendImpactEvent(ctx context.Context, tx Tx, ev domain.ImpactEvent) (domain.ImpactEvent, error) {
 	e, err := domain.ImpactEntry(ev)
 	if err != nil {

@@ -3,7 +3,7 @@
   // backward ones (dashed) below, each carrying its name as a pill.
   import type { LifecycleForm } from '../methodologyForm';
 
-  let { lc }: { lc: LifecycleForm } = $props();
+  let { lc, current = '' }: { lc: LifecycleForm; /** the state something is in: drawn emphasised */ current?: string } = $props();
 
   const BOX_W = 110;
   const BOX_H = 36;
@@ -138,10 +138,11 @@
 
       {#each states as s, i (i)}
         {@const c = tone(s)}
-        {@const flags = [s.name === lc.initial ? 'INITIAL' : '', s.editable ? 'EDITABLE' : '', s.final ? 'FINAL' : ''].filter(Boolean).join(' · ')}
+        {@const here = !!current && s.name === current}
+        {@const flags = [here ? 'CURRENT' : '', s.name === lc.initial ? 'INITIAL' : '', s.editable ? 'EDITABLE' : '', s.final ? 'FINAL' : ''].filter(Boolean).join(' · ')}
         <g>
           <title>{s.description || s.name}</title>
-          <rect class="state" x={cx(i) - BOX_W / 2} y={layout.rowY - BOX_H / 2} width={BOX_W} height={BOX_H} rx="6" style="--c: {c}" />
+          <rect class="state" class:here x={cx(i) - BOX_W / 2} y={layout.rowY - BOX_H / 2} width={BOX_W} height={BOX_H} rx="6" style="--c: {c}" />
           <text class="sname" x={cx(i)} y={layout.rowY + (flags ? 1 : 4)} text-anchor="middle" style="fill: {c}">{s.name}</text>
           {#if flags}<text class="sflags" x={cx(i)} y={layout.rowY + 13} text-anchor="middle" style="fill: {c}">{flags}</text>{/if}
         </g>
@@ -159,6 +160,10 @@
     fill: color-mix(in srgb, var(--c) 14%, transparent);
     stroke: var(--c);
     stroke-width: 1.5;
+  }
+  .state.here {
+    fill: color-mix(in srgb, var(--c) 32%, transparent);
+    stroke-width: 3;
   }
   .sname {
     font-size: 11px;

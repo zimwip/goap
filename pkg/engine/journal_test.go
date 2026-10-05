@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/zimwip/goap/pkg/authz"
@@ -52,6 +53,26 @@ func TestJournalRecordsTicksAndActions(t *testing.T) {
 	act := recs[4]
 	if act.Action != "identify_impacts" || act.ActionKind != "llm" || len(act.ModelCalls) != 1 || act.EffectsMet == nil || !*act.EffectsMet || len(act.Nodes) != 1 {
 		t.Fatalf("action record: %+v", act)
+	}
+	// the prompt of the call is an entry of the log of the change, linked to the action run; the record and the
+	// process keep the counts only
+	entries, _, err := g.ChangeLog(ctx, domain.LogFilter{Change: p.ChangeID, Types: []string{domain.LogModel + ".call"}, Execution: act.ID})
+	if err != nil || len(entries) != 1 || entries[0].Subject != "0" || entries[0].Process != p.ID {
+		t.Fatalf("model entries: %+v %v", entries, err)
+	}
+	var ex domain.ModelExchange
+	if err := json.Unmarshal(entries[0].Payload, &ex); err != nil || ex.System == "" || len(ex.Messages) == 0 || ex.Response == "" {
+		t.Fatalf("exchange: %+v %v", ex, err)
+	}
+	if act.ModelCalls[0].Exchange != nil {
+		t.Fatalf("the record holds the prompt")
+	}
+	for _, st := range p.Steps {
+		for _, c := range st.LLMCalls {
+			if c.Exchange != nil {
+				t.Fatalf("the process holds a prompt: step %d", st.Index)
+			}
+		}
 	}
 	// provenance: every item produced by an action points to its record
 	c, _ := g.Change(ctx, p.ChangeID)

@@ -279,6 +279,15 @@ func (c *Client) Apply(ctx context.Context, id domain.ChangeID, baselineName str
 	return pbconv.BaselineFromPB(r.Msg.Baseline), nil
 }
 
+// TransitionChange moves the state of a change along a transition of its lifecycle (ADR 0058).
+func (c *Client) TransitionChange(ctx context.Context, id domain.ChangeID, in graph.TransitionRequest) (domain.Change, error) {
+	r, err := c.rpc.TransitionChange(ctx, connect.NewRequest(&graphv1.TransitionChangeRequest{ChangeId: string(id), Transition: in.Transition, Decision: in.Decision}))
+	if err != nil {
+		return domain.Change{}, rpcerr.FromConnect(err)
+	}
+	return pbconv.ChangeFromPB(r.Msg.Change), nil
+}
+
 func (c *Client) Baselines(ctx context.Context, namespace string) ([]domain.Baseline, error) {
 	r, err := c.rpc.ListBaselines(ctx, connect.NewRequest(&graphv1.ListBaselinesRequest{Namespace: namespace}))
 	if err != nil {

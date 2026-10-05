@@ -343,6 +343,9 @@ func (t *TriggerManager) start(ctx context.Context, key string, s TriggerState, 
 	if req.Intent == "" {
 		req.Intent = "Automatic run: " + strings.TrimSpace(s.Name+" "+def.Description)
 	}
+	if ev != nil && ev.Process != nil {
+		req.Cause = ev.Process.ID
+	}
 	if ev != nil {
 		// the event is available to the agent (conditions, scripts, builtins)
 		req.Vars = map[string]any{"event": ev.activation()}

@@ -92,7 +92,7 @@ func actionRecord(p *Process, i int, kind, activityRef, id string) domain.Execut
 	}
 	for _, c := range s.LLMCalls {
 		r.ModelCalls = append(r.ModelCalls, domain.ModelCall{Provider: c.Provider, Model: c.Model, InputTokens: c.InputTokens,
-			OutputTokens: c.OutputTokens, DurationMs: c.DurationMs, Error: c.Error})
+			OutputTokens: c.OutputTokens, DurationMs: c.DurationMs, Error: c.Error, Exchange: c.Exchange})
 	}
 	for _, c := range s.ToolCalls {
 		r.ToolCalls = append(r.ToolCalls, domain.ToolUse{Name: c.Name, DurationMs: c.DurationMs, Error: c.Error})

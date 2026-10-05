@@ -877,6 +877,16 @@ export interface LogEntry {
   payload?: string;
 }
 
+/** The request and the answer of one LLM call (payload of a model.call log entry). */
+export interface ModelExchange {
+  step?: number;
+  call?: number;
+  system?: string;
+  messages?: { role?: string; content?: string }[];
+  response?: string;
+  truncated?: boolean;
+}
+
 export interface ChangeLogQuery {
   changeId: string;
   /** exact types or streams ('journal.') */
@@ -1023,6 +1033,9 @@ export interface Change {
   status?: 'draft' | 'active' | 'committed' | 'applied' | 'abandoned' | string;
   baselineId?: string;
   resultBaselineId?: string;
+  /** the domain lifecycle the change follows (named by its methodology) and its state (ADR 0058); absent: none */
+  lifecycle?: string;
+  state?: string;
   data?: Struct;
   items?: ChangeItem[];
   /** the nodes the change reads, modifies or creates: stored, and derived from its items */
@@ -1282,6 +1295,28 @@ export interface StepContext {
 }
 
 /** Where a run stands in the steps of the process its agent runs (ADR 0035 §3). */
+/** One part of a condition formula with the value it took (ExplainCondition). */
+export interface ConditionTerm {
+  text?: string;
+  value?: string;
+  skipped?: boolean;
+  error?: string;
+  terms?: ConditionTerm[];
+}
+
+export interface ConditionExplanation {
+  condition?: string;
+  expr?: string;
+  value?: boolean;
+  error?: string;
+  /** declared established by a person whatever the formula says */
+  waived?: boolean;
+  root?: ConditionTerm;
+  /** blackboard variables the formula reads, as JSON text */
+  inputs?: Record<string, string>;
+  note?: string;
+}
+
 export interface ProcessProgress {
   processId?: string;
   methodology?: string;
@@ -1383,6 +1418,8 @@ export interface Process {
   traceId?: string;
   /** "<agent>/<trigger>" when started by a trigger */
   trigger?: string;
+  /** process whose event fired the trigger */
+  cause?: string;
   /** flow branch the process works on (relaunched step); empty: the main flow */
   flow?: string;
   /** process replaced when the flow is adopted, and the step that was restarted */
@@ -2167,6 +2204,9 @@ export const engine = {
     rpc<{ id: string }, { process?: Process }>(ENGINE, 'GetProcess', { id }, signal),
   getProcessProgress: (id: string, signal?: AbortSignal) =>
     rpc<{ id: string }, { progress?: ProcessProgress }>(ENGINE, 'GetProcessProgress', { id }, signal),
+  /** How a condition of the run's world state got its value against the run's change. */
+  explainCondition: (processId: string, condition: string, signal?: AbortSignal) =>
+    rpc<{ processId: string; condition: string }, ConditionExplanation>(ENGINE, 'ExplainCondition', { processId, condition }, signal),
   listProcesses: (req: ListProcessesRequest = {}, signal?: AbortSignal) =>
     rpc<ListProcessesRequest, { processes?: Process[] }>(ENGINE, 'ListProcesses', req, signal),
   /** Binds an unbound process (ADR 0031) to an existing change (changeId set) or a new one. */

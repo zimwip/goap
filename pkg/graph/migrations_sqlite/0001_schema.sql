@@ -64,7 +64,9 @@ CREATE TABLE change (
     owner_org          text        NOT NULL CHECK (owner_org <> ''),
     project_id         text        NOT NULL CHECK (project_id <> ''),
     administrative     integer     NOT NULL DEFAULT 0,
-    activity_ref       text        NOT NULL DEFAULT ''
+    activity_ref       text        NOT NULL DEFAULT '',
+    lifecycle          text        NOT NULL DEFAULT '',
+    state              text        NOT NULL DEFAULT ''
 );
 CREATE INDEX change_parent ON change (parent_id);
 

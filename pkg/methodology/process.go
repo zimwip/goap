@@ -127,6 +127,10 @@ func (s Step) Method() string {
 // StepCondition is the name of the generated condition of a step done once it has run.
 func StepCondition(path string) string { return "step:" + path }
 
+// StatePrefix starts the generated condition of a state of the lifecycle of the change (ADR 0058): a step that
+// names "state:analysing" in its pre is active while the change is analysing.
+const StatePrefix = "state:"
+
 // NestedProcess returns the methodology (empty: the one declaring it) and the process a step nests.
 func (s Step) NestedProcess() (methodologyName, process string) {
 	if i := strings.Index(s.Process, "/"); i >= 0 {
@@ -203,6 +207,11 @@ func (m *Methodology) compileProcesses(add func(path, format string, args ...any
 	}
 	// the conditions a step names are checked once every step has its own: a step may name "step:<path>" of any other
 	for _, r := range w.refs {
+		if state, ok := strings.CutPrefix(r.cond, StatePrefix); ok && state != "" && !known[r.cond] {
+			// "state:<name>" is generated (ADR 0058): true while the change is in that state of its lifecycle
+			known[r.cond] = true
+			out.conditions = append(out.conditions, condition.Definition{Name: r.cond, Expr: fmt.Sprintf("change.state == %q", state)})
+		}
 		if !known[r.cond] {
 			add(r.path, "unknown condition %q", r.cond)
 		}

@@ -45,6 +45,10 @@ func TestEventTriggerStartsReviewerOnSameChange(t *testing.T) {
 		reviewer.Initiator.Subject != "system:trigger:test-design/reviewer/after_design" {
 		t.Fatalf("unexpected triggered process %+v", reviewer)
 	}
+	// the run whose event fired the trigger is its cause
+	if reviewer.Cause != d.ID {
+		t.Fatalf("cause = %q, want the designer run %q", reviewer.Cause, d.ID)
+	}
 	// the reviewer completion does not match the filter: no loop
 	e.Drain()
 	time.Sleep(50 * time.Millisecond)
@@ -73,6 +77,9 @@ func TestManualFireOfScheduleTrigger(t *testing.T) {
 	}
 	if p.Status != StatusRunning || p.Goal != "designed" || p.Trigger == "" {
 		t.Fatalf("unexpected process %+v", p)
+	}
+	if p.Cause != "" {
+		t.Fatalf("a manual fire has no cause, got %q", p.Cause)
 	}
 	e.Drain()
 	p, _ = e.Store.Get(ctx, p.ID)

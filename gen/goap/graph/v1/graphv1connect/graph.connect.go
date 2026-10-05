@@ -117,6 +117,9 @@ const (
 	// GraphServiceApplyChangeProcedure is the fully-qualified name of the GraphService's ApplyChange
 	// RPC.
 	GraphServiceApplyChangeProcedure = "/goap.graph.v1.GraphService/ApplyChange"
+	// GraphServiceTransitionChangeProcedure is the fully-qualified name of the GraphService's
+	// TransitionChange RPC.
+	GraphServiceTransitionChangeProcedure = "/goap.graph.v1.GraphService/TransitionChange"
 	// GraphServiceDeleteChangeProcedure is the fully-qualified name of the GraphService's DeleteChange
 	// RPC.
 	GraphServiceDeleteChangeProcedure = "/goap.graph.v1.GraphService/DeleteChange"
@@ -270,6 +273,9 @@ type GraphServiceClient interface {
 	CommitEdits(context.Context, *connect.Request[v1.CommitEditsRequest]) (*connect.Response[v1.CommitEditsResponse], error)
 	GetBlackboard(context.Context, *connect.Request[v1.GetBlackboardRequest]) (*connect.Response[v1.GetBlackboardResponse], error)
 	ApplyChange(context.Context, *connect.Request[v1.ApplyChangeRequest]) (*connect.Response[v1.ApplyChangeResponse], error)
+	// Move the state of a change along a transition of its lifecycle (ADR 0058): its guard (a decided decision point,
+	// the expected world state) must hold, and it is journaled.
+	TransitionChange(context.Context, *connect.Request[v1.TransitionChangeRequest]) (*connect.Response[v1.TransitionChangeResponse], error)
 	// Remove a change that landed nothing, with its log (ADR 0037). Refused once anything of it is applied or used.
 	DeleteChange(context.Context, *connect.Request[v1.DeleteChangeRequest]) (*connect.Response[v1.DeleteChangeResponse], error)
 	// Version branches (ADR 0009)
@@ -521,6 +527,12 @@ func NewGraphServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			httpClient,
 			baseURL+GraphServiceApplyChangeProcedure,
 			connect.WithSchema(graphServiceMethods.ByName("ApplyChange")),
+			connect.WithClientOptions(opts...),
+		),
+		transitionChange: connect.NewClient[v1.TransitionChangeRequest, v1.TransitionChangeResponse](
+			httpClient,
+			baseURL+GraphServiceTransitionChangeProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("TransitionChange")),
 			connect.WithClientOptions(opts...),
 		),
 		deleteChange: connect.NewClient[v1.DeleteChangeRequest, v1.DeleteChangeResponse](
@@ -775,6 +787,7 @@ type graphServiceClient struct {
 	commitEdits            *connect.Client[v1.CommitEditsRequest, v1.CommitEditsResponse]
 	getBlackboard          *connect.Client[v1.GetBlackboardRequest, v1.GetBlackboardResponse]
 	applyChange            *connect.Client[v1.ApplyChangeRequest, v1.ApplyChangeResponse]
+	transitionChange       *connect.Client[v1.TransitionChangeRequest, v1.TransitionChangeResponse]
 	deleteChange           *connect.Client[v1.DeleteChangeRequest, v1.DeleteChangeResponse]
 	createBranch           *connect.Client[v1.CreateBranchRequest, v1.CreateBranchResponse]
 	listBranches           *connect.Client[v1.ListBranchesRequest, v1.ListBranchesResponse]
@@ -966,6 +979,11 @@ func (c *graphServiceClient) GetBlackboard(ctx context.Context, req *connect.Req
 // ApplyChange calls goap.graph.v1.GraphService.ApplyChange.
 func (c *graphServiceClient) ApplyChange(ctx context.Context, req *connect.Request[v1.ApplyChangeRequest]) (*connect.Response[v1.ApplyChangeResponse], error) {
 	return c.applyChange.CallUnary(ctx, req)
+}
+
+// TransitionChange calls goap.graph.v1.GraphService.TransitionChange.
+func (c *graphServiceClient) TransitionChange(ctx context.Context, req *connect.Request[v1.TransitionChangeRequest]) (*connect.Response[v1.TransitionChangeResponse], error) {
+	return c.transitionChange.CallUnary(ctx, req)
 }
 
 // DeleteChange calls goap.graph.v1.GraphService.DeleteChange.
@@ -1197,6 +1215,9 @@ type GraphServiceHandler interface {
 	CommitEdits(context.Context, *connect.Request[v1.CommitEditsRequest]) (*connect.Response[v1.CommitEditsResponse], error)
 	GetBlackboard(context.Context, *connect.Request[v1.GetBlackboardRequest]) (*connect.Response[v1.GetBlackboardResponse], error)
 	ApplyChange(context.Context, *connect.Request[v1.ApplyChangeRequest]) (*connect.Response[v1.ApplyChangeResponse], error)
+	// Move the state of a change along a transition of its lifecycle (ADR 0058): its guard (a decided decision point,
+	// the expected world state) must hold, and it is journaled.
+	TransitionChange(context.Context, *connect.Request[v1.TransitionChangeRequest]) (*connect.Response[v1.TransitionChangeResponse], error)
 	// Remove a change that landed nothing, with its log (ADR 0037). Refused once anything of it is applied or used.
 	DeleteChange(context.Context, *connect.Request[v1.DeleteChangeRequest]) (*connect.Response[v1.DeleteChangeResponse], error)
 	// Version branches (ADR 0009)
@@ -1444,6 +1465,12 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 		GraphServiceApplyChangeProcedure,
 		svc.ApplyChange,
 		connect.WithSchema(graphServiceMethods.ByName("ApplyChange")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceTransitionChangeHandler := connect.NewUnaryHandler(
+		GraphServiceTransitionChangeProcedure,
+		svc.TransitionChange,
+		connect.WithSchema(graphServiceMethods.ByName("TransitionChange")),
 		connect.WithHandlerOptions(opts...),
 	)
 	graphServiceDeleteChangeHandler := connect.NewUnaryHandler(
@@ -1726,6 +1753,8 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 			graphServiceGetBlackboardHandler.ServeHTTP(w, r)
 		case GraphServiceApplyChangeProcedure:
 			graphServiceApplyChangeHandler.ServeHTTP(w, r)
+		case GraphServiceTransitionChangeProcedure:
+			graphServiceTransitionChangeHandler.ServeHTTP(w, r)
 		case GraphServiceDeleteChangeProcedure:
 			graphServiceDeleteChangeHandler.ServeHTTP(w, r)
 		case GraphServiceCreateBranchProcedure:
@@ -1929,6 +1958,10 @@ func (UnimplementedGraphServiceHandler) GetBlackboard(context.Context, *connect.
 
 func (UnimplementedGraphServiceHandler) ApplyChange(context.Context, *connect.Request[v1.ApplyChangeRequest]) (*connect.Response[v1.ApplyChangeResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.ApplyChange is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) TransitionChange(context.Context, *connect.Request[v1.TransitionChangeRequest]) (*connect.Response[v1.TransitionChangeResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.TransitionChange is not implemented"))
 }
 
 func (UnimplementedGraphServiceHandler) DeleteChange(context.Context, *connect.Request[v1.DeleteChangeRequest]) (*connect.Response[v1.DeleteChangeResponse], error) {

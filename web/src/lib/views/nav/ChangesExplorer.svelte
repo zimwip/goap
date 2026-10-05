@@ -16,6 +16,8 @@
   let filter = $state('');
   let manualId = $state('');
   let creating = $state(false);
+  // Sub-changes nested under their parent change (tree) or listed on their own (flat).
+  let tree = $state(true);
 
   $effect(() => {
     if (!changes.loaded) void refreshChanges();
@@ -28,7 +30,7 @@
     const m = new Map<string, Process[]>();
     const all = [...processes.values()].sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''));
     for (const p of all) {
-      if (!p.changeId || (p.parentId && processes.has(p.parentId))) continue;
+      if (!p.changeId || nested(p)) continue;
       m.set(p.changeId, [...(m.get(p.changeId) ?? []), p]);
     }
     return m;
@@ -38,9 +40,40 @@
     for (const p of processes.values()) if (p.parentId && processes.has(p.parentId)) m.set(p.parentId, [...(m.get(p.parentId) ?? []), p]);
     return m;
   });
-  const orphans = $derived(
-    [...processes.values()].filter((p) => !p.changeId && !(p.parentId && processes.has(p.parentId))),
-  );
+  // Runs fired by a trigger on an event of another run: children of the run that raised it.
+  const caused = $derived.by(() => {
+    const m = new Map<string, Process[]>();
+    for (const p of processes.values()) if (!p.parentId && p.cause && processes.has(p.cause)) m.set(p.cause, [...(m.get(p.cause) ?? []), p]);
+    return m;
+  });
+  const orphans = $derived([...processes.values()].filter((p) => !p.changeId && !nested(p)));
+
+  // A run shown under another one: sub-agent of its parent, or fired by an event of its cause.
+  function nested(p: Process): boolean {
+    return !!((p.parentId && processes.has(p.parentId)) || (p.cause && processes.has(p.cause)));
+  }
+
+  // Runs of one level, a trigger being the parent of the runs it launched (parallel or re-runs): the group
+  // stands where its newest run was.
+  type Entry = { trigger: string; runs: Process[] } | { run: Process };
+  function layout(list: Process[]): Entry[] {
+    const out: Entry[] = [];
+    const groups = new Map<string, { trigger: string; runs: Process[] }>();
+    for (const p of list) {
+      if (!p.trigger) {
+        out.push({ run: p });
+        continue;
+      }
+      let g = groups.get(p.trigger);
+      if (!g) {
+        g = { trigger: p.trigger, runs: [] };
+        groups.set(p.trigger, g);
+        out.push(g);
+      }
+      g.runs.push(p);
+    }
+    return out;
+  }
 
   const plabel = (p: Process) => p.title || p.agent || p.goal || shortId(p.id);
 
@@ -92,6 +125,15 @@
 
   const runsOf = (c: Change) => byChange.get(c.id ?? '') ?? [];
 
+  const shownIds = $derived(new Set(shown.map((c) => c.id)));
+  const subChanges = $derived.by(() => {
+    const m = new Map<string, Change[]>();
+    for (const c of shown) if (c.parentId && shownIds.has(c.parentId)) m.set(c.parentId, [...(m.get(c.parentId) ?? []), c]);
+    return m;
+  });
+  const isRoot = (c: Change) => !tree || !(c.parentId && shownIds.has(c.parentId));
+  const childrenOf = (c: Change) => (tree ? (subChanges.get(c.id ?? '') ?? []) : []);
+
   function open(c: Change, pin = false) {
     openTab({ kind: 'change', params: { id: c.id ?? '' } }, { pin });
     select({
@@ -119,16 +161,39 @@
   }
 </script>
 
+{#snippet runs(list: Process[], depth: number, scope: string)}
+  {#each layout(list) as e ('run' in e ? e.run.id : `t:${scope}:${e.trigger}`)}
+    {#if 'run' in e}
+      {@render run(e.run, depth)}
+    {:else}
+      {@const k = `t:${scope}:${e.trigger}`}
+      <TreeRow
+        {depth}
+        icon="zap"
+        label={e.trigger}
+        detail={String(e.runs.length)}
+        title={`triggered by ${e.trigger}`}
+        expanded={isOpen(k, true)}
+        ontoggle={() => toggle(k, true)}
+      />
+      {#if isOpen(k, true)}
+        {#each e.runs as p (p.id)}{@render run(p, depth + 1)}{/each}
+      {/if}
+    {/if}
+  {/each}
+{/snippet}
+
 {#snippet run(p: Process, depth: number)}
   {@const kids = subs.get(p.id ?? '') ?? []}
+  {@const fired = caused.get(p.id ?? '') ?? []}
   {@const k = `p:${p.id}`}
   {@const tokens = int(p.usage?.inputTokens) + int(p.usage?.outputTokens)}
   <TreeRow
     {depth}
-    icon={p.parentId ? 'bot' : p.trigger ? 'zap' : 'runs'}
+    icon={p.parentId ? 'bot' : 'runs'}
     label={plabel(p)}
     detail={shortId(p.id)}
-    expanded={kids.length ? isOpen(k, true) : undefined}
+    expanded={kids.length || fired.length ? isOpen(k, true) : undefined}
     active={tabsState.active === `run:${p.id}`}
     title={`${plabel(p)} — ${p.status}${tokens ? ` — ${formatInt(tokens)} tokens` : ''}${p.trigger ? `\ntriggered by ${p.trigger}` : ''}\n${formatDate(p.createdAt)}`}
     onselect={() => openRun(p)}
@@ -137,8 +202,33 @@
   >
     {#snippet trail()}<StatusBadge status={p.status} />{/snippet}
   </TreeRow>
-  {#if kids.length && isOpen(k, true)}
+  {#if (kids.length || fired.length) && isOpen(k, true)}
     {#each kids as c (c.id)}{@render run(c, depth + 1)}{/each}
+    {@render runs(fired, depth + 1, k)}
+  {/if}
+{/snippet}
+
+{#snippet change(c: Change, depth: number)}
+  {@const subsOf = childrenOf(c)}
+  {@const k = `ch:${c.id}`}
+  {@const hasKids = runsOf(c).length > 0 || subsOf.length > 0}
+  <TreeRow
+    {depth}
+    icon="diff"
+    label={c.title || shortId(c.id)}
+    detail={formatDate(c.createdAt)}
+    title={c.intent || c.title || c.id}
+    active={tabsState.active === `change:${c.id}`}
+    expanded={hasKids ? isOpen(k, true) : undefined}
+    ontoggle={() => toggle(k, true)}
+    onselect={() => open(c)}
+    onopen={() => open(c, true)}
+  >
+    {#snippet trail()}<StatusBadge status={c.status} />{/snippet}
+  </TreeRow>
+  {#if hasKids && isOpen(k, true)}
+    {@render runs(runsOf(c), depth + 1, k)}
+    {#each subsOf as sc (sc.id)}{@render change(sc, depth + 1)}{/each}
   {/if}
 {/snippet}
 
@@ -150,6 +240,14 @@
     >
     <button type="button" class="ghost small" title="New intent test" aria-label="New intent test" onclick={newTest}
       ><Icon name="flask" size={14} /></button
+    >
+    <button
+      type="button"
+      class="ghost small"
+      title={tree ? 'Sub-changes under their parent (click for a flat list)' : 'Flat list of changes (click to nest sub-changes)'}
+      aria-label="Nest sub-changes under their parent"
+      aria-pressed={tree}
+      onclick={() => (tree = !tree)}><Icon name={tree ? 'trace' : 'list'} size={14} /></button
     >
     <button
       type="button"
@@ -177,25 +275,7 @@
       {#if list.length}
         <TreeRow icon="folder" label={s.label} detail={String(list.length)} expanded={isOpen(k, s.id !== 'abandoned')} ontoggle={() => toggle(k, s.id !== 'abandoned')} />
         {#if isOpen(k, s.id !== 'abandoned')}
-          {#each list as c (c.id)}
-            <TreeRow
-              depth={1}
-              icon="diff"
-              label={c.title || shortId(c.id)}
-              detail={formatDate(c.createdAt)}
-              title={c.intent || c.title || c.id}
-              active={tabsState.active === `change:${c.id}`}
-              expanded={runsOf(c).length ? isOpen(`ch:${c.id}`, true) : undefined}
-              ontoggle={() => toggle(`ch:${c.id}`, true)}
-              onselect={() => open(c)}
-              onopen={() => open(c, true)}
-            >
-              {#snippet trail()}<StatusBadge status={c.status} />{/snippet}
-            </TreeRow>
-            {#if runsOf(c).length && isOpen(`ch:${c.id}`, true)}
-              {#each runsOf(c) as p (p.id)}{@render run(p, 2)}{/each}
-            {/if}
-          {/each}
+          {#each list.filter(isRoot) as c (c.id)}{@render change(c, 1)}{/each}
         {/if}
       {/if}
     {/each}
@@ -209,7 +289,7 @@
     <div role="tree" aria-label="Executions without a change">
       <TreeRow icon="help" label="No change" detail={String(orphans.length)} expanded={isOpen('g:orphans')} ontoggle={() => toggle('g:orphans')} />
       {#if isOpen('g:orphans')}
-        {#each orphans as p (p.id)}{@render run(p, 1)}{/each}
+        {@render runs(orphans, 1, 'orphans')}
       {/if}
     </div>
   {/if}

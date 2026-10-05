@@ -122,7 +122,7 @@ func (r *planRecorder) complete(ctx context.Context, req llm.Request) (llm.Respo
 	start := time.Now()
 	resp, err := r.client.Complete(ctx, req)
 	call := LLMCall{Provider: resp.Provider, Model: resp.Model, InputTokens: int64(resp.Usage.InputTokens),
-		OutputTokens: int64(resp.Usage.OutputTokens), DurationMs: time.Since(start).Milliseconds()}
+		OutputTokens: int64(resp.Usage.OutputTokens), DurationMs: time.Since(start).Milliseconds(), Exchange: exchangeOf(req, resp)}
 	if call.Model == "" {
 		call.Model = req.Model
 	}

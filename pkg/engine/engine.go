@@ -122,7 +122,9 @@ type StartRequest struct {
 	Call     string
 	// Trigger is set for processes started by a trigger.
 	Trigger string
-	Vars    map[string]any
+	// Cause is the process whose event fired the trigger.
+	Cause string
+	Vars  map[string]any
 	// Step is the step of the parent's process a sub-agent carries out (ADR 0034).
 	Step *StepContext
 	// Flow puts the process on an already-open flow branch of ChangeID (ADR
@@ -163,7 +165,7 @@ func (e *Engine) log() *slog.Logger {
 // methodology, identification ranks the agents of every published methodology.
 func (e *Engine) Start(ctx context.Context, req StartRequest) (*Process, error) {
 	p := &Process{ID: uuid.NewString(), Methodology: req.Methodology, Agent: req.Agent, ChangeID: req.ChangeID, BaselineID: req.BaselineID, Namespace: req.Namespace, OwnBranch: req.OwnBranch, Org: req.OwnerOrg,
-		Project: req.ProjectID, Title: req.Title, ParentID: req.ParentID, Trigger: req.Trigger, Flow: req.Flow, Initiator: authz.From(ctx), Vars: maps.Clone(req.Vars), Step: req.Step, Disabled: map[string]bool{},
+		Project: req.ProjectID, Title: req.Title, ParentID: req.ParentID, Trigger: req.Trigger, Cause: req.Cause, Flow: req.Flow, Initiator: authz.From(ctx), Vars: maps.Clone(req.Vars), Step: req.Step, Disabled: map[string]bool{},
 		CreatedAt: e.clock(), UpdatedAt: e.clock()}
 	if req.Intent != "" {
 		if err := e.appendIntentTurns(ctx, p, intent.Turn{Role: "user", Text: req.Intent}); err != nil {
@@ -788,11 +790,13 @@ func (e *Engine) execute(ctx context.Context, p *Process, m *methodology.Compile
 		step := &p.Steps[i]
 		step.Error, step.EndedAt = err.Error(), e.clock()
 		e.journal(ctx, p, actionRecord(p, i, action.Kind, action.Step, id))
+		p.Steps[i].dropExchanges()
 		return e.recordFailure(p, action.Name)
 	}
 	p.Steps[i].Specialization = spec
 	err = e.executeStep(ctx, p, m, bb, impl, i)
 	e.journal(ctx, p, actionRecord(p, i, impl.Kind, action.Step, id))
+	p.Steps[i].dropExchanges()
 	return err
 }
 

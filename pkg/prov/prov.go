@@ -58,6 +58,11 @@ func Export(c domain.Change, entries []domain.LogEntry) (Document, error) {
 			if err = json.Unmarshal(e.Payload, &it); err == nil {
 				b.fact(c, e, it)
 			}
+		case domain.LogModel:
+			var ex domain.ModelExchange
+			if err = json.Unmarshal(e.Payload, &ex); err == nil {
+				b.exchange(c, e, ex)
+			}
 		case domain.LogImpact:
 			var ev domain.ImpactEvent
 			if err = json.Unmarshal(e.Payload, &ev); err == nil {
@@ -301,6 +306,23 @@ func (b *builder) execution(c domain.Change, e domain.LogEntry, r domain.Executi
 	}
 }
 
+// exchange is the request and the answer of an LLM call: an entity the action run generated, with the texts.
+func (b *builder) exchange(c domain.Change, e domain.LogEntry, ex domain.ModelExchange) {
+	n := b.node(iri("exchange", e.ID), "prov:Entity", "goap:ModelExchange")
+	entry(n, e)
+	set(n, "label", "model call "+e.Subject)
+	set(n, "goap:system", ex.System)
+	set(n, "goap:response", ex.Response)
+	if ex.Truncated {
+		n["goap:truncated"] = true
+	}
+	setTime(n, "prov:generatedAtTime", e.At)
+	add(n, "prov:wasGeneratedBy", ref(by(c, e.Execution)))
+	if p := b.principal(e.By); p != "" {
+		add(n, "prov:wasAttributedTo", ref(p))
+	}
+}
+
 // fact is an item of the change's blackboard.
 func (b *builder) fact(c domain.Change, e domain.LogEntry, it domain.ChangeItem) {
 	n := b.node(itemIRI(it.ID), "prov:Entity", "goap:Item")
@@ -328,6 +350,12 @@ func (b *builder) fact(c domain.Change, e domain.LogEntry, it domain.ChangeItem)
 		add(n, "goap:decides", ref(itemIRI(d.Item)))
 		n["goap:accept"] = d.Accept
 		set(n, "rdfs:comment", d.Comment)
+	}
+	if it.Kind == domain.KindTransition {
+		// a move of the lifecycle of the change (ADR 0058), influenced by the decision point that gated it
+		if d, _ := it.Data["decision"].(string); d != "" {
+			add(n, "prov:wasInfluencedBy", ref(itemIRI(domain.ItemID(d))))
+		}
 	}
 	if len(it.Data) > 0 {
 		n["data"] = it.Data

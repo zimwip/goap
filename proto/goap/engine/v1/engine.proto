@@ -27,6 +27,9 @@ service EngineService {
   rpc GetProcess(GetProcessRequest) returns (GetProcessResponse);
   // Where a run stands in the steps of the process its agent runs (ADR 0035 §3).
   rpc GetProcessProgress(GetProcessProgressRequest) returns (GetProcessProgressResponse);
+  // How a condition of the run's world state got its value: its CEL formula, the value of each part of it and
+  // of the blackboard variables it reads, against the change of the run.
+  rpc ExplainCondition(ExplainConditionRequest) returns (ExplainConditionResponse);
   rpc ListProcesses(ListProcessesRequest) returns (ListProcessesResponse);
   // Binds an unbound process (ADR 0031, process_id with no change) to a change: an existing one
   // (change_id) or a new one, defaulted the same way StartProcess defaults one.
@@ -263,6 +266,8 @@ message Process {
   // process replaced when the flow is adopted, and the step it restarted
   string relaunch_of = 28;
   int32 from_step = 29;
+  // process whose event fired the trigger
+  string cause = 30;
 }
 
 message StartProcessRequest {
@@ -384,6 +389,37 @@ message GetProcessProgressRequest {
 
 message GetProcessProgressResponse {
   ProcessProgress progress = 1;
+}
+
+message ExplainConditionRequest {
+  string process_id = 1;
+  string condition = 2;
+}
+
+message ExplainConditionResponse {
+  string condition = 1;
+  string expr = 2;
+  // the condition as the run sees it (a waiver may override the formula)
+  bool value = 3;
+  // the formula could not be evaluated
+  string error = 4;
+  // the value was declared established by a person (Engine.Unblock) whatever the formula says
+  bool waived = 5;
+  // the formula as a tree of its parts
+  ConditionTerm root = 6;
+  // the blackboard variables the formula reads, as JSON text
+  map<string, string> inputs = 7;
+  // a synthetic condition of the engine has no formula
+  string note = 8;
+}
+
+message ConditionTerm {
+  string text = 1;
+  string value = 2;
+  // short-circuited, or inside a macro (exists, all, ...) whose iterations have no single value
+  bool skipped = 3;
+  string error = 4;
+  repeated ConditionTerm terms = 5;
 }
 
 message ProcessProgress {

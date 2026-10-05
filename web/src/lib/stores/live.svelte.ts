@@ -39,9 +39,12 @@ export interface TokenRow {
   key: string;
   time: string;
   processId: string;
+  changeId: string;
   agent: string;
   action: string;
   step: number;
+  /** position of the call in the step */
+  call: number;
   provider: string;
   model: string;
   input: number;
@@ -120,9 +123,11 @@ export function ingestProcess(p: Process | undefined): void {
         key,
         time: s.endedAt || s.startedAt || p.updatedAt || '',
         processId: p.id ?? '',
+        changeId: p.changeId ?? '',
         agent: p.agent ?? '',
         action: s.action ?? '',
         step: idx,
+        call: i,
         provider: c.provider ?? '',
         model: c.model ?? '',
         input: int(c.inputTokens),
