@@ -65,7 +65,7 @@ nodeTypes:
   # home unit.
   # The user lifecycle (ADR 0048) tracks whether the account is usable, not a review workflow: proposed is a
   # transient bootstrap state (a sign-in immediately activates it in the same change), active and deactivated
-  # are both ordinary long-lived statuses a User rests in indefinitely — hence restInEditable below.
+  # are both ordinary long-lived statuses a User rests in indefinitely — all of them landable.
   - name: User
     description: "Person or service account, with its profile and roles"
     extends: OrgUnit
@@ -155,32 +155,29 @@ nodeTypes:
       - {name: description, label: Description, description: "Why the assignment exists", type: string, widget: textarea, section: Identity, order: 2}
 lifecycles:
   # A node no parent holds (an adapter instance, a policy, an assignment) is never deleted (ADR 0076 §4c): it is
-  # retired, and its readers leave it out (pkg/access, the MCP hub); an active one stays editable at rest.
+  # retired, and its readers leave it out (pkg/access, the MCP hub); an active one stays editable.
   - name: config
     description: Whether an access or adapter entry is in force
     initial: active
-    restInEditable: true
     states:
-      - {name: active, editable: true, description: "In force"}
-      - {name: retired, description: "Taken out of force; read-only until restored"}
+      - {name: active, description: "In force"}
+      - {name: retired, description: "Taken out of force until restored"}
     transitions:
       - {name: retire, description: Take the entry out of force, from: active, to: retired}
       - {name: restore, description: Put a retired entry back in force, from: retired, to: active}
-  # ADR 0048: active and deactivated are both ordinary resting statuses (restInEditable), not a review draft —
-  # a User's profile stays freely editable while active, the way it always has; only a deactivated account is
-  # frozen (not editable) until an admin reactivates it. proposed exists only to carry a brand-new account
+  # ADR 0048: active and deactivated are both ordinary resting statuses, not a review draft — every state of
+  # this lifecycle is landable (ADR 0078). proposed exists only to carry a brand-new account
   # from creation to its first activation within the same bootstrap change (ADR 0040/0042).
   - name: user
     description: Whether a user account is usable (not a review workflow)
     initial: proposed
-    restInEditable: true
     states:
-      - {name: proposed, editable: true, description: "Created, not yet activated"}
-      - {name: active, editable: true, description: "Usable account"}
-      - {name: deactivated, description: "Suspended by an admin; read-only until reactivated"}
+      - {name: proposed, description: "Created, not yet activated"}
+      - {name: active, description: "Usable account"}
+      - {name: deactivated, description: "Suspended by an admin until reactivated"}
     transitions:
       - {name: activate, description: Activate a new account (a sign-in does it in the same change), from: proposed, to: active}
-      - {name: deactivate, description: Suspend the account; it is read-only until reactivated, from: active, to: deactivated, permission: "user:deactivate"}
+      - {name: deactivate, description: Suspend the account until it is reactivated, from: active, to: deactivated, permission: "user:deactivate"}
       - {name: reactivate, description: Give a suspended account back, from: deactivated, to: active, permission: "user:reactivate"}
 linkTypes:
   # child -> parent: outgoing links belong to the source version, so reorganising a unit only versions that unit

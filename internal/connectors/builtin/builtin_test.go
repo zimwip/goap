@@ -223,7 +223,7 @@ func TestChangeTools(t *testing.T) {
 	if _, err := p.hub.Call(ctx, "ORG-CHECKOUT", "goap-change/write", map[string]any{"key": "REQ-1", "type": "alm@Requirement", "rationale": "again"}); err == nil {
 		t.Fatal("write of an existing node accepted")
 	}
-	// REQ-2 starts proposed (not editable): reopen it to draft before editing its properties
+	// REQ-2 starts proposed: move it to draft (the state of the work) before editing its properties
 	p.call(t, ctx, "ORG-CHECKOUT", "goap-change/edit", map[string]any{"key": "REQ-2", "state": "draft", "rationale": "reopen for refunds"})
 	// edit guards against a concurrent edit
 	if _, err := p.hub.Call(ctx, "ORG-CHECKOUT", "goap-change/edit", map[string]any{"key": "REQ-2", "properties": map[string]any{"priority": "high"},
@@ -330,7 +330,7 @@ func TestChangeOptionTools(t *testing.T) {
 		"namespace": "alm", "methodology": "sdlc"})["change"].(map[string]any)["id"].(string)
 	ctx = mcp.WithCall(ctx, mcp.CallContext{Change: id, Process: "P1"})
 	a := p.call(t, ctx, "ORG-CHECKOUT", "goap-change/option", map[string]any{"name": "high", "hypothesis": "refunds are urgent", "activate": true})["option"].(map[string]any)
-	// REQ-2 starts proposed (not editable): reopen it to draft before editing its properties, in each option
+	// REQ-2 starts proposed: move it to draft (the state of the work) before editing its properties, in each option
 	p.call(t, ctx, "ORG-CHECKOUT", "goap-change/edit", map[string]any{"key": "REQ-2", "state": "draft", "rationale": "reopen for refunds"})
 	p.call(t, ctx, "ORG-CHECKOUT", "goap-change/edit", map[string]any{"key": "REQ-2", "properties": map[string]any{"priority": "high"}, "rationale": "urgent"})
 	b := p.call(t, ctx, "ORG-CHECKOUT", "goap-change/option", map[string]any{"name": "low", "hypothesis": "refunds can wait"})["option"].(map[string]any)

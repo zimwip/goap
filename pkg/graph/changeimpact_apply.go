@@ -74,19 +74,19 @@ func (a *applier) mainImpacts() []domain.ChangeImpact {
 
 // checkChangeImpacts validates the versions produced by the change impacts once the target graph is known: property
 // validators, the states the nodes are left in and the transitions they went through, then what they leave (the landing
-// gate, else no node left in an editable state). A transition was authorized, guarded and acted when it was taken
+// gate, else no node left in a state that cannot land). A transition was authorized, guarded and acted when it was taken
 // (ImpactNodeTransition, ADR 0076): the walk only checks that each state change on the branch is a move of the lifecycle.
 func (a *applier) checkChangeImpacts() error {
-	editable, err := a.walkChangeImpacts()
+	stuck, err := a.walkChangeImpacts()
 	if err != nil {
 		return err
 	}
-	return a.settleChangeImpacts(editable)
+	return a.settleChangeImpacts(stuck)
 }
 
 // walkChangeImpacts validates the properties of each produced version and walks its transitions: it returns the nodes
-// left in an editable state.
-func (a *applier) walkChangeImpacts() (editable []string, err error) {
+// left in a state that cannot land (ADR 0078).
+func (a *applier) walkChangeImpacts() (stuck []string, err error) {
 	for _, cp := range a.cposts {
 		n := cp.post
 		if n.Deleted {
@@ -99,14 +99,14 @@ func (a *applier) walkChangeImpacts() (editable []string, err error) {
 		if lc == nil || n.State == "" {
 			continue
 		}
-		if lc.Editable(n.State) && !lc.RestInEditable {
-			editable = append(editable, fmt.Sprintf("%s (%s) in %s", n.Key, n.Type, n.State))
+		if !lc.Landable(n.State) {
+			stuck = append(stuck, fmt.Sprintf("%s (%s) in %s", n.Key, n.Type, n.State))
 		}
 		if err := a.walkTransitions(cp, lc); err != nil {
 			return nil, err
 		}
 	}
-	return editable, nil
+	return stuck, nil
 }
 
 // walkTransitions replays the versions of a node written on the change branch: each state change must be a
@@ -136,8 +136,8 @@ func (a *applier) walkTransitions(cp cpost, lc *domain.Lifecycle) error {
 	return nil
 }
 
-// settleChangeImpacts decides what the walk found: the landing gate, else the editable states left.
-func (a *applier) settleChangeImpacts(editable []string) error {
+// settleChangeImpacts decides what the walk found: the landing gate, else the states left that cannot land.
+func (a *applier) settleChangeImpacts(stuck []string) error {
 	// LandingGate may itself need to read the graph, which this transaction would block (the stores are not
 	// reentrant): askLandingGate asks it in its own rolled-back pass before this transaction opens, and passes the
 	// answer in as a.landing. a.collect means this call IS that earlier pass: nothing to check yet, just leave the
@@ -153,8 +153,8 @@ func (a *applier) settleChangeImpacts(editable []string) error {
 		if !a.landing.ok {
 			return invalidf("the change does not satisfy the goal of its landing gate")
 		}
-	case len(editable) > 0:
-		return invalidf("the change leaves nodes in an editable state, move them out of it before applying: %s", joinSorted(editable))
+	case len(stuck) > 0:
+		return invalidf("the change leaves nodes in a state that cannot land, move them to a landable state first: %s", joinSorted(stuck))
 	}
 	return nil
 }
@@ -170,7 +170,7 @@ func (a *applier) landingBlackboard() domain.Blackboard {
 		}
 		v := domain.NodeView{Node: *n}
 		if lc := a.ix.lifecycleOf(n.Type); lc != nil && n.State != "" {
-			v.Frozen = !lc.Editable(n.State)
+			v.NotLandable = !lc.Landable(n.State)
 		}
 		bb.Nodes[n.Ref()] = v
 	}

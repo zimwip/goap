@@ -22,7 +22,7 @@ func ActivityOf(c domain.Change) string {
 }
 
 // LandingGate resolves pkg/graph.Graph.LandingGate: a change scoped to an Activity (DataActivity) is gated at
-// landing by that activity's own goal condition instead of the node-type lifecycle's Editable floor; any other
+// landing by that activity's own goal condition instead of the node-type lifecycle's landable-state floor; any other
 // change is not decided. Wire it from main: g.LandingGate = reg.LandingGate, where reg is the *Service* backing the
 // registry.
 func (s *Service) LandingGate(ctx context.Context, c domain.Change, bb domain.Blackboard) (decided, ok bool, err error) {

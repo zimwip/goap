@@ -10,7 +10,7 @@ export function lifecycleResolver(cat: TypeCatalog): (type: string | undefined) 
 
 export interface LifecycleRow {
   node: GraphNode;
-  /** undefined: the node type has no lifecycle (always editable through a change) */
+  /** undefined: the node type has no lifecycle (always landable) */
   lifecycle?: Lifecycle;
   /** stored state ('' : the node has none yet) */
   base: string;
@@ -18,7 +18,8 @@ export interface LifecycleRow {
   effective: string;
   /** states the change moves the node through */
   moves: string[];
-  editable: boolean;
+  /** the effective state can land: a node of a type without lifecycle, or in a state not flagged notLandable (ADR 0078) */
+  landable: boolean;
   /** transitions available from the effective state */
   transitions: LifecycleTransition[];
   /** properties after the change's writes */
@@ -183,7 +184,7 @@ export function createdRows(cat: TypeCatalog, cns: ChangeImpact[], posts: PostVe
       base: '',
       effective: state,
       moves: [],
-      editable: lifecycle ? editableState(lifecycle, state) : true,
+      landable: lifecycle ? landableState(lifecycle, state) : true,
       transitions: [],
       props: { ...((post?.props ?? {}) as Record<string, unknown>) },
       edits: 0,
@@ -195,7 +196,7 @@ export function createdRows(cat: TypeCatalog, cns: ChangeImpact[], posts: PostVe
   return rows;
 }
 
-const editableState = (l: Lifecycle, s: string) => !!l.states?.find((x) => x.name === s)?.editable;
+const landableState = (l: Lifecycle, s: string) => !s || !l.states?.find((x) => x.name === s)?.notLandable;
 
 /** Properties declared by a node type, its ancestors' first. */
 export function declaredProperties(cat: TypeCatalog, type: string | undefined): string[] {
@@ -240,7 +241,7 @@ export function lifecycleRows(
       base,
       effective: cur,
       moves,
-      editable: lifecycle ? editableState(lifecycle, cur) : true,
+      landable: lifecycle ? landableState(lifecycle, cur) : true,
       transitions: lifecycle ? (lifecycle.transitions ?? []).filter((t) => t.from === cur) : [],
       props,
       edits,
@@ -250,11 +251,6 @@ export function lifecycleRows(
   }
   rows.sort((a, b) => (a.node.key ?? '').localeCompare(b.node.key ?? ''));
   return [...rows, ...createdRows(cat, cns, posts, scoped)];
-}
-
-/** Is this transition a "reopen": from a state that is not editable into one that is? */
-export function isReopen(row: LifecycleRow, t: LifecycleTransition): boolean {
-  return !!row.lifecycle && !row.editable && editableState(row.lifecycle, t.to ?? '');
 }
 
 /** Nodes of the baseline the change could take on: of its namespace (every one without), not deleted. */

@@ -460,8 +460,8 @@ type NodeView struct {
 	Latest int32                  `protobuf:"varint,2,opt,name=latest,proto3" json:"latest,omitempty"`
 	Out    []*Link                `protobuf:"bytes,3,rep,name=out,proto3" json:"out,omitempty"`
 	In     []*Link                `protobuf:"bytes,4,rep,name=in,proto3" json:"in,omitempty"`
-	// the node has a lifecycle and its state is not editable
-	Frozen        bool `protobuf:"varint,5,opt,name=frozen,proto3" json:"frozen,omitempty"`
+	// the node has a lifecycle and its state is flagged notLandable (ADR 0078)
+	NotLandable   bool `protobuf:"varint,5,opt,name=not_landable,json=notLandable,proto3" json:"not_landable,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -524,9 +524,9 @@ func (x *NodeView) GetIn() []*Link {
 	return nil
 }
 
-func (x *NodeView) GetFrozen() bool {
+func (x *NodeView) GetNotLandable() bool {
 	if x != nil {
-		return x.Frozen
+		return x.NotLandable
 	}
 	return false
 }
@@ -6683,7 +6683,7 @@ type NodeEdit struct {
 	// commit for a created node
 	Owner string `protobuf:"bytes,8,opt,name=owner,proto3" json:"owner,omitempty"`
 	// the lifecycle state the node is moved to (a transition of its own, ADR 0076): after the other edits, or before
-	// them when the node rests out of the editable states (a retired entry restored)
+	// them (a retired entry restored)
 	State         string `protobuf:"bytes,9,opt,name=state,proto3" json:"state,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -12862,13 +12862,13 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\x04from\x18\x03 \x01(\v2\x16.goap.graph.v1.NodeRefR\x04from\x12&\n" +
 	"\x02to\x18\x04 \x01(\v2\x16.goap.graph.v1.NodeRefR\x02to\x12-\n" +
 	"\x05props\x18\x05 \x01(\v2\x17.google.protobuf.StructR\x05props\x12\x1b\n" +
-	"\tchange_id\x18\x06 \x01(\tR\bchangeId\"\xaf\x01\n" +
+	"\tchange_id\x18\x06 \x01(\tR\bchangeId\"\xba\x01\n" +
 	"\bNodeView\x12'\n" +
 	"\x04node\x18\x01 \x01(\v2\x13.goap.graph.v1.NodeR\x04node\x12\x16\n" +
 	"\x06latest\x18\x02 \x01(\x05R\x06latest\x12%\n" +
 	"\x03out\x18\x03 \x03(\v2\x13.goap.graph.v1.LinkR\x03out\x12#\n" +
-	"\x02in\x18\x04 \x03(\v2\x13.goap.graph.v1.LinkR\x02in\x12\x16\n" +
-	"\x06frozen\x18\x05 \x01(\bR\x06frozen\"\xee\x02\n" +
+	"\x02in\x18\x04 \x03(\v2\x13.goap.graph.v1.LinkR\x02in\x12!\n" +
+	"\fnot_landable\x18\x05 \x01(\bR\vnotLandable\"\xee\x02\n" +
 	"\bBaseline\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1b\n" +

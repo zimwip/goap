@@ -213,8 +213,9 @@ func testChangeImpactsLifecycle(t *testing.T, repo Repo) {
 	}
 	title := edit{Properties: map[string]any{"title": "one v2"}}
 
-	if _, err := g.edit(ctx, c.ID, nodes[0].ID, title); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "not editable") {
-		t.Fatalf("editing an approved node must be refused: %v", err)
+	// a node is edited in any state while it is in a change (ADR 0078)
+	if _, err := g.edit(ctx, c.ID, nodes[0].ID, title); err != nil {
+		t.Fatalf("editing an approved node: %v", err)
 	}
 	if _, err := g.edit(ctx, c.ID, nodes[0].ID, edit{State: "released"}); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("no such transition: %v", err)
@@ -234,8 +235,8 @@ func testChangeImpactsLifecycle(t *testing.T, repo Repo) {
 	}
 	review(nodes[0].ID)
 	review(nodes[1].ID)
-	if _, err := g.Apply(ctx, c.ID, ""); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "editable state") {
-		t.Fatalf("apply must refuse an editable leftover: %v", err)
+	if _, err := g.Apply(ctx, c.ID, ""); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "cannot land") {
+		t.Fatalf("apply must refuse a node left in a state that cannot land: %v", err)
 	}
 	if _, err := g.edit(ctx, c.ID, nodes[0].ID, edit{State: "approved"}); err != nil {
 		t.Fatal(err)

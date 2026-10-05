@@ -483,8 +483,8 @@ func (g *Graph) createTx(ctx context.Context, tx Tx, id domain.ChangeID, in Node
 }
 
 // ImpactNodeCheckout puts a node in edit mode in a change: it writes the next version of the node, a copy of the version
-// the change sees (properties, state, owner and outgoing links), checked out. The node must be in an editable state of
-// its lifecycle (a transition reopens it), and not checked out already on the flow. A checkout after a check-in sends
+// the change sees (properties, state, owner and outgoing links), checked out, whatever its state (ADR 0078). The node must not be
+// checked out already on the flow. A checkout after a check-in sends
 // the review of the impact back to proposed: what is changed is reviewed again.
 func (g *Graph) ImpactNodeCheckout(ctx context.Context, id domain.ChangeID, in NodeCheckout) (cn domain.ChangeImpact, err error) {
 	err = g.repo.InTx(ctx, func(tx Tx) error {
@@ -517,10 +517,6 @@ func (g *Graph) checkoutTx(ctx context.Context, tx Tx, w *work, execution string
 		return domain.NodeRef{}, invalidf("change impact %s has no version to check out", w.cn.ID)
 	case base.CheckedOut:
 		return domain.NodeRef{}, fmt.Errorf("change impact %s (%s) is already checked out: %w", w.cn.ID, w.cn.Key, ErrConflict)
-	default:
-		if lc := w.ix.lifecycleOf(base.Type); lc != nil && base.State != "" && !lc.Editable(base.State) {
-			return domain.NodeRef{}, invalidf("cannot check out %s (%s): it is %s, not editable; reopen it first with a transition", base.Key, base.Type, base.State)
-		}
 	}
 	n, err := g.newVersion(ctx, tx, w, base, execution)
 	if err != nil {

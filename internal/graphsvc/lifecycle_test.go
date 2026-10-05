@@ -89,7 +89,7 @@ version: 1.0.0
 lifecycles:
   - name: req
     initial: released
-    states: [{name: draft, editable: true}, {name: released}]
+    states: [{name: draft, notLandable: true}, {name: released}]
     transitions:
       - {name: reopen, from: released, to: draft}
       - {name: release, from: draft, to: released, permission: "requirement:release"}

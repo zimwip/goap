@@ -15,7 +15,7 @@ export interface CondRow {
 export interface LifecycleStateForm {
   name: string;
   description: string;
-  editable: boolean;
+  notLandable: boolean;
   final: boolean;
 }
 
@@ -42,8 +42,6 @@ export interface LifecycleForm {
   uid: string;
   name: string;
   description: string;
-  /** nodes may rest in an editable state */
-  restInEditable: boolean;
   initial: string;
   states: LifecycleStateForm[];
   transitions: LifecycleTransitionForm[];
@@ -658,9 +656,8 @@ export function lifecycleToForm(l: Lifecycle): LifecycleForm {
     uid: newUid(),
     name: l.name ?? '',
     description: l.description ?? '',
-    restInEditable: l.restInEditable === true,
     initial: l.initial ?? '',
-    states: (l.states ?? []).map((s) => ({ name: s.name ?? '', description: s.description ?? '', editable: !!s.editable, final: !!s.final })),
+    states: (l.states ?? []).map((s) => ({ name: s.name ?? '', description: s.description ?? '', notLandable: !!s.notLandable, final: !!s.final })),
     transitions: (l.transitions ?? []).map((t) => ({
       name: t.name ?? '',
       description: t.description ?? '',
@@ -680,11 +677,10 @@ export function lifecycleToForm(l: Lifecycle): LifecycleForm {
 export function lifecycleFromForm(l: LifecycleForm): Lifecycle {
   const o: Lifecycle = { name: l.name.trim(), initial: l.initial.trim() };
   put(o, 'description', l.description.trim());
-  if (l.restInEditable) o.restInEditable = true;
   o.states = l.states.map((s) => {
     const st: LifecycleState = { name: s.name.trim() };
     put(st, 'description', s.description.trim());
-    if (s.editable) st.editable = true;
+    if (s.notLandable) st.notLandable = true;
     if (s.final) st.final = true;
     return st;
   });
@@ -709,12 +705,11 @@ export function defaultLifecycle(name = ''): LifecycleForm {
     uid: newUid(),
     name,
     description: '',
-    restInEditable: false,
     initial: 'proposed',
     states: [
-      { name: 'proposed', description: '', editable: false, final: false },
-      { name: 'draft', description: 'Being worked on in a change', editable: true, final: false },
-      { name: 'approved', description: '', editable: false, final: false },
+      { name: 'proposed', description: '', notLandable: false, final: false },
+      { name: 'draft', description: 'Being worked on in a change', notLandable: true, final: false },
+      { name: 'approved', description: '', notLandable: false, final: false },
     ],
     transitions: [
       { name: 'start', description: '', from: 'proposed', to: 'draft', permission: '', guard: '', requiresAttributes: '', requiresLinks: '', children: '', guards: [], actions: [] },

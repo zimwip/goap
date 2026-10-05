@@ -74,15 +74,14 @@ nodeTypes:
       - {name: description, label: Description, description: "What the role allows", type: string, widget: textarea, section: Identity, order: 2}
 lifecycles:
   # An entry of the platform configuration (an MCP, an adapter definition, an entry of the model gateway) is never
-  # deleted (ADR 0076): it is retired, and its readers leave it out; an active entry stays editable at rest
-  # (restInEditable), the way configuration always was.
+  # deleted (ADR 0076): it is retired, and its readers leave it out; every state is landable
+  # (ADR 0078), the way configuration always was.
   - name: config
     description: Whether an entry of the platform configuration is in force
     initial: active
-    restInEditable: true
     states:
-      - {name: active, editable: true, description: "In force"}
-      - {name: retired, description: "Taken out of the configuration; read-only until restored"}
+      - {name: active, description: "In force"}
+      - {name: retired, description: "Taken out of the configuration until restored"}
     transitions:
       - {name: retire, description: Take the entry out of the configuration, from: active, to: retired}
       - {name: restore, description: Put a retired entry back in force, from: retired, to: active}

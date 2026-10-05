@@ -12,7 +12,7 @@ lifecycles:
   - name: requirement
     initial: draft
     states:
-      - {name: draft, editable: true}
+      - {name: draft, notLandable: true}
       - {name: approved}
       - {name: obsolete, final: true}
     transitions:
@@ -21,7 +21,7 @@ lifecycles:
       - {name: retire, from: approved, to: obsolete}
   - name: spec
     initial: draft
-    states: [{name: draft, editable: true}, {name: released}]
+    states: [{name: draft, notLandable: true}, {name: released}]
     transitions:
       - {name: release, from: draft, to: released, children: {states: [approved]}}
 nodeTypes:
@@ -41,7 +41,7 @@ func TestLifecycleParsesAndInherits(t *testing.T) {
 	if is := d.Validate(); len(is) > 0 {
 		t.Fatalf("unexpected issues: %v", is)
 	}
-	if l := d.LifecycleOf("FunctionalRequirement"); l == nil || l.Initial != "draft" || !l.Editable("draft") || l.Editable("approved") {
+	if l := d.LifecycleOf("FunctionalRequirement"); l == nil || l.Initial != "draft" || l.Landable("draft") || !l.Landable("approved") {
 		t.Fatalf("subtype must inherit the lifecycle: %+v", l)
 	}
 	if d.LifecycleOf("Note") != nil {
@@ -66,16 +66,15 @@ func TestLifecycleParsesAndInherits(t *testing.T) {
 
 func TestLifecycleValidation(t *testing.T) {
 	bad := map[string]string{
-		"unknown initial":      `{initial: nope, states: [{name: a, editable: true}, {name: b}], transitions: [{name: t, from: a, to: b}]}`,
-		"no editable state":    `{initial: a, states: [{name: a}, {name: b}]}`,
-		"no fixed state":       `{initial: a, states: [{name: a, editable: true}]}`,
-		"unknown target":       `{initial: a, states: [{name: a, editable: true}, {name: b}], transitions: [{name: t, from: a, to: zz}]}`,
-		"trapped editable":     `{initial: a, states: [{name: a, editable: true}, {name: b}]}`,
-		"leaves a final":       `{initial: a, states: [{name: a, editable: true}, {name: b, final: true}], transitions: [{name: t, from: a, to: b}, {name: u, from: b, to: a}]}`,
-		"duplicate state":      `{initial: a, states: [{name: a, editable: true}, {name: a}], transitions: [{name: t, from: a, to: a}]}`,
-		"final and editable":   `{initial: a, states: [{name: a, editable: true, final: true}, {name: b}], transitions: [{name: t, from: a, to: b}]}`,
-		"duplicate transition": `{initial: a, states: [{name: a, editable: true}, {name: b}], transitions: [{name: t, from: a, to: b}, {name: t, from: a, to: b}]}`,
-		"bad guard":            `{initial: a, states: [{name: a, editable: true}, {name: b}], transitions: [{name: t, from: a, to: b, guard: "node.props.("}]}`,
+		"unknown initial":      `{initial: nope, states: [{name: a, notLandable: true}, {name: b}], transitions: [{name: t, from: a, to: b}]}`,
+		"no landable state":    `{initial: a, states: [{name: a, notLandable: true}, {name: b, notLandable: true}], transitions: [{name: t, from: a, to: b}]}`,
+		"unknown target":       `{initial: a, states: [{name: a, notLandable: true}, {name: b}], transitions: [{name: t, from: a, to: zz}]}`,
+		"trapped not landable": `{initial: a, states: [{name: a, notLandable: true}, {name: b}]}`,
+		"leaves a final":       `{initial: a, states: [{name: a, notLandable: true}, {name: b, final: true}], transitions: [{name: t, from: a, to: b}, {name: u, from: b, to: a}]}`,
+		"duplicate state":      `{initial: a, states: [{name: a, notLandable: true}, {name: a}], transitions: [{name: t, from: a, to: a}]}`,
+		"final not landable":   `{initial: a, states: [{name: a}, {name: b, notLandable: true, final: true}], transitions: [{name: t, from: a, to: b}]}`,
+		"duplicate transition": `{initial: a, states: [{name: a, notLandable: true}, {name: b}], transitions: [{name: t, from: a, to: b}, {name: t, from: a, to: b}]}`,
+		"bad guard":            `{initial: a, states: [{name: a, notLandable: true}, {name: b}], transitions: [{name: t, from: a, to: b, guard: "node.props.("}]}`,
 	}
 	for name, lc := range bad {
 		src := "name: x\nversion: 1\nlifecycles:\n  - {name: l, " + strings.TrimPrefix(lc, "{") + "\nnodeTypes:\n  - {name: T, lifecycle: l}\n"
@@ -87,9 +86,15 @@ func TestLifecycleValidation(t *testing.T) {
 			t.Errorf("%s: must be rejected", name)
 		}
 	}
+	// a lifecycle that flags nothing is valid: every state is landable, the initial one included
+	if d, err := ParseDomain([]byte("name: x\nversion: 1\nlifecycles:\n  - {name: l, initial: a, states: [{name: a}, {name: b}], transitions: [{name: t, from: a, to: b}]}\nnodeTypes:\n  - {name: T, lifecycle: l}\n")); err != nil {
+		t.Fatal(err)
+	} else if is := d.Validate(); len(is) > 0 {
+		t.Fatalf("all states landable: %v", is)
+	}
 	// references and documents
-	const ok = "{initial: a, states: [{name: a, editable: true}, {name: b}], transitions: [{name: t, from: a, to: b}]}"
-	base := "name: x\nversion: 1\nlifecycles:\n  - {name: c, " + strings.TrimPrefix(ok, "{") + "\n  - {name: d, initial: a, states: [{name: a, editable: true}, {name: b}], transitions: [{name: t, from: a, to: b, children: {states: [zz]}}]}\nnodeTypes:\n  - {name: C, lifecycle: c}\n"
+	const ok = "{initial: a, states: [{name: a, notLandable: true}, {name: b}], transitions: [{name: t, from: a, to: b}]}"
+	base := "name: x\nversion: 1\nlifecycles:\n  - {name: c, " + strings.TrimPrefix(ok, "{") + "\n  - {name: d, initial: a, states: [{name: a, notLandable: true}, {name: b}], transitions: [{name: t, from: a, to: b, children: {states: [zz]}}]}\nnodeTypes:\n  - {name: C, lifecycle: c}\n"
 	cases := map[string]string{
 		"unknown lifecycle":    "  - {name: D, lifecycle: nope}\n",
 		"unknown child type":   "  - {name: D, document: {contains: [Nope]}}\n",
@@ -120,7 +125,7 @@ version: 1.0.0
 lifecycles:
   - name: maturity
     initial: a
-    states: [{name: a, editable: true}, {name: b}]
+    states: [{name: a, notLandable: true}, {name: b}]
     transitions:
       - name: go
         from: a

@@ -169,7 +169,7 @@ export const graph = {
     rpc<{ changeId: string }, { nodes?: SharedNode[] }>(GRAPH, 'GetSharedNodes', { changeId }, signal),
   /** A node version with its outgoing and incoming links (version 0: the latest). */
   getNode: (ref: NodeRef, signal?: AbortSignal) =>
-    rpc<{ ref: NodeRef }, { view?: { node?: GraphNode; latest?: number; out?: Link[]; in?: Link[]; frozen?: boolean } }>(GRAPH, 'GetNode', { ref }, signal),
+    rpc<{ ref: NodeRef }, { view?: { node?: GraphNode; latest?: number; out?: Link[]; in?: Link[]; notLandable?: boolean } }>(GRAPH, 'GetNode', { ref }, signal),
   /** Every version of a node, all branches. */
   listNodeVersions: (id: string, signal?: AbortSignal) =>
     rpc<{ id: string }, { versions?: GraphNode[] }>(GRAPH, 'ListNodeVersions', { id }, signal),

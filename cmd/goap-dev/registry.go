@@ -36,7 +36,7 @@ func buildRegistry(e *env, gp *graphPart, st stores) (*registryPart, error) {
 	types := typecat.NewLive(reg.Domains)
 	g.Types = func() graph.TypeCatalog { return types.Get() }
 	// a change scoped to an Activity is gated by its own goal condition at Apply, not the node-type lifecycle's
-	// Editable floor (architecture plan "Activity concept")
+	// landable-state floor (architecture plan "Activity concept")
 	g.LandingGate = reg.LandingGate
 	g.SubChangeValidator = reg.SubChangeValidator
 	// a change follows the lifecycle its methodology names, its gates read the conditions of the methodology (ADR 0058)

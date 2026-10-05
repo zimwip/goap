@@ -122,15 +122,15 @@ nodeTypes:
       - {name: date, label: Deployed on, description: Date of the deployment, type: date, section: Outcome, order: 3}
       - {name: checks, label: Checks, description: Results of the post-deployment checks (structured), type: json, widget: textarea, section: Outcome, order: 4}
 lifecycles:
-  # Work happens in the editable states, which a node only holds through a change:
-  # a persisted version is never editable.
+  # A node is edited in any state while it is in a change; a state flagged notLandable (a draft) keeps the change
+  # from landing until the node is moved to a landable one (ADR 0078).
   - name: requirement
     description: How a requirement is written, approved once reviewed in its change, and retired
-    # a node is created in its initial state, checked out and filled in its first version: it is born editable
+    # a node is created in its initial state and filled in its first version: it is born not landable
     initial: draft
     states:
       - {name: proposed, description: "Raised, not worked on yet"}
-      - {name: draft, editable: true, description: "Being written or reworked in a change"}
+      - {name: draft, notLandable: true, description: "Being written or reworked in a change"}
       - {name: approved, description: Reviewed and accepted}
       - {name: obsolete, final: true, description: No longer applicable}
     transitions:
@@ -146,7 +146,7 @@ lifecycles:
     initial: draft
     states:
       - {name: candidate, description: "Planned, contents may still change"}
-      - {name: draft, editable: true, description: Contents being reworked in a change}
+      - {name: draft, notLandable: true, description: Contents being reworked in a change}
       - {name: released, description: Frozen deliverable}
       - {name: withdrawn, final: true, description: Taken out of service}
     transitions:
@@ -163,7 +163,7 @@ lifecycles:
     initial: draft
     states:
       - {name: proposed, description: "Put forward, awaiting a decision"}
-      - {name: draft, editable: true, description: "Being written or reworked in a change"}
+      - {name: draft, notLandable: true, description: "Being written or reworked in a change"}
       - {name: accepted, description: "Decision taken, not delivered yet"}
       - {name: released, description: "Delivered and frozen"}
       - {name: withdrawn, final: true, description: Taken out of service}
