@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/zimwip/goap/pkg/builtins"
 	"github.com/zimwip/goap/pkg/condition"
 )
 
@@ -102,9 +103,6 @@ const (
 	MethodProcess = "process"
 	MethodManual  = "manual"
 )
-
-// BuiltinStep is the builtin of the actions generated for the steps done by an agent or a nested process.
-const BuiltinStep = "process.step"
 
 // ArtifactStepDone is the type of the artifact recorded when a step run by an agent, a nested process or a person
 // ends: {step: <path>, process: <process id>}.
@@ -458,7 +456,7 @@ func (w *stepWalker) step(s Step, sp, path string, need map[string]bool) map[str
 				w.merge(sp+".pre", gen.Pre, c.needs)
 			}
 		}
-		gen.Kind, gen.Builtin = KindBuiltin, BuiltinStep
+		gen.Kind, gen.Builtin = KindBuiltin, builtins.ProcessStep
 		gen.Params = map[string]any{"step": path, "methodology": other, "agent": proc, "goal": proc}
 	case MethodCapability:
 		candidates := w.m.methodsFor(s.Capability, w.methods.goals)
@@ -485,7 +483,7 @@ func (w *stepWalker) step(s Step, sp, path string, need map[string]bool) map[str
 				return nil
 			}
 		}
-		gen.Kind, gen.Builtin = KindBuiltin, BuiltinStep
+		gen.Kind, gen.Builtin = KindBuiltin, builtins.ProcessStep
 		if gen.Params == nil {
 			gen.Params = map[string]any{"step": path, "capability": s.Capability}
 		}

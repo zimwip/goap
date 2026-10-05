@@ -1,4 +1,7 @@
-package engine
+// Package selfimprove registers the builtins of the self-observation methodology (ADR 0011, ADR 0062): they
+// analyze a finished run, propose improvements and draft a new methodology version. They live outside the engine,
+// which knows no observer; the composition roots register them.
+package selfimprove
 
 import (
 	"context"
@@ -8,20 +11,16 @@ import (
 	"maps"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/zimwip/goap/pkg/authz"
+	"github.com/zimwip/goap/pkg/builtins"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/domain/def"
 	"github.com/zimwip/goap/pkg/dsl"
+	"github.com/zimwip/goap/pkg/engine"
 	"github.com/zimwip/goap/pkg/methodology"
 	"github.com/zimwip/goap/pkg/observe"
-)
-
-// Builtins of the self-observation methodology (ADR 0011).
-const (
-	BuiltinObserveAnalyze   = "observe.analyze"
-	BuiltinObservePropose   = "observe.propose"
-	BuiltinMethodologyDraft = "methodology.draft"
 )
 
 // TraceSource reads the spans of a trace from the OpenTelemetry backend.
@@ -37,8 +36,8 @@ type MethodologyDrafts interface {
 	SaveDraft(ctx context.Context, m methodology.Methodology) (def.Issues, error)
 }
 
-// SelfImprovement configures the self-observation builtins.
-type SelfImprovement struct {
+// Config configures the self-observation builtins.
+type Config struct {
 	Traces     TraceSource       // optional: slow spans of the observed run
 	Drafts     MethodologyDrafts // required by methodology.draft
 	Thresholds observe.Thresholds
@@ -46,19 +45,19 @@ type SelfImprovement struct {
 	TraceURL string
 }
 
-// SelfImprovementBuiltins returns the builtins that analyze a finished run
-// from its journal and traces, propose improvements of its methodology and
-// turn the accepted ones into a draft version.
-func (e *Engine) SelfImprovementBuiltins(cfg SelfImprovement) BuiltinExecutor {
-	return BuiltinExecutor{
-		BuiltinObserveAnalyze: func(ctx context.Context, ac ActionContext) (ActionResult, error) {
-			return e.observeAnalyze(ctx, ac, cfg)
-		},
-		BuiltinObservePropose: func(ctx context.Context, ac ActionContext) (ActionResult, error) { return e.observePropose(ctx, ac) },
-		BuiltinMethodologyDraft: func(ctx context.Context, ac ActionContext) (ActionResult, error) {
-			return e.methodologyDraft(ctx, ac, cfg)
-		},
-	}
+// Register adds the self-observation builtins to b: they analyze a finished run of e from its journal and traces,
+// propose improvements of its methodology and turn the accepted ones into a draft version. It panics on a name
+// already registered.
+func Register(b engine.BuiltinExecutor, e *engine.Engine, cfg Config) {
+	b.Register(builtins.ObserveAnalyze, func(ctx context.Context, ac engine.ActionContext) (engine.ActionResult, error) {
+		return observeAnalyze(ctx, e, ac, cfg)
+	})
+	b.Register(builtins.ObservePropose, func(ctx context.Context, ac engine.ActionContext) (engine.ActionResult, error) {
+		return observePropose(ctx, e, ac)
+	})
+	b.Register(builtins.MethodologyDraft, func(ctx context.Context, ac engine.ActionContext) (engine.ActionResult, error) {
+		return methodologyDraft(ctx, e, ac, cfg)
+	})
 }
 
 // observedProcess is the process to analyze: vars.process, or the process of
@@ -73,14 +72,14 @@ func observedProcess(vars map[string]any) string {
 	return id
 }
 
-func (e *Engine) observeAnalyze(ctx context.Context, ac ActionContext, cfg SelfImprovement) (ActionResult, error) {
+func observeAnalyze(ctx context.Context, e *engine.Engine, ac engine.ActionContext, cfg Config) (engine.ActionResult, error) {
 	id := observedProcess(ac.Process.Vars)
 	if id == "" {
-		return ActionResult{}, errors.New("no process to observe (vars.process or a process event)")
+		return engine.ActionResult{}, errors.New("no process to observe (vars.process or a process event)")
 	}
 	obs, err := e.Store.Get(ctx, id)
 	if err != nil {
-		return ActionResult{}, err
+		return engine.ActionResult{}, err
 	}
 	ids := []string{obs.ID}
 	if all, err := e.Store.List(ctx); err == nil {
@@ -95,7 +94,7 @@ func (e *Engine) observeAnalyze(ctx context.Context, ac ActionContext, cfg SelfI
 	}
 	recs, err := e.Graph.Journal(ctx, domain.ExecutionFilter{ProcessIDs: ids})
 	if err != nil {
-		return ActionResult{}, err
+		return engine.ActionResult{}, err
 	}
 	items := map[domain.ItemID]domain.ChangeItem{}
 	nodes := map[domain.ChangeImpactID]domain.ChangeImpact{}
@@ -109,11 +108,11 @@ func (e *Engine) observeAnalyze(ctx context.Context, ac ActionContext, cfg SelfI
 			}
 		}
 	}
-	var logs []LogLine
+	var logs []engine.LogLine
 	var spans []observe.Span
 	if cfg.Traces != nil && obs.TraceID != "" {
 		if spans, err = cfg.Traces.Spans(ctx, obs.TraceID); err != nil {
-			logs = append(logs, LogLine{Time: e.clock(), Level: "warn", Message: "traces unavailable: " + err.Error()})
+			logs = append(logs, engine.LogLine{Time: time.Now().UTC(), Level: "warn", Message: "traces unavailable: " + err.Error()})
 			spans = nil
 		}
 	}
@@ -124,13 +123,13 @@ func (e *Engine) observeAnalyze(ctx context.Context, ac ActionContext, cfg SelfI
 	}
 	data, err := toData(r)
 	if err != nil {
-		return ActionResult{}, err
+		return engine.ActionResult{}, err
 	}
 	if cfg.TraceURL != "" && r.TraceID != "" {
 		data["traceUrl"] = cfg.TraceURL + r.TraceID
 	}
 	out := fmt.Sprintf("%s/%s: %d findings (%d steps, %d tokens, %d spans)", r.Methodology, r.Agent, len(r.Findings), r.Steps, r.Tokens, len(spans))
-	return ActionResult{Items: []ItemInput{{Kind: "artifact", Type: "cost_report", Data: data}}, Output: out, Logs: logs}, nil
+	return engine.ActionResult{Items: []engine.ItemInput{{Kind: "artifact", Type: "cost_report", Data: data}}, Output: out, Logs: logs}, nil
 }
 
 // toData converts a value into JSON-compatible data (lists never null).
@@ -167,14 +166,14 @@ func costReport(bb domain.Blackboard) (observe.Report, error) {
 	return r, errors.New("no cost report on the blackboard")
 }
 
-func (e *Engine) observePropose(ctx context.Context, ac ActionContext) (ActionResult, error) {
+func observePropose(ctx context.Context, e *engine.Engine, ac engine.ActionContext) (engine.ActionResult, error) {
 	r, err := costReport(ac.Blackboard)
 	if err != nil {
-		return ActionResult{}, err
+		return engine.ActionResult{}, err
 	}
 	cm, err := e.Methodologies.Methodology(ctx, r.Methodology)
 	if err != nil {
-		return ActionResult{}, err
+		return engine.ActionResult{}, err
 	}
 	props, notes := observe.Propose(r, cm.Methodology)
 	// an improvement is a change impact on an element of the methodology (ADR 0024): the rationale says what and
@@ -195,18 +194,18 @@ func (e *Engine) observePropose(ctx context.Context, ac ActionContext) (ActionRe
 	if notes == nil {
 		notes = []string{}
 	}
-	items := []ItemInput{{Kind: "artifact", Type: "improvement_plan", Data: map[string]any{
+	items := []engine.ItemInput{{Kind: "artifact", Type: "improvement_plan", Data: map[string]any{
 		"methodology": r.Methodology, "observedVersion": r.Version, "currentVersion": cm.Version, "proposals": len(props), "notes": notes}}}
-	return ActionResult{Items: items, Nodes: ops, Output: fmt.Sprintf("%d proposals, %d notes", len(props), len(notes))}, nil
+	return engine.ActionResult{Items: items, Nodes: ops, Output: fmt.Sprintf("%d proposals, %d notes", len(props), len(notes))}, nil
 }
 
-func (e *Engine) methodologyDraft(ctx context.Context, ac ActionContext, cfg SelfImprovement) (ActionResult, error) {
+func methodologyDraft(ctx context.Context, e *engine.Engine, ac engine.ActionContext, cfg Config) (engine.ActionResult, error) {
 	if cfg.Drafts == nil {
-		return ActionResult{}, errors.New("no methodology registry to save drafts")
+		return engine.ActionResult{}, errors.New("no methodology registry to save drafts")
 	}
 	r, err := costReport(ac.Blackboard)
 	if err != nil {
-		return ActionResult{}, err
+		return engine.ActionResult{}, err
 	}
 	bb := ac.Blackboard
 	var edits []observe.Edit
@@ -229,18 +228,18 @@ func (e *Engine) methodologyDraft(ctx context.Context, ac ActionContext, cfg Sel
 		edits = append(edits, ed)
 	}
 	if len(edits) == 0 {
-		return ActionResult{Items: []ItemInput{{Kind: "artifact", Type: "methodology_draft",
+		return engine.ActionResult{Items: []engine.ItemInput{{Kind: "artifact", Type: "methodology_draft",
 			Data: map[string]any{"methodology": r.Methodology, "skipped": true, "reason": "no proposal accepted"}}}, Output: "nothing to merge"}, nil
 	}
 	// the draft is saved with the identity of the process initiator
 	ctx = authz.With(ctx, ac.Process.Initiator)
 	cur, ok, err := cfg.Drafts.Definition(ctx, r.Methodology, "")
 	if err != nil || !ok {
-		return ActionResult{}, fmt.Errorf("methodology %s: %v", r.Methodology, cmpErr(err, "not published"))
+		return engine.ActionResult{}, fmt.Errorf("methodology %s: %v", r.Methodology, cmpErr(err, "not published"))
 	}
 	d, err := observe.Apply(cur, edits)
 	if err != nil {
-		return ActionResult{}, err
+		return engine.ActionResult{}, err
 	}
 	d.Methodology.Version = observe.NextVersion(cur.Version, func(v string) bool {
 		_, exists, _ := cfg.Drafts.Definition(ctx, cur.Name, v)
@@ -248,7 +247,7 @@ func (e *Engine) methodologyDraft(ctx context.Context, ac ActionContext, cfg Sel
 	})
 	issues, err := cfg.Drafts.SaveDraft(ctx, d.Methodology)
 	if err != nil {
-		return ActionResult{}, err
+		return engine.ActionResult{}, err
 	}
 	data, _ := toData(d)
 	data["methodology"], data["version"], data["from"] = cur.Name, d.Methodology.Version, cur.Version
@@ -257,7 +256,7 @@ func (e *Engine) methodologyDraft(ctx context.Context, ac ActionContext, cfg Sel
 		is = append(is, i.String())
 	}
 	data["issues"] = orEmptyAnyList(is)
-	return ActionResult{Items: []ItemInput{{Kind: "artifact", Type: "methodology_draft", Data: data}},
+	return engine.ActionResult{Items: []engine.ItemInput{{Kind: "artifact", Type: "methodology_draft", Data: data}},
 		Output: fmt.Sprintf("draft %s@%s: %d changes, %d issues", cur.Name, d.Methodology.Version, len(d.Applied), len(issues))}, nil
 }
 

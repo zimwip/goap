@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/zimwip/goap/pkg/authz"
+	"github.com/zimwip/goap/pkg/builtins"
 	"github.com/zimwip/goap/pkg/domain/def"
 	"github.com/zimwip/goap/pkg/engine"
 	"github.com/zimwip/goap/pkg/methodology"
@@ -114,7 +115,7 @@ func (s *Service) validate(ctx context.Context, m *methodology.Methodology) def.
 	if err != nil {
 		return def.Issues{{Path: "namespace", Message: "the types in force cannot be read: " + err.Error()}}
 	}
-	issues := m.Resolve(cat).ValidateStored()
+	issues := resolve(*m, cat).ValidateStored()
 	if m.Namespace != "" {
 		if _, ok := cat.Domains()[m.Namespace]; !ok {
 			issues = append(issues, def.Issue{Path: "namespace", Message: fmt.Sprintf("no published domain %s", m.Namespace)})
@@ -306,5 +307,11 @@ func (s *Service) Methodology(ctx context.Context, name string) (*methodology.Co
 	if err != nil {
 		return nil, err
 	}
-	return r.Methodology.Resolve(cat).Compile()
+	return resolve(r.Methodology, cat).Compile()
+}
+
+// resolve gives a definition the types in force and the builtins of the platform, so that a typo in `builtin:` is
+// refused when the definition is validated or published, without an engine (ADR 0062).
+func resolve(m methodology.Methodology, types def.TypeSet) *methodology.Methodology {
+	return m.Resolve(types).WithBuiltins(builtins.Known{})
 }

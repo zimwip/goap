@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/zimwip/goap/pkg/engine"
 	"github.com/zimwip/goap/pkg/observe"
+	"github.com/zimwip/goap/pkg/selfimprove"
 )
 
 // JaegerTraces reads traces from the Jaeger query API, so that the
@@ -20,9 +20,9 @@ type JaegerTraces struct {
 	Client  *http.Client
 }
 
-var _ engine.TraceSource = JaegerTraces{}
+var _ selfimprove.TraceSource = JaegerTraces{}
 
-// Spans implements engine.TraceSource.
+// Spans implements selfimprove.TraceSource.
 func (j JaegerTraces) Spans(ctx context.Context, traceID string) ([]observe.Span, error) {
 	hc := j.Client
 	if hc == nil {
@@ -75,8 +75,8 @@ func (j JaegerTraces) Spans(ctx context.Context, traceID string) ([]observe.Span
 // SelfImprovementFromEnv configures the self-observation builtins: traces
 // from GOAP_TRACE_QUERY_URL (Jaeger query API, optional), links to
 // GOAP_TRACE_UI_URL (default <query>/trace/).
-func SelfImprovementFromEnv(drafts engine.MethodologyDrafts) engine.SelfImprovement {
-	cfg := engine.SelfImprovement{Drafts: drafts}
+func SelfImprovementFromEnv(drafts selfimprove.MethodologyDrafts) selfimprove.Config {
+	cfg := selfimprove.Config{Drafts: drafts}
 	if u := os.Getenv("GOAP_TRACE_QUERY_URL"); u != "" {
 		cfg.Traces = JaegerTraces{BaseURL: u}
 		cfg.TraceURL = strings.TrimSuffix(u, "/") + "/trace/"

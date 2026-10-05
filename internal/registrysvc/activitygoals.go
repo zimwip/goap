@@ -28,7 +28,7 @@ func (s *Service) ActivityGoalsMet(ctx context.Context, activityRef string, bb d
 	if err != nil {
 		return false, err
 	}
-	c, err := r.Methodology.Resolve(cat).Compile()
+	c, err := resolve(r.Methodology, cat).Compile()
 	if err != nil {
 		return false, err
 	}

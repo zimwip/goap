@@ -20,7 +20,8 @@ var forbidden = map[string][]string{
 	"pkg/domain/def": {"pkg/mcp", "pkg/adapter", "pkg/mcpbuiltin", "pkg/access"},
 	"pkg/access":     {"pkg/mcp", "pkg/adapter", "pkg/mcpbuiltin"},
 	"pkg/llmcfg":     {"pkg/mcp", "pkg/adapter", "pkg/mcpbuiltin"},
-	"pkg/engine":     {"pkg/adapter", "pkg/mcpbuiltin"},
+	"pkg/engine":     {"pkg/adapter", "pkg/mcpbuiltin", "pkg/observe", "pkg/selfimprove"},
+	"pkg/builtins":   {"pkg/methodology", "pkg/engine", "pkg/domain"},
 	"pkg/adapter":    {"pkg/mcpbuiltin", "pkg/access"},
 }
 
